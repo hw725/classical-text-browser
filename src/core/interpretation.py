@@ -167,7 +167,7 @@ def _scan_tracked_files(doc_path: Path) -> list[dict]:
     if not l4_dir.exists():
         return tracked
 
-    for f in sorted(l4_dir.rglob("*")):
+    for f in sorted(l4_dir.rglob("*")):  # 구조상 최대 2~3단계이므로 성능 이슈 없음
         if not f.is_file():
             continue
         # 바이너리가 아닌 텍스트/JSON 파일만 추적
@@ -256,11 +256,17 @@ def check_dependency(library_path: str | Path, interp_id: str) -> dict:
         file_abs = doc_path / tf["path"]
         if file_abs.exists():
             current_hash = _compute_file_hash(file_abs)
-            if current_hash != tf["hash_at_base"] and tf["status"] not in ("acknowledged", "updated"):
-                tf["status"] = "changed"
-                changed_files.append(tf["path"])
-            elif tf["status"] == "unchanged":
-                unchanged_count += 1
+            if current_hash != tf["hash_at_base"]:
+                # acknowledged/updated 상태라도 해시가 또 바뀌면 재감지
+                if tf["status"] not in ("acknowledged", "updated"):
+                    tf["status"] = "changed"
+                    changed_files.append(tf["path"])
+                elif tf["status"] == "acknowledged":
+                    # 이미 인정한 변경이므로 카운트만 (재확인 불필요)
+                    unchanged_count += 1
+                else:
+                    # updated 상태: 이미 반영 완료
+                    unchanged_count += 1
             else:
                 unchanged_count += 1
         else:
@@ -579,7 +585,13 @@ def git_commit_interpretation(interp_path: str | Path, message: str) -> dict:
 
     try:
         commit = repo.index.commit(message)
-    except git.HookExecutionError:
+    except git.HookExecutionError as e:
+        # 훅 실패 시 커밋이 실제로 생성되지 않았을 수 있으므로
+        # head.commit은 이전 커밋일 수 있다. 경고를 기록한다.
+        import logging
+        logging.getLogger(__name__).warning(
+            "git commit hook 실패 — 커밋이 생성되지 않았을 수 있음: %s", e
+        )
         commit = repo.head.commit
 
     return {

@@ -21,11 +21,14 @@ core-schema-v1.3.md 및 operation-rules-v1.0.md에 따른다.
 """
 
 import json
+import logging
 import uuid
 from pathlib import Path
 
 import git
 import jsonschema
+
+logger = logging.getLogger(__name__)
 
 # ──────────────────────────
 # 상수 정의
@@ -113,6 +116,12 @@ def _validate_entity(entity_type: str, data: dict) -> None:
         # _meta 등 내부 필드는 검증에서 제외
         validate_data = {k: v for k, v in data.items() if not k.startswith("_")}
         jsonschema.validate(instance=validate_data, schema=schema)
+    else:
+        logger.warning(
+            "스키마 파일이 없어 '%s' 엔티티 검증을 건너뜁니다: %s",
+            entity_type,
+            schema_path,
+        )
 
 
 def _write_json(path: Path, data: dict) -> None:
@@ -388,15 +397,19 @@ def list_entities_for_page(
                 or rel.get("subject_id") in related_ids
                 or rel.get("object_id") in related_ids):
             page_relations.append(rel)
-            # 관련된 Agent/Concept ID 수집
-            if rel.get("subject_type") == "agent":
-                agent_ids.add(rel["subject_id"])
-            elif rel.get("subject_type") == "concept":
-                concept_ids.add(rel["subject_id"])
-            if rel.get("object_type") == "agent":
-                agent_ids.add(rel["object_id"])
-            elif rel.get("object_type") == "concept":
-                concept_ids.add(rel["object_id"])
+            # 관련된 Agent/Concept/Block ID 수집 (.get()으로 KeyError 방지)
+            subj_id = rel.get("subject_id")
+            obj_id = rel.get("object_id")
+            if rel.get("subject_type") == "agent" and subj_id:
+                agent_ids.add(subj_id)
+            elif rel.get("subject_type") == "concept" and subj_id:
+                concept_ids.add(subj_id)
+            if rel.get("object_type") == "agent" and obj_id:
+                agent_ids.add(obj_id)
+            elif rel.get("object_type") == "concept" and obj_id:
+                concept_ids.add(obj_id)
+            elif rel.get("object_type") == "block" and obj_id:
+                block_ids.add(obj_id)
 
     # 4) Agent / Concept: 관련 ID로 필터
     all_agents = list_entities(interp_path, "agent")
@@ -458,10 +471,18 @@ def promote_tag_to_concept(
     # Tag 읽기
     tag = get_entity(interp_path, "tag", tag_id)
 
+    # Concept 라벨: 비어있으면 승격 불가
+    effective_label = label or tag.get("surface", "")
+    if not effective_label:
+        raise ValueError(
+            f"Concept 라벨을 결정할 수 없습니다. "
+            f"Tag(id={tag_id})에 surface가 없고, label 인수도 지정되지 않았습니다."
+        )
+
     # Concept 생성
     concept_data = {
         "id": str(uuid.uuid4()),
-        "label": label or tag.get("surface", ""),
+        "label": effective_label,
         "scope_work": scope_work,
         "description": description,
         "concept_features": None,

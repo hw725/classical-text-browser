@@ -681,21 +681,25 @@ function _renderCorrList() {
   listEl.innerHTML = "";
   correctionState.corrections.forEach((corr, idx) => {
     const typeInfo = CORRECTION_TYPES[corr.type] || {};
-    const typeCls = "type-" + corr.type.replace(/_/g, "-");
+    // CSS 클래스명 안전 변환: 허용되지 않는 문자 제거 후 언더스코어를 하이픈으로
+    const typeCls = "type-" + corr.type.replace(/[^a-z0-9_-]/gi, "").replace(/_/g, "-");
 
     const item = document.createElement("div");
     item.className = "corr-list-item";
     item.innerHTML = `
-      <span class="corr-list-type ${typeCls}">${typeInfo.label || corr.type}</span>
-      <span class="corr-list-text">${corr.original_ocr}</span>
+      <span class="corr-list-type ${typeCls}">${typeInfo.label || _escapeHtml(corr.type)}</span>
+      <span class="corr-list-text">${_escapeHtml(corr.original_ocr)}</span>
       <span class="corr-list-arrow">→</span>
-      <span class="corr-list-text">${corr.corrected}</span>
-      <span class="corr-list-note">${corr.note || ""}</span>
+      <span class="corr-list-text">${_escapeHtml(corr.corrected)}</span>
+      <span class="corr-list-note">${_escapeHtml(corr.note || "")}</span>
     `;
 
     // 클릭 시 해당 글자로 스크롤 + 하이라이트
     item.addEventListener("click", () => {
-      const charEl = document.querySelector(`.corr-char[data-idx="${corr.char_index}"]`);
+      // char_index를 정수로 검증하여 selector injection 방지
+      const safeIdx = Number.isInteger(corr.char_index) ? corr.char_index : parseInt(corr.char_index, 10);
+      if (Number.isNaN(safeIdx)) return;
+      const charEl = document.querySelector(`.corr-char[data-idx="${safeIdx}"]`);
       if (charEl) {
         charEl.scrollIntoView({ behavior: "smooth", block: "center" });
         // 잠시 강조 효과
@@ -894,6 +898,14 @@ async function _loadGitDiff(docId, commitHash, message) {
   const diffContent = document.getElementById("git-diff-content");
 
   if (!diffView || !diffContent) return;
+
+  // git commit hash 형식 검증 (7~40자리 hex)
+  if (!commitHash || !/^[0-9a-f]{7,40}$/.test(commitHash)) {
+    if (diffContent) {
+      diffContent.innerHTML = '<div class="placeholder">유효하지 않은 커밋 해시입니다</div>';
+    }
+    return;
+  }
 
   // 목록 숨기고 diff 표시
   if (logList) logList.style.display = "none";

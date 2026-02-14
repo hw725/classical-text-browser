@@ -860,7 +860,18 @@ async def api_layer_content(
             status_code=404,
         )
 
-    return get_layer_content(interp_path, layer, sub_type, part_id, page_num)
+    try:
+        return get_layer_content(interp_path, layer, sub_type, part_id, page_num)
+    except FileNotFoundError:
+        return JSONResponse(
+            {"error": f"레이어 내용을 찾을 수 없습니다: {layer}/{sub_type} page {page_num}"},
+            status_code=404,
+        )
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"레이어 조회 중 오류: {e}"},
+            status_code=500,
+        )
 
 
 @app.put("/api/interpretations/{interp_id}/layers/{layer}/{sub_type}/pages/{page_num}")
@@ -1094,8 +1105,10 @@ async def api_update_entity(
         result = update_entity(interp_path, entity_type, entity_id, body.updates)
     except FileNotFoundError as e:
         return JSONResponse({"error": str(e)}, status_code=404)
-    except (ValueError, Exception) as e:
+    except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        return JSONResponse({"error": f"엔티티 수정 중 오류: {e}"}, status_code=500)
 
     # 자동 git commit
     commit_msg = f"fix: {entity_type} 엔티티 수정 — {entity_id[:8]}"

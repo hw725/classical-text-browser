@@ -361,6 +361,7 @@ async function loadLibraryInfo() {
 function initBottomPanelTabs() {
   const tabs = document.querySelectorAll(".panel-tabs .panel-tab");
   const gitContent = document.getElementById("git-panel-content");
+  const validationContent = document.getElementById("validation-panel-content");
   const depContent = document.getElementById("dep-panel-content");
   const entityContent = document.getElementById("entity-panel-content");
 
@@ -369,8 +370,9 @@ function initBottomPanelTabs() {
       tabs.forEach((t) => t.classList.remove("active"));
       tab.classList.add("active");
 
-      // 탭 내용 전환
+      // 탭 내용 전환: 0=Git, 1=검증결과, 2=의존추적, 3=엔티티
       if (gitContent) gitContent.style.display = (index === 0) ? "" : "none";
+      if (validationContent) validationContent.style.display = (index === 1) ? "" : "none";
       if (depContent) depContent.style.display = (index === 2) ? "" : "none";
       if (entityContent) entityContent.style.display = (index === 3) ? "" : "none";
 

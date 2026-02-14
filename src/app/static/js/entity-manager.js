@@ -152,7 +152,10 @@ function _loadEntitiesForCurrentPage() {
     // 페이지별 엔티티 조회
     const url = `/api/interpretations/${interpState.interpId}/entities/page/${viewerState.pageNum}?document_id=${viewerState.docId}`;
     fetch(url)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`서버 오류 (${r.status})`);
+        return r.json();
+      })
       .then((data) => {
         if (data.error) {
           _renderEmptyList(data.error);
@@ -182,7 +185,10 @@ function _loadAllEntities() {
   Promise.all(
     types.map((t) =>
       fetch(`/api/interpretations/${interpState.interpId}/entities/${t}`)
-        .then((r) => r.json())
+        .then((r) => {
+          if (!r.ok) throw new Error(`서버 오류 (${r.status})`);
+          return r.json();
+        })
         .then((data) => ({ type: t, entities: data.entities || [] }))
         .catch(() => ({ type: t, entities: [] }))
     )
@@ -336,7 +342,10 @@ function _openEntityEditDialog(entityType, entityId) {
   if (!interpState || !interpState.interpId) return;
 
   fetch(`/api/interpretations/${interpState.interpId}/entities/${entityType}/${entityId}`)
-    .then((r) => r.json())
+    .then((r) => {
+      if (!r.ok) throw new Error(`서버 오류 (${r.status})`);
+      return r.json();
+    })
     .then((entity) => {
       if (entity.error) {
         alert(entity.error);
@@ -513,6 +522,13 @@ async function _saveEntity() {
           body: JSON.stringify({ updates: data }),
         }
       );
+      if (!resp.ok) {
+        // HTTP 오류 시 JSON 본문이 있으면 에러 메시지를 추출, 없으면 상태 코드 표시
+        const errBody = await resp.json().catch(() => ({}));
+        statusEl.textContent = errBody.error || `서버 오류 (${resp.status})`;
+        statusEl.style.color = "#ef4444";
+        return;
+      }
       result = await resp.json();
     } else {
       // 생성 (POST)
@@ -524,6 +540,12 @@ async function _saveEntity() {
           body: JSON.stringify({ entity_type: type, data: data }),
         }
       );
+      if (!resp.ok) {
+        const errBody = await resp.json().catch(() => ({}));
+        statusEl.textContent = errBody.error || `서버 오류 (${resp.status})`;
+        statusEl.style.color = "#ef4444";
+        return;
+      }
       result = await resp.json();
     }
 
@@ -667,9 +689,10 @@ async function _openTextBlockCreator() {
   let works = [];
   try {
     const resp = await fetch(`/api/interpretations/${interpState.interpId}/entities/work`);
+    if (!resp.ok) throw new Error(`서버 오류 (${resp.status})`);
     const data = await resp.json();
     works = data.entities || [];
-  } catch { /* ignore */ }
+  } catch { /* Work 목록 로드 실패 시 빈 목록으로 진행 */ }
 
   const workOptions = works.map((w) =>
     `<option value="${w.id}">${_escHtml(w.title)} (${w.id.substring(0, 8)})</option>`
@@ -709,6 +732,10 @@ async function _openTextBlockCreator() {
             body: JSON.stringify({ document_id: viewerState.docId }),
           }
         );
+        if (!resp.ok) {
+          const errBody = await resp.json().catch(() => ({}));
+          throw new Error(errBody.error || `서버 오류 (${resp.status})`);
+        }
         const result = await resp.json();
         if (result.work) {
           const sel = document.getElementById("ef-tb-work-id");
@@ -779,6 +806,12 @@ async function _saveTextBlockFromSource() {
         }),
       }
     );
+    if (!resp.ok) {
+      const errBody = await resp.json().catch(() => ({}));
+      statusEl.textContent = errBody.error || `서버 오류 (${resp.status})`;
+      statusEl.style.color = "#ef4444";
+      return;
+    }
     const result = await resp.json();
 
     if (result.error) {
@@ -835,6 +868,11 @@ async function _promoteTag(tagId) {
         }),
       }
     );
+    if (!resp.ok) {
+      const errBody = await resp.json().catch(() => ({}));
+      alert(errBody.error || `승격 실패: 서버 오류 (${resp.status})`);
+      return;
+    }
     const result = await resp.json();
     if (result.error) {
       alert(result.error);
@@ -936,6 +974,11 @@ async function _handleLlmReviewAction(action, entityType, entityId) {
         body: JSON.stringify({ updates: { status: newStatus } }),
       }
     );
+    if (!resp.ok) {
+      const errBody = await resp.json().catch(() => ({}));
+      alert(errBody.error || `상태 변경 실패: 서버 오류 (${resp.status})`);
+      return;
+    }
     const result = await resp.json();
     if (result.error) {
       alert(result.error);

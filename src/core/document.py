@@ -86,7 +86,20 @@ def add_document(
                     "→ 해결: 파일 경로를 확인하세요."
                 )
             dest = doc_path / "L1_source" / file_path.name
-            shutil.copy2(file_path, dest)
+            try:
+                shutil.copy2(file_path, dest)
+            except PermissionError as e:
+                raise ValueError(
+                    f"파일 복사 권한이 없습니다: {file_path} → {dest}\n"
+                    f"→ 원인: {e}\n"
+                    "→ 해결: 파일 및 대상 폴더의 읽기/쓰기 권한을 확인하세요."
+                ) from e
+            except OSError as e:
+                raise ValueError(
+                    f"파일 복사 중 오류가 발생했습니다: {file_path} → {dest}\n"
+                    f"→ 원인: {e}\n"
+                    "→ 해결: 디스크 공간, 파일 경로 길이, 네트워크 드라이브 연결 상태를 확인하세요."
+                ) from e
             part_id = f"vol{len(parts) + 1}"
             parts.append({
                 "part_id": part_id,
