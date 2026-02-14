@@ -1,0 +1,254 @@
+{
+  "results": [
+    {
+      "title": "アカデミア",
+      "creator": "南山大学",
+      "item_id": "000000027158",
+      "material_type": null,
+      "issued": "2015",
+      "summary": "アカデミア / 南山大学 (2015)",
+      "raw": {
+        "dc:title": "アカデミア",
+        "dcndl:titleTranscription": "アカデミア",
+        "dc:creator": "南山大学",
+        "dcndl:creatorTranscription": "ナンザン ダイガク",
+        "dc:publisher": "南山大学",
+        "dcndl:publicationPlace": "JP",
+        "dcterms:issued": "2015",
+        "dc:date": "2015",
+        "dc:description": "本タイトル等は最新号による",
+        "dcndl:volume": "(通号97) 2015年1月",
+        "dcndl:NDLBibID": "000000027158",
+        "dcndl:NDLC": "ZK21",
+        "rdfs:seeAlso": "https://ndlsearch.ndl.go.jp/books/R100000002-I000000027158-i5973459",
+        "link": "https://ndlsearch.ndl.go.jp/books/R100000002-I000000027158-i5973459"
+      }
+    },
+    {
+      "title": "アカデミア",
+      "creator": "南山大学",
+      "item_id": "000000027158",
+      "material_type": null,
+      "issued": "2015",
+      "summary": "アカデミア / 南山大学 (2015)",
+      "raw": {
+        "dc:title": "アカデミア",
+        "dcndl:titleTranscription": "アカデミア",
+        "dc:creator": "南山大学",
+        "dcndl:creatorTranscription": "ナンザン ダイガク",
+        "dc:publisher": "南山大学",
+        "dcndl:publicationPlace": "JP",
+        "dcterms:issued": "2015",
+        "dc:date": "2015",
+        "dc:description": "本タイトル等は最新号による",
+        "dcndl:volume": "(97)-(98):2015.1-2015.6",
+        "dcndl:NDLBibID": "000000027158",
+        "dcndl:NDLC": "ZK21",
+        "rdfs:seeAlso": "https://ndlsearch.ndl.go.jp/books/R100000002-I000000027158-i5974382",
+        "link": "https://ndlsearch.ndl.go.jp/books/R100000002-I000000027158-i5974382"
+      }
+    },
+    {
+      "title": "赤羽淑先生退職記念論文集",
+      "creator": "赤羽, 淑, 1931-",
+      "item_id": "000007693358",
+      "material_type": null,
+      "issued": "2005.3",
+      "summary": "赤羽淑先生退職記念論文集 / 赤羽, 淑, 1931- (2005.3)",
+      "raw": {
+        "dc:title": "赤羽淑先生退職記念論文集",
+        "dcndl:titleTranscription": "アカバネシュクセンセイ タイショク キネン ロンブンシュウ",
+        "dc:creator": "赤羽, 淑, 1931-",
+        "dcndl:creatorTranscription": "アカバネ, シュク, 1931-",
+        "dc:publisher": "赤羽淑先生退職記念の会",
+        "dcndl:publicationPlace": "JP",
+        "dcterms:issued": "2005.3",
+        "dc:date": "2005",
+        "dc:extent": "374p",
+        "dc:description": "肖像あり",
+        "dcndl:NDLBibID": "000007693358",
+        "dcndl:JPNO": "20765317",
+        "dcndl:NDLC": "KG12",
+        "dcndl:NDC9": "910.4",
+        "dc:subject_list": [
+          "日本文学--論文集"
+        ],
+        "rdfs:seeAlso": "https://opac.libnet.pref.okayama.jp/licsxp-opac/WOpacMsgNewListToTifTilDetailAction.do?tilcod=1009811869965",
+        "link": "https://ndlsearch.ndl.go.jp/books/R100000002-I000007693358"
+      }
+    },
+    {
+      "title": "「明衡往来(めいこうおうらい)」に見える「蒙求(もうぎゅう)」関係語彙について",
+      "creator": "青木 孝",
+      "item_id": null,
+      "material_type": null,
+      "issued": "1979-11-10",
+      "summary": "「明衡往来(めいこうおうらい)」に見える「蒙求(もうぎゅう)」関係語彙について / 青木 孝 (1979-11-10)",
+      "raw": {
+        "dc:title": "「明衡往来(めいこうおうらい)」に見える「蒙求(もうぎゅう)」関係語彙について",
+        "dc:creator": "青木 孝",
+        "dcterms:issued": "1979-11-10",
+        "dc:date": "1979-11-10",
+        "dc:description": "掲載誌：青山學院女子短期大學紀要 1979-11-10 p.1-30",
+        "rdfs:seeAlso": "https://cir.nii.ac.jp/crid/1571980076703123200",
+        "link": "https://ndlsearch.ndl.go.jp/books/R100000136-I1571980076703123200"
+      }
+    },
+    {
+      "title": "朝枝善照著作集",
+      "creator": "朝枝, 善照, 1944-2007",
+      "item_id": "027766090",
+      "material_type": null,
+      "issued": "2016.11",
+      "summary": "朝枝善照著作集 / 朝枝, 善照, 1944-2007 (2016.11)",
+      "raw": {
+        "dc:title": "朝枝善照著作集",
+        "dcndl:titleTranscription": "アサエダ ゼンショウ チョサクシュウ",
+        "dc:creator": "朝枝, 善照, 1944-2007",
+        "dcndl:creatorTranscription": "アサエダ, ゼンショウ, 1944-2007",
+        "dc:publisher": "永田文昌堂",
+        "dcndl:publicationPlace": "JP",
+        "dcterms:issued": "2016.11",
+        "dc:date": "2016",
+        "dc:extent": "578, 18p",
+        "dc:description": "年表あり",
+        "dcndl:volume": "第3巻",
+        "dcndl:price": "10000円",
+        "dcndl:ISBN": "978-4-8162-4483-4",
+        "dcndl:NDLBibID": "027766090",
+        "dcndl:JPNO": "22825790",
+        "dcndl:NDLC": "HM11",
+        "dcndl:NDC9": "180.8",
+        "dc:subject_list": [
+          "妙好人伝"
+        ],
+        "rdfs:seeAlso": "https://catalog.library.metro.tokyo.lg.jp/winj/opac/switch-detail-iccap.do?bibid=1152938384",
+        "link": "https://ndlsearch.ndl.go.jp/books/R100000002-I027766090"
+      }
+    },
+    {
+      "title": "朝倉文化展[出品史料]",
+      "creator": null,
+      "item_id": null,
+      "material_type": null,
+      "issued": null,
+      "summary": "朝倉文化展[出品史料]",
+      "raw": {
+        "dc:title": "朝倉文化展[出品史料]",
+        "dcndl:titleTranscription": "アサクラ ブンカテン シュッピン シリョウ",
+        "dc:publisher": "福井県立図書館(製作)",
+        "dc:date": "1978",
+        "dc:extent": "1冊 ; 15×21cm",
+        "dc:description": "一般注記：写真複製 ↓",
+        "dcndl:volume": "[4]",
+        "dcndl:price": "3100",
+        "dc:subject_list": [
+          "709.1"
+        ],
+        "rdfs:seeAlso": "https://www.library-archives.pref.fukui.lg.jp/wo/opc_srh/srh_detail/1103298300/",
+        "link": "https://ndlsearch.ndl.go.jp/books/R100000001-I18111103298300"
+      }
+    },
+    {
+      "title": "朝倉文化展[出品史料]",
+      "creator": null,
+      "item_id": null,
+      "material_type": null,
+      "issued": null,
+      "summary": "朝倉文化展[出品史料]",
+      "raw": {
+        "dc:title": "朝倉文化展[出品史料]",
+        "dcndl:titleTranscription": "アサクラ ブンカテン シュッピン シリョウ",
+        "dc:publisher": "福井県立図書館(製作)",
+        "dc:date": "1978",
+        "dc:extent": "1冊 ; 15×21cm",
+        "dc:description": "一般注記：写真複製 ↓",
+        "dcndl:volume": "[5]",
+        "dcndl:price": "2500",
+        "dc:subject_list": [
+          "709.1"
+        ],
+        "rdfs:seeAlso": "https://www.library-archives.pref.fukui.lg.jp/wo/opc_srh/srh_detail/1103298301/",
+        "link": "https://ndlsearch.ndl.go.jp/books/R100000001-I18111103298301"
+      }
+    },
+    {
+      "title": "[足利学校遺蹟図書館所蔵貴重書集成]",
+      "creator": null,
+      "item_id": "000001235397",
+      "material_type": null,
+      "issued": "1980",
+      "summary": "[足利学校遺蹟図書館所蔵貴重書集成] (1980)",
+      "raw": {
+        "dc:title": "[足利学校遺蹟図書館所蔵貴重書集成]",
+        "dcndl:titleTranscription": "アシカガ ガッコウ イセキ トショカン ショゾウ キチョウショ シュウセイ",
+        "dc:publisher": "栃木県立足利図書館",
+        "dcndl:publicationPlace": "JP",
+        "dcterms:issued": "1980",
+        "dc:date": "1980",
+        "dc:extent": "8巻",
+        "dc:description": " 1980",
+        "dcndl:volume": "14-21",
+        "dcndl:NDLBibID": "000001235397",
+        "dcndl:JPNO": "74003126",
+        "dcndl:NDLC": "US1",
+        "dc:subject_list": [
+          "082"
+        ],
+        "rdfs:seeAlso": "https://ndlsearch.ndl.go.jp/books/R100000002-I000001235397",
+        "link": "https://ndlsearch.ndl.go.jp/books/R100000002-I000001235397"
+      }
+    },
+    {
+      "title": "足利学校貴重書目録",
+      "creator": "足利学校遺蹟図書館",
+      "item_id": "000000567825",
+      "material_type": null,
+      "issued": "大正14",
+      "summary": "足利学校貴重書目録 / 足利学校遺蹟図書館 (大正14)",
+      "raw": {
+        "dc:title": "足利学校貴重書目録",
+        "dcndl:titleTranscription": "アシカガ ガッコウ キチョウショ モクロク",
+        "dc:creator": "足利学校遺蹟図書館",
+        "dcndl:creatorTranscription": "アシカガ ガッコウ イセキ トショカン",
+        "dc:publisher": "足利学校遺蹟図書館",
+        "dcndl:publicationPlace": "JP",
+        "dcterms:issued": "大正14",
+        "dc:date": "1925",
+        "dc:extent": "58p",
+        "dc:description": " 1925",
+        "dcndl:NDLBibID": "000000567825",
+        "dcndl:JPNO": "43020351",
+        "dc:subject_list": [
+          "026"
+        ],
+        "rdfs:seeAlso": "https://catalog.library.metro.tokyo.lg.jp/winj/opac/switch-detail-iccap.do?bibid=1100541239",
+        "link": "https://ndlsearch.ndl.go.jp/books/R100000002-I000000567825"
+      }
+    },
+    {
+      "title": "アジア遊学",
+      "creator": "勉誠社",
+      "item_id": "000000107338",
+      "material_type": null,
+      "issued": "2008",
+      "summary": "アジア遊学 / 勉誠社 (2008)",
+      "raw": {
+        "dc:title": "アジア遊学",
+        "dcndl:titleTranscription": "アジア ユウガク",
+        "dc:creator": "勉誠社",
+        "dcndl:creatorTranscription": "ベンセイシャ",
+        "dc:publisher": "勉誠社",
+        "dcndl:publicationPlace": "JP",
+        "dcterms:issued": "2008",
+        "dc:date": "2008",
+        "dc:description": "本タイトル等は最新号による",
+        "dcndl:volume": "(113)-(114):2008.8-2008.9",
+        "dcndl:NDLBibID": "000000107338",
+        "dcndl:NDLC": "ZG71",
+        "rdfs:seeAlso": "https://ndlsearch.ndl.go.jp/books/R100000002-I000000107338-i10496999",
+        "link": "https://ndlsearch.ndl.go.jp/books/R100000002-I000000107338-i10496999"
+      }
+    }
+  ]
+}

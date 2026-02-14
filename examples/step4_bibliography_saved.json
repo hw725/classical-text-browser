@@ -1,0 +1,40 @@
+{
+  "title": "蒙求",
+  "title_reading": "もうぎゅう / 몽구",
+  "alternative_titles": [
+    "標題徐狀元補注蒙求",
+    "補注蒙求",
+    "Mengqiu"
+  ],
+  "creator": {
+    "name": "李翰(李瀨)",
+    "name_reading": "りかん",
+    "role": "author",
+    "period": "唐"
+  },
+  "contributors": [
+    {
+      "name": "徐子光",
+      "name_reading": "じょしこう",
+      "role": "annotator",
+      "period": "南宋"
+    }
+  ],
+  "date_created": "唐代(原著), 南宋(補注)",
+  "edition_type": null,
+  "language": "classical_chinese",
+  "script": "漢字",
+  "physical_description": null,
+  "subject": [
+    "初学書",
+    "古典教育",
+    "歴史故事"
+  ],
+  "classification": null,
+  "series_title": null,
+  "material_type": "古典籍",
+  "repository": null,
+  "digital_source": null,
+  "raw_metadata": null,
+  "notes": "唐代の初学書。4字句形式で歴史人物の故事をまとめたもの。"
+}

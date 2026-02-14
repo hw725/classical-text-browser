@@ -1,0 +1,101 @@
+{
+  "bibliography": {
+    "title": "test_title",
+    "title_reading": null,
+    "alternative_titles": null,
+    "creator": {
+      "name": "test_creator",
+      "name_reading": null,
+      "role": "author",
+      "period": null
+    },
+    "contributors": null,
+    "date_created": "1979-11-10",
+    "edition_type": null,
+    "language": null,
+    "script": null,
+    "physical_description": null,
+    "subject": null,
+    "classification": null,
+    "series_title": null,
+    "material_type": null,
+    "repository": null,
+    "digital_source": {
+      "platform": "NDL Search (国立国会図書館サーチ)",
+      "source_url": null,
+      "permanent_uri": null,
+      "system_ids": null,
+      "license": "CC-BY 4.0 (NDL 자관 데이터)",
+      "accessed_at": null
+    },
+    "raw_metadata": {
+      "source_system": "ndl",
+      "dc:title": "test_title",
+      "dc:creator": "test_creator",
+      "dcterms:issued": "1979-11-10"
+    },
+    "_mapping_info": {
+      "parser_id": "ndl",
+      "fetched_at": "2026-02-14T10:40:18.175958+00:00",
+      "api_variant": "opensearch",
+      "field_sources": {
+        "title": {
+          "source_field": "dc:title",
+          "confidence": "exact",
+          "note": null
+        },
+        "title_reading": {
+          "source_field": "dcndl:titleTranscription",
+          "confidence": "exact",
+          "note": null
+        },
+        "creator.name": {
+          "source_field": "dc:creator",
+          "confidence": "exact",
+          "note": null
+        },
+        "creator.name_reading": {
+          "source_field": "dcndl:creatorTranscription",
+          "confidence": "exact",
+          "note": null
+        },
+        "date_created": {
+          "source_field": "dcterms:issued",
+          "confidence": "exact",
+          "note": null
+        },
+        "edition_type": {
+          "source_field": null,
+          "confidence": null,
+          "note": "NDL에 해당 필드 없음"
+        },
+        "physical_description": {
+          "source_field": "dc:extent",
+          "confidence": "exact",
+          "note": null
+        },
+        "subject": {
+          "source_field": "dc:subject",
+          "confidence": "exact",
+          "note": null
+        },
+        "classification": {
+          "source_field": "dc:subject[@type=dcndl:NDLC/NDC]",
+          "confidence": "exact",
+          "note": null
+        },
+        "material_type": {
+          "source_field": "dcndl:materialType",
+          "confidence": "exact",
+          "note": null
+        },
+        "series_title": {
+          "source_field": "dcndl:seriesTitle",
+          "confidence": "exact",
+          "note": null
+        }
+      }
+    },
+    "notes": null
+  }
+}
