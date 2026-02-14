@@ -9,6 +9,7 @@
  *   5. API에서 서고 정보 로드
  *   6. PDF 렌더러 초기화 (pdf-renderer.js)
  *   7. 텍스트 에디터 초기화 (text-editor.js)
+ *   8. 교정 편집기 초기화 (correction-editor.js)
  */
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -23,6 +24,10 @@ document.addEventListener("DOMContentLoaded", () => {
   if (typeof initTextEditor === "function") initTextEditor();
   // Phase 4: 레이아웃 편집기 초기화
   if (typeof initLayoutEditor === "function") initLayoutEditor();
+  // Phase 6: 교정 편집기 초기화
+  if (typeof initCorrectionEditor === "function") initCorrectionEditor();
+  // Phase 5: 서지정보 패널 초기화
+  if (typeof initBibliography === "function") initBibliography();
 });
 
 
@@ -196,7 +201,7 @@ function initActivityBar() {
  * 현재 활성 모드를 추적한다.
  * "view" — 열람 모드 (기본. PDF + 텍스트 병렬 뷰어)
  * "layout" — 레이아웃 모드 (PDF 위에 LayoutBlock 편집)
- * "correction" — 교정 모드 (향후)
+ * "correction" — 교정 모드 (Phase 6: 글자 단위 교정 + 블록별 섹션 + Git 연동)
  */
 let currentMode = "view";
 
@@ -222,7 +227,7 @@ function initModeBar() {
  * 왜 이렇게 하는가:
  *   - 열람 모드: 좌측 PDF, 우측 텍스트 에디터 (기존 Phase 3 동작)
  *   - 레이아웃 모드: 좌측 PDF + 오버레이, 우측 블록 속성 패널
- *   - 교정 모드: 향후 확장
+ *   - 교정 모드: 좌측 PDF, 우측 교정 편집기 (글자 단위 하이라이팅)
  *
  *   모드 전환 시 좌측 PDF 뷰어는 유지하고,
  *   우측 패널과 오버레이만 교체한다.
@@ -230,27 +235,36 @@ function initModeBar() {
 function _switchMode(mode) {
   const editorRight = document.getElementById("editor-right");
   const layoutPanel = document.getElementById("layout-props-panel");
+  const correctionPanel = document.getElementById("correction-panel");
 
   // 이전 모드 정리
   if (currentMode === "layout") {
     if (typeof deactivateLayoutMode === "function") deactivateLayoutMode();
     if (layoutPanel) layoutPanel.style.display = "none";
-    if (editorRight) editorRight.style.display = "";
   }
+  if (currentMode === "correction") {
+    if (typeof deactivateCorrectionMode === "function") deactivateCorrectionMode();
+    if (correctionPanel) correctionPanel.style.display = "none";
+  }
+
+  // 모든 우측 패널 숨김 (초기화)
+  if (editorRight) editorRight.style.display = "none";
+  if (layoutPanel) layoutPanel.style.display = "none";
+  if (correctionPanel) correctionPanel.style.display = "none";
 
   // 새 모드 활성화
   currentMode = mode;
 
   if (mode === "layout") {
-    // 우측: 텍스트 에디터 숨기고, 레이아웃 속성 패널 표시
-    if (editorRight) editorRight.style.display = "none";
+    // 우측: 레이아웃 속성 패널 표시
     if (layoutPanel) layoutPanel.style.display = "";
     if (typeof activateLayoutMode === "function") activateLayoutMode();
-  } else if (mode === "view") {
-    // 우측: 텍스트 에디터 표시
-    if (editorRight) editorRight.style.display = "";
   } else if (mode === "correction") {
-    // 향후 확장: 교정 모드
+    // 우측: 교정 편집기 패널 표시
+    if (correctionPanel) correctionPanel.style.display = "";
+    if (typeof activateCorrectionMode === "function") activateCorrectionMode();
+  } else {
+    // view 모드: 텍스트 에디터 표시
     if (editorRight) editorRight.style.display = "";
   }
 }

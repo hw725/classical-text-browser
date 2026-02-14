@@ -11,6 +11,15 @@ API 엔드포인트:
     GET /api/documents/{doc_id}/pdf/{part_id} → PDF 파일 서빙
     GET /api/documents/{doc_id}/pages/{page_num}/text → 페이지 텍스트 조회
     PUT /api/documents/{doc_id}/pages/{page_num}/text → 페이지 텍스트 저장
+    GET /api/documents/{doc_id}/bibliography → 서지정보 조회
+    PUT /api/documents/{doc_id}/bibliography → 서지정보 저장
+    GET /api/documents/{doc_id}/pages/{page_num}/corrections → 교정 기록 조회
+    PUT /api/documents/{doc_id}/pages/{page_num}/corrections → 교정 기록 저장 (자동 git commit)
+    GET /api/documents/{doc_id}/git/log → git 커밋 이력
+    GET /api/documents/{doc_id}/git/diff/{commit_hash} → 커밋 diff
+    GET /api/parsers → 등록된 파서 목록
+    POST /api/parsers/{parser_id}/search → 외부 소스 검색
+    POST /api/parsers/{parser_id}/map → 검색 결과를 bibliography 형식으로 매핑
 """
 
 import sys
@@ -28,11 +37,18 @@ from pydantic import BaseModel
 
 from core.library import get_library_info, list_documents
 from core.document import (
+    get_bibliography,
     get_document_info,
+    get_git_diff,
+    get_git_log,
+    get_page_corrections,
     get_page_layout,
     get_page_text,
     get_pdf_path,
+    git_commit_document,
     list_pages,
+    save_bibliography,
+    save_page_corrections,
     save_page_layout,
     save_page_text,
 )
@@ -322,3 +338,337 @@ async def api_block_types():
     import json
     data = json.loads(block_types_path.read_text(encoding="utf-8"))
     return data
+
+
+# --- 교정 API (Phase 6) ---
+
+
+class CorrectionItem(BaseModel):
+    """개별 교정 항목. corrections.schema.json의 Correction 정의와 대응."""
+    page: int | None = None
+    block_id: str | None = None
+    line: int | None = None
+    char_index: int | None = None
+    type: str
+    original_ocr: str
+    corrected: str
+    common_reading: str | None = None
+    corrected_by: str | None = None
+    confidence: float | None = None
+    note: str | None = None
+
+
+class CorrectionsSaveRequest(BaseModel):
+    """교정 저장 요청 본문. corrections.schema.json 형식."""
+    part_id: str | None = None
+    corrections: list[CorrectionItem] = []
+
+
+@app.get("/api/documents/{doc_id}/pages/{page_num}/corrections")
+async def api_page_corrections(
+    doc_id: str,
+    page_num: int,
+    part_id: str = Query(..., description="권 식별자 (예: vol1)"),
+):
+    """특정 페이지의 교정 기록을 반환한다.
+
+    목적: 교정 편집기에서 기존 교정 기록을 로드하기 위해 사용한다.
+    입력:
+        doc_id — 문헌 ID.
+        page_num — 페이지 번호 (1부터 시작).
+        part_id — 쿼리 파라미터, 권 식별자.
+    출력: corrections.schema.json 형식 + _meta.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = _library_path / "documents" / doc_id
+    if not doc_path.exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
+            status_code=404,
+        )
+
+    try:
+        return get_page_corrections(doc_path, part_id, page_num)
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
+
+@app.put("/api/documents/{doc_id}/pages/{page_num}/corrections")
+async def api_save_page_corrections(
+    doc_id: str,
+    page_num: int,
+    body: CorrectionsSaveRequest,
+    part_id: str = Query(..., description="권 식별자 (예: vol1)"),
+):
+    """특정 페이지의 교정 기록을 저장하고 자동으로 git commit한다.
+
+    목적: 교정 편집기에서 작성한 교정 데이터를 L4_text/corrections/에 기록하고,
+          교정 내역을 요약한 커밋 메시지로 자동 commit한다.
+    입력:
+        doc_id — 문헌 ID.
+        page_num — 페이지 번호.
+        part_id — 쿼리 파라미터, 권 식별자.
+        body — corrections.schema.json 형식의 교정 데이터.
+    출력: {status, file_path, correction_count, git}.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = _library_path / "documents" / doc_id
+    if not doc_path.exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
+            status_code=404,
+        )
+
+    corrections_data = body.model_dump()
+    try:
+        save_result = save_page_corrections(doc_path, part_id, page_num, corrections_data)
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"교정 저장 실패: {e}"},
+            status_code=400,
+        )
+
+    # 교정 유형별 건수 집계 → git commit 메시지 생성
+    from collections import Counter
+    type_counts = Counter(c["type"] for c in corrections_data.get("corrections", []))
+    summary_parts = [f"{t} {n}건" for t, n in type_counts.items()]
+    summary = ", ".join(summary_parts) if summary_parts else "없음"
+    commit_msg = f"L4: page {page_num:03d} 교정 — {summary}"
+
+    git_result = git_commit_document(doc_path, commit_msg)
+    save_result["git"] = git_result
+
+    return save_result
+
+
+# --- Git API (Phase 6) ---
+
+
+@app.get("/api/documents/{doc_id}/git/log")
+async def api_git_log(
+    doc_id: str,
+    max_count: int = Query(50, description="최대 커밋 수"),
+):
+    """문헌 저장소의 git 커밋 이력을 반환한다.
+
+    목적: 하단 패널의 Git 이력 탭에 커밋 목록을 표시하기 위해 사용한다.
+    입력:
+        doc_id — 문헌 ID.
+        max_count — 최대 커밋 수 (기본 50).
+    출력: [{hash, short_hash, message, author, date}, ...].
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = _library_path / "documents" / doc_id
+    if not doc_path.exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
+            status_code=404,
+        )
+
+    return {"commits": get_git_log(doc_path, max_count=max_count)}
+
+
+@app.get("/api/documents/{doc_id}/git/diff/{commit_hash}")
+async def api_git_diff(doc_id: str, commit_hash: str):
+    """특정 커밋과 그 부모 사이의 diff를 반환한다.
+
+    목적: Git 이력에서 커밋을 선택했을 때 변경 내용을 표시하기 위해 사용한다.
+    입력:
+        doc_id — 문헌 ID.
+        commit_hash — 대상 커밋 해시.
+    출력: {commit_hash, message, diffs: [{file, change_type, diff_text}, ...]}.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = _library_path / "documents" / doc_id
+    if not doc_path.exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
+            status_code=404,
+        )
+
+    result = get_git_diff(doc_path, commit_hash)
+    if "error" in result:
+        return JSONResponse({"error": result["error"]}, status_code=404)
+
+    return result
+
+
+# --- 서지정보 API (Phase 5) ---
+
+
+@app.get("/api/documents/{doc_id}/bibliography")
+async def api_bibliography(doc_id: str):
+    """문헌의 서지정보를 반환한다.
+
+    목적: 서지정보 패널에 bibliography.json 내용을 표시하기 위해 사용한다.
+    입력: doc_id — 문헌 ID.
+    출력: bibliography.json의 내용.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = _library_path / "documents" / doc_id
+    if not doc_path.exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
+            status_code=404,
+        )
+
+    try:
+        return get_bibliography(doc_path)
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
+
+class BibliographySaveRequest(BaseModel):
+    """서지정보 저장 요청 본문. bibliography.schema.json 형식."""
+    title: str | None = None
+    title_reading: str | None = None
+    alternative_titles: list[str] | None = None
+    creator: dict | None = None
+    contributors: list[dict] | None = None
+    date_created: str | None = None
+    edition_type: str | None = None
+    language: str | None = None
+    script: str | None = None
+    physical_description: str | None = None
+    subject: list[str] | None = None
+    classification: dict | None = None
+    series_title: str | None = None
+    material_type: str | None = None
+    repository: dict | None = None
+    digital_source: dict | None = None
+    raw_metadata: dict | None = None
+    _mapping_info: dict | None = None
+    notes: str | None = None
+
+
+@app.put("/api/documents/{doc_id}/bibliography")
+async def api_save_bibliography(doc_id: str, body: BibliographySaveRequest):
+    """문헌의 서지정보를 저장한다.
+
+    목적: 파서가 가져온 서지정보 또는 사용자가 수동 편집한 내용을 저장한다.
+    입력:
+        doc_id — 문헌 ID.
+        body — bibliography.schema.json 형식의 데이터.
+    출력: {status: "saved", file_path}.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = _library_path / "documents" / doc_id
+    if not doc_path.exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
+            status_code=404,
+        )
+
+    bib_data = body.model_dump(exclude_none=False)
+    try:
+        return save_bibliography(doc_path, bib_data)
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"서지정보 저장 실패: {e}"},
+            status_code=400,
+        )
+
+
+# --- 파서 API (Phase 5) ---
+
+
+@app.get("/api/parsers")
+async def api_parsers():
+    """등록된 파서 목록을 반환한다.
+
+    목적: GUI에서 파서 선택 드롭다운을 채우기 위해 사용한다.
+    출력: [{id, name, api_variant}, ...]
+    """
+    # 파서 모듈을 지연 import (parsers 패키지가 register_parser를 호출)
+    import parsers  # noqa: F401
+    from parsers.base import list_parsers, get_registry_json
+
+    return {
+        "parsers": list_parsers(),
+        "registry": get_registry_json(),
+    }
+
+
+class ParserSearchRequest(BaseModel):
+    """파서 검색 요청 본문."""
+    query: str
+    cnt: int = 10
+    mediatype: int | None = None
+
+
+@app.post("/api/parsers/{parser_id}/search")
+async def api_parser_search(parser_id: str, body: ParserSearchRequest):
+    """외부 소스에서 서지정보를 검색한다.
+
+    목적: GUI의 "서지정보 가져오기" 다이얼로그에서 사용.
+    입력:
+        parser_id — 파서 ID (예: "ndl", "japan_national_archives").
+        body — {query: "검색어", cnt: 10}.
+    출력: {results: [{title, creator, item_id, summary, raw}, ...]}.
+    """
+    import parsers  # noqa: F401
+    from parsers.base import get_parser
+
+    try:
+        fetcher, _mapper = get_parser(parser_id)
+    except KeyError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
+    try:
+        results = await fetcher.search(
+            body.query,
+            cnt=body.cnt,
+            mediatype=body.mediatype,
+        )
+        return {"results": results}
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"검색 실패: {e}\n→ 해결: 네트워크 연결과 검색어를 확인하세요."},
+            status_code=502,
+        )
+
+
+class ParserMapRequest(BaseModel):
+    """파서 매핑 요청 본문. 검색 결과의 raw 데이터를 전달한다."""
+    raw_data: dict
+
+
+@app.post("/api/parsers/{parser_id}/map")
+async def api_parser_map(parser_id: str, body: ParserMapRequest):
+    """검색 결과를 bibliography.json 형식으로 매핑한다.
+
+    목적: 사용자가 검색 결과에서 항목을 선택하면,
+          해당 항목의 raw 데이터를 공통 스키마로 변환한다.
+    입력:
+        parser_id — 파서 ID.
+        body — {raw_data: {...}} (Fetcher가 반환한 raw dict).
+    출력: bibliography.schema.json 형식의 dict.
+    """
+    import parsers  # noqa: F401
+    from parsers.base import get_parser
+
+    try:
+        _fetcher, mapper = get_parser(parser_id)
+    except KeyError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
+    try:
+        bibliography = mapper.map_to_bibliography(body.raw_data)
+        return {"bibliography": bibliography}
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"매핑 실패: {e}"},
+            status_code=400,
+        )

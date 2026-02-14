@@ -50,6 +50,20 @@
           <div class="placeholder">서고를 불러오는 중...</div>
         </div>
       </div>
+
+      <!-- Phase 5: 서지정보 섹션 (문헌 선택 시 표시) -->
+      <div class="sidebar-section" id="bib-section" style="display:none;">
+        <div class="section-header">
+          서지정보
+          <div class="section-header-actions">
+            <button id="bib-fetch-btn" class="section-action-btn" title="서지정보 가져오기">가져오기</button>
+            <button id="bib-edit-btn" class="section-action-btn" title="수동 편집">편집</button>
+          </div>
+        </div>
+        <div id="bib-fields" class="bib-fields">
+          <div class="placeholder">문헌을 선택하면 서지정보가 표시됩니다</div>
+        </div>
+      </div>
     </div>
   </aside>
 
@@ -189,6 +203,34 @@
         </div>
       </div>
 
+      <!-- 우측 패널: 교정 편집기 (Phase 6, 교정 모드에서만 표시) -->
+      <div class="editor-panel editor-right correction-panel" id="correction-panel" style="display:none;">
+        <div class="panel-label">교정 편집기 (L4)</div>
+
+        <!-- 교정 도구 바 -->
+        <div class="corr-toolbar">
+          <button id="corr-save" class="text-btn text-btn-primary" title="저장 (Ctrl+S)">저장</button>
+          <span id="corr-save-status" class="text-save-status"></span>
+          <div class="text-toolbar-spacer"></div>
+          <span id="corr-count" class="text-toolbar-info">교정: 0건</span>
+          <div class="text-toolbar-divider"></div>
+          <select id="corr-block-filter" class="corr-block-filter" title="블록 필터">
+            <option value="all">전체</option>
+          </select>
+        </div>
+
+        <!-- 교정 텍스트 표시 영역 (글자 단위 span) -->
+        <div id="corr-text-area" class="corr-text-area">
+          <div class="placeholder">교정 모드에서 텍스트가 여기에 표시됩니다</div>
+        </div>
+
+        <!-- 교정 목록 (현재 페이지) -->
+        <div class="corr-list-section">
+          <div class="props-section-title">교정 목록</div>
+          <div id="corr-list" class="corr-list"></div>
+        </div>
+      </div>
+
       <!-- 우측 패널: 텍스트 에디터 (L4 교정 텍스트) -->
       <div class="editor-panel editor-right" id="editor-right">
         <div class="panel-label" id="right-panel-label">교정 텍스트 (4층)</div>
@@ -243,11 +285,141 @@
         </button>
       </div>
       <div class="panel-content" id="panel-content">
-        <div class="placeholder">Git 이력이 여기에 표시됩니다</div>
+        <!-- Git 이력 탭 내용 (Phase 6) -->
+        <div id="git-panel-content">
+          <div id="git-log-list" class="git-log-list">
+            <div class="placeholder">문헌을 선택하면 Git 이력이 표시됩니다</div>
+          </div>
+          <div id="git-diff-view" class="git-diff-view" style="display:none;">
+            <div class="git-diff-header">
+              <button id="git-diff-back" class="text-btn" title="목록으로">&larr; 목록</button>
+              <span id="git-diff-title" class="git-diff-title"></span>
+            </div>
+            <div id="git-diff-content" class="git-diff-content"></div>
+          </div>
+        </div>
       </div>
     </div>
 
   </main>
+
+  <!-- Phase 5: 서지정보 다이얼로그 오버레이 -->
+  <div class="bib-dialog-overlay" id="bib-dialog-overlay" style="display:none;">
+
+    <!-- 서지정보 가져오기 다이얼로그 -->
+    <div class="bib-dialog" id="bib-fetch-dialog">
+      <div class="bib-dialog-header">
+        <span class="bib-dialog-title">서지정보 가져오기</span>
+        <button class="bib-dialog-close" title="닫기">&times;</button>
+      </div>
+      <div class="bib-dialog-body">
+        <div class="bib-search-row">
+          <select id="bib-parser-select" class="bib-select" title="파서 선택"></select>
+          <input id="bib-search-input" type="text" class="bib-input" placeholder="검색어 (예: 蒙求)" />
+          <button id="bib-search-btn" class="bib-btn bib-btn-primary">검색</button>
+        </div>
+        <div class="bib-search-info">
+          <span id="bib-search-status"></span>
+        </div>
+        <div id="bib-search-results" class="bib-search-results"></div>
+      </div>
+    </div>
+
+    <!-- 수동 편집 다이얼로그 -->
+    <div class="bib-dialog" id="bib-edit-dialog" style="display:none;">
+      <div class="bib-dialog-header">
+        <span class="bib-dialog-title">서지정보 편집</span>
+        <button class="bib-dialog-close" title="닫기">&times;</button>
+      </div>
+      <div class="bib-dialog-body bib-edit-form">
+        <label class="bib-edit-label">제목</label>
+        <input id="bib-edit-title" type="text" class="bib-input" />
+
+        <label class="bib-edit-label">독음</label>
+        <input id="bib-edit-title-reading" type="text" class="bib-input" placeholder="예: もうぎゅう / 몽구" />
+
+        <label class="bib-edit-label">저자명</label>
+        <input id="bib-edit-creator-name" type="text" class="bib-input" />
+
+        <label class="bib-edit-label">저자 독음</label>
+        <input id="bib-edit-creator-reading" type="text" class="bib-input" />
+
+        <label class="bib-edit-label">저자 역할</label>
+        <input id="bib-edit-creator-role" type="text" class="bib-input" placeholder="예: author, annotator" />
+
+        <label class="bib-edit-label">저자 시기</label>
+        <input id="bib-edit-creator-period" type="text" class="bib-input" placeholder="예: 唐" />
+
+        <label class="bib-edit-label">성립/간행 시기</label>
+        <input id="bib-edit-date" type="text" class="bib-input" placeholder="예: 唐代(原著)" />
+
+        <label class="bib-edit-label">판종</label>
+        <input id="bib-edit-edition" type="text" class="bib-input" placeholder="예: 목판본, 활자본" />
+
+        <label class="bib-edit-label">형태사항</label>
+        <input id="bib-edit-physical" type="text" class="bib-input" placeholder="예: 4冊, 26.7cm" />
+
+        <label class="bib-edit-label">자료유형</label>
+        <input id="bib-edit-material" type="text" class="bib-input" placeholder="예: 図書, 和古書" />
+
+        <label class="bib-edit-label">총서명</label>
+        <input id="bib-edit-series" type="text" class="bib-input" />
+
+        <label class="bib-edit-label">비고</label>
+        <textarea id="bib-edit-notes" class="bib-textarea" rows="3"></textarea>
+
+        <div class="bib-edit-actions">
+          <span id="bib-edit-status"></span>
+          <button id="bib-edit-save-btn" class="bib-btn bib-btn-primary">저장</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 6: 교정 다이얼로그 오버레이 -->
+  <div class="corr-dialog-overlay" id="corr-dialog-overlay" style="display:none;">
+    <div class="corr-dialog">
+      <div class="bib-dialog-header">
+        <span class="bib-dialog-title" id="corr-dialog-title">교정 입력</span>
+        <button class="bib-dialog-close" id="corr-dialog-close" title="닫기">&times;</button>
+      </div>
+      <div class="bib-dialog-body corr-dialog-body">
+
+        <label class="bib-edit-label">교정 유형</label>
+        <select id="corr-type" class="bib-select corr-type-select">
+          <option value="ocr_error">OCR 오류 (ocr_error)</option>
+          <option value="variant_reading">판본 이문 (variant_reading)</option>
+          <option value="variant_char">이체자 (variant_char)</option>
+          <option value="decoding_error">판독 불가→가능 (decoding_error)</option>
+          <option value="uncertain">불확실 (uncertain)</option>
+        </select>
+
+        <label class="bib-edit-label">원래 글자</label>
+        <input id="corr-original" type="text" class="bib-input" readonly />
+
+        <label class="bib-edit-label">교정 글자</label>
+        <input id="corr-corrected" type="text" class="bib-input" placeholder="교정할 글자 입력" />
+
+        <div id="corr-common-reading-group">
+          <label class="bib-edit-label">통행 텍스트 (다른 판본)</label>
+          <input id="corr-common-reading" type="text" class="bib-input" placeholder="다른 판본의 글자" />
+        </div>
+
+        <label class="bib-edit-label">메모</label>
+        <textarea id="corr-note" class="bib-textarea" rows="3" placeholder="교정 근거, 비고"></textarea>
+
+        <label class="bib-edit-label">확신도: <span id="corr-confidence-val">0.9</span></label>
+        <input id="corr-confidence" type="range" min="0" max="1" step="0.05" value="0.9" class="corr-slider" />
+
+        <div class="corr-dialog-actions">
+          <button id="corr-dialog-delete" class="text-btn props-btn-danger" style="display:none;">삭제</button>
+          <div class="text-toolbar-spacer"></div>
+          <button id="corr-dialog-cancel" class="text-btn">취소</button>
+          <button id="corr-dialog-save" class="text-btn text-btn-primary">저장</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- 상태 바: D-001 하단 정보 표시줄 -->
   <footer class="status-bar">
@@ -272,6 +444,8 @@
 <script src="/static/js/pdf-renderer.js"></script>
 <script src="/static/js/text-editor.js"></script>
 <script src="/static/js/layout-editor.js"></script>
+<script src="/static/js/correction-editor.js"></script>
+<script src="/static/js/bibliography.js"></script>
 <script src="/static/js/workspace.js"></script>
 </body>
 </html>

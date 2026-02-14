@@ -346,6 +346,21 @@ function _selectPage(docId, partId, pageNum, docInfo, pageNode) {
   if (typeof updatePartSelector === "function" && docInfo && docInfo.parts) {
     updatePartSelector(docInfo.parts, partId);
   }
+
+  // Phase 6: 교정 모드일 때 교정 데이터도 로드
+  if (typeof loadPageCorrections === "function" && typeof correctionState !== "undefined" && correctionState.active) {
+    loadPageCorrections(docId, partId, pageNum);
+  }
+
+  // Phase 6: Git 이력 로드
+  if (typeof _loadGitLog === "function") {
+    _loadGitLog(docId);
+  }
+
+  // Phase 5: 서지정보 로드 (bibliography.js에서 정의)
+  if (typeof loadBibliography === "function") {
+    loadBibliography(docId);
+  }
 }
 
 

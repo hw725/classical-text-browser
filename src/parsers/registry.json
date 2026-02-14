@@ -1,0 +1,39 @@
+{
+  "parsers": [
+    {
+      "id": "ndl",
+      "name": "国立国会図書館サーチ (NDL Search)",
+      "country": "JP",
+      "fetcher": "ndl_fetcher",
+      "mapper": "ndl_mapper",
+      "access_method": "api",
+      "base_url": "https://ndlsearch.ndl.go.jp/api/",
+      "response_format": "xml",
+      "requires_auth": false,
+      "metadata_standard": "DC-NDL",
+      "api_variants": ["opensearch"]
+    },
+    {
+      "id": "japan_national_archives",
+      "name": "国立公文書館デジタルアーカイブ",
+      "country": "JP",
+      "fetcher": "archives_jp_fetcher",
+      "mapper": "archives_jp_mapper",
+      "access_method": "scraping",
+      "base_url": "https://www.digital.archives.go.jp/",
+      "response_format": "html",
+      "requires_auth": false,
+      "metadata_standard": "custom_hierarchical"
+    },
+    {
+      "id": "manual",
+      "name": "수동 입력",
+      "country": null,
+      "fetcher": null,
+      "mapper": null,
+      "access_method": "manual",
+      "requires_auth": false,
+      "metadata_standard": null
+    }
+  ]
+}

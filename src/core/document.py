@@ -407,6 +407,294 @@ def save_page_layout(
     }
 
 
+def get_bibliography(doc_path: str | Path) -> dict:
+    """문헌의 서지정보(bibliography.json)를 읽어 반환한다.
+
+    목적: 문헌의 서지정보를 조회한다.
+    입력: doc_path — 문헌 디렉토리 경로.
+    출력: bibliography.json의 내용 (dict). 파일이 없으면 기본 구조 반환.
+    왜 이렇게 하는가: 서지정보는 처음에는 거의 비어 있을 수 있고,
+                      나중에 파서나 수동 입력으로 채워진다.
+    """
+    doc_path = Path(doc_path).resolve()
+    bib_path = doc_path / "bibliography.json"
+
+    if bib_path.exists():
+        return json.loads(bib_path.read_text(encoding="utf-8"))
+
+    # 파일이 없으면 manifest에서 제목만 가져와 기본 구조 반환
+    manifest = get_document_info(doc_path)
+    return {"title": manifest.get("title")}
+
+
+def save_bibliography(doc_path: str | Path, bibliography: dict) -> dict:
+    """문헌의 서지정보를 저장한다.
+
+    목적: bibliography.json을 갱신한다.
+    입력:
+        doc_path — 문헌 디렉토리 경로.
+        bibliography — bibliography.schema.json 형식의 dict.
+    출력: {status: "saved", file_path}.
+    왜 이렇게 하는가: 파서가 외부 소스에서 가져온 서지정보를 저장하거나,
+                      사용자가 수동으로 편집한 내용을 저장할 때 사용한다.
+                      저장 전에 jsonschema로 검증하여 잘못된 데이터를 방지한다.
+    """
+    import jsonschema
+
+    doc_path = Path(doc_path).resolve()
+    bib_path = doc_path / "bibliography.json"
+
+    # 스키마 검증
+    schema_path = (
+        Path(__file__).resolve().parent.parent.parent
+        / "schemas" / "source_repo" / "bibliography.schema.json"
+    )
+    if schema_path.exists():
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        # _mapping_info, raw_metadata는 스키마에 포함되어 있으므로 그대로 검증
+        # 단, 검증 전에 빈 값 정리 (null 필드는 스키마가 허용)
+        jsonschema.validate(instance=bibliography, schema=schema)
+
+    _write_json(bib_path, bibliography)
+
+    relative_path = bib_path.relative_to(doc_path).as_posix()
+    return {
+        "status": "saved",
+        "file_path": relative_path,
+    }
+
+
+def _corrections_file_path(doc_path: Path, part_id: str, page_num: int) -> Path:
+    """교정 파일 경로를 조립한다. (내부 유틸리티)
+
+    컨벤션: L4_text/corrections/{part_id}_page_{NNN}_corrections.json
+    왜 이렇게 하는가: 교정 데이터를 텍스트 파일과 분리하여 저장하면,
+                      텍스트 원본과 교정 기록을 독립적으로 관리할 수 있다.
+                      네이밍 규칙은 L4_text/pages, L3_layout과 동일하게 유지한다.
+    """
+    filename = f"{part_id}_page_{page_num:03d}_corrections.json"
+    return doc_path / "L4_text" / "corrections" / filename
+
+
+def get_page_corrections(doc_path: str | Path, part_id: str, page_num: int) -> dict:
+    """특정 페이지의 교정 기록을 읽어 반환한다.
+
+    목적: L4_text/corrections/ 에서 해당 페이지의 교정 JSON 파일을 읽는다.
+    입력:
+        doc_path — 문헌 디렉토리 경로.
+        part_id — 권 식별자.
+        page_num — 페이지 번호 (1부터 시작).
+    출력: corrections.schema.json 형식의 dict + _meta.
+          파일이 없으면 빈 corrections 배열과 exists=false를 반환한다.
+    왜 이렇게 하는가: 교정이 아직 진행되지 않은 페이지도 있으므로,
+                      파일이 없으면 기본 구조를 반환한다.
+    """
+    doc_path = Path(doc_path).resolve()
+    manifest = get_document_info(doc_path)
+    corr_path = _corrections_file_path(doc_path, part_id, page_num)
+
+    relative_path = corr_path.relative_to(doc_path).as_posix()
+
+    if corr_path.exists():
+        data = json.loads(corr_path.read_text(encoding="utf-8"))
+        data["_meta"] = {
+            "document_id": manifest["document_id"],
+            "file_path": relative_path,
+            "exists": True,
+        }
+        return data
+
+    # 파일이 없으면 빈 교정 반환
+    return {
+        "part_id": part_id,
+        "corrections": [],
+        "_meta": {
+            "document_id": manifest["document_id"],
+            "file_path": relative_path,
+            "exists": False,
+        },
+    }
+
+
+def save_page_corrections(
+    doc_path: str | Path,
+    part_id: str,
+    page_num: int,
+    corrections_data: dict,
+) -> dict:
+    """특정 페이지의 교정 기록을 저장한다.
+
+    목적: L4_text/corrections/ 에 교정 JSON 파일을 기록한다.
+    입력:
+        doc_path — 문헌 디렉토리 경로.
+        part_id — 권 식별자.
+        page_num — 페이지 번호.
+        corrections_data — corrections.schema.json 형식의 dict.
+    출력: dict with status, file_path, correction_count.
+    왜 이렇게 하는가: 교정 편집기에서 사용자가 글자 교정을 완료하면,
+                      이 함수가 호출되어 교정 기록이 JSON으로 저장된다.
+                      저장 전에 jsonschema로 검증하여, 잘못된 데이터가 저장되지 않도록 한다.
+
+    Raises:
+        jsonschema.ValidationError: 스키마 검증 실패 시.
+    """
+    import jsonschema
+
+    doc_path = Path(doc_path).resolve()
+    corr_path = _corrections_file_path(doc_path, part_id, page_num)
+
+    # L4_text/corrections/ 디렉토리가 없으면 생성
+    corr_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # 스키마 검증
+    schema_path = (
+        Path(__file__).resolve().parent.parent.parent
+        / "schemas" / "source_repo" / "corrections.schema.json"
+    )
+    if schema_path.exists():
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        # _meta 필드는 내부용이므로 검증 전에 제거
+        validate_data = {k: v for k, v in corrections_data.items() if not k.startswith("_")}
+        jsonschema.validate(instance=validate_data, schema=schema)
+
+    # _meta 필드 제거 후 저장
+    save_data = {k: v for k, v in corrections_data.items() if not k.startswith("_")}
+    _write_json(corr_path, save_data)
+
+    relative_path = corr_path.relative_to(doc_path).as_posix()
+    return {
+        "status": "saved",
+        "file_path": relative_path,
+        "correction_count": len(save_data.get("corrections", [])),
+    }
+
+
+def git_commit_document(doc_path: str | Path, message: str) -> dict:
+    """문헌 저장소에 git commit을 생성한다.
+
+    목적: 교정 저장 시 자동으로 커밋하여 버전 이력을 남긴다.
+    입력:
+        doc_path — 문헌 디렉토리 경로 (git 저장소).
+        message — 커밋 메시지.
+    출력: {committed: True/False, hash, message}.
+    왜 이렇게 하는가: 매 교정 저장마다 커밋하면, 모든 변경 이력이
+                      git log에 남아 언제든 이전 상태로 돌아갈 수 있다.
+                      변경사항이 없으면 빈 커밋을 만들지 않는다.
+    """
+    doc_path = Path(doc_path).resolve()
+
+    try:
+        repo = git.Repo(doc_path)
+    except git.InvalidGitRepositoryError:
+        # git 저장소가 아직 없으면 자동 초기화한다.
+        # 왜: add_document()로 정식 등록하지 않은 문헌(더미 등)도
+        #      교정 저장 시 자연스럽게 git 이력을 시작할 수 있게 한다.
+        repo = git.Repo.init(doc_path)
+
+    # 변경사항이 없으면 커밋 스킵
+    if not repo.is_dirty(untracked_files=True):
+        return {"committed": False, "message": "변경사항 없음"}
+
+    repo.index.add(["."])
+
+    try:
+        commit = repo.index.commit(message)
+    except git.HookExecutionError:
+        # Git LFS 등의 post-commit hook이 실패할 수 있다.
+        # 커밋 자체는 이미 완료되었으므로, hook 에러는 무시하고
+        # 마지막 커밋 정보를 가져온다.
+        commit = repo.head.commit
+
+    return {
+        "committed": True,
+        "hash": commit.hexsha,
+        "short_hash": commit.hexsha[:7],
+        "message": message,
+    }
+
+
+def get_git_log(doc_path: str | Path, max_count: int = 50) -> list[dict]:
+    """문헌 저장소의 git 커밋 이력을 반환한다.
+
+    목적: 하단 패널의 Git 이력 탭에 표시할 커밋 목록을 가져온다.
+    입력:
+        doc_path — 문헌 디렉토리 경로.
+        max_count — 최대 커밋 수 (기본 50).
+    출력: [{hash, short_hash, message, author, date}, ...].
+    왜 이렇게 하는가: 연구자가 자신의 교정 이력을 확인하고,
+                      특정 시점의 상태를 찾아볼 수 있게 한다.
+    """
+    doc_path = Path(doc_path).resolve()
+
+    try:
+        repo = git.Repo(doc_path)
+    except git.InvalidGitRepositoryError:
+        return []
+
+    commits = []
+    for c in repo.iter_commits(max_count=max_count):
+        commits.append({
+            "hash": c.hexsha,
+            "short_hash": c.hexsha[:7],
+            "message": c.message.strip(),
+            "author": str(c.author),
+            "date": c.committed_datetime.isoformat(),
+        })
+
+    return commits
+
+
+def get_git_diff(doc_path: str | Path, commit_hash: str) -> dict:
+    """특정 커밋과 그 부모 커밋 사이의 diff를 반환한다.
+
+    목적: 특정 교정 커밋에서 무엇이 변경되었는지 확인한다.
+    입력:
+        doc_path — 문헌 디렉토리 경로.
+        commit_hash — 대상 커밋 해시 (full 또는 short).
+    출력: {commit_hash, message, diffs: [{file, change_type, diff_text}, ...]}.
+    왜 이렇게 하는가: 연구자가 교정 전후를 비교하여,
+                      어떤 글자가 어떻게 변경되었는지 확인할 수 있다.
+    """
+    doc_path = Path(doc_path).resolve()
+
+    try:
+        repo = git.Repo(doc_path)
+        commit = repo.commit(commit_hash)
+    except (git.InvalidGitRepositoryError, git.BadName, ValueError):
+        return {"error": f"커밋을 찾을 수 없습니다: {commit_hash}"}
+
+    result = {
+        "commit_hash": commit.hexsha,
+        "short_hash": commit.hexsha[:7],
+        "message": commit.message.strip(),
+        "author": str(commit.author),
+        "date": commit.committed_datetime.isoformat(),
+        "diffs": [],
+    }
+
+    # 부모가 없으면 (최초 커밋) 빈 트리와 비교
+    if commit.parents:
+        parent = commit.parents[0]
+        diffs = parent.diff(commit, create_patch=True)
+    else:
+        diffs = commit.diff(git.NULL_TREE, create_patch=True)
+
+    for d in diffs:
+        diff_entry = {
+            "file": d.b_path or d.a_path,
+            "change_type": d.change_type,
+        }
+        # diff 텍스트 (패치 내용)
+        try:
+            diff_entry["diff_text"] = d.diff.decode("utf-8", errors="replace")
+        except Exception:
+            diff_entry["diff_text"] = "(바이너리 파일)"
+
+        result["diffs"].append(diff_entry)
+
+    return result
+
+
 def _update_library_manifest(library_path: Path, doc_id: str, title: str) -> None:
     """서고 매니페스트에 새 문헌을 추가한다. (내부 유틸리티)"""
     manifest_path = library_path / "library_manifest.json"
