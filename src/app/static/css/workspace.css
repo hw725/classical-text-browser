@@ -755,3 +755,201 @@ body.resizing-row {
 .status-modified { color: #f59e0b; }
 .status-saving { color: var(--accent); }
 .status-error { color: #ef4444; }
+
+
+/* === Phase 4: 모드 탭 바 (열람 / 레이아웃 / 교정) === */
+
+.mode-bar {
+  height: 32px;
+  display: flex;
+  align-items: stretch;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  padding: 0 8px;
+  gap: 2px;
+}
+
+.mode-tab {
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  user-select: none;
+  border-radius: 4px 4px 0 0;
+}
+
+.mode-tab:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.mode-tab.active {
+  color: var(--text-active);
+  border-bottom-color: var(--accent);
+}
+
+/* 레이아웃 모드 활성화 시 모드탭 강조 */
+.mode-tab.active[data-mode="layout"] {
+  border-bottom-color: #A855F7;
+  color: #A855F7;
+}
+
+
+/* === Phase 4: PDF 캔버스 래퍼 (오버레이 정렬용) === */
+
+.pdf-canvas-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.layout-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 10;
+  cursor: crosshair;
+}
+
+
+/* === Phase 4: 레이아웃 속성 편집 패널 === */
+
+.layout-props-panel {
+  overflow-y: auto;
+}
+
+.layout-toolbar {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.layout-props-form {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.props-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin: 8px 0 6px;
+  letter-spacing: 0.5px;
+}
+
+.props-label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin: 6px 0 2px;
+  font-family: var(--font-mono);
+}
+
+.props-input,
+.props-select {
+  width: 100%;
+  padding: 4px 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+.props-input:focus,
+.props-select:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.props-input[readonly] {
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+}
+
+.props-actions {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.props-btn-danger {
+  color: #ef4444 !important;
+  border-color: #ef4444 !important;
+}
+
+.props-btn-danger:hover {
+  background: rgba(239, 68, 68, 0.15) !important;
+}
+
+
+/* === Phase 4: 블록 목록 (우측 패널 하단) === */
+
+.layout-block-list-section {
+  padding: 8px 12px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.layout-block-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.block-list-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.1s;
+}
+
+.block-list-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.block-list-item.selected {
+  background: rgba(0, 122, 204, 0.2);
+}
+
+.block-list-color {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.block-list-order {
+  font-weight: 600;
+  color: var(--text-active);
+  min-width: 18px;
+  text-align: center;
+}
+
+.block-list-label {
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.block-list-id {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}

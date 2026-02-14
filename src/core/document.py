@@ -300,6 +300,113 @@ def save_page_text(
     }
 
 
+def _layout_file_path(doc_path: Path, part_id: str, page_num: int) -> Path:
+    """L3 레이아웃 파일 경로를 조립한다. (내부 유틸리티)
+
+    컨벤션: L3_layout/{part_id}_page_{NNN}.json (NNN = 3자리 zero-padded)
+    왜 이렇게 하는가: L4_text와 동일한 네이밍 규칙을 사용하여 일관성을 유지한다.
+    """
+    filename = f"{part_id}_page_{page_num:03d}.json"
+    return doc_path / "L3_layout" / filename
+
+
+def get_page_layout(doc_path: str | Path, part_id: str, page_num: int) -> dict:
+    """특정 페이지의 레이아웃(LayoutBlock 목록)을 읽어 반환한다.
+
+    목적: L3_layout/ 에서 해당 페이지의 레이아웃 JSON 파일을 읽는다.
+    입력:
+        doc_path — 문헌 디렉토리 경로.
+        part_id — 권 식별자.
+        page_num — 페이지 번호 (1부터 시작).
+    출력: layout_page.schema.json 형식의 dict.
+          파일이 없으면 빈 blocks 배열과 exists=false를 반환한다.
+    왜 이렇게 하는가: 레이아웃이 아직 작성되지 않은 페이지도 있으므로,
+                      파일이 없으면 기본 구조를 반환한다.
+    """
+    doc_path = Path(doc_path).resolve()
+    manifest = get_document_info(doc_path)
+    layout_path = _layout_file_path(doc_path, part_id, page_num)
+
+    relative_path = layout_path.relative_to(doc_path).as_posix()
+
+    if layout_path.exists():
+        data = json.loads(layout_path.read_text(encoding="utf-8"))
+        data["_meta"] = {
+            "document_id": manifest["document_id"],
+            "file_path": relative_path,
+            "exists": True,
+        }
+        return data
+
+    # 파일이 없으면 빈 레이아웃 반환
+    return {
+        "part_id": part_id,
+        "page_number": page_num,
+        "image_width": None,
+        "image_height": None,
+        "analysis_method": None,
+        "blocks": [],
+        "_meta": {
+            "document_id": manifest["document_id"],
+            "file_path": relative_path,
+            "exists": False,
+        },
+    }
+
+
+def save_page_layout(
+    doc_path: str | Path,
+    part_id: str,
+    page_num: int,
+    layout_data: dict,
+) -> dict:
+    """특정 페이지의 레이아웃을 저장한다.
+
+    목적: L3_layout/ 에 레이아웃 JSON 파일을 기록한다.
+    입력:
+        doc_path — 문헌 디렉토리 경로.
+        part_id — 권 식별자.
+        page_num — 페이지 번호.
+        layout_data — layout_page.schema.json 형식의 dict.
+    출력: dict with status, file_path, block_count.
+    왜 이렇게 하는가: 레이아웃 편집기에서 사용자가 LayoutBlock을 그리고 저장하면,
+                      이 함수가 호출되어 L3_layout/에 JSON으로 기록된다.
+                      저장 전에 jsonschema로 검증하여, 잘못된 데이터가 저장되지 않도록 한다.
+
+    Raises:
+        jsonschema.ValidationError: 스키마 검증 실패 시.
+    """
+    import jsonschema
+
+    doc_path = Path(doc_path).resolve()
+    layout_path = _layout_file_path(doc_path, part_id, page_num)
+
+    # L3_layout/ 디렉토리가 없으면 생성
+    layout_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # 스키마 검증
+    schema_path = (
+        Path(__file__).resolve().parent.parent.parent
+        / "schemas" / "source_repo" / "layout_page.schema.json"
+    )
+    if schema_path.exists():
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        # _meta 필드는 내부용이므로 검증 전에 제거
+        validate_data = {k: v for k, v in layout_data.items() if not k.startswith("_")}
+        jsonschema.validate(instance=validate_data, schema=schema)
+
+    # _meta 필드 제거 후 저장
+    save_data = {k: v for k, v in layout_data.items() if not k.startswith("_")}
+    _write_json(layout_path, save_data)
+
+    relative_path = layout_path.relative_to(doc_path).as_posix()
+    return {
+        "status": "saved",
+        "file_path": relative_path,
+        "block_count": len(save_data.get("blocks", [])),
+    }
+
+
 def _update_library_manifest(library_path: Path, doc_id: str, title: str) -> None:
     """서고 매니페스트에 새 문헌을 추가한다. (내부 유틸리티)"""
     manifest_path = library_path / "library_manifest.json"

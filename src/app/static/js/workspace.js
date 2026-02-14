@@ -16,10 +16,13 @@ document.addEventListener("DOMContentLoaded", () => {
   initPanelToggle();
   initActivityBar();
   initTabs();
+  initModeBar();
   loadLibraryInfo();
   // Phase 3: 병렬 뷰어 모듈 초기화
   if (typeof initPdfRenderer === "function") initPdfRenderer();
   if (typeof initTextEditor === "function") initTextEditor();
+  // Phase 4: 레이아웃 편집기 초기화
+  if (typeof initLayoutEditor === "function") initLayoutEditor();
 });
 
 
@@ -186,7 +189,75 @@ function initActivityBar() {
 
 
 /* ──────────────────────────
-   4. 탭 전환 (층별 탭 + 하단 패널 탭)
+   4. 모드 전환 (Phase 4: 열람 / 레이아웃 / 교정)
+   ────────────────────────── */
+
+/**
+ * 현재 활성 모드를 추적한다.
+ * "view" — 열람 모드 (기본. PDF + 텍스트 병렬 뷰어)
+ * "layout" — 레이아웃 모드 (PDF 위에 LayoutBlock 편집)
+ * "correction" — 교정 모드 (향후)
+ */
+let currentMode = "view";
+
+function initModeBar() {
+  const modeTabs = document.querySelectorAll(".mode-tab");
+  modeTabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const newMode = tab.dataset.mode;
+      if (newMode === currentMode) return;
+
+      // 모드 탭 하이라이트 전환
+      modeTabs.forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+
+      _switchMode(newMode);
+    });
+  });
+}
+
+/**
+ * 모드를 전환한다.
+ *
+ * 왜 이렇게 하는가:
+ *   - 열람 모드: 좌측 PDF, 우측 텍스트 에디터 (기존 Phase 3 동작)
+ *   - 레이아웃 모드: 좌측 PDF + 오버레이, 우측 블록 속성 패널
+ *   - 교정 모드: 향후 확장
+ *
+ *   모드 전환 시 좌측 PDF 뷰어는 유지하고,
+ *   우측 패널과 오버레이만 교체한다.
+ */
+function _switchMode(mode) {
+  const editorRight = document.getElementById("editor-right");
+  const layoutPanel = document.getElementById("layout-props-panel");
+
+  // 이전 모드 정리
+  if (currentMode === "layout") {
+    if (typeof deactivateLayoutMode === "function") deactivateLayoutMode();
+    if (layoutPanel) layoutPanel.style.display = "none";
+    if (editorRight) editorRight.style.display = "";
+  }
+
+  // 새 모드 활성화
+  currentMode = mode;
+
+  if (mode === "layout") {
+    // 우측: 텍스트 에디터 숨기고, 레이아웃 속성 패널 표시
+    if (editorRight) editorRight.style.display = "none";
+    if (layoutPanel) layoutPanel.style.display = "";
+    if (typeof activateLayoutMode === "function") activateLayoutMode();
+  } else if (mode === "view") {
+    // 우측: 텍스트 에디터 표시
+    if (editorRight) editorRight.style.display = "";
+  } else if (mode === "correction") {
+    // 향후 확장: 교정 모드
+    if (editorRight) editorRight.style.display = "";
+  }
+}
+
+
+/* ──────────────────────────
+   5. 탭 전환 (층별 탭 + 하단 패널 탭)
    ────────────────────────── */
 
 function initTabs() {
@@ -208,7 +279,7 @@ function initTabGroup(selector) {
 
 
 /* ──────────────────────────
-   5. 서고 정보 로드
+   6. 서고 정보 로드
    ────────────────────────── */
 
 async function loadLibraryInfo() {

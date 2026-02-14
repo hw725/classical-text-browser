@@ -147,6 +147,14 @@ async function _renderPage(pageNum) {
   // UI 업데이트
   document.getElementById("pdf-page-input").value = pageNum;
 
+  // Phase 4: PDF 렌더링 완료 후 레이아웃 오버레이 크기 동기화
+  if (typeof _syncOverlaySize === "function") {
+    _syncOverlaySize();
+  }
+  if (typeof _redrawOverlay === "function" && typeof layoutState !== "undefined" && layoutState.active) {
+    _redrawOverlay();
+  }
+
   // 대기 중인 페이지가 있으면 렌더링
   if (pdfState.pendingPage !== null) {
     const pending = pdfState.pendingPage;
@@ -208,6 +216,11 @@ function _syncPageChange(pageNum) {
   // 사이드바 하이라이트 동기화
   if (typeof highlightTreePage === "function") {
     highlightTreePage(pageNum);
+  }
+
+  // Phase 4: 레이아웃 모드일 때 레이아웃도 동기화
+  if (typeof loadPageLayout === "function" && typeof layoutState !== "undefined" && layoutState.active) {
+    loadPageLayout(viewerState.docId, viewerState.partId, pageNum);
   }
 }
 

@@ -29,9 +29,11 @@ from pydantic import BaseModel
 from core.library import get_library_info, list_documents
 from core.document import (
     get_document_info,
+    get_page_layout,
     get_page_text,
     get_pdf_path,
     list_pages,
+    save_page_layout,
     save_page_text,
 )
 
@@ -46,6 +48,19 @@ app = FastAPI(
 class TextSaveRequest(BaseModel):
     """텍스트 저장 요청 본문. PUT /api/documents/{doc_id}/pages/{page_num}/text 에서 사용."""
     text: str
+
+
+class LayoutSaveRequest(BaseModel):
+    """레이아웃 저장 요청 본문. PUT /api/documents/{doc_id}/pages/{page_num}/layout 에서 사용.
+
+    layout_page.schema.json 형식의 JSON을 그대로 전달받는다.
+    """
+    part_id: str
+    page_number: int
+    image_width: int | None = None
+    image_height: int | None = None
+    analysis_method: str | None = None
+    blocks: list = []
 
 # 서고 경로 — serve 명령에서 설정된다
 _library_path: Path | None = None
@@ -214,3 +229,96 @@ async def api_save_page_text(
         return save_page_text(doc_path, part_id, page_num, body.text)
     except FileNotFoundError as e:
         return JSONResponse({"error": str(e)}, status_code=404)
+
+
+# --- 레이아웃 API (Phase 4) ---
+
+
+@app.get("/api/documents/{doc_id}/pages/{page_num}/layout")
+async def api_page_layout(
+    doc_id: str,
+    page_num: int,
+    part_id: str = Query(..., description="권 식별자 (예: vol1)"),
+):
+    """특정 페이지의 레이아웃(LayoutBlock 목록)을 반환한다.
+
+    목적: 레이아웃 편집기에서 기존 LayoutBlock을 로드하기 위해 사용한다.
+    입력:
+        doc_id — 문헌 ID.
+        page_num — 페이지 번호 (1부터 시작).
+        part_id — 쿼리 파라미터, 권 식별자.
+    출력: layout_page.schema.json 형식 + _meta (document_id, file_path, exists).
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = _library_path / "documents" / doc_id
+    if not doc_path.exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
+            status_code=404,
+        )
+
+    try:
+        return get_page_layout(doc_path, part_id, page_num)
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
+
+@app.put("/api/documents/{doc_id}/pages/{page_num}/layout")
+async def api_save_page_layout(
+    doc_id: str,
+    page_num: int,
+    body: LayoutSaveRequest,
+    part_id: str = Query(..., description="권 식별자 (예: vol1)"),
+):
+    """특정 페이지의 레이아웃을 저장한다.
+
+    목적: 레이아웃 편집기에서 작성한 LayoutBlock 데이터를 L3_layout/에 기록한다.
+    입력:
+        doc_id — 문헌 ID.
+        page_num — 페이지 번호.
+        part_id — 쿼리 파라미터, 권 식별자.
+        body — layout_page.schema.json 형식의 레이아웃 데이터.
+    출력: {status: "saved", file_path, block_count}.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = _library_path / "documents" / doc_id
+    if not doc_path.exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
+            status_code=404,
+        )
+
+    layout_data = body.model_dump()
+    try:
+        return save_page_layout(doc_path, part_id, page_num, layout_data)
+    except Exception as e:
+        # jsonschema.ValidationError 등
+        return JSONResponse(
+            {"error": f"레이아웃 저장 실패: {e}"},
+            status_code=400,
+        )
+
+
+@app.get("/api/resources/block_types")
+async def api_block_types():
+    """블록 타입 어휘 목록을 반환한다.
+
+    목적: 레이아웃 편집기에서 block_type 드롭다운을 채우기 위해 사용한다.
+    출력: resources/block_types.json의 내용.
+    """
+    block_types_path = (
+        Path(__file__).resolve().parent.parent.parent
+        / "resources" / "block_types.json"
+    )
+    if not block_types_path.exists():
+        return JSONResponse(
+            {"error": "block_types.json을 찾을 수 없습니다."},
+            status_code=404,
+        )
+    import json
+    data = json.loads(block_types_path.read_text(encoding="utf-8"))
+    return data

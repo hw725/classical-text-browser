@@ -337,6 +337,11 @@ function _selectPage(docId, partId, pageNum, docInfo, pageNode) {
     loadPageText(docId, partId, pageNum);
   }
 
+  // Phase 4: 레이아웃 모드일 때 레이아웃도 로드
+  if (typeof loadPageLayout === "function" && typeof layoutState !== "undefined" && layoutState.active) {
+    loadPageLayout(docId, partId, pageNum);
+  }
+
   // 다권본: part 선택기 업데이트 (pdf-renderer.js에서 정의)
   if (typeof updatePartSelector === "function" && docInfo && docInfo.parts) {
     updatePartSelector(docInfo.parts, partId);

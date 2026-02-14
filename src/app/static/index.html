@@ -59,7 +59,14 @@
   <!-- 메인 영역 -->
   <main class="main-area">
 
-    <!-- 탭 바: D-001 멀티탭 → 층별 탭 -->
+    <!-- 모드 탭 바: 열람 / 레이아웃 / 교정 (Phase 4) -->
+    <div class="mode-bar">
+      <div class="mode-tab active" data-mode="view">열람</div>
+      <div class="mode-tab" data-mode="layout">레이아웃</div>
+      <div class="mode-tab" data-mode="correction">교정</div>
+    </div>
+
+    <!-- 층별 탭 바: D-001 멀티탭 -->
     <div class="tab-bar">
       <div class="tab active">원문</div>
       <div class="tab">교정</div>
@@ -106,13 +113,81 @@
           </div>
           <!-- 캔버스 영역 -->
           <div class="pdf-canvas-container" id="pdf-canvas-container">
-            <canvas id="pdf-canvas"></canvas>
+            <div class="pdf-canvas-wrapper" id="pdf-canvas-wrapper">
+              <canvas id="pdf-canvas"></canvas>
+              <!-- Phase 4: 레이아웃 오버레이 캔버스 (레이아웃 모드에서만 활성화) -->
+              <canvas id="layout-overlay" class="layout-overlay" style="display:none;"></canvas>
+            </div>
           </div>
         </div>
       </div>
 
       <!-- 에디터 리사이즈 핸들 -->
       <div class="resize-handle resize-editor" id="resize-editor"></div>
+
+      <!-- 우측 패널: 레이아웃 속성 편집 (Phase 4, 레이아웃 모드에서만 표시) -->
+      <div class="editor-panel editor-right layout-props-panel" id="layout-props-panel" style="display:none;">
+        <div class="panel-label">LayoutBlock 속성</div>
+
+        <!-- 레이아웃 도구 바 -->
+        <div class="layout-toolbar">
+          <button id="layout-save" class="text-btn text-btn-primary" title="저장 (Ctrl+S)">저장</button>
+          <span id="layout-save-status" class="text-save-status"></span>
+          <div class="text-toolbar-spacer"></div>
+          <span id="layout-block-count" class="text-toolbar-info">블록: 0</span>
+        </div>
+
+        <!-- 선택된 블록 속성 편집 -->
+        <div class="layout-props-form" id="layout-props-form" style="display:none;">
+          <div class="props-section-title">선택된 블록</div>
+
+          <label class="props-label">block_id</label>
+          <input id="prop-block-id" class="props-input" readonly />
+
+          <label class="props-label">block_type</label>
+          <select id="prop-block-type" class="props-select"></select>
+
+          <label class="props-label">reading_order</label>
+          <input id="prop-reading-order" type="number" min="0" class="props-input" />
+
+          <label class="props-label">writing_direction</label>
+          <select id="prop-writing-dir" class="props-select">
+            <option value="vertical_rtl">vertical_rtl (세로 우→좌)</option>
+            <option value="vertical_ltr">vertical_ltr (세로 좌→우)</option>
+            <option value="horizontal_ltr">horizontal_ltr (가로 좌→우)</option>
+            <option value="horizontal_rtl">horizontal_rtl (가로 우→좌)</option>
+          </select>
+
+          <label class="props-label">refers_to_block</label>
+          <select id="prop-refers-to" class="props-select">
+            <option value="">없음</option>
+          </select>
+
+          <label class="props-label">line_style</label>
+          <select id="prop-line-style" class="props-select">
+            <option value="">미지정</option>
+            <option value="single_line">single_line (단행)</option>
+            <option value="double_line">double_line (쌍행)</option>
+          </select>
+
+          <label class="props-label">font_size_class</label>
+          <select id="prop-font-size" class="props-select">
+            <option value="">미지정</option>
+            <option value="large">large (대자)</option>
+            <option value="small">small (소자)</option>
+          </select>
+
+          <div class="props-actions">
+            <button id="prop-delete" class="text-btn props-btn-danger" title="블록 삭제 (Delete)">블록 삭제</button>
+          </div>
+        </div>
+
+        <!-- 전체 블록 목록 (reading_order 순) -->
+        <div class="layout-block-list-section">
+          <div class="props-section-title">전체 블록 목록 (reading_order 순)</div>
+          <div id="layout-block-list" class="layout-block-list"></div>
+        </div>
+      </div>
 
       <!-- 우측 패널: 텍스트 에디터 (L4 교정 텍스트) -->
       <div class="editor-panel editor-right" id="editor-right">
@@ -196,6 +271,7 @@
 <script src="/static/js/sidebar-tree.js"></script>
 <script src="/static/js/pdf-renderer.js"></script>
 <script src="/static/js/text-editor.js"></script>
+<script src="/static/js/layout-editor.js"></script>
 <script src="/static/js/workspace.js"></script>
 </body>
 </html>
