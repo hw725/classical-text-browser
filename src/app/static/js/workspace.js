@@ -7,6 +7,8 @@
  *   3. 하단 패널 높이 드래그 조절 + 접기/펴기
  *   4. 액티비티 바 탭 전환
  *   5. API에서 서고 정보 로드
+ *   6. PDF 렌더러 초기화 (pdf-renderer.js)
+ *   7. 텍스트 에디터 초기화 (text-editor.js)
  */
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -15,6 +17,9 @@ document.addEventListener("DOMContentLoaded", () => {
   initActivityBar();
   initTabs();
   loadLibraryInfo();
+  // Phase 3: 병렬 뷰어 모듈 초기화
+  if (typeof initPdfRenderer === "function") initPdfRenderer();
+  if (typeof initTextEditor === "function") initTextEditor();
 });
 
 
@@ -224,7 +229,12 @@ async function loadLibraryInfo() {
     document.getElementById("status-documents").textContent =
       `문헌: ${docs.length}`;
 
-    renderDocumentList(docs);
+    // Phase 3: 트리 뷰 사용 (sidebar-tree.js)
+    if (typeof initSidebarTree === "function") {
+      initSidebarTree(docs);
+    } else {
+      renderDocumentList(docs);
+    }
   } catch (err) {
     // API 연결 실패는 정상 — 정적 파일만 볼 수도 있다
     document.getElementById("document-list").innerHTML =

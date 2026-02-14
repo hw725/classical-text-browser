@@ -8,6 +8,9 @@ API 엔드포인트:
     GET /api/library → 서고 정보
     GET /api/documents → 문헌 목록
     GET /api/documents/{doc_id} → 특정 문헌 정보
+    GET /api/documents/{doc_id}/pdf/{part_id} → PDF 파일 서빙
+    GET /api/documents/{doc_id}/pages/{page_num}/text → 페이지 텍스트 조회
+    PUT /api/documents/{doc_id}/pages/{page_num}/text → 페이지 텍스트 저장
 """
 
 import sys
@@ -18,19 +21,31 @@ _src_dir = str(Path(__file__).resolve().parent.parent)
 if _src_dir not in sys.path:
     sys.path.insert(0, _src_dir)
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from core.library import get_library_info, list_documents
-from core.document import get_document_info, list_pages
+from core.document import (
+    get_document_info,
+    get_page_text,
+    get_pdf_path,
+    list_pages,
+    save_page_text,
+)
 
 
 app = FastAPI(
     title="고전 텍스트 디지털 서고 플랫폼",
     description="사람과 LLM이 함께 고전 텍스트를 읽고 번역하고 연구하는 통합 작업 환경",
-    version="0.1.0",
+    version="0.2.0",
 )
+
+
+class TextSaveRequest(BaseModel):
+    """텍스트 저장 요청 본문. PUT /api/documents/{doc_id}/pages/{page_num}/text 에서 사용."""
+    text: str
 
 # 서고 경로 — serve 명령에서 설정된다
 _library_path: Path | None = None
@@ -109,3 +124,93 @@ async def api_document(doc_id: str):
             {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
             status_code=404,
         )
+
+
+@app.get("/api/documents/{doc_id}/pdf/{part_id}")
+async def api_document_pdf(doc_id: str, part_id: str):
+    """문헌의 특정 권(part) PDF 파일을 반환한다.
+
+    목적: 좌측 PDF 뷰어에서 원본 PDF를 렌더링하기 위해 파일을 서빙한다.
+    입력:
+        doc_id — 문헌 ID.
+        part_id — 권 식별자 (예: "vol1").
+    출력: PDF 파일 (application/pdf).
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = _library_path / "documents" / doc_id
+    try:
+        pdf_path = get_pdf_path(doc_path, part_id)
+        return FileResponse(
+            str(pdf_path),
+            media_type="application/pdf",
+            filename=pdf_path.name,
+        )
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
+
+@app.get("/api/documents/{doc_id}/pages/{page_num}/text")
+async def api_page_text(
+    doc_id: str,
+    page_num: int,
+    part_id: str = Query(..., description="권 식별자 (예: vol1)"),
+):
+    """특정 페이지의 텍스트를 반환한다.
+
+    목적: 우측 텍스트 에디터에 페이지 텍스트를 로드하기 위해 사용한다.
+    입력:
+        doc_id — 문헌 ID.
+        page_num — 페이지 번호 (1부터 시작).
+        part_id — 쿼리 파라미터, 권 식별자.
+    출력: {document_id, part_id, page, text, file_path, exists}.
+          파일이 없으면 text=""과 exists=false를 반환한다.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = _library_path / "documents" / doc_id
+    if not doc_path.exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
+            status_code=404,
+        )
+
+    try:
+        return get_page_text(doc_path, part_id, page_num)
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
+
+@app.put("/api/documents/{doc_id}/pages/{page_num}/text")
+async def api_save_page_text(
+    doc_id: str,
+    page_num: int,
+    body: TextSaveRequest,
+    part_id: str = Query(..., description="권 식별자 (예: vol1)"),
+):
+    """특정 페이지의 텍스트를 저장한다.
+
+    목적: 우측 텍스트 에디터에서 입력한 텍스트를 L4_text/pages/에 기록한다.
+    입력:
+        doc_id — 문헌 ID.
+        page_num — 페이지 번호.
+        part_id — 쿼리 파라미터, 권 식별자.
+        body — {text: "저장할 텍스트"}.
+    출력: {status: "saved", file_path, size}.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = _library_path / "documents" / doc_id
+    if not doc_path.exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
+            status_code=404,
+        )
+
+    try:
+        return save_page_text(doc_path, part_id, page_num, body.text)
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)

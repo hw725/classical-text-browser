@@ -41,3 +41,9 @@ intermediate_results/
 
 # 로그
 logs/*.jsonl
+
+# 테스트 서고 (examples/register_dummy.py가 생성)
+examples/test_library/
+
+# 생성된 더미 PDF
+examples/dummy_shishuo.pdf

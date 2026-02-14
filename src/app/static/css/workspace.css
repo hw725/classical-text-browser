@@ -470,3 +470,288 @@ body.resizing-row {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.25);
 }
+
+
+/* === Phase 3: 트리 뷰 (문헌 > 권 > 페이지 계층구조) === */
+
+.tree-node {
+  user-select: none;
+}
+
+.tree-node-header {
+  display: flex;
+  align-items: center;
+  padding: 3px 8px;
+  cursor: pointer;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--text-primary);
+  gap: 4px;
+}
+
+.tree-node-header:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tree-toggle {
+  width: 16px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  text-align: center;
+  transition: transform 0.15s;
+  display: inline-block;
+}
+
+.tree-toggle.expanded {
+  transform: rotate(90deg);
+}
+
+.tree-children {
+  padding-left: 12px;
+}
+
+.tree-badge {
+  color: var(--text-secondary);
+  font-size: 11px;
+  margin-left: auto;
+  padding-left: 8px;
+  flex-shrink: 0;
+}
+
+.tree-page {
+  display: flex;
+  align-items: center;
+  padding: 2px 8px 2px 20px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-primary);
+  gap: 4px;
+}
+
+.tree-page:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tree-page.active {
+  background: rgba(0, 122, 204, 0.2);
+  color: var(--text-active);
+}
+
+.tree-page-icon {
+  width: 14px;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.tree-page-icon::before {
+  content: "▪";
+  color: var(--text-muted);
+}
+
+.tree-page.active .tree-page-icon::before {
+  color: var(--accent);
+}
+
+
+/* === Phase 3: PDF 뷰어 === */
+
+.pdf-viewer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pdf-toolbar {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.pdf-btn {
+  padding: 2px 8px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.pdf-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.pdf-select {
+  padding: 2px 4px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-size: 12px;
+  max-width: 140px;
+}
+
+.pdf-page-input {
+  width: 40px;
+  padding: 2px 4px;
+  text-align: center;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-size: 12px;
+  -moz-appearance: textfield;
+}
+
+.pdf-page-input::-webkit-outer-spin-button,
+.pdf-page-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.pdf-page-total {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.pdf-zoom-level {
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-width: 36px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.pdf-toolbar-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.pdf-canvas-container {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  padding: 8px;
+  background: #1a1a1a;
+}
+
+#pdf-canvas {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+
+/* === Phase 3: 텍스트 에디터 === */
+
+.text-editor {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.text-toolbar {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.text-toolbar-info {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-toolbar-spacer {
+  flex: 1;
+}
+
+.text-toolbar-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.text-btn {
+  padding: 2px 8px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.text-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.text-btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-active);
+}
+
+.text-btn-primary:hover {
+  background: var(--accent-hover);
+}
+
+.text-content {
+  flex: 1;
+  padding: 12px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: none;
+  resize: none;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.6;
+  outline: none;
+}
+
+.text-content:focus {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.text-content::placeholder {
+  color: var(--text-muted);
+}
+
+.text-save-status {
+  font-size: 11px;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+.status-saved { color: #22c55e; }
+.status-new { color: var(--text-secondary); }
+.status-modified { color: #f59e0b; }
+.status-saving { color: var(--accent); }
+.status-error { color: #ef4444; }

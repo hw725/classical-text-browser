@@ -178,6 +178,128 @@ def list_pages(doc_path: str | Path) -> list[dict]:
     return pages
 
 
+def get_pdf_path(doc_path: str | Path, part_id: str) -> Path:
+    """manifest의 parts에서 part_id에 해당하는 PDF 파일 경로를 반환한다.
+
+    목적: PDF 뷰어에 파일을 서빙하기 위해 실제 파일 경로를 조립한다.
+    입력:
+        doc_path — 문헌 디렉토리 경로.
+        part_id — 권 식별자 (예: "vol1").
+    출력: PDF 파일의 절대 Path.
+    왜 이렇게 하는가: manifest.json의 parts[].file은 상대 경로이므로,
+                      doc_path와 합쳐서 절대 경로를 만들어야 한다.
+
+    Raises:
+        FileNotFoundError: 문헌 또는 해당 part_id를 찾을 수 없을 때.
+    """
+    doc_path = Path(doc_path).resolve()
+    manifest = get_document_info(doc_path)
+
+    for part in manifest.get("parts", []):
+        if part["part_id"] == part_id:
+            pdf_path = doc_path / part["file"]
+            if not pdf_path.exists():
+                raise FileNotFoundError(
+                    f"PDF 파일을 찾을 수 없습니다: {pdf_path}\n"
+                    "→ 해결: L1_source/ 디렉토리에 파일이 있는지 확인하세요."
+                )
+            return pdf_path
+
+    available = [p["part_id"] for p in manifest.get("parts", [])]
+    raise FileNotFoundError(
+        f"권을 찾을 수 없습니다: part_id='{part_id}'\n"
+        f"→ 사용 가능한 part_id: {available}"
+    )
+
+
+def _text_file_path(doc_path: Path, part_id: str, page_num: int) -> Path:
+    """텍스트 파일 경로를 조립한다. (내부 유틸리티)
+
+    컨벤션: L4_text/pages/{part_id}_page_{NNN}.txt (NNN = 3자리 zero-padded)
+    왜 이렇게 하는가: 다권본에서 각 권의 각 페이지를 고유하게 식별하기 위해
+                      part_id + 페이지 번호를 결합한다.
+    """
+    filename = f"{part_id}_page_{page_num:03d}.txt"
+    return doc_path / "L4_text" / "pages" / filename
+
+
+def get_page_text(doc_path: str | Path, part_id: str, page_num: int) -> dict:
+    """특정 페이지의 텍스트를 읽어 반환한다.
+
+    목적: L4_text/pages/ 에서 해당 페이지의 텍스트 파일을 읽는다.
+    입력:
+        doc_path — 문헌 디렉토리 경로.
+        part_id — 권 식별자.
+        page_num — 페이지 번호 (1부터 시작).
+    출력: dict with document_id, part_id, page, text, file_path, exists.
+    왜 이렇게 하는가: 텍스트가 아직 입력되지 않은 페이지도 있을 수 있으므로,
+                      파일이 없으면 빈 문자열과 exists=false를 반환한다.
+    """
+    doc_path = Path(doc_path).resolve()
+    manifest = get_document_info(doc_path)
+    text_path = _text_file_path(doc_path, part_id, page_num)
+
+    # doc_path 기준 상대 경로 (Windows/Unix 호환 슬래시)
+    relative_path = text_path.relative_to(doc_path).as_posix()
+
+    if text_path.exists():
+        text = text_path.read_text(encoding="utf-8")
+        return {
+            "document_id": manifest["document_id"],
+            "part_id": part_id,
+            "page": page_num,
+            "text": text,
+            "file_path": relative_path,
+            "exists": True,
+        }
+
+    return {
+        "document_id": manifest["document_id"],
+        "part_id": part_id,
+        "page": page_num,
+        "text": "",
+        "file_path": relative_path,
+        "exists": False,
+    }
+
+
+def save_page_text(
+    doc_path: str | Path,
+    part_id: str,
+    page_num: int,
+    text: str,
+) -> dict:
+    """특정 페이지의 텍스트를 저장한다.
+
+    목적: L4_text/pages/ 에 텍스트 파일을 기록한다.
+    입력:
+        doc_path — 문헌 디렉토리 경로.
+        part_id — 권 식별자.
+        page_num — 페이지 번호.
+        text — 저장할 텍스트 내용.
+    출력: dict with status, file_path, size.
+    왜 이렇게 하는가: 사용자가 우측 에디터에서 텍스트를 입력하면,
+                      이 함수가 호출되어 L4_text/pages/에 파일로 저장된다.
+                      UTF-8 인코딩, LF 줄바꿈으로 통일한다.
+    """
+    doc_path = Path(doc_path).resolve()
+    text_path = _text_file_path(doc_path, part_id, page_num)
+
+    # L4_text/pages/ 디렉토리가 없으면 생성
+    text_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # LF 줄바꿈으로 통일 (Windows CRLF → LF)
+    normalized_text = text.replace("\r\n", "\n")
+    text_path.write_text(normalized_text, encoding="utf-8")
+
+    relative_path = text_path.relative_to(doc_path).as_posix()
+    return {
+        "status": "saved",
+        "file_path": relative_path,
+        "size": len(normalized_text.encode("utf-8")),
+    }
+
+
 def _update_library_manifest(library_path: Path, doc_id: str, title: str) -> None:
     """서고 매니페스트에 새 문헌을 추가한다. (내부 유틸리티)"""
     manifest_path = library_path / "library_manifest.json"

@@ -71,10 +71,12 @@
     <!-- 에디터 영역: D-001 에디터 → 병렬 뷰어 (이미지 + 텍스트) -->
     <div class="editor-area">
 
-      <!-- 좌측 패널: 원본 뷰어 -->
+      <!-- 좌측 패널: 원본 PDF 뷰어 -->
       <div class="editor-panel editor-left" id="editor-left">
-        <div class="panel-label">원본 저장소 (1~4층)</div>
-        <div class="editor-placeholder">
+        <div class="panel-label" id="left-panel-label">원본 저장소 (1~4층)</div>
+
+        <!-- 기본 placeholder (문헌 미선택 시) -->
+        <div class="editor-placeholder" id="pdf-placeholder">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3">
             <rect x="3" y="3" width="18" height="18" rx="2"/>
             <circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
@@ -82,15 +84,42 @@
           <p>원본 이미지 / PDF 뷰어</p>
           <p class="hint">문헌을 선택하면 여기에 표시됩니다</p>
         </div>
+
+        <!-- PDF 뷰어 (문헌 선택 시 표시) -->
+        <div class="pdf-viewer" id="pdf-viewer" style="display: none;">
+          <!-- PDF 툴바 -->
+          <div class="pdf-toolbar">
+            <!-- 권 선택 (다권본) -->
+            <select id="pdf-part-select" class="pdf-select" title="권 선택"></select>
+            <div class="pdf-toolbar-divider"></div>
+            <!-- 페이지 탐색 -->
+            <button id="pdf-prev" class="pdf-btn" title="이전 페이지">&#9664;</button>
+            <input id="pdf-page-input" type="number" min="1" value="1" class="pdf-page-input" title="페이지 번호"/>
+            <span id="pdf-page-total" class="pdf-page-total">/ ?</span>
+            <button id="pdf-next" class="pdf-btn" title="다음 페이지">&#9654;</button>
+            <div class="pdf-toolbar-divider"></div>
+            <!-- 줌 -->
+            <button id="pdf-zoom-out" class="pdf-btn" title="축소">&#8722;</button>
+            <span id="pdf-zoom-level" class="pdf-zoom-level">100%</span>
+            <button id="pdf-zoom-in" class="pdf-btn" title="확대">+</button>
+            <button id="pdf-zoom-fit" class="pdf-btn" title="너비에 맞추기">&#8862;</button>
+          </div>
+          <!-- 캔버스 영역 -->
+          <div class="pdf-canvas-container" id="pdf-canvas-container">
+            <canvas id="pdf-canvas"></canvas>
+          </div>
+        </div>
       </div>
 
       <!-- 에디터 리사이즈 핸들 -->
       <div class="resize-handle resize-editor" id="resize-editor"></div>
 
-      <!-- 우측 패널: 해석 뷰어 -->
+      <!-- 우측 패널: 텍스트 에디터 (L4 교정 텍스트) -->
       <div class="editor-panel editor-right" id="editor-right">
-        <div class="panel-label">해석 저장소 (5~8층)</div>
-        <div class="editor-placeholder">
+        <div class="panel-label" id="right-panel-label">교정 텍스트 (4층)</div>
+
+        <!-- 기본 placeholder (문헌 미선택 시) -->
+        <div class="editor-placeholder" id="text-placeholder">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3">
             <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
             <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/>
@@ -98,6 +127,24 @@
           </svg>
           <p>텍스트 / 번역 뷰어</p>
           <p class="hint">교정, 현토, 번역, 주석이 여기에 표시됩니다</p>
+        </div>
+
+        <!-- 텍스트 에디터 (문헌 선택 시 표시) -->
+        <div class="text-editor" id="text-editor" style="display: none;">
+          <!-- 에디터 툴바 -->
+          <div class="text-toolbar">
+            <span class="text-toolbar-info" id="text-file-info"></span>
+            <div class="text-toolbar-spacer"></div>
+            <button id="text-insert-main" class="text-btn" title="[本文] 삽입">[本文]</button>
+            <button id="text-insert-anno" class="text-btn" title="[注釈] 삽입">[注釈]</button>
+            <div class="text-toolbar-divider"></div>
+            <button id="text-save" class="text-btn text-btn-primary" title="저장 (Ctrl+S)">저장</button>
+            <span id="text-save-status" class="text-save-status"></span>
+          </div>
+          <!-- 텍스트 입력 영역 -->
+          <textarea id="text-content" class="text-content"
+            placeholder="[本文]&#10;본문 텍스트를 입력하세요&#10;&#10;[注釈]&#10;주석 텍스트를 입력하세요"
+            spellcheck="false"></textarea>
         </div>
       </div>
 
@@ -136,12 +183,19 @@
     <div class="status-right">
       <span class="status-item">UTF-8</span>
       <span class="status-item">LF</span>
-      <span class="status-item">v0.1.0</span>
+      <span class="status-item">v0.2.0</span>
     </div>
   </footer>
 
 </div>
 
+<!-- PDF.js CDN (3.x UMD — 빌드 도구 없는 프로젝트에 적합) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<!-- 앱 모듈 (로드 순서 중요: sidebar-tree가 viewerState를 정의, 나머지가 참조) -->
+<script src="/static/js/sidebar-tree.js"></script>
+<script src="/static/js/pdf-renderer.js"></script>
+<script src="/static/js/text-editor.js"></script>
 <script src="/static/js/workspace.js"></script>
 </body>
 </html>
