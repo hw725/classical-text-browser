@@ -20,6 +20,17 @@ API 엔드포인트:
     GET /api/parsers → 등록된 파서 목록
     POST /api/parsers/{parser_id}/search → 외부 소스 검색
     POST /api/parsers/{parser_id}/map → 검색 결과를 bibliography 형식으로 매핑
+
+    --- Phase 7: 해석 저장소 API ---
+    POST /api/interpretations → 해석 저장소 생성
+    GET  /api/interpretations → 해석 저장소 목록
+    GET  /api/interpretations/{interp_id} → 해석 저장소 상세
+    GET  /api/interpretations/{interp_id}/dependency → 의존 변경 확인
+    POST /api/interpretations/{interp_id}/dependency/acknowledge → 변경 인지
+    POST /api/interpretations/{interp_id}/dependency/update-base → 기반 업데이트
+    GET  /api/interpretations/{interp_id}/layers/{layer}/{sub_type}/pages/{page_num} → 층 내용 조회
+    PUT  /api/interpretations/{interp_id}/layers/{layer}/{sub_type}/pages/{page_num} → 층 내용 저장
+    GET  /api/interpretations/{interp_id}/git/log → git 이력
 """
 
 import sys
@@ -35,7 +46,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from core.library import get_library_info, list_documents
+from core.library import get_library_info, list_documents, list_interpretations
 from core.document import (
     get_bibliography,
     get_document_info,
@@ -51,6 +62,17 @@ from core.document import (
     save_page_corrections,
     save_page_layout,
     save_page_text,
+)
+from core.interpretation import (
+    acknowledge_changes,
+    check_dependency,
+    create_interpretation,
+    get_interp_git_log,
+    get_interpretation_info,
+    get_layer_content,
+    git_commit_interpretation,
+    save_layer_content,
+    update_base,
 )
 
 
@@ -672,3 +694,207 @@ async def api_parser_map(parser_id: str, body: ParserMapRequest):
             {"error": f"매핑 실패: {e}"},
             status_code=400,
         )
+
+
+# =========================================
+#   Phase 7: 해석 저장소 API
+# =========================================
+
+
+class CreateInterpretationRequest(BaseModel):
+    """해석 저장소 생성 요청 본문."""
+    interp_id: str
+    source_document_id: str
+    interpreter_type: str
+    interpreter_name: str | None = None
+    title: str | None = None
+
+
+class LayerContentSaveRequest(BaseModel):
+    """층 내용 저장 요청 본문."""
+    content: str | dict
+    part_id: str
+
+
+class AcknowledgeRequest(BaseModel):
+    """변경 인지 요청 본문."""
+    file_paths: list[str] | None = None
+
+
+@app.post("/api/interpretations")
+async def api_create_interpretation(body: CreateInterpretationRequest):
+    """해석 저장소를 생성한다.
+
+    목적: 원본 문헌을 기반으로 새 해석 저장소를 만든다.
+    입력:
+        body — {interp_id, source_document_id, interpreter_type, interpreter_name, title}.
+    출력: 생성된 해석 저장소의 manifest 정보.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    try:
+        interp_path = create_interpretation(
+            _library_path,
+            interp_id=body.interp_id,
+            source_document_id=body.source_document_id,
+            interpreter_type=body.interpreter_type,
+            interpreter_name=body.interpreter_name,
+            title=body.title,
+        )
+        info = get_interpretation_info(interp_path)
+        return {"status": "created", "interpretation": info}
+    except (ValueError, FileExistsError, FileNotFoundError) as e:
+        status = 400 if isinstance(e, (ValueError, FileExistsError)) else 404
+        return JSONResponse({"error": str(e)}, status_code=status)
+
+
+@app.get("/api/interpretations")
+async def api_interpretations():
+    """해석 저장소 목록을 반환한다."""
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+    return list_interpretations(_library_path)
+
+
+@app.get("/api/interpretations/{interp_id}")
+async def api_interpretation(interp_id: str):
+    """특정 해석 저장소의 상세 정보를 반환한다."""
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    try:
+        return get_interpretation_info(interp_path)
+    except FileNotFoundError:
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
+            status_code=404,
+        )
+
+
+@app.get("/api/interpretations/{interp_id}/dependency")
+async def api_check_dependency(interp_id: str):
+    """해석 저장소의 의존 변경을 확인한다.
+
+    목적: 원본 저장소가 변경되었는지 확인하여 경고 배너를 표시하기 위해 사용한다.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    try:
+        return check_dependency(_library_path, interp_id)
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
+
+@app.post("/api/interpretations/{interp_id}/dependency/acknowledge")
+async def api_acknowledge_changes(interp_id: str, body: AcknowledgeRequest):
+    """변경된 파일을 '인지함' 상태로 전환한다.
+
+    목적: 연구자가 원본 변경을 확인했지만 해석은 유효하다고 판단할 때 사용한다.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    try:
+        return acknowledge_changes(_library_path, interp_id, body.file_paths)
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
+
+@app.post("/api/interpretations/{interp_id}/dependency/update-base")
+async def api_update_base(interp_id: str):
+    """기반 커밋을 현재 원본 HEAD로 갱신한다.
+
+    목적: 원본 변경을 모두 반영하고 새 기반에서 작업을 계속한다.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    try:
+        return update_base(_library_path, interp_id)
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
+
+@app.get("/api/interpretations/{interp_id}/layers/{layer}/{sub_type}/pages/{page_num}")
+async def api_layer_content(
+    interp_id: str,
+    layer: str,
+    sub_type: str,
+    page_num: int,
+    part_id: str = Query(..., description="권 식별자 (예: vol1)"),
+):
+    """해석 층의 내용을 반환한다.
+
+    목적: 해석 뷰어에서 특정 층/서브타입/페이지의 내용을 로드하기 위해 사용한다.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
+            status_code=404,
+        )
+
+    return get_layer_content(interp_path, layer, sub_type, part_id, page_num)
+
+
+@app.put("/api/interpretations/{interp_id}/layers/{layer}/{sub_type}/pages/{page_num}")
+async def api_save_layer_content(
+    interp_id: str,
+    layer: str,
+    sub_type: str,
+    page_num: int,
+    body: LayerContentSaveRequest,
+):
+    """해석 층의 내용을 저장하고 자동 git commit한다.
+
+    목적: 해석 뷰어에서 편집한 내용을 저장하고 버전 이력을 남긴다.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
+            status_code=404,
+        )
+
+    try:
+        save_result = save_layer_content(
+            interp_path, layer, sub_type, body.part_id, page_num, body.content,
+        )
+    except Exception as e:
+        return JSONResponse({"error": f"저장 실패: {e}"}, status_code=400)
+
+    # 자동 git commit
+    layer_label = {"L5_reading": "현토", "L6_translation": "번역", "L7_annotation": "주석"}.get(layer, layer)
+    commit_msg = f"{layer}: page {page_num:03d} {layer_label} 편집 ({sub_type})"
+    git_result = git_commit_interpretation(interp_path, commit_msg)
+    save_result["git"] = git_result
+
+    return save_result
+
+
+@app.get("/api/interpretations/{interp_id}/git/log")
+async def api_interp_git_log(
+    interp_id: str,
+    max_count: int = Query(50, description="최대 커밋 수"),
+):
+    """해석 저장소의 git 커밋 이력을 반환한다."""
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
+            status_code=404,
+        )
+
+    return {"commits": get_interp_git_log(interp_path, max_count=max_count)}

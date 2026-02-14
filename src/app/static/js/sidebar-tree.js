@@ -361,6 +361,13 @@ function _selectPage(docId, partId, pageNum, docInfo, pageNode) {
   if (typeof loadBibliography === "function") {
     loadBibliography(docId);
   }
+
+  // Phase 7: 해석 모드일 때 층 내용 로드
+  if (typeof interpState !== "undefined" && interpState.active && interpState.interpId) {
+    if (typeof _loadLayerContent === "function") {
+      _loadLayerContent();
+    }
+  }
 }
 
 

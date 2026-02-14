@@ -28,6 +28,10 @@ document.addEventListener("DOMContentLoaded", () => {
   if (typeof initCorrectionEditor === "function") initCorrectionEditor();
   // Phase 5: 서지정보 패널 초기화
   if (typeof initBibliography === "function") initBibliography();
+  // Phase 7: 해석 저장소 모듈 초기화
+  if (typeof initInterpretation === "function") initInterpretation();
+  // Phase 7: 하단 패널 탭 전환 (Git 이력 ↔ 의존 추적)
+  initBottomPanelTabs();
 });
 
 
@@ -202,6 +206,7 @@ function initActivityBar() {
  * "view" — 열람 모드 (기본. PDF + 텍스트 병렬 뷰어)
  * "layout" — 레이아웃 모드 (PDF 위에 LayoutBlock 편집)
  * "correction" — 교정 모드 (Phase 6: 글자 단위 교정 + 블록별 섹션 + Git 연동)
+ * "interpretation" — 해석 모드 (Phase 7: 현토/번역/주석 + 의존 추적)
  */
 let currentMode = "view";
 
@@ -236,6 +241,7 @@ function _switchMode(mode) {
   const editorRight = document.getElementById("editor-right");
   const layoutPanel = document.getElementById("layout-props-panel");
   const correctionPanel = document.getElementById("correction-panel");
+  const interpPanel = document.getElementById("interp-panel");
 
   // 이전 모드 정리
   if (currentMode === "layout") {
@@ -246,11 +252,16 @@ function _switchMode(mode) {
     if (typeof deactivateCorrectionMode === "function") deactivateCorrectionMode();
     if (correctionPanel) correctionPanel.style.display = "none";
   }
+  if (currentMode === "interpretation") {
+    if (typeof deactivateInterpretationMode === "function") deactivateInterpretationMode();
+    if (interpPanel) interpPanel.style.display = "none";
+  }
 
   // 모든 우측 패널 숨김 (초기화)
   if (editorRight) editorRight.style.display = "none";
   if (layoutPanel) layoutPanel.style.display = "none";
   if (correctionPanel) correctionPanel.style.display = "none";
+  if (interpPanel) interpPanel.style.display = "none";
 
   // 새 모드 활성화
   currentMode = mode;
@@ -263,6 +274,10 @@ function _switchMode(mode) {
     // 우측: 교정 편집기 패널 표시
     if (correctionPanel) correctionPanel.style.display = "";
     if (typeof activateCorrectionMode === "function") activateCorrectionMode();
+  } else if (mode === "interpretation") {
+    // 우측: 해석 뷰어 패널 표시
+    if (interpPanel) interpPanel.style.display = "";
+    if (typeof activateInterpretationMode === "function") activateInterpretationMode();
   } else {
     // view 모드: 텍스트 에디터 표시
     if (editorRight) editorRight.style.display = "";
@@ -277,8 +292,6 @@ function _switchMode(mode) {
 function initTabs() {
   // 층별 탭 (원문, 교정, 현토, 번역, 주석)
   initTabGroup(".tab-bar .tab");
-  // 하단 패널 탭 (Git 이력, 검증 결과, 의존 추적)
-  initTabGroup(".panel-tabs .panel-tab");
 }
 
 function initTabGroup(selector) {
@@ -326,6 +339,39 @@ async function loadLibraryInfo() {
       '<div class="placeholder">서고에 연결할 수 없습니다</div>';
   }
 }
+
+/* ──────────────────────────
+   7. 하단 패널 탭 전환 (Phase 7: Git 이력 ↔ 의존 추적)
+   ────────────────────────── */
+
+/**
+ * 하단 패널 탭 전환을 설정한다.
+ *
+ * 왜 이렇게 하는가:
+ *   기존 initTabGroup은 탭 하이라이트만 처리했다.
+ *   Phase 7에서 "의존 추적" 탭을 추가하면서,
+ *   탭에 따라 다른 내용 영역을 표시해야 한다.
+ *   - "Git 이력" → #git-panel-content 표시
+ *   - "의존 추적" → #dep-panel-content 표시
+ *   - 기타 탭은 기존 동작 유지
+ */
+function initBottomPanelTabs() {
+  const tabs = document.querySelectorAll(".panel-tabs .panel-tab");
+  const gitContent = document.getElementById("git-panel-content");
+  const depContent = document.getElementById("dep-panel-content");
+
+  tabs.forEach((tab, index) => {
+    tab.addEventListener("click", () => {
+      tabs.forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+
+      // 탭 내용 전환
+      if (gitContent) gitContent.style.display = (index === 0) ? "" : "none";
+      if (depContent) depContent.style.display = (index === 2) ? "" : "none";
+    });
+  });
+}
+
 
 /**
  * 사이드바에 문헌 목록을 렌더링한다.

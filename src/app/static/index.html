@@ -64,6 +64,19 @@
           <div class="placeholder">문헌을 선택하면 서지정보가 표시됩니다</div>
         </div>
       </div>
+
+      <!-- Phase 7: 해석 저장소 섹션 -->
+      <div class="sidebar-section" id="interp-section" style="display:none;">
+        <div class="section-header">
+          해석 저장소
+          <div class="section-header-actions">
+            <button id="interp-create-btn" class="section-action-btn" title="새 해석 저장소 만들기">새로 만들기</button>
+          </div>
+        </div>
+        <div id="interp-list" class="interp-list">
+          <div class="placeholder">해석 모드에서 저장소 목록이 표시됩니다</div>
+        </div>
+      </div>
     </div>
   </aside>
 
@@ -78,6 +91,7 @@
       <div class="mode-tab active" data-mode="view">열람</div>
       <div class="mode-tab" data-mode="layout">레이아웃</div>
       <div class="mode-tab" data-mode="correction">교정</div>
+      <div class="mode-tab" data-mode="interpretation">해석</div>
     </div>
 
     <!-- 층별 탭 바: D-001 멀티탭 -->
@@ -231,6 +245,52 @@
         </div>
       </div>
 
+      <!-- 우측 패널: 해석 뷰어 (Phase 7, 해석 모드에서만 표시) -->
+      <div class="editor-panel editor-right interp-panel" id="interp-panel" style="display:none;">
+        <div class="panel-label">해석 뷰어 (L5~L7)</div>
+
+        <!-- 의존 경고 배너 -->
+        <div id="interp-dep-banner" class="interp-dep-banner" style="display:none;">
+          <span class="interp-dep-icon">&#9888;</span>
+          <span id="interp-dep-msg" class="interp-dep-msg">원본이 변경되었습니다</span>
+          <div class="interp-dep-actions">
+            <button id="interp-dep-diff" class="text-btn" title="변경 파일 보기">diff</button>
+            <button id="interp-dep-ack" class="text-btn" title="변경 인지">확인</button>
+            <button id="interp-dep-update" class="text-btn text-btn-primary" title="기반 업데이트">기반 업데이트</button>
+          </div>
+        </div>
+
+        <!-- 층별 서브탭 -->
+        <div class="interp-subtab-bar">
+          <div class="interp-subtab active" data-layer="L5_reading">현토 (L5)</div>
+          <div class="interp-subtab" data-layer="L6_translation">번역 (L6)</div>
+          <div class="interp-subtab" data-layer="L7_annotation">주석 (L7)</div>
+        </div>
+
+        <!-- main_text / annotation 토글 -->
+        <div class="interp-subtype-bar" id="interp-subtype-bar">
+          <label class="interp-radio-label">
+            <input type="radio" name="interp-subtype" value="main_text" checked /> main_text
+          </label>
+          <label class="interp-radio-label">
+            <input type="radio" name="interp-subtype" value="annotation" /> annotation
+          </label>
+        </div>
+
+        <!-- 도구 바 -->
+        <div class="interp-toolbar">
+          <span class="text-toolbar-info" id="interp-file-info"></span>
+          <div class="text-toolbar-spacer"></div>
+          <button id="interp-save" class="text-btn text-btn-primary" title="저장 (Ctrl+S)">저장</button>
+          <span id="interp-save-status" class="text-save-status"></span>
+        </div>
+
+        <!-- 편집 영역 -->
+        <textarea id="interp-content" class="text-content interp-content"
+          placeholder="해석 내용을 입력하세요"
+          spellcheck="false"></textarea>
+      </div>
+
       <!-- 우측 패널: 텍스트 에디터 (L4 교정 텍스트) -->
       <div class="editor-panel editor-right" id="editor-right">
         <div class="panel-label" id="right-panel-label">교정 텍스트 (4층)</div>
@@ -297,6 +357,14 @@
             </div>
             <div id="git-diff-content" class="git-diff-content"></div>
           </div>
+        </div>
+
+        <!-- Phase 7: 의존 추적 탭 내용 -->
+        <div id="dep-panel-content" style="display:none;">
+          <div id="dep-status-summary" class="dep-status-summary">
+            <div class="placeholder">해석 저장소를 선택하면 의존 추적 정보가 표시됩니다</div>
+          </div>
+          <div id="dep-file-list" class="dep-file-list"></div>
         </div>
       </div>
     </div>
@@ -376,6 +444,43 @@
     </div>
   </div>
 
+  <!-- Phase 7: 해석 저장소 생성 다이얼로그 오버레이 -->
+  <div class="bib-dialog-overlay" id="interp-dialog-overlay" style="display:none;">
+    <div class="bib-dialog" id="interp-create-dialog">
+      <div class="bib-dialog-header">
+        <span class="bib-dialog-title">새 해석 저장소 만들기</span>
+        <button class="bib-dialog-close" id="interp-dialog-close" title="닫기">&times;</button>
+      </div>
+      <div class="bib-dialog-body bib-edit-form">
+        <label class="bib-edit-label">해석 저장소 ID</label>
+        <input id="interp-new-id" type="text" class="bib-input" placeholder="예: interp_kim_001 (영문 소문자+숫자+밑줄)" />
+
+        <label class="bib-edit-label">원본 문헌</label>
+        <select id="interp-new-source" class="bib-select" style="width:100%;">
+          <option value="">문헌을 선택하세요</option>
+        </select>
+
+        <label class="bib-edit-label">해석자 유형</label>
+        <select id="interp-new-type" class="bib-select" style="width:100%;">
+          <option value="human">human (사람)</option>
+          <option value="llm">llm (AI 모델)</option>
+          <option value="hybrid">hybrid (협업)</option>
+        </select>
+
+        <label class="bib-edit-label">해석자 이름</label>
+        <input id="interp-new-name" type="text" class="bib-input" placeholder="예: 연구자 김, claude-sonnet-4-5" />
+
+        <label class="bib-edit-label">제목 (선택)</label>
+        <input id="interp-new-title" type="text" class="bib-input" placeholder="예: 世說新語 현토 작업" />
+
+        <div class="bib-edit-actions">
+          <span id="interp-create-status"></span>
+          <button id="interp-create-save-btn" class="bib-btn bib-btn-primary">생성</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Phase 6: 교정 다이얼로그 오버레이 -->
   <div class="corr-dialog-overlay" id="corr-dialog-overlay" style="display:none;">
     <div class="corr-dialog">
@@ -446,6 +551,7 @@
 <script src="/static/js/layout-editor.js"></script>
 <script src="/static/js/correction-editor.js"></script>
 <script src="/static/js/bibliography.js"></script>
+<script src="/static/js/interpretation.js"></script>
 <script src="/static/js/workspace.js"></script>
 </body>
 </html>

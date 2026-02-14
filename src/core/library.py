@@ -108,6 +108,31 @@ def list_documents(path: str | Path) -> list[dict]:
     return documents
 
 
+def list_interpretations(path: str | Path) -> list[dict]:
+    """서고의 해석 저장소 목록을 반환한다.
+
+    목적: interpretations/ 안의 모든 해석 저장소 manifest.json을 읽어 목록으로 반환한다.
+    입력: path — 서고 경로.
+    출력: 해석 저장소 정보 dict의 리스트. 각 항목은 manifest.json 내용.
+    """
+    library_path = Path(path).resolve()
+    interp_dir = library_path / "interpretations"
+
+    if not interp_dir.exists():
+        return []
+
+    interpretations = []
+    for d in sorted(interp_dir.iterdir()):
+        if not d.is_dir():
+            continue
+        manifest_path = d / "manifest.json"
+        if manifest_path.exists():
+            info = json.loads(manifest_path.read_text(encoding="utf-8"))
+            interpretations.append(info)
+
+    return interpretations
+
+
 def _write_json(path: Path, data: dict) -> None:
     """JSON 파일을 UTF-8로 저장한다. (내부 유틸리티)"""
     path.write_text(

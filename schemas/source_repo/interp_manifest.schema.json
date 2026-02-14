@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "interp_manifest.schema.json",
+  "title": "해석 저장소 매니페스트",
+  "description": "해석 저장소(L5~L8)의 메타데이터. 원본 저장소 하나에 대해 독립된 해석 작업을 추적한다. platform-v7.md 섹션 4 기반.",
+  "type": "object",
+  "required": ["interpretation_id", "source_document_id", "interpreter", "created_at"],
+  "additionalProperties": false,
+  "properties": {
+    "interpretation_id": {
+      "type": "string",
+      "description": "해석 저장소 식별자. 예: interp_kim_001",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+    },
+    "source_document_id": {
+      "type": "string",
+      "description": "참조하는 원본 문헌의 document_id."
+    },
+    "title": {
+      "type": ["string", "null"],
+      "description": "해석 작업의 제목. 예: 世說新語 김연구자 번역",
+      "default": null
+    },
+    "interpreter": {
+      "type": "object",
+      "description": "해석 주체 정보.",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "해석 주체 유형.",
+          "enum": ["human", "llm", "hybrid"]
+        },
+        "name": {
+          "type": ["string", "null"],
+          "description": "해석자 이름 또는 모델명. 예: 연구자 김, claude-sonnet-4-5",
+          "default": null
+        }
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "description": "생성 일시. ISO 8601.",
+      "format": "date-time"
+    },
+    "notes": {
+      "type": ["string", "null"],
+      "description": "해석 작업에 대한 메모.",
+      "default": null
+    }
+  }
+}
