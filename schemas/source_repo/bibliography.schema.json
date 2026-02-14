@@ -1,0 +1,280 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "bibliography.schema.json",
+  "title": "서지정보",
+  "description": "문헌의 서지정보를 저장한다. 핵심 원칙: 모든 필드 nullable — 소스에 없는 필드는 비워두고 나중에 채운다. raw_metadata에 파서가 가져온 원본 데이터를 보존하고, _mapping_info에 매핑 판단을 기록한다. platform-v7.md 섹션 7.5 기반.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "title": {
+      "type": ["string", "null"],
+      "description": "문헌 제목. 원어 표기. 예: 蒙求",
+      "default": null
+    },
+    "title_reading": {
+      "type": ["string", "null"],
+      "description": "제목의 독음. 일본어(カタカナ), 한국어(한글) 등. 예: もうぎゅう / 몽구",
+      "default": null
+    },
+    "alternative_titles": {
+      "type": ["array", "null"],
+      "description": "동일 작품의 다른 명칭. 예: [\"標題徐狀元補注蒙求\", \"補注蒙求\"]",
+      "items": { "type": "string" },
+      "default": null
+    },
+    "creator": {
+      "description": "주 저자/찬자 정보.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": ["string", "null"],
+              "description": "저자명. 예: 李瀚(李翰)"
+            },
+            "name_reading": {
+              "type": ["string", "null"],
+              "description": "저자명 독음. NDL의 creatorTranscription 수용."
+            },
+            "role": {
+              "type": ["string", "null"],
+              "description": "역할. 예: author, annotator, editor, compiler"
+            },
+            "period": {
+              "type": ["string", "null"],
+              "description": "활동 시기. 자유 텍스트. 예: 唐"
+            }
+          }
+        }
+      ],
+      "default": null
+    },
+    "contributors": {
+      "type": ["array", "null"],
+      "description": "기여자 목록 (주석자, 편자, 교정자 등).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": ["string", "null"],
+            "description": "기여자명."
+          },
+          "name_reading": {
+            "type": ["string", "null"],
+            "description": "기여자명 독음."
+          },
+          "role": {
+            "type": ["string", "null"],
+            "description": "역할. 예: annotator, editor, compiler, calligrapher"
+          },
+          "period": {
+            "type": ["string", "null"],
+            "description": "활동 시기."
+          }
+        }
+      },
+      "default": null
+    },
+    "date_created": {
+      "type": ["string", "null"],
+      "description": "성립/간행 시기. 자유 텍스트. 정확한 연도를 모를 수 있다. 예: 唐代(原著), 南宋(補注)",
+      "default": null
+    },
+    "edition_type": {
+      "type": ["string", "null"],
+      "description": "판종. KORCIS 고유 필드. 예: 목판본, 활자본, 필사본, 석인본. NDL 등 다른 소스에는 없을 수 있다.",
+      "default": null
+    },
+    "language": {
+      "type": ["string", "null"],
+      "description": "사용 언어. 예: classical_chinese, korean, japanese",
+      "default": null
+    },
+    "script": {
+      "type": ["string", "null"],
+      "description": "문자 체계. 예: 漢字, ハングル",
+      "default": null
+    },
+    "physical_description": {
+      "type": ["string", "null"],
+      "description": "형태사항. 크기, 장정 등. 예: 4冊, 26.7cm",
+      "default": null
+    },
+    "subject": {
+      "type": ["array", "null"],
+      "description": "주제어 목록.",
+      "items": { "type": "string" },
+      "default": null
+    },
+    "classification": {
+      "description": "분류 기호. NDL의 NDLC/NDC 등을 수용. 예: {\"NDLC\": \"Y84\", \"NDC10\": \"726.1\"}",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      ],
+      "default": null
+    },
+    "series_title": {
+      "type": ["string", "null"],
+      "description": "총서명.",
+      "default": null
+    },
+    "material_type": {
+      "type": ["string", "null"],
+      "description": "자료 유형. NDL의 materialType 수용. 예: 図書, 和古書",
+      "default": null
+    },
+    "repository": {
+      "description": "소장처 정보.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": ["string", "null"],
+              "description": "소장처 원어명. 예: 国立公文書館"
+            },
+            "name_ko": {
+              "type": ["string", "null"],
+              "description": "소장처 한국어명. 예: 일본 국립공문서관"
+            },
+            "country": {
+              "type": ["string", "null"],
+              "description": "국가 코드 (ISO 3166-1 alpha-2). 예: JP, KR"
+            },
+            "call_number": {
+              "type": ["string", "null"],
+              "description": "청구기호."
+            }
+          }
+        }
+      ],
+      "default": null
+    },
+    "digital_source": {
+      "description": "디지털 원본 접근 정보.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "platform": {
+              "type": ["string", "null"],
+              "description": "디지털 아카이브 플랫폼명."
+            },
+            "source_url": {
+              "type": ["string", "null"],
+              "description": "원문 접근 URL.",
+              "format": "uri"
+            },
+            "permanent_uri": {
+              "type": ["string", "null"],
+              "description": "영구 식별 URI.",
+              "format": "uri"
+            },
+            "system_ids": {
+              "description": "아카이브 시스템 고유 ID. 예: {\"BID\": \"F100...\", \"ID\": \"M202...\"}",
+              "oneOf": [
+                { "type": "null" },
+                {
+                  "type": "object",
+                  "additionalProperties": { "type": "string" }
+                }
+              ]
+            },
+            "license": {
+              "type": ["string", "null"],
+              "description": "라이선스 정보. 예: 二次利用自由, CC-BY 4.0"
+            },
+            "accessed_at": {
+              "type": ["string", "null"],
+              "description": "접근 일자. ISO 8601 날짜.",
+              "format": "date"
+            }
+          }
+        }
+      ],
+      "default": null
+    },
+    "raw_metadata": {
+      "description": "파서가 소스에서 가져온 원본 메타데이터를 그대로 보존한다. 매핑 과정에서 정보가 손실되더라도 여기서 복구할 수 있다. (원칙 2: raw_metadata는 건드리지 않는다)",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "properties": {
+            "source_system": {
+              "type": "string",
+              "description": "소스 시스템 ID. parsers/registry.json의 id와 일치. 예: korcis, ndl, japan_national_archives"
+            }
+          },
+          "additionalProperties": true
+        }
+      ],
+      "default": null
+    },
+    "_mapping_info": {
+      "description": "파서의 매핑 판단을 기록한다. 각 필드가 어느 소스 필드에서 왔는지, 신뢰도는 어떤지 투명하게 남긴다. (원칙 3: 매핑 판단은 기록한다)",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "parser_id": {
+              "type": "string",
+              "description": "사용된 파서 ID."
+            },
+            "fetched_at": {
+              "type": ["string", "null"],
+              "description": "데이터 수집 일시.",
+              "format": "date-time"
+            },
+            "api_variant": {
+              "type": ["string", "null"],
+              "description": "사용된 API 변형. 예: sru, opensearch"
+            },
+            "field_sources": {
+              "type": ["object", "null"],
+              "description": "필드별 매핑 출처. 키=공통 필드명, 값=소스 정보.",
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "source_field": {
+                    "type": ["string", "null"],
+                    "description": "소스 시스템의 원래 필드명."
+                  },
+                  "confidence": {
+                    "type": ["string", "null"],
+                    "description": "매핑 신뢰도.",
+                    "enum": ["exact", "inferred", "partial", null]
+                  },
+                  "note": {
+                    "type": ["string", "null"],
+                    "description": "매핑 관련 비고."
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "default": null
+    },
+    "notes": {
+      "type": ["string", "null"],
+      "description": "자유 메모.",
+      "default": null
+    }
+  }
+}

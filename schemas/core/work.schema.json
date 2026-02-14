@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "work.schema.json",
+  "title": "Work — 작품",
+  "description": "하나의 텍스트 작품을 나타낸다. 코어 스키마의 최상위 엔티티. core-schema-v1.3.md 섹션 1 기반.",
+  "type": "object",
+  "required": ["id", "title", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "UUID. 엔티티 고유 식별자. 파일명과 일치해야 한다. (operation-rules 2.1)",
+      "format": "uuid"
+    },
+    "title": {
+      "type": "string",
+      "description": "작품 제목. 원어 표기. 예: 蒙求"
+    },
+    "author": {
+      "type": ["string", "null"],
+      "description": "저자. 자유 텍스트. 예: 李瀚",
+      "default": null
+    },
+    "period": {
+      "type": ["string", "null"],
+      "description": "시대/시기. 자유 텍스트. 예: 唐",
+      "default": null
+    },
+    "status": {
+      "type": "string",
+      "description": "엔티티 상태. 삭제 금지 — 상태 전이만 허용. (operation-rules 2.4: draft → active → deprecated → archived)",
+      "enum": ["draft", "active", "deprecated", "archived"]
+    },
+    "metadata": {
+      "type": ["object", "null"],
+      "description": "자유 형식 메타데이터. 스키마 마이그레이션 없이 확장 가능.",
+      "additionalProperties": true,
+      "default": null
+    }
+  }
+}

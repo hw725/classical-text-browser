@@ -1,0 +1,324 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "exchange.schema.json",
+  "title": "교환 형식 (내보내기/가져오기)",
+  "description": "내부 작업 형식(다수 파일, git 버전관리)과 별도로, 단일 JSON으로 문서 상태를 스냅샷하는 교환 형식. 다른 연구자에게 공유하거나 외부 시스템과 데이터를 교환할 때 사용한다. platform-v7.md 섹션 11.2 기반.",
+  "type": "object",
+  "required": ["schema_version", "export_info", "source_info"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "교환 형식 스키마 버전. 예: 1.0",
+      "const": "1.0"
+    },
+    "export_info": {
+      "type": "object",
+      "description": "내보내기 정보.",
+      "required": ["exported_at"],
+      "additionalProperties": false,
+      "properties": {
+        "exported_at": {
+          "type": "string",
+          "description": "내보내기 일시. ISO 8601.",
+          "format": "date-time"
+        },
+        "source_repo": {
+          "type": ["string", "null"],
+          "description": "원본 git 저장소 URL.",
+          "default": null
+        },
+        "source_commit": {
+          "type": ["string", "null"],
+          "description": "내보내기 시점의 커밋 해시.",
+          "default": null
+        },
+        "source_version_tag": {
+          "type": ["string", "null"],
+          "description": "버전 태그. 예: v2.0",
+          "default": null
+        }
+      }
+    },
+    "source_info": {
+      "type": "object",
+      "description": "문헌 기본 정보.",
+      "required": ["title"],
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "문헌 제목."
+        },
+        "source_type": {
+          "type": ["string", "null"],
+          "description": "원본 유형. 예: manuscript, printed, woodblock",
+          "default": null
+        },
+        "original_language": {
+          "type": ["string", "null"],
+          "description": "원문 언어. 예: classical_chinese",
+          "default": null
+        },
+        "date_created": {
+          "type": ["string", "null"],
+          "description": "성립/간행 시기.",
+          "default": null
+        },
+        "provenance": {
+          "type": ["string", "null"],
+          "description": "소장처/출처.",
+          "default": null
+        },
+        "external_link": {
+          "type": ["string", "null"],
+          "description": "외부 링크.",
+          "format": "uri",
+          "default": null
+        }
+      }
+    },
+    "parts": {
+      "type": ["array", "null"],
+      "description": "물리적 파일(권) 목록.",
+      "items": {
+        "type": "object",
+        "required": ["part_id", "label"],
+        "additionalProperties": false,
+        "properties": {
+          "part_id": {
+            "type": "string",
+            "description": "권 식별자."
+          },
+          "label": {
+            "type": "string",
+            "description": "권 이름."
+          },
+          "file_type": {
+            "type": ["string", "null"],
+            "description": "파일 유형. 예: pdf, image_set",
+            "default": null
+          },
+          "file_url": {
+            "type": ["string", "null"],
+            "description": "파일 접근 URL.",
+            "format": "uri",
+            "default": null
+          },
+          "file_hash": {
+            "type": ["string", "null"],
+            "description": "파일 해시. 예: sha256:...",
+            "default": null
+          },
+          "page_count": {
+            "type": ["integer", "null"],
+            "description": "페이지 수.",
+            "minimum": 1,
+            "default": null
+          }
+        }
+      },
+      "default": null
+    },
+    "pages": {
+      "type": ["array", "null"],
+      "description": "페이지별 OCR + 레이아웃 데이터.",
+      "items": {
+        "type": "object",
+        "required": ["part_id", "page_number"],
+        "additionalProperties": false,
+        "properties": {
+          "part_id": {
+            "type": "string",
+            "description": "권 식별자."
+          },
+          "page_number": {
+            "type": "integer",
+            "description": "페이지 번호.",
+            "minimum": 1
+          },
+          "mapping_precision": {
+            "type": ["string", "null"],
+            "description": "매핑 정밀도. platform-v7.md 섹션 5.5.",
+            "enum": ["character", "line", "block", "page", "file", null],
+            "default": null
+          },
+          "ocr": {
+            "description": "이 페이지의 OCR + 레이아웃 결합 데이터.",
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "blocks": {
+                    "type": "array",
+                    "description": "LayoutBlock + OCR 결합 데이터.",
+                    "items": {
+                      "type": "object",
+                      "required": ["block_id", "block_type"],
+                      "additionalProperties": false,
+                      "properties": {
+                        "block_id": { "type": "string" },
+                        "block_type": {
+                          "type": "string",
+                          "enum": [
+                            "main_text", "annotation", "preface", "colophon",
+                            "memorial", "page_title", "page_number", "seal",
+                            "illustration", "marginal_note", "table_of_contents", "unknown"
+                          ]
+                        },
+                        "refers_to_block": {
+                          "type": ["string", "null"],
+                          "default": null
+                        },
+                        "bbox": {
+                          "type": ["array", "null"],
+                          "items": { "type": "number" },
+                          "minItems": 4,
+                          "maxItems": 4,
+                          "default": null
+                        },
+                        "writing_direction": {
+                          "type": ["string", "null"],
+                          "enum": ["vertical_rtl", "vertical_ltr", "horizontal_ltr", "horizontal_rtl", null],
+                          "default": null
+                        },
+                        "line_style": {
+                          "type": ["string", "null"],
+                          "default": null
+                        },
+                        "font_size_class": {
+                          "type": ["string", "null"],
+                          "default": null
+                        },
+                        "lines": {
+                          "type": ["array", "null"],
+                          "description": "OCR 인식 행 목록.",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "text": { "type": "string" },
+                              "bbox": {
+                                "type": ["array", "null"],
+                                "items": { "type": "number" },
+                                "minItems": 4,
+                                "maxItems": 4,
+                                "default": null
+                              },
+                              "characters": {
+                                "type": ["array", "null"],
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "char": { "type": "string", "minLength": 1, "maxLength": 1 },
+                                    "bbox": {
+                                      "type": ["array", "null"],
+                                      "items": { "type": "number" },
+                                      "minItems": 4,
+                                      "maxItems": 4,
+                                      "default": null
+                                    },
+                                    "confidence": {
+                                      "type": ["number", "null"],
+                                      "minimum": 0.0,
+                                      "maximum": 1.0,
+                                      "default": null
+                                    }
+                                  },
+                                  "required": ["char"]
+                                },
+                                "default": null
+                              }
+                            },
+                            "required": ["text"]
+                          },
+                          "default": null
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            ],
+            "default": null
+          }
+        }
+      },
+      "default": null
+    },
+    "corrected_text": {
+      "description": "L4 교정 완료 텍스트. 본문/주석 구분.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "main_text": {
+              "type": ["string", "null"],
+              "description": "교정된 본문 텍스트.",
+              "default": null
+            },
+            "annotation": {
+              "type": ["string", "null"],
+              "description": "교정된 주석 텍스트.",
+              "default": null
+            }
+          }
+        }
+      ],
+      "default": null
+    },
+    "corrections": {
+      "type": ["array", "null"],
+      "description": "교정 기록 목록.",
+      "items": {
+        "type": "object",
+        "required": ["type", "original_ocr", "corrected"],
+        "additionalProperties": false,
+        "properties": {
+          "page": {
+            "type": ["integer", "null"],
+            "minimum": 1,
+            "default": null
+          },
+          "block_id": {
+            "type": ["string", "null"],
+            "default": null
+          },
+          "line": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "default": null
+          },
+          "char_index": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "default": null
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "ocr_error", "variant_reading", "variant_char",
+              "decoding_error", "uncertain", "layout_correction"
+            ]
+          },
+          "original_ocr": { "type": "string" },
+          "corrected": { "type": "string" },
+          "common_reading": {
+            "type": ["string", "null"],
+            "default": null
+          },
+          "note": {
+            "type": ["string", "null"],
+            "default": null
+          }
+        }
+      },
+      "default": null
+    }
+  }
+}

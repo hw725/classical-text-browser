@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent.schema.json",
+  "title": "Agent — 역사적/서사적 행위자",
+  "description": "고전 텍스트에 등장하는 구체적 역사 인물 또는 서사적 행위자. core-schema-v1.3.md 섹션 5 기반.",
+  "type": "object",
+  "required": ["id", "name", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "UUID.",
+      "format": "uuid"
+    },
+    "name": {
+      "type": "string",
+      "description": "인물/행위자 이름. 예: 王戎"
+    },
+    "period": {
+      "type": ["string", "null"],
+      "description": "활동 시기. 자유 텍스트. 예: 西晉",
+      "default": null
+    },
+    "biography_note": {
+      "type": ["string", "null"],
+      "description": "약전(略傳). 간략한 인물 설명.",
+      "default": null
+    },
+    "status": {
+      "type": "string",
+      "description": "엔티티 상태. (operation-rules 2.4)",
+      "enum": ["draft", "active", "deprecated", "archived"]
+    },
+    "metadata": {
+      "type": ["object", "null"],
+      "description": "자유 형식 메타데이터.",
+      "additionalProperties": true,
+      "default": null
+    }
+  }
+}

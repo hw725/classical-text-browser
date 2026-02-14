@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tag.schema.json",
+  "title": "Tag — 표면 주석 레이어",
+  "description": "LLM이나 자동 도구가 추출한 잠정적 태그. 연구자가 검토 후 Concept으로 승격할 수 있다 (Promotion Flow). core-schema-v1.3.md 섹션 3 기반. operation-rules 섹션 4: LLM이 생성 시 extractor='llm', status='draft' 필수.",
+  "type": "object",
+  "required": ["id", "block_id", "surface", "core_category", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "UUID.",
+      "format": "uuid"
+    },
+    "block_id": {
+      "type": "string",
+      "description": "이 태그가 붙은 TextBlock의 id.",
+      "format": "uuid"
+    },
+    "surface": {
+      "type": "string",
+      "description": "원문에서 추출된 표면 문자열. 예: 王戎"
+    },
+    "core_category": {
+      "type": "string",
+      "description": "핵심 범주. 구조적 분류만 — 해석은 코어 밖에서.",
+      "enum": ["person", "place", "book", "office", "object", "concept", "event", "other"]
+    },
+    "confidence": {
+      "type": ["number", "null"],
+      "description": "추출 신뢰도. 0.0 ~ 1.0. LLM 생성 시 필수 기록 (operation-rules 4.1).",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "default": null
+    },
+    "extractor": {
+      "type": ["string", "null"],
+      "description": "추출 주체. 예: llm, regex, manual. LLM 생성 시 'llm' 필수 (operation-rules 4.1).",
+      "default": null
+    },
+    "status": {
+      "type": "string",
+      "description": "엔티티 상태. (operation-rules 2.4)",
+      "enum": ["draft", "active", "deprecated", "archived"]
+    },
+    "metadata": {
+      "type": ["object", "null"],
+      "description": "자유 형식 메타데이터.",
+      "additionalProperties": true,
+      "default": null
+    }
+  }
+}

@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "layout_page.schema.json",
+  "title": "L3 레이아웃 분석 — 페이지 단위",
+  "description": "원본 저장소 3층(레이아웃 분석)의 페이지별 데이터. 각 페이지를 LayoutBlock 단위로 분할하고, OCR 읽기 순서와 구조적 역할(block_type)을 부여한다. DECISIONS.md D-002 기반.",
+  "type": "object",
+  "required": ["part_id", "page_number", "blocks"],
+  "additionalProperties": false,
+  "properties": {
+    "part_id": {
+      "type": "string",
+      "description": "manifest.json의 parts[].part_id와 일치. 예: vol1"
+    },
+    "page_number": {
+      "type": "integer",
+      "description": "페이지 번호 (1-based).",
+      "minimum": 1
+    },
+    "image_width": {
+      "type": ["integer", "null"],
+      "description": "원본 이미지 너비 (px). bbox 좌표의 기준.",
+      "default": null
+    },
+    "image_height": {
+      "type": ["integer", "null"],
+      "description": "원본 이미지 높이 (px).",
+      "default": null
+    },
+    "analysis_method": {
+      "type": ["string", "null"],
+      "description": "분석 방법. 예: llm, manual, hybrid",
+      "enum": ["llm", "manual", "hybrid", null],
+      "default": null
+    },
+    "blocks": {
+      "type": "array",
+      "description": "이 페이지의 LayoutBlock 목록. LayoutBlock = OCR 읽기 순서 단위. (D-002: \"Block\"이 아니라 반드시 \"LayoutBlock\"이라 부른다)",
+      "items": {
+        "$ref": "#/$defs/LayoutBlock"
+      }
+    }
+  },
+  "$defs": {
+    "LayoutBlock": {
+      "type": "object",
+      "description": "페이지 이미지 위의 사각형 영역. OCR이 읽는 순서를 지정하기 위한 단위. (D-002)",
+      "required": ["block_id", "block_type", "bbox", "reading_order"],
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "type": "string",
+          "description": "블록 식별자. 페이지 내 유일. 예: p01_b01",
+          "pattern": "^p\\d+_b\\d+$"
+        },
+        "block_type": {
+          "type": "string",
+          "description": "구조적 역할. resources/block_types.json에 정의된 어휘. platform-v7.md 섹션 5.3.",
+          "enum": [
+            "main_text",
+            "annotation",
+            "preface",
+            "colophon",
+            "memorial",
+            "page_title",
+            "page_number",
+            "seal",
+            "illustration",
+            "marginal_note",
+            "table_of_contents",
+            "unknown"
+          ]
+        },
+        "bbox": {
+          "type": "array",
+          "description": "영역 좌표 [x1, y1, x2, y2]. 좌상단 원점, 픽셀 단위.",
+          "items": { "type": "number" },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "reading_order": {
+          "type": "integer",
+          "description": "OCR 읽기 순서. 0부터 시작. 건너뛸 영역도 순서를 부여하되 skip 처리할 수 있다.",
+          "minimum": 0
+        },
+        "writing_direction": {
+          "type": "string",
+          "description": "이 블록의 쓰기 방향. 블록별로 다를 수 있다 (v7: writing_direction이 블록별로 설정).",
+          "enum": ["vertical_rtl", "vertical_ltr", "horizontal_ltr", "horizontal_rtl"],
+          "default": "vertical_rtl"
+        },
+        "line_style": {
+          "type": ["string", "null"],
+          "description": "행 배치. 예: single_line(단행), double_line(쌍행).",
+          "enum": ["single_line", "double_line", null],
+          "default": null
+        },
+        "font_size_class": {
+          "type": ["string", "null"],
+          "description": "글자 크기 분류. 예: large(대자), small(소자).",
+          "enum": ["large", "small", null],
+          "default": null
+        },
+        "ocr_config": {
+          "description": "이 블록에 적용할 OCR 설정. 블록별 맞춤 설정 가능.",
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "engine": {
+                  "type": ["string", "null"],
+                  "description": "OCR 엔진. 예: paddleocr, tesseract, google_vision"
+                },
+                "language": {
+                  "type": ["string", "null"],
+                  "description": "언어 설정. 예: classical_chinese, korean"
+                },
+                "line_style": {
+                  "type": ["string", "null"],
+                  "description": "행 스타일 힌트."
+                },
+                "font_size_class": {
+                  "type": ["string", "null"],
+                  "description": "글자 크기 힌트."
+                }
+              }
+            }
+          ],
+          "default": null
+        },
+        "refers_to_block": {
+          "type": ["string", "null"],
+          "description": "이 블록이 참조하는 다른 블록의 block_id. 예: 주석이 본문을 참조. (v7 섹션 5.3: refers_to_block으로 '이 주석은 저 본문에 달린 것'임을 표현)",
+          "default": null
+        },
+        "skip": {
+          "type": "boolean",
+          "description": "true이면 OCR에서 건너뛴다 (예: 인장, 삽화).",
+          "default": false
+        }
+      }
+    }
+  }
+}

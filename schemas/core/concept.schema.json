@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "concept.schema.json",
+  "title": "Concept — 승격된 의미 엔티티",
+  "description": "Tag에서 연구자의 명시적 판단으로 승격된 의미 엔티티. 온톨로지를 강제하지 않는다 (No ontology lock-in). concept_features는 자유 확장 가능. core-schema-v1.3.md 섹션 4 기반.",
+  "type": "object",
+  "required": ["id", "label", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "UUID.",
+      "format": "uuid"
+    },
+    "label": {
+      "type": "string",
+      "description": "엔티티 라벨. 사람이 읽을 수 있는 이름. 예: 王戎"
+    },
+    "scope_work": {
+      "type": ["string", "null"],
+      "description": "이 Concept이 유효한 Work의 id. null이면 전역.",
+      "format": "uuid",
+      "default": null
+    },
+    "description": {
+      "type": ["string", "null"],
+      "description": "학술적 설명 노트.",
+      "default": null
+    },
+    "concept_features": {
+      "type": ["object", "null"],
+      "description": "자유 형식 속성. 미리 정의된 필수 속성 없음. 부재 = '미지정'. 스키마 마이그레이션 없이 확장 가능.",
+      "additionalProperties": true,
+      "default": null
+    },
+    "status": {
+      "type": "string",
+      "description": "엔티티 상태. (operation-rules 2.4)",
+      "enum": ["draft", "active", "deprecated", "archived"]
+    },
+    "metadata": {
+      "type": ["object", "null"],
+      "description": "자유 형식 메타데이터.",
+      "additionalProperties": true,
+      "default": null
+    }
+  }
+}

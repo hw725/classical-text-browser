@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ocr_page.schema.json",
+  "title": "L2 OCR 결과 — 페이지 단위",
+  "description": "원본 저장소 2층(OCR 글자해독)의 페이지별 결과. 글자 + 좌표(bbox) + 신뢰도(confidence)를 저장한다. layout_block_id로 어느 LayoutBlock의 결과인지 참조한다. D-003에 따라 이 엔티티를 'OcrResult'라 부른다 ('Block'이 아님).",
+  "type": "object",
+  "required": ["part_id", "page_number", "ocr_results"],
+  "additionalProperties": false,
+  "properties": {
+    "part_id": {
+      "type": "string",
+      "description": "manifest.json의 parts[].part_id와 일치."
+    },
+    "page_number": {
+      "type": "integer",
+      "description": "페이지 번호 (1-based).",
+      "minimum": 1
+    },
+    "ocr_engine": {
+      "type": ["string", "null"],
+      "description": "사용된 OCR 엔진. 예: paddleocr, tesseract, google_vision, claude_vision",
+      "default": null
+    },
+    "ocr_config": {
+      "description": "페이지 단위 OCR 기본 설정. 블록별 설정이 없을 때 적용.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "engine": { "type": ["string", "null"] },
+            "language": { "type": ["string", "null"] },
+            "direction": { "type": ["string", "null"] }
+          }
+        }
+      ],
+      "default": null
+    },
+    "ocr_results": {
+      "type": "array",
+      "description": "OcrResult 목록. 각 항목은 하나의 LayoutBlock에 대한 OCR 결과이거나, 레이아웃 분석 전이면 페이지 전체의 결과.",
+      "items": {
+        "$ref": "#/$defs/OcrResult"
+      }
+    }
+  },
+  "$defs": {
+    "OcrResult": {
+      "type": "object",
+      "description": "하나의 LayoutBlock(또는 페이지 전체)에서 OCR이 인식한 결과. D-003: 'OcrResult'라 부른다.",
+      "required": ["lines"],
+      "additionalProperties": false,
+      "properties": {
+        "layout_block_id": {
+          "type": ["string", "null"],
+          "description": "대응하는 LayoutBlock의 block_id. L3 레이아웃 분석 후에 채워진다. null이면 페이지 전체 OCR 결과(경로 B: L2 먼저 → L3 나중에).",
+          "default": null
+        },
+        "lines": {
+          "type": "array",
+          "description": "인식된 행 목록.",
+          "items": {
+            "$ref": "#/$defs/OcrLine"
+          }
+        }
+      }
+    },
+    "OcrLine": {
+      "type": "object",
+      "description": "OCR이 인식한 하나의 행.",
+      "required": ["text"],
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "이 행의 인식 텍스트."
+        },
+        "bbox": {
+          "type": ["array", "null"],
+          "description": "행 영역 좌표 [x1, y1, x2, y2].",
+          "items": { "type": "number" },
+          "minItems": 4,
+          "maxItems": 4,
+          "default": null
+        },
+        "characters": {
+          "type": ["array", "null"],
+          "description": "글자 단위 인식 결과. 글자 단위 정밀도가 있을 때만.",
+          "items": {
+            "$ref": "#/$defs/OcrCharacter"
+          },
+          "default": null
+        }
+      }
+    },
+    "OcrCharacter": {
+      "type": "object",
+      "description": "OCR이 인식한 개별 글자.",
+      "required": ["char"],
+      "additionalProperties": false,
+      "properties": {
+        "char": {
+          "type": "string",
+          "description": "인식된 글자. 1문자.",
+          "minLength": 1,
+          "maxLength": 1
+        },
+        "bbox": {
+          "type": ["array", "null"],
+          "description": "글자 영역 좌표 [x1, y1, x2, y2].",
+          "items": { "type": "number" },
+          "minItems": 4,
+          "maxItems": 4,
+          "default": null
+        },
+        "confidence": {
+          "type": ["number", "null"],
+          "description": "인식 신뢰도. 0.0 ~ 1.0.",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": null
+        }
+      }
+    }
+  }
+}

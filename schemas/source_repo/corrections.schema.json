@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "corrections.schema.json",
+  "title": "L4 교정 기록",
+  "description": "원본 저장소 4층(사람 수정)의 교정 기록. OCR 오류, 이체자, 판본 이문 등 교정 유형별로 기록한다. platform-v7.md 섹션 5.4 기반.",
+  "type": "object",
+  "required": ["corrections"],
+  "additionalProperties": false,
+  "properties": {
+    "part_id": {
+      "type": ["string", "null"],
+      "description": "대상 파일의 part_id. 전체 문헌 공통이면 null.",
+      "default": null
+    },
+    "corrections": {
+      "type": "array",
+      "description": "교정 항목 목록.",
+      "items": {
+        "$ref": "#/$defs/Correction"
+      }
+    }
+  },
+  "$defs": {
+    "Correction": {
+      "type": "object",
+      "description": "하나의 교정 항목.",
+      "required": ["type", "original_ocr", "corrected"],
+      "additionalProperties": false,
+      "properties": {
+        "page": {
+          "type": ["integer", "null"],
+          "description": "페이지 번호.",
+          "minimum": 1,
+          "default": null
+        },
+        "block_id": {
+          "type": ["string", "null"],
+          "description": "대상 LayoutBlock의 block_id.",
+          "default": null
+        },
+        "line": {
+          "type": ["integer", "null"],
+          "description": "행 번호 (0-based).",
+          "minimum": 0,
+          "default": null
+        },
+        "char_index": {
+          "type": ["integer", "null"],
+          "description": "행 내 글자 위치 (0-based).",
+          "minimum": 0,
+          "default": null
+        },
+        "type": {
+          "type": "string",
+          "description": "교정 유형. platform-v7.md 섹션 5.4 교정 유형 참고.",
+          "enum": [
+            "ocr_error",
+            "variant_reading",
+            "variant_char",
+            "decoding_error",
+            "uncertain",
+            "layout_correction"
+          ]
+        },
+        "original_ocr": {
+          "type": "string",
+          "description": "OCR 원본 또는 교정 전 텍스트. 예: 元"
+        },
+        "corrected": {
+          "type": "string",
+          "description": "교정 후 텍스트. variant_reading이면 '이 판본에 쓰인 그대로'. 예: 元"
+        },
+        "common_reading": {
+          "type": ["string", "null"],
+          "description": "variant_reading 전용: 다른 판본의 통상 텍스트. 예: 玄",
+          "default": null
+        },
+        "corrected_by": {
+          "type": ["string", "null"],
+          "description": "교정자. 예: human, llm_claude, llm_gpt",
+          "default": null
+        },
+        "confidence": {
+          "type": ["number", "null"],
+          "description": "교정 확신도. 0.0 ~ 1.0. uncertain 유형일 때 특히 유의미.",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": null
+        },
+        "note": {
+          "type": ["string", "null"],
+          "description": "교정 근거, 비고. 예: 이 판본에서는 元으로 씌어 있으나, 다른 판본들은 玄. 피휘(避諱) 가능성.",
+          "default": null
+        }
+      }
+    }
+  }
+}

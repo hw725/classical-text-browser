@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "manifest.schema.json",
+  "title": "원본 저장소 매니페스트",
+  "description": "하나의 문헌(원본 저장소)의 기본 정보를 정의한다. document_id로 문헌을 식별하고, parts[]로 다권본을 지원한다. platform-v7.md 섹션 5.1, 10.1 기반.",
+  "type": "object",
+  "required": ["document_id", "title", "parts", "completeness_status"],
+  "additionalProperties": false,
+  "properties": {
+    "document_id": {
+      "type": "string",
+      "description": "문헌 고유 식별자. 영문 소문자, 숫자, 언더스코어만 허용. 예: monggu",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+    },
+    "title": {
+      "type": "string",
+      "description": "문헌 제목. 원어 표기. 예: 蒙求"
+    },
+    "title_ko": {
+      "type": ["string", "null"],
+      "description": "한국어 제목 또는 독음. 예: 몽구",
+      "default": null
+    },
+    "parts": {
+      "type": "array",
+      "description": "물리적 파일 목록. 단권본이면 1개, 다권본이면 여러 개. platform-v7.md 섹션 5.1 참고.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["part_id", "label", "file"],
+        "additionalProperties": false,
+        "properties": {
+          "part_id": {
+            "type": "string",
+            "description": "권 식별자. 예: vol1, vol2",
+            "pattern": "^[a-z][a-z0-9_]{0,31}$"
+          },
+          "label": {
+            "type": "string",
+            "description": "사람이 읽을 수 있는 권 이름. 예: 蒙求1"
+          },
+          "file": {
+            "type": "string",
+            "description": "L1_source/ 기준 상대 경로. 예: L1_source/蒙求1.pdf"
+          },
+          "page_count": {
+            "type": ["integer", "null"],
+            "description": "이 파일의 페이지 수. 모를 경우 null.",
+            "minimum": 1,
+            "default": null
+          }
+        }
+      }
+    },
+    "completeness_status": {
+      "type": "string",
+      "description": "문헌 디지털화 완성도. platform-v7.md 섹션 5.6 참고.",
+      "enum": [
+        "file_only",
+        "bibliography_added",
+        "ocr_done",
+        "layout_analyzed",
+        "correcting",
+        "correction_done",
+        "finalized"
+      ]
+    },
+    "created_at": {
+      "type": ["string", "null"],
+      "description": "저장소 생성 일시. ISO 8601 형식.",
+      "format": "date-time",
+      "default": null
+    },
+    "notes": {
+      "type": ["string", "null"],
+      "description": "자유 메모.",
+      "default": null
+    }
+  }
+}

@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dependency.schema.json",
+  "title": "저장소 간 의존 관계",
+  "description": "해석 저장소가 원본 저장소를 참조할 때의 파일 단위 의존 추적. 앱이 열 때(access-time check) 변경 여부를 확인한다. platform-v7.md 섹션 4.2 기반.",
+  "type": "object",
+  "required": ["interpretation_id", "interpreter", "source", "tracked_files", "dependency_status"],
+  "additionalProperties": false,
+  "properties": {
+    "interpretation_id": {
+      "type": "string",
+      "description": "해석 저장소 식별자. 예: interp_kim_001"
+    },
+    "interpreter": {
+      "type": "object",
+      "description": "해석 주체 정보.",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "해석 주체 유형.",
+          "enum": ["human", "llm", "hybrid"]
+        },
+        "name": {
+          "type": ["string", "null"],
+          "description": "해석자 이름 또는 모델명. 예: 연구자 김, claude-sonnet-4-5",
+          "default": null
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "description": "참조하는 원본 저장소 정보.",
+      "required": ["document_id", "base_commit"],
+      "additionalProperties": false,
+      "properties": {
+        "document_id": {
+          "type": "string",
+          "description": "원본 저장소의 document_id."
+        },
+        "remote": {
+          "type": ["string", "null"],
+          "description": "원격 저장소 URL. 로컬 전용이면 null.",
+          "format": "uri",
+          "default": null
+        },
+        "base_commit": {
+          "type": "string",
+          "description": "참조 기준 커밋 해시. 이 커밋 시점의 원본을 기반으로 해석 작업을 수행했다."
+        }
+      }
+    },
+    "tracked_files": {
+      "type": "array",
+      "description": "추적 대상 파일 목록. 해석 작업에서 실제로 참조한 원본 파일들.",
+      "items": {
+        "$ref": "#/$defs/TrackedFile"
+      }
+    },
+    "last_checked": {
+      "type": ["string", "null"],
+      "description": "마지막 변경 확인 일시. ISO 8601.",
+      "format": "date-time",
+      "default": null
+    },
+    "dependency_status": {
+      "type": "string",
+      "description": "전체 의존 상태. platform-v7.md 섹션 4.4.",
+      "enum": ["current", "outdated", "partially_acknowledged", "acknowledged"]
+    }
+  },
+  "$defs": {
+    "TrackedFile": {
+      "type": "object",
+      "description": "추적 대상 개별 파일.",
+      "required": ["path", "hash_at_base", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "원본 저장소 내 파일 경로. 예: L4_text/pages/page_001.txt"
+        },
+        "hash_at_base": {
+          "type": "string",
+          "description": "base_commit 시점의 파일 해시. 예: sha256:aaa111..."
+        },
+        "my_layers": {
+          "type": ["array", "null"],
+          "description": "이 파일을 기반으로 작업한 해석 층 번호들. 예: [5, 6]",
+          "items": {
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 8
+          },
+          "default": null
+        },
+        "status": {
+          "type": "string",
+          "description": "이 파일의 의존 상태. unchanged=원본과 동일, changed=원본 갱신됨, acknowledged=변경 인지했지만 유효, updated=새 원본에 맞춰 수정 완료.",
+          "enum": ["unchanged", "changed", "acknowledged", "updated"]
+        }
+      }
+    }
+  }
+}

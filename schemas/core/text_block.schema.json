@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "text_block.schema.json",
+  "title": "TextBlock — 해석용 텍스트 단위",
+  "description": "코어 스키마의 최소 텍스트 단위 (문장/절/구). D-003에 따라 'TextBlock'이라 부른다 (LayoutBlock, OcrResult과 구분). source_ref로 원본 저장소의 출처를 항상 추적한다 (D-005). core-schema-v1.3.md 섹션 2 기반.",
+  "type": "object",
+  "required": ["id", "work_id", "sequence_index", "original_text", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "UUID.",
+      "format": "uuid"
+    },
+    "work_id": {
+      "type": "string",
+      "description": "소속 Work의 id.",
+      "format": "uuid"
+    },
+    "sequence_index": {
+      "type": "integer",
+      "description": "작품 내 순서. 0-based.",
+      "minimum": 0
+    },
+    "original_text": {
+      "type": "string",
+      "description": "원문 텍스트. 절대 수정하지 않는다 (operation-rules 2.2: 원문은 불변). 예: 王戎簡要裴楷清通"
+    },
+    "normalized_text": {
+      "type": ["string", "null"],
+      "description": "정규화된 텍스트. 이체자 통일 등. 선택적.",
+      "default": null
+    },
+    "source_ref": {
+      "description": "원본 저장소에서의 출처 정보. TextBlock이 어디서 왔는지를 항상 추적한다 (D-005).",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "document_id": {
+              "type": "string",
+              "description": "원본 저장소의 document_id."
+            },
+            "page": {
+              "type": ["integer", "null"],
+              "description": "페이지 번호.",
+              "minimum": 1
+            },
+            "layout_block_id": {
+              "type": ["string", "null"],
+              "description": "L3 LayoutBlock의 block_id."
+            },
+            "layer": {
+              "type": ["string", "null"],
+              "description": "원본 저장소의 층. 예: L4"
+            },
+            "commit": {
+              "type": ["string", "null"],
+              "description": "참조 시점의 git 커밋 해시."
+            }
+          }
+        }
+      ],
+      "default": null
+    },
+    "status": {
+      "type": "string",
+      "description": "엔티티 상태. (operation-rules 2.4)",
+      "enum": ["draft", "active", "deprecated", "archived"]
+    },
+    "notes": {
+      "type": ["string", "null"],
+      "description": "비고.",
+      "default": null
+    },
+    "metadata": {
+      "type": ["object", "null"],
+      "description": "자유 형식 메타데이터.",
+      "additionalProperties": true,
+      "default": null
+    }
+  }
+}
