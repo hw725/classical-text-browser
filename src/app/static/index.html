@@ -281,6 +281,9 @@
         <div class="interp-toolbar">
           <span class="text-toolbar-info" id="interp-file-info"></span>
           <div class="text-toolbar-spacer"></div>
+          <button id="entity-create-textblock-btn" class="text-btn" title="이 본문 블록에서 TextBlock 만들기" style="display:none;">TextBlock 만들기</button>
+          <button id="entity-llm-request-btn" class="text-btn" title="LLM에게 요청" style="display:none;">LLM에게 요청</button>
+          <div class="text-toolbar-divider"></div>
           <button id="interp-save" class="text-btn text-btn-primary" title="저장 (Ctrl+S)">저장</button>
           <span id="interp-save-status" class="text-save-status"></span>
         </div>
@@ -337,6 +340,7 @@
           <button class="panel-tab active">Git 이력</button>
           <button class="panel-tab">검증 결과</button>
           <button class="panel-tab">의존 추적</button>
+          <button class="panel-tab">엔티티</button>
         </div>
         <button class="panel-toggle" id="panel-toggle" title="패널 접기/펴기">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -365,6 +369,33 @@
             <div class="placeholder">해석 저장소를 선택하면 의존 추적 정보가 표시됩니다</div>
           </div>
           <div id="dep-file-list" class="dep-file-list"></div>
+        </div>
+
+        <!-- Phase 8: 엔티티 탭 내용 -->
+        <div id="entity-panel-content" style="display:none;">
+          <!-- 필터 바 -->
+          <div class="entity-filter-bar">
+            <button class="entity-filter-btn active" data-type="all">전체</button>
+            <button class="entity-filter-btn" data-type="text_block">TextBlock</button>
+            <button class="entity-filter-btn" data-type="tag">Tag</button>
+            <button class="entity-filter-btn" data-type="concept">Concept</button>
+            <button class="entity-filter-btn" data-type="agent">Agent</button>
+            <button class="entity-filter-btn" data-type="relation">Relation</button>
+            <div class="entity-filter-spacer"></div>
+            <label class="entity-page-toggle">
+              <input type="checkbox" id="entity-page-filter" checked /> 현재 페이지만
+            </label>
+            <button id="entity-create-btn" class="text-btn text-btn-primary" title="새 엔티티 만들기">+ 새 엔티티</button>
+          </div>
+          <!-- LLM 초안 검토 영역 -->
+          <div id="entity-llm-review" class="llm-review-section" style="display:none;">
+            <div class="llm-review-header">LLM 초안 검토</div>
+            <div id="entity-llm-review-list"></div>
+          </div>
+          <!-- 엔티티 목록 -->
+          <div id="entity-list" class="entity-list">
+            <div class="placeholder">해석 모드에서 엔티티가 표시됩니다</div>
+          </div>
         </div>
       </div>
     </div>
@@ -526,6 +557,55 @@
     </div>
   </div>
 
+  <!-- Phase 8: 엔티티 CRUD 다이얼로그 오버레이 -->
+  <div class="bib-dialog-overlay" id="entity-dialog-overlay" style="display:none;">
+    <div class="bib-dialog" id="entity-dialog" style="width:520px;">
+      <div class="bib-dialog-header">
+        <span class="bib-dialog-title" id="entity-dialog-title">엔티티 생성</span>
+        <button class="bib-dialog-close" id="entity-dialog-close" title="닫기">&times;</button>
+      </div>
+      <div class="bib-dialog-body bib-edit-form" id="entity-dialog-form">
+        <!-- entity-manager.js가 동적으로 폼 필드를 렌더링 -->
+      </div>
+      <div class="bib-edit-actions" id="entity-dialog-actions">
+        <span id="entity-dialog-status"></span>
+        <div class="text-toolbar-spacer"></div>
+        <button id="entity-dialog-cancel" class="text-btn">취소</button>
+        <button id="entity-dialog-save" class="bib-btn bib-btn-primary">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 8: LLM 요청 다이얼로그 오버레이 -->
+  <div class="bib-dialog-overlay" id="llm-dialog-overlay" style="display:none;">
+    <div class="bib-dialog" id="llm-dialog" style="width:480px;">
+      <div class="bib-dialog-header">
+        <span class="bib-dialog-title">LLM에게 요청</span>
+        <button class="bib-dialog-close" id="llm-dialog-close" title="닫기">&times;</button>
+      </div>
+      <div class="bib-dialog-body bib-edit-form">
+        <label class="bib-edit-label">요청 유형</label>
+        <select id="llm-request-type" class="bib-select" style="width:100%;">
+          <option value="tag_extraction">Tag 추출 (인명·지명·관직)</option>
+          <option value="translation_draft">번역 초안</option>
+          <option value="relation_extraction">관계 추출</option>
+          <option value="agent_identification">인물 식별</option>
+        </select>
+        <label class="bib-edit-label">대상</label>
+        <select id="llm-target" class="bib-select" style="width:100%;">
+          <option value="current_page">현재 페이지 전체</option>
+          <option value="selected_block">선택된 TextBlock</option>
+        </select>
+        <label class="bib-edit-label">추가 지시사항 (선택)</label>
+        <textarea id="llm-instructions" class="bib-textarea" rows="3" placeholder="예: 六朝 인물에 집중하세요"></textarea>
+        <div class="bib-edit-actions">
+          <span id="llm-status" class="text-save-status" style="color:var(--text-secondary);">LLM 연동은 아직 준비 중입니다</span>
+          <button id="llm-request-btn" class="bib-btn bib-btn-primary" disabled>요청</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- 상태 바: D-001 하단 정보 표시줄 -->
   <footer class="status-bar">
     <div class="status-left">
@@ -552,6 +632,7 @@
 <script src="/static/js/correction-editor.js"></script>
 <script src="/static/js/bibliography.js"></script>
 <script src="/static/js/interpretation.js"></script>
+<script src="/static/js/entity-manager.js"></script>
 <script src="/static/js/workspace.js"></script>
 </body>
 </html>

@@ -31,6 +31,16 @@ API 엔드포인트:
     GET  /api/interpretations/{interp_id}/layers/{layer}/{sub_type}/pages/{page_num} → 층 내용 조회
     PUT  /api/interpretations/{interp_id}/layers/{layer}/{sub_type}/pages/{page_num} → 층 내용 저장
     GET  /api/interpretations/{interp_id}/git/log → git 이력
+
+    --- Phase 8: 코어 스키마 엔티티 API ---
+    POST /api/interpretations/{interp_id}/entities → 엔티티 생성
+    GET  /api/interpretations/{interp_id}/entities/{entity_type} → 유형별 목록
+    GET  /api/interpretations/{interp_id}/entities/{entity_type}/{entity_id} → 단일 조회
+    PUT  /api/interpretations/{interp_id}/entities/{entity_type}/{entity_id} → 엔티티 수정
+    GET  /api/interpretations/{interp_id}/entities/page/{page_num} → 페이지별 엔티티
+    POST /api/interpretations/{interp_id}/entities/text_block/from-source → TextBlock 생성
+    POST /api/interpretations/{interp_id}/entities/work/auto-create → Work 자동 생성
+    POST /api/interpretations/{interp_id}/entities/tags/{tag_id}/promote → Tag→Concept 승격
 """
 
 import sys
@@ -73,6 +83,16 @@ from core.interpretation import (
     git_commit_interpretation,
     save_layer_content,
     update_base,
+)
+from core.entity import (
+    auto_create_work,
+    create_entity,
+    create_textblock_from_source,
+    get_entity,
+    list_entities,
+    list_entities_for_page,
+    promote_tag_to_concept,
+    update_entity,
 )
 
 
@@ -898,3 +918,303 @@ async def api_interp_git_log(
         )
 
     return {"commits": get_interp_git_log(interp_path, max_count=max_count)}
+
+
+# =========================================
+#   Phase 8: 코어 스키마 엔티티 API
+# =========================================
+
+
+class EntityCreateRequest(BaseModel):
+    """엔티티 생성 요청 본문."""
+    entity_type: str   # work, text_block, tag, concept, agent, relation
+    data: dict         # 스키마에 맞는 엔티티 데이터
+
+
+class EntityUpdateRequest(BaseModel):
+    """엔티티 수정 요청 본문."""
+    updates: dict      # 갱신할 필드 딕셔너리
+
+
+class TextBlockFromSourceRequest(BaseModel):
+    """TextBlock 생성 요청 (source_ref 자동 채움)."""
+    document_id: str
+    part_id: str
+    page_num: int
+    layout_block_id: str | None = None
+    original_text: str
+    work_id: str
+    sequence_index: int
+
+
+class PromoteTagRequest(BaseModel):
+    """Tag → Concept 승격 요청."""
+    label: str | None = None
+    scope_work: str | None = None
+    description: str | None = None
+
+
+class AutoCreateWorkRequest(BaseModel):
+    """Work 자동 생성 요청."""
+    document_id: str
+
+
+@app.post("/api/interpretations/{interp_id}/entities")
+async def api_create_entity(interp_id: str, body: EntityCreateRequest):
+    """코어 스키마 엔티티를 생성한다.
+
+    목적: Work, TextBlock, Tag, Concept, Agent, Relation 엔티티를 해석 저장소에 추가한다.
+    입력: entity_type + data (JSON 스키마 형식).
+    출력: {"status": "created", "entity_type": ..., "id": ..., "file_path": ...}
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
+            status_code=404,
+        )
+
+    try:
+        result = create_entity(interp_path, body.entity_type, body.data)
+    except (ValueError, FileExistsError) as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        return JSONResponse({"error": f"엔티티 생성 실패: {e}"}, status_code=400)
+
+    # 자동 git commit
+    commit_msg = f"feat: {body.entity_type} 엔티티 생성 — {result['id'][:8]}"
+    result["git"] = git_commit_interpretation(interp_path, commit_msg)
+
+    return result
+
+
+@app.get("/api/interpretations/{interp_id}/entities/page/{page_num}")
+async def api_entities_for_page(
+    interp_id: str,
+    page_num: int,
+    document_id: str = Query(..., description="원본 문헌 ID"),
+):
+    """현재 페이지와 관련된 엔티티를 모두 반환한다.
+
+    목적: 하단 패널 "엔티티" 탭에서 현재 페이지에 연결된 엔티티를 표시한다.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
+            status_code=404,
+        )
+
+    try:
+        return list_entities_for_page(interp_path, document_id, page_num)
+    except Exception as e:
+        return JSONResponse({"error": f"엔티티 조회 실패: {e}"}, status_code=400)
+
+
+@app.get("/api/interpretations/{interp_id}/entities/{entity_type}")
+async def api_list_entities(
+    interp_id: str,
+    entity_type: str,
+    status: str | None = Query(None, description="상태 필터"),
+    block_id: str | None = Query(None, description="TextBlock ID 필터"),
+):
+    """특정 유형의 엔티티 목록을 반환한다."""
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
+            status_code=404,
+        )
+
+    filters = {}
+    if status:
+        filters["status"] = status
+    if block_id:
+        filters["block_id"] = block_id
+
+    try:
+        entities = list_entities(interp_path, entity_type, filters or None)
+        return {"entity_type": entity_type, "count": len(entities), "entities": entities}
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@app.get("/api/interpretations/{interp_id}/entities/{entity_type}/{entity_id}")
+async def api_get_entity(interp_id: str, entity_type: str, entity_id: str):
+    """단일 엔티티를 조회한다."""
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
+            status_code=404,
+        )
+
+    try:
+        return get_entity(interp_path, entity_type, entity_id)
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@app.put("/api/interpretations/{interp_id}/entities/{entity_type}/{entity_id}")
+async def api_update_entity(
+    interp_id: str,
+    entity_type: str,
+    entity_id: str,
+    body: EntityUpdateRequest,
+):
+    """엔티티를 수정한다 (상태 전이 포함).
+
+    목적: 엔티티 필드를 갱신한다. 삭제는 불가능하며 상태 전이만 허용된다.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
+            status_code=404,
+        )
+
+    try:
+        result = update_entity(interp_path, entity_type, entity_id, body.updates)
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+    except (ValueError, Exception) as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+    # 자동 git commit
+    commit_msg = f"fix: {entity_type} 엔티티 수정 — {entity_id[:8]}"
+    result["git"] = git_commit_interpretation(interp_path, commit_msg)
+
+    return result
+
+
+@app.post("/api/interpretations/{interp_id}/entities/text_block/from-source")
+async def api_create_textblock_from_source(
+    interp_id: str,
+    body: TextBlockFromSourceRequest,
+):
+    """L4 확정 텍스트에서 TextBlock을 생성한다 (source_ref 자동 채움).
+
+    목적: 연구자가 현재 보고 있는 페이지/블록에서 TextBlock을 만들면,
+          source_ref가 자동으로 채워진다.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
+            status_code=404,
+        )
+
+    try:
+        result = create_textblock_from_source(
+            interp_path,
+            _library_path,
+            body.document_id,
+            body.part_id,
+            body.page_num,
+            body.layout_block_id,
+            body.original_text,
+            body.work_id,
+            body.sequence_index,
+        )
+    except Exception as e:
+        return JSONResponse({"error": f"TextBlock 생성 실패: {e}"}, status_code=400)
+
+    # 자동 git commit
+    block_info = body.layout_block_id or ""
+    commit_msg = f"feat: TextBlock 생성 — page {body.page_num:03d} {block_info}"
+    result["git"] = git_commit_interpretation(interp_path, commit_msg)
+
+    return result
+
+
+@app.post("/api/interpretations/{interp_id}/entities/work/auto-create")
+async def api_auto_create_work(interp_id: str, body: AutoCreateWorkRequest):
+    """문헌 메타데이터로부터 Work 엔티티를 자동 생성한다.
+
+    목적: TextBlock 생성에 필요한 Work가 없을 때,
+          문헌의 서지정보/매니페스트에서 자동으로 Work를 만든다.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
+            status_code=404,
+        )
+
+    try:
+        result = auto_create_work(interp_path, _library_path, body.document_id)
+    except Exception as e:
+        return JSONResponse({"error": f"Work 자동 생성 실패: {e}"}, status_code=400)
+
+    # 기존 Work 반환인 경우 커밋 불필요
+    if result["status"] == "created":
+        work_title = result["work"].get("title", "")
+        commit_msg = f"feat: Work 자동 생성 — {work_title}"
+        result["git"] = git_commit_interpretation(interp_path, commit_msg)
+
+    return result
+
+
+@app.post("/api/interpretations/{interp_id}/entities/tags/{tag_id}/promote")
+async def api_promote_tag(
+    interp_id: str,
+    tag_id: str,
+    body: PromoteTagRequest,
+):
+    """Tag를 Concept으로 승격한다.
+
+    목적: 연구자가 확인한 Tag를 의미 엔티티(Concept)로 격상한다.
+          core-schema-v1.3.md 섹션 7: Promotion Flow.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
+            status_code=404,
+        )
+
+    try:
+        result = promote_tag_to_concept(
+            interp_path,
+            tag_id,
+            label=body.label,
+            scope_work=body.scope_work,
+            description=body.description,
+        )
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+    except Exception as e:
+        return JSONResponse({"error": f"Tag 승격 실패: {e}"}, status_code=400)
+
+    # 자동 git commit
+    label = result.get("concept", {}).get("label", "")
+    commit_msg = f"feat: Tag → Concept 승격 — {label}"
+    result["git"] = git_commit_interpretation(interp_path, commit_msg)
+
+    return result

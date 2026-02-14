@@ -30,7 +30,9 @@ document.addEventListener("DOMContentLoaded", () => {
   if (typeof initBibliography === "function") initBibliography();
   // Phase 7: 해석 저장소 모듈 초기화
   if (typeof initInterpretation === "function") initInterpretation();
-  // Phase 7: 하단 패널 탭 전환 (Git 이력 ↔ 의존 추적)
+  // Phase 8: 엔티티 관리 모듈 초기화
+  if (typeof initEntityManager === "function") initEntityManager();
+  // Phase 7+8: 하단 패널 탭 전환 (Git 이력 ↔ 의존 추적 ↔ 엔티티)
   initBottomPanelTabs();
 });
 
@@ -353,12 +355,14 @@ async function loadLibraryInfo() {
  *   탭에 따라 다른 내용 영역을 표시해야 한다.
  *   - "Git 이력" → #git-panel-content 표시
  *   - "의존 추적" → #dep-panel-content 표시
+ *   - "엔티티" → #entity-panel-content 표시
  *   - 기타 탭은 기존 동작 유지
  */
 function initBottomPanelTabs() {
   const tabs = document.querySelectorAll(".panel-tabs .panel-tab");
   const gitContent = document.getElementById("git-panel-content");
   const depContent = document.getElementById("dep-panel-content");
+  const entityContent = document.getElementById("entity-panel-content");
 
   tabs.forEach((tab, index) => {
     tab.addEventListener("click", () => {
@@ -368,6 +372,12 @@ function initBottomPanelTabs() {
       // 탭 내용 전환
       if (gitContent) gitContent.style.display = (index === 0) ? "" : "none";
       if (depContent) depContent.style.display = (index === 2) ? "" : "none";
+      if (entityContent) entityContent.style.display = (index === 3) ? "" : "none";
+
+      // Phase 8: 엔티티 탭 활성화 시 엔티티 로드
+      if (index === 3 && typeof _loadEntitiesForCurrentPage === "function") {
+        _loadEntitiesForCurrentPage();
+      }
     });
   });
 }
