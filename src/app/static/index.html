@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>고전 텍스트 디지털 서고</title>
+  <link rel="stylesheet" href="/static/css/workspace.css">
+</head>
+<body>
+
+<!-- D-001: VSCode 스타일 통합 작업 환경 -->
+<div class="workspace">
+
+  <!-- 액티비티 바: VSCode 좌측 아이콘 스트립 -->
+  <aside class="activity-bar">
+    <button class="activity-btn active" data-panel="explorer" title="서고 브라우저">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+      </svg>
+    </button>
+    <button class="activity-btn" data-panel="search" title="검색">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+      </svg>
+    </button>
+    <button class="activity-btn" data-panel="git" title="Git 이력">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 01-6 0V8"/>
+        <line x1="12" y1="2" x2="12" y2="8"/>
+      </svg>
+    </button>
+    <div class="activity-spacer"></div>
+    <button class="activity-btn" data-panel="settings" title="설정">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+      </svg>
+    </button>
+  </aside>
+
+  <!-- 사이드바: 서고 브라우저 (D-001: 파일 탐색기 → 서고 브라우저) -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-title">서고 브라우저</span>
+    </div>
+    <div class="sidebar-content" id="sidebar-content">
+      <div class="sidebar-section">
+        <div class="section-header">문헌 목록</div>
+        <div id="document-list" class="tree-view">
+          <div class="placeholder">서고를 불러오는 중...</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 사이드바 리사이즈 핸들 -->
+  <div class="resize-handle resize-sidebar" id="resize-sidebar"></div>
+
+  <!-- 메인 영역 -->
+  <main class="main-area">
+
+    <!-- 탭 바: D-001 멀티탭 → 층별 탭 -->
+    <div class="tab-bar">
+      <div class="tab active">원문</div>
+      <div class="tab">교정</div>
+      <div class="tab">현토</div>
+      <div class="tab">번역</div>
+      <div class="tab">주석</div>
+    </div>
+
+    <!-- 에디터 영역: D-001 에디터 → 병렬 뷰어 (이미지 + 텍스트) -->
+    <div class="editor-area">
+
+      <!-- 좌측 패널: 원본 뷰어 -->
+      <div class="editor-panel editor-left" id="editor-left">
+        <div class="panel-label">원본 저장소 (1~4층)</div>
+        <div class="editor-placeholder">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
+          </svg>
+          <p>원본 이미지 / PDF 뷰어</p>
+          <p class="hint">문헌을 선택하면 여기에 표시됩니다</p>
+        </div>
+      </div>
+
+      <!-- 에디터 리사이즈 핸들 -->
+      <div class="resize-handle resize-editor" id="resize-editor"></div>
+
+      <!-- 우측 패널: 해석 뷰어 -->
+      <div class="editor-panel editor-right" id="editor-right">
+        <div class="panel-label">해석 저장소 (5~8층)</div>
+        <div class="editor-placeholder">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+          <p>텍스트 / 번역 뷰어</p>
+          <p class="hint">교정, 현토, 번역, 주석이 여기에 표시됩니다</p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 하단 패널 리사이즈 핸들 -->
+    <div class="resize-handle resize-panel" id="resize-panel"></div>
+
+    <!-- 하단 패널: D-001 터미널/문제 → Git 이력, 검증, 의존 추적 -->
+    <div class="bottom-panel" id="bottom-panel">
+      <div class="panel-header">
+        <div class="panel-tabs">
+          <button class="panel-tab active">Git 이력</button>
+          <button class="panel-tab">검증 결과</button>
+          <button class="panel-tab">의존 추적</button>
+        </div>
+        <button class="panel-toggle" id="panel-toggle" title="패널 접기/펴기">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+      </div>
+      <div class="panel-content" id="panel-content">
+        <div class="placeholder">Git 이력이 여기에 표시됩니다</div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- 상태 바: D-001 하단 정보 표시줄 -->
+  <footer class="status-bar">
+    <div class="status-left">
+      <span class="status-item" id="status-library">서고: 연결 대기 중</span>
+      <span class="status-item" id="status-documents">문헌: 0</span>
+    </div>
+    <div class="status-right">
+      <span class="status-item">UTF-8</span>
+      <span class="status-item">LF</span>
+      <span class="status-item">v0.1.0</span>
+    </div>
+  </footer>
+
+</div>
+
+<script src="/static/js/workspace.js"></script>
+</body>
+</html>

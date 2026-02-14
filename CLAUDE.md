@@ -19,6 +19,11 @@ OCR, 교정, 번역, 주석 작업을 모두 수행한다.
 - PDF 렌더링: PDF.js
 - 버전관리: GitPython
 - 스키마 검증: jsonschema
+- 패키지 관리: uv (pip 사용 금지)
+  - 패키지 추가: uv add <패키지명>
+  - 개발 의존성: uv add --dev <패키지명>
+  - 실행: uv run python -m <모듈>
+  - uv.lock은 git에 포함
 
 ## 코딩 규칙
 - 이 프로젝트의 사용자는 비개발자 인문학 연구자다

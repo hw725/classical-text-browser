@@ -18,17 +18,34 @@ OCR, 교정, 번역, 주석 작업을 모두 수행합니다.
 
 ## 설치
 
+[uv](https://docs.astral.sh/uv/)를 사용합니다.
+
 ```bash
 # 저장소 클론
 git clone <repository-url>
 cd classical-text-platform
 
-# 가상환경 생성 및 활성화
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+# 의존성 설치 (.venv 자동 생성)
+uv sync
 
-# 의존성 설치
-pip install -e ".[dev]"
+# 개발 의존성 포함 설치
+uv sync --group dev
+```
+
+## 사용법
+
+```bash
+# 서고 초기화
+uv run python -m cli init-library <경로>
+
+# 문헌 등록
+uv run python -m cli add-document <서고경로> --title "蒙求" --doc-id monggu
+
+# 문헌 목록 확인
+uv run python -m cli list-documents <서고경로>
+
+# 웹 서버 실행
+uv run python -m app serve --library <서고경로>
 ```
 
 ## 프로젝트 구조

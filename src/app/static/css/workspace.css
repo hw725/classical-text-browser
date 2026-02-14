@@ -1,0 +1,472 @@
+/*
+ * 워크스페이스 레이아웃 — VSCode 스타일 (D-001)
+ *
+ * 구조:
+ *   액티비티 바 | 사이드바 | 리사이즈 | 메인 영역
+ *                                    ├─ 탭 바
+ *                                    ├─ 에디터 (좌우 분할)
+ *                                    ├─ 리사이즈
+ *                                    └─ 하단 패널
+ *   상태 바 (전체 너비)
+ */
+
+/* === 리셋 & 변수 === */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /* 레이아웃 크기 (JS에서 리사이즈 시 업데이트) */
+  --sidebar-width: 260px;
+  --panel-height: 200px;
+
+  /* 색상 — VSCode Dark 계열 */
+  --bg-primary: #1e1e1e;
+  --bg-secondary: #252526;
+  --bg-tertiary: #2d2d2d;
+  --bg-activity: #333333;
+  --bg-input: #3c3c3c;
+
+  --border: #3c3c3c;
+  --border-active: #007acc;
+
+  --text-primary: #cccccc;
+  --text-secondary: #888888;
+  --text-muted: #555555;
+  --text-active: #ffffff;
+
+  --accent: #007acc;
+  --accent-hover: #1a8ad4;
+
+  --resize-handle: transparent;
+  --resize-handle-hover: #007acc;
+
+  /* 폰트 */
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "Cascadia Code", "Consolas", "Monaco", monospace;
+  --font-size: 13px;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font-ui);
+  font-size: var(--font-size);
+  color: var(--text-primary);
+  background: var(--bg-primary);
+}
+
+
+/* === 워크스페이스 그리드 === */
+
+.workspace {
+  display: grid;
+  grid-template-columns: 48px var(--sidebar-width) 4px 1fr;
+  grid-template-rows: 1fr 24px;
+  grid-template-areas:
+    "activity sidebar resize-sb main"
+    "status   status  status    status";
+  height: 100vh;
+  width: 100vw;
+}
+
+
+/* === 액티비티 바 === */
+
+.activity-bar {
+  grid-area: activity;
+  background: var(--bg-activity);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 4px;
+  border-right: 1px solid var(--border);
+}
+
+.activity-btn {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.activity-btn:hover {
+  color: var(--text-active);
+}
+
+.activity-btn.active {
+  color: var(--text-active);
+  border-left-color: var(--accent);
+}
+
+.activity-spacer {
+  flex: 1;
+}
+
+
+/* === 사이드바 === */
+
+.sidebar {
+  grid-area: sidebar;
+  background: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 170px;
+}
+
+.sidebar-header {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.sidebar-section {
+  margin-bottom: 8px;
+}
+
+.section-header {
+  padding: 4px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.tree-view {
+  padding: 0 8px;
+}
+
+.tree-item {
+  padding: 3px 8px 3px 16px;
+  cursor: pointer;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.tree-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tree-item.active {
+  background: rgba(0, 122, 204, 0.2);
+}
+
+.tree-item .doc-id {
+  color: var(--text-secondary);
+  font-size: 11px;
+  margin-left: 6px;
+}
+
+
+/* === 리사이즈 핸들 (공통) === */
+
+.resize-handle {
+  background: var(--resize-handle);
+  transition: background 0.15s;
+  z-index: 10;
+}
+
+.resize-handle:hover,
+.resize-handle.active {
+  background: var(--resize-handle-hover);
+}
+
+.resize-sidebar {
+  grid-area: resize-sb;
+  cursor: col-resize;
+}
+
+.resize-editor {
+  width: 4px;
+  cursor: col-resize;
+  flex-shrink: 0;
+}
+
+.resize-panel {
+  height: 4px;
+  cursor: row-resize;
+  flex-shrink: 0;
+}
+
+
+/* === 메인 영역 === */
+
+.main-area {
+  grid-area: main;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+
+/* === 탭 바 === */
+
+.tab-bar {
+  height: 36px;
+  display: flex;
+  align-items: stretch;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.tab {
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+  user-select: none;
+}
+
+.tab:hover {
+  color: var(--text-primary);
+}
+
+.tab.active {
+  color: var(--text-active);
+  border-bottom-color: var(--accent);
+}
+
+
+/* === 에디터 영역 (좌우 분할) === */
+
+.editor-area {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.editor-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 200px;
+}
+
+.panel-label {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.editor-placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 24px;
+}
+
+.editor-placeholder p {
+  font-size: 14px;
+}
+
+.editor-placeholder .hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+
+/* === 하단 패널 === */
+
+.bottom-panel {
+  height: var(--panel-height);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: height 0.2s ease;
+}
+
+.bottom-panel.collapsed {
+  height: 0 !important;
+}
+
+/* collapsed일 때 resize 핸들도 숨김 */
+.bottom-panel.collapsed + .resize-panel,
+.resize-panel:has(+ .bottom-panel.collapsed) {
+  display: none;
+}
+
+.panel-header {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.panel-tabs {
+  display: flex;
+  gap: 2px;
+}
+
+.panel-tab {
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.panel-tab:hover {
+  color: var(--text-primary);
+}
+
+.panel-tab.active {
+  color: var(--text-active);
+  border-bottom-color: var(--accent);
+}
+
+.panel-toggle {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s, color 0.15s, transform 0.2s;
+}
+
+.panel-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+.bottom-panel.collapsed .panel-toggle {
+  transform: rotate(180deg);
+}
+
+.panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 12px;
+}
+
+
+/* === 상태 바 === */
+
+.status-bar {
+  grid-area: status;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  background: var(--accent);
+  color: var(--text-active);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.status-left,
+.status-right {
+  display: flex;
+  gap: 16px;
+}
+
+.status-item {
+  white-space: nowrap;
+}
+
+
+/* === 유틸리티 === */
+
+.placeholder {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 8px;
+}
+
+/* 드래그 중 iframe/selection 방지 */
+body.resizing {
+  user-select: none;
+  cursor: col-resize;
+}
+
+body.resizing-row {
+  user-select: none;
+  cursor: row-resize;
+}
+
+/* 스크롤바 스타일 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
