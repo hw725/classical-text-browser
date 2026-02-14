@@ -1,0 +1,114 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "고전 텍스트 페이지 영역의 구조적 역할을 정의하는 어휘 목록. platform-v7.md 섹션 5.3 기반.",
+  "block_types": [
+    {
+      "id": "main_text",
+      "label": "본문",
+      "label_cjk": "本文",
+      "description": "본문 (대자, 大字). 작품의 주된 내용.",
+      "typical_style": "대자 단행",
+      "example": "王戎簡要裴楷清通",
+      "color": "#3B82F6"
+    },
+    {
+      "id": "annotation",
+      "label": "주석",
+      "label_cjk": "注釋",
+      "description": "주석 (소자, 小字). 흔히 쌍행(雙行)으로 배열.",
+      "typical_style": "소자 쌍행",
+      "example": "王戎字濬沖瑯邪臨沂人...",
+      "color": "#22C55E"
+    },
+    {
+      "id": "preface",
+      "label": "서문",
+      "label_cjk": "序文",
+      "description": "서문. 작품 앞에 붙는 글.",
+      "typical_style": "다양",
+      "example": "李華《蒙求序》",
+      "color": "#A855F7"
+    },
+    {
+      "id": "colophon",
+      "label": "간기",
+      "label_cjk": "刊記",
+      "description": "간기 (간행 정보). 출판 시기, 장소, 간행자 등.",
+      "typical_style": "소자",
+      "example": "嘉熙己亥上元重刊于聚德堂",
+      "color": "#F59E0B"
+    },
+    {
+      "id": "memorial",
+      "label": "표문",
+      "label_cjk": "表文",
+      "description": "표문 (상소문). 황제에게 올리는 글.",
+      "typical_style": "다양",
+      "example": "李良《荐蒙求表》",
+      "color": "#EC4899"
+    },
+    {
+      "id": "page_title",
+      "label": "판심제",
+      "label_cjk": "版心題",
+      "description": "판심제. 페이지 접힌 부분에 인쇄된 제목.",
+      "typical_style": "소자",
+      "example": "蒙求卷上",
+      "color": "#6B7280"
+    },
+    {
+      "id": "page_number",
+      "label": "장차",
+      "label_cjk": "張次",
+      "description": "장차. 페이지 번호.",
+      "typical_style": "소자",
+      "example": "第三張",
+      "color": "#6B7280"
+    },
+    {
+      "id": "seal",
+      "label": "인장",
+      "label_cjk": "印章",
+      "description": "인장. 소장자의 도장.",
+      "typical_style": "—",
+      "example": "소장 인장",
+      "color": "#EF4444"
+    },
+    {
+      "id": "illustration",
+      "label": "삽화",
+      "label_cjk": "揷畫",
+      "description": "삽화. 그림, 도표 등.",
+      "typical_style": "—",
+      "example": "",
+      "color": "#14B8A6"
+    },
+    {
+      "id": "marginal_note",
+      "label": "방주/두주",
+      "label_cjk": "傍注/頭注",
+      "description": "방주(傍注) 또는 두주(頭注). 페이지 여백의 메모.",
+      "typical_style": "소자",
+      "example": "페이지 상단/옆 메모",
+      "color": "#F97316"
+    },
+    {
+      "id": "table_of_contents",
+      "label": "목차",
+      "label_cjk": "目次",
+      "description": "목차.",
+      "typical_style": "다양",
+      "example": "",
+      "color": "#8B5CF6"
+    },
+    {
+      "id": "unknown",
+      "label": "판별 불가",
+      "label_cjk": "不明",
+      "description": "구조적 역할을 판별할 수 없는 영역.",
+      "typical_style": "—",
+      "example": "",
+      "color": "#D1D5DB"
+    }
+  ]
+}

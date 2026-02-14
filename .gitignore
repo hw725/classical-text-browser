@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# 가상환경
+.venv/
+venv/
+env/
+
+# 환경 변수
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 테스트/커버리지
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# 원본 데이터 (용량이 크므로 git-lfs 또는 별도 관리)
+primary_data/
+
+# 중간 결과물
+intermediate_results/
+
+# 로그
+logs/*.jsonl
