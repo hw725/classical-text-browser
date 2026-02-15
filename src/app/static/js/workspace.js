@@ -38,6 +38,10 @@ document.addEventListener("DOMContentLoaded", () => {
   if (typeof initOcrPanel === "function") initOcrPanel();
   // Phase 10-3: 대조 뷰 초기화
   if (typeof initAlignmentView === "function") initAlignmentView();
+  // Phase 11-1: 표점 편집기 초기화
+  if (typeof initPunctuationEditor === "function") initPunctuationEditor();
+  // Phase 11-1: 현토 편집기 초기화
+  if (typeof initHyeontoEditor === "function") initHyeontoEditor();
   // Phase 7+8: 하단 패널 탭 전환 (Git 이력 ↔ 의존 추적 ↔ 엔티티)
   initBottomPanelTabs();
 });
@@ -215,6 +219,8 @@ function initActivityBar() {
  * "layout" — 레이아웃 모드 (PDF 위에 LayoutBlock 편집)
  * "correction" — 교정 모드 (Phase 6: 글자 단위 교정 + 블록별 섹션 + Git 연동)
  * "interpretation" — 해석 모드 (Phase 7: 현토/번역/주석 + 의존 추적)
+ * "punctuation" — 표점 모드 (Phase 11-1: L5 표점 편집기)
+ * "hyeonto" — 현토 모드 (Phase 11-1: L5 현토 편집기)
  */
 let currentMode = "view";
 
@@ -250,6 +256,8 @@ function _switchMode(mode) {
   const layoutPanel = document.getElementById("layout-props-panel");
   const correctionPanel = document.getElementById("correction-panel");
   const interpPanel = document.getElementById("interp-panel");
+  const punctPanel = document.getElementById("punct-panel");
+  const hyeontoPanel = document.getElementById("hyeonto-panel");
 
   // 이전 모드 정리
   if (currentMode === "layout") {
@@ -264,12 +272,22 @@ function _switchMode(mode) {
     if (typeof deactivateInterpretationMode === "function") deactivateInterpretationMode();
     if (interpPanel) interpPanel.style.display = "none";
   }
+  if (currentMode === "punctuation") {
+    if (typeof deactivatePunctuationMode === "function") deactivatePunctuationMode();
+    if (punctPanel) punctPanel.style.display = "none";
+  }
+  if (currentMode === "hyeonto") {
+    if (typeof deactivateHyeontoMode === "function") deactivateHyeontoMode();
+    if (hyeontoPanel) hyeontoPanel.style.display = "none";
+  }
 
   // 모든 우측 패널 숨김 (초기화)
   if (editorRight) editorRight.style.display = "none";
   if (layoutPanel) layoutPanel.style.display = "none";
   if (correctionPanel) correctionPanel.style.display = "none";
   if (interpPanel) interpPanel.style.display = "none";
+  if (punctPanel) punctPanel.style.display = "none";
+  if (hyeontoPanel) hyeontoPanel.style.display = "none";
 
   // 새 모드 활성화
   currentMode = mode;
@@ -286,6 +304,14 @@ function _switchMode(mode) {
     // 우측: 해석 뷰어 패널 표시
     if (interpPanel) interpPanel.style.display = "";
     if (typeof activateInterpretationMode === "function") activateInterpretationMode();
+  } else if (mode === "punctuation") {
+    // 우측: 표점 편집기 패널 표시
+    if (punctPanel) punctPanel.style.display = "";
+    if (typeof activatePunctuationMode === "function") activatePunctuationMode();
+  } else if (mode === "hyeonto") {
+    // 우측: 현토 편집기 패널 표시
+    if (hyeontoPanel) hyeontoPanel.style.display = "";
+    if (typeof activateHyeontoMode === "function") activateHyeontoMode();
   } else {
     // view 모드: 텍스트 에디터 표시
     if (editorRight) editorRight.style.display = "";
