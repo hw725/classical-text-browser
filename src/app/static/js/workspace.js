@@ -42,6 +42,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (typeof initPunctuationEditor === "function") initPunctuationEditor();
   // Phase 11-1: 현토 편집기 초기화
   if (typeof initHyeontoEditor === "function") initHyeontoEditor();
+  // Phase 11-2: 번역 편집기 초기화
+  if (typeof initTranslationEditor === "function") initTranslationEditor();
   // Phase 7+8: 하단 패널 탭 전환 (Git 이력 ↔ 의존 추적 ↔ 엔티티)
   initBottomPanelTabs();
 });
@@ -221,6 +223,7 @@ function initActivityBar() {
  * "interpretation" — 해석 모드 (Phase 7: 현토/번역/주석 + 의존 추적)
  * "punctuation" — 표점 모드 (Phase 11-1: L5 표점 편집기)
  * "hyeonto" — 현토 모드 (Phase 11-1: L5 현토 편집기)
+ * "translation" — 번역 모드 (Phase 11-2: L6 번역 편집기)
  */
 let currentMode = "view";
 
@@ -258,6 +261,7 @@ function _switchMode(mode) {
   const interpPanel = document.getElementById("interp-panel");
   const punctPanel = document.getElementById("punct-panel");
   const hyeontoPanel = document.getElementById("hyeonto-panel");
+  const transPanel = document.getElementById("trans-panel");
 
   // 이전 모드 정리
   if (currentMode === "layout") {
@@ -280,6 +284,10 @@ function _switchMode(mode) {
     if (typeof deactivateHyeontoMode === "function") deactivateHyeontoMode();
     if (hyeontoPanel) hyeontoPanel.style.display = "none";
   }
+  if (currentMode === "translation") {
+    if (typeof deactivateTranslationMode === "function") deactivateTranslationMode();
+    if (transPanel) transPanel.style.display = "none";
+  }
 
   // 모든 우측 패널 숨김 (초기화)
   if (editorRight) editorRight.style.display = "none";
@@ -288,6 +296,7 @@ function _switchMode(mode) {
   if (interpPanel) interpPanel.style.display = "none";
   if (punctPanel) punctPanel.style.display = "none";
   if (hyeontoPanel) hyeontoPanel.style.display = "none";
+  if (transPanel) transPanel.style.display = "none";
 
   // 새 모드 활성화
   currentMode = mode;
@@ -312,6 +321,10 @@ function _switchMode(mode) {
     // 우측: 현토 편집기 패널 표시
     if (hyeontoPanel) hyeontoPanel.style.display = "";
     if (typeof activateHyeontoMode === "function") activateHyeontoMode();
+  } else if (mode === "translation") {
+    // 우측: 번역 편집기 패널 표시
+    if (transPanel) transPanel.style.display = "";
+    if (typeof activateTranslationMode === "function") activateTranslationMode();
   } else {
     // view 모드: 텍스트 에디터 표시
     if (editorRight) editorRight.style.display = "";

@@ -394,6 +394,33 @@ L4는 평문 텍스트(.txt)로 블록 경계가 없다. 블록별 대조를 위
 
 ---
 
+## D-015: L6 번역 데이터 모델 + LLM 번역 워크플로우
+
+**날짜**: 2026-02-16
+**맥락**: L5 표점으로 분리된 문장 단위의 번역을 관리하는 L6 계층이 필요하다.
+
+**결정**:
+
+1. **문장 단위 번역**: L5 `split_sentences()`로 분리된 문장이 기본 번역 단위.
+   표점이 없으면 블록 전체를 하나의 문장으로 취급.
+2. **SourceRef 추적**: 각 번역은 `source: {block_id, start, end}`로 원문 위치를 정확히 참조.
+   `source_text`에 원문 스냅샷을 보관하여 L4 변경 시 비교 가능.
+3. **현토 스냅샷**: `hyeonto_text`에 현토 적용 텍스트를 선택적으로 보존.
+   번역 프롬프트에 현토를 포함하면 품질 향상.
+4. **상태 생명주기**: `draft → reviewed → accepted`. LLM 결과는 항상 draft로 시작.
+5. **Translator 정보**: `type: "llm" | "human"`, `model`, `draft_id`로 번역자 추적.
+6. **파일 경로**: `L6_translation/main_text/{part_id}_page_{NNN}_translation.json`
+   기존 `.txt` 파일과 `_translation` 접미사로 구분.
+7. **Draft→Review→Commit 재사용**: Phase 10-2의 LlmDraft 패턴을 번역에도 적용.
+
+**스키마**: `schemas/interp/translation_page.schema.json`
+
+**대안**:
+- 블록 단위 번역 → 문장이 너무 길어 번역 품질 저하. 문장 단위 채택.
+- 번역을 L5에 통합 → 표점/현토와 번역은 독립적 작업이므로 분리 채택.
+
+---
+
 ### 원본 저장소
 - [ ] JSON 스키마 각 필드의 상세 정의 → Phase 1에서 해결
 - [ ] 서지정보 파싱 상세 → Phase 5에서 해결
