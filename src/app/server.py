@@ -44,6 +44,12 @@ API 엔드포인트:
     POST /api/llm/compare-layout/{doc_id}/{page} → 레이아웃 분석 비교
     POST /api/llm/drafts/{draft_id}/review → Draft 검토 (accept/modify/reject)
 
+    --- Phase 10-1: OCR 엔진 연동 API ---
+    GET  /api/ocr/engines → 등록된 OCR 엔진 목록 + 사용 가능 여부
+    POST /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr → OCR 실행
+    GET  /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr → OCR 결과 조회
+    POST /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr/{block_id} → 단일 블록 재실행
+
     --- Phase 8: 코어 스키마 엔티티 API ---
     POST /api/interpretations/{interp_id}/entities → 엔티티 생성
     GET  /api/interpretations/{interp_id}/entities/{entity_type} → 유형별 목록
@@ -1827,3 +1833,197 @@ def _load_page_image(doc_id: str, page: int) -> bytes | None:
             pass  # pypdfium2가 없으면 건너뜀
 
     return None
+
+
+# ===========================================================================
+#  Phase 10-1: OCR 엔진 연동 API
+# ===========================================================================
+
+# OCR Pipeline + Registry 인스턴스 (서버 시작 시 lazy init)
+_ocr_registry = None
+_ocr_pipeline = None
+
+
+def _get_ocr_pipeline():
+    """OCR Pipeline과 Registry를 lazy-init한다.
+
+    왜 lazy-init인가:
+        _library_path는 serve 명령에서 설정된다.
+        OcrPipeline은 library_root가 필요하므로 앱 초기화 후에 생성해야 한다.
+    """
+    global _ocr_registry, _ocr_pipeline
+    if _ocr_registry is None:
+        from ocr.registry import OcrEngineRegistry
+        from ocr.pipeline import OcrPipeline
+
+        _ocr_registry = OcrEngineRegistry()
+        _ocr_registry.auto_register()
+        _ocr_pipeline = OcrPipeline(_ocr_registry, library_root=str(_library_path))
+
+    return _ocr_pipeline, _ocr_registry
+
+
+class OcrRunRequest(BaseModel):
+    """OCR 실행 요청 본문."""
+    engine_id: str | None = None      # None이면 기본 엔진
+    block_ids: list[str] | None = None  # None이면 전체 블록
+
+
+@app.get("/api/ocr/engines")
+async def api_ocr_engines():
+    """등록된 OCR 엔진 목록과 사용 가능 여부를 반환한다.
+
+    목적: GUI의 OCR 실행 패널에서 엔진 드롭다운을 채우기 위해 사용한다.
+    출력: {
+        "engines": [{"engine_id": "paddleocr", "display_name": "PaddleOCR", "available": true, ...}],
+        "default_engine": "paddleocr"
+    }
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    _pipeline, registry = _get_ocr_pipeline()
+    return {
+        "engines": registry.list_engines(),
+        "default_engine": registry.default_engine_id,
+    }
+
+
+@app.post("/api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr")
+async def api_run_ocr(
+    doc_id: str,
+    part_id: str,
+    page_number: int,
+    body: OcrRunRequest,
+):
+    """페이지의 블록들을 OCR 실행한다.
+
+    목적: 레이아웃 모드에서 OCR을 실행하고 결과를 L2_ocr/에 저장한다.
+    입력:
+        doc_id — 문헌 ID.
+        part_id — 권 식별자.
+        page_number — 페이지 번호 (1-indexed).
+        body — {"engine_id": null, "block_ids": null}.
+    출력: OcrPageResult.to_summary() 형식.
+          일부 블록 실패 시에도 성공한 블록 결과를 반환한다 (부분 성공).
+
+    처리 순서:
+        1. L3 layout_page.json에서 블록 목록 로드
+        2. L1_source에서 이미지 로드 (개별 파일 또는 PDF 페이지 추출)
+        3. 각 블록: bbox 크롭 → 전처리 → OCR 엔진 인식
+        4. 결과를 L2_ocr/{part_id}_page_{NNN}.json에 저장
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = _library_path / "documents" / doc_id
+    if not doc_path.exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
+            status_code=404,
+        )
+
+    pipeline, _registry = _get_ocr_pipeline()
+
+    try:
+        result = pipeline.run_page(
+            doc_id=doc_id,
+            part_id=part_id,
+            page_number=page_number,
+            engine_id=body.engine_id,
+            block_ids=body.block_ids,
+        )
+        return result.to_summary()
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"OCR 실행 실패: {e}"},
+            status_code=500,
+        )
+
+
+@app.get("/api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr")
+async def api_get_ocr_result(
+    doc_id: str,
+    part_id: str,
+    page_number: int,
+):
+    """특정 페이지의 OCR 결과(L2)를 반환한다.
+
+    목적: 교정 모드에서 기존 OCR 결과를 로드하기 위해 사용한다.
+    입력:
+        doc_id — 문헌 ID.
+        part_id — 권 식별자.
+        page_number — 페이지 번호 (1-indexed).
+    출력: L2_ocr/{part_id}_page_{NNN}.json의 내용.
+          파일이 없으면 404.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    import json as _json
+
+    filename = f"{part_id}_page_{page_number:03d}.json"
+    ocr_path = _library_path / "documents" / doc_id / "L2_ocr" / filename
+
+    if not ocr_path.exists():
+        return JSONResponse(
+            {"error": f"OCR 결과가 없습니다: {doc_id}/{part_id}/page_{page_number:03d}"},
+            status_code=404,
+        )
+
+    data = _json.loads(ocr_path.read_text(encoding="utf-8"))
+    data["_meta"] = {
+        "document_id": doc_id,
+        "part_id": part_id,
+        "page_number": page_number,
+        "file_path": str(ocr_path.relative_to(_library_path)),
+    }
+    return data
+
+
+@app.post("/api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr/{block_id}")
+async def api_rerun_ocr_block(
+    doc_id: str,
+    part_id: str,
+    page_number: int,
+    block_id: str,
+    body: OcrRunRequest,
+):
+    """특정 블록만 OCR을 재실행한다.
+
+    목적: 하나의 블록만 다시 OCR 처리하고 기존 L2 결과에 반영한다.
+          인식 결과가 좋지 않은 블록을 개별적으로 재시도할 때 사용한다.
+    입력:
+        doc_id — 문헌 ID.
+        part_id — 권 식별자.
+        page_number — 페이지 번호 (1-indexed).
+        block_id — 재실행할 블록 ID (L3 layout의 block_id).
+        body — {"engine_id": null} (다른 엔진으로 시도 가능).
+    출력: OcrPageResult.to_summary() 형식 (해당 블록만 포함).
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = _library_path / "documents" / doc_id
+    if not doc_path.exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
+            status_code=404,
+        )
+
+    pipeline, _registry = _get_ocr_pipeline()
+
+    try:
+        result = pipeline.run_block(
+            doc_id=doc_id,
+            part_id=part_id,
+            page_number=page_number,
+            block_id=block_id,
+            engine_id=body.engine_id,
+        )
+        return result.to_summary()
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"OCR 블록 재실행 실패: {e}"},
+            status_code=500,
+        )

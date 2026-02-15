@@ -368,6 +368,11 @@ function _selectPage(docId, partId, pageNum, docInfo, pageNode) {
       _loadLayerContent();
     }
   }
+
+  // Phase 10-1: 레이아웃 모드일 때 기존 OCR 결과 로드
+  if (typeof loadOcrResults === "function" && typeof layoutState !== "undefined" && layoutState.active) {
+    loadOcrResults();
+  }
 }
 
 

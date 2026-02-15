@@ -2478,3 +2478,172 @@ body.resizing-row {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+
+/* ====================================
+   Phase 10-1: OCR 실행 패널
+   ==================================== */
+
+/* --- OCR 패널 컨테이너 --- */
+.ocr-panel {
+  border-top: 1px solid var(--border);
+  padding: 8px;
+}
+
+.ocr-panel .props-section-title {
+  margin-bottom: 6px;
+}
+
+/* --- OCR 컨트롤 --- */
+.ocr-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ocr-control-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ocr-control-row .props-label {
+  flex-shrink: 0;
+  width: 36px;
+  margin: 0;
+}
+
+.ocr-control-row .props-select {
+  flex: 1;
+}
+
+.ocr-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.ocr-buttons .text-btn {
+  flex: 1;
+  font-size: 12px;
+}
+
+/* --- 프로그레스 바 --- */
+.ocr-progress {
+  padding: 4px 0;
+}
+
+#ocr-progress-text {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.ocr-progress-bar {
+  height: 3px;
+  background: var(--bg-primary);
+  border-radius: 2px;
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.ocr-progress-fill {
+  height: 100%;
+  width: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  animation: progress-pulse 1.5s ease-in-out infinite;
+}
+
+/* --- OCR 결과 미리보기 --- */
+.ocr-results-preview {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  margin-top: 8px;
+}
+
+.ocr-results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.ocr-result-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  background: var(--bg-secondary);
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.ocr-result-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.ocr-result-block-id {
+  flex-shrink: 0;
+  width: 60px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ocr-result-text {
+  flex: 1;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ocr-result-confidence {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+/* Confidence 색상 등급 */
+.conf-high {
+  color: #2d8a4e;
+  background: #d4edda;
+}
+
+.conf-mid {
+  color: #856404;
+  background: #fff3cd;
+}
+
+.conf-low {
+  color: #721c24;
+  background: #f8d7da;
+}
+
+.ocr-result-empty {
+  padding: 8px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.ocr-results-meta {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.ocr-summary-partial {
+  color: #856404;
+}
+
+/* --- OCR 버튼 비활성 상태 --- */
+#ocr-run-all:disabled,
+#ocr-run-selected:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

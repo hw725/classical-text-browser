@@ -233,6 +233,41 @@
           </div>
         </div>
 
+        <!-- Phase 10-1: OCR 실행 패널 -->
+        <div class="ocr-panel" id="ocr-panel">
+          <div class="props-section-title">OCR 실행</div>
+
+          <div class="ocr-controls">
+            <div class="ocr-control-row">
+              <label class="props-label">엔진</label>
+              <select id="ocr-engine-select" class="props-select" title="OCR 엔진 선택">
+                <option value="">로딩 중...</option>
+              </select>
+            </div>
+
+            <div class="ocr-buttons">
+              <button id="ocr-run-all" class="text-btn text-btn-primary" title="전체 블록 OCR 실행">전체 OCR</button>
+              <button id="ocr-run-selected" class="text-btn" title="선택된 블록만 OCR" disabled>선택 블록 OCR</button>
+            </div>
+
+            <div id="ocr-progress" class="ocr-progress" style="display:none;">
+              <span id="ocr-progress-text">처리 중...</span>
+              <div class="ocr-progress-bar">
+                <div id="ocr-progress-fill" class="ocr-progress-fill"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- OCR 결과 미리보기 -->
+          <div id="ocr-results-preview" class="ocr-results-preview" style="display:none;">
+            <div class="props-section-title">OCR 결과</div>
+            <div id="ocr-results-list" class="ocr-results-list"></div>
+            <div class="ocr-results-meta">
+              <span id="ocr-results-summary"></span>
+            </div>
+          </div>
+        </div>
+
         <!-- 전체 블록 목록 (reading_order 순) -->
         <div class="layout-block-list-section">
           <div class="props-section-title">전체 블록 목록 (reading_order 순)</div>
@@ -254,6 +289,8 @@
           <select id="corr-block-filter" class="corr-block-filter" title="블록 필터">
             <option value="all">전체</option>
           </select>
+          <div class="text-toolbar-divider"></div>
+          <button id="corr-fill-ocr" class="text-btn" title="OCR 결과로 텍스트 채우기">OCR 채우기</button>
         </div>
 
         <!-- 교정 텍스트 표시 영역 (글자 단위 span) -->
@@ -749,6 +786,7 @@
 <script src="/static/js/interpretation.js"></script>
 <script src="/static/js/entity-manager.js"></script>
 <script src="/static/js/create-document.js"></script>
+<script src="/static/js/ocr-panel.js"></script>
 <script src="/static/js/workspace.js"></script>
 </body>
 </html>

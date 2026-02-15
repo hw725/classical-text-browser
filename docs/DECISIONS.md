@@ -230,6 +230,38 @@ Git을 모르는 연구자에게는:
 
 ---
 
+## D-009: OCR 엔진 플러그인 아키텍처
+
+**날짜**: 2026-02-15
+**상태**: 확정
+
+**결정**:
+
+모든 OCR 엔진은 `BaseOcrEngine`을 상속하고, `OcrEngineRegistry`로 등록/조회하며,
+`OcrPipeline`을 통해서만 실행한다 (엔진 직접 호출 금지).
+
+| 구성 요소 | 역할 |
+|-----------|------|
+| `BaseOcrEngine` | 추상 클래스 — `recognize(image_bytes)` 인터페이스 |
+| `OcrEngineRegistry` | 엔진 등록/조회/기본 엔진 관리 |
+| `OcrPipeline` | L3 bbox → 이미지 크롭 → OCR → L2 JSON 저장 |
+| `PaddleOcrEngine` | 기본 엔진 — 오프라인 퍼스트, 한문 세로쓰기 지원 |
+
+**파이프라인 흐름**:
+```
+L3 LayoutBlock (bbox) → image_utils.crop_block() → OCR 엔진 → OcrBlockResult → L2 JSON
+```
+
+**스키마**:
+- 입력: `layout_page.schema.json` (L3)
+- 출력: `ocr_page.schema.json` (L2)
+- `additionalProperties: false` — 스키마에 없는 필드는 저장 금지
+
+**근거**: 파서(BaseFetcher/BaseMapper)와 동일한 플러그인 패턴으로 일관성 유지.
+오프라인 퍼스트 원칙 (PaddleOCR는 네트워크 불필요).
+
+---
+
 ## D-010: LLM 4단 폴백 아키텍처
 
 **날짜**: 2026-02-15
@@ -281,9 +313,12 @@ src/llm/
 ### 원본 저장소
 - [ ] JSON 스키마 각 필드의 상세 정의 → Phase 1에서 해결
 - [ ] 서지정보 파싱 상세 → Phase 5에서 해결
-- [ ] OCR 엔진 비교 평가 → Phase 10 이후
 - [ ] git-lfs 설정 상세 → Phase 2에서 해결
 - [ ] block_type 어휘 확장 → 점진적
+
+### OCR
+- [x] OCR 엔진 플러그인 아키텍처 → D-009 (Phase 10-1)
+- [ ] OCR 엔진 비교 평가 → Phase 10 이후
 
 ### LLM 협업
 - [x] LLM 호출 아키텍처 → D-010 (Phase 10-2)
