@@ -293,15 +293,44 @@
           <button id="corr-fill-ocr" class="text-btn" title="OCR 결과로 텍스트 채우기">OCR 채우기</button>
         </div>
 
+        <!-- 서브탭: 교정 / 대조 -->
+        <div class="corr-subtab-bar">
+          <div class="corr-subtab active" data-view="corrections">교정</div>
+          <div class="corr-subtab" data-view="alignment">대조</div>
+        </div>
+
         <!-- 교정 텍스트 표시 영역 (글자 단위 span) -->
         <div id="corr-text-area" class="corr-text-area">
           <div class="placeholder">교정 모드에서 텍스트가 여기에 표시됩니다</div>
         </div>
 
         <!-- 교정 목록 (현재 페이지) -->
-        <div class="corr-list-section">
+        <div class="corr-list-section" id="corr-list-section">
           <div class="props-section-title">교정 목록</div>
           <div id="corr-list" class="corr-list"></div>
+        </div>
+
+        <!-- 대조 뷰 (Phase 10-3, 대조 탭에서만 표시) -->
+        <div id="alignment-view" class="alignment-view" style="display:none;">
+          <!-- 통계 바 -->
+          <div id="alignment-stats-bar" class="alignment-stats-bar">
+            <div class="placeholder">대조를 실행하면 통계가 여기에 표시됩니다</div>
+          </div>
+
+          <!-- 블록 탭 -->
+          <div id="alignment-block-tabs" class="alignment-block-tabs"></div>
+
+          <!-- 글자별 대조 테이블 -->
+          <div id="alignment-table" class="alignment-table"></div>
+
+          <!-- 이체자 사전 관리 -->
+          <div class="alignment-variant-section">
+            <div class="props-section-title">
+              이체자 사전
+              <button id="alignment-add-variant" class="text-btn text-btn-small" title="이체자 쌍 추가">+ 추가</button>
+            </div>
+            <div id="alignment-variant-list" class="alignment-variant-list"></div>
+          </div>
         </div>
       </div>
 
@@ -787,6 +816,7 @@
 <script src="/static/js/entity-manager.js"></script>
 <script src="/static/js/create-document.js"></script>
 <script src="/static/js/ocr-panel.js"></script>
+<script src="/static/js/alignment-view.js"></script>
 <script src="/static/js/workspace.js"></script>
 </body>
 </html>

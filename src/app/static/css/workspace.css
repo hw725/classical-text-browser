@@ -2647,3 +2647,222 @@ body.resizing-row {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+
+/* ===========================================================================
+ * Phase 10-3: 대조 뷰 스타일
+ * =========================================================================== */
+
+/* --- 서브탭 바 (교정 / 대조) --- */
+.corr-subtab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid #ddd;
+  margin-bottom: 0;
+  background: #f8f9fa;
+}
+
+.corr-subtab {
+  padding: 6px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  color: #666;
+  user-select: none;
+}
+
+.corr-subtab:hover {
+  color: #333;
+  background: #eee;
+}
+
+.corr-subtab.active {
+  color: #1a73e8;
+  border-bottom-color: #1a73e8;
+  font-weight: 600;
+}
+
+/* --- 대조 뷰 컨테이너 --- */
+.alignment-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  gap: 8px;
+}
+
+/* --- 통계 바 --- */
+.alignment-stats-bar {
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.alignment-stats-summary {
+  margin-bottom: 6px;
+}
+
+.align-exact { color: #2e7d32; font-weight: 600; }
+.align-variant { color: #f57f17; font-weight: 600; }
+.align-mismatch { color: #c62828; font-weight: 600; }
+.align-insertion { color: #757575; }
+.align-deletion { color: #757575; }
+
+.alignment-accuracy-bar {
+  position: relative;
+  height: 18px;
+  background: #e0e0e0;
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.alignment-accuracy-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #66bb6a, #43a047);
+  border-radius: 9px;
+  transition: width 0.3s ease;
+}
+
+.alignment-accuracy-label {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  color: #333;
+}
+
+/* --- 블록 탭 --- */
+.alignment-block-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.alignment-block-tab {
+  padding: 3px 10px;
+  font-size: 12px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.alignment-block-tab:hover {
+  background: #eee;
+}
+
+.alignment-block-tab.active {
+  background: #1a73e8;
+  color: #fff;
+  border-color: #1a73e8;
+}
+
+/* --- 글자별 대조 테이블 --- */
+.alignment-grid {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  overflow: hidden;
+  font-size: 14px;
+}
+
+.alignment-grid-header {
+  display: grid;
+  grid-template-columns: 1fr 1fr 2fr;
+  background: #f0f0f0;
+  font-weight: 600;
+  font-size: 12px;
+  color: #555;
+}
+
+.alignment-grid-header .ag-col {
+  padding: 4px 8px;
+  border-bottom: 1px solid #ddd;
+}
+
+.alignment-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 2fr;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.alignment-row:last-child {
+  border-bottom: none;
+}
+
+.ag-col {
+  padding: 3px 8px;
+}
+
+.ag-char {
+  font-size: 18px;
+  text-align: center;
+  font-family: "Noto Serif KR", "Source Han Serif", serif;
+}
+
+.ag-status {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 대조 유형별 배경색 */
+.alignment-row.align-exact {
+  /* 기본 — 배경 없음 */
+}
+
+.alignment-row.align-variant {
+  background: #FFF9C4;
+}
+
+.alignment-row.align-mismatch {
+  background: #FFCDD2;
+}
+
+.alignment-row.align-insertion {
+  background: #E0E0E0;
+  color: #757575;
+}
+
+.alignment-row.align-deletion {
+  background: #E0E0E0;
+  color: #757575;
+}
+
+/* 클릭 가능한 행 */
+.alignment-row.align-mismatch:hover,
+.alignment-row.align-variant:hover {
+  filter: brightness(0.95);
+}
+
+/* --- 이체자 사전 섹션 --- */
+.alignment-variant-section {
+  margin-top: 8px;
+}
+
+.alignment-variant-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.variant-pair {
+  display: inline-block;
+  padding: 2px 8px;
+  background: #FFF9C4;
+  border: 1px solid #F9A825;
+  border-radius: 12px;
+  font-size: 13px;
+}
+
+.text-btn-small {
+  font-size: 11px;
+  padding: 1px 6px;
+}
