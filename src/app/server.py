@@ -2494,3 +2494,192 @@ async def api_hyeonto_preview(interp_id: str, page_num: int, block_id: str):
         "rendered_hyeonto": rendered,
         "rendered_combined": combined,
     }
+
+
+# ───────────────────────────────────────────────────
+# Phase 11-2: L6 번역(Translation) API
+# ───────────────────────────────────────────────────
+
+from src.core.translation import (
+    add_translation,
+    get_translation_status,
+    load_translations,
+    remove_translation,
+    save_translations,
+    update_translation,
+)
+from src.core.translation_llm import commit_translation_draft
+
+
+class TranslationAddRequest(BaseModel):
+    """수동 번역 입력 요청."""
+    source: dict
+    source_text: str
+    translation: str
+    target_language: str = "ko"
+    hyeonto_text: str | None = None
+
+
+class TranslationUpdateRequest(BaseModel):
+    """번역 수정 요청."""
+    translation: str | None = None
+    status: str | None = None
+
+
+class TranslationCommitRequest(BaseModel):
+    """Draft 확정 요청."""
+    modifications: dict | None = None
+
+
+@app.get("/api/interpretations/{interp_id}/pages/{page_num}/translation")
+async def api_get_translations(interp_id: str, page_num: int):
+    """번역 조회.
+
+    목적: 특정 페이지의 L6 번역 데이터를 반환한다.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse({"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."}, status_code=404)
+
+    part_id = "main"
+    data = load_translations(interp_path, part_id, page_num)
+    return data
+
+
+@app.get("/api/interpretations/{interp_id}/pages/{page_num}/translation/status")
+async def api_translation_status(interp_id: str, page_num: int):
+    """번역 상태 요약.
+
+    목적: 페이지의 번역 진행 상황을 한눈에 파악.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    part_id = "main"
+    data = load_translations(interp_path, part_id, page_num)
+    return get_translation_status(data)
+
+
+@app.post("/api/interpretations/{interp_id}/pages/{page_num}/translation")
+async def api_add_translation(interp_id: str, page_num: int, body: TranslationAddRequest):
+    """수동 번역 입력.
+
+    목적: 사용자가 직접 번역을 입력한다. translator.type = "human", status = "accepted".
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    part_id = "main"
+
+    data = load_translations(interp_path, part_id, page_num)
+
+    entry = {
+        "source": body.source,
+        "source_text": body.source_text,
+        "hyeonto_text": body.hyeonto_text,
+        "target_language": body.target_language,
+        "translation": body.translation,
+        "translator": {"type": "human", "model": None, "draft_id": None},
+        "status": "accepted",
+        "reviewed_by": None,
+        "reviewed_at": None,
+    }
+    result = add_translation(data, entry)
+
+    try:
+        save_translations(interp_path, part_id, page_num, data)
+        try:
+            git_commit_interpretation(interp_path, f"feat: L6 번역 추가 — page {page_num}")
+        except Exception:
+            pass
+        return JSONResponse(result, status_code=201)
+    except Exception as e:
+        return JSONResponse({"error": f"번역 저장 실패: {e}"}, status_code=400)
+
+
+@app.put("/api/interpretations/{interp_id}/pages/{page_num}/translation/{translation_id}")
+async def api_update_translation(
+    interp_id: str, page_num: int, translation_id: str, body: TranslationUpdateRequest
+):
+    """번역 수정."""
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    part_id = "main"
+
+    data = load_translations(interp_path, part_id, page_num)
+    updates = {}
+    if body.translation is not None:
+        updates["translation"] = body.translation
+    if body.status is not None:
+        updates["status"] = body.status
+
+    result = update_translation(data, translation_id, updates)
+    if result is None:
+        return JSONResponse({"error": f"번역 '{translation_id}'를 찾을 수 없습니다."}, status_code=404)
+
+    try:
+        save_translations(interp_path, part_id, page_num, data)
+        try:
+            git_commit_interpretation(interp_path, f"feat: L6 번역 수정 — page {page_num}")
+        except Exception:
+            pass
+        return result
+    except Exception as e:
+        return JSONResponse({"error": f"번역 저장 실패: {e}"}, status_code=400)
+
+
+@app.post("/api/interpretations/{interp_id}/pages/{page_num}/translation/{translation_id}/commit")
+async def api_commit_translation(
+    interp_id: str, page_num: int, translation_id: str, body: TranslationCommitRequest
+):
+    """Draft 확정.
+
+    목적: 연구자가 Draft를 검토 후 확정. status → "accepted".
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    part_id = "main"
+
+    data = load_translations(interp_path, part_id, page_num)
+    result = commit_translation_draft(data, translation_id, body.modifications)
+
+    if result is None:
+        return JSONResponse({"error": f"번역 '{translation_id}'를 찾을 수 없습니다."}, status_code=404)
+
+    try:
+        save_translations(interp_path, part_id, page_num, data)
+        try:
+            git_commit_interpretation(interp_path, f"feat: L6 번역 확정 — page {page_num}")
+        except Exception:
+            pass
+        return result
+    except Exception as e:
+        return JSONResponse({"error": f"번역 저장 실패: {e}"}, status_code=400)
+
+
+@app.delete("/api/interpretations/{interp_id}/pages/{page_num}/translation/{translation_id}")
+async def api_delete_translation(interp_id: str, page_num: int, translation_id: str):
+    """번역 삭제."""
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    part_id = "main"
+
+    data = load_translations(interp_path, part_id, page_num)
+    removed = remove_translation(data, translation_id)
+
+    if not removed:
+        return JSONResponse({"error": f"번역 '{translation_id}'를 찾을 수 없습니다."}, status_code=404)
+
+    save_translations(interp_path, part_id, page_num, data)
+    return JSONResponse(status_code=204, content=None)

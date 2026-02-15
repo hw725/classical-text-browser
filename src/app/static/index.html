@@ -104,7 +104,7 @@
   <!-- 메인 영역 -->
   <main class="main-area">
 
-    <!-- 모드 탭 바: 열람 / 레이아웃 / 교정 / 해석 / 표점 / 현토 -->
+    <!-- 모드 탭 바: 열람 / 레이아웃 / 교정 / 해석 / 표점 / 현토 / 번역 -->
     <div class="mode-bar">
       <div class="mode-tab active" data-mode="view">열람</div>
       <div class="mode-tab" data-mode="layout">레이아웃</div>
@@ -112,6 +112,7 @@
       <div class="mode-tab" data-mode="interpretation">해석</div>
       <div class="mode-tab" data-mode="punctuation">표점</div>
       <div class="mode-tab" data-mode="hyeonto">현토</div>
+      <div class="mode-tab" data-mode="translation">번역</div>
     </div>
 
     <!-- 층별 탭 바: D-001 멀티탭 -->
@@ -489,6 +490,37 @@
         <div class="hyeonto-preview-section">
           <div class="props-section-title">미리보기</div>
           <div id="hyeonto-preview" class="hyeonto-preview"></div>
+        </div>
+      </div>
+
+      <!-- 우측 패널: 번역 편집기 (Phase 11-2, 번역 모드에서만 표시) -->
+      <div class="editor-panel editor-right trans-panel" id="trans-panel" style="display:none;">
+        <div class="panel-label">번역 편집기 (L6)</div>
+
+        <!-- 도구 바 -->
+        <div class="trans-toolbar">
+          <select id="trans-block-select" class="corr-block-filter" title="블록 선택">
+            <option value="">블록 선택</option>
+          </select>
+          <div class="text-toolbar-spacer"></div>
+          <button id="trans-ai-all-btn" class="text-btn" title="미번역 문장 전체 AI 번역">전체 AI 번역</button>
+          <div class="text-toolbar-divider"></div>
+          <button id="trans-save-btn" class="text-btn text-btn-primary" title="저장">저장</button>
+          <span id="trans-save-status" class="text-save-status"></span>
+        </div>
+
+        <!-- 원문 + 표점 + 현토 (읽기 전용) -->
+        <div class="trans-source-section">
+          <div class="props-section-title">원문 (표점 + 현토)</div>
+          <div id="trans-source-text" class="trans-source-text"></div>
+        </div>
+
+        <!-- 번역 카드 목록 -->
+        <div class="trans-cards-section" id="trans-cards-section">
+          <div class="props-section-title">문장별 번역 (<span id="trans-status-summary"></span>)</div>
+          <div id="trans-cards" class="trans-cards">
+            <div class="placeholder">번역 모드: 블록을 선택하면 문장별 번역이 표시됩니다</div>
+          </div>
         </div>
       </div>
 
@@ -978,6 +1010,7 @@
 <script src="/static/js/alignment-view.js"></script>
 <script src="/static/js/punctuation-editor.js"></script>
 <script src="/static/js/hyeonto-editor.js"></script>
+<script src="/static/js/translation-editor.js"></script>
 <script src="/static/js/workspace.js"></script>
 </body>
 </html>

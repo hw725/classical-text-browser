@@ -3350,3 +3350,162 @@ body.resizing-row {
   display: flex;
   flex-direction: column;
 }
+
+
+/* ──────────────────────────────────────────────────
+   Phase 11-2: 번역 편집기 스타일
+   ────────────────────────────────────────────────── */
+
+/* 번역 모드 탭 강조색: 녹색 */
+.mode-tab.active[data-mode="translation"] {
+  border-bottom-color: #10b981;
+  color: #10b981;
+}
+
+/* 번역 패널 레이아웃 */
+.trans-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.trans-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+/* 원문 미리보기 */
+.trans-source-section {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.trans-source-text {
+  font-family: "Noto Serif KR", "Source Han Serif", serif;
+  font-size: 15px;
+  line-height: 1.8;
+  color: var(--text-primary);
+  padding: 6px 8px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  word-break: break-all;
+  min-height: 24px;
+}
+
+/* 번역 카드 영역 */
+.trans-cards-section {
+  padding: 8px 12px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.trans-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 개별 번역 카드 */
+.trans-card {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.trans-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.trans-card-source {
+  font-family: "Noto Serif KR", "Source Han Serif", serif;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.trans-card-status-badge {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* 상태별 색상 */
+.trans-status-none .trans-card-status-badge {
+  background: rgba(107, 114, 128, 0.2);
+  color: #9ca3af;
+}
+
+.trans-status-draft .trans-card-status-badge {
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+}
+
+.trans-status-draft {
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.trans-status-accepted .trans-card-status-badge {
+  background: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+}
+
+.trans-status-accepted {
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.trans-card-body {
+  padding: 8px 10px;
+}
+
+.trans-card-textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  resize: vertical;
+  font-family: inherit;
+}
+
+.trans-card-textarea:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.trans-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+}
+
+.trans-card-translator {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.trans-card-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.trans-card-empty {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+}
