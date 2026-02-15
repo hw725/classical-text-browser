@@ -421,6 +421,31 @@ L4는 평문 텍스트(.txt)로 블록 경계가 없다. 블록별 대조를 위
 
 ---
 
+## D-016: L7 주석 데이터 모델 + 주석 유형 관리
+
+**날짜**: 2026-02-16
+**맥락**: 원문의 인물·지명·용어·전거(고사/출전)에 주석을 다는 L7 계층이 필요하다.
+
+**결정**:
+
+1. **블록 단위 주석 관리**: annotation_page.json은 blocks 배열로 블록별 주석을 묶는다.
+   각 블록 안에서 target(start/end)으로 원문 범위를 지정.
+2. **유형은 사용자 정의 가능**: 고정 enum이 아니라 annotation_types.json으로 관리.
+   기본 프리셋 5종(person, place, term, allusion, note) + custom 확장.
+3. **서고별 커스텀 유형**: 기본 프리셋은 resources/에, 사용자 정의는 서고 안에 저장.
+   서고를 공유하면 유형도 함께 이동.
+4. **상태 생명주기**: L6과 동일한 draft → reviewed → accepted 패턴.
+5. **LLM 자동 태깅**: 원문 전체를 LLM에 보내 한번에 태깅. JSON 응답 파싱.
+6. **파일 경로**: `L7_annotation/main_text/{part_id}_page_{NNN}_annotation.json`
+
+**스키마**: `schemas/interp/annotation_page.schema.json`
+
+**대안**:
+- 주석을 L6에 통합 → 번역과 주석은 독립적 작업이므로 분리 채택.
+- 유형을 schema enum으로 고정 → 연구 분야마다 필요한 유형이 다르므로 유연한 관리 채택.
+
+---
+
 ### 원본 저장소
 - [ ] JSON 스키마 각 필드의 상세 정의 → Phase 1에서 해결
 - [ ] 서지정보 파싱 상세 → Phase 5에서 해결

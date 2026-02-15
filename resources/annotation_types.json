@@ -1,0 +1,10 @@
+{
+  "types": [
+    { "id": "person", "label": "인물", "color": "#4A90D9", "icon": "👤" },
+    { "id": "place", "label": "지명", "color": "#67B76C", "icon": "📍" },
+    { "id": "term", "label": "용어", "color": "#D4A843", "icon": "📖" },
+    { "id": "allusion", "label": "전거", "color": "#C75B8E", "icon": "📜" },
+    { "id": "note", "label": "메모", "color": "#999999", "icon": "📝" }
+  ],
+  "custom": []
+}
