@@ -22,6 +22,7 @@ DC-NDL 주요 필드 매핑:
 
 from __future__ import annotations
 
+import re
 from typing import Any
 from xml.etree import ElementTree as ET
 
@@ -103,6 +104,51 @@ class NdlFetcher(BaseFetcher):
             })
 
         return results
+
+    async def fetch_by_url(self, url: str) -> dict[str, Any]:
+        """NDL URL에서 NDLBibID를 추출하여 상세 정보를 가져온다.
+
+        지원 URL 패턴:
+            - https://ndlsearch.ndl.go.jp/books/R100000002-I...
+              → NDLBibID는 URL 끝 숫자 9자리
+            - https://dl.ndl.go.jp/info:ndljp/pid/...
+              → PID 기반 — PID를 검색어로 사용
+            - https://id.ndl.go.jp/bib/...
+              → NDLBibID 직접 포함
+
+        왜 이렇게 하는가:
+            연구자가 NDL 웹사이트에서 복사한 URL을 붙여넣으면,
+            검색 없이 바로 서지정보를 가져올 수 있다.
+        """
+        # 패턴 1: ndlsearch.ndl.go.jp/books/R100000002-I{NDLBibID}
+        m = re.search(r"ndlsearch\.ndl\.go\.jp/books/R\d+-I(\d+)", url)
+        if m:
+            return await self.fetch_detail(m.group(1))
+
+        # 패턴 2: id.ndl.go.jp/bib/{NDLBibID}
+        m = re.search(r"id\.ndl\.go\.jp/bib/(\d+)", url)
+        if m:
+            return await self.fetch_detail(m.group(1))
+
+        # 패턴 3: dl.ndl.go.jp/info:ndljp/pid/{PID} 또는 dl.ndl.go.jp/pid/{PID}
+        m = re.search(r"dl\.ndl\.go\.jp/(?:info:ndljp/)?pid/(\d+)", url)
+        if m:
+            pid = m.group(1)
+            # PID를 검색어로 사용하여 관련 서지 레코드를 찾는다
+            results = await self.search(pid, cnt=1)
+            if results:
+                return results[0]["raw"]
+            raise FileNotFoundError(
+                f"NDL에서 PID {pid}에 대한 서지 정보를 찾을 수 없습니다.\n"
+                "→ 해결: URL이 올바른지 확인하세요."
+            )
+
+        # 어떤 패턴에도 매칭되지 않으면 URL 자체를 검색어로 시도
+        raise ValueError(
+            f"NDL URL에서 ID를 추출할 수 없습니다: {url}\n"
+            "→ 지원 URL: ndlsearch.ndl.go.jp/books/..., "
+            "id.ndl.go.jp/bib/..., dl.ndl.go.jp/pid/..."
+        )
 
     async def fetch_detail(self, item_id: str, **kwargs) -> dict[str, Any]:
         """NDLBibID로 특정 항목의 상세 정보를 가져온다.

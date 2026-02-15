@@ -32,6 +32,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (typeof initInterpretation === "function") initInterpretation();
   // Phase 8: 엔티티 관리 모듈 초기화
   if (typeof initEntityManager === "function") initEntityManager();
+  // Phase 10: 새 문헌 생성 모듈 초기화
+  if (typeof initCreateDocument === "function") initCreateDocument();
   // Phase 7+8: 하단 패널 탭 전환 (Git 이력 ↔ 의존 추적 ↔ 엔티티)
   initBottomPanelTabs();
 });

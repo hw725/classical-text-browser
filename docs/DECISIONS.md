@@ -230,6 +230,52 @@ Git을 모르는 연구자에게는:
 
 ---
 
+## D-010: LLM 4단 폴백 아키텍처
+
+**날짜**: 2026-02-15
+**맥락**: LLM 호출을 어떤 구조로 관리할 것인가. 프로젝트 초기라 API 키가 없을 수도, 로컬 모델만 쓸 수도, 유료 API를 쓸 수도 있다.
+
+**결정**:
+
+4단 폴백 + 단일 진입점(Router) 아키텍처를 채택한다.
+
+| 순위 | Provider | 특징 |
+|------|----------|------|
+| 1순위 | Base44 HTTP (agent-chat) | 무료, 로컬 실행 필요 |
+| 2순위 | Base44 Bridge (Node.js) | 무료, Node.js subprocess |
+| 3순위 | Ollama (로컬 프록시) | 무료, 모델 선택 자유 |
+| 4순위 | Anthropic (Claude API) | 유료, 최고 품질 |
+
+**핵심 원칙**:
+- **LlmRouter가 유일한 진입점**: 모든 코드는 provider를 직접 호출하지 않고, Router를 통해야 한다
+- **Draft → Review → Commit**: LLM 결과는 항상 Draft 상태로 생성. 사람이 검토(accept/modify/reject) 후 확정
+- **비교 모드**: 같은 입력을 여러 모델에 보내서 결과를 나란히 비교 가능
+- **사용량 추적**: 서고별 llm_usage_log.jsonl에 모든 호출 기록 (무료 포함)
+- **force_provider/force_model**: 품질 테스트용 폴백 우회 옵션
+
+**파일 구조**:
+```
+src/llm/
+├── __init__.py          # 공개 API
+├── config.py            # 설정 관리 (.env → 환경변수 → 기본값)
+├── router.py            # 단일 진입점 (폴백 + 비교)
+├── draft.py             # Draft → Review → Commit
+├── usage_tracker.py     # JSONL 사용량 추적
+├── providers/
+│   ├── base.py          # 추상 클래스 + LlmResponse
+│   ├── base44_http.py   # 1순위
+│   ├── base44_bridge.py # 2순위
+│   ├── ollama.py        # 3순위
+│   └── anthropic_provider.py  # 4순위
+├── bridge/
+│   ├── invoke.js        # Node.js 텍스트 브릿지
+│   └── invoke_vision.js # Node.js 비전 브릿지
+└── prompts/
+    └── layout_analysis.yaml  # 레이아웃 분석 프롬프트
+```
+
+---
+
 ## 미결 사항 (v7 섹션 13 기반)
 
 ### 원본 저장소
@@ -240,9 +286,9 @@ Git을 모르는 연구자에게는:
 - [ ] block_type 어휘 확장 → 점진적
 
 ### LLM 협업
-- [ ] LLM 호출 아키텍처
-- [ ] 프롬프트 설계 원칙
-- [ ] 비용 관리
+- [x] LLM 호출 아키텍처 → D-010 (Phase 10-2)
+- [x] 프롬프트 설계 원칙 → layout_analysis.yaml (Phase 10-2)
+- [x] 비용 관리 → UsageTracker + 월별 예산 (Phase 10-2)
 
 ### 저장소 연결
 - [ ] 사다리형 git 그래프 구현

@@ -731,3 +731,162 @@ def _write_json(path: Path, data: dict) -> None:
         json.dumps(data, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+
+
+# --- URL에서 문헌 자동 생성 ---
+
+
+async def create_document_from_url(
+    library_path: str | Path,
+    url: str,
+    doc_id: str,
+    title: str | None = None,
+    selected_assets: list[str] | None = None,
+    progress_callback=None,
+) -> dict:
+    """URL에서 서지정보와 이미지를 자동으로 가져와 문헌을 생성한다.
+
+    목적: URL 하나로 서지정보 추출 + 이미지 다운로드 + 문서 폴더 생성을 한번에 수행.
+    입력:
+        library_path — 서고 경로.
+        url — 외부 아카이브 URL.
+        doc_id — 문헌 ID (영문 소문자+숫자+밑줄).
+        title — 문헌 제목 (None이면 서지정보에서 추출).
+        selected_assets — 다운로드할 에셋 ID 목록 (None이면 전체).
+        progress_callback — (status_msg, current, total)를 받는 콜백. (선택)
+    출력:
+        {
+            "doc_path": str,
+            "document_id": str,
+            "title": str,
+            "bibliography": dict,
+            "parts": list,
+            "parser_id": str,
+            "asset_count": int,
+        }
+
+    처리 흐름:
+        1. URL에서 파서 자동 판별
+        2. fetch_by_url()로 메타데이터 추출
+        3. map_to_bibliography()로 서지정보 변환
+        4. list_assets()로 다운로드 가능 에셋 조회
+        5. download_asset()로 각 에셋 다운로드 (임시 디렉토리)
+        6. add_document(files=[...])로 문헌 생성
+        7. save_bibliography()로 서지정보 저장
+        8. git commit
+
+    왜 이렇게 하는가:
+        기존 워크플로우는 '이미지 먼저 준비 → 문서 생성 → 서지 추가'인데,
+        국립공문서관처럼 URL에서 이미지와 서지를 모두 제공하는 경우
+        한 번에 처리하는 것이 연구자에게 훨씬 편리하다.
+    """
+    import tempfile
+
+    from parsers.base import detect_parser_from_url, get_parser
+
+    library_path = Path(library_path).resolve()
+
+    # 1. 파서 판별
+    parser_id = detect_parser_from_url(url)
+    if parser_id is None:
+        raise ValueError(f"이 URL은 자동 인식할 수 없습니다: {url}")
+
+    import parsers as _parsers_mod  # noqa: F401 — 파서 모듈 자동 등록
+    fetcher, mapper = get_parser(parser_id)
+
+    # 2. 메타데이터 추출
+    if progress_callback:
+        progress_callback("서지정보 가져오는 중...", 0, 0)
+    raw_data = await fetcher.fetch_by_url(url)
+
+    # 3. 서지정보 매핑
+    bibliography = mapper.map_to_bibliography(raw_data)
+    effective_title = title or bibliography.get("title") or "제목없음"
+
+    # 4. 에셋 다운로드 (지원하는 파서만)
+    downloaded_files: list[Path] = []
+    asset_parts_info: list[dict] = []
+
+    if fetcher.supports_asset_download:
+        if progress_callback:
+            progress_callback("에셋 목록 조회 중...", 0, 0)
+        assets = await fetcher.list_assets(raw_data)
+
+        # 선택된 에셋만 필터 (None이면 전체)
+        if selected_assets is not None:
+            assets = [a for a in assets if a["asset_id"] in selected_assets]
+
+        if assets:
+            with tempfile.TemporaryDirectory(prefix="ctp_download_") as tmp_dir:
+                tmp_path = Path(tmp_dir)
+                for i, asset in enumerate(assets):
+                    if progress_callback:
+                        progress_callback(
+                            f"다운로드 중: {asset['label']} ({i + 1}/{len(assets)})",
+                            i + 1,
+                            len(assets),
+                        )
+
+                    pdf_path = await fetcher.download_asset(
+                        asset,
+                        tmp_path,
+                        progress_callback=(
+                            lambda cur, total, _label=asset["label"]: (
+                                progress_callback(
+                                    f"다운로드 중: {_label} p.{cur}/{total}",
+                                    cur,
+                                    total,
+                                )
+                            )
+                            if progress_callback
+                            else None
+                        ),
+                    )
+                    downloaded_files.append(pdf_path)
+                    asset_parts_info.append({
+                        "label": asset["label"],
+                        "page_count": asset.get("page_count"),
+                    })
+
+                # 5. add_document() 호출
+                if progress_callback:
+                    progress_callback("문헌 폴더 생성 중...", 0, 0)
+                doc_path = add_document(
+                    library_path,
+                    effective_title,
+                    doc_id,
+                    files=downloaded_files,
+                )
+            # TemporaryDirectory가 여기서 자동 정리됨
+        else:
+            doc_path = add_document(library_path, effective_title, doc_id)
+    else:
+        doc_path = add_document(library_path, effective_title, doc_id)
+
+    # 6. manifest.json의 parts에 페이지 수와 라벨 업데이트
+    manifest = get_document_info(doc_path)
+    for i, part in enumerate(manifest.get("parts", [])):
+        if i < len(asset_parts_info):
+            part["page_count"] = asset_parts_info[i].get("page_count")
+            part["label"] = asset_parts_info[i]["label"]
+    if bibliography:
+        manifest["completeness_status"] = "bibliography_added"
+    _write_json(doc_path / "manifest.json", manifest)
+
+    # 7. 서지정보 저장
+    save_bibliography(doc_path, bibliography)
+
+    # 8. git commit
+    repo = git.Repo(doc_path)
+    repo.index.add(["."])
+    repo.index.commit(f"feat: URL에서 문헌 생성 ({parser_id})")
+
+    return {
+        "doc_path": str(doc_path),
+        "document_id": doc_id,
+        "title": effective_title,
+        "bibliography": bibliography,
+        "parts": manifest.get("parts", []),
+        "parser_id": parser_id,
+        "asset_count": len(downloaded_files),
+    }

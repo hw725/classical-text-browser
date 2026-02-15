@@ -14,3 +14,4 @@
 # 파서 모듈을 import하면 register_parser()가 호출되어 자동 등록된다.
 from parsers import ndl  # noqa: F401
 from parsers import archives_jp  # noqa: F401
+from parsers import korcis  # noqa: F401

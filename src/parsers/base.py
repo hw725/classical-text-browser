@@ -15,7 +15,9 @@ platform-v7.md §7.3 아키텍처:
 from __future__ import annotations
 
 import json
+import re
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -64,6 +66,63 @@ class BaseFetcher(ABC):
             (NDL OpenSearch는 검색 결과에 전체 필드를 포함하므로,
              이 경우 search 결과를 그대로 반환할 수 있다.)
         """
+
+    # --- 에셋 다운로드 인터페이스 (선택 구현) ---
+
+    supports_asset_download: bool = False
+    """이 Fetcher가 이미지/PDF 다운로드를 지원하는지 여부.
+
+    왜 이렇게 하는가:
+        모든 소스가 이미지 다운로드를 지원하지는 않는다.
+        KORCIS는 메타데이터 전용이고, NDL은 IIIF를 지원하나 아직 미구현.
+        이 플래그로 GUI에서 "문헌 생성" 버튼을 조건부 표시한다.
+    """
+
+    async def list_assets(self, raw_data: dict[str, Any]) -> list[dict[str, Any]]:
+        """다운로드 가능한 에셋(이미지/PDF) 목록을 반환한다.
+
+        입력:
+            raw_data — fetch_detail/fetch_by_url이 반환한 메타데이터.
+                       BID, MID 등 소스별 ID가 포함되어 있다.
+        출력:
+            [{
+                "asset_id": "M2023...",          # 소스 시스템 ID
+                "label": "蒙求1",                 # 사람이 읽는 이름
+                "page_count": 42,                 # 페이지 수 (알면)
+                "file_size": 12345678,            # 바이트 (알면)
+                "download_type": "jpeg_pages",    # jpeg_pages | pdf | iiif
+            }, ...]
+
+        왜 이렇게 하는가:
+            다권본(簿冊)은 하위에 여러 MID가 있다.
+            사용자에게 어떤 권을 다운로드할지 보여주기 위해
+            먼저 목록을 조회한다.
+        """
+        return []
+
+    async def download_asset(
+        self,
+        asset_info: dict[str, Any],
+        dest_dir: Path,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> Path:
+        """에셋을 다운로드하여 dest_dir에 저장한다.
+
+        입력:
+            asset_info — list_assets()가 반환한 항목 하나.
+            dest_dir — 파일을 저장할 디렉토리 (임시 디렉토리).
+            progress_callback — (current_page, total_pages)를 받는 콜백.
+        출력:
+            다운로드된 파일의 Path (PDF 등).
+
+        왜 이렇게 하는가:
+            소스마다 다운로드 방식이 다르다.
+            국립공문서관은 개별 JPEG를 받아 PDF로 합치고,
+            NDL은 IIIF manifest에서 이미지를 받을 수 있다.
+        """
+        raise NotImplementedError(
+            f"이 파서({self.parser_id})는 에셋 다운로드를 지원하지 않습니다."
+        )
 
 
 class BaseMapper(ABC):
@@ -177,6 +236,73 @@ def list_parsers() -> list[dict[str, str]]:
             "api_variant": fetcher.api_variant,
         })
     return result
+
+
+# --- URL 자동 판별 ---
+
+
+# URL 패턴 → parser_id 매핑 테이블.
+# 각 항목은 (정규식 패턴, parser_id) 쌍이다.
+# 왜 이렇게 하는가:
+#     연구자가 URL을 붙여넣으면, 어느 소스인지 자동으로 판별하여
+#     올바른 fetcher를 호출할 수 있다.
+_URL_PATTERNS: list[tuple[re.Pattern, str]] = [
+    # NDL (国立国会図書館): 여러 하위 도메인을 포괄
+    (re.compile(r"https?://ndlsearch\.ndl\.go\.jp/"), "ndl"),
+    (re.compile(r"https?://dl\.ndl\.go\.jp/"), "ndl"),
+    (re.compile(r"https?://id\.ndl\.go\.jp/"), "ndl"),
+    # 일본 국립공문서관 デジタルアーカイブ
+    (re.compile(r"https?://(www\.)?digital\.archives\.go\.jp/"), "japan_national_archives"),
+    # KORCIS (한국고문헌종합목록) — 국립중앙도서관 내
+    (re.compile(r"https?://(www\.)?nl\.go\.kr/korcis/"), "korcis"),
+]
+
+
+def detect_parser_from_url(url: str) -> str | None:
+    """URL 패턴으로 어느 파서를 쓸지 자동 판별한다.
+
+    입력:
+        url — 외부 서지정보 페이지 URL.
+    출력:
+        parser_id 문자열, 또는 인식할 수 없으면 None.
+
+    매칭 규칙:
+        - ndlsearch.ndl.go.jp, dl.ndl.go.jp, id.ndl.go.jp → "ndl"
+        - digital.archives.go.jp → "japan_national_archives"
+        - nl.go.kr/korcis/ → "korcis"
+
+    왜 이렇게 하는가:
+        연구자가 URL을 붙여넣기만 하면 검색 없이 서지정보를
+        바로 가져올 수 있도록 하기 위해서다.
+    """
+    for pattern, parser_id in _URL_PATTERNS:
+        if pattern.search(url):
+            return parser_id
+    return None
+
+
+def get_supported_sources() -> list[dict[str, str]]:
+    """URL 자동 판별이 지원하는 소스 목록을 반환한다.
+
+    출력: [{parser_id, url_example, description}, ...]
+    """
+    return [
+        {
+            "parser_id": "ndl",
+            "url_example": "https://ndlsearch.ndl.go.jp/books/R...",
+            "description": "国立国会図書館サーチ (NDL Search)",
+        },
+        {
+            "parser_id": "japan_national_archives",
+            "url_example": "https://www.digital.archives.go.jp/...",
+            "description": "国立公文書館デジタルアーカイブ",
+        },
+        {
+            "parser_id": "korcis",
+            "url_example": "https://www.nl.go.kr/korcis/...",
+            "description": "한국고문헌종합목록 (KORCIS)",
+        },
+    ]
 
 
 def get_registry_json() -> dict:

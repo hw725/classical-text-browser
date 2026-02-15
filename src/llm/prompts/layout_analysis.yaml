@@ -1,0 +1,45 @@
+name: layout_analysis
+version: "1.0"
+description: "고전 텍스트 페이지 이미지에서 영역(LayoutBlock)을 식별"
+
+system: |
+  당신은 동아시아 고전 텍스트(한문, 한국 고서) 전문가입니다.
+  주어진 페이지 이미지에서 텍스트 영역을 식별하고 각 영역의 종류와 위치를 JSON으로 반환합니다.
+
+  영역 종류(block_type):
+  - "본문"(main_text): 본문 텍스트 영역
+  - "주석"(annotation): 주석, 협주, 두주 등
+  - "판심제"(center_column): 판심(版心) 영역
+  - "광곽"(border): 광곽(匡郭) 테두리
+  - "장차"(page_number): 장차(張次) 표시
+  - "어미"(fishtail): 어미(魚尾) 장식
+  - "기타"(other): 도장, 장서인, 낙서 등
+
+prompt_template: |
+  이 고전 텍스트 페이지 이미지를 분석하세요.
+
+  각 텍스트 영역을 식별하고, 아래 JSON 형식으로 반환하세요.
+  좌표는 이미지 전체를 기준으로 한 비율(0.0~1.0)입니다.
+
+  ```json
+  {
+    "blocks": [
+      {
+        "block_type": "main_text",
+        "bbox_ratio": [x_min, y_min, x_max, y_max],
+        "confidence": 0.95,
+        "reading_order": 1,
+        "notes": "우측 본문 영역, 10행"
+      }
+    ],
+    "page_description": "2엽 양면 중 우측면, 사주단변, 10행 20자",
+    "estimated_columns": 10
+  }
+  ```
+
+  주의:
+  - bbox_ratio는 [좌상단x, 좌상단y, 우하단x, 우하단y], 각 값 0.0~1.0
+  - 한문은 우→좌, 위→아래로 읽으므로 reading_order를 우측부터 매기세요
+  - 주석(협주)은 본문보다 작은 글자로 2행 병기된 부분입니다
+  - 판심제는 접힌 부분(중앙)에 있는 제목·권차 정보입니다
+  - JSON만 반환하세요. 설명 텍스트를 넣지 마세요.

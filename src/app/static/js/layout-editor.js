@@ -894,3 +894,299 @@ function deactivateLayoutMode() {
     overlay.style.display = "none";
   }
 }
+
+
+/* ──────────────────────────
+   Phase 10-2: LLM 레이아웃 분석
+   ────────────────────────── */
+
+/**
+ * LLM 관련 UI를 초기화한다.
+ *
+ * 왜 layout-editor.js에 넣는가:
+ *   AI 분석은 레이아웃 편집기의 확장 기능이다.
+ *   분석 결과(Draft)를 기존 블록 편집 UI에 통합한다.
+ */
+function _initLlmLayoutUI() {
+  // 모델 목록 로드
+  _loadLlmModels();
+  // LLM 상태 로드
+  _loadLlmStatus();
+
+  // AI 분석 버튼
+  const analyzeBtn = document.getElementById("llm-analyze-btn");
+  if (analyzeBtn) {
+    analyzeBtn.addEventListener("click", _runLlmAnalysis);
+  }
+
+  // 비교 버튼
+  const compareBtn = document.getElementById("llm-compare-btn");
+  if (compareBtn) {
+    compareBtn.addEventListener("click", _runLlmComparison);
+  }
+}
+
+
+/**
+ * GET /api/llm/models → 드롭다운에 모델 목록 표시.
+ */
+async function _loadLlmModels() {
+  const select = document.getElementById("llm-model-select");
+  if (!select) return;
+
+  try {
+    const res = await fetch("/api/llm/models");
+    if (!res.ok) return;
+    const models = await res.json();
+
+    // 기존 옵션 초기화 (자동 유지)
+    select.innerHTML = '<option value="auto">자동 (폴백순서)</option>';
+
+    for (const m of models) {
+      const opt = document.createElement("option");
+      opt.value = `${m.provider}:${m.model}`;
+      const icon = m.available ? "●" : "○";
+      const costLabel = m.cost === "free" ? "" : " [유료]";
+      opt.textContent = `${icon} ${m.display}${costLabel}`;
+      opt.disabled = !m.available;
+      select.appendChild(opt);
+    }
+
+    // 비교 모드 옵션
+    const compareOpt = document.createElement("option");
+    compareOpt.value = "compare";
+    compareOpt.textContent = "비교 모드";
+    select.appendChild(compareOpt);
+  } catch {
+    // 서버 미연결 시 무시
+  }
+}
+
+
+/**
+ * GET /api/llm/status → 상태 인디케이터 표시.
+ */
+async function _loadLlmStatus() {
+  const indicators = document.getElementById("llm-status-indicators");
+  const costDisplay = document.getElementById("llm-cost-display");
+  if (!indicators) return;
+
+  try {
+    const [statusRes, usageRes] = await Promise.all([
+      fetch("/api/llm/status"),
+      fetch("/api/llm/usage"),
+    ]);
+
+    if (statusRes.ok) {
+      const status = await statusRes.json();
+      let html = "";
+      for (const [id, info] of Object.entries(status)) {
+        const icon = info.available ? "🟢" : "⚫";
+        const name = info.display_name || id;
+        html += `<span class="llm-provider-indicator" title="${name}">${icon}</span>`;
+      }
+      indicators.innerHTML = html;
+    }
+
+    if (usageRes.ok && costDisplay) {
+      const usage = await usageRes.json();
+      const cost = usage.total_cost_usd || 0;
+      const budget = usage.budget_usd || 10;
+      costDisplay.textContent = `$${cost.toFixed(2)} / $${budget.toFixed(2)}`;
+    }
+  } catch {
+    // 무시
+  }
+}
+
+
+/**
+ * AI 분석 실행.
+ */
+async function _runLlmAnalysis() {
+  if (!viewerState.docId || viewerState.pageNum == null) {
+    _setLlmStatus("문헌/페이지를 먼저 선택하세요.");
+    return;
+  }
+
+  const select = document.getElementById("llm-model-select");
+  const selectedValue = select ? select.value : "auto";
+
+  // 비교 모드 선택 시 비교 함수로 위임
+  if (selectedValue === "compare") {
+    return _runLlmComparison();
+  }
+
+  // force_provider, force_model 파싱
+  let params = "";
+  if (selectedValue !== "auto") {
+    const parts = selectedValue.split(":", 2);
+    params = `?force_provider=${encodeURIComponent(parts[0])}`;
+    if (parts[1] && parts[1] !== "auto") {
+      params += `&force_model=${encodeURIComponent(parts[1])}`;
+    }
+  }
+
+  _setLlmStatus("AI 분석 중...");
+  const analyzeBtn = document.getElementById("llm-analyze-btn");
+  if (analyzeBtn) analyzeBtn.disabled = true;
+
+  try {
+    const url = `/api/llm/analyze-layout/${viewerState.docId}/${viewerState.pageNum}${params}`;
+    const res = await fetch(url, { method: "POST" });
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || "분석 실패");
+    }
+
+    // Draft 결과를 블록으로 변환
+    _applyDraftToBlocks(data);
+    _setLlmStatus(
+      `분석 완료 (${data.provider || "?"}, ${(data.elapsed_sec || 0).toFixed(1)}s)`
+    );
+  } catch (err) {
+    _setLlmStatus(`오류: ${err.message}`);
+  } finally {
+    if (analyzeBtn) analyzeBtn.disabled = false;
+  }
+}
+
+
+/**
+ * 비교 분석 실행.
+ */
+async function _runLlmComparison() {
+  if (!viewerState.docId || viewerState.pageNum == null) {
+    _setLlmStatus("문헌/페이지를 먼저 선택하세요.");
+    return;
+  }
+
+  _setLlmStatus("여러 모델 비교 중...");
+
+  try {
+    const url = `/api/llm/compare-layout/${viewerState.docId}/${viewerState.pageNum}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targets: null }),  // 사용 가능한 모든 모델
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || "비교 실패");
+    }
+
+    // 비교 결과 다이얼로그 표시
+    _showComparisonResults(data);
+    _setLlmStatus(`비교 완료: ${data.length}개 모델`);
+  } catch (err) {
+    _setLlmStatus(`비교 오류: ${err.message}`);
+  }
+}
+
+
+/**
+ * Draft 결과를 레이아웃 블록으로 적용한다.
+ *
+ * Draft의 response_data.blocks를 기존 layoutState.blocks에 추가.
+ * 점선 스타일로 표시하여 기존 블록과 구분.
+ */
+function _applyDraftToBlocks(draft) {
+  const blocks = draft.response_data?.blocks;
+  if (!blocks || !Array.isArray(blocks)) {
+    _setLlmStatus("분석 결과에 블록이 없습니다.");
+    return;
+  }
+
+  // 기존 블록과 합침 (draft 블록은 _draft 플래그)
+  for (const b of blocks) {
+    const newBlock = {
+      block_id: `draft_${layoutState.blocks.length + 1}`,
+      block_type: b.block_type || "main_text",
+      bbox: _ratioToPixelBbox(b.bbox_ratio),
+      reading_order: b.reading_order || layoutState.blocks.length + 1,
+      writing_direction: "vertical_rtl",
+      notes: b.notes || "",
+      _draft: true,           // Draft 표시
+      _draft_id: draft.draft_id,
+      _confidence: b.confidence,
+    };
+    layoutState.blocks.push(newBlock);
+  }
+
+  layoutState.isDirty = true;
+  _renderBlocks();
+  _updateBlockCount();
+}
+
+
+/**
+ * bbox_ratio (0~1 비율) → 픽셀 좌표로 변환.
+ */
+function _ratioToPixelBbox(ratioArr) {
+  if (!ratioArr || ratioArr.length !== 4) return [0, 0, 100, 100];
+
+  const w = layoutState.imageWidth || 1000;
+  const h = layoutState.imageHeight || 1400;
+
+  return [
+    Math.round(ratioArr[0] * w),
+    Math.round(ratioArr[1] * h),
+    Math.round(ratioArr[2] * w),
+    Math.round(ratioArr[3] * h),
+  ];
+}
+
+
+/**
+ * 비교 결과 다이얼로그를 표시한다.
+ */
+function _showComparisonResults(drafts) {
+  // 간단한 alert로 표시 (추후 모달로 개선)
+  let msg = "=== LLM 비교 결과 ===\n\n";
+  for (const d of drafts) {
+    const blocks = d.response_data?.blocks;
+    const count = Array.isArray(blocks) ? blocks.length : "?";
+    msg += `[${d.provider || "?"} / ${d.model || "?"}]\n`;
+    msg += `  블록: ${count}개, 시간: ${(d.elapsed_sec || 0).toFixed(1)}s\n`;
+    msg += `  비용: $${(d.cost_usd || 0).toFixed(4)}\n`;
+    if (d.status === "rejected") {
+      msg += `  오류: ${d.quality_notes || "호출 실패"}\n`;
+    }
+    msg += "\n";
+  }
+
+  // 첫 번째 성공 Draft를 자동 적용할지 물어봄
+  const successful = drafts.filter(
+    d => d.status !== "rejected" && d.response_data?.blocks
+  );
+  if (successful.length > 0) {
+    msg += `가장 첫 번째 결과를 적용하시겠습니까?`;
+    if (confirm(msg)) {
+      _applyDraftToBlocks(successful[0]);
+    }
+  } else {
+    alert(msg + "\n성공한 모델이 없습니다.");
+  }
+}
+
+
+/**
+ * LLM 상태 텍스트를 설정한다.
+ */
+function _setLlmStatus(text) {
+  const el = document.getElementById("llm-analyze-status");
+  if (el) el.textContent = text;
+}
+
+
+// 레이아웃 모드 활성화 시 LLM UI도 초기화
+const _origActivateLayoutMode = typeof activateLayoutMode === "function"
+  ? activateLayoutMode
+  : null;
+
+// DOMContentLoaded에서 LLM UI 초기화
+document.addEventListener("DOMContentLoaded", () => {
+  _initLlmLayoutUI();
+});

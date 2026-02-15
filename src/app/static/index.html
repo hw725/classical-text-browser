@@ -45,7 +45,13 @@
     </div>
     <div class="sidebar-content" id="sidebar-content">
       <div class="sidebar-section">
-        <div class="section-header">문헌 목록</div>
+        <div class="section-header">
+          문헌 목록
+          <div class="section-header-actions">
+            <button id="create-doc-btn" class="section-action-btn" title="URL에서 새 문헌 생성"
+              onclick="if(typeof _openCreateDocDialog==='function')_openCreateDocDialog()">+ 새 문헌</button>
+          </div>
+        </div>
         <div id="document-list" class="tree-view">
           <div class="placeholder">서고를 불러오는 중...</div>
         </div>
@@ -98,7 +104,7 @@
     <div class="tab-bar">
       <div class="tab active">원문</div>
       <div class="tab">교정</div>
-      <div class="tab">현토</div>
+      <div class="tab">구두점</div>
       <div class="tab">번역</div>
       <div class="tab">주석</div>
     </div>
@@ -163,6 +169,23 @@
           <span id="layout-save-status" class="text-save-status"></span>
           <div class="text-toolbar-spacer"></div>
           <span id="layout-block-count" class="text-toolbar-info">블록: 0</span>
+        </div>
+
+        <!-- Phase 10-2: AI 분석 도구 바 -->
+        <div class="layout-toolbar llm-toolbar" id="llm-toolbar">
+          <select id="llm-model-select" class="props-select llm-model-select" title="LLM 모델 선택">
+            <option value="auto">자동 (폴백순서)</option>
+          </select>
+          <button id="llm-analyze-btn" class="text-btn text-btn-primary" title="AI 레이아웃 분석">AI 분석</button>
+          <button id="llm-compare-btn" class="text-btn" title="여러 모델 비교">비교</button>
+          <span id="llm-analyze-status" class="text-save-status"></span>
+        </div>
+
+        <!-- Phase 10-2: LLM 상태 표시 -->
+        <div class="llm-status-bar" id="llm-status-bar">
+          <span class="llm-status-label">LLM:</span>
+          <span id="llm-status-indicators"></span>
+          <span id="llm-cost-display" class="llm-cost-display"></span>
         </div>
 
         <!-- 선택된 블록 속성 편집 -->
@@ -262,7 +285,7 @@
 
         <!-- 층별 서브탭 -->
         <div class="interp-subtab-bar">
-          <div class="interp-subtab active" data-layer="L5_reading">현토 (L5)</div>
+          <div class="interp-subtab active" data-layer="L5_reading">구두점 (L5)</div>
           <div class="interp-subtab" data-layer="L6_translation">번역 (L6)</div>
           <div class="interp-subtab" data-layer="L7_annotation">주석 (L7)</div>
         </div>
@@ -417,15 +440,39 @@
         <button class="bib-dialog-close" title="닫기">&times;</button>
       </div>
       <div class="bib-dialog-body">
-        <div class="bib-search-row">
-          <select id="bib-parser-select" class="bib-select" title="파서 선택"></select>
-          <input id="bib-search-input" type="text" class="bib-input" placeholder="검색어 (예: 蒙求)" />
-          <button id="bib-search-btn" class="bib-btn bib-btn-primary">검색</button>
+        <!-- URL / 검색 탭 전환 -->
+        <div class="bib-tab-bar">
+          <button class="bib-tab active" data-tab="url">URL 붙여넣기</button>
+          <button class="bib-tab" data-tab="search">직접 검색</button>
         </div>
-        <div class="bib-search-info">
-          <span id="bib-search-status"></span>
+
+        <!-- URL 탭: 주 워크플로우 -->
+        <div id="bib-tab-url" class="bib-tab-content">
+          <div class="bib-url-row">
+            <input id="bib-url-input" type="text" class="bib-input bib-url-input"
+              placeholder="URL 붙여넣기 (예: https://ndlsearch.ndl.go.jp/books/...)" />
+            <button id="bib-url-btn" class="bib-btn bib-btn-primary">가져오기</button>
+          </div>
+          <div class="bib-url-info">
+            <span id="bib-url-status"></span>
+          </div>
+          <div class="bib-url-help">
+            지원: NDL Search, 국립공문서관, KORCIS (한국고문헌종합목록)
+          </div>
         </div>
-        <div id="bib-search-results" class="bib-search-results"></div>
+
+        <!-- 검색 탭: 기존 키워드 검색 -->
+        <div id="bib-tab-search" class="bib-tab-content" style="display:none;">
+          <div class="bib-search-row">
+            <select id="bib-parser-select" class="bib-select" title="파서 선택"></select>
+            <input id="bib-search-input" type="text" class="bib-input" placeholder="검색어 (예: 蒙求)" />
+            <button id="bib-search-btn" class="bib-btn bib-btn-primary">검색</button>
+          </div>
+          <div class="bib-search-info">
+            <span id="bib-search-status"></span>
+          </div>
+          <div id="bib-search-results" class="bib-search-results"></div>
+        </div>
       </div>
     </div>
 
@@ -611,6 +658,69 @@
     </div>
   </div>
 
+  <!-- Phase 10: 새 문헌 생성 다이얼로그 오버레이 -->
+  <div class="bib-dialog-overlay" id="create-doc-overlay" style="display:none;">
+    <div class="bib-dialog" id="create-doc-dialog" style="width:560px;">
+      <div class="bib-dialog-header">
+        <span class="bib-dialog-title">URL에서 새 문헌 생성</span>
+        <button class="bib-dialog-close" id="create-doc-close" title="닫기">&times;</button>
+      </div>
+      <div class="bib-dialog-body bib-edit-form">
+
+        <!-- Step 1: URL 입력 + 미리보기 -->
+        <div id="create-doc-step1">
+          <label class="bib-edit-label">원본 URL</label>
+          <div class="bib-url-row">
+            <input id="create-doc-url" type="text" class="bib-input bib-url-input"
+              placeholder="https://www.digital.archives.go.jp/file/..." />
+            <button id="create-doc-preview-btn" class="bib-btn bib-btn-primary">미리보기</button>
+          </div>
+          <div class="bib-url-help">
+            지원: NDL Search, 일본 국립공문서관, KORCIS
+          </div>
+          <span id="create-doc-status" class="text-save-status"></span>
+        </div>
+
+        <!-- Step 2: 미리보기 결과 + 에셋 선택 + doc_id 입력 (처음에는 숨김) -->
+        <div id="create-doc-step2" style="display:none;">
+          <!-- 서지 요약 -->
+          <div class="create-doc-bib-summary" id="create-doc-bib-summary"></div>
+
+          <!-- 에셋(이미지) 목록 -->
+          <div id="create-doc-assets-section" style="display:none;">
+            <label class="bib-edit-label">다운로드할 이미지/PDF</label>
+            <div id="create-doc-assets" class="create-doc-assets"></div>
+          </div>
+
+          <!-- 문헌 ID -->
+          <label class="bib-edit-label">문헌 ID (영문 소문자/숫자/밑줄)</label>
+          <input id="create-doc-id" type="text" class="bib-input"
+            placeholder="예: monggu" />
+
+          <!-- 문헌 제목 (선택) -->
+          <label class="bib-edit-label">문헌 제목 (선택)</label>
+          <input id="create-doc-title" type="text" class="bib-input" />
+
+          <div class="bib-edit-actions">
+            <button id="create-doc-back-btn" class="text-btn">뒤로</button>
+            <span id="create-doc-create-status" class="text-save-status"></span>
+            <div class="text-toolbar-spacer"></div>
+            <button id="create-doc-create-btn" class="bib-btn bib-btn-primary">문헌 생성</button>
+          </div>
+        </div>
+
+        <!-- 진행 상태 (생성 중 표시) -->
+        <div id="create-doc-progress" style="display:none;">
+          <div class="create-doc-progress-bar">
+            <div class="create-doc-progress-fill" id="create-doc-progress-fill"></div>
+          </div>
+          <div id="create-doc-progress-text" class="create-doc-progress-text">준비 중...</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
   <!-- 상태 바: D-001 하단 정보 표시줄 -->
   <footer class="status-bar">
     <div class="status-left">
@@ -638,6 +748,7 @@
 <script src="/static/js/bibliography.js"></script>
 <script src="/static/js/interpretation.js"></script>
 <script src="/static/js/entity-manager.js"></script>
+<script src="/static/js/create-document.js"></script>
 <script src="/static/js/workspace.js"></script>
 </body>
 </html>

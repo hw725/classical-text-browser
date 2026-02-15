@@ -83,9 +83,13 @@ function _bindEvents() {
   });
 
   // 다이얼로그 오버레이 클릭으로 닫기
+  // — 오버레이 배경(반투명 영역)을 클릭할 때만 닫고,
+  //   다이얼로그 내부(입력칸 등)를 클릭할 때는 닫지 않는다.
   const overlay = document.getElementById("bib-dialog-overlay");
   if (overlay) {
-    overlay.addEventListener("click", _closeAllDialogs);
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) _closeAllDialogs();
+    });
   }
 
   // 검색 실행 버튼
@@ -101,6 +105,25 @@ function _bindEvents() {
       if (e.key === "Enter") _executeSearch();
     });
   }
+
+  // URL 가져오기 버튼
+  const urlBtn = document.getElementById("bib-url-btn");
+  if (urlBtn) {
+    urlBtn.addEventListener("click", _fetchFromUrl);
+  }
+
+  // URL 입력에서 Enter 키
+  const urlInput = document.getElementById("bib-url-input");
+  if (urlInput) {
+    urlInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") _fetchFromUrl();
+    });
+  }
+
+  // 탭 전환 버튼
+  document.querySelectorAll(".bib-tab").forEach((tab) => {
+    tab.addEventListener("click", () => _switchTab(tab.dataset.tab));
+  });
 
   // 편집 저장 버튼
   const editSaveBtn = document.getElementById("bib-edit-save-btn");
@@ -206,6 +229,102 @@ function _renderBibliography(bib) {
   }
 
   container.innerHTML = html;
+}
+
+
+/* ──────────────────────────
+   탭 전환
+   ────────────────────────── */
+
+/**
+ * 서지정보 가져오기 다이얼로그의 탭을 전환한다.
+ *
+ * 왜 이렇게 하는가:
+ *   URL 붙여넣기가 주 워크플로우이므로 기본 탭이다.
+ *   직접 검색은 URL을 모를 때 사용하는 보조 기능이다.
+ */
+function _switchTab(tabName) {
+  // 탭 버튼 활성화
+  document.querySelectorAll(".bib-tab").forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.tab === tabName);
+  });
+
+  // 탭 내용 전환
+  const urlTab = document.getElementById("bib-tab-url");
+  const searchTab = document.getElementById("bib-tab-search");
+  if (urlTab) urlTab.style.display = tabName === "url" ? "" : "none";
+  if (searchTab) searchTab.style.display = tabName === "search" ? "" : "none";
+}
+
+
+/* ──────────────────────────
+   URL 붙여넣기로 서지정보 가져오기
+   ────────────────────────── */
+
+/**
+ * URL을 자동 판별하여 서지정보를 가져온다.
+ *
+ * 왜 이렇게 하는가:
+ *   연구자가 외부 사이트에서 URL을 복사해 붙여넣기만 하면
+ *   파서 선택·검색·결과 선택 과정 없이 서지정보가 채워진다.
+ */
+async function _fetchFromUrl() {
+  if (!viewerState.docId) return;
+
+  const urlInput = document.getElementById("bib-url-input");
+  const statusEl = document.getElementById("bib-url-status");
+  if (!urlInput) return;
+
+  const url = urlInput.value.trim();
+  if (!url) {
+    if (statusEl) statusEl.textContent = "URL을 입력하세요.";
+    return;
+  }
+
+  if (statusEl) {
+    statusEl.textContent = "가져오는 중...";
+    statusEl.className = "bib-url-status";
+  }
+
+  try {
+    // 문서에 바로 저장하는 편의 엔드포인트 사용
+    const res = await fetch(
+      `/api/documents/${viewerState.docId}/bibliography/from-url`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      }
+    );
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      let errorMsg = data.error || "가져오기 실패";
+      // 지원 소스 안내
+      if (data.supported_sources) {
+        errorMsg += "\n지원: " + data.supported_sources
+          .map((s) => s.description)
+          .join(", ");
+      }
+      throw new Error(errorMsg);
+    }
+
+    // 성공: 패널 갱신 + 다이얼로그 닫기
+    _currentBibliography = data.bibliography;
+    _renderBibliography(data.bibliography);
+    _closeAllDialogs();
+
+    if (statusEl) {
+      statusEl.textContent = `저장 완료 (${data.parser_id})`;
+      statusEl.className = "bib-url-status bib-url-success";
+    }
+  } catch (err) {
+    if (statusEl) {
+      statusEl.textContent = err.message;
+      statusEl.className = "bib-url-status bib-url-error";
+    }
+  }
 }
 
 
@@ -332,6 +451,12 @@ async function _executeSearch() {
 
 /**
  * 검색 결과 항목을 선택하여 매핑 + 저장한다.
+ *
+ * 왜 fetch-and-map을 사용하는가:
+ *   NDL은 검색 결과에 전체 메타데이터가 포함되므로 map만으로 충분하다.
+ *   하지만 KORCIS는 검색 결과에 기본 정보만 있고, MARC 데이터는
+ *   별도의 fetch_detail 호출이 필요하다.
+ *   fetch-and-map 엔드포인트는 둘 다 처리한다.
  */
 async function _selectSearchResult(parserId, result) {
   if (!viewerState.docId) return;
@@ -340,20 +465,34 @@ async function _selectSearchResult(parserId, result) {
   if (statusEl) statusEl.textContent = "매핑 중...";
 
   try {
-    // 매핑 요청
-    const mapRes = await fetch(`/api/parsers/${parserId}/map`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ raw_data: result.raw }),
-    });
-
-    if (!mapRes.ok) {
-      const err = await mapRes.json();
-      throw new Error(err.error || "매핑 실패");
+    // item_id가 있으면 fetch-and-map (상세 조회 + 매핑), 없으면 기존 map
+    let bibliography;
+    if (result.item_id) {
+      const fetchMapRes = await fetch(`/api/parsers/${parserId}/fetch-and-map`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ item_id: result.item_id }),
+      });
+      if (!fetchMapRes.ok) {
+        const err = await fetchMapRes.json();
+        throw new Error(err.error || "매핑 실패");
+      }
+      const fetchMapData = await fetchMapRes.json();
+      bibliography = fetchMapData.bibliography;
+    } else {
+      // 기존 방식: raw_data로 직접 매핑
+      const mapRes = await fetch(`/api/parsers/${parserId}/map`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ raw_data: result.raw }),
+      });
+      if (!mapRes.ok) {
+        const err = await mapRes.json();
+        throw new Error(err.error || "매핑 실패");
+      }
+      const mapData = await mapRes.json();
+      bibliography = mapData.bibliography;
     }
-
-    const mapData = await mapRes.json();
-    const bibliography = mapData.bibliography;
 
     // 저장 요청
     const saveRes = await fetch(`/api/documents/${viewerState.docId}/bibliography`, {

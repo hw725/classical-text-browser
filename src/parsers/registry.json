@@ -26,6 +26,18 @@
       "metadata_standard": "custom_hierarchical"
     },
     {
+      "id": "korcis",
+      "name": "한국고문헌종합목록 (KORCIS)",
+      "country": "KR",
+      "fetcher": "korcis_fetcher",
+      "mapper": "korcis_mapper",
+      "access_method": "scraping",
+      "base_url": "https://www.nl.go.kr/korcis/",
+      "response_format": "html",
+      "requires_auth": false,
+      "metadata_standard": "MARC"
+    },
+    {
       "id": "manual",
       "name": "수동 입력",
       "country": null,

@@ -103,6 +103,105 @@
       "description": "형태사항. 크기, 장정 등. 예: 4冊, 26.7cm",
       "default": null
     },
+    "printing_info": {
+      "description": "판식정보(版式情報). 형태서지학적 판본 감별 요소. KORMARC 008 고서 고정길이 필드 대응.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "gwangwak": {
+              "type": ["string", "null"],
+              "description": "광곽(匡郭) 형태. 예: 사주단변, 사주쌍변, 좌우쌍변"
+            },
+            "gwangwak_size": {
+              "type": ["string", "null"],
+              "description": "광곽 크기 (세로×가로 cm). 예: 20.5 × 14.8 cm"
+            },
+            "gyeseon": {
+              "type": ["string", "null"],
+              "description": "계선(界線). 예: 유계, 무계"
+            },
+            "haengja": {
+              "type": ["string", "null"],
+              "description": "행자수(行字數). 예: 반엽 10행 20자"
+            },
+            "ju_haengja": {
+              "type": ["string", "null"],
+              "description": "주(注) 행자수. 예: 주쌍행, 주단행"
+            },
+            "pangoo": {
+              "type": ["string", "null"],
+              "description": "판구(版口). 예: 대흑구, 소흑구, 백구"
+            },
+            "eomi": {
+              "type": ["string", "null"],
+              "description": "어미(魚尾). 예: 상하내향이엽화문어미, 상흑어미"
+            },
+            "pansimje": {
+              "type": ["string", "null"],
+              "description": "판심제(版心題). 판심에 기록된 서명."
+            },
+            "summary": {
+              "type": ["string", "null"],
+              "description": "판식 요약 (자유 텍스트). 예: 사주쌍변 유계 반엽10행20자 주쌍행 상하내향이엽화문어미"
+            }
+          }
+        }
+      ],
+      "default": null
+    },
+    "publishing": {
+      "description": "간행사항. DC Publisher 대응. 고서에서 '누가 어디서 간행했는가'.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "place": {
+              "type": ["string", "null"],
+              "description": "간행지. 예: 全州, 京城"
+            },
+            "publisher": {
+              "type": ["string", "null"],
+              "description": "간행처/간행자. 예: 完營, 校書館"
+            },
+            "publication_type": {
+              "type": ["string", "null"],
+              "description": "간행 유형. 예: 관판, 사찬, 사찰판, 방각본"
+            }
+          }
+        }
+      ],
+      "default": null
+    },
+    "extent": {
+      "description": "권책수. 고서의 논리적·물리적 규모.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "volumes": {
+              "type": ["string", "null"],
+              "description": "권수(卷數). 예: 3卷"
+            },
+            "books": {
+              "type": ["string", "null"],
+              "description": "책수(冊數). 예: 1冊"
+            },
+            "missing": {
+              "type": ["string", "null"],
+              "description": "결락 정보. 예: 卷2缺, 零本"
+            }
+          }
+        }
+      ],
+      "default": null
+    },
     "subject": {
       "type": ["array", "null"],
       "description": "주제어 목록.",

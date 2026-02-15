@@ -32,6 +32,18 @@ API 엔드포인트:
     PUT  /api/interpretations/{interp_id}/layers/{layer}/{sub_type}/pages/{page_num} → 층 내용 저장
     GET  /api/interpretations/{interp_id}/git/log → git 이력
 
+    --- Phase 10: URL → 문헌 자동 생성 API ---
+    POST /api/documents/preview-from-url → URL에서 서지정보 + 에셋 미리보기
+    POST /api/documents/create-from-url → URL에서 문헌 자동 생성
+
+    --- Phase 10-2: LLM 4단 폴백 아키텍처 API ---
+    GET  /api/llm/status → 각 provider 가용 상태
+    GET  /api/llm/models → GUI 드롭다운용 모델 목록
+    GET  /api/llm/usage  → 이번 달 사용량 요약
+    POST /api/llm/analyze-layout/{doc_id}/{page} → 레이아웃 분석 (Draft 반환)
+    POST /api/llm/compare-layout/{doc_id}/{page} → 레이아웃 분석 비교
+    POST /api/llm/drafts/{draft_id}/review → Draft 검토 (accept/modify/reject)
+
     --- Phase 8: 코어 스키마 엔티티 API ---
     POST /api/interpretations/{interp_id}/entities → 엔티티 생성
     GET  /api/interpretations/{interp_id}/entities/{entity_type} → 유형별 목록
@@ -58,6 +70,7 @@ from pydantic import BaseModel
 
 from core.library import get_library_info, list_documents, list_interpretations
 from core.document import (
+    create_document_from_url,
     get_bibliography,
     get_document_info,
     get_git_diff,
@@ -179,6 +192,170 @@ async def api_documents():
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
     return list_documents(_library_path)
+
+
+# =========================================
+#   Phase 10: URL → 문헌 자동 생성 API
+# =========================================
+
+
+def _suggest_doc_id(title: str) -> str:
+    """서지 제목에서 문헌 ID 후보를 자동 생성한다.
+
+    목적: 사용자가 doc_id를 직접 입력하지 않아도 되도록 서지 제목에서
+          영문 소문자/숫자/밑줄로 구성된 ID를 자동으로 만든다.
+    입력: title — 서지 제목 (한자/가나/한글 포함 가능).
+    출력: doc_id 후보 문자열 (최대 64자, ^[a-z][a-z0-9_]*$ 형식).
+
+    왜 ASCII만 사용하는가:
+        doc_id는 파일시스템 디렉토리명으로 사용되므로,
+        manifest.schema.json 규칙에 따라 영문 소문자+숫자+밑줄만 허용한다.
+        한자 제목인 경우 사용자가 직접 입력하도록 빈 제안값을 반환한다.
+    """
+    # ASCII 영문숫자와 공백/밑줄/하이픈만 추출
+    cleaned = []
+    for ch in title:
+        if ch.isascii() and ch.isalnum():
+            cleaned.append(ch.lower())
+        elif ch in " _-":
+            cleaned.append("_")
+        # 비 ASCII 문자(한자, 가나, 한글 등)는 건너뜀
+    result = "".join(cleaned).strip("_")
+    # 연속 밑줄 제거
+    while "__" in result:
+        result = result.replace("__", "_")
+    # 영문 소문자로 시작하지 않으면 접두어 추가
+    if result and not result[0].isalpha():
+        result = "doc_" + result
+    # 64자 제한
+    return result[:64] if result else ""
+
+
+class PreviewFromUrlRequest(BaseModel):
+    """URL에서 서지정보 + 에셋 목록 미리보기 요청."""
+    url: str
+
+
+@app.post("/api/documents/preview-from-url")
+async def api_preview_from_url(body: PreviewFromUrlRequest):
+    """URL에서 서지정보와 다운로드 가능한 에셋 목록을 미리보기한다.
+
+    목적: 문헌 생성 전에 서지정보와 이미지 목록을 확인한다 (2단계 워크플로우의 1단계).
+    입력: { "url": "https://www.digital.archives.go.jp/file/1078619.html" }
+    출력: {
+        "parser_id": "japan_national_archives",
+        "bibliography": {...},
+        "assets": [{"id": "...", "label": "...", "page_count": 77}, ...],
+        "suggested_doc_id": "蒙求"
+    }
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    import parsers as _parsers_mod  # noqa: F401
+    from parsers.base import detect_parser_from_url, get_parser, get_supported_sources
+
+    url = body.url.strip()
+    if not url:
+        return JSONResponse({"error": "URL이 비어있습니다."}, status_code=400)
+
+    # 1. 파서 판별
+    parser_id = detect_parser_from_url(url)
+    if parser_id is None:
+        sources = get_supported_sources()
+        return JSONResponse(
+            {
+                "error": "이 URL은 자동 인식할 수 없습니다.",
+                "supported_sources": sources,
+            },
+            status_code=400,
+        )
+
+    # 2. fetch + 매핑
+    try:
+        fetcher, mapper = get_parser(parser_id)
+        raw_data = await fetcher.fetch_by_url(url)
+        bibliography = mapper.map_to_bibliography(raw_data)
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"서지정보 가져오기 실패: {e}"},
+            status_code=502,
+        )
+
+    # 3. 에셋 목록 조회 (지원하는 파서만)
+    assets = []
+    if fetcher.supports_asset_download:
+        try:
+            assets = await fetcher.list_assets(raw_data)
+        except Exception as e:
+            # 에셋 목록 실패는 치명적이지 않음 — 경고만
+            assets = []
+            bibliography.setdefault("_warnings", []).append(
+                f"에셋 목록 조회 실패: {e}"
+            )
+
+    # 4. doc_id 후보 생성
+    title = bibliography.get("title", "")
+    suggested_doc_id = _suggest_doc_id(title) if title else "untitled"
+
+    return {
+        "parser_id": parser_id,
+        "bibliography": bibliography,
+        "assets": assets,
+        "suggested_doc_id": suggested_doc_id,
+    }
+
+
+class CreateFromUrlRequest(BaseModel):
+    """URL에서 문헌 자동 생성 요청."""
+    url: str
+    doc_id: str
+    title: str | None = None
+    selected_assets: list[str] | None = None
+
+
+@app.post("/api/documents/create-from-url")
+async def api_create_from_url(body: CreateFromUrlRequest):
+    """URL에서 서지정보와 이미지를 가져와 문헌을 자동 생성한다.
+
+    목적: URL 하나로 서지정보 추출 + 이미지 다운로드 + 문서 폴더 생성을 한 번에 수행.
+          2단계 워크플로우의 2단계 (미리보기 후 실행).
+    입력: {
+        "url": "https://...",
+        "doc_id": "monggu",
+        "title": "蒙求",
+        "selected_assets": ["M2023...156"]  // null이면 전체 다운로드
+    }
+    출력: create_document_from_url()의 결과.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    url = body.url.strip()
+    doc_id = body.doc_id.strip()
+    if not url:
+        return JSONResponse({"error": "URL이 비어있습니다."}, status_code=400)
+    if not doc_id:
+        return JSONResponse({"error": "doc_id가 비어있습니다."}, status_code=400)
+
+    try:
+        result = await create_document_from_url(
+            library_path=_library_path,
+            url=url,
+            doc_id=doc_id,
+            title=body.title,
+            selected_assets=body.selected_assets,
+        )
+        return result
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except FileExistsError as e:
+        return JSONResponse({"error": str(e)}, status_code=409)
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"문헌 생성 실패: {e}"},
+            status_code=502,
+        )
 
 
 @app.get("/api/documents/{doc_id}")
@@ -570,6 +747,84 @@ async def api_bibliography(doc_id: str):
         return JSONResponse({"error": str(e)}, status_code=404)
 
 
+class DocumentBibFromUrlRequest(BaseModel):
+    """문서에 URL로 서지정보를 가져와 바로 저장하는 요청 본문."""
+    url: str
+
+
+@app.post("/api/documents/{doc_id}/bibliography/from-url")
+async def api_document_bib_from_url(doc_id: str, body: DocumentBibFromUrlRequest):
+    """URL에서 서지정보를 가져와 해당 문서에 바로 저장한다.
+
+    목적: 연구자의 워크플로우를 1단계로 줄인다.
+          문서 선택 → URL 붙여넣기 → 가져오기 → 끝.
+    입력: { "url": "https://..." }
+    처리:
+        1. URL에서 bibliography 생성
+        2. 해당 문서의 bibliography.json에 저장
+        3. git commit
+    출력: { "status": "saved", "parser_id": "ndl", "bibliography": {...} }
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = _library_path / "documents" / doc_id
+    if not doc_path.exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
+            status_code=404,
+        )
+
+    import parsers as _parsers_mod  # noqa: F401
+    from parsers.base import detect_parser_from_url, get_parser, get_supported_sources
+
+    url = body.url.strip()
+    if not url:
+        return JSONResponse({"error": "URL이 비어있습니다."}, status_code=400)
+
+    # URL 판별
+    parser_id = detect_parser_from_url(url)
+    if parser_id is None:
+        sources = get_supported_sources()
+        return JSONResponse(
+            {
+                "error": "이 URL은 자동 인식할 수 없습니다.",
+                "supported_sources": sources,
+            },
+            status_code=400,
+        )
+
+    # 파서 가져오기 + fetch + 매핑
+    try:
+        fetcher, mapper = get_parser(parser_id)
+        raw_data = await fetcher.fetch_by_url(url)
+        bibliography = mapper.map_to_bibliography(raw_data)
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"서지정보 가져오기 실패: {e}"},
+            status_code=502,
+        )
+
+    # 저장
+    try:
+        save_bibliography(doc_path, bibliography)
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"서지정보 저장 실패: {e}"},
+            status_code=400,
+        )
+
+    # git commit
+    git_result = git_commit_document(doc_path, f"L0: 서지정보 URL 가져오기 ({parser_id})")
+
+    return {
+        "status": "saved",
+        "parser_id": parser_id,
+        "bibliography": bibliography,
+        "git": git_result,
+    }
+
+
 class BibliographySaveRequest(BaseModel):
     """서지정보 저장 요청 본문. bibliography.schema.json 형식."""
     title: str | None = None
@@ -643,6 +898,83 @@ async def api_parsers():
     }
 
 
+class BibliographyFromUrlRequest(BaseModel):
+    """URL에서 서지정보를 가져오는 요청 본문."""
+    url: str
+
+
+@app.post("/api/bibliography/from-url")
+async def api_bibliography_from_url(body: BibliographyFromUrlRequest):
+    """URL을 자동 판별하여 서지정보를 가져온다.
+
+    목적: 연구자가 URL을 붙여넣기만 하면 서지정보를 자동으로 가져온다.
+          파서 선택·검색·결과 선택 과정이 필요 없다.
+    입력: { "url": "https://..." }
+    처리:
+        1. detect_parser_from_url(url) → parser_id
+        2. fetcher.fetch_by_url(url) → raw_data
+        3. mapper.map_to_bibliography(raw_data) → bibliography
+    출력: { "parser_id": "ndl", "bibliography": {...} }
+    에러: URL을 인식할 수 없으면 → 지원하는 소스 목록 안내
+    """
+    import parsers  # noqa: F401
+    from parsers.base import detect_parser_from_url, get_parser, get_supported_sources
+
+    url = body.url.strip()
+    if not url:
+        return JSONResponse(
+            {"error": "URL이 비어있습니다."},
+            status_code=400,
+        )
+
+    # 1. URL 패턴으로 파서 자동 판별
+    parser_id = detect_parser_from_url(url)
+    if parser_id is None:
+        sources = get_supported_sources()
+        return JSONResponse(
+            {
+                "error": "이 URL은 자동 인식할 수 없습니다.",
+                "supported_sources": sources,
+                "hint": "지원하는 소스의 URL을 붙여넣거나, '직접 검색' 기능을 사용하세요.",
+            },
+            status_code=400,
+        )
+
+    # 2. 파서 가져오기
+    try:
+        fetcher, mapper = get_parser(parser_id)
+    except KeyError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
+    # 3. URL에서 메타데이터 추출
+    try:
+        raw_data = await fetcher.fetch_by_url(url)
+    except (ValueError, FileNotFoundError) as e:
+        return JSONResponse(
+            {"error": f"URL에서 데이터를 가져올 수 없습니다: {e}"},
+            status_code=400,
+        )
+    except Exception as e:
+        return JSONResponse(
+            {
+                "error": f"외부 소스 접속 실패: {e}",
+                "hint": "네트워크 연결을 확인하고 다시 시도하세요.",
+            },
+            status_code=502,
+        )
+
+    # 4. 매핑
+    try:
+        bibliography = mapper.map_to_bibliography(raw_data)
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"서지정보 매핑 실패: {e}"},
+            status_code=400,
+        )
+
+    return {"parser_id": parser_id, "bibliography": bibliography}
+
+
 class ParserSearchRequest(BaseModel):
     """파서 검색 요청 본문."""
     query: str
@@ -713,6 +1045,44 @@ async def api_parser_map(parser_id: str, body: ParserMapRequest):
         return JSONResponse(
             {"error": f"매핑 실패: {e}"},
             status_code=400,
+        )
+
+
+class ParserFetchAndMapRequest(BaseModel):
+    """상세 조회 + 매핑 결합 요청 본문."""
+    item_id: str
+
+
+@app.post("/api/parsers/{parser_id}/fetch-and-map")
+async def api_parser_fetch_and_map(parser_id: str, body: ParserFetchAndMapRequest):
+    """항목의 상세 정보를 가져와서 bibliography로 매핑한다.
+
+    목적: 검색 결과에서 항목을 선택했을 때,
+          KORCIS처럼 검색 결과에 전체 메타데이터가 없는 소스에서
+          fetch_detail + map_to_bibliography를 한 번에 수행한다.
+    입력:
+        parser_id — 파서 ID.
+        body — {item_id: "..."} (검색 결과의 item_id).
+    출력: bibliography.schema.json 형식의 dict.
+    """
+    import parsers  # noqa: F401
+    from parsers.base import get_parser
+
+    try:
+        fetcher, mapper = get_parser(parser_id)
+    except KeyError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
+    try:
+        raw_data = await fetcher.fetch_detail(body.item_id)
+        bibliography = mapper.map_to_bibliography(raw_data)
+        return {"bibliography": bibliography}
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"상세 조회/매핑 실패: {e}"},
+            status_code=502,
         )
 
 
@@ -904,7 +1274,7 @@ async def api_save_layer_content(
         return JSONResponse({"error": f"저장 실패: {e}"}, status_code=400)
 
     # 자동 git commit
-    layer_label = {"L5_reading": "현토", "L6_translation": "번역", "L7_annotation": "주석"}.get(layer, layer)
+    layer_label = {"L5_reading": "구두점", "L6_translation": "번역", "L7_annotation": "주석"}.get(layer, layer)
     commit_msg = f"{layer}: page {page_num:03d} {layer_label} 편집 ({sub_type})"
     git_result = git_commit_interpretation(interp_path, commit_msg)
     save_result["git"] = git_result
@@ -1231,3 +1601,229 @@ async def api_promote_tag(
     result["git"] = git_commit_interpretation(interp_path, commit_msg)
 
     return result
+
+
+# ===========================================================================
+#  Phase 10-2: LLM 4단 폴백 아키텍처 API
+# ===========================================================================
+
+# LLM Router 인스턴스 (serve 시 초기화)
+_llm_router = None
+
+
+def _get_llm_router():
+    """LLM Router를 lazy-init한다.
+
+    왜 lazy-init인가:
+        _library_path는 serve 명령에서 설정된다.
+        LlmConfig가 서고의 .env를 읽으려면 경로가 필요하다.
+    """
+    global _llm_router
+    if _llm_router is None:
+        from llm.config import LlmConfig
+        from llm.router import LlmRouter
+        config = LlmConfig(library_root=_library_path)
+        _llm_router = LlmRouter(config)
+    return _llm_router
+
+
+class DraftReviewRequest(BaseModel):
+    """Draft 검토 요청 본문."""
+    action: str  # "accept" | "modify" | "reject"
+    quality_rating: int | None = None
+    quality_notes: str | None = None
+    modifications: str | None = None
+
+
+class CompareLayoutRequest(BaseModel):
+    """레이아웃 비교 요청 본문."""
+    targets: list[str] | None = None
+
+
+# Draft 저장소 (메모리 — 서버 재시작 시 소멸)
+_llm_drafts: dict = {}
+
+
+@app.get("/api/llm/status")
+async def api_llm_status():
+    """각 provider의 가용 상태."""
+    router = _get_llm_router()
+    return await router.get_status()
+
+
+@app.get("/api/llm/models")
+async def api_llm_models():
+    """GUI 드롭다운용 모델 목록."""
+    router = _get_llm_router()
+    return await router.get_available_models()
+
+
+@app.get("/api/llm/usage")
+async def api_llm_usage():
+    """이번 달 사용량 요약."""
+    router = _get_llm_router()
+    return router.usage_tracker.get_monthly_summary()
+
+
+@app.post("/api/llm/analyze-layout/{doc_id}/{page}")
+async def api_analyze_layout(
+    doc_id: str,
+    page: int,
+    force_provider: str | None = Query(None),
+    force_model: str | None = Query(None),
+):
+    """페이지 이미지를 LLM으로 레이아웃 분석. Draft 반환.
+
+    왜 별도 엔드포인트인가:
+        기존 layout-editor의 수동 블록 편집과 독립적으로,
+        LLM이 제안하는 블록을 Draft로 관리한다.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    from core.layout_analyzer import analyze_page_layout
+
+    router = _get_llm_router()
+
+    # 페이지 이미지 로드
+    page_image = _load_page_image(doc_id, page)
+    if not page_image:
+        return JSONResponse(
+            {"error": f"페이지 이미지 없음: {doc_id} page {page}"},
+            status_code=404,
+        )
+
+    try:
+        draft = await analyze_page_layout(
+            router, page_image,
+            force_provider=force_provider,
+            force_model=force_model,
+        )
+    except Exception as e:
+        return JSONResponse({"error": f"레이아웃 분석 실패: {e}"}, status_code=500)
+
+    # Draft 저장
+    _llm_drafts[draft.draft_id] = draft
+    return draft.to_dict()
+
+
+@app.post("/api/llm/compare-layout/{doc_id}/{page}")
+async def api_compare_layout(doc_id: str, page: int, body: CompareLayoutRequest):
+    """여러 모델로 레이아웃 분석 비교."""
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    from core.layout_analyzer import compare_layout_analysis
+
+    router = _get_llm_router()
+
+    page_image = _load_page_image(doc_id, page)
+    if not page_image:
+        return JSONResponse(
+            {"error": f"페이지 이미지 없음: {doc_id} page {page}"},
+            status_code=404,
+        )
+
+    # targets 파싱: ["base44_http", "ollama:glm-5:cloud"]
+    parsed_targets = None
+    if body.targets:
+        parsed_targets = []
+        for t in body.targets:
+            if ":" in t:
+                parts = t.split(":", 1)
+                parsed_targets.append((parts[0], parts[1]))
+            else:
+                parsed_targets.append(t)
+
+    try:
+        drafts = await compare_layout_analysis(
+            router, page_image, targets=parsed_targets,
+        )
+    except Exception as e:
+        return JSONResponse({"error": f"레이아웃 비교 실패: {e}"}, status_code=500)
+
+    # Draft들 저장
+    for d in drafts:
+        _llm_drafts[d.draft_id] = d
+
+    return [d.to_dict() for d in drafts]
+
+
+@app.post("/api/llm/drafts/{draft_id}/review")
+async def api_review_draft(draft_id: str, body: DraftReviewRequest):
+    """Draft를 검토 (accept/modify/reject)."""
+    draft = _llm_drafts.get(draft_id)
+    if not draft:
+        return JSONResponse({"error": f"Draft 없음: {draft_id}"}, status_code=404)
+
+    if body.action == "accept":
+        draft.accept(
+            quality_rating=body.quality_rating,
+            notes=body.quality_notes or "",
+        )
+    elif body.action == "modify":
+        draft.modify(
+            modifications=body.modifications or "",
+            quality_rating=body.quality_rating,
+        )
+    elif body.action == "reject":
+        draft.reject(reason=body.quality_notes or "")
+    else:
+        return JSONResponse(
+            {"error": f"알 수 없는 action: {body.action}"},
+            status_code=400,
+        )
+
+    return draft.to_dict()
+
+
+def _load_page_image(doc_id: str, page: int) -> bytes | None:
+    """페이지 이미지를 바이트로 로드한다.
+
+    L1_source에서 PDF를 찾아 해당 페이지를 이미지로 변환.
+    또는 이미 이미지 파일이면 직접 읽는다.
+
+    왜 이렇게 하는가:
+        기존 PDF 뷰어는 클라이언트에서 PDF.js로 렌더링하지만,
+        LLM 분석에는 서버에서 이미지를 추출해야 한다.
+    """
+    if _library_path is None:
+        return None
+
+    doc_dir = _library_path / "documents" / doc_id
+
+    # 1. L1_source에서 이미지 파일 직접 찾기 (JPEG)
+    source_dir = doc_dir / "L1_source"
+    if source_dir.exists():
+        # 페이지 번호에 해당하는 이미지 찾기
+        for pattern in [
+            f"*_p{page:03d}.*",
+            f"*_p{page:04d}.*",
+            f"*_{page:03d}.*",
+            f"*_{page:04d}.*",
+            f"page_{page}.*",
+            f"p{page}.*",
+        ]:
+            matches = list(source_dir.glob(pattern))
+            for m in matches:
+                if m.suffix.lower() in (".jpg", ".jpeg", ".png", ".tiff", ".tif"):
+                    return m.read_bytes()
+
+    # 2. PDF에서 페이지 추출 (pypdfium2 사용 시도)
+    pdf_files = list(source_dir.glob("*.pdf")) if source_dir.exists() else []
+    if pdf_files:
+        try:
+            import pypdfium2 as pdfium
+            pdf = pdfium.PdfDocument(str(pdf_files[0]))
+            if page < len(pdf):
+                pdf_page = pdf[page]
+                bitmap = pdf_page.render(scale=2.0)
+                pil_image = bitmap.to_pil()
+                import io
+                buf = io.BytesIO()
+                pil_image.save(buf, format="PNG")
+                return buf.getvalue()
+        except ImportError:
+            pass  # pypdfium2가 없으면 건너뜀
+
+    return None

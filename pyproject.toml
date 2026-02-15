@@ -18,6 +18,10 @@ dependencies = [
     "lxml>=5.0.0",
     "fpdf2>=2.8.5",
     "cssselect>=1.4.0",
+    "pymupdf>=1.27.1",
+    "pillow>=12.1.1",
+    "pyyaml>=6.0.3",
+    "anthropic>=0.79.0",
 ]
 
 [dependency-groups]
