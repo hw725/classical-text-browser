@@ -24,6 +24,7 @@ MARC 필드 매핑:
 from __future__ import annotations
 
 import re
+import xml.etree.ElementTree as ET
 from typing import Any
 
 import httpx
@@ -33,6 +34,11 @@ from parsers.base import BaseFetcher, BaseMapper, register_parser
 
 # KORCIS 베이스 URL
 _KORCIS_BASE = "https://www.nl.go.kr"
+
+# KORCIS OpenAPI 엔드포인트
+# 참조: academic-mcp/src/academic_mcp/providers/nl.py
+_OPENAPI_SEARCH_URL = f"{_KORCIS_BASE}/korcis/openapi/search.do"
+_OPENAPI_DETAIL_URL = f"{_KORCIS_BASE}/korcis/openapi/detail.do"
 
 # 검색 URL
 _SEARCH_URL = f"{_KORCIS_BASE}/korcis/search/simpleResultList.do"
@@ -186,8 +192,17 @@ class KorcisMapper(BaseMapper):
                 "period": None,
             }
 
-        # 발행사항
+        # 발행사항 (MARC 260)
         marc260 = raw_data.get("260", {})
+
+        # publishing 객체 (간행사항)
+        publishing = None
+        if marc260.get("a") or marc260.get("b"):
+            publishing = {
+                "place": marc260.get("a"),
+                "publisher": marc260.get("b"),
+                "publication_type": None,  # MARC 260에서는 간행 유형을 직접 제공하지 않음
+            }
 
         # 형태사항
         marc300 = raw_data.get("300", {})
@@ -197,6 +212,29 @@ class KorcisMapper(BaseMapper):
         if marc300.get("c"):
             physical_parts.append(marc300["c"])
         physical_description = " ; ".join(p for p in physical_parts if p) if physical_parts else None
+
+        # extent 객체 (권책수)
+        # MARC 300 ▼a에서 권(卷)과 책(冊) 정보 추출
+        extent = _extract_extent(marc300.get("a", ""))
+
+        # printing_info 객체 (판식정보)
+        # OpenAPI enrichment로 form_info가 있으면 파싱
+        printing_info = None
+        openapi_data = raw_data.get("_openapi_detail", {})
+        form_info_text = openapi_data.get("form_info", "")
+        if form_info_text:
+            pansik = parse_pansik_info(form_info_text)
+            if pansik and len(pansik) > 1:  # summary 외에 파싱된 필드가 있으면
+                printing_info = pansik
+
+        # 008 필드 해석
+        info_008 = {}
+        marc008_raw = raw_data.get("008", "")
+        if marc008_raw:
+            info_008 = parse_008_field(marc008_raw)
+
+        # 언어: 008 해석 결과 또는 기존 코드 추출
+        language = _extract_language(raw_data)
 
         # 총서명 (440 필드, 여러 개 가능)
         series_titles = raw_data.get("440_list", [])
@@ -232,6 +270,46 @@ class KorcisMapper(BaseMapper):
             if marc085.get("2"):
                 classification["classification_scheme"] = marc085["2"]
 
+        # 소장기관 (OpenAPI enrichment에서)
+        repository = None
+        hold_libs = openapi_data.get("hold_libs", [])
+        if hold_libs:
+            # 첫 번째 소장기관을 대표로 설정
+            repository = {
+                "name": hold_libs[0],
+                "name_ko": hold_libs[0],
+                "country": "KR",
+                "call_number": None,
+            }
+
+        # 매핑 소스 추적
+        field_sources = {
+            "title": self._field_source("MARC 245 ▼a", "exact"),
+            "title_reading": self._field_source(
+                "검색결과 한글 제목", "inferred", "검색 결과 HTML에서 추출"
+            ),
+            "creator.name": self._field_source("MARC 245 ▼d / 100 ▼a", "exact"),
+            "creator.name_reading": self._field_source("MARC 100 ▼a", "exact"),
+            "creator.period": self._field_source("MARC 100 ▼c", "exact"),
+            "date_created": self._field_source("MARC 260 ▼c", "exact"),
+            "edition_type": self._field_source("MARC 250 ▼a", "exact"),
+            "physical_description": self._field_source("MARC 300 ▼a+▼c", "exact"),
+            "series_title": self._field_source("MARC 440 ▼a", "exact"),
+            "subject": self._field_source("MARC 653 ▼a", "exact"),
+        }
+        if publishing:
+            field_sources["publishing"] = self._field_source("MARC 260 ▼a/▼b", "exact")
+        if extent:
+            field_sources["extent"] = self._field_source(
+                "MARC 300 ▼a", "inferred", "정규식으로 권/책 추출"
+            )
+        if printing_info:
+            field_sources["printing_info"] = self._field_source(
+                "OpenAPI FORM_INFO", "inferred", "판식정보 텍스트에서 정규식 파싱"
+            )
+        if info_008 and "error" not in info_008:
+            field_sources["language"] = self._field_source("MARC 008[35:38]", "exact")
+
         bibliography = {
             "title": marc245.get("a"),
             "title_reading": raw_data.get("_title_kor"),  # 검색 결과에서 추출된 한글 제목
@@ -240,14 +318,17 @@ class KorcisMapper(BaseMapper):
             "contributors": _extract_contributors(raw_data),
             "date_created": marc260.get("c"),
             "edition_type": raw_data.get("250", {}).get("a"),
-            "language": _extract_language(raw_data),
+            "language": language,
             "script": None,
             "physical_description": physical_description,
+            "printing_info": printing_info,
+            "publishing": publishing,
+            "extent": extent,
             "subject": subjects if subjects else None,
             "classification": classification if classification else None,
             "series_title": series_title,
             "material_type": None,
-            "repository": None,  # KORCIS는 여러 소장처가 있으므로 별도 표시
+            "repository": repository,
             "digital_source": {
                 "platform": "한국고문헌종합목록 (KORCIS)",
                 "source_url": raw_data.get("source_url"),
@@ -261,20 +342,7 @@ class KorcisMapper(BaseMapper):
                 **raw_data,
             },
             "_mapping_info": self._make_mapping_info(
-                field_sources={
-                    "title": self._field_source("MARC 245 ▼a", "exact"),
-                    "title_reading": self._field_source(
-                        "검색결과 한글 제목", "inferred", "검색 결과 HTML에서 추출"
-                    ),
-                    "creator.name": self._field_source("MARC 245 ▼d / 100 ▼a", "exact"),
-                    "creator.name_reading": self._field_source("MARC 100 ▼a", "exact"),
-                    "creator.period": self._field_source("MARC 100 ▼c", "exact"),
-                    "date_created": self._field_source("MARC 260 ▼c", "exact"),
-                    "edition_type": self._field_source("MARC 250 ▼a", "exact"),
-                    "physical_description": self._field_source("MARC 300 ▼a+▼c", "exact"),
-                    "series_title": self._field_source("MARC 440 ▼a", "exact"),
-                    "subject": self._field_source("MARC 653 ▼a", "exact"),
-                },
+                field_sources=field_sources,
                 api_variant="html_scraping_marc",
             ),
             "notes": notes,
@@ -493,6 +561,479 @@ def _extract_language(raw_data: dict) -> str | None:
         if lang and lang != "   ":
             return lang
     return None
+
+
+def _extract_extent(physical_desc: str) -> dict[str, Any] | None:
+    """형태사항(MARC 300 ▼a)에서 권책수를 추출한다.
+
+    입력:
+        physical_desc — MARC 300 ▼a 값. 예: "3卷1冊", "卷1-2 2冊", "零本"
+    출력:
+        {"volumes": "3卷", "books": "1冊", "missing": null} 또는 None
+
+    왜 이렇게 하는가:
+        고서의 물리적 규모(권수·책수)를 구조화하면
+        여러 문헌의 규모를 비교하거나 결락을 추적할 수 있다.
+    """
+    if not physical_desc:
+        return None
+
+    result: dict[str, Any] = {}
+
+    # 권수 (卷): 숫자+卷 또는 "卷숫자-숫자"
+    vol_match = re.search(r"(\d+)\s*卷", physical_desc)
+    if vol_match:
+        result["volumes"] = f"{vol_match.group(1)}卷"
+
+    # 책수 (冊)
+    book_match = re.search(r"(\d+)\s*冊", physical_desc)
+    if book_match:
+        result["books"] = f"{book_match.group(1)}冊"
+
+    # 결락 (零本, 缺 등)
+    if "零本" in physical_desc:
+        result["missing"] = "零本"
+    elif "缺" in physical_desc:
+        lack_match = re.search(r"(卷\d+缺|[^,]+缺)", physical_desc)
+        result["missing"] = lack_match.group(1) if lack_match else "缺"
+
+    if not result:
+        return None
+
+    # 없는 필드는 null로 채움
+    result.setdefault("volumes", None)
+    result.setdefault("books", None)
+    result.setdefault("missing", None)
+
+    return result
+
+
+# --- KORMARC 008 고서 코드 해석기 (작업 2) ---
+#
+# KORMARC의 008 필드(40자 고정 길이)에서 고서 관련 코드를 해석한다.
+# 각 위치별 의미는 KORMARC 통합서지용 포맷 기반이다.
+
+# 간행연대구분 (위치 06)
+_DATE_TYPE_008 = {
+    "a": "확실한 간행연도",
+    "b": "추정 간행연도",
+    "c": "세기 단위",
+    "d": "연대 미상",
+    "e": "복수 연도 (시작~끝)",
+    "n": "연대 불명",
+    "s": "단일 확정 연도",
+    "m": "복수 확정 연도",
+    "q": "의문스러운 연도",
+    "r": "복간/영인 연도",
+    " ": "미부호",
+}
+
+# 언어 코드 (위치 35-37, ISO 639-2/B 기반)
+_LANG_CODES_008 = {
+    "chi": "중국어(한문)",
+    "kor": "한국어",
+    "jpn": "일본어",
+    "mul": "다국어",
+    "und": "미확인",
+    "   ": "미부호",
+}
+
+# 수정 기록 (위치 38)
+_MODIFIED_008 = {
+    " ": "수정 없음",
+    "d": "수정됨",
+    "o": "수정됨 (완전 개정)",
+    "r": "수정됨 (일부 개정)",
+    "s": "수정됨 (축약)",
+    "x": "수정됨 (기타)",
+}
+
+
+def parse_008_field(field_008: str) -> dict[str, Any]:
+    """KORMARC 008 필드를 해석한다.
+
+    입력:
+        field_008 — 40자 고정 길이 문자열.
+    출력:
+        해석된 딕셔너리. 주요 키:
+        - date_type: 간행연대구분 (위치 06)
+        - date_type_code: 원본 코드
+        - publication_year: 간행연도 (위치 07-10)
+        - publication_year_2: 두 번째 연도 (위치 11-14, 복수 연도일 때)
+        - language: 언어 (위치 35-37)
+        - language_code: 원본 언어 코드
+        - modified: 수정 기록 (위치 38)
+        - raw: 원본 문자열
+
+    왜 이렇게 하는가:
+        008 필드에는 간행 시기, 언어 등 핵심 서지 정보가 코드화되어 있다.
+        이를 사람이 읽을 수 있는 한국어로 변환하면
+        연구자가 서지 데이터를 쉽게 이해할 수 있다.
+    """
+    if not field_008 or len(field_008) < 35:
+        return {"error": f"008 필드 길이 부족: {len(field_008) if field_008 else 0}자"}
+
+    result: dict[str, Any] = {"raw": field_008}
+
+    # 위치 06: 간행연대구분
+    date_type_code = field_008[6] if len(field_008) > 6 else " "
+    result["date_type_code"] = date_type_code
+    result["date_type"] = _DATE_TYPE_008.get(date_type_code, f"미확인({date_type_code})")
+
+    # 위치 07-10: 간행연도 (####은 미상)
+    if len(field_008) >= 11:
+        year_str = field_008[7:11]
+        cleaned = year_str.replace("#", "").replace(" ", "").strip()
+        result["publication_year"] = cleaned if cleaned else None
+    else:
+        result["publication_year"] = None
+
+    # 위치 11-14: 두 번째 연도 (복수 연도일 때)
+    if len(field_008) >= 15:
+        year2_str = field_008[11:15]
+        cleaned2 = year2_str.replace("#", "").replace(" ", "").strip()
+        result["publication_year_2"] = cleaned2 if cleaned2 else None
+    else:
+        result["publication_year_2"] = None
+
+    # 위치 35-37: 언어 코드
+    if len(field_008) >= 38:
+        lang_code = field_008[35:38]
+        result["language_code"] = lang_code
+        result["language"] = _LANG_CODES_008.get(lang_code, lang_code)
+    else:
+        result["language_code"] = None
+        result["language"] = None
+
+    # 위치 38: 수정 기록
+    if len(field_008) >= 39:
+        mod_code = field_008[38]
+        result["modified"] = _MODIFIED_008.get(mod_code, f"미확인({mod_code})")
+    else:
+        result["modified"] = None
+
+    return result
+
+
+# --- 판식정보 구조화 추출 (작업 3) ---
+#
+# 고서의 판식정보(版式情報) 텍스트를 파싱하여 구조화된 필드로 분리한다.
+# 판식정보는 형태서지학에서 판본 감별의 핵심 요소다.
+#
+# 입력 예: "四周雙邊 半郭 22.5×15.2cm 有界 10行20字 注雙行 上下內向黑魚尾"
+# 출력: bibliography.schema.json의 printing_info 객체
+
+# 광곽(匡郭) 패턴 → 한국어 독음
+_GWANGWAK_PATTERNS = [
+    (re.compile(r"四周雙邊"), "사주쌍변"),
+    (re.compile(r"四周單邊"), "사주단변"),
+    (re.compile(r"左右雙邊"), "좌우쌍변"),
+    (re.compile(r"無邊"), "무변"),
+]
+
+# 어미(魚尾) 패턴 → 한국어 독음
+# 순서 중요: 긴 패턴을 먼저 매칭해야 짧은 패턴에 잘못 걸리지 않는다.
+_EOMI_PATTERNS = [
+    (re.compile(r"上下內向二葉花紋魚尾"), "상하내향이엽화문어미"),
+    (re.compile(r"上下內向花紋魚尾"), "상하내향화문어미"),
+    (re.compile(r"上下內向黑魚尾"), "상하내향흑어미"),
+    (re.compile(r"上下白魚尾"), "상하백어미"),
+    (re.compile(r"上下黑魚尾"), "상하흑어미"),
+    (re.compile(r"上黑魚尾"), "상흑어미"),
+    (re.compile(r"下黑魚尾"), "하흑어미"),
+    (re.compile(r"上白魚尾"), "상백어미"),
+    (re.compile(r"下白魚尾"), "하백어미"),
+    (re.compile(r"無魚尾"), "무어미"),
+]
+
+# 판구(版口) 패턴 → 한국어 독음
+_PANGOO_PATTERNS = [
+    (re.compile(r"大黑口"), "대흑구"),
+    (re.compile(r"小黑口"), "소흑구"),
+    (re.compile(r"白口"), "백구"),
+]
+
+
+def parse_pansik_info(text: str) -> dict[str, Any]:
+    """판식정보 텍스트를 구조화된 딕셔너리로 변환한다.
+
+    입력:
+        text — 판식정보 원문 텍스트.
+               예: "四周雙邊 半郭 22.5×15.2cm 有界 10行20字 注雙行 上下內向黑魚尾"
+    출력:
+        bibliography.schema.json의 printing_info 스키마에 대응하는 dict.
+        파싱하지 못한 부분은 summary에 원문을 보존.
+
+    왜 이렇게 하는가:
+        판식정보의 형식은 표준화되어 있지 않아서 다양한 변형이 있다.
+        정규식으로 주요 패턴을 매칭하고, 매칭 안 되는 부분은 원문으로 보존한다.
+        완벽한 파싱보다 안전한 파싱 — 에러 없이 가능한 만큼만 추출.
+    """
+    if not text or not text.strip():
+        return {}
+
+    result: dict[str, Any] = {"summary": text.strip()}
+    remaining = text.strip()
+
+    # 1. 광곽 (匡郭)
+    for pattern, value in _GWANGWAK_PATTERNS:
+        if pattern.search(remaining):
+            result["gwangwak"] = value
+            remaining = pattern.sub("", remaining)
+            break
+
+    # 2. 반곽 크기 (세로×가로 cm)
+    size_match = re.search(
+        r"(?:半郭)?\s*(\d+\.?\d*)\s*[×xX]\s*(\d+\.?\d*)\s*(?:cm|㎝)",
+        remaining, re.IGNORECASE,
+    )
+    if size_match:
+        result["gwangwak_size"] = f"{size_match.group(1)} × {size_match.group(2)} cm"
+        remaining = remaining[:size_match.start()] + remaining[size_match.end():]
+
+    # "半郭" 단독 키워드 제거 (크기와 함께 쓰이지 않은 경우)
+    remaining = re.sub(r"半郭", "", remaining)
+
+    # 3. 계선 (界線)
+    if "有界" in remaining:
+        result["gyeseon"] = "유계"
+        remaining = remaining.replace("有界", "")
+    elif "無界" in remaining:
+        result["gyeseon"] = "무계"
+        remaining = remaining.replace("無界", "")
+
+    # 4. 행자수 (行字數)
+    hj_match = re.search(r"(\d+)\s*行\s*(\d+)\s*字", remaining)
+    if hj_match:
+        rows = int(hj_match.group(1))
+        chars = int(hj_match.group(2))
+        result["haengja"] = f"반엽 {rows}행 {chars}자"
+        remaining = remaining[:hj_match.start()] + remaining[hj_match.end():]
+
+    # 5. 주(注) 행자수
+    ju_match = re.search(r"注雙行|주쌍행", remaining)
+    if ju_match:
+        result["ju_haengja"] = "주쌍행"
+        remaining = remaining[:ju_match.start()] + remaining[ju_match.end():]
+    else:
+        ju_match2 = re.search(r"注單行|주단행", remaining)
+        if ju_match2:
+            result["ju_haengja"] = "주단행"
+            remaining = remaining[:ju_match2.start()] + remaining[ju_match2.end():]
+
+    # 6. 판구 (版口)
+    for pattern, value in _PANGOO_PATTERNS:
+        if pattern.search(remaining):
+            result["pangoo"] = value
+            remaining = pattern.sub("", remaining)
+            break
+
+    # 7. 어미 (魚尾) — 긴 패턴 우선
+    for pattern, value in _EOMI_PATTERNS:
+        if pattern.search(remaining):
+            result["eomi"] = value
+            remaining = pattern.sub("", remaining)
+            break
+
+    # 8. 판심제 (版心題) — "版心題 <서명>" 패턴
+    pansimje_match = re.search(r"版心題\s*[:：]?\s*(.+?)(?:\s{2,}|$)", remaining)
+    if pansimje_match:
+        result["pansimje"] = pansimje_match.group(1).strip()
+        remaining = remaining[:pansimje_match.start()] + remaining[pansimje_match.end():]
+
+    return result
+
+
+# --- KORCIS OpenAPI 유틸리티 (작업 4) ---
+#
+# academic-mcp/src/academic_mcp/providers/nl.py를 참조하여 구현.
+# 기존 HTML 스크래핑과 별도로, OpenAPI를 통한 검색/상세 조회를 제공한다.
+# OpenAPI의 장점: FORM_INFO(판식정보), HOLDINFO(소장기관) 등
+# HTML 스크래핑에서는 얻기 어려운 필드를 제공한다.
+
+
+def _get_xml_text(element: ET.Element | None, tag: str) -> str:
+    """XML 요소에서 텍스트를 안전하게 추출한다.
+
+    왜 별도 함수인가:
+        ET.Element.find()가 None을 반환할 수 있고,
+        child.text도 None일 수 있어서 안전하게 처리해야 한다.
+    """
+    if element is None:
+        return ""
+    child = element.find(tag)
+    if child is None or not child.text:
+        return ""
+    return child.text.strip()
+
+
+async def openapi_search(
+    query: str,
+    max_results: int = 20,
+    api_key: str | None = None,
+) -> list[dict[str, Any]]:
+    """KORCIS OpenAPI로 검색한다.
+
+    입력:
+        query — 검색어 (한글 또는 한자).
+        max_results — 최대 결과 수 (기본 20, 최대 100).
+        api_key — API 키 (현재 KORCIS OpenAPI는 키 없이도 동작).
+    출력:
+        [{rec_key, title, kor_title, author, kor_author,
+          pub_year, publisher, edit_name, lib_name}, ...]
+
+    왜 이렇게 하는가:
+        기존 HTML 스크래핑 대비 OpenAPI의 장점:
+        - 안정적인 XML 응답 형식 (HTML 구조 변경에 영향 없음)
+        - 표준화된 필드명 (REC_KEY, TITLE 등)
+        - 상세 조회 시 FORM_INFO(판식정보) 제공
+    """
+    params: dict[str, str] = {
+        "search_field": "total",
+        "search_value": query,
+        "page": "1",
+        "display": str(min(max_results, 100)),
+    }
+    if api_key:
+        params["key"] = api_key
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(_OPENAPI_SEARCH_URL, params=params)
+            response.raise_for_status()
+
+        return _parse_openapi_search_xml(response.content)
+
+    except Exception as e:
+        raise ConnectionError(
+            f"KORCIS OpenAPI 검색 실패: {e}\n"
+            f"→ URL: {_OPENAPI_SEARCH_URL}"
+        ) from e
+
+
+async def openapi_detail(
+    rec_key: str,
+    api_key: str | None = None,
+) -> dict[str, Any]:
+    """KORCIS OpenAPI로 상세 정보를 조회한다.
+
+    입력:
+        rec_key — 레코드 키 (검색 결과의 REC_KEY).
+        api_key — API 키 (현재 KORCIS OpenAPI는 키 없이도 동작).
+    출력:
+        {title_info, publish_info, edition_info, form_info, note_info,
+         hold_libs: [...], pansik_parsed: {...}}
+
+        form_info가 있으면 parse_pansik_info()로 자동 구조화.
+
+    왜 이렇게 하는가:
+        OpenAPI 상세 조회의 FORM_INFO 필드에 판식정보가 들어있다.
+        이를 parse_pansik_info()와 연결하면 구조화된 판식정보를 얻을 수 있다.
+        MARC 팝업에서는 FORM_INFO를 직접 제공하지 않아서
+        OpenAPI가 필요한 이유다.
+    """
+    params: dict[str, str] = {"rec_key": rec_key}
+    if api_key:
+        params["key"] = api_key
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(_OPENAPI_DETAIL_URL, params=params)
+            response.raise_for_status()
+
+        return _parse_openapi_detail_xml(response.content)
+
+    except Exception as e:
+        raise ConnectionError(
+            f"KORCIS OpenAPI 상세 조회 실패 (rec_key={rec_key}): {e}\n"
+            f"→ URL: {_OPENAPI_DETAIL_URL}"
+        ) from e
+
+
+def _parse_openapi_search_xml(xml_bytes: bytes) -> list[dict[str, Any]]:
+    """OpenAPI 검색 결과 XML을 파싱한다.
+
+    XML 구조:
+        <RESULT>
+          <RECORD>
+            <REC_KEY>...</REC_KEY>
+            <TITLE>한자제목</TITLE>
+            <KOR_TITLE>한글제목</KOR_TITLE>
+            <AUTHOR>한자저자</AUTHOR>
+            <KOR_AUTHOR>한글저자</KOR_AUTHOR>
+            <PUBYEAR>발행년</PUBYEAR>
+            <PUBLISHER>발행처</PUBLISHER>
+            <EDIT_NAME>판종</EDIT_NAME>
+            <LIB_NAME>소장기관</LIB_NAME>
+          </RECORD>
+          ...
+        </RESULT>
+    """
+    records: list[dict[str, Any]] = []
+    root = ET.fromstring(xml_bytes)
+
+    for record in root.findall(".//RECORD"):
+        rec_key = _get_xml_text(record, "REC_KEY")
+        if not rec_key:
+            continue
+
+        records.append({
+            "rec_key": rec_key,
+            "title": _get_xml_text(record, "TITLE"),
+            "kor_title": _get_xml_text(record, "KOR_TITLE"),
+            "author": _get_xml_text(record, "AUTHOR"),
+            "kor_author": _get_xml_text(record, "KOR_AUTHOR"),
+            "pub_year": _get_xml_text(record, "PUBYEAR"),
+            "publisher": _get_xml_text(record, "PUBLISHER"),
+            "edit_name": _get_xml_text(record, "EDIT_NAME"),
+            "lib_name": _get_xml_text(record, "LIB_NAME"),
+        })
+
+    return records
+
+
+def _parse_openapi_detail_xml(xml_bytes: bytes) -> dict[str, Any]:
+    """OpenAPI 상세 정보 XML을 파싱한다.
+
+    XML 구조:
+        <RESULT>
+          <BIBINFO>
+            <TITLE_INFO>제목정보</TITLE_INFO>
+            <PUBLISH_INFO>발행사항</PUBLISH_INFO>
+            <EDITION_INFO>판사항</EDITION_INFO>
+            <FORM_INFO>형태사항(판식정보)</FORM_INFO>
+            <NOTE_INFO>주기사항</NOTE_INFO>
+          </BIBINFO>
+          <HOLDINFO>
+            <LIB_NAME>소장기관</LIB_NAME>
+          </HOLDINFO>
+          ...
+        </RESULT>
+    """
+    root = ET.fromstring(xml_bytes)
+    bib = root.find(".//BIBINFO")
+
+    result: dict[str, Any] = {
+        "title_info": _get_xml_text(bib, "TITLE_INFO") if bib is not None else "",
+        "publish_info": _get_xml_text(bib, "PUBLISH_INFO") if bib is not None else "",
+        "edition_info": _get_xml_text(bib, "EDITION_INFO") if bib is not None else "",
+        "form_info": _get_xml_text(bib, "FORM_INFO") if bib is not None else "",
+        "note_info": _get_xml_text(bib, "NOTE_INFO") if bib is not None else "",
+    }
+
+    # 소장기관 목록 (중복 제거)
+    hold_libs: list[str] = []
+    for hold in root.findall(".//HOLDINFO"):
+        lib_name = _get_xml_text(hold, "LIB_NAME")
+        if lib_name and lib_name not in hold_libs:
+            hold_libs.append(lib_name)
+    result["hold_libs"] = hold_libs
+
+    # FORM_INFO에서 판식정보 구조화 시도
+    if result["form_info"]:
+        result["pansik_parsed"] = parse_pansik_info(result["form_info"])
+
+    return result
 
 
 # --- 파서 등록 ---

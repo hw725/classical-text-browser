@@ -350,6 +350,26 @@ L4는 평문 텍스트(.txt)로 블록 경계가 없다. 블록별 대조를 위
 
 ---
 
+## D-013: KORCIS 파서 고도화 — 008 해석 + 판식정보 + OpenAPI 보강
+
+**날짜**: 2026-02-15
+**맥락**: Phase 10-4. 기존 KORCIS 파서(HTML 스크래핑 + MARC 팝업)로는 판식정보(printing_info), 간행사항(publishing), 권책수(extent) 등 고서 핵심 서지정보를 채울 수 없었다.
+
+**결정**:
+
+1. **KORMARC 008 고정길이 필드 해석기 추가** — 위치 06(날짜유형), 07-10(연도1), 11-14(연도2), 35-37(언어코드), 38(수정기호)를 코드 테이블로 해석.
+2. **판식정보 구조화 추출기 추가** — 정규표현식으로 광곽/행자수/어미/계선/판구/판심제 등을 `printing_info` 스키마 필드로 매핑. 원문은 `summary`에 보존.
+3. **KORCIS OpenAPI 보강 경로** — 기존 HTML 스크래핑을 유지하면서, OpenAPI(`nl.go.kr/korcis/openapi/`)를 보조 소스로 추가. FORM_INFO(판식정보), HOLDINFO(소장처)는 OpenAPI에서만 제공.
+4. **매퍼 통합** — MARC 260(간행사항→`publishing`), MARC 300(형태사항→`extent`), OpenAPI FORM_INFO(→`printing_info`)를 `map_to_bibliography()`에 반영.
+5. **GUI 라이트그레이 테마** — CSS 변수 기반 다크/라이트 테마 전환. `[data-theme="light"]`로 변수 오버라이드, localStorage에 저장, 액티비티 바 하단에 토글 버튼.
+
+**근거**:
+- 기존 HTML 스크래핑 경로를 제거하지 않고 보강하여 하위 호환성 유지
+- OpenAPI는 API 키 없이도 동작(KORCIS 공식 가이드)
+- CSS 변수 기반 테마 전환은 빌드 도구 없는 프로젝트에 적합
+
+---
+
 ## 미결 사항 (v7 섹션 13 기반)
 
 ### 원본 저장소
