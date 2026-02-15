@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "punctuation_page.schema.json",
+  "title": "L5 표점 (句讀)",
+  "description": "페이지 내 블록별 표점 부호를 기록한다. 원문 문자열은 변형하지 않고, 글자 인덱스에 삽입할 부호만 기록. Phase 11-1 통합 before/after 방식.",
+  "type": "object",
+  "required": ["block_id", "marks"],
+  "additionalProperties": false,
+  "properties": {
+    "block_id": {
+      "type": "string",
+      "description": "대상 블록 ID. L3 LayoutBlock 또는 L4 블록의 식별자. 예: p01_b01"
+    },
+    "marks": {
+      "type": "array",
+      "description": "표점 부호 목록. 원문 글자 위치에 삽입할 부호를 나열.",
+      "items": { "$ref": "#/$defs/Mark" }
+    }
+  },
+  "$defs": {
+    "Mark": {
+      "type": "object",
+      "description": "개별 표점 부호. target 범위의 앞(before)과 뒤(after)에 부호를 삽입한다.",
+      "required": ["id", "target", "before", "after"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "표점 고유 ID. 예: pm_001"
+        },
+        "target": {
+          "$ref": "#/$defs/Target",
+          "description": "부호를 삽입할 글자 범위."
+        },
+        "before": {
+          "type": ["string", "null"],
+          "description": "범위 앞에 삽입할 부호. 예: 《. 없으면 null."
+        },
+        "after": {
+          "type": ["string", "null"],
+          "description": "범위 뒤에 삽입할 부호. 예: 。. 없으면 null."
+        }
+      }
+    },
+    "Target": {
+      "type": "object",
+      "description": "글자 범위. 0-based inclusive 인덱스. start == end면 단일 글자.",
+      "required": ["start", "end"],
+      "additionalProperties": false,
+      "properties": {
+        "start": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "시작 글자 인덱스 (0-based, inclusive)."
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "끝 글자 인덱스 (0-based, inclusive)."
+        }
+      }
+    }
+  }
+}

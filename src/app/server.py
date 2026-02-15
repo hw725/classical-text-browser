@@ -55,6 +55,18 @@ API 엔드포인트:
     GET  /api/alignment/variant-dict → 이체자 사전 조회
     POST /api/alignment/variant-dict → 이체자 쌍 추가
 
+    --- Phase 11-1: L5 표점/현토 API ---
+    GET  /api/interpretations/{interp_id}/pages/{page}/punctuation → 표점 조회
+    PUT  /api/interpretations/{interp_id}/pages/{page}/punctuation → 표점 저장
+    POST /api/interpretations/{interp_id}/pages/{page}/punctuation/{block_id}/marks → 표점 추가
+    DELETE /api/interpretations/{interp_id}/pages/{page}/punctuation/{block_id}/marks/{id} → 표점 삭제
+    GET  /api/interpretations/{interp_id}/pages/{page}/punctuation/{block_id}/preview → 표점 미리보기
+    GET  /api/interpretations/{interp_id}/pages/{page}/hyeonto → 현토 조회
+    PUT  /api/interpretations/{interp_id}/pages/{page}/hyeonto → 현토 저장
+    POST /api/interpretations/{interp_id}/pages/{page}/hyeonto/{block_id}/annotations → 현토 추가
+    DELETE /api/interpretations/{interp_id}/pages/{page}/hyeonto/{block_id}/annotations/{id} → 현토 삭제
+    GET  /api/interpretations/{interp_id}/pages/{page}/hyeonto/{block_id}/preview → 현토 미리보기
+
     --- Phase 8: 코어 스키마 엔티티 API ---
     POST /api/interpretations/{interp_id}/entities → 엔티티 생성
     GET  /api/interpretations/{interp_id}/entities/{entity_type} → 유형별 목록
@@ -117,6 +129,21 @@ from core.entity import (
     list_entities_for_page,
     promote_tag_to_concept,
     update_entity,
+)
+from core.punctuation import (
+    add_mark,
+    load_punctuation,
+    remove_mark,
+    render_punctuated_text,
+    save_punctuation,
+    split_sentences,
+)
+from core.hyeonto import (
+    add_annotation,
+    load_hyeonto,
+    remove_annotation,
+    render_hyeonto_text,
+    save_hyeonto,
 )
 
 
@@ -2181,3 +2208,289 @@ async def api_add_variant_pair(body: VariantPairRequest):
         variant_dict.save(save_path)
 
     return {"status": "ok", "size": variant_dict.size}
+
+
+# ───────────────────────────────────────────────────
+# Phase 11-1: 표점 프리셋 조회
+# ───────────────────────────────────────────────────
+
+@app.get("/api/punctuation-presets")
+async def api_punctuation_presets():
+    """표점 부호 프리셋 목록을 반환한다."""
+    presets_path = Path(__file__).parent.parent.parent / "resources" / "punctuation_presets.json"
+    if not presets_path.exists():
+        return {"presets": [], "custom": []}
+    import json as _json
+    with open(presets_path, encoding="utf-8") as f:
+        return _json.load(f)
+
+
+# ───────────────────────────────────────────────────
+# Phase 11-1: L5 표점(句讀) API
+# ───────────────────────────────────────────────────
+
+
+class PunctuationSaveRequest(BaseModel):
+    """표점 저장 요청."""
+    block_id: str
+    marks: list
+
+
+class MarkAddRequest(BaseModel):
+    """개별 표점 추가 요청."""
+    target: dict
+    before: str | None = None
+    after: str | None = None
+
+
+@app.get("/api/interpretations/{interp_id}/pages/{page_num}/punctuation")
+async def api_get_punctuation(interp_id: str, page_num: int, block_id: str = Query(...)):
+    """표점 조회.
+
+    목적: 특정 블록의 L5 표점 데이터를 반환한다.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse({"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."}, status_code=404)
+
+    # part_id는 문헌에서 자동 추론 (현재는 "main" 기본값)
+    part_id = "main"
+    data = load_punctuation(interp_path, part_id, page_num, block_id)
+    return data
+
+
+@app.put("/api/interpretations/{interp_id}/pages/{page_num}/punctuation")
+async def api_save_punctuation(interp_id: str, page_num: int, body: PunctuationSaveRequest):
+    """표점 저장 (전체 덮어쓰기).
+
+    목적: 블록의 표점 데이터를 저장한다. 스키마 검증 후 파일 기록.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse({"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."}, status_code=404)
+
+    part_id = "main"
+    data = {"block_id": body.block_id, "marks": body.marks}
+
+    try:
+        file_path = save_punctuation(interp_path, part_id, page_num, data)
+        # git commit
+        try:
+            git_commit_interpretation(interp_path, f"feat: L5 표점 저장 — page {page_num}")
+        except Exception:
+            pass  # git 실패는 저장 성공에 영향 없음
+        return {"success": True, "file_path": str(file_path.relative_to(_library_path))}
+    except Exception as e:
+        return JSONResponse({"error": f"표점 저장 실패: {e}"}, status_code=400)
+
+
+@app.post("/api/interpretations/{interp_id}/pages/{page_num}/punctuation/{block_id}/marks")
+async def api_add_mark(interp_id: str, page_num: int, block_id: str, body: MarkAddRequest):
+    """개별 표점 추가."""
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    part_id = "main"
+
+    data = load_punctuation(interp_path, part_id, page_num, block_id)
+    mark = {"target": body.target, "before": body.before, "after": body.after}
+    result = add_mark(data, mark)
+
+    try:
+        save_punctuation(interp_path, part_id, page_num, data)
+        return JSONResponse(result, status_code=201)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@app.delete("/api/interpretations/{interp_id}/pages/{page_num}/punctuation/{block_id}/marks/{mark_id}")
+async def api_delete_mark(interp_id: str, page_num: int, block_id: str, mark_id: str):
+    """개별 표점 삭제."""
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    part_id = "main"
+
+    data = load_punctuation(interp_path, part_id, page_num, block_id)
+    removed = remove_mark(data, mark_id)
+
+    if not removed:
+        return JSONResponse({"error": f"표점 '{mark_id}'를 찾을 수 없습니다."}, status_code=404)
+
+    save_punctuation(interp_path, part_id, page_num, data)
+    return JSONResponse(status_code=204, content=None)
+
+
+@app.get("/api/interpretations/{interp_id}/pages/{page_num}/punctuation/{block_id}/preview")
+async def api_punctuation_preview(interp_id: str, page_num: int, block_id: str):
+    """합성 텍스트 미리보기.
+
+    L4 원문에 표점을 적용한 결과 + 문장 분리를 반환.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    part_id = "main"
+
+    # 표점 로드
+    punct_data = load_punctuation(interp_path, part_id, page_num, block_id)
+
+    # L4 원문 로드 (해석 저장소의 L5_reading에서)
+    layer_result = get_layer_content(interp_path, "L5_reading", "main_text", part_id, page_num)
+    original_text = ""
+    if layer_result.get("exists") and isinstance(layer_result.get("content"), str):
+        original_text = layer_result["content"]
+
+    rendered = render_punctuated_text(original_text, punct_data.get("marks", []))
+    sentences = split_sentences(original_text, punct_data.get("marks", []))
+
+    return {
+        "original_text": original_text,
+        "rendered": rendered,
+        "sentences": sentences,
+    }
+
+
+# ───────────────────────────────────────────────────
+# Phase 11-1: L5 현토(懸吐) API
+# ───────────────────────────────────────────────────
+
+
+class HyeontoSaveRequest(BaseModel):
+    """현토 저장 요청."""
+    block_id: str
+    annotations: list
+
+
+class AnnotationAddRequest(BaseModel):
+    """개별 현토 추가 요청."""
+    target: dict
+    position: str = "after"
+    text: str
+    category: str | None = None
+
+
+@app.get("/api/interpretations/{interp_id}/pages/{page_num}/hyeonto")
+async def api_get_hyeonto(interp_id: str, page_num: int, block_id: str = Query(...)):
+    """현토 조회."""
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse({"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."}, status_code=404)
+
+    part_id = "main"
+    data = load_hyeonto(interp_path, part_id, page_num, block_id)
+    return data
+
+
+@app.put("/api/interpretations/{interp_id}/pages/{page_num}/hyeonto")
+async def api_save_hyeonto(interp_id: str, page_num: int, body: HyeontoSaveRequest):
+    """현토 저장 (전체 덮어쓰기)."""
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse({"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."}, status_code=404)
+
+    part_id = "main"
+    data = {"block_id": body.block_id, "annotations": body.annotations}
+
+    try:
+        file_path = save_hyeonto(interp_path, part_id, page_num, data)
+        try:
+            git_commit_interpretation(interp_path, f"feat: L5 현토 저장 — page {page_num}")
+        except Exception:
+            pass
+        return {"success": True, "file_path": str(file_path.relative_to(_library_path))}
+    except Exception as e:
+        return JSONResponse({"error": f"현토 저장 실패: {e}"}, status_code=400)
+
+
+@app.post("/api/interpretations/{interp_id}/pages/{page_num}/hyeonto/{block_id}/annotations")
+async def api_add_annotation(interp_id: str, page_num: int, block_id: str, body: AnnotationAddRequest):
+    """개별 현토 추가."""
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    part_id = "main"
+
+    data = load_hyeonto(interp_path, part_id, page_num, block_id)
+    annotation = {
+        "target": body.target,
+        "position": body.position,
+        "text": body.text,
+        "category": body.category,
+    }
+    result = add_annotation(data, annotation)
+
+    try:
+        save_hyeonto(interp_path, part_id, page_num, data)
+        return JSONResponse(result, status_code=201)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@app.delete("/api/interpretations/{interp_id}/pages/{page_num}/hyeonto/{block_id}/annotations/{ann_id}")
+async def api_delete_annotation(interp_id: str, page_num: int, block_id: str, ann_id: str):
+    """개별 현토 삭제."""
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    part_id = "main"
+
+    data = load_hyeonto(interp_path, part_id, page_num, block_id)
+    removed = remove_annotation(data, ann_id)
+
+    if not removed:
+        return JSONResponse({"error": f"현토 '{ann_id}'를 찾을 수 없습니다."}, status_code=404)
+
+    save_hyeonto(interp_path, part_id, page_num, data)
+    return JSONResponse(status_code=204, content=None)
+
+
+@app.get("/api/interpretations/{interp_id}/pages/{page_num}/hyeonto/{block_id}/preview")
+async def api_hyeonto_preview(interp_id: str, page_num: int, block_id: str):
+    """현토 합성 텍스트 미리보기.
+
+    표점이 있으면 함께 적용한 결과를 반환.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    part_id = "main"
+
+    # L4 원문 로드
+    layer_result = get_layer_content(interp_path, "L5_reading", "main_text", part_id, page_num)
+    original_text = ""
+    if layer_result.get("exists") and isinstance(layer_result.get("content"), str):
+        original_text = layer_result["content"]
+
+    # 현토 로드
+    ht_data = load_hyeonto(interp_path, part_id, page_num, block_id)
+    rendered = render_hyeonto_text(original_text, ht_data.get("annotations", []))
+
+    # 표점도 함께 적용한 결과
+    punct_data = load_punctuation(interp_path, part_id, page_num, block_id)
+    # 표점 + 현토 합성: 먼저 현토 적용 후 표점 적용
+    combined = render_punctuated_text(rendered, punct_data.get("marks", []))
+
+    return {
+        "original_text": original_text,
+        "rendered_hyeonto": rendered,
+        "rendered_combined": combined,
+    }

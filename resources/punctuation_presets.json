@@ -1,0 +1,15 @@
+{
+  "presets": [
+    { "id": "period", "label": "마침표", "before": null, "after": "。" },
+    { "id": "comma", "label": "쉼표", "before": null, "after": "，" },
+    { "id": "semicolon", "label": "쌍점", "before": null, "after": "；" },
+    { "id": "colon", "label": "고리점", "before": null, "after": "：" },
+    { "id": "question", "label": "물음표", "before": null, "after": "？" },
+    { "id": "exclamation", "label": "느낌표", "before": null, "after": "！" },
+    { "id": "book_title", "label": "서명호", "before": "《", "after": "》" },
+    { "id": "chapter_title", "label": "편명호", "before": "〈", "after": "〉" },
+    { "id": "quote_single", "label": "인용부호", "before": "「", "after": "」" },
+    { "id": "quote_double", "label": "겹인용부호", "before": "『", "after": "』" }
+  ],
+  "custom": []
+}

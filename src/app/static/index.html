@@ -104,12 +104,14 @@
   <!-- 메인 영역 -->
   <main class="main-area">
 
-    <!-- 모드 탭 바: 열람 / 레이아웃 / 교정 (Phase 4) -->
+    <!-- 모드 탭 바: 열람 / 레이아웃 / 교정 / 해석 / 표점 / 현토 -->
     <div class="mode-bar">
       <div class="mode-tab active" data-mode="view">열람</div>
       <div class="mode-tab" data-mode="layout">레이아웃</div>
       <div class="mode-tab" data-mode="correction">교정</div>
       <div class="mode-tab" data-mode="interpretation">해석</div>
+      <div class="mode-tab" data-mode="punctuation">표점</div>
+      <div class="mode-tab" data-mode="hyeonto">현토</div>
     </div>
 
     <!-- 층별 탭 바: D-001 멀티탭 -->
@@ -393,6 +395,101 @@
         <textarea id="interp-content" class="text-content interp-content"
           placeholder="해석 내용을 입력하세요"
           spellcheck="false"></textarea>
+      </div>
+
+      <!-- 우측 패널: 표점 편집기 (Phase 11-1, 표점 모드에서만 표시) -->
+      <div class="editor-panel editor-right punct-panel" id="punct-panel" style="display:none;">
+        <div class="panel-label">표점 편집기 (L5)</div>
+
+        <!-- 도구 바 -->
+        <div class="punct-toolbar">
+          <select id="punct-block-select" class="corr-block-filter" title="블록 선택">
+            <option value="">블록 선택</option>
+          </select>
+          <div class="text-toolbar-spacer"></div>
+          <button id="punct-ai-btn" class="text-btn" title="AI 표점 생성">AI 표점</button>
+          <button id="punct-clear-btn" class="text-btn" title="표점 초기화">초기화</button>
+          <div class="text-toolbar-divider"></div>
+          <button id="punct-save-btn" class="text-btn text-btn-primary" title="저장">저장</button>
+          <span id="punct-save-status" class="text-save-status"></span>
+        </div>
+
+        <!-- 원문 + 표점 삽입 영역 -->
+        <div class="punct-char-area" id="punct-char-area">
+          <div class="placeholder">표점 모드: 문헌을 선택하면 원문이 표시됩니다</div>
+        </div>
+
+        <!-- 표점 부호 팔레트 -->
+        <div class="punct-palette" id="punct-palette">
+          <div class="punct-palette-label">표점 부호</div>
+          <div class="punct-palette-row" id="punct-palette-row">
+            <!-- JS에서 동적 생성 -->
+          </div>
+        </div>
+
+        <!-- 마크 목록 -->
+        <div class="punct-marks-section">
+          <div class="props-section-title">표점 목록 (<span id="punct-mark-count">0</span>건)</div>
+          <div id="punct-marks-list" class="punct-marks-list"></div>
+        </div>
+
+        <!-- 미리보기 -->
+        <div class="punct-preview-section">
+          <div class="props-section-title">미리보기</div>
+          <div id="punct-preview" class="punct-preview"></div>
+        </div>
+      </div>
+
+      <!-- 우측 패널: 현토 편집기 (Phase 11-1, 현토 모드에서만 표시) -->
+      <div class="editor-panel editor-right hyeonto-panel" id="hyeonto-panel" style="display:none;">
+        <div class="panel-label">현토 편집기 (L5)</div>
+
+        <!-- 도구 바 -->
+        <div class="hyeonto-toolbar">
+          <select id="hyeonto-block-select" class="corr-block-filter" title="블록 선택">
+            <option value="">블록 선택</option>
+          </select>
+          <div class="text-toolbar-spacer"></div>
+          <button id="hyeonto-clear-btn" class="text-btn" title="현토 초기화">초기화</button>
+          <div class="text-toolbar-divider"></div>
+          <button id="hyeonto-save-btn" class="text-btn text-btn-primary" title="저장">저장</button>
+          <span id="hyeonto-save-status" class="text-save-status"></span>
+        </div>
+
+        <!-- 원문 + 현토 삽입 영역 -->
+        <div class="hyeonto-char-area" id="hyeonto-char-area">
+          <div class="placeholder">현토 모드: 문헌을 선택하면 원문이 표시됩니다</div>
+        </div>
+
+        <!-- 현토 입력 팝업 (글자 클릭 시 표시) -->
+        <div class="hyeonto-input-popup" id="hyeonto-input-popup" style="display:none;">
+          <div class="hyeonto-popup-header">
+            <span id="hyeonto-popup-target">글자</span>에 현토 삽입
+            <button class="hyeonto-popup-close" id="hyeonto-popup-close">&times;</button>
+          </div>
+          <div class="hyeonto-popup-body">
+            <label class="hyeonto-popup-label">위치</label>
+            <select id="hyeonto-position-select" class="corr-block-filter">
+              <option value="after" selected>after (뒤)</option>
+              <option value="before">before (앞)</option>
+            </select>
+            <label class="hyeonto-popup-label">토</label>
+            <input id="hyeonto-text-input" type="text" class="bib-input" placeholder="예: 은, 하고, ᅵ" />
+            <button id="hyeonto-insert-btn" class="text-btn text-btn-primary" style="margin-top:8px;width:100%;">삽입</button>
+          </div>
+        </div>
+
+        <!-- 현토 목록 -->
+        <div class="hyeonto-ann-section">
+          <div class="props-section-title">현토 목록 (<span id="hyeonto-ann-count">0</span>건)</div>
+          <div id="hyeonto-ann-list" class="hyeonto-ann-list"></div>
+        </div>
+
+        <!-- 미리보기 -->
+        <div class="hyeonto-preview-section">
+          <div class="props-section-title">미리보기</div>
+          <div id="hyeonto-preview" class="hyeonto-preview"></div>
+        </div>
       </div>
 
       <!-- 우측 패널: 텍스트 에디터 (L4 교정 텍스트) -->
@@ -879,6 +976,8 @@
 <script src="/static/js/create-document.js"></script>
 <script src="/static/js/ocr-panel.js"></script>
 <script src="/static/js/alignment-view.js"></script>
+<script src="/static/js/punctuation-editor.js"></script>
+<script src="/static/js/hyeonto-editor.js"></script>
 <script src="/static/js/workspace.js"></script>
 </body>
 </html>

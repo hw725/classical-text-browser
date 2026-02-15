@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hyeonto_page.schema.json",
+  "title": "L5 현토 (懸吐)",
+  "description": "페이지 내 블록별 현토를 기록한다. 원문 문자열은 변형하지 않고, 글자 인덱스에 붙일 토만 기록. Phase 11-1.",
+  "type": "object",
+  "required": ["block_id", "annotations"],
+  "additionalProperties": false,
+  "properties": {
+    "block_id": {
+      "type": "string",
+      "description": "대상 블록 ID. L3 LayoutBlock 또는 L4 블록의 식별자. 예: p01_b01"
+    },
+    "annotations": {
+      "type": "array",
+      "description": "현토 목록. 원문 글자에 붙이는 한글 토.",
+      "items": { "$ref": "#/$defs/Annotation" }
+    }
+  },
+  "$defs": {
+    "Annotation": {
+      "type": "object",
+      "description": "개별 현토. target 범위에 position 위치로 text를 붙인다.",
+      "required": ["id", "target", "position", "text", "category"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "현토 고유 ID. 예: ht_001"
+        },
+        "target": {
+          "$ref": "#/$defs/Target",
+          "description": "토를 붙일 글자 범위."
+        },
+        "position": {
+          "type": "string",
+          "enum": ["after", "before", "over", "under"],
+          "description": "토 삽입 위치. after 기본. 향후 확장: before, over, under."
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "description": "현토 텍스트. 예: 은, 하고, ᅵ"
+        },
+        "category": {
+          "type": ["string", "null"],
+          "description": "현토 분류. 아직 미정이므로 null. 향후 확정 시 채움."
+        }
+      }
+    },
+    "Target": {
+      "type": "object",
+      "description": "글자 범위. 0-based inclusive 인덱스. start == end면 단일 글자.",
+      "required": ["start", "end"],
+      "additionalProperties": false,
+      "properties": {
+        "start": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "시작 글자 인덱스 (0-based, inclusive)."
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "끝 글자 인덱스 (0-based, inclusive)."
+        }
+      }
+    }
+  }
+}
