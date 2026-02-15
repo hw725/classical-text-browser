@@ -134,11 +134,60 @@
   --resize-handle: transparent;
   --resize-handle-hover: #007acc;
 
+  /* 반투명 오버레이 — 테마별 호버/선택 효과 */
+  --hover-bg: rgba(255, 255, 255, 0.05);
+  --hover-bg-medium: rgba(255, 255, 255, 0.1);
+  --hover-bg-strong: rgba(255, 255, 255, 0.15);
+  --selected-bg: rgba(0, 122, 204, 0.2);
+  --bg-canvas: #1a1a1a;
+  --overlay-bg: rgba(0, 0, 0, 0.5);
+  --dialog-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.5);
+
   /* 폰트 — AppFont: 한자=Spoqa Han Sans Neo, 나머지=Pretendard GOV Variable */
   --font-ui: 'AppFont', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "Cascadia Code", "Consolas", "Monaco", monospace;
   --font-size: 13px;
 }
+
+
+/* === 라이트그레이 테마 === */
+
+[data-theme="light"] {
+  /* 배경 */
+  --bg-primary: #FAFAFA;
+  --bg-secondary: #F5F5F5;
+  --bg-tertiary: #EEEEEE;
+  --bg-activity: #E8E8E8;
+  --bg-input: #FFFFFF;
+
+  /* 테두리 */
+  --border: #E0E0E0;
+  --border-active: #1976D2;
+
+  /* 텍스트 */
+  --text-primary: #333333;
+  --text-secondary: #666666;
+  --text-muted: #999999;
+  --text-active: #111111;
+
+  /* 강조 */
+  --accent: #1976D2;
+  --accent-hover: #1565C0;
+
+  --resize-handle-hover: #1976D2;
+
+  /* 반투명 오버레이 */
+  --hover-bg: rgba(0, 0, 0, 0.04);
+  --hover-bg-medium: rgba(0, 0, 0, 0.07);
+  --hover-bg-strong: rgba(0, 0, 0, 0.10);
+  --selected-bg: rgba(25, 118, 210, 0.12);
+  --bg-canvas: #E0E0E0;
+  --overlay-bg: rgba(0, 0, 0, 0.3);
+  --dialog-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
 
 html, body {
   height: 100%;
@@ -203,6 +252,25 @@ html, body {
   flex: 1;
 }
 
+/* 테마 전환 버튼 (액티비티 바 하단) */
+.theme-toggle-btn {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 18px;
+  transition: color 0.15s;
+  margin-bottom: 4px;
+}
+.theme-toggle-btn:hover {
+  color: var(--text-active);
+}
+
 
 /* === 사이드바 === */
 
@@ -265,11 +333,11 @@ html, body {
 }
 
 .tree-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--hover-bg);
 }
 
 .tree-item.active {
-  background: rgba(0, 122, 204, 0.2);
+  background: var(--selected-bg);
 }
 
 .tree-item .doc-id {
@@ -480,7 +548,7 @@ html, body {
 }
 
 .panel-toggle:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--hover-bg-medium);
   color: var(--text-primary);
 }
 
@@ -551,12 +619,12 @@ body.resizing-row {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--hover-bg-strong);
   border-radius: 5px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: var(--hover-bg-strong);
 }
 
 
@@ -580,7 +648,7 @@ body.resizing-row {
 }
 
 .tree-node-header:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--hover-bg);
 }
 
 .tree-toggle {
@@ -621,11 +689,11 @@ body.resizing-row {
 }
 
 .tree-page:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--hover-bg);
 }
 
 .tree-page.active {
-  background: rgba(0, 122, 204, 0.2);
+  background: var(--selected-bg);
   color: var(--text-active);
 }
 
@@ -677,7 +745,7 @@ body.resizing-row {
 }
 
 .pdf-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--hover-bg-medium);
 }
 
 .pdf-select {
@@ -736,11 +804,11 @@ body.resizing-row {
   display: flex;
   justify-content: center;
   padding: 8px;
-  background: #1a1a1a;
+  background: var(--bg-canvas);
 }
 
 #pdf-canvas {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-card);
 }
 
 
@@ -798,7 +866,7 @@ body.resizing-row {
 }
 
 .text-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--hover-bg-medium);
 }
 
 .text-btn-primary {
@@ -875,7 +943,7 @@ body.resizing-row {
 
 .mode-tab:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--hover-bg);
 }
 
 .mode-tab.active {
@@ -1010,11 +1078,11 @@ body.resizing-row {
 }
 
 .block-list-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--hover-bg);
 }
 
 .block-list-item.selected {
-  background: rgba(0, 122, 204, 0.2);
+  background: var(--selected-bg);
 }
 
 .block-list-color {
@@ -1130,7 +1198,7 @@ body.resizing-row {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--overlay-bg);
   z-index: 1000;
   display: flex;
   align-items: center;
@@ -1146,7 +1214,7 @@ body.resizing-row {
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--dialog-shadow);
 }
 
 .bib-dialog-header {
@@ -1459,7 +1527,7 @@ body.resizing-row {
 }
 
 .corr-char:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--hover-bg-strong);
 }
 
 .corr-char.selected {
@@ -1593,7 +1661,7 @@ body.resizing-row {
 }
 
 .corr-list-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--hover-bg);
 }
 
 .corr-list-type {
@@ -1637,7 +1705,7 @@ body.resizing-row {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--overlay-bg);
   z-index: 1000;
   display: flex;
   align-items: center;
@@ -1653,7 +1721,7 @@ body.resizing-row {
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--dialog-shadow);
 }
 
 .corr-dialog-body {
@@ -1704,7 +1772,7 @@ body.resizing-row {
 }
 
 .git-commit-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--hover-bg);
 }
 
 .git-commit-hash {
@@ -1956,7 +2024,7 @@ body.resizing-row {
 }
 
 .interp-list-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--hover-bg);
 }
 
 .interp-list-item.active {
@@ -2083,7 +2151,7 @@ body.resizing-row {
 
 .entity-filter-btn.active {
   color: var(--text-active);
-  background: rgba(0, 122, 204, 0.2);
+  background: var(--selected-bg);
   border-color: var(--accent);
 }
 
@@ -2124,7 +2192,7 @@ body.resizing-row {
 }
 
 .entity-list-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--hover-bg);
 }
 
 .entity-list-item.selected {

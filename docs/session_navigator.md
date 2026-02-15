@@ -12,8 +12,8 @@
 | 1 | 10-2 | LLM 4단 폴백 아키텍처 | ✅ 완료 | 🔴 높 | `phase10_2_llm_session.md` ✅ 작성 완료 | Anthropic API 키 |
 | 2 | 10-1 | OCR 엔진 연동 | ✅ 완료 | 🟡 중 | `phase10_1_ocr_session.md` ✅ 작성 완료 | PaddleOCR 설치 |
 | 3 | 10-3 | 정렬 엔진 | ✅ 완료 | 🟢 낮 | `phase10_3_alignment_session.md` ✅ 작성 완료 | 10-1 완료 |
-| 4 | 10-4 | KORCIS 파서 고도화 | ⏭️ 다음 | 🟢 낮 | `phase10_4_korcis_session.md` ✅ 작성 완료 (선택적) | 파서 수선 결과 확인 |
-| 5 | 11-1 | 끊어읽기·현토 편집기 (L5) | ⬜ 대기 | 🔴 높 | `phase11_1_hyeonto_session.md` | **혜원 L5 모델 확인** |
+| 4 | 10-4 | KORCIS 파서 고도화 | ✅ 완료 | 🟢 낮 | `phase10_4_korcis_session.md` ✅ 작성 완료 (선택적) | 파서 수선 결과 확인 |
+| 5 | 11-1 | 끊어읽기·현토 편집기 (L5) | ⏭️ 다음 | 🔴 높 | `phase11_1_hyeonto_session.md` | **혜원 L5 모델 확인** |
 | 6 | 11-2 | 번역 워크플로우 + LLM (L6) | ⬜ 대기 | 🟡 중 | `phase11_2_translation_session.md` | 10-2 LLM + 11-1 |
 | 7 | 11-3 | 주석/사전 연동 (L7) | ⬜ 대기 | 🟡 중 | `phase11_3_annotation_session.md` | 10-2 LLM |
 | 8 | 12-1 | Git 그래프 완전판 | ⬜ 대기 | 🟡 중 | (Phase 9 결과 확인 후) | Phase 9 |
@@ -45,8 +45,9 @@
 | 10-1 | D-009 | OCR 엔진 플러그인 아키텍처 |
 | 10-2 | D-010 | LLM 호출 아키텍처: 4단 폴백 + Draft→Review→Commit |
 | 10-2 | D-011 | LLM 비용 추적 방식 (llm_usage_log.jsonl) |
-| 10-3 | — | 정렬 알고리즘 (difflib + 이체자 보정) |
-| 11-1 | D-012 | L5 현토 데이터 모델 (**혜원 확인 후 확정**) |
+| 10-3 | D-012 | 정렬 알고리즘 (difflib + 이체자 보정) |
+| 10-4 | D-013 | KORCIS 파서 고도화 (008 해석 + 판식정보 + OpenAPI + 라이트 테마) |
+| 11-1 | D-014 | L5 현토 데이터 모델 (**혜원 확인 후 확정**) |
 | 11-2 | D-013 | L6 번역 데이터 모델 |
 | 11-3 | D-014 | L7 주석 데이터 모델 + 용어집 |
 

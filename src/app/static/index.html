@@ -30,6 +30,18 @@
       </svg>
     </button>
     <div class="activity-spacer"></div>
+    <button id="theme-toggle" class="theme-toggle-btn" title="라이트 모드로 전환">
+      <!-- 해/달 아이콘: JS에서 동적 전환 -->
+      <svg id="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
+        <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+        <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+      </svg>
+      <svg id="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+      </svg>
+    </button>
     <button class="activity-btn" data-panel="settings" title="설정">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="3"/>
@@ -801,6 +813,56 @@
   </footer>
 
 </div>
+
+<!-- 테마 전환 — 깜빡임 방지를 위해 최상단에서 즉시 실행 -->
+<script>
+(function() {
+  /** ThemeSwitcher: 다크/라이트 테마 전환.
+   *  localStorage에 사용자 선택을 저장하고, 페이지 로드 시 즉시 적용하여
+   *  다크→라이트 깜빡임(FOUC)을 방지한다.
+   */
+  var saved = localStorage.getItem('app-theme') || 'dark';
+  if (saved === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+
+  window._themeSwitcher = {
+    current: saved,
+    toggle: function() {
+      var next = this.current === 'dark' ? 'light' : 'dark';
+      this.apply(next);
+    },
+    apply: function(theme) {
+      if (theme === 'light') {
+        document.documentElement.setAttribute('data-theme', 'light');
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+      }
+      localStorage.setItem('app-theme', theme);
+      this.current = theme;
+
+      // 아이콘 전환: 다크모드에서는 해(전환 대상=라이트) 표시
+      var sun = document.getElementById('theme-icon-sun');
+      var moon = document.getElementById('theme-icon-moon');
+      var btn = document.getElementById('theme-toggle');
+      if (sun && moon) {
+        sun.style.display = theme === 'dark' ? 'none' : 'block';
+        moon.style.display = theme === 'dark' ? 'block' : 'none';
+      }
+      if (btn) {
+        btn.title = theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환';
+      }
+    }
+  };
+
+  // DOM 준비 후 아이콘 초기 상태 설정
+  document.addEventListener('DOMContentLoaded', function() {
+    window._themeSwitcher.apply(window._themeSwitcher.current);
+    var btn = document.getElementById('theme-toggle');
+    if (btn) btn.addEventListener('click', function() { window._themeSwitcher.toggle(); });
+  });
+})();
+</script>
 
 <!-- PDF.js CDN (3.x UMD — 빌드 도구 없는 프로젝트에 적합) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
