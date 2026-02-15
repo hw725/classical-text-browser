@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "annotation_page.schema.json",
+  "title": "L7 주석 (Annotation)",
+  "description": "페이지 내 블록별 주석을 기록한다. 인물·지명·용어·전거·메모 등. Phase 11-3.",
+  "type": "object",
+  "required": ["part_id", "page_number", "blocks"],
+  "additionalProperties": false,
+  "properties": {
+    "part_id": {
+      "type": "string",
+      "description": "권 식별자. 예: vol1, main"
+    },
+    "page_number": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "페이지 번호 (1부터 시작)."
+    },
+    "blocks": {
+      "type": "array",
+      "description": "블록별 주석 묶음.",
+      "items": { "$ref": "#/$defs/AnnotatedBlock" }
+    }
+  },
+  "$defs": {
+    "AnnotatedBlock": {
+      "type": "object",
+      "description": "하나의 블록에 속한 주석들.",
+      "required": ["block_id", "annotations"],
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "type": "string",
+          "description": "대상 블록 ID. 예: p01_b01"
+        },
+        "annotations": {
+          "type": "array",
+          "description": "이 블록의 주석 목록.",
+          "items": { "$ref": "#/$defs/Annotation" }
+        }
+      }
+    },
+    "Annotation": {
+      "type": "object",
+      "description": "개별 주석. 원문 범위에 대한 인물/지명/용어/전거/메모 등.",
+      "required": ["id", "target", "type", "content", "annotator", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "주석 고유 ID. 예: ann_001"
+        },
+        "target": {
+          "$ref": "#/$defs/Target",
+          "description": "원문 범위. 블록 내 글자 인덱스 (0-based, inclusive)."
+        },
+        "type": {
+          "type": "string",
+          "description": "주석 유형 ID. annotation_types.json에 정의. 예: person, place, term"
+        },
+        "content": {
+          "$ref": "#/$defs/AnnotationContent",
+          "description": "주석 내용."
+        },
+        "annotator": {
+          "$ref": "#/$defs/Annotator",
+          "description": "주석 작성자 정보."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "reviewed", "accepted"],
+          "description": "주석 상태. draft → reviewed → accepted."
+        },
+        "reviewed_by": {
+          "type": ["string", "null"],
+          "description": "검토자. null이면 미검토."
+        },
+        "reviewed_at": {
+          "type": ["string", "null"],
+          "description": "검토 일시. ISO 8601."
+        }
+      }
+    },
+    "Target": {
+      "type": "object",
+      "description": "원문 범위. 블록 내 글자 인덱스 (0-based, inclusive).",
+      "required": ["start", "end"],
+      "additionalProperties": false,
+      "properties": {
+        "start": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "시작 글자 인덱스."
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "끝 글자 인덱스."
+        }
+      }
+    },
+    "AnnotationContent": {
+      "type": "object",
+      "description": "주석 본문. 표제어 + 설명 + 참고문헌.",
+      "required": ["label", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string",
+          "description": "표제어. 예: 왕융(王戎)"
+        },
+        "description": {
+          "type": "string",
+          "description": "풀이/설명."
+        },
+        "references": {
+          "type": "array",
+          "description": "출전/참고문헌.",
+          "items": { "type": "string" },
+          "default": []
+        }
+      }
+    },
+    "Annotator": {
+      "type": "object",
+      "description": "주석 작성자. LLM 또는 사람.",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["llm", "human"],
+          "description": "작성자 유형."
+        },
+        "model": {
+          "type": ["string", "null"],
+          "description": "LLM 모델명. human이면 null."
+        },
+        "draft_id": {
+          "type": ["string", "null"],
+          "description": "LLM Draft ID. human이면 null."
+        }
+      }
+    }
+  }
+}

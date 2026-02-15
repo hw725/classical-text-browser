@@ -67,6 +67,26 @@ API 엔드포인트:
     DELETE /api/interpretations/{interp_id}/pages/{page}/hyeonto/{block_id}/annotations/{id} → 현토 삭제
     GET  /api/interpretations/{interp_id}/pages/{page}/hyeonto/{block_id}/preview → 현토 미리보기
 
+    --- Phase 11-2: L6 번역 API ---
+    GET  /api/interpretations/{interp_id}/pages/{page}/translation → 번역 조회
+    GET  /api/interpretations/{interp_id}/pages/{page}/translation/status → 상태 요약
+    POST /api/interpretations/{interp_id}/pages/{page}/translation → 수동 번역 입력
+    PUT  /api/interpretations/{interp_id}/pages/{page}/translation/{id} → 번역 수정
+    POST /api/interpretations/{interp_id}/pages/{page}/translation/{id}/commit → Draft 확정
+    DELETE /api/interpretations/{interp_id}/pages/{page}/translation/{id} → 번역 삭제
+
+    --- Phase 11-3: L7 주석 API ---
+    GET  /api/interpretations/{interp_id}/pages/{page}/annotations → 주석 조회 (?type= 필터)
+    GET  /api/interpretations/{interp_id}/pages/{page}/annotations/summary → 주석 요약
+    POST /api/interpretations/{interp_id}/pages/{page}/annotations/{block_id} → 수동 주석 추가
+    PUT  /api/interpretations/{interp_id}/pages/{page}/annotations/{block_id}/{ann_id} → 주석 수정
+    DELETE /api/interpretations/{interp_id}/pages/{page}/annotations/{block_id}/{ann_id} → 주석 삭제
+    POST /api/interpretations/{interp_id}/pages/{page}/annotations/{block_id}/{ann_id}/commit → Draft 확정
+    POST /api/interpretations/{interp_id}/pages/{page}/annotations/commit-all → 일괄 확정
+    GET  /api/annotation-types → 주석 유형 목록
+    POST /api/annotation-types → 사용자 정의 유형 추가
+    DELETE /api/annotation-types/{type_id} → 사용자 정의 유형 삭제
+
     --- Phase 8: 코어 스키마 엔티티 API ---
     POST /api/interpretations/{interp_id}/entities → 엔티티 생성
     GET  /api/interpretations/{interp_id}/entities/{entity_type} → 유형별 목록
@@ -2682,4 +2702,293 @@ async def api_delete_translation(interp_id: str, page_num: int, translation_id: 
         return JSONResponse({"error": f"번역 '{translation_id}'를 찾을 수 없습니다."}, status_code=404)
 
     save_translations(interp_path, part_id, page_num, data)
+    return JSONResponse(status_code=204, content=None)
+
+
+# ───────────────────────────────────────────────────
+# Phase 11-3: L7 주석(Annotation) API
+# ───────────────────────────────────────────────────
+
+from src.core.annotation import (
+    add_annotation as add_ann,
+    get_annotation_summary,
+    get_annotations_by_type,
+    load_annotations,
+    remove_annotation as remove_ann,
+    save_annotations,
+    update_annotation as update_ann,
+)
+from src.core.annotation_llm import commit_annotation_draft, commit_all_drafts
+from src.core.annotation_types import (
+    add_custom_type,
+    load_annotation_types,
+    remove_custom_type,
+)
+
+
+class AnnotationAddRequest(BaseModel):
+    """수동 주석 추가 요청."""
+    target: dict
+    type: str
+    content: dict
+
+
+class AnnotationUpdateRequest(BaseModel):
+    """주석 수정 요청."""
+    target: dict | None = None
+    type: str | None = None
+    content: dict | None = None
+    status: str | None = None
+
+
+class AnnotationCommitRequest(BaseModel):
+    """주석 Draft 확정 요청."""
+    modifications: dict | None = None
+
+
+class CustomTypeRequest(BaseModel):
+    """사용자 정의 주석 유형 추가 요청."""
+    id: str
+    label: str
+    color: str
+    icon: str = "🏷️"
+
+
+@app.get("/api/interpretations/{interp_id}/pages/{page_num}/annotations")
+async def api_get_annotations(interp_id: str, page_num: int, type: str | None = None):
+    """주석 조회.
+
+    목적: 특정 페이지의 L7 주석 데이터를 반환한다.
+    쿼리 파라미터: type — 특정 유형만 필터링 (선택).
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse({"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."}, status_code=404)
+
+    part_id = "main"
+    data = load_annotations(interp_path, part_id, page_num)
+
+    if type:
+        filtered = get_annotations_by_type(data, type)
+        return {"part_id": part_id, "page_number": page_num, "filtered_type": type, "results": filtered}
+
+    return data
+
+
+@app.get("/api/interpretations/{interp_id}/pages/{page_num}/annotations/summary")
+async def api_annotation_summary(interp_id: str, page_num: int):
+    """주석 상태 요약.
+
+    목적: 페이지의 주석 현황을 한눈에 파악.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    part_id = "main"
+    data = load_annotations(interp_path, part_id, page_num)
+    return get_annotation_summary(data)
+
+
+@app.post("/api/interpretations/{interp_id}/pages/{page_num}/annotations/{block_id}")
+async def api_add_annotation(
+    interp_id: str, page_num: int, block_id: str, body: AnnotationAddRequest
+):
+    """수동 주석 추가.
+
+    목적: 사용자가 직접 주석을 입력한다. annotator.type = "human", status = "accepted".
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    part_id = "main"
+
+    data = load_annotations(interp_path, part_id, page_num)
+
+    annotation = {
+        "target": body.target,
+        "type": body.type,
+        "content": body.content,
+        "annotator": {"type": "human", "model": None, "draft_id": None},
+        "status": "accepted",
+        "reviewed_by": None,
+        "reviewed_at": None,
+    }
+    result = add_ann(data, block_id, annotation)
+
+    try:
+        save_annotations(interp_path, part_id, page_num, data)
+        try:
+            git_commit_interpretation(interp_path, f"feat: L7 주석 추가 — page {page_num}")
+        except Exception:
+            pass
+        return JSONResponse(result, status_code=201)
+    except Exception as e:
+        return JSONResponse({"error": f"주석 저장 실패: {e}"}, status_code=400)
+
+
+@app.put("/api/interpretations/{interp_id}/pages/{page_num}/annotations/{block_id}/{ann_id}")
+async def api_update_annotation(
+    interp_id: str, page_num: int, block_id: str, ann_id: str,
+    body: AnnotationUpdateRequest,
+):
+    """주석 수정."""
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    part_id = "main"
+
+    data = load_annotations(interp_path, part_id, page_num)
+    updates = {}
+    if body.target is not None:
+        updates["target"] = body.target
+    if body.type is not None:
+        updates["type"] = body.type
+    if body.content is not None:
+        updates["content"] = body.content
+    if body.status is not None:
+        updates["status"] = body.status
+
+    result = update_ann(data, block_id, ann_id, updates)
+    if result is None:
+        return JSONResponse({"error": f"주석 '{ann_id}'를 찾을 수 없습니다."}, status_code=404)
+
+    try:
+        save_annotations(interp_path, part_id, page_num, data)
+        try:
+            git_commit_interpretation(interp_path, f"feat: L7 주석 수정 — page {page_num}")
+        except Exception:
+            pass
+        return result
+    except Exception as e:
+        return JSONResponse({"error": f"주석 저장 실패: {e}"}, status_code=400)
+
+
+@app.delete("/api/interpretations/{interp_id}/pages/{page_num}/annotations/{block_id}/{ann_id}")
+async def api_delete_annotation(
+    interp_id: str, page_num: int, block_id: str, ann_id: str
+):
+    """주석 삭제."""
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    part_id = "main"
+
+    data = load_annotations(interp_path, part_id, page_num)
+    removed = remove_ann(data, block_id, ann_id)
+
+    if not removed:
+        return JSONResponse({"error": f"주석 '{ann_id}'를 찾을 수 없습니다."}, status_code=404)
+
+    save_annotations(interp_path, part_id, page_num, data)
+    return JSONResponse(status_code=204, content=None)
+
+
+@app.post("/api/interpretations/{interp_id}/pages/{page_num}/annotations/{block_id}/{ann_id}/commit")
+async def api_commit_annotation(
+    interp_id: str, page_num: int, block_id: str, ann_id: str,
+    body: AnnotationCommitRequest,
+):
+    """주석 Draft 개별 확정.
+
+    목적: 연구자가 Draft를 검토 후 확정. status → "accepted".
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    part_id = "main"
+
+    data = load_annotations(interp_path, part_id, page_num)
+    result = commit_annotation_draft(data, block_id, ann_id, body.modifications)
+
+    if result is None:
+        return JSONResponse({"error": f"주석 '{ann_id}'를 찾을 수 없습니다."}, status_code=404)
+
+    try:
+        save_annotations(interp_path, part_id, page_num, data)
+        try:
+            git_commit_interpretation(interp_path, f"feat: L7 주석 확정 — page {page_num}")
+        except Exception:
+            pass
+        return result
+    except Exception as e:
+        return JSONResponse({"error": f"주석 저장 실패: {e}"}, status_code=400)
+
+
+@app.post("/api/interpretations/{interp_id}/pages/{page_num}/annotations/commit-all")
+async def api_commit_all_annotations(interp_id: str, page_num: int):
+    """주석 Draft 일괄 확정.
+
+    목적: 페이지의 모든 draft 주석을 한번에 accepted로 변경.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    part_id = "main"
+
+    data = load_annotations(interp_path, part_id, page_num)
+    count = commit_all_drafts(data)
+
+    if count == 0:
+        return {"message": "확정할 draft 주석이 없습니다.", "committed": 0}
+
+    try:
+        save_annotations(interp_path, part_id, page_num, data)
+        try:
+            git_commit_interpretation(interp_path, f"feat: L7 주석 일괄 확정 — page {page_num}")
+        except Exception:
+            pass
+        return {"message": f"{count}개 주석을 확정했습니다.", "committed": count}
+    except Exception as e:
+        return JSONResponse({"error": f"주석 저장 실패: {e}"}, status_code=400)
+
+
+# --- 주석 유형 관리 API ---
+
+@app.get("/api/annotation-types")
+async def api_get_annotation_types():
+    """주석 유형 목록.
+
+    목적: 기본 프리셋 + 사용자 정의 유형을 반환한다.
+    """
+    work_path = _library_path if _library_path else None
+    data = load_annotation_types(work_path)
+    return data
+
+
+@app.post("/api/annotation-types")
+async def api_add_annotation_type(body: CustomTypeRequest):
+    """사용자 정의 주석 유형 추가."""
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    try:
+        type_def = {"id": body.id, "label": body.label, "color": body.color, "icon": body.icon}
+        result = add_custom_type(_library_path, type_def)
+        return JSONResponse(result, status_code=201)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@app.delete("/api/annotation-types/{type_id}")
+async def api_delete_annotation_type(type_id: str):
+    """사용자 정의 주석 유형 삭제.
+
+    주의: 기본 프리셋(person, place, term, allusion, note)은 삭제할 수 없다.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    removed = remove_custom_type(_library_path, type_id)
+    if not removed:
+        return JSONResponse({"error": f"유형 '{type_id}'를 찾을 수 없거나 기본 프리셋입니다."}, status_code=404)
+
     return JSONResponse(status_code=204, content=None)

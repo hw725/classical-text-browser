@@ -15,8 +15,8 @@
 | 4 | 10-4 | KORCIS 파서 고도화 | ✅ 완료 | 🟢 낮 | `phase10_4_korcis_session.md` ✅ 작성 완료 (선택적) | 파서 수선 결과 확인 |
 | 5 | 11-1 | 끊어읽기·현토 편집기 (L5) | ✅ 완료 | 🔴 높 | `phase11_1_hyeonto_session.md` ✅ 작성 완료 | D-014 |
 | 6 | 11-2 | 번역 워크플로우 + LLM (L6) | ✅ 완료 | 🟡 중 | `phase11_2_translation_session.md` ✅ 작성 완료 | D-015 |
-| 7 | 11-3 | 주석/사전 연동 (L7) | ⏭️ 다음 | 🟡 중 | `phase11_3_annotation_session.md` | 10-2 LLM |
-| 8 | 12-1 | Git 그래프 완전판 | ⬜ 대기 | 🟡 중 | (Phase 9 결과 확인 후) | Phase 9 |
+| 7 | 11-3 | 주석/사전 연동 (L7) | ✅ 완료 | 🟡 중 | `phase11_3_annotation_session.md` ✅ 작성 완료 | D-016 |
+| 8 | 12-1 | Git 그래프 완전판 | ⏭️ 다음 | 🟡 중 | (Phase 9 결과 확인 후) | Phase 9 |
 | 9 | 12-2 | Tauri 데스크톱 래핑 | ⬜ 대기 | 🔴 높 | (Phase 11 완료 후) | Phase 11 전체 |
 | 10 | 12-3 | 교환 형식 import/export | ⬜ 대기 | 🟢 낮 | (exchange.schema.json 검토 후) | — |
 
