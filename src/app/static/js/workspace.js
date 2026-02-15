@@ -36,6 +36,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (typeof initCreateDocument === "function") initCreateDocument();
   // Phase 10-1: OCR 패널 초기화
   if (typeof initOcrPanel === "function") initOcrPanel();
+  // Phase 10-3: 대조 뷰 초기화
+  if (typeof initAlignmentView === "function") initAlignmentView();
   // Phase 7+8: 하단 패널 탭 전환 (Git 이력 ↔ 의존 추적 ↔ 엔티티)
   initBottomPanelTabs();
 });

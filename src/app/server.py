@@ -50,6 +50,11 @@ API 엔드포인트:
     GET  /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr → OCR 결과 조회
     POST /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr/{block_id} → 단일 블록 재실행
 
+    --- Phase 10-3: 정렬 엔진 API ---
+    POST /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/alignment → 대조 실행
+    GET  /api/alignment/variant-dict → 이체자 사전 조회
+    POST /api/alignment/variant-dict → 이체자 쌍 추가
+
     --- Phase 8: 코어 스키마 엔티티 API ---
     POST /api/interpretations/{interp_id}/entities → 엔티티 생성
     GET  /api/interpretations/{interp_id}/entities/{entity_type} → 유형별 목록
@@ -2027,3 +2032,152 @@ async def api_rerun_ocr_block(
             {"error": f"OCR 블록 재실행 실패: {e}"},
             status_code=500,
         )
+
+
+# ===========================================================================
+#  Phase 10-3: 정렬 엔진 — OCR ↔ 텍스트 대조 API
+# ===========================================================================
+
+# 이체자 사전 인스턴스 (서버 시작 시 lazy init)
+_variant_dict = None
+
+
+def _get_variant_dict():
+    """이체자 사전을 lazy-init한다.
+
+    왜 lazy-init인가:
+        _library_path가 설정된 후에야 서고 내부 사전 경로를 알 수 있다.
+        기본 경로(resources/variant_chars.json)를 먼저 시도하고,
+        없으면 VariantCharDict가 빈 사전으로 동작한다.
+    """
+    global _variant_dict
+    if _variant_dict is None:
+        from core.alignment import VariantCharDict
+
+        _variant_dict = VariantCharDict()  # 기본 경로 자동 탐색
+
+    return _variant_dict
+
+
+@app.post("/api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/alignment")
+async def api_run_alignment(
+    doc_id: str,
+    part_id: str,
+    page_number: int,
+):
+    """페이지의 OCR 결과(L2)와 확정 텍스트(L4)를 글자 단위로 대조한다.
+
+    목적: 교정 모드에서 OCR 인식 결과와 사람이 확정한 텍스트의 차이를 시각적으로 보여준다.
+    입력:
+        doc_id — 문헌 ID.
+        part_id — 권 식별자.
+        page_number — 페이지 번호 (1-indexed).
+    전제 조건:
+        L2(OCR 결과)와 L4(확정 텍스트)가 모두 있어야 한다.
+    출력: {
+        "blocks": [BlockAlignment.to_dict(), ...],  # 블록별 대조 결과
+        "page_stats": AlignmentStats.to_dict()       # 페이지 전체 통계 (* 블록)
+    }
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = _library_path / "documents" / doc_id
+    if not doc_path.exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
+            status_code=404,
+        )
+
+    from core.alignment import align_page
+
+    variant_dict = _get_variant_dict()
+
+    try:
+        block_results = align_page(
+            library_root=str(_library_path),
+            doc_id=doc_id,
+            part_id=part_id,
+            page_number=page_number,
+            variant_dict=variant_dict,
+        )
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"대조 실행 실패: {e}"},
+            status_code=500,
+        )
+
+    # 에러만 있는 경우
+    if len(block_results) == 1 and block_results[0].error:
+        return JSONResponse(
+            {"error": block_results[0].error},
+            status_code=404,
+        )
+
+    # 페이지 전체 통계 (* 블록)
+    page_stats = None
+    blocks_output = []
+    for br in block_results:
+        blocks_output.append(br.to_dict())
+        if br.layout_block_id == "*" and br.stats:
+            page_stats = br.stats.to_dict()
+
+    return {
+        "blocks": blocks_output,
+        "page_stats": page_stats,
+    }
+
+
+@app.get("/api/alignment/variant-dict")
+async def api_get_variant_dict():
+    """이체자 사전 내용을 반환한다.
+
+    목적: GUI의 이체자 사전 관리 패널에서 현재 등록된 이체자 목록을 표시한다.
+    출력: { "variants": { "裴": ["裵"], "裵": ["裴"], ... }, "size": 2 }
+    """
+    variant_dict = _get_variant_dict()
+    return {
+        "variants": variant_dict.to_dict(),
+        "size": variant_dict.size,
+    }
+
+
+class VariantPairRequest(BaseModel):
+    """이체자 쌍 추가 요청."""
+    char_a: str
+    char_b: str
+
+
+@app.post("/api/alignment/variant-dict")
+async def api_add_variant_pair(body: VariantPairRequest):
+    """이체자 쌍을 사전에 추가한다.
+
+    목적: 대조 결과에서 사용자가 발견한 이체자를 바로 등록할 수 있게 한다.
+    입력: { "char_a": "裴", "char_b": "裵" }
+    처리:
+        1. 양방향 등록 (A→B, B→A)
+        2. resources/variant_chars.json에 저장
+    출력: { "status": "ok", "size": <새 사전 크기> }
+    """
+    variant_dict = _get_variant_dict()
+
+    if not body.char_a or not body.char_b:
+        return JSONResponse({"error": "두 글자 모두 입력해야 합니다."}, status_code=400)
+    if body.char_a == body.char_b:
+        return JSONResponse({"error": "같은 글자는 이체자로 등록할 수 없습니다."}, status_code=400)
+
+    variant_dict.add_pair(body.char_a, body.char_b)
+
+    # 사전 파일에 저장
+    save_path = variant_dict._find_default_path()
+    if save_path:
+        variant_dict.save(save_path)
+    else:
+        # 기본 경로에 새로 생성
+        import os
+        resources_dir = os.path.join(os.path.dirname(__file__), "..", "..", "resources")
+        os.makedirs(resources_dir, exist_ok=True)
+        save_path = os.path.join(resources_dir, "variant_chars.json")
+        variant_dict.save(save_path)
+
+    return {"status": "ok", "size": variant_dict.size}
