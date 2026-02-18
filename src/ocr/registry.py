@@ -88,18 +88,37 @@ class OcrEngineRegistry:
 
         각 엔진 모듈을 import 시도하고, 성공하면 등록.
         import 실패 = 해당 엔진의 의존성이 설치되지 않음 → 건너뜀.
+
+        새 엔진을 추가하려면:
+          1. BaseOcrEngine을 상속하는 클래스를 만든다.
+          2. 여기에 try/except 블록을 추가한다.
+          paddleocr_engine.py를 참고하라.
         """
-        # 1순위: PaddleOCR (오프라인)
+        # PaddleOCR (별도 설치 필요: uv add paddlepaddle paddleocr)
         try:
             from .paddleocr_engine import PaddleOcrEngine
             engine = PaddleOcrEngine()
-            self.register(engine)
+            if engine.is_available():
+                self.register(engine)
+            else:
+                logger.info("PaddleOCR 미설치 — 건너뜀")
         except ImportError:
             logger.info("PaddleOCR 미설치 — 건너뜀")
         except Exception as e:
             logger.warning(f"PaddleOCR 초기화 실패: {e}")
 
-        # 향후: Google Vision, Claude Vision 등 추가
+        # 향후 추가 엔진 예시:
+        # try:
+        #     from .tesseract_engine import TesseractEngine
+        #     engine = TesseractEngine()
+        #     if engine.is_available():
+        #         self.register(engine)
+        # except ImportError:
+        #     pass
 
         if not self._engines:
-            logger.warning("사용 가능한 OCR 엔진이 없습니다!")
+            logger.info(
+                "사용 가능한 OCR 엔진이 없습니다. "
+                "OCR을 사용하려면 엔진을 설치하세요. "
+                "예: uv add paddlepaddle paddleocr"
+            )

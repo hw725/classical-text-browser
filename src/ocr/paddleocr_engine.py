@@ -1,13 +1,44 @@
-"""PaddleOCR 엔진 래퍼.
+"""PaddleOCR 엔진 래퍼 (예시 구현).
 
-오프라인 퍼스트 원칙에 따른 기본(1순위) OCR 엔진.
-PP-OCRv4 모델 사용 — 중국어 고전 텍스트에 적합.
+이 파일은 BaseOcrEngine을 구현하는 예시다.
+PaddleOCR 외에도 Tesseract, Google Vision, Claude Vision 등
+어떤 OCR 엔진이든 같은 패턴으로 추가할 수 있다.
 
-특징:
-  - 로컬 실행, 무료
-  - 세로쓰기 지원 (PP-OCR 자체 방향 감지)
-  - 줄 단위 + 글자 단위 bbox 제공 (글자 단위는 줄 bbox 균등 분할)
-  - 신뢰도(confidence) 제공
+설치 방법:
+  uv add paddlepaddle paddleocr
+
+주의:
+  - PaddlePaddle 3.x는 Windows에서 OneDNN 관련 호환성 문제가 있을 수 있다.
+  - Python 3.12 이하에서는 PaddlePaddle 2.6.x를 사용하면 안정적이다.
+  - Python 3.13+에서는 PaddlePaddle 3.x만 지원되는데,
+    Windows에서 fused_conv2d OneDNN 에러가 발생할 수 있다.
+  - Linux/macOS에서는 문제없이 동작한다.
+
+커스텀 엔진을 만들려면:
+  1. BaseOcrEngine을 상속하는 클래스를 만든다.
+  2. engine_id, display_name, requires_network 클래스 속성을 정의한다.
+  3. is_available()과 recognize()를 구현한다.
+  4. registry.py의 auto_register()에 등록 코드를 추가한다.
+
+예시: Tesseract OCR 엔진 추가
+  class TesseractEngine(BaseOcrEngine):
+      engine_id = "tesseract"
+      display_name = "Tesseract OCR"
+      requires_network = False
+
+      def is_available(self) -> bool:
+          try:
+              import pytesseract
+              return True
+          except ImportError:
+              return False
+
+      def recognize(self, image_bytes, ...) -> OcrBlockResult:
+          import pytesseract
+          from PIL import Image
+          img = Image.open(io.BytesIO(image_bytes))
+          data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
+          # ... data를 OcrBlockResult로 변환 ...
 """
 
 from __future__ import annotations
@@ -45,8 +76,7 @@ class PaddleOcrEngine(BaseOcrEngine):
           lang: PaddleOCR 언어 코드 ("ch" = 중국어/한자)
           use_gpu: GPU 사용 여부
 
-        주의: 초기화가 느릴 수 있다 (모델 로드).
-             첫 호출 시 모델 자동 다운로드 (~100MB).
+        주의: 첫 호출 시 모델 자동 다운로드 (~100MB).
         """
         self._lang = lang
         self._use_gpu = use_gpu
@@ -63,7 +93,6 @@ class PaddleOcrEngine(BaseOcrEngine):
             self._available = True
         except ImportError:
             self._available = False
-            logger.info("PaddleOCR 미설치 — uv add paddlepaddle paddleocr")
 
         return self._available
 
@@ -71,15 +100,18 @@ class PaddleOcrEngine(BaseOcrEngine):
         """PaddleOCR 인스턴스를 lazy 초기화."""
         if self._ocr is None:
             if not self.is_available():
-                raise OcrEngineUnavailableError("PaddleOCR이 설치되지 않았습니다.")
+                raise OcrEngineUnavailableError(
+                    "PaddleOCR이 설치되지 않았습니다.\n"
+                    "설치: uv add paddlepaddle paddleocr"
+                )
 
             from paddleocr import PaddleOCR as _PaddleOCR
 
             self._ocr = _PaddleOCR(
                 lang=self._lang,
-                use_angle_cls=True,   # 방향 감지 (세로쓰기 지원)
+                use_angle_cls=True,
                 use_gpu=self._use_gpu,
-                show_log=False,       # 로그 최소화
+                show_log=False,
             )
             logger.info("PaddleOCR 모델 로드 완료")
 
@@ -96,25 +128,12 @@ class PaddleOcrEngine(BaseOcrEngine):
 
         입력: 크롭된 블록 이미지 (PNG/JPEG 바이트)
         출력: OcrBlockResult
-
-        PaddleOCR 출력 형식:
-          result = ocr.ocr(image)
-          result[0] = [
-            [bbox_points, (text, confidence)],
-            ...
-          ]
-          bbox_points = [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]  (4꼭짓점)
-
-        변환:
-          4꼭짓점 → [x_min, y_min, x_max, y_max]
-          (text, confidence) → OcrLineResult
         """
         import numpy as np
         from PIL import Image
 
         ocr = self._get_ocr()
 
-        # bytes → numpy array (PaddleOCR 입력 형식)
         img = Image.open(io.BytesIO(image_bytes))
         img_array = np.array(img)
 
@@ -123,22 +142,17 @@ class PaddleOcrEngine(BaseOcrEngine):
         except Exception as e:
             raise OcrEngineError(f"PaddleOCR 인식 실패: {e}")
 
-        # PaddleOCR 결과 파싱
         lines = []
-
         if raw_result and raw_result[0]:
             for item in raw_result[0]:
-                bbox_points = item[0]  # [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+                bbox_points = item[0]
                 text = item[1][0]
                 confidence = float(item[1][1])
 
-                # 4꼭짓점 → [x_min, y_min, x_max, y_max]
                 xs = [p[0] for p in bbox_points]
                 ys = [p[1] for p in bbox_points]
                 line_bbox = [min(xs), min(ys), max(xs), max(ys)]
 
-                # 글자 단위 결과 생성 (PaddleOCR 기본은 줄 단위)
-                # 글자 단위 bbox가 없으므로 줄 bbox를 균등 분할
                 characters = self._split_line_to_chars(
                     text, line_bbox, confidence, writing_direction
                 )
@@ -149,7 +163,6 @@ class PaddleOcrEngine(BaseOcrEngine):
                     characters=characters,
                 ))
 
-        # 세로쓰기일 때: 줄을 오른쪽→왼쪽 순서로 정렬
         if writing_direction == "vertical_rtl" and lines:
             lines.sort(key=lambda ln: -(ln.bbox[0] if ln.bbox else 0))
 
@@ -170,11 +183,8 @@ class PaddleOcrEngine(BaseOcrEngine):
     ) -> list[OcrCharResult]:
         """줄의 텍스트를 글자별로 분할하고 bbox를 추정한다.
 
-        PaddleOCR은 기본적으로 줄 단위 결과만 제공.
+        PaddleOCR은 줄 단위 결과만 제공.
         글자 단위 bbox는 줄 bbox를 균등 분할하여 추정.
-
-        세로쓰기: y축 방향으로 균등 분할
-        가로쓰기: x축 방향으로 균등 분할
         """
         if not text:
             return []
@@ -185,12 +195,10 @@ class PaddleOcrEngine(BaseOcrEngine):
 
         for i, ch in enumerate(text):
             if writing_direction == "vertical_rtl":
-                # 세로쓰기: y축 분할
                 ch_y_min = y_min + (y_max - y_min) * i / n
                 ch_y_max = y_min + (y_max - y_min) * (i + 1) / n
                 char_bbox = [x_min, ch_y_min, x_max, ch_y_max]
             else:
-                # 가로쓰기: x축 분할
                 ch_x_min = x_min + (x_max - x_min) * i / n
                 ch_x_max = x_min + (x_max - x_min) * (i + 1) / n
                 char_bbox = [ch_x_min, y_min, ch_x_max, y_max]
@@ -198,7 +206,7 @@ class PaddleOcrEngine(BaseOcrEngine):
             chars.append(OcrCharResult(
                 char=ch,
                 bbox=char_bbox,
-                confidence=line_confidence,  # 줄 confidence를 글자에도 동일 적용
+                confidence=line_confidence,
             ))
 
         return chars
