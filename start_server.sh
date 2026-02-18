@@ -46,9 +46,20 @@ echo ""
 echo "[서고] $LIBRARY_PATH"
 echo "[서버] http://127.0.0.1:$PORT"
 echo ""
-echo "브라우저에서 http://127.0.0.1:$PORT 을 여세요."
 echo "종료하려면 Ctrl+C를 누르세요."
 echo ""
+
+# ── 브라우저 자동 열기 (2초 후) ────────────────
+(
+    sleep 2
+    if command -v open >/dev/null 2>&1; then
+        open "http://127.0.0.1:$PORT"           # macOS
+    elif command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "http://127.0.0.1:$PORT"       # Linux (GNOME/KDE 등)
+    else
+        echo "[알림] 브라우저를 열 수 없습니다. 직접 http://127.0.0.1:$PORT 에 접속하세요."
+    fi
+) &
 
 # ── 서버 실행 ─────────────────────────────────
 uv run python -m app serve --library "$LIBRARY_PATH" --port "$PORT"
