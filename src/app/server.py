@@ -3302,8 +3302,17 @@ async def _call_llm_text(purpose: str, text: str,
 
     커스텀:
         _LLM_PROMPTS 딕셔너리를 수정하면 프롬프트를 바꿀 수 있다.
+
+    폴백 전략:
+        자동 모드(force_provider 없음)에서 프로바이더가 JSON이 아닌
+        거절 응답을 반환하면 다음 프로바이더로 자동 재시도한다.
+        Base44 agent-chat은 MCP 도구 기반이라 자유 형식 텍스트 요청을
+        "도구가 없습니다"로 거절할 수 있다.
     """
     import json as _json
+    import logging as _logging
+
+    _logger = _logging.getLogger(__name__)
 
     prompts = _LLM_PROMPTS.get(purpose)
     if not prompts:
@@ -3313,15 +3322,64 @@ async def _call_llm_text(purpose: str, text: str,
     system_prompt = prompts["system"]
     user_prompt = prompts["user"].format(text=text)
 
-    response = await router.call(
-        user_prompt,
-        system=system_prompt,
-        force_provider=force_provider,
-        force_model=force_model,
-        purpose=purpose,
+    # ── force_provider가 지정된 경우: 해당 프로바이더만 시도 ──
+    if force_provider:
+        response = await router.call(
+            user_prompt,
+            system=system_prompt,
+            force_provider=force_provider,
+            force_model=force_model,
+            purpose=purpose,
+        )
+        return _parse_llm_json(response, _json)
+
+    # ── 자동 모드: 프로바이더 순서대로 시도, JSON 파싱 실패 시 다음으로 ──
+    # base44_http(agent-chat)는 MCP 도구 기반이라 자유 형식 텍스트 요청을
+    # 처리할 수 없다(HTTP 200이지만 "도구가 없습니다" 거절).
+    # agent-chat 수정은 별도 프로젝트이므로, 텍스트 호출에서는 건너뛴다.
+    _SKIP_FOR_TEXT = {"base44_http"}
+
+    errors = []
+    for provider in router.providers:
+        if provider.provider_id in _SKIP_FOR_TEXT:
+            continue
+        try:
+            if not await provider.is_available():
+                continue
+
+            response = await provider.call(
+                user_prompt,
+                system=system_prompt,
+                response_format="text",
+                max_tokens=4096,
+                purpose=purpose,
+            )
+            router.usage_tracker.log(response, purpose=purpose)
+
+            # JSON 파싱 시도 — 실패하면 다음 프로바이더로
+            return _parse_llm_json(response, _json)
+
+        except Exception as e:
+            _logger.info(
+                f"LLM {purpose} — {provider.provider_id} 실패: {e}, "
+                f"다음 프로바이더로 시도"
+            )
+            errors.append(f"{provider.provider_id}: {e}")
+            continue
+
+    raise ValueError(
+        f"모든 LLM 프로바이더가 {purpose} 요청에 실패했습니다:\n"
+        + "\n".join(f"  - {e}" for e in errors)
     )
 
-    # JSON 파싱 (방어적)
+
+def _parse_llm_json(response, _json) -> dict:
+    """LLM 응답에서 JSON을 추출한다.
+
+    왜 별도 함수인가:
+        _call_llm_text의 자동 폴백에서 반복 사용.
+        파싱 실패 시 ValueError를 발생시켜 다음 프로바이더로 넘긴다.
+    """
     raw = response.text.strip()
 
     # markdown 코드 블록 제거
@@ -3340,9 +3398,16 @@ async def _call_llm_text(purpose: str, text: str,
         start = raw.find("{")
         end = raw.rfind("}") + 1
         if start >= 0 and end > start:
-            data = _json.loads(raw[start:end])
+            try:
+                data = _json.loads(raw[start:end])
+            except _json.JSONDecodeError:
+                raise ValueError(
+                    f"LLM 응답 JSON 파싱 실패 ({response.provider}): {raw[:200]}"
+                )
         else:
-            raise ValueError(f"LLM 응답 JSON 파싱 실패: {raw[:200]}")
+            raise ValueError(
+                f"LLM 응답에 JSON이 없음 ({response.provider}): {raw[:200]}"
+            )
 
     data["_provider"] = response.provider
     data["_model"] = response.model
