@@ -807,10 +807,14 @@ function getLlmModelSelection(selectId) {
     return { force_provider: null, force_model: null };
   }
 
-  const parts = value.split(":", 2);
+  // 모델명에 콜론이 포함될 수 있으므로 (예: "qwen3-vl:235b-cloud")
+  // 첫 번째 콜론에서만 분리한다.
+  const colonIdx = value.indexOf(":");
+  const provider = value.substring(0, colonIdx);
+  const model = value.substring(colonIdx + 1);
   return {
-    force_provider: parts[0] || null,
-    force_model: parts[1] && parts[1] !== "auto" ? parts[1] : null,
+    force_provider: provider || null,
+    force_model: model && model !== "auto" ? model : null,
   };
 }
 

@@ -1033,12 +1033,16 @@ async function _runLlmAnalysis() {
   }
 
   // force_provider, force_model 파싱
+  // 모델명에 콜론이 포함될 수 있으므로 (예: "qwen3-vl:235b-cloud")
+  // 첫 번째 콜론에서만 분리한다.
   let params = "";
   if (selectedValue !== "auto") {
-    const parts = selectedValue.split(":", 2);
-    params = `?force_provider=${encodeURIComponent(parts[0])}`;
-    if (parts[1] && parts[1] !== "auto") {
-      params += `&force_model=${encodeURIComponent(parts[1])}`;
+    const colonIdx = selectedValue.indexOf(":");
+    const provider = selectedValue.substring(0, colonIdx);
+    const model = selectedValue.substring(colonIdx + 1);
+    params = `?force_provider=${encodeURIComponent(provider)}`;
+    if (model && model !== "auto") {
+      params += `&force_model=${encodeURIComponent(model)}`;
     }
   }
 
