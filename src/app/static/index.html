@@ -89,6 +89,7 @@
           해석 저장소
           <div class="section-header-actions">
             <button id="interp-create-btn" class="section-action-btn" title="새 해석 저장소 만들기">새로 만들기</button>
+            <button id="snapshot-import-btn" class="section-action-btn" title="JSON 스냅샷 가져오기">가져오기</button>
           </div>
         </div>
         <div id="interp-list" class="interp-list">
@@ -352,7 +353,9 @@
 
       <!-- 우측 패널: 해석 뷰어 (Phase 7, 해석 모드에서만 표시) -->
       <div class="editor-panel editor-right interp-panel" id="interp-panel" style="display:none;">
-        <div class="panel-label">해석 뷰어 (L5~L7)</div>
+        <div class="panel-label">해석 뷰어 (L5~L7)
+          <button id="snapshot-export-btn" class="section-action-btn" title="JSON 스냅샷 내보내기" style="margin-left:auto;">내보내기</button>
+        </div>
 
         <!-- 의존 경고 배너 -->
         <div id="interp-dep-banner" class="interp-dep-banner" style="display:none;">

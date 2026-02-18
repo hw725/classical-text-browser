@@ -18,7 +18,7 @@
 | 7 | 11-3 | 주석/사전 연동 (L7) | ✅ 완료 | 🟡 중 | `phase11_3_annotation_session.md` ✅ 작성 완료 | D-016 |
 | 8 | 12-1 | Git 그래프 완전판 | ✅ 완료 | 🟡 중 | `phase12_1_git_graph_session.md` ✅ 작성 완료 | D-017 |
 | 9 | 12-2 | Tauri 데스크톱 래핑 | ⬜ 대기 | 🔴 높 | (Phase 11 완료 후) | Phase 11 전체 |
-| 10 | 12-3 | 교환 형식 import/export | ⏭️ 다음 | 🟢 낮 | `phase12_3_json_snapshot_session.md` ✅ 작성 완료 | — |
+| 10 | 12-3 | 교환 형식 import/export | ✅ 완료 | 🟢 낮 | `phase12_3_json_snapshot_session.md` ✅ 작성 완료 | — |
 
 **상태 범례**: ✅ 완료 / 🔄 구현 중 / ⏭️ 다음 / ⬜ 대기
 
@@ -49,7 +49,9 @@
 | 10-4 | D-013 | KORCIS 파서 고도화 (008 해석 + 판식정보 + OpenAPI + 라이트 테마) |
 | 11-1 | D-014 | L5 표점·현토 before/after 모델 + 프리셋 팔레트 |
 | 11-2 | D-013 | L6 번역 데이터 모델 |
-| 11-3 | D-014 | L7 주석 데이터 모델 + 용어집 |
+| 11-3 | D-016 | L7 주석 데이터 모델 + 용어집 |
+| 12-1 | D-017 | Git 그래프 — 사다리형 이분 그래프 + Based-On-Original trailer |
+| 12-3 | D-018 | JSON 스냅샷 Export/Import 교환 형식 |
 
 ### 4. 다음 세션 시작
 Claude Code에 다음 세션 문서를 전달한다.
@@ -137,10 +139,13 @@ Claude Code에 다음 세션 문서를 전달한다.
 ### 12-1 완료 후 → 12-3 교환 형식 (12-2 Tauri는 보류)
 
 ```
-⏭️ 다음: phase12_3_json_snapshot_session.md
-📋 사전 준비:
-   - Rust + Tauri 개발 환경 설치
-   - 기존 FastAPI + 브라우저 구조 확인
+✅ Phase 12-3 완료: JSON 스냅샷 Export/Import
+   - D-018: JSON 스냅샷 Export/Import 설계 결정 기록
+   - build_snapshot() → 단일 JSON Export
+   - create_work_from_snapshot() → 새 Work Import
+   - validate_snapshot() → errors/warnings 2단계 검증
+   - GUI: 내보내기/가져오기 버튼
+   - 37개 통합 테스트 통과
 ```
 
 ### 12-2 완료 후 → 12-3 교환 형식

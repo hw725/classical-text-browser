@@ -48,6 +48,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (typeof initAnnotationEditor === "function") initAnnotationEditor();
   // Phase 12-1: Git 그래프 초기화
   if (typeof initGitGraph === "function") initGitGraph();
+  // Phase 12-3: JSON 스냅샷 Export/Import 버튼
+  initSnapshotButtons();
   // Phase 7+8: 하단 패널 탭 전환 (Git 이력 ↔ 의존 추적 ↔ 엔티티)
   initBottomPanelTabs();
 });
@@ -404,6 +406,139 @@ async function loadLibraryInfo() {
 /* ──────────────────────────
    7. 하단 패널 탭 전환 (Phase 7: Git 이력 ↔ 의존 추적)
    ────────────────────────── */
+
+/**
+ * JSON 스냅샷 Export/Import 버튼을 설정한다.
+ *
+ * 왜 이렇게 하는가:
+ *   Phase 12-3에서 현재 해석 작업(Work)을 단일 JSON 파일로
+ *   내보내거나, 다른 환경에서 가져온 JSON을 불러올 수 있다.
+ *   - Export: 현재 해석 저장소를 JSON 파일로 다운로드
+ *   - Import: JSON 파일을 선택하여 새 Work로 생성
+ */
+function initSnapshotButtons() {
+  // ─── Export 버튼 ───
+  const exportBtn = document.getElementById("snapshot-export-btn");
+  if (exportBtn) {
+    exportBtn.addEventListener("click", async () => {
+      // 현재 선택된 해석 저장소 ID 확인
+      if (typeof interpState === "undefined" || !interpState.interpId) {
+        alert("내보낼 해석 저장소를 먼저 선택해주세요.");
+        return;
+      }
+
+      const interpId = interpState.interpId;
+      exportBtn.disabled = true;
+      exportBtn.textContent = "내보내는 중…";
+
+      try {
+        const res = await fetch(`/api/interpretations/${interpId}/export/json`);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || `서버 오류: ${res.status}`);
+        }
+
+        // 서버가 보낸 파일명 추출 (Content-Disposition 헤더)
+        const disposition = res.headers.get("Content-Disposition") || "";
+        let filename = `${interpId}.json`;
+        const match = disposition.match(/filename="?([^"]+)"?/);
+        if (match) filename = match[1];
+
+        // Blob → 다운로드 트리거
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        alert(`내보내기 실패: ${e.message}`);
+      } finally {
+        exportBtn.disabled = false;
+        exportBtn.textContent = "내보내기";
+      }
+    });
+  }
+
+  // ─── Import 버튼 ───
+  const importBtn = document.getElementById("snapshot-import-btn");
+  if (importBtn) {
+    importBtn.addEventListener("click", () => {
+      // 숨겨진 file input 생성 → JSON 파일 선택
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = ".json,application/json";
+      input.style.display = "none";
+
+      input.addEventListener("change", async () => {
+        const file = input.files[0];
+        if (!file) return;
+
+        importBtn.disabled = true;
+        importBtn.textContent = "가져오는 중…";
+
+        try {
+          // 파일 내용 읽기
+          const text = await file.text();
+          let data;
+          try {
+            data = JSON.parse(text);
+          } catch {
+            throw new Error("올바른 JSON 파일이 아닙니다.");
+          }
+
+          // 서버에 전송
+          const res = await fetch("/api/import/json", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+          });
+
+          const result = await res.json();
+
+          if (!res.ok) {
+            // 검증 오류 표시
+            const errMsg = result.errors
+              ? result.errors.join("\n")
+              : result.error || "알 수 없는 오류";
+            throw new Error(errMsg);
+          }
+
+          // 성공: 결과 안내
+          let msg = `가져오기 완료!\n\n` +
+            `문헌: ${result.title}\n` +
+            `문헌 ID: ${result.doc_id}\n` +
+            `해석 ID: ${result.interp_id}\n` +
+            `레이어: ${(result.layers_imported || []).join(", ")}`;
+
+          if (result.warnings && result.warnings.length > 0) {
+            msg += `\n\n주의:\n${result.warnings.join("\n")}`;
+          }
+
+          alert(msg);
+
+          // 사이드바 문헌 목록 갱신
+          if (typeof loadLibraryInfo === "function") {
+            loadLibraryInfo();
+          }
+        } catch (e) {
+          alert(`가져오기 실패:\n${e.message}`);
+        } finally {
+          importBtn.disabled = false;
+          importBtn.textContent = "가져오기";
+          input.remove();
+        }
+      });
+
+      document.body.appendChild(input);
+      input.click();
+    });
+  }
+}
+
 
 /**
  * 하단 패널 탭 전환을 설정한다.
