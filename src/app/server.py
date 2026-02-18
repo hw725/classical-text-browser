@@ -1877,22 +1877,23 @@ def _load_page_image(doc_id: str, page: int) -> bytes | None:
                 if m.suffix.lower() in (".jpg", ".jpeg", ".png", ".tiff", ".tif"):
                     return m.read_bytes()
 
-    # 2. PDF에서 페이지 추출 (pypdfium2 사용 시도)
+    # 2. PDF에서 페이지 추출 (pymupdf/fitz 사용)
     pdf_files = list(source_dir.glob("*.pdf")) if source_dir.exists() else []
     if pdf_files:
         try:
-            import pypdfium2 as pdfium
-            pdf = pdfium.PdfDocument(str(pdf_files[0]))
-            if page < len(pdf):
-                pdf_page = pdf[page]
-                bitmap = pdf_page.render(scale=2.0)
-                pil_image = bitmap.to_pil()
-                import io
-                buf = io.BytesIO()
-                pil_image.save(buf, format="PNG")
-                return buf.getvalue()
+            import fitz  # pymupdf
+
+            doc = fitz.open(str(pdf_files[0]))
+            # page는 1-indexed (API 경로), fitz는 0-indexed
+            page_idx = page - 1
+            if 0 <= page_idx < len(doc):
+                pdf_page = doc[page_idx]
+                # scale=2.0 → 144 DPI (기본 72 DPI × 2)
+                pix = pdf_page.get_pixmap(matrix=fitz.Matrix(2.0, 2.0))
+                return pix.tobytes("png")
+            doc.close()
         except ImportError:
-            pass  # pypdfium2가 없으면 건너뜀
+            pass  # pymupdf가 없으면 건너뜀
 
     return None
 
