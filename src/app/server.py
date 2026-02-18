@@ -122,6 +122,7 @@ from core.library import get_library_info, list_documents, list_interpretations
 from core.document import (
     create_document_from_url,
     get_bibliography,
+    get_corrected_text,
     get_document_info,
     get_git_diff,
     get_git_log,
@@ -903,6 +904,41 @@ async def api_save_page_corrections(
     return save_result
 
 
+# --- 교정 적용 텍스트 API (편성 탭용) ---
+
+
+@app.get("/api/documents/{doc_id}/pages/{page_num}/corrected-text")
+async def api_corrected_text(
+    doc_id: str,
+    page_num: int,
+    part_id: str = Query(..., description="권 식별자 (예: vol1)"),
+):
+    """교정이 적용된 텍스트를 반환한다.
+
+    목적: 편성(composition) 탭에서 교정된 텍스트를 블록별로 표시하기 위해 사용한다.
+          L4_text/pages/ 원본에 L4_text/corrections/ 교정 기록을 적용한 결과.
+    입력:
+        doc_id — 문헌 ID.
+        page_num — 페이지 번호 (1부터 시작).
+        part_id — 쿼리 파라미터, 권 식별자.
+    출력: {document_id, part_id, page, original_text, corrected_text, correction_count, blocks}.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = _library_path / "documents" / doc_id
+    if not doc_path.exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
+            status_code=404,
+        )
+
+    try:
+        return get_corrected_text(doc_path, part_id, page_num)
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
+
 # --- Git API (Phase 6) ---
 
 
@@ -1643,6 +1679,8 @@ async def api_list_entities(
     entity_type: str,
     status: str | None = Query(None, description="상태 필터"),
     block_id: str | None = Query(None, description="TextBlock ID 필터"),
+    page: int | None = Query(None, description="페이지 번호 필터 (source_ref.page)"),
+    document_id: str | None = Query(None, description="문헌 ID 필터 (source_ref.document_id)"),
 ):
     """특정 유형의 엔티티 목록을 반환한다."""
     if _library_path is None:
@@ -1663,6 +1701,31 @@ async def api_list_entities(
 
     try:
         entities = list_entities(interp_path, entity_type, filters or None)
+
+        # page/document_id 필터 (source_ref, source_refs 기반)
+        if page is not None or document_id is not None:
+            filtered = []
+            for ent in entities:
+                refs = ent.get("source_refs") or []
+                ref = ent.get("source_ref")
+                match = False
+                # source_refs 배열 검사
+                for r in refs:
+                    page_ok = page is None or r.get("page") == page
+                    doc_ok = document_id is None or r.get("document_id") == document_id
+                    if page_ok and doc_ok:
+                        match = True
+                        break
+                # source_ref 단일 검사 (하위 호환)
+                if not match and ref:
+                    page_ok = page is None or ref.get("page") == page
+                    doc_ok = document_id is None or ref.get("document_id") == document_id
+                    if page_ok and doc_ok:
+                        match = True
+                if match:
+                    filtered.append(ent)
+            entities = filtered
+
         return {"entity_type": entity_type, "count": len(entities), "entities": entities}
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -1765,6 +1828,108 @@ async def api_create_textblock_from_source(
     block_info = body.layout_block_id or ""
     commit_msg = f"feat: TextBlock 생성 — page {body.page_num:03d} {block_info}"
     result["git"] = git_commit_interpretation(interp_path, commit_msg)
+
+    return result
+
+
+class CompositionSourceRef(BaseModel):
+    """편성용 소스 참조 하나."""
+    document_id: str
+    page: int
+    layout_block_id: str | None = None
+    char_range: list[int] | None = None  # [start, end) or null
+
+
+class ComposeTextBlockRequest(BaseModel):
+    """편성 탭에서 TextBlock을 생성하는 요청.
+
+    여러 LayoutBlock을 합치거나 하나를 쪼개서 TextBlock을 만든다.
+    source_refs 배열 순서대로 텍스트를 이어붙인다.
+    """
+    work_id: str
+    sequence_index: int
+    original_text: str
+    part_id: str
+    source_refs: list[CompositionSourceRef]
+
+
+@app.post("/api/interpretations/{interp_id}/entities/text_block/compose")
+async def api_compose_textblock(interp_id: str, body: ComposeTextBlockRequest):
+    """편성 탭에서 TextBlock을 생성한다 (source_refs 배열 지원).
+
+    목적: 여러 LayoutBlock을 합치거나, 하나의 LayoutBlock을 쪼개서
+          TextBlock을 만든다. source_refs로 출처를 정확히 추적한다.
+    입력:
+        work_id — 소속 Work UUID.
+        sequence_index — 작품 내 순서.
+        original_text — 편성된 텍스트 (교정 적용 후).
+        part_id — 파트 ID.
+        source_refs — 출처 참조 배열 (순서대로 이어붙인 것).
+    출력: {"status": "created", "id": ..., "text_block": {...}}
+    """
+    import uuid as _uuid
+
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
+            status_code=404,
+        )
+
+    # source_refs에 commit 해시 자동 채움
+    import git as _git
+    refs_with_commit = []
+    for ref in body.source_refs:
+        doc_path = _library_path / "documents" / ref.document_id
+        commit_hash = None
+        try:
+            repo = _git.Repo(doc_path)
+            commit_hash = repo.head.commit.hexsha
+        except Exception:
+            pass
+        refs_with_commit.append({
+            "document_id": ref.document_id,
+            "page": ref.page,
+            "layout_block_id": ref.layout_block_id,
+            "char_range": ref.char_range,
+            "layer": "L4",
+            "commit": commit_hash,
+        })
+
+    # 하위 호환: 첫 번째 ref를 source_ref로도 저장
+    first_ref = refs_with_commit[0] if refs_with_commit else None
+    source_ref_compat = None
+    if first_ref:
+        source_ref_compat = {
+            k: v for k, v in first_ref.items() if k != "char_range"
+        }
+
+    text_block_data = {
+        "id": str(_uuid.uuid4()),
+        "work_id": body.work_id,
+        "sequence_index": body.sequence_index,
+        "original_text": body.original_text,
+        "normalized_text": None,
+        "source_ref": source_ref_compat,
+        "source_refs": refs_with_commit,
+        "status": "draft",
+        "notes": None,
+        "metadata": {"part_id": body.part_id},
+    }
+
+    try:
+        result = create_entity(interp_path, "text_block", text_block_data)
+    except Exception as e:
+        return JSONResponse({"error": f"TextBlock 생성 실패: {e}"}, status_code=400)
+
+    # 자동 git commit
+    block_ids = [r.layout_block_id or "?" for r in body.source_refs]
+    commit_msg = f"feat: TextBlock 편성 — {'+'.join(block_ids)}"
+    result["git"] = git_commit_interpretation(interp_path, commit_msg)
+    result["text_block"] = text_block_data
 
     return result
 

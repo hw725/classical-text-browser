@@ -535,19 +535,22 @@ def create_textblock_from_source(
     # 원본 저장소의 현재 HEAD 커밋 해시
     commit_hash = _get_source_head_commit(doc_path)
 
+    single_ref = {
+        "document_id": document_id,
+        "page": page_num,
+        "layout_block_id": layout_block_id,
+        "layer": "L4",
+        "commit": commit_hash,
+    }
+
     text_block_data = {
         "id": str(uuid.uuid4()),
         "work_id": work_id,
         "sequence_index": sequence_index,
         "original_text": original_text,
         "normalized_text": None,
-        "source_ref": {
-            "document_id": document_id,
-            "page": page_num,
-            "layout_block_id": layout_block_id,
-            "layer": "L4",
-            "commit": commit_hash,
-        },
+        "source_ref": single_ref,
+        "source_refs": [{**single_ref, "char_range": None}],
         "status": "draft",
         "notes": None,
         "metadata": {

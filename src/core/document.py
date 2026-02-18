@@ -529,6 +529,211 @@ def get_page_corrections(doc_path: str | Path, part_id: str, page_num: int) -> d
     }
 
 
+def get_corrected_text(
+    doc_path: str | Path, part_id: str, page_num: int
+) -> dict:
+    """교정이 적용된 텍스트를 반환한다.
+
+    목적: L4_text/pages/의 원본 텍스트에 L4_text/corrections/의 교정 기록을
+          적용하여, "교정된 텍스트"를 생성한다. 편성(composition) 단계에서
+          TextBlock을 만들 때 이 텍스트를 사용한다.
+    입력:
+        doc_path — 문헌 디렉토리 경로.
+        part_id — 권 식별자.
+        page_num — 페이지 번호 (1부터 시작).
+    출력:
+        {
+            "document_id": str,
+            "part_id": str,
+            "page": int,
+            "original_text": str,      — 교정 전 원본
+            "corrected_text": str,     — 교정 적용 후 텍스트
+            "correction_count": int,   — 적용된 교정 건수
+            "blocks": [                — 블록별 교정 텍스트 (L3 있을 때)
+                {
+                    "block_id": str,
+                    "original_text": str,
+                    "corrected_text": str,
+                    "corrections_applied": int,
+                },
+                ...
+            ]
+        }
+
+    왜 이렇게 하는가:
+        교정 에디터는 원본을 건드리지 않고 교정 기록만 저장한다.
+        표점·현토 등 후속 작업에서는 "교정된 텍스트"가 필요하므로,
+        이 함수가 원본 + 교정 기록을 합쳐 교정된 텍스트를 생성한다.
+    """
+    doc_path = Path(doc_path).resolve()
+    manifest = get_document_info(doc_path)
+
+    # 원본 텍스트 로드
+    text_result = get_page_text(doc_path, part_id, page_num)
+    original_text = text_result["text"]
+
+    # 교정 기록 로드
+    corr_result = get_page_corrections(doc_path, part_id, page_num)
+    corrections = corr_result.get("corrections", [])
+
+    # L3 레이아웃 로드 (블록별 분리를 위해)
+    layout_result = get_page_layout(doc_path, part_id, page_num)
+    blocks_meta = layout_result.get("blocks", [])
+
+    # 전체 텍스트에 교정 적용
+    corrected_text = _apply_corrections_to_text(original_text, corrections)
+
+    # 블록별 교정 텍스트 (블록 마커가 있는 경우)
+    block_texts = _split_text_by_blocks(original_text, blocks_meta)
+    result_blocks = []
+    for bt in block_texts:
+        block_corrs = [
+            c for c in corrections if c.get("block_id") == bt["block_id"]
+        ]
+        bt_corrected = _apply_corrections_to_text(
+            bt["text"], block_corrs, block_local=True
+        )
+        result_blocks.append({
+            "block_id": bt["block_id"],
+            "block_type": bt.get("block_type", "main_text"),
+            "original_text": bt["text"],
+            "corrected_text": bt_corrected,
+            "corrections_applied": len(block_corrs),
+        })
+
+    return {
+        "document_id": manifest["document_id"],
+        "part_id": part_id,
+        "page": page_num,
+        "original_text": original_text,
+        "corrected_text": corrected_text,
+        "correction_count": len(corrections),
+        "blocks": result_blocks,
+    }
+
+
+def _apply_corrections_to_text(
+    text: str, corrections: list[dict], block_local: bool = False
+) -> str:
+    """텍스트에 교정 기록을 적용한다. (내부 유틸리티)
+
+    왜 이렇게 하는가:
+        교정 기록의 line/char_index를 사용하여 원본 텍스트의 해당 위치를
+        찾아 교정문으로 치환한다. 교정 기록이 없으면 원본 그대로 반환.
+
+    block_local이 True이면 line/char_index가 블록 내부 기준이라고 간주한다.
+    """
+    if not corrections:
+        return text
+
+    lines = text.split("\n")
+
+    # 교정을 역순으로 적용 (뒤에서부터 치환해야 인덱스가 밀리지 않음)
+    # line + char_index 기준으로 정렬 후 역순
+    sorted_corrs = sorted(
+        corrections,
+        key=lambda c: (c.get("line") or 0, c.get("char_index") or 0),
+        reverse=True,
+    )
+
+    for corr in sorted_corrs:
+        line_num = corr.get("line")
+        char_idx = corr.get("char_index")
+        original_ocr = corr.get("original_ocr", "")
+        corrected = corr.get("corrected", "")
+
+        if line_num is None or char_idx is None:
+            continue
+        if line_num < 0 or line_num >= len(lines):
+            continue
+
+        line = lines[line_num]
+        # 원본 글자가 실제로 해당 위치에 있는지 확인
+        end_idx = char_idx + len(original_ocr)
+        if end_idx <= len(line) and line[char_idx:end_idx] == original_ocr:
+            lines[line_num] = line[:char_idx] + corrected + line[end_idx:]
+
+    return "\n".join(lines)
+
+
+def _split_text_by_blocks(
+    text: str, blocks_meta: list[dict]
+) -> list[dict]:
+    """텍스트를 L3 블록 기준으로 분리한다. (내부 유틸리티)
+
+    왜 이렇게 하는가:
+        L4 텍스트는 페이지 단위로 저장되지만, 편성 에디터에서는
+        블록 단위로 표시해야 한다. 텍스트에 [本文], [注釈] 마커가 있으면
+        이를 기준으로 분리하고, 없으면 전체를 하나의 블록으로 취급한다.
+
+    현재 L4 텍스트의 구조:
+        - 마커가 없으면: 전체 텍스트가 첫 번째 블록
+        - [本文] / [注釈] 마커가 있으면: 마커 기준으로 분리
+    """
+    import re
+
+    # 블록이 없으면 전체를 하나의 기본 블록으로
+    if not blocks_meta:
+        default_block_id = f"p{1:02d}_b01"
+        return [{
+            "block_id": default_block_id,
+            "block_type": "main_text",
+            "text": text,
+        }]
+
+    # [本文] / [注釈] 마커로 분리 시도
+    marker_pattern = re.compile(r"\[(本文|注釈)\]")
+    markers = list(marker_pattern.finditer(text))
+
+    if not markers:
+        # 마커가 없으면: 블록 메타 순서대로 전체 텍스트를 첫 블록에 배정
+        result = []
+        for i, bm in enumerate(blocks_meta):
+            result.append({
+                "block_id": bm.get("block_id", f"b{i+1:02d}"),
+                "block_type": bm.get("block_type", "main_text"),
+                "text": text if i == 0 else "",
+            })
+        return result
+
+    # 마커 기반 분리
+    result = []
+    segments = []
+    last_idx = 0
+    last_type = "main_text"
+
+    for m in markers:
+        if m.start() > last_idx:
+            seg_text = text[last_idx:m.start()].strip()
+            if seg_text:
+                segments.append({"type": last_type, "text": seg_text})
+        last_type = "main_text" if m.group(1) == "本文" else "annotation"
+        last_idx = m.end()
+
+    # 마지막 세그먼트
+    if last_idx < len(text):
+        seg_text = text[last_idx:].strip()
+        if seg_text:
+            segments.append({"type": last_type, "text": seg_text})
+
+    # 세그먼트와 블록 메타를 매칭
+    for i, seg in enumerate(segments):
+        if i < len(blocks_meta):
+            block_id = blocks_meta[i].get("block_id", f"b{i+1:02d}")
+            block_type = blocks_meta[i].get("block_type", seg["type"])
+        else:
+            block_id = f"extra_b{i+1:02d}"
+            block_type = seg["type"]
+
+        result.append({
+            "block_id": block_id,
+            "block_type": block_type,
+            "text": seg["text"],
+        })
+
+    return result
+
+
 def save_page_corrections(
     doc_path: str | Path,
     part_id: str,
