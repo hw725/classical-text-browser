@@ -777,13 +777,18 @@ async function _loadAllLlmModelSelects() {
 }
 
 function _fillLlmSelect(select, models) {
+  // data-vision-only 속성이 있으면 비전 지원 모델만 표시 (OCR, 레이아웃 분석용)
+  const visionOnly = select.hasAttribute("data-vision-only");
+
   select.innerHTML = '<option value="auto">자동 (폴백순서)</option>';
   for (const m of models) {
+    if (visionOnly && !m.vision) continue;  // 비전 미지원 모델 제외
     const opt = document.createElement("option");
     opt.value = `${m.provider}:${m.model}`;
     const icon = m.available ? "●" : "○";
     const costLabel = m.cost === "free" ? "" : " [유료]";
-    opt.textContent = `${icon} ${m.display}${costLabel}`;
+    const visionLabel = m.vision ? " 👁" : "";
+    opt.textContent = `${icon} ${m.display}${costLabel}${visionLabel}`;
     opt.disabled = !m.available;
     select.appendChild(opt);
   }

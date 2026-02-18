@@ -200,7 +200,7 @@
 
         <!-- Phase 10-2: AI 분석 도구 바 -->
         <div class="layout-toolbar llm-toolbar" id="llm-toolbar">
-          <select id="llm-model-select" class="props-select llm-model-select" title="LLM 모델 선택">
+          <select id="llm-model-select" class="props-select llm-model-select" title="LLM 모델 선택" data-vision-only>
             <option value="auto">자동 (폴백순서)</option>
           </select>
           <button id="llm-analyze-btn" class="text-btn text-btn-primary" title="AI 레이아웃 분석">AI 분석</button>
@@ -275,7 +275,7 @@
 
             <div class="ocr-control-row" id="ocr-llm-model-row">
               <label class="props-label">LLM 모델</label>
-              <select id="ocr-llm-model-select" class="props-select llm-model-select" title="LLM 프로바이더/모델 선택">
+              <select id="ocr-llm-model-select" class="props-select llm-model-select" title="LLM 프로바이더/모델 선택" data-vision-only>
                 <option value="auto">자동 (폴백순서)</option>
               </select>
             </div>
