@@ -16,7 +16,6 @@ document.addEventListener("DOMContentLoaded", () => {
   initResizeHandlers();
   initPanelToggle();
   initActivityBar();
-  initTabs();
   initModeBar();
   loadLibraryInfo();
   // Phase 3: 병렬 뷰어 모듈 초기화
@@ -349,27 +348,7 @@ function _switchMode(mode) {
 
 
 /* ──────────────────────────
-   5. 탭 전환 (층별 탭 + 하단 패널 탭)
-   ────────────────────────── */
-
-function initTabs() {
-  // 층별 탭 (원문, 교정, 현토, 번역, 주석)
-  initTabGroup(".tab-bar .tab");
-}
-
-function initTabGroup(selector) {
-  const tabs = document.querySelectorAll(selector);
-  tabs.forEach((tab) => {
-    tab.addEventListener("click", () => {
-      tabs.forEach((t) => t.classList.remove("active"));
-      tab.classList.add("active");
-    });
-  });
-}
-
-
-/* ──────────────────────────
-   6. 서고 정보 로드
+   5. 서고 정보 로드
    ────────────────────────── */
 
 async function loadLibraryInfo() {
