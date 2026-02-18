@@ -1,7 +1,16 @@
 """OCR 엔진 연동 모듈.
 
 플러그인 아키텍처로 다양한 OCR 엔진을 지원한다.
-기본 엔진: PaddleOCR (오프라인).
+현재 기본 엔진은 없음 — 필요한 엔진을 설치 후 registry에 등록하면 된다.
+
+지원 가능한 엔진 (별도 설치 필요):
+  - PaddleOCR: uv add paddlepaddle paddleocr (CJK에 적합, Linux/macOS 권장)
+  - Tesseract: pip install pytesseract + 시스템 설치
+  - Google Vision: google-cloud-vision API 키 필요
+  - 기타: BaseOcrEngine을 상속하여 커스텀 엔진 추가 가능
+
+커스텀 엔진 추가 방법:
+  paddleocr_engine.py의 docstring에 상세한 가이드가 있다.
 
 사용법:
     from src.ocr import OcrPipeline, OcrEngineRegistry
