@@ -139,10 +139,18 @@ async function _runOcr(blockIds) {
   const engineId = engineSelect ? engineSelect.value || null : null;
 
   ocrState.running = true;
-  _showProgress(true, "OCR 실행 중...");
+  _showProgress(true, "레이아웃 저장 확인 중...");
   _disableButtons(true);
 
   try {
+    // OCR 전에 현재 레이아웃을 L3에 저장 (저장되지 않은 블록이 있을 수 있음)
+    // layout-editor.js의 _saveLayout()이 전역이 아니므로 직접 호출
+    if (typeof layoutState !== "undefined" && layoutState.blocks && layoutState.blocks.length > 0) {
+      await _ensureLayoutSaved(docId, partId, pageNum);
+    }
+
+    _showProgress(true, "OCR 실행 중...");
+
     // LLM 프로바이더/모델 선택 (llm_vision 엔진 전용)
     const llmSel = typeof getLlmModelSelection === "function"
       ? getLlmModelSelection("ocr-llm-model-select")
@@ -365,17 +373,36 @@ async function _fillFromOcr() {
     })
     .join("\n\n");
 
-  // 텍스트 에디터에 채우기 (text-editor.js의 전역 함수)
-  if (typeof setEditorText === "function") {
-    setEditorText(fullText);
-  } else {
-    // 직접 textarea에 설정
-    const textarea = document.getElementById("text-content");
-    if (textarea) {
-      textarea.value = fullText;
-      textarea.dispatchEvent(new Event("input"));
+  // 1. 텍스트 API에 저장 (교정 모드에서도 접근 가능하도록)
+  try {
+    const saveUrl = `/api/documents/${docId}/pages/${pageNum}/text?part_id=${partId}`;
+    const saveResp = await fetch(saveUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: fullText }),
+    });
+    if (!saveResp.ok) {
+      console.warn("OCR 텍스트 저장 실패:", await saveResp.text());
+    }
+  } catch (e) {
+    console.warn("OCR 텍스트 저장 실패:", e);
+  }
+
+  // 2. 열람 모드의 textarea에도 채우기 (열람 모드일 때)
+  const textarea = document.getElementById("text-content");
+  if (textarea) {
+    textarea.value = fullText;
+    textarea.dispatchEvent(new Event("input"));
+  }
+
+  // 3. 교정 모드가 활성화되어 있으면 교정 뷰 리프레시
+  if (typeof correctionState !== "undefined" && correctionState.active) {
+    if (typeof loadPageCorrections === "function") {
+      loadPageCorrections(docId, partId, pageNum);
     }
   }
+
+  alert(`OCR 결과가 텍스트로 저장되었습니다. (${ocrResults.length}개 블록)`);
 }
 
 
@@ -406,6 +433,70 @@ function _updateSelectedBlockButton() {
   const btn = document.getElementById("ocr-run-selected");
   if (!btn) return;
   btn.disabled = ocrState.running || !_hasSelectedBlock();
+}
+
+
+/**
+ * OCR 실행 전에 현재 레이아웃(블록)을 L3에 저장한다.
+ *
+ * 왜 필요한가:
+ *   OCR 파이프라인은 L3_layout/{part_id}_page_{NNN}.json에서 블록 목록을 읽는다.
+ *   사용자가 레이아웃 분석/수동 편집 후 저장 버튼을 누르지 않으면 L3 파일이 없다.
+ *   그래서 OCR 실행 직전에 현재 블록 상태를 자동 저장한다.
+ */
+async function _ensureLayoutSaved(docId, partId, pageNum) {
+  // layoutState.blocks가 없거나 비어있으면 저장할 것이 없음
+  if (typeof layoutState === "undefined" || !layoutState.blocks || layoutState.blocks.length === 0) {
+    return;
+  }
+
+  // 이미지 크기 정보
+  let imgW = layoutState.imageWidth || 0;
+  let imgH = layoutState.imageHeight || 0;
+  if (!imgW && typeof pdfState !== "undefined" && pdfState.pdfDoc) {
+    try {
+      const page = await pdfState.pdfDoc.getPage(pageNum);
+      const vp = page.getViewport({ scale: 1.0 });
+      imgW = Math.round(vp.width);
+      imgH = Math.round(vp.height);
+    } catch (_) { /* 무시 */ }
+  }
+
+  // 블록에서 스키마에 없는 내부 전용 필드 제거
+  const cleanBlocks = layoutState.blocks.map(b => {
+    const clean = { ...b };
+    delete clean._draft;
+    delete clean._draft_id;
+    delete clean._confidence;
+    delete clean.notes;
+    return clean;
+  });
+
+  const hasLlmBlocks = layoutState.blocks.some(b => b._draft);
+
+  const payload = {
+    part_id: partId,
+    page_number: pageNum,
+    image_width: imgW,
+    image_height: imgH,
+    analysis_method: hasLlmBlocks ? "llm" : "manual",
+    blocks: cleanBlocks,
+  };
+
+  const url = `/api/documents/${docId}/pages/${pageNum}/layout?part_id=${partId}`;
+  try {
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      console.warn("OCR 전 레이아웃 자동 저장 실패:", errData.error || "unknown");
+    }
+  } catch (e) {
+    console.warn("OCR 전 레이아웃 자동 저장 실패:", e);
+  }
 }
 
 
