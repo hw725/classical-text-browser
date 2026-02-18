@@ -170,6 +170,31 @@ class OcrPipeline:
                 )
                 return result
 
+        # 4-a. 좌표계 보정: L3 레이아웃의 image_width/height와 실제 이미지 크기가
+        #       다를 수 있다. (예: GUI에서 PDF.js 1x 뷰포트 기준으로 저장했는데,
+        #       OCR 파이프라인은 PyMuPDF 2x 스케일로 로드하는 경우)
+        #       이 경우 bbox 좌표를 실제 이미지 크기에 맞게 스케일링한다.
+        layout_w = layout.get("image_width", 0)
+        layout_h = layout.get("image_height", 0)
+        actual_w, actual_h = page_image.size
+
+        if layout_w > 0 and layout_h > 0 and (layout_w != actual_w or layout_h != actual_h):
+            scale_x = actual_w / layout_w
+            scale_y = actual_h / layout_h
+            logger.info(
+                f"bbox 좌표 스케일링: L3 ({layout_w}×{layout_h}) → "
+                f"실제 ({actual_w}×{actual_h}), scale=({scale_x:.2f}, {scale_y:.2f})"
+            )
+            for block in blocks:
+                bbox = block.get("bbox")
+                if bbox and len(bbox) == 4:
+                    block["bbox"] = [
+                        round(bbox[0] * scale_x),
+                        round(bbox[1] * scale_y),
+                        round(bbox[2] * scale_x),
+                        round(bbox[3] * scale_y),
+                    ]
+
         # 4. 블록별 OCR
         for block in blocks:
             block_id = block.get("block_id", "unknown")
