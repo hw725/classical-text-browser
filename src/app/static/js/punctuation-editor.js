@@ -633,9 +633,44 @@ async function _requestAiPunctuation() {
   }
 
   try {
-    // preview API를 통해 AI 표점을 시뮬레이션
-    // (실제 LLM 호출은 서버 사이드, 여기서는 미구현 — 향후 연결)
-    alert("AI 표점 기능은 LLM 연결 후 사용 가능합니다.\n수동으로 표점을 삽입하세요.");
+    // LLM에게 표점 생성 요청
+    const resp = await fetch("/api/llm/punctuation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: punctState.originalText }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+
+    const data = await resp.json();
+
+    // AI가 반환한 marks를 현재 블록에 적용
+    if (data.marks && Array.isArray(data.marks)) {
+      // 기존 marks 초기화 후 AI marks 적용
+      punctState.marks = [];
+      for (const m of data.marks) {
+        const idx = m.after_char_index;
+        const mark = m.mark;
+        if (idx >= 0 && idx < punctState.originalText.length && mark) {
+          punctState.marks.push({
+            id: _generateTempId(),
+            char_index: idx,
+            mark: mark,
+          });
+        }
+      }
+      _renderCharArea();
+      _renderMarksList();
+      _updatePreview();
+      _updateSaveStatus("AI 표점 생성 완료 — 저장하려면 [저장]을 누르세요", false);
+    } else {
+      alert("AI 응답에 marks가 없습니다. 수동으로 표점을 삽입하세요.");
+    }
+  } catch (e) {
+    alert(`AI 표점 실패: ${e.message}`);
   } finally {
     if (aiBtn) {
       aiBtn.disabled = false;

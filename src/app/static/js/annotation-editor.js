@@ -591,8 +591,117 @@ async function _deleteAnnotation() {
    AI 태깅 / 일괄 확정
    ──────────────────────────────────── */
 
-function _aiTagAll() {
-  alert("AI 자동 태깅은 LLM 연동이 필요합니다.\n현재는 수동 주석만 지원합니다.");
+async function _aiTagAll() {
+  /* AI 자동 태깅: /api/llm/annotation 호출 → 결과를 개별 주석으로 저장.
+   *
+   * 흐름:
+   *   1. 현재 블록 텍스트를 LLM에 전송
+   *   2. LLM이 인명/지명/관직/전고/용어 태깅
+   *   3. 각 태깅 결과를 서버 주석 API로 개별 POST (draft 상태)
+   *   4. UI 갱신
+   */
+  const text = annState.originalText;
+  if (!text) {
+    alert("태깅할 텍스트가 없습니다. 먼저 블록을 선택하세요.");
+    return;
+  }
+
+  const vs = typeof viewerState !== "undefined" ? viewerState : null;
+  const is = typeof interpState !== "undefined" ? interpState : null;
+  if (!vs || !vs.pageNum) return;
+
+  const interpId = (is && is.interpId) || "default";
+  const blockId = annState.blockId;
+  if (!blockId) {
+    alert("블록을 먼저 선택하세요.");
+    return;
+  }
+
+  // 버튼 비활성화 + 진행 표시
+  const aiBtn = document.getElementById("ann-ai-tag-btn");
+  if (aiBtn) {
+    aiBtn.disabled = true;
+    aiBtn.textContent = "AI 태깅 중…";
+  }
+
+  try {
+    // 1. LLM 호출
+    const resp = await fetch("/api/llm/annotation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `서버 오류 ${resp.status}`);
+    }
+
+    const data = await resp.json();
+    const aiAnnotations = data.annotations || [];
+
+    if (aiAnnotations.length === 0) {
+      _showSaveStatus("AI가 태깅할 항목을 찾지 못했습니다.");
+      return;
+    }
+
+    // 2. 각 태깅을 서버 주석으로 저장 (draft 상태)
+    let savedCount = 0;
+    for (const ann of aiAnnotations) {
+      // end 인덱스 보정: LLM이 exclusive end를 줄 수 있으므로 방어
+      const start = ann.start;
+      let end = ann.end;
+      // end가 start보다 작거나 같으면 text 길이로 보정
+      if (end <= start && ann.text) {
+        end = start + ann.text.length - 1;
+      } else if (end > start && end >= text.length) {
+        end = text.length - 1;
+      }
+      // inclusive end 보정: end가 exclusive(start + len)이면 -1
+      if (ann.text && (end - start + 1) > ann.text.length) {
+        end = start + ann.text.length - 1;
+      }
+
+      try {
+        const saveResp = await fetch(
+          `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/${blockId}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              target: { start, end },
+              type: ann.type || "term",
+              content: {
+                label: ann.label || ann.text || "",
+                description: ann.description || "",
+                references: [],
+              },
+            }),
+          }
+        );
+        if (saveResp.ok) savedCount++;
+      } catch (e) {
+        console.warn("주석 저장 실패:", ann, e);
+      }
+    }
+
+    // 3. UI 갱신
+    await _loadBlockAnnotations(blockId);
+    _renderSourceText();
+    _renderAnnList();
+    _renderStatusSummary();
+    _showSaveStatus(`AI 태깅 완료: ${savedCount}개 주석 (${data._provider || "LLM"})`);
+
+  } catch (e) {
+    console.error("AI 태깅 실패:", e);
+    alert("AI 태깅 실패: " + e.message);
+  } finally {
+    // 버튼 복원
+    if (aiBtn) {
+      aiBtn.disabled = false;
+      aiBtn.textContent = "AI 태깅";
+    }
+  }
 }
 
 async function _commitAllDrafts() {
