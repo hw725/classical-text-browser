@@ -1921,6 +1921,18 @@ def _get_ocr_pipeline():
 
         _ocr_registry = OcrEngineRegistry()
         _ocr_registry.auto_register()
+
+        # LLM Vision OCR 엔진에 라우터 주입
+        # auto_register()에서 LlmOcrEngine이 등록되었으면, 라우터를 연결한다.
+        # register() 시점에는 라우터가 없어 is_available()=False였으므로
+        # 기본 엔진도 여기서 설정한다.
+        llm_engine = _ocr_registry._engines.get("llm_vision")
+        if llm_engine is not None:
+            router = _get_llm_router()
+            llm_engine.set_router(router)
+            if _ocr_registry._default_engine_id is None and llm_engine.is_available():
+                _ocr_registry._default_engine_id = "llm_vision"
+
         _ocr_pipeline = OcrPipeline(_ocr_registry, library_root=str(_library_path))
 
     return _ocr_pipeline, _ocr_registry

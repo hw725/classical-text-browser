@@ -107,6 +107,18 @@ class OcrEngineRegistry:
         except Exception as e:
             logger.warning(f"PaddleOCR 초기화 실패: {e}")
 
+        # LLM Vision OCR (LLM 라우터의 비전 기능 사용, 별도 설치 불필요)
+        # 라우터는 나중에 서버에서 set_router()로 주입한다.
+        try:
+            from .llm_ocr_engine import LlmOcrEngine
+            engine = LlmOcrEngine(router=None)  # 라우터는 lazy-init
+            # is_available()은 라우터가 설정되면 True가 된다.
+            # 여기서는 등록만 하고, 라우터 주입은 서버 초기화 시 수행.
+            self.register(engine)
+            logger.info("LLM Vision OCR 엔진 등록 (라우터 주입 대기)")
+        except Exception as e:
+            logger.warning(f"LLM Vision OCR 초기화 실패: {e}")
+
         # 향후 추가 엔진 예시:
         # try:
         #     from .tesseract_engine import TesseractEngine
