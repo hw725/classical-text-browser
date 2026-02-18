@@ -12,10 +12,17 @@
 
 import { existsSync } from 'fs';
 import { resolve, dirname, join } from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// client.js 내부의 console.log/info가 stdout에 섞이면 JSON 파싱 실패하므로
+// 모든 console 출력을 stderr로 리다이렉트한다.
+const origLog = console.log;
+const origInfo = console.info;
+console.log = (...args) => process.stderr.write(args.join(' ') + '\n');
+console.info = (...args) => process.stderr.write(args.join(' ') + '\n');
 
 // backend-44 경로 탐색
 function findBackend44Root() {
@@ -45,15 +52,22 @@ async function main() {
   }
 
   // 동적 import (경로가 런타임에 결정되므로)
-  const clientPath = join(backend44Root, 'src', 'client.js');
+  // Windows에서 ESM import()는 file:// URL만 허용하므로 pathToFileURL로 변환
+  const clientPath = pathToFileURL(join(backend44Root, 'src', 'client.js')).href;
   const { getBase44Client, ensureAuth } = await import(clientPath);
 
-  // stdin 읽기
-  const chunks = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk);
+  // 입력 읽기: BRIDGE_INPUT_FILE 환경변수 우선, 없으면 stdin 폴백
+  let input;
+  if (process.env.BRIDGE_INPUT_FILE) {
+    const { readFileSync } = await import('fs');
+    input = JSON.parse(readFileSync(process.env.BRIDGE_INPUT_FILE, 'utf8'));
+  } else {
+    const chunks = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk);
+    }
+    input = JSON.parse(Buffer.concat(chunks).toString('utf8'));
   }
-  const input = JSON.parse(Buffer.concat(chunks).toString('utf8'));
   const { prompt, system, response_type } = input;
 
   ensureAuth();
@@ -75,7 +89,11 @@ async function main() {
   process.stdout.write(JSON.stringify({ text, provider: 'base44_bridge', raw: result }));
 }
 
-main().catch(e => {
+main().then(() => {
+  // Base44 SDK가 내부 HTTP 커넥션을 유지하여 프로세스가 종료되지 않으므로
+  // 결과 출력 후 명시적으로 종료한다.
+  process.exit(0);
+}).catch(e => {
   process.stderr.write(JSON.stringify({ error: e.message || String(e) }));
   process.exit(1);
 });

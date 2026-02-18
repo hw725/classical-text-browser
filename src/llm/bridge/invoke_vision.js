@@ -7,10 +7,15 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { resolve, dirname, join } from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// client.js 내부의 console.log/info가 stdout에 섞이면 JSON 파싱 실패하므로
+// 모든 console 출력을 stderr로 리다이렉트한다.
+console.log = (...args) => process.stderr.write(args.join(' ') + '\n');
+console.info = (...args) => process.stderr.write(args.join(' ') + '\n');
 
 function findBackend44Root() {
   if (process.env.BACKEND44_PATH) {
@@ -33,14 +38,21 @@ async function main() {
     throw new Error('backend-44를 찾을 수 없습니다.');
   }
 
-  const clientPath = join(backend44Root, 'src', 'client.js');
+  // Windows에서 ESM import()는 file:// URL만 허용하므로 pathToFileURL로 변환
+  const clientPath = pathToFileURL(join(backend44Root, 'src', 'client.js')).href;
   const { getBase44Client, ensureAuth } = await import(clientPath);
 
-  const chunks = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk);
+  // 입력 읽기: BRIDGE_INPUT_FILE 환경변수 우선, 없으면 stdin 폴백
+  let input;
+  if (process.env.BRIDGE_INPUT_FILE) {
+    input = JSON.parse(readFileSync(process.env.BRIDGE_INPUT_FILE, 'utf8'));
+  } else {
+    const chunks = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk);
+    }
+    input = JSON.parse(Buffer.concat(chunks).toString('utf8'));
   }
-  const input = JSON.parse(Buffer.concat(chunks).toString('utf8'));
   const { prompt, image_path, image_mime } = input;
 
   if (!existsSync(image_path)) {
@@ -88,7 +100,9 @@ async function main() {
   }));
 }
 
-main().catch(e => {
+main().then(() => {
+  process.exit(0);
+}).catch(e => {
   process.stderr.write(JSON.stringify({ error: e.message || String(e) }));
   process.exit(1);
 });
