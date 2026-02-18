@@ -100,22 +100,29 @@ def preprocess_for_ocr(
     grayscale: bool = True,
     binarize: bool = False,
     binarize_threshold: int = 128,
+    max_long_side: int = 1600,
 ) -> bytes:
     """OCR 정확도를 높이기 위한 이미지 전처리.
 
     입력: 크롭된 이미지 바이트
-    출력: 전처리된 이미지 바이트
+    출력: 전처리된 이미지 바이트 (JPEG, 최대 max_long_side px)
 
     옵션:
       grayscale: 그레이스케일 변환 (대부분의 고전 텍스트는 흑백)
       binarize: 이진화 (흑/백만 남김)
       binarize_threshold: 이진화 임계값 (0~255)
+      max_long_side: 긴 변 최대 픽셀 수. LLM 비전 모델은
+          내부적으로 리사이즈하므로 고해상도가 불필요하고,
+          대용량 이미지는 API 타임아웃/거부를 유발한다.
 
     주의:
       PaddleOCR은 자체 전처리가 있어서 기본적으로는 grayscale만.
       다른 엔진에서 필요하면 binarize도 사용.
     """
     img = Image.open(io.BytesIO(image_bytes))
+
+    # 긴 변 기준 리사이즈 (비율 유지)
+    img = _resize_if_needed(img, max_long_side)
 
     if grayscale and img.mode != "L":
         img = img.convert("L")
@@ -124,8 +131,43 @@ def preprocess_for_ocr(
         img = img.point(lambda x: 255 if x > binarize_threshold else 0, mode="1")
 
     buf = io.BytesIO()
-    img.save(buf, format="PNG")
+    img.save(buf, format="JPEG", quality=85)
     return buf.getvalue()
+
+
+def resize_for_llm(image_bytes: bytes, max_long_side: int = 1600) -> bytes:
+    """LLM 비전 호출용 이미지 리사이즈 + JPEG 압축.
+
+    입력: 원본 이미지 바이트 (PNG, JPEG 등)
+    출력: 리사이즈된 JPEG 바이트
+
+    왜 필요한가:
+      PDF에서 추출한 페이지 이미지는 10MB 이상이 될 수 있다.
+      base64 인코딩하면 14MB+ → Ollama 클라우드 프록시가 타임아웃/거부.
+      LLM 비전 모델은 내부적으로 리사이즈하므로 1600px이면 충분하다.
+    """
+    img = Image.open(io.BytesIO(image_bytes))
+    img = _resize_if_needed(img, max_long_side)
+
+    # RGB로 변환 (RGBA/P 등은 JPEG 불가)
+    if img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=85)
+    return buf.getvalue()
+
+
+def _resize_if_needed(img: Image.Image, max_long_side: int) -> Image.Image:
+    """긴 변이 max_long_side보다 크면 비율 유지하며 축소."""
+    w, h = img.size
+    long_side = max(w, h)
+    if long_side <= max_long_side:
+        return img
+    scale = max_long_side / long_side
+    new_w = int(w * scale)
+    new_h = int(h * scale)
+    return img.resize((new_w, new_h), Image.LANCZOS)
 
 
 def get_page_image_path(

@@ -2017,15 +2017,19 @@ async def api_review_draft(draft_id: str, body: DraftReviewRequest):
 
 
 def _load_page_image(doc_id: str, page: int) -> bytes | None:
-    """페이지 이미지를 바이트로 로드한다.
+    """페이지 이미지를 바이트로 로드한다 (LLM 전송용 리사이즈 포함).
 
     L1_source에서 PDF를 찾아 해당 페이지를 이미지로 변환.
     또는 이미 이미지 파일이면 직접 읽는다.
+    LLM 비전 모델에 보내기 위해 최대 2000px, JPEG 압축을 적용한다.
 
-    왜 이렇게 하는가:
-        기존 PDF 뷰어는 클라이언트에서 PDF.js로 렌더링하지만,
-        LLM 분석에는 서버에서 이미지를 추출해야 한다.
+    왜 리사이즈하는가:
+        PDF에서 144 DPI로 추출하면 10MB+ PNG가 된다.
+        base64 인코딩 시 14MB+ → Ollama 클라우드 프록시가 타임아웃/거부.
+        LLM 비전 모델은 내부적으로 리사이즈하므로 2000px이면 충분하다.
     """
+    from ocr.image_utils import resize_for_llm
+
     if _library_path is None:
         return None
 
@@ -2046,7 +2050,8 @@ def _load_page_image(doc_id: str, page: int) -> bytes | None:
             matches = list(source_dir.glob(pattern))
             for m in matches:
                 if m.suffix.lower() in (".jpg", ".jpeg", ".png", ".tiff", ".tif"):
-                    return m.read_bytes()
+                    raw = m.read_bytes()
+                    return resize_for_llm(raw, max_long_side=2000)
 
     # 2. PDF에서 페이지 추출 (pymupdf/fitz 사용)
     pdf_files = list(source_dir.glob("*.pdf")) if source_dir.exists() else []
@@ -2061,7 +2066,9 @@ def _load_page_image(doc_id: str, page: int) -> bytes | None:
                 pdf_page = doc[page_idx]
                 # scale=2.0 → 144 DPI (기본 72 DPI × 2)
                 pix = pdf_page.get_pixmap(matrix=fitz.Matrix(2.0, 2.0))
-                return pix.tobytes("png")
+                raw = pix.tobytes("png")
+                doc.close()
+                return resize_for_llm(raw, max_long_side=2000)
             doc.close()
         except ImportError:
             pass  # pymupdf가 없으면 건너뜀
