@@ -87,6 +87,9 @@ API 엔드포인트:
     POST /api/annotation-types → 사용자 정의 유형 추가
     DELETE /api/annotation-types/{type_id} → 사용자 정의 유형 삭제
 
+    --- Phase 12-1: Git 그래프 API ---
+    GET  /api/interpretations/{interp_id}/git-graph → 사다리형 이분 그래프 데이터
+
     --- Phase 8: 코어 스키마 엔티티 API ---
     POST /api/interpretations/{interp_id}/entities → 엔티티 생성
     GET  /api/interpretations/{interp_id}/entities/{entity_type} → 유형별 목록
@@ -140,6 +143,7 @@ from core.interpretation import (
     save_layer_content,
     update_base,
 )
+from core.git_graph import get_git_graph_data
 from core.entity import (
     auto_create_work,
     create_entity,
@@ -2992,3 +2996,68 @@ async def api_delete_annotation_type(type_id: str):
         return JSONResponse({"error": f"유형 '{type_id}'를 찾을 수 없거나 기본 프리셋입니다."}, status_code=404)
 
     return JSONResponse(status_code=204, content=None)
+
+
+# ──────────────────────────────────────
+# Phase 12-1: Git 그래프 API
+# ──────────────────────────────────────
+
+
+@app.get("/api/interpretations/{interp_id}/git-graph")
+async def api_git_graph(
+    interp_id: str,
+    original_branch: str = Query("main", description="원본 저장소 브랜치"),
+    interp_branch: str = Query("main", description="해석 저장소 브랜치"),
+    limit: int = Query(50, ge=1, le=200, description="각 저장소별 최대 커밋 수"),
+    offset: int = Query(0, ge=0, description="페이지네이션 오프셋"),
+):
+    """사다리형 이분 그래프 데이터를 반환한다.
+
+    목적: 원본 저장소(L1~L4)와 해석 저장소(L5~L7)의 커밋을
+        나란히 보여주는 그래프 데이터를 생성한다.
+    입력:
+        interp_id — 해석 저장소 ID.
+        original_branch — 원본 저장소 브랜치 이름.
+        interp_branch — 해석 저장소 브랜치 이름.
+        limit — 각 저장소별 최대 커밋 수.
+        offset — 페이지네이션 오프셋.
+    출력: {original, interpretation, links, pagination} 데이터.
+
+    왜 이렇게 하는가:
+        해석 저장소의 manifest.json에서 source_document_id를 읽어
+        원본 저장소 경로를 자동으로 결정한다.
+        사용자가 doc_id를 별도로 지정할 필요가 없다.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    manifest_path = interp_path / "manifest.json"
+
+    if not manifest_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
+            status_code=404,
+        )
+
+    import json
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    doc_id = manifest.get("source_document_id", "")
+
+    if not doc_id:
+        return JSONResponse(
+            {"error": "해석 저장소의 manifest에 source_document_id가 없습니다."},
+            status_code=400,
+        )
+
+    data = get_git_graph_data(
+        library_path=_library_path,
+        doc_id=doc_id,
+        interp_id=interp_id,
+        original_branch=original_branch,
+        interp_branch=interp_branch,
+        limit=limit,
+        offset=offset,
+    )
+
+    return data

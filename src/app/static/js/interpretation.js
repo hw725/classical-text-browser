@@ -220,6 +220,9 @@ async function _selectInterpretation(interpId) {
   // 의존 변경 확인
   await _checkDependency();
 
+  // Phase 12-1: Git 그래프에 현재 해석 저장소 ID 전달
+  if (typeof setGitGraphInterpId === "function") setGitGraphInterpId(interpId);
+
   // 내용 로드 (viewerState에 페이지가 있으면)
   _loadLayerContent();
 }
