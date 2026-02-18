@@ -90,6 +90,10 @@ API 엔드포인트:
     --- Phase 12-1: Git 그래프 API ---
     GET  /api/interpretations/{interp_id}/git-graph → 사다리형 이분 그래프 데이터
 
+    --- Phase 12-3: JSON 스냅샷 API ---
+    GET  /api/interpretations/{interp_id}/export/json → JSON 스냅샷 Export (다운로드)
+    POST /api/import/json → JSON 스냅샷 Import (새 Work 생성)
+
     --- Phase 8: 코어 스키마 엔티티 API ---
     POST /api/interpretations/{interp_id}/entities → 엔티티 생성
     GET  /api/interpretations/{interp_id}/entities/{entity_type} → 유형별 목록
@@ -109,8 +113,8 @@ _src_dir = str(Path(__file__).resolve().parent.parent)
 if _src_dir not in sys.path:
     sys.path.insert(0, _src_dir)
 
-from fastapi import FastAPI, Query
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, Query, Request
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -144,6 +148,8 @@ from core.interpretation import (
     update_base,
 )
 from core.git_graph import get_git_graph_data
+from core.snapshot import build_snapshot, create_work_from_snapshot, detect_imported_layers
+from core.snapshot_validator import validate_snapshot
 from core.entity import (
     auto_create_work,
     create_entity,
@@ -3061,3 +3067,112 @@ async def api_git_graph(
     )
 
     return data
+
+
+# ──────────────────────────────────────
+# Phase 12-3: JSON 스냅샷 API
+# ──────────────────────────────────────
+
+
+@app.get("/api/interpretations/{interp_id}/export/json")
+async def api_export_json(interp_id: str):
+    """해석 저장소 + 원본 전체를 JSON 스냅샷으로 내보낸다.
+
+    목적: 백업, 공유, 다른 환경 이동용 단일 JSON 파일 생성.
+    입력: interp_id — 해석 저장소 ID (manifest에서 원본 문헌 자동 결정).
+    출력: JSON 파일 다운로드 (Content-Disposition: attachment).
+
+    왜 이렇게 하는가:
+        Git 히스토리 없이 현재 HEAD 상태만 직렬화하면
+        파일 크기가 작고 복원 시 충돌이 없다.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    manifest_path = interp_path / "manifest.json"
+
+    if not manifest_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
+            status_code=404,
+        )
+
+    import json as _json
+    manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
+    doc_id = manifest.get("source_document_id", "")
+
+    if not doc_id:
+        return JSONResponse(
+            {"error": "manifest에 source_document_id가 없습니다."},
+            status_code=400,
+        )
+
+    snapshot = build_snapshot(_library_path, doc_id, interp_id)
+
+    # JSON 파일 다운로드
+    import io
+    from datetime import datetime
+
+    title = snapshot.get("work", {}).get("title", interp_id)
+    date_str = datetime.now().strftime("%Y%m%d")
+    filename = f"{title}_{date_str}.json"
+
+    content = _json.dumps(snapshot, ensure_ascii=False, indent=2).encode("utf-8")
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.post("/api/import/json")
+async def api_import_json(request: Request):
+    """JSON 스냅샷에서 새 Work(문헌 + 해석 저장소)를 생성한다.
+
+    목적: 다른 환경에서 export한 스냅샷을 현재 서고에 import.
+    입력: Request body에 JSON 직접 전송 (Content-Type: application/json).
+    출력: {status, doc_id, interp_id, title, layers_imported, warnings}.
+
+    왜 이렇게 하는가:
+        항상 "새 Work 생성"으로 처리하여 기존 데이터에 영향을 주지 않는다.
+        같은 스냅샷을 여러 번 import해도 각각 독립된 Work가 된다.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    import json as _json
+
+    try:
+        body = await request.body()
+        data = _json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, _json.JSONDecodeError) as e:
+        return JSONResponse(
+            {"error": f"JSON 파싱 실패: {e}"},
+            status_code=400,
+        )
+
+    # 검증
+    errors, warnings = validate_snapshot(data)
+    if errors:
+        return JSONResponse(
+            {
+                "status": "error",
+                "message": "스냅샷 검증 실패",
+                "errors": errors,
+                "warnings": warnings,
+            },
+            status_code=422,
+        )
+
+    # 새 Work 생성
+    result = create_work_from_snapshot(_library_path, data)
+
+    return {
+        "status": "success",
+        "doc_id": result["doc_id"],
+        "interp_id": result["interp_id"],
+        "title": result["title"],
+        "layers_imported": detect_imported_layers(data),
+        "warnings": result["warnings"] + warnings,
+    }

@@ -468,6 +468,28 @@ L4는 평문 텍스트(.txt)로 블록 경계가 없다. 블록별 대조를 위
 
 ---
 
+## D-018: JSON 스냅샷 Export/Import — 교환 형식 설계
+
+**날짜**: 2026-02-18
+**맥락**: Work(원본 L1~L4 + 해석 L5~L7 + 메타데이터)를 단일 JSON으로
+직렬화하여 백업, 복원, 다른 환경 이동을 지원해야 한다.
+
+**결정**:
+
+1. **schema_version**: 모든 스냅샷에 `"schema_version": "1.0"` 포함. 향후 마이그레이션 지원.
+2. **L1 이미지 참조만**: 바이너리 미포함, 경로·파일명·크기만 기록. JSON 경량화.
+3. **_source_path 메타데이터**: L5~L7 각 JSON에 원본 상대 경로를 기록하여 Import 시 정확한 위치에 복원.
+4. **항상 새 Work 생성**: Import 시 타임스탬프 접미사로 새 ID 발급. 기존 데이터 덮어쓰기 방지.
+5. **2단계 검증**: errors(import 차단)와 warnings(경고만) 분리. block_id 참조 무결성은 warning.
+6. **Export API**: `GET /api/interpretations/{interp_id}/export/json` — Content-Disposition 다운로드.
+7. **Import API**: `POST /api/import/json` — Request body에 JSON 직접 전송.
+
+**대안**:
+- ZIP 아카이브 (이미지 포함) → 파일 크기 과대, JSON 단순성 상실로 거부.
+- Git bundle → 히스토리 불필요한 경우가 더 많아 HEAD 스냅샷만 채택.
+
+---
+
 ### 원본 저장소
 - [ ] JSON 스키마 각 필드의 상세 정의 → Phase 1에서 해결
 - [ ] 서지정보 파싱 상세 → Phase 5에서 해결
