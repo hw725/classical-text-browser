@@ -206,12 +206,24 @@ class LlmOcrEngine(BaseOcrEngine):
         """
         prompt = _build_ocr_prompt(writing_direction, language)
 
-        response = await self._router.call_with_image(
-            prompt,
-            image_bytes,
+        # kwargs에서 force_provider/force_model 추출 (UI 프로바이더 선택 지원)
+        force_provider = kwargs.get("force_provider")
+        force_model = kwargs.get("force_model")
+
+        call_kwargs = dict(
             image_mime="image/png",
             purpose="ocr",
             system=_OCR_SYSTEM_PROMPT,
+        )
+        if force_provider:
+            call_kwargs["force_provider"] = force_provider
+        if force_model:
+            call_kwargs["force_model"] = force_model
+
+        response = await self._router.call_with_image(
+            prompt,
+            image_bytes,
+            **call_kwargs,
         )
 
         # 응답 텍스트에서 JSON 추출

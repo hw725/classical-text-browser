@@ -38,6 +38,11 @@ function initAnnotationEditor() {
   const aiBtn = document.getElementById("ann-ai-tag-btn");
   if (aiBtn) aiBtn.addEventListener("click", _aiTagAll);
 
+  // LLM 모델 드롭다운 로드
+  if (typeof populateLlmModelSelect === "function") {
+    populateLlmModelSelect("ann-llm-model-select");
+  }
+
   const commitAllBtn = document.getElementById("ann-commit-all-btn");
   if (commitAllBtn) commitAllBtn.addEventListener("click", _commitAllDrafts);
 
@@ -625,11 +630,20 @@ async function _aiTagAll() {
   }
 
   try {
+    // LLM 프로바이더/모델 선택 반영
+    const llmSel = typeof getLlmModelSelection === "function"
+      ? getLlmModelSelection("ann-llm-model-select")
+      : { force_provider: null, force_model: null };
+
+    const reqBody = { text };
+    if (llmSel.force_provider) reqBody.force_provider = llmSel.force_provider;
+    if (llmSel.force_model) reqBody.force_model = llmSel.force_model;
+
     // 1. LLM 호출
     const resp = await fetch("/api/llm/annotation", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(reqBody),
     });
 
     if (!resp.ok) {

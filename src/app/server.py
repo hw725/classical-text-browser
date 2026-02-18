@@ -1940,8 +1940,10 @@ def _get_ocr_pipeline():
 
 class OcrRunRequest(BaseModel):
     """OCR 실행 요청 본문."""
-    engine_id: str | None = None      # None이면 기본 엔진
+    engine_id: str | None = None        # None이면 기본 엔진
     block_ids: list[str] | None = None  # None이면 전체 블록
+    force_provider: str | None = None   # LLM 프로바이더 지정 (llm_vision 엔진 전용)
+    force_model: str | None = None      # LLM 모델 지정 (llm_vision 엔진 전용)
 
 
 @app.get("/api/ocr/engines")
@@ -2000,6 +2002,13 @@ async def api_run_ocr(
 
     pipeline, _registry = _get_ocr_pipeline()
 
+    # LLM 엔진용 추가 인자 (force_provider, force_model)
+    engine_kwargs = {}
+    if body.force_provider:
+        engine_kwargs["force_provider"] = body.force_provider
+    if body.force_model:
+        engine_kwargs["force_model"] = body.force_model
+
     try:
         result = pipeline.run_page(
             doc_id=doc_id,
@@ -2007,6 +2016,7 @@ async def api_run_ocr(
             page_number=page_number,
             engine_id=body.engine_id,
             block_ids=body.block_ids,
+            **engine_kwargs,
         )
         return result.to_summary()
     except Exception as e:

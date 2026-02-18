@@ -29,6 +29,17 @@ function initOcrPanel() {
   // 엔진 목록 로드
   refreshOcrEngines();
 
+  // LLM 모델 드롭다운 로드
+  if (typeof populateLlmModelSelect === "function") {
+    populateLlmModelSelect("ocr-llm-model-select");
+  }
+
+  // LLM 모델 행: llm_vision 엔진일 때만 표시
+  const engineSelect = document.getElementById("ocr-engine-select");
+  if (engineSelect) {
+    engineSelect.addEventListener("change", _toggleLlmModelRow);
+  }
+
   // 버튼 이벤트
   const runAllBtn = document.getElementById("ocr-run-all");
   const runSelectedBtn = document.getElementById("ocr-run-selected");
@@ -126,15 +137,24 @@ async function _runOcr(blockIds) {
   _disableButtons(true);
 
   try {
+    // LLM 프로바이더/모델 선택 (llm_vision 엔진 전용)
+    const llmSel = typeof getLlmModelSelection === "function"
+      ? getLlmModelSelection("ocr-llm-model-select")
+      : { force_provider: null, force_model: null };
+
+    const reqBody = {
+      engine_id: engineId,
+      block_ids: blockIds,
+    };
+    if (llmSel.force_provider) reqBody.force_provider = llmSel.force_provider;
+    if (llmSel.force_model) reqBody.force_model = llmSel.force_model;
+
     const resp = await fetch(
       `/api/documents/${docId}/parts/${partId}/pages/${pageNum}/ocr`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          engine_id: engineId,
-          block_ids: blockIds,
-        }),
+        body: JSON.stringify(reqBody),
       }
     );
 
@@ -380,4 +400,20 @@ function _updateSelectedBlockButton() {
   const btn = document.getElementById("ocr-run-selected");
   if (!btn) return;
   btn.disabled = ocrState.running || !_hasSelectedBlock();
+}
+
+
+/**
+ * LLM 모델 선택 행을 엔진 유형에 따라 표시/숨김.
+ *
+ * llm_vision 엔진일 때만 "LLM 모델" 드롭다운을 보여준다.
+ * 다른 엔진(PaddleOCR, Tesseract 등)은 LLM 모델이 무관하므로 숨긴다.
+ */
+function _toggleLlmModelRow() {
+  const engineSelect = document.getElementById("ocr-engine-select");
+  const modelRow = document.getElementById("ocr-llm-model-row");
+  if (!modelRow) return;
+
+  const engineId = engineSelect ? engineSelect.value : "";
+  modelRow.style.display = (engineId === "llm_vision" || engineId === "") ? "" : "none";
 }

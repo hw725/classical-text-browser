@@ -37,6 +37,10 @@ const transState = {
 // eslint-disable-next-line no-unused-vars
 function initTranslationEditor() {
   _bindTransEvents();
+  // LLM 모델 드롭다운 로드
+  if (typeof populateLlmModelSelect === "function") {
+    populateLlmModelSelect("trans-llm-model-select");
+  }
 }
 
 function _bindTransEvents() {
@@ -526,10 +530,19 @@ async function _aiTranslateSingle(sentIdx) {
   btns.forEach((b) => { b.disabled = true; b.textContent = "번역 중..."; });
 
   try {
+    // LLM 프로바이더/모델 선택 반영
+    const llmSel = typeof getLlmModelSelection === "function"
+      ? getLlmModelSelection("trans-llm-model-select")
+      : { force_provider: null, force_model: null };
+
+    const reqBody = { text: sent.text };
+    if (llmSel.force_provider) reqBody.force_provider = llmSel.force_provider;
+    if (llmSel.force_model) reqBody.force_model = llmSel.force_model;
+
     const resp = await fetch("/api/llm/translation", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: sent.text }),
+      body: JSON.stringify(reqBody),
     });
 
     if (!resp.ok) {

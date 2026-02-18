@@ -253,6 +253,13 @@
               </select>
             </div>
 
+            <div class="ocr-control-row" id="ocr-llm-model-row">
+              <label class="props-label">LLM 모델</label>
+              <select id="ocr-llm-model-select" class="props-select" title="LLM 프로바이더/모델 선택">
+                <option value="auto">자동 (폴백순서)</option>
+              </select>
+            </div>
+
             <div class="ocr-buttons">
               <button id="ocr-run-all" class="text-btn text-btn-primary" title="전체 블록 OCR 실행">전체 OCR</button>
               <button id="ocr-run-selected" class="text-btn" title="선택된 블록만 OCR" disabled>선택 블록 OCR</button>
@@ -403,6 +410,9 @@
             <option value="">블록 선택</option>
           </select>
           <div class="text-toolbar-spacer"></div>
+          <select id="punct-llm-model-select" class="props-select llm-model-select" title="LLM 모델">
+            <option value="auto">자동</option>
+          </select>
           <button id="punct-ai-btn" class="text-btn" title="AI 표점 생성">AI 표점</button>
           <button id="punct-clear-btn" class="text-btn" title="표점 초기화">초기화</button>
           <div class="text-toolbar-divider"></div>
@@ -498,6 +508,9 @@
             <option value="">블록 선택</option>
           </select>
           <div class="text-toolbar-spacer"></div>
+          <select id="trans-llm-model-select" class="props-select llm-model-select" title="LLM 모델">
+            <option value="auto">자동</option>
+          </select>
           <button id="trans-ai-all-btn" class="text-btn" title="미번역 문장 전체 AI 번역">전체 AI 번역</button>
           <div class="text-toolbar-divider"></div>
           <button id="trans-save-btn" class="text-btn text-btn-primary" title="저장">저장</button>
@@ -532,6 +545,9 @@
             <option value="">전체 유형</option>
           </select>
           <div class="text-toolbar-spacer"></div>
+          <select id="ann-llm-model-select" class="props-select llm-model-select" title="LLM 모델">
+            <option value="auto">자동</option>
+          </select>
           <button id="ann-ai-tag-btn" class="text-btn" title="AI 자동 태깅">AI 태깅</button>
           <button id="ann-commit-all-btn" class="text-btn" title="Draft 일괄 확정">전체 승인</button>
           <div class="text-toolbar-divider"></div>

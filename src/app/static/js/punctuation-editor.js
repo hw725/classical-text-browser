@@ -115,6 +115,11 @@ function _bindPunctEvents() {
   // AI 표점 버튼
   const aiBtn = document.getElementById("punct-ai-btn");
   if (aiBtn) aiBtn.addEventListener("click", _requestAiPunctuation);
+
+  // LLM 모델 드롭다운 로드
+  if (typeof populateLlmModelSelect === "function") {
+    populateLlmModelSelect("punct-llm-model-select");
+  }
 }
 
 
@@ -633,11 +638,20 @@ async function _requestAiPunctuation() {
   }
 
   try {
+    // LLM 프로바이더/모델 선택 반영
+    const llmSel = typeof getLlmModelSelection === "function"
+      ? getLlmModelSelection("punct-llm-model-select")
+      : { force_provider: null, force_model: null };
+
+    const reqBody = { text: punctState.originalText };
+    if (llmSel.force_provider) reqBody.force_provider = llmSel.force_provider;
+    if (llmSel.force_model) reqBody.force_model = llmSel.force_model;
+
     // LLM에게 표점 생성 요청
     const resp = await fetch("/api/llm/punctuation", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: punctState.originalText }),
+      body: JSON.stringify(reqBody),
     });
 
     if (!resp.ok) {
