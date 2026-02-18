@@ -23,7 +23,10 @@ class Base44HttpProvider(BaseLlmProvider):
 
     provider_id = "base44_http"
     display_name = "Base44 (agent-chat)"
-    supports_image = True
+    # agent-chat(MCP)은 이미지 첨부를 지원하지만
+    # 실제로 OCR/비전 분석에는 "지원되지 않습니다"를 반환하므로 비활성화.
+    # 이미지 분석은 base44_bridge, ollama 등 다른 프로바이더를 사용한다.
+    supports_image = False
 
     @property
     def _url(self) -> str:
