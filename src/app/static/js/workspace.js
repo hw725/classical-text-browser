@@ -558,6 +558,79 @@ function initBottomPanelTabs() {
 }
 
 
+/* ──────────────────────────
+   공통 LLM 모델 선택 로더
+   ──────────────────────────
+   OCR, 표점, 번역, 주석 등 모든 모드에서 동일한
+   LLM 프로바이더/모델 드롭다운을 공유한다.
+   /api/llm/models 응답을 한 번만 가져와 캐시한다.
+*/
+
+let _llmModelListCache = null;
+
+/**
+ * selectId에 해당하는 <select>에 LLM 모델 목록을 채운다.
+ *
+ * 왜 공통 함수인가:
+ *   레이아웃/OCR/표점/번역/주석 모두 같은 LLM 라우터를 사용한다.
+ *   프로바이더 선택 UI도 동일한 데이터를 보여주므로 중복을 제거한다.
+ *
+ * 입력: <select> 요소의 id
+ */
+async function populateLlmModelSelect(selectId) {
+  const select = document.getElementById(selectId);
+  if (!select) return;
+
+  // 캐시된 데이터가 있으면 바로 사용
+  if (_llmModelListCache) {
+    _fillLlmSelect(select, _llmModelListCache);
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/llm/models");
+    if (!res.ok) return;
+    _llmModelListCache = await res.json();
+    _fillLlmSelect(select, _llmModelListCache);
+  } catch {
+    // 서버 미연결 시 무시
+  }
+}
+
+function _fillLlmSelect(select, models) {
+  select.innerHTML = '<option value="auto">자동 (폴백순서)</option>';
+  for (const m of models) {
+    const opt = document.createElement("option");
+    opt.value = `${m.provider}:${m.model}`;
+    const icon = m.available ? "●" : "○";
+    const costLabel = m.cost === "free" ? "" : " [유료]";
+    opt.textContent = `${icon} ${m.display}${costLabel}`;
+    opt.disabled = !m.available;
+    select.appendChild(opt);
+  }
+}
+
+/**
+ * selectId의 <select>에서 force_provider, force_model을 파싱한다.
+ *
+ * 반환: { force_provider: string|null, force_model: string|null }
+ */
+function getLlmModelSelection(selectId) {
+  const select = document.getElementById(selectId);
+  const value = select ? select.value : "auto";
+
+  if (value === "auto") {
+    return { force_provider: null, force_model: null };
+  }
+
+  const parts = value.split(":", 2);
+  return {
+    force_provider: parts[0] || null,
+    force_model: parts[1] && parts[1] !== "auto" ? parts[1] : null,
+  };
+}
+
+
 /**
  * 사이드바에 문헌 목록을 렌더링한다.
  */

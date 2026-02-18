@@ -106,6 +106,7 @@ class OcrPipeline:
         page_number: int,
         engine_id: Optional[str] = None,
         block_ids: Optional[list[str]] = None,
+        **engine_kwargs,
     ) -> OcrPageResult:
         """페이지의 블록들을 OCR 실행한다.
 
@@ -115,6 +116,7 @@ class OcrPipeline:
           page_number: 페이지 번호 (1-indexed)
           engine_id: OCR 엔진 (None이면 기본 엔진)
           block_ids: OCR할 블록 ID 목록 (None이면 전체)
+          **engine_kwargs: 엔진에 전달할 추가 인자 (force_provider, force_model 등)
 
         출력: OcrPageResult
 
@@ -179,7 +181,9 @@ class OcrPipeline:
                 continue
 
             try:
-                ocr_dict = self._process_block(engine, page_image, block)
+                ocr_dict = self._process_block(
+                    engine, page_image, block, **engine_kwargs
+                )
                 ocr_dict["layout_block_id"] = block_id
                 result.ocr_results.append(ocr_dict)
                 result.processed_blocks += 1
@@ -224,11 +228,15 @@ class OcrPipeline:
         engine,
         page_image,
         block: dict,
+        **engine_kwargs,
     ) -> dict:
         """단일 블록을 OCR 처리한다.
 
         입력: 엔진, 페이지 이미지, 블록 정보(L3)
         출력: OCR 결과 딕셔너리 (ocr_page.schema.json 형식)
+
+        engine_kwargs는 엔진의 recognize()에 그대로 전달된다.
+        LlmOcrEngine의 경우 force_provider, force_model 등을 받을 수 있다.
         """
         bbox = block.get("bbox")
         if not bbox or len(bbox) != 4:
@@ -247,6 +255,7 @@ class OcrPipeline:
             processed,
             writing_direction=writing_direction,
             language=language,
+            **engine_kwargs,
         )
 
         return ocr_result.to_dict()
