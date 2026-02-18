@@ -37,6 +37,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (typeof initOcrPanel === "function") initOcrPanel();
   // Phase 10-3: 대조 뷰 초기화
   if (typeof initAlignmentView === "function") initAlignmentView();
+  // 편성 에디터 초기화 (LayoutBlock → TextBlock)
+  if (typeof initCompositionEditor === "function") initCompositionEditor();
   // Phase 11-1: 표점 편집기 초기화
   if (typeof initPunctuationEditor === "function") initPunctuationEditor();
   // Phase 11-1: 현토 편집기 초기화
@@ -439,6 +441,7 @@ function _switchMode(mode) {
   const editorRight = document.getElementById("editor-right");
   const layoutPanel = document.getElementById("layout-props-panel");
   const correctionPanel = document.getElementById("correction-panel");
+  const compositionPanel = document.getElementById("composition-panel");
   const interpPanel = document.getElementById("interp-panel");
   const punctPanel = document.getElementById("punct-panel");
   const hyeontoPanel = document.getElementById("hyeonto-panel");
@@ -453,6 +456,10 @@ function _switchMode(mode) {
   if (currentMode === "correction") {
     if (typeof deactivateCorrectionMode === "function") deactivateCorrectionMode();
     if (correctionPanel) correctionPanel.style.display = "none";
+  }
+  if (currentMode === "composition") {
+    if (typeof deactivateCompositionMode === "function") deactivateCompositionMode();
+    if (compositionPanel) compositionPanel.style.display = "none";
   }
   if (currentMode === "interpretation") {
     if (typeof deactivateInterpretationMode === "function") deactivateInterpretationMode();
@@ -479,6 +486,7 @@ function _switchMode(mode) {
   if (editorRight) editorRight.style.display = "none";
   if (layoutPanel) layoutPanel.style.display = "none";
   if (correctionPanel) correctionPanel.style.display = "none";
+  if (compositionPanel) compositionPanel.style.display = "none";
   if (interpPanel) interpPanel.style.display = "none";
   if (punctPanel) punctPanel.style.display = "none";
   if (hyeontoPanel) hyeontoPanel.style.display = "none";
@@ -496,6 +504,10 @@ function _switchMode(mode) {
     // 우측: 교정 편집기 패널 표시
     if (correctionPanel) correctionPanel.style.display = "";
     if (typeof activateCorrectionMode === "function") activateCorrectionMode();
+  } else if (mode === "composition") {
+    // 우측: 편성 에디터 패널 표시
+    if (compositionPanel) compositionPanel.style.display = "";
+    if (typeof activateCompositionMode === "function") activateCompositionMode();
   } else if (mode === "interpretation") {
     // 우측: 해석 뷰어 패널 표시
     if (interpPanel) interpPanel.style.display = "";

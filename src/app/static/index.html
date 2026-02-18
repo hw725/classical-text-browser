@@ -18,6 +18,10 @@
         <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
       </svg>
     </button>
+    <!-- 미구현 placeholder 버튼: 검색, Git 이력
+         기능이 구현되면 주석 해제. 현재는 클릭해도 서고 브라우저와 동일하게
+         동작하여 사용자 혼란을 유발하므로 숨김 처리. -->
+    <!--
     <button class="activity-btn" data-panel="search" title="검색">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
@@ -29,6 +33,7 @@
         <line x1="12" y1="2" x2="12" y2="8"/>
       </svg>
     </button>
+    -->
     <div class="activity-spacer"></div>
     <button id="theme-toggle" class="theme-toggle-btn" title="라이트 모드로 전환">
       <!-- 해/달 아이콘: JS에서 동적 전환 -->
@@ -129,9 +134,10 @@
       <div class="mode-tab active" data-mode="view">열람</div>
       <div class="mode-tab" data-mode="layout">레이아웃</div>
       <div class="mode-tab" data-mode="correction">교정</div>
-      <div class="mode-tab" data-mode="interpretation">해석</div>
+      <div class="mode-tab" data-mode="composition">편성</div>
       <div class="mode-tab" data-mode="punctuation">표점</div>
       <div class="mode-tab" data-mode="hyeonto">현토</div>
+      <div class="mode-tab" data-mode="interpretation">해석</div>
       <div class="mode-tab" data-mode="translation">번역</div>
       <div class="mode-tab" data-mode="annotation">주석</div>
     </div>
@@ -365,6 +371,53 @@
               <button id="alignment-add-variant" class="text-btn text-btn-small" title="이체자 쌍 추가">+ 추가</button>
             </div>
             <div id="alignment-variant-list" class="alignment-variant-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 우측 패널: 편성 에디터 (교정→표점 사이, LayoutBlock→TextBlock 변환) -->
+      <div class="editor-panel editor-right composition-panel" id="composition-panel" style="display:none;">
+        <div class="panel-label">텍스트 편성
+          <span id="comp-save-status" class="text-save-status"></span>
+        </div>
+
+        <!-- 도구 바 -->
+        <div class="comp-toolbar" style="display:flex; gap:6px; padding:6px 8px; border-bottom:1px solid var(--border);">
+          <button id="comp-auto-btn" class="text-btn" title="각 LayoutBlock을 1:1로 TextBlock 자동 생성">자동 편성</button>
+          <button id="comp-merge-btn" class="text-btn" title="선택한 블록들을 합쳐서 하나의 TextBlock 생성">합치기</button>
+          <div style="flex:1;"></div>
+          <span id="comp-block-count" class="text-save-status" style="font-size:11px;"></span>
+        </div>
+
+        <!-- 교정된 텍스트 블록 목록 (좌측: 소스) -->
+        <div class="comp-container" style="display:flex; flex-direction:column; flex:1; overflow:auto; padding:8px;">
+          <!-- 소스 블록 영역 -->
+          <div class="comp-section">
+            <div class="comp-section-title" style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px;">
+              교정된 LayoutBlock (소스)
+            </div>
+            <div id="comp-source-blocks" class="comp-block-list" style="display:flex; flex-direction:column; gap:6px;">
+              <div class="placeholder" style="padding:20px; text-align:center; color:var(--text-muted);">
+                페이지를 선택하세요
+              </div>
+            </div>
+          </div>
+
+          <!-- 구분선 -->
+          <div style="border-top:1px solid var(--border); margin:12px 0; position:relative;">
+            <span style="position:absolute; top:-9px; left:50%; transform:translateX(-50%); background:var(--bg-primary); padding:0 8px; font-size:10px; color:var(--text-muted);">▼ TextBlock ▼</span>
+          </div>
+
+          <!-- 생성된 TextBlock 목록 -->
+          <div class="comp-section">
+            <div class="comp-section-title" style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px;">
+              생성된 TextBlock (해석 저장소)
+            </div>
+            <div id="comp-textblock-list" class="comp-block-list" style="display:flex; flex-direction:column; gap:6px;">
+              <div class="placeholder" style="padding:20px; text-align:center; color:var(--text-muted);">
+                해석 저장소를 선택하세요
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1127,6 +1180,7 @@
 <script src="/static/js/create-document.js"></script>
 <script src="/static/js/ocr-panel.js"></script>
 <script src="/static/js/alignment-view.js"></script>
+<script src="/static/js/composition-editor.js"></script>
 <script src="/static/js/punctuation-editor.js"></script>
 <script src="/static/js/hyeonto-editor.js"></script>
 <script src="/static/js/translation-editor.js"></script>

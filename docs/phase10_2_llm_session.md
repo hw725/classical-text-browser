@@ -2315,3 +2315,33 @@ from .anthropic_provider import AnthropicProvider
 - [ ] bridge/invoke.js가 backend-44 경로를 올바르게 탐색
 - [ ] API 엔드포인트가 기존 앱에 등록됨 (`/api/llm/status` 접근 가능)
 - [ ] GUI에 모델 선택 드롭다운 + AI 분석 버튼 동작
+
+---
+
+## ⏭️ 다음 세션: Phase 10-1 — OCR 엔진 연동
+
+```
+이 세션(10-2)이 완료되면 다음 작업은 Phase 10-1 — OCR 엔진 연동이다.
+
+10-2에서 만든 것:
+  ✅ LlmRouter (4단 폴백)
+  ✅ Base44HttpProvider, Base44BridgeProvider, OllamaProvider, AnthropicProvider
+  ✅ Draft → Review → Commit 패턴
+  ✅ UsageTracker (비용 추적)
+  ✅ 레이아웃 분석 프롬프트 + 로직
+  ✅ 모델 비교 모드 (compare)
+  ✅ GUI — 모델 선택 + AI 분석
+
+10-1에서 만들 것:
+  - OCR 플러그인 아키텍처 (BaseOcrEngine + Registry)
+  - PaddleOCR 엔진 (오프라인 퍼스트)
+  - OCR 파이프라인 (L3 bbox → 이미지 크롭 → OCR → L2 저장)
+  - API 엔드포인트
+  - GUI — OCR 실행 + 결과 표시 + 이미지 오버레이
+
+세션 문서: phase10_1_ocr_session.md
+사전 준비:
+  - PaddleOCR 설치 가능한지 확인 (paddlepaddle ~500MB)
+  - GPU 없으면 CPU 버전으로 진행
+  - L3 layout_page.json이 있는 테스트 데이터 확인
+```

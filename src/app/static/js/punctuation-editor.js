@@ -153,7 +153,11 @@ function deactivatePunctuationMode() {
 
 /**
  * 블록 선택 드롭다운을 채운다.
- * 교정 모드의 블록 필터와 같은 방식으로, 레이아웃 블록 목록을 가져온다.
+ *
+ * 왜 이렇게 하는가:
+ *   편성 단계를 거쳤으면 TextBlock이 존재한다.
+ *   TextBlock이 있으면 TextBlock 목록을 드롭다운에 표시하고,
+ *   없으면 기존처럼 LayoutBlock 목록을 표시한다 (하위 호환).
  */
 async function _populateBlockSelect() {
   const select = document.getElementById("punct-block-select");
@@ -164,12 +168,58 @@ async function _populateBlockSelect() {
 
   if (!viewerState.docId || !viewerState.partId || !viewerState.pageNum) return;
 
+  // TextBlock이 있으면 우선 사용
+  if (interpState.interpId) {
+    try {
+      const tbRes = await fetch(
+        `/api/interpretations/${interpState.interpId}/entities/text_block?page=${viewerState.pageNum}&document_id=${viewerState.docId}`
+      );
+      if (tbRes.ok) {
+        const tbData = await tbRes.json();
+        const textBlocks = (tbData.entities || []).filter((e) => {
+          const refs = e.source_refs || [];
+          const ref = e.source_ref;
+          if (refs.length > 0) return refs.some((r) => r.page === viewerState.pageNum);
+          if (ref) return ref.page === viewerState.pageNum;
+          return false;
+        }).sort((a, b) => (a.sequence_index || 0) - (b.sequence_index || 0));
+
+        if (textBlocks.length > 0) {
+          // TextBlock 기반 드롭다운
+          textBlocks.forEach((tb) => {
+            const opt = document.createElement("option");
+            // TextBlock ID를 value로 사용 (UUID)
+            opt.value = `tb:${tb.id}`;
+            const refs = tb.source_refs || [];
+            const srcLabel = refs.map((r) => r.layout_block_id || "?").join("+");
+            opt.textContent = `#${tb.sequence_index} TextBlock (${srcLabel})`;
+            // TextBlock 텍스트를 data 속성에 저장
+            opt.dataset.text = tb.original_text || "";
+            select.appendChild(opt);
+          });
+
+          // 이전 선택 복원 또는 첫 번째 자동 선택
+          if (punctState.blockId && select.querySelector(`option[value="${punctState.blockId}"]`)) {
+            select.value = punctState.blockId;
+          } else if (select.options.length > 1) {
+            select.selectedIndex = 1;
+            punctState.blockId = select.value;
+            _loadPunctuationData();
+          }
+          return;
+        }
+      }
+    } catch {
+      // TextBlock 조회 실패 시 LayoutBlock 폴백
+    }
+  }
+
+  // 폴백: LayoutBlock 기반 드롭다운 (편성 미완료 시)
   try {
     const res = await fetch(
       `/api/documents/${viewerState.docId}/pages/${viewerState.pageNum}/layout?part_id=${viewerState.partId}`
     );
     if (!res.ok) {
-      // 레이아웃이 없으면 기본 블록 하나 제공
       const opt = document.createElement("option");
       opt.value = `p${String(viewerState.pageNum).padStart(2, "0")}_b01`;
       opt.textContent = `p${String(viewerState.pageNum).padStart(2, "0")}_b01 (기본)`;
@@ -197,13 +247,11 @@ async function _populateBlockSelect() {
     if (punctState.blockId) {
       select.value = punctState.blockId;
     } else if (select.options.length > 1) {
-      // 첫 번째 블록 자동 선택
       select.selectedIndex = 1;
       punctState.blockId = select.value;
       _loadPunctuationData();
     }
   } catch {
-    // 네트워크 오류 시 기본 블록
     const opt = document.createElement("option");
     opt.value = `p${String(viewerState.pageNum).padStart(2, "0")}_b01`;
     opt.textContent = `p${String(viewerState.pageNum).padStart(2, "0")}_b01 (기본)`;
@@ -218,6 +266,11 @@ async function _populateBlockSelect() {
 
 /**
  * 현재 블록의 원문 + 표점 데이터를 로드한다.
+ *
+ * 왜 이렇게 하는가:
+ *   blockId가 "tb:UUID" 형식이면 TextBlock에서 텍스트를 가져오고,
+ *   그렇지 않으면 기존처럼 L4 텍스트에서 가져온다 (하위 호환).
+ *   TextBlock을 사용하면 교정이 적용된 텍스트를 자동으로 받을 수 있다.
  */
 async function _loadPunctuationData() {
   if (!interpState.interpId || !viewerState.pageNum || !punctState.blockId) {
@@ -225,29 +278,71 @@ async function _loadPunctuationData() {
     return;
   }
 
+  const isTextBlock = punctState.blockId.startsWith("tb:");
+
   try {
-    // 원문 + 표점을 병렬 로드
-    const [textRes, punctRes] = await Promise.all([
-      fetch(`/api/documents/${viewerState.docId}/pages/${viewerState.pageNum}/text?part_id=${viewerState.partId}`),
-      fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation?block_id=${punctState.blockId}`),
-    ]);
+    if (isTextBlock) {
+      // TextBlock 기반: 드롭다운 option의 data-text에서 텍스트를 가져옴
+      const select = document.getElementById("punct-block-select");
+      const selectedOpt = select ? select.querySelector(`option[value="${punctState.blockId}"]`) : null;
 
-    // 원문 로드
-    if (textRes.ok) {
-      const textData = await textRes.json();
-      // 텍스트에서 블록에 해당하는 부분을 추출
-      // 현재는 전체 텍스트를 사용 (향후 블록별 분리 가능)
-      punctState.originalText = textData.text || "";
-    } else {
-      punctState.originalText = "";
-    }
+      if (selectedOpt && selectedOpt.dataset.text) {
+        punctState.originalText = selectedOpt.dataset.text;
+      } else {
+        // API로 TextBlock 직접 조회
+        const tbId = punctState.blockId.replace("tb:", "");
+        const tbRes = await fetch(
+          `/api/interpretations/${interpState.interpId}/entities/text_block/${tbId}`
+        );
+        if (tbRes.ok) {
+          const tb = await tbRes.json();
+          punctState.originalText = tb.original_text || "";
+        } else {
+          punctState.originalText = "";
+        }
+      }
 
-    // 표점 로드
-    if (punctRes.ok) {
-      const punctData = await punctRes.json();
-      punctState.marks = punctData.marks || [];
+      // 표점 로드 (block_id는 TextBlock ID)
+      const punctBlockId = punctState.blockId.replace("tb:", "");
+      const punctRes = await fetch(
+        `/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation?block_id=${punctBlockId}`
+      );
+      if (punctRes.ok) {
+        const punctData = await punctRes.json();
+        punctState.marks = punctData.marks || [];
+      } else {
+        punctState.marks = [];
+      }
+
     } else {
-      punctState.marks = [];
+      // 기존 LayoutBlock 기반 (하위 호환)
+      const [textRes, punctRes] = await Promise.all([
+        fetch(`/api/documents/${viewerState.docId}/pages/${viewerState.pageNum}/corrected-text?part_id=${viewerState.partId}`),
+        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation?block_id=${punctState.blockId}`),
+      ]);
+
+      // 교정된 텍스트에서 해당 블록의 텍스트를 추출
+      if (textRes.ok) {
+        const data = await textRes.json();
+        const blocks = data.blocks || [];
+        const match = blocks.find((b) => b.block_id === punctState.blockId);
+        if (match) {
+          punctState.originalText = match.corrected_text || match.original_text || "";
+        } else {
+          // 블록 매칭 실패 시 전체 교정 텍스트 사용
+          punctState.originalText = data.corrected_text || "";
+        }
+      } else {
+        punctState.originalText = "";
+      }
+
+      // 표점 로드
+      if (punctRes.ok) {
+        const punctData = await punctRes.json();
+        punctState.marks = punctData.marks || [];
+      } else {
+        punctState.marks = [];
+      }
     }
 
     punctState.isDirty = false;
