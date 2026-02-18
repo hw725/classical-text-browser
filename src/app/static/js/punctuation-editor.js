@@ -115,11 +115,7 @@ function _bindPunctEvents() {
   // AI 표점 버튼
   const aiBtn = document.getElementById("punct-ai-btn");
   if (aiBtn) aiBtn.addEventListener("click", _requestAiPunctuation);
-
-  // LLM 모델 드롭다운 로드
-  if (typeof populateLlmModelSelect === "function") {
-    populateLlmModelSelect("punct-llm-model-select");
-  }
+  // (LLM 모델 목록은 workspace.js의 _loadAllLlmModelSelects()가 일괄 로드)
 }
 
 

@@ -38,10 +38,7 @@ function initAnnotationEditor() {
   const aiBtn = document.getElementById("ann-ai-tag-btn");
   if (aiBtn) aiBtn.addEventListener("click", _aiTagAll);
 
-  // LLM 모델 드롭다운 로드
-  if (typeof populateLlmModelSelect === "function") {
-    populateLlmModelSelect("ann-llm-model-select");
-  }
+  // (LLM 모델 목록은 workspace.js의 _loadAllLlmModelSelects()가 일괄 로드)
 
   const commitAllBtn = document.getElementById("ann-commit-all-btn");
   if (commitAllBtn) commitAllBtn.addEventListener("click", _commitAllDrafts);

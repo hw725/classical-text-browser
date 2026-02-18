@@ -29,12 +29,8 @@ function initOcrPanel() {
   // 엔진 목록 로드
   refreshOcrEngines();
 
-  // LLM 모델 드롭다운 로드
-  if (typeof populateLlmModelSelect === "function") {
-    populateLlmModelSelect("ocr-llm-model-select");
-  }
-
   // LLM 모델 행: llm_vision 엔진일 때만 표시
+  // (모델 목록은 workspace.js의 _loadAllLlmModelSelects()가 일괄 로드)
   const engineSelect = document.getElementById("ocr-engine-select");
   if (engineSelect) {
     engineSelect.addEventListener("change", _toggleLlmModelRow);

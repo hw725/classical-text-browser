@@ -51,6 +51,9 @@ document.addEventListener("DOMContentLoaded", () => {
   initSnapshotButtons();
   // Phase 7+8: 하단 패널 탭 전환 (Git 이력 ↔ 의존 추적 ↔ 엔티티)
   initBottomPanelTabs();
+
+  // 전 모드 LLM 모델 드롭다운 채우기 (모든 init 완료 후 한 번만)
+  _loadAllLlmModelSelects();
 });
 
 
@@ -563,37 +566,40 @@ function initBottomPanelTabs() {
    ──────────────────────────
    OCR, 표점, 번역, 주석 등 모든 모드에서 동일한
    LLM 프로바이더/모델 드롭다운을 공유한다.
-   /api/llm/models 응답을 한 번만 가져와 캐시한다.
+   /api/llm/models를 한 번만 fetch하여 모든 셀렉트를 채운다.
 */
 
-let _llmModelListCache = null;
-
 /**
- * selectId에 해당하는 <select>에 LLM 모델 목록을 채운다.
+ * 모든 LLM 모델 드롭다운을 한 번에 채운다.
  *
- * 왜 공통 함수인가:
- *   레이아웃/OCR/표점/번역/주석 모두 같은 LLM 라우터를 사용한다.
- *   프로바이더 선택 UI도 동일한 데이터를 보여주므로 중복을 제거한다.
+ * DOMContentLoaded 끝에서 호출한다.
+ * /api/llm/models를 한 번만 fetch하고,
+ * class="llm-model-select"인 모든 <select>에 옵션을 채운다.
  *
- * 입력: <select> 요소의 id
+ * 왜 이 방식인가:
+ *   개별 init 함수에서 각각 호출하면 타이밍 문제가 생길 수 있다.
+ *   한 곳에서 한 번에 처리하면 확실하다.
  */
-async function populateLlmModelSelect(selectId) {
-  const select = document.getElementById(selectId);
-  if (!select) return;
-
-  // 캐시된 데이터가 있으면 바로 사용
-  if (_llmModelListCache) {
-    _fillLlmSelect(select, _llmModelListCache);
-    return;
-  }
+async function _loadAllLlmModelSelects() {
+  // class="llm-model-select"인 모든 <select> 찾기
+  const selects = document.querySelectorAll("select.llm-model-select");
+  if (selects.length === 0) return;
 
   try {
     const res = await fetch("/api/llm/models");
-    if (!res.ok) return;
-    _llmModelListCache = await res.json();
-    _fillLlmSelect(select, _llmModelListCache);
-  } catch {
-    // 서버 미연결 시 무시
+    if (!res.ok) {
+      console.warn("LLM 모델 목록 로드 실패:", res.status);
+      return;
+    }
+    const models = await res.json();
+    console.log(`LLM 모델 ${models.length}개 로드 → ${selects.length}개 드롭다운에 적용`);
+
+    // 모든 셀렉트에 동일한 옵션 채우기
+    for (const select of selects) {
+      _fillLlmSelect(select, models);
+    }
+  } catch (e) {
+    console.warn("LLM 모델 목록 로드 실패:", e);
   }
 }
 
