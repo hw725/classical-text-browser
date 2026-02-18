@@ -797,13 +797,69 @@ async function loadPageLayout(docId, partId, pageNum) {
     layoutState.selectedBlockId = null;
     layoutState.isDirty = false;
 
-    _updateLayoutSaveStatus(data._meta?.exists ? "saved" : "empty");
+    // PDF 뷰포트(scale=1.0) 크기를 기준값으로 가져옴
+    // 왜 필요한가:
+    //   1. imageWidth가 없으면 LLM bbox_ratio 변환에 필요
+    //   2. 기존 L3의 imageWidth가 뷰포트와 다르면 블록 좌표 보정 필요
+    let vpWidth = 0, vpHeight = 0;
+    if (typeof pdfState !== "undefined" && pdfState.pdfDoc) {
+      try {
+        const pdfPage = await pdfState.pdfDoc.getPage(pageNum);
+        const vp = pdfPage.getViewport({ scale: 1.0 });
+        vpWidth = Math.round(vp.width);
+        vpHeight = Math.round(vp.height);
+      } catch (_) { /* 무시 */ }
+    }
+
+    if (!layoutState.imageWidth && vpWidth > 0) {
+      // 레이아웃이 아직 작성되지 않은 페이지 → PDF 뷰포트에서 설정
+      layoutState.imageWidth = vpWidth;
+      layoutState.imageHeight = vpHeight;
+    } else if (layoutState.imageWidth && vpWidth > 0 && layoutState.imageWidth !== vpWidth) {
+      // 기존 L3의 image_width가 PDF 뷰포트와 다른 경우
+      // (예: 이전 버그로 3120이 저장되었지만, 실제 뷰포트는 1560)
+      // → 블록 bbox를 뷰포트 좌표계로 리스케일
+      const scaleX = vpWidth / layoutState.imageWidth;
+      const scaleY = vpHeight / layoutState.imageHeight;
+      console.info(
+        `L3 imageWidth(${layoutState.imageWidth})가 PDF 뷰포트(${vpWidth})와 다릅니다.`,
+        `블록 좌표를 리스케일합니다 (×${scaleX.toFixed(2)}, ×${scaleY.toFixed(2)})`
+      );
+      for (const block of layoutState.blocks) {
+        if (block.bbox && block.bbox.length === 4) {
+          block.bbox = [
+            Math.round(block.bbox[0] * scaleX),
+            Math.round(block.bbox[1] * scaleY),
+            Math.round(block.bbox[2] * scaleX),
+            Math.round(block.bbox[3] * scaleY),
+          ];
+        }
+      }
+      layoutState.imageWidth = vpWidth;
+      layoutState.imageHeight = vpHeight;
+      layoutState.isDirty = true;  // 리스케일했으므로 저장 필요
+    }
+
+    _updateLayoutSaveStatus(
+      layoutState.isDirty ? "modified" : (data._meta?.exists ? "saved" : "empty")
+    );
     _redrawOverlay();
     _updatePropsForm();
     _updateBlockList();
   } catch (err) {
     console.error("레이아웃 로드 실패:", err);
     layoutState.blocks = [];
+
+    // 에러 시에도 imageWidth는 PDF 뷰포트에서 설정
+    if (typeof pdfState !== "undefined" && pdfState.pdfDoc) {
+      try {
+        const pdfPage = await pdfState.pdfDoc.getPage(pageNum);
+        const vp = pdfPage.getViewport({ scale: 1.0 });
+        layoutState.imageWidth = Math.round(vp.width);
+        layoutState.imageHeight = Math.round(vp.height);
+      } catch (_) { /* 무시 */ }
+    }
+
     _redrawOverlay();
     _updateBlockList();
   }
@@ -1059,6 +1115,16 @@ async function _runLlmAnalysis() {
       throw new Error(data.error || "분석 실패");
     }
 
+    // imageWidth가 없으면 PDF 뷰포트에서 확보 (bbox_ratio 변환에 필수)
+    if (!layoutState.imageWidth && typeof pdfState !== "undefined" && pdfState.pdfDoc) {
+      try {
+        const pdfPage = await pdfState.pdfDoc.getPage(viewerState.pageNum);
+        const vp = pdfPage.getViewport({ scale: 1.0 });
+        layoutState.imageWidth = Math.round(vp.width);
+        layoutState.imageHeight = Math.round(vp.height);
+      } catch (_) { /* 무시 */ }
+    }
+
     // Draft 결과를 블록으로 변환
     _applyDraftToBlocks(data);
 
@@ -1159,12 +1225,27 @@ function _applyDraftToBlocks(draft) {
 
 /**
  * bbox_ratio (0~1 비율) → 픽셀 좌표로 변환.
+ *
+ * 왜 imageWidth가 필요한가:
+ *   LLM이 반환하는 bbox_ratio는 이미지 전체 대비 비율(0~1)이다.
+ *   이를 캔버스/레이아웃 좌표(픽셀)로 변환하려면 기준 이미지 크기가 필요하다.
+ *   기준 크기는 PDF 뷰포트(scale=1.0)의 크기로, loadPageLayout()에서 설정된다.
  */
 function _ratioToPixelBbox(ratioArr) {
   if (!ratioArr || ratioArr.length !== 4) return [0, 0, 100, 100];
 
-  const w = layoutState.imageWidth || 1000;
-  const h = layoutState.imageHeight || 1400;
+  const w = layoutState.imageWidth;
+  const h = layoutState.imageHeight;
+
+  if (!w || !h) {
+    console.warn(
+      "_ratioToPixelBbox: imageWidth/Height가 설정되지 않았습니다.",
+      "loadPageLayout()에서 PDF 뷰포트 초기화가 필요합니다.",
+      { imageWidth: w, imageHeight: h }
+    );
+    // 폴백: 에러 방지를 위해 임시 값 사용 (이 경우 좌표가 부정확할 수 있음)
+    return [0, 0, 100, 100];
+  }
 
   // [x_min, y_min, x_max, y_max] 비율 → 픽셀 변환
   let x1 = Math.round(ratioArr[0] * w);
