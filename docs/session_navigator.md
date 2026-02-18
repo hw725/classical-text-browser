@@ -16,9 +16,9 @@
 | 5 | 11-1 | 끊어읽기·현토 편집기 (L5) | ✅ 완료 | 🔴 높 | `phase11_1_hyeonto_session.md` ✅ 작성 완료 | D-014 |
 | 6 | 11-2 | 번역 워크플로우 + LLM (L6) | ✅ 완료 | 🟡 중 | `phase11_2_translation_session.md` ✅ 작성 완료 | D-015 |
 | 7 | 11-3 | 주석/사전 연동 (L7) | ✅ 완료 | 🟡 중 | `phase11_3_annotation_session.md` ✅ 작성 완료 | D-016 |
-| 8 | 12-1 | Git 그래프 완전판 | ⏭️ 다음 | 🟡 중 | (Phase 9 결과 확인 후) | Phase 9 |
+| 8 | 12-1 | Git 그래프 완전판 | ✅ 완료 | 🟡 중 | `phase12_1_git_graph_session.md` ✅ 작성 완료 | D-017 |
 | 9 | 12-2 | Tauri 데스크톱 래핑 | ⬜ 대기 | 🔴 높 | (Phase 11 완료 후) | Phase 11 전체 |
-| 10 | 12-3 | 교환 형식 import/export | ⬜ 대기 | 🟢 낮 | (exchange.schema.json 검토 후) | — |
+| 10 | 12-3 | 교환 형식 import/export | ⏭️ 다음 | 🟢 낮 | `phase12_3_json_snapshot_session.md` ✅ 작성 완료 | — |
 
 **상태 범례**: ✅ 완료 / 🔄 구현 중 / ⏭️ 다음 / ⬜ 대기
 
@@ -128,17 +128,16 @@ Claude Code에 다음 세션 문서를 전달한다.
 ### 11-3 완료 후 → 12-1 Git 그래프 완전판
 
 ```
-✅ Phase 11 전체 완료: 현토 + 번역 + 주석
-⏭️ 다음: Phase 9 결과물 확인 후 Git 그래프 세션 작성
-📋 사전 준비:
-   - Phase 9의 간략 타임라인 구현 상태 확인
-   - d3.js 또는 Canvas 렌더링 방식 결정
+✅ Phase 12-1 완료: 사다리형 이분 그래프 + Based-On-Original trailer
+   - D-017: Git 그래프 설계 결정 기록
+   - d3.js SVG 렌더링, 커밋 목록/그래프 탭 전환
+   - 32개 통합 테스트 통과
 ```
 
-### 12-1 완료 후 → 12-2 Tauri 래핑
+### 12-1 완료 후 → 12-3 교환 형식 (12-2 Tauri는 보류)
 
 ```
-⏭️ 다음: Tauri 프로젝트 초기화
+⏭️ 다음: phase12_3_json_snapshot_session.md
 📋 사전 준비:
    - Rust + Tauri 개발 환경 설치
    - 기존 FastAPI + 브라우저 구조 확인

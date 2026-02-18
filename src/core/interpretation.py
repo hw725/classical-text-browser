@@ -562,6 +562,57 @@ def save_layer_content(
     }
 
 
+def _append_based_on_trailer(interp_path: Path, message: str) -> str:
+    """커밋 메시지에 Based-On-Original trailer를 추가한다.
+
+    왜 이렇게 하는가:
+        해석 커밋이 어떤 원본 시점을 기반했는지 추적하기 위해,
+        원본 저장소의 현재 HEAD hash를 Git trailer 형식으로 기록한다.
+        이 정보는 Phase 12-1 Git 그래프에서 의존 관계 연결선(links)을 만드는 데 쓰인다.
+
+    입력:
+        interp_path — 해석 저장소 경로 (resolve된).
+        message — 원래 커밋 메시지.
+    출력: trailer가 추가된 커밋 메시지. 원본 저장소를 찾을 수 없으면 원래 메시지 그대로.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # manifest.json에서 source_document_id를 읽는다
+    manifest_path = interp_path / "manifest.json"
+    if not manifest_path.exists():
+        return message
+
+    try:
+        with open(manifest_path, encoding="utf-8") as f:
+            manifest = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return message
+
+    source_doc_id = manifest.get("source_document_id")
+    if not source_doc_id:
+        return message
+
+    # 원본 저장소 경로: 해석 저장소의 상위 서고에서 documents/{doc_id}
+    # 서고 구조: library/interpretations/{interp_id}/ → library/documents/{doc_id}/
+    library_path = interp_path.parent.parent
+    doc_path = library_path / "documents" / source_doc_id
+
+    if not doc_path.exists():
+        logger.debug("원본 저장소를 찾을 수 없어 trailer 생략: %s", doc_path)
+        return message
+
+    try:
+        doc_repo = git.Repo(doc_path)
+        original_head = doc_repo.head.commit.hexsha
+    except (git.InvalidGitRepositoryError, ValueError):
+        logger.debug("원본 저장소에 커밋이 없어 trailer 생략: %s", doc_path)
+        return message
+
+    # trailer 추가 (빈 줄 + trailer)
+    return f"{message.rstrip()}\n\nBased-On-Original: {original_head}"
+
+
 def git_commit_interpretation(interp_path: str | Path, message: str) -> dict:
     """해석 저장소에 git commit을 생성한다.
 
@@ -570,6 +621,10 @@ def git_commit_interpretation(interp_path: str | Path, message: str) -> dict:
         interp_path — 해석 저장소 경로 (git 저장소).
         message — 커밋 메시지.
     출력: {committed: True/False, hash, message}.
+
+    Phase 12-1: 원본 저장소의 현재 HEAD hash를 Based-On-Original trailer로
+    커밋 메시지에 자동 추가한다. 이를 통해 해석 커밋이 어떤 원본 시점을
+    기반했는지 추적할 수 있다.
     """
     interp_path = Path(interp_path).resolve()
 
@@ -583,8 +638,11 @@ def git_commit_interpretation(interp_path: str | Path, message: str) -> dict:
 
     repo.index.add(["."])
 
+    # Phase 12-1: Based-On-Original trailer 추가
+    full_message = _append_based_on_trailer(interp_path, message)
+
     try:
-        commit = repo.index.commit(message)
+        commit = repo.index.commit(full_message)
     except git.HookExecutionError as e:
         # 훅 실패 시 커밋이 실제로 생성되지 않았을 수 있으므로
         # head.commit은 이전 커밋일 수 있다. 경고를 기록한다.

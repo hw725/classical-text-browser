@@ -3705,3 +3705,218 @@ body.resizing-row {
 .text-btn-danger:hover {
   background: #ef444420 !important;
 }
+
+
+/* ──────────────────────────────────────
+   Phase 12-1: Git 그래프 스타일
+   ────────────────────────────────────── */
+
+/* 뷰 전환 탭 */
+.git-view-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 8px;
+  border-bottom: 1px solid #2d2d2d;
+  background: #1e1e1e;
+}
+
+.git-view-tab {
+  padding: 3px 10px;
+  font-size: 12px;
+  color: #999;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.git-view-tab:hover {
+  color: #ddd;
+  background: #333;
+}
+
+.git-view-tab.active {
+  color: #e0e0e0;
+  background: #333;
+  border-color: #555;
+}
+
+.git-graph-controls {
+  margin-left: auto;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 11px;
+  color: #999;
+}
+
+.git-branch-select {
+  background: #2d2d2d;
+  color: #e0e0e0;
+  border: 1px solid #555;
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 11px;
+}
+
+/* 그래프 컨테이너 */
+.git-graph-container {
+  overflow: auto;
+  max-height: 100%;
+  padding: 8px;
+}
+
+.git-graph-svg {
+  font-family: 'Consolas', 'Courier New', monospace;
+}
+
+/* 레인 라벨 */
+.git-graph-lane-label {
+  fill: #999;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* 레인 세로 가이드선 */
+.git-graph-lane-line {
+  stroke: #333;
+  stroke-width: 1;
+  stroke-dasharray: 2,4;
+}
+
+/* 세로 연결선 (같은 레인 내) */
+.git-graph-vertical {
+  stroke: #444;
+  stroke-width: 1;
+}
+
+/* 가로 연결선 (의존 관계) */
+.git-graph-link {
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+/* 커밋 노드 */
+.git-graph-node {
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.git-graph-node circle {
+  transition: r 0.15s, stroke 0.15s;
+}
+
+.git-graph-node:hover circle {
+  r: 9;
+  stroke: #ffd700;
+  stroke-width: 2;
+}
+
+/* 해시 텍스트 */
+.git-graph-hash {
+  fill: #888;
+  font-size: 10px;
+}
+
+/* 툴팁 */
+.git-graph-tooltip {
+  display: none;
+  position: fixed;
+  z-index: 9999;
+  background: #1e1e1e;
+  border: 1px solid #555;
+  border-radius: 4px;
+  padding: 8px 10px;
+  color: #e0e0e0;
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 380px;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+
+.git-graph-tooltip strong {
+  color: #4fc3f7;
+}
+
+.git-graph-tooltip small {
+  color: #999;
+}
+
+/* 커밋 상세 패널 */
+.git-graph-detail {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 320px;
+  height: 100%;
+  background: #252526;
+  border-left: 1px solid #444;
+  overflow-y: auto;
+  z-index: 10;
+}
+
+.git-graph-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid #333;
+  font-size: 12px;
+  font-weight: 600;
+  color: #e0e0e0;
+}
+
+.git-graph-detail-header .text-btn {
+  font-size: 16px;
+  padding: 0 4px;
+}
+
+#git-graph-detail-body {
+  padding: 10px;
+  font-size: 12px;
+  color: #ccc;
+}
+
+.git-detail-row {
+  margin-bottom: 6px;
+}
+
+.git-detail-label {
+  display: inline-block;
+  width: 60px;
+  color: #999;
+  font-size: 11px;
+}
+
+.git-detail-match {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: #333;
+  color: #aaa;
+}
+
+.git-detail-message {
+  margin-top: 10px;
+  padding: 8px;
+  background: #1e1e1e;
+  border-radius: 4px;
+}
+
+.git-detail-message pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 11px;
+  color: #bbb;
+  font-family: inherit;
+}
+
+#git-graph-detail-body code {
+  font-family: 'Consolas', monospace;
+  background: #333;
+  padding: 1px 4px;
+  border-radius: 2px;
+  font-size: 11px;
+}

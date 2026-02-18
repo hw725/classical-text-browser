@@ -639,17 +639,45 @@
         </button>
       </div>
       <div class="panel-content" id="panel-content">
-        <!-- Git 이력 탭 내용 (Phase 6) -->
+        <!-- Git 이력 탭 내용 (Phase 6 + Phase 12-1) -->
         <div id="git-panel-content">
-          <div id="git-log-list" class="git-log-list">
-            <div class="placeholder">문헌을 선택하면 Git 이력이 표시됩니다</div>
-          </div>
-          <div id="git-diff-view" class="git-diff-view" style="display:none;">
-            <div class="git-diff-header">
-              <button id="git-diff-back" class="text-btn" title="목록으로">&larr; 목록</button>
-              <span id="git-diff-title" class="git-diff-title"></span>
+          <!-- Phase 12-1: 간략/상세 뷰 전환 탭 -->
+          <div class="git-view-tabs">
+            <button class="git-view-tab active" data-view="simple">커밋 목록</button>
+            <button class="git-view-tab" data-view="graph">사다리형 그래프</button>
+            <div class="git-graph-controls" id="git-graph-controls" style="display:none;">
+              <label>원본: <select id="git-graph-orig-branch" class="git-branch-select"><option>main</option></select></label>
+              <label>해석: <select id="git-graph-interp-branch" class="git-branch-select"><option>main</option></select></label>
             </div>
-            <div id="git-diff-content" class="git-diff-content"></div>
+          </div>
+
+          <!-- 간략 뷰: 기존 커밋 목록 -->
+          <div id="git-simple-view">
+            <div id="git-log-list" class="git-log-list">
+              <div class="placeholder">문헌을 선택하면 Git 이력이 표시됩니다</div>
+            </div>
+            <div id="git-diff-view" class="git-diff-view" style="display:none;">
+              <div class="git-diff-header">
+                <button id="git-diff-back" class="text-btn" title="목록으로">&larr; 목록</button>
+                <span id="git-diff-title" class="git-diff-title"></span>
+              </div>
+              <div id="git-diff-content" class="git-diff-content"></div>
+            </div>
+          </div>
+
+          <!-- 상세 뷰: Phase 12-1 사다리형 Git 그래프 -->
+          <div id="git-graph-view" style="display:none;">
+            <div id="git-graph-container" class="git-graph-container">
+              <div class="placeholder">해석 저장소를 선택하면 사다리형 그래프가 표시됩니다</div>
+            </div>
+            <!-- 클릭 시 커밋 상세 패널 -->
+            <div id="git-graph-detail" class="git-graph-detail" style="display:none;">
+              <div class="git-graph-detail-header">
+                <span id="git-graph-detail-title"></span>
+                <button id="git-graph-detail-close" class="text-btn">&times;</button>
+              </div>
+              <div id="git-graph-detail-body"></div>
+            </div>
           </div>
         </div>
 
@@ -1055,6 +1083,7 @@
 
 <!-- PDF.js CDN (3.x UMD — 빌드 도구 없는 프로젝트에 적합) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://d3js.org/d3.v7.min.js"></script>
 
 <!-- 앱 모듈 (로드 순서 중요: sidebar-tree가 viewerState를 정의, 나머지가 참조) -->
 <script src="/static/js/sidebar-tree.js"></script>
@@ -1072,6 +1101,7 @@
 <script src="/static/js/hyeonto-editor.js"></script>
 <script src="/static/js/translation-editor.js"></script>
 <script src="/static/js/annotation-editor.js"></script>
+<script src="/static/js/git-graph.js"></script>
 <script src="/static/js/workspace.js"></script>
 </body>
 </html>

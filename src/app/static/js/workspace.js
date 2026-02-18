@@ -46,6 +46,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (typeof initTranslationEditor === "function") initTranslationEditor();
   // Phase 11-3: 주석 편집기 초기화
   if (typeof initAnnotationEditor === "function") initAnnotationEditor();
+  // Phase 12-1: Git 그래프 초기화
+  if (typeof initGitGraph === "function") initGitGraph();
   // Phase 7+8: 하단 패널 탭 전환 (Git 이력 ↔ 의존 추적 ↔ 엔티티)
   initBottomPanelTabs();
 });
