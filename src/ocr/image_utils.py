@@ -75,6 +75,12 @@ def crop_block(
         x_max = int(x2) + padding_px
         y_max = int(y2) + padding_px
 
+    # 좌표 정규화: LLM이 x_min > x_max 또는 y_min > y_max로 반환할 수 있음
+    if x_min > x_max:
+        x_min, x_max = x_max, x_min
+    if y_min > y_max:
+        y_min, y_max = y_max, y_min
+
     # 범위 제한
     x_min = max(0, x_min)
     y_min = max(0, y_min)

@@ -831,13 +831,28 @@ async function _saveLayout() {
     } catch (_) { /* 무시 */ }
   }
 
+  // 블록 중 draft 속성(_draft) 제거하고, 스키마에 없는 필드도 정리
+  const cleanBlocks = layoutState.blocks.map(b => {
+    const clean = { ...b };
+    // 스키마에 없는 내부 전용 필드 제거
+    delete clean._draft;
+    delete clean._draft_id;
+    delete clean._confidence;
+    delete clean.notes;  // 스키마에 없으므로 제거
+    return clean;
+  });
+
+  // analysis_method: draft 블록이 하나라도 있으면 llm, 아니면 manual
+  const hasLlmBlocks = layoutState.blocks.some(b => b._draft);
+  const method = hasLlmBlocks ? "llm" : "manual";
+
   const payload = {
     part_id: partId,
     page_number: pageNum,
     image_width: imgW,
     image_height: imgH,
-    analysis_method: "manual",
-    blocks: layoutState.blocks,
+    analysis_method: method,
+    blocks: cleanBlocks,
   };
 
   const url = `/api/documents/${docId}/pages/${pageNum}/layout?part_id=${partId}`;
@@ -1042,8 +1057,13 @@ async function _runLlmAnalysis() {
 
     // Draft 결과를 블록으로 변환
     _applyDraftToBlocks(data);
+
+    // 분석 결과를 L3에 자동 저장 (OCR 실행의 전제 조건)
+    // 사용자가 저장 버튼을 따로 누를 필요 없이, 분석 완료 시 바로 저장한다.
+    await _saveLayout();
+
     _setLlmStatus(
-      `분석 완료 (${data.provider || "?"}, ${(data.elapsed_sec || 0).toFixed(1)}s)`
+      `분석 완료·저장됨 (${data.provider || "?"}, ${(data.elapsed_sec || 0).toFixed(1)}s)`
     );
   } catch (err) {
     _setLlmStatus(`오류: ${err.message}`);
@@ -1100,10 +1120,22 @@ function _applyDraftToBlocks(draft) {
   }
 
   // 기존 블록과 합침 (draft 블록은 _draft 플래그)
+  // 페이지 번호: 현재 viewerState.pageNum에서 추출 (없으면 01)
+  const pNum = String(viewerState.pageNum || 1).padStart(2, "0");
   for (const b of blocks) {
+    // block_id 형식: 스키마 패턴 ^p\d+_b\d+$ 준수
+    const bIdx = String(layoutState.blocks.length + 1).padStart(2, "0");
+    // block_type 검증: 스키마 enum에 없는 값은 "unknown"으로 대체
+    const validBlockTypes = [
+      "main_text", "annotation", "preface", "colophon", "memorial",
+      "page_title", "page_number", "seal", "illustration",
+      "marginal_note", "table_of_contents", "unknown"
+    ];
+    const rawType = b.block_type || "main_text";
+    const safeType = validBlockTypes.includes(rawType) ? rawType : "unknown";
     const newBlock = {
-      block_id: `draft_${layoutState.blocks.length + 1}`,
-      block_type: b.block_type || "main_text",
+      block_id: `p${pNum}_b${bIdx}`,
+      block_type: safeType,
       bbox: _ratioToPixelBbox(b.bbox_ratio),
       reading_order: b.reading_order || layoutState.blocks.length + 1,
       writing_direction: "vertical_rtl",
@@ -1130,12 +1162,17 @@ function _ratioToPixelBbox(ratioArr) {
   const w = layoutState.imageWidth || 1000;
   const h = layoutState.imageHeight || 1400;
 
-  return [
-    Math.round(ratioArr[0] * w),
-    Math.round(ratioArr[1] * h),
-    Math.round(ratioArr[2] * w),
-    Math.round(ratioArr[3] * h),
-  ];
+  // [x_min, y_min, x_max, y_max] 비율 → 픽셀 변환
+  let x1 = Math.round(ratioArr[0] * w);
+  let y1 = Math.round(ratioArr[1] * h);
+  let x2 = Math.round(ratioArr[2] * w);
+  let y2 = Math.round(ratioArr[3] * h);
+
+  // LLM이 좌표를 뒤집어 반환할 수 있으므로 정규화
+  if (x1 > x2) [x1, x2] = [x2, x1];
+  if (y1 > y2) [y1, y2] = [y2, y1];
+
+  return [x1, y1, x2, y2];
 }
 
 
