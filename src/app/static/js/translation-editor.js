@@ -37,10 +37,7 @@ const transState = {
 // eslint-disable-next-line no-unused-vars
 function initTranslationEditor() {
   _bindTransEvents();
-  // LLM 모델 드롭다운 로드
-  if (typeof populateLlmModelSelect === "function") {
-    populateLlmModelSelect("trans-llm-model-select");
-  }
+  // (LLM 모델 목록은 workspace.js의 _loadAllLlmModelSelects()가 일괄 로드)
 }
 
 function _bindTransEvents() {
