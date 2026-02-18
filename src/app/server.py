@@ -3189,3 +3189,205 @@ async def api_import_json(request: Request):
         "layers_imported": detect_imported_layers(data),
         "warnings": result["warnings"] + warnings,
     }
+
+
+# ===========================================================================
+#  LLM 연동: 표점 / 번역 / 주석 AI
+# ===========================================================================
+#
+# 왜 여기에 모아두는가:
+#   레이아웃 분석, OCR, 표점, 번역, 주석 모두 동일한 LLM 라우터를 사용한다.
+#   _get_llm_router()가 프로바이더 폴백(base44 → ollama → anthropic)을 관리하므로,
+#   각 기능은 프롬프트만 다르고 호출 방식은 동일하다.
+#
+# 커스텀 방법:
+#   1. 프롬프트 수정: 아래 _LLM_PROMPT_* 딕셔너리를 수정
+#   2. 프로바이더 변경: force_provider 파라미터로 특정 프로바이더 지정
+#   3. 모델 변경: force_model 파라미터로 특정 모델 지정
+#   4. 새 기능 추가: _get_llm_router().call() 또는 .call_with_image() 호출
+# ===========================================================================
+
+# ─── LLM 프롬프트 템플릿 (수정 용이하도록 분리) ──────────────
+
+_LLM_PROMPTS = {
+    "punctuation": {
+        "system": (
+            "당신은 고전 한문 표점(句讀) 전문가입니다.\n"
+            "주어진 원문에 구두점을 삽입하세요.\n"
+            "규칙:\n"
+            "1. 句(문장 끝)에는 。, 讀(절 끝)에는 、을 사용합니다.\n"
+            "2. 인용에는 「」, 고유명사에는 표시하지 않습니다.\n"
+            "3. 원문 글자를 변경하지 마세요. 글자 사이에 부호만 삽입하세요.\n"
+            "4. 반드시 순수 JSON만 출력하세요.\n"
+            "출력 형식:\n"
+            '{"punctuated": "王戎、簡要。", '
+            '"marks": [{"after_char_index": 1, "mark": "、"}, {"after_char_index": 3, "mark": "。"}]}'
+        ),
+        "user": "다음 고전 한문에 표점을 삽입하세요:\n\n{text}",
+    },
+    "translation": {
+        "system": (
+            "당신은 고전 한문 번역 전문가입니다.\n"
+            "주어진 문장을 한국어로 번역하세요.\n"
+            "규칙:\n"
+            "1. 원문의 뜻을 정확하게 전달하되, 자연스러운 한국어로 번역합니다.\n"
+            "2. 고유명사(인명, 지명)는 한자를 병기합니다. 예: 왕융(王戎)\n"
+            "3. 반드시 순수 JSON만 출력하세요.\n"
+            "출력 형식:\n"
+            '{"translation": "번역문", "notes": "번역 참고사항(선택)"}'
+        ),
+        "user": "다음 고전 한문을 한국어로 번역하세요:\n\n{text}",
+    },
+    "annotation": {
+        "system": (
+            "당신은 고전 한문 주석 전문가입니다.\n"
+            "주어진 텍스트에서 주석이 필요한 항목을 태깅하세요.\n"
+            "규칙:\n"
+            "1. 인명(person), 지명(place), 관직(official_title), 서명(book_title), "
+            "전고(allusion), 용어(term)를 식별합니다.\n"
+            "2. 각 항목에 간단한 설명을 덧붙이세요.\n"
+            "3. 원문의 시작 인덱스(start)와 끝 인덱스(end)를 포함하세요.\n"
+            "4. 반드시 순수 JSON만 출력하세요.\n"
+            "출력 형식:\n"
+            '{"annotations": [{"text": "王戎", "type": "person", '
+            '"start": 0, "end": 2, '
+            '"label": "왕융(王戎)", "description": "竹林七賢의 한 사람"}]}'
+        ),
+        "user": "다음 고전 한문에서 주석 대상을 태깅하세요:\n\n{text}",
+    },
+}
+
+
+class AiPunctuationRequest(BaseModel):
+    """AI 표점 요청."""
+    text: str                         # 표점할 원문 텍스트
+    force_provider: str | None = None
+    force_model: str | None = None
+
+
+class AiTranslationRequest(BaseModel):
+    """AI 번역 요청."""
+    text: str                         # 번역할 원문 텍스트
+    force_provider: str | None = None
+    force_model: str | None = None
+
+
+class AiAnnotationRequest(BaseModel):
+    """AI 주석 태깅 요청."""
+    text: str                         # 태깅할 원문 텍스트
+    force_provider: str | None = None
+    force_model: str | None = None
+
+
+async def _call_llm_text(purpose: str, text: str,
+                          force_provider=None, force_model=None) -> dict:
+    """공통 LLM 텍스트 호출. 프롬프트 템플릿 + JSON 파싱.
+
+    왜 이렇게 하는가:
+        표점, 번역, 주석 모두 동일한 패턴이다:
+        1. 시스템 프롬프트 + 사용자 프롬프트 구성
+        2. LLM 라우터로 호출
+        3. JSON 응답 파싱
+        4. 결과 반환
+
+    커스텀:
+        _LLM_PROMPTS 딕셔너리를 수정하면 프롬프트를 바꿀 수 있다.
+    """
+    import json as _json
+
+    prompts = _LLM_PROMPTS.get(purpose)
+    if not prompts:
+        raise ValueError(f"알 수 없는 LLM purpose: {purpose}")
+
+    router = _get_llm_router()
+    system_prompt = prompts["system"]
+    user_prompt = prompts["user"].format(text=text)
+
+    response = await router.call(
+        user_prompt,
+        system=system_prompt,
+        force_provider=force_provider,
+        force_model=force_model,
+        purpose=purpose,
+    )
+
+    # JSON 파싱 (방어적)
+    raw = response.text.strip()
+
+    # markdown 코드 블록 제거
+    if "```" in raw:
+        parts = raw.split("```")
+        if len(parts) >= 3:
+            raw = parts[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+            raw = raw.strip()
+
+    try:
+        data = _json.loads(raw)
+    except _json.JSONDecodeError:
+        # JSON 부분만 추출 시도
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        if start >= 0 and end > start:
+            data = _json.loads(raw[start:end])
+        else:
+            raise ValueError(f"LLM 응답 JSON 파싱 실패: {raw[:200]}")
+
+    data["_provider"] = response.provider
+    data["_model"] = response.model
+    return data
+
+
+@app.post("/api/llm/punctuation")
+async def api_llm_punctuation(body: AiPunctuationRequest):
+    """AI 표점 생성.
+
+    입력: 원문 텍스트
+    출력: 표점이 삽입된 텍스트 + marks 배열
+    """
+    try:
+        result = await _call_llm_text(
+            "punctuation", body.text,
+            force_provider=body.force_provider,
+            force_model=body.force_model,
+        )
+        return result
+    except Exception as e:
+        return JSONResponse({"error": f"AI 표점 실패: {e}"}, status_code=500)
+
+
+@app.post("/api/llm/translation")
+async def api_llm_translation(body: AiTranslationRequest):
+    """AI 번역.
+
+    입력: 원문 텍스트
+    출력: 한국어 번역 + 참고사항
+    """
+    try:
+        result = await _call_llm_text(
+            "translation", body.text,
+            force_provider=body.force_provider,
+            force_model=body.force_model,
+        )
+        return result
+    except Exception as e:
+        return JSONResponse({"error": f"AI 번역 실패: {e}"}, status_code=500)
+
+
+@app.post("/api/llm/annotation")
+async def api_llm_annotation(body: AiAnnotationRequest):
+    """AI 주석 태깅.
+
+    입력: 원문 텍스트
+    출력: 태깅된 주석 배열 (인명, 지명, 관직, 전고 등)
+    """
+    try:
+        result = await _call_llm_text(
+            "annotation", body.text,
+            force_provider=body.force_provider,
+            force_model=body.force_model,
+        )
+        return result
+    except Exception as e:
+        return JSONResponse({"error": f"AI 주석 실패: {e}"}, status_code=500)

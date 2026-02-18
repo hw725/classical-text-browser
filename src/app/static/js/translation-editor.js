@@ -513,12 +513,99 @@ async function _deleteTranslation(trId) {
    AI 번역 (단일 / 전체)
    ────────────────────────── */
 
-function _aiTranslateSingle(sentIdx) {
-  alert("AI 번역 기능은 LLM 연결 후 사용 가능합니다.\n[수동 입력]을 이용하세요.");
+async function _aiTranslateSingle(sentIdx) {
+  const sent = transState.sentences[sentIdx];
+  if (!sent) return;
+
+  // 이미 번역이 있으면 덮어쓸지 확인
+  const existing = _findTranslation(sent);
+  if (existing && !confirm("기존 번역이 있습니다. AI 번역으로 덮어쓰시겠습니까?")) return;
+
+  // 버튼 비활성화
+  const btns = document.querySelectorAll(".trans-ai-btn");
+  btns.forEach((b) => { b.disabled = true; b.textContent = "번역 중..."; });
+
+  try {
+    const resp = await fetch("/api/llm/translation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: sent.text }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+
+    const data = await resp.json();
+    const translationText = data.translation || "";
+    if (!translationText) throw new Error("AI 응답에 번역이 없습니다.");
+
+    // 기존 번역 업데이트 또는 새로 추가
+    if (existing) {
+      const res = await fetch(
+        `/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/translation/${existing.id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ translation: translationText }),
+        }
+      );
+      if (res.ok) {
+        const updated = await res.json();
+        Object.assign(existing, updated);
+      }
+    } else {
+      await _addManualTranslation(sent, translationText);
+    }
+
+    _renderTransCards();
+    _renderStatusSummary();
+  } catch (e) {
+    alert(`AI 번역 실패: ${e.message}`);
+  } finally {
+    btns.forEach((b) => { b.disabled = false; b.textContent = "AI"; });
+  }
 }
 
-function _aiTranslateAll() {
-  alert("전체 AI 번역 기능은 LLM 연결 후 사용 가능합니다.\n[수동 입력]을 이용하세요.");
+async function _aiTranslateAll() {
+  if (!transState.sentences || transState.sentences.length === 0) {
+    alert("번역할 문장이 없습니다.");
+    return;
+  }
+
+  // 미번역 문장만 대상
+  const targets = [];
+  for (let i = 0; i < transState.sentences.length; i++) {
+    if (!_findTranslation(transState.sentences[i])) {
+      targets.push(i);
+    }
+  }
+
+  if (targets.length === 0) {
+    alert("모든 문장이 이미 번역되어 있습니다.");
+    return;
+  }
+
+  if (!confirm(`미번역 ${targets.length}개 문장을 AI로 번역합니다. 계속하시겠습니까?`)) return;
+
+  const allBtn = document.getElementById("trans-ai-all-btn");
+  if (allBtn) { allBtn.disabled = true; allBtn.textContent = "번역 중..."; }
+
+  let success = 0;
+  let fail = 0;
+
+  for (const idx of targets) {
+    try {
+      await _aiTranslateSingle(idx);
+      success++;
+    } catch {
+      fail++;
+    }
+  }
+
+  if (allBtn) { allBtn.disabled = false; allBtn.textContent = "전체 AI 번역"; }
+  alert(`AI 번역 완료: 성공 ${success}건, 실패 ${fail}건`);
 }
 
 
