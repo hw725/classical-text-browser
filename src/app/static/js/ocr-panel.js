@@ -107,6 +107,16 @@ function _populateEngineSelect() {
     }
     select.appendChild(opt);
   }
+
+  // 엔진이 1개뿐이면 엔진 선택 행을 숨긴다 (선택 의미 없음)
+  const engineRow = document.getElementById("ocr-engine-row");
+  if (engineRow) {
+    const available = ocrState.engines.filter(e => e.available);
+    engineRow.style.display = available.length <= 1 ? "none" : "";
+  }
+
+  // LLM 모델 행 표시/숨김 갱신
+  _toggleLlmModelRow();
 }
 
 
@@ -400,16 +410,14 @@ function _updateSelectedBlockButton() {
 
 
 /**
- * LLM 모델 선택 행을 엔진 유형에 따라 표시/숨김.
+ * LLM 모델 선택 행 표시/숨김.
  *
- * llm_vision 엔진일 때만 "LLM 모델" 드롭다운을 보여준다.
- * 다른 엔진(PaddleOCR, Tesseract 등)은 LLM 모델이 무관하므로 숨긴다.
+ * 현재 OCR 엔진이 llm_vision 하나뿐이므로 LLM 모델 행은 항상 표시.
+ * 엔진 행(ocr-engine-row)은 HTML에서 display:none 처리.
  */
 function _toggleLlmModelRow() {
-  const engineSelect = document.getElementById("ocr-engine-select");
   const modelRow = document.getElementById("ocr-llm-model-row");
   if (!modelRow) return;
-
-  const engineId = engineSelect ? engineSelect.value : "";
-  modelRow.style.display = (engineId === "llm_vision" || engineId === "") ? "" : "none";
+  // LLM vision 엔진만 존재하므로 항상 표시
+  modelRow.style.display = "";
 }

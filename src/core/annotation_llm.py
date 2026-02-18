@@ -10,14 +10,14 @@ from pathlib import Path
 
 import yaml
 
-from src.core.annotation import (
+from core.annotation import (
     _gen_annotation_id,
     add_annotation,
     load_annotations,
     save_annotations,
 )
-from src.llm.draft import LlmDraft
-from src.llm.router import LlmRouter
+from llm.draft import LlmDraft
+from llm.router import LlmRouter
 
 
 def _load_prompt() -> dict:

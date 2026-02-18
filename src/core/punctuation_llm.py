@@ -9,9 +9,9 @@ from pathlib import Path
 
 import yaml
 
-from src.core.punctuation import _gen_mark_id, save_punctuation
-from src.llm.draft import LlmDraft
-from src.llm.router import LlmRouter
+from core.punctuation import _gen_mark_id, save_punctuation
+from llm.draft import LlmDraft
+from llm.router import LlmRouter
 
 
 def _load_prompt() -> dict:

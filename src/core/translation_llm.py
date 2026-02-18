@@ -12,16 +12,16 @@ from pathlib import Path
 
 import yaml
 
-from src.core.hyeonto import load_hyeonto, render_hyeonto_text
-from src.core.punctuation import load_punctuation, split_sentences
-from src.core.translation import (
+from core.hyeonto import load_hyeonto, render_hyeonto_text
+from core.punctuation import load_punctuation, split_sentences
+from core.translation import (
     _gen_translation_id,
     add_translation,
     load_translations,
     save_translations,
 )
-from src.llm.draft import LlmDraft
-from src.llm.router import LlmRouter
+from llm.draft import LlmDraft
+from llm.router import LlmRouter
 
 
 def _load_prompt() -> dict:
