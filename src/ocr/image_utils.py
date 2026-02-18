@@ -191,7 +191,7 @@ def load_page_image_from_pdf(
     왜 필요한가:
       L1_source에 PDF만 있고 개별 이미지가 없는 경우,
       OCR을 위해 PDF에서 페이지를 추출해야 한다.
-      pypdfium2를 사용 (없으면 None 반환).
+      pymupdf(fitz)를 사용 (없으면 None 반환).
     """
     source_dir = Path(library_root) / "documents" / doc_id / "L1_source"
     if not source_dir.exists():
@@ -202,20 +202,24 @@ def load_page_image_from_pdf(
         return None
 
     try:
-        import pypdfium2 as pdfium
+        import fitz  # pymupdf
 
-        pdf = pdfium.PdfDocument(str(pdf_files[0]))
-        # page_number는 1-indexed, pypdfium2는 0-indexed
+        doc = fitz.open(str(pdf_files[0]))
+        # page_number는 1-indexed, fitz는 0-indexed
         page_idx = page_number - 1
-        if page_idx < 0 or page_idx >= len(pdf):
+        if page_idx < 0 or page_idx >= len(doc):
+            doc.close()
             return None
 
-        pdf_page = pdf[page_idx]
-        bitmap = pdf_page.render(scale=scale)
-        pil_image = bitmap.to_pil()
+        pdf_page = doc[page_idx]
+        pix = pdf_page.get_pixmap(matrix=fitz.Matrix(scale, scale))
+        # PNG 바이트 → PIL Image
+        from io import BytesIO
+        pil_image = Image.open(BytesIO(pix.tobytes("png")))
+        doc.close()
         return pil_image
     except ImportError:
-        # pypdfium2가 설치되지 않은 경우
+        # pymupdf가 설치되지 않은 경우
         return None
     except Exception:
         return None
