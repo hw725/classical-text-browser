@@ -43,26 +43,37 @@ def crop_block(
 
     입력:
       page_image: 전체 페이지 PIL Image
-      bbox: [x, y, width, height] — 비율 좌표 (0.0~1.0)
+      bbox: 두 가지 형식 모두 지원:
+        - [x1, y1, x2, y2] 픽셀 좌표 (L3 layout 형식, 값 > 1)
+        - [x, y, width, height] 비율 좌표 (LLM 분석 형식, 값 0.0~1.0)
       padding_px: 크롭 영역에 추가할 여백 (픽셀). 글자가 잘리는 것 방지.
 
     출력: 크롭된 이미지의 PNG 바이트
 
-    bbox 좌표 변환:
-      비율 → 픽셀:
-      x_px = x * image_width
-      y_px = y * image_height
-      w_px = width * image_width
-      h_px = height * image_height
+    왜 자동 감지인가:
+      L3 layout은 [x1,y1,x2,y2] 픽셀로 저장하고,
+      LLM 레이아웃 분석은 [x,y,w,h] 비율로 반환한다.
+      두 경로 모두 이 함수를 사용하므로, 형식을 자동 감지한다.
     """
     img_w, img_h = page_image.size
 
-    # 비율 → 픽셀 변환
-    x, y, w, h = bbox
-    x_min = int(x * img_w) - padding_px
-    y_min = int(y * img_h) - padding_px
-    x_max = int((x + w) * img_w) + padding_px
-    y_max = int((y + h) * img_h) + padding_px
+    # 자동 감지: 모든 값이 0~1 범위이면 비율, 아니면 픽셀 좌표
+    is_ratio = all(0 <= v <= 1.0 for v in bbox)
+
+    if is_ratio:
+        # 비율 [x, y, width, height] → 픽셀
+        x, y, w, h = bbox
+        x_min = int(x * img_w) - padding_px
+        y_min = int(y * img_h) - padding_px
+        x_max = int((x + w) * img_w) + padding_px
+        y_max = int((y + h) * img_h) + padding_px
+    else:
+        # 픽셀 [x1, y1, x2, y2] — L3 layout 형식
+        x1, y1, x2, y2 = bbox
+        x_min = int(x1) - padding_px
+        y_min = int(y1) - padding_px
+        x_max = int(x2) + padding_px
+        y_max = int(y2) + padding_px
 
     # 범위 제한
     x_min = max(0, x_min)

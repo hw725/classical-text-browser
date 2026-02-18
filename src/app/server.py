@@ -254,6 +254,177 @@ async def api_library():
         )
 
 
+@app.get("/api/settings")
+async def api_get_settings():
+    """현재 서고 설정 정보를 반환한다.
+
+    서고 경로, 원본/해석 저장소의 원격 URL을 포함한다.
+    """
+    import subprocess
+
+    info = {
+        "library_path": str(_library_path) if _library_path else None,
+        "documents": [],
+        "interpretations": [],
+    }
+
+    if _library_path is None:
+        return info
+
+    # 원본 저장소의 원격 URL 수집
+    doc_dir = _library_path / "documents"
+    if doc_dir.exists():
+        for d in sorted(doc_dir.iterdir()):
+            if not d.is_dir() or d.name.startswith("."):
+                continue
+            remote_url = _get_git_remote(d)
+            info["documents"].append({
+                "id": d.name,
+                "path": str(d),
+                "remote_url": remote_url,
+            })
+
+    # 해석 저장소의 원격 URL 수집
+    interp_dir = _library_path / "interpretations"
+    if interp_dir.exists():
+        for d in sorted(interp_dir.iterdir()):
+            if not d.is_dir() or d.name.startswith("."):
+                continue
+            remote_url = _get_git_remote(d)
+            info["interpretations"].append({
+                "id": d.name,
+                "path": str(d),
+                "remote_url": remote_url,
+            })
+
+    return info
+
+
+class SetRemoteRequest(BaseModel):
+    """원격 저장소 URL 설정 요청."""
+    repo_type: str   # "documents" 또는 "interpretations"
+    repo_id: str     # 저장소 ID
+    remote_url: str  # 원격 URL
+
+
+@app.post("/api/settings/remote")
+async def api_set_remote(body: SetRemoteRequest):
+    """원본/해석 저장소의 원격 URL을 설정한다."""
+    import subprocess
+
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    repo_dir = _library_path / body.repo_type / body.repo_id
+    if not repo_dir.exists():
+        return JSONResponse(
+            {"error": f"저장소를 찾을 수 없습니다: {body.repo_type}/{body.repo_id}"},
+            status_code=404,
+        )
+
+    git_dir = repo_dir / ".git"
+    if not git_dir.exists():
+        return JSONResponse(
+            {"error": f"Git 저장소가 아닙니다: {body.repo_type}/{body.repo_id}"},
+            status_code=400,
+        )
+
+    try:
+        # 기존 origin 제거 (있으면)
+        subprocess.run(
+            ["git", "remote", "remove", "origin"],
+            cwd=str(repo_dir), capture_output=True,
+        )
+        # 새 origin 추가
+        result = subprocess.run(
+            ["git", "remote", "add", "origin", body.remote_url],
+            cwd=str(repo_dir), capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            return JSONResponse(
+                {"error": f"원격 설정 실패: {result.stderr}"},
+                status_code=500,
+            )
+        return {"status": "ok", "remote_url": body.remote_url}
+    except Exception as e:
+        return JSONResponse({"error": f"원격 설정 실패: {e}"}, status_code=500)
+
+
+class GitPushPullRequest(BaseModel):
+    """Git push/pull 요청."""
+    repo_type: str   # "documents" 또는 "interpretations"
+    repo_id: str
+    action: str      # "push" 또는 "pull"
+
+
+@app.post("/api/settings/git-sync")
+async def api_git_sync(body: GitPushPullRequest):
+    """원본/해석 저장소를 원격에 push 또는 pull한다."""
+    import subprocess
+
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    repo_dir = _library_path / body.repo_type / body.repo_id
+    if not repo_dir.exists():
+        return JSONResponse(
+            {"error": f"저장소를 찾을 수 없습니다: {body.repo_type}/{body.repo_id}"},
+            status_code=404,
+        )
+
+    if body.action not in ("push", "pull"):
+        return JSONResponse({"error": "action은 push 또는 pull이어야 합니다."}, status_code=400)
+
+    try:
+        # 현재 브랜치 이름
+        branch_result = subprocess.run(
+            ["git", "branch", "--show-current"],
+            cwd=str(repo_dir), capture_output=True, text=True,
+        )
+        branch = branch_result.stdout.strip() or "master"
+
+        if body.action == "push":
+            result = subprocess.run(
+                ["git", "push", "-u", "origin", branch],
+                cwd=str(repo_dir), capture_output=True, text=True, timeout=60,
+            )
+        else:
+            result = subprocess.run(
+                ["git", "pull", "origin", branch],
+                cwd=str(repo_dir), capture_output=True, text=True, timeout=60,
+            )
+
+        if result.returncode != 0:
+            return JSONResponse(
+                {"error": f"{body.action} 실패: {result.stderr}"},
+                status_code=500,
+            )
+        return {
+            "status": "ok",
+            "action": body.action,
+            "output": result.stdout.strip(),
+        }
+    except subprocess.TimeoutExpired:
+        return JSONResponse({"error": "타임아웃 (60초)"}, status_code=500)
+    except Exception as e:
+        return JSONResponse({"error": f"{body.action} 실패: {e}"}, status_code=500)
+
+
+def _get_git_remote(repo_dir: Path) -> str | None:
+    """Git 저장소의 origin remote URL을 반환한다."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=str(repo_dir), capture_output=True, text=True,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return None
+
+
 @app.get("/api/documents")
 async def api_documents():
     """서고의 문헌 목록을 반환한다."""
@@ -2553,7 +2724,7 @@ async def api_hyeonto_preview(interp_id: str, page_num: int, block_id: str):
 # Phase 11-2: L6 번역(Translation) API
 # ───────────────────────────────────────────────────
 
-from src.core.translation import (
+from core.translation import (
     add_translation,
     get_translation_status,
     load_translations,
@@ -2561,7 +2732,7 @@ from src.core.translation import (
     save_translations,
     update_translation,
 )
-from src.core.translation_llm import commit_translation_draft
+from core.translation_llm import commit_translation_draft
 
 
 class TranslationAddRequest(BaseModel):
@@ -2742,7 +2913,7 @@ async def api_delete_translation(interp_id: str, page_num: int, translation_id: 
 # Phase 11-3: L7 주석(Annotation) API
 # ───────────────────────────────────────────────────
 
-from src.core.annotation import (
+from core.annotation import (
     add_annotation as add_ann,
     get_annotation_summary,
     get_annotations_by_type,
@@ -2751,8 +2922,8 @@ from src.core.annotation import (
     save_annotations,
     update_annotation as update_ann,
 )
-from src.core.annotation_llm import commit_annotation_draft, commit_all_drafts
-from src.core.annotation_types import (
+from core.annotation_llm import commit_annotation_draft, commit_all_drafts
+from core.annotation_types import (
     add_custom_type,
     load_annotation_types,
     remove_custom_type,

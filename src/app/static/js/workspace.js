@@ -209,13 +209,186 @@ function initPanelToggle() {
 function initActivityBar() {
   const buttons = document.querySelectorAll(".activity-btn");
 
+  // 패널별 표시/숨김 매핑
+  // explorer: 문헌목록 + 서지정보 + 해석저장소 (기존)
+  // settings: 설정 패널만
+  const panelSections = {
+    explorer: ["document-list", "bib-section", "interp-section"],
+    settings: ["settings-section"],
+  };
+
   buttons.forEach((btn) => {
     btn.addEventListener("click", () => {
       buttons.forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
-      // 향후: data-panel 값에 따라 사이드바 내용 전환
+
+      const panel = btn.getAttribute("data-panel");
+
+      // 모든 sidebar-section 숨김
+      document.querySelectorAll("#sidebar-content .sidebar-section").forEach((s) => {
+        s.style.display = "none";
+      });
+
+      if (panel === "settings") {
+        // 설정 패널 표시
+        const settingsEl = document.getElementById("settings-section");
+        if (settingsEl) {
+          settingsEl.style.display = "";
+          _loadSettings();
+        }
+        // 사이드바 타이틀 변경
+        const title = document.querySelector(".sidebar-title");
+        if (title) title.textContent = "설정";
+      } else {
+        // explorer: 기존 섹션 복원
+        const docList = document.querySelector("#sidebar-content > .sidebar-section:first-child");
+        if (docList) docList.style.display = "";
+        // 문헌 선택 상태에 따라 서지/해석 섹션 복원
+        const bibSec = document.getElementById("bib-section");
+        const interpSec = document.getElementById("interp-section");
+        if (bibSec && typeof viewerState !== "undefined" && viewerState.docId) {
+          bibSec.style.display = "";
+        }
+        if (interpSec && typeof viewerState !== "undefined" && viewerState.docId) {
+          interpSec.style.display = "";
+        }
+        // 사이드바 타이틀 복원
+        const title = document.querySelector(".sidebar-title");
+        if (title) title.textContent = "서고 브라우저";
+      }
     });
   });
+}
+
+
+/* ──────────────────────────
+   3-1. 설정 패널 로드
+   ────────────────────────── */
+
+async function _loadSettings() {
+  try {
+    const res = await fetch("/api/settings");
+    if (!res.ok) return;
+    const data = await res.json();
+
+    // 서고 경로 표시
+    const pathEl = document.getElementById("settings-library-path");
+    if (pathEl) {
+      pathEl.textContent = data.library_path || "(설정 안 됨)";
+    }
+
+    // 원본 저장소 목록
+    _renderRepoList("settings-doc-repos", data.documents || [], "documents");
+
+    // 해석 저장소 목록
+    _renderRepoList("settings-interp-repos", data.interpretations || [], "interpretations");
+  } catch (e) {
+    console.warn("설정 로드 실패:", e);
+  }
+}
+
+
+function _renderRepoList(containerId, repos, repoType) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  if (repos.length === 0) {
+    container.innerHTML = '<div class="placeholder">저장소 없음</div>';
+    return;
+  }
+
+  container.innerHTML = "";
+  for (const repo of repos) {
+    const item = document.createElement("div");
+    item.className = "settings-repo-item";
+
+    const hasRemote = !!repo.remote_url;
+    const statusIcon = hasRemote ? "●" : "○";
+    const statusClass = hasRemote ? "remote-connected" : "remote-disconnected";
+
+    item.innerHTML = `
+      <div class="settings-repo-header">
+        <span class="${statusClass}">${statusIcon}</span>
+        <strong>${repo.id}</strong>
+      </div>
+      <div class="settings-repo-remote">
+        <input type="text" class="settings-remote-input"
+               placeholder="원격 URL (예: https://github.com/...)"
+               value="${repo.remote_url || ""}"
+               data-repo-type="${repoType}" data-repo-id="${repo.id}">
+        <button class="text-btn settings-remote-save" title="원격 URL 저장">저장</button>
+      </div>
+      <div class="settings-repo-actions">
+        <button class="text-btn settings-push-btn"
+                data-repo-type="${repoType}" data-repo-id="${repo.id}"
+                ${hasRemote ? "" : "disabled"}>Push</button>
+        <button class="text-btn settings-pull-btn"
+                data-repo-type="${repoType}" data-repo-id="${repo.id}"
+                ${hasRemote ? "" : "disabled"}>Pull</button>
+      </div>
+    `;
+
+    // 원격 URL 저장 버튼
+    item.querySelector(".settings-remote-save").addEventListener("click", async () => {
+      const input = item.querySelector(".settings-remote-input");
+      const url = input.value.trim();
+      if (!url) { alert("원격 URL을 입력하세요."); return; }
+
+      try {
+        const res = await fetch("/api/settings/remote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            repo_type: repoType,
+            repo_id: repo.id,
+            remote_url: url,
+          }),
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error);
+        alert(`원격 URL 설정 완료: ${url}`);
+        _loadSettings();  // 새로고침
+      } catch (e) {
+        alert(`원격 설정 실패: ${e.message}`);
+      }
+    });
+
+    // Push/Pull 버튼
+    const pushBtn = item.querySelector(".settings-push-btn");
+    const pullBtn = item.querySelector(".settings-pull-btn");
+
+    if (pushBtn) {
+      pushBtn.addEventListener("click", () => _gitSync(repoType, repo.id, "push"));
+    }
+    if (pullBtn) {
+      pullBtn.addEventListener("click", () => _gitSync(repoType, repo.id, "pull"));
+    }
+
+    container.appendChild(item);
+  }
+}
+
+
+async function _gitSync(repoType, repoId, action) {
+  const label = action === "push" ? "Push" : "Pull";
+  if (!confirm(`${repoId} 저장소를 ${label} 하시겠습니까?`)) return;
+
+  try {
+    const res = await fetch("/api/settings/git-sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repo_type: repoType,
+        repo_id: repoId,
+        action: action,
+      }),
+    });
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.error);
+    alert(`${label} 완료: ${result.output || "성공"}`);
+  } catch (e) {
+    alert(`${label} 실패: ${e.message}`);
+  }
 }
 
 

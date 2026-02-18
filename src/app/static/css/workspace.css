@@ -144,6 +144,81 @@
   --dialog-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.5);
 
+  /* 대조 뷰(Alignment) 색상 */
+  --corr-subtab-border: #3c3c3c;
+  --corr-subtab-bg: #2d2d2d;
+  --corr-subtab-text: #999;
+  --corr-subtab-hover-text: #ccc;
+  --corr-subtab-hover-bg: #3c3c3c;
+  --corr-subtab-active: #4fc3f7;
+  --align-stats-bg: #2d2d2d;
+  --align-stats-border: #3c3c3c;
+  --align-grid-border: #3c3c3c;
+  --align-grid-header-bg: #333;
+  --align-grid-header-text: #999;
+  --align-row-border: #3c3c3c;
+  --align-tab-border: #555;
+  --align-tab-bg: #2d2d2d;
+  --align-tab-hover-bg: #3c3c3c;
+  --align-variant-bg: rgba(255, 249, 196, 0.15);
+  --align-mismatch-bg: rgba(255, 205, 210, 0.15);
+  --align-ins-del-bg: rgba(255, 255, 255, 0.06);
+  --align-ins-del-text: #999;
+  --align-accuracy-bar-bg: #3c3c3c;
+  --align-accuracy-label: #ccc;
+  --variant-pair-bg: rgba(255, 249, 196, 0.15);
+  --variant-pair-border: #F9A825;
+  --align-exact-text: #4caf50;
+  --align-variant-text: #ff9800;
+  --align-mismatch-text: #ef5350;
+  --align-neutral-text: #757575;
+  --align-accuracy-fill: linear-gradient(90deg, #66bb6a, #43a047);
+  --align-tab-active-bg: #1a73e8;
+  --align-tab-active-text: #fff;
+  --align-tab-active-border: #1a73e8;
+
+  /* Confidence 색상 */
+  --conf-high-text: #4caf50;
+  --conf-high-bg: rgba(76, 175, 80, 0.15);
+  --conf-mid-text: #ff9800;
+  --conf-mid-bg: rgba(255, 152, 0, 0.15);
+  --conf-low-text: #ef4444;
+  --conf-low-bg: rgba(239, 68, 68, 0.15);
+
+  /* Git 그래프 색상 */
+  --git-tab-border: #3c3c3c;
+  --git-tab-bg: #1e1e1e;
+  --git-tab-text: #999;
+  --git-tab-hover-text: #ddd;
+  --git-tab-hover-bg: #333;
+  --git-tab-active-text: #e0e0e0;
+  --git-tab-active-bg: #333;
+  --git-tab-active-border: #555;
+  --git-controls-text: #999;
+  --git-select-bg: #2d2d2d;
+  --git-select-text: #e0e0e0;
+  --git-select-border: #555;
+  --git-lane-label: #999;
+  --git-lane-line: #555;
+  --git-vertical-line: #444;
+  --git-hash-text: #888;
+  --git-tooltip-bg: #1e1e1e;
+  --git-tooltip-border: #555;
+  --git-tooltip-text: #e0e0e0;
+  --git-tooltip-strong: #4fc3f7;
+  --git-tooltip-small: #999;
+  --git-detail-bg: #252526;
+  --git-detail-border: #444;
+  --git-detail-header-border: #333;
+  --git-detail-header-text: #e0e0e0;
+  --git-detail-body-text: #ccc;
+  --git-detail-label: #999;
+  --git-detail-match-bg: #333;
+  --git-detail-match-text: #aaa;
+  --git-detail-msg-bg: #1e1e1e;
+  --git-detail-msg-text: #bbb;
+  --git-detail-code-bg: #333;
+
   /* 폰트 — AppFont: 한자=Spoqa Han Sans Neo, 나머지=Pretendard GOV Variable */
   --font-ui: 'AppFont', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "Cascadia Code", "Consolas", "Monaco", monospace;
@@ -186,6 +261,81 @@
   --overlay-bg: rgba(0, 0, 0, 0.3);
   --dialog-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
   --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.1);
+
+  /* 대조 뷰 색상 */
+  --corr-subtab-border: #ddd;
+  --corr-subtab-bg: #f8f9fa;
+  --corr-subtab-text: #666;
+  --corr-subtab-hover-text: #333;
+  --corr-subtab-hover-bg: #eee;
+  --corr-subtab-active: #1a73e8;
+  --align-stats-bg: #f8f9fa;
+  --align-stats-border: #e0e0e0;
+  --align-grid-border: #ddd;
+  --align-grid-header-bg: #f0f0f0;
+  --align-grid-header-text: #555;
+  --align-row-border: #f0f0f0;
+  --align-tab-border: #ccc;
+  --align-tab-bg: #fff;
+  --align-tab-hover-bg: #eee;
+  --align-variant-bg: #FFF9C4;
+  --align-mismatch-bg: #FFCDD2;
+  --align-ins-del-bg: #E0E0E0;
+  --align-ins-del-text: #757575;
+  --align-accuracy-bar-bg: #e0e0e0;
+  --align-accuracy-label: #333;
+  --variant-pair-bg: #FFF9C4;
+  --variant-pair-border: #F9A825;
+  --align-exact-text: #2e7d32;
+  --align-variant-text: #f57f17;
+  --align-mismatch-text: #c62828;
+  --align-neutral-text: #757575;
+  --align-accuracy-fill: linear-gradient(90deg, #66bb6a, #43a047);
+  --align-tab-active-bg: #1a73e8;
+  --align-tab-active-text: #fff;
+  --align-tab-active-border: #1a73e8;
+
+  /* Confidence 색상 */
+  --conf-high-text: #2d8a4e;
+  --conf-high-bg: #d4edda;
+  --conf-mid-text: #856404;
+  --conf-mid-bg: #fff3cd;
+  --conf-low-text: #721c24;
+  --conf-low-bg: #f8d7da;
+
+  /* Git 그래프 색상 */
+  --git-tab-border: #ddd;
+  --git-tab-bg: #f8f9fa;
+  --git-tab-text: #666;
+  --git-tab-hover-text: #333;
+  --git-tab-hover-bg: #eee;
+  --git-tab-active-text: #222;
+  --git-tab-active-bg: #fff;
+  --git-tab-active-border: #ccc;
+  --git-controls-text: #666;
+  --git-select-bg: #fff;
+  --git-select-text: #333;
+  --git-select-border: #ccc;
+  --git-lane-label: #666;
+  --git-lane-line: #ccc;
+  --git-vertical-line: #ddd;
+  --git-hash-text: #888;
+  --git-tooltip-bg: #fff;
+  --git-tooltip-border: #ccc;
+  --git-tooltip-text: #333;
+  --git-tooltip-strong: #1565C0;
+  --git-tooltip-small: #666;
+  --git-detail-bg: #f8f9fa;
+  --git-detail-border: #ddd;
+  --git-detail-header-border: #eee;
+  --git-detail-header-text: #333;
+  --git-detail-body-text: #444;
+  --git-detail-label: #666;
+  --git-detail-match-bg: #eee;
+  --git-detail-match-text: #666;
+  --git-detail-msg-bg: #fff;
+  --git-detail-msg-text: #444;
+  --git-detail-code-bg: #eee;
 }
 
 
@@ -2643,18 +2793,18 @@ body.resizing-row {
 
 /* Confidence 색상 등급 */
 .conf-high {
-  color: #2d8a4e;
-  background: #d4edda;
+  color: var(--conf-high-text);
+  background: var(--conf-high-bg);
 }
 
 .conf-mid {
-  color: #856404;
-  background: #fff3cd;
+  color: var(--conf-mid-text);
+  background: var(--conf-mid-bg);
 }
 
 .conf-low {
-  color: #721c24;
-  background: #f8d7da;
+  color: var(--conf-low-text);
+  background: var(--conf-low-bg);
 }
 
 .ocr-result-empty {
@@ -2671,7 +2821,7 @@ body.resizing-row {
 }
 
 .ocr-summary-partial {
-  color: #856404;
+  color: var(--conf-mid-text);
 }
 
 /* --- OCR 버튼 비활성 상태 --- */
@@ -2690,9 +2840,9 @@ body.resizing-row {
 .corr-subtab-bar {
   display: flex;
   gap: 0;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid var(--corr-subtab-border);
   margin-bottom: 0;
-  background: #f8f9fa;
+  background: var(--corr-subtab-bg);
 }
 
 .corr-subtab {
@@ -2700,18 +2850,18 @@ body.resizing-row {
   font-size: 13px;
   cursor: pointer;
   border-bottom: 2px solid transparent;
-  color: #666;
+  color: var(--corr-subtab-text);
   user-select: none;
 }
 
 .corr-subtab:hover {
-  color: #333;
-  background: #eee;
+  color: var(--corr-subtab-hover-text);
+  background: var(--corr-subtab-hover-bg);
 }
 
 .corr-subtab.active {
-  color: #1a73e8;
-  border-bottom-color: #1a73e8;
+  color: var(--corr-subtab-active);
+  border-bottom-color: var(--corr-subtab-active);
   font-weight: 600;
 }
 
@@ -2727,8 +2877,8 @@ body.resizing-row {
 
 /* --- 통계 바 --- */
 .alignment-stats-bar {
-  background: #f8f9fa;
-  border: 1px solid #e0e0e0;
+  background: var(--align-stats-bg);
+  border: 1px solid var(--align-stats-border);
   border-radius: 4px;
   padding: 8px 12px;
   font-size: 13px;
@@ -2738,23 +2888,23 @@ body.resizing-row {
   margin-bottom: 6px;
 }
 
-.align-exact { color: #2e7d32; font-weight: 600; }
-.align-variant { color: #f57f17; font-weight: 600; }
-.align-mismatch { color: #c62828; font-weight: 600; }
-.align-insertion { color: #757575; }
-.align-deletion { color: #757575; }
+.align-exact { color: var(--align-exact-text); font-weight: 600; }
+.align-variant { color: var(--align-variant-text); font-weight: 600; }
+.align-mismatch { color: var(--align-mismatch-text); font-weight: 600; }
+.align-insertion { color: var(--align-neutral-text); }
+.align-deletion { color: var(--align-neutral-text); }
 
 .alignment-accuracy-bar {
   position: relative;
   height: 18px;
-  background: #e0e0e0;
+  background: var(--align-accuracy-bar-bg);
   border-radius: 9px;
   overflow: hidden;
 }
 
 .alignment-accuracy-fill {
   height: 100%;
-  background: linear-gradient(90deg, #66bb6a, #43a047);
+  background: var(--align-accuracy-fill);
   border-radius: 9px;
   transition: width 0.3s ease;
 }
@@ -2767,7 +2917,7 @@ body.resizing-row {
   font-size: 11px;
   font-weight: 700;
   line-height: 18px;
-  color: #333;
+  color: var(--align-accuracy-label);
 }
 
 /* --- 블록 탭 --- */
@@ -2780,25 +2930,25 @@ body.resizing-row {
 .alignment-block-tab {
   padding: 3px 10px;
   font-size: 12px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--align-tab-border);
   border-radius: 3px;
-  background: #fff;
+  background: var(--align-tab-bg);
   cursor: pointer;
 }
 
 .alignment-block-tab:hover {
-  background: #eee;
+  background: var(--align-tab-hover-bg);
 }
 
 .alignment-block-tab.active {
-  background: #1a73e8;
-  color: #fff;
-  border-color: #1a73e8;
+  background: var(--align-tab-active-bg);
+  color: var(--align-tab-active-text);
+  border-color: var(--align-tab-active-border);
 }
 
 /* --- 글자별 대조 테이블 --- */
 .alignment-grid {
-  border: 1px solid #ddd;
+  border: 1px solid var(--align-grid-border);
   border-radius: 4px;
   overflow: hidden;
   font-size: 14px;
@@ -2807,21 +2957,21 @@ body.resizing-row {
 .alignment-grid-header {
   display: grid;
   grid-template-columns: 1fr 1fr 2fr;
-  background: #f0f0f0;
+  background: var(--align-grid-header-bg);
   font-weight: 600;
   font-size: 12px;
-  color: #555;
+  color: var(--align-grid-header-text);
 }
 
 .alignment-grid-header .ag-col {
   padding: 4px 8px;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid var(--align-grid-border);
 }
 
 .alignment-row {
   display: grid;
   grid-template-columns: 1fr 1fr 2fr;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--align-row-border);
 }
 
 .alignment-row:last-child {
@@ -2851,21 +3001,21 @@ body.resizing-row {
 }
 
 .alignment-row.align-variant {
-  background: #FFF9C4;
+  background: var(--align-variant-bg);
 }
 
 .alignment-row.align-mismatch {
-  background: #FFCDD2;
+  background: var(--align-mismatch-bg);
 }
 
 .alignment-row.align-insertion {
-  background: #E0E0E0;
-  color: #757575;
+  background: var(--align-ins-del-bg);
+  color: var(--align-ins-del-text);
 }
 
 .alignment-row.align-deletion {
-  background: #E0E0E0;
-  color: #757575;
+  background: var(--align-ins-del-bg);
+  color: var(--align-ins-del-text);
 }
 
 /* 클릭 가능한 행 */
@@ -2889,8 +3039,8 @@ body.resizing-row {
 .variant-pair {
   display: inline-block;
   padding: 2px 8px;
-  background: #FFF9C4;
-  border: 1px solid #F9A825;
+  background: var(--variant-pair-bg);
+  border: 1px solid var(--variant-pair-border);
   border-radius: 12px;
   font-size: 13px;
 }
@@ -3265,6 +3415,113 @@ body.resizing-row {
 
 .hyeonto-ann-item:hover {
   background: var(--hover-bg, rgba(255,255,255,0.06));
+}
+
+
+/* ─────────────────────────────
+   설정 패널 (settings)
+   ───────────────────────────── */
+
+.settings-group {
+  padding: 8px 12px;
+}
+
+.settings-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+}
+
+.settings-value {
+  font-size: 12px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  word-break: break-all;
+  padding: 4px 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+.settings-repo-list {
+  padding: 4px 8px;
+}
+
+.settings-repo-item {
+  padding: 8px;
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+}
+
+.settings-repo-header {
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.remote-connected {
+  color: #4caf50;
+}
+
+.remote-disconnected {
+  color: var(--text-muted);
+}
+
+.settings-repo-remote {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.settings-remote-input {
+  flex: 1;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  padding: 3px 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+.settings-remote-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.settings-remote-save {
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+.settings-repo-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.settings-push-btn,
+.settings-pull-btn {
+  font-size: 11px;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.settings-push-btn:hover,
+.settings-pull-btn:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.settings-push-btn:disabled,
+.settings-pull-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .hyeonto-ann-char {
@@ -3682,14 +3939,14 @@ body.resizing-row {
   align-items: center;
   gap: 2px;
   padding: 4px 8px;
-  border-bottom: 1px solid #2d2d2d;
-  background: #1e1e1e;
+  border-bottom: 1px solid var(--git-tab-border);
+  background: var(--git-tab-bg);
 }
 
 .git-view-tab {
   padding: 3px 10px;
   font-size: 12px;
-  color: #999;
+  color: var(--git-tab-text);
   background: none;
   border: 1px solid transparent;
   border-radius: 3px;
@@ -3697,14 +3954,14 @@ body.resizing-row {
 }
 
 .git-view-tab:hover {
-  color: #ddd;
-  background: #333;
+  color: var(--git-tab-hover-text);
+  background: var(--git-tab-hover-bg);
 }
 
 .git-view-tab.active {
-  color: #e0e0e0;
-  background: #333;
-  border-color: #555;
+  color: var(--git-tab-active-text);
+  background: var(--git-tab-active-bg);
+  border-color: var(--git-tab-active-border);
 }
 
 .git-graph-controls {
@@ -3713,13 +3970,13 @@ body.resizing-row {
   gap: 10px;
   align-items: center;
   font-size: 11px;
-  color: #999;
+  color: var(--git-controls-text);
 }
 
 .git-branch-select {
-  background: #2d2d2d;
-  color: #e0e0e0;
-  border: 1px solid #555;
+  background: var(--git-select-bg);
+  color: var(--git-select-text);
+  border: 1px solid var(--git-select-border);
   border-radius: 3px;
   padding: 1px 4px;
   font-size: 11px;
@@ -3738,21 +3995,21 @@ body.resizing-row {
 
 /* 레인 라벨 */
 .git-graph-lane-label {
-  fill: #999;
+  fill: var(--git-lane-label);
   font-size: 11px;
   font-weight: 600;
 }
 
 /* 레인 세로 가이드선 */
 .git-graph-lane-line {
-  stroke: #333;
+  stroke: var(--git-lane-line);
   stroke-width: 1;
   stroke-dasharray: 2,4;
 }
 
 /* 세로 연결선 (같은 레인 내) */
 .git-graph-vertical {
-  stroke: #444;
+  stroke: var(--git-vertical-line);
   stroke-width: 1;
 }
 
@@ -3780,7 +4037,7 @@ body.resizing-row {
 
 /* 해시 텍스트 */
 .git-graph-hash {
-  fill: #888;
+  fill: var(--git-hash-text);
   font-size: 10px;
 }
 
@@ -3789,11 +4046,11 @@ body.resizing-row {
   display: none;
   position: fixed;
   z-index: 9999;
-  background: #1e1e1e;
-  border: 1px solid #555;
+  background: var(--git-tooltip-bg);
+  border: 1px solid var(--git-tooltip-border);
   border-radius: 4px;
   padding: 8px 10px;
-  color: #e0e0e0;
+  color: var(--git-tooltip-text);
   font-size: 12px;
   line-height: 1.5;
   max-width: 380px;
@@ -3802,11 +4059,11 @@ body.resizing-row {
 }
 
 .git-graph-tooltip strong {
-  color: #4fc3f7;
+  color: var(--git-tooltip-strong);
 }
 
 .git-graph-tooltip small {
-  color: #999;
+  color: var(--git-tooltip-small);
 }
 
 /* 커밋 상세 패널 */
@@ -3816,8 +4073,8 @@ body.resizing-row {
   top: 0;
   width: 320px;
   height: 100%;
-  background: #252526;
-  border-left: 1px solid #444;
+  background: var(--git-detail-bg);
+  border-left: 1px solid var(--git-detail-border);
   overflow-y: auto;
   z-index: 10;
 }
@@ -3827,10 +4084,10 @@ body.resizing-row {
   justify-content: space-between;
   align-items: center;
   padding: 8px 10px;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid var(--git-detail-header-border);
   font-size: 12px;
   font-weight: 600;
-  color: #e0e0e0;
+  color: var(--git-detail-header-text);
 }
 
 .git-graph-detail-header .text-btn {
@@ -3841,7 +4098,7 @@ body.resizing-row {
 #git-graph-detail-body {
   padding: 10px;
   font-size: 12px;
-  color: #ccc;
+  color: var(--git-detail-body-text);
 }
 
 .git-detail-row {
@@ -3851,7 +4108,7 @@ body.resizing-row {
 .git-detail-label {
   display: inline-block;
   width: 60px;
-  color: #999;
+  color: var(--git-detail-label);
   font-size: 11px;
 }
 
@@ -3859,14 +4116,14 @@ body.resizing-row {
   font-size: 10px;
   padding: 1px 5px;
   border-radius: 3px;
-  background: #333;
-  color: #aaa;
+  background: var(--git-detail-match-bg);
+  color: var(--git-detail-match-text);
 }
 
 .git-detail-message {
   margin-top: 10px;
   padding: 8px;
-  background: #1e1e1e;
+  background: var(--git-detail-msg-bg);
   border-radius: 4px;
 }
 
@@ -3874,13 +4131,13 @@ body.resizing-row {
   margin: 0;
   white-space: pre-wrap;
   font-size: 11px;
-  color: #bbb;
+  color: var(--git-detail-msg-text);
   font-family: inherit;
 }
 
 #git-graph-detail-body code {
   font-family: 'Consolas', monospace;
-  background: #333;
+  background: var(--git-detail-code-bg);
   padding: 1px 4px;
   border-radius: 2px;
   font-size: 11px;

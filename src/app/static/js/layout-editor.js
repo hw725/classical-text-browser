@@ -1116,8 +1116,8 @@ function _applyDraftToBlocks(draft) {
   }
 
   layoutState.isDirty = true;
-  _renderBlocks();
-  _updateBlockCount();
+  _redrawOverlay();
+  _updateBlockList();
 }
 
 

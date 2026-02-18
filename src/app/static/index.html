@@ -96,6 +96,25 @@
           <div class="placeholder">해석 모드에서 저장소 목록이 표시됩니다</div>
         </div>
       </div>
+
+      <!-- 설정 패널 (settings 버튼 클릭 시 표시) -->
+      <div class="sidebar-section" id="settings-section" style="display:none;">
+        <div class="section-header">서고 설정</div>
+        <div class="settings-group">
+          <div class="settings-label">서고 경로</div>
+          <div class="settings-value" id="settings-library-path">로딩 중...</div>
+        </div>
+
+        <div class="section-header" style="margin-top:12px;">원본 저장소</div>
+        <div id="settings-doc-repos" class="settings-repo-list">
+          <div class="placeholder">로딩 중...</div>
+        </div>
+
+        <div class="section-header" style="margin-top:12px;">해석 저장소</div>
+        <div id="settings-interp-repos" class="settings-repo-list">
+          <div class="placeholder">로딩 중...</div>
+        </div>
+      </div>
     </div>
   </aside>
 
@@ -246,7 +265,8 @@
           <div class="props-section-title">OCR 실행</div>
 
           <div class="ocr-controls">
-            <div class="ocr-control-row">
+            <!-- 엔진 행: LLM vision만 존재하므로 항상 숨김 -->
+            <div class="ocr-control-row" id="ocr-engine-row" style="display:none;">
               <label class="props-label">엔진</label>
               <select id="ocr-engine-select" class="props-select" title="OCR 엔진 선택">
                 <option value="">로딩 중...</option>
