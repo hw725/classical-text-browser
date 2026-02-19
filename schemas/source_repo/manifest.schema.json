@@ -57,6 +57,7 @@
       "description": "문헌 디지털화 완성도. platform-v7.md 섹션 5.6 참고.",
       "enum": [
         "file_only",
+        "text_imported",
         "bibliography_added",
         "ocr_done",
         "layout_analyzed",

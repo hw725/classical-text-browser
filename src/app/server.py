@@ -113,13 +113,14 @@ _src_dir = str(Path(__file__).resolve().parent.parent)
 if _src_dir not in sys.path:
     sys.path.insert(0, _src_dir)
 
-from fastapi import FastAPI, Query, Request
+from fastapi import FastAPI, File, Form, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from core.library import get_library_info, list_documents, list_interpretations
 from core.document import (
+    create_document_from_hwp,
     create_document_from_url,
     get_bibliography,
     get_corrected_text,
@@ -131,7 +132,9 @@ from core.document import (
     get_page_text,
     get_pdf_path,
     git_commit_document,
+    import_hwp_text_to_document,
     list_pages,
+    match_hwp_text_to_layout_blocks,
     save_bibliography,
     save_page_corrections,
     save_page_layout,
@@ -595,6 +598,228 @@ async def api_create_from_url(body: CreateFromUrlRequest):
         return JSONResponse(
             {"error": f"문헌 생성 실패: {e}"},
             status_code=502,
+        )
+
+
+# --- HWP 가져오기 ---
+
+
+@app.post("/api/documents/preview-hwp")
+async def api_preview_hwp(file: UploadFile = File(...)):
+    """HWP/HWPX 파일을 미리보기한다.
+
+    목적: 가져오기 전에 파일 내용과 표점·현토 감지 결과를 확인한다.
+    입력: multipart/form-data로 HWP/HWPX 파일 업로드.
+    출력:
+        {
+            "metadata": {title, author, format, ...},
+            "text_preview": str (앞부분 500자),
+            "sections_count": int,
+            "detected_punctuation": bool,
+            "detected_hyeonto": bool,
+            "sample_clean_text": str (첫 섹션의 정리 결과),
+        }
+    """
+    import tempfile
+
+    from hwp.reader import detect_format, get_reader
+    from hwp.text_cleaner import clean_hwp_text
+
+    # 업로드된 파일을 임시 파일로 저장
+    suffix = Path(file.filename or "").suffix or ".hwpx"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = Path(tmp.name)
+
+    try:
+        # 형식 감지
+        fmt = detect_format(tmp_path)
+        if fmt is None:
+            return JSONResponse(
+                {"error": f"지원하지 않는 파일 형식입니다: {suffix}"},
+                status_code=400,
+            )
+
+        # 텍스트 추출
+        reader = get_reader(tmp_path)
+        metadata = reader.extract_metadata()
+
+        if hasattr(reader, "extract_sections"):
+            sections = reader.extract_sections()
+            full_text = "\n\n".join(s["text"] for s in sections)
+            sections_count = len(sections)
+        else:
+            full_text = reader.extract_text()
+            sections_count = len([
+                t for t in full_text.split("\n\n") if t.strip()
+            ])
+
+        # 표점·현토 감지 (샘플)
+        sample_text = full_text[:2000]
+        sample_result = clean_hwp_text(sample_text)
+
+        return {
+            "metadata": metadata,
+            "text_preview": full_text[:500],
+            "full_text_length": len(full_text),
+            "sections_count": sections_count,
+            "detected_punctuation": sample_result.had_punctuation,
+            "detected_hyeonto": sample_result.had_hyeonto,
+            "detected_taidu": sample_result.had_taidu,
+            "sample_clean_text": sample_result.clean_text[:500],
+            "punct_count": len(sample_result.punctuation_marks),
+            "hyeonto_count": len(sample_result.hyeonto_annotations),
+        }
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"HWP 파일 읽기 실패: {e}"},
+            status_code=400,
+        )
+    finally:
+        # 임시 파일 정리
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
+
+
+@app.post("/api/documents/import-hwp")
+async def api_import_hwp(
+    file: UploadFile = File(...),
+    doc_id: str = Form(...),
+    title: str = Form(None),
+    page_mapping: str = Form(None),
+    strip_punctuation: bool = Form(True),
+    strip_hyeonto: bool = Form(True),
+):
+    """HWP/HWPX 파일에서 텍스트를 가져온다.
+
+    목적: HWP 텍스트를 기존 문서의 L4에 가져오거나, 새 문헌을 생성한다.
+    입력: multipart/form-data
+        file — HWP/HWPX 파일
+        doc_id — 문헌 ID
+        title — 제목 (선택, 새 문헌 생성 시)
+        page_mapping — JSON 문자열 (선택, 시나리오 1의 섹션↔페이지 매핑)
+        strip_punctuation — 표점 제거 여부 (기본 true)
+        strip_hyeonto — 현토 제거 여부 (기본 true)
+    모드 자동 판별:
+        - doc_id가 이미 존재하면 → 시나리오 1 (기존 문서에 텍스트 가져오기)
+        - doc_id가 없으면 → 시나리오 2 (새 문헌 생성)
+    출력: {document_id, title, mode, pages_saved, text_pages, cleaned_stats}
+    """
+    import tempfile
+
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    if not doc_id or not doc_id.strip():
+        return JSONResponse({"error": "doc_id가 비어있습니다."}, status_code=400)
+    doc_id = doc_id.strip()
+
+    # page_mapping JSON 파싱
+    parsed_mapping = None
+    if page_mapping:
+        try:
+            parsed_mapping = json.loads(page_mapping)
+        except json.JSONDecodeError:
+            return JSONResponse(
+                {"error": "page_mapping이 올바른 JSON이 아닙니다."},
+                status_code=400,
+            )
+
+    # 업로드된 파일을 임시 파일로 저장
+    suffix = Path(file.filename or "").suffix or ".hwpx"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = Path(tmp.name)
+
+    try:
+        doc_path = _library_path / "documents" / doc_id
+
+        if doc_path.exists():
+            # 시나리오 1: 기존 문서에 텍스트 가져오기
+            result = import_hwp_text_to_document(
+                library_path=_library_path,
+                doc_id=doc_id,
+                hwp_file=tmp_path,
+                page_mapping=parsed_mapping,
+                strip_punctuation=strip_punctuation,
+                strip_hyeonto=strip_hyeonto,
+            )
+        else:
+            # 시나리오 2: 새 문헌 생성
+            result = create_document_from_hwp(
+                library_path=_library_path,
+                hwp_file=tmp_path,
+                doc_id=doc_id,
+                title=title,
+                strip_punctuation=strip_punctuation,
+                strip_hyeonto=strip_hyeonto,
+            )
+
+        return result
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+    except FileExistsError as e:
+        return JSONResponse({"error": str(e)}, status_code=409)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"HWP 가져오기 실패: {e}"},
+            status_code=500,
+        )
+    finally:
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
+
+
+class MatchHwpToBlocksRequest(BaseModel):
+    """HWP 텍스트를 LayoutBlock에 매칭하는 요청."""
+    part_id: str
+    page_num: int
+    block_text_mapping: list[dict]
+
+
+@app.post("/api/documents/{doc_id}/match-hwp-to-blocks")
+async def api_match_hwp_to_blocks(doc_id: str, body: MatchHwpToBlocksRequest):
+    """페이지 텍스트를 LayoutBlock 단위로 매칭한다 (2단계).
+
+    목적: 1단계(페이지 매핑) 완료 후, 레이아웃 분석(L3)이 있으면
+          HWP 텍스트를 LayoutBlock 단위로 분할·매칭한다.
+    전제: 레이아웃 분석(L3) 완료.
+    입력: {
+        "part_id": "vol1",
+        "page_num": 1,
+        "block_text_mapping": [
+            {"layout_block_id": "p01_b01", "text": "天地之道..."},
+            ...
+        ]
+    }
+    출력: {matched_blocks, ocr_result_saved}
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    try:
+        result = match_hwp_text_to_layout_blocks(
+            library_path=_library_path,
+            doc_id=doc_id,
+            part_id=body.part_id,
+            page_num=body.page_num,
+            block_text_mapping=body.block_text_mapping,
+        )
+        return result
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"블록 매칭 실패: {e}"},
+            status_code=500,
         )
 
 
@@ -2287,6 +2512,7 @@ class OcrRunRequest(BaseModel):
     block_ids: list[str] | None = None  # None이면 전체 블록
     force_provider: str | None = None   # LLM 프로바이더 지정 (llm_vision 엔진 전용)
     force_model: str | None = None      # LLM 모델 지정 (llm_vision 엔진 전용)
+    paddle_lang: str | None = None      # PaddleOCR 언어 코드 (paddleocr 엔진 전용: ch, chinese_cht, korean, japan, en)
 
 
 @app.get("/api/ocr/engines")
@@ -2351,6 +2577,14 @@ async def api_run_ocr(
         engine_kwargs["force_provider"] = body.force_provider
     if body.force_model:
         engine_kwargs["force_model"] = body.force_model
+
+    # PaddleOCR 엔진: 언어 런타임 변경
+    if body.paddle_lang and body.engine_id == "paddleocr":
+        try:
+            paddle_engine = _registry.get_engine("paddleocr")
+            paddle_engine.lang = body.paddle_lang
+        except Exception:
+            pass  # 엔진이 없거나 사용 불가 — 무시 (아래 run_page에서 에러 처리)
 
     try:
         result = pipeline.run_page(
@@ -2441,6 +2675,21 @@ async def api_rerun_ocr_block(
 
     pipeline, _registry = _get_ocr_pipeline()
 
+    # PaddleOCR 엔진: 언어 런타임 변경
+    if body.paddle_lang and body.engine_id == "paddleocr":
+        try:
+            paddle_engine = _registry.get_engine("paddleocr")
+            paddle_engine.lang = body.paddle_lang
+        except Exception:
+            pass
+
+    # LLM 엔진용 추가 인자
+    engine_kwargs = {}
+    if body.force_provider:
+        engine_kwargs["force_provider"] = body.force_provider
+    if body.force_model:
+        engine_kwargs["force_model"] = body.force_model
+
     try:
         result = pipeline.run_block(
             doc_id=doc_id,
@@ -2448,6 +2697,7 @@ async def api_rerun_ocr_block(
             page_number=page_number,
             block_id=block_id,
             engine_id=body.engine_id,
+            **engine_kwargs,
         )
         return result.to_summary()
     except Exception as e:

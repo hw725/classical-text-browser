@@ -637,3 +637,63 @@ def auto_create_work(
 
     result = create_entity(interp_path, "work", work_data)
     return {**result, "work": work_data}
+
+
+def auto_create_textblocks_from_text(
+    interp_path: str | Path,
+    library_path: str | Path,
+    document_id: str,
+    pages: list[dict],
+) -> list[dict]:
+    """텍스트에서 TextBlock을 직접 생성한다 (시나리오 2: HWP만).
+
+    목적: HWP 파일로 새 문헌을 만든 후, 레이아웃 분석(L3) 없이
+          바로 TextBlock을 생성하여 표점·현토·번역 작업을 시작할 수 있게 한다.
+    입력:
+        interp_path — 해석 저장소 경로.
+        library_path — 서고 루트 경로.
+        document_id — 원본 문헌 ID.
+        pages — [{page_num, text, part_id(선택)}].
+            각 항목은 한 페이지의 텍스트.
+            part_id가 없으면 "vol1" 사용.
+    출력: 생성된 TextBlock 딕셔너리 리스트.
+
+    왜 이렇게 하는가:
+        시나리오 2에서는 PDF/이미지가 없으므로 LayoutBlock도 없다.
+        source_ref.layout_block_id=null로 설정하고,
+        source_ref.page만으로 원본을 추적한다.
+        Work가 아직 없으면 자동으로 생성한다 (auto_create_work).
+    """
+    interp_path = Path(interp_path).resolve()
+    library_path = Path(library_path).resolve()
+
+    # Work 자동 생성 (없으면 생성, 있으면 기존 것 사용)
+    work_result = auto_create_work(interp_path, library_path, document_id)
+    work_id = work_result["work"]["id"]
+
+    created_blocks = []
+
+    for seq_idx, page_info in enumerate(pages):
+        page_num = page_info["page_num"]
+        text = page_info.get("text", "")
+        part_id = page_info.get("part_id", "vol1")
+
+        if not text.strip():
+            continue
+
+        # TextBlock 생성 — layout_block_id=null (HWP 직접 가져오기)
+        block_result = create_textblock_from_source(
+            interp_path=interp_path,
+            library_path=library_path,
+            document_id=document_id,
+            part_id=part_id,
+            page_num=page_num,
+            layout_block_id=None,
+            original_text=text,
+            work_id=work_id,
+            sequence_index=seq_idx,
+        )
+
+        created_blocks.append(block_result)
+
+    return created_blocks
