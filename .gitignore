@@ -47,7 +47,7 @@ examples/test_library/
 test_library/
 
 # 생성된 더미 PDF
-examples/dummy_shishuo.pdf
+examples/dummy_*.pdf
 
 # 임시 테스트 파일
 test_*.json
