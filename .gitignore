@@ -42,8 +42,27 @@ intermediate_results/
 # 로그
 logs/*.jsonl
 
-# 테스트 서고 (examples/register_dummy.py가 생성)
+# 테스트 서고
 examples/test_library/
+test_library/
 
 # 생성된 더미 PDF
 examples/dummy_shishuo.pdf
+
+# 임시 테스트 파일
+test_*.json
+
+# 서버 로그
+server_*.log
+
+# Claude Code
+.claude/
+
+# VSCode Local History
+.history/
+
+# LLM 사용 로그 (서고 내 자동 생성)
+**/llm_usage_log.jsonl
+
+# 테스트 중 추가된 예제 문헌 (서브모듈 아닌 것)
+examples/monggu_library/documents/kameda_monggu/
