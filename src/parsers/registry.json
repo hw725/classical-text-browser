@@ -38,6 +38,19 @@
       "metadata_standard": "MARC"
     },
     {
+      "id": "generic_llm",
+      "name": "범용 LLM 추출 (markdown.new)",
+      "country": null,
+      "fetcher": "generic_llm_fetcher",
+      "mapper": "generic_llm_mapper",
+      "access_method": "llm",
+      "base_url": null,
+      "response_format": "markdown+llm",
+      "requires_auth": false,
+      "metadata_standard": null,
+      "note": "markdown.new로 웹페이지 변환 후 LLM으로 서지 필드 추출. 전용 파서 없는 사이트에 폴백."
+    },
+    {
       "id": "manual",
       "name": "수동 입력",
       "country": null,
