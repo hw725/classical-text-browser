@@ -40,7 +40,9 @@ from .providers.base import (
 )
 from .providers.base44_bridge import Base44BridgeProvider
 from .providers.base44_http import Base44HttpProvider
+from .providers.gemini_provider import GeminiProvider
 from .providers.ollama import OllamaProvider
+from .providers.openai_provider import OpenAiProvider
 from .usage_tracker import UsageTracker
 
 
@@ -51,13 +53,14 @@ class LlmRouter:
         self.config = config or LlmConfig()
         self.usage_tracker = UsageTracker(self.config)
 
-        # 우선순위 순서
+        # 우선순위 순서 (무료 → 저렴 → 중간 → 최후)
         self.providers: list[BaseLlmProvider] = [
-            Base44HttpProvider(self.config),     # 1순위
-            Base44BridgeProvider(self.config),    # 2순위
-            OllamaProvider(self.config),          # 3순위
-            AnthropicProvider(self.config),       # 4순위
-            # OpenAI, Gemini는 나중에 추가
+            Base44HttpProvider(self.config),     # 1순위: 무료 (텍스트 전용)
+            Base44BridgeProvider(self.config),    # 2순위: 무료 (비전 포함)
+            OllamaProvider(self.config),          # 3순위: 무료 (로컬/프록시)
+            GeminiProvider(self.config),           # 4순위: 저렴 (비전 포함)
+            OpenAiProvider(self.config),           # 5순위: 중간 (비전 포함)
+            AnthropicProvider(self.config),       # 6순위: 최후 폴백
         ]
 
     def _get_provider(self, provider_id: str) -> Optional[BaseLlmProvider]:
@@ -248,31 +251,39 @@ class LlmRouter:
         return list(results)
 
     async def get_available_models(self) -> list[dict]:
-        """GUI 드롭다운용 모델 목록."""
+        """GUI 드롭다운용 모델 목록.
+
+        list_models() 메서드가 있는 프로바이더(Ollama, OpenAI, Gemini)는
+        개별 모델을 각각 표시한다.
+        """
         models = []
+
+        # list_models()를 지원하는 프로바이더 ID
+        EXPANDABLE = {"ollama", "openai", "gemini"}
 
         for provider in self.providers:
             available = await provider.is_available()
 
-            if provider.provider_id == "ollama" and available:
+            if provider.provider_id in EXPANDABLE and available:
                 try:
-                    ollama_models = await provider.list_models()
-                    for m in ollama_models:
+                    provider_models = await provider.list_models()
+                    for m in provider_models:
+                        is_free = provider.provider_id == "ollama"
                         models.append({
-                            "provider": "ollama",
+                            "provider": provider.provider_id,
                             "model": m["name"],
                             "available": True,
-                            "display": f"Ollama — {m['name']}",
-                            "cost": "free",
+                            "display": f"{provider.display_name} — {m['name']}",
+                            "cost": "free" if is_free else m.get("cost", "paid"),
                             "vision": m.get("vision", False),
                         })
                 except Exception:
                     models.append({
-                        "provider": "ollama",
+                        "provider": provider.provider_id,
                         "model": "(조회 실패)",
                         "available": False,
-                        "display": "Ollama (모델 목록 조회 실패)",
-                        "cost": "free",
+                        "display": f"{provider.display_name} (모델 목록 조회 실패)",
+                        "cost": "free" if provider.provider_id == "ollama" else "paid",
                         "vision": False,
                     })
             else:
