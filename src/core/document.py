@@ -938,6 +938,526 @@ def _write_json(path: Path, data: dict) -> None:
     )
 
 
+def _formatting_file_path(doc_path: Path, part_id: str, page_num: int) -> Path:
+    """서식 메타데이터(대두 등) 파일 경로를 조립한다. (내부 유틸리티)
+
+    컨벤션: L4_text/pages/{part_id}_page_{NNN}_formatting.json
+    왜 이렇게 하는가: 대두 등 서식 정보를 L4 txt 파일과 분리하여 저장하면,
+                      기존 파이프라인에 전혀 영향 없이 서식 메타데이터를 관리할 수 있다.
+    """
+    filename = f"{part_id}_page_{page_num:03d}_formatting.json"
+    return doc_path / "L4_text" / "pages" / filename
+
+
+def _hwp_clean_file_path(doc_path: Path, part_id: str, page_num: int) -> Path:
+    """HWP 정리 데이터(표점·현토) 사이드카 파일 경로를 조립한다. (내부 유틸리티)
+
+    컨벤션: L4_text/pages/{part_id}_page_{NNN}_hwp_clean.json
+    왜 이렇게 하는가: HWP에서 분리한 표점·현토 데이터를 L4 옆에 보관해 두면,
+                      나중에 L5(해석 저장소)로 가져갈 때 원본 데이터로 사용할 수 있다.
+    """
+    filename = f"{part_id}_page_{page_num:03d}_hwp_clean.json"
+    return doc_path / "L4_text" / "pages" / filename
+
+
+def _ocr_file_path(doc_path: Path, part_id: str, page_num: int) -> Path:
+    """L2 OCR 결과 파일 경로를 조립한다. (내부 유틸리티)
+
+    컨벤션: L2_ocr/{part_id}_page_{NNN}.json
+    """
+    filename = f"{part_id}_page_{page_num:03d}.json"
+    return doc_path / "L2_ocr" / filename
+
+
+# --- HWP 가져오기 ---
+
+
+def import_hwp_text_to_document(
+    library_path: str | Path,
+    doc_id: str,
+    hwp_file: str | Path,
+    page_mapping: list[dict] | None = None,
+    strip_punctuation: bool = True,
+    strip_hyeonto: bool = True,
+) -> dict:
+    """시나리오 1: 기존 문서에 HWP 텍스트를 페이지별로 L4에 가져온다.
+
+    목적: PDF 스캔이 이미 있는 문서에 HWP 타이핑본의 텍스트를 투입한다.
+          표점·현토를 분리하여 순수 원문만 L4에 저장하고,
+          분리된 데이터는 사이드카 JSON으로 보관한다.
+    입력:
+        library_path — 서고 경로.
+        doc_id — 기존 문헌 ID.
+        hwp_file — HWP/HWPX 파일 경로.
+        page_mapping — HWP 섹션 ↔ PDF 페이지 매핑.
+            None이면 순서대로 1:1 자동 매핑.
+            형식: [{"section_index": 0, "page_num": 1, "part_id": "vol1"}, ...]
+        strip_punctuation — True이면 표점을 제거하고 별도 저장.
+        strip_hyeonto — True이면 현토를 제거하고 별도 저장.
+    출력:
+        {
+            "document_id": str,
+            "mode": "import_to_existing",
+            "pages_saved": int,
+            "text_pages": [{page_num, part_id, text_length, has_punct, has_hyeonto}],
+            "cleaned_stats": {had_punctuation, had_hyeonto, punct_count, hyeonto_count},
+        }
+
+    처리 흐름:
+        1. HWP 텍스트 추출 → 섹션/단락별 분할
+        2. page_mapping으로 HWP 섹션 ↔ PDF 페이지 매핑 (1단계)
+        3. 표점·현토 분리 (strip_punctuation, strip_hyeonto)
+        4. L4_text/pages/{part_id}_page_{NNN}.txt에 저장
+        5. 서식 메타데이터(대두)는 _formatting.json에 저장
+        6. 표점·현토 데이터는 _hwp_clean.json에 저장
+        7. completeness_status 업데이트
+        8. git commit
+
+    Raises:
+        FileNotFoundError: 문헌이 존재하지 않을 때.
+        FileNotFoundError: HWP 파일이 없을 때.
+        ValueError: HWP 파일 형식이 지원되지 않을 때.
+    """
+    from hwp.reader import get_reader
+    from hwp.text_cleaner import clean_hwp_text
+
+    library_path = Path(library_path).resolve()
+    hwp_file = Path(hwp_file)
+    doc_path = library_path / "documents" / doc_id
+
+    # 문서 존재 확인
+    if not doc_path.exists():
+        raise FileNotFoundError(
+            f"문헌이 존재하지 않습니다: {doc_id}\n"
+            "→ 해결: 먼저 문헌을 생성하세요. 또는 HWP만으로 새 문헌을 만들려면 "
+            "create_document_from_hwp()를 사용하세요."
+        )
+
+    # HWP 텍스트 추출
+    reader = get_reader(hwp_file)
+
+    # HWPX이면 섹션별 추출, HWP이면 전체 텍스트를 줄바꿈 기준으로 분할
+    if hasattr(reader, "extract_sections"):
+        sections = reader.extract_sections()
+        section_texts = [s["text"] for s in sections]
+    else:
+        full_text = reader.extract_text()
+        # 빈 줄 2개 이상을 페이지 구분자로 사용
+        section_texts = [t.strip() for t in re.split(r"\n{2,}", full_text) if t.strip()]
+
+    # 매니페스트에서 parts 정보 확인
+    manifest = get_document_info(doc_path)
+    parts = manifest.get("parts", [])
+    if not parts:
+        raise ValueError(
+            "문헌에 parts(파일)가 정의되어 있지 않습니다.\n"
+            "→ 해결: manifest.json의 parts 배열을 확인하세요."
+        )
+
+    # 기본 part_id
+    default_part_id = parts[0]["part_id"]
+
+    # page_mapping 생성 (없으면 1:1 자동 매핑)
+    if page_mapping is None:
+        page_mapping = []
+        for i, text in enumerate(section_texts):
+            page_mapping.append({
+                "section_index": i,
+                "page_num": i + 1,
+                "part_id": default_part_id,
+            })
+
+    # 각 페이지에 텍스트 저장
+    text_pages = []
+    total_punct_count = 0
+    total_hyeonto_count = 0
+    had_punctuation = False
+    had_hyeonto = False
+
+    for mapping in page_mapping:
+        section_idx = mapping["section_index"]
+        page_num = mapping["page_num"]
+        part_id = mapping.get("part_id", default_part_id)
+
+        if section_idx >= len(section_texts):
+            continue  # 매핑이 섹션 수보다 많으면 건너뜀
+
+        raw_text = section_texts[section_idx]
+
+        # 표점·현토 분리
+        result = clean_hwp_text(
+            raw_text,
+            strip_punct=strip_punctuation,
+            strip_hyeonto=strip_hyeonto,
+        )
+
+        # L4 텍스트 저장
+        save_page_text(doc_path, part_id, page_num, result.clean_text)
+
+        # 서식 메타데이터(대두) 저장
+        if result.taidu_marks:
+            fmt_path = _formatting_file_path(doc_path, part_id, page_num)
+            fmt_path.parent.mkdir(parents=True, exist_ok=True)
+            _write_json(fmt_path, {
+                "taidu": [
+                    {"pos": t["pos"], "raise_chars": t["raise_chars"], "note": t["note"]}
+                    for t in result.taidu_marks
+                ],
+            })
+
+        # 표점·현토 데이터 사이드카 저장 (나중에 L5로 이전 가능)
+        if result.punctuation_marks or result.hyeonto_annotations:
+            clean_path = _hwp_clean_file_path(doc_path, part_id, page_num)
+            clean_path.parent.mkdir(parents=True, exist_ok=True)
+            _write_json(clean_path, {
+                "source": "hwp_import",
+                "raw_text_length": len(raw_text),
+                "clean_text_length": len(result.clean_text),
+                "punctuation_marks": result.punctuation_marks,
+                "hyeonto_annotations": result.hyeonto_annotations,
+            })
+
+        # 통계 수집
+        if result.had_punctuation:
+            had_punctuation = True
+        if result.had_hyeonto:
+            had_hyeonto = True
+        total_punct_count += len(result.punctuation_marks)
+        total_hyeonto_count += len(result.hyeonto_annotations)
+
+        text_pages.append({
+            "page_num": page_num,
+            "part_id": part_id,
+            "text_length": len(result.clean_text),
+            "has_punct": result.had_punctuation,
+            "has_hyeonto": result.had_hyeonto,
+        })
+
+    # completeness_status 업데이트
+    manifest["completeness_status"] = "text_imported"
+    _write_json(doc_path / "manifest.json", manifest)
+
+    # git commit
+    git_commit_document(doc_path, f"feat: HWP 텍스트 가져오기 — {len(text_pages)}페이지")
+
+    return {
+        "document_id": doc_id,
+        "mode": "import_to_existing",
+        "pages_saved": len(text_pages),
+        "text_pages": text_pages,
+        "cleaned_stats": {
+            "had_punctuation": had_punctuation,
+            "had_hyeonto": had_hyeonto,
+            "punct_count": total_punct_count,
+            "hyeonto_count": total_hyeonto_count,
+        },
+    }
+
+
+def match_hwp_text_to_layout_blocks(
+    library_path: str | Path,
+    doc_id: str,
+    part_id: str,
+    page_num: int,
+    block_text_mapping: list[dict],
+) -> dict:
+    """2단계: 페이지 내 텍스트를 LayoutBlock 단위로 매칭한다.
+
+    목적: 1단계(페이지 매핑) 완료 후, 레이아웃 분석(L3)이 있으면
+          HWP 텍스트를 LayoutBlock 단위로 분할·매칭한다.
+    입력:
+        library_path — 서고 경로.
+        doc_id — 문헌 ID.
+        part_id — 권 식별자.
+        page_num — 페이지 번호.
+        block_text_mapping — [{layout_block_id, text}].
+            각 항목은 해당 LayoutBlock에 대응하는 텍스트.
+    출력:
+        {
+            "matched_blocks": int,
+            "ocr_result_saved": str (L2 파일 경로),
+        }
+
+    전제: 해당 페이지의 레이아웃 분석(L3)이 완료되어 있어야 함.
+
+    처리 흐름:
+        1. block_text_mapping 검증 (LayoutBlock 존재 여부)
+        2. L2 OcrResult 형태로 저장 (ocr_engine="hwp_import")
+        3. git commit
+
+    Raises:
+        FileNotFoundError: 문헌이 존재하지 않을 때.
+    """
+    library_path = Path(library_path).resolve()
+    doc_path = library_path / "documents" / doc_id
+
+    if not doc_path.exists():
+        raise FileNotFoundError(f"문헌이 존재하지 않습니다: {doc_id}")
+
+    # L3 레이아웃 확인
+    layout = get_page_layout(doc_path, part_id, page_num)
+    existing_block_ids = {
+        b["block_id"] for b in layout.get("blocks", [])
+    }
+
+    # OcrResult 목록 생성 (ocr_page.schema.json 형식)
+    ocr_results = []
+    matched = 0
+
+    for mapping in block_text_mapping:
+        block_id = mapping.get("layout_block_id")
+        text = mapping.get("text", "")
+
+        if not text:
+            continue
+
+        # LayoutBlock 존재 여부 확인 (경고만, 에러는 아님)
+        if block_id and block_id not in existing_block_ids:
+            import logging
+            logging.getLogger(__name__).warning(
+                "LayoutBlock이 L3에 존재하지 않습니다: %s (page %d)",
+                block_id, page_num,
+            )
+
+        # 텍스트를 줄 단위로 분할하여 OcrLine 형태로 변환
+        lines = []
+        for line_text in text.split("\n"):
+            if line_text.strip():
+                lines.append({
+                    "text": line_text,
+                    "bbox": None,
+                    "characters": None,
+                })
+
+        ocr_results.append({
+            "layout_block_id": block_id,
+            "lines": lines,
+        })
+        matched += 1
+
+    # L2 OcrResult 저장
+    ocr_page_data = {
+        "part_id": part_id,
+        "page_number": page_num,
+        "ocr_engine": "hwp_import",
+        "ocr_config": {
+            "engine": "hwp_import",
+            "language": None,
+            "direction": None,
+        },
+        "ocr_results": ocr_results,
+    }
+
+    ocr_path = _ocr_file_path(doc_path, part_id, page_num)
+    ocr_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_json(ocr_path, ocr_page_data)
+
+    relative_path = ocr_path.relative_to(doc_path).as_posix()
+
+    # git commit
+    git_commit_document(
+        doc_path,
+        f"feat: HWP 텍스트 LayoutBlock 매칭 — page {page_num}, {matched}블록",
+    )
+
+    return {
+        "matched_blocks": matched,
+        "ocr_result_saved": relative_path,
+    }
+
+
+def create_document_from_hwp(
+    library_path: str | Path,
+    hwp_file: str | Path,
+    doc_id: str,
+    title: str | None = None,
+    strip_punctuation: bool = True,
+    strip_hyeonto: bool = True,
+) -> dict:
+    """시나리오 2: HWP 파일로 새 문헌을 생성한다.
+
+    목적: PDF 없이 HWP 파일만 있을 때, HWP 자체를 원본으로 새 문헌을 만든다.
+          텍스트를 추출하여 페이지별로 L4에 저장하고,
+          표점·현토를 분리한 데이터는 사이드카 JSON으로 보관한다.
+    입력:
+        library_path — 서고 경로.
+        hwp_file — HWP/HWPX 파일 경로.
+        doc_id — 새 문헌 ID (영문 소문자+숫자+밑줄).
+        title — 문헌 제목 (None이면 HWP 메타데이터에서 추출).
+        strip_punctuation — True이면 표점을 제거하고 별도 저장.
+        strip_hyeonto — True이면 현토를 제거하고 별도 저장.
+    출력:
+        {
+            "doc_path": str,
+            "document_id": str,
+            "title": str,
+            "mode": "create_from_hwp",
+            "pages_saved": int,
+            "text_pages": [{page_num, text_length, has_punct, has_hyeonto}],
+            "cleaned_stats": {...},
+            "images_extracted": int,
+        }
+
+    처리 흐름:
+        1. HWP 파일 → L1_source에 복사 (원본 보존)
+        2. 메타데이터 추출 → 제목, 서지정보
+        3. 텍스트 추출 → 표점·현토 분리 → L4_text/pages/에 페이지별 저장
+        4. 서식 메타데이터(대두) → _formatting.json
+        5. 표점·현토 데이터 → _hwp_clean.json 사이드카
+        6. 이미지 추출 (있으면) → L1_source에 저장
+        7. bibliography.json에 메타데이터
+        8. completeness_status = "text_imported"
+        9. git commit
+
+    Raises:
+        FileExistsError: 같은 doc_id의 문헌이 이미 존재할 때.
+        FileNotFoundError: HWP 파일이 없을 때.
+        ValueError: HWP 파일 형식이 지원되지 않을 때.
+    """
+    from hwp.reader import get_reader
+    from hwp.text_cleaner import clean_hwp_text
+
+    library_path = Path(library_path).resolve()
+    hwp_file = Path(hwp_file)
+
+    if not hwp_file.exists():
+        raise FileNotFoundError(
+            f"HWP 파일을 찾을 수 없습니다: {hwp_file}\n"
+            "→ 해결: 파일 경로를 확인하세요."
+        )
+
+    # 리더로 메타데이터 추출 (파일 형식도 검증됨)
+    reader = get_reader(hwp_file)
+    metadata = reader.extract_metadata()
+    effective_title = title or metadata.get("title") or hwp_file.stem
+
+    # 1. 문헌 생성 (HWP 파일을 L1_source에 복사)
+    doc_path = add_document(
+        library_path,
+        effective_title,
+        doc_id,
+        files=[hwp_file],
+    )
+
+    # 2. 텍스트 추출
+    # 새 리더 — add_document가 파일을 L1에 복사했으므로,
+    # 원본 hwp_file은 여전히 유효하다 (복사지가 아닌 원본 사용)
+    if hasattr(reader, "extract_sections"):
+        sections = reader.extract_sections()
+        section_texts = [s["text"] for s in sections]
+    else:
+        full_text = reader.extract_text()
+        section_texts = [t.strip() for t in re.split(r"\n{2,}", full_text) if t.strip()]
+
+    # part_id — HWP 문서는 단권본이므로 vol1
+    part_id = "vol1"
+
+    # manifest의 parts에 page_count 업데이트
+    manifest = get_document_info(doc_path)
+
+    # 3. 각 페이지에 텍스트 저장
+    text_pages = []
+    total_punct_count = 0
+    total_hyeonto_count = 0
+    had_punctuation = False
+    had_hyeonto = False
+
+    for i, raw_text in enumerate(section_texts):
+        page_num = i + 1
+
+        # 표점·현토 분리
+        result = clean_hwp_text(
+            raw_text,
+            strip_punct=strip_punctuation,
+            strip_hyeonto=strip_hyeonto,
+        )
+
+        # L4 텍스트 저장
+        save_page_text(doc_path, part_id, page_num, result.clean_text)
+
+        # 서식 메타데이터(대두) 저장
+        if result.taidu_marks:
+            fmt_path = _formatting_file_path(doc_path, part_id, page_num)
+            fmt_path.parent.mkdir(parents=True, exist_ok=True)
+            _write_json(fmt_path, {
+                "taidu": [
+                    {"pos": t["pos"], "raise_chars": t["raise_chars"], "note": t["note"]}
+                    for t in result.taidu_marks
+                ],
+            })
+
+        # 표점·현토 데이터 사이드카 저장
+        if result.punctuation_marks or result.hyeonto_annotations:
+            clean_path = _hwp_clean_file_path(doc_path, part_id, page_num)
+            clean_path.parent.mkdir(parents=True, exist_ok=True)
+            _write_json(clean_path, {
+                "source": "hwp_import",
+                "raw_text_length": len(raw_text),
+                "clean_text_length": len(result.clean_text),
+                "punctuation_marks": result.punctuation_marks,
+                "hyeonto_annotations": result.hyeonto_annotations,
+            })
+
+        # 통계
+        if result.had_punctuation:
+            had_punctuation = True
+        if result.had_hyeonto:
+            had_hyeonto = True
+        total_punct_count += len(result.punctuation_marks)
+        total_hyeonto_count += len(result.hyeonto_annotations)
+
+        text_pages.append({
+            "page_num": page_num,
+            "text_length": len(result.clean_text),
+            "has_punct": result.had_punctuation,
+            "has_hyeonto": result.had_hyeonto,
+        })
+
+    # 4. 이미지 추출 (HWPX만 지원)
+    images_extracted = 0
+    if hasattr(reader, "extract_images"):
+        images_dest = doc_path / "L1_source"
+        images = reader.extract_images(images_dest)
+        images_extracted = len(images)
+
+    # 5. manifest 업데이트
+    for part in manifest.get("parts", []):
+        if part["part_id"] == part_id:
+            part["page_count"] = len(section_texts)
+    manifest["completeness_status"] = "text_imported"
+    _write_json(doc_path / "manifest.json", manifest)
+
+    # 6. 서지정보 저장
+    bib = {"title": effective_title}
+    if metadata.get("author"):
+        bib["creator"] = {"name": metadata["author"]}
+    save_bibliography(doc_path, bib)
+
+    # 7. git commit
+    repo = git.Repo(doc_path)
+    repo.index.add(["."])
+    try:
+        repo.index.commit(f"feat: HWP에서 문헌 생성 — {effective_title}")
+    except git.HookExecutionError:
+        pass  # hook 에러는 무시 (커밋 자체는 완료)
+
+    return {
+        "doc_path": str(doc_path),
+        "document_id": doc_id,
+        "title": effective_title,
+        "mode": "create_from_hwp",
+        "pages_saved": len(text_pages),
+        "text_pages": text_pages,
+        "cleaned_stats": {
+            "had_punctuation": had_punctuation,
+            "had_hyeonto": had_hyeonto,
+            "punct_count": total_punct_count,
+            "hyeonto_count": total_hyeonto_count,
+        },
+        "images_extracted": images_extracted,
+    }
+
+
 # --- URL에서 문헌 자동 생성 ---
 
 

@@ -67,6 +67,8 @@
           <div class="section-header-actions">
             <button id="create-doc-btn" class="section-action-btn" title="URL에서 새 문헌 생성"
               onclick="if(typeof _openCreateDocDialog==='function')_openCreateDocDialog()">+ 새 문헌</button>
+            <button id="import-hwp-btn" class="section-action-btn" title="HWP/HWPX 파일에서 텍스트 가져오기"
+              onclick="if(typeof _openHwpImportDialog==='function')_openHwpImportDialog()">HWP</button>
           </div>
         </div>
         <div id="document-list" class="tree-view">
@@ -271,18 +273,31 @@
           <div class="props-section-title">OCR 실행</div>
 
           <div class="ocr-controls">
-            <!-- 엔진 행: LLM vision만 존재하므로 항상 숨김 -->
-            <div class="ocr-control-row" id="ocr-engine-row" style="display:none;">
+            <!-- 엔진 행: 엔진이 2개 이상이면 표시 (JS에서 제어) -->
+            <div class="ocr-control-row" id="ocr-engine-row">
               <label class="props-label">엔진</label>
               <select id="ocr-engine-select" class="props-select" title="OCR 엔진 선택">
                 <option value="">로딩 중...</option>
               </select>
             </div>
 
-            <div class="ocr-control-row" id="ocr-llm-model-row">
+            <!-- LLM 모델 행: llm_vision 엔진일 때만 표시 -->
+            <div class="ocr-control-row" id="ocr-llm-model-row" style="display:none;">
               <label class="props-label">LLM 모델</label>
               <select id="ocr-llm-model-select" class="props-select llm-model-select" title="LLM 프로바이더/모델 선택" data-vision-only>
                 <option value="auto">자동 (폴백순서)</option>
+              </select>
+            </div>
+
+            <!-- PaddleOCR 언어 행: paddleocr 엔진일 때만 표시 -->
+            <div class="ocr-control-row" id="ocr-paddle-lang-row" style="display:none;">
+              <label class="props-label">언어</label>
+              <select id="ocr-paddle-lang-select" class="props-select" title="PaddleOCR 인식 언어">
+                <option value="ch">중국어 간체</option>
+                <option value="chinese_cht">중국어 번체</option>
+                <option value="korean">한국어</option>
+                <option value="japan">일본어</option>
+                <option value="en">영어</option>
               </select>
             </div>
 
@@ -1099,6 +1114,71 @@
     </div>
   </div>
 
+  <!-- HWP 가져오기 다이얼로그 -->
+  <div class="bib-dialog-overlay" id="hwp-import-overlay" style="display:none;">
+    <div class="bib-dialog" id="hwp-import-dialog" style="width:600px;">
+      <div class="bib-dialog-header">
+        <span class="bib-dialog-title">HWP/HWPX 파일 가져오기</span>
+        <button class="bib-dialog-close" id="hwp-import-close" title="닫기">&times;</button>
+      </div>
+      <div class="bib-dialog-body bib-edit-form">
+
+        <!-- Step 1: 파일 선택 + 미리보기 -->
+        <div id="hwp-import-step1">
+          <label class="bib-edit-label">HWP/HWPX 파일 선택</label>
+          <div class="bib-url-row">
+            <input id="hwp-import-file" type="file" accept=".hwp,.hwpx"
+              style="flex:1;" />
+            <button id="hwp-import-preview-btn" class="bib-btn bib-btn-primary">미리보기</button>
+          </div>
+          <span id="hwp-import-status" class="text-save-status"></span>
+
+          <!-- 미리보기 결과 (처음에는 숨김) -->
+          <div id="hwp-import-preview" style="display:none; margin-top:10px;">
+            <div id="hwp-import-meta" style="font-size:12px; margin-bottom:8px;"></div>
+            <div style="display:flex; gap:8px; margin-bottom:8px;">
+              <span class="status-item" id="hwp-preview-punct"></span>
+              <span class="status-item" id="hwp-preview-hyeonto"></span>
+              <span class="status-item" id="hwp-preview-taidu"></span>
+            </div>
+            <label class="bib-edit-label">텍스트 미리보기</label>
+            <textarea id="hwp-import-text-preview" class="bib-textarea"
+              rows="5" readonly style="font-size:12px;"></textarea>
+            <label class="bib-edit-label" style="margin-top:6px;">정리된 원문 (L4 저장본)</label>
+            <textarea id="hwp-import-clean-preview" class="bib-textarea"
+              rows="3" readonly style="font-size:12px;"></textarea>
+          </div>
+        </div>
+
+        <!-- Step 2: 설정 + 실행 (미리보기 후 표시) -->
+        <div id="hwp-import-step2" style="display:none;">
+          <label class="bib-edit-label">문헌 ID (영문 소문자/숫자/밑줄)</label>
+          <input id="hwp-import-doc-id" type="text" class="bib-input"
+            placeholder="예: monggu_hwp" />
+
+          <label class="bib-edit-label">문헌 제목 (선택)</label>
+          <input id="hwp-import-title" type="text" class="bib-input" />
+
+          <div style="margin-top:8px; display:flex; gap:12px;">
+            <label style="font-size:12px;">
+              <input type="checkbox" id="hwp-import-strip-punct" checked /> 표점 분리
+            </label>
+            <label style="font-size:12px;">
+              <input type="checkbox" id="hwp-import-strip-hyeonto" checked /> 현토 분리
+            </label>
+          </div>
+
+          <div class="bib-edit-actions" style="margin-top:10px;">
+            <span id="hwp-import-exec-status" class="text-save-status"></span>
+            <div class="text-toolbar-spacer"></div>
+            <button id="hwp-import-exec-btn" class="bib-btn bib-btn-primary">가져오기</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
   <!-- 상태 바: D-001 하단 정보 표시줄 -->
   <footer class="status-bar">
     <div class="status-left">
@@ -1178,6 +1258,7 @@
 <script src="/static/js/interpretation.js"></script>
 <script src="/static/js/entity-manager.js"></script>
 <script src="/static/js/create-document.js"></script>
+<script src="/static/js/hwp-import.js"></script>
 <script src="/static/js/ocr-panel.js"></script>
 <script src="/static/js/alignment-view.js"></script>
 <script src="/static/js/composition-editor.js"></script>
