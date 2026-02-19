@@ -255,6 +255,18 @@ _URL_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"https?://(www\.)?digital\.archives\.go\.jp/"), "japan_national_archives"),
     # KORCIS (한국고문헌종합목록) — 국립중앙도서관 내
     (re.compile(r"https?://(www\.)?nl\.go\.kr/korcis/"), "korcis"),
+    # ── 범용 LLM 파서 대상 사이트 ──
+    # 전용 파서 없이 markdown.new + LLM으로 서지정보를 추출한다.
+    # 일본국문학연구자료관 (국서종합목록)
+    (re.compile(r"https?://(www\.)?kokusho\.nijl\.ac\.jp/"), "generic_llm"),
+    # 해외한국학자료센터 (고려대)
+    (re.compile(r"https?://kostma\.korea\.ac\.kr/"), "generic_llm"),
+    # 한국학자료센터 (한국학중앙연구원)
+    (re.compile(r"https?://kostma\.aks\.ac\.kr/"), "generic_llm"),
+    # 국사편찬위원회 한국사데이터베이스
+    (re.compile(r"https?://db\.history\.go\.kr/"), "generic_llm"),
+    # 한국고전번역원 한국고전종합DB
+    (re.compile(r"https?://db\.itkc\.or\.kr/"), "generic_llm"),
 ]
 
 
@@ -267,17 +279,33 @@ def detect_parser_from_url(url: str) -> str | None:
         parser_id 문자열, 또는 인식할 수 없으면 None.
 
     매칭 규칙:
-        - ndlsearch.ndl.go.jp, dl.ndl.go.jp, id.ndl.go.jp → "ndl"
-        - digital.archives.go.jp → "japan_national_archives"
-        - nl.go.kr/korcis/ → "korcis"
+        1순위 — 전용 파서:
+            - ndlsearch.ndl.go.jp, dl.ndl.go.jp, id.ndl.go.jp → "ndl"
+            - digital.archives.go.jp → "japan_national_archives"
+            - nl.go.kr/korcis/ → "korcis"
+        2순위 — 범용 LLM 파서 (등록된 사이트):
+            - kokusho.nijl.ac.jp, kostma.korea.ac.kr, kostma.aks.ac.kr,
+              db.history.go.kr, db.itkc.or.kr → "generic_llm"
+        3순위 — 폴백:
+            - http/https로 시작하는 모든 URL → "generic_llm"
 
     왜 이렇게 하는가:
         연구자가 URL을 붙여넣기만 하면 검색 없이 서지정보를
         바로 가져올 수 있도록 하기 위해서다.
+        전용 파서가 없는 사이트도 markdown.new + LLM으로 추출을 시도한다.
     """
     for pattern, parser_id in _URL_PATTERNS:
         if pattern.search(url):
             return parser_id
+
+    # 폴백: 전용 패턴에 없는 http/https URL은 범용 LLM 파서로 시도.
+    # 왜 이렇게 하는가:
+    #     연구자가 사용하는 서지 DB는 수십 개에 달한다.
+    #     모든 사이트에 전용 파서를 만들 수 없으므로,
+    #     LLM으로 서지 필드를 추출하는 범용 폴백을 제공한다.
+    if url.startswith(("http://", "https://")):
+        return "generic_llm"
+
     return None
 
 
@@ -285,8 +313,13 @@ def get_supported_sources() -> list[dict[str, str]]:
     """URL 자동 판별이 지원하는 소스 목록을 반환한다.
 
     출력: [{parser_id, url_example, description}, ...]
+
+    왜 generic_llm 항목도 포함하는가:
+        연구자에게 "이 사이트도 URL 붙여넣기로 가져올 수 있다"는 것을
+        알려주기 위해서. 전용 파서보다 정확도가 낮을 수 있지만 동작은 한다.
     """
     return [
+        # ── 전용 파서 (높은 정확도) ──
         {
             "parser_id": "ndl",
             "url_example": "https://ndlsearch.ndl.go.jp/books/R...",
@@ -301,6 +334,37 @@ def get_supported_sources() -> list[dict[str, str]]:
             "parser_id": "korcis",
             "url_example": "https://www.nl.go.kr/korcis/...",
             "description": "한국고문헌종합목록 (KORCIS)",
+        },
+        # ── 범용 LLM 추출 (markdown.new + LLM) ──
+        {
+            "parser_id": "generic_llm",
+            "url_example": "https://kokusho.nijl.ac.jp/...",
+            "description": "일본국문학연구자료관 (국서종합목록)",
+        },
+        {
+            "parser_id": "generic_llm",
+            "url_example": "https://kostma.korea.ac.kr/...",
+            "description": "해외한국학자료센터",
+        },
+        {
+            "parser_id": "generic_llm",
+            "url_example": "https://kostma.aks.ac.kr/...",
+            "description": "한국학자료센터",
+        },
+        {
+            "parser_id": "generic_llm",
+            "url_example": "https://db.history.go.kr/...",
+            "description": "국사편찬위원회 한국사데이터베이스",
+        },
+        {
+            "parser_id": "generic_llm",
+            "url_example": "https://db.itkc.or.kr/...",
+            "description": "한국고전번역원 한국고전종합DB",
+        },
+        {
+            "parser_id": "generic_llm",
+            "url_example": "https://example.com/catalog/...",
+            "description": "기타 URL (LLM 자동 추출 — 정확도 낮을 수 있음)",
         },
     ]
 

@@ -15,3 +15,4 @@
 from parsers import ndl  # noqa: F401
 from parsers import archives_jp  # noqa: F401
 from parsers import korcis  # noqa: F401
+from parsers import generic_llm  # noqa: F401  — markdown.new + LLM 범용 파서
