@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>고전 텍스트 플랫폼 — 전체 스키마 개요도</title>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;700;900&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;700;900&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
 <style>
 :root {
   --bg: #0e1117;
@@ -27,45 +27,45 @@ body { background: var(--bg); color: var(--text); font-family: 'Noto Sans KR', s
 header { text-align: center; margin-bottom: 48px; padding-bottom: 32px; border-bottom: 1px solid var(--border); }
 header h1 { font-family: 'Noto Serif KR', serif; font-size: 28px; font-weight: 900; letter-spacing: -0.5px; margin-bottom: 8px; }
 header .subtitle { color: var(--text-muted); font-size: 15px; font-weight: 300; }
-header .stats { margin-top: 16px; display: flex; justify-content: center; gap: 32px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--text-dim); }
+header .stats { margin-top: 16px; display: flex; justify-content: center; gap: 32px; font-family: 'Sarasa Fixed K', 'Sarasa Mono K', monospace; font-size: 12px; color: var(--text-dim); flex-wrap: wrap; }
 header .stats span { color: var(--text-muted); }
 section { margin-bottom: 48px; }
-section > h2 { font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); margin-bottom: 20px; padding-left: 4px; }
+section > h2 { font-family: 'Sarasa Fixed K', 'Sarasa Mono K', monospace; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); margin-bottom: 20px; padding-left: 4px; }
 .tower { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; }
 .tower-row { display: grid; grid-template-columns: 56px 100px 1fr 200px; gap: 0; align-items: stretch; min-height: 44px; }
-.tower-layer-num { font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 12px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius) 0 0 var(--radius); color: #000; }
-.tower-layer-name { font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 500; display: flex; align-items: center; padding: 0 10px; background: var(--surface); color: var(--text-muted); white-space: nowrap; }
+.tower-layer-num { font-family: 'Sarasa Fixed K', 'Sarasa Mono K', monospace; font-weight: 600; font-size: 12px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius) 0 0 var(--radius); color: #000; }
+.tower-layer-name { font-family: 'Sarasa Fixed K', 'Sarasa Mono K', monospace; font-size: 11px; font-weight: 500; display: flex; align-items: center; padding: 0 10px; background: var(--surface); color: var(--text-muted); white-space: nowrap; }
 .tower-content { background: var(--surface); padding: 8px 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .tower-schema-ref { background: var(--surface); padding: 8px 14px; display: flex; align-items: center; justify-content: flex-end; border-radius: 0 var(--radius) var(--radius) 0; gap: 6px; flex-wrap: wrap; }
 .tower-content .desc { font-size: 12px; color: var(--text-muted); }
-.schema-pill { font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 500; padding: 2px 8px; border-radius: 10px; white-space: nowrap; border: 1px solid; }
+.schema-pill { font-family: 'Sarasa Fixed K', 'Sarasa Mono K', monospace; font-size: 10px; font-weight: 500; padding: 2px 8px; border-radius: 10px; white-space: nowrap; border: 1px solid; }
 .pill-source { color: var(--cat-source); border-color: rgba(240,136,62,0.3); background: rgba(240,136,62,0.1); }
 .pill-interp { color: var(--cat-interp); border-color: rgba(88,166,255,0.3); background: rgba(88,166,255,0.1); }
 .pill-core { color: var(--cat-core); border-color: rgba(163,113,247,0.3); background: rgba(163,113,247,0.1); }
 .pill-exchange { color: var(--cat-exchange); border-color: rgba(63,185,80,0.3); background: rgba(63,185,80,0.1); }
 .pill-infra { color: var(--cat-infra); border-color: rgba(139,148,158,0.3); background: rgba(139,148,158,0.1); }
 .tower-divider { display: grid; grid-template-columns: 56px 1fr; gap: 0; min-height: 28px; margin: 6px 0; }
-.tower-divider-label { font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; color: var(--text-dim); }
+.tower-divider-label { font-family: 'Sarasa Fixed K', 'Sarasa Mono K', monospace; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; color: var(--text-dim); }
 .tower-divider-line { display: flex; align-items: center; padding: 0 12px; }
-.tower-divider-line span { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--text-dim); padding: 0 8px; white-space: nowrap; }
+.tower-divider-line span { font-family: 'Sarasa Fixed K', 'Sarasa Mono K', monospace; font-size: 10px; color: var(--text-dim); padding: 0 8px; white-space: nowrap; }
 .tower-divider-line::before, .tower-divider-line::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 .schema-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
 .schema-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; transition: border-color 0.2s; }
 .schema-card:hover { border-color: var(--border-accent); }
 .schema-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .schema-card-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
-.schema-card-header h3 { font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 600; }
-.schema-card-header .filename { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--text-dim); display: block; }
+.schema-card-header h3 { font-family: 'Sarasa Fixed K', 'Sarasa Mono K', monospace; font-size: 14px; font-weight: 600; }
+.schema-card-header .filename { font-family: 'Sarasa Fixed K', 'Sarasa Mono K', monospace; font-size: 11px; color: var(--text-dim); display: block; }
 .schema-card .purpose { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; line-height: 1.5; }
 .field-list { list-style: none; }
-.field-list li { font-family: 'IBM Plex Mono', monospace; font-size: 11px; padding: 3px 0; display: flex; gap: 6px; align-items: baseline; }
+.field-list li { font-family: 'Sarasa Fixed K', 'Sarasa Mono K', monospace; font-size: 11px; padding: 3px 0; display: flex; gap: 6px; align-items: baseline; }
 .field-list li .fname { color: var(--text); font-weight: 500; flex-shrink: 0; }
 .field-list li .ftype { color: var(--text-dim); font-size: 10px; }
 .field-list li .fdesc { color: var(--text-muted); font-size: 10px; font-family: 'Noto Sans KR', sans-serif; }
 .field-list .required::before { content: '*'; color: var(--l2); font-weight: 700; margin-right: 2px; }
-.field-group-label { font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; padding: 8px 0 4px; border-top: 1px dashed var(--border); margin-top: 6px; }
+.field-group-label { font-family: 'Sarasa Fixed K', 'Sarasa Mono K', monospace; font-size: 10px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; padding: 8px 0 4px; border-top: 1px dashed var(--border); margin-top: 6px; }
 .field-group-label:first-child { border-top: none; margin-top: 0; }
-.rel-diagram { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 28px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; line-height: 2; overflow-x: auto; }
+.rel-diagram { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 28px; font-family: 'Sarasa Fixed K', 'Sarasa Mono K', monospace; font-size: 12px; line-height: 2; overflow-x: auto; }
 .rel-diagram .arrow { color: var(--text-dim); }
 .rel-diagram .ref { color: var(--cat-core); }
 .rel-diagram .entity { color: var(--text); font-weight: 600; }
@@ -74,13 +74,14 @@ section > h2 { font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-we
 .legend { display: flex; gap: 24px; flex-wrap: wrap; padding: 12px 0; }
 .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
 .legend-dot { width: 10px; height: 10px; border-radius: 3px; }
-.status-flow { display: flex; align-items: center; gap: 0; font-family: 'IBM Plex Mono', monospace; font-size: 12px; margin: 12px 0; }
+.status-flow { display: flex; align-items: center; gap: 0; font-family: 'Sarasa Fixed K', 'Sarasa Mono K', monospace; font-size: 12px; margin: 12px 0; flex-wrap: wrap; }
 .status-node { padding: 6px 14px; border-radius: 16px; background: var(--surface-raised); border: 1px solid var(--border); white-space: nowrap; }
 .status-arrow { color: var(--text-dim); padding: 0 4px; font-size: 14px; }
-.file-tree { font-family: 'IBM Plex Mono', monospace; font-size: 11px; line-height: 1.8; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px 24px; }
+.file-tree { font-family: 'Sarasa Fixed K', 'Sarasa Mono K', monospace; font-size: 11px; line-height: 1.8; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px 24px; }
 .file-tree .dir { color: var(--text); font-weight: 500; }
 .file-tree .schema-file { color: var(--cat-source); }
 .file-tree .core-file { color: var(--cat-core); }
+.file-tree .interp-file { color: var(--cat-interp); }
 .file-tree .exch-file { color: var(--cat-exchange); }
 @media (max-width: 900px) { .tower-row { grid-template-columns: 44px 80px 1fr; } .tower-schema-ref { display: none; } .schema-grid { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .tower-row { grid-template-columns: 36px 1fr; } .tower-layer-name { display: none; } }
@@ -90,10 +91,11 @@ section > h2 { font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-we
 <div class="container">
 <header>
   <h1>고전 텍스트 디지털 서고 플랫폼</h1>
-  <div class="subtitle">전체 스키마 개요도 — Phase 9 완료 시점</div>
+  <div class="subtitle">전체 스키마 개요도 — 2025-02-19 기준</div>
   <div class="stats">
-    <div>스키마 <span>14개</span></div>
+    <div>스키마 <span>18개</span></div>
     <div>원본 저장소 <span>7개</span></div>
+    <div>해석 저장소 <span>4개</span></div>
     <div>코어 엔티티 <span>6개</span></div>
     <div>교환 형식 <span>1개</span></div>
   </div>
@@ -102,9 +104,9 @@ section > h2 { font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-we
   <h2>1. 8층 모델과 스키마 배치</h2>
   <div class="tower">
     <div class="tower-row"><div class="tower-layer-num" style="background:var(--l8)">L8</div><div class="tower-layer-name">연결</div><div class="tower-content"><span class="desc">엔티티 간 관계, 외부 DB 연동</span></div><div class="tower-schema-ref"><span class="schema-pill pill-core">relation</span></div></div>
-    <div class="tower-row"><div class="tower-layer-num" style="background:var(--l7)">L7</div><div class="tower-layer-name">주석</div><div class="tower-content"><span class="desc">주석, 어휘 설명, 인물·지명 태깅</span></div><div class="tower-schema-ref"><span class="schema-pill pill-core">tag</span><span class="schema-pill pill-core">concept</span><span class="schema-pill pill-core">agent</span></div></div>
-    <div class="tower-row"><div class="tower-layer-num" style="background:var(--l6)">L6</div><div class="tower-layer-name">번역</div><div class="tower-content"><span class="desc">현대어 번역문</span></div><div class="tower-schema-ref"><span class="schema-pill pill-interp">layer JSON</span></div></div>
-    <div class="tower-row"><div class="tower-layer-num" style="background:var(--l5)">L5</div><div class="tower-layer-name">현토</div><div class="tower-content"><span class="desc">토·구두점 부여, 읽기 표시</span></div><div class="tower-schema-ref"><span class="schema-pill pill-interp">layer JSON</span><span class="schema-pill pill-core">text_block</span><span class="schema-pill pill-core">work</span></div></div>
+    <div class="tower-row"><div class="tower-layer-num" style="background:var(--l7)">L7</div><div class="tower-layer-name">주석</div><div class="tower-content"><span class="desc">주석, 어휘 설명, 인물·지명 태깅</span></div><div class="tower-schema-ref"><span class="schema-pill pill-interp">annotation_page</span><span class="schema-pill pill-core">tag</span><span class="schema-pill pill-core">concept</span><span class="schema-pill pill-core">agent</span></div></div>
+    <div class="tower-row"><div class="tower-layer-num" style="background:var(--l6)">L6</div><div class="tower-layer-name">번역</div><div class="tower-content"><span class="desc">현대어 번역문</span></div><div class="tower-schema-ref"><span class="schema-pill pill-interp">translation_page</span></div></div>
+    <div class="tower-row"><div class="tower-layer-num" style="background:var(--l5)">L5</div><div class="tower-layer-name">표점·현토</div><div class="tower-content"><span class="desc">구두점(句讀) 부여, 한국어 현토(懸吐)</span></div><div class="tower-schema-ref"><span class="schema-pill pill-interp">punctuation_page</span><span class="schema-pill pill-interp">hyeonto_page</span><span class="schema-pill pill-core">text_block</span><span class="schema-pill pill-core">work</span></div></div>
     <div class="tower-divider"><div class="tower-divider-label">▲▼</div><div class="tower-divider-line"><span>해석 저장소 ↑ dependency.json ↓ 원본 저장소</span></div></div>
     <div class="tower-row"><div class="tower-layer-num" style="background:var(--l4)">L4</div><div class="tower-layer-name">사람 수정</div><div class="tower-content"><span class="desc">OCR 교정, 확정 텍스트</span></div><div class="tower-schema-ref"><span class="schema-pill pill-source">corrections</span></div></div>
     <div class="tower-row"><div class="tower-layer-num" style="background:var(--l3)">L3</div><div class="tower-layer-name">레이아웃</div><div class="tower-content"><span class="desc">페이지 영역 분할, 읽기 순서 지정</span></div><div class="tower-schema-ref"><span class="schema-pill pill-source">layout_page</span></div></div>
@@ -131,6 +133,12 @@ section > h2 { font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-we
 │   ├── <span class="schema-file">interp_manifest.schema.json</span>  해석 저장소 매니페스트
 │   └── <span class="schema-file">dependency.schema.json</span>       저장소 간 의존 추적
 │
+├── <span class="dir">interp/</span>               ─ 해석 저장소 (L5~L7)
+│   ├── <span class="interp-file">punctuation_page.schema.json</span> L5 표점 (句讀)
+│   ├── <span class="interp-file">hyeonto_page.schema.json</span>     L5 현토 (懸吐)
+│   ├── <span class="interp-file">translation_page.schema.json</span> L6 번역
+│   └── <span class="interp-file">annotation_page.schema.json</span>  L7 주석
+│
 ├── <span class="dir">core/</span>                 ─ 코어 스키마 엔티티 (L5~L8)
 │   ├── <span class="core-file">work.schema.json</span>              작품
 │   ├── <span class="core-file">text_block.schema.json</span>        텍스트 단위
@@ -156,6 +164,12 @@ section > h2 { font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-we
 <span class="entity">dependency</span>.<span class="field">source.document_id</span>    <span class="arrow">──▶</span>  <span class="entity">manifest</span>.<span class="field">document_id</span>
 <span class="entity">dependency</span>.<span class="field">source.base_commit</span>     <span class="arrow">──▶</span>  원본 저장소 git commit hash
 
+<span class="comment">── 해석 저장소 → 원본 저장소 ──</span>
+<span class="entity">punctuation_page</span>.<span class="field">block_id</span>          <span class="arrow">──▶</span>  <span class="entity">layout_page</span>.<span class="field">blocks[].block_id</span>
+<span class="entity">hyeonto_page</span>.<span class="field">block_id</span>              <span class="arrow">──▶</span>  <span class="entity">layout_page</span>.<span class="field">blocks[].block_id</span>
+<span class="entity">translation_page</span>.<span class="field">source.block_id</span>   <span class="arrow">──▶</span>  <span class="entity">layout_page</span>.<span class="field">blocks[].block_id</span>
+<span class="entity">annotation_page</span>.<span class="field">blocks[].block_id</span>  <span class="arrow">──▶</span>  <span class="entity">layout_page</span>.<span class="field">blocks[].block_id</span>
+
 <span class="comment">── 코어 스키마 내부 ──</span>
 <span class="entity">text_block</span>.<span class="field">work_id</span>        <span class="arrow">──▶</span>  <span class="entity">work</span>.<span class="field">id</span>
 <span class="entity">tag</span>.<span class="field">block_id</span>              <span class="arrow">──▶</span>  <span class="entity">text_block</span>.<span class="field">id</span>
@@ -171,7 +185,7 @@ section > h2 { font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-we
 <section>
   <h2>4. 원본 저장소 스키마 (7개)</h2>
   <div class="schema-grid">
-    <div class="schema-card"><div class="schema-card-header"><div class="schema-card-icon" style="background:rgba(240,136,62,0.15); color:var(--l1)">📋</div><div><h3>manifest</h3><span class="filename">source_repo/manifest.schema.json</span></div></div><div class="purpose">문헌 1건의 신원 정보. 문헌 ID, 제목, 물리 파일(권) 목록, 작업 진행 상태.</div><ul class="field-list"><li><span class="fname required">document_id</span> <span class="ftype">string</span> <span class="fdesc">— 영문 식별자</span></li><li><span class="fname required">title</span> <span class="ftype">string</span> <span class="fdesc">— 원어 표기</span></li><li><span class="fname">title_ko</span> <span class="ftype">string?</span></li><li><span class="fname required">parts[]</span> <span class="ftype">array</span> <span class="fdesc">— {part_id, label, file, page_count}</span></li><li><span class="fname required">completeness_status</span> <span class="ftype">enum</span> <span class="fdesc">— file_only → … → finalized</span></li></ul></div>
+    <div class="schema-card"><div class="schema-card-header"><div class="schema-card-icon" style="background:rgba(240,136,62,0.15); color:var(--l1)">📋</div><div><h3>manifest</h3><span class="filename">source_repo/manifest.schema.json</span></div></div><div class="purpose">문헌 1건의 신원 정보. 문헌 ID, 제목, 물리 파일(권) 목록, 작업 진행 상태.</div><ul class="field-list"><li><span class="fname required">document_id</span> <span class="ftype">string</span> <span class="fdesc">— 영문 식별자</span></li><li><span class="fname required">title</span> <span class="ftype">string</span> <span class="fdesc">— 원어 표기</span></li><li><span class="fname">title_ko</span> <span class="ftype">string?</span></li><li><span class="fname required">parts[]</span> <span class="ftype">array</span> <span class="fdesc">— {part_id, label, file, page_count}</span></li><li><span class="fname required">completeness_status</span> <span class="ftype">enum</span> <span class="fdesc">— file_only → text_imported → bibliography_added → ocr_done → layout_analyzed → correcting → correction_done → finalized</span></li></ul></div>
     <div class="schema-card"><div class="schema-card-header"><div class="schema-card-icon" style="background:rgba(240,136,62,0.15); color:var(--l1)">📚</div><div><h3>bibliography</h3><span class="filename">source_repo/bibliography.schema.json</span></div></div><div class="purpose">서지정보. 모든 필드 nullable. raw_metadata로 원본 보존, _mapping_info로 매핑 투명성.</div><ul class="field-list"><div class="field-group-label">기본 정보</div><li><span class="fname">title, title_reading, alternative_titles</span></li><li><span class="fname">creator</span> <span class="fdesc">— {name, role, period}</span></li><li><span class="fname">contributors[]</span></li><li><span class="fname">date_created, edition_type</span></li><div class="field-group-label">분류·형태</div><li><span class="fname">physical_description, subject, classification, material_type</span></li><div class="field-group-label">소장·접근</div><li><span class="fname">repository</span> <span class="fdesc">— {name, country, call_number}</span></li><li><span class="fname">digital_source</span> <span class="fdesc">— {platform, source_url, permanent_uri, system_ids, license}</span></li><div class="field-group-label">파서 투명성</div><li><span class="fname">raw_metadata, _mapping_info</span></li></ul></div>
     <div class="schema-card"><div class="schema-card-header"><div class="schema-card-icon" style="background:rgba(163,113,247,0.15); color:var(--l3)">🔲</div><div><h3>layout_page</h3><span class="filename">source_repo/layout_page.schema.json</span></div></div><div class="purpose">L3 레이아웃 분석. LayoutBlock 단위로 분할, 읽기 순서·구조적 역할 부여.</div><ul class="field-list"><li><span class="fname required">part_id, page_number</span></li><li><span class="fname required">blocks[]</span> <span class="ftype">LayoutBlock[]</span></li><li style="padding-left:16px"><span class="fname">block_id, block_type, bbox, reading_order</span></li><li style="padding-left:16px"><span class="fname">writing_direction, line_style, refers_to_block, skip</span></li></ul></div>
     <div class="schema-card"><div class="schema-card-header"><div class="schema-card-icon" style="background:rgba(218,54,51,0.15); color:var(--l2)">🔍</div><div><h3>ocr_page</h3><span class="filename">source_repo/ocr_page.schema.json</span></div></div><div class="purpose">L2 OCR 결과. 글자 + 좌표 + 신뢰도. layout_block_id로 LayoutBlock 연결.</div><ul class="field-list"><li><span class="fname required">part_id, page_number</span></li><li><span class="fname required">ocr_results[]</span> <span class="ftype">OcrResult → OcrLine → OcrCharacter</span></li></ul></div>
@@ -181,11 +195,24 @@ section > h2 { font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-we
   </div>
 </section>
 <section>
-  <h2>5. 코어 스키마 엔티티 (6개)</h2>
+  <h2>5. 해석 저장소 스키마 (4개)</h2>
+  <div style="margin-bottom: 20px;">
+    <h3 style="font-size:13px; color:var(--text-muted); margin-bottom: 8px; font-weight:400">공통: 원문 비변형 — 글자 인덱스 기반 오버레이 방식</h3>
+    <div style="font-size:11px; color:var(--text-dim); margin-top:6px; font-family:'Sarasa Fixed K', 'Sarasa Mono K',monospace;">Target: {start, end} — 0-based inclusive 글자 인덱스. 원문은 그대로 두고 부호/토/번역/주석을 덧붙인다.</div>
+  </div>
+  <div class="schema-grid">
+    <div class="schema-card"><div class="schema-card-header"><div class="schema-card-icon" style="background:rgba(88,166,255,0.15); color:var(--l5)">。</div><div><h3>punctuation_page</h3><span class="filename">interp/punctuation_page.schema.json</span></div></div><div class="purpose">L5 표점(句讀). 원문 글자 인덱스에 삽입할 구두점 기록. before/after 통합 방식.</div><ul class="field-list"><li><span class="fname required">block_id</span> <span class="ftype">string</span> <span class="fdesc">— 대상 블록 (L3/L4)</span></li><li><span class="fname required">marks[]</span> <span class="ftype">Mark[]</span></li><li style="padding-left:16px"><span class="fname">id, target</span> <span class="fdesc">— {start, end}</span></li><li style="padding-left:16px"><span class="fname">before, after</span> <span class="ftype">string?</span> <span class="fdesc">— 범위 앞/뒤 삽입 부호</span></li></ul></div>
+    <div class="schema-card"><div class="schema-card-header"><div class="schema-card-icon" style="background:rgba(88,166,255,0.15); color:var(--l5)">토</div><div><h3>hyeonto_page</h3><span class="filename">interp/hyeonto_page.schema.json</span></div></div><div class="purpose">L5 현토(懸吐). 원문 글자에 붙이는 한글 토. position(after/before/over/under) 지정.</div><ul class="field-list"><li><span class="fname required">block_id</span> <span class="ftype">string</span> <span class="fdesc">— 대상 블록 (L3/L4)</span></li><li><span class="fname required">annotations[]</span> <span class="ftype">Annotation[]</span></li><li style="padding-left:16px"><span class="fname">id, target</span> <span class="fdesc">— {start, end}</span></li><li style="padding-left:16px"><span class="fname required">position</span> <span class="ftype">enum</span> <span class="fdesc">— after | before | over | under</span></li><li style="padding-left:16px"><span class="fname required">text</span> <span class="ftype">string</span> <span class="fdesc">— 현토 텍스트</span></li><li style="padding-left:16px"><span class="fname">category</span> <span class="ftype">string?</span></li></ul></div>
+    <div class="schema-card"><div class="schema-card-header"><div class="schema-card-icon" style="background:rgba(121,192,255,0.15); color:var(--l6)">訳</div><div><h3>translation_page</h3><span class="filename">interp/translation_page.schema.json</span></div></div><div class="purpose">L6 번역. 문장 단위 번역 기록. LLM draft → 사람 review → accepted 워크플로우.</div><ul class="field-list"><li><span class="fname required">part_id, page_number</span></li><li><span class="fname required">translations[]</span> <span class="ftype">Translation[]</span></li><li style="padding-left:16px"><span class="fname">id, source</span> <span class="fdesc">— {block_id, start, end}</span></li><li style="padding-left:16px"><span class="fname required">source_text</span> <span class="fdesc">— 원문 스냅샷</span></li><li style="padding-left:16px"><span class="fname">hyeonto_text</span> <span class="ftype">string?</span> <span class="fdesc">— 현토 적용 텍스트</span></li><li style="padding-left:16px"><span class="fname required">target_language, translation</span></li><li style="padding-left:16px"><span class="fname required">translator</span> <span class="fdesc">— {type: llm|human, model?, draft_id?}</span></li><li style="padding-left:16px"><span class="fname required">status</span> <span class="ftype">enum</span> <span class="fdesc">— draft → reviewed → accepted</span></li></ul></div>
+    <div class="schema-card"><div class="schema-card-header"><div class="schema-card-icon" style="background:rgba(210,168,255,0.15); color:var(--l7)">注</div><div><h3>annotation_page</h3><span class="filename">interp/annotation_page.schema.json</span></div></div><div class="purpose">L7 주석. 블록별 인물·지명·용어·전거·메모 등. LLM 자동 태깅 + 수동 편집.</div><ul class="field-list"><li><span class="fname required">part_id, page_number</span></li><li><span class="fname required">blocks[]</span> <span class="ftype">AnnotatedBlock[]</span></li><li style="padding-left:16px"><span class="fname">block_id, annotations[]</span></li><li style="padding-left:24px"><span class="fname">id, target</span> <span class="fdesc">— {start, end}</span></li><li style="padding-left:24px"><span class="fname required">type</span> <span class="fdesc">— person, place, term 등</span></li><li style="padding-left:24px"><span class="fname required">content</span> <span class="fdesc">— {label, description, references[]}</span></li><li style="padding-left:24px"><span class="fname required">annotator</span> <span class="fdesc">— {type: llm|human, model?}</span></li><li style="padding-left:24px"><span class="fname required">status</span> <span class="ftype">enum</span> <span class="fdesc">— draft → reviewed → accepted</span></li></ul></div>
+  </div>
+</section>
+<section>
+  <h2>6. 코어 스키마 엔티티 (6개)</h2>
   <div style="margin-bottom: 20px;">
     <h3 style="font-size:13px; color:var(--text-muted); margin-bottom: 8px; font-weight:400">공통: 전 엔티티 상태 전이 (삭제 금지)</h3>
     <div class="status-flow"><span class="status-node" style="border-color:var(--l5); color:var(--l5)">draft</span><span class="status-arrow">→</span><span class="status-node" style="border-color:var(--l4); color:var(--l4)">active</span><span class="status-arrow">→</span><span class="status-node" style="border-color:var(--text-dim); color:var(--text-dim)">deprecated</span><span class="status-arrow">→</span><span class="status-node" style="border-color:var(--text-dim); color:var(--text-dim)">archived</span></div>
-    <div style="font-size:11px; color:var(--text-dim); margin-top:6px; font-family:'IBM Plex Mono',monospace;">공통 필드: id (UUID), status (enum), metadata (object? 자유 확장)</div>
+    <div style="font-size:11px; color:var(--text-dim); margin-top:6px; font-family:'Sarasa Fixed K', 'Sarasa Mono K',monospace;">공통 필드: id (UUID), status (enum), metadata (object? 자유 확장)</div>
   </div>
   <div class="schema-grid">
     <div class="schema-card"><div class="schema-card-header"><div class="schema-card-icon" style="background:rgba(163,113,247,0.15); color:var(--cat-core)">📕</div><div><h3>Work</h3><span class="filename">core/work.schema.json</span></div></div><div class="purpose">최상위. 하나의 텍스트 작품. TextBlock의 소속 기준.</div><ul class="field-list"><li><span class="fname required">title</span> <span class="fdesc">— 원어 제목</span></li><li><span class="fname">author, period</span></li></ul></div>
@@ -197,26 +224,27 @@ section > h2 { font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-we
   </div>
 </section>
 <section>
-  <h2>6. 교환 형식</h2>
+  <h2>7. 교환 형식</h2>
   <div class="schema-grid">
     <div class="schema-card" style="grid-column: 1 / -1; max-width: 720px;"><div class="schema-card-header"><div class="schema-card-icon" style="background:rgba(63,185,80,0.15); color:var(--cat-exchange)">📦</div><div><h3>exchange</h3><span class="filename">exchange.schema.json</span></div></div><div class="purpose">단일 JSON 스냅샷. 내보내기/가져오기용.</div><ul class="field-list"><li><span class="fname required">schema_version, export_info, source_info</span></li><li><span class="fname">parts[], pages[], corrected_text, corrections[]</span></li></ul></div>
   </div>
 </section>
 <section>
-  <h2>7. 설계 원칙 요약</h2>
+  <h2>8. 설계 원칙 요약</h2>
   <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:12px;">
-    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px;"><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; color:var(--l1); margin-bottom:6px;">모든 필드 Nullable</div><div style="font-size:12px; color:var(--text-muted);">소스에 없는 필드는 비워두고 나중에 채운다.</div></div>
-    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px;"><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; color:var(--l2); margin-bottom:6px;">원본 불변</div><div style="font-size:12px; color:var(--text-muted);">L1 파일, raw_metadata, original_text — 수정 금지.</div></div>
-    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px;"><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; color:var(--l3); margin-bottom:6px;">삭제 금지, 상태 전이만</div><div style="font-size:12px; color:var(--text-muted);">draft → active → deprecated → archived</div></div>
-    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px;"><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; color:var(--l4); margin-bottom:6px;">매핑 투명성</div><div style="font-size:12px; color:var(--text-muted);">_mapping_info에 출처·신뢰도 기록.</div></div>
-    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px;"><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; color:var(--l5); margin-bottom:6px;">출처 추적</div><div style="font-size:12px; color:var(--text-muted);">source_ref로 원본 저장소 역참조.</div></div>
-    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px;"><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; color:var(--l7); margin-bottom:6px;">온톨로지 비강제</div><div style="font-size:12px; color:var(--text-muted);">자유 확장. 부재 = 미지정.</div></div>
-    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px;"><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; color:var(--l8); margin-bottom:6px;">Promotion Flow</div><div style="font-size:12px; color:var(--text-muted);">Tag(잠정) → Concept(확정).</div></div>
-    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px;"><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; color:var(--cat-infra); margin-bottom:6px;">용어 규칙</div><div style="font-size:12px; color:var(--text-muted);">LayoutBlock / OcrResult / TextBlock. "Block" 단독 사용 금지.</div></div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px;"><div style="font-family:'Sarasa Fixed K', 'Sarasa Mono K',monospace; font-size:11px; font-weight:600; color:var(--l1); margin-bottom:6px;">모든 필드 Nullable</div><div style="font-size:12px; color:var(--text-muted);">소스에 없는 필드는 비워두고 나중에 채운다.</div></div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px;"><div style="font-family:'Sarasa Fixed K', 'Sarasa Mono K',monospace; font-size:11px; font-weight:600; color:var(--l2); margin-bottom:6px;">원본 불변</div><div style="font-size:12px; color:var(--text-muted);">L1 파일, raw_metadata, original_text — 수정 금지.</div></div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px;"><div style="font-family:'Sarasa Fixed K', 'Sarasa Mono K',monospace; font-size:11px; font-weight:600; color:var(--l3); margin-bottom:6px;">삭제 금지, 상태 전이만</div><div style="font-size:12px; color:var(--text-muted);">draft → active → deprecated → archived</div></div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px;"><div style="font-family:'Sarasa Fixed K', 'Sarasa Mono K',monospace; font-size:11px; font-weight:600; color:var(--l4); margin-bottom:6px;">매핑 투명성</div><div style="font-size:12px; color:var(--text-muted);">_mapping_info에 출처·신뢰도 기록.</div></div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px;"><div style="font-family:'Sarasa Fixed K', 'Sarasa Mono K',monospace; font-size:11px; font-weight:600; color:var(--l5); margin-bottom:6px;">출처 추적</div><div style="font-size:12px; color:var(--text-muted);">source_ref로 원본 저장소 역참조.</div></div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px;"><div style="font-family:'Sarasa Fixed K', 'Sarasa Mono K',monospace; font-size:11px; font-weight:600; color:var(--l6); margin-bottom:6px;">원문 비변형</div><div style="font-size:12px; color:var(--text-muted);">표점·현토·번역은 글자 인덱스 오버레이. 원문은 그대로.</div></div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px;"><div style="font-family:'Sarasa Fixed K', 'Sarasa Mono K',monospace; font-size:11px; font-weight:600; color:var(--l7); margin-bottom:6px;">온톨로지 비강제</div><div style="font-size:12px; color:var(--text-muted);">자유 확장. 부재 = 미지정.</div></div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px;"><div style="font-family:'Sarasa Fixed K', 'Sarasa Mono K',monospace; font-size:11px; font-weight:600; color:var(--l8); margin-bottom:6px;">Promotion Flow</div><div style="font-size:12px; color:var(--text-muted);">Tag(잠정) → Concept(확정).</div></div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px;"><div style="font-family:'Sarasa Fixed K', 'Sarasa Mono K',monospace; font-size:11px; font-weight:600; color:var(--cat-infra); margin-bottom:6px;">용어 규칙</div><div style="font-size:12px; color:var(--text-muted);">LayoutBlock / OcrResult / TextBlock. "Block" 단독 사용 금지.</div></div>
   </div>
 </section>
-<footer style="text-align:center; padding:32px 0; color:var(--text-dim); font-family:'IBM Plex Mono',monospace; font-size:11px; border-top:1px solid var(--border); margin-top:24px;">
-  생성: 2025-02-15 · schemas/ 디렉토리 기준 · Phase 9 완료 시점
+<footer style="text-align:center; padding:32px 0; color:var(--text-dim); font-family:'Sarasa Fixed K', 'Sarasa Mono K',monospace; font-size:11px; border-top:1px solid var(--border); margin-top:24px;">
+  생성: 2025-02-19 · schemas/ 디렉토리 기준 · 18개 스키마 (원본 7 + 해석 4 + 코어 6 + 교환 1)
 </footer>
 </div>
 </body>

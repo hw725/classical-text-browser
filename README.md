@@ -126,7 +126,11 @@ classical-text-platform/
 │   ├── platform-v7.md     #   8층 모델, Git 저장소, 전체 아키텍처
 │   ├── core-schema-v1.3.md#   해석 저장소의 엔티티 모델
 │   ├── operation-rules-v1.0.md # 코어 스키마 운영 규약
-│   └── DECISIONS.md       #   설계 결정 기록
+│   ├── DECISIONS.md       #   설계 결정 기록
+│   ├── architecture-diagrams.md # Mermaid 다이어그램
+│   ├── schema_overview.html #   전체 스키마 개요도 (브라우저 열람)
+│   ├── llm_architecture_design.md # LLM 4단 폴백 설계
+│   └── sessions/          #   구현 세션 기록 (Phase 10~12)
 ├── src/
 │   ├── core/              #   핵심 로직 (표점, 번역, 주석 등)
 │   ├── hwp/               #   HWP/HWPX 파일 처리 (텍스트 추출, 표점·현토 분리)
@@ -138,8 +142,9 @@ classical-text-platform/
 │       ├── server.py      #     FastAPI 서버 (모든 API 엔드포인트)
 │       └── static/        #     정적 파일 (CSS, JS)
 ├── schemas/
-│   ├── source_repo/       #   원본 저장소 JSON 스키마
-│   └── core/              #   코어 스키마 (해석 저장소)
+│   ├── source_repo/       #   원본 저장소 JSON 스키마 (7개)
+│   ├── interp/            #   해석 저장소 JSON 스키마 (4개)
+│   └── core/              #   코어 스키마 엔티티 (6개)
 ├── examples/              # 예제 서고 (monggu_library)
 ├── resources/             # 공유 리소스 (block_types 등)
 ├── pyproject.toml         # 프로젝트 설정 및 의존성
@@ -163,11 +168,19 @@ classical-text-platform/
 
 자세한 아키텍처와 설계 결정은 `docs/` 폴더를 참고하세요:
 
-- **platform-v7.md** — 8층 데이터 모델, 원본·해석 저장소 분리, 전체 아키텍처
-- **core-schema-v1.3.md** — 해석 저장소(5~8층)의 엔티티 모델
-- **operation-rules-v1.0.md** — 코어 스키마 운영 규약
-- **DECISIONS.md** — 주요 설계 결정과 근거
-- **architecture-diagrams.md** — Mermaid 다이어그램 (8층 모델, 워크플로우, 시스템 구조, 코어 스키마 ER)
+### 핵심 설계
+- [**platform-v7.md**](docs/platform-v7.md) — 8층 데이터 모델, 원본·해석 저장소 분리, 전체 아키텍처
+- [**core-schema-v1.3.md**](docs/core-schema-v1.3.md) — 해석 저장소(5~8층)의 엔티티 모델
+- [**operation-rules-v1.0.md**](docs/operation-rules-v1.0.md) — 코어 스키마 운영 규약
+- [**DECISIONS.md**](docs/DECISIONS.md) — 주요 설계 결정과 근거
+
+### 다이어그램·개요
+- [**architecture-diagrams.md**](docs/architecture-diagrams.md) — Mermaid 다이어그램 (8층 모델, 워크플로우, 시스템 구조, 코어 스키마 ER, 층별 의존)
+- [**schema_overview.html**](docs/schema_overview.html) — 전체 스키마 개요도 (브라우저에서 열기, 18개 스키마 일람)
+- [**llm_architecture_design.md**](docs/llm_architecture_design.md) — LLM 4단 폴백 아키텍처 상세 설계
+
+### 구현 세션 기록
+- `docs/sessions/` — Phase 10~12 구현 세션 로그 14개 ([목차](docs/sessions/session_navigator.md))
 
 ## 라이선스
 
