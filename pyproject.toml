@@ -3,7 +3,7 @@ name = "classical-text-platform"
 version = "0.1.0"
 description = "고전 텍스트 디지털 서고 플랫폼 — 사람과 LLM이 함께 고전 텍스트를 읽고 번역하고 연구하는 통합 작업 환경"
 readme = "README.md"
-license = "MIT"
+license = "LicenseRef-PolyForm-Noncommercial-1.0.0"
 requires-python = ">=3.10"
 authors = [
     { name = "hw725" },

@@ -167,7 +167,11 @@ classical-text-platform/
 - **core-schema-v1.3.md** — 해석 저장소(5~8층)의 엔티티 모델
 - **operation-rules-v1.0.md** — 코어 스키마 운영 규약
 - **DECISIONS.md** — 주요 설계 결정과 근거
+- **architecture-diagrams.md** — Mermaid 다이어그램 (8층 모델, 워크플로우, 시스템 구조, 코어 스키마 ER)
 
 ## 라이선스
 
-미정 (DECISIONS.md 미결 사항 참고)
+[PolyForm Noncommercial 1.0.0](LICENSE)
+
+- 비상업적 사용·수정·재배포: 자유
+- 상업적 사용: 별도 협의 필요 (LICENSE 파일 하단 연락처 참고)
