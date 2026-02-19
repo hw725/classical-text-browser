@@ -51,7 +51,11 @@ document.addEventListener("DOMContentLoaded", () => {
   if (typeof initGitGraph === "function") initGitGraph();
   // Phase 12-3: JSON 스냅샷 Export/Import 버튼
   initSnapshotButtons();
-  // Phase 7+8: 하단 패널 탭 전환 (Git 이력 ↔ 의존 추적 ↔ 엔티티)
+  // 읽기 보조선 초기화
+  if (typeof initReaderLine === "function") initReaderLine();
+  // 비고/메모 패널 초기화
+  if (typeof initNotesPanel === "function") initNotesPanel();
+  // Phase 7+8: 하단 패널 탭 전환 (Git 이력 ↔ 의존 추적 ↔ 엔티티 ↔ 비고)
   initBottomPanelTabs();
 
   // 전 모드 LLM 모델 드롭다운 채우기 (모든 init 완료 후 한 번만)
@@ -563,6 +567,9 @@ async function loadLibraryInfo() {
     } else {
       renderDocumentList(docs);
     }
+
+    // URL 해시에서 열람 위치 복원 (Plan 4)
+    _restoreFromHash();
   } catch (err) {
     // API 연결 실패는 정상 — 정적 파일만 볼 수도 있다
     document.getElementById("document-list").innerHTML =
@@ -707,6 +714,98 @@ function initSnapshotButtons() {
 }
 
 
+/* ──────────────────────────
+   페이지 변경 공통 동기화
+   ──────────────────────────
+   사이드바 트리 클릭(_selectPage)과 PDF 툴바 ◀▶ 버튼(_syncPageChange),
+   키보드 단축키, URL 해시 복원 등 어떤 경로로 페이지가 바뀌더라도
+   모든 패널을 동일하게 갱신하기 위한 단일 진입점.
+
+   왜 이렇게 하는가:
+     이전에는 _selectPage(9가지 동기화)와 _syncPageChange(3가지만)가
+     불일치하여 툴바로 페이지를 넘기면 교정·해석·비고 등이 갱신되지 않았다.
+*/
+
+/**
+ * 페이지 변경 후 모든 패널을 동기화한다.
+ *
+ * 입력:
+ *   opts.skipText — true이면 텍스트 로드 생략 (이미 로드한 경우)
+ *   opts.skipHighlight — true이면 사이드바 하이라이트 생략 (직접 처리한 경우)
+ */
+// eslint-disable-next-line no-unused-vars
+function onPageChanged(opts) {
+  opts = opts || {};
+  const docId = viewerState.docId;
+  const partId = viewerState.partId;
+  const pageNum = viewerState.pageNum;
+  if (!docId || !partId || !pageNum) return;
+
+  // 1. 텍스트 에디터
+  if (!opts.skipText && typeof loadPageText === "function") {
+    loadPageText(docId, partId, pageNum);
+  }
+
+  // 2. 사이드바 하이라이트
+  if (!opts.skipHighlight && typeof highlightTreePage === "function") {
+    highlightTreePage(pageNum);
+  }
+
+  // 3. 레이아웃 동기화 (활성 시)
+  if (typeof loadPageLayout === "function" &&
+      typeof layoutState !== "undefined" && layoutState.active) {
+    loadPageLayout(docId, partId, pageNum);
+  }
+
+  // 4. 교정 동기화 (활성 시)
+  if (typeof loadPageCorrections === "function" &&
+      typeof correctionState !== "undefined" && correctionState.active) {
+    loadPageCorrections(docId, partId, pageNum);
+  }
+
+  // 5. Git 이력
+  if (typeof _loadGitLog === "function") {
+    _loadGitLog(docId);
+  }
+
+  // 6. 서지정보
+  if (typeof loadBibliography === "function") {
+    loadBibliography(docId);
+  }
+
+  // 7. 해석 층 내용 (활성 시)
+  if (typeof interpState !== "undefined" && interpState.active && interpState.interpId) {
+    if (typeof _loadLayerContent === "function") {
+      _loadLayerContent();
+    }
+  }
+
+  // 8. OCR 결과 (레이아웃 모드 활성 시)
+  if (typeof loadOcrResults === "function" &&
+      typeof layoutState !== "undefined" && layoutState.active) {
+    loadOcrResults();
+  }
+
+  // 9. 비고/메모 (탭 표시 중일 때)
+  if (typeof loadPageNotes === "function") {
+    const notesPanel = document.getElementById("notes-panel-content");
+    if (notesPanel && notesPanel.style.display !== "none") {
+      loadPageNotes();
+    }
+  }
+
+  // 10. 이전/다음 버튼 상태 (Plan 3에서 추가)
+  if (typeof _updateNavButtonStates === "function") {
+    _updateNavButtonStates();
+  }
+
+  // 11. URL 해시 업데이트 (Plan 4에서 추가)
+  if (typeof _updateHash === "function") {
+    _updateHash();
+  }
+}
+
+
 /**
  * 하단 패널 탭 전환을 설정한다.
  *
@@ -725,21 +824,28 @@ function initBottomPanelTabs() {
   const validationContent = document.getElementById("validation-panel-content");
   const depContent = document.getElementById("dep-panel-content");
   const entityContent = document.getElementById("entity-panel-content");
+  const notesContent = document.getElementById("notes-panel-content");
 
   tabs.forEach((tab, index) => {
     tab.addEventListener("click", () => {
       tabs.forEach((t) => t.classList.remove("active"));
       tab.classList.add("active");
 
-      // 탭 내용 전환: 0=Git, 1=검증결과, 2=의존추적, 3=엔티티
+      // 탭 내용 전환: 0=Git, 1=검증결과, 2=의존추적, 3=엔티티, 4=비고
       if (gitContent) gitContent.style.display = (index === 0) ? "" : "none";
       if (validationContent) validationContent.style.display = (index === 1) ? "" : "none";
       if (depContent) depContent.style.display = (index === 2) ? "" : "none";
       if (entityContent) entityContent.style.display = (index === 3) ? "" : "none";
+      if (notesContent) notesContent.style.display = (index === 4) ? "" : "none";
 
       // Phase 8: 엔티티 탭 활성화 시 엔티티 로드
       if (index === 3 && typeof _loadEntitiesForCurrentPage === "function") {
         _loadEntitiesForCurrentPage();
+      }
+
+      // 비고 탭 활성화 시 메모 로드
+      if (index === 4 && typeof loadPageNotes === "function") {
+        loadPageNotes();
       }
     });
   });
@@ -829,6 +935,133 @@ function getLlmModelSelection(selectId) {
     force_model: model && model !== "auto" ? model : null,
   };
 }
+
+
+/* ──────────────────────────
+   URL 해시 라우팅 (Plan 4)
+   ──────────────────────────
+   형식: #doc_id/part_id/page_num  (예: #monggu/vol1/3)
+
+   왜 이렇게 하는가:
+     1. 새로고침해도 열람 위치가 복원된다.
+     2. 브라우저 뒤로/앞으로 버튼으로 이전 페이지로 돌아갈 수 있다.
+     3. URL을 공유하면 같은 페이지를 바로 열 수 있다 (딥링크).
+*/
+
+/** 해시 업데이트 억제 플래그 (복원 중 해시 재생성 방지) */
+let _suppressHashUpdate = false;
+
+/**
+ * 현재 viewerState를 URL 해시에 반영한다.
+ * onPageChanged()에서 호출된다.
+ */
+function _updateHash() {
+  if (_suppressHashUpdate) return;
+  const { docId, partId, pageNum } = viewerState;
+  if (!docId || !partId || !pageNum) return;
+
+  const newHash = `#${docId}/${partId}/${pageNum}`;
+  // 같은 해시면 중복 pushState 방지
+  if (window.location.hash === newHash) return;
+  history.pushState(null, "", newHash);
+}
+
+/**
+ * URL 해시를 파싱한다.
+ * 반환: { docId, partId, pageNum } 또는 null
+ */
+function _parseHash() {
+  const hash = window.location.hash.replace(/^#/, "");
+  if (!hash) return null;
+
+  const parts = hash.split("/");
+  if (parts.length < 3) return null;
+
+  const docId = parts[0];
+  const partId = parts[1];
+  const pageNum = parseInt(parts[2], 10);
+  if (!docId || !partId || isNaN(pageNum) || pageNum < 1) return null;
+
+  return { docId, partId, pageNum };
+}
+
+/**
+ * URL 해시에서 열람 위치를 복원한다.
+ * loadLibraryInfo() 완료 후 호출된다.
+ */
+async function _restoreFromHash() {
+  const target = _parseHash();
+  if (!target) return;
+
+  try {
+    // 문헌 상세 가져오기 (parts 정보 필요)
+    const res = await fetch(`/api/documents/${target.docId}`);
+    if (!res.ok) return;
+    const docInfo = await res.json();
+
+    // viewerState 설정
+    viewerState.docId = target.docId;
+    viewerState.partId = target.partId;
+    viewerState.pageNum = target.pageNum;
+    viewerState.documentInfo = docInfo;
+
+    // 해시 재생성 억제 (이미 해시에서 복원 중)
+    _suppressHashUpdate = true;
+
+    // PDF 로드
+    if (typeof loadPdfPage === "function") {
+      loadPdfPage(target.docId, target.partId, target.pageNum);
+    }
+
+    // 다권본 선택기 업데이트
+    if (typeof updatePartSelector === "function" && docInfo.parts) {
+      updatePartSelector(docInfo.parts, target.partId);
+    }
+
+    // 모든 패널 동기화
+    if (typeof onPageChanged === "function") {
+      onPageChanged();
+    }
+
+    // 서지정보·해석 섹션 표시
+    const bibSec = document.getElementById("bib-section");
+    const interpSec = document.getElementById("interp-section");
+    if (bibSec) bibSec.style.display = "";
+    if (interpSec) interpSec.style.display = "";
+
+    _suppressHashUpdate = false;
+  } catch (e) {
+    _suppressHashUpdate = false;
+    console.warn("해시 복원 실패:", e);
+  }
+}
+
+// 브라우저 뒤로/앞으로 버튼 → 해시 파싱 → 페이지 복원
+window.addEventListener("popstate", () => {
+  const target = _parseHash();
+  if (!target) return;
+
+  // 같은 위치면 무시
+  if (viewerState.docId === target.docId &&
+      viewerState.partId === target.partId &&
+      viewerState.pageNum === target.pageNum) return;
+
+  viewerState.docId = target.docId;
+  viewerState.partId = target.partId;
+  viewerState.pageNum = target.pageNum;
+
+  _suppressHashUpdate = true;
+
+  if (typeof loadPdfPage === "function") {
+    loadPdfPage(target.docId, target.partId, target.pageNum);
+  }
+
+  if (typeof onPageChanged === "function") {
+    onPageChanged();
+  }
+
+  _suppressHashUpdate = false;
+});
 
 
 /**

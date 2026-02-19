@@ -682,6 +682,79 @@ def get_interp_git_log(interp_path: str | Path, max_count: int = 50) -> list[dic
     return commits
 
 
+def get_page_notes(interp_path: str | Path, part_id: str, page_num: int) -> dict:
+    """비고(메모)를 읽어 반환한다.
+
+    목적: 연구자가 특정 페이지에 자유 텍스트 메모를 남기고 조회할 수 있다.
+          아직 어떤 해석 층으로 편입될지 미확정인 내용(임시 메모, 질문 등)을 보관한다.
+    입력:
+        interp_path — 해석 저장소 경로.
+        part_id — 권 식별자.
+        page_num — 페이지 번호.
+    출력: {part_id, page, entries, exists}.
+    """
+    interp_path = Path(interp_path).resolve()
+    notes_dir = interp_path / "_notes" / part_id
+    file_path = notes_dir / f"page_{page_num:03d}.json"
+
+    if file_path.exists():
+        raw = file_path.read_text(encoding="utf-8")
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            data = {"entries": []}
+        return {
+            "part_id": part_id,
+            "page": page_num,
+            "entries": data.get("entries", []),
+            "exists": True,
+        }
+
+    return {
+        "part_id": part_id,
+        "page": page_num,
+        "entries": [],
+        "exists": False,
+    }
+
+
+def save_page_notes(
+    interp_path: str | Path,
+    part_id: str,
+    page_num: int,
+    entries: list[dict],
+) -> dict:
+    """비고(메모)를 저장한다.
+
+    목적: 연구자가 작성한 자유 메모를 _notes/ 디렉토리에 JSON으로 기록한다.
+    입력:
+        interp_path — 해석 저장소 경로.
+        part_id — 권 식별자.
+        page_num — 페이지 번호.
+        entries — 메모 항목 리스트 [{text, created_at, updated_at}, ...].
+    출력: {status, file_path, count}.
+    """
+    interp_path = Path(interp_path).resolve()
+    notes_dir = interp_path / "_notes" / part_id
+    notes_dir.mkdir(parents=True, exist_ok=True)
+
+    file_path = notes_dir / f"page_{page_num:03d}.json"
+    data = {
+        "page": page_num,
+        "part_id": part_id,
+        "entries": entries,
+    }
+    text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+    file_path.write_text(text, encoding="utf-8")
+
+    relative_path = file_path.relative_to(interp_path).as_posix()
+    return {
+        "status": "saved",
+        "file_path": relative_path,
+        "count": len(entries),
+    }
+
+
 def _update_library_manifest_interp(
     library_path: Path,
     interp_id: str,

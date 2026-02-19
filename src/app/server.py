@@ -147,8 +147,10 @@ from core.interpretation import (
     get_interp_git_log,
     get_interpretation_info,
     get_layer_content,
+    get_page_notes,
     git_commit_interpretation,
     save_layer_content,
+    save_page_notes,
     update_base,
 )
 from core.git_graph import get_git_graph_data
@@ -3618,6 +3620,85 @@ async def api_delete_annotation_type(type_id: str):
         return JSONResponse({"error": f"유형 '{type_id}'를 찾을 수 없거나 기본 프리셋입니다."}, status_code=404)
 
     return JSONResponse(status_code=204, content=None)
+
+
+# --- 비고/메모 API ---
+
+
+class NotesSaveRequest(BaseModel):
+    """비고 저장 요청 모델."""
+    entries: list[dict]
+
+
+@app.get("/api/interpretations/{interp_id}/pages/{page_num}/notes")
+async def api_get_notes(
+    interp_id: str,
+    page_num: int,
+    part_id: str = Query("main", description="권 식별자"),
+):
+    """페이지 비고(메모)를 조회한다.
+
+    목적: 연구자가 작성한 자유 메모를 불러온다.
+          아직 어디로 편입될지 미확정인 내용(임시 메모, 질문 등)을 보관한다.
+    입력:
+        interp_id — 해석 저장소 ID.
+        page_num — 페이지 번호.
+        part_id — 권 식별자 (기본 "main").
+    출력: {part_id, page, entries, exists}.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
+            status_code=404,
+        )
+
+    return get_page_notes(interp_path, part_id, page_num)
+
+
+@app.put("/api/interpretations/{interp_id}/pages/{page_num}/notes")
+async def api_save_notes(
+    interp_id: str,
+    page_num: int,
+    body: NotesSaveRequest,
+    part_id: str = Query("main", description="권 식별자"),
+):
+    """페이지 비고(메모)를 저장한다.
+
+    목적: 연구자가 작성한 자유 메모를 _notes/ 디렉토리에 저장하고 자동 커밋한다.
+    입력:
+        interp_id — 해석 저장소 ID.
+        page_num — 페이지 번호.
+        body — {entries: [{text, created_at, updated_at}, ...]}.
+        part_id — 권 식별자 (기본 "main").
+    출력: {status, file_path, count}.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
+            status_code=404,
+        )
+
+    try:
+        result = save_page_notes(interp_path, part_id, page_num, body.entries)
+        # 자동 git commit
+        try:
+            git_commit_interpretation(
+                interp_path,
+                f"docs: 비고 저장 — page {page_num}",
+            )
+        except Exception:
+            pass
+        return result
+    except Exception as e:
+        return JSONResponse({"error": f"비고 저장 실패: {e}"}, status_code=400)
 
 
 # ──────────────────────────────────────

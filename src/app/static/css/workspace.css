@@ -859,8 +859,15 @@ body.resizing-row {
   line-height: 1;
 }
 
-.pdf-btn:hover {
+.pdf-btn:hover:not(:disabled) {
   background: var(--hover-bg-medium);
+}
+
+/* 경계 페이지에서 이전/다음 버튼 비활성화 */
+.pdf-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
 }
 
 .pdf-select {
@@ -920,10 +927,46 @@ body.resizing-row {
   justify-content: center;
   padding: 8px;
   background: var(--bg-canvas);
+  position: relative;
+}
+
+/* PDF 로딩 인디케이터 */
+.pdf-loading-indicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 15;
+}
+.pdf-loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: pdfSpin 0.7s linear infinite;
+}
+@keyframes pdfSpin {
+  to { transform: rotate(360deg); }
 }
 
 #pdf-canvas {
   box-shadow: var(--shadow-card);
+}
+
+/* === 이미지 필터·회전·보조선 라벨 === */
+.pdf-toolbar-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  min-width: 16px;
+}
+
+/* 보조선 활성 버튼 */
+.pdf-btn.active {
+  background: var(--selected-bg);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 
@@ -1073,11 +1116,34 @@ body.resizing-row {
 }
 
 
+/* === 읽기 보조선 (Reader Line) === */
+.reader-line {
+  position: absolute;
+  pointer-events: none;  /* 마우스 이벤트 투과 — 오버레이 조작 방해 안 함 */
+  z-index: 5;            /* pdf-canvas 위, layout-overlay(z:10) 아래 */
+  opacity: 0.5;
+}
+
+.reader-line-horizontal {
+  background: #ff6b6b;
+  height: 2px;
+  width: 100%;
+}
+
+.reader-line-vertical {
+  background: #4dabf7;
+  width: 2px;
+  height: 100%;
+}
+
+
 /* === Phase 4: PDF 캔버스 래퍼 (오버레이 정렬용) === */
 
 .pdf-canvas-wrapper {
   position: relative;
   display: inline-block;
+  transition: transform 0.2s ease, margin 0.2s ease;
+  transform-origin: center center;
 }
 
 .layout-overlay {
@@ -1686,6 +1752,91 @@ body.resizing-row {
   text-decoration: underline dotted #6b7280 2px;
   text-underline-offset: 3px;
 }
+
+/* --- 세로쓰기 모드 ---
+ *
+ * .vertical-text-mode: 컨테이너 전체에 세로쓰기 적용
+ *   - writing-mode: vertical-rl → 오른쪽→왼쪽 세로열 (한문 전통 방향)
+ *   - text-orientation: mixed → 한자 정립, 라틴/숫자 자동 회전
+ *
+ * [data-writing-dir]: 블록별 개별 방향 지정
+ *   - vertical_rtl / vertical_ltr 일 때만 세로쓰기 활성화
+ *   - 세로 모드가 아니면 블록별 방향도 미적용 (사용자가 명시적으로 켜야 함)
+ */
+
+/* 교정 편집기: 세로 모드 */
+.corr-text-area.vertical-text-mode {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  overflow-x: auto;      /* 세로열이 많으면 가로 스크롤 */
+  overflow-y: hidden;
+  line-height: 1.8;
+  padding: 12px 16px;
+}
+
+/* 세로 모드에서 블록 섹션을 가로로 나열 (각 블록이 세로열 하나) */
+.corr-text-area.vertical-text-mode .corr-block-section {
+  display: inline-block;
+  vertical-align: top;
+  margin-bottom: 0;
+  margin-left: 8px;
+  min-height: 200px;
+}
+
+/* 세로 모드에서 블록 헤더를 가로쓰기 유지 (블록 ID 등 라벨) */
+.corr-text-area.vertical-text-mode .corr-block-header {
+  writing-mode: horizontal-tb;
+  text-orientation: initial;
+}
+
+/* 세로 모드에서 줄바꿈 → 다음 열 */
+.corr-text-area.vertical-text-mode .corr-newline {
+  display: inline;
+  height: auto;
+}
+
+/* OCR 결과 목록: 세로 모드 */
+.ocr-results-list.vertical-text-mode {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-height: none;
+  padding: 8px;
+}
+
+.ocr-results-list.vertical-text-mode .ocr-result-item {
+  display: inline-block;
+  vertical-align: top;
+  margin-left: 6px;
+  margin-bottom: 0;
+}
+
+.ocr-results-list.vertical-text-mode .ocr-result-text {
+  writing-mode: vertical-rl;
+}
+
+/* 블록별 writing_direction (세로 모드 ON 시에만 적용) */
+.vertical-text-mode .corr-block-body[data-writing-dir="vertical_rtl"] {
+  writing-mode: vertical-rl;
+}
+
+.vertical-text-mode .corr-block-body[data-writing-dir="vertical_ltr"] {
+  writing-mode: vertical-lr;
+}
+
+.vertical-text-mode .corr-block-body[data-writing-dir="horizontal_ltr"],
+.vertical-text-mode .corr-block-body[data-writing-dir="horizontal_rtl"] {
+  writing-mode: horizontal-tb;
+}
+
+/* 소형 버튼 (인라인 토글) */
+.text-btn-sm {
+  padding: 1px 6px;
+  font-size: 11px;
+  margin-left: auto;
+}
+
 
 /* --- 블록별 섹션 --- */
 
@@ -4141,4 +4292,79 @@ body.resizing-row {
   padding: 1px 4px;
   border-radius: 2px;
   font-size: 11px;
+}
+
+
+/* ──────────────────────────────────────
+   비고/메모 패널 스타일
+   ────────────────────────────────────── */
+
+.notes-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.notes-list {
+  padding: 8px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.notes-entry {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.notes-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+}
+
+.notes-date {
+  color: var(--text-muted);
+}
+
+.notes-remove-btn {
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 0 4px;
+}
+
+.notes-remove-btn:hover {
+  color: #ef4444;
+}
+
+.notes-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: none;
+  padding: 8px;
+  font-size: 13px;
+  font-family: var(--font-body);
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  resize: vertical;
+  min-height: 60px;
+  line-height: 1.6;
+}
+
+.notes-textarea:focus {
+  outline: none;
+  background: var(--bg-primary);
+}
+
+.notes-textarea::placeholder {
+  color: var(--text-muted);
 }

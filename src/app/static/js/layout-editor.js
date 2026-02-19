@@ -134,10 +134,25 @@ function _canvasCoords(e) {
   const rect = overlay.getBoundingClientRect();
   const scaleX = overlay.width / rect.width;
   const scaleY = overlay.height / rect.height;
-  return {
-    x: (e.clientX - rect.left) * scaleX,
-    y: (e.clientY - rect.top) * scaleY,
-  };
+  let x = (e.clientX - rect.left) * scaleX;
+  let y = (e.clientY - rect.top) * scaleY;
+
+  // CSS 회전 보정: getBoundingClientRect()는 회전 후 AABB(축 정렬 바운딩 박스)를
+  // 반환하므로, 90°/180°/270°에서 좌표를 역회전해야 캔버스 내부 좌표가 된다.
+  if (typeof pdfState !== "undefined" && pdfState.rotation) {
+    const deg = pdfState.rotation;
+    const cw = overlay.width;
+    const ch = overlay.height;
+    if (deg === 90) {
+      [x, y] = [y, cw - x];
+    } else if (deg === 180) {
+      [x, y] = [cw - x, ch - y];
+    } else if (deg === 270) {
+      [x, y] = [ch - y, x];
+    }
+  }
+
+  return { x, y };
 }
 
 

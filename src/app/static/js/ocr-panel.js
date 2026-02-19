@@ -20,6 +20,7 @@ const ocrState = {
   defaultEngine: null,   // 기본 엔진 ID
   running: false,        // OCR 실행 중 여부
   lastResults: null,     // 마지막 OCR 결과 (to_summary 형식)
+  verticalView: false,   // OCR 결과 세로쓰기 표시 모드
 };
 
 
@@ -54,6 +55,10 @@ function initOcrPanel() {
   if (fillOcrBtn) {
     fillOcrBtn.addEventListener("click", _fillFromOcr);
   }
+
+  // OCR 결과 세로쓰기 토글
+  const ocrVertBtn = document.getElementById("ocr-vertical-btn");
+  if (ocrVertBtn) ocrVertBtn.addEventListener("click", _toggleOcrVerticalView);
 
   // 선택 블록 변경 시 "선택 블록 OCR" 버튼 상태 업데이트
   // layout-editor.js에서 블록 선택 시 이벤트를 발생시키지 않으므로
@@ -409,6 +414,28 @@ async function _fillFromOcr() {
   }
 
   alert(`OCR 결과가 텍스트로 저장되었습니다. (${ocrResults.length}개 블록)`);
+}
+
+
+/* ─── OCR 결과 세로쓰기 토글 ─────────────────────── */
+
+/**
+ * OCR 결과 목록의 가로/세로 표시를 전환한다.
+ *
+ * 왜 이렇게 하는가: 고전 한문 텍스트는 세로로 읽으므로,
+ *   OCR 결과도 세로로 표시하면 원본과 비교하기 쉽다.
+ */
+function _toggleOcrVerticalView() {
+  ocrState.verticalView = !ocrState.verticalView;
+  const list = document.getElementById("ocr-results-list");
+  if (list) {
+    list.classList.toggle("vertical-text-mode", ocrState.verticalView);
+  }
+  const btn = document.getElementById("ocr-vertical-btn");
+  if (btn) {
+    btn.classList.toggle("active", ocrState.verticalView);
+    btn.title = ocrState.verticalView ? "가로쓰기로 전환" : "세로쓰기로 전환";
+  }
 }
 
 
