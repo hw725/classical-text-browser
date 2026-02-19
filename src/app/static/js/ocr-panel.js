@@ -163,6 +163,12 @@ async function _runOcr(blockIds) {
     if (llmSel.force_provider) reqBody.force_provider = llmSel.force_provider;
     if (llmSel.force_model) reqBody.force_model = llmSel.force_model;
 
+    // PaddleOCR 엔진: 언어 선택
+    const paddleLangSel = document.getElementById("ocr-paddle-lang-select");
+    if (paddleLangSel && engineId === "paddleocr") {
+      reqBody.paddle_lang = paddleLangSel.value;
+    }
+
     const resp = await fetch(
       `/api/documents/${docId}/parts/${partId}/pages/${pageNum}/ocr`,
       {
@@ -501,14 +507,23 @@ async function _ensureLayoutSaved(docId, partId, pageNum) {
 
 
 /**
- * LLM 모델 선택 행 표시/숨김.
+ * OCR 엔진에 따라 LLM 모델 행과 PaddleOCR 언어 행을 표시/숨김한다.
  *
- * 현재 OCR 엔진이 llm_vision 하나뿐이므로 LLM 모델 행은 항상 표시.
- * 엔진 행(ocr-engine-row)은 HTML에서 display:none 처리.
+ * - llm_vision 엔진: LLM 모델 선택 행 표시, PaddleOCR 언어 행 숨김
+ * - paddleocr 엔진: PaddleOCR 언어 행 표시, LLM 모델 행 숨김
+ * - 기타 엔진: 둘 다 숨김
  */
 function _toggleLlmModelRow() {
+  const engineSelect = document.getElementById("ocr-engine-select");
+  const engineId = engineSelect ? engineSelect.value : "";
+
   const modelRow = document.getElementById("ocr-llm-model-row");
-  if (!modelRow) return;
-  // LLM vision 엔진만 존재하므로 항상 표시
-  modelRow.style.display = "";
+  const paddleLangRow = document.getElementById("ocr-paddle-lang-row");
+
+  if (modelRow) {
+    modelRow.style.display = (engineId === "llm_vision") ? "" : "none";
+  }
+  if (paddleLangRow) {
+    paddleLangRow.style.display = (engineId === "paddleocr") ? "" : "none";
+  }
 }

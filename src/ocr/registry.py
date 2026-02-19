@@ -94,18 +94,18 @@ class OcrEngineRegistry:
           2. 여기에 try/except 블록을 추가한다.
           paddleocr_engine.py를 참고하라.
         """
-        # PaddleOCR (별도 설치 필요: uv add paddlepaddle paddleocr)
+        # PaddleOCR (별도 설치 필요: uv add --optional paddleocr paddlepaddle paddleocr)
+        # 미설치 시에도 항상 등록한다 → list_engines()에서 available=false로 표시.
+        # 왜: 프론트엔드에서 "PaddleOCR (사용 불가)" 옵션을 보여주어
+        #      사용자에게 설치 가능한 엔진이 있다는 것을 알려주기 위함.
         try:
             from .paddleocr_engine import PaddleOcrEngine
             engine = PaddleOcrEngine()
-            if engine.is_available():
-                self.register(engine)
-            else:
-                logger.info("PaddleOCR 미설치 — 건너뜀")
-        except ImportError:
-            logger.info("PaddleOCR 미설치 — 건너뜀")
+            self.register(engine)
+            if not engine.is_available():
+                logger.info("PaddleOCR 등록됨 (패키지 미설치 — 사용 불가)")
         except Exception as e:
-            logger.warning(f"PaddleOCR 초기화 실패: {e}")
+            logger.warning(f"PaddleOCR 등록 실패: {e}")
 
         # LLM Vision OCR (LLM 라우터의 비전 기능 사용, 별도 설치 불필요)
         # 라우터는 나중에 서버에서 set_router()로 주입한다.
