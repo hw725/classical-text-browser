@@ -170,7 +170,7 @@
             <div class="pdf-toolbar-divider"></div>
             <!-- 페이지 탐색 -->
             <button id="pdf-prev" class="pdf-btn" title="이전 페이지">&#9664;</button>
-            <input id="pdf-page-input" type="number" min="1" value="1" class="pdf-page-input" title="페이지 번호"/>
+            <input id="pdf-page-input" type="number" min="1" value="1" class="pdf-page-input" title="페이지 번호" aria-label="페이지 번호"/>
             <span id="pdf-page-total" class="pdf-page-total">/ ?</span>
             <button id="pdf-next" class="pdf-btn" title="다음 페이지">&#9654;</button>
             <div class="pdf-toolbar-divider"></div>
@@ -178,10 +178,27 @@
             <button id="pdf-zoom-out" class="pdf-btn" title="축소">&#8722;</button>
             <span id="pdf-zoom-level" class="pdf-zoom-level">100%</span>
             <button id="pdf-zoom-in" class="pdf-btn" title="확대">+</button>
-            <button id="pdf-zoom-fit" class="pdf-btn" title="너비에 맞추기">&#8862;</button>
+            <button id="pdf-zoom-fit" class="pdf-btn" title="맞춤 모드 전환 (가로/세로/해제)">&#8862;</button>
+            <span id="pdf-fit-label" class="pdf-toolbar-label"></span>
+            <div class="pdf-toolbar-divider"></div>
+            <!-- 이미지 필터 -->
+            <button id="pdf-filter-btn" class="pdf-btn" title="이미지 필터 전환 (원본/흑백/고대비/반전)">&#9681;</button>
+            <span id="pdf-filter-label" class="pdf-toolbar-label"></span>
+            <div class="pdf-toolbar-divider"></div>
+            <!-- 회전 -->
+            <button id="pdf-rotate-ccw" class="pdf-btn" title="반시계 방향 90° 회전">&#8634;</button>
+            <button id="pdf-rotate-cw" class="pdf-btn" title="시계 방향 90° 회전">&#8635;</button>
+            <span id="pdf-rotation-label" class="pdf-toolbar-label"></span>
+            <div class="pdf-toolbar-divider"></div>
+            <!-- 읽기 보조선 -->
+            <button id="pdf-reader-line-btn" class="pdf-btn" title="읽기 보조선 (R)">&#9473;</button>
           </div>
           <!-- 캔버스 영역 -->
           <div class="pdf-canvas-container" id="pdf-canvas-container">
+            <!-- 로딩 인디케이터 (페이지 전환 시 표시) -->
+            <div class="pdf-loading-indicator" id="pdf-loading-indicator" style="display:none;">
+              <div class="pdf-loading-spinner"></div>
+            </div>
             <div class="pdf-canvas-wrapper" id="pdf-canvas-wrapper">
               <canvas id="pdf-canvas"></canvas>
               <!-- Phase 4: 레이아웃 오버레이 캔버스 (레이아웃 모드에서만 활성화) -->
@@ -316,7 +333,9 @@
 
           <!-- OCR 결과 미리보기 -->
           <div id="ocr-results-preview" class="ocr-results-preview" style="display:none;">
-            <div class="props-section-title">OCR 결과</div>
+            <div class="props-section-title">OCR 결과
+              <button id="ocr-vertical-btn" class="text-btn text-btn-sm" title="세로쓰기로 전환">세로</button>
+            </div>
             <div id="ocr-results-list" class="ocr-results-list"></div>
             <div class="ocr-results-meta">
               <span id="ocr-results-summary"></span>
@@ -347,6 +366,8 @@
           </select>
           <div class="text-toolbar-divider"></div>
           <button id="corr-fill-ocr" class="text-btn" title="OCR 결과로 텍스트 채우기">OCR 채우기</button>
+          <div class="text-toolbar-divider"></div>
+          <button id="corr-vertical-btn" class="text-btn" title="세로쓰기로 전환">세로</button>
         </div>
 
         <!-- 서브탭: 교정 / 대조 -->
@@ -729,6 +750,7 @@
           <button class="panel-tab">검증 결과</button>
           <button class="panel-tab">의존 추적</button>
           <button class="panel-tab">엔티티</button>
+          <button class="panel-tab">비고</button>
         </div>
         <button class="panel-toggle" id="panel-toggle" title="패널 접기/펴기">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -816,6 +838,17 @@
           <!-- 엔티티 목록 -->
           <div id="entity-list" class="entity-list">
             <div class="placeholder">해석 모드에서 엔티티가 표시됩니다</div>
+          </div>
+        </div>
+
+        <!-- 비고/메모 탭 내용 -->
+        <div id="notes-panel-content" style="display:none;">
+          <div class="notes-toolbar">
+            <button id="notes-add-btn" class="text-btn text-btn-primary" title="새 메모 추가">+ 추가</button>
+            <span id="notes-save-status" class="text-save-status"></span>
+          </div>
+          <div id="notes-list" class="notes-list">
+            <div class="placeholder">해석 저장소를 선택하면 비고를 작성할 수 있습니다</div>
           </div>
         </div>
       </div>
@@ -1267,6 +1300,8 @@
 <script src="/static/js/translation-editor.js"></script>
 <script src="/static/js/annotation-editor.js"></script>
 <script src="/static/js/git-graph.js"></script>
+<script src="/static/js/reader-line.js"></script>
+<script src="/static/js/notes-panel.js"></script>
 <script src="/static/js/workspace.js"></script>
 </body>
 </html>

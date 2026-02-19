@@ -324,7 +324,7 @@ function _selectPage(docId, partId, pageNum, docInfo, pageNode) {
   viewerState.pageNum = pageNum;
   viewerState.documentInfo = docInfo;
 
-  // 사이드바 하이라이트 업데이트
+  // 사이드바 하이라이트 업데이트 (직접 노드 참조가 있으므로 여기서 처리)
   _highlightPage(pageNode);
 
   // 좌측: PDF 로드 (pdf-renderer.js에서 정의)
@@ -332,46 +332,15 @@ function _selectPage(docId, partId, pageNum, docInfo, pageNode) {
     loadPdfPage(docId, partId, pageNum);
   }
 
-  // 우측: 텍스트 로드 (text-editor.js에서 정의)
-  if (typeof loadPageText === "function") {
-    loadPageText(docId, partId, pageNum);
-  }
-
-  // Phase 4: 레이아웃 모드일 때 레이아웃도 로드
-  if (typeof loadPageLayout === "function" && typeof layoutState !== "undefined" && layoutState.active) {
-    loadPageLayout(docId, partId, pageNum);
-  }
-
   // 다권본: part 선택기 업데이트 (pdf-renderer.js에서 정의)
   if (typeof updatePartSelector === "function" && docInfo && docInfo.parts) {
     updatePartSelector(docInfo.parts, partId);
   }
 
-  // Phase 6: 교정 모드일 때 교정 데이터도 로드
-  if (typeof loadPageCorrections === "function" && typeof correctionState !== "undefined" && correctionState.active) {
-    loadPageCorrections(docId, partId, pageNum);
-  }
-
-  // Phase 6: Git 이력 로드
-  if (typeof _loadGitLog === "function") {
-    _loadGitLog(docId);
-  }
-
-  // Phase 5: 서지정보 로드 (bibliography.js에서 정의)
-  if (typeof loadBibliography === "function") {
-    loadBibliography(docId);
-  }
-
-  // Phase 7: 해석 모드일 때 층 내용 로드
-  if (typeof interpState !== "undefined" && interpState.active && interpState.interpId) {
-    if (typeof _loadLayerContent === "function") {
-      _loadLayerContent();
-    }
-  }
-
-  // Phase 10-1: 레이아웃 모드일 때 기존 OCR 결과 로드
-  if (typeof loadOcrResults === "function" && typeof layoutState !== "undefined" && layoutState.active) {
-    loadOcrResults();
+  // 공통 동기화: 텍스트, 레이아웃, 교정, Git, 서지, 해석, OCR, 비고 등
+  // (workspace.js의 onPageChanged에서 일괄 처리)
+  if (typeof onPageChanged === "function") {
+    onPageChanged({ skipHighlight: true });  // 하이라이트는 위에서 이미 처리
   }
 }
 

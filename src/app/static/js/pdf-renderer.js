@@ -39,7 +39,103 @@ const pdfState = {
   pendingPage: null,   // 렌더링 대기 중인 페이지 번호
   currentDocId: null,  // 현재 로드된 문헌 ID
   currentPartId: null, // 현재 로드된 권 ID
+  filterMode: 0,       // 이미지 필터: 0=원본, 1=흑백, 2=고대비, 3=반전
+  rotation: 0,         // 회전 각도: 0, 90, 180, 270
+  fitMode: "width",    // 자동 맞춤: "width" | "height" | "none"
 };
+
+
+/* ──────────────────────────
+   이미지 필터 (Feature 1)
+   ──────────────────────────
+   바래진 고서 이미지를 흑백/반전으로 보면 글자가 더 잘 보인다.
+   CSS filter를 #pdf-canvas에만 적용하여 오버레이 블록 색상은 유지한다.
+*/
+
+const FILTER_MODES = [
+  { name: "원본",  filter: "none" },
+  { name: "흑백",  filter: "grayscale(100%)" },
+  { name: "고대비", filter: "grayscale(100%) contrast(2.0)" },
+  { name: "반전",  filter: "invert(100%)" },
+];
+
+/**
+ * 이미지 필터를 순환 전환한다.
+ * 원본 → 흑백 → 고대비 → 반전 → 원본
+ */
+function _cycleFilter() {
+  pdfState.filterMode = (pdfState.filterMode + 1) % FILTER_MODES.length;
+  _applyFilter();
+}
+
+/**
+ * 현재 filterMode에 따라 CSS filter를 적용한다.
+ * canvas.style.filter 사용 — GPU 가속, 비파괴적, 좌표계에 영향 없음.
+ */
+function _applyFilter() {
+  const canvas = document.getElementById("pdf-canvas");
+  if (!canvas) return;
+  const mode = FILTER_MODES[pdfState.filterMode];
+  canvas.style.filter = mode.filter;
+  const label = document.getElementById("pdf-filter-label");
+  if (label) label.textContent = mode.name !== "원본" ? mode.name : "";
+}
+
+
+/* ──────────────────────────
+   이미지 회전 (Feature 2)
+   ──────────────────────────
+   원본 서적이 옆으로 놓인 경우(족자, 가로형 문서) 회전이 필요하다.
+   .pdf-canvas-wrapper에 CSS transform을 적용하여 #pdf-canvas와
+   #layout-overlay가 함께 회전한다.
+*/
+
+/**
+ * 시계 방향 90° 회전.
+ */
+function _rotateCW() {
+  pdfState.rotation = (pdfState.rotation + 90) % 360;
+  _applyRotation();
+}
+
+/**
+ * 반시계 방향 90° 회전.
+ */
+function _rotateCCW() {
+  pdfState.rotation = (pdfState.rotation + 270) % 360;
+  _applyRotation();
+}
+
+/**
+ * 현재 rotation 값에 따라 CSS transform을 적용한다.
+ * 90°/270°에서는 wrapper의 margin으로 너비↔높이 교환 효과를 보정한다.
+ */
+function _applyRotation() {
+  const wrapper = document.getElementById("pdf-canvas-wrapper");
+  if (!wrapper) return;
+
+  const deg = pdfState.rotation;
+  wrapper.style.transform = deg === 0 ? "" : `rotate(${deg}deg)`;
+
+  // 90°/270°에서 너비↔높이가 뒤바뀌므로 마진으로 보정
+  if (deg === 90 || deg === 270) {
+    const canvas = document.getElementById("pdf-canvas");
+    if (canvas && canvas.style.width) {
+      const w = parseInt(canvas.style.width, 10);
+      const h = parseInt(canvas.style.height, 10);
+      if (w && h) {
+        const diff = (h - w) / 2;
+        wrapper.style.margin = `${diff}px ${-diff}px`;
+      }
+    }
+  } else {
+    wrapper.style.margin = "";
+  }
+
+  // 회전 각도 라벨 표시
+  const label = document.getElementById("pdf-rotation-label");
+  if (label) label.textContent = deg === 0 ? "" : `${deg}°`;
+}
 
 
 /**
@@ -85,9 +181,10 @@ async function loadPdfPage(docId, partId, pageNum) {
     const pageInput = document.getElementById("pdf-page-input");
     pageInput.max = pdfState.totalPages;
 
-    // 첫 로드 시 너비에 맞추기
-    await _fitToWidth();
+    // 첫 로드 시 사용자가 선택한 맞춤 모드로 자동 맞춤
+    await _autoFit();
     await _renderPage(pageNum);
+    _updateFitLabel();
   } catch (err) {
     console.error("PDF 로드 실패:", err);
     const container = document.getElementById("pdf-canvas-container");
@@ -115,6 +212,10 @@ async function _renderPage(pageNum) {
 
   pdfState.rendering = true;
   pdfState.currentPage = pageNum;
+
+  // 로딩 인디케이터 표시
+  const loadingEl = document.getElementById("pdf-loading-indicator");
+  if (loadingEl) loadingEl.style.display = "";
 
   try {
     const page = await pdfState.pdfDoc.getPage(pageNum);
@@ -144,6 +245,9 @@ async function _renderPage(pageNum) {
 
   pdfState.rendering = false;
 
+  // 로딩 인디케이터 숨김
+  if (loadingEl) loadingEl.style.display = "none";
+
   // UI 업데이트
   document.getElementById("pdf-page-input").value = pageNum;
 
@@ -155,11 +259,39 @@ async function _renderPage(pageNum) {
     _redrawOverlay();
   }
 
+  // 렌더링 완료 후 회전/필터 상태 재적용
+  if (pdfState.rotation !== 0) _applyRotation();
+  if (pdfState.filterMode !== 0) _applyFilter();
+
+  // 이전/다음 버튼 상태 갱신
+  _updateNavButtonStates();
+
   // 대기 중인 페이지가 있으면 렌더링
   if (pdfState.pendingPage !== null) {
     const pending = pdfState.pendingPage;
     pdfState.pendingPage = null;
     await _renderPage(pending);
+  }
+
+  // 인접 페이지 프리로드 (렌더링 없이 PDF.js 내부 캐시 워밍)
+  _preloadAdjacentPages(pageNum);
+}
+
+
+/**
+ * 인접 페이지를 프리로드한다 (렌더링 없이 PDF.js 내부 캐시만 워밍).
+ *
+ * 왜 이렇게 하는가: PDF.js의 getPage()는 내부적으로 페이지 데이터를 파싱/캐시한다.
+ *   미리 호출해두면 다음 페이지 이동 시 파싱 시간이 줄어 체감 속도가 빨라진다.
+ */
+function _preloadAdjacentPages(currentPage) {
+  if (!pdfState.pdfDoc) return;
+  const pages = [currentPage - 1, currentPage + 1];
+  for (const p of pages) {
+    if (p >= 1 && p <= pdfState.totalPages) {
+      // 비동기 호출, 결과는 무시 (캐시 워밍 목적)
+      pdfState.pdfDoc.getPage(p).catch(() => {});
+    }
   }
 }
 
@@ -193,10 +325,78 @@ async function _fitToWidth() {
 
 
 /**
- * PDF 뷰어에서 페이지가 변경될 때, 텍스트 에디터와 사이드바를 동기화한다.
+ * 캔버스 컨테이너 높이에 맞춰 줌을 조정한다.
  *
- * 왜 이렇게 하는가: PDF 뷰어의 이전/다음 버튼으로 페이지를 이동할 때,
- *                    우측 텍스트 에디터도 같은 페이지를 표시해야 한다.
+ * 왜 이렇게 하는가: 세로로 긴 고전 텍스트 페이지를 한 화면에 넣으면
+ *   전체 페이지를 한눈에 볼 수 있어 읽기 편하다.
+ */
+async function _fitToHeight() {
+  if (!pdfState.pdfDoc) return;
+  const page = await pdfState.pdfDoc.getPage(pdfState.currentPage || 1);
+  const viewport = page.getViewport({ scale: 1.0 });
+  const container = document.getElementById("pdf-canvas-container");
+  // 패딩 여유분 20px
+  const newScale = (container.clientHeight - 20) / viewport.height;
+  _setZoom(newScale);
+}
+
+
+/**
+ * 현재 fitMode에 따라 자동 맞춤을 적용한다.
+ *
+ * 왜 이렇게 하는가: 페이지를 전환할 때마다 사용자가 선택한 맞춤 모드를
+ *   자동으로 재적용하여 일관된 보기 경험을 제공한다.
+ *   수동 줌 시에는 fitMode="none"으로 전환되어 자동 맞춤이 중단된다.
+ */
+async function _autoFit() {
+  if (pdfState.fitMode === "width") {
+    await _fitToWidth();
+  } else if (pdfState.fitMode === "height") {
+    await _fitToHeight();
+  }
+  // "none"이면 아무것도 하지 않음
+}
+
+
+/**
+ * 맞춤 모드를 순환한다: 가로맞춤 → 세로맞춤 → 해제 → 가로맞춤.
+ */
+function _cycleFitMode() {
+  if (pdfState.fitMode === "width") {
+    pdfState.fitMode = "height";
+    _fitToHeight();
+  } else if (pdfState.fitMode === "height") {
+    pdfState.fitMode = "none";
+  } else {
+    pdfState.fitMode = "width";
+    _fitToWidth();
+  }
+  _updateFitLabel();
+}
+
+
+/**
+ * 맞춤 모드 라벨을 업데이트한다.
+ */
+function _updateFitLabel() {
+  const label = document.getElementById("pdf-fit-label");
+  if (!label) return;
+  if (pdfState.fitMode === "width") {
+    label.textContent = "가로맞춤";
+  } else if (pdfState.fitMode === "height") {
+    label.textContent = "세로맞춤";
+  } else {
+    label.textContent = "";
+  }
+}
+
+
+/**
+ * PDF 뷰어에서 페이지가 변경될 때, 모든 패널을 동기화한다.
+ *
+ * 왜 이렇게 하는가: PDF 뷰어의 이전/다음 버튼, 키보드 단축키 등으로
+ *   페이지를 이동할 때 교정·해석·비고 등 모든 패널이 갱신되어야 한다.
+ *   실제 동기화 로직은 workspace.js의 onPageChanged()에 집약.
  */
 function _syncPageChange(pageNum) {
   // 비저장 변경 확인
@@ -208,20 +408,27 @@ function _syncPageChange(pageNum) {
 
   viewerState.pageNum = pageNum;
 
-  // 우측 텍스트 에디터 동기화
-  if (typeof loadPageText === "function") {
-    loadPageText(viewerState.docId, viewerState.partId, pageNum);
+  // 공통 동기화 함수 호출 (workspace.js에서 정의)
+  if (typeof onPageChanged === "function") {
+    onPageChanged();
   }
+}
 
-  // 사이드바 하이라이트 동기화
-  if (typeof highlightTreePage === "function") {
-    highlightTreePage(pageNum);
-  }
 
-  // Phase 4: 레이아웃 모드일 때 레이아웃도 동기화
-  if (typeof loadPageLayout === "function" && typeof layoutState !== "undefined" && layoutState.active) {
-    loadPageLayout(viewerState.docId, viewerState.partId, pageNum);
-  }
+/**
+ * 이전/다음 페이지 버튼의 활성/비활성 상태를 업데이트한다.
+ *
+ * 왜 이렇게 하는가:
+ *   첫 페이지에서 "이전" 버튼, 마지막 페이지에서 "다음" 버튼을 비활성화하여
+ *   연구자에게 경계임을 시각적으로 알려준다.
+ */
+function _updateNavButtonStates() {
+  const prevBtn = document.getElementById("pdf-prev");
+  const nextBtn = document.getElementById("pdf-next");
+  if (!prevBtn || !nextBtn) return;
+
+  prevBtn.disabled = (pdfState.currentPage <= 1);
+  nextBtn.disabled = (pdfState.currentPage >= pdfState.totalPages);
 }
 
 
@@ -296,22 +503,26 @@ function initPdfRenderer() {
     }
   });
 
-  // 줌 확대 버튼
+  // 줌 확대 버튼 — 수동 줌이므로 자동 맞춤 해제
   document.getElementById("pdf-zoom-in").addEventListener("click", () => {
+    pdfState.fitMode = "none";
+    _updateFitLabel();
     _setZoom(pdfState.scale + 0.25);
   });
 
-  // 줌 축소 버튼
+  // 줌 축소 버튼 — 수동 줌이므로 자동 맞춤 해제
   document.getElementById("pdf-zoom-out").addEventListener("click", () => {
+    pdfState.fitMode = "none";
+    _updateFitLabel();
     _setZoom(pdfState.scale - 0.25);
   });
 
-  // 너비에 맞추기 버튼
+  // 맞춤 모드 순환 버튼: 가로맞춤 → 세로맞춤 → 해제 → 가로맞춤
   document.getElementById("pdf-zoom-fit").addEventListener("click", () => {
-    _fitToWidth();
+    _cycleFitMode();
   });
 
-  // Ctrl+스크롤로 줌
+  // Ctrl+스크롤로 줌 — 수동 줌이므로 자동 맞춤 해제
   document
     .getElementById("pdf-canvas-container")
     .addEventListener(
@@ -319,12 +530,24 @@ function initPdfRenderer() {
       (e) => {
         if (e.ctrlKey) {
           e.preventDefault();
+          pdfState.fitMode = "none";
+          _updateFitLabel();
           const delta = e.deltaY > 0 ? -0.1 : 0.1;
           _setZoom(pdfState.scale + delta);
         }
       },
       { passive: false }
     );
+
+  // 이미지 필터 전환 버튼 (Feature 1)
+  const filterBtn = document.getElementById("pdf-filter-btn");
+  if (filterBtn) filterBtn.addEventListener("click", _cycleFilter);
+
+  // 회전 버튼 (Feature 2)
+  const rotateCwBtn = document.getElementById("pdf-rotate-cw");
+  if (rotateCwBtn) rotateCwBtn.addEventListener("click", _rotateCW);
+  const rotateCcwBtn = document.getElementById("pdf-rotate-ccw");
+  if (rotateCcwBtn) rotateCcwBtn.addEventListener("click", _rotateCCW);
 
   // 다권본 권 변경 이벤트
   document.getElementById("pdf-part-select").addEventListener("change", (e) => {
@@ -343,6 +566,73 @@ function initPdfRenderer() {
 
     if (typeof loadPageText === "function") {
       loadPageText(viewerState.docId, newPartId, 1);
+    }
+  });
+
+
+  /* ──────────────────────────
+     키보드 단축키 (Plan 2)
+     ──────────────────────────
+     ↑/↓: 페이지 이전/다음 (PDF가 뷰포트 안에 다 보일 때만 — 줌인 상태에서는 스크롤 우선)
+     PageUp/PageDown: 페이지 이전/다음 (항상)
+     Home/End: 첫/마지막 페이지 (항상)
+
+     왜 ←/→가 아닌 ↑/↓인가:
+       고전 한문은 우→좌로 읽는 책이 많아서 ←/→의 "이전/다음" 의미가 모호하다.
+       ↑/↓는 방향 중립적이라 혼동이 없다.
+  */
+  document.addEventListener("keydown", (e) => {
+    // PDF가 로드되지 않았으면 무시
+    if (!pdfState.pdfDoc) return;
+
+    // 입력 필드 포커스 시 무시 (reader-line.js R키 패턴 준용)
+    const tag = document.activeElement?.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    if (document.activeElement?.isContentEditable) return;
+
+    // 다이얼로그 오버레이가 열려 있으면 무시
+    const overlays = document.querySelectorAll(".bib-dialog-overlay, .corr-dialog-overlay");
+    for (const ov of overlays) {
+      if (ov.style.display !== "none" && ov.style.display !== "") return;
+    }
+
+    let targetPage = null;
+
+    switch (e.key) {
+      case "ArrowUp":
+      case "ArrowDown": {
+        // 줌인 상태(스크롤 가능)에서는 스크롤 우선, 페이지 전환하지 않음
+        const container = document.getElementById("pdf-canvas-container");
+        if (container && container.scrollHeight > container.clientHeight + 2) return;
+        targetPage = e.key === "ArrowUp"
+          ? pdfState.currentPage - 1
+          : pdfState.currentPage + 1;
+        break;
+      }
+      case "PageUp":
+        targetPage = pdfState.currentPage - 1;
+        break;
+      case "PageDown":
+        targetPage = pdfState.currentPage + 1;
+        break;
+      case "Home":
+        targetPage = 1;
+        break;
+      case "End":
+        targetPage = pdfState.totalPages;
+        break;
+      default:
+        return; // 처리하지 않는 키는 기본 동작 유지
+    }
+
+    // 범위 확인 후 페이지 이동
+    if (targetPage !== null && targetPage >= 1 && targetPage <= pdfState.totalPages && targetPage !== pdfState.currentPage) {
+      e.preventDefault();
+      _renderPage(targetPage);
+      _syncPageChange(targetPage);
+    } else if (targetPage !== null) {
+      // 경계에서 기본 동작 방지 (PageUp/Down의 스크롤 등)
+      e.preventDefault();
     }
   });
 }

@@ -31,6 +31,7 @@ const correctionState = {
   editingCorrIdx: -1,      // 편집 중인 교정 인덱스 (-1이면 새 교정)
   pageText: "",            // 현재 페이지 텍스트 원본
   isDirty: false,          // 수정 여부
+  verticalView: false,     // 세로쓰기 표시 모드
 };
 
 
@@ -66,6 +67,31 @@ function initCorrectionEditor() {
   _initCorrDialogEvents();
   _initCorrToolbarEvents();
   _initGitPanelEvents();
+
+  // 세로쓰기 토글 버튼
+  const vertBtn = document.getElementById("corr-vertical-btn");
+  if (vertBtn) vertBtn.addEventListener("click", _toggleVerticalView);
+}
+
+
+/**
+ * 교정 텍스트 영역의 가로/세로 표시를 전환한다.
+ *
+ * 왜 이렇게 하는가: 고전 한문은 세로로 읽는다.
+ *   OCR/교정 결과도 세로로 표시하면 원본과 대조하기 쉽다.
+ *   writing_direction이 vertical_rtl인 블록은 오른쪽→왼쪽 세로열로 표시.
+ */
+function _toggleVerticalView() {
+  correctionState.verticalView = !correctionState.verticalView;
+  const area = document.getElementById("corr-text-area");
+  if (area) {
+    area.classList.toggle("vertical-text-mode", correctionState.verticalView);
+  }
+  const btn = document.getElementById("corr-vertical-btn");
+  if (btn) {
+    btn.classList.toggle("active", correctionState.verticalView);
+    btn.title = correctionState.verticalView ? "가로쓰기로 전환" : "세로쓰기로 전환";
+  }
 }
 
 
@@ -398,6 +424,15 @@ function _createBlockSection(segment, segIdx) {
   // 본문
   const body = document.createElement("div");
   body.className = "corr-block-body";
+
+  // 세로쓰기 지원: LayoutBlock의 writing_direction을 data 속성으로 전달
+  // 세그먼트 인덱스(segIdx)에 대응하는 블록의 writing_direction을 가져온다
+  let writingDir = "horizontal_ltr";
+  if (correctionState.hasLayout && correctionState.blocks && correctionState.blocks[segIdx]) {
+    writingDir = correctionState.blocks[segIdx].writing_direction || "horizontal_ltr";
+  }
+  body.dataset.writingDir = writingDir;
+
   _renderCharsIntoElement(body, segment.text, segment.startIdx, segment.type);
 
   section.appendChild(header);
