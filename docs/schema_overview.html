@@ -65,7 +65,7 @@ section > h2 { font-family: 'Sarasa Fixed K', 'Sarasa Mono K', monospace; font-s
 .field-list .required::before { content: '*'; color: var(--l2); font-weight: 700; margin-right: 2px; }
 .field-group-label { font-family: 'Sarasa Fixed K', 'Sarasa Mono K', monospace; font-size: 10px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; padding: 8px 0 4px; border-top: 1px dashed var(--border); margin-top: 6px; }
 .field-group-label:first-child { border-top: none; margin-top: 0; }
-.rel-diagram { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 28px; font-family: 'Sarasa Fixed K', 'Sarasa Mono K', monospace; font-size: 12px; line-height: 2; overflow-x: auto; }
+.rel-diagram { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 28px; font-family: 'Sarasa Fixed K', 'Sarasa Mono K', monospace; font-size: 12px; line-height: 2; overflow-x: auto; white-space: pre-wrap; }
 .rel-diagram .arrow { color: var(--text-dim); }
 .rel-diagram .ref { color: var(--cat-core); }
 .rel-diagram .entity { color: var(--text); font-weight: 600; }
@@ -77,12 +77,39 @@ section > h2 { font-family: 'Sarasa Fixed K', 'Sarasa Mono K', monospace; font-s
 .status-flow { display: flex; align-items: center; gap: 0; font-family: 'Sarasa Fixed K', 'Sarasa Mono K', monospace; font-size: 12px; margin: 12px 0; flex-wrap: wrap; }
 .status-node { padding: 6px 14px; border-radius: 16px; background: var(--surface-raised); border: 1px solid var(--border); white-space: nowrap; }
 .status-arrow { color: var(--text-dim); padding: 0 4px; font-size: 14px; }
-.file-tree { font-family: 'Sarasa Fixed K', 'Sarasa Mono K', monospace; font-size: 11px; line-height: 1.8; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px 24px; }
+.file-tree { font-family: 'Sarasa Fixed K', 'Sarasa Mono K', monospace; font-size: 11px; line-height: 1.8; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px 24px; white-space: pre-wrap; }
 .file-tree .dir { color: var(--text); font-weight: 500; }
 .file-tree .schema-file { color: var(--cat-source); }
 .file-tree .core-file { color: var(--cat-core); }
 .file-tree .interp-file { color: var(--cat-interp); }
 .file-tree .exch-file { color: var(--cat-exchange); }
+/* === 라이트그레이 테마 (OS 설정 자동 감지) === */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #fafafa;
+    --surface: #ffffff;
+    --surface-raised: #f5f5f5;
+    --border: #e0e0e0;
+    --border-accent: #c0c0c0;
+    --text: #333333;
+    --text-muted: #666666;
+    --text-dim: #999999;
+    --l1: #d97706; --l2: #dc2626; --l3: #7c3aed; --l4: #16a34a;
+    --l5: #2563eb; --l6: #0284c7; --l7: #9333ea; --l8: #db2777;
+    --cat-source: #d97706; --cat-interp: #2563eb; --cat-core: #7c3aed;
+    --cat-exchange: #16a34a; --cat-infra: #999999;
+  }
+  .tower-layer-num { color: #fff; }
+  .pill-source { color: var(--cat-source); border-color: rgba(217,119,6,0.3); background: rgba(217,119,6,0.08); }
+  .pill-interp { color: var(--cat-interp); border-color: rgba(37,99,235,0.3); background: rgba(37,99,235,0.08); }
+  .pill-core { color: var(--cat-core); border-color: rgba(124,58,237,0.3); background: rgba(124,58,237,0.08); }
+  .pill-exchange { color: var(--cat-exchange); border-color: rgba(22,163,74,0.3); background: rgba(22,163,74,0.08); }
+  .pill-infra { color: var(--cat-infra); border-color: rgba(153,153,153,0.3); background: rgba(153,153,153,0.08); }
+  .schema-card { box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .schema-card:hover { border-color: #b0b0b0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+  .status-node { background: #f0f0f0; }
+}
+
 @media (max-width: 900px) { .tower-row { grid-template-columns: 44px 80px 1fr; } .tower-schema-ref { display: none; } .schema-grid { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .tower-row { grid-template-columns: 36px 1fr; } .tower-layer-name { display: none; } }
 </style>

@@ -271,7 +271,7 @@ function _renderSourceBlocks() {
     });
 
     const label = document.createElement("span");
-    label.style.cssText = "font-size:11px; font-weight:600; font-family:monospace;";
+    label.style.cssText = "font-size:11px; font-weight:600; font-family:var(--font-mono);";
     label.textContent = block.block_id;
 
     const typeBadge = document.createElement("span");
@@ -383,7 +383,7 @@ function _renderTextBlocks() {
     seqBadge.textContent = `#${tb.sequence_index}`;
 
     const sourceInfo = document.createElement("span");
-    sourceInfo.style.cssText = "font-size:10px; color:var(--text-muted); font-family:monospace;";
+    sourceInfo.style.cssText = "font-size:10px; color:var(--text-muted); font-family:var(--font-mono);";
     const refs = tb.source_refs || [];
     if (refs.length > 0) {
       sourceInfo.textContent = refs.map((r) => r.layout_block_id || "?").join(" + ");
