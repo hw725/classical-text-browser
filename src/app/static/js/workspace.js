@@ -225,10 +225,43 @@ function initActivityBar() {
 
   buttons.forEach((btn) => {
     btn.addEventListener("click", () => {
+      const panel = btn.getAttribute("data-panel");
+      const sidebar = document.getElementById("sidebar");
+      const resizeHandle = document.getElementById("resize-sidebar");
+      const workspace = document.querySelector(".workspace");
+
+      // VSCode 스타일: 이미 활성인 버튼을 다시 클릭하면 사이드바 접기/펼치기
+      if (btn.classList.contains("active")) {
+        const isCollapsed = sidebar.classList.toggle("collapsed");
+        if (resizeHandle) resizeHandle.style.display = isCollapsed ? "none" : "";
+        // 그리드 컬럼 조정: 사이드바+리사이즈 영역을 0으로
+        if (workspace) {
+          workspace.style.gridTemplateColumns = isCollapsed
+            ? "48px 0px 0px 1fr"
+            : `48px var(--sidebar-width) 4px 1fr`;
+        }
+        // 세로맞춤 시 PDF가 새 너비에 맞게 재조정
+        if (typeof _autoFit === "function") {
+          setTimeout(() => _autoFit(), 50);
+        }
+        return;
+      }
+
+      // 다른 버튼을 클릭하면 사이드바 펼치기 + 패널 전환
       buttons.forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
 
-      const panel = btn.getAttribute("data-panel");
+      // 접혀 있으면 펼치기
+      if (sidebar.classList.contains("collapsed")) {
+        sidebar.classList.remove("collapsed");
+        if (resizeHandle) resizeHandle.style.display = "";
+        if (workspace) {
+          workspace.style.gridTemplateColumns = `48px var(--sidebar-width) 4px 1fr`;
+        }
+        if (typeof _autoFit === "function") {
+          setTimeout(() => _autoFit(), 50);
+        }
+      }
 
       // 모든 sidebar-section 숨김
       document.querySelectorAll("#sidebar-content .sidebar-section").forEach((s) => {
