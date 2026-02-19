@@ -431,6 +431,17 @@ html, body {
   flex-direction: column;
   overflow: hidden;
   min-width: 170px;
+  transition: opacity 0.15s ease;
+}
+
+/* 사이드바 접기: 액티비티 바 버튼 재클릭 시 토글.
+   grid-template-columns를 JS에서 "48px 0px 0px 1fr"로 바꾸고
+   이 클래스를 추가하여 내용을 숨긴다. */
+.sidebar.collapsed {
+  min-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .sidebar-header {
@@ -924,7 +935,9 @@ body.resizing-row {
   flex: 1;
   overflow: auto;
   display: flex;
-  justify-content: center;
+  /* justify-content: center 는 캔버스가 컨테이너보다 넓을 때
+     왼쪽이 접근 불가능한 영역으로 밀려나는 CSS 버그가 있다.
+     대신 캔버스 래퍼에 margin:auto를 적용하여 안전하게 가운데 정렬한다. */
   padding: 8px;
   background: var(--bg-canvas);
   position: relative;
@@ -1142,6 +1155,10 @@ body.resizing-row {
 .pdf-canvas-wrapper {
   position: relative;
   display: inline-block;
+  /* margin:auto로 가운데 정렬.
+     justify-content:center 대신 이 방식을 쓰면
+     캔버스가 컨테이너보다 넓을 때도 왼쪽 끝이 잘리지 않는다. */
+  margin: auto;
   transition: transform 0.2s ease, margin 0.2s ease;
   transform-origin: center center;
 }
