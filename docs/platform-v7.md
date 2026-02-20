@@ -67,16 +67,16 @@ v6까지의 7층 모델은 "OCR이 글자를 읽는다(2층) → 사람이 교�
 
 ### 2.3 각 층에서의 사람과 LLM의 역할
 
-| 층 | 이름 | LLM의 역할 | 사람의 역할 |
-|---|---|---|---|
-| 1 | 이미지/PDF | — | 원본 스캔/업로드 |
-| 2 | OCR 글자해독 | OCR 보조: 저품질 이미지, 필기체 판독 | OCR 엔진 선택, 설정 조정 |
-| 3 | 레이아웃 분석 | 이미지 보고 영역 구분 (본문/주석/서문 등) | 검토, 수정, 확정 |
-| 4 | 사람 수정 | 교정 제안: 이체자 판별, 문맥 기반 오류 후보 | 최종 교정 판단, 확정 |
-| 5 | 끊어읽기·현토 | 표점·현토 초안 (여러 안 병렬 제시) | 검토, 선택, 수정, 확정 |
-| 6 | 번역 | draft 생성 (현대어, 다국어, 여러 스타일) | 검토, 수정, 확정 |
-| 7 | 주석/사전 | 주석 초안, 전거 탐색, 인물/지명 식별 | 검증, 보완, 학술적 판단 |
-| 8 | 외부연계 | 유사 문헌 추천, 외부 DB 매핑 | 연계 판단, 연구 방향 설정 |
+| 층 | 이름 | LLM의 역할 | 사람의 역할 | 구현 |
+|---|---|---|---|---|
+| 1 | 이미지/PDF | — | 원본 스캔/업로드 + 에셋 자동 감지 | ✓ |
+| 2 | OCR 글자해독 | PaddleOCR + LLM Vision | OCR 엔진 선택, 설정 조정 | ✓ |
+| 3 | 레이아웃 분석 | 이미지 보고 영역 구분 (본문/주석/서문 등) | 검토, 수정, 확정 | ✓ |
+| 4 | 사람 수정 | 교정 제안: 이체자 판별, 문맥 기반 오류 후보 | 최종 교정 판단, 확정 | ✓ |
+| 5 | 끊어읽기·현토 | 표점·현토 초안 (여러 안 병렬 제시) | 검토, 선택, 수정, 확정 | ✓ |
+| 6 | 번역 | draft 생성 (사전 참조 포함) | 검토, 수정, 확정 | ✓ |
+| 7 | 주석/사전 | 4단계 사전 생성 + 자동 태깅 | 검증, 편집, 사전 내보내기/가져오기 | ✓ |
+| 8 | 외부연계 | 유사 문헌 추천, 외부 DB 매핑 | 연계 판단, 연구 방향 설정 | — |
 
 **패턴: LLM이 draft → 사람이 review → 사람이 commit** (2~8층 공통)
 
@@ -362,8 +362,8 @@ parts가 1개이면 단권본, 여러 개이면 다권본. 동일한 구조.
 
 | 설정 항목 | 옵션 |
 |---|---|
-| OCR 엔진 | Tesseract, PaddleOCR, Google Cloud Vision, 커스텀 |
-| LLM 보조 | Claude Vision, GPT-4V (텍스트만, 좌표 없음) |
+| OCR 엔진 | **PaddleOCR (기본 설치)**, Tesseract, Google Cloud Vision, 커스텀 |
+| LLM 보조 | Claude Vision, GPT-4V, Gemini Vision 등 (텍스트만, 좌표 없음) |
 | 언어 | 한문(繁/簡), 한글, 일문, 만주어, 기타 |
 | 방향 | 세로쓰기, 가로쓰기, 혼합 |
 | 레이아웃 | 단일 컬럼, 다단, 주석란 포함, 혼합 |
@@ -483,12 +483,13 @@ LLM은 페이지 이미지를 보고:
 
 ### 6.1 각 층
 
-| 층 | 내용 | LLM | 사람 |
-|---|---|---|---|
-| 5 끊어읽기·현토 | 구두점, 독법 | 초안 (여러 안) | 검토, 확정 |
-| 6 번역 | 현대어역, 다국어 | draft (다양한 스타일) | 수정, 확정 |
-| 7 주석/사전 | 어휘, 전거 | 자동 식별 | 검증 |
-| 8 외부연계 | 다른 DB | 자동 탐색 | 판단 |
+| 층 | 내용 | LLM | 사람 | 구현 상태 |
+|---|---|---|---|---|
+| 5 끊어읽기·현토 | 구두점, 독법 | 초안 (여러 안) | 검토, 확정 | ✓ D-014 |
+| 6 번역 | 현대어역, 문장 단위 | draft (다양한 스타일) | 수정, 확정 | ✓ D-015 |
+| 7 주석/사전 | 태깅 + 사전형 주석 | 4단계 누적 생성 | 검증, 편집 | ✓ D-016, D-019 |
+| — 인용 마크 | 논문 인용 구절 마크업 | — | 선택, 포맷 | ✓ D-020 |
+| 8 외부연계 | 다른 DB | 자동 탐색 | 판단 | 미구현 |
 
 ### 6.2 본문과 주석의 구분
 
@@ -535,6 +536,7 @@ LLM에게 번역을 요청할 때도 "본문만", "주석만", "둘 다"를 지�
 | KORCIS (한국고문헌종합목록) | 한국 고전적 | REST API (XML) | KORMARC | API키 필요 |
 | NDL Search (일본 국립국회도서관) | 일본 문헌 전반 | SRU / OpenSearch (XML) | DC-NDL (Dublin Core + NDL 확장) | 비영리: 불필요 |
 | 일본 국립공문서관 デジタルアーカイブ | 일본 소장 한적·화서 | 웹 스크래핑 | 자체 계층 (簿冊→件名) | 불필요 |
+| **범용 LLM 파서** | 등록된 파서 없는 모든 URL | markdown.new + LLM | 자유 형식 | 불필요 |
 | 수동 입력 | 출처 불문 | 직접 입력 | — | — |
 
 **각 소스의 메타데이터 구조가 근본적으로 다르다.** 이 차이를 흡수하는 것이 파서 아키텍처의 핵심.
@@ -661,6 +663,7 @@ LLM에게 번역을 요청할 때도 "본문만", "주석만", "둘 다"를 지�
 [KORCIS API]        → korcis_fetcher    → korcis_mapper    ─┐
 [NDL Search API]    → ndl_fetcher       → ndl_mapper        ─┤
 [국립공문서관 HTML]  → archives_fetcher  → archives_mapper   ─┼→ bibliography.json
+[임의의 URL]        → generic_llm       → generic_mapper    ─┤
 [수동 입력 폼]      →                   → manual_mapper     ─┘
                      ↑ 추출(Extract)      ↑ 매핑(Map)         ↑ 공통 스키마
 ```
@@ -668,6 +671,15 @@ LLM에게 번역을 요청할 때도 "본문만", "주석만", "둘 다"를 지�
 각 소스에 대해 두 단계:
 1. **Fetcher** (추출): 해당 소스에서 원본 데이터를 가져온다 (API 호출, HTML 파싱)
 2. **Mapper** (매핑): 소스별 필드를 공통 스키마 필드에 대응시킨다
+
+**범용 LLM 파서 (generic_llm)**:
+등록된 파서가 없는 URL에 대한 폴백. markdown.new로 웹페이지를 마크다운으로 변환한 뒤
+LLM이 서지정보를 추출한다. 에셋(PDF/이미지) 자동 감지 + 다운로드도 지원한다.
+
+**에셋 감지 (asset_detector)**:
+파서와 독립된 유틸리티. URL의 Content-Type 확인, 마크다운에서 PDF/이미지 링크 추출,
+이미지 번들→PDF 변환을 수행한다. generic_llm 파서가 위임하고,
+다른 파서(NDL, KORCIS)는 서버 폴백으로 활용한다.
 
 #### 7.3.2 필드 매핑 테이블
 
@@ -756,6 +768,19 @@ LLM에게 번역을 요청할 때도 "본문만", "주석만", "둘 다"를 지�
       "response_format": "html",
       "requires_auth": false,
       "metadata_standard": "custom_hierarchical"
+    },
+    {
+      "id": "generic_llm",
+      "name": "범용 LLM 파서 (모든 URL)",
+      "country": null,
+      "fetcher": "generic_llm_fetcher",
+      "mapper": "generic_llm_mapper",
+      "access_method": "scraping+llm",
+      "base_url": null,
+      "response_format": "markdown",
+      "requires_auth": false,
+      "metadata_standard": null,
+      "note": "등록된 파서가 없는 모든 URL의 폴백. markdown.new로 변환 후 LLM 추출."
     },
     {
       "id": "manual",
@@ -963,18 +988,18 @@ NDL에서:     title ✓, creator ✓, edition_type ✗, reading ✓
 ### 8.4 프롬프트 관리
 
 ```
-resources/prompts/
-  ├─ translation/
-  │   ├─ ko_modern_literal_v1.md
-  │   ├─ ko_modern_literary_v1.md
-  │   └─ en_academic_v1.md
-  ├─ punctuation/
-  ├─ hyeonto/
-  ├─ layout_analysis/           # ← NEW
-  │   ├─ classical_chinese_v1.md
-  │   └─ ...
-  └─ annotation/
+src/llm/prompts/                    # YAML 기반 프롬프트 (구현)
+  ├─ layout_analysis.yaml           # L3 레이아웃 분석
+  ├─ punctuation.yaml               # L5 표점 자동 생성
+  ├─ translation.yaml               # L6 번역 생성
+  ├─ annotation.yaml                # L7 주석 자동 태깅
+  ├─ annotation_dict_stage1.yaml    # L7 사전 1단계: 원문→주석
+  ├─ annotation_dict_stage2.yaml    # L7 사전 2단계: 번역→보강
+  └─ annotation_dict_stage3.yaml    # L7 사전 3단계: 통합/일괄
 ```
+
+**번역↔주석 양방향 연동**: 번역 생성 시 사전형 주석을 참고 컨텍스트로 포함하고,
+번역 변경 시 `translation_snapshot` 비교로 주석 갱신 필요 여부를 감지한다.
 
 ---
 
@@ -1012,6 +1037,40 @@ resources/prompts/
 
 **3층(레이아웃 분석) 반영**: 좌측에 "블록: 본문(大字) ✓"가 표시되고,
 우측의 현토·번역이 본문/주석으로 구분되어 보인다.
+
+---
+
+### 9.2 JSON 스키마 파일 일람
+
+`schemas/` 디렉토리에 모든 데이터 구조를 JSON Schema로 정의한다.
+상세 설명은 `schemas/README.md` 참조.
+
+| 디렉토리 | 스키마 | 버전/상태 | 설명 |
+|----------|--------|----------|------|
+| `source_repo/` | `manifest.schema.json` | — | 문헌 매니페스트 |
+| | `bibliography.schema.json` | — | 서지정보 |
+| | `layout_page.schema.json` | — | L3 레이아웃 (LayoutBlock) |
+| | `ocr_page.schema.json` | — | L2 OCR (OcrResult) |
+| | `corrections.schema.json` | — | L4 교정 기록 |
+| | `dependency.schema.json` | — | 해석→원본 의존 추적 |
+| | `interp_manifest.schema.json` | — | 해석 저장소 매니페스트 |
+| `interp/` | `punctuation_page.schema.json` | v1 | L5 표점(句讀) |
+| | `hyeonto_page.schema.json` | v1 | L5 현토(懸吐) |
+| | `translation_page.schema.json` | **v1.1** | L6 번역 + `annotation_context` |
+| | `annotation_page.schema.json` | **v2** | L7 주석 + 사전형(DictionaryEntry) + 4단계 이력 |
+| | `citation_mark_page.schema.json` | v1 | L7 인용 마크 |
+| `core/` | `work.schema.json` | — | 코어: 작품 |
+| | `text_block.schema.json` | — | 코어: TextBlock |
+| | `tag.schema.json` | — | 코어: Tag |
+| | `concept.schema.json` | — | 코어: Concept |
+| | `agent.schema.json` | — | 코어: Agent |
+| | `relation.schema.json` | — | 코어: Relation |
+| — | `exchange.schema.json` | v1 | 교환 형식 (스냅샷) |
+
+**주요 스키마 변경 이력:**
+- `annotation_page` v1→v2 (D-019): `dictionary`, `current_stage`, `generation_history`, `source_text_snapshot`, `translation_snapshot` 추가
+- `translation_page` v1→v1.1 (D-019): `annotation_context` (`used_annotation_ids`, `reference_dict_filenames`) 추가
+- `citation_mark_page` 신규 (D-020): 인용 마크 + `citation_override`
 
 ---
 
@@ -1062,21 +1121,26 @@ monggu_interp_kim/                # = 별도 git repository
 ├── .git/
 ├── dependency.json               # 원본 참조 + 파일 단위 추적
 ├── manifest.json
-├── L5_reading/                   # 5층
+├── L5_reading/                   # 5층: 끊어읽기·표점·현토
 │   ├── main_text/                # 본문 끊어읽기
-│   │   └── page_001.json
+│   │   ├── page_001_punctuation.json  # 표점
+│   │   └── page_001_hyeonto.json      # 현토
 │   └── annotation/               # 주석 끊어읽기 (선택)
 │       └── page_001.json
-├── L6_translation/               # 6층
-│   ├── main_text/
-│   │   ├── ko_modern.txt
-│   │   └── en_academic.txt
-│   └── annotation/
-│       └── ko_modern.txt
-├── L7_annotation/                # 7층
-│   └── annotations.json
+├── L6_translation/               # 6층: 번역 (문장 단위)
+│   └── main_text/
+│       └── vol1_page_001_translation.json
+├── L7_annotation/                # 7층: 주석 + 사전형 주석
+│   └── main_text/
+│       └── vol1_page_001_annotation.json  # dictionary 필드 포함
 ├── L8_external/                  # 8층
 │   └── external_links.json
+├── citation_marks/               # 인용 마크 (연구 도구, 해석 레이어와 별도)
+│   └── vol1_page_001_citation_marks.json
+├── reference_dicts/              # 참조 사전 (다른 해석에서 가져온 것)
+│   └── imported_dict_001.json
+├── notes/                        # 자유 연구 노트
+│   └── vol1_page_001_notes.json
 └── llm_logs/
     └── draft_001.json
 ```
@@ -1095,11 +1159,19 @@ library/
 │   ├── monggu_llm_claude/
 │   └── cheonjamun_interp_kim/
 ├── resources/
-│   ├── block_types.json          # 블록 타입 어휘 정의 (NEW)
+│   ├── block_types.json          # 블록 타입 어휘 정의
 │   ├── variant_chars.json        # 이체자 테이블
+│   ├── annotation_types.json     # 사용자 정의 주석 유형
+│   ├── punctuation_presets.json  # 표점 프리셋 (10종)
 │   ├── ocr_profiles/
 │   └── prompts/
+├── .trash/                       # 휴지통 (D-023)
+│   ├── documents/                # 삭제된 문헌 ({timestamp}_{doc_id}/)
+│   └── interpretations/          # 삭제된 해석 ({timestamp}_{interp_id}/)
 └── .library_config.json
+
+~/.classical-text-platform/       # 앱 전역 설정 (서고 외부, D-022)
+└── config.json                   # recent_libraries 등
 ```
 
 ---
@@ -1216,66 +1288,72 @@ library/
 전체 앱을 한꺼번에 만들지 않는다.
 각 Milestone이 **독립적으로 쓸 수 있는 도구**를 만들어낸다.
 
-### Phase 1: 원본 저장소 도구 (1~4층)
+### Phase 1: 원본 저장소 도구 (1~4층) — ✓ 완료
 
-**M1.1 서고 구조 초기화**
+**M1.1 서고 구조 초기화** ✓
 - `init_library.py`: 서고 디렉토리 구조 생성
 - `add_document.py`: 이미지/PDF를 서고에 등록 + git init + git-lfs 설정
 - manifest (다권본 parts 포함) 자동 생성
-- **이것만으로**: 스캔본을 체계적으로 정리할 수 있다
 
-**M1.2 서지정보 파싱 (파서 아키텍처)**
+**M1.2 서지정보 파싱 (파서 아키텍처)** ✓
 - 파서 등록 구조 구현 (registry.json)
-- 1차 파서: KORCIS (MARC/XML), NDL Search (DC-NDL/XML), 일본 국립공문서관 (HTML)
-- 각 파서: fetcher (추출) + mapper (매핑) 2단계
-- URL 또는 저장된 HTML → bibliography.json 자동 생성
+- 구현된 파서: KORCIS, NDL Search, 일본 국립공문서관, **범용 LLM 파서** (D-021)
+- 범용 LLM 파서: markdown.new + LLM으로 모든 URL 지원
+- 에셋 자동 감지 + 다운로드 (PDF/이미지 번들)
 - raw_metadata 보존, _mapping_info 기록
-- 수동 입력 폼 (파서 없는 소스용)
-- **이것만으로**: 다운받은 파일에 서지정보를 붙일 수 있다
 
-**M1.3 OCR 파이프라인**
-- 엔진 1개로 시작
+**M1.3 OCR 파이프라인** ✓
+- PaddleOCR 기본 엔진 (paddlepaddle 3.3.0 + paddleocr 2.10.0)
+- LLM Vision 엔진 (Ollama/Gemini/OpenAI)
 - 표준 JSON 출력 (글자 + bbox + confidence)
-- **이것만으로**: 스캔 이미지에서 텍스트를 뽑을 수 있다
 
-**M1.4 레이아웃 분석 도구 (NEW)**
+**M1.4 레이아웃 분석 도구** ✓
 - LLM에게 페이지 이미지를 보내 블록 구분
-- block_type 어휘 적용
+- block_type 12종 어휘 적용
 - 사람 검토 인터페이스
-- **이것만으로**: 본문과 주석을 구분할 수 있다
 
-**M1.5 정렬 엔진**
-- OCR 결과 ↔ 기존 해독 텍스트 정렬
-- 매핑 정밀도 스펙트럼
-- **이것만으로**: 기존 텍스트의 오류를 찾을 수 있다
+**M1.5 정렬 엔진** ✓
+- OCR 결과 ↔ 확정 텍스트 글자 단위 정렬 (D-012)
+- 이체자 사전 보정
 
-**M1.6 교정 뷰어 (HTML)**
+**M1.6 교정 뷰어 (HTML)** ✓
 - 이미지 + 텍스트 나란히 보기
 - 불일치 하이라이팅
 - 교정 유형 선택 (ocr_error / variant_reading 등)
 - 교정 + git commit 연동
-- **이것만으로**: 이미지를 보면서 텍스트를 교정할 수 있다
 
-### Phase 2: 저장소 연결 + LLM
+### Phase 2: 저장소 연결 + LLM — ✓ 완료
 
-**M2.1 해석 저장소 구조 + dependency.json**
-**M2.2 파일 단위 변경 감지 (access-time check)**
-**M2.3 LLM 협업 인터페이스 (draft → review → commit)**
-**M2.4 분할 화면 (좌: 원본, 우: 해석, 본문/주석 구분)**
-**M2.5 사다리형 git 그래프**
+**M2.1 해석 저장소 구조 + dependency.json** ✓
+**M2.2 파일 단위 변경 감지 (access-time check)** ✓
+**M2.3 LLM 협업 인터페이스 (draft → review → commit)** ✓ (D-010)
+**M2.4 분할 화면 (좌: 원본, 우: 해석, 본문/주석 구분)** ✓
+**M2.5 사다리형 git 그래프** ✓ (D-017)
 
-### Phase 3: 해석 도구 (5~8층) — 별도 설계
+### Phase 3: 해석 도구 (5~8층) — 대부분 완료
 
-**M3.1 끊어읽기·표점·현토 (5층)**
-**M3.2 번역 워크플로우 + LLM (6층)**
-**M3.3 주석/사전 연동 (7층)**
-**M3.4 외부연계 (8층)**
+**M3.1 끊어읽기·표점·현토 (5층)** ✓ (D-014)
+**M3.2 번역 워크플로우 + LLM (6층)** ✓ (D-015)
+- 문장 단위 번역, SourceRef 추적, 현토 스냅샷
+- LLM 번역 생성 + 사전형 주석 참조 기능 추가
+**M3.3 주석/사전 연동 (7층)** ✓ (D-016, D-019)
+- 주석 태깅 + 사전형 주석 (dictionary 필드, 4단계 LLM 누적 생성)
+- 사전 내보내기/가져오기/참조 매칭
+- 인용 마크 시스템 (D-020)
+**M3.4 외부연계 (8층)** — 미구현
 
-### Phase 4: 인프라
+### Phase 4: 인프라 — 진행 중
 
-**M4.1 서지정보 소스 추가 (NDL, 한국 국회도서관 등)**
-**M4.2 OCR 엔진 추가**
-**M4.3 웹 인터페이스**
+**M4.1 서지정보 소스 추가** ✓ 범용 LLM 파서로 모든 URL 지원
+**M4.2 OCR 엔진 추가** ✓ PaddleOCR + LLM Vision
+**M4.3 웹 인터페이스** ✓ FastAPI + vanilla JS (빌드 도구 없음)
+
+### Phase 5: 서고 관리 — ✓ 완료 (2026-02-20 추가)
+
+**M5.1 GUI에서 서고 전환/생성** ✓ (D-022)
+**M5.2 최근 서고 목록 + 자동 선택** ✓ (D-022)
+**M5.3 휴지통 시스템** ✓ (D-023)
+**M5.4 JSON 스냅샷 Export/Import** ✓ (D-018)
 
 ---
 
@@ -1283,33 +1361,40 @@ library/
 
 ### 원본 저장소
 
-1. JSON 스키마 각 필드의 상세 정의 (타입, 필수/선택, 제약)
-2. 서지정보 파싱 상세 (한국고문헌종합목록 + 일본 공문서관 페이지 구조)
-3. OCR 엔진 비교 평가
+1. ~~JSON 스키마 각 필드의 상세 정의~~ → 완료 (jsonschema 검증)
+2. ~~서지정보 파싱 상세~~ → 완료 (4개 파서 + 범용 LLM 파서)
+3. OCR 엔진 비교 평가 (PaddleOCR vs LLM Vision 벤치마크)
 4. git-lfs 설정 상세 (어떤 확장자를 LFS로 관리할지)
 5. block_type 어휘 확장 (문헌 유형별 필요한 type)
 
 ### LLM 협업
 
-6. LLM 호출 아키텍처 (클라우드 API)
-7. 프롬프트 설계 원칙 (층별, 작업별)
-8. 비용 관리
+6. ~~LLM 호출 아키텍처~~ → 완료 (D-010, 4단 폴백)
+7. ~~프롬프트 설계 원칙~~ → 완료 (층별 YAML 프롬프트)
+8. ~~비용 관리~~ → 완료 (UsageTracker + 월별 예산)
 
 ### 저장소 연결
 
-9. 사다리형 git 그래프 구현 (시각화 라이브러리)
+9. ~~사다리형 git 그래프 구현~~ → 완료 (D-017)
 10. git 호스팅 선정
 
 ### 해석 저장소
 
-11. 5~8층 데이터 모델 상세
-12. 본문/주석 번역의 연결 구조 (주석이 본문의 어느 부분에 대한 것인지)
+11. ~~5~8층 데이터 모델 상세~~ → 완료 (D-014~D-016, D-019~D-020)
+12. ~~본문/주석 번역의 연결 구조~~ → 완료 (D-015 SourceRef)
 13. 협업 모델 (다수 연구자 참여 시)
+14. L8(외부연계) 설계 상세
+
+### 배포·설치
+
+15. Google Drive + .git 충돌 회피 가이드
+16. 비개발자용 Git 번들링 또는 Git-free 모드
+17. HWP 가져오기/내보내기 (Part C 계획 수립됨, 미구현)
 
 ### 전체
 
-14. 라이선스/공개 범위
-15. **프로젝트 이름**
+18. 라이선스/공개 범위
+19. **프로젝트 이름**
 
 ---
 
@@ -1342,6 +1427,10 @@ library/
     - bibliography.json 확장 (독음, 별제, 기여자, 시스템ID)
     - 본문/주석 구분된 해석 저장소 구조
     - git-lfs 필수 확정
+20. → 해석 도구 전층 구현: L5 표점/현토, L6 번역, L7 주석 + 사전형 주석 + 인용 마크
+21. → 범용 에셋 감지 (모든 URL에서 PDF/이미지 자동 다운로드)
+22. → GUI 서고 관리 (런타임 전환, 최근 목록, 새 서고 생성)
+23. → 휴지통 시스템 (소프트 삭제 + 복원)
 
 ## 부록 B: 핵심 설계 결정 요약
 
@@ -1364,6 +1453,11 @@ library/
 | 15 | 교환 형식 | 단일 JSON 스냅샷 | 내보내기/가져오기용, 내부 형식과 별도 |
 | 16 | 서지 파서 | 플러그인 (fetcher + mapper) | 소스마다 구조가 다름, 새 소스 추가 시 기존 코드 수정 없음 |
 | 17 | 매핑 원칙 | 모든 필드 nullable + raw 보존 | 소스에 없는 필드는 비우고, 원본은 항상 유지 |
+| 18 | 주석 확장 | 기존 태깅 + dictionary 필드 | 별도 엔티티보다 점진적 확장이 효율적 (D-019) |
+| 19 | 인용 마크 | 해석 레이어와 별도 디렉토리 | 연구 도구와 해석 데이터의 성격이 다름 (D-020) |
+| 20 | 에셋 감지 | 범용 유틸리티 (파서 독립) | 모든 URL에서 PDF/이미지 자동 다운로드 (D-021) |
+| 21 | 서고 관리 | 앱 설정 + GUI 전환 | 런타임 서고 전환, CLI 인자 선택화 (D-022) |
+| 22 | 삭제 정책 | 서고 내 .trash/ 소프트 삭제 | OS 독립적 복원 가능 (D-023) |
 
 ## 부록 C: 《蒙求》 워크스루 결과
 

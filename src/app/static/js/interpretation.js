@@ -180,22 +180,68 @@ async function _loadInterpretationList() {
           <span class="interp-type-badge ${typeClass}">${typeLabel}</span>
           <span class="interp-list-title">${item.title || item.interpretation_id}</span>
           <span class="interp-list-source">${item.source_document_id}</span>
+          <button class="interp-delete-btn" title="해석 저장소 삭제 (휴지통 이동)">×</button>
         </div>
       `;
     }).join("");
 
     // 클릭 이벤트
     container.querySelectorAll(".interp-list-item").forEach((el) => {
-      el.addEventListener("click", () => {
+      el.addEventListener("click", (e) => {
+        // 삭제 버튼 클릭은 무시 (삭제 버튼에 자체 핸들러가 있음)
+        if (e.target.classList.contains("interp-delete-btn")) return;
         _selectInterpretation(el.dataset.interpId);
         // 하이라이트
         container.querySelectorAll(".interp-list-item").forEach((i) => i.classList.remove("active"));
         el.classList.add("active");
       });
+
+      // 삭제 버튼 이벤트
+      const delBtn = el.querySelector(".interp-delete-btn");
+      if (delBtn) {
+        delBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const interpId = el.dataset.interpId;
+          const title = el.querySelector(".interp-list-title")?.textContent || interpId;
+          _trashInterpretation(interpId, title);
+        });
+      }
     });
   } catch (err) {
     console.error("해석 저장소 목록 로드 실패:", err);
     container.innerHTML = '<div class="placeholder">목록을 불러올 수 없습니다</div>';
+  }
+}
+
+
+/**
+ * 해석 저장소를 휴지통으로 이동한다.
+ *
+ * 왜 이렇게 하는가:
+ *   - 영구 삭제 대신 서고 내 .trash/ 폴더로 이동하여 복원 가능하게 한다.
+ */
+async function _trashInterpretation(interpId, interpTitle) {
+  if (!confirm(`"${interpTitle}" 해석 저장소를 삭제(휴지통 이동)하시겠습니까?`)) return;
+
+  try {
+    const res = await fetch(`/api/interpretations/${interpId}`, { method: "DELETE" });
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert(`삭제 실패: ${data.error || "알 수 없는 오류"}`);
+      return;
+    }
+
+    // 현재 선택된 해석 저장소가 삭제된 경우 상태 초기화
+    if (interpState.interpId === interpId) {
+      interpState.interpId = null;
+      interpState.interpInfo = null;
+    }
+
+    // 목록 새로고침
+    _loadInterpretationList();
+  } catch (err) {
+    alert(`삭제 중 오류: ${err.message}`);
   }
 }
 

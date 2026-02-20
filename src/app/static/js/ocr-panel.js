@@ -113,11 +113,12 @@ function _populateEngineSelect() {
     select.appendChild(opt);
   }
 
-  // 엔진이 1개뿐이면 엔진 선택 행을 숨긴다 (선택 의미 없음)
+  // 등록된 엔진이 2개 이상이면 엔진 선택 행을 표시한다.
+  // available 여부와 무관하게 표시 — "사용 불가" 엔진도 보여줘야
+  // 사용자가 설치 가능한 엔진이 있다는 것을 알 수 있다.
   const engineRow = document.getElementById("ocr-engine-row");
   if (engineRow) {
-    const available = ocrState.engines.filter(e => e.available);
-    engineRow.style.display = available.length <= 1 ? "none" : "";
+    engineRow.style.display = ocrState.engines.length <= 1 ? "none" : "";
   }
 
   // LLM 모델 행 표시/숨김 갱신

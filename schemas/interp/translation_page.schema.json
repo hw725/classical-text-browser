@@ -69,6 +69,14 @@
         "reviewed_at": {
           "type": ["string", "null"],
           "description": "검토 일시. ISO 8601."
+        },
+        "annotation_context": {
+          "description": "번역 시 참조한 사전형 주석 정보. null이면 주석 참조 없이 번역.",
+          "oneOf": [
+            { "$ref": "#/$defs/AnnotationContext" },
+            { "type": "null" }
+          ],
+          "default": null
         }
       }
     },
@@ -91,6 +99,25 @@
           "type": "integer",
           "minimum": 0,
           "description": "끝 글자 인덱스."
+        }
+      }
+    },
+    "AnnotationContext": {
+      "type": "object",
+      "description": "번역 시 참조한 사전형 주석 맥락. 어떤 주석을 참고했는지 추적한다.",
+      "required": ["used_annotation_ids"],
+      "additionalProperties": false,
+      "properties": {
+        "used_annotation_ids": {
+          "type": "array",
+          "description": "참조한 주석 ID 목록. 예: [\"ann_001\", \"ann_002\"]",
+          "items": { "type": "string" }
+        },
+        "reference_dict_filenames": {
+          "type": "array",
+          "description": "참조한 참조 사전 파일명 목록. 없으면 빈 배열.",
+          "items": { "type": "string" },
+          "default": []
         }
       }
     },

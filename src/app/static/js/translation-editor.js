@@ -38,6 +38,7 @@ const transState = {
 function initTranslationEditor() {
   _bindTransEvents();
   // (LLM 모델 목록은 workspace.js의 _loadAllLlmModelSelects()가 일괄 로드)
+  initRefDictUI();
 }
 
 function _bindTransEvents() {
@@ -664,5 +665,233 @@ async function _saveAllTranslations() {
   if (statusEl) {
     statusEl.textContent = `${success}건 저장 완료`;
     setTimeout(() => { statusEl.textContent = ""; }, 2000);
+  }
+}
+
+
+/* ────────────────────────────────────
+   참조 사전 매칭 (Reference Dictionary)
+   ──────────────────────────────────── */
+
+/**
+ * 참조 사전 상태.
+ */
+const refDictState = {
+  enabled: false,       // 참조 사전 사용 토글
+  matches: [],          // 매칭 결과
+  selectedHeadwords: new Set(), // 사용자가 선택한 headword
+};
+
+
+function initRefDictUI() {
+  /* 참조 사전 UI 초기화. initTranslationEditor() 이후 호출. */
+  const toggleBtn = document.getElementById("trans-refdict-toggle");
+  if (toggleBtn) toggleBtn.addEventListener("click", _toggleRefDict);
+
+  const applyBtn = document.getElementById("trans-refdict-apply-btn");
+  if (applyBtn) applyBtn.addEventListener("click", _applyRefDictSelection);
+
+  const selectAllBtn = document.getElementById("trans-refdict-select-all-btn");
+  if (selectAllBtn) selectAllBtn.addEventListener("click", _selectAllRefDict);
+
+  const manageDictsBtn = document.getElementById("trans-refdict-manage-btn");
+  if (manageDictsBtn) manageDictsBtn.addEventListener("click", _showRefDictManager);
+}
+
+
+function _toggleRefDict() {
+  refDictState.enabled = !refDictState.enabled;
+  const btn = document.getElementById("trans-refdict-toggle");
+  if (btn) {
+    btn.textContent = refDictState.enabled ? "참조 사전 OFF" : "참조 사전 ON";
+    btn.classList.toggle("active", refDictState.enabled);
+  }
+
+  const panel = document.getElementById("trans-refdict-panel");
+  if (panel) panel.style.display = refDictState.enabled ? "" : "none";
+
+  if (refDictState.enabled && transState.blockId) {
+    _loadRefDictMatches();
+  }
+}
+
+
+async function _loadRefDictMatches() {
+  /* 현재 블록의 원문에서 참조 사전 매칭을 수행한다. */
+  const is = typeof interpState !== "undefined" ? interpState : null;
+  if (!is || !is.interpId) return;
+
+  const blocks = [{ block_id: transState.blockId, text: transState.originalText }];
+  if (!blocks[0].text) return;
+
+  try {
+    const resp = await fetch(`/api/interpretations/${is.interpId}/reference-dicts/match`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ blocks }),
+    });
+
+    if (!resp.ok) return;
+
+    const data = await resp.json();
+    refDictState.matches = data.matches || [];
+    // 기본적으로 전체 선택
+    refDictState.selectedHeadwords = new Set(
+      refDictState.matches.map(m => `${m.headword}|${m.source_dict}`)
+    );
+    _renderRefDictMatches();
+  } catch (e) {
+    console.error("참조 사전 매칭 실패:", e);
+  }
+}
+
+
+function _renderRefDictMatches() {
+  /* 매칭 결과를 리스트로 표시한다. */
+  const container = document.getElementById("trans-refdict-list");
+  if (!container) return;
+
+  if (refDictState.matches.length === 0) {
+    container.innerHTML = '<div class="placeholder">매칭된 항목이 없습니다.</div>';
+    return;
+  }
+
+  container.innerHTML = "";
+  for (const m of refDictState.matches) {
+    const key = `${m.headword}|${m.source_dict}`;
+    const checked = refDictState.selectedHeadwords.has(key) ? "checked" : "";
+    const reading = m.headword_reading ? ` (${m.headword_reading})` : "";
+    const meaning = m.dictionary_meaning || "";
+    const source = m.source_document || m.source_dict || "";
+
+    const item = document.createElement("label");
+    item.className = "trans-refdict-item";
+    item.innerHTML = `
+      <input type="checkbox" data-key="${key}" ${checked}>
+      <span class="trans-refdict-hw">${m.headword}${reading}</span>
+      <span class="trans-refdict-type">[${m.type || ""}]</span>
+      <span class="trans-refdict-meaning">${meaning.slice(0, 60)}${meaning.length > 60 ? "…" : ""}</span>
+      <span class="trans-refdict-source">${source}</span>
+    `;
+
+    const checkbox = item.querySelector("input");
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) {
+        refDictState.selectedHeadwords.add(key);
+      } else {
+        refDictState.selectedHeadwords.delete(key);
+      }
+    });
+
+    container.appendChild(item);
+  }
+}
+
+
+function _selectAllRefDict() {
+  const allSelected = refDictState.selectedHeadwords.size === refDictState.matches.length;
+  if (allSelected) {
+    refDictState.selectedHeadwords.clear();
+  } else {
+    for (const m of refDictState.matches) {
+      refDictState.selectedHeadwords.add(`${m.headword}|${m.source_dict}`);
+    }
+  }
+  _renderRefDictMatches();
+}
+
+
+function _applyRefDictSelection() {
+  /* 선택된 매칭 항목을 번역 참고 텍스트로 생성하여 다음 AI 번역에 반영. */
+  const selected = refDictState.matches.filter(m =>
+    refDictState.selectedHeadwords.has(`${m.headword}|${m.source_dict}`)
+  );
+
+  if (selected.length === 0) {
+    alert("선택된 항목이 없습니다.");
+    return;
+  }
+
+  // 참고 텍스트 생성 (서버의 format_for_translation_context와 동일한 형식)
+  let lines = ["[참고 사전]"];
+  for (const m of selected) {
+    let line = `- ${m.headword}`;
+    if (m.headword_reading) line += `(${m.headword_reading})`;
+    if (m.type) line += ` [${m.type}]`;
+    line += `: ${m.dictionary_meaning || ""}`;
+    if (m.contextual_meaning) line += ` / 문맥: ${m.contextual_meaning}`;
+    lines.push(line);
+  }
+
+  // transState에 참조 사전 컨텍스트 저장 (AI 번역 시 사용)
+  transState._refDictContext = lines.join("\n");
+
+  const statusEl = document.getElementById("trans-save-status");
+  if (statusEl) {
+    statusEl.textContent = `참조 사전 ${selected.length}개 항목 적용`;
+    setTimeout(() => { statusEl.textContent = ""; }, 2000);
+  }
+}
+
+
+async function _showRefDictManager() {
+  /* 참조 사전 관리 다이얼로그: 목록 조회 + 등록 + 삭제. */
+  const is = typeof interpState !== "undefined" ? interpState : null;
+  if (!is || !is.interpId) return;
+
+  try {
+    const resp = await fetch(`/api/interpretations/${is.interpId}/reference-dicts`);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const dicts = data.reference_dicts || [];
+
+    let msg = "등록된 참조 사전:\n";
+    if (dicts.length === 0) {
+      msg += "(없음)\n";
+    } else {
+      for (const d of dicts) {
+        msg += `  - ${d.filename} (${d.source_document_title}, ${d.total_entries}개 항목)\n`;
+      }
+    }
+    msg += "\n새 사전을 등록하려면 '등록'을, 기존 사전을 삭제하려면 '삭제'를 입력하세요.\n(취소하려면 빈칸)";
+
+    const action = prompt(msg);
+    if (!action) return;
+
+    if (action === "등록") {
+      // 파일 선택으로 등록
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = ".json";
+      input.addEventListener("change", async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const text = await file.text();
+        const dictData = JSON.parse(text);
+
+        const regResp = await fetch(`/api/interpretations/${is.interpId}/reference-dicts`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dictionary_data: dictData }),
+        });
+        if (regResp.ok) {
+          const result = await regResp.json();
+          alert(`참조 사전 등록 완료: ${result.filename}`);
+        }
+      });
+      input.click();
+    } else if (action === "삭제") {
+      const filename = prompt("삭제할 파일명:");
+      if (!filename) return;
+
+      const delResp = await fetch(`/api/interpretations/${is.interpId}/reference-dicts/${filename}`, {
+        method: "DELETE",
+      });
+      if (delResp.ok || delResp.status === 204) {
+        alert("참조 사전 삭제 완료");
+      }
+    }
+  } catch (e) {
+    console.error("참조 사전 관리 실패:", e);
   }
 }

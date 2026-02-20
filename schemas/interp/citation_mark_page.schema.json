@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "citation_mark_page.schema.json",
+  "title": "인용 마크 (Citation Marks)",
+  "description": "연구자가 논문 인용을 위해 마크업한 텍스트 구절 목록. 페이지 단위로 저장.",
+  "type": "object",
+  "required": ["part_id", "page_number", "marks"],
+  "additionalProperties": false,
+  "properties": {
+    "part_id": {
+      "type": "string",
+      "description": "권 식별자. 예: vol1, main"
+    },
+    "page_number": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "페이지 번호 (1부터 시작)."
+    },
+    "marks": {
+      "type": "array",
+      "description": "인용 마크 목록.",
+      "items": { "$ref": "#/$defs/CitationMark" }
+    }
+  },
+  "$defs": {
+    "CitationMark": {
+      "type": "object",
+      "description": "개별 인용 마크. 원문 또는 번역에서 마크된 텍스트 범위.",
+      "required": ["id", "source", "marked_from", "source_text_snapshot", "created_at", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "인용 마크 고유 ID. 예: cite_a1b2c3"
+        },
+        "source": {
+          "$ref": "#/$defs/SourceRange",
+          "description": "원문 범위 참조. L4 텍스트의 블록 ID + 글자 범위."
+        },
+        "marked_from": {
+          "type": "string",
+          "enum": ["original", "translation"],
+          "description": "마크한 위치. original=원문에서, translation=번역에서."
+        },
+        "source_text_snapshot": {
+          "type": "string",
+          "description": "마크 시점의 원문 스냅샷. L4 변경 감지용."
+        },
+        "label": {
+          "type": ["string", "null"],
+          "description": "연구자의 메모. 왜 이 구절을 인용하려 하는지.",
+          "default": null
+        },
+        "tags": {
+          "type": "array",
+          "description": "분류 태그. 예: [\"서론\", \"핵심논거\"]",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "citation_override": {
+          "description": "자동 서지정보로 부족할 때 연구자가 직접 입력하는 인용 메타데이터.",
+          "oneOf": [
+            { "$ref": "#/$defs/CitationOverride" },
+            { "type": "null" }
+          ],
+          "default": null
+        },
+        "created_at": {
+          "type": "string",
+          "description": "생성 일시. ISO 8601."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "used", "archived"],
+          "description": "상태. active=활성, used=내보내기 완료, archived=보관."
+        }
+      }
+    },
+    "SourceRange": {
+      "type": "object",
+      "description": "원문 범위 참조. 블록 ID + 글자 인덱스 (0-based inclusive).",
+      "required": ["block_id", "start", "end"],
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "type": "string",
+          "description": "대상 블록 ID. 예: p01_b01"
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "시작 글자 인덱스 (0-based, inclusive)."
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "끝 글자 인덱스 (0-based, inclusive)."
+        }
+      }
+    },
+    "CitationOverride": {
+      "type": "object",
+      "description": "인용 서지정보 수동 입력 필드. 자동 매핑이 불충분할 때 사용.",
+      "additionalProperties": false,
+      "properties": {
+        "work_title": {
+          "type": ["string", "null"],
+          "description": "작품 제목. 예: 答巡使書"
+        },
+        "page_ref": {
+          "type": ["string", "null"],
+          "description": "관련 페이지. 예: 25면"
+        },
+        "supplementary": {
+          "type": ["string", "null"],
+          "description": "부가 정보. 예: 韓國文集叢刊252집, 48면"
+        }
+      }
+    }
+  }
+}

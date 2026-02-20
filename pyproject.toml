@@ -27,6 +27,8 @@ dependencies = [
     "python-hwpx>=0.1.0",
     "olefile>=0.47",
     "python-multipart>=0.0.22",
+    "paddlepaddle>=3.3.0",
+    "paddleocr>=2.10.0",
 ]
 
 # PaddleOCR 선택 설치: uv add --optional paddleocr paddlepaddle paddleocr

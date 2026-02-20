@@ -109,7 +109,18 @@
         <div class="section-header">서고 설정</div>
         <div class="settings-group">
           <div class="settings-label">서고 경로</div>
-          <div class="settings-value" id="settings-library-path">로딩 중...</div>
+          <div class="settings-library-row">
+            <input type="text" id="settings-library-input"
+                   class="settings-library-input"
+                   placeholder="서고 경로 입력..." readonly>
+            <button class="btn-sm" id="btn-edit-library" title="경로 편집">편집</button>
+          </div>
+          <div class="settings-library-actions" id="library-actions" style="display:none;">
+            <button class="btn-sm btn-primary" id="btn-switch-library">변경</button>
+            <button class="btn-sm" id="btn-cancel-library">취소</button>
+            <button class="btn-sm" id="btn-new-library">새 서고</button>
+          </div>
+          <div id="recent-libraries" class="recent-library-list"></div>
         </div>
 
         <div class="section-header" style="margin-top:12px;">원본 저장소</div>
@@ -141,6 +152,7 @@
       <div class="mode-tab" data-mode="hyeonto">현토</div>
       <div class="mode-tab" data-mode="translation">번역</div>
       <div class="mode-tab" data-mode="annotation">주석</div>
+      <div class="mode-tab" data-mode="citation">인용</div>
       <div class="mode-tab" data-mode="interpretation">교차 뷰어</div>
     </div>
 
@@ -626,6 +638,24 @@
           <span id="trans-save-status" class="text-save-status"></span>
         </div>
 
+        <!-- 참조 사전 도구 바 -->
+        <div class="trans-refdict-toolbar">
+          <button id="trans-refdict-toggle" class="text-btn" title="참조 사전 사용 ON/OFF">참조 사전 ON</button>
+          <button id="trans-refdict-manage-btn" class="text-btn" title="참조 사전 관리">사전 관리</button>
+        </div>
+
+        <!-- 참조 사전 매칭 패널 (토글 시 표시) -->
+        <div id="trans-refdict-panel" class="trans-refdict-panel" style="display:none;">
+          <div class="props-section-title">참조 사전 매칭</div>
+          <div id="trans-refdict-list" class="trans-refdict-list">
+            <div class="placeholder">참조 사전을 ON 하면 원문의 매칭 결과가 표시됩니다</div>
+          </div>
+          <div class="trans-refdict-actions">
+            <button id="trans-refdict-select-all-btn" class="text-btn text-btn-sm">전체 선택/해제</button>
+            <button id="trans-refdict-apply-btn" class="text-btn text-btn-primary text-btn-sm">선택 항목 적용</button>
+          </div>
+        </div>
+
         <!-- 원문 + 표점 + 현토 (읽기 전용) -->
         <div class="trans-source-section">
           <div class="props-section-title">원문 (표점 + 현토)</div>
@@ -664,6 +694,21 @@
           <span id="ann-save-status" class="text-save-status"></span>
         </div>
 
+        <!-- 사전형 주석 도구 바 -->
+        <div class="ann-dict-toolbar">
+          <button id="ann-dict-view-toggle" class="text-btn" title="사전 상세 보기/접기">사전 펼치기</button>
+          <div class="text-toolbar-divider"></div>
+          <span class="ann-dict-stage-label">사전 생성:</span>
+          <button id="ann-dict-stage1-btn" class="text-btn text-btn-sm" title="1단계: 원문에서 사전 항목 추출">1단계</button>
+          <button id="ann-dict-stage2-btn" class="text-btn text-btn-sm" title="2단계: 번역으로 보강">2단계</button>
+          <button id="ann-dict-stage3-btn" class="text-btn text-btn-sm" title="3단계: 최종 통합">3단계</button>
+          <div class="text-toolbar-divider"></div>
+          <button id="ann-dict-batch-btn" class="text-btn" title="전체 문서 일괄 사전 생성 (3단계 직행)">일괄 사전 생성</button>
+          <div class="text-toolbar-divider"></div>
+          <button id="ann-dict-export-btn" class="text-btn" title="사전 내보내기 (JSON)">내보내기</button>
+          <button id="ann-dict-import-btn" class="text-btn" title="사전 가져오기 (JSON)">가져오기</button>
+        </div>
+
         <!-- 원문 (하이라이팅 표시) -->
         <div class="ann-source-section">
           <div class="props-section-title">원문 (<span id="ann-status-summary"></span>)</div>
@@ -698,6 +743,130 @@
               <button id="ann-edit-accept-btn" class="text-btn">승인</button>
               <button id="ann-edit-delete-btn" class="text-btn text-btn-danger">삭제</button>
               <button id="ann-edit-cancel-btn" class="text-btn">닫기</button>
+            </div>
+          </div>
+
+          <!-- 사전 편집 패널 -->
+          <div id="ann-dict-edit-panel" class="ann-dict-edit-panel" style="display:none;">
+            <div class="props-section-title">사전 항목 편집</div>
+            <div class="ann-dict-edit-form">
+              <label>표제어 (한자):
+                <input type="text" id="ann-dict-headword" placeholder="예: 王戎">
+              </label>
+              <label>독음:
+                <input type="text" id="ann-dict-reading" placeholder="예: 왕융">
+              </label>
+              <label>사전적 의미:
+                <textarea id="ann-dict-meaning" rows="2" placeholder="일반적/표준적 정의 (2-3문장)"></textarea>
+              </label>
+              <label>문맥적 의미:
+                <textarea id="ann-dict-ctx-meaning" rows="2" placeholder="이 텍스트에서의 특수한 의미 (1-2문장)"></textarea>
+              </label>
+              <label>출전 (쉼표 구분):
+                <input type="text" id="ann-dict-src-refs" placeholder="예: 晉書, 世說新語">
+              </label>
+              <label>관련어 (쉼표 구분):
+                <input type="text" id="ann-dict-related" placeholder="예: 竹林七賢, 嵇康">
+              </label>
+              <label>메모:
+                <input type="text" id="ann-dict-notes" placeholder="연구자 메모">
+              </label>
+              <div class="ann-edit-actions">
+                <button id="ann-dict-save-btn" class="text-btn text-btn-primary">사전 저장</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 우측 패널: 인용 편집기 (인용 모드에서만 표시) -->
+      <div class="editor-panel editor-right cite-panel" id="cite-panel" style="display:none;">
+        <div class="panel-label">인용 편집기</div>
+
+        <!-- 도구 바 -->
+        <div class="cite-toolbar">
+          <select id="cite-block-select" class="corr-block-filter" title="블록 선택">
+            <option value="">블록 선택</option>
+          </select>
+          <div class="text-toolbar-spacer"></div>
+          <button id="cite-view-toggle" class="text-btn" title="페이지/전체 보기 전환">전체 보기</button>
+          <button id="cite-add-btn" class="text-btn text-btn-primary" title="선택한 텍스트를 인용 마크로 추가">인용 마크</button>
+          <button id="cite-export-btn" class="text-btn" title="선택한 마크를 인용 형식으로 내보내기">내보내기</button>
+          <span id="cite-save-status" class="text-save-status"></span>
+        </div>
+
+        <!-- 원문 (하이라이팅 표시) -->
+        <div class="cite-source-section">
+          <div class="props-section-title">원문</div>
+          <div id="cite-source-text" class="cite-source-text"></div>
+        </div>
+
+        <!-- 인용 마크 목록 -->
+        <div class="cite-list-section">
+          <div class="props-section-title">인용 마크 (<span id="cite-mark-count">0</span>건)</div>
+          <div id="cite-mark-list" class="cite-mark-list">
+            <div class="placeholder">인용 모드: 블록을 선택하면 인용 마크가 표시됩니다</div>
+          </div>
+        </div>
+
+        <!-- 통합 컨텍스트 뷰 (마크 선택 시 표시) -->
+        <div class="cite-context-panel" id="cite-context-panel" style="display:none;">
+          <div class="props-section-title">통합 컨텍스트</div>
+          <div id="cite-ctx-text-changed" class="cite-text-changed-warning" style="display:none;">
+            원문이 마크 이후 변경되었습니다.
+          </div>
+          <div class="cite-context-section">
+            <div class="cite-ctx-label">원문:</div>
+            <div id="cite-ctx-original" class="cite-ctx-content"></div>
+          </div>
+          <div class="cite-context-section">
+            <div class="cite-ctx-label">표점본:</div>
+            <div id="cite-ctx-punctuated" class="cite-ctx-content cite-ctx-punctuated"></div>
+          </div>
+          <div class="cite-context-section">
+            <div class="cite-ctx-label">번역:</div>
+            <div id="cite-ctx-translations" class="cite-ctx-content"></div>
+          </div>
+          <div class="cite-context-section">
+            <div class="cite-ctx-label">주석:</div>
+            <div id="cite-ctx-annotations" class="cite-ctx-content"></div>
+          </div>
+        </div>
+
+        <!-- 내보내기 미리보기 -->
+        <pre id="cite-export-preview" class="cite-export-preview" style="display:none;"></pre>
+
+        <!-- 편집 패널 (마크 선택 시 표시) -->
+        <div class="cite-edit-panel" id="cite-edit-panel" style="display:none;">
+          <div class="props-section-title">인용 마크 편집</div>
+          <div class="cite-edit-form">
+            <label>메모:
+              <input type="text" id="cite-edit-label" placeholder="이 인용의 목적/맥락">
+            </label>
+            <label>태그 (쉼표 구분):
+              <input type="text" id="cite-edit-tags" placeholder="예: 서론, 핵심논거">
+            </label>
+            <label>상태:
+              <select id="cite-edit-status">
+                <option value="active">활성</option>
+                <option value="used">사용됨</option>
+                <option value="archived">보관</option>
+              </select>
+            </label>
+            <div class="props-section-title" style="margin-top:8px;">인용 서지정보 (수동 입력)</div>
+            <label>작품 제목:
+              <input type="text" id="cite-edit-work-title" placeholder="예: 答巡使書">
+            </label>
+            <label>관련 페이지:
+              <input type="text" id="cite-edit-page-ref" placeholder="예: 25면">
+            </label>
+            <label>부가 정보:
+              <input type="text" id="cite-edit-supplementary" placeholder="예: 韓國文集叢刊252집, 48면">
+            </label>
+            <div class="cite-edit-actions">
+              <button id="cite-edit-save-btn" class="text-btn text-btn-primary">저장</button>
+              <button id="cite-edit-delete-btn" class="text-btn text-btn-danger">삭제</button>
+              <button id="cite-edit-close-btn" class="text-btn">닫기</button>
             </div>
           </div>
         </div>
@@ -1299,6 +1468,7 @@
 <script src="/static/js/hyeonto-editor.js"></script>
 <script src="/static/js/translation-editor.js"></script>
 <script src="/static/js/annotation-editor.js"></script>
+<script src="/static/js/citation-editor.js"></script>
 <script src="/static/js/git-graph.js"></script>
 <script src="/static/js/reader-line.js"></script>
 <script src="/static/js/notes-panel.js"></script>

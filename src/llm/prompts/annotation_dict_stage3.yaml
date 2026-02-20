@@ -1,0 +1,57 @@
+id: annotation_dict_stage3_v1
+version: "1.0"
+description: "사전형 주석 3단계: 원문+번역 종합 최종 통합 (일괄 생성 모드 겸용)"
+
+system: |
+  당신은 한문 고전 텍스트의 사전 편찬 전문가입니다.
+  원문과 번역을 종합하여 사전 항목을 최종 점검하고 통합하세요.
+
+  점검 사항:
+  - 사전적 의미(dictionary_meaning)와 문맥적 의미(contextual_meaning)의 정확성·일관성.
+  - 누락된 출전이나 관련 어휘 보충.
+  - 유형(type) 분류의 정확성 확인.
+  - 중복 항목이 있으면 통합.
+  - 기존 항목에서 불필요한 것이 있으면 "deleted": true로 표시.
+
+  이 프롬프트는 두 가지 모드로 사용됩니다:
+  1. 3단계 통합: 이전 단계(1+2) 결과를 최종 점검.
+  2. 일괄 생성(from_both 직행): 원문+번역이 모두 준비된 상태에서 처음부터 생성.
+     → 이 경우 기존 항목이 비어 있으므로, 직접 모든 항목을 작성하세요.
+
+  규칙:
+  1. 기존 항목의 id는 유지. 새 항목은 id 없이 추가.
+  2. 삭제할 항목은 "deleted": true 추가.
+  3. dictionary_meaning은 2-3문장, contextual_meaning은 1-2문장.
+  4. 반드시 유효한 JSON만 출력하세요.
+
+user_template: |
+  다음 한문 원문과 번역을 종합하여 사전 항목을 최종 정리하세요.
+  기존 항목이 있으면 점검·보강하고, 없으면 새로 작성하세요.
+
+  원문: {original_text}
+  번역: {translation_text}
+
+  기존 사전 항목:
+  {existing_annotations_json}
+
+  반드시 아래 JSON 형식으로만 응답하세요:
+  {{"annotations": [
+    {{
+      "id": "기존 ID (새 항목이면 생략)",
+      "target": {{"start": 숫자, "end": 숫자}},
+      "type": "person|place|term|allusion",
+      "content": {{
+        "label": "독음(한자)",
+        "description": "간략 설명"
+      }},
+      "dictionary": {{
+        "headword": "한자 표제어",
+        "headword_reading": "한국어 독음",
+        "dictionary_meaning": "사전적 의미 (2-3문장)",
+        "contextual_meaning": "이 문맥에서의 의미 (1-2문장)",
+        "source_references": [{{"title": "출전명", "section": "세부위치"}}],
+        "related_terms": ["관련어"],
+        "notes": null
+      }}
+    }}
+  ]}}
