@@ -1528,7 +1528,9 @@ async def create_document_from_url(
     bibliography = mapper.map_to_bibliography(raw_data)
     effective_title = title or bibliography.get("title") or "제목없음"
 
-    # 4. 에셋 다운로드 (지원하는 파서만)
+    # 4. 에셋 다운로드
+    # - 전용 에셋 다운로더가 있는 파서 → list_assets() + download_asset()
+    # - 없는 파서지만 selected_assets가 있음 → 폴백 감지 + 범용 다운로더
     downloaded_files: list[Path] = []
     asset_parts_info: list[dict] = []
 
@@ -1583,6 +1585,46 @@ async def create_document_from_url(
                     files=downloaded_files,
                 )
             # TemporaryDirectory가 여기서 자동 정리됨
+        else:
+            doc_path = add_document(library_path, effective_title, doc_id)
+    elif selected_assets:
+        # 폴백: 전용 다운로더가 없지만 preview에서 에셋이 감지된 경우
+        # (NDL/KORCIS 등에서 URL 자체가 PDF일 때)
+        from parsers.asset_detector import detect_direct_download, download_generic_asset
+
+        if progress_callback:
+            progress_callback("에셋 감지 중...", 0, 0)
+        direct = await detect_direct_download(url)
+
+        if direct and direct["asset_id"] in selected_assets:
+            with tempfile.TemporaryDirectory(prefix="ctp_download_") as tmp_dir:
+                tmp_path = Path(tmp_dir)
+                if progress_callback:
+                    progress_callback(
+                        f"다운로드 중: {direct['label']}", 1, 1,
+                    )
+                pdf_path = await download_generic_asset(
+                    direct, tmp_path,
+                    progress_callback=(
+                        lambda cur, total: progress_callback(
+                            f"다운로드 중: {direct['label']}", cur, total,
+                        )
+                    ) if progress_callback else None,
+                )
+                downloaded_files.append(pdf_path)
+                asset_parts_info.append({
+                    "label": direct["label"],
+                    "page_count": direct.get("page_count"),
+                })
+
+                if progress_callback:
+                    progress_callback("문헌 폴더 생성 중...", 0, 0)
+                doc_path = add_document(
+                    library_path,
+                    effective_title,
+                    doc_id,
+                    files=downloaded_files,
+                )
         else:
             doc_path = add_document(library_path, effective_title, doc_id)
     else:

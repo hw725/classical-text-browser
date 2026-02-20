@@ -31,6 +31,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
@@ -152,6 +153,9 @@ class GenericLlmFetcher(BaseFetcher):
     parser_name = "범용 LLM 추출 (markdown.new)"
     api_variant = "markdown_new_llm"
 
+    # 페이지에서 PDF/이미지 링크가 감지되면 다운로드 제공
+    supports_asset_download = True
+
     def __init__(self):
         # LlmRouter는 첫 호출 시 lazy 초기화.
         # 왜 lazy인가: 파서 등록(import 시)에는 서고 경로가 아직 없다.
@@ -207,6 +211,44 @@ class GenericLlmFetcher(BaseFetcher):
             "llm_extracted": llm_result,
             "extraction_model": llm_result.get("_model", "unknown"),
         }
+
+    async def list_assets(self, raw_data: dict[str, Any]) -> list[dict[str, Any]]:
+        """페이지 마크다운에서 PDF/이미지 링크를 자동 감지한다.
+
+        입력:
+            raw_data — fetch_by_url()이 반환한 dict.
+                       markdown_text와 source_url이 포함되어 있다.
+        출력:
+            감지된 에셋 목록 (PDF 링크, 이미지 묶음 등).
+
+        왜 이렇게 하는가:
+            generic_llm 파서는 임의의 서지 웹페이지를 처리한다.
+            페이지에 PDF 다운로드 링크나 이미지 뷰어 링크가 있으면
+            자동 감지하여 연구자가 수동 다운로드 없이 문헌을 생성할 수 있다.
+        """
+        from .asset_detector import detect_assets
+        return await detect_assets(
+            raw_data["source_url"],
+            raw_data.get("markdown_text"),
+        )
+
+    async def download_asset(
+        self,
+        asset_info: dict[str, Any],
+        dest_dir: Path,
+        progress_callback=None,
+    ) -> Path:
+        """범용 에셋 다운로더로 파일을 다운로드한다.
+
+        입력:
+            asset_info — list_assets()가 반환한 에셋 항목.
+            dest_dir — 파일을 저장할 디렉토리.
+            progress_callback — (current, total)를 받는 진행 콜백.
+        출력:
+            다운로드된 파일의 Path.
+        """
+        from .asset_detector import download_generic_asset
+        return await download_generic_asset(asset_info, dest_dir, progress_callback)
 
     async def _fetch_markdown(self, url: str) -> str:
         """웹페이지를 마크다운으로 변환한다.

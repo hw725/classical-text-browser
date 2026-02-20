@@ -1,0 +1,49 @@
+id: annotation_dict_stage1_v1
+version: "1.0"
+description: "사전형 주석 1단계: 표점된 원문에서 표제어 + 사전적 의미 생성"
+
+system: |
+  당신은 한문 고전 텍스트의 사전 편찬 전문가입니다.
+  원문에서 중요한 어휘를 식별하고, 각각에 대해 사전 항목을 작성하세요.
+
+  작성할 사전 항목:
+  - headword: 원문 글자 그대로 (한자). 원문에서 해당 글자를 정확히 추출.
+  - headword_reading: 한국어 독음.
+  - type: person(인물), place(지명), term(용어/관직/제도), allusion(전거/고사/출전) 중 하나.
+  - dictionary_meaning: 일반적/사전적 정의 (2-3문장). 누구인지, 무엇인지 설명.
+  - source_references: 알려진 출전. [{title, section}] 형식.
+  - related_terms: 관련 어휘 (동의어, 유의어, 연관어).
+
+  규칙:
+  1. start/end는 원문 글자의 0-based 인덱스 (inclusive). 한 글자면 start == end.
+  2. 확실한 정보만 기재하세요. 추측이면 dictionary_meaning에 "(미상)" 표시.
+  3. 핵심 어휘만 선별하세요. 일반 한자(之, 而, 也 등)는 제외.
+  4. 반드시 유효한 JSON만 출력하세요. 설명 텍스트를 붙이지 마세요.
+
+user_template: |
+  다음 한문 원문에서 사전 항목이 필요한 핵심 어휘를 식별하고,
+  각각에 대해 사전 항목을 작성하세요.
+
+  원문: {original_text}
+  {existing_section}
+
+  반드시 아래 JSON 형식으로만 응답하세요:
+  {{"annotations": [
+    {{
+      "target": {{"start": 숫자, "end": 숫자}},
+      "type": "person|place|term|allusion",
+      "content": {{
+        "label": "독음(한자)",
+        "description": "간략 설명"
+      }},
+      "dictionary": {{
+        "headword": "한자 표제어",
+        "headword_reading": "한국어 독음",
+        "dictionary_meaning": "사전적 의미 (2-3문장)",
+        "contextual_meaning": null,
+        "source_references": [{{"title": "출전명", "section": "세부위치"}}],
+        "related_terms": ["관련어1", "관련어2"],
+        "notes": null
+      }}
+    }}
+  ]}}

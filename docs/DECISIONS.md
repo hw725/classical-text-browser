@@ -490,6 +490,191 @@ L4는 평문 텍스트(.txt)로 블록 경계가 없다. 블록별 대조를 위
 
 ---
 
+## D-019: 사전형 주석 (Dictionary Annotation) 아키텍처
+
+**날짜**: 2026-02-20
+**맥락**: L7 주석이 단순 태깅(인물/지명/용어 식별 + label/description)만 지원하여,
+연구자가 원하는 사전 형식의 체계적 주석이 불가능했다. 표제어, 사전적 의미, 문맥적 의미,
+출전을 기록하고, LLM이 4단계에 걸쳐 누적적으로 생성하며, 다른 문헌에서도 참조할 수 있는
+독립 사전으로 내보낼 수 있는 시스템이 필요했다.
+
+**결정**:
+
+1. **기존 태깅을 사전으로 확장**: 별도 엔티티가 아니라 기존 Annotation 객체에 `dictionary` 필드 추가.
+   기존 UI 유지하면서 사전 필드를 점진적으로 채움. 스키마 v2 (`annotation_page.schema.json`).
+2. **v1→v2 lazy migration**: 기존 파일 수정 없이 로드 시점에 기본값 채움. 저장 시에만 v2 형식.
+3. **4단계 누적 생성**: (1) 원문→사전항목, (2) 번역→보강, (3) 원문+번역 통합, (4) 사람 검토.
+   각 단계가 이전 결과를 enrichment. `generation_history`에 스냅샷 보존.
+4. **Stage 3 직행 (일괄 생성)**: 완성된 원문+번역 쌍에서 1→2 건너뛰고 바로 3단계 실행.
+   용도: 이미 완성된 작업에서 사전 추출 → 다른 문헌 번역 시 참조.
+5. **해석별 독립 사전 + 명시적 내보내기/가져오기**: 각 해석이 자체 사전을 가지며,
+   필요 시 JSON으로 내보내기하여 다른 해석에서 가져오기. headword 기반 병합.
+6. **참조 사전 자동 매칭 + 사용자 확인**: 가져온 사전의 headword를 원문에서 부분 문자열 검색.
+   매칭 결과를 사용자가 체크박스로 선택 → 번역 프롬프트에 참고 사전으로 포함.
+7. **번역↔주석 양방향 연동**: 번역 변경 시 `translation_snapshot` 비교로 감지,
+   주석 수정 후 "주석 참조 재번역" 수동 트리거. 양방향 모두 사용자가 명시적으로 실행.
+   `translation_page.schema.json`에 `annotation_context` 필드 추가 — 번역 시 참조한 주석 ID와 참조 사전 파일명을 기록.
+8. **사람이 편집한 항목 보호**: `status == "accepted"` 주석은 LLM이 덮어쓰지 않음.
+   LLM 제안은 `generation_history`에만 기록.
+
+**스키마 변경**:
+- `annotation_page.schema.json` v1→v2: `dictionary`(DictionaryEntry), `current_stage`, `generation_history`(GenerationStage[]), `source_text_snapshot`, `translation_snapshot` 추가
+- `translation_page.schema.json`: `annotation_context`(AnnotationContext) 추가 — `used_annotation_ids`, `reference_dict_filenames`
+
+**새 파일**:
+- `src/core/annotation_dict_llm.py` — 4단계 사전 생성 파이프라인
+- `src/core/annotation_dict_io.py` — 사전 내보내기/가져오기
+- `src/core/annotation_dict_match.py` — 참조 사전 매칭 엔진
+- `src/llm/prompts/annotation_dict_stage{1,2,3}.yaml` — 단계별 프롬프트
+
+**대안**:
+- 사전을 별도 엔티티로 분리 → 기존 태깅 UI와 이중 관리 부담으로 거부.
+- LLM 1회 호출로 사전 생성 → 원문만/번역만 있는 단계에서 활용 불가로 거부.
+- 참조 사전 자동 적용 → 연구자 통제권 약화로 거부. 수동 확인 채택.
+
+---
+
+## D-020: 인용 마크 시스템 (Citation Mark) 아키텍처
+
+**날짜**: 2026-02-20
+**맥락**: 연구자가 원문(L4)이나 번역(L6)을 읽으면서 나중에 논문에 인용할 구절을
+마크업하고, 마크된 구절에 대해 원문+표점본+번역+주석을 한눈에 보며,
+학술 인용 형식으로 내보내는 기능이 필요했다.
+
+**인용 형식**: `著者名, 書名卷數, 작품제목, 관련페이지(부가정보) : 표점된 원문`
+예시: `朴趾源, 燕岩集卷2, 答巡使書 25면(韓國文集叢刊252집, 48면) : 若吾所樂者善，而所敬者天也。`
+
+**결정**:
+
+1. **인용 마크는 해석 레이어가 아닌 연구 도구**: L5~L8 해석 데이터와 구분하여
+   `{interp_id}/citation_marks/` 별도 디렉토리에 저장.
+2. **교차 레이어 해석(resolve)**: 단일 인용 마크에서 L4 원문, L5 표점본, L6 번역,
+   L7 주석을 자동으로 통합 조회. SourceRange(block_id, start, end)를 공유 좌표로 사용.
+3. **citation_override**: 서지정보(bibliography.json)에서 자동 추출 불가능한
+   작품제목·페이지·부가정보를 연구자가 수동 입력하는 필드.
+   서지정보 자동값보다 override가 우선.
+4. **텍스트 선택 개선**: annotation-editor.js의 `text.indexOf()` 문제를 수정하여
+   Selection Range API로 정확한 char offset을 계산. 동일 텍스트 반복 시에도 올바른 위치 추출.
+5. **상태 관리**: active(마크 직후) → used(논문에 사용) → archived(폐기).
+   라벨과 태그로 마크를 분류.
+6. **내보내기**: 선택한 마크들을 학술 인용 형식으로 일괄 변환, 클립보드 복사.
+   번역 포함 여부 선택 가능.
+
+**새 파일**:
+- `schemas/interp/citation_mark_page.schema.json` — 인용 마크 스키마
+- `src/core/citation_mark.py` — CRUD + resolve + format
+- `src/app/static/js/citation-editor.js` — 프론트엔드 에디터
+- `tests/test_citation_mark.py` — 백엔드 테스트 (15개)
+
+**수정 파일**: `server.py` (7 엔드포인트), `index.html`, `workspace.js`, `workspace.css`
+
+**대안**:
+- 인용을 L8(외부참조) 레이어에 저장 → 연구 도구와 해석 데이터의 성격이 다르므로 거부.
+- 별도 DB(SQLite)에 저장 → 기존 JSON+Git 아키텍처와 불일치로 거부.
+
+---
+
+## D-021: 범용 에셋 감지 + 다운로드 (Generic Asset Detection)
+
+**날짜**: 2026-02-20
+**맥락**: 기존에는 일본 국립공문서관(`archives_jp`)만 PDF 자동 다운로드를 지원했다.
+다른 기관 URL에서도 PDF나 이미지 파일을 자동으로 감지하여 다운로드할 수 있어야 한다.
+
+**결정**:
+
+1. **범용 에셋 감지기 신설**: `src/parsers/asset_detector.py` — 파서와 독립된 유틸리티.
+   URL에 HEAD 요청을 보내 Content-Type으로 직접 다운로드 가능 여부를 판별하고,
+   마크다운에서 PDF/이미지 링크를 정규표현식으로 추출.
+2. **이미지 번들→PDF 변환**: 같은 디렉토리의 이미지 2개 이상은 "이미지 번들"로 그룹핑.
+   fpdf2 + PIL로 합쳐서 단일 PDF로 변환 (archives_jp 패턴 재사용, 150dpi 가정).
+3. **장식 이미지 필터링**: logo, icon, favicon, banner 등 장식 이미지는
+   `_DECORATIVE_PATTERNS` 정규표현식으로 자동 제외.
+4. **generic_llm 파서 확장**: `supports_asset_download = True` 플래그 추가.
+   `list_assets()`와 `download_asset()`을 asset_detector에 위임.
+5. **서버 폴백**: `preview-from-url` 엔드포인트에서 파서가 에셋 감지를 지원하지 않더라도
+   URL 자체가 PDF/이미지인지 직접 확인하는 폴백 경로 추가.
+
+**에셋 유형**: `pdf`, `image`, `image_bundle`
+
+**새 파일**:
+- `src/parsers/asset_detector.py` — 에셋 감지 + 다운로드 유틸리티
+- `tests/test_asset_detector.py` — 32개 테스트
+
+**수정 파일**: `src/parsers/generic_llm.py`, `src/app/server.py`, `src/core/document.py`
+
+**대안**:
+- 각 파서에 에셋 감지 로직 개별 구현 → 중복 코드, 일관성 결여로 거부.
+- 서버 측에서 모든 에셋 감지 → 파서별 특화 로직과 혼재로 거부. 유틸리티 분리 채택.
+
+---
+
+## D-022: GUI에서 서고(Library) 관리
+
+**날짜**: 2026-02-20
+**맥락**: 서고 경로(`--library`)는 CLI 인자로만 지정 가능하고, 서버 시작 후 변경할 수 없었다.
+GUI에서 서고를 전환·생성·최근 목록 조회할 수 있어야 한다.
+
+**결정**:
+
+1. **앱 설정 파일**: `~/.classical-text-platform/config.json`에 최근 서고 목록 저장.
+   서고 경로와 무관한 앱 수준 설정이므로 서고 외부(홈 디렉토리)에 배치.
+2. **런타임 서고 전환**: `configure()` 함수를 재호출하여 서고를 동적으로 변경.
+   LLM 라우터 캐시를 초기화하여 서고별 `.env` 설정 차이를 반영.
+3. **`--library` 선택 인자화**: 미지정 시 마지막 사용 서고를 자동 선택.
+   마지막 서고도 없으면 서고 없이 서버 시작 → GUI에서 선택/생성 유도.
+4. **프론트엔드 전체 리로드**: 서고 전환 시 `location.reload()`로 상태 초기화.
+   부분 갱신보다 안전하고 단순.
+
+**새 API 엔드포인트**:
+- `POST /api/library/switch` — 서고 전환 (경로 검증 → configure() → 응답)
+- `POST /api/library/init` — 새 서고 생성 (init_library() → configure())
+- `GET  /api/library/recent` — 최근 서고 목록 (최대 10개, 최신 순)
+
+**새 파일**:
+- `src/core/app_config.py` — 앱 전역 설정 관리
+
+**수정 파일**: `src/app/server.py`, `src/app/__main__.py`,
+`src/app/static/index.html`, `src/app/static/js/workspace.js`,
+`src/app/static/css/workspace.css`
+
+**대안**:
+- 서고 설정을 서고 내부에 저장 → 서고 경로 자체를 기억해야 하므로 불가.
+- 서고 전환 시 서버 재시작 → 사용자 경험 저하로 거부. 런타임 전환 채택.
+
+---
+
+## D-023: 휴지통 시스템 (Trash/Restore)
+
+**날짜**: 2026-02-20
+**맥락**: 문헌이나 해석 저장소를 삭제할 때 영구 삭제는 위험하다.
+복원 가능한 소프트 삭제가 필요하다.
+
+**결정**:
+
+1. **서고 내부 `.trash/` 폴더**: `library/.trash/documents/`와 `.trash/interpretations/`에
+   삭제된 항목을 타임스탬프 접두사(`{YYYYMMDD}T{HHMMSS}_{원래ID}`)로 이동.
+2. **OS 독립적**: OS 휴지통(Recycle Bin)은 플랫폼마다 API가 달라 사용하지 않음.
+   `shutil.move`로 서고 내 이동만 수행.
+3. **연관 해석 저장소 경고**: 문헌 삭제 시 해당 문헌을 `source_document_id`로 참조하는
+   해석 저장소 목록을 반환하여 프론트엔드에서 경고 표시.
+4. **복원**: 타임스탬프 접두사를 제거하고 원래 위치로 `shutil.move`.
+   같은 ID가 이미 존재하면 `FileExistsError`.
+
+**API 엔드포인트**:
+- `DELETE /api/documents/{doc_id}` — 문헌을 휴지통으로 이동
+- `DELETE /api/interpretations/{interp_id}` — 해석 저장소를 휴지통으로 이동
+- `GET    /api/trash` — 휴지통 목록
+- `POST   /api/trash/{trash_type}/{trash_name}/restore` — 복원
+
+**수정 파일**: `src/core/library.py` (trash_document, trash_interpretation,
+list_trash, restore_from_trash 함수 추가), `src/app/server.py`
+
+**대안**:
+- 영구 삭제 + 확인 대화상자 → 사용자 실수 시 복구 불가로 거부.
+- Git에서 복구 → 대용량 파일(PDF)은 git-lfs라 복잡, 비개발자에게 부적합.
+
+---
+
 ### 원본 저장소
 - [ ] JSON 스키마 각 필드의 상세 정의 → Phase 1에서 해결
 - [ ] 서지정보 파싱 상세 → Phase 5에서 해결
@@ -498,6 +683,7 @@ L4는 평문 텍스트(.txt)로 블록 경계가 없다. 블록별 대조를 위
 
 ### OCR
 - [x] OCR 엔진 플러그인 아키텍처 → D-009 (Phase 10-1)
+- [x] PaddleOCR 기본 엔진 설치 확정 — paddlepaddle 3.3.0 + paddleocr 2.10.0
 - [ ] OCR 엔진 비교 평가 → Phase 10 이후
 
 ### LLM 협업
@@ -510,9 +696,16 @@ L4는 평문 텍스트(.txt)로 블록 경계가 없다. 블록별 대조를 위
 - [ ] git 호스팅 선정
 
 ### 해석 저장소
-- [ ] 5~8층 데이터 모델 상세
-- [ ] 본문/주석 번역의 연결 구조
+- [x] 5~8층 데이터 모델 상세 → D-014(L5), D-015(L6), D-016(L7)
+- [x] 본문/주석 번역의 연결 구조 → D-015 (SourceRef)
+- [x] 사전형 주석 (Dictionary Annotation) → D-019
+- [x] 인용 마크 시스템 (Citation Mark) → D-020
 - [ ] 협업 모델
+
+### 서고 관리
+- [x] 범용 에셋 감지 + 다운로드 → D-021
+- [x] GUI에서 서고 관리 (전환/생성/최근 목록) → D-022
+- [x] 휴지통 시스템 (Trash/Restore) → D-023
 
 ### 배포·설치
 - [ ] Google Drive + .git 충돌 회피 가이드 → Phase 10 이후

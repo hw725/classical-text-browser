@@ -803,6 +803,28 @@ body.resizing-row {
   flex-shrink: 0;
 }
 
+/* 문헌/해석 저장소 삭제 버튼 — hover 시에만 표시 */
+.tree-delete-btn,
+.interp-delete-btn {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 0 2px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.tree-delete-btn:hover,
+.interp-delete-btn:hover {
+  color: #ef4444;
+}
+.tree-node-header:hover .tree-delete-btn,
+.interp-list-item:hover .interp-delete-btn {
+  display: inline-block;
+}
+
 .tree-page {
   display: flex;
   align-items: center;
@@ -3611,6 +3633,75 @@ body.resizing-row {
   border-radius: 3px;
 }
 
+/* 서고 경로 입력 행 */
+.settings-library-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.settings-library-input {
+  flex: 1;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  padding: 4px 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-primary);
+  min-width: 0;
+}
+
+.settings-library-input:not([readonly]) {
+  border-color: var(--accent);
+  background: var(--bg-primary);
+}
+
+.settings-library-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+/* 최근 서고 목록 */
+.recent-library-list {
+  margin-top: 6px;
+}
+
+.recent-library-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 3px;
+  word-break: break-all;
+}
+
+.recent-library-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.recent-library-item.current {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.recent-library-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-right: 4px;
+}
+
+.recent-library-path {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  opacity: 0.7;
+}
+
 .settings-repo-list {
   padding: 4px 8px;
 }
@@ -4098,6 +4189,437 @@ body.resizing-row {
 
 
 /* ──────────────────────────────────────
+   인용 마크 (Citation Mark) 스타일
+   ────────────────────────────────────── */
+
+.cite-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.cite-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+/* 원문 섹션 (하이라이팅) */
+.cite-source-section {
+  padding: 0 8px;
+  flex-shrink: 0;
+}
+
+.cite-source-text {
+  font-size: 16px;
+  line-height: 2;
+  padding: 8px;
+  background: var(--bg-secondary, #1e1e1e);
+  border-radius: 4px;
+  cursor: text;
+  user-select: text;
+}
+
+/* 인용 하이라이트 — 노란색 계열 (주석의 보라색과 구분) */
+.cite-highlight {
+  background: rgba(234, 179, 8, 0.25);
+  cursor: pointer;
+  border-radius: 2px;
+  padding: 1px 0;
+}
+
+.cite-highlight:hover {
+  background: rgba(234, 179, 8, 0.40);
+}
+
+.cite-highlight-selected {
+  background: rgba(234, 179, 8, 0.50);
+  outline: 1px solid #eab308;
+}
+
+.cite-plain-char {
+  cursor: text;
+}
+
+/* 인용 마크 목록 */
+.cite-list-section {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 8px;
+  min-height: 80px;
+}
+
+.cite-mark-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 인용 마크 카드 */
+.cite-card {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.cite-card:hover {
+  border-color: #eab308;
+}
+
+.cite-card-selected {
+  border-color: #eab308;
+  background: rgba(234, 179, 8, 0.08);
+}
+
+.cite-card-checkbox {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+.cite-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.cite-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.cite-card-label {
+  font-weight: 600;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cite-card-range {
+  color: var(--text-secondary, #888);
+  font-size: 11px;
+}
+
+.cite-card-status {
+  margin-left: auto;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.cite-status-active {
+  background: #eab30820;
+  color: #eab308;
+}
+
+.cite-status-used {
+  background: #10b98120;
+  color: #10b981;
+}
+
+.cite-status-archived {
+  background: #6b728020;
+  color: #6b7280;
+}
+
+.cite-card-text {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary, #999);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 태그 뱃지 */
+.cite-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.cite-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #3b82f620;
+  color: #3b82f6;
+  white-space: nowrap;
+}
+
+/* 통합 컨텍스트 패널 (resolve 결과 표시) */
+.cite-context-panel {
+  border-top: 1px solid var(--border);
+  padding: 8px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  max-height: 40vh;
+}
+
+.cite-context-section {
+  margin-bottom: 10px;
+}
+
+.cite-context-section h4 {
+  font-size: 11px;
+  color: var(--text-muted, #666);
+  margin: 0 0 4px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.cite-context-text {
+  font-size: 14px;
+  line-height: 1.8;
+  padding: 6px 8px;
+  background: var(--bg-secondary, #1e1e1e);
+  border-radius: 4px;
+  white-space: pre-wrap;
+}
+
+.cite-context-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cite-context-item {
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 4px 8px;
+  background: var(--bg-secondary, #1e1e1e);
+  border-radius: 4px;
+  border-left: 3px solid var(--border);
+}
+
+/* 텍스트 변경 경고 */
+.cite-text-changed-warning {
+  color: #f59e0b;
+  font-size: 11px;
+  padding: 4px 8px;
+  background: #f59e0b10;
+  border-radius: 4px;
+  display: none;
+}
+
+/* 내보내기 미리보기 */
+.cite-export-preview {
+  border-top: 1px solid var(--border);
+  padding: 8px;
+  flex-shrink: 0;
+}
+
+.cite-export-preview pre {
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 8px;
+  background: var(--bg-secondary, #1e1e1e);
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* 인용 편집 패널 */
+.cite-edit-panel {
+  border-top: 1px solid var(--border);
+  padding: 8px;
+  flex-shrink: 0;
+}
+
+.cite-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cite-edit-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--text-secondary, #999);
+}
+
+.cite-edit-form input,
+.cite-edit-form textarea,
+.cite-edit-form select {
+  padding: 4px 6px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-secondary, #1e1e1e);
+  color: var(--text, #ccc);
+}
+
+.cite-edit-form textarea {
+  resize: vertical;
+}
+
+.cite-edit-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+/* 인용 마크 추가 팝업 (인라인) */
+.cite-mark-popup {
+  border: 1px solid #eab308;
+  border-radius: 6px;
+  padding: 8px;
+  background: var(--bg-primary, #252526);
+  margin: 6px 8px;
+  display: none;
+}
+
+.cite-mark-popup label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--text-secondary, #999);
+  margin-bottom: 6px;
+}
+
+.cite-mark-popup input {
+  padding: 4px 6px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-secondary, #1e1e1e);
+  color: var(--text, #ccc);
+}
+
+.cite-mark-popup-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+/* 인용 Override 필드 그룹 */
+.cite-override-group {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px;
+  margin-top: 2px;
+}
+
+.cite-override-group legend {
+  font-size: 11px;
+  color: var(--text-muted, #666);
+  padding: 0 4px;
+}
+
+/* 컨텍스트 패널 내부 레이블 / 내용 */
+.cite-ctx-label {
+  font-size: 11px;
+  color: var(--text-muted, #666);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.cite-ctx-content {
+  font-size: 14px;
+  line-height: 1.8;
+  padding: 6px 8px;
+  background: var(--bg-secondary, #1e1e1e);
+  border-radius: 4px;
+  white-space: pre-wrap;
+}
+
+/* 번역 아이템 */
+.cite-ctx-trans-item {
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 4px 8px;
+  background: var(--bg-secondary, #1e1e1e);
+  border-radius: 4px;
+  border-left: 3px solid #3b82f6;
+  margin-bottom: 4px;
+}
+
+.cite-ctx-trans-status {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-weight: 600;
+  background: #3b82f620;
+  color: #3b82f6;
+  margin-left: 6px;
+}
+
+/* 주석 아이템 */
+.cite-ctx-ann-item {
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 4px 8px;
+  background: var(--bg-secondary, #1e1e1e);
+  border-radius: 4px;
+  border-left: 3px solid #8b5cf6;
+  margin-bottom: 4px;
+}
+
+.cite-ctx-ann-type {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-weight: 600;
+  background: #8b5cf620;
+  color: #8b5cf6;
+  margin-right: 6px;
+}
+
+/* 마크 카드 스니펫 + 페이지 뱃지 */
+.cite-card-snippet {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cite-page-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #6b728020;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.cite-card-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.cite-card-check {
+  margin-left: auto;
+  cursor: pointer;
+}
+
+
+/* ──────────────────────────────────────
    Phase 12-1: Git 그래프 스타일
    ────────────────────────────────────── */
 
@@ -4384,4 +4906,205 @@ body.resizing-row {
 
 .notes-textarea::placeholder {
   color: var(--text-muted);
+}
+
+
+/* ────────────────────────────────────
+   사전형 주석 (Dictionary Annotation)
+   ──────────────────────────────────── */
+
+/* 사전 도구 바 */
+.ann-dict-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-muted);
+  background: var(--bg-secondary);
+  flex-wrap: wrap;
+}
+
+.ann-dict-stage-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-right: 2px;
+}
+
+.text-btn-sm {
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
+/* 사전 단계 뱃지 */
+.ann-dict-badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  margin-left: 4px;
+  font-weight: 600;
+}
+
+.ann-dict-badge-from_original {
+  background: #E3F2FD;
+  color: #1565C0;
+}
+
+.ann-dict-badge-from_translation {
+  background: #FFF3E0;
+  color: #E65100;
+}
+
+.ann-dict-badge-from_both {
+  background: #E8F5E9;
+  color: #2E7D32;
+}
+
+.ann-dict-badge-reviewed {
+  background: #F3E5F5;
+  color: #6A1B9A;
+}
+
+/* 사전 상세 보기 (카드 내) */
+.ann-dict-detail {
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: var(--bg-primary);
+  border-radius: 4px;
+  border-left: 3px solid #42A5F5;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ann-dict-hw {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.ann-dict-meaning,
+.ann-dict-ctx,
+.ann-dict-refs,
+.ann-dict-related {
+  margin-top: 2px;
+  color: var(--text-secondary);
+}
+
+.ann-dict-empty {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* 사전 편집 패널 */
+.ann-dict-edit-panel {
+  border-top: 1px solid var(--border-muted);
+  padding-top: 8px;
+  margin-top: 8px;
+}
+
+.ann-dict-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ann-dict-edit-form label {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  color: var(--text-secondary);
+  gap: 2px;
+}
+
+.ann-dict-edit-form input,
+.ann-dict-edit-form textarea {
+  font-size: 12px;
+  padding: 4px 6px;
+  border: 1px solid var(--border-muted);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+
+/* ────────────────────────────────────
+   참조 사전 (Reference Dictionary)
+   ──────────────────────────────────── */
+
+.trans-refdict-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-muted);
+  background: var(--bg-secondary);
+}
+
+.trans-refdict-toolbar .text-btn.active {
+  background: #42A5F5;
+  color: white;
+}
+
+.trans-refdict-panel {
+  padding: 8px;
+  border-bottom: 1px solid var(--border-muted);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.trans-refdict-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.trans-refdict-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.trans-refdict-item:hover {
+  background: var(--bg-hover);
+}
+
+.trans-refdict-item input[type="checkbox"] {
+  margin-top: 2px;
+}
+
+.trans-refdict-hw {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.trans-refdict-type {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.trans-refdict-meaning {
+  color: var(--text-secondary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trans-refdict-source {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.trans-refdict-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  justify-content: flex-end;
 }

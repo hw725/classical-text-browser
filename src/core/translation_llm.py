@@ -41,6 +41,8 @@ async def generate_translation_drafts(
     annotations: list[dict] | None = None,
     context: str = "",
     target_language: str = "ko",
+    dictionary_annotations: list[dict] | None = None,
+    reference_dict_context: str = "",
 ) -> list[dict]:
     """LLM으로 문장별 번역 Draft를 생성한다.
 
@@ -53,7 +55,15 @@ async def generate_translation_drafts(
         annotations — L5 현토 annotations (있으면 프롬프트에 포함).
         context — 맥락 텍스트 (앞뒤 블록 원문 등).
         target_language — 번역 대상 언어.
+        dictionary_annotations — L7 사전형 주석 리스트 (있으면 번역 참고).
+            형식: [{"headword": "王戎", "dictionary_meaning": "...", ...}, ...]
+        reference_dict_context — 참조 사전 매칭 결과 텍스트 (format_for_translation_context 출력).
     출력: 번역 항목 리스트 (translation_page.json의 translations 형식).
+
+    왜 dictionary_annotations를 추가하는가:
+        사전형 주석이 있으면 번역의 일관성과 정확성이 높아진다.
+        특히 고유명사(인물, 지명)의 번역 일관성에 효과적이다.
+        "주석 참조 재번역" 기능의 핵심 파라미터이다.
     """
     prompt_config = _load_prompt()
 
@@ -90,11 +100,21 @@ async def generate_translation_drafts(
         if hyeonto_text:
             hyeonto_section = f"현토: {hyeonto_text}  (참고용)"
 
+        # 사전 참고 섹션 조립
+        dict_section = _build_dictionary_section(
+            source_text, start, end,
+            dictionary_annotations, reference_dict_context,
+        )
+
         user_prompt = prompt_config["prompt_template"].format(
             original_text=source_text,
             hyeonto_section=hyeonto_section,
             context=context or "(첫 문장)",
         )
+
+        # 사전 참고 섹션이 있으면 프롬프트 끝에 추가
+        if dict_section:
+            user_prompt += f"\n\n{dict_section}"
 
         # LLM 호출
         response = await router.call(
@@ -118,6 +138,18 @@ async def generate_translation_drafts(
             elapsed_sec=getattr(response, "elapsed_sec", 0.0),
         )
 
+        # annotation_context 구성: 사전 참조가 있었으면 기록
+        ann_context = None
+        if dictionary_annotations or reference_dict_context:
+            used_ids = []
+            if dictionary_annotations:
+                used_ids = [a.get("id", "") for a in dictionary_annotations if a.get("id")]
+            ref_filenames = []  # 참조 사전 파일명은 호출자가 제공해야 함
+            ann_context = {
+                "used_annotation_ids": used_ids,
+                "reference_dict_filenames": ref_filenames,
+            }
+
         # L6 형식으로 변환
         entry = {
             "id": _gen_translation_id(),
@@ -138,6 +170,7 @@ async def generate_translation_drafts(
             "status": "draft",
             "reviewed_by": None,
             "reviewed_at": None,
+            "annotation_context": ann_context,
         }
         results.append(entry)
 
@@ -195,6 +228,65 @@ def _filter_annotations_for_range(
         if ann_end >= start and ann_start <= end:
             result.append(ann)
     return result
+
+
+def _build_dictionary_section(
+    source_text: str,
+    start: int,
+    end: int,
+    dictionary_annotations: list[dict] | None,
+    reference_dict_context: str,
+) -> str:
+    """번역 프롬프트에 포함할 사전 참고 섹션을 생성한다.
+
+    목적: 사전형 주석과 참조 사전 정보를 번역 LLM이 참고할 수 있는 텍스트로 변환.
+    입력:
+        source_text — 현재 문장 원문.
+        start, end — 현재 문장의 블록 내 범위.
+        dictionary_annotations — L7 사전형 주석 리스트.
+        reference_dict_context — 참조 사전 매칭 결과 텍스트 (이미 포맷됨).
+    출력: 프롬프트에 추가할 텍스트. 비어있으면 빈 문자열.
+
+    왜 이렇게 하는가:
+        LLM에게 이미 확인된 어휘 정보를 제공하면 번역 일관성이 높아진다.
+        사전 주석과 참조 사전 정보를 모두 하나의 섹션으로 통합한다.
+    """
+    lines = []
+
+    # 1. L7 사전형 주석에서 이 문장 범위에 해당하는 항목 추출
+    if dictionary_annotations:
+        relevant = []
+        for ann in dictionary_annotations:
+            target = ann.get("target", {})
+            ann_start = target.get("start", 0)
+            ann_end = target.get("end", ann_start)
+            # 범위가 겹치는 주석만 포함
+            if ann_end >= start and ann_start <= end:
+                dict_entry = ann.get("dictionary") or {}
+                hw = dict_entry.get("headword", "")
+                if hw:
+                    reading = dict_entry.get("headword_reading") or ""
+                    meaning = dict_entry.get("dictionary_meaning", "")
+                    ctx = dict_entry.get("contextual_meaning") or ""
+                    line = f"- {hw}"
+                    if reading:
+                        line += f"({reading})"
+                    line += f": {meaning}"
+                    if ctx:
+                        line += f" / 문맥: {ctx}"
+                    relevant.append(line)
+
+        if relevant:
+            lines.append("[이 블록의 사전 주석]")
+            lines.extend(relevant)
+
+    # 2. 참조 사전 컨텍스트 (이미 포맷된 텍스트)
+    if reference_dict_context:
+        if lines:
+            lines.append("")  # 빈 줄로 구분
+        lines.append(reference_dict_context)
+
+    return "\n".join(lines)
 
 
 def _shift_annotations(annotations: list[dict], offset: int) -> list[dict]:

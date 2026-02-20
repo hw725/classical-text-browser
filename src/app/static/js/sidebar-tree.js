@@ -79,11 +79,19 @@ function _createDocumentNode(doc) {
     <span class="tree-toggle">▶</span>
     <span class="tree-label">${doc.title || "제목 없음"}</span>
     <span class="tree-badge">${doc.document_id || ""}</span>
+    <button class="tree-delete-btn" title="문헌 삭제 (휴지통 이동)">×</button>
   `;
 
   const children = document.createElement("div");
   children.className = "tree-children";
   children.style.display = "none";
+
+  // 삭제 버튼 클릭 → 휴지통 이동
+  const deleteBtn = header.querySelector(".tree-delete-btn");
+  deleteBtn.addEventListener("click", (e) => {
+    e.stopPropagation(); // 문헌 펼침 방지
+    _trashDocument(doc.document_id, doc.title || doc.document_id);
+  });
 
   // 문헌 헤더 클릭 → parts 확장/축소
   header.addEventListener("click", () => {
@@ -375,5 +383,53 @@ function highlightTreePage(pageNum) {
     target.classList.add("active");
     // 스크롤하여 보이도록
     target.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+}
+
+
+/**
+ * 문헌을 휴지통으로 이동한다.
+ *
+ * 왜 이렇게 하는가:
+ *   - 영구 삭제 대신 서고 내 .trash/ 폴더로 이동하여 복원 가능하게 한다.
+ *   - 연관 해석 저장소가 있으면 추가 경고를 표시한다.
+ */
+async function _trashDocument(docId, docTitle) {
+  // 1단계: 연관 해석 저장소 확인을 위해 먼저 삭제 시도 전 사전 확인
+  let msg = `"${docTitle}" 문헌을 삭제(휴지통 이동)하시겠습니까?`;
+  if (!confirm(msg)) return;
+
+  try {
+    const res = await fetch(`/api/documents/${docId}`, { method: "DELETE" });
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert(`삭제 실패: ${data.error || "알 수 없는 오류"}`);
+      return;
+    }
+
+    // 연관 해석 저장소 경고
+    if (data.related_interpretations && data.related_interpretations.length > 0) {
+      alert(
+        `문헌이 휴지통으로 이동되었습니다.\n\n` +
+        `주의: 다음 해석 저장소가 이 문헌을 참조합니다:\n` +
+        data.related_interpretations.map((id) => `  - ${id}`).join("\n")
+      );
+    }
+
+    // 현재 선택된 문헌이 삭제된 경우 상태 초기화
+    if (viewerState.docId === docId) {
+      viewerState.docId = null;
+      viewerState.partId = null;
+      viewerState.pageNum = null;
+      viewerState.documentInfo = null;
+    }
+
+    // 사이드바 새로고침 — workspace.js의 loadLibraryInfo 호출
+    if (typeof loadLibraryInfo === "function") {
+      loadLibraryInfo();
+    }
+  } catch (err) {
+    alert(`삭제 중 오류: ${err.message}`);
   }
 }

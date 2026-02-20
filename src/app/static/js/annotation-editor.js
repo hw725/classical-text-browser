@@ -58,6 +58,9 @@ function initAnnotationEditor() {
 
   const editCancel = document.getElementById("ann-edit-cancel-btn");
   if (editCancel) editCancel.addEventListener("click", _closeEditPanel);
+
+  // 사전형 주석 UI 초기화
+  initDictAnnotation();
 }
 
 
@@ -406,11 +409,13 @@ function _renderAnnList() {
       <div class="ann-card-header">
         <span class="ann-card-type" style="color:${typeInfo.color}">${typeInfo.icon} ${typeInfo.label}</span>
         <span class="ann-card-range">"${sourceText}" [${ann.target.start}–${ann.target.end}]</span>
+        ${_renderDictBadge(ann)}
         <span class="ann-card-status ${statusClass}">${ann.status}</span>
       </div>
       <div class="ann-card-body">
         <div class="ann-card-label">${ann.content.label}</div>
         <div class="ann-card-desc">${ann.content.description}</div>
+        ${_renderDictExpanded(ann)}
       </div>
     `;
 
@@ -455,6 +460,11 @@ function _selectAnnotation(annId) {
 
   const refsInput = document.getElementById("ann-edit-refs");
   if (refsInput) refsInput.value = (ann.content.references || []).join(", ");
+
+  // 사전 편집 필드 채우기
+  if (typeof _populateDictEditFields === "function") {
+    _populateDictEditFields(ann);
+  }
 
   // 목록 하이라이트 갱신
   _renderAnnList();
@@ -787,4 +797,401 @@ function _showSaveStatus(msg) {
   if (!el) return;
   el.textContent = msg;
   setTimeout(() => { el.textContent = ""; }, 2000);
+}
+
+
+/* ────────────────────────────────────
+   사전형 주석 (Dictionary Annotation)
+   ──────────────────────────────────── */
+
+/**
+ * 사전 보기 토글 상태.
+ * true이면 주석 카드에 dictionary 필드를 확장 표시.
+ */
+let _dictViewExpanded = false;
+
+function initDictAnnotation() {
+  /* 사전형 주석 UI 초기화.
+   * initAnnotationEditor() 이후에 호출한다.
+   */
+
+  // 사전 보기 토글
+  const toggleBtn = document.getElementById("ann-dict-view-toggle");
+  if (toggleBtn) toggleBtn.addEventListener("click", _toggleDictView);
+
+  // 단계별 생성 버튼
+  const s1Btn = document.getElementById("ann-dict-stage1-btn");
+  if (s1Btn) s1Btn.addEventListener("click", () => _generateDictStage(1));
+
+  const s2Btn = document.getElementById("ann-dict-stage2-btn");
+  if (s2Btn) s2Btn.addEventListener("click", () => _generateDictStage(2));
+
+  const s3Btn = document.getElementById("ann-dict-stage3-btn");
+  if (s3Btn) s3Btn.addEventListener("click", () => _generateDictStage(3));
+
+  // 일괄 사전 생성
+  const batchBtn = document.getElementById("ann-dict-batch-btn");
+  if (batchBtn) batchBtn.addEventListener("click", _generateDictBatch);
+
+  // 내보내기/가져오기
+  const exportBtn = document.getElementById("ann-dict-export-btn");
+  if (exportBtn) exportBtn.addEventListener("click", _exportDictionary);
+
+  const importBtn = document.getElementById("ann-dict-import-btn");
+  if (importBtn) importBtn.addEventListener("click", _importDictionary);
+
+  // 사전 편집 저장
+  const dictSaveBtn = document.getElementById("ann-dict-save-btn");
+  if (dictSaveBtn) dictSaveBtn.addEventListener("click", _saveDictFields);
+}
+
+
+function _toggleDictView() {
+  _dictViewExpanded = !_dictViewExpanded;
+  const btn = document.getElementById("ann-dict-view-toggle");
+  if (btn) btn.textContent = _dictViewExpanded ? "사전 접기" : "사전 펼치기";
+  _renderAnnList();
+}
+
+
+/* ── 주석 카드에 사전 정보 확장 표시 ── */
+
+function _renderDictBadge(ann) {
+  /* 주석 카드에 사전 단계 뱃지를 HTML 문자열로 반환한다. */
+  const stage = ann.current_stage || "none";
+  if (stage === "none") return "";
+
+  const labels = {
+    "from_original": "1단계",
+    "from_translation": "2단계",
+    "from_both": "3단계",
+    "reviewed": "검토완료",
+  };
+  const label = labels[stage] || stage;
+  return `<span class="ann-dict-badge ann-dict-badge-${stage}">${label}</span>`;
+}
+
+
+function _renderDictExpanded(ann) {
+  /* 사전 보기가 확장되었을 때 dictionary 필드를 HTML로 렌더링. */
+  if (!_dictViewExpanded) return "";
+  const d = ann.dictionary;
+  if (!d) return '<div class="ann-dict-empty">사전 항목 없음</div>';
+
+  let html = '<div class="ann-dict-detail">';
+  html += `<div class="ann-dict-hw">${d.headword || ""}`;
+  if (d.headword_reading) html += ` (${d.headword_reading})`;
+  html += "</div>";
+
+  if (d.dictionary_meaning) {
+    html += `<div class="ann-dict-meaning"><b>사전적 의미:</b> ${d.dictionary_meaning}</div>`;
+  }
+  if (d.contextual_meaning) {
+    html += `<div class="ann-dict-ctx"><b>문맥적 의미:</b> ${d.contextual_meaning}</div>`;
+  }
+
+  if (d.source_references && d.source_references.length > 0) {
+    const refs = d.source_references.map(r => r.title + (r.section ? ` ${r.section}` : "")).join(", ");
+    html += `<div class="ann-dict-refs"><b>출전:</b> ${refs}</div>`;
+  }
+
+  if (d.related_terms && d.related_terms.length > 0) {
+    html += `<div class="ann-dict-related"><b>관련어:</b> ${d.related_terms.join(", ")}</div>`;
+  }
+
+  html += "</div>";
+  return html;
+}
+
+
+/* ── 단계별 사전 생성 ── */
+
+async function _generateDictStage(stageNum) {
+  const vs = typeof viewerState !== "undefined" ? viewerState : null;
+  const is = typeof interpState !== "undefined" ? interpState : null;
+  if (!vs || !vs.pageNum) return;
+
+  const interpId = (is && is.interpId) || "default";
+  const blockId = annState.blockId;
+  if (!blockId) {
+    alert("블록을 먼저 선택하세요.");
+    return;
+  }
+
+  const btn = document.getElementById(`ann-dict-stage${stageNum}-btn`);
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = `${stageNum}단계 생성 중…`;
+  }
+
+  try {
+    const llmSel = typeof getLlmModelSelection === "function"
+      ? getLlmModelSelection("ann-llm-model-select")
+      : { force_provider: null, force_model: null };
+
+    const reqBody = { block_id: blockId };
+    if (llmSel.force_provider) reqBody.force_provider = llmSel.force_provider;
+    if (llmSel.force_model) reqBody.force_model = llmSel.force_model;
+
+    const resp = await fetch(
+      `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/generate-stage${stageNum}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(reqBody),
+      }
+    );
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `서버 오류 ${resp.status}`);
+    }
+
+    const result = await resp.json();
+    const count = (result.annotations || []).length;
+    _showSaveStatus(`${stageNum}단계 완료: ${count}개 항목`);
+
+    await _loadBlockAnnotations(blockId);
+    _renderSourceText();
+    _renderAnnList();
+    _renderStatusSummary();
+
+  } catch (e) {
+    console.error(`${stageNum}단계 사전 생성 실패:`, e);
+    alert(`${stageNum}단계 사전 생성 실패: ${e.message}`);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = `${stageNum}단계`;
+    }
+  }
+}
+
+
+async function _generateDictBatch() {
+  const is = typeof interpState !== "undefined" ? interpState : null;
+  const interpId = (is && is.interpId) || "default";
+
+  if (!confirm("전체 문서에 대해 일괄 사전 생성(3단계 직행)을 실행합니다.\n시간이 걸릴 수 있습니다. 진행하시겠습니까?")) return;
+
+  const btn = document.getElementById("ann-dict-batch-btn");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "일괄 생성 중…";
+  }
+
+  try {
+    const llmSel = typeof getLlmModelSelection === "function"
+      ? getLlmModelSelection("ann-llm-model-select")
+      : { force_provider: null, force_model: null };
+
+    const reqBody = {};
+    if (llmSel.force_provider) reqBody.force_provider = llmSel.force_provider;
+    if (llmSel.force_model) reqBody.force_model = llmSel.force_model;
+
+    const resp = await fetch(`/api/interpretations/${interpId}/annotations/generate-batch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(reqBody),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `서버 오류 ${resp.status}`);
+    }
+
+    const result = await resp.json();
+    _showSaveStatus(`일괄 생성 완료: ${result.pages_processed}페이지, ${result.total_annotations}개 항목`);
+
+    // 현재 블록 갱신
+    if (annState.blockId) {
+      await _loadBlockAnnotations(annState.blockId);
+      _renderSourceText();
+      _renderAnnList();
+      _renderStatusSummary();
+    }
+
+  } catch (e) {
+    console.error("일괄 사전 생성 실패:", e);
+    alert("일괄 사전 생성 실패: " + e.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "일괄 사전 생성";
+    }
+  }
+}
+
+
+/* ── 사전 내보내기/가져오기 ── */
+
+async function _exportDictionary() {
+  const is = typeof interpState !== "undefined" ? interpState : null;
+  const interpId = (is && is.interpId) || "default";
+
+  try {
+    const resp = await fetch(`/api/interpretations/${interpId}/export/dictionary`);
+    if (!resp.ok) throw new Error("내보내기 실패");
+
+    const data = await resp.json();
+    const count = data.entries ? data.entries.length : 0;
+
+    // JSON 다운로드
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `dictionary_${interpId}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    _showSaveStatus(`사전 내보내기: ${count}개 항목`);
+  } catch (e) {
+    console.error("사전 내보내기 실패:", e);
+    alert("사전 내보내기 실패: " + e.message);
+  }
+}
+
+
+async function _importDictionary() {
+  const is = typeof interpState !== "undefined" ? interpState : null;
+  const interpId = (is && is.interpId) || "default";
+
+  // 파일 선택
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".json";
+  input.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const dictData = JSON.parse(text);
+
+      const strategy = prompt(
+        "가져오기 전략을 선택하세요:\n- merge: 기존 항목과 병합\n- skip_existing: 기존 항목 건너뛰기\n- overwrite: 기존 항목 덮어쓰기",
+        "merge"
+      );
+      if (!strategy) return;
+
+      const resp = await fetch(`/api/interpretations/${interpId}/import/dictionary`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dictionary_data: dictData,
+          merge_strategy: strategy,
+        }),
+      });
+
+      if (!resp.ok) throw new Error("가져오기 실패");
+
+      const result = await resp.json();
+      _showSaveStatus(`가져오기: 새로 ${result.imported}개, 병합 ${result.merged}개, 건너뜀 ${result.skipped}개`);
+
+      // 갱신
+      if (annState.blockId) {
+        await _loadBlockAnnotations(annState.blockId);
+        _renderSourceText();
+        _renderAnnList();
+      }
+    } catch (err) {
+      console.error("사전 가져오기 실패:", err);
+      alert("사전 가져오기 실패: " + err.message);
+    }
+  });
+  input.click();
+}
+
+
+/* ── 사전 편집 필드 (편집 패널 확장) ── */
+
+function _populateDictEditFields(ann) {
+  /* 편집 패널에 사전형 주석 필드를 채운다.
+   * _selectAnnotation()에서 호출. */
+  const panel = document.getElementById("ann-dict-edit-panel");
+  if (!panel) return;
+
+  const d = ann.dictionary || {};
+  panel.style.display = "";
+
+  const hw = document.getElementById("ann-dict-headword");
+  if (hw) hw.value = d.headword || "";
+
+  const reading = document.getElementById("ann-dict-reading");
+  if (reading) reading.value = d.headword_reading || "";
+
+  const dictMeaning = document.getElementById("ann-dict-meaning");
+  if (dictMeaning) dictMeaning.value = d.dictionary_meaning || "";
+
+  const ctxMeaning = document.getElementById("ann-dict-ctx-meaning");
+  if (ctxMeaning) ctxMeaning.value = d.contextual_meaning || "";
+
+  const refs = document.getElementById("ann-dict-src-refs");
+  if (refs) refs.value = (d.source_references || []).map(r => r.title).join(", ");
+
+  const related = document.getElementById("ann-dict-related");
+  if (related) related.value = (d.related_terms || []).join(", ");
+
+  const notes = document.getElementById("ann-dict-notes");
+  if (notes) notes.value = d.notes || "";
+}
+
+
+async function _saveDictFields() {
+  /* 사전 편집 필드를 서버에 저장한다. */
+  if (!annState.selectedAnnId) return;
+
+  const vs = typeof viewerState !== "undefined" ? viewerState : null;
+  const is = typeof interpState !== "undefined" ? interpState : null;
+  if (!vs || !vs.pageNum) return;
+
+  const interpId = (is && is.interpId) || "default";
+  const blockId = annState.blockId;
+  const annId = annState.selectedAnnId;
+
+  const hw = document.getElementById("ann-dict-headword");
+  const reading = document.getElementById("ann-dict-reading");
+  const dictMeaning = document.getElementById("ann-dict-meaning");
+  const ctxMeaning = document.getElementById("ann-dict-ctx-meaning");
+  const refs = document.getElementById("ann-dict-src-refs");
+  const related = document.getElementById("ann-dict-related");
+  const notes = document.getElementById("ann-dict-notes");
+
+  const sourceRefs = refs && refs.value
+    ? refs.value.split(",").map(s => ({ title: s.trim() })).filter(r => r.title)
+    : [];
+
+  const relatedTerms = related && related.value
+    ? related.value.split(",").map(s => s.trim()).filter(Boolean)
+    : [];
+
+  const dictionary = {
+    headword: hw ? hw.value : "",
+    headword_reading: reading ? reading.value || null : null,
+    dictionary_meaning: dictMeaning ? dictMeaning.value : "",
+    contextual_meaning: ctxMeaning ? ctxMeaning.value || null : null,
+    source_references: sourceRefs,
+    related_terms: relatedTerms,
+    notes: notes ? notes.value || null : null,
+  };
+
+  try {
+    const resp = await fetch(
+      `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/${blockId}/${annId}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dictionary }),
+      }
+    );
+
+    if (resp.ok) {
+      _showSaveStatus("사전 필드 저장 완료");
+      await _loadBlockAnnotations(blockId);
+      _renderAnnList();
+    }
+  } catch (e) {
+    console.error("사전 필드 저장 실패:", e);
+  }
 }

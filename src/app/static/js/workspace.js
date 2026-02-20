@@ -47,6 +47,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (typeof initTranslationEditor === "function") initTranslationEditor();
   // Phase 11-3: 주석 편집기 초기화
   if (typeof initAnnotationEditor === "function") initAnnotationEditor();
+  // 인용 마크 편집기 초기화
+  if (typeof initCitationEditor === "function") initCitationEditor();
   // Phase 12-1: Git 그래프 초기화
   if (typeof initGitGraph === "function") initGitGraph();
   // Phase 12-3: JSON 스냅샷 Export/Import 버튼
@@ -310,11 +312,18 @@ async function _loadSettings() {
     if (!res.ok) return;
     const data = await res.json();
 
-    // 서고 경로 표시
-    const pathEl = document.getElementById("settings-library-path");
-    if (pathEl) {
-      pathEl.textContent = data.library_path || "(설정 안 됨)";
+    // 서고 경로 표시 (input 필드에)
+    const inputEl = document.getElementById("settings-library-input");
+    if (inputEl) {
+      inputEl.value = data.library_path || "";
+      inputEl.title = data.library_path || "";
     }
+
+    // 서고 편집/전환 버튼 이벤트 바인딩 (1회만)
+    _initLibraryControls();
+
+    // 최근 서고 목록 로드
+    _loadRecentLibraries();
 
     // 원본 저장소 목록
     _renderRepoList("settings-doc-repos", data.documents || [], "documents");
@@ -323,6 +332,165 @@ async function _loadSettings() {
     _renderRepoList("settings-interp-repos", data.interpretations || [], "interpretations");
   } catch (e) {
     console.warn("설정 로드 실패:", e);
+  }
+}
+
+
+/* ─── 서고 경로 관리 ───────────────────────────── */
+
+let _libraryControlsInitialized = false;
+
+function _initLibraryControls() {
+  if (_libraryControlsInitialized) return;
+  _libraryControlsInitialized = true;
+
+  const inputEl = document.getElementById("settings-library-input");
+  const editBtn = document.getElementById("btn-edit-library");
+  const actionsEl = document.getElementById("library-actions");
+  const switchBtn = document.getElementById("btn-switch-library");
+  const cancelBtn = document.getElementById("btn-cancel-library");
+  const newBtn = document.getElementById("btn-new-library");
+
+  if (!inputEl || !editBtn) return;
+
+  let originalValue = inputEl.value;
+
+  // "편집" 버튼 → input을 수정 가능하게 + 액션 버튼 표시
+  editBtn.addEventListener("click", () => {
+    originalValue = inputEl.value;
+    inputEl.removeAttribute("readonly");
+    inputEl.focus();
+    if (actionsEl) actionsEl.style.display = "";
+    editBtn.style.display = "none";
+  });
+
+  // "취소" 버튼 → 원래 값으로 복원
+  if (cancelBtn) {
+    cancelBtn.addEventListener("click", () => {
+      inputEl.value = originalValue;
+      inputEl.setAttribute("readonly", "");
+      if (actionsEl) actionsEl.style.display = "none";
+      editBtn.style.display = "";
+    });
+  }
+
+  // "변경" 버튼 → 서고 전환
+  if (switchBtn) {
+    switchBtn.addEventListener("click", () => {
+      const newPath = inputEl.value.trim();
+      if (newPath && newPath !== originalValue) {
+        _switchLibrary(newPath);
+      }
+    });
+  }
+
+  // Enter 키로도 전환
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !inputEl.hasAttribute("readonly")) {
+      const newPath = inputEl.value.trim();
+      if (newPath && newPath !== originalValue) {
+        _switchLibrary(newPath);
+      }
+    }
+  });
+
+  // "새 서고" 버튼
+  if (newBtn) {
+    newBtn.addEventListener("click", _createNewLibrary);
+  }
+}
+
+
+async function _switchLibrary(path) {
+  try {
+    const res = await fetch("/api/library/switch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert("서고 전환 실패: " + (data.error || "알 수 없는 오류"));
+      return;
+    }
+
+    // 전체 페이지 리로드 (상태 초기화)
+    location.reload();
+  } catch (e) {
+    alert("서고 전환 실패: " + e.message);
+  }
+}
+
+
+async function _createNewLibrary() {
+  const path = prompt("새 서고를 생성할 경로를 입력하세요:");
+  if (!path) return;
+
+  try {
+    const res = await fetch("/api/library/init", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert("서고 생성 실패: " + (data.error || "알 수 없는 오류"));
+      return;
+    }
+
+    location.reload();
+  } catch (e) {
+    alert("서고 생성 실패: " + e.message);
+  }
+}
+
+
+async function _loadRecentLibraries() {
+  const container = document.getElementById("recent-libraries");
+  if (!container) return;
+
+  try {
+    const res = await fetch("/api/library/recent");
+    if (!res.ok) return;
+    const data = await res.json();
+    const libraries = data.libraries || [];
+    const current = data.current || "";
+
+    if (libraries.length <= 1) {
+      container.innerHTML = "";
+      return;
+    }
+
+    container.innerHTML = "";
+    for (const lib of libraries) {
+      const item = document.createElement("div");
+      item.className = "recent-library-item" +
+        (lib.path === current ? " current" : "");
+
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "recent-library-name";
+      nameSpan.textContent = lib.name || "이름 없음";
+
+      const pathSpan = document.createElement("span");
+      pathSpan.className = "recent-library-path";
+      pathSpan.textContent = lib.path;
+
+      item.appendChild(nameSpan);
+      item.appendChild(pathSpan);
+
+      if (lib.path !== current) {
+        item.addEventListener("click", () => _switchLibrary(lib.path));
+        item.title = "클릭하여 이 서고로 전환";
+      } else {
+        item.title = "현재 서고";
+      }
+
+      container.appendChild(item);
+    }
+  } catch (e) {
+    console.debug("최근 서고 목록 로드 실패:", e);
   }
 }
 
@@ -484,6 +652,7 @@ function _switchMode(mode) {
   const hyeontoPanel = document.getElementById("hyeonto-panel");
   const transPanel = document.getElementById("trans-panel");
   const annPanel = document.getElementById("ann-panel");
+  const citePanel = document.getElementById("cite-panel");
 
   // 이전 모드 정리
   if (currentMode === "layout") {
@@ -518,6 +687,10 @@ function _switchMode(mode) {
     if (typeof deactivateAnnotationMode === "function") deactivateAnnotationMode();
     if (annPanel) annPanel.style.display = "none";
   }
+  if (currentMode === "citation") {
+    if (typeof deactivateCitationMode === "function") deactivateCitationMode();
+    if (citePanel) citePanel.style.display = "none";
+  }
 
   // 모든 우측 패널 숨김 (초기화)
   if (editorRight) editorRight.style.display = "none";
@@ -529,6 +702,7 @@ function _switchMode(mode) {
   if (hyeontoPanel) hyeontoPanel.style.display = "none";
   if (transPanel) transPanel.style.display = "none";
   if (annPanel) annPanel.style.display = "none";
+  if (citePanel) citePanel.style.display = "none";
 
   // 새 모드 활성화
   currentMode = mode;
@@ -565,6 +739,10 @@ function _switchMode(mode) {
     // 우측: 주석 편집기 패널 표시
     if (annPanel) annPanel.style.display = "";
     if (typeof activateAnnotationMode === "function") activateAnnotationMode();
+  } else if (mode === "citation") {
+    // 우측: 인용 마크 패널 표시
+    if (citePanel) citePanel.style.display = "";
+    if (typeof activateCitationMode === "function") activateCitationMode();
   } else {
     // view 모드: 텍스트 에디터 표시
     if (editorRight) editorRight.style.display = "";

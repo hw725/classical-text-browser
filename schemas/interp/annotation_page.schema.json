@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "annotation_page.schema.json",
-  "title": "L7 주석 (Annotation)",
-  "description": "페이지 내 블록별 주석을 기록한다. 인물·지명·용어·전거·메모 등. Phase 11-3.",
+  "title": "L7 주석 (Annotation) v2 — 사전형 주석",
+  "description": "페이지 내 블록별 주석. 기존 태깅(인물·지명·용어·전거·메모) + 사전형 주석(표제어·사전적 의미·문맥적 의미) + 4단계 누적 생성 이력.",
   "type": "object",
   "required": ["part_id", "page_number", "blocks"],
   "additionalProperties": false,
@@ -15,6 +15,11 @@
       "type": "integer",
       "minimum": 1,
       "description": "페이지 번호 (1부터 시작)."
+    },
+    "schema_version": {
+      "type": "string",
+      "description": "스키마 버전. 없으면 v1 (하위호환). v2부터 사전형 주석 지원.",
+      "default": "2.0"
     },
     "blocks": {
       "type": "array",
@@ -42,7 +47,7 @@
     },
     "Annotation": {
       "type": "object",
-      "description": "개별 주석. 원문 범위에 대한 인물/지명/용어/전거/메모 등.",
+      "description": "개별 주석. 기존 태깅 + 사전형 주석 + 4단계 생성 이력.",
       "required": ["id", "target", "type", "content", "annotator", "status"],
       "additionalProperties": false,
       "properties": {
@@ -60,7 +65,37 @@
         },
         "content": {
           "$ref": "#/$defs/AnnotationContent",
-          "description": "주석 내용."
+          "description": "주석 내용 (기존 태깅 호환)."
+        },
+        "dictionary": {
+          "description": "사전형 주석. null이면 기존 태깅만 있는 상태.",
+          "oneOf": [
+            { "$ref": "#/$defs/DictionaryEntry" },
+            { "type": "null" }
+          ],
+          "default": null
+        },
+        "current_stage": {
+          "type": "string",
+          "enum": ["none", "from_original", "from_translation", "from_both", "reviewed"],
+          "default": "none",
+          "description": "현재 도달한 사전 생성 단계. none=기존 태깅만, from_original=1단계, from_translation=2단계, from_both=3단계, reviewed=검토완료."
+        },
+        "generation_history": {
+          "type": "array",
+          "description": "4단계 누적 생성 이력. 각 단계의 스냅샷을 기록한다.",
+          "items": { "$ref": "#/$defs/GenerationStage" },
+          "default": []
+        },
+        "source_text_snapshot": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "주석 생성 시점의 L4 원문 스냅샷. 원문 변경 감지용."
+        },
+        "translation_snapshot": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "주석 생성 시점의 L6 번역 스냅샷. 번역 변경 감지용."
         },
         "annotator": {
           "$ref": "#/$defs/Annotator",
@@ -101,7 +136,7 @@
     },
     "AnnotationContent": {
       "type": "object",
-      "description": "주석 본문. 표제어 + 설명 + 참고문헌.",
+      "description": "주석 본문 (기존 태깅 호환). 표제어 + 설명 + 참고문헌.",
       "required": ["label", "description"],
       "additionalProperties": false,
       "properties": {
@@ -118,6 +153,132 @@
           "description": "출전/참고문헌.",
           "items": { "type": "string" },
           "default": []
+        }
+      }
+    },
+    "DictionaryEntry": {
+      "type": "object",
+      "description": "사전형 주석. 표제어·독음·사전적 의미·문맥적 의미·출전·관련어.",
+      "required": ["headword", "dictionary_meaning"],
+      "additionalProperties": false,
+      "properties": {
+        "headword": {
+          "type": "string",
+          "description": "표제어 (한자). 예: 王戎"
+        },
+        "headword_reading": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "표제어 독음 (한국어). 예: 왕융"
+        },
+        "dictionary_meaning": {
+          "type": "string",
+          "description": "사전적 의미. 일반적/표준적 정의."
+        },
+        "contextual_meaning": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "문맥적 의미. 이 텍스트에서의 특수한 용법/뜻."
+        },
+        "source_references": {
+          "type": "array",
+          "description": "출전/참고문헌 (구조화).",
+          "items": { "$ref": "#/$defs/SourceReference" },
+          "default": []
+        },
+        "related_terms": {
+          "type": "array",
+          "description": "관련 어휘. 동의어, 유의어, 대비어 등.",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "notes": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "연구자 메모. 자유 형식."
+        }
+      }
+    },
+    "SourceReference": {
+      "type": "object",
+      "description": "구조화된 출전 참조.",
+      "required": ["title"],
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "출전명. 예: 晉書"
+        },
+        "section": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "세부 위치. 예: 列傳 第十三"
+        },
+        "url": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "외부 링크 URL."
+        }
+      }
+    },
+    "GenerationStage": {
+      "type": "object",
+      "description": "사전 생성 단계 스냅샷. 각 단계 완료 시 기록.",
+      "required": ["stage", "timestamp"],
+      "additionalProperties": false,
+      "properties": {
+        "stage": {
+          "type": "string",
+          "enum": ["from_original", "from_translation", "from_both", "reviewed"],
+          "description": "생성 단계."
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "단계 완료 시각. ISO 8601."
+        },
+        "content_snapshot": {
+          "description": "이 단계 시점의 content 스냅샷.",
+          "oneOf": [
+            { "$ref": "#/$defs/AnnotationContent" },
+            { "type": "null" }
+          ],
+          "default": null
+        },
+        "dictionary_snapshot": {
+          "description": "이 단계 시점의 dictionary 스냅샷.",
+          "oneOf": [
+            { "$ref": "#/$defs/DictionaryEntry" },
+            { "type": "null" }
+          ],
+          "default": null
+        },
+        "generator": {
+          "description": "이 단계의 생성자 (LLM 또는 human).",
+          "oneOf": [
+            { "$ref": "#/$defs/Annotator" },
+            { "type": "null" }
+          ],
+          "default": null
+        },
+        "input_sources": {
+          "type": ["object", "null"],
+          "description": "이 단계에서 참조한 입력 데이터.",
+          "additionalProperties": false,
+          "default": null,
+          "properties": {
+            "original_text": {
+              "type": ["string", "null"],
+              "description": "참조한 원문."
+            },
+            "translation_text": {
+              "type": ["string", "null"],
+              "description": "참조한 번역."
+            },
+            "previous_stage": {
+              "type": ["string", "null"],
+              "description": "이전 단계 이름."
+            }
+          }
         }
       }
     },

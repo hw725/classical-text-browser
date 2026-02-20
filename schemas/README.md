@@ -27,6 +27,16 @@
 | `agent.schema.json` | 역사적/서사적 행위자 | core-schema-v1.3 섹션 5 |
 | `relation.schema.json` | 엔티티 간 관계 | core-schema-v1.3 섹션 6 |
 
+### interp/ — 해석 저장소 (5~7층)
+
+| 스키마 | 설명 | 근거 |
+|--------|------|------|
+| `punctuation_page.schema.json` | L5 표점(句讀) — 블록별 글자 인덱스에 부호 삽입 | v7 섹션 8.1, D-014 |
+| `hyeonto_page.schema.json` | L5 현토(懸吐) — 블록별 글자 인덱스에 한국어 토 | v7 섹션 8.2, D-015 |
+| `translation_page.schema.json` | L6 번역 — 문장별 번역 + 번역자 정보 + 주석 맥락(`annotation_context`) | v7 섹션 8.3, D-016 |
+| `annotation_page.schema.json` | L7 주석 **v2** — 기존 태깅 + 사전형 주석(`DictionaryEntry`) + 4단계 누적 생성 이력(`GenerationStage`) | v7 섹션 8.4, D-017~D-019 |
+| `citation_mark_page.schema.json` | L7 인용 마크 — 논문 인용을 위한 텍스트 마크업 + 서지정보 수동 오버라이드 | D-020 |
+
 ### exchange.schema.json — 교환 형식
 
 단일 JSON으로 문서 상태를 스냅샷. 내보내기/가져오기용. (v7 섹션 11.2)
@@ -80,6 +90,31 @@ TextBlock ──────────── text_block.schema.json
   │
   └─→ Relation ────────── relation.schema.json
         Agent/Concept/TextBlock 간 관계
+
+--- 해석 작업 (interp/) ---
+
+L4 텍스트 (교정 완료)
+     │
+     ├─→ L5 표점 ──────── punctuation_page.schema.json
+     │     블록별 글자 인덱스에 부호 삽입 (before/after)
+     │
+     ├─→ L5 현토 ──────── hyeonto_page.schema.json
+     │     블록별 글자 인덱스에 한국어 토
+     │
+     ├─→ L6 번역 ──────── translation_page.schema.json
+     │     문장별 번역 + annotation_context (주석 참조)
+     │
+     ├─→ L7 주석 ──────── annotation_page.schema.json (v2)
+     │     │  기존 태깅 + 사전형 주석 (DictionaryEntry)
+     │     │  4단계 누적 생성: from_original → from_translation
+     │     │                   → from_both → reviewed
+     │     │
+     │     └─→ L6 번역과 양방향 연동
+     │           번역→주석: annotation_context에 참조 기록
+     │           주석→번역: dictionary_section으로 번역 품질 향상
+     │
+     └─→ L7 인용 마크 ── citation_mark_page.schema.json
+           논문 인용을 위한 구절 마크업 + 서지정보 해소
 ```
 
 ## 공통 규칙
