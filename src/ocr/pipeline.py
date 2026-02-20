@@ -220,7 +220,13 @@ class OcrPipeline:
         result.elapsed_sec = time.time() - start_time
 
         # 5. L2 JSON 저장
-        self._save_ocr_result(doc_id, part_id, page_number, result)
+        self._save_ocr_result(
+            doc_id,
+            part_id,
+            page_number,
+            result,
+            merge_with_existing=(block_ids is not None),
+        )
 
         logger.info(
             f"OCR 완료: {doc_id}/{part_id}/page_{page_number:03d} — "
@@ -315,6 +321,7 @@ class OcrPipeline:
         part_id: str,
         page_number: int,
         result: OcrPageResult,
+        merge_with_existing: bool = False,
     ) -> str:
         """OCR 결과를 L2 JSON으로 저장한다.
 
@@ -332,6 +339,36 @@ class OcrPipeline:
         output_path = l2_dir / filename
 
         data = result.to_dict()
+
+        if merge_with_existing and output_path.exists():
+            with open(output_path, "r", encoding="utf-8") as f:
+                existing_data = json.load(f)
+
+            existing_results = existing_data.get("ocr_results", [])
+            incoming_results = data.get("ocr_results", [])
+
+            incoming_by_id = {
+                item.get("layout_block_id"): item
+                for item in incoming_results
+                if item.get("layout_block_id")
+            }
+
+            merged_results = []
+            for old_item in existing_results:
+                block_id = old_item.get("layout_block_id")
+                if block_id in incoming_by_id:
+                    merged_results.append(incoming_by_id.pop(block_id))
+                else:
+                    merged_results.append(old_item)
+
+            merged_ids = {m.get("layout_block_id") for m in merged_results if m.get("layout_block_id")}
+            for new_item in incoming_results:
+                block_id = new_item.get("layout_block_id")
+                if block_id and block_id not in merged_ids:
+                    merged_results.append(new_item)
+                    merged_ids.add(block_id)
+
+            data["ocr_results"] = merged_results
 
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)

@@ -23,6 +23,8 @@ PaddleOCR v3 호환:
 from __future__ import annotations
 import io
 import logging
+import platform
+import sys
 from typing import Optional
 
 from .base import (
@@ -72,6 +74,7 @@ class PaddleOcrEngine(BaseOcrEngine):
         self._ocr = None  # lazy init
         self._ocr_lang = None  # 현재 로드된 모델의 언어
         self._available: Optional[bool] = None
+        self._unavailable_reason: Optional[str] = None
 
     @property
     def lang(self) -> str:
@@ -88,15 +91,35 @@ class PaddleOcrEngine(BaseOcrEngine):
                 logger.info(f"PaddleOCR 언어 변경: {self._ocr_lang} → {value} (재초기화 예정)")
 
     def is_available(self) -> bool:
-        """PaddleOCR 패키지가 설치되어 있는지 확인."""
+        """PaddleOCR 패키지 + 현재 런타임 호환성을 확인."""
         if self._available is not None:
             return self._available
 
         try:
             import paddleocr  # noqa: F401
+            import paddle  # noqa: F401
+
+            # Windows + Python 3.13 + PaddlePaddle 3.x 조합에서
+            # OneDNN fused_conv2d 런타임 에러가 빈번히 발생한다.
+            # 이 조합은 설치되어 있어도 실사용이 불안정하므로 사용 불가로 간주한다.
+            paddle_version = getattr(paddle, "__version__", "")
+            is_windows = platform.system() == "Windows"
+            is_py313_or_newer = sys.version_info >= (3, 13)
+            is_paddle3_or_newer = paddle_version.split(".")[0].isdigit() and int(paddle_version.split(".")[0]) >= 3
+
+            if is_windows and is_py313_or_newer and is_paddle3_or_newer and not self._use_gpu:
+                self._available = False
+                self._unavailable_reason = (
+                    "Windows + Python 3.13 + PaddlePaddle 3.x(CPU) 조합은 "
+                    "OneDNN 런타임 오류로 OCR이 실패할 수 있습니다."
+                )
+                logger.warning(f"PaddleOCR 사용 불가 처리: {self._unavailable_reason}")
+                return self._available
+
             self._available = True
         except ImportError:
             self._available = False
+            self._unavailable_reason = "PaddleOCR 또는 PaddlePaddle 패키지가 설치되지 않았습니다."
 
         return self._available
 
@@ -112,8 +135,10 @@ class PaddleOcrEngine(BaseOcrEngine):
 
         if self._ocr is None:
             if not self.is_available():
+                reason = self._unavailable_reason
                 raise OcrEngineUnavailableError(
-                    "PaddleOCR이 설치되지 않았습니다.\n"
+                    f"PaddleOCR을 현재 환경에서 사용할 수 없습니다.\n"
+                    f"사유: {reason or '확인되지 않은 환경 문제'}\n"
                     "설치: uv add --optional paddleocr paddlepaddle paddleocr\n"
                     "참고: paddlepaddle 용량 ~500MB, 첫 실행 시 OCR 모델 ~100MB 추가 다운로드"
                 )
@@ -121,12 +146,20 @@ class PaddleOcrEngine(BaseOcrEngine):
             try:
                 from paddleocr import PaddleOCR as _PaddleOCR
 
-                self._ocr = _PaddleOCR(
-                    lang=self._lang,
-                    use_angle_cls=True,
-                    use_gpu=self._use_gpu,
-                    show_log=False,
-                )
+                ocr_kwargs = {
+                    "lang": self._lang,
+                    "use_angle_cls": True,
+                    "use_gpu": self._use_gpu,
+                    "show_log": False,
+                }
+
+                # Windows + CPU 환경에서는 OneDNN(MKLDNN) 경로가
+                # fused_conv2d 런타임 오류를 낼 수 있어 기본 비활성화한다.
+                # 왜: OCR이 "설치되어도 실행 실패" 하는 현상을 최소 변경으로 막기 위함.
+                if not self._use_gpu and platform.system() == "Windows":
+                    ocr_kwargs["enable_mkldnn"] = False
+
+                self._ocr = _PaddleOCR(**ocr_kwargs)
                 self._ocr_lang = self._lang
                 logger.info(f"PaddleOCR 모델 로드 완료 (lang={self._lang}, gpu={self._use_gpu})")
 

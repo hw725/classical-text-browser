@@ -19,21 +19,21 @@ class OpenAiProvider(BaseLlmProvider):
     provider_id = "openai"
     display_name = "OpenAI"
     supports_image = True
-    DEFAULT_MODEL = "gpt-4.1-mini"  # 비용 효율적 기본 모델
+    DEFAULT_MODEL = "gpt-5-mini"  # 비용 효율적 기본 모델
 
     # 주요 모델 목록 (하드코딩 — API로 모델 목록을 가져올 수 있지만
     # 불필요한 모델이 너무 많아서 수동 관리가 실용적)
     MODELS = [
-        {"name": "gpt-4.1-nano", "vision": True, "cost": "lowest",
+        {"name": "gpt-5-nano", "vision": True, "cost": "lowest",
          "input": 0.0001, "output": 0.0004},
-        {"name": "gpt-4.1-mini", "vision": True, "cost": "low",
+        {"name": "gpt-5-mini", "vision": True, "cost": "low",
          "input": 0.0004, "output": 0.0016},
-        {"name": "gpt-4.1", "vision": True, "cost": "medium",
+        {"name": "gpt-5", "vision": True, "cost": "medium",
          "input": 0.002, "output": 0.008},
         {"name": "o3-mini", "vision": False, "cost": "medium",
          "input": 0.0011, "output": 0.0044},
-        {"name": "o4-mini", "vision": True, "cost": "medium",
-         "input": 0.0011, "output": 0.0044},
+        {"name": "gpt-5-pro", "vision": True, "cost": "high",
+         "input": 0.015, "output": 0.06},
     ]
 
     # 가격표 (1K tokens 기준, USD)

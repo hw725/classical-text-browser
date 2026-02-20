@@ -27,17 +27,15 @@ dependencies = [
     "python-hwpx>=0.1.0",
     "olefile>=0.47",
     "python-multipart>=0.0.22",
-    "paddlepaddle>=3.3.0",
-    "paddleocr>=2.10.0",
 ]
 
-# PaddleOCR 선택 설치: uv add --optional paddleocr paddlepaddle paddleocr
-# paddlepaddle ~500MB. Python 3.13+에서는 자동으로 3.x 설치.
-# Windows Python 3.13에서 OneDNN 에러 가능 (Linux/macOS 정상).
+# PaddleOCR 선택 설치(extra): uv sync --extra paddleocr
+# paddlepaddle ~500MB. Python 3.13+에서는 3.x가 설치된다.
+# Windows + Python 3.13 + PaddlePaddle 3.x(CPU)에서 OneDNN 런타임 오류 가능.
 [project.optional-dependencies]
 paddleocr = [
-    "paddlepaddle>=2.6.0",
-    "paddleocr>=2.8.0",
+    "paddlepaddle>=3.3.0",
+    "paddleocr>=2.10.0",
 ]
 
 [dependency-groups]

@@ -25,6 +25,7 @@ uv sync
 
 # (선택) 오프라인 OCR
 uv sync --extra paddleocr
+# 주의: Windows + Python 3.13 + PaddlePaddle 3.x(CPU) 조합은 런타임 충돌 가능
 
 # 서버 실행
 uv run python -m app serve --library <서고경로>
@@ -33,6 +34,8 @@ uv run python -m app serve --library <서고경로>
 브라우저에서 `http://localhost:8765` 접속.
 
 `--library` 없이 실행하면 GUI에서 서고를 선택/생성할 수 있습니다.
+
+PaddleOCR은 기본 설치 대상이 아니며, 충돌 없는 환경 사용자만 개별 설치를 권장합니다.
 
 ## 기술 스택
 

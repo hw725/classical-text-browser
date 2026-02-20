@@ -58,6 +58,10 @@ function _bindTransEvents() {
 
   const aiAllBtn = document.getElementById("trans-ai-all-btn");
   if (aiAllBtn) aiAllBtn.addEventListener("click", _aiTranslateAll);
+
+  // 리셋 버튼: 현재 페이지의 모든 번역 삭제
+  const resetBtn = document.getElementById("trans-reset-btn");
+  if (resetBtn) resetBtn.addEventListener("click", _resetAllTranslations);
 }
 
 
@@ -665,6 +669,66 @@ async function _saveAllTranslations() {
   if (statusEl) {
     statusEl.textContent = `${success}건 저장 완료`;
     setTimeout(() => { statusEl.textContent = ""; }, 2000);
+  }
+}
+
+
+/* ──────────────────────────────────
+   전체 리셋: 현재 페이지의 모든 번역 삭제
+   ────────────────────────────────── */
+
+/**
+ * 현재 페이지의 모든 번역을 삭제한다.
+ *
+ * 왜 이렇게 하는가: 페이지 단위로 번역을 처음부터 다시 하고 싶을 때,
+ *   개별 삭제를 반복하는 대신 한 번에 모두 삭제할 수 있다.
+ *   삭제 전 confirm()으로 사용자 확인을 받아 실수를 방지한다.
+ */
+async function _resetAllTranslations() {
+  if (!interpState.interpId || !viewerState.pageNum) {
+    alert("해석 저장소와 페이지가 선택되어야 합니다.");
+    return;
+  }
+
+  if (transState.translations.length === 0) {
+    alert("삭제할 번역이 없습니다.");
+    return;
+  }
+
+  if (!confirm(
+    `현재 페이지의 번역 ${transState.translations.length}건을 모두 삭제합니다.\n이 작업은 되돌릴 수 없습니다. 계속하시겠습니까?`
+  )) return;
+
+  let success = 0;
+  let fail = 0;
+
+  // 번역 ID 목록을 미리 복사 (삭제 중 배열 변경 방지)
+  const ids = transState.translations.map(t => t.id);
+
+  for (const trId of ids) {
+    try {
+      const res = await fetch(
+        `/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/translation/${trId}`,
+        { method: "DELETE" }
+      );
+      if (res.ok || res.status === 204) {
+        success++;
+      } else {
+        fail++;
+      }
+    } catch {
+      fail++;
+    }
+  }
+
+  // 로컬 상태 초기화
+  transState.translations = [];
+  transState.isDirty = false;
+  _renderTransCards();
+  _renderStatusSummary();
+
+  if (fail > 0) {
+    alert(`번역 리셋 완료: 성공 ${success}건, 실패 ${fail}건`);
   }
 }
 

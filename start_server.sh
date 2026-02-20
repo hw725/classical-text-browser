@@ -4,17 +4,19 @@
 set -e
 
 # ── 설정 ──────────────────────────────────────
-# 서고 경로: 첫 번째 인자 또는 기본값
-LIBRARY_PATH="${1:-examples/monggu_library}"
+# 서고 경로: 첫 번째 인자(선택)
+# 비워두면 --library 없이 실행되어 GUI에서 서고를 선택/변경할 수 있다.
+LIBRARY_PATH="${1:-}"
 
 # 서버 포트: 두 번째 인자 또는 기본값 (사용 중이면 자동으로 다음 포트 시도)
 PORT="${2:-8000}"
 
 # ── 서고 확인 ─────────────────────────────────
-if [ ! -f "$LIBRARY_PATH/library_manifest.json" ]; then
+if [ -n "$LIBRARY_PATH" ] && [ ! -f "$LIBRARY_PATH/library_manifest.json" ]; then
     echo "[오류] 서고를 찾을 수 없습니다: $LIBRARY_PATH"
     echo ""
-    echo "사용법: ./start_server.sh <서고 경로> [포트]"
+    echo "사용법: ./start_server.sh [서고 경로] [포트]"
+    echo "  예: ./start_server.sh"
     echo "  예: ./start_server.sh examples/monggu_library 8000"
     echo ""
     echo "서고 생성: uv run python -m cli init-library <경로>"
@@ -43,7 +45,11 @@ echo "============================================"
 echo "  고전 텍스트 디지털 서고 플랫폼"
 echo "============================================"
 echo ""
-echo "[서고] $LIBRARY_PATH"
+if [ -n "$LIBRARY_PATH" ]; then
+    echo "[서고] $LIBRARY_PATH"
+else
+    echo "[서고] (없음 - 시작 후 GUI에서 선택/변경)"
+fi
 echo "[서버] http://127.0.0.1:$PORT"
 echo ""
 echo "종료하려면 Ctrl+C를 누르세요."
@@ -62,4 +68,8 @@ echo ""
 ) &
 
 # ── 서버 실행 ─────────────────────────────────
-uv run python -m app serve --library "$LIBRARY_PATH" --port "$PORT"
+if [ -n "$LIBRARY_PATH" ]; then
+    uv run python -m app serve --library "$LIBRARY_PATH" --port "$PORT"
+else
+    uv run python -m app serve --port "$PORT"
+fi

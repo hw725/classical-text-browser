@@ -83,6 +83,9 @@ uv sync
 
 # 3. (선택) 오프라인 OCR 엔진 설치 (~500MB)
 uv sync --extra paddleocr
+
+# 주의: PaddleOCR은 개별 설치 권장
+# Windows + Python 3.13 + PaddlePaddle 3.x(CPU) 조합에서는 실행 충돌 가능
 ```
 
 ### 2.3 서버 실행

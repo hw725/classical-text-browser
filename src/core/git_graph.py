@@ -74,7 +74,7 @@ def extract_layers_affected(commit_message: str) -> list[str]:
 
 def _collect_commits(
     repo_path: Path,
-    branch: str = "main",
+    branch: str = "auto",
     max_count: int = 50,
     offset: int = 0,
 ) -> tuple[list[dict], int, list[str]]:
@@ -90,15 +90,17 @@ def _collect_commits(
     # 가용 브랜치
     branches = [b.name for b in repo.branches]
 
+    selected_branch = _resolve_branch_name(repo, branch, branches)
+
     # 해당 브랜치의 커밋
     try:
-        total = sum(1 for _ in repo.iter_commits(branch))
+        total = sum(1 for _ in repo.iter_commits(selected_branch))
     except (git.GitCommandError, ValueError):
         total = 0
         return [], total, branches
 
     commits = []
-    for i, c in enumerate(repo.iter_commits(branch, max_count=max_count + offset)):
+    for i, c in enumerate(repo.iter_commits(selected_branch, max_count=max_count + offset)):
         if i < offset:
             continue
         commits.append({
@@ -112,6 +114,39 @@ def _collect_commits(
         })
 
     return commits, total, branches
+
+
+def _resolve_branch_name(repo: git.Repo, requested: str, branches: list[str]) -> str:
+    """요청 브랜치를 실제 사용할 브랜치명으로 해석한다.
+
+    우선순위:
+    1) requested가 명시되어 있고 존재하면 그대로 사용
+    2) active branch
+    3) main / master
+    4) 첫 번째 브랜치
+    """
+    req = (requested or "").strip()
+
+    if req and req != "auto" and req in branches:
+        return req
+
+    try:
+        active = repo.active_branch.name
+        if active in branches:
+            return active
+    except TypeError:
+        pass
+    except ValueError:
+        pass
+
+    for candidate in ("main", "master"):
+        if candidate in branches:
+            return candidate
+
+    if branches:
+        return branches[0]
+
+    return req or "main"
 
 
 # ──────────────────────────────────────
@@ -192,8 +227,8 @@ def get_git_graph_data(
     library_path: str | Path,
     doc_id: str,
     interp_id: str,
-    original_branch: str = "main",
-    interp_branch: str = "main",
+    original_branch: str = "auto",
+    interp_branch: str = "auto",
     limit: int = 50,
     offset: int = 0,
 ) -> dict:
@@ -214,13 +249,28 @@ def get_git_graph_data(
     interp_path = library_path / "interpretations" / interp_id
 
     # 원본 저장소 커밋
+    orig_selected_branch = original_branch
+    interp_selected_branch = interp_branch
+
+    try:
+        orig_repo = git.Repo(doc_path)
+        orig_selected_branch = _resolve_branch_name(orig_repo, original_branch, [b.name for b in orig_repo.branches])
+    except (git.InvalidGitRepositoryError, git.NoSuchPathError):
+        pass
+
+    try:
+        interp_repo = git.Repo(interp_path)
+        interp_selected_branch = _resolve_branch_name(interp_repo, interp_branch, [b.name for b in interp_repo.branches])
+    except (git.InvalidGitRepositoryError, git.NoSuchPathError):
+        pass
+
     orig_commits, orig_total, orig_branches = _collect_commits(
-        doc_path, original_branch, limit, offset
+        doc_path, orig_selected_branch, limit, offset
     )
 
     # 해석 저장소 커밋
     interp_commits, interp_total, interp_branches = _collect_commits(
-        interp_path, interp_branch, limit, offset
+        interp_path, interp_selected_branch, limit, offset
     )
 
     # 해석 커밋에 base_original_hash 필드 추가
@@ -234,12 +284,14 @@ def get_git_graph_data(
 
     return {
         "original": {
-            "branch": original_branch,
+            "branch": orig_selected_branch,
+            "requested_branch": original_branch,
             "branches_available": orig_branches,
             "commits": orig_commits,
         },
         "interpretation": {
-            "branch": interp_branch,
+            "branch": interp_selected_branch,
+            "requested_branch": interp_branch,
             "branches_available": interp_branches,
             "commits": interp_commits,
         },

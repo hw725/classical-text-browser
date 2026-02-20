@@ -173,6 +173,23 @@ class TestOcrPipeline:
         assert result.processed_blocks == 1
         assert result.ocr_results[0]["layout_block_id"] == "p01_b02"
 
+    def test_run_block_merges_existing_l2_results(self, test_library):
+        registry = OcrEngineRegistry()
+        registry.register(DummyOcrEngine())
+        pipeline = OcrPipeline(registry, library_root=str(test_library))
+
+        pipeline.run_page("doc001", "vol1", 1)
+        pipeline.run_block("doc001", "vol1", 1, "p01_b02")
+
+        l2_path = test_library / "documents" / "doc001" / "L2_ocr" / "vol1_page_001.json"
+        with open(l2_path, encoding="utf-8") as f:
+            data = json.load(f)
+
+        block_ids = [item.get("layout_block_id") for item in data.get("ocr_results", [])]
+        assert "p01_b01" in block_ids
+        assert "p01_b02" in block_ids
+        assert len(data.get("ocr_results", [])) == 2
+
     def test_to_dict_schema_format(self, test_library):
         """to_dict()가 ocr_page.schema.json 형식을 따르는지."""
         registry = OcrEngineRegistry()

@@ -126,6 +126,27 @@ def add_document(
 
     # --- git init + .gitattributes (LFS 설정) ---
     # v7 §5.1: git-lfs 필수. 이미지/PDF는 LFS로 관리.
+    gitignore_content = (
+        "# 안전 규칙: 저장소 내부 Git 메타데이터는 절대 추적하지 않는다.\n"
+        ".git\n"
+        ".git/\n"
+        "**/.git\n"
+        "**/.git/**\n"
+        "\n"
+        "# 임시/캐시 파일\n"
+        "__pycache__/\n"
+        "*.py[cod]\n"
+        "*.tmp\n"
+        "*.temp\n"
+        "\n"
+        "# 에디터/OS 잡파일\n"
+        ".DS_Store\n"
+        "Thumbs.db\n"
+        ".vscode/\n"
+        ".idea/\n"
+    )
+    (doc_path / ".gitignore").write_text(gitignore_content, encoding="utf-8")
+
     gitattributes_content = (
         "# git-lfs: 이미지/PDF 대용량 파일 관리 (v7 §5.1)\n"
         "*.pdf filter=lfs diff=lfs merge=lfs -text\n"
@@ -787,7 +808,11 @@ def save_page_corrections(
     }
 
 
-def git_commit_document(doc_path: str | Path, message: str) -> dict:
+def git_commit_document(
+    doc_path: str | Path,
+    message: str,
+    add_paths: list[str] | None = None,
+) -> dict:
     """문헌 저장소에 git commit을 생성한다.
 
     목적: 교정 저장 시 자동으로 커밋하여 버전 이력을 남긴다.
@@ -813,7 +838,21 @@ def git_commit_document(doc_path: str | Path, message: str) -> dict:
     if not repo.is_dirty(untracked_files=True):
         return {"committed": False, "message": "변경사항 없음"}
 
-    repo.index.add(["."])
+    if add_paths:
+        staged_paths = []
+        for rel_path in add_paths:
+            if not rel_path:
+                continue
+            abs_path = (doc_path / rel_path).resolve()
+            if abs_path.exists():
+                staged_paths.append(rel_path)
+
+        if staged_paths:
+            repo.index.add(staged_paths)
+        else:
+            repo.index.add(["."])
+    else:
+        repo.index.add(["."])
 
     try:
         commit = repo.index.commit(message)

@@ -1,27 +1,44 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>고전 텍스트 디지털 서고</title>
-  <link rel="stylesheet" href="/static/css/workspace.css">
-</head>
-<body>
-
-<!-- D-001: VSCode 스타일 통합 작업 환경 -->
-<div class="workspace">
-
-  <!-- 액티비티 바: VSCode 좌측 아이콘 스트립 -->
-  <aside class="activity-bar">
-    <button class="activity-btn active" data-panel="explorer" title="서고 브라우저">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
-      </svg>
-    </button>
-    <!-- 미구현 placeholder 버튼: 검색, Git 이력
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+    <title>고전 텍스트 디지털 서고</title>
+    <link
+      rel="stylesheet"
+      href="/static/css/workspace.css"
+    />
+  </head>
+  <body>
+    <!-- D-001: VSCode 스타일 통합 작업 환경 -->
+    <div class="workspace">
+      <!-- 액티비티 바: VSCode 좌측 아이콘 스트립 -->
+      <aside class="activity-bar">
+        <button
+          class="activity-btn active"
+          data-panel="explorer"
+          title="서고 브라우저"
+        >
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+            />
+          </svg>
+        </button>
+        <!-- 미구현 placeholder 버튼: 검색, Git 이력
          기능이 구현되면 주석 해제. 현재는 클릭해도 서고 브라우저와 동일하게
          동작하여 사용자 혼란을 유발하므로 숨김 처리. -->
-    <!--
+        <!--
     <button class="activity-btn" data-panel="search" title="검색">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
@@ -34,1444 +51,3674 @@
       </svg>
     </button>
     -->
-    <div class="activity-spacer"></div>
-    <button id="theme-toggle" class="theme-toggle-btn" title="라이트 모드로 전환">
-      <!-- 해/달 아이콘: JS에서 동적 전환 -->
-      <svg id="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
-        <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
-        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-        <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
-        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-      </svg>
-      <svg id="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
-      </svg>
-    </button>
-    <button class="activity-btn" data-panel="settings" title="설정">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="3"/>
-        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
-      </svg>
-    </button>
-  </aside>
-
-  <!-- 사이드바: 서고 브라우저 (D-001: 파일 탐색기 → 서고 브라우저) -->
-  <aside class="sidebar" id="sidebar">
-    <div class="sidebar-header">
-      <span class="sidebar-title">서고 브라우저</span>
-    </div>
-    <div class="sidebar-content" id="sidebar-content">
-      <div class="sidebar-section">
-        <div class="section-header">
-          문헌 목록
-          <div class="section-header-actions">
-            <button id="create-doc-btn" class="section-action-btn" title="URL에서 새 문헌 생성"
-              onclick="if(typeof _openCreateDocDialog==='function')_openCreateDocDialog()">+ 새 문헌</button>
-            <button id="import-hwp-btn" class="section-action-btn" title="HWP/HWPX 파일에서 텍스트 가져오기"
-              onclick="if(typeof _openHwpImportDialog==='function')_openHwpImportDialog()">HWP</button>
-          </div>
-        </div>
-        <div id="document-list" class="tree-view">
-          <div class="placeholder">서고를 불러오는 중...</div>
-        </div>
-      </div>
-
-      <!-- Phase 5: 서지정보 섹션 (문헌 선택 시 표시) -->
-      <div class="sidebar-section" id="bib-section" style="display:none;">
-        <div class="section-header">
-          서지정보
-          <div class="section-header-actions">
-            <button id="bib-fetch-btn" class="section-action-btn" title="서지정보 가져오기">가져오기</button>
-            <button id="bib-edit-btn" class="section-action-btn" title="수동 편집">편집</button>
-          </div>
-        </div>
-        <div id="bib-fields" class="bib-fields">
-          <div class="placeholder">문헌을 선택하면 서지정보가 표시됩니다</div>
-        </div>
-      </div>
-
-      <!-- Phase 7: 해석 저장소 섹션 -->
-      <div class="sidebar-section" id="interp-section" style="display:none;">
-        <div class="section-header">
-          해석 저장소
-          <div class="section-header-actions">
-            <button id="interp-create-btn" class="section-action-btn" title="새 해석 저장소 만들기">새로 만들기</button>
-            <button id="snapshot-import-btn" class="section-action-btn" title="JSON 스냅샷 가져오기">가져오기</button>
-          </div>
-        </div>
-        <div id="interp-list" class="interp-list">
-          <div class="placeholder">해석 모드에서 저장소 목록이 표시됩니다</div>
-        </div>
-      </div>
-
-      <!-- 설정 패널 (settings 버튼 클릭 시 표시) -->
-      <div class="sidebar-section" id="settings-section" style="display:none;">
-        <div class="section-header">서고 설정</div>
-        <div class="settings-group">
-          <div class="settings-label">서고 경로</div>
-          <div class="settings-library-row">
-            <input type="text" id="settings-library-input"
-                   class="settings-library-input"
-                   placeholder="서고 경로 입력..." readonly>
-            <button class="btn-sm" id="btn-edit-library" title="경로 편집">편집</button>
-          </div>
-          <div class="settings-library-actions" id="library-actions" style="display:none;">
-            <button class="btn-sm btn-primary" id="btn-switch-library">변경</button>
-            <button class="btn-sm" id="btn-cancel-library">취소</button>
-            <button class="btn-sm" id="btn-new-library">새 서고</button>
-          </div>
-          <div id="recent-libraries" class="recent-library-list"></div>
-        </div>
-
-        <div class="section-header" style="margin-top:12px;">원본 저장소</div>
-        <div id="settings-doc-repos" class="settings-repo-list">
-          <div class="placeholder">로딩 중...</div>
-        </div>
-
-        <div class="section-header" style="margin-top:12px;">해석 저장소</div>
-        <div id="settings-interp-repos" class="settings-repo-list">
-          <div class="placeholder">로딩 중...</div>
-        </div>
-      </div>
-    </div>
-  </aside>
-
-  <!-- 사이드바 리사이즈 핸들 -->
-  <div class="resize-handle resize-sidebar" id="resize-sidebar"></div>
-
-  <!-- 메인 영역 -->
-  <main class="main-area">
-
-    <!-- 모드 탭 바: 열람 / 레이아웃 / 교정 / 편성 / 표점 / 현토 / 번역 / 주석 / 교차 뷰어 -->
-    <div class="mode-bar">
-      <div class="mode-tab active" data-mode="view">열람</div>
-      <div class="mode-tab" data-mode="layout">레이아웃</div>
-      <div class="mode-tab" data-mode="correction">교정</div>
-      <div class="mode-tab" data-mode="composition">편성</div>
-      <div class="mode-tab" data-mode="punctuation">표점</div>
-      <div class="mode-tab" data-mode="hyeonto">현토</div>
-      <div class="mode-tab" data-mode="translation">번역</div>
-      <div class="mode-tab" data-mode="annotation">주석</div>
-      <div class="mode-tab" data-mode="citation">인용</div>
-      <div class="mode-tab" data-mode="interpretation">교차 뷰어</div>
-    </div>
-
-    <!-- 에디터 영역: D-001 에디터 → 병렬 뷰어 (이미지 + 텍스트) -->
-    <div class="editor-area">
-
-      <!-- 좌측 패널: 원본 PDF 뷰어 -->
-      <div class="editor-panel editor-left" id="editor-left">
-        <div class="panel-label" id="left-panel-label">원본 저장소 (1~4층)</div>
-
-        <!-- 기본 placeholder (문헌 미선택 시) -->
-        <div class="editor-placeholder" id="pdf-placeholder">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3">
-            <rect x="3" y="3" width="18" height="18" rx="2"/>
-            <circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
+        <div class="activity-spacer"></div>
+        <button
+          id="theme-toggle"
+          class="theme-toggle-btn"
+          title="라이트 모드로 전환"
+        >
+          <!-- 해/달 아이콘: JS에서 동적 전환 -->
+          <svg
+            id="theme-icon-sun"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            style="display: none"
+          >
+            <circle
+              cx="12"
+              cy="12"
+              r="5"
+            />
+            <line
+              x1="12"
+              y1="1"
+              x2="12"
+              y2="3"
+            />
+            <line
+              x1="12"
+              y1="21"
+              x2="12"
+              y2="23"
+            />
+            <line
+              x1="4.22"
+              y1="4.22"
+              x2="5.64"
+              y2="5.64"
+            />
+            <line
+              x1="18.36"
+              y1="18.36"
+              x2="19.78"
+              y2="19.78"
+            />
+            <line
+              x1="1"
+              y1="12"
+              x2="3"
+              y2="12"
+            />
+            <line
+              x1="21"
+              y1="12"
+              x2="23"
+              y2="12"
+            />
+            <line
+              x1="4.22"
+              y1="19.78"
+              x2="5.64"
+              y2="18.36"
+            />
+            <line
+              x1="18.36"
+              y1="5.64"
+              x2="19.78"
+              y2="4.22"
+            />
           </svg>
-          <p>원본 이미지 / PDF 뷰어</p>
-          <p class="hint">문헌을 선택하면 여기에 표시됩니다</p>
-        </div>
-
-        <!-- PDF 뷰어 (문헌 선택 시 표시) -->
-        <div class="pdf-viewer" id="pdf-viewer" style="display: none;">
-          <!-- PDF 툴바 -->
-          <div class="pdf-toolbar">
-            <!-- 권 선택 (다권본) -->
-            <select id="pdf-part-select" class="pdf-select" title="권 선택"></select>
-            <div class="pdf-toolbar-divider"></div>
-            <!-- 페이지 탐색 -->
-            <button id="pdf-prev" class="pdf-btn" title="이전 페이지 (↑/PageUp)">&#9650;</button>
-            <input id="pdf-page-input" type="number" min="1" value="1" class="pdf-page-input" title="페이지 번호" aria-label="페이지 번호"/>
-            <span id="pdf-page-total" class="pdf-page-total">/ ?</span>
-            <button id="pdf-next" class="pdf-btn" title="다음 페이지 (↓/PageDown)">&#9660;</button>
-            <div class="pdf-toolbar-divider"></div>
-            <!-- 줌 -->
-            <button id="pdf-zoom-out" class="pdf-btn" title="축소">&#8722;</button>
-            <span id="pdf-zoom-level" class="pdf-zoom-level">100%</span>
-            <button id="pdf-zoom-in" class="pdf-btn" title="확대">+</button>
-            <button id="pdf-zoom-fit" class="pdf-btn" title="맞춤 모드 전환 (가로/세로/해제)">&#8862;</button>
-            <span id="pdf-fit-label" class="pdf-toolbar-label"></span>
-            <div class="pdf-toolbar-divider"></div>
-            <!-- 이미지 필터 -->
-            <button id="pdf-filter-btn" class="pdf-btn" title="이미지 필터 전환 (원본/흑백/고대비/반전)">&#9681;</button>
-            <span id="pdf-filter-label" class="pdf-toolbar-label"></span>
-            <div class="pdf-toolbar-divider"></div>
-            <!-- 회전 -->
-            <button id="pdf-rotate-ccw" class="pdf-btn" title="반시계 방향 90° 회전">&#8634;</button>
-            <button id="pdf-rotate-cw" class="pdf-btn" title="시계 방향 90° 회전">&#8635;</button>
-            <span id="pdf-rotation-label" class="pdf-toolbar-label"></span>
-            <div class="pdf-toolbar-divider"></div>
-            <!-- 읽기 보조선 -->
-            <button id="pdf-reader-line-btn" class="pdf-btn" title="읽기 보조선 (R)">&#9473;</button>
-          </div>
-          <!-- 캔버스 영역 -->
-          <div class="pdf-canvas-container" id="pdf-canvas-container">
-            <!-- 로딩 인디케이터 (페이지 전환 시 표시) -->
-            <div class="pdf-loading-indicator" id="pdf-loading-indicator" style="display:none;">
-              <div class="pdf-loading-spinner"></div>
-            </div>
-            <div class="pdf-canvas-wrapper" id="pdf-canvas-wrapper">
-              <canvas id="pdf-canvas"></canvas>
-              <!-- Phase 4: 레이아웃 오버레이 캔버스 (레이아웃 모드에서만 활성화) -->
-              <canvas id="layout-overlay" class="layout-overlay" style="display:none;"></canvas>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 에디터 리사이즈 핸들 -->
-      <div class="resize-handle resize-editor" id="resize-editor"></div>
-
-      <!-- 우측 패널: 레이아웃 속성 편집 (Phase 4, 레이아웃 모드에서만 표시) -->
-      <div class="editor-panel editor-right layout-props-panel" id="layout-props-panel" style="display:none;">
-        <div class="panel-label">LayoutBlock 속성</div>
-
-        <!-- 레이아웃 도구 바 -->
-        <div class="layout-toolbar">
-          <button id="layout-save" class="text-btn text-btn-primary" title="저장 (Ctrl+S)">저장</button>
-          <span id="layout-save-status" class="text-save-status"></span>
-          <div class="text-toolbar-spacer"></div>
-          <span id="layout-block-count" class="text-toolbar-info">블록: 0</span>
-        </div>
-
-        <!-- Phase 10-2: AI 분석 도구 바 -->
-        <div class="layout-toolbar llm-toolbar" id="llm-toolbar">
-          <select id="llm-model-select" class="props-select llm-model-select" title="LLM 모델 선택" data-vision-only>
-            <option value="auto">자동 (폴백순서)</option>
-          </select>
-          <button id="llm-analyze-btn" class="text-btn text-btn-primary" title="AI 레이아웃 분석">AI 분석</button>
-          <button id="llm-compare-btn" class="text-btn" title="여러 모델 비교">비교</button>
-          <span id="llm-analyze-status" class="text-save-status"></span>
-        </div>
-
-        <!-- Phase 10-2: LLM 상태 표시 -->
-        <div class="llm-status-bar" id="llm-status-bar">
-          <span class="llm-status-label">LLM:</span>
-          <span id="llm-status-indicators"></span>
-          <span id="llm-cost-display" class="llm-cost-display"></span>
-        </div>
-
-        <!-- 선택된 블록 속성 편집 -->
-        <div class="layout-props-form" id="layout-props-form" style="display:none;">
-          <div class="props-section-title">선택된 블록</div>
-
-          <label class="props-label">block_id</label>
-          <input id="prop-block-id" class="props-input" readonly />
-
-          <label class="props-label">block_type</label>
-          <select id="prop-block-type" class="props-select"></select>
-
-          <label class="props-label">reading_order</label>
-          <input id="prop-reading-order" type="number" min="0" class="props-input" />
-
-          <label class="props-label">writing_direction</label>
-          <select id="prop-writing-dir" class="props-select">
-            <option value="vertical_rtl">vertical_rtl (세로 우→좌)</option>
-            <option value="vertical_ltr">vertical_ltr (세로 좌→우)</option>
-            <option value="horizontal_ltr">horizontal_ltr (가로 좌→우)</option>
-            <option value="horizontal_rtl">horizontal_rtl (가로 우→좌)</option>
-          </select>
-
-          <label class="props-label">refers_to_block</label>
-          <select id="prop-refers-to" class="props-select">
-            <option value="">없음</option>
-          </select>
-
-          <label class="props-label">line_style</label>
-          <select id="prop-line-style" class="props-select">
-            <option value="">미지정</option>
-            <option value="single_line">single_line (단행)</option>
-            <option value="double_line">double_line (쌍행)</option>
-          </select>
-
-          <label class="props-label">font_size_class</label>
-          <select id="prop-font-size" class="props-select">
-            <option value="">미지정</option>
-            <option value="large">large (대자)</option>
-            <option value="small">small (소자)</option>
-          </select>
-
-          <div class="props-actions">
-            <button id="prop-delete" class="text-btn props-btn-danger" title="블록 삭제 (Delete)">블록 삭제</button>
-          </div>
-        </div>
-
-        <!-- Phase 10-1: OCR 실행 패널 -->
-        <div class="ocr-panel" id="ocr-panel">
-          <div class="props-section-title">OCR 실행</div>
-
-          <div class="ocr-controls">
-            <!-- 엔진 행: 엔진이 2개 이상이면 표시 (JS에서 제어) -->
-            <div class="ocr-control-row" id="ocr-engine-row">
-              <label class="props-label">엔진</label>
-              <select id="ocr-engine-select" class="props-select" title="OCR 엔진 선택">
-                <option value="">로딩 중...</option>
-              </select>
-            </div>
-
-            <!-- LLM 모델 행: llm_vision 엔진일 때만 표시 -->
-            <div class="ocr-control-row" id="ocr-llm-model-row" style="display:none;">
-              <label class="props-label">LLM 모델</label>
-              <select id="ocr-llm-model-select" class="props-select llm-model-select" title="LLM 프로바이더/모델 선택" data-vision-only>
-                <option value="auto">자동 (폴백순서)</option>
-              </select>
-            </div>
-
-            <!-- PaddleOCR 언어 행: paddleocr 엔진일 때만 표시 -->
-            <div class="ocr-control-row" id="ocr-paddle-lang-row" style="display:none;">
-              <label class="props-label">언어</label>
-              <select id="ocr-paddle-lang-select" class="props-select" title="PaddleOCR 인식 언어">
-                <option value="ch">중국어 간체</option>
-                <option value="chinese_cht">중국어 번체</option>
-                <option value="korean">한국어</option>
-                <option value="japan">일본어</option>
-                <option value="en">영어</option>
-              </select>
-            </div>
-
-            <div class="ocr-buttons">
-              <button id="ocr-run-all" class="text-btn text-btn-primary" title="전체 블록 OCR 실행">전체 OCR</button>
-              <button id="ocr-run-selected" class="text-btn" title="선택된 블록만 OCR" disabled>선택 블록 OCR</button>
-            </div>
-
-            <div id="ocr-progress" class="ocr-progress" style="display:none;">
-              <span id="ocr-progress-text">처리 중...</span>
-              <div class="ocr-progress-bar">
-                <div id="ocr-progress-fill" class="ocr-progress-fill"></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- OCR 결과 미리보기 -->
-          <div id="ocr-results-preview" class="ocr-results-preview" style="display:none;">
-            <div class="props-section-title">OCR 결과
-              <button id="ocr-vertical-btn" class="text-btn text-btn-sm" title="세로쓰기로 전환">세로</button>
-            </div>
-            <div id="ocr-results-list" class="ocr-results-list"></div>
-            <div class="ocr-results-meta">
-              <span id="ocr-results-summary"></span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 전체 블록 목록 (reading_order 순) -->
-        <div class="layout-block-list-section">
-          <div class="props-section-title">전체 블록 목록 (reading_order 순)</div>
-          <div id="layout-block-list" class="layout-block-list"></div>
-        </div>
-      </div>
-
-      <!-- 우측 패널: 교정 편집기 (Phase 6, 교정 모드에서만 표시) -->
-      <div class="editor-panel editor-right correction-panel" id="correction-panel" style="display:none;">
-        <div class="panel-label">교정 편집기 (L4)</div>
-
-        <!-- 교정 도구 바 -->
-        <div class="corr-toolbar">
-          <button id="corr-save" class="text-btn text-btn-primary" title="저장 (Ctrl+S)">저장</button>
-          <span id="corr-save-status" class="text-save-status"></span>
-          <div class="text-toolbar-spacer"></div>
-          <span id="corr-count" class="text-toolbar-info">교정: 0건</span>
-          <div class="text-toolbar-divider"></div>
-          <select id="corr-block-filter" class="corr-block-filter" title="블록 필터">
-            <option value="all">전체</option>
-          </select>
-          <div class="text-toolbar-divider"></div>
-          <button id="corr-fill-ocr" class="text-btn" title="OCR 결과로 텍스트 채우기">OCR 채우기</button>
-          <div class="text-toolbar-divider"></div>
-          <button id="corr-vertical-btn" class="text-btn" title="세로쓰기로 전환">세로</button>
-        </div>
-
-        <!-- 서브탭: 교정 / 대조 -->
-        <div class="corr-subtab-bar">
-          <div class="corr-subtab active" data-view="corrections">교정</div>
-          <div class="corr-subtab" data-view="alignment">대조</div>
-        </div>
-
-        <!-- 교정 텍스트 표시 영역 (글자 단위 span) -->
-        <div id="corr-text-area" class="corr-text-area">
-          <div class="placeholder">교정 모드에서 텍스트가 여기에 표시됩니다</div>
-        </div>
-
-        <!-- 교정 목록 (현재 페이지) -->
-        <div class="corr-list-section" id="corr-list-section">
-          <div class="props-section-title">교정 목록</div>
-          <div id="corr-list" class="corr-list"></div>
-        </div>
-
-        <!-- 대조 뷰 (Phase 10-3, 대조 탭에서만 표시) -->
-        <div id="alignment-view" class="alignment-view" style="display:none;">
-          <!-- 통계 바 -->
-          <div id="alignment-stats-bar" class="alignment-stats-bar">
-            <div class="placeholder">대조를 실행하면 통계가 여기에 표시됩니다</div>
-          </div>
-
-          <!-- 블록 탭 -->
-          <div id="alignment-block-tabs" class="alignment-block-tabs"></div>
-
-          <!-- 글자별 대조 테이블 -->
-          <div id="alignment-table" class="alignment-table"></div>
-
-          <!-- 이체자 사전 관리 -->
-          <div class="alignment-variant-section">
-            <div class="props-section-title">
-              이체자 사전
-              <button id="alignment-add-variant" class="text-btn text-btn-small" title="이체자 쌍 추가">+ 추가</button>
-            </div>
-            <div id="alignment-variant-list" class="alignment-variant-list"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 우측 패널: 편성 에디터 (교정→표점 사이, LayoutBlock→TextBlock 변환) -->
-      <div class="editor-panel editor-right composition-panel" id="composition-panel" style="display:none;">
-        <div class="panel-label">텍스트 편성
-          <span id="comp-save-status" class="text-save-status"></span>
-        </div>
-
-        <!-- 도구 바 -->
-        <div class="comp-toolbar" style="display:flex; gap:6px; padding:6px 8px; border-bottom:1px solid var(--border);">
-          <button id="comp-auto-btn" class="text-btn" title="각 LayoutBlock을 1:1로 TextBlock 자동 생성">자동 편성</button>
-          <button id="comp-merge-btn" class="text-btn" title="선택한 블록들을 합쳐서 하나의 TextBlock 생성">합치기</button>
-          <div style="flex:1;"></div>
-          <span id="comp-block-count" class="text-save-status" style="font-size:11px;"></span>
-        </div>
-
-        <!-- 교정된 텍스트 블록 목록 (좌측: 소스) -->
-        <div class="comp-container" style="display:flex; flex-direction:column; flex:1; overflow:auto; padding:8px;">
-          <!-- 소스 블록 영역 -->
-          <div class="comp-section">
-            <div class="comp-section-title" style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px;">
-              교정된 LayoutBlock (소스)
-            </div>
-            <div id="comp-source-blocks" class="comp-block-list" style="display:flex; flex-direction:column; gap:6px;">
-              <div class="placeholder" style="padding:20px; text-align:center; color:var(--text-muted);">
-                페이지를 선택하세요
-              </div>
-            </div>
-          </div>
-
-          <!-- 구분선 -->
-          <div style="border-top:1px solid var(--border); margin:12px 0; position:relative;">
-            <span style="position:absolute; top:-9px; left:50%; transform:translateX(-50%); background:var(--bg-primary); padding:0 8px; font-size:10px; color:var(--text-muted);">▼ TextBlock ▼</span>
-          </div>
-
-          <!-- 생성된 TextBlock 목록 -->
-          <div class="comp-section">
-            <div class="comp-section-title" style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px;">
-              생성된 TextBlock (해석 저장소)
-            </div>
-            <div id="comp-textblock-list" class="comp-block-list" style="display:flex; flex-direction:column; gap:6px;">
-              <div class="placeholder" style="padding:20px; text-align:center; color:var(--text-muted);">
-                해석 저장소를 선택하세요
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 우측 패널: 교차 뷰어 (Phase 7, interpretation 모드에서만 표시) -->
-      <div class="editor-panel editor-right interp-panel" id="interp-panel" style="display:none;">
-        <div class="panel-label">교차 뷰어 (L5~L7)
-          <button id="snapshot-export-btn" class="section-action-btn" title="JSON 스냅샷 내보내기" style="margin-left:auto;">내보내기</button>
-        </div>
-
-        <!-- 의존 경고 배너 -->
-        <div id="interp-dep-banner" class="interp-dep-banner" style="display:none;">
-          <span class="interp-dep-icon">&#9888;</span>
-          <span id="interp-dep-msg" class="interp-dep-msg">원본이 변경되었습니다</span>
-          <div class="interp-dep-actions">
-            <button id="interp-dep-diff" class="text-btn" title="변경 파일 보기">diff</button>
-            <button id="interp-dep-ack" class="text-btn" title="변경 인지">확인</button>
-            <button id="interp-dep-update" class="text-btn text-btn-primary" title="기반 업데이트">기반 업데이트</button>
-          </div>
-        </div>
-
-        <!-- 층별 서브탭 -->
-        <div class="interp-subtab-bar">
-          <div class="interp-subtab active" data-layer="L5_reading">구두점 (L5)</div>
-          <div class="interp-subtab" data-layer="L6_translation">번역 (L6)</div>
-          <div class="interp-subtab" data-layer="L7_annotation">주석 (L7)</div>
-        </div>
-
-        <!-- main_text / annotation 토글 -->
-        <div class="interp-subtype-bar" id="interp-subtype-bar">
-          <label class="interp-radio-label">
-            <input type="radio" name="interp-subtype" value="main_text" checked /> main_text
-          </label>
-          <label class="interp-radio-label">
-            <input type="radio" name="interp-subtype" value="annotation" /> annotation
-          </label>
-        </div>
-
-        <!-- 도구 바 -->
-        <div class="interp-toolbar">
-          <span class="text-toolbar-info" id="interp-file-info"></span>
-          <div class="text-toolbar-spacer"></div>
-          <button id="entity-create-textblock-btn" class="text-btn" title="이 본문 블록에서 TextBlock 만들기" style="display:none;">TextBlock 만들기</button>
-          <button id="entity-llm-request-btn" class="text-btn" title="LLM에게 요청" style="display:none;">LLM에게 요청</button>
-          <div class="text-toolbar-divider"></div>
-          <button id="interp-save" class="text-btn text-btn-primary" title="저장 (Ctrl+S)">저장</button>
-          <span id="interp-save-status" class="text-save-status"></span>
-        </div>
-
-        <!-- 편집 영역 -->
-        <textarea id="interp-content" class="text-content interp-content"
-          placeholder="해석 저장소 파일 내용"
-          spellcheck="false"></textarea>
-      </div>
-
-      <!-- 우측 패널: 표점 편집기 (Phase 11-1, 표점 모드에서만 표시) -->
-      <div class="editor-panel editor-right punct-panel" id="punct-panel" style="display:none;">
-        <div class="panel-label">표점 편집기 (L5)</div>
-
-        <!-- 도구 바 -->
-        <div class="punct-toolbar">
-          <select id="punct-block-select" class="corr-block-filter" title="블록 선택">
-            <option value="">블록 선택</option>
-          </select>
-          <div class="text-toolbar-spacer"></div>
-          <select id="punct-llm-model-select" class="props-select llm-model-select" title="LLM 모델">
-            <option value="auto">자동</option>
-          </select>
-          <button id="punct-ai-btn" class="text-btn" title="AI 표점 생성">AI 표점</button>
-          <button id="punct-clear-btn" class="text-btn" title="표점 초기화">초기화</button>
-          <div class="text-toolbar-divider"></div>
-          <button id="punct-save-btn" class="text-btn text-btn-primary" title="저장">저장</button>
-          <span id="punct-save-status" class="text-save-status"></span>
-        </div>
-
-        <!-- 원문 + 표점 삽입 영역 -->
-        <div class="punct-char-area" id="punct-char-area">
-          <div class="placeholder">표점 모드: 문헌을 선택하면 원문이 표시됩니다</div>
-        </div>
-
-        <!-- 표점 부호 팔레트 -->
-        <div class="punct-palette" id="punct-palette">
-          <div class="punct-palette-label">표점 부호</div>
-          <div class="punct-palette-row" id="punct-palette-row">
-            <!-- JS에서 동적 생성 -->
-          </div>
-        </div>
-
-        <!-- 마크 목록 -->
-        <div class="punct-marks-section">
-          <div class="props-section-title">표점 목록 (<span id="punct-mark-count">0</span>건)</div>
-          <div id="punct-marks-list" class="punct-marks-list"></div>
-        </div>
-
-        <!-- 미리보기 -->
-        <div class="punct-preview-section">
-          <div class="props-section-title">미리보기</div>
-          <div id="punct-preview" class="punct-preview"></div>
-        </div>
-      </div>
-
-      <!-- 우측 패널: 현토 편집기 (Phase 11-1, 현토 모드에서만 표시) -->
-      <div class="editor-panel editor-right hyeonto-panel" id="hyeonto-panel" style="display:none;">
-        <div class="panel-label">현토 편집기 (L5)</div>
-
-        <!-- 도구 바 -->
-        <div class="hyeonto-toolbar">
-          <select id="hyeonto-block-select" class="corr-block-filter" title="블록 선택">
-            <option value="">블록 선택</option>
-          </select>
-          <div class="text-toolbar-spacer"></div>
-          <button id="hyeonto-clear-btn" class="text-btn" title="현토 초기화">초기화</button>
-          <div class="text-toolbar-divider"></div>
-          <button id="hyeonto-save-btn" class="text-btn text-btn-primary" title="저장">저장</button>
-          <span id="hyeonto-save-status" class="text-save-status"></span>
-        </div>
-
-        <!-- 원문 + 현토 삽입 영역 -->
-        <div class="hyeonto-char-area" id="hyeonto-char-area">
-          <div class="placeholder">현토 모드: 문헌을 선택하면 원문이 표시됩니다</div>
-        </div>
-
-        <!-- 현토 입력 팝업 (글자 클릭 시 표시) -->
-        <div class="hyeonto-input-popup" id="hyeonto-input-popup" style="display:none;">
-          <div class="hyeonto-popup-header">
-            <span id="hyeonto-popup-target">글자</span>에 현토 삽입
-            <button class="hyeonto-popup-close" id="hyeonto-popup-close">&times;</button>
-          </div>
-          <div class="hyeonto-popup-body">
-            <label class="hyeonto-popup-label">위치</label>
-            <select id="hyeonto-position-select" class="corr-block-filter">
-              <option value="after" selected>after (뒤)</option>
-              <option value="before">before (앞)</option>
-            </select>
-            <label class="hyeonto-popup-label">토</label>
-            <input id="hyeonto-text-input" type="text" class="bib-input" placeholder="예: 은, 하고, ᅵ" />
-            <button id="hyeonto-insert-btn" class="text-btn text-btn-primary" style="margin-top:8px;width:100%;">삽입</button>
-          </div>
-        </div>
-
-        <!-- 현토 목록 -->
-        <div class="hyeonto-ann-section">
-          <div class="props-section-title">현토 목록 (<span id="hyeonto-ann-count">0</span>건)</div>
-          <div id="hyeonto-ann-list" class="hyeonto-ann-list"></div>
-        </div>
-
-        <!-- 미리보기 -->
-        <div class="hyeonto-preview-section">
-          <div class="props-section-title">미리보기</div>
-          <div id="hyeonto-preview" class="hyeonto-preview"></div>
-        </div>
-      </div>
-
-      <!-- 우측 패널: 번역 편집기 (Phase 11-2, 번역 모드에서만 표시) -->
-      <div class="editor-panel editor-right trans-panel" id="trans-panel" style="display:none;">
-        <div class="panel-label">번역 편집기 (L6)</div>
-
-        <!-- 도구 바 -->
-        <div class="trans-toolbar">
-          <select id="trans-block-select" class="corr-block-filter" title="블록 선택">
-            <option value="">블록 선택</option>
-          </select>
-          <div class="text-toolbar-spacer"></div>
-          <select id="trans-llm-model-select" class="props-select llm-model-select" title="LLM 모델">
-            <option value="auto">자동</option>
-          </select>
-          <button id="trans-ai-all-btn" class="text-btn" title="미번역 문장 전체 AI 번역">전체 AI 번역</button>
-          <div class="text-toolbar-divider"></div>
-          <button id="trans-save-btn" class="text-btn text-btn-primary" title="저장">저장</button>
-          <span id="trans-save-status" class="text-save-status"></span>
-        </div>
-
-        <!-- 참조 사전 도구 바 -->
-        <div class="trans-refdict-toolbar">
-          <button id="trans-refdict-toggle" class="text-btn" title="참조 사전 사용 ON/OFF">참조 사전 ON</button>
-          <button id="trans-refdict-manage-btn" class="text-btn" title="참조 사전 관리">사전 관리</button>
-        </div>
-
-        <!-- 참조 사전 매칭 패널 (토글 시 표시) -->
-        <div id="trans-refdict-panel" class="trans-refdict-panel" style="display:none;">
-          <div class="props-section-title">참조 사전 매칭</div>
-          <div id="trans-refdict-list" class="trans-refdict-list">
-            <div class="placeholder">참조 사전을 ON 하면 원문의 매칭 결과가 표시됩니다</div>
-          </div>
-          <div class="trans-refdict-actions">
-            <button id="trans-refdict-select-all-btn" class="text-btn text-btn-sm">전체 선택/해제</button>
-            <button id="trans-refdict-apply-btn" class="text-btn text-btn-primary text-btn-sm">선택 항목 적용</button>
-          </div>
-        </div>
-
-        <!-- 원문 + 표점 + 현토 (읽기 전용) -->
-        <div class="trans-source-section">
-          <div class="props-section-title">원문 (표점 + 현토)</div>
-          <div id="trans-source-text" class="trans-source-text"></div>
-        </div>
-
-        <!-- 번역 카드 목록 -->
-        <div class="trans-cards-section" id="trans-cards-section">
-          <div class="props-section-title">문장별 번역 (<span id="trans-status-summary"></span>)</div>
-          <div id="trans-cards" class="trans-cards">
-            <div class="placeholder">번역 모드: 블록을 선택하면 문장별 번역이 표시됩니다</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 우측 패널: 주석 편집기 (Phase 11-3, 주석 모드에서만 표시) -->
-      <div class="editor-panel editor-right ann-panel" id="ann-panel" style="display:none;">
-        <div class="panel-label">주석 편집기 (L7)</div>
-
-        <!-- 도구 바 -->
-        <div class="ann-toolbar">
-          <select id="ann-block-select" class="corr-block-filter" title="블록 선택">
-            <option value="">블록 선택</option>
-          </select>
-          <select id="ann-type-filter" class="corr-block-filter" title="유형 필터">
-            <option value="">전체 유형</option>
-          </select>
-          <div class="text-toolbar-spacer"></div>
-          <select id="ann-llm-model-select" class="props-select llm-model-select" title="LLM 모델">
-            <option value="auto">자동</option>
-          </select>
-          <button id="ann-ai-tag-btn" class="text-btn" title="AI 자동 태깅">AI 태깅</button>
-          <button id="ann-commit-all-btn" class="text-btn" title="Draft 일괄 확정">전체 승인</button>
-          <div class="text-toolbar-divider"></div>
-          <button id="ann-type-mgmt-btn" class="text-btn" title="유형 관리">유형 관리</button>
-          <span id="ann-save-status" class="text-save-status"></span>
-        </div>
-
-        <!-- 사전형 주석 도구 바 -->
-        <div class="ann-dict-toolbar">
-          <button id="ann-dict-view-toggle" class="text-btn" title="사전 상세 보기/접기">사전 펼치기</button>
-          <div class="text-toolbar-divider"></div>
-          <span class="ann-dict-stage-label">사전 생성:</span>
-          <button id="ann-dict-stage1-btn" class="text-btn text-btn-sm" title="1단계: 원문에서 사전 항목 추출">1단계</button>
-          <button id="ann-dict-stage2-btn" class="text-btn text-btn-sm" title="2단계: 번역으로 보강">2단계</button>
-          <button id="ann-dict-stage3-btn" class="text-btn text-btn-sm" title="3단계: 최종 통합">3단계</button>
-          <div class="text-toolbar-divider"></div>
-          <button id="ann-dict-batch-btn" class="text-btn" title="전체 문서 일괄 사전 생성 (3단계 직행)">일괄 사전 생성</button>
-          <div class="text-toolbar-divider"></div>
-          <button id="ann-dict-export-btn" class="text-btn" title="사전 내보내기 (JSON)">내보내기</button>
-          <button id="ann-dict-import-btn" class="text-btn" title="사전 가져오기 (JSON)">가져오기</button>
-        </div>
-
-        <!-- 원문 (하이라이팅 표시) -->
-        <div class="ann-source-section">
-          <div class="props-section-title">원문 (<span id="ann-status-summary"></span>)</div>
-          <div id="ann-source-text" class="ann-source-text"></div>
-        </div>
-
-        <!-- 주석 목록 -->
-        <div class="ann-list-section" id="ann-list-section">
-          <div id="ann-list" class="ann-list">
-            <div class="placeholder">주석 모드: 블록을 선택하면 주석이 표시됩니다</div>
-          </div>
-        </div>
-
-        <!-- 주석 편집 패널 (선택 시 표시) -->
-        <div class="ann-edit-panel" id="ann-edit-panel" style="display:none;">
-          <div class="props-section-title">주석 편집</div>
-          <div class="ann-edit-form">
-            <label>유형:
-              <select id="ann-edit-type"></select>
-            </label>
-            <label>표제어:
-              <input type="text" id="ann-edit-label" placeholder="예: 왕융(王戎)">
-            </label>
-            <label>설명:
-              <textarea id="ann-edit-desc" rows="3" placeholder="풀이/설명"></textarea>
-            </label>
-            <label>참고문헌:
-              <input type="text" id="ann-edit-refs" placeholder="쉼표로 구분">
-            </label>
-            <div class="ann-edit-actions">
-              <button id="ann-edit-save-btn" class="text-btn text-btn-primary">저장</button>
-              <button id="ann-edit-accept-btn" class="text-btn">승인</button>
-              <button id="ann-edit-delete-btn" class="text-btn text-btn-danger">삭제</button>
-              <button id="ann-edit-cancel-btn" class="text-btn">닫기</button>
-            </div>
-          </div>
-
-          <!-- 사전 편집 패널 -->
-          <div id="ann-dict-edit-panel" class="ann-dict-edit-panel" style="display:none;">
-            <div class="props-section-title">사전 항목 편집</div>
-            <div class="ann-dict-edit-form">
-              <label>표제어 (한자):
-                <input type="text" id="ann-dict-headword" placeholder="예: 王戎">
-              </label>
-              <label>독음:
-                <input type="text" id="ann-dict-reading" placeholder="예: 왕융">
-              </label>
-              <label>사전적 의미:
-                <textarea id="ann-dict-meaning" rows="2" placeholder="일반적/표준적 정의 (2-3문장)"></textarea>
-              </label>
-              <label>문맥적 의미:
-                <textarea id="ann-dict-ctx-meaning" rows="2" placeholder="이 텍스트에서의 특수한 의미 (1-2문장)"></textarea>
-              </label>
-              <label>출전 (쉼표 구분):
-                <input type="text" id="ann-dict-src-refs" placeholder="예: 晉書, 世說新語">
-              </label>
-              <label>관련어 (쉼표 구분):
-                <input type="text" id="ann-dict-related" placeholder="예: 竹林七賢, 嵇康">
-              </label>
-              <label>메모:
-                <input type="text" id="ann-dict-notes" placeholder="연구자 메모">
-              </label>
-              <div class="ann-edit-actions">
-                <button id="ann-dict-save-btn" class="text-btn text-btn-primary">사전 저장</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 우측 패널: 인용 편집기 (인용 모드에서만 표시) -->
-      <div class="editor-panel editor-right cite-panel" id="cite-panel" style="display:none;">
-        <div class="panel-label">인용 편집기</div>
-
-        <!-- 도구 바 -->
-        <div class="cite-toolbar">
-          <select id="cite-block-select" class="corr-block-filter" title="블록 선택">
-            <option value="">블록 선택</option>
-          </select>
-          <div class="text-toolbar-spacer"></div>
-          <button id="cite-view-toggle" class="text-btn" title="페이지/전체 보기 전환">전체 보기</button>
-          <button id="cite-add-btn" class="text-btn text-btn-primary" title="선택한 텍스트를 인용 마크로 추가">인용 마크</button>
-          <button id="cite-export-btn" class="text-btn" title="선택한 마크를 인용 형식으로 내보내기">내보내기</button>
-          <span id="cite-save-status" class="text-save-status"></span>
-        </div>
-
-        <!-- 원문 (하이라이팅 표시) -->
-        <div class="cite-source-section">
-          <div class="props-section-title">원문</div>
-          <div id="cite-source-text" class="cite-source-text"></div>
-        </div>
-
-        <!-- 인용 마크 목록 -->
-        <div class="cite-list-section">
-          <div class="props-section-title">인용 마크 (<span id="cite-mark-count">0</span>건)</div>
-          <div id="cite-mark-list" class="cite-mark-list">
-            <div class="placeholder">인용 모드: 블록을 선택하면 인용 마크가 표시됩니다</div>
-          </div>
-        </div>
-
-        <!-- 통합 컨텍스트 뷰 (마크 선택 시 표시) -->
-        <div class="cite-context-panel" id="cite-context-panel" style="display:none;">
-          <div class="props-section-title">통합 컨텍스트</div>
-          <div id="cite-ctx-text-changed" class="cite-text-changed-warning" style="display:none;">
-            원문이 마크 이후 변경되었습니다.
-          </div>
-          <div class="cite-context-section">
-            <div class="cite-ctx-label">원문:</div>
-            <div id="cite-ctx-original" class="cite-ctx-content"></div>
-          </div>
-          <div class="cite-context-section">
-            <div class="cite-ctx-label">표점본:</div>
-            <div id="cite-ctx-punctuated" class="cite-ctx-content cite-ctx-punctuated"></div>
-          </div>
-          <div class="cite-context-section">
-            <div class="cite-ctx-label">번역:</div>
-            <div id="cite-ctx-translations" class="cite-ctx-content"></div>
-          </div>
-          <div class="cite-context-section">
-            <div class="cite-ctx-label">주석:</div>
-            <div id="cite-ctx-annotations" class="cite-ctx-content"></div>
-          </div>
-        </div>
-
-        <!-- 내보내기 미리보기 -->
-        <pre id="cite-export-preview" class="cite-export-preview" style="display:none;"></pre>
-
-        <!-- 편집 패널 (마크 선택 시 표시) -->
-        <div class="cite-edit-panel" id="cite-edit-panel" style="display:none;">
-          <div class="props-section-title">인용 마크 편집</div>
-          <div class="cite-edit-form">
-            <label>메모:
-              <input type="text" id="cite-edit-label" placeholder="이 인용의 목적/맥락">
-            </label>
-            <label>태그 (쉼표 구분):
-              <input type="text" id="cite-edit-tags" placeholder="예: 서론, 핵심논거">
-            </label>
-            <label>상태:
-              <select id="cite-edit-status">
-                <option value="active">활성</option>
-                <option value="used">사용됨</option>
-                <option value="archived">보관</option>
-              </select>
-            </label>
-            <div class="props-section-title" style="margin-top:8px;">인용 서지정보 (수동 입력)</div>
-            <label>작품 제목:
-              <input type="text" id="cite-edit-work-title" placeholder="예: 答巡使書">
-            </label>
-            <label>관련 페이지:
-              <input type="text" id="cite-edit-page-ref" placeholder="예: 25면">
-            </label>
-            <label>부가 정보:
-              <input type="text" id="cite-edit-supplementary" placeholder="예: 韓國文集叢刊252집, 48면">
-            </label>
-            <div class="cite-edit-actions">
-              <button id="cite-edit-save-btn" class="text-btn text-btn-primary">저장</button>
-              <button id="cite-edit-delete-btn" class="text-btn text-btn-danger">삭제</button>
-              <button id="cite-edit-close-btn" class="text-btn">닫기</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 우측 패널: 텍스트 에디터 (L4 교정 텍스트) -->
-      <div class="editor-panel editor-right" id="editor-right">
-        <div class="panel-label" id="right-panel-label">교정 텍스트 (4층)</div>
-
-        <!-- 기본 placeholder (문헌 미선택 시) -->
-        <div class="editor-placeholder" id="text-placeholder">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3">
-            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/>
-            <line x1="16" y1="17" x2="8" y2="17"/>
-          </svg>
-          <p>텍스트 / 번역 뷰어</p>
-          <p class="hint">교정, 현토, 번역, 주석이 여기에 표시됩니다</p>
-        </div>
-
-        <!-- 텍스트 에디터 (문헌 선택 시 표시) -->
-        <div class="text-editor" id="text-editor" style="display: none;">
-          <!-- 에디터 툴바 -->
-          <div class="text-toolbar">
-            <span class="text-toolbar-info" id="text-file-info"></span>
-            <div class="text-toolbar-spacer"></div>
-            <button id="text-insert-main" class="text-btn" title="[本文] 삽입">[本文]</button>
-            <button id="text-insert-anno" class="text-btn" title="[注釈] 삽입">[注釈]</button>
-            <div class="text-toolbar-divider"></div>
-            <button id="text-save" class="text-btn text-btn-primary" title="저장 (Ctrl+S)">저장</button>
-            <span id="text-save-status" class="text-save-status"></span>
-          </div>
-          <!-- 텍스트 입력 영역 -->
-          <textarea id="text-content" class="text-content"
-            placeholder="[本文]&#10;본문 텍스트를 입력하세요&#10;&#10;[注釈]&#10;주석 텍스트를 입력하세요"
-            spellcheck="false"></textarea>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- 하단 패널 리사이즈 핸들 -->
-    <div class="resize-handle resize-panel" id="resize-panel"></div>
-
-    <!-- 하단 패널: D-001 터미널/문제 → Git 이력, 검증, 의존 추적 -->
-    <div class="bottom-panel" id="bottom-panel">
-      <div class="panel-header">
-        <div class="panel-tabs">
-          <button class="panel-tab active">Git 이력</button>
-          <button class="panel-tab">검증 결과</button>
-          <button class="panel-tab">의존 추적</button>
-          <button class="panel-tab">엔티티</button>
-          <button class="panel-tab">비고</button>
-        </div>
-        <button class="panel-toggle" id="panel-toggle" title="패널 접기/펴기">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="6 9 12 15 18 9"/>
+          <svg
+            id="theme-icon-moon"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
           </svg>
         </button>
-      </div>
-      <div class="panel-content" id="panel-content">
-        <!-- Git 이력 탭 내용 (Phase 6 + Phase 12-1) -->
-        <div id="git-panel-content">
-          <!-- Phase 12-1: 간략/상세 뷰 전환 탭 -->
-          <div class="git-view-tabs">
-            <button class="git-view-tab active" data-view="simple">커밋 목록</button>
-            <button class="git-view-tab" data-view="graph">사다리형 그래프</button>
-            <div class="git-graph-controls" id="git-graph-controls" style="display:none;">
-              <label>원본: <select id="git-graph-orig-branch" class="git-branch-select"><option>main</option></select></label>
-              <label>해석: <select id="git-graph-interp-branch" class="git-branch-select"><option>main</option></select></label>
-            </div>
-          </div>
+        <button
+          class="activity-btn"
+          data-panel="settings"
+          title="설정"
+        >
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <circle
+              cx="12"
+              cy="12"
+              r="3"
+            />
+            <path
+              d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"
+            />
+          </svg>
+        </button>
+      </aside>
 
-          <!-- 간략 뷰: 기존 커밋 목록 -->
-          <div id="git-simple-view">
-            <div id="git-log-list" class="git-log-list">
-              <div class="placeholder">문헌을 선택하면 Git 이력이 표시됩니다</div>
-            </div>
-            <div id="git-diff-view" class="git-diff-view" style="display:none;">
-              <div class="git-diff-header">
-                <button id="git-diff-back" class="text-btn" title="목록으로">&larr; 목록</button>
-                <span id="git-diff-title" class="git-diff-title"></span>
+      <!-- 사이드바: 서고 브라우저 (D-001: 파일 탐색기 → 서고 브라우저) -->
+      <aside
+        class="sidebar"
+        id="sidebar"
+      >
+        <div class="sidebar-header">
+          <span class="sidebar-title">서고 브라우저</span>
+        </div>
+        <div
+          class="sidebar-content"
+          id="sidebar-content"
+        >
+          <div class="sidebar-section">
+            <div class="section-header">
+              문헌 목록
+              <div class="section-header-actions">
+                <button
+                  id="create-doc-btn"
+                  class="section-action-btn"
+                  title="URL에서 새 문헌 생성"
+                  onclick="
+                    if (typeof _openCreateDocDialog === 'function')
+                      _openCreateDocDialog();
+                  "
+                >
+                  + 새 문헌
+                </button>
+                <button
+                  id="import-hwp-btn"
+                  class="section-action-btn"
+                  title="HWP/HWPX 파일에서 텍스트 가져오기"
+                  onclick="
+                    if (typeof _openHwpImportDialog === 'function')
+                      _openHwpImportDialog();
+                  "
+                >
+                  HWP
+                </button>
               </div>
-              <div id="git-diff-content" class="git-diff-content"></div>
+            </div>
+            <div
+              id="document-list"
+              class="tree-view"
+            >
+              <div class="placeholder">서고를 불러오는 중...</div>
             </div>
           </div>
 
-          <!-- 상세 뷰: Phase 12-1 사다리형 Git 그래프 -->
-          <div id="git-graph-view" style="display:none;">
-            <div id="git-graph-container" class="git-graph-container">
-              <div class="placeholder">해석 저장소를 선택하면 사다리형 그래프가 표시됩니다</div>
-            </div>
-            <!-- 클릭 시 커밋 상세 패널 -->
-            <div id="git-graph-detail" class="git-graph-detail" style="display:none;">
-              <div class="git-graph-detail-header">
-                <span id="git-graph-detail-title"></span>
-                <button id="git-graph-detail-close" class="text-btn">&times;</button>
+          <!-- Phase 5: 서지정보 섹션 (문헌 선택 시 표시) -->
+          <div
+            class="sidebar-section"
+            id="bib-section"
+            style="display: none"
+          >
+            <div class="section-header">
+              서지정보
+              <div class="section-header-actions">
+                <button
+                  id="bib-fetch-btn"
+                  class="section-action-btn"
+                  title="서지정보 가져오기"
+                >
+                  가져오기
+                </button>
+                <button
+                  id="bib-edit-btn"
+                  class="section-action-btn"
+                  title="수동 편집"
+                >
+                  편집
+                </button>
               </div>
-              <div id="git-graph-detail-body"></div>
+            </div>
+            <div
+              id="bib-fields"
+              class="bib-fields"
+            >
+              <div class="placeholder">
+                문헌을 선택하면 서지정보가 표시됩니다
+              </div>
+            </div>
+          </div>
+
+          <!-- Phase 7: 해석 저장소 섹션 -->
+          <div
+            class="sidebar-section"
+            id="interp-section"
+            style="display: none"
+          >
+            <div class="section-header">
+              해석 저장소
+              <div class="section-header-actions">
+                <button
+                  id="interp-create-btn"
+                  class="section-action-btn"
+                  title="새 해석 저장소 만들기"
+                >
+                  새로 만들기
+                </button>
+                <button
+                  id="snapshot-import-btn"
+                  class="section-action-btn"
+                  title="JSON 스냅샷 파일 가져오기 (.json)"
+                >
+                  JSON 가져오기
+                </button>
+                <button
+                  id="interp-import-folder-btn"
+                  class="section-action-btn"
+                  title="기존 해석 저장소 폴더 가져오기 (manifest.json 포함)"
+                >
+                  폴더 가져오기
+                </button>
+              </div>
+            </div>
+            <div
+              id="interp-list"
+              class="interp-list"
+            >
+              <div class="placeholder">
+                해석 모드에서 저장소 목록이 표시됩니다
+              </div>
+            </div>
+          </div>
+
+          <!-- 설정 패널 (settings 버튼 클릭 시 표시) -->
+          <div
+            class="sidebar-section"
+            id="settings-section"
+            style="display: none"
+          >
+            <div class="section-header">서고 설정</div>
+            <div class="settings-group">
+              <div class="settings-label">서고 경로</div>
+              <div class="settings-library-row">
+                <input
+                  type="text"
+                  id="settings-library-input"
+                  class="settings-library-input"
+                  placeholder="서고 경로 입력..."
+                  readonly
+                />
+                <button
+                  class="btn-sm"
+                  id="btn-edit-library"
+                  title="경로 편집"
+                >
+                  편집
+                </button>
+              </div>
+              <div
+                class="settings-library-actions"
+                id="library-actions"
+                style="display: none"
+              >
+                <button
+                  class="btn-sm btn-primary"
+                  id="btn-switch-library"
+                >
+                  변경
+                </button>
+                <button
+                  class="btn-sm"
+                  id="btn-cancel-library"
+                >
+                  취소
+                </button>
+                <button
+                  class="btn-sm"
+                  id="btn-new-library"
+                >
+                  새 서고
+                </button>
+              </div>
+              <div
+                id="recent-libraries"
+                class="recent-library-list"
+              ></div>
+            </div>
+
+            <div
+              class="section-header"
+              style="margin-top: 12px"
+            >
+              원본 저장소
+            </div>
+            <div
+              id="settings-doc-repos"
+              class="settings-repo-list"
+            >
+              <div class="placeholder">로딩 중...</div>
+            </div>
+
+            <div
+              class="section-header"
+              style="margin-top: 12px"
+            >
+              해석 저장소
+            </div>
+            <div
+              id="settings-interp-repos"
+              class="settings-repo-list"
+            >
+              <div class="placeholder">로딩 중...</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 사이드바 리사이즈 핸들 -->
+      <div
+        class="resize-handle resize-sidebar"
+        id="resize-sidebar"
+      ></div>
+
+      <!-- 메인 영역 -->
+      <main class="main-area">
+        <!-- 모드 탭 바: 열람 / 레이아웃 / 교정 / 편성 / 표점 / 현토 / 번역 / 주석 / 교차 뷰어 -->
+        <div class="mode-bar">
+          <div
+            class="mode-tab active"
+            data-mode="view"
+          >
+            열람
+          </div>
+          <div
+            class="mode-tab"
+            data-mode="layout"
+          >
+            레이아웃
+          </div>
+          <div
+            class="mode-tab"
+            data-mode="correction"
+          >
+            교정
+          </div>
+          <div
+            class="mode-tab"
+            data-mode="composition"
+          >
+            편성
+          </div>
+          <div
+            class="mode-tab"
+            data-mode="punctuation"
+          >
+            표점
+          </div>
+          <div
+            class="mode-tab"
+            data-mode="hyeonto"
+          >
+            현토
+          </div>
+          <div
+            class="mode-tab"
+            data-mode="translation"
+          >
+            번역
+          </div>
+          <div
+            class="mode-tab"
+            data-mode="annotation"
+          >
+            주석
+          </div>
+          <div
+            class="mode-tab"
+            data-mode="citation"
+          >
+            인용
+          </div>
+          <div
+            class="mode-tab"
+            data-mode="interpretation"
+          >
+            교차 뷰어
+          </div>
+        </div>
+
+        <!-- 에디터 영역: D-001 에디터 → 병렬 뷰어 (이미지 + 텍스트) -->
+        <div class="editor-area">
+          <!-- 좌측 패널: 원본 PDF 뷰어 -->
+          <div
+            class="editor-panel editor-left"
+            id="editor-left"
+          >
+            <div
+              class="panel-label"
+              id="left-panel-label"
+            >
+              원본 저장소 (1~4층)
+            </div>
+
+            <!-- 기본 placeholder (문헌 미선택 시) -->
+            <div
+              class="editor-placeholder"
+              id="pdf-placeholder"
+            >
+              <svg
+                width="48"
+                height="48"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1"
+                opacity="0.3"
+              >
+                <rect
+                  x="3"
+                  y="3"
+                  width="18"
+                  height="18"
+                  rx="2"
+                />
+                <circle
+                  cx="8.5"
+                  cy="8.5"
+                  r="1.5"
+                />
+                <path d="M21 15l-5-5L5 21" />
+              </svg>
+              <p>원본 이미지 / PDF 뷰어</p>
+              <p class="hint">문헌을 선택하면 여기에 표시됩니다</p>
+            </div>
+
+            <!-- PDF 뷰어 (문헌 선택 시 표시) -->
+            <div
+              class="pdf-viewer"
+              id="pdf-viewer"
+              style="display: none"
+            >
+              <!-- PDF 툴바 -->
+              <div class="pdf-toolbar">
+                <!-- 권 선택 (다권본) -->
+                <select
+                  id="pdf-part-select"
+                  class="pdf-select"
+                  title="권 선택"
+                ></select>
+                <div class="pdf-toolbar-divider"></div>
+                <!-- 페이지 탐색 -->
+                <button
+                  id="pdf-prev"
+                  class="pdf-btn"
+                  title="이전 페이지 (↑/PageUp)"
+                >
+                  &#9650;
+                </button>
+                <input
+                  id="pdf-page-input"
+                  type="number"
+                  min="1"
+                  value="1"
+                  class="pdf-page-input"
+                  title="페이지 번호"
+                  aria-label="페이지 번호"
+                />
+                <span
+                  id="pdf-page-total"
+                  class="pdf-page-total"
+                  >/ ?</span
+                >
+                <button
+                  id="pdf-next"
+                  class="pdf-btn"
+                  title="다음 페이지 (↓/PageDown)"
+                >
+                  &#9660;
+                </button>
+                <div class="pdf-toolbar-divider"></div>
+                <!-- 줌 -->
+                <button
+                  id="pdf-zoom-out"
+                  class="pdf-btn"
+                  title="축소"
+                >
+                  &#8722;
+                </button>
+                <span
+                  id="pdf-zoom-level"
+                  class="pdf-zoom-level"
+                  >100%</span
+                >
+                <button
+                  id="pdf-zoom-in"
+                  class="pdf-btn"
+                  title="확대"
+                >
+                  +
+                </button>
+                <button
+                  id="pdf-zoom-fit"
+                  class="pdf-btn"
+                  title="맞춤 모드 전환 (가로/세로/해제)"
+                >
+                  &#8862;
+                </button>
+                <span
+                  id="pdf-fit-label"
+                  class="pdf-toolbar-label"
+                ></span>
+                <div class="pdf-toolbar-divider"></div>
+                <!-- 이미지 필터 -->
+                <button
+                  id="pdf-filter-btn"
+                  class="pdf-btn"
+                  title="이미지 필터 전환 (원본/흑백/고대비/반전)"
+                >
+                  &#9681;
+                </button>
+                <span
+                  id="pdf-filter-label"
+                  class="pdf-toolbar-label"
+                ></span>
+                <div class="pdf-toolbar-divider"></div>
+                <!-- 회전 -->
+                <button
+                  id="pdf-rotate-ccw"
+                  class="pdf-btn"
+                  title="반시계 방향 90° 회전"
+                >
+                  &#8634;
+                </button>
+                <button
+                  id="pdf-rotate-cw"
+                  class="pdf-btn"
+                  title="시계 방향 90° 회전"
+                >
+                  &#8635;
+                </button>
+                <span
+                  id="pdf-rotation-label"
+                  class="pdf-toolbar-label"
+                ></span>
+                <div class="pdf-toolbar-divider"></div>
+                <!-- 읽기 보조선 -->
+                <button
+                  id="pdf-reader-line-btn"
+                  class="pdf-btn"
+                  title="읽기 보조선 (R)"
+                >
+                  &#9473;
+                </button>
+              </div>
+              <!-- 캔버스 영역 -->
+              <div
+                class="pdf-canvas-container"
+                id="pdf-canvas-container"
+              >
+                <!-- 로딩 인디케이터 (페이지 전환 시 표시) -->
+                <div
+                  class="pdf-loading-indicator"
+                  id="pdf-loading-indicator"
+                  style="display: none"
+                >
+                  <div class="pdf-loading-spinner"></div>
+                </div>
+                <div
+                  class="pdf-canvas-wrapper"
+                  id="pdf-canvas-wrapper"
+                >
+                  <canvas id="pdf-canvas"></canvas>
+                  <!-- Phase 4: 레이아웃 오버레이 캔버스 (레이아웃 모드에서만 활성화) -->
+                  <canvas
+                    id="layout-overlay"
+                    class="layout-overlay"
+                    style="display: none"
+                  ></canvas>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 에디터 리사이즈 핸들 -->
+          <div
+            class="resize-handle resize-editor"
+            id="resize-editor"
+          ></div>
+
+          <!-- 우측 패널: 레이아웃 속성 편집 (Phase 4, 레이아웃 모드에서만 표시) -->
+          <div
+            class="editor-panel editor-right layout-props-panel"
+            id="layout-props-panel"
+            style="display: none"
+          >
+            <div class="panel-label">LayoutBlock 속성</div>
+
+            <!-- 레이아웃 도구 바 -->
+            <div class="layout-toolbar">
+              <button
+                id="layout-save"
+                class="text-btn text-btn-primary"
+                title="저장 (Ctrl+S)"
+              >
+                저장
+              </button>
+              <span
+                id="layout-save-status"
+                class="text-save-status"
+              ></span>
+              <div class="text-toolbar-spacer"></div>
+              <span
+                id="layout-block-count"
+                class="text-toolbar-info"
+                >블록: 0</span
+              >
+              <div class="text-toolbar-divider"></div>
+              <button
+                id="layout-reset-btn"
+                class="text-btn"
+                style="color: var(--accent-red, #ef4444)"
+                title="현재 페이지의 모든 레이아웃 블록 삭제"
+              >
+                리셋
+              </button>
+            </div>
+
+            <!-- Phase 10-2: AI 분석 도구 바 -->
+            <div
+              class="layout-toolbar llm-toolbar"
+              id="llm-toolbar"
+            >
+              <select
+                id="llm-model-select"
+                class="props-select llm-model-select"
+                title="LLM 모델 선택"
+                data-vision-only
+              >
+                <option value="auto">자동 (폴백순서)</option>
+              </select>
+              <button
+                id="llm-analyze-btn"
+                class="text-btn text-btn-primary"
+                title="AI 레이아웃 분석"
+              >
+                AI 분석
+              </button>
+              <button
+                id="llm-compare-btn"
+                class="text-btn"
+                title="여러 모델 비교"
+              >
+                비교
+              </button>
+              <span
+                id="llm-analyze-status"
+                class="text-save-status"
+              ></span>
+            </div>
+
+            <!-- Phase 10-2: LLM 상태 표시 -->
+            <div
+              class="llm-status-bar"
+              id="llm-status-bar"
+            >
+              <span class="llm-status-label">LLM:</span>
+              <span id="llm-status-indicators"></span>
+              <span
+                id="llm-cost-display"
+                class="llm-cost-display"
+              ></span>
+            </div>
+
+            <!-- 선택된 블록 속성 편집 -->
+            <div
+              class="layout-props-form"
+              id="layout-props-form"
+              style="display: none"
+            >
+              <div class="props-section-title">선택된 블록</div>
+
+              <label class="props-label">block_id</label>
+              <input
+                id="prop-block-id"
+                class="props-input"
+                readonly
+              />
+
+              <label class="props-label">block_type</label>
+              <select
+                id="prop-block-type"
+                class="props-select"
+              ></select>
+
+              <label class="props-label">reading_order</label>
+              <input
+                id="prop-reading-order"
+                type="number"
+                min="0"
+                class="props-input"
+              />
+
+              <label class="props-label">writing_direction</label>
+              <select
+                id="prop-writing-dir"
+                class="props-select"
+              >
+                <option value="vertical_rtl">vertical_rtl (세로 우→좌)</option>
+                <option value="vertical_ltr">vertical_ltr (세로 좌→우)</option>
+                <option value="horizontal_ltr">
+                  horizontal_ltr (가로 좌→우)
+                </option>
+                <option value="horizontal_rtl">
+                  horizontal_rtl (가로 우→좌)
+                </option>
+              </select>
+
+              <label class="props-label">refers_to_block</label>
+              <select
+                id="prop-refers-to"
+                class="props-select"
+              >
+                <option value="">없음</option>
+              </select>
+
+              <label class="props-label">line_style</label>
+              <select
+                id="prop-line-style"
+                class="props-select"
+              >
+                <option value="">미지정</option>
+                <option value="single_line">single_line (단행)</option>
+                <option value="double_line">double_line (쌍행)</option>
+              </select>
+
+              <label class="props-label">font_size_class</label>
+              <select
+                id="prop-font-size"
+                class="props-select"
+              >
+                <option value="">미지정</option>
+                <option value="large">large (대자)</option>
+                <option value="small">small (소자)</option>
+              </select>
+
+              <div class="props-actions">
+                <button
+                  id="prop-delete"
+                  class="text-btn props-btn-danger"
+                  title="블록 삭제 (Delete)"
+                >
+                  블록 삭제
+                </button>
+              </div>
+            </div>
+
+            <!-- Phase 10-1: OCR 실행 패널 -->
+            <div
+              class="ocr-panel"
+              id="ocr-panel"
+            >
+              <div class="props-section-title">OCR 실행</div>
+
+              <div class="ocr-controls">
+                <!-- 엔진 행: 엔진이 2개 이상이면 표시 (JS에서 제어) -->
+                <div
+                  class="ocr-control-row"
+                  id="ocr-engine-row"
+                >
+                  <label class="props-label">엔진</label>
+                  <select
+                    id="ocr-engine-select"
+                    class="props-select"
+                    title="OCR 엔진 선택"
+                  >
+                    <option value="">로딩 중...</option>
+                  </select>
+                </div>
+
+                <!-- LLM 모델 행: llm_vision 엔진일 때만 표시 -->
+                <div
+                  class="ocr-control-row"
+                  id="ocr-llm-model-row"
+                  style="display: none"
+                >
+                  <label class="props-label">LLM 모델</label>
+                  <select
+                    id="ocr-llm-model-select"
+                    class="props-select llm-model-select"
+                    title="LLM 프로바이더/모델 선택"
+                    data-vision-only
+                  >
+                    <option value="auto">자동 (폴백순서)</option>
+                  </select>
+                </div>
+
+                <!-- PaddleOCR 언어 행: paddleocr 엔진일 때만 표시 -->
+                <div
+                  class="ocr-control-row"
+                  id="ocr-paddle-lang-row"
+                  style="display: none"
+                >
+                  <label class="props-label">언어</label>
+                  <select
+                    id="ocr-paddle-lang-select"
+                    class="props-select"
+                    title="PaddleOCR 인식 언어"
+                  >
+                    <option value="ch">중국어 간체</option>
+                    <option value="chinese_cht">중국어 번체</option>
+                    <option value="korean">한국어</option>
+                    <option value="japan">일본어</option>
+                    <option value="en">영어</option>
+                  </select>
+                </div>
+
+                <div class="ocr-buttons">
+                  <button
+                    id="ocr-run-all"
+                    class="text-btn text-btn-primary"
+                    title="전체 블록 OCR 실행"
+                  >
+                    전체 OCR
+                  </button>
+                  <button
+                    id="ocr-run-selected"
+                    class="text-btn"
+                    title="선택된 블록만 OCR"
+                    disabled
+                  >
+                    선택 블록 OCR
+                  </button>
+                  <button
+                    id="ocr-delete-page"
+                    class="text-btn"
+                    title="선택한 OCR 1건 삭제"
+                  >
+                    선택 OCR 삭제
+                  </button>
+                </div>
+
+                <div
+                  id="ocr-progress"
+                  class="ocr-progress"
+                  style="display: none"
+                >
+                  <span id="ocr-progress-text">처리 중...</span>
+                  <div class="ocr-progress-bar">
+                    <div
+                      id="ocr-progress-fill"
+                      class="ocr-progress-fill"
+                    ></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- OCR 결과 미리보기 -->
+              <div
+                id="ocr-results-preview"
+                class="ocr-results-preview"
+                style="display: none"
+              >
+                <div class="props-section-title">
+                  OCR 결과
+                  <button
+                    id="ocr-vertical-btn"
+                    class="text-btn text-btn-sm"
+                    title="세로쓰기로 전환"
+                  >
+                    세로
+                  </button>
+                </div>
+                <div
+                  id="ocr-results-list"
+                  class="ocr-results-list"
+                ></div>
+                <div class="ocr-results-meta">
+                  <span id="ocr-results-summary"></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 전체 블록 목록 (reading_order 순) -->
+            <div class="layout-block-list-section">
+              <div class="props-section-title">
+                전체 블록 목록 (reading_order 순)
+              </div>
+              <div
+                id="layout-block-list"
+                class="layout-block-list"
+              ></div>
+            </div>
+          </div>
+
+          <!-- 우측 패널: 교정 편집기 (Phase 6, 교정 모드에서만 표시) -->
+          <div
+            class="editor-panel editor-right correction-panel"
+            id="correction-panel"
+            style="display: none"
+          >
+            <div class="panel-label">교정 편집기 (L4)</div>
+
+            <!-- 교정 도구 바 -->
+            <div class="corr-toolbar">
+              <button
+                id="corr-save"
+                class="text-btn text-btn-primary"
+                title="저장 (Ctrl+S)"
+              >
+                저장
+              </button>
+              <span
+                id="corr-save-status"
+                class="text-save-status"
+              ></span>
+              <div class="text-toolbar-spacer"></div>
+              <span
+                id="corr-count"
+                class="text-toolbar-info"
+                >교정: 0건</span
+              >
+              <div class="text-toolbar-divider"></div>
+              <select
+                id="corr-block-filter"
+                class="corr-block-filter"
+                title="블록 필터"
+              >
+                <option value="all">전체</option>
+              </select>
+              <div class="text-toolbar-divider"></div>
+              <button
+                id="corr-fill-ocr"
+                class="text-btn"
+                title="OCR 결과로 텍스트 채우기"
+              >
+                OCR 채우기
+              </button>
+              <div class="text-toolbar-divider"></div>
+              <button
+                id="corr-vertical-btn"
+                class="text-btn"
+                title="세로쓰기로 전환"
+              >
+                세로
+              </button>
+              <div class="text-toolbar-divider"></div>
+              <button
+                id="corr-reset-btn"
+                class="text-btn"
+                style="color: var(--accent-red, #ef4444)"
+                title="현재 페이지의 모든 교정 삭제"
+              >
+                교정 리셋
+              </button>
+            </div>
+
+            <!-- 서브탭: 교정 / 대조 -->
+            <div class="corr-subtab-bar">
+              <div
+                class="corr-subtab active"
+                data-view="corrections"
+              >
+                교정
+              </div>
+              <div
+                class="corr-subtab"
+                data-view="alignment"
+              >
+                대조
+              </div>
+            </div>
+
+            <!-- 교정 텍스트 표시 영역 (글자 단위 span) -->
+            <div
+              id="corr-text-area"
+              class="corr-text-area"
+            >
+              <div class="placeholder">
+                교정 모드에서 텍스트가 여기에 표시됩니다
+              </div>
+            </div>
+
+            <!-- 교정 목록 (현재 페이지) -->
+            <div
+              class="corr-list-section"
+              id="corr-list-section"
+            >
+              <div class="props-section-title">교정 목록</div>
+              <div
+                id="corr-list"
+                class="corr-list"
+              ></div>
+            </div>
+
+            <!-- 대조 뷰 (Phase 10-3, 대조 탭에서만 표시) -->
+            <div
+              id="alignment-view"
+              class="alignment-view"
+              style="display: none"
+            >
+              <!-- 통계 바 -->
+              <div
+                id="alignment-stats-bar"
+                class="alignment-stats-bar"
+              >
+                <div class="placeholder">
+                  대조를 실행하면 통계가 여기에 표시됩니다
+                </div>
+              </div>
+
+              <!-- 블록 탭 -->
+              <div
+                id="alignment-block-tabs"
+                class="alignment-block-tabs"
+              ></div>
+
+              <!-- 글자별 대조 테이블 -->
+              <div
+                id="alignment-table"
+                class="alignment-table"
+              ></div>
+
+              <!-- 이체자 사전 관리 -->
+              <div class="alignment-variant-section">
+                <div class="props-section-title">
+                  이체자 사전
+                  <button
+                    id="alignment-add-variant"
+                    class="text-btn text-btn-small"
+                    title="이체자 쌍 추가"
+                  >
+                    + 추가
+                  </button>
+                </div>
+                <div
+                  id="alignment-variant-list"
+                  class="alignment-variant-list"
+                ></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 우측 패널: 편성 에디터 (교정→표점 사이, LayoutBlock→TextBlock 변환) -->
+          <div
+            class="editor-panel editor-right composition-panel"
+            id="composition-panel"
+            style="display: none"
+          >
+            <div class="panel-label">
+              텍스트 편성
+              <span
+                id="comp-save-status"
+                class="text-save-status"
+              ></span>
+            </div>
+
+            <!-- 해석 저장소 선택 바 -->
+            <div
+              id="comp-interp-bar"
+              style="
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 6px 8px;
+                border-bottom: 1px solid var(--border);
+                background: var(--bg-secondary, #1e1e2e);
+              "
+            >
+              <label
+                style="
+                  font-size: 11px;
+                  color: var(--text-muted);
+                  white-space: nowrap;
+                "
+                >해석 저장소:</label
+              >
+              <select
+                id="comp-interp-select"
+                class="corr-block-filter"
+                style="flex: 1; min-width: 0"
+              >
+                <option value="">-- 선택하세요 --</option>
+              </select>
+            </div>
+
+            <!-- 도구 바 -->
+            <div
+              class="comp-toolbar"
+              style="
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                padding: 6px 8px;
+                border-bottom: 1px solid var(--border);
+              "
+            >
+              <button
+                id="comp-auto-btn"
+                class="text-btn"
+                title="각 LayoutBlock을 1:1로 TextBlock 자동 생성"
+              >
+                자동 편성
+              </button>
+              <button
+                id="comp-merge-btn"
+                class="text-btn"
+                title="선택한 블록들을 합쳐서 하나의 TextBlock 생성"
+              >
+                합치기
+              </button>
+              <button
+                id="comp-split-btn"
+                class="text-btn"
+                disabled
+                title="선택한 TextBlock을 구분선(===)으로 쪼갬"
+              >
+                쪼개기
+              </button>
+              <button
+                id="comp-reset-btn"
+                class="text-btn"
+                style="color: var(--accent-red, #ef4444)"
+                title="현재 페이지의 TextBlock을 모두 삭제 (deprecated 전환)"
+              >
+                리셋
+              </button>
+              <div style="flex: 1"></div>
+              <span
+                id="comp-block-count"
+                class="text-save-status"
+                style="font-size: 11px"
+              ></span>
+            </div>
+            <!-- 페이지 범위 컨트롤 -->
+            <div
+              class="comp-page-range"
+              style="
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 4px 8px;
+                border-bottom: 1px solid var(--border);
+                font-size: 11px;
+                color: var(--text-muted);
+              "
+            >
+              <label style="display: flex; align-items: center; gap: 4px">
+                시작
+                <input
+                  type="number"
+                  id="comp-page-start"
+                  min="1"
+                  step="1"
+                  style="width: 64px"
+                />
+              </label>
+              <span
+                id="comp-page-indicator"
+                style="font-weight: 600; color: var(--text-primary)"
+                >—</span
+              >
+              <label style="display: flex; align-items: center; gap: 4px">
+                끝
+                <input
+                  type="number"
+                  id="comp-page-end"
+                  min="1"
+                  step="1"
+                  style="width: 64px"
+                />
+              </label>
+              <button
+                id="comp-page-range-apply"
+                class="text-btn"
+                style="padding: 2px 8px; font-size: 11px"
+                title="페이지 범위 적용"
+              >
+                적용
+              </button>
+            </div>
+
+            <!-- 교정된 텍스트 블록 목록 (좌측: 소스) -->
+            <div
+              class="comp-container"
+              style="
+                display: flex;
+                flex-direction: column;
+                flex: 1;
+                overflow: auto;
+                padding: 8px;
+              "
+            >
+              <!-- 소스 블록 영역 -->
+              <div class="comp-section">
+                <div
+                  class="comp-section-title"
+                  style="
+                    font-size: 11px;
+                    font-weight: 600;
+                    color: var(--text-muted);
+                    margin-bottom: 6px;
+                  "
+                >
+                  교정된 LayoutBlock (소스)
+                </div>
+                <div
+                  id="comp-source-blocks"
+                  class="comp-block-list"
+                  style="display: flex; flex-direction: column; gap: 6px"
+                >
+                  <div
+                    class="placeholder"
+                    style="
+                      padding: 20px;
+                      text-align: center;
+                      color: var(--text-muted);
+                    "
+                  >
+                    페이지를 선택하세요
+                  </div>
+                </div>
+              </div>
+
+              <!-- 구분선 -->
+              <div
+                style="
+                  border-top: 1px solid var(--border);
+                  margin: 12px 0;
+                  position: relative;
+                "
+              >
+                <span
+                  style="
+                    position: absolute;
+                    top: -9px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background: var(--bg-primary);
+                    padding: 0 8px;
+                    font-size: 10px;
+                    color: var(--text-muted);
+                  "
+                  >▼ TextBlock ▼</span
+                >
+              </div>
+
+              <!-- 생성된 TextBlock 목록 -->
+              <div class="comp-section">
+                <div
+                  class="comp-section-title"
+                  style="
+                    font-size: 11px;
+                    font-weight: 600;
+                    color: var(--text-muted);
+                    margin-bottom: 6px;
+                  "
+                >
+                  생성된 TextBlock (해석 저장소)
+                </div>
+                <div
+                  id="comp-textblock-list"
+                  class="comp-block-list"
+                  style="display: flex; flex-direction: column; gap: 6px"
+                >
+                  <div
+                    class="placeholder"
+                    style="
+                      padding: 20px;
+                      text-align: center;
+                      color: var(--text-muted);
+                    "
+                  >
+                    해석 저장소를 선택하세요
+                  </div>
+                </div>
+              </div>
+
+              <!-- 쪼개기 편집 영역 (TextBlock 선택 시 표시) -->
+              <div
+                id="comp-split-editor"
+                style="
+                  display: none;
+                  border-top: 1px solid var(--border);
+                  padding: 8px;
+                "
+              >
+                <div
+                  style="
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    margin-bottom: 6px;
+                  "
+                >
+                  <span
+                    style="
+                      font-size: 11px;
+                      font-weight: 600;
+                      color: var(--text-muted);
+                    "
+                    >쪼개기 편집</span
+                  >
+                  <span
+                    id="comp-split-info"
+                    style="font-size: 10px; color: var(--text-muted)"
+                  ></span>
+                  <div style="flex: 1"></div>
+                  <button
+                    id="comp-split-cancel-btn"
+                    class="text-btn"
+                    style="font-size: 11px"
+                  >
+                    취소
+                  </button>
+                  <button
+                    id="comp-split-exec-btn"
+                    class="text-btn"
+                    style="
+                      font-size: 11px;
+                      background: var(--accent-primary, #3b82f6);
+                      color: #fff;
+                    "
+                  >
+                    쪼개기 실행
+                  </button>
+                </div>
+                <div
+                  style="
+                    font-size: 10px;
+                    color: var(--text-muted);
+                    margin-bottom: 4px;
+                  "
+                >
+                  쪼개고 싶은 위치에 빈 줄을 넣고 <code>===</code>를 입력하세요.
+                </div>
+                <textarea
+                  id="comp-split-textarea"
+                  style="
+                    width: 100%;
+                    min-height: 120px;
+                    resize: vertical;
+                    font-size: 12px;
+                    line-height: 1.6;
+                    font-family: var(--font-mono);
+                    border: 1px solid var(--border);
+                    border-radius: 4px;
+                    padding: 6px;
+                    background: var(--bg-secondary);
+                    color: var(--text-primary);
+                  "
+                  spellcheck="false"
+                ></textarea>
+                <div
+                  id="comp-split-preview"
+                  style="
+                    font-size: 10px;
+                    color: var(--text-muted);
+                    margin-top: 4px;
+                  "
+                ></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 우측 패널: 교차 뷰어 (Phase 7, interpretation 모드에서만 표시) -->
+          <div
+            class="editor-panel editor-right interp-panel"
+            id="interp-panel"
+            style="display: none"
+          >
+            <div class="panel-label">
+              교차 뷰어 (L5~L7)
+              <button
+                id="snapshot-export-btn"
+                class="section-action-btn"
+                title="JSON 스냅샷 내보내기"
+                style="margin-left: auto"
+              >
+                내보내기
+              </button>
+            </div>
+
+            <!-- 의존 경고 배너 -->
+            <div
+              id="interp-dep-banner"
+              class="interp-dep-banner"
+              style="display: none"
+            >
+              <span class="interp-dep-icon">&#9888;</span>
+              <span
+                id="interp-dep-msg"
+                class="interp-dep-msg"
+                >원본이 변경되었습니다</span
+              >
+              <div class="interp-dep-actions">
+                <button
+                  id="interp-dep-diff"
+                  class="text-btn"
+                  title="변경 파일 보기"
+                >
+                  diff
+                </button>
+                <button
+                  id="interp-dep-ack"
+                  class="text-btn"
+                  title="변경 인지"
+                >
+                  확인
+                </button>
+                <button
+                  id="interp-dep-update"
+                  class="text-btn text-btn-primary"
+                  title="기반 업데이트"
+                >
+                  기반 업데이트
+                </button>
+              </div>
+            </div>
+
+            <!-- 층별 서브탭 -->
+            <div class="interp-subtab-bar">
+              <div
+                class="interp-subtab active"
+                data-layer="L5_reading"
+              >
+                구두점 (L5)
+              </div>
+              <div
+                class="interp-subtab"
+                data-layer="L6_translation"
+              >
+                번역 (L6)
+              </div>
+              <div
+                class="interp-subtab"
+                data-layer="L7_annotation"
+              >
+                주석 (L7)
+              </div>
+            </div>
+
+            <!-- main_text / annotation 토글 -->
+            <div
+              class="interp-subtype-bar"
+              id="interp-subtype-bar"
+            >
+              <label class="interp-radio-label">
+                <input
+                  type="radio"
+                  name="interp-subtype"
+                  value="main_text"
+                  checked
+                />
+                main_text
+              </label>
+              <label class="interp-radio-label">
+                <input
+                  type="radio"
+                  name="interp-subtype"
+                  value="annotation"
+                />
+                annotation
+              </label>
+            </div>
+
+            <!-- 도구 바 -->
+            <div class="interp-toolbar">
+              <span
+                class="text-toolbar-info"
+                id="interp-file-info"
+              ></span>
+              <div class="text-toolbar-spacer"></div>
+              <button
+                id="entity-create-textblock-btn"
+                class="text-btn"
+                title="이 본문 블록에서 TextBlock 만들기"
+                style="display: none"
+              >
+                TextBlock 만들기
+              </button>
+              <button
+                id="entity-llm-request-btn"
+                class="text-btn"
+                title="LLM에게 요청"
+                style="display: none"
+              >
+                LLM에게 요청
+              </button>
+              <div class="text-toolbar-divider"></div>
+              <button
+                id="interp-save"
+                class="text-btn text-btn-primary"
+                title="저장 (Ctrl+S)"
+              >
+                저장
+              </button>
+              <span
+                id="interp-save-status"
+                class="text-save-status"
+              ></span>
+            </div>
+
+            <!-- 편집 영역 -->
+            <textarea
+              id="interp-content"
+              class="text-content interp-content"
+              placeholder="해석 저장소 파일 내용"
+              spellcheck="false"
+            ></textarea>
+          </div>
+
+          <!-- 우측 패널: 표점 편집기 (Phase 11-1, 표점 모드에서만 표시) -->
+          <div
+            class="editor-panel editor-right punct-panel"
+            id="punct-panel"
+            style="display: none"
+          >
+            <div class="panel-label">표점 편집기 (L5)</div>
+
+            <!-- 도구 바 -->
+            <div class="punct-toolbar">
+              <select
+                id="punct-block-select"
+                class="corr-block-filter"
+                title="블록 선택"
+              >
+                <option value="">블록 선택</option>
+              </select>
+              <div class="text-toolbar-spacer"></div>
+              <select
+                id="punct-llm-model-select"
+                class="props-select llm-model-select"
+                title="LLM 모델"
+              >
+                <option value="auto">자동</option>
+              </select>
+              <button
+                id="punct-ai-btn"
+                class="text-btn"
+                title="AI 표점 생성"
+              >
+                AI 표점
+              </button>
+              <button
+                id="punct-clear-btn"
+                class="text-btn"
+                title="표점 초기화"
+              >
+                초기화
+              </button>
+              <div class="text-toolbar-divider"></div>
+              <button
+                id="punct-save-btn"
+                class="text-btn text-btn-primary"
+                title="저장"
+              >
+                저장
+              </button>
+              <span
+                id="punct-save-status"
+                class="text-save-status"
+              ></span>
+            </div>
+
+            <!-- 원문 + 표점 삽입 영역 -->
+            <div
+              class="punct-char-area"
+              id="punct-char-area"
+            >
+              <div class="placeholder">
+                표점 모드: 문헌을 선택하면 원문이 표시됩니다
+              </div>
+            </div>
+
+            <!-- 표점 부호 팔레트 -->
+            <div
+              class="punct-palette"
+              id="punct-palette"
+            >
+              <div class="punct-palette-label">표점 부호</div>
+              <div
+                class="punct-palette-row"
+                id="punct-palette-row"
+              >
+                <!-- JS에서 동적 생성 -->
+              </div>
+            </div>
+
+            <!-- 마크 목록 -->
+            <div class="punct-marks-section">
+              <div class="props-section-title">
+                표점 목록 (<span id="punct-mark-count">0</span>건)
+              </div>
+              <div
+                id="punct-marks-list"
+                class="punct-marks-list"
+              ></div>
+            </div>
+
+            <!-- 미리보기 -->
+            <div class="punct-preview-section">
+              <div class="props-section-title">미리보기</div>
+              <div
+                id="punct-preview"
+                class="punct-preview"
+              ></div>
+            </div>
+          </div>
+
+          <!-- 우측 패널: 현토 편집기 (Phase 11-1, 현토 모드에서만 표시) -->
+          <div
+            class="editor-panel editor-right hyeonto-panel"
+            id="hyeonto-panel"
+            style="display: none"
+          >
+            <div class="panel-label">현토 편집기 (L5)</div>
+
+            <!-- 도구 바 -->
+            <div class="hyeonto-toolbar">
+              <select
+                id="hyeonto-block-select"
+                class="corr-block-filter"
+                title="블록 선택"
+              >
+                <option value="">블록 선택</option>
+              </select>
+              <div class="text-toolbar-spacer"></div>
+              <button
+                id="hyeonto-clear-btn"
+                class="text-btn"
+                title="현토 초기화"
+              >
+                초기화
+              </button>
+              <div class="text-toolbar-divider"></div>
+              <button
+                id="hyeonto-save-btn"
+                class="text-btn text-btn-primary"
+                title="저장"
+              >
+                저장
+              </button>
+              <span
+                id="hyeonto-save-status"
+                class="text-save-status"
+              ></span>
+            </div>
+
+            <!-- 원문 + 현토 삽입 영역 -->
+            <div
+              class="hyeonto-char-area"
+              id="hyeonto-char-area"
+            >
+              <div class="placeholder">
+                현토 모드: 문헌을 선택하면 원문이 표시됩니다
+              </div>
+            </div>
+
+            <!-- 현토 입력 팝업 (글자 클릭 시 표시) -->
+            <div
+              class="hyeonto-input-popup"
+              id="hyeonto-input-popup"
+              style="display: none"
+            >
+              <div class="hyeonto-popup-header">
+                <span id="hyeonto-popup-target">글자</span>에 현토 삽입
+                <button
+                  class="hyeonto-popup-close"
+                  id="hyeonto-popup-close"
+                >
+                  &times;
+                </button>
+              </div>
+              <div class="hyeonto-popup-body">
+                <label class="hyeonto-popup-label">위치</label>
+                <select
+                  id="hyeonto-position-select"
+                  class="corr-block-filter"
+                >
+                  <option
+                    value="after"
+                    selected
+                  >
+                    after (뒤)
+                  </option>
+                  <option value="before">before (앞)</option>
+                </select>
+                <label class="hyeonto-popup-label">토</label>
+                <input
+                  id="hyeonto-text-input"
+                  type="text"
+                  class="bib-input"
+                  placeholder="예: 은, 하고, ᅵ"
+                />
+                <button
+                  id="hyeonto-insert-btn"
+                  class="text-btn text-btn-primary"
+                  style="margin-top: 8px; width: 100%"
+                >
+                  삽입
+                </button>
+              </div>
+            </div>
+
+            <!-- 현토 목록 -->
+            <div class="hyeonto-ann-section">
+              <div class="props-section-title">
+                현토 목록 (<span id="hyeonto-ann-count">0</span>건)
+              </div>
+              <div
+                id="hyeonto-ann-list"
+                class="hyeonto-ann-list"
+              ></div>
+            </div>
+
+            <!-- 미리보기 -->
+            <div class="hyeonto-preview-section">
+              <div class="props-section-title">미리보기</div>
+              <div
+                id="hyeonto-preview"
+                class="hyeonto-preview"
+              ></div>
+            </div>
+          </div>
+
+          <!-- 우측 패널: 번역 편집기 (Phase 11-2, 번역 모드에서만 표시) -->
+          <div
+            class="editor-panel editor-right trans-panel"
+            id="trans-panel"
+            style="display: none"
+          >
+            <div class="panel-label">번역 편집기 (L6)</div>
+
+            <!-- 도구 바 -->
+            <div class="trans-toolbar">
+              <select
+                id="trans-block-select"
+                class="corr-block-filter"
+                title="블록 선택"
+              >
+                <option value="">블록 선택</option>
+              </select>
+              <div class="text-toolbar-spacer"></div>
+              <select
+                id="trans-llm-model-select"
+                class="props-select llm-model-select"
+                title="LLM 모델"
+              >
+                <option value="auto">자동</option>
+              </select>
+              <button
+                id="trans-ai-all-btn"
+                class="text-btn"
+                title="미번역 문장 전체 AI 번역"
+              >
+                전체 AI 번역
+              </button>
+              <div class="text-toolbar-divider"></div>
+              <button
+                id="trans-save-btn"
+                class="text-btn text-btn-primary"
+                title="저장"
+              >
+                저장
+              </button>
+              <span
+                id="trans-save-status"
+                class="text-save-status"
+              ></span>
+              <div class="text-toolbar-divider"></div>
+              <button
+                id="trans-reset-btn"
+                class="text-btn"
+                style="color: var(--accent-red, #ef4444)"
+                title="현재 페이지의 모든 번역 삭제"
+              >
+                리셋
+              </button>
+            </div>
+
+            <!-- 참조 사전 도구 바 -->
+            <div class="trans-refdict-toolbar">
+              <button
+                id="trans-refdict-toggle"
+                class="text-btn"
+                title="참조 사전 사용 ON/OFF"
+              >
+                참조 사전 ON
+              </button>
+              <button
+                id="trans-refdict-manage-btn"
+                class="text-btn"
+                title="참조 사전 관리"
+              >
+                사전 관리
+              </button>
+            </div>
+
+            <!-- 참조 사전 매칭 패널 (토글 시 표시) -->
+            <div
+              id="trans-refdict-panel"
+              class="trans-refdict-panel"
+              style="display: none"
+            >
+              <div class="props-section-title">참조 사전 매칭</div>
+              <div
+                id="trans-refdict-list"
+                class="trans-refdict-list"
+              >
+                <div class="placeholder">
+                  참조 사전을 ON 하면 원문의 매칭 결과가 표시됩니다
+                </div>
+              </div>
+              <div class="trans-refdict-actions">
+                <button
+                  id="trans-refdict-select-all-btn"
+                  class="text-btn text-btn-sm"
+                >
+                  전체 선택/해제
+                </button>
+                <button
+                  id="trans-refdict-apply-btn"
+                  class="text-btn text-btn-primary text-btn-sm"
+                >
+                  선택 항목 적용
+                </button>
+              </div>
+            </div>
+
+            <!-- 원문 + 표점 + 현토 (읽기 전용) -->
+            <div class="trans-source-section">
+              <div class="props-section-title">원문 (표점 + 현토)</div>
+              <div
+                id="trans-source-text"
+                class="trans-source-text"
+              ></div>
+            </div>
+
+            <!-- 번역 카드 목록 -->
+            <div
+              class="trans-cards-section"
+              id="trans-cards-section"
+            >
+              <div class="props-section-title">
+                문장별 번역 (<span id="trans-status-summary"></span>)
+              </div>
+              <div
+                id="trans-cards"
+                class="trans-cards"
+              >
+                <div class="placeholder">
+                  번역 모드: 블록을 선택하면 문장별 번역이 표시됩니다
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 우측 패널: 주석 편집기 (Phase 11-3, 주석 모드에서만 표시) -->
+          <div
+            class="editor-panel editor-right ann-panel"
+            id="ann-panel"
+            style="display: none"
+          >
+            <div class="panel-label">주석 편집기 (L7)</div>
+
+            <!-- 도구 바 -->
+            <div class="ann-toolbar">
+              <select
+                id="ann-block-select"
+                class="corr-block-filter"
+                title="블록 선택"
+              >
+                <option value="">블록 선택</option>
+              </select>
+              <select
+                id="ann-type-filter"
+                class="corr-block-filter"
+                title="유형 필터"
+              >
+                <option value="">전체 유형</option>
+              </select>
+              <div class="text-toolbar-spacer"></div>
+              <select
+                id="ann-llm-model-select"
+                class="props-select llm-model-select"
+                title="LLM 모델"
+              >
+                <option value="auto">자동</option>
+              </select>
+              <button
+                id="ann-ai-tag-btn"
+                class="text-btn"
+                title="AI 자동 태깅"
+              >
+                AI 태깅
+              </button>
+              <button
+                id="ann-commit-all-btn"
+                class="text-btn"
+                title="Draft 일괄 확정"
+              >
+                전체 승인
+              </button>
+              <div class="text-toolbar-divider"></div>
+              <button
+                id="ann-type-mgmt-btn"
+                class="text-btn"
+                title="유형 관리"
+              >
+                유형 관리
+              </button>
+              <span
+                id="ann-save-status"
+                class="text-save-status"
+              ></span>
+              <div class="text-toolbar-divider"></div>
+              <button
+                id="ann-reset-btn"
+                class="text-btn"
+                style="color: var(--accent-red, #ef4444)"
+                title="현재 페이지의 모든 주석 삭제"
+              >
+                리셋
+              </button>
+            </div>
+
+            <!-- 사전형 주석 도구 바 -->
+            <div class="ann-dict-toolbar">
+              <button
+                id="ann-dict-view-toggle"
+                class="text-btn"
+                title="사전 상세 보기/접기"
+              >
+                사전 펼치기
+              </button>
+              <div class="text-toolbar-divider"></div>
+              <span class="ann-dict-stage-label">사전 생성:</span>
+              <button
+                id="ann-dict-stage1-btn"
+                class="text-btn text-btn-sm"
+                title="1단계: 원문에서 사전 항목 추출"
+              >
+                1단계
+              </button>
+              <button
+                id="ann-dict-stage2-btn"
+                class="text-btn text-btn-sm"
+                title="2단계: 번역으로 보강"
+              >
+                2단계
+              </button>
+              <button
+                id="ann-dict-stage3-btn"
+                class="text-btn text-btn-sm"
+                title="3단계: 최종 통합"
+              >
+                3단계
+              </button>
+              <div class="text-toolbar-divider"></div>
+              <button
+                id="ann-dict-batch-btn"
+                class="text-btn"
+                title="전체 문서 일괄 사전 생성 (3단계 직행)"
+              >
+                일괄 사전 생성
+              </button>
+              <div class="text-toolbar-divider"></div>
+              <button
+                id="ann-dict-export-btn"
+                class="text-btn"
+                title="사전 내보내기 (JSON)"
+              >
+                내보내기
+              </button>
+              <button
+                id="ann-dict-import-btn"
+                class="text-btn"
+                title="사전 가져오기 (JSON)"
+              >
+                가져오기
+              </button>
+            </div>
+
+            <!-- 원문 (하이라이팅 표시) -->
+            <div class="ann-source-section">
+              <div class="props-section-title">
+                원문 (<span id="ann-status-summary"></span>)
+              </div>
+              <div
+                id="ann-source-text"
+                class="ann-source-text"
+              ></div>
+            </div>
+
+            <!-- 주석 목록 -->
+            <div
+              class="ann-list-section"
+              id="ann-list-section"
+            >
+              <div
+                id="ann-list"
+                class="ann-list"
+              >
+                <div class="placeholder">
+                  주석 모드: 블록을 선택하면 주석이 표시됩니다
+                </div>
+              </div>
+            </div>
+
+            <!-- 주석 편집 패널 (선택 시 표시) -->
+            <div
+              class="ann-edit-panel"
+              id="ann-edit-panel"
+              style="display: none"
+            >
+              <div class="props-section-title">주석 편집</div>
+              <div class="ann-edit-form">
+                <label
+                  >유형:
+                  <select id="ann-edit-type"></select>
+                </label>
+                <label
+                  >표제어:
+                  <input
+                    type="text"
+                    id="ann-edit-label"
+                    placeholder="예: 왕융(王戎)"
+                  />
+                </label>
+                <label
+                  >설명:
+                  <textarea
+                    id="ann-edit-desc"
+                    rows="3"
+                    placeholder="풀이/설명"
+                  ></textarea>
+                </label>
+                <label
+                  >참고문헌:
+                  <input
+                    type="text"
+                    id="ann-edit-refs"
+                    placeholder="쉼표로 구분"
+                  />
+                </label>
+                <div class="ann-edit-actions">
+                  <button
+                    id="ann-edit-save-btn"
+                    class="text-btn text-btn-primary"
+                  >
+                    저장
+                  </button>
+                  <button
+                    id="ann-edit-accept-btn"
+                    class="text-btn"
+                  >
+                    승인
+                  </button>
+                  <button
+                    id="ann-edit-delete-btn"
+                    class="text-btn text-btn-danger"
+                  >
+                    삭제
+                  </button>
+                  <button
+                    id="ann-edit-cancel-btn"
+                    class="text-btn"
+                  >
+                    닫기
+                  </button>
+                </div>
+              </div>
+
+              <!-- 사전 편집 패널 -->
+              <div
+                id="ann-dict-edit-panel"
+                class="ann-dict-edit-panel"
+                style="display: none"
+              >
+                <div class="props-section-title">사전 항목 편집</div>
+                <div class="ann-dict-edit-form">
+                  <label
+                    >표제어 (한자):
+                    <input
+                      type="text"
+                      id="ann-dict-headword"
+                      placeholder="예: 王戎"
+                    />
+                  </label>
+                  <label
+                    >독음:
+                    <input
+                      type="text"
+                      id="ann-dict-reading"
+                      placeholder="예: 왕융"
+                    />
+                  </label>
+                  <label
+                    >사전적 의미:
+                    <textarea
+                      id="ann-dict-meaning"
+                      rows="2"
+                      placeholder="일반적/표준적 정의 (2-3문장)"
+                    ></textarea>
+                  </label>
+                  <label
+                    >문맥적 의미:
+                    <textarea
+                      id="ann-dict-ctx-meaning"
+                      rows="2"
+                      placeholder="이 텍스트에서의 특수한 의미 (1-2문장)"
+                    ></textarea>
+                  </label>
+                  <label
+                    >출전 (쉼표 구분):
+                    <input
+                      type="text"
+                      id="ann-dict-src-refs"
+                      placeholder="예: 晉書, 世說新語"
+                    />
+                  </label>
+                  <label
+                    >관련어 (쉼표 구분):
+                    <input
+                      type="text"
+                      id="ann-dict-related"
+                      placeholder="예: 竹林七賢, 嵇康"
+                    />
+                  </label>
+                  <label
+                    >메모:
+                    <input
+                      type="text"
+                      id="ann-dict-notes"
+                      placeholder="연구자 메모"
+                    />
+                  </label>
+                  <div class="ann-edit-actions">
+                    <button
+                      id="ann-dict-save-btn"
+                      class="text-btn text-btn-primary"
+                    >
+                      사전 저장
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 우측 패널: 인용 편집기 (인용 모드에서만 표시) -->
+          <div
+            class="editor-panel editor-right cite-panel"
+            id="cite-panel"
+            style="display: none"
+          >
+            <div class="panel-label">인용 편집기</div>
+
+            <!-- 도구 바 -->
+            <div class="cite-toolbar">
+              <select
+                id="cite-block-select"
+                class="corr-block-filter"
+                title="블록 선택"
+              >
+                <option value="">블록 선택</option>
+              </select>
+              <div class="text-toolbar-spacer"></div>
+              <button
+                id="cite-view-toggle"
+                class="text-btn"
+                title="페이지/전체 보기 전환"
+              >
+                전체 보기
+              </button>
+              <button
+                id="cite-add-btn"
+                class="text-btn text-btn-primary"
+                title="선택한 텍스트를 인용 마크로 추가"
+              >
+                인용 마크
+              </button>
+              <button
+                id="cite-export-btn"
+                class="text-btn"
+                title="선택한 마크를 인용 형식으로 내보내기"
+              >
+                내보내기
+              </button>
+              <span
+                id="cite-save-status"
+                class="text-save-status"
+              ></span>
+              <div class="text-toolbar-divider"></div>
+              <button
+                id="cite-reset-btn"
+                class="text-btn"
+                style="color: var(--accent-red, #ef4444)"
+                title="현재 페이지의 모든 인용 마크 삭제"
+              >
+                리셋
+              </button>
+            </div>
+
+            <!-- 원문 (하이라이팅 표시) -->
+            <div class="cite-source-section">
+              <div class="props-section-title">원문</div>
+              <div
+                id="cite-source-text"
+                class="cite-source-text"
+              ></div>
+            </div>
+
+            <!-- 인용 마크 목록 -->
+            <div class="cite-list-section">
+              <div class="props-section-title">
+                인용 마크 (<span id="cite-mark-count">0</span>건)
+              </div>
+              <div
+                id="cite-mark-list"
+                class="cite-mark-list"
+              >
+                <div class="placeholder">
+                  인용 모드: 블록을 선택하면 인용 마크가 표시됩니다
+                </div>
+              </div>
+            </div>
+
+            <!-- 통합 컨텍스트 뷰 (마크 선택 시 표시) -->
+            <div
+              class="cite-context-panel"
+              id="cite-context-panel"
+              style="display: none"
+            >
+              <div class="props-section-title">통합 컨텍스트</div>
+              <div
+                id="cite-ctx-text-changed"
+                class="cite-text-changed-warning"
+                style="display: none"
+              >
+                원문이 마크 이후 변경되었습니다.
+              </div>
+              <div class="cite-context-section">
+                <div class="cite-ctx-label">원문:</div>
+                <div
+                  id="cite-ctx-original"
+                  class="cite-ctx-content"
+                ></div>
+              </div>
+              <div class="cite-context-section">
+                <div class="cite-ctx-label">표점본:</div>
+                <div
+                  id="cite-ctx-punctuated"
+                  class="cite-ctx-content cite-ctx-punctuated"
+                ></div>
+              </div>
+              <div class="cite-context-section">
+                <div class="cite-ctx-label">번역:</div>
+                <div
+                  id="cite-ctx-translations"
+                  class="cite-ctx-content"
+                ></div>
+              </div>
+              <div class="cite-context-section">
+                <div class="cite-ctx-label">주석:</div>
+                <div
+                  id="cite-ctx-annotations"
+                  class="cite-ctx-content"
+                ></div>
+              </div>
+            </div>
+
+            <!-- 내보내기 미리보기 -->
+            <pre
+              id="cite-export-preview"
+              class="cite-export-preview"
+              style="display: none"
+            ></pre>
+
+            <!-- 편집 패널 (마크 선택 시 표시) -->
+            <div
+              class="cite-edit-panel"
+              id="cite-edit-panel"
+              style="display: none"
+            >
+              <div class="props-section-title">인용 마크 편집</div>
+              <div class="cite-edit-form">
+                <label
+                  >메모:
+                  <input
+                    type="text"
+                    id="cite-edit-label"
+                    placeholder="이 인용의 목적/맥락"
+                  />
+                </label>
+                <label
+                  >태그 (쉼표 구분):
+                  <input
+                    type="text"
+                    id="cite-edit-tags"
+                    placeholder="예: 서론, 핵심논거"
+                  />
+                </label>
+                <label
+                  >상태:
+                  <select id="cite-edit-status">
+                    <option value="active">활성</option>
+                    <option value="used">사용됨</option>
+                    <option value="archived">보관</option>
+                  </select>
+                </label>
+                <div
+                  class="props-section-title"
+                  style="margin-top: 8px"
+                >
+                  인용 서지정보 (수동 입력)
+                </div>
+                <label
+                  >작품 제목:
+                  <input
+                    type="text"
+                    id="cite-edit-work-title"
+                    placeholder="예: 答巡使書"
+                  />
+                </label>
+                <label
+                  >관련 페이지:
+                  <input
+                    type="text"
+                    id="cite-edit-page-ref"
+                    placeholder="예: 25면"
+                  />
+                </label>
+                <label
+                  >부가 정보:
+                  <input
+                    type="text"
+                    id="cite-edit-supplementary"
+                    placeholder="예: 韓國文集叢刊252집, 48면"
+                  />
+                </label>
+                <div class="cite-edit-actions">
+                  <button
+                    id="cite-edit-save-btn"
+                    class="text-btn text-btn-primary"
+                  >
+                    저장
+                  </button>
+                  <button
+                    id="cite-edit-delete-btn"
+                    class="text-btn text-btn-danger"
+                  >
+                    삭제
+                  </button>
+                  <button
+                    id="cite-edit-close-btn"
+                    class="text-btn"
+                  >
+                    닫기
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 우측 패널: 텍스트 에디터 (L4 교정 텍스트) -->
+          <div
+            class="editor-panel editor-right"
+            id="editor-right"
+          >
+            <div
+              class="panel-label"
+              id="right-panel-label"
+            >
+              교정 텍스트 (4층)
+            </div>
+
+            <!-- 기본 placeholder (문헌 미선택 시) -->
+            <div
+              class="editor-placeholder"
+              id="text-placeholder"
+            >
+              <svg
+                width="48"
+                height="48"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1"
+                opacity="0.3"
+              >
+                <path
+                  d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"
+                />
+                <polyline points="14 2 14 8 20 8" />
+                <line
+                  x1="16"
+                  y1="13"
+                  x2="8"
+                  y2="13"
+                />
+                <line
+                  x1="16"
+                  y1="17"
+                  x2="8"
+                  y2="17"
+                />
+              </svg>
+              <p>텍스트 / 번역 뷰어</p>
+              <p class="hint">교정, 현토, 번역, 주석이 여기에 표시됩니다</p>
+            </div>
+
+            <!-- 텍스트 에디터 (문헌 선택 시 표시) -->
+            <div
+              class="text-editor"
+              id="text-editor"
+              style="display: none"
+            >
+              <!-- 에디터 툴바 -->
+              <div class="text-toolbar">
+                <span
+                  class="text-toolbar-info"
+                  id="text-file-info"
+                ></span>
+                <div class="text-toolbar-spacer"></div>
+                <button
+                  id="text-insert-main"
+                  class="text-btn"
+                  title="[本文] 삽입"
+                >
+                  [本文]
+                </button>
+                <button
+                  id="text-insert-anno"
+                  class="text-btn"
+                  title="[注釈] 삽입"
+                >
+                  [注釈]
+                </button>
+                <div class="text-toolbar-divider"></div>
+                <button
+                  id="text-save"
+                  class="text-btn text-btn-primary"
+                  title="저장 (Ctrl+S)"
+                >
+                  저장
+                </button>
+                <span
+                  id="text-save-status"
+                  class="text-save-status"
+                ></span>
+              </div>
+              <!-- 텍스트 입력 영역 -->
+              <textarea
+                id="text-content"
+                class="text-content"
+                placeholder="[本文]&#10;본문 텍스트를 입력하세요&#10;&#10;[注釈]&#10;주석 텍스트를 입력하세요"
+                spellcheck="false"
+              ></textarea>
             </div>
           </div>
         </div>
 
-        <!-- Phase 5: 검증 결과 탭 내용 (향후 스키마 검증 결과 표시용) -->
-        <div id="validation-panel-content" style="display:none;">
-          <div class="placeholder">스키마 검증 결과가 여기에 표시됩니다 (향후 구현)</div>
-        </div>
+        <!-- 하단 패널 리사이즈 핸들 -->
+        <div
+          class="resize-handle resize-panel"
+          id="resize-panel"
+        ></div>
 
-        <!-- Phase 7: 의존 추적 탭 내용 -->
-        <div id="dep-panel-content" style="display:none;">
-          <div id="dep-status-summary" class="dep-status-summary">
-            <div class="placeholder">해석 저장소를 선택하면 의존 추적 정보가 표시됩니다</div>
-          </div>
-          <div id="dep-file-list" class="dep-file-list"></div>
-        </div>
-
-        <!-- Phase 8: 엔티티 탭 내용 -->
-        <div id="entity-panel-content" style="display:none;">
-          <!-- 필터 바 -->
-          <div class="entity-filter-bar">
-            <button class="entity-filter-btn active" data-type="all">전체</button>
-            <button class="entity-filter-btn" data-type="text_block">TextBlock</button>
-            <button class="entity-filter-btn" data-type="tag">Tag</button>
-            <button class="entity-filter-btn" data-type="concept">Concept</button>
-            <button class="entity-filter-btn" data-type="agent">Agent</button>
-            <button class="entity-filter-btn" data-type="relation">Relation</button>
-            <div class="entity-filter-spacer"></div>
-            <label class="entity-page-toggle">
-              <input type="checkbox" id="entity-page-filter" checked /> 현재 페이지만
-            </label>
-            <button id="entity-create-btn" class="text-btn text-btn-primary" title="새 엔티티 만들기">+ 새 엔티티</button>
-          </div>
-          <!-- LLM 초안 검토 영역 -->
-          <div id="entity-llm-review" class="llm-review-section" style="display:none;">
-            <div class="llm-review-header">LLM 초안 검토</div>
-            <div id="entity-llm-review-list"></div>
-          </div>
-          <!-- 엔티티 목록 -->
-          <div id="entity-list" class="entity-list">
-            <div class="placeholder">해석 모드에서 엔티티가 표시됩니다</div>
-          </div>
-        </div>
-
-        <!-- 비고/메모 탭 내용 -->
-        <div id="notes-panel-content" style="display:none;">
-          <div class="notes-toolbar">
-            <button id="notes-add-btn" class="text-btn text-btn-primary" title="새 메모 추가">+ 추가</button>
-            <span id="notes-save-status" class="text-save-status"></span>
-          </div>
-          <div id="notes-list" class="notes-list">
-            <div class="placeholder">해석 저장소를 선택하면 비고를 작성할 수 있습니다</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-  </main>
-
-  <!-- Phase 5: 서지정보 다이얼로그 오버레이 -->
-  <div class="bib-dialog-overlay" id="bib-dialog-overlay" style="display:none;">
-
-    <!-- 서지정보 가져오기 다이얼로그 -->
-    <div class="bib-dialog" id="bib-fetch-dialog">
-      <div class="bib-dialog-header">
-        <span class="bib-dialog-title">서지정보 가져오기</span>
-        <button class="bib-dialog-close" title="닫기">&times;</button>
-      </div>
-      <div class="bib-dialog-body">
-        <!-- URL / 검색 탭 전환 -->
-        <div class="bib-tab-bar">
-          <button class="bib-tab active" data-tab="url">URL 붙여넣기</button>
-          <button class="bib-tab" data-tab="search">직접 검색</button>
-        </div>
-
-        <!-- URL 탭: 주 워크플로우 -->
-        <div id="bib-tab-url" class="bib-tab-content">
-          <div class="bib-url-row">
-            <input id="bib-url-input" type="text" class="bib-input bib-url-input"
-              placeholder="URL 붙여넣기 (예: https://ndlsearch.ndl.go.jp/books/...)" />
-            <button id="bib-url-btn" class="bib-btn bib-btn-primary">가져오기</button>
-          </div>
-          <div class="bib-url-info">
-            <span id="bib-url-status"></span>
-          </div>
-          <div class="bib-url-help">
-            지원: NDL Search, 국립공문서관, KORCIS (한국고문헌종합목록)
-          </div>
-        </div>
-
-        <!-- 검색 탭: 기존 키워드 검색 -->
-        <div id="bib-tab-search" class="bib-tab-content" style="display:none;">
-          <div class="bib-search-row">
-            <select id="bib-parser-select" class="bib-select" title="파서 선택"></select>
-            <input id="bib-search-input" type="text" class="bib-input" placeholder="검색어 (예: 蒙求)" />
-            <button id="bib-search-btn" class="bib-btn bib-btn-primary">검색</button>
-          </div>
-          <div class="bib-search-info">
-            <span id="bib-search-status"></span>
-          </div>
-          <div id="bib-search-results" class="bib-search-results"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 수동 편집 다이얼로그 -->
-    <div class="bib-dialog" id="bib-edit-dialog" style="display:none;">
-      <div class="bib-dialog-header">
-        <span class="bib-dialog-title">서지정보 편집</span>
-        <button class="bib-dialog-close" title="닫기">&times;</button>
-      </div>
-      <div class="bib-dialog-body bib-edit-form">
-        <label class="bib-edit-label">제목</label>
-        <input id="bib-edit-title" type="text" class="bib-input" />
-
-        <label class="bib-edit-label">독음</label>
-        <input id="bib-edit-title-reading" type="text" class="bib-input" placeholder="예: もうぎゅう / 몽구" />
-
-        <label class="bib-edit-label">저자명</label>
-        <input id="bib-edit-creator-name" type="text" class="bib-input" />
-
-        <label class="bib-edit-label">저자 독음</label>
-        <input id="bib-edit-creator-reading" type="text" class="bib-input" />
-
-        <label class="bib-edit-label">저자 역할</label>
-        <input id="bib-edit-creator-role" type="text" class="bib-input" placeholder="예: author, annotator" />
-
-        <label class="bib-edit-label">저자 시기</label>
-        <input id="bib-edit-creator-period" type="text" class="bib-input" placeholder="예: 唐" />
-
-        <label class="bib-edit-label">성립/간행 시기</label>
-        <input id="bib-edit-date" type="text" class="bib-input" placeholder="예: 唐代(原著)" />
-
-        <label class="bib-edit-label">판종</label>
-        <input id="bib-edit-edition" type="text" class="bib-input" placeholder="예: 목판본, 활자본" />
-
-        <label class="bib-edit-label">형태사항</label>
-        <input id="bib-edit-physical" type="text" class="bib-input" placeholder="예: 4冊, 26.7cm" />
-
-        <label class="bib-edit-label">자료유형</label>
-        <input id="bib-edit-material" type="text" class="bib-input" placeholder="예: 図書, 和古書" />
-
-        <label class="bib-edit-label">총서명</label>
-        <input id="bib-edit-series" type="text" class="bib-input" />
-
-        <label class="bib-edit-label">비고</label>
-        <textarea id="bib-edit-notes" class="bib-textarea" rows="3"></textarea>
-
-        <div class="bib-edit-actions">
-          <span id="bib-edit-status"></span>
-          <button id="bib-edit-save-btn" class="bib-btn bib-btn-primary">저장</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Phase 7: 해석 저장소 생성 다이얼로그 오버레이 -->
-  <div class="bib-dialog-overlay" id="interp-dialog-overlay" style="display:none;">
-    <div class="bib-dialog" id="interp-create-dialog">
-      <div class="bib-dialog-header">
-        <span class="bib-dialog-title">새 해석 저장소 만들기</span>
-        <button class="bib-dialog-close" id="interp-dialog-close" title="닫기">&times;</button>
-      </div>
-      <div class="bib-dialog-body bib-edit-form">
-        <label class="bib-edit-label">해석 저장소 ID</label>
-        <input id="interp-new-id" type="text" class="bib-input" placeholder="예: interp_kim_001 (영문 소문자+숫자+밑줄)" />
-
-        <label class="bib-edit-label">원본 문헌</label>
-        <select id="interp-new-source" class="bib-select" style="width:100%;">
-          <option value="">문헌을 선택하세요</option>
-        </select>
-
-        <label class="bib-edit-label">해석자 유형</label>
-        <select id="interp-new-type" class="bib-select" style="width:100%;">
-          <option value="human">human (사람)</option>
-          <option value="llm">llm (AI 모델)</option>
-          <option value="hybrid">hybrid (협업)</option>
-        </select>
-
-        <label class="bib-edit-label">해석자 이름</label>
-        <input id="interp-new-name" type="text" class="bib-input" placeholder="예: 연구자 김, claude-sonnet-4-5" />
-
-        <label class="bib-edit-label">제목 (선택)</label>
-        <input id="interp-new-title" type="text" class="bib-input" placeholder="예: 世說新語 현토 작업" />
-
-        <div class="bib-edit-actions">
-          <span id="interp-create-status"></span>
-          <button id="interp-create-save-btn" class="bib-btn bib-btn-primary">생성</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Phase 6: 교정 다이얼로그 오버레이 -->
-  <div class="corr-dialog-overlay" id="corr-dialog-overlay" style="display:none;">
-    <div class="corr-dialog">
-      <div class="bib-dialog-header">
-        <span class="bib-dialog-title" id="corr-dialog-title">교정 입력</span>
-        <button class="bib-dialog-close" id="corr-dialog-close" title="닫기">&times;</button>
-      </div>
-      <div class="bib-dialog-body corr-dialog-body">
-
-        <label class="bib-edit-label">교정 유형</label>
-        <select id="corr-type" class="bib-select corr-type-select">
-          <option value="ocr_error">OCR 오류 (ocr_error)</option>
-          <option value="variant_reading">판본 이문 (variant_reading)</option>
-          <option value="variant_char">이체자 (variant_char)</option>
-          <option value="decoding_error">판독 불가→가능 (decoding_error)</option>
-          <option value="uncertain">불확실 (uncertain)</option>
-        </select>
-
-        <label class="bib-edit-label">원래 글자</label>
-        <input id="corr-original" type="text" class="bib-input" readonly />
-
-        <label class="bib-edit-label">교정 글자</label>
-        <input id="corr-corrected" type="text" class="bib-input" placeholder="교정할 글자 입력" />
-
-        <div id="corr-common-reading-group">
-          <label class="bib-edit-label">통행 텍스트 (다른 판본)</label>
-          <input id="corr-common-reading" type="text" class="bib-input" placeholder="다른 판본의 글자" />
-        </div>
-
-        <label class="bib-edit-label">메모</label>
-        <textarea id="corr-note" class="bib-textarea" rows="3" placeholder="교정 근거, 비고"></textarea>
-
-        <label class="bib-edit-label">확신도: <span id="corr-confidence-val">0.9</span></label>
-        <input id="corr-confidence" type="range" min="0" max="1" step="0.05" value="0.9" class="corr-slider" />
-
-        <div class="corr-dialog-actions">
-          <button id="corr-dialog-delete" class="text-btn props-btn-danger" style="display:none;">삭제</button>
-          <div class="text-toolbar-spacer"></div>
-          <button id="corr-dialog-cancel" class="text-btn">취소</button>
-          <button id="corr-dialog-save" class="text-btn text-btn-primary">저장</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Phase 8: 엔티티 CRUD 다이얼로그 오버레이 -->
-  <div class="bib-dialog-overlay" id="entity-dialog-overlay" style="display:none;">
-    <div class="bib-dialog" id="entity-dialog" style="width:520px;">
-      <div class="bib-dialog-header">
-        <span class="bib-dialog-title" id="entity-dialog-title">엔티티 생성</span>
-        <button class="bib-dialog-close" id="entity-dialog-close" title="닫기">&times;</button>
-      </div>
-      <div class="bib-dialog-body bib-edit-form" id="entity-dialog-form">
-        <!-- entity-manager.js가 동적으로 폼 필드를 렌더링 -->
-      </div>
-      <div class="bib-edit-actions" id="entity-dialog-actions">
-        <span id="entity-dialog-status"></span>
-        <div class="text-toolbar-spacer"></div>
-        <button id="entity-dialog-cancel" class="text-btn">취소</button>
-        <button id="entity-dialog-save" class="bib-btn bib-btn-primary">저장</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Phase 8: LLM 요청 다이얼로그 오버레이 -->
-  <div class="bib-dialog-overlay" id="llm-dialog-overlay" style="display:none;">
-    <div class="bib-dialog" id="llm-dialog" style="width:480px;">
-      <div class="bib-dialog-header">
-        <span class="bib-dialog-title">LLM에게 요청</span>
-        <button class="bib-dialog-close" id="llm-dialog-close" title="닫기">&times;</button>
-      </div>
-      <div class="bib-dialog-body bib-edit-form">
-        <label class="bib-edit-label">요청 유형</label>
-        <select id="llm-request-type" class="bib-select" style="width:100%;">
-          <option value="tag_extraction">Tag 추출 (인명·지명·관직)</option>
-          <option value="translation_draft">번역 초안</option>
-          <option value="relation_extraction">관계 추출</option>
-          <option value="agent_identification">인물 식별</option>
-        </select>
-        <label class="bib-edit-label">대상</label>
-        <select id="llm-target" class="bib-select" style="width:100%;">
-          <option value="current_page">현재 페이지 전체</option>
-          <option value="selected_block">선택된 TextBlock</option>
-        </select>
-        <label class="bib-edit-label">추가 지시사항 (선택)</label>
-        <textarea id="llm-instructions" class="bib-textarea" rows="3" placeholder="예: 六朝 인물에 집중하세요"></textarea>
-        <div class="bib-edit-actions">
-          <span id="llm-status" class="text-save-status" style="color:var(--text-secondary);">LLM 연동은 아직 준비 중입니다</span>
-          <button id="llm-request-btn" class="bib-btn bib-btn-primary" disabled>요청</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Phase 10: 새 문헌 생성 다이얼로그 오버레이 -->
-  <div class="bib-dialog-overlay" id="create-doc-overlay" style="display:none;">
-    <div class="bib-dialog" id="create-doc-dialog" style="width:560px;">
-      <div class="bib-dialog-header">
-        <span class="bib-dialog-title">URL에서 새 문헌 생성</span>
-        <button class="bib-dialog-close" id="create-doc-close" title="닫기">&times;</button>
-      </div>
-      <div class="bib-dialog-body bib-edit-form">
-
-        <!-- Step 1: URL 입력 + 미리보기 -->
-        <div id="create-doc-step1">
-          <label class="bib-edit-label">원본 URL</label>
-          <div class="bib-url-row">
-            <input id="create-doc-url" type="text" class="bib-input bib-url-input"
-              placeholder="https://www.digital.archives.go.jp/file/..." />
-            <button id="create-doc-preview-btn" class="bib-btn bib-btn-primary">미리보기</button>
-          </div>
-          <div class="bib-url-help">
-            지원: NDL Search, 일본 국립공문서관, KORCIS
-          </div>
-          <span id="create-doc-status" class="text-save-status"></span>
-        </div>
-
-        <!-- Step 2: 미리보기 결과 + 에셋 선택 + doc_id 입력 (처음에는 숨김) -->
-        <div id="create-doc-step2" style="display:none;">
-          <!-- 서지 요약 -->
-          <div class="create-doc-bib-summary" id="create-doc-bib-summary"></div>
-
-          <!-- 에셋(이미지) 목록 -->
-          <div id="create-doc-assets-section" style="display:none;">
-            <label class="bib-edit-label">다운로드할 이미지/PDF</label>
-            <div id="create-doc-assets" class="create-doc-assets"></div>
-          </div>
-
-          <!-- 문헌 ID -->
-          <label class="bib-edit-label">문헌 ID (영문 소문자/숫자/밑줄)</label>
-          <input id="create-doc-id" type="text" class="bib-input"
-            placeholder="예: monggu" />
-
-          <!-- 문헌 제목 (선택) -->
-          <label class="bib-edit-label">문헌 제목 (선택)</label>
-          <input id="create-doc-title" type="text" class="bib-input" />
-
-          <div class="bib-edit-actions">
-            <button id="create-doc-back-btn" class="text-btn">뒤로</button>
-            <span id="create-doc-create-status" class="text-save-status"></span>
-            <div class="text-toolbar-spacer"></div>
-            <button id="create-doc-create-btn" class="bib-btn bib-btn-primary">문헌 생성</button>
-          </div>
-        </div>
-
-        <!-- 진행 상태 (생성 중 표시) -->
-        <div id="create-doc-progress" style="display:none;">
-          <div class="create-doc-progress-bar">
-            <div class="create-doc-progress-fill" id="create-doc-progress-fill"></div>
-          </div>
-          <div id="create-doc-progress-text" class="create-doc-progress-text">준비 중...</div>
-        </div>
-
-      </div>
-    </div>
-  </div>
-
-  <!-- HWP 가져오기 다이얼로그 -->
-  <div class="bib-dialog-overlay" id="hwp-import-overlay" style="display:none;">
-    <div class="bib-dialog" id="hwp-import-dialog" style="width:600px;">
-      <div class="bib-dialog-header">
-        <span class="bib-dialog-title">HWP/HWPX 파일 가져오기</span>
-        <button class="bib-dialog-close" id="hwp-import-close" title="닫기">&times;</button>
-      </div>
-      <div class="bib-dialog-body bib-edit-form">
-
-        <!-- Step 1: 파일 선택 + 미리보기 -->
-        <div id="hwp-import-step1">
-          <label class="bib-edit-label">HWP/HWPX 파일 선택</label>
-          <div class="bib-url-row">
-            <input id="hwp-import-file" type="file" accept=".hwp,.hwpx"
-              style="flex:1;" />
-            <button id="hwp-import-preview-btn" class="bib-btn bib-btn-primary">미리보기</button>
-          </div>
-          <span id="hwp-import-status" class="text-save-status"></span>
-
-          <!-- 미리보기 결과 (처음에는 숨김) -->
-          <div id="hwp-import-preview" style="display:none; margin-top:10px;">
-            <div id="hwp-import-meta" style="font-size:12px; margin-bottom:8px;"></div>
-            <div style="display:flex; gap:8px; margin-bottom:8px;">
-              <span class="status-item" id="hwp-preview-punct"></span>
-              <span class="status-item" id="hwp-preview-hyeonto"></span>
-              <span class="status-item" id="hwp-preview-taidu"></span>
+        <!-- 하단 패널: D-001 터미널/문제 → Git 이력, 검증, 의존 추적 -->
+        <div
+          class="bottom-panel"
+          id="bottom-panel"
+        >
+          <div class="panel-header">
+            <div class="panel-tabs">
+              <button class="panel-tab active">Git 이력</button>
+              <button class="panel-tab">검증 결과</button>
+              <button class="panel-tab">의존 추적</button>
+              <button class="panel-tab">엔티티</button>
+              <button class="panel-tab">비고</button>
             </div>
-            <label class="bib-edit-label">텍스트 미리보기</label>
-            <textarea id="hwp-import-text-preview" class="bib-textarea"
-              rows="5" readonly style="font-size:12px;"></textarea>
-            <label class="bib-edit-label" style="margin-top:6px;">정리된 원문 (L4 저장본)</label>
-            <textarea id="hwp-import-clean-preview" class="bib-textarea"
-              rows="3" readonly style="font-size:12px;"></textarea>
+            <button
+              class="panel-toggle"
+              id="panel-toggle"
+              title="패널 접기/펴기"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+          </div>
+          <div
+            class="panel-content"
+            id="panel-content"
+          >
+            <!-- Git 이력 탭 내용 (Phase 6 + Phase 12-1) -->
+            <div id="git-panel-content">
+              <!-- Phase 12-1: 간략/상세 뷰 전환 탭 -->
+              <div class="git-view-tabs">
+                <button
+                  class="git-view-tab active"
+                  data-view="simple"
+                >
+                  커밋 목록
+                </button>
+                <button
+                  class="git-view-tab"
+                  data-view="graph"
+                >
+                  사다리형 그래프
+                </button>
+                <div
+                  class="git-graph-controls"
+                  id="git-graph-controls"
+                  style="display: none"
+                >
+                  <label
+                    >원본:
+                    <select
+                      id="git-graph-orig-branch"
+                      class="git-branch-select"
+                    >
+                      <option value="auto">auto</option>
+                    </select></label
+                  >
+                  <label
+                    >해석:
+                    <select
+                      id="git-graph-interp-branch"
+                      class="git-branch-select"
+                    >
+                      <option value="auto">auto</option>
+                    </select></label
+                  >
+                </div>
+              </div>
+
+              <!-- 간략 뷰: 기존 커밋 목록 -->
+              <div id="git-simple-view">
+                <div
+                  id="git-log-list"
+                  class="git-log-list"
+                >
+                  <div class="placeholder">
+                    문헌을 선택하면 Git 이력이 표시됩니다
+                  </div>
+                </div>
+                <div
+                  id="git-diff-view"
+                  class="git-diff-view"
+                  style="display: none"
+                >
+                  <div class="git-diff-header">
+                    <button
+                      id="git-diff-back"
+                      class="text-btn"
+                      title="목록으로"
+                    >
+                      &larr; 목록
+                    </button>
+                    <span
+                      id="git-diff-title"
+                      class="git-diff-title"
+                    ></span>
+                  </div>
+                  <div
+                    id="git-diff-content"
+                    class="git-diff-content"
+                  ></div>
+                </div>
+              </div>
+
+              <!-- 상세 뷰: Phase 12-1 사다리형 Git 그래프 -->
+              <div
+                id="git-graph-view"
+                style="display: none"
+              >
+                <div
+                  id="git-graph-container"
+                  class="git-graph-container"
+                >
+                  <div class="placeholder">
+                    해석 저장소를 선택하면 사다리형 그래프가 표시됩니다
+                  </div>
+                </div>
+                <!-- 클릭 시 커밋 상세 패널 -->
+                <div
+                  id="git-graph-detail"
+                  class="git-graph-detail"
+                  style="display: none"
+                >
+                  <div class="git-graph-detail-header">
+                    <span id="git-graph-detail-title"></span>
+                    <button
+                      id="git-graph-detail-close"
+                      class="text-btn"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                  <div id="git-graph-detail-body"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Phase 5: 검증 결과 탭 내용 (향후 스키마 검증 결과 표시용) -->
+            <div
+              id="validation-panel-content"
+              style="display: none"
+            >
+              <div class="placeholder">
+                스키마 검증 결과가 여기에 표시됩니다 (향후 구현)
+              </div>
+            </div>
+
+            <!-- Phase 7: 의존 추적 탭 내용 -->
+            <div
+              id="dep-panel-content"
+              style="display: none"
+            >
+              <div
+                id="dep-status-summary"
+                class="dep-status-summary"
+              >
+                <div class="placeholder">
+                  해석 저장소를 선택하면 의존 추적 정보가 표시됩니다
+                </div>
+              </div>
+              <div
+                id="dep-file-list"
+                class="dep-file-list"
+              ></div>
+            </div>
+
+            <!-- Phase 8: 엔티티 탭 내용 -->
+            <div
+              id="entity-panel-content"
+              style="display: none"
+            >
+              <!-- 필터 바 -->
+              <div class="entity-filter-bar">
+                <button
+                  class="entity-filter-btn active"
+                  data-type="all"
+                >
+                  전체
+                </button>
+                <button
+                  class="entity-filter-btn"
+                  data-type="text_block"
+                >
+                  TextBlock
+                </button>
+                <button
+                  class="entity-filter-btn"
+                  data-type="tag"
+                >
+                  Tag
+                </button>
+                <button
+                  class="entity-filter-btn"
+                  data-type="concept"
+                >
+                  Concept
+                </button>
+                <button
+                  class="entity-filter-btn"
+                  data-type="agent"
+                >
+                  Agent
+                </button>
+                <button
+                  class="entity-filter-btn"
+                  data-type="relation"
+                >
+                  Relation
+                </button>
+                <div class="entity-filter-spacer"></div>
+                <label class="entity-page-toggle">
+                  <input
+                    type="checkbox"
+                    id="entity-page-filter"
+                    checked
+                  />
+                  현재 페이지만
+                </label>
+                <button
+                  id="entity-create-btn"
+                  class="text-btn text-btn-primary"
+                  title="새 엔티티 만들기"
+                >
+                  + 새 엔티티
+                </button>
+              </div>
+              <!-- LLM 초안 검토 영역 -->
+              <div
+                id="entity-llm-review"
+                class="llm-review-section"
+                style="display: none"
+              >
+                <div class="llm-review-header">LLM 초안 검토</div>
+                <div id="entity-llm-review-list"></div>
+              </div>
+              <!-- 엔티티 목록 -->
+              <div
+                id="entity-list"
+                class="entity-list"
+              >
+                <div class="placeholder">해석 모드에서 엔티티가 표시됩니다</div>
+              </div>
+            </div>
+
+            <!-- 비고/메모 탭 내용 -->
+            <div
+              id="notes-panel-content"
+              style="display: none"
+            >
+              <div class="notes-toolbar">
+                <button
+                  id="notes-add-btn"
+                  class="text-btn text-btn-primary"
+                  title="새 메모 추가"
+                >
+                  + 추가
+                </button>
+                <span
+                  id="notes-save-status"
+                  class="text-save-status"
+                ></span>
+              </div>
+              <div
+                id="notes-list"
+                class="notes-list"
+              >
+                <div class="placeholder">
+                  해석 저장소를 선택하면 비고를 작성할 수 있습니다
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <!-- Phase 5: 서지정보 다이얼로그 오버레이 -->
+      <div
+        class="bib-dialog-overlay"
+        id="bib-dialog-overlay"
+        style="display: none"
+      >
+        <!-- 서지정보 가져오기 다이얼로그 -->
+        <div
+          class="bib-dialog"
+          id="bib-fetch-dialog"
+        >
+          <div class="bib-dialog-header">
+            <span class="bib-dialog-title">서지정보 가져오기</span>
+            <button
+              class="bib-dialog-close"
+              title="닫기"
+            >
+              &times;
+            </button>
+          </div>
+          <div class="bib-dialog-body">
+            <!-- URL / 검색 탭 전환 -->
+            <div class="bib-tab-bar">
+              <button
+                class="bib-tab active"
+                data-tab="url"
+              >
+                URL 붙여넣기
+              </button>
+              <button
+                class="bib-tab"
+                data-tab="search"
+              >
+                직접 검색
+              </button>
+            </div>
+
+            <!-- URL 탭: 주 워크플로우 -->
+            <div
+              id="bib-tab-url"
+              class="bib-tab-content"
+            >
+              <div class="bib-url-row">
+                <input
+                  id="bib-url-input"
+                  type="text"
+                  class="bib-input bib-url-input"
+                  placeholder="URL 붙여넣기 (예: https://ndlsearch.ndl.go.jp/books/...)"
+                />
+                <button
+                  id="bib-url-btn"
+                  class="bib-btn bib-btn-primary"
+                >
+                  가져오기
+                </button>
+              </div>
+              <div class="bib-url-info">
+                <span id="bib-url-status"></span>
+              </div>
+              <div class="bib-url-help">
+                지원: NDL Search, 국립공문서관, KORCIS (한국고문헌종합목록)
+              </div>
+            </div>
+
+            <!-- 검색 탭: 기존 키워드 검색 -->
+            <div
+              id="bib-tab-search"
+              class="bib-tab-content"
+              style="display: none"
+            >
+              <div class="bib-search-row">
+                <select
+                  id="bib-parser-select"
+                  class="bib-select"
+                  title="파서 선택"
+                ></select>
+                <input
+                  id="bib-search-input"
+                  type="text"
+                  class="bib-input"
+                  placeholder="검색어 (예: 蒙求)"
+                />
+                <button
+                  id="bib-search-btn"
+                  class="bib-btn bib-btn-primary"
+                >
+                  검색
+                </button>
+              </div>
+              <div class="bib-search-info">
+                <span id="bib-search-status"></span>
+              </div>
+              <div
+                id="bib-search-results"
+                class="bib-search-results"
+              ></div>
+            </div>
           </div>
         </div>
 
-        <!-- Step 2: 설정 + 실행 (미리보기 후 표시) -->
-        <div id="hwp-import-step2" style="display:none;">
-          <label class="bib-edit-label">문헌 ID (영문 소문자/숫자/밑줄)</label>
-          <input id="hwp-import-doc-id" type="text" class="bib-input"
-            placeholder="예: monggu_hwp" />
-
-          <label class="bib-edit-label">문헌 제목 (선택)</label>
-          <input id="hwp-import-title" type="text" class="bib-input" />
-
-          <div style="margin-top:8px; display:flex; gap:12px;">
-            <label style="font-size:12px;">
-              <input type="checkbox" id="hwp-import-strip-punct" checked /> 표점 분리
-            </label>
-            <label style="font-size:12px;">
-              <input type="checkbox" id="hwp-import-strip-hyeonto" checked /> 현토 분리
-            </label>
+        <!-- 수동 편집 다이얼로그 -->
+        <div
+          class="bib-dialog"
+          id="bib-edit-dialog"
+          style="display: none"
+        >
+          <div class="bib-dialog-header">
+            <span class="bib-dialog-title">서지정보 편집</span>
+            <button
+              class="bib-dialog-close"
+              title="닫기"
+            >
+              &times;
+            </button>
           </div>
+          <div class="bib-dialog-body bib-edit-form">
+            <label class="bib-edit-label">제목</label>
+            <input
+              id="bib-edit-title"
+              type="text"
+              class="bib-input"
+            />
 
-          <div class="bib-edit-actions" style="margin-top:10px;">
-            <span id="hwp-import-exec-status" class="text-save-status"></span>
-            <div class="text-toolbar-spacer"></div>
-            <button id="hwp-import-exec-btn" class="bib-btn bib-btn-primary">가져오기</button>
+            <label class="bib-edit-label">독음</label>
+            <input
+              id="bib-edit-title-reading"
+              type="text"
+              class="bib-input"
+              placeholder="예: もうぎゅう / 몽구"
+            />
+
+            <label class="bib-edit-label">저자명</label>
+            <input
+              id="bib-edit-creator-name"
+              type="text"
+              class="bib-input"
+            />
+
+            <label class="bib-edit-label">저자 독음</label>
+            <input
+              id="bib-edit-creator-reading"
+              type="text"
+              class="bib-input"
+            />
+
+            <label class="bib-edit-label">저자 역할</label>
+            <input
+              id="bib-edit-creator-role"
+              type="text"
+              class="bib-input"
+              placeholder="예: author, annotator"
+            />
+
+            <label class="bib-edit-label">저자 시기</label>
+            <input
+              id="bib-edit-creator-period"
+              type="text"
+              class="bib-input"
+              placeholder="예: 唐"
+            />
+
+            <label class="bib-edit-label">성립/간행 시기</label>
+            <input
+              id="bib-edit-date"
+              type="text"
+              class="bib-input"
+              placeholder="예: 唐代(原著)"
+            />
+
+            <label class="bib-edit-label">판종</label>
+            <input
+              id="bib-edit-edition"
+              type="text"
+              class="bib-input"
+              placeholder="예: 목판본, 활자본"
+            />
+
+            <label class="bib-edit-label">형태사항</label>
+            <input
+              id="bib-edit-physical"
+              type="text"
+              class="bib-input"
+              placeholder="예: 4冊, 26.7cm"
+            />
+
+            <label class="bib-edit-label">자료유형</label>
+            <input
+              id="bib-edit-material"
+              type="text"
+              class="bib-input"
+              placeholder="예: 図書, 和古書"
+            />
+
+            <label class="bib-edit-label">총서명</label>
+            <input
+              id="bib-edit-series"
+              type="text"
+              class="bib-input"
+            />
+
+            <label class="bib-edit-label">비고</label>
+            <textarea
+              id="bib-edit-notes"
+              class="bib-textarea"
+              rows="3"
+            ></textarea>
+
+            <div class="bib-edit-actions">
+              <span id="bib-edit-status"></span>
+              <button
+                id="bib-edit-save-btn"
+                class="bib-btn bib-btn-primary"
+              >
+                저장
+              </button>
+            </div>
           </div>
         </div>
-
       </div>
+
+      <!-- Phase 7: 해석 저장소 생성 다이얼로그 오버레이 -->
+      <div
+        class="bib-dialog-overlay"
+        id="interp-dialog-overlay"
+        style="display: none"
+      >
+        <div
+          class="bib-dialog"
+          id="interp-create-dialog"
+        >
+          <div class="bib-dialog-header">
+            <span class="bib-dialog-title">새 해석 저장소 만들기</span>
+            <button
+              class="bib-dialog-close"
+              id="interp-dialog-close"
+              title="닫기"
+            >
+              &times;
+            </button>
+          </div>
+          <div class="bib-dialog-body bib-edit-form">
+            <label class="bib-edit-label">해석 저장소 ID</label>
+            <input
+              id="interp-new-id"
+              type="text"
+              class="bib-input"
+              placeholder="예: interp_kim_001 (영문 소문자+숫자+밑줄)"
+            />
+
+            <label class="bib-edit-label">원본 문헌</label>
+            <select
+              id="interp-new-source"
+              class="bib-select"
+              style="width: 100%"
+            >
+              <option value="">문헌을 선택하세요</option>
+            </select>
+
+            <label class="bib-edit-label">해석자 유형</label>
+            <select
+              id="interp-new-type"
+              class="bib-select"
+              style="width: 100%"
+            >
+              <option value="human">human (사람)</option>
+              <option value="llm">llm (AI 모델)</option>
+              <option value="hybrid">hybrid (협업)</option>
+            </select>
+
+            <label class="bib-edit-label">해석자 이름</label>
+            <input
+              id="interp-new-name"
+              type="text"
+              class="bib-input"
+              placeholder="예: 연구자 김, claude-sonnet-4-5"
+            />
+
+            <label class="bib-edit-label">제목 (선택)</label>
+            <input
+              id="interp-new-title"
+              type="text"
+              class="bib-input"
+              placeholder="예: 世說新語 현토 작업"
+            />
+
+            <div class="bib-edit-actions">
+              <span id="interp-create-status"></span>
+              <button
+                id="interp-create-save-btn"
+                class="bib-btn bib-btn-primary"
+              >
+                생성
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase 6: 교정 다이얼로그 오버레이 -->
+      <div
+        class="corr-dialog-overlay"
+        id="corr-dialog-overlay"
+        style="display: none"
+      >
+        <div class="corr-dialog">
+          <div class="bib-dialog-header">
+            <span
+              class="bib-dialog-title"
+              id="corr-dialog-title"
+              >교정 입력</span
+            >
+            <button
+              class="bib-dialog-close"
+              id="corr-dialog-close"
+              title="닫기"
+            >
+              &times;
+            </button>
+          </div>
+          <div class="bib-dialog-body corr-dialog-body">
+            <label class="bib-edit-label">교정 유형</label>
+            <select
+              id="corr-type"
+              class="bib-select corr-type-select"
+            >
+              <option value="ocr_error">OCR 오류 (ocr_error)</option>
+              <option value="variant_reading">
+                판본 이문 (variant_reading)
+              </option>
+              <option value="variant_char">이체자 (variant_char)</option>
+              <option value="decoding_error">
+                판독 불가→가능 (decoding_error)
+              </option>
+              <option value="uncertain">불확실 (uncertain)</option>
+            </select>
+
+            <label class="bib-edit-label">원래 글자</label>
+            <input
+              id="corr-original"
+              type="text"
+              class="bib-input"
+              readonly
+            />
+
+            <label class="bib-edit-label">교정 글자</label>
+            <input
+              id="corr-corrected"
+              type="text"
+              class="bib-input"
+              placeholder="교정할 글자 입력"
+            />
+
+            <div id="corr-common-reading-group">
+              <label class="bib-edit-label">통행 텍스트 (다른 판본)</label>
+              <input
+                id="corr-common-reading"
+                type="text"
+                class="bib-input"
+                placeholder="다른 판본의 글자"
+              />
+            </div>
+
+            <label class="bib-edit-label">메모</label>
+            <textarea
+              id="corr-note"
+              class="bib-textarea"
+              rows="3"
+              placeholder="교정 근거, 비고"
+            ></textarea>
+
+            <label class="bib-edit-label"
+              >확신도: <span id="corr-confidence-val">0.9</span></label
+            >
+            <input
+              id="corr-confidence"
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value="0.9"
+              class="corr-slider"
+            />
+
+            <div class="corr-dialog-actions">
+              <button
+                id="corr-dialog-delete"
+                class="text-btn props-btn-danger"
+                style="display: none"
+              >
+                삭제
+              </button>
+              <div class="text-toolbar-spacer"></div>
+              <button
+                id="corr-dialog-cancel"
+                class="text-btn"
+              >
+                취소
+              </button>
+              <button
+                id="corr-dialog-save"
+                class="text-btn text-btn-primary"
+              >
+                저장
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase 8: 엔티티 CRUD 다이얼로그 오버레이 -->
+      <div
+        class="bib-dialog-overlay"
+        id="entity-dialog-overlay"
+        style="display: none"
+      >
+        <div
+          class="bib-dialog"
+          id="entity-dialog"
+          style="width: 520px"
+        >
+          <div class="bib-dialog-header">
+            <span
+              class="bib-dialog-title"
+              id="entity-dialog-title"
+              >엔티티 생성</span
+            >
+            <button
+              class="bib-dialog-close"
+              id="entity-dialog-close"
+              title="닫기"
+            >
+              &times;
+            </button>
+          </div>
+          <div
+            class="bib-dialog-body bib-edit-form"
+            id="entity-dialog-form"
+          >
+            <!-- entity-manager.js가 동적으로 폼 필드를 렌더링 -->
+          </div>
+          <div
+            class="bib-edit-actions"
+            id="entity-dialog-actions"
+          >
+            <span id="entity-dialog-status"></span>
+            <div class="text-toolbar-spacer"></div>
+            <button
+              id="entity-dialog-cancel"
+              class="text-btn"
+            >
+              취소
+            </button>
+            <button
+              id="entity-dialog-save"
+              class="bib-btn bib-btn-primary"
+            >
+              저장
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase 8: LLM 요청 다이얼로그 오버레이 -->
+      <div
+        class="bib-dialog-overlay"
+        id="llm-dialog-overlay"
+        style="display: none"
+      >
+        <div
+          class="bib-dialog"
+          id="llm-dialog"
+          style="width: 480px"
+        >
+          <div class="bib-dialog-header">
+            <span class="bib-dialog-title">LLM에게 요청</span>
+            <button
+              class="bib-dialog-close"
+              id="llm-dialog-close"
+              title="닫기"
+            >
+              &times;
+            </button>
+          </div>
+          <div class="bib-dialog-body bib-edit-form">
+            <label class="bib-edit-label">요청 유형</label>
+            <select
+              id="llm-request-type"
+              class="bib-select"
+              style="width: 100%"
+            >
+              <option value="tag_extraction">Tag 추출 (인명·지명·관직)</option>
+              <option value="translation_draft">번역 초안</option>
+              <option value="relation_extraction">관계 추출</option>
+              <option value="agent_identification">인물 식별</option>
+            </select>
+            <label class="bib-edit-label">대상</label>
+            <select
+              id="llm-target"
+              class="bib-select"
+              style="width: 100%"
+            >
+              <option value="current_page">현재 페이지 전체</option>
+              <option value="selected_block">선택된 TextBlock</option>
+            </select>
+            <label class="bib-edit-label">추가 지시사항 (선택)</label>
+            <textarea
+              id="llm-instructions"
+              class="bib-textarea"
+              rows="3"
+              placeholder="예: 六朝 인물에 집중하세요"
+            ></textarea>
+            <div class="bib-edit-actions">
+              <span
+                id="llm-status"
+                class="text-save-status"
+                style="color: var(--text-secondary)"
+                >LLM 연동은 아직 준비 중입니다</span
+              >
+              <button
+                id="llm-request-btn"
+                class="bib-btn bib-btn-primary"
+                disabled
+              >
+                요청
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase 10: 새 문헌 생성 다이얼로그 오버레이 -->
+      <div
+        class="bib-dialog-overlay"
+        id="create-doc-overlay"
+        style="display: none"
+      >
+        <div
+          class="bib-dialog"
+          id="create-doc-dialog"
+          style="width: 560px"
+        >
+          <div class="bib-dialog-header">
+            <span class="bib-dialog-title">URL에서 새 문헌 생성</span>
+            <button
+              class="bib-dialog-close"
+              id="create-doc-close"
+              title="닫기"
+            >
+              &times;
+            </button>
+          </div>
+          <div class="bib-dialog-body bib-edit-form">
+            <!-- Step 1: URL 입력 + 미리보기 -->
+            <div id="create-doc-step1">
+              <label class="bib-edit-label">원본 URL</label>
+              <div class="bib-url-row">
+                <input
+                  id="create-doc-url"
+                  type="text"
+                  class="bib-input bib-url-input"
+                  placeholder="https://www.digital.archives.go.jp/file/..."
+                />
+                <button
+                  id="create-doc-preview-btn"
+                  class="bib-btn bib-btn-primary"
+                >
+                  미리보기
+                </button>
+              </div>
+              <div class="bib-url-help">
+                지원: NDL Search, 일본 국립공문서관, KORCIS
+              </div>
+              <span
+                id="create-doc-status"
+                class="text-save-status"
+              ></span>
+            </div>
+
+            <!-- Step 2: 미리보기 결과 + 에셋 선택 + doc_id 입력 (처음에는 숨김) -->
+            <div
+              id="create-doc-step2"
+              style="display: none"
+            >
+              <!-- 서지 요약 -->
+              <div
+                class="create-doc-bib-summary"
+                id="create-doc-bib-summary"
+              ></div>
+
+              <!-- 에셋(이미지) 목록 -->
+              <div
+                id="create-doc-assets-section"
+                style="display: none"
+              >
+                <label class="bib-edit-label">다운로드할 이미지/PDF</label>
+                <div
+                  id="create-doc-assets"
+                  class="create-doc-assets"
+                ></div>
+              </div>
+
+              <!-- 문헌 ID -->
+              <label class="bib-edit-label"
+                >문헌 ID (영문 소문자/숫자/밑줄)</label
+              >
+              <input
+                id="create-doc-id"
+                type="text"
+                class="bib-input"
+                placeholder="예: monggu"
+              />
+
+              <!-- 문헌 제목 (선택) -->
+              <label class="bib-edit-label">문헌 제목 (선택)</label>
+              <input
+                id="create-doc-title"
+                type="text"
+                class="bib-input"
+              />
+
+              <div class="bib-edit-actions">
+                <button
+                  id="create-doc-back-btn"
+                  class="text-btn"
+                >
+                  뒤로
+                </button>
+                <span
+                  id="create-doc-create-status"
+                  class="text-save-status"
+                ></span>
+                <div class="text-toolbar-spacer"></div>
+                <button
+                  id="create-doc-create-btn"
+                  class="bib-btn bib-btn-primary"
+                >
+                  문헌 생성
+                </button>
+              </div>
+            </div>
+
+            <!-- 진행 상태 (생성 중 표시) -->
+            <div
+              id="create-doc-progress"
+              style="display: none"
+            >
+              <div class="create-doc-progress-bar">
+                <div
+                  class="create-doc-progress-fill"
+                  id="create-doc-progress-fill"
+                ></div>
+              </div>
+              <div
+                id="create-doc-progress-text"
+                class="create-doc-progress-text"
+              >
+                준비 중...
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- HWP 가져오기 다이얼로그 -->
+      <div
+        class="bib-dialog-overlay"
+        id="hwp-import-overlay"
+        style="display: none"
+      >
+        <div
+          class="bib-dialog"
+          id="hwp-import-dialog"
+          style="width: 600px"
+        >
+          <div class="bib-dialog-header">
+            <span class="bib-dialog-title">HWP/HWPX 파일 가져오기</span>
+            <button
+              class="bib-dialog-close"
+              id="hwp-import-close"
+              title="닫기"
+            >
+              &times;
+            </button>
+          </div>
+          <div class="bib-dialog-body bib-edit-form">
+            <!-- Step 1: 파일 선택 + 미리보기 -->
+            <div id="hwp-import-step1">
+              <label class="bib-edit-label">HWP/HWPX 파일 선택</label>
+              <div class="bib-url-row">
+                <input
+                  id="hwp-import-file"
+                  type="file"
+                  accept=".hwp,.hwpx"
+                  style="flex: 1"
+                />
+                <button
+                  id="hwp-import-preview-btn"
+                  class="bib-btn bib-btn-primary"
+                >
+                  미리보기
+                </button>
+              </div>
+              <span
+                id="hwp-import-status"
+                class="text-save-status"
+              ></span>
+
+              <!-- 미리보기 결과 (처음에는 숨김) -->
+              <div
+                id="hwp-import-preview"
+                style="display: none; margin-top: 10px"
+              >
+                <div
+                  id="hwp-import-meta"
+                  style="font-size: 12px; margin-bottom: 8px"
+                ></div>
+                <div style="display: flex; gap: 8px; margin-bottom: 8px">
+                  <span
+                    class="status-item"
+                    id="hwp-preview-punct"
+                  ></span>
+                  <span
+                    class="status-item"
+                    id="hwp-preview-hyeonto"
+                  ></span>
+                  <span
+                    class="status-item"
+                    id="hwp-preview-taidu"
+                  ></span>
+                </div>
+                <label class="bib-edit-label">텍스트 미리보기</label>
+                <textarea
+                  id="hwp-import-text-preview"
+                  class="bib-textarea"
+                  rows="5"
+                  readonly
+                  style="font-size: 12px"
+                ></textarea>
+                <label
+                  class="bib-edit-label"
+                  style="margin-top: 6px"
+                  >정리된 원문 (L4 저장본)</label
+                >
+                <textarea
+                  id="hwp-import-clean-preview"
+                  class="bib-textarea"
+                  rows="3"
+                  readonly
+                  style="font-size: 12px"
+                ></textarea>
+              </div>
+            </div>
+
+            <!-- Step 2: 설정 + 실행 (미리보기 후 표시) -->
+            <div
+              id="hwp-import-step2"
+              style="display: none"
+            >
+              <label class="bib-edit-label"
+                >문헌 ID (영문 소문자/숫자/밑줄)</label
+              >
+              <input
+                id="hwp-import-doc-id"
+                type="text"
+                class="bib-input"
+                placeholder="예: monggu_hwp"
+              />
+
+              <label class="bib-edit-label">문헌 제목 (선택)</label>
+              <input
+                id="hwp-import-title"
+                type="text"
+                class="bib-input"
+              />
+
+              <div style="margin-top: 8px; display: flex; gap: 12px">
+                <label style="font-size: 12px">
+                  <input
+                    type="checkbox"
+                    id="hwp-import-strip-punct"
+                    checked
+                  />
+                  표점 분리
+                </label>
+                <label style="font-size: 12px">
+                  <input
+                    type="checkbox"
+                    id="hwp-import-strip-hyeonto"
+                    checked
+                  />
+                  현토 분리
+                </label>
+              </div>
+
+              <div
+                class="bib-edit-actions"
+                style="margin-top: 10px"
+              >
+                <span
+                  id="hwp-import-exec-status"
+                  class="text-save-status"
+                ></span>
+                <div class="text-toolbar-spacer"></div>
+                <button
+                  id="hwp-import-exec-btn"
+                  class="bib-btn bib-btn-primary"
+                >
+                  가져오기
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 상태 바: D-001 하단 정보 표시줄 -->
+      <footer class="status-bar">
+        <div class="status-left">
+          <span
+            class="status-item"
+            id="status-library"
+            >서고: 연결 대기 중</span
+          >
+          <span
+            class="status-item"
+            id="status-documents"
+            >문헌: 0</span
+          >
+        </div>
+        <div class="status-right">
+          <span class="status-item">UTF-8</span>
+          <span class="status-item">LF</span>
+          <span class="status-item">v0.2.0</span>
+        </div>
+      </footer>
     </div>
-  </div>
 
-  <!-- 상태 바: D-001 하단 정보 표시줄 -->
-  <footer class="status-bar">
-    <div class="status-left">
-      <span class="status-item" id="status-library">서고: 연결 대기 중</span>
-      <span class="status-item" id="status-documents">문헌: 0</span>
-    </div>
-    <div class="status-right">
-      <span class="status-item">UTF-8</span>
-      <span class="status-item">LF</span>
-      <span class="status-item">v0.2.0</span>
-    </div>
-  </footer>
+    <!-- 테마 전환 — 깜빡임 방지를 위해 최상단에서 즉시 실행 -->
+    <script>
+      (function () {
+        /** ThemeSwitcher: 다크/라이트 테마 전환.
+         *  localStorage에 사용자 선택을 저장하고, 페이지 로드 시 즉시 적용하여
+         *  다크→라이트 깜빡임(FOUC)을 방지한다.
+         */
+        var saved = localStorage.getItem("app-theme") || "dark";
+        if (saved === "light") {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
 
-</div>
+        window._themeSwitcher = {
+          current: saved,
+          toggle: function () {
+            var next = this.current === "dark" ? "light" : "dark";
+            this.apply(next);
+          },
+          apply: function (theme) {
+            if (theme === "light") {
+              document.documentElement.setAttribute("data-theme", "light");
+            } else {
+              document.documentElement.removeAttribute("data-theme");
+            }
+            localStorage.setItem("app-theme", theme);
+            this.current = theme;
 
-<!-- 테마 전환 — 깜빡임 방지를 위해 최상단에서 즉시 실행 -->
-<script>
-(function() {
-  /** ThemeSwitcher: 다크/라이트 테마 전환.
-   *  localStorage에 사용자 선택을 저장하고, 페이지 로드 시 즉시 적용하여
-   *  다크→라이트 깜빡임(FOUC)을 방지한다.
-   */
-  var saved = localStorage.getItem('app-theme') || 'dark';
-  if (saved === 'light') {
-    document.documentElement.setAttribute('data-theme', 'light');
-  }
+            // 아이콘 전환: 다크모드에서는 해(전환 대상=라이트) 표시
+            var sun = document.getElementById("theme-icon-sun");
+            var moon = document.getElementById("theme-icon-moon");
+            var btn = document.getElementById("theme-toggle");
+            if (sun && moon) {
+              sun.style.display = theme === "dark" ? "none" : "block";
+              moon.style.display = theme === "dark" ? "block" : "none";
+            }
+            if (btn) {
+              btn.title =
+                theme === "dark" ? "라이트 모드로 전환" : "다크 모드로 전환";
+            }
+          },
+        };
 
-  window._themeSwitcher = {
-    current: saved,
-    toggle: function() {
-      var next = this.current === 'dark' ? 'light' : 'dark';
-      this.apply(next);
-    },
-    apply: function(theme) {
-      if (theme === 'light') {
-        document.documentElement.setAttribute('data-theme', 'light');
-      } else {
-        document.documentElement.removeAttribute('data-theme');
-      }
-      localStorage.setItem('app-theme', theme);
-      this.current = theme;
+        // DOM 준비 후 아이콘 초기 상태 설정
+        document.addEventListener("DOMContentLoaded", function () {
+          window._themeSwitcher.apply(window._themeSwitcher.current);
+          var btn = document.getElementById("theme-toggle");
+          if (btn)
+            btn.addEventListener("click", function () {
+              window._themeSwitcher.toggle();
+            });
+        });
+      })();
+    </script>
 
-      // 아이콘 전환: 다크모드에서는 해(전환 대상=라이트) 표시
-      var sun = document.getElementById('theme-icon-sun');
-      var moon = document.getElementById('theme-icon-moon');
-      var btn = document.getElementById('theme-toggle');
-      if (sun && moon) {
-        sun.style.display = theme === 'dark' ? 'none' : 'block';
-        moon.style.display = theme === 'dark' ? 'block' : 'none';
-      }
-      if (btn) {
-        btn.title = theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환';
-      }
-    }
-  };
+    <!-- PDF.js CDN (3.x UMD — 빌드 도구 없는 프로젝트에 적합) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
 
-  // DOM 준비 후 아이콘 초기 상태 설정
-  document.addEventListener('DOMContentLoaded', function() {
-    window._themeSwitcher.apply(window._themeSwitcher.current);
-    var btn = document.getElementById('theme-toggle');
-    if (btn) btn.addEventListener('click', function() { window._themeSwitcher.toggle(); });
-  });
-})();
-</script>
-
-<!-- PDF.js CDN (3.x UMD — 빌드 도구 없는 프로젝트에 적합) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://d3js.org/d3.v7.min.js"></script>
-
-<!-- 앱 모듈 (로드 순서 중요: sidebar-tree가 viewerState를 정의, 나머지가 참조) -->
-<script src="/static/js/sidebar-tree.js"></script>
-<script src="/static/js/pdf-renderer.js"></script>
-<script src="/static/js/text-editor.js"></script>
-<script src="/static/js/layout-editor.js"></script>
-<script src="/static/js/correction-editor.js"></script>
-<script src="/static/js/bibliography.js"></script>
-<script src="/static/js/interpretation.js"></script>
-<script src="/static/js/entity-manager.js"></script>
-<script src="/static/js/create-document.js"></script>
-<script src="/static/js/hwp-import.js"></script>
-<script src="/static/js/ocr-panel.js"></script>
-<script src="/static/js/alignment-view.js"></script>
-<script src="/static/js/composition-editor.js"></script>
-<script src="/static/js/punctuation-editor.js"></script>
-<script src="/static/js/hyeonto-editor.js"></script>
-<script src="/static/js/translation-editor.js"></script>
-<script src="/static/js/annotation-editor.js"></script>
-<script src="/static/js/citation-editor.js"></script>
-<script src="/static/js/git-graph.js"></script>
-<script src="/static/js/reader-line.js"></script>
-<script src="/static/js/notes-panel.js"></script>
-<script src="/static/js/workspace.js"></script>
-</body>
+    <!-- 앱 모듈 (로드 순서 중요: sidebar-tree가 viewerState를 정의, 나머지가 참조) -->
+    <script src="/static/js/sidebar-tree.js"></script>
+    <script src="/static/js/pdf-renderer.js"></script>
+    <script src="/static/js/text-editor.js"></script>
+    <script src="/static/js/layout-editor.js"></script>
+    <script src="/static/js/correction-editor.js"></script>
+    <script src="/static/js/bibliography.js"></script>
+    <script src="/static/js/interpretation.js"></script>
+    <script src="/static/js/entity-manager.js"></script>
+    <script src="/static/js/create-document.js"></script>
+    <script src="/static/js/hwp-import.js"></script>
+    <script src="/static/js/ocr-panel.js"></script>
+    <script src="/static/js/alignment-view.js"></script>
+    <script src="/static/js/composition-editor.js"></script>
+    <script src="/static/js/punctuation-editor.js"></script>
+    <script src="/static/js/hyeonto-editor.js"></script>
+    <script src="/static/js/translation-editor.js"></script>
+    <script src="/static/js/annotation-editor.js"></script>
+    <script src="/static/js/citation-editor.js"></script>
+    <script src="/static/js/git-graph.js?v=20260220-horizontal-lanes"></script>
+    <script src="/static/js/reader-line.js"></script>
+    <script src="/static/js/notes-panel.js"></script>
+    <script src="/static/js/workspace.js"></script>
+  </body>
 </html>
