@@ -31,14 +31,28 @@ const compState = {
   sourceBlocks: [], // 교정된 LayoutBlock 목록 [{block_id, block_type, original_text, corrected_text, _page, ...}]
   // _page: 이 블록이 소속된 페이지 번호 (크로스 페이지 지원용)
   textBlocks: [], // 이미 생성된 TextBlock 목록
-  selectedBlockIds: [], // 합치기를 위해 선택된 LayoutBlock ID 목록
-  // block_id는 p{N}_b{M} 패턴이므로 페이지 간 고유하다
+  selectedBlockKeys: [], // 합치기를 위해 선택된 LayoutBlock 키 목록 ("{page}::{block_id}")
   workId: null, // 현재 Work UUID (TextBlock 생성에 필요)
   rangeStart: null, // 시작 페이지 (null이면 현재 페이지)
   rangeEnd: null, // 끝 페이지 (null이면 현재 페이지)
   selectedTbId: null, // 쪼개기를 위해 선택된 TextBlock ID
   selectedTb: null, // 쪼개기를 위해 선택된 TextBlock 객체
 };
+
+function _toBlockKey(page, blockId) {
+  return `${Number(page || 0)}::${String(blockId || "")}`;
+}
+
+function _blockToKey(block, fallbackPage) {
+  const page = block?._page ?? fallbackPage ?? viewerState.pageNum ?? 0;
+  return _toBlockKey(page, block?.block_id);
+}
+
+function _sourceRefToKey(ref, fallbackPage) {
+  if (!ref || !ref.layout_block_id) return null;
+  const page = ref.page ?? fallbackPage ?? viewerState.pageNum ?? 0;
+  return _toBlockKey(page, ref.layout_block_id);
+}
 
 /* ──────────────────────────
    초기화
@@ -204,7 +218,7 @@ function activateCompositionMode() {
 // eslint-disable-next-line no-unused-vars
 function deactivateCompositionMode() {
   compState.active = false;
-  compState.selectedBlockIds = [];
+  compState.selectedBlockKeys = [];
 }
 
 /* ──────────────────────────
@@ -333,7 +347,7 @@ async function _loadCompositionData() {
     }
   }
 
-  compState.selectedBlockIds = [];
+  compState.selectedBlockKeys = [];
   _renderSourceBlocks();
   _renderTextBlocks();
   _updateBlockCount();
@@ -365,6 +379,28 @@ function _syncPageRangeInputs() {
   }
   if (endInput && compState.rangeEnd != null) {
     endInput.value = String(compState.rangeEnd);
+  }
+}
+
+/**
+ * 해석 저장소에 수동 git commit을 보낸다 (배치 작업 완료 후).
+ *
+ * 왜 이렇게 하는가:
+ *   쪼개기·리셋 등 여러 API 호출이 필요한 배치 작업에서,
+ *   개별 호출마다 git commit하면 10~60초씩 걸린다.
+ *   no_commit=true로 변경을 모은 뒤 마지막에 한 번만 commit하면
+ *   전체 작업이 1~2초에 끝난다.
+ */
+async function _commitBatch(message) {
+  if (!interpState.interpId) return;
+  try {
+    await fetch(`/api/interpretations/${interpState.interpId}/git/commit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    });
+  } catch (e) {
+    console.error("배치 커밋 실패:", e);
   }
 }
 
@@ -485,14 +521,17 @@ function _renderSourceBlocks() {
     card.dataset.blockPage = String(blockPage);
 
     // 이미 TextBlock으로 편성된 블록인지 확인
+    const blockKey = _blockToKey(block, currentPage);
     const alreadyComposed = compState.textBlocks.some((tb) => {
       const refs = tb.source_refs || [];
-      return refs.some(
-        (r) => r.layout_block_id === block.block_id && r.page === blockPage,
+      const inRefs = refs.some(
+        (r) => _sourceRefToKey(r, blockPage) === blockKey,
       );
+      if (inRefs) return true;
+      return _sourceRefToKey(tb.source_ref, blockPage) === blockKey;
     });
 
-    const isSelected = compState.selectedBlockIds.includes(block.block_id);
+    const isSelected = compState.selectedBlockKeys.includes(blockKey);
 
     // 현재 페이지가 아닌 블록은 왼쪽에 색깔 줄을 넣어 시각적으로 구분
     const borderLeft = isForeignPage
@@ -519,7 +558,7 @@ function _renderSourceBlocks() {
     checkbox.disabled = alreadyComposed;
     checkbox.style.cssText = "margin:0;";
     checkbox.addEventListener("change", () => {
-      _toggleBlockSelection(block.block_id, checkbox.checked);
+      _toggleBlockSelection(blockKey, checkbox.checked);
     });
 
     const label = document.createElement("span");
@@ -579,7 +618,7 @@ function _renderSourceBlocks() {
     card.addEventListener("click", (e) => {
       if (e.target === checkbox || alreadyComposed) return;
       checkbox.checked = !checkbox.checked;
-      _toggleBlockSelection(block.block_id, checkbox.checked);
+      _toggleBlockSelection(blockKey, checkbox.checked);
     });
   });
 }
@@ -587,14 +626,14 @@ function _renderSourceBlocks() {
 /**
  * 블록 선택 토글.
  */
-function _toggleBlockSelection(blockId, selected) {
+function _toggleBlockSelection(blockKey, selected) {
   if (selected) {
-    if (!compState.selectedBlockIds.includes(blockId)) {
-      compState.selectedBlockIds.push(blockId);
+    if (!compState.selectedBlockKeys.includes(blockKey)) {
+      compState.selectedBlockKeys.push(blockKey);
     }
   } else {
-    compState.selectedBlockIds = compState.selectedBlockIds.filter(
-      (id) => id !== blockId,
+    compState.selectedBlockKeys = compState.selectedBlockKeys.filter(
+      (key) => key !== blockKey,
     );
   }
   _renderSourceBlocks();
@@ -793,20 +832,22 @@ async function _autoCompose() {
   }
 
   // 이미 편성된 블록 ID 수집
-  const composedBlockIds = new Set();
+  const composedKeys = new Set();
   compState.textBlocks.forEach((tb) => {
     const refs = tb.source_refs || [];
     refs.forEach((r) => {
-      if (r.layout_block_id) composedBlockIds.add(r.layout_block_id);
+      const key = _sourceRefToKey(r, currentPage);
+      if (key) composedKeys.add(key);
     });
-    if (tb.source_ref && tb.source_ref.layout_block_id) {
-      composedBlockIds.add(tb.source_ref.layout_block_id);
+    const singleKey = _sourceRefToKey(tb.source_ref, currentPage);
+    if (singleKey) {
+      composedKeys.add(singleKey);
     }
   });
 
   // 편성 안 된 블록만 처리
   const toCompose = currentPageBlocks.filter(
-    (b) => !composedBlockIds.has(b.block_id),
+    (b) => !composedKeys.has(_blockToKey(b, currentPage)),
   );
 
   if (toCompose.length === 0) {
@@ -825,34 +866,39 @@ async function _autoCompose() {
     const text = block.corrected_text || block.original_text || "";
     if (!text.trim()) continue;
 
+    // 여러 블록 생성 시 no_commit=true로 git commit을 건너뛴다
+    const useNoCommit = toCompose.length > 1;
+    const url =
+      `/api/interpretations/${interpState.interpId}/entities/text_block/compose` +
+      (useNoCommit ? "?no_commit=true" : "");
+
     try {
-      const res = await fetch(
-        `/api/interpretations/${interpState.interpId}/entities/text_block/compose`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            work_id: compState.workId,
-            sequence_index: baseSeq + i,
-            original_text: text,
-            part_id: viewerState.partId,
-            source_refs: [
-              {
-                document_id: viewerState.docId,
-                page: block._page || currentPage,
-                layout_block_id: block.block_id,
-                char_range: null,
-              },
-            ],
-          }),
-        },
-      );
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          work_id: compState.workId,
+          sequence_index: baseSeq + i,
+          original_text: text,
+          part_id: viewerState.partId,
+          source_refs: [
+            {
+              document_id: viewerState.docId,
+              page: block._page || currentPage,
+              layout_block_id: block.block_id,
+              char_range: null,
+            },
+          ],
+        }),
+      });
 
       if (res.ok) {
         created++;
       } else {
         const err = await res.json().catch(() => ({}));
-        errors.push(`${block.block_id}: ${err.error || err.detail || "HTTP " + res.status}`);
+        errors.push(
+          `${block.block_id}: ${err.error || err.detail || "HTTP " + res.status}`,
+        );
         console.error(`TextBlock 생성 실패 (${block.block_id}):`, err);
       }
     } catch (e) {
@@ -861,13 +907,20 @@ async function _autoCompose() {
     }
   }
 
+  // no_commit 모드였으면 마지막에 한 번만 커밋
+  if (created > 0 && toCompose.length > 1) {
+    await _commitBatch(`feat: 자동 편성 — ${created}개 TextBlock 생성`);
+  }
+
   if (errors.length > 0 && created === 0) {
     alert(`자동 편성 실패:\n\n${errors.join("\n")}`);
     _updateCompStatus("자동 편성 실패", false);
     return;
   }
   if (errors.length > 0) {
-    alert(`${created}개 생성, ${errors.length}개 실패:\n\n${errors.join("\n")}`);
+    alert(
+      `${created}개 생성, ${errors.length}개 실패:\n\n${errors.join("\n")}`,
+    );
   }
 
   _updateCompStatus(`${created}개 TextBlock 생성 완료`, false);
@@ -906,8 +959,8 @@ async function _mergeSelectedBlocks() {
     }
   }
 
-  const selectedIds = compState.selectedBlockIds;
-  if (selectedIds.length < 2) {
+  const selectedKeys = compState.selectedBlockKeys;
+  if (selectedKeys.length < 2) {
     alert("합치려면 2개 이상의 블록을 선택하세요.");
     return;
   }
@@ -916,9 +969,34 @@ async function _mergeSelectedBlocks() {
 
   // 선택된 블록의 텍스트를 순서대로 이어붙이기
   // (소스 블록 목록의 순서를 유지 — 이미 페이지 순 + reading_order 순)
+  const selectedSet = new Set(selectedKeys);
   const orderedBlocks = compState.sourceBlocks.filter((b) =>
-    selectedIds.includes(b.block_id),
+    selectedSet.has(_blockToKey(b, currentPage)),
   );
+
+  if (orderedBlocks.length !== selectedKeys.length) {
+    alert(
+      "선택한 블록을 모두 찾지 못했습니다. 범위를 다시 불러온 뒤 시도해주세요.",
+    );
+    return;
+  }
+
+  // 선택 블록은 순서가 섞이지 않는 연속 구간이어야 한다.
+  const selectedIndices = compState.sourceBlocks
+    .map((block, index) => ({ block, index }))
+    .filter(({ block }) => selectedSet.has(_blockToKey(block, currentPage)))
+    .map(({ index }) => index)
+    .sort((a, b) => a - b);
+  const minIndex = selectedIndices[0];
+  const maxIndex = selectedIndices[selectedIndices.length - 1];
+  const expectedCount = maxIndex - minIndex + 1;
+  if (expectedCount !== selectedIndices.length) {
+    alert(
+      "합치기는 순서가 섞이지 않는 연속 구간만 지원합니다.\n" +
+        "중간 블록을 포함해서 다시 선택해주세요.",
+    );
+    return;
+  }
 
   const mergedText = orderedBlocks
     .map((b) => b.corrected_text || b.original_text || "")
@@ -943,7 +1021,7 @@ async function _mergeSelectedBlocks() {
 
   try {
     const res = await fetch(
-      `/api/interpretations/${interpState.interpId}/entities/text_block/compose`,
+      `/api/interpretations/${interpState.interpId}/entities/text_block/compose?no_commit=true`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -958,10 +1036,12 @@ async function _mergeSelectedBlocks() {
     );
 
     if (res.ok) {
+      // 합치기 성공 → 배치 커밋 (git commit 1회만)
       const blockIds = orderedBlocks.map((b) => b.block_id).join(" + ");
       const suffix = isCrossPage
         ? ` (p.${[...pages].join("+")} 크로스 페이지)`
         : "";
+      await _commitBatch(`feat: TextBlock 합치기 — ${blockIds}${suffix}`);
       _updateCompStatus(`합치기 완료: ${blockIds}${suffix}`, false);
     } else {
       const err = await res.json().catch(() => ({}));
@@ -1034,25 +1114,32 @@ async function _deleteTextBlock(tb) {
 
   // 텍스트 미리보기 (확인 대화상자에 표시)
   const previewText = (tb.original_text || "").substring(0, 50);
-  const displayText = previewText + (tb.original_text && tb.original_text.length > 50 ? "..." : "");
+  const displayText =
+    previewText +
+    (tb.original_text && tb.original_text.length > 50 ? "..." : "");
 
-  if (!confirm(`TextBlock #${tb.sequence_index} 을(를) 삭제하시겠습니까?\n\n"${displayText}"\n\n(deprecated 전환 — 이력은 보존됩니다)`)) {
+  if (
+    !confirm(
+      `TextBlock #${tb.sequence_index} 을(를) 삭제하시겠습니까?\n\n"${displayText}"\n\n(deprecated 전환 — 이력은 보존됩니다)`,
+    )
+  ) {
     return;
   }
 
   _updateCompStatus("삭제 중...", false);
 
   try {
+    // 배치 리셋 엔드포인트를 1개 ID로 호출 (단일 git commit)
     const res = await fetch(
-      `/api/interpretations/${interpState.interpId}/entities/text_block/${tb.id}`,
+      `/api/interpretations/${interpState.interpId}/entities/text_block/reset`,
       {
-        method: "PUT",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ updates: { status: "deprecated" } }),
+        body: JSON.stringify({ text_block_ids: [tb.id] }),
       },
     );
 
-    if (res.ok) {
+    if (res.ok || res.status === 207) {
       _updateCompStatus(`TextBlock #${tb.sequence_index} 삭제 완료`, false);
 
       // 삭제한 TextBlock이 현재 쪼개기 편집기에 열려 있으면 닫기
@@ -1101,41 +1188,50 @@ async function _resetComposition() {
     return;
   }
 
-  if (!confirm(`현재 표시된 TextBlock ${targets.length}개를 모두 리셋(deprecated)하시겠습니까?\n\n이력은 보존되며, 나중에 복원할 수 있습니다.`)) {
+  if (
+    !confirm(
+      `현재 표시된 TextBlock ${targets.length}개를 모두 리셋(deprecated)하시겠습니까?\n\n이력은 보존되며, 나중에 복원할 수 있습니다.`,
+    )
+  ) {
     return;
   }
 
   _updateCompStatus(`리셋 중... (${targets.length}개)`, false);
 
-  let done = 0;
-  const errors = [];
+  try {
+    // 배치 리셋 엔드포인트: 한 번의 API 호출 + 한 번의 git commit
+    const res = await fetch(
+      `/api/interpretations/${interpState.interpId}/entities/text_block/reset`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text_block_ids: targets.map((tb) => tb.id),
+        }),
+      },
+    );
 
-  for (const tb of targets) {
-    try {
-      const res = await fetch(
-        `/api/interpretations/${interpState.interpId}/entities/text_block/${tb.id}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ updates: { status: "deprecated" } }),
-        },
-      );
-      if (res.ok) {
-        done++;
-      } else {
-        const err = await res.json().catch(() => ({}));
-        errors.push(err.error || `HTTP ${res.status}`);
-      }
-    } catch (e) {
-      errors.push(e.message);
+    if (!res.ok && res.status !== 207) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || err.detail || `HTTP ${res.status}`);
     }
-  }
 
-  if (errors.length > 0) {
-    alert(`${done}개 리셋 완료, ${errors.length}개 실패:\n${errors.join("\n")}`);
-  }
+    const data = await res.json();
+    const done = data.deprecated_count || 0;
+    const errors = data.errors || [];
 
-  _updateCompStatus(`리셋 완료: ${done}개 deprecated`, false);
+    if (errors.length > 0) {
+      alert(
+        `${done}개 리셋 완료, ${errors.length}개 실패:\n${errors.join("\n")}`,
+      );
+    }
+
+    _updateCompStatus(`리셋 완료: ${done}개 deprecated`, false);
+  } catch (e) {
+    alert(`리셋 실패: ${e.message}`);
+    _updateCompStatus("리셋 실패", true);
+    return;
+  }
 
   // 쪼개기 편집기 닫기
   _cancelSplit();
@@ -1248,93 +1344,44 @@ async function _executeSplit() {
   const nonEmpty = pieces.filter((p) => p.trim().length > 0);
 
   if (nonEmpty.length <= 1) {
-    alert("=== 구분선을 넣어 2개 이상으로 나눠야 합니다.\n\n예시:\n첫 번째 텍스트\n===\n두 번째 텍스트");
+    alert(
+      "=== 구분선을 넣어 2개 이상으로 나눠야 합니다.\n\n예시:\n첫 번째 텍스트\n===\n두 번째 텍스트",
+    );
     return;
-  }
-
-  const originalTb = compState.selectedTb;
-  const baseSeq = originalTb.sequence_index || 0;
-
-  // 원본의 source_refs를 모든 조각이 상속
-  const inheritedRefs = [...(originalTb.source_refs || [])];
-  // source_ref (단수)가 있으면 배열로 변환
-  if (inheritedRefs.length === 0 && originalTb.source_ref) {
-    inheritedRefs.push(originalTb.source_ref);
   }
 
   _updateCompStatus(`쪼개는 중... (${nonEmpty.length}개)`, false);
 
-  let created = 0;
-  const errors = [];
+  try {
+    const res = await fetch(
+      `/api/interpretations/${interpState.interpId}/entities/text_block/split`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          original_text_block_id: compState.selectedTbId,
+          pieces: nonEmpty,
+          part_id: viewerState.partId,
+        }),
+      },
+    );
 
-  for (let i = 0; i < nonEmpty.length; i++) {
-    const text = nonEmpty[i];
-
-    try {
-      const res = await fetch(
-        `/api/interpretations/${interpState.interpId}/entities/text_block/compose`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            work_id: compState.workId,
-            // 원본 seq 기준으로 배치: baseSeq*100 + i (나중에 재정렬 가능)
-            sequence_index: baseSeq * 100 + i,
-            original_text: text,
-            part_id: viewerState.partId,
-            source_refs: inheritedRefs.map((r) => ({
-              document_id: r.document_id,
-              page: r.page,
-              layout_block_id: r.layout_block_id,
-              char_range: null,
-            })),
-          }),
-        },
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(
+        err.error || err.detail || `쪼개기 실패: HTTP ${res.status}`,
       );
-
-      if (res.ok) {
-        created++;
-      } else {
-        const err = await res.json().catch(() => ({}));
-        const msg = err.error || err.detail || `HTTP ${res.status}`;
-        errors.push(`${i + 1}번째 조각: ${msg}`);
-        console.error(`쪼개기: TextBlock 생성 실패 (${i + 1}번째):`, err);
-      }
-    } catch (e) {
-      errors.push(`${i + 1}번째 조각: ${e.message}`);
-      console.error(`쪼개기: TextBlock 생성 실패 (${i + 1}번째):`, e);
     }
-  }
 
-  // 원본 TextBlock을 deprecated 상태로 전환
-  if (created > 0) {
-    try {
-      await fetch(
-        `/api/interpretations/${interpState.interpId}/entities/text_block/${compState.selectedTbId}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            updates: { status: "deprecated" },
-          }),
-        },
-      );
-    } catch (e) {
-      console.error("원본 TextBlock deprecated 전환 실패:", e);
-    }
-  }
-
-  // 결과 피드백
-  if (errors.length > 0 && created === 0) {
-    alert(`쪼개기 실패:\n\n${errors.join("\n")}`);
-    _updateCompStatus("쪼개기 실패", false);
+    _updateCompStatus(
+      `쪼개기 완료: ${nonEmpty.length}개 TextBlock 생성`,
+      false,
+    );
+  } catch (e) {
+    alert(`쪼개기 실패:\n${e.message}`);
+    _updateCompStatus("쪼개기 실패", true);
     return;
   }
-  if (errors.length > 0) {
-    alert(`${created}개 생성, ${errors.length}개 실패:\n\n${errors.join("\n")}`);
-  }
-
-  _updateCompStatus(`쪼개기 완료: ${created}개 TextBlock 생성`, false);
 
   // 쪼개기 편집기 닫기
   _cancelSplit();

@@ -830,9 +830,9 @@ body.resizing-row {
   display: inline-block;
 }
 
-/* 편성 모드 TextBlock 삭제 버튼 — hover 시에만 표시 */
+/* 편성 모드 TextBlock 삭제 버튼 */
 .comp-tb-delete-btn {
-  display: none;
+  display: inline-block;
   background: none;
   border: none;
   cursor: pointer;
@@ -845,9 +845,6 @@ body.resizing-row {
 }
 .comp-tb-delete-btn:hover {
   color: #ef4444;
-}
-.comp-tb-card:hover .comp-tb-delete-btn {
-  display: inline-block;
 }
 
 .tree-page {
