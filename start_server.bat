@@ -6,19 +6,22 @@ REM  Classical Text Digital Library Platform
 REM ============================================
 
 REM -- Settings --------------------------------
-REM Change LIBRARY_PATH to your library directory.
-set LIBRARY_PATH=examples\monggu_library
+REM Optional first arg: library path (empty = start without --library)
+set LIBRARY_PATH=%~1
 set PORT=8000
 
 REM -- Check library ---------------------------
-if not exist "%LIBRARY_PATH%\library_manifest.json" (
-    echo [ERROR] Library not found: %LIBRARY_PATH%
-    echo.
-    echo Fix: change LIBRARY_PATH in this file, or create a library first:
-    echo   uv run python -m cli init-library path
-    echo.
-    pause
-    exit /b 1
+if not "%LIBRARY_PATH%"=="" (
+    if not exist "%LIBRARY_PATH%\library_manifest.json" (
+        echo [ERROR] Library not found: %LIBRARY_PATH%
+        echo.
+        echo Usage:
+        echo   start_server.bat
+        echo   start_server.bat examples\monggu_library
+        echo.
+        pause
+        exit /b 1
+    )
 )
 
 REM -- Find available port ---------------------
@@ -41,7 +44,11 @@ echo ============================================
 echo  Classical Text Digital Library Platform
 echo ============================================
 echo.
-echo [Library] %LIBRARY_PATH%
+if "%LIBRARY_PATH%"=="" (
+    echo [Library] none - choose/change in GUI after startup
+) else (
+    echo [Library] %LIBRARY_PATH%
+)
 echo [Server]  http://127.0.0.1:%PORT%
 echo.
 echo Press Ctrl+C to stop the server.
@@ -51,7 +58,11 @@ REM -- Open browser after 2 seconds -----------
 start "" cmd /c "timeout /t 2 /nobreak >nul && start http://127.0.0.1:!PORT!"
 
 REM -- Run server ------------------------------
-uv run python -m app serve --library "%LIBRARY_PATH%" --port !PORT!
+if "%LIBRARY_PATH%"=="" (
+    uv run python -m app serve --port !PORT!
+) else (
+    uv run python -m app serve --library "%LIBRARY_PATH%" --port !PORT!
+)
 
 echo.
 echo Server stopped.

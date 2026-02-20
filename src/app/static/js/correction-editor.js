@@ -23,17 +23,17 @@
    ────────────────────────── */
 
 const correctionState = {
-  active: false,           // 교정 모드 활성화 여부
-  corrections: [],         // 현재 페이지의 교정 목록
-  blocks: [],              // L3 레이아웃 블록 (있으면)
-  hasLayout: false,        // L3 데이터 존재 여부
-  selectedCharInfo: null,  // 선택된 글자 정보 {blockId, charIdx, char}
-  editingCorrIdx: -1,      // 편집 중인 교정 인덱스 (-1이면 새 교정)
-  pageText: "",            // 현재 페이지 텍스트 원본
-  isDirty: false,          // 수정 여부
-  verticalView: false,     // 세로쓰기 표시 모드
+  active: false, // 교정 모드 활성화 여부
+  corrections: [], // 현재 페이지의 교정 목록
+  blocks: [], // L3 레이아웃 블록 (있으면)
+  hasLayout: false, // L3 데이터 존재 여부
+  selectedCharInfo: null, // 선택된 글자 정보 {blockId, charIdx, char}
+  editingCorrIdx: -1, // 편집 중인 교정 인덱스 (-1이면 새 교정)
+  pageText: "", // 현재 페이지 텍스트 원본
+  isDirty: false, // 수정 여부
+  verticalView: false, // 세로쓰기 표시 모드
+  saving: false, // 저장 요청 진행 여부
 };
-
 
 /* ──────────────────────────
    교정 유형 정의
@@ -46,13 +46,28 @@ const correctionState = {
  * 왜 이렇게 하는가: UI 표시용 라벨과 색상을 한곳에서 관리한다.
  */
 const CORRECTION_TYPES = {
-  ocr_error:        { label: "OCR 오류",       color: "#ef4444", cssClass: "corr-ocr-error" },
-  variant_reading:  { label: "판본 이문",       color: "#3b82f6", cssClass: "corr-variant-reading" },
-  variant_char:     { label: "이체자",          color: "#a855f7", cssClass: "corr-variant-char" },
-  decoding_error:   { label: "판독 불가→가능",  color: "#f59e0b", cssClass: "corr-decoding-error" },
-  uncertain:        { label: "불확실",          color: "#6b7280", cssClass: "corr-uncertain" },
+  ocr_error: {
+    label: "OCR 오류",
+    color: "#ef4444",
+    cssClass: "corr-ocr-error",
+  },
+  variant_reading: {
+    label: "판본 이문",
+    color: "#3b82f6",
+    cssClass: "corr-variant-reading",
+  },
+  variant_char: {
+    label: "이체자",
+    color: "#a855f7",
+    cssClass: "corr-variant-char",
+  },
+  decoding_error: {
+    label: "판독 불가→가능",
+    color: "#f59e0b",
+    cssClass: "corr-decoding-error",
+  },
+  uncertain: { label: "불확실", color: "#6b7280", cssClass: "corr-uncertain" },
 };
-
 
 /* ──────────────────────────
    초기화
@@ -73,7 +88,6 @@ function initCorrectionEditor() {
   if (vertBtn) vertBtn.addEventListener("click", _toggleVerticalView);
 }
 
-
 /**
  * 교정 텍스트 영역의 가로/세로 표시를 전환한다.
  *
@@ -90,10 +104,11 @@ function _toggleVerticalView() {
   const btn = document.getElementById("corr-vertical-btn");
   if (btn) {
     btn.classList.toggle("active", correctionState.verticalView);
-    btn.title = correctionState.verticalView ? "가로쓰기로 전환" : "세로쓰기로 전환";
+    btn.title = correctionState.verticalView
+      ? "가로쓰기로 전환"
+      : "세로쓰기로 전환";
   }
 }
-
 
 /**
  * 교정 다이얼로그의 이벤트 리스너를 등록한다.
@@ -141,7 +156,6 @@ function _initCorrDialogEvents() {
   }
 }
 
-
 /**
  * 교정 툴바의 이벤트 리스너를 등록한다.
  */
@@ -167,8 +181,11 @@ function _initCorrToolbarEvents() {
       _applyBlockFilter(filter.value);
     });
   }
-}
 
+  // 리셋 버튼: 현재 페이지의 모든 교정 삭제
+  const resetBtn = document.getElementById("corr-reset-btn");
+  if (resetBtn) resetBtn.addEventListener("click", _resetAllCorrections);
+}
 
 /* ──────────────────────────
    모드 전환: 교정 모드 활성화/비활성화
@@ -187,10 +204,13 @@ function activateCorrectionMode() {
 
   // 현재 페이지의 교정 데이터 로드
   if (viewerState.docId && viewerState.partId && viewerState.pageNum) {
-    loadPageCorrections(viewerState.docId, viewerState.partId, viewerState.pageNum);
+    loadPageCorrections(
+      viewerState.docId,
+      viewerState.partId,
+      viewerState.pageNum,
+    );
   }
 }
-
 
 /**
  * 교정 모드를 비활성화한다.
@@ -200,7 +220,6 @@ function deactivateCorrectionMode() {
   correctionState.active = false;
   correctionState.selectedCharInfo = null;
 }
-
 
 /* ──────────────────────────
    데이터 로드
@@ -223,9 +242,17 @@ async function loadPageCorrections(docId, partId, pageNum) {
   try {
     // 세 API 병렬 호출
     const [textRes, layoutRes, corrRes] = await Promise.all([
-      fetch(`/api/documents/${docId}/pages/${pageNum}/text?part_id=${partId}`),
-      fetch(`/api/documents/${docId}/pages/${pageNum}/layout?part_id=${partId}`),
-      fetch(`/api/documents/${docId}/pages/${pageNum}/corrections?part_id=${partId}`),
+      fetch(`/api/documents/${docId}/pages/${pageNum}/text?part_id=${partId}`, {
+        cache: "no-store",
+      }),
+      fetch(
+        `/api/documents/${docId}/pages/${pageNum}/layout?part_id=${partId}`,
+        { cache: "no-store" },
+      ),
+      fetch(
+        `/api/documents/${docId}/pages/${pageNum}/corrections?part_id=${partId}`,
+        { cache: "no-store" },
+      ),
     ]);
 
     if (!textRes.ok) throw new Error("텍스트 API 응답 오류");
@@ -255,17 +282,17 @@ async function loadPageCorrections(docId, partId, pageNum) {
     _renderCorrectionView();
     _renderCorrList();
     _updateCorrCount();
-    _updateCorrSaveStatus(correctionState.corrections.length > 0 ? "saved" : "empty");
+    _updateCorrSaveStatus(
+      correctionState.corrections.length > 0 ? "saved" : "empty",
+    );
 
     // Git 이력도 로드
     _loadGitLog(docId);
-
   } catch (err) {
     console.error("교정 데이터 로드 실패:", err);
     _updateCorrSaveStatus("error");
   }
 }
-
 
 /* ──────────────────────────
    텍스트 렌더링: 글자 단위 + 블록별 섹션
@@ -285,7 +312,8 @@ function _renderCorrectionView() {
 
   const text = correctionState.pageText;
   if (!text) {
-    container.innerHTML = '<div class="placeholder">이 페이지에 텍스트가 없습니다. 열람 모드에서 먼저 텍스트를 입력하세요.</div>';
+    container.innerHTML =
+      '<div class="placeholder">이 페이지에 텍스트가 없습니다. 열람 모드에서 먼저 텍스트를 입력하세요.</div>';
     return;
   }
 
@@ -311,7 +339,6 @@ function _renderCorrectionView() {
     container.appendChild(charContainer);
   }
 }
-
 
 /**
  * 텍스트를 [本文] / [注釈] 마커로 분할한다.
@@ -382,7 +409,6 @@ function _splitTextIntoSegments(text) {
   return segments;
 }
 
-
 /**
  * 블록 섹션 DOM 요소를 생성한다.
  */
@@ -428,8 +454,13 @@ function _createBlockSection(segment, segIdx) {
   // 세로쓰기 지원: LayoutBlock의 writing_direction을 data 속성으로 전달
   // 세그먼트 인덱스(segIdx)에 대응하는 블록의 writing_direction을 가져온다
   let writingDir = "horizontal_ltr";
-  if (correctionState.hasLayout && correctionState.blocks && correctionState.blocks[segIdx]) {
-    writingDir = correctionState.blocks[segIdx].writing_direction || "horizontal_ltr";
+  if (
+    correctionState.hasLayout &&
+    correctionState.blocks &&
+    correctionState.blocks[segIdx]
+  ) {
+    writingDir =
+      correctionState.blocks[segIdx].writing_direction || "horizontal_ltr";
   }
   body.dataset.writingDir = writingDir;
 
@@ -440,7 +471,6 @@ function _createBlockSection(segment, segIdx) {
 
   return section;
 }
-
 
 /**
  * 텍스트의 글자들을 span 요소로 렌더링하여 부모 요소에 추가한다.
@@ -497,7 +527,6 @@ function _renderCharsIntoElement(parent, text, globalStartIdx, blockType) {
   }
 }
 
-
 /**
  * 전체 텍스트 인덱스에 해당하는 교정 항목을 찾는다.
  * 반환: corrections 배열 내의 인덱스. 없으면 -1.
@@ -507,10 +536,9 @@ function _renderCharsIntoElement(parent, text, globalStartIdx, blockType) {
  */
 function _findCorrectionAtIndex(globalIdx) {
   return correctionState.corrections.findIndex(
-    (c) => c.char_index === globalIdx
+    (c) => c.char_index === globalIdx,
   );
 }
-
 
 /* ──────────────────────────
    글자 클릭 → 교정 다이얼로그
@@ -520,7 +548,13 @@ function _findCorrectionAtIndex(globalIdx) {
  * 글자 span 클릭 시 호출된다.
  * 기존 교정이 있으면 편집, 없으면 새 교정 다이얼로그를 연다.
  */
-function _onCharClick(span, globalIdx, originalChar, blockType, existingCorrIdx) {
+function _onCharClick(
+  span,
+  globalIdx,
+  originalChar,
+  blockType,
+  existingCorrIdx,
+) {
   // 이전 선택 해제
   document.querySelectorAll(".corr-char.selected").forEach((el) => {
     el.classList.remove("selected");
@@ -544,7 +578,6 @@ function _onCharClick(span, globalIdx, originalChar, blockType, existingCorrIdx)
     _openCorrDialog(null);
   }
 }
-
 
 /**
  * 교정 다이얼로그를 연다.
@@ -596,7 +629,6 @@ function _openCorrDialog(existingCorr) {
   setTimeout(() => correctedEl.focus(), 100);
 }
 
-
 /**
  * variant_reading 유형일 때만 통행 텍스트 필드를 표시한다.
  *
@@ -609,7 +641,6 @@ function _toggleCommonReadingField(type) {
     group.style.display = type === "variant_reading" ? "" : "none";
   }
 }
-
 
 /**
  * 교정 다이얼로그를 닫는다.
@@ -626,7 +657,6 @@ function _closeCorrDialog() {
   correctionState.editingCorrIdx = -1;
 }
 
-
 /**
  * 다이얼로그의 저장 버튼 클릭 시: 교정 항목을 추가/수정한다.
  */
@@ -639,7 +669,9 @@ function _saveCorrFromDialog() {
   const corrected = document.getElementById("corr-corrected").value;
   const common = document.getElementById("corr-common-reading").value;
   const note = document.getElementById("corr-note").value;
-  const confidence = parseFloat(document.getElementById("corr-confidence").value);
+  const confidence = parseFloat(
+    document.getElementById("corr-confidence").value,
+  );
 
   if (!corrected) {
     alert("교정 글자를 입력하세요.");
@@ -654,7 +686,7 @@ function _saveCorrFromDialog() {
     type: type,
     original_ocr: original,
     corrected: corrected,
-    common_reading: type === "variant_reading" ? (common || null) : null,
+    common_reading: type === "variant_reading" ? common || null : null,
     corrected_by: "human",
     confidence: confidence,
     note: note || null,
@@ -677,7 +709,6 @@ function _saveCorrFromDialog() {
   _renderCorrList();
 }
 
-
 /**
  * 다이얼로그의 삭제 버튼 클릭 시: 교정 항목을 제거한다.
  */
@@ -695,7 +726,6 @@ function _deleteCorrFromDialog() {
   _renderCorrectionView();
   _renderCorrList();
 }
-
 
 /* ──────────────────────────
    교정 목록 (우측 패널 하단)
@@ -717,7 +747,8 @@ function _renderCorrList() {
   correctionState.corrections.forEach((corr, idx) => {
     const typeInfo = CORRECTION_TYPES[corr.type] || {};
     // CSS 클래스명 안전 변환: 허용되지 않는 문자 제거 후 언더스코어를 하이픈으로
-    const typeCls = "type-" + corr.type.replace(/[^a-z0-9_-]/gi, "").replace(/_/g, "-");
+    const typeCls =
+      "type-" + corr.type.replace(/[^a-z0-9_-]/gi, "").replace(/_/g, "-");
 
     const item = document.createElement("div");
     item.className = "corr-list-item";
@@ -732,9 +763,13 @@ function _renderCorrList() {
     // 클릭 시 해당 글자로 스크롤 + 하이라이트
     item.addEventListener("click", () => {
       // char_index를 정수로 검증하여 selector injection 방지
-      const safeIdx = Number.isInteger(corr.char_index) ? corr.char_index : parseInt(corr.char_index, 10);
+      const safeIdx = Number.isInteger(corr.char_index)
+        ? corr.char_index
+        : parseInt(corr.char_index, 10);
       if (Number.isNaN(safeIdx)) return;
-      const charEl = document.querySelector(`.corr-char[data-idx="${safeIdx}"]`);
+      const charEl = document.querySelector(
+        `.corr-char[data-idx="${safeIdx}"]`,
+      );
       if (charEl) {
         charEl.scrollIntoView({ behavior: "smooth", block: "center" });
         // 잠시 강조 효과
@@ -746,7 +781,6 @@ function _renderCorrList() {
     listEl.appendChild(item);
   });
 }
-
 
 /* ──────────────────────────
    블록 필터
@@ -774,7 +808,7 @@ function _updateBlockFilterOptions(segments) {
 function _applyBlockFilter(value) {
   const sections = document.querySelectorAll(".corr-block-section");
   if (value === "all") {
-    sections.forEach((s) => s.style.display = "");
+    sections.forEach((s) => (s.style.display = ""));
   } else {
     const idx = parseInt(value, 10);
     sections.forEach((s, i) => {
@@ -782,7 +816,6 @@ function _applyBlockFilter(value) {
     });
   }
 }
-
 
 /* ──────────────────────────
    교정 저장 (API)
@@ -795,6 +828,9 @@ function _applyBlockFilter(value) {
 async function _saveCorrections() {
   const { docId, partId, pageNum } = viewerState;
   if (!docId || !partId || !pageNum) return;
+  if (correctionState.saving) return;
+
+  correctionState.saving = true;
 
   _updateCorrSaveStatus("saving");
 
@@ -804,10 +840,14 @@ async function _saveCorrections() {
   };
 
   const url = `/api/documents/${docId}/pages/${pageNum}/corrections?part_id=${partId}`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
   try {
     const res = await fetch(url, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
       body: JSON.stringify(payload),
     });
 
@@ -824,10 +864,54 @@ async function _saveCorrections() {
     if (result.git && result.git.committed) {
       _loadGitLog(docId);
     }
-
   } catch (err) {
     console.error("교정 저장 실패:", err);
     _updateCorrSaveStatus("error");
+  } finally {
+    clearTimeout(timeoutId);
+    correctionState.saving = false;
+  }
+}
+
+/* ──────────────────────────
+   전체 리셋: 현재 페이지의 모든 교정 삭제
+   ────────────────────────── */
+
+/**
+ * 현재 페이지의 모든 교정을 삭제한다.
+ *
+ * 왜 이렇게 하는가: 교정 작업을 처음부터 다시 하고 싶을 때,
+ *   개별 삭제를 반복하는 대신 한 번에 모두 삭제할 수 있다.
+ *   교정은 corrections 배열을 비운 뒤 PUT API로 저장하여 서버에 반영한다.
+ *   삭제 전 confirm()으로 사용자 확인을 받아 실수를 방지한다.
+ */
+async function _resetAllCorrections() {
+  const { docId, partId, pageNum } = viewerState;
+  if (!docId || !partId || !pageNum) {
+    alert("문헌과 페이지가 선택되어야 합니다.");
+    return;
+  }
+
+  if (correctionState.corrections.length === 0) {
+    alert("삭제할 교정 기록이 없습니다.");
+    return;
+  }
+
+  if (!confirm(
+    `현재 페이지의 교정 ${correctionState.corrections.length}건을 모두 삭제합니다.\n이 작업은 되돌릴 수 없습니다. 계속하시겠습니까?`
+  )) return;
+
+  // 교정 배열을 비우고 서버에 빈 배열로 저장
+  correctionState.corrections = [];
+  correctionState.isDirty = true;
+
+  try {
+    await _saveCorrections();
+    _renderCorrectionView();
+    _renderCorrList();
+    _updateCorrCount();
+  } catch (e) {
+    alert(`교정 리셋 실패: ${e.message}`);
   }
 }
 
@@ -857,7 +941,6 @@ function _updateCorrCount() {
     el.textContent = `교정: ${correctionState.corrections.length}건`;
   }
 }
-
 
 /* ──────────────────────────
    Git 이력 패널 (하단)
@@ -915,13 +998,12 @@ async function _loadGitLog(docId) {
 
       listEl.appendChild(item);
     });
-
   } catch (err) {
     console.error("Git log 로드 실패:", err);
-    listEl.innerHTML = '<div class="placeholder">Git 이력을 불러올 수 없습니다</div>';
+    listEl.innerHTML =
+      '<div class="placeholder">Git 이력을 불러올 수 없습니다</div>';
   }
 }
-
 
 /**
  * 특정 커밋의 diff를 로드하여 표시한다.
@@ -937,7 +1019,8 @@ async function _loadGitDiff(docId, commitHash, message) {
   // git commit hash 형식 검증 (7~40자리 hex)
   if (!commitHash || !/^[0-9a-f]{7,40}$/.test(commitHash)) {
     if (diffContent) {
-      diffContent.innerHTML = '<div class="placeholder">유효하지 않은 커밋 해시입니다</div>';
+      diffContent.innerHTML =
+        '<div class="placeholder">유효하지 않은 커밋 해시입니다</div>';
     }
     return;
   }
@@ -945,8 +1028,10 @@ async function _loadGitDiff(docId, commitHash, message) {
   // 목록 숨기고 diff 표시
   if (logList) logList.style.display = "none";
   diffView.style.display = "";
-  if (diffTitle) diffTitle.textContent = `${commitHash.substring(0, 7)} — ${message}`;
-  diffContent.innerHTML = '<div class="placeholder">diff를 불러오는 중...</div>';
+  if (diffTitle)
+    diffTitle.textContent = `${commitHash.substring(0, 7)} — ${message}`;
+  diffContent.innerHTML =
+    '<div class="placeholder">diff를 불러오는 중...</div>';
 
   try {
     const res = await fetch(`/api/documents/${docId}/git/diff/${commitHash}`);
@@ -955,7 +1040,8 @@ async function _loadGitDiff(docId, commitHash, message) {
     const diffs = data.diffs || [];
 
     if (diffs.length === 0) {
-      diffContent.innerHTML = '<div class="placeholder">변경 사항이 없습니다</div>';
+      diffContent.innerHTML =
+        '<div class="placeholder">변경 사항이 없습니다</div>';
       return;
     }
 
@@ -977,13 +1063,12 @@ async function _loadGitDiff(docId, commitHash, message) {
 
       diffContent.appendChild(fileDiv);
     });
-
   } catch (err) {
     console.error("Git diff 로드 실패:", err);
-    diffContent.innerHTML = '<div class="placeholder">diff를 불러올 수 없습니다</div>';
+    diffContent.innerHTML =
+      '<div class="placeholder">diff를 불러올 수 없습니다</div>';
   }
 }
-
 
 /**
  * diff 텍스트에 추가/삭제 행 색상을 적용한다.
@@ -1004,7 +1089,6 @@ function _colorizeDiff(text) {
     })
     .join("\n");
 }
-
 
 /* ──────────────────────────
    유틸리티

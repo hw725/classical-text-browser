@@ -59,6 +59,10 @@ function initAnnotationEditor() {
   const editCancel = document.getElementById("ann-edit-cancel-btn");
   if (editCancel) editCancel.addEventListener("click", _closeEditPanel);
 
+  // 리셋 버튼: 현재 페이지의 모든 주석 삭제
+  const resetBtn = document.getElementById("ann-reset-btn");
+  if (resetBtn) resetBtn.addEventListener("click", _resetAllAnnotations);
+
   // 사전형 주석 UI 초기화
   initDictAnnotation();
 }
@@ -784,6 +788,80 @@ async function _showTypeMgmtDialog() {
     }
   } catch (e) {
     console.error("유형 추가 실패:", e);
+  }
+}
+
+
+/* ────────────────────────────────────
+   전체 리셋: 현재 페이지의 모든 주석 삭제
+   ──────────────────────────────────── */
+
+/**
+ * 현재 블록의 모든 주석을 삭제한다.
+ *
+ * 왜 이렇게 하는가: AI 태깅이나 수동 주석 작업을 처음부터 다시 하고 싶을 때,
+ *   개별 삭제를 반복하는 대신 한 번에 모두 삭제할 수 있다.
+ *   삭제 전 confirm()으로 사용자 확인을 받아 실수를 방지한다.
+ */
+async function _resetAllAnnotations() {
+  const vs = typeof viewerState !== "undefined" ? viewerState : null;
+  const is = typeof interpState !== "undefined" ? interpState : null;
+  if (!vs || !vs.pageNum) {
+    alert("페이지가 선택되어야 합니다.");
+    return;
+  }
+
+  const interpId = (is && is.interpId) || "default";
+  const blockId = annState.blockId;
+
+  if (!blockId) {
+    alert("블록을 먼저 선택하세요.");
+    return;
+  }
+
+  if (annState.annotations.length === 0) {
+    alert("삭제할 주석이 없습니다.");
+    return;
+  }
+
+  if (!confirm(
+    `현재 블록(${blockId})의 주석 ${annState.annotations.length}건을 모두 삭제합니다.\n이 작업은 되돌릴 수 없습니다. 계속하시겠습니까?`
+  )) return;
+
+  let success = 0;
+  let fail = 0;
+
+  // 주석 ID 목록을 미리 복사 (삭제 중 배열 변경 방지)
+  const ids = annState.annotations.map(a => a.id);
+
+  for (const annId of ids) {
+    try {
+      const resp = await fetch(
+        `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/${blockId}/${annId}`,
+        { method: "DELETE" }
+      );
+      if (resp.ok || resp.status === 204) {
+        success++;
+      } else {
+        fail++;
+      }
+    } catch {
+      fail++;
+    }
+  }
+
+  // 로컬 상태 초기화 및 UI 갱신
+  annState.selectedAnnId = null;
+  _closeEditPanel();
+  await _loadBlockAnnotations(blockId);
+  _renderSourceText();
+  _renderAnnList();
+  _renderStatusSummary();
+
+  if (fail > 0) {
+    alert(`주석 리셋 완료: 성공 ${success}건, 실패 ${fail}건`);
+  } else {
+    _showSaveStatus(`주석 ${success}건 삭제 완료`);
   }
 }
 

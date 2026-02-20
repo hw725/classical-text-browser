@@ -15,23 +15,21 @@
  *   해석 모드에서만 활성화되며, 모드 전환 시 activate/deactivate로 제어한다.
  */
 
-
 /* ──────────────────────────
    상태 객체
    ────────────────────────── */
 
 // eslint-disable-next-line no-unused-vars
 const interpState = {
-  active: false,               // 해석 모드 활성화 여부
-  interpId: null,              // 선택된 해석 저장소 ID
-  interpInfo: null,            // manifest 캐시
-  depStatus: null,             // 의존 변경 확인 결과
-  currentLayer: "L5_reading",  // 현재 층
+  active: false, // 해석 모드 활성화 여부
+  interpId: null, // 선택된 해석 저장소 ID
+  interpInfo: null, // manifest 캐시
+  depStatus: null, // 의존 변경 확인 결과
+  currentLayer: "L5_reading", // 현재 층
   currentSubType: "main_text", // main_text | annotation
-  isDirty: false,              // 편집 변경 여부
-  interpretations: [],         // 전체 목록 캐시
+  isDirty: false, // 편집 변경 여부
+  interpretations: [], // 전체 목록 캐시
 };
-
 
 /* ──────────────────────────
    초기화
@@ -47,16 +45,23 @@ function initInterpretation() {
   const createBtn = document.getElementById("interp-create-btn");
   if (createBtn) createBtn.addEventListener("click", _openCreateDialog);
 
+  const importFolderBtn = document.getElementById("interp-import-folder-btn");
+  if (importFolderBtn) {
+    importFolderBtn.addEventListener("click", _importInterpretationFolder);
+  }
+
   const dialogClose = document.getElementById("interp-dialog-close");
   if (dialogClose) dialogClose.addEventListener("click", _closeCreateDialog);
 
   const dialogOverlay = document.getElementById("interp-dialog-overlay");
-  if (dialogOverlay) dialogOverlay.addEventListener("click", (e) => {
-    if (e.target === dialogOverlay) _closeCreateDialog();
-  });
+  if (dialogOverlay)
+    dialogOverlay.addEventListener("click", (e) => {
+      if (e.target === dialogOverlay) _closeCreateDialog();
+    });
 
   const createSaveBtn = document.getElementById("interp-create-save-btn");
-  if (createSaveBtn) createSaveBtn.addEventListener("click", _createInterpretation);
+  if (createSaveBtn)
+    createSaveBtn.addEventListener("click", _createInterpretation);
 
   // 층별 서브탭
   document.querySelectorAll(".interp-subtab").forEach((tab) => {
@@ -64,14 +69,16 @@ function initInterpretation() {
       const layer = tab.dataset.layer;
       if (layer === interpState.currentLayer) return;
 
-      document.querySelectorAll(".interp-subtab").forEach((t) => t.classList.remove("active"));
+      document
+        .querySelectorAll(".interp-subtab")
+        .forEach((t) => t.classList.remove("active"));
       tab.classList.add("active");
       interpState.currentLayer = layer;
 
       // L7_annotation은 sub_type 토글 숨김
       const subtypeBar = document.getElementById("interp-subtype-bar");
       if (subtypeBar) {
-        subtypeBar.style.display = (layer === "L7_annotation") ? "none" : "";
+        subtypeBar.style.display = layer === "L7_annotation" ? "none" : "";
       }
 
       _loadLayerContent();
@@ -116,6 +123,82 @@ function initInterpretation() {
   if (depUpdate) depUpdate.addEventListener("click", _updateBase);
 }
 
+/**
+ * 기존 해석 저장소 폴더를 가져온다.
+ *
+ * 왜 이렇게 하는가:
+ *   JSON 스냅샷 export/import 없이, 이미 존재하는 해석 저장소 디렉토리를
+ *   그대로 현재 서고의 interpretations/ 하위로 복사 등록하기 위함이다.
+ *
+ * 동작:
+ *   1) 폴더 선택(디렉토리 업로드)
+ *   2) multipart/form-data로 파일 전송
+ *   3) 서버가 manifest 검사 후 새 해석 저장소로 생성
+ */
+async function _importInterpretationFolder() {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.multiple = true;
+  input.setAttribute("webkitdirectory", "");
+  input.setAttribute("directory", "");
+  input.style.display = "none";
+
+  input.addEventListener("change", async () => {
+    const files = Array.from(input.files || []);
+    if (files.length === 0) {
+      input.remove();
+      return;
+    }
+
+    const btn = document.getElementById("interp-import-folder-btn");
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "가져오는 중…";
+    }
+
+    try {
+      const form = new FormData();
+      files.forEach((file) => {
+        const relativePath = file.webkitRelativePath || file.name;
+        form.append("files", file, relativePath);
+      });
+
+      const res = await fetch("/api/import/interpretation-folder", {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || `서버 오류: ${res.status}`);
+      }
+
+      alert(
+        `가져오기 완료!\n\n` +
+          `해석 ID: ${data.interp_id}\n` +
+          `문헌 ID: ${data.source_document_id}\n` +
+          `파일 수: ${data.file_count}` +
+          (data.skipped_count ? `\n제외 파일 수: ${data.skipped_count}` : ""),
+      );
+
+      await _loadInterpretationList();
+      if (typeof loadLibraryInfo === "function") {
+        loadLibraryInfo();
+      }
+    } catch (err) {
+      alert(`폴더 가져오기 실패:\n${err.message}`);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "폴더 가져오기";
+      }
+      input.remove();
+    }
+  });
+
+  document.body.appendChild(input);
+  input.click();
+}
 
 /* ──────────────────────────
    모드 활성화 / 비활성화
@@ -152,7 +235,6 @@ function deactivateInterpretationMode() {
   _hideDepBanner();
 }
 
-
 /* ──────────────────────────
    해석 저장소 목록
    ────────────────────────── */
@@ -168,14 +250,16 @@ async function _loadInterpretationList() {
     interpState.interpretations = list;
 
     if (list.length === 0) {
-      container.innerHTML = '<div class="placeholder">등록된 해석 저장소가 없습니다</div>';
+      container.innerHTML =
+        '<div class="placeholder">등록된 해석 저장소가 없습니다</div>';
       return;
     }
 
-    container.innerHTML = list.map((item) => {
-      const typeClass = `type-${item.interpreter?.type || "human"}`;
-      const typeLabel = item.interpreter?.type || "human";
-      return `
+    container.innerHTML = list
+      .map((item) => {
+        const typeClass = `type-${item.interpreter?.type || "human"}`;
+        const typeLabel = item.interpreter?.type || "human";
+        return `
         <div class="interp-list-item" data-interp-id="${item.interpretation_id}">
           <span class="interp-type-badge ${typeClass}">${typeLabel}</span>
           <span class="interp-list-title">${item.title || item.interpretation_id}</span>
@@ -183,7 +267,8 @@ async function _loadInterpretationList() {
           <button class="interp-delete-btn" title="해석 저장소 삭제 (휴지통 이동)">×</button>
         </div>
       `;
-    }).join("");
+      })
+      .join("");
 
     // 클릭 이벤트
     container.querySelectorAll(".interp-list-item").forEach((el) => {
@@ -192,7 +277,9 @@ async function _loadInterpretationList() {
         if (e.target.classList.contains("interp-delete-btn")) return;
         _selectInterpretation(el.dataset.interpId);
         // 하이라이트
-        container.querySelectorAll(".interp-list-item").forEach((i) => i.classList.remove("active"));
+        container
+          .querySelectorAll(".interp-list-item")
+          .forEach((i) => i.classList.remove("active"));
         el.classList.add("active");
       });
 
@@ -202,17 +289,18 @@ async function _loadInterpretationList() {
         delBtn.addEventListener("click", (e) => {
           e.stopPropagation();
           const interpId = el.dataset.interpId;
-          const title = el.querySelector(".interp-list-title")?.textContent || interpId;
+          const title =
+            el.querySelector(".interp-list-title")?.textContent || interpId;
           _trashInterpretation(interpId, title);
         });
       }
     });
   } catch (err) {
     console.error("해석 저장소 목록 로드 실패:", err);
-    container.innerHTML = '<div class="placeholder">목록을 불러올 수 없습니다</div>';
+    container.innerHTML =
+      '<div class="placeholder">목록을 불러올 수 없습니다</div>';
   }
 }
-
 
 /**
  * 해석 저장소를 휴지통으로 이동한다.
@@ -221,10 +309,13 @@ async function _loadInterpretationList() {
  *   - 영구 삭제 대신 서고 내 .trash/ 폴더로 이동하여 복원 가능하게 한다.
  */
 async function _trashInterpretation(interpId, interpTitle) {
-  if (!confirm(`"${interpTitle}" 해석 저장소를 삭제(휴지통 이동)하시겠습니까?`)) return;
+  if (!confirm(`"${interpTitle}" 해석 저장소를 삭제(휴지통 이동)하시겠습니까?`))
+    return;
 
   try {
-    const res = await fetch(`/api/interpretations/${interpId}`, { method: "DELETE" });
+    const res = await fetch(`/api/interpretations/${interpId}`, {
+      method: "DELETE",
+    });
     const data = await res.json();
 
     if (!res.ok) {
@@ -244,7 +335,6 @@ async function _trashInterpretation(interpId, interpTitle) {
     alert(`삭제 중 오류: ${err.message}`);
   }
 }
-
 
 /* ──────────────────────────
    해석 저장소 선택
@@ -273,7 +363,6 @@ async function _selectInterpretation(interpId) {
   _loadLayerContent();
 }
 
-
 /* ──────────────────────────
    의존 변경 확인
    ────────────────────────── */
@@ -282,7 +371,9 @@ async function _checkDependency() {
   if (!interpState.interpId) return;
 
   try {
-    const res = await fetch(`/api/interpretations/${interpState.interpId}/dependency`);
+    const res = await fetch(
+      `/api/interpretations/${interpState.interpId}/dependency`,
+    );
     if (!res.ok) throw new Error("의존 확인 API 오류");
     const dep = await res.json();
     interpState.depStatus = dep;
@@ -306,9 +397,9 @@ function _showDepBanner(dep) {
   if (!banner || !msg) return;
 
   const statusLabels = {
-    "outdated": "원본이 변경되었습니다",
-    "partially_acknowledged": "일부 변경을 인지했습니다",
-    "acknowledged": "모든 변경을 인지했습니다",
+    outdated: "원본이 변경되었습니다",
+    partially_acknowledged: "일부 변경을 인지했습니다",
+    acknowledged: "모든 변경을 인지했습니다",
   };
 
   msg.textContent = `${statusLabels[dep.dependency_status] || dep.dependency_status} (변경 ${dep.changed_count}건)`;
@@ -319,7 +410,6 @@ function _hideDepBanner() {
   const banner = document.getElementById("interp-dep-banner");
   if (banner) banner.style.display = "none";
 }
-
 
 /* ──────────────────────────
    의존 배너 액션
@@ -343,11 +433,14 @@ async function _acknowledgeChanges() {
   if (!interpState.interpId) return;
 
   try {
-    const res = await fetch(`/api/interpretations/${interpState.interpId}/dependency/acknowledge`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ file_paths: null }),
-    });
+    const res = await fetch(
+      `/api/interpretations/${interpState.interpId}/dependency/acknowledge`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file_paths: null }),
+      },
+    );
     if (!res.ok) throw new Error("인지 API 오류");
     const result = await res.json();
     console.log("변경 인지 완료:", result);
@@ -363,9 +456,12 @@ async function _updateBase() {
   if (!interpState.interpId) return;
 
   try {
-    const res = await fetch(`/api/interpretations/${interpState.interpId}/dependency/update-base`, {
-      method: "POST",
-    });
+    const res = await fetch(
+      `/api/interpretations/${interpState.interpId}/dependency/update-base`,
+      {
+        method: "POST",
+      },
+    );
     if (!res.ok) throw new Error("기반 업데이트 API 오류");
     const result = await res.json();
     console.log("기반 업데이트 완료:", result);
@@ -377,7 +473,6 @@ async function _updateBase() {
   }
 }
 
-
 /* ──────────────────────────
    하단 패널 의존 추적 렌더링
    ────────────────────────── */
@@ -388,12 +483,13 @@ function _renderDepPanel(dep) {
   if (!summary || !fileList) return;
 
   // 상태 뱃지
-  const badgeClass = {
-    "current": "status-current",
-    "outdated": "status-outdated",
-    "acknowledged": "status-acknowledged",
-    "partially_acknowledged": "status-partially",
-  }[dep.dependency_status] || "status-outdated";
+  const badgeClass =
+    {
+      current: "status-current",
+      outdated: "status-outdated",
+      acknowledged: "status-acknowledged",
+      partially_acknowledged: "status-partially",
+    }[dep.dependency_status] || "status-outdated";
 
   summary.innerHTML = `
     <span class="dep-status-badge ${badgeClass}">${dep.dependency_status}</span>
@@ -410,17 +506,18 @@ function _renderDepPanel(dep) {
     return;
   }
 
-  fileList.innerHTML = files.map((tf) => {
-    const stClass = `st-${tf.status}`;
-    return `
+  fileList.innerHTML = files
+    .map((tf) => {
+      const stClass = `st-${tf.status}`;
+      return `
       <div class="dep-file-item">
         <span class="dep-file-status ${stClass}">${tf.status}</span>
         <span class="dep-file-path">${tf.path}</span>
       </div>
     `;
-  }).join("");
+    })
+    .join("");
 }
-
 
 /* ──────────────────────────
    층 내용 로드 / 저장
@@ -447,7 +544,11 @@ async function _loadLayerContent() {
       // L6은 텍스트, L5/L7은 JSON → 텍스트로 표시
       if (typeof data.content === "string") {
         content.value = data.content;
-      } else if (typeof data.content === "object" && data.content !== null && Object.keys(data.content).length > 0) {
+      } else if (
+        typeof data.content === "object" &&
+        data.content !== null &&
+        Object.keys(data.content).length > 0
+      ) {
         content.value = JSON.stringify(data.content, null, 2);
       } else {
         content.value = "";
@@ -464,7 +565,8 @@ async function _loadLayerContent() {
 }
 
 async function _saveLayerContent() {
-  if (!interpState.interpId || !viewerState.partId || !viewerState.pageNum) return;
+  if (!interpState.interpId || !viewerState.partId || !viewerState.pageNum)
+    return;
 
   const { interpId, currentLayer, currentSubType } = interpState;
   const { partId, pageNum } = viewerState;
@@ -498,7 +600,6 @@ async function _saveLayerContent() {
   }
 }
 
-
 /* ──────────────────────────
    UI 유틸리티
    ────────────────────────── */
@@ -508,12 +609,12 @@ function _updateSaveStatus(status) {
   if (!el) return;
 
   const map = {
-    "saved": { text: "저장됨", cls: "status-saved" },
-    "new": { text: "새 파일", cls: "status-new" },
-    "modified": { text: "수정됨", cls: "status-modified" },
-    "saving": { text: "저장 중...", cls: "status-saving" },
-    "error": { text: "오류", cls: "status-error" },
-    "empty": { text: "", cls: "" },
+    saved: { text: "저장됨", cls: "status-saved" },
+    new: { text: "새 파일", cls: "status-new" },
+    modified: { text: "수정됨", cls: "status-modified" },
+    saving: { text: "저장 중...", cls: "status-saving" },
+    error: { text: "오류", cls: "status-error" },
+    empty: { text: "", cls: "" },
   };
 
   const info = map[status] || map["empty"];
@@ -525,7 +626,6 @@ function _updateFileInfo(filePath) {
   const el = document.getElementById("interp-file-info");
   if (el) el.textContent = filePath;
 }
-
 
 /* ──────────────────────────
    생성 다이얼로그
@@ -577,8 +677,10 @@ async function _createInterpretation() {
   const interpId = document.getElementById("interp-new-id")?.value?.trim();
   const sourceDocId = document.getElementById("interp-new-source")?.value;
   const interpType = document.getElementById("interp-new-type")?.value;
-  const interpName = document.getElementById("interp-new-name")?.value?.trim() || null;
-  const title = document.getElementById("interp-new-title")?.value?.trim() || null;
+  const interpName =
+    document.getElementById("interp-new-name")?.value?.trim() || null;
+  const title =
+    document.getElementById("interp-new-title")?.value?.trim() || null;
   const statusEl = document.getElementById("interp-create-status");
 
   if (!interpId) {

@@ -24,8 +24,9 @@
 
 /* --- Pretendard GOV Variable: 기본 폰트 (한글, 라틴, 숫자, 기호 등 모든 문자) --- */
 @font-face {
-  font-family: 'AppFont';
-  src: url('https://unpkg.com/pretendard-gov@1.3.9/dist/web/variable/woff2/PretendardGOVVariable.woff2') format('woff2-variations');
+  font-family: "AppFont";
+  src: url("https://unpkg.com/pretendard-gov@1.3.9/dist/web/variable/woff2/PretendardGOVVariable.woff2")
+    format("woff2-variations");
   font-weight: 45 920;
   font-style: normal;
   font-display: swap;
@@ -48,55 +49,64 @@
  */
 
 @font-face {
-  font-family: 'AppFont';
-  src: url('https://cdn.jsdelivr.net/gh/spoqa/spoqa-han-sans@latest/Subset/SpoqaHanSansNeo/SpoqaHanSansNeo-Thin.woff2') format('woff2');
+  font-family: "AppFont";
+  src: url("https://cdn.jsdelivr.net/gh/spoqa/spoqa-han-sans@latest/Subset/SpoqaHanSansNeo/SpoqaHanSansNeo-Thin.woff2")
+    format("woff2");
   font-weight: 100;
   font-style: normal;
   font-display: swap;
-  unicode-range: U+2E80-2EFF, U+2F00-2FDF, U+3400-4DBF, U+4E00-9FFF,
-                 U+F900-FAFF, U+20000-2A6DF, U+2A700-2B81F;
+  unicode-range:
+    U+2E80-2EFF, U+2F00-2FDF, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF,
+    U+20000-2A6DF, U+2A700-2B81F;
 }
 
 @font-face {
-  font-family: 'AppFont';
-  src: url('https://cdn.jsdelivr.net/gh/spoqa/spoqa-han-sans@latest/Subset/SpoqaHanSansNeo/SpoqaHanSansNeo-Light.woff2') format('woff2');
+  font-family: "AppFont";
+  src: url("https://cdn.jsdelivr.net/gh/spoqa/spoqa-han-sans@latest/Subset/SpoqaHanSansNeo/SpoqaHanSansNeo-Light.woff2")
+    format("woff2");
   font-weight: 300;
   font-style: normal;
   font-display: swap;
-  unicode-range: U+2E80-2EFF, U+2F00-2FDF, U+3400-4DBF, U+4E00-9FFF,
-                 U+F900-FAFF, U+20000-2A6DF, U+2A700-2B81F;
+  unicode-range:
+    U+2E80-2EFF, U+2F00-2FDF, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF,
+    U+20000-2A6DF, U+2A700-2B81F;
 }
 
 @font-face {
-  font-family: 'AppFont';
-  src: url('https://cdn.jsdelivr.net/gh/spoqa/spoqa-han-sans@latest/Subset/SpoqaHanSansNeo/SpoqaHanSansNeo-Regular.woff2') format('woff2');
+  font-family: "AppFont";
+  src: url("https://cdn.jsdelivr.net/gh/spoqa/spoqa-han-sans@latest/Subset/SpoqaHanSansNeo/SpoqaHanSansNeo-Regular.woff2")
+    format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
-  unicode-range: U+2E80-2EFF, U+2F00-2FDF, U+3400-4DBF, U+4E00-9FFF,
-                 U+F900-FAFF, U+20000-2A6DF, U+2A700-2B81F;
+  unicode-range:
+    U+2E80-2EFF, U+2F00-2FDF, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF,
+    U+20000-2A6DF, U+2A700-2B81F;
 }
 
 @font-face {
-  font-family: 'AppFont';
-  src: url('https://cdn.jsdelivr.net/gh/spoqa/spoqa-han-sans@latest/Subset/SpoqaHanSansNeo/SpoqaHanSansNeo-Medium.woff2') format('woff2');
+  font-family: "AppFont";
+  src: url("https://cdn.jsdelivr.net/gh/spoqa/spoqa-han-sans@latest/Subset/SpoqaHanSansNeo/SpoqaHanSansNeo-Medium.woff2")
+    format("woff2");
   font-weight: 500;
   font-style: normal;
   font-display: swap;
-  unicode-range: U+2E80-2EFF, U+2F00-2FDF, U+3400-4DBF, U+4E00-9FFF,
-                 U+F900-FAFF, U+20000-2A6DF, U+2A700-2B81F;
+  unicode-range:
+    U+2E80-2EFF, U+2F00-2FDF, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF,
+    U+20000-2A6DF, U+2A700-2B81F;
 }
 
 @font-face {
-  font-family: 'AppFont';
-  src: url('https://cdn.jsdelivr.net/gh/spoqa/spoqa-han-sans@latest/Subset/SpoqaHanSansNeo/SpoqaHanSansNeo-Bold.woff2') format('woff2');
+  font-family: "AppFont";
+  src: url("https://cdn.jsdelivr.net/gh/spoqa/spoqa-han-sans@latest/Subset/SpoqaHanSansNeo/SpoqaHanSansNeo-Bold.woff2")
+    format("woff2");
   font-weight: 700;
   font-style: normal;
   font-display: swap;
-  unicode-range: U+2E80-2EFF, U+2F00-2FDF, U+3400-4DBF, U+4E00-9FFF,
-                 U+F900-FAFF, U+20000-2A6DF, U+2A700-2B81F;
+  unicode-range:
+    U+2E80-2EFF, U+2F00-2FDF, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF,
+    U+20000-2A6DF, U+2A700-2B81F;
 }
-
 
 /* === 리셋 & 변수 === */
 
@@ -167,7 +177,7 @@
   --align-accuracy-bar-bg: #3c3c3c;
   --align-accuracy-label: #ccc;
   --variant-pair-bg: rgba(255, 249, 196, 0.15);
-  --variant-pair-border: #F9A825;
+  --variant-pair-border: #f9a825;
   --align-exact-text: #4caf50;
   --align-variant-text: #ff9800;
   --align-mismatch-text: #ef5350;
@@ -220,25 +230,25 @@
   --git-detail-code-bg: #333;
 
   /* 폰트 — AppFont: 한자=Spoqa Han Sans Neo, 나머지=Pretendard GOV Variable */
-  --font-ui: 'AppFont', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-ui:
+    "AppFont", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "Sarasa Fixed K", "Sarasa Mono K", monospace;
   --font-size: 13px;
 }
-
 
 /* === 라이트그레이 테마 === */
 
 [data-theme="light"] {
   /* 배경 */
-  --bg-primary: #FAFAFA;
-  --bg-secondary: #F5F5F5;
-  --bg-tertiary: #EEEEEE;
-  --bg-activity: #E8E8E8;
-  --bg-input: #FFFFFF;
+  --bg-primary: #fafafa;
+  --bg-secondary: #f5f5f5;
+  --bg-tertiary: #eeeeee;
+  --bg-activity: #e8e8e8;
+  --bg-input: #ffffff;
 
   /* 테두리 */
-  --border: #E0E0E0;
-  --border-active: #1976D2;
+  --border: #e0e0e0;
+  --border-active: #1976d2;
 
   /* 텍스트 */
   --text-primary: #333333;
@@ -247,17 +257,17 @@
   --text-active: #111111;
 
   /* 강조 */
-  --accent: #1976D2;
-  --accent-hover: #1565C0;
+  --accent: #1976d2;
+  --accent-hover: #1565c0;
 
-  --resize-handle-hover: #1976D2;
+  --resize-handle-hover: #1976d2;
 
   /* 반투명 오버레이 */
   --hover-bg: rgba(0, 0, 0, 0.04);
   --hover-bg-medium: rgba(0, 0, 0, 0.07);
-  --hover-bg-strong: rgba(0, 0, 0, 0.10);
+  --hover-bg-strong: rgba(0, 0, 0, 0.1);
   --selected-bg: rgba(25, 118, 210, 0.12);
-  --bg-canvas: #E0E0E0;
+  --bg-canvas: #e0e0e0;
   --overlay-bg: rgba(0, 0, 0, 0.3);
   --dialog-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
   --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -278,14 +288,14 @@
   --align-tab-border: #ccc;
   --align-tab-bg: #fff;
   --align-tab-hover-bg: #eee;
-  --align-variant-bg: #FFF9C4;
-  --align-mismatch-bg: #FFCDD2;
-  --align-ins-del-bg: #E0E0E0;
+  --align-variant-bg: #fff9c4;
+  --align-mismatch-bg: #ffcdd2;
+  --align-ins-del-bg: #e0e0e0;
   --align-ins-del-text: #757575;
   --align-accuracy-bar-bg: #e0e0e0;
   --align-accuracy-label: #333;
-  --variant-pair-bg: #FFF9C4;
-  --variant-pair-border: #F9A825;
+  --variant-pair-bg: #fff9c4;
+  --variant-pair-border: #f9a825;
   --align-exact-text: #2e7d32;
   --align-variant-text: #f57f17;
   --align-mismatch-text: #c62828;
@@ -323,7 +333,7 @@
   --git-tooltip-bg: #fff;
   --git-tooltip-border: #ccc;
   --git-tooltip-text: #333;
-  --git-tooltip-strong: #1565C0;
+  --git-tooltip-strong: #1565c0;
   --git-tooltip-small: #666;
   --git-detail-bg: #f8f9fa;
   --git-detail-border: #ddd;
@@ -338,8 +348,8 @@
   --git-detail-code-bg: #eee;
 }
 
-
-html, body {
+html,
+body {
   height: 100%;
   overflow: hidden;
   font-family: var(--font-ui);
@@ -347,7 +357,6 @@ html, body {
   color: var(--text-primary);
   background: var(--bg-primary);
 }
-
 
 /* === 워크스페이스 그리드 === */
 
@@ -361,7 +370,6 @@ html, body {
   height: 100vh;
   width: 100vw;
 }
-
 
 /* === 액티비티 바 === */
 
@@ -386,7 +394,9 @@ html, body {
   border-left: 2px solid transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
 }
 
 .activity-btn:hover {
@@ -420,7 +430,6 @@ html, body {
 .theme-toggle-btn:hover {
   color: var(--text-active);
 }
-
 
 /* === 사이드바 === */
 
@@ -507,7 +516,6 @@ html, body {
   margin-left: 6px;
 }
 
-
 /* === 리사이즈 핸들 (공통) === */
 
 .resize-handle {
@@ -538,7 +546,6 @@ html, body {
   flex-shrink: 0;
 }
 
-
 /* === 메인 영역 === */
 
 .main-area {
@@ -548,7 +555,6 @@ html, body {
   overflow: hidden;
   background: var(--bg-primary);
 }
-
 
 /* === 에디터 영역 (좌우 분할) === */
 
@@ -598,7 +604,6 @@ html, body {
   font-size: 12px;
   color: var(--text-secondary);
 }
-
 
 /* === 하단 패널 === */
 
@@ -670,7 +675,10 @@ html, body {
   color: var(--text-secondary);
   cursor: pointer;
   border-radius: 4px;
-  transition: background 0.15s, color 0.15s, transform 0.2s;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    transform 0.2s;
 }
 
 .panel-toggle:hover {
@@ -687,7 +695,6 @@ html, body {
   overflow-y: auto;
   padding: 8px 12px;
 }
-
 
 /* === 상태 바 === */
 
@@ -713,7 +720,6 @@ html, body {
 .status-item {
   white-space: nowrap;
 }
-
 
 /* === 유틸리티 === */
 
@@ -752,7 +758,6 @@ body.resizing-row {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--hover-bg-strong);
 }
-
 
 /* === Phase 3: 트리 뷰 (문헌 > 권 > 페이지 계층구조) === */
 
@@ -825,6 +830,26 @@ body.resizing-row {
   display: inline-block;
 }
 
+/* 편성 모드 TextBlock 삭제 버튼 — hover 시에만 표시 */
+.comp-tb-delete-btn {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding: 0 2px;
+  flex-shrink: 0;
+  line-height: 1;
+  margin-left: auto;
+}
+.comp-tb-delete-btn:hover {
+  color: #ef4444;
+}
+.comp-tb-card:hover .comp-tb-delete-btn {
+  display: inline-block;
+}
+
 .tree-page {
   display: flex;
   align-items: center;
@@ -859,7 +884,6 @@ body.resizing-row {
 .tree-page.active .tree-page-icon::before {
   color: var(--accent);
 }
-
 
 /* === Phase 3: PDF 뷰어 === */
 
@@ -982,7 +1006,9 @@ body.resizing-row {
   animation: pdfSpin 0.7s linear infinite;
 }
 @keyframes pdfSpin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 #pdf-canvas {
@@ -1003,7 +1029,6 @@ body.resizing-row {
   border-color: var(--accent);
   color: var(--accent);
 }
-
 
 /* === Phase 3: 텍스트 에디터 === */
 
@@ -1099,12 +1124,21 @@ body.resizing-row {
   white-space: nowrap;
 }
 
-.status-saved { color: #22c55e; }
-.status-new { color: var(--text-secondary); }
-.status-modified { color: #f59e0b; }
-.status-saving { color: var(--accent); }
-.status-error { color: #ef4444; }
-
+.status-saved {
+  color: #22c55e;
+}
+.status-new {
+  color: var(--text-secondary);
+}
+.status-modified {
+  color: #f59e0b;
+}
+.status-saving {
+  color: var(--accent);
+}
+.status-error {
+  color: #ef4444;
+}
 
 /* === Phase 4: 모드 탭 바 (열람 / 레이아웃 / 교정) === */
 
@@ -1129,7 +1163,10 @@ body.resizing-row {
   cursor: pointer;
   border-bottom: 2px solid transparent;
   white-space: nowrap;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background 0.15s;
   user-select: none;
   border-radius: 4px 4px 0 0;
 }
@@ -1146,16 +1183,15 @@ body.resizing-row {
 
 /* 레이아웃 모드 활성화 시 모드탭 강조 */
 .mode-tab.active[data-mode="layout"] {
-  border-bottom-color: #A855F7;
-  color: #A855F7;
+  border-bottom-color: #a855f7;
+  color: #a855f7;
 }
-
 
 /* === 읽기 보조선 (Reader Line) === */
 .reader-line {
   position: absolute;
-  pointer-events: none;  /* 마우스 이벤트 투과 — 오버레이 조작 방해 안 함 */
-  z-index: 5;            /* pdf-canvas 위, layout-overlay(z:10) 아래 */
+  pointer-events: none; /* 마우스 이벤트 투과 — 오버레이 조작 방해 안 함 */
+  z-index: 5; /* pdf-canvas 위, layout-overlay(z:10) 아래 */
   opacity: 0.5;
 }
 
@@ -1171,7 +1207,6 @@ body.resizing-row {
   height: 100%;
 }
 
-
 /* === Phase 4: PDF 캔버스 래퍼 (오버레이 정렬용) === */
 
 .pdf-canvas-wrapper {
@@ -1181,7 +1216,9 @@ body.resizing-row {
      justify-content:center 대신 이 방식을 쓰면
      캔버스가 컨테이너보다 넓을 때도 왼쪽 끝이 잘리지 않는다. */
   margin: auto;
-  transition: transform 0.2s ease, margin 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    margin 0.2s ease;
   transform-origin: center center;
 }
 
@@ -1192,7 +1229,6 @@ body.resizing-row {
   z-index: 10;
   cursor: crosshair;
 }
-
 
 /* === Phase 4: 레이아웃 속성 편집 패널 === */
 
@@ -1271,7 +1307,6 @@ body.resizing-row {
   background: rgba(239, 68, 68, 0.15) !important;
 }
 
-
 /* === Phase 4: 블록 목록 (우측 패널 하단) === */
 
 .layout-block-list-section {
@@ -1329,7 +1364,6 @@ body.resizing-row {
   font-family: var(--font-mono);
   font-size: 11px;
 }
-
 
 /* =========================================
    Phase 5: 서지정보 패널 + 다이얼로그
@@ -1488,7 +1522,9 @@ body.resizing-row {
   padding: 6px 16px;
   font-size: 12px;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
 }
 
 .bib-tab:hover {
@@ -1685,7 +1721,6 @@ body.resizing-row {
   border-top: 1px solid var(--border);
 }
 
-
 /* =========================================
    Phase 6: 교정 편집기 (Correction Editor)
    ========================================= */
@@ -1732,7 +1767,7 @@ body.resizing-row {
   overflow-y: auto;
   font-family: var(--font-mono);
   font-size: 16px;
-  line-height: 2.0;
+  line-height: 2;
   color: var(--text-primary);
   background: var(--bg-primary);
   /* 세로쓰기 고전 텍스트를 위한 넉넉한 행간 */
@@ -1807,7 +1842,7 @@ body.resizing-row {
 .corr-text-area.vertical-text-mode {
   writing-mode: vertical-rl;
   text-orientation: mixed;
-  overflow-x: auto;      /* 세로열이 많으면 가로 스크롤 */
+  overflow-x: auto; /* 세로열이 많으면 가로 스크롤 */
   overflow-y: hidden;
   line-height: 1.8;
   padding: 12px 16px;
@@ -1875,7 +1910,6 @@ body.resizing-row {
   font-size: 11px;
   margin-left: auto;
 }
-
 
 /* --- 블록별 섹션 --- */
 
@@ -1978,11 +2012,21 @@ body.resizing-row {
   flex-shrink: 0;
 }
 
-.corr-list-type.type-ocr-error { background: #ef4444; }
-.corr-list-type.type-variant-reading { background: #3b82f6; }
-.corr-list-type.type-variant-char { background: #a855f7; }
-.corr-list-type.type-decoding-error { background: #f59e0b; }
-.corr-list-type.type-uncertain { background: #6b7280; }
+.corr-list-type.type-ocr-error {
+  background: #ef4444;
+}
+.corr-list-type.type-variant-reading {
+  background: #3b82f6;
+}
+.corr-list-type.type-variant-char {
+  background: #a855f7;
+}
+.corr-list-type.type-decoding-error {
+  background: #f59e0b;
+}
+.corr-list-type.type-uncertain {
+  background: #6b7280;
+}
 
 .corr-list-text {
   color: var(--text-primary);
@@ -2053,7 +2097,6 @@ body.resizing-row {
   padding-top: 8px;
   border-top: 1px solid var(--border);
 }
-
 
 /* =========================================
    Phase 6: Git 이력 패널 (하단)
@@ -2172,7 +2215,6 @@ body.resizing-row {
   color: var(--accent);
 }
 
-
 /* =========================================
    Phase 7: 해석 저장소 (Interpretation)
    ========================================= */
@@ -2237,7 +2279,9 @@ body.resizing-row {
   cursor: pointer;
   border-bottom: 2px solid transparent;
   white-space: nowrap;
-  transition: color 0.15s, border-color 0.15s;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
   user-select: none;
 }
 
@@ -2345,9 +2389,15 @@ body.resizing-row {
   flex-shrink: 0;
 }
 
-.interp-type-badge.type-human { background: #3b82f6; }
-.interp-type-badge.type-llm { background: #a855f7; }
-.interp-type-badge.type-hybrid { background: #f59e0b; }
+.interp-type-badge.type-human {
+  background: #3b82f6;
+}
+.interp-type-badge.type-llm {
+  background: #a855f7;
+}
+.interp-type-badge.type-hybrid {
+  background: #f59e0b;
+}
 
 .interp-list-title {
   color: var(--text-primary);
@@ -2379,10 +2429,18 @@ body.resizing-row {
   color: #fff;
 }
 
-.dep-status-badge.status-current { background: #22c55e; }
-.dep-status-badge.status-outdated { background: #ef4444; }
-.dep-status-badge.status-acknowledged { background: #3b82f6; }
-.dep-status-badge.status-partially { background: #f59e0b; }
+.dep-status-badge.status-current {
+  background: #22c55e;
+}
+.dep-status-badge.status-outdated {
+  background: #ef4444;
+}
+.dep-status-badge.status-acknowledged {
+  background: #3b82f6;
+}
+.dep-status-badge.status-partially {
+  background: #f59e0b;
+}
 
 .dep-file-list {
   display: flex;
@@ -2409,10 +2467,18 @@ body.resizing-row {
   flex-shrink: 0;
 }
 
-.dep-file-status.st-unchanged { background: #22c55e; }
-.dep-file-status.st-changed { background: #ef4444; }
-.dep-file-status.st-acknowledged { background: #3b82f6; }
-.dep-file-status.st-updated { background: #6b7280; }
+.dep-file-status.st-unchanged {
+  background: #22c55e;
+}
+.dep-file-status.st-changed {
+  background: #ef4444;
+}
+.dep-file-status.st-acknowledged {
+  background: #3b82f6;
+}
+.dep-file-status.st-updated {
+  background: #6b7280;
+}
 
 .dep-file-path {
   color: var(--text-primary);
@@ -2420,7 +2486,6 @@ body.resizing-row {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 
 /* =========================================
    Phase 8: 엔티티 관리 (Entity Manager)
@@ -2516,12 +2581,24 @@ body.resizing-row {
   letter-spacing: 0.3px;
 }
 
-.entity-type-badge.type-work       { background: #ec4899; }
-.entity-type-badge.type-text-block { background: #3b82f6; }
-.entity-type-badge.type-tag        { background: #f59e0b; }
-.entity-type-badge.type-concept    { background: #22c55e; }
-.entity-type-badge.type-agent      { background: #a855f7; }
-.entity-type-badge.type-relation   { background: #6366f1; }
+.entity-type-badge.type-work {
+  background: #ec4899;
+}
+.entity-type-badge.type-text-block {
+  background: #3b82f6;
+}
+.entity-type-badge.type-tag {
+  background: #f59e0b;
+}
+.entity-type-badge.type-concept {
+  background: #22c55e;
+}
+.entity-type-badge.type-agent {
+  background: #a855f7;
+}
+.entity-type-badge.type-relation {
+  background: #6366f1;
+}
 
 /* --- 엔티티 상태 뱃지 --- */
 .entity-status-badge {
@@ -2640,14 +2717,29 @@ body.resizing-row {
   color: var(--text-primary);
 }
 
-.llm-approve-btn       { color: #22c55e !important; border-color: #22c55e !important; }
-.llm-approve-btn:hover { background: rgba(34, 197, 94, 0.15); }
+.llm-approve-btn {
+  color: #22c55e !important;
+  border-color: #22c55e !important;
+}
+.llm-approve-btn:hover {
+  background: rgba(34, 197, 94, 0.15);
+}
 
-.llm-edit-btn       { color: var(--accent) !important; border-color: var(--accent) !important; }
-.llm-edit-btn:hover { background: rgba(0, 122, 204, 0.15); }
+.llm-edit-btn {
+  color: var(--accent) !important;
+  border-color: var(--accent) !important;
+}
+.llm-edit-btn:hover {
+  background: rgba(0, 122, 204, 0.15);
+}
 
-.llm-reject-btn       { color: #ef4444 !important; border-color: #ef4444 !important; }
-.llm-reject-btn:hover { background: rgba(239, 68, 68, 0.15); }
+.llm-reject-btn {
+  color: #ef4444 !important;
+  border-color: #ef4444 !important;
+}
+.llm-reject-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+}
 
 /* --- 엔티티 다이얼로그 보완 --- */
 #entity-dialog-form .bib-edit-label {
@@ -2676,7 +2768,6 @@ body.resizing-row {
   height: 100%;
   overflow: hidden;
 }
-
 
 /* ====================================
    Phase 10: 새 문헌 생성 다이얼로그
@@ -2770,8 +2861,13 @@ body.resizing-row {
 }
 
 @keyframes progress-pulse {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .create-doc-progress-text {
@@ -2780,7 +2876,6 @@ body.resizing-row {
   color: var(--text-secondary);
   padding: 8px 0;
 }
-
 
 /* ====================================
    Phase 10-2: LLM 레이아웃 분석 UI
@@ -2851,7 +2946,6 @@ body.resizing-row {
   opacity: 0.5;
   cursor: not-allowed;
 }
-
 
 /* ====================================
    Phase 10-1: OCR 실행 패널
@@ -2949,20 +3043,27 @@ body.resizing-row {
   background: var(--bg-secondary);
   border-radius: 3px;
   font-size: 12px;
+  cursor: pointer;
 }
 
 .ocr-result-item:hover {
   background: var(--bg-tertiary);
 }
 
+.ocr-result-item.ocr-result-item-selected {
+  background: var(--bg-tertiary);
+  outline: 1px solid var(--accent);
+}
+
 .ocr-result-block-id {
   flex-shrink: 0;
-  width: 60px;
+  width: 140px;
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ocr-result-text {
@@ -3016,11 +3117,11 @@ body.resizing-row {
 
 /* --- OCR 버튼 비활성 상태 --- */
 #ocr-run-all:disabled,
-#ocr-run-selected:disabled {
+#ocr-run-selected:disabled,
+#ocr-delete-page:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
-
 
 /* ===========================================================================
  * Phase 10-3: 대조 뷰 스타일
@@ -3078,11 +3179,24 @@ body.resizing-row {
   margin-bottom: 6px;
 }
 
-.align-exact { color: var(--align-exact-text); font-weight: 600; }
-.align-variant { color: var(--align-variant-text); font-weight: 600; }
-.align-mismatch { color: var(--align-mismatch-text); font-weight: 600; }
-.align-insertion { color: var(--align-neutral-text); }
-.align-deletion { color: var(--align-neutral-text); }
+.align-exact {
+  color: var(--align-exact-text);
+  font-weight: 600;
+}
+.align-variant {
+  color: var(--align-variant-text);
+  font-weight: 600;
+}
+.align-mismatch {
+  color: var(--align-mismatch-text);
+  font-weight: 600;
+}
+.align-insertion {
+  color: var(--align-neutral-text);
+}
+.align-deletion {
+  color: var(--align-neutral-text);
+}
 
 .alignment-accuracy-bar {
   position: relative;
@@ -3240,7 +3354,6 @@ body.resizing-row {
   padding: 1px 6px;
 }
 
-
 /* ──────────────────────────────────────────────────
    Phase 11-1: 표점 편집기 스타일
    ────────────────────────────────────────────────── */
@@ -3293,7 +3406,7 @@ body.resizing-row {
 }
 
 .punct-char:hover {
-  background: var(--hover-bg-medium, rgba(255,255,255,0.12));
+  background: var(--hover-bg-medium, rgba(255, 255, 255, 0.12));
 }
 
 .punct-char-selected {
@@ -3307,7 +3420,9 @@ body.resizing-row {
   color: var(--text-secondary);
   cursor: pointer;
   opacity: 0.3;
-  transition: opacity 0.1s, color 0.1s;
+  transition:
+    opacity 0.1s,
+    color 0.1s;
   user-select: none;
 }
 
@@ -3362,12 +3477,14 @@ body.resizing-row {
   font-size: 18px;
   cursor: pointer;
   color: var(--text-primary);
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
   font-family: "Noto Serif KR", "Source Han Serif", serif;
 }
 
 .punct-preset-btn:hover {
-  background: var(--hover-bg-medium, rgba(255,255,255,0.12));
+  background: var(--hover-bg-medium, rgba(255, 255, 255, 0.12));
   border-color: #f59e0b;
 }
 
@@ -3396,7 +3513,7 @@ body.resizing-row {
 }
 
 .punct-mark-item:hover {
-  background: var(--hover-bg, rgba(255,255,255,0.06));
+  background: var(--hover-bg, rgba(255, 255, 255, 0.06));
 }
 
 .punct-mark-char {
@@ -3448,7 +3565,6 @@ body.resizing-row {
   flex-direction: column;
 }
 
-
 /* ──────────────────────────────────────────────────
    Phase 11-1: 현토 편집기 스타일
    ────────────────────────────────────────────────── */
@@ -3496,7 +3612,7 @@ body.resizing-row {
 }
 
 .hyeonto-char-wrapper:hover {
-  background: var(--hover-bg-medium, rgba(255,255,255,0.12));
+  background: var(--hover-bg-medium, rgba(255, 255, 255, 0.12));
 }
 
 .hyeonto-char-selected {
@@ -3520,11 +3636,11 @@ body.resizing-row {
 }
 
 .hyeonto-ruby-before {
-  order: -1;  /* 글자 위에 표시 */
+  order: -1; /* 글자 위에 표시 */
 }
 
 .hyeonto-ruby-after {
-  order: 1;   /* 글자 아래에 표시 */
+  order: 1; /* 글자 아래에 표시 */
 }
 
 /* 현토 입력 팝업 */
@@ -3536,7 +3652,7 @@ body.resizing-row {
   background: var(--bg-primary);
   border: 1px solid var(--border);
   border-radius: 8px;
-  box-shadow: var(--dialog-shadow, 0 8px 24px rgba(0,0,0,0.4));
+  box-shadow: var(--dialog-shadow, 0 8px 24px rgba(0, 0, 0, 0.4));
   z-index: 100;
   width: 240px;
   padding: 0;
@@ -3604,9 +3720,8 @@ body.resizing-row {
 }
 
 .hyeonto-ann-item:hover {
-  background: var(--hover-bg, rgba(255,255,255,0.06));
+  background: var(--hover-bg, rgba(255, 255, 255, 0.06));
 }
-
 
 /* ─────────────────────────────
    설정 패널 (settings)
@@ -3832,7 +3947,6 @@ body.resizing-row {
   flex-direction: column;
 }
 
-
 /* ──────────────────────────────────────────────────
    Phase 11-2: 번역 편집기 스타일
    ────────────────────────────────────────────────── */
@@ -3990,7 +4104,6 @@ body.resizing-row {
   justify-content: center;
   padding: 12px;
 }
-
 
 /* ───────────────────────────────────────────────────
    Phase 11-3: L7 주석 편집기 스타일
@@ -4187,7 +4300,6 @@ body.resizing-row {
   background: #ef444420 !important;
 }
 
-
 /* ──────────────────────────────────────
    인용 마크 (Citation Mark) 스타일
    ────────────────────────────────────── */
@@ -4234,11 +4346,11 @@ body.resizing-row {
 }
 
 .cite-highlight:hover {
-  background: rgba(234, 179, 8, 0.40);
+  background: rgba(234, 179, 8, 0.4);
 }
 
 .cite-highlight-selected {
-  background: rgba(234, 179, 8, 0.50);
+  background: rgba(234, 179, 8, 0.5);
   outline: 1px solid #eab308;
 }
 
@@ -4618,7 +4730,6 @@ body.resizing-row {
   cursor: pointer;
 }
 
-
 /* ──────────────────────────────────────
    Phase 12-1: Git 그래프 스타일
    ────────────────────────────────────── */
@@ -4694,7 +4805,7 @@ body.resizing-row {
 .git-graph-lane-line {
   stroke: var(--git-lane-line);
   stroke-width: 1;
-  stroke-dasharray: 2,4;
+  stroke-dasharray: 2, 4;
 }
 
 /* 세로 연결선 (같은 레인 내) */
@@ -4707,6 +4818,8 @@ body.resizing-row {
 .git-graph-link {
   cursor: pointer;
   transition: opacity 0.2s;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* 커밋 노드 */
@@ -4716,7 +4829,9 @@ body.resizing-row {
 }
 
 .git-graph-node circle {
-  transition: r 0.15s, stroke 0.15s;
+  transition:
+    r 0.15s,
+    stroke 0.15s;
 }
 
 .git-graph-node:hover circle {
@@ -4745,7 +4860,7 @@ body.resizing-row {
   line-height: 1.5;
   max-width: 380px;
   pointer-events: none;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
 .git-graph-tooltip strong {
@@ -4833,7 +4948,6 @@ body.resizing-row {
   font-size: 11px;
 }
 
-
 /* ──────────────────────────────────────
    비고/메모 패널 스타일
    ────────────────────────────────────── */
@@ -4908,7 +5022,6 @@ body.resizing-row {
   color: var(--text-muted);
 }
 
-
 /* ────────────────────────────────────
    사전형 주석 (Dictionary Annotation)
    ──────────────────────────────────── */
@@ -4946,23 +5059,23 @@ body.resizing-row {
 }
 
 .ann-dict-badge-from_original {
-  background: #E3F2FD;
-  color: #1565C0;
+  background: #e3f2fd;
+  color: #1565c0;
 }
 
 .ann-dict-badge-from_translation {
-  background: #FFF3E0;
-  color: #E65100;
+  background: #fff3e0;
+  color: #e65100;
 }
 
 .ann-dict-badge-from_both {
-  background: #E8F5E9;
-  color: #2E7D32;
+  background: #e8f5e9;
+  color: #2e7d32;
 }
 
 .ann-dict-badge-reviewed {
-  background: #F3E5F5;
-  color: #6A1B9A;
+  background: #f3e5f5;
+  color: #6a1b9a;
 }
 
 /* 사전 상세 보기 (카드 내) */
@@ -4971,7 +5084,7 @@ body.resizing-row {
   padding: 6px 8px;
   background: var(--bg-primary);
   border-radius: 4px;
-  border-left: 3px solid #42A5F5;
+  border-left: 3px solid #42a5f5;
   font-size: 12px;
   line-height: 1.5;
 }
@@ -5028,7 +5141,6 @@ body.resizing-row {
   color: var(--text-primary);
 }
 
-
 /* ────────────────────────────────────
    참조 사전 (Reference Dictionary)
    ──────────────────────────────────── */
@@ -5043,7 +5155,7 @@ body.resizing-row {
 }
 
 .trans-refdict-toolbar .text-btn.active {
-  background: #42A5F5;
+  background: #42a5f5;
   color: white;
 }
 

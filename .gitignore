@@ -61,6 +61,10 @@ server_*.log
 # VSCode Local History
 .history/
 
+# 안전 가드: 중첩 Git 메타데이터 추적 금지
+**/.git
+**/.git/**
+
 # LLM 사용 로그 (서고 내 자동 생성)
 **/llm_usage_log.jsonl
 

@@ -64,7 +64,6 @@ document.addEventListener("DOMContentLoaded", () => {
   _loadAllLlmModelSelects();
 });
 
-
 /* ──────────────────────────
    1. 리사이즈 핸들러
    ────────────────────────── */
@@ -194,7 +193,6 @@ function setupRowResize({ handle, getTarget, cssVar, minSize, maxSize }) {
   });
 }
 
-
 /* ──────────────────────────
    2. 하단 패널 접기/펴기
    ────────────────────────── */
@@ -208,7 +206,6 @@ function initPanelToggle() {
     panel.classList.toggle("collapsed");
   });
 }
-
 
 /* ──────────────────────────
    3. 액티비티 바 탭 전환
@@ -235,7 +232,8 @@ function initActivityBar() {
       // VSCode 스타일: 이미 활성인 버튼을 다시 클릭하면 사이드바 접기/펼치기
       if (btn.classList.contains("active")) {
         const isCollapsed = sidebar.classList.toggle("collapsed");
-        if (resizeHandle) resizeHandle.style.display = isCollapsed ? "none" : "";
+        if (resizeHandle)
+          resizeHandle.style.display = isCollapsed ? "none" : "";
         // 그리드 컬럼 조정: 사이드바+리사이즈 영역을 0으로
         if (workspace) {
           workspace.style.gridTemplateColumns = isCollapsed
@@ -266,9 +264,11 @@ function initActivityBar() {
       }
 
       // 모든 sidebar-section 숨김
-      document.querySelectorAll("#sidebar-content .sidebar-section").forEach((s) => {
-        s.style.display = "none";
-      });
+      document
+        .querySelectorAll("#sidebar-content .sidebar-section")
+        .forEach((s) => {
+          s.style.display = "none";
+        });
 
       if (panel === "settings") {
         // 설정 패널 표시
@@ -282,7 +282,9 @@ function initActivityBar() {
         if (title) title.textContent = "설정";
       } else {
         // explorer: 기존 섹션 복원
-        const docList = document.querySelector("#sidebar-content > .sidebar-section:first-child");
+        const docList = document.querySelector(
+          "#sidebar-content > .sidebar-section:first-child",
+        );
         if (docList) docList.style.display = "";
         // 문헌 선택 상태에 따라 서지/해석 섹션 복원
         const bibSec = document.getElementById("bib-section");
@@ -290,7 +292,11 @@ function initActivityBar() {
         if (bibSec && typeof viewerState !== "undefined" && viewerState.docId) {
           bibSec.style.display = "";
         }
-        if (interpSec && typeof viewerState !== "undefined" && viewerState.docId) {
+        if (
+          interpSec &&
+          typeof viewerState !== "undefined" &&
+          viewerState.docId
+        ) {
           interpSec.style.display = "";
         }
         // 사이드바 타이틀 복원
@@ -300,7 +306,6 @@ function initActivityBar() {
     });
   });
 }
-
 
 /* ──────────────────────────
    3-1. 설정 패널 로드
@@ -329,12 +334,15 @@ async function _loadSettings() {
     _renderRepoList("settings-doc-repos", data.documents || [], "documents");
 
     // 해석 저장소 목록
-    _renderRepoList("settings-interp-repos", data.interpretations || [], "interpretations");
+    _renderRepoList(
+      "settings-interp-repos",
+      data.interpretations || [],
+      "interpretations",
+    );
   } catch (e) {
     console.warn("설정 로드 실패:", e);
   }
 }
-
 
 /* ─── 서고 경로 관리 ───────────────────────────── */
 
@@ -400,7 +408,6 @@ function _initLibraryControls() {
   }
 }
 
-
 async function _switchLibrary(path) {
   try {
     const res = await fetch("/api/library/switch", {
@@ -421,7 +428,6 @@ async function _switchLibrary(path) {
     alert("서고 전환 실패: " + e.message);
   }
 }
-
 
 async function _createNewLibrary() {
   const path = prompt("새 서고를 생성할 경로를 입력하세요:");
@@ -446,7 +452,6 @@ async function _createNewLibrary() {
   }
 }
 
-
 async function _loadRecentLibraries() {
   const container = document.getElementById("recent-libraries");
   if (!container) return;
@@ -466,8 +471,8 @@ async function _loadRecentLibraries() {
     container.innerHTML = "";
     for (const lib of libraries) {
       const item = document.createElement("div");
-      item.className = "recent-library-item" +
-        (lib.path === current ? " current" : "");
+      item.className =
+        "recent-library-item" + (lib.path === current ? " current" : "");
 
       const nameSpan = document.createElement("span");
       nameSpan.className = "recent-library-name";
@@ -493,7 +498,6 @@ async function _loadRecentLibraries() {
     console.debug("최근 서고 목록 로드 실패:", e);
   }
 }
-
 
 function _renderRepoList(containerId, repos, repoType) {
   const container = document.getElementById(containerId);
@@ -536,45 +540,53 @@ function _renderRepoList(containerId, repos, repoType) {
     `;
 
     // 원격 URL 저장 버튼
-    item.querySelector(".settings-remote-save").addEventListener("click", async () => {
-      const input = item.querySelector(".settings-remote-input");
-      const url = input.value.trim();
-      if (!url) { alert("원격 URL을 입력하세요."); return; }
+    item
+      .querySelector(".settings-remote-save")
+      .addEventListener("click", async () => {
+        const input = item.querySelector(".settings-remote-input");
+        const url = input.value.trim();
+        if (!url) {
+          alert("원격 URL을 입력하세요.");
+          return;
+        }
 
-      try {
-        const res = await fetch("/api/settings/remote", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            repo_type: repoType,
-            repo_id: repo.id,
-            remote_url: url,
-          }),
-        });
-        const result = await res.json();
-        if (!res.ok) throw new Error(result.error);
-        alert(`원격 URL 설정 완료: ${url}`);
-        _loadSettings();  // 새로고침
-      } catch (e) {
-        alert(`원격 설정 실패: ${e.message}`);
-      }
-    });
+        try {
+          const res = await fetch("/api/settings/remote", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              repo_type: repoType,
+              repo_id: repo.id,
+              remote_url: url,
+            }),
+          });
+          const result = await res.json();
+          if (!res.ok) throw new Error(result.error);
+          alert(`원격 URL 설정 완료: ${url}`);
+          _loadSettings(); // 새로고침
+        } catch (e) {
+          alert(`원격 설정 실패: ${e.message}`);
+        }
+      });
 
     // Push/Pull 버튼
     const pushBtn = item.querySelector(".settings-push-btn");
     const pullBtn = item.querySelector(".settings-pull-btn");
 
     if (pushBtn) {
-      pushBtn.addEventListener("click", () => _gitSync(repoType, repo.id, "push"));
+      pushBtn.addEventListener("click", () =>
+        _gitSync(repoType, repo.id, "push"),
+      );
     }
     if (pullBtn) {
-      pullBtn.addEventListener("click", () => _gitSync(repoType, repo.id, "pull"));
+      pullBtn.addEventListener("click", () =>
+        _gitSync(repoType, repo.id, "pull"),
+      );
     }
 
     container.appendChild(item);
   }
 }
-
 
 async function _gitSync(repoType, repoId, action) {
   const label = action === "push" ? "Push" : "Pull";
@@ -591,13 +603,18 @@ async function _gitSync(repoType, repoId, action) {
       }),
     });
     const result = await res.json();
-    if (!res.ok) throw new Error(result.error);
+    if (!res.ok) {
+      const lines = [result.error || "알 수 없는 오류"];
+      if (result.detail) lines.push(result.detail);
+      if (result.hint) lines.push(`안내: ${result.hint}`);
+      if (result.retried) lines.push("(서버에서 자동 재시도 1회 수행됨)");
+      throw new Error(lines.join("\n"));
+    }
     alert(`${label} 완료: ${result.output || "성공"}`);
   } catch (e) {
     alert(`${label} 실패: ${e.message}`);
   }
 }
-
 
 /* ──────────────────────────
    4. 모드 전환 (Phase 4: 열람 / 레이아웃 / 교정)
@@ -660,19 +677,23 @@ function _switchMode(mode) {
     if (layoutPanel) layoutPanel.style.display = "none";
   }
   if (currentMode === "correction") {
-    if (typeof deactivateCorrectionMode === "function") deactivateCorrectionMode();
+    if (typeof deactivateCorrectionMode === "function")
+      deactivateCorrectionMode();
     if (correctionPanel) correctionPanel.style.display = "none";
   }
   if (currentMode === "composition") {
-    if (typeof deactivateCompositionMode === "function") deactivateCompositionMode();
+    if (typeof deactivateCompositionMode === "function")
+      deactivateCompositionMode();
     if (compositionPanel) compositionPanel.style.display = "none";
   }
   if (currentMode === "interpretation") {
-    if (typeof deactivateInterpretationMode === "function") deactivateInterpretationMode();
+    if (typeof deactivateInterpretationMode === "function")
+      deactivateInterpretationMode();
     if (interpPanel) interpPanel.style.display = "none";
   }
   if (currentMode === "punctuation") {
-    if (typeof deactivatePunctuationMode === "function") deactivatePunctuationMode();
+    if (typeof deactivatePunctuationMode === "function")
+      deactivatePunctuationMode();
     if (punctPanel) punctPanel.style.display = "none";
   }
   if (currentMode === "hyeonto") {
@@ -680,11 +701,13 @@ function _switchMode(mode) {
     if (hyeontoPanel) hyeontoPanel.style.display = "none";
   }
   if (currentMode === "translation") {
-    if (typeof deactivateTranslationMode === "function") deactivateTranslationMode();
+    if (typeof deactivateTranslationMode === "function")
+      deactivateTranslationMode();
     if (transPanel) transPanel.style.display = "none";
   }
   if (currentMode === "annotation") {
-    if (typeof deactivateAnnotationMode === "function") deactivateAnnotationMode();
+    if (typeof deactivateAnnotationMode === "function")
+      deactivateAnnotationMode();
     if (annPanel) annPanel.style.display = "none";
   }
   if (currentMode === "citation") {
@@ -718,15 +741,18 @@ function _switchMode(mode) {
   } else if (mode === "composition") {
     // 우측: 편성 에디터 패널 표시
     if (compositionPanel) compositionPanel.style.display = "";
-    if (typeof activateCompositionMode === "function") activateCompositionMode();
+    if (typeof activateCompositionMode === "function")
+      activateCompositionMode();
   } else if (mode === "interpretation") {
     // 우측: 해석 뷰어 패널 표시
     if (interpPanel) interpPanel.style.display = "";
-    if (typeof activateInterpretationMode === "function") activateInterpretationMode();
+    if (typeof activateInterpretationMode === "function")
+      activateInterpretationMode();
   } else if (mode === "punctuation") {
     // 우측: 표점 편집기 패널 표시
     if (punctPanel) punctPanel.style.display = "";
-    if (typeof activatePunctuationMode === "function") activatePunctuationMode();
+    if (typeof activatePunctuationMode === "function")
+      activatePunctuationMode();
   } else if (mode === "hyeonto") {
     // 우측: 현토 편집기 패널 표시
     if (hyeontoPanel) hyeontoPanel.style.display = "";
@@ -734,7 +760,8 @@ function _switchMode(mode) {
   } else if (mode === "translation") {
     // 우측: 번역 편집기 패널 표시
     if (transPanel) transPanel.style.display = "";
-    if (typeof activateTranslationMode === "function") activateTranslationMode();
+    if (typeof activateTranslationMode === "function")
+      activateTranslationMode();
   } else if (mode === "annotation") {
     // 우측: 주석 편집기 패널 표시
     if (annPanel) annPanel.style.display = "";
@@ -748,7 +775,6 @@ function _switchMode(mode) {
     if (editorRight) editorRight.style.display = "";
   }
 }
-
 
 /* ──────────────────────────
    5. 서고 정보 로드
@@ -863,7 +889,7 @@ function initSnapshotButtons() {
         if (!file) return;
 
         importBtn.disabled = true;
-        importBtn.textContent = "가져오는 중…";
+        importBtn.textContent = "JSON 가져오는 중…";
 
         try {
           // 파일 내용 읽기
@@ -872,7 +898,11 @@ function initSnapshotButtons() {
           try {
             data = JSON.parse(text);
           } catch {
-            throw new Error("올바른 JSON 파일이 아닙니다.");
+            throw new Error(
+              "올바른 JSON 파일이 아닙니다.\n" +
+                "- JSON 스냅샷 파일(.json)은 'JSON 가져오기'\n" +
+                "- 해석 저장소 폴더는 '폴더 가져오기'를 사용하세요.",
+            );
           }
 
           // 서버에 전송
@@ -893,7 +923,8 @@ function initSnapshotButtons() {
           }
 
           // 성공: 결과 안내
-          let msg = `가져오기 완료!\n\n` +
+          let msg =
+            `JSON 가져오기 완료!\n\n` +
             `문헌: ${result.title}\n` +
             `문헌 ID: ${result.doc_id}\n` +
             `해석 ID: ${result.interp_id}\n` +
@@ -910,10 +941,10 @@ function initSnapshotButtons() {
             loadLibraryInfo();
           }
         } catch (e) {
-          alert(`가져오기 실패:\n${e.message}`);
+          alert(`JSON 가져오기 실패:\n${e.message}`);
         } finally {
           importBtn.disabled = false;
-          importBtn.textContent = "가져오기";
+          importBtn.textContent = "JSON 가져오기";
           input.remove();
         }
       });
@@ -923,7 +954,6 @@ function initSnapshotButtons() {
     });
   }
 }
-
 
 /* ──────────────────────────
    페이지 변경 공통 동기화
@@ -963,14 +993,20 @@ function onPageChanged(opts) {
   }
 
   // 3. 레이아웃 동기화 (활성 시)
-  if (typeof loadPageLayout === "function" &&
-      typeof layoutState !== "undefined" && layoutState.active) {
+  if (
+    typeof loadPageLayout === "function" &&
+    typeof layoutState !== "undefined" &&
+    layoutState.active
+  ) {
     loadPageLayout(docId, partId, pageNum);
   }
 
   // 4. 교정 동기화 (활성 시)
-  if (typeof loadPageCorrections === "function" &&
-      typeof correctionState !== "undefined" && correctionState.active) {
+  if (
+    typeof loadPageCorrections === "function" &&
+    typeof correctionState !== "undefined" &&
+    correctionState.active
+  ) {
     loadPageCorrections(docId, partId, pageNum);
   }
 
@@ -984,16 +1020,28 @@ function onPageChanged(opts) {
     loadBibliography(docId);
   }
 
+  // 6-1. 해석 저장소 목록 (문서가 선택되면 항상 사이드바 목록 로드)
+  if (typeof _loadInterpretationList === "function") {
+    _loadInterpretationList();
+  }
+
   // 7. 해석 층 내용 (활성 시)
-  if (typeof interpState !== "undefined" && interpState.active && interpState.interpId) {
+  if (
+    typeof interpState !== "undefined" &&
+    interpState.active &&
+    interpState.interpId
+  ) {
     if (typeof _loadLayerContent === "function") {
       _loadLayerContent();
     }
   }
 
   // 8. OCR 결과 (레이아웃 모드 활성 시)
-  if (typeof loadOcrResults === "function" &&
-      typeof layoutState !== "undefined" && layoutState.active) {
+  if (
+    typeof loadOcrResults === "function" &&
+    typeof layoutState !== "undefined" &&
+    layoutState.active
+  ) {
     loadOcrResults();
   }
 
@@ -1015,7 +1063,6 @@ function onPageChanged(opts) {
     _updateHash();
   }
 }
-
 
 /**
  * 하단 패널 탭 전환을 설정한다.
@@ -1043,11 +1090,13 @@ function initBottomPanelTabs() {
       tab.classList.add("active");
 
       // 탭 내용 전환: 0=Git, 1=검증결과, 2=의존추적, 3=엔티티, 4=비고
-      if (gitContent) gitContent.style.display = (index === 0) ? "" : "none";
-      if (validationContent) validationContent.style.display = (index === 1) ? "" : "none";
-      if (depContent) depContent.style.display = (index === 2) ? "" : "none";
-      if (entityContent) entityContent.style.display = (index === 3) ? "" : "none";
-      if (notesContent) notesContent.style.display = (index === 4) ? "" : "none";
+      if (gitContent) gitContent.style.display = index === 0 ? "" : "none";
+      if (validationContent)
+        validationContent.style.display = index === 1 ? "" : "none";
+      if (depContent) depContent.style.display = index === 2 ? "" : "none";
+      if (entityContent)
+        entityContent.style.display = index === 3 ? "" : "none";
+      if (notesContent) notesContent.style.display = index === 4 ? "" : "none";
 
       // Phase 8: 엔티티 탭 활성화 시 엔티티 로드
       if (index === 3 && typeof _loadEntitiesForCurrentPage === "function") {
@@ -1061,7 +1110,6 @@ function initBottomPanelTabs() {
     });
   });
 }
-
 
 /* ──────────────────────────
    공통 LLM 모델 선택 로더
@@ -1094,7 +1142,9 @@ async function _loadAllLlmModelSelects() {
       return;
     }
     const models = await res.json();
-    console.log(`LLM 모델 ${models.length}개 로드 → ${selects.length}개 드롭다운에 적용`);
+    console.log(
+      `LLM 모델 ${models.length}개 로드 → ${selects.length}개 드롭다운에 적용`,
+    );
 
     // 모든 셀렉트에 동일한 옵션 채우기
     for (const select of selects) {
@@ -1111,7 +1161,7 @@ function _fillLlmSelect(select, models) {
 
   select.innerHTML = '<option value="auto">자동 (폴백순서)</option>';
   for (const m of models) {
-    if (visionOnly && !m.vision) continue;  // 비전 미지원 모델 제외
+    if (visionOnly && !m.vision) continue; // 비전 미지원 모델 제외
     const opt = document.createElement("option");
     opt.value = `${m.provider}:${m.model}`;
     const icon = m.available ? "●" : "○";
@@ -1146,7 +1196,6 @@ function getLlmModelSelection(selectId) {
     force_model: model && model !== "auto" ? model : null,
   };
 }
-
 
 /* ──────────────────────────
    URL 해시 라우팅 (Plan 4)
@@ -1253,9 +1302,12 @@ window.addEventListener("popstate", () => {
   if (!target) return;
 
   // 같은 위치면 무시
-  if (viewerState.docId === target.docId &&
-      viewerState.partId === target.partId &&
-      viewerState.pageNum === target.pageNum) return;
+  if (
+    viewerState.docId === target.docId &&
+    viewerState.partId === target.partId &&
+    viewerState.pageNum === target.pageNum
+  )
+    return;
 
   viewerState.docId = target.docId;
   viewerState.partId = target.partId;
@@ -1274,7 +1326,6 @@ window.addEventListener("popstate", () => {
   _suppressHashUpdate = false;
 });
 
-
 /**
  * 사이드바에 문헌 목록을 렌더링한다.
  */
@@ -1282,7 +1333,8 @@ function renderDocumentList(docs) {
   const container = document.getElementById("document-list");
 
   if (!docs || docs.length === 0) {
-    container.innerHTML = '<div class="placeholder">등록된 문헌이 없습니다</div>';
+    container.innerHTML =
+      '<div class="placeholder">등록된 문헌이 없습니다</div>';
     return;
   }
 
@@ -1293,14 +1345,16 @@ function renderDocumentList(docs) {
         ${doc.title || "제목 없음"}
         <span class="doc-id">${doc.document_id || ""}</span>
       </div>
-    `
+    `,
     )
     .join("");
 
   // 클릭 이벤트
   container.querySelectorAll(".tree-item").forEach((item) => {
     item.addEventListener("click", () => {
-      container.querySelectorAll(".tree-item").forEach((i) => i.classList.remove("active"));
+      container
+        .querySelectorAll(".tree-item")
+        .forEach((i) => i.classList.remove("active"));
       item.classList.add("active");
       // 향후: 문헌 선택 시 에디터 영역에 내용 표시
     });

@@ -139,6 +139,31 @@ def create_interpretation(
     }
     _write_json(interp_path / "dependency.json", dependency)
 
+    # --- .gitignore ---
+    # 왜 이렇게 하는가:
+    #   해석 저장소 내부에서 .git 메타데이터나 임시 파일이 추적되면
+    #   비정상 대용량 push/충돌로 이어질 수 있다.
+    gitignore_content = (
+        "# 안전 규칙: 저장소 내부 Git 메타데이터는 절대 추적하지 않는다.\n"
+        ".git\n"
+        ".git/\n"
+        "**/.git\n"
+        "**/.git/**\n"
+        "\n"
+        "# 임시/캐시 파일\n"
+        "__pycache__/\n"
+        "*.py[cod]\n"
+        "*.tmp\n"
+        "*.temp\n"
+        "\n"
+        "# 에디터/OS 잡파일\n"
+        ".DS_Store\n"
+        "Thumbs.db\n"
+        ".vscode/\n"
+        ".idea/\n"
+    )
+    (interp_path / ".gitignore").write_text(gitignore_content, encoding="utf-8")
+
     # --- git init + 초기 커밋 ---
     repo = git.Repo.init(interp_path)
     repo.index.add(["."])

@@ -48,6 +48,7 @@ API 엔드포인트:
     GET  /api/ocr/engines → 등록된 OCR 엔진 목록 + 사용 가능 여부
     POST /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr → OCR 실행
     GET  /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr → OCR 결과 조회
+    DELETE /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr → OCR 결과 삭제(.trash 이동)
     POST /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr/{block_id} → 단일 블록 재실행
 
     --- Phase 10-3: 정렬 엔진 API ---
@@ -116,6 +117,7 @@ API 엔드포인트:
     --- Phase 12-3: JSON 스냅샷 API ---
     GET  /api/interpretations/{interp_id}/export/json → JSON 스냅샷 Export (다운로드)
     POST /api/import/json → JSON 스냅샷 Import (새 Work 생성)
+    POST /api/import/interpretation-folder → 기존 해석 저장소 폴더 Import
 
     --- Phase 8: 코어 스키마 엔티티 API ---
     POST /api/interpretations/{interp_id}/entities → 엔티티 생성
@@ -140,6 +142,8 @@ API 엔드포인트:
 """
 
 import sys
+import shutil
+from datetime import datetime
 from pathlib import Path
 
 # src/ 디렉토리를 Python 경로에 추가
@@ -536,6 +540,52 @@ async def api_git_sync(body: GitPushPullRequest):
     if body.action not in ("push", "pull"):
         return JSONResponse({"error": "action은 push 또는 pull이어야 합니다."}, status_code=400)
 
+    # Push 전 안전검사: 작업트리에 .git 내부 파일이 추적되면
+    # 저장소 메타데이터까지 원격에 밀려 대용량/비정상 push가 발생한다.
+    # 이 경우 branch(main/master) 문제가 아니라 저장소 상태 문제이므로 즉시 차단한다.
+    if body.action == "push":
+        try:
+            ls_files = subprocess.run(
+                ["git", "ls-files"],
+                cwd=str(repo_dir),
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            tracked = ls_files.stdout.splitlines() if ls_files.returncode == 0 else []
+            tracked_git_internal = [
+                p for p in tracked if p.startswith(".git/") or p.startswith("./.git/")
+            ]
+
+            if tracked_git_internal:
+                sample = "\n".join(tracked_git_internal[:5])
+                return JSONResponse(
+                    {
+                        "error": "push 차단: 저장소 내부 .git 파일이 추적되고 있습니다.",
+                        "detail": f"추적 예시:\n{sample}",
+                        "hint": (
+                            "branch(main/master) 문제가 아닙니다. "
+                            "해당 저장소에서 `git rm -r --cached .git` 후 커밋하고 다시 push 하세요. "
+                            "필요하면 저장소를 새로 초기화하는 것이 가장 안전합니다."
+                        ),
+                    },
+                    status_code=400,
+                )
+        except Exception:
+            # 안전검사 실패는 치명 오류로 보지 않고 기존 흐름을 유지한다.
+            pass
+
+    def _run_git_sync(cmd: list[str], timeout_sec: int = 180):
+        """git 명령을 실행하고 (성공여부, stdout, stderr, returncode)를 반환한다."""
+        proc = subprocess.run(
+            cmd,
+            cwd=str(repo_dir),
+            capture_output=True,
+            text=True,
+            timeout=timeout_sec,
+        )
+        return proc.returncode == 0, proc.stdout.strip(), proc.stderr.strip(), proc.returncode
+
     try:
         # 현재 브랜치 이름
         branch_result = subprocess.run(
@@ -545,30 +595,100 @@ async def api_git_sync(body: GitPushPullRequest):
         branch = branch_result.stdout.strip() or "master"
 
         if body.action == "push":
-            result = subprocess.run(
+            success, out, err, code = _run_git_sync(
                 ["git", "push", "-u", "origin", branch],
-                cwd=str(repo_dir), capture_output=True, text=True, timeout=60,
-            )
-        else:
-            result = subprocess.run(
-                ["git", "pull", "origin", branch],
-                cwd=str(repo_dir), capture_output=True, text=True, timeout=60,
+                timeout_sec=180,
             )
 
-        if result.returncode != 0:
-            return JSONResponse(
-                {"error": f"{body.action} 실패: {result.stderr}"},
-                status_code=500,
+            # Windows/HTTPS에서 자주 발생하는 RPC/HTTP 500 계열 오류는
+            # HTTP/1.1 강제 + postBuffer 확장으로 1회 재시도한다.
+            retry_used = False
+            retry_reason = ""
+            rpc_http_500 = (
+                ("RPC failed" in err)
+                or ("The requested URL returned error: 500" in err)
+                or ("send-pack: unexpected disconnect while reading sideband packet" in err)
+                or ("the remote end hung up unexpectedly" in err)
             )
-        return {
-            "status": "ok",
-            "action": body.action,
-            "output": result.stdout.strip(),
-        }
+
+            if (not success) and rpc_http_500:
+                retry_used = True
+                retry_reason = "원격 HTTP 500/RPC 실패 감지"
+                success, out, err, code = _run_git_sync(
+                    [
+                        "git",
+                        "-c",
+                        "http.version=HTTP/1.1",
+                        "-c",
+                        "http.postBuffer=524288000",
+                        "push",
+                        "-u",
+                        "origin",
+                        branch,
+                    ],
+                    timeout_sec=300,
+                )
+
+            if not success:
+                hint = (
+                    "원격 서버(또는 네트워크)에서 연결을 끊었습니다. "
+                    "잠시 후 재시도하거나, 원격 URL/권한(PAT)과 저장소 용량 제한을 확인하세요."
+                )
+                return JSONResponse(
+                    {
+                        "error": f"push 실패 (exit={code})",
+                        "detail": err or out or "알 수 없는 git 오류",
+                        "hint": hint,
+                        "retried": retry_used,
+                        "retry_reason": retry_reason,
+                    },
+                    status_code=500,
+                )
+
+            return {
+                "status": "ok",
+                "action": body.action,
+                "output": out or "성공",
+                "retried": retry_used,
+                "retry_reason": retry_reason,
+            }
+        else:
+            success, out, err, code = _run_git_sync(
+                ["git", "pull", "origin", branch],
+                timeout_sec=180,
+            )
+            if not success:
+                return JSONResponse(
+                    {
+                        "error": f"pull 실패 (exit={code})",
+                        "detail": err or out or "알 수 없는 git 오류",
+                        "hint": "원격 URL/브랜치/인증 상태를 확인하세요.",
+                    },
+                    status_code=500,
+                )
+            return {
+                "status": "ok",
+                "action": body.action,
+                "output": out or "성공",
+            }
     except subprocess.TimeoutExpired:
-        return JSONResponse({"error": "타임아웃 (60초)"}, status_code=500)
+        return JSONResponse(
+            {
+                "error": "git 동기화 타임아웃",
+                "detail": "명령 실행 시간이 제한을 초과했습니다.",
+                "hint": "네트워크 상태를 확인하고 다시 시도하세요.",
+            },
+            status_code=500,
+        )
     except Exception as e:
-        return JSONResponse({"error": f"{body.action} 실패: {e}"}, status_code=500)
+        return JSONResponse(
+            {
+                "error": f"{body.action} 실패",
+                "detail": str(e),
+                "hint": "로컬 git 설정과 원격 접근 권한을 확인하세요.",
+            },
+            status_code=500,
+        )
 
 
 def _get_git_remote(repo_dir: Path) -> str | None:
@@ -1308,7 +1428,18 @@ async def api_save_page_corrections(
     summary = ", ".join(summary_parts) if summary_parts else "없음"
     commit_msg = f"L4: page {page_num:03d} 교정 — {summary}"
 
-    git_result = git_commit_document(doc_path, commit_msg)
+    try:
+        git_result = git_commit_document(
+            doc_path,
+            commit_msg,
+            add_paths=[save_result.get("file_path", "")],
+        )
+    except Exception as e:
+        git_result = {
+            "committed": False,
+            "message": f"git commit 실패: {e}",
+        }
+
     save_result["git"] = git_result
 
     return save_result
@@ -2841,6 +2972,159 @@ async def api_get_ocr_result(
         "file_path": str(ocr_path.relative_to(_library_path)),
     }
     return data
+
+
+@app.delete("/api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr")
+async def api_delete_ocr_result(
+    doc_id: str,
+    part_id: str,
+    page_number: int,
+):
+    """특정 페이지의 OCR 결과(L2)를 휴지통으로 이동한다."""
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = _library_path / "documents" / doc_id
+    if not doc_path.exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
+            status_code=404,
+        )
+
+    filename = f"{part_id}_page_{page_number:03d}.json"
+    legacy_filename = f"page_{page_number:03d}.json"
+    ocr_path = doc_path / "L2_ocr" / filename
+
+    if not ocr_path.exists():
+        legacy_path = doc_path / "L2_ocr" / legacy_filename
+        if legacy_path.exists():
+            ocr_path = legacy_path
+            filename = legacy_filename
+        else:
+            return JSONResponse(
+                {"error": f"삭제할 OCR 결과가 없습니다: {doc_id}/{part_id}/page_{page_number:03d}"},
+                status_code=404,
+            )
+
+    trash_dir = _library_path / ".trash" / "ocr"
+    trash_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+    trash_name = f"{timestamp}_{doc_id}_{filename}"
+    trash_path = trash_dir / trash_name
+
+    try:
+        shutil.move(str(ocr_path), str(trash_path))
+    except Exception as e:
+        return JSONResponse({"error": f"OCR 결과 삭제 실패: {e}"}, status_code=500)
+
+    return {
+        "status": "trashed",
+        "document_id": doc_id,
+        "part_id": part_id,
+        "page_number": page_number,
+        "trash_path": str(trash_path.relative_to(_library_path)).replace("\\", "/"),
+    }
+
+
+@app.delete("/api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr/{block_id}")
+async def api_delete_ocr_block_result(
+    doc_id: str,
+    part_id: str,
+    page_number: int,
+    block_id: str,
+    index: int = Query(-1),
+):
+    """특정 OCR 결과 1건을 block_id + index로 강제 매칭하여 삭제한다.
+
+    왜 이렇게 하는가:
+      같은 페이지에서 layout_block_id가 겹치거나 중복 OCR 항목이 생길 수 있다.
+      block_id만으로 삭제하면 여러 항목이 함께 지워질 위험이 있으므로,
+      프론트가 보낸 index와 block_id를 동시에 검증해 단건만 삭제한다.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = _library_path / "documents" / doc_id
+    if not doc_path.exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
+            status_code=404,
+        )
+
+    import json as _json
+
+    filename = f"{part_id}_page_{page_number:03d}.json"
+    legacy_filename = f"page_{page_number:03d}.json"
+    ocr_path = doc_path / "L2_ocr" / filename
+
+    if not ocr_path.exists():
+        legacy_path = doc_path / "L2_ocr" / legacy_filename
+        if legacy_path.exists():
+            ocr_path = legacy_path
+        else:
+            return JSONResponse(
+                {"error": f"OCR 결과가 없습니다: {doc_id}/{part_id}/page_{page_number:03d}"},
+                status_code=404,
+            )
+
+    try:
+        data = _json.loads(ocr_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        return JSONResponse({"error": f"OCR 파일 읽기 실패: {e}"}, status_code=500)
+
+    ocr_results = data.get("ocr_results")
+    if not isinstance(ocr_results, list):
+        return JSONResponse({"error": "OCR 결과 형식이 올바르지 않습니다."}, status_code=500)
+
+    if index < 0 or index >= len(ocr_results):
+        return JSONResponse(
+            {
+                "error": "삭제할 OCR 항목 index가 유효하지 않습니다.",
+                "index": index,
+                "total": len(ocr_results),
+            },
+            status_code=400,
+        )
+
+    normalized_block_id = str(block_id or "").strip()
+    target = ocr_results[index]
+    target_block_id = str(target.get("layout_block_id") or "").strip()
+
+    if target_block_id != normalized_block_id:
+        return JSONResponse(
+            {
+                "error": "block_id와 OCR 항목 index가 일치하지 않습니다.",
+                "expected_block_id": normalized_block_id,
+                "actual_block_id": target_block_id,
+                "index": index,
+            },
+            status_code=409,
+        )
+
+    deleted_item = ocr_results.pop(index)
+    data["ocr_results"] = ocr_results
+
+    try:
+        ocr_path.write_text(
+            _json.dumps(data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except Exception as e:
+        return JSONResponse({"error": f"OCR 파일 저장 실패: {e}"}, status_code=500)
+
+    return {
+        "status": "deleted",
+        "document_id": doc_id,
+        "part_id": part_id,
+        "page_number": page_number,
+        "block_id": normalized_block_id,
+        "index": index,
+        "remaining": len(ocr_results),
+        "deleted_text": "".join(
+            [(line.get("text") or "") for line in (deleted_item.get("lines") or [])]
+        ),
+    }
 
 
 @app.post("/api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr/{block_id}")
@@ -4712,8 +4996,8 @@ async def api_export_citations(
 @app.get("/api/interpretations/{interp_id}/git-graph")
 async def api_git_graph(
     interp_id: str,
-    original_branch: str = Query("main", description="원본 저장소 브랜치"),
-    interp_branch: str = Query("main", description="해석 저장소 브랜치"),
+    original_branch: str = Query("auto", description="원본 저장소 브랜치"),
+    interp_branch: str = Query("auto", description="해석 저장소 브랜치"),
     limit: int = Query(50, ge=1, le=200, description="각 저장소별 최대 커밋 수"),
     offset: int = Query(0, ge=0, description="페이지네이션 오프셋"),
 ):
@@ -4876,6 +5160,284 @@ async def api_import_json(request: Request):
         "layers_imported": detect_imported_layers(data),
         "warnings": result["warnings"] + warnings,
     }
+
+
+@app.post("/api/import/interpretation-folder")
+async def api_import_interpretation_folder(files: list[UploadFile] = File(...)):
+    """기존 해석 저장소 폴더를 현재 서고로 가져온다.
+
+    목적:
+        JSON 스냅샷을 새로 만들지 않고, 기존 해석 저장소 디렉토리 자체를
+        업로드하여 interpretations/ 하위에 등록한다.
+
+    입력:
+        multipart/form-data의 files[] (디렉토리 업로드 결과).
+        파일 경로는 filename(webkitRelativePath)로 전달된다.
+        overwrite=true이면 기존 저장소를 .trash로 이동 후 덮어쓴다.
+
+    출력:
+        {status, interp_id, source_document_id, file_count, skipped_count}.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    if not files:
+        return JSONResponse(
+            {"error": "업로드된 파일이 없습니다. 해석 저장소 폴더를 선택하세요."},
+            status_code=400,
+        )
+
+    import json as _json
+    import re as _re
+    import subprocess as _subprocess
+    from datetime import timezone as _timezone
+    from pathlib import PurePosixPath as _PurePosixPath
+
+    normalized_files: list[tuple[UploadFile, str]] = []
+    for uploaded in files:
+        raw_name = (uploaded.filename or "").replace("\\", "/").strip().strip("/")
+        if not raw_name:
+            continue
+        normalized_files.append((uploaded, raw_name))
+
+    if not normalized_files:
+        return JSONResponse(
+            {"error": "유효한 파일 경로를 찾지 못했습니다."},
+            status_code=400,
+        )
+
+    # 폴더 루트 접두사(예: interp_xxx/) 추정
+    root_candidates = {name.split("/", 1)[0] for _, name in normalized_files if "/" in name}
+    root_prefix = next(iter(root_candidates)) if len(root_candidates) == 1 else ""
+
+    manifest_file: UploadFile | None = None
+    for uploaded, name in normalized_files:
+        if name.endswith("/manifest.json") or name == "manifest.json":
+            manifest_file = uploaded
+            break
+
+    if manifest_file is None:
+        return JSONResponse(
+            {"error": "manifest.json이 없습니다. 해석 저장소 루트 폴더를 선택하세요."},
+            status_code=400,
+        )
+
+    try:
+        manifest_raw = (await manifest_file.read()).decode("utf-8")
+        manifest = _json.loads(manifest_raw)
+    except UnicodeDecodeError:
+        return JSONResponse(
+            {"error": "manifest.json 인코딩이 UTF-8이 아닙니다."},
+            status_code=400,
+        )
+    except _json.JSONDecodeError as e:
+        return JSONResponse(
+            {"error": f"manifest.json 파싱 실패: {e}"},
+            status_code=400,
+        )
+
+    interp_id = manifest.get("interpretation_id")
+    source_document_id = manifest.get("source_document_id")
+
+    if not isinstance(interp_id, str) or not interp_id:
+        return JSONResponse(
+            {"error": "manifest.json의 interpretation_id가 누락되었습니다."},
+            status_code=400,
+        )
+    if not _re.match(r"^[a-z][a-z0-9_]{0,63}$", interp_id):
+        return JSONResponse(
+            {
+                "error": (
+                    f"해석 저장소 ID 형식이 올바르지 않습니다: '{interp_id}'\n"
+                    "→ 해결: 영문 소문자로 시작하고, 소문자·숫자·밑줄만 사용하세요."
+                )
+            },
+            status_code=400,
+        )
+
+    if not isinstance(source_document_id, str) or not source_document_id:
+        return JSONResponse(
+            {"error": "manifest.json의 source_document_id가 누락되었습니다."},
+            status_code=400,
+        )
+
+    source_manifest = _library_path / "documents" / source_document_id / "manifest.json"
+    if not source_manifest.exists():
+        return JSONResponse(
+            {
+                "error": (
+                    f"원본 문헌을 찾을 수 없습니다: {source_document_id}\n"
+                    "→ 해결: 같은 서고에 해당 문헌을 먼저 준비한 뒤 다시 시도하세요."
+                )
+            },
+            status_code=404,
+        )
+
+    target_interp_path = _library_path / "interpretations" / interp_id
+
+    # ── 이미 존재하면: 파일 건드리지 않고 등록만 확인하고 끝 ──
+    if target_interp_path.exists():
+        _register_interp_in_library(
+            _library_path, interp_id, source_document_id, manifest.get("title"),
+        )
+        return {
+            "status": "success",
+            "interp_id": interp_id,
+            "source_document_id": source_document_id,
+            "file_count": 0,
+            "skipped_count": 0,
+            "message": "이미 존재하는 해석 저장소를 불러왔습니다.",
+        }
+
+    # ── 새로 가져오기: 파일 쓰기 ──
+    written_count = 0
+    skipped_count = 0
+
+    try:
+        target_interp_path.mkdir(parents=True, exist_ok=False)
+
+        for uploaded, original_name in normalized_files:
+            rel_name = original_name
+            if root_prefix and rel_name.startswith(root_prefix + "/"):
+                rel_name = rel_name[len(root_prefix) + 1:]
+
+            if not rel_name:
+                continue
+
+            posix_path = _PurePosixPath(rel_name)
+            if posix_path.is_absolute() or ".." in posix_path.parts:
+                raise ValueError(f"잘못된 파일 경로가 포함되어 있습니다: {original_name}")
+
+            # 안전 규칙: .git 메타데이터는 가져오지 않는다.
+            if ".git" in posix_path.parts:
+                skipped_count += 1
+                continue
+
+            content = await uploaded.read()
+            target_file = target_interp_path.joinpath(*posix_path.parts)
+            target_file.parent.mkdir(parents=True, exist_ok=True)
+            target_file.write_bytes(content)
+            written_count += 1
+
+        # manifest는 파싱 성공본으로 최종 저장 (손상 업로드 방지)
+        target_manifest = target_interp_path / "manifest.json"
+        target_manifest.write_text(
+            _json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        # dependency.json이 없는 구버전/부분 폴더를 위해 최소값 생성
+        dependency_path = target_interp_path / "dependency.json"
+        if not dependency_path.exists():
+            fallback_dependency = {
+                "interpretation_id": interp_id,
+                "interpreter": manifest.get("interpreter", {"type": "human", "name": None}),
+                "source": {
+                    "document_id": source_document_id,
+                    "remote": None,
+                    "base_commit": "no_git",
+                },
+                "tracked_files": [],
+                "last_checked": datetime.now(_timezone.utc).isoformat(),
+                "dependency_status": "current",
+            }
+            dependency_path.write_text(
+                _json.dumps(fallback_dependency, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+        # .gitignore 자동 보강
+        gitignore_path = target_interp_path / ".gitignore"
+        if not gitignore_path.exists():
+            gitignore_path.write_text(
+                (
+                    "# 안전 규칙: 저장소 내부 Git 메타데이터는 절대 추적하지 않는다.\n"
+                    ".git\n"
+                    ".git/\n"
+                    "**/.git\n"
+                    "**/.git/**\n"
+                    "\n"
+                    "# 임시/캐시 파일\n"
+                    "__pycache__/\n"
+                    "*.py[cod]\n"
+                    "*.tmp\n"
+                    "*.temp\n"
+                    "\n"
+                    "# 에디터/OS 잡파일\n"
+                    ".DS_Store\n"
+                    "Thumbs.db\n"
+                    ".vscode/\n"
+                    ".idea/\n"
+                ),
+                encoding="utf-8",
+            )
+
+        # Git 저장소가 없으면 초기화
+        if not (target_interp_path / ".git").exists():
+            init_proc = _subprocess.run(
+                ["git", "init"],
+                cwd=str(target_interp_path),
+                capture_output=True,
+                text=True,
+            )
+            if init_proc.returncode == 0:
+                _subprocess.run(["git", "add", "."], cwd=str(target_interp_path), capture_output=True)
+                _subprocess.run(
+                    ["git", "commit", "-m", f"feat: 해석 저장소 폴더 가져오기 — {interp_id}"],
+                    cwd=str(target_interp_path),
+                    capture_output=True,
+                    text=True,
+                )
+
+        _register_interp_in_library(
+            _library_path, interp_id, source_document_id, manifest.get("title"),
+        )
+
+        return {
+            "status": "success",
+            "interp_id": interp_id,
+            "source_document_id": source_document_id,
+            "file_count": written_count,
+            "skipped_count": skipped_count,
+        }
+
+    except ValueError as e:
+        shutil.rmtree(target_interp_path, ignore_errors=True)
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        shutil.rmtree(target_interp_path, ignore_errors=True)
+        return JSONResponse(
+            {"error": f"해석 저장소 폴더 가져오기 실패: {e}"},
+            status_code=500,
+        )
+
+
+def _register_interp_in_library(
+    library_path: Path, interp_id: str, source_document_id: str, title: str | None,
+):
+    """library_manifest.json에 해석 저장소 항목을 등록한다 (이미 있으면 무시)."""
+    import json as _json
+    manifest_path = library_path / "library_manifest.json"
+    try:
+        if manifest_path.exists():
+            lib_manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
+        else:
+            lib_manifest = {"documents": [], "interpretations": []}
+
+        interps = lib_manifest.setdefault("interpretations", [])
+        if not any(x.get("interpretation_id") == interp_id for x in interps):
+            interps.append({
+                "interpretation_id": interp_id,
+                "source_document_id": source_document_id,
+                "title": title,
+                "path": f"interpretations/{interp_id}",
+            })
+            manifest_path.write_text(
+                _json.dumps(lib_manifest, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+    except Exception:
+        pass
 
 
 # ===========================================================================

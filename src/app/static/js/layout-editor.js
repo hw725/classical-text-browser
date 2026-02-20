@@ -647,6 +647,12 @@ function _initPropsEvents() {
   if (saveBtn) {
     saveBtn.addEventListener("click", _saveLayout);
   }
+
+  // 리셋 버튼: 현재 페이지의 모든 레이아웃 블록 삭제
+  const resetBtn = document.getElementById("layout-reset-btn");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", _resetAllBlocks);
+  }
 }
 
 
@@ -764,6 +770,50 @@ function _updateBlockList() {
 
     listEl.appendChild(item);
   });
+}
+
+
+/* ──────────────────────────
+   전체 리셋: 현재 페이지의 모든 레이아웃 블록 삭제
+   ────────────────────────── */
+
+/**
+ * 현재 페이지의 모든 레이아웃 블록을 삭제하고 빈 레이아웃으로 저장한다.
+ *
+ * 왜 이렇게 하는가: 레이아웃을 처음부터 다시 그리고 싶을 때,
+ *   개별 블록 삭제를 반복하는 대신 한 번에 모두 삭제할 수 있다.
+ *   블록 배열을 비우고 PUT API로 빈 레이아웃을 서버에 저장한다.
+ *   삭제 전 confirm()으로 사용자 확인을 받아 실수를 방지한다.
+ */
+async function _resetAllBlocks() {
+  const { docId, partId, pageNum } = viewerState;
+  if (!docId || !partId || !pageNum) {
+    alert("문헌과 페이지가 선택되어야 합니다.");
+    return;
+  }
+
+  if (layoutState.blocks.length === 0) {
+    alert("삭제할 레이아웃 블록이 없습니다.");
+    return;
+  }
+
+  if (!confirm(
+    `현재 페이지의 레이아웃 블록 ${layoutState.blocks.length}개를 모두 삭제합니다.\n이 작업은 되돌릴 수 없습니다. 계속하시겠습니까?`
+  )) return;
+
+  // 블록 배열을 비우고 서버에 빈 레이아웃 저장
+  layoutState.blocks = [];
+  layoutState.selectedBlockId = null;
+  layoutState.isDirty = true;
+
+  try {
+    await _saveLayout();
+    _redrawOverlay();
+    _updatePropsForm();
+    _updateBlockList();
+  } catch (e) {
+    alert(`레이아웃 리셋 실패: ${e.message}`);
+  }
 }
 
 

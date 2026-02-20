@@ -54,6 +54,10 @@ function initCitationEditor() {
 
   const editClose = document.getElementById("cite-edit-close-btn");
   if (editClose) editClose.addEventListener("click", _closeCiteEditPanel);
+
+  // 리셋 버튼: 현재 페이지의 모든 인용 마크 삭제
+  const resetBtn = document.getElementById("cite-reset-btn");
+  if (resetBtn) resetBtn.addEventListener("click", _resetAllCiteMarks);
 }
 
 
@@ -752,6 +756,78 @@ async function _exportSelectedCitations() {
     }
   } catch (e) {
     console.error("인용 내보내기 실패:", e);
+  }
+}
+
+
+/* ────────────────────────────────────
+   전체 리셋: 현재 페이지의 모든 인용 마크 삭제
+   ──────────────────────────────────── */
+
+/**
+ * 현재 페이지의 모든 인용 마크를 삭제한다.
+ *
+ * 왜 이렇게 하는가: 인용 마크를 처음부터 다시 지정하고 싶을 때,
+ *   개별 삭제를 반복하는 대신 한 번에 모두 삭제할 수 있다.
+ *   삭제 전 confirm()으로 사용자 확인을 받아 실수를 방지한다.
+ */
+async function _resetAllCiteMarks() {
+  const vs = typeof viewerState !== "undefined" ? viewerState : null;
+  const is = typeof interpState !== "undefined" ? interpState : null;
+  if (!vs || !vs.pageNum) {
+    alert("페이지가 선택되어야 합니다.");
+    return;
+  }
+
+  const interpId = (is && is.interpId) || "default";
+
+  if (citeState.marks.length === 0) {
+    alert("삭제할 인용 마크가 없습니다.");
+    return;
+  }
+
+  if (!confirm(
+    `현재 페이지의 인용 마크 ${citeState.marks.length}건을 모두 삭제합니다.\n이 작업은 되돌릴 수 없습니다. 계속하시겠습니까?`
+  )) return;
+
+  let success = 0;
+  let fail = 0;
+
+  // 마크 ID 목록을 미리 복사 (삭제 중 배열 변경 방지)
+  const ids = citeState.marks.map(m => m.id);
+
+  for (const markId of ids) {
+    try {
+      const resp = await fetch(
+        `/api/interpretations/${interpId}/pages/${vs.pageNum}/citation-marks/${markId}`,
+        { method: "DELETE" }
+      );
+      if (resp.ok || resp.status === 204) {
+        success++;
+      } else {
+        fail++;
+      }
+    } catch {
+      fail++;
+    }
+  }
+
+  // 로컬 상태 초기화 및 UI 갱신
+  citeState.selectedMarkId = null;
+  citeState.resolvedContext = null;
+  const editPanel = document.getElementById("cite-edit-panel");
+  if (editPanel) editPanel.style.display = "none";
+  const ctxPanel = document.getElementById("cite-context-panel");
+  if (ctxPanel) ctxPanel.style.display = "none";
+
+  await _loadCiteMarks();
+  _renderCiteSourceText();
+  _renderCiteMarkList();
+
+  if (fail > 0) {
+    alert(`인용 마크 리셋 완료: 성공 ${success}건, 실패 ${fail}건`);
+  } else {
+    _showCiteSaveStatus(`인용 마크 ${success}건 삭제 완료`);
   }
 }
 

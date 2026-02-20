@@ -19,60 +19,80 @@
    ────────────────────────────────────── */
 
 const LAYER_COLORS = {
-    // 원본 저장소
-    L1: '#94a3b8',           // slate
-    L2: '#60a5fa',           // blue
-    L3: '#818cf8',           // indigo
-    L4: '#2563eb',           // blue-dark
-    // 해석 저장소
-    L5: '#34d399',           // emerald
-    L5_punctuation: '#34d399',
-    L5_hyeonto: '#10b981',   // green
-    L6: '#f59e0b',           // amber
-    L7: '#f97316',           // orange
-    unknown: '#6b7280',      // gray
+  // 원본 저장소
+  L1: "#94a3b8", // slate
+  L2: "#60a5fa", // blue
+  L3: "#818cf8", // indigo
+  L4: "#2563eb", // blue-dark
+  // 해석 저장소
+  L5: "#34d399", // emerald
+  L5_punctuation: "#34d399",
+  L5_hyeonto: "#10b981", // green
+  L6: "#f59e0b", // amber
+  L7: "#f97316", // orange
+  unknown: "#6b7280", // gray
 };
 
 const LINK_STYLES = {
-    explicit: { stroke: '#64748b', dasharray: 'none', width: 1.5 },
-    estimated: { stroke: '#94a3b8', dasharray: '6,3', width: 1 },
+  explicit: { stroke: "#64748b", dasharray: "none", width: 1.5 },
+  estimated: { stroke: "#94a3b8", dasharray: "6,3", width: 1 },
 };
-
 
 /* ──────────────────────────────────────
    2. 레이아웃 계산
    ────────────────────────────────────── */
 
 /**
- * 두 저장소 커밋을 시간순 통합 정렬하여 Y좌표를 계산한다.
+ * 두 저장소 커밋을 시간순 통합 정렬하여 X좌표를 계산한다.
  *
  * 입력: API 응답 데이터 { original, interpretation }
  * 출력: Map<hash, { x, y, lane }>
  */
 function calculateLayout(data) {
-    const NODE_GAP = 46;       // 커밋 간 Y 간격 (px)
-    const TOP_MARGIN = 40;     // 상단 여백 (레인 라벨 아래)
-    const LANE_ORIGINAL = 140; // 원본 레인 X좌표
-    const LANE_INTERP = 420;   // 해석 레인 X좌표
+  const NODE_GAP = 56; // 커밋 간 X 간격 (px)
+  const LEFT_MARGIN = 70; // 좌측 여백
+  const RIGHT_MARGIN = 40; // 우측 여백
+  const LANE_LABEL_Y = 18; // 레인 라벨 Y
+  const LANE_ORIGINAL_Y = 68; // 원본 레인 Y
+  const LANE_INTERP_Y = 148; // 해석 레인 Y
 
-    // 모든 커밋을 timestamp 역순 통합 정렬 (최신 먼저)
-    const allCommits = [
-        ...data.original.commits.map(c => ({ ...c, lane: 'original' })),
-        ...data.interpretation.commits.map(c => ({ ...c, lane: 'interpretation' })),
-    ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  // 모든 커밋을 timestamp 오름차순 통합 정렬 (과거 → 최신)
+  const allCommits = [
+    ...data.original.commits.map((c) => ({ ...c, lane: "original" })),
+    ...data.interpretation.commits.map((c) => ({
+      ...c,
+      lane: "interpretation",
+    })),
+  ].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-    const positions = new Map();
-    allCommits.forEach((commit, index) => {
-        positions.set(commit.hash, {
-            x: commit.lane === 'original' ? LANE_ORIGINAL : LANE_INTERP,
-            y: index * NODE_GAP + TOP_MARGIN,
-            lane: commit.lane,
-        });
+  const positions = new Map();
+  allCommits.forEach((commit, index) => {
+    positions.set(commit.hash, {
+      x: index * NODE_GAP + LEFT_MARGIN,
+      y: commit.lane === "original" ? LANE_ORIGINAL_Y : LANE_INTERP_Y,
+      lane: commit.lane,
     });
+  });
 
-    return { positions, allCommits, LANE_ORIGINAL, LANE_INTERP, NODE_GAP, TOP_MARGIN };
+  const totalWidth = Math.max(
+    580,
+    allCommits.length * NODE_GAP + LEFT_MARGIN + RIGHT_MARGIN,
+  );
+  const totalHeight = 196;
+
+  return {
+    positions,
+    allCommits,
+    NODE_GAP,
+    LEFT_MARGIN,
+    RIGHT_MARGIN,
+    LANE_LABEL_Y,
+    LANE_ORIGINAL_Y,
+    LANE_INTERP_Y,
+    totalWidth,
+    totalHeight,
+  };
 }
-
 
 /* ──────────────────────────────────────
    3. d3.js SVG 렌더링
@@ -85,150 +105,177 @@ function calculateLayout(data) {
  * data: API 응답 데이터
  */
 function renderLadderGraph(container, data) {
-    // 기존 SVG 제거
-    container.innerHTML = '';
+  // 기존 SVG 제거
+  container.innerHTML = "";
 
-    if (!data.original.commits.length && !data.interpretation.commits.length) {
-        container.innerHTML = '<div class="placeholder">커밋이 없습니다</div>';
-        return;
-    }
+  if (!data.original.commits.length && !data.interpretation.commits.length) {
+    container.innerHTML = '<div class="placeholder">커밋이 없습니다</div>';
+    return;
+  }
 
-    const layout = calculateLayout(data);
-    const { positions, allCommits, LANE_ORIGINAL, LANE_INTERP, TOP_MARGIN } = layout;
+  const layout = calculateLayout(data);
+  const {
+    positions,
+    allCommits,
+    LEFT_MARGIN,
+    RIGHT_MARGIN,
+    LANE_LABEL_Y,
+    LANE_ORIGINAL_Y,
+    LANE_INTERP_Y,
+    totalWidth,
+    totalHeight,
+  } = layout;
 
-    const totalHeight = allCommits.length * layout.NODE_GAP + TOP_MARGIN + 30;
-    const svgWidth = 580;
+  const svg = d3
+    .select(container)
+    .append("svg")
+    .attr("width", totalWidth)
+    .attr("height", totalHeight)
+    .attr("class", "git-graph-svg");
 
-    const svg = d3.select(container)
-        .append('svg')
-        .attr('width', svgWidth)
-        .attr('height', totalHeight)
-        .attr('class', 'git-graph-svg');
+  // 화살표 마커 정의
+  svg
+    .append("defs")
+    .append("marker")
+    .attr("id", "arrowhead")
+    .attr("viewBox", "0 0 10 10")
+    .attr("refX", 8)
+    .attr("refY", 5)
+    .attr("markerWidth", 6)
+    .attr("markerHeight", 6)
+    .attr("orient", "auto")
+    .append("path")
+    .attr("d", "M 0 0 L 10 5 L 0 10 z")
+    .attr("fill", "#64748b");
 
-    // 화살표 마커 정의
-    svg.append('defs').append('marker')
-        .attr('id', 'arrowhead')
-        .attr('viewBox', '0 0 10 10')
-        .attr('refX', 8)
-        .attr('refY', 5)
-        .attr('markerWidth', 6)
-        .attr('markerHeight', 6)
-        .attr('orient', 'auto')
-        .append('path')
-        .attr('d', 'M 0 0 L 10 5 L 0 10 z')
-        .attr('fill', '#64748b');
+  // ── 레인 라벨 ──
+  svg
+    .append("text")
+    .attr("x", LEFT_MARGIN)
+    .attr("y", LANE_LABEL_Y)
+    .attr("text-anchor", "start")
+    .attr("class", "git-graph-lane-label")
+    .text("원본 (L1~L4)");
 
-    // ── 레인 라벨 ──
-    svg.append('text')
-        .attr('x', LANE_ORIGINAL)
-        .attr('y', 16)
-        .attr('text-anchor', 'middle')
-        .attr('class', 'git-graph-lane-label')
-        .text('원본 (L1~L4)');
+  svg
+    .append("text")
+    .attr("x", LEFT_MARGIN)
+    .attr("y", LANE_INTERP_Y - 24)
+    .attr("text-anchor", "start")
+    .attr("class", "git-graph-lane-label")
+    .text("해석 (L5~L7)");
 
-    svg.append('text')
-        .attr('x', LANE_INTERP)
-        .attr('y', 16)
-        .attr('text-anchor', 'middle')
-        .attr('class', 'git-graph-lane-label')
-        .text('해석 (L5~L7)');
+  // ── 레인 가로선 (배경) ──
+  svg
+    .append("line")
+    .attr("x1", LEFT_MARGIN - 12)
+    .attr("y1", LANE_ORIGINAL_Y)
+    .attr("x2", totalWidth - RIGHT_MARGIN + 8)
+    .attr("y2", LANE_ORIGINAL_Y)
+    .attr("class", "git-graph-lane-line");
 
-    // ── 레인 세로선 (배경) ──
-    svg.append('line')
-        .attr('x1', LANE_ORIGINAL).attr('y1', TOP_MARGIN - 10)
-        .attr('x2', LANE_ORIGINAL).attr('y2', totalHeight - 10)
-        .attr('class', 'git-graph-lane-line');
+  svg
+    .append("line")
+    .attr("x1", LEFT_MARGIN - 12)
+    .attr("y1", LANE_INTERP_Y)
+    .attr("x2", totalWidth - RIGHT_MARGIN + 8)
+    .attr("y2", LANE_INTERP_Y)
+    .attr("class", "git-graph-lane-line");
 
-    svg.append('line')
-        .attr('x1', LANE_INTERP).attr('y1', TOP_MARGIN - 10)
-        .attr('x2', LANE_INTERP).attr('y2', totalHeight - 10)
-        .attr('class', 'git-graph-lane-line');
+  // ── 가로 연결선 (같은 레인 내 인접 커밋) ──
+  const origCommits = allCommits.filter((c) => c.lane === "original");
+  const interpCommits = allCommits.filter((c) => c.lane === "interpretation");
 
-    // ── 세로 연결선 (같은 레인 내 인접 커밋) ──
-    const origCommits = allCommits.filter(c => c.lane === 'original');
-    const interpCommits = allCommits.filter(c => c.lane === 'interpretation');
+  _renderLaneLinks(svg, origCommits, positions);
+  _renderLaneLinks(svg, interpCommits, positions);
 
-    _renderVerticalLinks(svg, origCommits, positions);
-    _renderVerticalLinks(svg, interpCommits, positions);
+  // ── 레인 간 연결선 (의존 관계) ──
+  const linkSelection = svg
+    .selectAll(".git-graph-link")
+    .data(data.links)
+    .enter()
+    .append("path")
+    .attr("class", "git-graph-link")
+    .each(function (d) {
+      const origPos = positions.get(d.original_hash);
+      const interpPos = positions.get(d.interp_hash);
+      if (!origPos || !interpPos) return;
 
-    // ── 가로 연결선 (의존 관계) ──
-    const linkSelection = svg.selectAll('.git-graph-link')
-        .data(data.links)
-        .enter()
-        .append('line')
-        .attr('class', 'git-graph-link')
-        .each(function (d) {
-            const origPos = positions.get(d.original_hash);
-            const interpPos = positions.get(d.interp_hash);
-            if (!origPos || !interpPos) return;
+      const style = LINK_STYLES[d.match_type] || LINK_STYLES.estimated;
+      const startX = origPos.x;
+      const startY = origPos.y + 8;
+      const endX = interpPos.x;
+      const endY = interpPos.y - 8;
+      const elbowY = startY + (endY - startY) / 2;
+      const path = `M ${startX} ${startY} L ${startX} ${elbowY} L ${endX} ${elbowY} L ${endX} ${endY}`;
 
-            const style = LINK_STYLES[d.match_type] || LINK_STYLES.estimated;
-
-            d3.select(this)
-                .attr('x1', origPos.x + 8)
-                .attr('y1', origPos.y)
-                .attr('x2', interpPos.x - 8)
-                .attr('y2', interpPos.y)
-                .attr('stroke', style.stroke)
-                .attr('stroke-width', style.width)
-                .attr('stroke-dasharray', style.dasharray)
-                .attr('marker-end', 'url(#arrowhead)');
-        });
-
-    // ── 커밋 노드 ──
-    const nodeData = allCommits.map(c => {
-        const pos = positions.get(c.hash);
-        return { ...c, cx: pos.x, cy: pos.y };
+      d3.select(this)
+        .attr("d", path)
+        .attr("fill", "none")
+        .attr("stroke", style.stroke)
+        .attr("stroke-width", style.width)
+        .attr("stroke-dasharray", style.dasharray)
+        .attr("marker-end", "url(#arrowhead)");
     });
 
-    const nodeGroup = svg.selectAll('.git-graph-node')
-        .data(nodeData)
-        .enter()
-        .append('g')
-        .attr('class', 'git-graph-node')
-        .attr('transform', d => `translate(${d.cx}, ${d.cy})`);
+  // ── 커밋 노드 ──
+  const nodeData = allCommits.map((c) => {
+    const pos = positions.get(c.hash);
+    return { ...c, cx: pos.x, cy: pos.y };
+  });
 
-    // 원 (색상은 layers_affected 첫 번째 기준)
-    nodeGroup.append('circle')
-        .attr('r', 7)
-        .attr('fill', d => {
-            const layer = (d.layers_affected && d.layers_affected[0]) || 'unknown';
-            return LAYER_COLORS[layer] || LAYER_COLORS.unknown;
-        })
-        .attr('stroke', '#fff')
-        .attr('stroke-width', 1.5);
+  const nodeGroup = svg
+    .selectAll(".git-graph-node")
+    .data(nodeData)
+    .enter()
+    .append("g")
+    .attr("class", "git-graph-node")
+    .attr("transform", (d) => `translate(${d.cx}, ${d.cy})`);
 
-    // 짧은 해시 텍스트
-    nodeGroup.append('text')
-        .attr('x', d => d.lane === 'original' ? -14 : 14)
-        .attr('y', 4)
-        .attr('text-anchor', d => d.lane === 'original' ? 'end' : 'start')
-        .attr('class', 'git-graph-hash')
-        .text(d => d.short_hash);
+  // 원 (색상은 layers_affected 첫 번째 기준)
+  nodeGroup
+    .append("circle")
+    .attr("r", 7)
+    .attr("fill", (d) => {
+      const layer = (d.layers_affected && d.layers_affected[0]) || "unknown";
+      return LAYER_COLORS[layer] || LAYER_COLORS.unknown;
+    })
+    .attr("stroke", "#fff")
+    .attr("stroke-width", 1.5);
 
-    // ── 인터랙션 ──
-    _addTooltip(nodeGroup);
-    _addNodeClick(nodeGroup);
-    _addLinkHighlight(linkSelection, nodeGroup);
+  // 짧은 해시 텍스트
+  nodeGroup
+    .append("text")
+    .attr("x", 0)
+    .attr("y", (d) => (d.lane === "original" ? -12 : 18))
+    .attr("text-anchor", "middle")
+    .attr("class", "git-graph-hash")
+    .text((d) => d.short_hash);
+
+  // ── 인터랙션 ──
+  _addTooltip(nodeGroup);
+  _addNodeClick(nodeGroup);
+  _addLinkHighlight(linkSelection, nodeGroup);
 }
-
 
 /**
- * 같은 레인 내 인접 커밋 간 세로 연결선을 그린다.
+ * 같은 레인 내 인접 커밋 간 가로 연결선을 그린다.
  */
-function _renderVerticalLinks(svg, commits, positions) {
-    for (let i = 0; i < commits.length - 1; i++) {
-        const from = positions.get(commits[i].hash);
-        const to = positions.get(commits[i + 1].hash);
-        if (!from || !to) continue;
+function _renderLaneLinks(svg, commits, positions) {
+  for (let i = 0; i < commits.length - 1; i++) {
+    const from = positions.get(commits[i].hash);
+    const to = positions.get(commits[i + 1].hash);
+    if (!from || !to) continue;
 
-        svg.append('line')
-            .attr('x1', from.x).attr('y1', from.y + 7)
-            .attr('x2', to.x).attr('y2', to.y - 7)
-            .attr('class', 'git-graph-vertical');
-    }
+    svg
+      .append("line")
+      .attr("x1", from.x + 7)
+      .attr("y1", from.y)
+      .attr("x2", to.x - 7)
+      .attr("y2", to.y)
+      .attr("class", "git-graph-vertical");
+  }
 }
-
 
 /* ──────────────────────────────────────
    4. 인터랙션
@@ -238,117 +285,124 @@ function _renderVerticalLinks(svg, commits, positions) {
  * 커밋 노드 호버 → 툴팁 표시.
  */
 function _addTooltip(nodeSelection) {
-    // 툴팁 요소가 없으면 생성
-    let tooltip = document.getElementById('git-graph-tooltip');
-    if (!tooltip) {
-        tooltip = document.createElement('div');
-        tooltip.id = 'git-graph-tooltip';
-        tooltip.className = 'git-graph-tooltip';
-        document.body.appendChild(tooltip);
-    }
+  // 툴팁 요소가 없으면 생성
+  let tooltip = document.getElementById("git-graph-tooltip");
+  if (!tooltip) {
+    tooltip = document.createElement("div");
+    tooltip.id = "git-graph-tooltip";
+    tooltip.className = "git-graph-tooltip";
+    document.body.appendChild(tooltip);
+  }
 
-    nodeSelection
-        .on('mouseenter', function (event, d) {
-            const matchLabel = d.base_match_type === 'explicit' ? '명시적' :
-                               d.base_match_type === 'estimated' ? '추정' : '';
-            const baseInfo = d.base_original_hash
-                ? `<br><small>기반 원본: ${d.base_original_hash.substring(0, 7)} (${matchLabel})</small>`
-                : '';
-            const layers = (d.layers_affected || []).join(', ');
+  nodeSelection
+    .on("mouseenter", function (event, d) {
+      const matchLabel =
+        d.base_match_type === "explicit"
+          ? "명시적"
+          : d.base_match_type === "estimated"
+            ? "추정"
+            : "";
+      const baseInfo = d.base_original_hash
+        ? `<br><small>기반 원본: ${d.base_original_hash.substring(0, 7)} (${matchLabel})</small>`
+        : "";
+      const layers = (d.layers_affected || []).join(", ");
 
-            tooltip.innerHTML =
-                `<strong>${d.short_hash}</strong><br>` +
-                `${_escapeHtml(d.message.split('\n')[0])}<br>` +
-                `<small>${_escapeHtml(d.author)} · ${_formatDate(d.timestamp)}</small><br>` +
-                `<small>레이어: ${layers}</small>` +
-                baseInfo;
-            tooltip.style.display = 'block';
-            tooltip.style.left = (event.pageX + 12) + 'px';
-            tooltip.style.top = (event.pageY - 10) + 'px';
-        })
-        .on('mousemove', function (event) {
-            tooltip.style.left = (event.pageX + 12) + 'px';
-            tooltip.style.top = (event.pageY - 10) + 'px';
-        })
-        .on('mouseleave', function () {
-            tooltip.style.display = 'none';
-        });
+      tooltip.innerHTML =
+        `<strong>${d.short_hash}</strong><br>` +
+        `${_escapeHtml(d.message.split("\n")[0])}<br>` +
+        `<small>${_escapeHtml(d.author)} · ${_formatDate(d.timestamp)}</small><br>` +
+        `<small>레이어: ${layers}</small>` +
+        baseInfo;
+      tooltip.style.display = "block";
+      tooltip.style.left = event.pageX + 12 + "px";
+      tooltip.style.top = event.pageY - 10 + "px";
+    })
+    .on("mousemove", function (event) {
+      tooltip.style.left = event.pageX + 12 + "px";
+      tooltip.style.top = event.pageY - 10 + "px";
+    })
+    .on("mouseleave", function () {
+      tooltip.style.display = "none";
+    });
 }
-
 
 /**
  * 커밋 노드 클릭 → 상세 패널 표시.
  */
 function _addNodeClick(nodeSelection) {
-    nodeSelection.on('click', function (event, d) {
-        const detail = document.getElementById('git-graph-detail');
-        const title = document.getElementById('git-graph-detail-title');
-        const body = document.getElementById('git-graph-detail-body');
-        if (!detail || !title || !body) return;
+  nodeSelection.on("click", function (event, d) {
+    const detail = document.getElementById("git-graph-detail");
+    const title = document.getElementById("git-graph-detail-title");
+    const body = document.getElementById("git-graph-detail-body");
+    if (!detail || !title || !body) return;
 
-        const layers = (d.layers_affected || []).join(', ');
-        const matchLabel = d.base_match_type === 'explicit' ? '명시적 매칭' :
-                           d.base_match_type === 'estimated' ? '타임스탬프 추정' : '';
-        const baseInfo = d.base_original_hash
-            ? `<div class="git-detail-row"><span class="git-detail-label">기반 원본</span><code>${d.base_original_hash.substring(0, 7)}</code> <span class="git-detail-match">${matchLabel}</span></div>`
-            : '';
+    const layers = (d.layers_affected || []).join(", ");
+    const matchLabel =
+      d.base_match_type === "explicit"
+        ? "명시적 매칭"
+        : d.base_match_type === "estimated"
+          ? "타임스탬프 추정"
+          : "";
+    const baseInfo = d.base_original_hash
+      ? `<div class="git-detail-row"><span class="git-detail-label">기반 원본</span><code>${d.base_original_hash.substring(0, 7)}</code> <span class="git-detail-match">${matchLabel}</span></div>`
+      : "";
 
-        title.textContent = `${d.short_hash} — ${d.message.split('\n')[0]}`;
-        body.innerHTML =
-            `<div class="git-detail-row"><span class="git-detail-label">해시</span><code>${d.hash}</code></div>` +
-            `<div class="git-detail-row"><span class="git-detail-label">작성자</span>${_escapeHtml(d.author)}</div>` +
-            `<div class="git-detail-row"><span class="git-detail-label">시간</span>${_formatDate(d.timestamp)}</div>` +
-            `<div class="git-detail-row"><span class="git-detail-label">레이어</span>${layers}</div>` +
-            baseInfo +
-            `<div class="git-detail-message"><pre>${_escapeHtml(d.message)}</pre></div>`;
+    title.textContent = `${d.short_hash} — ${d.message.split("\n")[0]}`;
+    body.innerHTML =
+      `<div class="git-detail-row"><span class="git-detail-label">해시</span><code>${d.hash}</code></div>` +
+      `<div class="git-detail-row"><span class="git-detail-label">작성자</span>${_escapeHtml(d.author)}</div>` +
+      `<div class="git-detail-row"><span class="git-detail-label">시간</span>${_formatDate(d.timestamp)}</div>` +
+      `<div class="git-detail-row"><span class="git-detail-label">레이어</span>${layers}</div>` +
+      baseInfo +
+      `<div class="git-detail-message"><pre>${_escapeHtml(d.message)}</pre></div>`;
 
-        detail.style.display = 'block';
-    });
+    detail.style.display = "block";
+  });
 }
-
 
 /**
  * 가로선 호버 → 연결된 노드만 하이라이트.
  */
 function _addLinkHighlight(linkSelection, nodeSelection) {
-    linkSelection
-        .on('mouseenter', function (event, d) {
-            nodeSelection.style('opacity', function (n) {
-                return (n.hash === d.original_hash || n.hash === d.interp_hash) ? 1 : 0.2;
-            });
-            linkSelection.style('opacity', function (l) {
-                return l === d ? 1 : 0.1;
-            });
-        })
-        .on('mouseleave', function () {
-            nodeSelection.style('opacity', 1);
-            linkSelection.style('opacity', 1);
-        });
+  linkSelection
+    .on("mouseenter", function (event, d) {
+      nodeSelection.style("opacity", function (n) {
+        return n.hash === d.original_hash || n.hash === d.interp_hash ? 1 : 0.2;
+      });
+      linkSelection.style("opacity", function (l) {
+        return l === d ? 1 : 0.1;
+      });
+    })
+    .on("mouseleave", function () {
+      nodeSelection.style("opacity", 1);
+      linkSelection.style("opacity", 1);
+    });
 }
-
 
 /* ──────────────────────────────────────
    5. 유틸리티
    ────────────────────────────────────── */
 
 function _escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text || '';
-    return div.innerHTML;
+  const div = document.createElement("div");
+  div.textContent = text || "";
+  return div.innerHTML;
 }
 
 function _formatDate(isoString) {
-    try {
-        const d = new Date(isoString);
-        return d.toLocaleString('ko-KR', {
-            year: 'numeric', month: '2-digit', day: '2-digit',
-            hour: '2-digit', minute: '2-digit',
-        });
-    } catch {
-        return isoString;
-    }
+  try {
+    const d = new Date(isoString);
+    return d.toLocaleString("ko-KR", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return isoString;
+  }
 }
-
 
 /* ──────────────────────────────────────
    6. 초기화 + 탭 전환
@@ -362,123 +416,140 @@ let _gitGraphInterpId = null;
  * workspace.js의 DOMContentLoaded에서 호출된다.
  */
 function initGitGraph() {
-    // 뷰 탭 전환
-    const tabs = document.querySelectorAll('.git-view-tab');
-    tabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-            tabs.forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
+  // 뷰 탭 전환
+  const tabs = document.querySelectorAll(".git-view-tab");
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      tabs.forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
 
-            const view = tab.dataset.view;
-            const simpleView = document.getElementById('git-simple-view');
-            const graphView = document.getElementById('git-graph-view');
-            const controls = document.getElementById('git-graph-controls');
+      const view = tab.dataset.view;
+      const simpleView = document.getElementById("git-simple-view");
+      const graphView = document.getElementById("git-graph-view");
+      const controls = document.getElementById("git-graph-controls");
 
-            if (view === 'simple') {
-                if (simpleView) simpleView.style.display = '';
-                if (graphView) graphView.style.display = 'none';
-                if (controls) controls.style.display = 'none';
-            } else {
-                if (simpleView) simpleView.style.display = 'none';
-                if (graphView) graphView.style.display = '';
-                if (controls) controls.style.display = '';
-                // 그래프 데이터 로드
-                if (_gitGraphInterpId) {
-                    loadGitGraph(_gitGraphInterpId);
-                }
-            }
-        });
+      if (view === "simple") {
+        if (simpleView) simpleView.style.display = "";
+        if (graphView) graphView.style.display = "none";
+        if (controls) controls.style.display = "none";
+      } else {
+        if (simpleView) simpleView.style.display = "none";
+        if (graphView) graphView.style.display = "";
+        if (controls) controls.style.display = "";
+        // 그래프 데이터 로드
+        if (_gitGraphInterpId) {
+          loadGitGraph(_gitGraphInterpId);
+        }
+      }
     });
+  });
 
-    // 상세 패널 닫기 버튼
-    const closeBtn = document.getElementById('git-graph-detail-close');
-    if (closeBtn) {
-        closeBtn.addEventListener('click', () => {
-            const detail = document.getElementById('git-graph-detail');
-            if (detail) detail.style.display = 'none';
-        });
-    }
-
-    // 브랜치 드롭다운 변경 시 그래프 갱신
-    const origBranch = document.getElementById('git-graph-orig-branch');
-    const interpBranch = document.getElementById('git-graph-interp-branch');
-    if (origBranch) origBranch.addEventListener('change', () => {
-        if (_gitGraphInterpId) loadGitGraph(_gitGraphInterpId);
+  // 상세 패널 닫기 버튼
+  const closeBtn = document.getElementById("git-graph-detail-close");
+  if (closeBtn) {
+    closeBtn.addEventListener("click", () => {
+      const detail = document.getElementById("git-graph-detail");
+      if (detail) detail.style.display = "none";
     });
-    if (interpBranch) interpBranch.addEventListener('change', () => {
-        if (_gitGraphInterpId) loadGitGraph(_gitGraphInterpId);
+  }
+
+  // 브랜치 드롭다운 변경 시 그래프 갱신
+  const origBranch = document.getElementById("git-graph-orig-branch");
+  const interpBranch = document.getElementById("git-graph-interp-branch");
+  if (origBranch)
+    origBranch.addEventListener("change", () => {
+      if (_gitGraphInterpId) loadGitGraph(_gitGraphInterpId);
+    });
+  if (interpBranch)
+    interpBranch.addEventListener("change", () => {
+      if (_gitGraphInterpId) loadGitGraph(_gitGraphInterpId);
     });
 }
-
 
 /**
  * 해석 저장소 ID를 설정한다.
  * workspace.js에서 해석 저장소 선택 시 호출.
  */
 function setGitGraphInterpId(interpId) {
-    _gitGraphInterpId = interpId;
+  _gitGraphInterpId = interpId;
 }
-
 
 /**
  * 그래프 데이터를 API에서 가져와 렌더링한다.
  */
 async function loadGitGraph(interpId) {
-    const container = document.getElementById('git-graph-container');
-    if (!container) return;
+  const container = document.getElementById("git-graph-container");
+  if (!container) return;
 
-    container.innerHTML = '<div class="placeholder">그래프 데이터 로딩 중...</div>';
+  container.innerHTML =
+    '<div class="placeholder">그래프 데이터 로딩 중...</div>';
 
-    const origBranch = document.getElementById('git-graph-orig-branch')?.value || 'main';
-    const interpBranch = document.getElementById('git-graph-interp-branch')?.value || 'main';
+  const origBranch =
+    document.getElementById("git-graph-orig-branch")?.value || "auto";
+  const interpBranch =
+    document.getElementById("git-graph-interp-branch")?.value || "auto";
 
-    try {
-        const params = new URLSearchParams({
-            original_branch: origBranch,
-            interp_branch: interpBranch,
-            limit: '50',
-            offset: '0',
-        });
+  try {
+    const params = new URLSearchParams({
+      original_branch: origBranch,
+      interp_branch: interpBranch,
+      limit: "50",
+      offset: "0",
+    });
 
-        const resp = await fetch(`/api/interpretations/${interpId}/git-graph?${params}`);
-        if (!resp.ok) {
-            const err = await resp.json().catch(() => ({}));
-            container.innerHTML = `<div class="placeholder">오류: ${err.error || resp.statusText}</div>`;
-            return;
-        }
-
-        const data = await resp.json();
-
-        // 브랜치 드롭다운 업데이트
-        _updateBranchSelect('git-graph-orig-branch', data.original.branches_available, data.original.branch);
-        _updateBranchSelect('git-graph-interp-branch', data.interpretation.branches_available, data.interpretation.branch);
-
-        // d3.js 렌더링
-        renderLadderGraph(container, data);
-
-    } catch (err) {
-        container.innerHTML = `<div class="placeholder">그래프 로딩 실패: ${err.message}</div>`;
+    const resp = await fetch(
+      `/api/interpretations/${interpId}/git-graph?${params}`,
+    );
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      container.innerHTML = `<div class="placeholder">오류: ${err.error || resp.statusText}</div>`;
+      return;
     }
-}
 
+    const data = await resp.json();
+
+    // 브랜치 드롭다운 업데이트
+    _updateBranchSelect(
+      "git-graph-orig-branch",
+      data.original.branches_available,
+      data.original.branch,
+    );
+    _updateBranchSelect(
+      "git-graph-interp-branch",
+      data.interpretation.branches_available,
+      data.interpretation.branch,
+    );
+
+    // d3.js 렌더링
+    renderLadderGraph(container, data);
+  } catch (err) {
+    container.innerHTML = `<div class="placeholder">그래프 로딩 실패: ${err.message}</div>`;
+  }
+}
 
 /**
  * 브랜치 드롭다운을 업데이트한다.
  */
 function _updateBranchSelect(selectId, branches, current) {
-    const sel = document.getElementById(selectId);
-    if (!sel || !branches || !branches.length) return;
+  const sel = document.getElementById(selectId);
+  if (!sel || !branches || !branches.length) return;
 
-    // 현재 옵션과 동일하면 스킵
-    const existing = Array.from(sel.options).map(o => o.value);
-    if (existing.length === branches.length && existing.every((v, i) => v === branches[i])) return;
+  // 현재 옵션과 동일하면 스킵
+  const existing = Array.from(sel.options).map((o) => o.value);
+  if (
+    existing.length === branches.length &&
+    existing.every((v, i) => v === branches[i])
+  ) {
+    sel.value = branches.includes(current) ? current : branches[0];
+    return;
+  }
 
-    sel.innerHTML = '';
-    branches.forEach(b => {
-        const opt = document.createElement('option');
-        opt.value = b;
-        opt.textContent = b;
-        if (b === current) opt.selected = true;
-        sel.appendChild(opt);
-    });
+  sel.innerHTML = "";
+  branches.forEach((b) => {
+    const opt = document.createElement("option");
+    opt.value = b;
+    opt.textContent = b;
+    if (b === current) opt.selected = true;
+    sel.appendChild(opt);
+  });
 }
