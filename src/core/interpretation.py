@@ -166,7 +166,9 @@ def create_interpretation(
 
     # --- git init + 초기 커밋 ---
     repo = git.Repo.init(interp_path)
-    repo.index.add(["."])
+    # repo.git.add()는 실제 git 바이너리를 호출 — .git/ 내부를 추가하지 않음
+    # (repo.index.add(["."])는 GitPython 저수준 API라 .git/도 추가해버림)
+    repo.git.add("-A")
     try:
         repo.index.commit(f"feat: 해석 저장소 생성 — {title or interp_id}")
     except git.HookExecutionError:
@@ -661,7 +663,9 @@ def git_commit_interpretation(interp_path: str | Path, message: str) -> dict:
     if not repo.is_dirty(untracked_files=True):
         return {"committed": False, "message": "변경사항 없음"}
 
-    repo.index.add(["."])
+    # repo.git.add()는 실제 git 바이너리를 호출 — .git/ 내부를 추가하지 않음
+    # (repo.index.add(["."])는 GitPython 저수준 API라 .git/도 추가해버림)
+    repo.git.add("-A")
 
     # Phase 12-1: Based-On-Original trailer 추가
     full_message = _append_based_on_trailer(interp_path, message)

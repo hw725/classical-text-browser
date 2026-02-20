@@ -151,7 +151,7 @@ _src_dir = str(Path(__file__).resolve().parent.parent)
 if _src_dir not in sys.path:
     sys.path.insert(0, _src_dir)
 
-from fastapi import FastAPI, File, Form, Query, Request, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -2132,6 +2132,35 @@ async def api_interp_git_log(
     return {"commits": get_interp_git_log(interp_path, max_count=max_count)}
 
 
+class ManualCommitRequest(BaseModel):
+    """수동 커밋 요청 본문."""
+    message: str = "batch: 배치 작업 커밋"
+
+
+@app.post("/api/interpretations/{interp_id}/git/commit")
+async def api_interp_manual_commit(interp_id: str, body: ManualCommitRequest, bg: BackgroundTasks):
+    """해석 저장소에 수동으로 git commit을 생성한다 (백그라운드).
+
+    목적: 배치 작업(쪼개기, 리셋 등)에서 no_commit=true로 여러 변경을
+          모은 뒤, 마지막에 한 번만 커밋한다. 커밋은 백그라운드에서 실행되어
+          API가 즉시 응답한다.
+    입력: message — 커밋 메시지 (기본값: "batch: 배치 작업 커밋")
+    출력: {committed: "background", message}
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
+            status_code=404,
+        )
+
+    bg.add_task(git_commit_interpretation, interp_path, body.message)
+    return {"committed": "background", "message": body.message}
+
+
 # =========================================
 #   Phase 8: 코어 스키마 엔티티 API
 # =========================================
@@ -2314,6 +2343,8 @@ async def api_update_entity(
     entity_type: str,
     entity_id: str,
     body: EntityUpdateRequest,
+    bg: BackgroundTasks,
+    no_commit: bool = Query(False, description="True이면 git commit을 건너뛴다 (배치 작업용)"),
 ):
     """엔티티를 수정한다 (상태 전이 포함).
 
@@ -2338,9 +2369,13 @@ async def api_update_entity(
     except Exception as e:
         return JSONResponse({"error": f"엔티티 수정 중 오류: {e}"}, status_code=500)
 
-    # 자동 git commit
-    commit_msg = f"fix: {entity_type} 엔티티 수정 — {entity_id[:8]}"
-    result["git"] = git_commit_interpretation(interp_path, commit_msg)
+    # git commit — 백그라운드로 실행하여 API 즉시 응답
+    if not no_commit:
+        commit_msg = f"fix: {entity_type} 엔티티 수정 — {entity_id[:8]}"
+        bg.add_task(git_commit_interpretation, interp_path, commit_msg)
+        result["git"] = "background"
+    else:
+        result["git"] = {"committed": False, "reason": "no_commit=true"}
 
     return result
 
@@ -2410,7 +2445,12 @@ class ComposeTextBlockRequest(BaseModel):
 
 
 @app.post("/api/interpretations/{interp_id}/entities/text_block/compose")
-async def api_compose_textblock(interp_id: str, body: ComposeTextBlockRequest):
+async def api_compose_textblock(
+    interp_id: str,
+    body: ComposeTextBlockRequest,
+    bg: BackgroundTasks,
+    no_commit: bool = Query(False, description="True이면 git commit을 건너뛴다 (배치 작업용)"),
+):
     """편성 탭에서 TextBlock을 생성한다 (source_refs 배열 지원).
 
     목적: 여러 LayoutBlock을 합치거나, 하나의 LayoutBlock을 쪼개서
@@ -2421,6 +2461,7 @@ async def api_compose_textblock(interp_id: str, body: ComposeTextBlockRequest):
         original_text — 편성된 텍스트 (교정 적용 후).
         part_id — 파트 ID.
         source_refs — 출처 참조 배열 (순서대로 이어붙인 것).
+        no_commit — True이면 git commit을 건너뛴다 (쪼개기 등 배치 작업 시).
     출력: {"status": "created", "id": ..., "text_block": {...}}
     """
     import uuid as _uuid
@@ -2481,13 +2522,213 @@ async def api_compose_textblock(interp_id: str, body: ComposeTextBlockRequest):
     except Exception as e:
         return JSONResponse({"error": f"TextBlock 생성 실패: {e}"}, status_code=400)
 
-    # 자동 git commit
-    block_ids = [r.layout_block_id or "?" for r in body.source_refs]
-    commit_msg = f"feat: TextBlock 편성 — {'+'.join(block_ids)}"
-    result["git"] = git_commit_interpretation(interp_path, commit_msg)
+    # git commit — 백그라운드로 실행하여 API 즉시 응답
+    if not no_commit:
+        block_ids = [r.layout_block_id or "?" for r in body.source_refs]
+        commit_msg = f"feat: TextBlock 편성 — {'+'.join(block_ids)}"
+        bg.add_task(git_commit_interpretation, interp_path, commit_msg)
+        result["git"] = "background"
+    else:
+        result["git"] = {"committed": False, "reason": "no_commit=true"}
     result["text_block"] = text_block_data
 
     return result
+
+
+class SplitTextBlockRequest(BaseModel):
+    """TextBlock 쪼개기 요청 본문."""
+    original_text_block_id: str
+    part_id: str
+    pieces: list[str]  # === 구분선으로 나눈 텍스트 조각들
+
+
+@app.post("/api/interpretations/{interp_id}/entities/text_block/split")
+async def api_split_textblock(interp_id: str, body: SplitTextBlockRequest, bg: BackgroundTasks):
+    """TextBlock을 여러 조각으로 쪼갠다 (백그라운드 git commit).
+
+    목적: 한 TextBlock을 단락 단위로 나누는 배치 작업.
+          모든 조각 생성 + 원본 deprecated 를 한 번의 git commit으로 처리하여
+          사용자 대기 시간을 최소화한다.
+
+    처리 순서:
+        1. 원본 TextBlock에서 source_refs, work_id 상속
+        2. 각 조각마다 새 TextBlock 생성 (git commit 없이)
+        3. 원본 TextBlock을 deprecated 전환 (git commit 없이)
+        4. 마지막에 한 번만 git commit
+    """
+    import uuid as _uuid
+
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
+            status_code=404,
+        )
+
+    # 원본 TextBlock 로드
+    try:
+        original = get_entity(interp_path, "text_block", body.original_text_block_id)
+    except FileNotFoundError:
+        return JSONResponse(
+            {"error": f"원본 TextBlock을 찾을 수 없습니다: {body.original_text_block_id}"},
+            status_code=404,
+        )
+
+    base_seq = int(original.get("sequence_index", 0))
+    work_id = original.get("work_id")
+    if not work_id:
+        return JSONResponse({"error": "원본 TextBlock의 work_id가 없습니다."}, status_code=400)
+
+    pieces = [str(piece).strip() for piece in (body.pieces or []) if str(piece).strip()]
+    if len(pieces) < 2:
+        return JSONResponse({"error": "쪼개기 조각은 2개 이상이어야 합니다."}, status_code=400)
+
+    inherited_refs = original.get("source_refs") or []
+    # source_ref(단수) 하위호환
+    if not inherited_refs and original.get("source_ref"):
+        inherited_refs = [original["source_ref"]]
+
+    # source_refs에 현재 원본 commit 해시 채우기
+    import git as _git
+    for ref in inherited_refs:
+        if not ref.get("commit"):
+            doc_path = _library_path / "documents" / ref.get("document_id", "")
+            try:
+                repo = _git.Repo(doc_path)
+                ref["commit"] = repo.head.commit.hexsha
+            except Exception:
+                pass
+
+    # 하위 호환: 첫 번째 ref를 source_ref로도 저장
+    first_ref = inherited_refs[0] if inherited_refs else None
+    source_ref_compat = None
+    if first_ref:
+        source_ref_compat = {k: v for k, v in first_ref.items() if k != "char_range"}
+
+    created_ids = []
+    errors = []
+
+    # 순서 보존: 원본 뒤에 있는 활성 TextBlock의 sequence를 뒤로 민다.
+    try:
+        active_blocks = [
+            tb for tb in list_entities(interp_path, "text_block")
+            if tb.get("id") != body.original_text_block_id
+            and tb.get("status") not in ("deprecated", "archived")
+            and int(tb.get("sequence_index", 0)) > base_seq
+        ]
+        active_blocks.sort(key=lambda tb: int(tb.get("sequence_index", 0)))
+
+        shift = len(pieces) - 1
+        for tb in active_blocks:
+            seq = int(tb.get("sequence_index", 0))
+            update_entity(interp_path, "text_block", tb["id"], {"sequence_index": seq + shift})
+    except Exception as e:
+        return JSONResponse({"error": f"sequence 재배치 실패: {e}"}, status_code=400)
+
+    # 각 조각마다 새 TextBlock 생성 (원래 위치에 연속 삽입)
+    for i, piece_text in enumerate(pieces):
+
+        text_block_data = {
+            "id": str(_uuid.uuid4()),
+            "work_id": work_id,
+            "sequence_index": base_seq + i,
+            "original_text": piece_text,
+            "normalized_text": None,
+            "source_ref": source_ref_compat,
+            "source_refs": [
+                {**r, "char_range": None} for r in inherited_refs
+            ],
+            "status": "draft",
+            "notes": None,
+            "metadata": {"part_id": body.part_id},
+        }
+
+        try:
+            create_entity(interp_path, "text_block", text_block_data)
+            created_ids.append(text_block_data["id"])
+        except Exception as e:
+            errors.append(f"조각 {i + 1}: {e}")
+
+    # 원본 TextBlock을 deprecated 전환
+    if created_ids:
+        try:
+            update_entity(
+                interp_path, "text_block",
+                body.original_text_block_id,
+                {"status": "deprecated"},
+            )
+        except Exception as e:
+            errors.append(f"원본 deprecated 실패: {e}")
+
+    # 백그라운드 git commit — API는 즉시 응답
+    commit_msg = f"feat: TextBlock 쪼개기 — {len(created_ids)}개 생성"
+    bg.add_task(git_commit_interpretation, interp_path, commit_msg)
+
+    if errors:
+        return JSONResponse({
+            "created_count": len(created_ids),
+            "errors": errors,
+            "git": "background",
+        }, status_code=207)
+
+    return {
+        "created_count": len(created_ids),
+        "created_ids": created_ids,
+        "deprecated_id": body.original_text_block_id,
+        "git": "background",
+    }
+
+
+class ResetCompositionRequest(BaseModel):
+    """편성 리셋 요청 본문."""
+    text_block_ids: list[str]  # deprecated로 전환할 TextBlock ID 목록
+
+
+@app.post("/api/interpretations/{interp_id}/entities/text_block/reset")
+async def api_reset_composition(interp_id: str, body: ResetCompositionRequest, bg: BackgroundTasks):
+    """여러 TextBlock을 한꺼번에 deprecated 전환한다 (백그라운드 git commit).
+
+    목적: 편성 리셋 시 모든 TextBlock을 배치로 deprecated 전환.
+          개별 PUT 호출 대신 단일 엔드포인트로 처리하여 속도를 높인다.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
+            status_code=404,
+        )
+
+    deprecated_count = 0
+    errors = []
+
+    for tb_id in body.text_block_ids:
+        try:
+            update_entity(interp_path, "text_block", tb_id, {"status": "deprecated"})
+            deprecated_count += 1
+        except Exception as e:
+            errors.append(f"{tb_id[:8]}: {e}")
+
+    # 백그라운드 git commit — API는 즉시 응답
+    commit_msg = f"fix: TextBlock 편성 리셋 — {deprecated_count}개 deprecated"
+    bg.add_task(git_commit_interpretation, interp_path, commit_msg)
+
+    if errors:
+        return JSONResponse({
+            "deprecated_count": deprecated_count,
+            "errors": errors,
+            "git": "background",
+        }, status_code=207)
+
+    return {
+        "deprecated_count": deprecated_count,
+        "git": "background",
+    }
 
 
 @app.post("/api/interpretations/{interp_id}/entities/work/auto-create")
