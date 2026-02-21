@@ -2875,71 +2875,45 @@ body.resizing-row {
 }
 
 /* ====================================
-   Phase 10-2: LLM 레이아웃 분석 UI
+   자동감지 (koten-layout-detector ONNX) UI
    ==================================== */
 
-/* --- AI 분석 도구 바 --- */
-.llm-toolbar {
+/* --- 자동감지 도구 바 --- */
+#autodetect-toolbar {
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border);
   gap: 6px;
 }
 
-.llm-model-select {
-  max-width: 180px;
-  font-size: 11px;
-  padding: 2px 4px;
-}
-
-/* --- LLM 상태 바 (프로바이더 + 비용) --- */
-.llm-status-bar {
+/* --- confidence 슬라이더 라벨 --- */
+.autodetect-conf-label {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 3px 8px;
-  background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border);
+  gap: 4px;
   font-size: 11px;
   color: var(--text-secondary);
-  flex-shrink: 0;
-  min-height: 24px;
-}
-
-.llm-status-label {
-  font-weight: 600;
-  color: var(--text-secondary);
-  flex-shrink: 0;
-}
-
-/* --- 프로바이더 상태 인디케이터 --- */
-.llm-provider-indicator {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  font-size: 13px;
-  border-radius: 3px;
-  cursor: default;
-  transition: opacity 0.15s;
-}
-
-.llm-provider-indicator[title]::after {
-  content: none;
-}
-
-/* --- 비용 표시 --- */
-.llm-cost-display {
-  margin-left: auto;
-  font-size: 11px;
-  font-family: var(--font-mono);
-  color: var(--text-muted);
   white-space: nowrap;
 }
 
-/* --- 분석 중 버튼 상태 --- */
-#llm-analyze-btn:disabled,
-#llm-compare-btn:disabled {
+/* --- confidence 슬라이더 --- */
+.autodetect-conf-slider {
+  width: 80px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--accent-blue, #3B82F6);
+}
+
+/* --- confidence 값 표시 --- */
+#autodetect-conf-value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  min-width: 28px;
+  text-align: center;
+}
+
+/* --- 감지 중 버튼 상태 --- */
+#autodetect-btn:disabled,
+#autodetect-all-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
