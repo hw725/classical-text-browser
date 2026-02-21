@@ -1,15 +1,34 @@
 {
   "presets": [
-    { "id": "period", "label": "마침표", "before": null, "after": "。" },
-    { "id": "comma", "label": "쉼표", "before": null, "after": "，" },
-    { "id": "semicolon", "label": "쌍점", "before": null, "after": "；" },
-    { "id": "colon", "label": "고리점", "before": null, "after": "：" },
-    { "id": "question", "label": "물음표", "before": null, "after": "？" },
-    { "id": "exclamation", "label": "느낌표", "before": null, "after": "！" },
-    { "id": "book_title", "label": "서명호", "before": "《", "after": "》" },
-    { "id": "chapter_title", "label": "편명호", "before": "〈", "after": "〉" },
-    { "id": "quote_single", "label": "인용부호", "before": "「", "after": "」" },
-    { "id": "quote_double", "label": "겹인용부호", "before": "『", "after": "』" }
+    { "id": "period", "label": "마침표", "category": "fullwidth", "before": null, "after": "。" },
+    { "id": "comma", "label": "쉼표", "category": "fullwidth", "before": null, "after": "，" },
+    { "id": "semicolon", "label": "쌍점", "category": "fullwidth", "before": null, "after": "；" },
+    { "id": "colon", "label": "고리점", "category": "fullwidth", "before": null, "after": "：" },
+    { "id": "question", "label": "물음표", "category": "fullwidth", "before": null, "after": "？" },
+    { "id": "exclamation", "label": "느낌표", "category": "fullwidth", "before": null, "after": "！" },
+
+    { "id": "period_hw", "label": "마침표(반각)", "category": "halfwidth", "before": null, "after": "." },
+    { "id": "comma_hw", "label": "쉼표(반각)", "category": "halfwidth", "before": null, "after": "," },
+    { "id": "semicolon_hw", "label": "쌍점(반각)", "category": "halfwidth", "before": null, "after": ";" },
+    { "id": "colon_hw", "label": "고리점(반각)", "category": "halfwidth", "before": null, "after": ":" },
+    { "id": "question_hw", "label": "물음표(반각)", "category": "halfwidth", "before": null, "after": "?" },
+    { "id": "exclamation_hw", "label": "느낌표(반각)", "category": "halfwidth", "before": null, "after": "!" },
+
+    { "id": "book_title", "label": "서명호", "category": "paired", "before": "《", "after": "》" },
+    { "id": "chapter_title", "label": "편명호", "category": "paired", "before": "〈", "after": "〉" },
+    { "id": "quote_single", "label": "인용부호", "category": "paired", "before": "「", "after": "」" },
+    { "id": "quote_double", "label": "겹인용부호", "category": "paired", "before": "『", "after": "』" },
+
+    { "id": "paren_open", "label": "소괄호 열기", "category": "individual", "before": null, "after": "（" },
+    { "id": "paren_close", "label": "소괄호 닫기", "category": "individual", "before": null, "after": "）" },
+    { "id": "guillemet_open", "label": "서명호 열기", "category": "individual", "before": null, "after": "《" },
+    { "id": "guillemet_close", "label": "서명호 닫기", "category": "individual", "before": null, "after": "》" },
+    { "id": "angle_open", "label": "편명호 열기", "category": "individual", "before": null, "after": "〈" },
+    { "id": "angle_close", "label": "편명호 닫기", "category": "individual", "before": null, "after": "〉" },
+    { "id": "corner_open", "label": "인용부호 열기", "category": "individual", "before": null, "after": "「" },
+    { "id": "corner_close", "label": "인용부호 닫기", "category": "individual", "before": null, "after": "」" },
+    { "id": "dcorner_open", "label": "겹인용부호 열기", "category": "individual", "before": null, "after": "『" },
+    { "id": "dcorner_close", "label": "겹인용부호 닫기", "category": "individual", "before": null, "after": "』" }
   ],
   "custom": []
 }

@@ -70,3 +70,6 @@ server_*.log
 
 # 테스트 중 추가된 예제 문헌 (서브모듈 아닌 것)
 examples/monggu_library/documents/kameda_monggu/
+
+# 참고용 PDF (루트에 놓인 샘플)
+*.pdf
