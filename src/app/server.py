@@ -5703,15 +5703,25 @@ _LLM_PROMPTS = {
     "punctuation": {
         "system": (
             "당신은 고전 한문 표점(句讀) 전문가입니다.\n"
-            "주어진 원문에 구두점을 삽입하세요.\n"
+            "주어진 원문에 현대 학술 표점부호를 삽입하세요.\n\n"
+            "사용 가능한 부호: 。，、；：？！《》〈〉「」『』\n\n"
             "규칙:\n"
-            "1. 句(문장 끝)에는 。, 讀(절 끝)에는 、을 사용합니다.\n"
-            "2. 인용에는 「」, 고유명사에는 표시하지 않습니다.\n"
-            "3. 원문 글자를 변경하지 마세요. 글자 사이에 부호만 삽입하세요.\n"
-            "4. 반드시 순수 JSON만 출력하세요.\n"
+            "- 문장이 끝나면(句) 。\n"
+            "- 절이 이어지면(讀) ，\n"
+            "- 단순 나열·병렬(竝列)은 、\n"
+            "- 대구·열거가 길면 ；\n"
+            "- 서명은 《》, 편명은 〈〉\n"
+            "- 인용은 「」\n"
+            "- 의문문은 ？, 감탄문은 ！\n\n"
+            "중요:\n"
+            "- start/end는 0-based 글자 인덱스 (inclusive)\n"
+            "- 단일 글자 뒤에 부호를 넣으면 start == end\n"
+            "- 부호를 글자 뒤에 넣으려면 after에, 앞에 넣으려면 before에 넣으세요\n"
+            "- 원문 글자를 절대 변경하지 마세요\n"
+            "- JSON만 반환하세요. 설명 텍스트를 넣지 마세요.\n\n"
             "출력 형식:\n"
-            '{"punctuated": "王戎、簡要。", '
-            '"marks": [{"after_char_index": 1, "mark": "、"}, {"after_char_index": 3, "mark": "。"}]}'
+            '{"marks": [{"start": 1, "end": 1, "before": null, "after": "，"}, '
+            '{"start": 3, "end": 3, "before": null, "after": "。"}]}'
         ),
         "user": "다음 고전 한문에 표점을 삽입하세요:\n\n{text}",
     },
@@ -5894,6 +5904,35 @@ def _parse_llm_json(response, _json) -> dict:
     return data
 
 
+def _normalize_punct_marks(raw_marks: list) -> list:
+    """LLM이 반환한 marks를 {start, end, before, after} 형식으로 정규화.
+
+    왜 이렇게 하는가:
+        LLM은 프롬프트와 다른 형식으로 응답할 수 있다.
+        구형식 {after_char_index, mark}이든 신형식 {start, end, before, after}이든
+        클라이언트가 일관되게 처리할 수 있도록 표준화한다.
+    """
+    normalized = []
+    for m in raw_marks:
+        if "after_char_index" in m:
+            # 구형식: {after_char_index: int, mark: str}
+            # → after_char_index번째 글자 뒤에 mark를 삽입
+            idx = m["after_char_index"]
+            normalized.append({
+                "start": idx, "end": idx,
+                "before": None, "after": m.get("mark"),
+            })
+        else:
+            # 신형식: 이미 {start, end, before, after}
+            normalized.append({
+                "start": m.get("start", 0),
+                "end": m.get("end", m.get("start", 0)),
+                "before": m.get("before"),
+                "after": m.get("after"),
+            })
+    return normalized
+
+
 @app.post("/api/llm/punctuation")
 async def api_llm_punctuation(body: AiPunctuationRequest):
     """AI 표점 생성.
@@ -5907,6 +5946,9 @@ async def api_llm_punctuation(body: AiPunctuationRequest):
             force_provider=body.force_provider,
             force_model=body.force_model,
         )
+        # LLM 응답의 marks를 표준 형식으로 정규화
+        if "marks" in result and isinstance(result["marks"], list):
+            result["marks"] = _normalize_punct_marks(result["marks"])
         return result
     except Exception as e:
         return JSONResponse({"error": f"AI 표점 실패: {e}"}, status_code=500)
