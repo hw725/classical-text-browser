@@ -88,13 +88,26 @@ class OpenAiProvider(BaseLlmProvider):
         create_kwargs = {
             "model": selected_model,
             "messages": messages,
-            "max_tokens": max_tokens,
         }
+        # OpenAI 최신 모델(gpt-5, o3 등)은 max_tokens 대신
+        # max_completion_tokens를 사용한다.
+        # 구형 모델 호환을 위해 먼저 max_completion_tokens를 시도하고,
+        # 실패하면 max_tokens로 폴백한다.
+        create_kwargs["max_completion_tokens"] = max_tokens
         if response_format == "json":
             create_kwargs["response_format"] = {"type": "json_object"}
 
         t0 = time.monotonic()
-        response = await client.chat.completions.create(**create_kwargs)
+        try:
+            response = await client.chat.completions.create(**create_kwargs)
+        except openai.BadRequestError as e:
+            if "max_completion_tokens" in str(e):
+                # 구형 모델: max_tokens로 폴백
+                del create_kwargs["max_completion_tokens"]
+                create_kwargs["max_tokens"] = max_tokens
+                response = await client.chat.completions.create(**create_kwargs)
+            else:
+                raise
         elapsed = time.monotonic() - t0
 
         text = response.choices[0].message.content if response.choices else ""
@@ -146,11 +159,21 @@ class OpenAiProvider(BaseLlmProvider):
         })
 
         t0 = time.monotonic()
-        response = await client.chat.completions.create(
-            model=selected_model,
-            messages=messages,
-            max_tokens=max_tokens,
-        )
+        try:
+            response = await client.chat.completions.create(
+                model=selected_model,
+                messages=messages,
+                max_completion_tokens=max_tokens,
+            )
+        except openai.BadRequestError as e:
+            if "max_completion_tokens" in str(e):
+                response = await client.chat.completions.create(
+                    model=selected_model,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                )
+            else:
+                raise
         elapsed = time.monotonic() - t0
 
         text = response.choices[0].message.content if response.choices else ""

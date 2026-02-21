@@ -1,4 +1,4 @@
-"""LLM Router — 4단 폴백 + 모델 선택 + 비교.
+"""LLM Router — 다단 폴백 + 모델 선택 + 비교.
 
 모든 LLM 호출의 단일 진입점.
 provider를 직접 호출하지 말고, 항상 이 Router를 통해 호출한다.
@@ -23,7 +23,7 @@ provider를 직접 호출하지 말고, 항상 이 Router를 통해 호출한다
     # 비교
     results = await router.compare(
         "번역해줘",
-        targets=["base44_http", ("ollama", "glm-5:cloud")]
+        targets=["base44_bridge", ("ollama", "glm-5:cloud")]
     )
 """
 
@@ -39,7 +39,6 @@ from .providers.base import (
     LlmUnavailableError,
 )
 from .providers.base44_bridge import Base44BridgeProvider
-from .providers.base44_http import Base44HttpProvider
 from .providers.gemini_provider import GeminiProvider
 from .providers.ollama import OllamaProvider
 from .providers.openai_provider import OpenAiProvider
@@ -55,12 +54,11 @@ class LlmRouter:
 
         # 우선순위 순서 (무료 → 저렴 → 중간 → 최후)
         self.providers: list[BaseLlmProvider] = [
-            Base44HttpProvider(self.config),     # 1순위: 무료 (텍스트 전용)
-            Base44BridgeProvider(self.config),    # 2순위: 무료 (비전 포함)
-            OllamaProvider(self.config),          # 3순위: 무료 (로컬/프록시)
-            GeminiProvider(self.config),           # 4순위: 저렴 (비전 포함)
-            OpenAiProvider(self.config),           # 5순위: 중간 (비전 포함)
-            AnthropicProvider(self.config),       # 6순위: 최후 폴백
+            Base44BridgeProvider(self.config),    # 1순위: 무료 (비전 포함)
+            OllamaProvider(self.config),          # 2순위: 무료 (로컬/프록시)
+            GeminiProvider(self.config),           # 3순위: 저렴 (비전 포함)
+            OpenAiProvider(self.config),           # 4순위: 중간 (비전 포함)
+            AnthropicProvider(self.config),       # 5순위: 최후 폴백
         ]
 
     def _get_provider(self, provider_id: str) -> Optional[BaseLlmProvider]:
@@ -133,9 +131,9 @@ class LlmRouter:
         raise LlmUnavailableError(
             "사용 가능한 LLM provider가 없습니다.\n"
             "확인 사항:\n"
-            "  1. agent-chat: cd backend-44 && npm run agent:chat\n"
+            "  1. Base44: base44 login 후 bridge 스크립트 확인\n"
             "  2. Ollama: ollama serve\n"
-            "  3. API 키: .env에 ANTHROPIC_API_KEY 등\n\n"
+            "  3. API 키: .env에 OPENAI_API_KEY, GOOGLE_API_KEY 등\n\n"
             "시도 결과:\n" + "\n".join(f"  - {e}" for e in errors)
         )
 
@@ -206,7 +204,7 @@ class LlmRouter:
     ) -> list:
         """여러 모델에 같은 입력을 보내서 결과를 비교.
 
-        targets: ["base44_http", ("ollama", "glm-5:cloud"), "anthropic"]
+        targets: ["base44_bridge", ("ollama", "glm-5:cloud"), "anthropic"]
                  None이면 사용 가능한 모든 provider.
 
         반환: list[LlmResponse | Exception]

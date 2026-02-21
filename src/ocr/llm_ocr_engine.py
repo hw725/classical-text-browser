@@ -4,7 +4,7 @@
 이미지에서 텍스트를 인식한다.
 
 별도의 OCR 라이브러리(PaddleOCR, Tesseract 등)를 설치할 필요 없이,
-이미 구성된 LLM 프로바이더(base44_http, base44_bridge, ollama, anthropic)의
+이미 구성된 LLM 프로바이더(base44_bridge, ollama, openai, anthropic)의
 비전 기능으로 고전 텍스트를 인식한다.
 
 왜 LLM을 OCR에 쓰는가:
