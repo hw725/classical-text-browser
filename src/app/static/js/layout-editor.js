@@ -1187,8 +1187,8 @@ async function _runAutoDetect() {
     const confThreshold = confSlider ? parseFloat(confSlider.value) : 0.5;
     const detections = KotenLayout.postprocess(outputTensor, meta, confThreshold, 0.45);
 
-    // 4. Detection → LayoutBlock 변환
-    const newBlocks = _detectionsToBlocks(detections);
+    // 4. Detection → LayoutBlock 변환 (행 자동 그룹핑 포함)
+    const { blocks: newBlocks, lineCount } = _detectionsToBlocks(detections);
 
     if (newBlocks.length === 0) {
       _setAutodetectStatus("감지된 영역 없음 (임계값을 낮춰보세요)");
@@ -1206,7 +1206,10 @@ async function _runAutoDetect() {
     await _saveLayout();
 
     const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
-    _setAutodetectStatus(`${newBlocks.length}개 블록 감지·저장됨 (${elapsed}s)`);
+    const groupInfo = lineCount !== newBlocks.length
+      ? `${lineCount}행 → ${newBlocks.length}블록`
+      : `${newBlocks.length}블록`;
+    _setAutodetectStatus(`${groupInfo} 감지·저장됨 (${elapsed}s)`);
   } catch (err) {
     console.error("자동감지 오류:", err);
     _setAutodetectStatus(`오류: ${err.message}`);
@@ -1282,8 +1285,8 @@ async function _runAutoDetectAll() {
         const outputTensor = await KotenLayout.runInference(session, tensor);
         const detections = KotenLayout.postprocess(outputTensor, meta, confThreshold, 0.45);
 
-        // c. Detection → LayoutBlock 변환
-        const blocks = _detectionsToBlocks(detections, pageNum, { width: imgW, height: imgH });
+        // c. Detection → LayoutBlock 변환 (행 자동 그룹핑 포함)
+        const { blocks } = _detectionsToBlocks(detections, pageNum, { width: imgW, height: imgH });
 
         // d. API로 저장
         const payload = {
@@ -1335,17 +1338,146 @@ async function _runAutoDetectAll() {
 
 
 /**
+ * 배열의 중앙값을 구한다. (그룹핑 통계용)
+ * @param {number[]} arr
+ * @returns {number}
+ */
+function _median(arr) {
+  if (arr.length === 0) return 0;
+  const sorted = arr.slice().sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[mid - 1] + sorted[mid]) / 2
+    : sorted[mid];
+}
+
+
+/**
+ * 행(열) 단위 감지 결과를 들여쓰기·공간 인접성 기준으로 그룹핑한다.
+ *
+ * 왜 이렇게 하는가:
+ *   koten-layout-detector는 세로 열 하나하나를 개별 감지한다.
+ *   그대로 쓰면 한 페이지에 블록 10~20개가 생겨 OCR·교정·편성이 번거롭다.
+ *   인접한 열들을 하나의 큰 영역 블록으로 합치되,
+ *   들여쓰기(y1 위치 차이)나 큰 간격은 별도 블록으로 분리한다.
+ *
+ * 알고리즘:
+ *   1. 텍스트(main_text)만 추출, 비텍스트(illustration, seal)는 개별 유지
+ *   2. 텍스트를 x-center 내림차순 정렬 (RTL 읽기순)
+ *   3. 인접 열 간 x-center 간격 중앙값, 열 높이 중앙값 계산
+ *   4. 순차 비교: 인접(x-gap < medianGap×2) AND 같은 레벨(|Δy1| < medianHeight×0.15) → 같은 그룹
+ *   5. 그룹 bbox 병합 (union)
+ *
+ * @param {Array<{ x1, y1, x2, y2, blockType, cx, cy }>} filtered - overall 제외, 매핑 완료된 감지 결과
+ * @returns {Array<{ bbox: [number,number,number,number], blockType: string, cx: number, cy: number, memberCount: number }>}
+ */
+function _groupLineDetections(filtered) {
+  // 1. 텍스트 / 비텍스트 분리
+  const textDets = filtered.filter(d => d.blockType === "main_text");
+  const otherDets = filtered.filter(d => d.blockType !== "main_text");
+
+  // 비텍스트는 개별 블록으로 유지
+  const otherGroups = otherDets.map(d => ({
+    bbox: [d.x1, d.y1, d.x2, d.y2],
+    blockType: d.blockType,
+    cx: d.cx,
+    cy: d.cy,
+    memberCount: 1,
+  }));
+
+  // 텍스트 0~1개면 그룹핑 불필요
+  if (textDets.length <= 1) {
+    const singleGroups = textDets.map(d => ({
+      bbox: [d.x1, d.y1, d.x2, d.y2],
+      blockType: d.blockType,
+      cx: d.cx,
+      cy: d.cy,
+      memberCount: 1,
+    }));
+    return singleGroups.concat(otherGroups);
+  }
+
+  // 2. x-center 내림차순 정렬 (오른쪽→왼쪽, RTL 읽기순)
+  textDets.sort((a, b) => b.cx - a.cx);
+
+  // 3. 통계 계산
+  const heights = textDets.map(d => d.y2 - d.y1);
+  const medianHeight = _median(heights);
+
+  // 인접 열 간 x-center 간격 (정렬된 순서대로)
+  const xGaps = [];
+  for (let i = 1; i < textDets.length; i++) {
+    xGaps.push(Math.abs(textDets[i - 1].cx - textDets[i].cx));
+  }
+  const medianGap = _median(xGaps);
+
+  // 들여쓰기 임계값: 열 높이의 15% (약간의 y1 차이는 허용)
+  const indentThreshold = medianHeight * 0.15;
+  // 인접성 임계값: 중앙 간격의 2배 (열 사이에 빈 공간이 있으면 다른 영역)
+  const adjacencyThreshold = medianGap * 2.0;
+
+  // 4. 순차 그룹핑
+  const groups = [];
+  let currentGroup = { members: [textDets[0]] };
+
+  for (let i = 1; i < textDets.length; i++) {
+    const prev = textDets[i - 1];
+    const curr = textDets[i];
+
+    const xCenterGap = Math.abs(prev.cx - curr.cx);
+    const y1Diff = Math.abs(prev.y1 - curr.y1);
+
+    const isAdjacent = xCenterGap < adjacencyThreshold;
+    const isSameLevel = y1Diff < indentThreshold;
+
+    if (isAdjacent && isSameLevel) {
+      // 같은 그룹에 추가
+      currentGroup.members.push(curr);
+    } else {
+      // 현재 그룹 마감, 새 그룹 시작
+      groups.push(currentGroup);
+      currentGroup = { members: [curr] };
+    }
+  }
+  groups.push(currentGroup); // 마지막 그룹
+
+  // 5. 각 그룹의 bbox 병합 (union)
+  const textGroups = groups.map(g => {
+    let minX1 = Infinity, minY1 = Infinity, maxX2 = -Infinity, maxY2 = -Infinity;
+    let sumCx = 0, sumCy = 0;
+    for (const m of g.members) {
+      if (m.x1 < minX1) minX1 = m.x1;
+      if (m.y1 < minY1) minY1 = m.y1;
+      if (m.x2 > maxX2) maxX2 = m.x2;
+      if (m.y2 > maxY2) maxY2 = m.y2;
+      sumCx += m.cx;
+      sumCy += m.cy;
+    }
+    return {
+      bbox: [minX1, minY1, maxX2, maxY2],
+      blockType: "main_text",
+      cx: sumCx / g.members.length,    // 그룹 중심 (reading_order 정렬용)
+      cy: sumCy / g.members.length,
+      memberCount: g.members.length,
+    };
+  });
+
+  return textGroups.concat(otherGroups);
+}
+
+
+/**
  * Detection 배열을 LayoutBlock 배열로 변환한다.
  *
- * - overall(classId=0)은 건너뜀 (판면 전체 영역, OCR 단위 아님)
- * - 좌표는 이미 원본 이미지 좌표 (postprocess에서 역변환됨)
- * - reading_order: 세로쓰기 RTL 기준, x좌표 중심 내림차순(오른쪽→왼쪽),
- *   동일 열은 y좌표 오름차순(위→아래)
+ * 흐름:
+ *   1. overall(classId=0) 제외, block_type 매핑
+ *   2. 인접 행(열)을 자동 그룹핑 (들여쓰기·간격 기준)
+ *   3. 그룹별 LayoutBlock 생성 + reading_order 배정
  *
  * @param {Array<{ x1, y1, x2, y2, conf, classId, label, color }>} detections
  * @param {number} [pageNum] - 페이지 번호 (생략 시 현재 페이지)
  * @param {{ width: number, height: number }} [imgSize] - 이미지 크기 (생략 시 layoutState)
- * @returns {Array} LayoutBlock 배열
+ * @returns {{ blocks: Array, lineCount: number }} LayoutBlock 배열 + 원래 행 수
  */
 function _detectionsToBlocks(detections, pageNum, imgSize) {
   const pn = pageNum || viewerState.pageNum || 1;
@@ -1353,7 +1485,7 @@ function _detectionsToBlocks(detections, pageNum, imgSize) {
   const imgW = imgSize ? imgSize.width : (layoutState.imageWidth || 9999);
   const imgH = imgSize ? imgSize.height : (layoutState.imageHeight || 9999);
 
-  // overall(classId=0) 제외, block_type 매핑
+  // 1. overall(classId=0) 제외, block_type 매핑
   const filtered = detections
     .filter(d => KOTEN_TO_BLOCK_TYPE[d.classId] !== null && KOTEN_TO_BLOCK_TYPE[d.classId] !== undefined)
     .map(d => ({
@@ -1363,29 +1495,29 @@ function _detectionsToBlocks(detections, pageNum, imgSize) {
       cy: (d.y1 + d.y2) / 2,
     }));
 
-  // reading_order 정렬: x중심 내림차순(오른쪽→왼쪽), 동일 열은 y중심 오름차순(위→아래)
-  // "동일 열" 판정: x중심 차이가 블록 너비의 50% 이내이면 같은 열
-  filtered.sort((a, b) => {
-    const avgWidth = ((a.x2 - a.x1) + (b.x2 - b.x1)) / 2;
+  const lineCount = filtered.length;
+
+  // 2. 인접 행을 자동 그룹핑
+  const groups = _groupLineDetections(filtered);
+
+  // 3. reading_order 정렬: 그룹 cx 내림차순(오른쪽→왼쪽), 동일 위치면 cy 오름차순(위→아래)
+  groups.sort((a, b) => {
     const xDiff = Math.abs(a.cx - b.cx);
-    if (xDiff < avgWidth * 0.5) {
-      // 같은 열 → y 오름차순
-      return a.cy - b.cy;
-    }
-    // 다른 열 → x 내림차순 (오른쪽 먼저)
+    // 가까운 x 위치면 y로 비교
+    if (xDiff < 50) return a.cy - b.cy;
     return b.cx - a.cx;
   });
 
-  return filtered.map((d, idx) => {
+  const blocks = groups.map((g, idx) => {
     const bIdx = String(idx + 1).padStart(2, "0");
     return {
       block_id: `p${pNum}_b${bIdx}`,
-      block_type: d.blockType,
+      block_type: g.blockType,
       bbox: [
-        Math.round(Math.max(0, d.x1)),
-        Math.round(Math.max(0, d.y1)),
-        Math.round(Math.min(imgW, d.x2)),
-        Math.round(Math.min(imgH, d.y2)),
+        Math.round(Math.max(0, g.bbox[0])),
+        Math.round(Math.max(0, g.bbox[1])),
+        Math.round(Math.min(imgW, g.bbox[2])),
+        Math.round(Math.min(imgH, g.bbox[3])),
       ],
       reading_order: idx,
       writing_direction: "vertical_rtl",
@@ -1393,9 +1525,11 @@ function _detectionsToBlocks(detections, pageNum, imgSize) {
       font_size_class: null,
       ocr_config: null,
       refers_to_block: null,
-      skip: d.blockType === "seal", // 인장은 OCR 건너뜀
+      skip: g.blockType === "seal", // 인장은 OCR 건너뜀
     };
   });
+
+  return { blocks, lineCount };
 }
 
 
