@@ -3557,7 +3557,7 @@
         </div>
       </div>
 
-      <!-- HWP 가져오기 다이얼로그 -->
+      <!-- 텍스트 가져오기 다이얼로그 (HWP + PDF 통합) -->
       <div
         class="bib-dialog-overlay"
         id="hwp-import-overlay"
@@ -3566,10 +3566,10 @@
         <div
           class="bib-dialog"
           id="hwp-import-dialog"
-          style="width: 600px"
+          style="width: 680px; max-height: 85vh; overflow-y: auto"
         >
           <div class="bib-dialog-header">
-            <span class="bib-dialog-title">HWP/HWPX 파일 가져오기</span>
+            <span class="bib-dialog-title">텍스트 파일 가져오기</span>
             <button
               class="bib-dialog-close"
               id="hwp-import-close"
@@ -3581,12 +3581,12 @@
           <div class="bib-dialog-body bib-edit-form">
             <!-- Step 1: 파일 선택 + 미리보기 -->
             <div id="hwp-import-step1">
-              <label class="bib-edit-label">HWP/HWPX 파일 선택</label>
+              <label class="bib-edit-label">파일 선택 (.hwp / .hwpx / .pdf)</label>
               <div class="bib-url-row">
                 <input
                   id="hwp-import-file"
                   type="file"
-                  accept=".hwp,.hwpx"
+                  accept=".hwp,.hwpx,.pdf"
                   style="flex: 1"
                 />
                 <button
@@ -3601,7 +3601,7 @@
                 class="text-save-status"
               ></span>
 
-              <!-- 미리보기 결과 (처음에는 숨김) -->
+              <!-- HWP 미리보기 결과 -->
               <div
                 id="hwp-import-preview"
                 style="display: none; margin-top: 10px"
@@ -3644,6 +3644,92 @@
                   readonly
                   style="font-size: 12px"
                 ></textarea>
+              </div>
+
+              <!-- PDF 미리보기 결과 -->
+              <div
+                id="pdf-import-preview"
+                style="display: none; margin-top: 10px"
+              >
+                <div
+                  id="pdf-import-meta"
+                  style="font-size: 12px; margin-bottom: 8px"
+                ></div>
+                <div style="margin-bottom: 8px">
+                  <span
+                    class="status-item"
+                    id="pdf-preview-text-layer"
+                  ></span>
+                  <span
+                    class="status-item"
+                    id="pdf-preview-structure"
+                  ></span>
+                </div>
+
+                <!-- 구조 분석 결과 -->
+                <div
+                  id="pdf-structure-info"
+                  style="display: none; background: var(--color-bg-secondary); padding: 8px; border-radius: 4px; margin-bottom: 8px; font-size: 12px"
+                >
+                  <div><b>문서 구조:</b> <span id="pdf-structure-type"></span></div>
+                  <div><b>원문 특징:</b> <span id="pdf-structure-original"></span></div>
+                  <div><b>번역 특징:</b> <span id="pdf-structure-translation"></span></div>
+                  <div><b>확신도:</b> <span id="pdf-structure-confidence"></span></div>
+                </div>
+
+                <label class="bib-edit-label">추가 지시 (선택)</label>
+                <input
+                  id="pdf-import-custom-instructions"
+                  type="text"
+                  class="bib-input"
+                  placeholder="예: 판본 목록도 원문에 포함"
+                  style="font-size: 12px"
+                />
+
+                <label class="bib-edit-label" style="margin-top: 6px">샘플 텍스트 (첫 페이지)</label>
+                <textarea
+                  id="pdf-import-sample-text"
+                  class="bib-textarea"
+                  rows="5"
+                  readonly
+                  style="font-size: 12px"
+                ></textarea>
+
+                <!-- PDF 분리 실행 -->
+                <div style="margin-top: 8px; display: flex; gap: 8px; align-items: center">
+                  <button
+                    id="pdf-import-separate-btn"
+                    class="bib-btn bib-btn-primary"
+                  >
+                    원문/번역 분리 실행 (LLM)
+                  </button>
+                  <span
+                    id="pdf-import-separate-status"
+                    class="text-save-status"
+                  ></span>
+                </div>
+
+                <!-- 분리 결과 미리보기 -->
+                <div
+                  id="pdf-separation-results"
+                  style="display: none; margin-top: 10px"
+                >
+                  <label class="bib-edit-label">분리된 원문</label>
+                  <textarea
+                    id="pdf-import-original-preview"
+                    class="bib-textarea"
+                    rows="5"
+                    style="font-size: 12px"
+                  ></textarea>
+                  <label class="bib-edit-label" style="margin-top: 4px">분리된 번역</label>
+                  <textarea
+                    id="pdf-import-translation-preview"
+                    class="bib-textarea"
+                    rows="3"
+                    readonly
+                    style="font-size: 12px"
+                  ></textarea>
+                </div>
               </div>
             </div>
 
@@ -3802,7 +3888,7 @@
     <script src="/static/js/interpretation.js?v=20260220c"></script>
     <script src="/static/js/entity-manager.js?v=20260220c"></script>
     <script src="/static/js/create-document.js?v=20260220c"></script>
-    <script src="/static/js/hwp-import.js?v=20260220c"></script>
+    <script src="/static/js/hwp-import.js?v=20260221a"></script>
     <script src="/static/js/ocr-panel.js?v=20260220c"></script>
     <script src="/static/js/alignment-view.js?v=20260221a"></script>
     <script src="/static/js/variant-manager.js?v=20260221b"></script>

@@ -141,6 +141,8 @@ API 엔드포인트:
     POST   /api/trash/{trash_type}/{trash_name}/restore → 휴지통에서 복원
 """
 
+import json
+import logging
 import os
 import sys
 import shutil
@@ -1125,6 +1127,283 @@ async def api_match_hwp_to_blocks(doc_id: str, body: MatchHwpToBlocksRequest):
     except Exception as e:
         return JSONResponse(
             {"error": f"블록 매칭 실패: {e}"},
+            status_code=500,
+        )
+
+
+# --- PDF 참조 텍스트 추출 (Part D) ---
+
+
+@app.post("/api/text-import/pdf/analyze")
+async def api_pdf_analyze(file: UploadFile = File(...)):
+    """PDF 텍스트 레이어를 분석한다.
+
+    목적: PDF에 텍스트 레이어가 있는지 확인하고,
+          첫 몇 페이지의 텍스트를 추출하여 구조 분석(LLM)을 수행한다.
+    입력: multipart/form-data로 PDF 파일 업로드.
+    출력:
+        {
+            "page_count": int,
+            "has_text_layer": bool,
+            "sample_pages": [{page_num, text, char_count}, ...],
+            "detected_structure": {pattern_type, original_markers, ...} | null,
+        }
+    """
+    import tempfile
+
+    from text_import.pdf_extractor import PdfTextExtractor
+
+    suffix = Path(file.filename or "").suffix or ".pdf"
+    if suffix.lower() != ".pdf":
+        return JSONResponse(
+            {"error": f"PDF 파일만 지원합니다 (받은 형식: {suffix})"},
+            status_code=400,
+        )
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = Path(tmp.name)
+
+    try:
+        extractor = PdfTextExtractor(tmp_path)
+        has_text = extractor.has_text_layer()
+        page_count = extractor.page_count
+        sample_pages = extractor.get_sample_text(max_pages=3)
+
+        # 텍스트 레이어가 있으면 LLM으로 구조 분석 시도
+        detected_structure = None
+        if has_text and _llm_router is not None:
+            try:
+                from text_import.text_separator import TextSeparator
+
+                separator = TextSeparator(_llm_router)
+                structure = await separator.analyze_structure(sample_pages)
+                detected_structure = structure.to_dict()
+            except Exception as e:
+                logging.getLogger(__name__).warning("구조 분석 실패 (비치명적): %s", e)
+
+        extractor.close()
+
+        return {
+            "page_count": page_count,
+            "has_text_layer": has_text,
+            "sample_pages": sample_pages,
+            "detected_structure": detected_structure,
+        }
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"PDF 분석 실패: {e}"},
+            status_code=400,
+        )
+    finally:
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
+
+
+class PdfSeparateRequest(BaseModel):
+    """PDF 텍스트 분리 요청."""
+    structure: dict  # DocumentStructure 딕셔너리
+    pages: list[dict] | None = None  # [{page_num, text}] — None이면 전체
+    custom_instructions: str = ""
+    force_provider: str | None = None
+    force_model: str | None = None
+
+
+@app.post("/api/text-import/pdf/separate")
+async def api_pdf_separate(
+    file: UploadFile = File(...),
+    body: str = Form(...),
+):
+    """PDF 텍스트를 원문/번역/주석으로 분리한다 (LLM).
+
+    목적: analyze에서 확인된 구조를 바탕으로, 전체(또는 지정) 페이지의
+          텍스트를 원문/번역/주석으로 분리한다.
+    입력:
+        file — PDF 파일 (multipart)
+        body — JSON 문자열 {structure, pages, custom_instructions, ...}
+    출력:
+        {
+            "results": [{page_num, original_text, translation_text, notes, uncertain}, ...]
+        }
+    """
+    import tempfile
+
+    if _llm_router is None:
+        return JSONResponse(
+            {"error": "LLM이 설정되지 않았습니다. API 키를 확인하세요."},
+            status_code=500,
+        )
+
+    # body JSON 파싱
+    try:
+        params = json.loads(body)
+    except json.JSONDecodeError:
+        return JSONResponse({"error": "body가 올바른 JSON이 아닙니다."}, status_code=400)
+
+    suffix = Path(file.filename or "").suffix or ".pdf"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = Path(tmp.name)
+
+    try:
+        from text_import.pdf_extractor import PdfTextExtractor
+        from text_import.text_separator import DocumentStructure, TextSeparator
+
+        # 구조 복원
+        structure = DocumentStructure.from_dict(params.get("structure", {}))
+        custom_instructions = params.get("custom_instructions", "")
+        force_provider = params.get("force_provider")
+        force_model = params.get("force_model")
+
+        # 페이지 텍스트 준비
+        pages = params.get("pages")
+        if pages is None:
+            # 전체 페이지 추출
+            extractor = PdfTextExtractor(tmp_path)
+            pages = extractor.extract_all_pages()
+            extractor.close()
+
+        # LLM 분리 실행
+        separator = TextSeparator(_llm_router)
+        results = await separator.separate_batch(
+            pages=pages,
+            structure=structure,
+            custom_instructions=custom_instructions,
+            force_provider=force_provider,
+            force_model=force_model,
+        )
+
+        return {
+            "results": [r.to_dict() for r in results],
+        }
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"텍스트 분리 실패: {e}"},
+            status_code=500,
+        )
+    finally:
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
+
+
+class PdfApplyRequest(BaseModel):
+    """PDF 분리 결과를 문서에 적용하는 요청."""
+    doc_id: str
+    results: list[dict]  # [{page_num, original_text, ...}]
+    page_mapping: list[dict] | None = None  # [{source_page, target_page, part_id}]
+    save_translation_to_l6: bool = False
+    strip_punctuation: bool = True
+    strip_hyeonto: bool = True
+
+
+@app.post("/api/text-import/pdf/apply")
+async def api_pdf_apply(body: PdfApplyRequest, background_tasks: BackgroundTasks):
+    """PDF 분리 결과를 문서의 L4에 적용한다.
+
+    목적: 사용자가 확인/수정한 분리 결과를 실제 문서에 저장한다.
+    입력: PdfApplyRequest
+    출력: {pages_saved, l4_files}
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = _library_path / "documents" / body.doc_id
+    if not doc_path.exists():
+        return JSONResponse(
+            {"error": f"문헌이 존재하지 않습니다: {body.doc_id}"},
+            status_code=404,
+        )
+
+    try:
+        from hwp.text_cleaner import clean_hwp_text
+        from text_import.common import (
+            save_formatting_sidecar,
+            save_punctuation_sidecar,
+            save_text_to_l4,
+        )
+
+        # 매니페스트에서 기본 part_id
+        manifest = get_document_info(doc_path)
+        parts = manifest.get("parts", [])
+        default_part_id = parts[0]["part_id"] if parts else "vol1"
+
+        l4_files = []
+        pages_saved = 0
+
+        for item in body.results:
+            page_num = item.get("page_num", 0)
+            original_text = item.get("original_text", "")
+            if not original_text.strip():
+                continue
+
+            # page_mapping이 있으면 대상 페이지/part 변환
+            target_page = page_num
+            target_part = default_part_id
+            if body.page_mapping:
+                for m in body.page_mapping:
+                    if m.get("source_page") == page_num:
+                        target_page = m.get("target_page", page_num)
+                        target_part = m.get("part_id", default_part_id)
+                        break
+
+            # 표점·현토 분리 (옵션)
+            if body.strip_punctuation or body.strip_hyeonto:
+                result = clean_hwp_text(
+                    original_text,
+                    strip_punct=body.strip_punctuation,
+                    strip_hyeonto=body.strip_hyeonto,
+                )
+                text_to_save = result.clean_text
+
+                # 사이드카 데이터 저장
+                save_punctuation_sidecar(
+                    doc_path, target_part, target_page,
+                    result.punctuation_marks, result.hyeonto_annotations,
+                    raw_text_length=len(original_text),
+                    clean_text_length=len(result.clean_text),
+                    source="pdf_import",
+                )
+
+                if result.taidu_marks:
+                    save_formatting_sidecar(
+                        doc_path, target_part, target_page,
+                        result.taidu_marks,
+                    )
+            else:
+                text_to_save = original_text
+
+            # L4 텍스트 저장
+            file_path = save_text_to_l4(doc_path, target_part, target_page, text_to_save)
+            l4_files.append(file_path.relative_to(doc_path).as_posix())
+            pages_saved += 1
+
+        # completeness_status 업데이트
+        manifest["completeness_status"] = "text_imported"
+        (doc_path / "manifest.json").write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        # git commit (백그라운드)
+        background_tasks.add_task(
+            git_commit_document,
+            doc_path,
+            f"feat: PDF 참조 텍스트 가져오기 — {pages_saved}페이지",
+        )
+
+        return {
+            "pages_saved": pages_saved,
+            "l4_files": l4_files,
+        }
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"PDF 텍스트 적용 실패: {e}"},
             status_code=500,
         )
 

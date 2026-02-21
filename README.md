@@ -9,10 +9,11 @@
 
 | 영역 | 기능 |
 |------|------|
-| **원본 관리** | PDF/이미지 뷰어, 레이아웃 분석, OCR(LLM 비전 + PaddleOCR), HWP 가져오기 |
+| **원본 관리** | PDF/이미지 뷰어, 레이아웃 분석, OCR(LLM 비전 + PaddleOCR), HWP/HWPX 가져오기, PDF 참조 텍스트 추출 |
 | **해석 작업** | 표점(句讀), 현토(懸吐), 번역(LLM+수동), 주석(태깅+사전형) |
 | **연구 도구** | 인용 마크, 사전 내보내기/가져오기, 교차 뷰어 |
 | **저장소 관리** | 원본·해석 분리 Git 저장소, 사다리형 그래프, JSON 스냅샷 |
+| **텍스트 가져오기** | HWP/HWPX 표점·현토 분리, PDF 텍스트 레이어 추출, LLM 원문/번역/주석 분리 |
 | **LLM 연동** | Ollama, Base44, Anthropic, Gemini, OpenAI (자동 폴백) |
 
 ## 빠른 시작
@@ -39,7 +40,7 @@ PaddleOCR은 기본 설치 대상이 아니며, 충돌 없는 환경 사용자�
 
 ## 기술 스택
 
-Python + FastAPI | HTML + vanilla JS (빌드 도구 없음) | PDF.js | GitPython | jsonschema | uv
+Python + FastAPI | HTML + vanilla JS (빌드 도구 없음) | PDF.js | PyMuPDF | GitPython | jsonschema | uv
 
 ## 8층 데이터 모델
 
@@ -54,13 +55,14 @@ Python + FastAPI | HTML + vanilla JS (빌드 도구 없음) | PDF.js | GitPython
 
 ```
 src/
-├── core/       # 핵심 로직 (표점, 번역, 주석 등)
-├── hwp/        # HWP/HWPX 처리
-├── llm/        # LLM 라우터 + 프로바이더
-├── ocr/        # OCR 엔진 (LLM 비전 + PaddleOCR)
-├── parsers/    # 서지정보 파서
-├── cli/        # CLI 도구
-└── app/        # 웹 앱 (FastAPI + static)
+├── core/         # 핵심 로직 (표점, 번역, 주석 등)
+├── hwp/          # HWP/HWPX 처리 (hwp-hwpx-parser)
+├── text_import/  # 텍스트 가져오기 (HWP 표점분리 + PDF 참조텍스트)
+├── llm/          # LLM 라우터 + 프로바이더
+├── ocr/          # OCR 엔진 (LLM 비전 + PaddleOCR)
+├── parsers/      # 서지정보 파서
+├── cli/          # CLI 도구
+└── app/          # 웹 앱 (FastAPI + static)
 schemas/
 ├── source_repo/  # 원본 저장소 스키마 (7개)
 ├── interp/       # 해석 저장소 스키마 (5개)
