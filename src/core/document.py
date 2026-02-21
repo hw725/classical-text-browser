@@ -663,16 +663,25 @@ def _apply_corrections_to_text(
         original_ocr = corr.get("original_ocr", "")
         corrected = corr.get("corrected", "")
 
-        if line_num is None or char_idx is None:
-            continue
-        if line_num < 0 or line_num >= len(lines):
+        if char_idx is None:
             continue
 
-        line = lines[line_num]
-        # 원본 글자가 실제로 해당 위치에 있는지 확인
-        end_idx = char_idx + len(original_ocr)
-        if end_idx <= len(line) and line[char_idx:end_idx] == original_ocr:
-            lines[line_num] = line[:char_idx] + corrected + line[end_idx:]
+        if line_num is not None:
+            # 줄+글자 좌표 방식
+            if line_num < 0 or line_num >= len(lines):
+                continue
+            line = lines[line_num]
+            end_idx = char_idx + len(original_ocr)
+            if end_idx <= len(line) and line[char_idx:end_idx] == original_ocr:
+                lines[line_num] = line[:char_idx] + corrected + line[end_idx:]
+        else:
+            # line=null → char_index가 페이지 전체 기준 평면 인덱스
+            # 줄바꿈 포함 전체 텍스트에서 직접 치환
+            full = "\n".join(lines)
+            end_idx = char_idx + len(original_ocr)
+            if end_idx <= len(full) and full[char_idx:end_idx] == original_ocr:
+                full = full[:char_idx] + corrected + full[end_idx:]
+                lines = full.split("\n")
 
     return "\n".join(lines)
 
@@ -1695,4 +1704,183 @@ async def create_document_from_url(
         "parts": manifest.get("parts", []),
         "parser_id": parser_id,
         "asset_count": len(downloaded_files),
+    }
+
+
+# ──────────────────────────────────────────────────────────
+# 일괄 교정 (Batch Correction)
+# ──────────────────────────────────────────────────────────
+
+
+def search_char_in_pages(
+    doc_path: str | Path,
+    part_id: str,
+    page_start: int,
+    page_end: int,
+    target_char: str,
+) -> list[dict]:
+    """여러 페이지에서 특정 글자를 검색한다.
+
+    목적: 일괄 교정의 미리보기 단계. 교정 대상 글자가 어느 페이지의
+          어느 위치에 있는지 찾아서, 이미 교정된 위치는 제외한다.
+    입력:
+        doc_path — 문헌 디렉토리 경로.
+        part_id — 권 식별자.
+        page_start — 검색 시작 페이지 (1부터).
+        page_end — 검색 끝 페이지 (포함).
+        target_char — 찾을 글자 (1글자).
+    출력:
+        페이지별 검색 결과 리스트:
+        [
+            {
+                "page": int,
+                "count": int,
+                "positions": [
+                    {"char_index": int, "context": str},
+                    ...
+                ]
+            },
+            ...
+        ]
+    왜 이렇게 하는가:
+        일괄 교정 전 사용자가 매칭 결과를 미리 확인할 수 있도록 한다.
+        이미 교정된 위치를 제외해야 같은 글자를 중복 교정하지 않는다.
+    """
+    doc_path = Path(doc_path).resolve()
+    results = []
+
+    for page_num in range(page_start, page_end + 1):
+        # 원본 텍스트 로드
+        text_result = get_page_text(doc_path, part_id, page_num)
+        text = text_result.get("text", "")
+        if not text:
+            continue
+
+        # 기존 교정 로드 — 이미 교정된 위치를 제외하기 위해
+        corr_result = get_page_corrections(doc_path, part_id, page_num)
+        corrections = corr_result.get("corrections", [])
+
+        # 이미 교정된 char_index 집합 (line=null인 평면 인덱스)
+        corrected_indices = set()
+        for c in corrections:
+            ci = c.get("char_index")
+            if ci is not None and c.get("line") is None:
+                corrected_indices.add(ci)
+
+        # 텍스트에서 target_char 검색
+        positions = []
+        for i, ch in enumerate(text):
+            if ch == target_char and i not in corrected_indices:
+                # 컨텍스트: 앞뒤 5글자
+                ctx_start = max(0, i - 5)
+                ctx_end = min(len(text), i + 6)
+                context = text[ctx_start:ctx_end]
+                positions.append({
+                    "char_index": i,
+                    "context": context,
+                })
+
+        if positions:
+            results.append({
+                "page": page_num,
+                "count": len(positions),
+                "positions": positions,
+            })
+
+    return results
+
+
+def apply_batch_corrections(
+    doc_path: str | Path,
+    part_id: str,
+    page_start: int,
+    page_end: int,
+    original_char: str,
+    corrected_char: str,
+    correction_type: str = "ocr_error",
+    note: str | None = None,
+) -> dict:
+    """여러 페이지에 걸쳐 같은 글자를 일괄 교정한다.
+
+    목적: 같은 OCR 오류가 여러 페이지에서 반복될 때, 한 번에 모두 교정한다.
+    입력:
+        doc_path — 문헌 디렉토리 경로.
+        part_id — 권 식별자.
+        page_start — 교정 시작 페이지.
+        page_end — 교정 끝 페이지 (포함).
+        original_char — 교정 전 글자.
+        corrected_char — 교정 후 글자.
+        correction_type — 교정 유형 (기본: 'ocr_error').
+        note — 교정 비고.
+    출력:
+        {
+            "total_corrected": int,
+            "pages_affected": int,
+            "details": [
+                {"page": int, "corrected": int},
+                ...
+            ]
+        }
+    왜 이렇게 하는가:
+        페이지마다 corrections.json에 교정 항목을 추가한다.
+        corrected_by를 'human_batch'로 표시하여 일괄 교정임을 구분한다.
+    """
+    doc_path = Path(doc_path).resolve()
+    total = 0
+    details = []
+
+    for page_num in range(page_start, page_end + 1):
+        # 원본 텍스트 로드
+        text_result = get_page_text(doc_path, part_id, page_num)
+        text = text_result.get("text", "")
+        if not text:
+            continue
+
+        # 기존 교정 로드
+        corr_result = get_page_corrections(doc_path, part_id, page_num)
+        corrections = corr_result.get("corrections", [])
+
+        # 이미 교정된 위치 집합
+        corrected_indices = set()
+        for c in corrections:
+            ci = c.get("char_index")
+            if ci is not None and c.get("line") is None:
+                corrected_indices.add(ci)
+
+        # 텍스트에서 original_char 검색 → 새 교정 항목 생성
+        new_corrs = []
+        for i, ch in enumerate(text):
+            if ch == original_char and i not in corrected_indices:
+                entry = {
+                    "page": page_num,
+                    "block_id": None,
+                    "line": None,
+                    "char_index": i,
+                    "type": correction_type,
+                    "original_ocr": original_char,
+                    "corrected": corrected_char,
+                    "corrected_by": "human_batch",
+                    "confidence": None,
+                    "note": note,
+                }
+                new_corrs.append(entry)
+
+        if not new_corrs:
+            continue
+
+        # 기존 교정에 추가하여 저장
+        corrections.extend(new_corrs)
+        save_data = {
+            "part_id": part_id,
+            "corrections": corrections,
+        }
+        save_page_corrections(doc_path, part_id, page_num, save_data)
+
+        total += len(new_corrs)
+        details.append({"page": page_num, "corrected": len(new_corrs)})
+
+    return {
+        "total_corrected": total,
+        "pages_affected": len(details),
+        "details": details,
     }
