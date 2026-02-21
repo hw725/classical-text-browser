@@ -3462,8 +3462,30 @@ body.resizing-row {
 
 .punct-palette-row {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 팔레트 카테고리 그룹 (전각/반각/감싸기/개별) */
+.punct-palette-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   flex-wrap: wrap;
-  gap: 4px;
+}
+
+.punct-palette-group-label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  min-width: 48px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.punct-palette-btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
 }
 
 .punct-preset-btn {
@@ -3483,6 +3505,13 @@ body.resizing-row {
 .punct-preset-btn:hover {
   background: var(--hover-bg-medium, rgba(255, 255, 255, 0.12));
   border-color: #f59e0b;
+}
+
+/* 감싸기 부호: 범위 선택이 필요함을 시각적으로 표시 */
+.punct-preset-paired {
+  border-style: dashed;
+  font-size: 14px;
+  padding: 4px 6px;
 }
 
 /* 마크 목록 섹션 */

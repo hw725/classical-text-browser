@@ -70,19 +70,45 @@ async function _loadPresets() {
 
 /**
  * 프리셋 폴백 (네트워크 불가 시).
+ *
+ * category 분류:
+ *   fullwidth  — 전각 문장부호 (중국/일본식)
+ *   halfwidth  — 반각 문장부호 (한국식, 공백 없이 삽입)
+ *   paired     — 감싸기 부호 (범위 선택 후 한 쌍으로 삽입)
+ *   individual — 개별 삽입 (열기/닫기 부호를 단독으로 삽입)
  */
 function _defaultPresets() {
   return [
-    { id: "period", label: "마침표", before: null, after: "。" },
-    { id: "comma", label: "쉼표", before: null, after: "，" },
-    { id: "semicolon", label: "쌍점", before: null, after: "；" },
-    { id: "colon", label: "고리점", before: null, after: "：" },
-    { id: "question", label: "물음표", before: null, after: "？" },
-    { id: "exclamation", label: "느낌표", before: null, after: "！" },
-    { id: "book_title", label: "서명호", before: "《", after: "》" },
-    { id: "chapter_title", label: "편명호", before: "〈", after: "〉" },
-    { id: "quote_single", label: "인용부호", before: "「", after: "」" },
-    { id: "quote_double", label: "겹인용부호", before: "『", after: "』" },
+    // 전각
+    { id: "period", label: "마침표", category: "fullwidth", before: null, after: "。" },
+    { id: "comma", label: "쉼표", category: "fullwidth", before: null, after: "，" },
+    { id: "semicolon", label: "쌍점", category: "fullwidth", before: null, after: "；" },
+    { id: "colon", label: "고리점", category: "fullwidth", before: null, after: "：" },
+    { id: "question", label: "물음표", category: "fullwidth", before: null, after: "？" },
+    { id: "exclamation", label: "느낌표", category: "fullwidth", before: null, after: "！" },
+    // 반각
+    { id: "period_hw", label: "마침표(반각)", category: "halfwidth", before: null, after: "." },
+    { id: "comma_hw", label: "쉼표(반각)", category: "halfwidth", before: null, after: "," },
+    { id: "semicolon_hw", label: "쌍점(반각)", category: "halfwidth", before: null, after: ";" },
+    { id: "colon_hw", label: "고리점(반각)", category: "halfwidth", before: null, after: ":" },
+    { id: "question_hw", label: "물음표(반각)", category: "halfwidth", before: null, after: "?" },
+    { id: "exclamation_hw", label: "느낌표(반각)", category: "halfwidth", before: null, after: "!" },
+    // 감싸기
+    { id: "book_title", label: "서명호", category: "paired", before: "《", after: "》" },
+    { id: "chapter_title", label: "편명호", category: "paired", before: "〈", after: "〉" },
+    { id: "quote_single", label: "인용부호", category: "paired", before: "「", after: "」" },
+    { id: "quote_double", label: "겹인용부호", category: "paired", before: "『", after: "』" },
+    // 개별 삽입 (감싸기 부호의 열기/닫기를 각각 단독 삽입)
+    { id: "paren_open", label: "소괄호 열기", category: "individual", before: null, after: "（" },
+    { id: "paren_close", label: "소괄호 닫기", category: "individual", before: null, after: "）" },
+    { id: "guillemet_open", label: "서명호 열기", category: "individual", before: null, after: "《" },
+    { id: "guillemet_close", label: "서명호 닫기", category: "individual", before: null, after: "》" },
+    { id: "angle_open", label: "편명호 열기", category: "individual", before: null, after: "〈" },
+    { id: "angle_close", label: "편명호 닫기", category: "individual", before: null, after: "〉" },
+    { id: "corner_open", label: "인용부호 열기", category: "individual", before: null, after: "「" },
+    { id: "corner_close", label: "인용부호 닫기", category: "individual", before: null, after: "」" },
+    { id: "dcorner_open", label: "겹인용부호 열기", category: "individual", before: null, after: "『" },
+    { id: "dcorner_close", label: "겹인용부호 닫기", category: "individual", before: null, after: "』" },
   ];
 }
 
@@ -486,64 +512,120 @@ function _isCharInSelection(idx) {
    표점 부호 팔레트
    ────────────────────────── */
 
+/**
+ * 팔레트를 카테고리별로 그룹화하여 렌더링한다.
+ *
+ * 카테고리 배치:
+ *   전각 — 중국/일본식 전각 문장부호
+ *   반각 — 한국식 반각 문장부호
+ *   감싸기 — 범위 선택 후 한 쌍으로 삽입 (before + after)
+ *   개별 — 감싸기 부호의 열기/닫기를 단독 삽입
+ */
 function _renderPalette() {
-  const row = document.getElementById("punct-palette-row");
-  if (!row) return;
+  const container = document.getElementById("punct-palette-row");
+  if (!container) return;
 
-  row.innerHTML = "";
+  container.innerHTML = "";
+
+  // 카테고리별로 프리셋을 분류
+  const categories = {
+    fullwidth: { label: "전각", presets: [] },
+    halfwidth: { label: "반각", presets: [] },
+    paired: { label: "감싸기 (범위 선택 후)", presets: [] },
+    individual: { label: "개별 삽입", presets: [] },
+  };
+
   for (const preset of punctState.presets) {
-    const btn = document.createElement("button");
-    btn.className = "punct-preset-btn";
-    btn.title = preset.label;
-    btn.dataset.presetId = preset.id;
+    const cat = preset.category || "fullwidth";
+    if (categories[cat]) {
+      categories[cat].presets.push(preset);
+    } else {
+      // category가 없거나 알 수 없는 경우 → fullwidth로 폴백
+      categories.fullwidth.presets.push(preset);
+    }
+  }
 
-    // 표시할 부호 결정
-    const display = preset.before && preset.after
-      ? `${preset.before}…${preset.after}`  // 감싸기 부호
-      : preset.after || preset.before || "?";
+  // 각 카테고리를 행으로 렌더링
+  for (const [catId, catData] of Object.entries(categories)) {
+    if (catData.presets.length === 0) continue;
 
-    btn.textContent = display;
-    btn.addEventListener("click", () => _insertPreset(preset));
-    row.appendChild(btn);
+    const group = document.createElement("div");
+    group.className = "punct-palette-group";
+
+    const label = document.createElement("span");
+    label.className = "punct-palette-group-label";
+    label.textContent = catData.label;
+    group.appendChild(label);
+
+    const btnRow = document.createElement("span");
+    btnRow.className = "punct-palette-btn-row";
+
+    for (const preset of catData.presets) {
+      const btn = document.createElement("button");
+      btn.className = "punct-preset-btn";
+      btn.title = preset.label;
+      btn.dataset.presetId = preset.id;
+
+      // 표시할 부호 결정
+      if (catId === "paired") {
+        // 감싸기 부호: 열기…닫기
+        btn.textContent = `${preset.before}…${preset.after}`;
+        btn.classList.add("punct-preset-paired");
+      } else {
+        btn.textContent = preset.after || preset.before || "?";
+      }
+
+      btn.addEventListener("click", () => _insertPreset(preset));
+      btnRow.appendChild(btn);
+    }
+
+    group.appendChild(btnRow);
+    container.appendChild(group);
   }
 }
 
 
 /**
  * 선택된 위치에 프리셋 부호를 삽입한다.
+ *
+ * 삽입 방식:
+ *   - 감싸기(paired) 부호: 반드시 범위 선택 필요 (첫 글자 클릭 → Shift+마지막 글자)
+ *     범위가 없으면 안내 메시지를 표시한다.
+ *   - 단일/개별 부호: 슬롯(글자 사이 ┊) 클릭 후 삽입
  */
 function _insertPreset(preset) {
-  if (punctState.selectedSlot === null && !punctState.selectionRange) {
-    alert("표점을 삽입할 위치를 먼저 선택하세요.\n글자 사이의 ┊ 를 클릭하세요.");
-    return;
-  }
+  // 감싸기 부호 (before + after 모두 있는 경우): 범위 선택 필수
+  const isPaired = preset.before && preset.after;
 
-  // 감싸기 부호 (before + after 모두 있는 경우): 범위 선택 필요
-  if (preset.before && preset.after) {
-    if (punctState.selectionRange) {
-      const lo = Math.min(punctState.selectionRange.start, punctState.selectionRange.end);
-      const hi = Math.max(punctState.selectionRange.start, punctState.selectionRange.end);
-      const mark = {
-        id: _genTempId(),
-        target: { start: lo, end: hi },
-        before: preset.before,
-        after: preset.after,
-      };
-      punctState.marks.push(mark);
-    } else {
-      // 범위 없이 슬롯만 선택 → 해당 글자 하나에 적용
-      const idx = punctState.selectedSlot;
-      const mark = {
-        id: _genTempId(),
-        target: { start: idx, end: idx },
-        before: preset.before,
-        after: preset.after,
-      };
-      punctState.marks.push(mark);
+  if (isPaired) {
+    if (!punctState.selectionRange) {
+      alert(
+        `${preset.before}${preset.after} 감싸기 부호는 범위 선택이 필요합니다.\n\n` +
+        "사용법:\n" +
+        "  1. 첫 번째 글자를 클릭하세요\n" +
+        "  2. Shift 키를 누른 채 마지막 글자를 클릭하세요\n" +
+        "  3. 선택된 범위가 주황색으로 표시됩니다\n" +
+        "  4. 감싸기 부호 버튼을 클릭하세요\n\n" +
+        "개별 삽입이 필요하면 아래 '개별 삽입' 행의 버튼을 사용하세요."
+      );
+      return;
     }
+    const lo = Math.min(punctState.selectionRange.start, punctState.selectionRange.end);
+    const hi = Math.max(punctState.selectionRange.start, punctState.selectionRange.end);
+    const mark = {
+      id: _genTempId(),
+      target: { start: lo, end: hi },
+      before: preset.before,
+      after: preset.after,
+    };
+    punctState.marks.push(mark);
   } else {
-    // 단일 부호 (after만 또는 before만)
-    const idx = punctState.selectedSlot ?? 0;
+    // 단일/개별 부호: 슬롯 또는 범위 끝 위치에 삽입
+    if (punctState.selectedSlot === null && !punctState.selectionRange) {
+      alert("표점을 삽입할 위치를 먼저 선택하세요.\n글자 사이의 ┊ 를 클릭하세요.");
+      return;
+    }
+    const idx = punctState.selectedSlot ?? punctState.selectionRange?.end ?? 0;
     const mark = {
       id: _genTempId(),
       target: { start: idx, end: idx },
@@ -753,24 +835,32 @@ async function _requestAiPunctuation() {
     const data = await resp.json();
 
     // AI가 반환한 marks를 현재 블록에 적용
+    // 서버는 {start, end, before, after} 형식으로 정규화하여 반환한다.
+    // 클라이언트에서 {id, target: {start, end}, before, after} 형식으로 변환한다.
     if (data.marks && Array.isArray(data.marks)) {
-      // 기존 marks 초기화 후 AI marks 적용
+      const n = punctState.originalText.length;
       punctState.marks = [];
       for (const m of data.marks) {
-        const idx = m.after_char_index;
-        const mark = m.mark;
-        if (idx >= 0 && idx < punctState.originalText.length && mark) {
+        const start = m.start ?? m.target?.start ?? 0;
+        const end = m.end ?? m.target?.end ?? start;
+        if (start >= 0 && end < n && start <= end && (m.before || m.after)) {
           punctState.marks.push({
-            id: _generateTempId(),
-            char_index: idx,
-            mark: mark,
+            id: m.id || _genTempId(),
+            target: { start, end },
+            before: m.before || null,
+            after: m.after || null,
           });
         }
       }
+      punctState.isDirty = true;
       _renderCharArea();
       _renderMarksList();
-      _updatePreview();
-      _updateSaveStatus("AI 표점 생성 완료 — 저장하려면 [저장]을 누르세요", false);
+      _renderPreview();
+      const statusEl = document.getElementById("punct-save-status");
+      if (statusEl) {
+        statusEl.textContent = "AI 표점 생성 완료 — [저장]을 누르세요";
+        setTimeout(() => { statusEl.textContent = ""; }, 5000);
+      }
     } else {
       alert("AI 응답에 marks가 없습니다. 수동으로 표점을 삽입하세요.");
     }
