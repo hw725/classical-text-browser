@@ -73,3 +73,6 @@ examples/monggu_library/documents/kameda_monggu/
 
 # 참고용 PDF (루트에 놓인 샘플)
 *.pdf
+
+# ONNX 모델 (대용량, 별도 다운로드)
+*.onnx

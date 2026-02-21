@@ -684,49 +684,44 @@
               </button>
             </div>
 
-            <!-- Phase 10-2: AI 분석 도구 바 -->
+            <!-- 자동감지 도구 바 (koten-layout-detector ONNX) -->
             <div
-              class="layout-toolbar llm-toolbar"
-              id="llm-toolbar"
+              class="layout-toolbar"
+              id="autodetect-toolbar"
             >
-              <select
-                id="llm-model-select"
-                class="props-select llm-model-select"
-                title="LLM 모델 선택"
-                data-vision-only
-              >
-                <option value="auto">자동 (폴백순서)</option>
-              </select>
               <button
-                id="llm-analyze-btn"
+                id="autodetect-btn"
                 class="text-btn text-btn-primary"
-                title="AI 레이아웃 분석"
+                title="현재 페이지 레이아웃 자동감지"
               >
-                AI 분석
+                자동감지
               </button>
               <button
-                id="llm-compare-btn"
+                id="autodetect-all-btn"
                 class="text-btn"
-                title="여러 모델 비교"
+                title="전체 페이지 레이아웃 일괄 자동감지"
               >
-                비교
+                전체 감지
               </button>
+              <label
+                class="autodetect-conf-label"
+                title="감지 임계값: 낮을수록 더 많은 영역 감지"
+              >
+                임계값
+                <input
+                  type="range"
+                  id="autodetect-conf"
+                  min="0.1"
+                  max="0.9"
+                  step="0.05"
+                  value="0.5"
+                  class="autodetect-conf-slider"
+                />
+                <span id="autodetect-conf-value">0.50</span>
+              </label>
               <span
-                id="llm-analyze-status"
+                id="autodetect-status"
                 class="text-save-status"
-              ></span>
-            </div>
-
-            <!-- Phase 10-2: LLM 상태 표시 -->
-            <div
-              class="llm-status-bar"
-              id="llm-status-bar"
-            >
-              <span class="llm-status-label">LLM:</span>
-              <span id="llm-status-indicators"></span>
-              <span
-                id="llm-cost-display"
-                class="llm-cost-display"
               ></span>
             </div>
 
@@ -879,7 +874,7 @@
                     class="text-btn text-btn-primary"
                     title="전체 블록 OCR 실행"
                   >
-                    전체 OCR
+                    모든 블록 OCR
                   </button>
                   <button
                     id="ocr-run-selected"
@@ -3793,12 +3788,15 @@
     <!-- PDF.js CDN (3.x UMD — 빌드 도구 없는 프로젝트에 적합) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
+    <!-- ONNX Runtime Web — 브라우저에서 ONNX 모델 추론 (koten-layout-detector 의존성) -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/ort.min.js"></script>
 
     <!-- 앱 모듈 (로드 순서 중요: sidebar-tree가 viewerState를 정의, 나머지가 참조) -->
     <script src="/static/js/sidebar-tree.js?v=20260220c"></script>
     <script src="/static/js/pdf-renderer.js?v=20260220c"></script>
     <script src="/static/js/text-editor.js?v=20260220c"></script>
-    <script src="/static/js/layout-editor.js?v=20260220c"></script>
+    <script src="/static/js/koten-layout-detector.js?v=20260221"></script>
+    <script src="/static/js/layout-editor.js?v=20260221"></script>
     <script src="/static/js/correction-editor.js?v=20260220c"></script>
     <script src="/static/js/bibliography.js?v=20260220c"></script>
     <script src="/static/js/interpretation.js?v=20260220c"></script>

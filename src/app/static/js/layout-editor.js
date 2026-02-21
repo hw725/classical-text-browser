@@ -1033,347 +1033,413 @@ function deactivateLayoutMode() {
 
 
 /* ──────────────────────────
-   Phase 10-2: LLM 레이아웃 분석
+   자동감지: koten-layout-detector (ONNX)
    ────────────────────────── */
 
 /**
- * LLM 관련 UI를 초기화한다.
+ * ONNX 세션 캐시 — 모델을 한 번만 로드하고 재사용한다.
  *
- * 왜 layout-editor.js에 넣는가:
- *   AI 분석은 레이아웃 편집기의 확장 기능이다.
- *   분석 결과(Draft)를 기존 블록 편집 UI에 통합한다.
+ * 왜 이렇게 하는가:
+ *   ONNX 모델(~36MB)은 처음 한 번만 로드하면 된다.
+ *   이후 페이지 변경 시에는 캐시된 세션으로 즉시 추론한다.
  */
-function _initLlmLayoutUI() {
-  // 모델 목록 로드
-  _loadLlmModels();
-  // LLM 상태 로드
-  _loadLlmStatus();
+let _kotenSession = null;
+let _kotenModelLoading = false;
 
-  // AI 분석 버튼
-  const analyzeBtn = document.getElementById("llm-analyze-btn");
-  if (analyzeBtn) {
-    analyzeBtn.addEventListener("click", _runLlmAnalysis);
-  }
-
-  // 비교 버튼
-  const compareBtn = document.getElementById("llm-compare-btn");
-  if (compareBtn) {
-    compareBtn.addEventListener("click", _runLlmComparison);
-  }
-}
+/**
+ * koten-layout-detector 클래스 → 우리 block_type 매핑.
+ *
+ * classId 0 (全体/overall): 판면 전체 영역이므로 건너뜀 (OCR 단위 아님)
+ * classId 1 (手書き/handwritten): 필사본 본문 → main_text
+ * classId 2 (活字/typography): 활자본 본문 → main_text
+ * classId 3 (図版/illustration): 삽화 → illustration
+ * classId 4 (印判/stamp): 인장 → seal
+ */
+const KOTEN_TO_BLOCK_TYPE = {
+  0: null,           // overall — 건너뜀
+  1: "main_text",    // handwritten
+  2: "main_text",    // typography
+  3: "illustration", // illustration
+  4: "seal",         // stamp
+};
 
 
 /**
- * GET /api/llm/models → 드롭다운에 모델 목록 표시.
+ * ONNX 모델을 로드한다.
+ * 로컬 서버 경로 우선, 실패 시 GitHub Releases URL 폴백.
+ *
+ * @returns {Promise<ort.InferenceSession>}
  */
-async function _loadLlmModels() {
-  const select = document.getElementById("llm-model-select");
-  if (!select) return;
-
-  try {
-    const res = await fetch("/api/llm/models");
-    if (!res.ok) return;
-    const models = await res.json();
-
-    // 기존 옵션 초기화 (자동 유지)
-    select.innerHTML = '<option value="auto">자동 (폴백순서)</option>';
-
-    for (const m of models) {
-      const opt = document.createElement("option");
-      opt.value = `${m.provider}:${m.model}`;
-      const icon = m.available ? "●" : "○";
-      const costLabel = m.cost === "free" ? "" : " [유료]";
-      opt.textContent = `${icon} ${m.display}${costLabel}`;
-      opt.disabled = !m.available;
-      select.appendChild(opt);
+async function _loadKotenModel() {
+  if (_kotenSession) return _kotenSession;
+  if (_kotenModelLoading) {
+    // 이미 로딩 중이면 완료될 때까지 대기
+    while (_kotenModelLoading) {
+      await new Promise(r => setTimeout(r, 100));
     }
-
-    // 비교 모드 옵션
-    const compareOpt = document.createElement("option");
-    compareOpt.value = "compare";
-    compareOpt.textContent = "비교 모드";
-    select.appendChild(compareOpt);
-  } catch {
-    // 서버 미연결 시 무시
+    return _kotenSession;
   }
-}
 
+  _kotenModelLoading = true;
+  _setAutodetectStatus("모델 로딩 중...");
 
-/**
- * GET /api/llm/status → 상태 인디케이터 표시.
- */
-async function _loadLlmStatus() {
-  const indicators = document.getElementById("llm-status-indicators");
-  const costDisplay = document.getElementById("llm-cost-display");
-  if (!indicators) return;
+  const LOCAL_URL = "/static/models/koten-layout-best.onnx";
+  const GITHUB_URL = "https://github.com/yuta1984/koten-layout-detector/releases/download/v1.1.0/best.onnx";
 
   try {
-    const [statusRes, usageRes] = await Promise.all([
-      fetch("/api/llm/status"),
-      fetch("/api/llm/usage"),
-    ]);
-
-    if (statusRes.ok) {
-      const status = await statusRes.json();
-      let html = "";
-      for (const [id, info] of Object.entries(status)) {
-        const icon = info.available ? "🟢" : "⚫";
-        const name = info.display_name || id;
-        html += `<span class="llm-provider-indicator" title="${name}">${icon}</span>`;
+    // 로컬 우선 시도
+    try {
+      const checkRes = await fetch(LOCAL_URL, { method: "HEAD" });
+      if (checkRes.ok) {
+        _kotenSession = await KotenLayout.loadModel(LOCAL_URL);
+        _setAutodetectStatus("모델 로드 완료 (로컬)");
+        return _kotenSession;
       }
-      indicators.innerHTML = html;
-    }
+    } catch (_) { /* 로컬 없으면 GitHub 폴백 */ }
 
-    if (usageRes.ok && costDisplay) {
-      const usage = await usageRes.json();
-      const cost = usage.total_cost_usd || 0;
-      const budget = usage.budget_usd || 10;
-      costDisplay.textContent = `$${cost.toFixed(2)} / $${budget.toFixed(2)}`;
-    }
-  } catch {
-    // 무시
+    // GitHub Releases 폴백
+    _setAutodetectStatus("모델 다운로드 중 (GitHub)...");
+    _kotenSession = await KotenLayout.loadModel(GITHUB_URL);
+    _setAutodetectStatus("모델 로드 완료 (GitHub)");
+    return _kotenSession;
+  } catch (err) {
+    _setAutodetectStatus(`모델 로드 실패: ${err.message}`);
+    throw err;
+  } finally {
+    _kotenModelLoading = false;
   }
 }
 
 
 /**
- * AI 분석 실행.
+ * 지정된 PDF 페이지에서 이미지를 추출한다.
+ *
+ * 왜 이렇게 하는가:
+ *   koten-layout-detector는 HTMLImageElement 또는 Canvas를 입력으로 받는다.
+ *   PDF.js가 렌더링한 캔버스에서 직접 이미지를 만들어 전달한다.
+ *   scale=1.0으로 렌더링하여, 좌표가 레이아웃 저장 좌표와 일치하도록 한다.
+ *
+ * @param {number} [pageNum] - 페이지 번호 (생략 시 현재 페이지)
+ * @returns {Promise<HTMLImageElement>}
  */
-async function _runLlmAnalysis() {
+async function _getPageImage(pageNum) {
+  if (!pdfState.pdfDoc) throw new Error("PDF가 로드되지 않았습니다.");
+  const pn = pageNum || viewerState.pageNum;
+
+  const page = await pdfState.pdfDoc.getPage(pn);
+  const vp = page.getViewport({ scale: 1.0 });
+
+  // 오프스크린 캔버스에 scale=1.0으로 렌더링
+  const offCanvas = document.createElement("canvas");
+  offCanvas.width = Math.round(vp.width);
+  offCanvas.height = Math.round(vp.height);
+  const ctx = offCanvas.getContext("2d");
+
+  await page.render({ canvasContext: ctx, viewport: vp }).promise;
+
+  // Canvas → Image
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = offCanvas.toDataURL("image/png");
+  });
+}
+
+
+/**
+ * 자동감지 실행: 현재 PDF 페이지에서 레이아웃 영역을 감지한다.
+ *
+ * 흐름:
+ *   1. ONNX 모델 로드 (캐시)
+ *   2. PDF 페이지 이미지 추출
+ *   3. 전처리 → 추론 → 후처리
+ *   4. Detection[] → LayoutBlock[] 변환
+ *   5. 기존 블록에 추가 + 자동 저장
+ */
+async function _runAutoDetect() {
   if (!viewerState.docId || viewerState.pageNum == null) {
-    _setLlmStatus("문헌/페이지를 먼저 선택하세요.");
+    alert("문헌과 페이지를 먼저 선택하세요.");
     return;
   }
 
-  const select = document.getElementById("llm-model-select");
-  const selectedValue = select ? select.value : "auto";
-
-  // 비교 모드 선택 시 비교 함수로 위임
-  if (selectedValue === "compare") {
-    return _runLlmComparison();
-  }
-
-  // force_provider, force_model 파싱
-  // 모델명에 콜론이 포함될 수 있으므로 (예: "qwen3-vl:235b-cloud")
-  // 첫 번째 콜론에서만 분리한다.
-  let params = "";
-  if (selectedValue !== "auto") {
-    const colonIdx = selectedValue.indexOf(":");
-    const provider = selectedValue.substring(0, colonIdx);
-    const model = selectedValue.substring(colonIdx + 1);
-    params = `?force_provider=${encodeURIComponent(provider)}`;
-    if (model && model !== "auto") {
-      params += `&force_model=${encodeURIComponent(model)}`;
-    }
-  }
-
-  _setLlmStatus("AI 분석 중...");
-  const analyzeBtn = document.getElementById("llm-analyze-btn");
-  if (analyzeBtn) analyzeBtn.disabled = true;
+  const btn = document.getElementById("autodetect-btn");
+  if (btn) btn.disabled = true;
+  _setAutodetectStatus("감지 중...");
+  const startTime = performance.now();
 
   try {
-    const url = `/api/llm/analyze-layout/${viewerState.docId}/${viewerState.pageNum}${params}`;
-    const res = await fetch(url, { method: "POST" });
-    const data = await res.json();
+    // 1. 모델 로드
+    const session = await _loadKotenModel();
 
-    if (!res.ok) {
-      throw new Error(data.error || "분석 실패");
+    // 2. 페이지 이미지 추출
+    const img = await _getPageImage();
+
+    // imageWidth/Height 설정 (저장 시 필요)
+    layoutState.imageWidth = img.naturalWidth || img.width;
+    layoutState.imageHeight = img.naturalHeight || img.height;
+
+    // 3. 전처리 → 추론 → 후처리
+    const { tensor, meta } = KotenLayout.preprocess(img);
+    const outputTensor = await KotenLayout.runInference(session, tensor);
+
+    const confSlider = document.getElementById("autodetect-conf");
+    const confThreshold = confSlider ? parseFloat(confSlider.value) : 0.5;
+    const detections = KotenLayout.postprocess(outputTensor, meta, confThreshold, 0.45);
+
+    // 4. Detection → LayoutBlock 변환
+    const newBlocks = _detectionsToBlocks(detections);
+
+    if (newBlocks.length === 0) {
+      _setAutodetectStatus("감지된 영역 없음 (임계값을 낮춰보세요)");
+      return;
     }
 
-    // imageWidth가 없으면 PDF 뷰포트에서 확보 (bbox_ratio 변환에 필수)
-    if (!layoutState.imageWidth && typeof pdfState !== "undefined" && pdfState.pdfDoc) {
-      try {
-        const pdfPage = await pdfState.pdfDoc.getPage(viewerState.pageNum);
-        const vp = pdfPage.getViewport({ scale: 1.0 });
-        layoutState.imageWidth = Math.round(vp.width);
-        layoutState.imageHeight = Math.round(vp.height);
-      } catch (_) { /* 무시 */ }
-    }
+    // 5. 기존 블록을 지우고 새 블록으로 교체
+    layoutState.blocks = newBlocks;
+    layoutState.isDirty = true;
 
-    // Draft 결과를 블록으로 변환
-    _applyDraftToBlocks(data);
+    _redrawOverlay();
+    _updateBlockList();
 
-    // 분석 결과를 L3에 자동 저장 (OCR 실행의 전제 조건)
-    // 사용자가 저장 버튼을 따로 누를 필요 없이, 분석 완료 시 바로 저장한다.
+    // 자동 저장
     await _saveLayout();
 
-    _setLlmStatus(
-      `분석 완료·저장됨 (${data.provider || "?"}, ${(data.elapsed_sec || 0).toFixed(1)}s)`
-    );
+    const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+    _setAutodetectStatus(`${newBlocks.length}개 블록 감지·저장됨 (${elapsed}s)`);
   } catch (err) {
-    _setLlmStatus(`오류: ${err.message}`);
+    console.error("자동감지 오류:", err);
+    _setAutodetectStatus(`오류: ${err.message}`);
+    alert(`자동감지 실패: ${err.message}`);
   } finally {
-    if (analyzeBtn) analyzeBtn.disabled = false;
+    if (btn) btn.disabled = false;
   }
 }
 
 
 /**
- * 비교 분석 실행.
+ * 전체 페이지 배치 자동감지.
+ *
+ * 왜 이렇게 하는가:
+ *   고전적 PDF는 수십~수백 페이지이다.
+ *   1페이지씩 수동 클릭하는 것은 비효율적이므로,
+ *   전체 페이지를 순회하면서 자동감지 + 저장을 한번에 수행한다.
+ *   ONNX 모델이 브라우저에서 돌아가므로 API 호출 없이 빠르게 처리된다.
+ *
+ * 흐름:
+ *   1. ONNX 모델 로드 (캐시)
+ *   2. 전체 페이지 순회
+ *      a. 페이지 이미지 추출 (scale=1.0)
+ *      b. 전처리 → 추론 → 후처리
+ *      c. Detection → LayoutBlock 변환
+ *      d. PUT /api/.../layout 으로 저장
+ *   3. 현재 페이지의 결과를 화면에 반영
  */
-async function _runLlmComparison() {
-  if (!viewerState.docId || viewerState.pageNum == null) {
-    _setLlmStatus("문헌/페이지를 먼저 선택하세요.");
+async function _runAutoDetectAll() {
+  if (!viewerState.docId || !viewerState.partId) {
+    alert("문헌을 먼저 선택하세요.");
     return;
   }
 
-  _setLlmStatus("여러 모델 비교 중...");
+  if (!pdfState.pdfDoc) {
+    alert("PDF가 로드되지 않았습니다.");
+    return;
+  }
+
+  const totalPages = pdfState.pdfDoc.numPages;
+  if (!confirm(`전체 ${totalPages}페이지에 대해 레이아웃 자동감지를 실행합니다.\n계속하시겠습니까?`)) {
+    return;
+  }
+
+  const btn = document.getElementById("autodetect-btn");
+  const batchBtn = document.getElementById("autodetect-all-btn");
+  if (btn) btn.disabled = true;
+  if (batchBtn) batchBtn.disabled = true;
+
+  const confSlider = document.getElementById("autodetect-conf");
+  const confThreshold = confSlider ? parseFloat(confSlider.value) : 0.5;
+
+  const startTime = performance.now();
+  let successCount = 0;
+  let totalBlocks = 0;
 
   try {
-    const url = `/api/llm/compare-layout/${viewerState.docId}/${viewerState.pageNum}`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ targets: null }),  // 사용 가능한 모든 모델
-    });
-    const data = await res.json();
+    // 1. 모델 로드
+    const session = await _loadKotenModel();
 
-    if (!res.ok) {
-      throw new Error(data.error || "비교 실패");
+    // 2. 전체 페이지 순회
+    for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+      _setAutodetectStatus(`감지 중... ${pageNum}/${totalPages}`);
+
+      try {
+        // a. 페이지 이미지 추출
+        const img = await _getPageImage(pageNum);
+        const imgW = img.naturalWidth || img.width;
+        const imgH = img.naturalHeight || img.height;
+
+        // b. 전처리 → 추론 → 후처리
+        const { tensor, meta } = KotenLayout.preprocess(img);
+        const outputTensor = await KotenLayout.runInference(session, tensor);
+        const detections = KotenLayout.postprocess(outputTensor, meta, confThreshold, 0.45);
+
+        // c. Detection → LayoutBlock 변환
+        const blocks = _detectionsToBlocks(detections, pageNum, { width: imgW, height: imgH });
+
+        // d. API로 저장
+        const payload = {
+          part_id: viewerState.partId,
+          page_number: pageNum,
+          image_width: imgW,
+          image_height: imgH,
+          analysis_method: "auto_detect",
+          blocks: blocks,
+        };
+
+        const url = `/api/documents/${viewerState.docId}/pages/${pageNum}/layout?part_id=${viewerState.partId}`;
+        const res = await fetch(url, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (res.ok) {
+          successCount++;
+          totalBlocks += blocks.length;
+        } else {
+          console.warn(`페이지 ${pageNum} 저장 실패:`, await res.text());
+        }
+      } catch (pageErr) {
+        console.warn(`페이지 ${pageNum} 감지 오류:`, pageErr.message);
+        // 개별 페이지 실패는 건너뛰고 계속 진행
+      }
     }
 
-    // 비교 결과 다이얼로그 표시
-    _showComparisonResults(data);
-    _setLlmStatus(`비교 완료: ${data.length}개 모델`);
-  } catch (err) {
-    _setLlmStatus(`비교 오류: ${err.message}`);
-  }
-}
+    // 3. 현재 페이지의 결과를 화면에 반영
+    if (viewerState.pageNum) {
+      await loadPageLayout(viewerState.docId, viewerState.partId, viewerState.pageNum);
+    }
 
-
-/**
- * Draft 결과를 레이아웃 블록으로 적용한다.
- *
- * Draft의 response_data.blocks를 기존 layoutState.blocks에 추가.
- * 점선 스타일로 표시하여 기존 블록과 구분.
- */
-function _applyDraftToBlocks(draft) {
-  const blocks = draft.response_data?.blocks;
-  if (!blocks || !Array.isArray(blocks)) {
-    _setLlmStatus("분석 결과에 블록이 없습니다.");
-    return;
-  }
-
-  // 기존 블록과 합침 (draft 블록은 _draft 플래그)
-  // 페이지 번호: 현재 viewerState.pageNum에서 추출 (없으면 01)
-  const pNum = String(viewerState.pageNum || 1).padStart(2, "0");
-  for (const b of blocks) {
-    // block_id 형식: 스키마 패턴 ^p\d+_b\d+$ 준수
-    const bIdx = String(layoutState.blocks.length + 1).padStart(2, "0");
-    // block_type 검증: 스키마 enum에 없는 값은 "unknown"으로 대체
-    const validBlockTypes = [
-      "main_text", "annotation", "preface", "colophon", "memorial",
-      "page_title", "page_number", "seal", "illustration",
-      "marginal_note", "table_of_contents", "unknown"
-    ];
-    const rawType = b.block_type || "main_text";
-    const safeType = validBlockTypes.includes(rawType) ? rawType : "unknown";
-    const newBlock = {
-      block_id: `p${pNum}_b${bIdx}`,
-      block_type: safeType,
-      bbox: _ratioToPixelBbox(b.bbox_ratio),
-      reading_order: b.reading_order || layoutState.blocks.length + 1,
-      writing_direction: "vertical_rtl",
-      notes: b.notes || "",
-      _draft: true,           // Draft 표시
-      _draft_id: draft.draft_id,
-      _confidence: b.confidence,
-    };
-    layoutState.blocks.push(newBlock);
-  }
-
-  layoutState.isDirty = true;
-  _redrawOverlay();
-  _updateBlockList();
-}
-
-
-/**
- * bbox_ratio (0~1 비율) → 픽셀 좌표로 변환.
- *
- * 왜 imageWidth가 필요한가:
- *   LLM이 반환하는 bbox_ratio는 이미지 전체 대비 비율(0~1)이다.
- *   이를 캔버스/레이아웃 좌표(픽셀)로 변환하려면 기준 이미지 크기가 필요하다.
- *   기준 크기는 PDF 뷰포트(scale=1.0)의 크기로, loadPageLayout()에서 설정된다.
- */
-function _ratioToPixelBbox(ratioArr) {
-  if (!ratioArr || ratioArr.length !== 4) return [0, 0, 100, 100];
-
-  const w = layoutState.imageWidth;
-  const h = layoutState.imageHeight;
-
-  if (!w || !h) {
-    console.warn(
-      "_ratioToPixelBbox: imageWidth/Height가 설정되지 않았습니다.",
-      "loadPageLayout()에서 PDF 뷰포트 초기화가 필요합니다.",
-      { imageWidth: w, imageHeight: h }
+    const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+    _setAutodetectStatus(
+      `완료: ${successCount}/${totalPages}페이지, ${totalBlocks}블록 (${elapsed}s)`
     );
-    // 폴백: 에러 방지를 위해 임시 값 사용 (이 경우 좌표가 부정확할 수 있음)
-    return [0, 0, 100, 100];
-  }
-
-  // [x_min, y_min, x_max, y_max] 비율 → 픽셀 변환
-  let x1 = Math.round(ratioArr[0] * w);
-  let y1 = Math.round(ratioArr[1] * h);
-  let x2 = Math.round(ratioArr[2] * w);
-  let y2 = Math.round(ratioArr[3] * h);
-
-  // LLM이 좌표를 뒤집어 반환할 수 있으므로 정규화
-  if (x1 > x2) [x1, x2] = [x2, x1];
-  if (y1 > y2) [y1, y2] = [y2, y1];
-
-  return [x1, y1, x2, y2];
-}
-
-
-/**
- * 비교 결과 다이얼로그를 표시한다.
- */
-function _showComparisonResults(drafts) {
-  // 간단한 alert로 표시 (추후 모달로 개선)
-  let msg = "=== LLM 비교 결과 ===\n\n";
-  for (const d of drafts) {
-    const blocks = d.response_data?.blocks;
-    const count = Array.isArray(blocks) ? blocks.length : "?";
-    msg += `[${d.provider || "?"} / ${d.model || "?"}]\n`;
-    msg += `  블록: ${count}개, 시간: ${(d.elapsed_sec || 0).toFixed(1)}s\n`;
-    msg += `  비용: $${(d.cost_usd || 0).toFixed(4)}\n`;
-    if (d.status === "rejected") {
-      msg += `  오류: ${d.quality_notes || "호출 실패"}\n`;
-    }
-    msg += "\n";
-  }
-
-  // 첫 번째 성공 Draft를 자동 적용할지 물어봄
-  const successful = drafts.filter(
-    d => d.status !== "rejected" && d.response_data?.blocks
-  );
-  if (successful.length > 0) {
-    msg += `가장 첫 번째 결과를 적용하시겠습니까?`;
-    if (confirm(msg)) {
-      _applyDraftToBlocks(successful[0]);
-    }
-  } else {
-    alert(msg + "\n성공한 모델이 없습니다.");
+  } catch (err) {
+    console.error("배치 자동감지 오류:", err);
+    _setAutodetectStatus(`오류: ${err.message}`);
+    alert(`배치 자동감지 실패: ${err.message}`);
+  } finally {
+    if (btn) btn.disabled = false;
+    if (batchBtn) batchBtn.disabled = false;
   }
 }
 
 
 /**
- * LLM 상태 텍스트를 설정한다.
+ * Detection 배열을 LayoutBlock 배열로 변환한다.
+ *
+ * - overall(classId=0)은 건너뜀 (판면 전체 영역, OCR 단위 아님)
+ * - 좌표는 이미 원본 이미지 좌표 (postprocess에서 역변환됨)
+ * - reading_order: 세로쓰기 RTL 기준, x좌표 중심 내림차순(오른쪽→왼쪽),
+ *   동일 열은 y좌표 오름차순(위→아래)
+ *
+ * @param {Array<{ x1, y1, x2, y2, conf, classId, label, color }>} detections
+ * @param {number} [pageNum] - 페이지 번호 (생략 시 현재 페이지)
+ * @param {{ width: number, height: number }} [imgSize] - 이미지 크기 (생략 시 layoutState)
+ * @returns {Array} LayoutBlock 배열
  */
-function _setLlmStatus(text) {
-  const el = document.getElementById("llm-analyze-status");
+function _detectionsToBlocks(detections, pageNum, imgSize) {
+  const pn = pageNum || viewerState.pageNum || 1;
+  const pNum = String(pn).padStart(2, "0");
+  const imgW = imgSize ? imgSize.width : (layoutState.imageWidth || 9999);
+  const imgH = imgSize ? imgSize.height : (layoutState.imageHeight || 9999);
+
+  // overall(classId=0) 제외, block_type 매핑
+  const filtered = detections
+    .filter(d => KOTEN_TO_BLOCK_TYPE[d.classId] !== null && KOTEN_TO_BLOCK_TYPE[d.classId] !== undefined)
+    .map(d => ({
+      ...d,
+      blockType: KOTEN_TO_BLOCK_TYPE[d.classId],
+      cx: (d.x1 + d.x2) / 2,
+      cy: (d.y1 + d.y2) / 2,
+    }));
+
+  // reading_order 정렬: x중심 내림차순(오른쪽→왼쪽), 동일 열은 y중심 오름차순(위→아래)
+  // "동일 열" 판정: x중심 차이가 블록 너비의 50% 이내이면 같은 열
+  filtered.sort((a, b) => {
+    const avgWidth = ((a.x2 - a.x1) + (b.x2 - b.x1)) / 2;
+    const xDiff = Math.abs(a.cx - b.cx);
+    if (xDiff < avgWidth * 0.5) {
+      // 같은 열 → y 오름차순
+      return a.cy - b.cy;
+    }
+    // 다른 열 → x 내림차순 (오른쪽 먼저)
+    return b.cx - a.cx;
+  });
+
+  return filtered.map((d, idx) => {
+    const bIdx = String(idx + 1).padStart(2, "0");
+    return {
+      block_id: `p${pNum}_b${bIdx}`,
+      block_type: d.blockType,
+      bbox: [
+        Math.round(Math.max(0, d.x1)),
+        Math.round(Math.max(0, d.y1)),
+        Math.round(Math.min(imgW, d.x2)),
+        Math.round(Math.min(imgH, d.y2)),
+      ],
+      reading_order: idx,
+      writing_direction: "vertical_rtl",
+      line_style: null,
+      font_size_class: null,
+      ocr_config: null,
+      refers_to_block: null,
+      skip: d.blockType === "seal", // 인장은 OCR 건너뜀
+    };
+  });
+}
+
+
+/**
+ * 자동감지 상태 텍스트를 설정한다.
+ */
+function _setAutodetectStatus(text) {
+  const el = document.getElementById("autodetect-status");
   if (el) el.textContent = text;
 }
 
 
-// 레이아웃 모드 활성화 시 LLM UI도 초기화
-const _origActivateLayoutMode = typeof activateLayoutMode === "function"
-  ? activateLayoutMode
-  : null;
+/**
+ * 자동감지 UI를 초기화한다.
+ *
+ * 왜 layout-editor.js에 넣는가:
+ *   자동감지는 레이아웃 편집기의 확장 기능이다.
+ *   감지 결과를 기존 블록 편집 UI에 통합한다.
+ */
+function _initAutodetectUI() {
+  // 현재 페이지 자동감지 버튼
+  const btn = document.getElementById("autodetect-btn");
+  if (btn) {
+    btn.addEventListener("click", _runAutoDetect);
+  }
 
-// DOMContentLoaded에서 LLM UI 초기화
+  // 전체 페이지 배치 자동감지 버튼
+  const batchBtn = document.getElementById("autodetect-all-btn");
+  if (batchBtn) {
+    batchBtn.addEventListener("click", _runAutoDetectAll);
+  }
+
+  // confidence 슬라이더 값 표시
+  const slider = document.getElementById("autodetect-conf");
+  const valueLabel = document.getElementById("autodetect-conf-value");
+  if (slider && valueLabel) {
+    slider.addEventListener("input", () => {
+      valueLabel.textContent = parseFloat(slider.value).toFixed(2);
+    });
+  }
+}
+
+
+// DOMContentLoaded에서 자동감지 UI 초기화
 document.addEventListener("DOMContentLoaded", () => {
-  _initLlmLayoutUI();
+  _initAutodetectUI();
 });
