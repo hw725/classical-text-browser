@@ -82,6 +82,7 @@ function _defaultPresets() {
     // 전각
     { id: "period", label: "마침표", category: "fullwidth", before: null, after: "。" },
     { id: "comma", label: "쉼표", category: "fullwidth", before: null, after: "，" },
+    { id: "enumeration", label: "나열점", category: "fullwidth", before: null, after: "、" },
     { id: "semicolon", label: "쌍점", category: "fullwidth", before: null, after: "；" },
     { id: "colon", label: "고리점", category: "fullwidth", before: null, after: "：" },
     { id: "question", label: "물음표", category: "fullwidth", before: null, after: "？" },
