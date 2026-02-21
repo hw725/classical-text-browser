@@ -1854,6 +1854,11 @@ body.resizing-row {
   min-height: 200px;
 }
 
+/* 세로 모드에서 접힌 블록은 min-height 해제 — 헤더만 표시 */
+.corr-text-area.vertical-text-mode .corr-block-section:has(.corr-block-body.collapsed) {
+  min-height: auto;
+}
+
 /* 세로 모드에서 블록 헤더를 가로쓰기 유지 (블록 ID 등 라벨) */
 .corr-text-area.vertical-text-mode .corr-block-header {
   writing-mode: horizontal-tb;

@@ -1,16 +1,26 @@
 /**
- * HWP/HWPX 파일 가져오기 UI.
+ * 텍스트 파일 가져오기 UI (HWP + PDF 통합).
  *
  * 워크플로우:
- *   1. 파일 선택(.hwp/.hwpx) → 미리보기 (메타데이터 + 텍스트 + 표점·현토 감지)
- *   2. 문헌 ID 입력 + 옵션 설정 → 가져오기 실행
- *   3. doc_id가 이미 존재하면 시나리오 1 (기존 문서에 텍스트 투입)
- *      doc_id가 없으면 시나리오 2 (새 문헌 생성)
+ *   1. 파일 선택(.hwp/.hwpx/.pdf) → 자동 형식 판별
+ *   2-HWP: 미리보기(메타데이터 + 텍스트 + 표점·현토 감지)
+ *   2-PDF: 텍스트 레이어 확인 + 구조 분석(LLM)
+ *   3-PDF: 원문/번역 분리(LLM) → 분리 결과 미리보기 + 편집
+ *   4: 문헌 ID 입력 + 옵션 → 가져오기 실행
  *
  * 의존: index.html의 #hwp-import-overlay 다이얼로그.
  */
 
 /* global _loadDocumentList */  // workspace.js에서 제공
+
+/** 현재 파일 형식 추적 — "hwp" | "pdf" | null */
+let _importFileType = null;
+
+/** PDF 분리 결과 캐시 (분리 실행 후 저장 → apply에서 사용) */
+let _pdfSeparationResults = null;
+
+/** PDF 구조 분석 결과 캐시 */
+let _pdfStructure = null;
 
 // ── 다이얼로그 열기/닫기 ──────────────────────
 
@@ -20,9 +30,14 @@ function _openHwpImportDialog() {
   if (!overlay) return;
 
   // 상태 초기화
+  _importFileType = null;
+  _pdfSeparationResults = null;
+  _pdfStructure = null;
+
   document.getElementById("hwp-import-file").value = "";
   document.getElementById("hwp-import-status").textContent = "";
   document.getElementById("hwp-import-preview").style.display = "none";
+  document.getElementById("pdf-import-preview").style.display = "none";
   document.getElementById("hwp-import-step2").style.display = "none";
   document.getElementById("hwp-import-exec-status").textContent = "";
 
@@ -36,13 +51,23 @@ function _closeHwpImportDialog() {
 }
 
 
-// ── 미리보기 ──────────────────────────────────
+// ── 파일 형식 판별 ──────────────────────────
 
-/** 선택한 HWP 파일의 미리보기를 서버에서 가져온다. */
-async function _previewHwpFile() {
+/** 파일 확장자로 형식을 판별한다. */
+function _detectFileType(filename) {
+  const ext = (filename || "").split(".").pop().toLowerCase();
+  if (ext === "hwp" || ext === "hwpx") return "hwp";
+  if (ext === "pdf") return "pdf";
+  return null;
+}
+
+
+// ── 미리보기 (형식에 따라 분기) ──────────────
+
+/** 선택한 파일의 미리보기를 수행한다. */
+async function _previewImportFile() {
   const fileInput = document.getElementById("hwp-import-file");
   const statusEl = document.getElementById("hwp-import-status");
-  const previewDiv = document.getElementById("hwp-import-preview");
 
   if (!fileInput.files || fileInput.files.length === 0) {
     statusEl.textContent = "파일을 선택하세요.";
@@ -50,7 +75,27 @@ async function _previewHwpFile() {
   }
 
   const file = fileInput.files[0];
-  statusEl.textContent = "미리보기 중...";
+  _importFileType = _detectFileType(file.name);
+
+  // 결과 영역 초기화
+  document.getElementById("hwp-import-preview").style.display = "none";
+  document.getElementById("pdf-import-preview").style.display = "none";
+  document.getElementById("hwp-import-step2").style.display = "none";
+
+  if (_importFileType === "hwp") {
+    await _previewHwpFile(file, statusEl);
+  } else if (_importFileType === "pdf") {
+    await _previewPdfFile(file, statusEl);
+  } else {
+    statusEl.textContent = "지원하지 않는 형식입니다. (.hwp, .hwpx, .pdf만 가능)";
+  }
+}
+
+
+// ── HWP 미리보기 ────────────────────────────
+
+async function _previewHwpFile(file, statusEl) {
+  statusEl.textContent = "HWP 미리보기 중...";
 
   try {
     const formData = new FormData();
@@ -62,7 +107,6 @@ async function _previewHwpFile() {
     });
 
     const data = await res.json();
-
     if (!res.ok) {
       statusEl.textContent = data.error || "미리보기 실패";
       return;
@@ -99,11 +143,10 @@ async function _previewHwpFile() {
     document.getElementById("hwp-import-clean-preview").value =
       data.sample_clean_text || "";
 
-    previewDiv.style.display = "block";
+    document.getElementById("hwp-import-preview").style.display = "block";
 
     // Step 2 표시
-    const step2 = document.getElementById("hwp-import-step2");
-    step2.style.display = "block";
+    document.getElementById("hwp-import-step2").style.display = "block";
 
     // 제목 자동 채우기
     const titleInput = document.getElementById("hwp-import-title");
@@ -118,9 +161,190 @@ async function _previewHwpFile() {
 }
 
 
-// ── 가져오기 실행 ─────────────────────────────
+// ── PDF 미리보기 ────────────────────────────
 
-/** HWP 텍스트를 문헌으로 가져온다. */
+async function _previewPdfFile(file, statusEl) {
+  statusEl.textContent = "PDF 분석 중...";
+
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const res = await fetch("/api/text-import/pdf/analyze", {
+      method: "POST",
+      body: formData,
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = data.error || "PDF 분석 실패";
+      return;
+    }
+
+    // 메타 정보
+    const metaEl = document.getElementById("pdf-import-meta");
+    metaEl.innerHTML = [
+      `<b>페이지 수:</b> ${data.page_count}`,
+      `<b>텍스트 레이어:</b> ${data.has_text_layer ? "있음" : "없음"}`,
+    ].join(" &nbsp;|&nbsp; ");
+
+    // 텍스트 레이어 상태
+    const textLayerEl = document.getElementById("pdf-preview-text-layer");
+    textLayerEl.textContent = data.has_text_layer
+      ? "텍스트 추출 가능" : "텍스트 레이어 없음 — OCR이 필요합니다";
+    textLayerEl.style.color = data.has_text_layer ? "#4caf50" : "#f44336";
+
+    // 구조 분석 결과
+    const structureEl = document.getElementById("pdf-preview-structure");
+    const structureInfo = document.getElementById("pdf-structure-info");
+
+    if (data.detected_structure) {
+      _pdfStructure = data.detected_structure;
+      structureEl.textContent = `구조 분석 완료 (${data.detected_structure.pattern_type})`;
+      structureEl.style.color = "#4caf50";
+
+      // 구조 상세 표시
+      document.getElementById("pdf-structure-type").textContent =
+        _translatePatternType(data.detected_structure.pattern_type);
+      document.getElementById("pdf-structure-original").textContent =
+        data.detected_structure.original_markers || "(없음)";
+      document.getElementById("pdf-structure-translation").textContent =
+        data.detected_structure.translation_markers || "(없음)";
+      document.getElementById("pdf-structure-confidence").textContent =
+        `${(data.detected_structure.confidence * 100).toFixed(0)}%`;
+      structureInfo.style.display = "block";
+    } else {
+      structureEl.textContent = data.has_text_layer
+        ? "구조 분석 건너뜀" : "";
+      structureEl.style.color = "#666";
+      structureInfo.style.display = "none";
+    }
+
+    // 샘플 텍스트
+    const sampleText = (data.sample_pages || [])
+      .map(p => `--- 페이지 ${p.page_num} (${p.char_count}자) ---\n${p.text}`)
+      .join("\n\n");
+    document.getElementById("pdf-import-sample-text").value = sampleText || "(텍스트 없음)";
+
+    // 분리 결과 초기화
+    document.getElementById("pdf-separation-results").style.display = "none";
+    _pdfSeparationResults = null;
+
+    document.getElementById("pdf-import-preview").style.display = "block";
+
+    // 텍스트 레이어가 있으면 Step 2 표시
+    if (data.has_text_layer) {
+      document.getElementById("hwp-import-step2").style.display = "block";
+    }
+
+    statusEl.textContent = "";
+  } catch (err) {
+    statusEl.textContent = `오류: ${err.message}`;
+  }
+}
+
+/** 패턴 타입을 한국어로 변환. */
+function _translatePatternType(type) {
+  const map = {
+    alternating: "원문→번역 교차",
+    block: "블록 분리 (앞 원문/뒤 번역)",
+    interlinear: "줄 단위 교차",
+    mixed: "혼합 구조",
+    original_only: "원문만 있음",
+    unknown: "분석 실패",
+  };
+  return map[type] || type;
+}
+
+
+// ── PDF 원문/번역 분리 ──────────────────────
+
+async function _executePdfSeparation() {
+  const fileInput = document.getElementById("hwp-import-file");
+  const statusEl = document.getElementById("pdf-import-separate-status");
+  const btn = document.getElementById("pdf-import-separate-btn");
+
+  if (!fileInput.files || fileInput.files.length === 0) {
+    statusEl.textContent = "파일을 다시 선택하세요.";
+    return;
+  }
+
+  if (!_pdfStructure) {
+    statusEl.textContent = "구조 분석 결과가 없습니다. 미리보기를 다시 실행하세요.";
+    return;
+  }
+
+  btn.disabled = true;
+  statusEl.textContent = "LLM으로 원문/번역 분리 중... (시간이 걸릴 수 있습니다)";
+
+  try {
+    const customInstructions =
+      document.getElementById("pdf-import-custom-instructions").value.trim();
+
+    const bodyObj = {
+      structure: _pdfStructure,
+      custom_instructions: customInstructions,
+    };
+
+    const formData = new FormData();
+    formData.append("file", fileInput.files[0]);
+    formData.append("body", JSON.stringify(bodyObj));
+
+    const res = await fetch("/api/text-import/pdf/separate", {
+      method: "POST",
+      body: formData,
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = data.error || "분리 실패";
+      alert(`텍스트 분리 실패: ${data.error || "알 수 없는 오류"}`);
+      return;
+    }
+
+    _pdfSeparationResults = data.results || [];
+
+    // 분리 결과 미리보기
+    const allOriginal = _pdfSeparationResults
+      .map(r => r.original_text || "")
+      .filter(t => t.trim())
+      .join("\n\n");
+    const allTranslation = _pdfSeparationResults
+      .map(r => r.translation_text || "")
+      .filter(t => t.trim())
+      .join("\n\n");
+
+    document.getElementById("pdf-import-original-preview").value = allOriginal;
+    document.getElementById("pdf-import-translation-preview").value = allTranslation;
+    document.getElementById("pdf-separation-results").style.display = "block";
+
+    // Step 2 표시
+    document.getElementById("hwp-import-step2").style.display = "block";
+
+    const pagesWithText = _pdfSeparationResults.filter(r => r.original_text).length;
+    statusEl.textContent = `분리 완료: ${pagesWithText}페이지에서 원문 추출`;
+  } catch (err) {
+    statusEl.textContent = `오류: ${err.message}`;
+    alert(`텍스트 분리 중 오류: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+
+// ── 가져오기 실행 (HWP / PDF 공통) ──────────
+
+async function _executeImport() {
+  if (_importFileType === "pdf") {
+    await _executePdfApply();
+  } else {
+    await _executeHwpImport();
+  }
+}
+
+
+// ── HWP 가져오기 실행 ───────────────────────
+
 async function _executeHwpImport() {
   const fileInput = document.getElementById("hwp-import-file");
   const docIdInput = document.getElementById("hwp-import-doc-id");
@@ -141,7 +365,6 @@ async function _executeHwpImport() {
     return;
   }
 
-  // 실행 중 버튼 비활성화
   execBtn.disabled = true;
   statusEl.textContent = "가져오는 중...";
 
@@ -164,10 +387,10 @@ async function _executeHwpImport() {
 
     if (!res.ok) {
       statusEl.textContent = data.error || "가져오기 실패";
+      alert(`HWP 가져오기 실패: ${data.error || "알 수 없는 오류"}`);
       return;
     }
 
-    // 성공
     const stats = data.cleaned_stats || {};
     const mode = data.mode === "create_from_hwp" ? "새 문헌 생성" : "기존 문헌에 투입";
     statusEl.textContent =
@@ -175,12 +398,80 @@ async function _executeHwpImport() {
       (stats.punct_count ? `, 표점 ${stats.punct_count}개 분리` : "") +
       (stats.hyeonto_count ? `, 현토 ${stats.hyeonto_count}개 분리` : "");
 
-    // 문헌 목록 새로고침
     if (typeof _loadDocumentList === "function") {
       _loadDocumentList();
     }
   } catch (err) {
     statusEl.textContent = `오류: ${err.message}`;
+    alert(`HWP 가져오기 중 오류: ${err.message}`);
+  } finally {
+    execBtn.disabled = false;
+  }
+}
+
+
+// ── PDF 가져오기 적용 ───────────────────────
+
+async function _executePdfApply() {
+  const docIdInput = document.getElementById("hwp-import-doc-id");
+  const stripPunct = document.getElementById("hwp-import-strip-punct").checked;
+  const stripHyeonto = document.getElementById("hwp-import-strip-hyeonto").checked;
+  const statusEl = document.getElementById("hwp-import-exec-status");
+  const execBtn = document.getElementById("hwp-import-exec-btn");
+
+  const docId = docIdInput.value.trim();
+  if (!docId) {
+    statusEl.textContent = "문헌 ID를 입력하세요.";
+    return;
+  }
+
+  // 분리 결과가 있으면 사용, 없으면 직접 텍스트 사용
+  let results;
+  if (_pdfSeparationResults && _pdfSeparationResults.length > 0) {
+    // 사용자가 편집한 원문 반영
+    const editedOriginal = document.getElementById("pdf-import-original-preview").value;
+    // 편집된 텍스트를 단일 결과로 전송 (전체를 page 1로)
+    results = [{
+      page_num: 1,
+      original_text: editedOriginal,
+      translation_text: document.getElementById("pdf-import-translation-preview").value,
+    }];
+  } else {
+    statusEl.textContent = "먼저 '원문/번역 분리 실행'을 해주세요.";
+    return;
+  }
+
+  execBtn.disabled = true;
+  statusEl.textContent = "L4에 저장 중...";
+
+  try {
+    const res = await fetch("/api/text-import/pdf/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        doc_id: docId,
+        results: results,
+        strip_punctuation: stripPunct,
+        strip_hyeonto: stripHyeonto,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      statusEl.textContent = data.error || "저장 실패";
+      alert(`PDF 텍스트 저장 실패: ${data.error || "알 수 없는 오류"}`);
+      return;
+    }
+
+    statusEl.textContent = `완료: ${data.pages_saved}페이지 L4에 저장`;
+
+    if (typeof _loadDocumentList === "function") {
+      _loadDocumentList();
+    }
+  } catch (err) {
+    statusEl.textContent = `오류: ${err.message}`;
+    alert(`PDF 텍스트 저장 중 오류: ${err.message}`);
   } finally {
     execBtn.disabled = false;
   }
@@ -202,11 +493,15 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // 미리보기 버튼
+  // 미리보기 버튼 — 형식에 따라 분기
   const previewBtn = document.getElementById("hwp-import-preview-btn");
-  if (previewBtn) previewBtn.addEventListener("click", _previewHwpFile);
+  if (previewBtn) previewBtn.addEventListener("click", _previewImportFile);
 
-  // 가져오기 실행 버튼
+  // 가져오기 실행 버튼 — 형식에 따라 분기
   const execBtn = document.getElementById("hwp-import-exec-btn");
-  if (execBtn) execBtn.addEventListener("click", _executeHwpImport);
+  if (execBtn) execBtn.addEventListener("click", _executeImport);
+
+  // PDF 분리 실행 버튼
+  const separateBtn = document.getElementById("pdf-import-separate-btn");
+  if (separateBtn) separateBtn.addEventListener("click", _executePdfSeparation);
 });

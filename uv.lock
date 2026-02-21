@@ -316,13 +316,12 @@ dependencies = [
     { name = "gitpython" },
     { name = "google-genai" },
     { name = "httpx" },
+    { name = "hwp-hwpx-parser" },
     { name = "jsonschema" },
     { name = "lxml" },
-    { name = "olefile" },
     { name = "openai" },
     { name = "pillow" },
     { name = "pymupdf" },
-    { name = "python-hwpx" },
     { name = "python-multipart" },
     { name = "pyyaml" },
     { name = "uvicorn", extra = ["standard"] },
@@ -350,15 +349,14 @@ requires-dist = [
     { name = "gitpython", specifier = ">=3.1.0" },
     { name = "google-genai", specifier = ">=1.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
+    { name = "hwp-hwpx-parser", specifier = ">=1.0.0" },
     { name = "jsonschema", specifier = ">=4.20.0" },
     { name = "lxml", specifier = ">=5.0.0" },
-    { name = "olefile", specifier = ">=0.47" },
     { name = "openai", specifier = ">=1.50.0" },
     { name = "paddleocr", marker = "extra == 'paddleocr'", specifier = ">=2.10.0" },
     { name = "paddlepaddle", marker = "extra == 'paddleocr'", specifier = ">=3.3.0" },
     { name = "pillow", specifier = ">=12.1.1" },
     { name = "pymupdf", specifier = ">=1.27.1" },
-    { name = "python-hwpx", specifier = ">=0.1.0" },
     { name = "python-multipart", specifier = ">=0.0.22" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
@@ -780,6 +778,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/b1/df/48c586a5fe32a0f01324ee087459e112ebb7224f646c0b5023f5e79e9956/httpx-0.28.1.tar.gz", hash = "sha256:75e98c5f16b0f35b567856f597f06ff2270a374470a5c2392242528e3e3e42fc", size = 141406, upload-time = "2024-12-06T15:37:23.222Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2a/39/e50c7c3a983047577ee07d2a9e53faf5a69493943ec3f6a384bdc792deb2/httpx-0.28.1-py3-none-any.whl", hash = "sha256:d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad", size = 73517, upload-time = "2024-12-06T15:37:21.509Z" },
+]
+
+[[package]]
+name = "hwp-hwpx-parser"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "olefile" },
+    { name = "python-docx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e9/f4/a381b0e7c6d8cbc4c0013585746d143f61081a58c5a0483e37669155be89/hwp_hwpx_parser-1.0.0.tar.gz", hash = "sha256:27ba84c6871ebcd34bb2da257bdd2209bf15ad2b6d19b7aee1168f20c7d03f20", size = 185607, upload-time = "2026-01-29T06:14:35.607Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/55/92/eb144ed0c7360ac0fc14a59193776b881b77a1a13b093f337bd386bb6086/hwp_hwpx_parser-1.0.0-py3-none-any.whl", hash = "sha256:f853f6e7043c388b1eb7adcfa465f4d84fd7ee15ba0d49c383af9707924b9139", size = 28402, upload-time = "2026-01-29T06:14:33.856Z" },
 ]
 
 [[package]]
@@ -1825,18 +1836,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f0/26/19cadc79a718c5edbec86fd4919a6b6d3f681039a2f6d66d14be94e75fb9/python_dotenv-1.2.1.tar.gz", hash = "sha256:42667e897e16ab0d66954af0e60a9caa94f0fd4ecf3aaf6d2d260eec1aa36ad6", size = 44221, upload-time = "2025-10-26T15:12:10.434Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/14/1b/a298b06749107c305e1fe0f814c6c74aea7b2f1e10989cb30f544a1b3253/python_dotenv-1.2.1-py3-none-any.whl", hash = "sha256:b81ee9561e9ca4004139c6cbba3a238c32b03e4894671e181b671e8cb8425d61", size = 21230, upload-time = "2025-10-26T15:12:09.109Z" },
-]
-
-[[package]]
-name = "python-hwpx"
-version = "1.9"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "lxml" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/80/b6/0d02b6bc26908b964b48d3691900b93d5611149c097caf96d3fdc1634c98/python_hwpx-1.9.tar.gz", hash = "sha256:cc58463e1119c5f8776bcbb584a45a749444d4a378c08a5bfea4b3fa62f77652", size = 84845, upload-time = "2025-09-21T00:41:50.864Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/27/08/c757b68fb3d77ff0b2aedee08856cd89ef85cec1b8a62d29f54bd05938a8/python_hwpx-1.9-py3-none-any.whl", hash = "sha256:097ff30cc611a238d31bb6b4d360c630de8ec031fe2153ae46e0a4cb3c1bde75", size = 72465, upload-time = "2025-09-21T00:41:49.004Z" },
 ]
 
 [[package]]
