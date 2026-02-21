@@ -282,6 +282,164 @@ class VariantCharDict:
             char: sorted(alts) for char, alts in sorted(self._variants.items())
         }
 
+    def import_bulk(self, text: str, fmt: str = "auto") -> dict:
+        """외부 이체자 데이터를 대량으로 가져온다.
+
+        목적: CSV, TSV, 텍스트, JSON 등 다양한 형식의 이체자 데이터를
+              파싱하여 사전에 일괄 등록한다.
+        입력:
+            text — 가져올 텍스트 데이터.
+            fmt — 형식 지정. "auto"이면 자동 감지.
+                   "csv", "tsv", "text", "json" 중 하나.
+        출력: { "added": 추가된 쌍 수, "skipped": 건너뛴 수, "errors": [에러 목록] }
+        """
+        if fmt == "auto":
+            fmt = self._detect_format(text)
+
+        if fmt == "json":
+            return self._import_json(text)
+        else:
+            return self._import_delimited(text, fmt)
+
+    def _detect_format(self, text: str) -> str:
+        """텍스트 형식을 자동 감지한다.
+
+        판별 기준:
+          - { 로 시작하면 JSON
+          - 탭 문자가 포함되면 TSV
+          - 쉼표가 포함되면 CSV
+          - 그 외는 공백 구분 텍스트
+        """
+        stripped = text.strip()
+        if stripped.startswith("{") or stripped.startswith("["):
+            return "json"
+        # 첫 몇 줄로 판별
+        first_lines = stripped.split("\n", 5)[:5]
+        tab_count = sum(1 for line in first_lines if "\t" in line)
+        comma_count = sum(1 for line in first_lines if "," in line)
+        if tab_count >= 2:
+            return "tsv"
+        if comma_count >= 2:
+            return "csv"
+        return "text"
+
+    def _import_delimited(self, text: str, fmt: str) -> dict:
+        """구분자 기반 텍스트에서 이체자 쌍을 파싱한다.
+
+        지원 형식:
+          - csv: A,B 또는 A,B,C (한 행에 여러 이체자)
+          - tsv: A\\tB 또는 A\\tB\\tC
+          - text: A B 또는 A↔B (공백/화살표 구분)
+
+        한 행에 3개 이상이면 모든 조합을 양방향 등록한다.
+        예: 齒,歯,齿 → 齒↔歯, 齒↔齿, 歯↔齿
+        """
+        added = 0
+        skipped = 0
+        errors = []
+
+        for line_num, line in enumerate(text.strip().split("\n"), 1):
+            line = line.strip()
+            if not line or line.startswith("#") or line.startswith("//"):
+                continue
+
+            # 구분자로 분리
+            if fmt == "csv":
+                chars = [c.strip() for c in line.split(",")]
+            elif fmt == "tsv":
+                chars = [c.strip() for c in line.split("\t")]
+            else:
+                # text: 공백, ↔, =, → 등 다양한 구분자
+                import re
+                chars = [c.strip() for c in re.split(r"[\s↔=→⇔]+", line)]
+
+            # 빈 항목 제거, 한 글자씩만 허용
+            chars = [c for c in chars if c]
+
+            if len(chars) < 2:
+                errors.append(f"{line_num}행: 이체자 쌍이 부족합니다 — '{line}'")
+                continue
+
+            # 모든 조합을 양방향 등록
+            for i in range(len(chars)):
+                for j in range(i + 1, len(chars)):
+                    a, b = chars[i], chars[j]
+                    if a == b:
+                        skipped += 1
+                        continue
+                    # 이미 등록된 쌍은 건너뛰기
+                    if self.is_variant(a, b):
+                        skipped += 1
+                        continue
+                    self.add_pair(a, b)
+                    added += 1
+
+        return {"added": added, "skipped": skipped, "errors": errors}
+
+    def _import_json(self, text: str) -> dict:
+        """JSON 형식에서 이체자 쌍을 파싱한다.
+
+        지원 형식:
+          1. 플랫폼 표준: {"variants": {"A": ["B", "C"], "B": ["A"], ...}}
+          2. 간단 매핑: {"A": "B", "C": "D", ...}
+          3. 간단 배열: {"A": ["B", "C"], ...}
+          4. 쌍 배열: [["A", "B"], ["C", "D"], ...]
+        """
+        added = 0
+        skipped = 0
+        errors = []
+
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as e:
+            return {"added": 0, "skipped": 0, "errors": [f"JSON 파싱 오류: {e}"]}
+
+        # 형식 1: 플랫폼 표준 형식
+        if isinstance(data, dict) and "variants" in data:
+            data = data["variants"]
+
+        if isinstance(data, dict):
+            for char, alts in data.items():
+                # _format_guide 같은 메타데이터 건너뛰기
+                if char.startswith("_"):
+                    continue
+                if isinstance(alts, str):
+                    # 형식 2: 단순 매핑 {"A": "B"}
+                    alts = [alts]
+                if isinstance(alts, list):
+                    for alt in alts:
+                        if not isinstance(alt, str):
+                            continue
+                        if char == alt:
+                            skipped += 1
+                            continue
+                        if self.is_variant(char, alt):
+                            skipped += 1
+                            continue
+                        self.add_pair(char, alt)
+                        added += 1
+        elif isinstance(data, list):
+            # 형식 4: 쌍 배열 [["A", "B"], ...]
+            for idx, pair in enumerate(data):
+                if not isinstance(pair, (list, tuple)) or len(pair) < 2:
+                    errors.append(f"항목 {idx}: 올바른 쌍이 아닙니다 — {pair}")
+                    continue
+                # 배열 내 모든 조합 등록
+                chars = [c for c in pair if isinstance(c, str)]
+                for i in range(len(chars)):
+                    for j in range(i + 1, len(chars)):
+                        a, b = chars[i], chars[j]
+                        if a == b:
+                            skipped += 1
+                            continue
+                        if self.is_variant(a, b):
+                            skipped += 1
+                            continue
+                        self.add_pair(a, b)
+                        added += 1
+
+        return {"added": added, "skipped": skipped, "errors": errors}
+
 
 # ──────────────────────────────────────
 # 핵심 정렬 알고리즘 (작업 3)

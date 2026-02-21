@@ -88,6 +88,13 @@ function _initVariantEvents() {
       _showVariantAddDialog();
     });
   }
+
+  const importBtn = document.getElementById("alignment-import-variant");
+  if (importBtn) {
+    importBtn.addEventListener("click", () => {
+      _showVariantImportDialog();
+    });
+  }
 }
 
 
@@ -355,6 +362,168 @@ async function _addVariantPair(charA, charB) {
     _runAlignment();
   } catch (err) {
     console.error("이체자 등록 오류:", err);
+  }
+}
+
+
+/**
+ * 이체자 대량 가져오기 다이얼로그를 표시한다.
+ *
+ * 텍스트 붙여넣기 + 파일 업로드 두 가지 방법을 지원한다.
+ * 형식: CSV, TSV, 텍스트(공백/↔ 구분), JSON 자동 감지.
+ */
+function _showVariantImportDialog() {
+  // 기존 다이얼로그가 있으면 제거
+  const existing = document.getElementById("variant-import-dialog");
+  if (existing) existing.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "variant-import-dialog";
+  overlay.style.cssText =
+    "position:fixed;top:0;left:0;width:100%;height:100%;" +
+    "background:rgba(0,0,0,0.5);z-index:10000;display:flex;" +
+    "align-items:center;justify-content:center;";
+
+  const dialog = document.createElement("div");
+  dialog.style.cssText =
+    "background:var(--bg-primary,#1e1e1e);color:var(--text-primary,#e0e0e0);" +
+    "border-radius:8px;padding:20px;width:520px;max-height:80vh;" +
+    "overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.5);";
+
+  dialog.innerHTML = `
+    <h3 style="margin:0 0 12px 0;font-size:15px;">이체자 사전 가져오기</h3>
+    <div style="margin-bottom:8px;font-size:12px;color:var(--text-secondary,#aaa);">
+      지원 형식: CSV (<code>A,B</code>), TSV (<code>A&#9;B</code>),
+      텍스트 (<code>A B</code> 또는 <code>A↔B</code>),
+      JSON (<code>{"A":["B"]}</code> 또는 <code>[["A","B"]]</code>)<br>
+      한 줄에 3개 이상이면 모든 조합을 등록합니다. <code>#</code>으로 시작하는 줄은 무시됩니다.
+    </div>
+    <div style="margin-bottom:8px;">
+      <label style="font-size:13px;">
+        형식:
+        <select id="variant-import-format" style="margin-left:4px;padding:2px 6px;
+          background:var(--bg-secondary,#2d2d2d);color:var(--text-primary,#e0e0e0);
+          border:1px solid var(--border-color,#555);border-radius:4px;">
+          <option value="auto">자동 감지</option>
+          <option value="csv">CSV (쉼표)</option>
+          <option value="tsv">TSV (탭)</option>
+          <option value="text">텍스트 (공백/↔)</option>
+          <option value="json">JSON</option>
+        </select>
+      </label>
+    </div>
+    <textarea id="variant-import-text"
+      placeholder="여기에 이체자 데이터를 붙여넣으세요.&#10;예시:&#10;說,説&#10;齒,歯,齿&#10;裴,裵"
+      style="width:100%;height:180px;font-family:monospace;font-size:13px;
+        background:var(--bg-secondary,#2d2d2d);color:var(--text-primary,#e0e0e0);
+        border:1px solid var(--border-color,#555);border-radius:4px;
+        padding:8px;resize:vertical;box-sizing:border-box;"></textarea>
+    <div style="margin:8px 0;">
+      <label style="font-size:13px;cursor:pointer;
+        color:var(--accent-color,#4fc3f7);text-decoration:underline;">
+        파일에서 불러오기
+        <input type="file" id="variant-import-file"
+          accept=".csv,.tsv,.txt,.json"
+          style="display:none;">
+      </label>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button id="variant-import-cancel"
+        style="padding:6px 16px;border:1px solid var(--border-color,#555);
+          background:transparent;color:var(--text-primary,#e0e0e0);
+          border-radius:4px;cursor:pointer;">취소</button>
+      <button id="variant-import-submit"
+        style="padding:6px 16px;border:none;
+          background:var(--accent-color,#4fc3f7);color:#000;
+          border-radius:4px;cursor:pointer;font-weight:bold;">가져오기</button>
+    </div>
+  `;
+
+  overlay.appendChild(dialog);
+  document.body.appendChild(overlay);
+
+  // 파일 선택 시 textarea에 내용 채우기
+  const fileInput = document.getElementById("variant-import-file");
+  fileInput.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      document.getElementById("variant-import-text").value = reader.result;
+      // 파일 확장자로 형식 자동 설정
+      const ext = file.name.split(".").pop().toLowerCase();
+      const fmtSelect = document.getElementById("variant-import-format");
+      if (ext === "csv") fmtSelect.value = "csv";
+      else if (ext === "tsv") fmtSelect.value = "tsv";
+      else if (ext === "json") fmtSelect.value = "json";
+      else fmtSelect.value = "auto";
+    };
+    reader.readAsText(file, "UTF-8");
+  });
+
+  // 취소
+  document.getElementById("variant-import-cancel").addEventListener("click", () => {
+    overlay.remove();
+  });
+
+  // 오버레이 바깥 클릭 시 닫기
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  // 가져오기 실행
+  document.getElementById("variant-import-submit").addEventListener("click", async () => {
+    const text = document.getElementById("variant-import-text").value;
+    const fmt = document.getElementById("variant-import-format").value;
+
+    if (!text.trim()) {
+      alert("가져올 데이터를 입력하세요.");
+      return;
+    }
+
+    await _importVariantData(text, fmt);
+    overlay.remove();
+  });
+}
+
+
+/**
+ * 이체자 데이터를 서버로 전송하여 대량 등록한다.
+ */
+async function _importVariantData(text, format) {
+  try {
+    const res = await fetch("/api/alignment/variant-dict/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, format }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.error || "이체자 가져오기 실패");
+      return;
+    }
+
+    const data = await res.json();
+
+    // 결과 메시지 조립
+    let msg = `이체자 가져오기 완료\n\n추가: ${data.added}쌍\n건너뜀 (중복): ${data.skipped}쌍\n총 사전 크기: ${data.size}자`;
+    if (data.errors && data.errors.length > 0) {
+      msg += `\n\n오류 ${data.errors.length}건:\n` + data.errors.slice(0, 10).join("\n");
+      if (data.errors.length > 10) {
+        msg += `\n... 외 ${data.errors.length - 10}건`;
+      }
+    }
+    alert(msg);
+
+    // 사전 새로고침 + 대조 재실행
+    await _loadVariantDict();
+    if (data.added > 0) {
+      _runAlignment();
+    }
+  } catch (err) {
+    console.error("이체자 가져오기 오류:", err);
+    alert("이체자 가져오기 중 오류가 발생했습니다: " + err.message);
   }
 }
 

@@ -2925,7 +2925,7 @@ async def api_compare_layout(doc_id: str, page: int, body: CompareLayoutRequest)
             status_code=404,
         )
 
-    # targets 파싱: ["base44_http", "ollama:glm-5:cloud"]
+    # targets 파싱: ["base44_bridge", "ollama:glm-5:cloud"]
     parsed_targets = None
     if body.targets:
         parsed_targets = []
@@ -3579,6 +3579,56 @@ async def api_add_variant_pair(body: VariantPairRequest):
         variant_dict.save(save_path)
 
     return {"status": "ok", "size": variant_dict.size}
+
+
+class VariantImportRequest(BaseModel):
+    """이체자 대량 가져오기 요청."""
+    text: str  # 가져올 데이터 텍스트
+    format: str = "auto"  # "auto", "csv", "tsv", "text", "json"
+
+
+@app.post("/api/alignment/variant-dict/import")
+async def api_import_variant_dict(body: VariantImportRequest):
+    """이체자 데이터를 대량으로 가져온다.
+
+    목적: 외부 이체자 데이터를 다양한 형식으로 가져와 사전에 일괄 등록한다.
+    입력: { "text": "...", "format": "auto" }
+        format: "auto" (자동 감지), "csv", "tsv", "text", "json"
+    처리:
+        1. 형식 감지/파싱
+        2. 이체자 쌍 추출 → 양방향 등록
+        3. resources/variant_chars.json에 저장
+    출력: { "status": "ok", "added": N, "skipped": N, "errors": [...], "size": N }
+    """
+    if not body.text or not body.text.strip():
+        return JSONResponse(
+            {"error": "가져올 데이터가 비어 있습니다."}, status_code=400
+        )
+
+    variant_dict = _get_variant_dict()
+    result = variant_dict.import_bulk(body.text, body.format)
+
+    # 추가된 쌍이 있으면 저장
+    if result["added"] > 0:
+        save_path = variant_dict._find_default_path()
+        if save_path:
+            variant_dict.save(save_path)
+        else:
+            import os
+            resources_dir = os.path.join(
+                os.path.dirname(__file__), "..", "..", "resources"
+            )
+            os.makedirs(resources_dir, exist_ok=True)
+            save_path = os.path.join(resources_dir, "variant_chars.json")
+            variant_dict.save(save_path)
+
+    return {
+        "status": "ok",
+        "added": result["added"],
+        "skipped": result["skipped"],
+        "errors": result["errors"],
+        "size": variant_dict.size,
+    }
 
 
 # ───────────────────────────────────────────────────
@@ -5687,7 +5737,7 @@ def _register_interp_in_library(
 #
 # 왜 여기에 모아두는가:
 #   레이아웃 분석, OCR, 표점, 번역, 주석 모두 동일한 LLM 라우터를 사용한다.
-#   _get_llm_router()가 프로바이더 폴백(base44 → ollama → anthropic)을 관리하므로,
+#   _get_llm_router()가 프로바이더 폴백(base44_bridge → ollama → openai → anthropic)을 관리하므로,
 #   각 기능은 프롬프트만 다르고 호출 방식은 동일하다.
 #
 # 커스텀 방법:
@@ -5824,15 +5874,8 @@ async def _call_llm_text(purpose: str, text: str,
         return _parse_llm_json(response, _json)
 
     # ── 자동 모드: 프로바이더 순서대로 시도, JSON 파싱 실패 시 다음으로 ──
-    # base44_http(agent-chat)는 MCP 도구 기반이라 자유 형식 텍스트 요청을
-    # 처리할 수 없다(HTTP 200이지만 "도구가 없습니다" 거절).
-    # agent-chat 수정은 별도 프로젝트이므로, 텍스트 호출에서는 건너뛴다.
-    _SKIP_FOR_TEXT = {"base44_http"}
-
     errors = []
     for provider in router.providers:
-        if provider.provider_id in _SKIP_FOR_TEXT:
-            continue
         try:
             if not await provider.is_available():
                 continue

@@ -4,7 +4,7 @@
 
 기본 엔진:
   - LLM Vision OCR: 기존 LLM 라우터의 비전 기능을 사용.
-    별도 설치 없이 base44_http, base44_bridge, ollama 등으로 OCR 수행.
+    별도 설치 없이 base44_bridge, ollama 등으로 OCR 수행.
 
 추가 엔진 (별도 설치 필요):
   - PaddleOCR: uv add paddlepaddle paddleocr (CJK에 적합, Linux/macOS 권장)

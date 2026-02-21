@@ -416,15 +416,8 @@ class GenericLlmFetcher(BaseFetcher):
 
         user_prompt = _USER_PROMPT_TEMPLATE.format(url=url, markdown=markdown)
 
-        # base44_http(agent-chat)는 MCP 도구 기반이라 자유 형식 텍스트 요청을
-        # 처리할 수 없으므로 건너뛴다 (server.py의 _call_llm_text와 동일한 패턴).
-        _SKIP_FOR_TEXT = {"base44_http"}
-
         errors = []
         for provider in router.providers:
-            if provider.provider_id in _SKIP_FOR_TEXT:
-                continue
-
             try:
                 if not await provider.is_available():
                     continue

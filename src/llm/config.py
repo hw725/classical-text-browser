@@ -20,7 +20,6 @@ class LlmConfig:
     """
 
     DEFAULTS = {
-        "agent_chat_url": "http://127.0.0.1:8787",
         "ollama_url": "http://localhost:11434",
         "base44_backend_path": None,
         "monthly_budget_usd": 10.0,
