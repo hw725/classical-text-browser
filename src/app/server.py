@@ -141,6 +141,7 @@ API 엔드포인트:
     POST   /api/trash/{trash_type}/{trash_name}/restore → 휴지통에서 복원
 """
 
+import os
 import sys
 import shutil
 from datetime import datetime
@@ -3436,25 +3437,99 @@ async def api_rerun_ocr_block(
 #  Phase 10-3: 정렬 엔진 — OCR ↔ 텍스트 대조 API
 # ===========================================================================
 
-# 이체자 사전 인스턴스 (서버 시작 시 lazy init)
+# ── 이체자 사전 관리 (다중 사전 지원) ──
+# resources/ 폴더에 여러 사전 파일이 공존할 수 있다.
+# 활성 사전 이름은 resources/.active_variant_dict 에 기록.
 _variant_dict = None
+_variant_dict_name: str | None = None  # 현재 로드된 사전 파일명
 
 
-def _get_variant_dict():
-    """이체자 사전을 lazy-init한다.
+def _get_resources_dir() -> str:
+    """resources/ 디렉토리의 절대 경로를 반환한다."""
+    return os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "resources")
+    )
 
-    왜 lazy-init인가:
-        _library_path가 설정된 후에야 서고 내부 사전 경로를 알 수 있다.
-        기본 경로(resources/variant_chars.json)를 먼저 시도하고,
-        없으면 VariantCharDict가 빈 사전으로 동작한다.
+
+def _get_active_dict_name() -> str:
+    """활성 이체자 사전 파일명을 반환한다.
+
+    resources/.active_variant_dict 파일에 기록된 이름을 읽는다.
+    파일이 없으면 기본값 'variant_chars'를 반환한다.
     """
-    global _variant_dict
-    if _variant_dict is None:
-        from core.alignment import VariantCharDict
+    marker = os.path.join(_get_resources_dir(), ".active_variant_dict")
+    if os.path.exists(marker):
+        with open(marker, "r", encoding="utf-8") as f:
+            name = f.read().strip()
+            if name:
+                return name
+    return "variant_chars"
 
-        _variant_dict = VariantCharDict()  # 기본 경로 자동 탐색
 
+def _set_active_dict_name(name: str) -> None:
+    """활성 이체자 사전 이름을 저장한다."""
+    marker = os.path.join(_get_resources_dir(), ".active_variant_dict")
+    with open(marker, "w", encoding="utf-8") as f:
+        f.write(name)
+
+
+def _dict_name_to_path(name: str) -> str:
+    """사전 이름을 파일 경로로 변환한다. 예: 'variant_chars' → '.../resources/variant_chars.json'"""
+    return os.path.join(_get_resources_dir(), f"{name}.json")
+
+
+def _get_variant_dict(name: str | None = None):
+    """이체자 사전을 로드한다.
+
+    name이 None이면 활성 사전을 로드한다.
+    이미 같은 이름이 로드되어 있으면 캐시를 반환한다.
+    """
+    global _variant_dict, _variant_dict_name
+    from core.alignment import VariantCharDict
+
+    if name is None:
+        name = _get_active_dict_name()
+
+    # 캐시된 사전과 같은 이름이면 그대로 반환
+    if _variant_dict is not None and _variant_dict_name == name:
+        return _variant_dict
+
+    path = _dict_name_to_path(name)
+    _variant_dict = VariantCharDict(dict_path=path)
+    _variant_dict_name = name
     return _variant_dict
+
+
+def _save_variant_dict(vd, name: str | None = None) -> str:
+    """이체자 사전을 파일로 저장하고 경로를 반환한다."""
+    if name is None:
+        name = _get_active_dict_name()
+    path = _dict_name_to_path(name)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    vd.save(path)
+    return path
+
+
+def _list_variant_dicts() -> list[dict]:
+    """resources/ 폴더의 이체자 사전 파일 목록을 반환한다.
+
+    variant_chars*.json 패턴에 맞는 파일만 포함한다.
+    반환: [{"name": "variant_chars", "path": "...", "active": True}, ...]
+    """
+    import glob as glob_mod
+    resources = _get_resources_dir()
+    active = _get_active_dict_name()
+    result = []
+    # variant_ 로 시작하는 JSON 파일 탐색
+    for path in sorted(glob_mod.glob(os.path.join(resources, "variant_*.json"))):
+        basename = os.path.basename(path)
+        name = basename.rsplit(".json", 1)[0]
+        result.append({
+            "name": name,
+            "file": basename,
+            "active": name == active,
+        })
+    return result
 
 
 @app.post("/api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/alignment")
@@ -3526,37 +3601,29 @@ async def api_run_alignment(
     }
 
 
+# ── 기존 호환 API (활성 사전에 프록시) ──
+
 @app.get("/api/alignment/variant-dict")
 async def api_get_variant_dict():
-    """이체자 사전 내용을 반환한다.
-
-    목적: GUI의 이체자 사전 관리 패널에서 현재 등록된 이체자 목록을 표시한다.
-    출력: { "variants": { "裴": ["裵"], "裵": ["裴"], ... }, "size": 2 }
-    """
+    """활성 이체자 사전 내용을 반환한다. (기존 API 호환)"""
     variant_dict = _get_variant_dict()
     return {
         "variants": variant_dict.to_dict(),
         "size": variant_dict.size,
+        "pair_count": variant_dict.pair_count,
+        "active_name": _get_active_dict_name(),
     }
 
 
 class VariantPairRequest(BaseModel):
-    """이체자 쌍 추가 요청."""
+    """이체자 쌍 추가/삭제 요청."""
     char_a: str
     char_b: str
 
 
 @app.post("/api/alignment/variant-dict")
 async def api_add_variant_pair(body: VariantPairRequest):
-    """이체자 쌍을 사전에 추가한다.
-
-    목적: 대조 결과에서 사용자가 발견한 이체자를 바로 등록할 수 있게 한다.
-    입력: { "char_a": "裴", "char_b": "裵" }
-    처리:
-        1. 양방향 등록 (A→B, B→A)
-        2. resources/variant_chars.json에 저장
-    출력: { "status": "ok", "size": <새 사전 크기> }
-    """
+    """활성 사전에 이체자 쌍을 추가한다. (기존 API 호환)"""
     variant_dict = _get_variant_dict()
 
     if not body.char_a or not body.char_b:
@@ -3565,41 +3632,35 @@ async def api_add_variant_pair(body: VariantPairRequest):
         return JSONResponse({"error": "같은 글자는 이체자로 등록할 수 없습니다."}, status_code=400)
 
     variant_dict.add_pair(body.char_a, body.char_b)
-
-    # 사전 파일에 저장
-    save_path = variant_dict._find_default_path()
-    if save_path:
-        variant_dict.save(save_path)
-    else:
-        # 기본 경로에 새로 생성
-        import os
-        resources_dir = os.path.join(os.path.dirname(__file__), "..", "..", "resources")
-        os.makedirs(resources_dir, exist_ok=True)
-        save_path = os.path.join(resources_dir, "variant_chars.json")
-        variant_dict.save(save_path)
-
+    _save_variant_dict(variant_dict)
     return {"status": "ok", "size": variant_dict.size}
+
+
+@app.delete("/api/alignment/variant-dict")
+async def api_delete_variant_pair(body: VariantPairRequest):
+    """활성 사전에서 이체자 쌍을 삭제한다."""
+    variant_dict = _get_variant_dict()
+
+    if not body.char_a or not body.char_b:
+        return JSONResponse({"error": "두 글자 모두 입력해야 합니다."}, status_code=400)
+
+    removed = variant_dict.remove_pair(body.char_a, body.char_b)
+    if not removed:
+        return JSONResponse({"error": "해당 이체자 쌍이 존재하지 않습니다."}, status_code=404)
+
+    _save_variant_dict(variant_dict)
+    return {"status": "ok", "removed": True, "size": variant_dict.size}
 
 
 class VariantImportRequest(BaseModel):
     """이체자 대량 가져오기 요청."""
-    text: str  # 가져올 데이터 텍스트
-    format: str = "auto"  # "auto", "csv", "tsv", "text", "json"
+    text: str
+    format: str = "auto"
 
 
 @app.post("/api/alignment/variant-dict/import")
 async def api_import_variant_dict(body: VariantImportRequest):
-    """이체자 데이터를 대량으로 가져온다.
-
-    목적: 외부 이체자 데이터를 다양한 형식으로 가져와 사전에 일괄 등록한다.
-    입력: { "text": "...", "format": "auto" }
-        format: "auto" (자동 감지), "csv", "tsv", "text", "json"
-    처리:
-        1. 형식 감지/파싱
-        2. 이체자 쌍 추출 → 양방향 등록
-        3. resources/variant_chars.json에 저장
-    출력: { "status": "ok", "added": N, "skipped": N, "errors": [...], "size": N }
-    """
+    """활성 사전에 이체자 데이터를 대량 가져온다. (기존 API 호환)"""
     if not body.text or not body.text.strip():
         return JSONResponse(
             {"error": "가져올 데이터가 비어 있습니다."}, status_code=400
@@ -3608,19 +3669,8 @@ async def api_import_variant_dict(body: VariantImportRequest):
     variant_dict = _get_variant_dict()
     result = variant_dict.import_bulk(body.text, body.format)
 
-    # 추가된 쌍이 있으면 저장
     if result["added"] > 0:
-        save_path = variant_dict._find_default_path()
-        if save_path:
-            variant_dict.save(save_path)
-        else:
-            import os
-            resources_dir = os.path.join(
-                os.path.dirname(__file__), "..", "..", "resources"
-            )
-            os.makedirs(resources_dir, exist_ok=True)
-            save_path = os.path.join(resources_dir, "variant_chars.json")
-            variant_dict.save(save_path)
+        _save_variant_dict(variant_dict)
 
     return {
         "status": "ok",
@@ -3629,6 +3679,306 @@ async def api_import_variant_dict(body: VariantImportRequest):
         "errors": result["errors"],
         "size": variant_dict.size,
     }
+
+
+# ── 다중 사전 관리 API ──
+
+@app.get("/api/variant-dicts")
+async def api_list_variant_dicts():
+    """resources/ 폴더의 이체자 사전 목록을 반환한다.
+
+    출력: { "dicts": [{"name": "variant_chars", "file": "variant_chars.json", "active": true}] }
+    """
+    return {"dicts": _list_variant_dicts()}
+
+
+@app.get("/api/variant-dicts/{name}")
+async def api_get_variant_dict_by_name(name: str):
+    """특정 이름의 이체자 사전 내용을 반환한다."""
+    path = _dict_name_to_path(name)
+    if not os.path.exists(path):
+        return JSONResponse({"error": f"사전을 찾을 수 없습니다: {name}"}, status_code=404)
+
+    vd = _get_variant_dict(name)
+    return {
+        "name": name,
+        "variants": vd.to_dict(),
+        "size": vd.size,
+        "pair_count": vd.pair_count,
+        "active": name == _get_active_dict_name(),
+    }
+
+
+class CreateDictRequest(BaseModel):
+    """새 사전 생성 요청."""
+    name: str
+
+
+@app.post("/api/variant-dicts")
+async def api_create_variant_dict(body: CreateDictRequest):
+    """빈 이체자 사전을 새로 생성한다.
+
+    이름은 자동으로 'variant_' 접두사가 붙는다.
+    예: 'kangxi' → 'variant_kangxi'
+    """
+    import re
+    # variant_ 접두사 자동 추가
+    raw_name = body.name.strip()
+    if not raw_name.startswith("variant_"):
+        raw_name = f"variant_{raw_name}"
+
+    if not re.match(r'^variant_[a-zA-Z0-9_\-]+$', raw_name):
+        return JSONResponse(
+            {"error": "사전 이름은 영문, 숫자, 밑줄, 하이픈만 사용할 수 있습니다."},
+            status_code=400,
+        )
+
+    path = _dict_name_to_path(raw_name)
+    if os.path.exists(path):
+        return JSONResponse({"error": f"이미 존재하는 사전입니다: {raw_name}"}, status_code=409)
+
+    from core.alignment import VariantCharDict
+    vd = VariantCharDict(dict_path=None)  # 빈 사전
+    vd.save(path)
+    return {"status": "ok", "name": raw_name}
+
+
+class CopyDictRequest(BaseModel):
+    """사전 복제 요청."""
+    new_name: str
+
+
+@app.post("/api/variant-dicts/{name}/copy")
+async def api_copy_variant_dict(name: str, body: CopyDictRequest):
+    """기존 사전을 새 이름으로 복제한다."""
+    import re
+    new_name = body.new_name.strip()
+    if not new_name.startswith("variant_"):
+        new_name = f"variant_{new_name}"
+
+    if not re.match(r'^variant_[a-zA-Z0-9_\-]+$', new_name):
+        return JSONResponse(
+            {"error": "사전 이름은 영문, 숫자, 밑줄, 하이픈만 사용할 수 있습니다."},
+            status_code=400,
+        )
+
+    src_path = _dict_name_to_path(name)
+    if not os.path.exists(src_path):
+        return JSONResponse({"error": f"원본 사전을 찾을 수 없습니다: {name}"}, status_code=404)
+
+    dst_path = _dict_name_to_path(new_name)
+    if os.path.exists(dst_path):
+        return JSONResponse({"error": f"이미 존재하는 사전입니다: {new_name}"}, status_code=409)
+
+    shutil.copy2(src_path, dst_path)
+    return {"status": "ok", "name": new_name}
+
+
+@app.delete("/api/variant-dicts/{name}")
+async def api_delete_variant_dict(name: str):
+    """사전 파일을 삭제한다 (휴지통으로 이동).
+
+    활성 사전은 삭제할 수 없다.
+    """
+    active = _get_active_dict_name()
+    if name == active:
+        return JSONResponse(
+            {"error": "활성 사전은 삭제할 수 없습니다. 먼저 다른 사전을 활성화하세요."},
+            status_code=400,
+        )
+
+    path = _dict_name_to_path(name)
+    if not os.path.exists(path):
+        return JSONResponse({"error": f"사전을 찾을 수 없습니다: {name}"}, status_code=404)
+
+    # 휴지통으로 이동 (CLAUDE.md: 영구 삭제 금지)
+    try:
+        import subprocess
+        subprocess.run(
+            ["powershell", "-Command",
+             f"Add-Type -AssemblyName Microsoft.VisualBasic; "
+             f"[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile("
+             f"'{path}', 'OnlyErrorDialogs', 'SendToRecycleBin')"],
+            check=True, capture_output=True,
+        )
+    except Exception:
+        # PowerShell 실패 시 (Linux 등) — 이름 변경으로 "삭제"
+        trash_path = path + ".deleted"
+        os.rename(path, trash_path)
+
+    return {"status": "ok", "deleted": name}
+
+
+@app.put("/api/variant-dicts/{name}/activate")
+async def api_activate_variant_dict(name: str):
+    """지정한 사전을 활성 사전으로 설정한다."""
+    path = _dict_name_to_path(name)
+    if not os.path.exists(path):
+        return JSONResponse({"error": f"사전을 찾을 수 없습니다: {name}"}, status_code=404)
+
+    _set_active_dict_name(name)
+
+    # 캐시 무효화 → 다음 _get_variant_dict() 호출 시 새 사전 로드
+    global _variant_dict, _variant_dict_name
+    _variant_dict = None
+    _variant_dict_name = None
+
+    return {"status": "ok", "active": name}
+
+
+@app.post("/api/variant-dicts/{name}/pair")
+async def api_add_pair_to_dict(name: str, body: VariantPairRequest):
+    """지정한 사전에 이체자 쌍을 추가한다."""
+    path = _dict_name_to_path(name)
+    if not os.path.exists(path):
+        return JSONResponse({"error": f"사전을 찾을 수 없습니다: {name}"}, status_code=404)
+    if not body.char_a or not body.char_b:
+        return JSONResponse({"error": "두 글자 모두 입력해야 합니다."}, status_code=400)
+    if body.char_a == body.char_b:
+        return JSONResponse({"error": "같은 글자는 이체자로 등록할 수 없습니다."}, status_code=400)
+
+    vd = _get_variant_dict(name)
+    vd.add_pair(body.char_a, body.char_b)
+    _save_variant_dict(vd, name)
+    return {"status": "ok", "size": vd.size}
+
+
+@app.delete("/api/variant-dicts/{name}/pair")
+async def api_delete_pair_from_dict(name: str, body: VariantPairRequest):
+    """지정한 사전에서 이체자 쌍을 삭제한다."""
+    path = _dict_name_to_path(name)
+    if not os.path.exists(path):
+        return JSONResponse({"error": f"사전을 찾을 수 없습니다: {name}"}, status_code=404)
+
+    vd = _get_variant_dict(name)
+    removed = vd.remove_pair(body.char_a, body.char_b)
+    if not removed:
+        return JSONResponse({"error": "해당 이체자 쌍이 존재하지 않습니다."}, status_code=404)
+
+    _save_variant_dict(vd, name)
+    return {"status": "ok", "removed": True, "size": vd.size}
+
+
+@app.post("/api/variant-dicts/{name}/import")
+async def api_import_to_dict(name: str, body: VariantImportRequest):
+    """지정한 사전에 이체자 데이터를 대량 가져온다."""
+    path = _dict_name_to_path(name)
+    if not os.path.exists(path):
+        return JSONResponse({"error": f"사전을 찾을 수 없습니다: {name}"}, status_code=404)
+    if not body.text or not body.text.strip():
+        return JSONResponse({"error": "가져올 데이터가 비어 있습니다."}, status_code=400)
+
+    vd = _get_variant_dict(name)
+    result = vd.import_bulk(body.text, body.format)
+
+    if result["added"] > 0:
+        _save_variant_dict(vd, name)
+
+    return {
+        "status": "ok",
+        "added": result["added"],
+        "skipped": result["skipped"],
+        "errors": result["errors"],
+        "size": vd.size,
+    }
+
+
+@app.get("/api/variant-dicts/{name}/export")
+async def api_export_variant_dict(name: str, format: str = "json"):
+    """이체자 사전을 파일로 내보낸다.
+
+    format: "json" (기본) 또는 "csv"
+    """
+    path = _dict_name_to_path(name)
+    if not os.path.exists(path):
+        return JSONResponse({"error": f"사전을 찾을 수 없습니다: {name}"}, status_code=404)
+
+    vd = _get_variant_dict(name)
+
+    if format == "csv":
+        from starlette.responses import Response
+        csv_text = vd.export_csv()
+        return Response(
+            content=csv_text,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{name}.csv"'},
+        )
+    else:
+        # JSON: 원본 파일을 그대로 반환
+        from starlette.responses import FileResponse
+        return FileResponse(
+            path=path,
+            media_type="application/json; charset=utf-8",
+            filename=f"{name}.json",
+        )
+
+
+# ───────────────────────────────────────────────────
+# 일괄 교정 (Batch Correction)
+# ───────────────────────────────────────────────────
+
+
+class BatchCorrectionRequest(BaseModel):
+    """일괄 교정 요청."""
+    part_id: str
+    page_start: int
+    page_end: int
+    original_char: str
+    corrected_char: str
+    correction_type: str = "ocr_error"
+    note: str | None = None
+
+
+@app.post("/api/documents/{doc_id}/batch-corrections/preview")
+async def api_batch_correction_preview(doc_id: str, body: BatchCorrectionRequest):
+    """일괄 교정 미리보기 — 대상 글자가 어느 페이지에서 몇 건 매칭되는지 반환한다."""
+    doc_path = _library_path / "documents" / doc_id
+
+    from core.document import search_char_in_pages
+
+    results = search_char_in_pages(
+        doc_path, body.part_id, body.page_start, body.page_end, body.original_char
+    )
+    total = sum(r["count"] for r in results)
+    return {
+        "original_char": body.original_char,
+        "corrected_char": body.corrected_char,
+        "total_matches": total,
+        "pages": results,
+    }
+
+
+@app.post("/api/documents/{doc_id}/batch-corrections/execute")
+async def api_batch_correction_execute(
+    doc_id: str,
+    body: BatchCorrectionRequest,
+    background_tasks: BackgroundTasks,
+):
+    """일괄 교정 실행 — 매칭되는 모든 위치에 교정을 적용한다."""
+    doc_path = _library_path / "documents" / doc_id
+
+    from core.document import apply_batch_corrections, git_commit_document
+
+    result = apply_batch_corrections(
+        doc_path,
+        body.part_id,
+        body.page_start,
+        body.page_end,
+        body.original_char,
+        body.corrected_char,
+        body.correction_type,
+        body.note,
+    )
+
+    # git commit은 백그라운드로 (성능)
+    if result["total_corrected"] > 0:
+        msg = (
+            f"fix: 일괄 교정 '{body.original_char}'→'{body.corrected_char}' "
+            f"({result['total_corrected']}건, {result['pages_affected']}페이지)"
+        )
+        background_tasks.add_task(git_commit_document, doc_path, msg)
+
+    return result
 
 
 # ───────────────────────────────────────────────────

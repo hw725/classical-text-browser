@@ -24,11 +24,12 @@
 
 // eslint-disable-next-line no-unused-vars
 const alignmentState = {
-  lastResult: null,        // 마지막 대조 결과
-  activeBlockId: "*",      // 현재 선택된 블록 탭 ("*" = 페이지 전체)
-  variantDict: null,       // 이체자 사전 캐시
+  lastResult: null, // 마지막 대조 결과
+  activeBlockId: "*", // 현재 선택된 블록 탭 ("*" = 페이지 전체)
+  variantDict: null, // 이체자 사전 캐시
 };
 
+let _variantEventDelegationBound = false;
 
 /* ──────────────────────────
    초기화
@@ -44,9 +45,8 @@ function initAlignmentView() {
   _initVariantEvents();
 }
 
-
 /**
- * 서브탭(교정/대조) 전환 이벤트를 설정한다.
+ * 서브탭(교정/일괄/대조) 전환 이벤트를 설정한다.
  */
 function _initSubtabEvents() {
   const subtabs = document.querySelectorAll(".corr-subtab");
@@ -62,41 +62,54 @@ function _initSubtabEvents() {
       const corrTextArea = document.getElementById("corr-text-area");
       const corrListSection = document.getElementById("corr-list-section");
       const alignmentView = document.getElementById("alignment-view");
+      const batchView = document.getElementById("batch-correction-view");
+
+      // 모든 뷰 숨기기
+      if (corrTextArea) corrTextArea.style.display = "none";
+      if (corrListSection) corrListSection.style.display = "none";
+      if (alignmentView) alignmentView.style.display = "none";
+      if (batchView) batchView.style.display = "none";
 
       if (view === "alignment") {
-        if (corrTextArea) corrTextArea.style.display = "none";
-        if (corrListSection) corrListSection.style.display = "none";
         if (alignmentView) alignmentView.style.display = "";
         _runAlignment();
+      } else if (view === "batch") {
+        if (batchView) batchView.style.display = "";
+        // 일괄 교정 초기화 (현재 페이지 정보 반영)
+        if (typeof activateBatchCorrection === "function") activateBatchCorrection();
       } else {
+        // corrections (교정) 뷰
         if (corrTextArea) corrTextArea.style.display = "";
         if (corrListSection) corrListSection.style.display = "";
-        if (alignmentView) alignmentView.style.display = "none";
       }
     });
   });
 }
 
-
 /**
  * 이체자 사전 관리 이벤트를 설정한다.
  */
 function _initVariantEvents() {
-  const addBtn = document.getElementById("alignment-add-variant");
-  if (addBtn) {
-    addBtn.addEventListener("click", () => {
+  if (_variantEventDelegationBound) return;
+  _variantEventDelegationBound = true;
+
+  document.addEventListener("click", (e) => {
+    if (!(e.target instanceof Element)) return;
+
+    const addBtn = e.target.closest("#alignment-add-variant");
+    if (addBtn) {
+      e.preventDefault();
       _showVariantAddDialog();
-    });
-  }
+      return;
+    }
 
-  const importBtn = document.getElementById("alignment-import-variant");
-  if (importBtn) {
-    importBtn.addEventListener("click", () => {
+    const importBtn = e.target.closest("#alignment-import-variant");
+    if (importBtn) {
+      e.preventDefault();
       _showVariantImportDialog();
-    });
-  }
+    }
+  });
 }
-
 
 /* ──────────────────────────
    대조 실행
@@ -112,7 +125,8 @@ async function _runAlignment() {
   }
 
   const statsBar = document.getElementById("alignment-stats-bar");
-  if (statsBar) statsBar.innerHTML = '<div class="placeholder">대조 실행 중...</div>';
+  if (statsBar)
+    statsBar.innerHTML = '<div class="placeholder">대조 실행 중...</div>';
 
   const table = document.getElementById("alignment-table");
   if (table) table.innerHTML = "";
@@ -140,7 +154,6 @@ async function _runAlignment() {
   }
 }
 
-
 /* ──────────────────────────
    렌더링: 블록 탭
    ────────────────────────── */
@@ -160,15 +173,18 @@ function _renderBlockTabs(blocks) {
       tab.classList.add("active");
     }
 
-    const label = block.layout_block_id === "*" ? "전체" : block.layout_block_id;
-    const accuracy = block.stats ? `${Math.round(block.stats.accuracy * 100)}%` : "—";
+    const label =
+      block.layout_block_id === "*" ? "전체" : block.layout_block_id;
+    const accuracy = block.stats
+      ? `${Math.round(block.stats.accuracy * 100)}%`
+      : "—";
     tab.textContent = `${label} (${accuracy})`;
 
     tab.addEventListener("click", () => {
       alignmentState.activeBlockId = block.layout_block_id;
-      container.querySelectorAll(".alignment-block-tab").forEach((t) =>
-        t.classList.remove("active")
-      );
+      container
+        .querySelectorAll(".alignment-block-tab")
+        .forEach((t) => t.classList.remove("active"));
       tab.classList.add("active");
       _renderAlignmentResult(alignmentState.lastResult);
     });
@@ -176,7 +192,6 @@ function _renderBlockTabs(blocks) {
     container.appendChild(tab);
   });
 }
-
 
 /* ──────────────────────────
    렌더링: 통계 + 테이블
@@ -189,14 +204,13 @@ function _renderAlignmentResult(data) {
   if (!data || !data.blocks) return;
 
   const block = data.blocks.find(
-    (b) => b.layout_block_id === alignmentState.activeBlockId
+    (b) => b.layout_block_id === alignmentState.activeBlockId,
   );
   if (!block) return;
 
   _renderStatsBar(block.stats);
   _renderAlignmentTable(block.pairs);
 }
-
 
 /**
  * 통계 바를 렌더링한다.
@@ -224,7 +238,6 @@ function _renderStatsBar(stats) {
   `;
 }
 
-
 /**
  * 글자별 대조 테이블을 렌더링한다.
  */
@@ -233,7 +246,8 @@ function _renderAlignmentTable(pairs) {
   if (!container) return;
 
   if (!pairs || pairs.length === 0) {
-    container.innerHTML = '<div class="placeholder">대조할 데이터가 없습니다</div>';
+    container.innerHTML =
+      '<div class="placeholder">대조할 데이터가 없습니다</div>';
     return;
   }
 
@@ -262,18 +276,19 @@ function _renderAlignmentTable(pairs) {
   container.innerHTML = html;
 
   // 불일치/이체자 클릭 이벤트
-  container.querySelectorAll(".align-mismatch, .align-variant").forEach((row) => {
-    row.style.cursor = "pointer";
-    row.addEventListener("click", () => {
-      const idx = parseInt(row.dataset.pairIdx, 10);
-      const pair = pairs[idx];
-      if (pair && pair.ocr_char && pair.ref_char) {
-        _onAlignmentPairClick(pair);
-      }
+  container
+    .querySelectorAll(".align-mismatch, .align-variant")
+    .forEach((row) => {
+      row.style.cursor = "pointer";
+      row.addEventListener("click", () => {
+        const idx = parseInt(row.dataset.pairIdx, 10);
+        const pair = pairs[idx];
+        if (pair && pair.ocr_char && pair.ref_char) {
+          _onAlignmentPairClick(pair);
+        }
+      });
     });
-  });
 }
-
 
 /* ──────────────────────────
    이체자 사전 관리
@@ -294,7 +309,6 @@ async function _loadVariantDict() {
   }
 }
 
-
 /**
  * 이체자 사전 목록을 렌더링한다.
  */
@@ -306,7 +320,8 @@ function _renderVariantList(data) {
   const keys = Object.keys(variants);
 
   if (keys.length === 0) {
-    container.innerHTML = '<div class="placeholder">등록된 이체자가 없습니다</div>';
+    container.innerHTML =
+      '<div class="placeholder">등록된 이체자가 없습니다</div>';
     return;
   }
 
@@ -326,7 +341,6 @@ function _renderVariantList(data) {
   container.innerHTML = html;
 }
 
-
 /**
  * 이체자 추가 다이얼로그를 표시한다.
  */
@@ -338,7 +352,6 @@ function _showVariantAddDialog(charA, charB) {
 
   _addVariantPair(a.trim(), b.trim());
 }
-
 
 /**
  * 이체자 쌍을 서버에 등록한다.
@@ -364,7 +377,6 @@ async function _addVariantPair(charA, charB) {
     console.error("이체자 등록 오류:", err);
   }
 }
-
 
 /**
  * 이체자 대량 가져오기 다이얼로그를 표시한다.
@@ -462,9 +474,11 @@ function _showVariantImportDialog() {
   });
 
   // 취소
-  document.getElementById("variant-import-cancel").addEventListener("click", () => {
-    overlay.remove();
-  });
+  document
+    .getElementById("variant-import-cancel")
+    .addEventListener("click", () => {
+      overlay.remove();
+    });
 
   // 오버레이 바깥 클릭 시 닫기
   overlay.addEventListener("click", (e) => {
@@ -472,20 +486,21 @@ function _showVariantImportDialog() {
   });
 
   // 가져오기 실행
-  document.getElementById("variant-import-submit").addEventListener("click", async () => {
-    const text = document.getElementById("variant-import-text").value;
-    const fmt = document.getElementById("variant-import-format").value;
+  document
+    .getElementById("variant-import-submit")
+    .addEventListener("click", async () => {
+      const text = document.getElementById("variant-import-text").value;
+      const fmt = document.getElementById("variant-import-format").value;
 
-    if (!text.trim()) {
-      alert("가져올 데이터를 입력하세요.");
-      return;
-    }
+      if (!text.trim()) {
+        alert("가져올 데이터를 입력하세요.");
+        return;
+      }
 
-    await _importVariantData(text, fmt);
-    overlay.remove();
-  });
+      await _importVariantData(text, fmt);
+      overlay.remove();
+    });
 }
-
 
 /**
  * 이체자 데이터를 서버로 전송하여 대량 등록한다.
@@ -509,7 +524,9 @@ async function _importVariantData(text, format) {
     // 결과 메시지 조립
     let msg = `이체자 가져오기 완료\n\n추가: ${data.added}쌍\n건너뜀 (중복): ${data.skipped}쌍\n총 사전 크기: ${data.size}자`;
     if (data.errors && data.errors.length > 0) {
-      msg += `\n\n오류 ${data.errors.length}건:\n` + data.errors.slice(0, 10).join("\n");
+      msg +=
+        `\n\n오류 ${data.errors.length}건:\n` +
+        data.errors.slice(0, 10).join("\n");
       if (data.errors.length > 10) {
         msg += `\n... 외 ${data.errors.length - 10}건`;
       }
@@ -527,7 +544,6 @@ async function _importVariantData(text, format) {
   }
 }
 
-
 /**
  * 대조 결과에서 불일치/이체자 쌍 클릭 시 처리.
  */
@@ -540,10 +556,11 @@ function _onAlignmentPairClick(pair) {
     }
   } else if (pair.match_type === "variant") {
     // variant → 정보 표시
-    alert(`"${pair.ocr_char}" ↔ "${pair.ref_char}" — 이체자(同字異形)로 등록되어 있습니다.`);
+    alert(
+      `"${pair.ocr_char}" ↔ "${pair.ref_char}" — 이체자(同字異形)로 등록되어 있습니다.`,
+    );
   }
 }
-
 
 /* ──────────────────────────
    유틸리티
@@ -551,23 +568,35 @@ function _onAlignmentPairClick(pair) {
 
 function _matchTypeIcon(type) {
   switch (type) {
-    case "exact":     return "&#10003;";   // ✓
-    case "variant":   return "&#9679;";    // ●
-    case "mismatch":  return "&#10007;";   // ✗
-    case "insertion":  return "+";
-    case "deletion":   return "&minus;";
-    default:           return "?";
+    case "exact":
+      return "&#10003;"; // ✓
+    case "variant":
+      return "&#9679;"; // ●
+    case "mismatch":
+      return "&#10007;"; // ✗
+    case "insertion":
+      return "+";
+    case "deletion":
+      return "&minus;";
+    default:
+      return "?";
   }
 }
 
 function _matchTypeLabel(type) {
   switch (type) {
-    case "exact":     return "일치";
-    case "variant":   return "이체자";
-    case "mismatch":  return "불일치";
-    case "insertion":  return "삽입";
-    case "deletion":   return "누락";
-    default:           return type;
+    case "exact":
+      return "일치";
+    case "variant":
+      return "이체자";
+    case "mismatch":
+      return "불일치";
+    case "insertion":
+      return "삽입";
+    case "deletion":
+      return "누락";
+    default:
+      return type;
   }
 }
 

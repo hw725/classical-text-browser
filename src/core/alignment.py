@@ -32,6 +32,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
+from src.core.document import get_corrected_text
+
 logger = logging.getLogger(__name__)
 
 
@@ -281,6 +283,62 @@ class VariantCharDict:
         return {
             char: sorted(alts) for char, alts in sorted(self._variants.items())
         }
+
+    def remove_pair(self, char_a: str, char_b: str) -> bool:
+        """이체자 쌍을 양방향으로 삭제한다.
+
+        입력: char_a, char_b — 삭제할 이체자 쌍.
+        출력: 실제로 삭제되었으면 True, 존재하지 않았으면 False.
+
+        왜 이렇게 하는가:
+            이체자는 양방향으로 등록되므로 삭제도 양방향으로 처리한다.
+            A→B를 삭제하면 B→A도 삭제한다.
+            삭제 후 빈 set이면 키 자체를 삭제한다.
+        """
+        removed = False
+
+        if char_a in self._variants and char_b in self._variants[char_a]:
+            self._variants[char_a].discard(char_b)
+            if not self._variants[char_a]:
+                del self._variants[char_a]
+            removed = True
+
+        if char_b in self._variants and char_a in self._variants[char_b]:
+            self._variants[char_b].discard(char_a)
+            if not self._variants[char_b]:
+                del self._variants[char_b]
+            removed = True
+
+        return removed
+
+    def export_csv(self) -> str:
+        """이체자 사전을 CSV 문자열로 내보낸다.
+
+        출력: "글자A,글자B\\n" 형식의 CSV 문자열.
+              양방향 중복을 제거하여 한 쌍당 한 줄만 출력한다.
+
+        왜 이렇게 하는가:
+            다른 도구에서 사용하거나 백업하기 위해 범용 형식으로 내보낸다.
+        """
+        seen = set()
+        lines = []
+        for char, alts in sorted(self._variants.items()):
+            for alt in sorted(alts):
+                pair_key = tuple(sorted([char, alt]))
+                if pair_key not in seen:
+                    seen.add(pair_key)
+                    lines.append(f"{char},{alt}")
+        return "\n".join(lines)
+
+    @property
+    def pair_count(self) -> int:
+        """양방향 중복을 제거한 실제 이체자 쌍 수."""
+        seen = set()
+        for char, alts in self._variants.items():
+            for alt in alts:
+                pair_key = tuple(sorted([char, alt]))
+                seen.add(pair_key)
+        return len(seen)
 
     def import_bulk(self, text: str, fmt: str = "auto") -> dict:
         """외부 이체자 데이터를 대량으로 가져온다.
@@ -614,15 +672,26 @@ def align_page(
             error=f"L2 OCR 결과를 찾을 수 없습니다: {l2_path}",
         )]
 
-    # ── L4 확정 텍스트 로드 ──
-    l4_filename = f"{part_id}_page_{page_number:03d}.txt"
-    l4_path = doc_path / "L4_text" / "pages" / l4_filename
-    ref_text = _load_text(str(l4_path))
+    # ── L4 확정 텍스트 로드 (교정 적용) ──
+    # 교정이 있으면 교정 적용된 텍스트를, 없으면 원본을 사용한다.
+    # 왜: L4 원본이 OCR에서 그대로 가져온 경우, 교정 없이 대조하면
+    #      항상 100% 일치가 나와서 대조가 무의미하다.
+    try:
+        corrected = get_corrected_text(doc_path, part_id, page_number)
+        ref_text = corrected.get("corrected_text", "")
+    except Exception:
+        ref_text = None
+
+    if not ref_text:
+        # 교정 결과도 없고 원본도 없는 경우
+        l4_filename = f"{part_id}_page_{page_number:03d}.txt"
+        l4_path = doc_path / "L4_text" / "pages" / l4_filename
+        ref_text = _load_text(str(l4_path))
 
     if ref_text is None:
         return [BlockAlignment(
             layout_block_id="*",
-            error=f"L4 확정 텍스트를 찾을 수 없습니다: {l4_path}",
+            error=f"L4 확정 텍스트를 찾을 수 없습니다: {doc_path / 'L4_text' / 'pages'}",
         )]
 
     # 참조 텍스트에서 줄바꿈 제거 (글자 단위 비교)

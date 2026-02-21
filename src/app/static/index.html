@@ -438,6 +438,12 @@
           >
             교차 뷰어
           </div>
+          <div
+            class="mode-tab"
+            data-mode="variant"
+          >
+            이체자
+          </div>
         </div>
 
         <!-- 에디터 영역: D-001 에디터 → 병렬 뷰어 (이미지 + 텍스트) -->
@@ -1007,13 +1013,19 @@
               </button>
             </div>
 
-            <!-- 서브탭: 교정 / 대조 -->
+            <!-- 서브탭: 교정 / 일괄 / 대조 -->
             <div class="corr-subtab-bar">
               <div
                 class="corr-subtab active"
                 data-view="corrections"
               >
                 교정
+              </div>
+              <div
+                class="corr-subtab"
+                data-view="batch"
+              >
+                일괄
               </div>
               <div
                 class="corr-subtab"
@@ -1045,6 +1057,52 @@
               ></div>
             </div>
 
+            <!-- 일괄 교정 뷰 (일괄 서브탭에서만 표시) -->
+            <div
+              id="batch-correction-view"
+              class="batch-correction-view"
+              style="display: none"
+            >
+              <div class="batch-form">
+                <div class="batch-row">
+                  <label>페이지 범위:</label>
+                  <input type="number" id="batch-page-start" min="1" value="1" class="batch-input batch-input-small">
+                  <span>~</span>
+                  <input type="number" id="batch-page-end" min="1" value="1" class="batch-input batch-input-small">
+                </div>
+                <div class="batch-row">
+                  <label>찾을 글자:</label>
+                  <input type="text" id="batch-original-char" maxlength="1" class="batch-input batch-input-char" placeholder="例: 别">
+                </div>
+                <div class="batch-row">
+                  <label>교정 글자:</label>
+                  <input type="text" id="batch-corrected-char" maxlength="1" class="batch-input batch-input-char" placeholder="例: 別">
+                </div>
+                <div class="batch-row">
+                  <label>유형:</label>
+                  <select id="batch-correction-type" class="batch-input">
+                    <option value="ocr_error">OCR 오류</option>
+                    <option value="variant_char">이체자</option>
+                    <option value="variant_reading">이문</option>
+                    <option value="decoding_error">디코딩 오류</option>
+                  </select>
+                </div>
+                <div class="batch-row">
+                  <label>비고:</label>
+                  <input type="text" id="batch-note" class="batch-input" placeholder="(선택) 교정 근거">
+                </div>
+                <div class="batch-row batch-actions">
+                  <button id="batch-preview-btn" class="text-btn text-btn-primary">미리보기</button>
+                  <button id="batch-execute-btn" class="text-btn" disabled>실행</button>
+                </div>
+              </div>
+              <div id="batch-result" class="batch-result">
+                <div class="placeholder">
+                  찾을 글자와 교정 글자를 입력하고 [미리보기]를 누르세요
+                </div>
+              </div>
+            </div>
+
             <!-- 대조 뷰 (Phase 10-3, 대조 탭에서만 표시) -->
             <div
               id="alignment-view"
@@ -1073,29 +1131,9 @@
                 class="alignment-table"
               ></div>
 
-              <!-- 이체자 사전 관리 -->
-              <div class="alignment-variant-section">
-                <div class="props-section-title">
-                  이체자 사전
-                  <button
-                    id="alignment-add-variant"
-                    class="text-btn text-btn-small"
-                    title="이체자 쌍 추가"
-                  >
-                    + 추가
-                  </button>
-                  <button
-                    id="alignment-import-variant"
-                    class="text-btn text-btn-small"
-                    title="외부 이체자 데이터 가져오기 (CSV, TSV, JSON, 텍스트)"
-                  >
-                    가져오기
-                  </button>
-                </div>
-                <div
-                  id="alignment-variant-list"
-                  class="alignment-variant-list"
-                ></div>
+              <!-- 이체자 사전 — 별도 탭으로 이동됨 -->
+              <div style="padding:8px 12px;color:var(--text-secondary);font-size:12px">
+                이체자 사전은 <a href="#" onclick="document.querySelector('[data-mode=variant]').click();return false;" style="color:var(--accent)">이체자 탭</a>에서 관리합니다.
               </div>
             </div>
           </div>
@@ -1569,6 +1607,59 @@
             ></textarea>
           </div>
 
+          <!-- 우측 패널: 이체자 사전 관리 (variant 모드) -->
+          <div
+            class="editor-panel editor-right variant-panel"
+            id="variant-panel"
+            style="display: none"
+          >
+            <div class="panel-label">이체자 사전 관리</div>
+
+            <!-- 사전 선택 바 -->
+            <div class="vm-toolbar">
+              <select id="vm-dict-select" class="vm-select" title="사전 선택"></select>
+              <button id="vm-btn-create" class="text-btn text-btn-small" title="빈 사전 생성">새로 만들기</button>
+              <button id="vm-btn-copy" class="text-btn text-btn-small" title="현재 사전 복제">복제</button>
+              <button id="vm-btn-delete" class="text-btn text-btn-small" title="선택한 사전 삭제">삭제</button>
+            </div>
+
+            <!-- 도구 바 -->
+            <div class="vm-toolbar">
+              <button id="vm-btn-add-pair" class="text-btn text-btn-small text-btn-primary">+ 추가</button>
+              <button id="vm-btn-import" class="text-btn text-btn-small">가져오기</button>
+              <button id="vm-btn-export-json" class="text-btn text-btn-small">JSON 내보내기</button>
+              <button id="vm-btn-export-csv" class="text-btn text-btn-small">CSV 내보내기</button>
+              <span style="flex:1"></span>
+              <button id="vm-btn-sort" class="text-btn text-btn-small" title="정렬 변경">유니코드순</button>
+              <span id="vm-stats" class="vm-stats"></span>
+            </div>
+
+            <!-- 검색 -->
+            <div class="vm-search-bar">
+              <input type="text" id="vm-search" placeholder="글자 검색..." class="vm-search-input">
+            </div>
+
+            <!-- 테이블 -->
+            <div class="vm-table-container">
+              <table class="vm-table">
+                <thead>
+                  <tr>
+                    <th style="width:50px">글자</th>
+                    <th style="width:50px">이체자</th>
+                    <th style="width:40px"></th>
+                  </tr>
+                </thead>
+                <tbody id="vm-table-body">
+                  <tr>
+                    <td colspan="3" style="text-align:center;color:var(--text-secondary);padding:20px">
+                      이체자 탭을 활성화하면 사전이 로드됩니다
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           <!-- 우측 패널: 표점 편집기 (Phase 11-1, 표점 모드에서만 표시) -->
           <div
             class="editor-panel editor-right punct-panel"
@@ -1632,39 +1723,38 @@
               </div>
             </div>
 
-            <!-- 표점 부호 팔레트 (카테고리별: 전각/반각/감싸기/개별) -->
-            <div
-              class="punct-palette"
-              id="punct-palette"
-            >
-              <div class="punct-palette-label">표점 부호 — 슬롯(┊) 클릭 후 삽입, 감싸기는 범위 선택(Shift+클릭) 필요</div>
-              <div
-                class="punct-palette-row"
-                id="punct-palette-row"
-              >
-                <!-- JS에서 카테고리별로 동적 생성 -->
+            <!-- 표점 부호 팔레트 (카테고리 탭 방식) -->
+            <div class="punct-palette" id="punct-palette">
+              <div class="punct-palette-tabs" id="punct-palette-tabs">
+                <!-- JS에서 카테고리 탭 버튼 동적 생성 -->
+              </div>
+              <div class="punct-palette-row" id="punct-palette-row">
+                <!-- JS에서 선택된 카테고리의 버튼만 표시 -->
+              </div>
+              <div class="punct-palette-hint">
+                슬롯(┊) 클릭 후 삽입 · 감싸기는 범위 선택(Shift+클릭) 필요
               </div>
             </div>
 
-            <!-- 마크 목록 -->
-            <div class="punct-marks-section">
-              <div class="props-section-title">
+            <!-- 마크 목록 (접기/펼치기) -->
+            <details class="punct-marks-section" id="punct-marks-details">
+              <summary class="punct-section-summary">
                 표점 목록 (<span id="punct-mark-count">0</span>건)
-              </div>
+              </summary>
               <div
                 id="punct-marks-list"
                 class="punct-marks-list"
               ></div>
-            </div>
+            </details>
 
-            <!-- 미리보기 -->
-            <div class="punct-preview-section">
-              <div class="props-section-title">미리보기</div>
+            <!-- 미리보기 (접기/펼치기) -->
+            <details class="punct-preview-section" id="punct-preview-details">
+              <summary class="punct-section-summary">미리보기</summary>
               <div
                 id="punct-preview"
                 class="punct-preview"
               ></div>
-            </div>
+            </details>
           </div>
 
           <!-- 우측 패널: 현토 편집기 (Phase 11-1, 현토 모드에서만 표시) -->
@@ -3716,7 +3806,9 @@
     <script src="/static/js/create-document.js?v=20260220c"></script>
     <script src="/static/js/hwp-import.js?v=20260220c"></script>
     <script src="/static/js/ocr-panel.js?v=20260220c"></script>
-    <script src="/static/js/alignment-view.js?v=20260220c"></script>
+    <script src="/static/js/alignment-view.js?v=20260221a"></script>
+    <script src="/static/js/variant-manager.js?v=20260221b"></script>
+    <script src="/static/js/batch-correction.js?v=20260221"></script>
     <script src="/static/js/composition-editor.js?v=20260220c"></script>
     <script src="/static/js/punctuation-editor.js?v=20260220c"></script>
     <script src="/static/js/hyeonto-editor.js?v=20260220c"></script>

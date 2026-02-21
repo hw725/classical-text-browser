@@ -13,55 +13,71 @@
  */
 
 document.addEventListener("DOMContentLoaded", () => {
-  initResizeHandlers();
-  initPanelToggle();
-  initActivityBar();
-  initModeBar();
-  loadLibraryInfo();
+  // 각 모듈 초기화를 try-catch로 감싸서, 한 모듈이 실패해도
+  // 나머지 모듈이 정상 초기화되도록 보호한다.
+  // 왜: 모듈 하나가 에러를 던지면 그 이후의 모든 init이 실행되지 않아
+  //      버튼 클릭 등 이벤트가 전혀 동작하지 않는 문제가 발생한다.
+  function _safeInit(name, fn) {
+    try {
+      fn();
+    } catch (err) {
+      console.error(`[workspace] ${name} 초기화 실패:`, err);
+    }
+  }
+
+  _safeInit("ResizeHandlers", initResizeHandlers);
+  _safeInit("PanelToggle", initPanelToggle);
+  _safeInit("ActivityBar", initActivityBar);
+  _safeInit("ModeBar", initModeBar);
+  _safeInit("LibraryInfo", loadLibraryInfo);
   // Phase 3: 병렬 뷰어 모듈 초기화
-  if (typeof initPdfRenderer === "function") initPdfRenderer();
-  if (typeof initTextEditor === "function") initTextEditor();
+  if (typeof initPdfRenderer === "function") _safeInit("PdfRenderer", initPdfRenderer);
+  if (typeof initTextEditor === "function") _safeInit("TextEditor", initTextEditor);
   // Phase 4: 레이아웃 편집기 초기화
-  if (typeof initLayoutEditor === "function") initLayoutEditor();
+  if (typeof initLayoutEditor === "function") _safeInit("LayoutEditor", initLayoutEditor);
   // Phase 6: 교정 편집기 초기화
-  if (typeof initCorrectionEditor === "function") initCorrectionEditor();
+  if (typeof initCorrectionEditor === "function") _safeInit("CorrectionEditor", initCorrectionEditor);
   // Phase 5: 서지정보 패널 초기화
-  if (typeof initBibliography === "function") initBibliography();
+  if (typeof initBibliography === "function") _safeInit("Bibliography", initBibliography);
   // Phase 7: 해석 저장소 모듈 초기화
-  if (typeof initInterpretation === "function") initInterpretation();
+  if (typeof initInterpretation === "function") _safeInit("Interpretation", initInterpretation);
   // Phase 8: 엔티티 관리 모듈 초기화
-  if (typeof initEntityManager === "function") initEntityManager();
+  if (typeof initEntityManager === "function") _safeInit("EntityManager", initEntityManager);
   // Phase 10: 새 문헌 생성 모듈 초기화
-  if (typeof initCreateDocument === "function") initCreateDocument();
+  if (typeof initCreateDocument === "function") _safeInit("CreateDocument", initCreateDocument);
   // Phase 10-1: OCR 패널 초기화
-  if (typeof initOcrPanel === "function") initOcrPanel();
+  if (typeof initOcrPanel === "function") _safeInit("OcrPanel", initOcrPanel);
   // Phase 10-3: 대조 뷰 초기화
-  if (typeof initAlignmentView === "function") initAlignmentView();
+  if (typeof initAlignmentView === "function") _safeInit("AlignmentView", initAlignmentView);
   // 편성 에디터 초기화 (LayoutBlock → TextBlock)
-  if (typeof initCompositionEditor === "function") initCompositionEditor();
+  if (typeof initCompositionEditor === "function") _safeInit("CompositionEditor", initCompositionEditor);
   // Phase 11-1: 표점 편집기 초기화
-  if (typeof initPunctuationEditor === "function") initPunctuationEditor();
+  if (typeof initPunctuationEditor === "function") _safeInit("PunctuationEditor", initPunctuationEditor);
   // Phase 11-1: 현토 편집기 초기화
-  if (typeof initHyeontoEditor === "function") initHyeontoEditor();
+  if (typeof initHyeontoEditor === "function") _safeInit("HyeontoEditor", initHyeontoEditor);
   // Phase 11-2: 번역 편집기 초기화
-  if (typeof initTranslationEditor === "function") initTranslationEditor();
+  if (typeof initTranslationEditor === "function") _safeInit("TranslationEditor", initTranslationEditor);
   // Phase 11-3: 주석 편집기 초기화
-  if (typeof initAnnotationEditor === "function") initAnnotationEditor();
+  if (typeof initAnnotationEditor === "function") _safeInit("AnnotationEditor", initAnnotationEditor);
   // 인용 마크 편집기 초기화
-  if (typeof initCitationEditor === "function") initCitationEditor();
+  if (typeof initCitationEditor === "function") _safeInit("CitationEditor", initCitationEditor);
+  // 이체자 사전 관리 초기화
+  if (typeof initVariantManager === "function") _safeInit("VariantManager", initVariantManager);
+  // 일괄 교정 초기화
+  if (typeof initBatchCorrection === "function") _safeInit("BatchCorrection", initBatchCorrection);
   // Phase 12-1: Git 그래프 초기화
-  if (typeof initGitGraph === "function") initGitGraph();
+  if (typeof initGitGraph === "function") _safeInit("GitGraph", initGitGraph);
   // Phase 12-3: JSON 스냅샷 Export/Import 버튼
-  initSnapshotButtons();
+  _safeInit("SnapshotButtons", initSnapshotButtons);
   // 읽기 보조선 초기화
-  if (typeof initReaderLine === "function") initReaderLine();
+  if (typeof initReaderLine === "function") _safeInit("ReaderLine", initReaderLine);
   // 비고/메모 패널 초기화
-  if (typeof initNotesPanel === "function") initNotesPanel();
+  if (typeof initNotesPanel === "function") _safeInit("NotesPanel", initNotesPanel);
   // Phase 7+8: 하단 패널 탭 전환 (Git 이력 ↔ 의존 추적 ↔ 엔티티 ↔ 비고)
-  initBottomPanelTabs();
+  _safeInit("BottomPanelTabs", initBottomPanelTabs);
 
   // 전 모드 LLM 모델 드롭다운 채우기 (모든 init 완료 후 한 번만)
-  _loadAllLlmModelSelects();
+  _safeInit("LlmModelSelects", _loadAllLlmModelSelects);
 });
 
 /* ──────────────────────────
@@ -670,6 +686,7 @@ function _switchMode(mode) {
   const transPanel = document.getElementById("trans-panel");
   const annPanel = document.getElementById("ann-panel");
   const citePanel = document.getElementById("cite-panel");
+  const variantPanel = document.getElementById("variant-panel");
 
   // 이전 모드 정리
   if (currentMode === "layout") {
@@ -714,6 +731,10 @@ function _switchMode(mode) {
     if (typeof deactivateCitationMode === "function") deactivateCitationMode();
     if (citePanel) citePanel.style.display = "none";
   }
+  if (currentMode === "variant") {
+    if (typeof deactivateVariantMode === "function") deactivateVariantMode();
+    if (variantPanel) variantPanel.style.display = "none";
+  }
 
   // 모든 우측 패널 숨김 (초기화)
   if (editorRight) editorRight.style.display = "none";
@@ -726,6 +747,7 @@ function _switchMode(mode) {
   if (transPanel) transPanel.style.display = "none";
   if (annPanel) annPanel.style.display = "none";
   if (citePanel) citePanel.style.display = "none";
+  if (variantPanel) variantPanel.style.display = "none";
 
   // 새 모드 활성화
   currentMode = mode;
@@ -770,6 +792,10 @@ function _switchMode(mode) {
     // 우측: 인용 마크 패널 표시
     if (citePanel) citePanel.style.display = "";
     if (typeof activateCitationMode === "function") activateCitationMode();
+  } else if (mode === "variant") {
+    // 우측: 이체자 사전 관리 패널 표시
+    if (variantPanel) variantPanel.style.display = "";
+    if (typeof activateVariantMode === "function") activateVariantMode();
   } else {
     // view 모드: 텍스트 에디터 표시
     if (editorRight) editorRight.style.display = "";

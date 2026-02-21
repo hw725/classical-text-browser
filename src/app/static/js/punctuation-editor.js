@@ -27,6 +27,7 @@ const punctState = {
   selectedSlot: null,      // 선택된 삽입 위치 (글자 인덱스, "after" 기준)
   selectionRange: null,    // 범위 선택 {start, end} (감싸기 부호용)
   isDirty: false,          // 변경 여부
+  activePaletteTab: "fullwidth",  // 현재 선택된 팔레트 카테고리
 };
 
 
@@ -376,6 +377,8 @@ async function _loadPunctuationData() {
     _renderCharArea();
     _renderMarksList();
     _renderPreview();
+    // 마크가 있으면 목록/미리보기 자동 펼침
+    _openDetailsIfHasMarks();
   } catch (e) {
     console.error("표점 데이터 로드 실패:", e);
   }
@@ -514,74 +517,97 @@ function _isCharInSelection(idx) {
    ────────────────────────── */
 
 /**
- * 팔레트를 카테고리별로 그룹화하여 렌더링한다.
+ * 팔레트 카테고리 정의.
+ * 탭 버튼으로 전환하며, 한 번에 1개 카테고리만 표시한다.
+ */
+const PALETTE_CATEGORIES = {
+  fullwidth:  { label: "전각" },
+  halfwidth:  { label: "반각" },
+  paired:     { label: "감싸기" },
+  individual: { label: "개별" },
+};
+
+
+/**
+ * 팔레트를 카테고리 탭 방식으로 렌더링한다.
  *
- * 카테고리 배치:
- *   전각 — 중국/일본식 전각 문장부호
- *   반각 — 한국식 반각 문장부호
- *   감싸기 — 범위 선택 후 한 쌍으로 삽입 (before + after)
- *   개별 — 감싸기 부호의 열기/닫기를 단독 삽입
+ * 왜 이렇게 하는가:
+ *   기존에 4개 카테고리를 모두 동시에 보여주면 ~150px를 차지하여
+ *   글자 영역의 공간이 부족했다. 탭 방식으로 한 카테고리만 표시하면
+ *   ~50px로 축소되어 글자 영역에 더 많은 공간을 확보할 수 있다.
  */
 function _renderPalette() {
-  const container = document.getElementById("punct-palette-row");
-  if (!container) return;
-
-  container.innerHTML = "";
+  const tabContainer = document.getElementById("punct-palette-tabs");
+  const btnContainer = document.getElementById("punct-palette-row");
+  if (!tabContainer || !btnContainer) return;
 
   // 카테고리별로 프리셋을 분류
-  const categories = {
-    fullwidth: { label: "전각", presets: [] },
-    halfwidth: { label: "반각", presets: [] },
-    paired: { label: "감싸기 (범위 선택 후)", presets: [] },
-    individual: { label: "개별 삽입", presets: [] },
-  };
-
+  const grouped = {};
+  for (const [catId] of Object.entries(PALETTE_CATEGORIES)) {
+    grouped[catId] = [];
+  }
   for (const preset of punctState.presets) {
     const cat = preset.category || "fullwidth";
-    if (categories[cat]) {
-      categories[cat].presets.push(preset);
+    if (grouped[cat]) {
+      grouped[cat].push(preset);
     } else {
-      // category가 없거나 알 수 없는 경우 → fullwidth로 폴백
-      categories.fullwidth.presets.push(preset);
+      grouped.fullwidth.push(preset);
     }
   }
 
-  // 각 카테고리를 행으로 렌더링
-  for (const [catId, catData] of Object.entries(categories)) {
-    if (catData.presets.length === 0) continue;
+  // 탭 버튼 렌더링 (한 번만 — 이후 탭 전환 시에는 버튼만 갱신)
+  tabContainer.innerHTML = "";
+  for (const [catId, catMeta] of Object.entries(PALETTE_CATEGORIES)) {
+    if (grouped[catId].length === 0) continue;
+    const tab = document.createElement("button");
+    tab.className = "punct-palette-tab" + (catId === punctState.activePaletteTab ? " active" : "");
+    tab.textContent = catMeta.label;
+    tab.dataset.cat = catId;
+    tab.addEventListener("click", () => {
+      punctState.activePaletteTab = catId;
+      _renderPaletteButtons(grouped);
+      // 탭 active 상태 갱신
+      tabContainer.querySelectorAll(".punct-palette-tab").forEach((t) => {
+        t.classList.toggle("active", t.dataset.cat === catId);
+      });
+    });
+    tabContainer.appendChild(tab);
+  }
 
-    const group = document.createElement("div");
-    group.className = "punct-palette-group";
+  // 현재 탭의 버튼 렌더링
+  // grouped를 클로저로 기억하기 위해 저장
+  tabContainer._grouped = grouped;
+  _renderPaletteButtons(grouped);
+}
 
-    const label = document.createElement("span");
-    label.className = "punct-palette-group-label";
-    label.textContent = catData.label;
-    group.appendChild(label);
 
-    const btnRow = document.createElement("span");
-    btnRow.className = "punct-palette-btn-row";
+/**
+ * 선택된 카테고리의 프리셋 버튼만 렌더링한다.
+ */
+function _renderPaletteButtons(grouped) {
+  const container = document.getElementById("punct-palette-row");
+  if (!container) return;
+  container.innerHTML = "";
 
-    for (const preset of catData.presets) {
-      const btn = document.createElement("button");
-      btn.className = "punct-preset-btn";
-      btn.title = preset.label;
-      btn.dataset.presetId = preset.id;
+  const catId = punctState.activePaletteTab;
+  const presets = grouped[catId] || [];
 
-      // 표시할 부호 결정
-      if (catId === "paired") {
-        // 감싸기 부호: 열기…닫기
-        btn.textContent = `${preset.before}…${preset.after}`;
-        btn.classList.add("punct-preset-paired");
-      } else {
-        btn.textContent = preset.after || preset.before || "?";
-      }
+  for (const preset of presets) {
+    const btn = document.createElement("button");
+    btn.className = "punct-preset-btn";
+    btn.title = preset.label;
+    btn.dataset.presetId = preset.id;
 
-      btn.addEventListener("click", () => _insertPreset(preset));
-      btnRow.appendChild(btn);
+    // 표시할 부호 결정
+    if (catId === "paired") {
+      btn.textContent = `${preset.before}…${preset.after}`;
+      btn.classList.add("punct-preset-paired");
+    } else {
+      btn.textContent = preset.after || preset.before || "?";
     }
 
-    group.appendChild(btnRow);
-    container.appendChild(group);
+    btn.addEventListener("click", () => _insertPreset(preset));
+    container.appendChild(btn);
   }
 }
 
@@ -857,6 +883,8 @@ async function _requestAiPunctuation() {
       _renderCharArea();
       _renderMarksList();
       _renderPreview();
+      // AI 생성 완료 시 마크 목록과 미리보기 자동 펼침
+      _openDetailsIfHasMarks();
       const statusEl = document.getElementById("punct-save-status");
       if (statusEl) {
         statusEl.textContent = "AI 표점 생성 완료 — [저장]을 누르세요";
@@ -887,4 +915,22 @@ async function _requestAiPunctuation() {
  */
 function _genTempId() {
   return "mk_" + Math.random().toString(36).substring(2, 8);
+}
+
+
+/**
+ * 마크가 있으면 마크 목록과 미리보기 details를 자동으로 펼친다.
+ * 마크가 없으면 접힌 상태를 유지한다.
+ */
+function _openDetailsIfHasMarks() {
+  const hasMarks = punctState.marks.length > 0;
+  const marksDetails = document.getElementById("punct-marks-details");
+  const previewDetails = document.getElementById("punct-preview-details");
+  if (hasMarks) {
+    if (previewDetails) previewDetails.open = true;
+  }
+  // 마크 목록은 건수가 적을 때만 자동 펼침 (너무 많으면 공간 차지)
+  if (hasMarks && punctState.marks.length <= 20) {
+    if (marksDetails) marksDetails.open = true;
+  }
 }
