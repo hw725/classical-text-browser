@@ -244,7 +244,7 @@ from core.hyeonto import (
 
 
 app = FastAPI(
-    title="고전 텍스트 디지털 서고 플랫폼",
+    title="고전서지 통합 브라우저",
     description="사람과 LLM이 함께 고전 텍스트를 읽고 번역하고 연구하는 통합 작업 환경",
     version="0.2.0",
 )

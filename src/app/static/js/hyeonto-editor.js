@@ -357,7 +357,7 @@ function _insertAnnotation() {
   const textInput = document.getElementById("hyeonto-text-input");
 
   if (!textInput || !textInput.value.trim()) {
-    alert("토 텍스트를 입력하세요.");
+    showToast("토 텍스트를 입력하세요.", 'warning');
     return;
   }
 
@@ -372,7 +372,7 @@ function _insertAnnotation() {
     start = hyeontoState.selectedChar;
     end = start;
   } else {
-    alert("글자를 먼저 선택하세요.");
+    showToast("글자를 먼저 선택하세요.", 'warning');
     return;
   }
 
@@ -517,7 +517,7 @@ function _renderHyeontoPreview() {
 
 async function _saveHyeonto() {
   if (!interpState.interpId || !viewerState.pageNum || !hyeontoState.blockId) {
-    alert("해석 저장소와 블록이 선택되어야 합니다.");
+    showToast("해석 저장소와 블록이 선택되어야 합니다.", 'warning');
     return;
   }
 
@@ -545,11 +545,11 @@ async function _saveHyeonto() {
       }
     } else {
       const err = await res.json();
-      alert(`저장 실패: ${err.error || "알 수 없는 오류"}`);
+      showToast(`저장 실패: ${err.error || "알 수 없는 오류"}`, 'error');
       if (statusEl) statusEl.textContent = "저장 실패";
     }
   } catch (e) {
-    alert(`저장 실패: ${e.message}`);
+    showToast(`저장 실패: ${e.message}`, 'error');
     if (statusEl) statusEl.textContent = "저장 실패";
   }
 }

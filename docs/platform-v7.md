@@ -1170,7 +1170,7 @@ library/
 │   └── interpretations/          # 삭제된 해석 ({timestamp}_{interp_id}/)
 └── .library_config.json
 
-~/.classical-text-platform/       # 앱 전역 설정 (서고 외부, D-022)
+~/.classical-text-browser/        # 앱 전역 설정 (서고 외부, D-022)
 └── config.json                   # recent_libraries 등
 ```
 

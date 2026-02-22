@@ -788,12 +788,12 @@ function _updateBlockList() {
 async function _resetAllBlocks() {
   const { docId, partId, pageNum } = viewerState;
   if (!docId || !partId || !pageNum) {
-    alert("문헌과 페이지가 선택되어야 합니다.");
+    showToast("문헌과 페이지가 선택되어야 합니다.", 'warning');
     return;
   }
 
   if (layoutState.blocks.length === 0) {
-    alert("삭제할 레이아웃 블록이 없습니다.");
+    showToast("삭제할 레이아웃 블록이 없습니다.", 'warning');
     return;
   }
 
@@ -812,7 +812,7 @@ async function _resetAllBlocks() {
     _updatePropsForm();
     _updateBlockList();
   } catch (e) {
-    alert(`레이아웃 리셋 실패: ${e.message}`);
+    showToast(`레이아웃 리셋 실패: ${e.message}`, 'error');
   }
 }
 
@@ -1159,7 +1159,7 @@ async function _getPageImage(pageNum) {
  */
 async function _runAutoDetect() {
   if (!viewerState.docId || viewerState.pageNum == null) {
-    alert("문헌과 페이지를 먼저 선택하세요.");
+    showToast("문헌과 페이지를 먼저 선택하세요.", 'warning');
     return;
   }
 
@@ -1213,7 +1213,7 @@ async function _runAutoDetect() {
   } catch (err) {
     console.error("자동감지 오류:", err);
     _setAutodetectStatus(`오류: ${err.message}`);
-    alert(`자동감지 실패: ${err.message}`);
+    showToast(`자동감지 실패: ${err.message}`, 'error');
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -1240,12 +1240,12 @@ async function _runAutoDetect() {
  */
 async function _runAutoDetectAll() {
   if (!viewerState.docId || !viewerState.partId) {
-    alert("문헌을 먼저 선택하세요.");
+    showToast("문헌을 먼저 선택하세요.", 'warning');
     return;
   }
 
   if (!pdfState.pdfDoc) {
-    alert("PDF가 로드되지 않았습니다.");
+    showToast("PDF가 로드되지 않았습니다.", 'warning');
     return;
   }
 
@@ -1329,7 +1329,7 @@ async function _runAutoDetectAll() {
   } catch (err) {
     console.error("배치 자동감지 오류:", err);
     _setAutodetectStatus(`오류: ${err.message}`);
-    alert(`배치 자동감지 실패: ${err.message}`);
+    showToast(`배치 자동감지 실패: ${err.message}`, 'error');
   } finally {
     if (btn) btn.disabled = false;
     if (batchBtn) batchBtn.disabled = false;

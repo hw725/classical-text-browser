@@ -406,7 +406,7 @@ function _renderCiteContext(ctx) {
 function _onCiteTextSelection() {
   const selection = window.getSelection();
   if (!selection || selection.isCollapsed) {
-    alert("원문에서 인용할 텍스트를 먼저 드래그하세요.");
+    showToast("원문에서 인용할 텍스트를 먼저 드래그하세요.", 'warning');
     return;
   }
 
@@ -417,7 +417,7 @@ function _onCiteTextSelection() {
   // 정확한 위치 계산: getSelection의 Range 사용
   const range = _getSelectionCharRange();
   if (!range) {
-    alert("텍스트 범위를 결정할 수 없습니다. 원문 영역에서 드래그하세요.");
+    showToast("텍스트 범위를 결정할 수 없습니다. 원문 영역에서 드래그하세요.", 'warning');
     return;
   }
 
@@ -498,7 +498,7 @@ async function _addCitationMark(start, end, selectedText, label, tags) {
     );
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
-      alert(`인용 마크 추가 실패: ${err.error || resp.statusText}`);
+      showToast(`인용 마크 추가 실패: ${err.error || resp.statusText}`, 'error');
       return;
     }
 
@@ -596,7 +596,7 @@ async function _saveCiteEdit() {
     );
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
-      alert(`수정 실패: ${err.error || resp.statusText}`);
+      showToast(`수정 실패: ${err.error || resp.statusText}`, 'error');
       return;
     }
 
@@ -630,7 +630,7 @@ async function _deleteCiteMark() {
       { method: "DELETE" }
     );
     if (!resp.ok) {
-      alert("삭제 실패");
+      showToast("삭제 실패", 'error');
       return;
     }
 
@@ -709,7 +709,7 @@ async function _exportSelectedCitations() {
   checks.forEach(cb => markIds.push(cb.dataset.citeId));
 
   if (markIds.length === 0) {
-    alert("내보낼 인용 마크를 선택하세요 (체크박스).");
+    showToast("내보낼 인용 마크를 선택하세요 (체크박스).", 'warning');
     return;
   }
 
@@ -728,7 +728,7 @@ async function _exportSelectedCitations() {
       }
     );
     if (!resp.ok) {
-      alert("내보내기 실패");
+      showToast("내보내기 실패", 'error');
       return;
     }
 
@@ -736,7 +736,7 @@ async function _exportSelectedCitations() {
     const citationText = result.citations || "";
 
     if (!citationText) {
-      alert("내보낼 내용이 없습니다.");
+      showToast("내보낼 내용이 없습니다.", 'warning');
       return;
     }
 
@@ -775,14 +775,14 @@ async function _resetAllCiteMarks() {
   const vs = typeof viewerState !== "undefined" ? viewerState : null;
   const is = typeof interpState !== "undefined" ? interpState : null;
   if (!vs || !vs.pageNum) {
-    alert("페이지가 선택되어야 합니다.");
+    showToast("페이지가 선택되어야 합니다.", 'warning');
     return;
   }
 
   const interpId = (is && is.interpId) || "default";
 
   if (citeState.marks.length === 0) {
-    alert("삭제할 인용 마크가 없습니다.");
+    showToast("삭제할 인용 마크가 없습니다.", 'warning');
     return;
   }
 
@@ -825,7 +825,7 @@ async function _resetAllCiteMarks() {
   _renderCiteMarkList();
 
   if (fail > 0) {
-    alert(`인용 마크 리셋 완료: 성공 ${success}건, 실패 ${fail}건`);
+    showToast(`인용 마크 리셋 완료: 성공 ${success}건, 실패 ${fail}건`, 'error');
   } else {
     _showCiteSaveStatus(`인용 마크 ${success}건 삭제 완료`);
   }

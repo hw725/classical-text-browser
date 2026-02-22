@@ -348,7 +348,7 @@ function _openEntityEditDialog(entityType, entityId) {
     })
     .then((entity) => {
       if (entity.error) {
-        alert(entity.error);
+        showToast(entity.error, 'error');
         return;
       }
 
@@ -364,7 +364,7 @@ function _openEntityEditDialog(entityType, entityId) {
       document.getElementById("entity-dialog-status").textContent = "";
       document.getElementById("entity-dialog-overlay").style.display = "";
     })
-    .catch((err) => alert(`엔티티 조회 실패: ${err.message}`));
+    .catch((err) => showToast(`엔티티 조회 실패: ${err.message}`, 'error'));
 }
 
 
@@ -674,7 +674,7 @@ function _closeEntityDialog() {
  */
 async function _openTextBlockCreator() {
   if (!interpState || !interpState.interpId || !viewerState || !viewerState.docId) {
-    alert("해석 저장소와 문헌을 먼저 선택하세요.");
+    showToast("해석 저장소와 문헌을 먼저 선택하세요.", 'warning');
     return;
   }
 
@@ -870,17 +870,17 @@ async function _promoteTag(tagId) {
     );
     if (!resp.ok) {
       const errBody = await resp.json().catch(() => ({}));
-      alert(errBody.error || `승격 실패: 서버 오류 (${resp.status})`);
+      showToast(errBody.error || `승격 실패: 서버 오류 (${resp.status})`, 'error');
       return;
     }
     const result = await resp.json();
     if (result.error) {
-      alert(result.error);
+      showToast(result.error, 'error');
       return;
     }
     _loadEntitiesForCurrentPage();
   } catch (err) {
-    alert(`승격 실패: ${err.message}`);
+    showToast(`승격 실패: ${err.message}`, 'error');
   }
 }
 
@@ -976,17 +976,17 @@ async function _handleLlmReviewAction(action, entityType, entityId) {
     );
     if (!resp.ok) {
       const errBody = await resp.json().catch(() => ({}));
-      alert(errBody.error || `상태 변경 실패: 서버 오류 (${resp.status})`);
+      showToast(errBody.error || `상태 변경 실패: 서버 오류 (${resp.status})`, 'error');
       return;
     }
     const result = await resp.json();
     if (result.error) {
-      alert(result.error);
+      showToast(result.error, 'error');
       return;
     }
     _loadEntitiesForCurrentPage();
   } catch (err) {
-    alert(`상태 변경 실패: ${err.message}`);
+    showToast(`상태 변경 실패: ${err.message}`, 'error');
   }
 }
 

@@ -56,7 +56,7 @@ let _lastPreviewData = null; // 실행 시 재사용
 
 async function _batchPreview() {
   if (typeof viewerState === "undefined" || !viewerState.docId) {
-    alert("문헌을 먼저 선택하세요.");
+    showToast("문헌을 먼저 선택하세요.", 'warning');
     return;
   }
 
@@ -67,19 +67,19 @@ async function _batchPreview() {
   const correctedChar = document.getElementById("batch-corrected-char").value.trim();
 
   if (!originalChar) {
-    alert("찾을 글자를 입력하세요.");
+    showToast("찾을 글자를 입력하세요.", 'warning');
     return;
   }
   if (!correctedChar) {
-    alert("교정 글자를 입력하세요.");
+    showToast("교정 글자를 입력하세요.", 'warning');
     return;
   }
   if (originalChar === correctedChar) {
-    alert("찾을 글자와 교정 글자가 동일합니다.");
+    showToast("찾을 글자와 교정 글자가 동일합니다.", 'warning');
     return;
   }
   if (pageStart > pageEnd) {
-    alert("페이지 범위가 올바르지 않습니다.");
+    showToast("페이지 범위가 올바르지 않습니다.", 'warning');
     return;
   }
 
@@ -105,7 +105,7 @@ async function _batchPreview() {
     );
     if (!res.ok) {
       const err = await res.json();
-      alert(err.detail || err.error || "미리보기 실패");
+      showToast(err.detail || err.error || "미리보기 실패", 'error');
       return;
     }
 
@@ -118,7 +118,7 @@ async function _batchPreview() {
     }
   } catch (err) {
     console.error("일괄 교정 미리보기 오류:", err);
-    alert("미리보기 중 오류가 발생했습니다: " + err.message);
+    showToast("미리보기 중 오류가 발생했습니다: " + err.message, 'error');
   }
 }
 
@@ -173,7 +173,7 @@ function _renderPreviewResult(data) {
 
 async function _batchExecute() {
   if (!_lastPreviewData || _lastPreviewData.total_matches === 0) {
-    alert("먼저 미리보기를 실행하세요.");
+    showToast("먼저 미리보기를 실행하세요.", 'warning');
     return;
   }
 
@@ -213,14 +213,14 @@ async function _batchExecute() {
     );
     if (!res.ok) {
       const err = await res.json();
-      alert(err.detail || err.error || "일괄 교정 실행 실패");
+      showToast(err.detail || err.error || "일괄 교정 실행 실패", 'error');
       return;
     }
 
     const data = await res.json();
-    alert(
-      `일괄 교정 완료\n\n교정: ${data.total_corrected}건\n대상 페이지: ${data.pages_affected}개`
-    );
+    showToast(
+      `일괄 교정 완료 — 교정: ${data.total_corrected}건, 대상 페이지: ${data.pages_affected}개`,
+      'success');
 
     // 결과 초기화
     _lastPreviewData = null;
@@ -231,7 +231,7 @@ async function _batchExecute() {
     }
   } catch (err) {
     console.error("일괄 교정 실행 오류:", err);
-    alert("일괄 교정 중 오류가 발생했습니다: " + err.message);
+    showToast("일괄 교정 중 오류가 발생했습니다: " + err.message, 'error');
   }
 }
 

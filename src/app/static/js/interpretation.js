@@ -173,20 +173,19 @@ async function _importInterpretationFolder() {
         throw new Error(data.error || `서버 오류: ${res.status}`);
       }
 
-      alert(
-        `가져오기 완료!\n\n` +
-          `해석 ID: ${data.interp_id}\n` +
-          `문헌 ID: ${data.source_document_id}\n` +
+      showToast(
+        `가져오기 완료! 해석 ID: ${data.interp_id}, ` +
+          `문헌 ID: ${data.source_document_id}, ` +
           `파일 수: ${data.file_count}` +
-          (data.skipped_count ? `\n제외 파일 수: ${data.skipped_count}` : ""),
-      );
+          (data.skipped_count ? `, 제외 파일 수: ${data.skipped_count}` : ""),
+        'success');
 
       await _loadInterpretationList();
       if (typeof loadLibraryInfo === "function") {
         loadLibraryInfo();
       }
     } catch (err) {
-      alert(`폴더 가져오기 실패:\n${err.message}`);
+      showToast(`폴더 가져오기 실패: ${err.message}`, 'error');
     } finally {
       if (btn) {
         btn.disabled = false;
@@ -319,7 +318,7 @@ async function _trashInterpretation(interpId, interpTitle) {
     const data = await res.json();
 
     if (!res.ok) {
-      alert(`삭제 실패: ${data.error || "알 수 없는 오류"}`);
+      showToast(`삭제 실패: ${data.error || "알 수 없는 오류"}`, 'error');
       return;
     }
 
@@ -332,7 +331,7 @@ async function _trashInterpretation(interpId, interpTitle) {
     // 목록 새로고침
     _loadInterpretationList();
   } catch (err) {
-    alert(`삭제 중 오류: ${err.message}`);
+    showToast(`삭제 중 오류: ${err.message}`, 'error');
   }
 }
 

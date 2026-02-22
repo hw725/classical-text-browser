@@ -674,7 +674,7 @@ function _saveCorrFromDialog() {
   );
 
   if (!corrected) {
-    alert("교정 글자를 입력하세요.");
+    showToast("교정 글자를 입력하세요.", 'warning');
     return;
   }
 
@@ -888,12 +888,12 @@ async function _saveCorrections() {
 async function _resetAllCorrections() {
   const { docId, partId, pageNum } = viewerState;
   if (!docId || !partId || !pageNum) {
-    alert("문헌과 페이지가 선택되어야 합니다.");
+    showToast("문헌과 페이지가 선택되어야 합니다.", 'warning');
     return;
   }
 
   if (correctionState.corrections.length === 0) {
-    alert("삭제할 교정 기록이 없습니다.");
+    showToast("삭제할 교정 기록이 없습니다.", 'warning');
     return;
   }
 
@@ -911,7 +911,7 @@ async function _resetAllCorrections() {
     _renderCorrList();
     _updateCorrCount();
   } catch (e) {
-    alert(`교정 리셋 실패: ${e.message}`);
+    showToast(`교정 리셋 실패: ${e.message}`, 'error');
   }
 }
 

@@ -1,4 +1,4 @@
-# 고전 텍스트 디지털 서고 플랫폼
+# 고전서지 통합 브라우저 (Classical Text Browser)
 
 물리적 원본(PDF/이미지)과 디지털 텍스트의 연결이 끊어지지 않는,
 사람과 LLM이 함께 고전 텍스트를 읽고 번역하고 연구하는 **통합 작업 환경**.
@@ -18,25 +18,14 @@
 
 ## 빠른 시작
 
-```bash
-# 설치
-git clone https://github.com/hw725/classical-text-platform.git
-cd classical-text-platform
-uv sync
+1. [**ZIP 다운로드**](https://github.com/hw725/classical-text-browser/archive/refs/heads/master.zip) → 압축 풀기
+2. `install.bat` 더블클릭 (Windows) 또는 `./install.sh` (macOS/Linux) — Python, Git, uv 자동 설치
+3. `start_server.bat` 더블클릭 (Windows) 또는 `./start_server.sh` (macOS/Linux)
 
-# (선택) 오프라인 OCR
-uv sync --extra paddleocr
-# 주의: Windows + Python 3.13 + PaddlePaddle 3.x(CPU) 조합은 런타임 충돌 가능
+브라우저에서 `http://localhost:8000` 접속. GUI에서 서고를 선택/생성할 수 있습니다.
 
-# 서버 실행
-uv run python -m app serve --library <서고경로>
-```
-
-브라우저에서 `http://localhost:8765` 접속.
-
-`--library` 없이 실행하면 GUI에서 서고를 선택/생성할 수 있습니다.
-
-PaddleOCR은 기본 설치 대상이 아니며, 충돌 없는 환경 사용자만 개별 설치를 권장합니다.
+> Git을 아는 분은 `git clone https://github.com/hw725/classical-text-browser.git`으로도 가능합니다.
+> 오프라인 OCR이 필요하면 터미널에서 `uv sync --extra paddleocr`.
 
 ## 기술 스택
 

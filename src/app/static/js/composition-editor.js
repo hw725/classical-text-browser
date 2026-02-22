@@ -107,7 +107,7 @@ function _bindCompEvents() {
       start < 1 ||
       end < 1
     ) {
-      alert("페이지 범위는 1 이상의 숫자로 입력해주세요.");
+      showToast("페이지 범위는 1 이상의 숫자로 입력해주세요.", 'warning');
       return;
     }
 
@@ -808,13 +808,13 @@ function _updateCompStatus(text, isError) {
  */
 async function _autoCompose() {
   if (!interpState.interpId) {
-    alert("편성 패널 상단의 해석 저장소 드롭다운에서 먼저 선택하세요.");
+    showToast("편성 패널 상단의 해석 저장소 드롭다운에서 먼저 선택하세요.", 'warning');
     return;
   }
   if (!compState.workId) {
     await _ensureWork();
     if (!compState.workId) {
-      alert("Work를 확보할 수 없습니다. 해석 저장소를 다시 선택해주세요.");
+      showToast("Work를 확보할 수 없습니다. 해석 저장소를 다시 선택해주세요.", 'warning');
       return;
     }
   }
@@ -827,7 +827,7 @@ async function _autoCompose() {
   );
 
   if (currentPageBlocks.length === 0) {
-    alert("편성할 소스 블록이 없습니다.");
+    showToast("편성할 소스 블록이 없습니다.", 'warning');
     return;
   }
 
@@ -913,13 +913,14 @@ async function _autoCompose() {
   }
 
   if (errors.length > 0 && created === 0) {
-    alert(`자동 편성 실패:\n\n${errors.join("\n")}`);
+    showToast(`자동 편성 실패:\n\n${errors.join("\n")}`, 'error');
     _updateCompStatus("자동 편성 실패", false);
     return;
   }
   if (errors.length > 0) {
-    alert(
+    showToast(
       `${created}개 생성, ${errors.length}개 실패:\n\n${errors.join("\n")}`,
+      'error',
     );
   }
 
@@ -948,20 +949,20 @@ async function _autoCompose() {
  */
 async function _mergeSelectedBlocks() {
   if (!interpState.interpId) {
-    alert("편성 패널 상단의 해석 저장소 드롭다운에서 먼저 선택하세요.");
+    showToast("편성 패널 상단의 해석 저장소 드롭다운에서 먼저 선택하세요.", 'warning');
     return;
   }
   if (!compState.workId) {
     await _ensureWork();
     if (!compState.workId) {
-      alert("Work를 확보할 수 없습니다. 해석 저장소를 다시 선택해주세요.");
+      showToast("Work를 확보할 수 없습니다. 해석 저장소를 다시 선택해주세요.", 'warning');
       return;
     }
   }
 
   const selectedKeys = compState.selectedBlockKeys;
   if (selectedKeys.length < 2) {
-    alert("합치려면 2개 이상의 블록을 선택하세요.");
+    showToast("합치려면 2개 이상의 블록을 선택하세요.", 'warning');
     return;
   }
 
@@ -975,8 +976,9 @@ async function _mergeSelectedBlocks() {
   );
 
   if (orderedBlocks.length !== selectedKeys.length) {
-    alert(
+    showToast(
       "선택한 블록을 모두 찾지 못했습니다. 범위를 다시 불러온 뒤 시도해주세요.",
+      'warning',
     );
     return;
   }
@@ -991,9 +993,10 @@ async function _mergeSelectedBlocks() {
   const maxIndex = selectedIndices[selectedIndices.length - 1];
   const expectedCount = maxIndex - minIndex + 1;
   if (expectedCount !== selectedIndices.length) {
-    alert(
+    showToast(
       "합치기는 순서가 섞이지 않는 연속 구간만 지원합니다.\n" +
         "중간 블록을 포함해서 다시 선택해주세요.",
+      'warning',
     );
     return;
   }
@@ -1108,7 +1111,7 @@ function _selectTextBlock(tb) {
  */
 async function _deleteTextBlock(tb) {
   if (!interpState.interpId) {
-    alert("해석 저장소가 선택되지 않았습니다.");
+    showToast("해석 저장소가 선택되지 않았습니다.", 'warning');
     return;
   }
 
@@ -1149,11 +1152,11 @@ async function _deleteTextBlock(tb) {
     } else {
       const err = await res.json().catch(() => ({}));
       const msg = err.error || err.detail || `HTTP ${res.status}`;
-      alert(`삭제 실패: ${msg}`);
+      showToast(`삭제 실패: ${msg}`, 'error');
       return;
     }
   } catch (e) {
-    alert(`삭제 실패: ${e.message}`);
+    showToast(`삭제 실패: ${e.message}`, 'error');
     return;
   }
 
@@ -1175,7 +1178,7 @@ async function _deleteTextBlock(tb) {
  */
 async function _resetComposition() {
   if (!interpState.interpId) {
-    alert("편성 패널 상단의 해석 저장소 드롭다운에서 먼저 선택하세요.");
+    showToast("편성 패널 상단의 해석 저장소 드롭다운에서 먼저 선택하세요.", 'warning');
     return;
   }
 
@@ -1184,7 +1187,7 @@ async function _resetComposition() {
   );
 
   if (targets.length === 0) {
-    alert("리셋할 TextBlock이 없습니다.");
+    showToast("리셋할 TextBlock이 없습니다.", 'warning');
     return;
   }
 
@@ -1221,14 +1224,15 @@ async function _resetComposition() {
     const errors = data.errors || [];
 
     if (errors.length > 0) {
-      alert(
+      showToast(
         `${done}개 리셋 완료, ${errors.length}개 실패:\n${errors.join("\n")}`,
+        'error',
       );
     }
 
     _updateCompStatus(`리셋 완료: ${done}개 deprecated`, false);
   } catch (e) {
-    alert(`리셋 실패: ${e.message}`);
+    showToast(`리셋 실패: ${e.message}`, 'error');
     _updateCompStatus("리셋 실패", true);
     return;
   }
@@ -1320,11 +1324,11 @@ function _parseSplitPieces(text) {
  */
 async function _executeSplit() {
   if (!compState.selectedTb || !compState.selectedTbId) {
-    alert("쪼갤 TextBlock을 먼저 선택하세요.");
+    showToast("쪼갤 TextBlock을 먼저 선택하세요.", 'warning');
     return;
   }
   if (!interpState.interpId) {
-    alert("편성 패널 상단의 해석 저장소 드롭다운에서 먼저 선택하세요.");
+    showToast("편성 패널 상단의 해석 저장소 드롭다운에서 먼저 선택하세요.", 'warning');
     return;
   }
 
@@ -1332,7 +1336,7 @@ async function _executeSplit() {
   if (!compState.workId) {
     await _ensureWork();
     if (!compState.workId) {
-      alert("Work를 확보할 수 없습니다. 해석 저장소를 다시 선택해주세요.");
+      showToast("Work를 확보할 수 없습니다. 해석 저장소를 다시 선택해주세요.", 'warning');
       return;
     }
   }
@@ -1344,8 +1348,9 @@ async function _executeSplit() {
   const nonEmpty = pieces.filter((p) => p.trim().length > 0);
 
   if (nonEmpty.length <= 1) {
-    alert(
+    showToast(
       "=== 구분선을 넣어 2개 이상으로 나눠야 합니다.\n\n예시:\n첫 번째 텍스트\n===\n두 번째 텍스트",
+      'warning',
     );
     return;
   }
@@ -1378,7 +1383,7 @@ async function _executeSplit() {
       false,
     );
   } catch (e) {
-    alert(`쪼개기 실패:\n${e.message}`);
+    showToast(`쪼개기 실패:\n${e.message}`, 'error');
     _updateCompStatus("쪼개기 실패", true);
     return;
   }

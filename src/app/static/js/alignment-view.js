@@ -366,7 +366,7 @@ async function _addVariantPair(charA, charB) {
 
     if (!res.ok) {
       const err = await res.json();
-      alert(err.error || "이체자 등록 실패");
+      showToast(err.error || "이체자 등록 실패", 'error');
       return;
     }
 
@@ -493,7 +493,7 @@ function _showVariantImportDialog() {
       const fmt = document.getElementById("variant-import-format").value;
 
       if (!text.trim()) {
-        alert("가져올 데이터를 입력하세요.");
+        showToast("가져올 데이터를 입력하세요.", 'warning');
         return;
       }
 
@@ -515,7 +515,7 @@ async function _importVariantData(text, format) {
 
     if (!res.ok) {
       const err = await res.json();
-      alert(err.error || "이체자 가져오기 실패");
+      showToast(err.error || "이체자 가져오기 실패", 'error');
       return;
     }
 
@@ -531,7 +531,7 @@ async function _importVariantData(text, format) {
         msg += `\n... 외 ${data.errors.length - 10}건`;
       }
     }
-    alert(msg);
+    showToast(msg, 'success');
 
     // 사전 새로고침 + 대조 재실행
     await _loadVariantDict();
@@ -540,7 +540,7 @@ async function _importVariantData(text, format) {
     }
   } catch (err) {
     console.error("이체자 가져오기 오류:", err);
-    alert("이체자 가져오기 중 오류가 발생했습니다: " + err.message);
+    showToast("이체자 가져오기 중 오류가 발생했습니다: " + err.message, 'error');
   }
 }
 
@@ -556,9 +556,9 @@ function _onAlignmentPairClick(pair) {
     }
   } else if (pair.match_type === "variant") {
     // variant → 정보 표시
-    alert(
+    showToast(
       `"${pair.ocr_char}" ↔ "${pair.ref_char}" — 이체자(同字異形)로 등록되어 있습니다.`,
-    );
+      'info');
   }
 }
 

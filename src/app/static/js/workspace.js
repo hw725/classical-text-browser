@@ -434,14 +434,14 @@ async function _switchLibrary(path) {
     const data = await res.json();
 
     if (!res.ok) {
-      alert("서고 전환 실패: " + (data.error || "알 수 없는 오류"));
+      showToast("서고 전환 실패: " + (data.error || "알 수 없는 오류"), 'error');
       return;
     }
 
     // 전체 페이지 리로드 (상태 초기화)
     location.reload();
   } catch (e) {
-    alert("서고 전환 실패: " + e.message);
+    showToast("서고 전환 실패: " + e.message, 'error');
   }
 }
 
@@ -458,13 +458,13 @@ async function _createNewLibrary() {
     const data = await res.json();
 
     if (!res.ok) {
-      alert("서고 생성 실패: " + (data.error || "알 수 없는 오류"));
+      showToast("서고 생성 실패: " + (data.error || "알 수 없는 오류"), 'error');
       return;
     }
 
     location.reload();
   } catch (e) {
-    alert("서고 생성 실패: " + e.message);
+    showToast("서고 생성 실패: " + e.message, 'error');
   }
 }
 
@@ -562,7 +562,7 @@ function _renderRepoList(containerId, repos, repoType) {
         const input = item.querySelector(".settings-remote-input");
         const url = input.value.trim();
         if (!url) {
-          alert("원격 URL을 입력하세요.");
+          showToast("원격 URL을 입력하세요.", 'warning');
           return;
         }
 
@@ -578,10 +578,10 @@ function _renderRepoList(containerId, repos, repoType) {
           });
           const result = await res.json();
           if (!res.ok) throw new Error(result.error);
-          alert(`원격 URL 설정 완료: ${url}`);
+          showToast(`원격 URL 설정 완료: ${url}`, 'success');
           _loadSettings(); // 새로고침
         } catch (e) {
-          alert(`원격 설정 실패: ${e.message}`);
+          showToast(`원격 설정 실패: ${e.message}`, 'error');
         }
       });
 
@@ -626,9 +626,9 @@ async function _gitSync(repoType, repoId, action) {
       if (result.retried) lines.push("(서버에서 자동 재시도 1회 수행됨)");
       throw new Error(lines.join("\n"));
     }
-    alert(`${label} 완료: ${result.output || "성공"}`);
+    showToast(`${label} 완료: ${result.output || "성공"}`, 'success');
   } catch (e) {
-    alert(`${label} 실패: ${e.message}`);
+    showToast(`${label} 실패: ${e.message}`, 'error');
   }
 }
 
@@ -656,8 +656,12 @@ function initModeBar() {
       if (newMode === currentMode) return;
 
       // 모드 탭 하이라이트 전환
-      modeTabs.forEach((t) => t.classList.remove("active"));
+      modeTabs.forEach((t) => {
+        t.classList.remove("active");
+        t.setAttribute("aria-selected", "false");
+      });
       tab.classList.add("active");
+      tab.setAttribute("aria-selected", "true");
 
       _switchMode(newMode);
     });
@@ -860,7 +864,7 @@ function initSnapshotButtons() {
     exportBtn.addEventListener("click", async () => {
       // 현재 선택된 해석 저장소 ID 확인
       if (typeof interpState === "undefined" || !interpState.interpId) {
-        alert("내보낼 해석 저장소를 먼저 선택해주세요.");
+        showToast("내보낼 해석 저장소를 먼저 선택해주세요.", 'warning');
         return;
       }
 
@@ -892,7 +896,7 @@ function initSnapshotButtons() {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
       } catch (e) {
-        alert(`내보내기 실패: ${e.message}`);
+        showToast(`내보내기 실패: ${e.message}`, 'error');
       } finally {
         exportBtn.disabled = false;
         exportBtn.textContent = "내보내기";
@@ -960,14 +964,14 @@ function initSnapshotButtons() {
             msg += `\n\n주의:\n${result.warnings.join("\n")}`;
           }
 
-          alert(msg);
+          showToast(msg, 'success');
 
           // 사이드바 문헌 목록 갱신
           if (typeof loadLibraryInfo === "function") {
             loadLibraryInfo();
           }
         } catch (e) {
-          alert(`JSON 가져오기 실패:\n${e.message}`);
+          showToast(`JSON 가져오기 실패:\n${e.message}`, 'error');
         } finally {
           importBtn.disabled = false;
           importBtn.textContent = "JSON 가져오기";

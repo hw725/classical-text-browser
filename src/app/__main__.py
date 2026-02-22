@@ -17,7 +17,7 @@ if _src_dir not in sys.path:
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="classical-text-platform-server",
+        prog="classical-text-browser",
         description="고전 텍스트 서고 웹 서버",
     )
     subparsers = parser.add_subparsers(dest="command")
