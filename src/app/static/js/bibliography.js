@@ -337,7 +337,7 @@ async function _fetchFromUrl() {
  */
 function _openFetchDialog() {
   if (!viewerState.docId) {
-    alert("문헌을 먼저 선택하세요.");
+    showToast("문헌을 먼저 선택하세요.", 'warning');
     return;
   }
 
@@ -527,7 +527,7 @@ async function _selectSearchResult(parserId, result) {
  */
 function _openEditDialog() {
   if (!viewerState.docId) {
-    alert("문헌을 먼저 선택하세요.");
+    showToast("문헌을 먼저 선택하세요.", 'warning');
     return;
   }
 

@@ -143,7 +143,7 @@ async function _runOcr(blockIds) {
   const pageNum = viewerState.pageNum;
 
   if (!docId || !partId || !pageNum) {
-    alert("문헌과 페이지를 먼저 선택하세요.");
+    showToast("문헌과 페이지를 먼저 선택하세요.", 'warning');
     return;
   }
 
@@ -222,7 +222,7 @@ async function _runOcr(blockIds) {
     _displayResults(latest);
   } catch (e) {
     _showProgress(false);
-    alert(`OCR 실패: ${e.message}`);
+    showToast(`OCR 실패: ${e.message}`, 'error');
   } finally {
     ocrState.running = false;
     _disableButtons(false);
@@ -380,7 +380,7 @@ async function _fillFromOcr() {
   const pageNum = viewerState.pageNum;
 
   if (!docId || !partId || !pageNum) {
-    alert("문헌과 페이지를 먼저 선택하세요.");
+    showToast("문헌과 페이지를 먼저 선택하세요.", 'warning');
     return;
   }
 
@@ -393,21 +393,21 @@ async function _fillFromOcr() {
       { cache: "no-store" },
     );
     if (!resp.ok) {
-      alert(
+      showToast(
         "이 페이지에 OCR 결과가 없습니다. 레이아웃 모드에서 OCR을 먼저 실행하세요.",
-      );
+        'warning');
       return;
     }
     ocrData = await resp.json();
   } catch (e) {
-    alert(`OCR 결과 로드 실패: ${e.message}`);
+    showToast(`OCR 결과 로드 실패: ${e.message}`, 'error');
     return;
   }
 
   // OCR 결과에서 전체 텍스트 추출
   const ocrResults = ocrData.ocr_results || [];
   if (ocrResults.length === 0) {
-    alert("OCR 결과가 비어있습니다.");
+    showToast("OCR 결과가 비어있습니다.", 'warning');
     return;
   }
 
@@ -433,7 +433,7 @@ async function _fillFromOcr() {
       throw new Error(errBody || `HTTP ${saveResp.status}`);
     }
   } catch (e) {
-    alert(`OCR 텍스트 저장 실패: ${e.message}`);
+    showToast(`OCR 텍스트 저장 실패: ${e.message}`, 'error');
     return;
   }
 
@@ -462,7 +462,7 @@ async function _fillFromOcr() {
     }
   }
 
-  alert(`OCR 결과가 텍스트로 저장되었습니다. (${ocrResults.length}개 블록)`);
+  showToast(`OCR 결과가 텍스트로 저장되었습니다. (${ocrResults.length}개 블록)`, 'success');
 }
 
 /* ─── OCR 결과 세로쓰기 토글 ─────────────────────── */
@@ -678,14 +678,14 @@ async function _deleteCurrentPageOcr() {
   const pageNum = viewerState.pageNum;
 
   if (!docId || !partId || !pageNum) {
-    alert("문헌과 페이지를 먼저 선택하세요.");
+    showToast("문헌과 페이지를 먼저 선택하세요.", 'warning');
     return;
   }
 
   if (!_canDeleteSelectedOcrResult()) {
-    alert(
+    showToast(
       "삭제할 OCR 항목을 먼저 선택하세요. (block_id가 있는 항목만 삭제 가능)",
-    );
+      'warning');
     return;
   }
 
@@ -745,9 +745,9 @@ async function _deleteCurrentPageOcr() {
       if (summary) summary.textContent = "";
     }
 
-    alert(`선택한 OCR 1건을 삭제했습니다. (block_id: ${blockId}, #${idx + 1})`);
+    showToast(`선택한 OCR 1건을 삭제했습니다. (block_id: ${blockId}, #${idx + 1})`, 'success');
   } catch (e) {
-    alert(`OCR 결과 삭제 실패: ${e.message}`);
+    showToast(`OCR 결과 삭제 실패: ${e.message}`, 'error');
   } finally {
     _showProgress(false);
     _disableButtons(false);

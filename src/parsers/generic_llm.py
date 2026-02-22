@@ -357,8 +357,8 @@ class GenericLlmFetcher(BaseFetcher):
                 follow_redirects=True,
                 headers={
                     "User-Agent": (
-                        "Mozilla/5.0 (compatible; ClassicalTextPlatform/1.0; "
-                        "+https://github.com/hw725/classical-text-platform)"
+                        "Mozilla/5.0 (compatible; ClassicalTextBrowser/1.0; "
+                        "+https://github.com/hw725/classical-text-browser)"
                     ),
                 },
             ) as client:

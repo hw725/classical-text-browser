@@ -1,4 +1,4 @@
-# 사용자 가이드 — 고전 텍스트 디지털 서고 플랫폼
+# 사용자 가이드 — 고전서지 통합 브라우저
 
 > 이 문서는 **처음 사용하는 연구자**를 위한 단계별 안내서입니다.
 > 프로그래밍 지식은 필요하지 않습니다.
@@ -58,47 +58,56 @@
 
 ## 2. 설치와 실행
 
-### 2.1 사전 요구 사항
+### 2.1 다운로드
 
-- **Python 3.10 이상** (Python이 없다면 [python.org](https://www.python.org)에서 설치)
-- **Git** ([git-scm.com](https://git-scm.com)에서 설치)
-- **uv** (Python 패키지 관리자):
-  ```bash
-  # Windows (PowerShell)
-  irm https://astral.sh/uv/install.ps1 | iex
+[**ZIP 다운로드**](https://github.com/hw725/classical-text-browser/archive/refs/heads/master.zip)를 클릭하고 원하는 위치에 압축을 풀어주세요.
 
-  # macOS/Linux
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-  ```
+> Git을 아는 분은 `git clone https://github.com/hw725/classical-text-browser.git`으로도 가능합니다.
 
 ### 2.2 설치
 
-```bash
-# 1. 소스 코드 다운로드
-git clone https://github.com/hw725/classical-text-platform.git
-cd classical-text-platform
+압축을 푼 폴더에서:
 
-# 2. 의존성 설치 (자동으로 가상환경 생성)
+| OS | 설치 방법 |
+|----|----------|
+| **Windows** | `install.bat` 더블클릭 |
+| **macOS/Linux** | 터미널에서 `./install.sh` 실행 |
+
+설치 스크립트가 Python, Git, uv를 **자동으로 설치**하고, 의존성 설치(`uv sync`)도 처리합니다.
+컴퓨터에 이미 설치된 것은 건너뜁니다. 처음 실행 시 1~2분 소요됩니다.
+
+<details>
+<summary>수동 설치 (고급)</summary>
+
+```bash
+cd classical-text-browser
+
+# uv가 없다면 먼저 설치:
+# Windows: irm https://astral.sh/uv/install.ps1 | iex
+# macOS/Linux: curl -LsSf https://astral.sh/uv/install.sh | sh
+
 uv sync
 
-# 3. (선택) 오프라인 OCR 엔진 설치 (~500MB)
+# (선택) 오프라인 OCR 엔진 설치 (~500MB)
 uv sync --extra paddleocr
-
-# 주의: PaddleOCR은 개별 설치 권장
-# Windows + Python 3.13 + PaddlePaddle 3.x(CPU) 조합에서는 실행 충돌 가능
+# 주의: Windows + Python 3.13 + PaddlePaddle 3.x(CPU) 조합은 실행 충돌 가능
 ```
+</details>
 
 ### 2.3 서버 실행
 
-```bash
-# 서고가 이미 있는 경우:
-uv run python -m app serve --library /path/to/my-library
+| OS | 실행 방법 |
+|----|----------|
+| **Windows** | `start_server.bat` 더블클릭 |
+| **macOS/Linux** | `./start_server.sh` |
 
-# 서고가 없는 경우 (GUI에서 나중에 설정):
-uv run python -m app serve
+또는 터미널에서 직접:
+```bash
+uv run python -m app serve                              # GUI에서 서고 선택
+uv run python -m app serve --library /path/to/my-library # 서고 지정
 ```
 
-실행 후 **브라우저에서 `http://localhost:8765`**를 엽니다.
+실행 후 **브라우저에서 `http://localhost:8000`**을 엽니다 (자동으로 열립니다).
 
 ### 2.4 서고 만들기 (처음일 때)
 
@@ -402,7 +411,7 @@ uv run python -m cli add-document /path/to/my-library \
 | 1 | Ollama (로컬/클라우드) | 자동 감지 (`localhost:11434`) | 모델 의존 | 무료 |
 | 2 | Base44 Bridge | 자동 (Node.js 필요) | O | 무료 |
 | 3 | Anthropic (Claude) | 환경변수 `ANTHROPIC_API_KEY` | O | 유료 |
-| 4 | Gemini (Google) | 환경변수 `GEMINI_API_KEY` | O | 유료 |
+| 4 | Gemini (Google) | 환경변수 `GOOGLE_API_KEY` | O | 유료 |
 | 5 | OpenAI | 환경변수 `OPENAI_API_KEY` | O | 유료 |
 
 ### 8.2 API 키 설정
@@ -411,7 +420,7 @@ uv run python -m cli add-document /path/to/my-library \
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
-GEMINI_API_KEY=AI...
+GOOGLE_API_KEY=AI...
 OPENAI_API_KEY=sk-...
 ```
 

@@ -452,10 +452,10 @@ async function _addManualTranslation(sent, translationText) {
       _renderStatusSummary();
     } else {
       const err = await res.json();
-      alert(`번역 추가 실패: ${err.error || "알 수 없는 오류"}`);
+      showToast(`번역 추가 실패: ${err.error || "알 수 없는 오류"}`, 'error');
     }
   } catch (e) {
-    alert(`번역 추가 실패: ${e.message}`);
+    showToast(`번역 추가 실패: ${e.message}`, 'error');
   }
 }
 
@@ -490,7 +490,7 @@ async function _acceptTranslation(trId) {
       _renderStatusSummary();
     }
   } catch (e) {
-    alert(`확정 실패: ${e.message}`);
+    showToast(`확정 실패: ${e.message}`, 'error');
   }
 }
 
@@ -510,7 +510,7 @@ async function _deleteTranslation(trId) {
       _renderStatusSummary();
     }
   } catch (e) {
-    alert(`삭제 실패: ${e.message}`);
+    showToast(`삭제 실패: ${e.message}`, 'error');
   }
 }
 
@@ -577,7 +577,7 @@ async function _aiTranslateSingle(sentIdx) {
     _renderTransCards();
     _renderStatusSummary();
   } catch (e) {
-    alert(`AI 번역 실패: ${e.message}`);
+    showToast(`AI 번역 실패: ${e.message}`, 'error');
   } finally {
     btns.forEach((b) => { b.disabled = false; b.textContent = "AI"; });
   }
@@ -585,7 +585,7 @@ async function _aiTranslateSingle(sentIdx) {
 
 async function _aiTranslateAll() {
   if (!transState.sentences || transState.sentences.length === 0) {
-    alert("번역할 문장이 없습니다.");
+    showToast("번역할 문장이 없습니다.", 'warning');
     return;
   }
 
@@ -598,7 +598,7 @@ async function _aiTranslateAll() {
   }
 
   if (targets.length === 0) {
-    alert("모든 문장이 이미 번역되어 있습니다.");
+    showToast("모든 문장이 이미 번역되어 있습니다.", 'info');
     return;
   }
 
@@ -620,7 +620,7 @@ async function _aiTranslateAll() {
   }
 
   if (allBtn) { allBtn.disabled = false; allBtn.textContent = "전체 AI 번역"; }
-  alert(`AI 번역 완료: 성공 ${success}건, 실패 ${fail}건`);
+  showToast(`AI 번역 완료: 성공 ${success}건, 실패 ${fail}건`, 'success');
 }
 
 
@@ -630,7 +630,7 @@ async function _aiTranslateAll() {
 
 async function _saveAllTranslations() {
   if (!interpState.interpId || !viewerState.pageNum) {
-    alert("해석 저장소가 선택되어야 합니다.");
+    showToast("해석 저장소가 선택되어야 합니다.", 'warning');
     return;
   }
 
@@ -686,12 +686,12 @@ async function _saveAllTranslations() {
  */
 async function _resetAllTranslations() {
   if (!interpState.interpId || !viewerState.pageNum) {
-    alert("해석 저장소와 페이지가 선택되어야 합니다.");
+    showToast("해석 저장소와 페이지가 선택되어야 합니다.", 'warning');
     return;
   }
 
   if (transState.translations.length === 0) {
-    alert("삭제할 번역이 없습니다.");
+    showToast("삭제할 번역이 없습니다.", 'warning');
     return;
   }
 
@@ -728,7 +728,7 @@ async function _resetAllTranslations() {
   _renderStatusSummary();
 
   if (fail > 0) {
-    alert(`번역 리셋 완료: 성공 ${success}건, 실패 ${fail}건`);
+    showToast(`번역 리셋 완료: 성공 ${success}건, 실패 ${fail}건`, 'error');
   }
 }
 
@@ -872,7 +872,7 @@ function _applyRefDictSelection() {
   );
 
   if (selected.length === 0) {
-    alert("선택된 항목이 없습니다.");
+    showToast("선택된 항목이 없습니다.", 'warning');
     return;
   }
 
@@ -940,7 +940,7 @@ async function _showRefDictManager() {
         });
         if (regResp.ok) {
           const result = await regResp.json();
-          alert(`참조 사전 등록 완료: ${result.filename}`);
+          showToast(`참조 사전 등록 완료: ${result.filename}`, 'success');
         }
       });
       input.click();
@@ -952,7 +952,7 @@ async function _showRefDictManager() {
         method: "DELETE",
       });
       if (delResp.ok || delResp.status === 204) {
-        alert("참조 사전 삭제 완료");
+        showToast("참조 사전 삭제 완료", 'success');
       }
     }
   } catch (e) {

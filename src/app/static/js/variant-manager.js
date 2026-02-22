@@ -134,7 +134,7 @@ async function _loadDictList() {
     }
   } catch (err) {
     console.error("사전 목록 로드 오류:", err);
-    alert("이체자 사전 목록을 불러올 수 없습니다: " + err.message);
+    showToast("이체자 사전 목록을 불러올 수 없습니다: " + err.message, 'error');
   }
 }
 
@@ -155,7 +155,7 @@ async function _loadDictContent(name) {
     _renderVariantTable();
   } catch (err) {
     console.error("사전 내용 로드 오류:", err);
-    alert("이체자 사전을 불러올 수 없습니다: " + err.message);
+    showToast("이체자 사전을 불러올 수 없습니다: " + err.message, 'error');
   }
 }
 
@@ -175,13 +175,13 @@ async function _createDict() {
     });
     if (!res.ok) {
       const err = await res.json();
-      alert(err.error || "사전 생성 실패");
+      showToast(err.error || "사전 생성 실패", 'error');
       return;
     }
-    alert(`사전 '${name}' 생성 완료`);
+    showToast(`사전 '${name}' 생성 완료`, 'success');
     await _loadDictList();
   } catch (err) {
-    alert("사전 생성 오류: " + err.message);
+    showToast("사전 생성 오류: " + err.message, 'error');
   }
 }
 
@@ -201,13 +201,13 @@ async function _copyDict() {
     });
     if (!res.ok) {
       const err = await res.json();
-      alert(err.error || "복제 실패");
+      showToast(err.error || "복제 실패", 'error');
       return;
     }
-    alert(`사전 '${newName}' 복제 완료`);
+    showToast(`사전 '${newName}' 복제 완료`, 'success');
     await _loadDictList();
   } catch (err) {
-    alert("복제 오류: " + err.message);
+    showToast("복제 오류: " + err.message, 'error');
   }
 }
 
@@ -224,13 +224,13 @@ async function _deleteDict() {
     });
     if (!res.ok) {
       const err = await res.json();
-      alert(err.error || "삭제 실패");
+      showToast(err.error || "삭제 실패", 'error');
       return;
     }
-    alert(`사전 '${name}' 삭제 완료`);
+    showToast(`사전 '${name}' 삭제 완료`, 'success');
     await _loadDictList();
   } catch (err) {
-    alert("삭제 오류: " + err.message);
+    showToast("삭제 오류: " + err.message, 'error');
   }
 }
 
@@ -260,12 +260,12 @@ async function _addPair(charA, charB) {
     });
     if (!res.ok) {
       const err = await res.json();
-      alert(err.error || "추가 실패");
+      showToast(err.error || "추가 실패", 'error');
       return;
     }
     await _loadDictContent(name);
   } catch (err) {
-    alert("추가 오류: " + err.message);
+    showToast("추가 오류: " + err.message, 'error');
   }
 }
 
@@ -284,12 +284,12 @@ async function _deletePair(charA, charB) {
     });
     if (!res.ok) {
       const err = await res.json();
-      alert(err.error || "삭제 실패");
+      showToast(err.error || "삭제 실패", 'error');
       return;
     }
     await _loadDictContent(name);
   } catch (err) {
-    alert("삭제 오류: " + err.message);
+    showToast("삭제 오류: " + err.message, 'error');
   }
 }
 
@@ -368,7 +368,7 @@ function _showImportDialog() {
     const text = document.getElementById("vm-import-text").value;
     const fmt = document.getElementById("vm-import-format").value;
     if (!text.trim()) {
-      alert("가져올 데이터를 입력하세요.");
+      showToast("가져올 데이터를 입력하세요.", 'warning');
       return;
     }
 
@@ -380,19 +380,19 @@ function _showImportDialog() {
       });
       if (!res.ok) {
         const err = await res.json();
-        alert(err.error || "가져오기 실패");
+        showToast(err.error || "가져오기 실패", 'error');
         return;
       }
       const data = await res.json();
-      let msg = `가져오기 완료\n\n추가: ${data.added}쌍\n건너뜀: ${data.skipped}쌍\n총: ${data.size}자`;
+      let msg = `가져오기 완료 — 추가: ${data.added}쌍, 건너뜀: ${data.skipped}쌍, 총: ${data.size}자`;
       if (data.errors && data.errors.length > 0) {
-        msg += `\n\n오류 ${data.errors.length}건:\n` + data.errors.slice(0, 10).join("\n");
+        msg += ` (오류 ${data.errors.length}건)`;
       }
-      alert(msg);
+      showToast(msg, 'success');
       overlay.remove();
       await _loadDictContent(name);
     } catch (err) {
-      alert("가져오기 오류: " + err.message);
+      showToast("가져오기 오류: " + err.message, 'error');
     }
   });
 }

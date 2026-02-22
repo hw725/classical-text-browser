@@ -618,7 +618,7 @@ async function _aiTagAll() {
    */
   const text = annState.originalText;
   if (!text) {
-    alert("태깅할 텍스트가 없습니다. 먼저 블록을 선택하세요.");
+    showToast("태깅할 텍스트가 없습니다. 먼저 블록을 선택하세요.", 'warning');
     return;
   }
 
@@ -629,7 +629,7 @@ async function _aiTagAll() {
   const interpId = (is && is.interpId) || "default";
   const blockId = annState.blockId;
   if (!blockId) {
-    alert("블록을 먼저 선택하세요.");
+    showToast("블록을 먼저 선택하세요.", 'warning');
     return;
   }
 
@@ -719,7 +719,7 @@ async function _aiTagAll() {
 
   } catch (e) {
     console.error("AI 태깅 실패:", e);
-    alert("AI 태깅 실패: " + e.message);
+    showToast("AI 태깅 실패: " + e.message, 'error');
   } finally {
     // 버튼 복원
     if (aiBtn) {
@@ -784,7 +784,7 @@ async function _showTypeMgmtDialog() {
       await _loadAnnotationTypes();
     } else {
       const err = await resp.json();
-      alert("유형 추가 실패: " + (err.error || "알 수 없는 오류"));
+      showToast("유형 추가 실패: " + (err.error || "알 수 없는 오류"), 'error');
     }
   } catch (e) {
     console.error("유형 추가 실패:", e);
@@ -807,7 +807,7 @@ async function _resetAllAnnotations() {
   const vs = typeof viewerState !== "undefined" ? viewerState : null;
   const is = typeof interpState !== "undefined" ? interpState : null;
   if (!vs || !vs.pageNum) {
-    alert("페이지가 선택되어야 합니다.");
+    showToast("페이지가 선택되어야 합니다.", 'warning');
     return;
   }
 
@@ -815,12 +815,12 @@ async function _resetAllAnnotations() {
   const blockId = annState.blockId;
 
   if (!blockId) {
-    alert("블록을 먼저 선택하세요.");
+    showToast("블록을 먼저 선택하세요.", 'warning');
     return;
   }
 
   if (annState.annotations.length === 0) {
-    alert("삭제할 주석이 없습니다.");
+    showToast("삭제할 주석이 없습니다.", 'warning');
     return;
   }
 
@@ -859,7 +859,7 @@ async function _resetAllAnnotations() {
   _renderStatusSummary();
 
   if (fail > 0) {
-    alert(`주석 리셋 완료: 성공 ${success}건, 실패 ${fail}건`);
+    showToast(`주석 리셋 완료: 성공 ${success}건, 실패 ${fail}건`, 'error');
   } else {
     _showSaveStatus(`주석 ${success}건 삭제 완료`);
   }
@@ -992,7 +992,7 @@ async function _generateDictStage(stageNum) {
   const interpId = (is && is.interpId) || "default";
   const blockId = annState.blockId;
   if (!blockId) {
-    alert("블록을 먼저 선택하세요.");
+    showToast("블록을 먼저 선택하세요.", 'warning');
     return;
   }
 
@@ -1036,7 +1036,7 @@ async function _generateDictStage(stageNum) {
 
   } catch (e) {
     console.error(`${stageNum}단계 사전 생성 실패:`, e);
-    alert(`${stageNum}단계 사전 생성 실패: ${e.message}`);
+    showToast(`${stageNum}단계 사전 생성 실패: ${e.message}`, 'error');
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -1091,7 +1091,7 @@ async function _generateDictBatch() {
 
   } catch (e) {
     console.error("일괄 사전 생성 실패:", e);
-    alert("일괄 사전 생성 실패: " + e.message);
+    showToast("일괄 사전 생성 실패: " + e.message, 'error');
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -1126,7 +1126,7 @@ async function _exportDictionary() {
     _showSaveStatus(`사전 내보내기: ${count}개 항목`);
   } catch (e) {
     console.error("사전 내보내기 실패:", e);
-    alert("사전 내보내기 실패: " + e.message);
+    showToast("사전 내보내기 실패: " + e.message, 'error');
   }
 }
 
@@ -1175,7 +1175,7 @@ async function _importDictionary() {
       }
     } catch (err) {
       console.error("사전 가져오기 실패:", err);
-      alert("사전 가져오기 실패: " + err.message);
+      showToast("사전 가져오기 실패: " + err.message, 'error');
     }
   });
   input.click();

@@ -298,7 +298,7 @@ async function _executePdfSeparation() {
     const data = await res.json();
     if (!res.ok) {
       statusEl.textContent = data.error || "분리 실패";
-      alert(`텍스트 분리 실패: ${data.error || "알 수 없는 오류"}`);
+      showToast(`텍스트 분리 실패: ${data.error || "알 수 없는 오류"}`, 'error');
       return;
     }
 
@@ -325,7 +325,7 @@ async function _executePdfSeparation() {
     statusEl.textContent = `분리 완료: ${pagesWithText}페이지에서 원문 추출`;
   } catch (err) {
     statusEl.textContent = `오류: ${err.message}`;
-    alert(`텍스트 분리 중 오류: ${err.message}`);
+    showToast(`텍스트 분리 중 오류: ${err.message}`, 'error');
   } finally {
     btn.disabled = false;
   }
@@ -387,7 +387,7 @@ async function _executeHwpImport() {
 
     if (!res.ok) {
       statusEl.textContent = data.error || "가져오기 실패";
-      alert(`HWP 가져오기 실패: ${data.error || "알 수 없는 오류"}`);
+      showToast(`HWP 가져오기 실패: ${data.error || "알 수 없는 오류"}`, 'error');
       return;
     }
 
@@ -403,7 +403,7 @@ async function _executeHwpImport() {
     }
   } catch (err) {
     statusEl.textContent = `오류: ${err.message}`;
-    alert(`HWP 가져오기 중 오류: ${err.message}`);
+    showToast(`HWP 가져오기 중 오류: ${err.message}`, 'error');
   } finally {
     execBtn.disabled = false;
   }
@@ -460,7 +460,7 @@ async function _executePdfApply() {
 
     if (!res.ok) {
       statusEl.textContent = data.error || "저장 실패";
-      alert(`PDF 텍스트 저장 실패: ${data.error || "알 수 없는 오류"}`);
+      showToast(`PDF 텍스트 저장 실패: ${data.error || "알 수 없는 오류"}`, 'error');
       return;
     }
 
@@ -471,7 +471,7 @@ async function _executePdfApply() {
     }
   } catch (err) {
     statusEl.textContent = `오류: ${err.message}`;
-    alert(`PDF 텍스트 저장 중 오류: ${err.message}`);
+    showToast(`PDF 텍스트 저장 중 오류: ${err.message}`, 'error');
   } finally {
     execBtn.disabled = false;
   }

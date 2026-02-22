@@ -2,13 +2,25 @@
 setlocal enabledelayedexpansion
 
 REM ============================================
-REM  Classical Text Digital Library Platform
+REM  Classical Text Browser
 REM ============================================
 
+REM -- Check uv --------------------------------
+uv --version >nul 2>&1
+if !ERRORLEVEL! neq 0 (
+    echo [오류] uv가 설치되어 있지 않습니다.
+    echo.
+    echo   먼저 install.bat 을 실행하세요.
+    echo.
+    pause
+    exit /b 1
+)
+
 REM -- Settings --------------------------------
-REM Optional first arg: library path (empty = start without --library)
+REM First arg: library path (optional, empty = choose in GUI)
+REM Second arg: port (optional, default 8000)
 set LIBRARY_PATH=%~1
-set PORT=8000
+if "%~2"=="" (set PORT=8000) else (set PORT=%~2)
 
 REM -- Check library ---------------------------
 if not "%LIBRARY_PATH%"=="" (
@@ -41,7 +53,7 @@ if !ERRORLEVEL! equ 0 (
 )
 
 echo ============================================
-echo  Classical Text Digital Library Platform
+echo  Classical Text Browser
 echo ============================================
 echo.
 if "%LIBRARY_PATH%"=="" (

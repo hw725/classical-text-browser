@@ -1,7 +1,7 @@
 """앱 전역 설정 관리.
 
 서고 경로와 무관한 앱 수준 설정을 관리한다.
-설정 파일: ~/.classical-text-platform/config.json
+설정 파일: ~/.classical-text-browser/config.json
 
 왜 서고 안이 아닌 홈 디렉토리인가:
     서고가 여러 개일 수 있고, 서고 경로 자체를 기억해야 하므로
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 # ── 설정 경로 ──────────────────────────────────
 
-CONFIG_DIR = Path.home() / ".classical-text-platform"
+CONFIG_DIR = Path.home() / ".classical-text-browser"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 # 최근 서고 목록 최대 개수

@@ -141,6 +141,15 @@
   --accent: #007acc;
   --accent-hover: #1a8ad4;
 
+  /* 시맨틱 색상 — 하드코딩 방지용 */
+  --color-danger: #ef4444;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-layout: #a855f7;
+
+  /* 스크롤바 호버 */
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.25);
+
   --resize-handle: transparent;
   --resize-handle-hover: #007acc;
 
@@ -259,6 +268,15 @@
   /* 강조 */
   --accent: #1976d2;
   --accent-hover: #1565c0;
+
+  /* 시맨틱 색상 */
+  --color-danger: #dc2626;
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-layout: #9333ea;
+
+  /* 스크롤바 호버 */
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.2);
 
   --resize-handle-hover: #1976d2;
 
@@ -756,7 +774,7 @@ body.resizing-row {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--hover-bg-strong);
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* === Phase 3: 트리 뷰 (문헌 > 권 > 페이지 계층구조) === */
@@ -823,7 +841,7 @@ body.resizing-row {
 }
 .tree-delete-btn:hover,
 .interp-delete-btn:hover {
-  color: #ef4444;
+  color: var(--color-danger);
 }
 .tree-node-header:hover .tree-delete-btn,
 .interp-list-item:hover .interp-delete-btn {
@@ -844,7 +862,7 @@ body.resizing-row {
   margin-left: auto;
 }
 .comp-tb-delete-btn:hover {
-  color: #ef4444;
+  color: var(--color-danger);
 }
 
 .tree-page {
@@ -1094,6 +1112,14 @@ body.resizing-row {
   background: var(--accent-hover);
 }
 
+.text-btn-danger {
+  color: var(--color-danger);
+}
+
+.text-btn-danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
 .text-content {
   flex: 1;
   padding: 12px;
@@ -1122,19 +1148,19 @@ body.resizing-row {
 }
 
 .status-saved {
-  color: #22c55e;
+  color: var(--color-success);
 }
 .status-new {
   color: var(--text-secondary);
 }
 .status-modified {
-  color: #f59e0b;
+  color: var(--color-warning);
 }
 .status-saving {
   color: var(--accent);
 }
 .status-error {
-  color: #ef4444;
+  color: var(--color-danger);
 }
 
 /* === Phase 4: 모드 탭 바 (열람 / 레이아웃 / 교정) === */
@@ -1180,8 +1206,8 @@ body.resizing-row {
 
 /* 레이아웃 모드 활성화 시 모드탭 강조 */
 .mode-tab.active[data-mode="layout"] {
-  border-bottom-color: #a855f7;
-  color: #a855f7;
+  border-bottom-color: var(--color-layout);
+  color: var(--color-layout);
 }
 
 /* === 읽기 보조선 (Reader Line) === */
@@ -3325,10 +3351,7 @@ body.resizing-row {
   font-size: 13px;
 }
 
-.text-btn-small {
-  font-size: 11px;
-  padding: 1px 6px;
-}
+/* .text-btn-small → .text-btn-sm으로 통합됨 (L1928 참조) */
 
 /* ──────────────────────────────────────────────────
    Phase 11-1: 표점 편집기 스타일
@@ -5094,11 +5117,6 @@ details[open] > .punct-section-summary::before {
   margin-right: 2px;
 }
 
-.text-btn-sm {
-  font-size: 11px;
-  padding: 2px 6px;
-}
-
 /* 사전 단계 뱃지 */
 .ann-dict-badge {
   display: inline-block;
@@ -5543,4 +5561,257 @@ details[open] > .punct-section-summary::before {
 .batch-context-more {
   color: var(--text-muted);
   font-size: 11px;
+}
+
+/* ====================================================================
+   UI/UX 개선 — 2026-02-22
+   ====================================================================
+
+   Part 2: 미정의 클래스 추가
+   Part 3: 접근성 (focus-visible)
+   Part 4: 모드 탭 바 개선
+   Part 5: 인라인 스타일 대체 클래스
+   Toast 알림 시스템
+   ==================================================================== */
+
+/* === Part 2: 설정 섹션 누락 버튼 클래스 === */
+
+.btn-sm {
+  padding: 2px 8px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--font-ui);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.btn-sm:hover {
+  background: var(--hover-bg-medium);
+  border-color: var(--accent);
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-active);
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+}
+
+/* === Part 3: 접근성 — 포커스 표시 === */
+
+/* 키보드 탐색 시 모든 포커스 가능 요소에 시각적 표시.
+   :focus-visible은 마우스 클릭 시에는 나타나지 않고
+   키보드(Tab)로 이동할 때만 표시되어 간섭이 적다. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* 이미 box-shadow로 포커스를 표시하는 요소는 outline 제거 */
+.text-content:focus-visible,
+.props-input:focus-visible,
+.props-select:focus-visible,
+.bib-input:focus-visible,
+.bib-textarea:focus-visible,
+.interp-content:focus-visible,
+.settings-remote-input:focus-visible,
+.trans-card-textarea:focus-visible,
+.notes-textarea:focus-visible,
+.vm-search-input:focus-visible,
+.batch-input:focus-visible {
+  outline: none;
+}
+
+/* === Part 4: 모드 탭 바 개선 === */
+
+/* 탭이 넘칠 때 가로 스크롤 허용.
+   스크롤바는 시각적으로 숨기되 스크롤 자체는 가능하게. */
+.mode-bar {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+  position: relative;
+}
+
+.mode-bar::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
+}
+
+/* 모드 탭 그룹 구분자 — 탭 사이에 세로선으로 작업 단계를 시각적으로 구분 */
+.mode-tab-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 2px;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+/* 모드 탭을 button으로 전환했을 때 기본 스타일 리셋 */
+button.mode-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-family: var(--font-ui);
+}
+
+/* === Part 5: 인라인 스타일 대체 클래스 === */
+
+/* 편성 패널 — 해석 저장소 선택 바 */
+.comp-interp-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.comp-interp-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* 편성 도구 바 */
+.comp-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* 편성 페이지 범위 컨트롤 */
+.comp-page-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* 대조 뷰 — 이체자 탭 안내 */
+.alignment-footer {
+  padding: 8px 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.alignment-footer-link {
+  color: var(--accent);
+}
+
+/* === 토스트 알림 시스템 === */
+
+.toast-container {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+  max-width: 420px;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  box-shadow: var(--dialog-shadow);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.4;
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateX(100%);
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+}
+
+.toast-active {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.toast-removing {
+  animation: toastSlideOut 0.3s ease forwards;
+}
+
+@keyframes toastSlideOut {
+  to {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}
+
+.toast-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.toast-message {
+  flex: 1;
+  word-break: break-word;
+}
+
+.toast-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.toast-close:hover {
+  color: var(--text-active);
+}
+
+/* 타입별 색상 */
+.toast-success {
+  border-left: 3px solid var(--color-success);
+}
+.toast-success .toast-icon {
+  color: var(--color-success);
+}
+
+.toast-error {
+  border-left: 3px solid var(--color-danger);
+}
+.toast-error .toast-icon {
+  color: var(--color-danger);
+}
+
+.toast-warning {
+  border-left: 3px solid var(--color-warning);
+}
+.toast-warning .toast-icon {
+  color: var(--color-warning);
+}
+
+.toast-info {
+  border-left: 3px solid var(--accent);
+}
+.toast-info .toast-icon {
+  color: var(--accent);
 }

@@ -13,6 +13,9 @@
     />
   </head>
   <body>
+    <!-- 토스트 알림 컨테이너 (alert 대체) -->
+    <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="false"></div>
+
     <!-- D-001: VSCode 스타일 통합 작업 환경 -->
     <div class="workspace">
       <!-- 액티비티 바: VSCode 좌측 아이콘 스트립 -->
@@ -21,6 +24,7 @@
           class="activity-btn active"
           data-panel="explorer"
           title="서고 브라우저"
+          aria-label="서고 브라우저"
         >
           <svg
             width="22"
@@ -56,6 +60,7 @@
           id="theme-toggle"
           class="theme-toggle-btn"
           title="라이트 모드로 전환"
+          aria-label="테마 전환"
         >
           <!-- 해/달 아이콘: JS에서 동적 전환 -->
           <svg
@@ -138,6 +143,7 @@
           class="activity-btn"
           data-panel="settings"
           title="설정"
+          aria-label="설정"
         >
           <svg
             width="22"
@@ -377,73 +383,25 @@
       <!-- 메인 영역 -->
       <main class="main-area">
         <!-- 모드 탭 바: 열람 / 레이아웃 / 교정 / 편성 / 표점 / 현토 / 번역 / 주석 / 교차 뷰어 -->
-        <div class="mode-bar">
-          <div
-            class="mode-tab active"
-            data-mode="view"
-          >
-            열람
-          </div>
-          <div
-            class="mode-tab"
-            data-mode="layout"
-          >
-            레이아웃
-          </div>
-          <div
-            class="mode-tab"
-            data-mode="correction"
-          >
-            교정
-          </div>
-          <div
-            class="mode-tab"
-            data-mode="composition"
-          >
-            편성
-          </div>
-          <div
-            class="mode-tab"
-            data-mode="punctuation"
-          >
-            표점
-          </div>
-          <div
-            class="mode-tab"
-            data-mode="hyeonto"
-          >
-            현토
-          </div>
-          <div
-            class="mode-tab"
-            data-mode="translation"
-          >
-            번역
-          </div>
-          <div
-            class="mode-tab"
-            data-mode="annotation"
-          >
-            주석
-          </div>
-          <div
-            class="mode-tab"
-            data-mode="citation"
-          >
-            인용
-          </div>
-          <div
-            class="mode-tab"
-            data-mode="interpretation"
-          >
-            교차 뷰어
-          </div>
-          <div
-            class="mode-tab"
-            data-mode="variant"
-          >
-            이체자
-          </div>
+        <div class="mode-bar" role="tablist" aria-label="작업 모드">
+          <!-- 원본 작업 -->
+          <button class="mode-tab active" data-mode="view" role="tab" aria-selected="true">열람</button>
+          <button class="mode-tab" data-mode="layout" role="tab">레이아웃</button>
+          <span class="mode-tab-divider" aria-hidden="true"></span>
+          <!-- 교정 작업 -->
+          <button class="mode-tab" data-mode="correction" role="tab">교정</button>
+          <button class="mode-tab" data-mode="composition" role="tab">편성</button>
+          <span class="mode-tab-divider" aria-hidden="true"></span>
+          <!-- 해석 작업 -->
+          <button class="mode-tab" data-mode="punctuation" role="tab">표점</button>
+          <button class="mode-tab" data-mode="hyeonto" role="tab">현토</button>
+          <button class="mode-tab" data-mode="translation" role="tab">번역</button>
+          <button class="mode-tab" data-mode="annotation" role="tab">주석</button>
+          <button class="mode-tab" data-mode="citation" role="tab">인용</button>
+          <span class="mode-tab-divider" aria-hidden="true"></span>
+          <!-- 도구 -->
+          <button class="mode-tab" data-mode="interpretation" role="tab">교차 뷰어</button>
+          <button class="mode-tab" data-mode="variant" role="tab">이체자</button>
         </div>
 
         <!-- 에디터 영역: D-001 에디터 → 병렬 뷰어 (이미지 + 텍스트) -->
@@ -512,6 +470,7 @@
                   id="pdf-prev"
                   class="pdf-btn"
                   title="이전 페이지 (↑/PageUp)"
+                  aria-label="이전 페이지"
                 >
                   &#9650;
                 </button>
@@ -533,6 +492,7 @@
                   id="pdf-next"
                   class="pdf-btn"
                   title="다음 페이지 (↓/PageDown)"
+                  aria-label="다음 페이지"
                 >
                   &#9660;
                 </button>
@@ -542,6 +502,7 @@
                   id="pdf-zoom-out"
                   class="pdf-btn"
                   title="축소"
+                  aria-label="축소"
                 >
                   &#8722;
                 </button>
@@ -554,6 +515,7 @@
                   id="pdf-zoom-in"
                   class="pdf-btn"
                   title="확대"
+                  aria-label="확대"
                 >
                   +
                 </button>
@@ -561,6 +523,7 @@
                   id="pdf-zoom-fit"
                   class="pdf-btn"
                   title="맞춤 모드 전환 (가로/세로/해제)"
+                  aria-label="맞춤 모드 전환"
                 >
                   &#8862;
                 </button>
@@ -574,6 +537,7 @@
                   id="pdf-filter-btn"
                   class="pdf-btn"
                   title="이미지 필터 전환 (원본/흑백/고대비/반전)"
+                  aria-label="이미지 필터"
                 >
                   &#9681;
                 </button>
@@ -587,6 +551,7 @@
                   id="pdf-rotate-ccw"
                   class="pdf-btn"
                   title="반시계 방향 90° 회전"
+                  aria-label="반시계 회전"
                 >
                   &#8634;
                 </button>
@@ -594,6 +559,7 @@
                   id="pdf-rotate-cw"
                   class="pdf-btn"
                   title="시계 방향 90° 회전"
+                  aria-label="시계 회전"
                 >
                   &#8635;
                 </button>
@@ -607,6 +573,7 @@
                   id="pdf-reader-line-btn"
                   class="pdf-btn"
                   title="읽기 보조선 (R)"
+                  aria-label="읽기 보조선"
                 >
                   &#9473;
                 </button>
@@ -676,8 +643,7 @@
               <div class="text-toolbar-divider"></div>
               <button
                 id="layout-reset-btn"
-                class="text-btn"
-                style="color: var(--accent-red, #ef4444)"
+                class="text-btn text-btn-danger"
                 title="현재 페이지의 모든 레이아웃 블록 삭제"
               >
                 리셋
@@ -1000,8 +966,7 @@
               <div class="text-toolbar-divider"></div>
               <button
                 id="corr-reset-btn"
-                class="text-btn"
-                style="color: var(--accent-red, #ef4444)"
+                class="text-btn text-btn-danger"
                 title="현재 페이지의 모든 교정 삭제"
               >
                 교정 리셋
@@ -1127,8 +1092,8 @@
               ></div>
 
               <!-- 이체자 사전 — 별도 탭으로 이동됨 -->
-              <div style="padding:8px 12px;color:var(--text-secondary);font-size:12px">
-                이체자 사전은 <a href="#" onclick="document.querySelector('[data-mode=variant]').click();return false;" style="color:var(--accent)">이체자 탭</a>에서 관리합니다.
+              <div class="alignment-footer">
+                이체자 사전은 <a href="#" onclick="document.querySelector('[data-mode=variant]').click();return false;" class="alignment-footer-link">이체자 탭</a>에서 관리합니다.
               </div>
             </div>
           </div>
@@ -1150,23 +1115,9 @@
             <!-- 해석 저장소 선택 바 -->
             <div
               id="comp-interp-bar"
-              style="
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                padding: 6px 8px;
-                border-bottom: 1px solid var(--border);
-                background: var(--bg-secondary, #1e1e2e);
-              "
+              class="comp-interp-bar"
             >
-              <label
-                style="
-                  font-size: 11px;
-                  color: var(--text-muted);
-                  white-space: nowrap;
-                "
-                >해석 저장소:</label
-              >
+              <label class="comp-interp-label">해석 저장소:</label>
               <select
                 id="comp-interp-select"
                 class="corr-block-filter"
@@ -1177,16 +1128,7 @@
             </div>
 
             <!-- 도구 바 -->
-            <div
-              class="comp-toolbar"
-              style="
-                display: flex;
-                flex-wrap: wrap;
-                gap: 6px;
-                padding: 6px 8px;
-                border-bottom: 1px solid var(--border);
-              "
-            >
+            <div class="comp-toolbar">
               <button
                 id="comp-auto-btn"
                 class="text-btn"
@@ -1211,32 +1153,19 @@
               </button>
               <button
                 id="comp-reset-btn"
-                class="text-btn"
-                style="color: var(--accent-red, #ef4444)"
+                class="text-btn text-btn-danger"
                 title="현재 페이지의 TextBlock을 모두 삭제 (deprecated 전환)"
               >
                 리셋
               </button>
-              <div style="flex: 1"></div>
+              <div class="text-toolbar-spacer"></div>
               <span
                 id="comp-block-count"
-                class="text-save-status"
-                style="font-size: 11px"
+                class="text-save-status text-btn-sm"
               ></span>
             </div>
             <!-- 페이지 범위 컨트롤 -->
-            <div
-              class="comp-page-range"
-              style="
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                padding: 4px 8px;
-                border-bottom: 1px solid var(--border);
-                font-size: 11px;
-                color: var(--text-muted);
-              "
-            >
+            <div class="comp-page-range">
               <label style="display: flex; align-items: center; gap: 4px">
                 시작
                 <input
@@ -1613,19 +1542,19 @@
             <!-- 사전 선택 바 -->
             <div class="vm-toolbar">
               <select id="vm-dict-select" class="vm-select" title="사전 선택"></select>
-              <button id="vm-btn-create" class="text-btn text-btn-small" title="빈 사전 생성">새로 만들기</button>
-              <button id="vm-btn-copy" class="text-btn text-btn-small" title="현재 사전 복제">복제</button>
-              <button id="vm-btn-delete" class="text-btn text-btn-small" title="선택한 사전 삭제">삭제</button>
+              <button id="vm-btn-create" class="text-btn text-btn-sm" title="빈 사전 생성">새로 만들기</button>
+              <button id="vm-btn-copy" class="text-btn text-btn-sm" title="현재 사전 복제">복제</button>
+              <button id="vm-btn-delete" class="text-btn text-btn-sm" title="선택한 사전 삭제">삭제</button>
             </div>
 
             <!-- 도구 바 -->
             <div class="vm-toolbar">
-              <button id="vm-btn-add-pair" class="text-btn text-btn-small text-btn-primary">+ 추가</button>
-              <button id="vm-btn-import" class="text-btn text-btn-small">가져오기</button>
-              <button id="vm-btn-export-json" class="text-btn text-btn-small">JSON 내보내기</button>
-              <button id="vm-btn-export-csv" class="text-btn text-btn-small">CSV 내보내기</button>
+              <button id="vm-btn-add-pair" class="text-btn text-btn-sm text-btn-primary">+ 추가</button>
+              <button id="vm-btn-import" class="text-btn text-btn-sm">가져오기</button>
+              <button id="vm-btn-export-json" class="text-btn text-btn-sm">JSON 내보내기</button>
+              <button id="vm-btn-export-csv" class="text-btn text-btn-sm">CSV 내보내기</button>
               <span style="flex:1"></span>
-              <button id="vm-btn-sort" class="text-btn text-btn-small" title="정렬 변경">유니코드순</button>
+              <button id="vm-btn-sort" class="text-btn text-btn-sm" title="정렬 변경">유니코드순</button>
               <span id="vm-stats" class="vm-stats"></span>
             </div>
 
@@ -1915,8 +1844,7 @@
               <div class="text-toolbar-divider"></div>
               <button
                 id="trans-reset-btn"
-                class="text-btn"
-                style="color: var(--accent-red, #ef4444)"
+                class="text-btn text-btn-danger"
                 title="현재 페이지의 모든 번역 삭제"
               >
                 리셋
@@ -2061,8 +1989,7 @@
               <div class="text-toolbar-divider"></div>
               <button
                 id="ann-reset-btn"
-                class="text-btn"
-                style="color: var(--accent-red, #ef4444)"
+                class="text-btn text-btn-danger"
                 title="현재 페이지의 모든 주석 삭제"
               >
                 리셋
@@ -2339,8 +2266,7 @@
               <div class="text-toolbar-divider"></div>
               <button
                 id="cite-reset-btn"
-                class="text-btn"
-                style="color: var(--accent-red, #ef4444)"
+                class="text-btn text-btn-danger"
                 title="현재 페이지의 모든 인용 마크 삭제"
               >
                 리셋
@@ -2629,6 +2555,7 @@
               class="panel-toggle"
               id="panel-toggle"
               title="패널 접기/펴기"
+              aria-label="하단 패널 접기/펴기"
             >
               <svg
                 width="16"
@@ -3878,6 +3805,7 @@
     <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/ort.min.js"></script>
 
     <!-- 앱 모듈 (로드 순서 중요: sidebar-tree가 viewerState를 정의, 나머지가 참조) -->
+    <script src="/static/js/toast.js?v=20260222"></script>
     <script src="/static/js/sidebar-tree.js?v=20260220c"></script>
     <script src="/static/js/pdf-renderer.js?v=20260220c"></script>
     <script src="/static/js/text-editor.js?v=20260220c"></script>

@@ -404,16 +404,17 @@ async function _trashDocument(docId, docTitle) {
     const data = await res.json();
 
     if (!res.ok) {
-      alert(`삭제 실패: ${data.error || "알 수 없는 오류"}`);
+      showToast(`삭제 실패: ${data.error || "알 수 없는 오류"}`, 'error');
       return;
     }
 
     // 연관 해석 저장소 경고
     if (data.related_interpretations && data.related_interpretations.length > 0) {
-      alert(
+      showToast(
         `문헌이 휴지통으로 이동되었습니다.\n\n` +
         `주의: 다음 해석 저장소가 이 문헌을 참조합니다:\n` +
-        data.related_interpretations.map((id) => `  - ${id}`).join("\n")
+        data.related_interpretations.map((id) => `  - ${id}`).join("\n"),
+        'warning'
       );
     }
 
@@ -430,6 +431,6 @@ async function _trashDocument(docId, docTitle) {
       loadLibraryInfo();
     }
   } catch (err) {
-    alert(`삭제 중 오류: ${err.message}`);
+    showToast(`삭제 중 오류: ${err.message}`, 'error');
   }
 }

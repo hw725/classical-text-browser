@@ -9,7 +9,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  classical-text-platform (Python/FastAPI)                    │
+│  classical-text-browser (Python/FastAPI)                    │
 │                                                             │
 │  src/llm/router.py  ← LLM 호출의 단일 진입점               │
 │      │                                                      │
@@ -992,7 +992,7 @@ class LlmConfig:
     
     설정 우선순위:
       1. 환경변수 (.env)
-      2. 서고 설정 파일 (~/.classical-text-platform/llm_config.json)
+      2. 서고 설정 파일 (~/.classical-text-browser/llm_config.json)
       3. 기본값
     """
     
@@ -1037,7 +1037,7 @@ class LlmConfig:
 ### 6.2 .env 예시
 
 ```env
-# LLM 설정 — classical-text-platform/.env
+# LLM 설정 — classical-text-browser/.env
 # 이 파일은 .gitignore에 포함되어야 한다!
 
 # Base44 (1·2순위 — 무료)
@@ -1302,7 +1302,7 @@ class OllamaProvider(BaseLlmProvider):
 ```
 # 컨텍스트
 
-프로젝트: 고전 텍스트 디지털 서고 플랫폼
+프로젝트: 고전서지 통합 브라우저
 Phase 10-1 OCR 완료. 이번은 LLM 아키텍처.
 
 CLAUDE.md를 먼저 읽어.

@@ -626,14 +626,15 @@ function _insertPreset(preset) {
 
   if (isPaired) {
     if (!punctState.selectionRange) {
-      alert(
+      showToast(
         `${preset.before}${preset.after} 감싸기 부호는 범위 선택이 필요합니다.\n\n` +
         "사용법:\n" +
         "  1. 첫 번째 글자를 클릭하세요\n" +
         "  2. Shift 키를 누른 채 마지막 글자를 클릭하세요\n" +
         "  3. 선택된 범위가 주황색으로 표시됩니다\n" +
         "  4. 감싸기 부호 버튼을 클릭하세요\n\n" +
-        "개별 삽입이 필요하면 아래 '개별 삽입' 행의 버튼을 사용하세요."
+        "개별 삽입이 필요하면 아래 '개별 삽입' 행의 버튼을 사용하세요.",
+        'warning',
       );
       return;
     }
@@ -649,7 +650,7 @@ function _insertPreset(preset) {
   } else {
     // 단일/개별 부호: 슬롯 또는 범위 끝 위치에 삽입
     if (punctState.selectedSlot === null && !punctState.selectionRange) {
-      alert("표점을 삽입할 위치를 먼저 선택하세요.\n글자 사이의 ┊ 를 클릭하세요.");
+      showToast("표점을 삽입할 위치를 먼저 선택하세요.\n글자 사이의 ┊ 를 클릭하세요.", 'warning');
       return;
     }
     const idx = punctState.selectedSlot ?? punctState.selectionRange?.end ?? 0;
@@ -781,7 +782,7 @@ function _renderPreview() {
 
 async function _savePunctuation() {
   if (!interpState.interpId || !viewerState.pageNum || !punctState.blockId) {
-    alert("해석 저장소와 블록이 선택되어야 합니다.");
+    showToast("해석 저장소와 블록이 선택되어야 합니다.", 'warning');
     return;
   }
 
@@ -809,11 +810,11 @@ async function _savePunctuation() {
       }
     } else {
       const err = await res.json();
-      alert(`저장 실패: ${err.error || "알 수 없는 오류"}`);
+      showToast(`저장 실패: ${err.error || "알 수 없는 오류"}`, 'error');
       if (statusEl) statusEl.textContent = "저장 실패";
     }
   } catch (e) {
-    alert(`저장 실패: ${e.message}`);
+    showToast(`저장 실패: ${e.message}`, 'error');
     if (statusEl) statusEl.textContent = "저장 실패";
   }
 }
@@ -825,7 +826,7 @@ async function _savePunctuation() {
 
 async function _requestAiPunctuation() {
   if (!punctState.originalText) {
-    alert("원문이 없습니다. 블록을 선택하세요.");
+    showToast("원문이 없습니다. 블록을 선택하세요.", 'warning');
     return;
   }
 
@@ -891,10 +892,10 @@ async function _requestAiPunctuation() {
         setTimeout(() => { statusEl.textContent = ""; }, 5000);
       }
     } else {
-      alert("AI 응답에 marks가 없습니다. 수동으로 표점을 삽입하세요.");
+      showToast("AI 응답에 marks가 없습니다. 수동으로 표점을 삽입하세요.", 'warning');
     }
   } catch (e) {
-    alert(`AI 표점 실패: ${e.message}`);
+    showToast(`AI 표점 실패: ${e.message}`, 'error');
   } finally {
     if (aiBtn) {
       aiBtn.disabled = false;

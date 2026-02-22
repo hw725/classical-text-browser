@@ -170,7 +170,7 @@ LayoutBlock (L3) → OcrResult (L2) → L4 교정 → TextBlock (코어 스키�
 **상태**: 미결
 
 v7 섹션 13에 "프로젝트 이름"이 미결 사항으로 남아 있다.
-현재 코드명: classical-text-platform (임시)
+확정: classical-text-browser (고전서지 통합 브라우저)
 
 ---
 
@@ -616,7 +616,7 @@ GUI에서 서고를 전환·생성·최근 목록 조회할 수 있어야 한다
 
 **결정**:
 
-1. **앱 설정 파일**: `~/.classical-text-platform/config.json`에 최근 서고 목록 저장.
+1. **앱 설정 파일**: `~/.classical-text-browser/config.json`에 최근 서고 목록 저장.
    서고 경로와 무관한 앱 수준 설정이므로 서고 외부(홈 디렉토리)에 배치.
 2. **런타임 서고 전환**: `configure()` 함수를 재호출하여 서고를 동적으로 변경.
    LLM 라우터 캐시를 초기화하여 서고별 `.env` 설정 차이를 반영.

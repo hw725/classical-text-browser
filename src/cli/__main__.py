@@ -1,4 +1,4 @@
-"""CLI 도구 — 고전 텍스트 디지털 서고 플랫폼.
+"""CLI 도구 — 고전서지 통합 브라우저.
 
 사용법:
     python -m cli init-library <path>
@@ -75,8 +75,8 @@ def cmd_list_documents(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="classical-text-platform",
-        description="고전 텍스트 디지털 서고 플랫폼 — CLI 도구",
+        prog="classical-text-browser",
+        description="고전서지 통합 브라우저 — CLI 도구",
     )
     subparsers = parser.add_subparsers(dest="command")
 

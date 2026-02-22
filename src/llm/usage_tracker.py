@@ -27,7 +27,7 @@ class UsageTracker:
             self._log_path = Path(library_root) / "llm_usage_log.jsonl"
         else:
             self._log_path = (
-                Path.home() / ".classical-text-platform" / "llm_usage_log.jsonl"
+                Path.home() / ".classical-text-browser" / "llm_usage_log.jsonl"
             )
 
         self._log_path.parent.mkdir(parents=True, exist_ok=True)
