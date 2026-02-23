@@ -1260,78 +1260,79 @@ async def api_pdf_analyze(file: UploadFile = File(...)):
             pass
 
 
-class HwpSeparateRequest(BaseModel):
-    """HWP 텍스트 원문/번역 분리 요청.
-
-    HWP 미리보기에서 추출한 텍스트를 LLM으로 원문/번역/주석으로 분리한다.
-    PDF와 달리 파일 업로드 없이 텍스트를 직접 받는다 (미리보기에서 이미 추출했으므로).
-    """
-    text: str  # HWP에서 추출한 전체 텍스트
-    custom_instructions: str = ""
-    force_provider: str | None = None
-    force_model: str | None = None
-
-
 @app.post("/api/text-import/hwp/separate")
-async def api_hwp_separate(body: HwpSeparateRequest):
-    """HWP 텍스트를 원문/번역/주석으로 분리한다 (LLM).
+async def api_hwp_separate(
+    file: UploadFile = File(...),
+):
+    """HWP 텍스트를 유니코드 문자 유형(한자/한글) 기반으로 원문/번역 분리한다.
 
     목적: HWP에서 추출한 혼합 텍스트(한문 원문 + 한국어 번역이 뒤섞인 경우)를
-          LLM으로 분석·분리하여 원문과 번역을 각각 추출한다.
-    입력: HwpSeparateRequest (text, custom_instructions, ...)
+          regex \\p{Han}/\\p{Hangul} 유니코드 카테고리로 줄 단위 분류하여 분리한다.
+    입력: multipart/form-data로 HWP/HWPX 파일 업로드
     출력:
         {
-            "structure": {pattern_type, original_markers, ...},
-            "results": [{page_num, original_text, translation_text, notes, uncertain}]
+            "method": "unicode_script",
+            "stats": {total_lines, original_lines, translation_lines, ...},
+            "results": [{page_num, original_text, translation_text}]
         }
 
-    왜 이렇게 하는가:
-      연구자가 입력한 HWP 파일에는 한문 원문과 한국어 번역/주석이 섞여 있는 경우가 많다.
-      이를 수동으로 분리하는 것은 비효율적이므로 LLM이 패턴을 파악하여 자동 분리한다.
+    왜 규칙 기반인가:
+      한문(漢字)과 한글(Hangul)은 유니코드 블록이 완전히 다르다.
+      LLM 없이 각 줄의 \\p{Han} vs \\p{Hangul} 비율만으로 정확하게 분류할 수 있다.
+      LLM은 느리고, 비용이 들고, 500자 제한 등 문제가 있었다.
     """
-    if _llm_router is None:
+    import tempfile
+
+    from hwp.reader import get_reader
+    from text_import.common import separate_by_script
+
+    suffix = Path(file.filename or "").suffix or ".hwpx"
+    if suffix.lower() not in (".hwp", ".hwpx"):
         return JSONResponse(
-            {"error": "LLM이 설정되지 않았습니다. API 키를 확인하세요."},
-            status_code=500,
+            {"error": f"HWP/HWPX 파일만 지원합니다 (받은 형식: {suffix})"},
+            status_code=400,
         )
 
-    if not body.text or not body.text.strip():
-        return JSONResponse({"error": "텍스트가 비어 있습니다."}, status_code=400)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = Path(tmp.name)
 
     try:
-        from text_import.text_separator import TextSeparator
+        # HWP에서 전체 텍스트 추출
+        reader = get_reader(tmp_path)
+        if hasattr(reader, "extract_sections"):
+            sections = reader.extract_sections()
+            full_text = "\n\n".join(s["text"] for s in sections)
+        else:
+            full_text = reader.extract_text()
 
-        separator = TextSeparator(_llm_router)
+        if not full_text.strip():
+            return JSONResponse({"error": "텍스트가 비어 있습니다."}, status_code=400)
 
-        # 전체 텍스트를 단일 "페이지"로 취급하여 구조 분석 + 분리
-        sample_pages = [{"page_num": 1, "text": body.text}]
-
-        # 1단계: 구조 분석
-        structure = await separator.analyze_structure(
-            sample_pages,
-            force_provider=body.force_provider,
-            force_model=body.force_model,
-        )
-
-        # 2단계: 분리
-        results = await separator.separate_batch(
-            pages=sample_pages,
-            structure=structure,
-            custom_instructions=body.custom_instructions,
-            force_provider=body.force_provider,
-            force_model=body.force_model,
-        )
+        # 유니코드 문자 유형 기반 분리
+        sep_result = separate_by_script(full_text)
 
         return {
-            "structure": structure.to_dict(),
-            "results": [r.to_dict() for r in results],
+            "method": "unicode_script",
+            "stats": sep_result["stats"],
+            "results": [{
+                "page_num": 1,
+                "original_text": sep_result["original_text"],
+                "translation_text": sep_result["translation_text"],
+            }],
         }
     except Exception as e:
-        logger.exception("HWP 텍스트 분리 실패")
+        logging.getLogger(__name__).exception("HWP 텍스트 분리 실패")
         return JSONResponse(
             {"error": f"텍스트 분리 실패: {e}"},
             status_code=500,
         )
+    finally:
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
 
 
 class PdfSeparateRequest(BaseModel):
@@ -1346,35 +1347,39 @@ class PdfSeparateRequest(BaseModel):
 @app.post("/api/text-import/pdf/separate")
 async def api_pdf_separate(
     file: UploadFile = File(...),
-    body: str = Form(...),
+    body: str = Form("{}"),
 ):
-    """PDF 텍스트를 원문/번역/주석으로 분리한다 (LLM).
+    """PDF 텍스트를 유니코드 문자 유형(한자/한글) 기반으로 원문/번역 분리한다.
 
-    목적: analyze에서 확인된 구조를 바탕으로, 전체(또는 지정) 페이지의
-          텍스트를 원문/번역/주석으로 분리한다.
+    목적: PDF 각 페이지의 텍스트를 regex \\p{Han}/\\p{Hangul}로 줄 단위 분류하여
+          원문과 번역을 분리한다. LLM 불필요.
     입력:
         file — PDF 파일 (multipart)
-        body — JSON 문자열 {structure, pages, custom_instructions, ...}
+        body — JSON 문자열 (호환용, 무시해도 됨)
     출력:
         {
-            "results": [{page_num, original_text, translation_text, notes, uncertain}, ...]
+            "method": "unicode_script",
+            "page_count": int,
+            "stats": {total_lines, original_lines, translation_lines, ...},
+            "results": [{page_num, original_text, translation_text}, ...]
         }
+
+    왜 규칙 기반인가:
+      한문(漢字)과 한글(Hangul)은 유니코드 블록이 완전히 다르다.
+      LLM 없이 각 줄의 \\p{Han} vs \\p{Hangul} 비율만으로 정확하게 분류할 수 있다.
+      LLM은 느리고, 비용이 들고, API 키 미설정 시 사용 불가했다.
     """
     import tempfile
 
-    if _llm_router is None:
-        return JSONResponse(
-            {"error": "LLM이 설정되지 않았습니다. API 키를 확인하세요."},
-            status_code=500,
-        )
-
-    # body JSON 파싱
-    try:
-        params = json.loads(body)
-    except json.JSONDecodeError:
-        return JSONResponse({"error": "body가 올바른 JSON이 아닙니다."}, status_code=400)
+    from text_import.common import separate_by_script
 
     suffix = Path(file.filename or "").suffix or ".pdf"
+    if suffix.lower() != ".pdf":
+        return JSONResponse(
+            {"error": f"PDF 파일만 지원합니다 (받은 형식: {suffix})"},
+            status_code=400,
+        )
+
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         content = await file.read()
         tmp.write(content)
@@ -1382,36 +1387,48 @@ async def api_pdf_separate(
 
     try:
         from text_import.pdf_extractor import PdfTextExtractor
-        from text_import.text_separator import DocumentStructure, TextSeparator
 
-        # 구조 복원
-        structure = DocumentStructure.from_dict(params.get("structure", {}))
-        custom_instructions = params.get("custom_instructions", "")
-        force_provider = params.get("force_provider")
-        force_model = params.get("force_model")
+        extractor = PdfTextExtractor(tmp_path)
+        pages = extractor.extract_all_pages()
+        page_count = extractor.page_count
+        extractor.close()
 
-        # 페이지 텍스트 준비
-        pages = params.get("pages")
-        if pages is None:
-            # 전체 페이지 추출
-            extractor = PdfTextExtractor(tmp_path)
-            pages = extractor.extract_all_pages()
-            extractor.close()
+        # 페이지별 유니코드 문자 유형 기반 분리
+        results = []
+        total_stats = {
+            "total_lines": 0, "original_lines": 0,
+            "translation_lines": 0, "skipped_lines": 0,
+        }
 
-        # LLM 분리 실행
-        separator = TextSeparator(_llm_router)
-        results = await separator.separate_batch(
-            pages=pages,
-            structure=structure,
-            custom_instructions=custom_instructions,
-            force_provider=force_provider,
-            force_model=force_model,
-        )
+        for page in pages:
+            text = page.get("text", "").strip()
+            if not text:
+                results.append({
+                    "page_num": page["page_num"],
+                    "original_text": "",
+                    "translation_text": "",
+                })
+                continue
+
+            sep = separate_by_script(text)
+            results.append({
+                "page_num": page["page_num"],
+                "original_text": sep["original_text"],
+                "translation_text": sep["translation_text"],
+            })
+
+            # 통계 누적
+            for key in total_stats:
+                total_stats[key] += sep["stats"].get(key, 0)
 
         return {
-            "results": [r.to_dict() for r in results],
+            "method": "unicode_script",
+            "page_count": page_count,
+            "stats": total_stats,
+            "results": results,
         }
     except Exception as e:
+        logging.getLogger(__name__).exception("PDF 텍스트 분리 실패")
         return JSONResponse(
             {"error": f"텍스트 분리 실패: {e}"},
             status_code=500,
@@ -6566,7 +6583,7 @@ _LLM_PROMPTS = {
             '{"marks": [{"start": 1, "end": 1, "before": null, "after": "，"}, '
             '{"start": 3, "end": 3, "before": null, "after": "。"}]}'
         ),
-        "user": "다음 고전 한문에 표점을 삽입하세요:\n\n{text}",
+        "user": "다음 고전 한문에 표점을 삽입하세요:\n\n원문({char_count}자): {text}",
     },
     "translation": {
         "system": (
@@ -6653,48 +6670,73 @@ async def _call_llm_text(purpose: str, text: str,
 
     router = _get_llm_router()
     system_prompt = prompts["system"]
-    user_prompt = prompts["user"].format(text=text)
+    user_prompt = prompts["user"].format(text=text, char_count=len(text))
 
-    # ── force_provider가 지정된 경우: 해당 프로바이더만 시도 ──
+    # thinking 모델(kimi-k2.5 등)은 사고 토큰 + 출력 토큰이 합산되므로
+    # 4096으로는 사고에 다 쓰고 출력이 빈 응답이 될 수 있다.
+    _MAX_TOKENS = 16384
+
+    # ── force_provider가 지정된 경우: 해당 프로바이더만 시도 (빈 응답 시 1회 재시도) ──
     if force_provider:
-        response = await router.call(
-            user_prompt,
-            system=system_prompt,
-            force_provider=force_provider,
-            force_model=force_model,
-            purpose=purpose,
-        )
+        response = None
+        for _attempt in range(2):
+            response = await router.call(
+                user_prompt,
+                system=system_prompt,
+                force_provider=force_provider,
+                force_model=force_model,
+                purpose=purpose,
+                max_tokens=_MAX_TOKENS,
+            )
+            if response.text.strip():
+                break
+            _logger.warning(
+                f"LLM {purpose} — {force_provider}/{force_model or 'auto'} "
+                f"빈 응답 (시도 {_attempt+1}/2), "
+                f"tokens_out={getattr(response, 'tokens_out', '?')}"
+            )
         return _parse_llm_json(response, _json)
 
     # ── 자동 모드: 프로바이더 순서대로 시도, JSON 파싱 실패 시 다음으로 ──
     errors = []
+    tried = []
     for provider in router.providers:
         try:
-            if not await provider.is_available():
+            available = await provider.is_available()
+            if not available:
+                _logger.debug(f"LLM {purpose} — {provider.provider_id}: 사용 불가, 건너뜀")
                 continue
+
+            tried.append(provider.provider_id)
+            _logger.info(f"LLM {purpose} — {provider.provider_id} 시도 중...")
 
             response = await provider.call(
                 user_prompt,
                 system=system_prompt,
                 response_format="text",
-                max_tokens=4096,
+                max_tokens=_MAX_TOKENS,
                 purpose=purpose,
             )
             router.usage_tracker.log(response, purpose=purpose)
+
+            _logger.info(
+                f"LLM {purpose} — {provider.provider_id}/{response.model} 응답 수신 "
+                f"(길이={len(response.text)}, tokens_out={response.tokens_out})"
+            )
 
             # JSON 파싱 시도 — 실패하면 다음 프로바이더로
             return _parse_llm_json(response, _json)
 
         except Exception as e:
-            _logger.info(
-                f"LLM {purpose} — {provider.provider_id} 실패: {e}, "
-                f"다음 프로바이더로 시도"
+            _logger.warning(
+                f"LLM {purpose} — {provider.provider_id} 실패: {e}"
             )
             errors.append(f"{provider.provider_id}: {e}")
             continue
 
     raise ValueError(
-        f"모든 LLM 프로바이더가 {purpose} 요청에 실패했습니다:\n"
+        f"모든 LLM 프로바이더가 {purpose} 요청에 실패했습니다 "
+        f"(시도: {', '.join(tried) if tried else '없음'}):\n"
         + "\n".join(f"  - {e}" for e in errors)
     )
 
@@ -6705,8 +6747,45 @@ def _parse_llm_json(response, _json) -> dict:
     왜 별도 함수인가:
         _call_llm_text의 자동 폴백에서 반복 사용.
         파싱 실패 시 ValueError를 발생시켜 다음 프로바이더로 넘긴다.
+
+    처리 순서:
+        1. 빈 응답 감지
+        2. <think>...</think> thinking 태그 제거
+        3. markdown 코드 블록 제거
+        4. JSON 파싱 (전체 → 부분 추출)
     """
+    import logging as _log
+    import re as _re
+    _logger = _log.getLogger(__name__)
+
     raw = response.text.strip()
+
+    # 빈 응답 조기 감지 (OpenAI content_filter / refusal 등)
+    if not raw:
+        _logger.warning(
+            f"LLM 빈 응답 ({response.provider}/{response.model}) "
+            f"— tokens_out={getattr(response, 'tokens_out', '?')}, "
+            f"raw={getattr(response, 'raw', '?')}"
+        )
+        raise ValueError(
+            f"{response.provider}({response.model})이(가) 빈 응답을 반환했습니다. "
+            f"콘텐츠 필터링 또는 모델 오류일 수 있습니다."
+        )
+
+    # thinking 모델(kimi-k2.5, qwq 등)의 <think>...</think> 태그 제거.
+    # thinking 내부에 {, } 등이 포함되어 JSON 추출을 방해할 수 있다.
+    raw = _re.sub(r'<think>.*?</think>', '', raw, flags=_re.DOTALL).strip()
+
+    # thinking 태그 제거 후 빈 응답이 되는 경우 (사고만 하고 출력 없음)
+    if not raw:
+        _logger.warning(
+            f"LLM thinking-only 응답 ({response.provider}/{response.model}) "
+            f"— 사고 태그 제거 후 빈 응답"
+        )
+        raise ValueError(
+            f"{response.provider}({response.model})이(가) 사고(thinking)만 반환하고 "
+            f"실제 출력은 비어 있습니다."
+        )
 
     # markdown 코드 블록 제거
     if "```" in raw:
@@ -6720,8 +6799,11 @@ def _parse_llm_json(response, _json) -> dict:
     try:
         data = _json.loads(raw)
     except _json.JSONDecodeError:
-        # JSON 부분만 추출 시도
-        start = raw.find("{")
+        # JSON 부분만 추출 시도 — 마지막 유효 JSON 객체를 찾는다.
+        # rfind로 찾으면 thinking 잔여물이 아닌 실제 JSON을 잡을 가능성이 높다.
+        start = raw.rfind('{"')
+        if start < 0:
+            start = raw.find("{")
         end = raw.rfind("}") + 1
         if start >= 0 and end > start:
             try:
@@ -6747,26 +6829,95 @@ def _normalize_punct_marks(raw_marks: list) -> list:
         LLM은 프롬프트와 다른 형식으로 응답할 수 있다.
         구형식 {after_char_index, mark}이든 신형식 {start, end, before, after}이든
         클라이언트가 일관되게 처리할 수 있도록 표준화한다.
+
+    방어 처리:
+        LLM이 marks 배열에 dict가 아닌 항목(문자열, 정수 등)을
+        포함할 수 있으므로, dict가 아닌 항목은 무시한다.
     """
+    import logging as _log
+    _logger = _log.getLogger(__name__)
     normalized = []
     for m in raw_marks:
+        # dict가 아닌 항목 방어 (LLM이 ["。","，"] 등 반환 시)
+        if not isinstance(m, dict):
+            _logger.warning(f"_normalize_punct_marks: dict가 아닌 mark 항목 무시: {m!r}")
+            continue
         if "after_char_index" in m:
             # 구형식: {after_char_index: int, mark: str}
             # → after_char_index번째 글자 뒤에 mark를 삽입
             idx = m["after_char_index"]
+            if not isinstance(idx, int):
+                try:
+                    idx = int(idx)
+                except (ValueError, TypeError):
+                    continue
             normalized.append({
                 "start": idx, "end": idx,
                 "before": None, "after": m.get("mark"),
             })
         else:
             # 신형식: 이미 {start, end, before, after}
+            start = m.get("start", 0)
+            end = m.get("end", start)
+            # 인덱스가 문자열로 올 수 있다 ("3" → 3)
+            try:
+                start = int(start) if start is not None else 0
+                end = int(end) if end is not None else start
+            except (ValueError, TypeError):
+                continue
             normalized.append({
-                "start": m.get("start", 0),
-                "end": m.get("end", m.get("start", 0)),
+                "start": start,
+                "end": end,
                 "before": m.get("before"),
                 "after": m.get("after"),
             })
     return normalized
+
+
+def _extract_marks_from_punctuated(original: str, punctuated: str) -> list:
+    """표점이 삽입된 텍스트에서 marks를 역추출한다.
+
+    왜 이렇게 하는가:
+        LLM이 {"marks": [...]} 형식 대신 표점문(예: "표점문", "result")을
+        반환하는 경우가 빈번하다. 원문과 표점문을 비교하여 삽입된 부호의
+        위치를 자동 추출하면 어떤 형식이든 처리할 수 있다.
+
+    알고리즘:
+        원문 글자를 기준으로 표점문을 순서대로 대조한다.
+        원문에 없는 글자가 나오면 표점 부호로 간주하고,
+        직전 원문 글자의 after에 축적한다.
+    """
+    import re as _re
+    # 원문·표점문 모두 공백 제거
+    orig = _re.sub(r'\s+', '', original)
+    punct = _re.sub(r'\s+', '', punctuated)
+
+    marks = []
+    oi = 0  # 원문 인덱스
+    pending_after = ""  # 직전 글자 뒤에 붙일 부호 축적
+
+    for ch in punct:
+        if oi < len(orig) and ch == orig[oi]:
+            # 원문 글자 — 축적된 부호가 있으면 직전 글자의 after로 기록
+            if pending_after and oi > 0:
+                marks.append({
+                    "start": oi - 1, "end": oi - 1,
+                    "before": None, "after": pending_after,
+                })
+                pending_after = ""
+            oi += 1
+        else:
+            # 원문에 없는 글자 → 표점 부호
+            pending_after += ch
+
+    # 마지막 글자 뒤에 남은 부호 처리
+    if pending_after and oi > 0:
+        marks.append({
+            "start": oi - 1, "end": oi - 1,
+            "before": None, "after": pending_after,
+        })
+
+    return marks
 
 
 @app.post("/api/llm/punctuation")
@@ -6775,19 +6926,61 @@ async def api_llm_punctuation(body: AiPunctuationRequest):
 
     입력: 원문 텍스트
     출력: 표점이 삽입된 텍스트 + marks 배열
+
+    LLM 응답 형식 대응:
+        1. {"marks": [...]} → 그대로 사용 (정규화)
+        2. {"표점문": "..."} 또는 {"result": "..."} 등 → 원문 대조로 marks 역추출
     """
+    import logging as _logging
+    import re as _re
+    _logger = _logging.getLogger(__name__)
+
+    # 공백/줄바꿈 제거 — Ollama·OpenAI가 줄바꿈 포함 텍스트에서 빈 응답을 반환하는 문제 방지
+    clean_text = _re.sub(r'\s+', '', body.text)
+    if not clean_text:
+        return JSONResponse(
+            {"error": "표점할 텍스트가 비어 있습니다 (공백만 포함)."},
+            status_code=400,
+        )
+
+    _logger.info(f"AI 표점 요청: {len(clean_text)}자, provider={body.force_provider or 'auto'}")
+
     try:
         result = await _call_llm_text(
-            "punctuation", body.text,
+            "punctuation", clean_text,
             force_provider=body.force_provider,
             force_model=body.force_model,
         )
-        # LLM 응답의 marks를 표준 형식으로 정규화
+        # ── marks 형식 정규화 ──
         if "marks" in result and isinstance(result["marks"], list):
             result["marks"] = _normalize_punct_marks(result["marks"])
+            _logger.info(f"AI 표점 완료: marks {len(result['marks'])}개 (직접 반환)")
+        else:
+            # marks가 없으면 표점문에서 역추출 시도
+            # LLM이 {"표점문": "..."}, {"result": "..."}, {"punctuated": "..."} 등
+            # 다양한 키로 표점문을 반환할 수 있다.
+            punct_text = None
+            for key in ("표점문", "punctuated", "result", "text", "output"):
+                val = result.get(key)
+                # 표점문은 원문보다 길어야 함 (부호가 삽입되었으므로).
+                # 같은 길이일 수도 있으므로 >= 조건 사용.
+                if isinstance(val, str) and len(val) >= len(clean_text):
+                    punct_text = val
+                    _logger.info(f"AI 표점: marks 없음, '{key}' 키에서 표점문 역추출 시도")
+                    break
+            if punct_text:
+                result["marks"] = _extract_marks_from_punctuated(clean_text, punct_text)
+                _logger.info(f"AI 표점 완료: marks {len(result['marks'])}개 (표점문 역추출)")
+            else:
+                _logger.warning(
+                    f"AI 표점: marks도 표점문도 없음. 응답 키: {list(result.keys())}"
+                )
+                result["marks"] = []
         return result
     except Exception as e:
-        return JSONResponse({"error": f"AI 표점 실패: {e}"}, status_code=500)
+        _logger.error(f"AI 표점 실패: {e}", exc_info=True)
+        # 프론트엔드에서 "AI 표점 실패:" 접두어를 붙이므로 여기선 원본 에러만 전달
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 @app.post("/api/llm/translation")
@@ -6805,7 +6998,7 @@ async def api_llm_translation(body: AiTranslationRequest):
         )
         return result
     except Exception as e:
-        return JSONResponse({"error": f"AI 번역 실패: {e}"}, status_code=500)
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 @app.post("/api/llm/annotation")
@@ -6823,7 +7016,7 @@ async def api_llm_annotation(body: AiAnnotationRequest):
         )
         return result
     except Exception as e:
-        return JSONResponse({"error": f"AI 주석 실패: {e}"}, status_code=500)
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 # ──────────────────────────────────────

@@ -26,6 +26,7 @@ dependencies = [
     "google-genai>=1.0.0",
     "hwp-hwpx-parser>=1.0.0",
     "python-multipart>=0.0.22",
+    "regex>=2026.2.19",
 ]
 
 # PaddleOCR 선택 설치(extra): uv sync --extra paddleocr

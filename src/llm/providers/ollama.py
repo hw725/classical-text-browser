@@ -30,11 +30,16 @@ class OllamaProvider(BaseLlmProvider):
     supports_image = True
 
     # 용도별 기본 모델
+    # 주의: kimi-k2.5는 thinking 모델이라 사고 토큰이 num_predict 예산을
+    # 소진하여 빈 응답을 반환할 수 있다.
+    # JSON 구조화 출력이 필요한 용도(표점, 주석)는 non-thinking 모델을 사용한다.
     DEFAULT_MODELS = {
         "text": "kimi-k2.5:cloud",
         "vision": "qwen3-vl:235b-cloud",
         "translation": "glm-5:cloud",
         "json": "gemini-3-flash-preview:cloud",
+        "punctuation": "gemini-3-flash-preview:cloud",   # JSON 출력 — non-thinking 모델
+        "annotation": "gemini-3-flash-preview:cloud",     # JSON 출력 — non-thinking 모델
     }
 
     @property
@@ -85,6 +90,10 @@ class OllamaProvider(BaseLlmProvider):
             "model": selected_model,
             "prompt": prompt,
             "stream": False,
+            # num_predict: Ollama의 최대 출력 토큰 설정.
+            # 이 값이 없으면 모델 기본값(128~256)이 적용되어
+            # 표점·주석 등 긴 JSON 응답이 중간에 잘린다.
+            "options": {"num_predict": max_tokens},
         }
         if system:
             payload["system"] = system

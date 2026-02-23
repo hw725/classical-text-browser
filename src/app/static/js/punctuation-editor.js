@@ -830,7 +830,18 @@ async function _requestAiPunctuation() {
     return;
   }
 
-  if (!confirm("AI가 표점을 자동 생성합니다.\n기존 표점이 있으면 덮어씁니다. 계속하시겠습니까?")) return;
+  // ── 선택 영역 판별 ──
+  // 드래그로 범위를 선택한 경우: 해당 영역만 AI 표점 (기존 marks 유지).
+  // 선택 없으면: 전체 텍스트에 AI 표점 (기존 marks 전체 교체).
+  const sel = punctState.selectionRange;
+  const hasSelection = sel && sel.start !== sel.end;
+  const selLo = hasSelection ? Math.min(sel.start, sel.end) : 0;
+  const selHi = hasSelection ? Math.max(sel.start, sel.end) : punctState.originalText.length - 1;
+
+  const scopeLabel = hasSelection
+    ? `선택 영역(${selLo}~${selHi})만`
+    : "전체 텍스트에";
+  if (!confirm(`AI가 ${scopeLabel} 표점을 생성합니다.\n해당 범위의 기존 표점은 덮어씁니다. 계속하시겠습니까?`)) return;
 
   const aiBtn = document.getElementById("punct-ai-btn");
   if (aiBtn) {
@@ -844,7 +855,29 @@ async function _requestAiPunctuation() {
       ? getLlmModelSelection("punct-llm-model-select")
       : { force_provider: null, force_model: null };
 
-    const reqBody = { text: punctState.originalText };
+    // 대상 영역 추출 (선택 범위 또는 전체)
+    const rawText = punctState.originalText;
+    const targetText = hasSelection
+      ? rawText.substring(selLo, selHi + 1)
+      : rawText;
+
+    // 대상 영역에서 공백을 제거하여 LLM에 전달.
+    // cleanToTarget: 공백 제거 인덱스 → targetText 내 인덱스 매핑.
+    let cleanText = "";
+    const cleanToTarget = [];
+    for (let i = 0; i < targetText.length; i++) {
+      if (!/\s/.test(targetText[i])) {
+        cleanToTarget.push(i);
+        cleanText += targetText[i];
+      }
+    }
+
+    if (!cleanText) {
+      showToast("선택 영역에 표점할 글자가 없습니다.", 'warning');
+      return;
+    }
+
+    const reqBody = { text: cleanText };
     if (llmSel.force_provider) reqBody.force_provider = llmSel.force_provider;
     if (llmSel.force_model) reqBody.force_model = llmSel.force_model;
 
@@ -862,34 +895,75 @@ async function _requestAiPunctuation() {
 
     const data = await resp.json();
 
-    // AI가 반환한 marks를 현재 블록에 적용
-    // 서버는 {start, end, before, after} 형식으로 정규화하여 반환한다.
-    // 클라이언트에서 {id, target: {start, end}, before, after} 형식으로 변환한다.
+    // AI가 반환한 marks를 적용
+    // LLM 인덱스(공백 제거 기준) → targetText 인덱스 → 원문 인덱스로 복원.
     if (data.marks && Array.isArray(data.marks)) {
-      const n = punctState.originalText.length;
-      punctState.marks = [];
+      const cn = cleanText.length;
+      const totalReceived = data.marks.length;
+      let skipped = 0;
+      const newMarks = [];
       for (const m of data.marks) {
-        const start = m.start ?? m.target?.start ?? 0;
-        const end = m.end ?? m.target?.end ?? start;
-        if (start >= 0 && end < n && start <= end && (m.before || m.after)) {
-          punctState.marks.push({
-            id: m.id || _genTempId(),
-            target: { start, end },
-            before: m.before || null,
-            after: m.after || null,
-          });
-        }
+        let cs = m.start ?? m.target?.start ?? 0;
+        let ce = m.end ?? m.target?.end ?? cs;
+
+        // 부호가 없는 mark는 건너뛴다
+        if (!m.before && !m.after) { skipped++; continue; }
+
+        // clean 인덱스 clamp
+        if (cs < 0) cs = 0;
+        if (ce >= cn) ce = cn - 1;
+        if (cs > ce) { skipped++; continue; }
+
+        // clean → targetText → 원문 인덱스
+        const tStart = cleanToTarget[cs] ?? 0;
+        const tEnd = cleanToTarget[ce] ?? tStart;
+        const start = selLo + tStart;
+        const end = selLo + tEnd;
+
+        newMarks.push({
+          id: m.id || _genTempId(),
+          target: { start, end },
+          before: m.before || null,
+          after: m.after || null,
+        });
       }
+
+      if (skipped > 0) {
+        console.warn(`[표점] AI 반환 ${totalReceived}개 중 ${skipped}개 무효 mark 제외`);
+      }
+
+      // 선택 영역이면: 해당 범위의 기존 marks만 교체, 나머지 유지
+      // 전체이면: 전부 교체
+      if (hasSelection) {
+        punctState.marks = punctState.marks.filter(mk => {
+          const ms = mk.target?.start ?? 0;
+          const me = mk.target?.end ?? ms;
+          // 선택 범위와 겹치는 mark 제거
+          return me < selLo || ms > selHi;
+        });
+        punctState.marks.push(...newMarks);
+        // 인덱스 순으로 정렬
+        punctState.marks.sort((a, b) => (a.target?.start ?? 0) - (b.target?.start ?? 0));
+      } else {
+        punctState.marks = newMarks;
+      }
+
       punctState.isDirty = true;
       _renderCharArea();
       _renderMarksList();
       _renderPreview();
-      // AI 생성 완료 시 마크 목록과 미리보기 자동 펼침
       _openDetailsIfHasMarks();
       const statusEl = document.getElementById("punct-save-status");
       if (statusEl) {
-        statusEl.textContent = "AI 표점 생성 완료 — [저장]을 누르세요";
+        const scope = hasSelection ? `선택 영역에 ` : "";
+        const msg = newMarks.length > 0
+          ? `${scope}AI 표점 ${newMarks.length}개 생성 완료 — [저장]을 누르세요`
+          : "AI가 mark를 생성하지 못했습니다.";
+        statusEl.textContent = msg;
         setTimeout(() => { statusEl.textContent = ""; }, 5000);
+      }
+      if (newMarks.length === 0 && totalReceived > 0) {
+        showToast(`AI가 ${totalReceived}개 mark를 반환했으나 모두 무효합니다.`, 'warning');
       }
     } else {
       showToast("AI 응답에 marks가 없습니다. 수동으로 표점을 삽입하세요.", 'warning');
