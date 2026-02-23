@@ -188,8 +188,16 @@ async function loadPdfPage(docId, partId, pageNum) {
   } catch (err) {
     console.error("PDF 로드 실패:", err);
     const container = document.getElementById("pdf-canvas-container");
+    // PDF가 없는 문헌 (HWP 전용 등)이면 친절한 메시지 표시
     container.innerHTML =
-      '<div class="placeholder">PDF를 불러올 수 없습니다</div>';
+      '<div class="placeholder" style="text-align:center;padding:40px 20px;color:#888;">' +
+      '<div style="font-size:24px;margin-bottom:8px;">📄</div>' +
+      '<div>PDF를 불러올 수 없습니다.</div>' +
+      '<div style="font-size:11px;margin-top:4px;color:#aaa;">HWP 전용 문헌이면 우측 텍스트 패널을 확인하세요.</div>' +
+      '</div>';
+    pdfState.pdfDoc = null;
+    pdfState.currentDocId = null;
+    pdfState.currentPartId = null;
   }
 }
 

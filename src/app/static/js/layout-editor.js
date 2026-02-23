@@ -757,7 +757,10 @@ function _updateBlockList() {
     const isSelected = block.block_id === layoutState.selectedBlockId;
 
     item.className = "block-list-item" + (isSelected ? " selected" : "");
+    item.draggable = true;
+    item.dataset.blockId = block.block_id;
     item.innerHTML = `
+      <span class="block-list-drag-handle" title="드래그하여 순서 변경">⠿</span>
       <span class="block-list-color" style="background:${color}"></span>
       <span class="block-list-order">${block.reading_order}</span>
       <span class="block-list-label">${label}</span>
@@ -767,8 +770,127 @@ function _updateBlockList() {
     item.addEventListener("click", () => {
       _selectBlock(block.block_id);
     });
+    item.addEventListener("dragstart", _onBlockDragStart);
+    item.addEventListener("dragover", _onBlockDragOver);
+    item.addEventListener("dragleave", _onBlockDragLeave);
+    item.addEventListener("drop", _onBlockDrop);
+    item.addEventListener("dragend", _onBlockDragEnd);
 
     listEl.appendChild(item);
+  });
+}
+
+
+/* ──────────────────────────
+   블록 목록 드래그 앤 드롭 순서 변경
+   ────────────────────────── */
+
+/** 드래그 중인 블록의 block_id를 임시 저장 */
+let _draggedBlockId = null;
+
+/**
+ * 드래그 시작: dataTransfer에 block_id를 저장하고 시각적 피드백을 준다.
+ */
+function _onBlockDragStart(e) {
+  const blockId = e.currentTarget.dataset.blockId;
+  _draggedBlockId = blockId;
+  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.setData("text/plain", blockId);
+  // 약간의 지연으로 dragging 클래스 추가 (드래그 고스트 이미지 생성 후)
+  requestAnimationFrame(() => {
+    e.currentTarget.classList.add("dragging");
+  });
+}
+
+/**
+ * 드래그가 블록 위를 지나갈 때: 드롭 위치를 위/아래 인디케이터로 표시한다.
+ *
+ * 왜 이렇게 하는가: 마우스 Y 좌표가 항목의 중앙보다 위인지 아래인지에 따라
+ *   드롭될 위치를 사용자에게 직관적으로 보여준다.
+ */
+function _onBlockDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+
+  const item = e.currentTarget;
+  // 자기 자신 위에서는 인디케이터 표시 안 함
+  if (item.dataset.blockId === _draggedBlockId) return;
+
+  const rect = item.getBoundingClientRect();
+  const midY = rect.top + rect.height / 2;
+
+  // 이전 인디케이터 제거 후 새로 설정
+  item.classList.remove("drag-over-above", "drag-over-below");
+  if (e.clientY < midY) {
+    item.classList.add("drag-over-above");
+  } else {
+    item.classList.add("drag-over-below");
+  }
+}
+
+/**
+ * 드래그가 항목을 벗어날 때: 인디케이터를 제거한다.
+ */
+function _onBlockDragLeave(e) {
+  e.currentTarget.classList.remove("drag-over-above", "drag-over-below");
+}
+
+/**
+ * 드롭: 드래그한 블록을 드롭 위치에 맞게 reading_order를 재할당한다.
+ *
+ * 왜 이렇게 하는가: DOM 조작 대신 데이터(reading_order)를 직접 변경한 뒤
+ *   _updateBlockList()로 목록을 다시 그린다. 이렇게 하면 데이터와 UI가
+ *   항상 일치하고, 저장 시 올바른 순서가 서버에 전달된다.
+ */
+function _onBlockDrop(e) {
+  e.preventDefault();
+  const targetItem = e.currentTarget;
+  targetItem.classList.remove("drag-over-above", "drag-over-below");
+
+  const draggedId = _draggedBlockId;
+  const targetId = targetItem.dataset.blockId;
+  if (!draggedId || draggedId === targetId) return;
+
+  // 현재 reading_order 순으로 블록 ID 배열을 만든다
+  const ordered = [...layoutState.blocks]
+    .sort((a, b) => a.reading_order - b.reading_order)
+    .map((b) => b.block_id);
+
+  // 드래그한 블록을 원래 위치에서 제거
+  const fromIdx = ordered.indexOf(draggedId);
+  if (fromIdx === -1) return;
+  ordered.splice(fromIdx, 1);
+
+  // 드롭 대상의 위치를 찾고, 마우스 위치에 따라 위/아래에 삽입
+  const targetIdx = ordered.indexOf(targetId);
+  const rect = targetItem.getBoundingClientRect();
+  const midY = rect.top + rect.height / 2;
+  const insertIdx = e.clientY < midY ? targetIdx : targetIdx + 1;
+  ordered.splice(insertIdx, 0, draggedId);
+
+  // reading_order를 0부터 순서대로 재할당
+  ordered.forEach((blockId, idx) => {
+    const block = layoutState.blocks.find((b) => b.block_id === blockId);
+    if (block) block.reading_order = idx;
+  });
+
+  // UI 갱신 및 dirty 플래그 설정
+  layoutState.isDirty = true;
+  _updateLayoutSaveStatus("modified");
+  _redrawOverlay();
+  _updatePropsForm();
+  _updateBlockList();
+}
+
+/**
+ * 드래그 종료: 시각적 상태를 정리한다.
+ */
+function _onBlockDragEnd(e) {
+  e.currentTarget.classList.remove("dragging");
+  _draggedBlockId = null;
+  // 혹시 남아있을 수 있는 인디케이터 모두 제거
+  document.querySelectorAll(".block-list-item").forEach((el) => {
+    el.classList.remove("drag-over-above", "drag-over-below");
   });
 }
 
@@ -1265,6 +1387,8 @@ async function _runAutoDetectAll() {
   const startTime = performance.now();
   let successCount = 0;
   let totalBlocks = 0;
+  // 실패 추적: 어떤 페이지가 왜 실패했는지 기록
+  const failures = [];
 
   try {
     // 1. 모델 로드
@@ -1272,7 +1396,9 @@ async function _runAutoDetectAll() {
 
     // 2. 전체 페이지 순회
     for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-      _setAutodetectStatus(`감지 중... ${pageNum}/${totalPages}`);
+      _setAutodetectStatus(
+        `감지 중... ${pageNum}/${totalPages} (성공 ${successCount}, 실패 ${failures.length})`
+      );
 
       try {
         // a. 페이지 이미지 추출
@@ -1309,11 +1435,13 @@ async function _runAutoDetectAll() {
           successCount++;
           totalBlocks += blocks.length;
         } else {
-          console.warn(`페이지 ${pageNum} 저장 실패:`, await res.text());
+          const errText = await res.text();
+          console.error(`[전체감지] 페이지 ${pageNum} 저장 실패 (HTTP ${res.status}):`, errText);
+          failures.push({ page: pageNum, reason: `HTTP ${res.status}: ${errText}` });
         }
       } catch (pageErr) {
-        console.warn(`페이지 ${pageNum} 감지 오류:`, pageErr.message);
-        // 개별 페이지 실패는 건너뛰고 계속 진행
+        console.error(`[전체감지] 페이지 ${pageNum} 감지 오류:`, pageErr);
+        failures.push({ page: pageNum, reason: pageErr.message });
       }
     }
 
@@ -1322,10 +1450,24 @@ async function _runAutoDetectAll() {
       await loadPageLayout(viewerState.docId, viewerState.partId, viewerState.pageNum);
     }
 
+    // 4. 결과 보고 — 성공/실패를 명확히 구분하여 표시
     const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
-    _setAutodetectStatus(
-      `완료: ${successCount}/${totalPages}페이지, ${totalBlocks}블록 (${elapsed}s)`
-    );
+    if (failures.length === 0) {
+      _setAutodetectStatus(
+        `완료: ${successCount}/${totalPages}페이지, ${totalBlocks}블록 (${elapsed}s)`
+      );
+    } else {
+      _setAutodetectStatus(
+        `완료: 성공 ${successCount}/${totalPages}, 실패 ${failures.length}건 (${elapsed}s)`
+      );
+      // 실패 원인을 사용자에게 표시 (첫 번째 실패의 원인만 토스트로)
+      const firstFail = failures[0];
+      const failPages = failures.map(f => f.page).join(", ");
+      showToast(
+        `저장 실패 ${failures.length}건 (페이지: ${failPages})\n원인: ${firstFail.reason}`,
+        'error'
+      );
+    }
   } catch (err) {
     console.error("배치 자동감지 오류:", err);
     _setAutodetectStatus(`오류: ${err.message}`);

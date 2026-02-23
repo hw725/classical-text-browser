@@ -189,25 +189,47 @@ def get_document_info(doc_path: str | Path) -> dict:
 
 def list_pages(doc_path: str | Path) -> list[dict]:
     """L1_source/ 내의 파일(페이지) 목록을 반환한다.
+    L1_source에 개별 페이지 파일이 없으면 L4_text/pages/의 .txt 파일을 폴백으로 사용한다.
 
     목적: 문헌의 원본 파일 목록을 조회한다.
+         HWP 전용 문헌은 L1_source에 .hwpx 파일 하나만 있어서
+         개별 페이지를 열거할 수 없으므로, L4_text/pages/의 텍스트 파일을 사용한다.
     입력: doc_path — 문헌 디렉토리 경로.
     출력: 파일 정보 dict의 리스트 (filename, size, suffix).
     """
     doc_path = Path(doc_path).resolve()
     source_dir = doc_path / "L1_source"
 
-    if not source_dir.exists():
-        return []
-
     pages = []
-    for f in sorted(source_dir.iterdir()):
-        if f.is_file() and not f.name.startswith("."):
-            pages.append({
-                "filename": f.name,
-                "size": f.stat().st_size,
-                "suffix": f.suffix,
-            })
+    if source_dir.exists():
+        for f in sorted(source_dir.iterdir()):
+            if f.is_file() and not f.name.startswith("."):
+                pages.append({
+                    "filename": f.name,
+                    "size": f.stat().st_size,
+                    "suffix": f.suffix,
+                })
+
+    # L1_source에 개별 페이지 파일(이미지/PDF 다수)이 아니라
+    # HWP 등 단일 파일만 있으면, L4_text/pages/의 .txt를 폴백으로 사용한다.
+    # 왜: HWP 가져오기 후 사이드바에 페이지 목록이 뜨려면 페이지 파일이 필요하다.
+    page_suffixes = {".pdf", ".jpg", ".jpeg", ".png", ".tif", ".tiff"}
+    has_page_files = any(p["suffix"].lower() in page_suffixes for p in pages)
+
+    if not has_page_files:
+        l4_dir = doc_path / "L4_text" / "pages"
+        if l4_dir.exists():
+            l4_pages = []
+            for f in sorted(l4_dir.iterdir()):
+                if f.is_file() and f.suffix == ".txt" and not f.name.startswith("."):
+                    l4_pages.append({
+                        "filename": f.name,
+                        "size": f.stat().st_size,
+                        "suffix": f.suffix,
+                        "source": "L4_text",  # L4에서 온 것임을 표시
+                    })
+            if l4_pages:
+                return l4_pages
 
     return pages
 
@@ -898,14 +920,19 @@ def get_git_log(doc_path: str | Path, max_count: int = 50) -> list[dict]:
         return []
 
     commits = []
-    for c in repo.iter_commits(max_count=max_count):
-        commits.append({
-            "hash": c.hexsha,
-            "short_hash": c.hexsha[:7],
-            "message": c.message.strip(),
-            "author": str(c.author),
-            "date": c.committed_datetime.isoformat(),
-        })
+    try:
+        for c in repo.iter_commits(max_count=max_count):
+            commits.append({
+                "hash": c.hexsha,
+                "short_hash": c.hexsha[:7],
+                "message": c.message.strip(),
+                "author": str(c.author),
+                "date": c.committed_datetime.isoformat(),
+            })
+    except (ValueError, Exception) as e:
+        # Git 객체가 깨진 경우(missing SHA 등) — 읽을 수 있는 커밋까지만 반환
+        import logging
+        logging.warning(f"Git 로그 읽기 중 오류 (읽은 커밋 {len(commits)}건): {e}")
 
     return commits
 
@@ -1180,6 +1207,22 @@ def import_hwp_text_to_document(
             "has_punct": result.had_punctuation,
             "has_hyeonto": result.had_hyeonto,
         })
+
+    # page_count 업데이트 — HWP 가져오기 후 사이드바에 페이지 목록이 뜨려면
+    # manifest의 parts[].page_count가 설정되어 있어야 한다.
+    # part_id별 최대 page_num을 집계하여 반영한다.
+    part_page_counts: dict[str, int] = {}
+    for tp in text_pages:
+        pid = tp["part_id"]
+        pn = tp["page_num"]
+        part_page_counts[pid] = max(part_page_counts.get(pid, 0), pn)
+
+    for part in manifest.get("parts", []):
+        pid = part["part_id"]
+        if pid in part_page_counts:
+            # 기존 page_count보다 크면 업데이트 (PDF 페이지 수와 다를 수 있음)
+            existing = part.get("page_count") or 0
+            part["page_count"] = max(existing, part_page_counts[pid])
 
     # completeness_status 업데이트
     manifest["completeness_status"] = "text_imported"

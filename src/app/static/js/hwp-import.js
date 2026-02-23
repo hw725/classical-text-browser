@@ -4,6 +4,7 @@
  * 워크플로우:
  *   1. 파일 선택(.hwp/.hwpx/.pdf) → 자동 형식 판별
  *   2-HWP: 미리보기(메타데이터 + 텍스트 + 표점·현토 감지)
+ *   2-HWP(선택): 원문/번역 분리(LLM) → 분리 결과 미리보기 + 편집
  *   2-PDF: 텍스트 레이어 확인 + 구조 분석(LLM)
  *   3-PDF: 원문/번역 분리(LLM) → 분리 결과 미리보기 + 편집
  *   4: 문헌 ID 입력 + 옵션 → 가져오기 실행
@@ -22,6 +23,9 @@ let _pdfSeparationResults = null;
 /** PDF 구조 분석 결과 캐시 */
 let _pdfStructure = null;
 
+/** HWP 분리 결과 캐시 (분리 실행 후 저장 → 가져오기에서 사용) */
+let _hwpSeparationResults = null;
+
 // ── 다이얼로그 열기/닫기 ──────────────────────
 
 /** 다이얼로그를 열고 초기 상태로 리셋한다. */
@@ -33,6 +37,7 @@ function _openHwpImportDialog() {
   _importFileType = null;
   _pdfSeparationResults = null;
   _pdfStructure = null;
+  _hwpSeparationResults = null;
 
   document.getElementById("hwp-import-file").value = "";
   document.getElementById("hwp-import-status").textContent = "";
@@ -40,6 +45,11 @@ function _openHwpImportDialog() {
   document.getElementById("pdf-import-preview").style.display = "none";
   document.getElementById("hwp-import-step2").style.display = "none";
   document.getElementById("hwp-import-exec-status").textContent = "";
+  // HWP 분리 관련 초기화
+  const hwpSepResults = document.getElementById("hwp-separation-results");
+  if (hwpSepResults) hwpSepResults.style.display = "none";
+  const hwpSepStatus = document.getElementById("hwp-import-separate-status");
+  if (hwpSepStatus) hwpSepStatus.textContent = "";
 
   overlay.style.display = "flex";
 }
@@ -343,6 +353,97 @@ async function _executeImport() {
 }
 
 
+// ── HWP 원문/번역 분리 (LLM) ────────────────
+
+/**
+ * HWP 텍스트를 LLM으로 원문/번역/주석으로 분리한다.
+ *
+ * 동작:
+ *   1. 미리보기에서 추출된 텍스트를 서버로 전송
+ *   2. 서버가 TextSeparator로 구조 분석 + 분리
+ *   3. 분리 결과(원문, 번역)를 편집 가능한 textarea에 표시
+ *   4. 사용자가 확인/수정 후 "가져오기"를 클릭하면 분리된 원문이 L4에 저장됨
+ */
+async function _executeHwpSeparation() {
+  const statusEl = document.getElementById("hwp-import-separate-status");
+  const btn = document.getElementById("hwp-import-separate-btn");
+  const textPreview = document.getElementById("hwp-import-text-preview");
+
+  const text = textPreview ? textPreview.value : "";
+  if (!text.trim()) {
+    statusEl.textContent = "분리할 텍스트가 없습니다. 먼저 미리보기를 실행하세요.";
+    return;
+  }
+
+  btn.disabled = true;
+  statusEl.textContent = "LLM으로 원문/번역 분리 중... (시간이 걸릴 수 있습니다)";
+
+  try {
+    const customInstructions =
+      (document.getElementById("hwp-import-custom-instructions") || {}).value || "";
+
+    let res;
+    try {
+      res = await fetch("/api/text-import/hwp/separate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: text,
+          custom_instructions: customInstructions.trim(),
+        }),
+      });
+    } catch (networkErr) {
+      statusEl.textContent = "서버 연결 실패 — 서버가 실행 중인지 확인하세요.";
+      alert("서버 연결 실패: " + networkErr.message);
+      return;
+    }
+
+    const data = await res.json();
+    if (!res.ok) {
+      const errMsg = data.error || "분리 실패";
+      statusEl.textContent = errMsg;
+      // LLM 미설정 등 중요 에러는 alert로 확실히 표시
+      alert(`텍스트 분리 실패:\n${errMsg}`);
+      return;
+    }
+
+    _hwpSeparationResults = data.results || [];
+
+    // 분리 결과 미리보기 표시
+    const allOriginal = _hwpSeparationResults
+      .map((r) => r.original_text || "")
+      .filter((t) => t.trim())
+      .join("\n\n");
+    const allTranslation = _hwpSeparationResults
+      .map((r) => r.translation_text || "")
+      .filter((t) => t.trim())
+      .join("\n\n");
+
+    document.getElementById("hwp-import-original-preview").value = allOriginal;
+    document.getElementById("hwp-import-translation-preview").value = allTranslation;
+    document.getElementById("hwp-separation-results").style.display = "block";
+
+    // 정리된 원문 미리보기도 분리 결과로 교체
+    document.getElementById("hwp-import-clean-preview").value = allOriginal;
+
+    // 구조 정보 표시
+    const structure = data.structure || {};
+    const patternLabel = _translatePatternType(structure.pattern_type || "unknown");
+    statusEl.textContent =
+      `분리 완료: ${patternLabel}` +
+      (structure.confidence ? ` (확신도 ${(structure.confidence * 100).toFixed(0)}%)` : "");
+
+    // Step 2 표시
+    document.getElementById("hwp-import-step2").style.display = "block";
+  } catch (err) {
+    statusEl.textContent = `오류: ${err.message}`;
+    showToast(`텍스트 분리 중 오류: ${err.message}`, "error");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+
 // ── HWP 가져오기 실행 ───────────────────────
 
 async function _executeHwpImport() {
@@ -366,6 +467,90 @@ async function _executeHwpImport() {
   }
 
   execBtn.disabled = true;
+
+  // ─── 분리 결과가 있으면: apply API로 분리된 원문/번역 저장 ───
+  if (_hwpSeparationResults && _hwpSeparationResults.length > 0) {
+    statusEl.textContent = "분리된 텍스트 저장 중...";
+
+    try {
+      // 먼저 HWP 파일 업로드로 문헌 생성 (아직 없으면)
+      const formData = new FormData();
+      formData.append("file", fileInput.files[0]);
+      formData.append("doc_id", docId);
+      if (titleInput.value.trim()) {
+        formData.append("title", titleInput.value.trim());
+      }
+      // 분리 모드에서는 원본 텍스트를 먼저 올리지 않고 apply로 대체
+      formData.append("strip_punctuation", "false");
+      formData.append("strip_hyeonto", "false");
+
+      const createRes = await fetch("/api/documents/import-hwp", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!createRes.ok) {
+        const errData = await createRes.json();
+        // "이미 존재합니다" 에러는 무시 (기존 문헌에 투입하는 경우)
+        if (!errData.error || !errData.error.includes("이미 존재")) {
+          statusEl.textContent = errData.error || "문헌 생성 실패";
+          showToast(`문헌 생성 실패: ${errData.error || "알 수 없는 오류"}`, "error");
+          execBtn.disabled = false;
+          return;
+        }
+      }
+
+      // 사용자가 편집한 원문/번역 반영
+      const editedOriginal =
+        document.getElementById("hwp-import-original-preview").value;
+      const editedTranslation =
+        document.getElementById("hwp-import-translation-preview").value;
+
+      const results = [{
+        page_num: 1,
+        original_text: editedOriginal,
+        translation_text: editedTranslation,
+      }];
+
+      // apply API로 분리된 원문을 L4에, 번역을 사이드카에 저장
+      const applyRes = await fetch("/api/text-import/pdf/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          doc_id: docId,
+          results: results,
+          strip_punctuation: stripPunct,
+          strip_hyeonto: stripHyeonto,
+        }),
+      });
+
+      const applyData = await applyRes.json();
+      if (!applyRes.ok) {
+        statusEl.textContent = applyData.error || "저장 실패";
+        showToast(`텍스트 저장 실패: ${applyData.error || "알 수 없는 오류"}`, "error");
+        execBtn.disabled = false;
+        return;
+      }
+
+      let msg = `완료: 원문 ${applyData.pages_saved}페이지 L4 저장`;
+      if (applyData.translations_saved) {
+        msg += `, 번역 ${applyData.translations_saved}페이지 저장`;
+      }
+      statusEl.textContent = msg;
+
+      if (typeof _loadDocumentList === "function") {
+        _loadDocumentList();
+      }
+    } catch (err) {
+      statusEl.textContent = `오류: ${err.message}`;
+      showToast(`가져오기 중 오류: ${err.message}`, "error");
+    } finally {
+      execBtn.disabled = false;
+    }
+    return;
+  }
+
+  // ─── 분리 안 한 경우: 기존 HWP 가져오기 (전체 텍스트를 L4에 저장) ───
   statusEl.textContent = "가져오는 중...";
 
   try {
@@ -386,8 +571,9 @@ async function _executeHwpImport() {
     const data = await res.json();
 
     if (!res.ok) {
-      statusEl.textContent = data.error || "가져오기 실패";
-      showToast(`HWP 가져오기 실패: ${data.error || "알 수 없는 오류"}`, 'error');
+      const errMsg = data.error || "가져오기 실패";
+      statusEl.textContent = errMsg;
+      alert(`HWP 가져오기 실패:\n${errMsg}`);
       return;
     }
 
@@ -504,4 +690,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // PDF 분리 실행 버튼
   const separateBtn = document.getElementById("pdf-import-separate-btn");
   if (separateBtn) separateBtn.addEventListener("click", _executePdfSeparation);
+
+  // HWP 분리 실행 버튼
+  const hwpSeparateBtn = document.getElementById("hwp-import-separate-btn");
+  if (hwpSeparateBtn) hwpSeparateBtn.addEventListener("click", _executeHwpSeparation);
 });

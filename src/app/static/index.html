@@ -304,37 +304,20 @@
                   type="text"
                   id="settings-library-input"
                   class="settings-library-input"
-                  placeholder="서고 경로 입력..."
+                  placeholder="서고를 선택하세요..."
                   readonly
                 />
                 <button
-                  class="btn-sm"
-                  id="btn-edit-library"
-                  title="경로 편집"
-                >
-                  편집
-                </button>
-              </div>
-              <div
-                class="settings-library-actions"
-                id="library-actions"
-                style="display: none"
-              >
-                <button
                   class="btn-sm btn-primary"
-                  id="btn-switch-library"
+                  id="btn-browse-library"
+                  title="폴더 선택 대화상자 열기"
                 >
-                  변경
-                </button>
-                <button
-                  class="btn-sm"
-                  id="btn-cancel-library"
-                >
-                  취소
+                  폴더 선택
                 </button>
                 <button
                   class="btn-sm"
                   id="btn-new-library"
+                  title="빈 폴더에 새 서고 생성"
                 >
                   새 서고
                 </button>
@@ -3571,6 +3554,53 @@
                   readonly
                   style="font-size: 12px"
                 ></textarea>
+
+                <!-- HWP 원문/번역 분리 -->
+                <div style="margin-top: 8px">
+                  <label class="bib-edit-label">추가 지시 (선택)</label>
+                  <input
+                    id="hwp-import-custom-instructions"
+                    type="text"
+                    class="bib-input"
+                    placeholder="예: 판본 목록은 원문에 포함, [^N]은 각주"
+                    style="font-size: 12px"
+                  />
+                </div>
+
+                <div style="margin-top: 8px; display: flex; gap: 8px; align-items: center">
+                  <button
+                    id="hwp-import-separate-btn"
+                    class="bib-btn bib-btn-primary"
+                    onclick="_executeHwpSeparation()"
+                  >
+                    원문/번역 분리 (LLM)
+                  </button>
+                  <span
+                    id="hwp-import-separate-status"
+                    class="text-save-status"
+                  ></span>
+                </div>
+
+                <!-- HWP 분리 결과 미리보기 -->
+                <div
+                  id="hwp-separation-results"
+                  style="display: none; margin-top: 10px"
+                >
+                  <label class="bib-edit-label">분리된 원문 (한문)</label>
+                  <textarea
+                    id="hwp-import-original-preview"
+                    class="bib-textarea"
+                    rows="5"
+                    style="font-size: 12px"
+                  ></textarea>
+                  <label class="bib-edit-label" style="margin-top: 4px">분리된 번역 (한국어)</label>
+                  <textarea
+                    id="hwp-import-translation-preview"
+                    class="bib-textarea"
+                    rows="3"
+                    style="font-size: 12px"
+                  ></textarea>
+                </div>
               </div>
 
               <!-- PDF 미리보기 결과 -->
@@ -3806,19 +3836,19 @@
 
     <!-- 앱 모듈 (로드 순서 중요: sidebar-tree가 viewerState를 정의, 나머지가 참조) -->
     <script src="/static/js/toast.js?v=20260222"></script>
-    <script src="/static/js/sidebar-tree.js?v=20260220c"></script>
-    <script src="/static/js/pdf-renderer.js?v=20260220c"></script>
+    <script src="/static/js/sidebar-tree.js?v=20260223"></script>
+    <script src="/static/js/pdf-renderer.js?v=20260223"></script>
     <script src="/static/js/text-editor.js?v=20260220c"></script>
     <script src="/static/js/koten-layout-detector.js?v=20260221"></script>
-    <script src="/static/js/layout-editor.js?v=20260221"></script>
+    <script src="/static/js/layout-editor.js?v=20260223"></script>
     <script src="/static/js/correction-editor.js?v=20260220c"></script>
     <script src="/static/js/bibliography.js?v=20260220c"></script>
-    <script src="/static/js/interpretation.js?v=20260220c"></script>
+    <script src="/static/js/interpretation.js?v=20260223"></script>
     <script src="/static/js/entity-manager.js?v=20260220c"></script>
     <script src="/static/js/create-document.js?v=20260220c"></script>
-    <script src="/static/js/hwp-import.js?v=20260221a"></script>
+    <script src="/static/js/hwp-import.js?v=20260223"></script>
     <script src="/static/js/ocr-panel.js?v=20260220c"></script>
-    <script src="/static/js/alignment-view.js?v=20260221a"></script>
+    <script src="/static/js/alignment-view.js?v=20260223"></script>
     <script src="/static/js/variant-manager.js?v=20260221b"></script>
     <script src="/static/js/batch-correction.js?v=20260221"></script>
     <script src="/static/js/composition-editor.js?v=20260220c"></script>
@@ -3830,6 +3860,6 @@
     <script src="/static/js/git-graph.js?v=20260220c"></script>
     <script src="/static/js/reader-line.js?v=20260220c"></script>
     <script src="/static/js/notes-panel.js?v=20260220c"></script>
-    <script src="/static/js/workspace.js?v=20260220c"></script>
+    <script src="/static/js/workspace.js?v=20260223"></script>
   </body>
 </html>

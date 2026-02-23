@@ -234,18 +234,25 @@ async function _togglePart(docId, part, docInfo, headerEl, childrenEl) {
 
   let pageCount = part.page_count;
 
-  // page_count가 null이면 PDF에서 파악
+  // page_count가 null이면 PDF에서 파악, PDF 없으면 API에서 L4 텍스트 페이지 수 파악
   if (!pageCount) {
     try {
       childrenEl.innerHTML = '<div class="placeholder">페이지 수 확인 중...</div>';
       pageCount = await _getPageCountFromPdf(docId, part.part_id);
-      // 뱃지 업데이트
+    } catch {
+      // PDF 없음 (HWP 전용 문헌 등) → API에서 페이지 수 파악
+      try {
+        pageCount = await _getPageCountFromApi(docId);
+      } catch (err2) {
+        console.error("페이지 수 확인 실패:", err2);
+        childrenEl.innerHTML = '<div class="placeholder">페이지 수를 확인할 수 없습니다</div>';
+        return;
+      }
+    }
+    // 뱃지 업데이트
+    if (pageCount) {
       const badge = headerEl.querySelector(".tree-badge");
       if (badge) badge.textContent = `${pageCount}p`;
-    } catch (err) {
-      console.error("페이지 수 확인 실패:", err);
-      childrenEl.innerHTML = '<div class="placeholder">페이지 수를 확인할 수 없습니다</div>';
-      return;
     }
   }
 
@@ -277,6 +284,23 @@ async function _getPageCountFromPdf(docId, partId) {
   const numPages = pdfDoc.numPages;
   pdfDoc.destroy();
   return numPages;
+}
+
+
+/**
+ * API에서 문헌의 페이지 수를 파악한다 (PDF 없을 때 폴백).
+ *
+ * 왜 이렇게 하는가: HWP 전용 문헌은 PDF가 없어 PDF.js로 페이지 수를 알 수 없다.
+ *                    대신 GET /api/documents/{doc_id} 응답의 pages 배열 길이를 사용한다.
+ *                    (서버에서 L4_text/pages/의 .txt 파일을 폴백으로 열거한다)
+ */
+async function _getPageCountFromApi(docId) {
+  const res = await fetch(`/api/documents/${docId}`);
+  if (!res.ok) throw new Error("문헌 상세 API 응답 오류");
+  const docInfo = await res.json();
+  const pages = docInfo.pages || [];
+  if (pages.length === 0) throw new Error("페이지 없음");
+  return pages.length;
 }
 
 
@@ -401,7 +425,13 @@ async function _trashDocument(docId, docTitle) {
 
   try {
     const res = await fetch(`/api/documents/${docId}`, { method: "DELETE" });
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch (_) {
+      showToast("삭제 실패: 서버 내부 오류", "error");
+      return;
+    }
 
     if (!res.ok) {
       showToast(`삭제 실패: ${data.error || "알 수 없는 오류"}`, 'error');
@@ -426,9 +456,12 @@ async function _trashDocument(docId, docTitle) {
       viewerState.documentInfo = null;
     }
 
-    // 사이드바 새로고침 — workspace.js의 loadLibraryInfo 호출
+    // 사이드바 + 서고 설정 패널 새로고침
     if (typeof loadLibraryInfo === "function") {
       loadLibraryInfo();
+    }
+    if (typeof _loadSettings === "function") {
+      _loadSettings();
     }
   } catch (err) {
     showToast(`삭제 중 오류: ${err.message}`, 'error');
