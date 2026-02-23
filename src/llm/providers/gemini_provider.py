@@ -20,14 +20,19 @@ class GeminiProvider(BaseLlmProvider):
     supports_image = True
     DEFAULT_MODEL = "gemini-2.5-flash"  # 비용 효율적 기본 모델
 
-    # 주요 모델 목록
+    # 주요 모델 목록 (2026-02 기준)
+    # Gemini 3 시리즈는 preview 상태. 안정성이 필요하면 2.5 사용.
     MODELS = [
-        {"name": "gemini-2.5-flash", "vision": True, "cost": "low",
+        {"name": "gemini-2.5-flash", "vision": True, "cost": "lowest",
          "input": 0.00015, "output": 0.0006},
-        {"name": "gemini-2.5-pro", "vision": True, "cost": "medium",
+        {"name": "gemini-2.5-pro", "vision": True, "cost": "low",
          "input": 0.00125, "output": 0.01},
-        {"name": "gemini-2.0-flash", "vision": True, "cost": "lowest",
-         "input": 0.0001, "output": 0.0004},
+        {"name": "gemini-3-flash-preview", "vision": True, "cost": "low",
+         "input": 0.00015, "output": 0.0006},
+        {"name": "gemini-3-pro-preview", "vision": True, "cost": "medium",
+         "input": 0.00125, "output": 0.01},
+        {"name": "gemini-3.1-pro-preview", "vision": True, "cost": "high",
+         "input": 0.00125, "output": 0.01},
     ]
 
     PRICING = {m["name"]: {"input": m["input"], "output": m["output"]} for m in MODELS}

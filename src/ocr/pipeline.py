@@ -19,7 +19,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from .base import OcrBlockResult, OcrEngineError
 from .registry import OcrEngineRegistry
@@ -106,6 +106,7 @@ class OcrPipeline:
         page_number: int,
         engine_id: Optional[str] = None,
         block_ids: Optional[list[str]] = None,
+        progress_callback: Optional[Callable[[dict], None]] = None,
         **engine_kwargs,
     ) -> OcrPageResult:
         """페이지의 블록들을 OCR 실행한다.
@@ -116,6 +117,8 @@ class OcrPipeline:
           page_number: 페이지 번호 (1-indexed)
           engine_id: OCR 엔진 (None이면 기본 엔진)
           block_ids: OCR할 블록 ID 목록 (None이면 전체)
+          progress_callback: 블록 처리 진행 시 호출되는 콜백 (SSE 스트리밍용).
+              호출 형식: callback({"current": 2, "total": 5, "block_id": "p01_b02", "status": "processing"})
           **engine_kwargs: 엔진에 전달할 추가 인자 (force_provider, force_model 등)
 
         출력: OcrPageResult
@@ -196,7 +199,11 @@ class OcrPipeline:
                     ]
 
         # 4. 블록별 OCR
-        for block in blocks:
+        # processable_blocks: skip이 아닌 실제 처리 대상 블록 수
+        processable_blocks = [b for b in blocks if not b.get("skip", False)]
+        total_processable = len(processable_blocks)
+
+        for proc_idx, block in enumerate(blocks):
             block_id = block.get("block_id", "unknown")
             skip = block.get("skip", False)
 
@@ -204,6 +211,16 @@ class OcrPipeline:
                 result.skipped_blocks += 1
                 logger.debug(f"블록 건너뜀 (skip=true): {block_id}")
                 continue
+
+            # 진행률 콜백: 처리 시작 알림
+            current_num = result.processed_blocks + len(result.errors) + 1
+            if progress_callback:
+                progress_callback({
+                    "current": current_num,
+                    "total": total_processable,
+                    "block_id": block_id,
+                    "status": "processing",
+                })
 
             try:
                 ocr_dict = self._process_block(

@@ -3044,16 +3044,35 @@ body.resizing-row {
 #ocr-progress-text {
   font-size: 11px;
   color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .ocr-progress-bar {
-  height: 3px;
+  height: 4px;
   background: var(--bg-primary);
   border-radius: 2px;
   margin-top: 4px;
   overflow: hidden;
 }
 
+/* 확정 진행률: 실제 퍼센트로 부드럽게 채워진다 */
+.ocr-progress-fill.ocr-progress-determinate {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+  animation: none;
+}
+
+/* 불확정 진행률: 좌우로 펄스하는 애니메이션 (대기 중) */
+.ocr-progress-fill.ocr-progress-indeterminate {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  animation: progress-pulse 1.5s ease-in-out infinite;
+}
+
+/* 기본 상태 (클래스 없을 때) = 불확정 */
 .ocr-progress-fill {
   height: 100%;
   width: 100%;
@@ -5066,6 +5085,107 @@ details[open] > .punct-section-summary::before {
   padding: 1px 4px;
   border-radius: 2px;
   font-size: 11px;
+}
+
+/* ──────────────────────────────────────
+   Phase 12-2: HEAD 마커 + 미리보기 + 되돌리기 스타일
+   ────────────────────────────────────── */
+
+.git-graph-head-ring {
+  pointer-events: none;
+  animation: head-pulse 2s ease-in-out infinite;
+}
+
+@keyframes head-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.git-graph-head-label {
+  fill: #ffd700;
+  font-size: 9px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+/* 파일 목록 */
+.git-detail-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--git-detail-header-text);
+  margin: 10px 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--git-detail-header-border);
+}
+
+.git-detail-file-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.git-detail-file-item {
+  padding: 3px 6px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  border-radius: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.git-detail-file-item:hover {
+  background: var(--git-detail-match-bg);
+}
+
+/* 파일 미리보기 (읽기 전용) */
+.git-detail-file-viewer {
+  margin-top: 8px;
+}
+
+.git-file-preview {
+  max-height: 300px;
+  overflow: auto;
+  padding: 8px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  background: var(--git-detail-msg-bg);
+  color: var(--git-detail-msg-text);
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border-left: 3px solid #64748b;
+  user-select: text;
+  margin: 0;
+}
+
+/* 되돌리기 버튼 */
+.git-detail-actions {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--git-detail-header-border);
+}
+
+.revert-btn {
+  width: 100%;
+  padding: 8px 12px;
+  background: #b45309;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.revert-btn:hover {
+  background: #92400e;
+}
+
+.revert-btn:disabled {
+  background: #6b7280;
+  cursor: not-allowed;
 }
 
 /* ──────────────────────────────────────

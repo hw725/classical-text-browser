@@ -37,11 +37,21 @@ class LlmConfig:
         self._library_root = library_root
         self._env_cache: dict = {}
 
-        # .env 파일 로드 (있으면)
+        # .env 파일 로드 우선순위:
+        #   1. 프로젝트 루트 (.env.example과 같은 위치)
+        #   2. 서고(library) 루트
+        # 서고 .env가 프로젝트 루트 .env의 값을 덮어쓴다.
+        # → API 키는 프로젝트 루트에, 서고별 설정은 서고 .env에 넣을 수 있다.
+        project_root = Path(__file__).resolve().parent.parent.parent  # src/llm/config.py → 프로젝트 루트
+        project_env = project_root / ".env"
+        if project_env.exists():
+            self._env_cache = self._load_dotenv(project_env)
+
         if library_root:
-            env_file = Path(library_root) / ".env"
-            if env_file.exists():
-                self._env_cache = self._load_dotenv(env_file)
+            lib_env = Path(library_root) / ".env"
+            if lib_env.exists():
+                # 서고 .env가 프로젝트 .env를 덮어쓴다 (merge)
+                self._env_cache.update(self._load_dotenv(lib_env))
 
     def _load_dotenv(self, path: Path) -> dict:
         """간단한 .env 파서. python-dotenv 없이 동작."""

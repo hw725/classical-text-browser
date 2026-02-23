@@ -14,11 +14,23 @@
 const annState = {
   active: false,
   originalText: "",
-  blockId: "",
+  blockId: "",          // "tb:<id>" (TextBlock) 또는 LayoutBlock ID
   annotations: [],     // 현재 블록의 주석 배열
+  punctMarks: [],       // 표점 marks (원문 미리보기에 적용)
   annotationTypes: [],  // 전체 유형 목록 (types + custom)
   selectedAnnId: null,  // 편집 중인 주석 ID
 };
+
+/**
+ * API용 block_id 반환 — "tb:" 접두사 제거.
+ * 표점·번역·주석 모두 서버에는 접두사 없이 저장해야
+ * block_id 매칭이 일치한다.
+ */
+function _annApiBlockId() {
+  return annState.blockId.startsWith("tb:")
+    ? annState.blockId.slice(3)
+    : annState.blockId;
+}
 
 
 /* ────────────────────────────────────
@@ -141,6 +153,53 @@ async function _populateAnnBlockSelect() {
   const vs = typeof viewerState !== "undefined" ? viewerState : null;
   if (!vs || !vs.docId || !vs.pageNum) return;
 
+  // TextBlock이 있으면 우선 사용 (번역 편집기와 동일한 block_id 체계).
+  // 왜: 표점·번역이 TextBlock ID로 저장되므로, 주석에서도 같은 ID를
+  //     사용해야 블록 간 데이터 연결이 일관된다.
+  const is = typeof interpState !== "undefined" ? interpState : null;
+  if (is && is.interpId) {
+    try {
+      const tbRes = await fetch(
+        `/api/interpretations/${is.interpId}/entities/text_block?page=${vs.pageNum}&document_id=${vs.docId}`
+      );
+      if (tbRes.ok) {
+        const tbData = await tbRes.json();
+        const textBlocks = (tbData.entities || []).filter((e) => {
+          const refs = e.source_refs || [];
+          const ref = e.source_ref;
+          if (refs.length > 0) return refs.some((r) => r.page === vs.pageNum);
+          if (ref) return ref.page === vs.pageNum;
+          return false;
+        }).sort((a, b) => (a.sequence_index || 0) - (b.sequence_index || 0));
+
+        if (textBlocks.length > 0) {
+          textBlocks.forEach((tb) => {
+            const opt = document.createElement("option");
+            opt.value = `tb:${tb.id}`;
+            const refs = tb.source_refs || [];
+            const srcLabel = refs.map((r) => r.layout_block_id || "?").join("+");
+            opt.textContent = `#${tb.sequence_index} TextBlock (${srcLabel})`;
+            opt.dataset.text = tb.original_text || "";
+            sel.appendChild(opt);
+          });
+
+          // 이전 선택값 복원 또는 첫 번째 블록 자동 선택
+          if (annState.blockId && sel.querySelector(`option[value="${annState.blockId}"]`)) {
+            sel.value = annState.blockId;
+          } else if (sel.options.length > 1) {
+            sel.selectedIndex = 1;
+            annState.blockId = sel.value;
+          }
+          _onAnnBlockChange();
+          return;
+        }
+      }
+    } catch {
+      // TextBlock 조회 실패 시 LayoutBlock 폴백
+    }
+  }
+
+  // 폴백: LayoutBlock 기반 (편성 미완료 시)
   try {
     const resp = await fetch(`/api/documents/${vs.docId}/pages/${vs.pageNum}/layout`);
     if (!resp.ok) return;
@@ -176,6 +235,7 @@ async function _onAnnBlockChange() {
   await Promise.all([
     _loadBlockText(blockId),
     _loadBlockAnnotations(blockId),
+    _loadBlockPunctuation(blockId),
   ]);
 
   _renderSourceText();
@@ -192,17 +252,50 @@ async function _loadBlockText(blockId) {
   const vs = typeof viewerState !== "undefined" ? viewerState : null;
   if (!vs || !vs.docId || !vs.pageNum) return;
 
-  try {
-    const resp = await fetch(`/api/documents/${vs.docId}/pages/${vs.pageNum}/text`);
-    if (!resp.ok) return;
-    const data = await resp.json();
-    // L4 텍스트에서 블록 찾기
-    const blocks = data.blocks || [];
-    const block = blocks.find(b => b.block_id === blockId);
-    annState.originalText = block ? block.text : (data.text || "");
-  } catch (e) {
-    console.error("텍스트 로드 실패:", e);
-    annState.originalText = "";
+  const isTextBlock = blockId.startsWith("tb:");
+
+  if (isTextBlock) {
+    // ── TextBlock 모드 ──
+    // 드롭다운의 data-text에서 가져오거나, API로 직접 조회.
+    const sel = document.getElementById("ann-block-select");
+    const selectedOpt = sel
+      ? sel.querySelector(`option[value="${blockId}"]`)
+      : null;
+
+    if (selectedOpt && selectedOpt.dataset.text) {
+      annState.originalText = selectedOpt.dataset.text;
+    } else {
+      const is = typeof interpState !== "undefined" ? interpState : null;
+      if (!is || !is.interpId) { annState.originalText = ""; return; }
+      const apiBlockId = blockId.slice(3);
+      try {
+        const tbRes = await fetch(
+          `/api/interpretations/${is.interpId}/entities/text_block/${apiBlockId}`
+        );
+        if (tbRes.ok) {
+          const tb = await tbRes.json();
+          annState.originalText = tb.original_text || "";
+        } else {
+          annState.originalText = "";
+        }
+      } catch (e) {
+        console.error("TextBlock 텍스트 로드 실패:", e);
+        annState.originalText = "";
+      }
+    }
+  } else {
+    // ── LayoutBlock 모드 (하위 호환) ──
+    try {
+      const resp = await fetch(`/api/documents/${vs.docId}/pages/${vs.pageNum}/text`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const blocks = data.blocks || [];
+      const block = blocks.find(b => b.block_id === blockId);
+      annState.originalText = block ? block.text : (data.text || "");
+    } catch (e) {
+      console.error("텍스트 로드 실패:", e);
+      annState.originalText = "";
+    }
   }
 }
 
@@ -212,6 +305,8 @@ async function _loadBlockAnnotations(blockId) {
   if (!vs || !vs.pageNum) return;
 
   const interpId = (is && is.interpId) || "default";
+  // API에 전달할 block_id: "tb:" 접두사 제거
+  const apiBlockId = blockId.startsWith("tb:") ? blockId.slice(3) : blockId;
 
   try {
     const resp = await fetch(`/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations`);
@@ -221,11 +316,37 @@ async function _loadBlockAnnotations(blockId) {
     }
     const data = await resp.json();
     const blocks = data.blocks || [];
-    const block = blocks.find(b => b.block_id === blockId);
+    const block = blocks.find(b => b.block_id === apiBlockId);
     annState.annotations = block ? block.annotations : [];
   } catch (e) {
     console.error("주석 로드 실패:", e);
     annState.annotations = [];
+  }
+}
+
+async function _loadBlockPunctuation(blockId) {
+  const vs = typeof viewerState !== "undefined" ? viewerState : null;
+  const is = typeof interpState !== "undefined" ? interpState : null;
+  if (!vs || !vs.pageNum || !is || !is.interpId) {
+    annState.punctMarks = [];
+    return;
+  }
+
+  const apiBlockId = blockId.startsWith("tb:") ? blockId.slice(3) : blockId;
+
+  try {
+    const resp = await fetch(
+      `/api/interpretations/${is.interpId}/pages/${vs.pageNum}/punctuation?block_id=${apiBlockId}`
+    );
+    if (resp.ok) {
+      const data = await resp.json();
+      annState.punctMarks = data.marks || [];
+    } else {
+      annState.punctMarks = [];
+    }
+  } catch (e) {
+    console.error("표점 로드 실패:", e);
+    annState.punctMarks = [];
   }
 }
 
@@ -244,25 +365,41 @@ function _renderSourceText() {
     return;
   }
 
-  // 글자별 하이라이트 색상 매핑
-  const charColors = new Array(text.length).fill(null);
-  const charAnnIds = new Array(text.length).fill(null);
+  const n = text.length;
+
+  // ── 표점 before/after 버퍼 구성 ──
+  // 왜: 원문 글자 사이에 표점 기호(。？！ 등)를 삽입하여
+  //     연구자가 문장 구조를 파악할 수 있게 한다.
+  const beforeBuf = new Array(n).fill("");
+  const afterBuf = new Array(n).fill("");
+
+  for (const mark of annState.punctMarks) {
+    const start = mark.target?.start ?? 0;
+    const end = mark.target?.end ?? start;
+    if (start < 0 || end >= n || start > end) continue;
+    if (mark.before) beforeBuf[start] += mark.before;
+    if (mark.after) afterBuf[end] += mark.after;
+  }
+
+  // ── 글자별 하이라이트 색상 매핑 ──
+  const charColors = new Array(n).fill(null);
+  const charAnnIds = new Array(n).fill(null);
 
   for (const ann of annState.annotations) {
     const start = ann.target.start;
     const end = ann.target.end;
     const typeInfo = _getTypeInfo(ann.type);
 
-    for (let i = start; i <= end && i < text.length; i++) {
+    for (let i = start; i <= end && i < n; i++) {
       charColors[i] = typeInfo.color;
       charAnnIds[i] = ann.id;
     }
   }
 
-  // HTML 생성
+  // ── HTML 생성: 글자별로 표점 + 하이라이트를 함께 렌더링 ──
   container.innerHTML = "";
   let i = 0;
-  while (i < text.length) {
+  while (i < n) {
     if (charColors[i]) {
       const color = charColors[i];
       const annId = charAnnIds[i];
@@ -273,21 +410,28 @@ function _renderSourceText() {
       span.dataset.annId = annId;
       span.title = _getAnnotationTooltip(annId);
 
-      // 같은 색상+annId가 연속되는 글자를 모음
+      // 같은 annId가 연속되는 글자를 모아서 표점 포함 텍스트 생성
       let j = i;
-      while (j < text.length && charAnnIds[j] === annId) j++;
-      span.textContent = text.slice(i, j);
+      let buf = "";
+      while (j < n && charAnnIds[j] === annId) {
+        buf += beforeBuf[j] + text[j] + afterBuf[j];
+        j++;
+      }
+      span.textContent = buf;
       span.addEventListener("click", () => _selectAnnotation(annId));
       container.appendChild(span);
       i = j;
     } else {
-      // 하이라이트 없는 글자
+      // 하이라이트 없는 글자: 연속 null을 모아서 표점 포함 텍스트 생성
       const span = document.createElement("span");
       span.className = "ann-plain-char";
-      // 같은 null 연속 모음
       let j = i;
-      while (j < text.length && !charColors[j]) j++;
-      span.textContent = text.slice(i, j);
+      let buf = "";
+      while (j < n && !charColors[j]) {
+        buf += beforeBuf[j] + text[j] + afterBuf[j];
+        j++;
+      }
+      span.textContent = buf;
       // 텍스트 범위 선택으로 수동 주석 추가 지원
       span.addEventListener("mouseup", _onTextSelection);
       container.appendChild(span);
@@ -344,7 +488,7 @@ async function _addManualAnnotation(start, end, typeId, label, description) {
   if (!vs || !vs.pageNum) return;
 
   const interpId = (is && is.interpId) || "default";
-  const blockId = annState.blockId;
+  const blockId = _annApiBlockId();
 
   try {
     const resp = await fetch(
@@ -369,6 +513,36 @@ async function _addManualAnnotation(start, end, typeId, label, description) {
   } catch (e) {
     console.error("주석 추가 실패:", e);
   }
+}
+
+
+/**
+ * 원문의 [start, end] 범위에 표점 부호를 적용한 텍스트 반환.
+ * 주석 카드의 인용 텍스트 등에서 사용.
+ */
+function _punctuateSlice(start, end) {
+  const text = annState.originalText;
+  if (!text) return "";
+  const slice = text.slice(start, end + 1);
+  const len = slice.length;
+  const beforeBuf = new Array(len).fill("");
+  const afterBuf = new Array(len).fill("");
+
+  for (const mark of annState.punctMarks) {
+    const mS = mark.target?.start ?? 0;
+    const mE = mark.target?.end ?? mS;
+    if (mE < start || mS > end) continue;
+    const lS = mS - start;
+    const lE = mE - start;
+    if (lS >= 0 && lS < len && mark.before) beforeBuf[lS] += mark.before;
+    if (lE >= 0 && lE < len && mark.after) afterBuf[lE] += mark.after;
+  }
+
+  let result = "";
+  for (let i = 0; i < len; i++) {
+    result += beforeBuf[i] + slice[i] + afterBuf[i];
+  }
+  return result;
 }
 
 
@@ -403,7 +577,7 @@ function _renderAnnList() {
     card.className = "ann-card";
     if (ann.id === annState.selectedAnnId) card.classList.add("ann-card-selected");
 
-    const sourceText = annState.originalText.slice(ann.target.start, ann.target.end + 1);
+    const sourceText = _punctuateSlice(ann.target.start, ann.target.end);
 
     const statusClass = ann.status === "accepted" ? "ann-status-accepted"
                       : ann.status === "draft" ? "ann-status-draft"
@@ -494,7 +668,7 @@ async function _saveEditedAnnotation() {
   if (!vs || !vs.pageNum) return;
 
   const interpId = (is && is.interpId) || "default";
-  const blockId = annState.blockId;
+  const blockId = _annApiBlockId();
   const annId = annState.selectedAnnId;
 
   const typeSelect = document.getElementById("ann-edit-type");
@@ -545,7 +719,7 @@ async function _acceptAnnotation() {
   if (!vs || !vs.pageNum) return;
 
   const interpId = (is && is.interpId) || "default";
-  const blockId = annState.blockId;
+  const blockId = _annApiBlockId();
   const annId = annState.selectedAnnId;
 
   try {
@@ -579,7 +753,7 @@ async function _deleteAnnotation() {
   if (!vs || !vs.pageNum) return;
 
   const interpId = (is && is.interpId) || "default";
-  const blockId = annState.blockId;
+  const blockId = _annApiBlockId();
   const annId = annState.selectedAnnId;
 
   try {
@@ -627,7 +801,7 @@ async function _aiTagAll() {
   if (!vs || !vs.pageNum) return;
 
   const interpId = (is && is.interpId) || "default";
-  const blockId = annState.blockId;
+  const blockId = _annApiBlockId();
   if (!blockId) {
     showToast("블록을 먼저 선택하세요.", 'warning');
     return;
@@ -812,7 +986,7 @@ async function _resetAllAnnotations() {
   }
 
   const interpId = (is && is.interpId) || "default";
-  const blockId = annState.blockId;
+  const blockId = _annApiBlockId();
 
   if (!blockId) {
     showToast("블록을 먼저 선택하세요.", 'warning');
@@ -990,7 +1164,7 @@ async function _generateDictStage(stageNum) {
   if (!vs || !vs.pageNum) return;
 
   const interpId = (is && is.interpId) || "default";
-  const blockId = annState.blockId;
+  const blockId = _annApiBlockId();
   if (!blockId) {
     showToast("블록을 먼저 선택하세요.", 'warning');
     return;
@@ -1225,7 +1399,7 @@ async function _saveDictFields() {
   if (!vs || !vs.pageNum) return;
 
   const interpId = (is && is.interpId) || "default";
-  const blockId = annState.blockId;
+  const blockId = _annApiBlockId();
   const annId = annState.selectedAnnId;
 
   const hw = document.getElementById("ann-dict-headword");

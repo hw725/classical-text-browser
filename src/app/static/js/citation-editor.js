@@ -14,14 +14,26 @@
 
 const citeState = {
   active: false,
-  blockId: "",
+  blockId: "",            // "tb:<id>" (TextBlock) 또는 LayoutBlock ID
   originalText: "",       // 현재 블록의 L4 원문
+  punctMarks: [],         // 표점 marks (원문 미리보기에 적용)
   marks: [],              // 현재 페이지의 인용 마크 배열
   allMarks: [],           // 전체 인용 마크 (전체 보기 모드)
   selectedMarkId: null,
   viewMode: "page",       // "page" | "all"
   resolvedContext: null,   // 선택된 마크의 통합 컨텍스트
 };
+
+/**
+ * API용 block_id 반환 — "tb:" 접두사 제거.
+ * 표점·번역·주석·인용 모두 서버에는 접두사 없이 저장해야
+ * block_id 매칭이 일치한다.
+ */
+function _citeApiBlockId() {
+  return citeState.blockId.startsWith("tb:")
+    ? citeState.blockId.slice(3)
+    : citeState.blockId;
+}
 
 
 /* ────────────────────────────────────
@@ -90,6 +102,53 @@ async function _populateCiteBlockSelect() {
   const vs = typeof viewerState !== "undefined" ? viewerState : null;
   if (!vs || !vs.docId || !vs.pageNum) return;
 
+  // TextBlock이 있으면 우선 사용 (번역·주석 편집기와 동일한 block_id 체계).
+  // 왜: 표점·번역·주석이 TextBlock ID로 저장되므로, 인용에서도 같은 ID를
+  //     사용해야 resolve 시 올바른 데이터를 매칭할 수 있다.
+  const is = typeof interpState !== "undefined" ? interpState : null;
+  if (is && is.interpId) {
+    try {
+      const tbRes = await fetch(
+        `/api/interpretations/${is.interpId}/entities/text_block?page=${vs.pageNum}&document_id=${vs.docId}`
+      );
+      if (tbRes.ok) {
+        const tbData = await tbRes.json();
+        const textBlocks = (tbData.entities || []).filter((e) => {
+          const refs = e.source_refs || [];
+          const ref = e.source_ref;
+          if (refs.length > 0) return refs.some((r) => r.page === vs.pageNum);
+          if (ref) return ref.page === vs.pageNum;
+          return false;
+        }).sort((a, b) => (a.sequence_index || 0) - (b.sequence_index || 0));
+
+        if (textBlocks.length > 0) {
+          textBlocks.forEach((tb) => {
+            const opt = document.createElement("option");
+            opt.value = `tb:${tb.id}`;
+            const refs = tb.source_refs || [];
+            const srcLabel = refs.map((r) => r.layout_block_id || "?").join("+");
+            opt.textContent = `#${tb.sequence_index} TextBlock (${srcLabel})`;
+            opt.dataset.text = tb.original_text || "";
+            sel.appendChild(opt);
+          });
+
+          // 이전 선택값 복원 또는 첫 번째 블록 자동 선택
+          if (citeState.blockId && sel.querySelector(`option[value="${citeState.blockId}"]`)) {
+            sel.value = citeState.blockId;
+          } else if (sel.options.length > 1) {
+            sel.selectedIndex = 1;
+            citeState.blockId = sel.value;
+          }
+          _onCiteBlockChange();
+          return;
+        }
+      }
+    } catch {
+      // TextBlock 조회 실패 시 LayoutBlock 폴백
+    }
+  }
+
+  // 폴백: LayoutBlock 기반 (편성 미완료 시)
   try {
     const resp = await fetch(`/api/documents/${vs.docId}/pages/${vs.pageNum}/layout`);
     if (!resp.ok) return;
@@ -131,6 +190,7 @@ async function _onCiteBlockChange() {
   await Promise.all([
     _loadCiteBlockText(blockId),
     _loadCiteMarks(),
+    _loadCitePunctuation(blockId),
   ]);
 
   _renderCiteSourceText();
@@ -142,14 +202,48 @@ async function _loadCiteBlockText(blockId) {
   const vs = typeof viewerState !== "undefined" ? viewerState : null;
   if (!vs || !vs.docId || !vs.pageNum) return;
 
-  try {
-    const resp = await fetch(`/api/documents/${vs.docId}/pages/${vs.pageNum}/text`);
-    if (!resp.ok) return;
-    const data = await resp.json();
-    citeState.originalText = data.text || "";
-  } catch (e) {
-    console.error("텍스트 로드 실패:", e);
-    citeState.originalText = "";
+  const isTextBlock = blockId.startsWith("tb:");
+
+  if (isTextBlock) {
+    // ── TextBlock 모드 ──
+    // 드롭다운의 data-text에서 가져오거나, API로 직접 조회.
+    const sel = document.getElementById("cite-block-select");
+    const selectedOpt = sel
+      ? sel.querySelector(`option[value="${blockId}"]`)
+      : null;
+
+    if (selectedOpt && selectedOpt.dataset.text) {
+      citeState.originalText = selectedOpt.dataset.text;
+    } else {
+      const is = typeof interpState !== "undefined" ? interpState : null;
+      if (!is || !is.interpId) { citeState.originalText = ""; return; }
+      const apiBlockId = blockId.slice(3);
+      try {
+        const tbRes = await fetch(
+          `/api/interpretations/${is.interpId}/entities/text_block/${apiBlockId}`
+        );
+        if (tbRes.ok) {
+          const tb = await tbRes.json();
+          citeState.originalText = tb.original_text || "";
+        } else {
+          citeState.originalText = "";
+        }
+      } catch (e) {
+        console.error("TextBlock 텍스트 로드 실패:", e);
+        citeState.originalText = "";
+      }
+    }
+  } else {
+    // ── LayoutBlock 모드 (하위 호환) ──
+    try {
+      const resp = await fetch(`/api/documents/${vs.docId}/pages/${vs.pageNum}/text`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      citeState.originalText = data.text || "";
+    } catch (e) {
+      console.error("텍스트 로드 실패:", e);
+      citeState.originalText = "";
+    }
   }
 }
 
@@ -174,6 +268,32 @@ async function _loadCiteMarks() {
   }
 }
 
+async function _loadCitePunctuation(blockId) {
+  const vs = typeof viewerState !== "undefined" ? viewerState : null;
+  const is = typeof interpState !== "undefined" ? interpState : null;
+  if (!vs || !vs.pageNum || !is || !is.interpId) {
+    citeState.punctMarks = [];
+    return;
+  }
+
+  const apiBlockId = blockId.startsWith("tb:") ? blockId.slice(3) : blockId;
+
+  try {
+    const resp = await fetch(
+      `/api/interpretations/${is.interpId}/pages/${vs.pageNum}/punctuation?block_id=${apiBlockId}`
+    );
+    if (resp.ok) {
+      const data = await resp.json();
+      citeState.punctMarks = data.marks || [];
+    } else {
+      citeState.punctMarks = [];
+    }
+  } catch (e) {
+    console.error("표점 로드 실패:", e);
+    citeState.punctMarks = [];
+  }
+}
+
 
 /* ────────────────────────────────────
    원문 렌더링 (하이라이팅)
@@ -189,31 +309,46 @@ function _renderCiteSourceText() {
     return;
   }
 
+  const n = text.length;
+
+  // ── 표점 before/after 버퍼 구성 ──
+  const beforeBuf = new Array(n).fill("");
+  const afterBuf = new Array(n).fill("");
+
+  for (const mark of citeState.punctMarks) {
+    const start = mark.target?.start ?? 0;
+    const end = mark.target?.end ?? start;
+    if (start < 0 || end >= n || start > end) continue;
+    if (mark.before) beforeBuf[start] += mark.before;
+    if (mark.after) afterBuf[end] += mark.after;
+  }
+
   // 인용 마크 하이라이팅: 현재 블록의 마크만
+  // 서버에 저장된 block_id는 접두사 없으므로 _citeApiBlockId()로 비교
+  const apiBlockId = _citeApiBlockId();
   const blockMarks = citeState.marks.filter(
-    m => m.source && m.source.block_id === citeState.blockId
+    m => m.source && m.source.block_id === apiBlockId
   );
 
   // 글자별 하이라이트 배열
-  const charHighlight = new Array(text.length).fill(false);
-  const charMarkId = new Array(text.length).fill(null);
+  const charHighlight = new Array(n).fill(false);
+  const charMarkId = new Array(n).fill(null);
 
   for (const m of blockMarks) {
     const s = m.source.start;
     const e = m.source.end;
-    for (let i = s; i <= e && i < text.length; i++) {
+    for (let i = s; i <= e && i < n; i++) {
       charHighlight[i] = true;
       charMarkId[i] = m.id;
     }
   }
 
-  // HTML 생성
+  // HTML 생성: 글자별로 표점 + 하이라이트를 함께 렌더링
   let html = "";
   let inHighlight = false;
   let currentMarkId = null;
 
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
+  for (let i = 0; i < n; i++) {
     const isHL = charHighlight[i];
     const mid = charMarkId[i];
 
@@ -228,11 +363,8 @@ function _renderCiteSourceText() {
       currentMarkId = null;
     }
 
-    // 특수문자 이스케이프
-    if (ch === "<") html += "&lt;";
-    else if (ch === ">") html += "&gt;";
-    else if (ch === "&") html += "&amp;";
-    else html += ch;
+    // 표점 before + 원문 글자 + 표점 after (이스케이프 포함)
+    html += _esc(beforeBuf[i]) + _esc(text[i]) + _esc(afterBuf[i]);
   }
   if (inHighlight) html += "</span>";
 
@@ -477,7 +609,7 @@ async function _addCitationMark(start, end, selectedText, label, tags) {
   if (!vs || !vs.pageNum) return;
 
   const interpId = (is && is.interpId) || "default";
-  const blockId = citeState.blockId;
+  const blockId = _citeApiBlockId();
 
   try {
     const resp = await fetch(

@@ -26,6 +26,12 @@ let _pdfStructure = null;
 /** HWP 분리 결과 캐시 (분리 실행 후 저장 → 가져오기에서 사용) */
 let _hwpSeparationResults = null;
 
+/** 매핑 결과 캐시 (기존 문헌 모드에서 매핑 미리보기 후 저장) */
+let _alignmentResults = null;
+
+/** 기존 문헌 목록 캐시 (문헌 상세정보 포함) */
+let _existingDocList = null;
+
 // ── 다이얼로그 열기/닫기 ──────────────────────
 
 /** 다이얼로그를 열고 초기 상태로 리셋한다. */
@@ -38,6 +44,7 @@ function _openHwpImportDialog() {
   _pdfSeparationResults = null;
   _pdfStructure = null;
   _hwpSeparationResults = null;
+  _alignmentResults = null;
 
   document.getElementById("hwp-import-file").value = "";
   document.getElementById("hwp-import-status").textContent = "";
@@ -50,6 +57,19 @@ function _openHwpImportDialog() {
   if (hwpSepResults) hwpSepResults.style.display = "none";
   const hwpSepStatus = document.getElementById("hwp-import-separate-status");
   if (hwpSepStatus) hwpSepStatus.textContent = "";
+
+  // 모드 라디오 초기화: "새 문헌"으로 복원
+  const newRadio = document.querySelector('input[name="hwp-import-mode"][value="new"]');
+  if (newRadio) newRadio.checked = true;
+  const newFields = document.getElementById("hwp-import-new-fields");
+  const existingFields = document.getElementById("hwp-import-existing-fields");
+  if (newFields) newFields.style.display = "";
+  if (existingFields) existingFields.style.display = "none";
+  // 매핑 결과 초기화
+  const alignResults = document.getElementById("hwp-import-align-results");
+  if (alignResults) alignResults.style.display = "none";
+  const alignStatus = document.getElementById("hwp-import-align-status");
+  if (alignStatus) alignStatus.textContent = "";
 
   overlay.style.display = "flex";
 }
@@ -343,6 +363,15 @@ async function _executePdfSeparation() {
 // ── 가져오기 실행 (HWP / PDF 공통) ──────────
 
 async function _executeImport() {
+  // 모드 확인: "기존 문헌에 추가" 모드인지
+  const mode = document.querySelector('input[name="hwp-import-mode"]:checked')?.value;
+
+  if (mode === "existing") {
+    await _executeExistingDocImport();
+    return;
+  }
+
+  // "새 문헌 만들기" 모드 — 기존 로직
   if (_importFileType === "pdf") {
     await _executePdfApply();
   } else {
@@ -650,6 +679,322 @@ async function _executePdfApply() {
   } catch (err) {
     statusEl.textContent = `오류: ${err.message}`;
     showToast(`PDF 텍스트 저장 중 오류: ${err.message}`, 'error');
+  } finally {
+    execBtn.disabled = false;
+  }
+}
+
+
+// ── 모드 전환 (새 문헌 / 기존 문헌) ──────────────
+
+/**
+ * 라디오 버튼으로 "새 문헌" / "기존 문헌에 추가" 모드를 전환한다.
+ *
+ * 동작:
+ *   새 문헌: doc_id + title 입력 필드를 보여준다
+ *   기존 문헌: 문헌 드롭다운 + part 선택 + 매핑 미리보기를 보여준다
+ */
+function _onImportModeChange() {
+  const mode = document.querySelector('input[name="hwp-import-mode"]:checked')?.value;
+  const newFields = document.getElementById("hwp-import-new-fields");
+  const existingFields = document.getElementById("hwp-import-existing-fields");
+
+  if (mode === "existing") {
+    newFields.style.display = "none";
+    existingFields.style.display = "";
+    // 문헌 목록이 아직 없으면 로드
+    _loadExistingDocuments();
+  } else {
+    newFields.style.display = "";
+    existingFields.style.display = "none";
+  }
+}
+
+
+/**
+ * 서버에서 기존 문헌 목록을 가져와 드롭다운을 채운다.
+ *
+ * 왜 이렇게 하는가:
+ *   기존 문헌에 텍스트를 추가하려면, 대상 문헌을 선택해야 한다.
+ *   /api/documents가 서고의 모든 문헌 목록을 반환한다.
+ */
+async function _loadExistingDocuments() {
+  const select = document.getElementById("hwp-import-existing-doc");
+  if (!select) return;
+
+  try {
+    const res = await fetch("/api/documents");
+    if (!res.ok) return;
+
+    const data = await res.json();
+    _existingDocList = data;
+
+    // 드롭다운 채우기
+    // API 응답 필드: document_id (doc_id가 아님)
+    select.innerHTML = '<option value="">-- 문헌을 선택하세요 --</option>';
+    (data || []).forEach(doc => {
+      const docId = doc.document_id || doc.doc_id;
+      const opt = document.createElement("option");
+      opt.value = docId;
+      opt.textContent = `${doc.title || docId} (${docId})`;
+      select.appendChild(opt);
+    });
+  } catch (err) {
+    console.error("문헌 목록 로드 실패:", err);
+  }
+}
+
+
+/**
+ * 문헌 드롭다운 변경 시 해당 문헌의 part 목록을 갱신한다.
+ *
+ * 왜 이렇게 하는가:
+ *   문헌마다 part가 다를 수 있다 (예: vol1, vol2).
+ *   선택한 문헌의 manifest에서 part 정보를 가져와 드롭다운에 표시한다.
+ */
+async function _onExistingDocChange() {
+  const docId = document.getElementById("hwp-import-existing-doc").value;
+  const partSelect = document.getElementById("hwp-import-existing-part");
+  partSelect.innerHTML = '<option value="">-- part 없음 --</option>';
+
+  // 매핑 결과 초기화
+  _alignmentResults = null;
+  const alignResults = document.getElementById("hwp-import-align-results");
+  if (alignResults) alignResults.style.display = "none";
+
+  if (!docId) return;
+
+  try {
+    const res = await fetch(`/api/documents/${docId}`);
+    if (!res.ok) return;
+
+    const doc = await res.json();
+    const parts = doc.parts || [];
+
+    if (parts.length > 0) {
+      partSelect.innerHTML = "";
+      parts.forEach(p => {
+        const opt = document.createElement("option");
+        opt.value = p.part_id;
+        opt.textContent = `${p.label || p.part_id} (${p.page_count || 0}페이지)`;
+        partSelect.appendChild(opt);
+      });
+    }
+  } catch (err) {
+    console.error("문헌 상세 로드 실패:", err);
+  }
+}
+
+
+/**
+ * 분리된 원문 텍스트를 기존 문헌의 OCR/L4 텍스트와 대조하여 페이지 매핑 미리보기를 실행한다.
+ *
+ * 왜 이렇게 하는가:
+ *   한문 텍스트의 어느 부분이 어느 페이지에 해당하는지 자동으로 매칭한다.
+ *   매핑 결과를 테이블로 보여줘서 사용자가 확인/수정할 수 있다.
+ *
+ * 동작:
+ *   1. 분리된 원문 텍스트를 가져온다 (HWP면 hwp-import-original-preview, PDF면 pdf-import-original-preview)
+ *   2. /api/text-import/align-preview에 doc_id, part_id, original_text 전송
+ *   3. 매핑 결과를 테이블에 표시 (페이지별 OCR vs 매칭 텍스트 + 신뢰도)
+ */
+async function _executeAlignPreview() {
+  const docId = document.getElementById("hwp-import-existing-doc").value;
+  const partId = document.getElementById("hwp-import-existing-part").value;
+  const statusEl = document.getElementById("hwp-import-align-status");
+  const btn = document.getElementById("hwp-import-align-btn");
+
+  if (!docId) {
+    statusEl.textContent = "대상 문헌을 선택하세요.";
+    return;
+  }
+
+  // 분리된 원문 텍스트 가져오기 (분리 결과 → 정리된 원문 → 전체 텍스트 순으로 폴백)
+  let originalText = "";
+  if (_importFileType === "pdf") {
+    originalText = document.getElementById("pdf-import-original-preview")?.value || "";
+    if (!originalText.trim()) {
+      // PDF는 분리 없이도 sample 텍스트가 있을 수 있다
+      originalText = document.getElementById("pdf-import-sample-text")?.value || "";
+    }
+  } else {
+    originalText = document.getElementById("hwp-import-original-preview")?.value || "";
+    if (!originalText.trim()) {
+      // 분리 안 한 경우: 정리된 원문 → 전체 텍스트 미리보기 순으로 폴백
+      originalText = document.getElementById("hwp-import-clean-preview")?.value || "";
+    }
+    if (!originalText.trim()) {
+      originalText = document.getElementById("hwp-import-text-preview")?.value || "";
+    }
+  }
+
+  if (!originalText.trim()) {
+    statusEl.textContent = "매핑할 텍스트가 없습니다. 미리보기를 먼저 실행하세요.";
+    return;
+  }
+
+  btn.disabled = true;
+  statusEl.textContent = "페이지 매핑 중... (한자 앵커 대조)";
+
+  try {
+    const res = await fetch("/api/text-import/align-preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        doc_id: docId,
+        part_id: partId || null,
+        original_text: originalText,
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = data.error || "매핑 실패";
+      return;
+    }
+
+    _alignmentResults = data.alignments || [];
+
+    // 테이블 채우기
+    const tbody = document.getElementById("hwp-import-align-tbody");
+    tbody.innerHTML = "";
+
+    _alignmentResults.forEach(a => {
+      const tr = document.createElement("tr");
+      const confPct = Math.round((a.confidence || 0) * 100);
+      const confColor = confPct >= 80 ? "#4caf50" : confPct >= 50 ? "#e0a000" : "#f44336";
+      const ocrSnip = (a.ocr_preview || "").substring(0, 60);
+      const matchSnip = (a.matched_text || "").substring(0, 60);
+
+      tr.innerHTML = `
+        <td style="padding: 4px 6px; border-bottom: 1px solid var(--color-border)">${a.page_num}</td>
+        <td style="padding: 4px 6px; border-bottom: 1px solid var(--color-border); color: #888; font-size: 11px"
+            title="${_escapeHtml(a.ocr_preview || "")}">${_escapeHtml(ocrSnip)}${ocrSnip.length < (a.ocr_preview || "").length ? "…" : ""}</td>
+        <td style="padding: 4px 6px; border-bottom: 1px solid var(--color-border); font-size: 11px"
+            title="${_escapeHtml(a.matched_text || "")}">${_escapeHtml(matchSnip)}${matchSnip.length < (a.matched_text || "").length ? "…" : ""}</td>
+        <td style="padding: 4px 6px; border-bottom: 1px solid var(--color-border); text-align: center">
+          <span style="color: ${confColor}; font-weight: bold">${confPct}%</span>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById("hwp-import-align-results").style.display = "block";
+
+    const avgConf = _alignmentResults.length > 0
+      ? Math.round(_alignmentResults.reduce((s, a) => s + (a.confidence || 0), 0) / _alignmentResults.length * 100)
+      : 0;
+    statusEl.textContent = `매핑 완료: ${data.page_count}페이지, 평균 신뢰도 ${avgConf}%`;
+  } catch (err) {
+    statusEl.textContent = `오류: ${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+
+/** HTML 특수 문자를 이스케이프한다. */
+function _escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+
+// ── 기존 문헌에 텍스트 추가 ─────────────────────
+
+/**
+ * 기존 문헌에 매핑된 텍스트를 페이지별로 저장한다.
+ *
+ * 왜 이렇게 하는가:
+ *   매핑 미리보기에서 확인한 페이지별 텍스트를 기존 문헌의 L4에 저장한다.
+ *   기존 /api/text-import/pdf/apply 엔드포인트를 재사용한다.
+ *
+ * 동작:
+ *   1. 매핑 결과(_alignmentResults)에서 results 배열 생성
+ *   2. 번역 텍스트가 있으면 동일한 비율로 분배
+ *   3. /api/text-import/pdf/apply 호출로 L4 저장 + 번역 사이드카
+ */
+async function _executeExistingDocImport() {
+  const docId = document.getElementById("hwp-import-existing-doc").value;
+  const partId = document.getElementById("hwp-import-existing-part").value;
+  const stripPunct = document.getElementById("hwp-import-strip-punct").checked;
+  const stripHyeonto = document.getElementById("hwp-import-strip-hyeonto").checked;
+  const statusEl = document.getElementById("hwp-import-exec-status");
+  const execBtn = document.getElementById("hwp-import-exec-btn");
+
+  if (!docId) {
+    statusEl.textContent = "대상 문헌을 선택하세요.";
+    return;
+  }
+
+  if (!_alignmentResults || _alignmentResults.length === 0) {
+    statusEl.textContent = "먼저 '페이지 매핑 미리보기'를 실행하세요.";
+    return;
+  }
+
+  execBtn.disabled = true;
+  statusEl.textContent = "기존 문헌에 텍스트 저장 중...";
+
+  try {
+    // 번역 텍스트 가져오기
+    let translationText = "";
+    if (_importFileType === "pdf") {
+      translationText = document.getElementById("pdf-import-translation-preview")?.value || "";
+    } else {
+      translationText = document.getElementById("hwp-import-translation-preview")?.value || "";
+    }
+
+    // 매핑 결과를 results 배열로 변환
+    const results = _alignmentResults.map(a => ({
+      page_num: a.page_num,
+      original_text: a.matched_text || "",
+      translation_text: "",  // 아래에서 분배
+    }));
+
+    // 번역 텍스트가 있으면 페이지 수에 따라 균등 분배
+    // (번역 텍스트는 페이지 매핑이 어렵기 때문에 단순 분배)
+    if (translationText.trim()) {
+      const transLines = translationText.split("\n");
+      const linesPerPage = Math.ceil(transLines.length / results.length);
+      results.forEach((r, i) => {
+        const start = i * linesPerPage;
+        const end = Math.min(start + linesPerPage, transLines.length);
+        r.translation_text = transLines.slice(start, end).join("\n");
+      });
+    }
+
+    const res = await fetch("/api/text-import/pdf/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        doc_id: docId,
+        part_id: partId || undefined,
+        results: results,
+        strip_punctuation: stripPunct,
+        strip_hyeonto: stripHyeonto,
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      statusEl.textContent = data.error || "저장 실패";
+      showToast(`텍스트 저장 실패: ${data.error || "알 수 없는 오류"}`, "error");
+      return;
+    }
+
+    let msg = `완료: ${data.pages_saved}페이지 L4 저장 (기존 문헌: ${docId})`;
+    if (data.translations_saved) {
+      msg += `, 번역 ${data.translations_saved}페이지 저장`;
+    }
+    statusEl.textContent = msg;
+
+    if (typeof _loadDocumentList === "function") {
+      _loadDocumentList();
+    }
+  } catch (err) {
+    statusEl.textContent = `오류: ${err.message}`;
+    showToast(`가져오기 중 오류: ${err.message}`, "error");
   } finally {
     execBtn.disabled = false;
   }

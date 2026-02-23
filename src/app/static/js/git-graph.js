@@ -252,6 +252,33 @@ function renderLadderGraph(container, data) {
     .attr("class", "git-graph-hash")
     .text((d) => d.short_hash);
 
+  // ── Phase 12-2: HEAD(현재 작업) 마커 ──
+  const origHead = data.original.head_hash;
+  const interpHead = data.interpretation.head_hash;
+
+  nodeGroup.each(function (d) {
+    const isHead = d.hash === origHead || d.hash === interpHead;
+    if (!isHead) return;
+
+    const g = d3.select(this);
+
+    // 금색 테두리 링
+    g.insert("circle", "circle")
+      .attr("r", 12)
+      .attr("fill", "none")
+      .attr("stroke", "#ffd700")
+      .attr("stroke-width", 2.5)
+      .attr("class", "git-graph-head-ring");
+
+    // "현재 작업" 라벨
+    g.append("text")
+      .attr("x", 0)
+      .attr("y", d.lane === "original" ? -26 : 32)
+      .attr("text-anchor", "middle")
+      .attr("class", "git-graph-head-label")
+      .text("현재 작업");
+  });
+
   // ── 인터랙션 ──
   _addTooltip(nodeGroup);
   _addNodeClick(nodeGroup);
@@ -327,7 +354,9 @@ function _addTooltip(nodeSelection) {
 }
 
 /**
- * 커밋 노드 클릭 → 상세 패널 표시.
+ * 커밋 노드 클릭 → 상세 패널 표시 + 파일 목록 + 되돌리기 버튼.
+ *
+ * Phase 12-2: 기존 커밋 상세에 파일 미리보기와 되돌리기 기능을 추가한다.
  */
 function _addNodeClick(nodeSelection) {
   nodeSelection.on("click", function (event, d) {
@@ -349,14 +378,28 @@ function _addNodeClick(nodeSelection) {
 
     title.textContent = `${d.short_hash} — ${d.message.split("\n")[0]}`;
     body.innerHTML =
-      `<div class="git-detail-row"><span class="git-detail-label">해시</span><code>${d.hash}</code></div>` +
+      `<div class="git-detail-row"><span class="git-detail-label">식별번호</span><code>${d.hash}</code></div>` +
       `<div class="git-detail-row"><span class="git-detail-label">작성자</span>${_escapeHtml(d.author)}</div>` +
       `<div class="git-detail-row"><span class="git-detail-label">시간</span>${_formatDate(d.timestamp)}</div>` +
       `<div class="git-detail-row"><span class="git-detail-label">레이어</span>${layers}</div>` +
       baseInfo +
-      `<div class="git-detail-message"><pre>${_escapeHtml(d.message)}</pre></div>`;
+      `<div class="git-detail-message"><pre>${_escapeHtml(d.message)}</pre></div>` +
+      // Phase 12-2: 파일 목록 영역
+      `<div class="git-detail-section-title">저장된 파일 목록</div>` +
+      `<div id="git-detail-file-list" class="git-detail-file-list">` +
+      `<span class="placeholder">불러오는 중...</span></div>` +
+      // Phase 12-2: 되돌리기 버튼
+      `<div class="git-detail-actions">` +
+      `<button id="git-revert-btn" class="revert-btn" ` +
+      `data-hash="${d.hash}" data-lane="${d.lane}">` +
+      `이 버전으로 되돌리기</button></div>`;
 
     detail.style.display = "block";
+
+    // 파일 목록 비동기 로드
+    _loadCommitFiles(d);
+    // 되돌리기 버튼 이벤트 연결
+    _bindRevertButton();
   });
 }
 
@@ -380,6 +423,235 @@ function _addLinkHighlight(linkSelection, nodeSelection) {
 }
 
 /* ──────────────────────────────────────
+   4-B. Phase 12-2: 파일 미리보기 + 되돌리기
+   ────────────────────────────────────── */
+
+/**
+ * 커밋 시점의 파일 목록을 API에서 가져와 상세 패널에 표시한다.
+ *
+ * 왜 이렇게 하는가:
+ *   연구자가 "이 시점에 무엇이 저장되어 있었는지" 확인할 수 있다.
+ *   각 파일을 클릭하면 읽기 전용으로 내용을 미리볼 수 있다.
+ */
+async function _loadCommitFiles(commitData) {
+  const fileListEl = document.getElementById("git-detail-file-list");
+  if (!fileListEl) return;
+
+  const repoType =
+    commitData.lane === "original" ? "documents" : "interpretations";
+  const repoId =
+    commitData.lane === "original" ? _gitGraphDocId : _gitGraphInterpId;
+
+  if (!repoId) {
+    fileListEl.innerHTML =
+      '<span class="placeholder">저장소 정보가 없습니다</span>';
+    return;
+  }
+
+  try {
+    const resp = await fetch(
+      `/api/repos/${repoType}/${repoId}/commits/${commitData.hash}/files`,
+    );
+    if (!resp.ok) throw new Error("파일 목록 조회 실패");
+    const data = await resp.json();
+
+    if (data.error) {
+      fileListEl.innerHTML = `<span class="placeholder">${_escapeHtml(data.error)}</span>`;
+      return;
+    }
+
+    if (!data.files || data.files.length === 0) {
+      fileListEl.innerHTML =
+        '<span class="placeholder">파일이 없습니다</span>';
+      return;
+    }
+
+    fileListEl.innerHTML = "";
+    data.files.forEach((f) => {
+      const item = document.createElement("div");
+      item.className = "git-detail-file-item";
+      item.textContent = f.path;
+      item.title = `${f.path} (${_formatFileSize(f.size)})`;
+      item.addEventListener("click", () => {
+        _loadCommitFileContent(
+          repoType,
+          repoId,
+          commitData.hash,
+          f.path,
+        );
+      });
+      fileListEl.appendChild(item);
+    });
+  } catch (err) {
+    fileListEl.innerHTML =
+      '<span class="placeholder">파일 목록을 불러올 수 없습니다</span>';
+  }
+}
+
+/**
+ * 커밋 시점의 특정 파일 내용을 읽기 전용으로 표시한다.
+ *
+ * 왜 이렇게 하는가:
+ *   연구자가 과거 시점의 파일 내용을 안전하게 미리볼 수 있다.
+ *   수정 불가(읽기 전용)로 표시하여 실수를 방지한다.
+ */
+async function _loadCommitFileContent(repoType, repoId, commitHash, filePath) {
+  const body = document.getElementById("git-graph-detail-body");
+  if (!body) return;
+
+  // 기존 파일 뷰어가 있으면 제거 후 재생성
+  let viewer = document.getElementById("git-detail-file-viewer");
+  if (viewer) viewer.remove();
+
+  viewer = document.createElement("div");
+  viewer.id = "git-detail-file-viewer";
+  viewer.className = "git-detail-file-viewer";
+  body.appendChild(viewer);
+
+  viewer.innerHTML =
+    `<div class="git-detail-section-title">` +
+    `${_escapeHtml(filePath)} <small>(읽기 전용)</small></div>` +
+    '<div class="placeholder">불러오는 중...</div>';
+
+  try {
+    const resp = await fetch(
+      `/api/repos/${repoType}/${repoId}/commits/${commitHash}/files/${filePath.split("/").map(encodeURIComponent).join("/")}`,
+    );
+    if (!resp.ok) throw new Error("파일 내용 조회 실패");
+    const data = await resp.json();
+
+    if (data.error && data.content == null) {
+      viewer.innerHTML =
+        `<div class="git-detail-section-title">${_escapeHtml(filePath)}</div>` +
+        `<div class="placeholder">${_escapeHtml(data.error)}</div>`;
+      return;
+    }
+
+    if (data.is_binary) {
+      viewer.innerHTML =
+        `<div class="git-detail-section-title">${_escapeHtml(filePath)}</div>` +
+        '<div class="placeholder">(바이너리 파일 — 미리보기 불가)</div>';
+      return;
+    }
+
+    // JSON 파일이면 정렬해서 표시
+    let displayContent = data.content;
+    if (filePath.endsWith(".json")) {
+      try {
+        displayContent = JSON.stringify(JSON.parse(data.content), null, 2);
+      } catch {
+        /* JSON 파싱 실패 시 원본 그대로 */
+      }
+    }
+
+    viewer.innerHTML =
+      `<div class="git-detail-section-title">` +
+      `${_escapeHtml(filePath)} <small>(읽기 전용)</small></div>` +
+      `<pre class="git-file-preview">${_escapeHtml(displayContent)}</pre>`;
+  } catch (err) {
+    viewer.innerHTML =
+      `<div class="git-detail-section-title">${_escapeHtml(filePath)}</div>` +
+      '<div class="placeholder">파일 내용을 불러올 수 없습니다</div>';
+  }
+}
+
+/**
+ * "이 버전으로 되돌리기" 버튼에 이벤트를 연결한다.
+ *
+ * 왜 이렇게 하는가:
+ *   confirm() 다이얼로그로 한 번 더 확인하여 실수 방지.
+ *   되돌리기는 새 커밋을 생성하므로 이력이 보존된다는 점을 안내한다.
+ */
+function _bindRevertButton() {
+  const btn = document.getElementById("git-revert-btn");
+  if (!btn) return;
+
+  btn.addEventListener("click", () => {
+    const hash = btn.dataset.hash;
+    const lane = btn.dataset.lane;
+    const shortHash = hash.substring(0, 7);
+
+    const confirmed = confirm(
+      `"${shortHash}" 시점으로 되돌리시겠습니까?\n\n` +
+        `현재 작업 내용은 그대로 이력에 보존됩니다.\n` +
+        `되돌리기 자체도 새로운 저장 시점으로 기록됩니다.`,
+    );
+
+    if (!confirmed) return;
+    _executeRevert(hash, lane);
+  });
+}
+
+/**
+ * 되돌리기 API를 호출하고 결과를 표시한다.
+ *
+ * 왜 이렇게 하는가:
+ *   POST /api/repos/{type}/{id}/revert 를 호출하여
+ *   새 커밋을 생성하는 방식으로 안전하게 되돌린다.
+ *   성공 시 그래프를 새로고침하여 변경 사항을 반영한다.
+ */
+async function _executeRevert(targetHash, lane) {
+  const repoType = lane === "original" ? "documents" : "interpretations";
+  const repoId = lane === "original" ? _gitGraphDocId : _gitGraphInterpId;
+
+  if (!repoId) {
+    if (typeof showToast === "function")
+      showToast("저장소 정보가 없습니다.", "error");
+    return;
+  }
+
+  const btn = document.getElementById("git-revert-btn");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "되돌리는 중...";
+  }
+
+  try {
+    const resp = await fetch(`/api/repos/${repoType}/${repoId}/revert`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target_hash: targetHash }),
+    });
+
+    const result = await resp.json();
+
+    if (!resp.ok || result.error) {
+      if (typeof showToast === "function")
+        showToast(result.error || "되돌리기 실패", "error");
+      return;
+    }
+
+    if (!result.reverted) {
+      if (typeof showToast === "function")
+        showToast(
+          result.message || "현재 상태가 이미 해당 시점과 동일합니다.",
+          "info",
+        );
+      return;
+    }
+
+    if (typeof showToast === "function")
+      showToast(
+        `${targetHash.substring(0, 7)} 시점으로 되돌렸습니다. 새 저장 시점: ${result.new_short_hash}`,
+        "success",
+      );
+
+    // 그래프 새로고침
+    if (_gitGraphInterpId) {
+      loadGitGraph(_gitGraphInterpId);
+    }
+  } catch (err) {
+    if (typeof showToast === "function")
+      showToast("되돌리기 중 오류가 발생했습니다: " + err.message, "error");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "이 버전으로 되돌리기";
+    }
+  }
+}
+
+/* ──────────────────────────────────────
    5. 유틸리티
    ────────────────────────────────────── */
 
@@ -387,6 +659,12 @@ function _escapeHtml(text) {
   const div = document.createElement("div");
   div.textContent = text || "";
   return div.innerHTML;
+}
+
+function _formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
 function _formatDate(isoString) {
@@ -410,6 +688,8 @@ function _formatDate(isoString) {
 
 /** 현재 선택된 해석 저장소 ID (workspace.js에서 설정) */
 let _gitGraphInterpId = null;
+/** 원본 문헌 ID (git-graph API 응답에서 자동 설정) */
+let _gitGraphDocId = null;
 
 /**
  * Git 그래프 모듈 초기화.
@@ -507,6 +787,9 @@ async function loadGitGraph(interpId) {
     }
 
     const data = await resp.json();
+
+    // Phase 12-2: 원본 문헌 ID 저장 (파일 조회/되돌리기 API에 필요)
+    _gitGraphDocId = data.doc_id || null;
 
     // 브랜치 드롭다운 업데이트
     _updateBranchSelect(

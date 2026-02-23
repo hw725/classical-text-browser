@@ -289,3 +289,209 @@ def build_auto_page_mapping(
         }
         for i in range(section_count)
     ]
+
+
+def align_text_to_pages(
+    page_texts: list[dict],
+    imported_text: str,
+    anchor_length: int = 15,
+) -> list[dict]:
+    """기존 페이지 텍스트와 외부 텍스트를 한자 앵커로 대조하여 페이지별 매핑을 생성한다.
+
+    왜 이렇게 하는가:
+      기존 문헌에 이미 OCR/L4 텍스트가 있고, 외부 HWP/PDF에서 추출한 고품질
+      텍스트를 가져다 붙이려 할 때, 외부 텍스트의 어느 부분이 어느 페이지에
+      해당하는지 자동으로 알아내야 한다.
+      한자 시퀀스는 유니코드 블록이 독특하여 15자면 거의 고유한 지문이 된다.
+      페이지 순서가 보장되므로 순차 검색으로 효율적 매칭이 가능하다.
+
+    알고리즘 (한자 앵커 순차 매칭):
+      1. 외부 텍스트에서 한자(\\p{Han})만 추출 → han_string + 위치 맵
+      2. 각 페이지의 기존 텍스트에서 한자 추출 → 중간 N자를 앵커로 사용
+      3. han_string에서 앵커를 순차 검색 (이전 매칭 위치 이후부터)
+      4. 앵커 위치를 원본 텍스트 위치로 역매핑하여 페이지 경계 결정
+      5. 정확 매칭 실패 시 difflib로 퍼지 매칭 폴백
+      6. OCR 텍스트가 없으면 균등 분할 폴백
+
+    입력:
+        page_texts — [{page_num, text}] 기존 문헌의 페이지별 OCR/L4 텍스트
+        imported_text — 분리된 원문 텍스트 (연속 문자열)
+        anchor_length — 앵커로 사용할 한자 수 (기본 15)
+    출력:
+        [{
+            page_num: int,
+            matched_text: str,      # 외부 텍스트 중 이 페이지에 해당하는 부분
+            ocr_preview: str,       # 기존 텍스트 미리보기 (첫 80자)
+            confidence: float,      # 매칭 신뢰도 (0.0~1.0)
+            anchor: str,            # 사용된 앵커 문자열
+        }]
+    """
+    import regex
+    from difflib import SequenceMatcher
+
+    # ── 1단계: 외부 텍스트에서 한자 추출 + 위치 맵 구축 ──
+    # han_to_pos[i] = imported_text에서 i번째 한자의 실제 위치
+    han_chars: list[str] = []
+    han_to_pos: list[int] = []
+    for i, ch in enumerate(imported_text):
+        if regex.match(r"\p{Han}", ch):
+            han_chars.append(ch)
+            han_to_pos.append(i)
+    han_string = "".join(han_chars)
+
+    if not han_string:
+        # 외부 텍스트에 한자가 없으면 전체를 page 1에 매핑
+        return [{
+            "page_num": page_texts[0]["page_num"] if page_texts else 1,
+            "matched_text": imported_text,
+            "ocr_preview": "",
+            "confidence": 0.0,
+            "anchor": "",
+        }]
+
+    # ── 2단계: 각 페이지의 한자 앵커 추출 ──
+    page_anchors: list[dict] = []
+    for page in page_texts:
+        page_han = "".join(regex.findall(r"\p{Han}", page.get("text", "")))
+        if len(page_han) >= anchor_length:
+            # 중간 부분에서 앵커 추출 (OCR 오류가 가장 적은 영역)
+            mid = len(page_han) // 2
+            half = anchor_length // 2
+            anchor = page_han[mid - half : mid - half + anchor_length]
+        elif page_han:
+            anchor = page_han  # 짧으면 전체 사용
+        else:
+            anchor = ""
+        page_anchors.append({
+            "page_num": page["page_num"],
+            "anchor": anchor,
+            "page_han": page_han,
+            "ocr_preview": page.get("text", "").strip()[:80],
+        })
+
+    # ── 3단계: 순차 앵커 매칭 ──
+    # 각 앵커를 han_string에서 찾아 매칭 위치 결정
+    match_positions: list[dict] = []  # [{han_pos, confidence, anchor}]
+    search_start = 0
+
+    for pa in page_anchors:
+        anchor = pa["anchor"]
+        if not anchor:
+            match_positions.append({
+                "han_pos": -1, "confidence": 0.0, "anchor": "",
+            })
+            continue
+
+        # 정확 매칭 시도
+        pos = han_string.find(anchor, search_start)
+        if pos >= 0:
+            match_positions.append({
+                "han_pos": pos, "confidence": 1.0, "anchor": anchor,
+            })
+            search_start = pos + len(anchor)
+            continue
+
+        # 정확 매칭 실패 → 퍼지 매칭 (슬라이딩 윈도우)
+        best_pos = -1
+        best_ratio = 0.0
+        window_size = len(anchor)
+        # 검색 범위 제한: search_start부터 합리적 범위까지
+        search_end = min(len(han_string), search_start + window_size * 20)
+
+        for i in range(search_start, max(search_start, search_end - window_size + 1)):
+            window = han_string[i : i + window_size]
+            ratio = SequenceMatcher(None, anchor, window).ratio()
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best_pos = i
+
+        if best_ratio >= 0.6:  # 60% 이상 일치하면 매칭으로 인정
+            match_positions.append({
+                "han_pos": best_pos, "confidence": best_ratio, "anchor": anchor,
+            })
+            search_start = best_pos + window_size
+        else:
+            match_positions.append({
+                "han_pos": -1, "confidence": best_ratio, "anchor": anchor,
+            })
+
+    # ── 4단계: 앵커 위치 → 페이지 경계 계산 ──
+    # 앵커는 각 페이지의 **중간**에서 추출했으므로,
+    # 페이지 경계는 연속된 앵커 위치의 중간점으로 설정한다.
+    #   Page 1: 0 ~ mid(anchor1, anchor2)
+    #   Page 2: mid(anchor1, anchor2) ~ mid(anchor2, anchor3)
+    #   Page N: mid(anchorN-1, anchorN) ~ end
+
+    # 앵커 위치를 실제 텍스트 위치로 변환
+    anchor_text_positions: list[int] = []
+    for mp in match_positions:
+        if mp["han_pos"] >= 0 and mp["han_pos"] < len(han_to_pos):
+            anchor_text_positions.append(han_to_pos[mp["han_pos"]])
+        else:
+            anchor_text_positions.append(-1)
+
+    # 미매칭(-1)을 보간
+    _interpolate_missing(anchor_text_positions, len(imported_text))
+
+    # 앵커 중간점으로 페이지 경계 생성
+    page_boundaries: list[int] = [0]  # 첫 페이지는 항상 0에서 시작
+    for i in range(len(anchor_text_positions) - 1):
+        mid = (anchor_text_positions[i] + anchor_text_positions[i + 1]) // 2
+        page_boundaries.append(mid)
+    page_boundaries.append(len(imported_text))  # 마지막 경계 = 텍스트 끝
+
+    # ── 5단계: 결과 생성 ──
+    results: list[dict] = []
+    for idx, pa in enumerate(page_anchors):
+        start = page_boundaries[idx]
+        end = page_boundaries[idx + 1]
+        matched = imported_text[start:end].strip()
+
+        results.append({
+            "page_num": pa["page_num"],
+            "matched_text": matched,
+            "ocr_preview": pa["ocr_preview"],
+            "confidence": match_positions[idx]["confidence"],
+            "anchor": match_positions[idx]["anchor"],
+        })
+
+    return results
+
+
+def _interpolate_missing(boundaries: list[int], total_length: int) -> None:
+    """매칭 실패한 페이지 경계를 인접 성공 경계 사이에서 균등 보간한다.
+
+    boundaries 리스트를 제자리(in-place)로 수정한다.
+    -1인 항목을 직전 성공 위치와 다음 성공 위치 사이에서 균등 분배.
+
+    왜 이렇게 하는가:
+      일부 페이지의 OCR 텍스트가 비어있거나 매칭에 실패할 수 있다.
+      이 경우 인접 페이지의 매칭 결과를 기반으로 합리적인 경계를 추정한다.
+
+    입력:
+        boundaries — 페이지별 시작 위치 리스트 (-1이면 미매칭)
+        total_length — 전체 텍스트 길이
+    """
+    # 첫 번째가 -1이면 0으로
+    if boundaries and boundaries[0] == -1:
+        boundaries[0] = 0
+
+    # 연속된 -1 구간을 찾아 보간
+    i = 0
+    while i < len(boundaries):
+        if boundaries[i] == -1:
+            # -1 구간의 시작
+            gap_start = i
+            while i < len(boundaries) and boundaries[i] == -1:
+                i += 1
+            # 직전 값
+            prev_val = boundaries[gap_start - 1] if gap_start > 0 else 0
+            # 다음 값
+            next_val = boundaries[i] if i < len(boundaries) else total_length
+            # 균등 보간
+            gap_count = i - gap_start
+            step = (next_val - prev_val) / (gap_count + 1)
+            for j in range(gap_count):
+                boundaries[gap_start + j] = int(prev_val + step * (j + 1))
+        else:
+            i += 1

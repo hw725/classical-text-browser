@@ -28,6 +28,8 @@ provider를 직접 호출하지 말고, 항상 이 Router를 통해 호출한다
 """
 
 import asyncio
+import logging
+import time
 from typing import Optional
 
 from .config import LlmConfig
@@ -44,9 +46,17 @@ from .providers.ollama import OllamaProvider
 from .providers.openai_provider import OpenAiProvider
 from .usage_tracker import UsageTracker
 
+_logger = logging.getLogger(__name__)
+
 
 class LlmRouter:
     """LLM 호출 단일 진입점."""
+
+    # is_available() 캐시 TTL (초).
+    # Base44(subprocess 5s), Ollama(HTTP 3s) 같은 느린 체크를
+    # 매 호출마다 반복하지 않기 위해 캐시한다.
+    _AVAIL_TTL_OK = 120    # 사용 가능 → 2분간 재확인 안 함
+    _AVAIL_TTL_FAIL = 30   # 사용 불가 → 30초간 재확인 안 함
 
     def __init__(self, config: Optional[LlmConfig] = None):
         self.config = config or LlmConfig()
@@ -60,6 +70,39 @@ class LlmRouter:
             OpenAiProvider(self.config),           # 4순위: 중간 (비전 포함)
             AnthropicProvider(self.config),       # 5순위: 최후 폴백
         ]
+
+        # is_available() 캐시: {provider_id: (결과, 타임스탬프)}
+        self._avail_cache: dict[str, tuple[bool, float]] = {}
+
+    async def is_available_cached(self, provider: BaseLlmProvider) -> bool:
+        """is_available() 결과를 캐싱하여 반환.
+
+        왜 캐싱하는가:
+            Base44는 Node.js subprocess(5초), Ollama는 HTTP(3초) 체크가 필요하다.
+            자동 폴백에서 매번 순차 호출하면 사용 불가 프로바이더마다 3~5초 낭비.
+            짧은 TTL로 캐싱하면 첫 호출 후 거의 즉시 건너뛸 수 있다.
+        """
+        pid = provider.provider_id
+        cached = self._avail_cache.get(pid)
+        if cached:
+            ok, ts = cached
+            ttl = self._AVAIL_TTL_OK if ok else self._AVAIL_TTL_FAIL
+            if time.monotonic() - ts < ttl:
+                return ok
+
+        try:
+            ok = await provider.is_available()
+        except Exception:
+            ok = False
+        self._avail_cache[pid] = (ok, time.monotonic())
+        return ok
+
+    def invalidate_cache(self, provider_id: Optional[str] = None):
+        """가용성 캐시를 무효화한다. 설정 변경 시 호출."""
+        if provider_id:
+            self._avail_cache.pop(provider_id, None)
+        else:
+            self._avail_cache.clear()
 
     def _get_provider(self, provider_id: str) -> Optional[BaseLlmProvider]:
         """provider_id로 provider 객체를 찾는다."""
@@ -111,12 +154,20 @@ class LlmRouter:
             return response
 
         # ── 자동 폴백 모드 ──
-        errors = []
-        for provider in self.providers:
-            try:
-                if not await provider.is_available():
-                    continue
+        # 1단계: 모든 프로바이더의 가용성을 병렬로 사전 체크 (캐시 활용).
+        #   Base44(5s) + Ollama(3s) 순차 체크 → 최대 8초 낭비
+        #   병렬 체크 + 캐시 → 첫 호출 max(5,3)=5초, 이후 ~0초
+        avail_results = await asyncio.gather(
+            *[self.is_available_cached(p) for p in self.providers],
+            return_exceptions=True,
+        )
 
+        # 2단계: 사용 가능한 프로바이더만 우선순위대로 호출
+        errors = []
+        for provider, ok in zip(self.providers, avail_results):
+            if ok is not True:
+                continue
+            try:
                 response = await provider.call(
                     prompt, system=system, response_format=response_format,
                     max_tokens=max_tokens, purpose=purpose, **kwargs,
@@ -125,6 +176,8 @@ class LlmRouter:
                 return response
 
             except Exception as e:
+                # 호출 실패 시 캐시 무효화 (다음에 재체크)
+                self._avail_cache.pop(provider.provider_id, None)
                 errors.append(f"{provider.provider_id}: {e}")
                 continue
 
@@ -171,19 +224,25 @@ class LlmRouter:
             self.usage_tracker.log(response, purpose=purpose)
             return response
 
+        # 비전 지원 프로바이더의 가용성을 병렬 체크
+        vision_providers = [p for p in self.providers if p.supports_image]
+        avail_results = await asyncio.gather(
+            *[self.is_available_cached(p) for p in vision_providers],
+            return_exceptions=True,
+        )
+
         errors = []
-        for provider in self.providers:
-            if not provider.supports_image:
+        for provider, ok in zip(vision_providers, avail_results):
+            if ok is not True:
                 continue
             try:
-                if not await provider.is_available():
-                    continue
                 response = await provider.call_with_image(
                     prompt, image, image_mime=image_mime, **kwargs,
                 )
                 self.usage_tracker.log(response, purpose=purpose)
                 return response
             except Exception as e:
+                self._avail_cache.pop(provider.provider_id, None)
                 errors.append(f"{provider.provider_id}: {e}")
                 continue
 
