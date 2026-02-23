@@ -446,7 +446,7 @@ function _showVariantImportDialog() {
           border-radius:4px;cursor:pointer;">취소</button>
       <button id="variant-import-submit"
         style="padding:6px 16px;border:none;
-          background:var(--accent-color,#4fc3f7);color:#000;
+          background:var(--accent-color,#4fc3f7);color:#fff;
           border-radius:4px;cursor:pointer;font-weight:bold;">가져오기</button>
     </div>
   `;

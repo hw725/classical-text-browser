@@ -29,7 +29,7 @@
     "analysis_method": {
       "type": ["string", "null"],
       "description": "분석 방법. 예: llm, manual, hybrid",
-      "enum": ["llm", "manual", "hybrid", null],
+      "enum": ["llm", "manual", "hybrid", "auto_detect", null],
       "default": null
     },
     "blocks": {

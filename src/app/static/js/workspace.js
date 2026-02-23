@@ -368,59 +368,68 @@ function _initLibraryControls() {
   if (_libraryControlsInitialized) return;
   _libraryControlsInitialized = true;
 
-  const inputEl = document.getElementById("settings-library-input");
-  const editBtn = document.getElementById("btn-edit-library");
-  const actionsEl = document.getElementById("library-actions");
-  const switchBtn = document.getElementById("btn-switch-library");
-  const cancelBtn = document.getElementById("btn-cancel-library");
+  const browseBtn = document.getElementById("btn-browse-library");
   const newBtn = document.getElementById("btn-new-library");
 
-  if (!inputEl || !editBtn) return;
-
-  let originalValue = inputEl.value;
-
-  // "편집" 버튼 → input을 수정 가능하게 + 액션 버튼 표시
-  editBtn.addEventListener("click", () => {
-    originalValue = inputEl.value;
-    inputEl.removeAttribute("readonly");
-    inputEl.focus();
-    if (actionsEl) actionsEl.style.display = "";
-    editBtn.style.display = "none";
-  });
-
-  // "취소" 버튼 → 원래 값으로 복원
-  if (cancelBtn) {
-    cancelBtn.addEventListener("click", () => {
-      inputEl.value = originalValue;
-      inputEl.setAttribute("readonly", "");
-      if (actionsEl) actionsEl.style.display = "none";
-      editBtn.style.display = "";
-    });
+  // "폴더 선택" 버튼 → 네이티브 폴더 대화상자 열기
+  if (browseBtn) {
+    browseBtn.addEventListener("click", _browseAndSwitchLibrary);
   }
 
-  // "변경" 버튼 → 서고 전환
-  if (switchBtn) {
-    switchBtn.addEventListener("click", () => {
-      const newPath = inputEl.value.trim();
-      if (newPath && newPath !== originalValue) {
-        _switchLibrary(newPath);
-      }
-    });
-  }
-
-  // Enter 키로도 전환
-  inputEl.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !inputEl.hasAttribute("readonly")) {
-      const newPath = inputEl.value.trim();
-      if (newPath && newPath !== originalValue) {
-        _switchLibrary(newPath);
-      }
-    }
-  });
-
-  // "새 서고" 버튼
+  // "새 서고" 버튼 → 폴더 선택 후 서고 초기화
   if (newBtn) {
     newBtn.addEventListener("click", _createNewLibrary);
+  }
+}
+
+/**
+ * 네이티브 폴더 선택 대화상자를 열고, 선택된 폴더로 서고를 전환한다.
+ *
+ * 왜 이렇게 하는가:
+ *   비개발자 연구자가 경로를 직접 타이핑하지 않고
+ *   Windows 탐색기 스타일의 폴더 선택으로 서고를 지정할 수 있게 한다.
+ *   선택된 폴더에 library_manifest.json이 없으면
+ *   새 서고를 만들지 확인한다.
+ */
+async function _browseAndSwitchLibrary() {
+  try {
+    const res = await fetch("/api/library/browse", { method: "POST" });
+    const data = await res.json();
+    if (data.cancelled) return;
+
+    const path = data.path;
+    const inputEl = document.getElementById("settings-library-input");
+    if (inputEl) inputEl.value = path;
+
+    // 기존 서고인지 확인 (switch 시도)
+    const switchRes = await fetch("/api/library/switch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path }),
+    });
+
+    if (switchRes.ok) {
+      location.reload();
+      return;
+    }
+
+    // switch 실패 = 유효한 서고가 아님 → 새 서고 생성 제안
+    if (confirm("이 폴더에 새 서고를 만들까요?\n\n" + path)) {
+      const initRes = await fetch("/api/library/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path }),
+      });
+      const initData = await initRes.json();
+
+      if (!initRes.ok) {
+        showToast("서고 생성 실패: " + (initData.error || "알 수 없는 오류"), "error");
+        return;
+      }
+      location.reload();
+    }
+  } catch (e) {
+    showToast("폴더 선택 실패: " + e.message, "error");
   }
 }
 
@@ -446,10 +455,14 @@ async function _switchLibrary(path) {
 }
 
 async function _createNewLibrary() {
-  const path = prompt("새 서고를 생성할 경로를 입력하세요:");
-  if (!path) return;
-
   try {
+    // 폴더 선택 대화상자
+    const browseRes = await fetch("/api/library/browse", { method: "POST" });
+    const browseData = await browseRes.json();
+    if (browseData.cancelled) return;
+
+    const path = browseData.path;
+
     const res = await fetch("/api/library/init", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -458,13 +471,13 @@ async function _createNewLibrary() {
     const data = await res.json();
 
     if (!res.ok) {
-      showToast("서고 생성 실패: " + (data.error || "알 수 없는 오류"), 'error');
+      showToast("서고 생성 실패: " + (data.error || "알 수 없는 오류"), "error");
       return;
     }
 
     location.reload();
   } catch (e) {
-    showToast("서고 생성 실패: " + e.message, 'error');
+    showToast("서고 생성 실패: " + e.message, "error");
   }
 }
 
@@ -530,22 +543,22 @@ function _renderRepoList(containerId, repos, repoType) {
     item.className = "settings-repo-item";
 
     const hasRemote = !!repo.remote_url;
-    const statusIcon = hasRemote ? "●" : "○";
-    const statusClass = hasRemote ? "remote-connected" : "remote-disconnected";
 
     item.innerHTML = `
       <div class="settings-repo-header">
-        <span class="${statusClass}">${statusIcon}</span>
         <strong>${repo.id}</strong>
+        <button class="text-btn settings-remote-toggle" title="원격 동기화 설정">
+          ${hasRemote ? "● 원격 연결됨" : "원격 설정 ▸"}
+        </button>
       </div>
-      <div class="settings-repo-remote">
+      <div class="settings-repo-remote" style="display: ${hasRemote ? "flex" : "none"};">
         <input type="text" class="settings-remote-input"
                placeholder="원격 URL (예: https://github.com/...)"
                value="${repo.remote_url || ""}"
                data-repo-type="${repoType}" data-repo-id="${repo.id}">
         <button class="text-btn settings-remote-save" title="원격 URL 저장">저장</button>
       </div>
-      <div class="settings-repo-actions">
+      <div class="settings-repo-actions" style="display: ${hasRemote ? "flex" : "none"};">
         <button class="text-btn settings-push-btn"
                 data-repo-type="${repoType}" data-repo-id="${repo.id}"
                 ${hasRemote ? "" : "disabled"}>Push</button>
@@ -554,6 +567,15 @@ function _renderRepoList(containerId, repos, repoType) {
                 ${hasRemote ? "" : "disabled"}>Pull</button>
       </div>
     `;
+
+    // 원격 설정 토글 버튼
+    item.querySelector(".settings-remote-toggle").addEventListener("click", () => {
+      const remoteDiv = item.querySelector(".settings-repo-remote");
+      const actionsDiv = item.querySelector(".settings-repo-actions");
+      const hidden = remoteDiv.style.display === "none";
+      remoteDiv.style.display = hidden ? "flex" : "none";
+      actionsDiv.style.display = hidden ? "flex" : "none";
+    });
 
     // 원격 URL 저장 버튼
     item
@@ -810,6 +832,15 @@ function _switchMode(mode) {
    5. 서고 정보 로드
    ────────────────────────── */
 
+/**
+ * hwp-import.js 등 외부 모듈에서 가져오기 완료 후 사이드바를 갱신할 때 호출한다.
+ * loadLibraryInfo()의 별칭으로, 문헌 목록을 다시 불러와 트리를 다시 그린다.
+ */
+// eslint-disable-next-line no-unused-vars
+function _loadDocumentList() {
+  loadLibraryInfo();
+}
+
 async function loadLibraryInfo() {
   try {
     // 서고 정보
@@ -838,9 +869,21 @@ async function loadLibraryInfo() {
     // URL 해시에서 열람 위치 복원 (Plan 4)
     _restoreFromHash();
   } catch (err) {
-    // API 연결 실패는 정상 — 정적 파일만 볼 수도 있다
-    document.getElementById("document-list").innerHTML =
-      '<div class="placeholder">서고에 연결할 수 없습니다</div>';
+    // 서고 미설정 또는 API 연결 실패 — 서고 선택 안내를 표시
+    const docList = document.getElementById("document-list");
+    docList.innerHTML =
+      '<div class="placeholder no-library-guide">' +
+      '  <p>서고가 연결되지 않았습니다.</p>' +
+      '  <button class="btn-sm btn-primary" id="btn-goto-settings">서고 설정 열기</button>' +
+      '</div>';
+    const goBtn = document.getElementById("btn-goto-settings");
+    if (goBtn) {
+      goBtn.addEventListener("click", () => {
+        // 설정 패널의 activity-bar 버튼 클릭을 시뮬레이션
+        const settingsBtn = document.querySelector('.activity-btn[data-panel="settings"]');
+        if (settingsBtn) settingsBtn.click();
+      });
+    }
   }
 }
 

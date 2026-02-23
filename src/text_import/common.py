@@ -127,6 +127,42 @@ def save_formatting_sidecar(
     return file_path
 
 
+def save_translation_sidecar(
+    doc_path: Path,
+    part_id: str,
+    page_num: int,
+    translation_text: str,
+    source: str = "hwp_import",
+) -> Path | None:
+    """분리된 번역 텍스트를 사이드카 파일로 저장한다.
+
+    L4_text/pages/{part_id}_page_{NNN}_translation.txt에 저장.
+    나중에 L6(해석 저장소 번역층)으로 가져갈 수 있도록 중간 보관.
+
+    왜 이렇게 하는가:
+      원문/번역 분리 후, 원문은 L4 .txt에, 번역은 이 사이드카에 보관한다.
+      해석 저장소가 만들어지면 이 파일에서 L6로 가져올 수 있다.
+
+    입력:
+        doc_path — 문헌 디렉토리
+        part_id — 권 식별자
+        page_num — 페이지 번호
+        translation_text — 번역 텍스트
+        source — 출처 식별자
+    출력: 저장된 파일 경로 (텍스트가 비어있으면 None)
+    """
+    if not translation_text or not translation_text.strip():
+        return None
+
+    pages_dir = doc_path / "L4_text" / "pages"
+    pages_dir.mkdir(parents=True, exist_ok=True)
+
+    file_path = pages_dir / f"{part_id}_page_{page_num:03d}_translation.txt"
+    file_path.write_text(translation_text, encoding="utf-8")
+    logger.info("번역 사이드카 저장: %s (%d자)", file_path.name, len(translation_text))
+    return file_path
+
+
 def build_auto_page_mapping(
     section_count: int,
     default_part_id: str,

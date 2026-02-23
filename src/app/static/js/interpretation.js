@@ -328,8 +328,11 @@ async function _trashInterpretation(interpId, interpTitle) {
       interpState.interpInfo = null;
     }
 
-    // 목록 새로고침
+    // 목록 + 서고 설정 패널 새로고침
     _loadInterpretationList();
+    if (typeof _loadSettings === "function") {
+      _loadSettings();
+    }
   } catch (err) {
     showToast(`삭제 중 오류: ${err.message}`, 'error');
   }

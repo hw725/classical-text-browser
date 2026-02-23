@@ -142,10 +142,12 @@ API 엔드포인트:
 """
 
 import json
+import asyncio
 import logging
 import os
 import sys
 import shutil
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
@@ -416,6 +418,42 @@ async def api_recent_libraries():
         "libraries": get_recent_libraries(),
         "current": str(_library_path) if _library_path else None,
     }
+
+
+_tk_executor = ThreadPoolExecutor(max_workers=1)
+
+
+def _open_folder_dialog():
+    """네이티브 폴더 선택 대화상자를 연다 (동기식).
+
+    왜 tkinter인가:
+        이 앱은 로컬 전용이므로 네이티브 대화상자가 가장 직관적이다.
+        tkinter는 Python 표준 라이브러리라 추가 설치가 필요 없다.
+    """
+    from tkinter import Tk
+    from tkinter.filedialog import askdirectory
+
+    root = Tk()
+    root.withdraw()
+    # 대화상자를 브라우저 위에 표시
+    root.attributes("-topmost", True)
+    path = askdirectory(title="서고 폴더를 선택하세요")
+    root.destroy()
+    return path
+
+
+@app.post("/api/library/browse")
+async def api_browse_folder():
+    """네이티브 폴더 선택 대화상자를 열고 선택된 경로를 반환한다.
+
+    목적: 사용자가 경로를 직접 타이핑하지 않고 폴더를 선택할 수 있게 한다.
+    출력: { "path": "..." } 또는 취소 시 { "cancelled": true }
+    """
+    loop = asyncio.get_event_loop()
+    path = await loop.run_in_executor(_tk_executor, _open_folder_dialog)
+    if not path:
+        return {"cancelled": True}
+    return {"path": path}
 
 
 @app.get("/api/settings")
@@ -728,6 +766,16 @@ async def api_delete_document(doc_id: str):
         return result
     except FileNotFoundError as e:
         return JSONResponse({"error": str(e)}, status_code=404)
+    except PermissionError as e:
+        return JSONResponse(
+            {"error": f"파일이 사용 중이라 삭제할 수 없습니다.\n원인: {e}\n→ 해결: 해당 폴더를 사용 중인 프로그램을 닫고 다시 시도하세요."},
+            status_code=500,
+        )
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"삭제 중 오류가 발생했습니다: {e}"},
+            status_code=500,
+        )
 
 
 # =========================================
@@ -1041,9 +1089,11 @@ async def api_import_hwp(
 
     try:
         doc_path = _library_path / "documents" / doc_id
+        manifest_path = doc_path / "manifest.json"
 
-        if doc_path.exists():
+        if doc_path.exists() and manifest_path.exists():
             # 시나리오 1: 기존 문서에 텍스트 가져오기
+            # manifest.json이 있는 정상 문헌에만 적용한다.
             result = import_hwp_text_to_document(
                 library_path=_library_path,
                 doc_id=doc_id,
@@ -1054,6 +1104,17 @@ async def api_import_hwp(
             )
         else:
             # 시나리오 2: 새 문헌 생성
+            # 디렉토리만 있고 manifest가 없으면 (이전 가져오기 실패 잔재)
+            # 기존 디렉토리를 백업 이름으로 변경 후 새로 생성한다.
+            if doc_path.exists() and not manifest_path.exists():
+                import time as _time
+                backup_name = f"{doc_id}_incomplete_{int(_time.time())}"
+                backup_path = doc_path.parent / backup_name
+                doc_path.rename(backup_path)
+                logging.getLogger(__name__).warning(
+                    "manifest 없는 불완전 문헌 디렉토리 발견: %s → %s 로 백업",
+                    doc_path, backup_path,
+                )
             result = create_document_from_hwp(
                 library_path=_library_path,
                 hwp_file=tmp_path,
@@ -1199,6 +1260,80 @@ async def api_pdf_analyze(file: UploadFile = File(...)):
             pass
 
 
+class HwpSeparateRequest(BaseModel):
+    """HWP 텍스트 원문/번역 분리 요청.
+
+    HWP 미리보기에서 추출한 텍스트를 LLM으로 원문/번역/주석으로 분리한다.
+    PDF와 달리 파일 업로드 없이 텍스트를 직접 받는다 (미리보기에서 이미 추출했으므로).
+    """
+    text: str  # HWP에서 추출한 전체 텍스트
+    custom_instructions: str = ""
+    force_provider: str | None = None
+    force_model: str | None = None
+
+
+@app.post("/api/text-import/hwp/separate")
+async def api_hwp_separate(body: HwpSeparateRequest):
+    """HWP 텍스트를 원문/번역/주석으로 분리한다 (LLM).
+
+    목적: HWP에서 추출한 혼합 텍스트(한문 원문 + 한국어 번역이 뒤섞인 경우)를
+          LLM으로 분석·분리하여 원문과 번역을 각각 추출한다.
+    입력: HwpSeparateRequest (text, custom_instructions, ...)
+    출력:
+        {
+            "structure": {pattern_type, original_markers, ...},
+            "results": [{page_num, original_text, translation_text, notes, uncertain}]
+        }
+
+    왜 이렇게 하는가:
+      연구자가 입력한 HWP 파일에는 한문 원문과 한국어 번역/주석이 섞여 있는 경우가 많다.
+      이를 수동으로 분리하는 것은 비효율적이므로 LLM이 패턴을 파악하여 자동 분리한다.
+    """
+    if _llm_router is None:
+        return JSONResponse(
+            {"error": "LLM이 설정되지 않았습니다. API 키를 확인하세요."},
+            status_code=500,
+        )
+
+    if not body.text or not body.text.strip():
+        return JSONResponse({"error": "텍스트가 비어 있습니다."}, status_code=400)
+
+    try:
+        from text_import.text_separator import TextSeparator
+
+        separator = TextSeparator(_llm_router)
+
+        # 전체 텍스트를 단일 "페이지"로 취급하여 구조 분석 + 분리
+        sample_pages = [{"page_num": 1, "text": body.text}]
+
+        # 1단계: 구조 분석
+        structure = await separator.analyze_structure(
+            sample_pages,
+            force_provider=body.force_provider,
+            force_model=body.force_model,
+        )
+
+        # 2단계: 분리
+        results = await separator.separate_batch(
+            pages=sample_pages,
+            structure=structure,
+            custom_instructions=body.custom_instructions,
+            force_provider=body.force_provider,
+            force_model=body.force_model,
+        )
+
+        return {
+            "structure": structure.to_dict(),
+            "results": [r.to_dict() for r in results],
+        }
+    except Exception as e:
+        logger.exception("HWP 텍스트 분리 실패")
+        return JSONResponse(
+            {"error": f"텍스트 분리 실패: {e}"},
+            status_code=500,
+        )
+
+
 class PdfSeparateRequest(BaseModel):
     """PDF 텍스트 분리 요청."""
     structure: dict  # DocumentStructure 딕셔너리
@@ -1322,6 +1457,7 @@ async def api_pdf_apply(body: PdfApplyRequest, background_tasks: BackgroundTasks
             save_formatting_sidecar,
             save_punctuation_sidecar,
             save_text_to_l4,
+            save_translation_sidecar,
         )
 
         # 매니페스트에서 기본 part_id
@@ -1331,10 +1467,12 @@ async def api_pdf_apply(body: PdfApplyRequest, background_tasks: BackgroundTasks
 
         l4_files = []
         pages_saved = 0
+        translations_saved = 0
 
         for item in body.results:
             page_num = item.get("page_num", 0)
             original_text = item.get("original_text", "")
+            translation_text = item.get("translation_text", "")
             if not original_text.strip():
                 continue
 
@@ -1374,10 +1512,20 @@ async def api_pdf_apply(body: PdfApplyRequest, background_tasks: BackgroundTasks
             else:
                 text_to_save = original_text
 
-            # L4 텍스트 저장
+            # L4 텍스트 저장 (원문)
             file_path = save_text_to_l4(doc_path, target_part, target_page, text_to_save)
             l4_files.append(file_path.relative_to(doc_path).as_posix())
             pages_saved += 1
+
+            # 번역 사이드카 저장 (분리된 번역이 있으면)
+            if translation_text and translation_text.strip():
+                tr_path = save_translation_sidecar(
+                    doc_path, target_part, target_page,
+                    translation_text, source="text_import",
+                )
+                if tr_path:
+                    l4_files.append(tr_path.relative_to(doc_path).as_posix())
+                    translations_saved += 1
 
         # completeness_status 업데이트
         manifest["completeness_status"] = "text_imported"
@@ -1386,20 +1534,40 @@ async def api_pdf_apply(body: PdfApplyRequest, background_tasks: BackgroundTasks
             encoding="utf-8",
         )
 
+        # page_count 업데이트 — 사이드바에 페이지 목록이 뜨도록
+        max_page = 0
+        for item in body.results:
+            pn = item.get("page_num", 0)
+            if pn > max_page:
+                max_page = pn
+        if max_page > 0:
+            for part in manifest.get("parts", []):
+                if part["part_id"] == default_part_id:
+                    existing = part.get("page_count") or 0
+                    part["page_count"] = max(existing, max_page)
+            (doc_path / "manifest.json").write_text(
+                json.dumps(manifest, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+
         # git commit (백그라운드)
+        commit_msg = f"feat: 텍스트 가져오기 — {pages_saved}페이지"
+        if translations_saved:
+            commit_msg += f", 번역 {translations_saved}페이지"
         background_tasks.add_task(
             git_commit_document,
             doc_path,
-            f"feat: PDF 참조 텍스트 가져오기 — {pages_saved}페이지",
+            commit_msg,
         )
 
         return {
             "pages_saved": pages_saved,
+            "translations_saved": translations_saved,
             "l4_files": l4_files,
         }
     except Exception as e:
         return JSONResponse(
-            {"error": f"PDF 텍스트 적용 실패: {e}"},
+            {"error": f"텍스트 적용 실패: {e}"},
             status_code=500,
         )
 

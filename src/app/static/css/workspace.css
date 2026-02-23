@@ -140,6 +140,7 @@
 
   --accent: #007acc;
   --accent-hover: #1a8ad4;
+  --accent-text: #ffffff; /* 파란색(accent) 배경 위 글씨색 — 항상 흰색 */
 
   /* 시맨틱 색상 — 하드코딩 방지용 */
   --color-danger: #ef4444;
@@ -268,6 +269,7 @@
   /* 강조 */
   --accent: #1976d2;
   --accent-hover: #1565c0;
+  --accent-text: #ffffff; /* 파란색(accent) 배경 위 글씨색 — 라이트 테마에서도 흰색 유지 */
 
   /* 시맨틱 색상 */
   --color-danger: #dc2626;
@@ -724,7 +726,7 @@ body {
   justify-content: space-between;
   padding: 0 12px;
   background: var(--accent);
-  color: var(--text-active);
+  color: var(--accent-text);
   font-size: 12px;
   flex-shrink: 0;
 }
@@ -745,6 +747,17 @@ body {
   color: var(--text-muted);
   font-size: 12px;
   padding: 8px;
+}
+
+.no-library-guide {
+  text-align: center;
+  padding: 24px 12px;
+}
+
+.no-library-guide p {
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 
 /* 드래그 중 iframe/selection 방지 */
@@ -1105,7 +1118,7 @@ body.resizing-row {
 .text-btn-primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: var(--text-active);
+  color: var(--accent-text);
 }
 
 .text-btn-primary:hover {
@@ -1388,6 +1401,33 @@ body.resizing-row {
   font-size: 11px;
 }
 
+/* 블록 목록 드래그 앤 드롭 순서 변경 */
+.block-list-drag-handle {
+  cursor: grab;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1;
+  user-select: none;
+  flex-shrink: 0;
+  padding: 0 2px;
+}
+
+.block-list-drag-handle:active {
+  cursor: grabbing;
+}
+
+.block-list-item.dragging {
+  opacity: 0.3;
+}
+
+.block-list-item.drag-over-above {
+  box-shadow: 0 -2px 0 0 var(--accent-color, #4a9eff) inset;
+}
+
+.block-list-item.drag-over-below {
+  box-shadow: 0 2px 0 0 var(--accent-color, #4a9eff) inset;
+}
+
 /* =========================================
    Phase 5: 서지정보 패널 + 다이얼로그
    ========================================= */
@@ -1646,7 +1686,7 @@ body.resizing-row {
 
 .bib-btn-primary {
   background: var(--accent);
-  color: var(--text-active);
+  color: var(--accent-text);
   border-color: var(--accent);
 }
 
@@ -3906,14 +3946,20 @@ details[open] > .punct-section-summary::before {
 .settings-repo-header {
   font-size: 13px;
   margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
-.remote-connected {
-  color: #4caf50;
-}
-
-.remote-disconnected {
+.settings-remote-toggle {
+  font-size: 11px;
   color: var(--text-muted);
+  cursor: pointer;
+  padding: 1px 6px;
+}
+
+.settings-remote-toggle:hover {
+  color: var(--text-primary);
 }
 
 .settings-repo-remote {
@@ -5597,7 +5643,7 @@ details[open] > .punct-section-summary::before {
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: var(--text-active);
+  color: var(--accent-text);
 }
 
 .btn-primary:hover {

@@ -13,6 +13,7 @@ platform-v7.md 섹션 10.3의 구조를 따른다:
 """
 
 import json
+import os
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -265,15 +266,35 @@ def restore_from_trash(
 # ──────────────────────────
 
 
+def _close_git_handles(repo_path: Path) -> None:
+    """GitPython이 열어둔 .git 파일 핸들을 해제한다.
+
+    왜 필요한가:
+        GitPython의 Repo 객체가 .git/objects/pack 등을 열어두면
+        Windows에서 shutil.move가 PermissionError를 던진다.
+        gc.collect()로 참조가 끊긴 Repo 객체를 정리하고,
+        혹시 남아있는 git.cmd 프로세스도 clear_cache()로 닫는다.
+    """
+    import gc
+    gc.collect()
+    try:
+        import git
+        git.cmd.Git.clear_cache()
+    except Exception:
+        pass
+
+
 def _move_to_trash(library_path: Path, category: str, item_id: str) -> str:
     """항목을 .trash/{category}/ 로 이동한다. (내부 유틸리티)
 
-    왜 shutil.move를 사용하는가:
+    왜 서고 내부 .trash/ 폴더를 사용하는가:
         OS 휴지통(Recycle Bin)은 플랫폼마다 다르고 프로그래밍 접근이 복잡하다.
         서고 내부 .trash/ 폴더를 사용하면 OS 독립적이고 복원도 간단하다.
 
     반환: 휴지통 내 폴더명 (타임스탬프_원래ID).
     """
+    import stat
+
     source = library_path / category / item_id
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
     trash_name = f"{timestamp}_{item_id}"
@@ -282,8 +303,29 @@ def _move_to_trash(library_path: Path, category: str, item_id: str) -> str:
     trash_dir.mkdir(parents=True, exist_ok=True)
 
     dest = trash_dir / trash_name
-    shutil.move(str(source), str(dest))
 
+    # Git 핸들 해제 (Windows에서 .git/objects 파일 잠김 방지)
+    _close_git_handles(source)
+
+    # 1차 시도: shutil.move (같은 파일시스템이면 빠른 rename)
+    try:
+        shutil.move(str(source), str(dest))
+        return trash_name
+    except PermissionError:
+        # 부분 이동이 발생했을 수 있으므로 dest 정리
+        if dest.exists():
+            shutil.rmtree(str(dest), ignore_errors=True)
+
+    # 2차 시도: 읽기 전용 해제 후 재시도
+    for root, dirs, files in os.walk(str(source)):
+        for f in files:
+            fp = os.path.join(root, f)
+            try:
+                os.chmod(fp, stat.S_IWRITE | stat.S_IREAD)
+            except Exception:
+                pass
+
+    shutil.move(str(source), str(dest))
     return trash_name
 
 
