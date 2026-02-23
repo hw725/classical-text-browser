@@ -305,7 +305,7 @@ wheels = [
 ]
 
 [[package]]
-name = "classical-text-platform"
+name = "classical-text-browser"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

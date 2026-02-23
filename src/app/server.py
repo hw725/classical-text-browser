@@ -249,6 +249,10 @@ app = FastAPI(
     version="0.2.0",
 )
 
+# 정적 파일 서빙 — 서고 유무와 관계없이 항상 마운트
+_static_dir = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
+
 
 class TextSaveRequest(BaseModel):
     """텍스트 저장 요청 본문. PUT /api/documents/{doc_id}/pages/{page_num}/text 에서 사용."""
@@ -270,8 +274,6 @@ class LayoutSaveRequest(BaseModel):
 # 서고 경로 — serve 명령에서 설정된다
 _library_path: Path | None = None
 
-# 정적 파일 디렉토리
-_static_dir = Path(__file__).parent / "static"
 
 
 def configure(library_path: str | Path) -> FastAPI:
@@ -304,12 +306,6 @@ def configure(library_path: str | Path) -> FastAPI:
         add_recent_library(str(_library_path), lib_name)
     except Exception as e:
         logger.debug(f"최근 서고 기록 실패 (무시): {e}")
-
-    # 정적 파일 서빙 (CSS, JS 등)
-    # mount는 한 번만 — 이미 마운트된 경우 스킵
-    routes_paths = [r.path for r in app.routes]
-    if "/static" not in routes_paths:
-        app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
     return app
 
