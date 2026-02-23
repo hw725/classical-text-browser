@@ -101,7 +101,9 @@ class OllamaProvider(BaseLlmProvider):
             payload["format"] = "json"
 
         t0 = time.monotonic()
-        async with httpx.AsyncClient(timeout=180.0) as client:
+        # 클라우드 프록시 모델(gemini-3-flash-preview:cloud 등)은
+        # 네트워크 지연이 추가되므로 타임아웃을 넉넉히 300초로 설정.
+        async with httpx.AsyncClient(timeout=300.0) as client:
             resp = await client.post(
                 f"{self._url}/api/generate", json=payload
             )

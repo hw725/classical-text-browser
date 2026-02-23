@@ -790,13 +790,20 @@ async function _savePunctuation() {
   if (statusEl) statusEl.textContent = "저장 중...";
 
   try {
+    // TextBlock 경로("tb:xxx")의 접두사를 제거하여 저장.
+    // 로드(_loadPunctuationData)에서도 "tb:"를 제거해 API 호출하므로,
+    // 저장 시에도 동일하게 제거해야 block_id가 일치한다.
+    const saveBlockId = punctState.blockId.startsWith("tb:")
+      ? punctState.blockId.slice(3)
+      : punctState.blockId;
+
     const res = await fetch(
       `/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation`,
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          block_id: punctState.blockId,
+          block_id: saveBlockId,
           marks: punctState.marks,
         }),
       }
@@ -844,10 +851,19 @@ async function _requestAiPunctuation() {
   if (!confirm(`AI가 ${scopeLabel} 표점을 생성합니다.\n해당 범위의 기존 표점은 덮어씁니다. 계속하시겠습니까?`)) return;
 
   const aiBtn = document.getElementById("punct-ai-btn");
+  const statusEl = document.getElementById("punct-save-status");
   if (aiBtn) {
     aiBtn.disabled = true;
     aiBtn.textContent = "생성 중...";
   }
+
+  // 경과 시간 표시: 1초마다 갱신하여 사용자에게 대기 중임을 알린다.
+  const startTime = Date.now();
+  const elapsedTimer = setInterval(() => {
+    const sec = Math.floor((Date.now() - startTime) / 1000);
+    if (aiBtn) aiBtn.textContent = `생성 중... (${sec}초)`;
+    if (statusEl) statusEl.textContent = `AI 표점 처리 중... ${sec}초 경과`;
+  }, 1000);
 
   try {
     // LLM 프로바이더/모델 선택 반영
@@ -971,6 +987,7 @@ async function _requestAiPunctuation() {
   } catch (e) {
     showToast(`AI 표점 실패: ${e.message}`, 'error');
   } finally {
+    clearInterval(elapsedTimer);
     if (aiBtn) {
       aiBtn.disabled = false;
       aiBtn.textContent = "AI 표점";

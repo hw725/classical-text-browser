@@ -192,6 +192,7 @@ from core.document import (
     save_page_text,
 )
 from core.interpretation import (
+    _append_based_on_trailer,
     acknowledge_changes,
     check_dependency,
     create_interpretation,
@@ -215,7 +216,12 @@ from core.citation_mark import (
     save_citation_marks,
     update_citation_mark,
 )
-from core.git_graph import get_git_graph_data
+from core.git_graph import (
+    get_git_graph_data,
+    get_commit_file_list,
+    get_commit_file_content,
+    revert_to_commit,
+)
 from core.snapshot import build_snapshot, create_work_from_snapshot, detect_imported_layers
 from core.snapshot_validator import validate_snapshot
 from core.entity import (
@@ -1440,9 +1446,92 @@ async def api_pdf_separate(
             pass
 
 
+class AlignPreviewRequest(BaseModel):
+    """외부 텍스트를 기존 문헌의 페이지에 자동 매핑하는 요청."""
+    doc_id: str
+    part_id: str | None = None  # None이면 첫 번째 part 사용
+    original_text: str          # 분리된 원문 텍스트 (연속)
+
+
+@app.post("/api/text-import/align-preview")
+async def api_align_preview(body: AlignPreviewRequest):
+    """외부 텍스트를 기존 문헌의 OCR/L4 텍스트와 한자 앵커로 대조하여 페이지 매핑을 미리 보여준다.
+
+    목적: 기존 문헌(PDF/이미지)에 외부 HWP/PDF 텍스트를 붙일 때,
+          어느 텍스트가 어느 페이지에 해당하는지 자동으로 알아낸다.
+    입력: AlignPreviewRequest {doc_id, part_id, original_text}
+    출력:
+        {
+            "page_count": int,
+            "alignments": [{page_num, matched_text, ocr_preview, confidence, anchor}, ...]
+        }
+
+    왜 이렇게 하는가:
+      기존 문헌에 이미 OCR 텍스트가 있으면, 외부 텍스트의 어느 부분이
+      어느 페이지인지 한자 시퀀스 매칭으로 자동 대조할 수 있다.
+      OCR 텍스트가 없으면 균등 분할로 폴백한다.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = _library_path / "documents" / body.doc_id
+    if not doc_path.exists():
+        return JSONResponse(
+            {"error": f"문헌이 존재하지 않습니다: {body.doc_id}"},
+            status_code=404,
+        )
+
+    try:
+        from text_import.common import align_text_to_pages
+
+        manifest = get_document_info(doc_path)
+        parts = manifest.get("parts", [])
+        if not parts:
+            return JSONResponse({"error": "문헌에 part 정보가 없습니다."}, status_code=400)
+
+        # part_id 결정
+        part_id = body.part_id or parts[0]["part_id"]
+        page_count = 0
+        for p in parts:
+            if p["part_id"] == part_id:
+                page_count = p.get("page_count") or 0
+                break
+
+        if page_count == 0:
+            return JSONResponse(
+                {"error": f"part '{part_id}'의 페이지 수가 0이거나 part를 찾을 수 없습니다."},
+                status_code=400,
+            )
+
+        # 각 페이지의 기존 L4 텍스트 조회
+        page_texts: list[dict] = []
+        for pg in range(1, page_count + 1):
+            page_info = get_page_text(doc_path, part_id, pg)
+            page_texts.append({
+                "page_num": pg,
+                "text": page_info.get("text", ""),
+            })
+
+        # 자동 매핑 실행
+        alignments = align_text_to_pages(page_texts, body.original_text)
+
+        return {
+            "page_count": page_count,
+            "part_id": part_id,
+            "alignments": alignments,
+        }
+    except Exception as e:
+        logging.getLogger(__name__).exception("텍스트 매핑 실패")
+        return JSONResponse(
+            {"error": f"텍스트 매핑 실패: {e}"},
+            status_code=500,
+        )
+
+
 class PdfApplyRequest(BaseModel):
     """PDF 분리 결과를 문서에 적용하는 요청."""
     doc_id: str
+    part_id: str | None = None  # None이면 첫 번째 part 사용
     results: list[dict]  # [{page_num, original_text, ...}]
     page_mapping: list[dict] | None = None  # [{source_page, target_page, part_id}]
     save_translation_to_l6: bool = False
@@ -1477,10 +1566,10 @@ async def api_pdf_apply(body: PdfApplyRequest, background_tasks: BackgroundTasks
             save_translation_sidecar,
         )
 
-        # 매니페스트에서 기본 part_id
+        # 매니페스트에서 기본 part_id (body.part_id가 있으면 우선 사용)
         manifest = get_document_info(doc_path)
         parts = manifest.get("parts", [])
-        default_part_id = parts[0]["part_id"] if parts else "vol1"
+        default_part_id = body.part_id or (parts[0]["part_id"] if parts else "vol1")
 
         l4_files = []
         pages_saved = 0
@@ -3634,6 +3723,102 @@ async def api_run_ocr(
             {"error": f"OCR 실행 실패: {e}"},
             status_code=500,
         )
+
+
+@app.post("/api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr/stream")
+async def api_run_ocr_stream(
+    doc_id: str,
+    part_id: str,
+    page_number: int,
+    body: OcrRunRequest,
+):
+    """OCR 실행 + SSE 스트리밍 진행률.
+
+    목적: 블록별 진행률을 실시간으로 프론트엔드에 전달한다.
+    출력: text/event-stream 형식.
+        - progress 이벤트: {"type":"progress","current":2,"total":5,"block_id":"p01_b02"}
+        - complete 이벤트: {"type":"complete", ...to_summary()}
+        - error 이벤트: {"type":"error","error":"메시지"}
+    """
+    import asyncio
+    import json as _json
+
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = _library_path / "documents" / doc_id
+    if not doc_path.exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
+            status_code=404,
+        )
+
+    pipeline, _registry = _get_ocr_pipeline()
+
+    # 엔진 설정 (기존 api_run_ocr와 동일)
+    engine_kwargs = {}
+    if body.force_provider:
+        engine_kwargs["force_provider"] = body.force_provider
+    if body.force_model:
+        engine_kwargs["force_model"] = body.force_model
+    if body.paddle_lang and body.engine_id == "paddleocr":
+        try:
+            paddle_engine = _registry.get_engine("paddleocr")
+            paddle_engine.lang = body.paddle_lang
+        except Exception:
+            pass
+
+    # asyncio.Queue를 사용해 동기 콜백 → 비동기 제너레이터로 연결
+    progress_queue: asyncio.Queue = asyncio.Queue()
+
+    def _on_progress(data: dict):
+        """OCR 파이프라인(동기)에서 호출되는 콜백.
+        asyncio 이벤트 루프에 안전하게 큐에 넣는다."""
+        progress_queue.put_nowait(data)
+
+    async def _run_ocr_in_thread():
+        """OCR를 별도 스레드에서 실행하고 결과를 큐에 넣는다."""
+        loop = asyncio.get_event_loop()
+        try:
+            result = await loop.run_in_executor(
+                None,
+                lambda: pipeline.run_page(
+                    doc_id=doc_id,
+                    part_id=part_id,
+                    page_number=page_number,
+                    engine_id=body.engine_id,
+                    block_ids=body.block_ids,
+                    progress_callback=_on_progress,
+                    **engine_kwargs,
+                ),
+            )
+            await progress_queue.put({"type": "complete", **result.to_summary()})
+        except Exception as e:
+            await progress_queue.put({"type": "error", "error": str(e)})
+
+    async def _event_generator():
+        """SSE 이벤트를 생성하는 비동기 제너레이터."""
+        # OCR를 백그라운드 태스크로 시작
+        task = asyncio.create_task(_run_ocr_in_thread())
+        try:
+            while True:
+                data = await progress_queue.get()
+                event_type = data.get("type", "progress")
+                yield f"data: {_json.dumps(data, ensure_ascii=False)}\n\n"
+                if event_type in ("complete", "error"):
+                    break
+        finally:
+            if not task.done():
+                task.cancel()
+
+    return StreamingResponse(
+        _event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr")
@@ -6155,6 +6340,137 @@ async def api_git_graph(
 
 
 # ──────────────────────────────────────
+# Phase 12-2: 버전 미리보기 + 되돌리기 API
+# ──────────────────────────────────────
+
+
+class RevertRequest(BaseModel):
+    """되돌리기 요청 바디."""
+    target_hash: str
+    message: str | None = None
+
+
+def _resolve_repo_path(repo_type: str, repo_id: str) -> Path | None:
+    """repo_type("documents"/"interpretations")과 repo_id로 저장소 경로를 결정한다.
+
+    왜 이렇게 하는가:
+        원본 저장소와 해석 저장소를 단일 엔드포인트로 처리하기 위해
+        repo_type 문자열을 검증하고 경로를 반환한다.
+    """
+    if _library_path is None:
+        return None
+    if repo_type not in ("documents", "interpretations"):
+        return None
+    return _library_path / repo_type / repo_id
+
+
+@app.get("/api/repos/{repo_type}/{repo_id}/commits/{commit_hash}/files")
+async def api_commit_files(repo_type: str, repo_id: str, commit_hash: str):
+    """특정 저장 시점의 파일 목록을 반환한다.
+
+    목적: 연구자가 과거 시점에 어떤 파일이 있었는지 확인한다.
+    입력:
+        repo_type — "documents" 또는 "interpretations".
+        repo_id — 문헌 ID 또는 해석 저장소 ID.
+        commit_hash — 대상 커밋 해시.
+    출력: {commit_hash, short_hash, message, timestamp, files: [{path, size}]}.
+    """
+    repo_path = _resolve_repo_path(repo_type, repo_id)
+    if repo_path is None:
+        return JSONResponse(
+            {"error": "서고가 설정되지 않았거나, 저장소 유형이 올바르지 않습니다."},
+            status_code=400,
+        )
+
+    if not repo_path.exists():
+        return JSONResponse(
+            {"error": f"저장소를 찾을 수 없습니다: {repo_id}"},
+            status_code=404,
+        )
+
+    result = get_commit_file_list(repo_path, commit_hash)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return result
+
+
+@app.get("/api/repos/{repo_type}/{repo_id}/commits/{commit_hash}/files/{file_path:path}")
+async def api_commit_file_content(
+    repo_type: str, repo_id: str, commit_hash: str, file_path: str
+):
+    """특정 저장 시점의 파일 내용을 반환한다.
+
+    목적: 연구자가 과거 시점의 특정 파일 내용을 읽기 전용으로 확인한다.
+    입력:
+        repo_type — "documents" 또는 "interpretations".
+        repo_id — 문헌 ID 또는 해석 저장소 ID.
+        commit_hash — 대상 커밋 해시.
+        file_path — 저장소 내 상대 파일 경로.
+    출력: {commit_hash, file_path, content, is_binary}.
+    """
+    repo_path = _resolve_repo_path(repo_type, repo_id)
+    if repo_path is None:
+        return JSONResponse(
+            {"error": "서고가 설정되지 않았거나, 저장소 유형이 올바르지 않습니다."},
+            status_code=400,
+        )
+
+    if not repo_path.exists():
+        return JSONResponse(
+            {"error": f"저장소를 찾을 수 없습니다: {repo_id}"},
+            status_code=404,
+        )
+
+    result = get_commit_file_content(repo_path, commit_hash, file_path)
+    if "error" in result and "content" not in result:
+        return JSONResponse(result, status_code=404)
+    return result
+
+
+@app.post("/api/repos/{repo_type}/{repo_id}/revert")
+async def api_revert_to_commit(repo_type: str, repo_id: str, body: RevertRequest):
+    """특정 저장 시점으로 되돌리는 새 커밋을 생성한다.
+
+    목적: 연구자가 "이 버전으로 되돌리기"를 클릭했을 때,
+        해당 시점의 파일 상태로 복원하고 새 커밋으로 기록한다.
+        기존 이력은 모두 보존된다.
+    입력:
+        repo_type — "documents" 또는 "interpretations".
+        repo_id — 문헌 ID 또는 해석 저장소 ID.
+        body.target_hash — 복원할 커밋 해시.
+        body.message — 커밋 메시지 (선택).
+    출력: {reverted, new_commit_hash, message, target_hash}.
+    """
+    repo_path = _resolve_repo_path(repo_type, repo_id)
+    if repo_path is None:
+        return JSONResponse(
+            {"error": "서고가 설정되지 않았거나, 저장소 유형이 올바르지 않습니다."},
+            status_code=400,
+        )
+
+    if not repo_path.exists():
+        return JSONResponse(
+            {"error": f"저장소를 찾을 수 없습니다: {repo_id}"},
+            status_code=404,
+        )
+
+    # 커밋 메시지 결정
+    commit_message = body.message
+
+    # 해석 저장소인 경우 Based-On-Original trailer를 추가한다
+    if repo_type == "interpretations":
+        short_hash = body.target_hash[:7]
+        if commit_message is None:
+            commit_message = f"revert: {short_hash} 시점으로 되돌리기"
+        commit_message = _append_based_on_trailer(repo_path, commit_message)
+
+    result = revert_to_commit(repo_path, body.target_hash, commit_message)
+    if "error" in result:
+        return JSONResponse(result, status_code=400)
+    return result
+
+
+# ──────────────────────────────────────
 # Phase 12-3: JSON 스냅샷 API
 # ──────────────────────────────────────
 
@@ -6676,44 +6992,70 @@ async def _call_llm_text(purpose: str, text: str,
     # 4096으로는 사고에 다 쓰고 출력이 빈 응답이 될 수 있다.
     _MAX_TOKENS = 16384
 
-    # ── force_provider가 지정된 경우: 해당 프로바이더만 시도 (빈 응답 시 1회 재시도) ──
+    # 표점·번역·주석 모두 JSON 출력을 기대한다.
+    # response_format="json"을 전달하면 각 프로바이더가 네이티브 JSON 모드를 활성화:
+    #   Gemini: response_mime_type="application/json" (thinking 유출 방지)
+    #   OpenAI: response_format={"type":"json_object"}
+    #   Ollama: format="json"
+    _RESPONSE_FORMAT = "json"
+
+    # ── force_provider가 지정된 경우: 해당 프로바이더만 시도 (빈 응답·에러 시 1회 재시도) ──
     if force_provider:
         response = None
+        last_error = None
         for _attempt in range(2):
-            response = await router.call(
-                user_prompt,
-                system=system_prompt,
-                force_provider=force_provider,
-                force_model=force_model,
-                purpose=purpose,
-                max_tokens=_MAX_TOKENS,
-            )
-            if response.text.strip():
-                break
-            _logger.warning(
-                f"LLM {purpose} — {force_provider}/{force_model or 'auto'} "
-                f"빈 응답 (시도 {_attempt+1}/2), "
-                f"tokens_out={getattr(response, 'tokens_out', '?')}"
-            )
+            try:
+                response = await router.call(
+                    user_prompt,
+                    system=system_prompt,
+                    response_format=_RESPONSE_FORMAT,
+                    force_provider=force_provider,
+                    force_model=force_model,
+                    purpose=purpose,
+                    max_tokens=_MAX_TOKENS,
+                )
+                last_error = None
+                if response.text.strip():
+                    break
+                _logger.warning(
+                    f"LLM {purpose} — {force_provider}/{force_model or 'auto'} "
+                    f"빈 응답 (시도 {_attempt+1}/2), "
+                    f"tokens_out={getattr(response, 'tokens_out', '?')}"
+                )
+            except Exception as e:
+                last_error = e
+                _logger.warning(
+                    f"LLM {purpose} — {force_provider} 에러 (시도 {_attempt+1}/2): {e}"
+                )
+        # 재시도 후에도 에러가 남아 있으면 전파
+        if last_error:
+            raise last_error
         return _parse_llm_json(response, _json)
 
     # ── 자동 모드: 프로바이더 순서대로 시도, JSON 파싱 실패 시 다음으로 ──
+    # 가용성을 병렬로 사전 체크 (캐시 활용).
+    # Base44(subprocess 5s) + Ollama(HTTP 3s) 순차 체크 → 최대 8초 낭비 방지.
+    import asyncio as _asyncio
+    avail_results = await _asyncio.gather(
+        *[router.is_available_cached(p) for p in router.providers],
+        return_exceptions=True,
+    )
+
     errors = []
     tried = []
-    for provider in router.providers:
-        try:
-            available = await provider.is_available()
-            if not available:
-                _logger.debug(f"LLM {purpose} — {provider.provider_id}: 사용 불가, 건너뜀")
-                continue
+    for provider, avail in zip(router.providers, avail_results):
+        if avail is not True:
+            _logger.debug(f"LLM {purpose} — {provider.provider_id}: 사용 불가, 건너뜀")
+            continue
 
+        try:
             tried.append(provider.provider_id)
             _logger.info(f"LLM {purpose} — {provider.provider_id} 시도 중...")
 
             response = await provider.call(
                 user_prompt,
                 system=system_prompt,
-                response_format="text",
+                response_format=_RESPONSE_FORMAT,
                 max_tokens=_MAX_TOKENS,
                 purpose=purpose,
             )
@@ -6772,8 +7114,9 @@ def _parse_llm_json(response, _json) -> dict:
             f"콘텐츠 필터링 또는 모델 오류일 수 있습니다."
         )
 
-    # thinking 모델(kimi-k2.5, qwq 등)의 <think>...</think> 태그 제거.
-    # thinking 내부에 {, } 등이 포함되어 JSON 추출을 방해할 수 있다.
+    # thinking 모델의 사고 과정 제거:
+    #   1. <think>...</think> 태그 (Ollama kimi-k2.5, qwq 등)
+    #   2. Gemini thinking 유출: JSON 없이 추론 텍스트만 반환되는 경우
     raw = _re.sub(r'<think>.*?</think>', '', raw, flags=_re.DOTALL).strip()
 
     # thinking 태그 제거 후 빈 응답이 되는 경우 (사고만 하고 출력 없음)
@@ -6785,6 +7128,18 @@ def _parse_llm_json(response, _json) -> dict:
         raise ValueError(
             f"{response.provider}({response.model})이(가) 사고(thinking)만 반환하고 "
             f"실제 출력은 비어 있습니다."
+        )
+
+    # JSON이 아예 없고 reasoning 텍스트만 있는 경우 조기 감지
+    # (Gemini thinking 유출: "Check...", "Correct.", "Wait," 같은 패턴)
+    if '{' not in raw:
+        _logger.warning(
+            f"LLM 응답에 JSON 없음 ({response.provider}/{response.model}): "
+            f"{raw[:100]}..."
+        )
+        raise ValueError(
+            f"{response.provider}({response.model}) 응답에 JSON이 없습니다. "
+            f"모델이 구조화 출력 대신 자유 텍스트를 반환했습니다."
         )
 
     # markdown 코드 블록 제거
@@ -6979,8 +7334,16 @@ async def api_llm_punctuation(body: AiPunctuationRequest):
         return result
     except Exception as e:
         _logger.error(f"AI 표점 실패: {e}", exc_info=True)
-        # 프론트엔드에서 "AI 표점 실패:" 접두어를 붙이므로 여기선 원본 에러만 전달
-        return JSONResponse({"error": str(e)}, status_code=500)
+        # 타임아웃 에러는 사용자에게 더 친절한 메시지 제공
+        import httpx as _httpx
+        if isinstance(e, (_httpx.ReadTimeout, _httpx.ConnectTimeout, _httpx.TimeoutException)):
+            error_msg = (
+                f"LLM 응답 시간 초과 ({body.force_provider or 'auto'}). "
+                f"텍스트가 길면 다른 프로바이더를 시도하거나, Ollama 서버 상태를 확인하세요."
+            )
+        else:
+            error_msg = str(e)
+        return JSONResponse({"error": error_msg}, status_code=500)
 
 
 @app.post("/api/llm/translation")

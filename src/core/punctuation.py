@@ -46,19 +46,26 @@ def load_punctuation(interp_path: str | Path, part_id: str, page_num: int, block
         block_id — 블록 ID.
     출력: {"block_id": ..., "marks": [...]}.
           파일 없거나 해당 블록 없으면 빈 marks 반환.
+
+    파일 경로 우선순위:
+        1. 블록별 파일: {part_id}_page_{NNN}_blk_{block_id[:8]}_punctuation.json
+        2. 레거시 페이지 파일: {part_id}_page_{NNN}_punctuation.json (block_id 일치 시만)
     """
     interp_path = Path(interp_path).resolve()
-    file_path = _punctuation_file_path(interp_path, part_id, page_num)
 
-    if not file_path.exists():
-        return {"block_id": block_id, "marks": []}
+    # 1순위: 블록별 파일 (한 페이지에 여러 블록 표점 가능)
+    block_file = _punctuation_block_file_path(interp_path, part_id, page_num, block_id)
+    if block_file.exists():
+        with open(block_file, encoding="utf-8") as f:
+            return json.load(f)
 
-    with open(file_path, encoding="utf-8") as f:
-        data = json.load(f)
-
-    # 파일에 저장된 block_id가 요청과 일치하면 반환
-    if data.get("block_id") == block_id:
-        return data
+    # 2순위: 레거시 페이지 파일 (하위 호환 — block_id 일치 시만)
+    legacy_file = _punctuation_file_path(interp_path, part_id, page_num)
+    if legacy_file.exists():
+        with open(legacy_file, encoding="utf-8") as f:
+            data = json.load(f)
+        if data.get("block_id") == block_id:
+            return data
 
     return {"block_id": block_id, "marks": []}
 
@@ -79,11 +86,16 @@ def save_punctuation(
         data — {"block_id": ..., "marks": [...]}.
     출력: 저장된 파일 경로.
     Raises: jsonschema.ValidationError — 스키마 불일치 시.
+
+    저장 경로:
+        블록별 파일로 저장. 한 페이지에 여러 블록의 표점을 각각 저장할 수 있다.
+        {part_id}_page_{NNN}_blk_{block_id[:8]}_punctuation.json
     """
     validate(instance=data, schema=_get_schema())
 
     interp_path = Path(interp_path).resolve()
-    file_path = _punctuation_file_path(interp_path, part_id, page_num)
+    block_id = data.get("block_id", "")
+    file_path = _punctuation_block_file_path(interp_path, part_id, page_num, block_id)
     file_path.parent.mkdir(parents=True, exist_ok=True)
 
     text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
@@ -103,6 +115,24 @@ def _punctuation_file_path(interp_path: Path, part_id: str, page_num: int) -> Pa
         / "L5_reading"
         / "main_text"
         / f"{part_id}_page_{page_num:03d}_punctuation.json"
+    )
+
+
+def _punctuation_block_file_path(
+    interp_path: Path, part_id: str, page_num: int, block_id: str,
+) -> Path:
+    """블록별 표점 파일 경로 조립.
+
+    컨벤션: L5_reading/main_text/{part_id}_page_{NNN}_blk_{XXXXXXXX}_punctuation.json
+    한 페이지에 여러 TextBlock이 있을 때 각각의 표점을 독립적으로 저장한다.
+    block_id 앞 8자리를 파일명에 사용하여 충돌 가능성을 낮춘다.
+    """
+    short_id = block_id[:8] if block_id else "unknown"
+    return (
+        interp_path
+        / "L5_reading"
+        / "main_text"
+        / f"{part_id}_page_{page_num:03d}_blk_{short_id}_punctuation.json"
     )
 
 

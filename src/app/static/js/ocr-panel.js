@@ -151,7 +151,7 @@ async function _runOcr(blockIds) {
   const engineId = engineSelect ? engineSelect.value || null : null;
 
   ocrState.running = true;
-  _showProgress(true, "레이아웃 저장 확인 중...");
+  _showProgress(true, "레이아웃 저장 확인 중...", 0, 0);
   _disableButtons(true);
 
   try {
@@ -165,7 +165,7 @@ async function _runOcr(blockIds) {
       await _ensureLayoutSaved(docId, partId, pageNum);
     }
 
-    _showProgress(true, "OCR 실행 중...");
+    _showProgress(true, "OCR 실행 중...", 0, 0);
 
     // LLM 프로바이더/모델 선택 (llm_vision 엔진 전용)
     const llmSel =
@@ -186,21 +186,8 @@ async function _runOcr(blockIds) {
       reqBody.paddle_lang = paddleLangSel.value;
     }
 
-    const resp = await fetch(
-      `/api/documents/${docId}/parts/${partId}/pages/${pageNum}/ocr`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(reqBody),
-      },
-    );
-
-    if (!resp.ok) {
-      const err = await resp.json();
-      throw new Error(err.error || `HTTP ${resp.status}`);
-    }
-
-    const result = await resp.json();
+    // SSE 스트리밍 엔드포인트로 요청 — 블록별 진행률을 실시간으로 받는다.
+    const result = await _runOcrWithStreaming(docId, partId, pageNum, reqBody);
 
     // 선택 블록 OCR의 응답은 부분 결과일 수 있다.
     // 저장된 L2 전체 결과를 다시 읽어와 화면에 반영해야
@@ -227,6 +214,99 @@ async function _runOcr(blockIds) {
     ocrState.running = false;
     _disableButtons(false);
   }
+}
+
+
+/**
+ * SSE 스트리밍으로 OCR을 실행하고 진행률을 실시간 업데이트한다.
+ *
+ * 왜 SSE를 사용하는가:
+ *   OCR은 블록 수에 따라 수십 초가 걸릴 수 있다.
+ *   기존 방식은 모든 블록이 완료될 때까지 아무런 피드백이 없었다.
+ *   SSE를 사용하면 블록이 처리될 때마다 진행률을 표시할 수 있다.
+ *
+ * 입력: docId, partId, pageNum, reqBody (OCR 요청 본문)
+ * 출력: OCR 완료 결과 (to_summary 형식)
+ */
+async function _runOcrWithStreaming(docId, partId, pageNum, reqBody) {
+  const resp = await fetch(
+    `/api/documents/${docId}/parts/${partId}/pages/${pageNum}/ocr/stream`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(reqBody),
+    },
+  );
+
+  if (!resp.ok) {
+    // SSE 엔드포인트 미지원 시 기존 동기 방식으로 폴백
+    const fallbackResp = await fetch(
+      `/api/documents/${docId}/parts/${partId}/pages/${pageNum}/ocr`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(reqBody),
+      },
+    );
+    if (!fallbackResp.ok) {
+      const err = await fallbackResp.json();
+      throw new Error(err.error || `HTTP ${fallbackResp.status}`);
+    }
+    return await fallbackResp.json();
+  }
+
+  // ReadableStream으로 SSE 이벤트를 읽는다
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finalResult = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
+    // SSE 형식 파싱: "data: {...}\n\n"
+    const lines = buffer.split("\n\n");
+    // 마지막 요소는 아직 완성되지 않은 청크일 수 있다
+    buffer = lines.pop() || "";
+
+    for (const chunk of lines) {
+      const dataLine = chunk.trim();
+      if (!dataLine.startsWith("data: ")) continue;
+
+      try {
+        const data = JSON.parse(dataLine.slice(6));
+
+        if (data.type === "progress") {
+          // 블록별 진행률 업데이트
+          const pct = data.total > 0 ? Math.round((data.current / data.total) * 100) : 0;
+          _showProgress(
+            true,
+            `OCR 블록 ${data.current}/${data.total} 처리 중... (${pct}%)`,
+            data.current,
+            data.total,
+          );
+        } else if (data.type === "complete") {
+          finalResult = data;
+          _showProgress(true, "OCR 완료, 결과 로드 중...", data.total_blocks, data.total_blocks);
+        } else if (data.type === "error") {
+          throw new Error(data.error || "OCR 스트리밍 오류");
+        }
+      } catch (parseErr) {
+        // JSON 파싱 실패한 이벤트는 건너뛴다
+        if (parseErr.message && !parseErr.message.includes("JSON")) throw parseErr;
+        console.warn("SSE 파싱 실패:", dataLine, parseErr);
+      }
+    }
+  }
+
+  if (!finalResult) {
+    throw new Error("OCR 스트리밍이 완료 이벤트 없이 종료되었습니다.");
+  }
+
+  return finalResult;
 }
 
 /* ─── OCR 결과 표시 ────────────────────────────── */
@@ -488,11 +568,41 @@ function _toggleOcrVerticalView() {
 
 /* ─── UI 헬퍼 ──────────────────────────────────── */
 
-function _showProgress(show, text) {
+/**
+ * OCR 진행률을 표시/숨김한다.
+ *
+ * 왜 이렇게 하는가:
+ *   current/total이 0이면 불확정 진행률 (펄스 애니메이션),
+ *   양수이면 확정 진행률 (채워지는 바 + 퍼센트 텍스트).
+ *
+ * 입력:
+ *   show — 표시 여부
+ *   text — 진행 상태 텍스트 (예: "블록 2/5 처리 중...")
+ *   current — 현재 처리 완료 수 (0이면 불확정)
+ *   total — 전체 처리 대상 수 (0이면 불확정)
+ */
+function _showProgress(show, text, current, total) {
   const el = document.getElementById("ocr-progress");
   const textEl = document.getElementById("ocr-progress-text");
+  const fillEl = document.getElementById("ocr-progress-fill");
+
   if (el) el.style.display = show ? "" : "none";
   if (textEl && text) textEl.textContent = text;
+
+  if (fillEl) {
+    if (current > 0 && total > 0) {
+      // 확정 진행률: 바를 실제 퍼센트로 채운다
+      const pct = Math.min(100, Math.round((current / total) * 100));
+      fillEl.style.width = pct + "%";
+      fillEl.classList.add("ocr-progress-determinate");
+      fillEl.classList.remove("ocr-progress-indeterminate");
+    } else {
+      // 불확정 진행률: 펄스 애니메이션
+      fillEl.style.width = "100%";
+      fillEl.classList.remove("ocr-progress-determinate");
+      fillEl.classList.add("ocr-progress-indeterminate");
+    }
+  }
 }
 
 function _disableButtons(disabled) {
@@ -704,7 +814,7 @@ async function _deleteCurrentPageOcr() {
   if (!ok) return;
 
   _disableButtons(true);
-  _showProgress(true, "선택 OCR 삭제 중...");
+  _showProgress(true, "선택 OCR 삭제 중...", 0, 0);
 
   try {
     const resp = await fetch(

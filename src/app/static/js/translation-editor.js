@@ -29,6 +29,17 @@ const transState = {
   isDirty: false,
 };
 
+/**
+ * API용 block_id 반환 — "tb:" 접두사 제거.
+ * 표점·번역 모두 서버에는 접두사 없이 저장해야
+ * block_id 매칭이 일치한다.
+ */
+function _transApiBlockId() {
+  return transState.blockId.startsWith("tb:")
+    ? transState.blockId.slice(3)
+    : transState.blockId;
+}
+
 
 /* ──────────────────────────
    초기화
@@ -96,6 +107,51 @@ async function _populateTransBlockSelect() {
 
   if (!viewerState.docId || !viewerState.partId || !viewerState.pageNum) return;
 
+  // TextBlock이 있으면 우선 사용 (표점 편집기와 동일한 block_id 체계).
+  // 왜: 표점이 TextBlock ID로 저장되므로, 번역에서도 같은 ID를 써야
+  //     표점 데이터를 찾을 수 있다.
+  if (interpState.interpId) {
+    try {
+      const tbRes = await fetch(
+        `/api/interpretations/${interpState.interpId}/entities/text_block?page=${viewerState.pageNum}&document_id=${viewerState.docId}`
+      );
+      if (tbRes.ok) {
+        const tbData = await tbRes.json();
+        const textBlocks = (tbData.entities || []).filter((e) => {
+          const refs = e.source_refs || [];
+          const ref = e.source_ref;
+          if (refs.length > 0) return refs.some((r) => r.page === viewerState.pageNum);
+          if (ref) return ref.page === viewerState.pageNum;
+          return false;
+        }).sort((a, b) => (a.sequence_index || 0) - (b.sequence_index || 0));
+
+        if (textBlocks.length > 0) {
+          textBlocks.forEach((tb) => {
+            const opt = document.createElement("option");
+            opt.value = `tb:${tb.id}`;
+            const refs = tb.source_refs || [];
+            const srcLabel = refs.map((r) => r.layout_block_id || "?").join("+");
+            opt.textContent = `#${tb.sequence_index} TextBlock (${srcLabel})`;
+            opt.dataset.text = tb.original_text || "";
+            select.appendChild(opt);
+          });
+
+          if (transState.blockId && select.querySelector(`option[value="${transState.blockId}"]`)) {
+            select.value = transState.blockId;
+          } else if (select.options.length > 1) {
+            select.selectedIndex = 1;
+            transState.blockId = select.value;
+            _loadTranslationData();
+          }
+          return;
+        }
+      }
+    } catch {
+      // TextBlock 조회 실패 시 LayoutBlock 폴백
+    }
+  }
+
+  // 폴백: LayoutBlock 기반 (편성 미완료 시)
   try {
     const res = await fetch(
       `/api/documents/${viewerState.docId}/pages/${viewerState.pageNum}/layout?part_id=${viewerState.partId}`
@@ -148,41 +204,66 @@ async function _loadTranslationData() {
     return;
   }
 
+  const isTextBlock = transState.blockId.startsWith("tb:");
+  // API에 전달할 block_id: TextBlock이면 "tb:" 접두사 제거.
+  // 표점 편집기와 동일한 규칙 — 저장/로드 모두 접두사 없이 사용.
+  const apiBlockId = isTextBlock
+    ? transState.blockId.slice(3)
+    : transState.blockId;
+
   try {
-    // 원문 + 표점 + 현토 + 번역을 병렬 로드
-    const [textRes, punctRes, htRes, transRes] = await Promise.all([
-      fetch(`/api/documents/${viewerState.docId}/pages/${viewerState.pageNum}/text?part_id=${viewerState.partId}`),
-      fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation?block_id=${transState.blockId}`),
-      fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/hyeonto?block_id=${transState.blockId}`),
-      fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/translation`),
-    ]);
+    if (isTextBlock) {
+      // ── TextBlock 모드 ──
+      // TextBlock의 original_text를 드롭다운 data-text에서 가져오거나 API 호출.
+      const select = document.getElementById("trans-block-select");
+      const selectedOpt = select
+        ? select.querySelector(`option[value="${transState.blockId}"]`)
+        : null;
 
-    if (textRes.ok) {
-      const textData = await textRes.json();
-      transState.originalText = textData.text || "";
-    } else {
-      transState.originalText = "";
-    }
+      if (selectedOpt && selectedOpt.dataset.text) {
+        transState.originalText = selectedOpt.dataset.text;
+      } else {
+        const tbRes = await fetch(
+          `/api/interpretations/${interpState.interpId}/entities/text_block/${apiBlockId}`
+        );
+        if (tbRes.ok) {
+          const tb = await tbRes.json();
+          transState.originalText = tb.original_text || "";
+        } else {
+          transState.originalText = "";
+        }
+      }
 
-    if (punctRes.ok) {
-      const punctData = await punctRes.json();
-      transState.punctMarks = punctData.marks || [];
-    } else {
-      transState.punctMarks = [];
-    }
+      // 표점 + 현토 + 번역을 병렬 로드 (block_id는 접두사 없이)
+      const [punctRes, htRes, transRes] = await Promise.all([
+        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation?block_id=${apiBlockId}`),
+        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/hyeonto?block_id=${apiBlockId}`),
+        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/translation`),
+      ]);
 
-    if (htRes.ok) {
-      const htData = await htRes.json();
-      transState.htAnnotations = htData.annotations || [];
-    } else {
-      transState.htAnnotations = [];
-    }
+      transState.punctMarks = punctRes.ok ? (await punctRes.json()).marks || [] : [];
+      transState.htAnnotations = htRes.ok ? (await htRes.json()).annotations || [] : [];
+      transState.translations = transRes.ok ? (await transRes.json()).translations || [] : [];
 
-    if (transRes.ok) {
-      const transData = await transRes.json();
-      transState.translations = transData.translations || [];
     } else {
-      transState.translations = [];
+      // ── LayoutBlock 모드 (하위 호환) ──
+      const [textRes, punctRes, htRes, transRes] = await Promise.all([
+        fetch(`/api/documents/${viewerState.docId}/pages/${viewerState.pageNum}/text?part_id=${viewerState.partId}`),
+        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation?block_id=${apiBlockId}`),
+        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/hyeonto?block_id=${apiBlockId}`),
+        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/translation`),
+      ]);
+
+      if (textRes.ok) {
+        const textData = await textRes.json();
+        transState.originalText = textData.text || "";
+      } else {
+        transState.originalText = "";
+      }
+
+      transState.punctMarks = punctRes.ok ? (await punctRes.json()).marks || [] : [];
+      transState.htAnnotations = htRes.ok ? (await htRes.json()).annotations || [] : [];
+      transState.translations = transRes.ok ? (await transRes.json()).translations || [] : [];
     }
 
     // 문장 분리 (클라이언트 사이드)
@@ -242,6 +323,63 @@ function _splitSentencesClient(text, marks) {
   }
 
   return sentences;
+}
+
+
+/**
+ * 문장 범위에 해당하는 표점·현토를 적용한 텍스트 반환.
+ *
+ * sent = {start, end, text} — originalText에서의 인덱스.
+ * marks의 target 좌표가 sent 범위 안에 있으면 적용한다.
+ */
+function _renderPunctuatedSentence(sent) {
+  const text = sent.text;
+  if (!text) return "";
+
+  const n = text.length;
+  const beforeBuf = new Array(n).fill("");
+  const afterBuf = new Array(n).fill("");
+
+  // 표점 적용
+  for (const mark of transState.punctMarks) {
+    const mStart = mark.target?.start ?? 0;
+    const mEnd = mark.target?.end ?? mStart;
+    if (mEnd < sent.start || mStart > sent.end) continue;
+
+    const localStart = mStart - sent.start;
+    const localEnd = mEnd - sent.start;
+    if (localStart >= 0 && localStart < n && mark.before) {
+      beforeBuf[localStart] += mark.before;
+    }
+    if (localEnd >= 0 && localEnd < n && mark.after) {
+      afterBuf[localEnd] += mark.after;
+    }
+  }
+
+  // 현토 적용
+  for (const ann of transState.htAnnotations) {
+    const aStart = ann.target?.start ?? 0;
+    const aEnd = ann.target?.end ?? aStart;
+    if (aEnd < sent.start || aStart > sent.end) continue;
+
+    const localStart = aStart - sent.start;
+    const localEnd = aEnd - sent.start;
+    if (ann.position === "before") {
+      if (localStart >= 0 && localStart < n) {
+        beforeBuf[localStart] += ann.text || "";
+      }
+    } else {
+      if (localEnd >= 0 && localEnd < n) {
+        afterBuf[localEnd] += ann.text || "";
+      }
+    }
+  }
+
+  let result = "";
+  for (let i = 0; i < n; i++) {
+    result += beforeBuf[i] + text[i] + afterBuf[i];
+  }
+  return result;
 }
 
 
@@ -320,9 +458,12 @@ function _renderTransCards() {
       ? (tr.translator.type === "llm" ? `AI (${tr.translator.model || "?"})` : "수동")
       : "";
 
+    // 표점+현토가 적용된 문장 텍스트를 카드에 표시.
+    const punctuatedText = _renderPunctuatedSentence(sent);
+
     html += `<div class="trans-card ${statusClass}" data-sent-idx="${i}">
       <div class="trans-card-header">
-        <span class="trans-card-source">${sent.text}</span>
+        <span class="trans-card-source">${punctuatedText}</span>
         <span class="trans-card-status-badge">${statusLabel}</span>
       </div>`;
 
@@ -377,9 +518,10 @@ function _renderTransCards() {
  * source.block_id + start/end로 매칭.
  */
 function _findTranslation(sent) {
+  const bid = _transApiBlockId();
   return transState.translations.find((tr) => {
     const src = tr.source || {};
-    return src.block_id === transState.blockId &&
+    return src.block_id === bid &&
       src.start === sent.start &&
       src.end === sent.end;
   }) || null;
@@ -434,7 +576,7 @@ async function _addManualTranslation(sent, translationText) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           source: {
-            block_id: transState.blockId,
+            block_id: _transApiBlockId(),
             start: sent.start,
             end: sent.end,
           },
@@ -785,7 +927,7 @@ async function _loadRefDictMatches() {
   const is = typeof interpState !== "undefined" ? interpState : null;
   if (!is || !is.interpId) return;
 
-  const blocks = [{ block_id: transState.blockId, text: transState.originalText }];
+  const blocks = [{ block_id: _transApiBlockId(), text: transState.originalText }];
   if (!blocks[0].text) return;
 
   try {
