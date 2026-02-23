@@ -163,6 +163,111 @@ def save_translation_sidecar(
     return file_path
 
 
+def separate_by_script(text: str, han_threshold: float = 0.8) -> dict:
+    """한문(漢字)과 한글을 유니코드 문자 유형 기반으로 분리한다.
+
+    왜 이렇게 하는가:
+      HWP/PDF의 고전 텍스트는 한문 원문과 한국어 번역이 줄 단위로
+      교차 배치되거나 단락 단위로 나뉘는 경우가 대부분이다.
+      LLM 없이도 각 줄의 한자/한글 비율만으로 정확하게 분류할 수 있다.
+
+    알고리즘:
+      1. 텍스트를 줄 단위로 분할
+      2. 각 줄의 한자(\\p{Han}) 개수 vs 한글(\\p{Hangul}) 개수로 비율 계산
+      3. 한자 비율이 임계값(기본 80%) 이상이면 원문, 미만이면 번역
+         — 왜 80%인가: 번역문에도 한자(人名·地名·術語)가 꽤 쓰이지만,
+           한국어 조사·어미(은/는/이/가/을/를/에 등)가 반드시 있으므로
+           한자 비율은 대개 60~70% 이하. 반면 순한문은 거의 100%.
+           현토(懸吐)가 섞인 한문도 한자 비율이 80% 이상.
+      4. 둘 다 0이면(숫자·기호·라틴 등) 직전 분류를 따른다
+      5. 빈 줄은 단락 구분자로 양쪽에 유지
+
+    입력:
+        text — HWP/PDF에서 추출한 전체 텍스트 (한문+번역 혼합)
+        han_threshold — 원문으로 분류할 한자 비율 임계값 (기본 0.8 = 80%)
+    출력:
+        {
+            "original_text": str,      # 한문 원문
+            "translation_text": str,   # 한국어 번역
+            "stats": {
+                "total_lines": int,
+                "original_lines": int,
+                "translation_lines": int,
+                "skipped_lines": int,
+            }
+        }
+    """
+    import regex
+
+    lines = text.split("\n")
+    original_parts: list[str] = []
+    translation_parts: list[str] = []
+
+    # 직전 분류 추적 (한자/한글 모두 0인 줄의 분류에 사용)
+    last_type = "original"  # 기본값: 원문
+
+    stats = {"total_lines": len(lines), "original_lines": 0,
+             "translation_lines": 0, "skipped_lines": 0}
+
+    for line in lines:
+        stripped = line.strip()
+
+        # 빈 줄 → 단락 구분자로 양쪽에 추가
+        if not stripped:
+            if original_parts and original_parts[-1] != "":
+                original_parts.append("")
+            if translation_parts and translation_parts[-1] != "":
+                translation_parts.append("")
+            continue
+
+        # 줄 번호·괄호 번호 등 접두사 제거 후 분석
+        # 예: "1. 昔有善牧者" → "昔有善牧者" 부분만 분석
+        content_for_analysis = regex.sub(
+            r"^[\s\d\.\)\]\】\》\>\-\–\—]+", "", stripped
+        )
+
+        # 유니코드 카테고리별 문자 수 계산
+        han_count = len(regex.findall(r"\p{Han}", content_for_analysis))
+        hangul_count = len(regex.findall(r"\p{Hangul}", content_for_analysis))
+
+        if han_count == 0 and hangul_count == 0:
+            # 순수 숫자/기호/라틴 → 직전 분류 따르기
+            if last_type == "original":
+                original_parts.append(stripped)
+                stats["original_lines"] += 1
+            else:
+                translation_parts.append(stripped)
+                stats["translation_lines"] += 1
+            continue
+
+        # 비율 기반 분류:
+        #   한자 비율 >= 임계값(80%) → 원문 (순한문 또는 현토 섞인 한문)
+        #   한자 비율 < 임계값 → 번역 (한자가 섞여 있더라도 한글 문장)
+        total_cjk_hangul = han_count + hangul_count
+        han_ratio = han_count / total_cjk_hangul
+
+        if han_ratio >= han_threshold:
+            original_parts.append(stripped)
+            last_type = "original"
+            stats["original_lines"] += 1
+        else:
+            translation_parts.append(stripped)
+            last_type = "translation"
+            stats["translation_lines"] += 1
+
+    # 끝의 빈 줄 정리
+    while original_parts and original_parts[-1] == "":
+        original_parts.pop()
+    while translation_parts and translation_parts[-1] == "":
+        translation_parts.pop()
+
+    return {
+        "original_text": "\n".join(original_parts).strip(),
+        "translation_text": "\n".join(translation_parts).strip(),
+        "stats": stats,
+    }
+
+
 def build_auto_page_mapping(
     section_count: int,
     default_part_id: str,

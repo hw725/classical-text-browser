@@ -279,36 +279,30 @@ async function _executePdfSeparation() {
     return;
   }
 
-  if (!_pdfStructure) {
-    statusEl.textContent = "구조 분석 결과가 없습니다. 미리보기를 다시 실행하세요.";
-    return;
-  }
-
   btn.disabled = true;
-  statusEl.textContent = "LLM으로 원문/번역 분리 중... (시간이 걸릴 수 있습니다)";
+  statusEl.textContent = "원문/번역 분리 중... (유니코드 문자 유형 분석)";
 
   try {
-    const customInstructions =
-      document.getElementById("pdf-import-custom-instructions").value.trim();
-
-    const bodyObj = {
-      structure: _pdfStructure,
-      custom_instructions: customInstructions,
-    };
-
     const formData = new FormData();
     formData.append("file", fileInput.files[0]);
-    formData.append("body", JSON.stringify(bodyObj));
 
-    const res = await fetch("/api/text-import/pdf/separate", {
-      method: "POST",
-      body: formData,
-    });
+    let res;
+    try {
+      res = await fetch("/api/text-import/pdf/separate", {
+        method: "POST",
+        body: formData,
+      });
+    } catch (networkErr) {
+      statusEl.textContent = "서버 연결 실패 — 서버가 실행 중인지 확인하세요.";
+      alert("서버 연결 실패: " + networkErr.message);
+      return;
+    }
 
     const data = await res.json();
     if (!res.ok) {
-      statusEl.textContent = data.error || "분리 실패";
-      showToast(`텍스트 분리 실패: ${data.error || "알 수 없는 오류"}`, 'error');
+      const errMsg = data.error || "분리 실패";
+      statusEl.textContent = errMsg;
+      alert(`텍스트 분리 실패:\n${errMsg}`);
       return;
     }
 
@@ -331,8 +325,12 @@ async function _executePdfSeparation() {
     // Step 2 표시
     document.getElementById("hwp-import-step2").style.display = "block";
 
+    const stats = data.stats || {};
     const pagesWithText = _pdfSeparationResults.filter(r => r.original_text).length;
-    statusEl.textContent = `분리 완료: ${pagesWithText}페이지에서 원문 추출`;
+    statusEl.textContent =
+      `분리 완료: ${pagesWithText}/${data.page_count || "?"}페이지, ` +
+      `원문 ${stats.original_lines || 0}줄, 번역 ${stats.translation_lines || 0}줄` +
+      ` (\\p{Han}/\\p{Hangul} 유니코드 분석)`;
   } catch (err) {
     statusEl.textContent = `오류: ${err.message}`;
     showToast(`텍스트 분리 중 오류: ${err.message}`, 'error');
@@ -367,30 +365,26 @@ async function _executeImport() {
 async function _executeHwpSeparation() {
   const statusEl = document.getElementById("hwp-import-separate-status");
   const btn = document.getElementById("hwp-import-separate-btn");
-  const textPreview = document.getElementById("hwp-import-text-preview");
+  const fileInput = document.getElementById("hwp-import-file");
 
-  const text = textPreview ? textPreview.value : "";
-  if (!text.trim()) {
-    statusEl.textContent = "분리할 텍스트가 없습니다. 먼저 미리보기를 실행하세요.";
+  if (!fileInput.files || fileInput.files.length === 0) {
+    statusEl.textContent = "파일을 먼저 선택하세요.";
     return;
   }
 
   btn.disabled = true;
-  statusEl.textContent = "LLM으로 원문/번역 분리 중... (시간이 걸릴 수 있습니다)";
+  statusEl.textContent = "원문/번역 분리 중... (유니코드 문자 유형 분석)";
 
   try {
-    const customInstructions =
-      (document.getElementById("hwp-import-custom-instructions") || {}).value || "";
+    // HWP 파일을 직접 서버로 전송 → 서버에서 전체 텍스트 추출 후 분리
+    const formData = new FormData();
+    formData.append("file", fileInput.files[0]);
 
     let res;
     try {
       res = await fetch("/api/text-import/hwp/separate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: text,
-          custom_instructions: customInstructions.trim(),
-        }),
+        body: formData,
       });
     } catch (networkErr) {
       statusEl.textContent = "서버 연결 실패 — 서버가 실행 중인지 확인하세요.";
@@ -402,7 +396,6 @@ async function _executeHwpSeparation() {
     if (!res.ok) {
       const errMsg = data.error || "분리 실패";
       statusEl.textContent = errMsg;
-      // LLM 미설정 등 중요 에러는 alert로 확실히 표시
       alert(`텍스트 분리 실패:\n${errMsg}`);
       return;
     }
@@ -426,12 +419,11 @@ async function _executeHwpSeparation() {
     // 정리된 원문 미리보기도 분리 결과로 교체
     document.getElementById("hwp-import-clean-preview").value = allOriginal;
 
-    // 구조 정보 표시
-    const structure = data.structure || {};
-    const patternLabel = _translatePatternType(structure.pattern_type || "unknown");
+    // 통계 표시
+    const stats = data.stats || {};
     statusEl.textContent =
-      `분리 완료: ${patternLabel}` +
-      (structure.confidence ? ` (확신도 ${(structure.confidence * 100).toFixed(0)}%)` : "");
+      `분리 완료: 원문 ${stats.original_lines || 0}줄, 번역 ${stats.translation_lines || 0}줄` +
+      ` (\\p{Han}/\\p{Hangul} 유니코드 분석)`;
 
     // Step 2 표시
     document.getElementById("hwp-import-step2").style.display = "block";
