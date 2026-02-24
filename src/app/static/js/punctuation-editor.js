@@ -310,28 +310,71 @@ async function _loadPunctuationData() {
 
   try {
     if (isTextBlock) {
-      // TextBlock 기반: 드롭다운 option의 data-text에서 텍스트를 가져옴
-      const select = document.getElementById("punct-block-select");
-      const selectedOpt = select ? select.querySelector(`option[value="${punctState.blockId}"]`) : null;
+      // TextBlock 기반: 원본 문서의 최신 교정 텍스트를 우선 사용
+      //
+      // 왜 이렇게 하는가:
+      //   TextBlock의 original_text는 편성(composition) 시점의 스냅샷이다.
+      //   편성 이후에 교감/교정을 수정하면 TextBlock에는 반영되지 않는다.
+      //   따라서 source_refs를 통해 원본 문서의 최신 교정 텍스트를 가져온다.
+      //   교정 텍스트를 못 가져오면 TextBlock 원본을 폴백으로 사용한다.
+      const tbId = punctState.blockId.replace("tb:", "");
+      let tbData = null;
 
-      if (selectedOpt && selectedOpt.dataset.text) {
-        punctState.originalText = selectedOpt.dataset.text;
-      } else {
-        // API로 TextBlock 직접 조회
-        const tbId = punctState.blockId.replace("tb:", "");
+      // TextBlock 정보 조회 (source_refs 필요)
+      try {
         const tbRes = await fetch(
           `/api/interpretations/${interpState.interpId}/entities/text_block/${tbId}`
         );
-        if (tbRes.ok) {
-          const tb = await tbRes.json();
-          punctState.originalText = tb.original_text || "";
-        } else {
-          punctState.originalText = "";
+        if (tbRes.ok) tbData = await tbRes.json();
+      } catch { /* 폴백 처리 아래 */ }
+
+      // source_refs에서 원본 문서의 교정 텍스트를 가져온다
+      let correctedText = "";
+      if (tbData && tbData.source_refs && tbData.source_refs.length > 0) {
+        const refPages = [...new Set(tbData.source_refs.map((r) => r.page))];
+        const texts = [];
+        for (const refPage of refPages) {
+          try {
+            const ctRes = await fetch(
+              `/api/documents/${viewerState.docId}/pages/${refPage}/corrected-text?part_id=${viewerState.partId}`
+            );
+            if (ctRes.ok) {
+              const ctData = await ctRes.json();
+              // source_refs에 layout_block_id가 있으면 해당 블록만 추출
+              const pageRefs = tbData.source_refs.filter((r) => r.page === refPage);
+              for (const ref of pageRefs) {
+                if (ref.layout_block_id && ctData.blocks) {
+                  const match = ctData.blocks.find((b) => b.block_id === ref.layout_block_id);
+                  if (match) {
+                    texts.push(match.corrected_text || match.original_text || "");
+                    continue;
+                  }
+                }
+                // 블록 매칭 실패 시 전체 교정 텍스트
+                if (texts.length === 0) {
+                  texts.push(ctData.corrected_text || "");
+                }
+              }
+            }
+          } catch { /* skip */ }
         }
+        correctedText = texts.join("\n");
+      }
+
+      // 교정 텍스트가 있으면 사용, 없으면 TextBlock 원본 폴백
+      if (correctedText.trim()) {
+        punctState.originalText = correctedText;
+      } else {
+        // 폴백: TextBlock의 원본 텍스트 (편성 시점 스냅샷)
+        const select = document.getElementById("punct-block-select");
+        const selectedOpt = select ? select.querySelector(`option[value="${punctState.blockId}"]`) : null;
+        punctState.originalText = (selectedOpt && selectedOpt.dataset.text)
+          ? selectedOpt.dataset.text
+          : (tbData ? tbData.original_text || "" : "");
       }
 
       // 표점 로드 (block_id는 TextBlock ID)
-      const punctBlockId = punctState.blockId.replace("tb:", "");
+      const punctBlockId = tbId;
       const punctRes = await fetch(
         `/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation?block_id=${punctBlockId}`
       );
