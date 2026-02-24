@@ -14,11 +14,11 @@
 const annState = {
   active: false,
   originalText: "",
-  blockId: "",          // "tb:<id>" (TextBlock) 또는 LayoutBlock ID
-  annotations: [],     // 현재 블록의 주석 배열
-  punctMarks: [],       // 표점 marks (원문 미리보기에 적용)
-  annotationTypes: [],  // 전체 유형 목록 (types + custom)
-  selectedAnnId: null,  // 편집 중인 주석 ID
+  blockId: "", // "tb:<id>" (TextBlock) 또는 LayoutBlock ID
+  annotations: [], // 현재 블록의 주석 배열
+  punctMarks: [], // 표점 marks (원문 미리보기에 적용)
+  annotationTypes: [], // 전체 유형 목록 (types + custom)
+  selectedAnnId: null, // 편집 중인 주석 ID
 };
 
 /**
@@ -31,7 +31,6 @@ function _annApiBlockId() {
     ? annState.blockId.slice(3)
     : annState.blockId;
 }
-
 
 /* ────────────────────────────────────
    초기화 / 모드 전환
@@ -79,7 +78,6 @@ function initAnnotationEditor() {
   initDictAnnotation();
 }
 
-
 function activateAnnotationMode() {
   annState.active = true;
   _loadAnnotationTypes();
@@ -92,7 +90,6 @@ function deactivateAnnotationMode() {
   const editPanel = document.getElementById("ann-edit-panel");
   if (editPanel) editPanel.style.display = "none";
 }
-
 
 /* ────────────────────────────────────
    유형 로드
@@ -137,9 +134,14 @@ function _populateEditTypeSelect() {
 }
 
 function _getTypeInfo(typeId) {
-  return annState.annotationTypes.find(t => t.id === typeId) || { label: typeId, color: "#999", icon: "🏷️" };
+  return (
+    annState.annotationTypes.find((t) => t.id === typeId) || {
+      label: typeId,
+      color: "#999",
+      icon: "🏷️",
+    }
+  );
 }
-
 
 /* ────────────────────────────────────
    블록 선택
@@ -160,31 +162,38 @@ async function _populateAnnBlockSelect() {
   if (is && is.interpId) {
     try {
       const tbRes = await fetch(
-        `/api/interpretations/${is.interpId}/entities/text_block?page=${vs.pageNum}&document_id=${vs.docId}`
+        `/api/interpretations/${is.interpId}/entities/text_block?page=${vs.pageNum}&document_id=${vs.docId}`,
       );
       if (tbRes.ok) {
         const tbData = await tbRes.json();
-        const textBlocks = (tbData.entities || []).filter((e) => {
-          const refs = e.source_refs || [];
-          const ref = e.source_ref;
-          if (refs.length > 0) return refs.some((r) => r.page === vs.pageNum);
-          if (ref) return ref.page === vs.pageNum;
-          return false;
-        }).sort((a, b) => (a.sequence_index || 0) - (b.sequence_index || 0));
+        const textBlocks = (tbData.entities || [])
+          .filter((e) => {
+            const refs = e.source_refs || [];
+            const ref = e.source_ref;
+            if (refs.length > 0) return refs.some((r) => r.page === vs.pageNum);
+            if (ref) return ref.page === vs.pageNum;
+            return false;
+          })
+          .sort((a, b) => (a.sequence_index || 0) - (b.sequence_index || 0));
 
         if (textBlocks.length > 0) {
           textBlocks.forEach((tb) => {
             const opt = document.createElement("option");
             opt.value = `tb:${tb.id}`;
             const refs = tb.source_refs || [];
-            const srcLabel = refs.map((r) => r.layout_block_id || "?").join("+");
+            const srcLabel = refs
+              .map((r) => r.layout_block_id || "?")
+              .join("+");
             opt.textContent = `#${tb.sequence_index} TextBlock (${srcLabel})`;
             opt.dataset.text = tb.original_text || "";
             sel.appendChild(opt);
           });
 
           // 이전 선택값 복원 또는 첫 번째 블록 자동 선택
-          if (annState.blockId && sel.querySelector(`option[value="${annState.blockId}"]`)) {
+          if (
+            annState.blockId &&
+            sel.querySelector(`option[value="${annState.blockId}"]`)
+          ) {
             sel.value = annState.blockId;
           } else if (sel.options.length > 1) {
             sel.selectedIndex = 1;
@@ -201,7 +210,9 @@ async function _populateAnnBlockSelect() {
 
   // 폴백: LayoutBlock 기반 (편성 미완료 시)
   try {
-    const resp = await fetch(`/api/documents/${vs.docId}/pages/${vs.pageNum}/layout`);
+    const resp = await fetch(
+      `/api/documents/${vs.docId}/pages/${vs.pageNum}/layout`,
+    );
     if (!resp.ok) return;
     const layout = await resp.json();
     const blocks = layout.blocks || [];
@@ -243,7 +254,6 @@ async function _onAnnBlockChange() {
   _renderStatusSummary();
 }
 
-
 /* ────────────────────────────────────
    데이터 로드
    ──────────────────────────────────── */
@@ -263,17 +273,22 @@ async function _loadBlockText(blockId) {
     //   편성 이후에 교감/교정을 수정하면 TextBlock에는 반영되지 않는다.
     //   따라서 source_refs를 통해 원본 문서의 최신 교정 텍스트를 가져온다.
     //   교정 텍스트를 못 가져오면 TextBlock 원본을 폴백으로 사용한다.
-    if (!is || !is.interpId) { annState.originalText = ""; return; }
+    if (!is || !is.interpId) {
+      annState.originalText = "";
+      return;
+    }
     const apiBlockId = blockId.slice(3);
     let tbData = null;
 
     // TextBlock 정보 조회 (source_refs 필요)
     try {
       const tbRes = await fetch(
-        `/api/interpretations/${is.interpId}/entities/text_block/${apiBlockId}`
+        `/api/interpretations/${is.interpId}/entities/text_block/${apiBlockId}`,
       );
       if (tbRes.ok) tbData = await tbRes.json();
-    } catch { /* 폴백 처리 아래 */ }
+    } catch {
+      /* 폴백 처리 아래 */
+    }
 
     // source_refs에서 원본 문서의 교정 텍스트를 가져온다
     let correctedText = "";
@@ -283,14 +298,18 @@ async function _loadBlockText(blockId) {
       for (const refPage of refPages) {
         try {
           const ctRes = await fetch(
-            `/api/documents/${vs.docId}/pages/${refPage}/corrected-text?part_id=${vs.partId}`
+            `/api/documents/${vs.docId}/pages/${refPage}/corrected-text?part_id=${vs.partId}`,
           );
           if (ctRes.ok) {
             const ctData = await ctRes.json();
-            const pageRefs = tbData.source_refs.filter((r) => r.page === refPage);
+            const pageRefs = tbData.source_refs.filter(
+              (r) => r.page === refPage,
+            );
             for (const ref of pageRefs) {
               if (ref.layout_block_id && ctData.blocks) {
-                const match = ctData.blocks.find((b) => b.block_id === ref.layout_block_id);
+                const match = ctData.blocks.find(
+                  (b) => b.block_id === ref.layout_block_id,
+                );
                 if (match) {
                   texts.push(match.corrected_text || match.original_text || "");
                   continue;
@@ -301,7 +320,9 @@ async function _loadBlockText(blockId) {
               }
             }
           }
-        } catch { /* skip */ }
+        } catch {
+          /* skip */
+        }
       }
       correctedText = texts.join("\n");
     }
@@ -311,24 +332,30 @@ async function _loadBlockText(blockId) {
       annState.originalText = correctedText;
     } else {
       const sel = document.getElementById("ann-block-select");
-      const selectedOpt = sel ? sel.querySelector(`option[value="${blockId}"]`) : null;
-      annState.originalText = (selectedOpt && selectedOpt.dataset.text)
-        ? selectedOpt.dataset.text
-        : (tbData ? tbData.original_text || "" : "");
+      const selectedOpt = sel
+        ? sel.querySelector(`option[value="${blockId}"]`)
+        : null;
+      annState.originalText =
+        selectedOpt && selectedOpt.dataset.text
+          ? selectedOpt.dataset.text
+          : tbData
+            ? tbData.original_text || ""
+            : "";
     }
   } else {
     // ── LayoutBlock 모드 (하위 호환) ──
     // 교정 텍스트 API를 사용하여 해당 블록의 교정된 텍스트를 가져온다.
     try {
       const resp = await fetch(
-        `/api/documents/${vs.docId}/pages/${vs.pageNum}/corrected-text?part_id=${vs.partId}`
+        `/api/documents/${vs.docId}/pages/${vs.pageNum}/corrected-text?part_id=${vs.partId}`,
       );
       if (!resp.ok) return;
       const data = await resp.json();
       const blocks = data.blocks || [];
-      const match = blocks.find(b => b.block_id === blockId);
+      const match = blocks.find((b) => b.block_id === blockId);
       if (match) {
-        annState.originalText = match.corrected_text || match.original_text || "";
+        annState.originalText =
+          match.corrected_text || match.original_text || "";
       } else {
         annState.originalText = data.corrected_text || "";
       }
@@ -349,14 +376,16 @@ async function _loadBlockAnnotations(blockId) {
   const apiBlockId = blockId.startsWith("tb:") ? blockId.slice(3) : blockId;
 
   try {
-    const resp = await fetch(`/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations`);
+    const resp = await fetch(
+      `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations`,
+    );
     if (!resp.ok) {
       annState.annotations = [];
       return;
     }
     const data = await resp.json();
     const blocks = data.blocks || [];
-    const block = blocks.find(b => b.block_id === apiBlockId);
+    const block = blocks.find((b) => b.block_id === apiBlockId);
     annState.annotations = block ? block.annotations : [];
   } catch (e) {
     console.error("주석 로드 실패:", e);
@@ -376,7 +405,7 @@ async function _loadBlockPunctuation(blockId) {
 
   try {
     const resp = await fetch(
-      `/api/interpretations/${is.interpId}/pages/${vs.pageNum}/punctuation?block_id=${apiBlockId}`
+      `/api/interpretations/${is.interpId}/pages/${vs.pageNum}/punctuation?block_id=${apiBlockId}`,
     );
     if (resp.ok) {
       const data = await resp.json();
@@ -389,7 +418,6 @@ async function _loadBlockPunctuation(blockId) {
     annState.punctMarks = [];
   }
 }
-
 
 /* ────────────────────────────────────
    원문 렌더링 (하이라이팅)
@@ -404,7 +432,6 @@ function _renderSourceText() {
     container.textContent = "(텍스트 없음)";
     return;
   }
-
   const n = text.length;
 
   // ── 표점 before/after 버퍼 구성 ──
@@ -481,12 +508,11 @@ function _renderSourceText() {
 }
 
 function _getAnnotationTooltip(annId) {
-  const ann = annState.annotations.find(a => a.id === annId);
+  const ann = annState.annotations.find((a) => a.id === annId);
   if (!ann) return "";
   const typeInfo = _getTypeInfo(ann.type);
   return `${typeInfo.icon} ${ann.content.label} [${ann.status}]`;
 }
-
 
 /* ────────────────────────────────────
    텍스트 범위 선택 → 수동 주석 추가
@@ -527,7 +553,7 @@ function _annDisplayOffsetToOriginal(displayOffset, originalText, punctMarks) {
     displayPos += beforeBuf[i].length;
     if (displayPos > displayOffset) return i;
 
-    displayPos += 1;  // 원문 글자 1자
+    displayPos += 1; // 원문 글자 1자
     if (displayPos > displayOffset) return i;
 
     displayPos += afterBuf[i].length;
@@ -559,7 +585,11 @@ function _onTextSelection() {
   const range = selection.getRangeAt(0);
 
   // 선택이 원문 컨테이너 내부인지 확인
-  if (!container.contains(range.startContainer) || !container.contains(range.endContainer)) return;
+  if (
+    !container.contains(range.startContainer) ||
+    !container.contains(range.endContainer)
+  )
+    return;
 
   // container 기준 표시 오프셋 계산 (표점 포함)
   const preRange = document.createRange();
@@ -575,8 +605,16 @@ function _onTextSelection() {
   if (displayStart > displayEnd || displayEnd < 0) return;
 
   // 표시 오프셋 → 원문 오프셋 변환 (표점 기호를 제외한 위치)
-  const startIdx = _annDisplayOffsetToOriginal(displayStart, text, annState.punctMarks);
-  const endIdx = _annDisplayOffsetToOriginal(displayEnd, text, annState.punctMarks);
+  const startIdx = _annDisplayOffsetToOriginal(
+    displayStart,
+    text,
+    annState.punctMarks,
+  );
+  const endIdx = _annDisplayOffsetToOriginal(
+    displayEnd,
+    text,
+    annState.punctMarks,
+  );
 
   if (startIdx < 0 || endIdx < 0 || startIdx > endIdx) return;
 
@@ -585,7 +623,7 @@ function _onTextSelection() {
 
   const typeId = prompt(
     `"${actualText}"에 주석을 추가합니다.\n유형을 입력하세요 (person/place/term/allusion/note):`,
-    "note"
+    "note",
   );
   if (!typeId) return;
 
@@ -618,7 +656,7 @@ async function _addManualAnnotation(start, end, typeId, label, description) {
           type: typeId,
           content: { label, description, references: [] },
         }),
-      }
+      },
     );
 
     if (resp.ok) {
@@ -631,7 +669,6 @@ async function _addManualAnnotation(start, end, typeId, label, description) {
     console.error("주석 추가 실패:", e);
   }
 }
-
 
 /**
  * 원문의 [start, end] 범위에 표점 부호를 적용한 텍스트 반환.
@@ -662,6 +699,28 @@ function _punctuateSlice(start, end) {
   return result;
 }
 
+function _composePunctuatedTextForAi(originalText, punctMarks) {
+  if (!originalText) return "";
+  const n = originalText.length;
+  if (n === 0) return "";
+
+  const beforeBuf = new Array(n).fill("");
+  const afterBuf = new Array(n).fill("");
+
+  for (const mark of punctMarks || []) {
+    const start = mark.target?.start ?? 0;
+    const end = mark.target?.end ?? start;
+    if (start < 0 || end >= n || start > end) continue;
+    if (mark.before) beforeBuf[start] += mark.before;
+    if (mark.after) afterBuf[end] += mark.after;
+  }
+
+  let out = "";
+  for (let i = 0; i < n; i++) {
+    out += beforeBuf[i] + originalText[i] + afterBuf[i];
+  }
+  return out;
+}
 
 /* ────────────────────────────────────
    주석 목록 렌더링
@@ -676,11 +735,12 @@ function _renderAnnList() {
 
   let anns = annState.annotations;
   if (filterType) {
-    anns = anns.filter(a => a.type === filterType);
+    anns = anns.filter((a) => a.type === filterType);
   }
 
   if (anns.length === 0) {
-    container.innerHTML = '<div class="placeholder">주석이 없습니다. 텍스트를 선택하거나 AI 태깅을 실행하세요.</div>';
+    container.innerHTML =
+      '<div class="placeholder">주석이 없습니다. 텍스트를 선택하거나 AI 태깅을 실행하세요.</div>';
     return;
   }
 
@@ -692,13 +752,17 @@ function _renderAnnList() {
     const typeInfo = _getTypeInfo(ann.type);
     const card = document.createElement("div");
     card.className = "ann-card";
-    if (ann.id === annState.selectedAnnId) card.classList.add("ann-card-selected");
+    if (ann.id === annState.selectedAnnId)
+      card.classList.add("ann-card-selected");
 
     const sourceText = _punctuateSlice(ann.target.start, ann.target.end);
 
-    const statusClass = ann.status === "accepted" ? "ann-status-accepted"
-                      : ann.status === "draft" ? "ann-status-draft"
-                      : "ann-status-reviewed";
+    const statusClass =
+      ann.status === "accepted"
+        ? "ann-status-accepted"
+        : ann.status === "draft"
+          ? "ann-status-draft"
+          : "ann-status-reviewed";
 
     card.innerHTML = `
       <div class="ann-card-header">
@@ -724,12 +788,13 @@ function _renderStatusSummary() {
   if (!el) return;
 
   const total = annState.annotations.length;
-  const accepted = annState.annotations.filter(a => a.status === "accepted").length;
-  const draft = annState.annotations.filter(a => a.status === "draft").length;
+  const accepted = annState.annotations.filter(
+    (a) => a.status === "accepted",
+  ).length;
+  const draft = annState.annotations.filter((a) => a.status === "draft").length;
 
   el.textContent = `전체 ${total} / 확정 ${accepted} / 초안 ${draft}`;
 }
-
 
 /* ────────────────────────────────────
    주석 선택 → 편집 패널
@@ -737,7 +802,7 @@ function _renderStatusSummary() {
 
 function _selectAnnotation(annId) {
   annState.selectedAnnId = annId;
-  const ann = annState.annotations.find(a => a.id === annId);
+  const ann = annState.annotations.find((a) => a.id === annId);
   if (!ann) return;
 
   const editPanel = document.getElementById("ann-edit-panel");
@@ -772,7 +837,6 @@ function _closeEditPanel() {
   _renderAnnList();
 }
 
-
 /* ────────────────────────────────────
    편집 패널 액션
    ──────────────────────────────────── */
@@ -793,9 +857,13 @@ async function _saveEditedAnnotation() {
   const descInput = document.getElementById("ann-edit-desc");
   const refsInput = document.getElementById("ann-edit-refs");
 
-  const refs = (refsInput && refsInput.value)
-    ? refsInput.value.split(",").map(s => s.trim()).filter(Boolean)
-    : [];
+  const refs =
+    refsInput && refsInput.value
+      ? refsInput.value
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
 
   const updates = {
     type: typeSelect ? typeSelect.value : undefined,
@@ -813,7 +881,7 @@ async function _saveEditedAnnotation() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
-      }
+      },
     );
 
     if (resp.ok) {
@@ -846,7 +914,7 @@ async function _acceptAnnotation() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
-      }
+      },
     );
 
     if (resp.ok) {
@@ -876,7 +944,7 @@ async function _deleteAnnotation() {
   try {
     const resp = await fetch(
       `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/${blockId}/${annId}`,
-      { method: "DELETE" }
+      { method: "DELETE" },
     );
 
     if (resp.ok || resp.status === 204) {
@@ -893,7 +961,6 @@ async function _deleteAnnotation() {
   }
 }
 
-
 /* ────────────────────────────────────
    AI 태깅 / 일괄 확정
    ──────────────────────────────────── */
@@ -908,8 +975,9 @@ async function _aiTagAll() {
    *   4. UI 갱신
    */
   const text = annState.originalText;
+  const aiInputText = _composePunctuatedTextForAi(text, annState.punctMarks);
   if (!text) {
-    showToast("태깅할 텍스트가 없습니다. 먼저 블록을 선택하세요.", 'warning');
+    showToast("태깅할 텍스트가 없습니다. 먼저 블록을 선택하세요.", "warning");
     return;
   }
 
@@ -920,7 +988,7 @@ async function _aiTagAll() {
   const interpId = (is && is.interpId) || "default";
   const blockId = _annApiBlockId();
   if (!blockId) {
-    showToast("블록을 먼저 선택하세요.", 'warning');
+    showToast("블록을 먼저 선택하세요.", "warning");
     return;
   }
 
@@ -933,11 +1001,12 @@ async function _aiTagAll() {
 
   try {
     // LLM 프로바이더/모델 선택 반영
-    const llmSel = typeof getLlmModelSelection === "function"
-      ? getLlmModelSelection("ann-llm-model-select")
-      : { force_provider: null, force_model: null };
+    const llmSel =
+      typeof getLlmModelSelection === "function"
+        ? getLlmModelSelection("ann-llm-model-select")
+        : { force_provider: null, force_model: null };
 
-    const reqBody = { text };
+    const reqBody = { text: aiInputText || text };
     if (llmSel.force_provider) reqBody.force_provider = llmSel.force_provider;
     if (llmSel.force_model) reqBody.force_model = llmSel.force_model;
 
@@ -955,7 +1024,7 @@ async function _aiTagAll() {
           showEditorProgress("ann", true, `AI 태깅 처리 중... ${sec}초 경과`);
         }
       },
-      "/api/llm/annotation"
+      "/api/llm/annotation",
     );
     const aiAnnotations = data.annotations || [];
 
@@ -965,24 +1034,29 @@ async function _aiTagAll() {
     }
 
     // 2. 인덱스 보정 후 일괄 저장 (batch POST)
-    // 각 태깅의 end 인덱스를 보정한다
+    // AI가 반환한 인덱스/텍스트를 원문 기준으로 정규화한다.
     const batchPayload = [];
     for (const ann of aiAnnotations) {
-      const start = ann.start;
-      let end = ann.end;
-      if (end <= start && ann.text) {
-        end = start + ann.text.length - 1;
-      } else if (end > start && end >= text.length) {
-        end = text.length - 1;
-      }
-      if (ann.text && (end - start + 1) > ann.text.length) {
-        end = start + ann.text.length - 1;
-      }
+      const resolvedRange = _resolveAiAnnotationRangeWithPunctuation(
+        ann,
+        text,
+        annState.punctMarks,
+      );
+      if (!resolvedRange) continue;
+
+      const start = resolvedRange.start;
+      const end = resolvedRange.end;
+      if (start < 0 || end < start || end >= text.length) continue;
+
+      const labelText =
+        _normalizeAiTagText(ann.label || ann.text || "") ||
+        text.slice(start, end + 1);
+
       batchPayload.push({
         target: { start, end },
         type: ann.type || "term",
         content: {
-          label: ann.label || ann.text || "",
+          label: labelText,
           description: ann.description || "",
           references: [],
         },
@@ -999,7 +1073,7 @@ async function _aiTagAll() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ annotations: batchPayload }),
-        }
+        },
       );
       if (batchResp.ok) {
         const batchResult = await batchResp.json();
@@ -1018,7 +1092,7 @@ async function _aiTagAll() {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(payload),
-            }
+            },
           );
           if (saveResp.ok) savedCount++;
         } catch (e) {
@@ -1032,11 +1106,12 @@ async function _aiTagAll() {
     _renderSourceText();
     _renderAnnList();
     _renderStatusSummary();
-    _showSaveStatus(`AI 태깅 완료: ${savedCount}개 주석 (${data._provider || "LLM"})`);
-
+    _showSaveStatus(
+      `AI 태깅 완료: ${savedCount}개 주석 (${data._provider || "LLM"})`,
+    );
   } catch (e) {
     console.error("AI 태깅 실패:", e);
-    showToast("AI 태깅 실패: " + e.message, 'error');
+    showToast("AI 태깅 실패: " + e.message, "error");
   } finally {
     // 진행 바 숨김 + 버튼 복원
     if (typeof showEditorProgress === "function") {
@@ -1059,7 +1134,7 @@ async function _commitAllDrafts() {
   try {
     const resp = await fetch(
       `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/commit-all`,
-      { method: "POST" }
+      { method: "POST" },
     );
 
     if (resp.ok) {
@@ -1075,42 +1150,225 @@ async function _commitAllDrafts() {
   }
 }
 
-
 /* ────────────────────────────────────
-   유형 관리 다이얼로그
+   유형 관리 다이얼로그 (모달)
+
+   왜 이렇게 하는가:
+     기존 prompt() 4연타 방식은 기존 유형 확인·삭제가 불가능하고,
+     색상을 hex로 직접 입력해야 해서 연구자에게 불편하다.
+     bib-dialog 패턴의 모달로 교체하여
+     목록 조회 + 추가 + 삭제를 한 화면에서 처리한다.
    ──────────────────────────────────── */
 
+/**
+ * 유형 관리 모달을 연다.
+ *
+ * 목적: 기본 프리셋 + 사용자 정의 유형 목록을 보여주고,
+ *       새 유형 추가 / 기존 커스텀 유형 삭제를 가능하게 한다.
+ */
 async function _showTypeMgmtDialog() {
-  const id = prompt("새 유형 ID (영문, 예: sutra_ref):");
-  if (!id) return;
+  const overlay = document.getElementById("atm-dialog-overlay");
+  if (!overlay) return;
 
-  const label = prompt("유형 이름 (한글):");
-  if (!label) return;
+  overlay.style.display = "";
+  await _renderTypeList();
 
-  const color = prompt("색상 (예: #FF6600):", "#888888");
-  if (!color) return;
+  // 이벤트 바인딩 (중복 방지를 위해 매번 재바인딩)
+  const closeBtn = document.getElementById("atm-dialog-close");
+  const doneBtn = document.getElementById("atm-dialog-done");
+  if (closeBtn) closeBtn.onclick = _closeTypeMgmtDialog;
+  if (doneBtn) doneBtn.onclick = _closeTypeMgmtDialog;
 
-  const icon = prompt("아이콘 (이모지):", "🏷️");
+  // 오버레이 클릭으로 닫기
+  overlay.onclick = (e) => {
+    if (e.target === overlay) _closeTypeMgmtDialog();
+  };
+}
+
+/**
+ * 유형 관리 모달을 닫고, 유형 필터·편집 셀렉트를 갱신한다.
+ */
+function _closeTypeMgmtDialog() {
+  const overlay = document.getElementById("atm-dialog-overlay");
+  if (overlay) overlay.style.display = "none";
+  // 모달에서 추가/삭제했을 수 있으므로 셀렉트 박스 갱신
+  _populateTypeFilter();
+  _populateEditTypeSelect();
+}
+
+/**
+ * 모달 본문에 유형 목록 + 추가 폼을 렌더링한다.
+ *
+ * 출력 구조:
+ *   ── 기본 프리셋 ── (읽기 전용 카드)
+ *   ── 사용자 정의 ── (삭제 버튼 포함 카드)
+ *   ── 새 유형 추가 ── (입력 폼)
+ */
+async function _renderTypeList() {
+  const body = document.getElementById("atm-dialog-body");
+  if (!body) return;
+
+  // API에서 최신 유형 목록 가져오기
+  let data;
+  try {
+    const resp = await fetch("/api/annotation-types");
+    if (!resp.ok) throw new Error("API 오류");
+    data = await resp.json();
+  } catch (e) {
+    body.innerHTML = '<p style="color:var(--error-color)">유형 목록을 불러올 수 없습니다.</p>';
+    return;
+  }
+
+  const presets = data.types || [];
+  const custom = data.custom || [];
+
+  let html = "";
+
+  // ── 기본 프리셋 ──
+  html += '<div class="atm-section-title">기본 프리셋</div>';
+  for (const t of presets) {
+    html += `
+      <div class="atm-type-card">
+        <span class="atm-type-color" style="background:${_escAttr(t.color)}"></span>
+        <span class="atm-type-icon">${_escHtml(t.icon || "🏷️")}</span>
+        <span class="atm-type-label">${_escHtml(t.label)}</span>
+        <span class="atm-type-id">${_escHtml(t.id)}</span>
+      </div>`;
+  }
+
+  // ── 사용자 정의 ──
+  html += '<div class="atm-section-title" style="margin-top:12px">사용자 정의</div>';
+  if (custom.length === 0) {
+    html += '<div class="atm-empty">아직 추가된 유형이 없습니다.</div>';
+  } else {
+    for (const t of custom) {
+      html += `
+        <div class="atm-type-card">
+          <span class="atm-type-color" style="background:${_escAttr(t.color)}"></span>
+          <span class="atm-type-icon">${_escHtml(t.icon || "🏷️")}</span>
+          <span class="atm-type-label">${_escHtml(t.label)}</span>
+          <span class="atm-type-id">${_escHtml(t.id)}</span>
+          <button class="text-btn atm-delete-btn" data-type-id="${_escAttr(t.id)}" title="삭제">삭제</button>
+        </div>`;
+    }
+  }
+
+  // ── 새 유형 추가 폼 ──
+  html += `
+    <div class="atm-section-title" style="margin-top:12px">새 유형 추가</div>
+    <div class="atm-add-form">
+      <div class="atm-form-row">
+        <label class="atm-form-label">ID (영문)</label>
+        <input id="atm-new-id" type="text" class="bib-input" placeholder="예: sutra_ref" />
+      </div>
+      <div class="atm-form-row">
+        <label class="atm-form-label">이름</label>
+        <input id="atm-new-label" type="text" class="bib-input" placeholder="예: 경전 참조" />
+      </div>
+      <div class="atm-form-row">
+        <label class="atm-form-label">아이콘</label>
+        <input id="atm-new-icon" type="text" class="bib-input" placeholder="🏷️" value="🏷️" style="width:60px" />
+      </div>
+      <div class="atm-form-row">
+        <label class="atm-form-label">색상</label>
+        <input id="atm-new-color" type="color" class="atm-color-input" value="#888888" />
+      </div>
+      <div class="atm-form-actions">
+        <button id="atm-add-btn" class="bib-btn bib-btn-primary">추가</button>
+      </div>
+    </div>`;
+
+  body.innerHTML = html;
+
+  // 추가 버튼 바인딩
+  const addBtn = document.getElementById("atm-add-btn");
+  if (addBtn) addBtn.addEventListener("click", _addCustomType);
+
+  // 삭제 버튼 바인딩
+  for (const btn of body.querySelectorAll(".atm-delete-btn")) {
+    btn.addEventListener("click", () => _deleteCustomType(btn.dataset.typeId));
+  }
+}
+
+/**
+ * 폼 입력값을 읽어 사용자 정의 유형을 추가한다.
+ *
+ * 입력 검증 → POST /api/annotation-types → 목록 갱신.
+ */
+async function _addCustomType() {
+  const id = (document.getElementById("atm-new-id")?.value || "").trim();
+  const label = (document.getElementById("atm-new-label")?.value || "").trim();
+  const icon = (document.getElementById("atm-new-icon")?.value || "").trim() || "🏷️";
+  const color = document.getElementById("atm-new-color")?.value || "#888888";
+  const status = document.getElementById("atm-dialog-status");
+
+  if (!id) { showToast("ID를 입력하세요.", "warning"); return; }
+  if (!label) { showToast("이름을 입력하세요.", "warning"); return; }
+  // ID는 영문+숫자+밑줄만 허용
+  if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(id)) {
+    showToast("ID는 영문으로 시작하고, 영문·숫자·밑줄만 사용할 수 있습니다.", "warning");
+    return;
+  }
 
   try {
     const resp = await fetch("/api/annotation-types", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, label, color, icon: icon || "🏷️" }),
+      body: JSON.stringify({ id, label, color, icon }),
     });
 
     if (resp.ok) {
-      _showSaveStatus("유형 추가 완료");
+      if (status) status.textContent = "추가 완료";
       await _loadAnnotationTypes();
+      await _renderTypeList();
     } else {
       const err = await resp.json();
-      showToast("유형 추가 실패: " + (err.error || "알 수 없는 오류"), 'error');
+      showToast("유형 추가 실패: " + (err.error || "알 수 없는 오류"), "error");
     }
   } catch (e) {
     console.error("유형 추가 실패:", e);
+    showToast("유형 추가 중 오류가 발생했습니다.", "error");
   }
 }
 
+/**
+ * 사용자 정의 유형을 삭제한다.
+ *
+ * 입력: typeId — 삭제할 유형 ID.
+ * confirm() 후 DELETE /api/annotation-types/{typeId} → 목록 갱신.
+ */
+async function _deleteCustomType(typeId) {
+  if (!confirm(`유형 '${typeId}'를 삭제하시겠습니까?`)) return;
+  const status = document.getElementById("atm-dialog-status");
+
+  try {
+    const resp = await fetch(`/api/annotation-types/${encodeURIComponent(typeId)}`, {
+      method: "DELETE",
+    });
+
+    if (resp.ok || resp.status === 204) {
+      if (status) status.textContent = "삭제 완료";
+      await _loadAnnotationTypes();
+      await _renderTypeList();
+    } else {
+      const err = await resp.json().catch(() => ({}));
+      showToast("유형 삭제 실패: " + (err.error || "알 수 없는 오류"), "error");
+    }
+  } catch (e) {
+    console.error("유형 삭제 실패:", e);
+    showToast("유형 삭제 중 오류가 발생했습니다.", "error");
+  }
+}
+
+/** HTML 이스케이프 (속성용) */
+function _escAttr(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** HTML 이스케이프 (텍스트 콘텐츠용) */
+function _escHtml(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 
 /* ────────────────────────────────────
    전체 리셋: 현재 페이지의 모든 주석 삭제
@@ -1127,7 +1385,7 @@ async function _resetAllAnnotations() {
   const vs = typeof viewerState !== "undefined" ? viewerState : null;
   const is = typeof interpState !== "undefined" ? interpState : null;
   if (!vs || !vs.pageNum) {
-    showToast("페이지가 선택되어야 합니다.", 'warning');
+    showToast("페이지가 선택되어야 합니다.", "warning");
     return;
   }
 
@@ -1135,30 +1393,33 @@ async function _resetAllAnnotations() {
   const blockId = _annApiBlockId();
 
   if (!blockId) {
-    showToast("블록을 먼저 선택하세요.", 'warning');
+    showToast("블록을 먼저 선택하세요.", "warning");
     return;
   }
 
   if (annState.annotations.length === 0) {
-    showToast("삭제할 주석이 없습니다.", 'warning');
+    showToast("삭제할 주석이 없습니다.", "warning");
     return;
   }
 
-  if (!confirm(
-    `현재 블록(${blockId})의 주석 ${annState.annotations.length}건을 모두 삭제합니다.\n이 작업은 되돌릴 수 없습니다. 계속하시겠습니까?`
-  )) return;
+  if (
+    !confirm(
+      `현재 블록(${blockId})의 주석 ${annState.annotations.length}건을 모두 삭제합니다.\n이 작업은 되돌릴 수 없습니다. 계속하시겠습니까?`,
+    )
+  )
+    return;
 
   let success = 0;
   let fail = 0;
 
   // 주석 ID 목록을 미리 복사 (삭제 중 배열 변경 방지)
-  const ids = annState.annotations.map(a => a.id);
+  const ids = annState.annotations.map((a) => a.id);
 
   for (const annId of ids) {
     try {
       const resp = await fetch(
         `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/${blockId}/${annId}`,
-        { method: "DELETE" }
+        { method: "DELETE" },
       );
       if (resp.ok || resp.status === 204) {
         success++;
@@ -1179,12 +1440,11 @@ async function _resetAllAnnotations() {
   _renderStatusSummary();
 
   if (fail > 0) {
-    showToast(`주석 리셋 완료: 성공 ${success}건, 실패 ${fail}건`, 'error');
+    showToast(`주석 리셋 완료: 성공 ${success}건, 실패 ${fail}건`, "error");
   } else {
     _showSaveStatus(`주석 ${success}건 삭제 완료`);
   }
 }
-
 
 /* ────────────────────────────────────
    유틸리티
@@ -1194,9 +1454,355 @@ function _showSaveStatus(msg) {
   const el = document.getElementById("ann-save-status");
   if (!el) return;
   el.textContent = msg;
-  setTimeout(() => { el.textContent = ""; }, 2000);
+  setTimeout(() => {
+    el.textContent = "";
+  }, 2000);
 }
 
+function _normalizeAiTagText(rawText) {
+  if (!rawText || typeof rawText !== "string") return "";
+  let text = rawText.trim();
+  if (!text) return "";
+
+  const leading = /^[\s"'“”‘’「『《〈【〔（\(\[]+/u;
+  const trailing = /[\s"'“”‘’」』》〉】〕）\)\]]+$/u;
+
+  while (leading.test(text)) {
+    text = text.replace(leading, "").trim();
+  }
+  while (trailing.test(text)) {
+    text = text.replace(trailing, "").trim();
+  }
+
+  return text;
+}
+
+const _AI_RANGE_IGNORABLE_CHAR_RE =
+  /[\s,.;:!?'"`~\-_=+\/\\|()[\]{}<>«»“”‘’‹›《》〈〉「」『』【】〔〕［］｛｝（）﹙﹚﹛﹜、。；：？！…·・，．]/u;
+
+function _toAiIndex(value, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.trunc(n);
+}
+
+function _buildAiRangeIndexMap(text) {
+  const strippedChars = [];
+  const strippedToOriginal = [];
+  const originalToStripped = new Array(text.length).fill(-1);
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (_AI_RANGE_IGNORABLE_CHAR_RE.test(ch)) continue;
+    originalToStripped[i] = strippedChars.length;
+    strippedToOriginal.push(i);
+    strippedChars.push(ch);
+  }
+
+  return {
+    strippedText: strippedChars.join(""),
+    strippedToOriginal,
+    originalToStripped,
+  };
+}
+
+function _findNearestOccurrence(haystack, needle, hintIndex) {
+  if (!haystack || !needle) return -1;
+  let pos = haystack.indexOf(needle);
+  if (pos === -1) return -1;
+
+  let bestPos = pos;
+  let bestDist = Math.abs(pos - hintIndex);
+
+  while (pos !== -1) {
+    const dist = Math.abs(pos - hintIndex);
+    if (dist < bestDist) {
+      bestPos = pos;
+      bestDist = dist;
+      if (bestDist === 0) break;
+    }
+    pos = haystack.indexOf(needle, pos + 1);
+  }
+
+  return bestPos;
+}
+
+function _resolveAiAnnotationRange(ann, originalText) {
+  const n = originalText.length;
+  if (n === 0) return null;
+
+  const target = ann && typeof ann === "object" ? ann.target || {} : {};
+  let start = _toAiIndex(ann?.start, _toAiIndex(target.start, 0));
+  let end = _toAiIndex(ann?.end, _toAiIndex(target.end, start));
+  if (end < start) {
+    const tmp = start;
+    start = end;
+    end = tmp;
+  }
+
+  start = Math.max(0, Math.min(start, n - 1));
+  end = Math.max(start, Math.min(end, n - 1));
+
+  const normalizedText = _normalizeAiTagText(ann?.text || "");
+  if (!normalizedText) {
+    return { start, end };
+  }
+
+  const currentSlice = originalText.slice(start, end + 1);
+  const localIndex = currentSlice.indexOf(normalizedText);
+  if (localIndex !== -1) {
+    const fixedStart = start + localIndex;
+    return {
+      start: fixedStart,
+      end: Math.min(n - 1, fixedStart + normalizedText.length - 1),
+    };
+  }
+
+  const foundStart = _findNearestOccurrence(originalText, normalizedText, start);
+  if (foundStart !== -1) {
+    return {
+      start: foundStart,
+      end: Math.min(n - 1, foundStart + normalizedText.length - 1),
+    };
+  }
+
+  // AI가 표점을 포함한 텍스트를 반환해도 원문 인덱스로 되돌릴 수 있게 보정한다.
+  const sourceMap = _buildAiRangeIndexMap(originalText);
+  const queryMap = _buildAiRangeIndexMap(normalizedText);
+  const strippedNeedle = queryMap.strippedText;
+  if (strippedNeedle) {
+    const strippedHint = sourceMap.originalToStripped[start];
+    const hintIndex = strippedHint >= 0 ? strippedHint : 0;
+    const strippedMatchStart = _findNearestOccurrence(
+      sourceMap.strippedText,
+      strippedNeedle,
+      hintIndex,
+    );
+    if (strippedMatchStart !== -1) {
+      const mappedStart = sourceMap.strippedToOriginal[strippedMatchStart];
+      const mappedEnd =
+        sourceMap.strippedToOriginal[
+          strippedMatchStart + strippedNeedle.length - 1
+        ];
+      if (Number.isInteger(mappedStart) && Number.isInteger(mappedEnd)) {
+        return { start: mappedStart, end: mappedEnd };
+      }
+    }
+  }
+
+  if (start <= end) {
+    return {
+      start,
+      end,
+    };
+  }
+
+  return null;
+}
+
+function _stripAiIgnorableChars(text) {
+  if (!text) return "";
+  let out = "";
+  for (const ch of text) {
+    if (_AI_RANGE_IGNORABLE_CHAR_RE.test(ch)) continue;
+    out += ch;
+  }
+  return out;
+}
+
+function _clampAiRange(range, n) {
+  if (!range || n <= 0) return null;
+  let start = Math.max(0, Math.min(range.start, n - 1));
+  let end = Math.max(0, Math.min(range.end, n - 1));
+  if (end < start) {
+    const tmp = start;
+    start = end;
+    end = tmp;
+  }
+  return { start, end };
+}
+
+function _scoreAiRangeCandidate(range, queryText, originalText) {
+  if (!range || !queryText || !originalText) return 0;
+  const slice = originalText.slice(range.start, range.end + 1);
+  const left = _stripAiIgnorableChars(slice);
+  const right = _stripAiIgnorableChars(queryText);
+  if (!left || !right) return 0;
+  if (left === right) return 3;
+  if (left.includes(right) || right.includes(left)) return 2;
+  if (left[0] === right[0]) return 1;
+  return 0;
+}
+
+function _extractLabelHanjaForAi(label) {
+  const normalizedLabel = _normalizeAiTagText(label || "");
+  if (!normalizedLabel) return "";
+
+  const parenMatches = normalizedLabel.matchAll(/[\(\uff08]([^\)\uff09]+)[\)\uff09]/gu);
+  for (const m of parenMatches) {
+    const inner = _normalizeAiTagText(m[1] || "");
+    if (!inner) continue;
+    if (/[\u3400-\u9fff\uf900-\ufaff]/u.test(inner)) {
+      return inner;
+    }
+  }
+  return "";
+}
+
+function _resolveAiRangeByQuery(queryText, candidateRanges, originalText) {
+  const n = originalText.length;
+  const normalizedText = _normalizeAiTagText(queryText || "");
+  if (!normalizedText) return null;
+
+  for (const range of candidateRanges) {
+    const currentSlice = originalText.slice(range.start, range.end + 1);
+    const localIndex = currentSlice.indexOf(normalizedText);
+    if (localIndex !== -1) {
+      const fixedStart = range.start + localIndex;
+      return {
+        start: fixedStart,
+        end: Math.min(n - 1, fixedStart + normalizedText.length - 1),
+      };
+    }
+  }
+
+  let bestDirect = null;
+  for (const range of candidateRanges) {
+    const foundStart = _findNearestOccurrence(
+      originalText,
+      normalizedText,
+      range.start,
+    );
+    if (foundStart === -1) continue;
+    const dist = Math.abs(foundStart - range.start);
+    if (!bestDirect || dist < bestDirect.dist) {
+      bestDirect = { start: foundStart, dist };
+    }
+  }
+  if (bestDirect) {
+    return {
+      start: bestDirect.start,
+      end: Math.min(n - 1, bestDirect.start + normalizedText.length - 1),
+    };
+  }
+
+  const sourceMap = _buildAiRangeIndexMap(originalText);
+  const queryMap = _buildAiRangeIndexMap(normalizedText);
+  const strippedNeedle = queryMap.strippedText;
+  if (strippedNeedle) {
+    let bestStripped = null;
+    for (const range of candidateRanges) {
+      const strippedHintRaw = sourceMap.originalToStripped[range.start];
+      const hintIndex = strippedHintRaw >= 0 ? strippedHintRaw : 0;
+      const strippedMatchStart = _findNearestOccurrence(
+        sourceMap.strippedText,
+        strippedNeedle,
+        hintIndex,
+      );
+      if (strippedMatchStart === -1) continue;
+      const dist = Math.abs(strippedMatchStart - hintIndex);
+      if (!bestStripped || dist < bestStripped.dist) {
+        bestStripped = { start: strippedMatchStart, dist };
+      }
+    }
+
+    if (bestStripped) {
+      const mappedStart = sourceMap.strippedToOriginal[bestStripped.start];
+      const mappedEnd =
+        sourceMap.strippedToOriginal[
+          bestStripped.start + strippedNeedle.length - 1
+        ];
+      if (Number.isInteger(mappedStart) && Number.isInteger(mappedEnd)) {
+        return { start: mappedStart, end: mappedEnd };
+      }
+    }
+  }
+
+  return null;
+}
+
+function _resolveAiAnnotationRangeWithPunctuation(
+  ann,
+  originalText,
+  punctMarks = [],
+) {
+  const n = originalText.length;
+  if (n === 0) return null;
+
+  const target = ann && typeof ann === "object" ? ann.target || {} : {};
+  let start = _toAiIndex(ann?.start, _toAiIndex(target.start, 0));
+  let end = _toAiIndex(ann?.end, _toAiIndex(target.end, start));
+  if (end < start) {
+    const tmp = start;
+    start = end;
+    end = tmp;
+  }
+
+  const rawRange = _clampAiRange({ start, end }, n);
+  if (!rawRange) return null;
+  const candidateRanges = [rawRange];
+
+  if (Array.isArray(punctMarks) && punctMarks.length > 0) {
+    const displayStart = _annDisplayOffsetToOriginal(
+      start,
+      originalText,
+      punctMarks,
+    );
+    const displayEnd = _annDisplayOffsetToOriginal(end, originalText, punctMarks);
+    const converted = _clampAiRange(
+      {
+        start: Math.min(displayStart, displayEnd),
+        end: Math.max(displayStart, displayEnd),
+      },
+      n,
+    );
+    if (
+      converted &&
+      (converted.start !== rawRange.start || converted.end !== rawRange.end)
+    ) {
+      candidateRanges.push(converted);
+    }
+  }
+
+  const labelHanja = _extractLabelHanjaForAi(ann?.label || "");
+  if (labelHanja) {
+    const byLabelHanja = _resolveAiRangeByQuery(
+      labelHanja,
+      candidateRanges,
+      originalText,
+    );
+    if (byLabelHanja) return byLabelHanja;
+    // 라벨 괄호 내 한자가 있으면 그 값으로 맞지 않는 항목은 버린다.
+    return null;
+  }
+
+  const normalizedText = _normalizeAiTagText(ann?.text || "");
+  if (!normalizedText) {
+    return rawRange;
+  }
+
+  const resolvedByText = _resolveAiRangeByQuery(
+    normalizedText,
+    candidateRanges,
+    originalText,
+  );
+  if (resolvedByText) return resolvedByText;
+
+  let bestRange = rawRange;
+  let bestScore = _scoreAiRangeCandidate(bestRange, normalizedText, originalText);
+  for (let i = 1; i < candidateRanges.length; i++) {
+    const score = _scoreAiRangeCandidate(
+      candidateRanges[i],
+      normalizedText,
+      originalText,
+    );
+    if (score > bestScore) {
+      bestRange = candidateRanges[i];
+      bestScore = score;
+    }
+  }
+  return bestRange;
+}
 
 /* ────────────────────────────────────
    사전형 주석 (Dictionary Annotation)
@@ -1243,14 +1849,12 @@ function initDictAnnotation() {
   if (dictSaveBtn) dictSaveBtn.addEventListener("click", _saveDictFields);
 }
 
-
 function _toggleDictView() {
   _dictViewExpanded = !_dictViewExpanded;
   const btn = document.getElementById("ann-dict-view-toggle");
   if (btn) btn.textContent = _dictViewExpanded ? "사전 접기" : "사전 펼치기";
   _renderAnnList();
 }
-
 
 /* ── 주석 카드에 사전 정보 확장 표시 ── */
 
@@ -1260,15 +1864,14 @@ function _renderDictBadge(ann) {
   if (stage === "none") return "";
 
   const labels = {
-    "from_original": "1단계",
-    "from_translation": "2단계",
-    "from_both": "3단계",
-    "reviewed": "검토완료",
+    from_original: "1단계",
+    from_translation: "2단계",
+    from_both: "3단계",
+    reviewed: "검토완료",
   };
   const label = labels[stage] || stage;
   return `<span class="ann-dict-badge ann-dict-badge-${stage}">${label}</span>`;
 }
-
 
 function _renderDictExpanded(ann) {
   /* 사전 보기가 확장되었을 때 dictionary 필드를 HTML로 렌더링. */
@@ -1289,7 +1892,9 @@ function _renderDictExpanded(ann) {
   }
 
   if (d.source_references && d.source_references.length > 0) {
-    const refs = d.source_references.map(r => r.title + (r.section ? ` ${r.section}` : "")).join(", ");
+    const refs = d.source_references
+      .map((r) => r.title + (r.section ? ` ${r.section}` : ""))
+      .join(", ");
     html += `<div class="ann-dict-refs"><b>출전:</b> ${refs}</div>`;
   }
 
@@ -1301,7 +1906,6 @@ function _renderDictExpanded(ann) {
   return html;
 }
 
-
 /* ── 단계별 사전 생성 ── */
 
 async function _generateDictStage(stageNum) {
@@ -1312,7 +1916,7 @@ async function _generateDictStage(stageNum) {
   const interpId = (is && is.interpId) || "default";
   const blockId = _annApiBlockId();
   if (!blockId) {
-    showToast("블록을 먼저 선택하세요.", 'warning');
+    showToast("블록을 먼저 선택하세요.", "warning");
     return;
   }
 
@@ -1323,9 +1927,10 @@ async function _generateDictStage(stageNum) {
   }
 
   try {
-    const llmSel = typeof getLlmModelSelection === "function"
-      ? getLlmModelSelection("ann-llm-model-select")
-      : { force_provider: null, force_model: null };
+    const llmSel =
+      typeof getLlmModelSelection === "function"
+        ? getLlmModelSelection("ann-llm-model-select")
+        : { force_provider: null, force_model: null };
 
     const reqBody = { block_id: blockId };
     if (llmSel.force_provider) reqBody.force_provider = llmSel.force_provider;
@@ -1337,7 +1942,7 @@ async function _generateDictStage(stageNum) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(reqBody),
-      }
+      },
     );
 
     if (!resp.ok) {
@@ -1353,10 +1958,9 @@ async function _generateDictStage(stageNum) {
     _renderSourceText();
     _renderAnnList();
     _renderStatusSummary();
-
   } catch (e) {
     console.error(`${stageNum}단계 사전 생성 실패:`, e);
-    showToast(`${stageNum}단계 사전 생성 실패: ${e.message}`, 'error');
+    showToast(`${stageNum}단계 사전 생성 실패: ${e.message}`, "error");
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -1365,12 +1969,16 @@ async function _generateDictStage(stageNum) {
   }
 }
 
-
 async function _generateDictBatch() {
   const is = typeof interpState !== "undefined" ? interpState : null;
   const interpId = (is && is.interpId) || "default";
 
-  if (!confirm("전체 문서에 대해 일괄 사전 생성(3단계 직행)을 실행합니다.\n시간이 걸릴 수 있습니다. 진행하시겠습니까?")) return;
+  if (
+    !confirm(
+      "전체 문서에 대해 일괄 사전 생성(3단계 직행)을 실행합니다.\n시간이 걸릴 수 있습니다. 진행하시겠습니까?",
+    )
+  )
+    return;
 
   const btn = document.getElementById("ann-dict-batch-btn");
   if (btn) {
@@ -1379,19 +1987,23 @@ async function _generateDictBatch() {
   }
 
   try {
-    const llmSel = typeof getLlmModelSelection === "function"
-      ? getLlmModelSelection("ann-llm-model-select")
-      : { force_provider: null, force_model: null };
+    const llmSel =
+      typeof getLlmModelSelection === "function"
+        ? getLlmModelSelection("ann-llm-model-select")
+        : { force_provider: null, force_model: null };
 
     const reqBody = {};
     if (llmSel.force_provider) reqBody.force_provider = llmSel.force_provider;
     if (llmSel.force_model) reqBody.force_model = llmSel.force_model;
 
-    const resp = await fetch(`/api/interpretations/${interpId}/annotations/generate-batch`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(reqBody),
-    });
+    const resp = await fetch(
+      `/api/interpretations/${interpId}/annotations/generate-batch`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(reqBody),
+      },
+    );
 
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
@@ -1399,7 +2011,9 @@ async function _generateDictBatch() {
     }
 
     const result = await resp.json();
-    _showSaveStatus(`일괄 생성 완료: ${result.pages_processed}페이지, ${result.total_annotations}개 항목`);
+    _showSaveStatus(
+      `일괄 생성 완료: ${result.pages_processed}페이지, ${result.total_annotations}개 항목`,
+    );
 
     // 현재 블록 갱신
     if (annState.blockId) {
@@ -1408,10 +2022,9 @@ async function _generateDictBatch() {
       _renderAnnList();
       _renderStatusSummary();
     }
-
   } catch (e) {
     console.error("일괄 사전 생성 실패:", e);
-    showToast("일괄 사전 생성 실패: " + e.message, 'error');
+    showToast("일괄 사전 생성 실패: " + e.message, "error");
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -1420,7 +2033,6 @@ async function _generateDictBatch() {
   }
 }
 
-
 /* ── 사전 내보내기/가져오기 ── */
 
 async function _exportDictionary() {
@@ -1428,14 +2040,18 @@ async function _exportDictionary() {
   const interpId = (is && is.interpId) || "default";
 
   try {
-    const resp = await fetch(`/api/interpretations/${interpId}/export/dictionary`);
+    const resp = await fetch(
+      `/api/interpretations/${interpId}/export/dictionary`,
+    );
     if (!resp.ok) throw new Error("내보내기 실패");
 
     const data = await resp.json();
     const count = data.entries ? data.entries.length : 0;
 
     // JSON 다운로드
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -1446,10 +2062,9 @@ async function _exportDictionary() {
     _showSaveStatus(`사전 내보내기: ${count}개 항목`);
   } catch (e) {
     console.error("사전 내보내기 실패:", e);
-    showToast("사전 내보내기 실패: " + e.message, 'error');
+    showToast("사전 내보내기 실패: " + e.message, "error");
   }
 }
-
 
 async function _importDictionary() {
   const is = typeof interpState !== "undefined" ? interpState : null;
@@ -1469,23 +2084,28 @@ async function _importDictionary() {
 
       const strategy = prompt(
         "가져오기 전략을 선택하세요:\n- merge: 기존 항목과 병합\n- skip_existing: 기존 항목 건너뛰기\n- overwrite: 기존 항목 덮어쓰기",
-        "merge"
+        "merge",
       );
       if (!strategy) return;
 
-      const resp = await fetch(`/api/interpretations/${interpId}/import/dictionary`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dictionary_data: dictData,
-          merge_strategy: strategy,
-        }),
-      });
+      const resp = await fetch(
+        `/api/interpretations/${interpId}/import/dictionary`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            dictionary_data: dictData,
+            merge_strategy: strategy,
+          }),
+        },
+      );
 
       if (!resp.ok) throw new Error("가져오기 실패");
 
       const result = await resp.json();
-      _showSaveStatus(`가져오기: 새로 ${result.imported}개, 병합 ${result.merged}개, 건너뜀 ${result.skipped}개`);
+      _showSaveStatus(
+        `가져오기: 새로 ${result.imported}개, 병합 ${result.merged}개, 건너뜀 ${result.skipped}개`,
+      );
 
       // 갱신
       if (annState.blockId) {
@@ -1495,12 +2115,11 @@ async function _importDictionary() {
       }
     } catch (err) {
       console.error("사전 가져오기 실패:", err);
-      showToast("사전 가져오기 실패: " + err.message, 'error');
+      showToast("사전 가져오기 실패: " + err.message, "error");
     }
   });
   input.click();
 }
-
 
 /* ── 사전 편집 필드 (편집 패널 확장) ── */
 
@@ -1526,7 +2145,8 @@ function _populateDictEditFields(ann) {
   if (ctxMeaning) ctxMeaning.value = d.contextual_meaning || "";
 
   const refs = document.getElementById("ann-dict-src-refs");
-  if (refs) refs.value = (d.source_references || []).map(r => r.title).join(", ");
+  if (refs)
+    refs.value = (d.source_references || []).map((r) => r.title).join(", ");
 
   const related = document.getElementById("ann-dict-related");
   if (related) related.value = (d.related_terms || []).join(", ");
@@ -1534,7 +2154,6 @@ function _populateDictEditFields(ann) {
   const notes = document.getElementById("ann-dict-notes");
   if (notes) notes.value = d.notes || "";
 }
-
 
 async function _saveDictFields() {
   /* 사전 편집 필드를 서버에 저장한다. */
@@ -1556,13 +2175,21 @@ async function _saveDictFields() {
   const related = document.getElementById("ann-dict-related");
   const notes = document.getElementById("ann-dict-notes");
 
-  const sourceRefs = refs && refs.value
-    ? refs.value.split(",").map(s => ({ title: s.trim() })).filter(r => r.title)
-    : [];
+  const sourceRefs =
+    refs && refs.value
+      ? refs.value
+          .split(",")
+          .map((s) => ({ title: s.trim() }))
+          .filter((r) => r.title)
+      : [];
 
-  const relatedTerms = related && related.value
-    ? related.value.split(",").map(s => s.trim()).filter(Boolean)
-    : [];
+  const relatedTerms =
+    related && related.value
+      ? related.value
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
 
   const dictionary = {
     headword: hw ? hw.value : "",
@@ -1581,7 +2208,7 @@ async function _saveDictFields() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dictionary }),
-      }
+      },
     );
 
     if (resp.ok) {

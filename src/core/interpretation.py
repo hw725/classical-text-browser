@@ -639,21 +639,17 @@ def get_layer_content_at_commit(
     # 기본 경로 + 전문 편집기 경로를 후보 목록으로 구성
     candidates = []
 
-    # 1. 기본 경로 (_layer_file_path 로직)
-    if layer == "L7_annotation":
-        candidates.append(f"{layer}/{filename_base}.json")
-    elif layer == "L6_translation":
-        candidates.append(f"{layer}/{sub_type}/{filename_base}.txt")
-    else:
-        candidates.append(f"{layer}/{sub_type}/{filename_base}.json")
-
-    # 2. 전문 편집기 경로 (_find_specialized_file 로직)
+    # 비교 뷰에서는 텍스트 블록 기반 전문 포맷(_translation/_annotation 등)을 우선한다.
     if layer == "L6_translation":
         candidates.append(f"L6_translation/{sub_type}/{filename_base}_translation.json")
+        candidates.append(f"{layer}/{sub_type}/{filename_base}.txt")
     elif layer == "L7_annotation":
         candidates.append(f"L7_annotation/{sub_type}/{filename_base}_annotation.json")
-    elif layer == "L5_reading":
-        candidates.append(f"L5_reading/{sub_type}/{filename_base}_punctuation.json")
+        candidates.append(f"{layer}/{filename_base}.json")
+    else:
+        candidates.append(f"{layer}/{sub_type}/{filename_base}.json")
+        if layer == "L5_reading":
+            candidates.append(f"L5_reading/{sub_type}/{filename_base}_punctuation.json")
 
     # git tree에서 후보 경로를 순서대로 탐색
     try:
@@ -776,36 +772,82 @@ def get_l5_compare_at_commit(
     except KeyError:
         pass
 
+    # Legacy fallback: if only page-level JSON exists in this commit, use its block list.
+    if not blocks:
+        legacy_rel = f"{tree_dir_path}/{page_prefix}.json"
+        try:
+            legacy_blob = commit.tree / legacy_rel
+            data = legacy_blob.data_stream.read()
+            try:
+                text = data.decode("utf-8")
+            except UnicodeDecodeError:
+                text = data.decode("utf-8", errors="replace")
+
+            try:
+                legacy_data = json.loads(text)
+                if isinstance(legacy_data, dict):
+                    if isinstance(legacy_data.get("blocks"), list):
+                        blocks = legacy_data.get("blocks", [])
+                    else:
+                        blocks = [legacy_data]
+            except json.JSONDecodeError:
+                pass
+        except KeyError:
+            pass
+
     # 비교용 텍스트 요약 생성 (기존 api_l5_compare와 동일 로직)
     lines = []
     for blk in blocks:
+        if not isinstance(blk, dict):
+            continue
+
         bid = blk.get("block_id", "unknown")
         if kind == "punctuation":
             items = blk.get("marks", [])
-            lines.append(f"[블록: {bid}]")
-            for m in items:
-                t = m.get("target", {})
-                s, e = t.get("start", "?"), t.get("end", "?")
-                before = m.get("before") or ""
-                after = m.get("after") or ""
-                parts = []
-                if before:
-                    parts.append(f"앞:{before}")
-                if after:
-                    parts.append(f"뒤:{after}")
-                desc = " ".join(parts) if parts else "(빈 표점)"
-                lines.append(f"  [{s}-{e}] {desc}")
+            if items:
+                lines.append(f"[블록: {bid}]")
+                for m in items:
+                    t = m.get("target", {})
+                    s, e = t.get("start", "?"), t.get("end", "?")
+                    before = m.get("before") or ""
+                    after = m.get("after") or ""
+                    parts = []
+                    if before:
+                        parts.append(f"앞:{before}")
+                    if after:
+                        parts.append(f"뒤:{after}")
+                    desc = " ".join(parts) if parts else "(빈 표점)"
+                    lines.append(f"  [{s}-{e}] {desc}")
+                lines.append("")
+                continue
         else:
             items = blk.get("annotations", [])
-            lines.append(f"[블록: {bid}]")
-            for a in items:
-                t = a.get("target", {})
-                s, e = t.get("start", "?"), t.get("end", "?")
-                text_val = a.get("text", "")
-                pos = a.get("position", "after")
-                lines.append(f"  [{s}-{e}] \"{text_val}\" ({pos})")
+            if items:
+                lines.append(f"[블록: {bid}]")
+                for a in items:
+                    t = a.get("target", {})
+                    s, e = t.get("start", "?"), t.get("end", "?")
+                    text_val = a.get("text", "")
+                    pos = a.get("position", "after")
+                    lines.append(f"  [{s}-{e}] \"{text_val}\" ({pos})")
+                lines.append("")
+                continue
 
-    return {"blocks": blocks, "text_summary": "\n".join(lines)}
+        text_value = (
+            blk.get("text")
+            or blk.get("source_text")
+            or blk.get("original_text")
+            or blk.get("corrected_text")
+            or ""
+        )
+        text_flat = " ".join(str(text_value).split()).strip()
+        if text_flat:
+            lines.append(f"[블록: {bid}] {text_flat}")
+        else:
+            lines.append(f"[블록: {bid}]")
+        lines.append("")
+
+    return {"blocks": blocks, "text_summary": "\n".join(lines).strip()}
 
 
 def save_layer_content(

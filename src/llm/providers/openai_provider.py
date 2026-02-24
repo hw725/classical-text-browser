@@ -113,7 +113,21 @@ class OpenAiProvider(BaseLlmProvider):
                 raise
         elapsed = time.monotonic() - t0
 
-        text = response.choices[0].message.content if response.choices else ""
+        choice = response.choices[0] if response.choices else None
+        message = choice.message if choice else None
+        text = (message.content if message else "") or ""
+        finish_reason = getattr(choice, "finish_reason", None) if choice else None
+        finish_reason_s = str(finish_reason or "").lower()
+
+        if response_format == "json" and finish_reason_s in ("length", "max_tokens"):
+            raise LlmProviderError(
+                f"OpenAI JSON output truncated (finish_reason={finish_reason_s}, max_tokens={max_tokens})"
+            )
+        if response_format == "json" and not text.strip():
+            raise LlmProviderError(
+                f"OpenAI empty JSON output (finish_reason={finish_reason_s}, max_tokens={max_tokens})"
+            )
+
         tokens_in = response.usage.prompt_tokens if response.usage else None
         tokens_out = response.usage.completion_tokens if response.usage else None
 
@@ -125,7 +139,7 @@ class OpenAiProvider(BaseLlmProvider):
             tokens_out=tokens_out,
             cost_usd=self._estimate_cost(selected_model, tokens_in, tokens_out),
             elapsed_sec=round(elapsed, 2),
-            raw={"id": response.id},
+            raw={"id": response.id, "finish_reason": finish_reason_s},
         )
 
     async def call_stream(
@@ -167,6 +181,7 @@ class OpenAiProvider(BaseLlmProvider):
         full_text = ""
         tokens_out = 0
         last_report = t0
+        finish_reason = ""
 
         try:
             stream = await client.chat.completions.create(**create_kwargs)
@@ -179,7 +194,10 @@ class OpenAiProvider(BaseLlmProvider):
                 raise
 
         async for chunk in stream:
-            delta = chunk.choices[0].delta if chunk.choices else None
+            choice = chunk.choices[0] if chunk.choices else None
+            if choice and getattr(choice, "finish_reason", None):
+                finish_reason = str(choice.finish_reason).lower()
+            delta = choice.delta if choice else None
             if delta and delta.content:
                 full_text += delta.content
                 tokens_out += 1
@@ -196,6 +214,15 @@ class OpenAiProvider(BaseLlmProvider):
 
         elapsed = time.monotonic() - t0
 
+        if response_format == "json" and finish_reason in ("length", "max_tokens"):
+            raise LlmProviderError(
+                f"OpenAI stream JSON output truncated (finish_reason={finish_reason}, max_tokens={max_tokens})"
+            )
+        if response_format == "json" and not full_text.strip():
+            raise LlmProviderError(
+                f"OpenAI stream empty JSON output (finish_reason={finish_reason}, max_tokens={max_tokens})"
+            )
+
         return LlmResponse(
             text=full_text,
             provider=self.provider_id,
@@ -204,7 +231,7 @@ class OpenAiProvider(BaseLlmProvider):
             tokens_out=tokens_out,
             cost_usd=self._estimate_cost(selected_model, None, tokens_out),
             elapsed_sec=round(elapsed, 2),
-            raw={"stream": True},
+            raw={"stream": True, "finish_reason": finish_reason},
         )
 
     async def call_with_image(self, prompt, image, *, image_mime="image/png",

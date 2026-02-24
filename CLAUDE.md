@@ -32,7 +32,7 @@ server.py는 FastAPI 앱 생성 + 라우터 마운트만 담당하는 조립 파
 ```
 src/app/
 ├── server.py            ← 앱 생성 + 라우터 마운트 + configure()
-├── _state.py            ← 공유 상태 + 헬퍼 (_get_llm_router, _resolve_repo_path 등)
+├── _state.py            ← 공유 상태 + 헬퍼 + LLM 프롬프트/캐시/동적 토큰 계산
 ├── __main__.py          ← CLI 진입점 (python -m app serve)
 └── routers/
     ├── library.py       ← 서고/설정/백업/휴지통 (15 라우트)

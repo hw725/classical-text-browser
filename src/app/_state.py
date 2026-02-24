@@ -6,6 +6,9 @@
 
 import re
 import logging
+import hashlib
+import time
+import copy
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -17,6 +20,7 @@ _llm_router = None
 _llm_drafts: dict = {}
 _ocr_registry = None
 _ocr_pipeline = None
+_llm_result_cache: dict[str, tuple[float, dict]] = {}
 
 # 저장소 ID 패턴: 영문 소문자로 시작, 소문자·숫자·밑줄만 허용 (최대 64자)
 # document.py의 _DOC_ID_PATTERN, interpretation.py의 _INTERP_ID_PATTERN과 동일한 규칙.
@@ -33,9 +37,10 @@ def get_library_path() -> Path | None:
 
 def set_library_path(path: Path | None):
     """서고 경로를 설정한다. LLM 라우터 캐시도 리셋된다."""
-    global _library_path, _llm_router
+    global _library_path, _llm_router, _llm_result_cache
     _library_path = path
     _llm_router = None  # 서고 전환 시 LLM 라우터 리셋
+    _llm_result_cache.clear()
 
 
 def get_llm_drafts() -> dict:
@@ -248,6 +253,127 @@ _LLM_PROMPTS = {
 }
 
 
+_LLM_MAX_TOKENS_DEFAULT = 4096
+_LLM_MAX_TOKENS_BY_PURPOSE = {
+    "punctuation": 1024,
+    "translation": 2048,
+    # annotation은 항목 배열이 길어지기 쉬워 잘림 방지를 위해 여유를 둔다.
+    "annotation": 8192,
+}
+
+_LLM_RESULT_CACHE_TTL_SEC = 600
+_LLM_RESULT_CACHE_MAX_SIZE = 256
+
+
+def _clamp_int(value: int, min_value: int, max_value: int) -> int:
+    return max(min_value, min(max_value, value))
+
+
+def _get_max_tokens_for_purpose(purpose: str, text_len: int) -> int:
+    """목적/입력 길이에 따라 max_tokens를 동적으로 계산한다."""
+    if text_len < 0:
+        text_len = 0
+
+    if purpose == "punctuation":
+        # 출력은 marks JSON 위주로 짧은 편
+        dynamic = 768 + int(text_len * 0.35)
+        return _clamp_int(dynamic, 768, 2048)
+
+    if purpose == "translation":
+        # 번역문 + notes를 고려하되 과도한 상한은 제한
+        dynamic = 1400 + int(text_len * 0.8)
+        return _clamp_int(dynamic, 1400, 4096)
+
+    if purpose == "annotation":
+        # 항목 배열(JSON) 길이가 입력 대비 빠르게 커질 수 있음
+        dynamic = 2800 + int(text_len * 1.6)
+        return _clamp_int(dynamic, 4096, 16384)
+
+    default = _LLM_MAX_TOKENS_BY_PURPOSE.get(purpose, _LLM_MAX_TOKENS_DEFAULT)
+    return _clamp_int(default, 1024, 8192)
+
+
+def _get_annotation_max_items(text_len: int) -> int:
+    # Prevent over-long JSON outputs while keeping enough headroom.
+    return _clamp_int(max(6, text_len // 8), 6, 24)
+
+
+def _is_retryable_llm_error(error: Exception) -> bool:
+    msg = str(error).lower()
+    retry_signals = (
+        "503",
+        "unavailable",
+        "timeout",
+        "temporarily",
+        "rate limit",
+        "429",
+        "connection reset",
+        "json",
+        "parse",
+        "truncated",
+        "empty response",
+        "빈 응답",
+    )
+    return any(sig in msg for sig in retry_signals)
+
+
+def _next_retry_max_tokens(purpose: str, current: int) -> int:
+    if purpose == "annotation":
+        return _clamp_int(int(current * 1.5), 4096, 24576)
+    if purpose == "translation":
+        return _clamp_int(int(current * 1.35), 1400, 8192)
+    return _clamp_int(int(current * 1.25), 768, 4096)
+
+
+def _make_llm_cache_key(
+    purpose: str,
+    text: str,
+    force_provider=None,
+    force_model=None,
+) -> str:
+    text_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return (
+        f"{purpose}|{force_provider or 'auto'}|{force_model or 'auto'}|"
+        f"{len(text)}|{text_hash}"
+    )
+
+
+def _prune_llm_result_cache(now: float):
+    expired = [
+        k for k, (ts, _) in _llm_result_cache.items()
+        if now - ts > _LLM_RESULT_CACHE_TTL_SEC
+    ]
+    for k in expired:
+        _llm_result_cache.pop(k, None)
+
+    if len(_llm_result_cache) <= _LLM_RESULT_CACHE_MAX_SIZE:
+        return
+
+    sorted_items = sorted(_llm_result_cache.items(), key=lambda item: item[1][0])
+    overflow = len(_llm_result_cache) - _LLM_RESULT_CACHE_MAX_SIZE
+    for k, _ in sorted_items[:overflow]:
+        _llm_result_cache.pop(k, None)
+
+
+def _get_cached_llm_result(cache_key: str) -> dict | None:
+    now = time.monotonic()
+    _prune_llm_result_cache(now)
+    cached = _llm_result_cache.get(cache_key)
+    if not cached:
+        return None
+    ts, data = cached
+    if now - ts > _LLM_RESULT_CACHE_TTL_SEC:
+        _llm_result_cache.pop(cache_key, None)
+        return None
+    return copy.deepcopy(data)
+
+
+def _set_cached_llm_result(cache_key: str, result: dict):
+    now = time.monotonic()
+    _llm_result_cache[cache_key] = (now, copy.deepcopy(result))
+    _prune_llm_result_cache(now)
+
+
 async def _call_llm_text(purpose: str, text: str,
                           force_provider=None, force_model=None) -> dict:
     """공통 LLM 텍스트 호출. 프롬프트 템플릿 + JSON 파싱.
@@ -277,11 +403,27 @@ async def _call_llm_text(purpose: str, text: str,
 
     router = _get_llm_router()
     system_prompt = prompts["system"]
-    user_prompt = prompts["user"].format(text=text, char_count=len(text))
+    max_items = _get_annotation_max_items(len(text)) if purpose == "annotation" else 0
+    if purpose == "annotation":
+        system_prompt += (
+            f"\n5. Return at most {max_items} items in annotations."
+            "\n6. description must be one line and <= 40 characters."
+            "\n7. If uncertain, skip instead of adding speculative items."
+        )
+    user_prompt = prompts["user"].format(
+        text=text,
+        char_count=len(text),
+        max_items=max_items,
+    )
+    cache_key = _make_llm_cache_key(purpose, text, force_provider, force_model)
+    cached = _get_cached_llm_result(cache_key)
+    if cached is not None:
+        logger.info(f"LLM {purpose} cache hit")
+        return cached
 
     # thinking 모델(kimi-k2.5 등)은 사고 토큰 + 출력 토큰이 합산되므로
     # 4096으로는 사고에 다 쓰고 출력이 빈 응답이 될 수 있다.
-    _MAX_TOKENS = 16384
+    _MAX_TOKENS = _get_max_tokens_for_purpose(purpose, len(text))
 
     # 표점·번역·주석 모두 JSON 출력을 기대한다.
     # response_format="json"을 전달하면 각 프로바이더가 네이티브 JSON 모드를 활성화:
@@ -294,7 +436,9 @@ async def _call_llm_text(purpose: str, text: str,
     if force_provider:
         response = None
         last_error = None
-        for _attempt in range(2):
+        max_tokens = _MAX_TOKENS
+        attempts = 3 if purpose == "annotation" else 2
+        for _attempt in range(attempts):
             try:
                 response = await router.call(
                     user_prompt,
@@ -303,25 +447,45 @@ async def _call_llm_text(purpose: str, text: str,
                     force_provider=force_provider,
                     force_model=force_model,
                     purpose=purpose,
-                    max_tokens=_MAX_TOKENS,
+                    max_tokens=max_tokens,
                 )
                 last_error = None
                 if response.text.strip():
-                    break
+                    parsed = _parse_llm_json(response, _json)
+                    _set_cached_llm_result(cache_key, parsed)
+                    return parsed
+                last_error = ValueError("empty response")
                 logger.warning(
                     f"LLM {purpose} — {force_provider}/{force_model or 'auto'} "
-                    f"빈 응답 (시도 {_attempt+1}/2), "
+                    f"빈 응답 (시도 {_attempt+1}/{attempts}), "
                     f"tokens_out={getattr(response, 'tokens_out', '?')}"
                 )
+                max_tokens = _next_retry_max_tokens(purpose, max_tokens)
             except Exception as e:
                 last_error = e
+                if _is_retryable_llm_error(e):
+                    max_tokens = _next_retry_max_tokens(purpose, max_tokens)
+                    try:
+                        await _asyncio.sleep(0.6 + (_attempt * 0.4))
+                    except Exception:
+                        pass
                 logger.warning(
                     f"LLM {purpose} — {force_provider} 에러 (시도 {_attempt+1}/2): {e}"
                 )
         # 재시도 후에도 에러가 남아 있으면 전파
+        if last_error and _is_retryable_llm_error(last_error):
+            logger.warning(
+                f"LLM {purpose} forced provider fallback to auto providers: {force_provider}"
+            )
+            return await _call_llm_text(
+                purpose=purpose,
+                text=text,
+                force_provider=None,
+                force_model=None,
+            )
         if last_error:
             raise last_error
-        return _parse_llm_json(response, _json)
+        raise ValueError(f"LLM {purpose} {force_provider} 응답을 생성하지 못했습니다.")
 
     # ── 자동 모드: 프로바이더 순서대로 시도, JSON 파싱 실패 시 다음으로 ──
     # 가용성을 병렬로 사전 체크 (캐시 활용).
@@ -357,7 +521,9 @@ async def _call_llm_text(purpose: str, text: str,
             )
 
             # JSON 파싱 시도 — 실패하면 다음 프로바이더로
-            return _parse_llm_json(response, _json)
+            parsed = _parse_llm_json(response, _json)
+            _set_cached_llm_result(cache_key, parsed)
+            return parsed
 
         except Exception as e:
             logger.warning(
@@ -398,9 +564,28 @@ async def _call_llm_text_stream(purpose: str, text: str,
 
     router = _get_llm_router()
     system_prompt = prompts["system"]
-    user_prompt = prompts["user"].format(text=text, char_count=len(text))
-    _MAX_TOKENS = 16384
+    max_items = _get_annotation_max_items(len(text)) if purpose == "annotation" else 0
+    if purpose == "annotation":
+        system_prompt += (
+            f"\n5. Return at most {max_items} items in annotations."
+            "\n6. description must be one line and <= 40 characters."
+            "\n7. If uncertain, skip instead of adding speculative items."
+        )
+    user_prompt = prompts["user"].format(
+        text=text,
+        char_count=len(text),
+        max_items=max_items,
+    )
+    cache_key = _make_llm_cache_key(purpose, text, force_provider, force_model)
+    cached = _get_cached_llm_result(cache_key)
+    if cached is not None:
+        await queue.put({"type": "complete", "result": cached})
+        return
+    _MAX_TOKENS = _get_max_tokens_for_purpose(purpose, len(text))
     _RESPONSE_FORMAT = "json"
+    attempts = 3 if purpose == "annotation" else 2
+    max_tokens = _MAX_TOKENS
+    last_error = None
 
     def _progress_cb(event):
         """provider의 progress_callback → queue에 넣기.
@@ -439,11 +624,106 @@ async def _call_llm_text_stream(purpose: str, text: str,
 
         # JSON 파싱 (_parse_llm_json 재사용)
         result = _parse_llm_json(response, _json)
+        _set_cached_llm_result(cache_key, result)
         await queue.put({"type": "complete", "result": result})
+        return
 
     except Exception as e:
+        if _is_retryable_llm_error(e):
+            retry_error = e
+            for _attempt in range(1, attempts):
+                try:
+                    max_tokens = _next_retry_max_tokens(purpose, max_tokens)
+                    await _asyncio.sleep(0.6 + ((_attempt - 1) * 0.4))
+                    if force_provider:
+                        response = await router.call_stream(
+                            user_prompt,
+                            system=system_prompt,
+                            response_format=_RESPONSE_FORMAT,
+                            force_provider=force_provider,
+                            force_model=force_model,
+                            purpose=purpose,
+                            max_tokens=max_tokens,
+                            progress_callback=_progress_cb,
+                        )
+                    else:
+                        response = await router.call_stream(
+                            user_prompt,
+                            system=system_prompt,
+                            response_format=_RESPONSE_FORMAT,
+                            purpose=purpose,
+                            max_tokens=max_tokens,
+                            progress_callback=_progress_cb,
+                        )
+                    result = _parse_llm_json(response, _json)
+                    _set_cached_llm_result(cache_key, result)
+                    await queue.put({"type": "complete", "result": result})
+                    return
+                except Exception as re:
+                    retry_error = re
+            e = retry_error
+            if force_provider:
+                try:
+                    logger.warning(
+                        f"LLM stream {purpose} forced provider fallback to auto providers: {force_provider}"
+                    )
+                    response = await router.call_stream(
+                        user_prompt,
+                        system=system_prompt,
+                        response_format=_RESPONSE_FORMAT,
+                        purpose=purpose,
+                        max_tokens=max_tokens,
+                        progress_callback=_progress_cb,
+                    )
+                    result = _parse_llm_json(response, _json)
+                    _set_cached_llm_result(cache_key, result)
+                    await queue.put({"type": "complete", "result": result})
+                    return
+                except Exception as auto_e:
+                    e = auto_e
         logger.error(f"LLM stream {purpose} 실패: {e}")
         await queue.put({"type": "error", "error": str(e)})
+
+def _salvage_truncated_array_payload(raw: str, key: str, _json) -> dict | None:
+    """Recover completed dict items from a truncated JSON array payload."""
+    key_token = f'"{key}"'
+    key_pos = raw.find(key_token)
+    if key_pos < 0:
+        return None
+
+    arr_start = raw.find("[", key_pos)
+    if arr_start < 0:
+        return None
+
+    body = raw[arr_start + 1 :]
+    decoder = _json.JSONDecoder()
+    items: list[dict] = []
+    i = 0
+    n = len(body)
+
+    while i < n:
+        ch = body[i]
+        if ch in " \r\n\t,":
+            i += 1
+            continue
+        if ch == "]":
+            break
+        if ch != "{":
+            i += 1
+            continue
+        try:
+            obj, next_i = decoder.raw_decode(body, i)
+        except _json.JSONDecodeError:
+            break
+        if isinstance(obj, dict):
+            items.append(obj)
+        i = next_i
+
+    if not items:
+        return None
+
+    logger.warning(f"LLM truncated JSON recovered: key={key}, items={len(items)}")
+    return {key: items}
 
 
 def _parse_llm_json(response, _json) -> dict:
@@ -523,13 +803,129 @@ def _parse_llm_json(response, _json) -> dict:
             try:
                 data = _json.loads(raw[start:end])
             except _json.JSONDecodeError:
-                raise ValueError(
+                data = _salvage_truncated_array_payload(raw, "annotations", _json)
+                if data is None:
+                    data = _salvage_truncated_array_payload(raw, "marks", _json)
+                if data is None:
+                    raise ValueError(
                     f"LLM 응답 JSON 파싱 실패 ({response.provider}): {raw[:200]}"
                 )
         else:
-            raise ValueError(
+            data = _salvage_truncated_array_payload(raw, "annotations", _json)
+            if data is None:
+                data = _salvage_truncated_array_payload(raw, "marks", _json)
+            if data is None:
+                raise ValueError(
                 f"LLM 응답에 JSON이 없음 ({response.provider}): {raw[:200]}"
             )
+
+    data["_provider"] = response.provider
+    data["_model"] = response.model
+    return data
+
+
+def _sanitize_json_control_chars(raw: str) -> str:
+    """Escape raw control chars inside JSON strings (common LLM formatting errors)."""
+    out: list[str] = []
+    in_string = False
+    escaped = False
+    for ch in raw:
+        if in_string:
+            if escaped:
+                out.append(ch)
+                escaped = False
+                continue
+            if ch == "\\":
+                out.append(ch)
+                escaped = True
+                continue
+            if ch == '"':
+                out.append(ch)
+                in_string = False
+                continue
+            if ch == "\n":
+                out.append("\\n")
+                continue
+            if ch == "\r":
+                out.append("\\r")
+                continue
+            if ch == "\t":
+                out.append("\\t")
+                continue
+            out.append(ch)
+            continue
+
+        out.append(ch)
+        if ch == '"':
+            in_string = True
+
+    return "".join(out)
+
+
+def _parse_llm_json(response, _json) -> dict:  # type: ignore[no-redef]
+    """Robust JSON parser for occasionally truncated / malformed LLM outputs."""
+    raw = (response.text or "").strip()
+
+    if not raw:
+        logger.warning(
+            f"LLM empty response ({response.provider}/{response.model}) "
+            f"tokens_out={getattr(response, 'tokens_out', '?')}, raw={getattr(response, 'raw', '?')}"
+        )
+        raise ValueError(
+            f"{response.provider}({response.model}) returned empty response."
+        )
+
+    raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+    if not raw:
+        raise ValueError(f"{response.provider}({response.model}) returned thinking-only output.")
+
+    if "```" in raw:
+        parts = raw.split("```")
+        if len(parts) >= 3:
+            raw = parts[1].strip()
+            if raw.startswith("json"):
+                raw = raw[4:].strip()
+
+    if "{" not in raw:
+        raise ValueError(
+            f"{response.provider}({response.model}) response has no JSON: {raw[:200]}"
+        )
+
+    def _attempt_parse(candidate: str) -> dict | None:
+        try:
+            return _json.loads(candidate)
+        except _json.JSONDecodeError:
+            start = candidate.rfind('{"')
+            if start < 0:
+                start = candidate.find("{")
+            end = candidate.rfind("}") + 1
+            if start >= 0 and end > start:
+                try:
+                    return _json.loads(candidate[start:end])
+                except _json.JSONDecodeError:
+                    pass
+
+            for key in ("annotations", "marks"):
+                recovered = _salvage_truncated_array_payload(candidate, key, _json)
+                if recovered is not None:
+                    return recovered
+            return None
+
+    candidates = [raw]
+    sanitized = _sanitize_json_control_chars(raw)
+    if sanitized != raw:
+        candidates.append(sanitized)
+
+    data: dict | None = None
+    for candidate in candidates:
+        data = _attempt_parse(candidate)
+        if data is not None:
+            break
+
+    if data is None:
+        raise ValueError(
+            f"LLM response JSON parse failed ({response.provider}): {raw[:200]}"
+        )
 
     data["_provider"] = response.provider
     data["_model"] = response.model

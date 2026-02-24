@@ -5190,6 +5190,97 @@ details[open] > .punct-section-summary::before {
   margin-top: 4px;
 }
 
+/* ── 주석 유형 관리 다이얼로그 (atm-*) ── */
+.atm-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+.atm-type-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  font-size: 12px;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.atm-type-color {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.atm-type-icon {
+  flex-shrink: 0;
+  font-size: 13px;
+}
+.atm-type-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.atm-type-id {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: monospace;
+}
+.atm-delete-btn {
+  color: var(--error-color, #f44) !important;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.atm-delete-btn:hover {
+  background: rgba(255, 68, 68, 0.15);
+}
+.atm-empty {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 6px 0;
+  font-style: italic;
+}
+.atm-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.atm-form-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.atm-form-label {
+  font-size: 12px;
+  color: var(--text-primary);
+  width: 70px;
+  flex-shrink: 0;
+}
+.atm-form-row .bib-input {
+  flex: 1;
+}
+.atm-color-input {
+  width: 60px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  padding: 1px;
+}
+.atm-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
 /* 인용 편집 패널 */
 .cite-edit-panel {
   border-top: 1px solid var(--border);

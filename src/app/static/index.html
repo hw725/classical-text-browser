@@ -861,7 +861,7 @@
 
       <!-- 메인 영역 -->
       <main class="main-area">
-        <!-- 모드 탭 바: 열람 / 레이아웃 / 교정 / 편성 / 표점 / 현토 / 번역 / 주석 / 비교 -->
+          <!-- 모드 탭 바: 열람 / 레이아웃 / 교정 / 편성 / 표점 / 현토 / 번역 / 주석 -->
         <div class="mode-bar" role="tablist" aria-label="작업 모드">
           <!-- 원본 작업 -->
           <button class="mode-tab active" data-mode="view" role="tab" aria-selected="true">열람</button>
@@ -879,7 +879,6 @@
           <button class="mode-tab" data-mode="citation" role="tab">인용</button>
           <span class="mode-tab-divider" aria-hidden="true"></span>
           <!-- 도구 -->
-          <button class="mode-tab" data-mode="interpretation" role="tab">비교</button>
           <button class="mode-tab" data-mode="variant" role="tab">이체자</button>
         </div>
 
@@ -1863,14 +1862,14 @@
             </div>
           </div>
 
-          <!-- 우측 패널: 비교 (Phase 7, interpretation 모드에서만 표시) -->
+          <!-- 우측 패널: 해석 (interpretation 모드에서만 표시) -->
           <div
             class="editor-panel editor-right interp-panel"
             id="interp-panel"
             style="display: none"
           >
             <div class="panel-label">
-              비교 (L5~L7)
+              해석 (L5~L7)
               <button
                 id="snapshot-export-btn"
                 class="section-action-btn"
@@ -2012,10 +2011,6 @@
               >
                 LLM에게 요청
               </button>
-              <label id="compare-mode-toggle" class="compare-toggle-label" title="비교 모드 켜기/끄기">
-                <input type="checkbox" id="compare-mode-checkbox" />
-                <span>비교 모드</span>
-              </label>
               <div class="text-toolbar-divider"></div>
               <button
                 id="interp-save"
@@ -2038,48 +2033,6 @@
               spellcheck="false"
             ></textarea>
 
-            <!-- 비교 영역 (비교 모드에서만 표시) -->
-            <div id="compare-container" class="compare-container" style="display: none">
-              <!-- 비교 유형 선택 바 (저장소 간 / 버전 간) -->
-              <div class="compare-type-bar">
-                <label class="compare-type-radio">
-                  <input type="radio" name="compare-type" value="repo" checked />
-                  <span>저장소 간</span>
-                </label>
-                <label class="compare-type-radio">
-                  <input type="radio" name="compare-type" value="version" />
-                  <span>버전 간</span>
-                </label>
-              </div>
-              <!-- 좌측 패널 A -->
-              <div class="compare-pane">
-                <div class="compare-pane-header">
-                  <select id="compare-repo-a" class="compare-repo-select compare-repo-mode" title="해석 저장소 A 선택">
-                    <option value="">저장소 A 선택</option>
-                  </select>
-                  <select id="compare-commit-a" class="compare-repo-select compare-version-mode" style="display:none" title="커밋 A 선택">
-                    <option value="HEAD">현재 (HEAD)</option>
-                  </select>
-                  <span class="compare-pane-label">A</span>
-                </div>
-                <div id="compare-content-a" class="compare-content"></div>
-              </div>
-              <!-- 구분선 -->
-              <div class="compare-divider"></div>
-              <!-- 우측 패널 B -->
-              <div class="compare-pane">
-                <div class="compare-pane-header">
-                  <select id="compare-repo-b" class="compare-repo-select compare-repo-mode" title="해석 저장소 B 선택">
-                    <option value="">저장소 B 선택</option>
-                  </select>
-                  <select id="compare-commit-b" class="compare-repo-select compare-version-mode" style="display:none" title="커밋 B 선택">
-                    <option value="HEAD">현재 (HEAD)</option>
-                  </select>
-                  <span class="compare-pane-label">B</span>
-                </div>
-                <div id="compare-content-b" class="compare-content"></div>
-              </div>
-            </div>
           </div>
 
           <!-- 우측 패널: 이체자 사전 관리 (variant 모드) -->
@@ -3652,6 +3605,36 @@
         </div>
       </div>
 
+      <!-- 주석 유형 관리 다이얼로그 -->
+      <div
+        class="bib-dialog-overlay"
+        id="atm-dialog-overlay"
+        style="display: none"
+      >
+        <div class="bib-dialog" id="atm-dialog" style="width: 480px">
+          <div class="bib-dialog-header">
+            <span class="bib-dialog-title">주석 유형 관리</span>
+            <button
+              class="bib-dialog-close"
+              id="atm-dialog-close"
+              title="닫기"
+            >
+              &times;
+            </button>
+          </div>
+          <div class="bib-dialog-body" id="atm-dialog-body">
+            <!-- annotation-editor.js가 동적으로 유형 목록 + 추가 폼 렌더링 -->
+          </div>
+          <div class="bib-edit-actions">
+            <span id="atm-dialog-status"></span>
+            <div class="text-toolbar-spacer"></div>
+            <button id="atm-dialog-done" class="bib-btn bib-btn-primary">
+              닫기
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- Phase 8: LLM 요청 다이얼로그 오버레이 -->
       <div
         class="bib-dialog-overlay"
@@ -4316,7 +4299,7 @@
     <script src="/static/js/layout-editor.js?v=20260223"></script>
     <script src="/static/js/correction-editor.js?v=20260220c"></script>
     <script src="/static/js/bibliography.js?v=20260220c"></script>
-    <script src="/static/js/interpretation.js?v=20260223"></script>
+    <script src="/static/js/interpretation.js?v=20260224e"></script>
     <script src="/static/js/entity-manager.js?v=20260220c"></script>
     <script src="/static/js/create-document.js?v=20260220c"></script>
     <script src="/static/js/hwp-import.js?v=20260223b"></script>
@@ -4334,6 +4317,6 @@
     <script src="/static/js/git-graph.js?v=20260220c"></script>
     <script src="/static/js/reader-line.js?v=20260220c"></script>
     <script src="/static/js/notes-panel.js?v=20260220c"></script>
-    <script src="/static/js/workspace.js?v=20260223"></script>
+    <script src="/static/js/workspace.js?v=20260224b"></script>
   </body>
 </html>

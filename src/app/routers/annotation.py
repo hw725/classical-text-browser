@@ -11,9 +11,10 @@ L7 주석 CRUD, 사전형 주석 생성/내보내기/가져오기, 참조 사전
 import asyncio
 import json
 import logging
+from pathlib import Path
 
-from fastapi import APIRouter, Query
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import APIRouter, Query, Request
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from app._state import get_library_path, _get_llm_router, _call_llm_text, _call_llm_text_stream
@@ -64,7 +65,9 @@ from core.citation_mark import (
     save_citation_marks,
     update_citation_mark,
 )
+from core.entity import list_entities
 from core.interpretation import git_commit_interpretation
+from core.translation import load_translations
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +89,12 @@ class AnnotationUpdateRequest(BaseModel):
     target: dict | None = None
     type: str | None = None
     content: dict | None = None
+    dictionary: dict | None = None
+    current_stage: str | None = None
+    generation_history: list[dict] | None = None
+    source_text_snapshot: str | None = None
+    translation_snapshot: str | None = None
+    annotator: dict | None = None
     status: str | None = None
 
 
@@ -176,13 +185,271 @@ class AiAnnotationRequest(BaseModel):
     force_model: str | None = None
 
 
+def _l4_text_file(interp_path: Path, page_num: int, part_id: str = "main") -> Path:
+    """L4 원문 파일 경로를 반환한다."""
+    return interp_path / "L4_text" / "main_text" / f"{part_id}_page_{page_num:03d}_text.json"
+
+
+def _load_page_blocks(interp_path: Path, page_num: int, part_id: str = "main") -> list[dict]:
+    """L4 원문 파일에서 페이지 블록 목록을 로드한다."""
+    text_file = _l4_text_file(interp_path, page_num, part_id)
+    if not text_file.exists():
+        raise FileNotFoundError(f"L4 원문 파일이 없습니다: {text_file.name}")
+
+    with open(text_file, encoding="utf-8") as f:
+        text_data = json.load(f)
+    return text_data.get("blocks", [])
+
+
+def _load_page_block_ids(interp_path: Path, page_num: int, part_id: str = "main") -> list[str]:
+    """Resolve block IDs from L4 first, then L6 translation as fallback."""
+    try:
+        page_blocks = _load_page_blocks(interp_path, page_num, part_id)
+        block_ids = [b.get("block_id") for b in page_blocks if b.get("block_id")]
+        if block_ids:
+            return block_ids
+    except FileNotFoundError:
+        pass
+
+    tr_data = load_translations(interp_path, part_id, page_num)
+    block_ids: list[str] = []
+    seen: set[str] = set()
+    for tr in tr_data.get("translations", []):
+        block_id = tr.get("source", {}).get("block_id")
+        if not block_id or block_id in seen:
+            continue
+        seen.add(block_id)
+        block_ids.append(block_id)
+
+    if block_ids:
+        return block_ids
+
+    # Last fallback: derive from text_block entities for this page.
+    try:
+        text_blocks = list_entities(interp_path, "text_block")
+    except Exception:
+        text_blocks = []
+    for tb in text_blocks:
+        refs = tb.get("source_refs") or []
+        if not refs and tb.get("source_ref"):
+            refs = [tb.get("source_ref")]
+        matched = False
+        for ref in refs:
+            if not isinstance(ref, dict):
+                continue
+            if ref.get("page") != page_num:
+                continue
+            layout_block_id = ref.get("layout_block_id")
+            candidate = layout_block_id or tb.get("id")
+            if candidate and candidate not in seen:
+                seen.add(candidate)
+                block_ids.append(candidate)
+                matched = True
+        if not refs and tb.get("id") and tb.get("id") not in seen and tb.get("page") == page_num:
+            # Optional compatibility for non-standard page field.
+            seen.add(tb.get("id"))
+            block_ids.append(tb.get("id"))
+        if matched:
+            continue
+    return block_ids
+
+
+def _load_original_block_text(
+    interp_path: Path,
+    page_num: int,
+    block_id: str,
+    part_id: str = "main",
+) -> str:
+    """지정 블록의 원문 텍스트를 반환한다."""
+    try:
+        blocks = _load_page_blocks(interp_path, page_num, part_id)
+        for block in blocks:
+            if block.get("block_id") != block_id:
+                continue
+            text = (
+                block.get("corrected_text")
+                or block.get("original_text")
+                or block.get("text")
+                or ""
+            )
+            if text and text.strip():
+                return text.strip()
+            break
+    except FileNotFoundError:
+        # Fallback: translation source_text often preserves the original segment.
+        pass
+
+    tr_data = load_translations(interp_path, part_id, page_num)
+    source_items = [
+        tr for tr in tr_data.get("translations", [])
+        if tr.get("source", {}).get("block_id") == block_id and tr.get("source_text")
+    ]
+    if source_items:
+        source_items.sort(key=lambda tr: tr.get("source", {}).get("start", 0))
+        source_text = "\n".join(
+            str(tr.get("source_text", "")).strip()
+            for tr in source_items
+            if tr.get("source_text")
+        ).strip()
+        if source_text:
+            return source_text
+
+    # Fallback: text_block entities may carry original text even without L4 files.
+    try:
+        text_blocks = list_entities(interp_path, "text_block")
+    except Exception:
+        text_blocks = []
+
+    for tb in text_blocks:
+        tb_text = (
+            str(tb.get("original_text", "")).strip()
+            or str(tb.get("normalized_text", "")).strip()
+        )
+        if not tb_text:
+            continue
+
+        if tb.get("id") == block_id:
+            return tb_text
+
+        refs = tb.get("source_refs") or []
+        if not refs and tb.get("source_ref"):
+            refs = [tb.get("source_ref")]
+        for ref in refs:
+            if not isinstance(ref, dict):
+                continue
+            if ref.get("layout_block_id") != block_id:
+                continue
+            ref_page = ref.get("page")
+            if isinstance(ref_page, int) and ref_page != page_num:
+                continue
+            return tb_text
+
+    raise FileNotFoundError(
+        f"원문 블록을 찾을 수 없거나 텍스트가 비어 있습니다: page={page_num}, block_id={block_id}"
+    )
+
+
+def _load_translation_block_text(
+    interp_path: Path,
+    page_num: int,
+    block_id: str,
+    part_id: str = "main",
+) -> str:
+    """지정 블록의 번역 텍스트를 합쳐 반환한다."""
+    tr_data = load_translations(interp_path, part_id, page_num)
+    items = [
+        tr for tr in tr_data.get("translations", [])
+        if tr.get("source", {}).get("block_id") == block_id and tr.get("translation")
+    ]
+
+    if not items:
+        # Fallback: map text_block id -> layout_block_id(s) in source_refs.
+        try:
+            text_blocks = list_entities(interp_path, "text_block")
+        except Exception:
+            text_blocks = []
+        mapped_ids: set[str] = set()
+        for tb in text_blocks:
+            if tb.get("id") != block_id:
+                continue
+            refs = tb.get("source_refs") or []
+            if not refs and tb.get("source_ref"):
+                refs = [tb.get("source_ref")]
+            for ref in refs:
+                if not isinstance(ref, dict):
+                    continue
+                ref_page = ref.get("page")
+                if isinstance(ref_page, int) and ref_page != page_num:
+                    continue
+                layout_block_id = ref.get("layout_block_id")
+                if layout_block_id:
+                    mapped_ids.add(layout_block_id)
+            break
+
+        if mapped_ids:
+            items = [
+                tr for tr in tr_data.get("translations", [])
+                if tr.get("source", {}).get("block_id") in mapped_ids and tr.get("translation")
+            ]
+
+    if not items:
+        raise FileNotFoundError(
+            f"번역 블록을 찾을 수 없습니다: page={page_num}, block_id={block_id}"
+        )
+
+    items.sort(key=lambda tr: tr.get("source", {}).get("start", 0))
+    text = "\n".join(str(tr.get("translation", "")).strip() for tr in items if tr.get("translation"))
+    if not text.strip():
+        raise FileNotFoundError(
+            f"번역 텍스트가 비어 있습니다: page={page_num}, block_id={block_id}"
+        )
+    return text
+
+
+def _get_block_annotations(data: dict, block_id: str) -> list[dict]:
+    """annotation_page 데이터에서 특정 블록의 주석 목록을 반환한다."""
+    for block in data.get("blocks", []):
+        if block.get("block_id") == block_id:
+            return list(block.get("annotations", []))
+    return []
+
+
+def _set_block_annotations(data: dict, block_id: str, annotations: list[dict]) -> None:
+    """annotation_page 데이터의 특정 블록 주석 목록을 교체한다."""
+    for block in data.get("blocks", []):
+        if block.get("block_id") == block_id:
+            block["annotations"] = annotations
+            return
+    data.setdefault("blocks", []).append({"block_id": block_id, "annotations": annotations})
+
+
+def _resolve_stage_block_id(
+    request: Request,
+    body: DictStageRequest | None,
+    interp_path: Path,
+    page_num: int,
+    part_id: str = "main",
+) -> str:
+    """사전 단계 API의 block_id를 유연하게 해석한다.
+
+    우선순위:
+      1) JSON body.block_id
+      2) query ?block_id=
+      3) 헤더 X-Block-Id
+      4) L4 페이지 첫 번째 블록
+    """
+    if body and body.block_id:
+        return body.block_id
+
+    query_block_id = request.query_params.get("block_id")
+    if query_block_id:
+        return query_block_id
+
+    header_block_id = request.headers.get("x-block-id")
+    if header_block_id:
+        return header_block_id
+
+    page_blocks = _load_page_blocks(interp_path, page_num, part_id)
+    for block in page_blocks:
+        candidate = block.get("block_id")
+        if candidate:
+            return candidate
+
+    raise FileNotFoundError(f"페이지 {page_num}에서 block_id를 찾을 수 없습니다.")
+
+
 # ──────────────────────────────────────────────────────────
 # L7 주석 CRUD API
 # ──────────────────────────────────────────────────────────
 
 
 @router.get("/api/interpretations/{interp_id}/pages/{page_num}/annotations")
-async def api_get_annotations(interp_id: str, page_num: int, type: str | None = None):
+async def api_get_annotations(
+    interp_id: str,
+    page_num: int,
+    type: str | None = None,
+    part_id: str = Query("main", description="권 식별자"),
+):
     """주석 조회.
 
     목적: 특정 페이지의 L7 주석 데이터를 반환한다.
@@ -196,7 +463,6 @@ async def api_get_annotations(interp_id: str, page_num: int, type: str | None = 
     if not interp_path.exists():
         return JSONResponse({"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."}, status_code=404)
 
-    part_id = "main"
     data = load_annotations(interp_path, part_id, page_num)
 
     if type:
@@ -222,7 +488,7 @@ async def api_annotation_summary(interp_id: str, page_num: int):
     return get_annotation_summary(data)
 
 
-@router.post("/api/interpretations/{interp_id}/pages/{page_num}/annotations/{block_id}")
+@router.post("/api/interpretations/{interp_id}/pages/{page_num}/annotations/__add/{block_id}")
 async def api_add_annotation(
     interp_id: str, page_num: int, block_id: str, body: AnnotationAddRequest
 ):
@@ -282,6 +548,18 @@ async def api_update_annotation(
         updates["type"] = body.type
     if body.content is not None:
         updates["content"] = body.content
+    if body.dictionary is not None:
+        updates["dictionary"] = body.dictionary
+    if body.current_stage is not None:
+        updates["current_stage"] = body.current_stage
+    if body.generation_history is not None:
+        updates["generation_history"] = body.generation_history
+    if body.source_text_snapshot is not None:
+        updates["source_text_snapshot"] = body.source_text_snapshot
+    if body.translation_snapshot is not None:
+        updates["translation_snapshot"] = body.translation_snapshot
+    if body.annotator is not None:
+        updates["annotator"] = body.annotator
     if body.status is not None:
         updates["status"] = body.status
 
@@ -319,7 +597,7 @@ async def api_delete_annotation(
         return JSONResponse({"error": f"주석 '{ann_id}'를 찾을 수 없습니다."}, status_code=404)
 
     save_annotations(interp_path, part_id, page_num, data)
-    return JSONResponse(status_code=204, content=None)
+    return Response(status_code=204)
 
 
 @router.post("/api/interpretations/{interp_id}/pages/{page_num}/annotations/{block_id}/{ann_id}/commit")
@@ -428,7 +706,7 @@ async def api_delete_annotation_type(type_id: str):
     if not removed:
         return JSONResponse({"error": f"유형 '{type_id}'를 찾을 수 없거나 기본 프리셋입니다."}, status_code=404)
 
-    return JSONResponse(status_code=204, content=None)
+    return Response(status_code=204)
 
 
 # ──────────────────────────────────────────────────────────
@@ -440,7 +718,12 @@ async def api_delete_annotation_type(type_id: str):
 
 
 @router.post("/api/interpretations/{interp_id}/pages/{page_num}/annotations/generate-stage1")
-async def api_dict_generate_stage1(interp_id: str, page_num: int, body: DictStageRequest):
+async def api_dict_generate_stage1(
+    interp_id: str,
+    page_num: int,
+    request: Request,
+    body: DictStageRequest | None = None,
+):
     """1단계 사전 생성: 원문에서 사전 항목 추출.
 
     목적: L4 원문을 분석하여 표제어, 독음, 사전적 의미, 출전을 생성한다.
@@ -456,19 +739,33 @@ async def api_dict_generate_stage1(interp_id: str, page_num: int, body: DictStag
 
     try:
         llm_router = _get_llm_router()
-        if body.force_provider:
+        if body and body.force_provider:
             llm_router.force_provider = body.force_provider
-        if body.force_model:
+        if body and body.force_model:
             llm_router.force_model = body.force_model
 
-        result = await generate_stage1_from_original(
-            interp_path=interp_path,
-            part_id="main",
-            page_num=page_num,
-            block_id=body.block_id,
+        block_id = _resolve_stage_block_id(request, body, interp_path, page_num, "main")
+
+        ann_data = load_annotations(interp_path, "main", page_num)
+        existing_annotations = _get_block_annotations(ann_data, block_id)
+        original_text = _load_original_block_text(interp_path, page_num, block_id, "main")
+
+        generated = await generate_stage1_from_original(
+            original_text=original_text,
+            block_id=block_id,
             router=llm_router,
+            existing_annotations=existing_annotations,
         )
-        return result
+
+        _set_block_annotations(ann_data, block_id, generated)
+        save_annotations(interp_path, "main", page_num, ann_data)
+
+        return {
+            "page_number": page_num,
+            "block_id": block_id,
+            "stage": "from_original",
+            "annotations": generated,
+        }
     except FileNotFoundError as e:
         return JSONResponse({"error": str(e)}, status_code=404)
     except Exception as e:
@@ -476,7 +773,12 @@ async def api_dict_generate_stage1(interp_id: str, page_num: int, body: DictStag
 
 
 @router.post("/api/interpretations/{interp_id}/pages/{page_num}/annotations/generate-stage2")
-async def api_dict_generate_stage2(interp_id: str, page_num: int, body: DictStageRequest):
+async def api_dict_generate_stage2(
+    interp_id: str,
+    page_num: int,
+    request: Request,
+    body: DictStageRequest | None = None,
+):
     """2단계 사전 생성: 번역으로 보강.
 
     목적: 1단계 결과에 L6 번역의 문맥적 의미를 보강한다.
@@ -492,19 +794,35 @@ async def api_dict_generate_stage2(interp_id: str, page_num: int, body: DictStag
 
     try:
         llm_router = _get_llm_router()
-        if body.force_provider:
+        if body and body.force_provider:
             llm_router.force_provider = body.force_provider
-        if body.force_model:
+        if body and body.force_model:
             llm_router.force_model = body.force_model
 
-        result = await generate_stage2_from_translation(
-            interp_path=interp_path,
-            part_id="main",
-            page_num=page_num,
-            block_id=body.block_id,
+        block_id = _resolve_stage_block_id(request, body, interp_path, page_num, "main")
+
+        ann_data = load_annotations(interp_path, "main", page_num)
+        existing_annotations = _get_block_annotations(ann_data, block_id)
+        original_text = _load_original_block_text(interp_path, page_num, block_id, "main")
+        translation_text = _load_translation_block_text(interp_path, page_num, block_id, "main")
+
+        generated = await generate_stage2_from_translation(
+            original_text=original_text,
+            translation_text=translation_text,
+            block_id=block_id,
             router=llm_router,
+            existing_annotations=existing_annotations,
         )
-        return result
+
+        _set_block_annotations(ann_data, block_id, generated)
+        save_annotations(interp_path, "main", page_num, ann_data)
+
+        return {
+            "page_number": page_num,
+            "block_id": block_id,
+            "stage": "from_translation",
+            "annotations": generated,
+        }
     except FileNotFoundError as e:
         return JSONResponse({"error": str(e)}, status_code=404)
     except Exception as e:
@@ -512,7 +830,12 @@ async def api_dict_generate_stage2(interp_id: str, page_num: int, body: DictStag
 
 
 @router.post("/api/interpretations/{interp_id}/pages/{page_num}/annotations/generate-stage3")
-async def api_dict_generate_stage3(interp_id: str, page_num: int, body: DictStageRequest):
+async def api_dict_generate_stage3(
+    interp_id: str,
+    page_num: int,
+    request: Request,
+    body: DictStageRequest | None = None,
+):
     """3단계 사전 생성: 원문+번역 최종 통합.
 
     목적: 원문과 번역을 종합하여 사전 항목을 최종 정리한다.
@@ -528,27 +851,54 @@ async def api_dict_generate_stage3(interp_id: str, page_num: int, body: DictStag
 
     try:
         llm_router = _get_llm_router()
-        if body.force_provider:
+        if body and body.force_provider:
             llm_router.force_provider = body.force_provider
-        if body.force_model:
+        if body and body.force_model:
             llm_router.force_model = body.force_model
 
-        result = await generate_stage3_from_both(
-            interp_path=interp_path,
-            part_id="main",
-            page_num=page_num,
-            block_id=body.block_id,
+        block_id = _resolve_stage_block_id(request, body, interp_path, page_num, "main")
+
+        ann_data = load_annotations(interp_path, "main", page_num)
+        existing_annotations = _get_block_annotations(ann_data, block_id)
+        original_text = _load_original_block_text(interp_path, page_num, block_id, "main")
+        translation_text = _load_translation_block_text(interp_path, page_num, block_id, "main")
+
+        generated = await generate_stage3_from_both(
+            original_text=original_text,
+            translation_text=translation_text,
+            block_id=block_id,
             router=llm_router,
+            existing_annotations=existing_annotations,
         )
-        return result
+
+        _set_block_annotations(ann_data, block_id, generated)
+        save_annotations(interp_path, "main", page_num, ann_data)
+
+        return {
+            "page_number": page_num,
+            "block_id": block_id,
+            "stage": "from_both",
+            "annotations": generated,
+        }
     except FileNotFoundError as e:
         return JSONResponse({"error": str(e)}, status_code=404)
     except Exception as e:
         return JSONResponse({"error": f"3단계 사전 생성 실패: {e}"}, status_code=500)
 
 
+@router.post("/api/interpretations/{interp_id}/pages/{page_num}/annotations/{block_id}")
+async def api_add_annotation_legacy_path(
+    interp_id: str,
+    page_num: int,
+    block_id: str,
+    body: AnnotationAddRequest,
+):
+    """Legacy add route kept after static routes to avoid path shadowing."""
+    return await api_add_annotation(interp_id, page_num, block_id, body)
+
+
 @router.post("/api/interpretations/{interp_id}/annotations/generate-batch")
-async def api_dict_generate_batch(interp_id: str, body: DictBatchRequest):
+async def api_dict_generate_batch(interp_id: str, body: DictBatchRequest | None = None):
     """일괄 사전 생성 (Stage 3 직행).
 
     목적: 완성된 원문+번역 쌍에서 모든 페이지의 사전을 한번에 생성한다.
@@ -564,51 +914,83 @@ async def api_dict_generate_batch(interp_id: str, body: DictBatchRequest):
 
     try:
         llm_router = _get_llm_router()
-        if body.force_provider:
+        if body and body.force_provider:
             llm_router.force_provider = body.force_provider
-        if body.force_model:
+        if body and body.force_model:
             llm_router.force_model = body.force_model
 
+        text_dir = interp_path / "L4_text" / "main_text"
+        if (not text_dir.exists()) and (not (interp_path / "L6_translation" / "main_text").exists()):
+            return JSONResponse(
+                {"error": "사전 생성 가능한 입력 데이터가 없습니다. (L4/L6 없음)"},
+                status_code=404,
+            )
+            return JSONResponse({"error": "L4 텍스트가 없습니다."}, status_code=404)
+
         # 대상 페이지 결정
-        if body.pages:
+        if body and body.pages:
             pages = body.pages
         else:
-            # L4 텍스트 파일이 있는 모든 페이지를 스캔
+            pages_from_l4: set[int] = set()
             text_dir = interp_path / "L4_text" / "main_text"
-            if not text_dir.exists():
-                return JSONResponse({"error": "L4 텍스트가 없습니다."}, status_code=404)
-            pages = sorted(
-                int(f.stem.split("_page_")[1].split("_")[0])
-                for f in text_dir.glob("main_page_*_text.json")
-            )
+            if text_dir.exists():
+                for f in text_dir.glob("main_page_*_text.json"):
+                    try:
+                        pages_from_l4.add(int(f.stem.split("_page_")[1].split("_")[0]))
+                    except Exception:
+                        continue
+
+            pages_from_l6: set[int] = set()
+            tr_dir = interp_path / "L6_translation" / "main_text"
+            if tr_dir.exists():
+                for f in tr_dir.glob("main_page_*_translation.json"):
+                    try:
+                        pages_from_l6.add(int(f.stem.split("_page_")[1].split("_")[0]))
+                    except Exception:
+                        continue
+
+            pages = sorted(pages_from_l4 | pages_from_l6)
+            if not pages:
+                return JSONResponse(
+                    {"error": "사전 생성 가능한 페이지가 없습니다. (L4/L6 데이터 없음)"},
+                    status_code=404,
+                )
 
         # 각 페이지별 블록에 대해 Stage 3 실행
         total_results = {"pages_processed": 0, "total_annotations": 0, "errors": []}
 
         for page_num in pages:
             try:
-                # 페이지의 모든 블록 찾기
                 ann_data = load_annotations(interp_path, "main", page_num)
-                block_ids = [b["block_id"] for b in ann_data.get("blocks", [])]
-
-                # 블록이 없으면 L4 텍스트에서 블록 ID 추출
+                block_ids = _load_page_block_ids(interp_path, page_num, "main")
                 if not block_ids:
-                    text_file = text_dir / f"main_page_{page_num:03d}_text.json"
-                    if text_file.exists():
-                        import json as _json
-                        with open(text_file, encoding="utf-8") as f:
-                            text_data = _json.load(f)
-                        block_ids = [b["block_id"] for b in text_data.get("blocks", [])]
+                    total_results["errors"].append({"page": page_num, "error": "L4 블록이 없습니다."})
+                    continue
 
                 for block_id in block_ids:
-                    result = await generate_stage3_from_both(
-                        interp_path=interp_path,
-                        part_id="main",
-                        page_num=page_num,
-                        block_id=block_id,
-                        router=llm_router,
-                    )
-                    total_results["total_annotations"] += len(result.get("annotations", []))
+                    try:
+                        original_text = _load_original_block_text(interp_path, page_num, block_id, "main")
+                        translation_text = _load_translation_block_text(interp_path, page_num, block_id, "main")
+                        existing_annotations = _get_block_annotations(ann_data, block_id)
+
+                        generated = await generate_stage3_from_both(
+                            original_text=original_text,
+                            translation_text=translation_text,
+                            block_id=block_id,
+                            router=llm_router,
+                            existing_annotations=existing_annotations,
+                        )
+
+                        _set_block_annotations(ann_data, block_id, generated)
+                        total_results["total_annotations"] += len(generated)
+                    except Exception as block_error:
+                        total_results["errors"].append({
+                            "page": page_num,
+                            "block_id": block_id,
+                            "error": str(block_error),
+                        })
+
+                save_annotations(interp_path, "main", page_num, ann_data)
 
                 total_results["pages_processed"] += 1
             except Exception as e:
@@ -772,7 +1154,7 @@ async def api_remove_reference_dict(interp_id: str, filename: str):
     if not removed:
         return JSONResponse({"error": f"참조 사전 '{filename}'을 찾을 수 없습니다."}, status_code=404)
 
-    return JSONResponse(status_code=204, content=None)
+    return Response(status_code=204)
 
 
 @router.post("/api/interpretations/{interp_id}/reference-dicts/match")

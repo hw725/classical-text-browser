@@ -7,6 +7,7 @@ Google Gemini API 호출 (google-genai SDK).
 """
 
 import time
+import inspect
 from typing import Optional
 
 from .base import BaseLlmProvider, LlmProviderError, LlmResponse
@@ -36,6 +37,28 @@ class GeminiProvider(BaseLlmProvider):
     ]
 
     PRICING = {m["name"]: {"input": m["input"], "output": m["output"]} for m in MODELS}
+
+    @staticmethod
+    def _normalize_finish_reason(reason) -> str:
+        if reason is None:
+            return ""
+        if hasattr(reason, "name"):
+            reason = reason.name
+        return str(reason).strip().lower()
+
+    @classmethod
+    def _extract_finish_reason(cls, response_obj) -> str:
+        candidates = getattr(response_obj, "candidates", None) or []
+        if not candidates:
+            return ""
+        reason = getattr(candidates[0], "finish_reason", None)
+        return cls._normalize_finish_reason(reason)
+
+    @staticmethod
+    def _is_truncated_finish_reason(reason: str) -> bool:
+        if not reason:
+            return False
+        return any(token in reason for token in ("max_tokens", "length", "token_limit"))
 
     async def is_available(self) -> bool:
         """GOOGLE_API_KEY가 설정되어 있는지 확인."""
@@ -101,6 +124,15 @@ class GeminiProvider(BaseLlmProvider):
         elapsed = time.monotonic() - t0
 
         text = response.text or ""
+        finish_reason = self._extract_finish_reason(response)
+        if response_format == "json" and self._is_truncated_finish_reason(finish_reason):
+            raise LlmProviderError(
+                f"Gemini JSON output truncated (finish_reason={finish_reason}, max_tokens={max_tokens})"
+            )
+        if response_format == "json" and not text.strip():
+            raise LlmProviderError(
+                f"Gemini empty JSON output (finish_reason={finish_reason}, max_tokens={max_tokens})"
+            )
         tokens_in = getattr(response.usage_metadata, "prompt_token_count", None)
         tokens_out = getattr(response.usage_metadata, "candidates_token_count", None)
 
@@ -112,7 +144,7 @@ class GeminiProvider(BaseLlmProvider):
             tokens_out=tokens_out,
             cost_usd=self._estimate_cost(selected_model, tokens_in, tokens_out),
             elapsed_sec=round(elapsed, 2),
-            raw={"model": selected_model},
+            raw={"model": selected_model, "finish_reason": finish_reason},
         )
 
     async def call_stream(
@@ -157,12 +189,26 @@ class GeminiProvider(BaseLlmProvider):
         full_text = ""
         tokens_out = 0
         last_report = t0
+        finish_reason = ""
 
-        async for chunk in client.aio.models.generate_content_stream(
+        stream_or_coro = client.aio.models.generate_content_stream(
             model=selected_model,
             contents=prompt,
             config=config,
-        ):
+        )
+
+        # SDK 버전에 따라 반환 타입이 다를 수 있다.
+        # - async iterator를 바로 반환하는 버전
+        # - coroutine을 반환하고 await하면 async iterator가 되는 버전
+        if inspect.isawaitable(stream_or_coro):
+            stream = await stream_or_coro
+        else:
+            stream = stream_or_coro
+
+        async for chunk in stream:
+            chunk_finish_reason = self._extract_finish_reason(chunk)
+            if chunk_finish_reason:
+                finish_reason = chunk_finish_reason
             part_text = chunk.text or ""
             full_text += part_text
             tokens_out += 1
@@ -179,6 +225,15 @@ class GeminiProvider(BaseLlmProvider):
 
         elapsed = time.monotonic() - t0
 
+        if response_format == "json" and self._is_truncated_finish_reason(finish_reason):
+            raise LlmProviderError(
+                f"Gemini stream JSON output truncated (finish_reason={finish_reason}, max_tokens={max_tokens})"
+            )
+        if response_format == "json" and not full_text.strip():
+            raise LlmProviderError(
+                f"Gemini stream empty JSON output (finish_reason={finish_reason}, max_tokens={max_tokens})"
+            )
+
         return LlmResponse(
             text=full_text,
             provider=self.provider_id,
@@ -187,7 +242,7 @@ class GeminiProvider(BaseLlmProvider):
             tokens_out=tokens_out,
             cost_usd=self._estimate_cost(selected_model, None, tokens_out),
             elapsed_sec=round(elapsed, 2),
-            raw={"stream": True, "model": selected_model},
+            raw={"stream": True, "model": selected_model, "finish_reason": finish_reason},
         )
 
     async def call_with_image(self, prompt, image, *, image_mime="image/png",
