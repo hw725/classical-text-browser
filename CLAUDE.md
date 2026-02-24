@@ -25,6 +25,30 @@ OCR, 교정, 번역, 주석 작업을 모두 수행한다.
   - 실행: uv run python -m <모듈>
   - uv.lock은 git에 포함
 
+## 백엔드 모듈 구조 (src/app/)
+server.py는 FastAPI 앱 생성 + 라우터 마운트만 담당하는 조립 파일(~85줄).
+실제 API 엔드포인트는 8개 라우터 모듈에 분산:
+
+```
+src/app/
+├── server.py            ← 앱 생성 + 라우터 마운트 + configure()
+├── _state.py            ← 공유 상태 + 헬퍼 (_get_llm_router, _resolve_repo_path 등)
+├── __main__.py          ← CLI 진입점 (python -m app serve)
+└── routers/
+    ├── library.py       ← 서고/설정/백업/휴지통 (15 라우트)
+    ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 (32 라우트)
+    ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티 (22 라우트)
+    ├── llm_ocr.py       ← LLM 상태·분석·초안 + OCR 엔진·실행 (13 라우트)
+    ├── alignment.py     ← 이체자 사전/정렬/일괄교정 (17 라우트)
+    ├── reading.py       ← L5 표점·현토 + L6 번역 + 비고 + AI보조 (22 라우트)
+    ├── annotation.py    ← L7 주석·사전형·인용마크 + AI보조 (30 라우트)
+    └── version.py       ← Git 그래프/되돌리기/스냅샷/가져오기 (7 라우트)
+```
+
+- 라우터 간 직접 import 금지. 공유 상태는 반드시 _state.py를 통해 접근.
+- 새 엔드포인트 추가 시 해당 도메인의 라우터 파일에 추가할 것.
+- Pydantic 모델은 사용하는 라우터 파일 내부에 정의.
+
 ## 코딩 규칙
 - 이 프로젝트의 사용자는 비개발자 인문학 연구자다
 - 코드 주석은 한국어로, 상세하게, "왜 이렇게 하는지" 포함

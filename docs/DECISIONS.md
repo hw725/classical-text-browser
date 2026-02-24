@@ -742,6 +742,7 @@ list_trash, restore_from_trash 함수 추가), `src/app/server.py`
 
 - [x] 하단 패널 → 액티비티 바 이동 + 급행 커밋 뷰 → D-025
 - [x] 비교 탭 L5 표점/현토 표시 수정 → D-026
+- [x] server.py 모놀리스 → 8개 라우터 분할 → D-027
 
 ---
 
@@ -771,6 +772,55 @@ list_trash, restore_from_trash 함수 추가), `src/app/server.py`
 **근거**:
 - 기존 `/punctuation`, `/hyeonto` API는 `block_id` 필수 → 페이지 단위 비교에 부적합.
 - 새 API로 기존 엔드포인트에 영향 없이 비교 전용 기능 추가.
+
+---
+
+## D-027: server.py 모놀리스 → 8개 라우터 분할
+
+**날짜**: 2026-02-24
+**맥락**: server.py가 7,718줄, 158개 라우트, 67개 Pydantic 모델을 담은 모놀리스로 성장.
+LLM 컨텍스트 윈도우(500~2,000줄이 적정)를 초과하여 코드 리뷰·수정 시 효율 저하.
+3-AI 크로스 리뷰(Claude/Codex/Gemini)에서 공통 1순위로 분할이 권고됨.
+
+**결정**:
+
+1. **도메인별 8개 APIRouter 모듈로 분할**:
+   FastAPI의 `APIRouter` 패턴으로, 각 도메인(서고/문헌/해석/LLM·OCR/정렬/독해/주석/버전)을
+   독립 파일로 추출. server.py는 ~85줄 조립 파일로 축소.
+
+2. **공유 상태 모듈 `_state.py` 신설**:
+   전역 상태(`_library_path`, `_llm_router`, `_llm_drafts`, `_ocr_pipeline`)와
+   공유 헬퍼(`_get_llm_router()`, `_resolve_repo_path()`, `_call_llm_text()` 등)를 집약.
+   라우터는 `_state.py`에서만 상태를 가져오고, 라우터 간 직접 import 금지.
+
+3. **순환 import 방지**: `_state.py`는 core/llm/ocr 모듈을 lazy import.
+   라우터→`_state`→core 단방향 의존만 허용.
+
+4. **하위 호환**: `from app.server import configure, app, _get_llm_router` 경로 유지.
+   `__main__.py`, `parsers/generic_llm.py` 등 기존 코드 변경 불필요.
+
+**파일 구조**:
+```
+src/app/
+├── server.py            ← 앱 생성 + 라우터 마운트 + configure() (~85줄)
+├── _state.py            ← 공유 상태 + 헬퍼 (~460줄)
+├── __main__.py          ← CLI 진입점
+└── routers/
+    ├── library.py       ← 서고/설정/백업/휴지통 (15 라우트, ~640줄)
+    ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 (32 라우트, ~1,800줄)
+    ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티 (22 라우트, ~970줄)
+    ├── llm_ocr.py       ← LLM 상태·분석·초안 + OCR (13 라우트, ~710줄)
+    ├── alignment.py     ← 이체자 사전/정렬/일괄교정 (17 라우트, ~570줄)
+    ├── reading.py       ← L5 표점·현토 + L6 번역 + AI보조 (22 라우트, ~930줄)
+    ├── annotation.py    ← L7 주석·사전형·인용마크 + AI보조 (30 라우트, ~1,200줄)
+    └── version.py       ← Git 그래프/되돌리기/스냅샷 (7 라우트, ~610줄)
+```
+
+**검증**: 전체 테스트 476 passed.
+
+**대안**:
+- 기능별 분할 (CRUD/LLM/Git) → 도메인 문맥이 파편화되어 거부.
+- 마이크로서비스 분리 → 단일 프로세스 아키텍처에 과잉.
 
 ---
 
