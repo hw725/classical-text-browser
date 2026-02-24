@@ -35,8 +35,12 @@ const interpState = {
 // eslint-disable-next-line no-unused-vars
 const compareState = {
   active: false, // 비교 모드 활성 여부
+  mode: "repo", // "repo" (저장소 간) | "version" (버전 간)
   repoIdA: null, // 좌측 해석 저장소 ID
   repoIdB: null, // 우측 해석 저장소 ID
+  commitA: null, // 좌측 커밋 해시 (null = HEAD)
+  commitB: null, // 우측 커밋 해시 (null = HEAD)
+  commitList: [], // 커밋 목록 캐시
   contentA: "", // 좌측 텍스트 내용
   contentB: "", // 우측 텍스트 내용
 };
@@ -168,6 +172,29 @@ function initInterpretation() {
   if (compareRepoB) {
     compareRepoB.addEventListener("change", () => {
       compareState.repoIdB = compareRepoB.value || null;
+      _loadCompareContent();
+    });
+  }
+
+  // 비교 유형 라디오 (저장소 간 / 버전 간)
+  document.querySelectorAll('input[name="compare-type"]').forEach((radio) => {
+    radio.addEventListener("change", () => {
+      _switchCompareType(radio.value);
+    });
+  });
+
+  // 버전 비교 커밋 드롭다운
+  const compareCommitA = document.getElementById("compare-commit-a");
+  const compareCommitB = document.getElementById("compare-commit-b");
+  if (compareCommitA) {
+    compareCommitA.addEventListener("change", () => {
+      compareState.commitA = compareCommitA.value === "HEAD" ? null : compareCommitA.value;
+      _loadCompareContent();
+    });
+  }
+  if (compareCommitB) {
+    compareCommitB.addEventListener("change", () => {
+      compareState.commitB = compareCommitB.value === "HEAD" ? null : compareCommitB.value;
       _loadCompareContent();
     });
   }
@@ -839,6 +866,15 @@ function _toggleCompareMode(enabled) {
     compareState.repoIdB = null;
     compareState.contentA = "";
     compareState.contentB = "";
+    // 버전 비교 상태도 초기화
+    compareState.mode = "repo";
+    compareState.commitA = null;
+    compareState.commitB = null;
+    compareState.commitList = [];
+    // 라디오 버튼 초기화
+    const repoRadio = document.querySelector('input[name="compare-type"][value="repo"]');
+    if (repoRadio) repoRadio.checked = true;
+    _showRepoCompareUI();
   }
 }
 
@@ -885,10 +921,18 @@ function _populateCompareSelects() {
 // eslint-disable-next-line no-unused-vars
 async function _loadCompareContent() {
   if (!compareState.active) return;
+  // 버전 간 비교 모드이면 별도 함수로 위임
+  if (compareState.mode === "version") return _loadVersionCompareContent();
   if (!viewerState.partId || !viewerState.pageNum) return;
 
   const { currentLayer, currentSubType } = interpState;
-  const { partId, pageNum } = viewerState;
+  const { pageNum } = viewerState;
+
+  // 왜 "main"을 쓰는가:
+  //   표점·번역·주석 전용 편집기(reading.py)는 part_id를 "main"으로 고정하여
+  //   저장한다. viewerState.partId는 문헌의 실제 part_id("vol1" 등)이므로
+  //   비교 모드에서 이를 그대로 쓰면 파일명 불일치로 내용을 찾지 못한다.
+  const partId = "main";
 
   // 좌측(A)과 우측(B)를 병렬로 로드
   const [contentA, contentB] = await Promise.all([
@@ -1075,4 +1119,195 @@ function _computeLineDiff(linesA, linesB) {
   }
 
   return result;
+}
+
+
+/* ──────────────────────────────────────────
+   버전 간 비교 (같은 저장소 내 커밋 비교)
+   ────────────────────────────────────────── */
+
+/**
+ * 비교 유형 전환: "저장소 간" ↔ "버전 간".
+ *
+ * 왜 이렇게 하는가:
+ *   기존 저장소 간 비교와 새 버전 간 비교를 하나의 UI에서 전환한다.
+ *   각 모드에 맞는 드롭다운(저장소 선택 vs 커밋 선택)을 표시/숨긴다.
+ */
+function _switchCompareType(type) {
+  compareState.mode = type;
+
+  if (type === "version") {
+    _showVersionCompareUI();
+    _populateCommitSelects();
+  } else {
+    _showRepoCompareUI();
+    _populateCompareSelects();
+  }
+
+  // 모드 전환 시 내용 다시 로드
+  _loadCompareContent();
+}
+
+/**
+ * 저장소 간 비교 UI — 저장소 드롭다운 표시, 커밋 드롭다운 숨김.
+ */
+function _showRepoCompareUI() {
+  document.querySelectorAll(".compare-repo-mode").forEach((el) => {
+    el.style.display = "";
+  });
+  document.querySelectorAll(".compare-version-mode").forEach((el) => {
+    el.style.display = "none";
+  });
+}
+
+/**
+ * 버전 간 비교 UI — 커밋 드롭다운 표시, 저장소 드롭다운 숨김.
+ */
+function _showVersionCompareUI() {
+  document.querySelectorAll(".compare-repo-mode").forEach((el) => {
+    el.style.display = "none";
+  });
+  document.querySelectorAll(".compare-version-mode").forEach((el) => {
+    el.style.display = "";
+  });
+}
+
+/**
+ * 커밋 드롭다운을 현재 해석 저장소의 커밋 목록으로 채운다.
+ *
+ * 왜 이렇게 하는가:
+ *   /api/interpretations/{id}/git/log 엔드포인트에서 커밋 이력을 가져와
+ *   드롭다운 옵션으로 변환한다. "현재 (HEAD)"가 항상 첫 번째 옵션.
+ */
+async function _populateCommitSelects() {
+  if (!interpState.interpId) return;
+
+  const selects = [
+    document.getElementById("compare-commit-a"),
+    document.getElementById("compare-commit-b"),
+  ];
+
+  // 캐시된 목록이 없으면 API에서 가져오기
+  if (compareState.commitList.length === 0) {
+    try {
+      const res = await fetch(
+        `/api/interpretations/${interpState.interpId}/git/log?limit=50`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        compareState.commitList = data.commits || [];
+      }
+    } catch (err) {
+      console.error("커밋 목록 로드 실패:", err);
+    }
+  }
+
+  selects.forEach((sel) => {
+    if (!sel) return;
+    const currentVal = sel.value;
+    sel.innerHTML = '<option value="HEAD">현재 (HEAD)</option>';
+    compareState.commitList.forEach((c) => {
+      const opt = document.createElement("option");
+      opt.value = c.hash || c.short_hash;
+      // 커밋 메시지 첫 줄만 (너무 길면 자름)
+      const msg = (c.message || "").split("\n")[0];
+      const shortMsg = msg.length > 40 ? msg.slice(0, 40) + "..." : msg;
+      opt.textContent = `${c.short_hash} ${shortMsg}`;
+      sel.appendChild(opt);
+    });
+    if (currentVal) sel.value = currentVal;
+  });
+
+  // A를 HEAD, B를 첫 번째 커밋으로 기본 선택
+  const selB = selects[1];
+  if (selB && !compareState.commitB && compareState.commitList.length > 0) {
+    const firstCommit = compareState.commitList[0];
+    selB.value = firstCommit.hash || firstCommit.short_hash;
+    compareState.commitB = selB.value;
+  }
+}
+
+/**
+ * 버전 간 비교: 특정 커밋 시점의 레이어 내용을 가져온다.
+ *
+ * commitHash가 null/HEAD이면 기존 API를 재사용한다.
+ * 특정 해시이면 새 커밋 기반 엔드포인트를 호출한다.
+ */
+async function _fetchComparePaneCommit(
+  commitHash,
+  layer,
+  subType,
+  partId,
+  pageNum
+) {
+  if (!commitHash || commitHash === "HEAD") {
+    return _fetchComparePane(
+      interpState.interpId,
+      layer,
+      subType,
+      partId,
+      pageNum
+    );
+  }
+
+  try {
+    let url;
+    if (layer === "L5_reading") {
+      const kind = interpState.l5Kind || "punctuation";
+      url =
+        `/api/interpretations/${interpState.interpId}` +
+        `/commits/${commitHash}/pages/${pageNum}/l5_compare` +
+        `?kind=${kind}&part_id=${partId}`;
+    } else {
+      url =
+        `/api/interpretations/${interpState.interpId}` +
+        `/commits/${commitHash}/layers/${layer}/${subType}/pages/${pageNum}` +
+        `?part_id=${partId}`;
+    }
+    const res = await fetch(url);
+    if (!res.ok) return "";
+    const data = await res.json();
+    return data.text_summary || _extractTextContent(data.content) || "";
+  } catch (err) {
+    console.error(`버전 비교 패널 로드 실패 (${commitHash}):`, err);
+    return "";
+  }
+}
+
+/**
+ * 버전 간 비교 내용 로드 + diff 렌더링.
+ *
+ * _loadCompareContent()에서 mode==="version"일 때 위임된다.
+ * 기존 diff 렌더링(_renderCompareDiff)을 그대로 재사용.
+ */
+async function _loadVersionCompareContent() {
+  if (!compareState.active || compareState.mode !== "version") return;
+  if (!interpState.interpId) return;
+  if (!viewerState.partId || !viewerState.pageNum) return;
+
+  const { currentLayer, currentSubType } = interpState;
+  const { pageNum } = viewerState;
+  const partId = "main";
+
+  const [contentA, contentB] = await Promise.all([
+    _fetchComparePaneCommit(
+      compareState.commitA,
+      currentLayer,
+      currentSubType,
+      partId,
+      pageNum
+    ),
+    _fetchComparePaneCommit(
+      compareState.commitB,
+      currentLayer,
+      currentSubType,
+      partId,
+      pageNum
+    ),
+  ]);
+
+  compareState.contentA = contentA;
+  compareState.contentB = contentB;
+
+  _renderCompareDiff();
 }

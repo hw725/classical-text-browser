@@ -606,6 +606,208 @@ def get_layer_content(
     }
 
 
+def get_layer_content_at_commit(
+    interp_path: str | Path,
+    commit_hash: str,
+    layer: str,
+    sub_type: str,
+    part_id: str,
+    page_num: int,
+) -> dict:
+    """특정 커밋 시점의 해석 층 내용을 읽어 반환한다.
+
+    목적: 버전 간 비교에서 과거 커밋 시점의 층 내용을 조회한다.
+    입력:
+        interp_path — 해석 저장소 경로.
+        commit_hash — 대상 커밋 해시 (전체 또는 단축).
+        layer — 층 이름 ("L5_reading" | "L6_translation" | "L7_annotation").
+        sub_type — 서브타입 ("main_text" | "annotation").
+        part_id — 권 식별자.
+        page_num — 페이지 번호.
+    출력: {layer, sub_type, part_id, page, content, file_path, exists, commit_hash}.
+
+    왜 이렇게 하는가:
+        get_layer_content()는 파일시스템(HEAD)만 읽지만,
+        이 함수는 git tree를 순회하여 특정 커밋 시점의 파일을 읽는다.
+        _layer_file_path()와 _find_specialized_file()이 시도하는
+        모든 경로 패턴을 git tree에서 순서대로 탐색한다.
+    """
+    import git as _git
+    interp_path = Path(interp_path).resolve()
+    filename_base = f"{part_id}_page_{page_num:03d}"
+
+    # 기본 경로 + 전문 편집기 경로를 후보 목록으로 구성
+    candidates = []
+
+    # 1. 기본 경로 (_layer_file_path 로직)
+    if layer == "L7_annotation":
+        candidates.append(f"{layer}/{filename_base}.json")
+    elif layer == "L6_translation":
+        candidates.append(f"{layer}/{sub_type}/{filename_base}.txt")
+    else:
+        candidates.append(f"{layer}/{sub_type}/{filename_base}.json")
+
+    # 2. 전문 편집기 경로 (_find_specialized_file 로직)
+    if layer == "L6_translation":
+        candidates.append(f"L6_translation/{sub_type}/{filename_base}_translation.json")
+    elif layer == "L7_annotation":
+        candidates.append(f"L7_annotation/{sub_type}/{filename_base}_annotation.json")
+    elif layer == "L5_reading":
+        candidates.append(f"L5_reading/{sub_type}/{filename_base}_punctuation.json")
+
+    # git tree에서 후보 경로를 순서대로 탐색
+    try:
+        repo = _git.Repo(interp_path)
+        commit = repo.commit(commit_hash)
+    except Exception:
+        return {
+            "layer": layer, "sub_type": sub_type, "part_id": part_id,
+            "page": page_num, "content": "" if layer == "L6_translation" else {},
+            "file_path": "", "exists": False, "commit_hash": commit_hash,
+        }
+
+    for rel_path in candidates:
+        try:
+            blob = commit.tree / rel_path
+        except KeyError:
+            continue
+
+        data = blob.data_stream.read()
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            text = data.decode("utf-8", errors="replace")
+
+        # JSON이면 파싱
+        if rel_path.endswith(".json"):
+            try:
+                content = json.loads(text)
+            except json.JSONDecodeError:
+                content = text
+        else:
+            content = text
+
+        return {
+            "layer": layer, "sub_type": sub_type, "part_id": part_id,
+            "page": page_num, "content": content,
+            "file_path": rel_path, "exists": True,
+            "commit_hash": commit.hexsha,
+        }
+
+    # L5 블록별 파일: 패턴 매칭으로 첫 번째 찾기
+    if layer == "L5_reading":
+        tree_dir_path = f"L5_reading/{sub_type}"
+        try:
+            tree_dir = commit.tree / tree_dir_path
+            for blob in tree_dir.blobs:
+                if blob.name.startswith(filename_base + "_blk_") and blob.name.endswith("_punctuation.json"):
+                    data = blob.data_stream.read()
+                    try:
+                        text = data.decode("utf-8")
+                    except UnicodeDecodeError:
+                        text = data.decode("utf-8", errors="replace")
+                    try:
+                        content = json.loads(text)
+                    except json.JSONDecodeError:
+                        content = text
+                    return {
+                        "layer": layer, "sub_type": sub_type, "part_id": part_id,
+                        "page": page_num, "content": content,
+                        "file_path": f"{tree_dir_path}/{blob.name}",
+                        "exists": True, "commit_hash": commit.hexsha,
+                    }
+        except KeyError:
+            pass
+
+    # 어떤 경로에서도 파일을 찾지 못함
+    return {
+        "layer": layer, "sub_type": sub_type, "part_id": part_id,
+        "page": page_num, "content": "" if layer == "L6_translation" else {},
+        "file_path": "", "exists": False, "commit_hash": commit_hash,
+    }
+
+
+def get_l5_compare_at_commit(
+    interp_path: str | Path,
+    commit_hash: str,
+    page_num: int,
+    kind: str = "punctuation",
+    part_id: str = "main",
+) -> dict:
+    """특정 커밋 시점의 L5 페이지 전체 비교 데이터를 반환한다.
+
+    목적: 버전 간 비교에서 특정 커밋의 L5 표점/현토 데이터를 수집한다.
+    입력:
+        interp_path — 해석 저장소 경로.
+        commit_hash — 대상 커밋 해시.
+        page_num — 페이지 번호.
+        kind — "punctuation" 또는 "hyeonto".
+        part_id — 권 식별자.
+    출력: {"blocks": [...], "text_summary": "줄 단위 비교용 텍스트"}.
+
+    왜 별도 함수인가:
+        L5는 블록별 파일이 여러 개이므로 git tree를 순회하여 패턴 매칭한다.
+        기존 api_l5_compare()의 filesystem glob을 git tree 순회로 대체한 버전이다.
+    """
+    import git as _git
+    interp_path = Path(interp_path).resolve()
+    page_prefix = f"{part_id}_page_{page_num:03d}"
+    suffix = f"_{kind}.json"
+
+    try:
+        repo = _git.Repo(interp_path)
+        commit = repo.commit(commit_hash)
+    except Exception:
+        return {"blocks": [], "text_summary": ""}
+
+    # git tree에서 L5_reading/main_text/ 하위 파일을 패턴 매칭
+    tree_dir_path = "L5_reading/main_text"
+    blocks = []
+    try:
+        tree_dir = commit.tree / tree_dir_path
+        for blob in sorted(tree_dir.blobs, key=lambda b: b.name):
+            if blob.name.startswith(page_prefix) and blob.name.endswith(suffix):
+                data = blob.data_stream.read()
+                try:
+                    text = data.decode("utf-8")
+                    blocks.append(json.loads(text))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    continue
+    except KeyError:
+        pass
+
+    # 비교용 텍스트 요약 생성 (기존 api_l5_compare와 동일 로직)
+    lines = []
+    for blk in blocks:
+        bid = blk.get("block_id", "unknown")
+        if kind == "punctuation":
+            items = blk.get("marks", [])
+            lines.append(f"[블록: {bid}]")
+            for m in items:
+                t = m.get("target", {})
+                s, e = t.get("start", "?"), t.get("end", "?")
+                before = m.get("before") or ""
+                after = m.get("after") or ""
+                parts = []
+                if before:
+                    parts.append(f"앞:{before}")
+                if after:
+                    parts.append(f"뒤:{after}")
+                desc = " ".join(parts) if parts else "(빈 표점)"
+                lines.append(f"  [{s}-{e}] {desc}")
+        else:
+            items = blk.get("annotations", [])
+            lines.append(f"[블록: {bid}]")
+            for a in items:
+                t = a.get("target", {})
+                s, e = t.get("start", "?"), t.get("end", "?")
+                text_val = a.get("text", "")
+                pos = a.get("position", "after")
+                lines.append(f"  [{s}-{e}] \"{text_val}\" ({pos})")
+
+    return {"blocks": blocks, "text_summary": "\n".join(lines)}
+
+
 def save_layer_content(
     interp_path: str | Path,
     layer: str,

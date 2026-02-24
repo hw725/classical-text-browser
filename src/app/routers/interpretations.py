@@ -21,6 +21,7 @@ from core.interpretation import (
     get_interp_git_log,
     get_interpretation_info,
     get_layer_content,
+    get_layer_content_at_commit,
     git_commit_interpretation,
     save_layer_content,
     update_base,
@@ -299,6 +300,47 @@ async def api_layer_content(
     except Exception as e:
         return JSONResponse(
             {"error": f"레이어 조회 중 오류: {e}"},
+            status_code=500,
+        )
+
+
+@router.get(
+    "/api/interpretations/{interp_id}/commits/{commit_hash}"
+    "/layers/{layer}/{sub_type}/pages/{page_num}"
+)
+async def api_layer_content_at_commit(
+    interp_id: str,
+    commit_hash: str,
+    layer: str,
+    sub_type: str,
+    page_num: int,
+    part_id: str = Query(..., description="권 식별자 (예: vol1)"),
+):
+    """특정 커밋 시점의 해석 층 내용을 반환한다.
+
+    목적: 버전 간 비교에서 과거 커밋의 층 내용을 로드한다.
+    왜 기존 api_layer_content()를 수정하지 않는가:
+        기존 엔드포인트는 항상 HEAD(현재 파일)를 읽는다.
+        커밋 해시를 받는 별도 URL로 분리하여 기존 동작에 영향을 주지 않는다.
+    """
+    _library_path = get_library_path()
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
+            status_code=404,
+        )
+
+    try:
+        return get_layer_content_at_commit(
+            interp_path, commit_hash, layer, sub_type, part_id, page_num
+        )
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"커밋 시점 레이어 조회 중 오류: {e}"},
             status_code=500,
         )
 

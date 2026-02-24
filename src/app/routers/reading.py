@@ -22,6 +22,7 @@ from pydantic import BaseModel
 
 from app._state import get_library_path, _call_llm_text, _call_llm_text_stream
 from core.interpretation import (
+    get_l5_compare_at_commit,
     get_layer_content,
     get_page_notes,
     git_commit_interpretation,
@@ -242,6 +243,49 @@ async def api_l5_compare(
                 lines.append(f"  [{s}-{e}] \"{text}\" ({pos})")
 
     return {"blocks": blocks, "text_summary": "\n".join(lines)}
+
+
+@router.get(
+    "/api/interpretations/{interp_id}/commits/{commit_hash}"
+    "/pages/{page_num}/l5_compare"
+)
+async def api_l5_compare_at_commit(
+    interp_id: str,
+    commit_hash: str,
+    page_num: int,
+    kind: str = Query("punctuation", description="L5 종류: punctuation | hyeonto"),
+    part_id: str = Query("main", description="권 식별자"),
+):
+    """버전 간 비교용: 특정 커밋 시점의 L5 페이지 전체 데이터 조회.
+
+    왜 기존 api_l5_compare()를 수정하지 않는가:
+        기존 엔드포인트는 파일시스템(HEAD)을 glob으로 탐색한다.
+        커밋 시점은 git tree 순회가 필요하므로 별도 엔드포인트로 분리.
+    """
+    _library_path = get_library_path()
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    if kind not in ("punctuation", "hyeonto"):
+        return JSONResponse(
+            {"error": f"kind는 'punctuation' 또는 'hyeonto'여야 합니다. 받은 값: {kind}"},
+            status_code=400,
+        )
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."},
+            status_code=404,
+        )
+
+    try:
+        return get_l5_compare_at_commit(interp_path, commit_hash, page_num, kind, part_id)
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"커밋 시점 L5 비교 조회 중 오류: {e}"},
+            status_code=500,
+        )
 
 
 @router.get("/api/interpretations/{interp_id}/pages/{page_num}/punctuation")
