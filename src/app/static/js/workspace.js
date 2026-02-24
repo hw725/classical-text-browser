@@ -883,6 +883,11 @@ function initModeBar() {
  *   우측 패널과 오버레이만 교체한다.
  */
 function _switchMode(mode) {
+  // Interpretation mode tab is removed from UI. Fallback to view if called externally.
+  if (mode === "interpretation") {
+    mode = "view";
+  }
+
   const editorRight = document.getElementById("editor-right");
   const layoutPanel = document.getElementById("layout-props-panel");
   const correctionPanel = document.getElementById("correction-panel");
@@ -1287,16 +1292,6 @@ function onPageChanged(opts) {
   ) {
     if (typeof _loadLayerContent === "function") {
       _loadLayerContent();
-    }
-  }
-
-  // 7-1. 비교 모드 동기화 (활성 시)
-  if (
-    typeof compareState !== "undefined" &&
-    compareState.active
-  ) {
-    if (typeof _loadCompareContent === "function") {
-      _loadCompareContent();
     }
   }
 

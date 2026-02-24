@@ -1009,6 +1009,10 @@ Selection API가 반환하는 문자 오프셋에 표점 문자가 포함되어
 - [x] 전문 편집기 파일 경로 통합 → D-030
 - [x] 표점 오프셋 보정 → D-031
 - [x] 정렬 알고리즘 최적화 → D-032
+- [x] LLM 응답 잘림 방지 + 결과 캐시 → D-033
+- [x] 비교 탭 L6/L7 표시 + 전용 API 호출 분기 → D-034
+- [x] 주석 라우터 확장 (블록 탐색 + 수정 필드) → D-035
+- [x] 주석 유형 관리 UX 개선 (모달 다이얼로그) → D-036
 - [ ] 협업 모델
 
 ### 서고 관리
@@ -1016,6 +1020,92 @@ Selection API가 반환하는 문자 오프셋에 표점 문자가 포함되어
 - [x] GUI에서 서고 관리 (전환/생성/최근 목록) → D-022
 - [x] 휴지통 시스템 (Trash/Restore) → D-023
 - [x] .git 오염 버그 수정 + 서고 백업 → D-024
+
+## D-033: LLM 응답 잘림 방지 + 결과 캐시
+
+**날짜**: 2026-02-24
+**맥락**: LLM JSON 응답이 `max_tokens` 한도에서 잘려 파싱 오류가 발생하거나,
+동일 입력에 대해 불필요한 반복 호출이 발생하는 문제.
+
+**결정**:
+
+1. **목적별 동적 `max_tokens` 계산**: `_state.py`에 `_get_max_tokens_for_purpose(purpose, text_len)` 추가.
+   표점(768~2048), 번역(1400~4096), 주석(4096~16384)으로 입력 길이에 비례하여 동적 조절.
+2. **잘림 감지 + 예외 발생**: Gemini/OpenAI provider에서 `finish_reason`이 `length`/`max_tokens`이면
+   `LlmProviderError`를 발생시켜 잘린 JSON이 조용히 통과하는 것을 방지.
+3. **결과 캐시**: `_state.py`에 입력 해시(SHA-256) 기반 인메모리 캐시 (TTL 10분, 최대 256건).
+   동일 블록·동일 목적에 대한 반복 호출을 방지.
+
+**수정 파일**: `_state.py`, `gemini_provider.py`, `openai_provider.py`
+
+---
+
+## D-034: 비교 탭 L6/L7 표시 + 전용 API 호출 분기
+
+**날짜**: 2026-02-24
+**맥락**: D-026에서 L5 비교를 수정했으나, L6(번역)·L7(주석) 비교 탭도
+범용 `/layers/` API가 전문 편집기의 실제 저장 경로를 찾지 못해 빈 화면이 표시되는 동일 문제.
+또한 Git 커밋 기반 비교에서도 전문 편집기 파일 경로 우선순위가 역전되어 빈 파일을 읽는 버그.
+
+**결정**:
+
+1. **`_buildCompareUrls()` URL 빌더**: 레이어별로 전용 API URL 목록을 생성하고 순서대로 시도.
+   - L5: `/l5_compare` API (블록 지향)
+   - L6: `/translation` API → `/layers/` 폴백
+   - L7: `/annotations` API → `/layers/` 폴백
+   `partId` 불일치도 처리 (실제 partId → "main" 폴백).
+
+2. **Git 커밋 비교 경로 우선순위 수정**: `core/interpretation.py`의 `get_layer_content_at_commit()`에서
+   전문 편집기 경로(`_translation.json`, `_annotation.json`)를 기본 경로보다 먼저 탐색.
+   기존에는 기본 경로가 먼저여서 빈 파일에 매칭.
+
+3. **L5/L7 레거시 폴백**: 블록별 파일이 없고 페이지 단위 JSON만 있을 때
+   해당 JSON의 blocks 배열을 사용하는 레거시 폴백 경로 추가. 현재 API + Git 비교 양쪽 적용.
+
+4. **비교 텍스트 요약 개선**: 빈 marks/annotations 블록은 건너뛰고,
+   텍스트 기반 블록에도 원문 텍스트를 표시하도록 제네릭 폴백 추가.
+
+**수정 파일**: `interpretation.js`, `core/interpretation.py`, `routers/reading.py`
+
+---
+
+## D-035: 주석 라우터 확장 — 블록 탐색 + 원문 로드 + 수정 필드 확장
+
+**날짜**: 2026-02-24
+**맥락**: 사전형 주석(D-019)의 4단계 생성과 AI 태깅이 블록별 원문 텍스트를
+직접 로드해야 하는데, 기존에는 별도 헬퍼 없이 라우터 핸들러 안에서 인라인 처리.
+또한 주석 수정 API(`PUT`)가 기본 필드(target, type, content, status)만 허용하여
+사전형 필드(dictionary, generation_history 등)를 수정할 수 없었다.
+
+**결정**:
+
+1. **블록 탐색 헬퍼 3종**: `annotation.py`에 `_load_page_blocks()`, `_load_page_block_ids()`,
+   `_load_original_block_text()` 추가. L4 원문 → L6 번역 → 엔티티 순으로 폴백.
+2. **수정 가능 필드 확장**: `AnnotationUpdateRequest`에 `dictionary`, `current_stage`,
+   `generation_history`, `source_text_snapshot`, `translation_snapshot`, `annotator` 추가.
+3. **AI 태깅 결과 캐시 통합**: `_state.py`의 `_llm_result_cache`와 연동.
+
+**수정 파일**: `routers/annotation.py`, `_state.py`
+
+---
+
+## D-036: 주석 유형 관리 UX 개선 — 모달 다이얼로그
+
+**날짜**: 2026-02-24
+**맥락**: 주석 유형 관리가 `prompt()` 4연타로 ID/라벨/색상/아이콘을 입력받는 구조.
+기존 유형 목록 확인 불가, 삭제 UI 없음, 컬러 피커 없음.
+
+**결정**:
+
+1. **bib-dialog 패턴 모달**: 기본 프리셋(읽기전용) + 사용자 정의(삭제 가능) + 추가 폼을
+   한 화면에서 관리하는 모달 다이얼로그로 교체.
+2. **`<input type="color">` 컬러 피커**: hex 직접 입력 대신 브라우저 내장 컬러 피커.
+3. **ID 검증**: 영문으로 시작, 영문·숫자·밑줄만 허용하는 정규표현식 클라이언트 검증.
+4. **모달 닫기 시 자동 갱신**: 유형 필터 셀렉트, 편집 패널 유형 셀렉트를 자동 갱신.
+
+**수정 파일**: `index.html`, `annotation-editor.js`, `workspace.css`
+
+---
 
 ### 배포·설치
 - [ ] Google Drive + .git 충돌 회피 가이드 → Phase 10 이후

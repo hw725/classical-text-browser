@@ -212,37 +212,76 @@ async def api_l5_compare(
         except (json.JSONDecodeError, OSError):
             continue
 
+    # Legacy fallback: if only page-level JSON exists, use its block list for block-oriented compare.
+    if not blocks:
+        legacy_file = l5_dir / f"{page_prefix}.json"
+        if legacy_file.exists():
+            try:
+                with open(legacy_file, encoding="utf-8") as f:
+                    legacy_data = json.load(f)
+                if isinstance(legacy_data, dict):
+                    if isinstance(legacy_data.get("blocks"), list):
+                        blocks = legacy_data.get("blocks", [])
+                    else:
+                        blocks = [legacy_data]
+            except (json.JSONDecodeError, OSError):
+                pass
+
     # 비교용 텍스트 요약 생성
     lines = []
     for blk in blocks:
+        if not isinstance(blk, dict):
+            continue
+
         bid = blk.get("block_id", "unknown")
         if kind == "punctuation":
             items = blk.get("marks", [])
-            lines.append(f"[블록: {bid}]")
-            for m in items:
-                t = m.get("target", {})
-                s, e = t.get("start", "?"), t.get("end", "?")
-                before = m.get("before") or ""
-                after = m.get("after") or ""
-                # before와 after를 모두 보여주어 비교 시 차이를 명확히 함
-                parts = []
-                if before:
-                    parts.append(f"앞:{before}")
-                if after:
-                    parts.append(f"뒤:{after}")
-                desc = " ".join(parts) if parts else "(빈 표점)"
-                lines.append(f"  [{s}-{e}] {desc}")
+            if items:
+                lines.append(f"[블록: {bid}]")
+                for m in items:
+                    t = m.get("target", {})
+                    s, e = t.get("start", "?"), t.get("end", "?")
+                    before = m.get("before") or ""
+                    after = m.get("after") or ""
+                    # before와 after를 모두 보여주어 비교 시 차이를 명확히 함
+                    parts = []
+                    if before:
+                        parts.append(f"앞:{before}")
+                    if after:
+                        parts.append(f"뒤:{after}")
+                    desc = " ".join(parts) if parts else "(빈 표점)"
+                    lines.append(f"  [{s}-{e}] {desc}")
+                lines.append("")
+                continue
         else:
             items = blk.get("annotations", [])
-            lines.append(f"[블록: {bid}]")
-            for a in items:
-                t = a.get("target", {})
-                s, e = t.get("start", "?"), t.get("end", "?")
-                text = a.get("text", "")
-                pos = a.get("position", "after")
-                lines.append(f"  [{s}-{e}] \"{text}\" ({pos})")
+            if items:
+                lines.append(f"[블록: {bid}]")
+                for a in items:
+                    t = a.get("target", {})
+                    s, e = t.get("start", "?"), t.get("end", "?")
+                    text = a.get("text", "")
+                    pos = a.get("position", "after")
+                    lines.append(f"  [{s}-{e}] \"{text}\" ({pos})")
+                lines.append("")
+                continue
 
-    return {"blocks": blocks, "text_summary": "\n".join(lines)}
+        # Generic block fallback (text-block unit), used when marks/annotations are absent.
+        text_value = (
+            blk.get("text")
+            or blk.get("source_text")
+            or blk.get("original_text")
+            or blk.get("corrected_text")
+            or ""
+        )
+        text_flat = " ".join(str(text_value).split()).strip()
+        if text_flat:
+            lines.append(f"[블록: {bid}] {text_flat}")
+        else:
+            lines.append(f"[블록: {bid}]")
+        lines.append("")
+
+    return {"blocks": blocks, "text_summary": "\n".join(lines).strip()}
 
 
 @router.get(
@@ -543,7 +582,11 @@ async def api_hyeonto_preview(interp_id: str, page_num: int, block_id: str):
 
 
 @router.get("/api/interpretations/{interp_id}/pages/{page_num}/translation")
-async def api_get_translations(interp_id: str, page_num: int):
+async def api_get_translations(
+    interp_id: str,
+    page_num: int,
+    part_id: str = Query("main", description="권 식별자"),
+):
     """번역 조회.
 
     목적: 특정 페이지의 L6 번역 데이터를 반환한다.
@@ -556,7 +599,6 @@ async def api_get_translations(interp_id: str, page_num: int):
     if not interp_path.exists():
         return JSONResponse({"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."}, status_code=404)
 
-    part_id = "main"
     data = load_translations(interp_path, part_id, page_num)
     return data
 

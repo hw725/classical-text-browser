@@ -932,7 +932,7 @@ async function _loadCompareContent() {
   //   표점·번역·주석 전용 편집기(reading.py)는 part_id를 "main"으로 고정하여
   //   저장한다. viewerState.partId는 문헌의 실제 part_id("vol1" 등)이므로
   //   비교 모드에서 이를 그대로 쓰면 파일명 불일치로 내용을 찾지 못한다.
-  const partId = "main";
+  const partId = viewerState.partId || "main";
 
   // 왜 "main_text"를 쓰는가:
   //   전문 편집기(표점·번역·주석)는 항상 main_text/ 하위에 파일을 저장한다.
@@ -955,41 +955,326 @@ async function _loadCompareContent() {
 }
 
 /**
- * 비교 패널 한쪽의 내용을 API에서 가져온다.
+ * 비교 패널 한쪽의 내용을 전용 API에서 가져온다.
+ *
+ * 왜 이렇게 하는가:
+ *   전문 편집기(reading.py, annotation.py)가 저장한 파일을 직접 읽는
+ *   전용 API를 각 층별로 호출한다. 범용 /layers/ API는 기본 경로
+ *   (vol1_page_002.json 등)를 먼저 찾으므로 빈 파일에 빠지기 쉽다.
+ *
+ *   - L5: l5_compare API — 표점/현토 블록별 파일을 수집해 text_summary 반환.
+ *   - L6: /translation API — reading.py가 main_text/에 저장한 번역 JSON 반환.
+ *   - L7: /annotations API — annotation.py가 main_text/에 저장한 주석 JSON 반환.
  *
  * 입력: repoId — 해석 저장소 ID (null이면 빈 문자열 반환)
- * 출력: 텍스트 문자열
+ * 출력: 비교용 텍스트 문자열
  */
+function _buildCompareUrls(repoId, layer, subType, partId, pageNum) {
+  const resolvedPart = partId || "main";
+  const urls = [];
+
+  if (layer === "L5_reading") {
+    const kind = interpState.l5Kind || "punctuation";
+    urls.push(
+      `/api/interpretations/${repoId}/pages/${pageNum}/l5_compare?kind=${kind}&part_id=${resolvedPart}`
+    );
+    if (resolvedPart !== "main") {
+      urls.push(
+        `/api/interpretations/${repoId}/pages/${pageNum}/l5_compare?kind=${kind}&part_id=main`
+      );
+    }
+    // L5 compare must stay block-oriented. Do not fall back to page-level layer files.
+    return [...new Set(urls)];
+  }
+
+  if (layer === "L6_translation") {
+    urls.push(
+      `/api/interpretations/${repoId}/pages/${pageNum}/translation?part_id=${resolvedPart}`
+    );
+    if (resolvedPart !== "main") {
+      urls.push(
+        `/api/interpretations/${repoId}/pages/${pageNum}/translation?part_id=main`
+      );
+    }
+  } else if (layer === "L7_annotation") {
+    urls.push(
+      `/api/interpretations/${repoId}/pages/${pageNum}/annotations?part_id=${resolvedPart}`
+    );
+    if (resolvedPart !== "main") {
+      urls.push(
+        `/api/interpretations/${repoId}/pages/${pageNum}/annotations?part_id=main`
+      );
+    }
+  }
+
+  urls.push(
+    `/api/interpretations/${repoId}/layers/${layer}/${subType}/pages/${pageNum}?part_id=${resolvedPart}`
+  );
+  if (resolvedPart !== "main") {
+    urls.push(
+      `/api/interpretations/${repoId}/layers/${layer}/${subType}/pages/${pageNum}?part_id=main`
+    );
+  }
+
+  return [...new Set(urls)];
+}
+
 async function _fetchComparePane(repoId, layer, subType, partId, pageNum) {
   if (!repoId) return "";
   try {
-    let url;
-    if (layer === "L5_reading") {
-      // L5는 표점/현토 전용 비교 API 사용
-      // 왜: 일반 /layers/ API는 _punctuation.json, _hyeonto.json 파일을 찾지 못한다.
-      const kind = interpState.l5Kind || "punctuation";
-      url = `/api/interpretations/${repoId}/pages/${pageNum}/l5_compare?kind=${kind}&part_id=${partId}`;
-    } else {
-      url = `/api/interpretations/${repoId}/layers/${layer}/${subType}/pages/${pageNum}?part_id=${partId}`;
+    const urls = _buildCompareUrls(repoId, layer, subType, partId, pageNum);
+
+    for (const url of urls) {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+
+      const data = await res.json();
+      const normalized = _normalizeCompareText(data, layer);
+      if (normalized) return normalized;
     }
-    const res = await fetch(url);
-    if (!res.ok) return "";
-    const data = await res.json();
-    // L5 비교 API는 text_summary를 반환, 그 외는 content를 텍스트로 변환
-    return data.text_summary || _extractTextContent(data.content) || "";
+
+    return "";
   } catch (err) {
-    console.error(`비교 패널 로드 실패 (${repoId}):`, err);
+    console.error(`Compare pane load failed (${repoId}):`, err);
     return "";
   }
 }
 
+function _formatTranslationsForCompare(data) {
+  // 전용 API와 레이어 API 모두 처리
+  const translations = data.translations || (data.content && data.content.translations) || [];
+  if (translations.length === 0) return "";
+
+  const lines = [];
+  for (const t of translations) {
+    const src = t.source || {};
+    const bid = (src.block_id || "?").slice(0, 8);
+    const s = src.start ?? "?";
+    const e = src.end ?? "?";
+    lines.push(`[블록: ${bid}] [${s}-${e}]`);
+    if (t.source_text) lines.push(`원문: ${t.source_text}`);
+    if (t.translation) lines.push(`번역: ${t.translation}`);
+    lines.push("");
+  }
+  return lines.join("\n").trimEnd();
+}
+
 /**
- * API 응답의 content를 문자열로 변환한다.
+ * L7 주석 데이터를 비교용 텍스트로 변환한다.
+ *
+ * /annotations API 응답 형식:
+ *   {blocks: [{block_id, annotations: [{target, type, content: {label, description}}, ...]}]}
+ *
+ * 커밋 기반 레이어 API 응답 형식:
+ *   {content: {blocks: [{block_id, annotations: [...]}]}}
+ */
+function _formatAnnotationsForCompare(data) {
+  // 전용 API와 레이어 API 모두 처리
+  const blocks = data.blocks || (data.content && data.content.blocks) || [];
+  if (blocks.length === 0) return "";
+
+  const lines = [];
+  for (const blk of blocks) {
+    const bid = (blk.block_id || "?").slice(0, 8);
+    const anns = blk.annotations || [];
+    if (anns.length === 0) continue;
+
+    lines.push(`[블록: ${bid}]`);
+    for (const a of anns) {
+      const t = a.target || {};
+      const s = t.start ?? "?";
+      const e = t.end ?? "?";
+      const typeName = a.type || "";
+      const content = a.content || {};
+      const label = content.label || "";
+      const desc = content.description || "";
+      // "  [10-11] book_title: 몽구(蒙求) — 설명..."
+      let line = `  [${s}-${e}]`;
+      if (typeName) line += ` ${typeName}:`;
+      if (label) line += ` ${label}`;
+      if (desc) line += ` — ${desc.length > 60 ? desc.slice(0, 60) + "…" : desc}`;
+      lines.push(line);
+    }
+    lines.push("");
+  }
+  return lines.join("\n").trimEnd();
+}
+
+/**
+ * API 응답의 content를 문자열로 변환한다. (폴백용)
  *
  * 왜 이렇게 하는가:
  *   L6_translation은 문자열, L5_reading/L7_annotation은 JSON 객체를 반환한다.
  *   비교를 위해 모든 경우를 문자열로 통일한다.
  */
+/**
+ * ???/?? ?? ??? ??? ?? ??? ???? ???.
+ */
+function _formatL5ContentForCompare(data) {
+  const payload =
+    data && typeof data === "object" && "content" in data ? data.content : data;
+  if (!payload || typeof payload !== "object") return "";
+
+  const kind = interpState.l5Kind || "punctuation";
+  const blocks = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload.blocks)
+      ? payload.blocks
+      : [payload];
+
+  const lines = [];
+  for (const blk of blocks) {
+    const blockId = (blk.block_id || "?").toString().slice(0, 8);
+    if (kind === "punctuation") {
+      const marks = blk.marks || [];
+      if (marks.length === 0) continue;
+
+      lines.push("[block: " + blockId + "]");
+      for (const m of marks) {
+        const t = m.target || {};
+        const sPos = t.start ?? "?";
+        const ePos = t.end ?? "?";
+        const before = m.before || "";
+        const after = m.after || "";
+        const parts = [];
+        if (before) parts.push("before:" + before);
+        if (after) parts.push("after:" + after);
+        lines.push(
+          "  [" + sPos + "-" + ePos + "] " + (parts.join(" ") || "(empty mark)")
+        );
+      }
+    } else {
+      const anns = blk.annotations || [];
+      if (anns.length === 0) continue;
+
+      lines.push("[block: " + blockId + "]");
+      for (const a of anns) {
+        const t = a.target || {};
+        const sPos = t.start ?? "?";
+        const ePos = t.end ?? "?";
+        const text = a.text || "";
+        const pos = a.position || "after";
+        lines.push(`  [${sPos}-${ePos}] "${text}" (${pos})`);
+      }
+    }
+
+    lines.push("");
+  }
+
+  return lines.join("\n").trimEnd();
+}
+
+function _formatGenericBlocksForCompare(data) {
+  const payload =
+    data && typeof data === "object" && "content" in data ? data.content : data;
+  if (!payload || typeof payload !== "object") return "";
+
+  const blocks = Array.isArray(payload.blocks)
+    ? payload.blocks
+    : Array.isArray(payload)
+      ? payload
+      : [];
+  if (blocks.length === 0) return "";
+
+  const lines = [];
+  for (const blk of blocks) {
+    if (!blk || typeof blk !== "object") continue;
+
+    const blockId = (blk.block_id || blk.id || "?").toString().slice(0, 8);
+    const textCandidate =
+      blk.text ||
+      blk.source_text ||
+      blk.original_text ||
+      blk.corrected_text ||
+      (typeof blk.content === "string" ? blk.content : "");
+    const flatText = String(textCandidate || "").replace(/\s+/g, " ").trim();
+
+    lines.push(
+      flatText ? "[block: " + blockId + "] " + flatText : "[block: " + blockId + "]"
+    );
+
+    const anns = Array.isArray(blk.annotations) ? blk.annotations : [];
+    for (const ann of anns) {
+      if (!ann || typeof ann !== "object") continue;
+      const t = ann.target || {};
+      const sPos = t.start ?? "?";
+      const ePos = t.end ?? "?";
+      const text =
+        ann.text ||
+        ann.label ||
+        (ann.content && ann.content.label) ||
+        "";
+      if (text) {
+        lines.push("  [" + sPos + "-" + ePos + "] " + text);
+      }
+    }
+
+    const marks = Array.isArray(blk.marks) ? blk.marks : [];
+    for (const mark of marks) {
+      if (!mark || typeof mark !== "object") continue;
+      const t = mark.target || {};
+      const sPos = t.start ?? "?";
+      const ePos = t.end ?? "?";
+      const before = mark.before || "";
+      const after = mark.after || "";
+      const parts = [];
+      if (before) parts.push("before:" + before);
+      if (after) parts.push("after:" + after);
+      if (parts.length > 0) {
+        lines.push("  [" + sPos + "-" + ePos + "] " + parts.join(" "));
+      }
+    }
+
+    lines.push("");
+  }
+
+  return lines.join("\n").trimEnd();
+}
+
+function _normalizeCompareText(data, layer) {
+  const payload =
+    data && typeof data === "object" && "content" in data ? data.content : data;
+
+  if (layer === "L5_reading") {
+    if (typeof data?.text_summary === "string" && data.text_summary.trim()) {
+      return data.text_summary;
+    }
+
+    const l5Text = _formatL5ContentForCompare(data);
+    if (l5Text) return l5Text;
+
+    const genericBlocks = _formatGenericBlocksForCompare(data);
+    if (genericBlocks) return genericBlocks;
+
+    return _extractTextContent(payload) || "";
+  }
+
+  if (layer === "L6_translation") {
+    const transText = _formatTranslationsForCompare(data);
+    if (transText) return transText;
+
+    if (typeof payload === "string") return payload;
+    const genericBlocks = _formatGenericBlocksForCompare(data);
+    if (genericBlocks) return genericBlocks;
+    return _extractTextContent(payload) || "";
+  }
+
+  if (layer === "L7_annotation") {
+    const annText = _formatAnnotationsForCompare(data);
+    if (annText) return annText;
+
+    const genericBlocks = _formatGenericBlocksForCompare(data);
+    if (genericBlocks) return genericBlocks;
+
+    return _extractTextContent(payload) || "";
+  }
+
+  if (data && typeof data.content !== "undefined") {
+    return _extractTextContent(data.content) || "";
+  }
+  return _extractTextContent(data) || "";
+}
+
 function _extractTextContent(content) {
   if (typeof content === "string") return content;
   if (
@@ -1015,7 +1300,11 @@ function _renderCompareDiff() {
   if (!containerA || !containerB) return;
 
   // 저장소가 하나도 선택되지 않은 경우
-  if (!compareState.repoIdA && !compareState.repoIdB) {
+  if (
+    compareState.mode === "repo" &&
+    !compareState.repoIdA &&
+    !compareState.repoIdB
+  ) {
     containerA.innerHTML =
       '<div class="compare-placeholder">좌측 저장소를 선택하세요</div>';
     containerB.innerHTML =
@@ -1240,6 +1529,45 @@ async function _populateCommitSelects() {
  * commitHash가 null/HEAD이면 기존 API를 재사용한다.
  * 특정 해시이면 새 커밋 기반 엔드포인트를 호출한다.
  */
+function _buildCompareCommitUrls(commitHash, layer, subType, partId, pageNum) {
+  const resolvedPart = partId || "main";
+  const urls = [];
+
+  if (layer === "L5_reading") {
+    const kind = interpState.l5Kind || "punctuation";
+    urls.push(
+      `/api/interpretations/${interpState.interpId}` +
+      `/commits/${commitHash}/pages/${pageNum}/l5_compare` +
+      `?kind=${kind}&part_id=${resolvedPart}`
+    );
+    if (resolvedPart !== "main") {
+      urls.push(
+        `/api/interpretations/${interpState.interpId}` +
+        `/commits/${commitHash}/pages/${pageNum}/l5_compare` +
+        `?kind=${kind}&part_id=main`
+      );
+    }
+
+    // L5 commit compare must stay block-oriented. Do not fall back to page-level layer files.
+    return [...new Set(urls)];
+  }
+
+  urls.push(
+    `/api/interpretations/${interpState.interpId}` +
+    `/commits/${commitHash}/layers/${layer}/${subType}/pages/${pageNum}` +
+    `?part_id=${resolvedPart}`
+  );
+  if (resolvedPart !== "main") {
+    urls.push(
+      `/api/interpretations/${interpState.interpId}` +
+      `/commits/${commitHash}/layers/${layer}/${subType}/pages/${pageNum}` +
+      `?part_id=main`
+    );
+  }
+
+  return [...new Set(urls)];
+}
+
 async function _fetchComparePaneCommit(
   commitHash,
   layer,
@@ -1258,35 +1586,30 @@ async function _fetchComparePaneCommit(
   }
 
   try {
-    let url;
-    if (layer === "L5_reading") {
-      const kind = interpState.l5Kind || "punctuation";
-      url =
-        `/api/interpretations/${interpState.interpId}` +
-        `/commits/${commitHash}/pages/${pageNum}/l5_compare` +
-        `?kind=${kind}&part_id=${partId}`;
-    } else {
-      url =
-        `/api/interpretations/${interpState.interpId}` +
-        `/commits/${commitHash}/layers/${layer}/${subType}/pages/${pageNum}` +
-        `?part_id=${partId}`;
+    const urls = _buildCompareCommitUrls(
+      commitHash,
+      layer,
+      subType,
+      partId,
+      pageNum
+    );
+
+    for (const url of urls) {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+
+      const data = await res.json();
+      const normalized = _normalizeCompareText(data, layer);
+      if (normalized) return normalized;
     }
-    const res = await fetch(url);
-    if (!res.ok) return "";
-    const data = await res.json();
-    return data.text_summary || _extractTextContent(data.content) || "";
+
+    return "";
   } catch (err) {
-    console.error(`버전 비교 패널 로드 실패 (${commitHash}):`, err);
+    console.error(`Version compare pane load failed (${commitHash}):`, err);
     return "";
   }
 }
 
-/**
- * 버전 간 비교 내용 로드 + diff 렌더링.
- *
- * _loadCompareContent()에서 mode==="version"일 때 위임된다.
- * 기존 diff 렌더링(_renderCompareDiff)을 그대로 재사용.
- */
 async function _loadVersionCompareContent() {
   if (!compareState.active || compareState.mode !== "version") return;
   if (!interpState.interpId) return;
@@ -1294,7 +1617,7 @@ async function _loadVersionCompareContent() {
 
   const { currentLayer } = interpState;
   const { pageNum } = viewerState;
-  const partId = "main";
+  const partId = viewerState.partId || "main";
   // _loadCompareContent()와 같은 이유로 "main_text" 고정
   const subType = "main_text";
 
