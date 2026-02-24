@@ -299,6 +299,15 @@ async function _loadInterpretationList() {
   const container = document.getElementById("interp-list");
   if (!container) return;
 
+  // 문헌이 선택된 상태면 해석 섹션을 표시한다.
+  // 왜: interp-section은 HTML에서 display:none으로 시작하는데,
+  //     loadBibliography()와 달리 여기서 섹션을 표시하지 않아서
+  //     다른 패널에 갔다 와야만 보이는 버그가 있었다.
+  if (typeof viewerState !== "undefined" && viewerState.docId) {
+    const section = document.getElementById("interp-section");
+    if (section) section.style.display = "";
+  }
+
   try {
     const res = await fetch("/api/interpretations");
     if (!res.ok) throw new Error("해석 저장소 목록 API 오류");
