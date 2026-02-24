@@ -123,13 +123,13 @@ class TestCollectCommits:
     def test_empty_repo(self, tmp_path):
         """빈 저장소에서 수집하면 빈 리스트를 반환한다."""
         repo = git.Repo.init(tmp_path / "empty_repo")
-        commits, total, branches = _collect_commits(tmp_path / "empty_repo")
+        commits, total, branches, _head = _collect_commits(tmp_path / "empty_repo")
         assert commits == []
         assert total == 0
 
     def test_nonexistent_path(self, tmp_path):
         """존재하지 않는 경로에서 수집하면 빈 리스트를 반환한다."""
-        commits, total, branches = _collect_commits(tmp_path / "no_such_repo")
+        commits, total, branches, _head = _collect_commits(tmp_path / "no_such_repo")
         assert commits == []
         assert total == 0
         assert branches == []
@@ -146,7 +146,7 @@ class TestCollectCommits:
             repo.index.commit(f"feat: L{i+1} 작업 {i}")
 
         branch = repo.active_branch.name
-        commits, total, branches = _collect_commits(repo_path, branch=branch)
+        commits, total, branches, _head = _collect_commits(repo_path, branch=branch)
 
         assert total == 3
         assert len(commits) == 3
@@ -166,7 +166,7 @@ class TestCollectCommits:
             repo.index.commit(f"commit {i}")
 
         branch = repo.active_branch.name
-        commits, total, _ = _collect_commits(repo_path, branch=branch, max_count=2, offset=1)
+        commits, total, _, _head = _collect_commits(repo_path, branch=branch, max_count=2, offset=1)
         assert total == 5
         assert len(commits) == 2
 
