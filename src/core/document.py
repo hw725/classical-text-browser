@@ -502,6 +502,26 @@ def save_bibliography(doc_path: str | Path, bibliography: dict) -> dict:
     doc_path = Path(doc_path).resolve()
     bib_path = doc_path / "bibliography.json"
 
+    # 검증 전 정리: 값이 전부 null인 하위 객체는 null로 축약.
+    # 예: {"call_number": null, "category": null} → null
+    # 왜: LLM 파서가 빈 필드를 null로 채워서 반환하는데,
+    #      additionalProperties 객체에 null만 있으면 의미 없고 스키마 검증도 번거로움.
+    def _collapse_null_only_dicts(obj):
+        if not isinstance(obj, dict):
+            return obj
+        cleaned = {}
+        for k, v in obj.items():
+            if isinstance(v, dict):
+                # 재귀 정리
+                v = _collapse_null_only_dicts(v)
+                # 모든 값이 None이면 dict 자체를 None으로
+                if v and all(val is None for val in v.values()):
+                    v = None
+            cleaned[k] = v
+        return cleaned
+
+    bibliography = _collapse_null_only_dicts(bibliography)
+
     # 스키마 검증
     schema_path = (
         Path(__file__).resolve().parent.parent.parent
@@ -509,8 +529,6 @@ def save_bibliography(doc_path: str | Path, bibliography: dict) -> dict:
     )
     if schema_path.exists():
         schema = json.loads(schema_path.read_text(encoding="utf-8"))
-        # _mapping_info, raw_metadata는 스키마에 포함되어 있으므로 그대로 검증
-        # 단, 검증 전에 빈 값 정리 (null 필드는 스키마가 허용)
         jsonschema.validate(instance=bibliography, schema=schema)
 
     _write_json(bib_path, bibliography)
