@@ -61,6 +61,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (typeof initAnnotationEditor === "function") _safeInit("AnnotationEditor", initAnnotationEditor);
   // 인용 마크 편집기 초기화
   if (typeof initCitationEditor === "function") _safeInit("CitationEditor", initCitationEditor);
+  // 인용 양식 관리 초기화
+  if (typeof initCiteFormatManager === "function") _safeInit("CiteFormatManager", initCiteFormatManager);
   // 이체자 사전 관리 초기화
   if (typeof initVariantManager === "function") _safeInit("VariantManager", initVariantManager);
   // 일괄 교정 초기화
@@ -234,6 +236,7 @@ function initActivityBar() {
     dependency: ["dep-sidebar-section"],
     entity: ["entity-sidebar-section"],
     notes: ["notes-sidebar-section"],
+    "cite-formats": ["cite-formats-sidebar-section"],
   };
 
   // 패널별 사이드바 타이틀
@@ -245,6 +248,7 @@ function initActivityBar() {
     dependency: "의존 추적",
     entity: "엔티티",
     notes: "비고",
+    "cite-formats": "인용 양식",
   };
 
   buttons.forEach((btn) => {
@@ -1574,4 +1578,143 @@ function renderDocumentList(docs) {
       // 향후: 문헌 선택 시 에디터 영역에 내용 표시
     });
   });
+}
+
+
+// ===================================================================
+//  공용 SSE 스트리밍 헬퍼 (LLM 호출 + 진행 바)
+// ===================================================================
+//
+// 왜 여기에 두는가:
+//   표점·번역·주석 에디터 모두 동일한 SSE 패턴을 사용한다.
+//   OCR 패널은 독자적 구현이지만, LLM 기능은 공용으로 통일한다.
+//
+// 사용법:
+//   const result = await fetchWithSSE(
+//     "/api/llm/punctuation/stream",
+//     { text: "子曰..." },
+//     (progress) => showEditorProgress("punct", true, `AI 처리 중... ${progress.elapsed_sec}초`),
+//     "/api/llm/punctuation"   // 폴백 URL
+//   );
+// ===================================================================
+
+
+/**
+ * SSE 스트리밍 fetch. progress 이벤트를 실시간으로 전달하고,
+ * complete 이벤트의 result를 반환한다.
+ *
+ * @param {string} url        스트리밍 엔드포인트 URL
+ * @param {object} body       POST 요청 body (JSON)
+ * @param {function} onProgress  progress 이벤트 콜백 ({type, elapsed_sec, tokens, provider})
+ * @param {string} fallbackUrl  스트리밍 실패 시 폴백할 기존 엔드포인트 URL
+ * @returns {Promise<object>} complete 이벤트의 result 객체
+ */
+async function fetchWithSSE(url, body, onProgress, fallbackUrl) {
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    // 스트리밍이 아닌 에러 응답이면 폴백
+    if (!resp.ok || !resp.headers.get("content-type")?.includes("text/event-stream")) {
+      throw new Error(`SSE 응답 아님: ${resp.status}`);
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let result = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // SSE 형식: "data: {...}\n\n" 단위로 파싱
+      const lines = buffer.split("\n\n");
+      buffer = lines.pop(); // 아직 완성되지 않은 마지막 부분
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data: ")) continue;
+        try {
+          const data = JSON.parse(trimmed.slice(6));
+          if (data.type === "progress" && onProgress) {
+            onProgress(data);
+          } else if (data.type === "complete") {
+            result = data.result;
+          } else if (data.type === "error") {
+            throw new Error(data.error || "SSE 에러");
+          }
+        } catch (parseErr) {
+          // JSON 파싱 실패면 에러 이벤트가 아닌 한 무시
+          if (parseErr.message && !parseErr.message.includes("SSE")) {
+            console.warn("[fetchWithSSE] 파싱 무시:", trimmed);
+          } else {
+            throw parseErr;
+          }
+        }
+      }
+    }
+
+    if (result !== null) return result;
+    throw new Error("SSE complete 이벤트 없이 스트림 종료");
+
+  } catch (err) {
+    console.warn(`[fetchWithSSE] 스트리밍 실패, 폴백 시도: ${err.message}`);
+    if (!fallbackUrl) throw err;
+
+    // 폴백: 기존 비스트리밍 엔드포인트 호출
+    const resp = await fetch(fallbackUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const errData = await resp.json().catch(() => ({}));
+      throw new Error(errData.error || `HTTP ${resp.status}`);
+    }
+    return await resp.json();
+  }
+}
+
+
+/**
+ * 에디터 진행 바 표시/숨김.
+ * OCR의 _showProgress()와 동일한 패턴이지만 prefix로 DOM ID를 구분한다.
+ *
+ * HTML 요소 규칙:
+ *   #{prefix}-progress       — 전체 컨테이너
+ *   #{prefix}-progress-text  — 텍스트 표시
+ *   #{prefix}-progress-fill  — 채움 바
+ *
+ * @param {string} prefix   DOM ID 접두사 ("punct", "trans", "ann")
+ * @param {boolean} show    표시/숨김
+ * @param {string} text     진행 상태 텍스트
+ * @param {number} current  현재 진행 (선택)
+ * @param {number} total    전체 수 (선택, 0이면 불확정)
+ */
+function showEditorProgress(prefix, show, text, current, total) {
+  const el = document.getElementById(`${prefix}-progress`);
+  const textEl = document.getElementById(`${prefix}-progress-text`);
+  const fillEl = document.getElementById(`${prefix}-progress-fill`);
+
+  if (el) el.style.display = show ? "" : "none";
+  if (textEl) textEl.textContent = text || "";
+  if (fillEl) {
+    if (total && total > 0) {
+      const pct = Math.min(100, Math.round((current / total) * 100));
+      fillEl.style.width = pct + "%";
+      fillEl.classList.add("ocr-progress-determinate");
+      fillEl.classList.remove("ocr-progress-indeterminate");
+    } else {
+      // 불확정 진행률: 펄스 애니메이션 (OCR과 동일한 CSS 클래스 재사용)
+      fillEl.style.width = "100%";
+      fillEl.classList.remove("ocr-progress-determinate");
+      fillEl.classList.add("ocr-progress-indeterminate");
+    }
+  }
 }

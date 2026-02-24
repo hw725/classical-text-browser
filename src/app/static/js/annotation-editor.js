@@ -253,45 +253,85 @@ async function _loadBlockText(blockId) {
   if (!vs || !vs.docId || !vs.pageNum) return;
 
   const isTextBlock = blockId.startsWith("tb:");
+  const is = typeof interpState !== "undefined" ? interpState : null;
 
   if (isTextBlock) {
-    // ── TextBlock 모드 ──
-    // 드롭다운의 data-text에서 가져오거나, API로 직접 조회.
-    const sel = document.getElementById("ann-block-select");
-    const selectedOpt = sel
-      ? sel.querySelector(`option[value="${blockId}"]`)
-      : null;
+    // ── TextBlock 모드: 최신 교정 텍스트를 우선 사용 ──
+    //
+    // 왜 이렇게 하는가:
+    //   TextBlock의 original_text는 편성(composition) 시점의 스냅샷이다.
+    //   편성 이후에 교감/교정을 수정하면 TextBlock에는 반영되지 않는다.
+    //   따라서 source_refs를 통해 원본 문서의 최신 교정 텍스트를 가져온다.
+    //   교정 텍스트를 못 가져오면 TextBlock 원본을 폴백으로 사용한다.
+    if (!is || !is.interpId) { annState.originalText = ""; return; }
+    const apiBlockId = blockId.slice(3);
+    let tbData = null;
 
-    if (selectedOpt && selectedOpt.dataset.text) {
-      annState.originalText = selectedOpt.dataset.text;
-    } else {
-      const is = typeof interpState !== "undefined" ? interpState : null;
-      if (!is || !is.interpId) { annState.originalText = ""; return; }
-      const apiBlockId = blockId.slice(3);
-      try {
-        const tbRes = await fetch(
-          `/api/interpretations/${is.interpId}/entities/text_block/${apiBlockId}`
-        );
-        if (tbRes.ok) {
-          const tb = await tbRes.json();
-          annState.originalText = tb.original_text || "";
-        } else {
-          annState.originalText = "";
-        }
-      } catch (e) {
-        console.error("TextBlock 텍스트 로드 실패:", e);
-        annState.originalText = "";
+    // TextBlock 정보 조회 (source_refs 필요)
+    try {
+      const tbRes = await fetch(
+        `/api/interpretations/${is.interpId}/entities/text_block/${apiBlockId}`
+      );
+      if (tbRes.ok) tbData = await tbRes.json();
+    } catch { /* 폴백 처리 아래 */ }
+
+    // source_refs에서 원본 문서의 교정 텍스트를 가져온다
+    let correctedText = "";
+    if (tbData && tbData.source_refs && tbData.source_refs.length > 0) {
+      const refPages = [...new Set(tbData.source_refs.map((r) => r.page))];
+      const texts = [];
+      for (const refPage of refPages) {
+        try {
+          const ctRes = await fetch(
+            `/api/documents/${vs.docId}/pages/${refPage}/corrected-text?part_id=${vs.partId}`
+          );
+          if (ctRes.ok) {
+            const ctData = await ctRes.json();
+            const pageRefs = tbData.source_refs.filter((r) => r.page === refPage);
+            for (const ref of pageRefs) {
+              if (ref.layout_block_id && ctData.blocks) {
+                const match = ctData.blocks.find((b) => b.block_id === ref.layout_block_id);
+                if (match) {
+                  texts.push(match.corrected_text || match.original_text || "");
+                  continue;
+                }
+              }
+              if (texts.length === 0) {
+                texts.push(ctData.corrected_text || "");
+              }
+            }
+          }
+        } catch { /* skip */ }
       }
+      correctedText = texts.join("\n");
+    }
+
+    // 교정 텍스트가 있으면 사용, 없으면 TextBlock 원본 폴백
+    if (correctedText.trim()) {
+      annState.originalText = correctedText;
+    } else {
+      const sel = document.getElementById("ann-block-select");
+      const selectedOpt = sel ? sel.querySelector(`option[value="${blockId}"]`) : null;
+      annState.originalText = (selectedOpt && selectedOpt.dataset.text)
+        ? selectedOpt.dataset.text
+        : (tbData ? tbData.original_text || "" : "");
     }
   } else {
     // ── LayoutBlock 모드 (하위 호환) ──
+    // 교정 텍스트 API를 사용하여 해당 블록의 교정된 텍스트를 가져온다.
     try {
-      const resp = await fetch(`/api/documents/${vs.docId}/pages/${vs.pageNum}/text`);
+      const resp = await fetch(
+        `/api/documents/${vs.docId}/pages/${vs.pageNum}/corrected-text?part_id=${vs.partId}`
+      );
       if (!resp.ok) return;
       const data = await resp.json();
       const blocks = data.blocks || [];
-      const block = blocks.find(b => b.block_id === blockId);
-      annState.originalText = block ? block.text : (data.text || "");
+      const match = blocks.find(b => b.block_id === blockId);
+      if (match) {
+        annState.originalText = match.corrected_text || match.original_text || "";
+      } else {
+        annState.originalText = data.corrected_text || "";
+      }
     } catch (e) {
       console.error("텍스트 로드 실패:", e);
       annState.originalText = "";
@@ -452,27 +492,104 @@ function _getAnnotationTooltip(annId) {
    텍스트 범위 선택 → 수동 주석 추가
    ──────────────────────────────────── */
 
+/**
+ * 표시 오프셋(표점 포함)을 원문 오프셋(표점 제외)으로 변환한다.
+ *
+ * 왜: 렌더링된 DOM에는 표점 기호(。？！ 등)가 삽입되어 있으므로,
+ *   사용자가 텍스트를 드래그하여 선택하면 Range API가 반환하는 위치는
+ *   표점을 포함한 "표시 위치"이다.
+ *   서버는 순수 원문(original_text)의 오프셋을 사용하므로 변환이 필요하다.
+ *
+ * @param {number} displayOffset - 표점 포함 표시 위치
+ * @param {string} originalText - 순수 원문 텍스트
+ * @param {Array} punctMarks - 표점 marks 배열
+ * @returns {number} 원문 기준 글자 인덱스
+ */
+function _annDisplayOffsetToOriginal(displayOffset, originalText, punctMarks) {
+  const n = originalText.length;
+  if (n === 0) return 0;
+
+  // 표점 before/after 버퍼 구성 (렌더링과 동일한 로직)
+  const beforeBuf = new Array(n).fill("");
+  const afterBuf = new Array(n).fill("");
+
+  for (const mark of punctMarks) {
+    const start = mark.target?.start ?? 0;
+    const end = mark.target?.end ?? start;
+    if (start < 0 || end >= n || start > end) continue;
+    if (mark.before) beforeBuf[start] += mark.before;
+    if (mark.after) afterBuf[end] += mark.after;
+  }
+
+  // 표시 문자열을 순차 스캔하며 원문 인덱스 매핑
+  let displayPos = 0;
+  for (let i = 0; i < n; i++) {
+    displayPos += beforeBuf[i].length;
+    if (displayPos > displayOffset) return i;
+
+    displayPos += 1;  // 원문 글자 1자
+    if (displayPos > displayOffset) return i;
+
+    displayPos += afterBuf[i].length;
+    if (displayPos > displayOffset) return i;
+  }
+
+  return n - 1;
+}
+
 function _onTextSelection() {
   const selection = window.getSelection();
   if (!selection || selection.isCollapsed) return;
 
   const text = annState.originalText;
+  if (!text) return;
+
   const selectedText = selection.toString();
   if (!selectedText || selectedText.length === 0) return;
 
-  // 원문에서 선택된 텍스트의 위치 찾기
-  const startIdx = text.indexOf(selectedText);
-  if (startIdx === -1) return;
+  // Range API로 표시 위치를 정확하게 계산한다.
+  // 왜 indexOf() 대신 이 방식을 쓰는가:
+  //   1) 동일한 글자열이 원문에 여러 번 나타날 때 indexOf()는
+  //      항상 첫 번째 위치만 반환한다.
+  //   2) selection.toString()에는 표점 기호가 포함되어 있어
+  //      순수 원문에서 indexOf()가 실패(-1)할 수 있다.
+  const container = document.getElementById("ann-source-text");
+  if (!container) return;
 
-  const endIdx = startIdx + selectedText.length - 1;
+  const range = selection.getRangeAt(0);
+
+  // 선택이 원문 컨테이너 내부인지 확인
+  if (!container.contains(range.startContainer) || !container.contains(range.endContainer)) return;
+
+  // container 기준 표시 오프셋 계산 (표점 포함)
+  const preRange = document.createRange();
+  preRange.selectNodeContents(container);
+  preRange.setEnd(range.startContainer, range.startOffset);
+  const displayStart = preRange.toString().length;
+
+  const fullRange = document.createRange();
+  fullRange.selectNodeContents(container);
+  fullRange.setEnd(range.endContainer, range.endOffset);
+  const displayEnd = fullRange.toString().length - 1;
+
+  if (displayStart > displayEnd || displayEnd < 0) return;
+
+  // 표시 오프셋 → 원문 오프셋 변환 (표점 기호를 제외한 위치)
+  const startIdx = _annDisplayOffsetToOriginal(displayStart, text, annState.punctMarks);
+  const endIdx = _annDisplayOffsetToOriginal(displayEnd, text, annState.punctMarks);
+
+  if (startIdx < 0 || endIdx < 0 || startIdx > endIdx) return;
+
+  // 실제 원문 텍스트 추출 (prompt에 표시용)
+  const actualText = text.slice(startIdx, endIdx + 1);
 
   const typeId = prompt(
-    `"${selectedText}"에 주석을 추가합니다.\n유형을 입력하세요 (person/place/term/allusion/note):`,
+    `"${actualText}"에 주석을 추가합니다.\n유형을 입력하세요 (person/place/term/allusion/note):`,
     "note"
   );
   if (!typeId) return;
 
-  const label = prompt("표제어:", selectedText);
+  const label = prompt("표제어:", actualText);
   if (label === null) return;
 
   const desc = prompt("설명:", "");
@@ -824,19 +941,22 @@ async function _aiTagAll() {
     if (llmSel.force_provider) reqBody.force_provider = llmSel.force_provider;
     if (llmSel.force_model) reqBody.force_model = llmSel.force_model;
 
-    // 1. LLM 호출
-    const resp = await fetch("/api/llm/annotation", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(reqBody),
-    });
-
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err.error || `서버 오류 ${resp.status}`);
+    // 1. SSE 스트리밍으로 LLM 태깅 요청 (실패 시 기존 엔드포인트 폴백)
+    if (typeof showEditorProgress === "function") {
+      showEditorProgress("ann", true, "AI 태깅 처리 중...");
     }
-
-    const data = await resp.json();
+    const data = await fetchWithSSE(
+      "/api/llm/annotation/stream",
+      reqBody,
+      (progress) => {
+        const sec = progress.elapsed_sec || 0;
+        if (aiBtn) aiBtn.textContent = `AI 태깅 중… (${sec}초)`;
+        if (typeof showEditorProgress === "function") {
+          showEditorProgress("ann", true, `AI 태깅 처리 중... ${sec}초 경과`);
+        }
+      },
+      "/api/llm/annotation"
+    );
     const aiAnnotations = data.annotations || [];
 
     if (aiAnnotations.length === 0) {
@@ -844,43 +964,66 @@ async function _aiTagAll() {
       return;
     }
 
-    // 2. 각 태깅을 서버 주석으로 저장 (draft 상태)
-    let savedCount = 0;
+    // 2. 인덱스 보정 후 일괄 저장 (batch POST)
+    // 각 태깅의 end 인덱스를 보정한다
+    const batchPayload = [];
     for (const ann of aiAnnotations) {
-      // end 인덱스 보정: LLM이 exclusive end를 줄 수 있으므로 방어
       const start = ann.start;
       let end = ann.end;
-      // end가 start보다 작거나 같으면 text 길이로 보정
       if (end <= start && ann.text) {
         end = start + ann.text.length - 1;
       } else if (end > start && end >= text.length) {
         end = text.length - 1;
       }
-      // inclusive end 보정: end가 exclusive(start + len)이면 -1
       if (ann.text && (end - start + 1) > ann.text.length) {
         end = start + ann.text.length - 1;
       }
+      batchPayload.push({
+        target: { start, end },
+        type: ann.type || "term",
+        content: {
+          label: ann.label || ann.text || "",
+          description: ann.description || "",
+          references: [],
+        },
+        status: "draft",
+      });
+    }
 
-      try {
-        const saveResp = await fetch(
-          `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/${blockId}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              target: { start, end },
-              type: ann.type || "term",
-              content: {
-                label: ann.label || ann.text || "",
-                description: ann.description || "",
-                references: [],
-              },
-            }),
-          }
-        );
-        if (saveResp.ok) savedCount++;
-      } catch (e) {
-        console.warn("주석 저장 실패:", ann, e);
+    // batch 엔드포인트로 1회 POST 시도. 실패 시 기존 순차 방식 폴백.
+    let savedCount = 0;
+    try {
+      const batchResp = await fetch(
+        `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/${blockId}/batch`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ annotations: batchPayload }),
+        }
+      );
+      if (batchResp.ok) {
+        const batchResult = await batchResp.json();
+        savedCount = batchResult.saved || 0;
+      } else {
+        throw new Error("batch 엔드포인트 실패");
+      }
+    } catch (batchErr) {
+      // 폴백: 개별 순차 POST
+      console.warn("batch 저장 실패, 순차 폴백:", batchErr.message);
+      for (const payload of batchPayload) {
+        try {
+          const saveResp = await fetch(
+            `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/${blockId}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            }
+          );
+          if (saveResp.ok) savedCount++;
+        } catch (e) {
+          console.warn("주석 저장 실패:", e);
+        }
       }
     }
 
@@ -895,7 +1038,10 @@ async function _aiTagAll() {
     console.error("AI 태깅 실패:", e);
     showToast("AI 태깅 실패: " + e.message, 'error');
   } finally {
-    // 버튼 복원
+    // 진행 바 숨김 + 버튼 복원
+    if (typeof showEditorProgress === "function") {
+      showEditorProgress("ann", false);
+    }
     if (aiBtn) {
       aiBtn.disabled = false;
       aiBtn.textContent = "AI 태깅";

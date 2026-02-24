@@ -490,6 +490,56 @@ def _layer_file_path(
     return interp_path / layer / sub_type / f"{filename_base}{ext}"
 
 
+def _find_specialized_file(
+    interp_path: Path,
+    layer: str,
+    sub_type: str,
+    part_id: str,
+    page_num: int,
+) -> Path | None:
+    """전문 편집기(표점·번역·주석)가 실제로 저장하는 파일 경로를 탐색한다.
+
+    왜 이렇게 하는가:
+        전문 편집기(punctuation-editor, translation-editor, annotation-editor)는
+        _layer_file_path()와 다른 파일명 규칙을 사용한다.
+        - L5: {pid}_page_{NNN}_blk_{BID}_punctuation.json (블록별)
+        - L6: {pid}_page_{NNN}_translation.json (JSON, .txt 아님)
+        - L7: L7_annotation/main_text/{pid}_page_{NNN}_annotation.json (main_text 하위)
+
+        비교 탭 등에서 get_layer_content()를 호출할 때, 기본 경로에 파일이 없으면
+        전문 편집기 경로를 추가로 탐색하여 내용을 찾아준다.
+
+    출력: 존재하는 파일 경로 또는 None.
+    """
+    filename_base = f"{part_id}_page_{page_num:03d}"
+
+    if layer == "L6_translation":
+        # 번역 편집기: _translation.json 접미사 사용
+        alt = interp_path / "L6_translation" / sub_type / f"{filename_base}_translation.json"
+        if alt.exists():
+            return alt
+
+    elif layer == "L7_annotation":
+        # 주석 편집기: main_text/ 하위에 _annotation.json 접미사
+        alt = interp_path / "L7_annotation" / sub_type / f"{filename_base}_annotation.json"
+        if alt.exists():
+            return alt
+
+    elif layer == "L5_reading":
+        # 표점 편집기: 페이지 단위 레거시 파일 확인
+        legacy = interp_path / "L5_reading" / sub_type / f"{filename_base}_punctuation.json"
+        if legacy.exists():
+            return legacy
+        # 블록별 표점 파일이 있으면 첫 번째 파일이라도 반환 (존재 여부 확인용)
+        block_dir = interp_path / "L5_reading" / sub_type
+        if block_dir.is_dir():
+            block_files = sorted(block_dir.glob(f"{filename_base}_blk_*_punctuation.json"))
+            if block_files:
+                return block_files[0]
+
+    return None
+
+
 def get_layer_content(
     interp_path: str | Path,
     layer: str,
@@ -507,9 +557,21 @@ def get_layer_content(
         part_id — 권 식별자.
         page_num — 페이지 번호.
     출력: {layer, sub_type, part_id, page, content, file_path, exists}.
+
+    파일 탐색 우선순위:
+        1. _layer_file_path()가 생성하는 기본 경로
+        2. 전문 편집기(표점·번역·주석)가 사용하는 실제 경로
+           (L5: _blk_*_punctuation.json, L6: _translation.json, L7: main_text/_annotation.json)
     """
     interp_path = Path(interp_path).resolve()
     file_path = _layer_file_path(interp_path, layer, sub_type, part_id, page_num)
+
+    # 기본 경로에 파일이 없으면 전문 편집기 경로를 탐색
+    if not file_path.exists():
+        alt = _find_specialized_file(interp_path, layer, sub_type, part_id, page_num)
+        if alt is not None:
+            file_path = alt
+
     relative_path = file_path.relative_to(interp_path).as_posix()
 
     if file_path.exists():

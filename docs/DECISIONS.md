@@ -824,6 +824,161 @@ src/app/
 
 ---
 
+## D-028: SSE 스트리밍 LLM 호출 + 진행 바 UI
+
+**날짜**: 2026-02-24
+**맥락**: LLM 분석(표점·번역·주석)은 10~30초가 걸리는데, 기존 구현은
+응답이 올 때까지 UI가 멈춘 것처럼 보였다. 사용자가 진행 상황을 실시간으로
+확인할 수 있어야 한다.
+
+**결정**:
+
+1. **SSE(Server-Sent Events) 스트리밍 엔드포인트 추가**:
+   - `/api/llm/punctuation/stream` — 표점 생성
+   - `/api/llm/translation/stream` — 번역
+   - `/api/llm/annotation/stream` — 주석 태깅
+   기존 비스트리밍 엔드포인트를 수정하지 않고 `/stream` 접미사로 신설.
+   SSE 실패 시 기존 엔드포인트로 자동 폴백.
+
+2. **`_call_llm_text_stream()` 백엔드 함수**:
+   `asyncio.Queue`에 `progress`, `complete`, `error` 이벤트를 넣고,
+   `StreamingResponse`가 queue에서 꺼내 클라이언트로 전달.
+   기존 `_call_llm_text()`를 수정하지 않아 하위 호환성 유지.
+
+3. **Provider별 `call_stream()` 메서드**:
+   `base.py`에 추상 메서드 추가, Gemini/Ollama/OpenAI 각각 구현.
+   `progress_callback`으로 경과 시간, 토큰 수, 프로바이더명을 전달.
+
+4. **공용 `fetchWithSSE()` 프론트엔드 헬퍼**:
+   SSE 스트림 수신 + progress 콜백 + 자동 폴백을 한 함수로 캡슐화.
+   표점/번역/주석 에디터에서 공용 사용.
+
+5. **주석 일괄 저장 API**:
+   `.../annotations/{block_id}/batch` — AI 태깅 후 N건을 1 POST로 저장.
+   기존 N번 왕복 → 1번으로 최적화.
+
+**수정 파일**: `_state.py`, `llm/router.py`, `llm/providers/*.py`,
+`routers/annotation.py`, `routers/reading.py`,
+`workspace.js`, `punctuation-editor.js`, `translation-editor.js`,
+`annotation-editor.js`, `index.html`, `workspace.css`
+
+**대안**:
+- WebSocket → SSE보다 복잡하고 양방향이 불필요. 단방향 SSE로 충분.
+- 폴링 → 지연이 크고 서버 부하가 높아 거부.
+
+---
+
+## D-029: 인용 내보내기 양식 관리자 (Cite Format Manager)
+
+**날짜**: 2026-02-24
+**맥락**: D-020에서 인용 마크의 기본 내보내기 형식을 구현했으나,
+학술지마다 인용 양식이 다르다. 연구자가 양식을 정의·저장·재사용할 수 있어야 한다.
+
+**결정**:
+
+1. **양식 라이브러리**: `localStorage`에 양식 프리셋(필드 순서, 구분자, 변환 규칙)을 저장.
+   서고 경로와 무관한 사용자 개인 설정이므로 서버가 아닌 브라우저 저장소 사용.
+2. **필드 순서 드래그앤드롭**: 인용 필드(저자, 서명권수, 작품면수, 원문, 번역)를
+   사용자가 드래그로 재배치. HTML5 Drag and Drop API 사용.
+3. **변환 규칙**: 서명호(「」↔〈〉, 『』↔《》) 변환, 따옴표 감싸기 등을
+   체크박스로 선택.
+4. **액티비티 바 통합**: "인용 양식" 버튼을 액티비티 바에 추가,
+   사이드바 패널에서 양식 CRUD.
+
+**새 파일**: `cite-format-manager.js`
+
+**수정 파일**: `citation-editor.js`, `index.html`, `workspace.css`, `workspace.js`
+
+**대안**:
+- 서버 측 JSON 파일에 저장 → 서고 간 공유가 필요 없고 개인 설정이므로 localStorage로 충분.
+- CSS/HTML 기반 양식 → 구조화된 필드 정의가 필요하므로 JS 객체 기반 채택.
+
+---
+
+## D-030: 전문 편집기 파일 경로 통합 (Layer File Path Reconciliation)
+
+**날짜**: 2026-02-24
+**맥락**: D-027(라우터 분할) 후 세 가지 경로 불일치 버그 발견.
+
+1. `_get_resources_dir()`가 `src/resources/`(존재하지 않음)를 가리킴 → 이체자 탭 전체 동작 불가.
+2. `core/alignment.py`의 `from src.core.document` → 정식 import 경로가 아님.
+3. `get_layer_content()`가 전문 편집기(표점·번역·주석)의 실제 저장 경로를 모름 → 비교 탭 내용 미표시.
+
+**결정**:
+
+1. **`_get_resources_dir()` 경로 수정**: `src/app/routers/alignment.py`에서
+   `"..", ".."` → `"..", "..", ".."` (2단계→3단계 상위).
+   라우터 분할로 파일 위치가 `src/app/server.py` → `src/app/routers/alignment.py`로
+   한 단계 깊어졌기 때문.
+
+2. **import 경로 정규화**: `from src.core.document` → `from core.document`.
+   `__main__.py`가 `src/`를 sys.path에 추가하므로 `core.xxx`가 정식 경로.
+
+3. **`_find_specialized_file()` 폴백 탐색 함수 추가**:
+   `core/interpretation.py`의 `get_layer_content()`에서 기본 경로에 파일이 없을 때
+   전문 편집기가 실제로 사용하는 경로를 탐색:
+
+   | 층 | `_layer_file_path()` 기본 경로 | 전문 편집기 실제 경로 |
+   |---|---|---|
+   | L5 | `L5_reading/main_text/{pid}_page_{NNN}.json` | `{pid}_page_{NNN}_blk_{BID}_punctuation.json` |
+   | L6 | `L6_translation/main_text/{pid}_page_{NNN}.txt` | `{pid}_page_{NNN}_translation.json` |
+   | L7 | `L7_annotation/{pid}_page_{NNN}.json` | `L7_annotation/main_text/{pid}_page_{NNN}_annotation.json` |
+
+   기본 경로(`_layer_file_path()`)는 `save_layer_content()`에서도 사용하므로
+   변경하지 않고, 읽기 전용 폴백 탐색을 추가.
+
+**수정 파일**: `src/app/routers/alignment.py`, `src/core/alignment.py`, `src/core/interpretation.py`
+
+**교훈**: 리팩토링 시 `__file__` 기반 상대 경로는 파일 이동에 취약.
+향후 프로젝트 루트를 `_state.py`에 상수로 등록하는 것을 검토.
+
+---
+
+## D-031: 표점 오프셋 보정 (Display → Original 변환)
+
+**날짜**: 2026-02-24
+**맥락**: 원문에 표점 부호(。！？ 등)를 삽입하여 DOM에 표시하면,
+Selection API가 반환하는 문자 오프셋에 표점 문자가 포함되어
+원문 기준 `start/end`와 불일치하는 버그 발생.
+주석 편집기와 인용 편집기 모두에서 동일 문제.
+
+**결정**:
+
+1. **`_annDisplayOffsetToOriginal()` / `_citeDisplayOffsetToOriginal()` 함수 추가**:
+   DOM 표시 위치(표점 포함) → 원문 오프셋(표점 미포함) 변환.
+   글자별 before/after 버퍼를 구성하여 표점 문자 수만큼 차감.
+
+2. **교정 텍스트 우선 사용**: TextBlock의 `original_text`는 편성(composition) 시점
+   스냅샷이므로, `source_refs` → `/api/documents/{id}/pages/{num}/corrected-text`로
+   최신 교정 텍스트를 조회. 실패 시 `original_text` 폴백.
+   주석·인용·번역·현토 에디터 4곳에 동일 패턴 적용.
+
+**수정 파일**: `annotation-editor.js`, `citation-editor.js`,
+`translation-editor.js`, `hyeonto-editor.js`
+
+**대안**:
+- 표점 없는 별도 `data-offset` 속성 → DOM 구조가 복잡해져 거부. 계산 방식이 더 단순.
+
+---
+
+## D-032: 정렬 알고리즘 최적화 — n-gram 후보 필터링
+
+**날짜**: 2026-02-24
+**맥락**: `_find_best_match_in_ref()`가 O(n*m) 전수 탐색으로,
+대량 텍스트(수천 자)에서 느려지는 문제.
+
+**결정**:
+
+1. **n-gram 후보 필터링**: 5-gram 부분 문자열 검색으로 후보 위치를 수집하고,
+   후보 주변에서만 `SequenceMatcher`를 실행. O(n*m) → O(k*m) (k << n).
+2. **3-gram 폴백**: 5-gram으로 후보가 없으면 3-gram으로 재시도.
+3. **NFC 정규화**: `unicodedata.normalize("NFC")`로 인코딩 차이 제거.
+   같은 글자의 결합형/완성형 차이로 매칭 실패하는 문제 방지.
+
+**수정 파일**: `src/core/alignment.py`
+
+---
+
 ### 원본 저장소
 - [ ] JSON 스키마 각 필드의 상세 정의 → Phase 1에서 해결
 - [ ] 서지정보 파싱 상세 → Phase 5에서 해결
@@ -839,6 +994,7 @@ src/app/
 - [x] LLM 호출 아키텍처 → D-010 (Phase 10-2)
 - [x] 프롬프트 설계 원칙 → layout_analysis.yaml (Phase 10-2)
 - [x] 비용 관리 → UsageTracker + 월별 예산 (Phase 10-2)
+- [x] SSE 스트리밍 LLM 호출 + 진행 바 → D-028
 
 ### 저장소 연결
 - [x] 사다리형 git 그래프 구현 → D-017 (Phase 12-1)
@@ -849,6 +1005,10 @@ src/app/
 - [x] 본문/주석 번역의 연결 구조 → D-015 (SourceRef)
 - [x] 사전형 주석 (Dictionary Annotation) → D-019
 - [x] 인용 마크 시스템 (Citation Mark) → D-020
+- [x] 인용 내보내기 양식 관리자 → D-029
+- [x] 전문 편집기 파일 경로 통합 → D-030
+- [x] 표점 오프셋 보정 → D-031
+- [x] 정렬 알고리즘 최적화 → D-032
 - [ ] 협업 모델
 
 ### 서고 관리

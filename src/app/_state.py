@@ -373,6 +373,79 @@ async def _call_llm_text(purpose: str, text: str,
     )
 
 
+async def _call_llm_text_stream(purpose: str, text: str,
+                                 queue,
+                                 force_provider=None, force_model=None):
+    """스트리밍 LLM 호출. asyncio.Queue에 SSE 이벤트를 넣는다.
+
+    왜 별도 함수인가:
+        기존 _call_llm_text()를 수정하지 않고, SSE 엔드포인트 전용으로 추가.
+        queue에 {"type":"progress",...}, {"type":"complete",...}, {"type":"error",...}를 넣는다.
+        엔드포인트는 queue에서 꺼내 StreamingResponse로 전달한다.
+
+    이벤트 형식:
+        progress: {"type":"progress","elapsed_sec":N,"tokens":N,"provider":"..."}
+        complete: {"type":"complete","result":{...파싱된 JSON...}}
+        error:    {"type":"error","error":"에러 메시지"}
+    """
+    import json as _json
+    import asyncio as _asyncio
+
+    prompts = _LLM_PROMPTS.get(purpose)
+    if not prompts:
+        await queue.put({"type": "error", "error": f"알 수 없는 LLM purpose: {purpose}"})
+        return
+
+    router = _get_llm_router()
+    system_prompt = prompts["system"]
+    user_prompt = prompts["user"].format(text=text, char_count=len(text))
+    _MAX_TOKENS = 16384
+    _RESPONSE_FORMAT = "json"
+
+    def _progress_cb(event):
+        """provider의 progress_callback → queue에 넣기.
+
+        왜 call_soon_threadsafe가 아닌가:
+            progress_callback은 같은 이벤트 루프의 async for 내에서 호출되므로
+            put_nowait()으로 충분하다.
+        """
+        try:
+            queue.put_nowait(event)
+        except Exception:
+            pass  # queue full — 무시 (progress는 best-effort)
+
+    try:
+        if force_provider:
+            response = await router.call_stream(
+                user_prompt,
+                system=system_prompt,
+                response_format=_RESPONSE_FORMAT,
+                force_provider=force_provider,
+                force_model=force_model,
+                purpose=purpose,
+                max_tokens=_MAX_TOKENS,
+                progress_callback=_progress_cb,
+            )
+        else:
+            # 자동 모드에서도 call_stream 사용
+            response = await router.call_stream(
+                user_prompt,
+                system=system_prompt,
+                response_format=_RESPONSE_FORMAT,
+                purpose=purpose,
+                max_tokens=_MAX_TOKENS,
+                progress_callback=_progress_cb,
+            )
+
+        # JSON 파싱 (_parse_llm_json 재사용)
+        result = _parse_llm_json(response, _json)
+        await queue.put({"type": "complete", "result": result})
+
+    except Exception as e:
+        logger.error(f"LLM stream {purpose} 실패: {e}")
+        await queue.put({"type": "error", "error": str(e)})
+
+
 def _parse_llm_json(response, _json) -> dict:
     """LLM 응답에서 JSON을 추출한다.
 

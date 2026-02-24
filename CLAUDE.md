@@ -40,8 +40,8 @@ src/app/
     ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티 (22 라우트)
     ├── llm_ocr.py       ← LLM 상태·분석·초안 + OCR 엔진·실행 (13 라우트)
     ├── alignment.py     ← 이체자 사전/정렬/일괄교정 (17 라우트)
-    ├── reading.py       ← L5 표점·현토 + L6 번역 + 비고 + AI보조 (22 라우트)
-    ├── annotation.py    ← L7 주석·사전형·인용마크 + AI보조 (30 라우트)
+    ├── reading.py       ← L5 표점·현토 + L6 번역 + 비고 + AI보조 (24 라우트)
+    ├── annotation.py    ← L7 주석·사전형·인용마크 + AI보조 (32 라우트)
     └── version.py       ← Git 그래프/되돌리기/스냅샷/가져오기 (7 라우트)
 ```
 
