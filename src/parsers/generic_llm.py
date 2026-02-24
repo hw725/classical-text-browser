@@ -30,10 +30,11 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import httpx
 
@@ -57,6 +58,24 @@ _JINA_READER_API = "https://r.jina.ai/"
 # 요청 타임아웃 (초).
 # 일부 대상 사이트가 느릴 수 있으므로 넉넉하게 설정.
 _MARKDOWNER_TIMEOUT = 60.0
+
+# ── kokusho.nijl.ac.jp IIIF 지원 ──
+
+# 국서종합목록(kokusho)의 서지 URL 패턴.
+# 예: https://kokusho.nijl.ac.jp/biblio/200021110/1?ln=ja
+# 그룹(1)이 biblio ID를 캡처한다.
+_KOKUSHO_BIBLIO_RE = re.compile(r"kokusho\.nijl\.ac\.jp/biblio/(\d+)")
+
+# IIIF manifest URL 템플릿.
+# kokusho는 IIIF Presentation API 2.0을 지원한다.
+_KOKUSHO_MANIFEST_TEMPLATE = "https://kokusho.nijl.ac.jp/biblio/{id}/manifest"
+
+# ── SPA 사이트 도메인 ──
+
+# JavaScript 렌더링이 필요한 SPA(Single Page Application) 사이트 목록.
+# 이 사이트들은 markdown.new가 빈 페이지를 반환하므로,
+# Jina Reader(JS 렌더링 지원)를 우선 사용한다.
+_KNOWN_SPA_DOMAINS: set[str] = {"kokusho.nijl.ac.jp", "db.itkc.or.kr"}
 
 
 # ── LLM 서지 추출 프롬프트 ──
@@ -198,7 +217,25 @@ class GenericLlmFetcher(BaseFetcher):
         에러:
             - markdown.new 실패 → 직접 HTML 가져와서 간단 변환 시도
             - LLM 실패 → LlmUnavailableError 전파
+
+        특수 처리:
+            kokusho.nijl.ac.jp/biblio/{id} URL이면 IIIF manifest를
+            먼저 시도한다. SPA이므로 markdown.new가 빈 페이지를 반환하고,
+            IIIF manifest에 구조화된 메타데이터가 이미 있으므로
+            LLM보다 정확하고 빠르다. IIIF 실패 시 LLM 폴백으로 전환.
         """
+        # ── kokusho IIIF 우선 시도 ──
+        kokusho_match = _KOKUSHO_BIBLIO_RE.search(url)
+        if kokusho_match:
+            try:
+                result = await self._fetch_kokusho_iiif(url, kokusho_match.group(1))
+                if result:
+                    return result
+            except Exception as e:
+                logger.warning("kokusho IIIF 실패, LLM 폴백으로 전환: %s", e)
+
+        # ── 기존 흐름: 마크다운 변환 + LLM 추출 ──
+
         # 1. 마크다운 변환
         markdown_text = await self._fetch_markdown(url)
 
@@ -225,7 +262,25 @@ class GenericLlmFetcher(BaseFetcher):
             generic_llm 파서는 임의의 서지 웹페이지를 처리한다.
             페이지에 PDF 다운로드 링크나 이미지 뷰어 링크가 있으면
             자동 감지하여 연구자가 수동 다운로드 없이 문헌을 생성할 수 있다.
+
+        kokusho IIIF:
+            fetch_by_url()에서 kokusho IIIF를 통해 캔버스 목록을 가져온 경우,
+            _kokusho_canvases 키에 IIIF 캔버스가 저장되어 있다.
+            이 경우 범용 에셋 감지 대신 IIIF 캔버스를 에셋으로 반환한다.
         """
+        # kokusho IIIF canvases가 있으면 IIIF 에셋으로 반환
+        canvases = raw_data.get("_kokusho_canvases")
+        if canvases:
+            title = raw_data.get("llm_extracted", {}).get("title", "kokusho")
+            return [{
+                "asset_id": raw_data.get("_kokusho_biblio_id", "kokusho"),
+                "label": title,
+                "page_count": len(canvases),
+                "download_type": "iiif",
+                "_canvases": canvases,
+            }]
+
+        # 기존 범용 에셋 감지
         from .asset_detector import detect_assets
         return await detect_assets(
             raw_data["source_url"],
@@ -246,9 +301,97 @@ class GenericLlmFetcher(BaseFetcher):
             progress_callback — (current, total)를 받는 진행 콜백.
         출력:
             다운로드된 파일의 Path.
+
+        IIIF canvases가 있으면 iiif_utils로 다운로드한다.
         """
+        # IIIF canvases가 있으면 IIIF 다운로더 사용
+        canvases = asset_info.get("_canvases")
+        if canvases:
+            from . import iiif_utils
+            return await iiif_utils.download_iiif_images_as_pdf(
+                canvases,
+                dest_dir,
+                label=asset_info.get("label", "kokusho"),
+                progress_callback=progress_callback,
+            )
+
+        # 기존 범용 다운로더
         from .asset_detector import download_generic_asset
         return await download_generic_asset(asset_info, dest_dir, progress_callback)
+
+    async def _fetch_kokusho_iiif(
+        self, url: str, biblio_id: str
+    ) -> dict[str, Any] | None:
+        """kokusho.nijl.ac.jp의 IIIF manifest에서 서지정보를 직접 추출한다.
+
+        입력:
+            url — 원본 kokusho 페이지 URL.
+            biblio_id — 서지 ID (예: "200021110").
+        출력:
+            fetch_by_url()과 동일한 raw_data dict, 또는 None (IIIF 메타데이터 불충분 시).
+
+        왜 IIIF를 쓰는가:
+            kokusho는 SPA(Single Page Application)이므로 markdown.new가
+            빈 페이지를 반환한다. Jina Reader는 동작하지만 느리고,
+            IIIF manifest에 구조화된 메타데이터가 이미 있으므로
+            LLM 추출보다 정확하고 빠르다.
+
+        IIIF 실패 시:
+            None을 반환하면 호출측에서 기존 LLM 폴백으로 전환한다.
+        """
+        from . import iiif_utils
+
+        manifest_url = _KOKUSHO_MANIFEST_TEMPLATE.format(id=biblio_id)
+        manifest = await iiif_utils.fetch_iiif_manifest(manifest_url)
+        metadata = iiif_utils.extract_iiif_metadata(manifest)
+        canvases = iiif_utils.extract_iiif_canvases(manifest)
+
+        if not metadata.get("title"):
+            logger.warning(
+                "kokusho IIIF manifest에서 제목을 찾지 못했습니다: %s",
+                manifest_url,
+            )
+            return None
+
+        # IIIF metadata를 LLM 추출 결과와 동일한 형식으로 변환.
+        # GenericLlmMapper가 그대로 처리할 수 있도록 필드명을 맞춘다.
+        creator_name = metadata.get("creator")
+        llm_compat: dict[str, Any] = {
+            "title": metadata.get("title"),
+            "creator": (
+                {"name": creator_name, "name_reading": None, "role": "author", "period": None}
+                if creator_name
+                else None
+            ),
+            "date_created": metadata.get("date"),
+            "platform_name": "国書総目録 (NIJL)",
+            "permanent_uri": url,
+            "license": metadata.get("license"),
+            "repository": (
+                {"name": metadata.get("attribution"), "name_ko": None, "country": "JP", "call_number": metadata.get("call_number")}
+                if metadata.get("attribution")
+                else None
+            ),
+            "notes": metadata.get("description"),
+            "_provider": "iiif_manifest",
+            "_model": "iiif_metadata",
+        }
+
+        logger.info(
+            "kokusho IIIF 서지 추출 완료: %s (%d 캔버스)",
+            metadata.get("title"),
+            len(canvases),
+        )
+
+        return {
+            "source_url": url,
+            "markdown_text": None,
+            "llm_extracted": llm_compat,
+            "extraction_model": "iiif_manifest",
+            "_kokusho_biblio_id": biblio_id,
+            "_kokusho_canvases": canvases,
+            "_iiif_manifest_url": manifest_url,
+        }
 
     async def _fetch_markdown(self, url: str) -> str:
         """웹페이지를 마크다운으로 변환한다.
@@ -258,33 +401,59 @@ class GenericLlmFetcher(BaseFetcher):
         출력:
             마크다운 텍스트.
 
-        폴백 순서:
+        폴백 순서 (일반 사이트):
             1. markdown.new API (사용자 지정 기본 서비스)
             2. Jina Reader (JavaScript SPA 렌더링 가능)
             3. 직접 HTTP GET + HTML 태그 제거 (최후 수단)
 
-        왜 markdown.new를 쓰는가:
-            - HTML을 깔끔한 마크다운으로 변환해 준다
-            - JavaScript 렌더링도 처리 (Cloudflare Workers 기반)
-            - LLM 토큰을 80% 이상 절약
+        폴백 순서 (SPA 사이트 — _KNOWN_SPA_DOMAINS):
+            1. Jina Reader (JS 렌더링 지원)
+            2. markdown.new (SPA 폴백)
+            3. 직접 HTTP GET + HTML 태그 제거 (최후 수단)
+
+        왜 SPA 사이트 순서가 다른가:
+            kokusho.nijl.ac.jp, db.itkc.or.kr 등 SPA 사이트는
+            서버에서 빈 HTML을 보내고 JavaScript로 콘텐츠를 렌더링한다.
+            markdown.new(Cloudflare Workers)는 JS를 실행하지 않을 수 있어
+            빈 페이지를 반환한다. Jina Reader는 헤드리스 브라우저로
+            JS를 실행하므로 SPA에서도 콘텐츠를 가져올 수 있다.
         """
-        # ── 1순위: markdown.new ──
-        try:
-            markdown = await self._try_markdowner(url)
-            if markdown:
-                return markdown
-        except Exception as e:
-            logger.warning(f"markdown.new 실패: {e}")
+        # URL 도메인으로 SPA 여부 판별
+        domain = urlparse(url).hostname or ""
+        is_spa = any(domain.endswith(d) for d in _KNOWN_SPA_DOMAINS)
 
-        # ── 2순위: Jina Reader ──
-        try:
-            markdown = await self._try_jina_reader(url)
-            if markdown:
-                return markdown
-        except Exception as e:
-            logger.warning(f"Jina Reader 실패: {e}")
+        if is_spa:
+            # ── SPA 사이트: Jina Reader → markdown.new → HTML ──
+            try:
+                markdown = await self._try_jina_reader(url)
+                if markdown:
+                    return markdown
+            except Exception as e:
+                logger.warning("Jina Reader 실패 (SPA): %s", e)
 
-        # ── 3순위: 직접 HTTP + 태그 제거 ──
+            try:
+                markdown = await self._try_markdowner(url)
+                if markdown:
+                    return markdown
+            except Exception as e:
+                logger.warning("markdown.new 실패 (SPA 폴백): %s", e)
+        else:
+            # ── 일반 사이트: markdown.new → Jina Reader → HTML ──
+            try:
+                markdown = await self._try_markdowner(url)
+                if markdown:
+                    return markdown
+            except Exception as e:
+                logger.warning("markdown.new 실패: %s", e)
+
+            try:
+                markdown = await self._try_jina_reader(url)
+                if markdown:
+                    return markdown
+            except Exception as e:
+                logger.warning("Jina Reader 실패: %s", e)
+
+        # ── 최후 수단: 직접 HTTP + 태그 제거 ──
         return await self._fetch_html_fallback(url)
 
     async def _try_markdowner(self, url: str) -> str | None:

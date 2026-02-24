@@ -267,6 +267,8 @@ _URL_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"https?://db\.history\.go\.kr/"), "generic_llm"),
     # 한국고전번역원 한국고전종합DB
     (re.compile(r"https?://db\.itkc\.or\.kr/"), "generic_llm"),
+    # 서울대학교 규장각한국학연구원
+    (re.compile(r"https?://kyudb\.snu\.ac\.kr/"), "generic_llm"),
 ]
 
 
@@ -285,7 +287,7 @@ def detect_parser_from_url(url: str) -> str | None:
             - nl.go.kr/korcis/ → "korcis"
         2순위 — 범용 LLM 파서 (등록된 사이트):
             - kokusho.nijl.ac.jp, kostma.korea.ac.kr, kostma.aks.ac.kr,
-              db.history.go.kr, db.itkc.or.kr → "generic_llm"
+              db.history.go.kr, db.itkc.or.kr, kyudb.snu.ac.kr → "generic_llm"
         3순위 — 폴백:
             - http/https로 시작하는 모든 URL → "generic_llm"
 
@@ -360,6 +362,11 @@ def get_supported_sources() -> list[dict[str, str]]:
             "parser_id": "generic_llm",
             "url_example": "https://db.itkc.or.kr/...",
             "description": "한국고전번역원 한국고전종합DB",
+        },
+        {
+            "parser_id": "generic_llm",
+            "url_example": "https://kyudb.snu.ac.kr/...",
+            "description": "서울대학교 규장각한국학연구원",
         },
         {
             "parser_id": "generic_llm",

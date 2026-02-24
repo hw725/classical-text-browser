@@ -925,7 +925,7 @@ async function _loadCompareContent() {
   if (compareState.mode === "version") return _loadVersionCompareContent();
   if (!viewerState.partId || !viewerState.pageNum) return;
 
-  const { currentLayer, currentSubType } = interpState;
+  const { currentLayer } = interpState;
   const { pageNum } = viewerState;
 
   // 왜 "main"을 쓰는가:
@@ -934,10 +934,17 @@ async function _loadCompareContent() {
   //   비교 모드에서 이를 그대로 쓰면 파일명 불일치로 내용을 찾지 못한다.
   const partId = "main";
 
+  // 왜 "main_text"를 쓰는가:
+  //   전문 편집기(표점·번역·주석)는 항상 main_text/ 하위에 파일을 저장한다.
+  //   interpState.currentSubType이 "annotation"일 수 있으나,
+  //   비교에서는 실제 저장 경로인 "main_text"를 사용해야 파일을 찾는다.
+  //   (L5는 l5_compare API가 별도 처리하므로 이 값은 L6/L7에만 영향.)
+  const subType = "main_text";
+
   // 좌측(A)과 우측(B)를 병렬로 로드
   const [contentA, contentB] = await Promise.all([
-    _fetchComparePane(compareState.repoIdA, currentLayer, currentSubType, partId, pageNum),
-    _fetchComparePane(compareState.repoIdB, currentLayer, currentSubType, partId, pageNum),
+    _fetchComparePane(compareState.repoIdA, currentLayer, subType, partId, pageNum),
+    _fetchComparePane(compareState.repoIdB, currentLayer, subType, partId, pageNum),
   ]);
 
   compareState.contentA = contentA;
@@ -1285,22 +1292,24 @@ async function _loadVersionCompareContent() {
   if (!interpState.interpId) return;
   if (!viewerState.partId || !viewerState.pageNum) return;
 
-  const { currentLayer, currentSubType } = interpState;
+  const { currentLayer } = interpState;
   const { pageNum } = viewerState;
   const partId = "main";
+  // _loadCompareContent()와 같은 이유로 "main_text" 고정
+  const subType = "main_text";
 
   const [contentA, contentB] = await Promise.all([
     _fetchComparePaneCommit(
       compareState.commitA,
       currentLayer,
-      currentSubType,
+      subType,
       partId,
       pageNum
     ),
     _fetchComparePaneCommit(
       compareState.commitB,
       currentLayer,
-      currentSubType,
+      subType,
       partId,
       pageNum
     ),
