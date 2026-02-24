@@ -646,22 +646,42 @@ def get_corrected_text(
     # 전체 텍스트에 교정 적용
     corrected_text = _apply_corrections_to_text(original_text, corrections)
 
-    # 블록별 교정 텍스트 (블록 마커가 있는 경우)
-    block_texts = _split_text_by_blocks(original_text, blocks_meta)
+    # 블록별 교정 텍스트 생성
+    # 전략: 페이지 전체 기준 교정(block_id=null)은 전체 텍스트에 적용 후 분리,
+    #        블록 지정 교정(block_id 있음)은 블록별로 따로 적용.
+    # 왜 이렇게 하는가: block_id=null 교정의 char_index는 페이지 전체 기준이고,
+    #   block_id 지정 교정의 char_index는 블록 내부 기준이므로 분리 처리해야 한다.
+    page_corrs = [c for c in corrections if c.get("block_id") is None]
+    block_specific_corrs = [c for c in corrections if c.get("block_id") is not None]
+
+    # 1단계: 페이지 전체 기준 교정을 전체 텍스트에 적용 후 블록 분리
+    page_corrected = _apply_corrections_to_text(original_text, page_corrs)
+    orig_block_texts = _split_text_by_blocks(original_text, blocks_meta)
+    corr_block_texts = _split_text_by_blocks(page_corrected, blocks_meta)
+
     result_blocks = []
-    for bt in block_texts:
-        block_corrs = [
-            c for c in corrections if c.get("block_id") == bt["block_id"]
+    for i, bt in enumerate(orig_block_texts):
+        # 페이지 교정이 적용된 블록 텍스트
+        corr_bt = (
+            corr_block_texts[i] if i < len(corr_block_texts)
+            else bt
+        )
+        # 2단계: 블록 지정 교정을 추가 적용 (block-local char_index)
+        this_block_corrs = [
+            c for c in block_specific_corrs
+            if c.get("block_id") == bt["block_id"]
         ]
-        bt_corrected = _apply_corrections_to_text(
-            bt["text"], block_corrs, block_local=True
+        final_text = _apply_corrections_to_text(
+            corr_bt["text"], this_block_corrs, block_local=True
         )
         result_blocks.append({
             "block_id": bt["block_id"],
             "block_type": bt.get("block_type", "main_text"),
             "original_text": bt["text"],
-            "corrected_text": bt_corrected,
-            "corrections_applied": len(block_corrs),
+            "corrected_text": final_text,
+            "corrections_applied": len(this_block_corrs) + (
+                1 if bt["text"] != corr_bt["text"] else 0
+            ),
         })
 
     return {
