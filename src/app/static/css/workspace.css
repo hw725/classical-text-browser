@@ -2456,6 +2456,22 @@ body.resizing-row {
   accent-color: #22c55e;
 }
 
+/* L5 종류(표점/현토) 선택 바 */
+.l5-kind-bar {
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.l5-kind-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-right: 4px;
+}
+
+.l5-kind-bar input[type="radio"] {
+  accent-color: #34d399; /* emerald — L5 레이어 색상 */
+}
+
 /* --- 해석 도구 바 --- */
 
 .interp-toolbar {

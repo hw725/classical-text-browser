@@ -4820,6 +4820,98 @@ class MarkAddRequest(BaseModel):
     after: str | None = None
 
 
+@app.get("/api/interpretations/{interp_id}/pages/{page_num}/l5_compare")
+async def api_l5_compare(
+    interp_id: str,
+    page_num: int,
+    kind: str = Query("punctuation", description="L5 종류: punctuation | hyeonto"),
+    part_id: str = Query("main", description="권 식별자"),
+):
+    """비교 모드용 L5 페이지 전체 데이터 조회.
+
+    목적: 한 페이지에 속한 모든 블록의 표점 또는 현토 데이터를 수집하여
+          텍스트 비교에 적합한 형태로 반환한다.
+
+    왜 이렇게 하는가:
+        기존 /punctuation, /hyeonto API는 block_id를 필수로 받아
+        단일 블록만 반환한다. 비교 탭은 페이지 단위로 두 저장소를
+        비교하므로, 페이지의 모든 블록을 한 번에 가져와야 한다.
+
+    입력:
+        kind — "punctuation" (표점, 기본) 또는 "hyeonto" (현토).
+        part_id — 권 식별자 (기본 "main").
+    출력: {"blocks": [...], "text_summary": "줄 단위 비교용 텍스트"}.
+    """
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    if kind not in ("punctuation", "hyeonto"):
+        return JSONResponse(
+            {"error": f"kind는 'punctuation' 또는 'hyeonto'여야 합니다. 받은 값: {kind}"},
+            status_code=400,
+        )
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."},
+            status_code=404,
+        )
+
+    # L5_reading/main_text/ 디렉토리에서 해당 페이지·종류의 파일을 모두 수집
+    l5_dir = interp_path / "L5_reading" / "main_text"
+    if not l5_dir.exists():
+        return {"blocks": [], "text_summary": ""}
+
+    page_prefix = f"{part_id}_page_{page_num:03d}"
+    suffix = f"_{kind}.json"
+    blocks = []
+
+    import glob as glob_mod
+
+    # 블록별 파일 + 레거시 페이지 파일 모두 수집
+    pattern = str(l5_dir / f"{page_prefix}*{suffix}")
+    for fpath in sorted(glob_mod.glob(pattern)):
+        try:
+            with open(fpath, encoding="utf-8") as f:
+                data = json.load(f)
+            blocks.append(data)
+        except (json.JSONDecodeError, OSError):
+            continue
+
+    # 비교용 텍스트 요약 생성
+    lines = []
+    for blk in blocks:
+        bid = blk.get("block_id", "unknown")
+        if kind == "punctuation":
+            items = blk.get("marks", [])
+            lines.append(f"[블록: {bid}]")
+            for m in items:
+                t = m.get("target", {})
+                s, e = t.get("start", "?"), t.get("end", "?")
+                before = m.get("before") or ""
+                after = m.get("after") or ""
+                # before와 after를 모두 보여주어 비교 시 차이를 명확히 함
+                parts = []
+                if before:
+                    parts.append(f"앞:{before}")
+                if after:
+                    parts.append(f"뒤:{after}")
+                desc = " ".join(parts) if parts else "(빈 표점)"
+                lines.append(f"  [{s}-{e}] {desc}")
+        else:
+            items = blk.get("annotations", [])
+            lines.append(f"[블록: {bid}]")
+            for a in items:
+                t = a.get("target", {})
+                s, e = t.get("start", "?"), t.get("end", "?")
+                text = a.get("text", "")
+                pos = a.get("position", "after")
+                lines.append(f"  [{s}-{e}] \"{text}\" ({pos})")
+
+    return {"blocks": blocks, "text_summary": "\n".join(lines)}
+
+
 @app.get("/api/interpretations/{interp_id}/pages/{page_num}/punctuation")
 async def api_get_punctuation(interp_id: str, page_num: int, block_id: str = Query(...)):
     """표점 조회.
