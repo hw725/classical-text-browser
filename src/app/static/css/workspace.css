@@ -2631,6 +2631,37 @@ body.resizing-row {
   display: none !important;
 }
 
+/* --- 버전 간 비교 모드 --- */
+
+.compare-type-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 8px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  width: 100%;
+}
+
+.compare-type-radio {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.compare-type-radio input[type="radio"] {
+  accent-color: #22c55e;
+  margin: 0;
+}
+
+.compare-type-radio:hover {
+  color: var(--text-primary);
+}
+
 /* --- 사이드바 해석 저장소 목록 --- */
 
 .interp-list {

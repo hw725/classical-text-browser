@@ -2040,11 +2040,25 @@
 
             <!-- 비교 영역 (비교 모드에서만 표시) -->
             <div id="compare-container" class="compare-container" style="display: none">
+              <!-- 비교 유형 선택 바 (저장소 간 / 버전 간) -->
+              <div class="compare-type-bar">
+                <label class="compare-type-radio">
+                  <input type="radio" name="compare-type" value="repo" checked />
+                  <span>저장소 간</span>
+                </label>
+                <label class="compare-type-radio">
+                  <input type="radio" name="compare-type" value="version" />
+                  <span>버전 간</span>
+                </label>
+              </div>
               <!-- 좌측 패널 A -->
               <div class="compare-pane">
                 <div class="compare-pane-header">
-                  <select id="compare-repo-a" class="compare-repo-select" title="해석 저장소 A 선택">
+                  <select id="compare-repo-a" class="compare-repo-select compare-repo-mode" title="해석 저장소 A 선택">
                     <option value="">저장소 A 선택</option>
+                  </select>
+                  <select id="compare-commit-a" class="compare-repo-select compare-version-mode" style="display:none" title="커밋 A 선택">
+                    <option value="HEAD">현재 (HEAD)</option>
                   </select>
                   <span class="compare-pane-label">A</span>
                 </div>
@@ -2055,8 +2069,11 @@
               <!-- 우측 패널 B -->
               <div class="compare-pane">
                 <div class="compare-pane-header">
-                  <select id="compare-repo-b" class="compare-repo-select" title="해석 저장소 B 선택">
+                  <select id="compare-repo-b" class="compare-repo-select compare-repo-mode" title="해석 저장소 B 선택">
                     <option value="">저장소 B 선택</option>
+                  </select>
+                  <select id="compare-commit-b" class="compare-repo-select compare-version-mode" style="display:none" title="커밋 B 선택">
+                    <option value="HEAD">현재 (HEAD)</option>
                   </select>
                   <span class="compare-pane-label">B</span>
                 </div>
