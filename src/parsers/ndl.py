@@ -22,13 +22,21 @@ DC-NDL 주요 필드 매핑:
 
 from __future__ import annotations
 
+import logging
 import re
+from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree as ET
 
 import httpx
 
 from parsers.base import BaseFetcher, BaseMapper, register_parser
+
+logger = logging.getLogger(__name__)
+
+# NDL Digital Collections IIIF API 패턴
+_NDL_IIIF_MANIFEST_URL = "https://dl.ndl.go.jp/api/iiif/{pid}/manifest.json"
 
 # XML 네임스페이스 맵 — NDL OpenSearch 응답에서 사용
 _NS = {
@@ -58,6 +66,7 @@ class NdlFetcher(BaseFetcher):
     parser_id = "ndl"
     parser_name = "国立国会図書館サーチ (NDL Search)"
     api_variant = "opensearch"
+    supports_asset_download = True
 
     async def search(self, query: str, **kwargs) -> list[dict[str, Any]]:
         """NDL OpenSearch로 키워드 검색을 수행한다.
@@ -137,11 +146,34 @@ class NdlFetcher(BaseFetcher):
             # PID를 검색어로 사용하여 관련 서지 레코드를 찾는다
             results = await self.search(pid, cnt=1)
             if results:
-                return results[0]["raw"]
-            raise FileNotFoundError(
-                f"NDL에서 PID {pid}에 대한 서지 정보를 찾을 수 없습니다.\n"
-                "→ 해결: URL이 올바른지 확인하세요."
-            )
+                raw_data = results[0]["raw"]
+            else:
+                raw_data = {}
+
+            # IIIF manifest에서 추가 메타데이터 보강 + PID 저장
+            # 왜: list_assets()에서 PID로 IIIF 이미지를 다운로드하기 위해.
+            # 실패해도 OpenSearch 결과는 그대로 유지한다.
+            raw_data["_ndl_pid"] = pid
+            try:
+                from parsers.iiif_utils import extract_iiif_metadata, fetch_iiif_manifest
+
+                manifest_url = _NDL_IIIF_MANIFEST_URL.format(pid=pid)
+                manifest = await fetch_iiif_manifest(manifest_url)
+                iiif_meta = extract_iiif_metadata(manifest)
+                raw_data["_iiif_metadata"] = iiif_meta
+                raw_data["_iiif_manifest_url"] = manifest_url
+                # IIIF 메타데이터로 누락 필드 보강 (OpenSearch에 없는 경우)
+                if not raw_data.get("dc:title") and iiif_meta.get("title"):
+                    raw_data["dc:title"] = iiif_meta["title"]
+            except Exception as e:
+                logger.warning("IIIF manifest 가져오기 실패 (PID=%s): %s", pid, e)
+
+            if not raw_data.get("dc:title"):
+                raise FileNotFoundError(
+                    f"NDL에서 PID {pid}에 대한 서지 정보를 찾을 수 없습니다.\n"
+                    "→ 해결: URL이 올바른지 확인하세요."
+                )
+            return raw_data
 
         # 어떤 패턴에도 매칭되지 않으면 URL 자체를 검색어로 시도
         raise ValueError(
@@ -174,6 +206,80 @@ class NdlFetcher(BaseFetcher):
             )
 
         return _parse_item_xml(items[0])
+
+    async def list_assets(self, raw_data: dict[str, Any]) -> list[dict[str, Any]]:
+        """IIIF manifest에서 다운로드 가능한 에셋(이미지) 목록을 조회한다.
+
+        동작:
+            1. raw_data에서 _ndl_pid를 추출한다.
+            2. IIIF manifest에서 캔버스 목록을 가져온다.
+            3. 전체를 하나의 에셋으로 묶어 반환한다.
+
+        왜 전체를 하나의 에셋으로:
+            NDL Digital Collections의 PID는 하나의 자료를 가리킨다.
+            국립공문서관처럼 BID→MID 계층이 없으므로,
+            PID 전체 = 하나의 에셋이 자연스럽다.
+
+        출력: [{asset_id, id, label, page_count, download_type, _canvases}, ...]
+        """
+        pid = raw_data.get("_ndl_pid")
+        if not pid:
+            return []
+
+        from parsers.iiif_utils import extract_iiif_canvases, fetch_iiif_manifest
+
+        manifest_url = raw_data.get(
+            "_iiif_manifest_url",
+            _NDL_IIIF_MANIFEST_URL.format(pid=pid),
+        )
+        try:
+            manifest = await fetch_iiif_manifest(manifest_url)
+            canvases = extract_iiif_canvases(manifest)
+        except Exception as e:
+            logger.warning("IIIF 캔버스 목록 조회 실패: %s", e)
+            return []
+
+        if not canvases:
+            return []
+
+        label = raw_data.get("dc:title") or f"NDL-{pid}"
+        return [{
+            "asset_id": f"ndl_iiif_{pid}",
+            "id": f"ndl_iiif_{pid}",
+            "label": label,
+            "page_count": len(canvases),
+            "file_size": None,  # IIIF는 전체 크기를 사전에 알 수 없음
+            "download_type": "iiif",
+            "_canvases": canvases,
+            "_manifest_url": manifest_url,
+        }]
+
+    async def download_asset(
+        self,
+        asset_info: dict[str, Any],
+        dest_dir: Path,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> Path:
+        """IIIF 이미지를 다운로드하여 PDF로 변환한다.
+
+        왜 이렇게 하는가:
+            archives_jp.py의 JPEG→PDF 패턴과 동일한 방식.
+            IIIF Image API의 size 파라미터로 적절한 해상도를 선택한다.
+        """
+        from parsers.iiif_utils import download_iiif_images_as_pdf
+
+        canvases = asset_info.get("_canvases", [])
+        if not canvases:
+            raise ValueError("에셋에 캔버스 정보가 없습니다.")
+
+        label = asset_info.get("label", "ndl_download")
+        return await download_iiif_images_as_pdf(
+            canvases=canvases,
+            dest_dir=Path(dest_dir),
+            label=label,
+            progress_callback=progress_callback,
+            max_dimension=1500,
+        )
 
 
 class NdlMapper(BaseMapper):
