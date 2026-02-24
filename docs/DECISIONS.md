@@ -741,6 +741,36 @@ list_trash, restore_from_trash 함수 추가), `src/app/server.py`
 ---
 
 - [x] 하단 패널 → 액티비티 바 이동 + 급행 커밋 뷰 → D-025
+- [x] 비교 탭 L5 표점/현토 표시 수정 → D-026
+
+---
+
+## D-026: 비교 탭 L5 표점/현토 표시 수정
+
+**날짜**: 2026-02-24
+**맥락**: 교차뷰어 비교 모드에서 L5(구두점) 탭을 선택하면 내용이 표시되지 않는 버그.
+비교 탭이 `/layers/L5_reading/main_text/pages/{num}` API를 호출하는데,
+이 API가 찾는 `page_001.json` 파일은 존재하지 않았다.
+실제 L5 데이터는 `_punctuation.json`과 `_hyeonto.json` 접미사 파일에 저장되기 때문.
+
+**결정**:
+
+1. **페이지 단위 L5 비교 전용 API 신설**:
+   `GET /api/interpretations/{id}/pages/{num}/l5_compare?kind=punctuation|hyeonto`
+   한 페이지의 모든 블록의 표점 또는 현토 파일을 glob으로 수집하여
+   `blocks`(원본 JSON)과 `text_summary`(줄 단위 비교용 텍스트)를 반환.
+
+2. **L5 종류 선택 UI 추가**: 교차뷰어 서브탭 바 아래에 "표점/현토" 라디오 버튼.
+   L5_reading 탭에서만 표시. 기본값은 표점(punctuation).
+
+3. **비교 패널 API 분기**: `_fetchComparePane()`에서 L5 레이어일 때
+   기존 `/layers/` API 대신 `/l5_compare` API를 호출.
+
+**수정 파일**: `server.py`, `interpretation.js`, `index.html`, `workspace.css`
+
+**근거**:
+- 기존 `/punctuation`, `/hyeonto` API는 `block_id` 필수 → 페이지 단위 비교에 부적합.
+- 새 API로 기존 엔드포인트에 영향 없이 비교 전용 기능 추가.
 
 ---
 

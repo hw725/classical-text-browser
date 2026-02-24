@@ -27,6 +27,7 @@ const interpState = {
   depStatus: null, // 의존 변경 확인 결과
   currentLayer: "L5_reading", // 현재 층
   currentSubType: "main_text", // main_text | annotation
+  l5Kind: "punctuation", // L5 종류: "punctuation" (표점) | "hyeonto" (현토)
   isDirty: false, // 편집 변경 여부
   interpretations: [], // 전체 목록 캐시
 };
@@ -90,6 +91,12 @@ function initInterpretation() {
         subtypeBar.style.display = layer === "L7_annotation" ? "none" : "";
       }
 
+      // L5_reading일 때만 표점/현토 선택 바 표시
+      const l5KindBar = document.getElementById("l5-kind-bar");
+      if (l5KindBar) {
+        l5KindBar.style.display = layer === "L5_reading" ? "" : "none";
+      }
+
       _loadLayerContent();
       if (compareState.active) _loadCompareContent();
     });
@@ -100,6 +107,14 @@ function initInterpretation() {
     radio.addEventListener("change", () => {
       interpState.currentSubType = radio.value;
       _loadLayerContent();
+      if (compareState.active) _loadCompareContent();
+    });
+  });
+
+  // L5 종류(표점/현토) 라디오
+  document.querySelectorAll('input[name="l5-kind"]').forEach((radio) => {
+    radio.addEventListener("change", () => {
+      interpState.l5Kind = radio.value;
       if (compareState.active) _loadCompareContent();
     });
   });
@@ -888,11 +903,20 @@ async function _loadCompareContent() {
 async function _fetchComparePane(repoId, layer, subType, partId, pageNum) {
   if (!repoId) return "";
   try {
-    const url = `/api/interpretations/${repoId}/layers/${layer}/${subType}/pages/${pageNum}?part_id=${partId}`;
+    let url;
+    if (layer === "L5_reading") {
+      // L5는 표점/현토 전용 비교 API 사용
+      // 왜: 일반 /layers/ API는 _punctuation.json, _hyeonto.json 파일을 찾지 못한다.
+      const kind = interpState.l5Kind || "punctuation";
+      url = `/api/interpretations/${repoId}/pages/${pageNum}/l5_compare?kind=${kind}&part_id=${partId}`;
+    } else {
+      url = `/api/interpretations/${repoId}/layers/${layer}/${subType}/pages/${pageNum}?part_id=${partId}`;
+    }
     const res = await fetch(url);
     if (!res.ok) return "";
     const data = await res.json();
-    return _extractTextContent(data.content);
+    // L5 비교 API는 text_summary를 반환, 그 외는 content를 텍스트로 변환
+    return data.text_summary || _extractTextContent(data.content) || "";
   } catch (err) {
     console.error(`비교 패널 로드 실패 (${repoId}):`, err);
     return "";
