@@ -127,7 +127,52 @@ flowchart TB
 
 ---
 
-## 4. 코어 스키마 엔티티 관계 (해석 저장소)
+## 4. 백엔드 모듈 구조 (src/app/)
+
+server.py는 조립 파일(~85줄). 158개 API 엔드포인트는 8개 도메인 라우터에 분산.
+공유 상태(`_state.py`)를 통해 라우터 간 의존 없이 동작.
+
+```mermaid
+flowchart TB
+  subgraph app["src/app/"]
+    server["server.py<br>(앱 생성 + 라우터 마운트)"]
+    state["_state.py<br>(공유 상태 + 헬퍼)"]
+
+    subgraph routers["routers/"]
+      lib["library.py<br>서고·설정·백업<br>(15 라우트)"]
+      doc["documents.py<br>문헌·페이지·서지<br>(32 라우트)"]
+      interp["interpretations.py<br>해석·레이어·엔티티<br>(22 라우트)"]
+      llm["llm_ocr.py<br>LLM·OCR<br>(13 라우트)"]
+      align["alignment.py<br>정렬·이체자<br>(17 라우트)"]
+      read["reading.py<br>표점·현토·번역<br>(22 라우트)"]
+      annot["annotation.py<br>주석·사전·인용<br>(30 라우트)"]
+      ver["version.py<br>Git·스냅샷<br>(7 라우트)"]
+    end
+  end
+
+  server -->|include_router| routers
+  lib & doc & interp & llm & align & read & annot & ver -->|import| state
+
+  subgraph core["src/core/ + src/llm/"]
+    coremod["core 모듈<br>(library, document,<br>interpretation, ...)"]
+    llmmod["llm 모듈<br>(router, config,<br>providers, ...)"]
+  end
+
+  state -->|lazy import| core
+
+  style app fill:#e3f2fd,stroke:#1565c0
+  style routers fill:#bbdefb,stroke:#1565c0
+  style core fill:#e8f5e9,stroke:#2e7d32
+```
+
+**규칙:**
+- 라우터 간 직접 import 금지 → 공유 로직은 `_state.py`에 배치
+- `_state.py`는 core/llm 모듈을 lazy import (순환 방지)
+- Pydantic 모델은 사용하는 라우터 파일 내부에 정의
+
+---
+
+## 5. 코어 스키마 엔티티 관계 (해석 저장소)
 
 해석 저장소 내부의 엔티티 모델 (core-schema-v1.3).
 
@@ -197,7 +242,7 @@ erDiagram
 
 ---
 
-## 5. 층별 의존 관계
+## 6. 층별 의존 관계
 
 하위 층 변경이 상위 층에 미치는 영향.
 
