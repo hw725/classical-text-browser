@@ -1107,6 +1107,31 @@ Selection API가 반환하는 문자 오프셋에 표점 문자가 포함되어
 
 ---
 
+## D-037: HWP/HWPX/PDF 가져오기 기능 일시 비활성화
+
+**날짜**: 2026-02-24
+**상태**: 준비중
+
+**맥락**: hwp-import.js로 구현된 HWP/HWPX/PDF 텍스트 가져오기 기능이
+아직 안정적이지 않아 사용자에게 혼란을 줄 수 있다.
+
+**결정**:
+
+1. **버튼 비활성화**: 사이드바의 "HWP" 버튼을 "가져오기"로 변경하고,
+   클릭 시 `showToast('준비중입니다', 'info')`만 표시.
+   `opacity: 0.5`로 시각적 비활성화 상태 표현.
+2. **코드 보존**: `hwp-import.js`와 `#hwp-import-overlay` HTML은 삭제하지 않음.
+   기능이 준비되면 `onclick`만 `_openHwpImportDialog()`로 복원하면 됨.
+3. **백엔드 엔드포인트 유지**: `/api/documents/import-hwp`, `/api/text-import/pdf/*` 등
+   API 엔드포인트도 그대로 유지. 프론트엔드 진입점만 차단.
+
+**수정 파일**: `index.html`
+
+**복원 방법**: `index.html`의 `import-hwp-btn` onclick을
+`_openHwpImportDialog()`로 복원하고 opacity/cursor 스타일 제거.
+
+---
+
 ### 배포·설치
 - [ ] Google Drive + .git 충돌 회피 가이드 → Phase 10 이후
 - [ ] 비개발자용 Git 번들링 또는 Git-free 모드 → Phase 10 이후
