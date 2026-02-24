@@ -159,7 +159,9 @@ def add_document(
     (doc_path / ".gitattributes").write_text(gitattributes_content, encoding="utf-8")
 
     repo = git.Repo.init(doc_path)
-    repo.index.add(["."])
+    # repo.git.add()는 실제 git 바이너리를 호출 — .git/ 내부를 추가하지 않음
+    # (repo.index.add(["."])는 GitPython 저수준 API라 .git/도 추가해버림)
+    repo.git.add("-A")
     repo.index.commit(f"feat: 문헌 등록 — {title}")
 
     # --- 서고 매니페스트 업데이트 ---
@@ -881,9 +883,10 @@ def git_commit_document(
         if staged_paths:
             repo.index.add(staged_paths)
         else:
-            repo.index.add(["."])
+            # repo.git.add()는 git 바이너리 호출 — .git/ 내부 추가 방지
+            repo.git.add("-A")
     else:
-        repo.index.add(["."])
+        repo.git.add("-A")
 
     try:
         commit = repo.index.commit(message)
@@ -901,23 +904,37 @@ def git_commit_document(
     }
 
 
-def get_git_log(doc_path: str | Path, max_count: int = 50) -> list[dict]:
+def get_git_log(
+    doc_path: str | Path,
+    max_count: int = 50,
+    pushed_only: bool = False,
+) -> dict:
     """문헌 저장소의 git 커밋 이력을 반환한다.
 
-    목적: 하단 패널의 Git 이력 탭에 표시할 커밋 목록을 가져온다.
+    목적: Git 이력 사이드바에 표시할 커밋 목록을 가져온다.
     입력:
         doc_path — 문헌 디렉토리 경로.
         max_count — 최대 커밋 수 (기본 50).
-    출력: [{hash, short_hash, message, author, date}, ...].
+        pushed_only — True이면 push 시점의 마일스톤만 요약 표시한다.
+    출력:
+        pushed_only=False: {"mode": "full", "commits": [{hash, ...}, ...]}
+        pushed_only=True:  {"mode": "milestones", "commits": [{hash, ..., commits_squashed, summary}, ...]}
     왜 이렇게 하는가: 연구자가 자신의 교정 이력을 확인하고,
                       특정 시점의 상태를 찾아볼 수 있게 한다.
+    왜 milestones가 필요한가: 교정 저장마다 자동 커밋이 생겨
+                              커밋 수가 과도해진다. push 시점만 보면
+                              지하철 급행처럼 의미 있는 작업 단위만 파악 가능.
     """
     doc_path = Path(doc_path).resolve()
 
     try:
         repo = git.Repo(doc_path)
     except git.InvalidGitRepositoryError:
-        return []
+        return {"mode": "full", "commits": []}
+
+    if pushed_only:
+        milestones = _get_push_milestones(repo, max_count)
+        return {"mode": "milestones", "commits": milestones}
 
     commits = []
     try:
@@ -930,11 +947,139 @@ def get_git_log(doc_path: str | Path, max_count: int = 50) -> list[dict]:
                 "date": c.committed_datetime.isoformat(),
             })
     except (ValueError, Exception) as e:
-        # Git 객체가 깨진 경우(missing SHA 등) — 읽을 수 있는 커밋까지만 반환
         import logging
         logging.warning(f"Git 로그 읽기 중 오류 (읽은 커밋 {len(commits)}건): {e}")
 
-    return commits
+    return {"mode": "full", "commits": commits}
+
+
+def _get_push_milestones(repo: git.Repo, max_count: int = 50) -> list[dict]:
+    """push 실행 시점의 커밋만 추출하여 요약 반환한다 (급행 정거장 뷰).
+
+    목적: reflog에서 'push' 이벤트를 찾아 해당 시점의 HEAD 커밋을 마일스톤으로 삼는다.
+    왜 reflog인가: git push를 실행하면 원격 추적 브랜치의 reflog에
+                   "update by push" 엔트리가 남는다. 이를 역추적하면
+                   사용자가 의미 있다고 판단하여 push한 시점을 알 수 있다.
+    출력: [{hash, short_hash, message, author, date,
+            commits_squashed (이전 push 이후 커밋 수), summary}, ...]
+    """
+    from datetime import datetime, timezone
+
+    remote_ref = _find_remote_tracking_ref(repo)
+    if not remote_ref:
+        return []
+
+    # reflog에서 push 시점 추출
+    # 주의: GitPython은 키워드 인자를 위치 인자 앞에 배치하므로
+    #        repo.git.reflog("show", ref, format=...) 형태는 인자 순서 오류를 일으킨다.
+    #        repo.git.execute()로 직접 명령을 구성한다.
+    try:
+        raw = repo.git.execute(
+            ["git", "reflog", "show", remote_ref, "--format=%H|%at|%gs"]
+        )
+    except git.GitCommandError:
+        return []
+
+    if not raw.strip():
+        return []
+
+    # push 엔트리만 필터 (최신순)
+    push_points = []
+    for line in raw.strip().split("\n"):
+        parts = line.split("|", 2)
+        if len(parts) < 3:
+            continue
+        h, ts_str, subject = parts
+        if "push" in subject.lower():
+            push_points.append((h, int(ts_str)))
+
+    if not push_points:
+        return []
+
+    milestones = []
+    for i, (h, push_ts) in enumerate(push_points[:max_count]):
+        try:
+            commit = repo.commit(h)
+        except (git.BadName, ValueError):
+            continue
+
+        # 이전 push 이후 ~ 이번 push까지의 커밋 수 계산
+        if i + 1 < len(push_points):
+            prev_h = push_points[i + 1][0]
+            range_spec = f"{prev_h}..{h}"
+        else:
+            # 최초 push → 해당 커밋까지 전체
+            range_spec = h
+
+        squashed = 0
+        summary_parts = []
+        try:
+            squashed = int(repo.git.rev_list("--count", range_spec))
+            # 범위 내 커밋 메시지에서 레이어별 요약 생성
+            messages = repo.git.log(
+                range_spec, format="%s", max_count=100,
+            ).strip().split("\n")
+            layer_counts = {}
+            for msg in messages:
+                if not msg:
+                    continue
+                # "L4: page 001 교정 — ..." 패턴에서 레이어 추출
+                if ":" in msg and msg.split(":")[0].startswith("L"):
+                    layer = msg.split(":")[0]
+                    layer_counts[layer] = layer_counts.get(layer, 0) + 1
+            if layer_counts:
+                summary_parts = [
+                    f"{k} {v}건" for k, v in sorted(layer_counts.items())
+                ]
+        except git.GitCommandError:
+            pass
+
+        push_dt = datetime.fromtimestamp(push_ts, tz=timezone.utc)
+        summary = ", ".join(summary_parts) if summary_parts else (
+            commit.message.strip().split("\n")[0]
+        )
+
+        milestones.append({
+            "hash": h,
+            "short_hash": h[:7],
+            "message": commit.message.strip(),
+            "author": str(commit.author),
+            "date": commit.committed_datetime.isoformat(),
+            "push_date": push_dt.isoformat(),
+            "commits_squashed": squashed,
+            "summary": summary,
+        })
+
+    return milestones
+
+
+def _find_remote_tracking_ref(repo: git.Repo) -> str | None:
+    """현재 브랜치의 원격 추적 참조를 찾는다.
+
+    목적: push milestone 추출에 사용할 원격 브랜치 참조를 결정한다.
+    출력: 'origin/main' 같은 문자열, 또는 원격이 없으면 None.
+    """
+    try:
+        tracking = repo.active_branch.tracking_branch()
+        if tracking:
+            return tracking.name
+    except (TypeError, ValueError):
+        pass
+
+    # tracking branch가 없으면 origin/<활성브랜치> 시도
+    try:
+        branch_name = repo.active_branch.name
+        for remote in repo.remotes:
+            ref_name = f"{remote.name}/{branch_name}"
+            try:
+                repo.commit(ref_name)
+                return ref_name
+            except (git.BadName, ValueError):
+                continue
+    except (TypeError, ValueError):
+        pass
+
+    return None
 
 
 def get_git_diff(doc_path: str | Path, commit_hash: str) -> dict:
@@ -1526,7 +1671,7 @@ def create_document_from_hwp(
 
     # 7. git commit
     repo = git.Repo(doc_path)
-    repo.index.add(["."])
+    repo.git.add("-A")  # git 바이너리 호출 — .git/ 내부 추가 방지
     try:
         repo.index.commit(f"feat: HWP에서 문헌 생성 — {effective_title}")
     except git.HookExecutionError:
@@ -1736,7 +1881,7 @@ async def create_document_from_url(
 
     # 8. git commit
     repo = git.Repo(doc_path)
-    repo.index.add(["."])
+    repo.git.add("-A")  # git 바이너리 호출 — .git/ 내부 추가 방지
     repo.index.commit(f"feat: URL에서 문헌 생성 ({parser_id})")
 
     return {

@@ -954,10 +954,40 @@ function _initGitPanelEvents() {
       document.getElementById("git-diff-view").style.display = "none";
     });
   }
+
+  // push 전용 필터 토글 버튼
+  const pushedBtn = document.getElementById("git-pushed-toggle");
+  if (pushedBtn) {
+    pushedBtn.addEventListener("click", () => {
+      _gitPushedOnly = !_gitPushedOnly;
+      pushedBtn.classList.toggle("active", _gitPushedOnly);
+      pushedBtn.title = _gitPushedOnly
+        ? "급행 뷰 (클릭: 전체 펼치기)"
+        : "전체 커밋 표시 중 (클릭: 급행 뷰)";
+
+      // 커밋 목록 새로고침
+      if (typeof viewerState !== "undefined" && viewerState?.docId) {
+        _loadGitLog(viewerState.docId);
+      }
+
+      // 그래프 뷰도 새로고침 (열려 있으면)
+      if (typeof _reloadGitGraph === "function") {
+        _reloadGitGraph();
+      }
+    });
+  }
 }
 
 /**
- * 문헌의 git 커밋 이력을 로드하여 하단 패널에 표시한다.
+ * push 전용 필터 상태 (기본: 급행 뷰 ON).
+ * true이면 push 시점의 마일스톤만 요약 표시한다 (급행 정거장 뷰).
+ * false이면 전체 커밋을 펼쳐서 표시한다.
+ */
+let _gitPushedOnly = true;
+
+/**
+ * 문헌의 git 커밋 이력을 로드하여 사이드바에 표시한다.
+ * pushed_only 모드일 때는 마일스톤 카드 형태로 렌더링한다.
  */
 // eslint-disable-next-line no-unused-vars
 async function _loadGitLog(docId) {
@@ -967,37 +997,73 @@ async function _loadGitLog(docId) {
   if (!listEl) return;
 
   try {
-    const res = await fetch(`/api/documents/${docId}/git/log`);
+    const params = new URLSearchParams();
+    if (_gitPushedOnly) params.set("pushed_only", "true");
+    const qs = params.toString() ? `?${params}` : "";
+    const res = await fetch(`/api/documents/${docId}/git/log${qs}`);
     if (!res.ok) throw new Error("Git log API 응답 오류");
     const data = await res.json();
     const commits = data.commits || [];
+    const mode = data.mode || "full";
 
     if (commits.length === 0) {
-      listEl.innerHTML = '<div class="placeholder">커밋 이력이 없습니다</div>';
+      listEl.innerHTML = _gitPushedOnly
+        ? '<div class="placeholder">첫 번째 Push(업로드)를 먼저 실행해 주세요.<br><span style="font-size:11px;color:var(--text-secondary)">설정 → Git 동기화에서 Push할 수 있습니다.</span></div>'
+        : '<div class="placeholder">커밋 이력이 없습니다</div>';
       return;
     }
 
     listEl.innerHTML = "";
-    commits.forEach((c) => {
-      const item = document.createElement("div");
-      item.className = "git-commit-item";
 
-      // 날짜 포맷: YYYY-MM-DD HH:mm
-      const dateStr = _formatDate(c.date);
+    if (mode === "milestones") {
+      // 급행 정거장 뷰: push 시점의 마일스톤 카드
+      commits.forEach((c) => {
+        const card = document.createElement("div");
+        card.className = "git-milestone-card";
 
-      item.innerHTML = `
-        <span class="git-commit-hash">${c.short_hash}</span>
-        <span class="git-commit-msg">${_escapeHtml(c.message)}</span>
-        <span class="git-commit-date">${dateStr}</span>
-      `;
+        const pushDateStr = _corrFormatDate(c.push_date);
+        const squashedLabel =
+          c.commits_squashed > 1
+            ? `${c.commits_squashed}건 커밋 포함`
+            : "1건 커밋";
 
-      // 클릭 시 diff 보기
-      item.addEventListener("click", () => {
-        _loadGitDiff(docId, c.hash, c.message);
+        card.innerHTML = `
+          <div class="milestone-header">
+            <span class="milestone-hash">${c.short_hash}</span>
+            <span class="milestone-badge">${_escapeHtml(squashedLabel)}</span>
+          </div>
+          <div class="milestone-summary">${_escapeHtml(c.summary)}</div>
+          <div class="milestone-date">push: ${pushDateStr}</div>
+        `;
+
+        // 클릭 시 해당 시점의 diff 보기
+        card.addEventListener("click", () => {
+          _loadGitDiff(docId, c.hash, c.message);
+        });
+
+        listEl.appendChild(card);
       });
+    } else {
+      // 일반 뷰: 개별 커밋 목록
+      commits.forEach((c) => {
+        const item = document.createElement("div");
+        item.className = "git-commit-item";
 
-      listEl.appendChild(item);
-    });
+        const dateStr = _corrFormatDate(c.date);
+
+        item.innerHTML = `
+          <span class="git-commit-hash">${c.short_hash}</span>
+          <span class="git-commit-msg">${_escapeHtml(c.message)}</span>
+          <span class="git-commit-date">${dateStr}</span>
+        `;
+
+        item.addEventListener("click", () => {
+          _loadGitDiff(docId, c.hash, c.message);
+        });
+
+        listEl.appendChild(item);
+      });
+    }
   } catch (err) {
     console.error("Git log 로드 실패:", err);
     listEl.innerHTML =
@@ -1100,7 +1166,7 @@ function _escapeHtml(text) {
   return div.innerHTML;
 }
 
-function _formatDate(isoStr) {
+function _corrFormatDate(isoStr) {
   try {
     const d = new Date(isoStr);
     const yyyy = d.getFullYear();

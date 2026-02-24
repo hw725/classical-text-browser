@@ -39,22 +39,74 @@
             />
           </svg>
         </button>
-        <!-- 미구현 placeholder 버튼: 검색, Git 이력
-         기능이 구현되면 주석 해제. 현재는 클릭해도 서고 브라우저와 동일하게
-         동작하여 사용자 혼란을 유발하므로 숨김 처리. -->
-        <!--
-    <button class="activity-btn" data-panel="search" title="검색">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
-      </svg>
-    </button>
-    <button class="activity-btn" data-panel="git" title="Git 이력">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 01-6 0V8"/>
-        <line x1="12" y1="2" x2="12" y2="8"/>
-      </svg>
-    </button>
-    -->
+        <!-- Git 이력 -->
+        <button
+          class="activity-btn"
+          data-panel="git"
+          title="Git 이력"
+          aria-label="Git 이력"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <circle cx="7" cy="5" r="2.5"/>
+            <circle cx="7" cy="19" r="2.5"/>
+            <circle cx="17" cy="12" r="2.5"/>
+            <line x1="7" y1="7.5" x2="7" y2="16.5"/>
+            <path d="M9.5 5c4.5 0 7.5 3 7.5 7"/>
+          </svg>
+        </button>
+        <!-- 검증 결과 -->
+        <button
+          class="activity-btn"
+          data-panel="validation"
+          title="검증 결과"
+          aria-label="검증 결과"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <polyline points="9 12 11 14 15 10"/>
+          </svg>
+        </button>
+        <!-- 의존 추적 -->
+        <button
+          class="activity-btn"
+          data-panel="dependency"
+          title="의존 추적"
+          aria-label="의존 추적"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/>
+            <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>
+          </svg>
+        </button>
+        <!-- 엔티티 -->
+        <button
+          class="activity-btn"
+          data-panel="entity"
+          title="엔티티"
+          aria-label="엔티티"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2">
+            <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/>
+            <line x1="7" y1="7" x2="7.01" y2="7"/>
+          </svg>
+        </button>
+        <!-- 비고 -->
+        <button
+          class="activity-btn"
+          data-panel="notes"
+          title="비고"
+          aria-label="비고"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2">
+            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+        </button>
         <div class="activity-spacer"></div>
         <button
           id="theme-toggle"
@@ -296,9 +348,10 @@
             id="settings-section"
             style="display: none"
           >
-            <div class="section-header">서고 설정</div>
+            <div class="section-header">
+              서고 경로 <span class="badge-required">필수</span>
+            </div>
             <div class="settings-group">
-              <div class="settings-label">서고 경로</div>
               <div class="settings-library-row">
                 <input
                   type="text"
@@ -326,11 +379,75 @@
                 id="recent-libraries"
                 class="recent-library-list"
               ></div>
+              <div class="settings-info-note">
+                이 앱은 로컬 서고 경로만으로 완전히 동작합니다.
+                아래 항목은 모두 선택 사항입니다.
+              </div>
             </div>
+
+            <div class="settings-divider"></div>
+
+            <div class="section-header" style="margin-top: 12px">
+              서고 백업 <span class="badge-optional">선택</span>
+            </div>
+            <div class="settings-group">
+              <div class="settings-label">백업 폴더</div>
+              <div class="settings-library-row">
+                <input
+                  type="text"
+                  id="settings-backup-input"
+                  class="settings-library-input"
+                  placeholder="백업 폴더를 선택하세요..."
+                  readonly
+                />
+                <button
+                  class="btn-sm"
+                  id="btn-browse-backup"
+                  title="백업 폴더 선택"
+                >
+                  폴더 선택
+                </button>
+                <button
+                  class="btn-sm btn-primary"
+                  id="btn-save-backup-path"
+                  title="백업 경로 저장"
+                >
+                  저장
+                </button>
+              </div>
+              <div id="backup-info" class="backup-info" style="display: none">
+                <span id="backup-last-time"></span>
+                <span id="backup-file-count"></span>
+              </div>
+              <button
+                class="btn-sm btn-backup"
+                id="btn-execute-backup"
+                title="서고를 백업 폴더에 복사합니다"
+              >
+                서고 백업
+              </button>
+              <div class="settings-info-note">
+                구글 드라이브 동기화 폴더를 지정하면 자동으로 클라우드에 백업됩니다.
+                설정하지 않아도 모든 기능이 동작합니다.
+              </div>
+            </div>
+
+            <div class="settings-divider"></div>
 
             <div
               class="section-header"
               style="margin-top: 12px"
+            >
+              원격 저장소 <span class="badge-optional">선택</span>
+            </div>
+            <div class="settings-info-note" style="margin-bottom: 8px">
+              원격 저장소를 설정하지 않아도 모든 기능이 동작합니다.
+              GitHub 등에 백업하고 싶을 때만 설정하세요.
+            </div>
+
+            <div
+              class="section-header sub-header"
+              style="margin-top: 8px"
             >
               원본 저장소
             </div>
@@ -342,7 +459,7 @@
             </div>
 
             <div
-              class="section-header"
+              class="section-header sub-header"
               style="margin-top: 12px"
             >
               해석 저장소
@@ -354,6 +471,293 @@
               <div class="placeholder">로딩 중...</div>
             </div>
           </div>
+
+          <!-- ====== Git 이력 사이드바 섹션 ====== -->
+          <div
+            class="sidebar-section"
+            id="git-sidebar-section"
+            style="display: none"
+          >
+            <div class="section-header">Git 이력</div>
+            <!-- 뷰 전환 탭 + 정렬 토글 -->
+            <div class="git-sidebar-toolbar">
+              <div class="git-view-tabs">
+                <button
+                  class="git-view-tab active"
+                  data-view="simple"
+                >
+                  커밋 목록
+                </button>
+                <button
+                  class="git-view-tab"
+                  data-view="graph"
+                >
+                  사다리형 그래프
+                </button>
+              </div>
+              <!-- push 전용 필터 토글 -->
+              <button
+                id="git-pushed-toggle"
+                class="git-toolbar-btn active"
+                title="급행 뷰 (클릭: 전체 펼치기)"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                  <path d="M12 19V5"/>
+                  <polyline points="5 12 12 5 19 12"/>
+                </svg>
+              </button>
+              <!-- 정렬 토글 -->
+              <button
+                id="git-sort-toggle"
+                class="git-toolbar-btn"
+                title="최신이 위 (현재)"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2">
+                  <polyline points="6 15 12 9 18 15"/>
+                </svg>
+              </button>
+            </div>
+            <!-- 브랜치 선택 (그래프 뷰 활성 시 표시) -->
+            <div
+              class="git-sidebar-branch-controls"
+              id="git-graph-controls"
+              style="display: none"
+            >
+              <label>원본:
+                <select
+                  id="git-graph-orig-branch"
+                  class="git-branch-select"
+                >
+                  <option value="auto">auto</option>
+                </select>
+              </label>
+              <label>해석:
+                <select
+                  id="git-graph-interp-branch"
+                  class="git-branch-select"
+                >
+                  <option value="auto">auto</option>
+                </select>
+              </label>
+            </div>
+            <!-- 간략 뷰: 커밋 목록 -->
+            <div id="git-simple-view">
+              <div
+                id="git-log-list"
+                class="git-log-list"
+              >
+                <div class="placeholder">
+                  문헌을 선택하면 Git 이력이 표시됩니다
+                </div>
+              </div>
+              <div
+                id="git-diff-view"
+                class="git-diff-view"
+                style="display: none"
+              >
+                <div class="git-diff-header">
+                  <button
+                    id="git-diff-back"
+                    class="text-btn"
+                    title="목록으로"
+                  >
+                    &larr; 목록
+                  </button>
+                  <span
+                    id="git-diff-title"
+                    class="git-diff-title"
+                  ></span>
+                </div>
+                <div
+                  id="git-diff-content"
+                  class="git-diff-content"
+                ></div>
+              </div>
+            </div>
+            <!-- 상세 뷰: 세로 사다리형 Git 그래프 -->
+            <div
+              id="git-graph-view"
+              style="display: none"
+            >
+              <div
+                id="git-graph-container"
+                class="git-graph-container"
+              >
+                <div class="placeholder">
+                  해석 저장소를 선택하면 사다리형 그래프가 표시됩니다
+                </div>
+              </div>
+              <!-- 커밋 상세 패널 (인라인) -->
+              <div
+                id="git-graph-detail"
+                class="git-graph-detail"
+                style="display: none"
+              >
+                <div class="git-graph-detail-header">
+                  <span id="git-graph-detail-title"></span>
+                  <button
+                    id="git-graph-detail-close"
+                    class="text-btn"
+                  >
+                    &times;
+                  </button>
+                </div>
+                <div id="git-graph-detail-body"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ====== 검증 결과 사이드바 섹션 ====== -->
+          <div
+            class="sidebar-section"
+            id="validation-sidebar-section"
+            style="display: none"
+          >
+            <div class="section-header">검증 결과</div>
+            <div id="validation-panel-content">
+              <div class="placeholder">
+                스키마 검증 결과가 여기에 표시됩니다 (향후 구현)
+              </div>
+            </div>
+          </div>
+
+          <!-- ====== 의존 추적 사이드바 섹션 ====== -->
+          <div
+            class="sidebar-section"
+            id="dep-sidebar-section"
+            style="display: none"
+          >
+            <div class="section-header">의존 추적</div>
+            <div
+              id="dep-status-summary"
+              class="dep-status-summary"
+            >
+              <div class="placeholder">
+                해석 저장소를 선택하면 의존 추적 정보가 표시됩니다
+              </div>
+            </div>
+            <div
+              id="dep-file-list"
+              class="dep-file-list"
+            ></div>
+          </div>
+
+          <!-- ====== 엔티티 사이드바 섹션 ====== -->
+          <div
+            class="sidebar-section"
+            id="entity-sidebar-section"
+            style="display: none"
+          >
+            <div class="section-header">엔티티</div>
+            <div id="entity-panel-content">
+              <!-- 필터 바 -->
+              <div class="entity-filter-bar">
+                <button
+                  class="entity-filter-btn active"
+                  data-type="all"
+                >
+                  전체
+                </button>
+                <button
+                  class="entity-filter-btn"
+                  data-type="text_block"
+                >
+                  TextBlock
+                </button>
+                <button
+                  class="entity-filter-btn"
+                  data-type="tag"
+                >
+                  Tag
+                </button>
+                <button
+                  class="entity-filter-btn"
+                  data-type="concept"
+                >
+                  Concept
+                </button>
+                <button
+                  class="entity-filter-btn"
+                  data-type="agent"
+                >
+                  Agent
+                </button>
+                <button
+                  class="entity-filter-btn"
+                  data-type="relation"
+                >
+                  Relation
+                </button>
+                <div class="entity-filter-spacer"></div>
+                <label class="entity-page-toggle">
+                  <input
+                    type="checkbox"
+                    id="entity-page-filter"
+                    checked
+                  />
+                  현재 페이지만
+                </label>
+                <button
+                  id="entity-create-btn"
+                  class="text-btn text-btn-primary"
+                  title="새 엔티티 만들기"
+                >
+                  + 새 엔티티
+                </button>
+              </div>
+              <!-- LLM 초안 검토 영역 -->
+              <div
+                id="entity-llm-review"
+                class="llm-review-section"
+                style="display: none"
+              >
+                <div class="llm-review-header">LLM 초안 검토</div>
+                <div id="entity-llm-review-list"></div>
+              </div>
+              <!-- 엔티티 목록 -->
+              <div
+                id="entity-list"
+                class="entity-list"
+              >
+                <div class="placeholder">해석 모드에서 엔티티가 표시됩니다</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ====== 비고 사이드바 섹션 ====== -->
+          <div
+            class="sidebar-section"
+            id="notes-sidebar-section"
+            style="display: none"
+          >
+            <div class="section-header">비고</div>
+            <div id="notes-panel-content">
+              <div class="notes-toolbar">
+                <button
+                  id="notes-add-btn"
+                  class="text-btn text-btn-primary"
+                  title="새 메모 추가"
+                >
+                  + 추가
+                </button>
+                <span
+                  id="notes-save-status"
+                  class="text-save-status"
+                ></span>
+              </div>
+              <div
+                id="notes-list"
+                class="notes-list"
+              >
+                <div class="placeholder">
+                  해석 저장소를 선택하면 비고를 작성할 수 있습니다
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </aside>
 
@@ -365,7 +769,7 @@
 
       <!-- 메인 영역 -->
       <main class="main-area">
-        <!-- 모드 탭 바: 열람 / 레이아웃 / 교정 / 편성 / 표점 / 현토 / 번역 / 주석 / 교차 뷰어 -->
+        <!-- 모드 탭 바: 열람 / 레이아웃 / 교정 / 편성 / 표점 / 현토 / 번역 / 주석 / 비교 -->
         <div class="mode-bar" role="tablist" aria-label="작업 모드">
           <!-- 원본 작업 -->
           <button class="mode-tab active" data-mode="view" role="tab" aria-selected="true">열람</button>
@@ -383,7 +787,7 @@
           <button class="mode-tab" data-mode="citation" role="tab">인용</button>
           <span class="mode-tab-divider" aria-hidden="true"></span>
           <!-- 도구 -->
-          <button class="mode-tab" data-mode="interpretation" role="tab">교차 뷰어</button>
+          <button class="mode-tab" data-mode="interpretation" role="tab">비교</button>
           <button class="mode-tab" data-mode="variant" role="tab">이체자</button>
         </div>
 
@@ -1367,14 +1771,14 @@
             </div>
           </div>
 
-          <!-- 우측 패널: 교차 뷰어 (Phase 7, interpretation 모드에서만 표시) -->
+          <!-- 우측 패널: 비교 (Phase 7, interpretation 모드에서만 표시) -->
           <div
             class="editor-panel editor-right interp-panel"
             id="interp-panel"
             style="display: none"
           >
             <div class="panel-label">
-              교차 뷰어 (L5~L7)
+              비교 (L5~L7)
               <button
                 id="snapshot-export-btn"
                 class="section-action-btn"
@@ -1491,6 +1895,10 @@
               >
                 LLM에게 요청
               </button>
+              <label id="compare-mode-toggle" class="compare-toggle-label" title="비교 모드 켜기/끄기">
+                <input type="checkbox" id="compare-mode-checkbox" />
+                <span>비교 모드</span>
+              </label>
               <div class="text-toolbar-divider"></div>
               <button
                 id="interp-save"
@@ -1505,13 +1913,39 @@
               ></span>
             </div>
 
-            <!-- 편집 영역 -->
+            <!-- 편집 영역 (일반 모드) -->
             <textarea
               id="interp-content"
               class="text-content interp-content"
               placeholder="해석 저장소 파일 내용"
               spellcheck="false"
             ></textarea>
+
+            <!-- 비교 영역 (비교 모드에서만 표시) -->
+            <div id="compare-container" class="compare-container" style="display: none">
+              <!-- 좌측 패널 A -->
+              <div class="compare-pane">
+                <div class="compare-pane-header">
+                  <select id="compare-repo-a" class="compare-repo-select" title="해석 저장소 A 선택">
+                    <option value="">저장소 A 선택</option>
+                  </select>
+                  <span class="compare-pane-label">A</span>
+                </div>
+                <div id="compare-content-a" class="compare-content"></div>
+              </div>
+              <!-- 구분선 -->
+              <div class="compare-divider"></div>
+              <!-- 우측 패널 B -->
+              <div class="compare-pane">
+                <div class="compare-pane-header">
+                  <select id="compare-repo-b" class="compare-repo-select" title="해석 저장소 B 선택">
+                    <option value="">저장소 B 선택</option>
+                  </select>
+                  <span class="compare-pane-label">B</span>
+                </div>
+                <div id="compare-content-b" class="compare-content"></div>
+              </div>
+            </div>
           </div>
 
           <!-- 우측 패널: 이체자 사전 관리 (variant 모드) -->
@@ -2515,293 +2949,7 @@
           </div>
         </div>
 
-        <!-- 하단 패널 리사이즈 핸들 -->
-        <div
-          class="resize-handle resize-panel"
-          id="resize-panel"
-        ></div>
-
-        <!-- 하단 패널: D-001 터미널/문제 → Git 이력, 검증, 의존 추적 -->
-        <div
-          class="bottom-panel"
-          id="bottom-panel"
-        >
-          <div class="panel-header">
-            <div class="panel-tabs">
-              <button class="panel-tab active">Git 이력</button>
-              <button class="panel-tab">검증 결과</button>
-              <button class="panel-tab">의존 추적</button>
-              <button class="panel-tab">엔티티</button>
-              <button class="panel-tab">비고</button>
-            </div>
-            <button
-              class="panel-toggle"
-              id="panel-toggle"
-              title="패널 접기/펴기"
-              aria-label="하단 패널 접기/펴기"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </button>
-          </div>
-          <div
-            class="panel-content"
-            id="panel-content"
-          >
-            <!-- Git 이력 탭 내용 (Phase 6 + Phase 12-1) -->
-            <div id="git-panel-content">
-              <!-- Phase 12-1: 간략/상세 뷰 전환 탭 -->
-              <div class="git-view-tabs">
-                <button
-                  class="git-view-tab active"
-                  data-view="simple"
-                >
-                  커밋 목록
-                </button>
-                <button
-                  class="git-view-tab"
-                  data-view="graph"
-                >
-                  사다리형 그래프
-                </button>
-                <div
-                  class="git-graph-controls"
-                  id="git-graph-controls"
-                  style="display: none"
-                >
-                  <label
-                    >원본:
-                    <select
-                      id="git-graph-orig-branch"
-                      class="git-branch-select"
-                    >
-                      <option value="auto">auto</option>
-                    </select></label
-                  >
-                  <label
-                    >해석:
-                    <select
-                      id="git-graph-interp-branch"
-                      class="git-branch-select"
-                    >
-                      <option value="auto">auto</option>
-                    </select></label
-                  >
-                </div>
-              </div>
-
-              <!-- 간략 뷰: 기존 커밋 목록 -->
-              <div id="git-simple-view">
-                <div
-                  id="git-log-list"
-                  class="git-log-list"
-                >
-                  <div class="placeholder">
-                    문헌을 선택하면 Git 이력이 표시됩니다
-                  </div>
-                </div>
-                <div
-                  id="git-diff-view"
-                  class="git-diff-view"
-                  style="display: none"
-                >
-                  <div class="git-diff-header">
-                    <button
-                      id="git-diff-back"
-                      class="text-btn"
-                      title="목록으로"
-                    >
-                      &larr; 목록
-                    </button>
-                    <span
-                      id="git-diff-title"
-                      class="git-diff-title"
-                    ></span>
-                  </div>
-                  <div
-                    id="git-diff-content"
-                    class="git-diff-content"
-                  ></div>
-                </div>
-              </div>
-
-              <!-- 상세 뷰: Phase 12-1 사다리형 Git 그래프 -->
-              <div
-                id="git-graph-view"
-                style="display: none"
-              >
-                <div
-                  id="git-graph-container"
-                  class="git-graph-container"
-                >
-                  <div class="placeholder">
-                    해석 저장소를 선택하면 사다리형 그래프가 표시됩니다
-                  </div>
-                </div>
-                <!-- 클릭 시 커밋 상세 패널 -->
-                <div
-                  id="git-graph-detail"
-                  class="git-graph-detail"
-                  style="display: none"
-                >
-                  <div class="git-graph-detail-header">
-                    <span id="git-graph-detail-title"></span>
-                    <button
-                      id="git-graph-detail-close"
-                      class="text-btn"
-                    >
-                      &times;
-                    </button>
-                  </div>
-                  <div id="git-graph-detail-body"></div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Phase 5: 검증 결과 탭 내용 (향후 스키마 검증 결과 표시용) -->
-            <div
-              id="validation-panel-content"
-              style="display: none"
-            >
-              <div class="placeholder">
-                스키마 검증 결과가 여기에 표시됩니다 (향후 구현)
-              </div>
-            </div>
-
-            <!-- Phase 7: 의존 추적 탭 내용 -->
-            <div
-              id="dep-panel-content"
-              style="display: none"
-            >
-              <div
-                id="dep-status-summary"
-                class="dep-status-summary"
-              >
-                <div class="placeholder">
-                  해석 저장소를 선택하면 의존 추적 정보가 표시됩니다
-                </div>
-              </div>
-              <div
-                id="dep-file-list"
-                class="dep-file-list"
-              ></div>
-            </div>
-
-            <!-- Phase 8: 엔티티 탭 내용 -->
-            <div
-              id="entity-panel-content"
-              style="display: none"
-            >
-              <!-- 필터 바 -->
-              <div class="entity-filter-bar">
-                <button
-                  class="entity-filter-btn active"
-                  data-type="all"
-                >
-                  전체
-                </button>
-                <button
-                  class="entity-filter-btn"
-                  data-type="text_block"
-                >
-                  TextBlock
-                </button>
-                <button
-                  class="entity-filter-btn"
-                  data-type="tag"
-                >
-                  Tag
-                </button>
-                <button
-                  class="entity-filter-btn"
-                  data-type="concept"
-                >
-                  Concept
-                </button>
-                <button
-                  class="entity-filter-btn"
-                  data-type="agent"
-                >
-                  Agent
-                </button>
-                <button
-                  class="entity-filter-btn"
-                  data-type="relation"
-                >
-                  Relation
-                </button>
-                <div class="entity-filter-spacer"></div>
-                <label class="entity-page-toggle">
-                  <input
-                    type="checkbox"
-                    id="entity-page-filter"
-                    checked
-                  />
-                  현재 페이지만
-                </label>
-                <button
-                  id="entity-create-btn"
-                  class="text-btn text-btn-primary"
-                  title="새 엔티티 만들기"
-                >
-                  + 새 엔티티
-                </button>
-              </div>
-              <!-- LLM 초안 검토 영역 -->
-              <div
-                id="entity-llm-review"
-                class="llm-review-section"
-                style="display: none"
-              >
-                <div class="llm-review-header">LLM 초안 검토</div>
-                <div id="entity-llm-review-list"></div>
-              </div>
-              <!-- 엔티티 목록 -->
-              <div
-                id="entity-list"
-                class="entity-list"
-              >
-                <div class="placeholder">해석 모드에서 엔티티가 표시됩니다</div>
-              </div>
-            </div>
-
-            <!-- 비고/메모 탭 내용 -->
-            <div
-              id="notes-panel-content"
-              style="display: none"
-            >
-              <div class="notes-toolbar">
-                <button
-                  id="notes-add-btn"
-                  class="text-btn text-btn-primary"
-                  title="새 메모 추가"
-                >
-                  + 추가
-                </button>
-                <span
-                  id="notes-save-status"
-                  class="text-save-status"
-                ></span>
-              </div>
-              <div
-                id="notes-list"
-                class="notes-list"
-              >
-                <div class="placeholder">
-                  해석 저장소를 선택하면 비고를 작성할 수 있습니다
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <!-- 하단 패널 제거됨: 모든 탭이 액티비티 바 사이드바로 이동 -->
       </main>
 
       <!-- Phase 5: 서지정보 다이얼로그 오버레이 -->

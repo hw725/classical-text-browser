@@ -402,3 +402,126 @@ def _write_json(path: Path, data: dict) -> None:
         json.dumps(data, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+
+
+# ──────────────────────────────────────────────────────────
+# Git 건강 검사 — .git 내부 파일 오염 탐지 및 수리
+# ──────────────────────────────────────────────────────────
+
+def check_git_health(library_path: str | Path) -> list[dict]:
+    """서고 내 모든 git 저장소에서 .git/ 파일 오염 여부를 검사한다.
+
+    목적: repo.index.add(["."])로 인해 .git/ 내부 파일이 인덱스에
+          추가된 저장소를 찾아낸다. push 차단의 근본 원인.
+    입력: library_path — 서고 루트 경로.
+    출력: 오염된 저장소 목록. 각 항목은:
+          {repo_id, repo_type, repo_path, contaminated_files: [str]}
+          오염이 없으면 빈 리스트.
+    """
+    import git as gitmodule
+
+    library_path = Path(library_path).resolve()
+    results = []
+
+    for repo_type in ("documents", "interpretations"):
+        type_dir = library_path / repo_type
+        if not type_dir.is_dir():
+            continue
+
+        for entry in type_dir.iterdir():
+            if not entry.is_dir():
+                continue
+            git_dir = entry / ".git"
+            if not git_dir.exists():
+                continue
+
+            try:
+                repo = gitmodule.Repo(entry)
+                # git ls-files로 추적 중인 파일 목록 가져오기
+                tracked = repo.git.ls_files().splitlines()
+                contaminated = [
+                    f for f in tracked
+                    if f.startswith(".git/") or f == ".git"
+                ]
+                if contaminated:
+                    results.append({
+                        "repo_id": entry.name,
+                        "repo_type": repo_type,
+                        "repo_path": str(entry),
+                        "contaminated_files": contaminated,
+                    })
+            except (gitmodule.InvalidGitRepositoryError, Exception):
+                continue
+
+    return results
+
+
+def repair_git_contamination(repo_path: str | Path) -> dict:
+    """오염된 저장소에서 .git/ 내부 파일을 인덱스에서 제거하고 커밋한다.
+
+    목적: .git/ 파일이 추적 중인 저장소를 수리한다.
+          git rm --cached 로 인덱스에서만 제거 (실제 .git/ 파일은 건드리지 않음).
+    입력: repo_path — 수리할 저장소 경로.
+    출력: {repaired: bool, method: str, files_removed: int, error: str | None}
+    """
+    import git as gitmodule
+
+    repo_path = Path(repo_path).resolve()
+    result = {"repaired": False, "method": "", "files_removed": 0, "error": None}
+
+    try:
+        repo = gitmodule.Repo(repo_path)
+        tracked = repo.git.ls_files().splitlines()
+        contaminated = [
+            f for f in tracked
+            if f.startswith(".git/") or f == ".git"
+        ]
+
+        if not contaminated:
+            result["method"] = "no_contamination"
+            return result
+
+        # 방법 1: git rm --cached 로 인덱스에서 제거 시도
+        try:
+            for f in contaminated:
+                repo.git.execute(["git", "rm", "--cached", "--", f])
+            result["method"] = "git_rm_cached"
+        except gitmodule.GitCommandError:
+            # 방법 2: update-index --force-remove
+            try:
+                for f in contaminated:
+                    repo.git.execute(
+                        ["git", "update-index", "--force-remove", "--", f]
+                    )
+                result["method"] = "update_index"
+            except gitmodule.GitCommandError as e:
+                result["error"] = str(e)
+                return result
+
+        # .gitignore에 .git 패턴이 없으면 추가 (재발 방지)
+        gitignore_path = repo_path / ".gitignore"
+        gitignore_content = ""
+        if gitignore_path.exists():
+            gitignore_content = gitignore_path.read_text(encoding="utf-8")
+        if ".git" not in gitignore_content.splitlines():
+            with open(gitignore_path, "a", encoding="utf-8") as f:
+                if gitignore_content and not gitignore_content.endswith("\n"):
+                    f.write("\n")
+                f.write("# .git 내부 파일 추적 방지\n.git\n.git/\n")
+
+        # 변경사항 커밋
+        repo.git.add("-A")
+        try:
+            repo.index.commit(
+                "fix: .git 내부 파일 추적 제거 (자동 수리)"
+            )
+        except gitmodule.GitCommandError:
+            pass  # 변경사항이 없으면 무시
+
+        result["repaired"] = True
+        result["files_removed"] = len(contaminated)
+
+    except Exception as e:
+        result["error"] = str(e)
+
+    return result

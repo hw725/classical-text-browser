@@ -525,7 +525,8 @@ def _git_init_and_commit(repo_path: Path, message: str) -> None:
     """Git 저장소를 초기화하고 모든 파일을 커밋한다."""
     try:
         repo = git.Repo.init(repo_path)
-        repo.index.add([str(f.relative_to(repo_path)) for f in repo_path.rglob("*") if f.is_file()])
+        # repo.git.add()는 git 바이너리 호출 — .git/ 내부 추가 방지
+        repo.git.add("-A")
         repo.index.commit(message)
     except Exception as e:
         logger.warning("Git 초기화/커밋 실패: %s — %s", repo_path, e)

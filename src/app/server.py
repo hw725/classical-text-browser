@@ -162,10 +162,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from core.library import (
+    check_git_health,
     get_library_info,
     list_documents,
     list_interpretations,
     list_trash,
+    repair_git_contamination,
     restore_from_trash,
     trash_document,
     trash_interpretation,
@@ -315,6 +317,35 @@ def configure(library_path: str | Path) -> FastAPI:
     except Exception as e:
         logger.debug(f"최근 서고 기록 실패 (무시): {e}")
 
+    # Git 건강 검사 — .git 내부 파일 오염 자동 탐지 및 수리
+    try:
+        contaminated = check_git_health(_library_path)
+        if contaminated:
+            logger.warning(
+                "Git 오염 발견: %d개 저장소에서 .git/ 파일이 추적 중",
+                len(contaminated),
+            )
+            for item in contaminated:
+                logger.warning(
+                    "  - %s/%s: %d개 파일 오염",
+                    item["repo_type"], item["repo_id"],
+                    len(item["contaminated_files"]),
+                )
+                repair_result = repair_git_contamination(item["repo_path"])
+                if repair_result["repaired"]:
+                    logger.info(
+                        "  → 자동 수리 완료 (%s): %d개 파일 제거",
+                        repair_result["method"],
+                        repair_result["files_removed"],
+                    )
+                else:
+                    logger.error(
+                        "  → 자동 수리 실패: %s",
+                        repair_result.get("error", "알 수 없는 오류"),
+                    )
+    except Exception as e:
+        logger.debug(f"Git 건강 검사 실패 (무시): {e}")
+
     return app
 
 
@@ -462,6 +493,39 @@ async def api_browse_folder():
     return {"path": path}
 
 
+@app.get("/api/library/git-health")
+async def api_git_health():
+    """서고 내 Git 저장소의 .git 오염 상태를 검사한다.
+
+    목적: 수동으로 .git/ 파일 오염 여부를 점검하고 수리할 수 있다.
+    출력: { contaminated: [...], repaired: [...] }
+    """
+    if _library_path is None:
+        return JSONResponse(
+            {"error": "서고가 설정되지 않았습니다."},
+            status_code=500,
+        )
+
+    contaminated = check_git_health(_library_path)
+    repaired = []
+
+    for item in contaminated:
+        result = repair_git_contamination(item["repo_path"])
+        repaired.append({
+            "repo_id": item["repo_id"],
+            "repo_type": item["repo_type"],
+            "contaminated_files": len(item["contaminated_files"]),
+            "repaired": result["repaired"],
+            "method": result["method"],
+            "error": result["error"],
+        })
+
+    return {
+        "contaminated_count": len(contaminated),
+        "repaired": repaired,
+    }
+
+
 @app.get("/api/settings")
 async def api_get_settings():
     """현재 서고 설정 정보를 반환한다.
@@ -505,7 +569,100 @@ async def api_get_settings():
                 "remote_url": remote_url,
             })
 
+    # 백업 경로 및 백업 정보 포함
+    from core.app_config import get_backup_path
+    from core.backup import get_backup_info
+    bp = get_backup_path()
+    info["backup_path"] = bp
+    info["backup_info"] = get_backup_info(bp) if bp else None
+
     return info
+
+
+# ── 백업/복원 API ─────────────────────────────────────
+
+class BackupPathRequest(BaseModel):
+    """백업 경로 설정 요청."""
+    path: str  # 백업 폴더 경로
+
+
+@app.post("/api/settings/backup-path")
+async def api_set_backup_path(body: BackupPathRequest):
+    """백업 폴더 경로를 설정한다.
+
+    구글 드라이브 동기화 폴더를 지정하면 자동으로 클라우드에 동기화된다.
+    """
+    from core.app_config import set_backup_path
+    bp = Path(body.path)
+    if not bp.exists():
+        return JSONResponse(
+            {"error": f"폴더가 존재하지 않습니다: {body.path}"},
+            status_code=400,
+        )
+    if not bp.is_dir():
+        return JSONResponse(
+            {"error": f"폴더가 아닙니다: {body.path}"},
+            status_code=400,
+        )
+    set_backup_path(body.path)
+    return {"backup_path": str(bp.resolve())}
+
+
+@app.post("/api/library/backup")
+async def api_backup_library():
+    """서고를 백업 경로에 복사한다.
+
+    .git/ 디렉토리는 제외하고 폴더 그대로 복사한다.
+    백업 경로가 미설정이면 에러를 반환한다.
+    """
+    from core.app_config import get_backup_path
+    from core.backup import backup_library
+
+    if _library_path is None:
+        return JSONResponse(
+            {"error": "서고가 설정되지 않았습니다."},
+            status_code=500,
+        )
+
+    bp = get_backup_path()
+    if not bp:
+        return JSONResponse(
+            {"error": "백업 경로가 설정되지 않았습니다.\n→ 설정에서 백업 폴더를 먼저 지정하세요."},
+            status_code=400,
+        )
+
+    result = backup_library(_library_path, bp)
+    if not result["success"]:
+        return JSONResponse(
+            {"error": f"백업 실패: {result['error']}"},
+            status_code=500,
+        )
+
+    return result
+
+
+class RestoreRequest(BaseModel):
+    """복원 요청."""
+    backup_path: str   # 백업 폴더 경로
+    restore_path: str  # 복원할 대상 경로
+
+
+@app.post("/api/library/restore")
+async def api_restore_library(body: RestoreRequest):
+    """백업에서 서고를 복원한다.
+
+    새 경로에 서고를 복원하고 git 저장소를 재초기화한다.
+    """
+    from core.backup import restore_from_backup
+
+    result = restore_from_backup(body.backup_path, body.restore_path)
+    if not result["success"]:
+        return JSONResponse(
+            {"error": f"복원 실패: {result['error']}"},
+            status_code=500,
+        )
+
+    return result
 
 
 class SetRemoteRequest(BaseModel):
@@ -2037,13 +2194,15 @@ async def api_corrected_text(
 async def api_git_log(
     doc_id: str,
     max_count: int = Query(50, description="최대 커밋 수"),
+    pushed_only: bool = Query(False, description="push된 커밋만 반환"),
 ):
     """문헌 저장소의 git 커밋 이력을 반환한다.
 
-    목적: 하단 패널의 Git 이력 탭에 커밋 목록을 표시하기 위해 사용한다.
+    목적: Git 이력 사이드바에 커밋 목록을 표시하기 위해 사용한다.
     입력:
         doc_id — 문헌 ID.
         max_count — 최대 커밋 수 (기본 50).
+        pushed_only — True이면 원격에 push된 커밋만 반환.
     출력: [{hash, short_hash, message, author, date}, ...].
     """
     if _library_path is None:
@@ -2056,7 +2215,9 @@ async def api_git_log(
             status_code=404,
         )
 
-    return {"commits": get_git_log(doc_path, max_count=max_count)}
+    result = get_git_log(doc_path, max_count=max_count, pushed_only=pushed_only)
+    # result = {"mode": "full"|"milestones", "commits": [...]}
+    return result
 
 
 @app.get("/api/documents/{doc_id}/git/diff/{commit_hash}")
@@ -6286,6 +6447,7 @@ async def api_git_graph(
     interp_branch: str = Query("auto", description="해석 저장소 브랜치"),
     limit: int = Query(50, ge=1, le=200, description="각 저장소별 최대 커밋 수"),
     offset: int = Query(0, ge=0, description="페이지네이션 오프셋"),
+    pushed_only: bool = Query(False, description="push된 커밋만 반환"),
 ):
     """사다리형 이분 그래프 데이터를 반환한다.
 
@@ -6334,6 +6496,7 @@ async def api_git_graph(
         interp_branch=interp_branch,
         limit=limit,
         offset=offset,
+        pushed_only=pushed_only,
     )
 
     return data
