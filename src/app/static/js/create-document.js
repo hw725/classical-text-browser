@@ -404,36 +404,61 @@ async function _createFromUrl() {
       throw new Error(data.error || "문헌 생성 실패");
     }
 
-    // 성공
-    _showProgress(`문헌 '${data.document_id}' 생성 완료!`);
+    // 성공 — 경고가 있어도 생성은 완료된 상태
+    let msg = `문헌 '${data.document_id}' 생성 완료! (${data.asset_count || 0}개 파일)`;
+    if (data.warning) {
+      msg += `\n⚠ ${data.warning}`;
+    }
+    _showProgress(msg);
 
-    // 잠시 후 다이얼로그 닫고 사이드바 갱신
-    setTimeout(async () => {
+    // 사이드바 갱신 + 완료 알림
+    await _refreshSidebar();
+
+    // 3초 후 다이얼로그 닫기 (연구자가 완료 메시지를 읽을 시간)
+    setTimeout(() => {
       _closeCreateDocDialog();
-
-      // 사이드바 트리 갱신
-      try {
-        const docsRes = await fetch("/api/documents");
-        if (docsRes.ok) {
-          const docs = await docsRes.json();
-          document.getElementById("status-documents").textContent =
-            `문헌: ${docs.length}`;
-          if (typeof initSidebarTree === "function") {
-            initSidebarTree(docs);
-          }
-        }
-      } catch {
-        // 갱신 실패는 치명적이지 않다
-      }
-    }, 1500);
+    }, 3000);
   } catch (err) {
     _hideProgress();
     if (statusEl) {
       statusEl.textContent = err.message;
       statusEl.style.color = "var(--error)";
     }
+    // 에러 시에도 사이드바 갱신 시도
+    // 왜: 502가 와도 문헌 폴더가 이미 생성되었을 수 있다.
+    //      갱신하면 목록에 바로 나타나므로 서버를 재시작할 필요가 없다.
+    await _refreshSidebar();
   } finally {
     if (createBtn) createBtn.disabled = false;
+  }
+}
+
+
+/* ──────────────────────────
+   사이드바 갱신
+   ────────────────────────── */
+
+/**
+ * 사이드바 문헌 목록을 갱신한다.
+ *
+ * 왜 별도 함수인가:
+ *   성공/실패 양쪽에서 호출해야 하므로 중복 방지.
+ *   502 에러가 와도 문헌 폴더가 이미 생성되었을 수 있으므로
+ *   에러 시에도 갱신하면 서버 재시작 없이 목록에 나타난다.
+ */
+async function _refreshSidebar() {
+  try {
+    const docsRes = await fetch("/api/documents");
+    if (docsRes.ok) {
+      const docs = await docsRes.json();
+      const statusEl = document.getElementById("status-documents");
+      if (statusEl) statusEl.textContent = `문헌: ${docs.length}`;
+      if (typeof initSidebarTree === "function") {
+        initSidebarTree(docs);
+      }
+    }
+  } catch {
+    // 갱신 실패는 치명적이지 않다
   }
 }
 

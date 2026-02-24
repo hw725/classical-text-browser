@@ -1895,14 +1895,29 @@ async def create_document_from_url(
     _write_json(doc_path / "manifest.json", manifest)
 
     # 7. 서지정보 저장
-    save_bibliography(doc_path, bibliography)
+    # 왜 try/except로 감싸는가:
+    #   문헌 폴더 + 이미지가 이미 생성된 상태에서 서지정보 검증만 실패하면
+    #   전체를 502로 날리는 것은 연구자에게 큰 손실이다.
+    #   서지정보 저장이 실패해도 문헌 자체는 생성 완료로 처리하고,
+    #   경고를 반환하여 나중에 서지정보를 수동으로 수정할 수 있게 한다.
+    bib_warning = None
+    try:
+        save_bibliography(doc_path, bibliography)
+    except Exception as bib_err:
+        bib_warning = f"서지정보 저장 실패 (문헌은 생성됨): {bib_err}"
+        # 검증 실패한 원본 데이터를 그대로 파일에 저장 (검증 건너뛰기)
+        # 왜: 연구자가 나중에 서지 편집 탭에서 수정할 수 있도록 보존한다.
+        try:
+            _write_json(doc_path / "bibliography.json", bibliography)
+        except Exception:
+            pass
 
     # 8. git commit
     repo = git.Repo(doc_path)
     repo.git.add("-A")  # git 바이너리 호출 — .git/ 내부 추가 방지
     repo.index.commit(f"feat: URL에서 문헌 생성 ({parser_id})")
 
-    return {
+    result = {
         "doc_path": str(doc_path),
         "document_id": doc_id,
         "title": effective_title,
@@ -1911,6 +1926,9 @@ async def create_document_from_url(
         "parser_id": parser_id,
         "asset_count": len(downloaded_files),
     }
+    if bib_warning:
+        result["warning"] = bib_warning
+    return result
 
 
 # ──────────────────────────────────────────────────────────
