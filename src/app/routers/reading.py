@@ -136,7 +136,9 @@ class AiTranslationRequest(BaseModel):
 @router.get("/api/punctuation-presets")
 async def api_punctuation_presets():
     """표점 부호 프리셋 목록을 반환한다."""
-    presets_path = Path(__file__).parent.parent.parent / "resources" / "punctuation_presets.json"
+    # __file__ = src/app/routers/reading.py → 4단계 올라가야 프로젝트 루트
+    # 왜 .parent가 4개인가: routers/ → app/ → src/ → 프로젝트루트
+    presets_path = Path(__file__).resolve().parent.parent.parent.parent / "resources" / "punctuation_presets.json"
     if not presets_path.exists():
         return {"presets": [], "custom": []}
     import json as _json
