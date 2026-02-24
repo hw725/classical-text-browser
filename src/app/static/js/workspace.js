@@ -73,8 +73,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (typeof initReaderLine === "function") _safeInit("ReaderLine", initReaderLine);
   // 비고/메모 패널 초기화
   if (typeof initNotesPanel === "function") _safeInit("NotesPanel", initNotesPanel);
-  // Phase 7+8: 하단 패널 탭 전환 (Git 이력 ↔ 의존 추적 ↔ 엔티티 ↔ 비고)
-  _safeInit("BottomPanelTabs", initBottomPanelTabs);
+  // 하단 패널 제거됨: 모든 탭이 액티비티 바 사이드바로 이동
 
   // 전 모드 LLM 모델 드롭다운 채우기 (모든 init 완료 후 한 번만)
   _safeInit("LlmModelSelects", _loadAllLlmModelSelects);
@@ -103,14 +102,7 @@ function initResizeHandlers() {
     maxSize: null, // 동적으로 계산
   });
 
-  // 하단 패널 높이 리사이즈
-  setupRowResize({
-    handle: document.getElementById("resize-panel"),
-    getTarget: () => document.getElementById("bottom-panel"),
-    cssVar: "--panel-height",
-    minSize: 100,
-    maxSize: 500,
-  });
+  // 하단 패널 제거됨: 리사이즈 핸들 불필요
 }
 
 /**
@@ -230,12 +222,29 @@ function initPanelToggle() {
 function initActivityBar() {
   const buttons = document.querySelectorAll(".activity-btn");
 
-  // 패널별 표시/숨김 매핑
-  // explorer: 문헌목록 + 서지정보 + 해석저장소 (기존)
-  // settings: 설정 패널만
+  // 패널별 사이드바 섹션 매핑
+  // explorer: 문헌목록 + 서지정보 + 해석저장소
+  // settings: 설정 패널
+  // git~notes: 구 하단 패널 탭들 → 사이드바로 이동
   const panelSections = {
     explorer: ["document-list", "bib-section", "interp-section"],
     settings: ["settings-section"],
+    git: ["git-sidebar-section"],
+    validation: ["validation-sidebar-section"],
+    dependency: ["dep-sidebar-section"],
+    entity: ["entity-sidebar-section"],
+    notes: ["notes-sidebar-section"],
+  };
+
+  // 패널별 사이드바 타이틀
+  const panelTitles = {
+    explorer: "서고 브라우저",
+    settings: "설정",
+    git: "Git 이력",
+    validation: "검증 결과",
+    dependency: "의존 추적",
+    entity: "엔티티",
+    notes: "비고",
   };
 
   buttons.forEach((btn) => {
@@ -286,6 +295,10 @@ function initActivityBar() {
           s.style.display = "none";
         });
 
+      // 사이드바 타이틀 업데이트
+      const titleEl = document.querySelector(".sidebar-title");
+      if (titleEl) titleEl.textContent = panelTitles[panel] || panel;
+
       if (panel === "settings") {
         // 설정 패널 표시
         const settingsEl = document.getElementById("settings-section");
@@ -293,10 +306,7 @@ function initActivityBar() {
           settingsEl.style.display = "";
           _loadSettings();
         }
-        // 사이드바 타이틀 변경
-        const title = document.querySelector(".sidebar-title");
-        if (title) title.textContent = "설정";
-      } else {
+      } else if (panel === "explorer") {
         // explorer: 기존 섹션 복원
         const docList = document.querySelector(
           "#sidebar-content > .sidebar-section:first-child",
@@ -315,9 +325,34 @@ function initActivityBar() {
         ) {
           interpSec.style.display = "";
         }
-        // 사이드바 타이틀 복원
-        const title = document.querySelector(".sidebar-title");
-        if (title) title.textContent = "서고 브라우저";
+      } else {
+        // git, validation, dependency, entity, notes — 해당 섹션 표시
+        const sectionIds = panelSections[panel];
+        if (sectionIds) {
+          sectionIds.forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = "";
+          });
+        }
+
+        // 패널별 데이터 로드 트리거
+        if (
+          panel === "git" &&
+          typeof _loadGitLog === "function" &&
+          typeof viewerState !== "undefined" &&
+          viewerState.docId
+        ) {
+          _loadGitLog(viewerState.docId);
+        }
+        if (
+          panel === "entity" &&
+          typeof _loadEntitiesForCurrentPage === "function"
+        ) {
+          _loadEntitiesForCurrentPage();
+        }
+        if (panel === "notes" && typeof loadPageNotes === "function") {
+          loadPageNotes();
+        }
       }
     });
   });
@@ -355,6 +390,9 @@ async function _loadSettings() {
       data.interpretations || [],
       "interpretations",
     );
+
+    // 백업 경로 및 백업 정보 표시
+    _loadBackupInfo(data);
   } catch (e) {
     console.warn("설정 로드 실패:", e);
   }
@@ -379,6 +417,22 @@ function _initLibraryControls() {
   // "새 서고" 버튼 → 폴더 선택 후 서고 초기화
   if (newBtn) {
     newBtn.addEventListener("click", _createNewLibrary);
+  }
+
+  // 백업 관련 버튼 이벤트
+  const browseBackupBtn = document.getElementById("btn-browse-backup");
+  if (browseBackupBtn) {
+    browseBackupBtn.addEventListener("click", _browseBackupFolder);
+  }
+
+  const saveBackupBtn = document.getElementById("btn-save-backup-path");
+  if (saveBackupBtn) {
+    saveBackupBtn.addEventListener("click", _saveBackupPath);
+  }
+
+  const execBackupBtn = document.getElementById("btn-execute-backup");
+  if (execBackupBtn) {
+    execBackupBtn.addEventListener("click", _executeBackup);
   }
 }
 
@@ -478,6 +532,129 @@ async function _createNewLibrary() {
     location.reload();
   } catch (e) {
     showToast("서고 생성 실패: " + e.message, "error");
+  }
+}
+
+/* ─── 서고 백업 관리 ───────────────────────────── */
+
+/**
+ * 백업 정보를 UI에 표시한다.
+ * _loadSettings()에서 호출된다.
+ */
+function _loadBackupInfo(settingsData) {
+  const inputEl = document.getElementById("settings-backup-input");
+  if (inputEl && settingsData.backup_path) {
+    inputEl.value = settingsData.backup_path;
+    inputEl.title = settingsData.backup_path;
+  }
+
+  const infoEl = document.getElementById("backup-info");
+  if (!infoEl) return;
+
+  const bi = settingsData.backup_info;
+  if (bi) {
+    infoEl.style.display = "";
+    const timeEl = document.getElementById("backup-last-time");
+    const countEl = document.getElementById("backup-file-count");
+    if (timeEl) {
+      const d = new Date(bi.timestamp);
+      timeEl.textContent = "마지막 백업: " + d.toLocaleString("ko-KR");
+    }
+    if (countEl) {
+      const sizeMB = (bi.total_size / (1024 * 1024)).toFixed(1);
+      countEl.textContent = `${bi.file_count}개 파일, ${sizeMB} MB`;
+    }
+  } else {
+    infoEl.style.display = "none";
+  }
+}
+
+/**
+ * 백업 폴더 선택 대화상자를 열어 경로를 표시한다.
+ */
+async function _browseBackupFolder() {
+  try {
+    const res = await fetch("/api/library/browse", { method: "POST" });
+    const data = await res.json();
+    if (data.cancelled) return;
+
+    const inputEl = document.getElementById("settings-backup-input");
+    if (inputEl) {
+      inputEl.value = data.path;
+      inputEl.title = data.path;
+    }
+  } catch (e) {
+    showToast("폴더 선택 실패: " + e.message, "error");
+  }
+}
+
+/**
+ * 백업 경로를 서버에 저장한다.
+ */
+async function _saveBackupPath() {
+  const inputEl = document.getElementById("settings-backup-input");
+  if (!inputEl || !inputEl.value) {
+    showToast("백업 폴더를 먼저 선택하세요.", "warning");
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/settings/backup-path", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: inputEl.value }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      showToast("저장 실패: " + (data.error || "알 수 없는 오류"), "error");
+      return;
+    }
+
+    showToast("백업 경로가 저장되었습니다.");
+  } catch (e) {
+    showToast("저장 실패: " + e.message, "error");
+  }
+}
+
+/**
+ * 서고를 백업 폴더에 복사한다.
+ * 확인 대화상자를 거친 후 실행한다.
+ */
+async function _executeBackup() {
+  if (!confirm("서고를 백업 폴더에 복사합니다.\n기존 백업이 있으면 교체됩니다.\n계속하시겠습니까?")) {
+    return;
+  }
+
+  const btn = document.getElementById("btn-execute-backup");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "백업 중...";
+  }
+
+  try {
+    const res = await fetch("/api/library/backup", { method: "POST" });
+    const data = await res.json();
+
+    if (!res.ok) {
+      showToast("백업 실패: " + (data.error || "알 수 없는 오류"), "error");
+      return;
+    }
+
+    const sizeMB = (data.total_size / (1024 * 1024)).toFixed(1);
+    showToast(
+      `백업 완료: ${data.file_count}개 파일, ${sizeMB} MB (${data.duration_sec}초)`
+    );
+
+    // 백업 정보 새로고침
+    _loadSettings();
+  } catch (e) {
+    showToast("백업 실패: " + e.message, "error");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "서고 백업";
+    }
   }
 }
 
@@ -1109,6 +1286,16 @@ function onPageChanged(opts) {
     }
   }
 
+  // 7-1. 비교 모드 동기화 (활성 시)
+  if (
+    typeof compareState !== "undefined" &&
+    compareState.active
+  ) {
+    if (typeof _loadCompareContent === "function") {
+      _loadCompareContent();
+    }
+  }
+
   // 8. OCR 결과 (레이아웃 모드 활성 시)
   if (
     typeof loadOcrResults === "function" &&
@@ -1118,10 +1305,10 @@ function onPageChanged(opts) {
     loadOcrResults();
   }
 
-  // 9. 비고/메모 (탭 표시 중일 때)
+  // 9. 비고/메모 (사이드바에서 비고 패널 활성 시)
   if (typeof loadPageNotes === "function") {
-    const notesPanel = document.getElementById("notes-panel-content");
-    if (notesPanel && notesPanel.style.display !== "none") {
+    const notesSection = document.getElementById("notes-sidebar-section");
+    if (notesSection && notesSection.style.display !== "none") {
       loadPageNotes();
     }
   }
@@ -1137,52 +1324,7 @@ function onPageChanged(opts) {
   }
 }
 
-/**
- * 하단 패널 탭 전환을 설정한다.
- *
- * 왜 이렇게 하는가:
- *   기존 initTabGroup은 탭 하이라이트만 처리했다.
- *   Phase 7에서 "의존 추적" 탭을 추가하면서,
- *   탭에 따라 다른 내용 영역을 표시해야 한다.
- *   - "Git 이력" → #git-panel-content 표시
- *   - "의존 추적" → #dep-panel-content 표시
- *   - "엔티티" → #entity-panel-content 표시
- *   - 기타 탭은 기존 동작 유지
- */
-function initBottomPanelTabs() {
-  const tabs = document.querySelectorAll(".panel-tabs .panel-tab");
-  const gitContent = document.getElementById("git-panel-content");
-  const validationContent = document.getElementById("validation-panel-content");
-  const depContent = document.getElementById("dep-panel-content");
-  const entityContent = document.getElementById("entity-panel-content");
-  const notesContent = document.getElementById("notes-panel-content");
-
-  tabs.forEach((tab, index) => {
-    tab.addEventListener("click", () => {
-      tabs.forEach((t) => t.classList.remove("active"));
-      tab.classList.add("active");
-
-      // 탭 내용 전환: 0=Git, 1=검증결과, 2=의존추적, 3=엔티티, 4=비고
-      if (gitContent) gitContent.style.display = index === 0 ? "" : "none";
-      if (validationContent)
-        validationContent.style.display = index === 1 ? "" : "none";
-      if (depContent) depContent.style.display = index === 2 ? "" : "none";
-      if (entityContent)
-        entityContent.style.display = index === 3 ? "" : "none";
-      if (notesContent) notesContent.style.display = index === 4 ? "" : "none";
-
-      // Phase 8: 엔티티 탭 활성화 시 엔티티 로드
-      if (index === 3 && typeof _loadEntitiesForCurrentPage === "function") {
-        _loadEntitiesForCurrentPage();
-      }
-
-      // 비고 탭 활성화 시 메모 로드
-      if (index === 4 && typeof loadPageNotes === "function") {
-        loadPageNotes();
-      }
-    });
-  });
-}
+/* initBottomPanelTabs() 제거됨: 모든 탭이 액티비티 바 사이드바로 이동 */
 
 /* ──────────────────────────
    공통 LLM 모델 선택 로더

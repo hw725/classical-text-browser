@@ -77,6 +77,7 @@ def _collect_commits(
     branch: str = "auto",
     max_count: int = 50,
     offset: int = 0,
+    pushed_only: bool = False,
 ) -> tuple[list[dict], int, list[str], str | None]:
     """Git 저장소에서 커밋 로그를 수집한다.
 
@@ -85,6 +86,9 @@ def _collect_commits(
     왜 HEAD 해시를 반환하는가:
         Phase 12-2에서 그래프에 "현재 작업 시점"을 표시하기 위해,
         프론트엔드가 어떤 커밋이 HEAD인지 알아야 한다.
+    왜 pushed_only가 필요한가:
+        교정 저장마다 자동 커밋이 생기므로, push 시점의 커밋만 보면
+        급행 정거장처럼 의미 있는 단위만 확인할 수 있다.
     """
     try:
         repo = git.Repo(repo_path)
@@ -102,6 +106,14 @@ def _collect_commits(
 
     selected_branch = _resolve_branch_name(repo, branch, branches)
 
+    # pushed_only 모드: reflog에서 push 시점 해시만 추출하여 필터링
+    milestone_hashes = None
+    if pushed_only:
+        milestone_hashes = _get_push_milestone_hashes(repo, selected_branch)
+        # 마일스톤이 없으면 전체 표시로 폴백
+        if not milestone_hashes:
+            milestone_hashes = None
+
     # 해당 브랜치의 커밋
     try:
         total = sum(1 for _ in repo.iter_commits(selected_branch))
@@ -110,20 +122,101 @@ def _collect_commits(
         return [], total, branches, head_hash
 
     commits = []
-    for i, c in enumerate(repo.iter_commits(selected_branch, max_count=max_count + offset)):
-        if i < offset:
-            continue
-        commits.append({
-            "hash": c.hexsha,
-            "short_hash": c.hexsha[:7],
-            "message": c.message.strip(),
-            "author": str(c.author),
-            "timestamp": c.committed_datetime.isoformat(),
-            "layers_affected": extract_layers_affected(c.message),
-            "tags": [t.name for t in c.tags] if hasattr(c, 'tags') else [],
-        })
+    if milestone_hashes is not None:
+        # 급행 정거장 모드: 마일스톤 해시에 해당하는 커밋만 수집
+        for h in milestone_hashes[:max_count]:
+            try:
+                c = repo.commit(h)
+                commits.append({
+                    "hash": c.hexsha,
+                    "short_hash": c.hexsha[:7],
+                    "message": c.message.strip(),
+                    "author": str(c.author),
+                    "timestamp": c.committed_datetime.isoformat(),
+                    "layers_affected": extract_layers_affected(c.message),
+                    "tags": [t.name for t in c.tags] if hasattr(c, "tags") else [],
+                })
+            except (git.BadName, ValueError):
+                continue
+    else:
+        for i, c in enumerate(repo.iter_commits(selected_branch, max_count=max_count + offset)):
+            if i < offset:
+                continue
+            commits.append({
+                "hash": c.hexsha,
+                "short_hash": c.hexsha[:7],
+                "message": c.message.strip(),
+                "author": str(c.author),
+                "timestamp": c.committed_datetime.isoformat(),
+                "layers_affected": extract_layers_affected(c.message),
+                "tags": [t.name for t in c.tags] if hasattr(c, "tags") else [],
+            })
 
-    return commits, total, branches, head_hash
+    return commits, total if milestone_hashes is None else len(commits), branches, head_hash
+
+
+def _get_push_milestone_hashes(
+    repo: git.Repo, branch_name: str
+) -> list[str] | None:
+    """원격 추적 브랜치의 reflog에서 push 시점의 커밋 해시를 추출한다.
+
+    목적: 그래프에서 급행 정거장 모드를 지원하기 위해,
+          push가 실행된 시점의 HEAD 커밋 해시만 모은다.
+    출력: 최신순 해시 리스트, 또는 원격이 없으면 None.
+    """
+    remote_ref = _find_remote_ref(repo, branch_name)
+    if not remote_ref:
+        return None
+
+    try:
+        raw = repo.git.execute(
+            ["git", "reflog", "show", remote_ref, "--format=%H|%gs"]
+        )
+    except git.GitCommandError:
+        return None
+
+    if not raw.strip():
+        return None
+
+    hashes = []
+    for line in raw.strip().split("\n"):
+        parts = line.split("|", 1)
+        if len(parts) < 2:
+            continue
+        h, subject = parts
+        if "push" in subject.lower():
+            hashes.append(h)
+
+    return hashes if hashes else None
+
+
+def _find_remote_ref(repo: git.Repo, branch_name: str) -> str | None:
+    """로컬 브랜치에 대응하는 원격 추적 참조를 찾는다.
+
+    목적: pushed_only 필터에서 원격에 존재하는 커밋 범위를 특정한다.
+    출력: 'origin/main' 같은 참조 문자열, 또는 원격이 없으면 None.
+    """
+    # 1) tracking branch 직접 조회
+    try:
+        for b in repo.branches:
+            if b.name == branch_name:
+                tracking = b.tracking_branch()
+                if tracking:
+                    return tracking.name
+                break
+    except (TypeError, ValueError):
+        pass
+
+    # 2) origin/<branch> 존재 여부 확인
+    for remote in repo.remotes:
+        ref_name = f"{remote.name}/{branch_name}"
+        try:
+            repo.commit(ref_name)
+            return ref_name
+        except (git.BadName, ValueError):
+            continue
+
+    return None
 
 
 def _resolve_branch_name(repo: git.Repo, requested: str, branches: list[str]) -> str:
@@ -241,6 +334,7 @@ def get_git_graph_data(
     interp_branch: str = "auto",
     limit: int = 50,
     offset: int = 0,
+    pushed_only: bool = False,
 ) -> dict:
     """두 저장소의 커밋 로그를 합쳐서 그래프 데이터를 생성한다.
 
@@ -275,12 +369,12 @@ def get_git_graph_data(
         pass
 
     orig_commits, orig_total, orig_branches, orig_head = _collect_commits(
-        doc_path, orig_selected_branch, limit, offset
+        doc_path, orig_selected_branch, limit, offset, pushed_only=pushed_only
     )
 
     # 해석 저장소 커밋
     interp_commits, interp_total, interp_branches, interp_head = _collect_commits(
-        interp_path, interp_selected_branch, limit, offset
+        interp_path, interp_selected_branch, limit, offset, pushed_only=pushed_only
     )
 
     # 해석 커밋에 base_original_hash 필드 추가

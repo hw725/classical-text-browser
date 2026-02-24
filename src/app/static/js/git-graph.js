@@ -1,17 +1,17 @@
 /**
- * Phase 12-1: 사다리형 이분 Git 그래프.
+ * 사다리형 이분 Git 그래프 — 세로 방향 (사이드바용).
  *
  * 왜 이렇게 하는가:
  *   원본 저장소(L1~L4)와 해석 저장소(L5~L7)의 커밋 이력을
- *   좌우 2개 레인으로 나란히 보여주면, 해석 작업이 어떤 원본
+ *   좌우 2개 세로 레인으로 나란히 보여주면, 해석 작업이 어떤 원본
  *   시점을 기반했는지 직관적으로 파악할 수 있다.
- *   Based-On-Original trailer로 명시적 연결을, 타임스탬프로 추정 연결을 만든다.
+ *   사이드바에 배치하므로 세로 스크롤, 좌=원본 우=해석.
  *
  * 모듈 구성:
  *   1. LAYER_COLORS / LINK_STYLES — 레이어별 색상·링크 스타일 상수
- *   2. calculateLayout() — 커밋의 X/Y 좌표 계산
+ *   2. calculateLayout() — 커밋의 X/Y 좌표 계산 (세로 방향)
  *   3. renderLadderGraph() — d3.js SVG 렌더링 + 인터랙션
- *   4. initGitGraph() — 탭 전환·API 호출·초기화
+ *   4. initGitGraph() — 탭 전환·API 호출·정렬 토글·초기화
  */
 
 /* ──────────────────────────────────────
@@ -39,67 +39,71 @@ const LINK_STYLES = {
 };
 
 /* ──────────────────────────────────────
-   2. 레이아웃 계산
+   2. 세로 레이아웃 계산
    ────────────────────────────────────── */
 
 /**
- * 두 저장소 커밋을 시간순 통합 정렬하여 X좌표를 계산한다.
+ * 두 저장소 커밋을 시간순 통합 정렬하여 Y좌표를 계산한다.
+ * 사이드바 세로 배치용: 좌측 레인=원본, 우측 레인=해석.
  *
  * 입력: API 응답 데이터 { original, interpretation }
  * 출력: Map<hash, { x, y, lane }>
  */
 function calculateLayout(data) {
-  const NODE_GAP = 56; // 커밋 간 X 간격 (px)
-  const LEFT_MARGIN = 70; // 좌측 여백
-  const RIGHT_MARGIN = 40; // 우측 여백
-  const LANE_LABEL_Y = 18; // 레인 라벨 Y
-  const LANE_ORIGINAL_Y = 68; // 원본 레인 Y
-  const LANE_INTERP_Y = 148; // 해석 레인 Y
+  const NODE_GAP_Y = 48;       // 커밋 간 Y 간격 (px)
+  const TOP_MARGIN = 50;       // 상단 여백 (레인 라벨 공간)
+  const BOTTOM_MARGIN = 30;    // 하단 여백
+  const TOTAL_WIDTH = 244;     // 사이드바 폭 260px - 패딩 16px
+  const LANE_ORIGINAL_X = Math.round(TOTAL_WIDTH * 0.29);  // ~71
+  const LANE_INTERP_X = Math.round(TOTAL_WIDTH * 0.71);    // ~173
+  const LANE_LABEL_Y = 20;    // 레인 라벨 Y 위치
 
-  // 모든 커밋을 timestamp 오름차순 통합 정렬 (과거 → 최신)
+  // 모든 커밋을 timestamp 정렬 (정렬 방향은 _gitGraphSortNewestFirst로 제어)
   const allCommits = [
     ...data.original.commits.map((c) => ({ ...c, lane: "original" })),
     ...data.interpretation.commits.map((c) => ({
       ...c,
       lane: "interpretation",
     })),
-  ].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  ].sort((a, b) => {
+    const diff = new Date(a.timestamp) - new Date(b.timestamp);
+    return _gitGraphSortNewestFirst ? -diff : diff;
+  });
 
   const positions = new Map();
   allCommits.forEach((commit, index) => {
     positions.set(commit.hash, {
-      x: index * NODE_GAP + LEFT_MARGIN,
-      y: commit.lane === "original" ? LANE_ORIGINAL_Y : LANE_INTERP_Y,
+      x: commit.lane === "original" ? LANE_ORIGINAL_X : LANE_INTERP_X,
+      y: index * NODE_GAP_Y + TOP_MARGIN,
       lane: commit.lane,
     });
   });
 
-  const totalWidth = Math.max(
-    580,
-    allCommits.length * NODE_GAP + LEFT_MARGIN + RIGHT_MARGIN,
+  const totalHeight = Math.max(
+    200,
+    allCommits.length * NODE_GAP_Y + TOP_MARGIN + BOTTOM_MARGIN,
   );
-  const totalHeight = 196;
 
   return {
     positions,
     allCommits,
-    NODE_GAP,
-    LEFT_MARGIN,
-    RIGHT_MARGIN,
+    NODE_GAP_Y,
+    TOP_MARGIN,
+    BOTTOM_MARGIN,
     LANE_LABEL_Y,
-    LANE_ORIGINAL_Y,
-    LANE_INTERP_Y,
-    totalWidth,
+    LANE_ORIGINAL_X,
+    LANE_INTERP_X,
+    TOTAL_WIDTH,
     totalHeight,
   };
 }
 
 /* ──────────────────────────────────────
-   3. d3.js SVG 렌더링
+   3. d3.js SVG 렌더링 (세로 방향)
    ────────────────────────────────────── */
 
 /**
- * 사다리형 이분 그래프를 SVG로 렌더링한다.
+ * 사다리형 이분 그래프를 세로 SVG로 렌더링한다.
  *
  * container: DOM 요소 (div#git-graph-container)
  * data: API 응답 데이터
@@ -117,27 +121,27 @@ function renderLadderGraph(container, data) {
   const {
     positions,
     allCommits,
-    LEFT_MARGIN,
-    RIGHT_MARGIN,
+    TOP_MARGIN,
+    BOTTOM_MARGIN,
     LANE_LABEL_Y,
-    LANE_ORIGINAL_Y,
-    LANE_INTERP_Y,
-    totalWidth,
+    LANE_ORIGINAL_X,
+    LANE_INTERP_X,
+    TOTAL_WIDTH,
     totalHeight,
   } = layout;
 
   const svg = d3
     .select(container)
     .append("svg")
-    .attr("width", totalWidth)
+    .attr("width", TOTAL_WIDTH)
     .attr("height", totalHeight)
     .attr("class", "git-graph-svg");
 
-  // 화살표 마커 정의
-  svg
-    .append("defs")
+  // 화살표 마커 정의 (가로 방향: 원본→해석)
+  const defs = svg.append("defs");
+  defs
     .append("marker")
-    .attr("id", "arrowhead")
+    .attr("id", "arrowhead-right")
     .attr("viewBox", "0 0 10 10")
     .attr("refX", 8)
     .attr("refY", 5)
@@ -148,48 +152,48 @@ function renderLadderGraph(container, data) {
     .attr("d", "M 0 0 L 10 5 L 0 10 z")
     .attr("fill", "#64748b");
 
-  // ── 레인 라벨 ──
+  // ── 레인 라벨 (상단 고정) ──
   svg
     .append("text")
-    .attr("x", LEFT_MARGIN)
+    .attr("x", LANE_ORIGINAL_X)
     .attr("y", LANE_LABEL_Y)
-    .attr("text-anchor", "start")
+    .attr("text-anchor", "middle")
     .attr("class", "git-graph-lane-label")
-    .text("원본 (L1~L4)");
+    .text("원본");
 
   svg
     .append("text")
-    .attr("x", LEFT_MARGIN)
-    .attr("y", LANE_INTERP_Y - 24)
-    .attr("text-anchor", "start")
+    .attr("x", LANE_INTERP_X)
+    .attr("y", LANE_LABEL_Y)
+    .attr("text-anchor", "middle")
     .attr("class", "git-graph-lane-label")
-    .text("해석 (L5~L7)");
+    .text("해석");
 
-  // ── 레인 가로선 (배경) ──
+  // ── 레인 세로선 (배경 가이드) ──
   svg
     .append("line")
-    .attr("x1", LEFT_MARGIN - 12)
-    .attr("y1", LANE_ORIGINAL_Y)
-    .attr("x2", totalWidth - RIGHT_MARGIN + 8)
-    .attr("y2", LANE_ORIGINAL_Y)
+    .attr("x1", LANE_ORIGINAL_X)
+    .attr("y1", TOP_MARGIN - 12)
+    .attr("x2", LANE_ORIGINAL_X)
+    .attr("y2", totalHeight - BOTTOM_MARGIN + 8)
     .attr("class", "git-graph-lane-line");
 
   svg
     .append("line")
-    .attr("x1", LEFT_MARGIN - 12)
-    .attr("y1", LANE_INTERP_Y)
-    .attr("x2", totalWidth - RIGHT_MARGIN + 8)
-    .attr("y2", LANE_INTERP_Y)
+    .attr("x1", LANE_INTERP_X)
+    .attr("y1", TOP_MARGIN - 12)
+    .attr("x2", LANE_INTERP_X)
+    .attr("y2", totalHeight - BOTTOM_MARGIN + 8)
     .attr("class", "git-graph-lane-line");
 
-  // ── 가로 연결선 (같은 레인 내 인접 커밋) ──
+  // ── 같은 레인 내 세로 연결선 ──
   const origCommits = allCommits.filter((c) => c.lane === "original");
   const interpCommits = allCommits.filter((c) => c.lane === "interpretation");
 
   _renderLaneLinks(svg, origCommits, positions);
   _renderLaneLinks(svg, interpCommits, positions);
 
-  // ── 레인 간 연결선 (의존 관계) ──
+  // ── 레인 간 연결선 (의존 관계 — 가로 엘보) ──
   const linkSelection = svg
     .selectAll(".git-graph-link")
     .data(data.links)
@@ -202,12 +206,13 @@ function renderLadderGraph(container, data) {
       if (!origPos || !interpPos) return;
 
       const style = LINK_STYLES[d.match_type] || LINK_STYLES.estimated;
-      const startX = origPos.x;
-      const startY = origPos.y + 8;
-      const endX = interpPos.x;
-      const endY = interpPos.y - 8;
-      const elbowY = startY + (endY - startY) / 2;
-      const path = `M ${startX} ${startY} L ${startX} ${elbowY} L ${endX} ${elbowY} L ${endX} ${endY}`;
+      // 가로 엘보: 원본 오른쪽 → 중간 X → 해석 왼쪽
+      const startX = origPos.x + 8;
+      const startY = origPos.y;
+      const endX = interpPos.x - 8;
+      const endY = interpPos.y;
+      const elbowX = startX + (endX - startX) / 2;
+      const path = `M ${startX} ${startY} L ${elbowX} ${startY} L ${elbowX} ${endY} L ${endX} ${endY}`;
 
       d3.select(this)
         .attr("d", path)
@@ -215,7 +220,7 @@ function renderLadderGraph(container, data) {
         .attr("stroke", style.stroke)
         .attr("stroke-width", style.width)
         .attr("stroke-dasharray", style.dasharray)
-        .attr("marker-end", "url(#arrowhead)");
+        .attr("marker-end", "url(#arrowhead-right)");
     });
 
   // ── 커밋 노드 ──
@@ -243,16 +248,16 @@ function renderLadderGraph(container, data) {
     .attr("stroke", "#fff")
     .attr("stroke-width", 1.5);
 
-  // 짧은 해시 텍스트
+  // 짧은 해시 텍스트: 원본은 좌측, 해석은 우측
   nodeGroup
     .append("text")
-    .attr("x", 0)
-    .attr("y", (d) => (d.lane === "original" ? -12 : 18))
-    .attr("text-anchor", "middle")
+    .attr("x", (d) => (d.lane === "original" ? -14 : 14))
+    .attr("y", 4)
+    .attr("text-anchor", (d) => (d.lane === "original" ? "end" : "start"))
     .attr("class", "git-graph-hash")
     .text((d) => d.short_hash);
 
-  // ── Phase 12-2: HEAD(현재 작업) 마커 ──
+  // ── HEAD(현재 작업) 마커 ──
   const origHead = data.original.head_hash;
   const interpHead = data.interpretation.head_hash;
 
@@ -272,11 +277,11 @@ function renderLadderGraph(container, data) {
 
     // "현재 작업" 라벨
     g.append("text")
-      .attr("x", 0)
-      .attr("y", d.lane === "original" ? -26 : 32)
-      .attr("text-anchor", "middle")
+      .attr("x", d.lane === "original" ? -14 : 14)
+      .attr("y", -10)
+      .attr("text-anchor", d.lane === "original" ? "end" : "start")
       .attr("class", "git-graph-head-label")
-      .text("현재 작업");
+      .text("현재");
   });
 
   // ── 인터랙션 ──
@@ -286,7 +291,7 @@ function renderLadderGraph(container, data) {
 }
 
 /**
- * 같은 레인 내 인접 커밋 간 가로 연결선을 그린다.
+ * 같은 레인 내 인접 커밋 간 세로 연결선을 그린다.
  */
 function _renderLaneLinks(svg, commits, positions) {
   for (let i = 0; i < commits.length - 1; i++) {
@@ -296,10 +301,10 @@ function _renderLaneLinks(svg, commits, positions) {
 
     svg
       .append("line")
-      .attr("x1", from.x + 7)
-      .attr("y1", from.y)
-      .attr("x2", to.x - 7)
-      .attr("y2", to.y)
+      .attr("x1", from.x)
+      .attr("y1", from.y + 7)
+      .attr("x2", to.x)
+      .attr("y2", to.y - 7)
       .attr("class", "git-graph-vertical");
   }
 }
@@ -337,15 +342,19 @@ function _addTooltip(nodeSelection) {
       tooltip.innerHTML =
         `<strong>${d.short_hash}</strong><br>` +
         `${_escapeHtml(d.message.split("\n")[0])}<br>` +
-        `<small>${_escapeHtml(d.author)} · ${_formatDate(d.timestamp)}</small><br>` +
+        `<small>${_escapeHtml(d.author)} · ${_gitFormatDate(d.timestamp)}</small><br>` +
         `<small>레이어: ${layers}</small>` +
         baseInfo;
       tooltip.style.display = "block";
-      tooltip.style.left = event.pageX + 12 + "px";
+
+      // 툴팁 위치: 사이드바 내에서 넘치지 않도록 보정
+      const x = Math.min(event.pageX + 12, window.innerWidth - 260);
+      tooltip.style.left = x + "px";
       tooltip.style.top = event.pageY - 10 + "px";
     })
     .on("mousemove", function (event) {
-      tooltip.style.left = event.pageX + 12 + "px";
+      const x = Math.min(event.pageX + 12, window.innerWidth - 260);
+      tooltip.style.left = x + "px";
       tooltip.style.top = event.pageY - 10 + "px";
     })
     .on("mouseleave", function () {
@@ -354,9 +363,7 @@ function _addTooltip(nodeSelection) {
 }
 
 /**
- * 커밋 노드 클릭 → 상세 패널 표시 + 파일 목록 + 되돌리기 버튼.
- *
- * Phase 12-2: 기존 커밋 상세에 파일 미리보기와 되돌리기 기능을 추가한다.
+ * 커밋 노드 클릭 → 인라인 상세 패널 표시 + 파일 목록 + 되돌리기 버튼.
  */
 function _addNodeClick(nodeSelection) {
   nodeSelection.on("click", function (event, d) {
@@ -380,15 +387,13 @@ function _addNodeClick(nodeSelection) {
     body.innerHTML =
       `<div class="git-detail-row"><span class="git-detail-label">식별번호</span><code>${d.hash}</code></div>` +
       `<div class="git-detail-row"><span class="git-detail-label">작성자</span>${_escapeHtml(d.author)}</div>` +
-      `<div class="git-detail-row"><span class="git-detail-label">시간</span>${_formatDate(d.timestamp)}</div>` +
+      `<div class="git-detail-row"><span class="git-detail-label">시간</span>${_gitFormatDate(d.timestamp)}</div>` +
       `<div class="git-detail-row"><span class="git-detail-label">레이어</span>${layers}</div>` +
       baseInfo +
       `<div class="git-detail-message"><pre>${_escapeHtml(d.message)}</pre></div>` +
-      // Phase 12-2: 파일 목록 영역
       `<div class="git-detail-section-title">저장된 파일 목록</div>` +
       `<div id="git-detail-file-list" class="git-detail-file-list">` +
       `<span class="placeholder">불러오는 중...</span></div>` +
-      // Phase 12-2: 되돌리기 버튼
       `<div class="git-detail-actions">` +
       `<button id="git-revert-btn" class="revert-btn" ` +
       `data-hash="${d.hash}" data-lane="${d.lane}">` +
@@ -404,7 +409,7 @@ function _addNodeClick(nodeSelection) {
 }
 
 /**
- * 가로선 호버 → 연결된 노드만 하이라이트.
+ * 연결선 호버 → 연결된 노드만 하이라이트.
  */
 function _addLinkHighlight(linkSelection, nodeSelection) {
   linkSelection
@@ -423,7 +428,7 @@ function _addLinkHighlight(linkSelection, nodeSelection) {
 }
 
 /* ──────────────────────────────────────
-   4-B. Phase 12-2: 파일 미리보기 + 되돌리기
+   4-B. 파일 미리보기 + 되돌리기
    ────────────────────────────────────── */
 
 /**
@@ -490,10 +495,6 @@ async function _loadCommitFiles(commitData) {
 
 /**
  * 커밋 시점의 특정 파일 내용을 읽기 전용으로 표시한다.
- *
- * 왜 이렇게 하는가:
- *   연구자가 과거 시점의 파일 내용을 안전하게 미리볼 수 있다.
- *   수정 불가(읽기 전용)로 표시하여 실수를 방지한다.
  */
 async function _loadCommitFileContent(repoType, repoId, commitHash, filePath) {
   const body = document.getElementById("git-graph-detail-body");
@@ -557,10 +558,6 @@ async function _loadCommitFileContent(repoType, repoId, commitHash, filePath) {
 
 /**
  * "이 버전으로 되돌리기" 버튼에 이벤트를 연결한다.
- *
- * 왜 이렇게 하는가:
- *   confirm() 다이얼로그로 한 번 더 확인하여 실수 방지.
- *   되돌리기는 새 커밋을 생성하므로 이력이 보존된다는 점을 안내한다.
  */
 function _bindRevertButton() {
   const btn = document.getElementById("git-revert-btn");
@@ -584,11 +581,6 @@ function _bindRevertButton() {
 
 /**
  * 되돌리기 API를 호출하고 결과를 표시한다.
- *
- * 왜 이렇게 하는가:
- *   POST /api/repos/{type}/{id}/revert 를 호출하여
- *   새 커밋을 생성하는 방식으로 안전하게 되돌린다.
- *   성공 시 그래프를 새로고침하여 변경 사항을 반영한다.
  */
 async function _executeRevert(targetHash, lane) {
   const repoType = lane === "original" ? "documents" : "interpretations";
@@ -667,7 +659,7 @@ function _formatFileSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
-function _formatDate(isoString) {
+function _gitFormatDate(isoString) {
   try {
     const d = new Date(isoString);
     return d.toLocaleString("ko-KR", {
@@ -683,21 +675,25 @@ function _formatDate(isoString) {
 }
 
 /* ──────────────────────────────────────
-   6. 초기화 + 탭 전환
+   6. 초기화 + 탭 전환 + 정렬 토글
    ────────────────────────────────────── */
 
 /** 현재 선택된 해석 저장소 ID (workspace.js에서 설정) */
 let _gitGraphInterpId = null;
 /** 원본 문헌 ID (git-graph API 응답에서 자동 설정) */
 let _gitGraphDocId = null;
+/** 정렬 방향: true=최신이 위, false=과거가 위 */
+let _gitGraphSortNewestFirst = true;
 
 /**
  * Git 그래프 모듈 초기화.
  * workspace.js의 DOMContentLoaded에서 호출된다.
  */
 function initGitGraph() {
-  // 뷰 탭 전환
-  const tabs = document.querySelectorAll(".git-view-tab");
+  // 사이드바 내 뷰 탭 전환 (커밋 목록 ↔ 사다리형 그래프)
+  const tabs = document.querySelectorAll(
+    "#git-sidebar-section .git-view-tab",
+  );
   tabs.forEach((tab) => {
     tab.addEventListener("click", () => {
       tabs.forEach((t) => t.classList.remove("active"));
@@ -744,6 +740,42 @@ function initGitGraph() {
     interpBranch.addEventListener("change", () => {
       if (_gitGraphInterpId) loadGitGraph(_gitGraphInterpId);
     });
+
+  // 정렬 토글 버튼
+  _initSortToggle();
+}
+
+/**
+ * 정렬 방향 토글 버튼을 초기화한다.
+ *
+ * 왜 이렇게 하는가:
+ *   연구자에 따라 "최신이 위"(git log 기본)와 "과거가 위"(시간순) 중
+ *   선호하는 방향이 다르다. 화살표 버튼 하나로 즉시 전환 가능.
+ */
+function _initSortToggle() {
+  const btn = document.getElementById("git-sort-toggle");
+  if (!btn) return;
+
+  btn.addEventListener("click", () => {
+    _gitGraphSortNewestFirst = !_gitGraphSortNewestFirst;
+
+    // 아이콘 회전: 위 화살표(최신위) ↔ 아래 화살표(과거위)
+    const svgEl = btn.querySelector("svg");
+    if (svgEl) {
+      svgEl.style.transform = _gitGraphSortNewestFirst
+        ? ""
+        : "rotate(180deg)";
+    }
+
+    btn.title = _gitGraphSortNewestFirst
+      ? "최신이 위 (현재)"
+      : "과거가 위 (현재)";
+
+    // 그래프가 로드된 상태면 재렌더
+    if (_gitGraphInterpId) {
+      loadGitGraph(_gitGraphInterpId);
+    }
+  });
 }
 
 /**
@@ -752,6 +784,17 @@ function initGitGraph() {
  */
 function setGitGraphInterpId(interpId) {
   _gitGraphInterpId = interpId;
+}
+
+/**
+ * 현재 설정된 해석 저장소 ID로 그래프를 새로고침한다.
+ * pushed 토글 등 외부에서 호출할 수 있는 편의 함수.
+ */
+// eslint-disable-next-line no-unused-vars
+function _reloadGitGraph() {
+  if (_gitGraphInterpId) {
+    loadGitGraph(_gitGraphInterpId);
+  }
 }
 
 /**
@@ -776,6 +819,10 @@ async function loadGitGraph(interpId) {
       limit: "50",
       offset: "0",
     });
+    // push 전용 필터 (correction-editor.js의 _gitPushedOnly 참조)
+    if (typeof _gitPushedOnly !== "undefined" && _gitPushedOnly) {
+      params.set("pushed_only", "true");
+    }
 
     const resp = await fetch(
       `/api/interpretations/${interpId}/git-graph?${params}`,
@@ -788,7 +835,7 @@ async function loadGitGraph(interpId) {
 
     const data = await resp.json();
 
-    // Phase 12-2: 원본 문헌 ID 저장 (파일 조회/되돌리기 API에 필요)
+    // 원본 문헌 ID 저장 (파일 조회/되돌리기 API에 필요)
     _gitGraphDocId = data.doc_id || null;
 
     // 브랜치 드롭다운 업데이트
@@ -803,7 +850,7 @@ async function loadGitGraph(interpId) {
       data.interpretation.branch,
     );
 
-    // d3.js 렌더링
+    // d3.js 세로 렌더링
     renderLadderGraph(container, data);
   } catch (err) {
     container.innerHTML = `<div class="placeholder">그래프 로딩 실패: ${err.message}</div>`;

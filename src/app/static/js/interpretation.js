@@ -31,6 +31,15 @@ const interpState = {
   interpretations: [], // 전체 목록 캐시
 };
 
+// eslint-disable-next-line no-unused-vars
+const compareState = {
+  active: false, // 비교 모드 활성 여부
+  repoIdA: null, // 좌측 해석 저장소 ID
+  repoIdB: null, // 우측 해석 저장소 ID
+  contentA: "", // 좌측 텍스트 내용
+  contentB: "", // 우측 텍스트 내용
+};
+
 /* ──────────────────────────
    초기화
    ────────────────────────── */
@@ -82,6 +91,7 @@ function initInterpretation() {
       }
 
       _loadLayerContent();
+      if (compareState.active) _loadCompareContent();
     });
   });
 
@@ -90,6 +100,7 @@ function initInterpretation() {
     radio.addEventListener("change", () => {
       interpState.currentSubType = radio.value;
       _loadLayerContent();
+      if (compareState.active) _loadCompareContent();
     });
   });
 
@@ -121,6 +132,30 @@ function initInterpretation() {
 
   const depUpdate = document.getElementById("interp-dep-update");
   if (depUpdate) depUpdate.addEventListener("click", _updateBase);
+
+  // 비교 모드 토글
+  const compareCheckbox = document.getElementById("compare-mode-checkbox");
+  if (compareCheckbox) {
+    compareCheckbox.addEventListener("change", () => {
+      _toggleCompareMode(compareCheckbox.checked);
+    });
+  }
+
+  // 비교 저장소 선택 드롭다운
+  const compareRepoA = document.getElementById("compare-repo-a");
+  const compareRepoB = document.getElementById("compare-repo-b");
+  if (compareRepoA) {
+    compareRepoA.addEventListener("change", () => {
+      compareState.repoIdA = compareRepoA.value || null;
+      _loadCompareContent();
+    });
+  }
+  if (compareRepoB) {
+    compareRepoB.addEventListener("change", () => {
+      compareState.repoIdB = compareRepoB.value || null;
+      _loadCompareContent();
+    });
+  }
 }
 
 /**
@@ -225,6 +260,13 @@ function activateInterpretationMode() {
 // eslint-disable-next-line no-unused-vars
 function deactivateInterpretationMode() {
   interpState.active = false;
+
+  // 비교 모드 해제
+  const checkbox = document.getElementById("compare-mode-checkbox");
+  if (checkbox && checkbox.checked) {
+    checkbox.checked = false;
+    _toggleCompareMode(false);
+  }
 
   // 사이드바 해석 섹션 숨김
   const section = document.getElementById("interp-section");
@@ -418,17 +460,9 @@ function _hideDepBanner() {
    ────────────────────────── */
 
 function _showDepInPanel() {
-  // 하단 패널 "의존 추적" 탭을 활성화
-  const tabs = document.querySelectorAll(".panel-tabs .panel-tab");
-  tabs.forEach((t) => t.classList.remove("active"));
-  // "의존 추적"은 3번째 탭 (인덱스 2)
-  if (tabs[2]) tabs[2].classList.add("active");
-
-  // 탭 내용 전환
-  const gitContent = document.getElementById("git-panel-content");
-  const depContent = document.getElementById("dep-panel-content");
-  if (gitContent) gitContent.style.display = "none";
-  if (depContent) depContent.style.display = "";
+  // 액티비티 바의 "의존 추적" 버튼을 클릭하여 사이드바 패널을 전환
+  const depBtn = document.querySelector('.activity-btn[data-panel="dependency"]');
+  if (depBtn) depBtn.click();
 }
 
 async function _acknowledgeChanges() {
@@ -724,4 +758,288 @@ async function _createInterpretation() {
     console.error("해석 저장소 생성 실패:", err);
     if (statusEl) statusEl.textContent = "네트워크 오류";
   }
+}
+
+/* ──────────────────────────
+   비교 모드
+   ────────────────────────── */
+
+/**
+ * 비교 모드를 켜거나 끈다.
+ *
+ * 왜 이렇게 하는가:
+ *   일반 모드의 편집 textarea와 비교 모드의 읽기 전용 diff 뷰를
+ *   display:none/block으로 교체하여, 기존 편집 흐름을 전혀 건드리지 않는다.
+ *
+ * 입력: enabled — true면 비교 모드, false면 일반 모드.
+ */
+function _toggleCompareMode(enabled) {
+  compareState.active = enabled;
+
+  const textarea = document.getElementById("interp-content");
+  const container = document.getElementById("compare-container");
+  const interpPanel = document.getElementById("interp-panel");
+
+  if (!textarea || !container) return;
+
+  if (enabled) {
+    // 일반 모드 → 비교 모드
+    textarea.style.display = "none";
+    container.style.display = "";
+
+    // 비교 모드 표시 클래스 (도구 바 요소 숨김용)
+    if (interpPanel) interpPanel.classList.add("compare-mode-active");
+
+    // 드롭다운에 저장소 목록 채우기
+    _populateCompareSelects();
+
+    // 현재 선택된 저장소를 A에 자동 선택
+    if (interpState.interpId) {
+      const selectA = document.getElementById("compare-repo-a");
+      if (selectA) {
+        selectA.value = interpState.interpId;
+        compareState.repoIdA = interpState.interpId;
+      }
+    }
+
+    _loadCompareContent();
+  } else {
+    // 비교 모드 → 일반 모드
+    textarea.style.display = "";
+    container.style.display = "none";
+
+    if (interpPanel) interpPanel.classList.remove("compare-mode-active");
+
+    // 상태 초기화
+    compareState.repoIdA = null;
+    compareState.repoIdB = null;
+    compareState.contentA = "";
+    compareState.contentB = "";
+  }
+}
+
+/**
+ * 비교 모드의 좌/우 저장소 선택 드롭다운을 채운다.
+ *
+ * 왜 이렇게 하는가:
+ *   interpState.interpretations에 이미 캐시된 목록을 사용하여
+ *   추가 API 호출 없이 드롭다운을 구성한다.
+ */
+function _populateCompareSelects() {
+  const selects = [
+    document.getElementById("compare-repo-a"),
+    document.getElementById("compare-repo-b"),
+  ];
+
+  selects.forEach((sel) => {
+    if (!sel) return;
+    const currentVal = sel.value;
+    sel.innerHTML = '<option value="">저장소 선택</option>';
+    (interpState.interpretations || []).forEach((item) => {
+      const opt = document.createElement("option");
+      opt.value = item.interpretation_id;
+      // 제목과 해석자 유형을 함께 표시
+      const typeLabel =
+        item.interpreter_type === "llm" ? " [LLM]" :
+        item.interpreter_type === "hybrid" ? " [혼합]" : "";
+      opt.textContent = (item.title || item.interpretation_id) + typeLabel;
+      sel.appendChild(opt);
+    });
+    // 이전 선택값 복원
+    if (currentVal) sel.value = currentVal;
+  });
+}
+
+/**
+ * 비교 모드에서 좌/우 패널의 내용을 로드하고 diff를 표시한다.
+ *
+ * 왜 이렇게 하는가:
+ *   동일한 층(layer), 서브타입(subType), 페이지(pageNum)에 대해
+ *   두 해석 저장소의 내용을 나란히 가져와 줄 단위 비교를 수행한다.
+ *   기존 API 엔드포인트를 그대로 재사용한다.
+ */
+// eslint-disable-next-line no-unused-vars
+async function _loadCompareContent() {
+  if (!compareState.active) return;
+  if (!viewerState.partId || !viewerState.pageNum) return;
+
+  const { currentLayer, currentSubType } = interpState;
+  const { partId, pageNum } = viewerState;
+
+  // 좌측(A)과 우측(B)를 병렬로 로드
+  const [contentA, contentB] = await Promise.all([
+    _fetchComparePane(compareState.repoIdA, currentLayer, currentSubType, partId, pageNum),
+    _fetchComparePane(compareState.repoIdB, currentLayer, currentSubType, partId, pageNum),
+  ]);
+
+  compareState.contentA = contentA;
+  compareState.contentB = contentB;
+
+  // diff 계산 및 렌더링
+  _renderCompareDiff();
+}
+
+/**
+ * 비교 패널 한쪽의 내용을 API에서 가져온다.
+ *
+ * 입력: repoId — 해석 저장소 ID (null이면 빈 문자열 반환)
+ * 출력: 텍스트 문자열
+ */
+async function _fetchComparePane(repoId, layer, subType, partId, pageNum) {
+  if (!repoId) return "";
+  try {
+    const url = `/api/interpretations/${repoId}/layers/${layer}/${subType}/pages/${pageNum}?part_id=${partId}`;
+    const res = await fetch(url);
+    if (!res.ok) return "";
+    const data = await res.json();
+    return _extractTextContent(data.content);
+  } catch (err) {
+    console.error(`비교 패널 로드 실패 (${repoId}):`, err);
+    return "";
+  }
+}
+
+/**
+ * API 응답의 content를 문자열로 변환한다.
+ *
+ * 왜 이렇게 하는가:
+ *   L6_translation은 문자열, L5_reading/L7_annotation은 JSON 객체를 반환한다.
+ *   비교를 위해 모든 경우를 문자열로 통일한다.
+ */
+function _extractTextContent(content) {
+  if (typeof content === "string") return content;
+  if (
+    typeof content === "object" &&
+    content !== null &&
+    Object.keys(content).length > 0
+  ) {
+    return JSON.stringify(content, null, 2);
+  }
+  return "";
+}
+
+/**
+ * 비교 모드의 좌/우 패널에 diff 하이라이트를 렌더링한다.
+ *
+ * 왜 이렇게 하는가:
+ *   줄 단위로 두 텍스트를 비교하여, 추가/삭제/동일 줄을
+ *   시각적으로 구분한다. 고전 텍스트 비교에서는 줄 단위가 충분하다.
+ */
+function _renderCompareDiff() {
+  const containerA = document.getElementById("compare-content-a");
+  const containerB = document.getElementById("compare-content-b");
+  if (!containerA || !containerB) return;
+
+  // 저장소가 하나도 선택되지 않은 경우
+  if (!compareState.repoIdA && !compareState.repoIdB) {
+    containerA.innerHTML =
+      '<div class="compare-placeholder">좌측 저장소를 선택하세요</div>';
+    containerB.innerHTML =
+      '<div class="compare-placeholder">우측 저장소를 선택하세요</div>';
+    return;
+  }
+
+  const linesA = (compareState.contentA || "").split("\n");
+  const linesB = (compareState.contentB || "").split("\n");
+
+  // 양쪽 모두 내용이 없는 경우
+  if (
+    linesA.length <= 1 && linesA[0] === "" &&
+    linesB.length <= 1 && linesB[0] === ""
+  ) {
+    containerA.innerHTML =
+      '<div class="compare-placeholder">내용 없음</div>';
+    containerB.innerHTML =
+      '<div class="compare-placeholder">내용 없음</div>';
+    return;
+  }
+
+  // diff 계산
+  const diffResult = _computeLineDiff(linesA, linesB);
+
+  // 렌더링
+  containerA.innerHTML = "";
+  containerB.innerHTML = "";
+
+  diffResult.forEach((entry) => {
+    if (entry.type === "unchanged") {
+      containerA.appendChild(_makeDiffLine(entry.lineA, "diff-line-unchanged"));
+      containerB.appendChild(_makeDiffLine(entry.lineB, "diff-line-unchanged"));
+    } else if (entry.type === "removed") {
+      // A에만 있는 줄: A에 빨간, B에 빈 줄
+      containerA.appendChild(_makeDiffLine(entry.lineA, "diff-line-removed"));
+      containerB.appendChild(_makeDiffLine("", "diff-line-removed"));
+    } else if (entry.type === "added") {
+      // B에만 있는 줄: A에 빈 줄, B에 초록
+      containerA.appendChild(_makeDiffLine("", "diff-line-added"));
+      containerB.appendChild(_makeDiffLine(entry.lineB, "diff-line-added"));
+    }
+  });
+}
+
+/**
+ * diff 줄 DOM 요소를 생성한다.
+ */
+function _makeDiffLine(text, className) {
+  const div = document.createElement("div");
+  div.className = className;
+  // textContent로 XSS 방지
+  if (text) {
+    div.textContent = text;
+  } else {
+    // 빈 줄도 높이를 유지하기 위해 공백 삽입
+    div.innerHTML = "&nbsp;";
+  }
+  return div;
+}
+
+/**
+ * 줄 단위 diff를 계산한다. (LCS 기반)
+ *
+ * 왜 이렇게 하는가:
+ *   외부 라이브러리 없이 간단한 줄 단위 비교를 수행한다.
+ *   고전 텍스트 페이지의 줄 수는 보통 수십 줄이므로 O(n*m) LCS로 충분하다.
+ *
+ * 입력: linesA — 좌측 줄 배열, linesB — 우측 줄 배열.
+ * 출력: [{type: "unchanged"|"added"|"removed", lineA, lineB}] 배열.
+ */
+function _computeLineDiff(linesA, linesB) {
+  const m = linesA.length;
+  const n = linesB.length;
+
+  // LCS 테이블 (DP)
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (linesA[i - 1] === linesB[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+      }
+    }
+  }
+
+  // 역추적으로 diff 생성
+  const result = [];
+  let i = m;
+  let j = n;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && linesA[i - 1] === linesB[j - 1]) {
+      result.unshift({
+        type: "unchanged",
+        lineA: linesA[i - 1],
+        lineB: linesB[j - 1],
+      });
+      i--;
+      j--;
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      result.unshift({ type: "added", lineA: null, lineB: linesB[j - 1] });
+      j--;
+    } else {
+      result.unshift({ type: "removed", lineA: linesA[i - 1], lineB: null });
+      i--;
+    }
+  }
+
+  return result;
 }

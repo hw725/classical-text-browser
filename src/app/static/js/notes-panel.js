@@ -210,7 +210,7 @@ function _renderNotes() {
 
     const dateSpan = document.createElement("span");
     const created = entry.created_at ? new Date(entry.created_at) : new Date();
-    dateSpan.textContent = _formatDate(created);
+    dateSpan.textContent = _notesFormatDate(created);
     dateSpan.className = "notes-date";
 
     const removeBtn = document.createElement("button");
@@ -246,7 +246,7 @@ function _renderNotes() {
 /**
  * 날짜를 간략한 형식으로 포맷한다.
  */
-function _formatDate(date) {
+function _notesFormatDate(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");

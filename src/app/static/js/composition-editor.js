@@ -138,7 +138,7 @@ function _bindCompEvents() {
  *
  * 왜 이렇게 하는가:
  *   편성 탭에서 TextBlock을 생성하려면 해석 저장소가 필수인데,
- *   기존에는 "교차 뷰어" 모드에서만 선택할 수 있었다.
+ *   기존에는 "비교" 모드에서만 선택할 수 있었다.
  *   편성 패널에 직접 드롭다운을 두면 모드 전환 없이 선택 가능하다.
  */
 function _bindCompInterpSelect() {

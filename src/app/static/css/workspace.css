@@ -625,95 +625,164 @@ body {
   color: var(--text-secondary);
 }
 
-/* === 하단 패널 === */
+/* === 하단 패널 제거됨: 모든 탭이 액티비티 바 사이드바로 이동 === */
 
-.bottom-panel {
-  height: var(--panel-height);
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-primary);
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
-  overflow: hidden;
-  transition: height 0.2s ease;
-}
+/* === 사이드바 내 Git 이력 패널 === */
 
-.bottom-panel.collapsed {
-  height: 0 !important;
-}
-
-/* collapsed일 때 resize 핸들도 숨김 */
-.bottom-panel.collapsed + .resize-panel,
-.resize-panel:has(+ .bottom-panel.collapsed) {
-  display: none;
-}
-
-.panel-header {
-  height: 32px;
+.git-sidebar-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 8px;
-  background: var(--bg-secondary);
+  gap: 4px;
+  padding: 4px 8px;
   border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
 }
 
-.panel-tabs {
-  display: flex;
-  gap: 2px;
+.git-sidebar-toolbar .git-view-tabs {
+  flex: 1;
 }
 
-.panel-tab {
-  padding: 4px 12px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-  transition: color 0.15s;
-}
-
-.panel-tab:hover {
-  color: var(--text-primary);
-}
-
-.panel-tab.active {
-  color: var(--text-active);
-  border-bottom-color: var(--accent);
-}
-
-.panel-toggle {
-  width: 28px;
-  height: 28px;
+.git-toolbar-btn {
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: none;
-  border: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
   color: var(--text-secondary);
   cursor: pointer;
-  border-radius: 4px;
-  transition:
-    background 0.15s,
-    color 0.15s,
-    transform 0.2s;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
 }
 
-.panel-toggle:hover {
+.git-toolbar-btn:hover {
+  color: var(--text-active);
   background: var(--hover-bg-medium);
+}
+
+.git-toolbar-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.git-toolbar-btn svg {
+  transition: transform 0.2s ease;
+}
+
+/* ── 급행 정거장 뷰: push 마일스톤 카드 ── */
+.git-milestone-card {
+  margin: 4px 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.git-milestone-card:hover {
+  background: var(--hover-bg-medium);
+}
+.milestone-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+.milestone-hash {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+}
+.milestone-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  white-space: nowrap;
+}
+.milestone-summary {
+  font-size: 12px;
   color: var(--text-primary);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.milestone-date {
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-top: 2px;
 }
 
-.bottom-panel.collapsed .panel-toggle {
-  transform: rotate(180deg);
+.git-sidebar-branch-controls {
+  display: flex;
+  gap: 8px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
 }
 
-.panel-content {
-  flex: 1;
+.git-sidebar-branch-controls label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 사이드바 내 세로 그래프 컨테이너 */
+#git-sidebar-section .git-graph-container {
   overflow-y: auto;
-  padding: 8px 12px;
+  overflow-x: hidden;
+  max-height: calc(100vh - 280px);
+  padding: 4px;
+}
+
+/* 사이드바 내 커밋 상세 — 인라인 배치 (absolute 아님) */
+#git-sidebar-section .git-graph-detail {
+  position: static;
+  width: 100%;
+  border-top: 1px solid var(--border);
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* 사이드바 내 커밋 목록 */
+#git-sidebar-section .git-log-list {
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+  padding: 0 4px;
+}
+
+/* 사이드바 내 엔티티 필터 바: 좁은 폭에서 줄바꿈 */
+#entity-sidebar-section .entity-filter-bar {
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 8px;
+}
+
+/* 사이드바 내 비고 패널 */
+#notes-sidebar-section .notes-toolbar {
+  padding: 4px 8px;
+}
+
+#notes-sidebar-section .notes-list {
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+  padding: 0 4px;
+}
+
+/* 사이드바 내 의존 추적 */
+#dep-sidebar-section .dep-status-summary {
+  padding: 4px 8px;
+}
+
+#dep-sidebar-section .dep-file-list {
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+  padding: 0 4px;
 }
 
 /* === 상태 바 === */
@@ -2423,6 +2492,129 @@ body.resizing-row {
   box-shadow: inset 0 0 0 1px #22c55e;
 }
 
+/* === 비교 모드 === */
+
+/* 비교 모드 토글 */
+.compare-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.compare-toggle-label input[type="checkbox"] {
+  accent-color: #22c55e;
+}
+
+.compare-toggle-label:hover {
+  color: var(--text-primary);
+}
+
+/* 비교 컨테이너 — 좌우 분할 */
+.compare-container {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* 각 비교 패널 — 50% 폭 */
+.compare-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.compare-pane-header {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.compare-repo-select {
+  flex: 1;
+  height: 22px;
+  font-size: 11px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+  outline: none;
+}
+
+.compare-repo-select:focus {
+  border-color: var(--border-active);
+}
+
+.compare-pane-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+/* 비교 콘텐츠 영역 — 읽기 전용 + diff 하이라이트 */
+.compare-content {
+  flex: 1;
+  padding: 12px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* 패널 사이 구분선 */
+.compare-divider {
+  width: 1px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+/* Diff 하이라이트 — 줄 단위 */
+.diff-line-added {
+  background: rgba(34, 197, 94, 0.15);
+}
+
+.diff-line-removed {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.diff-line-unchanged {
+  /* 기본 스타일 유지 */
+}
+
+/* 비교 모드 안내 메시지 */
+.compare-content .compare-placeholder {
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 24px 0;
+  text-align: center;
+}
+
+/* 비교 모드에서 편집 도구 숨김 */
+.compare-mode-active #interp-save,
+.compare-mode-active #interp-save-status,
+.compare-mode-active #entity-create-textblock-btn,
+.compare-mode-active #entity-llm-request-btn {
+  display: none !important;
+}
+
 /* --- 사이드바 해석 저장소 목록 --- */
 
 .interp-list {
@@ -4035,6 +4227,77 @@ details[open] > .punct-section-summary::before {
 .settings-pull-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* ── Phase 13: 필수/선택 배지 + 백업 UI ── */
+
+.badge-required {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--accent);
+  color: #fff;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+
+.badge-optional {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  vertical-align: middle;
+  margin-left: 4px;
+}
+
+.settings-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 12px 8px;
+}
+
+.settings-info-note {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 6px 0 2px;
+  line-height: 1.5;
+}
+
+.section-header.sub-header {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.btn-backup {
+  margin-top: 6px;
+  background: #d97706;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-backup:hover {
+  background: #b45309;
+}
+
+.btn-backup:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.backup-info {
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 4px 0;
+  display: flex;
+  gap: 12px;
 }
 
 .hyeonto-ann-char {

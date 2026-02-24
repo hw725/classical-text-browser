@@ -132,3 +132,26 @@ def get_last_library() -> str | None:
         if path and (Path(path) / "library_manifest.json").exists():
             return path
     return None
+
+
+# ── 백업 경로 관리 ──────────────────────────────
+
+def get_backup_path() -> str | None:
+    """백업 폴더 경로를 반환한다.
+
+    출력: 절대 경로 문자열, 또는 None (미설정).
+    """
+    config = load_app_config()
+    return config.get("backup_path")
+
+
+def set_backup_path(path: str | Path) -> None:
+    """백업 폴더 경로를 설정한다.
+
+    입력: path — 백업 대상 폴더의 절대 경로.
+          구글 드라이브 동기화 폴더 등을 지정하면
+          자동으로 클라우드에 동기화된다.
+    """
+    config = load_app_config()
+    config["backup_path"] = str(Path(path).resolve())
+    save_app_config(config)
