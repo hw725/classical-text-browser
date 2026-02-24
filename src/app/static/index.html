@@ -260,13 +260,11 @@
                 <button
                   id="import-hwp-btn"
                   class="section-action-btn"
-                  title="HWP/HWPX 파일에서 텍스트 가져오기"
-                  onclick="
-                    if (typeof _openHwpImportDialog === 'function')
-                      _openHwpImportDialog();
-                  "
+                  title="HWP/HWPX/PDF 가져오기 (준비중)"
+                  onclick="showToast('HWP/HWPX/PDF 가져오기 기능은 현재 준비중입니다.', 'info');"
+                  style="opacity: 0.5; cursor: default;"
                 >
-                  HWP
+                  가져오기
                 </button>
               </div>
             </div>
