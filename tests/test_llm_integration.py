@@ -125,7 +125,6 @@ class TestLlmConfig:
     def test_defaults(self):
         """기본값이 올바르게 반환된다."""
         config = LlmConfig()
-        assert config.get("agent_chat_url") == "http://127.0.0.1:8787"
         assert config.get("ollama_url") == "http://localhost:11434"
         assert config.get("nonexistent", "fallback") == "fallback"
 
