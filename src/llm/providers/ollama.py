@@ -128,6 +128,96 @@ class OllamaProvider(BaseLlmProvider):
             raw=data,
         )
 
+    async def call_stream(
+        self, prompt, *, system=None, response_format="text",
+        model=None, max_tokens=4096, purpose="text",
+        progress_callback=None, **kwargs,
+    ) -> LlmResponse:
+        """Ollama 네이티브 스트리밍. NDJSON 청크를 읽으며 progress_callback 호출.
+
+        왜 네이티브 스트리밍을 사용하는가:
+            기본 heartbeat(2초 간격)보다 훨씬 세밀한 진행 표시가 가능하다.
+            토큰이 생성될 때마다 경과 시간과 토큰 수를 실시간으로 전달한다.
+            Ollama의 stream 모드는 NDJSON(줄 구분 JSON)으로 응답하며,
+            각 줄은 {"response":"토큰","done":false} 형식이다.
+        """
+        import json as _json
+
+        selected_model = (
+            model
+            or self.DEFAULT_MODELS.get(purpose, self.DEFAULT_MODELS["text"])
+        )
+
+        payload = {
+            "model": selected_model,
+            "prompt": prompt,
+            "stream": True,
+            "options": {"num_predict": max_tokens},
+        }
+        if system:
+            payload["system"] = system
+        if response_format == "json":
+            payload["format"] = "json"
+
+        t0 = time.monotonic()
+        full_text = ""
+        tokens_out = 0
+        tokens_in = None
+        last_report = t0
+
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            async with client.stream(
+                "POST", f"{self._url}/api/generate", json=payload
+            ) as resp:
+                if resp.status_code != 200:
+                    raise LlmProviderError(
+                        f"Ollama 스트리밍 응답 {resp.status_code}"
+                    )
+
+                async for line in resp.aiter_lines():
+                    if not line.strip():
+                        continue
+                    try:
+                        chunk = _json.loads(line)
+                    except _json.JSONDecodeError:
+                        continue
+
+                    if chunk.get("error"):
+                        raise LlmProviderError(f"Ollama 에러: {chunk['error']}")
+
+                    token = chunk.get("response", "")
+                    full_text += token
+                    tokens_out += 1
+
+                    # 1초마다 progress 콜백
+                    now = time.monotonic()
+                    if progress_callback and (now - last_report) >= 1.0:
+                        last_report = now
+                        progress_callback({
+                            "type": "progress",
+                            "elapsed_sec": round(now - t0, 1),
+                            "tokens": tokens_out,
+                            "provider": self.provider_id,
+                        })
+
+                    if chunk.get("done"):
+                        tokens_in = chunk.get("prompt_eval_count")
+                        tokens_out = chunk.get("eval_count", tokens_out)
+                        break
+
+        elapsed = time.monotonic() - t0
+
+        return LlmResponse(
+            text=full_text,
+            provider=self.provider_id,
+            model=selected_model,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost_usd=0.0,
+            elapsed_sec=round(elapsed, 2),
+            raw={"stream": True},
+        )
+
     async def call_with_image(self, prompt, image, *, image_mime="image/png",
                               system=None, response_format="text", model=None,
                               max_tokens=4096, **kwargs) -> LlmResponse:

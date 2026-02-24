@@ -7,6 +7,11 @@
  *   - 삽입된 현토는 원문 옆에 시각적으로 표시
  *   - 표점이 있으면 함께 반영된 미리보기
  *
+ * 텍스트 로드 우선순위:
+ *   1. TextBlock 모드 → source_refs를 통해 원본 문서의 최신 교정 텍스트
+ *   2. TextBlock 모드 → 폴백: TextBlock.original_text (편성 시점 스냅샷)
+ *   3. LayoutBlock 모드 → /api/documents/.../corrected-text 교정 텍스트
+ *
  * 의존성:
  *   - sidebar-tree.js (viewerState)
  *   - interpretation.js (interpState)
@@ -19,14 +24,25 @@
 
 const hyeontoState = {
   active: false,           // 모드 활성화 여부
-  originalText: "",        // L4 원문
-  blockId: "",             // 현재 블록 ID
+  originalText: "",        // 교정된 텍스트 (또는 원문 폴백)
+  blockId: "",             // 현재 블록 ID ("tb:UUID" 또는 LayoutBlock ID)
   annotations: [],         // 현재 현토 목록
   punctMarks: [],          // 현재 표점 목록 (미리보기용)
   selectedChar: null,      // 선택된 글자 인덱스
   selectionRange: null,    // 범위 선택 {start, end}
   isDirty: false,          // 변경 여부
 };
+
+/**
+ * API용 block_id 반환 — "tb:" 접두사 제거.
+ * 표점·번역·현토 모두 서버에는 접두사 없이 저장해야
+ * block_id 매칭이 일치한다.
+ */
+function _htApiBlockId() {
+  return hyeontoState.blockId.startsWith("tb:")
+    ? hyeontoState.blockId.slice(3)
+    : hyeontoState.blockId;
+}
 
 
 /* ──────────────────────────
@@ -115,6 +131,14 @@ function deactivateHyeontoMode() {
    블록 선택 드롭다운
    ────────────────────────── */
 
+/**
+ * TextBlock이 있으면 우선 사용, 없으면 LayoutBlock 폴백.
+ * 표점·번역 편집기와 동일한 block_id 체계를 사용한다.
+ *
+ * 왜 이렇게 하는가:
+ *   표점이 TextBlock ID로 저장되므로, 현토에서도 같은 ID를 써야
+ *   표점 데이터를 찾을 수 있다.
+ */
 async function _populateHyeontoBlockSelect() {
   const select = document.getElementById("hyeonto-block-select");
   if (!select) return;
@@ -123,6 +147,49 @@ async function _populateHyeontoBlockSelect() {
 
   if (!viewerState.docId || !viewerState.partId || !viewerState.pageNum) return;
 
+  // TextBlock이 있으면 우선 사용
+  if (interpState.interpId) {
+    try {
+      const tbRes = await fetch(
+        `/api/interpretations/${interpState.interpId}/entities/text_block?page=${viewerState.pageNum}&document_id=${viewerState.docId}`
+      );
+      if (tbRes.ok) {
+        const tbData = await tbRes.json();
+        const textBlocks = (tbData.entities || []).filter((e) => {
+          const refs = e.source_refs || [];
+          const ref = e.source_ref;
+          if (refs.length > 0) return refs.some((r) => r.page === viewerState.pageNum);
+          if (ref) return ref.page === viewerState.pageNum;
+          return false;
+        }).sort((a, b) => (a.sequence_index || 0) - (b.sequence_index || 0));
+
+        if (textBlocks.length > 0) {
+          textBlocks.forEach((tb) => {
+            const opt = document.createElement("option");
+            opt.value = `tb:${tb.id}`;
+            const refs = tb.source_refs || [];
+            const srcLabel = refs.map((r) => r.layout_block_id || "?").join("+");
+            opt.textContent = `#${tb.sequence_index} TextBlock (${srcLabel})`;
+            opt.dataset.text = tb.original_text || "";
+            select.appendChild(opt);
+          });
+
+          if (hyeontoState.blockId && select.querySelector(`option[value="${hyeontoState.blockId}"]`)) {
+            select.value = hyeontoState.blockId;
+          } else if (select.options.length > 1) {
+            select.selectedIndex = 1;
+            hyeontoState.blockId = select.value;
+            _loadHyeontoData();
+          }
+          return;
+        }
+      }
+    } catch {
+      // TextBlock 조회 실패 시 LayoutBlock 폴백
+    }
+  }
+
+  // 폴백: LayoutBlock 기반 (편성 미완료 시)
   try {
     const res = await fetch(
       `/api/documents/${viewerState.docId}/pages/${viewerState.pageNum}/layout?part_id=${viewerState.partId}`
@@ -169,39 +236,123 @@ function _addDefaultBlockOption(select) {
    데이터 로드
    ────────────────────────── */
 
+/**
+ * 현재 블록의 교정 텍스트 + 현토 + 표점을 로드한다.
+ *
+ * 왜 이렇게 하는가:
+ *   blockId가 "tb:UUID" 형식이면 TextBlock에서 교정 텍스트를 가져오고,
+ *   그렇지 않으면 기존처럼 L4 교정 텍스트에서 가져온다 (하위 호환).
+ *   표점 편집기(punctuation-editor.js)와 동일한 패턴.
+ */
 async function _loadHyeontoData() {
   if (!interpState.interpId || !viewerState.pageNum || !hyeontoState.blockId) {
     _renderHyeontoCharArea();
     return;
   }
 
+  const isTextBlock = hyeontoState.blockId.startsWith("tb:");
+
   try {
-    // 원문 + 현토 + 표점을 병렬 로드
-    const [textRes, htRes, punctRes] = await Promise.all([
-      fetch(`/api/documents/${viewerState.docId}/pages/${viewerState.pageNum}/text?part_id=${viewerState.partId}`),
-      fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/hyeonto?block_id=${hyeontoState.blockId}`),
-      fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation?block_id=${hyeontoState.blockId}`),
-    ]);
+    if (isTextBlock) {
+      // ── TextBlock 모드: 최신 교정 텍스트를 우선 사용 ──
+      //
+      // 왜 이렇게 하는가:
+      //   TextBlock의 original_text는 편성(composition) 시점의 스냅샷이다.
+      //   편성 이후에 교감/교정을 수정하면 TextBlock에는 반영되지 않는다.
+      //   따라서 source_refs를 통해 원본 문서의 최신 교정 텍스트를 가져온다.
+      //   교정 텍스트를 못 가져오면 TextBlock 원본을 폴백으로 사용한다.
+      const tbId = hyeontoState.blockId.replace("tb:", "");
+      let tbData = null;
 
-    if (textRes.ok) {
-      const textData = await textRes.json();
-      hyeontoState.originalText = textData.text || "";
-    } else {
-      hyeontoState.originalText = "";
-    }
+      // TextBlock 정보 조회 (source_refs 필요)
+      try {
+        const tbRes = await fetch(
+          `/api/interpretations/${interpState.interpId}/entities/text_block/${tbId}`
+        );
+        if (tbRes.ok) tbData = await tbRes.json();
+      } catch { /* 폴백 처리 아래 */ }
 
-    if (htRes.ok) {
-      const htData = await htRes.json();
-      hyeontoState.annotations = htData.annotations || [];
-    } else {
-      hyeontoState.annotations = [];
-    }
+      // source_refs에서 원본 문서의 교정 텍스트를 가져온다
+      let correctedText = "";
+      if (tbData && tbData.source_refs && tbData.source_refs.length > 0) {
+        const refPages = [...new Set(tbData.source_refs.map((r) => r.page))];
+        const texts = [];
+        for (const refPage of refPages) {
+          try {
+            const ctRes = await fetch(
+              `/api/documents/${viewerState.docId}/pages/${refPage}/corrected-text?part_id=${viewerState.partId}`
+            );
+            if (ctRes.ok) {
+              const ctData = await ctRes.json();
+              // source_refs에 layout_block_id가 있으면 해당 블록만 추출
+              const pageRefs = tbData.source_refs.filter((r) => r.page === refPage);
+              for (const ref of pageRefs) {
+                if (ref.layout_block_id && ctData.blocks) {
+                  const match = ctData.blocks.find((b) => b.block_id === ref.layout_block_id);
+                  if (match) {
+                    texts.push(match.corrected_text || match.original_text || "");
+                    continue;
+                  }
+                }
+                // 블록 매칭 실패 시 전체 교정 텍스트
+                if (texts.length === 0) {
+                  texts.push(ctData.corrected_text || "");
+                }
+              }
+            }
+          } catch { /* skip */ }
+        }
+        correctedText = texts.join("\n");
+      }
 
-    if (punctRes.ok) {
-      const punctData = await punctRes.json();
-      hyeontoState.punctMarks = punctData.marks || [];
+      // 교정 텍스트가 있으면 사용, 없으면 TextBlock 원본 폴백
+      if (correctedText.trim()) {
+        hyeontoState.originalText = correctedText;
+      } else {
+        // 폴백: TextBlock의 원본 텍스트 (편성 시점 스냅샷)
+        const select = document.getElementById("hyeonto-block-select");
+        const selectedOpt = select ? select.querySelector(`option[value="${hyeontoState.blockId}"]`) : null;
+        hyeontoState.originalText = (selectedOpt && selectedOpt.dataset.text)
+          ? selectedOpt.dataset.text
+          : (tbData ? tbData.original_text || "" : "");
+      }
+
+      // 현토 + 표점 로드 (block_id는 TextBlock ID, 접두사 없이)
+      const apiBlockId = tbId;
+      const [htRes, punctRes] = await Promise.all([
+        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/hyeonto?block_id=${apiBlockId}`),
+        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation?block_id=${apiBlockId}`),
+      ]);
+
+      hyeontoState.annotations = htRes.ok ? (await htRes.json()).annotations || [] : [];
+      hyeontoState.punctMarks = punctRes.ok ? (await punctRes.json()).marks || [] : [];
+
     } else {
-      hyeontoState.punctMarks = [];
+      // ── LayoutBlock 모드 (하위 호환) ──
+      // 교정 텍스트 API를 사용하여 해당 블록의 교정된 텍스트를 가져온다.
+      const [textRes, htRes, punctRes] = await Promise.all([
+        fetch(`/api/documents/${viewerState.docId}/pages/${viewerState.pageNum}/corrected-text?part_id=${viewerState.partId}`),
+        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/hyeonto?block_id=${hyeontoState.blockId}`),
+        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation?block_id=${hyeontoState.blockId}`),
+      ]);
+
+      // 교정된 텍스트에서 해당 블록의 텍스트를 추출
+      if (textRes.ok) {
+        const data = await textRes.json();
+        const blocks = data.blocks || [];
+        const match = blocks.find((b) => b.block_id === hyeontoState.blockId);
+        if (match) {
+          hyeontoState.originalText = match.corrected_text || match.original_text || "";
+        } else {
+          // 블록 매칭 실패 시 전체 교정 텍스트 사용
+          hyeontoState.originalText = data.corrected_text || "";
+        }
+      } else {
+        hyeontoState.originalText = "";
+      }
+
+      hyeontoState.annotations = htRes.ok ? (await htRes.json()).annotations || [] : [];
+      hyeontoState.punctMarks = punctRes.ok ? (await punctRes.json()).marks || [] : [];
     }
 
     hyeontoState.isDirty = false;
@@ -521,6 +672,9 @@ async function _saveHyeonto() {
     return;
   }
 
+  // API에 전달할 block_id: "tb:" 접두사 제거
+  const apiBlockId = _htApiBlockId();
+
   const statusEl = document.getElementById("hyeonto-save-status");
   if (statusEl) statusEl.textContent = "저장 중...";
 
@@ -531,7 +685,7 @@ async function _saveHyeonto() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          block_id: hyeontoState.blockId,
+          block_id: apiBlockId,
           annotations: hyeontoState.annotations,
         }),
       }

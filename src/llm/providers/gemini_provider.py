@@ -115,6 +115,81 @@ class GeminiProvider(BaseLlmProvider):
             raw={"model": selected_model},
         )
 
+    async def call_stream(
+        self, prompt, *, system=None, response_format="text",
+        model=None, max_tokens=4096, purpose="text",
+        progress_callback=None, **kwargs,
+    ) -> LlmResponse:
+        """Gemini 네이티브 스트리밍. generate_content_stream() 사용.
+
+        왜 네이티브 스트리밍을 사용하는가:
+            google-genai SDK >=1.0.0은 generate_content_stream()을 지원한다.
+            청크가 도착할 때마다 진행률을 전달하여 실시간 피드백이 가능하다.
+            SDK 버전이 낮아 메서드가 없으면 기본 heartbeat 폴백으로 자동 전환한다.
+        """
+        from google import genai
+        from google.genai import types
+
+        api_key = self.config.get_api_key("gemini")
+        if not api_key:
+            raise LlmProviderError("GOOGLE_API_KEY가 설정되지 않았습니다.")
+
+        client = genai.Client(api_key=api_key)
+        selected_model = model or self.DEFAULT_MODEL
+
+        # generate_content_stream 메서드 확인 — 없으면 heartbeat 폴백
+        if not hasattr(client.aio.models, "generate_content_stream"):
+            return await super().call_stream(
+                prompt, system=system, response_format=response_format,
+                model=model, max_tokens=max_tokens, purpose=purpose,
+                progress_callback=progress_callback, **kwargs,
+            )
+
+        config = types.GenerateContentConfig(
+            max_output_tokens=max_tokens,
+        )
+        if system:
+            config.system_instruction = system
+        if response_format == "json":
+            config.response_mime_type = "application/json"
+
+        t0 = time.monotonic()
+        full_text = ""
+        tokens_out = 0
+        last_report = t0
+
+        async for chunk in client.aio.models.generate_content_stream(
+            model=selected_model,
+            contents=prompt,
+            config=config,
+        ):
+            part_text = chunk.text or ""
+            full_text += part_text
+            tokens_out += 1
+
+            now = time.monotonic()
+            if progress_callback and (now - last_report) >= 1.0:
+                last_report = now
+                progress_callback({
+                    "type": "progress",
+                    "elapsed_sec": round(now - t0, 1),
+                    "tokens": tokens_out,
+                    "provider": self.provider_id,
+                })
+
+        elapsed = time.monotonic() - t0
+
+        return LlmResponse(
+            text=full_text,
+            provider=self.provider_id,
+            model=selected_model,
+            tokens_in=None,
+            tokens_out=tokens_out,
+            cost_usd=self._estimate_cost(selected_model, None, tokens_out),
+            elapsed_sec=round(elapsed, 2),
+            raw={"stream": True, "model": selected_model},
+        )
+
     async def call_with_image(self, prompt, image, *, image_mime="image/png",
                               system=None, response_format="text", model=None,
                               max_tokens=4096, **kwargs) -> LlmResponse:

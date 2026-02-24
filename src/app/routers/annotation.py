@@ -13,10 +13,10 @@ import json
 import logging
 
 from fastapi import APIRouter, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from app._state import get_library_path, _get_llm_router, _call_llm_text
+from app._state import get_library_path, _get_llm_router, _call_llm_text, _call_llm_text_stream
 
 from core.annotation import (
     add_annotation as add_ann,
@@ -1203,3 +1203,122 @@ async def api_llm_annotation(body: AiAnnotationRequest):
         return result
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ──────────────────────────────────────────────────────────
+# SSE 스트리밍 AI 주석 + 일괄 저장
+# ──────────────────────────────────────────────────────────
+#
+# 기존 /api/llm/annotation을 수정하지 않고 /stream 엔드포인트를 추가.
+# 주석 일괄 저장도 N건 순차 POST → 1건 batch POST로 최적화.
+
+
+@router.post("/api/llm/annotation/stream")
+async def api_llm_annotation_stream(body: AiAnnotationRequest):
+    """AI 주석 태깅 SSE 스트리밍.
+
+    기존 api_llm_annotation과 동일한 결과를 반환하되,
+    LLM 응답 대기 중 progress 이벤트를 실시간으로 전달한다.
+    """
+    import asyncio
+    import json as _json
+
+    queue: asyncio.Queue = asyncio.Queue()
+
+    async def _run_llm():
+        await _call_llm_text_stream(
+            "annotation", body.text, queue,
+            force_provider=body.force_provider,
+            force_model=body.force_model,
+        )
+
+    async def _event_generator():
+        task = asyncio.create_task(_run_llm())
+        try:
+            while True:
+                data = await queue.get()
+                event_type = data.get("type", "progress")
+                yield f"data: {_json.dumps(data, ensure_ascii=False)}\n\n"
+                if event_type in ("complete", "error"):
+                    break
+        finally:
+            if not task.done():
+                task.cancel()
+
+    return StreamingResponse(
+        _event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+class AnnotationBatchSaveRequest(BaseModel):
+    """주석 일괄 저장 요청.
+
+    왜 필요한가:
+        AI 태깅 후 N개 주석을 개별 POST로 저장하면 N번의 왕복이 필요하다.
+        이 엔드포인트는 1회 POST로 N개를 저장한다.
+    """
+    annotations: list[dict]
+
+
+@router.post(
+    "/api/interpretations/{interp_id}/pages/{page_num}/annotations/{block_id}/batch"
+)
+async def api_batch_save_annotations(
+    interp_id: str, page_num: int, block_id: str,
+    body: AnnotationBatchSaveRequest,
+):
+    """주석 일괄 저장. N건을 1 POST로 처리.
+
+    입력: annotations — [{target, type, content}, ...] 배열.
+    출력: {saved: N, errors: [...]}
+    """
+    _library_path = get_library_path()
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = _library_path / "interpretations" / interp_id
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."},
+            status_code=404,
+        )
+
+    part_id = "main"
+    data = load_annotations(interp_path, part_id, page_num)
+
+    saved = 0
+    errors = []
+    for i, ann in enumerate(body.annotations):
+        try:
+            annotation = {
+                "target": ann.get("target", {}),
+                "type": ann.get("type", "term"),
+                "content": ann.get("content", {}),
+                "annotator": ann.get("annotator", {
+                    "type": "llm", "model": None, "draft_id": None,
+                }),
+                "status": ann.get("status", "draft"),
+                "reviewed_by": None,
+                "reviewed_at": None,
+            }
+            add_ann(data, block_id, annotation)
+            saved += 1
+        except Exception as e:
+            errors.append({"index": i, "error": str(e)})
+
+    try:
+        save_annotations(interp_path, part_id, page_num, data)
+        try:
+            git_commit_interpretation(
+                interp_path, f"feat: L7 주석 일괄 저장 — page {page_num} ({saved}건)"
+            )
+        except Exception:
+            pass
+        return {"saved": saved, "errors": errors}
+    except Exception as e:
+        return JSONResponse({"error": f"주석 저장 실패: {e}"}, status_code=400)

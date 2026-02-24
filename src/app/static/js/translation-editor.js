@@ -213,25 +213,65 @@ async function _loadTranslationData() {
 
   try {
     if (isTextBlock) {
-      // ── TextBlock 모드 ──
-      // TextBlock의 original_text를 드롭다운 data-text에서 가져오거나 API 호출.
-      const select = document.getElementById("trans-block-select");
-      const selectedOpt = select
-        ? select.querySelector(`option[value="${transState.blockId}"]`)
-        : null;
+      // ── TextBlock 모드: 최신 교정 텍스트를 우선 사용 ──
+      //
+      // 왜 이렇게 하는가:
+      //   TextBlock의 original_text는 편성(composition) 시점의 스냅샷이다.
+      //   편성 이후에 교감/교정을 수정하면 TextBlock에는 반영되지 않는다.
+      //   따라서 source_refs를 통해 원본 문서의 최신 교정 텍스트를 가져온다.
+      //   교정 텍스트를 못 가져오면 TextBlock 원본을 폴백으로 사용한다.
+      let tbData = null;
 
-      if (selectedOpt && selectedOpt.dataset.text) {
-        transState.originalText = selectedOpt.dataset.text;
-      } else {
+      // TextBlock 정보 조회 (source_refs 필요)
+      try {
         const tbRes = await fetch(
           `/api/interpretations/${interpState.interpId}/entities/text_block/${apiBlockId}`
         );
-        if (tbRes.ok) {
-          const tb = await tbRes.json();
-          transState.originalText = tb.original_text || "";
-        } else {
-          transState.originalText = "";
+        if (tbRes.ok) tbData = await tbRes.json();
+      } catch { /* 폴백 처리 아래 */ }
+
+      // source_refs에서 원본 문서의 교정 텍스트를 가져온다
+      let correctedText = "";
+      if (tbData && tbData.source_refs && tbData.source_refs.length > 0) {
+        const refPages = [...new Set(tbData.source_refs.map((r) => r.page))];
+        const texts = [];
+        for (const refPage of refPages) {
+          try {
+            const ctRes = await fetch(
+              `/api/documents/${viewerState.docId}/pages/${refPage}/corrected-text?part_id=${viewerState.partId}`
+            );
+            if (ctRes.ok) {
+              const ctData = await ctRes.json();
+              const pageRefs = tbData.source_refs.filter((r) => r.page === refPage);
+              for (const ref of pageRefs) {
+                if (ref.layout_block_id && ctData.blocks) {
+                  const match = ctData.blocks.find((b) => b.block_id === ref.layout_block_id);
+                  if (match) {
+                    texts.push(match.corrected_text || match.original_text || "");
+                    continue;
+                  }
+                }
+                if (texts.length === 0) {
+                  texts.push(ctData.corrected_text || "");
+                }
+              }
+            }
+          } catch { /* skip */ }
         }
+        correctedText = texts.join("\n");
+      }
+
+      // 교정 텍스트가 있으면 사용, 없으면 TextBlock 원본 폴백
+      if (correctedText.trim()) {
+        transState.originalText = correctedText;
+      } else {
+        const select = document.getElementById("trans-block-select");
+        const selectedOpt = select
+          ? select.querySelector(`option[value="${transState.blockId}"]`)
+          : null;
+        transState.originalText = (selectedOpt && selectedOpt.dataset.text)
+          ? selectedOpt.dataset.text
+          : (tbData ? tbData.original_text || "" : "");
       }
 
       // 표점 + 현토 + 번역을 병렬 로드 (block_id는 접두사 없이)
@@ -247,16 +287,24 @@ async function _loadTranslationData() {
 
     } else {
       // ── LayoutBlock 모드 (하위 호환) ──
+      // 교정 텍스트 API를 사용하여 해당 블록의 교정된 텍스트를 가져온다.
       const [textRes, punctRes, htRes, transRes] = await Promise.all([
-        fetch(`/api/documents/${viewerState.docId}/pages/${viewerState.pageNum}/text?part_id=${viewerState.partId}`),
+        fetch(`/api/documents/${viewerState.docId}/pages/${viewerState.pageNum}/corrected-text?part_id=${viewerState.partId}`),
         fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation?block_id=${apiBlockId}`),
         fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/hyeonto?block_id=${apiBlockId}`),
         fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/translation`),
       ]);
 
+      // 교정된 텍스트에서 해당 블록의 텍스트를 추출
       if (textRes.ok) {
-        const textData = await textRes.json();
-        transState.originalText = textData.text || "";
+        const data = await textRes.json();
+        const blocks = data.blocks || [];
+        const match = blocks.find((b) => b.block_id === apiBlockId);
+        if (match) {
+          transState.originalText = match.corrected_text || match.original_text || "";
+        } else {
+          transState.originalText = data.corrected_text || "";
+        }
       } else {
         transState.originalText = "";
       }
@@ -683,18 +731,16 @@ async function _aiTranslateSingle(sentIdx) {
     if (llmSel.force_provider) reqBody.force_provider = llmSel.force_provider;
     if (llmSel.force_model) reqBody.force_model = llmSel.force_model;
 
-    const resp = await fetch("/api/llm/translation", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(reqBody),
-    });
-
-    if (!resp.ok) {
-      const err = await resp.json();
-      throw new Error(err.error || `HTTP ${resp.status}`);
-    }
-
-    const data = await resp.json();
+    // SSE 스트리밍으로 번역 요청 (실패 시 기존 엔드포인트 폴백)
+    const data = await fetchWithSSE(
+      "/api/llm/translation/stream",
+      reqBody,
+      (progress) => {
+        const sec = progress.elapsed_sec || 0;
+        btns.forEach((b) => { b.textContent = `번역 중... (${sec}초)`; });
+      },
+      "/api/llm/translation"
+    );
     const translationText = data.translation || "";
     if (!translationText) throw new Error("AI 응답에 번역이 없습니다.");
 
@@ -749,18 +795,40 @@ async function _aiTranslateAll() {
   const allBtn = document.getElementById("trans-ai-all-btn");
   if (allBtn) { allBtn.disabled = true; allBtn.textContent = "번역 중..."; }
 
+  // 진행 바 표시
+  if (typeof showEditorProgress === "function") {
+    showEditorProgress("trans", true, `AI 번역 0/${targets.length} 문장`, 0, targets.length);
+  }
+
   let success = 0;
   let fail = 0;
 
-  for (const idx of targets) {
-    try {
-      await _aiTranslateSingle(idx);
-      success++;
-    } catch {
-      fail++;
+  // 2개씩 병렬 처리 (순차보다 ~2배 빠름, 서버 부하 제한)
+  const CHUNK_SIZE = 2;
+  for (let i = 0; i < targets.length; i += CHUNK_SIZE) {
+    const chunk = targets.slice(i, i + CHUNK_SIZE);
+    const results = await Promise.allSettled(
+      chunk.map((idx) => _aiTranslateSingle(idx))
+    );
+    for (const r of results) {
+      if (r.status === "fulfilled") success++;
+      else fail++;
     }
+    // 진행 바 갱신
+    const done = success + fail;
+    if (typeof showEditorProgress === "function") {
+      showEditorProgress(
+        "trans", true,
+        `AI 번역 ${done}/${targets.length} 문장 완료`,
+        done, targets.length
+      );
+    }
+    if (allBtn) allBtn.textContent = `번역 중... (${done}/${targets.length})`;
   }
 
+  if (typeof showEditorProgress === "function") {
+    showEditorProgress("trans", false);
+  }
   if (allBtn) { allBtn.disabled = false; allBtn.textContent = "전체 AI 번역"; }
   showToast(`AI 번역 완료: 성공 ${success}건, 실패 ${fail}건`, 'success');
 }

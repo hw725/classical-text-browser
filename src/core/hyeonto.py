@@ -46,18 +46,26 @@ def load_hyeonto(interp_path: str | Path, part_id: str, page_num: int, block_id:
         block_id — 블록 ID.
     출력: {"block_id": ..., "annotations": [...]}.
           파일 없거나 해당 블록 없으면 빈 annotations 반환.
+
+    파일 경로 우선순위:
+        1. 블록별 파일: {part_id}_page_{NNN}_blk_{block_id[:8]}_hyeonto.json
+        2. 레거시 페이지 파일: {part_id}_page_{NNN}_hyeonto.json (block_id 일치 시만)
     """
     interp_path = Path(interp_path).resolve()
-    file_path = _hyeonto_file_path(interp_path, part_id, page_num)
 
-    if not file_path.exists():
-        return {"block_id": block_id, "annotations": []}
+    # 1순위: 블록별 파일 (한 페이지에 여러 블록 현토 가능)
+    block_file = _hyeonto_block_file_path(interp_path, part_id, page_num, block_id)
+    if block_file.exists():
+        with open(block_file, encoding="utf-8") as f:
+            return json.load(f)
 
-    with open(file_path, encoding="utf-8") as f:
-        data = json.load(f)
-
-    if data.get("block_id") == block_id:
-        return data
+    # 2순위: 레거시 페이지 파일 (하위 호환 — block_id 일치 시만)
+    legacy_file = _hyeonto_file_path(interp_path, part_id, page_num)
+    if legacy_file.exists():
+        with open(legacy_file, encoding="utf-8") as f:
+            data = json.load(f)
+        if data.get("block_id") == block_id:
+            return data
 
     return {"block_id": block_id, "annotations": []}
 
@@ -78,11 +86,16 @@ def save_hyeonto(
         data — {"block_id": ..., "annotations": [...]}.
     출력: 저장된 파일 경로.
     Raises: jsonschema.ValidationError — 스키마 불일치 시.
+
+    저장 경로:
+        블록별 파일로 저장. 한 페이지에 여러 블록의 현토를 각각 저장할 수 있다.
+        {part_id}_page_{NNN}_blk_{block_id[:8]}_hyeonto.json
     """
     validate(instance=data, schema=_get_schema())
 
     interp_path = Path(interp_path).resolve()
-    file_path = _hyeonto_file_path(interp_path, part_id, page_num)
+    block_id = data.get("block_id", "")
+    file_path = _hyeonto_block_file_path(interp_path, part_id, page_num, block_id)
     file_path.parent.mkdir(parents=True, exist_ok=True)
 
     text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
@@ -92,15 +105,36 @@ def save_hyeonto(
 
 
 def _hyeonto_file_path(interp_path: Path, part_id: str, page_num: int) -> Path:
-    """현토 파일 경로 조립.
+    """레거시 현토 파일 경로 조립.
 
     컨벤션: L5_reading/main_text/{part_id}_page_{NNN}_hyeonto.json
+    주의: 이 경로는 페이지당 파일 1개뿐이라 블록별 분리가 안 된다.
+          하위 호환용으로만 사용. 새 저장은 _hyeonto_block_file_path()를 사용.
     """
     return (
         interp_path
         / "L5_reading"
         / "main_text"
         / f"{part_id}_page_{page_num:03d}_hyeonto.json"
+    )
+
+
+def _hyeonto_block_file_path(
+    interp_path: Path, part_id: str, page_num: int, block_id: str,
+) -> Path:
+    """블록별 현토 파일 경로 조립.
+
+    컨벤션: L5_reading/main_text/{part_id}_page_{NNN}_blk_{XXXXXXXX}_hyeonto.json
+    한 페이지에 여러 TextBlock이 있을 때 각각의 현토를 독립적으로 저장한다.
+    block_id가 긴 UUID일 수 있으므로 앞 8자만 사용한다 (표점과 동일한 규칙).
+    """
+    # block_id가 빈 문자열이면 "unknown"으로 대체
+    safe_id = block_id[:8] if block_id else "unknown"
+    return (
+        interp_path
+        / "L5_reading"
+        / "main_text"
+        / f"{part_id}_page_{page_num:03d}_blk_{safe_id}_hyeonto.json"
     )
 
 

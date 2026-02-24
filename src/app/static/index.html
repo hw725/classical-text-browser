@@ -107,6 +107,19 @@
             <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
           </svg>
         </button>
+        <!-- 인용 양식 -->
+        <button
+          class="activity-btn"
+          data-panel="cite-formats"
+          title="인용 양식"
+          aria-label="인용 양식"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 3v7a6 6 0 006 6 6 6 0 006-6V3"/>
+            <line x1="4" y1="21" x2="20" y2="21"/>
+          </svg>
+        </button>
         <div class="activity-spacer"></div>
         <button
           id="theme-toggle"
@@ -753,6 +766,85 @@
               >
                 <div class="placeholder">
                   해석 저장소를 선택하면 비고를 작성할 수 있습니다
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 인용 양식 관리 (액티비티 바 → cite-formats) -->
+          <div
+            class="sidebar-section"
+            id="cite-formats-sidebar-section"
+            style="display: none"
+          >
+            <div class="section-header">인용 양식</div>
+            <div class="cfm-toolbar">
+              <button
+                id="cfm-add-btn"
+                class="text-btn text-btn-primary"
+                title="새 양식 추가"
+              >
+                + 새 양식
+              </button>
+              <span id="cfm-save-status" class="text-save-status"></span>
+            </div>
+            <!-- 양식 목록 -->
+            <div id="cfm-format-list" class="cfm-format-list">
+              <div class="placeholder">
+                양식을 추가하여 학술지별 인용 형식을 관리하세요
+              </div>
+            </div>
+            <!-- 양식 편집 폼 (숨김) -->
+            <div id="cfm-edit-panel" class="cfm-edit-panel" style="display: none">
+              <div class="cfm-edit-title">양식 편집</div>
+              <div class="cfm-edit-form">
+                <label class="cfm-edit-label">
+                  이름:
+                  <input type="text" id="cfm-edit-name"
+                         placeholder="예: 한국고전번역원" />
+                </label>
+                <div class="cite-settings-group">
+                  <div class="cite-settings-group-title">제목 기호</div>
+                  <label class="cite-settings-select-label">
+                    홑낫표 「」 ↔ 홑화살괄호 〈〉
+                    <select id="cfm-opt-bracket-single" class="cite-settings-select">
+                      <option value="none">변환 없음</option>
+                      <option value="corner_to_angle">「」 → 〈〉</option>
+                      <option value="angle_to_corner">〈〉 → 「」</option>
+                    </select>
+                  </label>
+                  <label class="cite-settings-select-label">
+                    겹낫표 『』 ↔ 겹화살괄호 《》
+                    <select id="cfm-opt-bracket-double" class="cite-settings-select">
+                      <option value="none">변환 없음</option>
+                      <option value="corner_to_angle">『』 → 《》</option>
+                      <option value="angle_to_corner">《》 → 『』</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="cite-settings-group">
+                  <label class="cite-settings-checkbox">
+                    <input type="checkbox" id="cfm-opt-wrap-quotes" />
+                    원문을 \u201c\u201d로 감싸기
+                  </label>
+                </div>
+                <div class="cite-settings-group">
+                  <label class="cite-settings-checkbox">
+                    <input type="checkbox" id="cfm-opt-include-trans" checked />
+                    번역 포함
+                  </label>
+                </div>
+                <div class="cite-settings-group">
+                  <div class="cite-settings-group-title">필드 순서</div>
+                  <div id="cfm-field-order-list" class="cite-field-order-list">
+                    <!-- JS에서 동적 생성 -->
+                  </div>
+                </div>
+                <div class="cfm-edit-actions">
+                  <button id="cfm-save-btn" class="text-btn text-btn-primary">저장</button>
+                  <button id="cfm-cancel-btn" class="text-btn">취소</button>
+                  <button id="cfm-delete-btn" class="text-btn text-btn-danger"
+                          style="display: none">삭제</button>
                 </div>
               </div>
             </div>
@@ -2079,6 +2171,21 @@
               ></span>
             </div>
 
+            <!-- AI 표점 진행 바 -->
+            <div
+              id="punct-progress"
+              class="ocr-progress"
+              style="display: none"
+            >
+              <span id="punct-progress-text">AI 표점 처리 중...</span>
+              <div class="ocr-progress-bar">
+                <div
+                  id="punct-progress-fill"
+                  class="ocr-progress-fill"
+                ></div>
+              </div>
+            </div>
+
             <!-- 원문 + 표점 삽입 영역 -->
             <div
               class="punct-char-area"
@@ -2293,6 +2400,21 @@
               </button>
             </div>
 
+            <!-- AI 번역 진행 바 -->
+            <div
+              id="trans-progress"
+              class="ocr-progress"
+              style="display: none"
+            >
+              <span id="trans-progress-text">AI 번역 처리 중...</span>
+              <div class="ocr-progress-bar">
+                <div
+                  id="trans-progress-fill"
+                  class="ocr-progress-fill"
+                ></div>
+              </div>
+            </div>
+
             <!-- 참조 사전 도구 바 -->
             <div class="trans-refdict-toolbar">
               <button
@@ -2436,6 +2558,21 @@
               >
                 리셋
               </button>
+            </div>
+
+            <!-- AI 주석 진행 바 -->
+            <div
+              id="ann-progress"
+              class="ocr-progress"
+              style="display: none"
+            >
+              <span id="ann-progress-text">AI 태깅 처리 중...</span>
+              <div class="ocr-progress-bar">
+                <div
+                  id="ann-progress-fill"
+                  class="ocr-progress-fill"
+                ></div>
+              </div>
             </div>
 
             <!-- 사전형 주석 도구 바 -->
@@ -2782,6 +2919,65 @@
                 ></div>
               </div>
             </div>
+
+            <!-- 내보내기 설정 (접이식) -->
+            <details class="cite-export-settings" id="cite-export-settings">
+              <summary class="punct-section-summary">내보내기 설정</summary>
+              <div class="cite-export-settings-body">
+
+                <!-- 제목 기호 -->
+                <div class="cite-settings-group">
+                  <div class="cite-settings-group-title">제목 기호</div>
+                  <label class="cite-settings-select-label">
+                    홑낫표 「」 ↔ 홑화살괄호 〈〉
+                    <select id="cite-opt-bracket-single" class="cite-settings-select">
+                      <option value="none">변환 없음</option>
+                      <option value="corner_to_angle">「」 → 〈〉</option>
+                      <option value="angle_to_corner">〈〉 → 「」</option>
+                    </select>
+                  </label>
+                  <label class="cite-settings-select-label">
+                    겹낫표 『』 ↔ 겹화살괄호 《》
+                    <select id="cite-opt-bracket-double" class="cite-settings-select">
+                      <option value="none">변환 없음</option>
+                      <option value="corner_to_angle">『』 → 《》</option>
+                      <option value="angle_to_corner">《》 → 『』</option>
+                    </select>
+                  </label>
+                </div>
+
+                <!-- 따옴표 -->
+                <div class="cite-settings-group">
+                  <label class="cite-settings-checkbox">
+                    <input type="checkbox" id="cite-opt-wrap-quotes" />
+                    원문을 \u201c\u201d로 감싸기
+                  </label>
+                </div>
+
+                <!-- 번역 포함 (기존 confirm 대체) -->
+                <div class="cite-settings-group">
+                  <label class="cite-settings-checkbox">
+                    <input type="checkbox" id="cite-opt-include-trans" checked />
+                    번역 포함
+                  </label>
+                </div>
+
+                <!-- 인용 필드 순서 -->
+                <div class="cite-settings-group">
+                  <div class="cite-settings-group-title">
+                    인용 필드 순서
+                    <select id="cite-preset-select" class="cite-preset-select">
+                      <!-- JS에서 getCiteFormatLibrary()로 동적 생성 -->
+                      <option value="custom">사용자 정의</option>
+                    </select>
+                  </div>
+                  <div id="cite-field-order-list" class="cite-field-order-list">
+                    <!-- JS에서 동적 생성 (드래그 가능 아이템) -->
+                  </div>
+                </div>
+
+              </div>
+            </details>
 
             <!-- 내보내기 미리보기 -->
             <pre
@@ -4116,7 +4312,8 @@
     <script src="/static/js/hyeonto-editor.js?v=20260220c"></script>
     <script src="/static/js/translation-editor.js?v=20260220c"></script>
     <script src="/static/js/annotation-editor.js?v=20260220c"></script>
-    <script src="/static/js/citation-editor.js?v=20260220c"></script>
+    <script src="/static/js/cite-format-manager.js?v=20260224"></script>
+    <script src="/static/js/citation-editor.js?v=20260224"></script>
     <script src="/static/js/git-graph.js?v=20260220c"></script>
     <script src="/static/js/reader-line.js?v=20260220c"></script>
     <script src="/static/js/notes-panel.js?v=20260220c"></script>

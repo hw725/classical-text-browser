@@ -190,6 +190,79 @@ class LlmRouter:
             "시도 결과:\n" + "\n".join(f"  - {e}" for e in errors)
         )
 
+    async def call_stream(
+        self,
+        prompt: str,
+        *,
+        system: Optional[str] = None,
+        response_format: str = "text",
+        force_provider: Optional[str] = None,
+        force_model: Optional[str] = None,
+        purpose: str = "text",
+        max_tokens: int = 4096,
+        progress_callback=None,
+        **kwargs,
+    ) -> LlmResponse:
+        """LLM 스트리밍 호출. call()과 동일한 폴백 로직 + 실시간 진행률.
+
+        기존 call()을 수정하지 않고 별도 메서드로 추가.
+        progress_callback: {"type":"progress","elapsed_sec":N,...} 딕셔너리를 받는 콜백.
+        """
+        # ── 명시적 선택 모드 ──
+        if force_provider:
+            provider = self._get_provider(force_provider)
+            if not provider:
+                available = [p.provider_id for p in self.providers]
+                raise LlmProviderError(
+                    f"provider '{force_provider}'을(를) 찾을 수 없습니다. "
+                    f"사용 가능: {available}"
+                )
+            if not await provider.is_available():
+                raise LlmProviderError(
+                    f"provider '{force_provider}'이(가) 현재 사용할 수 없습니다."
+                )
+
+            response = await provider.call_stream(
+                prompt, system=system, response_format=response_format,
+                model=force_model, max_tokens=max_tokens, purpose=purpose,
+                progress_callback=progress_callback, **kwargs,
+            )
+            self.usage_tracker.log(response, purpose=purpose)
+            return response
+
+        # ── 자동 폴백 모드 ──
+        avail_results = await asyncio.gather(
+            *[self.is_available_cached(p) for p in self.providers],
+            return_exceptions=True,
+        )
+
+        errors = []
+        for provider, ok in zip(self.providers, avail_results):
+            if ok is not True:
+                continue
+            try:
+                response = await provider.call_stream(
+                    prompt, system=system, response_format=response_format,
+                    max_tokens=max_tokens, purpose=purpose,
+                    progress_callback=progress_callback, **kwargs,
+                )
+                self.usage_tracker.log(response, purpose=purpose)
+                return response
+
+            except Exception as e:
+                self._avail_cache.pop(provider.provider_id, None)
+                errors.append(f"{provider.provider_id}: {e}")
+                continue
+
+        raise LlmUnavailableError(
+            "사용 가능한 LLM provider가 없습니다.\n"
+            "확인 사항:\n"
+            "  1. Base44: base44 login 후 bridge 스크립트 확인\n"
+            "  2. Ollama: ollama serve\n"
+            "  3. API 키: .env에 OPENAI_API_KEY, GOOGLE_API_KEY 등\n\n"
+            "시도 결과:\n" + "\n".join(f"  - {e}" for e in errors)
+        )
+
     async def call_with_image(
         self,
         prompt: str,

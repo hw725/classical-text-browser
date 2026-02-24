@@ -74,6 +74,57 @@ class BaseLlmProvider(ABC):
         """텍스트 프롬프트로 LLM 호출."""
         ...
 
+    async def call_stream(
+        self,
+        prompt: str,
+        *,
+        system: Optional[str] = None,
+        response_format: str = "text",
+        model: Optional[str] = None,
+        max_tokens: int = 4096,
+        purpose: str = "text",
+        progress_callback=None,
+        **kwargs,
+    ) -> "LlmResponse":
+        """스트리밍 LLM 호출. 기본 구현은 call()을 감싸서 heartbeat를 생성한다.
+
+        왜 이렇게 하는가:
+            네이티브 스트리밍을 지원하지 않는 프로바이더(Base44, Anthropic 등)도
+            heartbeat 이벤트를 통해 사용자에게 '처리 중'임을 알릴 수 있다.
+            네이티브 스트리밍을 지원하는 프로바이더(Ollama, OpenAI, Gemini)는
+            이 메서드를 오버라이드하여 토큰 단위 진행률을 제공한다.
+
+        입력:
+            progress_callback — 선택적 콜백.
+                {"type":"progress","elapsed_sec":N,"provider":"..."} dict를 받는다.
+                SSE 이벤트로 변환하여 프론트엔드에 전달된다.
+        출력: LlmResponse (call()과 동일).
+        """
+        import asyncio
+        import time
+
+        t0 = time.monotonic()
+
+        # call()을 태스크로 실행하면서 2초마다 heartbeat 전송
+        call_task = asyncio.create_task(
+            self.call(
+                prompt, system=system, response_format=response_format,
+                model=model, max_tokens=max_tokens, purpose=purpose,
+                **kwargs,
+            )
+        )
+
+        while not call_task.done():
+            await asyncio.sleep(2.0)
+            if progress_callback and not call_task.done():
+                progress_callback({
+                    "type": "progress",
+                    "elapsed_sec": round(time.monotonic() - t0, 1),
+                    "provider": self.provider_id,
+                })
+
+        return call_task.result()
+
     @abstractmethod
     async def call_with_image(
         self,

@@ -900,13 +900,10 @@ async function _requestAiPunctuation() {
     aiBtn.textContent = "생성 중...";
   }
 
-  // 경과 시간 표시: 1초마다 갱신하여 사용자에게 대기 중임을 알린다.
-  const startTime = Date.now();
-  const elapsedTimer = setInterval(() => {
-    const sec = Math.floor((Date.now() - startTime) / 1000);
-    if (aiBtn) aiBtn.textContent = `생성 중... (${sec}초)`;
-    if (statusEl) statusEl.textContent = `AI 표점 처리 중... ${sec}초 경과`;
-  }, 1000);
+  // SSE 스트리밍 진행 바 표시
+  if (typeof showEditorProgress === "function") {
+    showEditorProgress("punct", true, "AI 표점 처리 중...");
+  }
 
   try {
     // LLM 프로바이더/모델 선택 반영
@@ -940,19 +937,20 @@ async function _requestAiPunctuation() {
     if (llmSel.force_provider) reqBody.force_provider = llmSel.force_provider;
     if (llmSel.force_model) reqBody.force_model = llmSel.force_model;
 
-    // LLM에게 표점 생성 요청
-    const resp = await fetch("/api/llm/punctuation", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(reqBody),
-    });
-
-    if (!resp.ok) {
-      const err = await resp.json();
-      throw new Error(err.error || `HTTP ${resp.status}`);
-    }
-
-    const data = await resp.json();
+    // SSE 스트리밍으로 LLM 표점 요청 (실패 시 기존 엔드포인트 폴백)
+    const data = await fetchWithSSE(
+      "/api/llm/punctuation/stream",
+      reqBody,
+      (progress) => {
+        const sec = progress.elapsed_sec || 0;
+        if (aiBtn) aiBtn.textContent = `생성 중... (${sec}초)`;
+        if (statusEl) statusEl.textContent = `AI 표점 처리 중... ${sec}초 경과`;
+        if (typeof showEditorProgress === "function") {
+          showEditorProgress("punct", true, `AI 표점 처리 중... ${sec}초 경과`);
+        }
+      },
+      "/api/llm/punctuation"
+    );
 
     // AI가 반환한 marks를 적용
     // LLM 인덱스(공백 제거 기준) → targetText 인덱스 → 원문 인덱스로 복원.
@@ -1030,7 +1028,9 @@ async function _requestAiPunctuation() {
   } catch (e) {
     showToast(`AI 표점 실패: ${e.message}`, 'error');
   } finally {
-    clearInterval(elapsedTimer);
+    if (typeof showEditorProgress === "function") {
+      showEditorProgress("punct", false);
+    }
     if (aiBtn) {
       aiBtn.disabled = false;
       aiBtn.textContent = "AI 표점";

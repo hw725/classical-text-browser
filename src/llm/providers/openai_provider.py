@@ -128,6 +128,85 @@ class OpenAiProvider(BaseLlmProvider):
             raw={"id": response.id},
         )
 
+    async def call_stream(
+        self, prompt, *, system=None, response_format="text",
+        model=None, max_tokens=4096, purpose="text",
+        progress_callback=None, **kwargs,
+    ) -> LlmResponse:
+        """OpenAI 네이티브 스트리밍. stream=True로 청크 단위 수신.
+
+        왜 네이티브 스트리밍을 사용하는가:
+            OpenAI SDK는 stream=True를 지원하며, 토큰이 생성될 때마다
+            delta.content로 부분 응답을 받을 수 있다.
+            이를 통해 실시간 진행률 표시가 가능하다.
+        """
+        import openai
+
+        api_key = self.config.get_api_key("openai")
+        if not api_key:
+            raise LlmProviderError("OPENAI_API_KEY가 설정되지 않았습니다.")
+
+        client = openai.AsyncOpenAI(api_key=api_key)
+        selected_model = model or self.DEFAULT_MODEL
+
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+
+        create_kwargs = {
+            "model": selected_model,
+            "messages": messages,
+            "stream": True,
+            "max_completion_tokens": max_tokens,
+        }
+        if response_format == "json":
+            create_kwargs["response_format"] = {"type": "json_object"}
+
+        t0 = time.monotonic()
+        full_text = ""
+        tokens_out = 0
+        last_report = t0
+
+        try:
+            stream = await client.chat.completions.create(**create_kwargs)
+        except openai.BadRequestError as e:
+            if "max_completion_tokens" in str(e):
+                del create_kwargs["max_completion_tokens"]
+                create_kwargs["max_tokens"] = max_tokens
+                stream = await client.chat.completions.create(**create_kwargs)
+            else:
+                raise
+
+        async for chunk in stream:
+            delta = chunk.choices[0].delta if chunk.choices else None
+            if delta and delta.content:
+                full_text += delta.content
+                tokens_out += 1
+
+                now = time.monotonic()
+                if progress_callback and (now - last_report) >= 1.0:
+                    last_report = now
+                    progress_callback({
+                        "type": "progress",
+                        "elapsed_sec": round(now - t0, 1),
+                        "tokens": tokens_out,
+                        "provider": self.provider_id,
+                    })
+
+        elapsed = time.monotonic() - t0
+
+        return LlmResponse(
+            text=full_text,
+            provider=self.provider_id,
+            model=selected_model,
+            tokens_in=None,
+            tokens_out=tokens_out,
+            cost_usd=self._estimate_cost(selected_model, None, tokens_out),
+            elapsed_sec=round(elapsed, 2),
+            raw={"stream": True},
+        )
+
     async def call_with_image(self, prompt, image, *, image_mime="image/png",
                               system=None, response_format="text", model=None,
                               max_tokens=4096, **kwargs) -> LlmResponse:

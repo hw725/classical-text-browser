@@ -17,10 +17,10 @@ import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from app._state import get_library_path, _call_llm_text
+from app._state import get_library_path, _call_llm_text, _call_llm_text_stream
 from core.interpretation import (
     get_layer_content,
     get_page_notes,
@@ -931,3 +931,133 @@ async def api_llm_translation(body: AiTranslationRequest):
         return result
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ───────────────────────────────────────────────────
+# SSE 스트리밍 LLM 표점·번역 API
+# ───────────────────────────────────────────────────
+#
+# 기존 /api/llm/punctuation, /api/llm/translation을 수정하지 않고
+# /stream 접미사 엔드포인트를 추가한다.
+# 프론트엔드는 먼저 /stream을 시도하고, 실패 시 기존 엔드포인트로 폴백한다.
+
+
+@router.post("/api/llm/punctuation/stream")
+async def api_llm_punctuation_stream(body: AiPunctuationRequest):
+    """AI 표점 SSE 스트리밍.
+
+    기존 api_llm_punctuation과 동일한 결과를 반환하되,
+    LLM 응답 대기 중 progress 이벤트를 실시간으로 전달한다.
+
+    SSE 이벤트:
+        progress: {"type":"progress","elapsed_sec":N,...}
+        complete: {"type":"complete","result":{marks:[...],...}}
+        error:    {"type":"error","error":"메시지"}
+    """
+    import asyncio
+    import json as _json
+    import re as _re
+
+    # 공백/줄바꿈 제거
+    clean_text = _re.sub(r'\s+', '', body.text)
+    if not clean_text:
+        return JSONResponse(
+            {"error": "표점할 텍스트가 비어 있습니다 (공백만 포함)."},
+            status_code=400,
+        )
+
+    queue: asyncio.Queue = asyncio.Queue()
+
+    async def _run_llm():
+        """LLM 호출 후 marks 정규화를 수행하여 queue에 넣는다."""
+        await _call_llm_text_stream(
+            "punctuation", clean_text, queue,
+            force_provider=body.force_provider,
+            force_model=body.force_model,
+        )
+
+    async def _event_generator():
+        """SSE 이벤트 생성기. complete 이벤트에서 marks 정규화를 적용."""
+        task = asyncio.create_task(_run_llm())
+        try:
+            while True:
+                data = await queue.get()
+                event_type = data.get("type", "progress")
+
+                # complete 이벤트일 때 marks 정규화 적용
+                if event_type == "complete" and "result" in data:
+                    result = data["result"]
+                    if "marks" in result and isinstance(result["marks"], list):
+                        result["marks"] = _normalize_punct_marks(result["marks"])
+                    else:
+                        # marks가 없으면 표점문에서 역추출 시도
+                        punct_text = None
+                        for key in ("표점문", "punctuated", "result", "text", "output"):
+                            val = result.get(key)
+                            if isinstance(val, str) and len(val) >= len(clean_text):
+                                punct_text = val
+                                break
+                        if punct_text:
+                            result["marks"] = _extract_marks_from_punctuated(
+                                clean_text, punct_text
+                            )
+                        else:
+                            result["marks"] = []
+
+                yield f"data: {_json.dumps(data, ensure_ascii=False)}\n\n"
+                if event_type in ("complete", "error"):
+                    break
+        finally:
+            if not task.done():
+                task.cancel()
+
+    return StreamingResponse(
+        _event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post("/api/llm/translation/stream")
+async def api_llm_translation_stream(body: AiTranslationRequest):
+    """AI 번역 SSE 스트리밍.
+
+    기존 api_llm_translation과 동일한 결과를 반환하되,
+    LLM 응답 대기 중 progress 이벤트를 실시간으로 전달한다.
+    """
+    import asyncio
+    import json as _json
+
+    queue: asyncio.Queue = asyncio.Queue()
+
+    async def _run_llm():
+        await _call_llm_text_stream(
+            "translation", body.text, queue,
+            force_provider=body.force_provider,
+            force_model=body.force_model,
+        )
+
+    async def _event_generator():
+        task = asyncio.create_task(_run_llm())
+        try:
+            while True:
+                data = await queue.get()
+                event_type = data.get("type", "progress")
+                yield f"data: {_json.dumps(data, ensure_ascii=False)}\n\n"
+                if event_type in ("complete", "error"):
+                    break
+        finally:
+            if not task.done():
+                task.cancel()
+
+    return StreamingResponse(
+        _event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )

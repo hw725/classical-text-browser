@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import json
 import logging
+import unicodedata
+from collections import Counter, defaultdict
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -291,6 +293,211 @@ def build_auto_page_mapping(
     ]
 
 
+def _nfc(text: str) -> str:
+    """유니코드 NFC 정규화.
+
+    왜 NFC인가:
+      - 같은 한자가 합성(composed)과 분해(decomposed) 형태로 저장될 수 있다.
+        예: '가' = U+AC00(NFC) vs U+1100+U+1161(NFD)
+      - OCR 출력과 HWP/PDF 추출본의 인코딩이 다르면 동일 글자도 불일치.
+      - NFC는 합성 형태로 통일하되, NFKC와 달리 호환 분해를 하지 않아
+        한자의 의미 구분 (예: ﬀ→ff 같은 변환)을 방지한다.
+    """
+    return unicodedata.normalize("NFC", text)
+
+
+def _build_ngram_index(text: str, n: int = 5) -> dict[str, list[int]]:
+    """텍스트의 n-gram 인덱스를 구축한다.
+
+    왜 이렇게 하는가:
+      앵커를 텍스트에서 찾을 때 str.find() 정확 매칭이 실패하면,
+      기존에는 슬라이딩 윈도우로 SequenceMatcher를 매번 호출했다 (O(n*m)).
+      n-gram 인덱스를 한 번 구축하면, 이후 앵커 탐색은 후보 위치를
+      O(1)로 좁힌 뒤 후보만 검증하므로 훨씬 빠르다.
+
+    입력:
+        text — 인덱싱할 텍스트 (한자만 추출된 문자열)
+        n — n-gram 크기 (기본 5)
+    출력: {n-gram문자열: [등장위치, ...]} 매핑
+    """
+    index: dict[str, list[int]] = defaultdict(list)
+    for i in range(len(text) - n + 1):
+        index[text[i:i + n]].append(i)
+    return index
+
+
+def _find_anchor_in_index(
+    anchor: str,
+    search_start: int,
+    ngram_index: dict[str, list[int]],
+    han_string: str,
+    ngram_size: int = 5,
+) -> tuple[int, float]:
+    """n-gram 인덱스를 사용하여 앵커를 빠르게 탐색한다.
+
+    왜 이렇게 하는가:
+      기존 퍼지 매칭은 슬라이딩 윈도우 전수 탐색으로 느렸다.
+      n-gram 인덱스에서 앵커의 부분 n-gram들이 출현하는 위치를 모아,
+      다수가 겹치는 위치를 후보로 추리면 검증 범위를 95% 이상 줄인다.
+
+    입력:
+        anchor — 탐색할 앵커 문자열
+        search_start — 검색 시작 위치 (이전 매칭 이후)
+        ngram_index — _build_ngram_index()로 구축한 인덱스
+        han_string — 전체 한자 문자열
+        ngram_size — 인덱스에 사용된 n-gram 크기
+    출력: (위치, 신뢰도) 튜플. 실패 시 (-1, 0.0).
+    """
+    from difflib import SequenceMatcher
+
+    anchor_len = len(anchor)
+
+    # 1차: 정확 매칭 (가장 빠름)
+    pos = han_string.find(anchor, search_start)
+    if pos >= 0:
+        return pos, 1.0
+
+    if anchor_len < ngram_size:
+        # 앵커가 n-gram보다 짧으면 단순 슬라이딩 윈도우
+        return _fuzzy_search_range(
+            anchor, han_string, search_start, len(han_string),
+        )
+
+    # 2차: n-gram 후보 추출
+    # 앵커에서 n-gram을 겹침 없이 추출 (stride = ngram_size // 2 + 1)
+    stride = max(1, ngram_size // 2 + 1)
+    sub_ngrams = []
+    for i in range(0, anchor_len - ngram_size + 1, stride):
+        ng = anchor[i:i + ngram_size]
+        sub_ngrams.append((ng, i))  # (n-gram, 앵커 내 오프셋)
+
+    if not sub_ngrams:
+        return -1, 0.0
+
+    # 각 n-gram의 출현 위치에서 앵커 시작 위치를 역산
+    pos_counter: Counter = Counter()
+    for ng, offset in sub_ngrams:
+        for hit in ngram_index.get(ng, []):
+            # 이 n-gram이 앵커의 offset 위치에 있다면, 앵커 시작 = hit - offset
+            estimated_start = hit - offset
+            if estimated_start >= search_start:
+                pos_counter[estimated_start] += 1
+
+    if not pos_counter:
+        return -1, 0.0
+
+    # 절반 이상의 n-gram이 지목한 위치만 후보로 채택
+    min_votes = max(1, len(sub_ngrams) // 2)
+    candidates = sorted(
+        pos for pos, cnt in pos_counter.items() if cnt >= min_votes
+    )
+
+    if not candidates:
+        # 투표 실패 시, 가장 많은 표를 받은 위치 1개라도 검증
+        best_candidate = pos_counter.most_common(1)[0][0]
+        candidates = [best_candidate]
+
+    # 동적 임계값: 앵커 길이에 비례 (긴 앵커일수록 엄격)
+    threshold = max(0.6, 1.0 - (2.0 / anchor_len))
+
+    # 후보에서만 SequenceMatcher 실행
+    best_pos = -1
+    best_ratio = 0.0
+    for cand in candidates:
+        end = cand + anchor_len
+        if end > len(han_string):
+            end = len(han_string)
+        window = han_string[cand:end]
+        if not window:
+            continue
+        ratio = SequenceMatcher(None, anchor, window).ratio()
+        if ratio > best_ratio:
+            best_ratio = ratio
+            best_pos = cand
+
+    if best_ratio >= threshold:
+        return best_pos, best_ratio
+
+    return -1, best_ratio
+
+
+def _fuzzy_search_range(
+    anchor: str,
+    han_string: str,
+    start: int,
+    end: int,
+) -> tuple[int, float]:
+    """지정 범위 내에서 슬라이딩 윈도우 퍼지 매칭을 수행한다.
+
+    캐스케이드 복구(Pass 2)와 짧은 앵커 처리에 사용.
+    범위를 제한하여 전수 탐색의 비용을 줄인다.
+
+    입력:
+        anchor — 탐색할 앵커
+        han_string — 전체 한자 문자열
+        start, end — 검색 범위
+    출력: (위치, 유사도) 튜플
+    """
+    from difflib import SequenceMatcher
+
+    anchor_len = len(anchor)
+    # 동적 임계값
+    threshold = max(0.6, 1.0 - (2.0 / anchor_len)) if anchor_len > 2 else 0.6
+
+    best_pos = -1
+    best_ratio = 0.0
+    search_end = min(end, len(han_string))
+
+    for i in range(start, max(start, search_end - anchor_len + 1)):
+        window = han_string[i:i + anchor_len]
+        ratio = SequenceMatcher(None, anchor, window).ratio()
+        if ratio > best_ratio:
+            best_ratio = ratio
+            best_pos = i
+
+    if best_ratio >= threshold:
+        return best_pos, best_ratio
+    return -1, best_ratio
+
+
+def _extract_multi_anchors(
+    page_han: str,
+    anchor_length: int,
+) -> list[str]:
+    """한 페이지의 한자 문자열에서 다중 앵커(시작부·중간부·끝부)를 추출한다.
+
+    왜 다중 앵커인가:
+      단일 앵커(중간부만)는 해당 위치의 OCR 오류 하나로 매칭이 실패한다.
+      3개 앵커를 추출하여 투표하면, 1개가 오류여도 나머지 2개로 복구 가능.
+      또한 시작부·끝부 앵커는 페이지 경계 추정에도 직접 도움이 된다.
+
+    입력:
+        page_han — 페이지의 한자만 추출한 문자열
+        anchor_length — 각 앵커의 길이
+    출력: 앵커 문자열 리스트 (최대 3개, 길이 미달 시 1개)
+    """
+    n = len(page_han)
+    if n < anchor_length:
+        # 앵커 길이에 미달 → 전체를 단일 앵커로
+        return [page_han] if page_han else []
+
+    if n < anchor_length * 2:
+        # 앵커 2개를 겹침 없이 추출하기 어려움 → 시작부·끝부 2개
+        return [
+            page_han[:anchor_length],
+            page_han[n - anchor_length:],
+        ]
+
+    # 3개 앵커: 시작부, 중간부, 끝부
+    mid = n // 2
+    half = anchor_length // 2
+    return [
+        page_han[:anchor_length],                              # 시작부
+        page_han[mid - half:mid - half + anchor_length],       # 중간부
+        page_han[n - anchor_length:],                          # 끝부
+    ]
+
+
 def align_text_to_pages(
     page_texts: list[dict],
     imported_text: str,
@@ -305,13 +512,14 @@ def align_text_to_pages(
       한자 시퀀스는 유니코드 블록이 독특하여 15자면 거의 고유한 지문이 된다.
       페이지 순서가 보장되므로 순차 검색으로 효율적 매칭이 가능하다.
 
-    알고리즘 (한자 앵커 순차 매칭):
+    알고리즘 (다중 앵커 투표 + 해시 탐색 + 캐스케이드 복구):
+      0. NFC 유니코드 정규화로 인코딩 차이를 제거
       1. 외부 텍스트에서 한자(\\p{Han})만 추출 → han_string + 위치 맵
-      2. 각 페이지의 기존 텍스트에서 한자 추출 → 중간 N자를 앵커로 사용
-      3. han_string에서 앵커를 순차 검색 (이전 매칭 위치 이후부터)
-      4. 앵커 위치를 원본 텍스트 위치로 역매핑하여 페이지 경계 결정
-      5. 정확 매칭 실패 시 difflib로 퍼지 매칭 폴백
-      6. OCR 텍스트가 없으면 균등 분할 폴백
+      2. han_string의 n-gram 인덱스 구축 (1회, 이후 앵커 탐색에 재사용)
+      3. 각 페이지에서 다중 앵커(시작·중간·끝) 추출 + 투표로 위치 결정
+      4. Pass 1 실패한 앵커를 인접 성공 위치 범위에서 재탐색 (캐스케이드 복구)
+      5. 앵커 위치를 원본 텍스트 위치로 역매핑하여 페이지 경계 결정
+      6. 미매칭 페이지를 인접 경계에서 균등 보간
 
     입력:
         page_texts — [{page_num, text}] 기존 문헌의 페이지별 OCR/L4 텍스트
@@ -323,11 +531,13 @@ def align_text_to_pages(
             matched_text: str,      # 외부 텍스트 중 이 페이지에 해당하는 부분
             ocr_preview: str,       # 기존 텍스트 미리보기 (첫 80자)
             confidence: float,      # 매칭 신뢰도 (0.0~1.0)
-            anchor: str,            # 사용된 앵커 문자열
+            anchor: str,            # 사용된 대표 앵커 문자열
         }]
     """
     import regex
-    from difflib import SequenceMatcher
+
+    # ── 0단계: NFC 정규화 ──
+    imported_text = _nfc(imported_text)
 
     # ── 1단계: 외부 텍스트에서 한자 추출 + 위치 맵 구축 ──
     # han_to_pos[i] = imported_text에서 i번째 한자의 실제 위치
@@ -349,80 +559,80 @@ def align_text_to_pages(
             "anchor": "",
         }]
 
-    # ── 2단계: 각 페이지의 한자 앵커 추출 ──
-    page_anchors: list[dict] = []
-    for page in page_texts:
-        page_han = "".join(regex.findall(r"\p{Han}", page.get("text", "")))
-        if len(page_han) >= anchor_length:
-            # 중간 부분에서 앵커 추출 (OCR 오류가 가장 적은 영역)
-            mid = len(page_han) // 2
-            half = anchor_length // 2
-            anchor = page_han[mid - half : mid - half + anchor_length]
-        elif page_han:
-            anchor = page_han  # 짧으면 전체 사용
-        else:
-            anchor = ""
-        page_anchors.append({
-            "page_num": page["page_num"],
-            "anchor": anchor,
-            "page_han": page_han,
-            "ocr_preview": page.get("text", "").strip()[:80],
-        })
+    # ── 2단계: n-gram 인덱스 구축 ──
+    NGRAM = 5
+    ngram_index = _build_ngram_index(han_string, NGRAM)
 
-    # ── 3단계: 순차 앵커 매칭 ──
-    # 각 앵커를 han_string에서 찾아 매칭 위치 결정
-    match_positions: list[dict] = []  # [{han_pos, confidence, anchor}]
+    # ── 3단계: 각 페이지의 다중 앵커 추출 + 투표 매칭 ──
+    page_anchors: list[dict] = []
+    match_positions: list[dict] = []
     search_start = 0
 
-    for pa in page_anchors:
-        anchor = pa["anchor"]
-        if not anchor:
+    for page in page_texts:
+        page_text = _nfc(page.get("text", ""))
+        page_han = "".join(regex.findall(r"\p{Han}", page_text))
+        anchors = _extract_multi_anchors(page_han, anchor_length)
+        ocr_preview = page_text.strip()[:80]
+
+        page_anchors.append({
+            "page_num": page["page_num"],
+            "anchors": anchors,
+            "page_han": page_han,
+            "ocr_preview": ocr_preview,
+        })
+
+        if not anchors:
             match_positions.append({
                 "han_pos": -1, "confidence": 0.0, "anchor": "",
             })
             continue
 
-        # 정확 매칭 시도
-        pos = han_string.find(anchor, search_start)
-        if pos >= 0:
+        # 각 앵커를 독립적으로 탐색
+        anchor_results: list[tuple[int, float, str]] = []  # (pos, confidence, anchor)
+        for anc in anchors:
+            pos, conf = _find_anchor_in_index(
+                anc, search_start, ngram_index, han_string, NGRAM,
+            )
+            anchor_results.append((pos, conf, anc))
+
+        # 성공한 앵커들 (pos >= 0)
+        successes = [(p, c, a) for p, c, a in anchor_results if p >= 0]
+
+        if len(successes) >= 2:
+            # 2개 이상 성공 → 중앙값 위치, 평균 신뢰도
+            positions = sorted(s[0] for s in successes)
+            median_pos = positions[len(positions) // 2]
+            avg_conf = sum(s[1] for s in successes) / len(successes)
+            best_anchor = max(successes, key=lambda s: s[1])[2]
             match_positions.append({
-                "han_pos": pos, "confidence": 1.0, "anchor": anchor,
+                "han_pos": median_pos,
+                "confidence": avg_conf,
+                "anchor": best_anchor,
             })
-            search_start = pos + len(anchor)
-            continue
-
-        # 정확 매칭 실패 → 퍼지 매칭 (슬라이딩 윈도우)
-        best_pos = -1
-        best_ratio = 0.0
-        window_size = len(anchor)
-        # 검색 범위 제한: search_start부터 합리적 범위까지
-        search_end = min(len(han_string), search_start + window_size * 20)
-
-        for i in range(search_start, max(search_start, search_end - window_size + 1)):
-            window = han_string[i : i + window_size]
-            ratio = SequenceMatcher(None, anchor, window).ratio()
-            if ratio > best_ratio:
-                best_ratio = ratio
-                best_pos = i
-
-        if best_ratio >= 0.6:  # 60% 이상 일치하면 매칭으로 인정
+            search_start = median_pos + anchor_length
+        elif len(successes) == 1:
+            # 1개만 성공 → 해당 위치 사용, 신뢰도 페널티 (×0.8)
+            pos, conf, anc = successes[0]
             match_positions.append({
-                "han_pos": best_pos, "confidence": best_ratio, "anchor": anchor,
+                "han_pos": pos,
+                "confidence": conf * 0.8,
+                "anchor": anc,
             })
-            search_start = best_pos + window_size
+            search_start = pos + anchor_length
         else:
+            # 모두 실패 → 가장 높은 유사도의 앵커 정보 보존
+            best = max(anchor_results, key=lambda x: x[1])
             match_positions.append({
-                "han_pos": -1, "confidence": best_ratio, "anchor": anchor,
+                "han_pos": -1,
+                "confidence": best[1],
+                "anchor": best[2],
             })
 
-    # ── 4단계: 앵커 위치 → 페이지 경계 계산 ──
-    # 앵커는 각 페이지의 **중간**에서 추출했으므로,
-    # 페이지 경계는 연속된 앵커 위치의 중간점으로 설정한다.
-    #   Page 1: 0 ~ mid(anchor1, anchor2)
-    #   Page 2: mid(anchor1, anchor2) ~ mid(anchor2, anchor3)
-    #   Page N: mid(anchorN-1, anchorN) ~ end
+    # ── 4단계: 캐스케이드 복구 (Pass 2) ──
+    # 실패한 앵커를 인접 성공 위치 범위 내에서 재탐색
+    _recover_failed_matches(match_positions, page_anchors, han_string, NGRAM, ngram_index)
 
-    # 앵커 위치를 실제 텍스트 위치로 변환
+    # ── 5단계: 앵커 위치 → 페이지 경계 계산 ──
     anchor_text_positions: list[int] = []
     for mp in match_positions:
         if mp["han_pos"] >= 0 and mp["han_pos"] < len(han_to_pos):
@@ -436,11 +646,11 @@ def align_text_to_pages(
     # 앵커 중간점으로 페이지 경계 생성
     page_boundaries: list[int] = [0]  # 첫 페이지는 항상 0에서 시작
     for i in range(len(anchor_text_positions) - 1):
-        mid = (anchor_text_positions[i] + anchor_text_positions[i + 1]) // 2
-        page_boundaries.append(mid)
+        mid_pt = (anchor_text_positions[i] + anchor_text_positions[i + 1]) // 2
+        page_boundaries.append(mid_pt)
     page_boundaries.append(len(imported_text))  # 마지막 경계 = 텍스트 끝
 
-    # ── 5단계: 결과 생성 ──
+    # ── 6단계: 결과 생성 ──
     results: list[dict] = []
     for idx, pa in enumerate(page_anchors):
         start = page_boundaries[idx]
@@ -456,6 +666,85 @@ def align_text_to_pages(
         })
 
     return results
+
+
+def _recover_failed_matches(
+    match_positions: list[dict],
+    page_anchors: list[dict],
+    han_string: str,
+    ngram_size: int,
+    ngram_index: dict[str, list[int]],
+) -> None:
+    """Pass 1에서 실패한 앵커를 인접 성공 위치 범위 내에서 재탐색한다.
+
+    왜 이렇게 하는가:
+      순차 매칭에서 한 페이지가 실패하면 search_start가 정체하여
+      후속 페이지도 연쇄 실패한다. Pass 2에서는 성공한 앵커 쌍 사이의
+      범위만 검색하므로 안전하게 복구할 수 있다.
+
+    입력:
+        match_positions — Pass 1 결과 리스트 (제자리 수정)
+        page_anchors — 페이지별 앵커 정보
+        han_string — 전체 한자 문자열
+        ngram_size — n-gram 크기
+        ngram_index — n-gram 인덱스
+    """
+    n = len(match_positions)
+    if n == 0:
+        return
+
+    # 성공한 앵커의 인덱스와 위치
+    success_indices = [
+        (i, mp["han_pos"])
+        for i, mp in enumerate(match_positions) if mp["han_pos"] >= 0
+    ]
+
+    for i, mp in enumerate(match_positions):
+        if mp["han_pos"] >= 0:
+            continue  # 이미 성공
+
+        anchors = page_anchors[i].get("anchors", [])
+        if not anchors:
+            continue
+
+        # 직전·직후 성공 위치를 찾아 검색 범위 결정
+        prev_pos = 0
+        next_pos = len(han_string)
+        for si, sp in success_indices:
+            if si < i:
+                prev_pos = max(prev_pos, sp)
+            elif si > i:
+                next_pos = min(next_pos, sp)
+                break  # 가장 가까운 후속 성공만 필요
+
+        # 범위가 너무 좁으면 건너뛰기
+        if next_pos - prev_pos < 3:
+            continue
+
+        # 각 앵커를 축소된 범위에서 재탐색
+        best_pos = -1
+        best_conf = 0.0
+        best_anchor = mp["anchor"]
+        for anc in anchors:
+            # n-gram 인덱스 기반 탐색 (범위를 search_start로 제한)
+            pos, conf = _find_anchor_in_index(
+                anc, prev_pos, ngram_index, han_string, ngram_size,
+            )
+            # 범위 내인지 확인
+            if pos >= 0 and prev_pos <= pos <= next_pos and conf > best_conf:
+                best_conf = conf
+                best_pos = pos
+                best_anchor = anc
+
+        if best_pos >= 0:
+            # 복구 성공 — 신뢰도에 복구 페널티 적용 (×0.9)
+            mp["han_pos"] = best_pos
+            mp["confidence"] = best_conf * 0.9
+            mp["anchor"] = best_anchor
+            logger.info(
+                "캐스케이드 복구 성공: 페이지 %s (위치=%d, 신뢰도=%.2f)",
+                page_anchors[i]["page_num"], best_pos, mp["confidence"],
+            )
 
 
 def _interpolate_missing(boundaries: list[int], total_length: int) -> None:

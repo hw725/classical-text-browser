@@ -33,9 +33,15 @@ _variant_dict_name: str | None = None  # 현재 로드된 사전 파일명
 
 
 def _get_resources_dir() -> str:
-    """resources/ 디렉토리의 절대 경로를 반환한다."""
+    """resources/ 디렉토리의 절대 경로를 반환한다.
+
+    왜 3단계 상위인가:
+        이 파일은 src/app/routers/alignment.py에 위치한다.
+        routers/ → app/ → src/ → 프로젝트루트 (3단계)
+        resources/는 프로젝트 루트에 있으므로 3번 올라가야 한다.
+    """
     return os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "..", "resources")
+        os.path.join(os.path.dirname(__file__), "..", "..", "..", "resources")
     )
 
 
