@@ -214,7 +214,7 @@
         { "type": "null" },
         {
           "type": "object",
-          "additionalProperties": { "type": "string" }
+          "additionalProperties": { "type": ["string", "null"] }
         }
       ],
       "default": null
@@ -286,7 +286,7 @@
                 { "type": "null" },
                 {
                   "type": "object",
-                  "additionalProperties": { "type": "string" }
+                  "additionalProperties": { "type": ["string", "null"] }
                 }
               ]
             },
