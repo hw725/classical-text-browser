@@ -43,6 +43,7 @@ paddleocr = [
 # 원본: https://github.com/ndl-lab/ndlocr-lite (CC BY 4.0, National Diet Library, Japan)
 ndlocr = [
     "onnxruntime>=1.20.0",
+    "opencv-python-headless>=4.8.0",
     "networkx>=3.0",
     "ordered-set>=4.1.0",
     "tqdm>=4.60.0",
@@ -53,6 +54,21 @@ ndlocr = [
 # 원본: https://github.com/ndl-lab/ndlkotenocr-lite (CC BY 4.0, National Diet Library, Japan)
 ndlkotenocr = [
     "onnxruntime>=1.20.0",
+    "opencv-python-headless>=4.8.0",
+    "networkx>=3.0",
+    "ordered-set>=4.1.0",
+    "tqdm>=4.60.0",
+]
+# NDL古典籍OCR Full (TrOCR) 선택 설치: uv sync --extra ndlkotenocr-full
+# PyTorch + HuggingFace TrOCR 기반. CUDA GPU 권장 (CPU도 동작하나 느림).
+# RTMDet ONNX 레이아웃은 ndlocr/ndlkotenocr extra와 의존성 공유.
+# 원본: https://github.com/ndl-lab/ndlkotenocr_cli (CC BY 4.0, National Diet Library, Japan)
+ndlkotenocr-full = [
+    "torch>=2.6.0",
+    "torchvision>=0.21.0",
+    "transformers>=4.47.0",
+    "onnxruntime>=1.20.0",
+    "opencv-python-headless>=4.8.0",
     "networkx>=3.0",
     "ordered-set>=4.1.0",
     "tqdm>=4.60.0",
@@ -81,3 +97,16 @@ select = ["E", "F", "I", "W"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# ── PyTorch CUDA 인덱스 설정 ──
+# torch/torchvision은 CUDA 빌드를 PyTorch 전용 인덱스에서 가져온다.
+# explicit = true → 이 인덱스는 torch/torchvision만 사용 (다른 패키지는 PyPI에서).
+# CUDA 12.4 기준. 다른 CUDA 버전이 필요하면 URL의 cu124를 변경.
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu124" }
+torchvision = { index = "pytorch-cu124" }

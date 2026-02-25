@@ -90,17 +90,35 @@ class OcrEngineRegistry:
         import 실패 = 해당 엔진의 의존성이 설치되지 않음 → 건너뜀.
 
         등록 순서 (= 드롭다운 표시 순서, 첫 available이 기본 엔진):
-          1. NDL古典籍OCR-Lite — 고전적(古典籍) 전용, 변체가나/고서체/한문 특화
-          2. NDLOCR-Lite — 근현대 인쇄 자료 범용
-          3. LLM Vision OCR — LLM 비전 기반 (느릴 수 있음)
-          4. PaddleOCR — Python 3.13에서 미지원, 맨 뒤 배치
+          1. NDL古典籍OCR Full (TrOCR) — 최고 품질, torch+GPU 필요
+          2. NDL古典籍OCR-Lite — 고전적(古典籍) 전용, 경량 ONNX
+          3. NDLOCR-Lite — 근현대 인쇄 자료 범용
+          4. LLM Vision OCR — LLM 비전 기반 (느릴 수 있음)
+          5. PaddleOCR — Python 3.13에서 미지원, 맨 뒤 배치
 
         새 엔진을 추가하려면:
           1. BaseOcrEngine을 상속하는 클래스를 만든다.
           2. 여기에 try/except 블록을 추가한다.
           paddleocr_engine.py를 참고하라.
         """
-        # ── 1. NDL古典籍OCR-Lite (고전적 전용 — 최우선 등록) ──
+        # ── 1. NDL古典籍OCR Full (TrOCR — 최고 품질, GPU 필요) ──
+        # RTMDet ONNX(lite 공유) + TrOCR PyTorch(full) 하이브리드 엔진.
+        # torch + transformers 미설치 시 is_available()=False → 등록하지 않음.
+        # 원본: https://github.com/ndl-lab/ndlkotenocr_cli (CC BY 4.0)
+        try:
+            from .ndlkotenocr_full_engine import NdlkotenOcrFullEngine
+            engine = NdlkotenOcrFullEngine()
+            if engine.is_available():
+                self.register(engine)
+            else:
+                logger.debug(
+                    "NDL古典籍OCR Full 건너뜀 (torch/transformers 미설치). "
+                    "설치: uv sync --extra ndlkotenocr-full"
+                )
+        except Exception as e:
+            logger.debug(f"NDL古典籍OCR Full 등록 건너뜀: {e}")
+
+        # ── 2. NDL古典籍OCR-Lite (고전적 전용 — 경량 ONNX) ──
         # 에도 이전 와고서, 청대 이전 한적 등 고전적 자료에 특화.
         # RTMDet(레이아웃) + 단일 PARSeq(문자 인식). ONNX 기반 오프라인.
         # 원본: https://github.com/ndl-lab/ndlkotenocr-lite (CC BY 4.0)
@@ -116,7 +134,7 @@ class OcrEngineRegistry:
         except Exception as e:
             logger.warning(f"NDL古典籍OCR-Lite 등록 실패: {e}")
 
-        # ── 2. NDLOCR-Lite (근현대 자료 범용) ──
+        # ── 3. NDLOCR-Lite (근현대 자료 범용) ──
         # DEIM(레이아웃) + 3단계 PARSeq 캐스케이드(문자 인식). ONNX 기반 오프라인.
         # PaddleOCR이 동작하지 않는 Python 3.13 환경의 대안.
         # 원본: https://github.com/ndl-lab/ndlocr-lite (CC BY 4.0)
@@ -132,7 +150,7 @@ class OcrEngineRegistry:
         except Exception as e:
             logger.warning(f"NDLOCR-Lite 등록 실패: {e}")
 
-        # ── 3. LLM Vision OCR (느릴 수 있음) ──
+        # ── 4. LLM Vision OCR (느릴 수 있음) ──
         # LLM 라우터의 비전 기능 사용, 별도 설치 불필요.
         # 라우터는 나중에 서버에서 set_router()로 주입한다.
         try:
@@ -145,7 +163,7 @@ class OcrEngineRegistry:
         except Exception as e:
             logger.warning(f"LLM Vision OCR 초기화 실패: {e}")
 
-        # ── 4. PaddleOCR (맨 뒤 — Python 3.13 미지원) ──
+        # ── 5. PaddleOCR (맨 뒤 — Python 3.13 미지원) ──
         # 별도 설치 필요: uv sync --extra paddleocr
         # 미설치 시에도 등록 → list_engines()에서 available=false로 표시.
         # 왜: 프론트엔드에서 "PaddleOCR (사용 불가)" 옵션을 보여주어

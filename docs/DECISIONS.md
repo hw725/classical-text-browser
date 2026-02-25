@@ -991,6 +991,7 @@ Selection API가 반환하는 문자 오프셋에 표점 문자가 포함되어
 - [x] NDLOCR-Lite (근현대 범용) 통합 → D-038
 - [x] NDL古典籍OCR-Lite (고전적 전용) 통합 → D-039
 - [x] PaddleOCR 레이스 컨디션 수정 → D-039
+- [x] NDL古典籍OCR Full (TrOCR, 하이브리드) 통합 → D-044
 - [ ] OCR 엔진 비교 평가 → Phase 10 이후
 
 ### LLM 협업
@@ -1427,6 +1428,60 @@ GUI에서 "이전 결과와 같다"는 보고. 원인 조사 결과 프론트엔
 - 풀 모델의 PARSeq는 캐스케이드(3단계) 구조일 수 있다.
   단일 모델만 사용하는 현재 코드로는 동작하지 않으며,
   캐스케이드 지원이 필요하면 `ndlocr_engine.py`의 패턴을 참고하여 확장.
+
+---
+
+## D-044: NDL古典籍OCR Full (TrOCR) — 하이브리드 고품질 OCR 엔진
+
+**날짜**: 2026-02-25
+
+**맥락**: D-039에서 통합한 NDL古典籍OCR-Lite의 PARSeq-tiny 모델은
+경량(~37MB)이지만 인식 정확도에 한계가 있다(D-043).
+NDL古典籍OCR 풀 버전(ndlkotenocr_cli ver.3)은 TrOCR 기반으로
+정확도가 훨씬 높지만, PyTorch + GPU가 필요하다.
+
+**결정**: RTMDet ONNX (lite) + TrOCR PyTorch (full) 하이브리드 엔진을 추가한다.
+
+| 구성요소 | lite 엔진 | full 엔진 (하이브리드) |
+|----------|----------|----------------------|
+| 레이아웃 탐지 | RTMDet ONNX (~38MB) | RTMDet ONNX (lite 공유) |
+| 문자 인식 | PARSeq-tiny ONNX (~37MB) | TrOCR PyTorch (~450MB) |
+| GPU 필요 | 아니오 | 사실상 필요 (CPU도 동작하나 매우 느림) |
+| 의존성 | onnxruntime (~50MB) | torch+CUDA ~4GB, transformers |
+
+**하이브리드 접근 이유**:
+- 업스트림 풀 버전은 CascadeRCNN(mmcv+mmdet)을 레이아웃에 사용하지만,
+  Windows에서 mmcv/mmdet 설치가 극히 어려움
+- RTMDet ONNX는 이미 검증되었고 동일한 클래스(16클래스) 구조를 공유
+- 품질 향상의 대부분은 문자 인식(TrOCR)에서 발생
+
+**등록 우선순위** (registry.py auto_register):
+1. ndlkotenocr-full (TrOCR) — 최고 품질, torch+GPU 필요
+2. ndlkotenocr (PARSeq-tiny) — 경량, CPU OK
+3. ndlocr — 근현대 자료 범용
+4. llm_vision — LLM 비전 기반
+5. paddleocr — Python 3.13 미지원
+
+**의존성 전략**:
+- `ndlkotenocr-full` optional extra로 분리
+- torch/torchvision은 PyTorch CUDA 인덱스(`cu124`)에서 설치
+- torch 미설치 시 `is_available()=False` → 등록하지 않음 → 기존 동작 무영향
+- `opencv-python-headless`를 ndlocr/ndlkotenocr/ndlkotenocr-full 3개 extra에 추가
+
+**모델 다운로드**:
+- TrOCR 모델 3개 디렉토리 (~450MB): NDL 공식 서버에서 zip 자동 다운로드
+- 캐시: `~/.cache/classical-text-browser/ndlkotenocr-full-models/`
+- 환경변수: `NDLKOTENOCR_FULL_MODEL_PATH`로 커스텀 경로 지정 가능
+
+**파일 변경**:
+- 신규: `src/ocr/ndlkotenocr/trocr.py`, `src/ocr/ndlkotenocr_full_engine.py`
+- 수정: `registry.py`, `ndlkotenocr/__init__.py`, `pyproject.toml`, `.gitignore`
+
+**검증 결과** (RTX 3070 Ti Laptop GPU):
+- 모델 로딩: ~9초 (CUDA)
+- 단일 추론: ~1.4초 (첫 실행 워밍업)
+- 배치(4개): ~0.17초 (GPU 효율)
+- 세로쓰기 자동 회전: 정상 동작
 
 ---
 

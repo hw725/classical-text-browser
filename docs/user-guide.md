@@ -88,9 +88,11 @@ cd classical-text-browser
 
 uv sync
 
-# (선택) 오프라인 OCR 엔진 설치 (~500MB)
-uv sync --extra paddleocr
-# 주의: Windows + Python 3.13 + PaddlePaddle 3.x(CPU) 조합은 실행 충돌 가능
+# (선택) 오프라인 OCR 엔진 설치 — 아래 중 택일:
+uv sync --extra ndlkotenocr       # 고전적(古典籍) 전용, ONNX 경량 (~80MB)
+uv sync --extra ndlocr            # 근현대 자료 범용, ONNX (~100MB)
+uv sync --extra ndlkotenocr-full  # 최고 품질 TrOCR, GPU 권장 (~4GB)
+uv sync --extra paddleocr         # PaddleOCR (~500MB, Python 3.13 주의)
 ```
 </details>
 
@@ -260,8 +262,12 @@ uv run python -m cli add-document /path/to/my-library \
 
 1. **레이아웃** 모드에서 우측 하단의 **OCR 실행** 패널 확인
 2. 설정:
-   - **엔진**: PaddleOCR(오프라인) 또는 LLM 비전(온라인)
-   - **모델**: auto(자동 폴백) 또는 특정 모델 선택
+   - **엔진**: 드롭다운에서 선택 (설치된 엔진만 표시)
+     - **NDL古典籍OCR Full** — 최고 품질, GPU 필요 (`uv sync --extra ndlkotenocr-full`)
+     - **NDL古典籍OCR-Lite** — 고전적 전용, CPU OK (`uv sync --extra ndlkotenocr`)
+     - **NDLOCR-Lite** — 근현대 자료 범용 (`uv sync --extra ndlocr`)
+     - **LLM Vision** — 온라인, API 키 필요
+     - **PaddleOCR** — 범용 (`uv sync --extra paddleocr`)
    - **언어**: classical_chinese(고전 한문)
 3. **"전체 OCR"** 클릭 → 모든 블록을 순서대로 OCR
    - 또는 특정 블록만 선택하여 **"선택 OCR"**
@@ -479,7 +485,7 @@ OCR과 레이아웃 분석은 **이미지를 볼 수 있는 모델**만 사용�
 
 ### 8.4 모델 선택 팁
 
-- **오프라인 작업**: PaddleOCR(OCR용) + 수동 해석
+- **오프라인 작업**: NDL古典籍OCR-Lite 또는 NDLOCR-Lite(OCR용) + 수동 해석
 - **무료 온라인**: Ollama + 클라우드 모델(kimi-k2.5, glm-5 등)
 - **저렴한 고품질**: Gemini 2.5 Flash (무료 티어 제공, API 키 필요)
 - **최고 품질**: Gemini 3 Pro, OpenAI gpt-5, 또는 Anthropic Claude
@@ -564,7 +570,7 @@ OCR과 레이아웃 분석은 **이미지를 볼 수 있는 모델**만 사용�
 ### Q. 인터넷이 없어도 사용할 수 있나요?
 
 **네.** 핵심 기능(PDF 보기, 텍스트 편집, 교정, 표점, 현토)은 완전히 오프라인에서 동작합니다.
-LLM 기능을 오프라인에서 쓰려면 PaddleOCR(OCR용) 또는 Ollama 로컬 모델을 설치하세요.
+오프라인 OCR은 NDL古典籍OCR-Lite(`uv sync --extra ndlkotenocr`) 또는 NDLOCR-Lite(`uv sync --extra ndlocr`)를 설치하세요. GPU가 있다면 NDL古典籍OCR Full(`uv sync --extra ndlkotenocr-full`)로 최고 품질을 얻을 수 있습니다. LLM을 오프라인에서 쓰려면 Ollama 로컬 모델을 설치하세요.
 
 ### Q. Git을 알아야 하나요?
 

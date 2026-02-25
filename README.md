@@ -9,7 +9,7 @@
 
 | 영역 | 기능 |
 |------|------|
-| **원본 관리** | PDF/이미지 뷰어, 레이아웃 분석, OCR(LLM 비전 + PaddleOCR), HWP/HWPX 가져오기, PDF 참조 텍스트 추출 |
+| **원본 관리** | PDF/이미지 뷰어, 레이아웃 분석, OCR(NDL古典籍OCR Full/Lite + NDLOCR + LLM 비전 + PaddleOCR), HWP/HWPX 가져오기, PDF 참조 텍스트 추출 |
 | **해석 작업** | 표점(句讀), 현토(懸吐), 번역(LLM+수동), 주석(태깅+사전형) |
 | **연구 도구** | 인용 마크, 사전 내보내기/가져오기, 교차 뷰어 |
 | **저장소 관리** | 원본·해석 분리 Git 저장소, 사다리형 그래프, JSON 스냅샷 |
@@ -25,7 +25,8 @@
 브라우저에서 `http://localhost:8000` 접속. GUI에서 서고를 선택/생성할 수 있습니다.
 
 > Git을 아는 분은 `git clone https://github.com/hw725/classical-text-browser.git`으로도 가능합니다.
-> 오프라인 OCR이 필요하면 터미널에서 `uv sync --extra paddleocr`.
+> 오프라인 OCR 설치: `uv sync --extra ndlkotenocr` (고전적 전용, 권장) 또는 `uv sync --extra ndlocr` (근현대 범용).
+> GPU가 있다면: `uv sync --extra ndlkotenocr-full` (TrOCR, 최고 품질).
 
 ## 기술 스택
 
@@ -48,7 +49,7 @@ src/
 ├── hwp/          # HWP/HWPX 처리 (hwp-hwpx-parser)
 ├── text_import/  # 텍스트 가져오기 (HWP 표점분리 + PDF 참조텍스트)
 ├── llm/          # LLM 라우터 + 프로바이더
-├── ocr/          # OCR 엔진 (LLM 비전 + PaddleOCR)
+├── ocr/          # OCR 엔진 (NDL古典籍OCR Full/Lite + NDLOCR + LLM 비전 + PaddleOCR)
 ├── parsers/      # 서지정보 파서
 ├── cli/          # CLI 도구
 └── app/          # 웹 앱 (FastAPI + static)

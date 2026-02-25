@@ -76,3 +76,6 @@ examples/monggu_library/documents/kameda_monggu/
 
 # ONNX 모델 (대용량, 별도 다운로드)
 *.onnx
+
+# PyTorch 모델 체크포인트 (NDL古典籍OCR 풀 버전 등)
+*.pth
