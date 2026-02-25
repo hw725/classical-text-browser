@@ -410,12 +410,15 @@ class TestAnnotationTypes:
 
     def test_load_default_types(self):
         types = load_annotation_types()
-        assert len(types["types"]) == 5
+        assert len(types["types"]) == 8
         ids = [t["id"] for t in types["types"]]
         assert "person" in ids
         assert "place" in ids
         assert "term" in ids
         assert "allusion" in ids
+        assert "official_title" in ids
+        assert "book_title" in ids
+        assert "grammar" in ids
         assert "note" in ids
 
     def test_validate_default_type(self):

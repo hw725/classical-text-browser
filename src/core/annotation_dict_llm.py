@@ -219,7 +219,7 @@ def _build_annotation_from_raw(
 # ──────────────────────────────────────
 
 
-def _merge_annotations(
+def merge_annotations(
     existing: list[dict],
     llm_results: list[dict],
     stage: str,
@@ -433,7 +433,7 @@ async def generate_stage2_from_translation(
             results.append(ann)
 
     # 기존 주석과 병합
-    return _merge_annotations(existing_annotations, results, "from_translation")
+    return merge_annotations(existing_annotations, results, "from_translation")
 
 
 # ──────────────────────────────────────
@@ -519,4 +519,4 @@ async def generate_stage3_from_both(
         return results
 
     # 기존 항목이 있으면 병합
-    return _merge_annotations(existing_annotations, results, "from_both")
+    return merge_annotations(existing_annotations, results, "from_both")
