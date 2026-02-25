@@ -423,6 +423,7 @@ async function loadOcrResults() {
   try {
     const resp = await fetch(
       `/api/documents/${docId}/parts/${partId}/pages/${pageNum}/ocr`,
+      { cache: "no-store" },
     );
     if (!resp.ok) {
       // 404 = OCR 결과 없음 (정상)

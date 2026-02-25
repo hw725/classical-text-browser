@@ -12,6 +12,21 @@ ndlocr-lite(일반)와의 차이:
 한글은 학습 데이터에 포함되지 않아 인식 불가.
 국한문(한자+한글 혼용) 문헌에서는 한글 부분이 깨진다.
 
+기본 모델 (lite): ~74MB, 자동 다운로드.
+  - RTMDet-S: rtmdet-s-1280x1280.onnx (~38MB)
+  - PARSeq tiny: parseq-ndl-32x384-tiny-10.onnx (~37MB)
+
+정확도 한계:
+  lite 모델은 용량 대비 실용적이지만, 일부 행에서 □(U+25A1) 오인식,
+  히라가나 오인식, 단일 문자 행 등이 발생할 수 있다.
+
+커스텀 모델 사용:
+  풀 모델(ndlkotenocr 비-lite)이나 직접 학습한 모델을 사용하려면:
+  1. 환경변수 NDLKOTENOCR_MODEL_PATH에 모델 디렉토리 경로 설정
+  2. 해당 디렉토리에 ONNX 모델 파일 배치
+  3. PARSeq 풀 모델은 캐스케이드 구조일 수 있으므로 코드 확장 필요
+  → 상세: docs/DECISIONS.md D-043 참조
+
 원본: https://github.com/ndl-lab/ndlkotenocr-lite
 라이선스: CC BY 4.0 (National Diet Library, Japan)
 
@@ -162,13 +177,8 @@ class NdlkotenOcrEngine(BaseOcrEngine):
         # RTMDet로 행 탐지
         detections = self._rtmdet.detect(np_image)
 
-        # LINE 유형만 필터링
-        line_dets = [
-            d for d in detections if d["class_index"] in _LINE_CLASS_INDICES
-        ]
-
-        if not line_dets:
-            # 행이 탐지되지 않으면 이미지 전체를 단일 행으로 간주
+        if not detections:
+            # 탐지가 전혀 없으면 이미지 전체를 단일 행으로 간주
             return self._recognize_single_line(np_image)
 
         # ndl_parser → XML → reading_order로 처리
@@ -307,10 +317,14 @@ class NdlkotenOcrEngine(BaseOcrEngine):
     ) -> list[dict]:
         """레이아웃만 탐지한다 (OCR 없이).
 
-        RTMDet가 탐지한 영역을 우리 block_type으로 매핑하여 반환.
-        RTMDet 모델이 실제로 다중 클래스를 구분하는지는 모델 의존적이다.
-        모든 탐지가 class 1(line_main)이더라도 행 위치 기반 읽기 순서를
-        제공하므로 유용하다.
+        RTMDet가 탐지한 영역의 실제 class_id를 사용하여 block_type으로 매핑.
+        LINE 유형(class 1~5)은 제외하고, BLOCK 유형(class 0, 6~15)만 반환.
+
+        ★ 주의사항 ★
+          업스트림 ndlkotenocr-lite는 모든 탐지를 class 1(line_main)로 처리한다.
+          RTMDet 모델이 16개 클래스를 학습했으나, 실제로 다중 클래스를 신뢰성 있게
+          출력하는지는 모델 의존적이다. detect_layout 결과가 비어 있거나 부정확하면
+          ndlocr 엔진의 detect_layout을 대안으로 사용할 것.
 
         입력:
           page_image_bytes: 전체 페이지 이미지 (PNG/JPEG 바이트)
@@ -406,17 +420,23 @@ class NdlkotenOcrEngine(BaseOcrEngine):
         from yaml import safe_load
 
         # RTMDet 레이아웃/행 탐지기 (ndlkotenocr 전용 모델)
+        # 임계값은 업스트림 ndlkotenocr-lite와 동일하게 설정 (0.3).
+        # 이전에 0.25를 사용했으나 저품질 탐지가 포함되어 결과 품질 저하.
         if self._rtmdet is None:
             self._rtmdet = RTMDet(
                 model_path=str(model_dir / "rtmdet-s-1280x1280.onnx"),
                 class_mapping_path=str(config_dir / "ndl.yaml"),
-                score_threshold=0.2,
-                conf_threshold=0.25,
-                iou_threshold=0.2,
+                score_threshold=0.3,
+                conf_threshold=0.3,
+                iou_threshold=0.3,
             )
 
         # PARSeq 문자 인식기 (단일 모델 — 캐스케이드 없음)
         # ndlkotenocr 전용 문자셋(config/NDLmoji.yaml) 사용
+        # ★ bgr_input=False: ndlkotenocr 모델은 RGB로 학습됨 ★
+        # ndlocr 모델은 BGR로 학습되어 기본값(True)을 사용하지만,
+        # ndlkotenocr의 PARSeq 모델은 RGB 입력을 기대한다.
+        # BGR로 넣으면 빨강↔파랑 채널이 뒤바뀌어 인식 품질이 크게 저하됨.
         if self._parseq is None:
             char_config = config_dir / "NDLmoji.yaml"
             with open(char_config, encoding="utf-8") as f:
@@ -426,6 +446,7 @@ class NdlkotenOcrEngine(BaseOcrEngine):
             self._parseq = PARSEQ(
                 model_path=str(model_dir / "parseq-ndl-32x384-tiny-10.onnx"),
                 charlist=charlist,
+                bgr_input=False,  # ndlkotenocr = RGB 입력
             )
 
         logger.info("NDL古典籍OCR-Lite 모델 로딩 완료")
@@ -441,10 +462,16 @@ class NdlkotenOcrEngine(BaseOcrEngine):
           3. 각 LINE을 이미지에서 크롭
           4. PARSeq 단일 모델로 각 LINE 인식 (캐스케이드 없음)
 
-        ndlocr_engine._process_detections()와의 차이:
-          - resultobj 구성 시 16개 클래스 (range(16))
-          - convert_to_xml_string3 호출 시 use_block_ad=False, score_thr=0.3
-          - PARSeq 캐스케이드 없이 단일 모델로 직접 인식
+        ★ 업스트림 호환성 핵심 ★
+          업스트림 ndlkotenocr-lite는 RTMDet postprocess()에서 모든 탐지의
+          class_index를 1(line_main)로 하드코딩한다. 이는 OCR 파이프라인
+          (ndl_parser → XY-Cut → PARSeq)이 모든 탐지를 LINE으로 처리하도록
+          설계되었기 때문이다.
+
+          우리 RTMDet는 detect_layout() 지원을 위해 실제 class_id를 보존하지만,
+          OCR 파이프라인에서는 업스트림과 동일하게 모든 탐지를 class 1로 취급한다.
+          실제 class_id를 그대로 사용하면 일부 행이 BLOCK으로 잘못 분류되어
+          LINE XML 요소로 변환되지 않고 OCR에서 누락된다.
 
         출력: [{"text": "인식결과", "bbox": [x,y,x2,y2], "order": 0}, ...]
         """
@@ -463,16 +490,18 @@ class NdlkotenOcrEngine(BaseOcrEngine):
         for i in range(16):  # 16개 클래스 (ndlocr은 17개)
             resultobj[1][i] = []
 
+        # ★ 업스트림 호환: 모든 탐지를 class 1(line_main)로 취급 ★
+        # 업스트림 RTMDet postprocess()는 모든 class_index를 1로 하드코딩.
+        # ndl_parser/XY-Cut 파이프라인은 이 전제 하에 동작한다.
+        # 실제 class_id를 사용하면 일부 행이 BLOCK(class 0)으로 분류되어
+        # LINE XML 요소가 되지 않고, PARSeq 인식에서 누락된다.
+        # detect_layout()에서는 실제 class_id를 활용하므로 RTMDet 자체는
+        # 실제 class_id를 보존한 채로 유지한다.
         for det in detections:
             xmin, ymin, xmax, ymax = det["box"]
             conf = det["confidence"]
-            cls_idx = det["class_index"]
-            # text_block (class 0)은 resultobj[0]에도 추가
-            if cls_idx == 0:
-                resultobj[0][0].append([xmin, ymin, xmax, ymax])
-            # 범위 내 클래스만 추가 (안전 검사)
-            if 0 <= cls_idx < 16:
-                resultobj[1][cls_idx].append([xmin, ymin, xmax, ymax, conf])
+            # 업스트림 동일: 모든 탐지를 class 1(line_main) 슬롯에 추가
+            resultobj[1][1].append([xmin, ymin, xmax, ymax, conf])
 
         # XML 구성 (ndlkotenocr 고유 파라미터)
         xmlstr = convert_to_xml_string3(

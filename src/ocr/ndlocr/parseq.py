@@ -10,9 +10,13 @@ class PARSEQ:
                  model_path: str,
                  charlist: [str],
                  original_size: Tuple[int, int] = (384, 32),
-                 device: str = "CPU") -> None:
+                 device: str = "CPU",
+                 bgr_input: bool = True) -> None:
         self.model_path = model_path
         self.charlist = charlist
+        # bgr_input: True이면 전처리에서 RGB→BGR 변환 (ndlocr 모델 학습 기준).
+        # ndlkotenocr 모델은 RGB로 학습되었으므로 False로 설정해야 한다.
+        self.bgr_input = bgr_input
 
         self.device = device
         self.image_width, self.image_height = original_size
@@ -53,7 +57,8 @@ class PARSEQ:
         pil_resized = pil_image.resize((self.input_width, self.input_height))
         
         resized = np.array(pil_resized, dtype=np.float32)
-        resized = resized[:,:,::-1]
+        if self.bgr_input:
+            resized = resized[:,:,::-1]  # RGB→BGR (ndlocr 모델 전용)
         input_image = resized / 255.0
         input_image = 2.0*(input_image-0.5)
         input_image = input_image.transpose(2,0,1)
