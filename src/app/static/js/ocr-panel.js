@@ -711,12 +711,16 @@ function _toggleLlmModelRow() {
 
   const modelRow = document.getElementById("ocr-llm-model-row");
   const paddleLangRow = document.getElementById("ocr-paddle-lang-row");
+  const ndlocrWarnRow = document.getElementById("ocr-ndlocr-warn-row");
 
   if (modelRow) {
     modelRow.style.display = engineId === "llm_vision" ? "" : "none";
   }
   if (paddleLangRow) {
     paddleLangRow.style.display = engineId === "paddleocr" ? "" : "none";
+  }
+  if (ndlocrWarnRow) {
+    ndlocrWarnRow.style.display = engineId === "ndlocr" ? "" : "none";
   }
 }
 

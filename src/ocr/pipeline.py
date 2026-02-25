@@ -198,7 +198,46 @@ class OcrPipeline:
                         round(bbox[3] * scale_y),
                     ]
 
-        # 4. 블록별 OCR
+        # ── 페이지 단위 OCR 분기 (ndlocr 등) ────────────────────
+        # supports_page_level=True인 엔진은 페이지 전체를 한 번에 처리한다.
+        # 조건:
+        #   - 엔진이 페이지 단위를 지원 (getattr로 방어: 기존 엔진에 속성 없어도 안전)
+        #   - 전체 블록 처리 (block_ids가 None). 개별 블록 재실행은 블록별로 처리.
+        if getattr(engine, 'supports_page_level', False) and block_ids is None:
+            try:
+                page_bytes = self._page_image_to_bytes(page_image)
+                page_results = engine.recognize_page(
+                    page_bytes, blocks,
+                    progress_callback=progress_callback,
+                    **engine_kwargs,
+                )
+                result.ocr_results = page_results
+                result.processed_blocks = len(page_results)
+                result.elapsed_sec = time.time() - start_time
+
+                self._save_ocr_result(
+                    doc_id, part_id, page_number, result,
+                    merge_with_existing=False,
+                )
+
+                logger.info(
+                    f"OCR 완료 (페이지 단위): {doc_id}/{part_id}/page_{page_number:03d} — "
+                    f"{result.processed_blocks} 블록, {result.elapsed_sec:.1f}초"
+                )
+                return result
+            except NotImplementedError:
+                # recognize_page() 미구현 → 아래 블록별 경로로 폴백
+                logger.info(
+                    f"{engine.engine_id}: 페이지 단위 미지원, 블록별로 전환"
+                )
+            except Exception as e:
+                # 페이지 단위 실패 → 블록별 경로로 폴백 (기존 기능 보호)
+                logger.warning(
+                    f"페이지 단위 OCR 실패, 블록별로 전환: {e}"
+                )
+        # ── 페이지 단위 분기 끝 ────────────────────────────────
+
+        # 4. 블록별 OCR (기존 경로 — 수정하지 않음)
         # processable_blocks: skip이 아닌 실제 처리 대상 블록 수
         processable_blocks = [b for b in blocks if not b.get("skip", False)]
         total_processable = len(processable_blocks)
@@ -392,3 +431,16 @@ class OcrPipeline:
 
         logger.info(f"L2 OCR 결과 저장: {output_path}")
         return str(output_path)
+
+    @staticmethod
+    def _page_image_to_bytes(page_image) -> bytes:
+        """PIL Image → PNG bytes 변환 (페이지 단위 OCR 엔진에 전달용).
+
+        왜 별도 메서드인가:
+          recognize_page()는 bytes를 입력으로 받는다 (PIL Image 직접 의존 방지).
+          파이프라인 내부에서만 사용하는 변환 헬퍼.
+        """
+        import io as _io
+        buf = _io.BytesIO()
+        page_image.convert("RGB").save(buf, format="PNG")
+        return buf.getvalue()

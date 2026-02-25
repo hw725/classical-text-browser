@@ -1352,6 +1352,12 @@ body.resizing-row {
   flex-shrink: 0;
 }
 
+.autodetect-engine-select {
+  width: auto;
+  max-width: 200px;
+  font-size: 0.78rem;
+}
+
 .layout-props-form {
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
@@ -3263,6 +3269,12 @@ body.resizing-row {
 
 .ocr-control-row .props-select {
   flex: 1;
+}
+
+.ocr-lang-warning {
+  color: #d97706;
+  font-size: 0.82rem;
+  line-height: 1.3;
 }
 
 .ocr-buttons {

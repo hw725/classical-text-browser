@@ -1132,6 +1132,84 @@ Selection API가 반환하는 문자 오프셋에 표점 문자가 포함되어
 
 ---
 
+## D-038: NDLOCR-Lite 통합 — 세 번째 OCR 엔진 + 서버사이드 레이아웃 감지
+
+**날짜**: 2026-02-25
+**맥락**: PaddleOCR이 Python 3.13 + Windows 환경에서 PaddlePaddle의 OneDNN 런타임 오류로
+동작하지 않는 문제. 대안으로 일본 국립국회도서관의 ndlocr-lite를 세 번째 OCR 엔진으로 통합.
+
+**결정**:
+
+1. **ONNX Runtime 기반 오프라인 OCR**: PaddlePaddle 의존 없이 ONNX Runtime만으로 동작.
+   Python 3.10+ (3.13 포함) 호환. 별도 설치: `uv sync --extra ndlocr`.
+
+2. **페이지 단위 인식 (Page-Level OCR)**: 기존 블록별 크롭→인식과 다른 경로.
+   - DEIM(DEIMv2): 전체 페이지에서 17클래스 레이아웃+행 탐지
+   - PARSeq 캐스케이드: 행 이미지에서 문자 인식 (30/50/100자 모델 단계적 적용)
+   - XY-Cut: 읽기 순서 결정
+   - L3 블록 매칭: 인식된 행을 기존 L3 블록의 bbox와 공간적으로 매칭
+
+3. **BaseOcrEngine 확장**: `supports_page_level: bool` 속성과 `recognize_page()` 메서드를
+   선택적(non-abstract)으로 추가. 기존 PaddleOCR/LLM Vision은 `False`(기본값)이므로 무영향.
+
+4. **파이프라인 분기**: `pipeline.py`에서 `getattr(engine, 'supports_page_level', False)`로
+   방어적 접근. 조건 충족 시 페이지 단위 경로, 실패 시 블록별 경로로 자동 폴백.
+
+5. **서버사이드 레이아웃 감지 API**: `POST /api/ocr/detect-layout/{doc_id}/{page}`.
+   DEIM 17클래스를 프로젝트 block_type으로 매핑. KotenLayout(브라우저 5클래스)의 대안.
+   프론트엔드에서 엔진 드롭다운으로 선택.
+
+6. **언어 제한 고지**: 한문(CJK 한자)/일본어만 지원. 한글 미인식.
+   OCR 패널에서 ndlocr 선택 시 경고 표시.
+
+7. **모델 자동 다운로드**: ONNX 모델(~147MB)은 git에 포함하지 않고,
+   `~/.cache/classical-text-browser/ndlocr-models/`에 첫 사용 시 GitHub에서 자동 다운로드.
+
+8. **소스 벤더링**: ndlocr-lite 소스를 `src/ocr/ndlocr/`에 벤더링.
+   import 경로를 상대 경로로 수정. 라이선스 CC BY 4.0 (NDL, Japan).
+
+**ndlocr 카테고리 → block_type 매핑**:
+| ndlocr class | 이름 | block_type |
+|---|---|---|
+| 0 | text_block | main_text |
+| 1 | line_main | main_text |
+| 2 | line_caption | annotation |
+| 4 | line_note (割注) | annotation |
+| 5 | line_note_tochu (頭注) | marginal_note |
+| 6 | block_fig | illustration |
+| 8 | block_pillar (柱) | page_title |
+| 9 | block_folio | page_number |
+| 16 | line_title | main_text |
+
+**파일 구조**:
+```
+src/ocr/
+├── base.py              ← +supports_page_level, +recognize_page()
+├── pipeline.py          ← +페이지 단위 분기, +_page_image_to_bytes()
+├── registry.py          ← +ndlocr 등록 블록
+├── ndlocr_engine.py     ← 신규: NdlocrEngine (OCR + 레이아웃 감지)
+└── ndlocr/              ← 신규: 벤더링된 ndlocr-lite 소스
+    ├── __init__.py      ← 모델 다운로드 관리
+    ├── deim.py          ← DEIM 레이아웃 탐지기
+    ├── parseq.py        ← PARSeq 문자 인식기
+    ├── ndl_parser.py    ← XML 변환기
+    ├── reading_order/   ← XY-Cut 읽기순서 모듈
+    └── config/          ← ndl.yaml, NDLmoji.yaml
+```
+
+**수정 파일**: `base.py`, `pipeline.py`, `registry.py`, `pyproject.toml`,
+`llm_ocr.py` (+detect-layout 엔드포인트), `index.html`, `ocr-panel.js`,
+`layout-editor.js`, `workspace.css`, `ocr/__init__.py`
+
+**신규 파일**: `ndlocr_engine.py`, `src/ocr/ndlocr/` (벤더링 ~15파일)
+
+**대안**:
+- Tesseract OCR → CJK 세로쓰기 정확도가 현저히 낮아 거부.
+- EasyOCR → PyTorch 의존으로 설치 크기가 과대, Python 3.13 호환 미확인.
+- 브라우저 전용 OCR (Tesseract.js) → CJK 품질 부족.
+
+---
+
 ### 배포·설치
 - [ ] Google Drive + .git 충돌 회피 가이드 → Phase 10 이후
 - [ ] 비개발자용 Git 번들링 또는 Git-free 모드 → Phase 10 이후

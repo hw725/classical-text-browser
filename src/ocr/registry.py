@@ -119,14 +119,21 @@ class OcrEngineRegistry:
         except Exception as e:
             logger.warning(f"LLM Vision OCR 초기화 실패: {e}")
 
-        # 향후 추가 엔진 예시:
-        # try:
-        #     from .tesseract_engine import TesseractEngine
-        #     engine = TesseractEngine()
-        #     if engine.is_available():
-        #         self.register(engine)
-        # except ImportError:
-        #     pass
+        # NDLOCR-Lite (ONNX 기반 오프라인 OCR — 한문/일본어 전용)
+        # PaddleOCR이 동작하지 않는 Python 3.13 환경의 대안.
+        # 미설치 시에도 등록 → list_engines()에서 available=false로 표시.
+        # 원본: https://github.com/ndl-lab/ndlocr-lite (CC BY 4.0)
+        try:
+            from .ndlocr_engine import NdlocrEngine
+            engine = NdlocrEngine()
+            self.register(engine)
+            if not engine.is_available():
+                logger.info(
+                    "NDLOCR-Lite 등록됨 (onnxruntime 미설치 또는 모델 없음 — 사용 불가). "
+                    "설치: uv sync --extra ndlocr"
+                )
+        except Exception as e:
+            logger.warning(f"NDLOCR-Lite 등록 실패: {e}")
 
         if not self._engines:
             logger.info(
