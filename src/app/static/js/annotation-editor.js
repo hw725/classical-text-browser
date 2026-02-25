@@ -622,7 +622,7 @@ function _onTextSelection() {
   const actualText = text.slice(startIdx, endIdx + 1);
 
   const typeId = prompt(
-    `"${actualText}"에 주석을 추가합니다.\n유형을 입력하세요 (person/place/term/allusion/note):`,
+    `"${actualText}"에 주석을 추가합니다.\n유형을 입력하세요 (person/place/term/allusion/official_title/book_title/grammar/note):`,
     "note",
   );
   if (!typeId) return;
@@ -720,6 +720,126 @@ function _composePunctuatedTextForAi(originalText, punctMarks) {
     out += beforeBuf[i] + originalText[i] + afterBuf[i];
   }
   return out;
+}
+
+/**
+ * 표점 마크 기반 문장 분리 — AI 태깅 병렬 처리용.
+ *
+ * 표점된 텍스트에서 문장 끝(。！？ 등)을 찾아
+ * 원문을 문장 단위로 분할한다.
+ * 각 문장에 해당하는 punctMarks를 로컬 인덱스로 변환하여 포함하므로,
+ * 기존 _resolveAiAnnotationRangeWithPunctuation 을 문장 단위로 재사용할 수 있다.
+ *
+ * @param {string} originalText - 원문 (표점 없는 순수 텍스트)
+ * @param {Array} punctMarks - 표점 마크 배열
+ * @returns {Array<{origStart, origEnd, text, punctMarks, punctuatedText}>}
+ */
+function _splitIntoSentences(originalText, punctMarks) {
+  if (!originalText || originalText.length === 0) return [];
+  if (!Array.isArray(punctMarks) || punctMarks.length === 0) {
+    // 표점이 없으면 분할 불가 → 전체를 하나의 "문장"으로
+    return [
+      {
+        origStart: 0,
+        origEnd: originalText.length - 1,
+        text: originalText,
+        punctMarks: [],
+        punctuatedText: originalText,
+      },
+    ];
+  }
+
+  // 문장 종결 부호 집합
+  const sentenceEndChars = new Set(["。", "！", "？", ".", "!", "?"]);
+
+  // punctMarks의 after 필드에서 문장 끝 위치를 수집
+  const endPositions = [];
+  for (const mark of punctMarks) {
+    if (!mark.after) continue;
+    for (const ch of mark.after) {
+      if (sentenceEndChars.has(ch)) {
+        const end = mark.target?.end ?? mark.target?.start ?? 0;
+        if (end >= 0 && end < originalText.length) {
+          endPositions.push(end);
+        }
+        break;
+      }
+    }
+  }
+
+  if (endPositions.length === 0) {
+    // 문장 종결 부호가 없으면 전체를 하나로
+    return [
+      {
+        origStart: 0,
+        origEnd: originalText.length - 1,
+        text: originalText,
+        punctMarks: punctMarks,
+        punctuatedText: _composePunctuatedTextForAi(originalText, punctMarks),
+      },
+    ];
+  }
+
+  endPositions.sort((a, b) => a - b);
+  // 같은 위치에 여러 종결 부호가 있으면 중복 제거
+  const uniqueEnds = [...new Set(endPositions)];
+
+  const sentences = [];
+  let start = 0;
+
+  for (const endPos of uniqueEnds) {
+    if (endPos < start) continue;
+    const sentText = originalText.slice(start, endPos + 1);
+    if (sentText.length === 0) continue;
+
+    // 이 문장 범위에 해당하는 punctMarks → 로컬 인덱스로 변환
+    const localMarks = [];
+    for (const mark of punctMarks) {
+      const mStart = mark.target?.start ?? 0;
+      const mEnd = mark.target?.end ?? mStart;
+      if (mStart >= start && mEnd <= endPos) {
+        localMarks.push({
+          ...mark,
+          target: { start: mStart - start, end: mEnd - start },
+        });
+      }
+    }
+
+    sentences.push({
+      origStart: start,
+      origEnd: endPos,
+      text: sentText,
+      punctMarks: localMarks,
+      punctuatedText: _composePunctuatedTextForAi(sentText, localMarks),
+    });
+    start = endPos + 1;
+  }
+
+  // 마지막 문장 끝 이후 남은 텍스트 (종결 부호 없이 끝나는 경우)
+  if (start < originalText.length) {
+    const sentText = originalText.slice(start);
+    const lastEnd = originalText.length - 1;
+    const localMarks = [];
+    for (const mark of punctMarks) {
+      const mStart = mark.target?.start ?? 0;
+      const mEnd = mark.target?.end ?? mStart;
+      if (mStart >= start && mEnd <= lastEnd) {
+        localMarks.push({
+          ...mark,
+          target: { start: mStart - start, end: mEnd - start },
+        });
+      }
+    }
+    sentences.push({
+      origStart: start,
+      origEnd: originalText.length - 1,
+      text: sentText,
+      punctMarks: localMarks,
+      punctuatedText: _composePunctuatedTextForAi(sentText, localMarks),
+    });
+  }
+
+  return sentences;
 }
 
 /* ────────────────────────────────────
@@ -968,14 +1088,16 @@ async function _deleteAnnotation() {
 async function _aiTagAll() {
   /* AI 자동 태깅: /api/llm/annotation 호출 → 결과를 개별 주석으로 저장.
    *
-   * 흐름:
-   *   1. 현재 블록 텍스트를 LLM에 전송
-   *   2. LLM이 인명/지명/관직/전고/용어 태깅
-   *   3. 각 태깅 결과를 서버 주석 API로 개별 POST (draft 상태)
-   *   4. UI 갱신
+   * 흐름 (문장 병렬 처리):
+   *   1. 표점 기준으로 문장 분리 (2문장 이상 & 60자 이상이면 병렬)
+   *   2. 문장별로 LLM 병렬 호출 (동시 3개씩)
+   *   3. 문장 로컬 인덱스 → 원문 글로벌 인덱스 변환
+   *   4. 완료된 문장부터 UI에 진행률 표시
+   *   5. 전체 결과를 batch POST로 저장
+   *
+   * 짧은 텍스트(60자 미만 또는 1문장)는 기존 단일 호출 방식 사용.
    */
   const text = annState.originalText;
-  const aiInputText = _composePunctuatedTextForAi(text, annState.punctMarks);
   if (!text) {
     showToast("태깅할 텍스트가 없습니다. 먼저 블록을 선택하세요.", "warning");
     return;
@@ -1006,58 +1128,173 @@ async function _aiTagAll() {
         ? getLlmModelSelection("ann-llm-model-select")
         : { force_provider: null, force_model: null };
 
-    const reqBody = { text: aiInputText || text };
-    if (llmSel.force_provider) reqBody.force_provider = llmSel.force_provider;
-    if (llmSel.force_model) reqBody.force_model = llmSel.force_model;
-
-    // 1. SSE 스트리밍으로 LLM 태깅 요청 (실패 시 기존 엔드포인트 폴백)
     if (typeof showEditorProgress === "function") {
       showEditorProgress("ann", true, "AI 태깅 처리 중...");
     }
-    const data = await fetchWithSSE(
-      "/api/llm/annotation/stream",
-      reqBody,
-      (progress) => {
-        const sec = progress.elapsed_sec || 0;
-        if (aiBtn) aiBtn.textContent = `AI 태깅 중… (${sec}초)`;
-        if (typeof showEditorProgress === "function") {
-          showEditorProgress("ann", true, `AI 태깅 처리 중... ${sec}초 경과`);
-        }
-      },
-      "/api/llm/annotation",
-    );
-    const aiAnnotations = data.annotations || [];
 
-    if (aiAnnotations.length === 0) {
+    // 문장 분리: 표점 기준으로 문장 경계를 찾는다
+    const sentences = _splitIntoSentences(text, annState.punctMarks);
+    const useSentenceMode = sentences.length >= 2 && text.length >= 60;
+
+    // ── 태깅 결과를 모을 배열 (인덱스 보정 완료 상태) ──
+    const allResolved = [];
+    let providerInfo = "LLM";
+
+    if (useSentenceMode) {
+      /* ── 문장 단위 병렬 처리 ──
+       * 왜 이렇게 하는가:
+       *   텍스트가 길면 LLM 응답 시간이 급격히 느려진다.
+       *   문장 단위로 쪼개면 개별 호출이 빠르고,
+       *   동시 3개씩 병렬 처리하여 총 시간을 단축한다.
+       *   완료된 문장부터 진행률을 표시하여 체감 속도도 개선.
+       */
+      const CONCURRENCY = 3;
+      let completed = 0;
+      const total = sentences.length;
+
+      for (let i = 0; i < sentences.length; i += CONCURRENCY) {
+        const batch = sentences.slice(i, i + CONCURRENCY);
+        const promises = batch.map(async (sent) => {
+          const reqBody = { text: sent.punctuatedText };
+          if (llmSel.force_provider)
+            reqBody.force_provider = llmSel.force_provider;
+          if (llmSel.force_model) reqBody.force_model = llmSel.force_model;
+
+          const data = await fetchWithSSE(
+            "/api/llm/annotation/stream",
+            reqBody,
+            () => {},
+            "/api/llm/annotation",
+          );
+          return {
+            sentence: sent,
+            annotations: data.annotations || [],
+            provider: data._provider || "",
+          };
+        });
+
+        const results = await Promise.allSettled(promises);
+        for (const result of results) {
+          if (result.status !== "fulfilled") {
+            console.warn("문장 태깅 실패:", result.reason);
+            continue;
+          }
+          const { sentence, annotations, provider } = result.value;
+          if (provider) providerInfo = provider;
+
+          for (const ann of annotations) {
+            // 문장 로컬 인덱스 → 원문 글로벌 인덱스 변환
+            const resolved = _resolveAiAnnotationRangeWithPunctuation(
+              ann,
+              sentence.text,
+              sentence.punctMarks,
+            );
+            if (!resolved) continue;
+
+            const globalStart = resolved.start + sentence.origStart;
+            const globalEnd = resolved.end + sentence.origStart;
+            if (globalStart < 0 || globalEnd >= text.length) continue;
+
+            allResolved.push({
+              start: globalStart,
+              end: globalEnd,
+              type: ann.type,
+              label: ann.label,
+              text: ann.text,
+              description: ann.description,
+            });
+          }
+        }
+
+        completed += batch.length;
+        if (aiBtn)
+          aiBtn.textContent = `AI 태깅 중… (${completed}/${total}문장)`;
+        if (typeof showEditorProgress === "function") {
+          showEditorProgress(
+            "ann",
+            true,
+            `AI 태깅: ${completed}/${total}문장 완료`,
+          );
+        }
+      }
+    } else {
+      /* ── 기존 단일 호출 방식 (짧은 텍스트 / 1문장) ── */
+      const aiInputText = _composePunctuatedTextForAi(
+        text,
+        annState.punctMarks,
+      );
+      const reqBody = { text: aiInputText || text };
+      if (llmSel.force_provider)
+        reqBody.force_provider = llmSel.force_provider;
+      if (llmSel.force_model) reqBody.force_model = llmSel.force_model;
+
+      const data = await fetchWithSSE(
+        "/api/llm/annotation/stream",
+        reqBody,
+        (progress) => {
+          const sec = progress.elapsed_sec || 0;
+          if (aiBtn) aiBtn.textContent = `AI 태깅 중… (${sec}초)`;
+          if (typeof showEditorProgress === "function") {
+            showEditorProgress(
+              "ann",
+              true,
+              `AI 태깅 처리 중... ${sec}초 경과`,
+            );
+          }
+        },
+        "/api/llm/annotation",
+      );
+      providerInfo = data._provider || "LLM";
+
+      for (const ann of data.annotations || []) {
+        const resolved = _resolveAiAnnotationRangeWithPunctuation(
+          ann,
+          text,
+          annState.punctMarks,
+        );
+        if (!resolved) continue;
+        if (resolved.start < 0 || resolved.end >= text.length) continue;
+        allResolved.push({
+          start: resolved.start,
+          end: resolved.end,
+          type: ann.type,
+          label: ann.label,
+          text: ann.text,
+          description: ann.description,
+        });
+      }
+    }
+
+    if (allResolved.length === 0) {
       _showSaveStatus("AI가 태깅할 항목을 찾지 못했습니다.");
       return;
     }
 
-    // 2. 인덱스 보정 후 일괄 저장 (batch POST)
-    // AI가 반환한 인덱스/텍스트를 원문 기준으로 정규화한다.
-    const batchPayload = [];
-    for (const ann of aiAnnotations) {
-      const resolvedRange = _resolveAiAnnotationRangeWithPunctuation(
-        ann,
-        text,
-        annState.punctMarks,
-      );
-      if (!resolvedRange) continue;
+    // ── 중복 제거: 동일 범위(start,end)의 주석은 첫 번째만 유지 ──
+    // 문장 경계에서 같은 대상이 중복 태깅될 수 있으므로 필터링.
+    const seenRanges = new Set();
+    const deduped = allResolved.filter((r) => {
+      const key = `${r.start}:${r.end}`;
+      if (seenRanges.has(key)) return false;
+      seenRanges.add(key);
+      return true;
+    });
 
-      const start = resolvedRange.start;
-      const end = resolvedRange.end;
-      if (start < 0 || end < start || end >= text.length) continue;
+    // ── 인덱스 보정 완료된 결과 → batch payload 구성 ──
+    const batchPayload = [];
+    for (const r of deduped) {
+      if (r.start < 0 || r.end < r.start || r.end >= text.length) continue;
 
       const labelText =
-        _normalizeAiTagText(ann.label || ann.text || "") ||
-        text.slice(start, end + 1);
+        _normalizeAiTagText(r.label || r.text || "") ||
+        text.slice(r.start, r.end + 1);
 
       batchPayload.push({
-        target: { start, end },
-        type: ann.type || "term",
+        target: { start: r.start, end: r.end },
+        type: r.type || "term",
         content: {
           label: labelText,
-          description: ann.description || "",
+          description: r.description || "",
           references: [],
         },
         status: "draft",
@@ -1101,14 +1338,15 @@ async function _aiTagAll() {
       }
     }
 
-    // 3. UI 갱신
+    // ── UI 갱신 ──
     await _loadBlockAnnotations(blockId);
     _renderSourceText();
     _renderAnnList();
     _renderStatusSummary();
-    _showSaveStatus(
-      `AI 태깅 완료: ${savedCount}개 주석 (${data._provider || "LLM"})`,
-    );
+    const modeLabel = useSentenceMode
+      ? `${sentences.length}문장 병렬`
+      : providerInfo;
+    _showSaveStatus(`AI 태깅 완료: ${savedCount}개 주석 (${modeLabel})`);
   } catch (e) {
     console.error("AI 태깅 실패:", e);
     showToast("AI 태깅 실패: " + e.message, "error");
@@ -1221,19 +1459,36 @@ async function _renderTypeList() {
 
   const presets = data.types || [];
   const custom = data.custom || [];
+  const hidden = data.hidden || [];
+  // 보호 유형: 삭제 불가 (인물, 지명, 서명)
+  const protectedIds = new Set(["person", "place", "book_title"]);
 
   let html = "";
 
   // ── 기본 프리셋 ──
   html += '<div class="atm-section-title">기본 프리셋</div>';
   for (const t of presets) {
+    const isProtected = protectedIds.has(t.id);
     html += `
       <div class="atm-type-card">
         <span class="atm-type-color" style="background:${_escAttr(t.color)}"></span>
         <span class="atm-type-icon">${_escHtml(t.icon || "🏷️")}</span>
         <span class="atm-type-label">${_escHtml(t.label)}</span>
         <span class="atm-type-id">${_escHtml(t.id)}</span>
+        ${isProtected ? "" : `<button class="text-btn atm-delete-btn" data-type-id="${_escAttr(t.id)}" title="삭제">삭제</button>`}
       </div>`;
+  }
+
+  // ── 숨긴 프리셋 복원 ──
+  if (hidden.length > 0) {
+    html += '<div class="atm-section-title" style="margin-top:12px">숨긴 프리셋</div>';
+    for (const id of hidden) {
+      html += `
+        <div class="atm-type-card" style="opacity:0.6">
+          <span class="atm-type-label">${_escHtml(id)}</span>
+          <button class="text-btn atm-restore-btn" data-type-id="${_escAttr(id)}" title="복원">복원</button>
+        </div>`;
+    }
   }
 
   // ── 사용자 정의 ──
@@ -1284,9 +1539,14 @@ async function _renderTypeList() {
   const addBtn = document.getElementById("atm-add-btn");
   if (addBtn) addBtn.addEventListener("click", _addCustomType);
 
-  // 삭제 버튼 바인딩
+  // 삭제 버튼 바인딩 (프리셋 + 커스텀 공용)
   for (const btn of body.querySelectorAll(".atm-delete-btn")) {
     btn.addEventListener("click", () => _deleteCustomType(btn.dataset.typeId));
+  }
+
+  // 복원 버튼 바인딩
+  for (const btn of body.querySelectorAll(".atm-restore-btn")) {
+    btn.addEventListener("click", () => _restorePresetType(btn.dataset.typeId));
   }
 }
 
@@ -1357,6 +1617,33 @@ async function _deleteCustomType(typeId) {
   } catch (e) {
     console.error("유형 삭제 실패:", e);
     showToast("유형 삭제 중 오류가 발생했습니다.", "error");
+  }
+}
+
+/**
+ * 숨긴 프리셋 유형을 복원한다.
+ *
+ * 입력: typeId — 복원할 유형 ID.
+ * POST /api/annotation-types/{typeId}/restore → 목록 갱신.
+ */
+async function _restorePresetType(typeId) {
+  const status = document.getElementById("atm-dialog-status");
+  try {
+    const resp = await fetch(
+      `/api/annotation-types/${encodeURIComponent(typeId)}/restore`,
+      { method: "POST" },
+    );
+    if (resp.ok) {
+      if (status) status.textContent = "복원 완료";
+      await _loadAnnotationTypes();
+      await _renderTypeList();
+    } else {
+      const err = await resp.json().catch(() => ({}));
+      showToast("복원 실패: " + (err.error || "알 수 없는 오류"), "error");
+    }
+  } catch (e) {
+    console.error("유형 복원 실패:", e);
+    showToast("유형 복원 중 오류가 발생했습니다.", "error");
   }
 }
 

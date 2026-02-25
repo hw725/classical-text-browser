@@ -35,6 +35,7 @@ from core.annotation_dict_llm import (
     generate_stage1_from_original,
     generate_stage2_from_translation,
     generate_stage3_from_both,
+    merge_annotations,
 )
 from core.annotation_dict_io import (
     export_dictionary,
@@ -50,9 +51,11 @@ from core.annotation_dict_match import (
     remove_reference_dict,
 )
 from core.annotation_types import (
+    PROTECTED_TYPE_IDS,
     add_custom_type,
     load_annotation_types,
-    remove_custom_type,
+    remove_type,
+    restore_preset_type,
 )
 from core.citation_mark import (
     add_citation_mark,
@@ -694,19 +697,46 @@ async def api_add_annotation_type(body: CustomTypeRequest):
 
 @router.delete("/api/annotation-types/{type_id}")
 async def api_delete_annotation_type(type_id: str):
-    """사용자 정의 주석 유형 삭제.
+    """주석 유형 삭제.
 
-    주의: 기본 프리셋(person, place, term, allusion, note)은 삭제할 수 없다.
+    보호 유형(person, place, book_title)은 삭제할 수 없다.
+    커스텀 유형은 완전 삭제, 프리셋 유형은 숨김 처리한다.
     """
     _library_path = get_library_path()
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    removed = remove_custom_type(_library_path, type_id)
+    if type_id in PROTECTED_TYPE_IDS:
+        return JSONResponse(
+            {"error": f"'{type_id}'은(는) 보호 유형이므로 삭제할 수 없습니다."},
+            status_code=403,
+        )
+
+    removed = remove_type(_library_path, type_id)
     if not removed:
-        return JSONResponse({"error": f"유형 '{type_id}'를 찾을 수 없거나 기본 프리셋입니다."}, status_code=404)
+        return JSONResponse(
+            {"error": f"유형 '{type_id}'를 찾을 수 없거나 이미 삭제되었습니다."},
+            status_code=404,
+        )
 
     return Response(status_code=204)
+
+
+@router.post("/api/annotation-types/{type_id}/restore")
+async def api_restore_annotation_type(type_id: str):
+    """숨긴 프리셋 유형을 복원한다."""
+    _library_path = get_library_path()
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    restored = restore_preset_type(_library_path, type_id)
+    if not restored:
+        return JSONResponse(
+            {"error": f"'{type_id}'은(는) 숨겨진 상태가 아닙니다."},
+            status_code=404,
+        )
+
+    return {"restored": type_id}
 
 
 # ──────────────────────────────────────────────────────────
@@ -757,7 +787,11 @@ async def api_dict_generate_stage1(
             existing_annotations=existing_annotations,
         )
 
-        _set_block_annotations(ann_data, block_id, generated)
+        # 기존 주석(수동 태깅 등)과 병합하여 저장한다.
+        # 왜: generate_stage1은 LLM 결과만 반환하므로,
+        # 병합 없이 교체하면 기존 태깅이 사라진다.
+        merged = merge_annotations(existing_annotations, generated, "from_original")
+        _set_block_annotations(ann_data, block_id, merged)
         save_annotations(interp_path, "main", page_num, ann_data)
 
         return {
