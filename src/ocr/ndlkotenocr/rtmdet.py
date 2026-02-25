@@ -1,7 +1,7 @@
 """RTMDet 레이아웃/행 탐지기.
 
 ndlkotenocr-lite의 RTMDet를 벤더링.
-원본: https://github.com/ndl-lab/ndlkotenocr-lite/blob/v1.3.1/src/rtmdet.py
+원본: https://github.com/ndl-lab/ndlkotenocr-lite/blob/1.3.1/src/rtmdet.py
 라이선스: CC BY 4.0 (National Diet Library, Japan)
 
 DEIM (ndlocr-lite)과의 차이:
