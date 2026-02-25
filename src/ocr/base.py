@@ -150,6 +150,7 @@ class BaseOcrEngine(ABC):
     engine_id: str = ""           # 예: "paddleocr"
     display_name: str = ""        # 예: "PaddleOCR"
     requires_network: bool = False  # True이면 온라인 엔진
+    supports_page_level: bool = False  # True이면 recognize_page() 사용 가능
 
     @abstractmethod
     def is_available(self) -> bool:
@@ -185,6 +186,32 @@ class BaseOcrEngine(ABC):
           OcrEngineUnavailableError — 엔진 사용 불가
         """
         raise NotImplementedError
+
+    def recognize_page(
+        self,
+        page_image_bytes: bytes,
+        blocks: list[dict],
+        progress_callback=None,
+        **kwargs,
+    ) -> list[dict]:
+        """페이지 전체를 한 번에 인식한다 (선택 구현).
+
+        supports_page_level=True인 엔진만 이 메서드를 오버라이드한다.
+        기본 구현은 NotImplementedError를 발생시킨다.
+
+        입력:
+          page_image_bytes: 전체 페이지 이미지 (PNG 바이트)
+          blocks: L3 레이아웃의 블록 목록 (bbox, block_id 등 포함)
+          progress_callback: 진행 상황 콜백 (SSE 스트리밍용)
+          **kwargs: 엔진별 추가 옵션
+
+        출력:
+          ocr_page.schema.json 호환 딕셔너리 목록.
+          각 항목: {"layout_block_id": "p01_b01", "lines": [...]}
+        """
+        raise NotImplementedError(
+            f"{self.engine_id}은(는) 페이지 단위 인식을 지원하지 않습니다."
+        )
 
     def get_info(self) -> dict:
         """엔진 정보를 딕셔너리로 반환. API 응답용."""

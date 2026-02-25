@@ -9,6 +9,7 @@ server.py의 Phase 10-2 (LLM) / Phase 10-1 (OCR) 엔드포인트를 분리한 �
     POST /api/llm/analyze-layout/{doc_id}/{page}
     POST /api/llm/compare-layout/{doc_id}/{page}
     POST /api/llm/drafts/{draft_id}/review
+    POST /api/ocr/detect-layout/{doc_id}/{page}
     GET  /api/ocr/engines
     POST /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr
     POST /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr/stream
@@ -266,6 +267,90 @@ async def api_review_draft(draft_id: str, body: DraftReviewRequest):
 # ===========================================================================
 #  Phase 10-1: OCR 엔진 연동 API
 # ===========================================================================
+
+@router.post("/api/ocr/detect-layout/{doc_id}/{page}")
+async def api_detect_layout(
+    doc_id: str,
+    page: int,
+    part_id: str = Query(..., description="파트 ID"),
+    conf_threshold: float = Query(0.3, description="감지 신뢰도 임계값 (0.0~1.0)"),
+):
+    """NDLOCR DEIM으로 페이지 레이아웃을 서버에서 감지한다.
+
+    왜 필요한가:
+        KotenLayout(브라우저 ONNX)은 5클래스(본문/삽화/인장)만 탐지한다.
+        NDLOCR DEIM은 17클래스(본문/주석/두주/판심제/장차/도판 등)를 탐지하여
+        고전적 레이아웃을 더 세밀하게 분석할 수 있다.
+
+    입력:
+        doc_id: 문서 ID
+        page: 페이지 번호 (1-indexed)
+        part_id: 파트 ID (이미지 탐색에 사용)
+        conf_threshold: 감지 신뢰도 임계값
+
+    출력:
+        { "blocks": [...], "image_width": int, "image_height": int,
+          "analysis_method": "auto_detect", "engine": "ndlocr" }
+    """
+    library_path = get_library_path()
+    if library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    # 1. NDLOCR 엔진 가져오기
+    _pipeline, registry = _get_ocr_pipeline()
+    try:
+        engine = registry.get_engine("ndlocr")
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"NDLOCR 엔진을 사용할 수 없습니다: {e}"},
+            status_code=400,
+        )
+
+    # 2. 페이지 이미지 로드 (원본 해상도)
+    from ocr.image_utils import get_page_image_path, load_page_image, load_page_image_from_pdf
+    import io as _io
+
+    image_path = get_page_image_path(str(library_path), doc_id, part_id, page)
+    if image_path is not None:
+        pil_image = load_page_image(image_path)
+    else:
+        pil_image = load_page_image_from_pdf(str(library_path), doc_id, page)
+
+    if pil_image is None:
+        return JSONResponse(
+            {"error": f"페이지 이미지를 찾을 수 없습니다: {doc_id} page {page}"},
+            status_code=404,
+        )
+
+    # PIL Image → PNG bytes
+    buf = _io.BytesIO()
+    pil_image.convert("RGB").save(buf, format="PNG")
+    image_bytes = buf.getvalue()
+
+    img_w, img_h = pil_image.size
+
+    # 3. 레이아웃 감지
+    try:
+        blocks = engine.detect_layout(
+            image_bytes,
+            page_number=page,
+            conf_threshold=conf_threshold,
+        )
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"레이아웃 감지 실패: {e}"},
+            status_code=500,
+        )
+
+    return {
+        "blocks": blocks,
+        "image_width": img_w,
+        "image_height": img_h,
+        "analysis_method": "auto_detect",
+        "engine": "ndlocr",
+        "block_count": len(blocks),
+    }
+
 
 @router.get("/api/ocr/engines")
 async def api_ocr_engines():

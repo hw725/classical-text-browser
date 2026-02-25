@@ -8,7 +8,7 @@
 
 추가 엔진 (별도 설치 필요):
   - PaddleOCR: uv add paddlepaddle paddleocr (CJK에 적합, Linux/macOS 권장)
-  - Tesseract: pip install pytesseract + 시스템 설치
+  - NDLOCR-Lite: uv sync --extra ndlocr (ONNX 기반, 한문/일본어 전용, Python 3.13 호환)
   - 기타: BaseOcrEngine을 상속하여 커스텀 엔진 추가 가능
 
 사용법:

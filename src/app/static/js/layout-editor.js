@@ -1134,6 +1134,9 @@ function activateLayoutMode() {
     _syncOverlaySize();
   }
 
+  // 자동감지 엔진 드롭다운 채우기 (서버 사용 가능 엔진 확인)
+  _populateAutodetectEngines();
+
   // 현재 페이지의 레이아웃 로드
   if (viewerState.docId && viewerState.partId && viewerState.pageNum) {
     loadPageLayout(viewerState.docId, viewerState.partId, viewerState.pageNum);
@@ -1272,6 +1275,25 @@ async function _getPageImage(pageNum) {
 /**
  * 자동감지 실행: 현재 PDF 페이지에서 레이아웃 영역을 감지한다.
  *
+ * 엔진 선택에 따라 분기:
+ *   - koten: 브라우저 ONNX (KotenLayout)
+ *   - ndlocr: 서버 API (NDLOCR DEIM, 17클래스)
+ */
+async function _runAutoDetect() {
+  const engineSelect = document.getElementById("autodetect-engine");
+  const engine = engineSelect ? engineSelect.value : "koten";
+
+  if (engine === "ndlocr") {
+    return _runAutoDetectNdlocr();
+  }
+
+  // ── 이하 기존 KotenLayout 코드 (수정 없음) ──
+  return _runAutoDetectKoten();
+}
+
+/**
+ * KotenLayout 브라우저 자동감지 (기존 코드).
+ *
  * 흐름:
  *   1. ONNX 모델 로드 (캐시)
  *   2. PDF 페이지 이미지 추출
@@ -1279,7 +1301,7 @@ async function _getPageImage(pageNum) {
  *   4. Detection[] → LayoutBlock[] 변환
  *   5. 기존 블록에 추가 + 자동 저장
  */
-async function _runAutoDetect() {
+async function _runAutoDetectKoten() {
   if (!viewerState.docId || viewerState.pageNum == null) {
     showToast("문헌과 페이지를 먼저 선택하세요.", 'warning');
     return;
@@ -1345,6 +1367,23 @@ async function _runAutoDetect() {
 /**
  * 전체 페이지 배치 자동감지.
  *
+ * 전체 페이지 배치 자동감지.
+ * 엔진 선택에 따라 분기한다.
+ */
+async function _runAutoDetectAll() {
+  const engineSelect = document.getElementById("autodetect-engine");
+  const engine = engineSelect ? engineSelect.value : "koten";
+
+  if (engine === "ndlocr") {
+    return _runAutoDetectAllNdlocr();
+  }
+
+  return _runAutoDetectAllKoten();
+}
+
+/**
+ * KotenLayout 전체 페이지 배치 자동감지 (기존 코드).
+ *
  * 왜 이렇게 하는가:
  *   고전적 PDF는 수십~수백 페이지이다.
  *   1페이지씩 수동 클릭하는 것은 비효율적이므로,
@@ -1360,7 +1399,7 @@ async function _runAutoDetect() {
  *      d. PUT /api/.../layout 으로 저장
  *   3. 현재 페이지의 결과를 화면에 반영
  */
-async function _runAutoDetectAll() {
+async function _runAutoDetectAllKoten() {
   if (!viewerState.docId || !viewerState.partId) {
     showToast("문헌을 먼저 선택하세요.", 'warning');
     return;
@@ -1719,3 +1758,222 @@ function _initAutodetectUI() {
 document.addEventListener("DOMContentLoaded", () => {
   _initAutodetectUI();
 });
+
+
+/* ──────────────────────────
+   자동감지: NDLOCR DEIM (서버사이드)
+   ────────────────────────── */
+
+/**
+ * 자동감지 엔진 드롭다운을 채운다.
+ *
+ * /api/ocr/engines를 호출하여 ndlocr 엔진이 사용 가능하면
+ * 드롭다운에 옵션을 추가한다.
+ * 네트워크 오류나 서고 미설정 시에는 무시 (KotenLayout만 표시).
+ */
+async function _populateAutodetectEngines() {
+  const select = document.getElementById("autodetect-engine");
+  if (!select) return;
+
+  try {
+    const res = await fetch("/api/ocr/engines");
+    if (!res.ok) return;
+    const data = await res.json();
+    const ndlocr = (data.engines || []).find(
+      e => e.engine_id === "ndlocr" && e.available
+    );
+    if (ndlocr && !select.querySelector('option[value="ndlocr"]')) {
+      const opt = document.createElement("option");
+      opt.value = "ndlocr";
+      opt.textContent = "NDLOCR-DEIM (서버·17클래스)";
+      select.appendChild(opt);
+    }
+  } catch (_) {
+    // 네트워크 오류 무시 — KotenLayout만 사용 가능
+  }
+}
+
+
+/**
+ * NDLOCR DEIM 자동감지: 현재 페이지.
+ *
+ * 서버 API를 호출하여 DEIM으로 레이아웃을 감지한다.
+ * KotenLayout(5클래스)과 달리 17개 클래스를 탐지하여
+ * 본문/주석/두주/판심제/장차/도판 등을 세밀하게 구분한다.
+ */
+async function _runAutoDetectNdlocr() {
+  if (!viewerState.docId || !viewerState.partId || viewerState.pageNum == null) {
+    showToast("문헌과 페이지를 먼저 선택하세요.", "warning");
+    return;
+  }
+
+  const btn = document.getElementById("autodetect-btn");
+  if (btn) btn.disabled = true;
+  _setAutodetectStatus("NDLOCR 감지 중...");
+  const startTime = performance.now();
+
+  try {
+    // 1. 신뢰도 임계값
+    const confSlider = document.getElementById("autodetect-conf");
+    const conf = confSlider ? parseFloat(confSlider.value) : 0.3;
+
+    // 2. 서버 API 호출
+    const url =
+      `/api/ocr/detect-layout/${viewerState.docId}/${viewerState.pageNum}` +
+      `?part_id=${encodeURIComponent(viewerState.partId)}&conf_threshold=${conf}`;
+    const res = await fetch(url, { method: "POST" });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+
+    // 3. 응답의 blocks를 layoutState에 반영
+    layoutState.imageWidth = data.image_width;
+    layoutState.imageHeight = data.image_height;
+    layoutState.blocks = data.blocks || [];
+    layoutState.isDirty = true;
+
+    if (layoutState.blocks.length === 0) {
+      _setAutodetectStatus("감지된 영역 없음 (임계값을 낮춰보세요)");
+      return;
+    }
+
+    // 4. 렌더링 + 저장
+    _redrawOverlay();
+    _updateBlockList();
+    await _saveLayout();
+
+    const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+    _setAutodetectStatus(
+      `${data.block_count}블록 감지·저장됨 — NDLOCR (${elapsed}s)`
+    );
+  } catch (err) {
+    console.error("NDLOCR 자동감지 오류:", err);
+    _setAutodetectStatus(`오류: ${err.message}`);
+    showToast(`NDLOCR 자동감지 실패: ${err.message}`, "error");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+
+/**
+ * NDLOCR DEIM 전체 페이지 배치 자동감지.
+ *
+ * 전체 페이지를 순회하면서 서버 API를 호출한다.
+ * 각 페이지 결과를 PUT /api/.../layout으로 직접 저장한다.
+ */
+async function _runAutoDetectAllNdlocr() {
+  if (!viewerState.docId || !viewerState.partId) {
+    showToast("문헌을 먼저 선택하세요.", "warning");
+    return;
+  }
+
+  if (!pdfState.pdfDoc) {
+    showToast("PDF가 로드되지 않았습니다.", "warning");
+    return;
+  }
+
+  const totalPages = pdfState.pdfDoc.numPages;
+  if (!confirm(
+    `NDLOCR-DEIM으로 전체 ${totalPages}페이지 레이아웃을 서버에서 감지합니다.\n계속하시겠습니까?`
+  )) {
+    return;
+  }
+
+  const btn = document.getElementById("autodetect-btn");
+  const batchBtn = document.getElementById("autodetect-all-btn");
+  if (btn) btn.disabled = true;
+  if (batchBtn) batchBtn.disabled = true;
+
+  const confSlider = document.getElementById("autodetect-conf");
+  const conf = confSlider ? parseFloat(confSlider.value) : 0.3;
+
+  const startTime = performance.now();
+  let successCount = 0;
+  let totalBlocks = 0;
+  const failures = [];
+
+  try {
+    for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+      _setAutodetectStatus(
+        `NDLOCR 감지 중... ${pageNum}/${totalPages} (성공 ${successCount}, 실패 ${failures.length})`
+      );
+
+      try {
+        // 서버 API로 레이아웃 감지
+        const detectUrl =
+          `/api/ocr/detect-layout/${viewerState.docId}/${pageNum}` +
+          `?part_id=${encodeURIComponent(viewerState.partId)}&conf_threshold=${conf}`;
+        const detectRes = await fetch(detectUrl, { method: "POST" });
+
+        if (!detectRes.ok) {
+          const errData = await detectRes.json().catch(() => ({}));
+          throw new Error(errData.error || `HTTP ${detectRes.status}`);
+        }
+
+        const data = await detectRes.json();
+        const blocks = data.blocks || [];
+
+        // PUT /api/.../layout으로 저장
+        const saveUrl =
+          `/api/documents/${viewerState.docId}/pages/${pageNum}/layout` +
+          `?part_id=${encodeURIComponent(viewerState.partId)}`;
+        const saveRes = await fetch(saveUrl, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            part_id: viewerState.partId,
+            page_number: pageNum,
+            image_width: data.image_width,
+            image_height: data.image_height,
+            analysis_method: "auto_detect",
+            blocks: blocks,
+          }),
+        });
+
+        if (saveRes.ok) {
+          successCount++;
+          totalBlocks += blocks.length;
+        } else {
+          const errText = await saveRes.text();
+          failures.push({ page: pageNum, reason: `저장 실패 HTTP ${saveRes.status}: ${errText}` });
+        }
+      } catch (pageErr) {
+        failures.push({ page: pageNum, reason: pageErr.message });
+      }
+    }
+
+    // 현재 페이지의 결과를 화면에 반영
+    if (viewerState.pageNum) {
+      await loadPageLayout(viewerState.docId, viewerState.partId, viewerState.pageNum);
+    }
+
+    // 결과 보고
+    const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+    if (failures.length === 0) {
+      _setAutodetectStatus(
+        `완료: ${successCount}/${totalPages}페이지, ${totalBlocks}블록 — NDLOCR (${elapsed}s)`
+      );
+    } else {
+      _setAutodetectStatus(
+        `완료: 성공 ${successCount}/${totalPages}, 실패 ${failures.length}건 — NDLOCR (${elapsed}s)`
+      );
+      const failPages = failures.map(f => f.page).join(", ");
+      showToast(
+        `감지 실패 ${failures.length}건 (페이지: ${failPages})\n원인: ${failures[0].reason}`,
+        "error"
+      );
+    }
+  } catch (err) {
+    console.error("NDLOCR 배치 자동감지 오류:", err);
+    _setAutodetectStatus(`오류: ${err.message}`);
+    showToast(`NDLOCR 배치 자동감지 실패: ${err.message}`, "error");
+  } finally {
+    if (btn) btn.disabled = false;
+    if (batchBtn) batchBtn.disabled = false;
+  }
+}

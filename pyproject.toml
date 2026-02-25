@@ -37,6 +37,16 @@ paddleocr = [
     "paddlepaddle>=3.3.0",
     "paddleocr>=2.10.0",
 ]
+# NDLOCR-Lite 선택 설치(extra): uv sync --extra ndlocr
+# ONNX 기반 오프라인 OCR — 한문(CJK 한자)/일본어 전용. 한글 미지원.
+# Python 3.10+ 호환. PaddleOCR이 동작하지 않는 Python 3.13 환경의 대안.
+# 원본: https://github.com/ndl-lab/ndlocr-lite (CC BY 4.0, National Diet Library, Japan)
+ndlocr = [
+    "onnxruntime>=1.20.0",
+    "networkx>=3.0",
+    "ordered-set>=4.1.0",
+    "tqdm>=4.60.0",
+]
 
 [dependency-groups]
 dev = [
