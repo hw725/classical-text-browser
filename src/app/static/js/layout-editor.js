@@ -1765,31 +1765,48 @@ document.addEventListener("DOMContentLoaded", () => {
    ────────────────────────── */
 
 /**
- * 자동감지 엔진 드롭다운을 채운다.
+ * 자동감지 엔진 드롭다운의 NDLOCR 옵션 상태를 갱신한다.
  *
- * /api/ocr/engines를 호출하여 ndlocr 엔진이 사용 가능하면
- * 드롭다운에 옵션을 추가한다.
- * 네트워크 오류나 서고 미설정 시에는 무시 (KotenLayout만 표시).
+ * HTML에 정적으로 포함된 ndlocr 옵션(disabled 상태)을
+ * /api/ocr/engines 응답에 따라 활성화 또는 사용 불가 표시로 전환.
+ *
+ * 왜 정적 포함인가:
+ *   동적 추가 방식은 네트워크 지연·에러 시 옵션 자체가 안 보여서
+ *   사용자가 NDLOCR 레이아웃 감지 기능의 존재를 알 수 없었다.
+ *   정적으로 두고 상태만 갱신하면 항상 보인다.
  */
 async function _populateAutodetectEngines() {
   const select = document.getElementById("autodetect-engine");
   if (!select) return;
 
+  const ndlocrOpt = select.querySelector('option[value="ndlocr"]');
+  if (!ndlocrOpt) return;
+
   try {
     const res = await fetch("/api/ocr/engines");
-    if (!res.ok) return;
+    if (!res.ok) {
+      ndlocrOpt.textContent = "NDLOCR-DEIM (서버 연결 실패)";
+      ndlocrOpt.disabled = true;
+      console.warn("[layout] /api/ocr/engines 응답 오류:", res.status);
+      return;
+    }
     const data = await res.json();
     const ndlocr = (data.engines || []).find(
-      e => e.engine_id === "ndlocr" && e.available
+      e => e.engine_id === "ndlocr"
     );
-    if (ndlocr && !select.querySelector('option[value="ndlocr"]')) {
-      const opt = document.createElement("option");
-      opt.value = "ndlocr";
-      opt.textContent = "NDLOCR-DEIM (서버·17클래스)";
-      select.appendChild(opt);
+    if (ndlocr && ndlocr.available) {
+      // 사용 가능 → 활성화
+      ndlocrOpt.textContent = "NDLOCR-DEIM (서버·17클래스)";
+      ndlocrOpt.disabled = false;
+    } else {
+      // 엔진 미설치 또는 사용 불가
+      ndlocrOpt.textContent = "NDLOCR-DEIM (미설치)";
+      ndlocrOpt.disabled = true;
     }
-  } catch (_) {
-    // 네트워크 오류 무시 — KotenLayout만 사용 가능
+  } catch (err) {
+    ndlocrOpt.textContent = "NDLOCR-DEIM (서버 연결 실패)";
+    ndlocrOpt.disabled = true;
+    console.warn("[layout] 엔진 목록 조회 실패:", err.message);
   }
 }
 
