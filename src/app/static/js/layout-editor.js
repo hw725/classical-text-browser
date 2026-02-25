@@ -1277,14 +1277,16 @@ async function _getPageImage(pageNum) {
  *
  * 엔진 선택에 따라 분기:
  *   - koten: 브라우저 ONNX (KotenLayout)
+ *   - ndlkotenocr: 서버 API (NDL古典籍OCR RTMDet, 16클래스)
  *   - ndlocr: 서버 API (NDLOCR DEIM, 17클래스)
  */
 async function _runAutoDetect() {
   const engineSelect = document.getElementById("autodetect-engine");
   const engine = engineSelect ? engineSelect.value : "koten";
 
-  if (engine === "ndlocr") {
-    return _runAutoDetectNdlocr();
+  // 서버사이드 레이아웃 감지 엔진 (engine_id를 API에 전달)
+  if (engine === "ndlkotenocr" || engine === "ndlocr") {
+    return _runAutoDetectServer(engine);
   }
 
   // ── 이하 기존 KotenLayout 코드 (수정 없음) ──
@@ -1374,8 +1376,9 @@ async function _runAutoDetectAll() {
   const engineSelect = document.getElementById("autodetect-engine");
   const engine = engineSelect ? engineSelect.value : "koten";
 
-  if (engine === "ndlocr") {
-    return _runAutoDetectAllNdlocr();
+  // 서버사이드 레이아웃 감지 엔진
+  if (engine === "ndlkotenocr" || engine === "ndlocr") {
+    return _runAutoDetectAllServer(engine);
   }
 
   return _runAutoDetectAllKoten();
@@ -1765,68 +1768,100 @@ document.addEventListener("DOMContentLoaded", () => {
    ────────────────────────── */
 
 /**
- * 자동감지 엔진 드롭다운의 NDLOCR 옵션 상태를 갱신한다.
+ * 자동감지 엔진 드롭다운의 서버 엔진 옵션 상태를 갱신한다.
  *
- * HTML에 정적으로 포함된 ndlocr 옵션(disabled 상태)을
+ * HTML에 정적으로 포함된 서버 엔진 옵션(disabled 상태)을
  * /api/ocr/engines 응답에 따라 활성화 또는 사용 불가 표시로 전환.
  *
  * 왜 정적 포함인가:
  *   동적 추가 방식은 네트워크 지연·에러 시 옵션 자체가 안 보여서
- *   사용자가 NDLOCR 레이아웃 감지 기능의 존재를 알 수 없었다.
+ *   사용자가 서버 레이아웃 감지 기능의 존재를 알 수 없었다.
  *   정적으로 두고 상태만 갱신하면 항상 보인다.
  */
 async function _populateAutodetectEngines() {
   const select = document.getElementById("autodetect-engine");
   if (!select) return;
 
+  // 서버 엔진 옵션들 (정적 HTML에 disabled로 포함)
+  const ndlkotenOpt = select.querySelector('option[value="ndlkotenocr"]');
   const ndlocrOpt = select.querySelector('option[value="ndlocr"]');
-  if (!ndlocrOpt) return;
+
+  // 헬퍼: 단일 엔진 옵션의 상태를 갱신
+  function _updateEngineOption(optEl, engines, engineId, enabledLabel, disabledLabel, failLabel) {
+    if (!optEl) return;
+    const info = (engines || []).find(e => e.engine_id === engineId);
+    if (info && info.available) {
+      optEl.textContent = enabledLabel;
+      optEl.disabled = false;
+    } else {
+      optEl.textContent = disabledLabel;
+      optEl.disabled = true;
+    }
+  }
 
   try {
     const res = await fetch("/api/ocr/engines");
     if (!res.ok) {
-      ndlocrOpt.textContent = "NDLOCR-DEIM (서버 연결 실패)";
-      ndlocrOpt.disabled = true;
+      // 서버 연결 실패 — 모든 서버 옵션 비활성화
+      if (ndlkotenOpt) {
+        ndlkotenOpt.textContent = "NDL古典籍OCR-RTMDet (서버 연결 실패)";
+        ndlkotenOpt.disabled = true;
+      }
+      if (ndlocrOpt) {
+        ndlocrOpt.textContent = "NDLOCR-DEIM (서버 연결 실패)";
+        ndlocrOpt.disabled = true;
+      }
       console.warn("[layout] /api/ocr/engines 응답 오류:", res.status);
       return;
     }
     const data = await res.json();
-    const ndlocr = (data.engines || []).find(
-      e => e.engine_id === "ndlocr"
+
+    _updateEngineOption(
+      ndlkotenOpt, data.engines, "ndlkotenocr",
+      "NDL古典籍OCR-RTMDet (서버·16클래스)",
+      "NDL古典籍OCR-RTMDet (미설치)",
     );
-    if (ndlocr && ndlocr.available) {
-      // 사용 가능 → 활성화
-      ndlocrOpt.textContent = "NDLOCR-DEIM (서버·17클래스)";
-      ndlocrOpt.disabled = false;
-    } else {
-      // 엔진 미설치 또는 사용 불가
-      ndlocrOpt.textContent = "NDLOCR-DEIM (미설치)";
+    _updateEngineOption(
+      ndlocrOpt, data.engines, "ndlocr",
+      "NDLOCR-DEIM (서버·17클래스)",
+      "NDLOCR-DEIM (미설치)",
+    );
+  } catch (err) {
+    if (ndlkotenOpt) {
+      ndlkotenOpt.textContent = "NDL古典籍OCR-RTMDet (서버 연결 실패)";
+      ndlkotenOpt.disabled = true;
+    }
+    if (ndlocrOpt) {
+      ndlocrOpt.textContent = "NDLOCR-DEIM (서버 연결 실패)";
       ndlocrOpt.disabled = true;
     }
-  } catch (err) {
-    ndlocrOpt.textContent = "NDLOCR-DEIM (서버 연결 실패)";
-    ndlocrOpt.disabled = true;
     console.warn("[layout] 엔진 목록 조회 실패:", err.message);
   }
 }
 
 
 /**
- * NDLOCR DEIM 자동감지: 현재 페이지.
+ * 서버사이드 레이아웃 자동감지: 현재 페이지.
  *
- * 서버 API를 호출하여 DEIM으로 레이아웃을 감지한다.
- * KotenLayout(5클래스)과 달리 17개 클래스를 탐지하여
+ * 서버 API를 호출하여 레이아웃을 감지한다.
+ * KotenLayout(5클래스)과 달리 16~17개 클래스를 탐지하여
  * 본문/주석/두주/판심제/장차/도판 등을 세밀하게 구분한다.
+ *
+ * 입력:
+ *   engineId: "ndlkotenocr" (RTMDet 16클래스) 또는 "ndlocr" (DEIM 17클래스)
  */
-async function _runAutoDetectNdlocr() {
+async function _runAutoDetectServer(engineId) {
   if (!viewerState.docId || !viewerState.partId || viewerState.pageNum == null) {
     showToast("문헌과 페이지를 먼저 선택하세요.", "warning");
     return;
   }
 
+  // 엔진 표시명 (UI 메시지용)
+  const engineLabel = engineId === "ndlkotenocr" ? "NDL古典籍OCR" : "NDLOCR";
+
   const btn = document.getElementById("autodetect-btn");
   if (btn) btn.disabled = true;
-  _setAutodetectStatus("NDLOCR 감지 중...");
+  _setAutodetectStatus(`${engineLabel} 감지 중...`);
   const startTime = performance.now();
 
   try {
@@ -1834,10 +1869,12 @@ async function _runAutoDetectNdlocr() {
     const confSlider = document.getElementById("autodetect-conf");
     const conf = confSlider ? parseFloat(confSlider.value) : 0.3;
 
-    // 2. 서버 API 호출
+    // 2. 서버 API 호출 (engine_id 파라미터 전달)
     const url =
       `/api/ocr/detect-layout/${viewerState.docId}/${viewerState.pageNum}` +
-      `?part_id=${encodeURIComponent(viewerState.partId)}&conf_threshold=${conf}`;
+      `?part_id=${encodeURIComponent(viewerState.partId)}` +
+      `&engine_id=${encodeURIComponent(engineId)}` +
+      `&conf_threshold=${conf}`;
     const res = await fetch(url, { method: "POST" });
 
     if (!res.ok) {
@@ -1850,7 +1887,7 @@ async function _runAutoDetectNdlocr() {
     // 3. 좌표 변환: 원본 이미지 좌표 → PDF 좌표계 (scale=1.0)
     //
     // 왜 변환이 필요한가:
-    //   DEIM은 원본 해상도 이미지(예: 3000×4000px)에서 감지하지만,
+    //   서버 엔진은 원본 해상도 이미지(예: 3000×4000px)에서 감지하지만,
     //   오버레이 렌더링(_imageToCanvas)은 PDF viewport(scale=1.0,
     //   예: 595×842px) 기준으로 좌표를 해석한다.
     //   변환하지 않으면 블록이 원본/PDF 비율만큼 거대하게 그려진다.
@@ -1886,12 +1923,12 @@ async function _runAutoDetectNdlocr() {
 
     const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
     _setAutodetectStatus(
-      `${data.block_count}블록 감지·저장됨 — NDLOCR (${elapsed}s)`
+      `${data.block_count}블록 감지·저장됨 — ${engineLabel} (${elapsed}s)`
     );
   } catch (err) {
-    console.error("NDLOCR 자동감지 오류:", err);
+    console.error(`${engineLabel} 자동감지 오류:`, err);
     _setAutodetectStatus(`오류: ${err.message}`);
-    showToast(`NDLOCR 자동감지 실패: ${err.message}`, "error");
+    showToast(`${engineLabel} 자동감지 실패: ${err.message}`, "error");
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -1899,12 +1936,15 @@ async function _runAutoDetectNdlocr() {
 
 
 /**
- * NDLOCR DEIM 전체 페이지 배치 자동감지.
+ * 서버사이드 전체 페이지 배치 자동감지.
  *
  * 전체 페이지를 순회하면서 서버 API를 호출한다.
  * 각 페이지 결과를 PUT /api/.../layout으로 직접 저장한다.
+ *
+ * 입력:
+ *   engineId: "ndlkotenocr" (RTMDet 16클래스) 또는 "ndlocr" (DEIM 17클래스)
  */
-async function _runAutoDetectAllNdlocr() {
+async function _runAutoDetectAllServer(engineId) {
   if (!viewerState.docId || !viewerState.partId) {
     showToast("문헌을 먼저 선택하세요.", "warning");
     return;
@@ -1915,9 +1955,11 @@ async function _runAutoDetectAllNdlocr() {
     return;
   }
 
+  const engineLabel = engineId === "ndlkotenocr" ? "NDL古典籍OCR" : "NDLOCR";
+
   const totalPages = pdfState.pdfDoc.numPages;
   if (!confirm(
-    `NDLOCR-DEIM으로 전체 ${totalPages}페이지 레이아웃을 서버에서 감지합니다.\n계속하시겠습니까?`
+    `${engineLabel}으로 전체 ${totalPages}페이지 레이아웃을 서버에서 감지합니다.\n계속하시겠습니까?`
   )) {
     return;
   }
@@ -1938,14 +1980,16 @@ async function _runAutoDetectAllNdlocr() {
   try {
     for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
       _setAutodetectStatus(
-        `NDLOCR 감지 중... ${pageNum}/${totalPages} (성공 ${successCount}, 실패 ${failures.length})`
+        `${engineLabel} 감지 중... ${pageNum}/${totalPages} (성공 ${successCount}, 실패 ${failures.length})`
       );
 
       try {
-        // 서버 API로 레이아웃 감지
+        // 서버 API로 레이아웃 감지 (engine_id 파라미터 전달)
         const detectUrl =
           `/api/ocr/detect-layout/${viewerState.docId}/${pageNum}` +
-          `?part_id=${encodeURIComponent(viewerState.partId)}&conf_threshold=${conf}`;
+          `?part_id=${encodeURIComponent(viewerState.partId)}` +
+          `&engine_id=${encodeURIComponent(engineId)}` +
+          `&conf_threshold=${conf}`;
         const detectRes = await fetch(detectUrl, { method: "POST" });
 
         if (!detectRes.ok) {
@@ -1956,7 +2000,7 @@ async function _runAutoDetectAllNdlocr() {
         const data = await detectRes.json();
 
         // 좌표 변환: 원본 이미지 → PDF 좌표계 (scale=1.0)
-        // _runAutoDetectNdlocr()와 동일한 이유로 변환 필요.
+        // _runAutoDetectServer()와 동일한 이유로 변환 필요.
         const pdfPage = await pdfState.pdfDoc.getPage(pageNum);
         const vp = pdfPage.getViewport({ scale: 1.0 });
         const sx = vp.width / data.image_width;
@@ -2012,11 +2056,11 @@ async function _runAutoDetectAllNdlocr() {
     const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
     if (failures.length === 0) {
       _setAutodetectStatus(
-        `완료: ${successCount}/${totalPages}페이지, ${totalBlocks}블록 — NDLOCR (${elapsed}s)`
+        `완료: ${successCount}/${totalPages}페이지, ${totalBlocks}블록 — ${engineLabel} (${elapsed}s)`
       );
     } else {
       _setAutodetectStatus(
-        `완료: 성공 ${successCount}/${totalPages}, 실패 ${failures.length}건 — NDLOCR (${elapsed}s)`
+        `완료: 성공 ${successCount}/${totalPages}, 실패 ${failures.length}건 — ${engineLabel} (${elapsed}s)`
       );
       const failPages = failures.map(f => f.page).join(", ");
       showToast(
@@ -2025,9 +2069,9 @@ async function _runAutoDetectAllNdlocr() {
       );
     }
   } catch (err) {
-    console.error("NDLOCR 배치 자동감지 오류:", err);
+    console.error(`${engineLabel} 배치 자동감지 오류:`, err);
     _setAutodetectStatus(`오류: ${err.message}`);
-    showToast(`NDLOCR 배치 자동감지 실패: ${err.message}`, "error");
+    showToast(`${engineLabel} 배치 자동감지 실패: ${err.message}`, "error");
   } finally {
     if (btn) btn.disabled = false;
     if (batchBtn) batchBtn.disabled = false;

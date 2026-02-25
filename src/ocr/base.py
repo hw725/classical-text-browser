@@ -151,6 +151,7 @@ class BaseOcrEngine(ABC):
     display_name: str = ""        # 예: "PaddleOCR"
     requires_network: bool = False  # True이면 온라인 엔진
     supports_page_level: bool = False  # True이면 recognize_page() 사용 가능
+    supports_layout_detection: bool = False  # True이면 detect_layout() 사용 가능
 
     @abstractmethod
     def is_available(self) -> bool:
@@ -213,6 +214,28 @@ class BaseOcrEngine(ABC):
             f"{self.engine_id}은(는) 페이지 단위 인식을 지원하지 않습니다."
         )
 
+    def detect_layout(
+        self,
+        page_image_bytes: bytes,
+        page_number: int = 1,
+        conf_threshold: float = 0.0,
+    ) -> list[dict]:
+        """레이아웃만 탐지한다 (OCR 없이). 선택 구현.
+
+        supports_layout_detection=True인 엔진만 이 메서드를 오버라이드한다.
+        기본 구현은 NotImplementedError를 발생시킨다.
+
+        입력:
+          page_image_bytes: 전체 페이지 이미지 (PNG/JPEG 바이트)
+          page_number: 페이지 번호 (block_id 생성에 사용)
+          conf_threshold: 신뢰도 임계값 (0이면 기본값 사용, >0이면 후필터링)
+
+        출력: L3 layout blocks 호환 딕셔너리 목록.
+        """
+        raise NotImplementedError(
+            f"{self.engine_id}은(는) 레이아웃 탐지를 지원하지 않습니다."
+        )
+
     def get_info(self) -> dict:
         """엔진 정보를 딕셔너리로 반환. API 응답용."""
         return {
@@ -220,4 +243,5 @@ class BaseOcrEngine(ABC):
             "display_name": self.display_name,
             "requires_network": self.requires_network,
             "available": self.is_available(),
+            "supports_layout_detection": self.supports_layout_detection,
         }

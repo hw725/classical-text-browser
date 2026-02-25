@@ -1,0 +1,30 @@
+# NDL古典籍OCR-Lite 레이아웃 클래스 정의 (16개 클래스)
+#
+# 원본: https://github.com/ndl-lab/ndlkotenocr-lite/blob/v1.3.1/src/config/ndl.yaml
+# 라이선스: CC BY 4.0 (National Diet Library, Japan)
+#
+# ndlocr-lite(일반)와의 차이:
+#   - 16개 클래스 (ndlocr은 17개, line_title 없음)
+#   - 원본의 'line_note_dummy' → 'line_note_tochu'로 매핑 (ndl_parser 호환)
+#   - 원본의 'table' → 'block_table'로 매핑 (ndl_parser 호환)
+#
+# 이 매핑은 ndlocr/ndl_parser.py의 convert_to_xml_string3()가
+# classes.index('block_table'), classes.index('text_block') 등을
+# 호출할 때 정상 동작하기 위해 필요하다.
+names:
+  0: text_block
+  1: line_main
+  2: line_caption
+  3: line_ad
+  4: line_note
+  5: line_note_tochu
+  6: block_fig
+  7: block_ad
+  8: block_pillar
+  9: block_folio
+  10: block_rubi
+  11: block_chart
+  12: block_eqn
+  13: block_cfm
+  14: block_eng
+  15: block_table

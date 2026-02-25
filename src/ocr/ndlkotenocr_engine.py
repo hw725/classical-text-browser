@@ -1,17 +1,22 @@
-"""NDLOCR-Lite OCR 엔진.
+"""NDL古典籍OCR-Lite OCR 엔진.
 
-일본 국립국회도서관(NDL)의 ndlocr-lite를 래핑한 오프라인 OCR 엔진.
-DEIM(레이아웃/행 탐지) + PARSeq(문자 인식) + XY-Cut(읽기순서)로 구성.
+일본 국립국회도서관(NDL)의 ndlkotenocr-lite를 래핑한 오프라인 OCR 엔진.
+RTMDet(레이아웃/행 탐지) + PARSeq(문자 인식) + XY-Cut(읽기순서)로 구성.
 
-지원 언어: 한문(CJK 한자), 일본어.
+ndlocr-lite(일반)와의 차이:
+  - RTMDet 사용 (DEIM 대신) — 1280×1280 입력, 16개 클래스
+  - 단일 PARSeq 모델 (캐스케이드 없음) — 고전적 전용 학습
+  - 고전적(古典籍) 전용 문자셋 (변체가나·고서체·한문)
+
+지원 언어: 한문(CJK 한자), 일본어 고전적.
 한글은 학습 데이터에 포함되지 않아 인식 불가.
 국한문(한자+한글 혼용) 문헌에서는 한글 부분이 깨진다.
 
-원본: https://github.com/ndl-lab/ndlocr-lite
+원본: https://github.com/ndl-lab/ndlkotenocr-lite
 라이선스: CC BY 4.0 (National Diet Library, Japan)
 
 의존성 (선택 설치):
-  uv sync --extra ndlocr
+  uv sync --extra ndlocr  (또는 --extra ndlkotenocr)
   → onnxruntime, networkx, ordered-set, tqdm
 """
 
@@ -28,7 +33,6 @@ from .base import (
     BaseOcrEngine,
     OcrBlockResult,
     OcrCharResult,
-    OcrEngineError,
     OcrEngineUnavailableError,
     OcrLineResult,
 )
@@ -36,10 +40,11 @@ from .base import (
 logger = logging.getLogger(__name__)
 
 
-# ── ndlocr 카테고리 → 우리 block_type 매핑 ─────────────────────
-# ndlocr DEIM 모델이 탐지하는 17개 클래스를
+# ── ndlkotenocr 카테고리 → 우리 block_type 매핑 ────────────
+# ndlkotenocr RTMDet 모델이 탐지하는 16개 클래스를
 # 이 프로젝트의 block_type (resources/block_types.json)으로 매핑.
-NDLOCR_TO_BLOCK_TYPE = {
+# ndlocr의 NDLOCR_TO_BLOCK_TYPE과 동일한 패턴이지만 16개 클래스.
+NDLKOTENOCR_TO_BLOCK_TYPE = {
     0: "main_text",       # text_block (본문 블록 컨테이너)
     1: "main_text",       # line_main (본문 행)
     2: "annotation",      # line_caption (캡션 행)
@@ -56,39 +61,38 @@ NDLOCR_TO_BLOCK_TYPE = {
     13: "unknown",        # block_cfm (확인필요)
     14: "unknown",        # block_eng (영문 블록)
     15: "illustration",   # block_table (표)
-    16: "main_text",      # line_title (제목 행)
 }
 
 # LINE 유형의 class_index 집합 (행 단위로 PARSeq 인식 대상)
-_LINE_CLASS_INDICES = {1, 2, 3, 4, 5, 16}
+# ndlocr은 {1, 2, 3, 4, 5, 16}이지만, ndlkotenocr은 16번 없음 (16개 클래스)
+_LINE_CLASS_INDICES = {1, 2, 3, 4, 5}
 
 
-class NdlocrEngine(BaseOcrEngine):
-    """NDLOCR-Lite 기반 오프라인 OCR 엔진.
+class NdlkotenOcrEngine(BaseOcrEngine):
+    """NDL古典籍OCR-Lite 기반 오프라인 OCR 엔진.
 
     특징:
       - ONNX Runtime 기반 → Python 3.10+ 호환 (3.13 포함)
-      - PaddleOCR 대안: PaddlePaddle 의존성 없이 오프라인 OCR 가능
+      - 고전적(古典籍) 전용 학습 모델
       - 페이지 단위 인식 지원 (supports_page_level=True)
-      - 레이아웃 탐지 기능 내장 (17개 클래스)
+      - 레이아웃 탐지 기능 내장 (16개 클래스)
 
     제한:
-      - 한문(CJK 한자)/일본어만 지원. 한글 인식 불가.
-      - 모델 파일(~147MB)이 필요. 첫 사용 시 자동 다운로드.
+      - 한문(CJK 한자)/일본어 고전적만 지원. 한글 인식 불가.
+      - 모델 파일(~74MB)이 필요. 첫 사용 시 자동 다운로드.
+      - RTMDet 모델이 실제로 다중 클래스를 구분하는지는 모델 의존적.
     """
 
-    engine_id = "ndlocr"
-    display_name = "NDLOCR-Lite (오프라인·한문/일본어)"
+    engine_id = "ndlkotenocr"
+    display_name = "NDL古典籍OCR-Lite (오프라인·고전적 전용)"
     requires_network = False
     supports_page_level = True
     supports_layout_detection = True
 
     def __init__(self):
         """엔진 초기화. 모델은 첫 사용 시 lazy 로드."""
-        self._deim = None           # DEIM 레이아웃 탐지기
-        self._parseq30 = None       # PARSeq 30자 이하 모델
-        self._parseq50 = None       # PARSeq 50자 이하 모델
-        self._parseq100 = None      # PARSeq 100자 이하 (기본) 모델
+        self._rtmdet = None          # RTMDet 레이아웃/행 탐지기
+        self._parseq = None          # PARSeq 문자 인식기 (단일 모델)
         self._available: Optional[bool] = None
         self._unavailable_reason: Optional[str] = None
 
@@ -111,18 +115,18 @@ class NdlocrEngine(BaseOcrEngine):
                 "onnxruntime이 설치되지 않았습니다. "
                 "설치: uv sync --extra ndlocr"
             )
-            logger.info(f"NDLOCR-Lite 사용 불가: {self._unavailable_reason}")
+            logger.info(f"NDL古典籍OCR-Lite 사용 불가: {self._unavailable_reason}")
             return False
 
         # 2) 모델 파일 확인
-        from .ndlocr import models_available
+        from .ndlkotenocr import models_available
         if not models_available():
             # 모델은 없지만 런타임은 있으므로 "사용 가능"으로 표시.
             # 실제 OCR 호출 시 ensure_models()로 자동 다운로드 시도.
             self._available = True
             self._unavailable_reason = None
             logger.info(
-                "NDLOCR-Lite: onnxruntime 설치됨. "
+                "NDL古典籍OCR-Lite: onnxruntime 설치됨. "
                 "모델 파일 미감지 — 첫 OCR 실행 시 자동 다운로드됩니다."
             )
             return True
@@ -140,13 +144,13 @@ class NdlocrEngine(BaseOcrEngine):
     ) -> OcrBlockResult:
         """단일 블록(크롭 이미지)에서 텍스트를 인식한다.
 
-        DEIM으로 블록 내 행을 탐지한 뒤 PARSeq로 각 행을 인식.
-        블록 이미지에서는 DEIM 정확도가 다소 떨어질 수 있다.
+        RTMDet로 블록 내 행을 탐지한 뒤 PARSeq로 각 행을 인식.
+        블록 이미지에서는 RTMDet 정확도가 다소 떨어질 수 있다.
         가능하면 recognize_page()를 사용하는 것을 권장.
         """
         if not self.is_available():
             raise OcrEngineUnavailableError(
-                self._unavailable_reason or "NDLOCR-Lite 사용 불가"
+                self._unavailable_reason or "NDL古典籍OCR-Lite 사용 불가"
             )
 
         self._init_models()
@@ -155,8 +159,8 @@ class NdlocrEngine(BaseOcrEngine):
         pil_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         np_image = np.array(pil_image)
 
-        # DEIM으로 행 탐지
-        detections = self._deim.detect(np_image)
+        # RTMDet로 행 탐지
+        detections = self._rtmdet.detect(np_image)
 
         # LINE 유형만 필터링
         line_dets = [
@@ -200,10 +204,10 @@ class NdlocrEngine(BaseOcrEngine):
         """페이지 전체를 한 번에 인식한다 (권장 경로).
 
         처리 흐름:
-          1. DEIM으로 전체 페이지에서 LINE 탐지
+          1. RTMDet로 전체 페이지에서 LINE 탐지
           2. ndl_parser로 XML 구성
           3. XY-Cut으로 읽기 순서 결정
-          4. PARSeq 캐스케이드로 각 LINE 인식
+          4. PARSeq로 각 LINE 인식 (단일 모델, 캐스케이드 없음)
           5. 인식된 LINE을 L3 block의 bbox와 공간적으로 매칭
           6. 블록별로 그룹화된 결과 반환
 
@@ -218,7 +222,7 @@ class NdlocrEngine(BaseOcrEngine):
         """
         if not self.is_available():
             raise OcrEngineUnavailableError(
-                self._unavailable_reason or "NDLOCR-Lite 사용 불가"
+                self._unavailable_reason or "NDL古典籍OCR-Lite 사용 불가"
             )
 
         self._init_models()
@@ -237,8 +241,10 @@ class NdlocrEngine(BaseOcrEngine):
                 "block_id": "", "status": "detecting_lines",
             })
 
-        # 2. DEIM + ndl_parser + XY-Cut + PARSeq
-        lines_with_text = self._process_detections(np_image, self._deim.detect(np_image))
+        # 2. RTMDet + ndl_parser + XY-Cut + PARSeq
+        lines_with_text = self._process_detections(
+            np_image, self._rtmdet.detect(np_image),
+        )
 
         if progress_callback:
             progress_callback({
@@ -251,7 +257,8 @@ class NdlocrEngine(BaseOcrEngine):
 
         # 4. 결과 구성
         results = []
-        for idx, block in enumerate(blocks):
+        done_count = 0  # skip 제외 처리 완료 카운트 (progress 보고용)
+        for block in blocks:
             block_id = block.get("block_id", "unknown")
             skip = block.get("skip", False)
 
@@ -279,14 +286,15 @@ class NdlocrEngine(BaseOcrEngine):
                 "lines": line_dicts,
             })
 
+            done_count += 1
             if progress_callback:
                 progress_callback({
-                    "current": idx + 1, "total": total,
+                    "current": done_count, "total": total,
                     "block_id": block_id, "status": "processing",
                 })
 
         logger.info(
-            f"NDLOCR 페이지 인식 완료: "
+            f"NDL古典籍OCR 페이지 인식 완료: "
             f"{len(lines_with_text)}행 탐지 → {len(results)}블록에 매칭"
         )
         return results
@@ -299,18 +307,21 @@ class NdlocrEngine(BaseOcrEngine):
     ) -> list[dict]:
         """레이아웃만 탐지한다 (OCR 없이).
 
-        DEIM이 탐지한 영역을 우리 block_type으로 매핑하여 반환.
+        RTMDet가 탐지한 영역을 우리 block_type으로 매핑하여 반환.
+        RTMDet 모델이 실제로 다중 클래스를 구분하는지는 모델 의존적이다.
+        모든 탐지가 class 1(line_main)이더라도 행 위치 기반 읽기 순서를
+        제공하므로 유용하다.
 
         입력:
           page_image_bytes: 전체 페이지 이미지 (PNG/JPEG 바이트)
           page_number: 페이지 번호 (block_id 생성에 사용)
-          conf_threshold: 신뢰도 임계값 (0이면 DEIM 기본값 사용, >0이면 후필터링)
+          conf_threshold: 신뢰도 임계값 (0이면 기본값 사용, >0이면 후필터링)
 
         출력: L3 layout blocks 호환 딕셔너리 목록.
         """
         if not self.is_available():
             raise OcrEngineUnavailableError(
-                self._unavailable_reason or "NDLOCR-Lite 사용 불가"
+                self._unavailable_reason or "NDL古典籍OCR-Lite 사용 불가"
             )
 
         self._init_models()
@@ -318,7 +329,7 @@ class NdlocrEngine(BaseOcrEngine):
         pil_image = Image.open(io.BytesIO(page_image_bytes)).convert("RGB")
         np_image = np.array(pil_image)
 
-        detections = self._deim.detect(np_image)
+        detections = self._rtmdet.detect(np_image)
 
         layout_blocks = []
         block_idx = 0
@@ -335,7 +346,7 @@ class NdlocrEngine(BaseOcrEngine):
                 continue
 
             x1, y1, x2, y2 = det["box"]
-            block_type = NDLOCR_TO_BLOCK_TYPE.get(class_index, "unknown")
+            block_type = NDLKOTENOCR_TO_BLOCK_TYPE.get(class_index, "unknown")
 
             layout_blocks.append({
                 "block_id": f"p{page_number:02d}_b{block_idx + 1:02d}",
@@ -353,9 +364,11 @@ class NdlocrEngine(BaseOcrEngine):
     def get_info(self) -> dict:
         """엔진 정보 + 지원 언어 경고를 포함한 딕셔너리."""
         info = super().get_info()
-        info["supported_languages"] = ["classical_chinese", "japanese"]
+        info["supported_languages"] = ["classical_chinese", "classical_japanese"]
         info["language_warning"] = (
-            "한문(漢文)·일본어만 인식 가능합니다. 한글은 인식할 수 없습니다."
+            "고전적(古典籍) 한문·일본어 전용입니다. "
+            "한글은 인식할 수 없습니다. "
+            "근현대 자료에는 NDLOCR-Lite를 사용하세요."
         )
         if self._unavailable_reason:
             info["unavailable_reason"] = self._unavailable_reason
@@ -364,94 +377,110 @@ class NdlocrEngine(BaseOcrEngine):
     # ── 내부 헬퍼 ────────────────────────────────────────────
 
     def _init_models(self) -> None:
-        """DEIM + PARSeq 모델을 lazy 로드한다.
+        """RTMDet + PARSeq 모델을 lazy 로드한다.
 
         모델 파일이 없으면 자동 다운로드를 시도한다.
+        RTMDet는 ndlkotenocr 패키지에서,
+        PARSeq는 ndlocr 패키지의 클래스를 공유하되 ndlkotenocr 모델/config를 사용.
         """
-        if self._deim is not None:
+        # 두 모델이 모두 초기화되었으면 재로딩 불필요
+        if self._rtmdet is not None and self._parseq is not None:
             return
 
-        from .ndlocr import ensure_models, get_model_dir, get_config_dir
+        from .ndlkotenocr import ensure_models, get_config_dir
 
         model_dir = ensure_models(auto_download=True)
         if model_dir is None:
             raise OcrEngineUnavailableError(
-                "NDLOCR-Lite 모델 파일을 찾을 수 없고, 다운로드에도 실패했습니다. "
-                "수동 다운로드: https://github.com/ndl-lab/ndlocr-lite/tree/master/src/model"
+                "NDL古典籍OCR-Lite 모델 파일을 찾을 수 없고, 다운로드에도 실패했습니다. "
+                "수동 다운로드: https://github.com/ndl-lab/ndlkotenocr-lite/tree/v1.3.1/src/model"
             )
 
         config_dir = get_config_dir()
 
-        logger.info("NDLOCR-Lite 모델 로딩 중...")
+        logger.info("NDL古典籍OCR-Lite 모델 로딩 중...")
 
-        from .ndlocr.deim import DEIM
+        from .ndlkotenocr.rtmdet import RTMDet
+        # PARSeq 클래스는 ndlocr 패키지에서 공유 (동일한 아키텍처)
         from .ndlocr.parseq import PARSEQ
         from yaml import safe_load
 
-        # DEIM 레이아웃 탐지기
-        self._deim = DEIM(
-            model_path=str(model_dir / "deim-s-1024x1024.onnx"),
-            class_mapping_path=str(config_dir / "ndl.yaml"),
-            score_threshold=0.2,
-            conf_threshold=0.25,
-            iou_threshold=0.2,
-        )
+        # RTMDet 레이아웃/행 탐지기 (ndlkotenocr 전용 모델)
+        if self._rtmdet is None:
+            self._rtmdet = RTMDet(
+                model_path=str(model_dir / "rtmdet-s-1280x1280.onnx"),
+                class_mapping_path=str(config_dir / "ndl.yaml"),
+                score_threshold=0.2,
+                conf_threshold=0.25,
+                iou_threshold=0.2,
+            )
 
-        # PARSeq 문자 인식기 (3개 모델 — 캐스케이드)
-        char_config = config_dir / "NDLmoji.yaml"
-        with open(char_config, encoding="utf-8") as f:
-            charobj = safe_load(f)
-        charlist = list(charobj["model"]["charset_train"])
+        # PARSeq 문자 인식기 (단일 모델 — 캐스케이드 없음)
+        # ndlkotenocr 전용 문자셋(config/NDLmoji.yaml) 사용
+        if self._parseq is None:
+            char_config = config_dir / "NDLmoji.yaml"
+            with open(char_config, encoding="utf-8") as f:
+                charobj = safe_load(f)
+            charlist = list(charobj["model"]["charset_train"])
 
-        self._parseq30 = PARSEQ(
-            model_path=str(model_dir / "parseq-ndl-16x256-30-tiny-192epoch-tegaki3.onnx"),
-            charlist=charlist,
-        )
-        self._parseq50 = PARSEQ(
-            model_path=str(model_dir / "parseq-ndl-16x384-50-tiny-146epoch-tegaki2.onnx"),
-            charlist=charlist,
-        )
-        self._parseq100 = PARSEQ(
-            model_path=str(model_dir / "parseq-ndl-16x768-100-tiny-165epoch-tegaki2.onnx"),
-            charlist=charlist,
-        )
+            self._parseq = PARSEQ(
+                model_path=str(model_dir / "parseq-ndl-32x384-tiny-10.onnx"),
+                charlist=charlist,
+            )
 
-        logger.info("NDLOCR-Lite 모델 로딩 완료")
+        logger.info("NDL古典籍OCR-Lite 모델 로딩 완료")
 
     def _process_detections(
         self, np_image: np.ndarray, detections: list[dict],
     ) -> list[dict]:
-        """DEIM 탐지 결과를 처리하여 텍스트가 포함된 LINE 목록을 반환한다.
+        """RTMDet 탐지 결과를 처리하여 텍스트가 포함된 LINE 목록을 반환한다.
 
         처리 흐름:
           1. ndl_parser로 탐지 결과 → XML 문자열 구성
           2. XY-Cut으로 읽기 순서 결정
           3. 각 LINE을 이미지에서 크롭
-          4. PARSeq 캐스케이드로 각 LINE 인식
+          4. PARSeq 단일 모델로 각 LINE 인식 (캐스케이드 없음)
+
+        ndlocr_engine._process_detections()와의 차이:
+          - resultobj 구성 시 16개 클래스 (range(16))
+          - convert_to_xml_string3 호출 시 use_block_ad=False, score_thr=0.3
+          - PARSeq 캐스케이드 없이 단일 모델로 직접 인식
 
         출력: [{"text": "인식결과", "bbox": [x,y,x2,y2], "order": 0}, ...]
         """
+        # ndl_parser와 reading_order는 ndlocr 패키지에서 공유
         from .ndlocr.ndl_parser import convert_to_xml_string3
         from .ndlocr.reading_order.xy_cut.eval import eval_xml
 
         img_h, img_w = np_image.shape[:2]
-        classeslist = list(self._deim.classes.values())
+        classeslist = list(self._rtmdet.classes.values())
 
         # ndl_parser가 기대하는 형식으로 변환
+        # resultobj[0]: {0: [[x1,y1,x2,y2], ...]}  — text_block 좌표
+        # resultobj[1]: {0: [...], 1: [...], ..., 15: [...]}  — 클래스별 탐지
         resultobj = [dict(), dict()]
         resultobj[0][0] = []
-        for i in range(17):
+        for i in range(16):  # 16개 클래스 (ndlocr은 17개)
             resultobj[1][i] = []
 
         for det in detections:
             xmin, ymin, xmax, ymax = det["box"]
             conf = det["confidence"]
-            if det["class_index"] == 0:
+            cls_idx = det["class_index"]
+            # text_block (class 0)은 resultobj[0]에도 추가
+            if cls_idx == 0:
                 resultobj[0][0].append([xmin, ymin, xmax, ymax])
-            resultobj[1][det["class_index"]].append([xmin, ymin, xmax, ymax, conf])
+            # 범위 내 클래스만 추가 (안전 검사)
+            if 0 <= cls_idx < 16:
+                resultobj[1][cls_idx].append([xmin, ymin, xmax, ymax, conf])
 
-        # XML 구성
-        xmlstr = convert_to_xml_string3(img_w, img_h, "page.jpg", classeslist, resultobj)
+        # XML 구성 (ndlkotenocr 고유 파라미터)
+        xmlstr = convert_to_xml_string3(
+            img_w, img_h, "page.jpg", classeslist, resultobj,
+            use_block_ad=False,
+            score_thr=0.3,
+            min_bbox_size=5,
+        )
         xmlstr = "<OCRDATASET>" + xmlstr + "</OCRDATASET>"
 
         root = ET.fromstring(xmlstr)
@@ -459,50 +488,21 @@ class NdlocrEngine(BaseOcrEngine):
         # XY-Cut 읽기 순서 결정
         eval_xml(root, logger=None)
 
-        # LINE 크롭 + PARSeq 캐스케이드
-        from .ndlocr.parseq import PARSEQ  # noqa: F811
-
-        class _RecogLine:
-            """인식 대상 행."""
-            def __init__(self, npimg, idx, pred_char_cnt, pred_str=""):
-                self.npimg = npimg
-                self.idx = idx
-                self.pred_char_cnt = pred_char_cnt
-                self.pred_str = pred_str
-            def __lt__(self, other):
-                return self.idx < other.idx
-
-        alllineobj = []
+        # LINE 크롭 + PARSeq 인식 (단일 모델, 캐스케이드 없음)
+        lines_with_text = []
         for idx, lineobj in enumerate(root.findall(".//LINE")):
             xmin = int(lineobj.get("X"))
             ymin = int(lineobj.get("Y"))
             line_w = int(lineobj.get("WIDTH"))
             line_h = int(lineobj.get("HEIGHT"))
-            try:
-                pred_char_cnt = float(lineobj.get("PRED_CHAR_CNT", "100"))
-            except (ValueError, TypeError):
-                pred_char_cnt = 100.0
 
             # 이미지에서 행 크롭
             lineimg = np_image[ymin:ymin + line_h, xmin:xmin + line_w, :]
-            alllineobj.append(_RecogLine(lineimg, idx, pred_char_cnt))
+            if lineimg.size == 0:
+                continue
 
-        if not alllineobj:
-            return []
-
-        # PARSeq 캐스케이드 인식
-        resultlinesall = self._cascade_recognize(alllineobj)
-
-        # 결과 구성
-        lines_with_text = []
-        for idx, lineobj in enumerate(root.findall(".//LINE")):
-            if idx >= len(resultlinesall):
-                break
-            xmin = int(lineobj.get("X"))
-            ymin = int(lineobj.get("Y"))
-            line_w = int(lineobj.get("WIDTH"))
-            line_h = int(lineobj.get("HEIGHT"))
-            text = resultlinesall[idx]
+            # 단일 PARSeq 모델로 인식 (ndlocr의 캐스케이드와 달리 단일 패스)
+            text = self._parseq.read(lineimg) or ""
 
             lines_with_text.append({
                 "text": text,
@@ -515,73 +515,12 @@ class NdlocrEngine(BaseOcrEngine):
 
         return lines_with_text
 
-    def _cascade_recognize(self, alllineobj: list) -> list[str]:
-        """PARSeq 캐스케이드 인식.
-
-        ndlocr-lite의 process_cascade()를 재구현.
-        예측 글자 수에 따라 30자/50자/100자 모델을 단계적으로 적용:
-          - pred_char_cnt == 3: 30자 모델 먼저, 25자 이상이면 50자 모델로
-          - pred_char_cnt == 2: 50자 모델 먼저, 45자 이상이면 100자 모델로
-          - 그 외: 100자 모델
-
-        왜 이렇게 하는가:
-          짧은 텍스트에 큰 모델을 쓰면 오인식률이 높다.
-          작은 모델부터 시도하고, 결과가 비정상적으로 길면 더 큰 모델로 재시도.
-        """
-        list30, list50, list100 = [], [], []
-        for obj in alllineobj:
-            if obj.pred_char_cnt == 3:
-                list30.append(obj)
-            elif obj.pred_char_cnt == 2:
-                list50.append(obj)
-            else:
-                list100.append(obj)
-
-        all_results = []
-
-        # 30자 모델
-        if list30:
-            for obj in list30:
-                text = self._parseq30.read(obj.npimg)
-                if text and len(text) >= 25:
-                    list50.append(obj)  # 너무 길면 50자 모델로
-                else:
-                    obj.pred_str = text or ""
-                    all_results.append(obj)
-
-        # 50자 모델
-        if list50:
-            for obj in list50:
-                if obj.pred_str:
-                    all_results.append(obj)
-                    continue
-                text = self._parseq50.read(obj.npimg)
-                if text and len(text) >= 45:
-                    list100.append(obj)  # 너무 길면 100자 모델로
-                else:
-                    obj.pred_str = text or ""
-                    all_results.append(obj)
-
-        # 100자 모델
-        if list100:
-            for obj in list100:
-                if obj.pred_str:
-                    all_results.append(obj)
-                    continue
-                text = self._parseq100.read(obj.npimg)
-                obj.pred_str = text or ""
-                all_results.append(obj)
-
-        # 원래 인덱스 순서로 정렬
-        all_results.sort(key=lambda o: o.idx)
-        return [o.pred_str for o in all_results]
-
     def _recognize_single_line(self, np_image: np.ndarray) -> OcrBlockResult:
         """이미지 전체를 단일 행으로 간주하여 인식한다.
 
-        DEIM이 행을 탐지하지 못한 경우의 폴백.
+        RTMDet가 행을 탐지하지 못한 경우의 폴백.
         """
-        text = self._parseq100.read(np_image) or ""
+        text = self._parseq.read(np_image) or ""
         chars = [OcrCharResult(char=ch) for ch in text]
         line = OcrLineResult(text=text, characters=chars)
         return OcrBlockResult(
@@ -598,6 +537,8 @@ class NdlocrEngine(BaseOcrEngine):
 
         각 LINE의 bbox 중심점이 어떤 block의 bbox 안에 들어가는지로 매칭.
         매칭되지 않는 LINE은 가장 가까운 block에 할당.
+
+        ndlocr_engine._match_lines_to_blocks()와 동일한 로직.
 
         입력:
           lines: [{"text": str, "bbox": [x1,y1,x2,y2], "order": int}, ...]

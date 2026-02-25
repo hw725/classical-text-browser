@@ -73,6 +73,7 @@ class PaddleOcrEngine(BaseOcrEngine):
         self._use_gpu = use_gpu
         self._ocr = None  # lazy init
         self._ocr_lang = None  # 현재 로드된 모델의 언어
+        self._lang_cache: dict = {}  # 언어별 PaddleOCR 인스턴스 캐시 (동시 요청 안전)
         self._available: Optional[bool] = None
         self._unavailable_reason: Optional[str] = None
 
@@ -123,64 +124,89 @@ class PaddleOcrEngine(BaseOcrEngine):
 
         return self._available
 
-    def _get_ocr(self):
+    def _get_ocr(self, lang: str | None = None):
         """PaddleOCR 인스턴스를 lazy 초기화.
 
-        언어가 변경되었으면 모델을 다시 로드한다.
+        입력:
+          lang: 사용할 언어 코드. None이면 기본 언어(self._lang)를 사용.
+                다른 언어가 지정되면 별도 인스턴스를 캐시에서 반환한다.
+                공유 인스턴스(self._ocr)를 변경하지 않으므로 동시 요청 시 안전하다.
+
+        출력: PaddleOCR 인스턴스
+
         초기화 실패 시 한국어 에러 메시지를 제공한다.
+
+        왜 언어별 캐시인가:
+            이전에는 요청마다 self._lang을 변경(mutation)했는데,
+            동시 요청이 오면 언어가 뒤바뀌는 레이스 컨디션이 발생했다.
+            언어별 인스턴스를 캐시하면 공유 상태 변경 없이 안전하게 처리된다.
+            PADDLE_LANGUAGES가 5개뿐이므로 메모리 부담도 경미하다.
         """
-        # 언어가 변경되었으면 기존 인스턴스 해제
-        if self._ocr is not None and self._ocr_lang != self._lang:
-            self._ocr = None
+        target_lang = lang or self._lang
 
-        if self._ocr is None:
-            if not self.is_available():
-                reason = self._unavailable_reason
-                raise OcrEngineUnavailableError(
-                    f"PaddleOCR을 현재 환경에서 사용할 수 없습니다.\n"
-                    f"사유: {reason or '확인되지 않은 환경 문제'}\n"
-                    "설치: uv add --optional paddleocr paddlepaddle paddleocr\n"
-                    "참고: paddlepaddle 용량 ~500MB, 첫 실행 시 OCR 모델 ~100MB 추가 다운로드"
-                )
+        # 1. 캐시에서 조회
+        cached = self._lang_cache.get(target_lang)
+        if cached is not None:
+            return cached
 
-            try:
-                from paddleocr import PaddleOCR as _PaddleOCR
+        # 2. 기존 기본 인스턴스가 같은 언어이면 캐시에 등록
+        if self._ocr is not None and self._ocr_lang == target_lang:
+            self._lang_cache[target_lang] = self._ocr
+            return self._ocr
 
-                ocr_kwargs = {
-                    "lang": self._lang,
-                    "use_angle_cls": True,
-                    "use_gpu": self._use_gpu,
-                    "show_log": False,
-                }
+        # 3. 새 인스턴스 생성
+        if not self.is_available():
+            reason = self._unavailable_reason
+            raise OcrEngineUnavailableError(
+                f"PaddleOCR을 현재 환경에서 사용할 수 없습니다.\n"
+                f"사유: {reason or '확인되지 않은 환경 문제'}\n"
+                "설치: uv add --optional paddleocr paddlepaddle paddleocr\n"
+                "참고: paddlepaddle 용량 ~500MB, 첫 실행 시 OCR 모델 ~100MB 추가 다운로드"
+            )
 
-                # Windows + CPU 환경에서는 OneDNN(MKLDNN) 경로가
-                # fused_conv2d 런타임 오류를 낼 수 있어 기본 비활성화한다.
-                # 왜: OCR이 "설치되어도 실행 실패" 하는 현상을 최소 변경으로 막기 위함.
-                if not self._use_gpu and platform.system() == "Windows":
-                    ocr_kwargs["enable_mkldnn"] = False
+        try:
+            from paddleocr import PaddleOCR as _PaddleOCR
 
-                self._ocr = _PaddleOCR(**ocr_kwargs)
-                self._ocr_lang = self._lang
-                logger.info(f"PaddleOCR 모델 로드 완료 (lang={self._lang}, gpu={self._use_gpu})")
+            ocr_kwargs = {
+                "lang": target_lang,
+                "use_angle_cls": True,
+                "use_gpu": self._use_gpu,
+                "show_log": False,
+            }
 
-            except Exception as e:
-                # 모델 초기화 실패 시 구체적인 안내 제공
-                err_msg = str(e)
-                if "OneDNN" in err_msg or "onednn" in err_msg.lower():
-                    raise OcrEngineError(
-                        f"PaddleOCR 모델 초기화 실패 (OneDNN 호환성 문제).\n"
-                        f"Windows + Python 3.13에서 발생할 수 있습니다.\n"
-                        f"해결: Linux/macOS 환경에서 사용하거나, "
-                        f"Python 3.12 이하 + PaddlePaddle 2.6.x를 사용하세요.\n"
-                        f"원본 에러: {e}"
-                    )
+            # Windows + CPU 환경에서는 OneDNN(MKLDNN) 경로가
+            # fused_conv2d 런타임 오류를 낼 수 있어 기본 비활성화한다.
+            # 왜: OCR이 "설치되어도 실행 실패" 하는 현상을 최소 변경으로 막기 위함.
+            if not self._use_gpu and platform.system() == "Windows":
+                ocr_kwargs["enable_mkldnn"] = False
+
+            instance = _PaddleOCR(**ocr_kwargs)
+            self._lang_cache[target_lang] = instance
+
+            # 기본 언어이면 기존 필드도 갱신 (하위 호환)
+            if target_lang == self._lang:
+                self._ocr = instance
+                self._ocr_lang = target_lang
+
+            logger.info(f"PaddleOCR 모델 로드 완료 (lang={target_lang}, gpu={self._use_gpu})")
+            return instance
+
+        except Exception as e:
+            # 모델 초기화 실패 시 구체적인 안내 제공
+            err_msg = str(e)
+            if "OneDNN" in err_msg or "onednn" in err_msg.lower():
                 raise OcrEngineError(
-                    f"PaddleOCR 모델 초기화 실패.\n"
-                    f"언어: {self._lang}, GPU: {self._use_gpu}\n"
+                    f"PaddleOCR 모델 초기화 실패 (OneDNN 호환성 문제).\n"
+                    f"Windows + Python 3.13에서 발생할 수 있습니다.\n"
+                    f"해결: Linux/macOS 환경에서 사용하거나, "
+                    f"Python 3.12 이하 + PaddlePaddle 2.6.x를 사용하세요.\n"
                     f"원본 에러: {e}"
                 )
-
-        return self._ocr
+            raise OcrEngineError(
+                f"PaddleOCR 모델 초기화 실패.\n"
+                f"언어: {target_lang}, GPU: {self._use_gpu}\n"
+                f"원본 에러: {e}"
+            )
 
     def recognize(
         self,
@@ -198,11 +224,17 @@ class PaddleOcrEngine(BaseOcrEngine):
           - RGBA/L/P 모드 이미지를 RGB로 변환 (PaddleOCR은 RGB만 지원)
           - 빈 결과·잘못된 item 구조 안전 처리
           - 세로쓰기에서는 cls=False (각도 분류기가 세로쓰기를 잘못 회전시킴)
+
+        kwargs:
+          paddle_lang: PaddleOCR 언어 코드 오버라이드 (공유 인스턴스 mutation 없음).
+                       지정하면 해당 언어의 캐시된 인스턴스를 사용한다.
         """
         import numpy as np
         from PIL import Image
 
-        ocr = self._get_ocr()
+        # per-request 언어 오버라이드 (공유 인스턴스를 변경하지 않음)
+        paddle_lang = kwargs.pop("paddle_lang", None)
+        ocr = self._get_ocr(lang=paddle_lang)
 
         # 이미지 열기 + RGB 변환 (RGBA/L/P 등 → RGB)
         # 왜: PaddleOCR은 3채널 RGB numpy 배열만 받는다.

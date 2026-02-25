@@ -299,15 +299,18 @@ class OcrPipeline:
         page_number: int,
         block_id: str,
         engine_id: Optional[str] = None,
+        **engine_kwargs,
     ) -> OcrPageResult:
         """단일 블록만 OCR 실행 (재실행용).
 
         기존 L2 결과에서 해당 블록만 업데이트한다.
+        engine_kwargs는 run_page()를 통해 엔진의 recognize()에 전달된다.
         """
         return self.run_page(
             doc_id, part_id, page_number,
             engine_id=engine_id,
             block_ids=[block_id],
+            **engine_kwargs,
         )
 
     def _process_block(
