@@ -47,6 +47,16 @@ ndlocr = [
     "ordered-set>=4.1.0",
     "tqdm>=4.60.0",
 ]
+# NDL古典籍OCR-Lite 선택 설치(extra): uv sync --extra ndlkotenocr
+# ONNX 기반 오프라인 OCR — 고전적(古典籍) 전용. 변체가나/고서체/한문 특화.
+# ndlocr과 의존성 동일. uv sync --extra ndlocr 했으면 추가 설치 불필요.
+# 원본: https://github.com/ndl-lab/ndlkotenocr-lite (CC BY 4.0, National Diet Library, Japan)
+ndlkotenocr = [
+    "onnxruntime>=1.20.0",
+    "networkx>=3.0",
+    "ordered-set>=4.1.0",
+    "tqdm>=4.60.0",
+]
 
 [dependency-groups]
 dev = [

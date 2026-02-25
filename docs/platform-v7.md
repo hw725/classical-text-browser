@@ -70,7 +70,7 @@ v6까지의 7층 모델은 "OCR이 글자를 읽는다(2층) → 사람이 교�
 | 층 | 이름 | LLM의 역할 | 사람의 역할 | 구현 |
 |---|---|---|---|---|
 | 1 | 이미지/PDF | — | 원본 스캔/업로드 + 에셋 자동 감지 | ✓ |
-| 2 | OCR 글자해독 | PaddleOCR + LLM Vision | OCR 엔진 선택, 설정 조정 | ✓ |
+| 2 | OCR 글자해독 | NDL古典籍OCR + NDLOCR + LLM Vision + PaddleOCR | OCR 엔진 선택, 설정 조정 | ✓ |
 | 3 | 레이아웃 분석 | 이미지 보고 영역 구분 (본문/주석/서문 등) | 검토, 수정, 확정 | ✓ |
 | 4 | 사람 수정 | 교정 제안: 이체자 판별, 문맥 기반 오류 후보 | 최종 교정 판단, 확정 | ✓ |
 | 5 | 끊어읽기·현토 | 표점·현토 초안 (여러 안 병렬 제시) | 검토, 선택, 수정, 확정 | ✓ |
@@ -136,7 +136,7 @@ v6까지의 7층 모델은 "OCR이 글자를 읽는다(2층) → 사람이 교�
 | 층 | 저장소 | 분기 빈도 | 예시 |
 |---|---|---|---|
 | 1 | 원본 | 없음 | 원본은 하나 |
-| 2 | 원본 | 드묾 | PaddleOCR vs Claude Vision |
+| 2 | 원본 | 드묾 | NDL古典籍OCR vs NDLOCR vs LLM Vision vs PaddleOCR |
 | 3 | 원본 | 드묾 | 다른 레이아웃 해석 |
 | 4 | 원본 | 드묾 | 이체자 판단 차이, 판본 이문 |
 | 5 | 해석 | **핵심 분기** | 사람/LLM 각각의 현토·표점 |
@@ -362,7 +362,7 @@ parts가 1개이면 단권본, 여러 개이면 다권본. 동일한 구조.
 
 | 설정 항목 | 옵션 |
 |---|---|
-| OCR 엔진 | **PaddleOCR (기본 설치)**, Tesseract, Google Cloud Vision, 커스텀 |
+| OCR 엔진 | **NDL古典籍OCR-Lite (기본, 고전적 전용)**, NDLOCR-Lite (근현대 범용), LLM Vision, PaddleOCR, 커스텀 |
 | LLM 보조 | Claude Vision, GPT-4V, Gemini Vision 등 (텍스트만, 좌표 없음) |
 | 언어 | 한문(繁/簡), 한글, 일문, 만주어, 기타 |
 | 방향 | 세로쓰기, 가로쓰기, 혼합 |
@@ -1305,6 +1305,8 @@ library/
 **M1.3 OCR 파이프라인** ✓
 - PaddleOCR 기본 엔진 (paddlepaddle 3.3.0 + paddleocr 2.10.0)
 - LLM Vision 엔진 (Ollama/Gemini/OpenAI)
+- NDLOCR-Lite (ONNX, 근현대 범용) — D-038
+- NDL古典籍OCR-Lite (ONNX, 고전적 전용, 기본 엔진) — D-039
 - 표준 JSON 출력 (글자 + bbox + confidence)
 
 **M1.4 레이아웃 분석 도구** ✓
@@ -1345,7 +1347,7 @@ library/
 ### Phase 4: 인프라 — 진행 중
 
 **M4.1 서지정보 소스 추가** ✓ 범용 LLM 파서로 모든 URL 지원
-**M4.2 OCR 엔진 추가** ✓ PaddleOCR + LLM Vision
+**M4.2 OCR 엔진 추가** ✓ PaddleOCR + LLM Vision + NDLOCR-Lite + NDL古典籍OCR-Lite
 **M4.3 웹 인터페이스** ✓ FastAPI + vanilla JS (빌드 도구 없음)
 
 ### Phase 5: 서고 관리 — ✓ 완료 (2026-02-20 추가)
@@ -1363,7 +1365,7 @@ library/
 
 1. ~~JSON 스키마 각 필드의 상세 정의~~ → 완료 (jsonschema 검증)
 2. ~~서지정보 파싱 상세~~ → 완료 (4개 파서 + 범용 LLM 파서)
-3. OCR 엔진 비교 평가 (PaddleOCR vs LLM Vision 벤치마크)
+3. OCR 엔진 비교 평가 (PaddleOCR vs LLM Vision vs NDLOCR vs NDL古典籍OCR 벤치마크)
 4. git-lfs 설정 상세 (어떤 확장자를 LFS로 관리할지)
 5. block_type 어휘 확장 (문헌 유형별 필요한 type)
 

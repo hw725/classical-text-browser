@@ -988,6 +988,9 @@ Selection API가 반환하는 문자 오프셋에 표점 문자가 포함되어
 ### OCR
 - [x] OCR 엔진 플러그인 아키텍처 → D-009 (Phase 10-1)
 - [x] PaddleOCR 기본 엔진 설치 확정 — paddlepaddle 3.3.0 + paddleocr 2.10.0
+- [x] NDLOCR-Lite (근현대 범용) 통합 → D-038
+- [x] NDL古典籍OCR-Lite (고전적 전용) 통합 → D-039
+- [x] PaddleOCR 레이스 컨디션 수정 → D-039
 - [ ] OCR 엔진 비교 평가 → Phase 10 이후
 
 ### LLM 협업
@@ -1207,6 +1210,102 @@ src/ocr/
 - Tesseract OCR → CJK 세로쓰기 정확도가 현저히 낮아 거부.
 - EasyOCR → PyTorch 의존으로 설치 크기가 과대, Python 3.13 호환 미확인.
 - 브라우저 전용 OCR (Tesseract.js) → CJK 품질 부족.
+
+---
+
+## D-039: NDL古典籍OCR-Lite 통합 — 고전적 전용 OCR 엔진 + PaddleOCR 레이스 컨디션 수정
+
+**날짜**: 2026-02-25
+**맥락**: D-038에서 통합한 NDLOCR-Lite는 근현대 인쇄 자료 범용 엔진이다.
+에도 이전 와고서, 청대 이전 한적 등 고전적(古典籍) 자료에 특화된
+ndlkotenocr-lite를 네 번째 OCR 엔진으로 추가하고, 기존 PaddleOCR의
+공유 인스턴스 레이스 컨디션 버그도 함께 수정한다.
+
+**결정**:
+
+1. **RTMDet 레이아웃 탐지기 벤더링**: ndlkotenocr-lite의 RTMDet(1280×1280 입력, BGR)을
+   `src/ocr/ndlkotenocr/rtmdet.py`에 벤더링. 업스트림은 `class_index=1`을 하드코딩하지만,
+   우리 버전은 **실제 모델 출력 class_id를 보존**하여 16클래스 레이아웃 감지를 지원한다.
+
+2. **단일 PARSeq 모델 (캐스케이드 없음)**: ndlocr의 3단계 PARSeq 캐스케이드와 달리,
+   ndlkotenocr는 단일 PARSeq 모델(32×384)만 사용. 고전적 문자셋(NDLmoji.yaml, ~42KB) 전용.
+
+3. **코드 공유**: `parseq.py`, `ndl_parser.py`, `reading_order/` 모듈은 기존 ndlocr 패키지에서 공유.
+   RTMDet와 config 파일만 별도 벤더링하여 최소한의 코드 추가.
+
+4. **ndl.yaml 호환성 매핑**: ndlkotenocr의 16개 클래스를 ndlocr의 ndl_parser.py와 호환:
+   - `table` → `block_table` (ndl_parser가 인식하는 이름)
+   - `line_note_dummy` → `line_note_tochu` (두주 클래스)
+
+5. **엔진 등록 순서 변경**:
+   NDL古典籍OCR-Lite(1순위, 기본 엔진) → NDLOCR-Lite(2순위) → LLM Vision(3순위, "느릴 수 있음") → PaddleOCR(4순위, Python 3.13 미지원)
+   고전적 전용 엔진이 드롭다운에서 먼저 보이고, 첫 번째 사용 가능 엔진이 기본 엔진으로 선택된다.
+
+6. **detect-layout API 일반화**: `engine_id` 쿼리 파라미터 추가.
+   기존 하드코딩된 ndlocr 전용 → 어떤 `supports_layout_detection=True` 엔진이든 사용 가능.
+   `engine_id=None`이면 레이아웃 감지를 지원하는 첫 번째 사용 가능 엔진을 자동 선택.
+
+7. **프론트엔드 일반화**: `_runAutoDetectNdlocr()` → `_runAutoDetectServer(engineId)`로 리팩토링.
+   엔진별 개별 함수 대신 범용 서버사이드 감지 함수로 통합.
+   드롭다운에 ndlkotenocr 옵션 추가.
+
+8. **PaddleOCR 레이스 컨디션 수정 (Codex CLI 교차검증 발견)**:
+   - **문제**: `paddle_engine.lang = body.paddle_lang`이 공유 싱글톤을 mutation.
+     동시 요청 시 언어가 뒤바뀌는 레이스 컨디션 발생.
+   - **수정**: `engine_kwargs["paddle_lang"]`으로 전달하여 공유 인스턴스를 변경하지 않음.
+     `PaddleOcrEngine._get_ocr(lang=...)`가 언어별 인스턴스를 캐시하여 안전하게 처리.
+     `pipeline.run_block()`도 `**engine_kwargs`를 전달하도록 수정.
+
+9. **모델 자동 다운로드**: ONNX 모델(~74MB)은 git에 포함하지 않고,
+   `~/.cache/classical-text-browser/ndlkotenocr-models/`에 GitHub v1.3.1 태그에서 자동 다운로드.
+
+**ndlkotenocr 16클래스 → block_type 매핑**:
+| class | 이름 | block_type |
+|---|---|---|
+| 0 | text_block | main_text |
+| 1 | line_main | main_text |
+| 2 | line_caption | annotation |
+| 3 | line_ad | unknown |
+| 4 | line_note | annotation |
+| 5 | line_note_tochu | marginal_note |
+| 6 | block_fig | illustration |
+| 7 | block_ad | unknown |
+| 8 | block_pillar (柱) | page_title |
+| 9 | block_folio (ノンブル) | page_number |
+| 10 | block_rubi | unknown |
+| 11 | block_chart | illustration |
+| 12 | block_eqn | unknown |
+| 13 | block_cfm | unknown |
+| 14 | block_eng | unknown |
+| 15 | block_table | illustration |
+
+**파일 구조**:
+```
+src/ocr/
+├── base.py                   ← +supports_layout_detection 속성
+├── pipeline.py               ← run_block() **engine_kwargs 전달 수정
+├── registry.py               ← 4개 엔진 등록 순서 변경
+├── paddleocr_engine.py       ← 언어별 인스턴스 캐시 (레이스 컨디션 수정)
+├── ndlocr_engine.py          ← +supports_layout_detection = True
+├── ndlkotenocr_engine.py     ← 신규: NdlkotenOcrEngine (단일 PARSeq + RTMDet)
+└── ndlkotenocr/              ← 신규: 벤더링된 RTMDet + config
+    ├── __init__.py            ← 모델 다운로드 관리 (~74MB)
+    ├── rtmdet.py              ← RTMDet 레이아웃 탐지기 (class_id 보존)
+    └── config/
+        ├── ndl.yaml           ← 16클래스 (block_table로 매핑)
+        └── NDLmoji.yaml       ← 고전적 전용 문자셋
+```
+
+**수정 파일**: `base.py`, `pipeline.py`, `registry.py`, `paddleocr_engine.py`,
+`ndlocr_engine.py`, `llm_ocr.py`, `pyproject.toml`, `index.html`, `layout-editor.js`
+
+**신규 파일**: `ndlkotenocr_engine.py`, `src/ocr/ndlkotenocr/` (3파일 + config 2파일)
+
+**검증**: Codex CLI (gpt-5.3-codex) 교차검증 완료. 6건 발견 → 자체 코드 3건 수정 완료.
+
+**대안**:
+- ndlkotenocr를 ndlocr의 서브클래스로 구현 → RTMDet/DEIM 입력 차이가 커서 별도 클래스가 더 명확.
+- PaddleOCR lang mutation을 Lock으로 보호 → Lock은 비동기 환경에서 복잡. 인스턴스 캐시가 더 단순.
 
 ---
 

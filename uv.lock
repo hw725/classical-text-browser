@@ -329,6 +329,13 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+ndlkotenocr = [
+    { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "onnxruntime" },
+    { name = "ordered-set" },
+    { name = "tqdm" },
+]
 ndlocr = [
     { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
@@ -360,9 +367,12 @@ requires-dist = [
     { name = "hwp-hwpx-parser", specifier = ">=1.0.0" },
     { name = "jsonschema", specifier = ">=4.20.0" },
     { name = "lxml", specifier = ">=5.0.0" },
+    { name = "networkx", marker = "extra == 'ndlkotenocr'", specifier = ">=3.0" },
     { name = "networkx", marker = "extra == 'ndlocr'", specifier = ">=3.0" },
+    { name = "onnxruntime", marker = "extra == 'ndlkotenocr'", specifier = ">=1.20.0" },
     { name = "onnxruntime", marker = "extra == 'ndlocr'", specifier = ">=1.20.0" },
     { name = "openai", specifier = ">=1.50.0" },
+    { name = "ordered-set", marker = "extra == 'ndlkotenocr'", specifier = ">=4.1.0" },
     { name = "ordered-set", marker = "extra == 'ndlocr'", specifier = ">=4.1.0" },
     { name = "paddleocr", marker = "extra == 'paddleocr'", specifier = ">=2.10.0" },
     { name = "paddlepaddle", marker = "extra == 'paddleocr'", specifier = ">=3.3.0" },
@@ -371,10 +381,11 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.22" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "regex", specifier = ">=2026.2.19" },
+    { name = "tqdm", marker = "extra == 'ndlkotenocr'", specifier = ">=4.60.0" },
     { name = "tqdm", marker = "extra == 'ndlocr'", specifier = ">=4.60.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
 ]
-provides-extras = ["paddleocr", "ndlocr"]
+provides-extras = ["paddleocr", "ndlocr", "ndlkotenocr"]
 
 [package.metadata.requires-dev]
 dev = [

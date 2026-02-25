@@ -273,38 +273,71 @@ async def api_detect_layout(
     doc_id: str,
     page: int,
     part_id: str = Query(..., description="파트 ID"),
+    engine_id: str = Query(
+        None,
+        description="레이아웃 감지 엔진 ID (ndlocr 또는 ndlkotenocr). "
+                    "None이면 레이아웃 감지를 지원하는 첫 번째 엔진 사용.",
+    ),
     conf_threshold: float = Query(0.3, description="감지 신뢰도 임계값 (0.0~1.0)"),
 ):
-    """NDLOCR DEIM으로 페이지 레이아웃을 서버에서 감지한다.
+    """서버사이드 레이아웃 감지 (엔진 선택 가능).
 
     왜 필요한가:
         KotenLayout(브라우저 ONNX)은 5클래스(본문/삽화/인장)만 탐지한다.
-        NDLOCR DEIM은 17클래스(본문/주석/두주/판심제/장차/도판 등)를 탐지하여
+        서버 엔진은 16~17클래스(본문/주석/두주/판심제/장차/도판 등)를 탐지하여
         고전적 레이아웃을 더 세밀하게 분석할 수 있다.
+
+    지원 엔진:
+        - ndlkotenocr: RTMDet 16클래스 (고전적 전용)
+        - ndlocr: DEIM 17클래스 (근현대 범용)
 
     입력:
         doc_id: 문서 ID
         page: 페이지 번호 (1-indexed)
         part_id: 파트 ID (이미지 탐색에 사용)
+        engine_id: 레이아웃 감지 엔진 ID (None이면 자동 선택)
         conf_threshold: 감지 신뢰도 임계값
 
     출력:
         { "blocks": [...], "image_width": int, "image_height": int,
-          "analysis_method": "auto_detect", "engine": "ndlocr" }
+          "analysis_method": "auto_detect", "engine": "<engine_id>" }
     """
     library_path = get_library_path()
     if library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    # 1. NDLOCR 엔진 가져오기
+    # 1. 레이아웃 감지 엔진 가져오기
     _pipeline, registry = _get_ocr_pipeline()
-    try:
-        engine = registry.get_engine("ndlocr")
-    except Exception as e:
-        return JSONResponse(
-            {"error": f"NDLOCR 엔진을 사용할 수 없습니다: {e}"},
-            status_code=400,
-        )
+
+    if engine_id is not None:
+        # 명시적으로 지정된 엔진 사용
+        try:
+            engine = registry.get_engine(engine_id)
+        except Exception as e:
+            return JSONResponse(
+                {"error": f"'{engine_id}' 엔진을 사용할 수 없습니다: {e}"},
+                status_code=400,
+            )
+        if not getattr(engine, "supports_layout_detection", False):
+            return JSONResponse(
+                {"error": f"'{engine_id}' 엔진은 레이아웃 감지를 지원하지 않습니다."},
+                status_code=400,
+            )
+    else:
+        # engine_id 미지정 → 레이아웃 감지를 지원하는 첫 번째 사용 가능 엔진 자동 선택
+        engine = None
+        for info in registry.list_engines():
+            if info.get("supports_layout_detection") and info.get("available"):
+                try:
+                    engine = registry.get_engine(info["engine_id"])
+                    break
+                except Exception:
+                    continue
+        if engine is None:
+            return JSONResponse(
+                {"error": "레이아웃 감지를 지원하는 사용 가능한 엔진이 없습니다."},
+                status_code=400,
+            )
 
     # 2. 페이지 이미지 로드 (원본 해상도)
     from ocr.image_utils import get_page_image_path, load_page_image, load_page_image_from_pdf
@@ -347,7 +380,7 @@ async def api_detect_layout(
         "image_width": img_w,
         "image_height": img_h,
         "analysis_method": "auto_detect",
-        "engine": "ndlocr",
+        "engine": engine.engine_id,
         "block_count": len(blocks),
     }
 
@@ -417,13 +450,14 @@ async def api_run_ocr(
     if body.force_model:
         engine_kwargs["force_model"] = body.force_model
 
-    # PaddleOCR 엔진: 언어 런타임 변경
+    # PaddleOCR 엔진: 요청별 언어 지정 (공유 인스턴스 mutation 없음)
+    # 왜 engine_kwargs로 전달하는가:
+    #   이전에는 paddle_engine.lang을 직접 변경했는데, 동시 요청 시
+    #   언어가 뒤바뀌는 레이스 컨디션이 발생했다 (공유 싱글톤 mutation).
+    #   engine_kwargs로 전달하면 PaddleOcrEngine.recognize()에서
+    #   언어별 캐시 인스턴스를 사용하여 안전하게 처리된다.
     if body.paddle_lang and body.engine_id == "paddleocr":
-        try:
-            paddle_engine = _registry.get_engine("paddleocr")
-            paddle_engine.lang = body.paddle_lang
-        except Exception:
-            pass  # 엔진이 없거나 사용 불가 — 무시 (아래 run_page에서 에러 처리)
+        engine_kwargs["paddle_lang"] = body.paddle_lang
 
     try:
         result = pipeline.run_page(
@@ -479,12 +513,9 @@ async def api_run_ocr_stream(
         engine_kwargs["force_provider"] = body.force_provider
     if body.force_model:
         engine_kwargs["force_model"] = body.force_model
+    # PaddleOCR 요청별 언어 지정 (공유 인스턴스 mutation 없음)
     if body.paddle_lang and body.engine_id == "paddleocr":
-        try:
-            paddle_engine = _registry.get_engine("paddleocr")
-            paddle_engine.lang = body.paddle_lang
-        except Exception:
-            pass
+        engine_kwargs["paddle_lang"] = body.paddle_lang
 
     # asyncio.Queue를 사용해 동기 콜백 → 비동기 제너레이터로 연결
     progress_queue: asyncio.Queue = asyncio.Queue()
@@ -562,13 +593,20 @@ async def api_get_ocr_result(
     import json as _json
 
     filename = f"{part_id}_page_{page_number:03d}.json"
+    legacy_filename = f"page_{page_number:03d}.json"
     ocr_path = library_path / "documents" / doc_id / "L2_ocr" / filename
 
+    # 레거시 파일명 폴백 (part_id 없는 구형 파일 호환)
     if not ocr_path.exists():
-        return JSONResponse(
-            {"error": f"OCR 결과가 없습니다: {doc_id}/{part_id}/page_{page_number:03d}"},
-            status_code=404,
-        )
+        legacy_path = library_path / "documents" / doc_id / "L2_ocr" / legacy_filename
+        if legacy_path.exists():
+            ocr_path = legacy_path
+            filename = legacy_filename
+        else:
+            return JSONResponse(
+                {"error": f"OCR 결과가 없습니다: {doc_id}/{part_id}/page_{page_number:03d}"},
+                status_code=404,
+            )
 
     data = _json.loads(ocr_path.read_text(encoding="utf-8"))
     data["_meta"] = {
@@ -768,20 +806,15 @@ async def api_rerun_ocr_block(
 
     pipeline, _registry = _get_ocr_pipeline()
 
-    # PaddleOCR 엔진: 언어 런타임 변경
-    if body.paddle_lang and body.engine_id == "paddleocr":
-        try:
-            paddle_engine = _registry.get_engine("paddleocr")
-            paddle_engine.lang = body.paddle_lang
-        except Exception:
-            pass
-
-    # LLM 엔진용 추가 인자
+    # 엔진별 추가 인자
     engine_kwargs = {}
     if body.force_provider:
         engine_kwargs["force_provider"] = body.force_provider
     if body.force_model:
         engine_kwargs["force_model"] = body.force_model
+    # PaddleOCR 요청별 언어 지정 (공유 인스턴스 mutation 없음)
+    if body.paddle_lang and body.engine_id == "paddleocr":
+        engine_kwargs["paddle_lang"] = body.paddle_lang
 
     try:
         result = pipeline.run_block(
