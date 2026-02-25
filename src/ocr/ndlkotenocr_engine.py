@@ -393,7 +393,7 @@ class NdlkotenOcrEngine(BaseOcrEngine):
         if model_dir is None:
             raise OcrEngineUnavailableError(
                 "NDL古典籍OCR-Lite 모델 파일을 찾을 수 없고, 다운로드에도 실패했습니다. "
-                "수동 다운로드: https://github.com/ndl-lab/ndlkotenocr-lite/tree/v1.3.1/src/model"
+                "수동 다운로드: https://github.com/ndl-lab/ndlkotenocr-lite/tree/1.3.1/src/model"
             )
 
         config_dir = get_config_dir()

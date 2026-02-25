@@ -1257,7 +1257,7 @@ ndlkotenocr-lite를 네 번째 OCR 엔진으로 추가하고, 기존 PaddleOCR�
      `pipeline.run_block()`도 `**engine_kwargs`를 전달하도록 수정.
 
 9. **모델 자동 다운로드**: ONNX 모델(~74MB)은 git에 포함하지 않고,
-   `~/.cache/classical-text-browser/ndlkotenocr-models/`에 GitHub v1.3.1 태그에서 자동 다운로드.
+   `~/.cache/classical-text-browser/ndlkotenocr-models/`에 GitHub 1.3.1 태그에서 자동 다운로드.
 
 **ndlkotenocr 16클래스 → block_type 매핑**:
 | class | 이름 | block_type |

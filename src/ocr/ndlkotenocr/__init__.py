@@ -30,9 +30,10 @@ logger = logging.getLogger(__name__)
 _DEFAULT_MODEL_DIR = Path.home() / ".cache" / "classical-text-browser" / "ndlkotenocr-models"
 
 # GitHub 안정 릴리즈 태그에서 모델 다운로드 (raw URL)
-# master가 아닌 v1.3.1 태그를 고정하여 재현성을 보장한다.
+# master가 아닌 1.3.1 태그를 고정하여 재현성을 보장한다.
+# 주의: 이 저장소의 태그에는 'v' 접두사가 없다 (v1.3.1 ✗ → 1.3.1 ✓).
 _GITHUB_RAW_BASE = (
-    "https://github.com/ndl-lab/ndlkotenocr-lite/raw/v1.3.1/src/model/"
+    "https://raw.githubusercontent.com/ndl-lab/ndlkotenocr-lite/1.3.1/src/model/"
 )
 
 # 필요한 ONNX 모델 파일 목록 (2개, 총 ~74MB)
