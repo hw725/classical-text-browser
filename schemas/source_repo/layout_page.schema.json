@@ -134,6 +134,13 @@
           "description": "이 블록이 참조하는 다른 블록의 block_id. 예: 주석이 본문을 참조. (v7 섹션 5.3: refers_to_block으로 '이 주석은 저 본문에 달린 것'임을 표현)",
           "default": null
         },
+        "confidence": {
+          "type": ["number", "null"],
+          "description": "자동 감지 시 해당 영역의 신뢰도 (0.0~1.0). 수동 편집 블록은 null.",
+          "minimum": 0,
+          "maximum": 1,
+          "default": null
+        },
         "skip": {
           "type": "boolean",
           "description": "true이면 OCR에서 건너뛴다 (예: 인장, 삽화).",
