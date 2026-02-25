@@ -1847,13 +1847,34 @@ async function _runAutoDetectNdlocr() {
 
     const data = await res.json();
 
-    // 3. 응답의 blocks를 layoutState에 반영
-    layoutState.imageWidth = data.image_width;
-    layoutState.imageHeight = data.image_height;
-    layoutState.blocks = data.blocks || [];
+    // 3. 좌표 변환: 원본 이미지 좌표 → PDF 좌표계 (scale=1.0)
+    //
+    // 왜 변환이 필요한가:
+    //   DEIM은 원본 해상도 이미지(예: 3000×4000px)에서 감지하지만,
+    //   오버레이 렌더링(_imageToCanvas)은 PDF viewport(scale=1.0,
+    //   예: 595×842px) 기준으로 좌표를 해석한다.
+    //   변환하지 않으면 블록이 원본/PDF 비율만큼 거대하게 그려진다.
+    const pdfPage = await pdfState.pdfDoc.getPage(viewerState.pageNum);
+    const vp = pdfPage.getViewport({ scale: 1.0 });
+    const scaleX = vp.width / data.image_width;
+    const scaleY = vp.height / data.image_height;
+
+    const blocks = (data.blocks || []).map(block => ({
+      ...block,
+      bbox: [
+        Math.round(block.bbox[0] * scaleX),
+        Math.round(block.bbox[1] * scaleY),
+        Math.round(block.bbox[2] * scaleX),
+        Math.round(block.bbox[3] * scaleY),
+      ],
+    }));
+
+    layoutState.imageWidth = Math.round(vp.width);
+    layoutState.imageHeight = Math.round(vp.height);
+    layoutState.blocks = blocks;
     layoutState.isDirty = true;
 
-    if (layoutState.blocks.length === 0) {
+    if (blocks.length === 0) {
       _setAutodetectStatus("감지된 영역 없음 (임계값을 낮춰보세요)");
       return;
     }
@@ -1933,9 +1954,27 @@ async function _runAutoDetectAllNdlocr() {
         }
 
         const data = await detectRes.json();
-        const blocks = data.blocks || [];
 
-        // PUT /api/.../layout으로 저장
+        // 좌표 변환: 원본 이미지 → PDF 좌표계 (scale=1.0)
+        // _runAutoDetectNdlocr()와 동일한 이유로 변환 필요.
+        const pdfPage = await pdfState.pdfDoc.getPage(pageNum);
+        const vp = pdfPage.getViewport({ scale: 1.0 });
+        const sx = vp.width / data.image_width;
+        const sy = vp.height / data.image_height;
+        const imgW = Math.round(vp.width);
+        const imgH = Math.round(vp.height);
+
+        const blocks = (data.blocks || []).map(b => ({
+          ...b,
+          bbox: [
+            Math.round(b.bbox[0] * sx),
+            Math.round(b.bbox[1] * sy),
+            Math.round(b.bbox[2] * sx),
+            Math.round(b.bbox[3] * sy),
+          ],
+        }));
+
+        // PUT /api/.../layout으로 저장 (PDF 좌표계 기준)
         const saveUrl =
           `/api/documents/${viewerState.docId}/pages/${pageNum}/layout` +
           `?part_id=${encodeURIComponent(viewerState.partId)}`;
@@ -1945,8 +1984,8 @@ async function _runAutoDetectAllNdlocr() {
           body: JSON.stringify({
             part_id: viewerState.partId,
             page_number: pageNum,
-            image_width: data.image_width,
-            image_height: data.image_height,
+            image_width: imgW,
+            image_height: imgH,
             analysis_method: "auto_detect",
             blocks: blocks,
           }),
