@@ -1309,6 +1309,127 @@ src/ocr/
 
 ---
 
+## D-040: ndlkotenocr OCR 파이프라인 — 업스트림 class_index 호환성 복원
+
+**날짜**: 2026-02-25
+
+**맥락**: ndlkotenocr-lite 통합 후 OCR 결과가 비정상적으로 나오는 문제 발생.
+업스트림 소스 비교 결과, 근본 원인은 `_process_detections()`에서
+RTMDet 탐지의 실제 `class_id`를 보존한 채 `resultobj`에 분배한 것.
+
+**원인 분석**:
+- 업스트림 `rtmdet.py`의 `postprocess()`는 **모든 탐지의 class_index를 1(line_main)로 하드코딩**
+- 이는 OCR 파이프라인(ndl_parser → XY-Cut → PARSeq)이 모든 탐지를 LINE으로 처리하도록 설계됐기 때문
+- 우리 벤더링은 `detect_layout()` 지원을 위해 실제 class_id를 보존했으나,
+  `_process_detections()`에서도 실제 class_id를 사용하여 탐지가 16개 슬롯에 분산
+- 결과: 실제 행인데 class 0(text_block)으로 분류된 탐지가 LINE XML 요소가 되지 못하고
+  PARSeq 인식에서 누락 → 텍스트 빠짐, 순서 꼬임
+
+**결정**:
+1. `_process_detections()`: 모든 탐지를 class 1(line_main) 슬롯에 추가 (업스트림 호환)
+2. `recognize()`: class_id 기반 LINE 필터 제거, 탐지 존재 여부만 확인
+3. `conf_threshold`: 0.25 → 0.3 (업스트림 동일)
+4. RTMDet 자체는 실제 class_id 보존 유지 (`detect_layout()`에서 활용)
+
+**원칙**: OCR 파이프라인은 업스트림 동작을 충실히 재현한다.
+실제 class_id는 `detect_layout()`에서만 활용하며, OCR 경로에서는 사용하지 않는다.
+
+---
+
+## D-041: ndlkotenocr PARSeq — RGB 입력 (BGR 변환 금지)
+
+**날짜**: 2026-02-25
+
+**맥락**: D-040 수정 후에도 ndlkotenocr OCR 결과가 비정상적.
+업스트림 소스를 세밀하게 비교한 결과, PARSeq 전처리의 색상 채널 차이를 발견.
+
+**원인 분석**:
+- ndlocr-lite PARSeq (`parseq.py`): 전처리에서 `resized[:,:,::-1]` (RGB→**BGR** 변환)
+- ndlkotenocr-lite PARSeq: 전처리에서 **RGB 그대로** (변환 없음)
+- 두 모델의 학습 데이터 전처리가 다름: ndlocr=BGR, ndlkotenocr=RGB
+- 우리 코드는 ndlocr의 PARSeq 클래스를 공유하므로,
+  ndlkotenocr 모델에 BGR 입력이 들어가 빨강↔파랑 채널 반전
+- 채널 반전으로 문자 특징이 왜곡되어 인식 정확도 대폭 하락
+
+**결정**:
+1. 공유 `PARSEQ` 클래스에 `bgr_input: bool = True` 파라미터 추가
+2. `bgr_input=True` (기본값): ndlocr 호환 — RGB→BGR 변환 수행
+3. `bgr_input=False`: ndlkotenocr 호환 — RGB 그대로 유지
+4. `ndlkotenocr_engine.py`에서 `PARSEQ(..., bgr_input=False)` 설정
+
+**근거**: ndlocr/ndlkotenocr 두 모델의 학습 전처리가 다르므로
+공유 클래스에서 런타임에 전환할 수 있어야 한다.
+코드 중복(별도 parseq.py) 없이 파라미터 하나로 해결.
+
+---
+
+## D-042: loadOcrResults() 브라우저 캐시 누락 버그
+
+**날짜**: 2026-02-25
+
+**맥락**: D-040·D-041 수정 후 백엔드는 정상 OCR 결과를 생성하지만,
+GUI에서 "이전 결과와 같다"는 보고. 원인 조사 결과 프론트엔드 캐시 문제.
+
+**원인 분석**:
+- `ocr-panel.js`의 `loadOcrResults()` — 페이지 전환 시 L2 OCR 결과를 불러오는 함수
+- `fetch()` 호출에 `cache: "no-store"` 옵션이 빠져 있음
+- 같은 파일의 `_fillFromOcr()`, `_deleteCurrentPageOcr()`에는 이미 있었음
+- 브라우저가 기본 캐싱 정책으로 이전 응답을 재사용
+- OCR 재실행 후에도 캐시된 옛 결과(D-041 수정 전 결과)가 표시됨
+
+**결정**: `loadOcrResults()`의 fetch에 `{ cache: "no-store" }` 추가.
+
+**영향**: 페이지 전환·새로고침 시 항상 서버에서 최신 OCR 결과를 가져온다.
+
+---
+
+## D-043: NDL古典籍OCR-Lite — 모델 한계와 커스텀 모델 사용 안내
+
+**날짜**: 2026-02-25
+
+**맥락**: ndlkotenocr-lite의 PARSeq 모델은 "tiny" 버전(~37MB)으로,
+인식 정확도에 한계가 있다. 일부 행에서 □(U+25A1) 문자, 히라가나 오인식,
+단일 문자 행 등이 발생한다. 비-lite 풀 모델을 사용하면 정확도가 올라가지만,
+모델 크기가 크고 설치가 복잡하다.
+
+**현재 모델 사양**:
+- RTMDet-S: `rtmdet-s-1280x1280.onnx` (~38MB) — 레이아웃/행 탐지
+- PARSeq tiny: `parseq-ndl-32x384-tiny-10.onnx` (~37MB) — 문자 인식
+- 합계 ~74MB, 자동 다운로드
+
+**결정**: 프로젝트에서 제공하는 기본 모델은 lite 버전을 유지한다.
+정확도가 필요한 사용자를 위해 커스텀 모델 교체 방법을 문서화한다.
+
+**커스텀 모델 사용 방법**:
+
+1. **환경변수로 모델 디렉토리 지정**:
+   ```
+   NDLKOTENOCR_MODEL_PATH=/path/to/custom-models
+   ```
+   이 디렉토리에 `rtmdet-s-1280x1280.onnx`와 PARSeq `.onnx` 파일을 넣는다.
+
+2. **PARSeq 풀 모델 사용** (정확도 향상):
+   - ndlkotenocr (비-lite) 저장소에서 풀 모델 다운로드:
+     https://github.com/ndl-lab/ndlkotenocr
+   - `parseq-ndl-32x384-tiny-10.onnx`를 풀 모델로 교체
+   - 파일명이 다를 경우 `ndlkotenocr_engine.py`의 `_init_models()` 수정 필요
+
+3. **RTMDet 교체** (탐지 정밀도 향상):
+   - 같은 입력 사양(1280×1280, BGR, 동일 mean/std)의 모델이면 드롭인 교체 가능
+   - 클래스 매핑이 다르면 `config/ndl.yaml`도 함께 교체
+
+4. **문자셋 교체**:
+   - 풀 모델이 다른 문자셋을 사용할 경우 `config/NDLmoji.yaml` 교체
+
+**주의사항**:
+- lite 모델과 풀 모델의 ONNX 입출력 텐서 형식이 다를 수 있다.
+  교체 전 `onnxruntime` 세션으로 입출력 shape를 확인할 것.
+- 풀 모델의 PARSeq는 캐스케이드(3단계) 구조일 수 있다.
+  단일 모델만 사용하는 현재 코드로는 동작하지 않으며,
+  캐스케이드 지원이 필요하면 `ndlocr_engine.py`의 패턴을 참고하여 확장.
+
+---
+
 ### 배포·설치
 - [ ] Google Drive + .git 충돌 회피 가이드 → Phase 10 이후
 - [ ] 비개발자용 Git 번들링 또는 Git-free 모드 → Phase 10 이후
