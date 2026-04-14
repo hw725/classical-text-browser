@@ -56,12 +56,21 @@ archived
 
 # 3. Folder Structure
 
-/project_root /works /blocks /tags /concepts /agents /relations
-/variants /assertions /experiments
+Entities are stored under `core_entities/` within each interpretation
+repository:
 
-Each entity stored as single JSON file.
+```
+{interp_id}/
+└── core_entities/
+    ├── works/{uuid}.json
+    ├── blocks/{uuid}.json       (TextBlock)
+    ├── tags/{uuid}.json
+    ├── concepts/{uuid}.json
+    ├── agents/{uuid}.json
+    └── relations/{uuid}.json
+```
 
-Experiments folder is outside Core integrity.
+Each entity stored as single JSON file. File name matches entity ID.
 
 ------------------------------------------------------------------------
 
@@ -95,8 +104,7 @@ To prevent interpretation leakage:
 
 -   Git required.
 -   Every structural update committed separately.
--   schema_version field must be verified.
--   JSON validation required before commit.
+-   JSON validation (jsonschema) required before commit.
 
 Version naming pattern:
 
@@ -104,16 +112,22 @@ v{major}.{minor}-{YYYYMMDD}-{shortdesc}
 
 ------------------------------------------------------------------------
 
-# 7. Experimental Layer Policy
+# 7. Experimental Layer Policy (Planned)
+
+> **Note**: Experimental zones are not yet implemented. This section
+> describes the planned design.
 
 Experiments must not modify Core entities directly.
 
-Allowed experimental zones: - /experiments/meaning/ -
-/experiments/structure/ - /experiments/llm_outputs/
+Planned experimental zones:
+- /experiments/meaning/
+- /experiments/structure/
+- /experiments/llm_outputs/
 
-Experimental results can migrate into Core only after: 1.
-Reproducibility confirmed 2. Human validation 3. Structural
-compatibility check
+Experimental results can migrate into Core only after:
+1. Reproducibility confirmed
+2. Human validation
+3. Structural compatibility check
 
 ------------------------------------------------------------------------
 

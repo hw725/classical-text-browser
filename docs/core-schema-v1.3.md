@@ -22,12 +22,17 @@ Fields: - id - title - author - period - metadata
 
 ------------------------------------------------------------------------
 
-# 2. Block
+# 2. TextBlock
 
 Smallest structural unit (sentence / clause / segment).
 
+> **Implementation note**: In code, the entity type is `text_block` and
+> the class is `TextBlock`. The storage directory is `blocks/`.
+> See CLAUDE.md "용어 규칙" for the distinction between LayoutBlock,
+> OcrResult, and TextBlock.
+
 Fields: - id - work_id - sequence_index - original_text -
-normalized_text (optional) - notes - metadata
+normalized_text (optional) - source_ref - source_refs - notes - metadata
 
 ------------------------------------------------------------------------
 

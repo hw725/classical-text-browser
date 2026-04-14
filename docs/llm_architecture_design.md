@@ -5,7 +5,7 @@
 
 ---
 
-## 1. 호출 우선순위 (4단 폴백)
+## 1. 호출 우선순위 (5단 폴백)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -13,17 +13,12 @@
 │                                                             │
 │  src/llm/router.py  ← LLM 호출의 단일 진입점               │
 │      │                                                      │
-│      ├─ 1순위: Base44 InvokeLLM (agent-chat HTTP)           │
-│      │   localhost:8787/api/chat                            │
-│      │   조건: agent-chat 서버가 실행 중                     │
-│      │   장점: 무료, 이미지 분석 가능, MCP 도구 연동        │
-│      │                                                      │
-│      ├─ 2순위: Base44 InvokeLLM (Node.js bridge)            │
+│      ├─ 1순위: Base44 InvokeLLM (Node.js bridge)            │
 │      │   subprocess: node src/llm/bridge/invoke.js          │
 │      │   조건: Node.js + backend-44 설치됨                  │
-│      │   장점: 서버 없이 SDK 직접 사용, 1회성 호출          │
+│      │   장점: 무료, 서버 없이 SDK 직접 사용, 비전 포함     │
 │      │                                                      │
-│      ├─ 3순위: Ollama (로컬 서버)                            │
+│      ├─ 2순위: Ollama (로컬 서버)                            │
 │      │   localhost:11434/api/generate                       │
 │      │   모델: qwen3-vl:235b-cloud, kimi-k2.5:cloud,       │
 │      │         minimax-m2.5:cloud, glm-5:cloud,             │
@@ -31,10 +26,17 @@
 │      │   조건: Ollama 서버가 실행 중                         │
 │      │   장점: 클라우드 모델을 로컬 프록시로, 비전 모델 지원 │
 │      │                                                      │
-│      └─ 4순위: 직접 API 호출                                 │
-│          Anthropic / OpenAI / Google Gemini                  │
-│          조건: API 키가 설정됨                               │
-│          장점: 가장 안정적, 최신 모델                        │
+│      ├─ 3순위: Gemini (Google AI)                            │
+│      │   조건: GEMINI_API_KEY 설정됨                        │
+│      │   장점: 저렴, 비전 포함                              │
+│      │                                                      │
+│      ├─ 4순위: OpenAI                                        │
+│      │   조건: OPENAI_API_KEY 설정됨                        │
+│      │   장점: 중간 비용, 비전 포함                         │
+│      │                                                      │
+│      └─ 5순위: Anthropic (Claude API)                        │
+│          조건: ANTHROPIC_API_KEY 설정됨                      │
+│          장점: 최후 폴백                                    │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -43,14 +45,15 @@
 
 | 순위 | 방식 | 비용 | 이미지 분석 | 의존성 | 오프라인 |
 |------|------|------|-------------|--------|----------|
-| 1 | Base44 agent-chat | 무료 | ✅ (UploadFile) | agent-chat 실행 | ✗ |
-| 2 | Base44 bridge | 무료 | ✅ (UploadFile) | Node.js 설치 | ✗ |
-| 3 | Ollama 클라우드 모델 | 무료~저가 | ✅ (qwen3-vl 등) | Ollama 실행 | △ (로컬 모델은 가능) |
-| 4 | 직접 API | 유료 | ✅ (Claude/Gemini) | API 키 | ✗ |
+| 1 | Base44 bridge | 무료 | ✅ (UploadFile) | Node.js 설치 | ✗ |
+| 2 | Ollama 클라우드 모델 | 무료~저가 | ✅ (qwen3-vl 등) | Ollama 실행 | △ (로컬 모델은 가능) |
+| 3 | Gemini | 저렴 | ✅ | API 키 | ✗ |
+| 4 | OpenAI | 중간 | ✅ | API 키 | ✗ |
+| 5 | Anthropic | 유료 | ✅ | API 키 | ✗ |
 
-- 1·2순위는 Base44의 무료 LLM을 최대한 활용
-- 3순위는 Ollama를 통한 클라우드 모델 프록시 (비용 효율)
-- 4순위는 최후 수단 (유료지만 가장 안정적)
+- 1순위는 Base44의 무료 LLM을 최대한 활용
+- 2순위는 Ollama를 통한 클라우드 모델 프록시 (비용 효율)
+- 3~5순위는 유료 API (비용 순: Gemini < OpenAI < Anthropic)
 
 ---
 
@@ -63,21 +66,24 @@ src/
     router.py           ← 단일 진입점: call_llm(), call_llm_with_image()
     providers/
       __init__.py
-      base.py           ← BaseLlmProvider 추상 클래스
-      base44_http.py    ← 1순위: agent-chat HTTP
-      base44_bridge.py  ← 2순위: Node.js bridge subprocess
-      ollama.py         ← 3순위: Ollama REST API
-      anthropic.py      ← 4순위: Claude API
-      openai.py         ← 4순위: OpenAI API
-      gemini.py         ← 4순위: Gemini API
+      base.py               ← BaseLlmProvider 추상 클래스
+      base44_bridge.py      ← 1순위: Node.js bridge subprocess
+      ollama.py             ← 2순위: Ollama REST API
+      gemini_provider.py    ← 3순위: Gemini API
+      openai_provider.py    ← 4순위: OpenAI API
+      anthropic_provider.py ← 5순위: Claude API
     bridge/
       invoke.js         ← Node.js 브릿지 스크립트 (backend-44 SDK 사용)
       invoke_vision.js  ← 이미지 분석용 브릿지
       package.json      ← 최소 의존성 (backend-44/src/client.js 참조)
     prompts/
-      layout_analysis.yaml
-      translation.yaml
-      annotation.yaml
+      layout_analysis.yaml       ← L3 레이아웃 분석
+      punctuation.yaml           ← L5 표점
+      translation.yaml           ← L6 번역
+      annotation.yaml            ← L7 주석
+      annotation_dict_stage1.yaml ← L7 사전형 1단계
+      annotation_dict_stage2.yaml ← L7 사전형 2단계
+      annotation_dict_stage3.yaml ← L7 사전형 3단계
     config.py           ← 설정: API 키, 모델 선택, 우선순위
     usage_tracker.py    ← 비용 추적
     draft.py            ← LlmDraft 모델 (Draft → Review → Commit)

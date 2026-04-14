@@ -262,21 +262,22 @@ L3 LayoutBlock (bbox) → image_utils.crop_block() → OCR 엔진 → OcrBlockRe
 
 ---
 
-## D-010: LLM 4단 폴백 아키텍처
+## D-010: LLM 5단 폴백 아키텍처
 
-**날짜**: 2026-02-15
+**날짜**: 2026-02-15 (최종 갱신: 2026-04-14)
 **맥락**: LLM 호출을 어떤 구조로 관리할 것인가. 프로젝트 초기라 API 키가 없을 수도, 로컬 모델만 쓸 수도, 유료 API를 쓸 수도 있다.
 
 **결정**:
 
-4단 폴백 + 단일 진입점(Router) 아키텍처를 채택한다.
+5단 폴백 + 단일 진입점(Router) 아키텍처를 채택한다.
 
 | 순위 | Provider | 특징 |
 |------|----------|------|
-| 1순위 | Base44 HTTP (agent-chat) | 무료, 로컬 실행 필요 |
-| 2순위 | Base44 Bridge (Node.js) | 무료, Node.js subprocess |
-| 3순위 | Ollama (로컬 프록시) | 무료, 모델 선택 자유 |
-| 4순위 | Anthropic (Claude API) | 유료, 최고 품질 |
+| 1순위 | Base44 Bridge (Node.js) | 무료, Node.js subprocess |
+| 2순위 | Ollama (로컬 프록시) | 무료, 모델 선택 자유 |
+| 3순위 | Gemini (Google AI) | 저렴, 비전 포함 |
+| 4순위 | OpenAI | 중간 비용, 비전 포함 |
+| 5순위 | Anthropic (Claude API) | 최후 폴백 |
 
 **핵심 원칙**:
 - **LlmRouter가 유일한 진입점**: 모든 코드는 provider를 직접 호출하지 않고, Router를 통해야 한다
@@ -294,16 +295,23 @@ src/llm/
 ├── draft.py             # Draft → Review → Commit
 ├── usage_tracker.py     # JSONL 사용량 추적
 ├── providers/
-│   ├── base.py          # 추상 클래스 + LlmResponse
-│   ├── base44_http.py   # 1순위
-│   ├── base44_bridge.py # 2순위
-│   ├── ollama.py        # 3순위
-│   └── anthropic_provider.py  # 4순위
+│   ├── base.py              # 추상 클래스 + LlmResponse
+│   ├── base44_bridge.py     # 1순위
+│   ├── ollama.py            # 2순위
+│   ├── gemini_provider.py   # 3순위
+│   ├── openai_provider.py   # 4순위
+│   └── anthropic_provider.py # 5순위
 ├── bridge/
 │   ├── invoke.js        # Node.js 텍스트 브릿지
 │   └── invoke_vision.js # Node.js 비전 브릿지
 └── prompts/
-    └── layout_analysis.yaml  # 레이아웃 분석 프롬프트
+    ├── layout_analysis.yaml       # L3 레이아웃 분석
+    ├── punctuation.yaml           # L5 표점
+    ├── translation.yaml           # L6 번역
+    ├── annotation.yaml            # L7 주석
+    ├── annotation_dict_stage1.yaml # L7 사전형 주석 1단계
+    ├── annotation_dict_stage2.yaml # L7 사전형 주석 2단계
+    └── annotation_dict_stage3.yaml # L7 사전형 주석 3단계
 ```
 
 ---
@@ -799,20 +807,20 @@ LLM 컨텍스트 윈도우(500-2,000줄이 적정)를 초과하여 코드 리뷰
 4. **하위 호환**: `from app.server import configure, app, _get_llm_router` 경로 유지.
    `__main__.py`, `parsers/generic_llm.py` 등 기존 코드 변경 불필요.
 
-**파일 구조**:
+**파일 구조** (2026-04-14 기준):
 ```
 src/app/
 ├── server.py            ← 앱 생성 + 라우터 마운트 + configure() (~85줄)
-├── _state.py            ← 공유 상태 + 헬퍼 (~460줄)
+├── _state.py            ← 공유 상태 + 헬퍼 (~930줄)
 ├── __main__.py          ← CLI 진입점
 └── routers/
     ├── library.py       ← 서고/설정/백업/휴지통 (15 라우트, ~640줄)
-    ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 (32 라우트, ~1,800줄)
-    ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티 (22 라우트, ~970줄)
-    ├── llm_ocr.py       ← LLM 상태·분석·초안 + OCR (13 라우트, ~710줄)
-    ├── alignment.py     ← 이체자 사전/정렬/일괄교정 (17 라우트, ~570줄)
-    ├── reading.py       ← L5 표점·현토 + L6 번역 + AI보조 (22 라우트, ~930줄)
-    ├── annotation.py    ← L7 주석·사전형·인용마크 + AI보조 (30 라우트, ~1,200줄)
+    ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 (32 라우트, ~1,810줄)
+    ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티 (23 라우트, ~1,020줄)
+    ├── llm_ocr.py       ← LLM 상태·분석·초안 + OCR (14 라우트, ~830줄)
+    ├── alignment.py     ← 이체자 사전/정렬/일괄교정 (17 라우트, ~580줄)
+    ├── reading.py       ← L5 표점·현토 + L6 번역 + AI보조 (25 라우트, ~1,150줄)
+    ├── annotation.py    ← L7 주석·사전형·인용마크 + AI보조 (34 라우트, ~1,740줄)
     └── version.py       ← Git 그래프/되돌리기/스냅샷 (7 라우트, ~610줄)
 ```
 
