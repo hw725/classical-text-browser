@@ -1,4 +1,4 @@
-# Phase 10~12 상세 설계 및 세션 지시문
+# Phase 10-12 상세 설계 및 세션 지시문
 
 > 이 파일은 /mnt/user-data/outputs/phase10_12_design.md 의 사본입니다.
 > 원본을 다운로드하여 docs/ 에 저장하세요.

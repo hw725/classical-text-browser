@@ -158,7 +158,7 @@ class OcrCharResult:
 
     char: str                          # 인식된 글자 (예: "王")
     bbox: Optional[list[float]] = None  # [x_min, y_min, x_max, y_max] — 없을 수도 있음
-    confidence: float = 0.0            # 0.0~1.0
+    confidence: float = 0.0            # 0.0-1.0
 
     def to_dict(self) -> dict:
         """스키마 호환 딕셔너리로 변환."""
@@ -446,7 +446,7 @@ class TestBaseOcrEngine:
 
 bbox 형식:
   phase10_12_design.md에서 정의된 비율 좌표 사용.
-  [x, y, width, height] — 0.0~1.0 비율.
+  [x, y, width, height] — 0.0-1.0 비율.
   예: [0.1, 0.05, 0.35, 0.9] → 왼쪽 10%, 위 5%에서 시작, 폭 35%, 높이 90%.
 """
 
@@ -483,7 +483,7 @@ def crop_block(
 
     입력:
       page_image: 전체 페이지 PIL Image
-      bbox: [x, y, width, height] — 비율 좌표 (0.0~1.0)
+      bbox: [x, y, width, height] — 비율 좌표 (0.0-1.0)
       padding_px: 크롭 영역에 추가할 여백 (픽셀). 글자가 잘리는 것 방지.
 
     출력: 크롭된 이미지의 PNG 바이트
@@ -538,7 +538,7 @@ def preprocess_for_ocr(
     옵션:
       grayscale: 그레이스케일 변환 (대부분의 고전 텍스트는 흑백)
       binarize: 이진화 (흑/백만 남김)
-      binarize_threshold: 이진화 임계값 (0~255)
+      binarize_threshold: 이진화 임계값 (0-255)
 
     주의:
       PaddleOCR은 자체 전처리가 있어서 기본적으로는 grayscale만.
@@ -1713,7 +1713,7 @@ pdf-renderer.js (또는 이미지 표시 컴포넌트)에:
 
 1. **OCR 오버레이 레이어**: 인식된 글자를 원본 bbox 위치에 반투명 표시.
 2. **토글 버튼**: `[오버레이 표시/숨기기]` — 기본은 숨김.
-3. **색상 구분**: confidence에 따라 초록(≥0.8), 노랑(0.5~0.8), 빨강(<0.5).
+3. **색상 구분**: confidence에 따라 초록(≥0.8), 노랑(0.5-0.8), 빨강(<0.5).
 
 구현 시 주의:
 - bbox는 크롭 이미지 기준이므로, 전체 페이지에 표시하려면 블록의 bbox 오프셋을 더해야 한다.

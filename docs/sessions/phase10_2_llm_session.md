@@ -1666,7 +1666,7 @@ class LlmDraft:
     modifications: Optional[str] = None  # modified일 때 변경 내용 설명
 
     # 품질 평가 (비교 테스트용)
-    quality_rating: Optional[int] = None     # 1~5점
+    quality_rating: Optional[int] = None     # 1-5점
     quality_notes: Optional[str] = None      # "주석 영역 빠뜨림"
     compared_with: Optional[list] = None     # ["base44_http", "anthropic"]
     chosen_reason: Optional[str] = None      # "블록 구분 가장 정확"
@@ -1731,7 +1731,7 @@ prompt_template: |
   이 고전 텍스트 페이지 이미지를 분석하세요.
 
   각 텍스트 영역을 식별하고, 아래 JSON 형식으로 반환하세요.
-  좌표는 이미지 전체를 기준으로 한 비율(0.0~1.0)입니다.
+  좌표는 이미지 전체를 기준으로 한 비율(0.0-1.0)입니다.
 
   ```json
   {
@@ -1750,7 +1750,7 @@ prompt_template: |
   ```
 
   주의:
-  - bbox_ratio는 [좌상단x, 좌상단y, 우하단x, 우하단y], 각 값 0.0~1.0
+  - bbox_ratio는 [좌상단x, 좌상단y, 우하단x, 우하단y], 각 값 0.0-1.0
   - 한문은 우→좌, 위→아래로 읽으므로 reading_order를 우측부터 매기세요
   - 주석(협주)은 본문보다 작은 글자로 2행 병기된 부분입니다
   - 판심제는 접힌 부분(중앙)에 있는 제목·권차 정보입니다
@@ -2069,7 +2069,7 @@ async def review_draft(draft_id: str, req: DraftReviewRequest):
 
 4. **Draft 검토 UI** — 각 제안 블록에:
    - [✅ 승인] [✏️ 수정] [❌ 삭제] 버튼
-   - 별점 (1~5) 입력 가능
+   - 별점 (1-5) 입력 가능
    - "전체 확정" → 각 블록을 POST /drafts/{id}/review
 
 5. **LLM 상태 표시** — 사이드바 또는 하단에:

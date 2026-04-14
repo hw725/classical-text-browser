@@ -30,7 +30,7 @@
 
 | 포함 | 제외 |
 |------|------|
-| L1~L4 원본 데이터 | Git 히스토리 |
+| L1-L4 원본 데이터 | Git 히스토리 |
 | L5 표점 + 현토 | .git 설정 |
 | L6 번역 | 캐시/임시 파일 |
 | L7 주석 | LLM 작업 로그 |
@@ -116,7 +116,7 @@ Work 모델이 이미 있을 것이다. 그 필드를 그대로 직렬화하라.
 }
 ```
 
-**중요**: L1~L4의 실제 파일 구조를 먼저 확인하고, 그 구조를 그대로 JSON에 담아라. 위 예시는 참고용이다. 실제 프로젝트의 L4 데이터 구조(블록 기반인지, 페이지 기반인지 등)에 맞춰라.
+**중요**: L1-L4의 실제 파일 구조를 먼저 확인하고, 그 구조를 그대로 JSON에 담아라. 위 예시는 참고용이다. 실제 프로젝트의 L4 데이터 구조(블록 기반인지, 페이지 기반인지 등)에 맞춰라.
 
 ### interpretation 섹션
 
@@ -210,8 +210,8 @@ def build_snapshot(work, branch: str) -> dict:
 ### 각 serialize 함수
 
 - `serialize_work_metadata`: Work 모델의 기본 정보 (id, title, created_at, description)
-- `serialize_original_layers`: 원본 저장소의 L1~L4 파일을 읽어서 딕셔너리로
-- `serialize_interpretation_layers`: 해석 저장소의 L5~L7 파일을 읽어서 딕셔너리로
+- `serialize_original_layers`: 원본 저장소의 L1-L4 파일을 읽어서 딕셔너리로
+- `serialize_interpretation_layers`: 해석 저장소의 L5-L7 파일을 읽어서 딕셔너리로
 - `serialize_variant_chars`: 이체자 사전 파일 읽기
 - `serialize_annotation_types`: annotation_types.json 읽기
 
@@ -371,10 +371,10 @@ def create_work_from_snapshot(data: dict):
         description=data["work"].get("description", "")
     )
     
-    # 2. 원본 저장소 초기화 + L1~L4 데이터 쓰기
+    # 2. 원본 저장소 초기화 + L1-L4 데이터 쓰기
     write_original_layers(work, data["original"])
     
-    # 3. 해석 저장소 초기화 + L5~L7 데이터 쓰기
+    # 3. 해석 저장소 초기화 + L5-L7 데이터 쓰기
     write_interpretation_layers(work, data["interpretation"])
     
     # 4. 이체자 사전 쓰기
@@ -496,8 +496,8 @@ async function importSnapshot() {
    - 미정의 annotation type → warning 반환 확인
 
 5. **빈 레이어 테스트**:
-   - L4만 있고 L5~L7이 없는 Work → Export 성공
-   - 해당 JSON Import → 성공, L5~L7은 빈 상태
+   - L4만 있고 L5-L7이 없는 Work → Export 성공
+   - 해당 JSON Import → 성공, L5-L7은 빈 상태
 
 커밋: `test: Phase 12-3 JSON 스냅샷 통합 테스트`
 

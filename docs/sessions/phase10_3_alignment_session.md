@@ -145,7 +145,7 @@ class AlignmentStats:
 
     @property
     def accuracy(self) -> float:
-        """일치율 (exact + variant) / total. 0.0~1.0."""
+        """일치율 (exact + variant) / total. 0.0-1.0."""
         if self.total_chars == 0:
             return 0.0
         return (self.exact + self.variant) / self.total_chars

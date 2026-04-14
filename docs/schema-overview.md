@@ -30,7 +30,7 @@
 
 ```
 schemas/
-├── source_repo/          ─ 원본 저장소 (L1~L4)
+├── source_repo/          ─ 원본 저장소 (L1-L4)
 │   ├── manifest.schema.json         문헌 매니페스트
 │   ├── bibliography.schema.json     서지정보
 │   ├── ocr_page.schema.json         L2 OCR 결과
@@ -39,14 +39,14 @@ schemas/
 │   ├── interp_manifest.schema.json  해석 저장소 매니페스트
 │   └── dependency.schema.json       저장소 간 의존 추적
 │
-├── interp/               ─ 해석 저장소 (L5~L7)
+├── interp/               ─ 해석 저장소 (L5-L7)
 │   ├── punctuation_page.schema.json L5 표점 (句讀)
 │   ├── hyeonto_page.schema.json     L5 현토 (懸吐)
 │   ├── translation_page.schema.json L6 번역
 │   ├── annotation_page.schema.json  L7 주석 (v2 사전형)
 │   └── citation_mark_page.schema.json L7 인용 마크
 │
-├── core/                 ─ 코어 스키마 엔티티 (L5~L8)
+├── core/                 ─ 코어 스키마 엔티티 (L5-L8)
 │   ├── work.schema.json              작품
 │   ├── text_block.schema.json        텍스트 단위
 │   ├── tag.schema.json               표면 태그
@@ -359,7 +359,7 @@ L7 인용 마크. 논문 인용을 위한 텍스트 구절 마크업. L4→L5→
 | **\*block_id** | uuid | → TextBlock |
 | **\*surface** | string | 표면 텍스트 |
 | **\*core_category** | enum | person \| place \| book \| office \| object \| concept \| event \| other |
-| confidence | float? | 신뢰도 0~1 |
+| confidence | float? | 신뢰도 0-1 |
 | extractor | string? | llm \| rule \| human |
 
 ### Concept

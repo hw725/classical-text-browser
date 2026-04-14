@@ -1242,7 +1242,7 @@ class LlmDraft:
     # ... 기존 필드들 ...
     
     # 품질 평가 (review 시 기록)
-    quality_rating: int | None = None    # 1~5점
+    quality_rating: int | None = None    # 1-5점
     quality_notes: str | None = None     # "주석 영역을 빠뜨렸음"
     
     # 비교 모드에서 채택된 경우
