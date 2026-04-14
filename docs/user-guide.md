@@ -198,7 +198,11 @@ uv run python -m cli init-library /path/to/my-library
 ### 방법 A: URL로 등록 (권장)
 
 1. 사이드바 상단의 **"+ 새 문헌"** 클릭
-2. **URL 입력** — 지원하는 서지정보 소스:
+2. **URL 입력**:
+
+![URL 입력 다이얼로그](screenshots/ug_url_input.png)
+
+   지원하는 서지정보 소스:
    - 한국고문헌종합목록(KORCIS) URL
    - 일본 국립국회도서관(NDL Search) URL
    - 일본 국립공문서관 디지털 아카이브 URL
@@ -206,6 +210,9 @@ uv run python -m cli init-library /path/to/my-library
 3. 시스템이 자동으로:
    - 서지정보를 파싱하여 제목·저자·시기를 채움
    - PDF/이미지가 있으면 자동 다운로드 제안
+
+![서지정보 미리보기 및 다운로드 옵션](screenshots/ug_url_preview.png)
+
 4. **"등록"** 클릭하면 서고에 문헌이 추가됩니다
 
 ### 방법 B: CLI로 등록
@@ -271,6 +278,9 @@ uv run python -m cli add-document /path/to/my-library \
    - **언어**: classical_chinese(고전 한문)
 3. **"전체 OCR"** 클릭 → 모든 블록을 순서대로 OCR
    - 또는 특정 블록만 선택하여 **"선택 OCR"**
+
+![레이아웃 블록 선택 및 OCR 결과 확인](screenshots/ug_ocr_block.jpg)
+
 4. 진행률 표시줄에서 **실시간** 진행 상황 확인 (블록별 스트리밍)
 5. 완료 후 결과 미리보기
 
@@ -285,6 +295,9 @@ uv run python -m cli add-document /path/to/my-library \
    - 교정 유형 지정: OCR 오류 / 이체자 / 해독 불가 등
 4. **대조** 서브탭: OCR 결과와 교정본을 글자별로 나란히 비교
    - 빨간색 = 불일치, 초록색 = 일치, 노란색 = 이체자
+
+![일괄 교정 — 이체자 찾기/교정](screenshots/ug_batch_correction.png)
+
 5. **저장** (Ctrl+S)
 
 ---
@@ -334,6 +347,9 @@ uv run python -m cli add-document /path/to/my-library \
 3. 원문에서 주석할 범위를 드래그로 선택
 4. 주석 유형 선택: 인물(person), 지명(place), 용어(term), 전거(allusion), 메모(note)
 5. 내용 입력: 표제어, 설명, 참고문헌
+
+![주석 편집 폼](screenshots/ug_annotation_form.png)
+
 6. **AI 태깅**: LLM이 자동으로 주석 후보를 생성합니다
 
 #### 사전형 주석 (고급)
@@ -370,6 +386,8 @@ uv run python -m cli add-document /path/to/my-library \
 4. 레이블(메모)과 태그(분류)를 붙일 수 있습니다
 5. **통합 컨텍스트 뷰**: 마크된 구절에 대해 원문·표점본·번역·주석을 한눈에 확인
 6. **"내보내기"**: 학술 인용 형식으로 변환, 클립보드에 복사
+
+![인용 내보내기 화면](screenshots/ug_citation_export.jpg)
 
 인용 형식 예시:
 ```
@@ -509,6 +527,8 @@ OCR과 레이아웃 분석은 **이미지를 볼 수 있는 모델**만 사용�
 ├── resources/           # 공유 리소스 (이체자 사전, 주석 유형 등)
 └── .trash/              # 휴지통 (삭제된 항목)
 ```
+
+![서고 폴더 선택 다이얼로그](screenshots/ug_library_folder.jpg)
 
 ### 9.2 서고 전환
 

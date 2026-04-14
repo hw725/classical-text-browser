@@ -15,7 +15,7 @@
 
 ### 1. 레이아웃 분석 + OCR — 원본 이미지에서 텍스트 추출
 
-![레이아웃 분석 화면](docs/screenshots/02_layout.png)
+![레이아웃 분석 화면](docs/screenshots/02_layout.jpg)
 
 PDF/이미지 위에 **읽기 순서대로 번호가 매겨진 파란색 블록**이 표시됩니다.
 고전적에 최적화된 NDL古典籍OCR(Full/Lite), 근현대 문서용 NDLOCR, LLM 비전, PaddleOCR 중 원하는 엔진을 선택해서 OCR을 실행할 수 있습니다.
@@ -26,34 +26,34 @@ PDF/이미지 위에 **읽기 순서대로 번호가 매겨진 파란색 블록*
 
 ### 2. 교정 — OCR 결과를 원본과 나란히 비교하며 수정
 
-![교정 화면](docs/screenshots/03_correction.png)
+![교정 화면](docs/screenshots/03_correction.jpg)
 
 왼쪽 원본 이미지를 보면서 오른쪽에서 OCR 인식 결과를 직접 수정합니다.
 **일괄 교정**(이체자 사전 기반)과 **대조 뷰**(OCR 원본 vs 교정본 비교)를 지원합니다.
 
 ### 3. 표점(句讀) — 고전 한문에 구두점 찍기
 
-![표점 화면](docs/screenshots/04_punctuation.png)
+![표점 화면](docs/screenshots/04_punctuation.jpg)
 
 교정이 끝난 텍스트에 **문장 부호(구두점)를 삽입**합니다.
 미리 설정된 부호 세트를 사용하거나, AI에게 표점 초안을 요청할 수도 있습니다.
 
 ### 4. 현토(懸吐) — 한문에 한국어 토씨 달기
 
-![현토 화면](docs/screenshots/05_hyeonto.png)
+![현토 화면](docs/screenshots/05_hyeonto.jpg)
 
 표점이 완료된 문장에 **한국어 토(吐)를 삽입**하는 단계입니다.
 한문 원문 옆에 작은 글씨로 토가 표시되며, AI 보조 기능도 사용할 수 있습니다.
 
 ### 5. 번역 — LLM 보조 또는 수동 번역
 
-![번역 화면](docs/screenshots/06_translation.png)
+![번역 화면](docs/screenshots/06_translation.jpg)
 
 원문을 현대 한국어로 번역합니다. **Ollama(로컬), Anthropic, Gemini, OpenAI** 등 다양한 LLM에 번역 초안을 요청하고, 연구자가 직접 수정·확정합니다. LLM이 응답하지 않으면 자동으로 다음 프로바이더로 폴백합니다.
 
 ### 6. 주석 — 태그, 사전형 주석, 인용 마크
 
-![주석 화면](docs/screenshots/07_annotation.png)
+![주석 화면](docs/screenshots/07_annotation.jpg)
 
 번역이 끝난 텍스트에 **연구 주석을 추가**합니다.
 인명·지명·서명 등의 **태그**, 단어의 뜻풀이를 기록하는 **사전형 주석**, 다른 문헌의 해당 구절을 연결하는 **인용 마크** 세 가지 유형을 지원합니다.
@@ -67,7 +67,7 @@ PDF/이미지 위에 **읽기 순서대로 번호가 매겨진 파란색 블록*
 
 ### 8. Git 버전 관리 — 모든 작업 이력을 안전하게 보존
 
-![Git 이력 화면](docs/screenshots/10_git_history.png)
+![Git 이력 화면](docs/screenshots/10_git_history.jpg)
 
 원본 저장소와 해석 저장소가 **각각 독립된 Git 저장소**로 관리됩니다.
 커밋 로그와 사다리형 그래프로 작업 이력을 한눈에 볼 수 있고, 언제든 이전 상태로 되돌릴 수 있습니다.
