@@ -79,3 +79,6 @@ examples/monggu_library/documents/kameda_monggu/
 
 # PyTorch 모델 체크포인트 (NDL古典籍OCR 풀 버전 등)
 *.pth
+
+# 로컬 전용 HTML/CSS 다이어그램 (Markdown Viewer용)
+docs/local-diagrams/
