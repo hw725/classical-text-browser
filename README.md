@@ -90,7 +90,7 @@ PDF/이미지 위에 **읽기 순서대로 번호가 매겨진 파란색 블록*
 | **연구 도구** | 인용 마크, 사전 내보내기/가져오기, 이체자 사전, 교차 뷰어 |
 | **저장소 관리** | 원본·해석 분리 Git 저장소, 사다리형 그래프, JSON 스냅샷 |
 | **텍스트 가져오기** | HWP/HWPX 표점·현토 분리, PDF 텍스트 레이어 추출, LLM 원문/번역/주석 분리 |
-| **LLM 연동** | Ollama, Base44, Anthropic, Gemini, OpenAI (자동 폴백) |
+| **LLM 연동** | Ollama (gemma4:e4b), Gemini, OpenAI, Anthropic (4단 자동 폴백) |
 
 ## 빠른 시작
 

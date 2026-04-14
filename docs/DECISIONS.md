@@ -269,15 +269,14 @@ L3 LayoutBlock (bbox) → image_utils.crop_block() → OCR 엔진 → OcrBlockRe
 
 **결정**:
 
-5단 폴백 + 단일 진입점(Router) 아키텍처를 채택한다.
+4단 폴백 + 단일 진입점(Router) 아키텍처를 채택한다.
 
 | 순위 | Provider | 특징 |
 |------|----------|------|
-| 1순위 | Base44 Bridge (Node.js) | 무료, Node.js subprocess |
-| 2순위 | Ollama (로컬 프록시) | 무료, 모델 선택 자유 |
-| 3순위 | Gemini (Google AI) | 저렴, 비전 포함 |
-| 4순위 | OpenAI | 중간 비용, 비전 포함 |
-| 5순위 | Anthropic (Claude API) | 최후 폴백 |
+| 1순위 | Ollama (로컬 gemma4:e4b) | 무료, 멀티모달 |
+| 2순위 | Gemini (Google AI) | 저렴, 비전 포함 |
+| 3순위 | OpenAI | 중간 비용, 비전 포함 |
+| 4순위 | Anthropic (Claude API) | 최후 폴백 |
 
 **핵심 원칙**:
 - **LlmRouter가 유일한 진입점**: 모든 코드는 provider를 직접 호출하지 않고, Router를 통해야 한다
@@ -296,14 +295,10 @@ src/llm/
 ├── usage_tracker.py     # JSONL 사용량 추적
 ├── providers/
 │   ├── base.py              # 추상 클래스 + LlmResponse
-│   ├── base44_bridge.py     # 1순위
-│   ├── ollama.py            # 2순위
-│   ├── gemini_provider.py   # 3순위
-│   ├── openai_provider.py   # 4순위
-│   └── anthropic_provider.py # 5순위
-├── bridge/
-│   ├── invoke.js        # Node.js 텍스트 브릿지
-│   └── invoke_vision.js # Node.js 비전 브릿지
+│   ├── ollama.py            # 1순위 (gemma4:e4b)
+│   ├── gemini_provider.py   # 2순위
+│   ├── openai_provider.py   # 3순위
+│   └── anthropic_provider.py # 4순위
 └── prompts/
     ├── layout_analysis.yaml       # L3 레이아웃 분석
     ├── punctuation.yaml           # L5 표점

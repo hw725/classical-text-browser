@@ -182,7 +182,7 @@ def _resolve_repo_path(repo_type: str, repo_id: str) -> Path | None:
 #
 # 왜 여기에 모아두는가:
 #   reading, annotation 라우터가 공유하는 LLM 호출 로직이다.
-#   _get_llm_router()가 프로바이더 폴백(base44_bridge → ollama → openai → anthropic)을
+#   _get_llm_router()가 프로바이더 폴백(ollama → gemini → openai → anthropic)을
 #   관리하므로, 각 기능은 프롬프트만 다르고 호출 방식은 동일하다.
 #
 # 커스텀 방법:
@@ -391,8 +391,7 @@ async def _call_llm_text(purpose: str, text: str,
     폴백 전략:
         자동 모드(force_provider 없음)에서 프로바이더가 JSON이 아닌
         거절 응답을 반환하면 다음 프로바이더로 자동 재시도한다.
-        Base44 agent-chat은 MCP 도구 기반이라 자유 형식 텍스트 요청을
-        "도구가 없습니다"로 거절할 수 있다.
+        일부 프로바이더가 자유 형식 텍스트 요청을 거절할 수 있다.
     """
     import json as _json
     import asyncio as _asyncio
@@ -489,7 +488,7 @@ async def _call_llm_text(purpose: str, text: str,
 
     # ── 자동 모드: 프로바이더 순서대로 시도, JSON 파싱 실패 시 다음으로 ──
     # 가용성을 병렬로 사전 체크 (캐시 활용).
-    # Base44(subprocess 5s) + Ollama(HTTP 3s) 순차 체크 → 최대 8초 낭비 방지.
+    # Ollama(HTTP 3s) 등 순차 체크 시 낭비 방지.
     avail_results = await _asyncio.gather(
         *[router.is_available_cached(p) for p in router.providers],
         return_exceptions=True,

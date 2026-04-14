@@ -161,11 +161,10 @@ flowchart TB
             O5["PaddleOCR"]
         end
         subgraph LLM_ENG["LLM 라우터 (router.py)"]
-            LR1["1. Base44 Bridge"]
-            LR2["2. Ollama 프록시"]
-            LR3["3. Gemini"]
-            LR4["4. OpenAI"]
-            LR5["5. Anthropic"]
+            LR1["1. Ollama (gemma4:e4b)"]
+            LR2["2. Gemini"]
+            LR3["3. OpenAI"]
+            LR4["4. Anthropic"]
         end
         subgraph ETC_ENG["기타"]
             JS_VAL["jsonschema 검증"]
@@ -263,23 +262,17 @@ flowchart TB
     ENTRY["<b>src/llm/router.py</b><br/>LLMRouter -- 단일 진입점 · 자동 폴백"]
 
     ENTRY -->|"시도"| TIER1
-    TIER1["<b>1순위: Base44 Bridge (Node.js)</b><br/>subprocess: node invoke.js<br/>backend-44 SDK 직접 호출 · 무료 · 비전 포함"]
-    TIER1 -->|"실패 시"| TIER2
 
-    subgraph TIER2_GROUP["2순위: Ollama (로컬 프록시)"]
-        TIER2_MAIN["localhost:11434 -- 클라우드 모델 로컬 프록시"]
-        TIER2_M1["Qwen3-VL"]
-        TIER2_M2["Kimi-K2.5"]
-        TIER2_M3["GLM-5"]
-        TIER2_M4["Gemini-3-Flash"]
+    subgraph TIER1_GROUP["1순위: Ollama (로컬)"]
+        TIER1["localhost:11434 -- gemma4:e4b (멀티모달)"]
     end
 
-    TIER2_GROUP -->|"실패 시"| TIER3
-    TIER3["<b>3순위: Gemini (Google AI)</b><br/>GEMINI_API_KEY · 저렴 · 비전 포함"]
+    TIER1_GROUP -->|"실패 시"| TIER2
+    TIER2["<b>2순위: Gemini (Google AI)</b><br/>GOOGLE_API_KEY · 저렴 · 비전 포함"]
+    TIER2 -->|"실패 시"| TIER3
+    TIER3["<b>3순위: OpenAI</b><br/>OPENAI_API_KEY · 중간 비용 · 비전 포함"]
     TIER3 -->|"실패 시"| TIER4
-    TIER4["<b>4순위: OpenAI</b><br/>OPENAI_API_KEY · 중간 비용 · 비전 포함"]
-    TIER4 -->|"실패 시"| TIER5
-    TIER5["<b>5순위: Anthropic (Claude)</b><br/>ANTHROPIC_API_KEY · 최후 폴백"]
+    TIER4["<b>4순위: Anthropic (Claude)</b><br/>ANTHROPIC_API_KEY · 최후 폴백"]
 
     subgraph CONSUMERS["LLM 소비자 (src/core/)"]
         direction LR
@@ -578,16 +571,15 @@ flowchart TB
 
     subgraph LLM_MOD["src/llm/ -- LLM 통합"]
         direction TB
-        LM1["<b>router.py -- 5단 폴백</b>"]
+        LM1["<b>router.py -- 4단 폴백</b>"]
         LM2["config.py"]
         LM3["draft.py"]
         LM4["usage_tracker.py"]
         subgraph PROVIDERS["providers/"]
-            LP1["base44_bridge"]
-            LP2["ollama"]
+            LP1["ollama (gemma4:e4b)"]
+            LP2["gemini"]
             LP3["openai"]
             LP4["anthropic"]
-            LP5["gemini"]
         end
     end
 

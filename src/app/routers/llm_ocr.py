@@ -209,7 +209,7 @@ async def api_compare_layout(doc_id: str, page: int, body: CompareLayoutRequest)
             status_code=404,
         )
 
-    # targets 파싱: ["base44_bridge", "ollama:glm-5:cloud"]
+    # targets 파싱: ["ollama", "gemini:gemini-2.5-flash"]
     parsed_targets = None
     if body.targets:
         parsed_targets = []

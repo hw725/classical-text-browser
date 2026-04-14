@@ -1,16 +1,11 @@
-"""Ollama Provider (3순위).
+"""Ollama Provider (1순위).
 
 Ollama 로컬 서버(localhost:11434)를 통한 LLM 호출.
-클라우드 모델도 Ollama가 프록시:
-    - qwen3-vl:235b-cloud    ← 이미지 분석 가능 (비전 모델)
-    - kimi-k2.5:cloud
-    - minimax-m2.5:cloud
-    - glm-5:cloud
-    - gemini-3-flash-preview:cloud
+기본 로컬 모델: gemma4:e4b (Google Gemma 4, 멀티모달)
 
 호출 흐름:
     Python → HTTP POST localhost:11434/api/generate
-          → Ollama → 클라우드 모델 프록시
+          → Ollama → 로컬 모델 실행
           → 결과 반환
 """
 
@@ -23,23 +18,20 @@ from .base import BaseLlmProvider, LlmProviderError, LlmResponse
 
 
 class OllamaProvider(BaseLlmProvider):
-    """Ollama 로컬 서버를 통한 LLM 호출. 클라우드 모델도 프록시."""
+    """Ollama 로컬 서버를 통한 LLM 호출. 기본 모델: gemma4:e4b."""
 
     provider_id = "ollama"
     display_name = "Ollama"
     supports_image = True
 
-    # 용도별 기본 모델
-    # 주의: kimi-k2.5는 thinking 모델이라 사고 토큰이 num_predict 예산을
-    # 소진하여 빈 응답을 반환할 수 있다.
-    # JSON 구조화 출력이 필요한 용도(표점, 주석)는 non-thinking 모델을 사용한다.
+    # 용도별 기본 모델 — gemma4:e4b (멀티모달, 텍스트+비전 통합)
     DEFAULT_MODELS = {
-        "text": "kimi-k2.5:cloud",
-        "vision": "qwen3-vl:235b-cloud",
-        "translation": "glm-5:cloud",
-        "json": "gemini-3-flash-preview:cloud",
-        "punctuation": "gemini-3-flash-preview:cloud",   # JSON 출력 — non-thinking 모델
-        "annotation": "gemini-3-flash-preview:cloud",     # JSON 출력 — non-thinking 모델
+        "text": "gemma4:e4b",
+        "vision": "gemma4:e4b",
+        "translation": "gemma4:e4b",
+        "json": "gemma4:e4b",
+        "punctuation": "gemma4:e4b",
+        "annotation": "gemma4:e4b",
     }
 
     @property
@@ -223,7 +215,7 @@ class OllamaProvider(BaseLlmProvider):
                               max_tokens=4096, **kwargs) -> LlmResponse:
         """Ollama 비전 모델로 이미지 분석.
 
-        qwen3-vl:235b-cloud가 기본 비전 모델.
+        gemma4:e4b가 기본 비전 모델 (멀티모달).
         Ollama API는 images 필드에 base64 배열을 받는다.
         """
         selected_model = model or self.DEFAULT_MODELS["vision"]

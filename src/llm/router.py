@@ -23,7 +23,7 @@ provider를 직접 호출하지 말고, 항상 이 Router를 통해 호출한다
     # 비교
     results = await router.compare(
         "번역해줘",
-        targets=["base44_bridge", ("ollama", "glm-5:cloud")]
+        targets=["ollama", ("gemini", "gemini-2.5-flash")]
     )
 """
 
@@ -40,7 +40,6 @@ from .providers.base import (
     LlmResponse,
     LlmUnavailableError,
 )
-from .providers.base44_bridge import Base44BridgeProvider
 from .providers.gemini_provider import GeminiProvider
 from .providers.ollama import OllamaProvider
 from .providers.openai_provider import OpenAiProvider
@@ -53,7 +52,7 @@ class LlmRouter:
     """LLM 호출 단일 진입점."""
 
     # is_available() 캐시 TTL (초).
-    # Base44(subprocess 5s), Ollama(HTTP 3s) 같은 느린 체크를
+    # Ollama(HTTP 3s) 같은 느린 체크를
     # 매 호출마다 반복하지 않기 위해 캐시한다.
     _AVAIL_TTL_OK = 120    # 사용 가능 → 2분간 재확인 안 함
     _AVAIL_TTL_FAIL = 30   # 사용 불가 → 30초간 재확인 안 함
@@ -64,11 +63,10 @@ class LlmRouter:
 
         # 우선순위 순서 (무료 → 저렴 → 중간 → 최후)
         self.providers: list[BaseLlmProvider] = [
-            Base44BridgeProvider(self.config),    # 1순위: 무료 (비전 포함)
-            OllamaProvider(self.config),          # 2순위: 무료 (로컬/프록시)
-            GeminiProvider(self.config),           # 3순위: 저렴 (비전 포함)
-            OpenAiProvider(self.config),           # 4순위: 중간 (비전 포함)
-            AnthropicProvider(self.config),       # 5순위: 최후 폴백
+            OllamaProvider(self.config),          # 1순위: 무료 (로컬 gemma4:e4b)
+            GeminiProvider(self.config),           # 2순위: 저렴 (비전 포함)
+            OpenAiProvider(self.config),           # 3순위: 중간 (비전 포함)
+            AnthropicProvider(self.config),       # 4순위: 최후 폴백
         ]
 
         # is_available() 캐시: {provider_id: (결과, 타임스탬프)}
@@ -78,8 +76,8 @@ class LlmRouter:
         """is_available() 결과를 캐싱하여 반환.
 
         왜 캐싱하는가:
-            Base44는 Node.js subprocess(5초), Ollama는 HTTP(3초) 체크가 필요하다.
-            자동 폴백에서 매번 순차 호출하면 사용 불가 프로바이더마다 3~5초 낭비.
+            Ollama는 HTTP(3초) 체크가 필요하다.
+            자동 폴백에서 매번 순차 호출하면 사용 불가 프로바이더마다 수 초 낭비.
             짧은 TTL로 캐싱하면 첫 호출 후 거의 즉시 건너뛸 수 있다.
         """
         pid = provider.provider_id
@@ -155,7 +153,7 @@ class LlmRouter:
 
         # ── 자동 폴백 모드 ──
         # 1단계: 모든 프로바이더의 가용성을 병렬로 사전 체크 (캐시 활용).
-        #   Base44(5s) + Ollama(3s) 순차 체크 → 최대 8초 낭비
+        #   Ollama(3s) 등 순차 체크 시 낭비 방지
         #   병렬 체크 + 캐시 → 첫 호출 max(5,3)=5초, 이후 ~0초
         avail_results = await asyncio.gather(
             *[self.is_available_cached(p) for p in self.providers],
@@ -184,9 +182,8 @@ class LlmRouter:
         raise LlmUnavailableError(
             "사용 가능한 LLM provider가 없습니다.\n"
             "확인 사항:\n"
-            "  1. Base44: base44 login 후 bridge 스크립트 확인\n"
-            "  2. Ollama: ollama serve\n"
-            "  3. API 키: .env에 OPENAI_API_KEY, GOOGLE_API_KEY 등\n\n"
+            "  1. Ollama: ollama serve (gemma4:e4b 모델 필요)\n"
+            "  2. API 키: .env에 GOOGLE_API_KEY, OPENAI_API_KEY 등\n\n"
             "시도 결과:\n" + "\n".join(f"  - {e}" for e in errors)
         )
 
@@ -257,9 +254,8 @@ class LlmRouter:
         raise LlmUnavailableError(
             "사용 가능한 LLM provider가 없습니다.\n"
             "확인 사항:\n"
-            "  1. Base44: base44 login 후 bridge 스크립트 확인\n"
-            "  2. Ollama: ollama serve\n"
-            "  3. API 키: .env에 OPENAI_API_KEY, GOOGLE_API_KEY 등\n\n"
+            "  1. Ollama: ollama serve (gemma4:e4b 모델 필요)\n"
+            "  2. API 키: .env에 GOOGLE_API_KEY, OPENAI_API_KEY 등\n\n"
             "시도 결과:\n" + "\n".join(f"  - {e}" for e in errors)
         )
 
@@ -336,7 +332,7 @@ class LlmRouter:
     ) -> list:
         """여러 모델에 같은 입력을 보내서 결과를 비교.
 
-        targets: ["base44_bridge", ("ollama", "glm-5:cloud"), "anthropic"]
+        targets: ["ollama", ("gemini", "gemini-2.5-flash"), "anthropic"]
                  None이면 사용 가능한 모든 provider.
 
         반환: list[LlmResponse | Exception]
@@ -424,8 +420,7 @@ class LlmRouter:
                     "display": provider.display_name,
                     "cost": (
                         "free"
-                        if "base44" in provider.provider_id
-                        or provider.provider_id == "ollama"
+                        if provider.provider_id == "ollama"
                         else "paid"
                     ),
                     "vision": provider.supports_image,

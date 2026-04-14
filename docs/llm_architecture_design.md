@@ -5,7 +5,7 @@
 
 ---
 
-## 1. 호출 우선순위 (5단 폴백)
+## 1. 호출 우선순위 (4단 폴백)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -13,28 +13,21 @@
 │                                                             │
 │  src/llm/router.py  ← LLM 호출의 단일 진입점               │
 │      │                                                      │
-│      ├─ 1순위: Base44 InvokeLLM (Node.js bridge)            │
-│      │   subprocess: node src/llm/bridge/invoke.js          │
-│      │   조건: Node.js + backend-44 설치됨                  │
-│      │   장점: 무료, 서버 없이 SDK 직접 사용, 비전 포함     │
-│      │                                                      │
-│      ├─ 2순위: Ollama (로컬 서버)                            │
+│      ├─ 1순위: Ollama (로컬 서버)                            │
 │      │   localhost:11434/api/generate                       │
-│      │   모델: qwen3-vl:235b-cloud, kimi-k2.5:cloud,       │
-│      │         minimax-m2.5:cloud, glm-5:cloud,             │
-│      │         gemini-3-flash-preview:cloud                 │
+│      │   모델: gemma4:e4b (Google Gemma 4, 멀티모달)        │
 │      │   조건: Ollama 서버가 실행 중                         │
-│      │   장점: 클라우드 모델을 로컬 프록시로, 비전 모델 지원 │
+│      │   장점: 무료, 로컬 실행, 비전 포함, 오프라인 가능     │
 │      │                                                      │
-│      ├─ 3순위: Gemini (Google AI)                            │
-│      │   조건: GEMINI_API_KEY 설정됨                        │
+│      ├─ 2순위: Gemini (Google AI)                            │
+│      │   조건: GOOGLE_API_KEY 설정됨                        │
 │      │   장점: 저렴, 비전 포함                              │
 │      │                                                      │
-│      ├─ 4순위: OpenAI                                        │
+│      ├─ 3순위: OpenAI                                        │
 │      │   조건: OPENAI_API_KEY 설정됨                        │
 │      │   장점: 중간 비용, 비전 포함                         │
 │      │                                                      │
-│      └─ 5순위: Anthropic (Claude API)                        │
+│      └─ 4순위: Anthropic (Claude API)                        │
 │          조건: ANTHROPIC_API_KEY 설정됨                      │
 │          장점: 최후 폴백                                    │
 │                                                             │
@@ -45,15 +38,13 @@
 
 | 순위 | 방식 | 비용 | 이미지 분석 | 의존성 | 오프라인 |
 |------|------|------|-------------|--------|----------|
-| 1 | Base44 bridge | 무료 | ✅ (UploadFile) | Node.js 설치 | ✗ |
-| 2 | Ollama 클라우드 모델 | 무료~저가 | ✅ (qwen3-vl 등) | Ollama 실행 | △ (로컬 모델은 가능) |
-| 3 | Gemini | 저렴 | ✅ | API 키 | ✗ |
-| 4 | OpenAI | 중간 | ✅ | API 키 | ✗ |
-| 5 | Anthropic | 유료 | ✅ | API 키 | ✗ |
+| 1 | Ollama (gemma4:e4b) | 무료 | ✅ (멀티모달) | Ollama 실행 | ✅ |
+| 2 | Gemini | 저렴 | ✅ | API 키 | ✗ |
+| 3 | OpenAI | 중간 | ✅ | API 키 | ✗ |
+| 4 | Anthropic | 유료 | ✅ | API 키 | ✗ |
 
-- 1순위는 Base44의 무료 LLM을 최대한 활용
-- 2순위는 Ollama를 통한 클라우드 모델 프록시 (비용 효율)
-- 3~5순위는 유료 API (비용 순: Gemini < OpenAI < Anthropic)
+- 1순위는 Ollama의 로컬 gemma4:e4b 모델 (무료, 오프라인 가능)
+- 2~4순위는 유료 API (비용 순: Gemini < OpenAI < Anthropic)
 
 ---
 
@@ -67,15 +58,10 @@ src/
     providers/
       __init__.py
       base.py               ← BaseLlmProvider 추상 클래스
-      base44_bridge.py      ← 1순위: Node.js bridge subprocess
-      ollama.py             ← 2순위: Ollama REST API
-      gemini_provider.py    ← 3순위: Gemini API
-      openai_provider.py    ← 4순위: OpenAI API
-      anthropic_provider.py ← 5순위: Claude API
-    bridge/
-      invoke.js         ← Node.js 브릿지 스크립트 (backend-44 SDK 사용)
-      invoke_vision.js  ← 이미지 분석용 브릿지
-      package.json      ← 최소 의존성 (backend-44/src/client.js 참조)
+      ollama.py             ← 1순위: Ollama REST API (gemma4:e4b)
+      gemini_provider.py    ← 2순위: Gemini API
+      openai_provider.py    ← 3순위: OpenAI API
+      anthropic_provider.py ← 4순위: Claude API
     prompts/
       layout_analysis.yaml       ← L3 레이아웃 분석
       punctuation.yaml           ← L5 표점
@@ -111,7 +97,7 @@ class LlmResponse:
     어떤 provider를 썼든 호출자는 동일한 형식을 받는다.
     """
     text: str                    # 응답 텍스트
-    provider: str                # "base44_http", "ollama", "anthropic" 등
+    provider: str                # "ollama", "gemini", "openai", "anthropic" 등
     model: str                   # 실제 사용된 모델명
     tokens_in: int | None        # 입력 토큰 (추정 가능할 때)
     tokens_out: int | None       # 출력 토큰
@@ -126,18 +112,16 @@ class BaseLlmProvider(ABC):
     router.py가 우선순위에 따라 순서대로 시도.
     """
     
-    provider_id: str        # "base44_http", "base44_bridge", "ollama", ...
-    display_name: str       # "Base44 (agent-chat)", ...
+    provider_id: str        # "ollama", "gemini", "openai", "anthropic"
+    display_name: str       # "Ollama", "Gemini", ...
     supports_image: bool    # 이미지 입력 가능 여부
     
     @abstractmethod
     async def is_available(self) -> bool:
         """이 provider가 현재 사용 가능한지 확인.
         
-        - base44_http: localhost:8787 헬스체크
-        - base44_bridge: Node.js + backend-44 경로 존재 확인
         - ollama: localhost:11434 헬스체크
-        - anthropic: API 키 존재 확인
+        - gemini/openai/anthropic: API 키 존재 확인
         """
         ...
     
@@ -201,12 +185,10 @@ class LlmRouter:
     def __init__(self, config: LlmConfig):
         # 우선순위 순서대로 provider 목록 생성
         self.providers = [
-            Base44HttpProvider(config),     # 1순위
-            Base44BridgeProvider(config),   # 2순위
-            OllamaProvider(config),         # 3순위
+            OllamaProvider(config),         # 1순�� (gemma4:e4b)
+            GeminiProvider(config),         # 2순위
+            OpenAIProvider(config),         # 3순위
             AnthropicProvider(config),      # 4순위
-            OpenAIProvider(config),         # 4순위
-            GeminiProvider(config),         # 4순위
         ]
         self.usage_tracker = UsageTracker(config)
     
@@ -220,9 +202,9 @@ class LlmRouter:
         
         모델 선택 옵션 (품질 테스트·비교용):
           force_provider: 특정 provider만 사용
-            예: "ollama", "anthropic", "base44_http"
+            예: "ollama", "gemini", "anthropic"
           force_model: 특정 모델 지정 (force_provider와 함께 사용)
-            예: "qwen3-vl:235b-cloud", "claude-sonnet-4-20250514"
+            예: "gemma4:e4b", "claude-sonnet-4-20250514"
         
         사용 예시:
           # 기본: 폴백 순서대로
@@ -331,9 +313,8 @@ class LlmRouter:
           results = await router.compare(
               "이 문장 번역해줘",
               targets=[
-                  "base44_http",
-                  ("ollama", "glm-5:cloud"),
-                  ("ollama", "kimi-k2.5:cloud"),
+                  "ollama",
+                  ("gemini", "gemini-2.5-flash"),
                   "anthropic",
               ]
           )
@@ -392,12 +373,8 @@ class LlmRouter:
         
         반환 예시:
         [
-            {"provider": "base44_http", "model": "(자동)", "available": True,
-             "display": "Base44 InvokeLLM", "cost": "무료"},
-            {"provider": "ollama", "model": "qwen3-vl:235b-cloud", "available": True,
-             "display": "Ollama — qwen3-vl (비전)", "cost": "무료", "vision": True},
-            {"provider": "ollama", "model": "kimi-k2.5:cloud", "available": True,
-             "display": "Ollama — kimi-k2.5", "cost": "무료"},
+            {"provider": "ollama", "model": "gemma4:e4b", "available": True,
+             "display": "Ollama — gemma4:e4b (멀티모달)", "cost": "무료", "vision": True},
             {"provider": "anthropic", "model": "claude-sonnet-4-20250514", "available": False,
              "display": "Claude Sonnet 4", "cost": "유료", "reason": "API 키 미설정"},
         ]
@@ -425,7 +402,7 @@ class LlmRouter:
                     "model": getattr(provider, "DEFAULT_MODEL", "(자동)"),
                     "available": available,
                     "display": provider.display_name,
-                    "cost": "무료" if provider.provider_id.startswith("base44") or provider.provider_id == "ollama" else "유료",
+                    "cost": "무료" if provider.provider_id == "ollama" else "유료",
                     "vision": provider.supports_image,
                 })
         
@@ -443,246 +420,7 @@ class LlmRouter:
 
 ## 4. Provider별 구현 상세
 
-### 4.1 Base44 HTTP (1순위)
-
-```python
-# src/llm/providers/base44_http.py
-
-class Base44HttpProvider(BaseLlmProvider):
-    """agent-chat 서버(localhost:8787)를 통한 Base44 InvokeLLM 호출.
-    
-    backend-44의 agent-chat이 실행 중일 때 사용.
-    장점: 무료, MCP 도구 연동, 세션 관리.
-    
-    호출 흐름:
-      Python → HTTP POST localhost:8787/api/chat
-            → agent-chat → Base44 InvokeLLM
-            → 결과 JSON 반환
-    """
-    
-    provider_id = "base44_http"
-    display_name = "Base44 (agent-chat)"
-    supports_image = True  # agent-chat이 첨부파일을 지원
-    
-    AGENT_CHAT_URL = "http://127.0.0.1:8787"
-    
-    async def is_available(self) -> bool:
-        """agent-chat 서버가 실행 중인지 확인."""
-        try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
-                resp = await client.get(f"{self.AGENT_CHAT_URL}/api/meta")
-                return resp.status_code == 200
-        except (httpx.ConnectError, httpx.TimeoutException):
-            return False
-    
-    async def call(self, prompt, *, system=None, response_format="text",
-                   connector="sequential-thinking", **kwargs) -> LlmResponse:
-        """agent-chat에 텍스트 요청.
-        
-        connector: 사용할 커넥터 (기본: sequential-thinking)
-          - "sequential-thinking": 범용 추론
-          - 다른 커넥터도 가능 (academic-mcp 등)
-        """
-        full_prompt = prompt
-        if system:
-            full_prompt = f"[시스템 지시]\n{system}\n\n[요청]\n{prompt}"
-        
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(
-                f"{self.AGENT_CHAT_URL}/api/chat",
-                json={
-                    "text": full_prompt,
-                    "connector": connector,
-                }
-            )
-            data = resp.json()
-        
-        return LlmResponse(
-            text=data.get("content", ""),
-            provider="base44_http",
-            model="base44_invokellm",
-            tokens_in=None,   # Base44가 토큰 수를 반환하지 않음
-            tokens_out=None,
-            cost_usd=0.0,     # 무료
-            raw=data,
-        )
-    
-    async def call_with_image(self, prompt, image, *,
-                              image_mime="image/png", **kwargs) -> LlmResponse:
-        """agent-chat에 이미지 첨부 요청.
-        
-        agent-chat의 attachments 기능 사용:
-        - base64로 인코딩하여 전송
-        - agent-chat이 Base44 UploadFile → InvokeLLM(file_urls) 처리
-        """
-        import base64
-        
-        attachment = {
-            "name": "page_image.png",
-            "type": image_mime,
-            "data": base64.b64encode(image).decode("ascii"),
-        }
-        
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(
-                f"{self.AGENT_CHAT_URL}/api/chat",
-                json={
-                    "text": prompt,
-                    "connector": "sequential-thinking",
-                    "attachments": [attachment],
-                }
-            )
-            data = resp.json()
-        
-        return LlmResponse(
-            text=data.get("content", ""),
-            provider="base44_http",
-            model="base44_invokellm_vision",
-            tokens_in=None,
-            tokens_out=None,
-            cost_usd=0.0,
-            raw=data,
-        )
-```
-
-### 4.2 Base44 Bridge (2순위)
-
-```python
-# src/llm/providers/base44_bridge.py
-
-class Base44BridgeProvider(BaseLlmProvider):
-    """Node.js 브릿지 스크립트를 subprocess로 실행하여 Base44 SDK 호출.
-    
-    agent-chat 서버가 안 떠있을 때의 대안.
-    Node.js 프로세스를 1회성으로 실행, JSON 결과를 stdout으로 받음.
-    
-    호출 흐름:
-      Python → subprocess.run(["node", "invoke.js", ...])
-            → invoke.js → Base44 SDK InvokeLLM
-            → stdout JSON → Python 파싱
-    
-    전제:
-      - Node.js 20+ 설치됨
-      - backend-44 디렉토리가 설정에 지정됨
-      - base44 login 완료 (토큰이 ~/.base44/auth/auth.json에 있음)
-    """
-    
-    provider_id = "base44_bridge"
-    display_name = "Base44 (bridge)"
-    supports_image = True
-    
-    async def is_available(self) -> bool:
-        """Node.js + backend-44 + 인증 토큰 존재 확인."""
-        # 1. Node.js 설치 확인
-        try:
-            result = await asyncio.create_subprocess_exec(
-                "node", "--version",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            await result.wait()
-            if result.returncode != 0:
-                return False
-        except FileNotFoundError:
-            return False
-        
-        # 2. bridge 스크립트 존재 확인
-        bridge_path = self.config.get("base44_bridge_script")
-        if not bridge_path or not Path(bridge_path).exists():
-            return False
-        
-        # 3. Base44 인증 토큰 확인
-        auth_path = Path.home() / ".base44" / "auth" / "auth.json"
-        if not auth_path.exists():
-            return False
-        
-        return True
-    
-    async def call(self, prompt, *, system=None, response_format="text",
-                   **kwargs) -> LlmResponse:
-        """Node.js 브릿지로 InvokeLLM 호출."""
-        bridge_script = self.config["base44_bridge_script"]
-        
-        input_data = json.dumps({
-            "prompt": prompt,
-            "system": system,
-            "response_type": response_format,
-        })
-        
-        proc = await asyncio.create_subprocess_exec(
-            "node", bridge_script,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await proc.communicate(input_data.encode())
-        
-        if proc.returncode != 0:
-            raise LlmProviderError(
-                f"Base44 bridge 실행 실패:\n{stderr.decode()}"
-            )
-        
-        data = json.loads(stdout.decode())
-        
-        return LlmResponse(
-            text=data.get("text", ""),
-            provider="base44_bridge",
-            model="base44_invokellm",
-            tokens_in=None,
-            tokens_out=None,
-            cost_usd=0.0,
-            raw=data,
-        )
-    
-    async def call_with_image(self, prompt, image, *,
-                              image_mime="image/png", **kwargs) -> LlmResponse:
-        """이미지를 임시 파일로 저장 → bridge에 경로 전달."""
-        import tempfile, base64
-        
-        with tempfile.NamedTemporaryFile(
-            suffix=".png", delete=False
-        ) as tmp:
-            tmp.write(image)
-            tmp_path = tmp.name
-        
-        try:
-            bridge_script = self.config["base44_bridge_vision_script"]
-            
-            input_data = json.dumps({
-                "prompt": prompt,
-                "image_path": tmp_path,
-                "image_mime": image_mime,
-            })
-            
-            proc = await asyncio.create_subprocess_exec(
-                "node", bridge_script,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await proc.communicate(input_data.encode())
-            
-            if proc.returncode != 0:
-                raise LlmProviderError(
-                    f"Base44 bridge vision 실행 실패:\n{stderr.decode()}"
-                )
-            
-            data = json.loads(stdout.decode())
-            
-            return LlmResponse(
-                text=data.get("text", ""),
-                provider="base44_bridge",
-                model="base44_invokellm_vision",
-                tokens_in=None,
-                tokens_out=None,
-                cost_usd=0.0,
-                raw=data,
-            )
-        finally:
-            Path(tmp_path).unlink(missing_ok=True)
-```
-
-### 4.3 Ollama (3순위)
+### 4.1 Ollama (1순위)
 
 ```python
 # src/llm/providers/ollama.py
@@ -690,31 +428,28 @@ class Base44BridgeProvider(BaseLlmProvider):
 class OllamaProvider(BaseLlmProvider):
     """Ollama 로컬 서버(localhost:11434)를 통한 LLM 호출.
     
-    클라우드 모델도 Ollama가 프록시:
-      - qwen3-vl:235b-cloud    ← 이미지 분석 가능 (비전 모델)
-      - kimi-k2.5:cloud
-      - minimax-m2.5:cloud
-      - glm-5:cloud
-      - gemini-3-flash-preview:cloud
+    기본 모델: gemma4:e4b (Google Gemma 4, 멀티모달)
     
     호출 흐름:
       Python → HTTP POST localhost:11434/api/generate
-            → Ollama → 클라우드 모델 프록시
+            → Ollama → 로컬 모�� 실행
             → 결과 반환
     """
     
     provider_id = "ollama"
     display_name = "Ollama"
-    supports_image = True  # qwen3-vl 등 비전 모델
+    supports_image = True  # gemma4:e4b 멀티모달
     
     OLLAMA_URL = "http://localhost:11434"
     
-    # 용도별 기본 모델
+    # 용도별 기본 모델 — gemma4:e4b (멀티모달, 텍스트+비전 통합)
     DEFAULT_MODELS = {
-        "text": "kimi-k2.5:cloud",           # 범용 텍스트
-        "vision": "qwen3-vl:235b-cloud",     # 이미지 분석
-        "translation": "glm-5:cloud",        # 번역
-        "json": "gemini-3-flash-preview:cloud",  # JSON 구조화 출력
+        "text": "gemma4:e4b",
+        "vision": "gemma4:e4b",
+        "translation": "gemma4:e4b",
+        "json": "gemma4:e4b",
+        "punctuation": "gemma4:e4b",
+        "annotation": "gemma4:e4b",
     }
     
     async def is_available(self) -> bool:
@@ -855,140 +590,9 @@ class AnthropicProvider(BaseLlmProvider):
 
 ---
 
-## 5. Node.js Bridge 스크립트
+## 5. 설정 관리
 
-### 5.1 invoke.js (텍스트 전용)
-
-```javascript
-// src/llm/bridge/invoke.js
-// 
-// Python에서 subprocess로 실행되는 1회성 스크립트.
-// stdin으로 JSON 입력을 받고, stdout으로 JSON 결과를 출력한다.
-//
-// 사용: echo '{"prompt":"..."}' | node invoke.js
-// 전제: backend-44의 client.js를 import할 수 있어야 함
-
-import { readFileSync } from 'fs';
-import { getBase44Client, ensureAuth } from '../../../backend-44/src/client.js';
-
-async function main() {
-  // stdin에서 입력 읽기
-  const chunks = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk);
-  }
-  const input = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-  
-  const { prompt, system, response_type } = input;
-  
-  // Base44 인증 확인
-  ensureAuth();
-  
-  const base44 = getBase44Client();
-  
-  // 시스템 프롬프트가 있으면 프롬프트 앞에 추가
-  const fullPrompt = system 
-    ? `[시스템 지시]\n${system}\n\n[요청]\n${prompt}`
-    : prompt;
-  
-  const result = await base44.integrations.Core.InvokeLLM({
-    prompt: fullPrompt,
-    response_type: response_type || 'text',
-  });
-  
-  // 결과를 JSON으로 stdout에 출력
-  const text = typeof result === 'string' 
-    ? result 
-    : (result?.content || JSON.stringify(result));
-  
-  const output = { text, provider: 'base44_bridge', raw: result };
-  process.stdout.write(JSON.stringify(output));
-}
-
-main().catch(e => {
-  process.stderr.write(JSON.stringify({ error: e.message }));
-  process.exit(1);
-});
-```
-
-### 5.2 invoke_vision.js (이미지 분석)
-
-```javascript
-// src/llm/bridge/invoke_vision.js
-//
-// 이미지 파일을 Base44에 업로드한 후 InvokeLLM(file_urls)로 분석.
-// stdin: {"prompt": "...", "image_path": "/tmp/xxx.png"}
-// stdout: {"text": "...", "provider": "base44_bridge"}
-
-import { readFileSync } from 'fs';
-import { getBase44Client, ensureAuth } from '../../../backend-44/src/client.js';
-
-async function main() {
-  const chunks = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk);
-  }
-  const input = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-  
-  const { prompt, image_path, image_mime } = input;
-  
-  ensureAuth();
-  const base44 = getBase44Client();
-  
-  // 이미지 파일 읽기 → File 객체 생성
-  const imageBuffer = readFileSync(image_path);
-  const fileName = image_path.split(/[\\/]/).pop();
-  
-  let fileObj;
-  if (typeof globalThis.File === 'function') {
-    fileObj = new globalThis.File([imageBuffer], fileName, {
-      type: image_mime || 'image/png'
-    });
-  } else {
-    fileObj = new globalThis.Blob([imageBuffer], {
-      type: image_mime || 'image/png'
-    });
-    fileObj.name = fileName;
-  }
-  
-  // Base44에 업로드
-  const uploadResult = await base44.integrations.Core.UploadFile({
-    file: fileObj,
-  });
-  
-  if (!uploadResult?.file_url) {
-    throw new Error('파일 업로드 실패: file_url이 반환되지 않음');
-  }
-  
-  // InvokeLLM에 file_urls로 전달
-  const result = await base44.integrations.Core.InvokeLLM({
-    prompt,
-    file_urls: [uploadResult.file_url],
-  });
-  
-  const text = typeof result === 'string'
-    ? result
-    : (result?.content || JSON.stringify(result));
-  
-  process.stdout.write(JSON.stringify({
-    text,
-    provider: 'base44_bridge',
-    file_url: uploadResult.file_url,
-    raw: result,
-  }));
-}
-
-main().catch(e => {
-  process.stderr.write(JSON.stringify({ error: e.message }));
-  process.exit(1);
-});
-```
-
----
-
-## 6. 설정 관리
-
-### 6.1 config.py
+### 5.1 config.py
 
 ```python
 # src/llm/config.py
@@ -998,13 +602,9 @@ class LlmConfig:
     
     설정 우선순위:
       1. 환경변수 (.env)
-      2. 서고 설정 파일 (~/.classical-text-browser/llm_config.json)
+      2. 서고 설정 파일
       3. 기본값
     """
-    
-    def __init__(self, library_root: Path | None = None):
-        self._env = dotenv.dotenv_values(library_root / ".env") if library_root else {}
-        self._config = self._load_global_config()
     
     def get_api_key(self, provider: str) -> str | None:
         """API 키 조회. 환경변수 → 설정 파일 → None."""
@@ -1012,89 +612,69 @@ class LlmConfig:
             "anthropic": "ANTHROPIC_API_KEY",
             "openai": "OPENAI_API_KEY",
             "gemini": "GOOGLE_API_KEY",
-            "base44": "BASE44_TOKEN",
         }
         env_name = env_keys.get(provider)
         if env_name:
             return os.environ.get(env_name) or self._env.get(env_name)
         return None
     
-    def get(self, key: str, default=None):
-        """일반 설정값 조회."""
-        return self._config.get(key, default)
-    
-    # 설정 항목들
     DEFAULTS = {
-        "provider_priority": [
-            "base44_http", "base44_bridge", "ollama",
-            "anthropic", "openai", "gemini"
-        ],
-        "agent_chat_url": "http://127.0.0.1:8787",
         "ollama_url": "http://localhost:11434",
-        "base44_bridge_script": None,          # backend-44 경로 (수동 설정)
-        "base44_bridge_vision_script": None,
-        "ollama_default_model": "kimi-k2.5:cloud",
-        "ollama_vision_model": "qwen3-vl:235b-cloud",
-        "anthropic_default_model": "claude-sonnet-4-20250514",
-        "monthly_budget_usd": 10.0,            # 월간 예산 (유료 API용)
+        "monthly_budget_usd": 10.0,
     }
 ```
 
-### 6.2 .env 예시
+### 5.2 .env 예시
 
 ```env
 # LLM 설정 — classical-text-browser/.env
 # 이 파일은 .gitignore에 포함되어야 한다!
 
-# Base44 (1·2순위 — 무료)
-BASE44_TOKEN=your_base44_token_here
-
-# backend-44 경로 (2순위 bridge용)
-BASE44_BACKEND_PATH=C:\Users\junto\Downloads\head-repo\hw725\backend-44
-
-# Ollama (3순위 — 로컬 서버)
+# Ollama (1순위 — 무료, 로컬 gemma4:e4b)
 # Ollama가 localhost:11434에서 실행 중이면 자동 감지
+# 모델 설치: ollama pull gemma4:e4b
+# OLLAMA_URL=http://localhost:11434
 
-# 직접 API (4순위 — 유료)
-ANTHROPIC_API_KEY=sk-ant-...
-# OPENAI_API_KEY=sk-...
+# 유료 API (2~4순위)
 # GOOGLE_API_KEY=AIza...
+# OPENAI_API_KEY=sk-...
+# ANTHROPIC_API_KEY=sk-ant-...
 
 # 예산
-LLM_MONTHLY_BUDGET_USD=10.0
+# MONTHLY_BUDGET_USD=10.0
 ```
 
 ---
 
-## 7. 용도별 모델 선택 전략
+## 6. 용도별 모델 선택 전략
 
 ```
 ┌────────────────────────┬──────────────────────────────────┐
 │ 용도                    │ 모델 선택                        │
 ├────────────────────────┼──────────────────────────────────┤
 │ 레이아웃 분석 (10-2)    │ 비전 필수:                        │
-│  이미지 → LayoutBlock   │  1. Base44 InvokeLLM + UploadFile│
-│                        │  2. Ollama qwen3-vl:235b-cloud  │
+│  이미지 → LayoutBlock   │  1. Ollama gemma4:e4b (멀티모달) │
+│                        │  2. Gemini gemini-2.5-flash      │
 │                        │  3. Claude claude-sonnet-4       │
 ├────────────────────────┼──────────────────────────────────┤
 │ 번역 (11-2)            │ 텍스트:                           │
-│  한문 → 현대한국어       │  1. Base44 InvokeLLM             │
-│                        │  2. Ollama glm-5:cloud           │
+│  한문 → 현대한국어       │  1. Ollama gemma4:e4b            │
+│                        │  2. Gemini                       │
 │                        │  3. Claude (한문에 강함)           │
 ├────────────────────────┼──────────────────────────────────┤
 │ 주석 자동 생성 (11-3)   │ 텍스트:                           │
-│  인물/지명/전거 식별     │  1. Base44 InvokeLLM             │
-│                        │  2. Ollama kimi-k2.5:cloud       │
+│  인물/지명/전거 식별     │  1. Ollama gemma4:e4b            │
+│                        │  2. Gemini                       │
 │                        │  3. Claude                       │
 ├────────────────────────┼──────────────────────────────────┤
 │ JSON 구조화 출력        │ JSON 모드 지원 모델:              │
-│  프롬프트 → JSON        │  1. Base44 (response_type: json) │
-│                        │  2. Ollama gemini-3-flash:cloud  │
+│  프롬프트 → JSON        │  1. Ollama gemma4:e4b (json)     │
+│                        │  2. Gemini (JSON mode)           │
 │                        │  3. Claude (JSON mode)           │
 ├────────────────────────┼──────────────────────────────────┤
 │ OCR 보조 (10-1)        │ 비전 필수:                        │
-│  저품질 이미지 판독     │  1. Base44 + UploadFile          │
-│                        │  2. Ollama qwen3-vl              │
+│  저품질 이미지 판독     │  1. Ollama gemma4:e4b (멀티모달) │
+│                        │  2. Gemini Vision                │
 │                        │  3. Claude Vision                │
 └────────────────────────┴──────────────────────────────────┘
 ```
@@ -1110,7 +690,7 @@ class UsageTracker:
     """LLM 사용량 추적.
     
     서고별 llm_usage_log.jsonl에 매 호출 기록.
-    무료 provider(Base44, Ollama)도 기록하여 사용 패턴 분석.
+    무료 provider(Ollama)도 기록하여 사용 패턴 분석.
     """
     
     def log(self, response: LlmResponse, purpose: str = ""):
@@ -1158,8 +738,7 @@ class UsageTracker:
             "total_calls": 42,
             "total_cost_usd": 1.23,
             "by_provider": {
-                "base44_http": {"calls": 30, "cost": 0.0},
-                "ollama": {"calls": 8, "cost": 0.0},
+                "ollama": {"calls": 38, "cost": 0.0},
                 "anthropic": {"calls": 4, "cost": 1.23},
             },
             "by_purpose": {
@@ -1187,12 +766,9 @@ class UsageTracker:
 │        ┌──────────────────────────────┐      │
 │        │ 🔄 자동 (폴백순서)            │ ← 기본값     │
 │        │ ─────────────────────────── │      │
-│        │ 🟢 Base44 InvokeLLM         │ ← 무료     │
-│        │ 🟢 Ollama: qwen3-vl (비전)  │ ← 무료     │
-│        │ 🟢 Ollama: kimi-k2.5        │ ← 무료     │
-│        │ 🟢 Ollama: glm-5            │ ← 무료     │
-│        │ 🟢 Ollama: minimax-m2.5     │ ← 무료     │
-│        │ 🟢 Ollama: gemini-3-flash   │ ← 무료     │
+│        │ 🟢 Ollama: gemma4:e4b       │ ← 무료     │
+│        │ ⚫ Gemini: gemini-2.5-flash │ ← 유료, 키 미설정     │
+│        │ ⚫ OpenAI: gpt-5-mini       │ ← 유료, 키 미설정     │
 │        │ ⚫ Claude sonnet-4          │ ← 유료, 키 미설정     │
 │        │ ─────────────────────────── │      │
 │        │ 🔬 비교 모드                  │ ← 전체 비교     │
@@ -1216,8 +792,8 @@ class UsageTracker:
 │  입력: [페이지 3 이미지 — 레이아웃 분석]                   │
 │                                                          │
 │  ┌──────────────┬──────────────┬──────────────┐          │
-│  │ Base44       │ Ollama       │ Claude       │          │
-│  │ InvokeLLM    │ qwen3-vl     │ sonnet-4     │          │
+│  │ Ollama       │ Gemini       │ Claude       │          │
+│  │ gemma4:e4b   │ 2.5-flash    │ sonnet-4     │          │
 │  ├──────────────┼──────────────┼──────────────┤          │
 │  │ 블록 5개      │ 블록 6개      │ 블록 5개      │          │
 │  │ 본문 2       │ 본문 2       │ 본문 2       │          │
@@ -1252,7 +828,7 @@ class LlmDraft:
     quality_notes: str | None = None     # "주석 영역을 빠뜨렸음"
     
     # 비교 모드에서 채택된 경우
-    compared_with: list[str] | None = None  # ["base44_http", "anthropic"]
+    compared_with: list[str] | None = None  # ["ollama", "anthropic"]
     chosen_reason: str | None = None        # "블록 구분이 가장 정확"
 ```
 
@@ -1260,10 +836,10 @@ class LlmDraft:
 
 ```
 "레이아웃 분석 30회 중:
-  - Ollama qwen3-vl 채택 18회 (평균 4.2점)
-  - Base44 채택 8회 (평균 3.5점)
+  - Ollama gemma4:e4b 채택 22회 (평균 4.2점)
+  - Gemini 채택 4회 (평균 4.0점)
   - Claude 채택 4회 (평균 4.5점, 비용 대비 효율은 낮음)
-→ 기본 모델을 qwen3-vl로 변경 권장"
+→ 기본 모델 gemma4:e4b 유지 권장"
 ```
 
 ### 9.4 Ollama 모델 목록 동적 조회
@@ -1320,10 +896,10 @@ docs/llm_architecture_design.md — 이 문서를 읽어. LLM 호출 아키텍�
 ### 핵심: 4단 폴백 LLM Router
 
 우선순위:
-1. Base44 InvokeLLM via agent-chat HTTP (localhost:8787)
-2. Base44 InvokeLLM via Node.js bridge (subprocess)
-3. Ollama 클라우드 모델 (localhost:11434)
-4. 직접 API (Anthropic/OpenAI/Gemini)
+1. Ollama 로컬 모델 gemma4:e4b (localhost:11434)
+2. Gemini API (저렴)
+3. OpenAI API (중간)
+4. Anthropic API (최후 폴백)
 
 모든 LLM 호출은 src/llm/router.py를 통해야 한다.
 provider를 직접 호출하지 않는다.
@@ -1337,39 +913,24 @@ src/llm/providers/base.py:
 - LlmResponse: text, provider, model, tokens, cost, raw
 - LlmProviderError, LlmUnavailableError
 
-### 작업 2: Base44 HTTP Provider (1순위)
-
-src/llm/providers/base44_http.py:
-- localhost:8787/api/chat로 POST
-- is_available: /api/meta GET 헬스체크 (timeout 2초)
-- call: text → connector="sequential-thinking"
-- call_with_image: attachments에 base64 이미지 첨부
-- 의존성: httpx (uv add httpx)
-
-### 작업 3: Node.js Bridge Provider (2순위)
-
-src/llm/providers/base44_bridge.py:
-- asyncio.create_subprocess_exec로 node invoke.js 실행
-- stdin으로 JSON 입력, stdout에서 JSON 결과 파싱
-- is_available: node --version + bridge 스크립트 존재 + ~/.base44/auth 확인
-
-src/llm/bridge/invoke.js:
-- backend-44의 src/client.js를 import
-- stdin JSON → InvokeLLM → stdout JSON
-
-src/llm/bridge/invoke_vision.js:
-- 이미지 경로 받아서 UploadFile → InvokeLLM(file_urls)
-
-### 작업 4: Ollama Provider (3순위)
+### 작업 2: Ollama Provider (1순위)
 
 src/llm/providers/ollama.py:
 - localhost:11434/api/generate POST
-- 용도별 기본 모델:
-  - text: kimi-k2.5:cloud
-  - vision: qwen3-vl:235b-cloud
-  - translation: glm-5:cloud
-  - json: gemini-3-flash-preview:cloud
+- 기본 모델: gemma4:e4b (멀티모달 — 텍스트+비전 통합)
 - call_with_image: images 필드에 base64 배열
+
+### 작업 3: Gemini Provider (2순위)
+
+src/llm/providers/gemini_provider.py:
+- google-genai SDK 사용
+- 기본 모델: gemini-2.5-flash
+
+### 작업 4: OpenAI Provider (3순위)
+
+src/llm/providers/openai_provider.py:
+- openai SDK 사용
+- 기본 모델: gpt-5-mini
 
 ### 작업 5: Anthropic Provider (4순위)
 
@@ -1420,9 +981,9 @@ POST /api/llm/config
 
 GET /api/llm/status — 각 provider 가용 상태 조회
   응답: {
-    "base44_http": {"available": true, "url": "localhost:8787"},
-    "base44_bridge": {"available": true, "node": "v20.19.0"},
-    "ollama": {"available": true, "models": ["kimi-k2.5:cloud", ...]},
+    "ollama": {"available": true, "models": ["gemma4:e4b"]},
+    "gemini": {"available": false, "reason": "API 키 미설정"},
+    "openai": {"available": false, "reason": "API 키 미설정"},
     "anthropic": {"available": false, "reason": "API 키 미설정"}
   }
 
@@ -1435,7 +996,7 @@ layout-editor.js:
 - "전체 확정" → POST /commit
 
 설정 또는 사이드바:
-- LLM 상태 표시: 🟢 Base44 | 🟢 Ollama | ⚫ Claude
+- LLM 상태 표시: 🟢 Ollama | ⚫ Gemini | ⚫ Claude
 - 이번 달 비용: $X.XX / $10.00
 
 ### 작업 12: 통합 테스트

@@ -18,7 +18,7 @@ class LlmResponse:
     """
 
     text: str                                # 응답 텍스트
-    provider: str                            # "base44_http", "ollama", "anthropic" 등
+    provider: str                            # "ollama", "gemini", "openai", "anthropic" 등
     model: str                               # 실제 사용된 모델명
     tokens_in: Optional[int] = None          # 입력 토큰 (추정 가능할 때)
     tokens_out: Optional[int] = None         # 출력 토큰
@@ -89,7 +89,7 @@ class BaseLlmProvider(ABC):
         """스트리밍 LLM 호출. 기본 구현은 call()을 감싸서 heartbeat를 생성한다.
 
         왜 이렇게 하는가:
-            네이티브 스트리밍을 지원하지 않는 프로바이더(Base44, Anthropic 등)도
+            네이티브 스트리밍을 지원하지 않는 프로바이더(Anthropic 등)도
             heartbeat 이벤트를 통해 사용자에게 '처리 중'임을 알릴 수 있다.
             네이티브 스트리밍을 지원하는 프로바이더(Ollama, OpenAI, Gemini)는
             이 메서드를 오버라이드하여 토큰 단위 진행률을 제공한다.

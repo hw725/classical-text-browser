@@ -488,13 +488,12 @@ uv run python -m cli add-document /path/to/my-library \
 
 | 순위 | 프로바이더 | 설정 방법 | 비전(이미지) | 비용 |
 |------|-----------|----------|-------------|------|
-| 1 | Base44 Bridge | 자동 (Node.js + `base44 login` 필요) | O | 무료 |
-| 2 | Ollama (로컬/클라우드) | 자동 감지 (`localhost:11434`) | 모델 의존 | 무료 |
-| 3 | Google Gemini | `.env`에 `GOOGLE_API_KEY` | O | 유료 (저렴) |
-| 4 | OpenAI | `.env`에 `OPENAI_API_KEY` | O | 유료 (중간) |
-| 5 | Anthropic (Claude) | `.env`에 `ANTHROPIC_API_KEY` | O | 유료 (최후) |
+| 1 | Ollama (로컬 gemma4:e4b) | `ollama pull gemma4:e4b` + `ollama serve` | O | 무료 |
+| 2 | Google Gemini | `.env`에 `GOOGLE_API_KEY` | O | 유료 (저렴) |
+| 3 | OpenAI | `.env`에 `OPENAI_API_KEY` | O | 유료 (중간) |
+| 4 | Anthropic (Claude) | `.env`에 `ANTHROPIC_API_KEY` | O | 유료 (최후) |
 
-> **권장**: 무료 프로바이더(Base44, Ollama)만으로도 대부분의 기능을 사용할 수 있습니다.
+> **권장**: Ollama(gemma4:e4b)만으로도 대부분의 기능을 사용할 수 있습니다.
 > 안정적인 표점·번역 품질이 필요하면 Gemini API 키를 설정하세요 (무료 티어 제공).
 
 ### 8.2 API 키 설정

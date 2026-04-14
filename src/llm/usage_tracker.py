@@ -1,7 +1,7 @@
 """LLM 사용량 추적.
 
 서고별 llm_usage_log.jsonl에 매 호출 기록.
-무료 provider(Base44, Ollama)도 기록하여 사용 패턴 분석.
+무료 provider(Ollama)도 기록하여 사용 패턴 분석.
 """
 
 import json

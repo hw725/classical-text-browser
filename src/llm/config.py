@@ -21,7 +21,6 @@ class LlmConfig:
 
     DEFAULTS = {
         "ollama_url": "http://localhost:11434",
-        "base44_backend_path": None,
         "monthly_budget_usd": 10.0,
     }
 
@@ -30,7 +29,6 @@ class LlmConfig:
         "anthropic": "ANTHROPIC_API_KEY",
         "openai": "OPENAI_API_KEY",
         "gemini": "GOOGLE_API_KEY",
-        "base44": "BASE44_TOKEN",
     }
 
     def __init__(self, library_root: Optional[Path] = None):
