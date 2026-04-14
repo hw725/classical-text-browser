@@ -40,44 +40,31 @@
 
 데이터는 8개 층으로 구분됩니다. 아래에서 위로 쌓아올리는 구조입니다.
 
-<div style="max-width: 1000px; width: 100%;">
-<style scoped>
-.arch-wrapper { display: flex; gap: 12px; }.arch-main { flex: 1; min-width: 0; }.arch-title { text-align: center; font-size: 20px; font-weight: bold; color: #78350f; margin-bottom: 14px; }
-.arch-layer { margin: 8px 0; padding: 12px; border-radius: 6px; box-shadow: 0 2px 6px rgba(120, 53, 15, 0.08); }.arch-layer-title { font-size: 12px; font-weight: bold; margin-bottom: 8px; text-align: center; }
-.arch-grid { display: grid; gap: 6px; }.arch-grid-2 { grid-template-columns: repeat(2, 1fr); }.arch-grid-3 { grid-template-columns: repeat(3, 1fr); }.arch-grid-4 { grid-template-columns: repeat(4, 1fr); }
-.arch-box { border-radius: 5px; padding: 7px; text-align: center; font-size: 11px; font-weight: 600; line-height: 1.3; color: #44220e; background: #fffcf7; border: 1px solid #d4c4a8; }.arch-box.highlight { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #b45309; }
-.arch-layer.user { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #d97706; }.arch-layer.user .arch-layer-title { color: #92400e; }.arch-layer.application { background: linear-gradient(135deg, #ffedd5 0%, #fdba74 100%); border: 2px solid #ea580c; }.arch-layer.application .arch-layer-title { color: #9a3412; }.arch-layer.data { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 2px solid #059669; }.arch-layer.data .arch-layer-title { color: #065f46; }.arch-layer.infra { background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); border: 2px solid #64748b; }.arch-layer.infra .arch-layer-title { color: #334155; }
-.d1-cols { display: flex; gap: 16px; align-items: stretch; }
-.d1-col { flex: 1; min-width: 0; }
-.d1-arrow { display: flex; align-items: center; justify-content: center; font-size: 28px; color: #b45309; font-weight: bold; padding: 0 4px; }
-</style>
-<div class="arch-title">8층 데이터 모델</div>
-<div class="d1-cols">
-<div class="d1-col">
-<div class="arch-layer data">
-<div class="arch-layer-title">원본 저장소 (변경 불가)</div>
-<div class="arch-grid">
-<div class="arch-box">L1 원본 PDF/이미지</div>
-<div class="arch-box">L2 OCR 인식 결과</div>
-<div class="arch-box">L3 레이아웃 분석</div>
-<div class="arch-box">L4 교정 텍스트</div>
-</div>
-</div>
-</div>
-<div class="d1-arrow">&#x27A1;</div>
-<div class="d1-col">
-<div class="arch-layer user">
-<div class="arch-layer-title">해석 저장소 (연구자의 작업)</div>
-<div class="arch-grid">
-<div class="arch-box">L5 표점(句讀) · 현토</div>
-<div class="arch-box">L6 번역</div>
-<div class="arch-box">L7 주석 · 사전</div>
-<div class="arch-box">L8 관계 그래프 (예정)</div>
-</div>
-</div>
-</div>
-</div>
-</div>
+```mermaid
+flowchart LR
+  subgraph source["원본 저장소 (변경 불가)"]
+    direction TB
+    L1["L1  원본 PDF/이미지"]
+    L2["L2  OCR 인식 결과"]
+    L3["L3  레이아웃 분석"]
+    L4["L4  교정 텍스트"]
+    L1 --- L2 --- L3 --- L4
+  end
+
+  subgraph interp["해석 저장소 (연구자의 작업)"]
+    direction TB
+    L5["L5  표점(句讀) · 현토"]
+    L6["L6  번역"]
+    L7["L7  주석 · 사전"]
+    L8["L8  관계 그래프 (예정)"]
+    L5 --- L6 --- L7 --- L8
+  end
+
+  source -->|참조| interp
+
+  style source fill:#d1fae5,stroke:#059669,stroke-width:2px,color:#065f46
+  style interp fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#92400e
+```
 
 - **원본 저장소**(L1-L4)는 문헌 자체의 디지털화 작업입니다
 - **해석 저장소**(L5-L8)는 연구자의 해석 작업입니다
@@ -155,76 +142,32 @@ uv run python -m cli init-library /path/to/my-library
 
 화면은 크게 4개 영역으로 나뉩니다.
 
-<div style="max-width: 1000px; width: 100%;">
-<style scoped>
-.arch-wrapper { display: flex; gap: 12px; }.arch-main { flex: 1; min-width: 0; }.arch-title { text-align: center; font-size: 20px; font-weight: bold; color: #78350f; margin-bottom: 14px; }
-.arch-layer { margin: 8px 0; padding: 12px; border-radius: 6px; box-shadow: 0 2px 6px rgba(120, 53, 15, 0.08); }.arch-layer-title { font-size: 12px; font-weight: bold; margin-bottom: 8px; text-align: center; }
-.arch-grid { display: grid; gap: 6px; }.arch-grid-2 { grid-template-columns: repeat(2, 1fr); }.arch-grid-3 { grid-template-columns: repeat(3, 1fr); }.arch-grid-4 { grid-template-columns: repeat(4, 1fr); }
-.arch-box { border-radius: 5px; padding: 7px; text-align: center; font-size: 11px; font-weight: 600; line-height: 1.3; color: #44220e; background: #fffcf7; border: 1px solid #d4c4a8; }.arch-box.highlight { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #b45309; }
-.arch-layer.user { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #d97706; }.arch-layer.user .arch-layer-title { color: #92400e; }.arch-layer.application { background: linear-gradient(135deg, #ffedd5 0%, #fdba74 100%); border: 2px solid #ea580c; }.arch-layer.application .arch-layer-title { color: #9a3412; }.arch-layer.data { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 2px solid #059669; }.arch-layer.data .arch-layer-title { color: #065f46; }.arch-layer.infra { background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); border: 2px solid #64748b; }.arch-layer.infra .arch-layer-title { color: #334155; }
-.d2-layout { display: flex; flex-direction: column; gap: 0; border: 2px solid #d97706; border-radius: 8px; overflow: hidden; }
-.d2-top { display: flex; min-height: 180px; }
-.d2-actbar { width: 60px; background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); border-right: 2px solid #64748b; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px 0; gap: 10px; }
-.d2-actbar-label { writing-mode: vertical-rl; text-orientation: upright; font-size: 11px; font-weight: 700; color: #334155; letter-spacing: 4px; }
-.d2-sidebar { width: 130px; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-right: 2px solid #d97706; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 6px; gap: 6px; }
-.d2-sidebar-title { font-size: 12px; font-weight: 700; color: #92400e; }
-.d2-sidebar-item { font-size: 10px; color: #78350f; }
-.d2-center { flex: 1; display: flex; flex-direction: column; }
-.d2-modetab { background: linear-gradient(135deg, #ffedd5 0%, #fdba74 100%); border-bottom: 2px solid #ea580c; padding: 6px 10px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.d2-modetab-label { font-size: 10px; font-weight: 700; color: #9a3412; margin-right: 4px; }
-.d2-tab { font-size: 10px; background: #fffcf7; border: 1px solid #d4c4a8; border-radius: 4px; padding: 2px 7px; color: #44220e; font-weight: 600; }
-.d2-panels { display: flex; flex: 1; }
-.d2-pdf { flex: 1; background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border-right: 2px solid #059669; display: flex; align-items: center; justify-content: center; padding: 14px; }
-.d2-pdf-label { font-size: 13px; font-weight: 700; color: #065f46; }
-.d2-editor { flex: 1; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); display: flex; align-items: center; justify-content: center; padding: 14px; }
-.d2-editor-label { font-size: 13px; font-weight: 700; color: #92400e; text-align: center; line-height: 1.5; }
-.d2-bottom { background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); border-top: 2px solid #64748b; padding: 8px 12px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.d2-bottom-label { font-size: 10px; font-weight: 700; color: #334155; margin-right: 4px; }
-.d2-bottom-tab { font-size: 10px; background: #fffcf7; border: 1px solid #d4c4a8; border-radius: 4px; padding: 2px 7px; color: #44220e; font-weight: 600; }
-</style>
-<div class="arch-title">화면 구성</div>
-<div class="d2-layout">
-<div class="d2-top">
-<div class="d2-actbar">
-<div class="d2-actbar-label">액티비티바</div>
-</div>
-<div class="d2-sidebar">
-<div class="d2-sidebar-title">사이드바</div>
-<div class="d2-sidebar-item">문헌 목록</div>
-<div class="d2-sidebar-item">서지정보</div>
-<div class="d2-sidebar-item">해석 저장소</div>
-</div>
-<div class="d2-center">
-<div class="d2-modetab">
-<div class="d2-modetab-label">모드 탭:</div>
-<div class="d2-tab">열람</div>
-<div class="d2-tab">레이아웃</div>
-<div class="d2-tab">교정</div>
-<div class="d2-tab">편성</div>
-<div class="d2-tab">표점</div>
-<div class="d2-tab">번역</div>
-<div class="d2-tab">주석</div>
-</div>
-<div class="d2-panels">
-<div class="d2-pdf">
-<div class="d2-pdf-label">PDF 뷰어 (원본 이미지)</div>
-</div>
-<div class="d2-editor">
-<div class="d2-editor-label">에디터 패널<br>(모드에 따라 내용 변경)</div>
-</div>
-</div>
-</div>
-</div>
-<div class="d2-bottom">
-<div class="d2-bottom-label">하단 패널:</div>
-<div class="d2-bottom-tab">Git이력</div>
-<div class="d2-bottom-tab">검증</div>
-<div class="d2-bottom-tab">의존</div>
-<div class="d2-bottom-tab">엔티티</div>
-<div class="d2-bottom-tab">비고</div>
-</div>
-</div>
-</div>
+```mermaid
+flowchart TB
+  subgraph layout["VSCode 스타일 3패널 레이아웃"]
+    direction TB
+    modetab["모드 탭: 열람 · 레이아웃 · 교정 · 편성 · 표점 · 현토 · 번역 · 주석 · 인용 · 교차뷰어"]
+
+    subgraph main["메인 영역 (좌우 분할)"]
+      direction LR
+      sidebar["<b>액티비티바 + 사이드바</b><br/>문헌 목록<br/>서지정보<br/>해석 저장소"]
+      pdf["<b>PDF 뷰어</b><br/>(원본 이미지)"]
+      editor["<b>에디터 패널</b><br/>(모드에 따라<br/>내용 변경)"]
+      sidebar --- pdf --- editor
+    end
+
+    bottom["하단 패널: Git이력 · 검증 · 의존 · 엔티티 · 비고"]
+
+    modetab --> main --> bottom
+  end
+
+  style layout fill:#fff8e1,stroke:#f9a825,stroke-width:2px
+  style modetab fill:#ffedd5,stroke:#ea580c,color:#9a3412
+  style sidebar fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
+  style pdf fill:#e3f2fd,stroke:#1565c0,color:#0d47a1
+  style editor fill:#f3e5f5,stroke:#7b1fa2,color:#4a148c
+  style bottom fill:#f5f5f5,stroke:#616161,color:#212121
+```
 
 ### 3.1 액티비티 바 (맨 왼쪽, 아이콘 세로줄)
 

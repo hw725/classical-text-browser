@@ -36,35 +36,45 @@
 
 ### 2.1 전체 구조
 
-<div style="max-width: 1000px; width: 100%;">
-<style scoped>
-.arch-wrapper { display: flex; gap: 12px; }.arch-main { flex: 1; min-width: 0; }.arch-title { text-align: center; font-size: 20px; font-weight: bold; color: #78350f; margin-bottom: 14px; }
-.arch-layer { margin: 8px 0; padding: 12px; border-radius: 6px; box-shadow: 0 2px 6px rgba(120, 53, 15, 0.08); }.arch-layer-title { font-size: 12px; font-weight: bold; margin-bottom: 8px; text-align: center; }
-.arch-grid { display: grid; gap: 6px; }.arch-grid-2 { grid-template-columns: repeat(2, 1fr); }.arch-grid-3 { grid-template-columns: repeat(3, 1fr); }.arch-grid-4 { grid-template-columns: repeat(4, 1fr); }
-.arch-box { border-radius: 5px; padding: 7px; text-align: center; font-size: 11px; font-weight: 600; line-height: 1.3; color: #44220e; background: #fffcf7; border: 1px solid #d4c4a8; }.arch-box.highlight { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #b45309; }
-.arch-layer.user { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #d97706; }.arch-layer.user .arch-layer-title { color: #92400e; }.arch-layer.application { background: linear-gradient(135deg, #ffedd5 0%, #fdba74 100%); border: 2px solid #ea580c; }.arch-layer.application .arch-layer-title { color: #9a3412; }.arch-layer.data { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 2px solid #059669; }.arch-layer.data .arch-layer-title { color: #065f46; }.arch-layer.infra { background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); border: 2px solid #64748b; }.arch-layer.infra .arch-layer-title { color: #334155; }.arch-layer.ai { background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%); border: 2px solid #dc2626; }.arch-layer.ai .arch-layer-title { color: #991b1b; }
-.eight-layer-row { display: flex; align-items: center; gap: 10px; padding: 6px 10px; }.eight-layer-num { font-size: 14px; font-weight: bold; min-width: 24px; text-align: center; }.eight-layer-name { font-size: 12px; font-weight: 700; min-width: 120px; }.eight-layer-desc { font-size: 11px; color: #555; flex: 1; }
-.eight-layer-boundary { text-align: center; font-size: 11px; font-weight: bold; padding: 4px 0; margin: 2px 0; }
-</style>
-<div class="arch-title">8층 모델 전체 구조</div>
-<div class="arch-layer user">
-<div class="arch-layer-title">해석 저장소 (5–8층)</div>
-<div class="eight-layer-row"><span class="eight-layer-num">8</span><span class="eight-layer-name">외부연계</span><span class="eight-layer-desc">API, 다른 DB, 다른 연구자의 서고, 학술 네트워크</span></div>
-<div class="eight-layer-row"><span class="eight-layer-num">7</span><span class="eight-layer-name">주석/링크/사전</span><span class="eight-layer-desc">어휘 풀이, 전거 참조, 사전 연동, 인물/지명 DB</span></div>
-<div class="eight-layer-row"><span class="eight-layer-num">6</span><span class="eight-layer-name">번역</span><span class="eight-layer-desc">현대어역, 다국어 번역 (수동 + LLM)</span></div>
-<div class="eight-layer-boundary" style="color: #92400e; border-top: 1px dashed #d97706;">── 해석의 경계 ──</div>
-<div class="eight-layer-row"><span class="eight-layer-num">5</span><span class="eight-layer-name">끊어읽기·표점·현토</span><span class="eight-layer-desc">구두점, 문장 경계, 한문 독법(懸吐) 표기</span></div>
-</div>
-<div class="eight-layer-boundary" style="color: #78350f; font-size: 13px; font-weight: 900; padding: 6px 0; letter-spacing: 2px;">━━ 저장소 경계 ━━</div>
-<div class="arch-layer data">
-<div class="arch-layer-title">원본 저장소 (1–4층)</div>
-<div class="eight-layer-row"><span class="eight-layer-num">4</span><span class="eight-layer-name">사람 수정</span><span class="eight-layer-desc">OCR 교정, 이체자 확인, 수동 입력, 판본 이문 기록</span></div>
-<div class="eight-layer-boundary" style="color: #065f46; border-top: 1px dashed #059669;">── 확정의 경계 ──</div>
-<div class="eight-layer-row"><span class="eight-layer-num">3</span><span class="eight-layer-name">레이아웃 분석</span><span class="eight-layer-desc">본문/주석/서문/간기 구분, 블록 구조 파악</span></div>
-<div class="eight-layer-row"><span class="eight-layer-num">2</span><span class="eight-layer-name">OCR 글자해독</span><span class="eight-layer-desc">엔진 인식 결과 + 좌표 + 신뢰도</span></div>
-<div class="eight-layer-row"><span class="eight-layer-num">1</span><span class="eight-layer-name">이미지/PDF</span><span class="eight-layer-desc">물리적 원본 (불변)</span></div>
-</div>
-</div>
+```mermaid
+flowchart TB
+    subgraph INTERP["<b>해석 저장소 (5-8층)</b>"]
+        L8["<b>8 외부연계</b><br/><i>API, 다른 DB, 다른 연구자의 서고, 학술 네트워크</i>"]
+        L7["<b>7 주석/링크/사전</b><br/><i>어휘 풀이, 전거 참조, 사전 연동, 인물/지명 DB</i>"]
+        L6["<b>6 번역</b><br/><i>현대어역, 다국어 번역 (수동 + LLM)</i>"]
+        B1["── 해석의 경계 ──"]
+        L5["<b>5 끊어읽기·표점·현토</b><br/><i>구두점, 문장 경계, 한문 독법 표기</i>"]
+    end
+
+    B2["━━ 저장소 경계 ━━"]
+
+    subgraph SOURCE["<b>원본 저장소 (1-4층)</b>"]
+        L4["<b>4 사람 수정</b><br/><i>OCR 교정, 이체자 확인, 수동 입력, 판본 이문 기록</i>"]
+        B3["── 확정의 경계 ──"]
+        L3["<b>3 레이아웃 분석</b><br/><i>본문/주석/서문/간기 구분, 블록 구조 파악</i>"]
+        L2["<b>2 OCR 글자해독</b><br/><i>엔진 인식 결과 + 좌표 + 신뢰도</i>"]
+        L1["<b>1 이미지/PDF</b><br/><i>물리적 원본 (불변)</i>"]
+    end
+
+    L8 --- L7 --- L6 --- B1 --- L5
+    INTERP ~~~ B2
+    B2 ~~~ SOURCE
+    L4 --- B3 --- L3 --- L2 --- L1
+
+    style INTERP fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style SOURCE fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style B1 fill:#ffe0b2,stroke:#e65100,stroke-dasharray:5 5
+    style B2 fill:#ffe0b2,stroke:#e65100,stroke-width:3px
+    style B3 fill:#ffe0b2,stroke:#e65100,stroke-dasharray:5 5
+    style L8 fill:#e3f2fd,stroke:#1565c0
+    style L7 fill:#e3f2fd,stroke:#1565c0
+    style L6 fill:#e3f2fd,stroke:#1565c0
+    style L5 fill:#e3f2fd,stroke:#1565c0
+    style L4 fill:#e8f5e9,stroke:#2e7d32
+    style L3 fill:#e8f5e9,stroke:#2e7d32
+    style L2 fill:#e8f5e9,stroke:#2e7d32
+    style L1 fill:#e8f5e9,stroke:#2e7d32
+```
 
 ### 2.2 왜 8층인가 (v6까지는 7층이었다)
 
@@ -110,69 +120,58 @@ v6까지의 7층 모델은 "OCR이 글자를 읽는다(2층) → 사람이 교�
 
 4층이 확정되는 순간, 그 위에 여러 해석 저장소가 독립적으로 생겨난다:
 
-<div style="max-width: 1000px; width: 100%;">
-<style scoped>
-.arch-wrapper { display: flex; gap: 12px; }.arch-main { flex: 1; min-width: 0; }.arch-title { text-align: center; font-size: 20px; font-weight: bold; color: #78350f; margin-bottom: 14px; }
-.arch-layer { margin: 8px 0; padding: 12px; border-radius: 6px; box-shadow: 0 2px 6px rgba(120, 53, 15, 0.08); }.arch-layer-title { font-size: 12px; font-weight: bold; margin-bottom: 8px; text-align: center; }
-.arch-grid { display: grid; gap: 6px; }.arch-grid-2 { grid-template-columns: repeat(2, 1fr); }.arch-grid-3 { grid-template-columns: repeat(3, 1fr); }.arch-grid-4 { grid-template-columns: repeat(4, 1fr); }
-.arch-box { border-radius: 5px; padding: 7px; text-align: center; font-size: 11px; font-weight: 600; line-height: 1.3; color: #44220e; background: #fffcf7; border: 1px solid #d4c4a8; }.arch-box.highlight { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #b45309; }
-.arch-layer.user { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #d97706; }.arch-layer.user .arch-layer-title { color: #92400e; }.arch-layer.application { background: linear-gradient(135deg, #ffedd5 0%, #fdba74 100%); border: 2px solid #ea580c; }.arch-layer.application .arch-layer-title { color: #9a3412; }.arch-layer.data { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 2px solid #059669; }.arch-layer.data .arch-layer-title { color: #065f46; }.arch-layer.infra { background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); border: 2px solid #64748b; }.arch-layer.infra .arch-layer-title { color: #334155; }.arch-layer.ai { background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%); border: 2px solid #dc2626; }.arch-layer.ai .arch-layer-title { color: #991b1b; }
-.parallel-connector { text-align: center; font-size: 18px; color: #78350f; line-height: 1; padding: 2px 0; }
-.parallel-branch { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
-.parallel-label { font-size: 11px; font-weight: 700; color: #44220e; min-width: 150px; }
-.parallel-nodes { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.parallel-node { border-radius: 5px; padding: 4px 8px; font-size: 10px; font-weight: 600; text-align: center; }
-</style>
-<div class="arch-title">병렬 저장소 모델</div>
-<div class="arch-layer data">
-<div class="arch-layer-title">원본 저장소</div>
-<div class="parallel-nodes" style="justify-content: center;">
-<span class="parallel-node" style="background: #d1fae5; border: 1px solid #059669;">L1</span>
-<span style="color: #065f46;">→</span>
-<span class="parallel-node" style="background: #d1fae5; border: 1px solid #059669;">L2</span>
-<span style="color: #065f46;">→</span>
-<span class="parallel-node" style="background: #d1fae5; border: 1px solid #059669;">L3</span>
-<span style="color: #065f46;">→</span>
-<span class="parallel-node" style="background: #d1fae5; border: 1px solid #059669;">L4</span>
-<span style="color: #065f46;">──●──</span>
-<span class="parallel-node highlight" style="background: linear-gradient(135deg, #fef3c7, #fde68a); border: 2px solid #b45309;">v1.0</span>
-<span style="color: #065f46;">──●──</span>
-<span class="parallel-node highlight" style="background: linear-gradient(135deg, #fef3c7, #fde68a); border: 2px solid #b45309;">v2.0</span>
-<span style="color: #065f46;">──●──</span>
-<span class="parallel-node highlight" style="background: linear-gradient(135deg, #fef3c7, #fde68a); border: 2px solid #b45309;">v3.0</span>
-</div>
-</div>
-<div class="parallel-connector">↓ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ↓ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ↓</div>
-<div class="arch-layer user" style="padding: 8px 12px;">
-<div class="parallel-branch">
-<span class="parallel-label">해석 A (사람, 수동)</span>
-<div class="parallel-nodes">
-<span style="color: #92400e; font-size: 11px;">v2.0에서 분기 →</span>
-<span class="parallel-node" style="background: #fef3c7; border: 1px solid #d97706;">L5 현토</span>
-<span style="color: #92400e;">→</span>
-<span class="parallel-node" style="background: #fef3c7; border: 1px solid #d97706;">L6 번역</span>
-<span style="color: #92400e;">→</span>
-<span class="parallel-node" style="background: #fef3c7; border: 1px solid #d97706;">L7 주석</span>
-</div>
-</div>
-<div class="parallel-branch">
-<span class="parallel-label">해석 B (LLM draft)</span>
-<div class="parallel-nodes">
-<span style="color: #92400e; font-size: 11px;">v3.0에서 분기 →</span>
-<span class="parallel-node" style="background: #fef3c7; border: 1px solid #d97706;">L6 LLM 번역</span>
-</div>
-</div>
-<div class="parallel-branch">
-<span class="parallel-label">해석 C (LLM→사람)</span>
-<div class="parallel-nodes">
-<span style="color: #92400e; font-size: 11px;">v1.0에서 분기 →</span>
-<span class="parallel-node" style="background: #fef3c7; border: 1px solid #d97706;">L5 현토(LLM→수정)</span>
-<span style="color: #92400e;">→</span>
-<span class="parallel-node" style="background: #fef3c7; border: 1px solid #d97706;">L6 번역(수정)</span>
-</div>
-</div>
-</div>
-</div>
+```mermaid
+flowchart TB
+    subgraph SRC["<b>원본 저장소</b>"]
+        direction LR
+        S_L1["L1"] --> S_L2["L2"] --> S_L3["L3"] --> S_L4["L4"]
+        S_L4 ==> V1(("v1.0")) ==> V2(("v2.0")) ==> V3(("v3.0"))
+    end
+
+    V1 -.-> IC
+    V2 -.-> IA
+    V3 -.-> IB
+
+    subgraph INTERPS["<b>해석 저장소들</b>"]
+        subgraph IA["해석 A (사람, 수동)"]
+            direction LR
+            A_NOTE["v2.0에서 분기"]
+            A5["L5 현토"] --> A6["L6 번역"] --> A7["L7 주석"]
+        end
+        subgraph IB["해석 B (LLM draft)"]
+            direction LR
+            B_NOTE["v3.0에서 분기"]
+            B6["L6 LLM 번역"]
+        end
+        subgraph IC["해석 C (LLM->사람)"]
+            direction LR
+            C_NOTE["v1.0에서 분기"]
+            C5["L5 현토(LLM->수정)"] --> C6["L6 번역(수정)"]
+        end
+    end
+
+    style SRC fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style INTERPS fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style IA fill:#e3f2fd,stroke:#1565c0
+    style IB fill:#e3f2fd,stroke:#1565c0
+    style IC fill:#e3f2fd,stroke:#1565c0
+    style S_L1 fill:#e8f5e9,stroke:#2e7d32
+    style S_L2 fill:#e8f5e9,stroke:#2e7d32
+    style S_L3 fill:#e8f5e9,stroke:#2e7d32
+    style S_L4 fill:#e8f5e9,stroke:#2e7d32
+    style V1 fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+    style V2 fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+    style V3 fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+    style A5 fill:#e3f2fd,stroke:#1565c0
+    style A6 fill:#e3f2fd,stroke:#1565c0
+    style A7 fill:#e3f2fd,stroke:#1565c0
+    style B6 fill:#e3f2fd,stroke:#1565c0
+    style C5 fill:#e3f2fd,stroke:#1565c0
+    style C6 fill:#e3f2fd,stroke:#1565c0
+    style A_NOTE fill:#fff3e0,stroke:#e65100,stroke-dasharray:3 3
+    style B_NOTE fill:#fff3e0,stroke:#e65100,stroke-dasharray:3 3
+    style C_NOTE fill:#fff3e0,stroke:#e65100,stroke-dasharray:3 3
+```
 
 ### 2.6 층별 의존 관계
 
@@ -218,46 +217,58 @@ v6까지의 7층 모델은 "OCR이 글자를 읽는다(2층) → 사람이 교�
 저장소 간의 관계를 이해하고, 의존성을 추적하고, 경고를 발생시키고,
 사다리형 그래프를 그리는 것은 전부 **앱 레이어**가 한다.
 
-<div style="max-width: 1000px; width: 100%;">
-<style scoped>
-.arch-wrapper { display: flex; gap: 12px; }.arch-main { flex: 1; min-width: 0; }.arch-title { text-align: center; font-size: 20px; font-weight: bold; color: #78350f; margin-bottom: 14px; }
-.arch-layer { margin: 8px 0; padding: 12px; border-radius: 6px; box-shadow: 0 2px 6px rgba(120, 53, 15, 0.08); }.arch-layer-title { font-size: 12px; font-weight: bold; margin-bottom: 8px; text-align: center; }
-.arch-grid { display: grid; gap: 6px; }.arch-grid-2 { grid-template-columns: repeat(2, 1fr); }.arch-grid-3 { grid-template-columns: repeat(3, 1fr); }.arch-grid-4 { grid-template-columns: repeat(4, 1fr); }
-.arch-box { border-radius: 5px; padding: 7px; text-align: center; font-size: 11px; font-weight: 600; line-height: 1.3; color: #44220e; background: #fffcf7; border: 1px solid #d4c4a8; }.arch-box.highlight { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #b45309; }
-.arch-layer.user { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #d97706; }.arch-layer.user .arch-layer-title { color: #92400e; }.arch-layer.application { background: linear-gradient(135deg, #ffedd5 0%, #fdba74 100%); border: 2px solid #ea580c; }.arch-layer.application .arch-layer-title { color: #9a3412; }.arch-layer.data { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 2px solid #059669; }.arch-layer.data .arch-layer-title { color: #065f46; }.arch-layer.infra { background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); border: 2px solid #64748b; }.arch-layer.infra .arch-layer-title { color: #334155; }.arch-layer.ai { background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%); border: 2px solid #dc2626; }.arch-layer.ai .arch-layer-title { color: #991b1b; }
-.app-item { font-size: 11px; color: #44220e; padding: 2px 0 2px 16px; position: relative; }.app-item::before { content: ""; position: absolute; left: 4px; top: 9px; width: 6px; height: 6px; border-radius: 50%; background: #b45309; }
-</style>
-<div class="arch-title">앱 + Git 아키텍처</div>
-<div class="arch-layer application">
-<div class="arch-layer-title">앱 (UI + 로직) — 두뇌</div>
-<div class="app-item">library_manifest.json 읽기 (서고 전체 지도)</div>
-<div class="app-item">원본 repo 접근 (git 명령)</div>
-<div class="app-item">해석 repo 접근 (git 명령)</div>
-<div class="app-item">dependency.json 해석</div>
-<div class="app-item">파일 단위 변경 감지 (git diff)</div>
-<div class="app-item">경고 생성</div>
-<div class="app-item">분할 화면 렌더링</div>
-<div class="app-item">사다리형 git 그래프 렌더링</div>
-<div class="app-item">LLM API 호출 &amp; 결과 관리 (온라인)</div>
-</div>
-<div class="arch-layer data">
-<div class="arch-layer-title">Git repos (로컬) — 저장소</div>
-<div class="arch-grid arch-grid-3">
-<div class="arch-box">doc_001/ (원본)</div>
-<div class="arch-box">doc_001_interp_kim/ (해석)</div>
-<div class="arch-box">...</div>
-</div>
-</div>
-<div class="arch-layer infra">
-<div class="arch-layer-title">Git 원격 호스팅 (온라인) — 백업/동기화</div>
-<div class="arch-grid arch-grid-4">
-<div class="arch-box">GitLab self-host</div>
-<div class="arch-box">Gitea</div>
-<div class="arch-box">GitHub</div>
-<div class="arch-box">아무거나</div>
-</div>
-</div>
-</div>
+```mermaid
+flowchart TB
+    subgraph APP["<b>앱 (UI + 로직) - 두뇌</b>"]
+        A1["library_manifest.json 읽기<br/><i>서고 전체 지도</i>"]
+        A2["원본 repo 접근<br/><i>git 명령</i>"]
+        A3["해석 repo 접근<br/><i>git 명령</i>"]
+        A4["dependency.json 해석"]
+        A5["파일 단위 변경 감지<br/><i>git diff</i>"]
+        A6["경고 생성"]
+        A7["분할 화면 렌더링"]
+        A8["사다리형 git 그래프 렌더링"]
+        A9["LLM API 호출 & 결과 관리<br/><i>온라인</i>"]
+    end
+
+    subgraph GIT["<b>Git repos (로컬) - 저장소</b>"]
+        direction LR
+        G1["doc_001/<br/>(원본)"]
+        G2["doc_001_interp_kim/<br/>(해석)"]
+        G3["..."]
+    end
+
+    subgraph REMOTE["<b>Git 원격 호스팅 (온라인) - 백업/동기화</b>"]
+        direction LR
+        R1["GitLab<br/>self-host"]
+        R2["Gitea"]
+        R3["GitHub"]
+        R4["아무거나"]
+    end
+
+    APP ==> GIT
+    GIT ==> REMOTE
+
+    style APP fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style GIT fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style REMOTE fill:#f5f5f5,stroke:#616161,stroke-width:2px
+    style A1 fill:#fff3e0,stroke:#e65100
+    style A2 fill:#fff3e0,stroke:#e65100
+    style A3 fill:#fff3e0,stroke:#e65100
+    style A4 fill:#fff3e0,stroke:#e65100
+    style A5 fill:#fff3e0,stroke:#e65100
+    style A6 fill:#fff3e0,stroke:#e65100
+    style A7 fill:#fff3e0,stroke:#e65100
+    style A8 fill:#fff3e0,stroke:#e65100
+    style A9 fill:#fff3e0,stroke:#e65100
+    style G1 fill:#e8f5e9,stroke:#2e7d32
+    style G2 fill:#e8f5e9,stroke:#2e7d32
+    style G3 fill:#e8f5e9,stroke:#2e7d32
+    style R1 fill:#f5f5f5,stroke:#616161
+    style R2 fill:#f5f5f5,stroke:#616161
+    style R3 fill:#f5f5f5,stroke:#616161
+    style R4 fill:#f5f5f5,stroke:#616161
+```
 
 **역할 분리:**
 - **Git**: 저장, 이력, 버전, diff → 이미 있는 인프라
@@ -358,44 +369,46 @@ v6까지의 7층 모델은 "OCR이 글자를 읽는다(2층) → 사람이 교�
 
 실시간 감시가 아니라, **앱이 해석 저장소를 열 때** 확인한다.
 
-<div style="max-width: 1000px; width: 100%;">
-<style scoped>
-.arch-wrapper { display: flex; gap: 12px; }.arch-main { flex: 1; min-width: 0; }.arch-title { text-align: center; font-size: 20px; font-weight: bold; color: #78350f; margin-bottom: 14px; }
-.arch-layer { margin: 8px 0; padding: 12px; border-radius: 6px; box-shadow: 0 2px 6px rgba(120, 53, 15, 0.08); }.arch-layer-title { font-size: 12px; font-weight: bold; margin-bottom: 8px; text-align: center; }
-.arch-grid { display: grid; gap: 6px; }.arch-grid-2 { grid-template-columns: repeat(2, 1fr); }.arch-grid-3 { grid-template-columns: repeat(3, 1fr); }.arch-grid-4 { grid-template-columns: repeat(4, 1fr); }
-.arch-box { border-radius: 5px; padding: 7px; text-align: center; font-size: 11px; font-weight: 600; line-height: 1.3; color: #44220e; background: #fffcf7; border: 1px solid #d4c4a8; }.arch-box.highlight { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #b45309; }
-.arch-layer.user { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #d97706; }.arch-layer.user .arch-layer-title { color: #92400e; }.arch-layer.application { background: linear-gradient(135deg, #ffedd5 0%, #fdba74 100%); border: 2px solid #ea580c; }.arch-layer.application .arch-layer-title { color: #9a3412; }.arch-layer.data { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 2px solid #059669; }.arch-layer.data .arch-layer-title { color: #065f46; }.arch-layer.infra { background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); border: 2px solid #64748b; }.arch-layer.infra .arch-layer-title { color: #334155; }.arch-layer.ai { background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%); border: 2px solid #dc2626; }.arch-layer.ai .arch-layer-title { color: #991b1b; }
-.flow-step { display: flex; align-items: center; gap: 8px; padding: 5px 10px; }.flow-arrow { text-align: center; color: #78350f; font-size: 16px; padding: 2px 0; }
-.flow-badge { display: inline-block; border-radius: 4px; padding: 3px 8px; font-size: 10px; font-weight: 700; }
-.flow-branch { display: flex; gap: 8px; align-items: flex-start; padding: 4px 10px 4px 28px; }
-</style>
-<div class="arch-title">변경 감지 흐름</div>
-<div class="arch-layer application" style="padding: 10px;">
-<div class="flow-step"><span class="arch-box highlight" style="flex: 1;">사용자가 해석 저장소를 연다</span></div>
-<div class="flow-arrow">↓</div>
-<div class="flow-step"><span class="arch-box" style="flex: 1;">[앱] dependency.json 읽기</span></div>
-<div class="flow-arrow">↓</div>
-<div class="flow-step"><span class="arch-box" style="flex: 1;">[앱] 원본 저장소의 최신 커밋 확인</span></div>
-<div class="flow-arrow">↓</div>
-<div class="flow-step"><span class="arch-box" style="flex: 1;">[앱] base_commit 이후 변경 파일 추출 (git diff --name-only)</span></div>
-<div class="flow-arrow">↓</div>
-<div class="flow-step"><span class="arch-box" style="flex: 1;">[앱] tracked_files와 대조</span></div>
-<div style="display: flex; gap: 12px; padding: 6px 10px;">
-<div class="arch-layer data" style="flex: 1; margin: 0; padding: 8px;">
-<div class="arch-layer-title" style="color: #065f46;">변경 없음</div>
-<div class="arch-box" style="background: #d1fae5; border-color: #059669;">"최신 상태" ✓</div>
-</div>
-<div class="arch-layer user" style="flex: 1.5; margin: 0; padding: 8px;">
-<div class="arch-layer-title">변경 있음 — 파일별 경고</div>
-<div class="arch-grid arch-grid-3">
-<div class="arch-box">[diff 보기]</div>
-<div class="arch-box">[기반 업데이트]<br>base_commit 갱신</div>
-<div class="arch-box">[무시]<br>acknowledged 마킹</div>
-</div>
-</div>
-</div>
-</div>
-</div>
+```mermaid
+flowchart TB
+    START["<b>사용자가 해석 저장소를 연다</b>"]
+    STEP1["[앱] dependency.json 읽기"]
+    STEP2["[앱] 원본 저장소의 최신 커밋 확인"]
+    STEP3["[앱] base_commit 이후 변경 파일 추출<br/><i>git diff --name-only</i>"]
+    STEP4["[앱] tracked_files와 대조"]
+
+    START --> STEP1 --> STEP2 --> STEP3 --> STEP4
+
+    STEP4 --> NO_CHANGE
+    STEP4 --> HAS_CHANGE
+
+    subgraph NO["변경 없음"]
+        NO_CHANGE["'최신 상태' ✓"]
+    end
+
+    subgraph YES["변경 있음 - 파일별 경고"]
+        HAS_CHANGE["경고 표시"]
+        ACT1["diff 보기"]
+        ACT2["기반 업데이트<br/><i>base_commit 갱신</i>"]
+        ACT3["무시<br/><i>acknowledged 마킹</i>"]
+        HAS_CHANGE --> ACT1
+        HAS_CHANGE --> ACT2
+        HAS_CHANGE --> ACT3
+    end
+
+    style START fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+    style STEP1 fill:#fff3e0,stroke:#e65100
+    style STEP2 fill:#fff3e0,stroke:#e65100
+    style STEP3 fill:#fff3e0,stroke:#e65100
+    style STEP4 fill:#fff3e0,stroke:#e65100
+    style NO fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style NO_CHANGE fill:#e8f5e9,stroke:#2e7d32
+    style YES fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style HAS_CHANGE fill:#ffe0b2,stroke:#e65100
+    style ACT1 fill:#e3f2fd,stroke:#1565c0
+    style ACT2 fill:#e3f2fd,stroke:#1565c0
+    style ACT3 fill:#e3f2fd,stroke:#1565c0
+```
 
 ### 4.4 status 값
 
@@ -758,61 +771,61 @@ LLM에게 번역을 요청할 때도 "본문만", "주석만", "둘 다"를 지�
 
 #### 7.3.1 전체 흐름
 
-<div style="max-width: 1000px; width: 100%;">
-<style scoped>
-.arch-wrapper { display: flex; gap: 12px; }.arch-main { flex: 1; min-width: 0; }.arch-title { text-align: center; font-size: 20px; font-weight: bold; color: #78350f; margin-bottom: 14px; }
-.arch-layer { margin: 8px 0; padding: 12px; border-radius: 6px; box-shadow: 0 2px 6px rgba(120, 53, 15, 0.08); }.arch-layer-title { font-size: 12px; font-weight: bold; margin-bottom: 8px; text-align: center; }
-.arch-grid { display: grid; gap: 6px; }.arch-grid-2 { grid-template-columns: repeat(2, 1fr); }.arch-grid-3 { grid-template-columns: repeat(3, 1fr); }.arch-grid-4 { grid-template-columns: repeat(4, 1fr); }
-.arch-box { border-radius: 5px; padding: 7px; text-align: center; font-size: 11px; font-weight: 600; line-height: 1.3; color: #44220e; background: #fffcf7; border: 1px solid #d4c4a8; }.arch-box.highlight { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #b45309; }
-.arch-layer.user { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #d97706; }.arch-layer.user .arch-layer-title { color: #92400e; }.arch-layer.application { background: linear-gradient(135deg, #ffedd5 0%, #fdba74 100%); border: 2px solid #ea580c; }.arch-layer.application .arch-layer-title { color: #9a3412; }.arch-layer.data { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 2px solid #059669; }.arch-layer.data .arch-layer-title { color: #065f46; }.arch-layer.infra { background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); border: 2px solid #64748b; }.arch-layer.infra .arch-layer-title { color: #334155; }.arch-layer.ai { background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%); border: 2px solid #dc2626; }.arch-layer.ai .arch-layer-title { color: #991b1b; }
-.parser-row { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 6px; align-items: center; margin-bottom: 6px; }
-.parser-arrow { text-align: center; color: #78350f; font-size: 14px; font-weight: bold; }
-</style>
-<div class="arch-title">파서 아키텍처 흐름</div>
-<div class="arch-layer application">
-<div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr 0.1fr; gap: 0; margin-bottom: 8px;">
-<div style="text-align: center; font-size: 10px; font-weight: bold; color: #9a3412;">소스</div>
-<div style="text-align: center; font-size: 10px; font-weight: bold; color: #9a3412;">추출 (Extract)</div>
-<div style="text-align: center; font-size: 10px; font-weight: bold; color: #9a3412;">매핑 (Map)</div>
-<div></div>
-</div>
-<div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr 0.1fr; gap: 6px; align-items: center; margin-bottom: 6px;">
-<div class="arch-box">KORCIS API</div>
-<div class="arch-box">korcis_fetcher</div>
-<div class="arch-box">korcis_mapper</div>
-<div class="parser-arrow">→</div>
-</div>
-<div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr 0.1fr; gap: 6px; align-items: center; margin-bottom: 6px;">
-<div class="arch-box">NDL Search API</div>
-<div class="arch-box">ndl_fetcher</div>
-<div class="arch-box">ndl_mapper</div>
-<div class="parser-arrow">→</div>
-</div>
-<div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr 0.1fr; gap: 6px; align-items: center; margin-bottom: 6px;">
-<div class="arch-box">국립공문서관 HTML</div>
-<div class="arch-box">archives_fetcher</div>
-<div class="arch-box">archives_mapper</div>
-<div class="parser-arrow">→</div>
-</div>
-<div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr 0.1fr; gap: 6px; align-items: center; margin-bottom: 6px;">
-<div class="arch-box">임의의 URL</div>
-<div class="arch-box">generic_llm</div>
-<div class="arch-box">generic_mapper</div>
-<div class="parser-arrow">→</div>
-</div>
-<div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr 0.1fr; gap: 6px; align-items: center;">
-<div class="arch-box">수동 입력 폼</div>
-<div class="arch-box" style="background: transparent; border: 1px dashed #d4c4a8;">(없음)</div>
-<div class="arch-box">manual_mapper</div>
-<div class="parser-arrow">→</div>
-</div>
-</div>
-<div style="text-align: center; font-size: 16px; color: #78350f; padding: 4px 0;">↓</div>
-<div class="arch-layer data" style="margin: 0;">
-<div class="arch-layer-title">공통 스키마</div>
-<div class="arch-box highlight" style="max-width: 240px; margin: 0 auto;">bibliography.json</div>
-</div>
-</div>
+```mermaid
+flowchart TB
+    subgraph PARSERS["<b>파서 아키텍처</b>"]
+        direction TB
+        subgraph ROW1["KORCIS"]
+            direction LR
+            S1["KORCIS API"] --> F1["korcis_fetcher"] --> M1["korcis_mapper"]
+        end
+        subgraph ROW2["NDL"]
+            direction LR
+            S2["NDL Search API"] --> F2["ndl_fetcher"] --> M2["ndl_mapper"]
+        end
+        subgraph ROW3["국립공문서관"]
+            direction LR
+            S3["국립공문서관 HTML"] --> F3["archives_fetcher"] --> M3["archives_mapper"]
+        end
+        subgraph ROW4["범용 LLM"]
+            direction LR
+            S4["임의의 URL"] --> F4["generic_llm"] --> M4["generic_mapper"]
+        end
+        subgraph ROW5["수동"]
+            direction LR
+            S5["수동 입력 폼"] -.-> M5["manual_mapper"]
+        end
+    end
+
+    M1 & M2 & M3 & M4 & M5 --> OUTPUT
+
+    subgraph SCHEMA["<b>공통 스키마</b>"]
+        OUTPUT["<b>bibliography.json</b>"]
+    end
+
+    style PARSERS fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style ROW1 fill:#fff3e0,stroke:#e65100
+    style ROW2 fill:#fff3e0,stroke:#e65100
+    style ROW3 fill:#fff3e0,stroke:#e65100
+    style ROW4 fill:#fff3e0,stroke:#e65100
+    style ROW5 fill:#fff3e0,stroke:#e65100
+    style SCHEMA fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style OUTPUT fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+    style S1 fill:#fff3e0,stroke:#e65100
+    style S2 fill:#fff3e0,stroke:#e65100
+    style S3 fill:#fff3e0,stroke:#e65100
+    style S4 fill:#fff3e0,stroke:#e65100
+    style S5 fill:#fff3e0,stroke:#e65100
+    style F1 fill:#fff3e0,stroke:#e65100
+    style F2 fill:#fff3e0,stroke:#e65100
+    style F3 fill:#fff3e0,stroke:#e65100
+    style F4 fill:#fff3e0,stroke:#e65100
+    style M1 fill:#fff3e0,stroke:#e65100
+    style M2 fill:#fff3e0,stroke:#e65100
+    style M3 fill:#fff3e0,stroke:#e65100
+    style M4 fill:#fff3e0,stroke:#e65100
+    style M5 fill:#fff3e0,stroke:#e65100
+```
 
 각 소스에 대해 두 단계:
 1. **Fetcher** (추출): 해당 소스에서 원본 데이터를 가져온다 (API 호출, HTML 파싱)
@@ -1153,77 +1166,65 @@ src/llm/prompts/                    # YAML 기반 프롬프트 (구현)
 
 ### 9.1 메인 뷰
 
-<div style="max-width: 1000px; width: 100%;">
-<style scoped>
-.arch-wrapper { display: flex; gap: 12px; }.arch-main { flex: 1; min-width: 0; }.arch-title { text-align: center; font-size: 20px; font-weight: bold; color: #78350f; margin-bottom: 14px; }
-.arch-layer { margin: 8px 0; padding: 12px; border-radius: 6px; box-shadow: 0 2px 6px rgba(120, 53, 15, 0.08); }.arch-layer-title { font-size: 12px; font-weight: bold; margin-bottom: 8px; text-align: center; }
-.arch-grid { display: grid; gap: 6px; }.arch-grid-2 { grid-template-columns: repeat(2, 1fr); }.arch-grid-3 { grid-template-columns: repeat(3, 1fr); }.arch-grid-4 { grid-template-columns: repeat(4, 1fr); }
-.arch-box { border-radius: 5px; padding: 7px; text-align: center; font-size: 11px; font-weight: 600; line-height: 1.3; color: #44220e; background: #fffcf7; border: 1px solid #d4c4a8; }.arch-box.highlight { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #b45309; }
-.arch-layer.user { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #d97706; }.arch-layer.user .arch-layer-title { color: #92400e; }.arch-layer.application { background: linear-gradient(135deg, #ffedd5 0%, #fdba74 100%); border: 2px solid #ea580c; }.arch-layer.application .arch-layer-title { color: #9a3412; }.arch-layer.data { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 2px solid #059669; }.arch-layer.data .arch-layer-title { color: #065f46; }.arch-layer.infra { background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); border: 2px solid #64748b; }.arch-layer.infra .arch-layer-title { color: #334155; }.arch-layer.ai { background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%); border: 2px solid #dc2626; }.arch-layer.ai .arch-layer-title { color: #991b1b; }
-.ui-split { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
-.ui-panel { padding: 10px; }
-.ui-panel-left { border-right: 2px solid #d4c4a8; }
-.ui-section-title { font-size: 11px; font-weight: bold; color: #78350f; margin: 6px 0 4px; }
-.ui-text-line { font-size: 10px; color: #44220e; padding: 1px 0; line-height: 1.5; }
-.ui-char { display: inline-block; padding: 1px 4px; margin: 1px; border-radius: 3px; font-size: 11px; font-weight: 600; }
-.ui-char-ok { background: #d1fae5; border: 1px solid #059669; }
-.ui-char-warn { background: #fef3c7; border: 1px solid #d97706; }
-.ui-meta { font-size: 10px; color: #666; padding: 2px 0; }
-.ui-scan-placeholder { background: #f1f5f9; border: 1px solid #94a3b8; border-radius: 4px; padding: 8px; text-align: center; font-size: 10px; color: #64748b; margin-bottom: 6px; }
-.ui-git-legend { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; font-size: 10px; color: #44220e; margin-top: 6px; }
-</style>
-<div class="arch-title">메인 뷰 — 분할 화면</div>
-<div class="arch-layer application" style="padding: 0; overflow: hidden;">
-<div class="ui-split">
-<div class="ui-panel ui-panel-left">
-<div class="arch-layer-title" style="color: #9a3412; padding-top: 8px;">원본 저장소 (1-4층)</div>
-<div class="ui-scan-placeholder">
-<div>스캔 이미지</div>
-<div style="margin-top: 4px;">
-<span class="ui-char" style="background: #e2e8f0; border: 1px solid #94a3b8;">[天]</span>
-<span class="ui-char" style="background: #e2e8f0; border: 1px solid #94a3b8;">[地]</span>
-<span class="ui-char ui-char-warn">[玄] ←</span>
-<span class="ui-char" style="background: #e2e8f0; border: 1px solid #94a3b8;">[黃]</span>
-</div>
-</div>
-<div class="ui-section-title">본문:</div>
-<div class="ui-text-line"><span class="ui-char ui-char-ok">天</span> <span class="ui-char ui-char-ok">地</span></div>
-<div class="ui-section-title">주석:</div>
-<div class="ui-text-line"><span class="ui-char ui-char-ok">王</span> <span class="ui-char ui-char-ok">戎</span> <span class="ui-char ui-char-ok">字</span></div>
-<div class="ui-meta">OCR 신뢰도: 0.95</div>
-<div class="ui-meta">블록: 본문(大字) ✓</div>
-<div class="ui-meta">상태: 교정 완료 v2.0</div>
-</div>
-<div class="ui-panel">
-<div class="arch-layer-title" style="color: #9a3412; padding-top: 8px;">해석 저장소 (5-8층)</div>
-<div class="ui-section-title">5층: 끊어읽기·현토</div>
-<div class="ui-text-line">[본문] 王戎은簡要하고</div>
-<div class="ui-text-line">[주석] 王戎의字는濬沖이니</div>
-<div class="ui-section-title">6층: 번역</div>
-<div class="ui-text-line">[본문] 왕융은 간결하고...</div>
-<div class="ui-text-line">[주석] 왕융의 자는 준충...</div>
-<div class="ui-text-line" style="color: #9a3412;">[LLM draft] [사람 수정]</div>
-<div class="ui-section-title">7층: 주석</div>
-<div class="ui-text-line">王戎: 字 濬沖. 瑯邪 臨沂人</div>
-<div class="ui-text-line" style="color: #9a3412;">→ 《晉書》 참조 [LLM]</div>
-<div class="ui-text-line" style="color: #dc2626; font-weight: bold; margin-top: 6px;">⚠ page_003 원본 변경됨</div>
-</div>
-</div>
-</div>
-<div class="arch-layer infra">
-<div class="arch-layer-title">Git 그래프</div>
-<div class="ui-text-line" style="text-align: center; font-size: 11px;">원본: ──●──●──●── v2.0 ──●── v3.0</div>
-<div class="ui-text-line" style="text-align: center; font-size: 11px;">해석A (사람): &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├──●──●──●──●</div>
-<div class="ui-text-line" style="text-align: center; font-size: 11px;">해석B (LLM): &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└──○──○</div>
-<div class="ui-git-legend">
-<span>● 사람</span>
-<span>○ LLM</span>
-<span>◐ LLM+사람</span>
-<span>─ current</span>
-<span style="opacity: 0.5;">╎ outdated</span>
-</div>
-</div>
-</div>
+```mermaid
+flowchart TB
+    subgraph MAIN_VIEW["<b>메인 뷰 - 분할 화면</b>"]
+        direction LR
+        subgraph LEFT["<b>원본 저장소 (1-4층)</b>"]
+            SCAN["스캔 이미지<br/>[天] [地] [玄]← [黃]"]
+            TEXT_MAIN["<b>본문:</b> 天 地"]
+            TEXT_NOTE["<b>주석:</b> 王 戎 字"]
+            META1["<i>OCR 신뢰도: 0.95</i>"]
+            META2["<i>블록: 본문(大字) ✓</i>"]
+            META3["<i>상태: 교정 완료 v2.0</i>"]
+            SCAN --- TEXT_MAIN --- TEXT_NOTE --- META1 --- META2 --- META3
+        end
+        subgraph RIGHT["<b>해석 저장소 (5-8층)</b>"]
+            L5_TITLE["<b>5층: 끊어읽기·현토</b>"]
+            L5_1["[본문] 王戎은簡要하고"]
+            L5_2["[주석] 王戎의字는濬沖이니"]
+            L6_TITLE["<b>6층: 번역</b>"]
+            L6_1["[본문] 왕융은 간결하고..."]
+            L6_2["[주석] 왕융의 자는 준충..."]
+            L6_3["[LLM draft] [사람 수정]"]
+            L7_TITLE["<b>7층: 주석</b>"]
+            L7_1["王戎: 字 濬沖. 瑯邪 臨沂人"]
+            L7_2["→ 晉書 참조 [LLM]"]
+            WARN["⚠ page_003 원본 변경됨"]
+            L5_TITLE --- L5_1 --- L5_2 --- L6_TITLE --- L6_1 --- L6_2 --- L6_3 --- L7_TITLE --- L7_1 --- L7_2 --- WARN
+        end
+    end
+
+    subgraph GIT_GRAPH["<b>Git 그래프</b>"]
+        direction LR
+        GG["원본: --●--●--●-- v2.0 --●-- v3.0<br/>해석A 사람: ├--●--●--●--●<br/>해석B LLM: └--○--○<br/><i>● 사람 / ○ LLM / ◐ LLM+사람</i>"]
+    end
+
+    MAIN_VIEW --- GIT_GRAPH
+
+    style MAIN_VIEW fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style LEFT fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style RIGHT fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style GIT_GRAPH fill:#f5f5f5,stroke:#616161,stroke-width:2px
+    style SCAN fill:#f5f5f5,stroke:#616161
+    style TEXT_MAIN fill:#e8f5e9,stroke:#2e7d32
+    style TEXT_NOTE fill:#e8f5e9,stroke:#2e7d32
+    style META1 fill:#f5f5f5,stroke:#616161
+    style META2 fill:#f5f5f5,stroke:#616161
+    style META3 fill:#f5f5f5,stroke:#616161
+    style L5_TITLE fill:#e3f2fd,stroke:#1565c0
+    style L5_1 fill:#e3f2fd,stroke:#1565c0
+    style L5_2 fill:#e3f2fd,stroke:#1565c0
+    style L6_TITLE fill:#e3f2fd,stroke:#1565c0
+    style L6_1 fill:#e3f2fd,stroke:#1565c0
+    style L6_2 fill:#e3f2fd,stroke:#1565c0
+    style L6_3 fill:#fff3e0,stroke:#e65100
+    style L7_TITLE fill:#e3f2fd,stroke:#1565c0
+    style L7_1 fill:#e3f2fd,stroke:#1565c0
+    style L7_2 fill:#fff3e0,stroke:#e65100
+    style WARN fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+    style GG fill:#f5f5f5,stroke:#616161
+```
 
 **3층(레이아웃 분석) 반영**: 좌측에 "블록: 본문(大字) ✓"가 표시되고,
 우측의 현토·번역이 본문/주석으로 구분되어 보인다.
