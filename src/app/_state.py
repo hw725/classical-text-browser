@@ -36,10 +36,12 @@ def get_library_path() -> Path | None:
 
 
 def set_library_path(path: Path | None):
-    """서고 경로를 설정한다. LLM 라우터 캐시도 리셋된다."""
-    global _library_path, _llm_router, _llm_result_cache
+    """서고 경로를 설정한다. LLM 라우터·OCR 파이프라인 캐시도 리셋된다."""
+    global _library_path, _llm_router, _llm_result_cache, _ocr_registry, _ocr_pipeline
     _library_path = path
     _llm_router = None  # 서고 전환 시 LLM 라우터 리셋
+    _ocr_registry = None  # 서고 전환 시 OCR 파이프라인도 리셋
+    _ocr_pipeline = None   # (library_root가 달라지므로 재생성 필요)
     _llm_result_cache.clear()
 
 
