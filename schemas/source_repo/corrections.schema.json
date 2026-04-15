@@ -12,6 +12,11 @@
       "description": "대상 파일의 part_id. 전체 문헌 공통이면 null.",
       "default": null
     },
+    "corrected_text": {
+      "type": ["string", "null"],
+      "description": "자유 편집된 교정 텍스트. null이면 corrections 배열로부터 계산한다.",
+      "default": null
+    },
     "corrections": {
       "type": "array",
       "description": "교정 항목 목록.",

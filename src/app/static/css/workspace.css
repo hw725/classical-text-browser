@@ -1911,6 +1911,62 @@ body.resizing-row {
   /* 세로쓰기 고전 텍스트를 위한 넉넉한 행간 */
 }
 
+/* 자유 편집 모드 */
+.corr-freetext-info {
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border-radius: 4px;
+}
+
+.corr-freetext-editor {
+  width: 100%;
+  min-height: 300px;
+  flex: 1;
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 16px;
+  line-height: 2;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  resize: vertical;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.corr-freetext-editor:focus {
+  outline: none;
+  border-color: var(--accent-color, #3B82F6);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.corr-freetext-ref {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.corr-freetext-ref summary {
+  cursor: pointer;
+  padding: 4px 0;
+}
+.corr-freetext-ref pre {
+  padding: 8px;
+  margin: 4px 0 0;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.8;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
 /* 글자 단위 span */
 .corr-char {
   cursor: pointer;

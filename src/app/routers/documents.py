@@ -131,8 +131,14 @@ class CorrectionItem(BaseModel):
 
 
 class CorrectionsSaveRequest(BaseModel):
-    """교정 저장 요청 본문. corrections.schema.json 형식."""
+    """교정 저장 요청 본문. corrections.schema.json 형식.
+
+    자유편집 모드에서는 corrected_text를 보내고,
+    서버가 원본과 diff하여 corrections를 자동 생성한다.
+    글자교정 모드에서는 기존처럼 corrections만 보낸다.
+    """
     part_id: str | None = None
+    corrected_text: str | None = None  # 자유편집 모드에서 편집된 전문
     corrections: list[CorrectionItem] = []
 
 
@@ -1359,6 +1365,40 @@ async def api_save_page_corrections(
         )
 
     corrections_data = body.model_dump()
+
+    # 자유편집 모드: corrected_text에서 diff로 corrections 자동 생성
+    # 왜 서버에서 diff하는가:
+    #   원본 텍스트(L4_text/pages/)는 서버에만 있다.
+    #   프론트엔드가 원본을 가지고 있더라도, 서버가 직접 diff하면
+    #   원본 기준이 확실하고, 프론트엔드 구현 오류로 인한 불일치를 방지한다.
+    if body.corrected_text is not None:
+        from core.document import (
+            get_page_text, get_page_corrections as _get_corrs,
+            _diff_to_corrections, _merge_corrections,
+        )
+        try:
+            text_result = get_page_text(doc_path, part_id, page_num)
+            original_text = text_result["text"]
+        except Exception:
+            return JSONResponse(
+                {"error": "원본 텍스트를 읽을 수 없습니다 (L4_text/pages/ 확인)."},
+                status_code=400,
+            )
+
+        # CRLF → LF 정규화
+        corrected_text = body.corrected_text.replace("\r\n", "\n")
+
+        # diff → corrections 자동 생성
+        auto_corrs = _diff_to_corrections(original_text, corrected_text, page_num)
+
+        # 기존 corrections의 메타데이터(유형, 비고 등) 보존하며 병합
+        existing = _get_corrs(doc_path, part_id, page_num)
+        existing_corrs = existing.get("corrections", [])
+        merged = _merge_corrections(auto_corrs, existing_corrs)
+
+        corrections_data["corrections"] = merged
+        corrections_data["corrected_text"] = corrected_text
+
     try:
         save_result = save_page_corrections(doc_path, part_id, page_num, corrections_data)
     except Exception as e:

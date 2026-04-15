@@ -1528,6 +1528,36 @@ NDL古典籍OCR 풀 버전(ndlkotenocr_cli ver.3)은 TrOCR 기반으로
 - 수정: `src/parsers/archives_jp.py` (IIIF 경로 추가),
   `src/parsers/__init__.py`, `src/parsers/base.py`, `src/parsers/registry.json`
 
+## D-046: 교정 편집기 자유 편집 모드 — diff 기반 corrections 자동 생성
+
+**날짜**: 2026-04-15
+
+**맥락**: 교정 시스템이 `char_index` 기반 1:1 글자 치환만 지원하여,
+연구자가 OCR 오류를 수정할 때 글자 추가나 삭제가 불가능했다.
+
+**결정**: `corrected_text`를 자유 편집의 primary source로 전환.
+저장 시 `difflib.SequenceMatcher`로 원본과 diff하여
+`char_index` 기반 corrections를 자동 생성한다.
+
+- 기존 `char_index` 체계를 폐기하지 않는다. 방향만 역전:
+  `corrections → corrected_text` (기존) → `corrected_text → corrections` (신규)
+- "글자 교정"(span 클릭) + "자유 편집"(textarea) 이중 모드를 토글로 전환
+- 기존 corrections의 메타데이터(유형, 비고, 이문 등)는 `_merge_corrections()`로 보존
+- corrections.schema.json에 `corrected_text` nullable 필드 추가 (하위 호환)
+- 일괄 교정 시스템은 이번 스코프 밖 (기존 방식 유지, 추후 전환)
+
+**대안 검토**:
+- A. `char_index` 기반 유지 + 시프트 관리 → 시프트 누적 관리 복잡, 기각
+- B. `corrected_text`를 primary로 전환 + diff → corrections 자동 생성 → **채택**
+
+**파일 변경**:
+- `src/core/document.py`: `_diff_to_corrections`, `_merge_corrections` 추가, `get_corrected_text` 수정
+- `schemas/source_repo/corrections.schema.json`: `corrected_text` 필드 추가
+- `src/app/routers/documents.py`: PUT 핸들러 diff 분기 추가
+- `src/app/static/js/correction-editor.js`: 이중 모드 + textarea + 저장 분기
+- `src/app/static/css/workspace.css`: 자유 편집 스타일
+- `src/app/static/index.html`: 모드 토글 버튼
+
 ---
 
 ### 배포·설치

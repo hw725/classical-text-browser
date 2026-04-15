@@ -33,6 +33,10 @@ const correctionState = {
   isDirty: false, // 수정 여부
   verticalView: false, // 세로쓰기 표시 모드
   saving: false, // 저장 요청 진행 여부
+
+  // 자유편집 모드 (Phase 3)
+  editMode: "char", // "char" = 글자 교정 (기존), "freetext" = 자유 편집
+  correctedText: "", // 자유편집 모드의 교정 텍스트
 };
 
 /* ──────────────────────────
@@ -86,6 +90,10 @@ function initCorrectionEditor() {
   // 세로쓰기 토글 버튼
   const vertBtn = document.getElementById("corr-vertical-btn");
   if (vertBtn) vertBtn.addEventListener("click", _toggleVerticalView);
+
+  // 편집 모드 토글 (글자 교정 ↔ 자유 편집)
+  const modeToggle = document.getElementById("corr-mode-toggle");
+  if (modeToggle) modeToggle.addEventListener("click", _toggleEditMode);
 }
 
 /**
@@ -271,8 +279,22 @@ async function loadPageCorrections(docId, partId, pageNum) {
     if (corrRes.ok) {
       const corrData = await corrRes.json();
       correctionState.corrections = corrData.corrections || [];
+
+      // 자유편집 모드용 correctedText 초기화
+      // 우선순위: 서버에 저장된 corrected_text > corrections 적용 > 원본
+      if (corrData.corrected_text != null) {
+        correctionState.correctedText = corrData.corrected_text;
+      } else if (correctionState.corrections.length > 0) {
+        // 하위 호환: 기존 corrections에서 corrected_text 생성
+        correctionState.correctedText = _applyCorrectionsLocally(
+          correctionState.pageText, correctionState.corrections
+        );
+      } else {
+        correctionState.correctedText = correctionState.pageText;
+      }
     } else {
       correctionState.corrections = [];
+      correctionState.correctedText = correctionState.pageText;
     }
 
     correctionState.isDirty = false;
@@ -317,6 +339,14 @@ function _renderCorrectionView() {
     return;
   }
 
+  // 자유편집 모드: textarea로 전환
+  if (correctionState.editMode === "freetext") {
+    _renderFreetextView(container);
+    return;
+  }
+
+  // ── 글자 교정 모드 (기존) ──
+
   // [本文] / [注釈] 마커로 텍스트를 블록 세그먼트로 분할
   const segments = _splitTextIntoSegments(text);
 
@@ -338,6 +368,127 @@ function _renderCorrectionView() {
     _renderCharsIntoElement(charContainer, text, 0, null);
     container.appendChild(charContainer);
   }
+}
+
+
+/* ──────────────────────────
+   자유 편집 모드
+   ──────────────────────────
+   왜 이중 모드인가:
+     - 글자 교정: variant_reading, uncertain 등 유형 지정에 적합
+     - 자유 편집: OCR 오류 대량 수정, 글자 추가/삭제에 적합
+     연구자가 상황에 따라 선택할 수 있어야 한다.
+*/
+
+/**
+ * 글자 교정 ↔ 자유 편집 모드를 전환한다.
+ */
+function _toggleEditMode() {
+  if (correctionState.editMode === "char") {
+    // 글자 교정 → 자유 편집: 현재 corrections를 적용한 텍스트를 textarea에 표시
+    correctionState.correctedText = _applyCorrectionsLocally(
+      correctionState.pageText, correctionState.corrections
+    );
+    correctionState.editMode = "freetext";
+  } else {
+    // 자유 편집 → 글자 교정: 그대로 전환 (corrections는 저장 시 서버에서 diff)
+    correctionState.editMode = "char";
+  }
+
+  // 토글 버튼 표시 갱신
+  const btn = document.getElementById("corr-mode-toggle");
+  if (btn) {
+    const isFreetext = correctionState.editMode === "freetext";
+    btn.textContent = isFreetext ? "글자 교정" : "자유 편집";
+    btn.title = isFreetext
+      ? "글자 단위 교정 모드로 전환 (유형 지정 가능)"
+      : "자유 편집 모드로 전환 (글자 추가/삭제 가능)";
+    btn.classList.toggle("active", isFreetext);
+  }
+
+  _renderCorrectionView();
+}
+
+/**
+ * 자유 편집 모드의 뷰를 렌더링한다.
+ *
+ * 왜 textarea를 사용하는가:
+ *   글자 추가/삭제를 자유롭게 하려면 일반 텍스트 입력이 필요하다.
+ *   div+span 구조에서는 글자 단위 조작만 가능하지만,
+ *   textarea에서는 아무 위치에서나 타이핑/삭제가 가능하다.
+ *   저장 시 서버에서 원본과 diff하여 corrections를 자동 생성한다.
+ */
+function _renderFreetextView(container) {
+  container.innerHTML = "";
+
+  // 안내 문구
+  const info = document.createElement("div");
+  info.className = "corr-freetext-info";
+  info.textContent = "자유 편집: 텍스트를 직접 수정하세요. 저장 시 원본과 비교하여 교정 기록이 자동 생성됩니다.";
+  container.appendChild(info);
+
+  // textarea
+  const textarea = document.createElement("textarea");
+  textarea.id = "corr-freetext-editor";
+  textarea.className = "corr-freetext-editor";
+  textarea.value = correctionState.correctedText || correctionState.pageText;
+  textarea.spellcheck = false;
+  textarea.addEventListener("input", () => {
+    correctionState.correctedText = textarea.value;
+    correctionState.isDirty = true;
+    _updateCorrSaveStatus("modified");
+  });
+  container.appendChild(textarea);
+
+  // 원본 텍스트 참조 패널 (접이식)
+  const refPanel = document.createElement("details");
+  refPanel.className = "corr-freetext-ref";
+  const summary = document.createElement("summary");
+  summary.textContent = "원본 텍스트 (OCR)";
+  refPanel.appendChild(summary);
+  const pre = document.createElement("pre");
+  pre.textContent = correctionState.pageText;
+  refPanel.appendChild(pre);
+  container.appendChild(refPanel);
+}
+
+
+/**
+ * 기존 corrections를 텍스트에 적용하여 corrected_text를 생성한다 (클라이언트 측).
+ *
+ * Python의 _apply_corrections_to_text와 동일한 로직.
+ * 왜 클라이언트에서도 필요한가:
+ *   글자 교정 모드에서 자유 편집 모드로 전환할 때,
+ *   서버를 호출하지 않고 즉시 textarea에 교정된 텍스트를 표시하기 위해서다.
+ *
+ * @param {string} original - 원본 텍스트
+ * @param {Array} corrections - correction 레코드 배열
+ * @returns {string} 교정이 적용된 텍스트
+ */
+function _applyCorrectionsLocally(original, corrections) {
+  if (!corrections || corrections.length === 0) return original;
+
+  // block_id=null, line=null인 평면 교정만 처리 (자유편집 대상)
+  const flatCorrs = corrections.filter(
+    c => c.block_id == null && c.line == null && c.char_index != null
+  );
+
+  // char_index 역순 정렬 (뒤에서부터 치환해야 인덱스가 밀리지 않음)
+  flatCorrs.sort((a, b) => (b.char_index || 0) - (a.char_index || 0));
+
+  let text = original;
+  for (const c of flatCorrs) {
+    const idx = c.char_index;
+    const orig = c.original_ocr || "";
+    const repl = c.corrected || "";
+    const end = idx + orig.length;
+
+    // 원본 글자가 일치하는지 확인 후 치환
+    if (end <= text.length && text.substring(idx, end) === orig) {
+      text = text.substring(0, idx) + repl + text.substring(end);
+    }
+  }
+  return text;
 }
 
 /**
@@ -834,10 +985,24 @@ async function _saveCorrections() {
 
   _updateCorrSaveStatus("saving");
 
-  const payload = {
-    part_id: partId,
-    corrections: correctionState.corrections,
-  };
+  // 편집 모드에 따라 payload 구성
+  // 자유편집: corrected_text를 보내면 서버가 원본과 diff하여 corrections 자동 생성
+  // 글자교정: 기존처럼 corrections 배열 전송
+  let payload;
+  if (correctionState.editMode === "freetext") {
+    // CRLF → LF 정규화
+    const normalizedText = (correctionState.correctedText || "").replace(/\r\n/g, "\n");
+    payload = {
+      part_id: partId,
+      corrected_text: normalizedText,
+      corrections: [],
+    };
+  } else {
+    payload = {
+      part_id: partId,
+      corrections: correctionState.corrections,
+    };
+  }
 
   const url = `/api/documents/${docId}/pages/${pageNum}/corrections?part_id=${partId}`;
   const controller = new AbortController();

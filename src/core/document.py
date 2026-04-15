@@ -15,6 +15,7 @@ platform-v7.md 섹션 10.1의 구조를 따른다:
         └── alignment/
 """
 
+import difflib
 import json
 import re
 import shutil
@@ -644,7 +645,16 @@ def get_corrected_text(
     blocks_meta = layout_result.get("blocks", [])
 
     # 전체 텍스트에 교정 적용
-    corrected_text = _apply_corrections_to_text(original_text, corrections)
+    # 우선순위: stored corrected_text > corrections 적용으로 계산
+    # 왜 이렇게 하는가:
+    #   자유편집 모드에서는 corrected_text가 직접 저장된다.
+    #   이 경우 corrections를 다시 적용할 필요 없이 바로 사용한다.
+    #   stored corrected_text가 없으면 기존 방식으로 폴백한다.
+    stored_corrected = corr_result.get("corrected_text")
+    if stored_corrected is not None:
+        corrected_text = stored_corrected
+    else:
+        corrected_text = _apply_corrections_to_text(original_text, corrections)
 
     # 블록별 교정 텍스트 생성
     # 전략: 페이지 전체 기준 교정(block_id=null)은 전체 텍스트에 적용 후 분리,
@@ -746,6 +756,108 @@ def _apply_corrections_to_text(
                 lines = full.split("\n")
 
     return "\n".join(lines)
+
+
+def _diff_to_corrections(
+    original: str, corrected: str, page_num: int | None = None
+) -> list[dict]:
+    """원본과 교정 텍스트의 diff에서 corrections 레코드를 자동 생성한다.
+
+    왜 이렇게 하는가:
+        자유 편집 모드에서 사용자가 텍스트를 직접 수정하면,
+        원본과 비교하여 어디가 바뀌었는지 자동으로 파악해야 한다.
+        difflib.SequenceMatcher로 글자 단위 diff를 수행하고,
+        각 변경을 char_index 기반 correction 레코드로 변환한다.
+
+    입력:
+        original: OCR 원본 텍스트
+        corrected: 사용자가 편집한 텍스트
+        page_num: 페이지 번호 (None이면 생략)
+
+    출력:
+        corrections.schema.json 형식의 correction 딕셔너리 리스트.
+        char_index는 항상 원본 텍스트 기준.
+    """
+    if original == corrected:
+        return []
+
+    sm = difflib.SequenceMatcher(None, original, corrected, autojunk=False)
+    corrections = []
+
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == "equal":
+            continue
+
+        # tag: replace, delete, insert
+        # i1:i2 = 원본에서 변경된 범위
+        # j1:j2 = 교정에서 대응하는 범위
+        corrections.append({
+            "page": page_num,
+            "block_id": None,
+            "line": None,
+            "char_index": i1,
+            "type": "ocr_error",
+            "original_ocr": original[i1:i2],   # delete: 삭제된 글자, insert: ""
+            "corrected": corrected[j1:j2],      # delete: "", insert: 추가된 글자
+            "corrected_by": "human_freetext",
+            "confidence": None,
+            "note": None,
+        })
+
+    return corrections
+
+
+def _merge_corrections(
+    auto_corrections: list[dict],
+    existing_corrections: list[dict],
+) -> list[dict]:
+    """diff 자동 생성 corrections와 기존 수동 corrections를 병합한다.
+
+    왜 이렇게 하는가:
+        자유 편집으로 저장하면 diff에서 새 corrections가 생성되는데,
+        기존에 사용자가 수동으로 지정한 메타데이터(유형, 비고, 이문 등)를
+        잃어버리면 안 된다.
+        같은 위치+원본글자의 기존 교정이 있으면 메타데이터를 보존한다.
+
+    입력:
+        auto_corrections: _diff_to_corrections()가 생성한 레코드
+        existing_corrections: 기존 corrections.json에 있던 레코드
+
+    출력:
+        병합된 corrections 리스트.
+        - 같은 (char_index, original_ocr)이면 기존 메타데이터 우선
+        - diff에만 있으면 auto correction 그대로
+        - diff에 없으면 제거 (사용자가 되돌렸다는 의미)
+    """
+    # 기존 corrections를 (char_index, original_ocr)로 인덱싱
+    # block_id=null, line=null인 것만 대상 (자유편집은 페이지 전체 기준)
+    existing_map: dict[tuple, dict] = {}
+    preserved: list[dict] = []  # block_id가 있는 기존 corrections (자유편집 대상 밖)
+
+    for c in existing_corrections:
+        if c.get("block_id") is not None:
+            # block_id 지정 corrections는 자유편집과 무관하므로 그대로 보존
+            preserved.append(c)
+            continue
+        key = (c.get("char_index"), c.get("original_ocr", ""))
+        existing_map[key] = c
+
+    merged = []
+    for auto in auto_corrections:
+        key = (auto.get("char_index"), auto.get("original_ocr", ""))
+        existing = existing_map.get(key)
+
+        if existing:
+            # 기존 메타데이터 보존, corrected만 auto에서 가져옴
+            merged_item = {**existing, "corrected": auto["corrected"]}
+            merged.append(merged_item)
+        else:
+            merged.append(auto)
+
+    # block_id 지정 corrections 복원
+    merged.extend(preserved)
+
+    return merged
 
 
 def _split_text_by_blocks(
