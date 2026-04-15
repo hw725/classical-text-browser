@@ -1,16 +1,40 @@
 """한국고문헌종합목록 (KORCIS) 파서.
 
-대상: 국립중앙도서관 한국고문헌종합목록
+대상: 국립중앙도서관 한국고문헌종합목록 + 원문 뷰어
 URL: https://www.nl.go.kr/korcis/
+     https://viewer.nl.go.kr/
+
+지원하는 URL 형식 (fetch_by_url):
+    ── KORCIS 검색/상세 ──
+    1) https://www.nl.go.kr/korcis/search/searchResultDetail.do?vdkvgwkey=101121303
+    2) https://www.nl.go.kr/korcis/search/popup/marcInfo.do?vdkvgwkey=ID&marcKey=ID&marcTarget=BIB
+
+    ── 목차/해제 팝업 (controlNo 기반) ── ★ 권장
+    3) https://nl.go.kr/korcis/search/popup/contentsInfo.do?controlNo=KOL000000392
+    4) https://nl.go.kr/korcis/search/popup/abstractsInfo.do?controlNo=KOL000000392
+       → 목차(目次)와 해제(解題)를 가져온다.
+       → controlNo만으로는 MARC 데이터를 가져올 수 없다.
+         vdkvgwkey URL도 함께 입력하면 MARC + 목차 + 해제가 모두 보강된다.
+
+    ── 소장/로컬 MARC 팝업 ──
+    5) marcInfo.do?...&marcTarget=HOLD  → vdkvgwkey 추출 → BIB MARC 조회 + 소장 보강
+    6) marcInfo.do?...&marcTarget=LOCAL → vdkvgwkey 추출 → BIB MARC 조회
+
+    ── 원문 뷰어 ──
+    7) https://viewer.nl.go.kr/main.wviewer?cno=KOL000021131
+       → 서지 + 이미지 다운로드 (에셋)
 
 접근 방법:
     - 검색: POST /korcis/search/simpleResultList.do
       파라미터: searchCondition=all, searchKeyword=검색어
-    - 상세: 세션 쿠키 필요 (검색 → 상세 순서대로 접근)
     - MARC 팝업: GET /korcis/search/popup/marcInfo.do?vdkvgwkey=ID&marcKey=ID&marcTarget=BIB
       (직접 접근 가능, 가장 구조화된 데이터)
+    - 목차 팝업: GET /korcis/search/popup/contentsInfo.do?controlNo=KOL...
+    - 해제 팝업: GET /korcis/search/popup/abstractsInfo.do?controlNo=KOL...
+    - 원문 뷰어: POST viewer.nl.go.kr/main.wviewer (Referer + ax=Y 세션)
 
 MARC 필드 매핑:
+    012 ▼a → controlNo (KOL...) — 목차/해제 조회 키
     100 ▼a → creator.name, ▼c → creator.period, ▼e → creator.role
     245 ▼a → title, ▼d → creator 원문
     250 ▼a → edition_type
@@ -23,8 +47,11 @@ MARC 필드 매핑:
 
 from __future__ import annotations
 
+import logging
 import re
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -32,8 +59,36 @@ from lxml import html as lxml_html
 
 from parsers.base import BaseFetcher, BaseMapper, register_parser
 
-# KORCIS 베이스 URL
+logger = logging.getLogger(__name__)
+
+# KORCIS 베이스 URL 및 팝업 엔드포인트
 _KORCIS_BASE = "https://www.nl.go.kr"
+
+# 목차 팝업 (GET, controlNo 기반)
+_CONTENTS_INFO_URL = f"{_KORCIS_BASE}/korcis/search/popup/contentsInfo.do"
+
+# 해제 팝업 (GET, controlNo 기반)
+_ABSTRACTS_INFO_URL = f"{_KORCIS_BASE}/korcis/search/popup/abstractsInfo.do"
+
+# 국립중앙도서관 원문 뷰어 URL
+_VIEWER_BASE = "https://viewer.nl.go.kr"
+_VIEWER_URL = f"{_VIEWER_BASE}/main.wviewer"
+
+# 뷰어 이미지 엔드포인트
+_VIEWER_IMAGE_URL = f"{_VIEWER_BASE}/nlmivs/view_image.jsp"
+
+# 뷰어 접근에 필요한 공통 헤더
+# 왜 이렇게 하는가:
+#     viewer.nl.go.kr은 Referer 없이 직접 접근하면 404를 반환한다.
+#     실제 브라우저에서 접근할 때와 동일한 헤더를 보내야 한다.
+_VIEWER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/131.0.0.0 Safari/537.36"
+    ),
+    "Referer": "https://www.nl.go.kr/",
+}
 
 # KORCIS OpenAPI 엔드포인트
 # 참조: academic-mcp/src/academic_mcp/providers/nl.py
@@ -62,6 +117,15 @@ class KorcisFetcher(BaseFetcher):
     parser_id = "korcis"
     parser_name = "한국고문헌종합목록 (KORCIS)"
     api_variant = "html_scraping_marc"
+
+    supports_asset_download = True
+    """KORCIS 원문 뷰어(viewer.nl.go.kr) 이미지 다운로드를 지원한다.
+
+    왜 이렇게 하는가:
+        연구자가 viewer URL을 붙여넣으면 서지정보 + 원문 이미지를
+        한 번에 가져와 문헌을 생성할 수 있어야 한다.
+        에셋 다운로드 플래그를 켜면 GUI에서 "문헌 생성" 버튼이 활성화된다.
+    """
 
     async def search(self, query: str, **kwargs) -> list[dict[str, Any]]:
         """키워드로 검색하여 후보 목록을 반환한다.
@@ -119,38 +183,315 @@ class KorcisFetcher(BaseFetcher):
         return marc_data
 
     async def fetch_by_url(self, url: str) -> dict[str, Any]:
-        """KORCIS URL에서 자료 ID를 추출하여 메타데이터를 가져온다.
+        """KORCIS 또는 원문 뷰어 URL에서 메타데이터를 가져온다.
 
         입력:
-            url — KORCIS 페이지 URL.
-                  예: https://www.nl.go.kr/korcis/search/searchResultDetail.do?vdkvgwkey=302554414
+            url — KORCIS 또는 뷰어 URL.
+                  예1: https://www.nl.go.kr/korcis/search/searchResultDetail.do?vdkvgwkey=302554414
+                  예2: https://viewer.nl.go.kr/main.wviewer?cno=KOL000021131
         출력:
-            MARC 필드를 파싱한 dict.
+            MARC 필드 또는 뷰어 메타데이터를 파싱한 dict.
 
         왜 이렇게 하는가:
-            연구자가 KORCIS에서 복사한 URL을 붙여넣으면
-            vdkvgwkey를 추출하여 MARC 데이터를 가져온다.
+            연구자가 KORCIS 또는 뷰어에서 복사한 URL을 붙여넣으면
+            적절한 방법으로 서지정보를 가져온다.
+            뷰어 URL의 경우 이미지 다운로드용 메타데이터도 함께 포함한다.
         """
-        # vdkvgwkey 파라미터에서 ID 추출
-        m = re.search(r"vdkvgwkey=(\d+)", url)
-        if m:
-            return await self.fetch_detail(m.group(1))
+        # ── 원문 뷰어 URL (viewer.nl.go.kr) ──
+        if "viewer.nl.go.kr" in url:
+            m = re.search(r"[?&]cno=([A-Z0-9]+)", url, re.IGNORECASE)
+            if m:
+                return await self._fetch_viewer(m.group(1))
+            raise ValueError(
+                f"뷰어 URL에서 cno를 추출할 수 없습니다: {url}\n"
+                "→ 지원 URL: https://viewer.nl.go.kr/main.wviewer?cno=KOL..."
+            )
+
+        # ── 목차/해제 팝업 URL (controlNo 기반) ──
+        # contentsInfo.do?controlNo=KOL... 또는 abstractsInfo.do?controlNo=KOL...
+        m_ctrl = re.search(r"[?&]controlNo=([A-Z0-9]+)", url, re.IGNORECASE)
+        if m_ctrl and ("contentsInfo" in url or "abstractsInfo" in url):
+            control_no = m_ctrl.group(1)
+            return await self._fetch_by_control_no(control_no)
+
+        # ── MARC 팝업 URL (BIB/HOLD/LOCAL) ──
+        m_vdk = re.search(r"vdkvgwkey=(\d+)", url)
+        if m_vdk:
+            item_id = m_vdk.group(1)
+            # HOLD/LOCAL 타겟이더라도 vdkvgwkey로 BIB MARC를 가져온 뒤 보강한다.
+            data = await self.fetch_detail(item_id)
+            # BIB MARC의 012 필드에서 controlNo 추출 → 목차/해제 보강
+            await self._enrich_with_contents(data)
+            return data
 
         # fnDetail('ID') 패턴에서 추출 (혹시 JS 링크를 복사한 경우)
         m = re.search(r"fnDetail\(['\"](\d+)['\"]\)", url)
         if m:
-            return await self.fetch_detail(m.group(1))
+            data = await self.fetch_detail(m.group(1))
+            await self._enrich_with_contents(data)
+            return data
 
         # marcKey 파라미터에서 ID 추출 (MARC 팝업 URL)
         m = re.search(r"marcKey=(\d+)", url)
         if m:
-            return await self.fetch_detail(m.group(1))
+            data = await self.fetch_detail(m.group(1))
+            await self._enrich_with_contents(data)
+            return data
 
         raise ValueError(
             f"KORCIS URL에서 자료 ID를 추출할 수 없습니다: {url}\n"
-            "→ 지원 URL: https://www.nl.go.kr/korcis/search/searchResultDetail.do"
-            "?vdkvgwkey=..."
+            "→ 지원 URL 형식:\n"
+            "  - https://www.nl.go.kr/korcis/.../searchResultDetail.do?vdkvgwkey=...\n"
+            "  - https://nl.go.kr/korcis/.../contentsInfo.do?controlNo=KOL...\n"
+            "  - https://nl.go.kr/korcis/.../abstractsInfo.do?controlNo=KOL...\n"
+            "  - https://viewer.nl.go.kr/main.wviewer?cno=KOL..."
         )
+
+    async def _fetch_by_control_no(self, control_no: str) -> dict[str, Any]:
+        """controlNo(KOL...)로 목차와 해제를 가져온다.
+
+        입력:
+            control_no — KORCIS 제어번호 (예: "KOL000000392").
+        출력:
+            {_contents_info, _abstracts_info, control_no, source_url, ...}
+
+        왜 이렇게 하는가:
+            contentsInfo/abstractsInfo URL에는 controlNo만 있고
+            vdkvgwkey가 없다. MARC 조회는 불가하지만,
+            목차와 해제는 controlNo만으로 직접 가져올 수 있다.
+            연구자가 이 URL을 붙여넣었다면 목차/해제 데이터가 목적이다.
+        """
+        data: dict[str, Any] = {"control_no": control_no}
+
+        contents = await _fetch_contents_info(control_no)
+        if contents:
+            data["_contents_info"] = contents
+
+        abstracts = await _fetch_abstracts_info(control_no)
+        if abstracts:
+            data["_abstracts_info"] = abstracts
+
+        data["source_url"] = (
+            f"{_KORCIS_BASE}/korcis/search/popup/contentsInfo.do"
+            f"?controlNo={control_no}"
+        )
+
+        return data
+
+    async def _enrich_with_contents(self, data: dict[str, Any]) -> None:
+        """BIB MARC 데이터에 목차와 해제를 보강한다.
+
+        입력/출력:
+            data — fetch_detail이 반환한 MARC dict. 직접 수정한다.
+
+        왜 이렇게 하는가:
+            MARC 012 필드에 controlNo(KOL...)가 들어있다.
+            이를 추출하여 contentsInfo/abstractsInfo를 가져오면
+            MARC 서지 + 목차 + 해제가 한 번에 보강된다.
+            012 필드가 없으면 보강 없이 넘어간다.
+        """
+        # MARC 012 ▼a 또는 035 ▼a에서 controlNo 추출
+        control_no = None
+        marc012 = data.get("012", {})
+        if isinstance(marc012, dict) and marc012.get("a"):
+            control_no = marc012["a"].strip()
+        if not control_no:
+            marc035 = data.get("035", {})
+            if isinstance(marc035, dict) and marc035.get("a"):
+                # "(011001)KOL000000392" → "KOL000000392"
+                m = re.search(r"(KOL\d+)", marc035["a"])
+                if m:
+                    control_no = m.group(1)
+
+        if not control_no:
+            return
+
+        data["control_no"] = control_no
+
+        try:
+            contents = await _fetch_contents_info(control_no)
+            if contents:
+                data["_contents_info"] = contents
+
+            abstracts = await _fetch_abstracts_info(control_no)
+            if abstracts:
+                data["_abstracts_info"] = abstracts
+        except Exception as e:
+            logger.warning("목차/해제 보강 실패 (controlNo=%s): %s", control_no, e)
+
+    async def _fetch_viewer(self, cno: str) -> dict[str, Any]:
+        """국립중앙도서관 원문 뷰어에서 서지정보와 페이지 메타데이터를 추출한다.
+
+        입력:
+            cno — 제어번호 (예: "KOL000021131").
+        출력:
+            서지정보 + 뷰어 메타데이터 dict.
+            {title, creator, date, publisher, cno, vol_maxpage, maxpage, ...}
+
+        왜 이렇게 하는가:
+            viewer.nl.go.kr은 2단계 세션 인증이 필요하다:
+            1) POST main.wviewer (ax=Y) → JSESSIONID 획득
+            2) 응답 HTML에서 서지정보와 JavaScript 변수 파싱
+            Referer 헤더 없이는 404를 반환하므로 브라우저 헤더를 모방한다.
+        """
+        form_data = {
+            "cno": cno,
+            "ax": "Y",
+            "sip": "0.0.0.0",
+        }
+
+        # 뷰어 서버가 응답이 느릴 수 있으므로 타임아웃을 넉넉히 설정한다.
+        async with httpx.AsyncClient(
+            timeout=60.0,
+            follow_redirects=True,
+            headers=_VIEWER_HEADERS,
+        ) as client:
+            response = await client.post(_VIEWER_URL, data=form_data)
+            response.raise_for_status()
+
+        return _parse_viewer_html(response.text, cno)
+
+    async def list_assets(self, raw_data: dict[str, Any]) -> list[dict[str, Any]]:
+        """원문 뷰어에서 다운로드 가능한 에셋 목록을 반환한다.
+
+        입력:
+            raw_data — fetch_by_url 또는 _fetch_viewer가 반환한 dict.
+                       _viewer 키에 뷰어 메타데이터가 포함되어 있어야 한다.
+        출력:
+            [{asset_id, label, page_count, download_type}, ...]
+
+        왜 이렇게 하는가:
+            뷰어 HTML의 JavaScript 변수에서 볼륨별 페이지 수를 알 수 있다.
+            vol_maxpage가 쉼표 구분 문자열로 각 볼륨의 최대 페이지를 제공한다.
+        """
+        viewer = raw_data.get("_viewer", {})
+        if not viewer:
+            return []
+
+        cno = viewer.get("cno", "")
+        title = viewer.get("title", cno)
+
+        # vol_maxpage: "143" 또는 "50,60,33" (볼륨별 페이지 수)
+        vol_pages_str = viewer.get("vol_maxpage", "")
+        if not vol_pages_str:
+            return []
+
+        vol_pages = [p.strip() for p in vol_pages_str.split(",") if p.strip()]
+        assets = []
+        for vol_idx, pages_str in enumerate(vol_pages, 1):
+            try:
+                page_count = int(pages_str)
+            except ValueError:
+                continue
+            assets.append({
+                "asset_id": cno,
+                "vol": vol_idx,
+                "label": f"{title}_v{vol_idx}" if len(vol_pages) > 1 else title,
+                "page_count": page_count,
+                "download_type": "viewer_png",
+            })
+
+        return assets
+
+    async def download_asset(
+        self,
+        asset_info: dict[str, Any],
+        dest_dir: Path,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> Path:
+        """원문 뷰어에서 이미지를 다운로드하여 PDF로 합친다.
+
+        입력:
+            asset_info — list_assets()가 반환한 항목.
+                         {asset_id(=cno), vol, page_count, label, download_type}
+            dest_dir — 파일을 저장할 디렉토리.
+            progress_callback — (현재 페이지, 총 페이지)를 받는 콜백.
+        출력:
+            생성된 PDF 파일의 Path.
+
+        왜 이렇게 하는가:
+            viewer.nl.go.kr은 각 페이지를 PNG로 제공한다.
+            세션 쿠키가 있어야 이미지를 받을 수 있으므로,
+            먼저 POST로 세션을 획득한 뒤 개별 페이지를 순차 다운로드한다.
+            fpdf2로 PNG들을 하나의 PDF로 결합한다.
+        """
+        from fpdf import FPDF
+        from PIL import Image
+
+        cno = asset_info["asset_id"]
+        vol = asset_info.get("vol", 1)
+        page_count = asset_info["page_count"]
+        label = asset_info.get("label", cno)
+        dest_dir = Path(dest_dir)
+
+        # 1. 세션 획득 (POST main.wviewer)
+        form_data = {"cno": cno, "ax": "Y", "sip": "0.0.0.0"}
+
+        async with httpx.AsyncClient(
+            timeout=60.0,
+            follow_redirects=True,
+            headers=_VIEWER_HEADERS,
+        ) as client:
+            session_resp = await client.post(_VIEWER_URL, data=form_data)
+            session_resp.raise_for_status()
+            # 세션 쿠키는 client가 자동 관리한다.
+
+            # 2. 각 페이지 이미지 다운로드
+            png_paths: list[Path] = []
+            for page_num in range(1, page_count + 1):
+                params = {
+                    "cno": cno,
+                    "vol": str(vol),
+                    "page": str(page_num),
+                    "twoThreeYn": "N",
+                }
+                resp = await client.get(_VIEWER_IMAGE_URL, params=params)
+                resp.raise_for_status()
+
+                # 빈 응답 건너뛰기 (일부 페이지가 비어있을 수 있음)
+                if len(resp.content) < 100:
+                    logger.warning(
+                        "빈 이미지 응답 (cno=%s, vol=%d, page=%d): %d bytes",
+                        cno, vol, page_num, len(resp.content),
+                    )
+                    continue
+
+                png_path = dest_dir / f"{cno}_v{vol}_p{page_num:04d}.png"
+                png_path.write_bytes(resp.content)
+                png_paths.append(png_path)
+
+                if progress_callback:
+                    progress_callback(page_num, page_count)
+
+        if not png_paths:
+            raise ValueError(
+                f"다운로드된 이미지가 없습니다: cno={cno}, vol={vol}\n"
+                "→ 원인: 뷰어 세션이 만료되었거나 접근이 차단되었을 수 있습니다."
+            )
+
+        # 3. PNG → PDF 결합
+        pdf = FPDF(unit="pt")
+        for png_path in png_paths:
+            with Image.open(png_path) as img:
+                w_px, h_px = img.size
+            # 150dpi 기준으로 포인트 변환 (고서 스캔 표준)
+            w_pt = w_px * 72 / 150
+            h_pt = h_px * 72 / 150
+            pdf.add_page(format=(w_pt, h_pt))
+            pdf.image(str(png_path), x=0, y=0, w=w_pt, h=h_pt)
+
+        safe_label = re.sub(r'[<>:"/\\|?*]', "_", label)
+        pdf_path = dest_dir / f"{safe_label}.pdf"
+        pdf.output(str(pdf_path))
+
+        logger.info(
+            "PDF 생성 완료 (KORCIS 뷰어): %s (%d페이지, %.1fMB)",
+            pdf_path.name,
+            len(png_paths),
+            pdf_path.stat().st_size / 1024 / 1024,
+        )
+
+        return pdf_path
 
 
 class KorcisMapper(BaseMapper):
@@ -166,11 +507,22 @@ class KorcisMapper(BaseMapper):
     parser_id = "korcis"
 
     def map_to_bibliography(self, raw_data: dict[str, Any]) -> dict[str, Any]:
-        """KORCIS MARC 데이터를 bibliography.json 형식으로 변환한다.
+        """KORCIS MARC 또는 뷰어 데이터를 bibliography.json 형식으로 변환한다.
 
-        입력: raw_data — KorcisFetcher가 반환한 파싱된 MARC dict.
+        입력: raw_data — KorcisFetcher가 반환한 파싱된 dict.
+              MARC 데이터이면 245, 100 등의 키가 있고,
+              뷰어 데이터이면 title, author, _viewer 키가 있다.
         출력: bibliography.schema.json 준수 dict.
         """
+        # ── 뷰어 데이터 경로 ──
+        if "_viewer" in raw_data:
+            return self._map_viewer_to_bibliography(raw_data)
+
+        # ── controlNo-only 경로 (목차/해제만 있고 MARC 없음) ──
+        if "control_no" in raw_data and "245" not in raw_data:
+            return self._map_control_no_to_bibliography(raw_data)
+
+        # ── MARC 데이터 경로 ──
         # 저자 매핑
         # MARC 100이 있으면 100을 기본으로, 없으면 245 ▼d에서 추출
         creator = None
@@ -247,9 +599,15 @@ class KorcisMapper(BaseMapper):
         notes_list = raw_data.get("500_list", [])
         notes = "\n".join(notes_list) if notes_list else None
 
+        # 목차 정보 (contentsInfo 보강)
+        contents_info = raw_data.get("_contents_info")
+
+        # 해제 정보 (abstractsInfo 보강)
+        abstracts_info = raw_data.get("_abstracts_info")
+
         # 시스템 ID
         system_ids = {}
-        control_no = raw_data.get("001")
+        control_no = raw_data.get("control_no") or raw_data.get("001")
         if control_no:
             system_ids["control_number"] = control_no
         vdkvgwkey = raw_data.get("vdkvgwkey")
@@ -309,6 +667,14 @@ class KorcisMapper(BaseMapper):
             )
         if info_008 and "error" not in info_008:
             field_sources["language"] = self._field_source("MARC 008[35:38]", "exact")
+        if contents_info:
+            field_sources["contents"] = self._field_source(
+                "contentsInfo 팝업", "exact", "controlNo 기반 목차 조회"
+            )
+        if abstracts_info:
+            field_sources["abstracts"] = self._field_source(
+                "abstractsInfo 팝업", "exact", "controlNo 기반 해제 조회"
+            )
 
         bibliography = {
             "title": marc245.get("a"),
@@ -346,9 +712,403 @@ class KorcisMapper(BaseMapper):
                 api_variant="html_scraping_marc",
             ),
             "notes": notes,
+            "contents": contents_info,
+            "abstracts": abstracts_info,
         }
 
         return bibliography
+
+    def _map_control_no_to_bibliography(self, raw_data: dict[str, Any]) -> dict[str, Any]:
+        """controlNo-only 데이터를 bibliography.json으로 매핑한다.
+
+        왜 이렇게 하는가:
+            연구자가 contentsInfo/abstractsInfo URL을 붙여넣으면
+            MARC 없이 목차와 해제만 있다. 이 경우에도
+            최소한의 bibliography 객체를 반환하여
+            나중에 MARC 데이터와 병합할 수 있도록 한다.
+        """
+        control_no = raw_data.get("control_no", "")
+        contents_info = raw_data.get("_contents_info")
+        abstracts_info = raw_data.get("_abstracts_info")
+
+        system_ids = {"control_number": control_no}
+
+        field_sources: dict[str, dict] = {}
+        if contents_info:
+            field_sources["contents"] = self._field_source(
+                "contentsInfo 팝업", "exact"
+            )
+        if abstracts_info:
+            field_sources["abstracts"] = self._field_source(
+                "abstractsInfo 팝업", "exact"
+            )
+
+        bibliography = {
+            "title": None,
+            "title_reading": None,
+            "alternative_titles": None,
+            "creator": None,
+            "contributors": None,
+            "date_created": None,
+            "edition_type": None,
+            "language": None,
+            "script": None,
+            "physical_description": None,
+            "printing_info": None,
+            "publishing": None,
+            "extent": None,
+            "subject": None,
+            "classification": None,
+            "series_title": None,
+            "material_type": None,
+            "repository": None,
+            "digital_source": {
+                "platform": "한국고문헌종합목록 (KORCIS)",
+                "source_url": raw_data.get("source_url"),
+                "permanent_uri": None,
+                "system_ids": system_ids,
+                "license": None,
+                "accessed_at": None,
+            },
+            "raw_metadata": {
+                "source_system": "korcis",
+                **raw_data,
+            },
+            "_mapping_info": self._make_mapping_info(
+                field_sources=field_sources,
+                api_variant="control_no_popup",
+            ),
+            "notes": None,
+            "contents": contents_info,
+            "abstracts": abstracts_info,
+        }
+
+        return bibliography
+
+    def _map_viewer_to_bibliography(self, raw_data: dict[str, Any]) -> dict[str, Any]:
+        """뷰어 HTML에서 추출한 데이터를 bibliography.json으로 매핑한다.
+
+        왜 이렇게 하는가:
+            뷰어 데이터는 MARC보다 필드가 적지만,
+            연구자가 뷰어 URL만 알 때도 최소한의 서지정보를 제공할 수 있다.
+            MARC 조회 없이도 제목, 저자, 발행일, 발행자는 확보된다.
+        """
+        viewer = raw_data.get("_viewer", {})
+        title = raw_data.get("title")
+        author = raw_data.get("author")
+
+        creator = None
+        if author:
+            creator = {
+                "name": author,
+                "name_reading": None,
+                "role": "author",
+                "period": None,
+            }
+
+        date_created = raw_data.get("date_created")
+        # 뷰어의 "1714----" 같은 형식 정리
+        if date_created:
+            date_created = re.sub(r"-+$", "", date_created).strip() or None
+
+        publisher = raw_data.get("publisher")
+        publishing = None
+        if publisher:
+            publishing = {
+                "place": None,
+                "publisher": publisher,
+                "publication_type": None,
+            }
+
+        cno = viewer.get("cno", "")
+        system_ids = {"control_number": cno}
+        kolis_no = viewer.get("kolis_no")
+        if kolis_no and kolis_no != cno:
+            system_ids["kolis_number"] = kolis_no
+
+        field_sources = {
+            "title": self._field_source("뷰어 hidden input erBookTitle", "exact"),
+            "creator.name": self._field_source("뷰어 hidden input erAuthor", "exact"),
+            "date_created": self._field_source("뷰어 bookInfo 발행일", "exact"),
+        }
+        if publishing:
+            field_sources["publishing"] = self._field_source(
+                "뷰어 bookInfo 발행자", "exact"
+            )
+
+        bibliography = {
+            "title": title,
+            "title_reading": None,
+            "alternative_titles": None,
+            "creator": creator,
+            "contributors": None,
+            "date_created": date_created,
+            "edition_type": None,
+            "language": None,
+            "script": None,
+            "physical_description": None,
+            "printing_info": None,
+            "publishing": publishing,
+            "extent": None,
+            "subject": None,
+            "classification": None,
+            "series_title": None,
+            "material_type": None,
+            "repository": None,
+            "digital_source": {
+                "platform": "국립중앙도서관 원문 뷰어",
+                "source_url": raw_data.get("source_url"),
+                "permanent_uri": None,
+                "system_ids": system_ids,
+                "license": raw_data.get("copyright_type"),
+                "accessed_at": None,
+            },
+            "raw_metadata": {
+                "source_system": "korcis_viewer",
+                **raw_data,
+            },
+            "_mapping_info": self._make_mapping_info(
+                field_sources=field_sources,
+                api_variant="viewer_html_scraping",
+            ),
+            "notes": None,
+        }
+
+        return bibliography
+
+
+# --- 목차/해제 팝업 파싱 유틸리티 ---
+
+
+async def _fetch_contents_info(control_no: str) -> list[dict[str, str]] | None:
+    """목차 팝업에서 목차 정보를 가져온다.
+
+    입력:
+        control_no — KORCIS 제어번호 (예: "KOL000000392").
+    출력:
+        [{"title": "海東諸國紀", "page": "1"}, ...] 또는 None.
+
+    왜 이렇게 하는가:
+        목차 팝업은 GET으로 직접 접근 가능하며,
+        "제목 = 페이지번호" 형식의 간단한 HTML을 반환한다.
+        이 구조를 파싱하여 목차 리스트로 반환한다.
+    """
+    params = {"controlNo": control_no}
+    try:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+            response = await client.get(_CONTENTS_INFO_URL, params=params)
+            response.raise_for_status()
+
+        return _parse_contents_html(response.text)
+    except Exception as e:
+        logger.warning("목차 조회 실패 (controlNo=%s): %s", control_no, e)
+        return None
+
+
+async def _fetch_abstracts_info(control_no: str) -> str | None:
+    """해제 팝업에서 해제(학술 해설) 텍스트를 가져온다.
+
+    입력:
+        control_no — KORCIS 제어번호 (예: "KOL000000392").
+    출력:
+        해제 텍스트 문자열 또는 None.
+
+    왜 이렇게 하는가:
+        해제 팝업은 GET으로 직접 접근 가능하며,
+        <kabs> 태그 안에 수천 자의 학술 해설이 들어있다.
+        고전 문헌 연구에 극히 귀중한 정보다.
+    """
+    params = {"controlNo": control_no}
+    try:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+            response = await client.get(_ABSTRACTS_INFO_URL, params=params)
+            response.raise_for_status()
+
+        return _parse_abstracts_html(response.text)
+    except Exception as e:
+        logger.warning("해제 조회 실패 (controlNo=%s): %s", control_no, e)
+        return None
+
+
+def _parse_contents_html(html_text: str) -> list[dict[str, str]] | None:
+    """목차 팝업 HTML을 파싱한다.
+
+    입력 예 (popupContent 내부):
+        表紙&nbsp;=&nbsp;0<br/>
+        海東諸國紀&nbsp;=&nbsp;1<br/>
+    출력:
+        [{"title": "表紙", "page": "0"}, {"title": "海東諸國紀", "page": "1"}]
+
+    왜 이렇게 하는가:
+        목차 HTML은 "제목 = 페이지" 형식이 <br/> 로 구분되어 있다.
+        &nbsp;는 공백으로, =는 구분자로 처리한다.
+    """
+    # popupContent div 안의 내용 추출
+    m = re.search(
+        r'class="popupContent[^"]*"[^>]*>(.*?)</div>',
+        html_text,
+        re.DOTALL,
+    )
+    if not m:
+        return None
+
+    content = m.group(1)
+    # HTML 엔티티 정리
+    content = content.replace("&nbsp;", " ").replace("&amp;", "&")
+
+    entries: list[dict[str, str]] = []
+    # <br/> 또는 <br> 로 분리
+    lines = re.split(r"<br\s*/?>", content)
+    for line in lines:
+        # HTML 태그 제거
+        line = re.sub(r"<[^>]+>", "", line).strip()
+        if not line:
+            continue
+
+        # "제목 = 페이지번호" 패턴 분리
+        if "=" in line:
+            parts = line.rsplit("=", 1)
+            title = parts[0].strip()
+            page = parts[1].strip() if len(parts) > 1 else ""
+            if title:
+                entries.append({"title": title, "page": page})
+        else:
+            # = 없는 줄은 제목만
+            entries.append({"title": line, "page": ""})
+
+    return entries if entries else None
+
+
+def _parse_abstracts_html(html_text: str) -> str | None:
+    """해제 팝업 HTML에서 해제 텍스트를 추출한다.
+
+    입력 예:
+        <id>KOL000000392<br><kabs><br> 『해동제국기...』는 ...
+    출력:
+        정리된 해제 텍스트 문자열.
+
+    왜 이렇게 하는가:
+        해제 HTML은 비표준 태그(<id>, <kabs>)를 사용하며,
+        <br> 태그로 문단을 구분한다.
+        HTML을 정리하여 읽기 좋은 텍스트로 변환한다.
+    """
+    # popupContent div 안의 내용 추출
+    m = re.search(
+        r'class="popupContent[^"]*"[^>]*>(.*?)</div>',
+        html_text,
+        re.DOTALL,
+    )
+    if not m:
+        return None
+
+    content = m.group(1)
+
+    # <id>...</id> 또는 <id>...<br> 태그 제거 (제어번호)
+    content = re.sub(r"<id>[^<]*(?:<br>|</id>)", "", content)
+    # <kabs> 태그 제거
+    content = re.sub(r"</?kabs>", "", content)
+    # <br> → 줄바꿈
+    content = re.sub(r"<br\s*/?>", "\n", content)
+    # 나머지 HTML 태그 제거
+    content = re.sub(r"<[^>]+>", "", content)
+    # HTML 엔티티
+    content = content.replace("&nbsp;", " ").replace("&amp;", "&")
+    # 연속 줄바꿈 정리
+    content = re.sub(r"\n{3,}", "\n\n", content)
+
+    text = content.strip()
+    return text if text else None
+
+
+# --- 뷰어 HTML 파싱 유틸리티 ---
+
+
+def _parse_viewer_html(html_text: str, cno: str) -> dict[str, Any]:
+    """원문 뷰어 HTML에서 서지정보와 페이지 메타데이터를 추출한다.
+
+    입력:
+        html_text — POST main.wviewer 응답 HTML.
+        cno — 제어번호 (fallback 용).
+    출력:
+        MARC 파서와 호환되는 dict +  _viewer 키에 뷰어 메타데이터.
+
+    왜 이렇게 하는가:
+        뷰어 HTML에는 두 가지 형태로 데이터가 들어있다:
+        1) hidden input / bookInfo <ul> — 서지 정보
+        2) JavaScript 변수 — 페이지·볼륨 메타데이터
+        둘 다 파싱하여 하나의 dict로 합친다.
+    """
+    data: dict[str, Any] = {}
+
+    # ── 1. hidden input에서 서지 기본 정보 추출 ──
+    # <input type="hidden" name="erBookTitle" title="서명" value="海東諸國紀" />
+    hidden_fields = {
+        "erControlNo": "control_no",
+        "erBookTitle": "title",
+        "erAuthor": "author",
+        "erFlag": "system_code",
+    }
+    for field_name, key in hidden_fields.items():
+        m = re.search(
+            rf'name="{field_name}"[^>]*value="([^"]*)"',
+            html_text,
+        )
+        if m and m.group(1):
+            data[key] = m.group(1)
+
+    # ── 2. bookInfo <ul>에서 상세 서지 추출 ──
+    # <span class="label tispan">서명</span>
+    # <span class="text">海東諸國紀</span>
+    label_map = {
+        "tispan": "title",
+        "authorspan": "author",
+        "issuedatespan": "date_created",
+        "issuerspan": "publisher",
+        "copyspan": "copyright_type",
+    }
+    for css_class, key in label_map.items():
+        # label 다음의 text span 값 추출
+        pattern = (
+            rf'class="label\s+{css_class}"[^>]*>.*?</span>\s*'
+            rf'<span class="text">([^<]*)</span>'
+        )
+        m = re.search(pattern, html_text, re.DOTALL)
+        if m and m.group(1).strip():
+            # bookInfo가 hidden input보다 우선 (더 상세할 수 있음)
+            data[key] = m.group(1).strip()
+
+    # ── 3. JavaScript 변수에서 페이지/볼륨 메타데이터 추출 ──
+    viewer_meta: dict[str, Any] = {"cno": cno}
+
+    js_vars = {
+        "srcpath": "srcpath",
+        "maxpage": "maxpage",
+        "ext": "ext",
+        "vol_maxpage": "vol_maxpage",
+        "curVol": "cur_vol",
+        "kolis_no": "kolis_no",
+        "DataClassCd": "data_class",
+        "saveYn": "save_yn",
+        "printYn": "print_yn",
+    }
+    for js_name, key in js_vars.items():
+        # var name = "value"; 또는 var name = 123; 패턴
+        m = re.search(
+            rf'var\s+{js_name}\s*=\s*["\']?([^"\';\n]+)["\']?\s*;',
+            html_text,
+        )
+        if m and m.group(1).strip():
+            viewer_meta[key] = m.group(1).strip()
+
+    # title을 viewer_meta에도 복사 (list_assets에서 label로 사용)
+    viewer_meta["title"] = data.get("title", cno)
+
+    data["_viewer"] = viewer_meta
+
+    # 뷰어 URL을 source_url로 설정
+    data["source_url"] = f"{_VIEWER_BASE}/main.wviewer?cno={cno}"
+
+    return data
 
 
 # --- HTML/MARC 파싱 유틸리티 ---
@@ -446,7 +1206,10 @@ def _parse_marc_html(html_text: str) -> dict[str, Any]:
             # 서브필드 파싱
             subfields = _parse_marc_subfields(content)
 
-            if tag == "001":
+            if tag == "012":
+                # 012 ▼a = controlNo (KOL...) — 목차/해제 조회 키
+                data["012"] = subfields
+            elif tag == "001":
                 data["001"] = content
             elif tag == "008":
                 data["008"] = content

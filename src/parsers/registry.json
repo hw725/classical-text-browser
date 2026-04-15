@@ -38,6 +38,45 @@
       "metadata_standard": "MARC"
     },
     {
+      "id": "kostma",
+      "name": "해외한국학자료센터 (KOSTMA)",
+      "country": "KR",
+      "fetcher": "kostma_fetcher",
+      "mapper": "kostma_mapper",
+      "access_method": "scraping",
+      "base_url": "http://kostma.korea.ac.kr/",
+      "response_format": "html",
+      "requires_auth": false,
+      "metadata_standard": "custom_table",
+      "note": "뷰어 페이지에서 서지정보(팝업) + 이미지 목록(JS) 추출. PDF 다운로드 지원."
+    },
+    {
+      "id": "jsg",
+      "name": "한국학중앙연구원 장서각",
+      "country": "KR",
+      "fetcher": "jsg_fetcher",
+      "mapper": "jsg_mapper",
+      "access_method": "scraping",
+      "base_url": "https://jsg.aks.ac.kr/",
+      "response_format": "html",
+      "requires_auth": false,
+      "metadata_standard": "custom_table",
+      "note": "dir/view 페이지에서 서지정보(테이블) + 이미지 목록(goOrgDataView) 추출. PDF 다운로드 지원."
+    },
+    {
+      "id": "kyujanggak",
+      "name": "서울대학교 규장각한국학연구원",
+      "country": "KR",
+      "fetcher": "kyujanggak_fetcher",
+      "mapper": "kyujanggak_mapper",
+      "access_method": "scraping",
+      "base_url": "https://kyudb.snu.ac.kr/",
+      "response_format": "html",
+      "requires_auth": false,
+      "metadata_standard": "custom_table",
+      "note": "book/view.do 페이지에서 서지정보 추출 + viewImgList.do API로 이미지 다운로드. SSL verify=False 필요."
+    },
+    {
       "id": "generic_llm",
       "name": "범용 LLM 추출 (markdown.new)",
       "country": null,

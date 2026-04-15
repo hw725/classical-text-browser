@@ -131,21 +131,30 @@ class ArchivesJpFetcher(BaseFetcher):
     async def list_assets(self, raw_data: dict[str, Any]) -> list[dict[str, Any]]:
         """다운로드 가능한 에셋(이미지) 목록을 조회한다.
 
-        동작:
+        두 가지 경로를 지원한다:
+
+        (A) 구형 페이지 (/DAS/meta/) — BID 기반:
             1. raw_data에서 BID를 추출한다.
             2. /DAS/meta/listPhoto 페이지를 파싱하여 MID 목록을 얻는다.
             3. 각 MID에 대해 sizeget API로 페이지 수를 조회한다.
 
-        다권본 구조:
-            BID(簿冊ID)가 여러 MID(件名ID)를 포함할 수 있다.
-            id_0은 簿冊 전체(BID), id_1~은 개별 件名(MID).
-            개별 MID만 반환한다 (BID는 전체를 감싸는 껍데기).
+        (B) 신형 페이지 (/file/) — img_ids + IIIF 기반:
+            1. raw_data["img_ids"]에서 /img/{id} 목록을 읽는다.
+            2. 각 ID의 IIIF manifest를 조회하여 캔버스(페이지) 수를 얻는다.
 
         왜 이렇게 하는가:
-            사용자가 다운로드할 권을 선택할 수 있도록
-            먼저 목록과 페이지 수를 보여준다.
+            국립공문서관이 2024년경 신형 /file/ 페이지로 이전하면서
+            기존 BID/MID 체계 대신 IIIF manifest를 제공하기 시작했다.
+            구형 BID가 없는 신형 페이지에서도 다운로드가 동작해야 한다.
         """
         bid = raw_data.get("BID")
+        img_ids = raw_data.get("img_ids", [])
+
+        # (B) 신형: img_ids가 있으면 IIIF manifest 기반 조회
+        if not bid and img_ids:
+            return await self._list_assets_iiif(img_ids, raw_data)
+
+        # (A) 구형: BID 기반 listPhoto 조회
         if not bid:
             return []
 
@@ -190,6 +199,54 @@ class ArchivesJpFetcher(BaseFetcher):
 
         return assets
 
+    async def _list_assets_iiif(
+        self,
+        img_ids: list[str],
+        raw_data: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """신형 /file/ 페이지의 /img/{id} 목록에서 IIIF manifest를 조회하여 에셋 목록을 만든다.
+
+        왜 이렇게 하는가:
+            신형 페이지는 BID/MID 대신 /img/{id}와 IIIF manifest를 사용한다.
+            각 img_id의 manifest.json에서 캔버스 수(=페이지 수)를 얻어
+            사용자에게 다운로드할 권(volume)을 선택하게 한다.
+        """
+        title = raw_data.get("title", "")
+        assets = []
+
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+            for i, img_id in enumerate(img_ids):
+                manifest_url = (
+                    f"{_ARCHIVES_BASE}/api/iiif/{img_id}/manifest.json"
+                )
+                try:
+                    resp = await client.get(manifest_url)
+                    resp.raise_for_status()
+                    manifest = resp.json()
+
+                    # IIIF Presentation API 2.x: sequences[0].canvases
+                    sequences = manifest.get("sequences", [])
+                    canvases = sequences[0].get("canvases", []) if sequences else []
+                    page_count = len(canvases)
+
+                    # 라벨: manifest의 label 또는 "제목 + 번호"
+                    label = manifest.get("label", f"{title}{i + 1}" if title else str(img_id))
+                except Exception as e:
+                    logger.warning("IIIF manifest 조회 실패 (%s): %s", img_id, e)
+                    page_count = 0
+                    label = f"{title}{i + 1}" if title else str(img_id)
+
+                assets.append({
+                    "id": img_id,
+                    "asset_id": img_id,
+                    "label": label,
+                    "page_count": page_count,
+                    "file_size": 0,
+                    "download_type": "iiif",
+                })
+
+        return assets
+
     async def download_asset(
         self,
         asset_info: dict[str, Any],
@@ -198,9 +255,16 @@ class ArchivesJpFetcher(BaseFetcher):
     ) -> Path:
         """개별 JPEG 이미지를 다운로드하여 PDF로 합친다.
 
-        동작:
+        두 가지 다운로드 경로를 지원한다:
+
+        (A) 구형 (download_type="jpeg_pages") — sizeget + jp2jpeg API:
             1. sizeget API로 총 페이지 수 확인
             2. 각 페이지를 jp2jpeg API로 JPEG 다운로드
+            3. fpdf2로 JPEG들을 하나의 PDF로 결합
+
+        (B) 신형 (download_type="iiif") — IIIF manifest:
+            1. /api/iiif/{id}/manifest.json에서 캔버스 목록 조회
+            2. 각 캔버스의 이미지 리소스 URL로 JPEG 다운로드
             3. fpdf2로 JPEG들을 하나의 PDF로 결합
 
         왜 JPEG → PDF 변환인가:
@@ -208,6 +272,95 @@ class ArchivesJpFetcher(BaseFetcher):
             PDF는 페이지 단위 관리가 자연스럽다.
             fpdf2는 프로젝트 의존성에 포함되어 있다.
         """
+        download_type = asset_info.get("download_type", "jpeg_pages")
+
+        if download_type == "iiif":
+            return await self._download_asset_iiif(asset_info, dest_dir, progress_callback)
+
+        return await self._download_asset_legacy(asset_info, dest_dir, progress_callback)
+
+    async def _download_asset_iiif(
+        self,
+        asset_info: dict[str, Any],
+        dest_dir: Path,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> Path:
+        """IIIF manifest에서 이미지를 다운로드하여 PDF로 합친다.
+
+        왜 이렇게 하는가:
+            신형 /file/ 페이지는 구형 sizeget/jp2jpeg API를 제공하지 않는다.
+            대신 IIIF Image API를 통해 이미지를 제공하므로,
+            manifest에서 각 캔버스의 이미지 URL을 추출하여 다운로드한다.
+        """
+        from fpdf import FPDF
+
+        img_id = asset_info["asset_id"]
+        label = asset_info.get("label", str(img_id))
+        dest_dir = Path(dest_dir)
+
+        # 1. IIIF manifest에서 이미지 URL 목록 추출
+        manifest_url = f"{_ARCHIVES_BASE}/api/iiif/{img_id}/manifest.json"
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+            resp = await client.get(manifest_url)
+            resp.raise_for_status()
+            manifest = resp.json()
+
+        image_urls = _extract_iiif_image_urls(manifest)
+        if not image_urls:
+            raise ValueError(
+                f"IIIF manifest에서 이미지를 찾을 수 없습니다: {img_id}\n"
+                f"해결책: 국립공문서관 웹사이트에서 직접 다운로드하세요."
+            )
+
+        page_count = len(image_urls)
+
+        # 2. 각 이미지 다운로드
+        jpeg_paths: list[Path] = []
+        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+            for page_num, img_url in enumerate(image_urls, 1):
+                resp = await client.get(img_url)
+                resp.raise_for_status()
+
+                jpeg_path = dest_dir / f"{img_id}_p{page_num:04d}.jpg"
+                jpeg_path.write_bytes(resp.content)
+                jpeg_paths.append(jpeg_path)
+
+                if progress_callback:
+                    progress_callback(page_num, page_count)
+
+        # 3. JPEG → PDF 결합
+        pdf = FPDF(unit="pt")
+        for jpeg_path in jpeg_paths:
+            from PIL import Image
+
+            with Image.open(jpeg_path) as img:
+                w_px, h_px = img.size
+            # 150dpi 기준으로 변환 (고서 스캔 해상도)
+            w_pt = w_px * 72 / 150
+            h_pt = h_px * 72 / 150
+            pdf.add_page(format=(w_pt, h_pt))
+            pdf.image(str(jpeg_path), x=0, y=0, w=w_pt, h=h_pt)
+
+        safe_label = _sanitize_filename(label)
+        pdf_path = dest_dir / f"{safe_label}.pdf"
+        pdf.output(str(pdf_path))
+
+        logger.info(
+            "PDF 생성 완료 (IIIF): %s (%d페이지, %.1fMB)",
+            pdf_path.name,
+            page_count,
+            pdf_path.stat().st_size / 1024 / 1024,
+        )
+
+        return pdf_path
+
+    async def _download_asset_legacy(
+        self,
+        asset_info: dict[str, Any],
+        dest_dir: Path,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> Path:
+        """구형 sizeget + jp2jpeg API로 이미지를 다운로드하여 PDF로 합친다."""
         from fpdf import FPDF
 
         mid = asset_info["asset_id"]
@@ -510,6 +663,28 @@ def _parse_detail_page(html_text: str, source_url: str) -> dict[str, Any]:
         if file_id_match:
             data.setdefault("ID", file_id_match.group(1))
 
+        # 신형 /file/ 페이지: /img/{id} 링크에서 개별 권(volume) ID 추출
+        # 왜 이렇게 하는가:
+        #   신형 페이지는 BID/MID 대신 /img/{id} 링크로 개별 권을 가리킨다.
+        #   이 ID들은 IIIF manifest 조회에 사용된다 (/api/iiif/{id}/manifest.json).
+        #   BID가 없는 경우 이 img_ids가 에셋 다운로드의 핵심 식별자가 된다.
+        if "BID" not in data:
+            # /file/{id} 자체의 ID — 상위 항목이므로 하위 권 목록에서 제외
+            file_self_id = data.get("ID")
+            img_links = tree.xpath('//a[contains(@href, "/img/")]/@href')
+            img_ids = []
+            seen = set()
+            for href in img_links:
+                m = re.search(r"/img/(\d+)", href)
+                if m and m.group(1) not in seen:
+                    # 상위 항목 자신은 건너뜀 (개별 권만 수집)
+                    if m.group(1) == file_self_id:
+                        continue
+                    seen.add(m.group(1))
+                    img_ids.append(m.group(1))
+            if img_ids:
+                data["img_ids"] = img_ids
+
     except Exception:
         # HTML 파싱 실패 시 기본 데이터만 반환
         pass
@@ -729,6 +904,38 @@ def _extract_param(url: str, param: str) -> str | None:
     """URL에서 특정 쿼리 파라미터 값을 추출한다."""
     match = re.search(rf"[?&]{param}=([^&]+)", url)
     return match.group(1) if match else None
+
+
+# --- IIIF 유틸리티 ---
+
+
+def _extract_iiif_image_urls(manifest: dict[str, Any]) -> list[str]:
+    """IIIF Presentation API 2.x manifest에서 이미지 URL 목록을 추출한다.
+
+    왜 이렇게 하는가:
+        신형 /file/ 페이지는 IIIF manifest를 제공한다.
+        각 캔버스(canvas)의 첫 번째 이미지 리소스 URL을 추출하여
+        다운로드에 사용한다.
+
+    구조: manifest → sequences[0] → canvases[] → images[0] → resource → @id
+    """
+    urls: list[str] = []
+    try:
+        sequences = manifest.get("sequences", [])
+        if not sequences:
+            return urls
+        canvases = sequences[0].get("canvases", [])
+        for canvas in canvases:
+            images = canvas.get("images", [])
+            if not images:
+                continue
+            resource = images[0].get("resource", {})
+            img_url = resource.get("@id", "")
+            if img_url:
+                urls.append(img_url)
+    except (IndexError, KeyError, TypeError) as e:
+        logger.warning("IIIF manifest 이미지 URL 추출 실패: %s", e)
+    return urls
 
 
 # --- 에셋 다운로드 유틸리티 ---

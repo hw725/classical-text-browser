@@ -255,20 +255,24 @@ _URL_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"https?://(www\.)?digital\.archives\.go\.jp/"), "japan_national_archives"),
     # KORCIS (한국고문헌종합목록) — 국립중앙도서관 내
     (re.compile(r"https?://(www\.)?nl\.go\.kr/korcis/"), "korcis"),
+    # 국립중앙도서관 원문 뷰어 — KORCIS 소속 자료의 이미지 열람
+    (re.compile(r"https?://viewer\.nl\.go\.kr/"), "korcis"),
     # ── 범용 LLM 파서 대상 사이트 ──
     # 전용 파서 없이 markdown.new + LLM으로 서지정보를 추출한다.
     # 일본국문학연구자료관 (국서종합목록)
     (re.compile(r"https?://(www\.)?kokusho\.nijl\.ac\.jp/"), "generic_llm"),
-    # 해외한국학자료센터 (고려대)
-    (re.compile(r"https?://kostma\.korea\.ac\.kr/"), "generic_llm"),
+    # 해외한국학자료센터 (고려대) — 전용 파서
+    (re.compile(r"https?://kostma\.korea\.ac\.kr/"), "kostma"),
     # 한국학자료센터 (한국학중앙연구원)
     (re.compile(r"https?://kostma\.aks\.ac\.kr/"), "generic_llm"),
     # 국사편찬위원회 한국사데이터베이스
     (re.compile(r"https?://db\.history\.go\.kr/"), "generic_llm"),
     # 한국고전번역원 한국고전종합DB
     (re.compile(r"https?://db\.itkc\.or\.kr/"), "generic_llm"),
-    # 서울대학교 규장각한국학연구원
-    (re.compile(r"https?://kyudb\.snu\.ac\.kr/"), "generic_llm"),
+    # 한국학중앙연구원 장서각 — 전용 파서
+    (re.compile(r"https?://jsg\.aks\.ac\.kr/"), "jsg"),
+    # 서울대학교 규장각한국학연구원 — 전용 파서
+    (re.compile(r"https?://kyudb\.snu\.ac\.kr/"), "kyujanggak"),
 ]
 
 
@@ -286,8 +290,10 @@ def detect_parser_from_url(url: str) -> str | None:
             - digital.archives.go.jp → "japan_national_archives"
             - nl.go.kr/korcis/ → "korcis"
         2순위 — 범용 LLM 파서 (등록된 사이트):
-            - kokusho.nijl.ac.jp, kostma.korea.ac.kr, kostma.aks.ac.kr,
-              db.history.go.kr, db.itkc.or.kr, kyudb.snu.ac.kr → "generic_llm"
+            - jsg.aks.ac.kr → "jsg"
+            - kyudb.snu.ac.kr → "kyujanggak"
+            - kokusho.nijl.ac.jp, kostma.aks.ac.kr,
+              db.history.go.kr, db.itkc.or.kr → "generic_llm"
         3순위 — 폴백:
             - http/https로 시작하는 모든 URL → "generic_llm"
 
@@ -324,8 +330,13 @@ def get_supported_sources() -> list[dict[str, str]]:
         # ── 전용 파서 (높은 정확도) ──
         {
             "parser_id": "ndl",
+            "url_example": "https://dl.ndl.go.jp/pid/1193135",
+            "description": "NDL Digital Collections (서지+PDF 다운로드)",
+        },
+        {
+            "parser_id": "ndl",
             "url_example": "https://ndlsearch.ndl.go.jp/books/R...",
-            "description": "国立国会図書館サーチ (NDL Search)",
+            "description": "NDL Search (서지정보만, PDF 다운로드 불가)",
         },
         {
             "parser_id": "japan_national_archives",
@@ -337,16 +348,31 @@ def get_supported_sources() -> list[dict[str, str]]:
             "url_example": "https://www.nl.go.kr/korcis/...",
             "description": "한국고문헌종합목록 (KORCIS)",
         },
+        {
+            "parser_id": "korcis",
+            "url_example": "https://viewer.nl.go.kr/main.wviewer?cno=KOL...",
+            "description": "국립중앙도서관 원문 뷰어 (서지 + 이미지 다운로드)",
+        },
+        {
+            "parser_id": "kostma",
+            "url_example": "http://kostma.korea.ac.kr/viewer/viewerDes?uci=...",
+            "description": "해외한국학자료센터 (KOSTMA, 고려대)",
+        },
+        {
+            "parser_id": "jsg",
+            "url_example": "https://jsg.aks.ac.kr/dir/view?dataId=JSG_K2-163",
+            "description": "한국학중앙연구원 장서각 (서지 + 이미지 다운로드)",
+        },
+        {
+            "parser_id": "kyujanggak",
+            "url_example": "https://kyudb.snu.ac.kr/book/view.do?book_cd=GK12715_00",
+            "description": "서울대학교 규장각한국학연구원 (서지 + 이미지 다운로드)",
+        },
         # ── 범용 LLM 추출 (markdown.new + LLM) ──
         {
             "parser_id": "generic_llm",
             "url_example": "https://kokusho.nijl.ac.jp/...",
             "description": "일본국문학연구자료관 (국서종합목록)",
-        },
-        {
-            "parser_id": "generic_llm",
-            "url_example": "https://kostma.korea.ac.kr/...",
-            "description": "해외한국학자료센터",
         },
         {
             "parser_id": "generic_llm",
@@ -363,11 +389,7 @@ def get_supported_sources() -> list[dict[str, str]]:
             "url_example": "https://db.itkc.or.kr/...",
             "description": "한국고전번역원 한국고전종합DB",
         },
-        {
-            "parser_id": "generic_llm",
-            "url_example": "https://kyudb.snu.ac.kr/...",
-            "description": "서울대학교 규장각한국학연구원",
-        },
+        # kyudb.snu.ac.kr은 전용 파서("kyujanggak")로 이동 — 위 항목 참조
         {
             "parser_id": "generic_llm",
             "url_example": "https://example.com/catalog/...",

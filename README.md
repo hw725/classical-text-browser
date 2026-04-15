@@ -126,7 +126,7 @@ src/
 ├── text_import/  # 텍스트 가져오기 (HWP 표점분리 + PDF 참조텍스트)
 ├── llm/          # LLM 라우터 + 프로바이더
 ├── ocr/          # OCR 엔진 (NDL古典籍OCR Full/Lite + NDLOCR + LLM 비전 + PaddleOCR)
-├── parsers/      # 서지정보 파서
+├── parsers/      # 서지정보 파서 (NDL, 국립공문서관, KORCIS, KOSTMA, 장서각, 규장각 + 범용 LLM)
 ├── cli/          # CLI 도구
 └── app/          # 웹 앱 (FastAPI + static)
 schemas/

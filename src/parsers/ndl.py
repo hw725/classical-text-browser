@@ -143,17 +143,17 @@ class NdlFetcher(BaseFetcher):
         m = re.search(r"dl\.ndl\.go\.jp/(?:info:ndljp/)?pid/(\d+)", url)
         if m:
             pid = m.group(1)
-            # PID를 검색어로 사용하여 관련 서지 레코드를 찾는다
-            results = await self.search(pid, cnt=1)
-            if results:
-                raw_data = results[0]["raw"]
-            else:
-                raw_data = {}
-
-            # IIIF manifest에서 추가 메타데이터 보강 + PID 저장
-            # 왜: list_assets()에서 PID로 IIIF 이미지를 다운로드하기 위해.
-            # 실패해도 OpenSearch 결과는 그대로 유지한다.
+            raw_data: dict[str, Any] = {}
             raw_data["_ndl_pid"] = pid
+
+            # 1단계: IIIF manifest에서 메타데이터 추출 (신뢰할 수 있는 소스)
+            # 왜 IIIF 우선인가:
+            #     PID는 디지털 콘텐츠 ID이지 서지 ID가 아니다.
+            #     PID를 OpenSearch 검색어로 쓰면 엉뚱한 자료가 1위에 올 수 있다.
+            #     IIIF manifest는 해당 PID의 실제 자료 메타데이터를 담고 있으므로
+            #     항상 올바른 서지정보를 제공한다.
+            iiif_meta: dict[str, Any] = {}
+            iiif_bib_id: str | None = None
             try:
                 from parsers.iiif_utils import extract_iiif_metadata, fetch_iiif_manifest
 
@@ -162,11 +162,42 @@ class NdlFetcher(BaseFetcher):
                 iiif_meta = extract_iiif_metadata(manifest)
                 raw_data["_iiif_metadata"] = iiif_meta
                 raw_data["_iiif_manifest_url"] = manifest_url
-                # IIIF 메타데이터로 누락 필드 보강 (OpenSearch에 없는 경우)
-                if not raw_data.get("dc:title") and iiif_meta.get("title"):
-                    raw_data["dc:title"] = iiif_meta["title"]
+
+                # IIIF metadata에서 Bibliographic ID 추출
+                # 왜: NDLBibID로 OpenSearch를 재검색하면 정확한 서지 레코드를 얻는다.
+                for entry in manifest.get("metadata", []):
+                    label = entry.get("label", "")
+                    if label == "Bibliographic ID":
+                        iiif_bib_id = entry.get("value", "")
+                        break
             except Exception as e:
                 logger.warning("IIIF manifest 가져오기 실패 (PID=%s): %s", pid, e)
+
+            # 2단계: NDLBibID가 있으면 정확한 서지 레코드 조회
+            # 왜: IIIF metadata는 title/creator 정도만 있지만,
+            #     OpenSearch에는 분류(NDLC/NDC), 주제어, 판종 등 풍부한 필드가 있다.
+            #     NDLBibID로 검색하면 정확히 1건이 매칭된다.
+            if iiif_bib_id:
+                try:
+                    bib_data = await self.fetch_detail(iiif_bib_id)
+                    raw_data.update(bib_data)
+                except Exception as e:
+                    logger.warning(
+                        "NDLBibID %s로 OpenSearch 조회 실패 (PID=%s): %s",
+                        iiif_bib_id, pid, e,
+                    )
+
+            # 3단계: IIIF 메타데이터로 누락/불일치 필드 보강
+            # 왜: OpenSearch 조회가 실패했거나 NDLBibID가 없는 경우에도
+            #     IIIF manifest의 기본 서지정보는 반영해야 한다.
+            if iiif_meta.get("title") and not raw_data.get("dc:title"):
+                raw_data["dc:title"] = iiif_meta["title"]
+            if iiif_meta.get("creator") and not raw_data.get("dc:creator"):
+                raw_data["dc:creator"] = iiif_meta["creator"]
+            if iiif_meta.get("publisher") and not raw_data.get("dc:publisher"):
+                raw_data["dc:publisher"] = iiif_meta["publisher"]
+            if iiif_meta.get("date") and not raw_data.get("dcterms:issued"):
+                raw_data["dcterms:issued"] = iiif_meta["date"]
 
             if not raw_data.get("dc:title"):
                 raise FileNotFoundError(

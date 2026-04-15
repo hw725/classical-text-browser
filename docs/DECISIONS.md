@@ -1488,6 +1488,48 @@ NDL古典籍OCR 풀 버전(ndlkotenocr_cli ver.3)은 TrOCR 기반으로
 
 ---
 
+## D-045: 서지 파서 확장 — 국립공문서관 IIIF + KOSTMA + 장서각 + 규장각
+
+**날짜**: 2026-04-15
+
+**맥락**: 기존 파서 체계(NDL, 국립공문서관, KORCIS, 범용 LLM)에서
+국립공문서관의 신형 `/file/` 페이지가 PDF 다운로드 실패했고,
+한국 고전적 주요 DB(KOSTMA, 장서각, 규장각)는 범용 LLM 폴백만 가능하여
+이미지 다운로드가 불가능했다.
+
+**결정**: 4건의 파서 작업을 수행한다.
+
+| 작업 | 파서 | 변경 유형 | 핵심 |
+|------|------|----------|------|
+| 국립공문서관 IIIF 지원 | archives_jp | 기존 수정 | 신형 `/file/` 페이지의 `/img/{id}` → IIIF manifest 기반 다운로드 |
+| KOSTMA 전용 파서 | kostma (신규) | 신규 추가 | 뷰어 팝업 서지 + bookInfos JS → JPEG → PDF |
+| 장서각 전용 파서 | jsg (신규) | 신규 추가 | dir/view 테이블 서지 + ajaxThumbs API → JPEG → PDF |
+| 규장각 전용 파서 | kyujanggak (신규) | 신규 추가 | book/view.do 서지 + viewImgList.do API → JPEG → PDF |
+
+**국립공문서관 수정 상세**:
+- 원인: 신형 페이지에 BID/MID가 없어 `list_assets()`가 빈 목록 반환
+- 해법: `_parse_detail_page`에서 `/img/{id}` 링크 → `img_ids` 추출,
+  `list_assets`에 IIIF manifest 경로 추가, `download_asset`에 IIIF 분기 추가
+- 구형(BID/sizeget/jp2jpeg)과 신형(IIIF)을 `download_type` 필드로 분기
+
+**공통 아키텍처 원칙** (platform-v7.md §7.3 준수):
+- BaseFetcher + BaseMapper 쌍으로 구현, register_parser()로 자동 등록
+- `supports_asset_download = True`, `list_assets()` + `download_asset()` 구현
+- JPEG → PDF 변환은 fpdf2 + PIL 공통 패턴
+- URL 자동 판별: `_URL_PATTERNS`에 등록, generic_llm → 전용 파서로 승격
+
+**대안 검토**:
+- 범용 LLM 폴백으로 충분한가? → 불충분. JS 변수(bookInfos), 숨겨진 팝업, POST API 등
+  HTML 스크래핑 없이는 이미지 URL을 추출할 수 없다.
+- 규장각 SSL 문제 → `verify=False` + ssl.SSLContext로 우회 (공공기관 인증서 문제)
+
+**파일 변경**:
+- 신규: `src/parsers/kostma.py`, `src/parsers/jsg.py`, `src/parsers/kyujanggak.py`
+- 수정: `src/parsers/archives_jp.py` (IIIF 경로 추가),
+  `src/parsers/__init__.py`, `src/parsers/base.py`, `src/parsers/registry.json`
+
+---
+
 ### 배포·설치
 - [ ] Google Drive + .git 충돌 회피 가이드 → Phase 10 이후
 - [ ] 비개발자용 Git 번들링 또는 Git-free 모드 → Phase 10 이후
