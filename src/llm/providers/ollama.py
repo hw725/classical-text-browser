@@ -48,7 +48,15 @@ class OllamaProvider(BaseLlmProvider):
             return False
 
     async def list_models(self) -> list[dict]:
-        """설치된 모델 목록 조회. GUI 드롭다운에서 사용."""
+        """설치된 모델 목록 조회. GUI 드롭다운에서 사용.
+
+        비전 지원 판별:
+            Ollama /api/show 의 capabilities 배열에 "vision"이 있으면 비전 모델.
+            이전에는 모델 이름의 키워드("vl", "vision", "llava")로 판별했으나,
+            gemma4 등 이름에 키워드가 없는 멀티모달 모델을 놓치는 문제가 있었다.
+            /api/show는 GGUF 메타데이터에서 vision.block_count를 확인하므로
+            모델 이름과 무관하게 정확히 판별한다.
+        """
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(f"{self._url}/api/tags")
             data = resp.json()
@@ -56,14 +64,68 @@ class OllamaProvider(BaseLlmProvider):
         models = []
         for m in data.get("models", []):
             name = m.get("name", "")
+            has_vision = await self._check_vision_capability(name)
             models.append({
                 "name": name,
                 "size": m.get("size", "N/A"),
-                "vision": any(
-                    kw in name.lower() for kw in ["vl", "vision", "llava"]
-                ),
+                "vision": has_vision,
             })
         return models
+
+    async def _check_vision_capability(self, model_name: str) -> bool:
+        """개별 모델의 비전 지원 여부를 /api/show로 확인한다.
+
+        왜 /api/show를 쓰는가:
+            /api/tags는 모델 목록만 반환하고 capability 정보가 없다.
+            /api/show는 capabilities 배열(["completion","vision"] 등)을 반환하며,
+            이 배열에 "vision"이 있으면 비전 프로젝터가 로드된 모델이다.
+            capabilities가 없는 구버전 Ollama에서는 모델 이름 키워드로 폴백한다.
+        """
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.post(
+                    f"{self._url}/api/show",
+                    json={"name": model_name},
+                )
+                if resp.status_code != 200:
+                    # 실패 시 이름 기반 폴백
+                    return self._name_based_vision_check(model_name)
+                info = resp.json()
+
+            # 1순위: capabilities 배열 (Ollama PR #10066 이후)
+            caps = info.get("capabilities", [])
+            if caps:
+                return "vision" in caps
+
+            # 2순위: details.families에 clip 계열이 있으면 비전
+            families = info.get("details", {}).get("families", [])
+            if any(f in ("clip", "mllama") for f in families):
+                return True
+
+            # 3순위: model_info에 vision.* 키가 있으면 비전
+            model_info = info.get("model_info", {})
+            if any(k.startswith("vision.") for k in model_info):
+                return True
+
+            # 최후 폴백: 이름 키워드 (구버전 Ollama 호환)
+            return self._name_based_vision_check(model_name)
+
+        except (httpx.ConnectError, httpx.TimeoutException, Exception):
+            return self._name_based_vision_check(model_name)
+
+    @staticmethod
+    def _name_based_vision_check(model_name: str) -> bool:
+        """모델 이름으로 비전 지원을 추정한다 (폴백용).
+
+        /api/show를 사용할 수 없을 때만 호출된다.
+        gemma4 등 이름에 키워드가 없는 모델은 놓칠 수 있으므로,
+        가능한 한 /api/show 경로를 우선 사용해야 한다.
+        """
+        name_lower = model_name.lower()
+        return any(
+            kw in name_lower
+            for kw in ["vl", "vision", "llava", "gemma4", "pixtral"]
+        )
 
     async def call(self, prompt, *, system=None, response_format="text",
                    model=None, max_tokens=4096, purpose="text",

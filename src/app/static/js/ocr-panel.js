@@ -109,11 +109,26 @@ function _populateEngineSelect() {
 
   select.disabled = false;
 
+  // 엔진별 사용 가이드: 마우스 올리면 툴팁으로 표시
+  // 왜 필요한가: NDL 古典籍OCR 계열은 전체 페이지 분석에 최적화되어 있어
+  //   좁은 블록 crop에서는 라인 탐지 성능이 떨어진다.
+  //   사용자가 엔진 특성을 알고 선택할 수 있도록 안내한다.
+  const engineHints = {
+    "ndlkotenocr": "전체 페이지용. 블록이 페이지 대부분을 덮을 때 권장.",
+    "ndlkotenocr-full": "전체 페이지용 (TrOCR). 블록이 페이지 대부분을 덮을 때 권장.",
+    "ndlocr": "전체 페이지용. 블록이 페이지 대부분을 덮을 때 권장.",
+    "llm_vision": "블록 크기 무관. 좁은 영역도 정확. 네트워크 필요.",
+    "paddleocr": "블록 크기 무관. 좁은 영역도 정확. 현대문에 최적.",
+  };
+
   for (const eng of ocrState.engines) {
     const opt = document.createElement("option");
     opt.value = eng.engine_id;
     opt.textContent = eng.display_name + (eng.available ? "" : " (사용 불가)");
     opt.disabled = !eng.available;
+    if (engineHints[eng.engine_id]) {
+      opt.title = engineHints[eng.engine_id];
+    }
     if (eng.engine_id === ocrState.defaultEngine) {
       opt.selected = true;
     }
@@ -681,21 +696,19 @@ async function _ensureLayoutSaved(docId, partId, pageNum) {
   };
 
   const url = `/api/documents/${docId}/pages/${pageNum}/layout?part_id=${partId}`;
-  try {
-    const res = await fetch(url, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      console.warn(
-        "OCR 전 레이아웃 자동 저장 실패:",
-        errData.error || "unknown",
-      );
-    }
-  } catch (e) {
-    console.warn("OCR 전 레이아웃 자동 저장 실패:", e);
+  // 저장 실패 시 OCR을 중단해야 한다.
+  // 왜: 저장이 실패하면 백엔드가 디스크의 옛 L3 데이터로 crop하여
+  //      사용자가 편집한 블록과 다른 영역을 OCR하게 된다.
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(
+      `레이아웃 저장 실패 (OCR 중단): ${errData.error || `HTTP ${res.status}`}`
+    );
   }
 }
 

@@ -181,6 +181,35 @@ class OcrPipeline:
         layout_h = layout.get("image_height", 0)
         actual_w, actual_h = page_image.size
 
+        # 방어 로직: image_width가 0이거나 누락된 경우,
+        # PDF의 1x 뷰포트 크기로 추정한다.
+        # 왜 필요한가: 프론트엔드는 PDF.js viewport(scale=1.0) 기준으로
+        #   bbox를 저장하므로, image_width가 누락되면 스케일링이 건너뛰어져
+        #   1x 좌표로 2x 이미지를 crop하게 되어 엉뚱한 영역이 잘린다.
+        if (layout_w <= 0 or layout_h <= 0) and actual_w > 0:
+            # PDF에서 1x 뷰포트 크기를 얻어 layout 크기로 사용
+            pdf_vp_size = self._get_pdf_viewport_size(doc_id, page_number)
+            if pdf_vp_size:
+                layout_w, layout_h = pdf_vp_size
+                logger.warning(
+                    f"L3에 image_width 누락 — PDF 뷰포트로 추정: "
+                    f"{layout_w}×{layout_h} (실제 이미지: {actual_w}×{actual_h})"
+                )
+            else:
+                # PDF도 없으면 bbox 범위에서 추정 (최후 수단)
+                max_x = max((b.get("bbox", [0, 0, 0, 0])[2] for b in blocks), default=0)
+                max_y = max((b.get("bbox", [0, 0, 0, 0])[3] for b in blocks), default=0)
+                if max_x > 0 and max_x < actual_w * 0.8:
+                    # bbox 최대값이 실제 이미지 크기의 80% 미만이면
+                    # 스케일 불일치가 확실하므로 비율을 추정
+                    # 가장 흔한 케이스: PDF 2x (viewport = actual / 2)
+                    layout_w = actual_w // 2
+                    layout_h = actual_h // 2
+                    logger.warning(
+                        f"L3에 image_width 누락, PDF 뷰포트도 없음 — "
+                        f"bbox 범위에서 추정: {layout_w}×{layout_h}"
+                    )
+
         if layout_w > 0 and layout_h > 0 and (layout_w != actual_w or layout_h != actual_h):
             scale_x = actual_w / layout_w
             scale_y = actual_h / layout_h
@@ -191,19 +220,41 @@ class OcrPipeline:
             for block in blocks:
                 bbox = block.get("bbox")
                 if bbox and len(bbox) == 4:
+                    old_bbox = list(bbox)
                     block["bbox"] = [
                         round(bbox[0] * scale_x),
                         round(bbox[1] * scale_y),
                         round(bbox[2] * scale_x),
                         round(bbox[3] * scale_y),
                     ]
+                    logger.debug(
+                        f"  블록 {block.get('block_id', '?')}: "
+                        f"{old_bbox} → {block['bbox']}"
+                    )
+        elif layout_w > 0 and layout_w == actual_w:
+            logger.debug(
+                f"bbox 스케일링 불필요: L3 = 실제 = {actual_w}×{actual_h}"
+            )
 
         # ── 페이지 단위 OCR 분기 (ndlocr 등) ────────────────────
         # supports_page_level=True인 엔진은 페이지 전체를 한 번에 처리한다.
         # 조건:
-        #   - 엔진이 페이지 단위를 지원 (getattr로 방어: 기존 엔진에 속성 없어도 안전)
-        #   - 전체 블록 처리 (block_ids가 None). 개별 블록 재실행은 블록별로 처리.
-        if getattr(engine, 'supports_page_level', False) and block_ids is None:
+        #   - 엔진이 페이지 단위를 지원
+        #   - 전체 블록 처리 (block_ids가 None)
+        #   - 블록이 페이지의 70% 이상을 덮을 때만 사용
+        #
+        # 왜 커버리지 조건이 필요한가:
+        #   페이지 단위 OCR은 전체 페이지에서 라인을 탐지한 뒤 블록에 매칭한다.
+        #   블록이 페이지 일부만 덮으면 블록 밖의 텍스트가 가장 가까운 블록에
+        #   할당되어, 사용자가 선택하지 않은 영역의 글자가 결과에 섞인다.
+        #   블록 커버리지가 낮으면 블록별 crop 경로를 사용하여
+        #   각 블록 영역만 정확하게 잘라서 OCR한다.
+        use_page_level = (
+            getattr(engine, 'supports_page_level', False)
+            and block_ids is None
+            and self._blocks_cover_page(blocks, actual_w, actual_h, threshold=0.7)
+        )
+        if use_page_level:
             try:
                 page_bytes = self._page_image_to_bytes(page_image)
                 page_results = engine.recognize_page(
@@ -313,6 +364,85 @@ class OcrPipeline:
             **engine_kwargs,
         )
 
+    def _get_pdf_viewport_size(
+        self, doc_id: str, page_number: int,
+    ) -> Optional[tuple[int, int]]:
+        """PDF의 1x 뷰포트 크기를 반환한다.
+
+        왜 필요한가:
+            프론트엔드는 PDF.js viewport(scale=1.0) 기준으로 bbox를 저장한다.
+            L3에 image_width가 누락된 경우, PDF의 1x 뷰포트 크기를 알면
+            올바른 스케일 비율을 계산할 수 있다.
+            PyMuPDF의 page.rect가 PDF.js viewport(scale=1.0)과 동일한 크기다.
+            (PDF.js의 userUnit=1, PyMuPDF의 기본 단위 = 72 DPI = 1x)
+
+        반환: (width, height) 정수 튜플, PDF가 없으면 None
+        """
+        source_dir = (
+            Path(self.library_root) / "documents" / doc_id / "L1_source"
+        )
+        if not source_dir.exists():
+            return None
+
+        pdf_files = list(source_dir.glob("*.pdf"))
+        if not pdf_files:
+            return None
+
+        try:
+            import fitz
+            doc = fitz.open(str(pdf_files[0]))
+            page_idx = page_number - 1
+            if page_idx < 0 or page_idx >= len(doc):
+                doc.close()
+                return None
+            rect = doc[page_idx].rect
+            doc.close()
+            return (round(rect.width), round(rect.height))
+        except Exception:
+            return None
+
+    @staticmethod
+    def _blocks_cover_page(
+        blocks: list[dict],
+        page_w: int,
+        page_h: int,
+        threshold: float = 0.7,
+    ) -> bool:
+        """블록들이 페이지의 일정 비율 이상을 덮는지 확인한다.
+
+        왜 필요한가:
+            페이지 단위 OCR(recognize_page)은 전체 페이지를 스캔하므로,
+            블록이 일부만 덮으면 블록 밖 텍스트가 결과에 섞인다.
+            커버리지가 threshold 미만이면 블록별 crop 경로가 더 정확하다.
+
+        입력:
+            blocks: L3 블록 목록 (bbox 포함)
+            page_w, page_h: 페이지 이미지 크기 (실제 픽셀)
+            threshold: 최소 커버리지 비율 (0.0~1.0)
+        출력:
+            True면 페이지 단위 OCR 사용 가능, False면 블록별 crop 사용
+        """
+        if page_w <= 0 or page_h <= 0:
+            return False
+
+        page_area = page_w * page_h
+        block_area = 0
+        for b in blocks:
+            bbox = b.get("bbox")
+            if not bbox or len(bbox) != 4 or b.get("skip", False):
+                continue
+            w = abs(bbox[2] - bbox[0])
+            h = abs(bbox[3] - bbox[1])
+            block_area += w * h
+
+        coverage = block_area / page_area
+        if coverage < threshold:
+            logger.info(
+                f"블록 커버리지 {coverage:.1%} < {threshold:.0%} → "
+                f"페이지 단위 대신 블록별 crop OCR 사용"
+            )
+        return coverage >= threshold
+
     def _process_block(
         self,
         engine,
@@ -332,7 +462,13 @@ class OcrPipeline:
         if not bbox or len(bbox) != 4:
             raise OcrEngineError(f"유효하지 않은 bbox: {bbox}")
 
-        # 이미지 크롭
+        # 이미지 크롭 (디버그: 이미지 크기 대비 bbox 비율 확인)
+        img_w, img_h = page_image.size
+        logger.debug(
+            f"crop 블록 {block.get('block_id', '?')}: "
+            f"bbox={bbox}, image={img_w}×{img_h}, "
+            f"비율=({bbox[2]/img_w:.2%}, {bbox[3]/img_h:.2%})"
+        )
         cropped = crop_block(page_image, bbox)
 
         # 전처리

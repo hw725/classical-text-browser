@@ -612,8 +612,15 @@ class NdlkotenOcrEngine(BaseOcrEngine):
                         best_block_id = block.get("block_id")
 
             if best_block_id is None:
-                # 중심점이 어떤 블록에도 안 들어가면 가장 가까운 블록 선택
+                # 중심점이 어떤 블록에도 안 들어가면 가장 가까운 블록 선택.
+                # 단, 거리가 블록 크기의 50%를 초과하면 무시한다.
+                # 왜 임계값이 필요한가:
+                #   블록이 1~2개뿐이면 페이지 반대편의 텍스트까지
+                #   가장 가까운 블록에 강제 할당되어, 선택하지 않은
+                #   영역의 글자가 OCR 결과에 섞이는 문제가 발생한다.
                 min_dist = float("inf")
+                best_candidate_id = None
+                best_candidate_bbox = None
                 for block in valid_blocks:
                     bbox = block.get("bbox")
                     if not bbox or len(bbox) != 4:
@@ -621,7 +628,16 @@ class NdlkotenOcrEngine(BaseOcrEngine):
                     dist = self._distance_to_bbox(cx, cy, bbox)
                     if dist < min_dist:
                         min_dist = dist
-                        best_block_id = block.get("block_id")
+                        best_candidate_id = block.get("block_id")
+                        best_candidate_bbox = bbox
+
+                # 거리 임계값: 가장 가까운 블록의 대각선 길이의 50%
+                if best_candidate_id and best_candidate_bbox:
+                    bw = abs(best_candidate_bbox[2] - best_candidate_bbox[0])
+                    bh = abs(best_candidate_bbox[3] - best_candidate_bbox[1])
+                    diag = (bw ** 2 + bh ** 2) ** 0.5
+                    if min_dist <= diag * 0.5:
+                        best_block_id = best_candidate_id
 
             if best_block_id:
                 result.setdefault(best_block_id, []).append(line)
