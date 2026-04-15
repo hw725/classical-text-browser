@@ -24,7 +24,16 @@ class OllamaProvider(BaseLlmProvider):
     display_name = "Ollama"
     supports_image = True
 
-    # 용도별 기본 모델 — gemma4:e4b (멀티모달, 텍스트+비전 통합)
+    # 용도별 기본 모델
+    # 일반 텍스트/비전: gemma4:e4b (로컬, 멀티모달)
+    # JSON 구조화 출력(표점/주석): 소형 로컬 모델은 품질이 떨어지므로
+    #   클라우드 프록시 모델을 우선 사용한다.
+    #   클라우드 프록시가 없으면 gemma4:e4b로 폴백.
+    #
+    # 왜 표점/주석은 별도 모델인가:
+    #   표점(구두점)은 고전 한문의 문맥을 이해해야 정확하고,
+    #   JSON 배열 형식으로 출력해야 한다. gemma4:e4b(소형)로는
+    #   구두점 위치 정확도와 JSON 구조 준수율이 크게 떨어진다.
     DEFAULT_MODELS = {
         "text": "gemma4:e4b",
         "vision": "gemma4:e4b",
@@ -33,6 +42,11 @@ class OllamaProvider(BaseLlmProvider):
         "punctuation": "gemma4:e4b",
         "annotation": "gemma4:e4b",
     }
+
+    # JSON 구조화 출력에 소형 모델이 부적합한 용도 목록.
+    # 이 용도들은 LLM Router의 자동 폴백에서 Ollama를 건너뛰고
+    # 다음 프로바이더(Gemini 등)로 넘어가도록 한다.
+    SKIP_FOR_PURPOSES = {"punctuation", "annotation"}
 
     @property
     def _url(self) -> str:

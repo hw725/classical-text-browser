@@ -162,9 +162,24 @@ class LlmRouter:
 
         # 2단계: 사용 가능한 프로바이더만 우선순위대로 호출
         errors = []
+        skipped_providers = []
         for provider, ok in zip(self.providers, avail_results):
             if ok is not True:
                 continue
+
+            # 특정 purpose에서 소형 모델이 부적합한 프로바이더는 건너뛴다.
+            # 예: 표점(punctuation), 주석(annotation)은 JSON 구조화 출력이 필요하여
+            #      gemma4:e4b 같은 소형 로컬 모델로는 품질이 떨어진다.
+            #      Gemini, OpenAI 등 더 capable한 프로바이더로 넘긴다.
+            skip_purposes = getattr(provider, "SKIP_FOR_PURPOSES", set())
+            if purpose in skip_purposes:
+                skipped_providers.append(provider.provider_id)
+                _logger.info(
+                    f"purpose '{purpose}': {provider.provider_id} 건너뜀 "
+                    f"(SKIP_FOR_PURPOSES)"
+                )
+                continue
+
             try:
                 response = await provider.call(
                     prompt, system=system, response_format=response_format,
@@ -178,6 +193,26 @@ class LlmRouter:
                 self._avail_cache.pop(provider.provider_id, None)
                 errors.append(f"{provider.provider_id}: {e}")
                 continue
+
+        # 모든 프로바이더가 실패/건너뛰기된 경우,
+        # 건너뛴 프로바이더라도 시도한다 (완전 불가보다 저품질이 나음).
+        if skipped_providers:
+            _logger.warning(
+                f"purpose '{purpose}': capable 프로바이더 없음, "
+                f"건너뛴 {skipped_providers}로 폴백 시도"
+            )
+            for provider, ok in zip(self.providers, avail_results):
+                if ok is not True or provider.provider_id not in skipped_providers:
+                    continue
+                try:
+                    response = await provider.call(
+                        prompt, system=system, response_format=response_format,
+                        max_tokens=max_tokens, purpose=purpose, **kwargs,
+                    )
+                    self.usage_tracker.log(response, purpose=purpose)
+                    return response
+                except Exception as e:
+                    errors.append(f"{provider.provider_id}(폴백): {e}")
 
         raise LlmUnavailableError(
             "사용 가능한 LLM provider가 없습니다.\n"
@@ -234,9 +269,17 @@ class LlmRouter:
         )
 
         errors = []
+        skipped_providers = []
         for provider, ok in zip(self.providers, avail_results):
             if ok is not True:
                 continue
+
+            # purpose별 소형 모델 건너뛰기 (call()과 동일 로직)
+            skip_purposes = getattr(provider, "SKIP_FOR_PURPOSES", set())
+            if purpose in skip_purposes:
+                skipped_providers.append(provider.provider_id)
+                continue
+
             try:
                 response = await provider.call_stream(
                     prompt, system=system, response_format=response_format,
@@ -250,6 +293,22 @@ class LlmRouter:
                 self._avail_cache.pop(provider.provider_id, None)
                 errors.append(f"{provider.provider_id}: {e}")
                 continue
+
+        # 건너뛴 프로바이더로 폴백
+        if skipped_providers:
+            for provider, ok in zip(self.providers, avail_results):
+                if ok is not True or provider.provider_id not in skipped_providers:
+                    continue
+                try:
+                    response = await provider.call_stream(
+                        prompt, system=system, response_format=response_format,
+                        max_tokens=max_tokens, purpose=purpose,
+                        progress_callback=progress_callback, **kwargs,
+                    )
+                    self.usage_tracker.log(response, purpose=purpose)
+                    return response
+                except Exception as e:
+                    errors.append(f"{provider.provider_id}(폴백): {e}")
 
         raise LlmUnavailableError(
             "사용 가능한 LLM provider가 없습니다.\n"
