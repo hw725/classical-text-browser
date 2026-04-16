@@ -50,7 +50,7 @@ PDF/이미지 위에 **읽기 순서대로 번호가 매겨진 파란색 블록*
 
 ![번역 화면](docs/screenshots/06_translation.jpg)
 
-원문을 현대 한국어로 번역합니다. **Ollama(로컬), Anthropic, Gemini, OpenAI** 등 다양한 LLM에 번역 초안을 요청하고, 연구자가 직접 수정·확정합니다. LLM이 응답하지 않으면 자동으로 다음 프로바이더로 폴백합니다.
+원문을 현대 한국어로 번역합니다. **Ollama(로컬), OpenAI OAuth, Anthropic, Gemini, OpenAI** 등 다양한 LLM에 번역 초안을 요청하고, 연구자가 직접 수정·확정합니다. LLM이 응답하지 않으면 자동으로 다음 프로바이더로 폴백합니다.
 
 ### 6. 주석 — 태그, 사전형 주석, 인용 마크
 
@@ -91,7 +91,7 @@ PDF/이미지 위에 **읽기 순서대로 번호가 매겨진 파란색 블록*
 | **연구 도구** | 인용 마크, 사전 내보내기/가져오기, 이체자 사전, 교차 뷰어 |
 | **저장소 관리** | 원본·해석 분리 Git 저장소, 사다리형 그래프, JSON 스냅샷 |
 | **텍스트 가져오기** | HWP/HWPX 표점·현토 분리, PDF 텍스트 레이어 추출, LLM 원문/번역/주석 분리 |
-| **LLM 연동** | Ollama (gemma4:e4b), Gemini, OpenAI, Anthropic (4단 자동 폴백) |
+| **LLM 연동** | Ollama (gemma4:e4b), OpenAI OAuth, Gemini, OpenAI, Anthropic (5단 자동 폴백) |
 
 ## 빠른 시작
 
@@ -142,7 +142,7 @@ schemas/
 |------|------|------|
 | [**user-guide.md**](docs/user-guide.md) | 연구자 | 사용 방법 단계별 안내 |
 | [platform-v7.md](docs/platform-v7.md) | 개발자 | 전체 아키텍처 |
-| [DECISIONS.md](docs/DECISIONS.md) | 개발자 | 설계 결정 근거 (D-001~D-044) |
+| [DECISIONS.md](docs/DECISIONS.md) | 개발자 | 설계 결정 근거 (D-001~D-047) |
 | [core-schema-v1.3.md](docs/core-schema-v1.3.md) | 개발자 | 코어 엔티티 모델 |
 | [schemas/README.md](schemas/README.md) | 개발자 | JSON 스키마 구조 |
 | [architecture-diagrams.md](docs/architecture-diagrams.md) | 전체 | Mermaid 다이어그램 |

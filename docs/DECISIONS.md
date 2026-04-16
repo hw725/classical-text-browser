@@ -1560,6 +1560,35 @@ NDL古典籍OCR 풀 버전(ndlkotenocr_cli ver.3)은 TrOCR 기반으로
 
 ---
 
+## D-047: OpenAI OAuth 프록시 프로바이더 추가
+
+**날짜**: 2026-04-16
+
+**맥락**: API 키 없이 ChatGPT 계정으로 OpenAI 모델을 무료로 사용할 수 있는
+openai-oauth 프록시 연동 필요.
+
+**결정**: `OpenAiProvider`를 상속하는 `OpenAiOAuthProvider`를 생성하고,
+`_create_client()` 오버라이드로 `base_url`만 변경한다.
+포트 10531~10540을 자동 스캔하여 실행 중인 프록시에 연결한다.
+
+- 기존 `OpenAiProvider`에서 `_create_client()` 헬퍼를 추출하여 오버라이드 가능하게 변경
+- 폴백 순서: Ollama → OpenAI OAuth → Gemini → OpenAI → Anthropic (4단→5단)
+- 프록시 미실행 시 자동 스킵, 다음 프로바이더로 폴백
+
+**대안 검토**:
+- A. 기존 `OpenAiProvider`에 `base_url` 옵션 추가 → 프로바이더 분리가 더 깔끔하여 기각
+- B. 별도 독립 클래스로 구현 → 코드 중복 발생하여 기각
+- C. 상속 + `_create_client()` 오버라이드 → **채택**
+
+**파일 변경**:
+- `src/llm/providers/openai_oauth_provider.py`: 신규 프로바이더 클래스
+- `src/llm/providers/openai_provider.py`: `_create_client()` 헬퍼 추출
+- `src/llm/router.py`: 5단 폴백 순서 반영
+
+**영향**: 프록시 실행 시 API 비용 $0
+
+---
+
 ### 배포·설치
 - [ ] Google Drive + .git 충돌 회피 가이드 → Phase 10 이후
 - [ ] 비개발자용 Git 번들링 또는 Git-free 모드 → Phase 10 이후

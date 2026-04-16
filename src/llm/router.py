@@ -43,6 +43,7 @@ from .providers.base import (
 from .providers.gemini_provider import GeminiProvider
 from .providers.ollama import OllamaProvider
 from .providers.openai_provider import OpenAiProvider
+from .providers.openai_oauth_provider import OpenAiOAuthProvider
 from .usage_tracker import UsageTracker
 
 _logger = logging.getLogger(__name__)
@@ -64,9 +65,10 @@ class LlmRouter:
         # 우선순위 순서 (무료 → 저렴 → 중간 → 최후)
         self.providers: list[BaseLlmProvider] = [
             OllamaProvider(self.config),          # 1순위: 무료 (로컬 gemma4:e4b)
-            GeminiProvider(self.config),           # 2순위: 저렴 (비전 포함)
-            OpenAiProvider(self.config),           # 3순위: 중간 (비전 포함)
-            AnthropicProvider(self.config),       # 4순위: 최후 폴백
+            OpenAiOAuthProvider(self.config),     # 2순위: 무료 (ChatGPT OAuth 프록시)
+            GeminiProvider(self.config),           # 3순위: 저렴 (비전 포함)
+            OpenAiProvider(self.config),           # 4순위: 중간 (비전 포함)
+            AnthropicProvider(self.config),       # 5순위: 최후 폴백
         ]
 
         # is_available() 캐시: {provider_id: (결과, 타임스탬프)}
@@ -218,7 +220,8 @@ class LlmRouter:
             "사용 가능한 LLM provider가 없습니다.\n"
             "확인 사항:\n"
             "  1. Ollama: ollama serve (gemma4:e4b 모델 필요)\n"
-            "  2. API 키: .env에 GOOGLE_API_KEY, OPENAI_API_KEY 등\n\n"
+            "  2. OpenAI OAuth: npx openai-oauth (무료, ChatGPT 계정 필요)\n"
+            "  3. API 키: .env에 GOOGLE_API_KEY, OPENAI_API_KEY 등\n\n"
             "시도 결과:\n" + "\n".join(f"  - {e}" for e in errors)
         )
 
@@ -314,7 +317,8 @@ class LlmRouter:
             "사용 가능한 LLM provider가 없습니다.\n"
             "확인 사항:\n"
             "  1. Ollama: ollama serve (gemma4:e4b 모델 필요)\n"
-            "  2. API 키: .env에 GOOGLE_API_KEY, OPENAI_API_KEY 등\n\n"
+            "  2. OpenAI OAuth: npx openai-oauth (무료, ChatGPT 계정 필요)\n"
+            "  3. API 키: .env에 GOOGLE_API_KEY, OPENAI_API_KEY 등\n\n"
             "시도 결과:\n" + "\n".join(f"  - {e}" for e in errors)
         )
 
@@ -444,7 +448,7 @@ class LlmRouter:
         models = []
 
         # list_models()를 지원하는 프로바이더 ID
-        EXPANDABLE = {"ollama", "openai", "gemini"}
+        EXPANDABLE = {"ollama", "openai", "openai_oauth", "gemini"}
 
         for provider in self.providers:
             available = await provider.is_available()
@@ -453,7 +457,7 @@ class LlmRouter:
                 try:
                     provider_models = await provider.list_models()
                     for m in provider_models:
-                        is_free = provider.provider_id == "ollama"
+                        is_free = provider.provider_id in ("ollama", "openai_oauth")
                         models.append({
                             "provider": provider.provider_id,
                             "model": m["name"],
@@ -479,7 +483,7 @@ class LlmRouter:
                     "display": provider.display_name,
                     "cost": (
                         "free"
-                        if provider.provider_id == "ollama"
+                        if provider.provider_id in ("ollama", "openai_oauth")
                         else "paid"
                     ),
                     "vision": provider.supports_image,

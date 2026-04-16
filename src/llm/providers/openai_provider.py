@@ -21,6 +21,19 @@ class OpenAiProvider(BaseLlmProvider):
     supports_image = True
     DEFAULT_MODEL = "gpt-5-mini"  # 비용 효율적 기본 모델
 
+    def _create_client(self):
+        """AsyncOpenAI 클라이언트 생성.
+
+        서브클래스(예: OpenAiOAuthProvider)에서 오버라이드하여
+        base_url이나 인증 방식을 변경할 수 있다.
+        """
+        import openai
+
+        api_key = self.config.get_api_key("openai")
+        if not api_key:
+            raise LlmProviderError("OPENAI_API_KEY가 설정되지 않았습니다.")
+        return openai.AsyncOpenAI(api_key=api_key)
+
     # 주요 모델 목록 (2026-02 기준, 수동 관리)
     # API로 모델 목록을 가져올 수 있지만 불필요한 모델이 너무 많아서 수동 관리가 실용적.
     # 가격: 1K 토큰당 USD. 출처: https://platform.openai.com/docs/pricing
@@ -76,11 +89,7 @@ class OpenAiProvider(BaseLlmProvider):
         """OpenAI Chat Completions API로 텍스트 생성."""
         import openai
 
-        api_key = self.config.get_api_key("openai")
-        if not api_key:
-            raise LlmProviderError("OPENAI_API_KEY가 설정되지 않았습니다.")
-
-        client = openai.AsyncOpenAI(api_key=api_key)
+        client = self._create_client()
         selected_model = model or self.DEFAULT_MODEL
 
         messages = []
@@ -156,11 +165,7 @@ class OpenAiProvider(BaseLlmProvider):
         """
         import openai
 
-        api_key = self.config.get_api_key("openai")
-        if not api_key:
-            raise LlmProviderError("OPENAI_API_KEY가 설정되지 않았습니다.")
-
-        client = openai.AsyncOpenAI(api_key=api_key)
+        client = self._create_client()
         selected_model = model or self.DEFAULT_MODEL
 
         messages = []
@@ -243,11 +248,7 @@ class OpenAiProvider(BaseLlmProvider):
         """
         import openai
 
-        api_key = self.config.get_api_key("openai")
-        if not api_key:
-            raise LlmProviderError("OPENAI_API_KEY가 설정되지 않았습니다.")
-
-        client = openai.AsyncOpenAI(api_key=api_key)
+        client = self._create_client()
         selected_model = model or self.DEFAULT_MODEL
 
         b64_data = base64.b64encode(image).decode("ascii")
