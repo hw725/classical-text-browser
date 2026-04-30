@@ -808,7 +808,7 @@ async function _createFromFiles() {
   //   fetch API는 업로드 진행률(upload.onprogress)을 노출하지 않는다.
   //   큰 이미지 묶음 업로드 시 진행 상황을 사용자에게 보여 주기 위해 XHR을 사용한다.
   // 첫 표시는 indeterminate(펄스) — 매우 빠른 업로드여도 막대가 보인다.
-  _showProgress("업로드 준비 중...", null);
+  _showCreateDocProgress("업로드 준비 중...", null);
   if (createBtn) createBtn.disabled = true;
 
   try {
@@ -821,17 +821,17 @@ async function _createFromFiles() {
           const pct = Math.min(50, Math.round((loaded / total) * 50));
           const mb = (loaded / 1024 / 1024).toFixed(1);
           const totalMb = (total / 1024 / 1024).toFixed(1);
-          _showProgress(
+          _showCreateDocProgress(
             `업로드 중... ${mb} / ${totalMb} MB`,
             pct,
           );
         } else {
-          _showProgress("업로드 중...", null);
+          _showCreateDocProgress("업로드 중...", null);
         }
       },
       // onUploadDone: 업로드 끝, 서버 처리 시작
       () => {
-        _showProgress(
+        _showCreateDocProgress(
           "서버에서 PDF로 묶고 저장 중... (페이지가 많으면 1-2분 걸립니다)",
           null, // null = indeterminate (펄스 애니메이션)
         );
@@ -844,7 +844,7 @@ async function _createFromFiles() {
     }
 
     const data = result.data;
-    _showProgress(
+    _showCreateDocProgress(
       `문헌 '${data.document_id}' 생성 완료! (${data.asset_count || 0}개 파일)`,
       100,
     );
@@ -855,7 +855,7 @@ async function _createFromFiles() {
       _closeCreateDocDialog();
     }, 2500);
   } catch (err) {
-    _hideProgress();
+    _hideCreateDocProgress();
     if (statusEl) {
       statusEl.textContent = err.message;
       statusEl.style.color = "var(--error)";
@@ -960,7 +960,7 @@ async function _createFromUrl() {
   const url = urlInput ? urlInput.value.trim() : _previewData.bibliography?.digital_source?.source_url;
 
   // 진행 상태 표시
-  _showProgress("문헌 생성 중... (이미지 다운로드에 시간이 걸릴 수 있습니다)");
+  _showCreateDocProgress("문헌 생성 중... (이미지 다운로드에 시간이 걸릴 수 있습니다)");
   if (createBtn) createBtn.disabled = true;
 
   try {
@@ -988,7 +988,7 @@ async function _createFromUrl() {
     if (data.warning) {
       msg += `\n⚠ ${data.warning}`;
     }
-    _showProgress(msg);
+    _showCreateDocProgress(msg);
 
     // 사이드바 갱신 + 완료 알림
     await _refreshSidebar();
@@ -998,7 +998,7 @@ async function _createFromUrl() {
       _closeCreateDocDialog();
     }, 3000);
   } catch (err) {
-    _hideProgress();
+    _hideCreateDocProgress();
     if (statusEl) {
       statusEl.textContent = err.message;
       statusEl.style.color = "var(--error)";
@@ -1054,7 +1054,7 @@ async function _refreshSidebar() {
  *                            null이면 indeterminate(펄스) 모드 — 서버 처리 등
  *                            진행률을 알 수 없는 단계에 사용.
  */
-function _showProgress(text, pct) {
+function _showCreateDocProgress(text, pct) {
   const step1 = document.getElementById("create-doc-step1");
   const step2 = document.getElementById("create-doc-step2");
   const progress = document.getElementById("create-doc-progress");
@@ -1083,7 +1083,7 @@ function _showProgress(text, pct) {
 }
 
 
-function _hideProgress() {
+function _hideCreateDocProgress() {
   const step2 = document.getElementById("create-doc-step2");
   const progress = document.getElementById("create-doc-progress");
 
