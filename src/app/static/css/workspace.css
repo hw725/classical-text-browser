@@ -3373,14 +3373,41 @@ body.resizing-row {
   font-size: 11px;
 }
 
+/* 진행 상태 영역 — 다이얼로그 본문에서 시각적으로 분리되도록 패딩/배경 */
+.create-doc-progress {
+  padding: 24px 8px;
+}
+
+.create-doc-progress-header {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+
+.create-doc-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.create-doc-progress-pct {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
 /* 진행 상태 바 */
 .create-doc-progress-bar {
-  height: 10px;
-  background: var(--bg-primary);
+  height: 14px;
+  background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: 7px;
   overflow: hidden;
-  margin: 16px 0 8px;
+  margin: 0;
   overflow: hidden;
 }
 

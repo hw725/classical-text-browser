@@ -1055,11 +1055,14 @@ async function _refreshSidebar() {
  *                            진행률을 알 수 없는 단계에 사용.
  */
 function _showProgress(text, pct) {
+  const step1 = document.getElementById("create-doc-step1");
   const step2 = document.getElementById("create-doc-step2");
   const progress = document.getElementById("create-doc-progress");
   const progressText = document.getElementById("create-doc-progress-text");
   const progressFill = document.getElementById("create-doc-progress-fill");
+  const progressPct = document.getElementById("create-doc-progress-pct");
 
+  if (step1) step1.style.display = "none";
   if (step2) step2.style.display = "none";
   if (progress) progress.style.display = "";
   if (progressText) progressText.textContent = text;
@@ -1069,10 +1072,12 @@ function _showProgress(text, pct) {
       // indeterminate — 막대를 100%로 채우고 펄스 애니메이션을 켠다
       progressFill.style.width = "100%";
       progressFill.classList.add("create-doc-progress-pulse");
+      if (progressPct) progressPct.textContent = "";
     } else {
       progressFill.classList.remove("create-doc-progress-pulse");
       const clamped = Math.max(0, Math.min(100, Math.round(pct)));
       progressFill.style.width = `${clamped}%`;
+      if (progressPct) progressPct.textContent = `${clamped}%`;
     }
   }
 }

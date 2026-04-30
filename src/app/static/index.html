@@ -3964,19 +3964,26 @@
             <!-- 진행 상태 (생성 중 표시) -->
             <div
               id="create-doc-progress"
+              class="create-doc-progress"
               style="display: none"
             >
+              <div class="create-doc-progress-header">문헌 생성 중</div>
               <div class="create-doc-progress-bar">
                 <div
                   class="create-doc-progress-fill"
                   id="create-doc-progress-fill"
                 ></div>
               </div>
-              <div
-                id="create-doc-progress-text"
-                class="create-doc-progress-text"
-              >
-                준비 중...
+              <div class="create-doc-progress-meta">
+                <span
+                  id="create-doc-progress-text"
+                  class="create-doc-progress-text"
+                  >준비 중...</span
+                >
+                <span
+                  id="create-doc-progress-pct"
+                  class="create-doc-progress-pct"
+                ></span>
               </div>
             </div>
           </div>
@@ -4448,7 +4455,7 @@
     <script src="/static/js/bibliography.js?v=20260220c"></script>
     <script src="/static/js/interpretation.js?v=20260224e"></script>
     <script src="/static/js/entity-manager.js?v=20260220c"></script>
-    <script src="/static/js/create-document.js?v=20260430f"></script>
+    <script src="/static/js/create-document.js?v=20260430g"></script>
     <script src="/static/js/hwp-import.js?v=20260223b"></script>
     <script src="/static/js/ocr-panel.js?v=20260220c"></script>
     <script src="/static/js/alignment-view.js?v=20260223"></script>
