@@ -148,6 +148,14 @@ class OllamaProvider(BaseLlmProvider):
 
         purpose: 용도 힌트 ("text", "translation", "json")
                  → 용도별 기본 모델 자동 선택
+
+        reasoning 모델(qwen3.5:*, deepseek-v3.2:*, kimi-k2-thinking:* 등) 처리:
+            Ollama는 reasoning 모델의 사고 흐름을 `thinking` 필드로 분리 반환한다.
+            기본값으로 `think=False`를 보내 직접 답변을 유도한다.
+            이렇게 해야 num_predict 토큰이 전부 thinking에 소모되어
+            response가 빈 문자열로 돌아오는 사고를 막을 수 있다.
+            호출자가 `think=True`를 넘기면 reasoning을 활성화하고,
+            response가 비어 있으면 thinking을 폴백 텍스트로 사용한다.
         """
         selected_model = (
             model
@@ -163,6 +171,14 @@ class OllamaProvider(BaseLlmProvider):
             # 표점·주석 등 긴 JSON 응답이 중간에 잘린다.
             "options": {"num_predict": max_tokens},
         }
+        # think 파라미터는 호출자가 명시했을 때만 전달한다.
+        # 왜 기본값을 보내지 않는가:
+        #   일부 클라우드 프록시 reasoning 모델(qwen3.5:397b-cloud 등)은
+        #   `think=False`를 받으면 thinking은 억제하지만 response도 비워
+        #   반환하여 완전 무응답이 된다. 모델 기본 동작(think ON)을
+        #   유지하고, response가 비면 thinking을 폴백으로 쓰는 편이 안전.
+        if "think" in kwargs and kwargs["think"] is not None:
+            payload["think"] = bool(kwargs["think"])
         if system:
             payload["system"] = system
         if response_format == "json":
@@ -185,8 +201,12 @@ class OllamaProvider(BaseLlmProvider):
         if data.get("error"):
             raise LlmProviderError(f"Ollama 에러: {data['error']}")
 
+        # reasoning 모델: response가 비어 있으면 thinking을 폴백으로 사용.
+        # think=True 모드에서 num_predict가 사고에 모두 소모됐을 때의 방어책.
+        text = data.get("response", "") or data.get("thinking", "")
+
         return LlmResponse(
-            text=data.get("response", ""),
+            text=text,
             provider=self.provider_id,
             model=selected_model,
             tokens_in=data.get("prompt_eval_count"),
@@ -222,6 +242,9 @@ class OllamaProvider(BaseLlmProvider):
             "stream": True,
             "options": {"num_predict": max_tokens},
         }
+        # think는 명시될 때만 전달 (call()과 동일한 정책).
+        if "think" in kwargs and kwargs["think"] is not None:
+            payload["think"] = bool(kwargs["think"])
         if system:
             payload["system"] = system
         if response_format == "json":
@@ -229,6 +252,10 @@ class OllamaProvider(BaseLlmProvider):
 
         t0 = time.monotonic()
         full_text = ""
+        # reasoning 스트림이 활성화된 경우 chunk["thinking"]으로 들어오는
+        # 사고 토큰을 별도로 모아둔다. 최종 response가 비어 있으면
+        # thinking 전체를 폴백 텍스트로 사용한다.
+        full_thinking = ""
         tokens_out = 0
         tokens_in = None
         last_report = t0
@@ -255,6 +282,10 @@ class OllamaProvider(BaseLlmProvider):
 
                     token = chunk.get("response", "")
                     full_text += token
+                    # reasoning 토큰은 response와 별도 필드로 도착한다.
+                    thinking_token = chunk.get("thinking", "")
+                    if thinking_token:
+                        full_thinking += thinking_token
                     tokens_out += 1
 
                     # 1초마다 progress 콜백
@@ -275,8 +306,11 @@ class OllamaProvider(BaseLlmProvider):
 
         elapsed = time.monotonic() - t0
 
+        # response가 비었는데 thinking만 차 있으면 thinking을 폴백으로.
+        final_text = full_text or full_thinking
+
         return LlmResponse(
-            text=full_text,
+            text=final_text,
             provider=self.provider_id,
             model=selected_model,
             tokens_in=tokens_in,
@@ -302,6 +336,9 @@ class OllamaProvider(BaseLlmProvider):
             "images": [base64.b64encode(image).decode("ascii")],
             "stream": False,
         }
+        # reasoning 비전 모델(qwen3-vl:235b-cloud 등)은 명시될 때만 think 전달.
+        if "think" in kwargs and kwargs["think"] is not None:
+            payload["think"] = bool(kwargs["think"])
         if system:
             payload["system"] = system
 
@@ -317,8 +354,11 @@ class OllamaProvider(BaseLlmProvider):
             data = resp.json()
         elapsed = time.monotonic() - t0
 
+        # reasoning 모델 폴백: response가 비면 thinking 사용.
+        text = data.get("response", "") or data.get("thinking", "")
+
         return LlmResponse(
-            text=data.get("response", ""),
+            text=text,
             provider=self.provider_id,
             model=selected_model,
             tokens_in=data.get("prompt_eval_count"),
