@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from app._state import get_library_path, _get_llm_router
 
 from core.document import (
+    add_document,
     create_document_from_hwp,
     create_document_from_url,
     get_bibliography,
@@ -397,6 +398,490 @@ async def api_create_from_url(body: CreateFromUrlRequest):
             {"error": f"문헌 생성 실패: {e}"},
             status_code=502,
         )
+
+
+# --- 진단 ---
+
+
+@router.get("/api/documents/{doc_id}/_diag")
+async def api_diagnose_document(doc_id: str):
+    """문헌 디스크 상태를 한 번에 진단해 반환한다.
+
+    목적: 사용자 환경에서 PDF가 깨진 원인(LFS pointer 변환, PDF 헤더 손상, hook 미작동 등)을
+          서버 측에서 검사해 한 번에 보고한다. 사용자에게 메모장으로 파일 열어보라고
+          시키지 않고도 진단할 수 있게 한다.
+
+    출력:
+        {
+            "document_id": str,
+            "doc_path": str,
+            "manifest_parts": [...],
+            "gitattributes": "...",
+            "hooks_path": "...",
+            "hooks_dir_files": [...],
+            "files": [
+                {
+                    "name": "...",
+                    "size": int,
+                    "head_hex": "25504446...",
+                    "head_text": "%PDF-1.7\\n...",
+                    "is_pdf": bool,
+                    "is_lfs_pointer": bool,
+                    "fitz_page_count": int | None,
+                    "fitz_error": str | None
+                },
+                ...
+            ]
+        }
+    """
+    import json as _json
+
+    import fitz
+    import git
+
+    _library_path = get_library_path()
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    # doc_id 형식 검증 — 경로 트래버설 차단
+    import re as _re
+    if not _re.match(r"^[a-z][a-z0-9_]{0,63}$", doc_id):
+        return JSONResponse(
+            {"error": f"문헌 ID 형식이 올바르지 않습니다: {doc_id!r}"},
+            status_code=400,
+        )
+
+    doc_path = Path(_library_path) / "documents" / doc_id
+    if not doc_path.exists():
+        return JSONResponse({"error": f"문헌 없음: {doc_id}"}, status_code=404)
+
+    out: dict = {
+        "document_id": doc_id,
+        "doc_path": str(doc_path),
+    }
+
+    # manifest
+    mp = doc_path / "manifest.json"
+    if mp.exists():
+        try:
+            out["manifest_parts"] = _json.loads(mp.read_text(encoding="utf-8")).get("parts")
+        except Exception as e:  # noqa: BLE001
+            out["manifest_error"] = str(e)
+
+    # .gitattributes
+    gatt = doc_path / ".gitattributes"
+    if gatt.exists():
+        out["gitattributes"] = gatt.read_text(encoding="utf-8")
+
+    # .gitignore — L1_source/ 룰 적용 여부 확인용
+    gign = doc_path / ".gitignore"
+    if gign.exists():
+        out["gitignore"] = gign.read_text(encoding="utf-8")
+
+    # git config: core.hooksPath
+    try:
+        repo = git.Repo(doc_path)
+        cr = repo.config_reader()
+        try:
+            out["hooks_path"] = cr.get_value("core", "hooksPath")
+        except Exception:
+            out["hooks_path"] = None
+    except Exception as e:  # noqa: BLE001
+        out["git_error"] = str(e)
+
+    # 실제 .git/hooks 또는 hooksPath 디렉터리 안 파일 (LFS hook이 살아있는지 확인)
+    hooks_dir = doc_path / ".git" / "hooks"
+    if hooks_dir.exists():
+        out["hooks_dir_files"] = [
+            p.name for p in sorted(hooks_dir.iterdir()) if p.is_file()
+        ]
+
+    # L1_source 파일 진단
+    l1 = doc_path / "L1_source"
+    files_info = []
+    if l1.exists():
+        for f in sorted(l1.iterdir()):
+            if not f.is_file():
+                continue
+            try:
+                head = f.read_bytes()[:48]
+            except Exception as e:  # noqa: BLE001
+                files_info.append({"name": f.name, "read_error": str(e)})
+                continue
+            info = {
+                "name": f.name,
+                "size": f.stat().st_size,
+                "head_hex": head.hex(),
+                "head_text": head.decode("ascii", errors="replace"),
+                "is_pdf": head.startswith(b"%PDF"),
+                "is_lfs_pointer": head.startswith(b"version https://git-lfs"),
+            }
+            if info["is_pdf"]:
+                try:
+                    with fitz.open(f) as d:
+                        info["fitz_page_count"] = d.page_count
+                except Exception as e:  # noqa: BLE001
+                    info["fitz_error"] = str(e)
+            files_info.append(info)
+    out["files"] = files_info
+
+    return out
+
+
+# --- 로컬 파일에서 새 문헌 생성 ---
+
+
+@router.post("/api/documents/create-from-files")
+async def api_create_from_files(
+    doc_id: str = Form(...),
+    title: str | None = Form(None),
+    files: list[UploadFile] = File(...),
+):
+    """로컬 이미지/PDF로 새 문헌을 생성한다.
+
+    동작 (클라이언트가 보낸 순서를 그대로 보존):
+        - 이미지(.jpg/.jpeg/.png/.tif/.tiff)들은 한 묶음으로 PIL이
+          PDF로 합쳐 L1_source/<doc_id>.pdf로 저장. manifest에 part 1개,
+          page_count = 이미지 개수.
+        - PDF(.pdf)들은 각각 별도 part. PyMuPDF(fitz)로 page_count 산출.
+        - 혼합 시: 이미지 묶음 PDF 1개(part 1) + 각 PDF 1개씩 추가 part.
+
+    왜 이미지를 PDF로 묶는가:
+        사이드바 트리는 part 클릭 시 PDF.js로 part.file을 로드해 페이지를
+        펼친다. 이미지를 그대로 두면 PDF.js가 못 열어 페이지가 안 나온다.
+        Pillow는 이미 의존성에 있어 추가 라이브러리 없이 해결된다.
+
+    왜 add_document로 빈 문헌부터 만드는가:
+        디렉터리 골격 + .gitignore/.gitattributes(LFS) + 첫 git commit +
+        bibliography 골격을 그대로 재사용하기 위해서다. 그 위에 우리가
+        L1_source/만 채우고 manifest.parts를 다시 쓴 뒤 두 번째 commit한다.
+    """
+    import json
+    import shutil
+    import tempfile
+
+    import fitz  # PyMuPDF — PDF 생성/페이지 수 파악
+    import git
+
+    _library_path = get_library_path()
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_id = (doc_id or "").strip()
+    if not doc_id:
+        return JSONResponse({"error": "doc_id가 비어있습니다."}, status_code=400)
+    # doc_id 형식 검증을 라우터 진입점에서 즉시 — temp 파일/디렉터리 이름에 사용되기
+    # 전에 차단해야 ../ 등 경로 트래버설 위험을 막을 수 있다.
+    # add_document에도 같은 검증이 있지만 그건 디렉터리 생성 시점이라 늦다.
+    import re as _re
+    if not _re.match(r"^[a-z][a-z0-9_]{0,63}$", doc_id):
+        return JSONResponse(
+            {
+                "error": (
+                    f"문헌 ID 형식이 올바르지 않습니다: {doc_id!r}\n"
+                    "→ 영문 소문자로 시작, 소문자·숫자·밑줄만 사용 (최대 64자)"
+                )
+            },
+            status_code=400,
+        )
+    if not files:
+        return JSONResponse(
+            {"error": "최소 한 개 이상의 파일을 업로드하세요."},
+            status_code=400,
+        )
+
+    image_suffixes = {".jpg", ".jpeg", ".png", ".tif", ".tiff"}
+    allowed_suffixes = image_suffixes | {".pdf"}
+
+    # 흐름:
+    #   1) 모든 업로드를 임시 디렉터리에 풀고
+    #   2) 이미지 → PyMuPDF로 한 권의 PDF로 묶고 (임시 폴더 안에서)
+    #   3) PDF는 그대로 임시 폴더에 두고
+    #   4) **검증 모두 통과한 뒤** add_document(files=[모두]) 한 번 호출 → L1_source 채움 + git init/commit
+    #   5) manifest.parts를 우리 의도(이미지묶음=vol1, 각 PDF=별도 vol)로 교체
+    # 왜 add_document 호출을 마지막으로 미루는가:
+    #   변환 실패 시 doc_path가 아직 만들어지지 않아 부분 생성 상태가 남지 않는다.
+    #   Windows에서는 git이 .git/ 내부 핸들을 잡고 있어 rmtree가 부분적으로 실패할 수 있는데,
+    #   애초에 doc_path를 만들지 않으면 그 위험이 사라진다.
+    tmp_dir = Path(tempfile.mkdtemp(prefix="ctb_create_from_files_"))
+    try:
+        img_dir = tmp_dir / "images"
+        pdf_dir = tmp_dir / "pdfs"
+        img_dir.mkdir()
+        pdf_dir.mkdir()
+
+        # 1. 입력 분류 — 클라이언트가 보낸 순서가 페이지 순서가 된다
+        image_paths: list[Path] = []
+        # (저장명, 원본 라벨, tmp 경로) — 저장명은 ASCII로 안전하게, 라벨은 원본 stem
+        pdf_inputs: list[tuple[str, str, Path]] = []
+        # 이미지 묶음 PDF는 항상 <doc_id>.pdf로 저장될 예정이라 미리 예약.
+        # 사용자가 같은 이름의 PDF를 첨부하면 충돌로 거절된다.
+        seen_pdf_storage_names: set[str] = {f"{doc_id}.pdf"}
+        pdf_idx = 0  # PDF별 영문 인덱스 (한국어 등 비ASCII 파일명 회피용)
+
+        for idx, upload in enumerate(files):
+            raw_name = upload.filename or "file"
+            safe_name = Path(raw_name).name  # basename만 (경로 트래버설 방지)
+            if not safe_name:
+                continue
+            suffix = Path(safe_name).suffix.lower()
+            if suffix not in allowed_suffixes:
+                return JSONResponse(
+                    {
+                        "error": (
+                            f"지원하지 않는 파일 형식입니다: {safe_name}\n"
+                            "→ 해결: PDF, JPG, JPEG, PNG, TIF, TIFF만 가능합니다."
+                        )
+                    },
+                    status_code=400,
+                )
+            content = await upload.read()
+
+            # 업로드 즉시 헤더 검증 — 우리가 받은 콘텐츠 자체가 손상됐는지 확인.
+            # 왜:
+            #   임시 폴더에 저장하기 전, 라우터가 받은 시점부터 이미 콘텐츠가
+            #   NULL/손상된 케이스가 있다 (안티바이러스 quarantine, 브라우저 확장
+            #   가로채기, 원본 손상 등). 이걸 라우터 진입점에서 잡으면 사용자에게
+            #   git/LFS가 아닌 진짜 원인을 명확히 안내할 수 있다.
+            if not content:
+                return JSONResponse(
+                    {
+                        "error": (
+                            f"업로드 콘텐츠가 비어 있습니다: {safe_name}\n"
+                            "→ 가능한 원인: 브라우저가 파일을 못 읽음, 또는 안티바이러스 차단."
+                        )
+                    },
+                    status_code=400,
+                )
+            if suffix == ".pdf" and not content.startswith(b"%PDF"):
+                head_hex = content[:8].hex()
+                # NULL 또는 다른 손상 패턴
+                return JSONResponse(
+                    {
+                        "error": (
+                            f"업로드된 PDF가 정상 PDF 형식이 아닙니다: {safe_name}\n"
+                            f"파일 크기: {len(content):,} bytes, 첫 8바이트: {head_hex}\n"
+                            "→ 가능한 원인:\n"
+                            "  1) 안티바이러스(Windows Defender 등)가 PDF를 검역해 NULL로 변환\n"
+                            "  2) 브라우저 확장(보안/번역/광고차단)이 업로드를 가로채 변조\n"
+                            "  3) 원본 PDF 파일 자체가 손상\n"
+                            "→ 해결: 같은 PDF를 메모장으로 열어 첫 줄이 '%PDF-'로 시작하는지 "
+                            "먼저 확인하세요. NULL로 보이면 (1)/(2)가 원인입니다."
+                        )
+                    },
+                    status_code=400,
+                )
+
+            if suffix in image_suffixes:
+                # 이미지는 PDF로 묶일 때 read 순서가 중요 — prefix로 정렬 보존
+                tmp_path = img_dir / f"{idx:04d}_{safe_name}"
+                tmp_path.write_bytes(content)
+                image_paths.append(tmp_path)
+            else:
+                # PDF 저장 파일명을 ASCII로 강제. 왜:
+                #   Windows + Git + git-lfs 조합에서 한국어 등 비ASCII 파일명의
+                #   PDF가 LFS clean filter를 거치면 working tree가 NULL 바이트로
+                #   손상되는 사례를 사용자 환경에서 확인했다 (1KB→660KB 전부 0x00).
+                #   파일 시스템에 저장하는 이름은 ASCII로 통일하고, 원본 이름은
+                #   manifest.label로 보존해 사용자에게는 원래 이름이 보이게 한다.
+                pdf_idx += 1
+                original_stem = Path(safe_name).stem
+                ext = Path(safe_name).suffix or ".pdf"
+                try:
+                    safe_name.encode("ascii")
+                    storage_name = safe_name
+                except UnicodeEncodeError:
+                    storage_name = f"{doc_id}_pdf{pdf_idx}{ext}"
+
+                # 저장명 충돌 방지 — 같은 ASCII 이름 두 번 들어오면 거절
+                if storage_name in seen_pdf_storage_names:
+                    return JSONResponse(
+                        {
+                            "error": (
+                                f"같은 이름의 PDF가 두 번 포함되었습니다: {safe_name}\n"
+                                "→ 해결: 파일 이름을 다르게 하거나 한 번만 선택하세요."
+                            )
+                        },
+                        status_code=400,
+                    )
+                seen_pdf_storage_names.add(storage_name)
+                tmp_path = pdf_dir / storage_name
+                tmp_path.write_bytes(content)
+                pdf_inputs.append((storage_name, original_stem, tmp_path))
+
+        if not image_paths and not pdf_inputs:
+            return JSONResponse({"error": "유효한 파일이 없습니다."}, status_code=400)
+
+        effective_title = (title or "").strip() or doc_id
+
+        # 2. 이미지 → PyMuPDF로 PDF 묶기 (임시 폴더 안에서)
+        # 왜 PIL 대신 PyMuPDF인가:
+        #   PIL의 multi-page PDF 출력은 PDF.js 일부 버전에서 "Invalid PDF structure"로
+        #   거절될 수 있다. PyMuPDF는 PDF 1.7 사양을 생성하므로 PDF.js 호환성이 가장 좋다.
+        prepared_files: list[Path] = []
+        part_meta: list[dict] = []  # [{label, file_basename, page_count}]
+
+        if image_paths:
+            images_pdf = tmp_dir / f"{doc_id}.pdf"
+            try:
+                pdf_doc = fitz.open()
+                try:
+                    for p in image_paths:
+                        pix = fitz.Pixmap(str(p))
+                        try:
+                            # CMYK 등 4채널은 RGB로 변환 (PDF.insert_image 안정성)
+                            if pix.colorspace and pix.colorspace.n >= 4:
+                                pix = fitz.Pixmap(fitz.csRGB, pix)
+                            page = pdf_doc.new_page(
+                                width=pix.width, height=pix.height
+                            )
+                            page.insert_image(page.rect, pixmap=pix)
+                        finally:
+                            pix = None  # noqa: F841 — 명시적 해제
+                    # 가장 보수적인 옵션 — 일부 PDF.js 버전(3.11)이 garbage 컬렉션이나
+                    # deflate 스트림에 까다로울 수 있어 디폴트 평이한 PDF로 저장한다.
+                    pdf_doc.save(str(images_pdf))
+                finally:
+                    pdf_doc.close()
+            except Exception as e:  # noqa: BLE001
+                logger.exception("이미지 → PDF 변환 실패")
+                return JSONResponse(
+                    {
+                        "error": (
+                            f"이미지를 PDF로 묶는 중 오류: {e}\n"
+                            "→ 해결: 이미지 파일이 손상되지 않았는지 확인하세요. "
+                            "이미지 형식이 표준 JPG/PNG/TIFF인지도 확인하세요."
+                        )
+                    },
+                    status_code=400,
+                )
+            prepared_files.append(images_pdf)
+            part_meta.append({
+                "label": effective_title,
+                "file_basename": images_pdf.name,
+                "page_count": len(image_paths),
+            })
+
+        # 3. 각 PDF → 페이지 수 산출 + prepared_files에 추가
+        for storage_name, original_label, src in pdf_inputs:
+            try:
+                with fitz.open(src) as pdf:
+                    pc = pdf.page_count
+            except Exception:
+                # 손상된 PDF여도 일단 등록 — 사이드바가 PDF.js로 재시도한다.
+                pc = None
+            prepared_files.append(src)
+            part_meta.append({
+                "label": original_label,  # 사용자에게 보이는 이름은 원본 그대로
+                "file_basename": storage_name,  # 디스크 저장명은 ASCII 안전
+                "page_count": pc,
+            })
+
+        # 4. add_document로 디렉터리 생성 + 파일 복사 + git init + 첫 commit (atomic)
+        # 왜 디스크 상태로 성공 여부를 판단하는가:
+        #   add_document의 마지막 단계가 git commit이고, 거기서 post-commit hook(git-lfs
+        #   미설치 등)이 비-zero로 끝나면 GitPython이 다양한 예외 타입을 raise한다
+        #   (GitCommandError / HookExecutionError 등). 그러나 디렉터리·파일·manifest는
+        #   이미 만들어져 있고 commit도 성공한 상태다. 비개발자 연구자에게 git-lfs
+        #   설치를 요구하지 않도록, 디스크 상태가 정상이면 hook 실패는 무시하고 진행한다.
+        expected_doc_path = Path(_library_path) / "documents" / doc_id
+        doc_path = None
+        try:
+            doc_path = add_document(
+                library_path=_library_path,
+                title=effective_title,
+                doc_id=doc_id,
+                files=prepared_files,
+            )
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        except FileExistsError as e:
+            return JSONResponse({"error": str(e)}, status_code=409)
+        except Exception as e:  # noqa: BLE001 — git hook 실패 등 광범위 처리
+            if (
+                expected_doc_path.exists()
+                and (expected_doc_path / "manifest.json").exists()
+                and (expected_doc_path / "L1_source").exists()
+            ):
+                # 디스크는 정상 — hook 실패류는 무시하고 진행
+                logger.warning(
+                    f"add_document 경고 (디스크 정상, 무시·진행): {type(e).__name__}: {e}"
+                )
+                doc_path = expected_doc_path
+            else:
+                logger.exception("add_document 실패 — 디스크 정리")
+                shutil.rmtree(expected_doc_path, ignore_errors=True)
+                return JSONResponse(
+                    {"error": f"문헌 생성 실패: {e}"},
+                    status_code=502,
+                )
+
+        # 5. working tree의 PDF가 진짜 PDF 바이트인지 확인 (LFS pointer 방어)
+        # 왜 검사하는가:
+        #   git-lfs가 .gitattributes 룰에 따라 working tree를 LFS pointer로
+        #   덮어씌우는 경우(특히 일부 git/lfs 조합에서 first commit 후), PDF.js가
+        #   "Invalid PDF structure"로 거절한다. 디스크 파일이 %PDF로 시작 안 하면
+        #   임시 폴더에 보관해둔 원본을 다시 복사해 working tree를 복원한다.
+        l1 = doc_path / "L1_source"
+        for meta, src in zip(part_meta, prepared_files):
+            wt_path = l1 / meta["file_basename"]
+            try:
+                head = wt_path.read_bytes()[:8]
+            except Exception:
+                head = b""
+            if not head.startswith(b"%PDF"):
+                logger.warning(
+                    f"working tree {wt_path.name} not PDF (head={head!r}) — 임시본으로 복원"
+                )
+                try:
+                    shutil.copy2(src, wt_path)
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(f"복원 실패 (계속 진행): {e}")
+
+        # 6. manifest.parts 교체 (add_document가 파일별 vol1, vol2... 로 채운 것을
+        #    우리 의도: 이미지묶음=vol1, 각 PDF=vol2,vol3...로 정리)
+        parts = []
+        for i, meta in enumerate(part_meta, start=1):
+            parts.append({
+                "part_id": f"vol{i}",
+                "label": meta["label"],
+                "file": f"L1_source/{meta['file_basename']}",
+                "page_count": meta["page_count"],
+            })
+
+        manifest_path = doc_path / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["parts"] = parts
+        manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        # 7. manifest 변경분 commit (LFS 후크 부재 등은 비치명적)
+        try:
+            repo = git.Repo(doc_path)
+            repo.git.add("-A")
+            if repo.git.diff("--cached", "--name-only"):
+                n_imgs = len(image_paths)
+                n_pdfs = len(pdf_inputs)
+                repo.index.commit(
+                    f"feat: 로컬 파일 추가 — 이미지 {n_imgs}장, PDF {n_pdfs}개"
+                )
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"git commit 경고 (무시): {e}")
+
+        return {
+            "document_id": doc_id,
+            "doc_path": str(doc_path),
+            "title": effective_title,
+            "asset_count": len(image_paths) + len(pdf_inputs),
+            "image_count": len(image_paths),
+            "pdf_count": len(pdf_inputs),
+            "parts": parts,
+            "mode": "create_from_files",
+        }
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 # --- HWP 가져오기 ---

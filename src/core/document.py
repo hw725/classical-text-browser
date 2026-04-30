@@ -125,14 +125,33 @@ def add_document(
     bibliography = {"title": title}
     _write_json(doc_path / "bibliography.json", bibliography)
 
-    # --- git init + .gitattributes (LFS 설정) ---
-    # v7 §5.1: git-lfs 필수. 이미지/PDF는 LFS로 관리.
+    # --- git init + .gitattributes ---
+    # 정책: git-lfs를 사용하지 않는다. 항상 일반 binary로 추적한다.
+    # 왜 LFS를 끄는가:
+    #   사용자 환경(Windows + git + git-lfs 일부 조합)에서 .gitattributes에
+    #   `*.pdf filter=lfs ...` 룰이 있으면 `git add` 시 LFS clean filter가 working
+    #   tree의 PDF 파일을 NULL 바이트로 손상시키는 사례가 재현되었다 (660KB 정도의
+    #   PDF가 전부 0x00 바이트로 채워진 채 디스크에 남음 → PDF.js "Invalid PDF
+    #   structure"). 이미지(우리가 만든 PDF)는 작은 차이로 재현되지 않을 뿐이라
+    #   이론적으로 동등 위험이다.
+    #   v7 §5.1은 LFS를 권장하지만, 비개발자 연구자의 디스크 안전이 더 우선이다.
+    #   git-lfs가 PATH에 있어도 이 문서 폴더에서는 LFS clean을 트리거하지 않는다.
     gitignore_content = (
         "# 안전 규칙: 저장소 내부 Git 메타데이터는 절대 추적하지 않는다.\n"
         ".git\n"
         ".git/\n"
         "**/.git\n"
         "**/.git/**\n"
+        "\n"
+        "# 원본 파일(이미지/PDF)은 git에서 추적하지 않는다.\n"
+        "# 왜:\n"
+        "#   사용자 환경(Windows + 일부 git 설치)에서 git filter가 PDF working tree를\n"
+        "#   NULL 바이트로 손상시키는 사례가 재현되었다. .gitattributes에서 LFS 룰을\n"
+        "#   제거해도 system level의 filter.lfs가 어떤 경로로 호출되어 손상을 일으킨다.\n"
+        "#   원본 파일은 본래 변경되지 않는 자료이므로 git 이력에서 제외해도 손실이 없다.\n"
+        "#   (편집 결과는 L2_ocr/L3_layout/L4_text/ 등에 텍스트/JSON으로 저장되어\n"
+        "#    git이 그대로 추적한다.)\n"
+        "L1_source/\n"
         "\n"
         "# 임시/캐시 파일\n"
         "__pycache__/\n"
@@ -149,17 +168,46 @@ def add_document(
     (doc_path / ".gitignore").write_text(gitignore_content, encoding="utf-8")
 
     gitattributes_content = (
-        "# git-lfs: 이미지/PDF 대용량 파일 관리 (v7 §5.1)\n"
-        "*.pdf filter=lfs diff=lfs merge=lfs -text\n"
-        "*.jpg filter=lfs diff=lfs merge=lfs -text\n"
-        "*.jpeg filter=lfs diff=lfs merge=lfs -text\n"
-        "*.png filter=lfs diff=lfs merge=lfs -text\n"
-        "*.tif filter=lfs diff=lfs merge=lfs -text\n"
-        "*.tiff filter=lfs diff=lfs merge=lfs -text\n"
+        "# git-lfs는 사용하지 않음 — 일반 binary로 안전하게 추적\n"
+        "# (사용자 환경에서 LFS clean filter가 PDF working tree를 손상시키는 사례 회피)\n"
+        "*.pdf binary\n"
+        "*.jpg binary\n"
+        "*.jpeg binary\n"
+        "*.png binary\n"
+        "*.tif binary\n"
+        "*.tiff binary\n"
     )
     (doc_path / ".gitattributes").write_text(gitattributes_content, encoding="utf-8")
 
     repo = git.Repo.init(doc_path)
+
+    # git hooks 비활성화 — system git template에 git-lfs 등이 설치된 환경에서
+    # 새 repo의 .git/hooks/에 LFS hook이 복사되어, git-lfs 명령이 PATH에 없으면
+    # post-commit 등이 실패해 commit 자체가 GitCommandError로 raise된다.
+    # 우리는 이 문서 폴더의 git을 단순 버전 관리에만 쓰므로 모든 hook을 끈다.
+    # 빈 디렉터리를 hooksPath로 지정하면 git이 hook을 찾지 못해 그냥 통과한다.
+    _empty_hooks = doc_path / ".git" / "no-hooks"
+    _empty_hooks.mkdir(exist_ok=True)
+    with repo.config_writer() as _cw:
+        # Windows에서도 git config는 forward slash를 받는다.
+        _cw.set_value("core", "hooksPath", str(_empty_hooks).replace("\\", "/"))
+
+    # 이 repo에서 git-lfs filter를 명시적으로 비활성화 — .gitattributes에 LFS 룰을
+    # 안 넣었어도 system git config의 filter.lfs가 살아 있으면 어떤 git 동작에서
+    # working tree를 만질 수 있다. `git lfs uninstall --local`은 .git/config에서
+    # LFS filter 항목들을 제거한다(설치 안 됐으면 무해).
+    import subprocess as _sp
+    try:
+        _sp.run(
+            ["git", "-C", str(doc_path), "lfs", "uninstall", "--local"],
+            capture_output=True,
+            check=False,
+            timeout=10,
+        )
+    except (FileNotFoundError, OSError):
+        # git-lfs 명령이 없는 환경 — 무시. 어차피 LFS filter도 없을 것.
+        pass
+
     # repo.git.add()는 실제 git 바이너리를 호출 — .git/ 내부를 추가하지 않음
     # (repo.index.add(["."])는 GitPython 저수준 API라 .git/도 추가해버림)
     repo.git.add("-A")

@@ -3746,7 +3746,7 @@
           style="width: 560px"
         >
           <div class="bib-dialog-header">
-            <span class="bib-dialog-title">URL에서 새 문헌 생성</span>
+            <span class="bib-dialog-title">새 문헌 생성</span>
             <button
               class="bib-dialog-close"
               id="create-doc-close"
@@ -3756,36 +3756,134 @@
             </button>
           </div>
           <div class="bib-dialog-body bib-edit-form">
-            <!-- Step 1: URL 입력 + 미리보기 -->
+            <!-- Step 1: 모드 탭 (URL / 로컬 파일) -->
             <div id="create-doc-step1">
-              <label class="bib-edit-label">원본 URL</label>
-              <div class="bib-url-row">
-                <input
-                  id="create-doc-url"
-                  type="text"
-                  class="bib-input bib-url-input"
-                  placeholder="https://dl.ndl.go.jp/pid/1193135"
-                />
+              <div
+                class="create-doc-tabs"
+                role="tablist"
+                aria-label="새 문헌 생성 방법"
+              >
                 <button
-                  id="create-doc-preview-btn"
-                  class="bib-btn bib-btn-primary"
+                  type="button"
+                  class="create-doc-tab create-doc-tab-active"
+                  id="create-doc-tab-url"
+                  data-mode="url"
+                  role="tab"
+                  aria-selected="true"
                 >
-                  미리보기
+                  URL에서
+                </button>
+                <button
+                  type="button"
+                  class="create-doc-tab"
+                  id="create-doc-tab-local"
+                  data-mode="local"
+                  role="tab"
+                  aria-selected="false"
+                >
+                  로컬 파일에서
                 </button>
               </div>
-              <div class="bib-url-help">
-                지원: NDL Digital Collections (<code>dl.ndl.go.jp/pid/…</code>
-                — 서지+PDF), NDL Search (<code>ndlsearch.ndl.go.jp</code>
-                — 서지만), 일본 국립공문서관, KORCIS
-                (<code>contentsInfo.do?controlNo=…</code> 목차,
-                <code>abstractsInfo.do?controlNo=…</code> 해제),
-                국중 원문뷰어 (<code>viewer.nl.go.kr</code>
-                — 서지+이미지), KOSTMA 등
+
+              <!-- 탭 1: URL -->
+              <div
+                id="create-doc-pane-url"
+                class="create-doc-pane"
+                role="tabpanel"
+                aria-labelledby="create-doc-tab-url"
+              >
+                <label class="bib-edit-label">원본 URL</label>
+                <div class="bib-url-row">
+                  <input
+                    id="create-doc-url"
+                    type="text"
+                    class="bib-input bib-url-input"
+                    placeholder="https://dl.ndl.go.jp/pid/1193135"
+                  />
+                  <button
+                    id="create-doc-preview-btn"
+                    class="bib-btn bib-btn-primary"
+                  >
+                    미리보기
+                  </button>
+                </div>
+                <div class="bib-url-help">
+                  지원: NDL Digital Collections (<code>dl.ndl.go.jp/pid/…</code>
+                  — 서지+PDF), NDL Search (<code>ndlsearch.ndl.go.jp</code>
+                  — 서지만), 일본 국립공문서관, KORCIS
+                  (<code>contentsInfo.do?controlNo=…</code> 목차,
+                  <code>abstractsInfo.do?controlNo=…</code> 해제),
+                  국중 원문뷰어 (<code>viewer.nl.go.kr</code>
+                  — 서지+이미지), KOSTMA 등
+                </div>
+                <span
+                  id="create-doc-status"
+                  class="text-save-status"
+                ></span>
               </div>
-              <span
-                id="create-doc-status"
-                class="text-save-status"
-              ></span>
+
+              <!-- 탭 2: 로컬 파일 -->
+              <div
+                id="create-doc-pane-local"
+                class="create-doc-pane"
+                role="tabpanel"
+                aria-labelledby="create-doc-tab-local"
+                style="display: none"
+              >
+                <label class="bib-edit-label">페이지 이미지 또는 PDF 파일</label>
+                <div class="create-doc-local-picker">
+                  <input
+                    id="create-doc-local-files"
+                    type="file"
+                    multiple
+                    accept=".pdf,.jpg,.jpeg,.png,.tif,.tiff,application/pdf,image/jpeg,image/png,image/tiff"
+                    style="display: none"
+                  />
+                  <button
+                    type="button"
+                    id="create-doc-local-add-btn"
+                    class="bib-btn"
+                  >
+                    파일 추가
+                  </button>
+                  <button
+                    type="button"
+                    id="create-doc-local-clear-btn"
+                    class="text-btn"
+                  >
+                    전체 비우기
+                  </button>
+                  <span
+                    id="create-doc-local-summary"
+                    class="bib-url-help create-doc-local-summary"
+                  >
+                    파일을 선택하지 않았습니다.
+                  </span>
+                </div>
+                <div
+                  id="create-doc-local-editor"
+                  class="create-doc-local-editor"
+                ></div>
+                <div class="bib-url-help">
+                  지원: PDF, JPG, JPEG, PNG, TIF, TIFF.
+                  이미지 여러 장은 위 순서대로 1권의 PDF로 묶여 저장되며
+                  (각 이미지가 1페이지), PDF 파일은 각각 별도의 권으로 추가됩니다.
+                  서지정보는 비워둔 채 생성되며 생성 후 서지정보 탭에서 편집할 수 있습니다.
+                </div>
+                <div class="bib-edit-actions">
+                  <div class="text-toolbar-spacer"></div>
+                  <span
+                    id="create-doc-local-status"
+                    class="text-save-status"
+                  ></span>
+                  <button
+                    id="create-doc-local-next-btn"
+                    class="bib-btn bib-btn-primary"
+                  >
+                    다음
+                  </button>
+                </div>
+              </div>
             </div>
 
             <!-- Step 2: 미리보기 결과 + 에셋 선택 + doc_id 입력 (처음에는 숨김) -->
@@ -3799,7 +3897,7 @@
                 id="create-doc-bib-summary"
               ></div>
 
-              <!-- 에셋(이미지) 목록 -->
+              <!-- 에셋(이미지) 목록 — URL 모드에서만 표시 -->
               <div
                 id="create-doc-assets-section"
                 style="display: none"
@@ -3807,6 +3905,18 @@
                 <label class="bib-edit-label">다운로드할 이미지/PDF</label>
                 <div
                   id="create-doc-assets"
+                  class="create-doc-assets"
+                ></div>
+              </div>
+
+              <!-- 로컬 파일 목록 — 로컬 모드에서만 표시 -->
+              <div
+                id="create-doc-local-files-section"
+                style="display: none"
+              >
+                <label class="bib-edit-label">선택된 파일</label>
+                <div
+                  id="create-doc-local-files-list"
                   class="create-doc-assets"
                 ></div>
               </div>
@@ -4338,7 +4448,7 @@
     <script src="/static/js/bibliography.js?v=20260220c"></script>
     <script src="/static/js/interpretation.js?v=20260224e"></script>
     <script src="/static/js/entity-manager.js?v=20260220c"></script>
-    <script src="/static/js/create-document.js?v=20260220c"></script>
+    <script src="/static/js/create-document.js?v=20260430f"></script>
     <script src="/static/js/hwp-import.js?v=20260223b"></script>
     <script src="/static/js/ocr-panel.js?v=20260220c"></script>
     <script src="/static/js/alignment-view.js?v=20260223"></script>

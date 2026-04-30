@@ -3142,6 +3142,167 @@ body.resizing-row {
    Phase 10: 새 문헌 생성 다이얼로그
    ==================================== */
 
+/* 모드 탭 (URL / 로컬 파일) */
+.create-doc-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.create-doc-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.create-doc-tab:hover {
+  color: var(--text-primary);
+}
+
+.create-doc-tab-active {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent);
+  font-weight: 500;
+}
+
+.create-doc-pane {
+  /* 탭 패널 — 표시/숨김은 인라인 style로 제어 */
+}
+
+/* 로컬 파일 모드 — 추가/비우기 버튼 영역 */
+.create-doc-local-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 8px;
+  flex-wrap: wrap;
+}
+
+.create-doc-local-summary {
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
+/* 추가된 파일 목록 (편집 가능) */
+.create-doc-local-editor {
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 6px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-primary);
+}
+
+.create-doc-local-editor:empty {
+  display: none;
+}
+
+.create-doc-local-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.create-doc-local-row:last-child {
+  border-bottom: none;
+}
+
+.create-doc-local-row:hover {
+  background: var(--bg-hover);
+}
+
+.create-doc-local-index {
+  flex-shrink: 0;
+  width: 28px;
+  text-align: right;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.create-doc-local-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.create-doc-local-kind {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--bg-secondary);
+}
+
+.create-doc-local-size {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  width: 60px;
+  text-align: right;
+}
+
+.create-doc-local-row-btns {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.create-doc-local-row-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  width: 22px;
+  height: 22px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0;
+  line-height: 1;
+}
+
+.create-doc-local-row-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+.create-doc-local-row-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.create-doc-local-row-btn.create-doc-local-row-remove:hover {
+  color: var(--error);
+}
+
+/* 진행 막대 — 너비 전환을 부드럽게 */
+.create-doc-progress-fill {
+  transition: width 0.2s ease-out;
+}
+
+/* indeterminate (펄스) — 진행률을 모를 때 시각적 피드백 */
+.create-doc-progress-fill.create-doc-progress-pulse {
+  animation: create-doc-progress-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes create-doc-progress-pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.4; }
+  100% { opacity: 1; }
+}
+
 /* 서지정보 요약 테이블 */
 .create-doc-bib-table {
   margin-bottom: 12px;
@@ -3214,9 +3375,11 @@ body.resizing-row {
 
 /* 진행 상태 바 */
 .create-doc-progress-bar {
-  height: 4px;
+  height: 10px;
   background: var(--bg-primary);
-  border-radius: 2px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  overflow: hidden;
   margin: 16px 0 8px;
   overflow: hidden;
 }
@@ -3226,17 +3389,8 @@ body.resizing-row {
   width: 100%;
   background: var(--accent);
   border-radius: 2px;
-  animation: progress-pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes progress-pulse {
-  0%,
-  100% {
-    opacity: 0.4;
-  }
-  50% {
-    opacity: 1;
-  }
+  /* 기본 상태에서는 정지 — 펄스는 _showProgress가 .create-doc-progress-pulse를
+     붙일 때만 켜진다 (indeterminate 단계). 막대 너비는 JS가 직접 제어한다. */
 }
 
 .create-doc-progress-text {
