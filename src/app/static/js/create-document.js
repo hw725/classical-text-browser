@@ -502,9 +502,13 @@ function _onLocalFilesChanged(e) {
 
   const incoming = Array.from(fileList);
   const invalid = [];
-  const duplicates = [];
+  const pdfDuplicates = []; // PDF는 이름 충돌이 manifest part에 영향 → 차단
   const accepted = [];
-  const existingKeys = new Set(_localFiles.map((f) => f.name));
+  const existingPdfNames = new Set(
+    _localFiles
+      .filter((f) => (f.name.split(".").pop() || "").toLowerCase() === "pdf")
+      .map((f) => f.name),
+  );
 
   for (const f of incoming) {
     const ext = (f.name.split(".").pop() || "").toLowerCase();
@@ -512,12 +516,14 @@ function _onLocalFilesChanged(e) {
       invalid.push(f.name);
       continue;
     }
-    if (existingKeys.has(f.name)) {
-      duplicates.push(f.name);
+    // 이미지는 어차피 PDF로 묶이므로 같은 이름이 여러 번 와도 무해 → 그대로 누적.
+    // PDF는 manifest의 part.file이 되므로 이름 충돌을 사전 차단한다.
+    if (ext === "pdf" && existingPdfNames.has(f.name)) {
+      pdfDuplicates.push(f.name);
       continue;
     }
     accepted.push(f);
-    existingKeys.add(f.name);
+    if (ext === "pdf") existingPdfNames.add(f.name);
   }
 
   _localFiles = _localFiles.concat(accepted);
@@ -525,7 +531,9 @@ function _onLocalFilesChanged(e) {
   if (statusEl) {
     const msgs = [];
     if (invalid.length > 0) msgs.push(`지원 안 함: ${invalid.join(", ")}`);
-    if (duplicates.length > 0) msgs.push(`중복 무시: ${duplicates.join(", ")}`);
+    if (pdfDuplicates.length > 0) {
+      msgs.push(`같은 이름의 PDF는 추가하지 못했습니다: ${pdfDuplicates.join(", ")}`);
+    }
     if (msgs.length > 0) {
       statusEl.textContent = msgs.join(" · ");
       statusEl.style.color = "var(--error)";

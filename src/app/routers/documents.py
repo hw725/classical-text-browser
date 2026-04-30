@@ -455,9 +455,12 @@ async def api_diagnose_document(doc_id: str):
     if not doc_path.exists():
         return JSONResponse({"error": f"문헌 없음: {doc_id}"}, status_code=404)
 
+    # 절대 경로는 노출하지 않는다 — 사용자가 진단 결과를 외부(이슈 트래커 등)에
+    # 공유할 때 사용자명/홈 디렉터리 경로가 함께 새지 않도록 상대 경로로 표시한다.
+    # 로컬 머신에서는 이미 디스크 접근 권한이 있어 정보 가치가 없다.
     out: dict = {
         "document_id": doc_id,
-        "doc_path": str(doc_path),
+        "doc_path": f"documents/{doc_id}",
     }
 
     # manifest
@@ -473,17 +476,23 @@ async def api_diagnose_document(doc_id: str):
     if gatt.exists():
         out["gitattributes"] = gatt.read_text(encoding="utf-8")
 
-    # .gitignore — L1_source/ 룰 적용 여부 확인용
+    # .gitignore
     gign = doc_path / ".gitignore"
     if gign.exists():
         out["gitignore"] = gign.read_text(encoding="utf-8")
 
-    # git config: core.hooksPath
+    # git config: core.hooksPath — 활성/비활성 여부만 표시 (절대 경로 숨김)
     try:
         repo = git.Repo(doc_path)
         cr = repo.config_reader()
         try:
-            out["hooks_path"] = cr.get_value("core", "hooksPath")
+            hooks_path_raw = cr.get_value("core", "hooksPath")
+            # 우리 라우터가 설정한 비활성 디렉터리(.git/no-hooks)인지만 판별해 노출
+            out["hooks_path"] = (
+                "<disabled: .git/no-hooks>"
+                if hooks_path_raw and "no-hooks" in str(hooks_path_raw)
+                else "<custom>"
+            )
         except Exception:
             out["hooks_path"] = None
     except Exception as e:  # noqa: BLE001
@@ -635,57 +644,18 @@ async def api_create_from_files(
                     },
                     status_code=400,
                 )
-            content = await upload.read()
-
-            # 업로드 즉시 헤더 검증 — 우리가 받은 콘텐츠 자체가 손상됐는지 확인.
-            # 왜:
-            #   임시 폴더에 저장하기 전, 라우터가 받은 시점부터 이미 콘텐츠가
-            #   NULL/손상된 케이스가 있다 (안티바이러스 quarantine, 브라우저 확장
-            #   가로채기, 원본 손상 등). 이걸 라우터 진입점에서 잡으면 사용자에게
-            #   git/LFS가 아닌 진짜 원인을 명확히 안내할 수 있다.
-            if not content:
-                return JSONResponse(
-                    {
-                        "error": (
-                            f"업로드 콘텐츠가 비어 있습니다: {safe_name}\n"
-                            "→ 가능한 원인: 브라우저가 파일을 못 읽음, 또는 안티바이러스 차단."
-                        )
-                    },
-                    status_code=400,
-                )
-            if suffix == ".pdf" and not content.startswith(b"%PDF"):
-                head_hex = content[:8].hex()
-                # NULL 또는 다른 손상 패턴
-                return JSONResponse(
-                    {
-                        "error": (
-                            f"업로드된 PDF가 정상 PDF 형식이 아닙니다: {safe_name}\n"
-                            f"파일 크기: {len(content):,} bytes, 첫 8바이트: {head_hex}\n"
-                            "→ 가능한 원인:\n"
-                            "  1) 안티바이러스(Windows Defender 등)가 PDF를 검역해 NULL로 변환\n"
-                            "  2) 브라우저 확장(보안/번역/광고차단)이 업로드를 가로채 변조\n"
-                            "  3) 원본 PDF 파일 자체가 손상\n"
-                            "→ 해결: 같은 PDF를 메모장으로 열어 첫 줄이 '%PDF-'로 시작하는지 "
-                            "먼저 확인하세요. NULL로 보이면 (1)/(2)가 원인입니다."
-                        )
-                    },
-                    status_code=400,
-                )
-
+            # 1) 임시 디스크에 스트리밍 저장 (메모리 폭주 회피)
+            #    upload.file은 SpooledTemporaryFile — shutil.copyfileobj가 큰 파일도
+            #    청크 단위로 복사한다. 한 번에 전부 메모리에 올리지 않는다.
             if suffix in image_suffixes:
-                # 이미지는 PDF로 묶일 때 read 순서가 중요 — prefix로 정렬 보존
                 tmp_path = img_dir / f"{idx:04d}_{safe_name}"
-                tmp_path.write_bytes(content)
-                image_paths.append(tmp_path)
             else:
                 # PDF 저장 파일명을 ASCII로 강제. 왜:
-                #   Windows + Git + git-lfs 조합에서 한국어 등 비ASCII 파일명의
-                #   PDF가 LFS clean filter를 거치면 working tree가 NULL 바이트로
-                #   손상되는 사례를 사용자 환경에서 확인했다 (1KB→660KB 전부 0x00).
+                #   Windows + Git 환경에서 비ASCII 파일명이 git filter를 거치며
+                #   working tree에 영향을 줄 위험 + 다양한 파일시스템 호환성.
                 #   파일 시스템에 저장하는 이름은 ASCII로 통일하고, 원본 이름은
                 #   manifest.label로 보존해 사용자에게는 원래 이름이 보이게 한다.
                 pdf_idx += 1
-                original_stem = Path(safe_name).stem
                 ext = Path(safe_name).suffix or ".pdf"
                 try:
                     safe_name.encode("ascii")
@@ -693,7 +663,6 @@ async def api_create_from_files(
                 except UnicodeEncodeError:
                     storage_name = f"{doc_id}_pdf{pdf_idx}{ext}"
 
-                # 저장명 충돌 방지 — 같은 ASCII 이름 두 번 들어오면 거절
                 if storage_name in seen_pdf_storage_names:
                     return JSONResponse(
                         {
@@ -706,7 +675,51 @@ async def api_create_from_files(
                     )
                 seen_pdf_storage_names.add(storage_name)
                 tmp_path = pdf_dir / storage_name
-                tmp_path.write_bytes(content)
+
+            # 스트림 복사
+            try:
+                upload.file.seek(0)
+            except Exception:
+                pass
+            with open(tmp_path, "wb") as out_fp:
+                shutil.copyfileobj(upload.file, out_fp, length=1024 * 1024)
+
+            # 2) 저장 후 헤더만 다시 읽어 검증 (메모리 부담 거의 없음)
+            with open(tmp_path, "rb") as in_fp:
+                head = in_fp.read(8)
+            file_size = tmp_path.stat().st_size
+
+            if file_size == 0:
+                return JSONResponse(
+                    {
+                        "error": (
+                            f"업로드 콘텐츠가 비어 있습니다: {safe_name}\n"
+                            "→ 가능한 원인: 브라우저가 파일을 못 읽음, 또는 안티바이러스 차단."
+                        )
+                    },
+                    status_code=400,
+                )
+            if suffix == ".pdf" and not head.startswith(b"%PDF"):
+                return JSONResponse(
+                    {
+                        "error": (
+                            f"업로드된 PDF가 정상 PDF 형식이 아닙니다: {safe_name}\n"
+                            f"파일 크기: {file_size:,} bytes, 첫 8바이트: {head.hex()}\n"
+                            "→ 가능한 원인:\n"
+                            "  1) 안티바이러스(Windows Defender 등)가 PDF를 검역해 NULL로 변환\n"
+                            "  2) 브라우저 확장(보안/번역/광고차단)이 업로드를 가로채 변조\n"
+                            "  3) 원본 PDF 파일 자체가 손상\n"
+                            "→ 해결: 같은 PDF를 메모장으로 열어 첫 줄이 '%PDF-'로 시작하는지 "
+                            "먼저 확인하세요. NULL로 보이면 (1)/(2)가 원인입니다."
+                        )
+                    },
+                    status_code=400,
+                )
+
+            if suffix in image_suffixes:
+                image_paths.append(tmp_path)
+            else:
+                original_stem = Path(safe_name).stem
                 pdf_inputs.append((storage_name, original_stem, tmp_path))
 
         if not image_paths and not pdf_inputs:
@@ -778,14 +791,8 @@ async def api_create_from_files(
             })
 
         # 4. add_document로 디렉터리 생성 + 파일 복사 + git init + 첫 commit (atomic)
-        # 왜 디스크 상태로 성공 여부를 판단하는가:
-        #   add_document의 마지막 단계가 git commit이고, 거기서 post-commit hook(git-lfs
-        #   미설치 등)이 비-zero로 끝나면 GitPython이 다양한 예외 타입을 raise한다
-        #   (GitCommandError / HookExecutionError 등). 그러나 디렉터리·파일·manifest는
-        #   이미 만들어져 있고 commit도 성공한 상태다. 비개발자 연구자에게 git-lfs
-        #   설치를 요구하지 않도록, 디스크 상태가 정상이면 hook 실패는 무시하고 진행한다.
-        expected_doc_path = Path(_library_path) / "documents" / doc_id
-        doc_path = None
+        # add_document는 자체적으로 hooksPath를 비활성화하고 LFS filter를 끄므로
+        # git hook 실패로 인한 예외는 발생하지 않는다. 따라서 일반적인 예외 처리만.
         try:
             doc_path = add_document(
                 library_path=_library_path,
@@ -797,24 +804,16 @@ async def api_create_from_files(
             return JSONResponse({"error": str(e)}, status_code=400)
         except FileExistsError as e:
             return JSONResponse({"error": str(e)}, status_code=409)
-        except Exception as e:  # noqa: BLE001 — git hook 실패 등 광범위 처리
-            if (
-                expected_doc_path.exists()
-                and (expected_doc_path / "manifest.json").exists()
-                and (expected_doc_path / "L1_source").exists()
-            ):
-                # 디스크는 정상 — hook 실패류는 무시하고 진행
-                logger.warning(
-                    f"add_document 경고 (디스크 정상, 무시·진행): {type(e).__name__}: {e}"
-                )
-                doc_path = expected_doc_path
-            else:
-                logger.exception("add_document 실패 — 디스크 정리")
-                shutil.rmtree(expected_doc_path, ignore_errors=True)
-                return JSONResponse(
-                    {"error": f"문헌 생성 실패: {e}"},
-                    status_code=502,
-                )
+        except Exception as e:  # noqa: BLE001
+            logger.exception("add_document 실패 — 디스크 정리")
+            shutil.rmtree(
+                Path(_library_path) / "documents" / doc_id,
+                ignore_errors=True,
+            )
+            return JSONResponse(
+                {"error": f"문헌 생성 실패: {e}"},
+                status_code=502,
+            )
 
         # 5. working tree의 PDF가 진짜 PDF 바이트인지 확인 (LFS pointer 방어)
         # 왜 검사하는가:
