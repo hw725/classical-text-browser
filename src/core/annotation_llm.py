@@ -122,24 +122,62 @@ async def generate_annotation_drafts(
     )
 
     # L7 형식으로 변환
+    # 위치 산출 정책 (v2):
+    #   1순위: LLM이 반환한 query 문자열을 원문에서 직접 검색.
+    #   2순위: query가 없거나 검색 실패하면 LLM의 start/end 인덱스 사용.
+    #   왜 query 우선인가:
+    #     LLM은 한문 텍스트에서 0-based 글자 인덱스를 정확히 세지 못한다
+    #     (특히 표점·현토가 섞이면 더 부정확). 반면 "원문에서 그대로 복사한
+    #     글자"는 매우 정확히 따올 수 있어 검색으로 위치를 결정하면 안정적이다.
     results = []
     text_len = len(original_text)
 
+    # 같은 query가 본문에 여러 번 나오면 처음 등장한 위치를 우선 잡고,
+    # 동일 query가 다음 주석에 또 등장하면 그 다음 위치를 잡도록 시작 인덱스를 옮긴다.
+    # 키: query 문자열, 값: 다음 검색을 시작할 인덱스
+    query_search_offsets: dict[str, int] = {}
+
     for raw in raw_annotations:
         target = raw.get("target", {})
-        start = target.get("start", 0)
-        end = target.get("end", start)
+        llm_start = target.get("start", 0)
+        llm_end = target.get("end", llm_start)
+        query = (raw.get("query") or "").strip()
 
-        # 범위 검증: 원문 길이를 초과하면 무시
-        if start < 0 or end < start or end >= text_len:
-            continue
+        # 1) query 기반 위치 산출
+        resolved_start: int | None = None
+        resolved_end: int | None = None
+        if query:
+            search_from = query_search_offsets.get(query, 0)
+            found = original_text.find(query, search_from)
+            if found == -1 and search_from > 0:
+                # 처음부터 다시 (중복 query여도 본문에 한 번만 나오는 경우)
+                found = original_text.find(query, 0)
+            if found != -1:
+                resolved_start = found
+                resolved_end = found + len(query) - 1
+                # 다음 동일 query가 있으면 이 위치 다음부터 검색하게 한다
+                query_search_offsets[query] = found + len(query)
+
+        # 2) query 매칭 실패 시 LLM 인덱스 폴백 (이전 동작과 동일)
+        if resolved_start is None or resolved_end is None:
+            if (
+                isinstance(llm_start, int)
+                and isinstance(llm_end, int)
+                and 0 <= llm_start <= llm_end < text_len
+            ):
+                resolved_start = llm_start
+                resolved_end = llm_end
+            else:
+                # 위치를 전혀 산출할 수 없으면 이 주석은 버린다 — 위치 없는 주석은
+                # 사용자가 화면에서 잡을 수 없어 의미가 없다.
+                continue
 
         ann_type = raw.get("type", "note")
         content = raw.get("content", {})
 
         annotation = {
             "id": _gen_annotation_id(),
-            "target": {"start": start, "end": end},
+            "target": {"start": resolved_start, "end": resolved_end},
             "type": ann_type,
             "content": {
                 "label": content.get("label", ""),
