@@ -11,13 +11,11 @@
 
 import unicodedata
 
-import pytest
 
 from src.text_import.common import (
     _build_ngram_index,
     _extract_multi_anchors,
     _find_anchor_in_index,
-    _fuzzy_search_range,
     _interpolate_missing,
     _nfc,
     align_text_to_pages,

@@ -6,7 +6,6 @@
   또는: uv run pytest tests/test_citation_mark.py -v
 """
 
-import json
 import sys
 import tempfile
 from pathlib import Path

@@ -9,7 +9,6 @@
 6. 통합: export → register → match 워크플로우
 """
 
-import json
 import tempfile
 from pathlib import Path
 
@@ -23,7 +22,6 @@ from core.annotation_dict_match import (
     match_text,
     match_page_blocks,
     format_for_translation_context,
-    _build_headword_index,
 )
 
 

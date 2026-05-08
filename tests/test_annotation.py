@@ -4,8 +4,6 @@ Phase 11-3: 스키마 검증, CRUD, 필터링, 요약, Draft 확정, 유형 관�
 """
 
 import json
-import tempfile
-import uuid
 from pathlib import Path
 
 import pytest
@@ -241,17 +239,17 @@ class TestAnnotationSummary:
 
     def test_mixed_summary(self):
         data = _empty_data()
-        ann1 = add_annotation(data, "p01_b01", {
+        add_annotation(data, "p01_b01", {
             "target": {"start": 0, "end": 1}, "type": "person",
             "content": {"label": "A", "description": ""},
             "status": "draft",
         })
-        ann2 = add_annotation(data, "p01_b01", {
+        add_annotation(data, "p01_b01", {
             "target": {"start": 2, "end": 3}, "type": "place",
             "content": {"label": "B", "description": ""},
             "status": "accepted",
         })
-        ann3 = add_annotation(data, "p01_b02", {
+        add_annotation(data, "p01_b02", {
             "target": {"start": 0, "end": 1}, "type": "term",
             "content": {"label": "C", "description": ""},
             "status": "accepted",

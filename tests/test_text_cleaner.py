@@ -6,7 +6,6 @@
 import pytest
 
 from hwp.text_cleaner import (
-    CleanResult,
     clean_hwp_text,
     detect_hyeonto,
     detect_taidu,

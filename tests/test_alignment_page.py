@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from src.core.alignment import MatchType, VariantCharDict, align_page
+from src.core.alignment import VariantCharDict, align_page
 
 
 @pytest.fixture

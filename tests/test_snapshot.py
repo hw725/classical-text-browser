@@ -12,12 +12,9 @@ detect_imported_layers 함수의 단위·통합 테스트.
 """
 
 import json
-import shutil
-from datetime import datetime
 from pathlib import Path
 
 import git
-import pytest
 
 
 # ──────────────────────────────────────

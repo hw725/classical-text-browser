@@ -12,13 +12,10 @@ from pathlib import Path
 
 import yaml
 
-from core.hyeonto import load_hyeonto, render_hyeonto_text
-from core.punctuation import load_punctuation, split_sentences
+from core.hyeonto import render_hyeonto_text
+from core.punctuation import split_sentences
 from core.translation import (
     _gen_translation_id,
-    add_translation,
-    load_translations,
-    save_translations,
 )
 from llm.draft import LlmDraft
 from llm.router import LlmRouter

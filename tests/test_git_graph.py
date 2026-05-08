@@ -10,9 +10,7 @@
 """
 
 import json
-import os
 import textwrap
-from pathlib import Path
 
 import git
 import pytest
@@ -122,7 +120,7 @@ class TestCollectCommits:
 
     def test_empty_repo(self, tmp_path):
         """빈 저장소에서 수집하면 빈 리스트를 반환한다."""
-        repo = git.Repo.init(tmp_path / "empty_repo")
+        git.Repo.init(tmp_path / "empty_repo")
         commits, total, branches, _head = _collect_commits(tmp_path / "empty_repo")
         assert commits == []
         assert total == 0
@@ -193,6 +191,30 @@ class TestBuildLinks:
         assert links[0]["match_type"] == "explicit"
         assert links[0]["original_hash"] == "abc123"
         assert links[0]["interp_hash"] == "def456"
+
+    def test_explicit_link_prefix_is_normalized(self):
+        orig = [{"hash": "abc123def456", "timestamp": "2026-01-01T10:00:00"}]
+        interp = [{
+            "hash": "interp1",
+            "timestamp": "2026-01-01T11:00:00",
+            "message": "feat: L5\n\nBased-On-Original: abc123",
+        }]
+
+        links = build_links(orig, interp)
+
+        assert len(links) == 1
+        assert links[0]["original_hash"] == "abc123def456"
+        assert links[0]["match_type"] == "explicit"
+
+    def test_missing_explicit_base_hash_is_not_linked(self):
+        orig = [{"hash": "abc123", "timestamp": "2026-01-01T10:00:00"}]
+        interp = [{
+            "hash": "interp1",
+            "timestamp": "2026-01-01T11:00:00",
+            "message": "feat: L5\n\nBased-On-Original: missing",
+        }]
+
+        assert build_links(orig, interp) == []
 
     def test_estimated_link(self):
         """trailer가 없는 커밋은 타임스탬프 기반 estimated 링크를 생성한다."""

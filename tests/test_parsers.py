@@ -4,7 +4,6 @@ Phase 5: NDL Search, 국립공문서관 파서 동작 확인.
 네트워크 접근이 필요한 테스트는 실제 API를 호출한다.
 """
 
-import asyncio
 import sys
 from pathlib import Path
 

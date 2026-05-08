@@ -12,9 +12,6 @@ import yaml
 
 from core.annotation import (
     _gen_annotation_id,
-    add_annotation,
-    load_annotations,
-    save_annotations,
 )
 from llm.draft import LlmDraft
 from llm.router import LlmRouter

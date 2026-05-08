@@ -40,4 +40,5 @@ __all__ = [
     "crop_block",
     "preprocess_for_ocr",
     "load_page_image",
+    "load_page_image_from_pdf",
 ]

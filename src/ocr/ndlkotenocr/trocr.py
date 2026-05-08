@@ -22,7 +22,6 @@ PARSeq의 read() 인터페이스와 호환되므로, 엔진에서 drop-in 교체
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 import numpy as np
 from PIL import Image

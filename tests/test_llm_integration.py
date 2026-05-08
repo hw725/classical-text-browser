@@ -11,13 +11,11 @@ Phase 10-2: LLM 4단 폴백 아키텍처 검증.
   - layout_analyzer: JSON 파싱 헬퍼
 """
 
-import asyncio
 import json
 import sys
 import tempfile
 from pathlib import Path
 from typing import Optional
-from unittest.mock import AsyncMock, patch
 
 import pytest
 

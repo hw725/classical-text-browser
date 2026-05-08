@@ -28,7 +28,6 @@ from .base import (
     BaseOcrEngine,
     OcrBlockResult,
     OcrCharResult,
-    OcrEngineError,
     OcrEngineUnavailableError,
     OcrLineResult,
 )
@@ -371,7 +370,7 @@ class NdlocrEngine(BaseOcrEngine):
         if self._deim is not None:
             return
 
-        from .ndlocr import ensure_models, get_model_dir, get_config_dir
+        from .ndlocr import ensure_models, get_config_dir
 
         model_dir = ensure_models(auto_download=True)
         if model_dir is None:
@@ -460,8 +459,6 @@ class NdlocrEngine(BaseOcrEngine):
         eval_xml(root, logger=None)
 
         # LINE 크롭 + PARSeq 캐스케이드
-        from .ndlocr.parseq import PARSEQ  # noqa: F811
-
         class _RecogLine:
             """인식 대상 행."""
             def __init__(self, npimg, idx, pred_char_cnt, pred_str=""):

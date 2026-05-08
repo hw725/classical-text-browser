@@ -604,7 +604,6 @@ async def _call_llm_text_stream(purpose: str, text: str,
     _RESPONSE_FORMAT = "json"
     attempts = 3 if purpose == "annotation" else 2
     max_tokens = _MAX_TOKENS
-    last_error = None
 
     def _progress_cb(event):
         """provider의 progress_callback → queue에 넣기.

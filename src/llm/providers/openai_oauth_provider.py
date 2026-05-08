@@ -21,7 +21,6 @@ OPENAI_API_KEY가 설정된 경우에도, 프록시가 살아있으면 이 프�
 import logging
 from typing import Optional
 
-from .base import LlmProviderError
 from .openai_provider import OpenAiProvider
 
 _logger = logging.getLogger(__name__)

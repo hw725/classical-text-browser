@@ -199,7 +199,10 @@ class OcrPipeline:
                 # PDF도 없으면 bbox 범위에서 추정 (최후 수단)
                 max_x = max((b.get("bbox", [0, 0, 0, 0])[2] for b in blocks), default=0)
                 max_y = max((b.get("bbox", [0, 0, 0, 0])[3] for b in blocks), default=0)
-                if max_x > 0 and max_x < actual_w * 0.8:
+                if (
+                    (max_x > 0 and max_x < actual_w * 0.8)
+                    or (max_y > 0 and max_y < actual_h * 0.8)
+                ):
                     # bbox 최대값이 실제 이미지 크기의 80% 미만이면
                     # 스케일 불일치가 확실하므로 비율을 추정
                     # 가장 흔한 케이스: PDF 2x (viewport = actual / 2)

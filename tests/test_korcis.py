@@ -11,14 +11,11 @@ import pytest
 from src.parsers.korcis import (
     KorcisFetcher,
     KorcisMapper,
-    _extract_contributors,
     _extract_extent,
     _extract_language,
-    _parse_marc_html,
     _parse_marc_subfields,
     _parse_openapi_detail_xml,
     _parse_openapi_search_xml,
-    _parse_search_results,
     parse_008_field,
     parse_pansik_info,
 )

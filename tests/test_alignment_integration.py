@@ -9,8 +9,6 @@ import json
 import pytest
 
 from src.core.alignment import (
-    AlignmentStats,
-    BlockAlignment,
     MatchType,
     VariantCharDict,
     align_page,

@@ -24,7 +24,6 @@ from core.annotation import (
     check_translation_changed,
     get_annotation_summary,
     get_annotations_by_type,
-    get_annotations_by_stage,
     load_annotations,
     remove_annotation as remove_ann,
     save_annotations,
@@ -43,9 +42,7 @@ from core.annotation_dict_io import (
     save_export,
 )
 from core.annotation_dict_match import (
-    format_for_translation_context,
     list_reference_dicts,
-    load_reference_dict,
     match_page_blocks,
     register_reference_dict,
     remove_reference_dict,
@@ -60,7 +57,6 @@ from core.annotation_types import (
 from core.citation_mark import (
     add_citation_mark,
     export_citations,
-    format_citation,
     list_all_citation_marks,
     load_citation_marks,
     remove_citation_mark,

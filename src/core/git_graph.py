@@ -282,15 +282,20 @@ def build_links(
 
         if base_hash:
             # 명시적 매칭 — 전체 해시 또는 접두사 매칭
-            matched = any(
-                oc["hash"] == base_hash or oc["hash"].startswith(base_hash)
-                for oc in original_commits
+            matched_commit = next(
+                (
+                    oc
+                    for oc in original_commits
+                    if oc["hash"] == base_hash or oc["hash"].startswith(base_hash)
+                ),
+                None,
             )
-            links.append({
-                "original_hash": base_hash,
-                "interp_hash": ic["hash"],
-                "match_type": "explicit",
-            })
+            if matched_commit:
+                links.append({
+                    "original_hash": matched_commit["hash"],
+                    "interp_hash": ic["hash"],
+                    "match_type": "explicit",
+                })
         else:
             # 2. fallback: 타임스탬프 기반 추정
             nearest = _find_nearest_original_before(ic["timestamp"], orig_sorted)

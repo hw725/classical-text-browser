@@ -9,12 +9,10 @@
 """
 
 import pytest
-import asyncio
 
 # 테스트 대상 모듈
 from parsers.asset_detector import (
     detect_assets_from_markdown,
-    detect_assets,
     _resolve_url,
     _label_from_url,
     _get_file_extension,

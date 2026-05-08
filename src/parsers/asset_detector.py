@@ -23,7 +23,7 @@ import hashlib
 import logging
 import re
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 from urllib.parse import urljoin, urlparse, unquote
 
 import httpx
@@ -278,7 +278,6 @@ async def download_generic_asset(
         - "image_bundle": 이미지들 다운로드 → fpdf2로 PDF 병합
     """
     download_type = asset_info.get("download_type", "pdf")
-    label = asset_info.get("label", "download")
 
     if download_type == "image_bundle":
         return await _download_image_bundle(asset_info, dest_dir, progress_callback)

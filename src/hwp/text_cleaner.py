@@ -24,9 +24,7 @@ HWP에서 추출한 텍스트에는 표점(구두점), 현토(한글 토씨), �
 from __future__ import annotations
 
 import re
-import unicodedata
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 # ─── 문자 분류 상수 ──────────────────────────────────
@@ -327,7 +325,6 @@ def clean_hwp_text(
     # 대두의 pos = 대두 공백 뒤의 첫 글자가 clean_text에서 몇 번째인지
     taidu_marks_clean: list[dict] = []
     for t in taidu_candidates:
-        following = t["following_char"]
         # clean_text에서 해당 글자의 위치 찾기 (근사값)
         # 대두 뒤의 한자가 clean_text에서 어디에 있는지 순차 검색
         # (정확한 매핑은 복잡하므로, 순서 기반으로 추정)
