@@ -119,11 +119,13 @@ class UnifiedReader:
         for i, section_file in enumerate(section_files):
             text = hwpx_reader._extract_section(section_file, opts)
             if text.strip():
-                sections.append({
-                    "index": i,
-                    "name": Path(section_file).name,
-                    "text": text.strip(),
-                })
+                sections.append(
+                    {
+                        "index": i,
+                        "name": Path(section_file).name,
+                        "text": text.strip(),
+                    }
+                )
 
         return sections
 
@@ -140,11 +142,13 @@ class UnifiedReader:
 
         sections = []
         for i, text in enumerate(paragraphs):
-            sections.append({
-                "index": i,
-                "name": f"paragraph_{i}",
-                "text": text,
-            })
+            sections.append(
+                {
+                    "index": i,
+                    "name": f"paragraph_{i}",
+                    "text": text,
+                }
+            )
 
         return sections
 
@@ -184,14 +188,8 @@ class UnifiedReader:
         )
         result = self._reader.extract_text_with_notes(opts)
 
-        footnotes = [
-            {"number": n.number, "text": n.text}
-            for n in result.footnotes
-        ]
-        endnotes = [
-            {"number": n.number, "text": n.text}
-            for n in result.endnotes
-        ]
+        footnotes = [{"number": n.number, "text": n.text} for n in result.footnotes]
+        endnotes = [{"number": n.number, "text": n.text} for n in result.endnotes]
 
         return {
             "text": result.text,

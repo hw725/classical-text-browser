@@ -39,16 +39,20 @@ ALL_PUNCTUATION = FULLWIDTH_PUNCTUATION | HALFWIDTH_PUNCTUATION | QUOTE_MARKS
 
 # 반각 → 전각 정규화 매핑
 HALFWIDTH_TO_FULLWIDTH = {
-    ".": "。", ",": "，", ";": "；", ":": "：",
-    "?": "？", "!": "！",
+    ".": "。",
+    ",": "，",
+    ";": "；",
+    ":": "：",
+    "?": "？",
+    "!": "！",
 }
 
 # CJK 한자 유니코드 범위 (CJK Unified Ideographs + Extension A)
 _CJK_RANGES = [
-    (0x4E00, 0x9FFF),    # CJK Unified Ideographs
-    (0x3400, 0x4DBF),    # CJK Extension A
+    (0x4E00, 0x9FFF),  # CJK Unified Ideographs
+    (0x3400, 0x4DBF),  # CJK Extension A
     (0x20000, 0x2A6DF),  # CJK Extension B
-    (0xF900, 0xFAFF),    # CJK Compatibility Ideographs
+    (0xF900, 0xFAFF),  # CJK Compatibility Ideographs
     (0x2F800, 0x2FA1F),  # CJK Compatibility Supplement
 ]
 
@@ -59,6 +63,7 @@ _HANGUL_SYLLABLE_END = 0xD7A3
 
 # ─── 결과 데이터 모델 ────────────────────────────────
 
+
 @dataclass
 class CleanResult:
     """텍스트 정리 결과.
@@ -66,7 +71,8 @@ class CleanResult:
     clean_text에서의 pos는 0-indexed이며, clean_text[pos] 글자 **뒤**에 해당한다.
     예: pos=3이면 clean_text[3] 뒤에 표점·현토가 위치.
     """
-    clean_text: str                    # 순수 원문 (L4 .txt용)
+
+    clean_text: str  # 순수 원문 (L4 .txt용)
     punctuation_marks: list[dict] = field(default_factory=list)
     # [{pos, mark, original_mark}] — pos: clean_text 기준 인덱스
     hyeonto_annotations: list[dict] = field(default_factory=list)
@@ -79,6 +85,7 @@ class CleanResult:
 
 
 # ─── 유틸리티 ────────────────────────────────────────
+
 
 def _is_cjk(ch: str) -> bool:
     """한자(CJK 통합 표의문자)인지 확인."""
@@ -107,6 +114,7 @@ def normalize_punctuation(mark: str) -> str:
 
 
 # ─── 대두 감지 ───────────────────────────────────────
+
 
 def detect_taidu(text: str) -> list[dict]:
     """대두(擡頭) 공백을 감지한다.
@@ -145,12 +153,14 @@ def detect_taidu(text: str) -> list[dict]:
                 context_end = min(len(line), context_start + 10)
                 context_text = line[context_start:context_end]
 
-                candidates.append({
-                    "raw_pos": pos,
-                    "raise_chars": len(spaces),
-                    "following_char": following,
-                    "context": context_text,
-                })
+                candidates.append(
+                    {
+                        "raw_pos": pos,
+                        "raise_chars": len(spaces),
+                        "following_char": following,
+                        "context": context_text,
+                    }
+                )
 
         pos += len(line) + 1  # +1 for \n
 
@@ -158,6 +168,7 @@ def detect_taidu(text: str) -> list[dict]:
 
 
 # ─── 현토 감지 ───────────────────────────────────────
+
 
 def detect_hyeonto(text: str) -> list[dict]:
     """한자 사이에 끼어있는 한글(현토)을 감지한다.
@@ -187,12 +198,14 @@ def detect_hyeonto(text: str) -> list[dict]:
 
                 # 뒤 글자가 한자, 표점, 공백, 줄끝 중 하나인지 확인
                 if i >= n or _is_cjk(text[i]) or _is_punctuation(text[i]) or text[i] in " \n":
-                    results.append({
-                        "raw_pos": hangul_start,
-                        "text": hangul_text,
-                        "preceding_char": text[hangul_start - 1],
-                        "following_char": text[i] if i < n else "",
-                    })
+                    results.append(
+                        {
+                            "raw_pos": hangul_start,
+                            "text": hangul_text,
+                            "preceding_char": text[hangul_start - 1],
+                            "following_char": text[i] if i < n else "",
+                        }
+                    )
                 continue
         i += 1
 
@@ -200,6 +213,7 @@ def detect_hyeonto(text: str) -> list[dict]:
 
 
 # ─── 핵심 정리 함수 ──────────────────────────────────
+
 
 def clean_hwp_text(
     raw_text: str,
@@ -261,11 +275,13 @@ def clean_hwp_text(
 
             # pos: 바로 앞 원문 글자의 인덱스 (= 현재까지의 clean_chars 길이 - 1)
             pos = len(clean_chars) - 1 if clean_chars else 0
-            punctuation_marks.append({
-                "pos": pos,
-                "mark": normalized,
-                "original_mark": original_mark,
-            })
+            punctuation_marks.append(
+                {
+                    "pos": pos,
+                    "mark": normalized,
+                    "original_mark": original_mark,
+                }
+            )
 
             i += 1
             # 표점 뒤의 공백 세트 제거
@@ -284,21 +300,25 @@ def clean_hwp_text(
                 hangul_text = raw_text[hangul_start:i]
 
                 pos = len(clean_chars) - 1 if clean_chars else 0
-                hyeonto_annotations.append({
-                    "pos": pos,
-                    "text": hangul_text,
-                    "position": "after",
-                })
+                hyeonto_annotations.append(
+                    {
+                        "pos": pos,
+                        "text": hangul_text,
+                        "position": "after",
+                    }
+                )
 
                 # 현토 뒤의 표점+공백 세트도 처리
                 if i < n and _is_punctuation(raw_text[i]) and strip_punct:
                     original_mark = raw_text[i]
                     normalized = normalize_punctuation(raw_text[i])
-                    punctuation_marks.append({
-                        "pos": pos,
-                        "mark": normalized,
-                        "original_mark": original_mark,
-                    })
+                    punctuation_marks.append(
+                        {
+                            "pos": pos,
+                            "mark": normalized,
+                            "original_mark": original_mark,
+                        }
+                    )
                     i += 1
 
                 # 공백 제거
@@ -328,14 +348,16 @@ def clean_hwp_text(
         # 대두 뒤의 한자가 clean_text에서 어디에 있는지 순차 검색
         # (정확한 매핑은 복잡하므로, 순서 기반으로 추정)
         # 여기서는 대두 후보를 그대로 반환하고, 호출자가 확인하도록 함
-        taidu_marks_clean.append({
-            "pos": 0,  # 호출자가 매핑할 것
-            "raise_chars": t["raise_chars"],
-            "note": f"{t['following_char']} 앞 대두 {t['raise_chars']}자",
-            "raw_pos": t["raw_pos"],
-            "following_char": t["following_char"],
-            "context": t.get("context", ""),
-        })
+        taidu_marks_clean.append(
+            {
+                "pos": 0,  # 호출자가 매핑할 것
+                "raise_chars": t["raise_chars"],
+                "note": f"{t['following_char']} 앞 대두 {t['raise_chars']}자",
+                "raw_pos": t["raw_pos"],
+                "following_char": t["following_char"],
+                "context": t.get("context", ""),
+            }
+        )
 
     return CleanResult(
         clean_text=clean_text,
@@ -349,6 +371,7 @@ def clean_hwp_text(
 
 
 # ─── 편집 후 재계산 ─────────────────────────────────
+
 
 def reclean_after_edit(
     clean_text: str,
