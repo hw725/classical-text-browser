@@ -362,13 +362,21 @@ def get_git_graph_data(
 
     try:
         orig_repo = git.Repo(doc_path)
-        orig_selected_branch = _resolve_branch_name(orig_repo, original_branch, [b.name for b in orig_repo.branches])
+        orig_selected_branch = _resolve_branch_name(
+            orig_repo,
+            original_branch,
+            [b.name for b in orig_repo.branches],
+        )
     except (git.InvalidGitRepositoryError, git.NoSuchPathError):
         pass
 
     try:
         interp_repo = git.Repo(interp_path)
-        interp_selected_branch = _resolve_branch_name(interp_repo, interp_branch, [b.name for b in interp_repo.branches])
+        interp_selected_branch = _resolve_branch_name(
+            interp_repo,
+            interp_branch,
+            [b.name for b in interp_repo.branches],
+        )
     except (git.InvalidGitRepositoryError, git.NoSuchPathError):
         pass
 
@@ -506,13 +514,16 @@ def get_commit_file_content(
             "file_path": file_path,
             "content": None,
             "is_binary": False,
-            "error": f"파일이 너무 큽니다 ({blob.size:,} 바이트). 최대 {_MAX_FILE_CONTENT_SIZE:,} 바이트까지 지원합니다.",
+            "error": (
+                f"파일이 너무 큽니다 ({blob.size:,} 바이트). "
+                f"최대 {_MAX_FILE_CONTENT_SIZE:,} 바이트까지 지원합니다."
+            ),
         }
 
     # 바이너리 판별 (최초 8KB에서 null 바이트 확인)
     data = blob.data_stream.read()
     sample = data[:8192]
-    if b'\x00' in sample:
+    if b"\x00" in sample:
         return {
             "commit_hash": commit.hexsha,
             "file_path": file_path,

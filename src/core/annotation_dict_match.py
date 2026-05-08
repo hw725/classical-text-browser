@@ -52,7 +52,10 @@ def list_reference_dicts(interp_path: str | Path) -> list[dict]:
                 "source_document_id": data.get("source", {}).get("document_id", ""),
                 "source_document_title": data.get("source", {}).get("document_title", ""),
                 "source_interpretation_id": data.get("source", {}).get("interpretation_id", ""),
-                "total_entries": data.get("statistics", {}).get("total_entries", len(data.get("entries", []))),
+                "total_entries": data.get("statistics", {}).get(
+                    "total_entries",
+                    len(data.get("entries", [])),
+                ),
                 "export_timestamp": data.get("export_timestamp"),
             })
         except (json.JSONDecodeError, OSError):

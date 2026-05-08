@@ -90,7 +90,10 @@ async def generate_translation_drafts(
             # 현토 중 이 문장 범위에 해당하는 것만 필터링
             sent_anns = _filter_annotations_for_range(annotations, start, end)
             if sent_anns:
-                hyeonto_text = render_hyeonto_text(source_text, _shift_annotations(sent_anns, start))
+                hyeonto_text = render_hyeonto_text(
+                    source_text,
+                    _shift_annotations(sent_anns, start),
+                )
 
         # 프롬프트 조립
         hyeonto_section = ""
@@ -99,8 +102,11 @@ async def generate_translation_drafts(
 
         # 사전 참고 섹션 조립
         dict_section = _build_dictionary_section(
-            source_text, start, end,
-            dictionary_annotations, reference_dict_context,
+            source_text,
+            start,
+            end,
+            dictionary_annotations,
+            reference_dict_context,
         )
 
         user_prompt = prompt_config["prompt_template"].format(

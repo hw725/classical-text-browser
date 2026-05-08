@@ -695,7 +695,9 @@ def get_layer_content_at_commit(
         try:
             tree_dir = commit.tree / tree_dir_path
             for blob in tree_dir.blobs:
-                if blob.name.startswith(filename_base + "_blk_") and blob.name.endswith("_punctuation.json"):
+                if blob.name.startswith(filename_base + "_blk_") and blob.name.endswith(
+                    "_punctuation.json"
+                ):
                     data = blob.data_stream.read()
                     try:
                         text = data.decode("utf-8")

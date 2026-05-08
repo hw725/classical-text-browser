@@ -1105,7 +1105,9 @@ def get_git_log(
         pushed_only — True이면 push 시점의 마일스톤만 요약 표시한다.
     출력:
         pushed_only=False: {"mode": "full", "commits": [{hash, ...}, ...]}
-        pushed_only=True:  {"mode": "milestones", "commits": [{hash, ..., commits_squashed, summary}, ...]}
+        pushed_only=True:
+            {"mode": "milestones",
+             "commits": [{hash, ..., commits_squashed, summary}, ...]}
     왜 이렇게 하는가: 연구자가 자신의 교정 이력을 확인하고,
                       특정 시점의 상태를 찾아볼 수 있게 한다.
     왜 milestones가 필요한가: 교정 저장마다 자동 커밋이 생겨

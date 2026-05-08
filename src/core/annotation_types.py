@@ -1,6 +1,7 @@
 """주석 유형(Annotation Types) 관리.
 
-기본 프리셋 8종(person, place, term, allusion, official_title, book_title, grammar, note)을 제공하고,
+기본 프리셋 8종(person, place, term, allusion, official_title,
+book_title, grammar, note)을 제공하고,
 사용자가 커스텀 유형을 추가/삭제할 수 있다.
 프리셋 중 보호 유형(person, place, book_title)을 제외한 나머지는 서고별로 숨길 수 있다.
 
