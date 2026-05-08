@@ -1031,11 +1031,7 @@ async def api_llm_punctuation(body: AiPunctuationRequest):
         ext_url = get_external_punctuation_url()
         if not ext_url:
             return JSONResponse(
-                {
-                    "error": (
-                        "외부 표점 서비스 URL이 설정되지 않았습니다 (환경변수 EXTERNAL_PUNCT_URL)."
-                    )
-                },
+                {"error": "외부 표점 서비스가 비활성화되어 있습니다 (EXTERNAL_PUNCT_URL=off)."},
                 status_code=503,
             )
         try:

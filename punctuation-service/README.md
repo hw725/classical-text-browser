@@ -10,9 +10,9 @@ HTTP로 분리하여 호출하는 마이크로서비스.
 (수백 MB ~ GB)를 박으면 `uv sync` 시간·디스크가 폭증하고 의존성 충돌(예: torch CPU vs
 CUDA, paddlepaddle Python 충돌) 위험이 커진다. 사용자는 비개발자 인문학 연구자다.
 
-대신 본체는 HTTP 어댑터(`force_provider == "external"`) 한 곳만 추가했다. 본체와 본
-서비스는 `EXTERNAL_PUNCT_URL` 환경변수로만 묶인다. 본 서비스가 어디에 떠 있든
-(localhost, 다른 PC, 클라우드) 동일하게 동작한다.
+대신 본체는 HTTP 어댑터(`force_provider == "external"`) 한 곳만 추가했다. 본체는
+기본적으로 `http://127.0.0.1:8765`의 로컬 표점 서비스를 사용하고, 다른 주소의 서비스는
+`EXTERNAL_PUNCT_URL` 환경변수로 덮어쓸 수 있다.
 
 ## 아키텍처
 
@@ -23,7 +23,7 @@ CUDA, paddlepaddle Python 충돌) 위험이 커진다. 사용자는 비개발자
 [본체 FastAPI] ─ httpx → [punctuation-service /punctuate] → [SikuRoBERTa]
        ↑                       ↑
        │                       └─ 가중치(.ckpt) + base BERT (HF)
-       └─ EXTERNAL_PUNCT_URL 환경변수로 본 서비스 위치 지정
+       └─ 기본 http://127.0.0.1:8765, 필요 시 EXTERNAL_PUNCT_URL로 위치 지정
 ```
 
 본체는 응답의 `marks` 배열을 기존 정규화 함수(`_normalize_punct_marks`)로 처리하므로
@@ -49,8 +49,8 @@ docker compose up -d --build
 # 4. 상태 확인 (ready=true면 OK)
 curl http://127.0.0.1:8765/health
 
-# 5. 본체를 환경변수와 함께 기동
-EXTERNAL_PUNCT_URL=http://127.0.0.1:8765 uv run python -m app serve
+# 5. 본체 기동
+uv run python -m app serve
 
 # 정지
 docker compose down
@@ -127,14 +127,21 @@ docker-compose 사용 시 호스트의 가중치 경로는 `PUNCT_MODEL_HOST_PAT
 
 ## 본체와의 결선
 
-본체에서 환경변수 `EXTERNAL_PUNCT_URL`만 설정하면 자동 연동된다.
+본체는 기본적으로 `http://127.0.0.1:8765`를 외부 표점 서비스 주소로 사용한다.
+따라서 기본 포트로 서비스를 띄운 경우에는 별도 환경변수가 필요 없다.
 
 ```bash
-EXTERNAL_PUNCT_URL=http://127.0.0.1:8765 uv run python -m app serve
+uv run python -m app serve
+```
+
+서비스가 다른 주소에 있으면 그때만 override한다.
+
+```bash
+EXTERNAL_PUNCT_URL=http://192.168.0.10:8765 uv run python -m app serve
 ```
 
 표점 화면(L5)의 LLM 모델 드롭다운 마지막에 `● 외부 표점 서비스 (SikuRoBERTa)` 옵션이
-나타난다. 환경변수가 없으면 옵션은 보이지만 선택 시 503으로 친절히 거절된다 (기본 비활성).
+나타난다. 외부 연동을 명시적으로 끄려면 `EXTERNAL_PUNCT_URL=off`로 실행한다.
 
 ## 엔진별 동작
 
@@ -183,7 +190,8 @@ Google Drive 링크에서 `.ckpt`를 받는다. 두 버전 중 v2.5 (SikuRoBERTa
 
 **본체 UI에 옵션이 안 보임**
 - 브라우저 캐시. 강제 새로고침(Ctrl+F5).
-- 본체 재시작 시 `EXTERNAL_PUNCT_URL`이 환경에 있는지 확인.
+- 기본 URL이 아닌 곳에 서비스를 띄웠다면 본체 재시작 시 `EXTERNAL_PUNCT_URL`이
+  환경에 있는지 확인.
 
 ## 검증 상태 (2026-05-08 시점)
 

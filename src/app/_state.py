@@ -135,6 +135,25 @@ def _get_llm_router():
 
 # ── 외부 표점 마이크로서비스 ─────────────────────
 
+_DEFAULT_EXTERNAL_PUNCT_HOST = "127.0.0.1"
+_DEFAULT_EXTERNAL_PUNCT_PORT = "8765"
+_DISABLED_EXTERNAL_PUNCT_VALUES = {"0", "false", "no", "none", "off", "disabled"}
+
+
+def _default_external_punctuation_url() -> str:
+    """Return the local punctuation-service URL used when no explicit URL is set."""
+    import os as _os
+
+    host = _os.getenv("PUNCT_HOST", _DEFAULT_EXTERNAL_PUNCT_HOST).strip()
+    if host in ("", "0.0.0.0", "::"):
+        host = _DEFAULT_EXTERNAL_PUNCT_HOST
+
+    port = _os.getenv("PUNCT_PORT", _DEFAULT_EXTERNAL_PUNCT_PORT).strip()
+    if not port:
+        port = _DEFAULT_EXTERNAL_PUNCT_PORT
+
+    return f"http://{host}:{port}"
+
 
 def get_external_punctuation_url() -> str | None:
     """외부 표점 마이크로서비스(punctuation-service)의 base URL을 반환.
@@ -144,13 +163,16 @@ def get_external_punctuation_url() -> str | None:
         별도 프로세스(마이크로서비스)로 분리했다. 본체는 HTTP로만 호출한다.
 
     설정:
-        환경변수 EXTERNAL_PUNCT_URL (예: "http://127.0.0.1:8765").
-        미설정이면 None을 반환하여 UI/라우터에서 외부 옵션을 비활성으로 처리.
+        환경변수 EXTERNAL_PUNCT_URL (예: "http://127.0.0.1:8765")가 있으면 우선한다.
+        미설정이면 로컬 기본값 http://127.0.0.1:8765 를 사용한다.
+        명시적으로 끄려면 EXTERNAL_PUNCT_URL=off 를 설정한다.
     """
     import os as _os
 
     url = _os.getenv("EXTERNAL_PUNCT_URL", "").strip()
-    return url or None
+    if url.lower() in _DISABLED_EXTERNAL_PUNCT_VALUES:
+        return None
+    return url or _default_external_punctuation_url()
 
 
 # ── OCR 파이프라인 ────────────────────────────
