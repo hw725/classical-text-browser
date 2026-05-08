@@ -22,16 +22,16 @@ D-001: 이 플랫폼의 주 인터페이스는 GUI이며, CLI는 보조 도구�
 import sys
 from pathlib import Path
 
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+
 # src/ 디렉토리를 Python 경로에 추가
 _src_dir = str(Path(__file__).resolve().parent.parent)
 if _src_dir not in sys.path:
     sys.path.insert(0, _src_dir)
 
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-
-from app._state import configure_library, set_library_path  # noqa: F401
-from app.routers import (  # noqa: F401
+from app._state import configure_library, set_library_path  # noqa: E402,F401
+from app.routers import (  # noqa: E402,F401
     alignment,
     annotation,
     documents,
@@ -81,4 +81,4 @@ def configure(library_path: str | Path) -> FastAPI:
 
 # ── 하위 호환: parsers/generic_llm.py 등에서 사용 ──
 # 기존에 `from app.server import _get_llm_router` 형태로 접근하는 코드 지원
-from app._state import _get_llm_router  # noqa: F401
+from app._state import _get_llm_router  # noqa: E402,F401

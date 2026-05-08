@@ -24,15 +24,15 @@ _src = str(Path(__file__).resolve().parent.parent / "src")
 if _src not in sys.path:
     sys.path.insert(0, _src)
 
-from llm.config import LlmConfig
-from llm.draft import LlmDraft
-from llm.providers.base import (
+from llm.config import LlmConfig  # noqa: E402
+from llm.draft import LlmDraft  # noqa: E402
+from llm.providers.base import (  # noqa: E402
     BaseLlmProvider,
     LlmProviderError,
     LlmResponse,
     LlmUnavailableError,
 )
-from llm.usage_tracker import UsageTracker
+from llm.usage_tracker import UsageTracker  # noqa: E402
 
 # ─── Mock Provider ───────────────────────────────────────────
 

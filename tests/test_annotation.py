@@ -9,6 +9,27 @@ from pathlib import Path
 import pytest
 from jsonschema import ValidationError, validate
 
+from src.core.annotation import (
+    add_annotation,
+    get_annotation_summary,
+    get_annotations_by_type,
+    load_annotations,
+    remove_annotation,
+    save_annotations,
+    update_annotation,
+)
+from src.core.annotation_llm import (
+    _parse_llm_annotations,
+    commit_all_drafts,
+    commit_annotation_draft,
+)
+from src.core.annotation_types import (
+    add_custom_type,
+    load_annotation_types,
+    remove_custom_type,
+    validate_type,
+)
+
 # ──────────────────────────────────────
 # 스키마 테스트
 # ──────────────────────────────────────
@@ -109,14 +130,6 @@ class TestAnnotationSchema:
 # ──────────────────────────────────────
 # CRUD 테스트
 # ──────────────────────────────────────
-
-from src.core.annotation import (
-    add_annotation,
-    get_annotation_summary,
-    get_annotations_by_type,
-    remove_annotation,
-    update_annotation,
-)
 
 
 def _empty_data():
@@ -331,8 +344,6 @@ class TestAnnotationSummary:
 # 파일 I/O 테스트
 # ──────────────────────────────────────
 
-from src.core.annotation import load_annotations, save_annotations
-
 
 class TestAnnotationFileIO:
     """저장/로드 라운드트립 테스트."""
@@ -393,8 +404,6 @@ class TestAnnotationFileIO:
 # ──────────────────────────────────────
 # Draft 확정 테스트
 # ──────────────────────────────────────
-
-from src.core.annotation_llm import commit_all_drafts, commit_annotation_draft
 
 
 class TestDraftCommit:
@@ -492,13 +501,6 @@ class TestDraftCommit:
 # 주석 유형 관리 테스트
 # ──────────────────────────────────────
 
-from src.core.annotation_types import (
-    add_custom_type,
-    load_annotation_types,
-    remove_custom_type,
-    validate_type,
-)
-
 
 class TestAnnotationTypes:
     """주석 유형 관리 테스트."""
@@ -579,8 +581,6 @@ class TestAnnotationTypes:
 # ──────────────────────────────────────
 # LLM 파서 테스트
 # ──────────────────────────────────────
-
-from src.core.annotation_llm import _parse_llm_annotations
 
 
 class TestLlmParser:
