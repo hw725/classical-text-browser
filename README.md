@@ -50,7 +50,7 @@ PDF/이미지 위에 **읽기 순서대로 번호가 매겨진 파란색 블록*
 
 ![번역 화면](docs/screenshots/06_translation.jpg)
 
-원문을 현대 한국어로 번역합니다. **Ollama(로컬), OpenAI OAuth, Anthropic, Gemini, OpenAI** 등 다양한 LLM에 번역 초안을 요청하고, 연구자가 직접 수정·확정합니다. LLM이 응답하지 않으면 자동으로 다음 프로바이더로 폴백합니다.
+원문을 현대 한국어로 번역합니다. **Ollama(로컬), OpenAI OAuth, Gemini, OpenAI, Anthropic** 등 다양한 LLM에 번역 초안을 요청하고, 연구자가 직접 수정·확정합니다. LLM이 응답하지 않으면 자동으로 다음 프로바이더로 폴백합니다.
 
 ### 6. 주석 — 태그, 사전형 주석, 인용 마크
 
@@ -100,6 +100,7 @@ PDF/이미지 위에 **읽기 순서대로 번호가 매겨진 파란색 블록*
 3. `start_server.bat` 더블클릭 (Windows) 또는 `./start_server.sh` (macOS/Linux)
 
 브라우저에서 `http://localhost:8000` 접속. GUI에서 서고를 선택/생성할 수 있습니다.
+Windows의 `start_server.bat`는 설정된 표점 Docker 서비스와 OpenAI OAuth 프록시도 함께 시작합니다. OAuth 첫 실행에서 로그인이 필요하면 별도 프록시 창의 안내를 따라 진행하세요.
 
 > Git을 아는 분은 `git clone https://github.com/hw725/classical-text-browser.git`으로도 가능합니다.
 > 오프라인 OCR 설치: `uv sync --extra ndlkotenocr` (고전적 전용, 권장) 또는 `uv sync --extra ndlocr` (근현대 범용).

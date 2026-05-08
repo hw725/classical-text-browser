@@ -89,6 +89,36 @@ if /I "%PUNCT_AUTO_START%"=="0" (
     echo              To enable: create punctuation-service\.env with PUNCT_MODEL_HOST_PATH=...
 )
 
+REM -- Optional OpenAI OAuth proxy -----------------
+REM The UI exposes "OpenAI (OAuth)", so start the local OpenAI-compatible proxy
+REM when npx.cmd is available. Set OPENAI_OAUTH_AUTO_START=0 to skip this.
+if /I "%OPENAI_OAUTH_AUTO_START%"=="0" (
+    echo [OpenAI OAuth] auto-start disabled by OPENAI_OAUTH_AUTO_START=0
+) else (
+    where npx.cmd >nul 2>&1
+    if !ERRORLEVEL! neq 0 (
+        echo [OpenAI OAuth] npx.cmd not found. Install Node.js or start openai-oauth manually.
+    ) else (
+        call :check_openai_oauth
+        if "!OPENAI_OAUTH_READY!"=="1" (
+            set OPENAI_OAUTH_BASE_URL=http://127.0.0.1:!OPENAI_OAUTH_PORT!/v1
+            echo [OpenAI OAuth] proxy ready at !OPENAI_OAUTH_BASE_URL!
+        ) else (
+            echo [OpenAI OAuth] starting local proxy...
+            start "OpenAI OAuth Proxy" cmd /k "npx.cmd -y openai-oauth"
+            timeout /t 4 /nobreak >nul
+            call :check_openai_oauth
+            if "!OPENAI_OAUTH_READY!"=="1" (
+                set OPENAI_OAUTH_BASE_URL=http://127.0.0.1:!OPENAI_OAUTH_PORT!/v1
+                echo [OpenAI OAuth] proxy ready at !OPENAI_OAUTH_BASE_URL!
+            ) else (
+                echo [OpenAI OAuth] proxy window opened. Complete login there if prompted.
+                echo               The main server will continue and will detect the proxy when it is ready.
+            )
+        )
+    )
+)
+
 echo ============================================
 echo  Classical Text Browser
 echo ============================================
@@ -112,7 +142,22 @@ if "%LIBRARY_PATH%"=="" (
 ) else (
     uv run python -m app serve --library "%LIBRARY_PATH%" --port !PORT!
 )
+set APP_EXIT_CODE=!ERRORLEVEL!
 
 echo.
 echo Server stopped.
 pause
+exit /b !APP_EXIT_CODE!
+
+:check_openai_oauth
+set OPENAI_OAUTH_READY=0
+set OPENAI_OAUTH_PORT=
+for /L %%P in (10531,1,10540) do (
+    curl.exe --silent --fail --max-time 2 -H "Authorization: Bearer oauth-proxy" "http://127.0.0.1:%%P/v1/models" 2>nul | findstr /I /C:"data" >nul
+    if !ERRORLEVEL! equ 0 (
+        set OPENAI_OAUTH_READY=1
+        set OPENAI_OAUTH_PORT=%%P
+        goto :eof
+    )
+)
+goto :eof

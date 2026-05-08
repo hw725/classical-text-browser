@@ -230,7 +230,7 @@ class LlmRouter:
             "사용 가능한 LLM provider가 없습니다.\n"
             "확인 사항:\n"
             "  1. Ollama: ollama serve (gemma4:e4b 모델 필요)\n"
-            "  2. OpenAI OAuth: npx openai-oauth (무료, ChatGPT 계정 필요)\n"
+            "  2. OpenAI OAuth: start_server.bat 또는 npx.cmd -y openai-oauth\n"
             "  3. API 키: .env에 GOOGLE_API_KEY, OPENAI_API_KEY 등\n\n"
             "시도 결과:\n" + "\n".join(f"  - {e}" for e in errors)
         )
@@ -339,7 +339,7 @@ class LlmRouter:
             "사용 가능한 LLM provider가 없습니다.\n"
             "확인 사항:\n"
             "  1. Ollama: ollama serve (gemma4:e4b 모델 필요)\n"
-            "  2. OpenAI OAuth: npx openai-oauth (무료, ChatGPT 계정 필요)\n"
+            "  2. OpenAI OAuth: start_server.bat 또는 npx.cmd -y openai-oauth\n"
             "  3. API 키: .env에 GOOGLE_API_KEY, OPENAI_API_KEY 등\n\n"
             "시도 결과:\n" + "\n".join(f"  - {e}" for e in errors)
         )

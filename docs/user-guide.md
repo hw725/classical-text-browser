@@ -502,9 +502,10 @@ uv run python -m cli add-document /path/to/my-library \
 | 순위 | 프로바이더 | 설정 방법 | 비전(이미지) | 비용 |
 |------|-----------|----------|-------------|------|
 | 1 | Ollama (로컬 gemma4:e4b) | `ollama pull gemma4:e4b` + `ollama serve` | O | 무료 |
-| 2 | Google Gemini | `.env`에 `GOOGLE_API_KEY` | O | 유료 (저렴) |
-| 3 | OpenAI | `.env`에 `OPENAI_API_KEY` | O | 유료 (중간) |
-| 4 | Anthropic (Claude) | `.env`에 `ANTHROPIC_API_KEY` | O | 유료 (최후) |
+| 2 | OpenAI OAuth | `start_server.bat` 자동 기동 또는 `npx.cmd -y openai-oauth` | O | 무료 |
+| 3 | Google Gemini | `.env`에 `GOOGLE_API_KEY` | O | 유료 (저렴) |
+| 4 | OpenAI | `.env`에 `OPENAI_API_KEY` | O | 유료 (중간) |
+| 5 | Anthropic (Claude) | `.env`에 `ANTHROPIC_API_KEY` | O | 유료 (최후) |
 
 > **권장**: Ollama(gemma4:e4b)만으로도 대부분의 기능을 사용할 수 있습니다.
 > 안정적인 표점·번역 품질이 필요하면 Gemini API 키를 설정하세요 (무료 티어 제공).
@@ -538,11 +539,21 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 > **주의**: `.env` 파일에는 API 키가 포함되므로 `.gitignore`에 등록되어 있습니다. Git에 커밋되지 않습니다.
 
-### 8.3 비전 모델
+### 8.3 OpenAI OAuth
+
+Windows에서는 `start_server.bat`가 `npx.cmd -y openai-oauth`를 별도 창에서 자동 실행합니다. 포트 `10531`이 다른 프로그램에 잡혀 있으면 프록시가 `10532~10540` 중 가능한 포트로 올라오고, 배치파일이 감지한 URL을 서버에 전달합니다.
+
+첫 실행에서 로그인이 필요하면 열린 `OpenAI OAuth Proxy` 창의 안내를 따르세요. 직접 프록시를 띄운 포트를 고정해야 하는 경우 프로젝트 루트 `.env`에 다음처럼 적을 수 있습니다.
+
+```bash
+OPENAI_OAUTH_BASE_URL=http://127.0.0.1:10532/v1
+```
+
+### 8.4 비전 모델
 
 OCR과 레이아웃 분석은 **이미지를 볼 수 있는 모델**만 사용할 수 있습니다. 드롭다운에서 모델 옆에 눈 아이콘이 있으면 비전을 지원합니다.
 
-### 8.4 모델 선택 팁
+### 8.5 모델 선택 팁
 
 - **오프라인 작업**: NDL古典籍OCR-Lite 또는 NDLOCR-Lite(OCR용) + 수동 해석
 - **무료 온라인**: Ollama + 클라우드 모델(kimi-k2.5, glm-5 등)
