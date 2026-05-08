@@ -47,17 +47,19 @@ def list_reference_dicts(interp_path: str | Path) -> list[dict]:
         try:
             with open(f, encoding="utf-8") as fh:
                 data = json.load(fh)
-            results.append({
-                "filename": f.name,
-                "source_document_id": data.get("source", {}).get("document_id", ""),
-                "source_document_title": data.get("source", {}).get("document_title", ""),
-                "source_interpretation_id": data.get("source", {}).get("interpretation_id", ""),
-                "total_entries": data.get("statistics", {}).get(
-                    "total_entries",
-                    len(data.get("entries", [])),
-                ),
-                "export_timestamp": data.get("export_timestamp"),
-            })
+            results.append(
+                {
+                    "filename": f.name,
+                    "source_document_id": data.get("source", {}).get("document_id", ""),
+                    "source_document_title": data.get("source", {}).get("document_title", ""),
+                    "source_interpretation_id": data.get("source", {}).get("interpretation_id", ""),
+                    "total_entries": data.get("statistics", {}).get(
+                        "total_entries",
+                        len(data.get("entries", [])),
+                    ),
+                    "export_timestamp": data.get("export_timestamp"),
+                }
+            )
         except (json.JSONDecodeError, OSError):
             # 손상된 파일은 건너뜀
             continue
@@ -162,17 +164,19 @@ def _build_headword_index(ref_dicts: list[dict]) -> list[dict]:
             hw = entry.get("headword", "")
             if not hw:
                 continue
-            index.append({
-                "headword": hw,
-                "headword_reading": entry.get("headword_reading"),
-                "type": entry.get("type", "term"),
-                "dictionary_meaning": entry.get("dictionary_meaning", ""),
-                "contextual_meaning": entry.get("contextual_meaning"),
-                "source_references": entry.get("source_references", []),
-                "related_terms": entry.get("related_terms", []),
-                "source_dict_filename": source_filename,
-                "source_document_title": source_title,
-            })
+            index.append(
+                {
+                    "headword": hw,
+                    "headword_reading": entry.get("headword_reading"),
+                    "type": entry.get("type", "term"),
+                    "dictionary_meaning": entry.get("dictionary_meaning", ""),
+                    "contextual_meaning": entry.get("contextual_meaning"),
+                    "source_references": entry.get("source_references", []),
+                    "related_terms": entry.get("related_terms", []),
+                    "source_dict_filename": source_filename,
+                    "source_document_title": source_title,
+                }
+            )
 
     # 표제어 길이 내림차순 정렬 (긴 표제어 우선 매칭 — 부분 겹침 방지)
     index.sort(key=lambda x: len(x["headword"]), reverse=True)
@@ -237,18 +241,20 @@ def match_text(
             start_idx = pos + 1  # 겹치는 매칭도 허용
 
         if positions:
-            matches.append({
-                "headword": hw,
-                "headword_reading": item["headword_reading"],
-                "type": item["type"],
-                "dictionary_meaning": item["dictionary_meaning"],
-                "contextual_meaning": item["contextual_meaning"],
-                "source_references": item["source_references"],
-                "related_terms": item["related_terms"],
-                "source_dict": item["source_dict_filename"],
-                "source_document": item["source_document_title"],
-                "match_positions": positions,
-            })
+            matches.append(
+                {
+                    "headword": hw,
+                    "headword_reading": item["headword_reading"],
+                    "type": item["type"],
+                    "dictionary_meaning": item["dictionary_meaning"],
+                    "contextual_meaning": item["contextual_meaning"],
+                    "source_references": item["source_references"],
+                    "related_terms": item["related_terms"],
+                    "source_dict": item["source_dict_filename"],
+                    "source_document": item["source_document_title"],
+                    "match_positions": positions,
+                }
+            )
 
     return matches
 

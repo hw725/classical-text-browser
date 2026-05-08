@@ -54,16 +54,10 @@ def _citation_mark_file_path(interp_path: Path, part_id: str, page_num: int) -> 
         기존 L5/L6/L7 파일 네이밍 패턴과 동일하게 맞추되,
         L-레이어 디렉토리가 아닌 citation_marks/ 에 저장한다.
     """
-    return (
-        interp_path
-        / "citation_marks"
-        / f"{part_id}_page_{page_num:03d}_citation_marks.json"
-    )
+    return interp_path / "citation_marks" / f"{part_id}_page_{page_num:03d}_citation_marks.json"
 
 
-def load_citation_marks(
-    interp_path: str | Path, part_id: str, page_num: int
-) -> dict:
+def load_citation_marks(interp_path: str | Path, part_id: str, page_num: int) -> dict:
     """인용 마크 파일을 로드한다.
 
     목적: 해석 저장소의 citation_marks/에서 인용 마크 JSON을 읽는다.
@@ -188,9 +182,7 @@ def remove_citation_mark(data: dict, mark_id: str) -> bool:
 # ──────────────────────────────────────
 
 
-def list_all_citation_marks(
-    interp_path: str | Path, part_id: str = "main"
-) -> list[dict]:
+def list_all_citation_marks(interp_path: str | Path, part_id: str = "main") -> list[dict]:
     """전체 페이지에서 인용 마크를 수집하여 반환한다.
 
     목적: 인용 패널에서 "전체 보기" 모드로 모든 인용 마크를 표시.
@@ -300,7 +292,7 @@ def resolve_citation_context(
         full_block_text = page_data.get("text", "")
 
     if full_block_text and start <= end < len(full_block_text):
-        original_text = full_block_text[start:end + 1]
+        original_text = full_block_text[start : end + 1]
     elif full_block_text and start < len(full_block_text):
         original_text = full_block_text[start:]
 
@@ -330,13 +322,15 @@ def resolve_citation_context(
                 tr_end = tr_source.get("end", 0)
                 # 범위 겹침 검사: 두 구간이 겹치는지
                 if tr_start <= end and tr_end >= start:
-                    translations.append({
-                        "id": tr.get("id"),
-                        "source_text": tr.get("source_text", ""),
-                        "translation": tr.get("translation", ""),
-                        "target_language": tr.get("target_language", "ko"),
-                        "status": tr.get("status", "draft"),
-                    })
+                    translations.append(
+                        {
+                            "id": tr.get("id"),
+                            "source_text": tr.get("source_text", ""),
+                            "translation": tr.get("translation", ""),
+                            "target_language": tr.get("target_language", "ko"),
+                            "status": tr.get("status", "draft"),
+                        }
+                    )
     except Exception:
         pass
 
@@ -352,13 +346,15 @@ def resolve_citation_context(
                 ann_start = ann_target.get("start", 0)
                 ann_end = ann_target.get("end", 0)
                 if ann_start <= end and ann_end >= start:
-                    annotations.append({
-                        "id": ann.get("id"),
-                        "type": ann.get("type", ""),
-                        "label": ann.get("content", {}).get("label", ""),
-                        "description": ann.get("content", {}).get("description", ""),
-                        "dictionary": ann.get("dictionary"),
-                    })
+                    annotations.append(
+                        {
+                            "id": ann.get("id"),
+                            "type": ann.get("type", ""),
+                            "label": ann.get("content", {}).get("label", ""),
+                            "description": ann.get("content", {}).get("description", ""),
+                            "dictionary": ann.get("dictionary"),
+                        }
+                    )
     except Exception:
         pass
 
@@ -385,9 +381,7 @@ def resolve_citation_context(
     }
 
 
-def _filter_marks_for_range(
-    marks: list[dict], start: int, end: int
-) -> list[dict]:
+def _filter_marks_for_range(marks: list[dict], start: int, end: int) -> list[dict]:
     """표점 marks에서 지정 범위(start~end)에 걸치는 것만 필터한다.
 
     왜 이렇게 하는가:
@@ -432,11 +426,11 @@ def _adjust_mark_offsets(marks: list[dict], offset: int) -> list[dict]:
 # 왜 이렇게 하는가: 한국 학술 논문의 전형적 인용 형식(저자, 서명, 작품 페이지 : 원문)을
 # 기본값으로 유지하되, 사용자가 순서를 바꿀 수 있게 한다.
 DEFAULT_FIELD_ORDER = [
-    "author",           # 저자
-    "book_volume",      # 서명 + 권수
-    "work_page",        # 작품명 + 페이지(부가정보)
+    "author",  # 저자
+    "book_volume",  # 서명 + 권수
+    "work_page",  # 작품명 + 페이지(부가정보)
     "punctuated_text",  # 표점 원문
-    "translation",      # 번역
+    "translation",  # 번역
 ]
 
 
@@ -550,10 +544,7 @@ def format_citation(
         field_values["punctuated_text"] = display_text
 
     if include_translation and context.get("translations"):
-        trans_texts = [
-            t["translation"] for t in context["translations"]
-            if t.get("translation")
-        ]
+        trans_texts = [t["translation"] for t in context["translations"] if t.get("translation")]
         if trans_texts:
             field_values["translation"] = " ".join(trans_texts)
 

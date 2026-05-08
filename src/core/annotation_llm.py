@@ -19,9 +19,7 @@ from llm.router import LlmRouter
 
 def _load_prompt() -> dict:
     """주석 프롬프트를 로드한다."""
-    prompt_path = (
-        Path(__file__).parent.parent / "llm" / "prompts" / "annotation.yaml"
-    )
+    prompt_path = Path(__file__).parent.parent / "llm" / "prompts" / "annotation.yaml"
     with open(prompt_path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
@@ -59,7 +57,7 @@ def _parse_llm_annotations(response_text: str) -> list[dict]:
     last_brace = text.rfind("}")
     if first_brace != -1 and last_brace != -1:
         try:
-            parsed = json.loads(text[first_brace:last_brace + 1])
+            parsed = json.loads(text[first_brace : last_brace + 1])
             if isinstance(parsed, dict) and "annotations" in parsed:
                 return parsed["annotations"]
         except json.JSONDecodeError:

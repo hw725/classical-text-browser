@@ -109,9 +109,7 @@ def _annotation_file_path(interp_path: Path, part_id: str, page_num: int) -> Pat
     )
 
 
-def load_annotations(
-    interp_path: str | Path, part_id: str, page_num: int
-) -> dict:
+def load_annotations(interp_path: str | Path, part_id: str, page_num: int) -> dict:
     """L7 주석 파일을 로드한다. v1 데이터는 자동으로 v2로 마이그레이션.
 
     목적: 해석 저장소의 L7_annotation에서 주석 JSON을 읽는다.
@@ -236,9 +234,7 @@ def add_annotation(data: dict, block_id: str, annotation: dict) -> dict:
     return annotation
 
 
-def update_annotation(
-    data: dict, block_id: str, annotation_id: str, updates: dict
-) -> dict | None:
+def update_annotation(data: dict, block_id: str, annotation_id: str, updates: dict) -> dict | None:
     """주석을 수정한다.
 
     입력:
@@ -267,9 +263,7 @@ def remove_annotation(data: dict, block_id: str, annotation_id: str) -> bool:
         return False
 
     original_len = len(block["annotations"])
-    block["annotations"] = [
-        ann for ann in block["annotations"] if ann["id"] != annotation_id
-    ]
+    block["annotations"] = [ann for ann in block["annotations"] if ann["id"] != annotation_id]
     return len(block["annotations"]) < original_len
 
 
@@ -288,10 +282,12 @@ def get_annotations_by_type(data: dict, type_id: str) -> list:
     for block in data.get("blocks", []):
         for ann in block.get("annotations", []):
             if ann.get("type") == type_id:
-                results.append({
-                    "block_id": block["block_id"],
-                    "annotation": ann,
-                })
+                results.append(
+                    {
+                        "block_id": block["block_id"],
+                        "annotation": ann,
+                    }
+                )
     return results
 
 
@@ -305,10 +301,12 @@ def get_annotations_by_stage(data: dict, stage: str) -> list:
     for block in data.get("blocks", []):
         for ann in block.get("annotations", []):
             if ann.get("current_stage") == stage:
-                results.append({
-                    "block_id": block["block_id"],
-                    "annotation": ann,
-                })
+                results.append(
+                    {
+                        "block_id": block["block_id"],
+                        "annotation": ann,
+                    }
+                )
     return results
 
 
@@ -354,13 +352,15 @@ def check_translation_changed(data: dict, current_translations: dict) -> list[di
                 hw = ""
                 if ann.get("dictionary"):
                     hw = ann["dictionary"].get("headword", "")
-                changed.append({
-                    "block_id": block_id,
-                    "annotation_id": ann["id"],
-                    "headword": hw,
-                    "snapshot": snapshot,
-                    "current": current_tr,
-                })
+                changed.append(
+                    {
+                        "block_id": block_id,
+                        "annotation_id": ann["id"],
+                        "headword": hw,
+                        "snapshot": snapshot,
+                        "current": current_tr,
+                    }
+                )
 
     return changed
 

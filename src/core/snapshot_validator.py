@@ -15,7 +15,6 @@ Phase 12-3: 스냅샷 데이터의 구조적 무결성을 검증한다.
     5. annotation_types 참조 무결성
 """
 
-
 SUPPORTED_VERSIONS = ["1.0"]
 
 
@@ -69,8 +68,7 @@ def _validate_original(original: dict, warnings: list) -> None:
     l1 = layers.get("L1_source", {})
     if l1.get("type") == "reference" and l1.get("files"):
         warnings.append(
-            f"L1 이미지 {len(l1['files'])}개는 경로 참조만 포함 — "
-            "실제 파일은 별도 복사 필요"
+            f"L1 이미지 {len(l1['files'])}개는 경로 참조만 포함 — 실제 파일은 별도 복사 필요"
         )
 
     # L4 텍스트 존재 확인
@@ -117,20 +115,13 @@ def _validate_interpretation(data: dict, warnings: list) -> None:
             for ann in block.get("annotations", []):
                 ann_type = ann.get("type")
                 if ann_type and defined_types and ann_type not in defined_types:
-                    warnings.append(
-                        f"L7 주석 type '{ann_type}'이 annotation_types에 미정의"
-                    )
+                    warnings.append(f"L7 주석 type '{ann_type}'이 annotation_types에 미정의")
 
 
 def _extract_l3_block_ids(data: dict) -> set[str]:
     """L3 레이아웃에서 모든 block_id를 추출한다."""
     ids = set()
-    l3_pages = (
-        data.get("original", {})
-        .get("layers", {})
-        .get("L3_layout", {})
-        .get("pages", [])
-    )
+    l3_pages = data.get("original", {}).get("layers", {}).get("L3_layout", {}).get("pages", [])
     for page in l3_pages:
         for block in page.get("blocks", []):
             bid = block.get("block_id")

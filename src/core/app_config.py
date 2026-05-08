@@ -31,6 +31,7 @@ _MAX_RECENT = 10
 
 # ── 설정 파일 읽기/쓰기 ─────────────────────────
 
+
 def load_app_config() -> dict:
     """앱 설정을 로드한다.
 
@@ -59,6 +60,7 @@ def save_app_config(config: dict) -> None:
 
 
 # ── 최근 서고 관리 ──────────────────────────────
+
 
 def get_recent_libraries() -> list[dict]:
     """최근 사용한 서고 목록을 반환한다.
@@ -107,11 +109,14 @@ def add_recent_library(path: str | Path, name: str | None = None) -> None:
     recent = [r for r in recent if r.get("path") != abs_path]
 
     # 맨 앞에 추가
-    recent.insert(0, {
-        "path": abs_path,
-        "name": effective_name,
-        "last_used": now,
-    })
+    recent.insert(
+        0,
+        {
+            "path": abs_path,
+            "name": effective_name,
+            "last_used": now,
+        },
+    )
 
     # 최대 개수 제한
     config["recent_libraries"] = recent[:_MAX_RECENT]
@@ -135,6 +140,7 @@ def get_last_library() -> str | None:
 
 
 # ── 백업 경로 관리 ──────────────────────────────
+
 
 def get_backup_path() -> str | None:
     """백업 폴더 경로를 반환한다.

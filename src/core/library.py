@@ -151,10 +151,7 @@ def trash_document(library_path: str | Path, doc_id: str) -> dict:
     doc_dir = library_path / "documents" / doc_id
 
     if not doc_dir.exists():
-        raise FileNotFoundError(
-            f"문헌을 찾을 수 없습니다: {doc_id}\n"
-            "→ 해결: 문헌 ID를 확인하세요."
-        )
+        raise FileNotFoundError(f"문헌을 찾을 수 없습니다: {doc_id}\n→ 해결: 문헌 ID를 확인하세요.")
 
     # 이 문헌을 참조하는 해석 저장소 목록 수집 (프론트에서 경고 표시용)
     related = _find_related_interpretations(library_path, doc_id)
@@ -180,8 +177,7 @@ def trash_interpretation(library_path: str | Path, interp_id: str) -> dict:
 
     if not interp_dir.exists():
         raise FileNotFoundError(
-            f"해석 저장소를 찾을 수 없습니다: {interp_id}\n"
-            "→ 해결: 해석 저장소 ID를 확인하세요."
+            f"해석 저장소를 찾을 수 없습니다: {interp_id}\n→ 해결: 해석 저장소 ID를 확인하세요."
         )
 
     trash_name = _move_to_trash(library_path, "interpretations", interp_id)
@@ -216,9 +212,7 @@ def list_trash(library_path: str | Path) -> dict:
     return result
 
 
-def restore_from_trash(
-    library_path: str | Path, trash_type: str, trash_name: str
-) -> str:
+def restore_from_trash(library_path: str | Path, trash_type: str, trash_name: str) -> str:
     """휴지통에서 문헌 또는 해석 저장소를 복원한다.
 
     목적: .trash/에 있는 항목을 원래 위치(documents/ 또는 interpretations/)로 되돌린다.
@@ -276,9 +270,11 @@ def _close_git_handles(repo_path: Path) -> None:
         혹시 남아있는 git.cmd 프로세스도 clear_cache()로 닫는다.
     """
     import gc
+
     gc.collect()
     try:
         import git
+
         git.cmd.Git.clear_cache()
     except Exception:
         pass
@@ -382,9 +378,11 @@ def _parse_trash_entry(trash_folder: Path) -> dict | None:
 
     # 타임스탬프 파싱
     try:
-        trashed_at = datetime.strptime(timestamp_str, "%Y%m%dT%H%M%S").replace(
-            tzinfo=timezone.utc
-        ).isoformat()
+        trashed_at = (
+            datetime.strptime(timestamp_str, "%Y%m%dT%H%M%S")
+            .replace(tzinfo=timezone.utc)
+            .isoformat()
+        )
     except ValueError:
         trashed_at = None
 
@@ -407,6 +405,7 @@ def _write_json(path: Path, data: dict) -> None:
 # ──────────────────────────────────────────────────────────
 # Git 건강 검사 — .git 내부 파일 오염 탐지 및 수리
 # ──────────────────────────────────────────────────────────
+
 
 def check_git_health(library_path: str | Path) -> list[dict]:
     """서고 내 모든 git 저장소에서 .git/ 파일 오염 여부를 검사한다.
@@ -439,17 +438,16 @@ def check_git_health(library_path: str | Path) -> list[dict]:
                 repo = gitmodule.Repo(entry)
                 # git ls-files로 추적 중인 파일 목록 가져오기
                 tracked = repo.git.ls_files().splitlines()
-                contaminated = [
-                    f for f in tracked
-                    if f.startswith(".git/") or f == ".git"
-                ]
+                contaminated = [f for f in tracked if f.startswith(".git/") or f == ".git"]
                 if contaminated:
-                    results.append({
-                        "repo_id": entry.name,
-                        "repo_type": repo_type,
-                        "repo_path": str(entry),
-                        "contaminated_files": contaminated,
-                    })
+                    results.append(
+                        {
+                            "repo_id": entry.name,
+                            "repo_type": repo_type,
+                            "repo_path": str(entry),
+                            "contaminated_files": contaminated,
+                        }
+                    )
             except (gitmodule.InvalidGitRepositoryError, Exception):
                 continue
 
@@ -472,10 +470,7 @@ def repair_git_contamination(repo_path: str | Path) -> dict:
     try:
         repo = gitmodule.Repo(repo_path)
         tracked = repo.git.ls_files().splitlines()
-        contaminated = [
-            f for f in tracked
-            if f.startswith(".git/") or f == ".git"
-        ]
+        contaminated = [f for f in tracked if f.startswith(".git/") or f == ".git"]
 
         if not contaminated:
             result["method"] = "no_contamination"
@@ -490,9 +485,7 @@ def repair_git_contamination(repo_path: str | Path) -> dict:
             # 방법 2: update-index --force-remove
             try:
                 for f in contaminated:
-                    repo.git.execute(
-                        ["git", "update-index", "--force-remove", "--", f]
-                    )
+                    repo.git.execute(["git", "update-index", "--force-remove", "--", f])
                 result["method"] = "update_index"
             except gitmodule.GitCommandError as e:
                 result["error"] = str(e)
@@ -512,9 +505,7 @@ def repair_git_contamination(repo_path: str | Path) -> dict:
         # 변경사항 커밋
         repo.git.add("-A")
         try:
-            repo.index.commit(
-                "fix: .git 내부 파일 추적 제거 (자동 수리)"
-            )
+            repo.index.commit("fix: .git 내부 파일 추적 제거 (자동 수리)")
         except gitmodule.GitCommandError:
             pass  # 변경사항이 없으면 무시
 

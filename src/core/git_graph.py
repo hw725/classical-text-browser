@@ -28,7 +28,7 @@ def parse_trailer(commit_message: str, key: str) -> str | None:
         key — trailer 키. 예: "Based-On-Original".
     출력: trailer 값 (해시 문자열). 없으면 None.
     """
-    pattern = rf'^{re.escape(key)}:\s*(.+)$'
+    pattern = rf"^{re.escape(key)}:\s*(.+)$"
     for line in reversed(commit_message.strip().splitlines()):
         match = re.match(pattern, line.strip())
         if match:
@@ -48,7 +48,7 @@ def extract_layers_affected(commit_message: str) -> list[str]:
     layers = []
 
     # L1~L8 패턴 검색
-    for match in re.finditer(r'\bL(\d)\b', first_line):
+    for match in re.finditer(r"\bL(\d)\b", first_line):
         layer = f"L{match.group(1)}"
         if layer not in layers:
             layers.append(layer)
@@ -126,7 +126,25 @@ def _collect_commits(
         for h in milestone_hashes[:max_count]:
             try:
                 c = repo.commit(h)
-                commits.append({
+                commits.append(
+                    {
+                        "hash": c.hexsha,
+                        "short_hash": c.hexsha[:7],
+                        "message": c.message.strip(),
+                        "author": str(c.author),
+                        "timestamp": c.committed_datetime.isoformat(),
+                        "layers_affected": extract_layers_affected(c.message),
+                        "tags": [t.name for t in c.tags] if hasattr(c, "tags") else [],
+                    }
+                )
+            except (git.BadName, ValueError):
+                continue
+    else:
+        for i, c in enumerate(repo.iter_commits(selected_branch, max_count=max_count + offset)):
+            if i < offset:
+                continue
+            commits.append(
+                {
                     "hash": c.hexsha,
                     "short_hash": c.hexsha[:7],
                     "message": c.message.strip(),
@@ -134,29 +152,13 @@ def _collect_commits(
                     "timestamp": c.committed_datetime.isoformat(),
                     "layers_affected": extract_layers_affected(c.message),
                     "tags": [t.name for t in c.tags] if hasattr(c, "tags") else [],
-                })
-            except (git.BadName, ValueError):
-                continue
-    else:
-        for i, c in enumerate(repo.iter_commits(selected_branch, max_count=max_count + offset)):
-            if i < offset:
-                continue
-            commits.append({
-                "hash": c.hexsha,
-                "short_hash": c.hexsha[:7],
-                "message": c.message.strip(),
-                "author": str(c.author),
-                "timestamp": c.committed_datetime.isoformat(),
-                "layers_affected": extract_layers_affected(c.message),
-                "tags": [t.name for t in c.tags] if hasattr(c, "tags") else [],
-            })
+                }
+            )
 
     return commits, total if milestone_hashes is None else len(commits), branches, head_hash
 
 
-def _get_push_milestone_hashes(
-    repo: git.Repo, branch_name: str
-) -> list[str] | None:
+def _get_push_milestone_hashes(repo: git.Repo, branch_name: str) -> list[str] | None:
     """원격 추적 브랜치의 reflog에서 push 시점의 커밋 해시를 추출한다.
 
     목적: 그래프에서 급행 정거장 모드를 지원하기 위해,
@@ -168,9 +170,7 @@ def _get_push_milestone_hashes(
         return None
 
     try:
-        raw = repo.git.execute(
-            ["git", "reflog", "show", remote_ref, "--format=%H|%gs"]
-        )
+        raw = repo.git.execute(["git", "reflog", "show", remote_ref, "--format=%H|%gs"])
     except git.GitCommandError:
         return None
 
@@ -290,20 +290,24 @@ def build_links(
                 None,
             )
             if matched_commit:
-                links.append({
-                    "original_hash": matched_commit["hash"],
-                    "interp_hash": ic["hash"],
-                    "match_type": "explicit",
-                })
+                links.append(
+                    {
+                        "original_hash": matched_commit["hash"],
+                        "interp_hash": ic["hash"],
+                        "match_type": "explicit",
+                    }
+                )
         else:
             # 2. fallback: 타임스탬프 기반 추정
             nearest = _find_nearest_original_before(ic["timestamp"], orig_sorted)
             if nearest:
-                links.append({
-                    "original_hash": nearest["hash"],
-                    "interp_hash": ic["hash"],
-                    "match_type": "estimated",
-                })
+                links.append(
+                    {
+                        "original_hash": nearest["hash"],
+                        "interp_hash": ic["hash"],
+                        "match_type": "estimated",
+                    }
+                )
 
     return links
 
@@ -456,10 +460,12 @@ def get_commit_file_list(
     files = []
     for blob in commit.tree.traverse():
         if blob.type == "blob":
-            files.append({
-                "path": blob.path,
-                "size": blob.size,
-            })
+            files.append(
+                {
+                    "path": blob.path,
+                    "size": blob.size,
+                }
+            )
 
     return {
         "commit_hash": commit.hexsha,

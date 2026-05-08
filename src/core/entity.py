@@ -67,6 +67,7 @@ SCHEMA_FILES: dict[str, str] = {
 # 내부 유틸리티
 # ──────────────────────────
 
+
 def _entity_dir_path(interp_path: Path, entity_type: str) -> Path:
     """엔티티 유형의 저장 디렉터리 경로를 반환한다. 디렉터리가 없으면 생성한다.
 
@@ -107,10 +108,7 @@ def _validate_entity(entity_type: str, data: dict) -> None:
     if not schema_file:
         return
 
-    schema_path = (
-        Path(__file__).resolve().parent.parent.parent
-        / "schemas" / "core" / schema_file
-    )
+    schema_path = Path(__file__).resolve().parent.parent.parent / "schemas" / "core" / schema_file
     if schema_path.exists():
         schema = json.loads(schema_path.read_text(encoding="utf-8"))
         # _meta 등 내부 필드는 검증에서 제외
@@ -149,6 +147,7 @@ def _get_source_head_commit(doc_path: Path) -> str:
 # ──────────────────────────
 # 공개 API 함수
 # ──────────────────────────
+
 
 def create_entity(
     interp_path: str | Path,
@@ -266,8 +265,7 @@ def update_entity(
     # id 변경 금지
     if "id" in updates and updates["id"] != entity_id:
         raise ValueError(
-            "엔티티 ID는 변경할 수 없습니다.\n"
-            "→ 해결: id 필드를 updates에서 제거하세요."
+            "엔티티 ID는 변경할 수 없습니다.\n→ 해결: id 필드를 updates에서 제거하세요."
         )
 
     # 상태 전이 검증
@@ -393,9 +391,11 @@ def list_entities_for_page(
     for rel in all_relations:
         # evidence_blocks가 page_blocks를 포함하거나, subject/object가 관련 ID
         evidence = set(rel.get("evidence_blocks") or [])
-        if (evidence & block_ids
-                or rel.get("subject_id") in related_ids
-                or rel.get("object_id") in related_ids):
+        if (
+            evidence & block_ids
+            or rel.get("subject_id") in related_ids
+            or rel.get("object_id") in related_ids
+        ):
             page_relations.append(rel)
             # 관련된 Agent/Concept/Block ID 수집 (.get()으로 KeyError 방지)
             subj_id = rel.get("subject_id")

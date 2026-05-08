@@ -16,9 +16,7 @@ from pathlib import Path
 # 기본 프리셋 경로
 # ──────────────────────────────────────
 
-_DEFAULT_TYPES_PATH = (
-    Path(__file__).parent.parent.parent / "resources" / "annotation_types.json"
-)
+_DEFAULT_TYPES_PATH = Path(__file__).parent.parent.parent / "resources" / "annotation_types.json"
 
 # 절대 삭제할 수 없는 보호 유형.
 # 왜: 인명·지명·서명은 고전 텍스트 주석의 핵심이며,

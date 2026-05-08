@@ -23,9 +23,7 @@ from llm.router import LlmRouter
 
 def _load_prompt() -> dict:
     """번역 프롬프트를 로드한다."""
-    prompt_path = (
-        Path(__file__).parent.parent / "llm" / "prompts" / "translation.yaml"
-    )
+    prompt_path = Path(__file__).parent.parent / "llm" / "prompts" / "translation.yaml"
     with open(prompt_path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
@@ -68,11 +66,13 @@ async def generate_translation_drafts(
     if marks:
         sentences = split_sentences(original_text, marks)
     else:
-        sentences = [{
-            "start": 0,
-            "end": len(original_text) - 1,
-            "text": original_text,
-        }]
+        sentences = [
+            {
+                "start": 0,
+                "end": len(original_text) - 1,
+                "text": original_text,
+            }
+        ]
 
     if not sentences:
         return []
@@ -213,9 +213,7 @@ def commit_translation_draft(
 # ──────────────────────────────────────
 
 
-def _filter_annotations_for_range(
-    annotations: list[dict], start: int, end: int
-) -> list[dict]:
+def _filter_annotations_for_range(annotations: list[dict], start: int, end: int) -> list[dict]:
     """주어진 글자 범위에 해당하는 현토만 필터링한다.
 
     왜 이렇게 하는가:

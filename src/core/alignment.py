@@ -206,9 +206,7 @@ class VariantCharDict:
         """
         candidates = [
             "resources/variant_chars.json",
-            os.path.join(
-                os.path.dirname(__file__), "..", "..", "resources", "variant_chars.json"
-            ),
+            os.path.join(os.path.dirname(__file__), "..", "..", "resources", "variant_chars.json"),
         ]
         for path in candidates:
             abs_path = os.path.abspath(path)
@@ -259,9 +257,7 @@ class VariantCharDict:
 
     def save(self, path: str) -> None:
         """사전을 JSON 파일로 저장한다."""
-        serializable = {
-            char: sorted(alts) for char, alts in sorted(self._variants.items())
-        }
+        serializable = {char: sorted(alts) for char, alts in sorted(self._variants.items())}
         data = {
             "_format_guide": {
                 "설명": "이체자(異體字) 사전. 같은 글자의 다른 형태를 등록한다.",
@@ -281,9 +277,7 @@ class VariantCharDict:
 
     def to_dict(self) -> dict:
         """API 응답용 딕셔너리."""
-        return {
-            char: sorted(alts) for char, alts in sorted(self._variants.items())
-        }
+        return {char: sorted(alts) for char, alts in sorted(self._variants.items())}
 
     def remove_pair(self, char_a: str, char_b: str) -> bool:
         """이체자 쌍을 양방향으로 삭제한다.
@@ -410,6 +404,7 @@ class VariantCharDict:
             else:
                 # text: 공백, ↔, =, → 등 다양한 구분자
                 import re
+
                 chars = [c.strip() for c in re.split(r"[\s↔=→⇔]+", line)]
 
             # 빈 항목 제거, 한 글자씩만 허용
@@ -534,13 +529,15 @@ def align_texts(
     for tag, i1, i2, j1, j2 in opcodes:
         if tag == "equal":
             for k in range(i2 - i1):
-                pairs.append(AlignedPair(
-                    ocr_char=ocr_text[i1 + k],
-                    ref_char=ref_text[j1 + k],
-                    match_type=MatchType.EXACT,
-                    ocr_index=i1 + k,
-                    ref_index=j1 + k,
-                ))
+                pairs.append(
+                    AlignedPair(
+                        ocr_char=ocr_text[i1 + k],
+                        ref_char=ref_text[j1 + k],
+                        match_type=MatchType.EXACT,
+                        ocr_index=i1 + k,
+                        ref_index=j1 + k,
+                    )
+                )
 
         elif tag == "replace":
             # 1:1 대응이 가능한 부분은 mismatch
@@ -550,51 +547,61 @@ def align_texts(
             common_len = min(ocr_len, ref_len)
 
             for k in range(common_len):
-                pairs.append(AlignedPair(
-                    ocr_char=ocr_text[i1 + k],
-                    ref_char=ref_text[j1 + k],
-                    match_type=MatchType.MISMATCH,
-                    ocr_index=i1 + k,
-                    ref_index=j1 + k,
-                ))
+                pairs.append(
+                    AlignedPair(
+                        ocr_char=ocr_text[i1 + k],
+                        ref_char=ref_text[j1 + k],
+                        match_type=MatchType.MISMATCH,
+                        ocr_index=i1 + k,
+                        ref_index=j1 + k,
+                    )
+                )
 
             # OCR이 더 길면 → 나머지는 insertion (참조에 없는 글자)
             for k in range(common_len, ocr_len):
-                pairs.append(AlignedPair(
-                    ocr_char=ocr_text[i1 + k],
-                    ref_char=None,
-                    match_type=MatchType.INSERTION,
-                    ocr_index=i1 + k,
-                ))
+                pairs.append(
+                    AlignedPair(
+                        ocr_char=ocr_text[i1 + k],
+                        ref_char=None,
+                        match_type=MatchType.INSERTION,
+                        ocr_index=i1 + k,
+                    )
+                )
 
             # 참조가 더 길면 → 나머지는 deletion (OCR이 놓친 글자)
             for k in range(common_len, ref_len):
-                pairs.append(AlignedPair(
-                    ocr_char=None,
-                    ref_char=ref_text[j1 + k],
-                    match_type=MatchType.DELETION,
-                    ref_index=j1 + k,
-                ))
+                pairs.append(
+                    AlignedPair(
+                        ocr_char=None,
+                        ref_char=ref_text[j1 + k],
+                        match_type=MatchType.DELETION,
+                        ref_index=j1 + k,
+                    )
+                )
 
         elif tag == "insert":
             # difflib "insert": ref에만 있음 → OCR이 놓침 → deletion
             for k in range(j2 - j1):
-                pairs.append(AlignedPair(
-                    ocr_char=None,
-                    ref_char=ref_text[j1 + k],
-                    match_type=MatchType.DELETION,
-                    ref_index=j1 + k,
-                ))
+                pairs.append(
+                    AlignedPair(
+                        ocr_char=None,
+                        ref_char=ref_text[j1 + k],
+                        match_type=MatchType.DELETION,
+                        ref_index=j1 + k,
+                    )
+                )
 
         elif tag == "delete":
             # difflib "delete": ocr에만 있음 → 참조에 없음 → insertion
             for k in range(i2 - i1):
-                pairs.append(AlignedPair(
-                    ocr_char=ocr_text[i1 + k],
-                    ref_char=None,
-                    match_type=MatchType.INSERTION,
-                    ocr_index=i1 + k,
-                ))
+                pairs.append(
+                    AlignedPair(
+                        ocr_char=ocr_text[i1 + k],
+                        ref_char=None,
+                        match_type=MatchType.INSERTION,
+                        ocr_index=i1 + k,
+                    )
+                )
 
     # 3단계: 이체자 보정
     if variant_dict:
@@ -668,10 +675,12 @@ def align_page(
     l2_data = _load_json(str(l2_path))
 
     if l2_data is None:
-        return [BlockAlignment(
-            layout_block_id="*",
-            error=f"L2 OCR 결과를 찾을 수 없습니다: {l2_path}",
-        )]
+        return [
+            BlockAlignment(
+                layout_block_id="*",
+                error=f"L2 OCR 결과를 찾을 수 없습니다: {l2_path}",
+            )
+        ]
 
     # ── L4 확정 텍스트 로드 (교정 적용) ──
     # 교정이 있으면 교정 적용된 텍스트를, 없으면 원본을 사용한다.
@@ -690,10 +699,12 @@ def align_page(
         ref_text = _load_text(str(l4_path))
 
     if ref_text is None:
-        return [BlockAlignment(
-            layout_block_id="*",
-            error=f"L4 확정 텍스트를 찾을 수 없습니다: {doc_path / 'L4_text' / 'pages'}",
-        )]
+        return [
+            BlockAlignment(
+                layout_block_id="*",
+                error=f"L4 확정 텍스트를 찾을 수 없습니다: {doc_path / 'L4_text' / 'pages'}",
+            )
+        ]
 
     # 참조 텍스트에서 줄바꿈 제거 (글자 단위 비교)
     ref_clean = ref_text.replace("\n", "").replace("\r", "")
@@ -720,26 +731,30 @@ def align_page(
         pairs = align_texts(ocr_text, block_ref, variant_dict=variant_dict)
         stats = AlignmentStats.from_pairs(pairs)
 
-        results.append(BlockAlignment(
-            layout_block_id=block_id,
-            pairs=pairs,
-            stats=stats,
-            ocr_text=ocr_text,
-            ref_text=block_ref,
-        ))
+        results.append(
+            BlockAlignment(
+                layout_block_id=block_id,
+                pairs=pairs,
+                stats=stats,
+                ocr_text=ocr_text,
+                ref_text=block_ref,
+            )
+        )
 
     # ── 페이지 전체 대조 ──
     full_ocr = "".join(text for _, text in block_texts)
     if full_ocr or ref_clean:
         full_pairs = align_texts(full_ocr, ref_clean, variant_dict=variant_dict)
         full_stats = AlignmentStats.from_pairs(full_pairs)
-        results.append(BlockAlignment(
-            layout_block_id="*",
-            pairs=full_pairs,
-            stats=full_stats,
-            ocr_text=full_ocr,
-            ref_text=ref_clean,
-        ))
+        results.append(
+            BlockAlignment(
+                layout_block_id="*",
+                pairs=full_pairs,
+                stats=full_stats,
+                ocr_text=full_ocr,
+                ref_text=ref_clean,
+            )
+        )
 
     return results
 
@@ -794,7 +809,7 @@ def _find_best_match_in_ref(ocr_text: str, ref_text: str) -> str:
         for cand in candidates:
             # 정확한 OCR 길이 윈도우로 먼저 검증 (정밀도 우선)
             if cand + ocr_len <= ref_len:
-                exact_window = ref_text[cand:cand + ocr_len]
+                exact_window = ref_text[cand : cand + ocr_len]
                 ratio = difflib.SequenceMatcher(None, ocr_text, exact_window).ratio()
                 if ratio > best_ratio:
                     best_ratio = ratio
@@ -803,7 +818,7 @@ def _find_best_match_in_ref(ocr_text: str, ref_text: str) -> str:
             # (probe가 OCR 텍스트 중간에 있을 수 있으므로)
             shifted_start = max(0, cand - ocr_len + 5)
             for s in range(shifted_start, min(cand + 1, ref_len - ocr_len + 1)):
-                window = ref_text[s:s + ocr_len]
+                window = ref_text[s : s + ocr_len]
                 ratio = difflib.SequenceMatcher(None, ocr_text, window).ratio()
                 if ratio > best_ratio:
                     best_ratio = ratio
@@ -813,7 +828,7 @@ def _find_best_match_in_ref(ocr_text: str, ref_text: str) -> str:
         best_ratio = 0.0
         best_start = 0
         for start in range(ref_len - ocr_len + 1):
-            candidate = ref_text[start:start + ocr_len]
+            candidate = ref_text[start : start + ocr_len]
             ratio = difflib.SequenceMatcher(None, ocr_text, candidate).ratio()
             if ratio > best_ratio:
                 best_ratio = ratio
@@ -827,7 +842,7 @@ def _find_best_match_in_ref(ocr_text: str, ref_text: str) -> str:
     expand_start = max(0, best_start - margin)
     expand_end = min(ref_len, best_start + ocr_len + margin)
 
-    exact_text = ref_text[best_start:best_start + ocr_len]
+    exact_text = ref_text[best_start : best_start + ocr_len]
     expanded_text = ref_text[expand_start:expand_end]
 
     exact_ratio = difflib.SequenceMatcher(None, ocr_text, exact_text).ratio()
@@ -863,7 +878,7 @@ def _collect_probe_candidates(
     probes.append(ocr_text[:probe_len])
     if len(ocr_text) >= probe_len * 2:
         mid = len(ocr_text) // 2
-        probes.append(ocr_text[mid:mid + probe_len])
+        probes.append(ocr_text[mid : mid + probe_len])
     if len(ocr_text) >= probe_len * 3:
         probes.append(ocr_text[-(probe_len):])
 

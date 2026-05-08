@@ -36,9 +36,7 @@ def _get_schema() -> dict:
 # ──────────────────────────────────────
 
 
-def load_translations(
-    interp_path: str | Path, part_id: str, page_num: int
-) -> dict:
+def load_translations(interp_path: str | Path, part_id: str, page_num: int) -> dict:
     """L6 번역 파일을 로드한다.
 
     목적: 해석 저장소의 L6_translation에서 번역 JSON을 읽는다.
@@ -164,9 +162,7 @@ def remove_translation(data: dict, translation_id: str) -> bool:
     출력: 삭제 성공 여부.
     """
     original_len = len(data["translations"])
-    data["translations"] = [
-        tr for tr in data["translations"] if tr["id"] != translation_id
-    ]
+    data["translations"] = [tr for tr in data["translations"] if tr["id"] != translation_id]
     return len(data["translations"]) < original_len
 
 

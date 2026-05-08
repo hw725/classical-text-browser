@@ -111,15 +111,15 @@ def _punctuation_file_path(interp_path: Path, part_id: str, page_num: int) -> Pa
     기존 L5 경로({part_id}_page_{NNN}.json)와 충돌 방지를 위해 _punctuation 접미사 사용.
     """
     return (
-        interp_path
-        / "L5_reading"
-        / "main_text"
-        / f"{part_id}_page_{page_num:03d}_punctuation.json"
+        interp_path / "L5_reading" / "main_text" / f"{part_id}_page_{page_num:03d}_punctuation.json"
     )
 
 
 def _punctuation_block_file_path(
-    interp_path: Path, part_id: str, page_num: int, block_id: str,
+    interp_path: Path,
+    part_id: str,
+    page_num: int,
+    block_id: str,
 ) -> Path:
     """블록별 표점 파일 경로 조립.
 
@@ -275,19 +275,23 @@ def split_sentences(original_text: str, marks: list[dict]) -> list[dict]:
 
     for i in range(len(original_text)):
         if i in ender_positions:
-            sentences.append({
-                "start": sentence_start,
-                "end": i,
-                "text": original_text[sentence_start:i + 1],
-            })
+            sentences.append(
+                {
+                    "start": sentence_start,
+                    "end": i,
+                    "text": original_text[sentence_start : i + 1],
+                }
+            )
             sentence_start = i + 1
 
     # 마지막 문장 (종결 부호 없는 나머지)
     if sentence_start < len(original_text):
-        sentences.append({
-            "start": sentence_start,
-            "end": len(original_text) - 1,
-            "text": original_text[sentence_start:],
-        })
+        sentences.append(
+            {
+                "start": sentence_start,
+                "end": len(original_text) - 1,
+                "text": original_text[sentence_start:],
+            }
+        )
 
     return sentences

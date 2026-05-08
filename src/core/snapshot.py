@@ -109,11 +109,13 @@ def _serialize_original(doc_path: Path) -> dict:
         files = []
         for f in sorted(l1_dir.iterdir()):
             if f.is_file() and not f.name.startswith("."):
-                files.append({
-                    "path": f.relative_to(doc_path).as_posix(),
-                    "name": f.name,
-                    "size_bytes": f.stat().st_size,
-                })
+                files.append(
+                    {
+                        "path": f.relative_to(doc_path).as_posix(),
+                        "name": f.name,
+                        "size_bytes": f.stat().st_size,
+                    }
+                )
         result["layers"]["L1_source"] = {
             "type": "reference",
             "note": "이미지/PDF 파일은 경로 참조만 포함. 바이너리 미포함.",
@@ -209,7 +211,9 @@ def _serialize_interpretation(interp_path: Path) -> dict:
 
 
 def _collect_layer_json(
-    interp_path: Path, layer_dir_name: str, pattern: str,
+    interp_path: Path,
+    layer_dir_name: str,
+    pattern: str,
 ) -> list[dict]:
     """특정 레이어 디렉토리에서 JSON 파일들을 수집한다.
 
@@ -227,9 +231,7 @@ def _collect_layer_json(
         data = _read_json(json_file)
         if data:
             # 상대 경로를 메타데이터로 추가 (import 시 복원에 필요)
-            data["_source_path"] = json_file.relative_to(
-                interp_path
-            ).as_posix()
+            data["_source_path"] = json_file.relative_to(interp_path).as_posix()
             results.append(data)
 
     return results
@@ -339,7 +341,10 @@ def create_work_from_snapshot(
 
 
 def _write_original_layers(
-    doc_path: Path, work: dict, original: dict, warnings: list,
+    doc_path: Path,
+    work: dict,
+    original: dict,
+    warnings: list,
 ) -> None:
     """원본 저장소(L1~L4)를 파일로 복원한다."""
     layers = original.get("layers", {})
@@ -369,9 +374,7 @@ def _write_original_layers(
         # 이미지 파일은 없으므로 참조 목록만 기록
         _write_json(l1_dir / "_imported_file_list.json", l1["files"])
         for f_info in l1["files"]:
-            warnings.append(
-                f"L1 이미지 파일은 포함되지 않음: {f_info.get('path', '?')}"
-            )
+            warnings.append(f"L1 이미지 파일은 포함되지 않음: {f_info.get('path', '?')}")
 
     # L3: 레이아웃
     l3 = layers.get("L3_layout", {})
@@ -443,9 +446,7 @@ def _write_interpretation_layers(
                 _write_json(target, item)
             else:
                 # _source_path가 없으면 layer_key 기반 기본 경로 사용
-                warnings.append(
-                    f"{layer_key}: _source_path 없음, 복원 스킵"
-                )
+                warnings.append(f"{layer_key}: _source_path 없음, 복원 스킵")
 
     # 코어 엔티티
     entities = interpretation.get("core_entities", {})
@@ -552,19 +553,23 @@ def _update_library_manifest(
 
     # 문헌 추가
     docs = manifest.setdefault("documents", [])
-    docs.append({
-        "document_id": doc_id,
-        "title": work.get("title", ""),
-        "path": f"documents/{doc_id}",
-    })
+    docs.append(
+        {
+            "document_id": doc_id,
+            "title": work.get("title", ""),
+            "path": f"documents/{doc_id}",
+        }
+    )
 
     # 해석 추가
     interps = manifest.setdefault("interpretations", [])
-    interps.append({
-        "interpretation_id": interp_id,
-        "source_document_id": doc_id,
-        "title": work.get("interpretation_title", work.get("title", "")),
-        "path": f"interpretations/{interp_id}",
-    })
+    interps.append(
+        {
+            "interpretation_id": interp_id,
+            "source_document_id": doc_id,
+            "title": work.get("interpretation_title", work.get("title", "")),
+            "path": f"interpretations/{interp_id}",
+        }
+    )
 
     _write_json(manifest_path, manifest)

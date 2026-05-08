@@ -16,9 +16,7 @@ from llm.router import LlmRouter
 
 def _load_prompt() -> dict:
     """레이아웃 분석 프롬프트를 로드한다."""
-    prompt_path = (
-        Path(__file__).parent.parent / "llm" / "prompts" / "layout_analysis.yaml"
-    )
+    prompt_path = Path(__file__).parent.parent / "llm" / "prompts" / "layout_analysis.yaml"
     with open(prompt_path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
@@ -104,11 +102,13 @@ async def compare_layout_analysis(
     drafts = []
     for r in results:
         if isinstance(r, Exception):
-            drafts.append(LlmDraft(
-                purpose="layout_analysis",
-                status="rejected",
-                quality_notes=f"호출 실패: {r}",
-            ))
+            drafts.append(
+                LlmDraft(
+                    purpose="layout_analysis",
+                    status="rejected",
+                    quality_notes=f"호출 실패: {r}",
+                )
+            )
         else:
             response_data = None
             try:
@@ -116,14 +116,16 @@ async def compare_layout_analysis(
             except (json.JSONDecodeError, IndexError):
                 response_data = {"raw_text": r.text, "parse_error": True}
 
-            drafts.append(LlmDraft(
-                purpose="layout_analysis",
-                provider=r.provider,
-                model=r.model,
-                response_text=r.text,
-                response_data=response_data,
-                cost_usd=r.cost_usd or 0.0,
-                elapsed_sec=r.elapsed_sec or 0.0,
-            ))
+            drafts.append(
+                LlmDraft(
+                    purpose="layout_analysis",
+                    provider=r.provider,
+                    model=r.model,
+                    response_text=r.text,
+                    response_data=response_data,
+                    cost_usd=r.cost_usd or 0.0,
+                    elapsed_sec=r.elapsed_sec or 0.0,
+                )
+            )
 
     return drafts

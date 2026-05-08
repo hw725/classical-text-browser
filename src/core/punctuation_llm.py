@@ -16,9 +16,7 @@ from llm.router import LlmRouter
 
 def _load_prompt() -> dict:
     """표점 프롬프트를 로드한다."""
-    prompt_path = (
-        Path(__file__).parent.parent / "llm" / "prompts" / "punctuation.yaml"
-    )
+    prompt_path = Path(__file__).parent.parent / "llm" / "prompts" / "punctuation.yaml"
     with open(prompt_path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 

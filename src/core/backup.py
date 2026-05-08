@@ -118,12 +118,14 @@ def backup_library(
             encoding="utf-8",
         )
 
-        result.update({
-            "success": True,
-            "file_count": file_count,
-            "total_size": total_size,
-            "duration_sec": round(duration, 2),
-        })
+        result.update(
+            {
+                "success": True,
+                "file_count": file_count,
+                "total_size": total_size,
+                "duration_sec": round(duration, 2),
+            }
+        )
 
     except Exception as e:
         result["error"] = str(e)
@@ -163,8 +165,7 @@ def restore_from_backup(
     meta_file = backup_path / _BACKUP_META
     if not meta_file.exists():
         result["error"] = (
-            f"유효한 백업이 아닙니다: {backup_path}\n"
-            "→ _backup_meta.json 파일이 없습니다."
+            f"유효한 백업이 아닙니다: {backup_path}\n→ _backup_meta.json 파일이 없습니다."
         )
         return result
 
@@ -203,14 +204,14 @@ def restore_from_backup(
                     repo.index.commit("feat: 백업에서 복원")
                     repos_initialized += 1
                 except Exception as e:
-                    logger.warning(
-                        "복원 중 git 초기화 실패: %s — %s", entry, e
-                    )
+                    logger.warning("복원 중 git 초기화 실패: %s — %s", entry, e)
 
-        result.update({
-            "success": True,
-            "repos_initialized": repos_initialized,
-        })
+        result.update(
+            {
+                "success": True,
+                "repos_initialized": repos_initialized,
+            }
+        )
 
     except Exception as e:
         result["error"] = str(e)

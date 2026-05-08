@@ -111,16 +111,14 @@ def _hyeonto_file_path(interp_path: Path, part_id: str, page_num: int) -> Path:
     주의: 이 경로는 페이지당 파일 1개뿐이라 블록별 분리가 안 된다.
           하위 호환용으로만 사용. 새 저장은 _hyeonto_block_file_path()를 사용.
     """
-    return (
-        interp_path
-        / "L5_reading"
-        / "main_text"
-        / f"{part_id}_page_{page_num:03d}_hyeonto.json"
-    )
+    return interp_path / "L5_reading" / "main_text" / f"{part_id}_page_{page_num:03d}_hyeonto.json"
 
 
 def _hyeonto_block_file_path(
-    interp_path: Path, part_id: str, page_num: int, block_id: str,
+    interp_path: Path,
+    part_id: str,
+    page_num: int,
+    block_id: str,
 ) -> Path:
     """블록별 현토 파일 경로 조립.
 

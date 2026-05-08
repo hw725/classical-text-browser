@@ -198,8 +198,7 @@ def import_dictionary(
 
                 # source_references 합집합
                 existing_refs = {
-                    r.get("title", ""): r
-                    for r in existing_dict.get("source_references", [])
+                    r.get("title", ""): r for r in existing_dict.get("source_references", [])
                 }
                 for ref in entry.get("source_references", []):
                     if ref.get("title") and ref["title"] not in existing_refs:
@@ -217,8 +216,7 @@ def import_dictionary(
                 existing_notes = existing_dict.get("notes") or ""
                 if import_note not in existing_notes:
                     existing_dict["notes"] = (
-                        f"{existing_notes} {import_note}".strip() if existing_notes
-                        else import_note
+                        f"{existing_notes} {import_note}".strip() if existing_notes else import_note
                     )
 
                 merged += 1
@@ -233,9 +231,7 @@ def import_dictionary(
             "content": {
                 "label": f"{entry.get('headword_reading', '')}({headword})",
                 "description": entry.get("dictionary_meaning", ""),
-                "references": [
-                    r.get("title", "") for r in entry.get("source_references", [])
-                ],
+                "references": [r.get("title", "") for r in entry.get("source_references", [])],
             },
             "dictionary": {
                 "headword": headword,

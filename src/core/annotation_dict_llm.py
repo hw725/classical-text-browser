@@ -254,9 +254,7 @@ def merge_annotations(
                 # history에만 LLM 제안 기록
                 if llm_ann.get("generation_history"):
                     target_ann.setdefault("generation_history", [])
-                    target_ann["generation_history"].extend(
-                        llm_ann["generation_history"]
-                    )
+                    target_ann["generation_history"].extend(llm_ann["generation_history"])
                 continue
 
             # dictionary 필드 업데이트
@@ -273,9 +271,7 @@ def merge_annotations(
             # history 추가
             if llm_ann.get("generation_history"):
                 target_ann.setdefault("generation_history", [])
-                target_ann["generation_history"].extend(
-                    llm_ann["generation_history"]
-                )
+                target_ann["generation_history"].extend(llm_ann["generation_history"])
 
             # 스냅샷 업데이트
             if llm_ann.get("source_text_snapshot"):
@@ -317,9 +313,8 @@ async def generate_stage1_from_original(
 
     existing_section = ""
     if existing_annotations:
-        existing_section = (
-            "기존 주석 (참고용):\n"
-            + _serialize_existing_annotations(existing_annotations)
+        existing_section = "기존 주석 (참고용):\n" + _serialize_existing_annotations(
+            existing_annotations
         )
 
     user_prompt = prompt_config["user_template"].format(

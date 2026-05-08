@@ -61,8 +61,7 @@ def add_document(
 
     if doc_path.exists():
         raise FileExistsError(
-            f"문헌이 이미 존재합니다: {doc_path}\n"
-            "→ 해결: 다른 doc_id를 사용하세요."
+            f"문헌이 이미 존재합니다: {doc_path}\n→ 해결: 다른 doc_id를 사용하세요."
         )
 
     # --- 디렉토리 구조 생성 (v7 §10.1) ---
@@ -82,8 +81,7 @@ def add_document(
             file_path = Path(file_path)
             if not file_path.exists():
                 raise FileNotFoundError(
-                    f"파일을 찾을 수 없습니다: {file_path}\n"
-                    "→ 해결: 파일 경로를 확인하세요."
+                    f"파일을 찾을 수 없습니다: {file_path}\n→ 해결: 파일 경로를 확인하세요."
                 )
             dest = doc_path / "L1_source" / file_path.name
             try:
@@ -101,12 +99,14 @@ def add_document(
                     "→ 해결: 디스크 공간, 파일 경로 길이, 네트워크 드라이브 연결 상태를 확인하세요."
                 ) from e
             part_id = f"vol{len(parts) + 1}"
-            parts.append({
-                "part_id": part_id,
-                "label": file_path.stem,
-                "file": f"L1_source/{file_path.name}",
-                "page_count": None,
-            })
+            parts.append(
+                {
+                    "part_id": part_id,
+                    "label": file_path.stem,
+                    "file": f"L1_source/{file_path.name}",
+                    "page_count": None,
+                }
+            )
 
     # --- manifest.json (manifest.schema.json 준수) ---
     manifest = {
@@ -186,6 +186,7 @@ def add_document(
     # working tree를 만질 수 있다. `git lfs uninstall --local`은 .git/config에서
     # LFS filter 항목들을 제거한다(설치 안 됐으면 무해).
     import subprocess as _sp
+
     try:
         _sp.run(
             ["git", "-C", str(doc_path), "lfs", "uninstall", "--local"],
@@ -220,8 +221,7 @@ def get_document_info(doc_path: str | Path) -> dict:
 
     if not manifest_path.exists():
         raise FileNotFoundError(
-            f"문헌을 찾을 수 없습니다: {manifest_path}\n"
-            "→ 해결: 올바른 문헌 경로를 지정하세요."
+            f"문헌을 찾을 수 없습니다: {manifest_path}\n→ 해결: 올바른 문헌 경로를 지정하세요."
         )
 
     return json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -244,11 +244,13 @@ def list_pages(doc_path: str | Path) -> list[dict]:
     if source_dir.exists():
         for f in sorted(source_dir.iterdir()):
             if f.is_file() and not f.name.startswith("."):
-                pages.append({
-                    "filename": f.name,
-                    "size": f.stat().st_size,
-                    "suffix": f.suffix,
-                })
+                pages.append(
+                    {
+                        "filename": f.name,
+                        "size": f.stat().st_size,
+                        "suffix": f.suffix,
+                    }
+                )
 
     # L1_source에 개별 페이지 파일(이미지/PDF 다수)이 아니라
     # HWP 등 단일 파일만 있으면, L4_text/pages/의 .txt를 폴백으로 사용한다.
@@ -262,12 +264,14 @@ def list_pages(doc_path: str | Path) -> list[dict]:
             l4_pages = []
             for f in sorted(l4_dir.iterdir()):
                 if f.is_file() and f.suffix == ".txt" and not f.name.startswith("."):
-                    l4_pages.append({
-                        "filename": f.name,
-                        "size": f.stat().st_size,
-                        "suffix": f.suffix,
-                        "source": "L4_text",  # L4에서 온 것임을 표시
-                    })
+                    l4_pages.append(
+                        {
+                            "filename": f.name,
+                            "size": f.stat().st_size,
+                            "suffix": f.suffix,
+                            "source": "L4_text",  # L4에서 온 것임을 표시
+                        }
+                    )
             if l4_pages:
                 return l4_pages
 
@@ -303,8 +307,7 @@ def get_pdf_path(doc_path: str | Path, part_id: str) -> Path:
 
     available = [p["part_id"] for p in manifest.get("parts", [])]
     raise FileNotFoundError(
-        f"권을 찾을 수 없습니다: part_id='{part_id}'\n"
-        f"→ 사용 가능한 part_id: {available}"
+        f"권을 찾을 수 없습니다: part_id='{part_id}'\n→ 사용 가능한 part_id: {available}"
     )
 
 
@@ -483,7 +486,9 @@ def save_page_layout(
     # 스키마 검증
     schema_path = (
         Path(__file__).resolve().parent.parent.parent
-        / "schemas" / "source_repo" / "layout_page.schema.json"
+        / "schemas"
+        / "source_repo"
+        / "layout_page.schema.json"
     )
     if schema_path.exists():
         schema = json.loads(schema_path.read_text(encoding="utf-8"))
@@ -563,7 +568,9 @@ def save_bibliography(doc_path: str | Path, bibliography: dict) -> dict:
     # 스키마 검증
     schema_path = (
         Path(__file__).resolve().parent.parent.parent
-        / "schemas" / "source_repo" / "bibliography.schema.json"
+        / "schemas"
+        / "source_repo"
+        / "bibliography.schema.json"
     )
     if schema_path.exists():
         schema = json.loads(schema_path.read_text(encoding="utf-8"))
@@ -630,9 +637,7 @@ def get_page_corrections(doc_path: str | Path, part_id: str, page_num: int) -> d
     }
 
 
-def get_corrected_text(
-    doc_path: str | Path, part_id: str, page_num: int
-) -> dict:
+def get_corrected_text(doc_path: str | Path, part_id: str, page_num: int) -> dict:
     """교정이 적용된 텍스트를 반환한다.
 
     목적: L4_text/pages/의 원본 텍스트에 L4_text/corrections/의 교정 기록을
@@ -709,27 +714,20 @@ def get_corrected_text(
     result_blocks = []
     for i, bt in enumerate(orig_block_texts):
         # 페이지 교정이 적용된 블록 텍스트
-        corr_bt = (
-            corr_block_texts[i] if i < len(corr_block_texts)
-            else bt
-        )
+        corr_bt = corr_block_texts[i] if i < len(corr_block_texts) else bt
         # 2단계: 블록 지정 교정을 추가 적용 (block-local char_index)
-        this_block_corrs = [
-            c for c in block_specific_corrs
-            if c.get("block_id") == bt["block_id"]
-        ]
-        final_text = _apply_corrections_to_text(
-            corr_bt["text"], this_block_corrs, block_local=True
+        this_block_corrs = [c for c in block_specific_corrs if c.get("block_id") == bt["block_id"]]
+        final_text = _apply_corrections_to_text(corr_bt["text"], this_block_corrs, block_local=True)
+        result_blocks.append(
+            {
+                "block_id": bt["block_id"],
+                "block_type": bt.get("block_type", "main_text"),
+                "original_text": bt["text"],
+                "corrected_text": final_text,
+                "corrections_applied": len(this_block_corrs)
+                + (1 if bt["text"] != corr_bt["text"] else 0),
+            }
         )
-        result_blocks.append({
-            "block_id": bt["block_id"],
-            "block_type": bt.get("block_type", "main_text"),
-            "original_text": bt["text"],
-            "corrected_text": final_text,
-            "corrections_applied": len(this_block_corrs) + (
-                1 if bt["text"] != corr_bt["text"] else 0
-            ),
-        })
 
     return {
         "document_id": manifest["document_id"],
@@ -795,9 +793,7 @@ def _apply_corrections_to_text(
     return "\n".join(lines)
 
 
-def _diff_to_corrections(
-    original: str, corrected: str, page_num: int | None = None
-) -> list[dict]:
+def _diff_to_corrections(original: str, corrected: str, page_num: int | None = None) -> list[dict]:
     """원본과 교정 텍스트의 diff에서 corrections 레코드를 자동 생성한다.
 
     왜 이렇게 하는가:
@@ -828,18 +824,20 @@ def _diff_to_corrections(
         # tag: replace, delete, insert
         # i1:i2 = 원본에서 변경된 범위
         # j1:j2 = 교정에서 대응하는 범위
-        corrections.append({
-            "page": page_num,
-            "block_id": None,
-            "line": None,
-            "char_index": i1,
-            "type": "ocr_error",
-            "original_ocr": original[i1:i2],   # delete: 삭제된 글자, insert: ""
-            "corrected": corrected[j1:j2],      # delete: "", insert: 추가된 글자
-            "corrected_by": "human_freetext",
-            "confidence": None,
-            "note": None,
-        })
+        corrections.append(
+            {
+                "page": page_num,
+                "block_id": None,
+                "line": None,
+                "char_index": i1,
+                "type": "ocr_error",
+                "original_ocr": original[i1:i2],  # delete: 삭제된 글자, insert: ""
+                "corrected": corrected[j1:j2],  # delete: "", insert: 추가된 글자
+                "corrected_by": "human_freetext",
+                "confidence": None,
+                "note": None,
+            }
+        )
 
     return corrections
 
@@ -897,9 +895,7 @@ def _merge_corrections(
     return merged
 
 
-def _split_text_by_blocks(
-    text: str, blocks_meta: list[dict]
-) -> list[dict]:
+def _split_text_by_blocks(text: str, blocks_meta: list[dict]) -> list[dict]:
     """텍스트를 L3 블록 기준으로 분리한다. (내부 유틸리티)
 
     왜 이렇게 하는가:
@@ -916,11 +912,13 @@ def _split_text_by_blocks(
     # 블록이 없으면 전체를 하나의 기본 블록으로
     if not blocks_meta:
         default_block_id = f"p{1:02d}_b01"
-        return [{
-            "block_id": default_block_id,
-            "block_type": "main_text",
-            "text": text,
-        }]
+        return [
+            {
+                "block_id": default_block_id,
+                "block_type": "main_text",
+                "text": text,
+            }
+        ]
 
     # [本文] / [注釈] 마커로 분리 시도
     marker_pattern = re.compile(r"\[(本文|注釈)\]")
@@ -930,11 +928,13 @@ def _split_text_by_blocks(
         # 마커가 없으면: 블록 메타 순서대로 전체 텍스트를 첫 블록에 배정
         result = []
         for i, bm in enumerate(blocks_meta):
-            result.append({
-                "block_id": bm.get("block_id", f"b{i+1:02d}"),
-                "block_type": bm.get("block_type", "main_text"),
-                "text": text if i == 0 else "",
-            })
+            result.append(
+                {
+                    "block_id": bm.get("block_id", f"b{i + 1:02d}"),
+                    "block_type": bm.get("block_type", "main_text"),
+                    "text": text if i == 0 else "",
+                }
+            )
         return result
 
     # 마커 기반 분리
@@ -945,7 +945,7 @@ def _split_text_by_blocks(
 
     for m in markers:
         if m.start() > last_idx:
-            seg_text = text[last_idx:m.start()].strip()
+            seg_text = text[last_idx : m.start()].strip()
             if seg_text:
                 segments.append({"type": last_type, "text": seg_text})
         last_type = "main_text" if m.group(1) == "本文" else "annotation"
@@ -960,17 +960,19 @@ def _split_text_by_blocks(
     # 세그먼트와 블록 메타를 매칭
     for i, seg in enumerate(segments):
         if i < len(blocks_meta):
-            block_id = blocks_meta[i].get("block_id", f"b{i+1:02d}")
+            block_id = blocks_meta[i].get("block_id", f"b{i + 1:02d}")
             block_type = blocks_meta[i].get("block_type", seg["type"])
         else:
-            block_id = f"extra_b{i+1:02d}"
+            block_id = f"extra_b{i + 1:02d}"
             block_type = seg["type"]
 
-        result.append({
-            "block_id": block_id,
-            "block_type": block_type,
-            "text": seg["text"],
-        })
+        result.append(
+            {
+                "block_id": block_id,
+                "block_type": block_type,
+                "text": seg["text"],
+            }
+        )
 
     return result
 
@@ -1008,7 +1010,9 @@ def save_page_corrections(
     # 스키마 검증
     schema_path = (
         Path(__file__).resolve().parent.parent.parent
-        / "schemas" / "source_repo" / "corrections.schema.json"
+        / "schemas"
+        / "source_repo"
+        / "corrections.schema.json"
     )
     if schema_path.exists():
         schema = json.loads(schema_path.read_text(encoding="utf-8"))
@@ -1128,15 +1132,18 @@ def get_git_log(
     commits = []
     try:
         for c in repo.iter_commits(max_count=max_count):
-            commits.append({
-                "hash": c.hexsha,
-                "short_hash": c.hexsha[:7],
-                "message": c.message.strip(),
-                "author": str(c.author),
-                "date": c.committed_datetime.isoformat(),
-            })
+            commits.append(
+                {
+                    "hash": c.hexsha,
+                    "short_hash": c.hexsha[:7],
+                    "message": c.message.strip(),
+                    "author": str(c.author),
+                    "date": c.committed_datetime.isoformat(),
+                }
+            )
     except (ValueError, Exception) as e:
         import logging
+
         logging.warning(f"Git 로그 읽기 중 오류 (읽은 커밋 {len(commits)}건): {e}")
 
     return {"mode": "full", "commits": commits}
@@ -1163,9 +1170,7 @@ def _get_push_milestones(repo: git.Repo, max_count: int = 50) -> list[dict]:
     #        repo.git.reflog("show", ref, format=...) 형태는 인자 순서 오류를 일으킨다.
     #        repo.git.execute()로 직접 명령을 구성한다.
     try:
-        raw = repo.git.execute(
-            ["git", "reflog", "show", remote_ref, "--format=%H|%at|%gs"]
-        )
+        raw = repo.git.execute(["git", "reflog", "show", remote_ref, "--format=%H|%at|%gs"])
     except git.GitCommandError:
         return []
 
@@ -1205,9 +1210,15 @@ def _get_push_milestones(repo: git.Repo, max_count: int = 50) -> list[dict]:
         try:
             squashed = int(repo.git.rev_list("--count", range_spec))
             # 범위 내 커밋 메시지에서 레이어별 요약 생성
-            messages = repo.git.log(
-                range_spec, format="%s", max_count=100,
-            ).strip().split("\n")
+            messages = (
+                repo.git.log(
+                    range_spec,
+                    format="%s",
+                    max_count=100,
+                )
+                .strip()
+                .split("\n")
+            )
             layer_counts = {}
             for msg in messages:
                 if not msg:
@@ -1217,27 +1228,27 @@ def _get_push_milestones(repo: git.Repo, max_count: int = 50) -> list[dict]:
                     layer = msg.split(":")[0]
                     layer_counts[layer] = layer_counts.get(layer, 0) + 1
             if layer_counts:
-                summary_parts = [
-                    f"{k} {v}건" for k, v in sorted(layer_counts.items())
-                ]
+                summary_parts = [f"{k} {v}건" for k, v in sorted(layer_counts.items())]
         except git.GitCommandError:
             pass
 
         push_dt = datetime.fromtimestamp(push_ts, tz=timezone.utc)
-        summary = ", ".join(summary_parts) if summary_parts else (
-            commit.message.strip().split("\n")[0]
+        summary = (
+            ", ".join(summary_parts) if summary_parts else (commit.message.strip().split("\n")[0])
         )
 
-        milestones.append({
-            "hash": h,
-            "short_hash": h[:7],
-            "message": commit.message.strip(),
-            "author": str(commit.author),
-            "date": commit.committed_datetime.isoformat(),
-            "push_date": push_dt.isoformat(),
-            "commits_squashed": squashed,
-            "summary": summary,
-        })
+        milestones.append(
+            {
+                "hash": h,
+                "short_hash": h[:7],
+                "message": commit.message.strip(),
+                "author": str(commit.author),
+                "date": commit.committed_datetime.isoformat(),
+                "push_date": push_dt.isoformat(),
+                "commits_squashed": squashed,
+                "summary": summary,
+            }
+        )
 
     return milestones
 
@@ -1330,11 +1341,13 @@ def _update_library_manifest(library_path: Path, doc_id: str, title: str) -> Non
     else:
         manifest = {"documents": []}
 
-    manifest["documents"].append({
-        "document_id": doc_id,
-        "title": title,
-        "path": f"documents/{doc_id}",
-    })
+    manifest["documents"].append(
+        {
+            "document_id": doc_id,
+            "title": title,
+            "path": f"documents/{doc_id}",
+        }
+    )
 
     _write_json(manifest_path, manifest)
 
@@ -1470,11 +1483,13 @@ def import_hwp_text_to_document(
     if page_mapping is None:
         page_mapping = []
         for i, text in enumerate(section_texts):
-            page_mapping.append({
-                "section_index": i,
-                "page_num": i + 1,
-                "part_id": default_part_id,
-            })
+            page_mapping.append(
+                {
+                    "section_index": i,
+                    "page_num": i + 1,
+                    "part_id": default_part_id,
+                }
+            )
 
     # 각 페이지에 텍스트 저장
     text_pages = []
@@ -1507,24 +1522,30 @@ def import_hwp_text_to_document(
         if result.taidu_marks:
             fmt_path = _formatting_file_path(doc_path, part_id, page_num)
             fmt_path.parent.mkdir(parents=True, exist_ok=True)
-            _write_json(fmt_path, {
-                "taidu": [
-                    {"pos": t["pos"], "raise_chars": t["raise_chars"], "note": t["note"]}
-                    for t in result.taidu_marks
-                ],
-            })
+            _write_json(
+                fmt_path,
+                {
+                    "taidu": [
+                        {"pos": t["pos"], "raise_chars": t["raise_chars"], "note": t["note"]}
+                        for t in result.taidu_marks
+                    ],
+                },
+            )
 
         # 표점·현토 데이터 사이드카 저장 (나중에 L5로 이전 가능)
         if result.punctuation_marks or result.hyeonto_annotations:
             clean_path = _hwp_clean_file_path(doc_path, part_id, page_num)
             clean_path.parent.mkdir(parents=True, exist_ok=True)
-            _write_json(clean_path, {
-                "source": "hwp_import",
-                "raw_text_length": len(raw_text),
-                "clean_text_length": len(result.clean_text),
-                "punctuation_marks": result.punctuation_marks,
-                "hyeonto_annotations": result.hyeonto_annotations,
-            })
+            _write_json(
+                clean_path,
+                {
+                    "source": "hwp_import",
+                    "raw_text_length": len(raw_text),
+                    "clean_text_length": len(result.clean_text),
+                    "punctuation_marks": result.punctuation_marks,
+                    "hyeonto_annotations": result.hyeonto_annotations,
+                },
+            )
 
         # 통계 수집
         if result.had_punctuation:
@@ -1534,13 +1555,15 @@ def import_hwp_text_to_document(
         total_punct_count += len(result.punctuation_marks)
         total_hyeonto_count += len(result.hyeonto_annotations)
 
-        text_pages.append({
-            "page_num": page_num,
-            "part_id": part_id,
-            "text_length": len(result.clean_text),
-            "has_punct": result.had_punctuation,
-            "has_hyeonto": result.had_hyeonto,
-        })
+        text_pages.append(
+            {
+                "page_num": page_num,
+                "part_id": part_id,
+                "text_length": len(result.clean_text),
+                "has_punct": result.had_punctuation,
+                "has_hyeonto": result.had_hyeonto,
+            }
+        )
 
     # page_count 업데이트 — HWP 가져오기 후 사이드바에 페이지 목록이 뜨려면
     # manifest의 parts[].page_count가 설정되어 있어야 한다.
@@ -1621,9 +1644,7 @@ def match_hwp_text_to_layout_blocks(
 
     # L3 레이아웃 확인
     layout = get_page_layout(doc_path, part_id, page_num)
-    existing_block_ids = {
-        b["block_id"] for b in layout.get("blocks", [])
-    }
+    existing_block_ids = {b["block_id"] for b in layout.get("blocks", [])}
 
     # OcrResult 목록 생성 (ocr_page.schema.json 형식)
     ocr_results = []
@@ -1639,25 +1660,31 @@ def match_hwp_text_to_layout_blocks(
         # LayoutBlock 존재 여부 확인 (경고만, 에러는 아님)
         if block_id and block_id not in existing_block_ids:
             import logging
+
             logging.getLogger(__name__).warning(
                 "LayoutBlock이 L3에 존재하지 않습니다: %s (page %d)",
-                block_id, page_num,
+                block_id,
+                page_num,
             )
 
         # 텍스트를 줄 단위로 분할하여 OcrLine 형태로 변환
         lines = []
         for line_text in text.split("\n"):
             if line_text.strip():
-                lines.append({
-                    "text": line_text,
-                    "bbox": None,
-                    "characters": None,
-                })
+                lines.append(
+                    {
+                        "text": line_text,
+                        "bbox": None,
+                        "characters": None,
+                    }
+                )
 
-        ocr_results.append({
-            "layout_block_id": block_id,
-            "lines": lines,
-        })
+        ocr_results.append(
+            {
+                "layout_block_id": block_id,
+                "lines": lines,
+            }
+        )
         matched += 1
 
     # L2 OcrResult 저장
@@ -1747,8 +1774,7 @@ def create_document_from_hwp(
 
     if not hwp_file.exists():
         raise FileNotFoundError(
-            f"HWP 파일을 찾을 수 없습니다: {hwp_file}\n"
-            "→ 해결: 파일 경로를 확인하세요."
+            f"HWP 파일을 찾을 수 없습니다: {hwp_file}\n→ 해결: 파일 경로를 확인하세요."
         )
 
     # 리더로 메타데이터 추출 (파일 형식도 검증됨)
@@ -1804,24 +1830,30 @@ def create_document_from_hwp(
         if result.taidu_marks:
             fmt_path = _formatting_file_path(doc_path, part_id, page_num)
             fmt_path.parent.mkdir(parents=True, exist_ok=True)
-            _write_json(fmt_path, {
-                "taidu": [
-                    {"pos": t["pos"], "raise_chars": t["raise_chars"], "note": t["note"]}
-                    for t in result.taidu_marks
-                ],
-            })
+            _write_json(
+                fmt_path,
+                {
+                    "taidu": [
+                        {"pos": t["pos"], "raise_chars": t["raise_chars"], "note": t["note"]}
+                        for t in result.taidu_marks
+                    ],
+                },
+            )
 
         # 표점·현토 데이터 사이드카 저장
         if result.punctuation_marks or result.hyeonto_annotations:
             clean_path = _hwp_clean_file_path(doc_path, part_id, page_num)
             clean_path.parent.mkdir(parents=True, exist_ok=True)
-            _write_json(clean_path, {
-                "source": "hwp_import",
-                "raw_text_length": len(raw_text),
-                "clean_text_length": len(result.clean_text),
-                "punctuation_marks": result.punctuation_marks,
-                "hyeonto_annotations": result.hyeonto_annotations,
-            })
+            _write_json(
+                clean_path,
+                {
+                    "source": "hwp_import",
+                    "raw_text_length": len(raw_text),
+                    "clean_text_length": len(result.clean_text),
+                    "punctuation_marks": result.punctuation_marks,
+                    "hyeonto_annotations": result.hyeonto_annotations,
+                },
+            )
 
         # 통계
         if result.had_punctuation:
@@ -1831,12 +1863,14 @@ def create_document_from_hwp(
         total_punct_count += len(result.punctuation_marks)
         total_hyeonto_count += len(result.hyeonto_annotations)
 
-        text_pages.append({
-            "page_num": page_num,
-            "text_length": len(result.clean_text),
-            "has_punct": result.had_punctuation,
-            "has_hyeonto": result.had_hyeonto,
-        })
+        text_pages.append(
+            {
+                "page_num": page_num,
+                "text_length": len(result.clean_text),
+                "has_punct": result.had_punctuation,
+                "has_hyeonto": result.had_hyeonto,
+            }
+        )
 
     # 4. 이미지 추출 (HWPX만 지원)
     images_extracted = 0
@@ -1942,6 +1976,7 @@ async def create_document_from_url(
         raise ValueError(f"이 URL은 자동 인식할 수 없습니다: {url}")
 
     import parsers as _parsers_mod  # noqa: F401 — 파서 모듈 자동 등록
+
     fetcher, mapper = get_parser(parser_id)
 
     # 2. 메타데이터 추출
@@ -1984,21 +2019,25 @@ async def create_document_from_url(
                         tmp_path,
                         progress_callback=(
                             lambda cur, total, _label=asset["label"]: (
-                                progress_callback(
-                                    f"다운로드 중: {_label} p.{cur}/{total}",
-                                    cur,
-                                    total,
+                                (
+                                    progress_callback(
+                                        f"다운로드 중: {_label} p.{cur}/{total}",
+                                        cur,
+                                        total,
+                                    )
                                 )
+                                if progress_callback
+                                else None
                             )
-                            if progress_callback
-                            else None
                         ),
                     )
                     downloaded_files.append(pdf_path)
-                    asset_parts_info.append({
-                        "label": asset["label"],
-                        "page_count": asset.get("page_count"),
-                    })
+                    asset_parts_info.append(
+                        {
+                            "label": asset["label"],
+                            "page_count": asset.get("page_count"),
+                        }
+                    )
 
                 # 5. add_document() 호출
                 if progress_callback:
@@ -2026,21 +2065,30 @@ async def create_document_from_url(
                 tmp_path = Path(tmp_dir)
                 if progress_callback:
                     progress_callback(
-                        f"다운로드 중: {direct['label']}", 1, 1,
+                        f"다운로드 중: {direct['label']}",
+                        1,
+                        1,
                     )
                 pdf_path = await download_generic_asset(
-                    direct, tmp_path,
+                    direct,
+                    tmp_path,
                     progress_callback=(
                         lambda cur, total: progress_callback(
-                            f"다운로드 중: {direct['label']}", cur, total,
+                            f"다운로드 중: {direct['label']}",
+                            cur,
+                            total,
                         )
-                    ) if progress_callback else None,
+                    )
+                    if progress_callback
+                    else None,
                 )
                 downloaded_files.append(pdf_path)
-                asset_parts_info.append({
-                    "label": direct["label"],
-                    "page_count": direct.get("page_count"),
-                })
+                asset_parts_info.append(
+                    {
+                        "label": direct["label"],
+                        "page_count": direct.get("page_count"),
+                    }
+                )
 
                 if progress_callback:
                     progress_callback("문헌 폴더 생성 중...", 0, 0)
@@ -2170,17 +2218,21 @@ def search_char_in_pages(
                 ctx_start = max(0, i - 5)
                 ctx_end = min(len(text), i + 6)
                 context = text[ctx_start:ctx_end]
-                positions.append({
-                    "char_index": i,
-                    "context": context,
-                })
+                positions.append(
+                    {
+                        "char_index": i,
+                        "context": context,
+                    }
+                )
 
         if positions:
-            results.append({
-                "page": page_num,
-                "count": len(positions),
-                "positions": positions,
-            })
+            results.append(
+                {
+                    "page": page_num,
+                    "count": len(positions),
+                    "positions": positions,
+                }
+            )
 
     return results
 

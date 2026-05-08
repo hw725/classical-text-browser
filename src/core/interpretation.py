@@ -77,8 +77,7 @@ def create_interpretation(
 
     if interp_path.exists():
         raise FileExistsError(
-            f"해석 저장소가 이미 존재합니다: {interp_path}\n"
-            "→ 해결: 다른 interp_id를 사용하세요."
+            f"해석 저장소가 이미 존재합니다: {interp_path}\n→ 해결: 다른 interp_id를 사용하세요."
         )
 
     # 원본 문헌 존재 확인
@@ -202,12 +201,14 @@ def _scan_tracked_files(doc_path: Path) -> list[dict]:
 
         relative_path = f.relative_to(doc_path).as_posix()
         file_hash = _compute_file_hash(f)
-        tracked.append({
-            "path": relative_path,
-            "hash_at_base": file_hash,
-            "my_layers": None,
-            "status": "unchanged",
-        })
+        tracked.append(
+            {
+                "path": relative_path,
+                "hash_at_base": file_hash,
+                "my_layers": None,
+                "status": "unchanged",
+            }
+        )
 
     return tracked
 
@@ -632,6 +633,7 @@ def get_layer_content_at_commit(
         모든 경로 패턴을 git tree에서 순서대로 탐색한다.
     """
     import git as _git
+
     interp_path = Path(interp_path).resolve()
     filename_base = f"{part_id}_page_{page_num:03d}"
 
@@ -656,9 +658,14 @@ def get_layer_content_at_commit(
         commit = repo.commit(commit_hash)
     except Exception:
         return {
-            "layer": layer, "sub_type": sub_type, "part_id": part_id,
-            "page": page_num, "content": "" if layer == "L6_translation" else {},
-            "file_path": "", "exists": False, "commit_hash": commit_hash,
+            "layer": layer,
+            "sub_type": sub_type,
+            "part_id": part_id,
+            "page": page_num,
+            "content": "" if layer == "L6_translation" else {},
+            "file_path": "",
+            "exists": False,
+            "commit_hash": commit_hash,
         }
 
     for rel_path in candidates:
@@ -683,9 +690,13 @@ def get_layer_content_at_commit(
             content = text
 
         return {
-            "layer": layer, "sub_type": sub_type, "part_id": part_id,
-            "page": page_num, "content": content,
-            "file_path": rel_path, "exists": True,
+            "layer": layer,
+            "sub_type": sub_type,
+            "part_id": part_id,
+            "page": page_num,
+            "content": content,
+            "file_path": rel_path,
+            "exists": True,
             "commit_hash": commit.hexsha,
         }
 
@@ -708,19 +719,28 @@ def get_layer_content_at_commit(
                     except json.JSONDecodeError:
                         content = text
                     return {
-                        "layer": layer, "sub_type": sub_type, "part_id": part_id,
-                        "page": page_num, "content": content,
+                        "layer": layer,
+                        "sub_type": sub_type,
+                        "part_id": part_id,
+                        "page": page_num,
+                        "content": content,
                         "file_path": f"{tree_dir_path}/{blob.name}",
-                        "exists": True, "commit_hash": commit.hexsha,
+                        "exists": True,
+                        "commit_hash": commit.hexsha,
                     }
         except KeyError:
             pass
 
     # 어떤 경로에서도 파일을 찾지 못함
     return {
-        "layer": layer, "sub_type": sub_type, "part_id": part_id,
-        "page": page_num, "content": "" if layer == "L6_translation" else {},
-        "file_path": "", "exists": False, "commit_hash": commit_hash,
+        "layer": layer,
+        "sub_type": sub_type,
+        "part_id": part_id,
+        "page": page_num,
+        "content": "" if layer == "L6_translation" else {},
+        "file_path": "",
+        "exists": False,
+        "commit_hash": commit_hash,
     }
 
 
@@ -747,6 +767,7 @@ def get_l5_compare_at_commit(
         기존 api_l5_compare()의 filesystem glob을 git tree 순회로 대체한 버전이다.
     """
     import git as _git
+
     interp_path = Path(interp_path).resolve()
     page_prefix = f"{part_id}_page_{page_num:03d}"
     suffix = f"_{kind}.json"
@@ -830,7 +851,7 @@ def get_l5_compare_at_commit(
                     s, e = t.get("start", "?"), t.get("end", "?")
                     text_val = a.get("text", "")
                     pos = a.get("position", "after")
-                    lines.append(f"  [{s}-{e}] \"{text_val}\" ({pos})")
+                    lines.append(f'  [{s}-{e}] "{text_val}" ({pos})')
                 lines.append("")
                 continue
 
@@ -910,6 +931,7 @@ def _append_based_on_trailer(interp_path: Path, message: str) -> str:
     출력: trailer가 추가된 커밋 메시지. 원본 저장소를 찾을 수 없으면 원래 메시지 그대로.
     """
     import logging
+
     logger = logging.getLogger(__name__)
 
     # manifest.json에서 source_document_id를 읽는다
@@ -983,6 +1005,7 @@ def git_commit_interpretation(interp_path: str | Path, message: str) -> dict:
         # 훅 실패 시 커밋이 실제로 생성되지 않았을 수 있으므로
         # head.commit은 이전 커밋일 수 있다. 경고를 기록한다.
         import logging
+
         logging.getLogger(__name__).warning(
             "git commit hook 실패 — 커밋이 생성되지 않았을 수 있음: %s", e
         )
@@ -1007,13 +1030,15 @@ def get_interp_git_log(interp_path: str | Path, max_count: int = 50) -> list[dic
 
     commits = []
     for c in repo.iter_commits(max_count=max_count):
-        commits.append({
-            "hash": c.hexsha,
-            "short_hash": c.hexsha[:7],
-            "message": c.message.strip(),
-            "author": str(c.author),
-            "date": c.committed_datetime.isoformat(),
-        })
+        commits.append(
+            {
+                "hash": c.hexsha,
+                "short_hash": c.hexsha[:7],
+                "message": c.message.strip(),
+                "author": str(c.author),
+                "date": c.committed_datetime.isoformat(),
+            }
+        )
 
     return commits
 
@@ -1107,12 +1132,14 @@ def _update_library_manifest_interp(
     if "interpretations" not in manifest:
         manifest["interpretations"] = []
 
-    manifest["interpretations"].append({
-        "interpretation_id": interp_id,
-        "source_document_id": source_document_id,
-        "title": title,
-        "path": f"interpretations/{interp_id}",
-    })
+    manifest["interpretations"].append(
+        {
+            "interpretation_id": interp_id,
+            "source_document_id": source_document_id,
+            "title": title,
+            "path": f"interpretations/{interp_id}",
+        }
+    )
 
     _write_json(manifest_path, manifest)
 
