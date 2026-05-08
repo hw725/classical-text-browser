@@ -37,39 +37,46 @@ _static_dir = Path(__file__).parent.parent / "static"
 
 # ── Pydantic 모델 ─────────────────────────────────
 
+
 class SwitchLibraryRequest(BaseModel):
     """서고 전환 요청."""
+
     path: str
 
 
 class InitLibraryRequest(BaseModel):
     """새 서고 생성 요청."""
+
     path: str
 
 
 class BackupPathRequest(BaseModel):
     """백업 경로 설정 요청."""
+
     path: str  # 백업 폴더 경로
 
 
 class RestoreRequest(BaseModel):
     """복원 요청."""
-    backup_path: str   # 백업 폴더 경로
+
+    backup_path: str  # 백업 폴더 경로
     restore_path: str  # 복원할 대상 경로
 
 
 class SetRemoteRequest(BaseModel):
     """원격 저장소 URL 설정 요청."""
-    repo_type: str   # "documents" 또는 "interpretations"
-    repo_id: str     # 저장소 ID
+
+    repo_type: str  # "documents" 또는 "interpretations"
+    repo_id: str  # 저장소 ID
     remote_url: str  # 원격 URL
 
 
 class GitPushPullRequest(BaseModel):
     """Git push/pull 요청."""
-    repo_type: str   # "documents" 또는 "interpretations"
+
+    repo_type: str  # "documents" 또는 "interpretations"
     repo_id: str
-    action: str      # "push" 또는 "pull"
+    action: str  # "push" 또는 "pull"
 
 
 # ── 헬퍼 ──────────────────────────────────────────
@@ -101,7 +108,9 @@ def _get_git_remote(repo_dir: Path) -> str | None:
     try:
         result = subprocess.run(
             ["git", "remote", "get-url", "origin"],
-            cwd=str(repo_dir), capture_output=True, text=True,
+            cwd=str(repo_dir),
+            capture_output=True,
+            text=True,
         )
         if result.returncode == 0:
             return result.stdout.strip()
@@ -111,6 +120,7 @@ def _get_git_remote(repo_dir: Path) -> str | None:
 
 
 # ── 라우트 ─────────────────────────────────────────
+
 
 @router.get("/")
 async def index():
@@ -146,6 +156,7 @@ async def api_switch_library(body: SwitchLibraryRequest):
     에러: 경로가 유효한 서고가 아니면 400.
     """
     from pathlib import Path as _Path
+
     target = _Path(body.path).resolve()
 
     if not target.exists():
@@ -202,6 +213,7 @@ async def api_recent_libraries():
     출력: { "libraries": [{path, name, last_used}, ...] }
     """
     from core.app_config import get_recent_libraries
+
     _library_path = get_library_path()
     return {
         "libraries": get_recent_libraries(),
@@ -242,14 +254,16 @@ async def api_git_health():
 
     for item in contaminated:
         result = repair_git_contamination(item["repo_path"])
-        repaired.append({
-            "repo_id": item["repo_id"],
-            "repo_type": item["repo_type"],
-            "contaminated_files": len(item["contaminated_files"]),
-            "repaired": result["repaired"],
-            "method": result["method"],
-            "error": result["error"],
-        })
+        repaired.append(
+            {
+                "repo_id": item["repo_id"],
+                "repo_type": item["repo_type"],
+                "contaminated_files": len(item["contaminated_files"]),
+                "repaired": result["repaired"],
+                "method": result["method"],
+                "error": result["error"],
+            }
+        )
 
     return {
         "contaminated_count": len(contaminated),
@@ -281,11 +295,13 @@ async def api_get_settings():
             if not d.is_dir() or d.name.startswith("."):
                 continue
             remote_url = _get_git_remote(d)
-            info["documents"].append({
-                "id": d.name,
-                "path": str(d),
-                "remote_url": remote_url,
-            })
+            info["documents"].append(
+                {
+                    "id": d.name,
+                    "path": str(d),
+                    "remote_url": remote_url,
+                }
+            )
 
     # 해석 저장소의 원격 URL 수집
     interp_dir = _library_path / "interpretations"
@@ -294,15 +310,18 @@ async def api_get_settings():
             if not d.is_dir() or d.name.startswith("."):
                 continue
             remote_url = _get_git_remote(d)
-            info["interpretations"].append({
-                "id": d.name,
-                "path": str(d),
-                "remote_url": remote_url,
-            })
+            info["interpretations"].append(
+                {
+                    "id": d.name,
+                    "path": str(d),
+                    "remote_url": remote_url,
+                }
+            )
 
     # 백업 경로 및 백업 정보 포함
     from core.app_config import get_backup_path
     from core.backup import get_backup_info
+
     bp = get_backup_path()
     info["backup_path"] = bp
     info["backup_info"] = get_backup_info(bp) if bp else None
@@ -312,6 +331,7 @@ async def api_get_settings():
 
 # ── 백업/복원 API ─────────────────────────────────────
 
+
 @router.post("/api/settings/backup-path")
 async def api_set_backup_path(body: BackupPathRequest):
     """백업 폴더 경로를 설정한다.
@@ -319,6 +339,7 @@ async def api_set_backup_path(body: BackupPathRequest):
     구글 드라이브 동기화 폴더를 지정하면 자동으로 클라우드에 동기화된다.
     """
     from core.app_config import set_backup_path
+
     bp = Path(body.path)
     if not bp.exists():
         return JSONResponse(
@@ -412,12 +433,15 @@ async def api_set_remote(body: SetRemoteRequest):
         # 기존 origin 제거 (있으면)
         subprocess.run(
             ["git", "remote", "remove", "origin"],
-            cwd=str(repo_dir), capture_output=True,
+            cwd=str(repo_dir),
+            capture_output=True,
         )
         # 새 origin 추가
         result = subprocess.run(
             ["git", "remote", "add", "origin", body.remote_url],
-            cwd=str(repo_dir), capture_output=True, text=True,
+            cwd=str(repo_dir),
+            capture_output=True,
+            text=True,
         )
         if result.returncode != 0:
             return JSONResponse(
@@ -498,7 +522,9 @@ async def api_git_sync(body: GitPushPullRequest):
         # 현재 브랜치 이름
         branch_result = subprocess.run(
             ["git", "branch", "--show-current"],
-            cwd=str(repo_dir), capture_output=True, text=True,
+            cwd=str(repo_dir),
+            capture_output=True,
+            text=True,
         )
         branch = branch_result.stdout.strip() or "master"
 
@@ -600,6 +626,7 @@ async def api_git_sync(body: GitPushPullRequest):
 
 
 # ── 휴지통 API ─────────────────────────────────────
+
 
 @router.get("/api/trash")
 async def api_trash():

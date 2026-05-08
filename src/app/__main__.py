@@ -59,6 +59,7 @@ def main():
             # 마지막 사용 서고 자동 선택
             try:
                 from core.app_config import get_last_library
+
                 last = get_last_library()
                 if last:
                     library_path = Path(last).resolve()

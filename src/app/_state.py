@@ -30,6 +30,7 @@ _REPO_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
 # ── 상태 접근 함수 ───────────────────────────
 
+
 def get_library_path() -> Path | None:
     """현재 서고 경로를 반환한다."""
     return _library_path
@@ -41,7 +42,7 @@ def set_library_path(path: Path | None):
     _library_path = path
     _llm_router = None  # 서고 전환 시 LLM 라우터 리셋
     _ocr_registry = None  # 서고 전환 시 OCR 파이프라인도 리셋
-    _ocr_pipeline = None   # (library_root가 달라지므로 재생성 필요)
+    _ocr_pipeline = None  # (library_root가 달라지므로 재생성 필요)
     _llm_result_cache.clear()
 
 
@@ -66,11 +67,13 @@ def configure_library(library_path: str | Path):
     # 최근 서고 목록에 추가
     try:
         from core.app_config import add_recent_library
+
         lib_name = resolved.name
         # library_manifest.json에서 이름 읽기 (있으면)
         manifest_path = resolved / "library_manifest.json"
         if manifest_path.exists():
             import json
+
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             lib_name = manifest.get("name", lib_name)
         add_recent_library(str(resolved), lib_name)
@@ -80,6 +83,7 @@ def configure_library(library_path: str | Path):
     # Git 건강 검사 — .git 내부 파일 오염 자동 탐지 및 수리
     try:
         from core.library import check_git_health, repair_git_contamination
+
         contaminated = check_git_health(resolved)
         if contaminated:
             logger.warning(
@@ -89,7 +93,8 @@ def configure_library(library_path: str | Path):
             for item in contaminated:
                 logger.warning(
                     "  - %s/%s: %d개 파일 오염",
-                    item["repo_type"], item["repo_id"],
+                    item["repo_type"],
+                    item["repo_id"],
                     len(item["contaminated_files"]),
                 )
                 repair_result = repair_git_contamination(item["repo_path"])
@@ -110,6 +115,7 @@ def configure_library(library_path: str | Path):
 
 # ── LLM 라우터 ────────────────────────────────
 
+
 def _get_llm_router():
     """LLM Router를 lazy-init한다.
 
@@ -121,12 +127,14 @@ def _get_llm_router():
     if _llm_router is None:
         from llm.config import LlmConfig
         from llm.router import LlmRouter
+
         config = LlmConfig(library_root=_library_path)
         _llm_router = LlmRouter(config)
     return _llm_router
 
 
 # ── 외부 표점 마이크로서비스 ─────────────────────
+
 
 def get_external_punctuation_url() -> str | None:
     """외부 표점 마이크로서비스(punctuation-service)의 base URL을 반환.
@@ -140,11 +148,13 @@ def get_external_punctuation_url() -> str | None:
         미설정이면 None을 반환하여 UI/라우터에서 외부 옵션을 비활성으로 처리.
     """
     import os as _os
+
     url = _os.getenv("EXTERNAL_PUNCT_URL", "").strip()
     return url or None
 
 
 # ── OCR 파이프라인 ────────────────────────────
+
 
 def _get_ocr_pipeline():
     """OCR Pipeline과 Registry를 lazy-init한다.
@@ -178,6 +188,7 @@ def _get_ocr_pipeline():
 
 
 # ── 경로 해석 ────────────────────────────────
+
 
 def _resolve_repo_path(repo_type: str, repo_id: str) -> Path | None:
     """repo_type("documents"/"interpretations")과 repo_id로 저장소 경로를 결정한다.
@@ -352,16 +363,12 @@ def _make_llm_cache_key(
     force_model=None,
 ) -> str:
     text_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
-    return (
-        f"{purpose}|{force_provider or 'auto'}|{force_model or 'auto'}|"
-        f"{len(text)}|{text_hash}"
-    )
+    return f"{purpose}|{force_provider or 'auto'}|{force_model or 'auto'}|{len(text)}|{text_hash}"
 
 
 def _prune_llm_result_cache(now: float):
     expired = [
-        k for k, (ts, _) in _llm_result_cache.items()
-        if now - ts > _LLM_RESULT_CACHE_TTL_SEC
+        k for k, (ts, _) in _llm_result_cache.items() if now - ts > _LLM_RESULT_CACHE_TTL_SEC
     ]
     for k in expired:
         _llm_result_cache.pop(k, None)
@@ -394,8 +401,7 @@ def _set_cached_llm_result(cache_key: str, result: dict):
     _prune_llm_result_cache(now)
 
 
-async def _call_llm_text(purpose: str, text: str,
-                          force_provider=None, force_model=None) -> dict:
+async def _call_llm_text(purpose: str, text: str, force_provider=None, force_model=None) -> dict:
     """공통 LLM 텍스트 호출. 프롬프트 템플릿 + JSON 파싱.
 
     왜 이렇게 하는가:
@@ -476,7 +482,7 @@ async def _call_llm_text(purpose: str, text: str,
                 last_error = ValueError("empty response")
                 logger.warning(
                     f"LLM {purpose} — {force_provider}/{force_model or 'auto'} "
-                    f"빈 응답 (시도 {_attempt+1}/{attempts}), "
+                    f"빈 응답 (시도 {_attempt + 1}/{attempts}), "
                     f"tokens_out={getattr(response, 'tokens_out', '?')}"
                 )
                 max_tokens = _next_retry_max_tokens(purpose, max_tokens)
@@ -489,7 +495,7 @@ async def _call_llm_text(purpose: str, text: str,
                     except Exception:
                         pass
                 logger.warning(
-                    f"LLM {purpose} — {force_provider} 에러 (시도 {_attempt+1}/2): {e}"
+                    f"LLM {purpose} — {force_provider} 에러 (시도 {_attempt + 1}/2): {e}"
                 )
         # 재시도 후에도 에러가 남아 있으면 전파
         if last_error and _is_retryable_llm_error(last_error):
@@ -545,9 +551,7 @@ async def _call_llm_text(purpose: str, text: str,
             return parsed
 
         except Exception as e:
-            logger.warning(
-                f"LLM {purpose} — {provider.provider_id} 실패: {e}"
-            )
+            logger.warning(f"LLM {purpose} — {provider.provider_id} 실패: {e}")
             errors.append(f"{provider.provider_id}: {e}")
             continue
 
@@ -558,9 +562,9 @@ async def _call_llm_text(purpose: str, text: str,
     )
 
 
-async def _call_llm_text_stream(purpose: str, text: str,
-                                 queue,
-                                 force_provider=None, force_model=None):
+async def _call_llm_text_stream(
+    purpose: str, text: str, queue, force_provider=None, force_model=None
+):
     """스트리밍 LLM 호출. asyncio.Queue에 SSE 이벤트를 넣는다.
 
     왜 별도 함수인가:
@@ -703,6 +707,7 @@ async def _call_llm_text_stream(purpose: str, text: str,
         logger.error(f"LLM stream {purpose} 실패: {e}")
         await queue.put({"type": "error", "error": str(e)})
 
+
 def _salvage_truncated_array_payload(raw: str, key: str, _json) -> dict | None:
     """Recover completed dict items from a truncated JSON array payload."""
     key_token = f'"{key}"'
@@ -775,7 +780,7 @@ def _parse_llm_json(response, _json) -> dict:
     # thinking 모델의 사고 과정 제거:
     #   1. <think>...</think> 태그 (Ollama kimi-k2.5, qwq 등)
     #   2. Gemini thinking 유출: JSON 없이 추론 텍스트만 반환되는 경우
-    raw = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL).strip()
+    raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
 
     # thinking 태그 제거 후 빈 응답이 되는 경우 (사고만 하고 출력 없음)
     if not raw:
@@ -790,10 +795,9 @@ def _parse_llm_json(response, _json) -> dict:
 
     # JSON이 아예 없고 reasoning 텍스트만 있는 경우 조기 감지
     # (Gemini thinking 유출: "Check...", "Correct.", "Wait," 같은 패턴)
-    if '{' not in raw:
+    if "{" not in raw:
         logger.warning(
-            f"LLM 응답에 JSON 없음 ({response.provider}/{response.model}): "
-            f"{raw[:100]}..."
+            f"LLM 응답에 JSON 없음 ({response.provider}/{response.model}): {raw[:100]}..."
         )
         raise ValueError(
             f"{response.provider}({response.model}) 응답에 JSON이 없습니다. "
@@ -826,17 +830,13 @@ def _parse_llm_json(response, _json) -> dict:
                 if data is None:
                     data = _salvage_truncated_array_payload(raw, "marks", _json)
                 if data is None:
-                    raise ValueError(
-                    f"LLM 응답 JSON 파싱 실패 ({response.provider}): {raw[:200]}"
-                )
+                    raise ValueError(f"LLM 응답 JSON 파싱 실패 ({response.provider}): {raw[:200]}")
         else:
             data = _salvage_truncated_array_payload(raw, "annotations", _json)
             if data is None:
                 data = _salvage_truncated_array_payload(raw, "marks", _json)
             if data is None:
-                raise ValueError(
-                f"LLM 응답에 JSON이 없음 ({response.provider}): {raw[:200]}"
-            )
+                raise ValueError(f"LLM 응답에 JSON이 없음 ({response.provider}): {raw[:200]}")
 
     data["_provider"] = response.provider
     data["_model"] = response.model
@@ -891,9 +891,7 @@ def _parse_llm_json(response, _json) -> dict:  # type: ignore[no-redef]
             f"tokens_out={getattr(response, 'tokens_out', '?')}, "
             f"raw={getattr(response, 'raw', '?')}"
         )
-        raise ValueError(
-            f"{response.provider}({response.model}) returned empty response."
-        )
+        raise ValueError(f"{response.provider}({response.model}) returned empty response.")
 
     raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
     if not raw:
@@ -907,9 +905,7 @@ def _parse_llm_json(response, _json) -> dict:  # type: ignore[no-redef]
                 raw = raw[4:].strip()
 
     if "{" not in raw:
-        raise ValueError(
-            f"{response.provider}({response.model}) response has no JSON: {raw[:200]}"
-        )
+        raise ValueError(f"{response.provider}({response.model}) response has no JSON: {raw[:200]}")
 
     def _attempt_parse(candidate: str) -> dict | None:
         try:
@@ -943,9 +939,7 @@ def _parse_llm_json(response, _json) -> dict:  # type: ignore[no-redef]
             break
 
     if data is None:
-        raise ValueError(
-            f"LLM response JSON parse failed ({response.provider}): {raw[:200]}"
-        )
+        raise ValueError(f"LLM response JSON parse failed ({response.provider}): {raw[:200]}")
 
     data["_provider"] = response.provider
     data["_model"] = response.model

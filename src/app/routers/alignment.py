@@ -40,9 +40,7 @@ def _get_resources_dir() -> str:
         routers/ → app/ → src/ → 프로젝트루트 (3단계)
         resources/는 프로젝트 루트에 있으므로 3번 올라가야 한다.
     """
-    return os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "..", "..", "resources")
-    )
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "resources"))
 
 
 def _get_active_dict_name() -> str:
@@ -111,6 +109,7 @@ def _list_variant_dicts() -> list[dict]:
     반환: [{"name": "variant_chars", "path": "...", "active": True}, ...]
     """
     import glob as glob_mod
+
     resources = _get_resources_dir()
     active = _get_active_dict_name()
     result = []
@@ -118,11 +117,13 @@ def _list_variant_dicts() -> list[dict]:
     for path in sorted(glob_mod.glob(os.path.join(resources, "variant_*.json"))):
         basename = os.path.basename(path)
         name = basename.rsplit(".json", 1)[0]
-        result.append({
-            "name": name,
-            "file": basename,
-            "active": name == active,
-        })
+        result.append(
+            {
+                "name": name,
+                "file": basename,
+                "active": name == active,
+            }
+        )
     return result
 
 
@@ -131,28 +132,33 @@ def _list_variant_dicts() -> list[dict]:
 
 class VariantPairRequest(BaseModel):
     """이체자 쌍 추가/삭제 요청."""
+
     char_a: str
     char_b: str
 
 
 class VariantImportRequest(BaseModel):
     """이체자 대량 가져오기 요청."""
+
     text: str
     format: str = "auto"
 
 
 class CreateDictRequest(BaseModel):
     """새 사전 생성 요청."""
+
     name: str
 
 
 class CopyDictRequest(BaseModel):
     """사전 복제 요청."""
+
     new_name: str
 
 
 class BatchCorrectionRequest(BaseModel):
     """일괄 교정 요청."""
+
     part_id: str
     page_start: int
     page_end: int
@@ -239,6 +245,7 @@ async def api_run_alignment(
 
 # ── 기존 호환 API (활성 사전에 프록시) ──
 
+
 @router.get("/api/alignment/variant-dict")
 async def api_get_variant_dict():
     """활성 이체자 사전 내용을 반환한다. (기존 API 호환)"""
@@ -286,9 +293,7 @@ async def api_delete_variant_pair(body: VariantPairRequest):
 async def api_import_variant_dict(body: VariantImportRequest):
     """활성 사전에 이체자 데이터를 대량 가져온다. (기존 API 호환)"""
     if not body.text or not body.text.strip():
-        return JSONResponse(
-            {"error": "가져올 데이터가 비어 있습니다."}, status_code=400
-        )
+        return JSONResponse({"error": "가져올 데이터가 비어 있습니다."}, status_code=400)
 
     variant_dict = _get_variant_dict()
     result = variant_dict.import_bulk(body.text, body.format)
@@ -306,6 +311,7 @@ async def api_import_variant_dict(body: VariantImportRequest):
 
 
 # ── 다중 사전 관리 API ──
+
 
 @router.get("/api/variant-dicts")
 async def api_list_variant_dicts():
@@ -345,7 +351,7 @@ async def api_create_variant_dict(body: CreateDictRequest):
     if not raw_name.startswith("variant_"):
         raw_name = f"variant_{raw_name}"
 
-    if not re.match(r'^variant_[a-zA-Z0-9_\-]+$', raw_name):
+    if not re.match(r"^variant_[a-zA-Z0-9_\-]+$", raw_name):
         return JSONResponse(
             {"error": "사전 이름은 영문, 숫자, 밑줄, 하이픈만 사용할 수 있습니다."},
             status_code=400,
@@ -356,6 +362,7 @@ async def api_create_variant_dict(body: CreateDictRequest):
         return JSONResponse({"error": f"이미 존재하는 사전입니다: {raw_name}"}, status_code=409)
 
     from core.alignment import VariantCharDict
+
     vd = VariantCharDict(dict_path=None)  # 빈 사전
     vd.save(path)
     return {"status": "ok", "name": raw_name}
@@ -368,7 +375,7 @@ async def api_copy_variant_dict(name: str, body: CopyDictRequest):
     if not new_name.startswith("variant_"):
         new_name = f"variant_{new_name}"
 
-    if not re.match(r'^variant_[a-zA-Z0-9_\-]+$', new_name):
+    if not re.match(r"^variant_[a-zA-Z0-9_\-]+$", new_name):
         return JSONResponse(
             {"error": "사전 이름은 영문, 숫자, 밑줄, 하이픈만 사용할 수 있습니다."},
             status_code=400,
@@ -406,11 +413,15 @@ async def api_delete_variant_dict(name: str):
     # 휴지통으로 이동 (CLAUDE.md: 영구 삭제 금지)
     try:
         subprocess.run(
-            ["powershell", "-Command",
-             f"Add-Type -AssemblyName Microsoft.VisualBasic; "
-             f"[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile("
-             f"'{path}', 'OnlyErrorDialogs', 'SendToRecycleBin')"],
-            check=True, capture_output=True,
+            [
+                "powershell",
+                "-Command",
+                f"Add-Type -AssemblyName Microsoft.VisualBasic; "
+                f"[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile("
+                f"'{path}', 'OnlyErrorDialogs', 'SendToRecycleBin')",
+            ],
+            check=True,
+            capture_output=True,
         )
     except Exception:
         # PowerShell 실패 시 (Linux 등) — 이름 변경으로 "삭제"

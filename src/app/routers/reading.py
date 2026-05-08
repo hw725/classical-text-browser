@@ -69,12 +69,14 @@ router = APIRouter(tags=["reading"])
 
 class PunctuationSaveRequest(BaseModel):
     """표점 저장 요청."""
+
     block_id: str
     marks: list
 
 
 class MarkAddRequest(BaseModel):
     """개별 표점 추가 요청."""
+
     target: dict
     before: str | None = None
     after: str | None = None
@@ -82,12 +84,14 @@ class MarkAddRequest(BaseModel):
 
 class HyeontoSaveRequest(BaseModel):
     """현토 저장 요청."""
+
     block_id: str
     annotations: list
 
 
 class AnnotationAddRequest(BaseModel):
     """개별 현토 추가 요청."""
+
     target: dict
     position: str = "after"
     text: str
@@ -96,6 +100,7 @@ class AnnotationAddRequest(BaseModel):
 
 class TranslationAddRequest(BaseModel):
     """수동 번역 입력 요청."""
+
     source: dict
     source_text: str
     translation: str
@@ -105,30 +110,35 @@ class TranslationAddRequest(BaseModel):
 
 class TranslationUpdateRequest(BaseModel):
     """번역 수정 요청."""
+
     translation: str | None = None
     status: str | None = None
 
 
 class TranslationCommitRequest(BaseModel):
     """Draft 확정 요청."""
+
     modifications: dict | None = None
 
 
 class NotesSaveRequest(BaseModel):
     """비고 저장 요청 모델."""
+
     entries: list[dict]
 
 
 class AiPunctuationRequest(BaseModel):
     """AI 표점 요청."""
-    text: str                         # 표점할 원문 텍스트
+
+    text: str  # 표점할 원문 텍스트
     force_provider: str | None = None
     force_model: str | None = None
 
 
 class AiTranslationRequest(BaseModel):
     """AI 번역 요청."""
-    text: str                         # 번역할 원문 텍스트
+
+    text: str  # 번역할 원문 텍스트
     force_provider: str | None = None
     force_model: str | None = None
 
@@ -151,6 +161,7 @@ async def api_punctuation_presets():
     if not presets_path.exists():
         return {"presets": [], "custom": []}
     import json as _json
+
     with open(presets_path, encoding="utf-8") as f:
         return _json.load(f)
 
@@ -271,7 +282,7 @@ async def api_l5_compare(
                     s, e = t.get("start", "?"), t.get("end", "?")
                     text = a.get("text", "")
                     pos = a.get("position", "after")
-                    lines.append(f"  [{s}-{e}] \"{text}\" ({pos})")
+                    lines.append(f'  [{s}-{e}] "{text}" ({pos})')
                 lines.append("")
                 continue
 
@@ -293,10 +304,7 @@ async def api_l5_compare(
     return {"blocks": blocks, "text_summary": "\n".join(lines).strip()}
 
 
-@router.get(
-    "/api/interpretations/{interp_id}/commits/{commit_hash}"
-    "/pages/{page_num}/l5_compare"
-)
+@router.get("/api/interpretations/{interp_id}/commits/{commit_hash}/pages/{page_num}/l5_compare")
 async def api_l5_compare_at_commit(
     interp_id: str,
     commit_hash: str,
@@ -412,7 +420,9 @@ async def api_add_mark(interp_id: str, page_num: int, block_id: str, body: MarkA
         return JSONResponse({"error": str(e)}, status_code=400)
 
 
-@router.delete("/api/interpretations/{interp_id}/pages/{page_num}/punctuation/{block_id}/marks/{mark_id}")
+@router.delete(
+    "/api/interpretations/{interp_id}/pages/{page_num}/punctuation/{block_id}/marks/{mark_id}"
+)
 async def api_delete_mark(interp_id: str, page_num: int, block_id: str, mark_id: str):
     """개별 표점 삭제."""
     _library_path = get_library_path()
@@ -547,7 +557,9 @@ async def api_add_annotation(
         return JSONResponse({"error": str(e)}, status_code=400)
 
 
-@router.delete("/api/interpretations/{interp_id}/pages/{page_num}/hyeonto/{block_id}/annotations/{ann_id}")
+@router.delete(
+    "/api/interpretations/{interp_id}/pages/{page_num}/hyeonto/{block_id}/annotations/{ann_id}"
+)
 async def api_delete_annotation(interp_id: str, page_num: int, block_id: str, ann_id: str):
     """개별 현토 삭제."""
     _library_path = get_library_path()
@@ -724,7 +736,9 @@ async def api_update_translation(
         return JSONResponse({"error": f"번역 저장 실패: {e}"}, status_code=400)
 
 
-@router.post("/api/interpretations/{interp_id}/pages/{page_num}/translation/{translation_id}/commit")
+@router.post(
+    "/api/interpretations/{interp_id}/pages/{page_num}/translation/{translation_id}/commit"
+)
 async def api_commit_translation(
     interp_id: str, page_num: int, translation_id: str, body: TranslationCommitRequest
 ):
@@ -878,6 +892,7 @@ def _normalize_punct_marks(raw_marks: list) -> list:
         포함할 수 있으므로, dict가 아닌 항목은 무시한다.
     """
     import logging as _log
+
     _logger = _log.getLogger(__name__)
     normalized = []
     for m in raw_marks:
@@ -894,10 +909,14 @@ def _normalize_punct_marks(raw_marks: list) -> list:
                     idx = int(idx)
                 except (ValueError, TypeError):
                     continue
-            normalized.append({
-                "start": idx, "end": idx,
-                "before": None, "after": m.get("mark"),
-            })
+            normalized.append(
+                {
+                    "start": idx,
+                    "end": idx,
+                    "before": None,
+                    "after": m.get("mark"),
+                }
+            )
         else:
             # 신형식: 이미 {start, end, before, after}
             start = m.get("start", 0)
@@ -908,12 +927,14 @@ def _normalize_punct_marks(raw_marks: list) -> list:
                 end = int(end) if end is not None else start
             except (ValueError, TypeError):
                 continue
-            normalized.append({
-                "start": start,
-                "end": end,
-                "before": m.get("before"),
-                "after": m.get("after"),
-            })
+            normalized.append(
+                {
+                    "start": start,
+                    "end": end,
+                    "before": m.get("before"),
+                    "after": m.get("after"),
+                }
+            )
     return normalized
 
 
@@ -931,9 +952,10 @@ def _extract_marks_from_punctuated(original: str, punctuated: str) -> list:
         직전 원문 글자의 after에 축적한다.
     """
     import re as _re
+
     # 원문·표점문 모두 공백 제거
-    orig = _re.sub(r'\s+', '', original)
-    punct = _re.sub(r'\s+', '', punctuated)
+    orig = _re.sub(r"\s+", "", original)
+    punct = _re.sub(r"\s+", "", punctuated)
 
     marks = []
     oi = 0  # 원문 인덱스
@@ -943,10 +965,14 @@ def _extract_marks_from_punctuated(original: str, punctuated: str) -> list:
         if oi < len(orig) and ch == orig[oi]:
             # 원문 글자 — 축적된 부호가 있으면 직전 글자의 after로 기록
             if pending_after and oi > 0:
-                marks.append({
-                    "start": oi - 1, "end": oi - 1,
-                    "before": None, "after": pending_after,
-                })
+                marks.append(
+                    {
+                        "start": oi - 1,
+                        "end": oi - 1,
+                        "before": None,
+                        "after": pending_after,
+                    }
+                )
                 pending_after = ""
             oi += 1
         else:
@@ -955,10 +981,14 @@ def _extract_marks_from_punctuated(original: str, punctuated: str) -> list:
 
     # 마지막 글자 뒤에 남은 부호 처리
     if pending_after and oi > 0:
-        marks.append({
-            "start": oi - 1, "end": oi - 1,
-            "before": None, "after": pending_after,
-        })
+        marks.append(
+            {
+                "start": oi - 1,
+                "end": oi - 1,
+                "before": None,
+                "after": pending_after,
+            }
+        )
 
     return marks
 
@@ -981,10 +1011,11 @@ async def api_llm_punctuation(body: AiPunctuationRequest):
     """
     import logging as _logging
     import re as _re
+
     _logger = _logging.getLogger(__name__)
 
     # 공백/줄바꿈 제거 — Ollama·OpenAI가 줄바꿈 포함 텍스트에서 빈 응답을 반환하는 문제 방지
-    clean_text = _re.sub(r'\s+', '', body.text)
+    clean_text = _re.sub(r"\s+", "", body.text)
     if not clean_text:
         return JSONResponse(
             {"error": "표점할 텍스트가 비어 있습니다 (공백만 포함)."},
@@ -1002,14 +1033,14 @@ async def api_llm_punctuation(body: AiPunctuationRequest):
             return JSONResponse(
                 {
                     "error": (
-                        "외부 표점 서비스 URL이 설정되지 않았습니다 "
-                        "(환경변수 EXTERNAL_PUNCT_URL)."
+                        "외부 표점 서비스 URL이 설정되지 않았습니다 (환경변수 EXTERNAL_PUNCT_URL)."
                     )
                 },
                 status_code=503,
             )
         try:
             import httpx as _httpx_ext
+
             # 60초 타임아웃 — SikuRoBERTa CPU 추론은 길어질 수 있음.
             async with _httpx_ext.AsyncClient(timeout=60.0) as client:
                 resp = await client.post(
@@ -1019,9 +1050,7 @@ async def api_llm_punctuation(body: AiPunctuationRequest):
             resp.raise_for_status()
             ext = resp.json()
             marks = _normalize_punct_marks(ext.get("marks") or [])
-            _logger.info(
-                f"외부 표점 완료: marks {len(marks)}개 (engine={ext.get('engine')})"
-            )
+            _logger.info(f"외부 표점 완료: marks {len(marks)}개 (engine={ext.get('engine')})")
             return {
                 "marks": marks,
                 "punctuated": ext.get("punctuated", ""),
@@ -1037,7 +1066,8 @@ async def api_llm_punctuation(body: AiPunctuationRequest):
 
     try:
         result = await _call_llm_text(
-            "punctuation", clean_text,
+            "punctuation",
+            clean_text,
             force_provider=body.force_provider,
             force_model=body.force_model,
         )
@@ -1062,15 +1092,14 @@ async def api_llm_punctuation(body: AiPunctuationRequest):
                 result["marks"] = _extract_marks_from_punctuated(clean_text, punct_text)
                 _logger.info(f"AI 표점 완료: marks {len(result['marks'])}개 (표점문 역추출)")
             else:
-                _logger.warning(
-                    f"AI 표점: marks도 표점문도 없음. 응답 키: {list(result.keys())}"
-                )
+                _logger.warning(f"AI 표점: marks도 표점문도 없음. 응답 키: {list(result.keys())}")
                 result["marks"] = []
         return result
     except Exception as e:
         _logger.error(f"AI 표점 실패: {e}", exc_info=True)
         # 타임아웃 에러는 사용자에게 더 친절한 메시지 제공
         import httpx as _httpx
+
         if isinstance(e, (_httpx.ReadTimeout, _httpx.ConnectTimeout, _httpx.TimeoutException)):
             error_msg = (
                 f"LLM 응답 시간 초과 ({body.force_provider or 'auto'}). "
@@ -1090,7 +1119,8 @@ async def api_llm_translation(body: AiTranslationRequest):
     """
     try:
         result = await _call_llm_text(
-            "translation", body.text,
+            "translation",
+            body.text,
             force_provider=body.force_provider,
             force_model=body.force_model,
         )
@@ -1125,7 +1155,7 @@ async def api_llm_punctuation_stream(body: AiPunctuationRequest):
     import re as _re
 
     # 공백/줄바꿈 제거
-    clean_text = _re.sub(r'\s+', '', body.text)
+    clean_text = _re.sub(r"\s+", "", body.text)
     if not clean_text:
         return JSONResponse(
             {"error": "표점할 텍스트가 비어 있습니다 (공백만 포함)."},
@@ -1137,7 +1167,9 @@ async def api_llm_punctuation_stream(body: AiPunctuationRequest):
     async def _run_llm():
         """LLM 호출 후 marks 정규화를 수행하여 queue에 넣는다."""
         await _call_llm_text_stream(
-            "punctuation", clean_text, queue,
+            "punctuation",
+            clean_text,
+            queue,
             force_provider=body.force_provider,
             force_model=body.force_model,
         )
@@ -1164,9 +1196,7 @@ async def api_llm_punctuation_stream(body: AiPunctuationRequest):
                                 punct_text = val
                                 break
                         if punct_text:
-                            result["marks"] = _extract_marks_from_punctuated(
-                                clean_text, punct_text
-                            )
+                            result["marks"] = _extract_marks_from_punctuated(clean_text, punct_text)
                         else:
                             result["marks"] = []
 
@@ -1201,7 +1231,9 @@ async def api_llm_translation_stream(body: AiTranslationRequest):
 
     async def _run_llm():
         await _call_llm_text_stream(
-            "translation", body.text, queue,
+            "translation",
+            body.text,
+            queue,
             force_provider=body.force_provider,
             force_model=body.force_model,
         )

@@ -53,6 +53,7 @@ router = APIRouter(tags=["interpretations"])
 
 class CreateInterpretationRequest(BaseModel):
     """해석 저장소 생성 요청 본문."""
+
     interp_id: str
     source_document_id: str
     interpreter_type: str
@@ -62,33 +63,39 @@ class CreateInterpretationRequest(BaseModel):
 
 class LayerContentSaveRequest(BaseModel):
     """층 내용 저장 요청 본문."""
+
     content: str | dict
     part_id: str
 
 
 class AcknowledgeRequest(BaseModel):
     """변경 인지 요청 본문."""
+
     file_paths: list[str] | None = None
 
 
 class ManualCommitRequest(BaseModel):
     """수동 커밋 요청 본문."""
+
     message: str = "batch: 배치 작업 커밋"
 
 
 class EntityCreateRequest(BaseModel):
     """엔티티 생성 요청 본문."""
-    entity_type: str   # work, text_block, tag, concept, agent, relation
-    data: dict         # 스키마에 맞는 엔티티 데이터
+
+    entity_type: str  # work, text_block, tag, concept, agent, relation
+    data: dict  # 스키마에 맞는 엔티티 데이터
 
 
 class EntityUpdateRequest(BaseModel):
     """엔티티 수정 요청 본문."""
-    updates: dict      # 갱신할 필드 딕셔너리
+
+    updates: dict  # 갱신할 필드 딕셔너리
 
 
 class TextBlockFromSourceRequest(BaseModel):
     """TextBlock 생성 요청 (source_ref 자동 채움)."""
+
     document_id: str
     part_id: str
     page_num: int
@@ -100,6 +107,7 @@ class TextBlockFromSourceRequest(BaseModel):
 
 class PromoteTagRequest(BaseModel):
     """Tag -> Concept 승격 요청."""
+
     label: str | None = None
     scope_work: str | None = None
     description: str | None = None
@@ -107,11 +115,13 @@ class PromoteTagRequest(BaseModel):
 
 class AutoCreateWorkRequest(BaseModel):
     """Work 자동 생성 요청."""
+
     document_id: str
 
 
 class CompositionSourceRef(BaseModel):
     """편성용 소스 참조 하나."""
+
     document_id: str
     page: int
     layout_block_id: str | None = None
@@ -124,6 +134,7 @@ class ComposeTextBlockRequest(BaseModel):
     여러 LayoutBlock을 합치거나 하나를 쪼개서 TextBlock을 만든다.
     source_refs 배열 순서대로 텍스트를 이어붙인다.
     """
+
     work_id: str
     sequence_index: int
     original_text: str
@@ -133,6 +144,7 @@ class ComposeTextBlockRequest(BaseModel):
 
 class SplitTextBlockRequest(BaseModel):
     """TextBlock 쪼개기 요청 본문."""
+
     original_text_block_id: str
     part_id: str
     pieces: list[str]  # === 구분선으로 나눈 텍스트 조각들
@@ -140,6 +152,7 @@ class SplitTextBlockRequest(BaseModel):
 
 class ResetCompositionRequest(BaseModel):
     """편성 리셋 요청 본문."""
+
     text_block_ids: list[str]  # deprecated로 전환할 TextBlock ID 목록
 
 
@@ -370,7 +383,12 @@ async def api_save_layer_content(
 
     try:
         save_result = save_layer_content(
-            interp_path, layer, sub_type, body.part_id, page_num, body.content,
+            interp_path,
+            layer,
+            sub_type,
+            body.part_id,
+            page_num,
+            body.content,
         )
     except Exception as e:
         return JSONResponse({"error": f"저장 실패: {e}"}, status_code=400)
@@ -702,6 +720,7 @@ async def api_compose_textblock(
 
     # source_refs에 commit 해시 자동 채움
     import git as _git
+
     refs_with_commit = []
     for ref in body.source_refs:
         doc_path = _library_path / "documents" / ref.document_id
@@ -711,22 +730,22 @@ async def api_compose_textblock(
             commit_hash = repo.head.commit.hexsha
         except Exception:
             pass
-        refs_with_commit.append({
-            "document_id": ref.document_id,
-            "page": ref.page,
-            "layout_block_id": ref.layout_block_id,
-            "char_range": ref.char_range,
-            "layer": "L4",
-            "commit": commit_hash,
-        })
+        refs_with_commit.append(
+            {
+                "document_id": ref.document_id,
+                "page": ref.page,
+                "layout_block_id": ref.layout_block_id,
+                "char_range": ref.char_range,
+                "layer": "L4",
+                "commit": commit_hash,
+            }
+        )
 
     # 하위 호환: 첫 번째 ref를 source_ref로도 저장
     first_ref = refs_with_commit[0] if refs_with_commit else None
     source_ref_compat = None
     if first_ref:
-        source_ref_compat = {
-            k: v for k, v in first_ref.items() if k != "char_range"
-        }
+        source_ref_compat = {k: v for k, v in first_ref.items() if k != "char_range"}
 
     text_block_data = {
         "id": str(_uuid.uuid4()),
@@ -811,6 +830,7 @@ async def api_split_textblock(interp_id: str, body: SplitTextBlockRequest, bg: B
 
     # source_refs에 현재 원본 commit 해시 채우기
     import git as _git
+
     for ref in inherited_refs:
         if not ref.get("commit"):
             doc_path = _library_path / "documents" / ref.get("document_id", "")
@@ -832,7 +852,8 @@ async def api_split_textblock(interp_id: str, body: SplitTextBlockRequest, bg: B
     # 순서 보존: 원본 뒤에 있는 활성 TextBlock의 sequence를 뒤로 민다.
     try:
         active_blocks = [
-            tb for tb in list_entities(interp_path, "text_block")
+            tb
+            for tb in list_entities(interp_path, "text_block")
             if tb.get("id") != body.original_text_block_id
             and tb.get("status") not in ("deprecated", "archived")
             and int(tb.get("sequence_index", 0)) > base_seq
@@ -848,7 +869,6 @@ async def api_split_textblock(interp_id: str, body: SplitTextBlockRequest, bg: B
 
     # 각 조각마다 새 TextBlock 생성 (원래 위치에 연속 삽입)
     for i, piece_text in enumerate(pieces):
-
         text_block_data = {
             "id": str(_uuid.uuid4()),
             "work_id": work_id,
@@ -856,9 +876,7 @@ async def api_split_textblock(interp_id: str, body: SplitTextBlockRequest, bg: B
             "original_text": piece_text,
             "normalized_text": None,
             "source_ref": source_ref_compat,
-            "source_refs": [
-                {**r, "char_range": None} for r in inherited_refs
-            ],
+            "source_refs": [{**r, "char_range": None} for r in inherited_refs],
             "status": "draft",
             "notes": None,
             "metadata": {"part_id": body.part_id},
@@ -874,7 +892,8 @@ async def api_split_textblock(interp_id: str, body: SplitTextBlockRequest, bg: B
     if created_ids:
         try:
             update_entity(
-                interp_path, "text_block",
+                interp_path,
+                "text_block",
                 body.original_text_block_id,
                 {"status": "deprecated"},
             )
@@ -886,11 +905,14 @@ async def api_split_textblock(interp_id: str, body: SplitTextBlockRequest, bg: B
     bg.add_task(git_commit_interpretation, interp_path, commit_msg)
 
     if errors:
-        return JSONResponse({
-            "created_count": len(created_ids),
-            "errors": errors,
-            "git": "background",
-        }, status_code=207)
+        return JSONResponse(
+            {
+                "created_count": len(created_ids),
+                "errors": errors,
+                "git": "background",
+            },
+            status_code=207,
+        )
 
     return {
         "created_count": len(created_ids),
@@ -933,11 +955,14 @@ async def api_reset_composition(interp_id: str, body: ResetCompositionRequest, b
     bg.add_task(git_commit_interpretation, interp_path, commit_msg)
 
     if errors:
-        return JSONResponse({
-            "deprecated_count": deprecated_count,
-            "errors": errors,
-            "git": "background",
-        }, status_code=207)
+        return JSONResponse(
+            {
+                "deprecated_count": deprecated_count,
+                "errors": errors,
+                "git": "background",
+            },
+            status_code=207,
+        )
 
     return {
         "deprecated_count": deprecated_count,

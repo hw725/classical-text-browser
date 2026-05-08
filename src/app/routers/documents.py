@@ -52,6 +52,7 @@ router = APIRouter(tags=["documents"])
 
 class TextSaveRequest(BaseModel):
     """텍스트 저장 요청 본문. PUT /api/documents/{doc_id}/pages/{page_num}/text 에서 사용."""
+
     text: str
 
 
@@ -60,6 +61,7 @@ class LayoutSaveRequest(BaseModel):
 
     layout_page.schema.json 형식의 JSON을 그대로 전달받는다.
     """
+
     part_id: str
     page_number: int
     image_width: int | None = None
@@ -70,11 +72,13 @@ class LayoutSaveRequest(BaseModel):
 
 class PreviewFromUrlRequest(BaseModel):
     """URL에서 서지정보 + 에셋 목록 미리보기 요청."""
+
     url: str
 
 
 class CreateFromUrlRequest(BaseModel):
     """URL에서 문헌 자동 생성 요청."""
+
     url: str
     doc_id: str
     title: str | None = None
@@ -83,6 +87,7 @@ class CreateFromUrlRequest(BaseModel):
 
 class MatchHwpToBlocksRequest(BaseModel):
     """HWP 텍스트를 LayoutBlock에 매칭하는 요청."""
+
     part_id: str
     page_num: int
     block_text_mapping: list[dict]
@@ -90,6 +95,7 @@ class MatchHwpToBlocksRequest(BaseModel):
 
 class PdfSeparateRequest(BaseModel):
     """PDF 텍스트 분리 요청."""
+
     structure: dict  # DocumentStructure 딕셔너리
     pages: list[dict] | None = None  # [{page_num, text}] — None이면 전체
     custom_instructions: str = ""
@@ -99,13 +105,15 @@ class PdfSeparateRequest(BaseModel):
 
 class AlignPreviewRequest(BaseModel):
     """외부 텍스트를 기존 문헌의 페이지에 자동 매핑하는 요청."""
+
     doc_id: str
     part_id: str | None = None  # None이면 첫 번째 part 사용
-    original_text: str          # 분리된 원문 텍스트 (연속)
+    original_text: str  # 분리된 원문 텍스트 (연속)
 
 
 class PdfApplyRequest(BaseModel):
     """PDF 분리 결과를 문서에 적용하는 요청."""
+
     doc_id: str
     part_id: str | None = None  # None이면 첫 번째 part 사용
     results: list[dict]  # [{page_num, original_text, ...}]
@@ -117,6 +125,7 @@ class PdfApplyRequest(BaseModel):
 
 class CorrectionItem(BaseModel):
     """개별 교정 항목. corrections.schema.json의 Correction 정의와 대응."""
+
     page: int | None = None
     block_id: str | None = None
     line: int | None = None
@@ -137,6 +146,7 @@ class CorrectionsSaveRequest(BaseModel):
     서버가 원본과 diff하여 corrections를 자동 생성한다.
     글자교정 모드에서는 기존처럼 corrections만 보낸다.
     """
+
     part_id: str | None = None
     corrected_text: str | None = None  # 자유편집 모드에서 편집된 전문
     corrections: list[CorrectionItem] = []
@@ -144,6 +154,7 @@ class CorrectionsSaveRequest(BaseModel):
 
 class BibliographySaveRequest(BaseModel):
     """서지정보 저장 요청 본문. bibliography.schema.json 형식."""
+
     title: str | None = None
     title_reading: str | None = None
     alternative_titles: list[str] | None = None
@@ -167,16 +178,19 @@ class BibliographySaveRequest(BaseModel):
 
 class DocumentBibFromUrlRequest(BaseModel):
     """문서에 URL로 서지정보를 가져와 바로 저장하는 요청 본문."""
+
     url: str
 
 
 class BibliographyFromUrlRequest(BaseModel):
     """URL에서 서지정보를 가져오는 요청 본문."""
+
     url: str
 
 
 class ParserSearchRequest(BaseModel):
     """파서 검색 요청 본문."""
+
     query: str
     cnt: int = 10
     mediatype: int | None = None
@@ -184,11 +198,13 @@ class ParserSearchRequest(BaseModel):
 
 class ParserMapRequest(BaseModel):
     """파서 매핑 요청 본문. 검색 결과의 raw 데이터를 전달한다."""
+
     raw_data: dict
 
 
 class ParserFetchAndMapRequest(BaseModel):
     """상세 조회 + 매핑 결합 요청 본문."""
+
     item_id: str
 
 
@@ -334,13 +350,12 @@ async def api_preview_from_url(body: PreviewFromUrlRequest):
         except Exception as e:
             # 에셋 목록 실패는 치명적이지 않음 — 경고만
             assets = []
-            bibliography.setdefault("_warnings", []).append(
-                f"에셋 목록 조회 실패: {e}"
-            )
+            bibliography.setdefault("_warnings", []).append(f"에셋 목록 조회 실패: {e}")
     else:
         # 폴백: URL 자체가 다운로드 가능한 파일(PDF/이미지)인지 확인
         try:
             from parsers.asset_detector import detect_direct_download
+
             direct = await detect_direct_download(url)
             if direct:
                 assets = [direct]
@@ -449,6 +464,7 @@ async def api_diagnose_document(doc_id: str):
 
     # doc_id 형식 검증 — 경로 트래버설 차단
     import re as _re
+
     if not _re.match(r"^[a-z][a-z0-9_]{0,63}$", doc_id):
         return JSONResponse(
             {"error": f"문헌 ID 형식이 올바르지 않습니다: {doc_id!r}"},
@@ -505,9 +521,7 @@ async def api_diagnose_document(doc_id: str):
     # 실제 .git/hooks 또는 hooksPath 디렉터리 안 파일 (LFS hook이 살아있는지 확인)
     hooks_dir = doc_path / ".git" / "hooks"
     if hooks_dir.exists():
-        out["hooks_dir_files"] = [
-            p.name for p in sorted(hooks_dir.iterdir()) if p.is_file()
-        ]
+        out["hooks_dir_files"] = [p.name for p in sorted(hooks_dir.iterdir()) if p.is_file()]
 
     # L1_source 파일 진단
     l1 = doc_path / "L1_source"
@@ -587,6 +601,7 @@ async def api_create_from_files(
     # 전에 차단해야 ../ 등 경로 트래버설 위험을 막을 수 있다.
     # add_document에도 같은 검증이 있지만 그건 디렉터리 생성 시점이라 늦다.
     import re as _re
+
     if not _re.match(r"^[a-z][a-z0-9_]{0,63}$", doc_id):
         return JSONResponse(
             {
@@ -750,9 +765,7 @@ async def api_create_from_files(
                             # CMYK 등 4채널은 RGB로 변환 (PDF.insert_image 안정성)
                             if pix.colorspace and pix.colorspace.n >= 4:
                                 pix = fitz.Pixmap(fitz.csRGB, pix)
-                            page = pdf_doc.new_page(
-                                width=pix.width, height=pix.height
-                            )
+                            page = pdf_doc.new_page(width=pix.width, height=pix.height)
                             page.insert_image(page.rect, pixmap=pix)
                         finally:
                             pix = None  # noqa: F841 — 명시적 해제
@@ -774,11 +787,13 @@ async def api_create_from_files(
                     status_code=400,
                 )
             prepared_files.append(images_pdf)
-            part_meta.append({
-                "label": effective_title,
-                "file_basename": images_pdf.name,
-                "page_count": len(image_paths),
-            })
+            part_meta.append(
+                {
+                    "label": effective_title,
+                    "file_basename": images_pdf.name,
+                    "page_count": len(image_paths),
+                }
+            )
 
         # 3. 각 PDF → 페이지 수 산출 + prepared_files에 추가
         for storage_name, original_label, src in pdf_inputs:
@@ -789,11 +804,13 @@ async def api_create_from_files(
                 # 손상된 PDF여도 일단 등록 — 사이드바가 PDF.js로 재시도한다.
                 pc = None
             prepared_files.append(src)
-            part_meta.append({
-                "label": original_label,  # 사용자에게 보이는 이름은 원본 그대로
-                "file_basename": storage_name,  # 디스크 저장명은 ASCII 안전
-                "page_count": pc,
-            })
+            part_meta.append(
+                {
+                    "label": original_label,  # 사용자에게 보이는 이름은 원본 그대로
+                    "file_basename": storage_name,  # 디스크 저장명은 ASCII 안전
+                    "page_count": pc,
+                }
+            )
 
         # 4. add_document로 디렉터리 생성 + 파일 복사 + git init + 첫 commit (atomic)
         # add_document는 자체적으로 hooksPath를 비활성화하고 LFS filter를 끄므로
@@ -846,12 +863,14 @@ async def api_create_from_files(
         #    우리 의도: 이미지묶음=vol1, 각 PDF=vol2,vol3...로 정리)
         parts = []
         for i, meta in enumerate(part_meta, start=1):
-            parts.append({
-                "part_id": f"vol{i}",
-                "label": meta["label"],
-                "file": f"L1_source/{meta['file_basename']}",
-                "page_count": meta["page_count"],
-            })
+            parts.append(
+                {
+                    "part_id": f"vol{i}",
+                    "label": meta["label"],
+                    "file": f"L1_source/{meta['file_basename']}",
+                    "page_count": meta["page_count"],
+                }
+            )
 
         manifest_path = doc_path / "manifest.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -868,9 +887,7 @@ async def api_create_from_files(
             if repo.git.diff("--cached", "--name-only"):
                 n_imgs = len(image_paths)
                 n_pdfs = len(pdf_inputs)
-                repo.index.commit(
-                    f"feat: 로컬 파일 추가 — 이미지 {n_imgs}장, PDF {n_pdfs}개"
-                )
+                repo.index.commit(f"feat: 로컬 파일 추가 — 이미지 {n_imgs}장, PDF {n_pdfs}개")
         except Exception as e:  # noqa: BLE001
             logger.warning(f"git commit 경고 (무시): {e}")
 
@@ -938,9 +955,7 @@ async def api_preview_hwp(file: UploadFile = File(...)):
             sections_count = len(sections)
         else:
             full_text = reader.extract_text()
-            sections_count = len([
-                t for t in full_text.split("\n\n") if t.strip()
-            ])
+            sections_count = len([t for t in full_text.split("\n\n") if t.strip()])
 
         # 표점·현토 감지 (샘플)
         sample_text = full_text[:2000]
@@ -1044,12 +1059,14 @@ async def api_import_hwp(
             # 기존 디렉토리를 백업 이름으로 변경 후 새로 생성한다.
             if doc_path.exists() and not manifest_path.exists():
                 import time as _time
+
                 backup_name = f"{doc_id}_incomplete_{int(_time.time())}"
                 backup_path = doc_path.parent / backup_name
                 doc_path.rename(backup_path)
                 logging.getLogger(__name__).warning(
                     "manifest 없는 불완전 문헌 디렉토리 발견: %s → %s 로 백업",
-                    doc_path, backup_path,
+                    doc_path,
+                    backup_path,
                 )
             result = create_document_from_hwp(
                 library_path=_library_path,
@@ -1247,11 +1264,13 @@ async def api_hwp_separate(
         return {
             "method": "unicode_script",
             "stats": sep_result["stats"],
-            "results": [{
-                "page_num": 1,
-                "original_text": sep_result["original_text"],
-                "translation_text": sep_result["translation_text"],
-            }],
+            "results": [
+                {
+                    "page_num": 1,
+                    "original_text": sep_result["original_text"],
+                    "translation_text": sep_result["translation_text"],
+                }
+            ],
         }
     except Exception as e:
         logging.getLogger(__name__).exception("HWP 텍스트 분리 실패")
@@ -1318,26 +1337,32 @@ async def api_pdf_separate(
         # 페이지별 유니코드 문자 유형 기반 분리
         results = []
         total_stats = {
-            "total_lines": 0, "original_lines": 0,
-            "translation_lines": 0, "skipped_lines": 0,
+            "total_lines": 0,
+            "original_lines": 0,
+            "translation_lines": 0,
+            "skipped_lines": 0,
         }
 
         for page in pages:
             text = page.get("text", "").strip()
             if not text:
-                results.append({
-                    "page_num": page["page_num"],
-                    "original_text": "",
-                    "translation_text": "",
-                })
+                results.append(
+                    {
+                        "page_num": page["page_num"],
+                        "original_text": "",
+                        "translation_text": "",
+                    }
+                )
                 continue
 
             sep = separate_by_script(text)
-            results.append({
-                "page_num": page["page_num"],
-                "original_text": sep["original_text"],
-                "translation_text": sep["translation_text"],
-            })
+            results.append(
+                {
+                    "page_num": page["page_num"],
+                    "original_text": sep["original_text"],
+                    "translation_text": sep["translation_text"],
+                }
+            )
 
             # 통계 누적
             for key in total_stats:
@@ -1417,10 +1442,12 @@ async def api_align_preview(body: AlignPreviewRequest):
         page_texts: list[dict] = []
         for pg in range(1, page_count + 1):
             page_info = get_page_text(doc_path, part_id, pg)
-            page_texts.append({
-                "page_num": pg,
-                "text": page_info.get("text", ""),
-            })
+            page_texts.append(
+                {
+                    "page_num": pg,
+                    "text": page_info.get("text", ""),
+                }
+            )
 
         # 자동 매핑 실행
         alignments = align_text_to_pages(page_texts, body.original_text)
@@ -1503,8 +1530,11 @@ async def api_pdf_apply(body: PdfApplyRequest, background_tasks: BackgroundTasks
 
                 # 사이드카 데이터 저장
                 save_punctuation_sidecar(
-                    doc_path, target_part, target_page,
-                    result.punctuation_marks, result.hyeonto_annotations,
+                    doc_path,
+                    target_part,
+                    target_page,
+                    result.punctuation_marks,
+                    result.hyeonto_annotations,
                     raw_text_length=len(original_text),
                     clean_text_length=len(result.clean_text),
                     source="pdf_import",
@@ -1512,7 +1542,9 @@ async def api_pdf_apply(body: PdfApplyRequest, background_tasks: BackgroundTasks
 
                 if result.taidu_marks:
                     save_formatting_sidecar(
-                        doc_path, target_part, target_page,
+                        doc_path,
+                        target_part,
+                        target_page,
                         result.taidu_marks,
                     )
             else:
@@ -1526,8 +1558,11 @@ async def api_pdf_apply(body: PdfApplyRequest, background_tasks: BackgroundTasks
             # 번역 사이드카 저장 (분리된 번역이 있으면)
             if translation_text and translation_text.strip():
                 tr_path = save_translation_sidecar(
-                    doc_path, target_part, target_page,
-                    translation_text, source="text_import",
+                    doc_path,
+                    target_part,
+                    target_page,
+                    translation_text,
+                    source="text_import",
                 )
                 if tr_path:
                     l4_files.append(tr_path.relative_to(doc_path).as_posix())
@@ -1776,8 +1811,7 @@ async def api_block_types():
     """
     # src/app/routers/documents.py → parent.parent.parent.parent = 프로젝트 루트
     block_types_path = (
-        Path(__file__).resolve().parent.parent.parent.parent
-        / "resources" / "block_types.json"
+        Path(__file__).resolve().parent.parent.parent.parent / "resources" / "block_types.json"
     )
     if not block_types_path.exists():
         return JSONResponse(
@@ -1785,6 +1819,7 @@ async def api_block_types():
             status_code=404,
         )
     import json
+
     data = json.loads(block_types_path.read_text(encoding="utf-8"))
     return data
 
@@ -1869,6 +1904,7 @@ async def api_save_page_corrections(
         from core.document import (
             get_page_corrections as _get_corrs,
         )
+
         try:
             text_result = get_page_text(doc_path, part_id, page_num)
             original_text = text_result["text"]
@@ -1902,6 +1938,7 @@ async def api_save_page_corrections(
 
     # 교정 유형별 건수 집계 → git commit 메시지 생성
     from collections import Counter
+
     type_counts = Counter(c["type"] for c in corrections_data.get("corrections", []))
     summary_parts = [f"{t} {n}건" for t, n in type_counts.items()]
     summary = ", ".join(summary_parts) if summary_parts else "없음"

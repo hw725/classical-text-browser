@@ -51,6 +51,7 @@ router = APIRouter(tags=["version"])
 
 class RevertRequest(BaseModel):
     """되돌리기 요청 바디."""
+
     target_hash: str
     message: str | None = None
 
@@ -158,9 +159,7 @@ async def api_commit_files(repo_type: str, repo_id: str, commit_hash: str):
 
 
 @router.get("/api/repos/{repo_type}/{repo_id}/commits/{commit_hash}/files/{file_path:path}")
-async def api_commit_file_content(
-    repo_type: str, repo_id: str, commit_hash: str, file_path: str
-):
+async def api_commit_file_content(repo_type: str, repo_id: str, commit_hash: str, file_path: str):
     """특정 저장 시점의 파일 내용을 반환한다.
 
     목적: 연구자가 과거 시점의 특정 파일 내용을 읽기 전용으로 확인한다.
@@ -449,7 +448,10 @@ async def api_import_interpretation_folder(files: list[UploadFile] = File(...)):
     # ── 이미 존재하면: 파일 건드리지 않고 등록만 확인하고 끝 ──
     if target_interp_path.exists():
         _register_interp_in_library(
-            _library_path, interp_id, source_document_id, manifest.get("title"),
+            _library_path,
+            interp_id,
+            source_document_id,
+            manifest.get("title"),
         )
         return {
             "status": "success",
@@ -470,7 +472,7 @@ async def api_import_interpretation_folder(files: list[UploadFile] = File(...)):
         for uploaded, original_name in normalized_files:
             rel_name = original_name
             if root_prefix and rel_name.startswith(root_prefix + "/"):
-                rel_name = rel_name[len(root_prefix) + 1:]
+                rel_name = rel_name[len(root_prefix) + 1 :]
 
             if not rel_name:
                 continue
@@ -565,7 +567,10 @@ async def api_import_interpretation_folder(files: list[UploadFile] = File(...)):
                 )
 
         _register_interp_in_library(
-            _library_path, interp_id, source_document_id, manifest.get("title"),
+            _library_path,
+            interp_id,
+            source_document_id,
+            manifest.get("title"),
         )
 
         return {
@@ -591,7 +596,10 @@ async def api_import_interpretation_folder(files: list[UploadFile] = File(...)):
 
 
 def _register_interp_in_library(
-    library_path: Path, interp_id: str, source_document_id: str, title: str | None,
+    library_path: Path,
+    interp_id: str,
+    source_document_id: str,
+    title: str | None,
 ):
     """library_manifest.json에 해석 저장소 항목을 등록한다 (이미 있으면 무시)."""
     manifest_path = library_path / "library_manifest.json"
@@ -603,12 +611,14 @@ def _register_interp_in_library(
 
         interps = lib_manifest.setdefault("interpretations", [])
         if not any(x.get("interpretation_id") == interp_id for x in interps):
-            interps.append({
-                "interpretation_id": interp_id,
-                "source_document_id": source_document_id,
-                "title": title,
-                "path": f"interpretations/{interp_id}",
-            })
+            interps.append(
+                {
+                    "interpretation_id": interp_id,
+                    "source_document_id": source_document_id,
+                    "title": title,
+                    "path": f"interpretations/{interp_id}",
+                }
+            )
             manifest_path.write_text(
                 json.dumps(lib_manifest, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",

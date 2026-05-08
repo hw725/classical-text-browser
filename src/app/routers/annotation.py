@@ -83,6 +83,7 @@ router = APIRouter(tags=["annotation"])
 
 class AnnotationAddRequest(BaseModel):
     """수동 주석 추가 요청."""
+
     target: dict
     type: str
     content: dict
@@ -90,6 +91,7 @@ class AnnotationAddRequest(BaseModel):
 
 class AnnotationUpdateRequest(BaseModel):
     """주석 수정 요청."""
+
     target: dict | None = None
     type: str | None = None
     content: dict | None = None
@@ -104,11 +106,13 @@ class AnnotationUpdateRequest(BaseModel):
 
 class AnnotationCommitRequest(BaseModel):
     """주석 Draft 확정 요청."""
+
     modifications: dict | None = None
 
 
 class CustomTypeRequest(BaseModel):
     """사용자 정의 주석 유형 추가 요청."""
+
     id: str
     label: str
     color: str
@@ -117,6 +121,7 @@ class CustomTypeRequest(BaseModel):
 
 class DictStageRequest(BaseModel):
     """사전형 주석 단계별 생성 요청."""
+
     block_id: str
     force_provider: str | None = None
     force_model: str | None = None
@@ -124,6 +129,7 @@ class DictStageRequest(BaseModel):
 
 class DictBatchRequest(BaseModel):
     """사전형 주석 일괄 생성 요청 (Stage 3 직행)."""
+
     pages: list[int] | None = None  # None이면 전체 페이지
     force_provider: str | None = None
     force_model: str | None = None
@@ -131,6 +137,7 @@ class DictBatchRequest(BaseModel):
 
 class DictImportRequest(BaseModel):
     """사전 가져오기 요청."""
+
     dictionary_data: dict
     merge_strategy: str = "merge"
     target_page: int = 1
@@ -138,18 +145,21 @@ class DictImportRequest(BaseModel):
 
 class RefDictRegisterRequest(BaseModel):
     """참조 사전 등록 요청."""
+
     dictionary_data: dict
     filename: str | None = None
 
 
 class RefDictMatchRequest(BaseModel):
     """참조 사전 매칭 요청."""
+
     blocks: list[dict]
     ref_filenames: list[str] | None = None
 
 
 class CitationMarkAddRequest(BaseModel):
     """인용 마크 추가 요청."""
+
     block_id: str
     start: int
     end: int
@@ -161,6 +171,7 @@ class CitationMarkAddRequest(BaseModel):
 
 class CitationMarkUpdateRequest(BaseModel):
     """인용 마크 수정 요청."""
+
     label: str | None = None
     tags: list[str] | None = None
     citation_override: dict | None = None
@@ -177,6 +188,7 @@ class CitationExportRequest(BaseModel):
         wrap_double_quotes — 원문을 \u201c\u201d로 감쌀지 여부.
         field_order — 인용 필드 순서 배열.
     """
+
     mark_ids: list[str]
     include_translation: bool = True
     export_options: dict | None = None
@@ -184,7 +196,8 @@ class CitationExportRequest(BaseModel):
 
 class AiAnnotationRequest(BaseModel):
     """AI 주석 태깅 요청."""
-    text: str                         # 태깅할 원문 텍스트
+
+    text: str  # 태깅할 원문 텍스트
     force_provider: str | None = None
     force_model: str | None = None
 
@@ -271,10 +284,7 @@ def _load_original_block_text(
             if block.get("block_id") != block_id:
                 continue
             text = (
-                block.get("corrected_text")
-                or block.get("original_text")
-                or block.get("text")
-                or ""
+                block.get("corrected_text") or block.get("original_text") or block.get("text") or ""
             )
             if text and text.strip():
                 return text.strip()
@@ -285,15 +295,14 @@ def _load_original_block_text(
 
     tr_data = load_translations(interp_path, part_id, page_num)
     source_items = [
-        tr for tr in tr_data.get("translations", [])
+        tr
+        for tr in tr_data.get("translations", [])
         if tr.get("source", {}).get("block_id") == block_id and tr.get("source_text")
     ]
     if source_items:
         source_items.sort(key=lambda tr: tr.get("source", {}).get("start", 0))
         source_text = "\n".join(
-            str(tr.get("source_text", "")).strip()
-            for tr in source_items
-            if tr.get("source_text")
+            str(tr.get("source_text", "")).strip() for tr in source_items if tr.get("source_text")
         ).strip()
         if source_text:
             return source_text
@@ -306,8 +315,7 @@ def _load_original_block_text(
 
     for tb in text_blocks:
         tb_text = (
-            str(tb.get("original_text", "")).strip()
-            or str(tb.get("normalized_text", "")).strip()
+            str(tb.get("original_text", "")).strip() or str(tb.get("normalized_text", "")).strip()
         )
         if not tb_text:
             continue
@@ -342,7 +350,8 @@ def _load_translation_block_text(
     """지정 블록의 번역 텍스트를 합쳐 반환한다."""
     tr_data = load_translations(interp_path, part_id, page_num)
     items = [
-        tr for tr in tr_data.get("translations", [])
+        tr
+        for tr in tr_data.get("translations", [])
         if tr.get("source", {}).get("block_id") == block_id and tr.get("translation")
     ]
 
@@ -372,7 +381,8 @@ def _load_translation_block_text(
 
         if mapped_ids:
             items = [
-                tr for tr in tr_data.get("translations", [])
+                tr
+                for tr in tr_data.get("translations", [])
                 if tr.get("source", {}).get("block_id") in mapped_ids and tr.get("translation")
             ]
 
@@ -383,9 +393,7 @@ def _load_translation_block_text(
 
     items.sort(key=lambda tr: tr.get("source", {}).get("start", 0))
     text = "\n".join(
-        str(tr.get("translation", "")).strip()
-        for tr in items
-        if tr.get("translation")
+        str(tr.get("translation", "")).strip() for tr in items if tr.get("translation")
     )
     if not text.strip():
         raise FileNotFoundError(
@@ -545,7 +553,10 @@ async def api_add_annotation(
 
 @router.put("/api/interpretations/{interp_id}/pages/{page_num}/annotations/{block_id}/{ann_id}")
 async def api_update_annotation(
-    interp_id: str, page_num: int, block_id: str, ann_id: str,
+    interp_id: str,
+    page_num: int,
+    block_id: str,
+    ann_id: str,
     body: AnnotationUpdateRequest,
 ):
     """주석 수정."""
@@ -595,9 +606,7 @@ async def api_update_annotation(
 
 
 @router.delete("/api/interpretations/{interp_id}/pages/{page_num}/annotations/{block_id}/{ann_id}")
-async def api_delete_annotation(
-    interp_id: str, page_num: int, block_id: str, ann_id: str
-):
+async def api_delete_annotation(interp_id: str, page_num: int, block_id: str, ann_id: str):
     """주석 삭제."""
     _library_path = get_library_path()
     if _library_path is None:
@@ -616,9 +625,14 @@ async def api_delete_annotation(
     return Response(status_code=204)
 
 
-@router.post("/api/interpretations/{interp_id}/pages/{page_num}/annotations/{block_id}/{ann_id}/commit")
+@router.post(
+    "/api/interpretations/{interp_id}/pages/{page_num}/annotations/{block_id}/{ann_id}/commit"
+)
 async def api_commit_annotation(
-    interp_id: str, page_num: int, block_id: str, ann_id: str,
+    interp_id: str,
+    page_num: int,
+    block_id: str,
+    ann_id: str,
     body: AnnotationCommitRequest,
 ):
     """주석 Draft 개별 확정.
@@ -680,6 +694,7 @@ async def api_commit_all_annotations(interp_id: str, page_num: int):
 
 
 # --- 주석 유형 관리 API ---
+
 
 @router.get("/api/annotation-types")
 async def api_get_annotation_types():
@@ -1039,11 +1054,13 @@ async def api_dict_generate_batch(interp_id: str, body: DictBatchRequest | None 
                         _set_block_annotations(ann_data, block_id, generated)
                         total_results["total_annotations"] += len(generated)
                     except Exception as block_error:
-                        total_results["errors"].append({
-                            "page": page_num,
-                            "block_id": block_id,
-                            "error": str(block_error),
-                        })
+                        total_results["errors"].append(
+                            {
+                                "page": page_num,
+                                "block_id": block_id,
+                                "error": str(block_error),
+                            }
+                        )
 
                 save_annotations(interp_path, "main", page_num, ann_data)
 
@@ -1084,6 +1101,7 @@ async def api_export_dictionary(
     doc_title = interp_id
     if meta_file.exists():
         import json as _json
+
         with open(meta_file, encoding="utf-8") as f:
             meta = _json.load(f)
         doc_id = meta.get("document_id", interp_id)
@@ -1124,6 +1142,7 @@ async def api_save_export(interp_id: str):
     doc_title = interp_id
     if meta_file.exists():
         import json as _json
+
         with open(meta_file, encoding="utf-8") as f:
             meta = _json.load(f)
         doc_id = meta.get("document_id", interp_id)
@@ -1261,6 +1280,7 @@ async def api_check_translation_changed(interp_id: str, page_num: int):
     ann_data = load_annotations(interp_path, part_id, page_num)
 
     from core.translation import load_translations
+
     tr_data = load_translations(interp_path, part_id, page_num)
 
     changed = check_translation_changed(ann_data, tr_data)
@@ -1345,7 +1365,8 @@ async def api_add_citation_mark(
         # git commit을 별도 스레드에서 실행하여 이벤트 루프 블로킹 방지
         asyncio.get_event_loop().create_task(
             asyncio.to_thread(
-                git_commit_interpretation, interp_path,
+                git_commit_interpretation,
+                interp_path,
                 f"feat: 인용 마크 추가 — page {page_num}, {body.block_id}",
             )
         )
@@ -1407,7 +1428,8 @@ async def api_update_citation_mark(
         save_citation_marks(interp_path, part_id, page_num, data)
         asyncio.get_event_loop().create_task(
             asyncio.to_thread(
-                git_commit_interpretation, interp_path,
+                git_commit_interpretation,
+                interp_path,
                 f"fix: 인용 마크 수정 — {mark_id}",
             )
         )
@@ -1453,7 +1475,8 @@ async def api_delete_citation_mark(
         save_citation_marks(interp_path, part_id, page_num, data)
         asyncio.get_event_loop().create_task(
             asyncio.to_thread(
-                git_commit_interpretation, interp_path,
+                git_commit_interpretation,
+                interp_path,
                 f"fix: 인용 마크 삭제 — {mark_id}",
             )
         )
@@ -1610,7 +1633,9 @@ async def api_export_citations(
         except Exception as e:
             logger.warning(
                 "인용 내보내기: mark '%s' (page %s) resolve 실패: %s",
-                mid, page_num, e,
+                mid,
+                page_num,
+                e,
             )
             skipped += 1
             continue
@@ -1641,7 +1666,8 @@ async def api_llm_annotation(body: AiAnnotationRequest):
     """
     try:
         result = await _call_llm_text(
-            "annotation", body.text,
+            "annotation",
+            body.text,
             force_provider=body.force_provider,
             force_model=body.force_model,
         )
@@ -1672,7 +1698,9 @@ async def api_llm_annotation_stream(body: AiAnnotationRequest):
 
     async def _run_llm():
         await _call_llm_text_stream(
-            "annotation", body.text, queue,
+            "annotation",
+            body.text,
+            queue,
             force_provider=body.force_provider,
             force_model=body.force_model,
         )
@@ -1707,14 +1735,15 @@ class AnnotationBatchSaveRequest(BaseModel):
         AI 태깅 후 N개 주석을 개별 POST로 저장하면 N번의 왕복이 필요하다.
         이 엔드포인트는 1회 POST로 N개를 저장한다.
     """
+
     annotations: list[dict]
 
 
-@router.post(
-    "/api/interpretations/{interp_id}/pages/{page_num}/annotations/{block_id}/batch"
-)
+@router.post("/api/interpretations/{interp_id}/pages/{page_num}/annotations/{block_id}/batch")
 async def api_batch_save_annotations(
-    interp_id: str, page_num: int, block_id: str,
+    interp_id: str,
+    page_num: int,
+    block_id: str,
     body: AnnotationBatchSaveRequest,
 ):
     """주석 일괄 저장. N건을 1 POST로 처리.
@@ -1744,9 +1773,14 @@ async def api_batch_save_annotations(
                 "target": ann.get("target", {}),
                 "type": ann.get("type", "term"),
                 "content": ann.get("content", {}),
-                "annotator": ann.get("annotator", {
-                    "type": "llm", "model": None, "draft_id": None,
-                }),
+                "annotator": ann.get(
+                    "annotator",
+                    {
+                        "type": "llm",
+                        "model": None,
+                        "draft_id": None,
+                    },
+                ),
                 "status": ann.get("status", "draft"),
                 "reviewed_by": None,
                 "reviewed_at": None,

@@ -35,8 +35,10 @@ router = APIRouter(tags=["llm_ocr"])
 #  Pydantic 요청 모델
 # ===========================================================================
 
+
 class DraftReviewRequest(BaseModel):
     """Draft 검토 요청 본문."""
+
     action: str  # "accept" | "modify" | "reject"
     quality_rating: int | None = None
     quality_notes: str | None = None
@@ -45,15 +47,17 @@ class DraftReviewRequest(BaseModel):
 
 class CompareLayoutRequest(BaseModel):
     """레이아웃 비교 요청 본문."""
+
     targets: list[str] | None = None
 
 
 class OcrRunRequest(BaseModel):
     """OCR 실행 요청 본문."""
-    engine_id: str | None = None        # None이면 기본 엔진
+
+    engine_id: str | None = None  # None이면 기본 엔진
     block_ids: list[str] | None = None  # None이면 전체 블록
-    force_provider: str | None = None   # LLM 프로바이더 지정 (llm_vision 엔진 전용)
-    force_model: str | None = None      # LLM 모델 지정 (llm_vision 엔진 전용)
+    force_provider: str | None = None  # LLM 프로바이더 지정 (llm_vision 엔진 전용)
+    force_model: str | None = None  # LLM 모델 지정 (llm_vision 엔진 전용)
     # PaddleOCR 언어 코드 (paddleocr 엔진 전용: ch, chinese_cht, korean, japan, en)
     paddle_lang: str | None = None
 
@@ -61,6 +65,7 @@ class OcrRunRequest(BaseModel):
 # ===========================================================================
 #  헬퍼 함수
 # ===========================================================================
+
 
 def _load_page_image(doc_id: str, page: int) -> bytes | None:
     """페이지 이미지를 바이트로 로드한다 (LLM 전송용 리사이즈 포함).
@@ -127,6 +132,7 @@ def _load_page_image(doc_id: str, page: int) -> bytes | None:
 #  Phase 10-2: LLM 4단 폴백 아키텍처 API
 # ===========================================================================
 
+
 @router.get("/api/llm/status")
 async def api_llm_status():
     """각 provider의 가용 상태."""
@@ -179,7 +185,8 @@ async def api_analyze_layout(
 
     try:
         draft = await analyze_page_layout(
-            router_inst, page_image,
+            router_inst,
+            page_image,
             force_provider=force_provider,
             force_model=force_model,
         )
@@ -223,7 +230,9 @@ async def api_compare_layout(doc_id: str, page: int, body: CompareLayoutRequest)
 
     try:
         draft_list = await compare_layout_analysis(
-            router_inst, page_image, targets=parsed_targets,
+            router_inst,
+            page_image,
+            targets=parsed_targets,
         )
     except Exception as e:
         return JSONResponse({"error": f"레이아웃 비교 실패: {e}"}, status_code=500)
@@ -269,6 +278,7 @@ async def api_review_draft(draft_id: str, body: DraftReviewRequest):
 #  Phase 10-1: OCR 엔진 연동 API
 # ===========================================================================
 
+
 @router.post("/api/ocr/detect-layout/{doc_id}/{page}")
 async def api_detect_layout(
     doc_id: str,
@@ -277,7 +287,7 @@ async def api_detect_layout(
     engine_id: str = Query(
         None,
         description="레이아웃 감지 엔진 ID (ndlocr 또는 ndlkotenocr). "
-                    "None이면 레이아웃 감지를 지원하는 첫 번째 엔진 사용.",
+        "None이면 레이아웃 감지를 지원하는 첫 번째 엔진 사용.",
     ),
     conf_threshold: float = Query(0.3, description="감지 신뢰도 임계값 (0.0~1.0)"),
 ):
