@@ -11,7 +11,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from core.annotation import load_annotations, save_annotations, _gen_annotation_id
+from core.annotation import _gen_annotation_id, load_annotations, save_annotations
 
 # ──────────────────────────────────────
 # 내보내기 (Export)

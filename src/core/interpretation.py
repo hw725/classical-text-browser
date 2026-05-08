@@ -30,7 +30,6 @@ from pathlib import Path
 
 import git
 
-
 # 해석 저장소 ID 패턴: 영문 소문자+숫자+밑줄
 _INTERP_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 

@@ -13,7 +13,7 @@ HWP 관련 모듈은 기존 src/hwp/에 유지:
   hwp/text_cleaner.py — 표점·현토 분리
 """
 
-from .common import save_text_to_l4, save_punctuation_sidecar
+from .common import save_punctuation_sidecar, save_text_to_l4
 from .pdf_extractor import PdfTextExtractor
 
 __all__ = [

@@ -26,7 +26,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-
 # ─── 문자 분류 상수 ──────────────────────────────────
 
 # 전각 (중국식) 표점

@@ -21,7 +21,6 @@ from pathlib import Path
 
 from jsonschema import validate
 
-
 # ──────────────────────────────────────
 # 스키마 로드 (모듈 레벨 캐시)
 # ──────────────────────────────────────
@@ -267,11 +266,11 @@ def resolve_citation_context(
         하나의 마크에서 모든 레이어를 횡단 조회하여 통합 뷰를 제공한다.
     """
     # 지연 임포트 — 순환 참조 방지
+    from core.annotation import load_annotations
     from core.document import get_bibliography, get_page_text
     from core.entity import get_entity
     from core.punctuation import load_punctuation, render_punctuated_text
     from core.translation import load_translations
-    from core.annotation import load_annotations
 
     library_path = Path(library_path).resolve()
     interp_path = Path(interp_path).resolve()

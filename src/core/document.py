@@ -24,7 +24,6 @@ from pathlib import Path
 
 import git
 
-
 # 문헌 ID 패턴: manifest.schema.json의 document_id 규칙과 동일
 _DOC_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
