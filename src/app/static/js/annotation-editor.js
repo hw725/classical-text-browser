@@ -154,6 +154,11 @@ async function _populateAnnBlockSelect() {
 
   const vs = typeof viewerState !== "undefined" ? viewerState : null;
   if (!vs || !vs.docId || !vs.pageNum) return;
+  const previousBlockId =
+    annState.blockId ||
+    (typeof transState !== "undefined" ? transState.blockId : "") ||
+    (typeof hyeontoState !== "undefined" ? hyeontoState.blockId : "") ||
+    (typeof punctState !== "undefined" ? punctState.blockId : "");
 
   // TextBlock이 있으면 우선 사용 (번역 편집기와 동일한 block_id 체계).
   // 왜: 표점·번역이 TextBlock ID로 저장되므로, 주석에서도 같은 ID를
@@ -191,10 +196,11 @@ async function _populateAnnBlockSelect() {
 
           // 이전 선택값 복원 또는 첫 번째 블록 자동 선택
           if (
-            annState.blockId &&
-            sel.querySelector(`option[value="${annState.blockId}"]`)
+            previousBlockId &&
+            sel.querySelector(`option[value="${previousBlockId}"]`)
           ) {
-            sel.value = annState.blockId;
+            sel.value = previousBlockId;
+            annState.blockId = sel.value;
           } else if (sel.options.length > 1) {
             sel.selectedIndex = 1;
             annState.blockId = sel.value;
@@ -210,27 +216,58 @@ async function _populateAnnBlockSelect() {
 
   // 폴백: LayoutBlock 기반 (편성 미완료 시)
   try {
+    const partParam = vs.partId
+      ? `?part_id=${encodeURIComponent(vs.partId)}`
+      : "";
     const resp = await fetch(
-      `/api/documents/${vs.docId}/pages/${vs.pageNum}/layout`,
+      `/api/documents/${vs.docId}/pages/${vs.pageNum}/layout${partParam}`,
     );
-    if (!resp.ok) return;
+    if (!resp.ok) {
+      _addAnnDefaultBlock(sel, vs);
+      annState.blockId = sel.value;
+      _onAnnBlockChange();
+      return;
+    }
     const layout = await resp.json();
     const blocks = layout.blocks || [];
 
-    for (const b of blocks) {
-      const opt = document.createElement("option");
-      opt.value = b.block_id;
-      opt.textContent = `${b.block_id} (${b.block_type || "?"})`;
-      sel.appendChild(opt);
+    if (blocks.length === 0) {
+      _addAnnDefaultBlock(sel, vs);
+    } else {
+      for (const b of blocks) {
+        const opt = document.createElement("option");
+        opt.value = b.block_id;
+        opt.textContent = `${b.block_id} (${b.block_type || "text"})`;
+        sel.appendChild(opt);
+      }
     }
 
-    if (blocks.length > 0) {
-      sel.value = blocks[0].block_id;
+    if (previousBlockId && sel.querySelector(`option[value="${previousBlockId}"]`)) {
+      sel.value = previousBlockId;
+    } else if (sel.options.length > 1) {
+      sel.selectedIndex = 1;
+    }
+    if (sel.value) {
+      annState.blockId = sel.value;
       _onAnnBlockChange();
     }
   } catch (e) {
     console.error("블록 목록 로드 실패:", e);
+    _addAnnDefaultBlock(sel, vs);
+    annState.blockId = sel.value;
+    _onAnnBlockChange();
   }
+}
+
+function _addAnnDefaultBlock(select, vs) {
+  const pageNum = (vs && vs.pageNum) || 1;
+  const fallbackId = `p${String(pageNum).padStart(2, "0")}_b01`;
+  if (select.querySelector(`option[value="${fallbackId}"]`)) return;
+  const opt = document.createElement("option");
+  opt.value = fallbackId;
+  opt.textContent = `${fallbackId} (기본)`;
+  select.appendChild(opt);
+  select.value = fallbackId;
 }
 
 async function _onAnnBlockChange() {
