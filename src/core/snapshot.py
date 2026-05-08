@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # Export: 스냅샷 조립
 # ──────────────────────────────────────
 
-PLATFORM_VERSION = "0.2.0"
+PLATFORM_VERSION = "1.1.4"
 
 
 def build_snapshot(

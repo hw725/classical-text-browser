@@ -45,7 +45,7 @@ from app.routers import (  # noqa: E402,F401
 app = FastAPI(
     title="고전서지 통합 브라우저",
     description="사람과 LLM이 함께 고전 텍스트를 읽고 번역하고 연구하는 통합 작업 환경",
-    version="0.2.0",
+    version="1.1.4",
 )
 
 # ── 라우터 마운트 ─────────────────────────────────

@@ -229,7 +229,7 @@ Google Drive 링크에서 `.ckpt`를 받는다. 두 버전 중 v2.5 (SikuRoBERTa
 - ✅ 컨테이너 안에서 `punctuation_service.sikurroberta` 모듈 import 정상
 - ✅ Mock 엔진으로 본체 ↔ 서비스 HTTP 통합 동작 확인
 - ⏳ 실제 가중치 로드 + 추론 정확도는 yachagye `.ckpt` 다운로드 후 검증 필요
-- ⏳ 다음 본체 정식 릴리스에서 `v1.1.4` patch로 태깅 예정
+- ✅ 본체 정식 릴리스 `v1.1.4`에 포함
 
 ## 디렉토리 구조
 
