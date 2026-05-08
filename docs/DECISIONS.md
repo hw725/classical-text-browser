@@ -264,19 +264,20 @@ L3 LayoutBlock (bbox) → image_utils.crop_block() → OCR 엔진 → OcrBlockRe
 
 ## D-010: LLM 5단 폴백 아키텍처
 
-**날짜**: 2026-02-15 (최종 갱신: 2026-04-14)
+**날짜**: 2026-02-15 (최종 갱신: 2026-05-08)
 **맥락**: LLM 호출을 어떤 구조로 관리할 것인가. 프로젝트 초기라 API 키가 없을 수도, 로컬 모델만 쓸 수도, 유료 API를 쓸 수도 있다.
 
 **결정**:
 
-4단 폴백 + 단일 진입점(Router) 아키텍처를 채택한다.
+5단 폴백 + 단일 진입점(Router) 아키텍처를 채택한다.
 
 | 순위 | Provider | 특징 |
 |------|----------|------|
 | 1순위 | Ollama (로컬 gemma4:e4b) | 무료, 멀티모달 |
-| 2순위 | Gemini (Google AI) | 저렴, 비전 포함 |
-| 3순위 | OpenAI | 중간 비용, 비전 포함 |
-| 4순위 | Anthropic (Claude API) | 최후 폴백 |
+| 2순위 | OpenAI OAuth | ChatGPT 계정 프록시, API 키 없이 무료 |
+| 3순위 | Gemini (Google AI) | 저렴, 비전 포함 |
+| 4순위 | OpenAI | 중간 비용, 비전 포함 |
+| 5순위 | Anthropic (Claude API) | 최후 폴백 |
 
 **핵심 원칙**:
 - **LlmRouter가 유일한 진입점**: 모든 코드는 provider를 직접 호출하지 않고, Router를 통해야 한다
@@ -296,9 +297,10 @@ src/llm/
 ├── providers/
 │   ├── base.py              # 추상 클래스 + LlmResponse
 │   ├── ollama.py            # 1순위 (gemma4:e4b)
-│   ├── gemini_provider.py   # 2순위
-│   ├── openai_provider.py   # 3순위
-│   └── anthropic_provider.py # 4순위
+│   ├── openai_oauth_provider.py # 2순위
+│   ├── gemini_provider.py   # 3순위
+│   ├── openai_provider.py   # 4순위
+│   └── anthropic_provider.py # 5순위
 └── prompts/
     ├── layout_analysis.yaml       # L3 레이아웃 분석
     ├── punctuation.yaml           # L5 표점
@@ -1586,6 +1588,59 @@ openai-oauth 프록시 연동 필요.
 - `src/llm/router.py`: 5단 폴백 순서 반영
 
 **영향**: 프록시 실행 시 API 비용 $0
+
+---
+
+## D-048: 외부 SikuRoBERTa 표점 서비스 자동 연동
+
+**날짜**: 2026-05-08
+
+**맥락**: yachagye의 Korean Classical Chinese Punctuation Prediction Model v2.5를
+본체에 직접 넣으면 torch/transformers/대용량 가중치 때문에 설치가 무거워진다.
+동시에 사용자는 본체에서 환경변수를 매번 지정하지 않고 표점 탭에서 바로 쓰길 원한다.
+
+**결정**:
+- 본체의 외부 표점 기본 URL은 `http://127.0.0.1:8765`로 둔다.
+- 명시적으로 끌 때만 `EXTERNAL_PUNCT_URL=off`를 사용한다.
+- `start_server.bat` / `start_server.sh`는 `punctuation-service/.env` 또는
+  `PUNCT_MODEL_HOST_PATH`가 있으면 Docker Compose로 표점 서비스를 자동 기동한다.
+- 모델 출처는 UI/API 응답에 `SikuRoBERTa, 양정현 2025`와 DOI로 표기한다.
+
+**영향**: Docker Desktop과 모델 경로만 준비되어 있으면 배치파일 하나로 본체+표점 서비스가 함께 올라온다.
+
+---
+
+## D-049: Windows 시작 배치파일의 OpenAI OAuth 자동 기동
+
+**날짜**: 2026-05-08
+
+**맥락**: UI에는 OpenAI OAuth 프로바이더가 노출되어 있으나 프록시를 따로 띄워야 하면
+비개발자 사용자의 실행 단계가 늘어난다.
+
+**결정**:
+- `start_server.bat`가 `npx.cmd -y openai-oauth`를 별도 창에서 자동 실행한다.
+- 포트 `10531~10540`의 `/v1/models`를 확인하여 실제 프록시 URL을 찾고
+  `OPENAI_OAUTH_BASE_URL`로 본체에 전달한다.
+- 자동 기동을 건너뛰려면 `OPENAI_OAUTH_AUTO_START=0`을 사용한다.
+
+**영향**: 배치파일 하나로 무료 온라인 LLM 폴백까지 준비된다. 첫 실행 로그인은 열린 프록시 창에서 진행한다.
+
+---
+
+## D-050: 주석·인용 탭의 블록 선택 및 원문 스냅샷 폴백
+
+**날짜**: 2026-05-08
+
+**맥락**: 번역까지 마친 뒤 주석/인용 탭으로 이동하면 드롭다운에 블록이 비거나,
+인용 마크의 통합 컨텍스트에서 원문이 비는 e2e 문제가 발견되었다.
+
+**결정**:
+- 주석/인용 탭은 TextBlock, LayoutBlock, 이전 탭의 현재 블록, `pNN_b01` 기본값을
+  순서대로 사용해 블록 선택을 복구한다.
+- 인용 편집기는 원문 드래그 선택으로 즉시 마크 생성 프롬프트를 열고,
+  원본 블록을 다시 찾지 못하면 저장된 `source_text_snapshot`으로 컨텍스트를 구성한다.
+
+**영향**: 표점→현토→번역 이후에도 주석/인용 단계가 같은 블록 흐름을 이어받는다.
 
 ---
 

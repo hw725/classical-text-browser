@@ -9,7 +9,7 @@
 
 | # | Phase | 세션 이름 | 상태 | 난이도 | 세션 문서 | 사전 조건 |
 |---|-------|----------|------|--------|----------|----------|
-| 1 | 10-2 | LLM 4단 폴백 아키텍처 | ✅ 완료 | 🔴 높 | `phase10_2_llm_session.md` ✅ 작성 완료 | Anthropic API 키 |
+| 1 | 10-2 | LLM 5단 폴백 아키텍처 | ✅ 완료 | 🔴 높 | `phase10_2_llm_session.md` ✅ 작성 완료 | Ollama 또는 OAuth/API 키 |
 | 2 | 10-1 | OCR 엔진 연동 | ✅ 완료 | 🟡 중 | `phase10_1_ocr_session.md` ✅ 작성 완료 | PaddleOCR 설치 |
 | 3 | 10-3 | 정렬 엔진 | ✅ 완료 | 🟢 낮 | `phase10_3_alignment_session.md` ✅ 작성 완료 | 10-1 완료 |
 | 4 | 10-4 | KORCIS 파서 고도화 | ✅ 완료 | 🟢 낮 | `phase10_4_korcis_session.md` ✅ 작성 완료 (선택적) | 파서 수선 결과 확인 |
@@ -43,7 +43,7 @@
 | Phase | Decision ID | 내용 |
 |-------|------------|------|
 | 10-1 | D-009 | OCR 엔진 플러그인 아키텍처 |
-| 10-2 | D-010 | LLM 호출 아키텍처: 4단 폴백 + Draft→Review→Commit |
+| 10-2 | D-010 | LLM 호출 아키텍처: 5단 폴백 + Draft→Review→Commit |
 | 10-2 | D-011 | LLM 비용 추적 방식 (llm_usage_log.jsonl) |
 | 10-3 | D-012 | 정렬 알고리즘 (difflib + 이체자 보정) |
 | 10-4 | D-013 | KORCIS 파서 고도화 (008 해석 + 판식정보 + OpenAPI + 라이트 테마) |
@@ -63,7 +63,7 @@ Claude Code에 다음 세션 문서를 전달한다.
 ### 10-2 완료 후 → 10-1 OCR 엔진 연동
 
 ```
-✅ 10-2에서 만든 것: LlmRouter, 4단 폴백, Draft→Review→Commit, 레이아웃 분석
+✅ 10-2에서 만든 것: LlmRouter, 5단 폴백, Draft→Review→Commit, 레이아웃 분석
 ⏭️ 다음: phase10_1_ocr_session.md
 📋 사전 준비:
    - PaddleOCR 설치 가능한지 확인 (paddlepaddle은 무거움)

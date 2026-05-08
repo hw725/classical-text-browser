@@ -143,12 +143,13 @@ schemas/
 |------|------|------|
 | [**user-guide.md**](docs/user-guide.md) | 연구자 | 사용 방법 단계별 안내 |
 | [platform-v7.md](docs/platform-v7.md) | 개발자 | 전체 아키텍처 |
-| [DECISIONS.md](docs/DECISIONS.md) | 개발자 | 설계 결정 근거 (D-001~D-047) |
+| [DECISIONS.md](docs/DECISIONS.md) | 개발자 | 설계 결정 근거 (D-001~D-050) |
 | [core-schema-v1.3.md](docs/core-schema-v1.3.md) | 개발자 | 코어 엔티티 모델 |
 | [schemas/README.md](schemas/README.md) | 개발자 | JSON 스키마 구조 |
 | [architecture-diagrams.md](docs/architecture-diagrams.md) | 전체 | Mermaid 다이어그램 |
 | [schema_overview.html](docs/schema_overview.html) | 전체 | 스키마 개요도 (브라우저, 19개) |
 | [llm_architecture_design.md](docs/llm_architecture_design.md) | 개발자 | LLM 5단 폴백 설계 |
+| [releases/v1.1.4.md](docs/releases/v1.1.4.md) | 전체 | v1.1.4 릴리스 노트 |
 | [docs/sessions/](docs/sessions/session_navigator.md) | 개발자 | 구현 세션 기록 (Phase 10~12) |
 
 ## 라이선스

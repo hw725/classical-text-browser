@@ -357,7 +357,7 @@ uv run python -m cli add-document /path/to/my-library \
    - 기본 부호: 。 、 ， ； ： ？ ！ 《》
 4. 부호를 선택하면 해당 글자 뒤에 삽입됩니다
    - 서명호(《》)는 범위 선택 필요
-5. **"AI 표점"**: LLM이 자동으로 구두점을 제안합니다 → 경과 시간이 표시됩니다 → 검토 후 확정
+5. **"AI 표점"**: LLM 또는 외부 SikuRoBERTa 표점 서비스가 구두점을 제안합니다 → 경과 시간이 표시됩니다 → 검토 후 확정
 6. **저장**
 
 ### 6.2 현토 (L5) — 한국어 토 달기
@@ -508,7 +508,7 @@ uv run python -m cli add-document /path/to/my-library \
 | 5 | Anthropic (Claude) | `.env`에 `ANTHROPIC_API_KEY` | O | 유료 (최후) |
 
 > **권장**: Ollama(gemma4:e4b)만으로도 대부분의 기능을 사용할 수 있습니다.
-> 안정적인 표점·번역 품질이 필요하면 Gemini API 키를 설정하세요 (무료 티어 제공).
+> 안정적인 자동 표점이 필요하면 외부 SikuRoBERTa 표점 서비스를 함께 설정하세요.
 
 ### 8.2 API 키 설정
 
@@ -549,14 +549,31 @@ Windows에서는 `start_server.bat`가 `npx.cmd -y openai-oauth`를 별도 창�
 OPENAI_OAUTH_BASE_URL=http://127.0.0.1:10532/v1
 ```
 
-### 8.4 비전 모델
+### 8.4 외부 표점 서비스
+
+Windows에서는 `start_server.bat`가 `punctuation-service/.env` 또는 `PUNCT_MODEL_HOST_PATH`를
+감지하면 Docker Compose로 SikuRoBERTa 표점 서비스를 자동 실행합니다. Docker Desktop은 먼저
+켜져 있어야 합니다. 기본 주소는 `http://127.0.0.1:8765`이므로 보통 본체에
+`EXTERNAL_PUNCT_URL`을 따로 지정하지 않아도 됩니다.
+
+`punctuation-service/.env` 예시:
+
+```bash
+PUNCT_MODEL_HOST_PATH=C:/Users/<USER>/Downloads/classical-text-browser-models/punctuation/v2.5_best_model_9110/v2.5_best_model_9110/punct-epoch=03-val_f1=0.9110.ckpt
+```
+
+표점 탭의 모델 드롭다운에서 `외부 표점 서비스 (SikuRoBERTa)`를 선택하면 사용합니다.
+자동 연동을 끄려면 프로젝트 루트 `.env`에 `EXTERNAL_PUNCT_URL=off`를 설정하세요.
+
+### 8.5 비전 모델
 
 OCR과 레이아웃 분석은 **이미지를 볼 수 있는 모델**만 사용할 수 있습니다. 드롭다운에서 모델 옆에 눈 아이콘이 있으면 비전을 지원합니다.
 
-### 8.5 모델 선택 팁
+### 8.6 모델 선택 팁
 
 - **오프라인 작업**: NDL古典籍OCR-Lite 또는 NDLOCR-Lite(OCR용) + 수동 해석
-- **무료 온라인**: Ollama + 클라우드 모델(kimi-k2.5, glm-5 등)
+- **무료 온라인**: OpenAI OAuth 프록시 또는 Ollama 클라우드 모델(kimi-k2.5, glm-5 등)
+- **자동 표점 특화**: 외부 SikuRoBERTa 표점 서비스
 - **저렴한 고품질**: Gemini 2.5 Flash (무료 티어 제공, API 키 필요)
 - **최고 품질**: Gemini 3 Pro, OpenAI gpt-5, 또는 Anthropic Claude
 

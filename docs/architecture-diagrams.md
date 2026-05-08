@@ -162,9 +162,10 @@ flowchart TB
         end
         subgraph LLM_ENG["LLM 라우터 (router.py)"]
             LR1["1. Ollama (gemma4:e4b)"]
-            LR2["2. Gemini"]
-            LR3["3. OpenAI"]
-            LR4["4. Anthropic"]
+            LR2["2. OpenAI OAuth"]
+            LR3["3. Gemini"]
+            LR4["4. OpenAI"]
+            LR5["5. Anthropic"]
         end
         subgraph ETC_ENG["기타"]
             JS_VAL["jsonschema 검증"]
@@ -174,8 +175,9 @@ flowchart TB
     end
 
     subgraph EXT["외부 서비스"]
-        EXT_LLM["Gemini · OpenAI · Anthropic"]
+        EXT_LLM["OpenAI OAuth · Gemini · OpenAI · Anthropic"]
         EXT_OLL["Ollama Server"]
+        EXT_PUNCT["punctuation-service<br/>(SikuRoBERTa)"]
         EXT_GIT["GitHub · GitLab<br/>(백업/동기화)"]
         EXT_BIB["NDL · KORCIS<br/>(서지 API)"]
     end
@@ -192,6 +194,7 @@ flowchart TB
     style ENGINE fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
     style EXT fill:#fce4ec,stroke:#c62828,stroke-width:2px,stroke-dasharray: 5 5
     style EXT_LLM fill:#fef3c7,stroke:#b45309
+    style EXT_PUNCT fill:#e0f2fe,stroke:#0369a1
 ```
 
 **역할 분리:**
@@ -268,11 +271,13 @@ flowchart TB
     end
 
     TIER1_GROUP -->|"실패 시"| TIER2
-    TIER2["<b>2순위: Gemini (Google AI)</b><br/>GOOGLE_API_KEY · 저렴 · 비전 포함"]
+    TIER2["<b>2순위: OpenAI OAuth</b><br/>start_server.bat/openai-oauth · 무료 · 비전 포함"]
     TIER2 -->|"실패 시"| TIER3
-    TIER3["<b>3순위: OpenAI</b><br/>OPENAI_API_KEY · 중간 비용 · 비전 포함"]
+    TIER3["<b>3순위: Gemini (Google AI)</b><br/>GOOGLE_API_KEY · 저렴 · 비전 포함"]
     TIER3 -->|"실패 시"| TIER4
-    TIER4["<b>4순위: Anthropic (Claude)</b><br/>ANTHROPIC_API_KEY · 최후 폴백"]
+    TIER4["<b>4순위: OpenAI API</b><br/>OPENAI_API_KEY · 중간 비용 · 비전 포함"]
+    TIER4 -->|"실패 시"| TIER5
+    TIER5["<b>5순위: Anthropic (Claude)</b><br/>ANTHROPIC_API_KEY · 최후 폴백"]
 
     subgraph CONSUMERS["LLM 소비자 (src/core/)"]
         direction LR
@@ -299,10 +304,10 @@ flowchart TB
 
     style ENTRY fill:#fef3c7,stroke:#b45309,stroke-width:2px
     style TIER1 fill:#e8f5e9,stroke:#2e7d32
-    style TIER2 fill:#fff3e0,stroke:#e65100
-    style TIER3_GROUP fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    style TIER3_MAIN fill:#f3e5f5,stroke:#7b1fa2
-    style TIER4_GROUP fill:#fce4ec,stroke:#c62828,stroke-width:2px
+    style TIER2 fill:#e0f2fe,stroke:#0369a1
+    style TIER3 fill:#fff3e0,stroke:#e65100
+    style TIER4 fill:#f3e5f5,stroke:#7b1fa2
+    style TIER5 fill:#fce4ec,stroke:#c62828
     style CONSUMERS fill:#eceff1,stroke:#546e7a,stroke-width:2px
     style CONFIG fill:#e8f5e9,stroke:#2e7d32
     style CF1 fill:#fef3c7,stroke:#b45309
@@ -571,15 +576,16 @@ flowchart TB
 
     subgraph LLM_MOD["src/llm/ -- LLM 통합"]
         direction TB
-        LM1["<b>router.py -- 4단 폴백</b>"]
+        LM1["<b>router.py -- 5단 폴백</b>"]
         LM2["config.py"]
         LM3["draft.py"]
         LM4["usage_tracker.py"]
         subgraph PROVIDERS["providers/"]
             LP1["ollama (gemma4:e4b)"]
-            LP2["gemini"]
-            LP3["openai"]
-            LP4["anthropic"]
+            LP2["openai_oauth"]
+            LP3["gemini"]
+            LP4["openai"]
+            LP5["anthropic"]
         end
     end
 

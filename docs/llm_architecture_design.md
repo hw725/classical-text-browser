@@ -5,7 +5,7 @@
 
 ---
 
-## 1. 호출 우선순위 (4단 폴백)
+## 1. 호출 우선순위 (5단 폴백)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -19,15 +19,19 @@
 │      │   조건: Ollama 서버가 실행 중                         │
 │      │   장점: 무료, 로컬 실행, 비전 포함, 오프라인 가능     │
 │      │                                                      │
-│      ├─ 2순위: Gemini (Google AI)                            │
+│      ├─ 2순위: OpenAI OAuth                                  │
+│      │   조건: openai-oauth 프록시 실행 또는 자동 기동       │
+│      │   장점: API 키 없이 무료, 비전 포함                   │
+│      │                                                      │
+│      ├─ 3순위: Gemini (Google AI)                            │
 │      │   조건: GOOGLE_API_KEY 설정됨                        │
 │      │   장점: 저렴, 비전 포함                              │
 │      │                                                      │
-│      ├─ 3순위: OpenAI                                        │
+│      ├─ 4순위: OpenAI                                        │
 │      │   조건: OPENAI_API_KEY 설정됨                        │
 │      │   장점: 중간 비용, 비전 포함                         │
 │      │                                                      │
-│      └─ 4순위: Anthropic (Claude API)                        │
+│      └─ 5순위: Anthropic (Claude API)                        │
 │          조건: ANTHROPIC_API_KEY 설정됨                      │
 │          장점: 최후 폴백                                    │
 │                                                             │
@@ -39,12 +43,14 @@
 | 순위 | 방식 | 비용 | 이미지 분석 | 의존성 | 오프라인 |
 |------|------|------|-------------|--------|----------|
 | 1 | Ollama (gemma4:e4b) | 무료 | ✅ (멀티모달) | Ollama 실행 | ✅ |
-| 2 | Gemini | 저렴 | ✅ | API 키 | ✗ |
-| 3 | OpenAI | 중간 | ✅ | API 키 | ✗ |
-| 4 | Anthropic | 유료 | ✅ | API 키 | ✗ |
+| 2 | OpenAI OAuth | 무료 | ✅ | openai-oauth 프록시 | ✗ |
+| 3 | Gemini | 저렴 | ✅ | API 키 | ✗ |
+| 4 | OpenAI | 중간 | ✅ | API 키 | ✗ |
+| 5 | Anthropic | 유료 | ✅ | API 키 | ✗ |
 
 - 1순위는 Ollama의 로컬 gemma4:e4b 모델 (무료, 오프라인 가능)
-- 2~4순위는 유료 API (비용 순: Gemini < OpenAI < Anthropic)
+- 2순위는 ChatGPT 계정 OAuth 프록시 (API 키 없이 무료, 온라인)
+- 3~5순위는 유료 API (비용 순: Gemini < OpenAI < Anthropic)
 
 ---
 
@@ -59,9 +65,10 @@ src/
       __init__.py
       base.py               ← BaseLlmProvider 추상 클래스
       ollama.py             ← 1순위: Ollama REST API (gemma4:e4b)
-      gemini_provider.py    ← 2순위: Gemini API
-      openai_provider.py    ← 3순위: OpenAI API
-      anthropic_provider.py ← 4순위: Claude API
+      openai_oauth_provider.py ← 2순위: OpenAI OAuth 프록시
+      gemini_provider.py    ← 3순위: Gemini API
+      openai_provider.py    ← 4순위: OpenAI API
+      anthropic_provider.py ← 5순위: Claude API
     prompts/
       layout_analysis.yaml       ← L3 레이아웃 분석
       punctuation.yaml           ← L5 표점
@@ -97,7 +104,7 @@ class LlmResponse:
     어떤 provider를 썼든 호출자는 동일한 형식을 받는다.
     """
     text: str                    # 응답 텍스트
-    provider: str                # "ollama", "gemini", "openai", "anthropic" 등
+    provider: str                # "ollama", "openai_oauth", "gemini", "openai", "anthropic" 등
     model: str                   # 실제 사용된 모델명
     tokens_in: int | None        # 입력 토큰 (추정 가능할 때)
     tokens_out: int | None       # 출력 토큰
@@ -112,7 +119,7 @@ class BaseLlmProvider(ABC):
     router.py가 우선순위에 따라 순서대로 시도.
     """
     
-    provider_id: str        # "ollama", "gemini", "openai", "anthropic"
+    provider_id: str        # "ollama", "openai_oauth", "gemini", "openai", "anthropic"
     display_name: str       # "Ollama", "Gemini", ...
     supports_image: bool    # 이미지 입력 가능 여부
     
@@ -185,10 +192,11 @@ class LlmRouter:
     def __init__(self, config: LlmConfig):
         # 우선순위 순서대로 provider 목록 생성
         self.providers = [
-            OllamaProvider(config),         # 1순�� (gemma4:e4b)
-            GeminiProvider(config),         # 2순위
-            OpenAIProvider(config),         # 3순위
-            AnthropicProvider(config),      # 4순위
+            OllamaProvider(config),         # 1순위 (gemma4:e4b)
+            OpenAiOAuthProvider(config),    # 2순위
+            GeminiProvider(config),         # 3순위
+            OpenAiProvider(config),         # 4순위
+            AnthropicProvider(config),      # 5순위
         ]
         self.usage_tracker = UsageTracker(config)
     
@@ -202,7 +210,7 @@ class LlmRouter:
         
         모델 선택 옵션 (품질 테스트·비교용):
           force_provider: 특정 provider만 사용
-            예: "ollama", "gemini", "anthropic"
+            예: "ollama", "openai_oauth", "gemini", "openai", "anthropic"
           force_model: 특정 모델 지정 (force_provider와 함께 사용)
             예: "gemma4:e4b", "claude-sonnet-4-20250514"
         
@@ -271,9 +279,9 @@ class LlmRouter:
         raise LlmUnavailableError(
             "사용 가능한 LLM provider가 없습니다.\n"
             "다음 중 하나를 확인하세요:\n"
-            "1. agent-chat 서버 실행 (npm run agent:chat)\n"
-            "2. Ollama 실행 (ollama serve)\n"
-            "3. API 키 설정 (.env에 ANTHROPIC_API_KEY 등)\n\n"
+            "1. Ollama 실행 (ollama serve)\n"
+            "2. OpenAI OAuth 프록시 실행 (start_server.bat 또는 npx.cmd -y openai-oauth)\n"
+            "3. API 키 설정 (.env에 GOOGLE_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY)\n\n"
             f"시도한 provider별 오류:\n" + "\n".join(errors)
         )
     
@@ -534,7 +542,16 @@ class OllamaProvider(BaseLlmProvider):
         )
 ```
 
-### 4.4 직접 API (4순위) — Anthropic 예시
+### 4.2 OpenAI OAuth (2순위)
+
+`OpenAiOAuthProvider`는 `OpenAiProvider`를 상속하고 OpenAI 호환 `base_url`만
+openai-oauth 프록시로 바꾼다. `start_server.bat`는 `npx.cmd -y openai-oauth`를
+별도 창에서 자동 실행하고, 프록시가 올라온 `10531~10540` 포트를 감지해
+`OPENAI_OAUTH_BASE_URL`을 본체 서버에 전달한다.
+
+프록시가 실행 중이 아니면 이 provider는 즉시 스킵되고 Gemini로 폴백한다.
+
+### 4.5 직접 API (5순위) — Anthropic 예시
 
 ```python
 # src/llm/providers/anthropic.py
@@ -635,7 +652,10 @@ class LlmConfig:
 # 모델 설치: ollama pull gemma4:e4b
 # OLLAMA_URL=http://localhost:11434
 
-# 유료 API (2~4순위)
+# OpenAI OAuth (2순위 — start_server.bat 자동 기동, 직접 고정할 때만 설정)
+# OPENAI_OAUTH_BASE_URL=http://127.0.0.1:10532/v1
+
+# 유료 API (3~5순위)
 # GOOGLE_API_KEY=AIza...
 # OPENAI_API_KEY=sk-...
 # ANTHROPIC_API_KEY=sk-ant-...
@@ -654,28 +674,35 @@ class LlmConfig:
 ├────────────────────────┼──────────────────────────────────┤
 │ 레이아웃 분석 (10-2)    │ 비전 필수:                        │
 │  이미지 → LayoutBlock   │  1. Ollama gemma4:e4b (멀티모달) │
-│                        │  2. Gemini gemini-2.5-flash      │
-│                        │  3. Claude claude-sonnet-4       │
+│                        │  2. OpenAI OAuth                 │
+│                        │  3. Gemini gemini-2.5-flash      │
+│                        │  4. OpenAI API                   │
+│                        │  5. Claude claude-sonnet-4       │
 ├────────────────────────┼──────────────────────────────────┤
 │ 번역 (11-2)            │ 텍스트:                           │
 │  한문 → 현대한국어       │  1. Ollama gemma4:e4b            │
-│                        │  2. Gemini                       │
-│                        │  3. Claude (한문에 강함)           │
+│                        │  2. OpenAI OAuth                 │
+│                        │  3. Gemini                       │
+│                        │  4. OpenAI API                   │
+│                        │  5. Claude (한문에 강함)           │
 ├────────────────────────┼──────────────────────────────────┤
 │ 주석 자동 생성 (11-3)   │ 텍스트:                           │
 │  인물/지명/전거 식별     │  1. Ollama gemma4:e4b            │
-│                        │  2. Gemini                       │
-│                        │  3. Claude                       │
+│                        │  2. OpenAI OAuth                 │
+│                        │  3. Gemini                       │
+│                        │  4. Claude                       │
 ├────────────────────────┼──────────────────────────────────┤
 │ JSON 구조화 출력        │ JSON 모드 지원 모델:              │
 │  프롬프트 → JSON        │  1. Ollama gemma4:e4b (json)     │
-│                        │  2. Gemini (JSON mode)           │
-│                        │  3. Claude (JSON mode)           │
+│                        │  2. OpenAI OAuth                 │
+│                        │  3. Gemini (JSON mode)           │
+│                        │  4. Claude (JSON mode)           │
 ├────────────────────────┼──────────────────────────────────┤
 │ OCR 보조 (10-1)        │ 비전 필수:                        │
 │  저품질 이미지 판독     │  1. Ollama gemma4:e4b (멀티모달) │
-│                        │  2. Gemini Vision                │
-│                        │  3. Claude Vision                │
+│                        │  2. OpenAI OAuth                 │
+│                        │  3. Gemini Vision                │
+│                        │  4. Claude Vision                │
 └────────────────────────┴──────────────────────────────────┘
 ```
 
@@ -767,6 +794,7 @@ class UsageTracker:
 │        │ 🔄 자동 (폴백순서)            │ ← 기본값     │
 │        │ ─────────────────────────── │      │
 │        │ 🟢 Ollama: gemma4:e4b       │ ← 무료     │
+│        │ ⚫ OpenAI OAuth: gpt-5.4-mini │ ← 무료, 프록시 미실행 │
 │        │ ⚫ Gemini: gemini-2.5-flash │ ← 유료, 키 미설정     │
 │        │ ⚫ OpenAI: gpt-5-mini       │ ← 유료, 키 미설정     │
 │        │ ⚫ Claude sonnet-4          │ ← 유료, 키 미설정     │
@@ -893,13 +921,14 @@ docs/llm_architecture_design.md — 이 문서를 읽어. LLM 호출 아키텍�
 
 ## 이번 목표: Phase 10-2 — LLM 호출 아키텍처 + 레이아웃 분석
 
-### 핵심: 4단 폴백 LLM Router
+### 핵심: 5단 폴백 LLM Router
 
 우선순위:
 1. Ollama 로컬 모델 gemma4:e4b (localhost:11434)
-2. Gemini API (저렴)
-3. OpenAI API (중간)
-4. Anthropic API (최후 폴백)
+2. OpenAI OAuth 프록시 (start_server.bat 자동 기동, API 키 없음)
+3. Gemini API (저렴)
+4. OpenAI API (중간)
+5. Anthropic API (최후 폴백)
 
 모든 LLM 호출은 src/llm/router.py를 통해야 한다.
 provider를 직접 호출하지 않는다.
@@ -920,25 +949,32 @@ src/llm/providers/ollama.py:
 - 기본 모델: gemma4:e4b (멀티모달 — 텍스트+비전 통합)
 - call_with_image: images 필드에 base64 배열
 
-### 작업 3: Gemini Provider (2순위)
+### 작업 3: OpenAI OAuth Provider (2순위)
+
+src/llm/providers/openai_oauth_provider.py:
+- OpenAI 호환 프록시(base_url) 사용
+- 포트 10531~10540 자동 감지
+- 기본 모델: gpt-5.4-mini
+
+### 작업 4: Gemini Provider (3순위)
 
 src/llm/providers/gemini_provider.py:
 - google-genai SDK 사용
 - 기본 모델: gemini-2.5-flash
 
-### 작업 4: OpenAI Provider (3순위)
+### 작업 5: OpenAI Provider (4순위)
 
 src/llm/providers/openai_provider.py:
 - openai SDK 사용
 - 기본 모델: gpt-5-mini
 
-### 작업 5: Anthropic Provider (4순위)
+### 작업 6: Anthropic Provider (5순위)
 
 src/llm/providers/anthropic.py:
 - anthropic Python SDK (uv add anthropic)
 - 기본 모델: claude-sonnet-4-20250514
 
-### 작업 6: Router + Config
+### 작업 7: Router + Config
 
 src/llm/router.py:
 - LlmRouter: providers 리스트를 순서대로 시도
@@ -949,20 +985,20 @@ src/llm/config.py:
 - .env에서 API 키, backend-44 경로, 월간 예산 읽기
 - 기본 설정값 (DEFAULT_MODELS 등)
 
-### 작업 7: 비용 추적
+### 작업 8: 비용 추적
 
 src/llm/usage_tracker.py:
 - 서고별 llm_usage_log.jsonl
 - log(response, purpose) — 매 호출 기록
 - get_monthly_summary() — 월간 요약
 
-### 작업 8: Draft 모델
+### 작업 9: Draft 모델
 
 src/llm/draft.py:
 - LlmDraft: draft_id, purpose, status (pending→accepted/modified/rejected)
 - Draft → Review → Commit 패턴의 기반
 
-### 작업 9: 레이아웃 분석 (Draft 패턴 첫 적용)
+### 작업 10: 레이아웃 분석 (Draft 패턴 첫 적용)
 
 src/llm/prompts/layout_analysis.yaml:
 - 이미지 → LayoutBlock 제안 JSON
@@ -972,7 +1008,7 @@ src/core/layout_analyzer.py:
 - analyze_page_layout() → LlmDraft (status: pending)
 - commit_layout_draft() → layout_page.json 저장 + git commit
 
-### 작업 10: API 엔드포인트
+### 작업 11: API 엔드포인트
 
 POST /api/documents/{doc_id}/pages/{page}/layout/analyze
 POST /api/llm/drafts/{draft_id}/commit
@@ -982,12 +1018,13 @@ POST /api/llm/config
 GET /api/llm/status — 각 provider 가용 상태 조회
   응답: {
     "ollama": {"available": true, "models": ["gemma4:e4b"]},
+    "openai_oauth": {"available": false, "reason": "프록시 미실행"},
     "gemini": {"available": false, "reason": "API 키 미설정"},
     "openai": {"available": false, "reason": "API 키 미설정"},
     "anthropic": {"available": false, "reason": "API 키 미설정"}
   }
 
-### 작업 11: GUI — AI 분석 + Provider 상태
+### 작업 12: GUI — AI 분석 + Provider 상태
 
 layout-editor.js:
 - "AI 분석" 버튼 → POST /analyze
@@ -996,14 +1033,14 @@ layout-editor.js:
 - "전체 확정" → POST /commit
 
 설정 또는 사이드바:
-- LLM 상태 표시: 🟢 Ollama | ⚫ Gemini | ⚫ Claude
+- LLM 상태 표시: 🟢 Ollama | ⚫ OpenAI OAuth | ⚫ Gemini | ⚫ Claude
 - 이번 달 비용: $X.XX / $10.00
 
-### 작업 12: 통합 테스트
+### 작업 13: 통합 테스트
 
 1. router가 provider를 순서대로 시도하는지 (mock)
-2. agent-chat이 죽었을 때 다음 provider로 폴백하는지
+2. OpenAI OAuth 프록시가 꺼졌을 때 다음 provider로 폴백하는지
 3. 레이아웃 분석 → Draft → Review → Commit 전체 흐름
 
-커밋: "feat: Phase 10-2 — LLM 4단 폴백 아키텍처 + 레이아웃 분석"
+커밋: "feat: Phase 10-2 — LLM 5단 폴백 아키텍처 + 레이아웃 분석"
 ```

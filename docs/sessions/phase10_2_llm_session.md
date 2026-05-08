@@ -1,5 +1,8 @@
 # Phase 10-2: LLM 4단 폴백 아키텍처 + 레이아웃 분석
 
+> 현재 구현은 D-010/D-047에 따라 `Ollama → OpenAI OAuth → Gemini → OpenAI → Anthropic`
+> 5단 폴백으로 갱신되었다. 이 문서는 Phase 10-2 당시의 세션 기록을 보존한다.
+
 > Claude Code 세션 지시문
 > 이 문서를 읽고 작업 순서대로 구현하라.
 

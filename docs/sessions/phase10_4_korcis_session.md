@@ -667,7 +667,7 @@ const themeSwitcher = new ThemeSwitcher();
 이 세션(10-4)이 완료되면 (또는 건너뛰면) Phase 11로 넘어간다.
 
 Phase 10 전체에서 만든 것:
-  ✅ 10-2: LLM 4단 폴백 아키텍처 + 레이아웃 분석
+  ✅ 10-2: LLM 5단 폴백 아키텍처 + 레이아웃 분석
   ✅ 10-1: OCR 엔진 연동 (PaddleOCR)
   ✅ 10-3: 정렬 엔진 (OCR ↔ 텍스트 대조)
   ✅ 10-4: KORCIS 파서 고도화 (선택)

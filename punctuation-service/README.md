@@ -36,14 +36,15 @@ transformers 4.57.3 포함). 이 이미지를 베이스로 재활용하므로 �
 설치는 fastapi/uvicorn 정도(수 MB)만 발생한다.
 
 ```bash
-# 1. 가중치 다운로드 — yachagye 레포 README의 Google Drive 링크에서 .ckpt 받기
-#    호스트 임의 경로에 저장. 예: D:/models/punct_v25.ckpt
+# 1. 가중치 다운로드 — yachagye 레포 README의 Google Drive 링크에서 v2.5 .ckpt 받기
+#    권장 위치 예:
+#    C:/Users/<USER>/Downloads/classical-text-browser-models/punctuation/v2.5_best_model_9110/...
 
 # 2. punctuation-service 폴더에 .env 작성
 cd punctuation-service
-echo "PUNCT_MODEL_HOST_PATH=D:/models/punct_v25.ckpt" > .env
+echo "PUNCT_MODEL_HOST_PATH=C:/Users/<USER>/Downloads/classical-text-browser-models/punctuation/v2.5_best_model_9110/v2.5_best_model_9110/punct-epoch=03-val_f1=0.9110.ckpt" > .env
 
-# 3. 컨테이너 빌드 + 기동
+# 3. 컨테이너 빌드 + 기동 (또는 루트의 start_server.bat 실행)
 docker compose up -d --build
 
 # 4. 상태 확인 (ready=true면 OK)
@@ -56,9 +57,11 @@ uv run python -m app serve
 docker compose down
 ```
 
-`start_server.bat` / `start_server.sh`를 쓰는 경우에는 `punctuation-service/.env` 또는
-`PUNCT_MODEL_HOST_PATH`가 설정되어 있으면 Docker Compose로 표점 서비스를 자동 기동한다.
-자동 기동을 건너뛰려면 `PUNCT_AUTO_START=0`을 설정한다.
+`start_server.bat` / `start_server.sh`를 쓰는 경우에는 Docker Desktop을 켠 상태에서
+`punctuation-service/.env` 또는 `PUNCT_MODEL_HOST_PATH`가 설정되어 있으면 Docker Compose로
+표점 서비스를 자동 기동한다. 기본 URL은 본체가 자동으로 `http://127.0.0.1:8765`를 쓰므로
+`EXTERNAL_PUNCT_URL`을 따로 지정할 필요가 없다. 자동 기동을 건너뛰려면 `PUNCT_AUTO_START=0`을
+설정한다.
 
 가중치 변경 시: `.env`만 수정하고 `docker compose up -d`로 재기동.
 
@@ -191,6 +194,8 @@ https://doi.org/10.37924/JSSW.100.9
 
 [yachagye 레포 README](https://github.com/yachagye/korean-classical-chinese-punctuation)의
 Google Drive 링크에서 `.ckpt`를 받는다. 두 버전 중 v2.5 (SikuRoBERTa, F1 0.91)를 권장.
+받은 파일은 `Downloads/classical-text-browser-models/punctuation/` 아래에 풀어두고,
+`punctuation-service/.env`의 `PUNCT_MODEL_HOST_PATH`가 실제 `.ckpt` 파일을 가리키게 한다.
 
 ## 트러블슈팅
 
@@ -228,7 +233,8 @@ Google Drive 링크에서 `.ckpt`를 받는다. 두 버전 중 v2.5 (SikuRoBERTa
 - ✅ Docker 빌드 성공 (`csp-csp:latest` 베이스)
 - ✅ 컨테이너 안에서 `punctuation_service.sikurroberta` 모듈 import 정상
 - ✅ Mock 엔진으로 본체 ↔ 서비스 HTTP 통합 동작 확인
-- ⏳ 실제 가중치 로드 + 추론 정확도는 yachagye `.ckpt` 다운로드 후 검증 필요
+- ✅ v2.5 가중치 다운로드 및 `PUNCT_MODEL_HOST_PATH` 방식 확인
+- ⏳ 실제 추론 품질은 로컬 e2e에서 최종 확인
 - ✅ 본체 정식 릴리스 `v1.1.4`에 포함
 
 ## 디렉토리 구조
