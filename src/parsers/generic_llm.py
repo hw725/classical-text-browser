@@ -38,7 +38,7 @@ from urllib.parse import quote, urlparse
 
 import httpx
 
-from parsers.base import BaseMapper, BaseFetcher, register_parser
+from parsers.base import BaseFetcher, BaseMapper, register_parser
 
 logger = logging.getLogger(__name__)
 

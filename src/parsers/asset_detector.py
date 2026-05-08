@@ -24,7 +24,7 @@ import logging
 import re
 from pathlib import Path
 from typing import Any, Callable
-from urllib.parse import urljoin, urlparse, unquote
+from urllib.parse import unquote, urljoin, urlparse
 
 import httpx
 

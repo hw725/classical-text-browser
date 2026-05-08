@@ -18,8 +18,8 @@ _src_dir = str(Path(__file__).resolve().parent.parent)
 if _src_dir not in sys.path:
     sys.path.insert(0, _src_dir)
 
-from core.library import init_library, get_library_info, list_documents  # noqa: E402
 from core.document import add_document  # noqa: E402
+from core.library import get_library_info, init_library, list_documents  # noqa: E402
 
 
 def cmd_init_library(args):

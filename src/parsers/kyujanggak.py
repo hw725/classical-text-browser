@@ -30,12 +30,12 @@ from __future__ import annotations
 import logging
 import re
 import ssl
-import urllib3
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import httpx
+import urllib3
 from lxml import html as lxml_html
 
 from parsers.base import BaseFetcher, BaseMapper, register_parser

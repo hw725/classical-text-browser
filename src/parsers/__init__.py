@@ -12,10 +12,12 @@
 """
 
 # 파서 모듈을 import하면 register_parser()가 호출되어 자동 등록된다.
-from parsers import ndl  # noqa: F401
-from parsers import archives_jp  # noqa: F401
-from parsers import korcis  # noqa: F401
-from parsers import jsg  # noqa: F401
-from parsers import kyujanggak  # noqa: F401
-from parsers import kostma  # noqa: F401
-from parsers import generic_llm  # noqa: F401  — markdown.new + LLM 범용 파서
+from parsers import (
+    archives_jp,  # noqa: F401
+    generic_llm,  # noqa: F401  — markdown.new + LLM 범용 파서
+    jsg,  # noqa: F401
+    korcis,  # noqa: F401
+    kostma,  # noqa: F401
+    kyujanggak,  # noqa: F401
+    ndl,  # noqa: F401
+)
