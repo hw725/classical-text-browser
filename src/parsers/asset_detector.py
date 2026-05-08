@@ -47,9 +47,7 @@ _DECORATIVE_PATTERNS = re.compile(
 
 # 마크다운에서 링크를 추출하는 정규식
 # [text](url) 형식 — 이미지 ![alt](url) 포함
-_MD_LINK_RE = re.compile(
-    r"!?\[([^\]]*)\]\(([^)\s]+(?:\s+\"[^\"]*\")?)\)"
-)
+_MD_LINK_RE = re.compile(r"!?\[([^\]]*)\]\(([^)\s]+(?:\s+\"[^\"]*\")?)\)")
 
 # bare URL (http/https로 시작하는 URL)
 _BARE_URL_RE = re.compile(
@@ -59,12 +57,11 @@ _BARE_URL_RE = re.compile(
 
 # HTTP 클라이언트 공통 설정
 _HTTP_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
-_HTTP_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (compatible; ClassicalTextPlatform/1.0)"
-}
+_HTTP_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; ClassicalTextPlatform/1.0)"}
 
 
 # ── 에셋 감지 함수 ──────────────────────────────────
+
 
 async def detect_direct_download(url: str) -> dict[str, Any] | None:
     """URL 자체가 다운로드 가능한 파일(PDF/이미지)인지 확인한다.
@@ -137,9 +134,7 @@ async def detect_direct_download(url: str) -> dict[str, Any] | None:
     }
 
 
-async def detect_assets_from_markdown(
-    markdown: str, base_url: str
-) -> list[dict[str, Any]]:
+async def detect_assets_from_markdown(markdown: str, base_url: str) -> list[dict[str, Any]]:
     """마크다운 텍스트에서 PDF/이미지 링크를 추출한다.
 
     입력:
@@ -197,15 +192,17 @@ async def detect_assets_from_markdown(
         if ext in PDF_EXTENSIONS:
             seen_urls.add(norm_url)
             pdf_label = label or _label_from_url(abs_url)
-            pdf_assets.append({
-                "asset_id": _url_to_asset_id(abs_url),
-                "id": _url_to_asset_id(abs_url),
-                "label": pdf_label,
-                "page_count": None,
-                "file_size": None,
-                "download_type": "pdf",
-                "download_url": abs_url,
-            })
+            pdf_assets.append(
+                {
+                    "asset_id": _url_to_asset_id(abs_url),
+                    "id": _url_to_asset_id(abs_url),
+                    "label": pdf_label,
+                    "page_count": None,
+                    "file_size": None,
+                    "download_type": "pdf",
+                    "download_url": abs_url,
+                }
+            )
 
         elif ext in IMAGE_EXTENSIONS:
             # 장식 이미지 제외
@@ -222,9 +219,7 @@ async def detect_assets_from_markdown(
     return pdf_assets + image_assets
 
 
-async def detect_assets(
-    url: str, page_markdown: str | None = None
-) -> list[dict[str, Any]]:
+async def detect_assets(url: str, page_markdown: str | None = None) -> list[dict[str, Any]]:
     """메인 진입점: URL 직접 감지 + 페이지 내 링크 감지.
 
     입력:
@@ -255,6 +250,7 @@ async def detect_assets(
 
 
 # ── 에셋 다운로드 함수 ──────────────────────────────
+
 
 async def download_generic_asset(
     asset_info: dict[str, Any],
@@ -420,6 +416,7 @@ async def _download_image_bundle(
 
 # ── 내부 유틸리티 ──────────────────────────────────
 
+
 def _get_file_extension(path: str) -> str:
     """URL 경로에서 파일 확장자를 추출한다.
 
@@ -544,27 +541,31 @@ def _group_images_into_bundles(
             # 번들 ID: 첫 URL의 해시
             bundle_id = _url_to_asset_id(urls[0]) + "_bundle"
 
-            assets.append({
-                "asset_id": bundle_id,
-                "id": bundle_id,
-                "label": bundle_label,
-                "page_count": len(urls),
-                "file_size": None,
-                "download_type": "image_bundle",
-                "download_urls": urls,
-            })
+            assets.append(
+                {
+                    "asset_id": bundle_id,
+                    "id": bundle_id,
+                    "label": bundle_label,
+                    "page_count": len(urls),
+                    "file_size": None,
+                    "download_type": "image_bundle",
+                    "download_urls": urls,
+                }
+            )
         else:
             # 개별 이미지
             label, url = links[0]
             img_label = label or _label_from_url(url)
-            assets.append({
-                "asset_id": _url_to_asset_id(url),
-                "id": _url_to_asset_id(url),
-                "label": img_label,
-                "page_count": 1,
-                "file_size": None,
-                "download_type": "image",
-                "download_url": url,
-            })
+            assets.append(
+                {
+                    "asset_id": _url_to_asset_id(url),
+                    "id": _url_to_asset_id(url),
+                    "label": img_label,
+                    "page_count": 1,
+                    "file_size": None,
+                    "download_type": "image",
+                    "download_url": url,
+                }
+            )
 
     return assets

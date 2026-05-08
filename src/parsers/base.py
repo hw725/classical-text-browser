@@ -31,9 +31,9 @@ class BaseFetcher(ABC):
     결과를 소스 고유 형태(dict)로 반환한다.
     """
 
-    parser_id: str = ""       # 파서 식별자 (예: "ndl", "japan_national_archives")
-    parser_name: str = ""     # 사람이 읽는 파서 이름
-    api_variant: str = ""     # 사용된 API 변형 (예: "opensearch", "sru")
+    parser_id: str = ""  # 파서 식별자 (예: "ndl", "japan_national_archives")
+    parser_name: str = ""  # 사람이 읽는 파서 이름
+    api_variant: str = ""  # 사용된 API 변형 (예: "opensearch", "sru")
 
     @abstractmethod
     async def search(self, query: str, **kwargs) -> list[dict[str, Any]]:
@@ -120,9 +120,7 @@ class BaseFetcher(ABC):
             국립공문서관은 개별 JPEG를 받아 PDF로 합치고,
             NDL은 IIIF manifest에서 이미지를 받을 수 있다.
         """
-        raise NotImplementedError(
-            f"이 파서({self.parser_id})는 에셋 다운로드를 지원하지 않습니다."
-        )
+        raise NotImplementedError(f"이 파서({self.parser_id})는 에셋 다운로드를 지원하지 않습니다.")
 
 
 class BaseMapper(ABC):
@@ -216,10 +214,7 @@ def get_parser(parser_id: str) -> tuple[BaseFetcher, BaseMapper]:
     """
     if parser_id not in _PARSER_REGISTRY:
         available = list(_PARSER_REGISTRY.keys())
-        raise KeyError(
-            f"등록되지 않은 파서입니다: '{parser_id}'\n"
-            f"→ 사용 가능한 파서: {available}"
-        )
+        raise KeyError(f"등록되지 않은 파서입니다: '{parser_id}'\n→ 사용 가능한 파서: {available}")
     return _PARSER_REGISTRY[parser_id]
 
 
@@ -230,11 +225,13 @@ def list_parsers() -> list[dict[str, str]]:
     """
     result = []
     for pid, (fetcher, _mapper) in _PARSER_REGISTRY.items():
-        result.append({
-            "id": pid,
-            "name": fetcher.parser_name,
-            "api_variant": fetcher.api_variant,
-        })
+        result.append(
+            {
+                "id": pid,
+                "name": fetcher.parser_name,
+                "api_variant": fetcher.api_variant,
+            }
+        )
     return result
 
 

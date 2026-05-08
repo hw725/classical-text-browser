@@ -177,8 +177,7 @@ class KorcisFetcher(BaseFetcher):
         marc_data = _parse_marc_html(response.text)
         marc_data["vdkvgwkey"] = item_id
         marc_data["source_url"] = (
-            f"{_KORCIS_BASE}/korcis/search/searchResultDetail.do"
-            f"?vdkvgwkey={item_id}"
+            f"{_KORCIS_BASE}/korcis/search/searchResultDetail.do?vdkvgwkey={item_id}"
         )
         return marc_data
 
@@ -272,8 +271,7 @@ class KorcisFetcher(BaseFetcher):
             data["_abstracts_info"] = abstracts
 
         data["source_url"] = (
-            f"{_KORCIS_BASE}/korcis/search/popup/contentsInfo.do"
-            f"?controlNo={control_no}"
+            f"{_KORCIS_BASE}/korcis/search/popup/contentsInfo.do?controlNo={control_no}"
         )
 
         return data
@@ -383,13 +381,15 @@ class KorcisFetcher(BaseFetcher):
                 page_count = int(pages_str)
             except ValueError:
                 continue
-            assets.append({
-                "asset_id": cno,
-                "vol": vol_idx,
-                "label": f"{title}_v{vol_idx}" if len(vol_pages) > 1 else title,
-                "page_count": page_count,
-                "download_type": "viewer_png",
-            })
+            assets.append(
+                {
+                    "asset_id": cno,
+                    "vol": vol_idx,
+                    "label": f"{title}_v{vol_idx}" if len(vol_pages) > 1 else title,
+                    "page_count": page_count,
+                    "download_type": "viewer_png",
+                }
+            )
 
         return assets
 
@@ -452,7 +452,10 @@ class KorcisFetcher(BaseFetcher):
                 if len(resp.content) < 100:
                     logger.warning(
                         "빈 이미지 응답 (cno=%s, vol=%d, page=%d): %d bytes",
-                        cno, vol, page_num, len(resp.content),
+                        cno,
+                        vol,
+                        page_num,
+                        len(resp.content),
                     )
                     continue
 
@@ -737,13 +740,9 @@ class KorcisMapper(BaseMapper):
 
         field_sources: dict[str, dict] = {}
         if contents_info:
-            field_sources["contents"] = self._field_source(
-                "contentsInfo 팝업", "exact"
-            )
+            field_sources["contents"] = self._field_source("contentsInfo 팝업", "exact")
         if abstracts_info:
-            field_sources["abstracts"] = self._field_source(
-                "abstractsInfo 팝업", "exact"
-            )
+            field_sources["abstracts"] = self._field_source("abstractsInfo 팝업", "exact")
 
         bibliography = {
             "title": None,
@@ -834,9 +833,7 @@ class KorcisMapper(BaseMapper):
             "date_created": self._field_source("뷰어 bookInfo 발행일", "exact"),
         }
         if publishing:
-            field_sources["publishing"] = self._field_source(
-                "뷰어 bookInfo 발행자", "exact"
-            )
+            field_sources["publishing"] = self._field_source("뷰어 bookInfo 발행자", "exact")
 
         bibliography = {
             "title": title,
@@ -1135,11 +1132,11 @@ def _parse_search_results(html_text: str) -> list[dict[str, Any]]:
             if len(parts) < 6:
                 continue
 
-            item_id = parts[0]           # vdkvgwkey
-            title_hanja = parts[1]       # 한자 제목
-            creator_hanja = parts[2]     # 한자 저자
-            publisher_hanja = parts[3]   # 한자 발행처
-            date_hanja = parts[4]        # 한자 발행년
+            item_id = parts[0]  # vdkvgwkey
+            title_hanja = parts[1]  # 한자 제목
+            creator_hanja = parts[2]  # 한자 저자
+            publisher_hanja = parts[3]  # 한자 발행처
+            date_hanja = parts[4]  # 한자 발행년
             title_kor = parts[5] if len(parts) > 5 else ""  # 한글 제목
             creator_kor = parts[6] if len(parts) > 6 else ""  # 한글 저자
 
@@ -1151,23 +1148,25 @@ def _parse_search_results(html_text: str) -> list[dict[str, Any]]:
                 summary_parts.append(f"({date_hanja})")
             summary = " ".join(summary_parts)
 
-            results.append({
-                "title": title_hanja,
-                "title_kor": title_kor,
-                "creator": creator_hanja,
-                "item_id": item_id,
-                "summary": summary,
-                "raw": {
-                    "vdkvgwkey": item_id,
-                    "title_hanja": title_hanja,
+            results.append(
+                {
+                    "title": title_hanja,
                     "title_kor": title_kor,
-                    "creator_hanja": creator_hanja,
-                    "creator_kor": creator_kor,
-                    "publisher_hanja": publisher_hanja,
-                    "date_hanja": date_hanja,
-                    "_title_kor": title_kor,
-                },
-            })
+                    "creator": creator_hanja,
+                    "item_id": item_id,
+                    "summary": summary,
+                    "raw": {
+                        "vdkvgwkey": item_id,
+                        "title_hanja": title_hanja,
+                        "title_kor": title_kor,
+                        "creator_hanja": creator_hanja,
+                        "creator_kor": creator_kor,
+                        "publisher_hanja": publisher_hanja,
+                        "date_hanja": date_hanja,
+                        "_title_kor": title_kor,
+                    },
+                }
+            )
 
     except Exception:
         pass
@@ -1306,12 +1305,14 @@ def _extract_contributors(raw_data: dict) -> list[dict] | None:
     for sub in contributors_raw:
         name = sub.get("a", "")
         if name:
-            contributors.append({
-                "name": name,
-                "name_reading": None,
-                "role": sub.get("e"),
-                "period": sub.get("c"),
-            })
+            contributors.append(
+                {
+                    "name": name,
+                    "name_reading": None,
+                    "role": sub.get("e"),
+                    "period": sub.get("c"),
+                }
+            )
     return contributors if contributors else None
 
 
@@ -1550,11 +1551,12 @@ def parse_pansik_info(text: str) -> dict[str, Any]:
     # 2. 반곽 크기 (세로×가로 cm)
     size_match = re.search(
         r"(?:半郭)?\s*(\d+\.?\d*)\s*[×xX]\s*(\d+\.?\d*)\s*(?:cm|㎝)",
-        remaining, re.IGNORECASE,
+        remaining,
+        re.IGNORECASE,
     )
     if size_match:
         result["gwangwak_size"] = f"{size_match.group(1)} × {size_match.group(2)} cm"
-        remaining = remaining[:size_match.start()] + remaining[size_match.end():]
+        remaining = remaining[: size_match.start()] + remaining[size_match.end() :]
 
     # "半郭" 단독 키워드 제거 (크기와 함께 쓰이지 않은 경우)
     remaining = re.sub(r"半郭", "", remaining)
@@ -1573,18 +1575,18 @@ def parse_pansik_info(text: str) -> dict[str, Any]:
         rows = int(hj_match.group(1))
         chars = int(hj_match.group(2))
         result["haengja"] = f"반엽 {rows}행 {chars}자"
-        remaining = remaining[:hj_match.start()] + remaining[hj_match.end():]
+        remaining = remaining[: hj_match.start()] + remaining[hj_match.end() :]
 
     # 5. 주(注) 행자수
     ju_match = re.search(r"注雙行|주쌍행", remaining)
     if ju_match:
         result["ju_haengja"] = "주쌍행"
-        remaining = remaining[:ju_match.start()] + remaining[ju_match.end():]
+        remaining = remaining[: ju_match.start()] + remaining[ju_match.end() :]
     else:
         ju_match2 = re.search(r"注單行|주단행", remaining)
         if ju_match2:
             result["ju_haengja"] = "주단행"
-            remaining = remaining[:ju_match2.start()] + remaining[ju_match2.end():]
+            remaining = remaining[: ju_match2.start()] + remaining[ju_match2.end() :]
 
     # 6. 판구 (版口)
     for pattern, value in _PANGOO_PATTERNS:
@@ -1604,7 +1606,7 @@ def parse_pansik_info(text: str) -> dict[str, Any]:
     pansimje_match = re.search(r"版心題\s*[:：]?\s*(.+?)(?:\s{2,}|$)", remaining)
     if pansimje_match:
         result["pansimje"] = pansimje_match.group(1).strip()
-        remaining = remaining[:pansimje_match.start()] + remaining[pansimje_match.end():]
+        remaining = remaining[: pansimje_match.start()] + remaining[pansimje_match.end() :]
 
     return result
 
@@ -1670,10 +1672,7 @@ async def openapi_search(
         return _parse_openapi_search_xml(response.content)
 
     except Exception as e:
-        raise ConnectionError(
-            f"KORCIS OpenAPI 검색 실패: {e}\n"
-            f"→ URL: {_OPENAPI_SEARCH_URL}"
-        ) from e
+        raise ConnectionError(f"KORCIS OpenAPI 검색 실패: {e}\n→ URL: {_OPENAPI_SEARCH_URL}") from e
 
 
 async def openapi_detail(
@@ -1710,8 +1709,7 @@ async def openapi_detail(
 
     except Exception as e:
         raise ConnectionError(
-            f"KORCIS OpenAPI 상세 조회 실패 (rec_key={rec_key}): {e}\n"
-            f"→ URL: {_OPENAPI_DETAIL_URL}"
+            f"KORCIS OpenAPI 상세 조회 실패 (rec_key={rec_key}): {e}\n→ URL: {_OPENAPI_DETAIL_URL}"
         ) from e
 
 
@@ -1742,17 +1740,19 @@ def _parse_openapi_search_xml(xml_bytes: bytes) -> list[dict[str, Any]]:
         if not rec_key:
             continue
 
-        records.append({
-            "rec_key": rec_key,
-            "title": _get_xml_text(record, "TITLE"),
-            "kor_title": _get_xml_text(record, "KOR_TITLE"),
-            "author": _get_xml_text(record, "AUTHOR"),
-            "kor_author": _get_xml_text(record, "KOR_AUTHOR"),
-            "pub_year": _get_xml_text(record, "PUBYEAR"),
-            "publisher": _get_xml_text(record, "PUBLISHER"),
-            "edit_name": _get_xml_text(record, "EDIT_NAME"),
-            "lib_name": _get_xml_text(record, "LIB_NAME"),
-        })
+        records.append(
+            {
+                "rec_key": rec_key,
+                "title": _get_xml_text(record, "TITLE"),
+                "kor_title": _get_xml_text(record, "KOR_TITLE"),
+                "author": _get_xml_text(record, "AUTHOR"),
+                "kor_author": _get_xml_text(record, "KOR_AUTHOR"),
+                "pub_year": _get_xml_text(record, "PUBYEAR"),
+                "publisher": _get_xml_text(record, "PUBLISHER"),
+                "edit_name": _get_xml_text(record, "EDIT_NAME"),
+                "lib_name": _get_xml_text(record, "LIB_NAME"),
+            }
+        )
 
     return records
 

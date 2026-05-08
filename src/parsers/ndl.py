@@ -102,15 +102,17 @@ class NdlFetcher(BaseFetcher):
         results = []
         for item in items:
             raw = _parse_item_xml(item)
-            results.append({
-                "title": raw.get("dc:title"),
-                "creator": raw.get("dc:creator"),
-                "item_id": raw.get("dcndl:NDLBibID"),
-                "material_type": raw.get("dcndl:materialType"),
-                "issued": raw.get("dcterms:issued"),
-                "summary": _build_summary(raw),
-                "raw": raw,
-            })
+            results.append(
+                {
+                    "title": raw.get("dc:title"),
+                    "creator": raw.get("dc:creator"),
+                    "item_id": raw.get("dcndl:NDLBibID"),
+                    "material_type": raw.get("dcndl:materialType"),
+                    "issued": raw.get("dcterms:issued"),
+                    "summary": _build_summary(raw),
+                    "raw": raw,
+                }
+            )
 
         return results
 
@@ -184,7 +186,9 @@ class NdlFetcher(BaseFetcher):
                 except Exception as e:
                     logger.warning(
                         "NDLBibID %s로 OpenSearch 조회 실패 (PID=%s): %s",
-                        iiif_bib_id, pid, e,
+                        iiif_bib_id,
+                        pid,
+                        e,
                     )
 
             # 3단계: IIIF 메타데이터로 누락/불일치 필드 보강
@@ -232,8 +236,7 @@ class NdlFetcher(BaseFetcher):
 
         if not items:
             raise FileNotFoundError(
-                f"NDL에서 항목을 찾을 수 없습니다: {item_id}\n"
-                "→ 해결: NDLBibID를 확인하세요."
+                f"NDL에서 항목을 찾을 수 없습니다: {item_id}\n→ 해결: NDLBibID를 확인하세요."
             )
 
         return _parse_item_xml(items[0])
@@ -274,16 +277,18 @@ class NdlFetcher(BaseFetcher):
             return []
 
         label = raw_data.get("dc:title") or f"NDL-{pid}"
-        return [{
-            "asset_id": f"ndl_iiif_{pid}",
-            "id": f"ndl_iiif_{pid}",
-            "label": label,
-            "page_count": len(canvases),
-            "file_size": None,  # IIIF는 전체 크기를 사전에 알 수 없음
-            "download_type": "iiif",
-            "_canvases": canvases,
-            "_manifest_url": manifest_url,
-        }]
+        return [
+            {
+                "asset_id": f"ndl_iiif_{pid}",
+                "id": f"ndl_iiif_{pid}",
+                "label": label,
+                "page_count": len(canvases),
+                "file_size": None,  # IIIF는 전체 크기를 사전에 알 수 없음
+                "download_type": "iiif",
+                "_canvases": canvases,
+                "_manifest_url": manifest_url,
+            }
+        ]
 
     async def download_asset(
         self,

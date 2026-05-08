@@ -159,10 +159,7 @@ class ArchivesJpFetcher(BaseFetcher):
             return []
 
         # listPhoto 페이지에서 MID 목록 추출
-        list_url = (
-            f"{_ARCHIVES_BASE}/DAS/meta/listPhoto"
-            f"?LANG=default&BID={bid}&ID=&TYPE=dljpeg"
-        )
+        list_url = f"{_ARCHIVES_BASE}/DAS/meta/listPhoto?LANG=default&BID={bid}&ID=&TYPE=dljpeg"
         async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
             resp = await client.get(list_url)
             resp.raise_for_status()
@@ -176,8 +173,7 @@ class ArchivesJpFetcher(BaseFetcher):
                 mid = entry["mid"]
                 try:
                     size_resp = await client.get(
-                        f"{_ARCHIVES_BASE}/acv/auto_conversion/sizeget"
-                        f"?mid={mid}&dltype=jpeg"
+                        f"{_ARCHIVES_BASE}/acv/auto_conversion/sizeget?mid={mid}&dltype=jpeg"
                     )
                     size_data = size_resp.json()
                     ic = size_data.get("imageContents", {})
@@ -188,14 +184,16 @@ class ArchivesJpFetcher(BaseFetcher):
                     page_count = 0
                     file_size = 0
 
-                assets.append({
-                    "id": mid,           # GUI 표준 키
-                    "asset_id": mid,     # 내부 호환용 (download_asset에서 사용)
-                    "label": entry["label"],
-                    "page_count": page_count,
-                    "file_size": file_size,
-                    "download_type": "jpeg_pages",
-                })
+                assets.append(
+                    {
+                        "id": mid,  # GUI 표준 키
+                        "asset_id": mid,  # 내부 호환용 (download_asset에서 사용)
+                        "label": entry["label"],
+                        "page_count": page_count,
+                        "file_size": file_size,
+                        "download_type": "jpeg_pages",
+                    }
+                )
 
         return assets
 
@@ -216,9 +214,7 @@ class ArchivesJpFetcher(BaseFetcher):
 
         async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
             for i, img_id in enumerate(img_ids):
-                manifest_url = (
-                    f"{_ARCHIVES_BASE}/api/iiif/{img_id}/manifest.json"
-                )
+                manifest_url = f"{_ARCHIVES_BASE}/api/iiif/{img_id}/manifest.json"
                 try:
                     resp = await client.get(manifest_url)
                     resp.raise_for_status()
@@ -236,14 +232,16 @@ class ArchivesJpFetcher(BaseFetcher):
                     page_count = 0
                     label = f"{title}{i + 1}" if title else str(img_id)
 
-                assets.append({
-                    "id": img_id,
-                    "asset_id": img_id,
-                    "label": label,
-                    "page_count": page_count,
-                    "file_size": 0,
-                    "download_type": "iiif",
-                })
+                assets.append(
+                    {
+                        "id": img_id,
+                        "asset_id": img_id,
+                        "label": label,
+                        "page_count": page_count,
+                        "file_size": 0,
+                        "download_type": "iiif",
+                    }
+                )
 
         return assets
 
@@ -371,8 +369,7 @@ class ArchivesJpFetcher(BaseFetcher):
         if not page_count:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 size_resp = await client.get(
-                    f"{_ARCHIVES_BASE}/acv/auto_conversion/sizeget"
-                    f"?mid={mid}&dltype=jpeg"
+                    f"{_ARCHIVES_BASE}/acv/auto_conversion/sizeget?mid={mid}&dltype=jpeg"
                 )
                 ic = size_resp.json().get("imageContents", {})
                 page_count = ic.get("pageNum", 0)
@@ -387,8 +384,7 @@ class ArchivesJpFetcher(BaseFetcher):
         async with httpx.AsyncClient(timeout=60.0) as client:
             for page_num in range(1, page_count + 1):
                 jpeg_url = (
-                    f"{_ARCHIVES_BASE}/acv/auto_conversion/conv/jp2jpeg"
-                    f"?ID={mid}&p={page_num}"
+                    f"{_ARCHIVES_BASE}/acv/auto_conversion/conv/jp2jpeg?ID={mid}&p={page_num}"
                 )
                 resp = await client.get(jpeg_url)
                 resp.raise_for_status()
@@ -457,14 +453,10 @@ class ArchivesJpMapper(BaseMapper):
         creator, contributors = _parse_creators(raw_data.get("creator"))
 
         # 서지사항에서 판종·발행년 추출: "刊本,寛政12年" → edition_type, date_created
-        edition_type, date_created = _parse_edition_notes(
-            raw_data.get("edition_notes")
-        )
+        edition_type, date_created = _parse_edition_notes(raw_data.get("edition_notes"))
 
         # extent 추출: volume_info에서 권수, physical_description에서 책수
-        extent = _parse_extent(
-            raw_data.get("volume_info"), raw_data.get("physical_description")
-        )
+        extent = _parse_extent(raw_data.get("volume_info"), raw_data.get("physical_description"))
 
         # notes 조합: 기존 notes + 권수 + 구장자 + 관련사항
         notes_parts = []
@@ -514,9 +506,7 @@ class ArchivesJpMapper(BaseMapper):
             "_mapping_info": self._make_mapping_info(
                 field_sources={
                     "title": self._field_source("書名/簿冊標題", "exact"),
-                    "title_reading": self._field_source(
-                        None, None, "국립공문서관에 독음 없음"
-                    ),
+                    "title_reading": self._field_source(None, None, "국립공문서관에 독음 없음"),
                     "creator": self._field_source(
                         "人名", "inferred", "역할:이름 형식에서 첫 인명 추출"
                     ),
@@ -574,13 +564,15 @@ def _parse_search_results(html_text: str) -> list[dict[str, Any]]:
                 title_text = link.text_content().strip()
                 if title_text and href:
                     bid = _extract_param(href, "BID")
-                    results.append({
-                        "title": title_text,
-                        "item_id": href,
-                        "detail_url": href,
-                        "summary": title_text,
-                        "raw": {"title": title_text, "detail_url": href, "BID": bid},
-                    })
+                    results.append(
+                        {
+                            "title": title_text,
+                            "item_id": href,
+                            "detail_url": href,
+                            "summary": title_text,
+                            "raw": {"title": title_text, "detail_url": href, "BID": bid},
+                        }
+                    )
         else:
             for item in items:
                 title_el = item.cssselect("a, .title, td:first-child")
@@ -594,13 +586,15 @@ def _parse_search_results(html_text: str) -> list[dict[str, Any]]:
                         href = link_el[0].get("href", "")
 
                 bid = _extract_param(href, "BID")
-                results.append({
-                    "title": title_text,
-                    "item_id": href,
-                    "detail_url": href,
-                    "summary": title_text,
-                    "raw": {"title": title_text, "detail_url": href, "BID": bid},
-                })
+                results.append(
+                    {
+                        "title": title_text,
+                        "item_id": href,
+                        "detail_url": href,
+                        "summary": title_text,
+                        "raw": {"title": title_text, "detail_url": href, "BID": bid},
+                    }
+                )
 
     except Exception:
         # HTML 파싱 실패 시 빈 목록 반환
@@ -953,9 +947,7 @@ def _extract_iiif_image_urls(manifest: dict[str, Any]) -> list[str]:
 # --- 에셋 다운로드 유틸리티 ---
 
 
-def _parse_list_photo_page(
-    html_text: str, bid: str
-) -> list[dict[str, str]]:
+def _parse_list_photo_page(html_text: str, bid: str) -> list[dict[str, str]]:
     """listPhoto 페이지에서 개별 MID와 라벨을 추출한다.
 
     구조:

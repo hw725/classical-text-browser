@@ -223,13 +223,15 @@ def extract_iiif_canvases(manifest: dict[str, Any]) -> list[dict[str, Any]]:
         width = resource.get("width") or canvas.get("width")
         height = resource.get("height") or canvas.get("height")
 
-        canvases.append({
-            "canvas_index": idx,
-            "label": label,
-            "image_url": image_url,
-            "width": width,
-            "height": height,
-        })
+        canvases.append(
+            {
+                "canvas_index": idx,
+                "label": label,
+                "image_url": image_url,
+                "width": width,
+                "height": height,
+            }
+        )
 
     return canvases
 

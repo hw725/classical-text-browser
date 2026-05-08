@@ -157,19 +157,21 @@ class KyujanggakFetcher(BaseFetcher):
 
                 label = f"{title} vol.{vol_no}" if title else f"{book_cd} vol.{vol_no}"
 
-                assets.append({
-                    "id": f"{book_cd}_{vol_no}",
-                    "asset_id": f"{book_cd}_{vol_no}",
-                    "label": label,
-                    "page_count": len(file_list),
-                    "file_size": 0,
-                    "download_type": "kyujanggak_jpeg",
-                    # 다운로드에 필요한 추가 정보
-                    "_item_cd": item_cd,
-                    "_book_cd": book_cd,
-                    "_vol_no": vol_no,
-                    "_file_list": file_list,
-                })
+                assets.append(
+                    {
+                        "id": f"{book_cd}_{vol_no}",
+                        "asset_id": f"{book_cd}_{vol_no}",
+                        "label": label,
+                        "page_count": len(file_list),
+                        "file_size": 0,
+                        "download_type": "kyujanggak_jpeg",
+                        # 다운로드에 필요한 추가 정보
+                        "_item_cd": item_cd,
+                        "_book_cd": book_cd,
+                        "_vol_no": vol_no,
+                        "_file_list": file_list,
+                    }
+                )
 
         return assets
 
@@ -308,11 +310,15 @@ class KyujanggakMapper(BaseMapper):
                 "place": _clean_unknown(raw_data.get("간행지")),
                 "publisher": _clean_unknown(raw_data.get("간행자")),
                 "date": date_created,
-            } if any([
-                _clean_unknown(raw_data.get("간행지")),
-                _clean_unknown(raw_data.get("간행자")),
-                date_created,
-            ]) else None,
+            }
+            if any(
+                [
+                    _clean_unknown(raw_data.get("간행지")),
+                    _clean_unknown(raw_data.get("간행자")),
+                    date_created,
+                ]
+            )
+            else None,
             "extent": extent,
             "subject": raw_data.get("사부분류"),
             "classification": None,
@@ -329,9 +335,7 @@ class KyujanggakMapper(BaseMapper):
                 "source_url": raw_data.get("source_url"),
                 "permanent_uri": None,
                 "system_ids": (
-                    {"book_cd": raw_data.get("book_cd")}
-                    if raw_data.get("book_cd")
-                    else None
+                    {"book_cd": raw_data.get("book_cd")} if raw_data.get("book_cd") else None
                 ),
                 "license": None,
                 "accessed_at": None,

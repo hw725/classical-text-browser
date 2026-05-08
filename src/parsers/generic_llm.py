@@ -194,11 +194,13 @@ class GenericLlmFetcher(BaseFetcher):
             # 가능하면 server의 라우터를 재사용한다.
             try:
                 from app.server import _get_llm_router
+
                 self._router = _get_llm_router()
             except Exception:
                 # server.py 외부에서 사용할 때 (CLI, 테스트 등)
                 from llm.config import LlmConfig
                 from llm.router import LlmRouter
+
                 self._router = LlmRouter(LlmConfig())
         return self._router
 
@@ -272,16 +274,19 @@ class GenericLlmFetcher(BaseFetcher):
         canvases = raw_data.get("_kokusho_canvases")
         if canvases:
             title = raw_data.get("llm_extracted", {}).get("title", "kokusho")
-            return [{
-                "asset_id": raw_data.get("_kokusho_biblio_id", "kokusho"),
-                "label": title,
-                "page_count": len(canvases),
-                "download_type": "iiif",
-                "_canvases": canvases,
-            }]
+            return [
+                {
+                    "asset_id": raw_data.get("_kokusho_biblio_id", "kokusho"),
+                    "label": title,
+                    "page_count": len(canvases),
+                    "download_type": "iiif",
+                    "_canvases": canvases,
+                }
+            ]
 
         # 기존 범용 에셋 감지
         from .asset_detector import detect_assets
+
         return await detect_assets(
             raw_data["source_url"],
             raw_data.get("markdown_text"),
@@ -308,6 +313,7 @@ class GenericLlmFetcher(BaseFetcher):
         canvases = asset_info.get("_canvases")
         if canvases:
             from . import iiif_utils
+
             return await iiif_utils.download_iiif_images_as_pdf(
                 canvases,
                 dest_dir,
@@ -317,11 +323,10 @@ class GenericLlmFetcher(BaseFetcher):
 
         # 기존 범용 다운로더
         from .asset_detector import download_generic_asset
+
         return await download_generic_asset(asset_info, dest_dir, progress_callback)
 
-    async def _fetch_kokusho_iiif(
-        self, url: str, biblio_id: str
-    ) -> dict[str, Any] | None:
+    async def _fetch_kokusho_iiif(self, url: str, biblio_id: str) -> dict[str, Any] | None:
         """kokusho.nijl.ac.jp의 IIIF manifest에서 서지정보를 직접 추출한다.
 
         입력:
@@ -481,9 +486,7 @@ class GenericLlmFetcher(BaseFetcher):
         markdown = response.text.strip()
 
         if not markdown or len(markdown) < 50:
-            logger.warning(
-                f"markdown.new 응답이 너무 짧습니다 ({len(markdown)}자)."
-            )
+            logger.warning(f"markdown.new 응답이 너무 짧습니다 ({len(markdown)}자).")
             return None
 
         logger.info(f"markdown.new 변환 완료: {url} → {len(markdown)}자")
@@ -507,9 +510,7 @@ class GenericLlmFetcher(BaseFetcher):
         markdown = response.text.strip()
 
         if not markdown or len(markdown) < 50:
-            logger.warning(
-                f"Jina Reader 응답이 너무 짧습니다 ({len(markdown)}자)."
-            )
+            logger.warning(f"Jina Reader 응답이 너무 짧습니다 ({len(markdown)}자).")
             return None
 
         logger.info(f"Jina Reader 변환 완료: {url} → {len(markdown)}자")
@@ -554,9 +555,7 @@ class GenericLlmFetcher(BaseFetcher):
             if len(text) > 15000:
                 text = text[:15000] + "\n\n[... 이하 생략 ...]"
 
-            logger.info(
-                f"HTML 직접 가져오기 완료: {url} → {len(text)}자"
-            )
+            logger.info(f"HTML 직접 가져오기 완료: {url} → {len(text)}자")
             return text
 
         except Exception as e:
@@ -613,8 +612,7 @@ class GenericLlmFetcher(BaseFetcher):
 
             except Exception as e:
                 logger.info(
-                    f"LLM 서지추출 — {provider.provider_id} 실패: {e}, "
-                    f"다음 프로바이더로 시도"
+                    f"LLM 서지추출 — {provider.provider_id} 실패: {e}, 다음 프로바이더로 시도"
                 )
                 errors.append(f"{provider.provider_id}: {e}")
                 continue
@@ -720,10 +718,14 @@ class GenericLlmMapper(BaseMapper):
             normalized = []
             for c in contributors:
                 if isinstance(c, str):
-                    normalized.append({
-                        "name": c, "name_reading": None,
-                        "role": None, "period": None,
-                    })
+                    normalized.append(
+                        {
+                            "name": c,
+                            "name_reading": None,
+                            "role": None,
+                            "period": None,
+                        }
+                    )
                 elif isinstance(c, dict):
                     normalized.append(c)
             contributors = normalized if normalized else None
@@ -797,20 +799,18 @@ class GenericLlmMapper(BaseMapper):
             "_mapping_info": self._make_mapping_info(
                 field_sources={
                     "title": self._field_source(
-                        "llm_extraction", "inferred",
-                        "LLM이 마크다운에서 추출. 정확도는 사이트에 따라 다를 수 있음."
+                        "llm_extraction",
+                        "inferred",
+                        "LLM이 마크다운에서 추출. 정확도는 사이트에 따라 다를 수 있음.",
                     ),
                     "creator": self._field_source(
-                        "llm_extraction", "inferred",
-                        "LLM이 마크다운에서 추출."
+                        "llm_extraction", "inferred", "LLM이 마크다운에서 추출."
                     ),
                     "date_created": self._field_source(
-                        "llm_extraction", "inferred",
-                        "LLM이 마크다운에서 추출."
+                        "llm_extraction", "inferred", "LLM이 마크다운에서 추출."
                     ),
                     "repository": self._field_source(
-                        "llm_extraction", "inferred",
-                        "LLM이 마크다운에서 추출."
+                        "llm_extraction", "inferred", "LLM이 마크다운에서 추출."
                     ),
                 },
                 api_variant="markdown_new_llm",

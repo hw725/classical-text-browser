@@ -136,17 +136,19 @@ class KostmaFetcher(BaseFetcher):
             # 라벨: "제목 권N" 또는 "bookPath"
             label = f"{title} 권{int(book_num)}" if title else book_path
 
-            assets.append({
-                "id": book_path,
-                "asset_id": book_path,
-                "label": label,
-                "page_count": len(img_infos),
-                "file_size": 0,
-                "download_type": "kostma_jpeg",
-                # 다운로드에 필요한 추가 정보
-                "_uci": uci,
-                "_img_infos": img_infos,
-            })
+            assets.append(
+                {
+                    "id": book_path,
+                    "asset_id": book_path,
+                    "label": label,
+                    "page_count": len(img_infos),
+                    "file_size": 0,
+                    "download_type": "kostma_jpeg",
+                    # 다운로드에 필요한 추가 정보
+                    "_uci": uci,
+                    "_img_infos": img_infos,
+                }
+            )
 
         return assets
 
@@ -241,9 +243,7 @@ class KostmaMapper(BaseMapper):
         extent = _parse_extent(raw_data.get("형태사항"))
 
         # 발행사항에서 발행지/발행처/발행년 추출
-        pub_place, publisher, pub_date = _parse_publication(
-            raw_data.get("발행사항")
-        )
+        pub_place, publisher, pub_date = _parse_publication(raw_data.get("발행사항"))
 
         # 분류에서 material_type 추론
         material_type = _classify_material_type(raw_data.get("분류"))
@@ -257,7 +257,7 @@ class KostmaMapper(BaseMapper):
             "title": raw_data.get("title"),
             "title_reading": None,
             "alternative_titles": None,
-            "creator": None,   # KOSTMA 뷰어 페이지에는 저자 정보 없음
+            "creator": None,  # KOSTMA 뷰어 페이지에는 저자 정보 없음
             "contributors": None,
             "date_created": pub_date,
             "edition_type": raw_data.get("판종"),
@@ -269,7 +269,9 @@ class KostmaMapper(BaseMapper):
                 "place": pub_place,
                 "publisher": publisher,
                 "date": pub_date,
-            } if any([pub_place, publisher, pub_date]) else None,
+            }
+            if any([pub_place, publisher, pub_date])
+            else None,
             "extent": extent,
             "subject": raw_data.get("분류"),
             "classification": None,
@@ -280,7 +282,9 @@ class KostmaMapper(BaseMapper):
                 "name_ko": raw_data.get("현소장처"),
                 "country": _infer_country(raw_data.get("현소장처")),
                 "call_number": raw_data.get("청구기호"),
-            } if raw_data.get("현소장처") else None,
+            }
+            if raw_data.get("현소장처")
+            else None,
             "digital_source": {
                 "platform": "해외한국학자료센터 (KOSTMA)",
                 "source_url": raw_data.get("source_url"),
@@ -512,15 +516,32 @@ def _infer_country(repository_name: str | None) -> str | None:
         return None
 
     country_hints = {
-        "미국": "US", "버클리": "US", "하버드": "US", "콜럼비아": "US",
-        "예일": "US", "UCLA": "US", "의회도서관": "US",
-        "일본": "JP", "東京": "JP", "京都": "JP", "도쿄": "JP",
-        "영국": "GB", "런던": "GB", "옥스포드": "GB", "케임브리지": "GB",
-        "프랑스": "FR", "파리": "FR",
-        "독일": "DE", "베를린": "DE",
-        "중국": "CN", "北京": "CN", "上海": "CN",
-        "러시아": "RU", "모스크바": "RU",
-        "대만": "TW", "臺灣": "TW",
+        "미국": "US",
+        "버클리": "US",
+        "하버드": "US",
+        "콜럼비아": "US",
+        "예일": "US",
+        "UCLA": "US",
+        "의회도서관": "US",
+        "일본": "JP",
+        "東京": "JP",
+        "京都": "JP",
+        "도쿄": "JP",
+        "영국": "GB",
+        "런던": "GB",
+        "옥스포드": "GB",
+        "케임브리지": "GB",
+        "프랑스": "FR",
+        "파리": "FR",
+        "독일": "DE",
+        "베를린": "DE",
+        "중국": "CN",
+        "北京": "CN",
+        "上海": "CN",
+        "러시아": "RU",
+        "모스크바": "RU",
+        "대만": "TW",
+        "臺灣": "TW",
     }
 
     for hint, code in country_hints.items():

@@ -141,17 +141,19 @@ class JsgFetcher(BaseFetcher):
 
                 label = f"{title} 권{i + 1}" if title else book_id
 
-                assets.append({
-                    "id": book_id,
-                    "asset_id": book_id,
-                    "label": label,
-                    "page_count": len(image_ids),
-                    "file_size": 0,
-                    "download_type": "jsg_jpeg",
-                    # 다운로드에 필요한 추가 정보
-                    "_book_id": book_id,
-                    "_image_ids": image_ids,
-                })
+                assets.append(
+                    {
+                        "id": book_id,
+                        "asset_id": book_id,
+                        "label": label,
+                        "page_count": len(image_ids),
+                        "file_size": 0,
+                        "download_type": "jsg_jpeg",
+                        # 다운로드에 필요한 추가 정보
+                        "_book_id": book_id,
+                        "_image_ids": image_ids,
+                    }
+                )
 
         return assets
 
@@ -272,9 +274,7 @@ class JsgMapper(BaseMapper):
             "title": raw_data.get("title") or raw_data.get("자료명"),
             "title_reading": None,
             "alternative_titles": (
-                [raw_data["자료명(이칭)"]]
-                if raw_data.get("자료명(이칭)")
-                else None
+                [raw_data["자료명(이칭)"]] if raw_data.get("자료명(이칭)") else None
             ),
             "creator": None,
             "contributors": None,
@@ -301,9 +301,7 @@ class JsgMapper(BaseMapper):
                 "source_url": raw_data.get("source_url"),
                 "permanent_uri": None,
                 "system_ids": (
-                    {"dataId": raw_data.get("dataId")}
-                    if raw_data.get("dataId")
-                    else None
+                    {"dataId": raw_data.get("dataId")} if raw_data.get("dataId") else None
                 ),
                 "license": None,
                 "accessed_at": None,
