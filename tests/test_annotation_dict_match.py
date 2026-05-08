@@ -82,6 +82,7 @@ def _sample_dict(doc_id="monggu", doc_title="蒙求"):
 # 테스트 1: 참조 사전 등록/목록/로드/삭제
 # ────────────────────────────────
 
+
 def test_register_and_list():
     with tempfile.TemporaryDirectory() as tmp:
         interp = Path(tmp) / "interp"
@@ -115,6 +116,7 @@ def test_register_and_list():
 # 테스트 2: match_text 기본 매칭
 # ────────────────────────────────
 
+
 def test_match_basic():
     data = _sample_dict()
     data["_filename"] = "test_dict.json"
@@ -147,6 +149,7 @@ def test_match_basic():
 # 테스트 3: 같은 표제어가 여러 번 출현
 # ────────────────────────────────
 
+
 def test_match_multiple_occurrences():
     data = _sample_dict()
     data["_filename"] = "test.json"
@@ -166,6 +169,7 @@ def test_match_multiple_occurrences():
 # ────────────────────────────────
 # 테스트 4: 복수 참조 사전에서 같은 headword
 # ────────────────────────────────
+
 
 def test_match_multiple_dicts():
     dict1 = _sample_dict("monggu", "蒙求")
@@ -202,6 +206,7 @@ def test_match_multiple_dicts():
 # 테스트 5: 긴 표제어 우선 매칭
 # ────────────────────────────────
 
+
 def test_match_longer_first():
     """竹林七賢이 먼저 매칭되어야 한다 (王戎보다 길기 때문에)."""
     data = {
@@ -226,6 +231,7 @@ def test_match_longer_first():
 # ────────────────────────────────
 # 테스트 6: match_page_blocks
 # ────────────────────────────────
+
 
 def test_match_page_blocks():
     with tempfile.TemporaryDirectory() as tmp:
@@ -256,6 +262,7 @@ def test_match_page_blocks():
 # ────────────────────────────────
 # 테스트 7: format_for_translation_context
 # ────────────────────────────────
+
 
 def test_format_context():
     matches = [
@@ -291,6 +298,7 @@ def test_format_context():
 # 테스트 8: 빈 입력 처리
 # ────────────────────────────────
 
+
 def test_empty_inputs():
     assert match_text("", [_sample_dict()]) == []
     assert match_text("test", []) == []
@@ -308,6 +316,7 @@ def test_empty_inputs():
 # 테스트 9: 통합 — export → register → match
 # ────────────────────────────────
 
+
 def test_full_workflow():
     """문헌A에서 export → 문헌B에 register → 문헌B 원문에서 match."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -318,30 +327,34 @@ def test_full_workflow():
             "part_id": "main",
             "page_number": 1,
             "schema_version": "2.0",
-            "blocks": [{
-                "block_id": "p01_b01",
-                "annotations": [{
-                    "id": "ann_001",
-                    "target": {"start": 0, "end": 1},
-                    "type": "person",
-                    "content": {"label": "왕융(王戎)", "description": "죽림칠현"},
-                    "dictionary": {
-                        "headword": "王戎",
-                        "headword_reading": "왕융",
-                        "dictionary_meaning": "竹林七賢의 한 사람.",
-                        "source_references": [{"title": "晉書"}],
-                        "related_terms": [],
-                    },
-                    "current_stage": "from_both",
-                    "generation_history": [],
-                    "source_text_snapshot": "王戎簡要",
-                    "translation_snapshot": None,
-                    "annotator": {"type": "llm", "model": "test", "draft_id": None},
-                    "status": "draft",
-                    "reviewed_by": None,
-                    "reviewed_at": None,
-                }],
-            }],
+            "blocks": [
+                {
+                    "block_id": "p01_b01",
+                    "annotations": [
+                        {
+                            "id": "ann_001",
+                            "target": {"start": 0, "end": 1},
+                            "type": "person",
+                            "content": {"label": "왕융(王戎)", "description": "죽림칠현"},
+                            "dictionary": {
+                                "headword": "王戎",
+                                "headword_reading": "왕융",
+                                "dictionary_meaning": "竹林七賢의 한 사람.",
+                                "source_references": [{"title": "晉書"}],
+                                "related_terms": [],
+                            },
+                            "current_stage": "from_both",
+                            "generation_history": [],
+                            "source_text_snapshot": "王戎簡要",
+                            "translation_snapshot": None,
+                            "annotator": {"type": "llm", "model": "test", "draft_id": None},
+                            "status": "draft",
+                            "reviewed_by": None,
+                            "reviewed_at": None,
+                        }
+                    ],
+                }
+            ],
         }
         save_annotations(interp_a, "main", 1, page1)
 

@@ -110,12 +110,23 @@ class TestNdlParser:
 
         # 스키마 필드 존재 확인
         expected_fields = [
-            "title", "title_reading", "alternative_titles",
-            "creator", "contributors", "date_created",
-            "edition_type", "physical_description",
-            "subject", "classification", "series_title",
-            "material_type", "repository", "digital_source",
-            "raw_metadata", "_mapping_info", "notes",
+            "title",
+            "title_reading",
+            "alternative_titles",
+            "creator",
+            "contributors",
+            "date_created",
+            "edition_type",
+            "physical_description",
+            "subject",
+            "classification",
+            "series_title",
+            "material_type",
+            "repository",
+            "digital_source",
+            "raw_metadata",
+            "_mapping_info",
+            "notes",
         ]
         for field in expected_fields:
             assert field in bib, f"필드 누락: {field}"

@@ -22,8 +22,10 @@ def variant_dict(tmp_path):
     """이체자 사전."""
     data = {
         "variants": {
-            "裴": ["裵"], "裵": ["裴"],
-            "說": ["説"], "説": ["說"],
+            "裴": ["裵"],
+            "裵": ["裴"],
+            "說": ["説"],
+            "説": ["說"],
         },
     }
     path = tmp_path / "variants.json"
@@ -93,7 +95,10 @@ class TestAlignmentIntegration:
     def test_full_flow(self, full_test_library, variant_dict):
         """전체 흐름: align_page → 블록별 + 페이지 전체 결과 검증."""
         results = align_page(
-            str(full_test_library), "monggu_test", "vol1", 1,
+            str(full_test_library),
+            "monggu_test",
+            "vol1",
+            1,
             variant_dict=variant_dict,
         )
 
@@ -112,7 +117,10 @@ class TestAlignmentIntegration:
     def test_block2_perfect_match(self, full_test_library, variant_dict):
         """블록 2 (孔明臥龍呂望非熊)는 완전 일치."""
         results = align_page(
-            str(full_test_library), "monggu_test", "vol1", 1,
+            str(full_test_library),
+            "monggu_test",
+            "vol1",
+            1,
             variant_dict=variant_dict,
         )
         b2 = [r for r in results if r.layout_block_id == "p01_b02"]
@@ -123,7 +131,10 @@ class TestAlignmentIntegration:
     def test_serialization(self, full_test_library, variant_dict):
         """전체 결과가 JSON 직렬화 가능한지."""
         results = align_page(
-            str(full_test_library), "monggu_test", "vol1", 1,
+            str(full_test_library),
+            "monggu_test",
+            "vol1",
+            1,
             variant_dict=variant_dict,
         )
         for r in results:
@@ -161,7 +172,10 @@ class TestAlignmentIntegration:
     def test_without_variant_dict(self, full_test_library):
         """이체자 사전 없이도 기본 동작 (variant 분류만 안 됨)."""
         results = align_page(
-            str(full_test_library), "monggu_test", "vol1", 1,
+            str(full_test_library),
+            "monggu_test",
+            "vol1",
+            1,
             variant_dict=None,
         )
         assert len(results) >= 1

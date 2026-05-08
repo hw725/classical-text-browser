@@ -8,6 +8,7 @@ from src.ocr.registry import OcrEngineRegistry
 
 class DummyEngine(BaseOcrEngine):
     """테스트용 더미 엔진."""
+
     engine_id = "dummy"
     display_name = "Dummy"
     requires_network = False
@@ -21,6 +22,7 @@ class DummyEngine(BaseOcrEngine):
 
 class UnavailableEngine(BaseOcrEngine):
     """사용 불가 상태인 더미 엔진."""
+
     engine_id = "unavailable"
     display_name = "Unavailable"
     requires_network = True
@@ -100,8 +102,12 @@ class TestOcrEngineRegistry:
             engine_id = "another"
             display_name = "Another"
             requires_network = False
-            def is_available(self): return True
-            def recognize(self, image_bytes, **kwargs): return OcrBlockResult()
+
+            def is_available(self):
+                return True
+
+            def recognize(self, image_bytes, **kwargs):
+                return OcrBlockResult()
 
         registry.register(AnotherEngine())
         registry.default_engine_id = "another"

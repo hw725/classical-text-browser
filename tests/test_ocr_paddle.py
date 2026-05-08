@@ -33,7 +33,7 @@ class TestPaddleOcrEngine:
         assert chars[0].char == "王"
         assert chars[1].char == "戎"
         # 세로쓰기: y축 분할
-        assert chars[0].bbox[1] == 0.0   # 王은 위쪽
+        assert chars[0].bbox[1] == 0.0  # 王은 위쪽
         assert chars[1].bbox[1] == 50.0  # 戎은 아래쪽
 
     def test_split_line_to_chars_horizontal(self):
@@ -74,10 +74,7 @@ class TestPaddleOcrEngine:
         # 1글자이면 bbox가 줄 전체
         assert chars[0].bbox == [10.0, 20.0, 50.0, 80.0]
 
-    @pytest.mark.skipif(
-        not PaddleOcrEngine().is_available(),
-        reason="PaddleOCR 미설치"
-    )
+    @pytest.mark.skipif(not PaddleOcrEngine().is_available(), reason="PaddleOCR 미설치")
     def test_recognize_real(self):
         """실제 PaddleOCR 인식 테스트 (PaddleOCR 설치 시에만 실행)."""
         import io

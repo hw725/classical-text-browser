@@ -143,6 +143,7 @@ class TestBaseOcrEngine:
 
     def test_get_info(self):
         """구현체의 get_info()가 올바른 형식을 반환하는지."""
+
         class DummyEngine(BaseOcrEngine):
             engine_id = "dummy"
             display_name = "Dummy"

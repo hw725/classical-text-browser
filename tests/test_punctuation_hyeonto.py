@@ -86,8 +86,20 @@ class TestHyeontoSchema:
         example = {
             "block_id": "p01_b01",
             "annotations": [
-                {"id": "ht_001", "target": {"start": 0, "end": 1}, "position": "after", "text": "은", "category": None},
-                {"id": "ht_002", "target": {"start": 2, "end": 3}, "position": "after", "text": "하고", "category": None},
+                {
+                    "id": "ht_001",
+                    "target": {"start": 0, "end": 1},
+                    "position": "after",
+                    "text": "은",
+                    "category": None,
+                },
+                {
+                    "id": "ht_002",
+                    "target": {"start": 2, "end": 3},
+                    "position": "after",
+                    "text": "하고",
+                    "category": None,
+                },
             ],
         }
         validate(instance=example, schema=hyeonto_schema)
@@ -315,7 +327,13 @@ class TestHyeontoCRUD:
         data = {
             "block_id": "p01_b01",
             "annotations": [
-                {"id": "ht_001", "target": {"start": 0, "end": 1}, "position": "after", "text": "은", "category": None},
+                {
+                    "id": "ht_001",
+                    "target": {"start": 0, "end": 1},
+                    "position": "after",
+                    "text": "은",
+                    "category": None,
+                },
             ],
         }
         assert remove_annotation(data, "ht_001") is True
@@ -326,7 +344,13 @@ class TestHyeontoCRUD:
         data = {
             "block_id": "p01_b01",
             "annotations": [
-                {"id": "ht_001", "target": {"start": 0, "end": 1}, "position": "after", "text": "은", "category": None},
+                {
+                    "id": "ht_001",
+                    "target": {"start": 0, "end": 1},
+                    "position": "after",
+                    "text": "은",
+                    "category": None,
+                },
             ],
         }
         result = update_annotation(data, "ht_001", {"text": "이"})
@@ -375,7 +399,13 @@ class TestFileIO:
         data = {
             "block_id": "p01_b01",
             "annotations": [
-                {"id": "ht_001", "target": {"start": 0, "end": 1}, "position": "after", "text": "은", "category": None},
+                {
+                    "id": "ht_001",
+                    "target": {"start": 0, "end": 1},
+                    "position": "after",
+                    "text": "은",
+                    "category": None,
+                },
             ],
         }
 

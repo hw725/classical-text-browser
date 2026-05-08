@@ -35,7 +35,7 @@ class TestNfc:
         """NFD 한글이 NFC로 합성되어야 한다."""
         # '가' = U+AC00 (NFC) vs U+1100 U+1161 (NFD)
         nfd = "\u1100\u1161"  # ㄱ + ㅏ (분해형)
-        nfc = "\uAC00"  # 가 (합성형)
+        nfc = "\uac00"  # 가 (합성형)
         assert _nfc(nfd) == nfc
 
     def test_nfc_empty(self):
@@ -51,7 +51,10 @@ class TestExtractMultiAnchors:
     def test_long_page_three_anchors(self):
         """충분히 긴 페이지에서 3개 앵커가 추출되어야 한다."""
         # 50자 한자 문자열
-        page_han = "天地玄黃宇宙洪荒日月盈昃辰宿列張寒來暑往秋收冬藏閏餘成歲律呂調陽雲騰致雨露結爲霜金生麗水玉出崑岡劍號巨闕珠稱夜光"
+        page_han = (
+            "天地玄黃宇宙洪荒日月盈昃辰宿列張寒來暑往秋收冬藏閏餘成歲律呂調陽"
+            "雲騰致雨露結爲霜金生麗水玉出崑岡劍號巨闕珠稱夜光"
+        )
         anchors = _extract_multi_anchors(page_han, anchor_length=15)
         assert len(anchors) == 3
         # 시작부

@@ -93,9 +93,7 @@ class TestPreprocessForOcr:
 
     def test_binarize(self, sample_image_bytes):
         """이진화가 정상 동작하는지."""
-        result = preprocess_for_ocr(
-            sample_image_bytes, grayscale=True, binarize=True
-        )
+        result = preprocess_for_ocr(sample_image_bytes, grayscale=True, binarize=True)
         img = Image.open(io.BytesIO(result))
         # 이진화된 이미지는 mode="1" 또는 "L"
         assert img.mode in ("1", "L")

@@ -70,7 +70,10 @@ class TestAlignPage:
     def test_basic(self, test_library, variant_dict):
         """기본 대조: 2블록 + 페이지 전체."""
         results = align_page(
-            str(test_library), "doc001", "vol1", 1,
+            str(test_library),
+            "doc001",
+            "vol1",
+            1,
             variant_dict=variant_dict,
         )
 
@@ -86,7 +89,10 @@ class TestAlignPage:
     def test_block_level_stats(self, test_library, variant_dict):
         """블록별 통계 확인."""
         results = align_page(
-            str(test_library), "doc001", "vol1", 1,
+            str(test_library),
+            "doc001",
+            "vol1",
+            1,
             variant_dict=variant_dict,
         )
 
@@ -98,7 +104,10 @@ class TestAlignPage:
     def test_page_total_includes_variant(self, test_library, variant_dict):
         """페이지 전체 대조에 이체자가 포함되는지."""
         results = align_page(
-            str(test_library), "doc001", "vol1", 1,
+            str(test_library),
+            "doc001",
+            "vol1",
+            1,
             variant_dict=variant_dict,
         )
         page_result = results[-1]
@@ -134,7 +143,10 @@ class TestAlignPage:
     def test_to_dict_serializable(self, test_library, variant_dict):
         """결과가 JSON 직렬화 가능한지."""
         results = align_page(
-            str(test_library), "doc001", "vol1", 1,
+            str(test_library),
+            "doc001",
+            "vol1",
+            1,
             variant_dict=variant_dict,
         )
         for result in results:
@@ -146,7 +158,10 @@ class TestAlignPage:
     def test_multiline_l2_block(self, test_library, variant_dict):
         """L2 블록에 여러 줄이 있을 때 텍스트가 합쳐지는지."""
         results = align_page(
-            str(test_library), "doc001", "vol1", 1,
+            str(test_library),
+            "doc001",
+            "vol1",
+            1,
             variant_dict=variant_dict,
         )
         # p01_b02는 2줄 (孔明臥龍 + 呂望非熊)

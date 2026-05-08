@@ -16,6 +16,7 @@ from src.ocr.registry import OcrEngineRegistry
 
 class FailingOcrEngine(BaseOcrEngine):
     """일부 이미지에서 실패하는 더미 엔진. 부분 실패 테스트용."""
+
     engine_id = "failing"
     display_name = "Failing"
     requires_network = False
@@ -29,16 +30,22 @@ class FailingOcrEngine(BaseOcrEngine):
         if self.call_count % 2 == 0:
             raise OcrEngineError("의도적 실패")
         return OcrBlockResult(
-            lines=[OcrLineResult(text="성공", characters=[
-                OcrCharResult(char="성", confidence=0.9),
-                OcrCharResult(char="공", confidence=0.85),
-            ])],
+            lines=[
+                OcrLineResult(
+                    text="성공",
+                    characters=[
+                        OcrCharResult(char="성", confidence=0.9),
+                        OcrCharResult(char="공", confidence=0.85),
+                    ],
+                )
+            ],
             engine_id="failing",
         )
 
 
 class DummyOcrEngine(BaseOcrEngine):
     """정상 동작하는 더미 엔진."""
+
     engine_id = "dummy"
     display_name = "Dummy"
     requires_network = False
@@ -48,16 +55,18 @@ class DummyOcrEngine(BaseOcrEngine):
 
     def recognize(self, image_bytes, **kwargs):
         return OcrBlockResult(
-            lines=[OcrLineResult(
-                text="王戎簡要",
-                bbox=[0, 0, 50, 200],
-                characters=[
-                    OcrCharResult(char="王", confidence=0.95, bbox=[0, 0, 50, 50]),
-                    OcrCharResult(char="戎", confidence=0.90, bbox=[0, 50, 50, 100]),
-                    OcrCharResult(char="簡", confidence=0.88, bbox=[0, 100, 50, 150]),
-                    OcrCharResult(char="要", confidence=0.92, bbox=[0, 150, 50, 200]),
-                ],
-            )],
+            lines=[
+                OcrLineResult(
+                    text="王戎簡要",
+                    bbox=[0, 0, 50, 200],
+                    characters=[
+                        OcrCharResult(char="王", confidence=0.95, bbox=[0, 0, 50, 50]),
+                        OcrCharResult(char="戎", confidence=0.90, bbox=[0, 50, 50, 100]),
+                        OcrCharResult(char="簡", confidence=0.88, bbox=[0, 100, 50, 150]),
+                        OcrCharResult(char="要", confidence=0.92, bbox=[0, 150, 50, 200]),
+                    ],
+                )
+            ],
             engine_id="dummy",
         )
 
@@ -186,9 +195,12 @@ class TestOcrIntegration:
             data = json.load(f)
 
         # 스키마 파일이 있으면 jsonschema로 검증
-        schema_path = Path(__file__).parent.parent / "schemas" / "source_repo" / "ocr_page.schema.json"
+        schema_path = (
+            Path(__file__).parent.parent / "schemas" / "source_repo" / "ocr_page.schema.json"
+        )
         if schema_path.exists():
             import jsonschema
+
             with open(schema_path, encoding="utf-8") as f:
                 schema = json.load(f)
             jsonschema.validate(data, schema)

@@ -128,11 +128,15 @@ class TestAnnotationCRUD:
 
     def test_add_annotation(self):
         data = _empty_data()
-        ann = add_annotation(data, "p01_b01", {
-            "target": {"start": 0, "end": 1},
-            "type": "person",
-            "content": {"label": "왕융(王戎)", "description": "죽림칠현"},
-        })
+        ann = add_annotation(
+            data,
+            "p01_b01",
+            {
+                "target": {"start": 0, "end": 1},
+                "type": "person",
+                "content": {"label": "왕융(王戎)", "description": "죽림칠현"},
+            },
+        )
         assert ann["id"].startswith("ann_")
         assert ann["status"] == "draft"
         assert len(data["blocks"]) == 1
@@ -140,44 +144,69 @@ class TestAnnotationCRUD:
 
     def test_add_to_existing_block(self):
         data = _empty_data()
-        add_annotation(data, "p01_b01", {
-            "target": {"start": 0, "end": 1},
-            "type": "person",
-            "content": {"label": "A", "description": ""},
-        })
-        add_annotation(data, "p01_b01", {
-            "target": {"start": 2, "end": 3},
-            "type": "person",
-            "content": {"label": "B", "description": ""},
-        })
+        add_annotation(
+            data,
+            "p01_b01",
+            {
+                "target": {"start": 0, "end": 1},
+                "type": "person",
+                "content": {"label": "A", "description": ""},
+            },
+        )
+        add_annotation(
+            data,
+            "p01_b01",
+            {
+                "target": {"start": 2, "end": 3},
+                "type": "person",
+                "content": {"label": "B", "description": ""},
+            },
+        )
         # 같은 블록에 2개
         assert len(data["blocks"]) == 1
         assert len(data["blocks"][0]["annotations"]) == 2
 
     def test_add_to_different_blocks(self):
         data = _empty_data()
-        add_annotation(data, "p01_b01", {
-            "target": {"start": 0, "end": 1},
-            "type": "person",
-            "content": {"label": "A", "description": ""},
-        })
-        add_annotation(data, "p01_b02", {
-            "target": {"start": 0, "end": 1},
-            "type": "place",
-            "content": {"label": "B", "description": ""},
-        })
+        add_annotation(
+            data,
+            "p01_b01",
+            {
+                "target": {"start": 0, "end": 1},
+                "type": "person",
+                "content": {"label": "A", "description": ""},
+            },
+        )
+        add_annotation(
+            data,
+            "p01_b02",
+            {
+                "target": {"start": 0, "end": 1},
+                "type": "place",
+                "content": {"label": "B", "description": ""},
+            },
+        )
         assert len(data["blocks"]) == 2
 
     def test_update_annotation(self):
         data = _empty_data()
-        ann = add_annotation(data, "p01_b01", {
-            "target": {"start": 0, "end": 1},
-            "type": "person",
-            "content": {"label": "원본", "description": ""},
-        })
-        result = update_annotation(data, "p01_b01", ann["id"], {
-            "content": {"label": "수정됨", "description": "새 설명"},
-        })
+        ann = add_annotation(
+            data,
+            "p01_b01",
+            {
+                "target": {"start": 0, "end": 1},
+                "type": "person",
+                "content": {"label": "원본", "description": ""},
+            },
+        )
+        result = update_annotation(
+            data,
+            "p01_b01",
+            ann["id"],
+            {
+                "content": {"label": "수정됨", "description": "새 설명"},
+            },
+        )
         assert result is not None
         assert result["content"]["label"] == "수정됨"
 
@@ -188,11 +217,15 @@ class TestAnnotationCRUD:
 
     def test_remove_annotation(self):
         data = _empty_data()
-        ann = add_annotation(data, "p01_b01", {
-            "target": {"start": 0, "end": 1},
-            "type": "person",
-            "content": {"label": "삭제대상", "description": ""},
-        })
+        ann = add_annotation(
+            data,
+            "p01_b01",
+            {
+                "target": {"start": 0, "end": 1},
+                "type": "person",
+                "content": {"label": "삭제대상", "description": ""},
+            },
+        )
         assert remove_annotation(data, "p01_b01", ann["id"]) is True
         assert len(data["blocks"][0]["annotations"]) == 0
 
@@ -211,18 +244,33 @@ class TestAnnotationFilter:
 
     def test_get_by_type(self):
         data = _empty_data()
-        add_annotation(data, "p01_b01", {
-            "target": {"start": 0, "end": 1}, "type": "person",
-            "content": {"label": "A", "description": ""},
-        })
-        add_annotation(data, "p01_b01", {
-            "target": {"start": 2, "end": 3}, "type": "place",
-            "content": {"label": "B", "description": ""},
-        })
-        add_annotation(data, "p01_b02", {
-            "target": {"start": 0, "end": 1}, "type": "person",
-            "content": {"label": "C", "description": ""},
-        })
+        add_annotation(
+            data,
+            "p01_b01",
+            {
+                "target": {"start": 0, "end": 1},
+                "type": "person",
+                "content": {"label": "A", "description": ""},
+            },
+        )
+        add_annotation(
+            data,
+            "p01_b01",
+            {
+                "target": {"start": 2, "end": 3},
+                "type": "place",
+                "content": {"label": "B", "description": ""},
+            },
+        )
+        add_annotation(
+            data,
+            "p01_b02",
+            {
+                "target": {"start": 0, "end": 1},
+                "type": "person",
+                "content": {"label": "C", "description": ""},
+            },
+        )
 
         persons = get_annotations_by_type(data, "person")
         assert len(persons) == 2
@@ -239,21 +287,36 @@ class TestAnnotationSummary:
 
     def test_mixed_summary(self):
         data = _empty_data()
-        add_annotation(data, "p01_b01", {
-            "target": {"start": 0, "end": 1}, "type": "person",
-            "content": {"label": "A", "description": ""},
-            "status": "draft",
-        })
-        add_annotation(data, "p01_b01", {
-            "target": {"start": 2, "end": 3}, "type": "place",
-            "content": {"label": "B", "description": ""},
-            "status": "accepted",
-        })
-        add_annotation(data, "p01_b02", {
-            "target": {"start": 0, "end": 1}, "type": "term",
-            "content": {"label": "C", "description": ""},
-            "status": "accepted",
-        })
+        add_annotation(
+            data,
+            "p01_b01",
+            {
+                "target": {"start": 0, "end": 1},
+                "type": "person",
+                "content": {"label": "A", "description": ""},
+                "status": "draft",
+            },
+        )
+        add_annotation(
+            data,
+            "p01_b01",
+            {
+                "target": {"start": 2, "end": 3},
+                "type": "place",
+                "content": {"label": "B", "description": ""},
+                "status": "accepted",
+            },
+        )
+        add_annotation(
+            data,
+            "p01_b02",
+            {
+                "target": {"start": 0, "end": 1},
+                "type": "term",
+                "content": {"label": "C", "description": ""},
+                "status": "accepted",
+            },
+        )
 
         summary = get_annotation_summary(data)
         assert summary["total"] == 3
@@ -289,7 +352,11 @@ class TestAnnotationFileIO:
                             "id": "ann_001",
                             "target": {"start": 0, "end": 1},
                             "type": "person",
-                            "content": {"label": "왕융(王戎)", "description": "설명", "references": []},
+                            "content": {
+                                "label": "왕융(王戎)",
+                                "description": "설명",
+                                "references": [],
+                            },
                             "annotator": {"type": "human", "model": None, "draft_id": None},
                             "status": "accepted",
                             "reviewed_by": None,
@@ -335,11 +402,16 @@ class TestDraftCommit:
 
     def test_commit_single(self):
         data = _empty_data()
-        ann = add_annotation(data, "p01_b01", {
-            "target": {"start": 0, "end": 1}, "type": "person",
-            "content": {"label": "A", "description": "설명"},
-            "status": "draft",
-        })
+        ann = add_annotation(
+            data,
+            "p01_b01",
+            {
+                "target": {"start": 0, "end": 1},
+                "type": "person",
+                "content": {"label": "A", "description": "설명"},
+                "status": "draft",
+            },
+        )
 
         result = commit_annotation_draft(data, "p01_b01", ann["id"])
         assert result is not None
@@ -348,15 +420,25 @@ class TestDraftCommit:
 
     def test_commit_with_modifications(self):
         data = _empty_data()
-        ann = add_annotation(data, "p01_b01", {
-            "target": {"start": 0, "end": 1}, "type": "person",
-            "content": {"label": "원본", "description": ""},
-            "status": "draft",
-        })
+        ann = add_annotation(
+            data,
+            "p01_b01",
+            {
+                "target": {"start": 0, "end": 1},
+                "type": "person",
+                "content": {"label": "원본", "description": ""},
+                "status": "draft",
+            },
+        )
 
-        result = commit_annotation_draft(data, "p01_b01", ann["id"], {
-            "content": {"label": "수정됨", "description": "새 설명", "references": []},
-        })
+        result = commit_annotation_draft(
+            data,
+            "p01_b01",
+            ann["id"],
+            {
+                "content": {"label": "수정됨", "description": "새 설명", "references": []},
+            },
+        )
         assert result["status"] == "accepted"
         assert result["content"]["label"] == "수정됨"
 
@@ -367,21 +449,36 @@ class TestDraftCommit:
 
     def test_commit_all(self):
         data = _empty_data()
-        add_annotation(data, "p01_b01", {
-            "target": {"start": 0, "end": 1}, "type": "person",
-            "content": {"label": "A", "description": ""},
-            "status": "draft",
-        })
-        add_annotation(data, "p01_b01", {
-            "target": {"start": 2, "end": 3}, "type": "place",
-            "content": {"label": "B", "description": ""},
-            "status": "draft",
-        })
-        add_annotation(data, "p01_b02", {
-            "target": {"start": 0, "end": 1}, "type": "term",
-            "content": {"label": "C", "description": ""},
-            "status": "accepted",  # 이미 확정
-        })
+        add_annotation(
+            data,
+            "p01_b01",
+            {
+                "target": {"start": 0, "end": 1},
+                "type": "person",
+                "content": {"label": "A", "description": ""},
+                "status": "draft",
+            },
+        )
+        add_annotation(
+            data,
+            "p01_b01",
+            {
+                "target": {"start": 2, "end": 3},
+                "type": "place",
+                "content": {"label": "B", "description": ""},
+                "status": "draft",
+            },
+        )
+        add_annotation(
+            data,
+            "p01_b02",
+            {
+                "target": {"start": 0, "end": 1},
+                "type": "term",
+                "content": {"label": "C", "description": ""},
+                "status": "accepted",  # 이미 확정
+            },
+        )
 
         count = commit_all_drafts(data)
         assert count == 2  # draft 2개만 확정
@@ -427,12 +524,15 @@ class TestAnnotationTypes:
         work_path = tmp_path / "work"
         work_path.mkdir()
 
-        result = add_custom_type(work_path, {
-            "id": "sutra_ref",
-            "label": "경전 참조",
-            "color": "#FF6600",
-            "icon": "🙏",
-        })
+        result = add_custom_type(
+            work_path,
+            {
+                "id": "sutra_ref",
+                "label": "경전 참조",
+                "color": "#FF6600",
+                "icon": "🙏",
+            },
+        )
         assert result["id"] == "sutra_ref"
 
         types = load_annotation_types(work_path)
@@ -444,21 +544,27 @@ class TestAnnotationTypes:
 
         # person은 기본 프리셋에 있으므로 중복
         with pytest.raises(ValueError, match="이미 존재"):
-            add_custom_type(work_path, {
-                "id": "person",
-                "label": "중복",
-                "color": "#000",
-            })
+            add_custom_type(
+                work_path,
+                {
+                    "id": "person",
+                    "label": "중복",
+                    "color": "#000",
+                },
+            )
 
     def test_remove_custom_type(self, tmp_path):
         work_path = tmp_path / "work3"
         work_path.mkdir()
 
-        add_custom_type(work_path, {
-            "id": "custom1",
-            "label": "커스텀",
-            "color": "#111",
-        })
+        add_custom_type(
+            work_path,
+            {
+                "id": "custom1",
+                "label": "커스텀",
+                "color": "#111",
+            },
+        )
         assert remove_custom_type(work_path, "custom1") is True
 
         types = load_annotation_types(work_path)
@@ -481,13 +587,19 @@ class TestLlmParser:
     """LLM 응답 파서 테스트."""
 
     def test_parse_clean_json(self):
-        text = '{"annotations": [{"target": {"start": 0, "end": 1}, "type": "person", "content": {"label": "A", "description": "B"}}]}'
+        text = (
+            '{"annotations": [{"target": {"start": 0, "end": 1}, '
+            '"type": "person", "content": {"label": "A", "description": "B"}}]}'
+        )
         result = _parse_llm_annotations(text)
         assert len(result) == 1
         assert result[0]["type"] == "person"
 
     def test_parse_with_markdown_block(self):
-        text = '설명 텍스트\n```json\n{"annotations": [{"target": {"start": 0, "end": 1}, "type": "place", "content": {"label": "C", "description": "D"}}]}\n```\n끝'
+        text = (
+            '설명 텍스트\n```json\n{"annotations": [{"target": {"start": 0, "end": 1}, '
+            '"type": "place", "content": {"label": "C", "description": "D"}}]}\n```\n끝'
+        )
         result = _parse_llm_annotations(text)
         assert len(result) == 1
         assert result[0]["type"] == "place"
@@ -497,6 +609,9 @@ class TestLlmParser:
         assert result == []
 
     def test_parse_bare_list(self):
-        text = '[{"target": {"start": 0, "end": 1}, "type": "term", "content": {"label": "E", "description": "F"}}]'
+        text = (
+            '[{"target": {"start": 0, "end": 1}, "type": "term", '
+            '"content": {"label": "E", "description": "F"}}]'
+        )
         result = _parse_llm_annotations(text)
         assert len(result) == 1

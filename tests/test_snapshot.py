@@ -20,6 +20,7 @@ import git
 # 테스트 헬퍼: 서고 구조 생성
 # ──────────────────────────────────────
 
+
 def _make_library(tmp_path: Path, doc_id: str = "test_doc", interp_id: str = "test_interp"):
     """테스트용 서고 전체 구조를 생성한다.
 
@@ -37,21 +38,35 @@ def _make_library(tmp_path: Path, doc_id: str = "test_doc", interp_id: str = "te
 
     # manifest
     doc_path.mkdir(parents=True)
-    (doc_path / "manifest.json").write_text(json.dumps({
-        "document_id": doc_id,
-        "title": "蒙求",
-        "title_ko": "몽구",
-        "parts": [{"part_id": "vol1", "title": "卷上"}],
-        "created_at": "2025-01-01T00:00:00+00:00",
-        "notes": "테스트용",
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    (doc_path / "manifest.json").write_text(
+        json.dumps(
+            {
+                "document_id": doc_id,
+                "title": "蒙求",
+                "title_ko": "몽구",
+                "parts": [{"part_id": "vol1", "title": "卷上"}],
+                "created_at": "2025-01-01T00:00:00+00:00",
+                "notes": "테스트용",
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     # bibliography
-    (doc_path / "bibliography.json").write_text(json.dumps({
-        "title": "蒙求",
-        "author": "李瀚",
-        "date": "唐",
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    (doc_path / "bibliography.json").write_text(
+        json.dumps(
+            {
+                "title": "蒙求",
+                "author": "李瀚",
+                "date": "唐",
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     # L1: 이미지 (더미 파일)
     l1 = doc_path / "L1_source"
@@ -61,14 +76,31 @@ def _make_library(tmp_path: Path, doc_id: str = "test_doc", interp_id: str = "te
     # L3: 레이아웃
     l3 = doc_path / "L3_layout"
     l3.mkdir()
-    (l3 / "vol1_page_001.json").write_text(json.dumps({
-        "part_id": "vol1",
-        "page_number": 1,
-        "blocks": [
-            {"block_id": "blk_001", "type": "text", "order": 1, "bbox": [100, 100, 500, 200]},
-            {"block_id": "blk_002", "type": "text", "order": 2, "bbox": [100, 200, 500, 300]},
-        ],
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    (l3 / "vol1_page_001.json").write_text(
+        json.dumps(
+            {
+                "part_id": "vol1",
+                "page_number": 1,
+                "blocks": [
+                    {
+                        "block_id": "blk_001",
+                        "type": "text",
+                        "order": 1,
+                        "bbox": [100, 100, 500, 200],
+                    },
+                    {
+                        "block_id": "blk_002",
+                        "type": "text",
+                        "order": 2,
+                        "bbox": [100, 200, 500, 300],
+                    },
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     # L4: 텍스트
     l4_pages = doc_path / "L4_text" / "pages"
@@ -76,10 +108,19 @@ def _make_library(tmp_path: Path, doc_id: str = "test_doc", interp_id: str = "te
     l4_pages.mkdir(parents=True)
     l4_corr.mkdir()
     (l4_pages / "vol1_page_001.txt").write_text("白起坑趙\n王翦滅楚", encoding="utf-8")
-    (l4_corr / "vol1_page_001_corrections.json").write_text(json.dumps({
-        "page": "vol1_page_001",
-        "corrections": [{"position": 0, "original": "白", "corrected": "白", "note": "확인"}],
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    (l4_corr / "vol1_page_001_corrections.json").write_text(
+        json.dumps(
+            {
+                "page": "vol1_page_001",
+                "corrections": [
+                    {"position": 0, "original": "白", "corrected": "白", "note": "확인"}
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     # Git 초기화 (원본)
     repo = git.Repo.init(doc_path)
@@ -89,79 +130,143 @@ def _make_library(tmp_path: Path, doc_id: str = "test_doc", interp_id: str = "te
     # ─── 해석 저장소 ───
 
     interp_path.mkdir(parents=True)
-    (interp_path / "manifest.json").write_text(json.dumps({
-        "interpretation_id": interp_id,
-        "source_document_id": doc_id,
-        "title": "蒙求 해석",
-        "interpreter": {"type": "human", "name": "테스터"},
-        "created_at": "2025-01-02T00:00:00+00:00",
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    (interp_path / "manifest.json").write_text(
+        json.dumps(
+            {
+                "interpretation_id": interp_id,
+                "source_document_id": doc_id,
+                "title": "蒙求 해석",
+                "interpreter": {"type": "human", "name": "테스터"},
+                "created_at": "2025-01-02T00:00:00+00:00",
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     # dependency.json
-    (interp_path / "dependency.json").write_text(json.dumps({
-        "source": {
-            "document_id": doc_id,
-            "base_commit": "abc123",
-        },
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    (interp_path / "dependency.json").write_text(
+        json.dumps(
+            {
+                "source": {
+                    "document_id": doc_id,
+                    "base_commit": "abc123",
+                },
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     # L5: 표점
     l5_dir = interp_path / "L5_reading" / "main_text"
     l5_dir.mkdir(parents=True)
-    (l5_dir / "vol1_page_001_punctuation.json").write_text(json.dumps({
-        "block_id": "blk_001",
-        "punctuated_text": "白起坑趙，",
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    (l5_dir / "vol1_page_001_punctuation.json").write_text(
+        json.dumps(
+            {
+                "block_id": "blk_001",
+                "punctuated_text": "白起坑趙，",
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     # L5: 현토
-    (l5_dir / "vol1_page_001_hyeonto.json").write_text(json.dumps({
-        "block_id": "blk_001",
-        "hyeonto_text": "白起ㅣ 趙를 坑하니",
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    (l5_dir / "vol1_page_001_hyeonto.json").write_text(
+        json.dumps(
+            {
+                "block_id": "blk_001",
+                "hyeonto_text": "白起ㅣ 趙를 坑하니",
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     # L6: 번역
     l6_dir = interp_path / "L6_translation" / "main_text"
     l6_dir.mkdir(parents=True)
-    (l6_dir / "vol1_page_001_translation.json").write_text(json.dumps({
-        "translations": [
-            {"source": {"block_id": "blk_001"}, "text": "백기가 조나라를 구덩이에 묻었다"},
-        ],
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    (l6_dir / "vol1_page_001_translation.json").write_text(
+        json.dumps(
+            {
+                "translations": [
+                    {"source": {"block_id": "blk_001"}, "text": "백기가 조나라를 구덩이에 묻었다"},
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     # L7: 주석
     l7_dir = interp_path / "L7_annotation" / "main_text"
     l7_dir.mkdir(parents=True)
-    (l7_dir / "vol1_page_001_annotation.json").write_text(json.dumps({
-        "blocks": [
+    (l7_dir / "vol1_page_001_annotation.json").write_text(
+        json.dumps(
             {
-                "block_id": "blk_001",
-                "annotations": [
-                    {"type": "person", "text": "白起", "note": "진나라 장군"},
+                "blocks": [
+                    {
+                        "block_id": "blk_001",
+                        "annotations": [
+                            {"type": "person", "text": "白起", "note": "진나라 장군"},
+                        ],
+                    },
                 ],
             },
-        ],
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     # 코어 엔티티
     person_dir = interp_path / "core_entities" / "person"
     person_dir.mkdir(parents=True)
-    (person_dir / "ent_001.json").write_text(json.dumps({
-        "id": "ent_001",
-        "name": "白起",
-        "type": "person",
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    (person_dir / "ent_001.json").write_text(
+        json.dumps(
+            {
+                "id": "ent_001",
+                "name": "白起",
+                "type": "person",
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     # Git 초기화 (해석)
     repo2 = git.Repo.init(interp_path)
-    repo2.index.add([str(f.relative_to(interp_path)) for f in interp_path.rglob("*") if f.is_file()])
+    repo2.index.add(
+        [str(f.relative_to(interp_path)) for f in interp_path.rglob("*") if f.is_file()]
+    )
     repo2.index.commit("init: 테스트 해석 데이터")
 
     # library_manifest
-    (lib / "library_manifest.json").write_text(json.dumps({
-        "name": "test_library",
-        "documents": [{"document_id": doc_id, "title": "蒙求"}],
-        "interpretations": [{"interpretation_id": interp_id, "source_document_id": doc_id, "title": "蒙求 해석"}],
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    (lib / "library_manifest.json").write_text(
+        json.dumps(
+            {
+                "name": "test_library",
+                "documents": [{"document_id": doc_id, "title": "蒙求"}],
+                "interpretations": [
+                    {
+                        "interpretation_id": interp_id,
+                        "source_document_id": doc_id,
+                        "title": "蒙求 해석",
+                    }
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     return lib, doc_id, interp_id
 
@@ -177,6 +282,7 @@ class TestBuildSnapshot:
     def test_snapshot_has_schema_version(self, tmp_path):
         """스냅샷에 schema_version이 포함된다."""
         from core.snapshot import build_snapshot
+
         lib, doc_id, interp_id = _make_library(tmp_path)
         result = build_snapshot(lib, doc_id, interp_id)
         assert result["schema_version"] == "1.0"
@@ -184,6 +290,7 @@ class TestBuildSnapshot:
     def test_snapshot_has_export_timestamp(self, tmp_path):
         """스냅샷에 export_timestamp가 포함된다."""
         from core.snapshot import build_snapshot
+
         lib, doc_id, interp_id = _make_library(tmp_path)
         result = build_snapshot(lib, doc_id, interp_id)
         assert "export_timestamp" in result
@@ -191,6 +298,7 @@ class TestBuildSnapshot:
     def test_work_metadata(self, tmp_path):
         """work 섹션에 문헌+해석 메타데이터가 포함된다."""
         from core.snapshot import build_snapshot
+
         lib, doc_id, interp_id = _make_library(tmp_path)
         result = build_snapshot(lib, doc_id, interp_id)
         work = result["work"]
@@ -202,6 +310,7 @@ class TestBuildSnapshot:
     def test_l1_reference_only(self, tmp_path):
         """L1은 경로 참조만 포함한다 (바이너리 미포함)."""
         from core.snapshot import build_snapshot
+
         lib, doc_id, interp_id = _make_library(tmp_path)
         result = build_snapshot(lib, doc_id, interp_id)
         l1 = result["original"]["layers"]["L1_source"]
@@ -213,6 +322,7 @@ class TestBuildSnapshot:
     def test_l3_layout_inline(self, tmp_path):
         """L3 레이아웃이 inline으로 포함된다."""
         from core.snapshot import build_snapshot
+
         lib, doc_id, interp_id = _make_library(tmp_path)
         result = build_snapshot(lib, doc_id, interp_id)
         l3 = result["original"]["layers"]["L3_layout"]
@@ -223,6 +333,7 @@ class TestBuildSnapshot:
     def test_l4_text_and_corrections(self, tmp_path):
         """L4 텍스트와 교정 기록이 포함된다."""
         from core.snapshot import build_snapshot
+
         lib, doc_id, interp_id = _make_library(tmp_path)
         result = build_snapshot(lib, doc_id, interp_id)
         l4 = result["original"]["layers"]["L4_text"]
@@ -233,6 +344,7 @@ class TestBuildSnapshot:
     def test_l5_punctuation(self, tmp_path):
         """L5 표점이 수집된다."""
         from core.snapshot import build_snapshot
+
         lib, doc_id, interp_id = _make_library(tmp_path)
         result = build_snapshot(lib, doc_id, interp_id)
         l5p = result["interpretation"]["layers"]["L5_punctuation"]
@@ -244,6 +356,7 @@ class TestBuildSnapshot:
     def test_l5_hyeonto(self, tmp_path):
         """L5 현토가 수집된다."""
         from core.snapshot import build_snapshot
+
         lib, doc_id, interp_id = _make_library(tmp_path)
         result = build_snapshot(lib, doc_id, interp_id)
         l5h = result["interpretation"]["layers"]["L5_hyeonto"]
@@ -254,6 +367,7 @@ class TestBuildSnapshot:
     def test_l6_translation(self, tmp_path):
         """L6 번역이 수집된다."""
         from core.snapshot import build_snapshot
+
         lib, doc_id, interp_id = _make_library(tmp_path)
         result = build_snapshot(lib, doc_id, interp_id)
         l6 = result["interpretation"]["layers"]["L6_translation"]
@@ -262,6 +376,7 @@ class TestBuildSnapshot:
     def test_l7_annotation(self, tmp_path):
         """L7 주석이 수집된다."""
         from core.snapshot import build_snapshot
+
         lib, doc_id, interp_id = _make_library(tmp_path)
         result = build_snapshot(lib, doc_id, interp_id)
         l7 = result["interpretation"]["layers"]["L7_annotation"]
@@ -270,6 +385,7 @@ class TestBuildSnapshot:
     def test_core_entities(self, tmp_path):
         """코어 엔티티가 수집된다."""
         from core.snapshot import build_snapshot
+
         lib, doc_id, interp_id = _make_library(tmp_path)
         result = build_snapshot(lib, doc_id, interp_id)
         entities = result["interpretation"]["core_entities"]
@@ -279,6 +395,7 @@ class TestBuildSnapshot:
     def test_dependency_included(self, tmp_path):
         """dependency.json이 포함된다."""
         from core.snapshot import build_snapshot
+
         lib, doc_id, interp_id = _make_library(tmp_path)
         result = build_snapshot(lib, doc_id, interp_id)
         assert result["interpretation"].get("dependency") is not None
@@ -287,6 +404,7 @@ class TestBuildSnapshot:
     def test_head_hash_included(self, tmp_path):
         """원본/해석 저장소의 HEAD 해시가 포함된다."""
         from core.snapshot import build_snapshot
+
         lib, doc_id, interp_id = _make_library(tmp_path)
         result = build_snapshot(lib, doc_id, interp_id)
         assert result["original"]["head_hash"] is not None
@@ -295,6 +413,7 @@ class TestBuildSnapshot:
     def test_json_serializable(self, tmp_path):
         """스냅샷 전체가 JSON 직렬화 가능하다."""
         from core.snapshot import build_snapshot
+
         lib, doc_id, interp_id = _make_library(tmp_path)
         result = build_snapshot(lib, doc_id, interp_id)
         serialized = json.dumps(result, ensure_ascii=False, indent=2)
@@ -321,12 +440,14 @@ class TestValidateSnapshot:
     def test_valid_minimal(self):
         """최소 스냅샷이 검증을 통과한다."""
         from core.snapshot_validator import validate_snapshot
+
         errors, warnings = validate_snapshot(self._minimal_snapshot())
         assert len(errors) == 0
 
     def test_missing_schema_version(self):
         """schema_version 누락 시 error."""
         from core.snapshot_validator import validate_snapshot
+
         data = self._minimal_snapshot()
         del data["schema_version"]
         errors, _ = validate_snapshot(data)
@@ -335,6 +456,7 @@ class TestValidateSnapshot:
     def test_unsupported_version(self):
         """지원하지 않는 버전 시 error."""
         from core.snapshot_validator import validate_snapshot
+
         data = self._minimal_snapshot()
         data["schema_version"] = "99.0"
         errors, _ = validate_snapshot(data)
@@ -343,6 +465,7 @@ class TestValidateSnapshot:
     def test_missing_title(self):
         """work.title 누락 시 error."""
         from core.snapshot_validator import validate_snapshot
+
         data = self._minimal_snapshot()
         data["work"]["title"] = ""
         errors, _ = validate_snapshot(data)
@@ -351,6 +474,7 @@ class TestValidateSnapshot:
     def test_missing_original(self):
         """original 섹션 누락 시 error."""
         from core.snapshot_validator import validate_snapshot
+
         data = self._minimal_snapshot()
         del data["original"]
         errors, _ = validate_snapshot(data)
@@ -359,6 +483,7 @@ class TestValidateSnapshot:
     def test_l1_reference_warning(self):
         """L1 이미지 참조 시 warning."""
         from core.snapshot_validator import validate_snapshot
+
         data = self._minimal_snapshot()
         data["original"]["layers"]["L1_source"] = {
             "type": "reference",
@@ -370,6 +495,7 @@ class TestValidateSnapshot:
     def test_l4_missing_warning(self):
         """L4 텍스트 없을 때 warning."""
         from core.snapshot_validator import validate_snapshot
+
         data = self._minimal_snapshot()
         _, warnings = validate_snapshot(data)
         assert any("L4" in w for w in warnings)
@@ -377,6 +503,7 @@ class TestValidateSnapshot:
     def test_block_id_mismatch_warning(self):
         """L5 block_id가 L3에 없으면 warning."""
         from core.snapshot_validator import validate_snapshot
+
         data = self._minimal_snapshot()
         data["original"]["layers"]["L3_layout"] = {
             "pages": [{"blocks": [{"block_id": "blk_001"}]}],
@@ -390,6 +517,7 @@ class TestValidateSnapshot:
     def test_block_id_match_no_warning(self):
         """L5 block_id가 L3에 있으면 warning 없음."""
         from core.snapshot_validator import validate_snapshot
+
         data = self._minimal_snapshot()
         data["original"]["layers"]["L3_layout"] = {
             "pages": [{"blocks": [{"block_id": "blk_001"}]}],
@@ -404,14 +532,19 @@ class TestValidateSnapshot:
     def test_annotation_type_mismatch_warning(self):
         """L7 주석 type이 annotation_types에 없으면 warning."""
         from core.snapshot_validator import validate_snapshot
+
         data = self._minimal_snapshot()
         data["annotation_types"] = [{"id": "person"}]
-        data["interpretation"]["layers"]["L7_annotation"] = [{
-            "blocks": [{
-                "block_id": "blk_001",
-                "annotations": [{"type": "unknown_type", "text": "test"}],
-            }],
-        }]
+        data["interpretation"]["layers"]["L7_annotation"] = [
+            {
+                "blocks": [
+                    {
+                        "block_id": "blk_001",
+                        "annotations": [{"type": "unknown_type", "text": "test"}],
+                    }
+                ],
+            }
+        ]
         _, warnings = validate_snapshot(data)
         assert any("unknown_type" in w for w in warnings)
 
@@ -509,6 +642,7 @@ class TestDetectImportedLayers:
     def test_full_snapshot(self, tmp_path):
         """모든 레이어가 있는 스냅샷에서 모두 감지한다."""
         from core.snapshot import build_snapshot, detect_imported_layers
+
         lib, doc_id, interp_id = _make_library(tmp_path)
         snapshot = build_snapshot(lib, doc_id, interp_id)
         layers = detect_imported_layers(snapshot)
@@ -520,19 +654,25 @@ class TestDetectImportedLayers:
     def test_empty_snapshot(self):
         """빈 스냅샷에서 빈 리스트 반환."""
         from core.snapshot import detect_imported_layers
+
         layers = detect_imported_layers({})
         assert layers == []
 
     def test_partial_snapshot(self):
         """일부 레이어만 있는 스냅샷에서 해당 레이어만 감지."""
         from core.snapshot import detect_imported_layers
+
         data = {
-            "original": {"layers": {
-                "L4_text": {"pages": [{"text": "test"}]},
-            }},
-            "interpretation": {"layers": {
-                "L6_translation": [{"text": "번역"}],
-            }},
+            "original": {
+                "layers": {
+                    "L4_text": {"pages": [{"text": "test"}]},
+                }
+            },
+            "interpretation": {
+                "layers": {
+                    "L6_translation": [{"text": "번역"}],
+                }
+            },
         }
         layers = detect_imported_layers(data)
         assert "L4" in layers

@@ -172,6 +172,7 @@ def _make_interp(tmp: Path) -> Path:
 # 테스트 1: _extract_page_num
 # ────────────────────────────────
 
+
 def test_extract_page_num():
     assert _extract_page_num("main_page_001_annotation.json") == 1
     assert _extract_page_num("main_page_012_annotation.json") == 12
@@ -184,6 +185,7 @@ def test_extract_page_num():
 # ────────────────────────────────
 # 테스트 2: _deduplicate_entries
 # ────────────────────────────────
+
 
 def test_deduplicate():
     entries = [
@@ -219,6 +221,7 @@ def test_deduplicate():
 # ────────────────────────────────
 # 테스트 3: export_dictionary
 # ────────────────────────────────
+
 
 def test_export():
     with tempfile.TemporaryDirectory() as tmp:
@@ -265,6 +268,7 @@ def test_export():
 # 테스트 4: save_export
 # ────────────────────────────────
 
+
 def test_save_export():
     with tempfile.TemporaryDirectory() as tmp:
         interp = _make_interp(Path(tmp))
@@ -287,6 +291,7 @@ def test_save_export():
 # ────────────────────────────────
 # 테스트 5: import_dictionary (새 항목)
 # ────────────────────────────────
+
 
 def test_import_new():
     with tempfile.TemporaryDirectory() as tmp:
@@ -346,6 +351,7 @@ def test_import_new():
 # 테스트 6: import merge 전략
 # ────────────────────────────────
 
+
 def test_import_merge():
     """이미 王戎 주석이 있는 해석에 王戎 사전을 가져올 때 merge 동작 검증."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -397,6 +403,7 @@ def test_import_merge():
 # 테스트 7: import skip_existing 전략
 # ────────────────────────────────
 
+
 def test_import_skip():
     with tempfile.TemporaryDirectory() as tmp:
         interp = _make_interp(Path(tmp))
@@ -405,7 +412,11 @@ def test_import_skip():
             "source": {"document_title": "외부"},
             "entries": [
                 {"headword": "王戎", "dictionary_meaning": "skip 테스트"},
-                {"headword": "新項目", "headword_reading": "신항목", "dictionary_meaning": "새 항목"},
+                {
+                    "headword": "新項目",
+                    "headword_reading": "신항목",
+                    "dictionary_meaning": "새 항목",
+                },
             ],
         }
 
@@ -419,6 +430,7 @@ def test_import_skip():
 # ────────────────────────────────
 # 테스트 8: 라운드트립 (export → import → re-export)
 # ────────────────────────────────
+
 
 def test_roundtrip():
     """문헌A에서 export → 문헌B에서 import → 문헌B에서 re-export 시 항목이 보존되는지."""
@@ -455,6 +467,7 @@ def test_roundtrip():
 # ────────────────────────────────
 # 테스트 9: page_range 필터
 # ────────────────────────────────
+
 
 def test_export_page_range():
     with tempfile.TemporaryDirectory() as tmp:

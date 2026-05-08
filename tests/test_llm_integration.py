@@ -36,6 +36,7 @@ from llm.usage_tracker import UsageTracker
 
 # ─── Mock Provider ───────────────────────────────────────────
 
+
 class MockProvider(BaseLlmProvider):
     """테스트용 모의 provider.
 
@@ -116,6 +117,7 @@ class MockProvider(BaseLlmProvider):
 
 # ─── LlmConfig 테스트 ───────────────────────────────────────
 
+
 class TestLlmConfig:
     """LLM 설정 관리 테스트."""
 
@@ -148,6 +150,7 @@ class TestLlmConfig:
 
 
 # ─── LlmDraft 테스트 ────────────────────────────────────────
+
 
 class TestLlmDraft:
     """Draft → Review → Commit 워크플로우."""
@@ -195,6 +198,7 @@ class TestLlmDraft:
 
 
 # ─── UsageTracker 테스트 ─────────────────────────────────────
+
 
 class TestUsageTracker:
     """JSONL 사용량 추적 테스트."""
@@ -269,7 +273,9 @@ class TestUsageTracker:
 
             results = [
                 LlmResponse(
-                    text="result1", provider="ollama", model="m1",
+                    text="result1",
+                    provider="ollama",
+                    model="m1",
                     elapsed_sec=1.0,
                 ),
                 ValueError("에러 발생"),
@@ -291,6 +297,7 @@ class TestUsageTracker:
 
 # ─── LlmRouter 테스트 (Mock Provider) ───────────────────────
 
+
 class TestLlmRouter:
     """LlmRouter 폴백 + 강제선택 + 비교 테스트.
 
@@ -303,6 +310,7 @@ class TestLlmRouter:
             config = LlmConfig(library_root=Path(td))
 
             from llm.router import LlmRouter
+
             router = LlmRouter(config)
             router.providers = providers
             return router, config
@@ -312,10 +320,12 @@ class TestLlmRouter:
         """첫 번째 사용 불가 → 두 번째로 폴백."""
         config = LlmConfig()
         p1 = MockProvider(config, provider_id="first", available=False)
-        p2 = MockProvider(config, provider_id="second", available=True,
-                          response_text="second response")
+        p2 = MockProvider(
+            config, provider_id="second", available=True, response_text="second response"
+        )
 
         from llm.router import LlmRouter
+
         router = LlmRouter(config)
         router.providers = [p1, p2]
 
@@ -332,6 +342,7 @@ class TestLlmRouter:
         p2 = MockProvider(config, provider_id="b", available=False)
 
         from llm.router import LlmRouter
+
         router = LlmRouter(config)
         router.providers = [p1, p2]
 
@@ -346,6 +357,7 @@ class TestLlmRouter:
         p2 = MockProvider(config, provider_id="second", response_text="p2")
 
         from llm.router import LlmRouter
+
         router = LlmRouter(config)
         router.providers = [p1, p2]
 
@@ -360,6 +372,7 @@ class TestLlmRouter:
         p1 = MockProvider(config, provider_id="first")
 
         from llm.router import LlmRouter
+
         router = LlmRouter(config)
         router.providers = [p1]
 
@@ -373,6 +386,7 @@ class TestLlmRouter:
         p1 = MockProvider(config, provider_id="first", available=False)
 
         from llm.router import LlmRouter
+
         router = LlmRouter(config)
         router.providers = [p1]
 
@@ -387,6 +401,7 @@ class TestLlmRouter:
         p2 = MockProvider(config, provider_id="ok", response_text="ok")
 
         from llm.router import LlmRouter
+
         router = LlmRouter(config)
         router.providers = [p1, p2]
 
@@ -397,12 +412,13 @@ class TestLlmRouter:
     async def test_call_with_image_skip_non_vision(self):
         """이미지 호출 시 supports_image=False provider는 건너뛴다."""
         config = LlmConfig()
-        p1 = MockProvider(config, provider_id="text_only",
-                          supports_image=False)
-        p2 = MockProvider(config, provider_id="vision",
-                          supports_image=True, response_text="vision ok")
+        p1 = MockProvider(config, provider_id="text_only", supports_image=False)
+        p2 = MockProvider(
+            config, provider_id="vision", supports_image=True, response_text="vision ok"
+        )
 
         from llm.router import LlmRouter
+
         router = LlmRouter(config)
         router.providers = [p1, p2]
 
@@ -417,12 +433,11 @@ class TestLlmRouter:
         p2 = MockProvider(config, provider_id="b", response_text="b result")
 
         from llm.router import LlmRouter
+
         router = LlmRouter(config)
         router.providers = [p1, p2]
 
-        results = await router.compare(
-            "테스트", targets=["a", "b"]
-        )
+        results = await router.compare("테스트", targets=["a", "b"])
         assert len(results) == 2
         texts = {r.text for r in results if isinstance(r, LlmResponse)}
         assert "a result" in texts
@@ -436,6 +451,7 @@ class TestLlmRouter:
         p2 = MockProvider(config, provider_id="err", should_error=True)
 
         from llm.router import LlmRouter
+
         router = LlmRouter(config)
         router.providers = [p1, p2]
 
@@ -448,12 +464,11 @@ class TestLlmRouter:
     async def test_get_status(self):
         """각 provider 가용 상태 조회."""
         config = LlmConfig()
-        p1 = MockProvider(config, provider_id="avail",
-                          display_name="Available", available=True)
-        p2 = MockProvider(config, provider_id="down",
-                          display_name="Down", available=False)
+        p1 = MockProvider(config, provider_id="avail", display_name="Available", available=True)
+        p2 = MockProvider(config, provider_id="down", display_name="Down", available=False)
 
         from llm.router import LlmRouter
+
         router = LlmRouter(config)
         router.providers = [p1, p2]
 
@@ -465,10 +480,10 @@ class TestLlmRouter:
     async def test_get_available_models(self):
         """GUI 모델 목록 조회."""
         config = LlmConfig()
-        p1 = MockProvider(config, provider_id="mock_p",
-                          display_name="Mock P", available=True)
+        p1 = MockProvider(config, provider_id="mock_p", display_name="Mock P", available=True)
 
         from llm.router import LlmRouter
+
         router = LlmRouter(config)
         router.providers = [p1]
 
@@ -479,6 +494,7 @@ class TestLlmRouter:
 
 
 # ─── layout_analyzer JSON 파싱 테스트 ────────────────────────
+
 
 class TestLayoutAnalyzerParsing:
     """레이아웃 분석 헬퍼 함수 테스트."""

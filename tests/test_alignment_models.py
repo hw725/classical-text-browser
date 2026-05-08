@@ -11,8 +11,11 @@ from src.core.alignment import (
 class TestAlignedPair:
     def test_exact_pair(self):
         p = AlignedPair(
-            ocr_char="王", ref_char="王", match_type=MatchType.EXACT,
-            ocr_index=0, ref_index=0,
+            ocr_char="王",
+            ref_char="王",
+            match_type=MatchType.EXACT,
+            ocr_index=0,
+            ref_index=0,
         )
         d = p.to_dict()
         assert d["match_type"] == "exact"
@@ -21,7 +24,9 @@ class TestAlignedPair:
 
     def test_deletion_pair(self):
         p = AlignedPair(
-            ocr_char=None, ref_char="清", match_type=MatchType.DELETION,
+            ocr_char=None,
+            ref_char="清",
+            match_type=MatchType.DELETION,
             ref_index=6,
         )
         assert p.ocr_char is None
@@ -29,7 +34,9 @@ class TestAlignedPair:
 
     def test_insertion_pair(self):
         p = AlignedPair(
-            ocr_char="甲", ref_char=None, match_type=MatchType.INSERTION,
+            ocr_char="甲",
+            ref_char=None,
+            match_type=MatchType.INSERTION,
             ocr_index=3,
         )
         assert p.ref_char is None
@@ -37,8 +44,11 @@ class TestAlignedPair:
 
     def test_variant_pair(self):
         p = AlignedPair(
-            ocr_char="裵", ref_char="裴", match_type=MatchType.VARIANT,
-            ocr_index=4, ref_index=4,
+            ocr_char="裵",
+            ref_char="裴",
+            match_type=MatchType.VARIANT,
+            ocr_index=4,
+            ref_index=4,
         )
         d = p.to_dict()
         assert d["match_type"] == "variant"
@@ -47,7 +57,9 @@ class TestAlignedPair:
 
     def test_mismatch_pair(self):
         p = AlignedPair(
-            ocr_char="甲", ref_char="乙", match_type=MatchType.MISMATCH,
+            ocr_char="甲",
+            ref_char="乙",
+            match_type=MatchType.MISMATCH,
         )
         assert p.to_dict()["match_type"] == "mismatch"
 

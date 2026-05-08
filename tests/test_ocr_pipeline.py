@@ -15,6 +15,7 @@ from src.ocr.registry import OcrEngineRegistry
 
 class DummyOcrEngine(BaseOcrEngine):
     """테스트용 더미 OCR 엔진."""
+
     engine_id = "dummy"
     display_name = "Dummy"
     requires_network = False
@@ -22,8 +23,9 @@ class DummyOcrEngine(BaseOcrEngine):
     def is_available(self) -> bool:
         return True
 
-    def recognize(self, image_bytes, writing_direction="vertical_rtl",
-                  language="classical_chinese", **kwargs) -> OcrBlockResult:
+    def recognize(
+        self, image_bytes, writing_direction="vertical_rtl", language="classical_chinese", **kwargs
+    ) -> OcrBlockResult:
         return OcrBlockResult(
             lines=[
                 OcrLineResult(

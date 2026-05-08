@@ -22,6 +22,7 @@ from parsers.asset_detector import (
 
 # ── _get_file_extension 테스트 ──────────────────
 
+
 class TestGetFileExtension:
     def test_pdf(self):
         assert _get_file_extension("/docs/file.pdf") == ".pdf"
@@ -47,6 +48,7 @@ class TestGetFileExtension:
 
 
 # ── _resolve_url 테스트 ──────────────────────────
+
 
 class TestResolveUrl:
     def test_absolute_url(self):
@@ -82,6 +84,7 @@ class TestResolveUrl:
 
 # ── _label_from_url 테스트 ──────────────────────
 
+
 class TestLabelFromUrl:
     def test_simple_filename(self):
         assert _label_from_url("https://example.com/docs/論語_全.pdf") == "論語_全.pdf"
@@ -95,6 +98,7 @@ class TestLabelFromUrl:
 
 
 # ── detect_assets_from_markdown 테스트 ──────────
+
 
 class TestDetectAssetsFromMarkdown:
     @pytest.fixture
@@ -207,6 +211,7 @@ class TestDetectAssetsFromMarkdown:
 
 # ── _group_images_into_bundles 테스트 ───────────
 
+
 class TestGroupImagesIntoBundles:
     def test_same_directory_grouped(self):
         """같은 디렉토리의 이미지가 번들로 묶인다."""
@@ -251,6 +256,7 @@ class TestGroupImagesIntoBundles:
 
 
 # ── _url_to_asset_id 테스트 ─────────────────────
+
 
 class TestUrlToAssetId:
     def test_deterministic(self):

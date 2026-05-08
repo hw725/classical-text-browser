@@ -82,7 +82,9 @@ class TestAlignTexts:
     def test_full_example(self, variant_dict):
         """설계 문서의 예제: 王戎簡要裵楷通 vs 王戎簡要裴楷清通."""
         pairs = align_texts(
-            "王戎簡要裵楷通", "王戎簡要裴楷清通", variant_dict=variant_dict,
+            "王戎簡要裵楷通",
+            "王戎簡要裴楷清通",
+            variant_dict=variant_dict,
         )
 
         types = {p.match_type for p in pairs}

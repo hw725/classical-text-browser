@@ -140,7 +140,7 @@ class TestCollectCommits:
         for i in range(3):
             (repo_path / f"file{i}.txt").write_text(f"content {i}", encoding="utf-8")
             repo.index.add([f"file{i}.txt"])
-            repo.index.commit(f"feat: L{i+1} 작업 {i}")
+            repo.index.commit(f"feat: L{i + 1} 작업 {i}")
 
         branch = repo.active_branch.name
         commits, total, branches, _head = _collect_commits(repo_path, branch=branch)
@@ -179,11 +179,13 @@ class TestBuildLinks:
     def test_explicit_link(self):
         """trailer가 있는 커밋은 explicit 링크를 생성한다."""
         orig = [{"hash": "abc123", "timestamp": "2026-01-01T10:00:00"}]
-        interp = [{
-            "hash": "def456",
-            "timestamp": "2026-01-01T11:00:00",
-            "message": "feat: L5\n\nBased-On-Original: abc123",
-        }]
+        interp = [
+            {
+                "hash": "def456",
+                "timestamp": "2026-01-01T11:00:00",
+                "message": "feat: L5\n\nBased-On-Original: abc123",
+            }
+        ]
 
         links = build_links(orig, interp)
         assert len(links) == 1
@@ -193,11 +195,13 @@ class TestBuildLinks:
 
     def test_explicit_link_prefix_is_normalized(self):
         orig = [{"hash": "abc123def456", "timestamp": "2026-01-01T10:00:00"}]
-        interp = [{
-            "hash": "interp1",
-            "timestamp": "2026-01-01T11:00:00",
-            "message": "feat: L5\n\nBased-On-Original: abc123",
-        }]
+        interp = [
+            {
+                "hash": "interp1",
+                "timestamp": "2026-01-01T11:00:00",
+                "message": "feat: L5\n\nBased-On-Original: abc123",
+            }
+        ]
 
         links = build_links(orig, interp)
 
@@ -207,11 +211,13 @@ class TestBuildLinks:
 
     def test_missing_explicit_base_hash_is_not_linked(self):
         orig = [{"hash": "abc123", "timestamp": "2026-01-01T10:00:00"}]
-        interp = [{
-            "hash": "interp1",
-            "timestamp": "2026-01-01T11:00:00",
-            "message": "feat: L5\n\nBased-On-Original: missing",
-        }]
+        interp = [
+            {
+                "hash": "interp1",
+                "timestamp": "2026-01-01T11:00:00",
+                "message": "feat: L5\n\nBased-On-Original: missing",
+            }
+        ]
 
         assert build_links(orig, interp) == []
 
@@ -221,11 +227,13 @@ class TestBuildLinks:
             {"hash": "orig1", "timestamp": "2026-01-01T09:00:00"},
             {"hash": "orig2", "timestamp": "2026-01-01T10:00:00"},
         ]
-        interp = [{
-            "hash": "interp1",
-            "timestamp": "2026-01-01T10:30:00",
-            "message": "feat: L5 표점",
-        }]
+        interp = [
+            {
+                "hash": "interp1",
+                "timestamp": "2026-01-01T10:30:00",
+                "message": "feat: L5 표점",
+            }
+        ]
 
         links = build_links(orig, interp)
         assert len(links) == 1
@@ -235,11 +243,13 @@ class TestBuildLinks:
 
     def test_no_original_commits(self):
         """원본 커밋이 없으면 링크가 생성되지 않는다."""
-        interp = [{
-            "hash": "interp1",
-            "timestamp": "2026-01-01T10:00:00",
-            "message": "feat: L5",
-        }]
+        interp = [
+            {
+                "hash": "interp1",
+                "timestamp": "2026-01-01T10:00:00",
+                "message": "feat: L5",
+            }
+        ]
         links = build_links([], interp)
         assert len(links) == 0
 
@@ -352,7 +362,9 @@ class TestGetGitGraphData:
         interp_branch = interp_repo.active_branch.name
 
         data = get_git_graph_data(
-            library, "monggu", "monggu_interp_001",
+            library,
+            "monggu",
+            "monggu_interp_001",
             original_branch=orig_branch,
             interp_branch=interp_branch,
         )
@@ -375,15 +387,15 @@ class TestGetGitGraphData:
         interp_branch = interp_repo.active_branch.name
 
         data = get_git_graph_data(
-            library, "monggu", "monggu_interp_001",
+            library,
+            "monggu",
+            "monggu_interp_001",
             original_branch=orig_branch,
             interp_branch=interp_branch,
         )
 
         # explicit 링크가 있어야 함
-        explicit_links = [
-            link for link in data["links"] if link["match_type"] == "explicit"
-        ]
+        explicit_links = [link for link in data["links"] if link["match_type"] == "explicit"]
         assert len(explicit_links) == 1
         assert explicit_links[0]["original_hash"] == orig_head
 
@@ -397,7 +409,9 @@ class TestGetGitGraphData:
         interp_branch = interp_repo.active_branch.name
 
         data = get_git_graph_data(
-            library, "monggu", "monggu_interp_001",
+            library,
+            "monggu",
+            "monggu_interp_001",
             original_branch=orig_branch,
             interp_branch=interp_branch,
         )
@@ -416,7 +430,9 @@ class TestGetGitGraphData:
         interp_branch = interp_repo.active_branch.name
 
         data = get_git_graph_data(
-            library, "monggu", "monggu_interp_001",
+            library,
+            "monggu",
+            "monggu_interp_001",
             original_branch=orig_branch,
             interp_branch=interp_branch,
         )
@@ -436,7 +452,9 @@ class TestGetGitGraphData:
         interp_repo = git.Repo(interp_path)
 
         data = get_git_graph_data(
-            library, "monggu", "monggu_interp_001",
+            library,
+            "monggu",
+            "monggu_interp_001",
             original_branch=doc_repo.active_branch.name,
             interp_branch=interp_repo.active_branch.name,
         )

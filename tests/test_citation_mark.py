@@ -90,11 +90,15 @@ def test_update_citation_mark():
     added = add_citation_mark(data, mark)
     mark_id = added["id"]
 
-    updated = update_citation_mark(data, mark_id, {
-        "label": "핵심 논거",
-        "tags": ["서론", "핵심"],
-        "status": "used",
-    })
+    updated = update_citation_mark(
+        data,
+        mark_id,
+        {
+            "label": "핵심 논거",
+            "tags": ["서론", "핵심"],
+            "status": "used",
+        },
+    )
 
     assert updated is not None
     assert updated["label"] == "핵심 논거"
@@ -110,10 +114,14 @@ def test_update_immutable_fields():
     original_id = added["id"]
     original_source = added["source"]
 
-    update_citation_mark(data, original_id, {
-        "id": "hacked_id",
-        "source": {"block_id": "p99_b99", "start": 99, "end": 99},
-    })
+    update_citation_mark(
+        data,
+        original_id,
+        {
+            "id": "hacked_id",
+            "source": {"block_id": "p99_b99", "start": 99, "end": 99},
+        },
+    )
 
     assert data["marks"][0]["id"] == original_id
     assert data["marks"][0]["source"] == original_source
@@ -144,9 +152,13 @@ def test_update_citation_override():
         "page_ref": "25면",
         "supplementary": "韓國文集叢刊252집, 48면",
     }
-    updated = update_citation_mark(data, added["id"], {
-        "citation_override": override,
-    })
+    updated = update_citation_mark(
+        data,
+        added["id"],
+        {
+            "citation_override": override,
+        },
+    )
 
     assert updated["citation_override"]["work_title"] == "答巡使書"
     assert updated["citation_override"]["page_ref"] == "25면"
@@ -289,7 +301,11 @@ def test_format_citation_full():
         "original_text": "若吾所樂者善而所敬者天也",
         "punctuated_text": "若吾所樂者善，而所敬者天也。",
         "translations": [
-            {"id": "tr_1", "translation": "만약 내가 즐기는 것이 선이요, 공경하는 것이 하늘이라면", "status": "accepted"}
+            {
+                "id": "tr_1",
+                "translation": "만약 내가 즐기는 것이 선이요, 공경하는 것이 하늘이라면",
+                "status": "accepted",
+            }
         ],
         "annotations": [],
         "bibliography": {
@@ -334,13 +350,21 @@ def test_format_citation_minimal():
 def test_export_citations_multiple():
     """여러 인용 일괄 변환."""
     ctx1 = {
-        "mark": {"id": "cite_1", "source": {"block_id": "p01_b01", "start": 0, "end": 3}, "citation_override": None},
+        "mark": {
+            "id": "cite_1",
+            "source": {"block_id": "p01_b01", "start": 0, "end": 3},
+            "citation_override": None,
+        },
         "punctuated_text": "王戎簡要，",
         "translations": [],
         "bibliography": {"title": "蒙求"},
     }
     ctx2 = {
-        "mark": {"id": "cite_2", "source": {"block_id": "p01_b01", "start": 4, "end": 7}, "citation_override": None},
+        "mark": {
+            "id": "cite_2",
+            "source": {"block_id": "p01_b01", "start": 4, "end": 7},
+            "citation_override": None,
+        },
         "punctuated_text": "裴楷清通。",
         "translations": [],
         "bibliography": {"title": "蒙求"},

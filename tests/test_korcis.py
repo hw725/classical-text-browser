@@ -497,6 +497,7 @@ class TestKorcisFetcher:
     def test_url_extraction_detail(self):
         """URL에서 vdkvgwkey 추출 가능한지 확인 (실제 호출은 안 함)."""
         import re
+
         url = "https://www.nl.go.kr/korcis/search/searchResultDetail.do?vdkvgwkey=302554414"
         m = re.search(r"vdkvgwkey=(\d+)", url)
         assert m is not None
@@ -505,6 +506,7 @@ class TestKorcisFetcher:
     def test_url_extraction_marc(self):
         """MARC URL에서 marcKey 추출."""
         import re
+
         url = "https://www.nl.go.kr/korcis/search/popup/marcInfo.do?marcKey=302554414"
         m = re.search(r"marcKey=(\d+)", url)
         assert m is not None
