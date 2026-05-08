@@ -295,12 +295,18 @@ class KostmaMapper(BaseMapper):
             },
             "_mapping_info": self._make_mapping_info(
                 field_sources={
-                    "title": self._field_source("SimpleTree 트리제목", "inferred", "뷰어 트리에서 추출"),
+                    "title": self._field_source(
+                        "SimpleTree 트리제목", "inferred", "뷰어 트리에서 추출"
+                    ),
                     "creator": self._field_source(None, None, "KOSTMA 뷰어에 저자 정보 없음"),
-                    "date_created": self._field_source("발행사항", "inferred", "발행사항에서 연도 추출"),
+                    "date_created": self._field_source(
+                        "발행사항", "inferred", "발행사항에서 연도 추출"
+                    ),
                     "edition_type": self._field_source("판종", "exact"),
                     "physical_description": self._field_source("형태사항", "exact"),
-                    "extent": self._field_source("형태사항", "inferred", "형태사항에서 권수/책수 추출"),
+                    "extent": self._field_source(
+                        "형태사항", "inferred", "형태사항에서 권수/책수 추출"
+                    ),
                     "subject": self._field_source("분류", "exact"),
                     "repository": self._field_source("현소장처+청구기호", "exact"),
                 },

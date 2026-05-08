@@ -563,7 +563,9 @@ class KorcisMapper(BaseMapper):
             physical_parts.append(marc300["a"])
         if marc300.get("c"):
             physical_parts.append(marc300["c"])
-        physical_description = " ; ".join(p for p in physical_parts if p) if physical_parts else None
+        physical_description = (
+            " ; ".join(p for p in physical_parts if p) if physical_parts else None
+        )
 
         # extent 객체 (권책수)
         # MARC 300 ▼a에서 권(卷)과 책(冊) 정보 추출

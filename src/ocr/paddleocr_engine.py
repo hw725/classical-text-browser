@@ -111,7 +111,10 @@ class PaddleOcrEngine(BaseOcrEngine):
             paddle_version = getattr(paddle, "__version__", "")
             is_windows = platform.system() == "Windows"
             is_py313_or_newer = sys.version_info >= (3, 13)
-            is_paddle3_or_newer = paddle_version.split(".")[0].isdigit() and int(paddle_version.split(".")[0]) >= 3
+            major_version = paddle_version.split(".")[0]
+            is_paddle3_or_newer = (
+                major_version.isdigit() and int(major_version) >= 3
+            )
 
             if is_windows and is_py313_or_newer and is_paddle3_or_newer and not self._use_gpu:
                 self._available = False

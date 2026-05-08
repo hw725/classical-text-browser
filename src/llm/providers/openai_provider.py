@@ -130,11 +130,13 @@ class OpenAiProvider(BaseLlmProvider):
 
         if response_format == "json" and finish_reason_s in ("length", "max_tokens"):
             raise LlmProviderError(
-                f"OpenAI JSON output truncated (finish_reason={finish_reason_s}, max_tokens={max_tokens})"
+                f"OpenAI JSON output truncated (finish_reason={finish_reason_s}, "
+                f"max_tokens={max_tokens})"
             )
         if response_format == "json" and not text.strip():
             raise LlmProviderError(
-                f"OpenAI empty JSON output (finish_reason={finish_reason_s}, max_tokens={max_tokens})"
+                f"OpenAI empty JSON output (finish_reason={finish_reason_s}, "
+                f"max_tokens={max_tokens})"
             )
 
         tokens_in = response.usage.prompt_tokens if response.usage else None
@@ -221,11 +223,13 @@ class OpenAiProvider(BaseLlmProvider):
 
         if response_format == "json" and finish_reason in ("length", "max_tokens"):
             raise LlmProviderError(
-                f"OpenAI stream JSON output truncated (finish_reason={finish_reason}, max_tokens={max_tokens})"
+                f"OpenAI stream JSON output truncated (finish_reason={finish_reason}, "
+                f"max_tokens={max_tokens})"
             )
         if response_format == "json" and not full_text.strip():
             raise LlmProviderError(
-                f"OpenAI stream empty JSON output (finish_reason={finish_reason}, max_tokens={max_tokens})"
+                f"OpenAI stream empty JSON output (finish_reason={finish_reason}, "
+                f"max_tokens={max_tokens})"
             )
 
         return LlmResponse(

@@ -368,7 +368,12 @@ class GenericLlmFetcher(BaseFetcher):
             "permanent_uri": url,
             "license": metadata.get("license"),
             "repository": (
-                {"name": metadata.get("attribution"), "name_ko": None, "country": "JP", "call_number": metadata.get("call_number")}
+                {
+                    "name": metadata.get("attribution"),
+                    "name_ko": None,
+                    "country": "JP",
+                    "call_number": metadata.get("call_number"),
+                }
                 if metadata.get("attribution")
                 else None
             ),

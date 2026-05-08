@@ -514,13 +514,25 @@ class ArchivesJpMapper(BaseMapper):
             "_mapping_info": self._make_mapping_info(
                 field_sources={
                     "title": self._field_source("書名/簿冊標題", "exact"),
-                    "title_reading": self._field_source(None, None, "국립공문서관에 독음 없음"),
-                    "creator": self._field_source("人名", "inferred", "역할:이름 형식에서 첫 인명 추출"),
+                    "title_reading": self._field_source(
+                        None, None, "국립공문서관에 독음 없음"
+                    ),
+                    "creator": self._field_source(
+                        "人名", "inferred", "역할:이름 형식에서 첫 인명 추출"
+                    ),
                     "contributors": self._field_source("人名", "inferred", "교정자 등 보조 역할"),
-                    "date_created": self._field_source("書誌事項", "inferred", "서지사항에서 연도 추출"),
-                    "edition_type": self._field_source("書誌事項", "inferred", "서지사항에서 판종 추출"),
+                    "date_created": self._field_source(
+                        "書誌事項", "inferred", "서지사항에서 연도 추출"
+                    ),
+                    "edition_type": self._field_source(
+                        "書誌事項", "inferred", "서지사항에서 판종 추출"
+                    ),
                     "language": self._field_source("言語", "exact"),
-                    "extent": self._field_source("巻数+数量", "inferred", "巻数에서 권수, 数量에서 책수 추출"),
+                    "extent": self._field_source(
+                        "巻数+数量",
+                        "inferred",
+                        "巻数에서 권수, 数量에서 책수 추출",
+                    ),
                     "repository": self._field_source("국립공문서관", "exact", "소장처 고정"),
                 },
                 api_variant="html_scraping",

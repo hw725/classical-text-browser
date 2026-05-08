@@ -271,7 +271,11 @@ class JsgMapper(BaseMapper):
         bibliography = {
             "title": raw_data.get("title") or raw_data.get("자료명"),
             "title_reading": None,
-            "alternative_titles": [raw_data["자료명(이칭)"]] if raw_data.get("자료명(이칭)") else None,
+            "alternative_titles": (
+                [raw_data["자료명(이칭)"]]
+                if raw_data.get("자료명(이칭)")
+                else None
+            ),
             "creator": None,
             "contributors": None,
             "date_created": date_created,
@@ -296,7 +300,11 @@ class JsgMapper(BaseMapper):
                 "platform": "한국학중앙연구원 장서각",
                 "source_url": raw_data.get("source_url"),
                 "permanent_uri": None,
-                "system_ids": {"dataId": raw_data.get("dataId")} if raw_data.get("dataId") else None,
+                "system_ids": (
+                    {"dataId": raw_data.get("dataId")}
+                    if raw_data.get("dataId")
+                    else None
+                ),
                 "license": None,
                 "accessed_at": None,
             },

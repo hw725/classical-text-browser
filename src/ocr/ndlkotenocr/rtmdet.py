@@ -171,7 +171,11 @@ class RTMDet:
             delta_h = (box[3] - box[1]) * 0.02
             new_boxes.append([box[0], box[1] - delta_h, box[2], box[3] + delta_h])
 
-        boxes = np.array(new_boxes).astype(np.int32) if new_boxes else np.empty((0, 4), dtype=np.int32)
+        boxes = (
+            np.array(new_boxes).astype(np.int32)
+            if new_boxes
+            else np.empty((0, 4), dtype=np.int32)
+        )
 
         detections = []
         for bbox, score, label in zip(boxes, scores, class_ids):

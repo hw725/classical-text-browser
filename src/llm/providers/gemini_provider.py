@@ -127,7 +127,8 @@ class GeminiProvider(BaseLlmProvider):
         finish_reason = self._extract_finish_reason(response)
         if response_format == "json" and self._is_truncated_finish_reason(finish_reason):
             raise LlmProviderError(
-                f"Gemini JSON output truncated (finish_reason={finish_reason}, max_tokens={max_tokens})"
+                f"Gemini JSON output truncated (finish_reason={finish_reason}, "
+                f"max_tokens={max_tokens})"
             )
         if response_format == "json" and not text.strip():
             raise LlmProviderError(
@@ -227,11 +228,13 @@ class GeminiProvider(BaseLlmProvider):
 
         if response_format == "json" and self._is_truncated_finish_reason(finish_reason):
             raise LlmProviderError(
-                f"Gemini stream JSON output truncated (finish_reason={finish_reason}, max_tokens={max_tokens})"
+                f"Gemini stream JSON output truncated (finish_reason={finish_reason}, "
+                f"max_tokens={max_tokens})"
             )
         if response_format == "json" and not full_text.strip():
             raise LlmProviderError(
-                f"Gemini stream empty JSON output (finish_reason={finish_reason}, max_tokens={max_tokens})"
+                f"Gemini stream empty JSON output (finish_reason={finish_reason}, "
+                f"max_tokens={max_tokens})"
             )
 
         return LlmResponse(

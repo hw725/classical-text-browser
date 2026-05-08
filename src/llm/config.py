@@ -40,7 +40,8 @@ class LlmConfig:
         #   2. 서고(library) 루트
         # 서고 .env가 프로젝트 루트 .env의 값을 덮어쓴다.
         # → API 키는 프로젝트 루트에, 서고별 설정은 서고 .env에 넣을 수 있다.
-        project_root = Path(__file__).resolve().parent.parent.parent  # src/llm/config.py → 프로젝트 루트
+        # src/llm/config.py → 프로젝트 루트
+        project_root = Path(__file__).resolve().parent.parent.parent
         project_env = project_root / ".env"
         if project_env.exists():
             self._env_cache = self._load_dotenv(project_env)

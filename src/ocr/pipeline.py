@@ -122,7 +122,8 @@ class OcrPipeline:
           engine_id: OCR 엔진 (None이면 기본 엔진)
           block_ids: OCR할 블록 ID 목록 (None이면 전체)
           progress_callback: 블록 처리 진행 시 호출되는 콜백 (SSE 스트리밍용).
-              호출 형식: callback({"current": 2, "total": 5, "block_id": "p01_b02", "status": "processing"})
+              호출 형식:
+              callback({"current": 2, "total": 5, "block_id": "p01_b02", ...})
           **engine_kwargs: 엔진에 전달할 추가 인자 (force_provider, force_model 등)
 
         출력: OcrPageResult
@@ -563,7 +564,11 @@ class OcrPipeline:
                 else:
                     merged_results.append(old_item)
 
-            merged_ids = {m.get("layout_block_id") for m in merged_results if m.get("layout_block_id")}
+            merged_ids = {
+                m.get("layout_block_id")
+                for m in merged_results
+                if m.get("layout_block_id")
+            }
             for new_item in incoming_results:
                 block_id = new_item.get("layout_block_id")
                 if block_id and block_id not in merged_ids:

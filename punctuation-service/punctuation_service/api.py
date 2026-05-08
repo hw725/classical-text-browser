@@ -59,7 +59,10 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="고전한문 표점 서비스",
     version="0.1.0",
-    description="SikuRoBERTa 기반 자동 표점 (yachagye/korean-classical-chinese-punctuation 모델 활용)",
+    description=(
+        "SikuRoBERTa 기반 자동 표점 "
+        "(yachagye/korean-classical-chinese-punctuation 모델 활용)"
+    ),
     lifespan=lifespan,
 )
 

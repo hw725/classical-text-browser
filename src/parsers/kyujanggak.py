@@ -328,7 +328,11 @@ class KyujanggakMapper(BaseMapper):
                 "platform": "서울대학교 규장각한국학연구원",
                 "source_url": raw_data.get("source_url"),
                 "permanent_uri": None,
-                "system_ids": {"book_cd": raw_data.get("book_cd")} if raw_data.get("book_cd") else None,
+                "system_ids": (
+                    {"book_cd": raw_data.get("book_cd")}
+                    if raw_data.get("book_cd")
+                    else None
+                ),
                 "license": None,
                 "accessed_at": None,
             },
@@ -340,13 +344,19 @@ class KyujanggakMapper(BaseMapper):
                 field_sources={
                     "title": self._field_source("원서명", "exact"),
                     "title_reading": self._field_source("현대어서명", "exact"),
-                    "creator": self._field_source("편저자(한자)", "inferred", "편저자 문자열에서 이름/시대/역할 파싱"),
+                    "creator": self._field_source(
+                        "편저자(한자)",
+                        "inferred",
+                        "편저자 문자열에서 이름/시대/역할 파싱",
+                    ),
                     "date_created": self._field_source("간행연도", "exact"),
                     "edition_type": self._field_source("판본사항", "exact"),
                     "physical_description": self._field_source("책크기", "exact"),
                     "extent": self._field_source("책권수", "inferred", "책권수에서 冊 수 추출"),
                     "subject": self._field_source("사부분류", "exact"),
-                    "repository": self._field_source(None, "exact", "하드코딩: 서울대학교 규장각한국학연구원"),
+                    "repository": self._field_source(
+                        None, "exact", "하드코딩: 서울대학교 규장각한국학연구원"
+                    ),
                 },
                 api_variant="html_scraping",
             ),
