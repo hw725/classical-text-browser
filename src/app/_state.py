@@ -683,7 +683,8 @@ async def _call_llm_text_stream(purpose: str, text: str,
             if force_provider:
                 try:
                     logger.warning(
-                        f"LLM stream {purpose} forced provider fallback to auto providers: {force_provider}"
+                        f"LLM stream {purpose} forced provider fallback to auto providers: "
+                        f"{force_provider}"
                     )
                     response = await router.call_stream(
                         user_prompt,
@@ -887,7 +888,8 @@ def _parse_llm_json(response, _json) -> dict:  # type: ignore[no-redef]
     if not raw:
         logger.warning(
             f"LLM empty response ({response.provider}/{response.model}) "
-            f"tokens_out={getattr(response, 'tokens_out', '?')}, raw={getattr(response, 'raw', '?')}"
+            f"tokens_out={getattr(response, 'tokens_out', '?')}, "
+            f"raw={getattr(response, 'raw', '?')}"
         )
         raise ValueError(
             f"{response.provider}({response.model}) returned empty response."

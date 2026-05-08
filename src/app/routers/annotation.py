@@ -382,7 +382,11 @@ def _load_translation_block_text(
         )
 
     items.sort(key=lambda tr: tr.get("source", {}).get("start", 0))
-    text = "\n".join(str(tr.get("translation", "")).strip() for tr in items if tr.get("translation"))
+    text = "\n".join(
+        str(tr.get("translation", "")).strip()
+        for tr in items
+        if tr.get("translation")
+    )
     if not text.strip():
         raise FileNotFoundError(
             f"번역 텍스트가 비어 있습니다: page={page_num}, block_id={block_id}"
@@ -465,13 +469,21 @@ async def api_get_annotations(
 
     interp_path = _library_path / "interpretations" / interp_id
     if not interp_path.exists():
-        return JSONResponse({"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."}, status_code=404)
+        return JSONResponse(
+            {"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."},
+            status_code=404,
+        )
 
     data = load_annotations(interp_path, part_id, page_num)
 
     if type:
         filtered = get_annotations_by_type(data, type)
-        return {"part_id": part_id, "page_number": page_num, "filtered_type": type, "results": filtered}
+        return {
+            "part_id": part_id,
+            "page_number": page_num,
+            "filtered_type": type,
+            "results": filtered,
+        }
 
     return data
 
@@ -955,7 +967,9 @@ async def api_dict_generate_batch(interp_id: str, body: DictBatchRequest | None 
             llm_router.force_model = body.force_model
 
         text_dir = interp_path / "L4_text" / "main_text"
-        if (not text_dir.exists()) and (not (interp_path / "L6_translation" / "main_text").exists()):
+        if (not text_dir.exists()) and (
+            not (interp_path / "L6_translation" / "main_text").exists()
+        ):
             return JSONResponse(
                 {"error": "사전 생성 가능한 입력 데이터가 없습니다. (L4/L6 없음)"},
                 status_code=404,
@@ -999,13 +1013,19 @@ async def api_dict_generate_batch(interp_id: str, body: DictBatchRequest | None 
                 ann_data = load_annotations(interp_path, "main", page_num)
                 block_ids = _load_page_block_ids(interp_path, page_num, "main")
                 if not block_ids:
-                    total_results["errors"].append({"page": page_num, "error": "L4 블록이 없습니다."})
+                    total_results["errors"].append(
+                        {"page": page_num, "error": "L4 블록이 없습니다."}
+                    )
                     continue
 
                 for block_id in block_ids:
                     try:
-                        original_text = _load_original_block_text(interp_path, page_num, block_id, "main")
-                        translation_text = _load_translation_block_text(interp_path, page_num, block_id, "main")
+                        original_text = _load_original_block_text(
+                            interp_path, page_num, block_id, "main"
+                        )
+                        translation_text = _load_translation_block_text(
+                            interp_path, page_num, block_id, "main"
+                        )
                         existing_annotations = _get_block_annotations(ann_data, block_id)
 
                         generated = await generate_stage3_from_both(
@@ -1040,7 +1060,11 @@ async def api_dict_generate_batch(interp_id: str, body: DictBatchRequest | None 
 
 
 @router.get("/api/interpretations/{interp_id}/export/dictionary")
-async def api_export_dictionary(interp_id: str, page_start: int | None = None, page_end: int | None = None):
+async def api_export_dictionary(
+    interp_id: str,
+    page_start: int | None = None,
+    page_end: int | None = None,
+):
     """사전 내보내기.
 
     목적: 해석의 L7 사전형 주석을 독립 사전 JSON으로 추출한다.
@@ -1187,7 +1211,10 @@ async def api_remove_reference_dict(interp_id: str, filename: str):
     interp_path = _library_path / "interpretations" / interp_id
     removed = remove_reference_dict(interp_path, filename)
     if not removed:
-        return JSONResponse({"error": f"참조 사전 '{filename}'을 찾을 수 없습니다."}, status_code=404)
+        return JSONResponse(
+            {"error": f"참조 사전 '{filename}'을 찾을 수 없습니다."},
+            status_code=404,
+        )
 
     return Response(status_code=204)
 
@@ -1471,7 +1498,8 @@ async def api_resolve_citation_mark(
 
     목적: 연구자가 인용 마크를 클릭했을 때 원문+표점본+번역+주석을 통합 표시.
     입력: interp_id, page_num, mark_id.
-    출력: {mark, original_text, punctuated_text, translations, annotations, bibliography, text_changed}.
+    출력: {mark, original_text, punctuated_text, translations, annotations,
+         bibliography, text_changed}.
     """
     _library_path = get_library_path()
     if _library_path is None:

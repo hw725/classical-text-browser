@@ -54,7 +54,8 @@ class OcrRunRequest(BaseModel):
     block_ids: list[str] | None = None  # None이면 전체 블록
     force_provider: str | None = None   # LLM 프로바이더 지정 (llm_vision 엔진 전용)
     force_model: str | None = None      # LLM 모델 지정 (llm_vision 엔진 전용)
-    paddle_lang: str | None = None      # PaddleOCR 언어 코드 (paddleocr 엔진 전용: ch, chinese_cht, korean, japan, en)
+    # PaddleOCR 언어 코드 (paddleocr 엔진 전용: ch, chinese_cht, korean, japan, en)
+    paddle_lang: str | None = None
 
 
 # ===========================================================================
@@ -392,7 +393,9 @@ async def api_ocr_engines():
 
     목적: GUI의 OCR 실행 패널에서 엔진 드롭다운을 채우기 위해 사용한다.
     출력: {
-        "engines": [{"engine_id": "paddleocr", "display_name": "PaddleOCR", "available": true, ...}],
+        "engines": [
+            {"engine_id": "paddleocr", "display_name": "PaddleOCR", "available": true, ...}
+        ],
         "default_engine": "paddleocr"
     }
     """

@@ -376,7 +376,11 @@ async def api_save_layer_content(
         return JSONResponse({"error": f"저장 실패: {e}"}, status_code=400)
 
     # 자동 git commit
-    layer_label = {"L5_reading": "구두점", "L6_translation": "번역", "L7_annotation": "주석"}.get(layer, layer)
+    layer_label = {
+        "L5_reading": "구두점",
+        "L6_translation": "번역",
+        "L7_annotation": "주석",
+    }.get(layer, layer)
     commit_msg = f"{layer}: page {page_num:03d} {layer_label} 편집 ({sub_type})"
     git_result = git_commit_interpretation(interp_path, commit_msg)
     save_result["git"] = git_result

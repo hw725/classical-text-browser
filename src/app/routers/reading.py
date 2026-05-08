@@ -143,7 +143,11 @@ async def api_punctuation_presets():
     """표점 부호 프리셋 목록을 반환한다."""
     # __file__ = src/app/routers/reading.py → 4단계 올라가야 프로젝트 루트
     # 왜 .parent가 4개인가: routers/ → app/ → src/ → 프로젝트루트
-    presets_path = Path(__file__).resolve().parent.parent.parent.parent / "resources" / "punctuation_presets.json"
+    presets_path = (
+        Path(__file__).resolve().parent.parent.parent.parent
+        / "resources"
+        / "punctuation_presets.json"
+    )
     if not presets_path.exists():
         return {"presets": [], "custom": []}
     import json as _json
@@ -216,7 +220,8 @@ async def api_l5_compare(
         except (json.JSONDecodeError, OSError):
             continue
 
-    # Legacy fallback: if only page-level JSON exists, use its block list for block-oriented compare.
+    # Legacy fallback: if only page-level JSON exists, use its block list for
+    # block-oriented compare.
     if not blocks:
         legacy_file = l5_dir / f"{page_prefix}.json"
         if legacy_file.exists():
@@ -343,7 +348,10 @@ async def api_get_punctuation(interp_id: str, page_num: int, block_id: str = Que
 
     interp_path = _library_path / "interpretations" / interp_id
     if not interp_path.exists():
-        return JSONResponse({"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."}, status_code=404)
+        return JSONResponse(
+            {"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."},
+            status_code=404,
+        )
 
     # part_id는 문헌에서 자동 추론 (현재는 "main" 기본값)
     part_id = "main"
@@ -363,7 +371,10 @@ async def api_save_punctuation(interp_id: str, page_num: int, body: PunctuationS
 
     interp_path = _library_path / "interpretations" / interp_id
     if not interp_path.exists():
-        return JSONResponse({"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."}, status_code=404)
+        return JSONResponse(
+            {"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."},
+            status_code=404,
+        )
 
     part_id = "main"
     data = {"block_id": body.block_id, "marks": body.marks}
@@ -467,7 +478,10 @@ async def api_get_hyeonto(interp_id: str, page_num: int, block_id: str = Query(.
 
     interp_path = _library_path / "interpretations" / interp_id
     if not interp_path.exists():
-        return JSONResponse({"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."}, status_code=404)
+        return JSONResponse(
+            {"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."},
+            status_code=404,
+        )
 
     part_id = "main"
     data = load_hyeonto(interp_path, part_id, page_num, block_id)
@@ -483,7 +497,10 @@ async def api_save_hyeonto(interp_id: str, page_num: int, body: HyeontoSaveReque
 
     interp_path = _library_path / "interpretations" / interp_id
     if not interp_path.exists():
-        return JSONResponse({"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."}, status_code=404)
+        return JSONResponse(
+            {"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."},
+            status_code=404,
+        )
 
     part_id = "main"
     data = {"block_id": body.block_id, "annotations": body.annotations}
@@ -500,7 +517,12 @@ async def api_save_hyeonto(interp_id: str, page_num: int, body: HyeontoSaveReque
 
 
 @router.post("/api/interpretations/{interp_id}/pages/{page_num}/hyeonto/{block_id}/annotations")
-async def api_add_annotation(interp_id: str, page_num: int, block_id: str, body: AnnotationAddRequest):
+async def api_add_annotation(
+    interp_id: str,
+    page_num: int,
+    block_id: str,
+    body: AnnotationAddRequest,
+):
     """개별 현토 추가."""
     _library_path = get_library_path()
     if _library_path is None:
@@ -601,7 +623,10 @@ async def api_get_translations(
 
     interp_path = _library_path / "interpretations" / interp_id
     if not interp_path.exists():
-        return JSONResponse({"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."}, status_code=404)
+        return JSONResponse(
+            {"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."},
+            status_code=404,
+        )
 
     data = load_translations(interp_path, part_id, page_num)
     return data
@@ -683,7 +708,10 @@ async def api_update_translation(
 
     result = update_translation(data, translation_id, updates)
     if result is None:
-        return JSONResponse({"error": f"번역 '{translation_id}'를 찾을 수 없습니다."}, status_code=404)
+        return JSONResponse(
+            {"error": f"번역 '{translation_id}'를 찾을 수 없습니다."},
+            status_code=404,
+        )
 
     try:
         save_translations(interp_path, part_id, page_num, data)
@@ -715,7 +743,10 @@ async def api_commit_translation(
     result = commit_translation_draft(data, translation_id, body.modifications)
 
     if result is None:
-        return JSONResponse({"error": f"번역 '{translation_id}'를 찾을 수 없습니다."}, status_code=404)
+        return JSONResponse(
+            {"error": f"번역 '{translation_id}'를 찾을 수 없습니다."},
+            status_code=404,
+        )
 
     try:
         save_translations(interp_path, part_id, page_num, data)
@@ -742,7 +773,10 @@ async def api_delete_translation(interp_id: str, page_num: int, translation_id: 
     removed = remove_translation(data, translation_id)
 
     if not removed:
-        return JSONResponse({"error": f"번역 '{translation_id}'를 찾을 수 없습니다."}, status_code=404)
+        return JSONResponse(
+            {"error": f"번역 '{translation_id}'를 찾을 수 없습니다."},
+            status_code=404,
+        )
 
     save_translations(interp_path, part_id, page_num, data)
     return JSONResponse(status_code=204, content=None)
@@ -966,7 +1000,12 @@ async def api_llm_punctuation(body: AiPunctuationRequest):
         ext_url = get_external_punctuation_url()
         if not ext_url:
             return JSONResponse(
-                {"error": "외부 표점 서비스 URL이 설정되지 않았습니다 (환경변수 EXTERNAL_PUNCT_URL)."},
+                {
+                    "error": (
+                        "외부 표점 서비스 URL이 설정되지 않았습니다 "
+                        "(환경변수 EXTERNAL_PUNCT_URL)."
+                    )
+                },
                 status_code=503,
             )
         try:

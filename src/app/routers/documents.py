@@ -257,7 +257,12 @@ async def api_delete_document(doc_id: str):
         return JSONResponse({"error": str(e)}, status_code=404)
     except PermissionError as e:
         return JSONResponse(
-            {"error": f"파일이 사용 중이라 삭제할 수 없습니다.\n원인: {e}\n→ 해결: 해당 폴더를 사용 중인 프로그램을 닫고 다시 시도하세요."},
+            {
+                "error": (
+                    f"파일이 사용 중이라 삭제할 수 없습니다.\n원인: {e}\n"
+                    "→ 해결: 해당 폴더를 사용 중인 프로그램을 닫고 다시 시도하세요."
+                )
+            },
             status_code=500,
         )
     except Exception as e:
@@ -605,7 +610,8 @@ async def api_create_from_files(
     #   1) 모든 업로드를 임시 디렉터리에 풀고
     #   2) 이미지 → PyMuPDF로 한 권의 PDF로 묶고 (임시 폴더 안에서)
     #   3) PDF는 그대로 임시 폴더에 두고
-    #   4) **검증 모두 통과한 뒤** add_document(files=[모두]) 한 번 호출 → L1_source 채움 + git init/commit
+    #   4) **검증 모두 통과한 뒤** add_document(files=[모두]) 한 번 호출
+    #      → L1_source 채움 + git init/commit
     #   5) manifest.parts를 우리 의도(이미지묶음=vol1, 각 PDF=별도 vol)로 교체
     # 왜 add_document 호출을 마지막으로 미루는가:
     #   변환 실패 시 doc_path가 아직 만들어지지 않아 부분 생성 상태가 남지 않는다.

@@ -552,7 +552,11 @@ async def api_import_interpretation_folder(files: list[UploadFile] = File(...)):
                 text=True,
             )
             if init_proc.returncode == 0:
-                subprocess.run(["git", "add", "."], cwd=str(target_interp_path), capture_output=True)
+                subprocess.run(
+                    ["git", "add", "."],
+                    cwd=str(target_interp_path),
+                    capture_output=True,
+                )
                 subprocess.run(
                     ["git", "commit", "-m", f"feat: 해석 저장소 폴더 가져오기 — {interp_id}"],
                     cwd=str(target_interp_path),

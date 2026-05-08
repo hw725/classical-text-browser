@@ -472,7 +472,8 @@ async def api_git_sync(body: GitPushPullRequest):
                         "detail": f"추적 예시:\n{sample}",
                         "hint": (
                             "branch(main/master) 문제가 아닙니다. "
-                            "해당 저장소에서 `git rm -r --cached .git` 후 커밋하고 다시 push 하세요. "
+                            "해당 저장소에서 `git rm -r --cached .git` 후 "
+                            "커밋하고 다시 push 하세요. "
                             "필요하면 저장소를 새로 초기화하는 것이 가장 안전합니다."
                         ),
                     },
@@ -629,7 +630,12 @@ async def api_restore_from_trash(trash_type: str, trash_name: str):
 
     if trash_type not in ("documents", "interpretations"):
         return JSONResponse(
-            {"error": f"올바르지 않은 유형: {trash_type}. 'documents' 또는 'interpretations'만 가능합니다."},
+            {
+                "error": (
+                    f"올바르지 않은 유형: {trash_type}. "
+                    "'documents' 또는 'interpretations'만 가능합니다."
+                )
+            },
             status_code=400,
         )
 
