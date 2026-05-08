@@ -4,11 +4,11 @@
 순환 import 방지를 위해 이 모듈은 core/llm/ocr 모듈만 lazy-import한다.
 """
 
-import re
-import logging
-import hashlib
-import time
 import copy
+import hashlib
+import logging
+import re
+import time
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -155,8 +155,8 @@ def _get_ocr_pipeline():
     """
     global _ocr_registry, _ocr_pipeline
     if _ocr_registry is None:
-        from ocr.registry import OcrEngineRegistry
         from ocr.pipeline import OcrPipeline
+        from ocr.registry import OcrEngineRegistry
 
         _ocr_registry = OcrEngineRegistry()
         _ocr_registry.auto_register()
@@ -413,8 +413,8 @@ async def _call_llm_text(purpose: str, text: str,
         거절 응답을 반환하면 다음 프로바이더로 자동 재시도한다.
         일부 프로바이더가 자유 형식 텍스트 요청을 거절할 수 있다.
     """
-    import json as _json
     import asyncio as _asyncio
+    import json as _json
 
     prompts = _LLM_PROMPTS.get(purpose)
     if not prompts:
@@ -573,8 +573,8 @@ async def _call_llm_text_stream(purpose: str, text: str,
         complete: {"type":"complete","result":{...파싱된 JSON...}}
         error:    {"type":"error","error":"에러 메시지"}
     """
-    import json as _json
     import asyncio as _asyncio
+    import json as _json
 
     prompts = _LLM_PROMPTS.get(purpose)
     if not prompts:

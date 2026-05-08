@@ -40,6 +40,7 @@ def main():
 
     if args.command == "serve":
         import uvicorn
+
         from app.server import configure
 
         # 서고 경로 결정: CLI 인자 → 마지막 사용 서고 → 미지정

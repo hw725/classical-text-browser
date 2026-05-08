@@ -14,6 +14,16 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app._state import get_library_path
+from core.entity import (
+    auto_create_work,
+    create_entity,
+    create_textblock_from_source,
+    get_entity,
+    list_entities,
+    list_entities_for_page,
+    promote_tag_to_concept,
+    update_entity,
+)
 from core.interpretation import (
     acknowledge_changes,
     check_dependency,
@@ -25,16 +35,6 @@ from core.interpretation import (
     git_commit_interpretation,
     save_layer_content,
     update_base,
-)
-from core.entity import (
-    auto_create_work,
-    create_entity,
-    create_textblock_from_source,
-    get_entity,
-    list_entities,
-    list_entities_for_page,
-    promote_tag_to_concept,
-    update_entity,
 )
 from core.library import (
     list_interpretations,

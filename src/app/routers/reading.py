@@ -13,7 +13,6 @@ Phase 11-1 / 11-2 엔드포인트를 포함한다.
 
 import json
 import logging
-
 from pathlib import Path
 
 from fastapi import APIRouter, Query
@@ -21,10 +20,17 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app._state import (
-    get_library_path,
     _call_llm_text,
     _call_llm_text_stream,
     get_external_punctuation_url,
+    get_library_path,
+)
+from core.hyeonto import (
+    add_annotation,
+    load_hyeonto,
+    remove_annotation,
+    render_hyeonto_text,
+    save_hyeonto,
 )
 from core.interpretation import (
     get_l5_compare_at_commit,
@@ -40,13 +46,6 @@ from core.punctuation import (
     render_punctuated_text,
     save_punctuation,
     split_sentences,
-)
-from core.hyeonto import (
-    add_annotation,
-    load_hyeonto,
-    remove_annotation,
-    render_hyeonto_text,
-    save_hyeonto,
 )
 from core.translation import (
     add_translation,

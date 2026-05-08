@@ -26,7 +26,7 @@ from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from app._state import get_library_path, _get_llm_router, _get_ocr_pipeline, get_llm_drafts
+from app._state import _get_llm_router, _get_ocr_pipeline, get_library_path, get_llm_drafts
 
 router = APIRouter(tags=["llm_ocr"])
 
@@ -340,8 +340,9 @@ async def api_detect_layout(
             )
 
     # 2. 페이지 이미지 로드 (원본 해상도)
-    from ocr.image_utils import get_page_image_path, load_page_image, load_page_image_from_pdf
     import io as _io
+
+    from ocr.image_utils import get_page_image_path, load_page_image, load_page_image_from_pdf
 
     image_path = get_page_image_path(str(library_path), doc_id, part_id, page)
     if image_path is not None:

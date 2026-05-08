@@ -30,17 +30,16 @@ from fastapi import APIRouter, File, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
+from app._state import _resolve_repo_path, get_library_path
 from core.git_graph import (
-    get_git_graph_data,
-    get_commit_file_list,
     get_commit_file_content,
+    get_commit_file_list,
+    get_git_graph_data,
     revert_to_commit,
 )
 from core.interpretation import _append_based_on_trailer
 from core.snapshot import build_snapshot, create_work_from_snapshot, detect_imported_layers
 from core.snapshot_validator import validate_snapshot
-
-from app._state import get_library_path, _resolve_repo_path
 
 logger = logging.getLogger(__name__)
 

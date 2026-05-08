@@ -18,6 +18,7 @@ from fastapi import APIRouter
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
+from app._state import _resolve_repo_path, configure_library, get_library_path
 from core.library import (
     check_git_health,
     get_library_info,
@@ -25,8 +26,6 @@ from core.library import (
     repair_git_contamination,
     restore_from_trash,
 )
-
-from app._state import get_library_path, configure_library, _resolve_repo_path
 
 logger = logging.getLogger(__name__)
 
@@ -173,8 +172,9 @@ async def api_init_library(body: InitLibraryRequest):
     출력: { "ok": true, "library_path": "..." }
     에러: 이미 서고가 있으면 409.
     """
-    from core.library import init_library
     from pathlib import Path as _Path
+
+    from core.library import init_library
 
     target = _Path(body.path).resolve()
 
