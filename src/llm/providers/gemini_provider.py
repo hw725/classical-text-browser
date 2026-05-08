@@ -24,16 +24,35 @@ class GeminiProvider(BaseLlmProvider):
     # 주요 모델 목록 (2026-02 기준)
     # Gemini 3 시리즈는 preview 상태. 안정성이 필요하면 2.5 사용.
     MODELS = [
-        {"name": "gemini-2.5-flash", "vision": True, "cost": "lowest",
-         "input": 0.00015, "output": 0.0006},
-        {"name": "gemini-2.5-pro", "vision": True, "cost": "low",
-         "input": 0.00125, "output": 0.01},
-        {"name": "gemini-3-flash-preview", "vision": True, "cost": "low",
-         "input": 0.00015, "output": 0.0006},
-        {"name": "gemini-3-pro-preview", "vision": True, "cost": "medium",
-         "input": 0.00125, "output": 0.01},
-        {"name": "gemini-3.1-pro-preview", "vision": True, "cost": "high",
-         "input": 0.00125, "output": 0.01},
+        {
+            "name": "gemini-2.5-flash",
+            "vision": True,
+            "cost": "lowest",
+            "input": 0.00015,
+            "output": 0.0006,
+        },
+        {"name": "gemini-2.5-pro", "vision": True, "cost": "low", "input": 0.00125, "output": 0.01},
+        {
+            "name": "gemini-3-flash-preview",
+            "vision": True,
+            "cost": "low",
+            "input": 0.00015,
+            "output": 0.0006,
+        },
+        {
+            "name": "gemini-3-pro-preview",
+            "vision": True,
+            "cost": "medium",
+            "input": 0.00125,
+            "output": 0.01,
+        },
+        {
+            "name": "gemini-3.1-pro-preview",
+            "vision": True,
+            "cost": "high",
+            "input": 0.00125,
+            "output": 0.01,
+        },
     ]
 
     PRICING = {m["name"]: {"input": m["input"], "output": m["output"]} for m in MODELS}
@@ -75,22 +94,27 @@ class GeminiProvider(BaseLlmProvider):
             for m in self.MODELS
         ]
 
-    def _estimate_cost(self, model: str,
-                       tokens_in: Optional[int],
-                       tokens_out: Optional[int]) -> float:
+    def _estimate_cost(
+        self, model: str, tokens_in: Optional[int], tokens_out: Optional[int]
+    ) -> float:
         """토큰 수로 비용 추정."""
-        pricing = self.PRICING.get(
-            model, {"input": 0.00015, "output": 0.0006}
-        )
-        cost = (
-            (tokens_in or 0) / 1000 * pricing["input"]
-            + (tokens_out or 0) / 1000 * pricing["output"]
-        )
+        pricing = self.PRICING.get(model, {"input": 0.00015, "output": 0.0006})
+        cost = (tokens_in or 0) / 1000 * pricing["input"] + (tokens_out or 0) / 1000 * pricing[
+            "output"
+        ]
         return round(cost, 6)
 
-    async def call(self, prompt, *, system=None, response_format="text",
-                   model=None, max_tokens=4096, purpose="text",
-                   **kwargs) -> LlmResponse:
+    async def call(
+        self,
+        prompt,
+        *,
+        system=None,
+        response_format="text",
+        model=None,
+        max_tokens=4096,
+        purpose="text",
+        **kwargs,
+    ) -> LlmResponse:
         """Gemini API로 텍스트 생성.
 
         google-genai SDK의 비동기 인터페이스 사용:
@@ -149,9 +173,16 @@ class GeminiProvider(BaseLlmProvider):
         )
 
     async def call_stream(
-        self, prompt, *, system=None, response_format="text",
-        model=None, max_tokens=4096, purpose="text",
-        progress_callback=None, **kwargs,
+        self,
+        prompt,
+        *,
+        system=None,
+        response_format="text",
+        model=None,
+        max_tokens=4096,
+        purpose="text",
+        progress_callback=None,
+        **kwargs,
     ) -> LlmResponse:
         """Gemini 네이티브 스트리밍. generate_content_stream() 사용.
 
@@ -173,9 +204,14 @@ class GeminiProvider(BaseLlmProvider):
         # generate_content_stream 메서드 확인 — 없으면 heartbeat 폴백
         if not hasattr(client.aio.models, "generate_content_stream"):
             return await super().call_stream(
-                prompt, system=system, response_format=response_format,
-                model=model, max_tokens=max_tokens, purpose=purpose,
-                progress_callback=progress_callback, **kwargs,
+                prompt,
+                system=system,
+                response_format=response_format,
+                model=model,
+                max_tokens=max_tokens,
+                purpose=purpose,
+                progress_callback=progress_callback,
+                **kwargs,
             )
 
         config = types.GenerateContentConfig(
@@ -217,12 +253,14 @@ class GeminiProvider(BaseLlmProvider):
             now = time.monotonic()
             if progress_callback and (now - last_report) >= 1.0:
                 last_report = now
-                progress_callback({
-                    "type": "progress",
-                    "elapsed_sec": round(now - t0, 1),
-                    "tokens": tokens_out,
-                    "provider": self.provider_id,
-                })
+                progress_callback(
+                    {
+                        "type": "progress",
+                        "elapsed_sec": round(now - t0, 1),
+                        "tokens": tokens_out,
+                        "provider": self.provider_id,
+                    }
+                )
 
         elapsed = time.monotonic() - t0
 
@@ -248,9 +286,18 @@ class GeminiProvider(BaseLlmProvider):
             raw={"stream": True, "model": selected_model, "finish_reason": finish_reason},
         )
 
-    async def call_with_image(self, prompt, image, *, image_mime="image/png",
-                              system=None, response_format="text", model=None,
-                              max_tokens=4096, **kwargs) -> LlmResponse:
+    async def call_with_image(
+        self,
+        prompt,
+        image,
+        *,
+        image_mime="image/png",
+        system=None,
+        response_format="text",
+        model=None,
+        max_tokens=4096,
+        **kwargs,
+    ) -> LlmResponse:
         """Gemini Vision으로 이미지 분석.
 
         google-genai SDK는 Part(inline_data=...) 형식으로 이미지를 전달한다.

@@ -79,11 +79,13 @@ class OllamaProvider(BaseLlmProvider):
         for m in data.get("models", []):
             name = m.get("name", "")
             has_vision = await self._check_vision_capability(name)
-            models.append({
-                "name": name,
-                "size": m.get("size", "N/A"),
-                "vision": has_vision,
-            })
+            models.append(
+                {
+                    "name": name,
+                    "size": m.get("size", "N/A"),
+                    "vision": has_vision,
+                }
+            )
         return models
 
     async def _check_vision_capability(self, model_name: str) -> bool:
@@ -136,14 +138,19 @@ class OllamaProvider(BaseLlmProvider):
         가능한 한 /api/show 경로를 우선 사용해야 한다.
         """
         name_lower = model_name.lower()
-        return any(
-            kw in name_lower
-            for kw in ["vl", "vision", "llava", "gemma4", "pixtral"]
-        )
+        return any(kw in name_lower for kw in ["vl", "vision", "llava", "gemma4", "pixtral"])
 
-    async def call(self, prompt, *, system=None, response_format="text",
-                   model=None, max_tokens=4096, purpose="text",
-                   **kwargs) -> LlmResponse:
+    async def call(
+        self,
+        prompt,
+        *,
+        system=None,
+        response_format="text",
+        model=None,
+        max_tokens=4096,
+        purpose="text",
+        **kwargs,
+    ) -> LlmResponse:
         """Ollama API로 텍스트 생성.
 
         purpose: 용도 힌트 ("text", "translation", "json")
@@ -157,10 +164,7 @@ class OllamaProvider(BaseLlmProvider):
             호출자가 `think=True`를 넘기면 reasoning을 활성화하고,
             response가 비어 있으면 thinking을 폴백 텍스트로 사용한다.
         """
-        selected_model = (
-            model
-            or self.DEFAULT_MODELS.get(purpose, self.DEFAULT_MODELS["text"])
-        )
+        selected_model = model or self.DEFAULT_MODELS.get(purpose, self.DEFAULT_MODELS["text"])
 
         payload = {
             "model": selected_model,
@@ -188,13 +192,9 @@ class OllamaProvider(BaseLlmProvider):
         # 클라우드 프록시 모델(gemini-3-flash-preview:cloud 등)은
         # 네트워크 지연이 추가되므로 타임아웃을 넉넉히 300초로 설정.
         async with httpx.AsyncClient(timeout=300.0) as client:
-            resp = await client.post(
-                f"{self._url}/api/generate", json=payload
-            )
+            resp = await client.post(f"{self._url}/api/generate", json=payload)
             if resp.status_code != 200:
-                raise LlmProviderError(
-                    f"Ollama 응답 {resp.status_code}: {resp.text[:200]}"
-                )
+                raise LlmProviderError(f"Ollama 응답 {resp.status_code}: {resp.text[:200]}")
             data = resp.json()
         elapsed = time.monotonic() - t0
 
@@ -217,9 +217,16 @@ class OllamaProvider(BaseLlmProvider):
         )
 
     async def call_stream(
-        self, prompt, *, system=None, response_format="text",
-        model=None, max_tokens=4096, purpose="text",
-        progress_callback=None, **kwargs,
+        self,
+        prompt,
+        *,
+        system=None,
+        response_format="text",
+        model=None,
+        max_tokens=4096,
+        purpose="text",
+        progress_callback=None,
+        **kwargs,
     ) -> LlmResponse:
         """Ollama 네이티브 스트리밍. NDJSON 청크를 읽으며 progress_callback 호출.
 
@@ -231,10 +238,7 @@ class OllamaProvider(BaseLlmProvider):
         """
         import json as _json
 
-        selected_model = (
-            model
-            or self.DEFAULT_MODELS.get(purpose, self.DEFAULT_MODELS["text"])
-        )
+        selected_model = model or self.DEFAULT_MODELS.get(purpose, self.DEFAULT_MODELS["text"])
 
         payload = {
             "model": selected_model,
@@ -261,13 +265,9 @@ class OllamaProvider(BaseLlmProvider):
         last_report = t0
 
         async with httpx.AsyncClient(timeout=300.0) as client:
-            async with client.stream(
-                "POST", f"{self._url}/api/generate", json=payload
-            ) as resp:
+            async with client.stream("POST", f"{self._url}/api/generate", json=payload) as resp:
                 if resp.status_code != 200:
-                    raise LlmProviderError(
-                        f"Ollama 스트리밍 응답 {resp.status_code}"
-                    )
+                    raise LlmProviderError(f"Ollama 스트리밍 응답 {resp.status_code}")
 
                 async for line in resp.aiter_lines():
                     if not line.strip():
@@ -292,12 +292,14 @@ class OllamaProvider(BaseLlmProvider):
                     now = time.monotonic()
                     if progress_callback and (now - last_report) >= 1.0:
                         last_report = now
-                        progress_callback({
-                            "type": "progress",
-                            "elapsed_sec": round(now - t0, 1),
-                            "tokens": tokens_out,
-                            "provider": self.provider_id,
-                        })
+                        progress_callback(
+                            {
+                                "type": "progress",
+                                "elapsed_sec": round(now - t0, 1),
+                                "tokens": tokens_out,
+                                "provider": self.provider_id,
+                            }
+                        )
 
                     if chunk.get("done"):
                         tokens_in = chunk.get("prompt_eval_count")
@@ -320,9 +322,18 @@ class OllamaProvider(BaseLlmProvider):
             raw={"stream": True},
         )
 
-    async def call_with_image(self, prompt, image, *, image_mime="image/png",
-                              system=None, response_format="text", model=None,
-                              max_tokens=4096, **kwargs) -> LlmResponse:
+    async def call_with_image(
+        self,
+        prompt,
+        image,
+        *,
+        image_mime="image/png",
+        system=None,
+        response_format="text",
+        model=None,
+        max_tokens=4096,
+        **kwargs,
+    ) -> LlmResponse:
         """Ollama 비전 모델로 이미지 분석.
 
         gemma4:e4b가 기본 비전 모델 (멀티모달).
@@ -344,13 +355,9 @@ class OllamaProvider(BaseLlmProvider):
 
         t0 = time.monotonic()
         async with httpx.AsyncClient(timeout=300.0) as client:
-            resp = await client.post(
-                f"{self._url}/api/generate", json=payload
-            )
+            resp = await client.post(f"{self._url}/api/generate", json=payload)
             if resp.status_code != 200:
-                raise LlmProviderError(
-                    f"Ollama vision 응답 {resp.status_code}"
-                )
+                raise LlmProviderError(f"Ollama vision 응답 {resp.status_code}")
             data = resp.json()
         elapsed = time.monotonic() - t0
 

@@ -22,13 +22,11 @@ class UsageTracker:
         if self._log_path:
             return self._log_path
 
-        library_root = getattr(self.config, '_library_root', None)
+        library_root = getattr(self.config, "_library_root", None)
         if library_root:
             self._log_path = Path(library_root) / "llm_usage_log.jsonl"
         else:
-            self._log_path = (
-                Path.home() / ".classical-text-browser" / "llm_usage_log.jsonl"
-            )
+            self._log_path = Path.home() / ".classical-text-browser" / "llm_usage_log.jsonl"
 
         self._log_path.parent.mkdir(parents=True, exist_ok=True)
         return self._log_path
@@ -61,17 +59,13 @@ class UsageTracker:
             "ts": datetime.now(timezone.utc).isoformat(),
             "type": "comparison",
             "purpose": purpose,
-            "targets": [
-                {"provider": pid, "model": model} for pid, model in targets
-            ],
+            "targets": [{"provider": pid, "model": model} for pid, model in targets],
             "results": [
                 {
                     "provider": r.provider if isinstance(r, LlmResponse) else None,
                     "model": r.model if isinstance(r, LlmResponse) else None,
                     "text_length": len(r.text) if isinstance(r, LlmResponse) else 0,
-                    "elapsed_sec": (
-                        r.elapsed_sec if isinstance(r, LlmResponse) else None
-                    ),
+                    "elapsed_sec": (r.elapsed_sec if isinstance(r, LlmResponse) else None),
                     "error": str(r) if isinstance(r, Exception) else None,
                 }
                 for r in results

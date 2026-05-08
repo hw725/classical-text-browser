@@ -38,18 +38,18 @@ class OpenAiProvider(BaseLlmProvider):
     # API로 모델 목록을 가져올 수 있지만 불필요한 모델이 너무 많아서 수동 관리가 실용적.
     # 가격: 1K 토큰당 USD. 출처: https://platform.openai.com/docs/pricing
     MODELS = [
-        {"name": "gpt-5-nano", "vision": True, "cost": "lowest",
-         "input": 0.00005, "output": 0.0004},
-        {"name": "gpt-5-mini", "vision": True, "cost": "low",
-         "input": 0.00025, "output": 0.002},
-        {"name": "gpt-5", "vision": True, "cost": "medium",
-         "input": 0.00125, "output": 0.01},
-        {"name": "gpt-5.2", "vision": True, "cost": "high",
-         "input": 0.00175, "output": 0.014},
-        {"name": "o4-mini", "vision": False, "cost": "medium",
-         "input": 0.0011, "output": 0.0044},
-        {"name": "gpt-4.1", "vision": True, "cost": "high",
-         "input": 0.002, "output": 0.008},
+        {
+            "name": "gpt-5-nano",
+            "vision": True,
+            "cost": "lowest",
+            "input": 0.00005,
+            "output": 0.0004,
+        },
+        {"name": "gpt-5-mini", "vision": True, "cost": "low", "input": 0.00025, "output": 0.002},
+        {"name": "gpt-5", "vision": True, "cost": "medium", "input": 0.00125, "output": 0.01},
+        {"name": "gpt-5.2", "vision": True, "cost": "high", "input": 0.00175, "output": 0.014},
+        {"name": "o4-mini", "vision": False, "cost": "medium", "input": 0.0011, "output": 0.0044},
+        {"name": "gpt-4.1", "vision": True, "cost": "high", "input": 0.002, "output": 0.008},
     ]
 
     # 가격표 (1K tokens 기준, USD)
@@ -70,22 +70,27 @@ class OpenAiProvider(BaseLlmProvider):
             for m in self.MODELS
         ]
 
-    def _estimate_cost(self, model: str,
-                       tokens_in: Optional[int],
-                       tokens_out: Optional[int]) -> float:
+    def _estimate_cost(
+        self, model: str, tokens_in: Optional[int], tokens_out: Optional[int]
+    ) -> float:
         """토큰 수로 비용 추정."""
-        pricing = self.PRICING.get(
-            model, {"input": 0.0004, "output": 0.0016}
-        )
-        cost = (
-            (tokens_in or 0) / 1000 * pricing["input"]
-            + (tokens_out or 0) / 1000 * pricing["output"]
-        )
+        pricing = self.PRICING.get(model, {"input": 0.0004, "output": 0.0016})
+        cost = (tokens_in or 0) / 1000 * pricing["input"] + (tokens_out or 0) / 1000 * pricing[
+            "output"
+        ]
         return round(cost, 6)
 
-    async def call(self, prompt, *, system=None, response_format="text",
-                   model=None, max_tokens=4096, purpose="text",
-                   **kwargs) -> LlmResponse:
+    async def call(
+        self,
+        prompt,
+        *,
+        system=None,
+        response_format="text",
+        model=None,
+        max_tokens=4096,
+        purpose="text",
+        **kwargs,
+    ) -> LlmResponse:
         """OpenAI Chat Completions API로 텍스트 생성."""
         import openai
 
@@ -154,9 +159,16 @@ class OpenAiProvider(BaseLlmProvider):
         )
 
     async def call_stream(
-        self, prompt, *, system=None, response_format="text",
-        model=None, max_tokens=4096, purpose="text",
-        progress_callback=None, **kwargs,
+        self,
+        prompt,
+        *,
+        system=None,
+        response_format="text",
+        model=None,
+        max_tokens=4096,
+        purpose="text",
+        progress_callback=None,
+        **kwargs,
     ) -> LlmResponse:
         """OpenAI 네이티브 스트리밍. stream=True로 청크 단위 수신.
 
@@ -212,12 +224,14 @@ class OpenAiProvider(BaseLlmProvider):
                 now = time.monotonic()
                 if progress_callback and (now - last_report) >= 1.0:
                     last_report = now
-                    progress_callback({
-                        "type": "progress",
-                        "elapsed_sec": round(now - t0, 1),
-                        "tokens": tokens_out,
-                        "provider": self.provider_id,
-                    })
+                    progress_callback(
+                        {
+                            "type": "progress",
+                            "elapsed_sec": round(now - t0, 1),
+                            "tokens": tokens_out,
+                            "provider": self.provider_id,
+                        }
+                    )
 
         elapsed = time.monotonic() - t0
 
@@ -243,9 +257,18 @@ class OpenAiProvider(BaseLlmProvider):
             raw={"stream": True, "finish_reason": finish_reason},
         )
 
-    async def call_with_image(self, prompt, image, *, image_mime="image/png",
-                              system=None, response_format="text", model=None,
-                              max_tokens=4096, **kwargs) -> LlmResponse:
+    async def call_with_image(
+        self,
+        prompt,
+        image,
+        *,
+        image_mime="image/png",
+        system=None,
+        response_format="text",
+        model=None,
+        max_tokens=4096,
+        **kwargs,
+    ) -> LlmResponse:
         """OpenAI Vision으로 이미지 분석.
 
         이미지는 base64 data URI로 전달한다.
@@ -261,16 +284,18 @@ class OpenAiProvider(BaseLlmProvider):
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
-        messages.append({
-            "role": "user",
-            "content": [
-                {
-                    "type": "image_url",
-                    "image_url": {"url": data_uri},
-                },
-                {"type": "text", "text": prompt},
-            ],
-        })
+        messages.append(
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": data_uri},
+                    },
+                    {"type": "text", "text": prompt},
+                ],
+            }
+        )
 
         t0 = time.monotonic()
         try:

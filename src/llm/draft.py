@@ -20,11 +20,9 @@ class LlmDraft:
         LLM 호출 → Draft(pending) → 사람 검토 → accepted/modified/rejected → Commit
     """
 
-    draft_id: str = field(
-        default_factory=lambda: str(uuid.uuid4())[:8]
-    )
-    purpose: str = ""               # "layout_analysis", "translation", "annotation"
-    status: str = "pending"         # pending → accepted | modified | rejected
+    draft_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    purpose: str = ""  # "layout_analysis", "translation", "annotation"
+    status: str = "pending"  # pending → accepted | modified | rejected
 
     # LLM 결과
     provider: str = ""
@@ -43,15 +41,13 @@ class LlmDraft:
     modifications: Optional[str] = None  # modified일 때 변경 내용 설명
 
     # 품질 평가 (비교 테스트용)
-    quality_rating: Optional[int] = None     # 1~5점
-    quality_notes: Optional[str] = None      # "주석 영역 빠뜨림"
-    compared_with: Optional[list] = None     # ["ollama", "anthropic"]
-    chosen_reason: Optional[str] = None      # "블록 구분 가장 정확"
+    quality_rating: Optional[int] = None  # 1~5점
+    quality_notes: Optional[str] = None  # "주석 영역 빠뜨림"
+    compared_with: Optional[list] = None  # ["ollama", "anthropic"]
+    chosen_reason: Optional[str] = None  # "블록 구분 가장 정확"
 
     # 타임스탬프
-    created_at: str = field(
-        default_factory=lambda: datetime.now().isoformat()
-    )
+    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
     def accept(self, quality_rating: Optional[int] = None, notes: str = ""):
         """Draft를 승인한다."""

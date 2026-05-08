@@ -55,8 +55,8 @@ class LlmRouter:
     # is_available() 캐시 TTL (초).
     # Ollama(HTTP 3s) 같은 느린 체크를
     # 매 호출마다 반복하지 않기 위해 캐시한다.
-    _AVAIL_TTL_OK = 120    # 사용 가능 → 2분간 재확인 안 함
-    _AVAIL_TTL_FAIL = 30   # 사용 불가 → 30초간 재확인 안 함
+    _AVAIL_TTL_OK = 120  # 사용 가능 → 2분간 재확인 안 함
+    _AVAIL_TTL_FAIL = 30  # 사용 불가 → 30초간 재확인 안 함
 
     def __init__(self, config: Optional[LlmConfig] = None):
         self.config = config or LlmConfig()
@@ -64,11 +64,11 @@ class LlmRouter:
 
         # 우선순위 순서 (무료 → 저렴 → 중간 → 최후)
         self.providers: list[BaseLlmProvider] = [
-            OllamaProvider(self.config),          # 1순위: 무료 (로컬 gemma4:e4b)
-            OpenAiOAuthProvider(self.config),     # 2순위: 무료 (ChatGPT OAuth 프록시)
-            GeminiProvider(self.config),           # 3순위: 저렴 (비전 포함)
-            OpenAiProvider(self.config),           # 4순위: 중간 (비전 포함)
-            AnthropicProvider(self.config),       # 5순위: 최후 폴백
+            OllamaProvider(self.config),  # 1순위: 무료 (로컬 gemma4:e4b)
+            OpenAiOAuthProvider(self.config),  # 2순위: 무료 (ChatGPT OAuth 프록시)
+            GeminiProvider(self.config),  # 3순위: 저렴 (비전 포함)
+            OpenAiProvider(self.config),  # 4순위: 중간 (비전 포함)
+            AnthropicProvider(self.config),  # 5순위: 최후 폴백
         ]
 
         # is_available() 캐시: {provider_id: (결과, 타임스탬프)}
@@ -137,8 +137,7 @@ class LlmRouter:
             if not provider:
                 available = [p.provider_id for p in self.providers]
                 raise LlmProviderError(
-                    f"provider '{force_provider}'을(를) 찾을 수 없습니다. "
-                    f"사용 가능: {available}"
+                    f"provider '{force_provider}'을(를) 찾을 수 없습니다. 사용 가능: {available}"
                 )
             if not await provider.is_available():
                 raise LlmProviderError(
@@ -146,8 +145,12 @@ class LlmRouter:
                 )
 
             response = await provider.call(
-                prompt, system=system, response_format=response_format,
-                model=force_model, max_tokens=max_tokens, purpose=purpose,
+                prompt,
+                system=system,
+                response_format=response_format,
+                model=force_model,
+                max_tokens=max_tokens,
+                purpose=purpose,
                 **kwargs,
             )
             self.usage_tracker.log(response, purpose=purpose)
@@ -177,15 +180,18 @@ class LlmRouter:
             if purpose in skip_purposes:
                 skipped_providers.append(provider.provider_id)
                 _logger.info(
-                    f"purpose '{purpose}': {provider.provider_id} 건너뜀 "
-                    f"(SKIP_FOR_PURPOSES)"
+                    f"purpose '{purpose}': {provider.provider_id} 건너뜀 (SKIP_FOR_PURPOSES)"
                 )
                 continue
 
             try:
                 response = await provider.call(
-                    prompt, system=system, response_format=response_format,
-                    max_tokens=max_tokens, purpose=purpose, **kwargs,
+                    prompt,
+                    system=system,
+                    response_format=response_format,
+                    max_tokens=max_tokens,
+                    purpose=purpose,
+                    **kwargs,
                 )
                 self.usage_tracker.log(response, purpose=purpose)
                 return response
@@ -208,8 +214,12 @@ class LlmRouter:
                     continue
                 try:
                     response = await provider.call(
-                        prompt, system=system, response_format=response_format,
-                        max_tokens=max_tokens, purpose=purpose, **kwargs,
+                        prompt,
+                        system=system,
+                        response_format=response_format,
+                        max_tokens=max_tokens,
+                        purpose=purpose,
+                        **kwargs,
                     )
                     self.usage_tracker.log(response, purpose=purpose)
                     return response
@@ -249,8 +259,7 @@ class LlmRouter:
             if not provider:
                 available = [p.provider_id for p in self.providers]
                 raise LlmProviderError(
-                    f"provider '{force_provider}'을(를) 찾을 수 없습니다. "
-                    f"사용 가능: {available}"
+                    f"provider '{force_provider}'을(를) 찾을 수 없습니다. 사용 가능: {available}"
                 )
             if not await provider.is_available():
                 raise LlmProviderError(
@@ -258,9 +267,14 @@ class LlmRouter:
                 )
 
             response = await provider.call_stream(
-                prompt, system=system, response_format=response_format,
-                model=force_model, max_tokens=max_tokens, purpose=purpose,
-                progress_callback=progress_callback, **kwargs,
+                prompt,
+                system=system,
+                response_format=response_format,
+                model=force_model,
+                max_tokens=max_tokens,
+                purpose=purpose,
+                progress_callback=progress_callback,
+                **kwargs,
             )
             self.usage_tracker.log(response, purpose=purpose)
             return response
@@ -285,9 +299,13 @@ class LlmRouter:
 
             try:
                 response = await provider.call_stream(
-                    prompt, system=system, response_format=response_format,
-                    max_tokens=max_tokens, purpose=purpose,
-                    progress_callback=progress_callback, **kwargs,
+                    prompt,
+                    system=system,
+                    response_format=response_format,
+                    max_tokens=max_tokens,
+                    purpose=purpose,
+                    progress_callback=progress_callback,
+                    **kwargs,
                 )
                 self.usage_tracker.log(response, purpose=purpose)
                 return response
@@ -304,9 +322,13 @@ class LlmRouter:
                     continue
                 try:
                     response = await provider.call_stream(
-                        prompt, system=system, response_format=response_format,
-                        max_tokens=max_tokens, purpose=purpose,
-                        progress_callback=progress_callback, **kwargs,
+                        prompt,
+                        system=system,
+                        response_format=response_format,
+                        max_tokens=max_tokens,
+                        purpose=purpose,
+                        progress_callback=progress_callback,
+                        **kwargs,
                     )
                     self.usage_tracker.log(response, purpose=purpose)
                     return response
@@ -337,21 +359,18 @@ class LlmRouter:
         if force_provider:
             provider = self._get_provider(force_provider)
             if not provider:
-                raise LlmProviderError(
-                    f"provider '{force_provider}' 없음"
-                )
+                raise LlmProviderError(f"provider '{force_provider}' 없음")
             if not provider.supports_image:
-                raise LlmProviderError(
-                    f"'{force_provider}'은(는) 이미지 미지원"
-                )
+                raise LlmProviderError(f"'{force_provider}'은(는) 이미지 미지원")
             if not await provider.is_available():
-                raise LlmProviderError(
-                    f"'{force_provider}' 사용 불가"
-                )
+                raise LlmProviderError(f"'{force_provider}' 사용 불가")
 
             response = await provider.call_with_image(
-                prompt, image, image_mime=image_mime,
-                model=force_model, **kwargs,
+                prompt,
+                image,
+                image_mime=image_mime,
+                model=force_model,
+                **kwargs,
             )
             self.usage_tracker.log(response, purpose=purpose)
             return response
@@ -369,7 +388,10 @@ class LlmRouter:
                 continue
             try:
                 response = await provider.call_with_image(
-                    prompt, image, image_mime=image_mime, **kwargs,
+                    prompt,
+                    image,
+                    image_mime=image_mime,
+                    **kwargs,
                 )
                 self.usage_tracker.log(response, purpose=purpose)
                 return response
@@ -421,15 +443,22 @@ class LlmRouter:
             try:
                 if image:
                     return await self.call_with_image(
-                        prompt, image, system=system,
-                        force_provider=pid, force_model=model,
-                        purpose=purpose, **kwargs,
+                        prompt,
+                        image,
+                        system=system,
+                        force_provider=pid,
+                        force_model=model,
+                        purpose=purpose,
+                        **kwargs,
                     )
                 else:
                     return await self.call(
-                        prompt, system=system,
-                        force_provider=pid, force_model=model,
-                        purpose=purpose, **kwargs,
+                        prompt,
+                        system=system,
+                        force_provider=pid,
+                        force_model=model,
+                        purpose=purpose,
+                        **kwargs,
                     )
             except Exception as e:
                 return e
@@ -458,36 +487,40 @@ class LlmRouter:
                     provider_models = await provider.list_models()
                     for m in provider_models:
                         is_free = provider.provider_id in ("ollama", "openai_oauth")
-                        models.append({
-                            "provider": provider.provider_id,
-                            "model": m["name"],
-                            "available": True,
-                            "display": f"{provider.display_name} — {m['name']}",
-                            "cost": "free" if is_free else m.get("cost", "paid"),
-                            "vision": m.get("vision", False),
-                        })
+                        models.append(
+                            {
+                                "provider": provider.provider_id,
+                                "model": m["name"],
+                                "available": True,
+                                "display": f"{provider.display_name} — {m['name']}",
+                                "cost": "free" if is_free else m.get("cost", "paid"),
+                                "vision": m.get("vision", False),
+                            }
+                        )
                 except Exception:
-                    models.append({
-                        "provider": provider.provider_id,
-                        "model": "(조회 실패)",
-                        "available": False,
-                        "display": f"{provider.display_name} (모델 목록 조회 실패)",
-                        "cost": "free" if provider.provider_id == "ollama" else "paid",
-                        "vision": False,
-                    })
+                    models.append(
+                        {
+                            "provider": provider.provider_id,
+                            "model": "(조회 실패)",
+                            "available": False,
+                            "display": f"{provider.display_name} (모델 목록 조회 실패)",
+                            "cost": "free" if provider.provider_id == "ollama" else "paid",
+                            "vision": False,
+                        }
+                    )
             else:
-                models.append({
-                    "provider": provider.provider_id,
-                    "model": getattr(provider, "DEFAULT_MODEL", "auto"),
-                    "available": available,
-                    "display": provider.display_name,
-                    "cost": (
-                        "free"
-                        if provider.provider_id in ("ollama", "openai_oauth")
-                        else "paid"
-                    ),
-                    "vision": provider.supports_image,
-                })
+                models.append(
+                    {
+                        "provider": provider.provider_id,
+                        "model": getattr(provider, "DEFAULT_MODEL", "auto"),
+                        "available": available,
+                        "display": provider.display_name,
+                        "cost": (
+                            "free" if provider.provider_id in ("ollama", "openai_oauth") else "paid"
+                        ),
+                        "vision": provider.supports_image,
+                    }
+                )
 
         return models
 

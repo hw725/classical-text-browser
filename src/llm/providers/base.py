@@ -17,26 +17,26 @@ class LlmResponse:
     어떤 provider를 썼든 호출자는 동일한 형식을 받는다.
     """
 
-    text: str                                # 응답 텍스트
-    provider: str                            # "ollama", "gemini", "openai", "anthropic" 등
-    model: str                               # 실제 사용된 모델명
-    tokens_in: Optional[int] = None          # 입력 토큰 (추정 가능할 때)
-    tokens_out: Optional[int] = None         # 출력 토큰
-    cost_usd: Optional[float] = None         # 추정 비용 (무료면 0.0)
-    elapsed_sec: Optional[float] = None      # 응답 시간 (비교용)
-    raw: Optional[dict] = None               # provider별 원본 응답 (디버깅)
-    timestamp: str = field(
-        default_factory=lambda: datetime.now().isoformat()
-    )
+    text: str  # 응답 텍스트
+    provider: str  # "ollama", "gemini", "openai", "anthropic" 등
+    model: str  # 실제 사용된 모델명
+    tokens_in: Optional[int] = None  # 입력 토큰 (추정 가능할 때)
+    tokens_out: Optional[int] = None  # 출력 토큰
+    cost_usd: Optional[float] = None  # 추정 비용 (무료면 0.0)
+    elapsed_sec: Optional[float] = None  # 응답 시간 (비교용)
+    raw: Optional[dict] = None  # provider별 원본 응답 (디버깅)
+    timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
 
 
 class LlmProviderError(Exception):
     """개별 provider 호출 실패."""
+
     pass
 
 
 class LlmUnavailableError(Exception):
     """모든 provider가 사용 불가."""
+
     pass
 
 
@@ -65,7 +65,7 @@ class BaseLlmProvider(ABC):
         prompt: str,
         *,
         system: Optional[str] = None,
-        response_format: str = "text",   # "text" | "json"
+        response_format: str = "text",  # "text" | "json"
         model: Optional[str] = None,
         max_tokens: int = 4096,
         purpose: str = "text",
@@ -108,8 +108,12 @@ class BaseLlmProvider(ABC):
         # call()을 태스크로 실행하면서 2초마다 heartbeat 전송
         call_task = asyncio.create_task(
             self.call(
-                prompt, system=system, response_format=response_format,
-                model=model, max_tokens=max_tokens, purpose=purpose,
+                prompt,
+                system=system,
+                response_format=response_format,
+                model=model,
+                max_tokens=max_tokens,
+                purpose=purpose,
                 **kwargs,
             )
         )
@@ -117,11 +121,13 @@ class BaseLlmProvider(ABC):
         while not call_task.done():
             await asyncio.sleep(2.0)
             if progress_callback and not call_task.done():
-                progress_callback({
-                    "type": "progress",
-                    "elapsed_sec": round(time.monotonic() - t0, 1),
-                    "provider": self.provider_id,
-                })
+                progress_callback(
+                    {
+                        "type": "progress",
+                        "elapsed_sec": round(time.monotonic() - t0, 1),
+                        "provider": self.provider_id,
+                    }
+                )
 
         return call_task.result()
 

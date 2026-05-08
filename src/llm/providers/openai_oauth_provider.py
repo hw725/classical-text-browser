@@ -101,6 +101,7 @@ class OpenAiOAuthProvider(OpenAiProvider):
             # 고정 URL이면 해당 URL만 확인
             try:
                 from urllib.parse import urlparse
+
                 port = urlparse(explicit).port or _DEFAULT_PORT
                 models = await self._probe_port(port)
                 if models is not None:
@@ -117,6 +118,7 @@ class OpenAiOAuthProvider(OpenAiProvider):
         if self._discovered_url:
             try:
                 from urllib.parse import urlparse
+
                 cached_port = urlparse(self._discovered_url).port
                 if cached_port:
                     models = await self._probe_port(cached_port)
@@ -132,9 +134,7 @@ class OpenAiOAuthProvider(OpenAiProvider):
             if models is not None:
                 self._discovered_url = f"http://127.0.0.1:{port}/v1"
                 self._discovered_models = models
-                _logger.info(
-                    f"openai-oauth 프록시 발견: port {port}"
-                )
+                _logger.info(f"openai-oauth 프록시 발견: port {port}")
                 return True
 
         self._discovered_url = None
@@ -178,12 +178,12 @@ class OpenAiOAuthProvider(OpenAiProvider):
         import openai
 
         return openai.AsyncOpenAI(
-            api_key="oauth-proxy",      # 프록시가 인증 처리, 더미 값
+            api_key="oauth-proxy",  # 프록시가 인증 처리, 더미 값
             base_url=self._get_base_url(),
         )
 
-    def _estimate_cost(self, model: str,
-                       tokens_in: Optional[int],
-                       tokens_out: Optional[int]) -> float:
+    def _estimate_cost(
+        self, model: str, tokens_in: Optional[int], tokens_out: Optional[int]
+    ) -> float:
         """OAuth 프록시는 ChatGPT 계정 크레딧을 사용하므로 API 비용은 0."""
         return 0.0

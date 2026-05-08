@@ -28,22 +28,27 @@ class AnthropicProvider(BaseLlmProvider):
         """ANTHROPIC_API_KEY가 설정되어 있는지 확인."""
         return bool(self.config.get_api_key("anthropic"))
 
-    def _estimate_cost(self, model: str,
-                       tokens_in: Optional[int],
-                       tokens_out: Optional[int]) -> float:
+    def _estimate_cost(
+        self, model: str, tokens_in: Optional[int], tokens_out: Optional[int]
+    ) -> float:
         """토큰 수로 비용 추정."""
-        pricing = self.PRICING.get(
-            model, {"input": 0.003, "output": 0.015}
-        )
-        cost = (
-            (tokens_in or 0) / 1000 * pricing["input"]
-            + (tokens_out or 0) / 1000 * pricing["output"]
-        )
+        pricing = self.PRICING.get(model, {"input": 0.003, "output": 0.015})
+        cost = (tokens_in or 0) / 1000 * pricing["input"] + (tokens_out or 0) / 1000 * pricing[
+            "output"
+        ]
         return round(cost, 6)
 
-    async def call(self, prompt, *, system=None, response_format="text",
-                   model=None, max_tokens=4096, purpose="text",
-                   **kwargs) -> LlmResponse:
+    async def call(
+        self,
+        prompt,
+        *,
+        system=None,
+        response_format="text",
+        model=None,
+        max_tokens=4096,
+        purpose="text",
+        **kwargs,
+    ) -> LlmResponse:
         """Claude API로 텍스트 생성."""
         import anthropic
 
@@ -80,9 +85,18 @@ class AnthropicProvider(BaseLlmProvider):
             raw={"id": response.id},
         )
 
-    async def call_with_image(self, prompt, image, *, image_mime="image/png",
-                              system=None, response_format="text", model=None,
-                              max_tokens=4096, **kwargs) -> LlmResponse:
+    async def call_with_image(
+        self,
+        prompt,
+        image,
+        *,
+        image_mime="image/png",
+        system=None,
+        response_format="text",
+        model=None,
+        max_tokens=4096,
+        **kwargs,
+    ) -> LlmResponse:
         """Claude Vision으로 이미지 분석."""
         import anthropic
 
