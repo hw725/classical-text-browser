@@ -11,8 +11,7 @@
 #   docker compose logs -f      # 로그 확인
 #   docker compose down         # 정지
 #
-# 본체에서:
-#   EXTERNAL_PUNCT_URL=http://127.0.0.1:8765 ... 로 띄우면 자동 연결.
+# 본체는 기본적으로 http://127.0.0.1:8765 를 사용하므로 별도 환경변수 없이 자동 연결.
 services:
   punctuation:
     build: .

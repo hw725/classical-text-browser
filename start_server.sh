@@ -49,6 +49,36 @@ if [ $TRY -ge $MAX_TRIES ]; then
     exit 1
 fi
 
+# ── 외부 표점 서비스 자동 시작(선택) ─────────────
+# punctuation-service/.env 또는 PUNCT_MODEL_HOST_PATH가 있으면 Docker Compose로
+# SikuRoBERTa 표점 서비스를 백그라운드 기동한다. 본체는 기본적으로
+# http://127.0.0.1:8765를 사용하므로 EXTERNAL_PUNCT_URL은 필요 없다.
+# 건너뛰려면 PUNCT_AUTO_START=0 ./start_server.sh
+PUNCT_SERVICE_CONFIGURED=0
+if [ -f "punctuation-service/.env" ] || [ -n "${PUNCT_MODEL_HOST_PATH:-}" ]; then
+    PUNCT_SERVICE_CONFIGURED=1
+fi
+
+if [ "${PUNCT_AUTO_START:-1}" = "0" ]; then
+    echo "[표점] PUNCT_AUTO_START=0 으로 자동 시작을 건너뜁니다."
+elif [ "$PUNCT_SERVICE_CONFIGURED" = "1" ]; then
+    if ! command -v docker >/dev/null 2>&1; then
+        echo "[표점] Docker를 찾을 수 없습니다. 필요하면 표점 서비스를 수동으로 시작하세요."
+    elif ! docker compose version >/dev/null 2>&1; then
+        echo "[표점] Docker Compose를 사용할 수 없습니다. 필요하면 표점 서비스를 수동으로 시작하세요."
+    else
+        echo "[표점] http://127.0.0.1:8765 서비스를 시작합니다..."
+        if (cd punctuation-service && docker compose up -d); then
+            echo "[표점] 서비스가 백그라운드에서 시작 중입니다."
+        else
+            echo "[표점] 서비스 시작에 실패했습니다. 본체 서버는 계속 실행합니다."
+        fi
+    fi
+else
+    echo "[표점] 모델 경로가 설정되지 않아 외부 표점 서비스 자동 시작을 건너뜁니다."
+    echo "       사용하려면 punctuation-service/.env에 PUNCT_MODEL_HOST_PATH=... 를 설정하세요."
+fi
+
 echo "============================================"
 echo "  고전서지 통합 브라우저"
 echo "============================================"

@@ -56,6 +56,10 @@ uv run python -m app serve
 docker compose down
 ```
 
+`start_server.bat` / `start_server.sh`를 쓰는 경우에는 `punctuation-service/.env` 또는
+`PUNCT_MODEL_HOST_PATH`가 설정되어 있으면 Docker Compose로 표점 서비스를 자동 기동한다.
+자동 기동을 건너뛰려면 `PUNCT_AUTO_START=0`을 설정한다.
+
 가중치 변경 시: `.env`만 수정하고 `docker compose up -d`로 재기동.
 
 ## 빠른 시작 — 로컬 설치 (옵션)

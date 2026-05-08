@@ -53,6 +53,42 @@ if !ERRORLEVEL! equ 0 (
     exit /b 1
 )
 
+REM -- Optional punctuation service ----------------
+REM If punctuation-service\.env exists or PUNCT_MODEL_HOST_PATH is set, start the
+REM Dockerized SikuRoBERTa punctuation service in the background. The main app
+REM defaults to http://127.0.0.1:8765, so no EXTERNAL_PUNCT_URL is needed.
+REM Set PUNCT_AUTO_START=0 to skip this.
+set PUNCT_SERVICE_CONFIGURED=0
+if exist "punctuation-service\.env" set PUNCT_SERVICE_CONFIGURED=1
+if not "%PUNCT_MODEL_HOST_PATH%"=="" set PUNCT_SERVICE_CONFIGURED=1
+
+if /I "%PUNCT_AUTO_START%"=="0" (
+    echo [Punctuation] auto-start disabled by PUNCT_AUTO_START=0
+) else if "%PUNCT_SERVICE_CONFIGURED%"=="1" (
+    docker --version >nul 2>&1
+    if !ERRORLEVEL! neq 0 (
+        echo [Punctuation] Docker not found. Start punctuation-service manually if needed.
+    ) else (
+        docker compose version >nul 2>&1
+        if !ERRORLEVEL! neq 0 (
+            echo [Punctuation] Docker Compose not available. Start punctuation-service manually if needed.
+        ) else (
+            echo [Punctuation] starting http://127.0.0.1:8765 ...
+            pushd punctuation-service >nul
+            docker compose up -d
+            if !ERRORLEVEL! neq 0 (
+                echo [Punctuation] failed to start. The main server will continue.
+            ) else (
+                echo [Punctuation] service ready or starting in background.
+            )
+            popd >nul
+        )
+    )
+) else (
+    echo [Punctuation] no model path configured. Skipping external punctuation service.
+    echo              To enable: create punctuation-service\.env with PUNCT_MODEL_HOST_PATH=...
+)
+
 echo ============================================
 echo  Classical Text Browser
 echo ============================================
