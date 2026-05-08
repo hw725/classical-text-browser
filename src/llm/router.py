@@ -42,8 +42,8 @@ from .providers.base import (
 )
 from .providers.gemini_provider import GeminiProvider
 from .providers.ollama import OllamaProvider
-from .providers.openai_provider import OpenAiProvider
 from .providers.openai_oauth_provider import OpenAiOAuthProvider
+from .providers.openai_provider import OpenAiProvider
 from .usage_tracker import UsageTracker
 
 _logger = logging.getLogger(__name__)

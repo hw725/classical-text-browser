@@ -17,6 +17,7 @@ ndlocr-lite(일반)와의 차이:
 """
 
 from __future__ import annotations
+
 import logging
 import os
 from pathlib import Path

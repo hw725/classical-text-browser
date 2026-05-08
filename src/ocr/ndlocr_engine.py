@@ -16,6 +16,7 @@ DEIM(레이아웃/행 탐지) + PARSeq(문자 인식) + XY-Cut(읽기순서)로 
 """
 
 from __future__ import annotations
+
 import io
 import logging
 import xml.etree.ElementTree as ET
@@ -383,9 +384,10 @@ class NdlocrEngine(BaseOcrEngine):
 
         logger.info("NDLOCR-Lite 모델 로딩 중...")
 
+        from yaml import safe_load
+
         from .ndlocr.deim import DEIM
         from .ndlocr.parseq import PARSEQ
-        from yaml import safe_load
 
         # DEIM 레이아웃 탐지기
         self._deim = DEIM(

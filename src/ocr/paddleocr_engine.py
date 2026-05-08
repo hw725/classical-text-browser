@@ -21,6 +21,7 @@ PaddleOCR v3 호환:
 """
 
 from __future__ import annotations
+
 import io
 import logging
 import platform
@@ -28,8 +29,12 @@ import sys
 from typing import Optional
 
 from .base import (
-    BaseOcrEngine, OcrBlockResult, OcrLineResult, OcrCharResult,
-    OcrEngineError, OcrEngineUnavailableError,
+    BaseOcrEngine,
+    OcrBlockResult,
+    OcrCharResult,
+    OcrEngineError,
+    OcrEngineUnavailableError,
+    OcrLineResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -97,8 +102,8 @@ class PaddleOcrEngine(BaseOcrEngine):
             return self._available
 
         try:
-            import paddleocr  # noqa: F401
             import paddle  # noqa: F401
+            import paddleocr  # noqa: F401
 
             # Windows + Python 3.13 + PaddlePaddle 3.x 조합에서
             # OneDNN fused_conv2d 런타임 에러가 빈번히 발생한다.

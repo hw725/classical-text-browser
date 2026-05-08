@@ -36,6 +36,7 @@ ndlocr-lite(일반)와의 차이:
 """
 
 from __future__ import annotations
+
 import io
 import logging
 import xml.etree.ElementTree as ET
@@ -414,10 +415,12 @@ class NdlkotenOcrEngine(BaseOcrEngine):
 
         logger.info("NDL古典籍OCR-Lite 모델 로딩 중...")
 
+        from yaml import safe_load
+
         from .ndlkotenocr.rtmdet import RTMDet
+
         # PARSeq 클래스는 ndlocr 패키지에서 공유 (동일한 아키텍처)
         from .ndlocr.parseq import PARSEQ
-        from yaml import safe_load
 
         # RTMDet 레이아웃/행 탐지기 (ndlkotenocr 전용 모델)
         # 임계값은 업스트림 ndlkotenocr-lite와 동일하게 설정 (0.3).

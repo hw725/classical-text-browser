@@ -6,8 +6,8 @@ Google Gemini API 호출 (google-genai SDK).
 환경변수: GOOGLE_API_KEY
 """
 
-import time
 import inspect
+import time
 from typing import Optional
 
 from .base import BaseLlmProvider, LlmProviderError, LlmResponse

@@ -14,10 +14,10 @@
 """
 
 from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Optional
-
 
 # ─── 결과 데이터 모델 ──────────────────────────────────
 

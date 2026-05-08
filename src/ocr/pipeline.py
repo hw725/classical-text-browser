@@ -14,6 +14,7 @@ L3 레이아웃 → 이미지 크롭 → OCR 엔진 → L2 결과 저장.
 """
 
 from __future__ import annotations
+
 import json
 import logging
 import time
@@ -22,11 +23,14 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from .base import OcrBlockResult, OcrEngineError
-from .registry import OcrEngineRegistry
 from .image_utils import (
-    load_page_image, load_page_image_from_pdf,
-    crop_block, preprocess_for_ocr, get_page_image_path,
+    crop_block,
+    get_page_image_path,
+    load_page_image,
+    load_page_image_from_pdf,
+    preprocess_for_ocr,
 )
+from .registry import OcrEngineRegistry
 
 logger = logging.getLogger(__name__)
 

@@ -17,11 +17,12 @@ DEIM (ndlocr-lite)과의 차이:
   우리 버전은 실제 모델 출력의 class_id를 보존하여 레이아웃 감지에 활용한다.
 """
 
-from PIL import Image, ImageDraw
-import yaml
-import onnxruntime
+from typing import List, Tuple
+
 import numpy as np
-from typing import Tuple, List
+import onnxruntime
+import yaml
+from PIL import Image, ImageDraw
 
 
 class RTMDet:
