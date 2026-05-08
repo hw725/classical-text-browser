@@ -182,6 +182,12 @@ async function _populateCiteBlockSelect() {
 
   const vs = typeof viewerState !== "undefined" ? viewerState : null;
   if (!vs || !vs.docId || !vs.pageNum) return;
+  const previousBlockId =
+    citeState.blockId ||
+    (typeof annState !== "undefined" ? annState.blockId : "") ||
+    (typeof transState !== "undefined" ? transState.blockId : "") ||
+    (typeof hyeontoState !== "undefined" ? hyeontoState.blockId : "") ||
+    (typeof punctState !== "undefined" ? punctState.blockId : "");
 
   // TextBlock이 있으면 우선 사용 (번역·주석 편집기와 동일한 block_id 체계).
   // 왜: 표점·번역·주석이 TextBlock ID로 저장되므로, 인용에서도 같은 ID를
@@ -214,8 +220,9 @@ async function _populateCiteBlockSelect() {
           });
 
           // 이전 선택값 복원 또는 첫 번째 블록 자동 선택
-          if (citeState.blockId && sel.querySelector(`option[value="${citeState.blockId}"]`)) {
-            sel.value = citeState.blockId;
+          if (previousBlockId && sel.querySelector(`option[value="${previousBlockId}"]`)) {
+            sel.value = previousBlockId;
+            citeState.blockId = sel.value;
           } else if (sel.options.length > 1) {
             sel.selectedIndex = 1;
             citeState.blockId = sel.value;
@@ -231,25 +238,56 @@ async function _populateCiteBlockSelect() {
 
   // 폴백: LayoutBlock 기반 (편성 미완료 시)
   try {
-    const resp = await fetch(`/api/documents/${vs.docId}/pages/${vs.pageNum}/layout`);
-    if (!resp.ok) return;
+    const partParam = vs.partId
+      ? `?part_id=${encodeURIComponent(vs.partId)}`
+      : "";
+    const resp = await fetch(`/api/documents/${vs.docId}/pages/${vs.pageNum}/layout${partParam}`);
+    if (!resp.ok) {
+      _addCiteDefaultBlock(sel, vs);
+      citeState.blockId = sel.value;
+      _onCiteBlockChange();
+      return;
+    }
     const layout = await resp.json();
     const blocks = layout.blocks || [];
 
-    for (const b of blocks) {
-      const opt = document.createElement("option");
-      opt.value = b.block_id;
-      opt.textContent = `${b.block_id} (${b.block_type || "?"})`;
-      sel.appendChild(opt);
+    if (blocks.length === 0) {
+      _addCiteDefaultBlock(sel, vs);
+    } else {
+      for (const b of blocks) {
+        const opt = document.createElement("option");
+        opt.value = b.block_id;
+        opt.textContent = `${b.block_id} (${b.block_type || "text"})`;
+        sel.appendChild(opt);
+      }
     }
 
-    if (blocks.length > 0) {
-      sel.value = blocks[0].block_id;
+    if (previousBlockId && sel.querySelector(`option[value="${previousBlockId}"]`)) {
+      sel.value = previousBlockId;
+    } else if (sel.options.length > 1) {
+      sel.selectedIndex = 1;
+    }
+    if (sel.value) {
+      citeState.blockId = sel.value;
       _onCiteBlockChange();
     }
   } catch (e) {
     console.error("블록 목록 로드 실패:", e);
+    _addCiteDefaultBlock(sel, vs);
+    citeState.blockId = sel.value;
+    _onCiteBlockChange();
   }
+}
+
+function _addCiteDefaultBlock(select, vs) {
+  const pageNum = (vs && vs.pageNum) || 1;
+  const fallbackId = `p${String(pageNum).padStart(2, "0")}_b01`;
+  if (select.querySelector(`option[value="${fallbackId}"]`)) return;
+  const opt = document.createElement("option");
+  opt.value = fallbackId;
+  opt.textContent = `${fallbackId} (기본)`;
+  select.appendChild(opt);
+  select.value = fallbackId;
 }
 
 
