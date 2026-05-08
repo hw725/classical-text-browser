@@ -15,13 +15,13 @@ from pathlib import Path
 from core.annotation import save_annotations
 from core.annotation_dict_io import export_dictionary
 from core.annotation_dict_match import (
-    list_reference_dicts,
-    register_reference_dict,
-    load_reference_dict,
-    remove_reference_dict,
-    match_text,
-    match_page_blocks,
     format_for_translation_context,
+    list_reference_dicts,
+    load_reference_dict,
+    match_page_blocks,
+    match_text,
+    register_reference_dict,
+    remove_reference_dict,
 )
 
 

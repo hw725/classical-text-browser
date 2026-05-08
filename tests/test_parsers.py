@@ -20,8 +20,8 @@ class TestParserRegistry:
 
     def test_list_parsers(self):
         """등록된 파서 목록이 반환된다."""
-        from parsers.base import list_parsers
         import parsers  # noqa: F401 — 자동 등록 트리거
+        from parsers.base import list_parsers
 
         result = list_parsers()
         assert len(result) >= 2
@@ -32,8 +32,8 @@ class TestParserRegistry:
 
     def test_get_parser(self):
         """parser_id로 fetcher/mapper를 가져올 수 있다."""
-        from parsers.base import get_parser
         import parsers  # noqa: F401
+        from parsers.base import get_parser
 
         fetcher, mapper = get_parser("ndl")
         assert fetcher.parser_id == "ndl"

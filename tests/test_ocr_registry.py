@@ -1,6 +1,7 @@
 """OCR 엔진 레지스트리 테스트."""
 
 import pytest
+
 from src.ocr.base import BaseOcrEngine, OcrBlockResult, OcrEngineUnavailableError
 from src.ocr.registry import OcrEngineRegistry
 

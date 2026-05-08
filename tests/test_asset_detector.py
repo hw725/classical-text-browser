@@ -12,14 +12,13 @@ import pytest
 
 # 테스트 대상 모듈
 from parsers.asset_detector import (
-    detect_assets_from_markdown,
-    _resolve_url,
-    _label_from_url,
     _get_file_extension,
     _group_images_into_bundles,
+    _label_from_url,
+    _resolve_url,
     _url_to_asset_id,
+    detect_assets_from_markdown,
 )
-
 
 # ── _get_file_extension 테스트 ──────────────────
 

@@ -11,7 +11,6 @@
 
 import unicodedata
 
-
 from src.text_import.common import (
     _build_ngram_index,
     _extract_multi_anchors,
@@ -20,7 +19,6 @@ from src.text_import.common import (
     _nfc,
     align_text_to_pages,
 )
-
 
 # ──────────────────────────────────────
 # _nfc 테스트

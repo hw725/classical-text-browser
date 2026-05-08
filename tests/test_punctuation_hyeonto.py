@@ -9,6 +9,14 @@ from pathlib import Path
 import pytest
 from jsonschema import validate
 
+from src.core.hyeonto import (
+    add_annotation,
+    load_hyeonto,
+    remove_annotation,
+    render_hyeonto_text,
+    save_hyeonto,
+    update_annotation,
+)
 from src.core.punctuation import (
     add_mark,
     load_punctuation,
@@ -18,15 +26,6 @@ from src.core.punctuation import (
     split_sentences,
     update_mark,
 )
-from src.core.hyeonto import (
-    add_annotation,
-    load_hyeonto,
-    remove_annotation,
-    render_hyeonto_text,
-    save_hyeonto,
-    update_annotation,
-)
-
 
 # ──────────────────────────────────────
 # 스키마 로드

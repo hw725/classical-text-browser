@@ -12,13 +12,13 @@ import json
 import tempfile
 from pathlib import Path
 
-from core.annotation import save_annotations, load_annotations
+from core.annotation import load_annotations, save_annotations
 from core.annotation_dict_io import (
-    export_dictionary,
-    save_export,
-    import_dictionary,
-    _extract_page_num,
     _deduplicate_entries,
+    _extract_page_num,
+    export_dictionary,
+    import_dictionary,
+    save_export,
 )
 
 

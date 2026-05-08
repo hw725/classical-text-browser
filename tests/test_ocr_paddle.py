@@ -5,6 +5,7 @@ PaddleOCR이 설치되지 않은 환경에서도 기본 테스트가 통과해�
 """
 
 import pytest
+
 from src.ocr.paddleocr_engine import PaddleOcrEngine
 
 
@@ -79,8 +80,9 @@ class TestPaddleOcrEngine:
     )
     def test_recognize_real(self):
         """실제 PaddleOCR 인식 테스트 (PaddleOCR 설치 시에만 실행)."""
-        from PIL import Image, ImageDraw
         import io
+
+        from PIL import Image, ImageDraw
 
         # 간단한 한자 이미지 생성
         img = Image.new("RGB", (200, 200), "white")

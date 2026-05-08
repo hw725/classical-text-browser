@@ -5,6 +5,7 @@ ocr_page.schema.json과 호환되는 출력을 생성하는지 검증한다.
 """
 
 import pytest
+
 from src.ocr.base import (
     BaseOcrEngine,
     OcrBlockResult,

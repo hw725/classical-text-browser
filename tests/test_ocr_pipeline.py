@@ -4,12 +4,13 @@
 """
 
 import json
+
 import pytest
 from PIL import Image
 
-from src.ocr.base import BaseOcrEngine, OcrBlockResult, OcrLineResult, OcrCharResult
-from src.ocr.registry import OcrEngineRegistry
+from src.ocr.base import BaseOcrEngine, OcrBlockResult, OcrCharResult, OcrLineResult
 from src.ocr.pipeline import OcrPipeline
+from src.ocr.registry import OcrEngineRegistry
 
 
 class DummyOcrEngine(BaseOcrEngine):

@@ -4,6 +4,7 @@ crop_block, preprocess_for_ocr, get_page_image_path, load_page_image를 검증�
 """
 
 import io
+
 import pytest
 from PIL import Image
 
