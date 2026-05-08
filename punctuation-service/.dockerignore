@@ -1,0 +1,14 @@
+# 이미지에 들어가서는 안 되는 호스트 산출물.
+.venv/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+uv.lock
+pyproject.toml
+docker-compose.yml
+.dockerignore
+Dockerfile
+models/
+*.ckpt
+*.pt

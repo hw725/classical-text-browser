@@ -1,0 +1,47 @@
+# punctuation-service 컨테이너 정의.
+#
+# 준비 (한 번만):
+#   1) 표점 모델 .ckpt 파일을 호스트 임의 경로에 둔다 (예: D:/models/punct.ckpt).
+#   2) 같은 폴더에 .env 파일을 두고 다음을 적는다:
+#        PUNCT_MODEL_HOST_PATH=D:/models/punct.ckpt
+#      (또는 셸에서 환경변수로 export)
+#
+# 실행:
+#   docker compose up -d        # 백그라운드 기동
+#   docker compose logs -f      # 로그 확인
+#   docker compose down         # 정지
+#
+# 본체에서:
+#   EXTERNAL_PUNCT_URL=http://127.0.0.1:8765 ... 로 띄우면 자동 연결.
+services:
+  punctuation:
+    build: .
+    image: classical-text-punctuation-service:latest
+    container_name: classical-text-punctuation
+    restart: unless-stopped
+    ports:
+      # 호스트 루프백에만 바인딩 — 외부 접근 차단.
+      - "127.0.0.1:8765:8765"
+    environment:
+      PUNCT_ENGINE: ${PUNCT_ENGINE:-sikurroberta}
+      PUNCT_MODEL_PATH: /models/checkpoint.ckpt
+      PUNCT_DEVICE: ${PUNCT_DEVICE:-auto}
+    volumes:
+      # 가중치는 호스트에서 read-only 바인드 마운트.
+      # PUNCT_MODEL_HOST_PATH 미설정 시 compose가 즉시 에러를 내므로
+      # 실수로 가짜 경로로 떠 있는 일을 방지한다.
+      - "${PUNCT_MODEL_HOST_PATH:?PUNCT_MODEL_HOST_PATH 환경변수가 필요합니다 (.env 또는 export)}:/models/checkpoint.ckpt:ro"
+      # 베이스 BERT 모델 재다운로드 방지 — csp-workspace와 HF 캐시 공유.
+      - csp_huggingface_cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  # 외부에서 이미 만들어진 볼륨(csp-workspace가 사용 중)을 그대로 참조.
+  csp_huggingface_cache:
+    external: true
