@@ -84,39 +84,54 @@ class MockEngine(PunctuationEngine):
 
 
 class SikuRoBERTaEngine(PunctuationEngine):
-    """SikuRoBERTa 기반 실제 표점 엔진 (자리표시).
+    """SikuRoBERTa 기반 실제 표점 엔진.
 
-    Phase 1b에서 구현한다. 구현 시 참고할 사항:
+    동작:
+        - PUNCT_MODEL_PATH(환경변수)에 .ckpt 파일 경로를 지정한다.
+          가중치는 yachagye/korean-classical-chinese-punctuation README의
+          Google Drive 링크에서 받는다.
+        - 첫 추론 호출 시 가중치를 로드한다 (lazy init). /health에서 ready()는
+          파일 존재 여부만 확인하므로 빠르다.
+        - PUNCT_DEVICE(환경변수, 기본 "auto") = cuda | cpu | auto.
 
-    1. 모델 구조: BERT backbone + Dropout + Linear classifier (7-way multi-label).
-       yachagye 레포의 inference/구두점7_추론모델.py 참조.
-    2. 토크나이저: AutoTokenizer.from_pretrained(<base_model>) — SikuBERT 또는 RoBERTa-classical-chinese.
-    3. 체크포인트 형식: PyTorch Lightning .ckpt — torch.load() 후 state_dict 추출.
-       Lightning 의존성 없이 로드하려면 키 이름을 직접 매핑해야 한다.
-    4. 추론 흐름: tokenize(max_length=512) → BERT → linear → sigmoid → threshold(0.5)
-       → token-level 예측을 char 단위로 정렬하여 마크 생성.
-    5. 512 초과 텍스트는 sliding window로 분할 (overlap 64자 권장).
-
-    구현이 끝나면 ready()를 모델 로드 성공 여부로 바꾸고 punctuate()를 채운다.
+    의존성:
+        torch + transformers + numpy 가 필요하다.
+        `uv sync --extra real` 로 설치된다.
     """
 
     name = "sikurroberta"
 
     def __init__(self) -> None:
-        self._model = None
-        self._tokenizer = None
-        self._model_path = os.getenv("PUNCT_MODEL_PATH", "")
+        # 환경변수는 인스턴스 생성 시점에 한 번만 읽는다.
+        self._model_path = os.getenv("PUNCT_MODEL_PATH", "").strip()
+        self._device = os.getenv("PUNCT_DEVICE", "auto").strip() or "auto"
+        self._predictor = None  # 첫 호출 시 lazy 로드
 
     def ready(self) -> bool:
-        # Phase 1b 미구현 상태에서는 항상 False.
-        # /health 엔드포인트가 이를 보고 서비스 미준비 상태임을 본체에 알린다.
-        return False
+        """가중치 파일 존재 여부만 빠르게 확인.
+
+        실제 모델 로드는 첫 punctuate() 호출 때 수행. /health가 무거운 로드를
+        트리거하지 않도록 의도적으로 가벼운 검사만 한다.
+        """
+        if not self._model_path:
+            return False
+        from pathlib import Path as _P
+        return _P(self._model_path).is_file()
 
     def punctuate(self, text: str) -> Result:
-        raise NotImplementedError(
-            "SikuRoBERTa 어댑터는 아직 구현되지 않았습니다 (Phase 1b 예정). "
-            "PUNCT_ENGINE=mock 으로 본체 통합을 먼저 테스트하세요."
-        )
+        if self._predictor is None:
+            if not self._model_path:
+                raise RuntimeError(
+                    "PUNCT_MODEL_PATH 환경변수가 설정되지 않았습니다. "
+                    "yachagye 레포에서 .ckpt를 받아 경로를 지정하세요."
+                )
+            # 무거운 import는 첫 호출 시점까지 지연.
+            # 내부에서 transformers·torch가 없으면 ImportError가 그대로 전파되어
+            # api.py가 500을 반환한다 (PUNCT_ENGINE=sikurroberta 인데 의존성 누락 상황).
+            from .sikurroberta import PunctuationPredictor
+            self._predictor = PunctuationPredictor(self._model_path, device=self._device)
+        punctuated, marks = self._predictor.punctuate(text)
+        return {"punctuated": punctuated, "marks": marks}
 
 
 def get_engine(name: str) -> PunctuationEngine:
