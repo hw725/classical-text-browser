@@ -17,29 +17,33 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
-from app._state import get_library_path, _get_llm_router, _call_llm_text, _call_llm_text_stream
-
+from app._state import _call_llm_text, _call_llm_text_stream, _get_llm_router, get_library_path
 from core.annotation import (
     add_annotation as add_ann,
+)
+from core.annotation import (
     check_translation_changed,
     get_annotation_summary,
     get_annotations_by_type,
     load_annotations,
-    remove_annotation as remove_ann,
     save_annotations,
-    update_annotation as update_ann,
 )
-from core.annotation_llm import commit_annotation_draft, commit_all_drafts
-from core.annotation_dict_llm import (
-    generate_stage1_from_original,
-    generate_stage2_from_translation,
-    generate_stage3_from_both,
-    merge_annotations,
+from core.annotation import (
+    remove_annotation as remove_ann,
+)
+from core.annotation import (
+    update_annotation as update_ann,
 )
 from core.annotation_dict_io import (
     export_dictionary,
     import_dictionary,
     save_export,
+)
+from core.annotation_dict_llm import (
+    generate_stage1_from_original,
+    generate_stage2_from_translation,
+    generate_stage3_from_both,
+    merge_annotations,
 )
 from core.annotation_dict_match import (
     list_reference_dicts,
@@ -47,6 +51,7 @@ from core.annotation_dict_match import (
     register_reference_dict,
     remove_reference_dict,
 )
+from core.annotation_llm import commit_all_drafts, commit_annotation_draft
 from core.annotation_types import (
     PROTECTED_TYPE_IDS,
     add_custom_type,

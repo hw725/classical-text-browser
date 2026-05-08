@@ -32,13 +32,13 @@ from fastapi.staticfiles import StaticFiles
 
 from app._state import configure_library, set_library_path  # noqa: F401
 from app.routers import (  # noqa: F401
-    library,
+    alignment,
+    annotation,
     documents,
     interpretations,
+    library,
     llm_ocr,
-    alignment,
     reading,
-    annotation,
     version,
 )
 

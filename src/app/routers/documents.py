@@ -14,8 +14,7 @@ from fastapi import APIRouter, BackgroundTasks, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from app._state import get_library_path, _get_llm_router
-
+from app._state import _get_llm_router, get_library_path
 from core.document import (
     add_document,
     create_document_from_hwp,
@@ -1857,8 +1856,12 @@ async def api_save_page_corrections(
     #   원본 기준이 확실하고, 프론트엔드 구현 오류로 인한 불일치를 방지한다.
     if body.corrected_text is not None:
         from core.document import (
-            get_page_text, get_page_corrections as _get_corrs,
-            _diff_to_corrections, _merge_corrections,
+            _diff_to_corrections,
+            _merge_corrections,
+            get_page_text,
+        )
+        from core.document import (
+            get_page_corrections as _get_corrs,
         )
         try:
             text_result = get_page_text(doc_path, part_id, page_num)
@@ -2158,7 +2161,7 @@ async def api_parsers():
     """
     # 파서 모듈을 지연 import (parsers 패키지가 register_parser를 호출)
     import parsers  # noqa: F401
-    from parsers.base import list_parsers, get_registry_json
+    from parsers.base import get_registry_json, list_parsers
 
     return {
         "parsers": list_parsers(),
