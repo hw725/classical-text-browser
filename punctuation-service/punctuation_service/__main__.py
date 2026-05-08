@@ -16,6 +16,7 @@
     PUNCT_ENGINE=sikurroberta PUNCT_MODEL_PATH=/path/to/model.ckpt \\
         uv run python -m punctuation_service
 """
+
 from __future__ import annotations
 
 import os

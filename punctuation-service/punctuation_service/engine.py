@@ -9,6 +9,7 @@
 엔진 선택은 환경변수 PUNCT_ENGINE으로 한다 (mock | sikurroberta).
 모델 가중치 경로는 PUNCT_MODEL_PATH로 지정한다.
 """
+
 from __future__ import annotations
 
 import os
@@ -116,6 +117,7 @@ class SikuRoBERTaEngine(PunctuationEngine):
         if not self._model_path:
             return False
         from pathlib import Path as _P
+
         return _P(self._model_path).is_file()
 
     def punctuate(self, text: str) -> Result:
@@ -129,6 +131,7 @@ class SikuRoBERTaEngine(PunctuationEngine):
             # 내부에서 transformers·torch가 없으면 ImportError가 그대로 전파되어
             # api.py가 500을 반환한다 (PUNCT_ENGINE=sikurroberta 인데 의존성 누락 상황).
             from .sikurroberta import PunctuationPredictor
+
             self._predictor = PunctuationPredictor(self._model_path, device=self._device)
         punctuated, marks = self._predictor.punctuate(text)
         return {"punctuated": punctuated, "marks": marks}

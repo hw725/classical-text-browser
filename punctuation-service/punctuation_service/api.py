@@ -10,6 +10,7 @@ SikuRoBERTa 기반 추론을 별도 프로세스에 격리하여, 본체 의존�
 응답 스키마는 본체의 _normalize_punct_marks() (src/app/routers/reading.py)
 규약과 호환되게 맞췄다. 즉 marks: [{start, end, before, after}, ...] 형태.
 """
+
 from __future__ import annotations
 
 import os
@@ -60,8 +61,7 @@ app = FastAPI(
     title="고전한문 표점 서비스",
     version="0.1.0",
     description=(
-        "SikuRoBERTa 기반 자동 표점 "
-        "(yachagye/korean-classical-chinese-punctuation 모델 활용)"
+        "SikuRoBERTa 기반 자동 표점 (yachagye/korean-classical-chinese-punctuation 모델 활용)"
     ),
     lifespan=lifespan,
 )

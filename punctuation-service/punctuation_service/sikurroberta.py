@@ -14,6 +14,7 @@ yachagye/korean-classical-chinese-punctuation의 inference/구두점7_추론모�
 - 체크포인트 로드 시 weights_only=False 를 명시한다. PyTorch 2.6+에서 기본값이
   바뀌어 Lightning ckpt의 hyper_parameters dict를 못 읽는 사고를 방지.
 """
+
 from __future__ import annotations
 
 import logging
@@ -97,12 +98,8 @@ class PunctuationPredictor:
         # Lightning state_dict의 키는 "bert.<...>" / "classifier.<...>"로 시작.
         # 각 모듈에 맞게 prefix를 떼고 load_state_dict.
         sd = ckpt["state_dict"]
-        bert_sd = {k[len("bert."):]: v for k, v in sd.items() if k.startswith("bert.")}
-        clf_sd = {
-            k[len("classifier."):]: v
-            for k, v in sd.items()
-            if k.startswith("classifier.")
-        }
+        bert_sd = {k[len("bert.") :]: v for k, v in sd.items() if k.startswith("bert.")}
+        clf_sd = {k[len("classifier.") :]: v for k, v in sd.items() if k.startswith("classifier.")}
         self.bert.load_state_dict(bert_sd)
         self.classifier.load_state_dict(clf_sd)
 
@@ -189,9 +186,7 @@ class PunctuationPredictor:
         return out
 
     @staticmethod
-    def _build_result(
-        text: str, tokens: list[str], binary
-    ) -> tuple[str, list[dict]]:
+    def _build_result(text: str, tokens: list[str], binary) -> tuple[str, list[dict]]:
         """토큰 단위 예측을 원문 글자에 정렬하여 (punctuated, marks)로 빌드.
 
         SikuRoBERTa(중국어 BERT 계열)는 한자 1자 = 1 토큰이라
@@ -215,18 +210,18 @@ class PunctuationPredictor:
             # 이 토큰 위치에 예측된 부호들을 LABELS 순서로 부착.
             if tok_idx < len(binary):
                 row = binary[tok_idx]
-                attached: list[str] = [
-                    LABELS[i] for i in range(len(LABELS)) if row[i] == 1
-                ]
+                attached: list[str] = [LABELS[i] for i in range(len(LABELS)) if row[i] == 1]
                 if attached:
                     after = "".join(attached)
                     out_chars.append(after)
-                    marks.append({
-                        "start": char_idx,
-                        "end": char_idx + 1,
-                        "before": "",
-                        "after": after,
-                    })
+                    marks.append(
+                        {
+                            "start": char_idx,
+                            "end": char_idx + 1,
+                            "before": "",
+                            "after": after,
+                        }
+                    )
 
             char_idx += 1
 
@@ -244,4 +239,4 @@ def _iter_chunks(text: str, size: int) -> Iterable[str]:
     422자 학습/512 토큰 한도를 안전하게 지키는 것이 우선.
     """
     for i in range(0, len(text), size):
-        yield text[i:i + size]
+        yield text[i : i + size]
