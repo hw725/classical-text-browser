@@ -272,6 +272,7 @@ def resolve_citation_context(
     block_id = source.get("block_id", "")
     start = source.get("start", 0)
     end = source.get("end", 0)
+    snapshot = mark.get("source_text_snapshot", "")
 
     # ─── L4: 원문 텍스트 ───
     # TextBlock 기반 마크인지 확인:
@@ -281,6 +282,7 @@ def resolve_citation_context(
     full_block_text = ""
     original_text = ""
     _used_textblock = False
+    _used_snapshot_fallback = False
 
     try:
         tb = get_entity(interp_path, "text_block", block_id)
@@ -288,20 +290,34 @@ def resolve_citation_context(
         _used_textblock = True
     except (FileNotFoundError, Exception):
         # TextBlock이 아닌 경우 (LayoutBlock ID 등) → L4 페이지 텍스트 폴백
-        page_data = get_page_text(doc_path, part_id, page_num)
-        full_block_text = page_data.get("text", "")
+        try:
+            page_data = get_page_text(doc_path, part_id, page_num)
+            full_block_text = page_data.get("text", "")
+        except Exception:
+            full_block_text = ""
 
     if full_block_text and start <= end < len(full_block_text):
         original_text = full_block_text[start : end + 1]
     elif full_block_text and start < len(full_block_text):
         original_text = full_block_text[start:]
+    elif snapshot:
+        # 마지막 폴백: 인용 생성 시 저장한 스냅샷.
+        #
+        # 왜 필요한가:
+        #   실제 UI 흐름에서는 LayoutBlock/TextBlock 파일 구조가 아직 완전히
+        #   동기화되지 않았더라도 마크 자체에는 사용자가 드래그한 원문이
+        #   source_text_snapshot으로 저장된다. 원문 복원 실패 시 이를 쓰면
+        #   통합 컨텍스트가 "(원문 없음)"으로 비는 일을 피할 수 있다.
+        original_text = snapshot
+        full_block_text = snapshot
+        _used_snapshot_fallback = True
 
     # ─── L5: 표점 적용본 ───
     punctuated_text = original_text  # 기본값: 표점 없으면 원문 그대로
     try:
         punct_data = load_punctuation(interp_path, part_id, page_num, block_id)
         marks_list = punct_data.get("marks", [])
-        if marks_list and full_block_text:
+        if marks_list and full_block_text and not _used_snapshot_fallback:
             # 마크 범위에 해당하는 표점만 필터하여 부분 텍스트에 적용한다.
             range_marks = _filter_marks_for_range(marks_list, start, end)
             # 범위 시작을 0으로 맞추기 위해 오프셋 조정
@@ -366,7 +382,6 @@ def resolve_citation_context(
         pass
 
     # ─── 텍스트 변경 감지 ───
-    snapshot = mark.get("source_text_snapshot", "")
     text_changed = (snapshot != original_text) if snapshot and original_text else False
 
     return {

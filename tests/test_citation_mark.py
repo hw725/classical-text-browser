@@ -23,6 +23,7 @@ from core.citation_mark import (
     list_all_citation_marks,
     load_citation_marks,
     remove_citation_mark,
+    resolve_citation_context,
     save_citation_marks,
     update_citation_mark,
 )
@@ -247,6 +248,36 @@ def test_list_all_citation_marks():
         pages = [m["page_number"] for m in all_marks]
         assert 1 in pages
         assert 2 in pages
+
+
+def test_resolve_uses_snapshot_when_source_text_missing():
+    """원문 블록을 복원하지 못해도 마크 스냅샷으로 컨텍스트를 채운다."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        library_path = root / "library"
+        interp_path = library_path / "interpretations" / "interp1"
+        interp_path.mkdir(parents=True)
+
+        mark = _make_mark(
+            block_id="p02_b01",
+            start=0,
+            end=9,
+            text="《蒙求》剏于唐李瀚。",
+        )
+
+        ctx = resolve_citation_context(
+            library_path=library_path,
+            doc_id="missing_doc",
+            interp_path=interp_path,
+            part_id="main",
+            page_num=2,
+            mark=mark,
+        )
+
+        assert ctx["original_text"] == "《蒙求》剏于唐李瀚。"
+        assert ctx["punctuated_text"] == "《蒙求》剏于唐李瀚。"
+        assert ctx["full_block_text"] == "《蒙求》剏于唐李瀚。"
+        assert ctx["text_changed"] is False
 
 
 # ──────────────────────────────────────
