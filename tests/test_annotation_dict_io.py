@@ -259,7 +259,6 @@ def test_export():
         assert stats["by_type"].get("person", 0) >= 2
 
         print("  [PASS] export_dictionary")
-        return result
 
 
 # ────────────────────────────────

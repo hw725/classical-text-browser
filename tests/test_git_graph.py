@@ -264,7 +264,7 @@ class TestBuildLinks:
 
         links = build_links(orig, interp)
         assert len(links) == 2
-        types = {l["match_type"] for l in links}
+        types = {link["match_type"] for link in links}
         assert "explicit" in types
         assert "estimated" in types
 
@@ -382,7 +382,9 @@ class TestGetGitGraphData:
         )
 
         # explicit 링크가 있어야 함
-        explicit_links = [l for l in data["links"] if l["match_type"] == "explicit"]
+        explicit_links = [
+            link for link in data["links"] if link["match_type"] == "explicit"
+        ]
         assert len(explicit_links) == 1
         assert explicit_links[0]["original_hash"] == orig_head
 

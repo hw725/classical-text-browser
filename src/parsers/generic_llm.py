@@ -615,7 +615,7 @@ class GenericLlmFetcher(BaseFetcher):
                 continue
 
         raise ValueError(
-            f"모든 LLM 프로바이더가 서지 추출에 실패했습니다:\n"
+            "모든 LLM 프로바이더가 서지 추출에 실패했습니다:\n"
             + "\n".join(f"  - {e}" for e in errors)
         )
 
