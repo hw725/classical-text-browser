@@ -1393,7 +1393,8 @@ function _fillLlmSelect(select, models) {
   if (extra && extra.includes("punct-external")) {
     const opt = document.createElement("option");
     opt.value = "external:default";
-    opt.textContent = "● 외부 표점 서비스 (SikuRoBERTa)";
+    opt.textContent = "● 외부 표점 서비스 (SikuRoBERTa, 양정현 2025)";
+    opt.title = "출처: yachagye/korean-classical-chinese-punctuation · CC BY-NC-SA 4.0 · DOI 10.37924/JSSW.100.9";
     select.appendChild(opt);
   }
 }

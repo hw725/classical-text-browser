@@ -157,6 +157,32 @@ EXTERNAL_PUNCT_URL=http://192.168.0.10:8765 uv run python -m app serve
 - 베이스 BERT는 `hyper_parameters.model_name`이 가리키는 HF 모델을 자동 다운로드.
   Docker 사용 시 `csp_huggingface_cache` 볼륨을 공유하므로 보통 재다운로드 없음.
 
+## 출처 표기 및 라이선스
+
+이 서비스의 SikuRoBERTa 엔진은
+[`yachagye/korean-classical-chinese-punctuation`](https://github.com/yachagye/korean-classical-chinese-punctuation)
+모델과 추론 방식을 본체 HTTP 계약에 맞게 연결한 것이다. 원 저장소의 조건에 따라
+원저작자와 출처를 명시하고 논문을 인용해야 한다.
+
+- 원저작자: Junghyun Yang (양정현)
+- 원 저장소: https://github.com/yachagye/korean-classical-chinese-punctuation
+- 모델: Korean Classical Chinese Punctuation Prediction Model v2.5
+- 라이선스: CC BY-NC-SA 4.0
+- DOI: https://doi.org/10.37924/JSSW.100.9
+
+권장 인용:
+
+```text
+Yang, J. (2025). Development and Application of a Deep Learning-Based Model
+for Automated Punctuation Inference in Korean Classical Chinese.
+The Korean Journal of History (Yoksahak Yongu), 100, 267-297.
+https://doi.org/10.37924/JSSW.100.9
+```
+
+서비스의 `/health`와 `/punctuate` 응답에는 `PUNCT_ENGINE=sikurroberta`일 때 위 출처
+메타데이터가 `attribution` 필드로 포함된다. 본체도 외부 표점 결과에 이 필드를 전달하며,
+구버전 서비스처럼 필드가 비어 있는 경우에도 동일한 출처 메타데이터를 보강한다.
+
 ## 모델 가중치 받기
 
 [yachagye 레포 README](https://github.com/yachagye/korean-classical-chinese-punctuation)의

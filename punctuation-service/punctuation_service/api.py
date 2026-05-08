@@ -20,6 +20,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from .attribution import MODEL_ATTRIBUTION
 from .engine import PunctuationEngine, get_engine
 
 
@@ -40,11 +41,22 @@ class PunctuateResponse(BaseModel):
     engine: str = Field(..., description="사용된 엔진 이름")
     punctuated: str = Field(..., description="표점이 적용된 결과 문자열")
     marks: list[PunctuationMarkModel] = Field(default_factory=list)
+    attribution: dict[str, str] | None = Field(
+        default=None,
+        description="실제 외부 모델을 사용한 경우의 출처/라이선스/인용 정보",
+    )
 
 
 # 엔진은 lifespan에서 한 번만 만들어 모듈 전역에 둔다.
 # 모델 로드가 무겁기 때문에 요청마다 만들면 안 된다.
 _engine: Optional[PunctuationEngine] = None
+
+
+def _engine_attribution() -> dict[str, str] | None:
+    """Return upstream model attribution only when the real yachagye model is used."""
+    if _engine is not None and _engine.name == "sikurroberta":
+        return MODEL_ATTRIBUTION.copy()
+    return None
 
 
 @asynccontextmanager
@@ -71,8 +83,18 @@ app = FastAPI(
 def health() -> dict:
     """간단한 상태 점검. 본체에서 서비스 가용성 판단에 사용."""
     if _engine is None:
-        return {"ok": False, "engine": None, "ready": False}
-    return {"ok": True, "engine": _engine.name, "ready": _engine.ready()}
+        return {
+            "ok": False,
+            "engine": None,
+            "ready": False,
+            "attribution": None,
+        }
+    return {
+        "ok": True,
+        "engine": _engine.name,
+        "ready": _engine.ready(),
+        "attribution": _engine_attribution(),
+    }
 
 
 @app.post("/punctuate", response_model=PunctuateResponse)
@@ -91,7 +113,12 @@ def punctuate(req: PunctuateRequest) -> PunctuateResponse:
             detail=f"엔진({_engine.name})이 아직 준비되지 않았습니다 (모델 미로드 등)",
         )
     if not req.text:
-        return PunctuateResponse(engine=_engine.name, punctuated="", marks=[])
+        return PunctuateResponse(
+            engine=_engine.name,
+            punctuated="",
+            marks=[],
+            attribution=_engine_attribution(),
+        )
     try:
         result = _engine.punctuate(req.text)
     except NotImplementedError as exc:
@@ -99,4 +126,8 @@ def punctuate(req: PunctuateRequest) -> PunctuateResponse:
     except Exception as exc:
         # 너무 자세한 내부 오류를 외부에 흘리지 않되, 디버그를 위해 메시지는 포함.
         raise HTTPException(status_code=500, detail=f"표점 추론 실패: {exc}") from exc
-    return PunctuateResponse(engine=_engine.name, **result)
+    return PunctuateResponse(
+        engine=_engine.name,
+        **result,
+        attribution=_engine_attribution(),
+    )

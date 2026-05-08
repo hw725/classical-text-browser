@@ -156,3 +156,24 @@ schemas/
 
 - 비상업적 사용·수정·재배포: 자유
 - 상업적 사용: 별도 협의 필요 (LICENSE 파일 하단 연락처 참고)
+
+## 외부 모델 출처
+
+외부 표점 서비스의 SikuRoBERTa 엔진은
+[`yachagye/korean-classical-chinese-punctuation`](https://github.com/yachagye/korean-classical-chinese-punctuation)
+모델을 HTTP 마이크로서비스로 연동합니다. 원 저장소 조건에 따라 원저작자와 출처를
+표기하고 논문을 인용해야 합니다.
+
+- 원저작자: Junghyun Yang (양정현)
+- 모델: Korean Classical Chinese Punctuation Prediction Model v2.5
+- 라이선스: CC BY-NC-SA 4.0
+- DOI: https://doi.org/10.37924/JSSW.100.9
+
+권장 인용:
+
+```text
+Yang, J. (2025). Development and Application of a Deep Learning-Based Model
+for Automated Punctuation Inference in Korean Classical Chinese.
+The Korean Journal of History (Yoksahak Yongu), 100, 267-297.
+https://doi.org/10.37924/JSSW.100.9
+```
