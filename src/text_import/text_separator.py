@@ -31,6 +31,7 @@ class DocumentStructure:
     LLM이 첫 몇 페이지를 보고 파악한 문서 내부의
     원문/번역/주석 배치 패턴.
     """
+
     pattern_type: str = "unknown"
     # "alternating" — 원문→번역 교차
     # "block" — 앞부분 원문, 뒷부분 번역
@@ -38,11 +39,11 @@ class DocumentStructure:
     # "mixed" — 혼합 (원문+각주+번역)
     # "original_only" — 원문만 (분리 불필요)
 
-    original_markers: str = ""     # 원문 식별 단서 (LLM이 서술)
+    original_markers: str = ""  # 원문 식별 단서 (LLM이 서술)
     translation_markers: str = ""  # 번역 식별 단서
-    note_markers: str = ""         # 주석 식별 단서
-    special_instructions: str = "" # 추가 특수 지시 (예: "판본 목록도 원문에 포함")
-    confidence: float = 0.0        # 구조 파악 확신도 (0.0 ~ 1.0)
+    note_markers: str = ""  # 주석 식별 단서
+    special_instructions: str = ""  # 추가 특수 지시 (예: "판본 목록도 원문에 포함")
+    confidence: float = 0.0  # 구조 파악 확신도 (0.0 ~ 1.0)
 
     def to_dict(self) -> dict:
         """딕셔너리로 변환 (JSON 직렬화용)."""
@@ -71,9 +72,10 @@ class DocumentStructure:
 @dataclass
 class SeparationResult:
     """한 페이지의 텍스트 분리 결과."""
+
     page_num: int = 0
-    original_text: str = ""      # 원문만 추출
-    translation_text: str = ""   # 번역만 추출
+    original_text: str = ""  # 원문만 추출
+    translation_text: str = ""  # 번역만 추출
     notes: list[str] = field(default_factory=list)  # 주석/각주
     uncertain: list[str] = field(default_factory=list)  # 분류 불확실한 부분
 
@@ -175,8 +177,7 @@ class TextSeparator:
         response = await self._router.call(
             prompt=prompt,
             system=(
-                "당신은 동아시아 고전 문헌 전문가입니다. "
-                "한문 원문과 번역/주석의 구조를 분석합니다."
+                "당신은 동아시아 고전 문헌 전문가입니다. 한문 원문과 번역/주석의 구조를 분석합니다."
             ),
             purpose="text_structure_analysis",
             force_provider=force_provider,

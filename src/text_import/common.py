@@ -208,8 +208,12 @@ def separate_by_script(text: str, han_threshold: float = 0.8) -> dict:
     # 직전 분류 추적 (한자/한글 모두 0인 줄의 분류에 사용)
     last_type = "original"  # 기본값: 원문
 
-    stats = {"total_lines": len(lines), "original_lines": 0,
-             "translation_lines": 0, "skipped_lines": 0}
+    stats = {
+        "total_lines": len(lines),
+        "original_lines": 0,
+        "translation_lines": 0,
+        "skipped_lines": 0,
+    }
 
     for line in lines:
         stripped = line.strip()
@@ -224,9 +228,7 @@ def separate_by_script(text: str, han_threshold: float = 0.8) -> dict:
 
         # 줄 번호·괄호 번호 등 접두사 제거 후 분석
         # 예: "1. 昔有善牧者" → "昔有善牧者" 부분만 분석
-        content_for_analysis = regex.sub(
-            r"^[\s\d\.\)\]\】\》\>\-\–\—]+", "", stripped
-        )
+        content_for_analysis = regex.sub(r"^[\s\d\.\)\]\】\》\>\-\–\—]+", "", stripped)
 
         # 유니코드 카테고리별 문자 수 계산
         han_count = len(regex.findall(r"\p{Han}", content_for_analysis))
@@ -322,7 +324,7 @@ def _build_ngram_index(text: str, n: int = 5) -> dict[str, list[int]]:
     """
     index: dict[str, list[int]] = defaultdict(list)
     for i in range(len(text) - n + 1):
-        index[text[i:i + n]].append(i)
+        index[text[i : i + n]].append(i)
     return index
 
 
@@ -360,7 +362,10 @@ def _find_anchor_in_index(
     if anchor_len < ngram_size:
         # 앵커가 n-gram보다 짧으면 단순 슬라이딩 윈도우
         return _fuzzy_search_range(
-            anchor, han_string, search_start, len(han_string),
+            anchor,
+            han_string,
+            search_start,
+            len(han_string),
         )
 
     # 2차: n-gram 후보 추출
@@ -368,7 +373,7 @@ def _find_anchor_in_index(
     stride = max(1, ngram_size // 2 + 1)
     sub_ngrams = []
     for i in range(0, anchor_len - ngram_size + 1, stride):
-        ng = anchor[i:i + ngram_size]
+        ng = anchor[i : i + ngram_size]
         sub_ngrams.append((ng, i))  # (n-gram, 앵커 내 오프셋)
 
     if not sub_ngrams:
@@ -388,9 +393,7 @@ def _find_anchor_in_index(
 
     # 절반 이상의 n-gram이 지목한 위치만 후보로 채택
     min_votes = max(1, len(sub_ngrams) // 2)
-    candidates = sorted(
-        pos for pos, cnt in pos_counter.items() if cnt >= min_votes
-    )
+    candidates = sorted(pos for pos, cnt in pos_counter.items() if cnt >= min_votes)
 
     if not candidates:
         # 투표 실패 시, 가장 많은 표를 받은 위치 1개라도 검증
@@ -449,7 +452,7 @@ def _fuzzy_search_range(
     search_end = min(end, len(han_string))
 
     for i in range(start, max(start, search_end - anchor_len + 1)):
-        window = han_string[i:i + anchor_len]
+        window = han_string[i : i + anchor_len]
         ratio = SequenceMatcher(None, anchor, window).ratio()
         if ratio > best_ratio:
             best_ratio = ratio
@@ -485,16 +488,16 @@ def _extract_multi_anchors(
         # 앵커 2개를 겹침 없이 추출하기 어려움 → 시작부·끝부 2개
         return [
             page_han[:anchor_length],
-            page_han[n - anchor_length:],
+            page_han[n - anchor_length :],
         ]
 
     # 3개 앵커: 시작부, 중간부, 끝부
     mid = n // 2
     half = anchor_length // 2
     return [
-        page_han[:anchor_length],                              # 시작부
-        page_han[mid - half:mid - half + anchor_length],       # 중간부
-        page_han[n - anchor_length:],                          # 끝부
+        page_han[:anchor_length],  # 시작부
+        page_han[mid - half : mid - half + anchor_length],  # 중간부
+        page_han[n - anchor_length :],  # 끝부
     ]
 
 
@@ -551,13 +554,15 @@ def align_text_to_pages(
 
     if not han_string:
         # 외부 텍스트에 한자가 없으면 전체를 page 1에 매핑
-        return [{
-            "page_num": page_texts[0]["page_num"] if page_texts else 1,
-            "matched_text": imported_text,
-            "ocr_preview": "",
-            "confidence": 0.0,
-            "anchor": "",
-        }]
+        return [
+            {
+                "page_num": page_texts[0]["page_num"] if page_texts else 1,
+                "matched_text": imported_text,
+                "ocr_preview": "",
+                "confidence": 0.0,
+                "anchor": "",
+            }
+        ]
 
     # ── 2단계: n-gram 인덱스 구축 ──
     NGRAM = 5
@@ -574,24 +579,34 @@ def align_text_to_pages(
         anchors = _extract_multi_anchors(page_han, anchor_length)
         ocr_preview = page_text.strip()[:80]
 
-        page_anchors.append({
-            "page_num": page["page_num"],
-            "anchors": anchors,
-            "page_han": page_han,
-            "ocr_preview": ocr_preview,
-        })
+        page_anchors.append(
+            {
+                "page_num": page["page_num"],
+                "anchors": anchors,
+                "page_han": page_han,
+                "ocr_preview": ocr_preview,
+            }
+        )
 
         if not anchors:
-            match_positions.append({
-                "han_pos": -1, "confidence": 0.0, "anchor": "",
-            })
+            match_positions.append(
+                {
+                    "han_pos": -1,
+                    "confidence": 0.0,
+                    "anchor": "",
+                }
+            )
             continue
 
         # 각 앵커를 독립적으로 탐색
         anchor_results: list[tuple[int, float, str]] = []  # (pos, confidence, anchor)
         for anc in anchors:
             pos, conf = _find_anchor_in_index(
-                anc, search_start, ngram_index, han_string, NGRAM,
+                anc,
+                search_start,
+                ngram_index,
+                han_string,
+                NGRAM,
             )
             anchor_results.append((pos, conf, anc))
 
@@ -604,29 +619,35 @@ def align_text_to_pages(
             median_pos = positions[len(positions) // 2]
             avg_conf = sum(s[1] for s in successes) / len(successes)
             best_anchor = max(successes, key=lambda s: s[1])[2]
-            match_positions.append({
-                "han_pos": median_pos,
-                "confidence": avg_conf,
-                "anchor": best_anchor,
-            })
+            match_positions.append(
+                {
+                    "han_pos": median_pos,
+                    "confidence": avg_conf,
+                    "anchor": best_anchor,
+                }
+            )
             search_start = median_pos + anchor_length
         elif len(successes) == 1:
             # 1개만 성공 → 해당 위치 사용, 신뢰도 페널티 (×0.8)
             pos, conf, anc = successes[0]
-            match_positions.append({
-                "han_pos": pos,
-                "confidence": conf * 0.8,
-                "anchor": anc,
-            })
+            match_positions.append(
+                {
+                    "han_pos": pos,
+                    "confidence": conf * 0.8,
+                    "anchor": anc,
+                }
+            )
             search_start = pos + anchor_length
         else:
             # 모두 실패 → 가장 높은 유사도의 앵커 정보 보존
             best = max(anchor_results, key=lambda x: x[1])
-            match_positions.append({
-                "han_pos": -1,
-                "confidence": best[1],
-                "anchor": best[2],
-            })
+            match_positions.append(
+                {
+                    "han_pos": -1,
+                    "confidence": best[1],
+                    "anchor": best[2],
+                }
+            )
 
     # ── 4단계: 캐스케이드 복구 (Pass 2) ──
     # 실패한 앵커를 인접 성공 위치 범위 내에서 재탐색
@@ -657,13 +678,15 @@ def align_text_to_pages(
         end = page_boundaries[idx + 1]
         matched = imported_text[start:end].strip()
 
-        results.append({
-            "page_num": pa["page_num"],
-            "matched_text": matched,
-            "ocr_preview": pa["ocr_preview"],
-            "confidence": match_positions[idx]["confidence"],
-            "anchor": match_positions[idx]["anchor"],
-        })
+        results.append(
+            {
+                "page_num": pa["page_num"],
+                "matched_text": matched,
+                "ocr_preview": pa["ocr_preview"],
+                "confidence": match_positions[idx]["confidence"],
+                "anchor": match_positions[idx]["anchor"],
+            }
+        )
 
     return results
 
@@ -695,8 +718,7 @@ def _recover_failed_matches(
 
     # 성공한 앵커의 인덱스와 위치
     success_indices = [
-        (i, mp["han_pos"])
-        for i, mp in enumerate(match_positions) if mp["han_pos"] >= 0
+        (i, mp["han_pos"]) for i, mp in enumerate(match_positions) if mp["han_pos"] >= 0
     ]
 
     for i, mp in enumerate(match_positions):
@@ -728,7 +750,11 @@ def _recover_failed_matches(
         for anc in anchors:
             # n-gram 인덱스 기반 탐색 (범위를 search_start로 제한)
             pos, conf = _find_anchor_in_index(
-                anc, prev_pos, ngram_index, han_string, ngram_size,
+                anc,
+                prev_pos,
+                ngram_index,
+                han_string,
+                ngram_size,
             )
             # 범위 내인지 확인
             if pos >= 0 and prev_pos <= pos <= next_pos and conf > best_conf:
@@ -743,7 +769,9 @@ def _recover_failed_matches(
             mp["anchor"] = best_anchor
             logger.info(
                 "캐스케이드 복구 성공: 페이지 %s (위치=%d, 신뢰도=%.2f)",
-                page_anchors[i]["page_num"], best_pos, mp["confidence"],
+                page_anchors[i]["page_num"],
+                best_pos,
+                mp["confidence"],
             )
 
 

@@ -46,10 +46,7 @@ class PdfTextExtractor:
         try:
             self._doc = fitz.open(str(self._path))
         except Exception as e:
-            raise ValueError(
-                f"PDF 파일을 열 수 없습니다: {self._path}\n"
-                f"→ 원인: {e}"
-            ) from e
+            raise ValueError(f"PDF 파일을 열 수 없습니다: {self._path}\n→ 원인: {e}") from e
 
     @property
     def page_count(self) -> int:
@@ -65,8 +62,7 @@ class PdfTextExtractor:
         """
         if page_num < 1 or page_num > len(self._doc):
             raise IndexError(
-                f"페이지 번호가 범위 밖입니다: {page_num} "
-                f"(전체 {len(self._doc)}페이지)"
+                f"페이지 번호가 범위 밖입니다: {page_num} (전체 {len(self._doc)}페이지)"
             )
 
         page = self._doc[page_num - 1]  # PyMuPDF는 0-indexed
@@ -84,11 +80,13 @@ class PdfTextExtractor:
         for i in range(len(self._doc)):
             page = self._doc[i]
             text = page.get_text("text")
-            pages.append({
-                "page_num": i + 1,
-                "text": text,
-                "char_count": len(text.strip()),
-            })
+            pages.append(
+                {
+                    "page_num": i + 1,
+                    "text": text,
+                    "char_count": len(text.strip()),
+                }
+            )
         return pages
 
     def extract_page_range(self, start: int, end: int) -> list[dict]:
@@ -106,11 +104,13 @@ class PdfTextExtractor:
         for i in range(start - 1, end):
             page = self._doc[i]
             text = page.get_text("text")
-            pages.append({
-                "page_num": i + 1,
-                "text": text,
-                "char_count": len(text.strip()),
-            })
+            pages.append(
+                {
+                    "page_num": i + 1,
+                    "text": text,
+                    "char_count": len(text.strip()),
+                }
+            )
         return pages
 
     def has_text_layer(self, sample_pages: int = 3) -> bool:
