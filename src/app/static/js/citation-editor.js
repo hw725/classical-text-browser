@@ -22,6 +22,7 @@ const citeState = {
   selectedMarkId: null,
   viewMode: "page",       // "page" | "all"
   resolvedContext: null,   // 선택된 마크의 통합 컨텍스트
+  selectionPromptOpen: false,
 };
 
 /* ────────────────────────────────────
@@ -130,6 +131,19 @@ function initCitationEditor() {
   // 인용 마크 추가 (텍스트 선택 후)
   const addBtn = document.getElementById("cite-add-btn");
   if (addBtn) addBtn.addEventListener("click", _onCiteTextSelection);
+
+  // 원문 드래그만으로 인용 마크 생성 흐름을 시작한다.
+  const sourceText = document.getElementById("cite-source-text");
+  if (sourceText) {
+    sourceText.addEventListener("mouseup", () => {
+      setTimeout(() => _onCiteTextSelection({ silentWhenEmpty: true }), 0);
+    });
+    sourceText.addEventListener("keyup", (e) => {
+      if (e.key === "Shift" || e.key.startsWith("Arrow")) {
+        setTimeout(() => _onCiteTextSelection({ silentWhenEmpty: true }), 0);
+      }
+    });
+  }
 
   // 내보내기
   const exportBtn = document.getElementById("cite-export-btn");
@@ -696,10 +710,14 @@ function _renderCiteContext(ctx) {
    텍스트 선택 → 인용 마크 추가
    ──────────────────────────────────── */
 
-function _onCiteTextSelection() {
+function _onCiteTextSelection(options = {}) {
+  if (citeState.selectionPromptOpen) return;
+
   const selection = window.getSelection();
   if (!selection || selection.isCollapsed) {
-    showToast("원문에서 인용할 텍스트를 먼저 드래그하세요.", 'warning');
+    if (!options.silentWhenEmpty) {
+      showToast("원문에서 인용할 텍스트를 먼저 드래그하세요.", 'warning');
+    }
     return;
   }
 
@@ -709,18 +727,25 @@ function _onCiteTextSelection() {
   // 정확한 위치 계산: getSelection의 Range 사용
   const range = _getSelectionCharRange();
   if (!range) {
-    showToast("텍스트 범위를 결정할 수 없습니다. 원문 영역에서 드래그하세요.", 'warning');
+    if (!options.silentWhenEmpty) {
+      showToast("텍스트 범위를 결정할 수 없습니다. 원문 영역에서 드래그하세요.", 'warning');
+    }
     return;
   }
 
+  citeState.selectionPromptOpen = true;
   const label = prompt(
     `"${selectedText.slice(0, 30)}${selectedText.length > 30 ? "…" : ""}" 인용 메모:`,
     ""
   );
-  if (label === null) return;  // 취소
+  if (label === null) {
+    citeState.selectionPromptOpen = false;
+    return;  // 취소
+  }
 
   const tagsStr = prompt("태그 (쉼표 구분, 없으면 빈칸):", "");
   const tags = tagsStr ? tagsStr.split(",").map(t => t.trim()).filter(Boolean) : [];
+  citeState.selectionPromptOpen = false;
 
   _addCitationMark(range.start, range.end, selectedText, label || null, tags);
   selection.removeAllRanges();
