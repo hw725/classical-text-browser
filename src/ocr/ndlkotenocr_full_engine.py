@@ -48,22 +48,22 @@ logger = logging.getLogger(__name__)
 # ndlkotenocr_engine.py(lite)와 동일한 매핑.
 # 두 엔진 모두 RTMDet 16개 클래스를 사용하므로 매핑 공유.
 NDLKOTENOCR_TO_BLOCK_TYPE = {
-    0: "main_text",       # text_block
-    1: "main_text",       # line_main
-    2: "annotation",      # line_caption
-    3: "unknown",         # line_ad
-    4: "annotation",      # line_note
-    5: "marginal_note",   # line_note_tochu
-    6: "illustration",    # block_fig
-    7: "unknown",         # block_ad
-    8: "page_title",      # block_pillar (柱)
-    9: "page_number",     # block_folio (ノンブル)
-    10: "unknown",        # block_rubi
-    11: "illustration",   # block_chart
-    12: "unknown",        # block_eqn
-    13: "unknown",        # block_cfm
-    14: "unknown",        # block_eng
-    15: "illustration",   # block_table
+    0: "main_text",  # text_block
+    1: "main_text",  # line_main
+    2: "annotation",  # line_caption
+    3: "unknown",  # line_ad
+    4: "annotation",  # line_note
+    5: "marginal_note",  # line_note_tochu
+    6: "illustration",  # block_fig
+    7: "unknown",  # block_ad
+    8: "page_title",  # block_pillar (柱)
+    9: "page_number",  # block_folio (ノンブル)
+    10: "unknown",  # block_rubi
+    11: "illustration",  # block_chart
+    12: "unknown",  # block_eqn
+    13: "unknown",  # block_cfm
+    14: "unknown",  # block_eng
+    15: "illustration",  # block_table
 }
 
 # LINE 유형의 class_index 집합 (행 단위로 TrOCR 인식 대상)
@@ -94,8 +94,8 @@ class NdlkotenOcrFullEngine(BaseOcrEngine):
 
     def __init__(self):
         """엔진 초기화. 모델은 첫 사용 시 lazy 로드."""
-        self._rtmdet = None          # RTMDet 레이아웃/행 탐지기 (lite 공유)
-        self._trocr = None           # TrOCR 문자 인식기 (full)
+        self._rtmdet = None  # RTMDet 레이아웃/행 탐지기 (lite 공유)
+        self._trocr = None  # TrOCR 문자 인식기 (full)
         self._available: Optional[bool] = None
         self._unavailable_reason: Optional[str] = None
 
@@ -115,8 +115,7 @@ class NdlkotenOcrFullEngine(BaseOcrEngine):
         except ImportError:
             self._available = False
             self._unavailable_reason = (
-                "torch가 설치되지 않았습니다. "
-                "설치: uv sync --extra ndlkotenocr-full"
+                "torch가 설치되지 않았습니다. 설치: uv sync --extra ndlkotenocr-full"
             )
             logger.debug(f"NDL古典籍OCR Full 사용 불가: {self._unavailable_reason}")
             return False
@@ -127,8 +126,7 @@ class NdlkotenOcrFullEngine(BaseOcrEngine):
         except ImportError:
             self._available = False
             self._unavailable_reason = (
-                "transformers가 설치되지 않았습니다. "
-                "설치: uv sync --extra ndlkotenocr-full"
+                "transformers가 설치되지 않았습니다. 설치: uv sync --extra ndlkotenocr-full"
             )
             logger.debug(f"NDL古典籍OCR Full 사용 불가: {self._unavailable_reason}")
             return False
@@ -139,8 +137,7 @@ class NdlkotenOcrFullEngine(BaseOcrEngine):
         except ImportError:
             self._available = False
             self._unavailable_reason = (
-                "onnxruntime이 설치되지 않았습니다. "
-                "설치: uv sync --extra ndlkotenocr-full"
+                "onnxruntime이 설치되지 않았습니다. 설치: uv sync --extra ndlkotenocr-full"
             )
             logger.debug(f"NDL古典籍OCR Full 사용 불가: {self._unavailable_reason}")
             return False
@@ -151,6 +148,7 @@ class NdlkotenOcrFullEngine(BaseOcrEngine):
         self._unavailable_reason = None
 
         import torch
+
         device_info = "CUDA" if torch.cuda.is_available() else "CPU"
         logger.info(
             f"NDL古典籍OCR Full: torch + transformers 설치됨 (device: {device_info}). "
@@ -194,11 +192,13 @@ class NdlkotenOcrFullEngine(BaseOcrEngine):
         ocr_lines = []
         for line_info in lines_with_text:
             chars = [OcrCharResult(char=ch) for ch in line_info["text"]]
-            ocr_lines.append(OcrLineResult(
-                text=line_info["text"],
-                bbox=line_info.get("bbox"),
-                characters=chars,
-            ))
+            ocr_lines.append(
+                OcrLineResult(
+                    text=line_info["text"],
+                    bbox=line_info.get("bbox"),
+                    characters=chars,
+                )
+            )
 
         return OcrBlockResult(
             lines=ocr_lines,
@@ -240,21 +240,30 @@ class NdlkotenOcrFullEngine(BaseOcrEngine):
         total = len(processable)
 
         if progress_callback:
-            progress_callback({
-                "current": 0, "total": total,
-                "block_id": "", "status": "detecting_lines",
-            })
+            progress_callback(
+                {
+                    "current": 0,
+                    "total": total,
+                    "block_id": "",
+                    "status": "detecting_lines",
+                }
+            )
 
         # 2. RTMDet + ndl_parser + XY-Cut + TrOCR (배치)
         lines_with_text = self._process_detections(
-            np_image, self._rtmdet.detect(np_image),
+            np_image,
+            self._rtmdet.detect(np_image),
         )
 
         if progress_callback:
-            progress_callback({
-                "current": 0, "total": total,
-                "block_id": "", "status": "matching_blocks",
-            })
+            progress_callback(
+                {
+                    "current": 0,
+                    "total": total,
+                    "block_id": "",
+                    "status": "matching_blocks",
+                }
+            )
 
         # 3. LINE → L3 block 매칭
         block_results = self._match_lines_to_blocks(lines_with_text, blocks)
@@ -273,10 +282,7 @@ class NdlkotenOcrFullEngine(BaseOcrEngine):
 
             line_dicts = []
             for line_info in matched_lines:
-                chars = [
-                    OcrCharResult(char=ch).to_dict()
-                    for ch in line_info["text"]
-                ]
+                chars = [OcrCharResult(char=ch).to_dict() for ch in line_info["text"]]
                 line_dict = {"text": line_info["text"]}
                 if line_info.get("bbox"):
                     line_dict["bbox"] = [round(v, 2) for v in line_info["bbox"]]
@@ -284,17 +290,23 @@ class NdlkotenOcrFullEngine(BaseOcrEngine):
                     line_dict["characters"] = chars
                 line_dicts.append(line_dict)
 
-            results.append({
-                "layout_block_id": block_id,
-                "lines": line_dicts,
-            })
+            results.append(
+                {
+                    "layout_block_id": block_id,
+                    "lines": line_dicts,
+                }
+            )
 
             done_count += 1
             if progress_callback:
-                progress_callback({
-                    "current": done_count, "total": total,
-                    "block_id": block_id, "status": "processing",
-                })
+                progress_callback(
+                    {
+                        "current": done_count,
+                        "total": total,
+                        "block_id": block_id,
+                        "status": "processing",
+                    }
+                )
 
         logger.info(
             f"NDL古典籍OCR Full 페이지 인식 완료: "
@@ -343,15 +355,17 @@ class NdlkotenOcrFullEngine(BaseOcrEngine):
             x1, y1, x2, y2 = det["box"]
             block_type = NDLKOTENOCR_TO_BLOCK_TYPE.get(class_index, "unknown")
 
-            layout_blocks.append({
-                "block_id": f"p{page_number:02d}_b{block_idx + 1:02d}",
-                "block_type": block_type,
-                "bbox": [int(x1), int(y1), int(x2), int(y2)],
-                "reading_order": block_idx,
-                "writing_direction": "vertical_rtl",
-                "confidence": det_conf,
-                "skip": block_type in ("illustration", "page_number"),
-            })
+            layout_blocks.append(
+                {
+                    "block_id": f"p{page_number:02d}_b{block_idx + 1:02d}",
+                    "block_type": block_type,
+                    "bbox": [int(x1), int(y1), int(x2), int(y2)],
+                    "reading_order": block_idx,
+                    "writing_direction": "vertical_rtl",
+                    "confidence": det_conf,
+                    "skip": block_type in ("illustration", "page_number"),
+                }
+            )
             block_idx += 1
 
         return layout_blocks
@@ -371,6 +385,7 @@ class NdlkotenOcrFullEngine(BaseOcrEngine):
         # device 정보 추가
         try:
             import torch
+
             info["device"] = "cuda" if torch.cuda.is_available() else "cpu"
             if torch.cuda.is_available():
                 info["gpu_name"] = torch.cuda.get_device_name(0)
@@ -435,21 +450,17 @@ class NdlkotenOcrFullEngine(BaseOcrEngine):
             from .ndlkotenocr.trocr import TrOCRRecognizer
 
             self._trocr = TrOCRRecognizer(
-                preprocessor_path=str(
-                    full_model_dir / "model-ver2" / "trocr-base-preprocessor"
-                ),
-                tokenizer_path=str(
-                    full_model_dir / "model-ver2" / "decoder-roberta-v3"
-                ),
-                model_path=str(
-                    full_model_dir / "model-ver2" / "kotenseki-trocr-honkoku-ver2"
-                ),
+                preprocessor_path=str(full_model_dir / "model-ver2" / "trocr-base-preprocessor"),
+                tokenizer_path=str(full_model_dir / "model-ver2" / "decoder-roberta-v3"),
+                model_path=str(full_model_dir / "model-ver2" / "kotenseki-trocr-honkoku-ver2"),
                 device="auto",
                 batch_size=16,
             )
 
     def _process_detections(
-        self, np_image: np.ndarray, detections: list[dict],
+        self,
+        np_image: np.ndarray,
+        detections: list[dict],
     ) -> list[dict]:
         """RTMDet 탐지 결과를 처리하여 텍스트가 포함된 LINE 목록을 반환한다.
 
@@ -481,7 +492,11 @@ class NdlkotenOcrFullEngine(BaseOcrEngine):
 
         # XML 구성
         xmlstr = convert_to_xml_string3(
-            img_w, img_h, "page.jpg", classeslist, resultobj,
+            img_w,
+            img_h,
+            "page.jpg",
+            classeslist,
+            resultobj,
             use_block_ad=False,
             score_thr=0.3,
             min_bbox_size=5,
@@ -501,15 +516,17 @@ class NdlkotenOcrFullEngine(BaseOcrEngine):
             line_w = int(lineobj.get("WIDTH"))
             line_h = int(lineobj.get("HEIGHT"))
 
-            lineimg = np_image[ymin:ymin + line_h, xmin:xmin + line_w, :]
+            lineimg = np_image[ymin : ymin + line_h, xmin : xmin + line_w, :]
             if lineimg.size == 0:
                 continue
 
             line_crops.append(lineimg)
-            line_metadata.append({
-                "bbox": [xmin, ymin, xmin + line_w, ymin + line_h],
-                "order": int(lineobj.get("ORDER", idx)),
-            })
+            line_metadata.append(
+                {
+                    "bbox": [xmin, ymin, xmin + line_w, ymin + line_h],
+                    "order": int(lineobj.get("ORDER", idx)),
+                }
+            )
 
         # ★ TrOCR 배치 인식 (lite의 개별 PARSeq.read()와 다른 핵심 차이) ★
         # GPU에서 전체 LINE을 한 번에 처리하면 개별 호출 대비 2-5배 빠르다.
@@ -521,11 +538,13 @@ class NdlkotenOcrFullEngine(BaseOcrEngine):
         # 결과 조합
         lines_with_text = []
         for text, meta in zip(texts, line_metadata):
-            lines_with_text.append({
-                "text": text or "",
-                "bbox": meta["bbox"],
-                "order": meta["order"],
-            })
+            lines_with_text.append(
+                {
+                    "text": text or "",
+                    "bbox": meta["bbox"],
+                    "order": meta["order"],
+                }
+            )
 
         # 읽기 순서로 정렬
         lines_with_text.sort(key=lambda x: x["order"])
@@ -608,7 +627,7 @@ class NdlkotenOcrFullEngine(BaseOcrEngine):
                 if best_candidate_id and best_candidate_bbox:
                     bw = abs(best_candidate_bbox[2] - best_candidate_bbox[0])
                     bh = abs(best_candidate_bbox[3] - best_candidate_bbox[1])
-                    diag = (bw ** 2 + bh ** 2) ** 0.5
+                    diag = (bw**2 + bh**2) ** 0.5
                     if min_dist <= diag * 0.5:
                         best_block_id = best_candidate_id
 

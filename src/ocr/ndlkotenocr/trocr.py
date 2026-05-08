@@ -127,7 +127,8 @@ class TrOCRRecognizer:
                 generated_ids = self.model.generate(pixel_values)
 
             text = self.tokenizer.batch_decode(
-                generated_ids, skip_special_tokens=True,
+                generated_ids,
+                skip_special_tokens=True,
             )[0]
 
             return text.strip()
@@ -173,7 +174,8 @@ class TrOCRRecognizer:
 
             try:
                 pixel_values = self.processor(
-                    pil_batch, return_tensors="pt",
+                    pil_batch,
+                    return_tensors="pt",
                 ).pixel_values
                 pixel_values = pixel_values.to(self.device, torch.float)
 
@@ -181,7 +183,8 @@ class TrOCRRecognizer:
                     generated_ids = self.model.generate(pixel_values)
 
                 texts = self.tokenizer.batch_decode(
-                    generated_ids, skip_special_tokens=True,
+                    generated_ids,
+                    skip_special_tokens=True,
                 )
                 results.extend(t.strip() for t in texts)
 

@@ -64,9 +64,7 @@ class OcrEngineRegistry:
             )
 
         if not engine.is_available():
-            raise OcrEngineUnavailableError(
-                f"엔진 '{engine_id}'이(가) 사용할 수 없는 상태입니다."
-            )
+            raise OcrEngineUnavailableError(f"엔진 '{engine_id}'이(가) 사용할 수 없는 상태입니다.")
 
         return engine
 
@@ -108,6 +106,7 @@ class OcrEngineRegistry:
         # 원본: https://github.com/ndl-lab/ndlkotenocr_cli (CC BY 4.0)
         try:
             from .ndlkotenocr_full_engine import NdlkotenOcrFullEngine
+
             engine = NdlkotenOcrFullEngine()
             if engine.is_available():
                 self.register(engine)
@@ -125,6 +124,7 @@ class OcrEngineRegistry:
         # 원본: https://github.com/ndl-lab/ndlkotenocr-lite (CC BY 4.0)
         try:
             from .ndlkotenocr_engine import NdlkotenOcrEngine
+
             engine = NdlkotenOcrEngine()
             self.register(engine)
             if not engine.is_available():
@@ -141,6 +141,7 @@ class OcrEngineRegistry:
         # 원본: https://github.com/ndl-lab/ndlocr-lite (CC BY 4.0)
         try:
             from .ndlocr_engine import NdlocrEngine
+
             engine = NdlocrEngine()
             self.register(engine)
             if not engine.is_available():
@@ -156,6 +157,7 @@ class OcrEngineRegistry:
         # 라우터는 나중에 서버에서 set_router()로 주입한다.
         try:
             from .llm_ocr_engine import LlmOcrEngine
+
             engine = LlmOcrEngine(router=None)  # 라우터는 lazy-init
             # is_available()은 라우터가 설정되면 True가 된다.
             # 여기서는 등록만 하고, 라우터 주입은 서버 초기화 시 수행.
@@ -171,6 +173,7 @@ class OcrEngineRegistry:
         #      사용자에게 설치 가능한 엔진이 있다는 것을 알려주기 위함.
         try:
             from .paddleocr_engine import PaddleOcrEngine
+
             engine = PaddleOcrEngine()
             self.register(engine)
             if not engine.is_available():

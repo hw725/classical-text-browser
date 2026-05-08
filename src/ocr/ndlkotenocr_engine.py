@@ -61,22 +61,22 @@ logger = logging.getLogger(__name__)
 # 이 프로젝트의 block_type (resources/block_types.json)으로 매핑.
 # ndlocr의 NDLOCR_TO_BLOCK_TYPE과 동일한 패턴이지만 16개 클래스.
 NDLKOTENOCR_TO_BLOCK_TYPE = {
-    0: "main_text",       # text_block (본문 블록 컨테이너)
-    1: "main_text",       # line_main (본문 행)
-    2: "annotation",      # line_caption (캡션 행)
-    3: "unknown",         # line_ad (광고 — 고전적에서 드묾)
-    4: "annotation",      # line_note (割注, 쌍행주)
-    5: "marginal_note",   # line_note_tochu (頭注, 두주)
-    6: "illustration",    # block_fig (도판)
-    7: "unknown",         # block_ad (광고 블록)
-    8: "page_title",      # block_pillar (柱, 판심제)
-    9: "page_number",     # block_folio (ノンブル, 장차)
-    10: "unknown",        # block_rubi (루비)
-    11: "illustration",   # block_chart (도표)
-    12: "unknown",        # block_eqn (수식)
-    13: "unknown",        # block_cfm (확인필요)
-    14: "unknown",        # block_eng (영문 블록)
-    15: "illustration",   # block_table (표)
+    0: "main_text",  # text_block (본문 블록 컨테이너)
+    1: "main_text",  # line_main (본문 행)
+    2: "annotation",  # line_caption (캡션 행)
+    3: "unknown",  # line_ad (광고 — 고전적에서 드묾)
+    4: "annotation",  # line_note (割注, 쌍행주)
+    5: "marginal_note",  # line_note_tochu (頭注, 두주)
+    6: "illustration",  # block_fig (도판)
+    7: "unknown",  # block_ad (광고 블록)
+    8: "page_title",  # block_pillar (柱, 판심제)
+    9: "page_number",  # block_folio (ノンブル, 장차)
+    10: "unknown",  # block_rubi (루비)
+    11: "illustration",  # block_chart (도표)
+    12: "unknown",  # block_eqn (수식)
+    13: "unknown",  # block_cfm (확인필요)
+    14: "unknown",  # block_eng (영문 블록)
+    15: "illustration",  # block_table (표)
 }
 
 # LINE 유형의 class_index 집합 (행 단위로 PARSeq 인식 대상)
@@ -107,8 +107,8 @@ class NdlkotenOcrEngine(BaseOcrEngine):
 
     def __init__(self):
         """엔진 초기화. 모델은 첫 사용 시 lazy 로드."""
-        self._rtmdet = None          # RTMDet 레이아웃/행 탐지기
-        self._parseq = None          # PARSeq 문자 인식기 (단일 모델)
+        self._rtmdet = None  # RTMDet 레이아웃/행 탐지기
+        self._parseq = None  # PARSeq 문자 인식기 (단일 모델)
         self._available: Optional[bool] = None
         self._unavailable_reason: Optional[str] = None
 
@@ -128,14 +128,14 @@ class NdlkotenOcrEngine(BaseOcrEngine):
         except ImportError:
             self._available = False
             self._unavailable_reason = (
-                "onnxruntime이 설치되지 않았습니다. "
-                "설치: uv sync --extra ndlocr"
+                "onnxruntime이 설치되지 않았습니다. 설치: uv sync --extra ndlocr"
             )
             logger.info(f"NDL古典籍OCR-Lite 사용 불가: {self._unavailable_reason}")
             return False
 
         # 2) 모델 파일 확인
         from .ndlkotenocr import models_available
+
         if not models_available():
             # 모델은 없지만 런타임은 있으므로 "사용 가능"으로 표시.
             # 실제 OCR 호출 시 ensure_models()로 자동 다운로드 시도.
@@ -188,15 +188,14 @@ class NdlkotenOcrEngine(BaseOcrEngine):
         # OcrBlockResult 구성
         ocr_lines = []
         for line_info in lines_with_text:
-            chars = [
-                OcrCharResult(char=ch)
-                for ch in line_info["text"]
-            ]
-            ocr_lines.append(OcrLineResult(
-                text=line_info["text"],
-                bbox=line_info.get("bbox"),
-                characters=chars,
-            ))
+            chars = [OcrCharResult(char=ch) for ch in line_info["text"]]
+            ocr_lines.append(
+                OcrLineResult(
+                    text=line_info["text"],
+                    bbox=line_info.get("bbox"),
+                    characters=chars,
+                )
+            )
 
         return OcrBlockResult(
             lines=ocr_lines,
@@ -247,21 +246,30 @@ class NdlkotenOcrEngine(BaseOcrEngine):
         total = len(processable)
 
         if progress_callback:
-            progress_callback({
-                "current": 0, "total": total,
-                "block_id": "", "status": "detecting_lines",
-            })
+            progress_callback(
+                {
+                    "current": 0,
+                    "total": total,
+                    "block_id": "",
+                    "status": "detecting_lines",
+                }
+            )
 
         # 2. RTMDet + ndl_parser + XY-Cut + PARSeq
         lines_with_text = self._process_detections(
-            np_image, self._rtmdet.detect(np_image),
+            np_image,
+            self._rtmdet.detect(np_image),
         )
 
         if progress_callback:
-            progress_callback({
-                "current": 0, "total": total,
-                "block_id": "", "status": "matching_blocks",
-            })
+            progress_callback(
+                {
+                    "current": 0,
+                    "total": total,
+                    "block_id": "",
+                    "status": "matching_blocks",
+                }
+            )
 
         # 3. LINE → L3 block 매칭
         block_results = self._match_lines_to_blocks(lines_with_text, blocks)
@@ -281,10 +289,7 @@ class NdlkotenOcrEngine(BaseOcrEngine):
             # OcrLineResult → dict 변환
             line_dicts = []
             for line_info in matched_lines:
-                chars = [
-                    OcrCharResult(char=ch).to_dict()
-                    for ch in line_info["text"]
-                ]
+                chars = [OcrCharResult(char=ch).to_dict() for ch in line_info["text"]]
                 line_dict = {"text": line_info["text"]}
                 if line_info.get("bbox"):
                     line_dict["bbox"] = [round(v, 2) for v in line_info["bbox"]]
@@ -292,17 +297,23 @@ class NdlkotenOcrEngine(BaseOcrEngine):
                     line_dict["characters"] = chars
                 line_dicts.append(line_dict)
 
-            results.append({
-                "layout_block_id": block_id,
-                "lines": line_dicts,
-            })
+            results.append(
+                {
+                    "layout_block_id": block_id,
+                    "lines": line_dicts,
+                }
+            )
 
             done_count += 1
             if progress_callback:
-                progress_callback({
-                    "current": done_count, "total": total,
-                    "block_id": block_id, "status": "processing",
-                })
+                progress_callback(
+                    {
+                        "current": done_count,
+                        "total": total,
+                        "block_id": block_id,
+                        "status": "processing",
+                    }
+                )
 
         logger.info(
             f"NDL古典籍OCR 페이지 인식 완료: "
@@ -363,15 +374,17 @@ class NdlkotenOcrEngine(BaseOcrEngine):
             x1, y1, x2, y2 = det["box"]
             block_type = NDLKOTENOCR_TO_BLOCK_TYPE.get(class_index, "unknown")
 
-            layout_blocks.append({
-                "block_id": f"p{page_number:02d}_b{block_idx + 1:02d}",
-                "block_type": block_type,
-                "bbox": [int(x1), int(y1), int(x2), int(y2)],
-                "reading_order": block_idx,
-                "writing_direction": "vertical_rtl",
-                "confidence": det_conf,
-                "skip": block_type in ("illustration", "page_number"),
-            })
+            layout_blocks.append(
+                {
+                    "block_id": f"p{page_number:02d}_b{block_idx + 1:02d}",
+                    "block_type": block_type,
+                    "bbox": [int(x1), int(y1), int(x2), int(y2)],
+                    "reading_order": block_idx,
+                    "writing_direction": "vertical_rtl",
+                    "confidence": det_conf,
+                    "skip": block_type in ("illustration", "page_number"),
+                }
+            )
             block_idx += 1
 
         return layout_blocks
@@ -455,7 +468,9 @@ class NdlkotenOcrEngine(BaseOcrEngine):
         logger.info("NDL古典籍OCR-Lite 모델 로딩 완료")
 
     def _process_detections(
-        self, np_image: np.ndarray, detections: list[dict],
+        self,
+        np_image: np.ndarray,
+        detections: list[dict],
     ) -> list[dict]:
         """RTMDet 탐지 결과를 처리하여 텍스트가 포함된 LINE 목록을 반환한다.
 
@@ -508,7 +523,11 @@ class NdlkotenOcrEngine(BaseOcrEngine):
 
         # XML 구성 (ndlkotenocr 고유 파라미터)
         xmlstr = convert_to_xml_string3(
-            img_w, img_h, "page.jpg", classeslist, resultobj,
+            img_w,
+            img_h,
+            "page.jpg",
+            classeslist,
+            resultobj,
             use_block_ad=False,
             score_thr=0.3,
             min_bbox_size=5,
@@ -529,18 +548,20 @@ class NdlkotenOcrEngine(BaseOcrEngine):
             line_h = int(lineobj.get("HEIGHT"))
 
             # 이미지에서 행 크롭
-            lineimg = np_image[ymin:ymin + line_h, xmin:xmin + line_w, :]
+            lineimg = np_image[ymin : ymin + line_h, xmin : xmin + line_w, :]
             if lineimg.size == 0:
                 continue
 
             # 단일 PARSeq 모델로 인식 (ndlocr의 캐스케이드와 달리 단일 패스)
             text = self._parseq.read(lineimg) or ""
 
-            lines_with_text.append({
-                "text": text,
-                "bbox": [xmin, ymin, xmin + line_w, ymin + line_h],
-                "order": int(lineobj.get("ORDER", idx)),
-            })
+            lines_with_text.append(
+                {
+                    "text": text,
+                    "bbox": [xmin, ymin, xmin + line_w, ymin + line_h],
+                    "order": int(lineobj.get("ORDER", idx)),
+                }
+            )
 
         # 읽기 순서로 정렬
         lines_with_text.sort(key=lambda x: x["order"])
@@ -638,7 +659,7 @@ class NdlkotenOcrEngine(BaseOcrEngine):
                 if best_candidate_id and best_candidate_bbox:
                     bw = abs(best_candidate_bbox[2] - best_candidate_bbox[0])
                     bh = abs(best_candidate_bbox[3] - best_candidate_bbox[1])
-                    diag = (bw ** 2 + bh ** 2) ** 0.5
+                    diag = (bw**2 + bh**2) ** 0.5
                     if min_dist <= diag * 0.5:
                         best_block_id = best_candidate_id
 

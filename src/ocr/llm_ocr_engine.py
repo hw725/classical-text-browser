@@ -171,9 +171,7 @@ class LlmOcrEngine(BaseOcrEngine):
             """별도 스레드에서 async LLM 호출을 실행한다."""
             try:
                 result_holder["value"] = asyncio.run(
-                    self._recognize_async(
-                        image_bytes, writing_direction, language, **kwargs
-                    )
+                    self._recognize_async(image_bytes, writing_direction, language, **kwargs)
                 )
             except Exception as e:
                 result_holder["error"] = e
@@ -244,10 +242,12 @@ class LlmOcrEngine(BaseOcrEngine):
                 if ch.strip()  # 공백 제외
             ]
 
-            ocr_lines.append(OcrLineResult(
-                text=text,
-                characters=characters,
-            ))
+            ocr_lines.append(
+                OcrLineResult(
+                    text=text,
+                    characters=characters,
+                )
+            )
 
         result = OcrBlockResult(
             lines=ocr_lines,
@@ -300,8 +300,7 @@ class LlmOcrEngine(BaseOcrEngine):
                 except json.JSONDecodeError:
                     # 최후 수단: 줄바꿈으로 분리
                     logger.warning(
-                        f"LLM OCR 응답 JSON 파싱 실패, 줄바꿈 분리로 대체: "
-                        f"{text[:100]}..."
+                        f"LLM OCR 응답 JSON 파싱 실패, 줄바꿈 분리로 대체: {text[:100]}..."
                     )
                     return [{"text": line} for line in text.split("\n") if line.strip()]
             else:

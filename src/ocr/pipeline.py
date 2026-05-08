@@ -42,6 +42,7 @@ class OcrPageResult:
     파이프라인의 최종 출력.
     ocr_page.schema.json 형식으로 저장된다.
     """
+
     doc_id: str
     part_id: str
     page_number: int
@@ -135,9 +136,7 @@ class OcrPipeline:
           4. 결과를 L2 JSON으로 저장
         """
         start_time = time.time()
-        result = OcrPageResult(
-            doc_id=doc_id, part_id=part_id, page_number=page_number
-        )
+        result = OcrPageResult(doc_id=doc_id, part_id=part_id, page_number=page_number)
 
         # 1. 엔진 확인
         engine = self.registry.get_engine(engine_id)
@@ -161,16 +160,12 @@ class OcrPipeline:
 
         # 3. 이미지 로드
         # 우선 개별 이미지 파일을 탐색하고, 없으면 PDF에서 추출한다.
-        image_path = get_page_image_path(
-            self.library_root, doc_id, part_id, page_number
-        )
+        image_path = get_page_image_path(self.library_root, doc_id, part_id, page_number)
         if image_path is not None:
             page_image = load_page_image(image_path)
         else:
             # PDF에서 페이지 추출 시도
-            page_image = load_page_image_from_pdf(
-                self.library_root, doc_id, page_number
-            )
+            page_image = load_page_image_from_pdf(self.library_root, doc_id, page_number)
             if page_image is None:
                 result.errors.append(
                     f"L1 이미지를 찾을 수 없습니다: page {page_number} "
@@ -204,10 +199,7 @@ class OcrPipeline:
                 # PDF도 없으면 bbox 범위에서 추정 (최후 수단)
                 max_x = max((b.get("bbox", [0, 0, 0, 0])[2] for b in blocks), default=0)
                 max_y = max((b.get("bbox", [0, 0, 0, 0])[3] for b in blocks), default=0)
-                if (
-                    (max_x > 0 and max_x < actual_w * 0.8)
-                    or (max_y > 0 and max_y < actual_h * 0.8)
-                ):
+                if (max_x > 0 and max_x < actual_w * 0.8) or (max_y > 0 and max_y < actual_h * 0.8):
                     # bbox 최대값이 실제 이미지 크기의 80% 미만이면
                     # 스케일 불일치가 확실하므로 비율을 추정
                     # 가장 흔한 케이스: PDF 2x (viewport = actual / 2)
@@ -236,13 +228,10 @@ class OcrPipeline:
                         round(bbox[3] * scale_y),
                     ]
                     logger.debug(
-                        f"  블록 {block.get('block_id', '?')}: "
-                        f"{old_bbox} → {block['bbox']}"
+                        f"  블록 {block.get('block_id', '?')}: {old_bbox} → {block['bbox']}"
                     )
         elif layout_w > 0 and layout_w == actual_w:
-            logger.debug(
-                f"bbox 스케일링 불필요: L3 = 실제 = {actual_w}×{actual_h}"
-            )
+            logger.debug(f"bbox 스케일링 불필요: L3 = 실제 = {actual_w}×{actual_h}")
 
         # ── 페이지 단위 OCR 분기 (ndlocr 등) ────────────────────
         # supports_page_level=True인 엔진은 페이지 전체를 한 번에 처리한다.
@@ -258,7 +247,7 @@ class OcrPipeline:
         #   블록 커버리지가 낮으면 블록별 crop 경로를 사용하여
         #   각 블록 영역만 정확하게 잘라서 OCR한다.
         use_page_level = (
-            getattr(engine, 'supports_page_level', False)
+            getattr(engine, "supports_page_level", False)
             and block_ids is None
             and self._blocks_cover_page(blocks, actual_w, actual_h, threshold=0.7)
         )
@@ -266,7 +255,8 @@ class OcrPipeline:
             try:
                 page_bytes = self._page_image_to_bytes(page_image)
                 page_results = engine.recognize_page(
-                    page_bytes, blocks,
+                    page_bytes,
+                    blocks,
                     progress_callback=progress_callback,
                     **engine_kwargs,
                 )
@@ -275,7 +265,10 @@ class OcrPipeline:
                 result.elapsed_sec = time.time() - start_time
 
                 self._save_ocr_result(
-                    doc_id, part_id, page_number, result,
+                    doc_id,
+                    part_id,
+                    page_number,
+                    result,
                     merge_with_existing=False,
                 )
 
@@ -286,14 +279,10 @@ class OcrPipeline:
                 return result
             except NotImplementedError:
                 # recognize_page() 미구현 → 아래 블록별 경로로 폴백
-                logger.info(
-                    f"{engine.engine_id}: 페이지 단위 미지원, 블록별로 전환"
-                )
+                logger.info(f"{engine.engine_id}: 페이지 단위 미지원, 블록별로 전환")
             except Exception as e:
                 # 페이지 단위 실패 → 블록별 경로로 폴백 (기존 기능 보호)
-                logger.warning(
-                    f"페이지 단위 OCR 실패, 블록별로 전환: {e}"
-                )
+                logger.warning(f"페이지 단위 OCR 실패, 블록별로 전환: {e}")
         # ── 페이지 단위 분기 끝 ────────────────────────────────
 
         # 4. 블록별 OCR (기존 경로 — 수정하지 않음)
@@ -313,17 +302,17 @@ class OcrPipeline:
             # 진행률 콜백: 처리 시작 알림
             current_num = result.processed_blocks + len(result.errors) + 1
             if progress_callback:
-                progress_callback({
-                    "current": current_num,
-                    "total": total_processable,
-                    "block_id": block_id,
-                    "status": "processing",
-                })
+                progress_callback(
+                    {
+                        "current": current_num,
+                        "total": total_processable,
+                        "block_id": block_id,
+                        "status": "processing",
+                    }
+                )
 
             try:
-                ocr_dict = self._process_block(
-                    engine, page_image, block, **engine_kwargs
-                )
+                ocr_dict = self._process_block(engine, page_image, block, **engine_kwargs)
                 ocr_dict["layout_block_id"] = block_id
                 result.ocr_results.append(ocr_dict)
                 result.processed_blocks += 1
@@ -366,14 +355,18 @@ class OcrPipeline:
         engine_kwargs는 run_page()를 통해 엔진의 recognize()에 전달된다.
         """
         return self.run_page(
-            doc_id, part_id, page_number,
+            doc_id,
+            part_id,
+            page_number,
             engine_id=engine_id,
             block_ids=[block_id],
             **engine_kwargs,
         )
 
     def _get_pdf_viewport_size(
-        self, doc_id: str, page_number: int,
+        self,
+        doc_id: str,
+        page_number: int,
     ) -> Optional[tuple[int, int]]:
         """PDF의 1x 뷰포트 크기를 반환한다.
 
@@ -386,9 +379,7 @@ class OcrPipeline:
 
         반환: (width, height) 정수 튜플, PDF가 없으면 None
         """
-        source_dir = (
-            Path(self.library_root) / "documents" / doc_id / "L1_source"
-        )
+        source_dir = Path(self.library_root) / "documents" / doc_id / "L1_source"
         if not source_dir.exists():
             return None
 
@@ -398,6 +389,7 @@ class OcrPipeline:
 
         try:
             import fitz
+
             doc = fitz.open(str(pdf_files[0]))
             page_idx = page_number - 1
             if page_idx < 0 or page_idx >= len(doc):
@@ -475,7 +467,7 @@ class OcrPipeline:
         logger.debug(
             f"crop 블록 {block.get('block_id', '?')}: "
             f"bbox={bbox}, image={img_w}×{img_h}, "
-            f"비율=({bbox[2]/img_w:.2%}, {bbox[3]/img_h:.2%})"
+            f"비율=({bbox[2] / img_w:.2%}, {bbox[3] / img_h:.2%})"
         )
         cropped = crop_block(page_image, bbox)
 
@@ -495,7 +487,10 @@ class OcrPipeline:
         return ocr_result.to_dict()
 
     def _load_layout(
-        self, doc_id: str, part_id: str, page_number: int,
+        self,
+        doc_id: str,
+        part_id: str,
+        page_number: int,
     ) -> Optional[dict]:
         """L3 layout_page.json을 로드한다.
 
@@ -507,10 +502,7 @@ class OcrPipeline:
           다권본에서 part_id를 파일명에 포함해 고유하게 식별한다.
         """
         filename = f"{part_id}_page_{page_number:03d}.json"
-        layout_path = (
-            Path(self.library_root) / "documents" / doc_id
-            / "L3_layout" / filename
-        )
+        layout_path = Path(self.library_root) / "documents" / doc_id / "L3_layout" / filename
 
         if not layout_path.exists():
             return None
@@ -534,9 +526,7 @@ class OcrPipeline:
         반환: 저장된 파일 경로
         """
         filename = f"{part_id}_page_{page_number:03d}.json"
-        l2_dir = (
-            Path(self.library_root) / "documents" / doc_id / "L2_ocr"
-        )
+        l2_dir = Path(self.library_root) / "documents" / doc_id / "L2_ocr"
         l2_dir.mkdir(parents=True, exist_ok=True)
 
         output_path = l2_dir / filename
@@ -565,9 +555,7 @@ class OcrPipeline:
                     merged_results.append(old_item)
 
             merged_ids = {
-                m.get("layout_block_id")
-                for m in merged_results
-                if m.get("layout_block_id")
+                m.get("layout_block_id") for m in merged_results if m.get("layout_block_id")
             }
             for new_item in incoming_results:
                 block_id = new_item.get("layout_block_id")
@@ -592,6 +580,7 @@ class OcrPipeline:
           파이프라인 내부에서만 사용하는 변환 헬퍼.
         """
         import io as _io
+
         buf = _io.BytesIO()
         page_image.convert("RGB").save(buf, format="PNG")
         return buf.getvalue()

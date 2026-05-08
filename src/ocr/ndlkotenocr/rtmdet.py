@@ -74,14 +74,14 @@ class RTMDet:
         """ONNX Runtime 세션을 생성하고 클래스 매핑을 로드한다."""
         opt_session = onnxruntime.SessionOptions()
         # 업스트림은 ORT_DISABLE_ALL을 사용 — 호환성을 위해 유지
-        opt_session.graph_optimization_level = (
-            onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
-        )
+        opt_session.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
         providers = ["CPUExecutionProvider"]
         if self.device.casefold() != "cpu":
             providers.insert(0, "CUDAExecutionProvider")
         session = onnxruntime.InferenceSession(
-            self.model_path, opt_session, providers=providers,
+            self.model_path,
+            opt_session,
+            providers=providers,
         )
         self.session = session
         self.model_inputs = self.session.get_inputs()
@@ -161,8 +161,7 @@ class RTMDet:
         boxes = predictions[:, :4].copy()
         boxes /= self.input_width
         boxes *= np.array(
-            [self.image_width, self.image_height,
-             self.image_width, self.image_height],
+            [self.image_width, self.image_height, self.image_width, self.image_height],
         )
 
         # 2% 세로 패딩 추가 (업스트림과 동일)
@@ -172,9 +171,7 @@ class RTMDet:
             new_boxes.append([box[0], box[1] - delta_h, box[2], box[3] + delta_h])
 
         boxes = (
-            np.array(new_boxes).astype(np.int32)
-            if new_boxes
-            else np.empty((0, 4), dtype=np.int32)
+            np.array(new_boxes).astype(np.int32) if new_boxes else np.empty((0, 4), dtype=np.int32)
         )
 
         detections = []
@@ -182,12 +179,14 @@ class RTMDet:
             # 업스트림은 class_index=1을 하드코딩하지만
             # 우리 버전은 실제 모델 출력의 class_id를 보존한다.
             cls_idx = int(label)
-            detections.append({
-                "class_index": cls_idx,
-                "confidence": float(score),
-                "box": bbox.tolist(),
-                "class_name": self.classes.get(cls_idx, f"unknown_{cls_idx}"),
-            })
+            detections.append(
+                {
+                    "class_index": cls_idx,
+                    "confidence": float(score),
+                    "box": bbox.tolist(),
+                    "class_name": self.classes.get(cls_idx, f"unknown_{cls_idx}"),
+                }
+            )
         return detections
 
     def detect(self, img: np.ndarray) -> List[dict]:

@@ -21,6 +21,7 @@ from typing import Optional
 
 # ─── 결과 데이터 모델 ──────────────────────────────────
 
+
 @dataclass
 class OcrCharResult:
     """글자 하나의 인식 결과.
@@ -32,9 +33,9 @@ class OcrCharResult:
     좌표는 크롭된 블록 이미지 기준 (픽셀).
     """
 
-    char: str                          # 인식된 글자 (예: "王")
+    char: str  # 인식된 글자 (예: "王")
     bbox: Optional[list[float]] = None  # [x_min, y_min, x_max, y_max] — 없을 수도 있음
-    confidence: float = 0.0            # 0.0~1.0
+    confidence: float = 0.0  # 0.0~1.0
 
     def to_dict(self) -> dict:
         """ocr_page.schema.json의 OcrCharacter 호환 딕셔너리.
@@ -57,7 +58,7 @@ class OcrLineResult:
     가로쓰기: 한 줄 = 한 행 (왼쪽에서 오른쪽)
     """
 
-    text: str                           # 줄 전체 텍스트 (예: "王戎簡要")
+    text: str  # 줄 전체 텍스트 (예: "王戎簡要")
     bbox: Optional[list[float]] = None  # 줄의 bbox
     characters: list[OcrCharResult] = field(default_factory=list)
 
@@ -88,9 +89,9 @@ class OcrBlockResult:
     """
 
     lines: list[OcrLineResult] = field(default_factory=list)
-    engine_id: str = ""                 # 어떤 엔진으로 인식했는지
-    language: str = ""                  # 인식 언어 (예: "classical_chinese")
-    writing_direction: str = ""         # "vertical_rtl", "horizontal_ltr" 등
+    engine_id: str = ""  # 어떤 엔진으로 인식했는지
+    language: str = ""  # 인식 언어 (예: "classical_chinese")
+    writing_direction: str = ""  # "vertical_rtl", "horizontal_ltr" 등
     raw_engine_output: Optional[dict] = None  # 엔진의 원래 출력 (디버깅용)
 
     @property
@@ -124,17 +125,21 @@ class OcrBlockResult:
 
 # ─── 에러 ──────────────────────────────────────────────
 
+
 class OcrEngineError(Exception):
     """OCR 엔진 실행 중 에러."""
+
     pass
 
 
 class OcrEngineUnavailableError(OcrEngineError):
     """OCR 엔진을 사용할 수 없음 (미설치, 초기화 실패 등)."""
+
     pass
 
 
 # ─── 추상 클래스 ───────────────────────────────────────
+
 
 class BaseOcrEngine(ABC):
     """OCR 엔진 추상 클래스.
@@ -147,8 +152,8 @@ class BaseOcrEngine(ABC):
     is_available()이 False이면 recognize()를 호출하면 안 된다.
     """
 
-    engine_id: str = ""           # 예: "paddleocr"
-    display_name: str = ""        # 예: "PaddleOCR"
+    engine_id: str = ""  # 예: "paddleocr"
+    display_name: str = ""  # 예: "PaddleOCR"
     requires_network: bool = False  # True이면 온라인 엔진
     supports_page_level: bool = False  # True이면 recognize_page() 사용 가능
     supports_layout_detection: bool = False  # True이면 detect_layout() 사용 가능
@@ -210,9 +215,7 @@ class BaseOcrEngine(ABC):
           ocr_page.schema.json 호환 딕셔너리 목록.
           각 항목: {"layout_block_id": "p01_b01", "lines": [...]}
         """
-        raise NotImplementedError(
-            f"{self.engine_id}은(는) 페이지 단위 인식을 지원하지 않습니다."
-        )
+        raise NotImplementedError(f"{self.engine_id}은(는) 페이지 단위 인식을 지원하지 않습니다.")
 
     def detect_layout(
         self,
@@ -232,9 +235,7 @@ class BaseOcrEngine(ABC):
 
         출력: L3 layout blocks 호환 딕셔너리 목록.
         """
-        raise NotImplementedError(
-            f"{self.engine_id}은(는) 레이아웃 탐지를 지원하지 않습니다."
-        )
+        raise NotImplementedError(f"{self.engine_id}은(는) 레이아웃 탐지를 지원하지 않습니다.")
 
     def get_info(self) -> dict:
         """엔진 정보를 딕셔너리로 반환. API 응답용."""

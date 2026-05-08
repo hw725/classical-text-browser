@@ -112,9 +112,7 @@ class PaddleOcrEngine(BaseOcrEngine):
             is_windows = platform.system() == "Windows"
             is_py313_or_newer = sys.version_info >= (3, 13)
             major_version = paddle_version.split(".")[0]
-            is_paddle3_or_newer = (
-                major_version.isdigit() and int(major_version) >= 3
-            )
+            is_paddle3_or_newer = major_version.isdigit() and int(major_version) >= 3
 
             if is_windows and is_py313_or_newer and is_paddle3_or_newer and not self._use_gpu:
                 self._available = False
@@ -276,9 +274,7 @@ class PaddleOcrEngine(BaseOcrEngine):
             raw_engine_output={"paddle_result": str(raw_result)[:500]},
         )
 
-    def _parse_result(
-        self, raw_result, writing_direction: str
-    ) -> list[OcrLineResult]:
+    def _parse_result(self, raw_result, writing_direction: str) -> list[OcrLineResult]:
         """PaddleOCR 반환 결과를 파싱한다.
 
         v2 형식: [[[4점bbox, (text, conf)], ...]]
@@ -337,11 +333,13 @@ class PaddleOcrEngine(BaseOcrEngine):
                     text, line_bbox, confidence, writing_direction
                 )
 
-                lines.append(OcrLineResult(
-                    text=text,
-                    bbox=line_bbox,
-                    characters=characters,
-                ))
+                lines.append(
+                    OcrLineResult(
+                        text=text,
+                        bbox=line_bbox,
+                        characters=characters,
+                    )
+                )
 
             except (TypeError, ValueError, IndexError) as e:
                 logger.warning(f"PaddleOCR item[{idx}] 파싱 실패 — 건너뜀: {e}")
@@ -349,9 +347,7 @@ class PaddleOcrEngine(BaseOcrEngine):
 
         return lines
 
-    def _parse_v3_result(
-        self, result, writing_direction: str
-    ) -> list[OcrLineResult]:
+    def _parse_v3_result(self, result, writing_direction: str) -> list[OcrLineResult]:
         """PaddleOCR v3 result 객체를 파싱한다.
 
         v3에서는 result.rec_texts, result.rec_scores, result.dt_polys 등
@@ -384,11 +380,13 @@ class PaddleOcrEngine(BaseOcrEngine):
                     text, line_bbox, confidence, writing_direction
                 )
 
-                lines.append(OcrLineResult(
-                    text=text,
-                    bbox=line_bbox,
-                    characters=characters,
-                ))
+                lines.append(
+                    OcrLineResult(
+                        text=text,
+                        bbox=line_bbox,
+                        characters=characters,
+                    )
+                )
 
         except Exception as e:
             logger.warning(f"PaddleOCR v3 결과 파싱 실패: {e}")
@@ -424,11 +422,13 @@ class PaddleOcrEngine(BaseOcrEngine):
                 ch_x_max = x_min + (x_max - x_min) * (i + 1) / n
                 char_bbox = [ch_x_min, y_min, ch_x_max, y_max]
 
-            chars.append(OcrCharResult(
-                char=ch,
-                bbox=char_bbox,
-                confidence=line_confidence,
-            ))
+            chars.append(
+                OcrCharResult(
+                    char=ch,
+                    bbox=char_bbox,
+                    confidence=line_confidence,
+                )
+            )
 
         return chars
 

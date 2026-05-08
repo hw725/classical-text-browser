@@ -89,9 +89,7 @@ def crop_block(
     y_max = min(img_h, y_max)
 
     if x_max <= x_min or y_max <= y_min:
-        raise OcrEngineError(
-            f"유효하지 않은 크롭 영역: bbox={bbox}, image_size=({img_w}, {img_h})"
-        )
+        raise OcrEngineError(f"유효하지 않은 크롭 영역: bbox={bbox}, image_size=({img_w}, {img_h})")
 
     cropped = page_image.crop((x_min, y_min, x_max, y_max))
 
@@ -275,6 +273,7 @@ def load_page_image_from_pdf(
         pix = pdf_page.get_pixmap(matrix=fitz.Matrix(scale, scale))
         # PNG 바이트 → PIL Image
         from io import BytesIO
+
         pil_image = Image.open(BytesIO(pix.tobytes("png")))
         doc.close()
         return pil_image

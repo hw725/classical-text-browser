@@ -33,14 +33,12 @@ _DEFAULT_MODEL_DIR = Path.home() / ".cache" / "classical-text-browser" / "ndlkot
 # GitHub 안정 릴리즈 태그에서 모델 다운로드 (raw URL)
 # master가 아닌 1.3.1 태그를 고정하여 재현성을 보장한다.
 # 주의: 이 저장소의 태그에는 'v' 접두사가 없다 (v1.3.1 ✗ → 1.3.1 ✓).
-_GITHUB_RAW_BASE = (
-    "https://raw.githubusercontent.com/ndl-lab/ndlkotenocr-lite/1.3.1/src/model/"
-)
+_GITHUB_RAW_BASE = "https://raw.githubusercontent.com/ndl-lab/ndlkotenocr-lite/1.3.1/src/model/"
 
 # 필요한 ONNX 모델 파일 목록 (2개, 총 ~74MB)
 MODEL_FILES = [
-    "rtmdet-s-1280x1280.onnx",          # ~38.3 MB — RTMDet 레이아웃/행 탐지
-    "parseq-ndl-32x384-tiny-10.onnx",    # ~36.0 MB — PARSeq 고전적 문자 인식
+    "rtmdet-s-1280x1280.onnx",  # ~38.3 MB — RTMDet 레이아웃/행 탐지
+    "parseq-ndl-32x384-tiny-10.onnx",  # ~36.0 MB — PARSeq 고전적 문자 인식
 ]
 
 
@@ -147,9 +145,9 @@ _FULL_MODEL_URL = "https://lab.ndl.go.jp/dataset/ndlkotensekiocr/trocr/model-ver
 
 # zip 해제 후 3개 서브디렉토리가 필요
 FULL_MODEL_SUBDIRS = [
-    "model-ver2/trocr-base-preprocessor",       # TrOCRProcessor (전처리)
-    "model-ver2/decoder-roberta-v3",             # AutoTokenizer (디코더)
-    "model-ver2/kotenseki-trocr-honkoku-ver2",   # VisionEncoderDecoderModel (본체)
+    "model-ver2/trocr-base-preprocessor",  # TrOCRProcessor (전처리)
+    "model-ver2/decoder-roberta-v3",  # AutoTokenizer (디코더)
+    "model-ver2/kotenseki-trocr-honkoku-ver2",  # VisionEncoderDecoderModel (본체)
 ]
 
 
@@ -217,7 +215,10 @@ def ensure_full_models(auto_download: bool = True) -> Optional[Path]:
         # 1. zip 다운로드 (대용량이므로 스트리밍)
         logger.info(f"  다운로드 중: model-ver2.zip ({_FULL_MODEL_URL})")
         with httpx.stream(
-            "GET", _FULL_MODEL_URL, follow_redirects=True, timeout=600.0,
+            "GET",
+            _FULL_MODEL_URL,
+            follow_redirects=True,
+            timeout=600.0,
         ) as resp:
             resp.raise_for_status()
             total_size = int(resp.headers.get("content-length", 0))
@@ -262,10 +263,7 @@ def ensure_full_models(auto_download: bool = True) -> Optional[Path]:
         logger.info("NDL古典籍OCR Full(TrOCR) 모델 다운로드 완료")
         return model_dir
     else:
-        missing = [
-            sub for sub in FULL_MODEL_SUBDIRS
-            if not (model_dir / sub).is_dir()
-        ]
+        missing = [sub for sub in FULL_MODEL_SUBDIRS if not (model_dir / sub).is_dir()]
         logger.error(
             f"zip 해제 후 일부 디렉토리 누락: {missing}\n"
             f"수동으로 {_FULL_MODEL_URL} 을 다운로드하여 {model_dir}에 해제하세요."
