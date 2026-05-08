@@ -1385,6 +1385,17 @@ function _fillLlmSelect(select, models) {
     opt.disabled = !m.available;
     select.appendChild(opt);
   }
+
+  // ── 추가 옵션 (data-extra-options 속성으로 활성화) ──
+  // 표점 화면 등 LLM이 아닌 외부 서비스를 선택지로 노출하고 싶을 때 사용한다.
+  // 값은 `provider:model` 규약을 따라 backend의 force_provider 분기와 맞물린다.
+  const extra = select.getAttribute("data-extra-options");
+  if (extra && extra.includes("punct-external")) {
+    const opt = document.createElement("option");
+    opt.value = "external:default";
+    opt.textContent = "● 외부 표점 서비스 (SikuRoBERTa)";
+    select.appendChild(opt);
+  }
 }
 
 /**

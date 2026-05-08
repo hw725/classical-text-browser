@@ -937,20 +937,38 @@ async function _requestAiPunctuation() {
     if (llmSel.force_provider) reqBody.force_provider = llmSel.force_provider;
     if (llmSel.force_model) reqBody.force_model = llmSel.force_model;
 
-    // SSE 스트리밍으로 LLM 표점 요청 (실패 시 기존 엔드포인트 폴백)
-    const data = await fetchWithSSE(
-      "/api/llm/punctuation/stream",
-      reqBody,
-      (progress) => {
-        const sec = progress.elapsed_sec || 0;
-        if (aiBtn) aiBtn.textContent = `생성 중... (${sec}초)`;
-        if (statusEl) statusEl.textContent = `AI 표점 처리 중... ${sec}초 경과`;
-        if (typeof showEditorProgress === "function") {
-          showEditorProgress("punct", true, `AI 표점 처리 중... ${sec}초 경과`);
-        }
-      },
-      "/api/llm/punctuation"
-    );
+    // 외부 표점 서비스(SikuRoBERTa 등)는 SSE 스트리밍을 지원하지 않으므로
+    // 일반 엔드포인트로 직접 호출한다. LLM 라우터를 거치지 않는 별도 분기.
+    const isExternal = llmSel.force_provider === "external";
+
+    let data;
+    if (isExternal) {
+      const resp = await fetch("/api/llm/punctuation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(reqBody),
+      });
+      if (!resp.ok) {
+        const errBody = await resp.json().catch(() => ({}));
+        throw new Error(errBody.error || `외부 표점 서비스 오류 (HTTP ${resp.status})`);
+      }
+      data = await resp.json();
+    } else {
+      // SSE 스트리밍으로 LLM 표점 요청 (실패 시 기존 엔드포인트 폴백)
+      data = await fetchWithSSE(
+        "/api/llm/punctuation/stream",
+        reqBody,
+        (progress) => {
+          const sec = progress.elapsed_sec || 0;
+          if (aiBtn) aiBtn.textContent = `생성 중... (${sec}초)`;
+          if (statusEl) statusEl.textContent = `AI 표점 처리 중... ${sec}초 경과`;
+          if (typeof showEditorProgress === "function") {
+            showEditorProgress("punct", true, `AI 표점 처리 중... ${sec}초 경과`);
+          }
+        },
+        "/api/llm/punctuation"
+      );
+    }
 
     // AI가 반환한 marks를 적용
     // LLM 인덱스(공백 제거 기준) → targetText 인덱스 → 원문 인덱스로 복원.

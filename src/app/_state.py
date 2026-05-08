@@ -126,6 +126,24 @@ def _get_llm_router():
     return _llm_router
 
 
+# ── 외부 표점 마이크로서비스 ─────────────────────
+
+def get_external_punctuation_url() -> str | None:
+    """외부 표점 마이크로서비스(punctuation-service)의 base URL을 반환.
+
+    왜 이렇게 하는가:
+        SikuRoBERTa 같은 무거운 표점 모델을 본체 의존성에서 격리하기 위해
+        별도 프로세스(마이크로서비스)로 분리했다. 본체는 HTTP로만 호출한다.
+
+    설정:
+        환경변수 EXTERNAL_PUNCT_URL (예: "http://127.0.0.1:8765").
+        미설정이면 None을 반환하여 UI/라우터에서 외부 옵션을 비활성으로 처리.
+    """
+    import os as _os
+    url = _os.getenv("EXTERNAL_PUNCT_URL", "").strip()
+    return url or None
+
+
 # ── OCR 파이프라인 ────────────────────────────
 
 def _get_ocr_pipeline():

@@ -20,7 +20,12 @@ from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from app._state import get_library_path, _call_llm_text, _call_llm_text_stream
+from app._state import (
+    get_library_path,
+    _call_llm_text,
+    _call_llm_text_stream,
+    get_external_punctuation_url,
+)
 from core.interpretation import (
     get_l5_compare_at_commit,
     get_layer_content,
@@ -954,6 +959,43 @@ async def api_llm_punctuation(body: AiPunctuationRequest):
         )
 
     _logger.info(f"AI 표점 요청: {len(clean_text)}자, provider={body.force_provider or 'auto'}")
+
+    # ── 외부 표점 서비스 분기 (force_provider == "external") ──
+    # SikuRoBERTa 등 별도 마이크로서비스로 위임. LLM 라우터를 거치지 않는다.
+    # 응답 형식은 마이크로서비스 측에서 본체의 marks 스키마와 호환되게 맞춰 보낸다.
+    if (body.force_provider or "").lower() == "external":
+        ext_url = get_external_punctuation_url()
+        if not ext_url:
+            return JSONResponse(
+                {"error": "외부 표점 서비스 URL이 설정되지 않았습니다 (환경변수 EXTERNAL_PUNCT_URL)."},
+                status_code=503,
+            )
+        try:
+            import httpx as _httpx_ext
+            # 60초 타임아웃 — SikuRoBERTa CPU 추론은 길어질 수 있음.
+            async with _httpx_ext.AsyncClient(timeout=60.0) as client:
+                resp = await client.post(
+                    f"{ext_url.rstrip('/')}/punctuate",
+                    json={"text": clean_text},
+                )
+            resp.raise_for_status()
+            ext = resp.json()
+            marks = _normalize_punct_marks(ext.get("marks") or [])
+            _logger.info(
+                f"외부 표점 완료: marks {len(marks)}개 (engine={ext.get('engine')})"
+            )
+            return {
+                "marks": marks,
+                "punctuated": ext.get("punctuated", ""),
+                "provider": "external",
+                "engine": ext.get("engine"),
+            }
+        except Exception as e:
+            _logger.error(f"외부 표점 실패: {e}", exc_info=True)
+            return JSONResponse(
+                {"error": f"외부 표점 서비스 호출 실패: {e}"},
+                status_code=502,
+            )
 
     try:
         result = await _call_llm_text(

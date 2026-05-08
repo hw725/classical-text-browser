@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+# 모델 가중치는 git에 포함하지 않는다 (수백 MB ~ GB 단위).
+# 사용자가 Google Drive에서 받아 PUNCT_MODEL_PATH로 경로 지정.
+models/
+*.ckpt
+*.pt
+*.bin
+*.safetensors
