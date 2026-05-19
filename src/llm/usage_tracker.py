@@ -2,12 +2,24 @@
 
 서고별 llm_usage_log.jsonl에 매 호출 기록.
 무료 provider(Ollama)도 기록하여 사용 패턴 분석.
+
+관측 가능성(Observability) — OpenTelemetry Phase 1 (D-051):
+    JSONL 각 줄은 OTel GenAI Semantic Conventions 키를 함께 기록한다.
+    옛 키(provider/model/tokens_in/...)는 다운스트림(get_monthly_summary 등)
+    호환을 위해 그대로 유지하며, 새 키(gen_ai.system/gen_ai.request.model/...)는
+    Phase 2(opentelemetry-sdk 도입) 시 별도 작업 없이 그대로 활용된다.
+    참고: docs/observability-roadmap.md
 """
 
 import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+
+# OTel GenAI Semantic Conventions (안정화 진행 중) 스키마 URL.
+# Phase 1에서는 키 명명만 정렬하고, Phase 2에서 opentelemetry-sdk를 통해
+# 동일한 키를 실제 span/log attribute로 승격할 예정이다.
+_OTEL_SCHEMA_URL = "https://opentelemetry.io/schemas/1.30.0"
 
 
 class UsageTracker:
@@ -38,16 +50,37 @@ class UsageTracker:
         if not isinstance(response, LlmResponse):
             return
 
+        ts_iso = datetime.now(timezone.utc).isoformat()
+        tokens_in = response.tokens_in
+        tokens_out = response.tokens_out
+        cost_usd = response.cost_usd or 0.0
+        elapsed_sec = response.elapsed_sec
+        duration_ms = int((elapsed_sec or 0) * 1000)
+
         entry = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            # ── 옛 키 (다운스트림 호환, Phase 2에서 제거 예정) ──
+            "ts": ts_iso,
             "type": "call",
             "provider": response.provider,
             "model": response.model,
-            "tokens_in": response.tokens_in,
-            "tokens_out": response.tokens_out,
-            "cost_usd": response.cost_usd or 0.0,
-            "elapsed_sec": response.elapsed_sec,
+            "tokens_in": tokens_in,
+            "tokens_out": tokens_out,
+            "cost_usd": cost_usd,
+            "elapsed_sec": elapsed_sec,
             "purpose": purpose,
+            # ── OTel GenAI Semantic Conventions (Phase 1) ──
+            "schema_url": _OTEL_SCHEMA_URL,
+            "event.name": "gen_ai.client.inference.operation.details",
+            "@timestamp": ts_iso,
+            "gen_ai.system": response.provider,
+            "gen_ai.request.model": response.model,
+            "gen_ai.response.model": response.model,
+            "gen_ai.usage.input_tokens": tokens_in,
+            "gen_ai.usage.output_tokens": tokens_out,
+            "gen_ai.operation.name": purpose or "unknown",
+            "duration_ms": duration_ms,
+            # 도메인 확장 속성 (OTel 표준 없음 → harness.* 네임스페이스)
+            "harness.cost_usd": cost_usd,
         }
         self._append(entry)
 
@@ -55,8 +88,10 @@ class UsageTracker:
         """비교 모드 호출 기록."""
         from .providers.base import LlmResponse
 
+        ts_iso = datetime.now(timezone.utc).isoformat()
         entry = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            # ── 옛 키 ──
+            "ts": ts_iso,
             "type": "comparison",
             "purpose": purpose,
             "targets": [{"provider": pid, "model": model} for pid, model in targets],
@@ -70,6 +105,12 @@ class UsageTracker:
                 }
                 for r in results
             ],
+            # ── OTel — 비교 모드는 표준 GenAI 이벤트가 아니므로
+            #    harness.* 네임스페이스의 도메인 이벤트로 분류 ──
+            "schema_url": _OTEL_SCHEMA_URL,
+            "event.name": "harness.llm.comparison",
+            "@timestamp": ts_iso,
+            "gen_ai.operation.name": purpose or "unknown",
         }
         self._append(entry)
 

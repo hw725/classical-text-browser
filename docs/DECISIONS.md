@@ -1644,6 +1644,50 @@ openai-oauth 프록시 연동 필요.
 
 ---
 
+## D-051: 관측 가능성 — LLM 사용 로그 OTel 시맨틱 컨벤션 명명 정렬 (Phase 1)
+
+**날짜**: 2026-05-19
+**상태**: 확정 (Phase 1만 적용. Phase 2/3은 [`observability-roadmap.md`](observability-roadmap.md) 참조)
+
+**맥락**: 본 프로젝트는 결정 카드(D-001~D-050)·세션 카드·검증 명령으로 **프로세스 관측 가능성**(process observability)을 잘 갖추고 있지만, **런타임 관측 가능성**(runtime observability)은 `llm_usage_log.jsonl` 한 종류에 그친다. Walking Labs의 "하네스 엔지니어링" 강의 11은 **계층화된 관측 가능성**(layered observability)을 위해 OpenTelemetry로 신호의 모양을 표준화하라고 권한다. 새 도구·SDK 도입은 비용을 동반하므로, *데이터 모델만 먼저 표준에 맞추고 SDK·백엔드는 단계적으로 미루는* 접근을 택한다.
+
+**결정**:
+
+1. **Phase 1: 키 명명만 정렬, 코드·의존성·동작 변경 없음.**
+   - [`src/llm/usage_tracker.py`](../src/llm/usage_tracker.py)의 JSONL 각 줄에 OTel GenAI Semantic Conventions 키를 **함께 기록** (이중 기록).
+   - 옛 키(`provider`·`model`·`tokens_in`·`tokens_out`·`cost_usd`·`elapsed_sec`·`purpose`·`ts`·`type`)는 다운스트림 호환을 위해 **그대로 유지**.
+   - 새 키: `gen_ai.system`·`gen_ai.request.model`·`gen_ai.response.model`·`gen_ai.usage.input_tokens`·`gen_ai.usage.output_tokens`·`gen_ai.operation.name`·`duration_ms`·`@timestamp`·`event.name`·`schema_url`. OTel 표준 없는 비용은 `harness.cost_usd`로 자체 네임스페이스.
+
+2. **Phase 2 (보류): `opentelemetry-sdk` 도입 + 콘솔 익스포터.** 발동 조건은 `observability-roadmap.md`. LLM·OCR·정렬 호출 결정 경계에 수동 span. FastAPI 자동 계측.
+
+3. **Phase 3 (보류): Jaeger/Tempo Docker 부착.** [D-048](#d-048)·[D-049](#d-049)의 외부 서비스 자동 기동 패턴을 그대로 따른다.
+
+4. **벤더 락인 금지**: Datadog·Honeycomb·New Relic 등 SaaS 도입 금지. OTel-호환 백엔드만 허용 (라이선스가 PolyForm Noncommercial이라 유료 SaaS는 어울리지 않음).
+
+**근거**:
+- Phase 1은 다운스트림(`get_monthly_summary()`) 코드 한 줄도 안 건드린다. 이중 기록이라 JSONL 줄당 크기가 ~30% 늘지만 분석 도구가 어느 키를 골라도 작동.
+- 미래 Phase 2 도입 시 옛 키만 제거하면 끝. 코드 마이그레이션 비용이 0에 수렴.
+- OTel은 단일 벤더 제품이 아니라 *데이터 모델 + SDK + OTLP 프로토콜*의 집합이므로 표준화 자체가 락인을 줄이는 방향이다.
+
+**트레이드오프**:
+- 채택: 이중 기록 — 무파괴, 점진적.
+- 거부 (하드 컷오버): 새 키만 출력하고 다운스트림을 동시에 수정. 깔끔하지만 기존 `llm_usage_log.jsonl` 파일을 한 번 마이그레이션해야 함. 가치 대비 비용 큼.
+- 거부 (Phase 2 즉시 도입): `opentelemetry-sdk` 즉시 추가. 의존성 ~200MB 증가, 본 프로젝트의 단일 사용자 데스크톱 사용 패턴에서 ROI가 아직 명확하지 않음.
+
+**검증**:
+
+```powershell
+uv run python -c "from src.llm.usage_tracker import UsageTracker; print('import ok')"
+uv run python -c "from src.llm.usage_tracker import _OTEL_SCHEMA_URL; print(_OTEL_SCHEMA_URL)"
+```
+
+**관련**:
+- 로드맵 문서: [`observability-roadmap.md`](observability-roadmap.md)
+- 회고에서의 위치: [`retrospective/05_harness.md`](retrospective/05_harness.md) H5(검증 명령) · H8(회고 가능한 오류)와 결합
+- 강의 11 (Walking Labs): https://walkinglabs.github.io/learn-harness-engineering/ko/lectures/lecture-11-why-observability-belongs-inside-the-harness/
+
+---
+
 ### 배포·설치
 - [ ] Google Drive + .git 충돌 회피 가이드 → Phase 10 이후
 - [ ] 비개발자용 Git 번들링 또는 Git-free 모드 → Phase 10 이후
