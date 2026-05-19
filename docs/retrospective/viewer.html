@@ -183,18 +183,18 @@
     <div class="chart-grid">
       <div class="chart-box">
         <h3>일자별 결정 누적</h3>
-        <svg id="chart-day" viewBox="0 0 600 280"></svg>
+        <svg id="chart-day" viewBox="0 0 600 280" width="100%" preserveAspectRatio="xMidYMid meet" style="min-height:240px"></svg>
       </div>
       <div class="chart-box">
         <h3>카테고리 분포 (도넛)</h3>
-        <svg id="chart-donut" viewBox="0 0 320 320"></svg>
+        <svg id="chart-donut" viewBox="0 0 320 320" width="100%" preserveAspectRatio="xMidYMid meet" style="min-height:280px"></svg>
         <div class="chart-legend" id="legend-donut"></div>
       </div>
     </div>
 
     <div class="chart-box">
       <h3>일자 × 카테고리 히트맵</h3>
-      <svg id="chart-heat" viewBox="0 0 720 320"></svg>
+      <svg id="chart-heat" viewBox="0 0 720 320" width="100%" preserveAspectRatio="xMidYMid meet" style="min-height:280px"></svg>
     </div>
 
     <div class="overview">
@@ -400,9 +400,29 @@
   <span id="gen-at"></span>
 </footer>
 
-<script src="viewer_data.js"></script>
+<script src="viewer_data.js" charset="utf-8"></script>
 <!-- Mermaid CDN (오프라인 시에는 시각화 탭의 다이어그램만 비활성, 다른 탭은 정상 작동) -->
-<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js" onerror="window.__noMermaid=true"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js" charset="utf-8" onerror="window.__noMermaid=true"></script>
+<script>
+// 진단 패널: viewer_data.js 로드 실패 또는 JS 에러를 화면에 표시
+window.addEventListener('error', function(ev) {
+  var b = document.getElementById('diag-box');
+  if (!b) {
+    b = document.createElement('div'); b.id = 'diag-box';
+    b.style.cssText = 'position:fixed;top:8px;right:8px;max-width:380px;background:#fee;border:1px solid #b04444;color:#5c1a1a;padding:8px 10px;font:12px/1.4 monospace;z-index:9999;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.15);';
+    if (document.body) document.body.appendChild(b);
+  }
+  b.innerHTML += '<div>⚠ ' + (ev.message || ev.error || ev) + '<br><small>' + (ev.filename||'') + ':' + (ev.lineno||'') + '</small></div>';
+});
+document.addEventListener('DOMContentLoaded', function() {
+  if (!window.RETRO_DATA) {
+    var b = document.createElement('div');
+    b.style.cssText = 'position:fixed;top:8px;right:8px;background:#fee;border:1px solid #b04444;color:#5c1a1a;padding:8px 10px;font:12px monospace;z-index:9999;border-radius:4px;';
+    b.textContent = '⚠ viewer_data.js 로드 실패 — 같은 폴더에 viewer_data.js가 있는지 확인하세요.';
+    document.body.appendChild(b);
+  }
+});
+</script>
 <script>
 (function() {
   const D = window.RETRO_DATA || { decisions: [], sessions: [], patterns: [], harness: [], byDay: {}, counts: {}, category_meta: {} };
@@ -429,14 +449,24 @@
     panels.forEach(p => p.classList.remove('active'));
     t.classList.add('active');
     document.getElementById('tab-' + t.dataset.tab).classList.add('active');
-    if (t.dataset.tab === 'vis' && !window.__mermaidRun && window.mermaid && !window.__noMermaid) {
-      try {
-        window.mermaid.initialize({ startOnLoad: false, theme: document.body.getAttribute('data-theme')==='dark'?'dark':'default' });
-        window.mermaid.run({ querySelector: '.mermaid' });
-        window.__mermaidRun = true;
-      } catch(e) { console.warn('Mermaid:', e); }
-    }
   }));
+
+  // ===== Mermaid 즉시 초기화 (페이지 로드 시 한 번) =====
+  function initMermaid() {
+    if (window.__mermaidRun || !window.mermaid || window.__noMermaid) return;
+    try {
+      window.mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: 'loose',
+        theme: document.body.getAttribute('data-theme')==='dark' ? 'dark' : 'default'
+      });
+      var p = window.mermaid.run({ querySelector: '.mermaid' });
+      if (p && p.catch) p.catch(function(e) { console.warn('Mermaid run:', e); });
+      window.__mermaidRun = true;
+    } catch(e) { console.warn('Mermaid init:', e); }
+  }
+  if (window.mermaid) initMermaid();
+  else setTimeout(initMermaid, 1500);
 
   // ===== 테마 =====
   const themeBtn = document.getElementById('theme-toggle');
