@@ -140,7 +140,7 @@
   .mermaid-box { background: var(--card); border: 1px solid var(--border);
     border-radius: 6px; padding: 16px; margin-bottom: 16px; }
   .mermaid-box h3 { margin-top: 0; }
-  .mermaid { overflow: auto; }
+  .mermaid-diagram { overflow: auto; }
   .mermaid-fallback { color: var(--muted); font-size: 13px; padding: 8px;
     background: var(--code); border-radius: 4px; }
 
@@ -259,120 +259,32 @@
 
     <div class="mermaid-box">
       <h3>1. 8층 모델</h3>
-      <div class="mermaid">flowchart TB
-    subgraph src[원본 저장소 source_repo]
-        L1[L1 원본 파일<br/>PDF · 이미지]
-        L3[L3 레이아웃 분석<br/>LayoutBlock]
-        L2[L2 OCR 결과<br/>OcrResult]
-        L4[L4 교정 텍스트]
-        L1 --> L3 --> L2 --> L4
-    end
-    subgraph interp[해석 저장소 interp]
-        L5[L5 표점 · 현토]
-        L6[L6 번역]
-        L7[L7 주석 · 사전]
-        L8[L8 관계 그래프]
-        L5 --> L6 --> L7 --> L8
-    end
-    L4 -. source_ref .-> L5
-    classDef srcCls fill:#e8f0fe,stroke:#2b5797,color:#000
-    classDef interpCls fill:#fff4e0,stroke:#cc8844,color:#000
-    class L1,L2,L3,L4 srcCls
-    class L5,L6,L7,L8 interpCls</div>
+      <div class="mermaid-diagram" data-diagram="layer-model"></div>
     </div>
 
     <div class="mermaid-box">
       <h3>2. 결정 트리거 그래프</h3>
-      <div class="mermaid">graph LR
-    D027[D-027<br/>server.py 분할]:::big
-    D027 --> D028[D-028 SSE]
-    D027 --> D029[D-029 인용 양식]
-    D027 --> D030[D-030 경로 통합]
-    D027 --> D031[D-031 표점 오프셋]
-    D027 --> D032[D-032 정렬 최적화]
-    D027 --> D033[D-033 LLM 캐시]
-    D027 --> D034[D-034 비교 탭]
-    D027 --> D035[D-035 주석 라우터]
-    D027 --> D036[D-036 주석 UX]
-    D009[D-009 OCR 플러그인]:::big
-    D009 --> D38[D-038~D-044 NDL 시리즈]
-    D010[D-010 LLM 5단 폴백]:::big
-    D010 --> D028
-    D010 --> D033
-    D010 --> D047[D-047 OAuth]
-    classDef big fill:#e8f0fe,stroke:#2b5797,stroke-width:2px,color:#000</div>
+      <div class="mermaid-diagram" data-diagram="trigger-graph"></div>
     </div>
 
     <div class="mermaid-box">
       <h3>3. 세션 카드의 4단 구조 + 인계 사이클</h3>
-      <div class="mermaid">flowchart TB
-    A([세션 시작]) --> B[1 사전 준비]
-    B --> C[2 설계 요약<br/>반드시 이해한 후 구현]
-    C --> D[3 작업 1, 2, 3 ...]
-    D --> E[4 다음 세션]
-    E --> F{{인계 프로토콜}}
-    F --> G[session_navigator.md 갱신]
-    F --> H[DECISIONS.md 갱신]
-    G & H --> I([다음 세션 진입])
-    I -. 새 Claude .-> A
-    classDef phase fill:#e8f0fe,stroke:#2b5797,color:#000
-    classDef meta fill:#fff4e0,stroke:#cc8844,color:#000
-    class B,C,D,E phase
-    class F,G,H meta</div>
+      <div class="mermaid-diagram" data-diagram="session-cycle"></div>
     </div>
 
     <div class="mermaid-box">
       <h3>4. 결정 카드의 6칸 양식</h3>
-      <div class="mermaid">flowchart LR
-    A[새 결정 발견] --> B{6칸 양식 작성}
-    B --> C[① 날짜]
-    B --> D[② 상태]
-    B --> E[③ 맥락]
-    B --> F[④ 결정]
-    B --> G[⑤ 근거]
-    B --> H[⑥ 트레이드오프<br/>거부한 대안]
-    C & D & E & F & G & H --> I[D-XXX 영구 ID 발급]
-    I --> J[DECISIONS.md 추가]
-    J --> K[미래의 Claude가<br/>이미 검토된 길을<br/>재탐사하지 않음]</div>
+      <div class="mermaid-diagram" data-diagram="decision-card"></div>
     </div>
 
     <div class="mermaid-box">
       <h3>5. 패턴 → 하네스 권고 트레이스</h3>
-      <div class="mermaid">graph LR
-    P1 --> H1[H1 4단 템플릿]
-    P1 --> H12[H12 세션·결정 분리]
-    P2 --> H2[H2 네비게이터 갱신]
-    P3 --> H3[H3 ID + 양식]
-    P3 --> H4[H4 트레이드오프]
-    P3 --> H12
-    P4 --> H11[H11 폭발일 인식]
-    P5 --> H5[H5 검증 명령]
-    P6 --> H6[H6 모호함 외화]
-    P7 --> H7[H7 플러그인]
-    P8 --> H8[H8 버그도 카드]
-    META[meta] --> H9[H9 회고 분리]
-    META --> H10[H10 CLAUDE.md]
-    classDef p fill:#fff4e0,stroke:#cc8844,color:#000
-    classDef h fill:#e8f0fe,stroke:#2b5797,color:#000
-    class P1,P2,P3,P4,P5,P6,P7,P8 p
-    class H1,H2,H3,H4,H5,H6,H7,H8,H9,H10,H11,H12 h</div>
+      <div class="mermaid-diagram" data-diagram="pattern-harness"></div>
     </div>
 
     <div class="mermaid-box">
       <h3>6. 회고 파이프라인</h3>
-      <div class="mermaid">flowchart LR
-    DEC[(DECISIONS.md<br/>48 결정)] --> P1[split D-XXX]
-    SES[(sessions/<br/>14 파일)] --> P2[extract H2/intro]
-    P1 --> M2[02_decisions.md]
-    P2 --> M3[03_sessions.md]
-    DEC & SES --> M1[01_timeline.md]
-    M2 & M3 --> M4[04_patterns.md] --> M5[05_harness.md]
-    M2 & M3 & M4 & M5 --> M6[06_visualizations.md]
-    P1 & P2 --> DATA[viewer_data.js] --> HTML[viewer.html]
-    classDef src fill:#ffe6e6,stroke:#b04444,color:#000
-    classDef out fill:#e8f0fe,stroke:#2b5797,color:#000
-    class DEC,SES src
-    class M1,M2,M3,M4,M5,M6,DATA,HTML out</div>
+      <div class="mermaid-diagram" data-diagram="retrospective-pipeline"></div>
     </div>
   </section>
 
@@ -451,18 +363,163 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('tab-' + t.dataset.tab).classList.add('active');
   }));
 
-  // ===== Mermaid 즉시 초기화 (페이지 로드 시 한 번) =====
-  function initMermaid() {
+  // Mermaid 원문은 HTML 본문에 직접 두면 <br/> 같은 조각이 먼저 파싱된다.
+  // 또한 CDN의 자동 startOnLoad와 수동 run이 겹치면 렌더된 SVG 텍스트를 다시 파싱할 수 있다.
+  // 그래서 .mermaid 클래스를 쓰지 않고, 각 다이어그램을 render()로 직접 그린다.
+  const MERMAID_DIAGRAMS = {
+    'layer-model': `
+flowchart TB
+    subgraph src[원본 저장소 source_repo]
+        L1["L1 원본 파일<br/>PDF · 이미지"]
+        L3["L3 레이아웃 분석<br/>LayoutBlock"]
+        L2["L2 OCR 결과<br/>OcrResult"]
+        L4["L4 교정 텍스트"]
+        L1 --> L3
+        L3 --> L2
+        L2 --> L4
+    end
+    subgraph interp[해석 저장소 interp]
+        L5["L5 표점 · 현토"]
+        L6["L6 번역"]
+        L7["L7 주석 · 사전"]
+        L8["L8 관계 그래프"]
+        L5 --> L6
+        L6 --> L7
+        L7 --> L8
+    end
+    L4 -. source_ref .-> L5
+    classDef srcCls fill:#e8f0fe,stroke:#2b5797,color:#000
+    classDef interpCls fill:#fff4e0,stroke:#cc8844,color:#000
+    class L1,L2,L3,L4 srcCls
+    class L5,L6,L7,L8 interpCls
+`,
+    'trigger-graph': `
+graph LR
+    D027["D-027<br/>server.py 분할"]:::big
+    D027 --> D028["D-028 SSE"]
+    D027 --> D029["D-029 인용 양식"]
+    D027 --> D030["D-030 경로 통합"]
+    D027 --> D031["D-031 표점 오프셋"]
+    D027 --> D032["D-032 정렬 최적화"]
+    D027 --> D033["D-033 LLM 캐시"]
+    D027 --> D034["D-034 비교 탭"]
+    D027 --> D035["D-035 주석 라우터"]
+    D027 --> D036["D-036 주석 UX"]
+    D009["D-009 OCR 플러그인"]:::big
+    D009 --> D038["D-038~D-044 NDL 시리즈"]
+    D010["D-010 LLM 5단 폴백"]:::big
+    D010 --> D028
+    D010 --> D033
+    D010 --> D047["D-047 OAuth"]
+    classDef big fill:#e8f0fe,stroke:#2b5797,stroke-width:2px,color:#000
+`,
+    'session-cycle': `
+flowchart TB
+    A(["세션 시작"]) --> B["1 사전 준비"]
+    B --> C["2 설계 요약<br/>반드시 이해한 후 구현"]
+    C --> D["3 작업 1, 2, 3 ..."]
+    D --> E["4 다음 세션"]
+    E --> F{{"인계 프로토콜"}}
+    F --> G["session_navigator.md 갱신"]
+    F --> H["DECISIONS.md 갱신"]
+    G --> I(["다음 세션 진입"])
+    H --> I
+    I -. 새 Claude .-> A
+    classDef phase fill:#e8f0fe,stroke:#2b5797,color:#000
+    classDef meta fill:#fff4e0,stroke:#cc8844,color:#000
+    class B,C,D,E phase
+    class F,G,H meta
+`,
+    'decision-card': `
+flowchart LR
+    A["새 결정 발견"] --> B{"6칸 양식 작성"}
+    B --> C["① 날짜"]
+    B --> D["② 상태"]
+    B --> E["③ 맥락"]
+    B --> F["④ 결정"]
+    B --> G["⑤ 근거"]
+    B --> H["⑥ 트레이드오프<br/>거부한 대안"]
+    C --> I["D-XXX 영구 ID 발급"]
+    D --> I
+    E --> I
+    F --> I
+    G --> I
+    H --> I
+    I --> J["DECISIONS.md 추가"]
+    J --> K["미래의 Claude가<br/>이미 검토된 길을<br/>재탐사하지 않음"]
+`,
+    'pattern-harness': `
+graph LR
+    P1 --> H1["H1 4단 템플릿"]
+    P1 --> H12["H12 세션·결정 분리"]
+    P2 --> H2["H2 네비게이터 갱신"]
+    P3 --> H3["H3 ID + 양식"]
+    P3 --> H4["H4 트레이드오프"]
+    P3 --> H12
+    P4 --> H11["H11 폭발일 인식"]
+    P5 --> H5["H5 검증 명령"]
+    P6 --> H6["H6 모호함 외화"]
+    P7 --> H7["H7 플러그인"]
+    P8 --> H8["H8 버그도 카드"]
+    META["meta"] --> H9["H9 회고 분리"]
+    META --> H10["H10 CLAUDE.md"]
+    classDef p fill:#fff4e0,stroke:#cc8844,color:#000
+    classDef h fill:#e8f0fe,stroke:#2b5797,color:#000
+    class P1,P2,P3,P4,P5,P6,P7,P8 p
+    class H1,H2,H3,H4,H5,H6,H7,H8,H9,H10,H11,H12 h
+`,
+    'retrospective-pipeline': `
+flowchart LR
+    DEC[("DECISIONS.md<br/>48 결정")] --> P1["split D-XXX"]
+    SES[("sessions/<br/>14 파일")] --> P2["extract H2/intro"]
+    P1 --> M2["02_decisions.md"]
+    P2 --> M3["03_sessions.md"]
+    DEC --> M1["01_timeline.md"]
+    SES --> M1
+    M2 --> M4["04_patterns.md"]
+    M3 --> M4
+    M4 --> M5["05_harness.md"]
+    M2 --> M6["06_visualizations.md"]
+    M3 --> M6
+    M4 --> M6
+    M5 --> M6
+    P1 --> DATA["viewer_data.js"]
+    P2 --> DATA
+    DATA --> HTML["viewer.html"]
+    classDef src fill:#ffe6e6,stroke:#b04444,color:#000
+    classDef out fill:#e8f0fe,stroke:#2b5797,color:#000
+    class DEC,SES src
+    class M1,M2,M3,M4,M5,M6,DATA,HTML out
+`,
+  };
+  // ===== Mermaid 직접 렌더링 (페이지 로드 시 한 번) =====
+  async function initMermaid() {
     if (window.__mermaidRun || !window.mermaid || window.__noMermaid) return;
+    window.__mermaidRun = true;
     try {
       window.mermaid.initialize({
         startOnLoad: false,
         securityLevel: 'loose',
         theme: document.body.getAttribute('data-theme')==='dark' ? 'dark' : 'default'
       });
-      var p = window.mermaid.run({ querySelector: '.mermaid' });
-      if (p && p.catch) p.catch(function(e) { console.warn('Mermaid run:', e); });
-      window.__mermaidRun = true;
+      const targets = Array.from(document.querySelectorAll('.mermaid-diagram[data-diagram]'));
+      for (let i = 0; i < targets.length; i++) {
+        const el = targets[i];
+        const source = (MERMAID_DIAGRAMS[el.dataset.diagram] || '').trim();
+        if (!source) continue;
+        try {
+          const rendered = await window.mermaid.render('retro-mermaid-' + i + '-' + Date.now(), source);
+          el.innerHTML = rendered.svg;
+        } catch (e) {
+          console.warn('Mermaid render:', el.dataset.diagram, e);
+          el.innerHTML =
+            '<pre class="mermaid-fallback">Mermaid 렌더링 실패\n\n' +
+            escHtml(source) +
+            '\n\n' +
+            escHtml(e && e.message ? e.message : String(e)) +
+            '</pre>';
+        }
+      }
     } catch(e) { console.warn('Mermaid init:', e); }
   }
   if (window.mermaid) initMermaid();
