@@ -12,6 +12,8 @@ OCR, 교정, 번역, 주석 작업을 모두 수행한다.
 - docs/core-schema-v1.3.md — 해석 저장소의 엔티티 모델
 - docs/operation-rules-v1.0.md — 코어 스키마 운영 규약
 - docs/DECISIONS.md — 설계 결정 기록 (반드시 읽을 것)
+- docs/observability-roadmap.md — 관측 가능성(OpenTelemetry) 점진적 도입 로드맵
+- docs/retrospective/ — 회고용 뷰 (원본 무수정). 결정·세션·패턴·하네스 권고 + 인터랙티브 뷰어
 
 ## 기술 스택
 - 백엔드: Python + FastAPI

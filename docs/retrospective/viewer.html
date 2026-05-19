@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>회고 뷰어 — 고전서지 통합 브라우저</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #fafaf7; --fg: #1a1a1a; --muted: #666;
+    --accent: #2b5797; --accent-soft: #e8f0fe;
+    --border: #d8d8d2; --card: #ffffff; --code: #f4f3ee;
+    --tag-bg: #ebe6d8; --tag-fg: #5c4a1c;
+    --warn: #b8651b; --good: #2d6a3e;
+  }
+  [data-theme="dark"] {
+    --bg: #14181c; --fg: #e6e6e2; --muted: #9aa0a6;
+    --accent: #79a8e6; --accent-soft: #1d2a3c;
+    --border: #2a3038; --card: #1a1f25; --code: #20262d;
+    --tag-bg: #3a3024; --tag-fg: #d9c184;
+    --warn: #e29a5a; --good: #76c08a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR",
+                 "Malgun Gothic", "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.55; font-size: 15px;
+  }
+  header { border-bottom: 1px solid var(--border); padding: 16px 24px;
+    display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  header .meta { color: var(--muted); font-size: 13px; }
+  header .right { margin-left: auto; display: flex; gap: 8px; }
+  header button {
+    background: var(--card); color: var(--fg); border: 1px solid var(--border);
+    padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 13px;
+  }
+  header button:hover { background: var(--accent-soft); }
+
+  nav.tabs {
+    display: flex; gap: 0; border-bottom: 1px solid var(--border);
+    padding: 0 24px; background: var(--bg);
+    position: sticky; top: 0; z-index: 10;
+    overflow-x: auto;
+  }
+  nav.tabs button {
+    background: transparent; border: none; border-bottom: 2px solid transparent;
+    color: var(--muted); padding: 10px 14px; font-size: 14px; cursor: pointer;
+    font-weight: 500; white-space: nowrap;
+  }
+  nav.tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
+  nav.tabs button:hover { color: var(--fg); }
+
+  main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+  section.tab-panel { display: none; }
+  section.tab-panel.active { display: block; }
+
+  h2 { font-size: 20px; margin-top: 0; }
+  h3 { font-size: 16px; margin: 24px 0 8px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .toolbar {
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    margin-bottom: 16px; padding: 12px; background: var(--card);
+    border: 1px solid var(--border); border-radius: 6px;
+  }
+  .toolbar input[type="search"] {
+    flex: 1; min-width: 200px; padding: 6px 10px; font-size: 14px;
+    background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px;
+  }
+  .toolbar select {
+    padding: 6px 8px; font-size: 14px; background: var(--bg); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 4px;
+  }
+  .toolbar .count { color: var(--muted); font-size: 13px; }
+
+  .card { background: var(--card); border: 1px solid var(--border);
+    border-radius: 6px; padding: 14px 18px; margin-bottom: 10px; }
+  .card-head { display: flex; gap: 10px; align-items: baseline; cursor: pointer; user-select: none; }
+  .card-id { font-family: "SF Mono", "Cascadia Code", Consolas, Menlo, monospace;
+    font-weight: 600; color: var(--accent); min-width: 56px; }
+  .card-title { flex: 1; font-weight: 500; }
+  .card-date { color: var(--muted); font-size: 13px; }
+  .card-body { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); display: none; }
+  .card.expanded .card-body { display: block; }
+  .card-body h4 { margin: 12px 0 4px; font-size: 13px; color: var(--muted);
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .card-body h4:first-child { margin-top: 0; }
+  .card-body p, .card-body pre { margin: 0; }
+  .card-body pre { background: var(--code); padding: 8px 10px; border-radius: 4px;
+    white-space: pre-wrap; font-size: 13px;
+    font-family: "SF Mono", "Cascadia Code", Consolas, Menlo, monospace; }
+
+  .tag { display: inline-block; padding: 1px 6px; border-radius: 3px;
+    background: var(--tag-bg); color: var(--tag-fg); font-size: 11px; font-weight: 600; }
+  .cat-tag { display: inline-block; padding: 1px 8px; border-radius: 10px;
+    font-size: 11px; font-weight: 600; color: white; margin-left: 6px; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 12px; }
+  .stat-num { font-size: 28px; font-weight: 700; color: var(--accent); }
+  .stat-label { font-size: 13px; color: var(--muted); }
+
+  .chart-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; margin-bottom: 24px; }
+  @media (max-width: 900px) { .chart-grid { grid-template-columns: 1fr; } }
+  .chart-box { background: var(--card); border: 1px solid var(--border);
+    border-radius: 6px; padding: 16px; }
+  .chart-box h3 { margin-top: 0; }
+  .chart-box svg { display: block; max-width: 100%; height: auto; }
+  .chart-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 12px;
+    margin-top: 8px; }
+  .chart-legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .chart-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+  .timeline-day { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 14px 18px; margin-bottom: 12px; }
+  .timeline-day h3 { margin: 0 0 8px; font-size: 15px; }
+  .timeline-day .day-meta { font-size: 12px; color: var(--muted); }
+  .timeline-day ul { margin: 8px 0 0; padding-left: 20px; }
+  .timeline-day li { margin: 2px 0; }
+
+  .overview { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; }
+  @media (max-width: 800px) { .overview { grid-template-columns: 1fr; } }
+  .overview .col { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 16px 20px; }
+
+  table { border-collapse: collapse; width: 100%; }
+  table th, table td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: top; }
+  table th { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  table.heatmap td { text-align: center; padding: 8px; font-weight: 600; }
+
+  .filter-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { padding: 4px 10px; border-radius: 12px; background: var(--card);
+    border: 1px solid var(--border); cursor: pointer; font-size: 12px; color: var(--muted); }
+  .chip.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+  pre.intro-quote { background: var(--accent-soft);
+    border-left: 3px solid var(--accent); padding: 8px 12px; margin: 8px 0;
+    font-style: italic; white-space: pre-wrap; font-family: inherit; font-size: 14px; }
+
+  .mermaid-box { background: var(--card); border: 1px solid var(--border);
+    border-radius: 6px; padding: 16px; margin-bottom: 16px; }
+  .mermaid-box h3 { margin-top: 0; }
+  .mermaid { overflow: auto; }
+  .mermaid-fallback { color: var(--muted); font-size: 13px; padding: 8px;
+    background: var(--code); border-radius: 4px; }
+
+  footer { border-top: 1px solid var(--border); padding: 16px 24px;
+    color: var(--muted); font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>회고 뷰어 — 고전서지 통합 브라우저</h1>
+  <span class="meta">결정 + 세션 + 패턴 + 하네스 + 시각화</span>
+  <div class="right">
+    <button id="theme-toggle" title="라이트/다크 전환">🌓 테마</button>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="overview" class="active">개요</button>
+  <button data-tab="timeline">타임라인</button>
+  <button data-tab="decisions">결정</button>
+  <button data-tab="sessions">세션</button>
+  <button data-tab="vis">시각화</button>
+  <button data-tab="patterns">패턴</button>
+  <button data-tab="harness">하네스</button>
+</nav>
+
+<main>
+  <section id="tab-overview" class="tab-panel active">
+    <h2>한 줄 요약</h2>
+    <p>2026년 2월 14일부터 5월 8일까지 약 3개월에 걸쳐 누적된 <strong id="ov-dec">…</strong>개의 설계 결정과 <strong id="ov-sess">…</strong>개의 세션 문서를 통합 회고로 재배열했다. <strong>원본은 한 글자도 수정하지 않는다.</strong></p>
+
+    <div class="stats">
+      <div class="stat"><div class="stat-num" id="s-dec">0</div><div class="stat-label">결정 카드 (D-XXX)</div></div>
+      <div class="stat"><div class="stat-num" id="s-sess">0</div><div class="stat-label">세션 문서</div></div>
+      <div class="stat"><div class="stat-num" id="s-days">0</div><div class="stat-label">활동일</div></div>
+      <div class="stat"><div class="stat-num" id="s-pat">0</div><div class="stat-label">관찰된 패턴</div></div>
+      <div class="stat"><div class="stat-num" id="s-har">0</div><div class="stat-label">하네스 권고</div></div>
+    </div>
+
+    <div class="chart-grid">
+      <div class="chart-box">
+        <h3>일자별 결정 누적</h3>
+        <svg id="chart-day" viewBox="0 0 600 280"></svg>
+      </div>
+      <div class="chart-box">
+        <h3>카테고리 분포 (도넛)</h3>
+        <svg id="chart-donut" viewBox="0 0 320 320"></svg>
+        <div class="chart-legend" id="legend-donut"></div>
+      </div>
+    </div>
+
+    <div class="chart-box">
+      <h3>일자 × 카테고리 히트맵</h3>
+      <svg id="chart-heat" viewBox="0 0 720 320"></svg>
+    </div>
+
+    <div class="overview">
+      <div class="col">
+        <h3>회고 문서 (본 폴더 안)</h3>
+        <table>
+          <tr><th>파일</th><th>내용</th></tr>
+          <tr><td><a href="README.md">README.md</a></td><td>회고 진입점</td></tr>
+          <tr><td><a href="01_timeline.md">01_timeline.md</a></td><td>일자별 통합 타임라인 + 간트</td></tr>
+          <tr><td><a href="02_decisions.md">02_decisions.md</a></td><td>D-001~D-050 결정 카드 + 트리거 그래프</td></tr>
+          <tr><td><a href="03_sessions.md">03_sessions.md</a></td><td>14개 세션의 메타·구성</td></tr>
+          <tr><td><a href="04_patterns.md">04_patterns.md</a></td><td>인터랙션 패턴 8가지</td></tr>
+          <tr><td><a href="05_harness.md">05_harness.md</a></td><td>하네스 권고 12가지</td></tr>
+          <tr><td><a href="06_visualizations.md">06_visualizations.md</a></td><td>시각화 종합 11종</td></tr>
+        </table>
+      </div>
+      <div class="col">
+        <h3>원본 (수정 금지)</h3>
+        <table>
+          <tr><td><a href="../DECISIONS.md">../DECISIONS.md</a></td><td>결정 원본</td></tr>
+          <tr><td><a href="../sessions/">../sessions/</a></td><td>세션 원본</td></tr>
+          <tr><td><a href="../platform-v7.md">../platform-v7.md</a></td><td>플랫폼 v7</td></tr>
+          <tr><td><a href="../core-schema-v1.3.md">../core-schema-v1.3.md</a></td><td>코어 스키마</td></tr>
+          <tr><td><a href="../user-guide.md">../user-guide.md</a></td><td>사용자 가이드</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-timeline" class="tab-panel">
+    <h2>통합 타임라인</h2>
+    <p>일자별 결정(D-XXX)과 세션을 통합한다.</p>
+    <div id="timeline-body"></div>
+  </section>
+
+  <section id="tab-decisions" class="tab-panel">
+    <h2>결정 카탈로그</h2>
+    <div class="toolbar">
+      <input type="search" id="dec-search" placeholder="검색 (제목, 맥락, 결정, 근거)…">
+      <select id="dec-day-filter"><option value="">모든 날짜</option></select>
+      <span class="count" id="dec-count"></span>
+    </div>
+    <div class="toolbar">
+      <span style="color:var(--muted); font-size:12px;">카테고리:</span>
+      <div class="filter-chips" id="dec-cat-chips"></div>
+    </div>
+    <div id="dec-list"></div>
+  </section>
+
+  <section id="tab-sessions" class="tab-panel">
+    <h2>세션 회고</h2>
+    <div class="toolbar">
+      <input type="search" id="sess-search" placeholder="검색 (제목, 구성, 도입부)…">
+      <span class="count" id="sess-count"></span>
+    </div>
+    <div id="sess-list"></div>
+  </section>
+
+  <section id="tab-vis" class="tab-panel">
+    <h2>시각화 종합</h2>
+    <p>아래 다이어그램들은 인터넷 연결 시 Mermaid CDN으로 렌더링된다. 오프라인 사용자는 <a href="06_visualizations.md">06_visualizations.md</a>를 GitHub·Obsidian·VSCode 미리보기에서 확인할 수 있다.</p>
+
+    <div class="mermaid-box">
+      <h3>1. 8층 모델</h3>
+      <div class="mermaid">flowchart TB
+    subgraph src[원본 저장소 source_repo]
+        L1[L1 원본 파일<br/>PDF · 이미지]
+        L3[L3 레이아웃 분석<br/>LayoutBlock]
+        L2[L2 OCR 결과<br/>OcrResult]
+        L4[L4 교정 텍스트]
+        L1 --> L3 --> L2 --> L4
+    end
+    subgraph interp[해석 저장소 interp]
+        L5[L5 표점 · 현토]
+        L6[L6 번역]
+        L7[L7 주석 · 사전]
+        L8[L8 관계 그래프]
+        L5 --> L6 --> L7 --> L8
+    end
+    L4 -. source_ref .-> L5
+    classDef srcCls fill:#e8f0fe,stroke:#2b5797,color:#000
+    classDef interpCls fill:#fff4e0,stroke:#cc8844,color:#000
+    class L1,L2,L3,L4 srcCls
+    class L5,L6,L7,L8 interpCls</div>
+    </div>
+
+    <div class="mermaid-box">
+      <h3>2. 결정 트리거 그래프</h3>
+      <div class="mermaid">graph LR
+    D027[D-027<br/>server.py 분할]:::big
+    D027 --> D028[D-028 SSE]
+    D027 --> D029[D-029 인용 양식]
+    D027 --> D030[D-030 경로 통합]
+    D027 --> D031[D-031 표점 오프셋]
+    D027 --> D032[D-032 정렬 최적화]
+    D027 --> D033[D-033 LLM 캐시]
+    D027 --> D034[D-034 비교 탭]
+    D027 --> D035[D-035 주석 라우터]
+    D027 --> D036[D-036 주석 UX]
+    D009[D-009 OCR 플러그인]:::big
+    D009 --> D38[D-038~D-044 NDL 시리즈]
+    D010[D-010 LLM 5단 폴백]:::big
+    D010 --> D028
+    D010 --> D033
+    D010 --> D047[D-047 OAuth]
+    classDef big fill:#e8f0fe,stroke:#2b5797,stroke-width:2px,color:#000</div>
+    </div>
+
+    <div class="mermaid-box">
+      <h3>3. 세션 카드의 4단 구조 + 인계 사이클</h3>
+      <div class="mermaid">flowchart TB
+    A([세션 시작]) --> B[1 사전 준비]
+    B --> C[2 설계 요약<br/>반드시 이해한 후 구현]
+    C --> D[3 작업 1, 2, 3 ...]
+    D --> E[4 다음 세션]
+    E --> F{{인계 프로토콜}}
+    F --> G[session_navigator.md 갱신]
+    F --> H[DECISIONS.md 갱신]
+    G & H --> I([다음 세션 진입])
+    I -. 새 Claude .-> A
+    classDef phase fill:#e8f0fe,stroke:#2b5797,color:#000
+    classDef meta fill:#fff4e0,stroke:#cc8844,color:#000
+    class B,C,D,E phase
+    class F,G,H meta</div>
+    </div>
+
+    <div class="mermaid-box">
+      <h3>4. 결정 카드의 6칸 양식</h3>
+      <div class="mermaid">flowchart LR
+    A[새 결정 발견] --> B{6칸 양식 작성}
+    B --> C[① 날짜]
+    B --> D[② 상태]
+    B --> E[③ 맥락]
+    B --> F[④ 결정]
+    B --> G[⑤ 근거]
+    B --> H[⑥ 트레이드오프<br/>거부한 대안]
+    C & D & E & F & G & H --> I[D-XXX 영구 ID 발급]
+    I --> J[DECISIONS.md 추가]
+    J --> K[미래의 Claude가<br/>이미 검토된 길을<br/>재탐사하지 않음]</div>
+    </div>
+
+    <div class="mermaid-box">
+      <h3>5. 패턴 → 하네스 권고 트레이스</h3>
+      <div class="mermaid">graph LR
+    P1 --> H1[H1 4단 템플릿]
+    P1 --> H12[H12 세션·결정 분리]
+    P2 --> H2[H2 네비게이터 갱신]
+    P3 --> H3[H3 ID + 양식]
+    P3 --> H4[H4 트레이드오프]
+    P3 --> H12
+    P4 --> H11[H11 폭발일 인식]
+    P5 --> H5[H5 검증 명령]
+    P6 --> H6[H6 모호함 외화]
+    P7 --> H7[H7 플러그인]
+    P8 --> H8[H8 버그도 카드]
+    META[meta] --> H9[H9 회고 분리]
+    META --> H10[H10 CLAUDE.md]
+    classDef p fill:#fff4e0,stroke:#cc8844,color:#000
+    classDef h fill:#e8f0fe,stroke:#2b5797,color:#000
+    class P1,P2,P3,P4,P5,P6,P7,P8 p
+    class H1,H2,H3,H4,H5,H6,H7,H8,H9,H10,H11,H12 h</div>
+    </div>
+
+    <div class="mermaid-box">
+      <h3>6. 회고 파이프라인</h3>
+      <div class="mermaid">flowchart LR
+    DEC[(DECISIONS.md<br/>48 결정)] --> P1[split D-XXX]
+    SES[(sessions/<br/>14 파일)] --> P2[extract H2/intro]
+    P1 --> M2[02_decisions.md]
+    P2 --> M3[03_sessions.md]
+    DEC & SES --> M1[01_timeline.md]
+    M2 & M3 --> M4[04_patterns.md] --> M5[05_harness.md]
+    M2 & M3 & M4 & M5 --> M6[06_visualizations.md]
+    P1 & P2 --> DATA[viewer_data.js] --> HTML[viewer.html]
+    classDef src fill:#ffe6e6,stroke:#b04444,color:#000
+    classDef out fill:#e8f0fe,stroke:#2b5797,color:#000
+    class DEC,SES src
+    class M1,M2,M3,M4,M5,M6,DATA,HTML out</div>
+    </div>
+  </section>
+
+  <section id="tab-patterns" class="tab-panel">
+    <h2>관찰된 인터랙션 패턴</h2>
+    <p><a href="04_patterns.md">전체 분석 → 04_patterns.md</a></p>
+    <div id="pat-list"></div>
+  </section>
+
+  <section id="tab-harness" class="tab-panel">
+    <h2>하네스 엔지니어링 권고</h2>
+    <p><a href="05_harness.md">전체 분석 → 05_harness.md</a></p>
+
+    <h3>패턴 × 하네스 매트릭스</h3>
+    <table class="heatmap" id="ph-matrix"></table>
+
+    <h3>권고 카드</h3>
+    <div id="har-list"></div>
+  </section>
+</main>
+
+<footer>
+  데이터 출처: <a href="../DECISIONS.md">DECISIONS.md</a> + <a href="../sessions/">sessions/</a>.
+  본 뷰어는 원본 파일을 수정하지 않는다 — 회고는 뷰, 원본은 스토어.
+  <span id="gen-at"></span>
+</footer>
+
+<script src="viewer_data.js"></script>
+<!-- Mermaid CDN (오프라인 시에는 시각화 탭의 다이어그램만 비활성, 다른 탭은 정상 작동) -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js" onerror="window.__noMermaid=true"></script>
+<script>
+(function() {
+  const D = window.RETRO_DATA || { decisions: [], sessions: [], patterns: [], harness: [], byDay: {}, counts: {}, category_meta: {} };
+  const CMETA = D.category_meta || {};
+
+  document.getElementById('s-dec').textContent = D.decisions.length;
+  document.getElementById('s-sess').textContent = D.sessions.length;
+  document.getElementById('s-days').textContent = D.counts.days || Object.keys(D.byDay).length;
+  document.getElementById('s-pat').textContent = D.patterns.length;
+  document.getElementById('s-har').textContent = D.harness.length;
+  document.getElementById('ov-dec').textContent = D.decisions.length;
+  document.getElementById('ov-sess').textContent = D.sessions.length;
+  document.getElementById('gen-at').textContent = D.generated_at ? '생성: ' + D.generated_at.slice(0,10) : '';
+
+  function escHtml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function catColor(k) { return (CMETA[k]||{}).color || '#888'; }
+  function catLabel(k) { return (CMETA[k]||{}).label || k; }
+
+  // ===== 탭 =====
+  const tabs = document.querySelectorAll('#tabs button');
+  const panels = document.querySelectorAll('.tab-panel');
+  tabs.forEach(t => t.addEventListener('click', () => {
+    tabs.forEach(x => x.classList.remove('active'));
+    panels.forEach(p => p.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('tab-' + t.dataset.tab).classList.add('active');
+    if (t.dataset.tab === 'vis' && !window.__mermaidRun && window.mermaid && !window.__noMermaid) {
+      try {
+        window.mermaid.initialize({ startOnLoad: false, theme: document.body.getAttribute('data-theme')==='dark'?'dark':'default' });
+        window.mermaid.run({ querySelector: '.mermaid' });
+        window.__mermaidRun = true;
+      } catch(e) { console.warn('Mermaid:', e); }
+    }
+  }));
+
+  // ===== 테마 =====
+  const themeBtn = document.getElementById('theme-toggle');
+  if (localStorage.getItem('retro-theme') === 'dark') document.body.setAttribute('data-theme', 'dark');
+  themeBtn.addEventListener('click', () => {
+    const cur = document.body.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+    const next = cur === 'dark' ? 'light' : 'dark';
+    if (next === 'dark') document.body.setAttribute('data-theme', 'dark');
+    else document.body.removeAttribute('data-theme');
+    localStorage.setItem('retro-theme', next);
+    // 차트 재렌더
+    drawDayChart(); drawDonutChart(); drawHeatmap();
+  });
+
+  // ===== SVG: 일자별 막대 =====
+  function drawDayChart() {
+    const svg = document.getElementById('chart-day');
+    if (!svg) return;
+    const days = Object.keys(D.byDay).filter(k=>k!=='unknown').sort();
+    const data = days.map(d => ({ day: d, n: (D.byDay[d].decisions||[]).length }));
+    const W = 600, H = 280, pad = { l: 40, r: 20, t: 20, b: 60 };
+    const innerW = W - pad.l - pad.r, innerH = H - pad.t - pad.b;
+    const maxN = Math.max(1, ...data.map(d=>d.n));
+    const barW = innerW / data.length * 0.7;
+    const gap = innerW / data.length * 0.3;
+    const fg = getCss('--fg'), accent = getCss('--accent'), border = getCss('--border'), muted = getCss('--muted');
+    let html = '';
+    // y축 grid
+    for (let i = 0; i <= 4; i++) {
+      const y = pad.t + innerH * (1 - i/4);
+      const v = Math.round(maxN * i / 4);
+      html += `<line x1="${pad.l}" y1="${y}" x2="${W-pad.r}" y2="${y}" stroke="${border}" stroke-dasharray="2,3"/>`;
+      html += `<text x="${pad.l-6}" y="${y+4}" text-anchor="end" fill="${muted}" font-size="10">${v}</text>`;
+    }
+    // 막대
+    data.forEach((d, i) => {
+      const x = pad.l + i * (innerW/data.length) + gap/2;
+      const h = (d.n / maxN) * innerH;
+      const y = pad.t + innerH - h;
+      const fill = d.n >= 10 ? '#b8651b' : accent;
+      html += `<rect x="${x}" y="${y}" width="${barW}" height="${h}" fill="${fill}" rx="2">
+        <title>${d.day}: ${d.n}건</title></rect>`;
+      html += `<text x="${x+barW/2}" y="${y-4}" text-anchor="middle" fill="${fg}" font-size="11" font-weight="600">${d.n}</text>`;
+      html += `<text x="${x+barW/2}" y="${H-pad.b+14}" text-anchor="middle" fill="${muted}" font-size="10" transform="rotate(-35, ${x+barW/2}, ${H-pad.b+14})">${d.day.slice(5)}</text>`;
+    });
+    svg.innerHTML = html;
+  }
+
+  // ===== SVG: 도넛 =====
+  function drawDonutChart() {
+    const svg = document.getElementById('chart-donut');
+    const legend = document.getElementById('legend-donut');
+    if (!svg) return;
+    const counts = D.category_count || {};
+    const entries = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+    const total = entries.reduce((a,[,n])=>a+n, 0) || 1;
+    const cx = 160, cy = 160, rOuter = 130, rInner = 75;
+    let acc = 0;
+    let html = '';
+    entries.forEach(([k, n]) => {
+      const start = (acc/total) * 2 * Math.PI - Math.PI/2;
+      acc += n;
+      const end = (acc/total) * 2 * Math.PI - Math.PI/2;
+      const large = (end - start) > Math.PI ? 1 : 0;
+      const x1 = cx + rOuter*Math.cos(start), y1 = cy + rOuter*Math.sin(start);
+      const x2 = cx + rOuter*Math.cos(end),   y2 = cy + rOuter*Math.sin(end);
+      const x3 = cx + rInner*Math.cos(end),   y3 = cy + rInner*Math.sin(end);
+      const x4 = cx + rInner*Math.cos(start), y4 = cy + rInner*Math.sin(start);
+      const path = `M ${x1} ${y1} A ${rOuter} ${rOuter} 0 ${large} 1 ${x2} ${y2} L ${x3} ${y3} A ${rInner} ${rInner} 0 ${large} 0 ${x4} ${y4} Z`;
+      html += `<path d="${path}" fill="${catColor(k)}" stroke="${getCss('--bg')}" stroke-width="1.5">
+        <title>${catLabel(k)}: ${n}건 (${(n/total*100).toFixed(0)}%)</title></path>`;
+    });
+    html += `<text x="${cx}" y="${cy-4}" text-anchor="middle" fill="${getCss('--fg')}" font-size="32" font-weight="700">${total}</text>`;
+    html += `<text x="${cx}" y="${cy+18}" text-anchor="middle" fill="${getCss('--muted')}" font-size="12">건의 결정</text>`;
+    svg.innerHTML = html;
+    legend.innerHTML = entries.map(([k,n]) => `<span><i style="background:${catColor(k)}"></i>${catLabel(k)} (${n})</span>`).join('');
+  }
+
+  // ===== SVG: 히트맵 (일자 × 카테고리) =====
+  function drawHeatmap() {
+    const svg = document.getElementById('chart-heat');
+    if (!svg) return;
+    const matrix = D.day_category_matrix || {};
+    const days = Object.keys(matrix).filter(d=>d!=='unknown').sort();
+    const cats = Object.keys(D.category_count || {}).sort((a,b)=>(D.category_count[b]||0)-(D.category_count[a]||0));
+    const cellW = 56, cellH = 22;
+    const padL = 110, padT = 80;
+    const W = padL + cellW * days.length + 20;
+    const H = padT + cellH * cats.length + 30;
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    let html = '';
+    const muted = getCss('--muted'), fg = getCss('--fg'), border = getCss('--border');
+    // 날짜 라벨 (세로)
+    days.forEach((d, i) => {
+      const x = padL + i*cellW + cellW/2;
+      html += `<text x="${x}" y="${padT-8}" text-anchor="end" fill="${muted}" font-size="10" transform="rotate(-60, ${x}, ${padT-8})">${d}</text>`;
+    });
+    // 카테고리 라벨 (왼쪽)
+    cats.forEach((c, j) => {
+      const y = padT + j*cellH + cellH/2 + 4;
+      html += `<text x="${padL-6}" y="${y}" text-anchor="end" fill="${fg}" font-size="11">${catLabel(c)}</text>`;
+    });
+    // 셀
+    const maxV = Math.max(1, ...Object.values(matrix).flatMap(o=>Object.values(o)));
+    cats.forEach((c, j) => {
+      days.forEach((d, i) => {
+        const v = (matrix[d]||{})[c] || 0;
+        const x = padL + i*cellW;
+        const y = padT + j*cellH;
+        const intensity = v ? Math.min(1, 0.25 + v/maxV*0.75) : 0;
+        const color = v ? catColor(c) : 'transparent';
+        html += `<rect x="${x}" y="${y}" width="${cellW-2}" height="${cellH-2}" fill="${color}" fill-opacity="${intensity}" stroke="${border}">
+          <title>${d} · ${catLabel(c)}: ${v}건</title></rect>`;
+        if (v) html += `<text x="${x+cellW/2}" y="${y+cellH/2+4}" text-anchor="middle" fill="white" font-size="11" font-weight="600">${v}</text>`;
+      });
+    });
+    // 폭발일 강조
+    const explodeDay = '2026-02-24';
+    if (days.includes(explodeDay)) {
+      const i = days.indexOf(explodeDay);
+      const x = padL + i*cellW;
+      html += `<rect x="${x-2}" y="${padT-2}" width="${cellW}" height="${cellH*cats.length+2}" fill="none" stroke="#b8651b" stroke-width="2" stroke-dasharray="4,2"/>`;
+      html += `<text x="${x+cellW/2}" y="${padT+cellH*cats.length+18}" text-anchor="middle" fill="#b8651b" font-size="11" font-weight="600">★ 폭발일</text>`;
+    }
+    svg.innerHTML = html;
+  }
+
+  function getCss(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#000';
+  }
+
+  // ===== 결정 =====
+  const decList = document.getElementById('dec-list');
+  const decSearch = document.getElementById('dec-search');
+  const decDayFilter = document.getElementById('dec-day-filter');
+  const decCount = document.getElementById('dec-count');
+  const decCatChips = document.getElementById('dec-cat-chips');
+  let activeCat = null;
+
+  const days = [...new Set(D.decisions.map(d => d.date).filter(Boolean))].sort();
+  for (const day of days) {
+    const opt = document.createElement('option');
+    opt.value = day; opt.textContent = day;
+    decDayFilter.appendChild(opt);
+  }
+
+  // 카테고리 chip
+  const allCats = Object.keys(D.category_count || {}).sort((a,b)=>(D.category_count[b]||0)-(D.category_count[a]||0));
+  const allChip = document.createElement('span');
+  allChip.className = 'chip active'; allChip.textContent = '전체';
+  allChip.addEventListener('click', () => { activeCat = null; updateChips(); renderDecisions(); });
+  decCatChips.appendChild(allChip);
+  for (const c of allCats) {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.style.borderColor = catColor(c);
+    chip.textContent = catLabel(c) + ' ' + (D.category_count[c]||0);
+    chip.addEventListener('click', () => { activeCat = c; updateChips(); renderDecisions(); });
+    chip.dataset.cat = c;
+    decCatChips.appendChild(chip);
+  }
+  function updateChips() {
+    [...decCatChips.children].forEach((chip, idx) => {
+      chip.classList.remove('active');
+      if (idx === 0 && activeCat === null) chip.classList.add('active');
+      else if (chip.dataset.cat === activeCat) {
+        chip.classList.add('active');
+        chip.style.background = catColor(chip.dataset.cat);
+        chip.style.color = 'white';
+      } else {
+        chip.style.background = '';
+        chip.style.color = '';
+      }
+    });
+  }
+
+  function renderDecisions() {
+    const q = decSearch.value.trim().toLowerCase();
+    const day = decDayFilter.value;
+    const filtered = D.decisions.filter(d => {
+      if (day && d.date !== day) return false;
+      if (activeCat && d.category !== activeCat) return false;
+      if (q) {
+        const hay = (d.id + ' ' + d.title + ' ' + d.context + ' ' + d.decision + ' ' + d.rationale + ' ' + d.tradeoff).toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+    decCount.textContent = filtered.length + ' / ' + D.decisions.length + ' 건';
+    decList.innerHTML = filtered.map(d => `
+      <div class="card">
+        <div class="card-head">
+          <span class="card-id">${d.id}</span>
+          <span class="card-title">${escHtml(d.title)}
+            <span class="cat-tag" style="background:${catColor(d.category)}">${escHtml(catLabel(d.category))}</span>
+          </span>
+          <span class="card-date">${d.date||''}</span>
+        </div>
+        <div class="card-body">
+          ${d.context ? '<h4>맥락</h4><pre>'+escHtml(d.context)+'</pre>' : ''}
+          ${d.decision ? '<h4>결정</h4><pre>'+escHtml(d.decision)+'</pre>' : ''}
+          ${d.rationale ? '<h4>근거</h4><pre>'+escHtml(d.rationale)+'</pre>' : ''}
+          ${d.tradeoff ? '<h4>트레이드오프</h4><pre>'+escHtml(d.tradeoff)+'</pre>' : ''}
+          <h4>원본 위치</h4>
+          <p><a href="../DECISIONS.md">../DECISIONS.md</a> — ${d.id} 섹션</p>
+        </div>
+      </div>`).join('');
+    decList.querySelectorAll('.card-head').forEach(h => {
+      h.addEventListener('click', () => h.parentElement.classList.toggle('expanded'));
+    });
+  }
+  decSearch.addEventListener('input', renderDecisions);
+  decDayFilter.addEventListener('change', renderDecisions);
+  renderDecisions();
+
+  // ===== 세션 =====
+  const sessList = document.getElementById('sess-list');
+  const sessSearch = document.getElementById('sess-search');
+  const sessCount = document.getElementById('sess-count');
+  function renderSessions() {
+    const q = sessSearch.value.trim().toLowerCase();
+    const filtered = D.sessions.filter(s => {
+      if (!q) return true;
+      const hay = (s.file + ' ' + s.title + ' ' + s.intro + ' ' + (s.h2||[]).join(' ')).toLowerCase();
+      return hay.includes(q);
+    });
+    sessCount.textContent = filtered.length + ' / ' + D.sessions.length + ' 건';
+    sessList.innerHTML = filtered.map(s => `
+      <div class="card">
+        <div class="card-head">
+          <span class="card-id">${(s.lines||0)}L</span>
+          <span class="card-title">${escHtml(s.title || s.file)}</span>
+          <span class="card-date">${s.date||''} · <a href="../sessions/${s.file}">원본</a></span>
+        </div>
+        <div class="card-body">
+          ${s.intro ? '<h4>도입부</h4><pre class="intro-quote">'+escHtml(s.intro)+'</pre>' : ''}
+          <h4>H2 구성 (${s.h2_count||0}개)</h4>
+          <ul>${(s.h2||[]).map(h => '<li>'+escHtml(h.replace(/^##\\s*/,''))+'</li>').join('')}</ul>
+          <h4>파일</h4>
+          <p><a href="../sessions/${s.file}">../sessions/${s.file}</a> — ${s.lines}줄, ${(s.bytes/1024).toFixed(1)} KB</p>
+        </div>
+      </div>`).join('');
+    sessList.querySelectorAll('.card-head').forEach(h => {
+      h.addEventListener('click', () => h.parentElement.classList.toggle('expanded'));
+    });
+  }
+  sessSearch.addEventListener('input', renderSessions);
+  renderSessions();
+
+  // ===== 타임라인 =====
+  const timelineBody = document.getElementById('timeline-body');
+  const dayKeys = Object.keys(D.byDay).filter(k => k !== 'unknown').sort();
+  timelineBody.innerHTML = dayKeys.map(day => {
+    const entry = D.byDay[day];
+    const decs = entry.decisions || [];
+    const sessions = entry.sessions || [];
+    const decItems = decs.map(id => {
+      const d = D.decisions.find(x => x.id === id);
+      return d ? `<li><strong>${id}</strong> ${escHtml(d.title)}
+        <span class="cat-tag" style="background:${catColor(d.category)}">${escHtml(catLabel(d.category))}</span></li>` : '';
+    }).join('');
+    const sessItems = sessions.map(f => {
+      const s = D.sessions.find(x => x.file === f);
+      return s ? `<li><a href="../sessions/${f}">${escHtml(s.title || f)}</a> <span class="card-date">(${s.lines}줄)</span></li>` : '';
+    }).join('');
+    const isExplode = decs.length >= 10;
+    return `
+      <div class="timeline-day" style="${isExplode?'border-color:#b8651b;border-width:2px;':''}">
+        <h3>${day} <span class="card-date">— ${decs.length}건 결정 + ${sessions.length}건 세션 ${isExplode?'★ 폭발일':''}</span></h3>
+        ${decItems ? '<div><strong>결정</strong><ul>'+decItems+'</ul></div>' : ''}
+        ${sessItems ? '<div><strong>세션 (추정)</strong><ul>'+sessItems+'</ul></div>' : ''}
+      </div>`;
+  }).join('');
+
+  // ===== 패턴 =====
+  document.getElementById('pat-list').innerHTML = D.patterns.map(p => `
+    <div class="card">
+      <div class="card-head">
+        <span class="card-id">${p.id}</span>
+        <span class="card-title">${escHtml(p.title)}</span>
+      </div>
+      <div class="card-body" style="display:block">
+        <p>${escHtml(p.summary)}</p>
+        <p><a href="04_patterns.md">자세히 → 04_patterns.md</a></p>
+      </div>
+    </div>`).join('');
+
+  // ===== 하네스 =====
+  document.getElementById('har-list').innerHTML = D.harness.map(h => `
+    <div class="card">
+      <div class="card-head">
+        <span class="card-id">${h.id}</span>
+        <span class="card-title">${escHtml(h.title)}</span>
+        <span class="card-date">← ${(h.from||[]).join(', ')}</span>
+      </div>
+      <div class="card-body" style="display:block">
+        <p><a href="05_harness.md">자세히 → 05_harness.md</a></p>
+      </div>
+    </div>`).join('');
+
+  // 패턴 × 하네스 매트릭스
+  const phMatrix = [
+    ['P1', ['H1','H12']],
+    ['P2', ['H2']],
+    ['P3', ['H3','H4','H12']],
+    ['P4', ['H11']],
+    ['P5', ['H5']],
+    ['P6', ['H6']],
+    ['P7', ['H7']],
+    ['P8', ['H8']],
+    ['meta', ['H9','H10']],
+  ];
+  const harnessIds = D.harness.map(h => h.id);
+  let mhtml = '<thead><tr><th></th>' + harnessIds.map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
+  for (const [p, hs] of phMatrix) {
+    mhtml += `<tr><th>${p}</th>`;
+    for (const h of harnessIds) {
+      const hit = hs.includes(h);
+      mhtml += `<td style="background:${hit?'var(--accent)':'transparent'};color:${hit?'white':'var(--muted)'}">${hit?'●':''}</td>`;
+    }
+    mhtml += '</tr>';
+  }
+  mhtml += '</tbody>';
+  document.getElementById('ph-matrix').innerHTML = mhtml;
+
+  // 초기 차트
+  drawDayChart(); drawDonutChart(); drawHeatmap();
+})();
+</script>
+</body>
+</html>
