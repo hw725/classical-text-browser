@@ -970,6 +970,11 @@ async function _requestAiPunctuation() {
       );
     }
 
+    // 잘린 응답 복구 시 경고 (누락 가능성 알림)
+    if (typeof notifyLlmTruncation === "function") {
+      notifyLlmTruncation(data, "표점");
+    }
+
     // AI가 반환한 marks를 적용
     // LLM 인덱스(공백 제거 기준) → targetText 인덱스 → 원문 인덱스로 복원.
     if (data.marks && Array.isArray(data.marks)) {

@@ -1188,6 +1188,9 @@ async function _aiTagAll() {
       const CONCURRENCY = 3;
       let completed = 0;
       const total = sentences.length;
+      // 잘린 응답을 문장별로 집계 — 개별 토스트 남발 대신 끝에 1회 경고.
+      let truncatedSentences = 0;
+      let truncatedRecovered = 0;
 
       for (let i = 0; i < sentences.length; i += CONCURRENCY) {
         const batch = sentences.slice(i, i + CONCURRENCY);
@@ -1207,6 +1210,11 @@ async function _aiTagAll() {
             sentence: sent,
             annotations: data.annotations || [],
             provider: data._provider || "",
+            truncated: data._truncated === true,
+            recovered:
+              typeof data._recovered_count === "number"
+                ? data._recovered_count
+                : 0,
           };
         });
 
@@ -1216,8 +1224,13 @@ async function _aiTagAll() {
             console.warn("문장 태깅 실패:", result.reason);
             continue;
           }
-          const { sentence, annotations, provider } = result.value;
+          const { sentence, annotations, provider, truncated, recovered } =
+            result.value;
           if (provider) providerInfo = provider;
+          if (truncated) {
+            truncatedSentences += 1;
+            truncatedRecovered += recovered;
+          }
 
           for (const ann of annotations) {
             // 문장 로컬 인덱스 → 원문 글로벌 인덱스 변환
@@ -1254,6 +1267,16 @@ async function _aiTagAll() {
           );
         }
       }
+      // 문장 단위 병렬 호출 중 하나라도 잘렸으면 1회 경고 (누락 가능성 알림)
+      if (truncatedSentences > 0 && typeof showToast === "function") {
+        showToast(
+          `LLM 주석 응답이 ${truncatedSentences}개 문장에서 잘려 ` +
+            `완성된 ${truncatedRecovered}개 항목만 복구했습니다 — ` +
+            `누락 가능성이 있으니 해당 문장을 재실행하세요.`,
+          "warning",
+          9000,
+        );
+      }
     } else {
       /* ── 기존 단일 호출 방식 (짧은 텍스트 / 1문장) ── */
       const aiInputText = _composePunctuatedTextForAi(
@@ -1282,6 +1305,11 @@ async function _aiTagAll() {
         "/api/llm/annotation",
       );
       providerInfo = data._provider || "LLM";
+
+      // 잘린 응답 복구 시 경고 (누락 가능성 알림)
+      if (typeof notifyLlmTruncation === "function") {
+        notifyLlmTruncation(data, "주석");
+      }
 
       for (const ann of data.annotations || []) {
         const resolved = _resolveAiAnnotationRangeWithPunctuation(

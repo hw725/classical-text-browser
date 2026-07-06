@@ -1690,6 +1690,38 @@ async function fetchWithSSE(url, body, onProgress, fallbackUrl) {
 
 
 /**
+ * 잘린 LLM 응답 경고 표시.
+ *
+ * 왜 필요한가:
+ *   LLM 응답이 토큰 한도 등으로 중간에 끊기면, 백엔드
+ *   (_state.py의 _salvage_truncated_array_payload)가 완성된 항목만 복구하고
+ *   결과에 _truncated:true·_recovered_count를 실어 보낸다. 이 플래그를 소비해
+ *   연구자에게 알리지 않으면, 불완전한 표점·주석을 완전한 것으로 오인할 수 있다.
+ *   따라서 여기서 토스트로 "잘려서 일부만 복구됨 — 재실행 권장"을 노출한다.
+ *
+ * @param {object} data  파싱된 LLM 결과 (result dict). _truncated 여부를 본다.
+ * @param {string} label 작업 이름 (예: "표점", "주석")
+ * @returns {boolean} 잘림 감지 여부 (호출부에서 추가 처리 판단용)
+ */
+function notifyLlmTruncation(data, label) {
+  if (!data || data._truncated !== true) return false;
+  const n = data._recovered_count;
+  const countText =
+    typeof n === "number" ? `완성된 ${n}개 항목만` : "완성된 항목만";
+  if (typeof showToast === "function") {
+    showToast(
+      `LLM ${label} 응답이 중간에 잘려 ${countText} 복구했습니다 — ` +
+        `누락 가능성이 있으니 재실행을 권장합니다.`,
+      "warning",
+      9000,
+    );
+  }
+  return true;
+}
+window.notifyLlmTruncation = notifyLlmTruncation;
+
+
+/**
  * 에디터 진행 바 표시/숨김.
  * OCR의 _showProgress()와 동일한 패턴이지만 prefix로 DOM ID를 구분한다.
  *
