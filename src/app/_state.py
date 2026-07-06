@@ -769,7 +769,11 @@ def _salvage_truncated_array_payload(raw: str, key: str, _json) -> dict | None:
         return None
 
     logger.warning(f"LLM truncated JSON recovered: key={key}, items={len(items)}")
-    return {key: items}
+    # 잘림 사실을 데이터에 실어 다운스트림(라우터·UI)이 조용히 넘어가지 않게 한다.
+    # LLM 응답이 중간에 끊겨 완성된 항목만 건졌다는 뜻이므로, 연구자가 누락 가능성을
+    # 알 수 있어야 한다. (_truncated·_recovered_count는 _provider/_model처럼 메타 필드라
+    # 실제 annotations/marks 항목과 섞이지 않는다.)
+    return {key: items, "_truncated": True, "_recovered_count": len(items)}
 
 
 def _parse_llm_json(response, _json) -> dict:
