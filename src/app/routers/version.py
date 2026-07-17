@@ -20,7 +20,6 @@ API 엔드포인트:
 import io
 import json
 import logging
-import re
 import shutil
 import subprocess
 from datetime import datetime, timezone
@@ -30,7 +29,8 @@ from fastapi import APIRouter, File, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from app._state import _resolve_repo_path, get_library_path
+from app._state import _resolve_repo_path, get_library_path, require_repo_path
+from core.repo_id import REPO_ID_RULE_TEXT, is_valid_repo_id
 from core.git_graph import (
     get_commit_file_content,
     get_commit_file_list,
@@ -91,7 +91,7 @@ async def api_git_graph(
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     manifest_path = interp_path / "manifest.json"
 
     if not manifest_path.exists():
@@ -253,7 +253,7 @@ async def api_export_json(interp_id: str):
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     manifest_path = interp_path / "manifest.json"
 
     if not manifest_path.exists():
@@ -414,12 +414,13 @@ async def api_import_interpretation_folder(files: list[UploadFile] = File(...)):
             {"error": "manifest.json의 interpretation_id가 누락되었습니다."},
             status_code=400,
         )
-    if not re.match(r"^[a-z][a-z0-9_]{0,63}$", interp_id):
+    # 규칙 정본: core/repo_id.py
+    if not is_valid_repo_id(interp_id):
         return JSONResponse(
             {
                 "error": (
                     f"해석 저장소 ID 형식이 올바르지 않습니다: '{interp_id}'\n"
-                    "→ 해결: 영문 소문자로 시작하고, 소문자·숫자·밑줄만 사용하세요."
+                    f"→ 해결: {REPO_ID_RULE_TEXT}."
                 )
             },
             status_code=400,
@@ -431,7 +432,8 @@ async def api_import_interpretation_folder(files: list[UploadFile] = File(...)):
             status_code=400,
         )
 
-    source_manifest = _library_path / "documents" / source_document_id / "manifest.json"
+    # require_repo_path가 ID 형식(경로 탈출)까지 검증한다 — 규칙 정본: core/repo_id.py
+    source_manifest = require_repo_path("documents", source_document_id) / "manifest.json"
     if not source_manifest.exists():
         return JSONResponse(
             {
@@ -443,7 +445,7 @@ async def api_import_interpretation_folder(files: list[UploadFile] = File(...)):
             status_code=404,
         )
 
-    target_interp_path = _library_path / "interpretations" / interp_id
+    target_interp_path = require_repo_path("interpretations", interp_id)
 
     # ── 이미 존재하면: 파일 건드리지 않고 등록만 확인하고 끝 ──
     if target_interp_path.exists():

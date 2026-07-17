@@ -22,10 +22,53 @@ _ocr_registry = None
 _ocr_pipeline = None
 _llm_result_cache: dict[str, tuple[float, dict]] = {}
 
-# 저장소 ID 패턴: 영문 소문자로 시작, 소문자·숫자·밑줄만 허용 (최대 64자)
-# document.py의 _DOC_ID_PATTERN, interpretation.py의 _INTERP_ID_PATTERN과 동일한 규칙.
+# 저장소 ID 패턴 — 단일 진실원은 core/repo_id.py.
 # 경로 탈출(../ 등)을 원천 차단하기 위해 API 계층에서도 검증한다.
-_REPO_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+from core.repo_id import REPO_ID_PATTERN as _REPO_ID_PATTERN  # noqa: E402
+from core.repo_id import REPO_ID_RULE_TEXT as _REPO_ID_RULE_TEXT  # noqa: E402
+
+
+class RepoPathError(Exception):
+    """저장소 경로 확보 실패 — require_repo_path()가 던진다.
+
+    server.py에 등록된 예외 핸들러가 이 예외를
+    JSONResponse({"error": ...}, status_code)로 변환한다.
+
+    왜 예외 방식인가:
+        라우터 ~95곳이 `_library_path / "documents" / doc_id` 식으로 경로를
+        인라인 조립하면서 ID 검증이 누락돼 있었다 (2026-07-17 감사 축②).
+        반환값 None을 검사하는 방식이면 95곳마다 오류 분기가 복제되지만,
+        예외 방식이면 각 지점이 한 줄 치환으로 끝나고 오류 응답 형식이
+        핸들러 한 곳에 모인다.
+    """
+
+    def __init__(self, message: str, status_code: int):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def require_repo_path(repo_type: str, repo_id) -> Path:
+    """검증된 저장소 경로를 반환한다. 실패 시 RepoPathError를 던진다.
+
+    입력: repo_type — "documents" 또는 "interpretations".
+          repo_id — 문헌/해석 저장소 ID (형식 검증됨).
+    출력: <서고>/<repo_type>/<repo_id> 경로 (존재 여부는 검사하지 않음 —
+          존재 검사와 404 응답은 호출부의 책임이다).
+    예외: RepoPathError — 서고 미설정(500), 유형/ID 형식 위반(400).
+          ID 검증이 경로 탈출(../)을 원천 차단한다.
+    """
+    if _library_path is None:
+        raise RepoPathError("서고가 설정되지 않았습니다.", 500)
+    if repo_type not in ("documents", "interpretations"):
+        raise RepoPathError(f"알 수 없는 저장소 유형입니다: {repo_type}", 400)
+    rid = str(repo_id or "")
+    if not _REPO_ID_PATTERN.match(rid):
+        label = "문헌" if repo_type == "documents" else "해석 저장소"
+        raise RepoPathError(
+            f"{label} ID 형식이 올바르지 않습니다: {rid!r}\n→ {_REPO_ID_RULE_TEXT}",
+            400,
+        )
+    return _library_path / repo_type / rid
 
 
 # ── 상태 접근 함수 ───────────────────────────
@@ -814,7 +857,7 @@ def _sanitize_json_control_chars(raw: str) -> str:
     return "".join(out)
 
 
-def _parse_llm_json(response, _json) -> dict:  # type: ignore[no-redef]
+def _parse_llm_json(response, _json) -> dict:
     """Robust JSON parser for occasionally truncated / malformed LLM outputs."""
     raw = (response.text or "").strip()
 

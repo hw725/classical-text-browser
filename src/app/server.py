@@ -7,8 +7,8 @@ D-001: 이 플랫폼의 주 인터페이스는 GUI이며, CLI는 보조 도구�
     이 파일은 FastAPI 앱 생성과 라우터 마운트만 담당한다.
     실제 API 엔드포인트는 app/routers/ 패키지의 8개 라우터 모듈에 분산:
 
-    routers/library.py       — 서고/설정/백업/휴지통 (15 라우트)
-    routers/documents.py     — 문헌 CRUD/페이지/교정/서지/파서 (32 라우트)
+    routers/library.py       — 서고/설정/백업/휴지통 (16 라우트)
+    routers/documents.py     — 문헌 CRUD/페이지/교정/서지/파서 (34 라우트)
     routers/interpretations.py — 해석 CRUD/레이어/의존/엔티티 (23 라우트)
     routers/llm_ocr.py       — LLM 상태·분석·초안 + OCR 엔진·실행 (14 라우트)
     routers/alignment.py     — 이체자 사전/정렬/일괄교정 (17 라우트)
@@ -30,7 +30,11 @@ _src_dir = str(Path(__file__).resolve().parent.parent)
 if _src_dir not in sys.path:
     sys.path.insert(0, _src_dir)
 
-from app._state import configure_library, set_library_path  # noqa: E402,F401
+from app._state import (  # noqa: E402,F401
+    RepoPathError,
+    configure_library,
+    set_library_path,
+)
 from app.routers import (  # noqa: E402,F401
     alignment,
     annotation,
@@ -47,6 +51,17 @@ app = FastAPI(
     description="사람과 LLM이 함께 고전 텍스트를 읽고 번역하고 연구하는 통합 작업 환경",
     version="1.1.4",
 )
+
+
+# ── 저장소 경로 오류 → 표준 에러 응답 변환 ─────────────
+# require_repo_path()(_state.py)가 던지는 RepoPathError를 이 프로젝트의
+# 에러 규약({"error": ...} + 상태코드)으로 바꾼다. 라우터 각 지점에
+# 오류 분기를 복제하지 않기 위한 단일 변환 지점이다.
+@app.exception_handler(RepoPathError)
+async def _repo_path_error_handler(request, exc: RepoPathError):
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse({"error": str(exc)}, status_code=exc.status_code)
 
 # ── 라우터 마운트 ─────────────────────────────────
 app.include_router(library.router)

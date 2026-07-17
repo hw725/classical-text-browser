@@ -24,8 +24,10 @@ from pathlib import Path
 
 import git
 
-# 문헌 ID 패턴: manifest.schema.json의 document_id 규칙과 동일
-_DOC_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+from core.repo_id import REPO_ID_PATTERN
+
+# 문헌 ID 패턴 — 단일 진실원은 core/repo_id.py (기존 이름은 하위 호환 별칭)
+_DOC_ID_PATTERN = REPO_ID_PATTERN
 
 
 def add_document(
@@ -2103,38 +2105,50 @@ async def create_document_from_url(
     else:
         doc_path = add_document(library_path, effective_title, doc_id)
 
-    # 6. manifest.json의 parts에 페이지 수와 라벨 업데이트
-    manifest = get_document_info(doc_path)
-    for i, part in enumerate(manifest.get("parts", [])):
-        if i < len(asset_parts_info):
-            part["page_count"] = asset_parts_info[i].get("page_count")
-            part["label"] = asset_parts_info[i]["label"]
-    if bibliography:
-        manifest["completeness_status"] = "bibliography_added"
-    _write_json(doc_path / "manifest.json", manifest)
-
-    # 7. 서지정보 저장
-    # 왜 try/except로 감싸는가:
-    #   문헌 폴더 + 이미지가 이미 생성된 상태에서 서지정보 검증만 실패하면
-    #   전체를 502로 날리는 것은 연구자에게 큰 손실이다.
-    #   서지정보 저장이 실패해도 문헌 자체는 생성 완료로 처리하고,
-    #   경고를 반환하여 나중에 서지정보를 수동으로 수정할 수 있게 한다.
-    bib_warning = None
+    # 6~8은 문헌 폴더가 이미 생긴 뒤의 마무리 단계다. 여기서 실패하면
+    # 부분 생성물(manifest 미완성·커밋 안 된 문헌)이 남던 것이
+    # 2026-07-17 감사에서 확인되었다 (create-from-files와 실패 시맨틱 비등가).
+    # 실패 시 폴더를 정리하고 예외를 다시 던져 "실패 = 아무것도 안 남음"을
+    # create-from-files와 동일하게 보장한다.
     try:
-        save_bibliography(doc_path, bibliography)
-    except Exception as bib_err:
-        bib_warning = f"서지정보 저장 실패 (문헌은 생성됨): {bib_err}"
-        # 검증 실패한 원본 데이터를 그대로 파일에 저장 (검증 건너뛰기)
-        # 왜: 연구자가 나중에 서지 편집 탭에서 수정할 수 있도록 보존한다.
-        try:
-            _write_json(doc_path / "bibliography.json", bibliography)
-        except Exception:
-            pass
+        # 6. manifest.json의 parts에 페이지 수와 라벨 업데이트
+        manifest = get_document_info(doc_path)
+        for i, part in enumerate(manifest.get("parts", [])):
+            if i < len(asset_parts_info):
+                part["page_count"] = asset_parts_info[i].get("page_count")
+                part["label"] = asset_parts_info[i]["label"]
+        if bibliography:
+            manifest["completeness_status"] = "bibliography_added"
+        _write_json(doc_path / "manifest.json", manifest)
 
-    # 8. git commit
-    repo = git.Repo(doc_path)
-    repo.git.add("-A")  # git 바이너리 호출 — .git/ 내부 추가 방지
-    repo.index.commit(f"feat: URL에서 문헌 생성 ({parser_id})")
+        # 7. 서지정보 저장
+        # 왜 try/except로 감싸는가:
+        #   문헌 폴더 + 이미지가 이미 생성된 상태에서 서지정보 검증만 실패하면
+        #   전체를 502로 날리는 것은 연구자에게 큰 손실이다.
+        #   서지정보 저장이 실패해도 문헌 자체는 생성 완료로 처리하고,
+        #   경고를 반환하여 나중에 서지정보를 수동으로 수정할 수 있게 한다.
+        bib_warning = None
+        try:
+            save_bibliography(doc_path, bibliography)
+        except Exception as bib_err:
+            bib_warning = f"서지정보 저장 실패 (문헌은 생성됨): {bib_err}"
+            # 검증 실패한 원본 데이터를 그대로 파일에 저장 (검증 건너뛰기)
+            # 왜: 연구자가 나중에 서지 편집 탭에서 수정할 수 있도록 보존한다.
+            try:
+                _write_json(doc_path / "bibliography.json", bibliography)
+            except Exception:
+                pass
+
+        # 8. git commit — with 문으로 열어 실패 시에도 .git 핸들이 닫히게 한다
+        # (Windows에서 핸들이 열려 있으면 아래 rmtree가 부분 실패한다)
+        with git.Repo(doc_path) as repo:
+            repo.git.add("-A")  # git 바이너리 호출 — .git/ 내부 추가 방지
+            repo.index.commit(f"feat: URL에서 문헌 생성 ({parser_id})")
+    except Exception:
+        # Windows에서 .git 내부 읽기전용 파일 때문에 일부가 남을 수 있으나
+        # (ignore_errors), 최선의 정리를 시도한 뒤 원래 예외를 그대로 올린다.
+        shutil.rmtree(doc_path, ignore_errors=True)
+        raise
 
     result = {
         "doc_path": str(doc_path),

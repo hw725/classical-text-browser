@@ -13,7 +13,7 @@ from fastapi import APIRouter, BackgroundTasks, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app._state import get_library_path
+from app._state import _resolve_repo_path, get_library_path, require_repo_path
 from core.entity import (
     auto_create_work,
     create_entity,
@@ -222,7 +222,7 @@ async def api_interpretation(interp_id: str):
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     try:
         return get_interpretation_info(interp_path)
     except FileNotFoundError:
@@ -296,7 +296,7 @@ async def api_layer_content(
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
@@ -340,7 +340,7 @@ async def api_layer_content_at_commit(
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
@@ -374,7 +374,7 @@ async def api_save_layer_content(
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
@@ -416,7 +416,7 @@ async def api_interp_git_log(
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
@@ -440,7 +440,7 @@ async def api_interp_manual_commit(interp_id: str, body: ManualCommitRequest, bg
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
@@ -468,7 +468,7 @@ async def api_create_entity(interp_id: str, body: EntityCreateRequest):
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
@@ -503,7 +503,7 @@ async def api_entities_for_page(
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
@@ -530,7 +530,7 @@ async def api_list_entities(
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
@@ -582,7 +582,7 @@ async def api_get_entity(interp_id: str, entity_type: str, entity_id: str):
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
@@ -614,7 +614,7 @@ async def api_update_entity(
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
@@ -655,7 +655,7 @@ async def api_create_textblock_from_source(
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
@@ -711,7 +711,7 @@ async def api_compose_textblock(
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
@@ -723,13 +723,16 @@ async def api_compose_textblock(
 
     refs_with_commit = []
     for ref in body.source_refs:
-        doc_path = _library_path / "documents" / ref.document_id
+        # ID 형식이 안 맞는 ref는 커밋 해시만 비운 채 계속 진행한다
+        # (이 루프는 best-effort 보강이므로 요청 전체를 거절하지 않는다).
+        doc_path = _resolve_repo_path("documents", ref.document_id)
         commit_hash = None
-        try:
-            repo = _git.Repo(doc_path)
-            commit_hash = repo.head.commit.hexsha
-        except Exception:
-            pass
+        if doc_path is not None:
+            try:
+                repo = _git.Repo(doc_path)
+                commit_hash = repo.head.commit.hexsha
+            except Exception:
+                pass
         refs_with_commit.append(
             {
                 "document_id": ref.document_id,
@@ -798,7 +801,7 @@ async def api_split_textblock(interp_id: str, body: SplitTextBlockRequest, bg: B
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
@@ -833,7 +836,10 @@ async def api_split_textblock(interp_id: str, body: SplitTextBlockRequest, bg: B
 
     for ref in inherited_refs:
         if not ref.get("commit"):
-            doc_path = _library_path / "documents" / ref.get("document_id", "")
+            # ID 형식이 안 맞는 ref는 건너뛴다 (best-effort 보강 — 기존 관용 동작 유지)
+            doc_path = _resolve_repo_path("documents", ref.get("document_id", ""))
+            if doc_path is None:
+                continue
             try:
                 repo = _git.Repo(doc_path)
                 ref["commit"] = repo.head.commit.hexsha
@@ -933,7 +939,7 @@ async def api_reset_composition(interp_id: str, body: ResetCompositionRequest, b
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
@@ -981,7 +987,7 @@ async def api_auto_create_work(interp_id: str, body: AutoCreateWorkRequest):
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
@@ -1017,7 +1023,7 @@ async def api_promote_tag(
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},

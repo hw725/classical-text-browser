@@ -24,6 +24,7 @@ from app._state import (
     _call_llm_text_stream,
     get_external_punctuation_url,
     get_library_path,
+    require_repo_path,
 )
 from core.hyeonto import (
     add_annotation,
@@ -220,7 +221,7 @@ async def api_l5_compare(
             status_code=400,
         )
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."},
@@ -345,7 +346,7 @@ async def api_l5_compare_at_commit(
             status_code=400,
         )
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."},
@@ -371,7 +372,7 @@ async def api_get_punctuation(interp_id: str, page_num: int, block_id: str = Que
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."},
@@ -394,7 +395,7 @@ async def api_save_punctuation(interp_id: str, page_num: int, body: PunctuationS
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."},
@@ -423,7 +424,7 @@ async def api_add_mark(interp_id: str, page_num: int, block_id: str, body: MarkA
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     part_id = "main"
 
     data = load_punctuation(interp_path, part_id, page_num, block_id)
@@ -446,7 +447,7 @@ async def api_delete_mark(interp_id: str, page_num: int, block_id: str, mark_id:
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     part_id = "main"
 
     data = load_punctuation(interp_path, part_id, page_num, block_id)
@@ -469,7 +470,7 @@ async def api_punctuation_preview(interp_id: str, page_num: int, block_id: str):
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     part_id = "main"
 
     # 표점 로드
@@ -503,7 +504,7 @@ async def api_get_hyeonto(interp_id: str, page_num: int, block_id: str = Query(.
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."},
@@ -522,7 +523,7 @@ async def api_save_hyeonto(interp_id: str, page_num: int, body: HyeontoSaveReque
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."},
@@ -555,7 +556,7 @@ async def api_add_annotation(
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     part_id = "main"
 
     data = load_hyeonto(interp_path, part_id, page_num, block_id)
@@ -583,7 +584,7 @@ async def api_delete_annotation(interp_id: str, page_num: int, block_id: str, an
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     part_id = "main"
 
     data = load_hyeonto(interp_path, part_id, page_num, block_id)
@@ -606,7 +607,7 @@ async def api_hyeonto_preview(interp_id: str, page_num: int, block_id: str):
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     part_id = "main"
 
     # L4 원문 로드
@@ -650,7 +651,7 @@ async def api_get_translations(
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."},
@@ -671,7 +672,7 @@ async def api_translation_status(interp_id: str, page_num: int):
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     part_id = "main"
     data = load_translations(interp_path, part_id, page_num)
     return get_translation_status(data)
@@ -687,7 +688,7 @@ async def api_add_translation(interp_id: str, page_num: int, body: TranslationAd
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     part_id = "main"
 
     data = load_translations(interp_path, part_id, page_num)
@@ -725,7 +726,7 @@ async def api_update_translation(
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     part_id = "main"
 
     data = load_translations(interp_path, part_id, page_num)
@@ -767,7 +768,7 @@ async def api_commit_translation(
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     part_id = "main"
 
     data = load_translations(interp_path, part_id, page_num)
@@ -797,7 +798,7 @@ async def api_delete_translation(interp_id: str, page_num: int, translation_id: 
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     part_id = "main"
 
     data = load_translations(interp_path, part_id, page_num)
@@ -838,7 +839,7 @@ async def api_get_notes(
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
@@ -869,7 +870,7 @@ async def api_save_notes(
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    interp_path = _library_path / "interpretations" / interp_id
+    interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
         return JSONResponse(
             {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},

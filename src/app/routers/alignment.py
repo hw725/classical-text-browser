@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from starlette.responses import Response
 
-from app._state import get_library_path
+from app._state import get_library_path, require_repo_path
 
 router = APIRouter(tags=["alignment"])
 
@@ -197,7 +197,7 @@ async def api_run_alignment(
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    doc_path = _library_path / "documents" / doc_id
+    doc_path = require_repo_path("documents", doc_id)
     if not doc_path.exists():
         return JSONResponse(
             {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
@@ -542,7 +542,7 @@ async def api_export_variant_dict(name: str, format: str = "json"):
 async def api_batch_correction_preview(doc_id: str, body: BatchCorrectionRequest):
     """일괄 교정 미리보기 — 대상 글자가 어느 페이지에서 몇 건 매칭되는지 반환한다."""
     _library_path = get_library_path()
-    doc_path = _library_path / "documents" / doc_id
+    doc_path = require_repo_path("documents", doc_id)
 
     from core.document import search_char_in_pages
 
@@ -566,7 +566,7 @@ async def api_batch_correction_execute(
 ):
     """일괄 교정 실행 — 매칭되는 모든 위치에 교정을 적용한다."""
     _library_path = get_library_path()
-    doc_path = _library_path / "documents" / doc_id
+    doc_path = require_repo_path("documents", doc_id)
 
     from core.document import apply_batch_corrections, git_commit_document
 
