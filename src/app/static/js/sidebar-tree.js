@@ -309,7 +309,7 @@ async function _getPageCountFromApi(docId) {
  *
  * 구조:
  *   <div class="tree-node tree-page" data-page="1">
- *     <span class="tree-page-icon">📄</span>
+ *     <span class="tree-page-icon"></span>  ← 아이콘은 CSS ::before(▪)로 그린다
  *     <span class="tree-label">1페이지</span>
  *   </div>
  */

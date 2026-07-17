@@ -75,6 +75,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (typeof initReaderLine === "function") _safeInit("ReaderLine", initReaderLine);
   // 비고/메모 패널 초기화
   if (typeof initNotesPanel === "function") _safeInit("NotesPanel", initNotesPanel);
+  // 드래그 앤 드롭 온보딩 (PDF/이미지 드롭 → 새 문헌)
+  if (typeof initDragDrop === "function") _safeInit("DragDrop", initDragDrop);
   // 하단 패널 제거됨: 모든 탭이 액티비티 바 사이드바로 이동
 
   // 전 모드 LLM 모델 드롭다운 채우기 (모든 init 완료 후 한 번만)
@@ -1027,7 +1029,11 @@ function _loadDocumentList() {
   loadLibraryInfo();
 }
 
-async function loadLibraryInfo() {
+async function loadLibraryInfo(options) {
+  // restoreHash: false면 URL 해시 기반 열람 위치 복원을 건너뛴다.
+  // 문헌 생성 직후의 사이드바 갱신(create-document.js)처럼 "목록만 새로
+  // 그리고 싶은" 호출자가 쓴다 — 복원까지 하면 보던 화면이 다시 로드된다.
+  const restoreHash = options?.restoreHash !== false;
   try {
     // 서고 정보
     const libRes = await fetch("/api/library");
@@ -1052,8 +1058,21 @@ async function loadLibraryInfo() {
       renderDocumentList(docs);
     }
 
+    // 서고는 있지만 문헌이 하나도 없을 때 — 드래그 앤 드롭 시작 안내.
+    // 왜: 첫 사용자가 "+ 새 문헌"을 찾기 전에 가장 빠른 길을 먼저 보여준다.
+    if (docs.length === 0) {
+      const docList = document.getElementById("document-list");
+      if (docList) {
+        docList.insertAdjacentHTML(
+          "beforeend",
+          '<div class="drop-hint">PDF나 이미지 파일(폴더)을<br />' +
+            "이 창 안 어디에든 끌어다 놓으면<br />바로 문헌으로 등록됩니다.</div>",
+        );
+      }
+    }
+
     // URL 해시에서 열람 위치 복원 (Plan 4)
-    _restoreFromHash();
+    if (restoreHash) _restoreFromHash();
   } catch (err) {
     // 서고 미설정 또는 API 연결 실패 — 서고 선택 안내를 표시
     const docList = document.getElementById("document-list");
@@ -1061,7 +1080,9 @@ async function loadLibraryInfo() {
       '<div class="placeholder no-library-guide">' +
       '  <p>서고가 연결되지 않았습니다.</p>' +
       '  <button class="btn-sm btn-primary" id="btn-goto-settings">서고 설정 열기</button>' +
-      '</div>';
+      '  <div class="drop-hint">또는 PDF·이미지를 이 창에 끌어다 놓으세요.<br />' +
+      "기본 서고를 자동으로 만들어 바로 시작합니다.</div>" +
+      "</div>";
     const goBtn = document.getElementById("btn-goto-settings");
     if (goBtn) {
       goBtn.addEventListener("click", () => {
@@ -1380,7 +1401,9 @@ function _fillLlmSelect(select, models) {
     opt.value = `${m.provider}:${m.model}`;
     const icon = m.available ? "●" : "○";
     const costLabel = m.cost === "free" ? "" : " [유료]";
-    const visionLabel = m.vision ? " 👁" : "";
+    // <option> 안에는 SVG를 넣을 수 없다 — 이모지(👁)는 OS 폰트에 따라
+    // 렌더링이 크게 달라 텍스트 라벨로 표기한다.
+    const visionLabel = m.vision ? " [비전]" : "";
     opt.textContent = `${icon} ${m.display}${costLabel}${visionLabel}`;
     opt.disabled = !m.available;
     select.appendChild(opt);

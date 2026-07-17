@@ -8,6 +8,11 @@
     />
     <title>고전 텍스트 디지털 서고</title>
     <link
+      rel="icon"
+      type="image/svg+xml"
+      href="/static/favicon.svg"
+    />
+    <link
       rel="stylesheet"
       href="/static/css/workspace.css"
     />
@@ -46,13 +51,14 @@
           title="Git 이력"
           aria-label="Git 이력"
         >
+          <!-- Feather git-branch — 트렁크에서 갈라진 가지. 이전 자작 3노드 글리프는
+               가지 선이 노드 중심을 관통해 어색했고, 커밋 그래프보다 네트워크도처럼 읽혔다. -->
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
-               stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <circle cx="7" cy="5" r="2.5"/>
-            <circle cx="7" cy="19" r="2.5"/>
-            <circle cx="17" cy="12" r="2.5"/>
-            <line x1="7" y1="7.5" x2="7" y2="16.5"/>
-            <path d="M9.5 5c4.5 0 7.5 3 7.5 7"/>
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="6" y1="3" x2="6" y2="15"/>
+            <circle cx="18" cy="6" r="3"/>
+            <circle cx="6" cy="18" r="3"/>
+            <path d="M18 9a9 9 0 0 1-9 9"/>
           </svg>
         </button>
         <!-- 검증 결과 -->
@@ -1001,7 +1007,13 @@
                   title="맞춤 모드 전환 (가로/세로/해제)"
                   aria-label="맞춤 모드 전환"
                 >
-                  &#8862;
+                  <!-- 화면 맞춤 (기존 ⊞ 글리프는 의미 추정이 어려워 SVG로 교체) -->
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3"/>
+                    <path d="M21 8V5a2 2 0 0 0-2-2h-3"/>
+                    <path d="M3 16v3a2 2 0 0 0 2 2h3"/>
+                    <path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
+                  </svg>
                 </button>
                 <span
                   id="pdf-fit-label"
@@ -1015,7 +1027,11 @@
                   title="이미지 필터 전환 (원본/흑백/고대비/반전)"
                   aria-label="이미지 필터"
                 >
-                  &#9681;
+                  <!-- 대비(contrast) — 기존 ◑ 문자를 폰트 편차 없는 SVG로 교체 -->
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9"/>
+                    <path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/>
+                  </svg>
                 </button>
                 <span
                   id="pdf-filter-label"
@@ -1051,7 +1067,12 @@
                   title="읽기 보조선 (R)"
                   aria-label="읽기 보조선"
                 >
-                  &#9473;
+                  <!-- 읽기 보조선 — 본문 행 위에 강조선이 놓인 모양 (기존 ━ 문자 교체) -->
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                    <line x1="5" y1="6" x2="19" y2="6" opacity="0.35"/>
+                    <line x1="3" y1="12" x2="21" y2="12" stroke-width="2.8"/>
+                    <line x1="5" y1="18" x2="19" y2="18" opacity="0.35"/>
+                  </svg>
                 </button>
               </div>
               <!-- 캔버스 영역 -->
@@ -1326,7 +1347,13 @@
                   style="display: none"
                 >
                   <span class="ocr-lang-warning">
-                    &#9888; 한문(漢文)·일본어만 인식 가능합니다. 한글은 인식할 수 없습니다.
+                    <!-- 경고 아이콘을 toast.js와 같은 SVG로 통일 (기존 ⚠ 엔티티) -->
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align: -1px">
+                      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                      <line x1="12" y1="9" x2="12" y2="13"/>
+                      <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    한문(漢文)·일본어만 인식 가능합니다. 한글은 인식할 수 없습니다.
                   </span>
                 </div>
 
@@ -1911,7 +1938,14 @@
               class="interp-dep-banner"
               style="display: none"
             >
-              <span class="interp-dep-icon">&#9888;</span>
+              <span class="interp-dep-icon">
+                <!-- 경고 아이콘을 toast.js와 같은 SVG로 통일 (기존 ⚠ 엔티티) -->
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              </span>
               <span
                 id="interp-dep-msg"
                 class="interp-dep-msg"
@@ -3922,15 +3956,15 @@
                 ></div>
               </div>
 
-              <!-- 문헌 ID -->
+              <!-- 문헌 ID — 비워두면 서버가 파일명/날짜에서 자동 생성한다 -->
               <label class="bib-edit-label"
-                >문헌 ID (영문 소문자/숫자/밑줄)</label
+                >문헌 ID (선택 — 비워두면 자동 생성)</label
               >
               <input
                 id="create-doc-id"
                 type="text"
                 class="bib-input"
-                placeholder="예: monggu"
+                placeholder="예: monggu (영문 소문자/숫자/밑줄)"
               />
 
               <!-- 문헌 제목 (선택) -->
@@ -4456,7 +4490,8 @@
     <script src="/static/js/bibliography.js?v=20260220c"></script>
     <script src="/static/js/interpretation.js?v=20260224e"></script>
     <script src="/static/js/entity-manager.js?v=20260220c"></script>
-    <script src="/static/js/create-document.js?v=20260430h"></script>
+    <script src="/static/js/create-document.js?v=20260717b"></script>
+    <script src="/static/js/drag-drop.js?v=20260717a"></script>
     <script src="/static/js/hwp-import.js?v=20260223b"></script>
     <script src="/static/js/ocr-panel.js?v=20260220c"></script>
     <script src="/static/js/alignment-view.js?v=20260223"></script>
@@ -4466,12 +4501,12 @@
     <script src="/static/js/punctuation-editor.js?v=20260706a"></script>
     <script src="/static/js/hyeonto-editor.js?v=20260220c"></script>
     <script src="/static/js/translation-editor.js?v=20260220c"></script>
-    <script src="/static/js/annotation-editor.js?v=20260706a"></script>
+    <script src="/static/js/annotation-editor.js?v=20260717a"></script>
     <script src="/static/js/cite-format-manager.js?v=20260224"></script>
     <script src="/static/js/citation-editor.js?v=20260224b"></script>
     <script src="/static/js/git-graph.js?v=20260220c"></script>
     <script src="/static/js/reader-line.js?v=20260220c"></script>
     <script src="/static/js/notes-panel.js?v=20260220c"></script>
-    <script src="/static/js/workspace.js?v=20260706a"></script>
+    <script src="/static/js/workspace.js?v=20260717b"></script>
   </body>
 </html>

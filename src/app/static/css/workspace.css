@@ -6824,3 +6824,72 @@ button.mode-tab {
 .toast-info .toast-icon {
   color: var(--accent);
 }
+
+/* PDF 툴바 버튼 안의 SVG 아이콘 — 텍스트 글리프와 같은 자리에 수직 정렬 */
+.pdf-btn svg {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* ──────────────────────────
+   드래그 앤 드롭 온보딩 (drag-drop.js)
+   ────────────────────────── */
+
+/* 전체 화면 드롭 오버레이 — 파일을 끌고 들어오면 표시된다.
+   pointer-events: none이 핵심: 오버레이 자체가 dragleave를 유발하면
+   깜빡임이 생기므로, 이벤트는 전부 window에서 받고 이건 순수 표시용. */
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.drop-overlay-visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.drop-overlay-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 36px 48px;
+  border: 2px dashed var(--accent);
+  border-radius: 12px;
+  background: var(--bg-primary);
+  color: var(--accent);
+}
+
+.drop-overlay-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary, inherit);
+}
+
+.drop-overlay-sub {
+  font-size: 12px;
+  opacity: 0.75;
+  color: var(--text-primary, inherit);
+}
+
+/* 빈 서고/미연결 상태의 드롭 안내 (사이드바 placeholder 하단) */
+.drop-hint {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1.5px dashed var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  opacity: 0.85;
+  text-align: center;
+}

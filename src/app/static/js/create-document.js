@@ -40,6 +40,13 @@ let _activeMode = "url";
 /** 로컬 모드에서 사용자가 선택한 File 객체 목록 */
 let _localFiles = [];
 
+/**
+ * 문헌/해석 ID 형식 — 프론트 유일 사본.
+ * 규칙의 정본은 백엔드 src/core/repo_id.py의 REPO_ID_PATTERN이다.
+ * 규칙을 바꿀 때는 그 파일과 이 상수, 두 곳만 맞추면 된다.
+ */
+const _DOC_ID_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
+
 
 /* ──────────────────────────
    초기화
@@ -488,19 +495,33 @@ const _LOCAL_ALLOWED_EXT = ["pdf", "jpg", "jpeg", "png", "tif", "tiff"];
  *     사용자 의도는 "한 번 더 누른 실수"일 가능성이 높다.
  */
 function _onLocalFilesChanged(e) {
+  const fileList = e?.target?.files || [];
+  _acceptIncomingLocalFiles(Array.from(fileList));
+  // input은 비워서 같은 파일을 다시 선택할 수 있게 한다.
+  if (e?.target) e.target.value = "";
+}
+
+
+/**
+ * 파일 배열을 검증해 _localFiles에 누적한다.
+ *
+ * 왜 분리했는가:
+ *   파일 선택(input change)과 드래그 앤 드롭(drag-drop.js) 두 진입점이
+ *   같은 확장자/중복 규칙을 공유해야 한다. 한쪽에만 고치면 갈라지므로
+ *   필터 로직을 단일 함수로 모은다.
+ */
+function _acceptIncomingLocalFiles(incoming) {
   const statusEl = document.getElementById("create-doc-local-status");
   if (statusEl) {
     statusEl.textContent = "";
     statusEl.style.color = "";
   }
 
-  const fileList = e?.target?.files || [];
-  if (fileList.length === 0) {
+  if (!incoming || incoming.length === 0) {
     _refreshLocalFilesUI();
     return;
   }
 
-  const incoming = Array.from(fileList);
   const invalid = [];
   const pdfDuplicates = []; // PDF는 이름 충돌이 manifest part에 영향 → 차단
   const accepted = [];
@@ -540,10 +561,43 @@ function _onLocalFilesChanged(e) {
     }
   }
 
-  // input은 비워서 같은 파일을 다시 선택할 수 있게 한다.
-  if (e?.target) e.target.value = "";
-
   _refreshLocalFilesUI();
+}
+
+
+/**
+ * 드래그 앤 드롭 진입점 — 드롭된 파일로 다이얼로그를 로컬 모드로 연다.
+ *
+ * drag-drop.js에서 호출한다. 유효한 파일이 있으면 곧장 Step2로 건너뛰어
+ * doc_id/제목이 자동 채워진 상태에서 "문헌 생성" 한 번만 누르면 되게 한다.
+ * (doc_id는 비워도 서버가 자동 생성하므로 사실상 클릭 한 번이 전부다.)
+ */
+// eslint-disable-next-line no-unused-vars
+function openCreateDocDialogWithFiles(files) {
+  const overlay = document.getElementById("create-doc-overlay");
+  if (!overlay) return;
+
+  // 드롭 파일로 새로 시작 — 이전 다이얼로그 상태를 초기화한다
+  _previewData = null;
+  _localFiles = [];
+  _switchCreateDocMode("local");
+  _showStep1();
+
+  const docIdInput = document.getElementById("create-doc-id");
+  if (docIdInput) docIdInput.value = "";
+  const titleInput = document.getElementById("create-doc-title");
+  if (titleInput) titleInput.value = "";
+  const createStatusEl = document.getElementById("create-doc-create-status");
+  if (createStatusEl) createStatusEl.textContent = "";
+
+  _acceptIncomingLocalFiles(Array.from(files || []));
+
+  overlay.style.display = "flex";
+
+  // 전부 거부됐으면 Step1에 머물러 상태 메시지(지원 안 함 등)를 보여준다.
+  if (_localFiles.length > 0) {
+    _proceedFromLocal();
+  }
 }
 
 
@@ -699,14 +753,18 @@ function _proceedFromLocal() {
   _toggleStep2Sections("local");
   _renderLocalFilesList(_localFiles);
 
-  // doc_id 후보: 첫 파일 이름의 stem을 소독하여 추천
+  // doc_id 후보: 첫 파일 이름의 stem을 소독하여 추천.
+  // 한자/한글 파일명이라 후보가 비면 그대로 비워둔다 — 서버가 자동 생성한다.
   const docIdInput = document.getElementById("create-doc-id");
   if (docIdInput && !docIdInput.value) {
     docIdInput.value = _suggestDocIdFromFile(_localFiles[0]?.name || "");
   }
-  // 제목은 비워두고 사용자가 채우게 함 (로컬 파일은 자동 추출 불가)
+  // 제목 후보: 첫 파일 이름의 stem을 원문 그대로 (한자/한글 보존).
+  // doc_id와 달리 제목은 ASCII 제약이 없으므로 원본 이름이 가장 유용하다.
   const titleInput = document.getElementById("create-doc-title");
-  if (titleInput) titleInput.value = titleInput.value || "";
+  if (titleInput && !titleInput.value) {
+    titleInput.value = (_localFiles[0]?.name || "").replace(/\.[^.]+$/, "");
+  }
 
   // 상태 초기화
   const createStatusEl = document.getElementById("create-doc-create-status");
@@ -772,17 +830,12 @@ async function _createFromFiles() {
   const docId = docIdInput ? docIdInput.value.trim() : "";
   const title = titleInput ? titleInput.value.trim() : "";
 
-  if (!docId) {
-    if (statusEl) {
-      statusEl.textContent = "문헌 ID를 입력하세요.";
-      statusEl.style.color = "var(--error)";
-    }
-    return;
-  }
-  if (!/^[a-z][a-z0-9_]{0,63}$/.test(docId)) {
+  // doc_id는 비워도 된다 — 비우면 서버가 파일명/날짜에서 자동 생성한다.
+  // 입력했다면 형식만 검증한다.
+  if (docId && !_DOC_ID_PATTERN.test(docId)) {
     if (statusEl) {
       statusEl.textContent =
-        "문헌 ID: 영문 소문자로 시작, 소문자/숫자/밑줄만 가능 (최대 64자)";
+        "문헌 ID: 영문 소문자로 시작, 소문자/숫자/밑줄만 가능 (최대 64자). 비워두면 자동 생성됩니다.";
       statusEl.style.color = "var(--error)";
     }
     return;
@@ -796,9 +849,9 @@ async function _createFromFiles() {
     return;
   }
 
-  // FormData로 multipart 업로드
+  // FormData로 multipart 업로드 — doc_id는 입력된 경우에만 보낸다 (없으면 서버 자동 생성)
   const formData = new FormData();
-  formData.append("doc_id", docId);
+  if (docId) formData.append("doc_id", docId);
   if (title) formData.append("title", title);
   for (const f of _localFiles) {
     formData.append("files", f, f.name);
@@ -937,7 +990,7 @@ async function _createFromUrl() {
   }
 
   // doc_id 형식 검증 (영문 소문자로 시작, 소문자/숫자/밑줄)
-  if (!/^[a-z][a-z0-9_]{0,63}$/.test(docId)) {
+  if (!_DOC_ID_PATTERN.test(docId)) {
     if (statusEl) {
       statusEl.textContent = "문헌 ID: 영문 소문자로 시작, 소문자/숫자/밑줄만 가능 (최대 64자)";
     }
@@ -986,7 +1039,7 @@ async function _createFromUrl() {
     // 성공 — 경고가 있어도 생성은 완료된 상태
     let msg = `문헌 '${data.document_id}' 생성 완료! (${data.asset_count || 0}개 파일)`;
     if (data.warning) {
-      msg += `\n⚠ ${data.warning}`;
+      msg += `\n경고: ${data.warning}`;
     }
     _showCreateDocProgress(msg);
 
@@ -1004,8 +1057,9 @@ async function _createFromUrl() {
       statusEl.style.color = "var(--error)";
     }
     // 에러 시에도 사이드바 갱신 시도
-    // 왜: 502가 와도 문헌 폴더가 이미 생성되었을 수 있다.
-    //      갱신하면 목록에 바로 나타나므로 서버를 재시작할 필요가 없다.
+    // 왜: 백엔드가 실패 시 부분 생성물을 롤백하지만(core/document.py),
+    //      Windows에서 .git 핸들 때문에 정리가 부분 실패할 수 있어
+    //      목록을 실제 디스크 상태와 다시 맞춘다.
     await _refreshSidebar();
   } finally {
     if (createBtn) createBtn.disabled = false;
@@ -1020,12 +1074,17 @@ async function _createFromUrl() {
 /**
  * 사이드바 문헌 목록을 갱신한다.
  *
- * 왜 별도 함수인가:
- *   성공/실패 양쪽에서 호출해야 하므로 중복 방지.
- *   502 에러가 와도 문헌 폴더가 이미 생성되었을 수 있으므로
- *   에러 시에도 갱신하면 서버 재시작 없이 목록에 나타난다.
+ * 정본은 workspace.js의 loadLibraryInfo다 — 과거에는 이 함수가 그 부분집합
+ * (문헌 수 + 트리)을 재구현해 서고명 갱신·빈 서고 안내가 빠진 채 동작이
+ * 갈라져 있었다 (2026-07-17 감사 축②). 이제 위임만 하고, 해시 복원은 꺼서
+ * 사용자가 보던 화면이 갱신 때문에 다시 로드되지 않게 한다.
  */
 async function _refreshSidebar() {
+  if (typeof loadLibraryInfo === "function") {
+    await loadLibraryInfo({ restoreHash: false });
+    return;
+  }
+  // 폴백 — workspace.js가 로드되지 않은 예외 상황에서만
   try {
     const docsRes = await fetch("/api/documents");
     if (docsRes.ok) {

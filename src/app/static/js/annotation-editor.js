@@ -138,7 +138,7 @@ function _getTypeInfo(typeId) {
     annState.annotationTypes.find((t) => t.id === typeId) || {
       label: typeId,
       color: "#999",
-      icon: "🏷️",
+      icon: "註",
     }
   );
 }
@@ -1537,7 +1537,7 @@ async function _renderTypeList() {
     html += `
       <div class="atm-type-card">
         <span class="atm-type-color" style="background:${_escAttr(t.color)}"></span>
-        <span class="atm-type-icon">${_escHtml(t.icon || "🏷️")}</span>
+        <span class="atm-type-icon">${_escHtml(t.icon || "註")}</span>
         <span class="atm-type-label">${_escHtml(t.label)}</span>
         <span class="atm-type-id">${_escHtml(t.id)}</span>
         ${isProtected ? "" : `<button class="text-btn atm-delete-btn" data-type-id="${_escAttr(t.id)}" title="삭제">삭제</button>`}
@@ -1565,7 +1565,7 @@ async function _renderTypeList() {
       html += `
         <div class="atm-type-card">
           <span class="atm-type-color" style="background:${_escAttr(t.color)}"></span>
-          <span class="atm-type-icon">${_escHtml(t.icon || "🏷️")}</span>
+          <span class="atm-type-icon">${_escHtml(t.icon || "註")}</span>
           <span class="atm-type-label">${_escHtml(t.label)}</span>
           <span class="atm-type-id">${_escHtml(t.id)}</span>
           <button class="text-btn atm-delete-btn" data-type-id="${_escAttr(t.id)}" title="삭제">삭제</button>
@@ -1587,7 +1587,7 @@ async function _renderTypeList() {
       </div>
       <div class="atm-form-row">
         <label class="atm-form-label">아이콘</label>
-        <input id="atm-new-icon" type="text" class="bib-input" placeholder="🏷️" value="🏷️" style="width:60px" />
+        <input id="atm-new-icon" type="text" class="bib-input" placeholder="註" value="註" style="width:60px" />
       </div>
       <div class="atm-form-row">
         <label class="atm-form-label">색상</label>
@@ -1623,7 +1623,7 @@ async function _renderTypeList() {
 async function _addCustomType() {
   const id = (document.getElementById("atm-new-id")?.value || "").trim();
   const label = (document.getElementById("atm-new-label")?.value || "").trim();
-  const icon = (document.getElementById("atm-new-icon")?.value || "").trim() || "🏷️";
+  const icon = (document.getElementById("atm-new-icon")?.value || "").trim() || "註";
   const color = document.getElementById("atm-new-color")?.value || "#888888";
   const status = document.getElementById("atm-dialog-status");
 

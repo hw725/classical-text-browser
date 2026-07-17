@@ -206,6 +206,47 @@ async def api_init_library(body: InitLibraryRequest):
     return {"ok": True, "library_path": str(get_library_path())}
 
 
+@router.post("/api/library/quick-start")
+async def api_quick_start_library():
+    """기본 위치에 서고를 자동으로 만들거나 재사용하고 즉시 전환한다.
+
+    목적: 첫 실행 온보딩 — 사용자가 경로를 고르지 않아도 드래그 앤 드롭
+          즉시 작업을 시작할 수 있게 한다. 위치는 나중에 설정에서 바꿀 수 있다.
+    위치: ~/Documents/고전서지서고 (Documents가 없으면 홈 바로 아래).
+    출력: { "ok": true, "library_path": "...", "created": true|false }
+        created=false면 같은 위치의 기존 기본 서고를 재사용한 것이다.
+    """
+    from core.library import init_library
+
+    docs_dir = Path.home() / "Documents"
+    base_dir = docs_dir if docs_dir.is_dir() else Path.home()
+    target = (base_dir / "고전서지서고").resolve()
+
+    created = False
+    if not (target / "library_manifest.json").exists():
+        try:
+            init_library(target)
+            created = True
+        except Exception as e:  # noqa: BLE001
+            logger.exception("기본 서고 생성 실패")
+            return JSONResponse(
+                {
+                    "error": (
+                        f"기본 서고를 만들지 못했습니다: {e}\n"
+                        f"→ 해결: 설정에서 서고 폴더를 직접 선택해 주세요. (시도한 위치: {target})"
+                    )
+                },
+                status_code=500,
+            )
+
+    configure_library(str(target))
+    return {
+        "ok": True,
+        "library_path": str(get_library_path()),
+        "created": created,
+    }
+
+
 @router.get("/api/library/recent")
 async def api_recent_libraries():
     """최근 사용한 서고 목록을 반환한다.
