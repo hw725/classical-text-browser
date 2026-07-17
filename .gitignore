@@ -39,8 +39,9 @@ primary_data/
 # 중간 결과물
 intermediate_results/
 
-# 로그
-logs/*.jsonl
+# 로그 — 런타임 산출물 전체 (codex 리뷰 입출력, 릴리스 노트 초안 등).
+# 정식 릴리스 문서는 docs/releases/에서 추적한다.
+logs/
 
 # 테스트 서고
 examples/test_library/
