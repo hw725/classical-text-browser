@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>인지 부채 감사 — classical-text-browser</title>
+<style>
+  :root {
+    --bg: #f7f6f3;
+    --card: #ffffff;
+    --ink: #1f2328;
+    --sub: #57606a;
+    --line: #d8d5cd;
+    --accent: #8a3b12;
+    --accent-soft: #f4e3d7;
+    --warn: #9a2b2b;
+    --ok: #2f6b3a;
+    --code-bg: #f0efe9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Pretendard GOV Variable', 'Pretendard Variable', Pretendard, sans-serif;
+    line-height: 1.65;
+    font-size: 16px;
+  }
+  code, pre, .mono {
+    font-family: 'Jetendard', 'Sarasa Fixed K', 'Sarasa Mono K', Consolas, monospace;
+    font-size: 0.92em;
+  }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 32px 20px 80px; }
+  header h1 { font-size: 1.7rem; margin: 0 0 6px; }
+  header .meta { color: var(--sub); font-size: 0.9rem; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 24px 28px; margin-top: 28px; }
+  h2 { font-size: 1.25rem; margin: 0 0 14px; border-bottom: 2px solid var(--accent-soft); padding-bottom: 8px; }
+  h3 { font-size: 1.02rem; margin: 20px 0 8px; }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--accent-soft); }
+  .rank { font-weight: 700; color: var(--accent); white-space: nowrap; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 0.78rem; font-weight: 600; }
+  .b-high { background: #f6d9d9; color: var(--warn); }
+  .b-mid { background: #f3e6c8; color: #7a5a12; }
+  .b-low2 { background: #dceade; color: var(--ok); }
+  .callout { border-left: 4px solid var(--accent); background: var(--accent-soft); padding: 10px 16px; border-radius: 0 8px 8px 0; margin: 14px 0; }
+  ul { padding-left: 22px; }
+  li { margin: 5px 0; }
+  .svgbox { overflow-x: auto; margin: 14px 0; }
+  /* 퀴즈 */
+  .q { border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; margin: 14px 0; }
+  .q p.stem { font-weight: 600; margin: 0 0 10px; }
+  .q label { display: block; padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; margin: 6px 0; cursor: pointer; }
+  .q label:hover { background: var(--code-bg); }
+  .q .fb { display: none; margin-top: 10px; padding: 10px 14px; border-radius: 6px; font-size: 0.93rem; }
+  .q .fb.correct { display: block; background: #e3efe4; border-left: 4px solid var(--ok); }
+  .q .fb.wrong { display: block; background: #f6e2e2; border-left: 4px solid var(--warn); }
+  .q label.picked-right { background: #e3efe4; border-color: var(--ok); }
+  .q label.picked-wrong { background: #f6e2e2; border-color: var(--warn); }
+  .score { font-weight: 700; margin-top: 16px; }
+  footer { color: var(--sub); font-size: 0.85rem; margin-top: 36px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div style="background:#e8f5e9;border-left:4px solid #43a047;padding:12px;margin:12px 0;font-family:sans-serif"><strong>✅ 해소 반영 (2026-07-07):</strong> 죽은 _parse_llm_json 이중정의 제거(ee8db13) 수정 완료. 아래 감사 본문은 수정 이전 스냅샷.</div>
+
+<header>
+  <h1>인지 부채 감사 — classical-text-browser</h1>
+  <div class="meta">감사일 2026-07-04 · 기준 v1.1.4 · 마지막 커밋 6a7fdab(2026-05-19) · 대상: <span class="mono">hw725\classical-text-browser</span></div>
+</header>
+
+<section id="bg">
+  <h2>1. 배경 — 왜 이 감사인가</h2>
+  <p>이 프로젝트의 코드 대부분은 AI 에이전트가 작성했다. 총 77,344줄(Python + JS + HTML + CSS)이 존재하지만, 사용자(비개발자 CJK 인문학 연구자)의 이해는 <em>문서에 적힌 지도</em> 수준에 머물러 있고, 실제 <em>영토</em>(코드가 실제로 하는 일)와의 간극이 누적되고 있다. 이 보고서는 유지보수 문서(<span class="mono">docs/유지보수문서/04_classical_text_browser.md</span>)가 이미 다루는 내용은 반복하지 않고, 문서가 놓친 보이지 않는 코드 경로·암묵 관례·부수효과와 문서-코드 drift만 다룬다.</p>
+</section>
+
+<section id="intuition">
+  <h2>2. 직관 — 이 앱을 한 문장으로 다시 보기</h2>
+  <p>겉보기에는 "브라우저에서 고전 문헌을 열람·교정·번역하는 웹앱 하나"지만, 실제로는 <strong>최대 3개 프로세스</strong>(uvicorn 서버 + OpenAI OAuth 프록시 + 표점 Docker 컨테이너)가 배치파일 한 번으로 함께 기동되고, 결과물은 서고 폴더 안의 <strong>문헌별·해석별 독립 git 저장소 수십 개</strong>에 흩어져 기록되며, LLM 호출은 5단 폴백 라우터와 10분짜리 결과 캐시를 조용히 통과한다. "버튼 하나"의 뒤에서 무엇이 움직이는지가 이 감사의 핵심이다.</p>
+</section>
+
+<section id="flow">
+  <h2>3. 핵심 흐름</h2>
+  <p>텍스트가 원본 이미지에서 주석까지 흐르는 경로와, 그 곁에서 모든 AI 기능이 통과하는 LLM 라우터 경로.</p>
+  <div class="svgbox">
+  <svg viewBox="0 0 880 360" width="880" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="8층 데이터 흐름과 LLM 폴백">
+    <defs>
+      <marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 z" fill="#8a3b12"/>
+      </marker>
+    </defs>
+    <style>
+      .box { fill:#fff; stroke:#8a3b12; stroke-width:1.5; rx:8; }
+      .box2 { fill:#f4e3d7; stroke:#8a3b12; stroke-width:1.5; }
+      .lbl { font: 600 13px 'Pretendard GOV Variable','Pretendard Variable',Pretendard,sans-serif; fill:#1f2328; }
+      .sm { font: 11px 'Pretendard GOV Variable','Pretendard Variable',Pretendard,sans-serif; fill:#57606a; }
+      .ln { stroke:#8a3b12; stroke-width:1.5; fill:none; marker-end:url(#arr); }
+      .dash { stroke-dasharray:5 4; stroke:#9a2b2b; }
+    </style>
+    <!-- 원본 저장소 -->
+    <rect x="10" y="20" width="420" height="120" fill="none" stroke="#57606a" stroke-dasharray="4 4" rx="10"/>
+    <text x="20" y="40" class="sm">원본 저장소 (documents/{id}/.git)</text>
+    <rect x="25" y="55" width="85" height="46" class="box" rx="8"/>
+    <text x="40" y="74" class="lbl">L1 원본</text><text x="40" y="90" class="sm">PDF/이미지</text>
+    <rect x="130" y="55" width="85" height="46" class="box" rx="8"/>
+    <text x="145" y="74" class="lbl">L2 OCR</text><text x="145" y="90" class="sm">3엔진 선택</text>
+    <rect x="235" y="55" width="85" height="46" class="box" rx="8"/>
+    <text x="248" y="74" class="lbl">L3 레이아웃</text><text x="248" y="90" class="sm">읽기순서</text>
+    <rect x="340" y="55" width="80" height="46" class="box" rx="8"/>
+    <text x="353" y="74" class="lbl">L4 교정</text><text x="353" y="90" class="sm">사람 확정</text>
+    <line x1="110" y1="78" x2="128" y2="78" class="ln"/>
+    <line x1="215" y1="78" x2="233" y2="78" class="ln"/>
+    <line x1="320" y1="78" x2="338" y2="78" class="ln"/>
+    <!-- 해석 저장소 -->
+    <rect x="450" y="20" width="420" height="120" fill="none" stroke="#57606a" stroke-dasharray="4 4" rx="10"/>
+    <text x="460" y="40" class="sm">해석 저장소 (interpretations/{id}/.git, L4 커밋에 의존)</text>
+    <rect x="465" y="55" width="90" height="46" class="box" rx="8"/>
+    <text x="475" y="74" class="lbl">L5 표점·현토</text><text x="475" y="90" class="sm">외부 Docker</text>
+    <rect x="575" y="55" width="85" height="46" class="box" rx="8"/>
+    <text x="590" y="74" class="lbl">L6 번역</text><text x="590" y="90" class="sm">LLM+수동</text>
+    <rect x="680" y="55" width="85" height="46" class="box" rx="8"/>
+    <text x="690" y="74" class="lbl">L7 주석·인용</text><text x="690" y="90" class="sm">AI 보조</text>
+    <rect x="785" y="55" width="70" height="46" class="box" rx="8"/>
+    <text x="795" y="74" class="lbl">L8 외부</text><text x="795" y="90" class="sm">API 연계</text>
+    <line x1="420" y1="78" x2="463" y2="78" class="ln"/>
+    <line x1="555" y1="78" x2="573" y2="78" class="ln"/>
+    <line x1="660" y1="78" x2="678" y2="78" class="ln"/>
+    <line x1="765" y1="78" x2="783" y2="78" class="ln"/>
+    <!-- LLM 라우터 -->
+    <rect x="150" y="200" width="580" height="60" class="box2" rx="10"/>
+    <text x="165" y="222" class="lbl">LLM 라우터 (src/llm/router.py) — 5단 폴백</text>
+    <text x="165" y="244" class="sm">Ollama(로컬) → OpenAI OAuth 프록시 → Gemini → OpenAI → Anthropic · 가용성 캐시 2분/30초</text>
+    <line x1="615" y1="103" x2="500" y2="198" class="ln"/>
+    <line x1="720" y1="103" x2="560" y2="198" class="ln"/>
+    <!-- 상태 허브 -->
+    <rect x="150" y="290" width="580" height="52" class="box2" rx="10"/>
+    <text x="165" y="311" class="lbl">_state.py — 프롬프트 · 결과 캐시(10분) · JSON 파싱 · 잘림 복구(침묵) · LLM 초안(메모리, 재시작 시 소멸)</text>
+    <text x="165" y="331" class="sm">모든 라우터가 여기를 경유 — 라우터 간 직접 import 금지 규칙의 실체</text>
+    <line x1="440" y1="262" x2="440" y2="288" class="ln dash"/>
+  </svg>
+  </div>
+  <div class="callout">서버 기동 시 <code>start_server.bat</code>이 (a) <code>npx -y openai-oauth</code> 프록시 자동 실행(포트 10531–10540 스캔, Bearer 토큰 <code>oauth-proxy</code> 하드코딩), (b) <code>punctuation-service/.env</code>가 있으면 표점 Docker 자동 기동, (c) 2초 후 브라우저 자동 오픈까지 수행한다. "서버가 안 뜬다"의 원인이 셋 중 어디인지 아는 것이 디버깅의 절반이다.</div>
+</section>
+
+<section id="hotspots">
+  <h2>4. 인지 부채 핫스팟 — 위험 순위와 방치 시 비용</h2>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>순위</th><th>경로</th><th>무엇이 숨어 있나</th><th>방치 시 비용</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="rank">1 <span class="badge b-high">높음</span></td>
+        <td class="mono">src/app/_state.py (968줄)</td>
+        <td>전역 상태 + LLM 프롬프트 사전 + 결과 캐시 + JSON 파서가 한 파일에 응집. 특히 <code>_parse_llm_json</code>이 775행과 906행에 <strong>이중 정의</strong> — 파이썬은 뒤 정의가 앞을 덮으므로 775행(한국어 docstring 쪽)은 죽은 코드.</td>
+        <td>죽은 쪽 정의를 수정해도 동작이 안 바뀌어 "고쳤는데 그대로"라는 미궁에 빠짐. AI에게 수정을 시켜도 어느 정의를 건드릴지 복불복. 프롬프트·캐시·파싱이 얽혀 있어 부분 수정이 연쇄 파손 유발.</td>
+      </tr>
+      <tr>
+        <td class="rank">2 <span class="badge b-high">높음</span></td>
+        <td class="mono">src/app/static/ (프론트 약 3만 줄)</td>
+        <td>index.html 4,477줄 단일 파일 + workspace.css 6,826줄 + JS 에디터 20여 개(annotation-editor 2,546줄 등). 빌드 도구·프론트 테스트·CI(<span class="mono">.github/workflows</span> 부재) 전무. 백엔드 테스트 28파일과 대조적.</td>
+        <td>버튼 하나 고치는 수정이 다른 탭을 조용히 깨뜨려도 감지 수단이 사람 눈뿐. 회귀가 누적되면 어느 시점의 어떤 수정이 원인인지 재구성 불가능.</td>
+      </tr>
+      <tr>
+        <td class="rank">3 <span class="badge b-mid">중간</span></td>
+        <td class="mono">_state.py:733 잘림 복구 + :317 결과 캐시</td>
+        <td>LLM 주석·인용 응답이 잘리면 <code>_salvage_truncated_array_payload</code>가 완성된 항목만 건져 <strong>조용히 부분 결과 반환</strong>(서버 로그 warning뿐, UI 무경고). 결과 캐시는 TTL 600초·최대 256건.</td>
+        <td>연구 데이터 품질 문제: 주석 10개를 요청했는데 7개만 온 것을 모른 채 확정할 수 있음. 캐시 때문에 프롬프트를 고쳐도 10분간 옛 결과가 보여 "수정이 안 먹힌다"는 오해 유발.</td>
+      </tr>
+      <tr>
+        <td class="rank">4 <span class="badge b-mid">중간</span></td>
+        <td class="mono">start_server.bat (부수효과 3종)</td>
+        <td>OAuth 프록시 자동 기동(외부 npm 패키지를 실행 시마다 신뢰), 포트 스캔, Docker 기동. 끄는 스위치(<code>OPENAI_OAUTH_AUTO_START=0</code>, <code>PUNCT_AUTO_START=0</code>)는 존재하나 문서화 약함.</td>
+        <td>기동 실패 시 원인 3갈래를 구분 못 해 매번 처음부터 헤맴. <code>openai-oauth</code> 패키지가 업스트림에서 변경·오염되면 자동으로 실행됨(공급망 위험).</td>
+      </tr>
+      <tr>
+        <td class="rank">5 <span class="badge b-mid">중간</span></td>
+        <td class="mono">src/parsers/ (5종, 약 4,600줄)</td>
+        <td>korcis(1,807줄)·archives_jp·kyujanggak·kostma·ndl — 외부 기관 사이트의 HTML 구조에 의존하는 스크래핑 파서. 유지보수 문서는 KORCIS API만 언급.</td>
+        <td>대상 사이트 개편 시 침묵 파손. 서지 자동 입력이 어느 날 빈 값을 돌려줘도 코드 결함인지 사이트 변경인지 판별할 지식이 없음.</td>
+      </tr>
+      <tr>
+        <td class="rank">6 <span class="badge b-low2">낮음</span></td>
+        <td class="mono">index.html의 봉인된 HWP 가져오기 (D-037)</td>
+        <td>"가져오기" 버튼의 "준비중"은 UI 차단일 뿐. hwp-import.js 1,034줄과 백엔드 엔드포인트(<code>/api/documents/import-hwp</code> 등)는 살아 있고, onclick 복원만으로 재개 가능.</td>
+        <td>존재를 모르면 최우선 TODO(HWP 표점·현토 분리 가져오기)를 처음부터 재구현 — 수 세션 낭비. 반대로 살아 있는 백엔드 경로는 API 직접 호출 시 여전히 동작함을 모르면 보안·데이터 정합 사각지대.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <h3>unknown unknowns (검증 자체가 안 된 영역)</h3>
+  <ul>
+    <li>테스트 28파일의 <strong>현재 통과 여부 미확인</strong> — CI가 없어 마지막 실행 시점을 아무도 모름.</li>
+    <li>2026-05-08 하루에 대량 style 커밋(포맷 정리 수십 건) — <code>git blame</code>이 그날로 덮여 실질 변경 이력 추적성이 저하된 정도 미확인.</li>
+    <li><code>llm_usage_log.jsonl</code>이 서고별로 분산 기록(서고 미설정 시 <span class="mono">~/.classical-text-browser/</span>) — 예산 합산이 실제로 이뤄지는지 미확인.</li>
+    <li>OCR extras(NDLOCR 계열)와 별도 폴더 <span class="mono">classical-text-browser-models</span>의 가중치 버전 정합 미확인.</li>
+  </ul>
+</section>
+
+<section id="drift">
+  <h2>5. Drift 로그 (증거 포함)</h2>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>#</th><th>증거</th><th>내용</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td class="mono">git status: M CLAUDE.md</td><td>커밋된 CLAUDE.md는 documents.py를 "32 라우트"로 기재, 미커밋 수정본은 34로 갱신. 실측(<code>grep -c '@router.'</code>) 결과 <strong>34가 정답</strong> — 2026-05-19 이후 문서 갱신이 커밋되지 않은 채 6주 이상 방치.</td></tr>
+      <tr><td>2</td><td class="mono">git status: ?? AGENTS.md</td><td>AGENTS.md 파일 자체가 git 미추적(이력 0건). CLAUDE.md와 내용이 같은 복제본인데, 한쪽만 고치면 두 지침이 갈라지는 구조적 drift 씨앗.</td></tr>
+      <tr><td>3</td><td class="mono">git status: ?? logs/</td><td>미추적 logs/에 codex 리뷰 기록(2026-02-23·02-24 JSONL, 04-30 입출력 md 총 252KB)과 <strong>release-notes-v1.1.3.md</strong>가 방치. 릴리스 노트가 로그 폴더에만 존재하는 상태.</td></tr>
+      <tr><td>4</td><td class="mono">git log: 6a7fdab 2026-05-19</td><td>마지막 커밋 후 감사일(2026-07-04)까지 약 6.5주 공백. 그 사이 수정은 위 3건뿐 — 개발 중단기이나 미커밋 상태로 남은 것이 문제.</td></tr>
+      <tr><td>5</td><td class="mono">D-037 vs 유지보수 문서 04 TODO</td><td>유지보수 문서는 "HWP/HWPX 가져오기 최우선 TODO"로 기재하지만, D-037(2026-02-24)에 따라 코드는 이미 존재하고 UI만 봉인된 상태 — "처음부터 만들 일"이 아니라 "복원+안정화할 일"임이 문서 간 불일치.</td></tr>
+      <tr><td>6</td><td class="mono">_state.py:775 / :906</td><td>동일 함수 <code>_parse_llm_json</code> 이중 정의(뒤가 앞을 덮음, <code># type: ignore[no-redef]</code> 주석이 의도적 방치임을 시사). 어떤 문서에도 기록 없음 — 코드-문서 간 최대 간극.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="quiz">
+  <h2>6. 이해 점검 퀴즈 (5문항)</h2>
+  <p>기존 코드 경로에 의존하는 동작을 겨냥한 문제. 오답 시 정답·해설·다시 읽을 위치를 보여준다.</p>
+
+  <div class="q" data-answer="b">
+    <p class="stem">Q1. <span class="mono">_state.py</span>에는 <code>_parse_llm_json</code>이 775행과 906행에 두 번 정의돼 있다. LLM 응답 파싱 시 실제로 실행되는 것은?</p>
+    <label><input type="radio" name="q1" value="a"> 775행 정의 (한국어 docstring이 있는 원본)</label>
+    <label><input type="radio" name="q1" value="b"> 906행 정의 (뒤에 나오는 영어 docstring 버전)</label>
+    <label><input type="radio" name="q1" value="c"> 호출 위치에 따라 둘 다 번갈아 실행된다</label>
+    <label><input type="radio" name="q1" value="d"> 이중 정의는 문법 오류라 서버가 아예 안 뜬다</label>
+    <div class="fb" data-explain="파이썬은 같은 이름의 함수를 다시 정의하면 뒤의 것이 앞을 통째로 덮는다. 775행 정의는 죽은 코드라 거기를 고쳐도 동작이 바뀌지 않는다. 다시 읽기: src/app/_state.py 775행·906행, 이 보고서 4절 핫스팟 1위."></div>
+  </div>
+
+  <div class="q" data-answer="c">
+    <p class="stem">Q2. AI 주석 생성 중 LLM 응답 JSON이 중간에 잘려서 왔다. 이 앱의 실제 동작은?</p>
+    <label><input type="radio" name="q2" value="a"> 오류 팝업을 띄우고 작업을 중단한다</label>
+    <label><input type="radio" name="q2" value="b"> 자동으로 같은 프로바이더에 무한 재시도한다</label>
+    <label><input type="radio" name="q2" value="c"> 완성된 항목만 건져 조용히 부분 결과를 보여준다 (서버 로그에만 경고)</label>
+    <label><input type="radio" name="q2" value="d"> 잘린 응답은 캐시에서 이전 결과로 자동 대체된다</label>
+    <div class="fb" data-explain="_salvage_truncated_array_payload(_state.py:733)가 잘린 배열에서 완성된 dict만 복구해 반환한다. UI에는 경고가 없어 주석 일부가 소리 없이 누락될 수 있다 — 확정 전 개수 확인 습관이 필요하다. 다시 읽기: src/app/_state.py 733행·851행 부근, 이 보고서 4절 3위."></div>
+  </div>
+
+  <div class="q" data-answer="d">
+    <p class="stem">Q3. Windows에서 <code>start_server.bat</code>을 실행하면 함께 일어나는 일이 <em>아닌</em> 것은?</p>
+    <label><input type="radio" name="q3" value="a"> npx가 있으면 OpenAI OAuth 프록시를 자동 기동한다 (포트 10531–10540 스캔)</label>
+    <label><input type="radio" name="q3" value="b"> punctuation-service/.env가 있으면 표점 Docker를 자동 기동한다</label>
+    <label><input type="radio" name="q3" value="c"> 2초 후 기본 브라우저를 자동으로 연다</label>
+    <label><input type="radio" name="q3" value="d"> PaddleOCR 모델 가중치를 자동으로 내려받는다</label>
+    <div class="fb" data-explain="배치파일의 부수효과는 OAuth 프록시·표점 Docker·브라우저 오픈 3종이다. OCR 모델 다운로드는 배치파일이 아니라 OCR 엔진 첫 사용 시점의 일이다. 다시 읽기: start_server.bat, .env.example 주석, 이 보고서 3절 callout."></div>
+  </div>
+
+  <div class="q" data-answer="b">
+    <p class="stem">Q4. 사이드바의 "가져오기" 버튼이 "준비중입니다"만 표시하는 이유는? (D-037)</p>
+    <label><input type="radio" name="q4" value="a"> HWP 가져오기 코드가 아직 작성되지 않았기 때문</label>
+    <label><input type="radio" name="q4" value="b"> 코드(hwp-import.js 1,034줄)와 백엔드 API는 살아 있고, index.html의 onclick만 차단해 둔 것</label>
+    <label><input type="radio" name="q4" value="c"> hwp-hwpx-parser 의존성이 제거되었기 때문</label>
+    <label><input type="radio" name="q4" value="d"> 라이선스 문제로 기능 전체가 삭제되었기 때문</label>
+    <div class="fb" data-explain="D-037은 UI 진입점만 봉인했다. 복원은 index.html의 import-hwp-btn onclick을 _openHwpImportDialog()로 되돌리는 것으로 시작한다. 처음부터 재구현하면 안 된다. 다시 읽기: docs/DECISIONS.md D-037, 이 보고서 4절 6위·5절 drift #5."></div>
+  </div>
+
+  <div class="q" data-answer="c">
+    <p class="stem">Q5. LLM 사용량(비용 추적) 기록 <code>llm_usage_log.jsonl</code>은 어디에 쌓이나?</p>
+    <label><input type="radio" name="q5" value="a"> 프로젝트 루트의 logs/ 폴더</label>
+    <label><input type="radio" name="q5" value="b"> 각 문헌 저장소(documents/{id}/) 안</label>
+    <label><input type="radio" name="q5" value="c"> 현재 열린 서고 루트 — 서고가 없으면 홈 폴더의 .classical-text-browser/</label>
+    <label><input type="radio" name="q5" value="d"> 메모리에만 있어 서버 재시작 시 사라진다</label>
+    <div class="fb" data-explain="usage_tracker.py의 _get_log_path()가 library_root/llm_usage_log.jsonl, 미설정 시 ~/.classical-text-browser/llm_usage_log.jsonl에 기록한다. 서고를 여러 개 쓰면 비용 기록이 분산되므로 MONTHLY_BUDGET_USD 합산을 맹신하면 안 된다. 다시 읽기: src/llm/usage_tracker.py 32–44행, 이 보고서 4절 unknown unknowns."></div>
+  </div>
+
+  <div class="score" id="score"></div>
+</section>
+
+<footer>인지 부채 감사 · classical-text-browser · 2026-07-04 · 이 파일은 자립형 HTML(외부 리소스 없음)</footer>
+</div>
+
+<script>
+(function () {
+  var qs = document.querySelectorAll('.q');
+  var answered = {};
+  function updateScore() {
+    var total = qs.length, done = 0, right = 0;
+    Object.keys(answered).forEach(function (k) { done++; if (answered[k]) right++; });
+    var el = document.getElementById('score');
+    if (done === 0) { el.textContent = ''; return; }
+    el.textContent = '점수: ' + right + ' / ' + total + (done < total ? ' (' + (total - done) + '문항 남음)' : right === total ? ' — 지도와 영토가 일치합니다.' : ' — 오답 해설의 "다시 읽기" 위치를 확인하세요.');
+  }
+  qs.forEach(function (q, idx) {
+    var key = 'q' + (idx + 1);
+    var correct = q.getAttribute('data-answer');
+    var fb = q.querySelector('.fb');
+    var explain = fb.getAttribute('data-explain');
+    q.querySelectorAll('input[type=radio]').forEach(function (input) {
+      input.addEventListener('change', function () {
+        q.querySelectorAll('label').forEach(function (l) { l.classList.remove('picked-right', 'picked-wrong'); });
+        var label = input.closest('label');
+        var ok = input.value === correct;
+        answered[key] = ok;
+        if (ok) {
+          label.classList.add('picked-right');
+          fb.className = 'fb correct';
+          fb.textContent = '정답. ' + explain;
+        } else {
+          label.classList.add('picked-wrong');
+          var correctLabel = q.querySelector('input[value=' + correct + ']').closest('label');
+          correctLabel.classList.add('picked-right');
+          fb.className = 'fb wrong';
+          fb.textContent = '오답. 정답은 "' + correctLabel.textContent.trim() + '". ' + explain;
+        }
+        updateScore();
+      });
+    });
+  });
+})();
+</script>
+</body>
+</html>

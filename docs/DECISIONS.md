@@ -1688,6 +1688,93 @@ uv run python -c "from src.llm.usage_tracker import _OTEL_SCHEMA_URL; print(_OTE
 
 ---
 
+## D-052: 드래그 앤 드롭 온보딩 — 경로 설정 없는 첫 시작
+
+**날짜**: 2026-07-17
+
+**결정**:
+1. **파일 드롭 = 새 문헌 생성 진입점.** 창 어디에나 PDF/이미지(폴더 포함)를 끌어다 놓으면
+   새 문헌 다이얼로그가 파일이 채워진 Step 2 상태로 열린다 (`static/js/drag-drop.js` 신설).
+2. **드롭은 경로 참조가 아니라 바이트 업로드.** 기존 `POST /api/documents/create-from-files`를
+   그대로 재사용해 `L1_source/`로 복사한다.
+3. **doc_id 자동 생성은 서버 책임.** `create-from-files`의 doc_id가 비면 첫 파일명에서
+   ASCII 후보를 만들고, 한자/한글뿐이면 `doc_YYYYMMDD`, 충돌 시 `_2`·`_3`을 붙인다.
+   제목이 비면 첫 파일명 stem(한자 보존)을 쓴다.
+4. **기본 서고 원클릭 확보.** `POST /api/library/quick-start` 신설 —
+   `~/Documents/고전서지서고`를 만들거나(없으면) 재사용해 즉시 전환한다.
+   서고 미설정 상태에서 드롭하면 프론트가 이를 자동 호출한 뒤 토스트로 위치를 알린다.
+
+**근거**:
+- 기존 온보딩은 “서고 설정 열기 → 폴더 선택(tkinter) → init → + 새 문헌 → 파일 추가 →
+  doc_id 영문 입력 → 생성”의 6단계 이상이었고, 특히 한자 파일명이면 doc_id 자동 후보가
+  빈 문자열이라 연구자가 영문 ID를 지어내야 했다.
+- 브라우저 보안상 드롭 파일의 절대 경로는 읽을 수 없다. 그러나 이 플랫폼은 애초에
+  원본을 L1_source로 **복사해 불변층으로 격리**하는 설계(platform-v7)라, 경로 참조가
+  아닌 바이트 복사가 설계와 정합한다. 원본 이동 시 링크가 끊기는 Zotero식 문제도 없다.
+- doc_id 생성을 프론트가 아닌 서버에 두는 이유: 유일성 판정(기존 문헌과 충돌 회피)은
+  documents/ 디렉토리를 아는 쪽만 할 수 있다.
+
+**트레이드오프**:
+- 채택: 웹앱 유지 + 업로드 복사. 거부 (네이티브 앱 재작성): 드롭 경로 획득·파일 연결은
+  얻지만, 라우트 169개·JS 28모듈 이식 비용과 “빌드 도구 없음” 원칙 훼손이 크다.
+  나중에 필요하면 pywebview로 현 코드를 그대로 감쌀 수 있다 (되돌리기 쉬운 결정).
+- 채택: 드롭 후 Step 2 확인 화면 경유(클릭 1회). 거부 (드롭 즉시 무확인 생성):
+  잘못 떨어뜨린 파일이 곧장 git 커밋된 문헌이 되는 위험이 절약되는 클릭 1회보다 크다.
+
+**검증**: `uv run python -m pytest tests/test_onboarding_api.py -q` (API 4건) +
+브라우저 실측 (서고 미설정 → 드롭 → quick-start → 생성까지 E2E, 2026-07-17).
+
+**관련**: [D-022](#d-022-gui에서-서고library-관리) GUI 서고 관리 위에 얹힘.
+explain-diff: [`sessions/session_dragdrop_onboarding.md`](sessions/session_dragdrop_onboarding.md)
+
+---
+
+## D-053: 구조 부채 상환 — ID 규칙 단일화 + 경로 검증 통일 + 생성 롤백
+
+**날짜**: 2026-07-17
+
+**배경**: 같은 날의 인지부채 감사(4축 리뷰)가 확인한 구조 부채 3건.
+D-052(드래그 앤 드롭 온보딩)가 밟는 땅의 위생 문제였다.
+
+**결정**:
+1. **ID 규칙 단일 진실원**: `core/repo_id.py` 신설. 8곳에 복제돼 있던
+   `^[a-z][a-z0-9_]{0,63}$`을 파이썬 1곳(이 모듈) + JS 1곳
+   (create-document.js `_DOC_ID_PATTERN`, 정본과 짝 명시)으로 수렴.
+   기존 이름(`_DOC_ID_PATTERN`·`_INTERP_ID_PATTERN`·`_REPO_ID_PATTERN`)은
+   하위 호환 별칭으로 유지.
+2. **경로 검증 통일**: `_state.require_repo_path(repo_type, repo_id)` 신설 —
+   실패 시 `RepoPathError`를 던지고 server.py의 예외 핸들러가 이 프로젝트
+   에러 규약(`{"error": ...}` + 400/500)으로 변환한다. 6개 라우터 ~95지점의
+   인라인 `_library_path / "documents" / id` 조립을 1줄 치환으로 대체.
+   read 경로도 이제 ID 형식(경로 탈출)을 검증한다. best-effort 루프 2곳
+   (source_refs 커밋 해시 보강)은 요청을 거절하지 않도록 `_resolve_repo_path`
+   (None 반환)로 처리해 기존 관용 동작을 유지.
+3. **create-from-url 롤백**: add_document 성공 이후의 마무리 단계(manifest
+   재작성·git commit) 실패 시 문헌 폴더를 정리하고 예외를 재전파 —
+   “실패 = 아무것도 안 남음”을 create-from-files와 등가로 보장.
+   git.Repo는 with 문으로 열어 Windows 핸들 잠금을 줄였다.
+4. **사이드바 갱신 단일화**: create-document.js `_refreshSidebar`가
+   workspace.js `loadLibraryInfo`(정본)에 위임. 해시 복원은
+   `{restoreHash: false}` 옵션으로 꺼서 생성 직후 화면 재탐색을 방지.
+
+**의도적 보류 — JS 전역 결합(ES 모듈 전환)**: 28개 비모듈 스크립트와
+`viewerState` 전역 변이는 남는다. 전환은 전 파일 이식 + 로드 순서 재설계가
+필요한 재작성급 변경인데 프론트 테스트가 0건이라 위험/이득이 맞지 않는다.
+착수 조건: 프론트 스모크 테스트(최소 초기화·문헌 열람 경로)가 먼저 생겨야 한다.
+
+**행동 변화(의도됨)**: 형식이 잘못된 ID로 read API를 부르면 이전에는
+404(“없음”)였지만 이제 400(“형식이 올바르지 않습니다”)이다. 프론트는
+`data.error`만 소비하므로 영향 없음. 트래버설 문자가 든 경로는 종전처럼
+라우팅 단계에서 404로 걸러지고, 인코딩을 우회해 도달해도 검증에 걸린다.
+
+**검증**: 전체 pytest 490 통과 + 라이브 API 실측(형식위반→400 통일 메시지,
+미존재→404 유지, 정상→200; documents·interpretations·reading 라우터 표본).
+
+**관련**: [D-052](#d-052-드래그-앤-드롭-온보딩--경로-설정-없는-첫-시작) ·
+explain-diff: [`sessions/session_dragdrop_onboarding.md`](sessions/session_dragdrop_onboarding.md)
+
+---
+
 ### 배포·설치
 - [ ] Google Drive + .git 충돌 회피 가이드 → Phase 10 이후
 - [ ] 비개발자용 Git 번들링 또는 Git-free 모드 → Phase 10 이후
