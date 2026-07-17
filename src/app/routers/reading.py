@@ -1016,6 +1016,43 @@ def _extract_marks_from_punctuated(original: str, punctuated: str) -> list:
 # ───────────────────────────────────────────────────
 
 
+@router.get("/api/llm/punctuation/external/health")
+async def api_external_punctuation_health():
+    """외부 표점 서비스(SikuRoBERTa)의 연결/준비 상태를 확인한다.
+
+    목적: 표점 편집기가 실행 전에 서비스 상태를 보여줄 수 있게 한다.
+          Docker 컨테이너 기동에 시간이 걸리고, 모델 가중치는 첫 표점 호출
+          때 로드되므로, 사용자가 "왜 안 되지"라고 오해하기 쉽다.
+    출력: {
+        "configured": 외부 서비스 URL이 설정되어 있는가,
+        "reachable": /health 응답이 오는가 (컨테이너 기동 여부),
+        "ready": 엔진이 모델 파일을 갖고 있는가 (로드 완료 의미는 아님 —
+                 실제 가중치 로드는 첫 표점 호출 때 일어난다),
+        "engine": 엔진 이름 (연결된 경우)
+    }
+    왜 서버가 대리 호출하는가: 브라우저에서 :8765로 직접 부르면 CORS에 걸린다.
+    """
+    ext_url = get_external_punctuation_url()
+    if not ext_url:
+        return {"configured": False, "reachable": False, "ready": False, "engine": None}
+    try:
+        import httpx as _httpx_h
+
+        async with _httpx_h.AsyncClient(timeout=3.0) as client:
+            resp = await client.get(f"{ext_url.rstrip('/')}/health")
+        resp.raise_for_status()
+        h = resp.json()
+        return {
+            "configured": True,
+            "reachable": True,
+            "ready": bool(h.get("ready")),
+            "engine": h.get("engine"),
+        }
+    except Exception:
+        # 컨테이너 미기동/기동 중 — 오류가 아니라 상태이므로 200으로 알린다
+        return {"configured": True, "reachable": False, "ready": False, "engine": None}
+
+
 @router.post("/api/llm/punctuation")
 async def api_llm_punctuation(body: AiPunctuationRequest):
     """AI 표점 생성.
@@ -1055,8 +1092,12 @@ async def api_llm_punctuation(body: AiPunctuationRequest):
         try:
             import httpx as _httpx_ext
 
-            # 60초 타임아웃 — SikuRoBERTa CPU 추론은 길어질 수 있음.
-            async with _httpx_ext.AsyncClient(timeout=60.0) as client:
+            # 300초 타임아웃. 왜 이렇게 긴가:
+            #   서비스의 모델 가중치는 첫 /punctuate 호출 때 lazy 로드된다
+            #   (punctuation-service/engine.py). CPU에서 torch+ckpt 로드가
+            #   수 분 걸릴 수 있어, 60초면 첫 호출이 애매한 502로 죽는다.
+            #   프론트가 경과 시간 진행 표시를 하므로 긴 대기가 침묵이 아니다.
+            async with _httpx_ext.AsyncClient(timeout=300.0) as client:
                 resp = await client.post(
                     f"{ext_url.rstrip('/')}/punctuate",
                     json={"text": clean_text},

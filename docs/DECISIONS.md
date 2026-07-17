@@ -1787,8 +1787,12 @@ explain-diff: [`sessions/session_dragdrop_onboarding.md`](sessions/session_dragd
    `interpretation_id`가 추가되고 완료 메시지에 표시된다.
 2. **시작 창 정리 (start_server.bat)**: 브라우저 오프너를 2초짜리 cmd 창 대신
    숨김 PowerShell(`start /b` + `-WindowStyle Hidden`)로 바꾸고, OpenAI OAuth
-   프록시 창은 `start /min`으로 최소화 상태로 띄운다 — 평소 보이는 창은
-   메인 서버 창 하나가 된다.
+   프록시는 **창 없이**(`start /b`) 백그라운드로 돌리며 출력을
+   `logs\openai-oauth.log`로 보낸다 — 보이는 창은 메인 서버 창 하나다.
+   (1차 시도였던 `start /min` 최소화는 Windows 11 기본 터미널인 Windows
+   Terminal이 최소화 지시를 무시해 실패했다 — 2026-07-17 실측. conhost 강제도
+   실환경에서 실패해 창 없는 방식으로 확정. 로그인 안내는 로그 파일로 확인하고,
+   메인 창을 닫으면 프록시도 함께 종료되어 잔여 프로세스가 없다.)
 
 **근거**:
 - 해석 저장소는 표점·번역·주석(L5-L7)의 전제 조건인데, 지금까지는 문헌 등록
@@ -1796,9 +1800,12 @@ explain-diff: [`sessions/session_dragdrop_onboarding.md`](sessions/session_dragd
   D-052의 “드롭 → 바로 작업”을 완성하려면 이 단계도 없어져야 한다.
   생성 비용은 폴더 골격 + git init 수준으로 저렴하고, 다중 해석 저장소
   모델(독립 해석 작업)과도 충돌하지 않는다 — 기본 하나가 미리 있을 뿐이다.
-- OAuth 프록시 창을 완전히 숨기지 않는 이유: 첫 실행 OAuth 로그인 안내가
-  그 창에 표시되므로, 작업표시줄에서 열어볼 수 있어야 한다.
-  `start_server.sh`(macOS/Linux)는 이미 `&` 백그라운드라 변경 불필요.
+- `start_server.sh`(macOS/Linux)는 이미 `&` 백그라운드라 변경 불필요.
+- 외부 표점 서비스는 모델 가중치를 **첫 표점 호출 때** lazy 로드해 수 분
+  걸릴 수 있다. 본체 타임아웃을 60→300초로 늘리고, 상태 확인 엔드포인트
+  (`GET /api/llm/punctuation/external/health`)와 경과 시간 진행 표시를 붙여
+  “멈춘 게 아니라 로딩 중”임을 보여준다. 진행률(%)은 원리상 알 수 없어
+  경과 시간 방식을 택했다.
 
 **트레이드오프**:
 - 채택: 항상 자동 생성. 거부 (옵트인 체크박스): 다이얼로그에 선택지를 하나

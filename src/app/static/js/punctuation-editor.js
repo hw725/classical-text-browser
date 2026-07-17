@@ -943,16 +943,51 @@ async function _requestAiPunctuation() {
 
     let data;
     if (isExternal) {
-      const resp = await fetch("/api/llm/punctuation", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(reqBody),
-      });
-      if (!resp.ok) {
-        const errBody = await resp.json().catch(() => ({}));
-        throw new Error(errBody.error || `외부 표점 서비스 오류 (HTTP ${resp.status})`);
+      // ── 사전 상태 확인 — 컨테이너가 아직 안 떴으면 헛된 대기 없이 즉시 알린다 ──
+      let health = null;
+      try {
+        const hres = await fetch("/api/llm/punctuation/external/health");
+        health = await hres.json();
+      } catch {
+        // 상태 확인 자체가 실패하면 본 호출의 오류 처리에 맡긴다
       }
-      data = await resp.json();
+      if (health && health.configured && !health.reachable) {
+        throw new Error(
+          "외부 표점 서비스에 연결할 수 없습니다 — Docker 컨테이너가 아직 시작 중이거나 꺼져 있습니다.\n" +
+          "start_server.bat이 함께 시작하는 표점 서비스가 준비된 뒤 다시 시도하세요.",
+        );
+      }
+
+      // ── 경과 시간 진행 표시 ──
+      // 서비스의 모델 가중치는 "첫 표점 호출" 때 로드되어 수 분 걸릴 수 있다.
+      // 진행률(%)은 원리상 알 수 없으므로, 경과 시간을 1초마다 갱신해
+      // "멈춘 게 아니라 로딩 중"임을 보여준다 (SSE 분기의 elapsed_sec와 동일한 UX).
+      const startedAt = Date.now();
+      const timer = setInterval(() => {
+        const sec = Math.round((Date.now() - startedAt) / 1000);
+        const hint = sec >= 5 ? " — 첫 실행은 모델 로딩으로 1~2분 걸릴 수 있습니다" : "";
+        const msg = `외부 표점 서비스 처리 중... ${sec}초 경과${hint}`;
+        if (aiBtn) aiBtn.textContent = `생성 중... (${sec}초)`;
+        if (statusEl) statusEl.textContent = msg;
+        if (typeof showEditorProgress === "function") {
+          showEditorProgress("punct", true, msg);
+        }
+      }, 1000);
+
+      try {
+        const resp = await fetch("/api/llm/punctuation", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(reqBody),
+        });
+        if (!resp.ok) {
+          const errBody = await resp.json().catch(() => ({}));
+          throw new Error(errBody.error || `외부 표점 서비스 오류 (HTTP ${resp.status})`);
+        }
+        data = await resp.json();
+      } finally {
+        clearInterval(timer);
+      }
     } else {
       // SSE 스트리밍으로 LLM 표점 요청 (실패 시 기존 엔드포인트 폴백)
       data = await fetchWithSSE(

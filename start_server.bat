@@ -80,6 +80,8 @@ if /I "%PUNCT_AUTO_START%"=="0" (
                 echo [Punctuation] failed to start. The main server will continue.
             ) else (
                 echo [Punctuation] service ready or starting in background.
+                echo               Note: the first punctuation request loads the model
+                echo               and may take a few minutes. The app shows progress.
             )
             popd >nul
         )
@@ -92,6 +94,14 @@ if /I "%PUNCT_AUTO_START%"=="0" (
 REM -- Optional OpenAI OAuth proxy -----------------
 REM The UI exposes "OpenAI (OAuth)", so start the local OpenAI-compatible proxy
 REM when npx.cmd is available. Set OPENAI_OAUTH_AUTO_START=0 to skip this.
+REM 프록시는 창 없이 백그라운드로 돌린다 - start /b 는 새 창을 만들지 않고
+REM 이 콘솔 뒤에서 실행하며, 출력은 logs\openai-oauth.log 로 보낸다.
+REM 왜 창을 안 만드는가: start /min 은 Windows 11 기본 터미널인
+REM Windows Terminal 에서 무시되어 창이 그대로 떠서 시끄럽다 - 2026-07-17 실측.
+REM 로그인 안내가 필요하면 사용자가 로그 파일을 열어 확인한다.
+REM 부수 효과: 이 창을 닫으면 프록시도 함께 종료된다 - 잔여 프로세스가 없다.
+REM 주의: 괄호 블록 안에는 REM을 넣지 말 것 - 주석 속 닫는 괄호가
+REM 블록을 조기 종료시켜 스크립트 전체가 파싱 오류로 죽는다.
 if /I "%OPENAI_OAUTH_AUTO_START%"=="0" (
     echo [OpenAI OAuth] auto-start disabled by OPENAI_OAUTH_AUTO_START=0
 ) else (
@@ -104,19 +114,18 @@ if /I "%OPENAI_OAUTH_AUTO_START%"=="0" (
             set OPENAI_OAUTH_BASE_URL=http://127.0.0.1:!OPENAI_OAUTH_PORT!/v1
             echo [OpenAI OAuth] proxy ready at !OPENAI_OAUTH_BASE_URL!
         ) else (
-            echo [OpenAI OAuth] starting local proxy...
-            REM /min: 프록시 창을 최소화 상태(작업표시줄)로 띄운다.
-            REM 완전히 숨기지 않는 이유: 첫 실행 시 OAuth 로그인 안내가 이 창에
-            REM 표시되므로, 필요할 때 사용자가 열어볼 수 있어야 한다.
-            start /min "OpenAI OAuth Proxy" cmd /k "npx.cmd -y openai-oauth"
+            echo [OpenAI OAuth] starting local proxy in the background...
+            if not exist "logs" mkdir "logs"
+            start "" /b cmd /c "npx.cmd -y openai-oauth >> logs\openai-oauth.log 2>&1"
             timeout /t 4 /nobreak >nul
             call :check_openai_oauth
             if "!OPENAI_OAUTH_READY!"=="1" (
                 set OPENAI_OAUTH_BASE_URL=http://127.0.0.1:!OPENAI_OAUTH_PORT!/v1
                 echo [OpenAI OAuth] proxy ready at !OPENAI_OAUTH_BASE_URL!
             ) else (
-                echo [OpenAI OAuth] proxy started minimized in the taskbar.
-                echo               If login is required, open that window and follow the prompt.
+                echo [OpenAI OAuth] proxy is starting in the background - no window.
+                echo               Output: logs\openai-oauth.log
+                echo               If login is required, that file will contain instructions.
                 echo               The main server will continue and will detect the proxy when it is ready.
             )
         )
