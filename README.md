@@ -149,6 +149,7 @@ schemas/
 | [architecture-diagrams.md](docs/architecture-diagrams.md) | 전체 | Mermaid 다이어그램 |
 | [schema_overview.html](docs/schema_overview.html) | 전체 | 스키마 개요도 (브라우저, 19개) |
 | [llm_architecture_design.md](docs/llm_architecture_design.md) | 개발자 | LLM 5단 폴백 설계 |
+| [releases/v1.2.0.md](docs/releases/v1.2.0.md) | 전체 | v1.2.0 릴리스 노트 (최신) |
 | [releases/v1.1.4.md](docs/releases/v1.1.4.md) | 전체 | v1.1.4 릴리스 노트 |
 | [docs/sessions/](docs/sessions/session_navigator.md) | 개발자 | 구현 세션 기록 (Phase 10~12) |
 | [observability-roadmap.md](docs/observability-roadmap.md) | 개발자 | OpenTelemetry 점진적 도입 로드맵 (Phase 1 완료) |
