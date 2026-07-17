@@ -244,6 +244,47 @@ def _suggest_doc_id(title: str) -> str:
     return result[:64] if result else ""
 
 
+def _auto_create_default_interpretation(
+    library_path, doc_id: str, title: str
+) -> tuple[str | None, str | None]:
+    """문헌 생성 직후 기본 해석 저장소를 자동으로 만든다.
+
+    목적: 문헌을 등록한 연구자가 해석 저장소를 따로 만드는 단계 없이
+          곧바로 표점·번역·주석 작업에 들어갈 수 있게 한다 (D-054).
+    입력: library_path — 서고 경로, doc_id — 방금 생성된 문헌 ID,
+          title — 해석 저장소 제목으로 쓸 문헌 제목.
+    출력: (interp_id, warning) — 성공 시 (ID, None), 실패 시 (None, 경고문).
+
+    왜 실패를 삼키는가:
+        이 함수는 문헌 생성이 이미 성공한 뒤에 불린다. 해석 저장소가
+        안 만들어져도 문헌은 유효하고 나중에 해석 탭에서 수동 생성할 수
+        있으므로, 전체 요청을 실패시키지 않고 경고만 돌려준다.
+    """
+    from core.interpretation import create_interpretation
+
+    # doc_id는 최대 64자 — 접미사(_interp + 충돌 시 _N)를 붙여도
+    # 64자 규칙(core/repo_id.py)을 넘지 않도록 54자로 자른다.
+    base = doc_id[:54] + "_interp"
+    interp_id = base
+    try:
+        n = 1
+        while (Path(library_path) / "interpretations" / interp_id).exists():
+            n += 1
+            interp_id = f"{base}_{n}"
+        create_interpretation(
+            library_path,
+            interp_id=interp_id,
+            source_document_id=doc_id,
+            # 이 플랫폼의 비전이 "사람과 LLM이 함께 읽는" 환경이므로 hybrid가 기본
+            interpreter_type="hybrid",
+            title=title,
+        )
+        return interp_id, None
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"기본 해석 저장소 자동 생성 실패 (문헌은 정상): {e}")
+        return None, f"해석 저장소 자동 생성 실패 (해석 탭에서 수동 생성 가능): {e}"
+
+
 # ── 문헌 CRUD API ──────────────────────────────
 
 
@@ -408,6 +449,14 @@ async def api_create_from_url(body: CreateFromUrlRequest):
             title=body.title,
             selected_assets=body.selected_assets,
         )
+        # 기본 해석 저장소 자동 생성 (실패해도 문헌 생성은 유효 — 경고만)
+        interp_id, interp_warning = _auto_create_default_interpretation(
+            _library_path, doc_id, result.get("title") or doc_id
+        )
+        result["interpretation_id"] = interp_id
+        if interp_warning:
+            prior = result.get("warning")
+            result["warning"] = f"{prior}\n{interp_warning}" if prior else interp_warning
         return result
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -907,6 +956,11 @@ async def api_create_from_files(
         except Exception as e:  # noqa: BLE001
             logger.warning(f"git commit 경고 (무시): {e}")
 
+        # 8. 기본 해석 저장소 자동 생성 (실패해도 문헌 생성은 유효 — 경고만)
+        interp_id, interp_warning = _auto_create_default_interpretation(
+            _library_path, doc_id, effective_title
+        )
+
         return {
             "document_id": doc_id,
             "doc_path": str(doc_path),
@@ -915,6 +969,8 @@ async def api_create_from_files(
             "image_count": len(image_paths),
             "pdf_count": len(pdf_inputs),
             "parts": parts,
+            "interpretation_id": interp_id,
+            "warning": interp_warning,
             "mode": "create_from_files",
         }
     finally:

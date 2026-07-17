@@ -105,14 +105,18 @@ if /I "%OPENAI_OAUTH_AUTO_START%"=="0" (
             echo [OpenAI OAuth] proxy ready at !OPENAI_OAUTH_BASE_URL!
         ) else (
             echo [OpenAI OAuth] starting local proxy...
-            start "OpenAI OAuth Proxy" cmd /k "npx.cmd -y openai-oauth"
+            REM /min: 프록시 창을 최소화 상태(작업표시줄)로 띄운다.
+            REM 완전히 숨기지 않는 이유: 첫 실행 시 OAuth 로그인 안내가 이 창에
+            REM 표시되므로, 필요할 때 사용자가 열어볼 수 있어야 한다.
+            start /min "OpenAI OAuth Proxy" cmd /k "npx.cmd -y openai-oauth"
             timeout /t 4 /nobreak >nul
             call :check_openai_oauth
             if "!OPENAI_OAUTH_READY!"=="1" (
                 set OPENAI_OAUTH_BASE_URL=http://127.0.0.1:!OPENAI_OAUTH_PORT!/v1
                 echo [OpenAI OAuth] proxy ready at !OPENAI_OAUTH_BASE_URL!
             ) else (
-                echo [OpenAI OAuth] proxy window opened. Complete login there if prompted.
+                echo [OpenAI OAuth] proxy started minimized in the taskbar.
+                echo               If login is required, open that window and follow the prompt.
                 echo               The main server will continue and will detect the proxy when it is ready.
             )
         )
@@ -134,7 +138,9 @@ echo Press Ctrl+C to stop the server.
 echo.
 
 REM -- Open browser after 2 seconds -----------
-start "" cmd /c "timeout /t 2 /nobreak >nul && start http://127.0.0.1:!PORT!"
+REM start /b + 숨김 PowerShell: 예전 방식(start cmd /c timeout...)은 2초짜리
+REM cmd 창을 하나 더 띄워 시작 시 창이 3개처럼 보였다. 이제 창 없이 연다.
+start /b "" powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Start-Process 'http://127.0.0.1:!PORT!'"
 
 REM -- Run server ------------------------------
 if "%LIBRARY_PATH%"=="" (

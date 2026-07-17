@@ -1775,6 +1775,45 @@ explain-diff: [`sessions/session_dragdrop_onboarding.md`](sessions/session_dragd
 
 ---
 
+## D-054: 문헌 생성 시 기본 해석 저장소 자동 생성 + 시작 창 정리
+
+**날짜**: 2026-07-17
+
+**결정**:
+1. **기본 해석 저장소 자동 생성**: `create-from-files`·`create-from-url` 성공 직후
+   `<doc_id>_interp`(hybrid, 문헌 제목 승계)를 자동 생성한다
+   (documents.py `_auto_create_default_interpretation`). 실패해도 문헌 생성은
+   유효하므로 예외를 삼키고 응답 `warning`으로만 알린다. 응답에
+   `interpretation_id`가 추가되고 완료 메시지에 표시된다.
+2. **시작 창 정리 (start_server.bat)**: 브라우저 오프너를 2초짜리 cmd 창 대신
+   숨김 PowerShell(`start /b` + `-WindowStyle Hidden`)로 바꾸고, OpenAI OAuth
+   프록시 창은 `start /min`으로 최소화 상태로 띄운다 — 평소 보이는 창은
+   메인 서버 창 하나가 된다.
+
+**근거**:
+- 해석 저장소는 표점·번역·주석(L5-L7)의 전제 조건인데, 지금까지는 문헌 등록
+  후 해석 탭에서 ID를 지어 수동 생성해야 했다 — doc_id와 같은 종류의 마찰.
+  D-052의 “드롭 → 바로 작업”을 완성하려면 이 단계도 없어져야 한다.
+  생성 비용은 폴더 골격 + git init 수준으로 저렴하고, 다중 해석 저장소
+  모델(독립 해석 작업)과도 충돌하지 않는다 — 기본 하나가 미리 있을 뿐이다.
+- OAuth 프록시 창을 완전히 숨기지 않는 이유: 첫 실행 OAuth 로그인 안내가
+  그 창에 표시되므로, 작업표시줄에서 열어볼 수 있어야 한다.
+  `start_server.sh`(macOS/Linux)는 이미 `&` 백그라운드라 변경 불필요.
+
+**트레이드오프**:
+- 채택: 항상 자동 생성. 거부 (옵트인 체크박스): 다이얼로그에 선택지를 하나
+  더 얹는 것 자체가 이번에 없애려는 마찰이다. 원치 않으면 해석 탭에서
+  삭제(휴지통)하면 된다.
+- interp_id는 doc_id를 54자로 잘라 `_interp`를 붙인다 — 64자 규칙
+  (core/repo_id.py) 안에서 충돌 접미사(_N) 여유를 남기기 위해서다.
+
+**검증**: `tests/test_onboarding_api.py`에 interpretation_id·목록 등재 단언 추가,
+전체 pytest 통과. 배치 파일은 수동 실행 확인 필요(창 2개 감소 기대).
+
+**관련**: [D-052](#d-052-드래그-앤-드롭-온보딩--경로-설정-없는-첫-시작) 온보딩의 완결편.
+
+---
+
 ### 배포·설치
 - [ ] Google Drive + .git 충돌 회피 가이드 → Phase 10 이후
 - [ ] 비개발자용 Git 번들링 또는 Git-free 모드 → Phase 10 이후

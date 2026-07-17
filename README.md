@@ -99,7 +99,7 @@ PDF/이미지 위에 **읽기 순서대로 번호가 매겨진 파란색 블록*
 2. `install.bat` 더블클릭 (Windows) 또는 `./install.sh` (macOS/Linux) — Python, Git, uv 자동 설치
 3. `start_server.bat` 더블클릭 (Windows) 또는 `./start_server.sh` (macOS/Linux)
 
-브라우저에서 `http://localhost:8000` 접속. **PDF·이미지 파일(또는 이미지 폴더)을 창 안에 끌어다 놓으면** 서고가 없어도 기본 서고(`~/Documents/고전서지서고`)가 자동으로 만들어지고 곧바로 문헌으로 등록됩니다 — 별도 경로 설정이 필요 없습니다. GUI 설정에서 서고를 직접 선택/생성할 수도 있습니다.
+브라우저에서 `http://localhost:8000` 접속. **PDF·이미지 파일(또는 이미지 폴더)을 창 안에 끌어다 놓으면** 서고가 없어도 기본 서고(`~/Documents/고전서지서고`)가 자동으로 만들어지고 곧바로 문헌으로 등록됩니다 — 별도 경로 설정이 필요 없고, 기본 해석 저장소도 함께 준비됩니다. GUI 설정에서 서고를 직접 선택/생성할 수도 있습니다.
 Windows의 `start_server.bat`는 설정된 표점 Docker 서비스와 OpenAI OAuth 프록시도 함께 시작합니다. OAuth 첫 실행에서 로그인이 필요하면 별도 프록시 창의 안내를 따라 진행하세요.
 
 > Git을 아는 분은 `git clone https://github.com/hw725/classical-text-browser.git`으로도 가능합니다.

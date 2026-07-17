@@ -897,10 +897,11 @@ async function _createFromFiles() {
     }
 
     const data = result.data;
-    _showCreateDocProgress(
-      `문헌 '${data.document_id}' 생성 완료! (${data.asset_count || 0}개 파일)`,
-      100,
-    );
+    let doneMsg = `문헌 '${data.document_id}' 생성 완료! (${data.asset_count || 0}개 파일)`;
+    if (data.interpretation_id) {
+      doneMsg += ` · 해석 저장소 '${data.interpretation_id}'도 함께 준비되었습니다.`;
+    }
+    _showCreateDocProgress(doneMsg, 100);
 
     await _refreshSidebar();
 
@@ -1038,6 +1039,9 @@ async function _createFromUrl() {
 
     // 성공 — 경고가 있어도 생성은 완료된 상태
     let msg = `문헌 '${data.document_id}' 생성 완료! (${data.asset_count || 0}개 파일)`;
+    if (data.interpretation_id) {
+      msg += ` · 해석 저장소 '${data.interpretation_id}'도 함께 준비되었습니다.`;
+    }
     if (data.warning) {
       msg += `\n경고: ${data.warning}`;
     }
