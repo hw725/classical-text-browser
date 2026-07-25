@@ -175,11 +175,60 @@ async function _loadExtractEngines() {
   }
 }
 
+/**
+ * LLM Vision용 모델 목록을 채운다.
+ *
+ * 왜 모델을 보여 주는가:
+ *   LLM Vision은 5단 폴백이라 어느 프로바이더가 잡힐지 화면에 드러나지 않는다.
+ *   실제로 «무료 로컬로 돌 것»이라 여겼는데 유료 API가 처리하고 있던 일이 있었다.
+ *   무엇으로 도는지 보이고, 원하면 고를 수 있어야 한다.
+ */
+async function _loadExtractModels() {
+  const select = document.getElementById("extract-model-select");
+  if (!select || select.dataset.loaded === "1") return;
+
+  try {
+    const res = await fetch("/api/llm/models");
+    const models = await res.json();
+    select.innerHTML = "";
+
+    const auto = document.createElement("option");
+    auto.value = "";
+    auto.textContent = "자동 (폴백 순서대로)";
+    select.appendChild(auto);
+
+    for (const m of Array.isArray(models) ? models : []) {
+      // 비전이 되는 모델만 — OCR은 이미지를 봐야 한다.
+      if (!m.vision || !m.available) continue;
+      const opt = document.createElement("option");
+      opt.value = `${m.provider}:${m.model}`;
+      // 과금 방식을 이름에 함께 적는다. «free»만 보고 공짜로 오해하면 안 된다.
+      const billing =
+        m.provider === "ollama"
+          ? (m.model || "").includes("cloud") ? "구독 한도" : "로컬 무료"
+          : m.provider === "openai_oauth" ? "구독 한도" : "종량 과금";
+      opt.textContent = `${m.display || m.model} — ${billing}`;
+      select.appendChild(opt);
+    }
+    select.dataset.loaded = "1";
+  } catch (e) {
+    console.warn("[ExtractPanel] 모델 목록을 불러오지 못했습니다:", e);
+  }
+}
+
 /** 선택한 엔진이 한글을 못 읽으면 경고를 보여 준다. */
 function _updateEngineWarning() {
   const select = document.getElementById("extract-engine-select");
   const warn = document.getElementById("extract-engine-warn");
   if (!select || !warn) return;
+  // LLM Vision일 때만 모델을 고르게 한다 (다른 엔진은 모델 개념이 없다).
+  const modelRow = document.getElementById("extract-model-row");
+  if (modelRow) {
+    const isLlm = select.value === "llm_vision";
+    modelRow.hidden = !isLlm;
+    if (isLlm) _loadExtractModels();
+  }
+
   const opt = select.selectedOptions[0];
   if (opt && opt.dataset.noHangul) {
     warn.hidden = false;
@@ -214,6 +263,42 @@ function _updateExtractCost() {
   costEl.textContent = usesLlm
     ? `${count}쪽 → LLM 호출 ${count}회`
     : `${count}쪽 (오프라인 엔진 — LLM 호출 없음)`;
+}
+
+/**
+ * 이번 실행에서 어느 모델로 얼마를 썼는지 보여 준다.
+ *
+ * 왜 금액만으로 부족한가:
+ *   구독형(Ollama 클라우드·OpenAI OAuth)은 비용이 0으로 기록된다.
+ *   «$0.00»만 띄우면 공짜로 오해하지만 실제로는 계정 한도를 쓰고 있다.
+ *   게다가 두 서비스 모두 남은 한도를 API로 알려 주지 않는다
+ *   (실측: 응답 헤더에 rate limit 정보 없음). 그래서 과금 방식에 따라
+ *   문구를 달리하고, 한도는 제공자 대시보드에서 보라고 안내한다.
+ */
+function _showUsage(usage) {
+  const box = document.getElementById("extract-usage");
+  if (!box) return;
+  if (!usage || !usage.calls) {
+    box.hidden = true;
+    return;
+  }
+
+  const cls = {
+    metered: "extract-usage-metered",
+    subscription: "extract-usage-subscription",
+    free: "extract-usage-free",
+  }[usage.billing] || "";
+  box.className = `extract-usage ${cls}`;
+
+  const models = (usage.models || []).join(", ") || "(알 수 없음)";
+  const tokens =
+    usage.tokens_in || usage.tokens_out
+      ? ` · 토큰 ${(usage.tokens_in || 0).toLocaleString()}/${(usage.tokens_out || 0).toLocaleString()}`
+      : "";
+
+  box.textContent = `${models} · ${usage.calls}회 호출${tokens}
+${usage.note || ""}`;
+  box.hidden = false;
 }
 
 /** 구운 PDF가 있는지 확인해 내려받기 링크를 갱신한다. */
@@ -271,6 +356,14 @@ async function _runExtractOcr() {
   const pages = parsePageRange(input.value, _extractPageCount());
   const body = { engine_id: select.value || null };
   if (pages) body.pages = pages;
+
+  // 모델을 골랐으면 그것으로 고정한다 (비우면 폴백 순서를 따른다).
+  const modelSelect = document.getElementById("extract-model-select");
+  if (modelSelect && modelSelect.value) {
+    const [provider, ...rest] = modelSelect.value.split(":");
+    body.force_provider = provider;
+    body.force_model = rest.join(":");
+  }
 
   _extractAbort = new AbortController();
   btn.textContent = "중단";
@@ -344,6 +437,7 @@ async function _runExtractOcr() {
       if (done.baked) parts.push(`PDF ${done.baked.baked_pages}쪽 구움`);
       text.textContent = parts.join(" · ");
       showToast(parts.join(" · "), "success");
+      _showUsage(done.usage);
       (done.warnings || []).forEach((w) => showToast(w, "info"));
       await _refreshExtractExport();
       // 지금 보고 있는 쪽의 텍스트를 다시 읽어 화면에 반영한다.

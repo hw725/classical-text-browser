@@ -1493,6 +1493,31 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
   line-height: 1.45;
 }
 
+/* 실행 후 어느 모델로 얼마를 썼는지 남긴다.
+   구독형은 금액이 0이라도 한도를 쓰므로 색을 달리해 구분한다. */
+.extract-usage {
+  white-space: pre-line;
+  padding: 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  background: var(--hover-bg);
+  color: var(--text-secondary);
+  border-left: 3px solid var(--border);
+}
+
+.extract-usage-metered {
+  border-left-color: #e0a030; /* 돈이 나간다 */
+}
+
+.extract-usage-subscription {
+  border-left-color: var(--accent); /* 한도를 쓴다 */
+}
+
+.extract-usage-free {
+  border-left-color: #4caf50; /* 소모 없음 */
+}
+
 /* 실행 전에 규모를 알린다 (300쪽 = LLM 호출 300회) */
 .extract-cost {
   color: var(--text-secondary);

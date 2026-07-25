@@ -40,6 +40,9 @@ class OpenAiOAuthProvider(OpenAiProvider):
     provider_id = "openai_oauth"
     display_name = "OpenAI (OAuth)"
     supports_image = True
+    # ChatGPT 구독 한도를 쓴다. 종량 과금이 아니므로 금액은 0으로 기록되지만
+    # 한도는 소모된다 — 남은 한도는 OpenAI 쪽에서 확인해야 한다.
+    billing_model = "subscription"
     DEFAULT_MODEL = "gpt-5.4-mini"  # OAuth 프록시 기본 모델 (비용 효율적)
 
     # is_available()에서 발견한 프록시 URL을 캐싱.

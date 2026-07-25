@@ -19,6 +19,7 @@ class OpenAiProvider(BaseLlmProvider):
     provider_id = "openai"
     display_name = "OpenAI"
     supports_image = True
+    billing_model = "metered"  # 쓴 만큼 과금된다
     DEFAULT_MODEL = "gpt-5-mini"  # 비용 효율적 기본 모델
 
     def _create_client(self):

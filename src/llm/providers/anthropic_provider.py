@@ -17,6 +17,7 @@ class AnthropicProvider(BaseLlmProvider):
     provider_id = "anthropic"
     display_name = "Claude (Anthropic)"
     supports_image = True
+    billing_model = "metered"  # 쓴 만큼 과금된다
     DEFAULT_MODEL = "claude-sonnet-4-20250514"
 
     # 대략적 가격 (1K tokens 기준, USD)

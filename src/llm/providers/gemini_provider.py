@@ -19,6 +19,7 @@ class GeminiProvider(BaseLlmProvider):
     provider_id = "gemini"
     display_name = "Google Gemini"
     supports_image = True
+    billing_model = "metered"  # 쓴 만큼 과금된다
     DEFAULT_MODEL = "gemini-2.5-flash"  # 비용 효율적 기본 모델
 
     # 주요 모델 목록 (2026-02 기준)

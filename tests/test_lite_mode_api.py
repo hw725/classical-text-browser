@@ -823,3 +823,146 @@ def test_force_rmtree_reports_failure_honestly(tmp_path):
     ok, why = _force_rmtree(missing)
     # 없는 경로는 지울 것이 없으므로 실패가 아니다.
     assert ok is True, why
+
+
+def test_batch_works_when_manifest_page_count_missing(batch_ready):
+    """manifest에 page_count가 없어도 OCR이 돌아야 한다.
+
+    add_document()로 만든 문헌(CLI·URL 등록)은 page_count가 null이다.
+    사이드바는 PDF를 직접 열어 쪽 수를 알아내므로 **화면에는 쪽이 보이는데**,
+    서버가 manifest만 믿으면 «쪽이 0개»라고 판단해 배치 OCR이
+    «OCR 할 쪽이 없습니다»로 죽는다. 실제로 사용자가 UI에서 이 에러를 만났다.
+    """
+    import json
+    from pathlib import Path
+
+    from app._state import get_library_path
+
+    client, doc_id, part_id = batch_ready
+
+    # 등록 경로에 따라 생기는 상태를 재현한다: page_count = null
+    manifest_path = Path(get_library_path()) / "documents" / doc_id / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["parts"][0]["page_count"] = None
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False), encoding="utf-8"
+    )
+
+    r = client.post(
+        f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch",
+        json={"engine_id": "dummy"},
+    )
+    assert r.status_code == 200, r.text
+
+    events = _sse_events(r)
+    assert events[0]["type"] == "start"
+    assert events[0]["total"] == 5, "PDF에서 쪽 수를 세지 못했다"
+    assert events[-1]["processed"] == 5
+
+
+def test_page_count_resolved_from_pdf():
+    """쪽 수 해석 함수는 manifest → PDF 순으로 본다."""
+    import tempfile
+    from pathlib import Path
+
+    import fitz
+
+    from app.routers.llm_ocr import _resolve_page_count
+    from core.document import add_document
+    from core.library import init_library
+
+    tmp = Path(tempfile.mkdtemp())
+    lib = tmp / "lib"
+    init_library(lib)
+
+    src = tmp / "four.pdf"
+    doc = fitz.open()
+    for _ in range(4):
+        doc.new_page(width=595, height=842)
+    doc.save(str(src))
+    doc.close()
+
+    add_document(library_path=lib, doc_id="pc_doc", title="pc", files=[src])
+    doc_path = lib / "documents" / "pc_doc"
+
+    # manifest에 값이 있으면 그것을 쓴다
+    assert _resolve_page_count(doc_path, {"part_id": "vol1", "page_count": 9}) == 9
+    # 없으면 PDF에서 센다
+    assert _resolve_page_count(doc_path, {"part_id": "vol1", "page_count": None}) == 4
+    # 셀 수 없으면 0 (호출부가 안내한다)
+    assert _resolve_page_count(doc_path, {"part_id": "nope", "page_count": None}) == 0
+
+
+# ── LLM 사용량·과금 표시 ──────────────────────────────
+
+
+def test_billing_kind_distinguishes_subscription_from_free():
+    """구독 한도와 무료를 구분해야 한다.
+
+    Ollama 클라우드는 금액이 0으로 기록되지만 계정 한도를 쓴다.
+    이것을 «무료»로 표시하면 사용자가 한도를 모르는 채 소모하게 된다.
+    실제로 폴백 순서만 보고 «무료 로컬»이라 여겼는데 유료 API가
+    처리하고 있던 일이 있었다.
+    """
+    from app.routers.llm_ocr import _billing_kind
+
+    assert _billing_kind(["gemini/gemini-2.5-flash"]) == "metered"
+    assert _billing_kind(["openai/gpt-5-mini"]) == "metered"
+    assert _billing_kind(["anthropic/claude-sonnet-4-20250514"]) == "metered"
+    # Ollama는 같은 프로바이더라도 모델에 따라 다르다
+    assert _billing_kind(["ollama/qwen3.5:cloud"]) == "subscription"
+    assert _billing_kind(["ollama/qwen3.5:4b"]) == "free"
+    assert _billing_kind(["openai_oauth/gpt-5.4-mini"]) == "subscription"
+    # 섞이면 그 사실을 알려야 한다
+    assert _billing_kind(["ollama/qwen3.5:cloud", "gemini/gemini-2.5-flash"]) == "mixed"
+    assert _billing_kind([]) == "unknown"
+
+
+def test_billing_note_never_calls_subscription_free():
+    """구독 한도 사용을 «무료»라고 말하면 안 된다."""
+    from app.routers.llm_ocr import _billing_note
+
+    usage = {"calls": 15, "cost_usd": 0.0}
+    sub = _billing_note("subscription", usage)
+    assert "한도" in sub
+    assert "무료" not in sub, "구독 한도를 무료라고 표시했다"
+
+    free = _billing_note("free", usage)
+    assert "로컬" in free
+
+    metered = _billing_note("metered", {"calls": 15, "cost_usd": 0.0084})
+    assert "0.0084" in metered
+
+
+def test_batch_reports_usage(batch_ready):
+    """배치 완료 응답에 사용량이 실려야 한다.
+
+    어느 모델로 얼마를 썼는지 사용자가 그 자리에서 알 수 있어야 한다.
+    """
+    client, doc_id, part_id = batch_ready
+    events = _sse_events(
+        client.post(
+            f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch",
+            json={"engine_id": "dummy", "pages": [1]},
+        )
+    )
+    done = events[-1]
+    assert "usage" in done, "완료 응답에 usage가 없다"
+    usage = done["usage"]
+    for key in ("calls", "tokens_in", "tokens_out", "cost_usd", "models", "billing"):
+        assert key in usage, f"usage에 {key}가 없다"
+    # 더미 엔진은 LLM을 부르지 않으므로 기록이 없다
+    assert usage["calls"] == 0
+    assert usage["billing"] == "unknown"
+
+
+def test_ollama_billing_depends_on_model():
+    """Ollama 프로바이더는 모델에 따라 과금 방식이 다르다."""
+    from llm.config import LlmConfig
+    from llm.providers.ollama import OllamaProvider
+
+    p = OllamaProvider(LlmConfig())
+    assert p.billing_for_model("qwen3.5:cloud") == "subscription"
+    assert p.billing_for_model("qwen3-vl:235b-cloud") == "subscription"
+    assert p.billing_for_model("qwen3.5:4b") == "free"
+    assert p.billing_for_model(None) == "free"

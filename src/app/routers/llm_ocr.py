@@ -86,6 +86,170 @@ class OcrBatchRequest(BaseModel):
     paddle_lang: str | None = None
 
 
+def _usage_log_path():
+    """LLM 사용 기록 파일 경로를 돌려준다. (UsageTracker와 같은 규칙)"""
+    from pathlib import Path
+
+    library_path = get_library_path()
+    if library_path is not None:
+        return Path(library_path) / "llm_usage_log.jsonl"
+    return Path.home() / ".classical-text-browser" / "llm_usage_log.jsonl"
+
+
+def _usage_snapshot() -> int:
+    """지금까지 쌓인 사용 기록의 줄 수를 센다.
+
+    배치 전후로 이 값을 비교해 **이번 실행에서 쓴 것만** 집계하기 위함이다.
+    파일이 없으면 0.
+    """
+    path = _usage_log_path()
+    if not path.exists():
+        return 0
+    try:
+        with open(path, encoding="utf-8") as f:
+            return sum(1 for _ in f)
+    except OSError:
+        return 0
+
+
+def _usage_since(start_line: int) -> dict:
+    """start_line 이후에 기록된 LLM 사용량을 집계한다.
+
+    입력: start_line — 배치 시작 시점의 기록 줄 수.
+    출력: {calls, tokens_in, tokens_out, cost_usd, models}
+
+    왜 필요한가:
+        어느 모델이 얼마를 썼는지 **사용자가 그 자리에서 알아야 한다.**
+        실제로 폴백 순서만 보고 «무료 로컬로 돌 것»이라 여겼는데
+        기록에는 유료 API가 찍히고 있던 일이 있었다. 모르는 채로
+        API가 소모되는 상황을 없애려고 완료 응답에 실어 보낸다.
+    """
+    import json as _json
+
+    path = _usage_log_path()
+    result = {
+        "calls": 0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "cost_usd": 0.0,
+        "models": [],
+    }
+    seen: list[str] = []
+    if path.exists():
+        try:
+            with open(path, encoding="utf-8") as f:
+                for idx, line in enumerate(f):
+                    if idx < start_line:
+                        continue
+                    try:
+                        rec = _json.loads(line)
+                    except _json.JSONDecodeError:
+                        continue
+                    if rec.get("purpose") != "ocr":
+                        continue
+                    result["calls"] += 1
+                    result["tokens_in"] += rec.get("tokens_in") or 0
+                    result["tokens_out"] += rec.get("tokens_out") or 0
+                    result["cost_usd"] += rec.get("cost_usd") or 0.0
+                    label = f"{rec.get('provider') or '?'}/{rec.get('model') or '?'}"
+                    if label not in seen:
+                        seen.append(label)
+        except OSError:
+            # 읽지 못해도 아래에서 billing·note를 채운 형태로 돌려준다.
+            # 조기 반환하면 호출부가 기대하는 키가 빠져 화면이 깨진다.
+            pass
+
+    result["models"] = seen
+    result["cost_usd"] = round(result["cost_usd"], 6)
+    result["billing"] = _billing_kind(seen)
+    result["note"] = _billing_note(result["billing"], result)
+    return result
+
+
+def _billing_kind(model_labels: list[str]) -> str:
+    """쓴 프로바이더·모델로 과금 방식을 판정한다.
+
+    입력: ["gemini/gemini-2.5-flash", "ollama/qwen3.5:cloud", ...]
+    출력: "metered" | "subscription" | "free" | "mixed" | "unknown"
+
+    왜 이 판정이 필요한가: 구독형(Ollama 클라우드·OpenAI OAuth)은 금액이
+    0으로 기록된다. 그대로 «$0.00»이라고 띄우면 **공짜로 오해**하지만
+    실제로는 계정 한도를 쓰고 있다. 표시 문구를 다르게 하려고 가른다.
+    """
+    if not model_labels:
+        return "unknown"
+
+    kinds = set()
+    for label in model_labels:
+        provider, _, model = label.partition("/")
+        if provider == "ollama":
+            kinds.add("subscription" if "cloud" in model else "free")
+        elif provider == "openai_oauth":
+            kinds.add("subscription")
+        elif provider in ("gemini", "openai", "anthropic"):
+            kinds.add("metered")
+        else:
+            kinds.add("unknown")
+
+    if len(kinds) == 1:
+        return kinds.pop()
+    return "mixed"
+
+
+def _billing_note(kind: str, usage: dict) -> str:
+    """사용자에게 보여 줄 한 줄 안내를 만든다.
+
+    금액이 0이라고 «무료»라고 말하지 않는다 — 구독 한도는 눈에 보이지 않게
+    소모되기 때문이다. Ollama·OpenAI는 남은 한도를 API로 알려 주지 않으므로
+    (실측 2026-07-25: 응답 헤더에 rate limit 정보 없음) 대시보드로 안내한다.
+    """
+    calls = usage.get("calls", 0)
+    if kind == "metered":
+        return f"종량 과금 — 이번 실행 ${usage.get('cost_usd', 0):.4f}"
+    if kind == "subscription":
+        return (
+            f"구독 한도를 사용했습니다 (호출 {calls}회). 금액은 청구되지 않지만 "
+            "한도가 소모됩니다 — 남은 한도는 제공자 대시보드에서 확인하세요."
+        )
+    if kind == "free":
+        return f"로컬 모델로 처리했습니다 (호출 {calls}회). 비용·한도 소모 없음."
+    if kind == "mixed":
+        return (
+            f"여러 프로바이더가 쓰였습니다 (호출 {calls}회, "
+            f"종량 과금분 ${usage.get('cost_usd', 0):.4f}). 구독 한도도 함께 소모됐습니다."
+        )
+    return ""
+
+
+def _resolve_page_count(doc_path, part: dict) -> int:
+    """이 권의 쪽 수를 구한다. manifest에 없으면 PDF를 열어 센다.
+
+    입력: doc_path — 문헌 디렉토리. part — manifest의 parts 항목.
+    출력: 쪽 수. 알 수 없으면 0.
+
+    왜 manifest만 믿으면 안 되는가:
+        `add_document()`로 만든 문헌(CLI·URL 등록)은 `page_count`가 null이다.
+        사이드바는 PDF를 직접 열어 쪽 수를 알아내므로 화면에는 쪽이 보이는데,
+        서버가 manifest만 보면 «쪽이 0개»라고 판단해 배치 OCR이
+        «OCR 할 쪽이 없습니다»로 죽는다. 실제로 그 사고가 있었다 —
+        화면에는 쪽이 멀쩡히 있는데 OCR만 안 되는 상태였다.
+    """
+    declared = part.get("page_count")
+    if isinstance(declared, int) and declared > 0:
+        return declared
+
+    # manifest에 없으면 실제 파일에서 센다.
+    try:
+        import fitz
+
+        from core.document import get_pdf_path
+
+        with fitz.open(str(get_pdf_path(doc_path, part.get("part_id")))) as pdf:
+            return pdf.page_count
+    except Exception:  # noqa: BLE001 — 셀 수 없으면 0으로 두고 호출부가 안내한다
+        return 0
+
+
 # 학습 데이터에 한글이 없어 한글을 인식하지 못하는 엔진들.
 # 근거는 각 엔진 파일의 docstring이다 (ndlocr_engine.py, ndlkotenocr_engine.py,
 # ndlkotenocr_full_engine.py). 추측이 아니라 문서화된 제약이다.
@@ -942,7 +1106,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
             status_code=404,
         )
 
-    page_count = int(part.get("page_count") or 0)
+    page_count = _resolve_page_count(doc_path, part)
     if body.pages is None:
         targets = list(range(1, page_count + 1))
     elif page_count:
@@ -1003,6 +1167,9 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
         loop = asyncio.get_event_loop()
         processed = skipped = failed = 0
         total_lines = 0
+
+        # 이번 배치에서 쓴 LLM 사용량만 집계하려고 시작 지점을 기억한다.
+        usage_start = _usage_snapshot()
 
         await progress_queue.put(
             {
@@ -1119,6 +1286,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                     "engine_id": effective_engine,
                     "warnings": warnings,
                     "embedded": embed_summary,
+                    "usage": _usage_since(usage_start),
                 }
             )
         except asyncio.CancelledError:

@@ -10,11 +10,14 @@ Ollama 로컬 서버(localhost:11434)를 통한 LLM 호출.
 """
 
 import base64
+import logging
 import time
 
 import httpx
 
 from .base import BaseLlmProvider, LlmProviderError, LlmResponse
+
+logger = logging.getLogger(__name__)
 
 
 class OllamaProvider(BaseLlmProvider):
@@ -48,9 +51,77 @@ class OllamaProvider(BaseLlmProvider):
     # 다음 프로바이더(Gemini 등)로 넘어가도록 한다.
     SKIP_FOR_PURPOSES = {"punctuation", "annotation"}
 
+    # 로컬 실행이 기본이지만 `:cloud` 모델은 구독 한도를 쓴다.
+    billing_model = "free"
+
+    def billing_for_model(self, model: str | None = None) -> str:
+        """모델 이름으로 과금 방식을 가른다.
+
+        Ollama는 로컬과 클라우드가 한 프로바이더에 섞여 있다.
+        `qwen3.5:cloud` 처럼 이름에 `cloud`가 들어가면 ollama.com 계정의
+        **구독 한도**를 소모한다 — 금액은 0이지만 공짜가 아니다.
+        로컬 모델은 이 PC에서 도므로 소모하는 것이 없다.
+        """
+        if model and "cloud" in model:
+            return "subscription"
+        return "free"
+
     @property
     def _url(self) -> str:
         return self.config.get("ollama_url", "http://localhost:11434")
+
+    async def _pick_vision_model(self) -> str:
+        """실제로 쓸 수 있는 비전 모델을 고른다.
+
+        출력: 모델 이름. 찾지 못하면 DEFAULT_MODELS["vision"]을 그대로 돌려준다
+              (그 경우 호출이 실패하고 라우터가 다음 프로바이더로 넘어간다).
+
+        고르는 순서:
+            1. 설정에 `ollama_vision_model`이 있으면 그것 (사용자 지정 우선)
+            2. DEFAULT_MODELS["vision"]이 실제로 설치돼 있으면 그것
+            3. 설치된 비전 모델 중 **클라우드 우선** — 로컬 소형 모델은
+               이 PC 사양에서 성능이 떨어진다는 사용자 판단에 따른다.
+            4. 그래도 없으면 로컬 비전 모델
+
+        결과는 캐시한다. 매 쪽마다 /api/show를 부르면 OCR이 느려진다.
+        """
+        configured = self.config.get("ollama_vision_model")
+        if configured:
+            return configured
+
+        cached = getattr(self, "_vision_model_cache", None)
+        if cached:
+            return cached
+
+        default = self.DEFAULT_MODELS["vision"]
+        try:
+            models = await self.list_models()
+        except Exception:  # noqa: BLE001 — 목록을 못 받으면 기본값으로 시도한다
+            return default
+
+        names = {m.get("name") for m in models}
+        if default in names:
+            self._vision_model_cache = default
+            return default
+
+        vision = [m.get("name") for m in models if m.get("vision")]
+        if not vision:
+            logger.warning(
+                "Ollama에 비전 모델이 없습니다. 이미지 호출은 다음 프로바이더로 넘어갑니다. "
+                "→ 해결: ollama pull 로 비전 모델을 받거나 .env에 "
+                "OLLAMA_VISION_MODEL 을 지정하세요."
+            )
+            return default
+
+        # 클라우드 모델을 앞세운다 (로컬 소형 모델은 이 PC에서 성능이 낮다).
+        cloud = [n for n in vision if n and "cloud" in n]
+        picked = (cloud or vision)[0]
+        self._vision_model_cache = picked
+        logger.info(
+            f"Ollama 비전 모델 자동 선택: {picked} "
+            f"(기본값 {default}이(가) 설치돼 있지 않음)"
+        )
+        return picked
 
     async def is_available(self) -> bool:
         """Ollama 서버가 실행 중인지 확인."""
@@ -336,10 +407,19 @@ class OllamaProvider(BaseLlmProvider):
     ) -> LlmResponse:
         """Ollama 비전 모델로 이미지 분석.
 
-        gemma4:e4b가 기본 비전 모델 (멀티모달).
         Ollama API는 images 필드에 base64 배열을 받는다.
+
+        모델을 왜 자동으로 고르는가:
+            DEFAULT_MODELS["vision"]에 적힌 모델이 **설치돼 있지 않으면**
+            호출이 실패하고 라우터가 조용히 다음 프로바이더로 넘어간다.
+            실제로 그 일이 있었다 — 기본값 `gemma4:e4b`가 없어서 Ollama가
+            늘 탈락했고, 사용자는 무료 로컬로 도는 줄 알았는데 실제로는
+            Gemini가 처리하고 있었다. 어느 모델이 쓰이는지 모르는 상태로
+            유료 API가 소모되는 것이 가장 나쁘다.
+
+            그래서 지정된 모델이 없으면 설치된 것 중에서 찾는다.
         """
-        selected_model = model or self.DEFAULT_MODELS["vision"]
+        selected_model = model or await self._pick_vision_model()
 
         payload = {
             "model": selected_model,

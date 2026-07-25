@@ -3192,6 +3192,18 @@
                   hidden
                 ></div>
 
+                <!-- LLM Vision을 고를 때만 보인다. 어느 모델이 도는지
+                     보이지 않으면 유료 API가 조용히 쓰일 수 있다. -->
+                <label
+                  class="extract-field"
+                  id="extract-model-row"
+                  for="extract-model-select"
+                  hidden
+                >
+                  <span>모델</span>
+                  <select id="extract-model-select"></select>
+                </label>
+
                 <label
                   class="extract-field"
                   for="extract-pages-input"
@@ -3224,6 +3236,14 @@
                     id="extract-progress-text"
                   ></div>
                 </div>
+
+                <!-- 실행이 끝나면 어느 모델로 얼마를 썼는지 남긴다.
+                     구독형은 금액이 0이라도 한도를 쓰므로 그 사실을 적는다. -->
+                <div
+                  class="extract-usage"
+                  id="extract-usage"
+                  hidden
+                ></div>
               </div>
 
               <!-- 3) born-digital일 때: 바로 가져오기 -->
