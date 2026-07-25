@@ -90,6 +90,7 @@ def cmd_embed_folder(args):
         keep_workspace=args.keep_workspace,
         page_sleep=args.sleep,
         paper_sleep=args.sleep_between,
+        use_line_detection=not args.no_line_detection,
     )
 
     if args.execute:
@@ -195,6 +196,13 @@ def main():
         action="store_true",
         help="작업 서고의 복사본을 지우지 않고 남긴다 (OCR 이력 보존). "
         "기본은 지운다 — 같은 논문의 사본이 늘어나지 않게.",
+    )
+    p_embed.add_argument(
+        "--no-line-detection",
+        action="store_true",
+        help="줄 위치 검출을 끈다. 켜져 있으면 텍스트가 원본 글자 자리에 놓이지만 "
+        "쪽당 약 8초가 더 든다. 끄면 빨라지는 대신 검색 형광이 제자리에 뜨지 않는다. "
+        "(PaddleOCR가 없으면 어차피 꺼진 것과 같다)",
     )
     p_embed.add_argument(
         "--sleep",

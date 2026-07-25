@@ -234,6 +234,7 @@ def _process_one(
     pipeline,
     keep_workspace: bool = False,
     page_sleep: float = 0.0,
+    use_line_detection: bool = True,
 ) -> dict:
     """논문 한 편을 등록 → OCR → 입히기 → 자리바꿈까지 처리한다.
 
@@ -285,13 +286,16 @@ def _process_one(
                 time.sleep(page_sleep)
 
         # 3) 텍스트 레이어를 입힌다
-        embedded = embed_text_layer(doc_path, "vol1")
+        embedded = embed_text_layer(
+            doc_path, "vol1", use_line_detection=use_line_detection
+        )
         record.update(
             {
                 "ocr_pages": ok_pages,
                 "embedded_pages": embedded.embedded_pages,
                 "positioned_lines": embedded.positioned_lines,
                 "approximated_lines": embedded.approximated_lines,
+                "detected_lines": embedded.detected_lines,
                 "embedded_path": embedded.output_path,
             }
         )
@@ -369,6 +373,7 @@ def embed_folder(
     keep_workspace: bool = False,
     page_sleep: float = 0.0,
     paper_sleep: float = 0.0,
+    use_line_detection: bool = True,
     progress=print,
 ) -> BatchReport:
     """논문 폴더 전체를 처리한다.
@@ -466,6 +471,7 @@ def embed_folder(
             pipeline,
             keep_workspace=keep_workspace,
             page_sleep=page_sleep,
+            use_line_detection=use_line_detection,
         )
         _append_log(log_path, record)
 

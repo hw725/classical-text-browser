@@ -73,6 +73,7 @@ class EmbedResult:
     total_lines: int
     positioned_lines: int  # bbox가 있어 제자리에 놓은 줄 수
     approximated_lines: int  # 좌표가 없어 원본 자리가 아닌 곳에 늘어놓은 줄 수
+    detected_lines: int  # 검출로 위치를 찾아 제자리에 놓은 줄 수
     size_bytes: int
     source_layer: str  # "l2"(OCR 결과) 또는 "l4"(교정 텍스트)
     embed_font: bool
@@ -88,6 +89,7 @@ class EmbedResult:
             "total_lines": self.total_lines,
             "positioned_lines": self.positioned_lines,
             "approximated_lines": self.approximated_lines,
+            "detected_lines": self.detected_lines,
             "size_bytes": self.size_bytes,
             "source_layer": self.source_layer,
             "embed_font": self.embed_font,
@@ -281,6 +283,7 @@ def embed_text_layer(
     pages: list[int] | None = None,
     source_layer: str = "l2",
     embed_font: bool = False,
+    use_line_detection: bool = True,
 ) -> EmbedResult:
     """문헌의 한 권(part)에 텍스트 레이어를 입혀 새 PDF를 만든다.
 
@@ -292,6 +295,8 @@ def embed_text_layer(
         source_layer — "l2"(OCR 결과, 좌표 있음) 또는 "l4"(사람이 교정한 텍스트).
                        l4는 좌표가 없어 왼쪽 여백에 순서대로 놓인다.
         embed_font — True면 폰트를 임베드한다(파일이 커지지만 뷰어 호환성이 높다).
+        use_line_detection — 좌표 없는 줄에 검출로 찾은 위치를 채운다.
+            PaddleOCR가 없으면 조용히 건너뛴다. 끄면 항상 순서 배치가 된다.
     출력: EmbedResult.
 
     왜 원본을 복사해서 쓰는가: L1_source/의 PDF는 절대 수정하지 않는다.
@@ -328,6 +333,7 @@ def embed_text_layer(
         targets = pages if pages is not None else list(range(1, total_pages + 1))
 
         embedded = skipped = total_lines = positioned = approximated = 0
+        detected_lines = 0
 
         for page_num in targets:
             if not 1 <= page_num <= total_pages:
@@ -341,6 +347,14 @@ def embed_text_layer(
                 continue
 
             scale = _render_scale(doc_path, part_id, page_num, page.rect.width)
+
+            # 좌표가 없는 줄에 «글자가 있는 자리»를 채워 넣는다.
+            # LLM Vision은 텍스트만 주므로, 검출로 얻은 줄 위치와 순서를 맞춘다.
+            # 실패하면 그대로 두고 아래에서 순서 배치로 물러난다.
+            if use_line_detection:
+                lines, filled = _fill_positions_by_detection(page, lines, scale)
+                detected_lines += filled
+
             pos, approx, warns = _embed_page(page, lines, scale, CJK_FONT, font)
 
             total_lines += len(lines)
@@ -380,7 +394,8 @@ def embed_text_layer(
     size = output_path.stat().st_size
     logger.info(
         f"텍스트 레이어 입히기 완료: {output_path} — "
-        f"{embedded}/{len(targets)}쪽, {positioned}줄 제자리·{approximated}줄 근사, "
+        f"{embedded}/{len(targets)}쪽, {positioned}줄 제자리"
+        f"(검출 {detected_lines}줄 포함)·{approximated}줄 순서배치, "
         f"{size / 1024:.0f}KB"
     )
 
@@ -392,11 +407,71 @@ def embed_text_layer(
         total_lines=total_lines,
         positioned_lines=positioned,
         approximated_lines=approximated,
+        detected_lines=detected_lines,
         size_bytes=size,
         source_layer=source_layer,
         embed_font=embed_font,
         warnings=warnings,
     )
+
+
+def _fill_positions_by_detection(
+    page, lines: list[tuple[str, list[float] | None]], scale: float
+) -> tuple[list[tuple[str, list[float] | None]], int]:
+    """좌표가 없는 줄에 검출로 찾은 «글자가 있는 자리»를 채운다.
+
+    입력:
+        page — 대상 PDF 페이지. lines — (텍스트, bbox 또는 None) 목록.
+        scale — 픽셀 → 포인트 배율.
+    출력: (좌표를 채운 목록, 채운 줄 수)
+
+    왜 줄 수가 같을 때만 채우는가:
+        검출과 인식은 서로 다른 도구라 줄을 나누는 방식이 다를 수 있다.
+        개수가 어긋난 상태에서 순서대로 짝지으면 **모든 줄이 밀려** 엉뚱한
+        자리를 가리키게 된다. 그건 위치가 없는 것보다 나쁘다.
+        그래서 개수가 정확히 맞을 때만 쓰고, 아니면 손대지 않는다.
+        (실측: 15쪽 논문에서 12쪽이 일치. 나머지는 순서 배치로 남는다.)
+
+    이미 좌표가 있는 줄(NDL·Paddle 인식 결과)은 건드리지 않는다.
+    """
+    missing = [i for i, (_t, bbox) in enumerate(lines) if bbox is None]
+    if not missing:
+        return lines, 0
+
+    try:
+        from ocr.line_detector import detect_lines
+    except Exception:  # noqa: BLE001 — 모듈이 없으면 조용히 물러난다
+        return lines, 0
+
+    try:
+        import fitz
+
+        pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale))
+        # 목표 줄 수를 함께 넘긴다. 쪽마다 알맞은 임계값이 달라
+        # 고정값으로는 2단 목차와 한시 대역을 동시에 맞출 수 없다.
+        detected = detect_lines(
+            pix.tobytes("png"), float(pix.width), target_count=len(lines)
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"줄 위치 검출을 건너뜁니다: {e}")
+        return lines, 0
+
+    if len(detected) != len(lines):
+        logger.info(
+            f"검출 {len(detected)}줄 ≠ 텍스트 {len(lines)}줄 — "
+            "순서가 밀릴 수 있어 위치를 채우지 않습니다."
+        )
+        return lines, 0
+
+    filled = []
+    count = 0
+    for (text, bbox), det in zip(lines, detected):
+        if bbox is None:
+            filled.append((text, det.as_bbox()))
+            count += 1
+        else:
+            filled.append((text, bbox))
+    return filled, count
 
 
 def _load_lines(

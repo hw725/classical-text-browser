@@ -178,12 +178,17 @@ def test_embed_with_bbox_positions_lines(scanned_doc):
 def test_embed_without_bbox_still_extractable(scanned_doc):
     """좌표가 없는 엔진(LLM Vision)이어도 텍스트는 반드시 들어가야 한다.
 
-    위치는 근사가 되지만, 복사·Ctrl+F·구조 분석이 동작하려면
+    위치는 원본 자리가 아니게 되지만, 복사·Ctrl+F·구조 분석이 동작하려면
     텍스트의 존재 자체가 먼저다.
+
+    검출을 끄고 본다: 여기서 확인할 것은 «좌표를 못 얻었을 때의 폴백»이다.
+    검출이 켜져 있으면 위치가 채워져 이 경로를 타지 않는다.
     """
     _write_l2(scanned_doc, "vol1", 1, with_bbox=False)
 
-    result = embed_text_layer(scanned_doc, "vol1", pages=[1])
+    result = embed_text_layer(
+        scanned_doc, "vol1", pages=[1], use_line_detection=False
+    )
 
     assert result.positioned_lines == 0
     assert result.approximated_lines == len(LINES)
@@ -307,11 +312,16 @@ def test_lines_without_bbox_are_stacked_not_placed(scanned_doc):
         좌표를 모르므로 **모든 줄을 왼쪽 여백에서 시작해 세로로 균등 배치**한다.
         검색하면 형광이 한 줄 크기로 정확히 뜨지만 그 자리에 원본 글자가 없다.
         설명과 구현이 다시 어긋나지 않도록 실제 좌표를 검증한다.
+
+        검출을 끈 상태의 동작이다. 검출로 위치를 얻으면 제자리에 놓이며,
+        그 경로는 test_detection_fills_positions_only_when_counts_match가 본다.
     """
     import fitz
 
     _write_l2(scanned_doc, "vol1", 1, with_bbox=False)
-    result = embed_text_layer(scanned_doc, "vol1", pages=[1])
+    result = embed_text_layer(
+        scanned_doc, "vol1", pages=[1], use_line_detection=False
+    )
     assert result.approximated_lines == len(LINES)
     assert result.positioned_lines == 0
 
@@ -341,3 +351,79 @@ def test_lines_without_bbox_are_stacked_not_placed(scanned_doc):
         )
     finally:
         out.close()
+
+
+def test_detection_fills_positions_only_when_counts_match(scanned_doc, monkeypatch):
+    """검출 줄 수가 텍스트 줄 수와 같을 때만 위치를 채워야 한다.
+
+    개수가 어긋난 상태에서 순서대로 짝지으면 모든 줄이 밀려 엉뚱한 자리를
+    가리킨다. 그건 위치가 없는 것보다 나쁘다. 실제 논문 15쪽 중 3쪽이
+    어긋났으므로 이 폴백이 반드시 동작해야 한다.
+    """
+    from ocr.line_detector import DetectedLine
+
+    _write_l2(scanned_doc, "vol1", 1, with_bbox=False)
+
+    # 1) 개수가 맞을 때 — 검출 위치로 채운다
+    fake = [DetectedLine(100.0 + i * 10, 200.0 + i * 40, 800.0, 236.0 + i * 40)
+            for i in range(len(LINES))]
+    monkeypatch.setattr("ocr.line_detector.detect_lines", lambda *a, **k: fake)
+    result = embed_text_layer(scanned_doc, "vol1", pages=[1],
+                              output_path=scanned_doc / "matched.pdf")
+    assert result.detected_lines == len(LINES)
+    assert result.positioned_lines == len(LINES)
+    assert result.approximated_lines == 0
+
+    # 2) 개수가 어긋날 때 — 손대지 않고 순서 배치로 물러난다
+    monkeypatch.setattr("ocr.line_detector.detect_lines", lambda *a, **k: fake[:1])
+    result = embed_text_layer(scanned_doc, "vol1", pages=[1],
+                              output_path=scanned_doc / "mismatched.pdf")
+    assert result.detected_lines == 0, "개수가 다른데 위치를 채웠다 — 줄이 밀린다"
+    assert result.approximated_lines == len(LINES)
+
+
+def test_detection_can_be_disabled(scanned_doc, monkeypatch):
+    """use_line_detection=False면 검출을 부르지 않는다."""
+    called = []
+    monkeypatch.setattr("ocr.line_detector.detect_lines",
+                        lambda *a, **k: called.append(1) or [])
+
+    _write_l2(scanned_doc, "vol1", 1, with_bbox=False)
+    result = embed_text_layer(scanned_doc, "vol1", pages=[1],
+                              use_line_detection=False)
+
+    assert not called, "끄라고 했는데 검출을 불렀다"
+    assert result.detected_lines == 0
+    assert result.approximated_lines == len(LINES)
+
+
+def test_detection_failure_falls_back_quietly(scanned_doc, monkeypatch):
+    """검출이 실패해도 텍스트 레이어는 만들어져야 한다.
+
+    검출은 위치를 개선하는 보조 수단이지 필수가 아니다.
+    """
+    def boom(*a, **k):
+        raise RuntimeError("모델 로드 실패")
+
+    monkeypatch.setattr("ocr.line_detector.detect_lines", boom)
+    _write_l2(scanned_doc, "vol1", 1, with_bbox=False)
+
+    result = embed_text_layer(scanned_doc, "vol1", pages=[1])
+
+    assert result.embedded_pages == 1
+    assert result.detected_lines == 0
+    assert result.approximated_lines == len(LINES)
+
+
+def test_existing_bbox_is_not_overwritten(scanned_doc, monkeypatch):
+    """이미 좌표가 있는 줄(NDL·Paddle 인식)은 검출로 덮어쓰지 않는다."""
+    from ocr.line_detector import DetectedLine
+
+    fake = [DetectedLine(999.0, 999.0, 1000.0, 1010.0) for _ in LINES]
+    monkeypatch.setattr("ocr.line_detector.detect_lines", lambda *a, **k: fake)
+
+    _write_l2(scanned_doc, "vol1", 1, with_bbox=True)  # bbox 있음
+    result = embed_text_layer(scanned_doc, "vol1", pages=[1])
+
+    assert result.detected_lines == 0, "OCR이 준 좌표를 검출로 덮어썼다"
+    assert result.positioned_lines == len(LINES)
