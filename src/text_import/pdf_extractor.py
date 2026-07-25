@@ -130,6 +130,88 @@ class PdfTextExtractor:
                 return True
         return False
 
+    def probe_text_layer(
+        self, sample_max: int = 30, min_chars_per_page: int = 50
+    ) -> dict:
+        """텍스트 레이어의 유무를 **문서 전체에 걸쳐** 판정한다.
+
+        입력:
+            sample_max — 최대 표본 쪽 수. 300쪽을 전부 재면 느리므로 고르게 뽑는다.
+            min_chars_per_page — 이 글자 수 이상이어야 "텍스트가 있는 쪽"으로 센다.
+        출력: dict — has_text_layer, total_pages, sampled, pages_with_text,
+              chars, ratio, verdict("born_digital" | "partial" | "scanned").
+
+        왜 has_text_layer()와 따로 두는가:
+            has_text_layer()는 "첫 3쪽 중 하나라도 10자 넘으면 True"다.
+            표지·판권지에만 활자가 있는 영인본·스캔 논문이 이 기준을 통과해
+            "텍스트가 있다"고 오판된다. 그러면 OCR이 필요한데도 건너뛰게 된다.
+            여기서는 고르게 표본을 뽑아 **비율**로 판정한다.
+            기존 함수는 다른 호출부가 쓰고 있으므로 건드리지 않는다.
+
+        왜 세 갈래로 나누는가:
+            이 판정이 틀리면 대가가 방향에 따라 다르다.
+            "스캔본인데 born-digital로 봄" → OCR을 건너뛰어 텍스트를 못 얻는다.
+            "born-digital인데 스캔본으로 봄" → 안 해도 될 OCR을 돌린다(느리고 부정확).
+            앞쪽이 더 나쁘므로 born_digital은 **확실할 때만** 선언한다.
+            그 사이(일부 쪽만 활자인 영인본·부분 OCR본)는 partial로 두고
+            사용자에게 사실대로 알린다.
+
+            - ratio >= 0.5  → born_digital (대부분의 쪽에 활자가 있다)
+            - ratio >= 0.05 → partial      (표지·판권지 등 일부만 활자)
+            - 그 미만       → scanned
+
+            임계값은 판단이며 실측이 아니다.
+        """
+        total = len(self._doc)
+        if total == 0:
+            return {
+                "has_text_layer": False,
+                "total_pages": 0,
+                "sampled": 0,
+                "pages_with_text": 0,
+                "chars": 0,
+                "ratio": 0.0,
+                "verdict": "scanned",
+            }
+
+        # 고르게 표본을 뽑는다. 스캔 여부는 문서 전체에 걸친 성질이라
+        # 표본으로 충분하고, 앞쪽만 보면 표지에 속는다.
+        if total <= sample_max:
+            indices = list(range(total))
+        else:
+            step = total / float(sample_max)
+            indices = sorted({int(i * step) for i in range(sample_max)})
+
+        with_text = 0
+        chars = 0
+        for i in indices:
+            try:
+                text = (self._doc[i].get_text("text") or "").strip()
+            except Exception:  # noqa: BLE001 — 한 쪽이 깨져도 판정은 계속한다
+                text = ""
+            chars += len(text)
+            if len(text) >= min_chars_per_page:
+                with_text += 1
+
+        ratio = with_text / float(len(indices))
+        if ratio >= 0.5:
+            verdict = "born_digital"
+        elif ratio >= 0.05:
+            verdict = "partial"
+        else:
+            verdict = "scanned"
+        return {
+            # has_text_layer는 "OCR 없이 텍스트를 얻을 수 있는가"를 뜻한다.
+            # partial은 일부 쪽만 되므로 False다 (나머지는 OCR이 필요하다).
+            "has_text_layer": verdict == "born_digital",
+            "total_pages": total,
+            "sampled": len(indices),
+            "pages_with_text": with_text,
+            "chars": chars,
+            "ratio": round(ratio, 3),
+            "verdict": verdict,
+        }
+
     def get_sample_text(self, max_pages: int = 3) -> list[dict]:
         """미리보기용 샘플 텍스트를 추출한다.
 

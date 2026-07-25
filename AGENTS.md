@@ -29,7 +29,7 @@ OCR, 교정, 번역, 주석 작업을 모두 수행한다.
 
 ## 백엔드 모듈 구조 (src/app/)
 server.py는 FastAPI 앱 생성 + 라우터 마운트만 담당하는 조립 파일(~85줄).
-실제 API 엔드포인트는 8개 라우터 모듈에 분산:
+실제 API 엔드포인트는 8개 라우터 모듈에 분산 (2026-07-25 기준 실측):
 
 ```
 src/app/
@@ -37,12 +37,12 @@ src/app/
 ├── _state.py            ← 공유 상태 + 헬퍼 + LLM 프롬프트/캐시/동적 토큰 계산
 ├── __main__.py          ← CLI 진입점 (python -m app serve)
 └── routers/
-    ├── library.py       ← 서고/설정/백업/휴지통 (15 라우트)
-    ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 (34 라우트)
+    ├── library.py       ← 서고/설정/백업/휴지통 (16 라우트)
+    ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 + 텍스트레이어 진단·가져오기·입히기 (38 라우트)
     ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티 (23 라우트)
-    ├── llm_ocr.py       ← LLM 상태·분석·초안 + OCR 엔진·실행 (14 라우트)
+    ├── llm_ocr.py       ← LLM 상태·분석·초안 + OCR 엔진·실행·권단위 일괄 (15 라우트)
     ├── alignment.py     ← 이체자 사전/정렬/일괄교정 (17 라우트)
-    ├── reading.py       ← L5 표점·현토 + L6 번역 + 비고 + AI보조 (25 라우트)
+    ├── reading.py       ← L5 표점·현토 + L6 번역 + 비고 + AI보조 (26 라우트)
     ├── annotation.py    ← L7 주석·사전형·인용마크 + AI보조 (34 라우트)
     └── version.py       ← Git 그래프/되돌리기/스냅샷/가져오기 (7 라우트)
 ```
@@ -99,6 +99,24 @@ src/app/
    옛 결과가 돌아올 수 있음.
 4. "가져오기" 버튼의 "준비중"은 UI만 봉인(D-037). hwp-import.js 1,034줄과 백엔드
    엔드포인트(`/api/documents/import-hwp` 등)는 살아 있음 — 재구현하지 말고 복원할 것.
+   **단 D-055 이후 이 버튼은 프로필에 따라 동작이 갈린다**: 「추출」 모드에서는
+   hwp-import 다이얼로그가 아니라 `POST .../text-import/from-text-layer`(단순 추출)에
+   연결된다. hwp-import 봉인 자체는 그대로다.
+7. **기본 OCR 엔진은 문헌 성격을 보지 않는다** — "설치된 것 중 첫 번째"(`registry.py`).
+   torch가 있으면 `ndlkotenocr-full`(고전적 전용, **한글 인식 불가**)이 기본이 된다.
+   근현대 한글 문헌을 아무 설정 없이 OCR하면 결과가 깨진다. 배치 라우트는 시작 시점에
+   경고하지만(D-055), 페이지 단위 라우트에는 그 경고가 없다.
+8. **OCR은 L3 레이아웃이 없으면 조용히 실패한다** — 200 OK에 `status: "partial"`,
+   `errors: ["L3 레이아웃을 찾을 수 없습니다"]`, 결과 0건. 예외가 아니므로
+   호출부가 `ocr_results`를 확인하지 않으면 성공으로 오인한다.
+9. **`el.hidden = true`만으로는 안 숨는다** — `workspace.css`가 `.mode-tab`,
+   `.extract-panel` 등에 `display: flex`를 지정하고 있어, 작성자 스타일시트가
+   브라우저 기본 `[hidden] { display: none }`을 우선순위로 덮어쓴다. 지금은 파일
+   맨 위의 `[hidden] { display: none !important }`가 막고 있으니 **그 줄을 지우면
+   숨김이 전부 깨진다.** jsdom은 이 결함을 재현하지 못하므로 브라우저 확인이 필요하다.
+10. **정적 파일은 `_NoCacheStaticFiles`로 서빙된다**(server.py) — 기본 `StaticFiles`는
+   `Cache-Control`을 붙이지 않아 브라우저가 고친 JS·CSS를 다시 받지 않는 사고가 있었다.
+   `?v=` 쿼리에 의존하지 말 것.
 5. 서지 파서 5종(`src/parsers/` korcis 1,807줄·archives_jp·kyujanggak·kostma·ndl)은 외부
    사이트 HTML 구조 의존 — 사이트 개편 시 침묵 파손. 테스트가 실제 네트워크를 안 타면 못 잡음.
 6. `llm_usage_log.jsonl`은 서고 루트에, 서고 미설정 시 `~/.classical-text-browser/`에 기록 —
@@ -108,7 +126,7 @@ src/app/
 | 순위 | 경로 | 위험 |
 |---|---|---|
 | 1 | `src/app/_state.py` (968줄) | 전역 상태+프롬프트+캐시+JSON 파서 응집, 중복 정의 잠복 |
-| 2 | `src/app/static/` 프론트 모놀리스 | 테스트 0·CI 없음, index.html 4,477줄 수정 회귀 감지 불가 |
+| 2 | `src/app/static/` 프론트 모놀리스 | 테스트 0·CI 없음, index.html 4,477줄 수정 회귀 감지 불가. D-055의 작업 모드는 jsdom 일회성 하네스로 22건 실측했으나 **그 하네스는 저장소에 없다** — 정식 프론트 스모크 테스트는 여전히 미결(D-053 착수 조건) |
 | 3 | `start_server.bat` | 암묵 부수효과 3종(프록시·Docker·포트 스캔), 실패 시 원인 추적 곤란 |
 | 4 | `src/parsers/` 5종 | 외부 사이트 의존 침묵 파손 |
 | 5 | 봉인된 HWP 가져오기 경로 | 존재를 모르면 중복 재구현, 알면 onclick 복원만으로 재개 |

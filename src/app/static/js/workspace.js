@@ -77,6 +77,13 @@ document.addEventListener("DOMContentLoaded", () => {
   if (typeof initNotesPanel === "function") _safeInit("NotesPanel", initNotesPanel);
   // 드래그 앤 드롭 온보딩 (PDF/이미지 드롭 → 새 문헌)
   if (typeof initDragDrop === "function") _safeInit("DragDrop", initDragDrop);
+  // 텍스트 레이어 가져오기 버튼 (프로필에 따라 동작이 갈린다)
+  _safeInit("TextLayerImport", initTextLayerImport);
+  // 텍스트 추출 패널 (진단 → OCR → 산출물)
+  if (typeof initExtractPanel === "function") _safeInit("PaperPanel", initExtractPanel);
+  // 작업 프로필 (고서 / 논문) — 고서 전용 탭 표시 여부
+  // 프로필 적용이 위 버튼 상태를 갱신하므로 반드시 뒤에 둔다.
+  _safeInit("WorkspaceProfile", initWorkspaceProfile);
   // 하단 패널 제거됨: 모든 탭이 액티비티 바 사이드바로 이동
 
   // 전 모드 LLM 모델 드롭다운 채우기 (모든 init 완료 후 한 번만)
@@ -871,6 +878,295 @@ function initModeBar() {
       _switchMode(newMode);
     });
   });
+}
+
+/* ──────────────────────────
+   1-b. 작업 프로필 (고서 / 논문)
+   ──────────────────────────
+
+   왜 필요한가:
+     이 앱은 고서(古書)를 읽기 위해 만들어졌고, 상단 탭 10개가 그 작업
+     순서를 그대로 드러낸다. 그런데 근현대 논문 스캔본에서 텍스트만
+     뽑으려는 경우 표점·현토·이체자·편성은 쓸 일이 없다.
+     (한문 독법 표기·이체자 판별은 근현대 활자본에 해당하지 않는다.)
+
+   무엇을 바꾸지 않는가:
+     숨기는 것은 **탭의 표시뿐**이다. 모드 전환 함수(_switchMode)도,
+     각 패널도, 저장되는 데이터도 건드리지 않는다. 프로필을 되돌리면
+     그대로 돌아온다. 문헌 파일에는 아무것도 기록하지 않는다
+     (manifest 스키마는 additionalProperties:false라 손대면 파급이 크다).
+
+   왜 localStorage인가:
+     문헌마다 기억해야 쓸모가 있는데(한 서고에 고서와 논문이 섞인다),
+     서버 설정에는 UI 토글을 담는 키가 없고 새로 만들면 스키마·스냅샷에
+     파급이 생긴다. 테마 스위처(index.html)가 이미 쓰는 방식이기도 하다. */
+
+const WORKSPACE_PROFILES = { collation: "교감", extract: "추출" };
+const PROFILE_STORAGE_PREFIX = "ctb.profile.";
+let currentProfile = "collation";
+
+/**
+ * 문헌에 저장된 작업 프로필을 읽는다.
+ *
+ * 입력: docId — 문헌 ID (없으면 전역 기본값을 본다)
+ * 출력: "collation" 또는 "extract"
+ */
+function getWorkspaceProfile(docId) {
+  try {
+    const key = PROFILE_STORAGE_PREFIX + (docId || "_default");
+    const saved = localStorage.getItem(key);
+    if (saved && WORKSPACE_PROFILES[saved]) return saved;
+  } catch (e) {
+    // localStorage가 막힌 환경(사생활 보호 모드 등)에서도 앱은 동작해야 한다.
+    console.warn("[Profile] 저장된 프로필을 읽지 못했습니다:", e);
+  }
+  return "collation";
+}
+
+/**
+ * 문헌의 작업 프로필을 저장한다.
+ *
+ * 입력: docId — 문헌 ID (없으면 전역 기본값으로 저장)
+ *       profile — "collation" 또는 "extract"
+ */
+function saveWorkspaceProfile(docId, profile) {
+  try {
+    localStorage.setItem(PROFILE_STORAGE_PREFIX + (docId || "_default"), profile);
+  } catch (e) {
+    console.warn("[Profile] 프로필을 저장하지 못했습니다:", e);
+  }
+}
+
+/**
+ * 작업 프로필을 화면에 적용한다.
+ *
+ * 입력: profile — "collation"(고서, 전체 탭) 또는 "extract"(논문, 고서 전용 탭 숨김)
+ * 출력: 없음.
+ *
+ * 왜 hidden 속성인가: CSS 클래스를 새로 만들지 않아도 되고,
+ * 스크린 리더도 숨겨진 탭을 읽지 않는다.
+ */
+function applyWorkspaceProfile(profile) {
+  if (!WORKSPACE_PROFILES[profile]) profile = "collation";
+  currentProfile = profile;
+  const isExtractMode = profile === "extract";
+
+  document.querySelectorAll('[data-profile="collation"]').forEach((el) => {
+    el.hidden = isExtractMode;
+  });
+
+  // 지금 보고 있는 탭이 숨겨졌다면 열람으로 되돌린다.
+  // (제거된 interpretation 모드를 view로 폴백시키는 기존 방식과 같다.)
+  const activeTab = document.querySelector(".mode-tab.active");
+  if (activeTab && activeTab.hidden) {
+    document.querySelectorAll(".mode-tab").forEach((t) => {
+      t.classList.remove("active");
+      t.setAttribute("aria-selected", "false");
+    });
+    const viewTab = document.querySelector('.mode-tab[data-mode="view"]');
+    if (viewTab) {
+      viewTab.classList.add("active");
+      viewTab.setAttribute("aria-selected", "true");
+    }
+    _switchMode("view");
+  }
+
+  // 지금 어느 모드인지가 한눈에 보여야 한다.
+  // 탭 몇 개가 사라지는 것만으로는 신호가 약하다.
+  //
+  // 세 곳에 동시에 표시한다:
+  //   1) body 속성 — 화면 전체의 색조를 바꿀 수 있게 (CSS가 받는다)
+  //   2) 배지 — 현재 상태를 글자로
+  //   3) 버튼 — 누르면 어디로 가는지
+  document.body.dataset.workspaceProfile = profile;
+
+  const badge = document.getElementById("profile-badge");
+  if (badge) {
+    badge.textContent = `${WORKSPACE_PROFILES[profile]} 모드`;
+    badge.classList.toggle("profile-badge-extract", isExtractMode);
+  }
+
+  const toggle = document.getElementById("profile-toggle");
+  if (toggle) {
+    const next = isExtractMode ? "collation" : "extract";
+    toggle.textContent = `${WORKSPACE_PROFILES[next]} 모드로 →`;
+    toggle.setAttribute("aria-pressed", isExtractMode ? "true" : "false");
+    toggle.classList.toggle("profile-extract", isExtractMode);
+  }
+
+  _updateTextLayerImportButton(isExtractMode);
+
+  // 텍스트 추출 패널은 「논문」 프로필에서만 보인다.
+  const extractPanel = document.getElementById("extract-panel");
+  if (extractPanel) {
+    extractPanel.hidden = !isExtractMode;
+    if (isExtractMode && typeof refreshExtractPanel === "function") {
+      refreshExtractPanel(true);
+    }
+  }
+}
+
+/**
+ * 사이드바 "가져오기" 버튼의 상태를 프로필에 맞춘다.
+ *
+ * 입력: enabled — 추출 모드이면 true.
+ *
+ * 왜 프로필로 가르는가: 이 버튼은 D-037로 봉인돼 있다
+ * (HWP/PDF 가져오기가 아직 안정적이지 않다는 판단). 그 판단을 뒤집지 않고,
+ * 추출 모드에서만 **다른 동작** — PDF 텍스트 레이어를 그대로 L4로
+ * 옮기는 단순 경로 — 에 연결한다. hwp-import 다이얼로그는 여전히 봉인이다.
+ */
+function _updateTextLayerImportButton(enabled) {
+  const btn = document.getElementById("import-hwp-btn");
+  if (!btn) return;
+  if (enabled) {
+    btn.title = "PDF 텍스트 레이어에서 본문 가져오기 (OCR 없음)";
+    btn.style.opacity = "";
+    btn.style.cursor = "pointer";
+  } else {
+    btn.title = "HWP/HWPX/PDF 가져오기 (준비중)";
+    btn.style.opacity = "0.5";
+    btn.style.cursor = "default";
+  }
+}
+
+/**
+ * "가져오기" 버튼 동작을 등록한다.
+ *
+ * 교감 모드: 기존과 같이 "준비중" 안내 (D-037).
+ * 추출 모드: 열린 문헌의 PDF 텍스트 레이어를 L4 텍스트로 가져온다.
+ */
+function initTextLayerImport() {
+  const btn = document.getElementById("import-hwp-btn");
+  if (!btn) return;
+
+  btn.addEventListener("click", async () => {
+    if (currentProfile !== "extract") {
+      showToast("HWP/HWPX/PDF 가져오기 기능은 현재 준비중입니다.", "info");
+      return;
+    }
+    const docId = viewerState && viewerState.docId;
+    const partId = viewerState && viewerState.partId;
+    if (!docId || !partId) {
+      showToast("먼저 문헌의 페이지를 여세요.", "info");
+      return;
+    }
+
+    btn.disabled = true;
+    try {
+      const res = await fetch(
+        `/api/documents/${docId}/parts/${partId}/text-import/from-text-layer`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || "가져오기에 실패했습니다.", "error");
+        return;
+      }
+      if (data.imported > 0) {
+        showToast(
+          `${data.imported}쪽을 가져왔습니다 (OCR 없이 원본 활자 그대로).`,
+          "success"
+        );
+        // 지금 보고 있는 쪽의 텍스트를 다시 읽어 화면에 반영한다.
+        if (typeof loadPageText === "function") {
+          loadPageText(docId, partId, viewerState.pageNum);
+        }
+      } else {
+        showToast(
+          (data.warnings && data.warnings[0]) || "가져올 텍스트가 없습니다.",
+          "info"
+        );
+      }
+    } catch (e) {
+      showToast(`가져오기 중 오류가 발생했습니다: ${e.message}`, "error");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
+/**
+ * 현재 열린 문헌에 맞는 프로필을 적용한다.
+ *
+ * 입력: docId — 문헌 ID.
+ * 왜 필요한가: 한 서고에 고서와 논문이 섞여 있으므로,
+ * 문헌을 바꿀 때마다 그 문헌에 맞는 프로필로 따라가야 한다.
+ */
+function applyProfileForDocument(docId) {
+  applyWorkspaceProfile(getWorkspaceProfile(docId));
+}
+
+/**
+ * 프로필 전환 버튼을 초기화한다.
+ */
+function initWorkspaceProfile() {
+  const toggle = document.getElementById("profile-toggle");
+  if (toggle) {
+    toggle.addEventListener("click", async () => {
+      const next = currentProfile === "collation" ? "extract" : "collation";
+      const docId =
+        typeof viewerState !== "undefined" && viewerState ? viewerState.docId : null;
+      saveWorkspaceProfile(docId, next);
+      applyWorkspaceProfile(next);
+      if (typeof showToast === "function") {
+        showToast(
+          next === "extract"
+            ? "추출 모드 — 열람·레이아웃·교정만 남겼습니다."
+            : "교감 모드 — 모든 작업 탭을 표시합니다.",
+          "info"
+        );
+      }
+      // 추출 모드에서는 L5-L7을 쓰지 않는다. 이 문헌에 딸린 해석 저장소가
+      // 비어 있으면 정리해 목록이 잡동사니로 차지 않게 한다.
+      if (next === "extract" && docId) {
+        await _discardEmptyInterpretations(docId);
+      }
+    });
+  }
+  // 첫 진입에는 아직 문헌이 없으므로 전역 기본값을 쓴다.
+  applyWorkspaceProfile(getWorkspaceProfile(null));
+}
+
+/**
+ * 이 문헌의 비어 있는 해석 저장소를 휴지통으로 옮긴다.
+ *
+ * 입력: docId — 문헌 ID.
+ *
+ * 왜 «비어 있는» 것만인가: 모드 전환은 표시를 바꾸는 일이지 데이터를
+ * 지우는 일이 아니다. 번역이나 주석이 하나라도 있으면 서버가 지키고
+ * 그 사실을 돌려준다. 옮긴 것도 삭제가 아니라 휴지통이라 되돌릴 수 있다.
+ */
+async function _discardEmptyInterpretations(docId) {
+  try {
+    const res = await fetch(
+      `/api/documents/${docId}/interpretations/discard-empty`,
+      { method: "POST", headers: { "Content-Type": "application/json" } }
+    );
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.discarded && data.discarded.length && typeof showToast === "function") {
+      showToast(
+        `쓰지 않는 해석 저장소 ${data.discarded.length}개를 휴지통으로 옮겼습니다. ` +
+          "(설정 → 휴지통에서 복원할 수 있습니다)",
+        "info"
+      );
+      if (typeof loadLibraryInfo === "function") loadLibraryInfo();
+    } else if (data.kept && data.kept.length && typeof showToast === "function") {
+      showToast(
+        `해석 저장소에 작업 내용이 있어 그대로 두었습니다 ` +
+          `(${data.kept.length}개).`,
+        "info"
+      );
+    }
+  } catch (e) {
+    // 정리는 편의 기능이다. 실패해도 모드 전환은 이미 끝났다.
+    console.warn("[Profile] 빈 해석 저장소 정리 실패:", e);
+  }
 }
 
 /**

@@ -17,6 +17,7 @@ server.py의 Phase 10-2 (LLM) / Phase 10-1 (OCR) 엔드포인트를 분리한 �
     DELETE /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr
     DELETE /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr/{block_id}
     POST /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr/{block_id}
+    POST /api/documents/{doc_id}/parts/{part_id}/ocr/batch
 """
 
 import shutil
@@ -60,6 +61,35 @@ class OcrRunRequest(BaseModel):
     force_model: str | None = None  # LLM 모델 지정 (llm_vision 엔진 전용)
     # PaddleOCR 언어 코드 (paddleocr 엔진 전용: ch, chinese_cht, korean, japan, en)
     paddle_lang: str | None = None
+
+
+class OcrBatchRequest(BaseModel):
+    """권(part) 단위 일괄 OCR 요청 본문."""
+
+    engine_id: str | None = None  # None이면 기본 엔진
+    pages: list[int] | None = None  # None이면 전체 쪽
+    # 이미 L2 결과가 있는 쪽을 건너뛴다. 중단 후 이어서 돌리는 기본 동작이다.
+    skip_existing: bool = True
+    # 레이아웃이 없는 쪽에 페이지 전면 블록을 자동 생성한다.
+    # 근현대 단일 컬럼 문헌용. 고서에서는 꺼야 한다.
+    auto_full_page_block: bool = True
+    writing_direction: str = "horizontal_ltr"
+    # OCR이 끝나면 텍스트 레이어 PDF까지 만든다.
+    #
+    # 왜 기본값이 True인가: OCR 결과는 L2 JSON에만 들어가므로, 입히기를 따로
+    # 실행하지 않으면 PDF는 여전히 스캔본이다. "OCR을 돌렸는데 왜 검색이
+    # 안 되나"라는 기대 어긋남을 없앤다. 입히기는 LLM을 부르지 않고
+    # 쪽당 1KB 미만이며 원본을 건드리지 않으므로 이어붙여도 안전하다.
+    embed_after: bool = True
+    force_provider: str | None = None
+    force_model: str | None = None
+    paddle_lang: str | None = None
+
+
+# 학습 데이터에 한글이 없어 한글을 인식하지 못하는 엔진들.
+# 근거는 각 엔진 파일의 docstring이다 (ndlocr_engine.py, ndlkotenocr_engine.py,
+# ndlkotenocr_full_engine.py). 추측이 아니라 문서화된 제약이다.
+HANGUL_INCAPABLE_ENGINES = ("ndlocr", "ndlkotenocr", "ndlkotenocr-full")
 
 
 # ===========================================================================
@@ -845,3 +875,273 @@ async def api_rerun_ocr_block(
             {"error": f"OCR 블록 재실행 실패: {e}"},
             status_code=500,
         )
+
+
+# ===========================================================================
+#  권(part) 단위 일괄 OCR
+# ===========================================================================
+#
+# 왜 필요한가:
+#   기존 OCR 라우트는 전부 페이지 단위다. 300쪽 문헌이면 사용자가
+#   "페이지 선택 → 레이아웃 자동감지 → OCR 실행"을 300번 반복해야 한다.
+#   근현대 논문처럼 페이지마다 판형이 같은 문헌에서는 이 반복에 의미가 없다.
+#
+# 왜 파이프라인을 고치지 않는가:
+#   D-009의 계약(L3 → crop → 엔진 → L2, 파이프라인 경유)을 그대로 지킨다.
+#   이 라우트는 쪽마다 기존 run_page()를 부르는 루프일 뿐이다.
+
+
+@router.post("/api/documents/{doc_id}/parts/{part_id}/ocr/batch")
+async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
+    """권 전체를 쪽 단위로 이어서 OCR 하고 SSE로 진행률을 보낸다.
+
+    목적: 페이지마다 반복하던 "레이아웃 → OCR"을 한 번의 요청으로 끝낸다.
+    입력: doc_id, part_id, body(OcrBatchRequest).
+    출력: text/event-stream
+        - start    : {"type":"start","total":N,"engine_id":...,"warnings":[...]}
+        - page     : {"type":"page","page":3,"index":2,"total":10,"status":"ok",
+                      "lines":12,"block_created":true}
+        - skip     : {"type":"skip","page":3,...,"reason":"이미 OCR 결과가 있습니다."}
+        - complete : {"type":"complete","processed":8,"skipped":2,"failed":0,...}
+        - error    : {"type":"error","error":"..."}
+
+    중단과 재개:
+        클라이언트가 연결을 끊으면 **쪽 경계에서** 멈춘다. 이미 끝난 쪽의
+        결과는 L2에 남아 있으므로, 같은 요청을 다시 보내면
+        skip_existing=True에 의해 남은 쪽부터 이어서 돈다.
+        (별도 상태 파일이 필요 없다 — L2 자체가 체크포인트다.)
+    """
+    import asyncio
+    import json as _json
+    from pathlib import Path as _Path
+
+    library_path = get_library_path()
+    if library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = library_path / "documents" / doc_id
+    if not (doc_path / "manifest.json").exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404
+        )
+
+    # 대상 쪽 목록을 정한다.
+    from core.document import get_document_info
+
+    manifest = get_document_info(doc_path)
+    part = next(
+        (p for p in manifest.get("parts", []) if p.get("part_id") == part_id), None
+    )
+    if part is None:
+        available = [p.get("part_id") for p in manifest.get("parts", [])]
+        return JSONResponse(
+            {
+                "error": f"권을 찾을 수 없습니다: part_id='{part_id}'\n"
+                f"→ 사용 가능한 part_id: {available}"
+            },
+            status_code=404,
+        )
+
+    page_count = int(part.get("page_count") or 0)
+    if body.pages is None:
+        targets = list(range(1, page_count + 1))
+    elif page_count:
+        # 쪽 수를 아는 경우에만 범위를 거른다.
+        targets = [p for p in body.pages if 1 <= p <= page_count]
+    else:
+        targets = list(body.pages)
+
+    if not targets:
+        return JSONResponse(
+            {
+                "error": "OCR 할 쪽이 없습니다.\n"
+                f"→ 이 권의 쪽 수는 {page_count}입니다. pages 값을 확인하세요."
+            },
+            status_code=400,
+        )
+
+    pipeline, registry = _get_ocr_pipeline()
+
+    engine_kwargs = {}
+    if body.force_provider:
+        engine_kwargs["force_provider"] = body.force_provider
+    if body.force_model:
+        engine_kwargs["force_model"] = body.force_model
+    if body.paddle_lang and body.engine_id == "paddleocr":
+        engine_kwargs["paddle_lang"] = body.paddle_lang
+
+    # 엔진 선택에 대한 사전 경고. 사용자가 300쪽을 다 돌린 뒤에
+    # "한글이 하나도 안 나왔다"는 것을 알게 되면 안 된다.
+    #
+    # 기본 엔진은 "설치된 것 중 첫 번째"라(registry.py) 근현대 논문에도
+    # 고전적 전용 엔진이 잡힌다. 그래서 이 경고가 특히 중요하다.
+    warnings: list[str] = []
+    effective_engine = body.engine_id or registry.default_engine_id
+    if effective_engine in HANGUL_INCAPABLE_ENGINES:
+        warnings.append(
+            f"'{effective_engine}' 엔진은 한글을 인식하지 못합니다 "
+            "(학습 데이터에 한글이 없습니다). "
+            "→ 한글이 포함된 문헌이면 llm_vision 엔진을 사용하세요."
+        )
+
+    progress_queue: asyncio.Queue = asyncio.Queue()
+
+    def _l2_exists(page_number: int) -> bool:
+        """이 쪽에 이미 OCR 결과가 있는지 확인한다 (재개 판단)."""
+        l2 = doc_path / "L2_ocr" / f"{part_id}_page_{page_number:03d}.json"
+        if not l2.exists():
+            return False
+        try:
+            data = _json.loads(_Path(l2).read_text(encoding="utf-8"))
+        except (OSError, _json.JSONDecodeError):
+            return False
+        # 파일만 있고 내용이 비어 있으면 다시 돌린다.
+        return bool(data.get("ocr_results"))
+
+    async def _run_batch():
+        """쪽을 하나씩 돌며 결과를 큐에 넣는다."""
+        loop = asyncio.get_event_loop()
+        processed = skipped = failed = 0
+        total_lines = 0
+
+        await progress_queue.put(
+            {
+                "type": "start",
+                "total": len(targets),
+                "engine_id": effective_engine,
+                "warnings": warnings,
+            }
+        )
+
+        try:
+            for index, page_number in enumerate(targets):
+                if body.skip_existing and _l2_exists(page_number):
+                    skipped += 1
+                    await progress_queue.put(
+                        {
+                            "type": "skip",
+                            "page": page_number,
+                            "index": index,
+                            "total": len(targets),
+                            "reason": "이미 OCR 결과가 있습니다.",
+                        }
+                    )
+                    continue
+
+                block_created = False
+                try:
+                    # 1) 레이아웃이 없으면 페이지 전면 블록을 만든다.
+                    if body.auto_full_page_block:
+                        from ocr.full_page_block import ensure_full_page_block
+
+                        info = await loop.run_in_executor(
+                            None,
+                            lambda p=page_number: ensure_full_page_block(
+                                doc_path,
+                                part_id,
+                                p,
+                                writing_direction=body.writing_direction,
+                            ),
+                        )
+                        block_created = bool(info.get("created"))
+
+                    # 2) 기존 파이프라인으로 OCR (D-009 계약 그대로)
+                    result = await loop.run_in_executor(
+                        None,
+                        lambda p=page_number: pipeline.run_page(
+                            doc_id=doc_id,
+                            part_id=part_id,
+                            page_number=p,
+                            engine_id=body.engine_id,
+                            **engine_kwargs,
+                        ),
+                    )
+                    summary = result.to_summary()
+                    lines = sum(
+                        len(r.get("lines") or [])
+                        for r in (summary.get("ocr_results") or [])
+                    )
+                    total_lines += lines
+                    processed += 1
+                    await progress_queue.put(
+                        {
+                            "type": "page",
+                            "page": page_number,
+                            "index": index,
+                            "total": len(targets),
+                            "status": summary.get("status"),
+                            "lines": lines,
+                            "block_created": block_created,
+                            "errors": summary.get("errors") or [],
+                        }
+                    )
+                except Exception as e:  # noqa: BLE001 — 한 쪽 실패로 전체를 멈추지 않는다
+                    failed += 1
+                    await progress_queue.put(
+                        {
+                            "type": "page",
+                            "page": page_number,
+                            "index": index,
+                            "total": len(targets),
+                            "status": "error",
+                            "lines": 0,
+                            "block_created": block_created,
+                            "errors": [str(e)],
+                        }
+                    )
+
+            # OCR이 끝났으면 텍스트 레이어 PDF까지 만든다.
+            # 실패해도 OCR 결과는 유효하므로 배치 전체를 실패로 보지 않는다.
+            embed_summary = None
+            if body.embed_after and (processed or skipped):
+                await progress_queue.put({"type": "baking", "total": len(targets)})
+                try:
+                    from export.text_layer_pdf import embed_text_layer
+
+                    embed_result = await loop.run_in_executor(
+                        None, lambda: embed_text_layer(doc_path, part_id)
+                    )
+                    embed_summary = embed_result.to_dict()
+                except Exception as e:  # noqa: BLE001
+                    warnings.append(
+                        f"OCR은 끝났지만 텍스트 레이어 PDF를 입히지 못했습니다: {e}\n"
+                        "→ 해결: 내보내기를 따로 실행해 보세요."
+                    )
+
+            await progress_queue.put(
+                {
+                    "type": "complete",
+                    "processed": processed,
+                    "skipped": skipped,
+                    "failed": failed,
+                    "total": len(targets),
+                    "total_lines": total_lines,
+                    "engine_id": effective_engine,
+                    "warnings": warnings,
+                    "embedded": embed_summary,
+                }
+            )
+        except asyncio.CancelledError:
+            # 클라이언트가 끊었다. 여기까지의 결과는 L2에 남아 있으므로
+            # 같은 요청을 다시 보내면 이어서 돈다.
+            raise
+        except Exception as e:  # noqa: BLE001
+            await progress_queue.put({"type": "error", "error": str(e)})
+
+    async def _event_generator():
+        task = asyncio.create_task(_run_batch())
+        try:
+            while True:
+                data = await progress_queue.get()
+                yield f"data: {_json.dumps(data, ensure_ascii=False)}\n\n"
+                if data.get("type") in ("complete", "error"):
+                    break
+        finally:
+            if not task.done():
+                task.cancel()
+
+    return StreamingResponse(
+        _event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

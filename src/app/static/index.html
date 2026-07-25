@@ -263,11 +263,16 @@
                 >
                   + 새 문헌
                 </button>
+                <!--
+                  D-037로 봉인된 버튼. 교감 모드에서는 그대로 "준비중"이다.
+                  추출 모드에서만 "텍스트 레이어에서 가져오기"로 살아난다
+                  (hwp-import 다이얼로그가 아니라 단순 추출 경로 —
+                   initTextLayerImport, workspace.js).
+                -->
                 <button
                   id="import-hwp-btn"
                   class="section-action-btn"
                   title="HWP/HWPX/PDF 가져오기 (준비중)"
-                  onclick="showToast('HWP/HWPX/PDF 가져오기 기능은 현재 준비중입니다.', 'info');"
                   style="opacity: 0.5; cursor: default;"
                 >
                   가져오기
@@ -866,6 +871,19 @@
       <!-- 메인 영역 -->
       <main class="main-area">
           <!-- 모드 탭 바: 열람 / 레이아웃 / 교정 / 편성 / 표점 / 현토 / 번역 / 주석 -->
+          <!--
+            data-profile="collation" 이 붙은 탭은 **한 글자씩 교감(校勘)하는
+            작업**이거나 그 뒤에 이어지는 해석 작업이다.
+            텍스트만 뽑으려는 「추출 모드」에서는 숨긴다.
+
+            남기는 셋에는 이유가 있다:
+              열람   — 원본을 봐야 한다
+              레이아웃 — 드물지만 일본어 세로쓰기 다단은 영역 지정이 필요하다
+              교정   — 인쇄 품질이 나쁘면 OCR 결과를 손봐야 한다
+
+            숨기는 것은 표시뿐이고 모드·패널·데이터는 그대로 남는다
+            (applyWorkspaceProfile — workspace.js).
+          -->
         <div class="mode-bar" role="tablist" aria-label="작업 모드">
           <!-- 원본 작업 -->
           <button class="mode-tab active" data-mode="view" role="tab" aria-selected="true">열람</button>
@@ -873,17 +891,32 @@
           <span class="mode-tab-divider" aria-hidden="true"></span>
           <!-- 교정 작업 -->
           <button class="mode-tab" data-mode="correction" role="tab">교정</button>
-          <button class="mode-tab" data-mode="composition" role="tab">편성</button>
-          <span class="mode-tab-divider" aria-hidden="true"></span>
+          <button class="mode-tab" data-mode="composition" data-profile="collation" role="tab">편성</button>
+          <span class="mode-tab-divider" data-profile="collation" aria-hidden="true"></span>
           <!-- 해석 작업 -->
-          <button class="mode-tab" data-mode="punctuation" role="tab">표점</button>
-          <button class="mode-tab" data-mode="hyeonto" role="tab">현토</button>
-          <button class="mode-tab" data-mode="translation" role="tab">번역</button>
-          <button class="mode-tab" data-mode="annotation" role="tab">주석</button>
-          <button class="mode-tab" data-mode="citation" role="tab">인용</button>
-          <span class="mode-tab-divider" aria-hidden="true"></span>
+          <button class="mode-tab" data-mode="punctuation" data-profile="collation" role="tab">표점</button>
+          <button class="mode-tab" data-mode="hyeonto" data-profile="collation" role="tab">현토</button>
+          <button class="mode-tab" data-mode="translation" data-profile="collation" role="tab">번역</button>
+          <button class="mode-tab" data-mode="annotation" data-profile="collation" role="tab">주석</button>
+          <button class="mode-tab" data-mode="citation" data-profile="collation" role="tab">인용</button>
+          <span class="mode-tab-divider" data-profile="collation" aria-hidden="true"></span>
           <!-- 도구 -->
-          <button class="mode-tab" data-mode="variant" role="tab">이체자</button>
+          <button class="mode-tab" data-mode="variant" data-profile="collation" role="tab">이체자</button>
+          <!-- 작업 프로필: 현재 상태(배지) + 전환(버튼)을 나눠 보여 준다.
+               버튼 하나로 겸하면 지금이 어느 모드인지 읽기 어렵다. -->
+          <div class="profile-switch">
+            <span
+              class="profile-badge"
+              id="profile-badge"
+            >교감 모드</span>
+            <button
+              class="profile-toggle"
+              id="profile-toggle"
+              type="button"
+              title="작업 모드 전환 — 추출 모드는 열람·레이아웃·교정만 남기고 텍스트 추출 패널을 엽니다"
+              aria-pressed="false"
+            >추출 모드로 →</button>
+          </div>
         </div>
 
         <!-- 에디터 영역: D-001 에디터 → 병렬 뷰어 (이미지 + 텍스트) -->
@@ -3114,6 +3147,121 @@
               교정 텍스트 (4층)
             </div>
 
+            <!--
+              텍스트 추출 패널 — 「논문」 프로필에서만 보인다 (extract-panel.js).
+              고서 흐름에는 나타나지 않으므로 기존 열람 화면은 그대로다.
+              진단 → 엔진 선택 → 권 전체 OCR → 구운 PDF 내려받기를 한자리에 모은다.
+            -->
+            <div
+              class="extract-panel"
+              id="extract-panel"
+              hidden
+            >
+              <div class="extract-panel-head">
+                <span class="extract-panel-title">텍스트 추출</span>
+                <button
+                  type="button"
+                  class="extract-panel-refresh"
+                  id="extract-refresh-btn"
+                  title="다시 진단"
+                >↻</button>
+              </div>
+
+              <!-- 1) 진단 -->
+              <div
+                class="extract-diagnosis"
+                id="extract-diagnosis"
+              >문헌의 페이지를 열면 진단합니다.</div>
+
+              <!-- 2) OCR 설정 (스캔본일 때만) -->
+              <div
+                class="extract-section"
+                id="extract-ocr-section"
+                hidden
+              >
+                <label
+                  class="extract-field"
+                  for="extract-engine-select"
+                >
+                  <span>OCR 엔진</span>
+                  <select id="extract-engine-select"></select>
+                </label>
+                <div
+                  class="extract-warn"
+                  id="extract-engine-warn"
+                  hidden
+                ></div>
+
+                <label
+                  class="extract-field"
+                  for="extract-pages-input"
+                >
+                  <span>쪽 범위</span>
+                  <input
+                    type="text"
+                    id="extract-pages-input"
+                    placeholder="비우면 전체 (예: 1-10, 15)"
+                  />
+                </label>
+                <div
+                  class="extract-cost"
+                  id="extract-cost"
+                ></div>
+
+                <button
+                  type="button"
+                  class="extract-run-btn"
+                  id="extract-run-ocr"
+                >전체 OCR 실행</button>
+                <div
+                  class="extract-progress"
+                  id="extract-progress"
+                  hidden
+                >
+                  <div class="extract-progress-bar"><span id="extract-progress-fill"></span></div>
+                  <div
+                    class="extract-progress-text"
+                    id="extract-progress-text"
+                  ></div>
+                </div>
+              </div>
+
+              <!-- 3) born-digital일 때: 바로 가져오기 -->
+              <div
+                class="extract-section"
+                id="extract-import-section"
+                hidden
+              >
+                <button
+                  type="button"
+                  class="extract-run-btn"
+                  id="extract-import-text"
+                >텍스트 바로 가져오기 (OCR 없음)</button>
+              </div>
+
+              <!-- 4) 산출물 -->
+              <div
+                class="extract-section"
+                id="extract-export-section"
+              >
+                <div
+                  class="extract-export-status"
+                  id="extract-export-status"
+                ></div>
+                <button
+                  type="button"
+                  class="extract-run-btn extract-secondary"
+                  id="extract-embed-btn"
+                >텍스트 레이어 PDF 다시 굽기</button>
+                <a
+                  class="extract-download"
+                  id="extract-download-link"
+                  hidden
+                  download
+                >구운 PDF 내려받기</a>
+              </div>
+            </div>
+
             <!-- 기본 placeholder (문헌 미선택 시) -->
             <div
               class="editor-placeholder"
@@ -4507,6 +4655,8 @@
     <script src="/static/js/git-graph.js?v=20260220c"></script>
     <script src="/static/js/reader-line.js?v=20260220c"></script>
     <script src="/static/js/notes-panel.js?v=20260220c"></script>
-    <script src="/static/js/workspace.js?v=20260717b"></script>
+    <!-- 텍스트 추출 패널 — workspace.js보다 먼저 정의돼야 프로필 적용 시 호출된다 -->
+    <script src="/static/js/extract-panel.js?v=20260725b"></script>
+    <script src="/static/js/workspace.js?v=20260725b"></script>
   </body>
 </html>

@@ -75,8 +75,33 @@ app.include_router(version.router)
 
 # ── 정적 파일 서빙 ───────────────────────────────
 # 서고 유무와 관계없이 항상 마운트한다.
+
+
+class _NoCacheStaticFiles(StaticFiles):
+    """정적 파일에 재검증을 강제하는 StaticFiles.
+
+    왜 필요한가:
+        기본 StaticFiles는 Cache-Control을 붙이지 않는다. 그러면 브라우저가
+        Last-Modified를 근거로 스스로 캐시 기간을 추정해(heuristic caching)
+        **고친 JS·CSS를 다시 받지 않는다.** `?v=` 쿼리를 손으로 올려도
+        올리는 것을 잊으면 같은 일이 벌어진다. 실제로 그 사고가 있었다:
+        코드는 고쳐졌는데 화면은 옛 동작 그대로였다.
+
+    왜 no-store가 아니라 no-cache인가:
+        no-cache는 «캐시하되 쓸 때마다 서버에 물어보라»는 뜻이다.
+        ETag가 함께 나가므로 내용이 그대로면 서버가 304를 돌려주어
+        본문 전송이 없다. 로컬에서 도는 앱이라 이 왕복은 무시할 수준이고,
+        대신 «고쳤는데 반영이 안 된다»가 원천적으로 사라진다.
+    """
+
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return response
+
+
 _static_dir = Path(__file__).parent / "static"
-app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
+app.mount("/static", _NoCacheStaticFiles(directory=str(_static_dir)), name="static")
 
 
 def configure(library_path: str | Path) -> FastAPI:

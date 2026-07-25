@@ -124,8 +124,16 @@ def _get_git_remote(repo_dir: Path) -> str | None:
 
 @router.get("/")
 async def index():
-    """메인 워크스페이스 페이지를 반환한다."""
-    return FileResponse(str(_static_dir / "index.html"))
+    """메인 워크스페이스 페이지를 반환한다.
+
+    캐시를 막는 이유: 이 HTML은 각 JS·CSS의 버전 쿼리(`?v=...`)를 담고 있다.
+    HTML이 캐시되면 버전을 올려도 브라우저가 옛 목록을 계속 써서
+    고친 코드가 반영되지 않는다. 로컬 앱이라 매번 받아도 부담이 없다.
+    """
+    return FileResponse(
+        str(_static_dir / "index.html"),
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
 
 
 @router.get("/api/library")

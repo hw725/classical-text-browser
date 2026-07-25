@@ -73,6 +73,38 @@ def cmd_list_documents(args):
         sys.exit(1)
 
 
+def cmd_embed_folder(args):
+    """논문 폴더의 스캔본에 텍스트 레이어를 입힌다."""
+    from cli.embed_folder import embed_folder
+
+    report = embed_folder(
+        Path(args.folder),
+        Path(args.library),
+        engine_id=args.engine,
+        dry_run=not args.execute,
+        limit=args.limit,
+        max_pages=args.max_pages,
+        only=args.only,
+        replace_original=not args.keep_original_in_place,
+        archive_root=Path(args.archive_dir) if args.archive_dir else None,
+        keep_workspace=args.keep_workspace,
+        page_sleep=args.sleep,
+        paper_sleep=args.sleep_between,
+    )
+
+    if args.execute:
+        print(
+            f"\n=== 결과 ===\n"
+            f"  처리 완료 {report.processed}편 / 실패 {report.failed}편 "
+            f"/ 이미 끝남 {report.skipped_done}편\n"
+            f"  걸린 시간 {report.elapsed_sec / 60:.1f}분"
+        )
+        if report.failures:
+            print("\n  실패 목록:")
+            for f in report.failures[:10]:
+                print(f"    {Path(f['source']).name[:60]} — {f.get('error', '')[:70]}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="classical-text-browser",
@@ -106,6 +138,77 @@ def main():
     )
     p_list.add_argument("library_path", help="서고 경로")
     p_list.set_defaults(func=cmd_list_documents)
+
+    # embed-folder
+    p_embed = subparsers.add_parser(
+        "embed-folder",
+        help="논문 폴더의 스캔본만 골라 텍스트 레이어를 입힌다",
+        description=(
+            "폴더를 훑어 텍스트 레이어가 없는 PDF만 골라 OCR한 뒤, "
+            "원본은 아카이브로 옮기고 텍스트 레이어 PDF를 원래 자리에 원래 이름으로 놓는다. "
+            "기본은 미리보기(dry-run)이며 --execute를 붙여야 실제로 바꾼다."
+        ),
+    )
+    p_embed.add_argument("folder", help="논문 폴더 경로")
+    p_embed.add_argument(
+        "--library",
+        required=True,
+        help="작업 서고 경로 (없으면 새로 만든다). OCR 이력이 여기 남는다.",
+    )
+    p_embed.add_argument(
+        "--engine",
+        default="llm_vision",
+        help="OCR 엔진 (기본: llm_vision — 한글이 되는 유일한 기본 선택). "
+        "ndlocr/ndlkotenocr 계열은 한글을 인식하지 못한다.",
+    )
+    p_embed.add_argument(
+        "--execute",
+        action="store_true",
+        help="실제로 실행한다 (없으면 계획만 보여 준다)",
+    )
+    p_embed.add_argument(
+        "--limit", type=int, default=None, help="처리할 최대 편수 (시범 실행용)"
+    )
+    p_embed.add_argument(
+        "--only",
+        default=None,
+        help="파일명에 이 문자열이 든 논문만 처리한다 (특정 편 시범 실행용)",
+    )
+    p_embed.add_argument(
+        "--max-pages",
+        type=int,
+        default=None,
+        help="이 쪽수를 넘는 문헌은 건너뛴다 (큰 것을 나중으로 미룰 때)",
+    )
+    p_embed.add_argument(
+        "--keep-original-in-place",
+        action="store_true",
+        help="원본을 그 자리에 두고 입히기만 한다 (자리바꿈·아카이브 없음)",
+    )
+    p_embed.add_argument(
+        "--archive-dir",
+        default=None,
+        help="원본 아카이브 위치 (기본: <논문폴더>/_scan_originals)",
+    )
+    p_embed.add_argument(
+        "--keep-workspace",
+        action="store_true",
+        help="작업 서고의 복사본을 지우지 않고 남긴다 (OCR 이력 보존). "
+        "기본은 지운다 — 같은 논문의 사본이 늘어나지 않게.",
+    )
+    p_embed.add_argument(
+        "--sleep",
+        type=float,
+        default=0.0,
+        help="쪽 사이 대기 시간(초). LLM 사용량 한도를 아낄 때 쓴다.",
+    )
+    p_embed.add_argument(
+        "--sleep-between",
+        type=float,
+        default=0.0,
+        help="논문 사이 대기 시간(초)",
+    )
+    p_embed.set_defaults(func=cmd_embed_folder)
 
     args = parser.parse_args()
 

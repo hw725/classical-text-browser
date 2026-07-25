@@ -10,6 +10,26 @@
  *   상태 바 (전체 너비)
  */
 
+/* === hidden 속성이 실제로 숨기게 만든다 ===
+ *
+ * 왜 필요한가:
+ *   HTML의 `hidden` 속성은 브라우저 기본 스타일시트(UA)에서 display:none으로
+ *   정의된다. 그런데 이 파일처럼 작성자 스타일시트가 `.mode-tab { display: flex }`
+ *   같은 규칙을 두면 **우선순위가 높아 UA 규칙을 덮어써서 hidden이 무시된다.**
+ *   요소에 hidden 속성은 붙는데 화면에는 그대로 보이는 상태가 된다.
+ *
+ *   실제로 그 사고가 있었다: 작업 프로필을 추출 모드로 바꿔도 탭이 하나도
+ *   숨지 않았다. JS는 정상이었고 hidden 속성도 붙어 있었으나 CSS가 이겼다.
+ *
+ * !important를 쓰는 이유:
+ *   hidden은 «이 요소는 지금 의미가 없다»는 선언이므로 어떤 레이아웃 규칙보다
+ *   우선해야 한다. 이 한 줄이 없으면 display를 지정하는 규칙마다 개별 대응이
+ *   필요해지고, 새 규칙을 추가할 때마다 같은 함정을 다시 밟게 된다.
+ */
+[hidden] {
+  display: none !important;
+}
+
 /* === 폰트 정의 ===
  *
  * 폰트 규칙:
@@ -1290,6 +1310,276 @@ body.resizing-row {
 .mode-tab.active[data-mode="layout"] {
   border-bottom-color: var(--color-layout);
   color: var(--color-layout);
+}
+
+/* === 작업 프로필 (고서 / 논문) ===
+   고서 전용 탭(편성·표점·현토·이체자)을 숨기는 스위치.
+   탭이 아니라 설정이므로 모드탭과 다르게 보이도록 오른쪽 끝에 둔다.
+
+   왜 배지와 버튼을 나누는가: 버튼 하나가 상태와 동작을 겸하면
+   «지금이 어느 모드인지»를 읽기 어렵다. 배지가 현재를, 버튼이 갈 곳을 말한다. */
+.profile-switch {
+  margin-left: auto; /* 탭 줄의 오른쪽 끝으로 밀어낸다 */
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.profile-badge {
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 10px;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  background: var(--hover-bg);
+  border: 1px solid transparent;
+}
+
+/* 추출 모드는 평소와 다른 상태다 — 색으로 분명히 구분한다 */
+.profile-badge.profile-badge-extract {
+  color: #fff;
+  background: var(--accent);
+}
+
+.profile-toggle {
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.profile-toggle:hover {
+  color: var(--text-primary);
+  background: var(--hover-bg);
+}
+
+.profile-toggle.profile-extract {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* 추출 모드에서는 탭 줄 자체에 표시를 남긴다.
+   탭 몇 개가 사라지는 것만으로는 «모드가 바뀌었다»는 느낌이 약하다. */
+body[data-workspace-profile="extract"] .mode-bar {
+  border-left: 3px solid var(--accent);
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--accent) 8%, transparent),
+    transparent 260px
+  );
+}
+
+/* 추출 모드에서는 우측 패널 제목도 달라진다 */
+body[data-workspace-profile="extract"] #right-panel-label::after {
+  content: " — 추출 모드";
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* === 텍스트 추출 패널 (열람 탭 우측, 「논문」 프로필 전용) ===
+   진단 → 엔진 → 권 전체 OCR → 산출물을 한자리에 모은다. */
+.extract-panel {
+  /* 이 패널이 추출 모드의 작업 중심이라는 것이 보여야 한다 */
+  border: 1px solid var(--accent);
+  border-top: 3px solid var(--accent);
+  border-radius: 6px;
+  margin: 8px;
+  padding: 10px;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.extract-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+
+.extract-panel-title {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.extract-panel-refresh {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.extract-panel-refresh:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+/* 진단 결과 — 줄바꿈을 살려 권고문을 그대로 보여 준다 */
+.extract-diagnosis {
+  white-space: pre-line;
+  line-height: 1.5;
+  padding: 8px;
+  border-radius: 4px;
+  background: var(--hover-bg);
+  color: var(--text-secondary);
+}
+
+.extract-diag-ok {
+  border-left: 3px solid var(--color-layout, #4caf50);
+}
+
+.extract-diag-warn {
+  border-left: 3px solid #e0a030;
+}
+
+.extract-diag-scan {
+  border-left: 3px solid var(--accent);
+}
+
+.extract-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.extract-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+}
+
+.extract-field > span {
+  flex-shrink: 0;
+  width: 56px;
+}
+
+.extract-field select,
+.extract-field input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-input, transparent);
+  color: var(--text-primary);
+}
+
+/* 한글 불가 엔진 경고 — 300쪽 돌린 뒤에 알면 늦다 */
+.extract-warn {
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: rgba(224, 160, 48, 0.12);
+  color: #b07818;
+  line-height: 1.45;
+}
+
+/* 실행 전에 규모를 알린다 (300쪽 = LLM 호출 300회) */
+.extract-cost {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.extract-run-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.extract-run-btn:hover {
+  filter: brightness(1.08);
+}
+
+.extract-run-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.extract-run-btn.extract-secondary {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.extract-run-btn.extract-secondary:hover {
+  color: var(--text-primary);
+  background: var(--hover-bg);
+}
+
+/* 실행 중에는 같은 버튼이 중단 버튼이 된다 */
+.extract-run-btn.extract-running {
+  background: #c0504d;
+}
+
+.extract-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.extract-progress-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--hover-bg);
+  overflow: hidden;
+}
+
+.extract-progress-bar > span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.2s;
+}
+
+.extract-progress-text {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.extract-export-status {
+  color: var(--text-secondary);
+  padding-left: 6px;
+}
+
+.extract-download {
+  display: inline-block;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  text-decoration: none;
+}
+
+.extract-download:hover {
+  background: var(--hover-bg);
 }
 
 /* === 읽기 보조선 (Reader Line) === */

@@ -351,10 +351,21 @@ function _selectPage(docId, partId, pageNum, docInfo, pageNode) {
   }
 
   // viewerState 업데이트
+  const previousDocId = viewerState.docId;
   viewerState.docId = docId;
   viewerState.partId = partId;
   viewerState.pageNum = pageNum;
   viewerState.documentInfo = docInfo;
+
+  // 문헌이 바뀌면 그 문헌의 작업 프로필(고서/논문)을 따라간다.
+  // 한 서고에 고서와 논문이 섞여 있으므로 문헌마다 기억해야 쓸모가 있다.
+  if (previousDocId !== docId && typeof applyProfileForDocument === "function") {
+    applyProfileForDocument(docId);
+  }
+  // 추출 패널은 열린 권(part)을 대상으로 진단하므로 권이 바뀌어도 갱신한다.
+  if (typeof refreshExtractPanel === "function") {
+    refreshExtractPanel(false);
+  }
 
   // 사이드바 하이라이트 업데이트 (직접 노드 참조가 있으므로 여기서 처리)
   _highlightPage(pageNode);

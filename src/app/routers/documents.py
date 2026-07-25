@@ -285,6 +285,29 @@ def _auto_create_default_interpretation(
         return None, f"해석 저장소 자동 생성 실패 (해석 탭에서 수동 생성 가능): {e}"
 
 
+def _probe_part_text_layer(doc_path: Path, part_file: str) -> dict | None:
+    """한 권(part)의 PDF에 텍스트 레이어가 있는지 진단한다. (내부 유틸리티)
+
+    입력:
+        doc_path — 문헌 디렉토리. part_file — manifest의 상대 경로(L1_source/...).
+    출력: PdfTextExtractor.probe_text_layer()의 dict.
+          PDF가 아니거나 열 수 없으면 None (진단 불가).
+
+    왜 실패를 None으로 넘기는가: 진단은 안내이지 관문이 아니다.
+    판별할 수 없다고 문헌 등록이나 조회가 막히면 되던 것이 안 되기 시작한다.
+    """
+    path = doc_path / part_file
+    if path.suffix.lower() != ".pdf" or not path.exists():
+        return None
+    try:
+        from text_import.pdf_extractor import PdfTextExtractor
+
+        return PdfTextExtractor(path).probe_text_layer()
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"텍스트 레이어 진단 실패 (건너뜀): {path} — {e}")
+        return None
+
+
 # ── 문헌 CRUD API ──────────────────────────────
 
 
@@ -960,6 +983,15 @@ async def api_create_from_files(
         interp_id, interp_warning = _auto_create_default_interpretation(
             _library_path, doc_id, effective_title
         )
+
+        # 9. 각 권의 텍스트 레이어 유무를 진단해 응답에 실어 보낸다.
+        #
+        # 왜 여기서 진단하는가: 스캔본인지 born-digital인지를 모른 채 작업을
+        # 시작하면, 텍스트가 이미 들어 있는 PDF에 OCR을 돌리거나 반대로
+        # 스캔본에서 텍스트를 기다리게 된다. 등록 직후가 이 사실을
+        # 알려 줄 유일하게 자연스러운 시점이다.
+        for part in parts:
+            part["text_layer"] = _probe_part_text_layer(doc_path, part["file"])
 
         return {
             "document_id": doc_id,
@@ -2448,3 +2480,344 @@ async def api_parser_fetch_and_map(parser_id: str, body: ParserFetchAndMapReques
             {"error": f"상세 조회/매핑 실패: {e}"},
             status_code=502,
         )
+
+
+# ── 텍스트 레이어 진단 ────────────────────────────────────
+#
+# 왜 별도 라우트가 필요한가: 기존 /api/text-import/pdf/analyze 는 업로드된
+# 임시 파일만 받는다(multipart file 필수). 서고에 이미 등록된 문헌의
+# L1_source PDF를 진단할 방법이 없었다.
+
+
+@router.get("/api/documents/{doc_id}/parts/{part_id}/text-layer")
+def api_probe_text_layer(doc_id: str, part_id: str):
+    """서고 안 문헌의 PDF에 텍스트 레이어가 있는지 진단한다.
+
+    목적: OCR이 필요한 스캔본인지, 이미 텍스트가 있는 born-digital인지
+          가려서 불필요한 OCR을 피한다.
+    입력: doc_id — 문헌 ID. part_id — 권 식별자.
+    출력: {part_id, verdict, has_text_layer, total_pages, sampled,
+           pages_with_text, ratio, recommendation}
+
+    왜 recommendation을 함께 주는가: 이 앱의 사용자는 비개발자 연구자다.
+    ratio 0.03 같은 수치만 주면 다음에 무엇을 해야 하는지 알 수 없다.
+    """
+    doc_path = require_repo_path("documents", doc_id)
+    if not (doc_path / "manifest.json").exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404
+        )
+
+    manifest = get_document_info(doc_path)
+    part = next(
+        (p for p in manifest.get("parts", []) if p.get("part_id") == part_id), None
+    )
+    if part is None:
+        available = [p.get("part_id") for p in manifest.get("parts", [])]
+        return JSONResponse(
+            {
+                "error": f"권을 찾을 수 없습니다: part_id='{part_id}'\n"
+                f"→ 사용 가능한 part_id: {available}"
+            },
+            status_code=404,
+        )
+
+    probe = _probe_part_text_layer(doc_path, part.get("file", ""))
+    if probe is None:
+        return JSONResponse(
+            {
+                "error": "이 권은 텍스트 레이어를 진단할 수 없습니다 "
+                "(PDF가 아니거나 파일을 열 수 없음).\n"
+                "→ 해결: L1_source/ 에 PDF 파일이 있는지 확인하세요."
+            },
+            status_code=400,
+        )
+
+    return {
+        "part_id": part_id,
+        **probe,
+        "recommendation": _text_layer_recommendation(probe),
+    }
+
+
+def _text_layer_recommendation(probe: dict) -> str:
+    """진단 결과를 사용자가 다음에 할 일로 옮긴다. (내부 유틸리티)
+
+    왜 필요한가: 이 앱의 사용자는 비개발자 연구자다.
+    ratio 0.2 같은 수치만으로는 무엇을 해야 할지 알 수 없다.
+    """
+    verdict = probe.get("verdict")
+    if verdict == "born_digital":
+        return (
+            "텍스트 레이어가 이미 있습니다. OCR 없이 바로 텍스트를 가져올 수 있습니다."
+        )
+    if verdict == "partial":
+        with_text = probe.get("pages_with_text", 0)
+        sampled = probe.get("sampled", 0)
+        return (
+            f"일부 쪽에만 텍스트가 있습니다 (표본 {sampled}쪽 중 {with_text}쪽).\n"
+            "→ 표지·판권지만 활자인 영인본이거나 부분적으로 OCR된 PDF입니다. "
+            "나머지 쪽은 OCR이 필요합니다."
+        )
+    return (
+        "스캔본입니다. 텍스트를 얻으려면 OCR이 필요합니다.\n"
+        "→ 한글이 포함된 근현대 문헌이면 LLM Vision 엔진을 쓰세요 "
+        "(NDL 계열 엔진은 한글을 인식하지 못합니다)."
+    )
+
+
+# ── born-digital PDF → L4 텍스트 직접 가져오기 ────────────────
+#
+# 왜 별도 경로인가:
+#   기존 /api/text-import/pdf/* 는 "원문 + 번역 + 주석이 섞인 PDF를 LLM으로
+#   갈래별로 나눈다"는 다른 목적을 가진다(그리고 그 UI는 D-037로 봉인돼 있다).
+#   근현대 논문은 나눌 갈래가 없다. 텍스트 레이어를 쪽 그대로 L4에 옮기면
+#   끝이고, 그러면 OCR을 한 번도 돌리지 않는다.
+
+
+class TextLayerImportRequest(BaseModel):
+    """born-digital PDF의 텍스트를 L4로 가져오는 요청 본문."""
+
+    pages: list[int] | None = None  # None이면 전체 쪽
+    # 이미 텍스트가 있는 쪽을 덮어쓸지. 기본은 보호(False)다 —
+    # 사람이 교정한 내용을 말없이 지우면 안 된다.
+    overwrite: bool = False
+
+
+@router.post("/api/documents/{doc_id}/parts/{part_id}/text-import/from-text-layer")
+def api_import_from_text_layer(
+    doc_id: str, part_id: str, body: TextLayerImportRequest
+):
+    """PDF의 텍스트 레이어를 쪽 그대로 L4 텍스트로 가져온다 (OCR 없음).
+
+    목적: 이미 텍스트가 있는 논문 PDF에서 OCR을 건너뛰고 바로 텍스트를 얻는다.
+    입력: doc_id, part_id, body(pages/overwrite).
+    출력: {imported, skipped, empty, total, chars, warnings}
+
+    왜 OCR보다 나은가: 원본 활자를 그대로 가져오므로 오인식이 없고,
+    LLM 호출도 모델 다운로드도 필요 없다.
+    """
+    doc_path = require_repo_path("documents", doc_id)
+    if not (doc_path / "manifest.json").exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404
+        )
+
+    try:
+        pdf_path = get_pdf_path(doc_path, part_id)
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
+    from text_import.pdf_extractor import PdfTextExtractor
+
+    try:
+        extractor = PdfTextExtractor(pdf_path)
+    except (FileNotFoundError, ValueError) as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+    pages = extractor.extract_all_pages()
+    wanted = set(body.pages) if body.pages is not None else None
+
+    imported = skipped = empty = 0
+    chars = 0
+    warnings: list[str] = []
+
+    for page in pages:
+        page_num = page["page_num"]
+        if wanted is not None and page_num not in wanted:
+            continue
+
+        text = (page.get("text") or "").strip()
+        if not text:
+            empty += 1
+            continue
+
+        if not body.overwrite:
+            existing = get_page_text(doc_path, part_id, page_num)
+            if existing.get("exists") and (existing.get("text") or "").strip():
+                skipped += 1
+                continue
+
+        save_page_text(doc_path, part_id, page_num, text)
+        imported += 1
+        chars += len(text)
+
+    if imported == 0 and empty > 0 and skipped == 0:
+        warnings.append(
+            "가져온 텍스트가 없습니다. 이 PDF에는 텍스트 레이어가 없는 것 같습니다.\n"
+            "→ 해결: 스캔본이므로 OCR을 실행하세요 "
+            "(한글이 있으면 llm_vision 엔진)."
+        )
+    if skipped:
+        warnings.append(
+            f"{skipped}쪽은 이미 텍스트가 있어 건너뛰었습니다. "
+            "덮어쓰려면 overwrite=true로 다시 요청하세요."
+        )
+
+    return {
+        "imported": imported,
+        "skipped": skipped,
+        "empty": empty,
+        "total": len(pages) if wanted is None else len(wanted),
+        "chars": chars,
+        "warnings": warnings,
+    }
+
+
+# ── 텍스트 레이어 입히기 (연구 산출물 내보내기) ─────────────────
+#
+# 왜 documents.py인가: 원본 저장소 문헌(L1 원본 + L2 OCR)에서 파생되는
+# 산출물이므로 문헌 도메인에 속한다. version.py는 Git 이력·스냅샷 도메인이라
+# 여기가 아니다. (AGENTS.md "새 엔드포인트는 해당 도메인의 라우터 파일에")
+
+
+class TextLayerBakeRequest(BaseModel):
+    """텍스트 레이어 입히기 요청 본문."""
+
+    pages: list[int] | None = None  # None이면 전체 쪽
+    source_layer: str = "l2"  # "l2"=OCR 결과, "l4"=사람이 교정한 텍스트
+    embed_font: bool = False  # True면 폰트 임베드 (크지만 뷰어 호환성 높음)
+
+
+@router.post("/api/documents/{doc_id}/parts/{part_id}/export/text-layer-pdf")
+def api_export_text_layer_pdf(doc_id: str, part_id: str, body: TextLayerBakeRequest):
+    """원본 스캔 PDF에 보이지 않는 텍스트 레이어를 얹어 새 PDF를 입힌다.
+
+    목적: 사이드카 .txt 대신 "텍스트 레이어를 가진 PDF"를 산출물로 만든다.
+          그래야 뷰어 복사·Ctrl+F, 구조 분석, 참고문헌 추출이 그대로 동작한다.
+    입력:
+        doc_id — 문헌 ID. part_id — 권 식별자.
+        body — pages/source_layer/embed_font.
+    출력: EmbedResult dict (출력 경로, 구운 쪽 수, 제자리/근사 줄 수, 크기 등).
+
+    왜 원본이 안전한가: L1_source/의 PDF는 읽기만 하고,
+    결과는 <문헌>/exports/ 아래에 새 파일로 쓴다.
+    """
+    doc_path = require_repo_path("documents", doc_id)
+    if not (doc_path / "manifest.json").exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
+            status_code=404,
+        )
+
+    from export.text_layer_pdf import embed_text_layer
+
+    try:
+        result = embed_text_layer(
+            doc_path,
+            part_id,
+            pages=body.pages,
+            source_layer=body.source_layer,
+            embed_font=body.embed_font,
+        )
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        logger.exception("텍스트 레이어 입히기 실패: %s/%s", doc_id, part_id)
+        return JSONResponse(
+            {"error": f"텍스트 레이어 입히기에 실패했습니다: {e}"},
+            status_code=500,
+        )
+
+    if result.embedded_pages == 0:
+        # 파일은 만들어졌지만 텍스트가 하나도 안 들어갔다.
+        # 사용자가 원인을 알 수 있게 안내를 붙인다.
+        result.warnings.append(
+            "텍스트를 얹은 쪽이 없습니다. "
+            "→ 해결: 먼저 OCR을 실행하거나(레이아웃 → OCR), "
+            "source_layer='l4'로 교정 텍스트를 사용하세요."
+        )
+
+    return result.to_dict()
+
+
+@router.get("/api/documents/{doc_id}/parts/{part_id}/export/text-layer-pdf/status")
+def api_text_layer_pdf_status(doc_id: str, part_id: str):
+    """입혀 둔 텍스트 레이어 PDF가 있는지, 언제 만든 것인지 알려 준다.
+
+    목적: 프론트가 "내려받기" 버튼을 보여줄지 판단한다.
+    출력: {exists, size_bytes, modified_at}
+
+    왜 HEAD가 아니라 별도 라우트인가: FastAPI의 @router.get은 HEAD를 자동
+    지원하지 않아 405가 난다. 게다가 크기·시각을 함께 주면 화면에서
+    "언제 텍스트 레이어를 입힌 것인지"를 보여 줄 수 있다.
+    """
+    doc_path = require_repo_path("documents", doc_id)
+    embedded = doc_path / "exports" / f"{part_id}_text.pdf"
+    if not embedded.exists():
+        return {"exists": False, "size_bytes": 0, "modified_at": None}
+
+    stat = embedded.stat()
+    from datetime import datetime, timezone
+
+    return {
+        "exists": True,
+        "size_bytes": stat.st_size,
+        "modified_at": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+    }
+
+
+@router.get("/api/documents/{doc_id}/parts/{part_id}/export/text-layer-pdf")
+def api_download_text_layer_pdf(doc_id: str, part_id: str):
+    """입혀 둔 텍스트 레이어 PDF를 내려받는다.
+
+    목적: POST로 구운 산출물을 브라우저에서 저장할 수 있게 한다.
+    출력: PDF 파일 응답. 아직 입히지 않았으면 404.
+    """
+    doc_path = require_repo_path("documents", doc_id)
+    embedded = doc_path / "exports" / f"{part_id}_text.pdf"
+    if not embedded.exists():
+        return JSONResponse(
+            {
+                "error": "아직 텍스트 레이어를 입히지 않았습니다.\n"
+                "→ 해결: 먼저 POST .../export/text-layer-pdf 를 실행하세요."
+            },
+            status_code=404,
+        )
+    return FileResponse(
+        str(embedded),
+        media_type="application/pdf",
+        filename=_embedded_download_name(doc_path, doc_id, part_id),
+    )
+
+
+def _embedded_download_name(doc_path: Path, doc_id: str, part_id: str) -> str:
+    """텍스트 레이어 PDF를 내려받을 때 쓸 파일 이름을 정한다. (내부 유틸리티)
+
+    **원본 파일 이름을 그대로 물려준다.** 예:
+        L1_source/김영진_2006_조선후기 서적 출판과 유통.pdf
+        → 김영진_2006_조선후기 서적 출판과 유통.pdf
+
+    왜 이렇게 하는가: 사용자의 논문 폴더는 `저자_연도_제목.pdf` 규약으로
+    정리돼 있고, 서지 관리 도구가 이 이름에서 정보를 읽는다.
+    `{doc_id}_{part_id}_text.pdf` 같은 내부 식별자를 붙이면 그 규약이 깨져
+    내려받은 파일을 원래 자리에 되돌려 놓을 수 없다.
+    한 문헌에 권이 여럿이면 원본 이름이 이미 서로 다르므로 충돌하지 않는다.
+
+    어디서 원본 이름을 얻는가: manifest의 parts[].label이다.
+    L1_source의 실제 파일명은 ASCII 안전하게 바뀌어 저장되지만
+    (`create-from-files`가 `{doc_id}_pdf1.pdf` 식으로 정규화한다),
+    label에는 "사용자에게 보이는 이름은 원본 그대로" 남는다.
+
+    원본 이름을 알 수 없을 때만 내부 식별자로 물러난다.
+    """
+    try:
+        manifest = get_document_info(doc_path)
+        for part in manifest.get("parts", []):
+            if part.get("part_id") != part_id:
+                continue
+            label = (part.get("label") or "").strip()
+            if label:
+                # label은 보통 확장자가 없는 원본 파일명(stem)이다.
+                stem = label[:-4] if label.lower().endswith(".pdf") else label
+                # 경로 구분자만 막으면 된다 — 나머지 문자는 그대로 살린다
+                # (한자·괄호·공백이 이 규약의 일부다).
+                stem = stem.replace("/", "_").replace("\\", "_").strip()
+                if stem:
+                    return f"{stem}.pdf"
+            break
+    except (FileNotFoundError, OSError, KeyError):
+        pass
+    return f"{doc_id}_{part_id}_text.pdf"

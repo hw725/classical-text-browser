@@ -1049,3 +1049,114 @@ async def api_promote_tag(
     result["git"] = git_commit_interpretation(interp_path, commit_msg)
 
     return result
+
+
+# ── 빈 해석 저장소 정리 ────────────────────────────────
+#
+# 왜 필요한가:
+#   문헌을 만들면 기본 해석 저장소가 함께 생긴다(D-054). 표점·번역·주석의
+#   전제 조건이기 때문이다. 그런데 텍스트만 뽑는 작업(추출 모드)에서는
+#   L5-L7을 아예 쓰지 않으므로 그 저장소가 빈 채로 목록에 쌓인다.
+#
+# 왜 «비었을 때만»인가:
+#   모드 전환은 표시를 바꾸는 일이지 데이터를 지우는 일이 아니다.
+#   실수로 눌렀다고 번역·주석이 사라지면 안 된다. 내용이 하나라도 있으면
+#   건드리지 않고 그 사실을 알린다.
+#
+# 왜 삭제가 아니라 휴지통인가:
+#   판단이 틀렸을 때 되돌릴 수 있어야 한다. 기존 휴지통 기능
+#   (trash_interpretation + /api/trash/.../restore)을 그대로 쓴다.
+
+
+def _interpretation_content_files(interp_path) -> list[str]:
+    """해석 저장소에 실제 작업 내용이 있는지 훑어 파일 목록을 돌려준다.
+
+    입력: interp_path — 해석 저장소 경로.
+    출력: 내용 파일의 상대 경로 목록 (비어 있으면 빈 리스트).
+
+    무엇을 «내용»으로 보는가: L5~L8 층 아래의 파일이다.
+    manifest.json·dependency.json·.git·.gitignore는 생성 시 만들어지는
+    골격이므로 «작업이 있다»는 근거가 되지 못한다.
+    """
+    from pathlib import Path as _Path
+
+    interp_path = _Path(interp_path)
+    found: list[str] = []
+    for layer in ("L5_reading", "L6_translation", "L7_annotation", "L8_external"):
+        layer_dir = interp_path / layer
+        if not layer_dir.exists():
+            continue
+        for f in layer_dir.rglob("*"):
+            if f.is_file() and f.name != ".gitkeep":
+                found.append(str(f.relative_to(interp_path).as_posix()))
+    return found
+
+
+@router.get("/api/interpretations/{interp_id}/emptiness")
+def api_interpretation_emptiness(interp_id: str):
+    """해석 저장소가 비어 있는지 확인한다.
+
+    목적: 정리해도 되는지 판단할 근거를 준다.
+    출력: {interp_id, is_empty, content_files, content_count}
+    """
+    interp_path = require_repo_path("interpretations", interp_id)
+    if not (interp_path / "manifest.json").exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"}, status_code=404
+        )
+    files = _interpretation_content_files(interp_path)
+    return {
+        "interp_id": interp_id,
+        "is_empty": not files,
+        "content_files": files[:20],
+        "content_count": len(files),
+    }
+
+
+@router.post("/api/documents/{doc_id}/interpretations/discard-empty")
+def api_discard_empty_interpretations(doc_id: str):
+    """이 문헌에 딸린 **비어 있는** 해석 저장소를 휴지통으로 옮긴다.
+
+    목적: 텍스트 추출만 할 문헌에서 쓰지 않는 저장소를 치운다.
+    출력: {discarded: [...], kept: [{interp_id, content_count}], ...}
+
+    내용이 있는 저장소는 절대 건드리지 않고 kept에 담아 이유와 함께 돌려준다.
+    """
+    _library_path = get_library_path()
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    from core.library import trash_interpretation
+
+    discarded: list[str] = []
+    kept: list[dict] = []
+    errors: list[str] = []
+
+    for interp in list_interpretations(_library_path):
+        interp_id = interp.get("interpretation_id")
+        # 이 문헌을 원본으로 삼는 해석 저장소만 대상으로 한다.
+        if interp.get("source_document_id") != doc_id:
+            continue
+
+        interp_path = _library_path / "interpretations" / interp_id
+        files = _interpretation_content_files(interp_path)
+        if files:
+            kept.append({"interp_id": interp_id, "content_count": len(files)})
+            continue
+        try:
+            trash_interpretation(_library_path, interp_id)
+            discarded.append(interp_id)
+        except Exception as e:  # noqa: BLE001 — 하나 실패해도 나머지는 진행
+            errors.append(f"{interp_id}: {e}")
+
+    return {
+        "document_id": doc_id,
+        "discarded": discarded,
+        "kept": kept,
+        "errors": errors,
+        "note": (
+            "휴지통으로 옮겼습니다. 되돌리려면 설정 → 휴지통에서 복원하세요."
+            if discarded
+            else "정리할 빈 해석 저장소가 없습니다."
+        ),
+    }
