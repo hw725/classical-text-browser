@@ -128,7 +128,10 @@ async function refreshExtractPanel(force) {
     ocrSection.hidden = data.verdict === "born_digital";
     importSection.hidden = data.verdict === "scanned";
 
-    if (!ocrSection.hidden) await _loadExtractEngines();
+    if (!ocrSection.hidden) {
+      await _loadExtractEngines();
+      await _refreshExtractPending();
+    }
     _updateExtractCost();
   } catch (e) {
     diagnosis.textContent = `진단 중 오류: ${e.message}`;
@@ -332,6 +335,67 @@ async function _refreshExtractExport() {
   }
 }
 
+/**
+ * 실행하기 전에 «몇 쪽이 실제로 도는가»를 보여 준다.
+ *
+ * 왜 필요한가:
+ *   OCR 한 쪽마다 LLM 호출이 나간다. 특히 레이아웃을 몇 쪽만 고친 뒤
+ *   다시 실행할 때, 전체 300쪽이 다시 도는 것인지 고친 1쪽만 도는 것인지가
+ *   버튼을 누르기 전에 보여야 한다.
+ */
+async function _refreshExtractPending() {
+  const box = document.getElementById("extract-pending");
+  const target = _extractTarget();
+  if (!box || !target) return;
+
+  // 「이미 처리한 쪽도 다시」를 켰으면 재개 판정이 통째로 꺼지므로
+  // 예상 규모가 달라진다. 남은 쪽 수를 그대로 보여 주면 거짓말이 된다.
+  const force = document.getElementById("extract-force-redo");
+  if (force && force.checked) {
+    const total = _extractPageCount();
+    box.textContent = total
+      ? `«이미 처리한 쪽도 다시»가 켜져 있어 ${total}쪽 전체가 다시 돕니다.`
+      : "«이미 처리한 쪽도 다시»가 켜져 있어 전체가 다시 돕니다.";
+    box.className = "extract-pending extract-diag-scan";
+    box.hidden = false;
+    return;
+  }
+
+  try {
+    const res = await fetch(
+      `/api/documents/${target.docId}/parts/${target.partId}/ocr/pending`
+    );
+    const data = await res.json();
+    if (!res.ok) {
+      box.hidden = true;
+      return;
+    }
+
+    if (data.will_run === 0) {
+      box.textContent = `${data.page_count}쪽 모두 처리됐습니다. 실행해도 도는 쪽이 없습니다.`;
+      box.className = "extract-pending extract-diag-ok";
+      box.hidden = false;
+      return;
+    }
+
+    const parts = [];
+    if (data.todo) parts.push(`${data.todo}쪽 미처리`);
+    if (data.stale) {
+      // 어느 쪽이 다시 도는지 번호까지 보여 준다. 사용자가 방금 고친 쪽과
+      // 일치하는지 눈으로 확인할 수 있어야 한다.
+      const shown = data.stale_pages.slice(0, 8).join(", ");
+      const more = data.stale_pages.length > 8 ? " 외" : "";
+      parts.push(`${data.stale}쪽은 레이아웃을 고쳐 다시 (${shown}쪽${more})`);
+    }
+    box.textContent = `실행하면 ${data.will_run}쪽이 돕니다 — ${parts.join(" · ")}`;
+    box.className = "extract-pending extract-diag-warn";
+    box.hidden = false;
+  } catch (e) {
+    // 예상 규모를 못 보여 줘도 실행 자체는 막지 않는다.
+    box.hidden = true;
+  }
+}
+
 /** 권 전체 OCR을 실행하고 진행률을 표시한다. */
 async function _runExtractOcr() {
   const target = _extractTarget();
@@ -356,6 +420,11 @@ async function _runExtractOcr() {
   const pages = parsePageRange(input.value, _extractPageCount());
   const body = { engine_id: select.value || null };
   if (pages) body.pages = pages;
+
+  // 「이미 처리한 쪽도 다시」를 켜면 재개 판정을 통째로 끈다.
+  // 끄면(기본) 아직 안 한 쪽 + 레이아웃을 고친 쪽만 돈다.
+  const force = document.getElementById("extract-force-redo");
+  if (force && force.checked) body.skip_existing = false;
 
   // 모델을 골랐으면 그것으로 고정한다 (비우면 폴백 순서를 따른다).
   const modelSelect = document.getElementById("extract-model-select");
@@ -414,6 +483,10 @@ async function _runExtractOcr() {
         if (evt.type === "start") {
           text.textContent = `${evt.total}쪽 처리 예정`;
           (evt.warnings || []).forEach((w) => showToast(w, "info"));
+        } else if (evt.type === "redo") {
+          // 레이아웃이 바뀌어 다시 도는 쪽이다. 왜 다시 도는지 그 자리에서
+          // 보이지 않으면 «건너뛴다더니 왜 도나»가 된다.
+          text.textContent = `${evt.page}쪽 다시 — ${evt.reason}`;
         } else if (evt.type === "page" || evt.type === "skip") {
           const pct = Math.round(((evt.index + 1) / evt.total) * 100);
           fill.style.width = `${pct}%`;
@@ -432,14 +505,19 @@ async function _runExtractOcr() {
 
     if (done) {
       const parts = [`${done.processed}쪽 처리`];
+      // redone은 processed 안에 포함된 값이다. 따로 더하지 않고 괄호로 덧붙인다.
+      if (done.redone) parts.push(`그중 ${done.redone}쪽은 레이아웃 수정분`);
       if (done.skipped) parts.push(`${done.skipped}쪽 건너뜀`);
       if (done.failed) parts.push(`${done.failed}쪽 실패`);
-      if (done.baked) parts.push(`PDF ${done.baked.baked_pages}쪽 구움`);
+      if (done.embedded) {
+        parts.push(`PDF ${done.embedded.embedded_pages}쪽에 텍스트 입힘`);
+      }
       text.textContent = parts.join(" · ");
       showToast(parts.join(" · "), "success");
       _showUsage(done.usage);
       (done.warnings || []).forEach((w) => showToast(w, "info"));
       await _refreshExtractExport();
+      await _refreshExtractPending();
       // 지금 보고 있는 쪽의 텍스트를 다시 읽어 화면에 반영한다.
       if (typeof loadPageText === "function") {
         loadPageText(target.docId, target.partId, viewerState.pageNum);
@@ -513,10 +591,13 @@ async function _embedExtractPdf() {
       showToast(data.error || "굽기에 실패했습니다.", "error");
       return;
     }
-    if (data.baked_pages > 0) {
+    if (data.embedded_pages > 0) {
+      const detected = data.detected_lines
+        ? `, 줄 위치 검출 ${data.detected_lines}줄`
+        : "";
       showToast(
-        `${data.baked_pages}쪽을 구웠습니다 ` +
-          `(${Math.round(data.size_bytes / 1024)}KB).`,
+        `${data.embedded_pages}쪽에 텍스트를 입혔습니다 ` +
+          `(${Math.round(data.size_bytes / 1024)}KB${detected}).`,
         "success"
       );
     }
@@ -545,4 +626,8 @@ function initExtractPanel() {
 
   const pages = document.getElementById("extract-pages-input");
   if (pages) pages.addEventListener("input", _updateExtractCost);
+
+  // 강제 재실행을 켜고 끄면 «몇 쪽이 도는가»가 달라진다. 그 자리에서 바꾼다.
+  const force = document.getElementById("extract-force-redo");
+  if (force) force.addEventListener("change", _refreshExtractPending);
 }

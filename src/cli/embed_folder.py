@@ -244,6 +244,7 @@ def _process_one(
     from core.document import add_document
     from export.text_layer_pdf import embed_text_layer
     from ocr.full_page_block import ensure_full_page_block
+    from ocr.layout_staleness import has_ocr_result
 
     started = time.time()
     record = {
@@ -256,13 +257,20 @@ def _process_one(
 
     try:
         # 1) 작업 서고에 등록 — 원본은 복사되고 이 시점부터 이력이 남는다.
-        add_document(
-            library_path=library_path,
-            doc_id=doc_id,
-            title=task.path.stem,
-            files=[task.path],
-        )
+        #
+        # 이미 있으면 다시 만들지 않는다. 앞선 실행이 이 편의 중간에서
+        # 멈춘 경우다(성공한 편은 서고에서 지워지므로 남아 있지 않다).
+        # 다시 만들면 그때까지 돌린 OCR이 통째로 버려진다 — 60쪽짜리
+        # 논문이면 LLM 호출 수십 회가 그대로 낭비된다.
         doc_path = library_path / "documents" / doc_id
+        resumed = (doc_path / "manifest.json").exists()
+        if not resumed:
+            add_document(
+                library_path=library_path,
+                doc_id=doc_id,
+                title=task.path.stem,
+                files=[task.path],
+            )
 
         # 2) 쪽마다 전면 블록 + OCR
         import fitz
@@ -271,7 +279,14 @@ def _process_one(
             page_count = src.page_count
 
         ok_pages = 0
+        resumed_pages = 0
         for page_num in range(1, page_count + 1):
+            # 이미 결과가 있는 쪽은 건너뛴다. L2 자체가 체크포인트다.
+            if resumed and has_ocr_result(doc_path, "vol1", page_num):
+                ok_pages += 1
+                resumed_pages += 1
+                continue
+
             ensure_full_page_block(doc_path, "vol1", page_num)
             result = pipeline.run_page(
                 doc_id=doc_id,
@@ -284,6 +299,9 @@ def _process_one(
             # LLM 사용량 한도를 위해 쪽 사이에 쉬어 간다.
             if page_sleep and page_num < page_count:
                 time.sleep(page_sleep)
+
+        if resumed_pages:
+            record["resumed_pages"] = resumed_pages
 
         # 3) 텍스트 레이어를 입힌다
         embedded = embed_text_layer(

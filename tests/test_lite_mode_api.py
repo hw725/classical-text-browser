@@ -10,6 +10,8 @@
     않는지를 회귀로 잡는다 (기존 has_text_layer()는 이걸 놓친다).
 """
 
+import json
+
 import fitz
 import pytest
 from fastapi.testclient import TestClient
@@ -966,3 +968,224 @@ def test_ollama_billing_depends_on_model():
     assert p.billing_for_model("qwen3-vl:235b-cloud") == "subscription"
     assert p.billing_for_model("qwen3.5:4b") == "free"
     assert p.billing_for_model(None) == "free"
+
+
+# ===========================================================================
+#  부분 재-OCR — 레이아웃을 고친 쪽만 다시 돈다
+# ===========================================================================
+#
+# 왜 여기까지 테스트하는가:
+#   판정 로직 자체는 tests/test_layout_staleness.py가 고정한다. 여기서는
+#   그 판정이 **실제 라우트를 통해** 사용자에게 도달하는지를 본다.
+#   판정이 맞아도 라우트가 그것을 쓰지 않으면 화면에서는 아무 일도 일어나지 않는다.
+
+
+def _fake_ocr_done(library_path, doc_id, part_id, page: int, block_ids):
+    """OCR을 이미 돌린 것처럼 L2/L3를 채운다 (LLM 호출 없이).
+
+    실제 OCR을 돌리면 테스트가 LLM에 의존하게 된다. 판정에 필요한 것은
+    L2의 layout_block_id와 L3의 block_id뿐이므로 그 형태만 만든다.
+    """
+    import json as _json
+
+    doc_path = library_path / "documents" / doc_id
+    (doc_path / "L2_ocr").mkdir(exist_ok=True)
+    (doc_path / "L3_layout").mkdir(exist_ok=True)
+
+    (doc_path / "L3_layout" / f"{part_id}_page_{page:03d}.json").write_text(
+        _json.dumps(
+            {
+                "part_id": part_id,
+                "page_number": page,
+                "image_width": 1190,
+                "image_height": 1684,
+                "blocks": [
+                    {
+                        "block_id": bid,
+                        "block_type": "main_text",
+                        "bbox": [0, 0, 1190, 1684],
+                        "reading_order": i + 1,
+                        "skip": False,
+                    }
+                    for i, bid in enumerate(block_ids)
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (doc_path / "L2_ocr" / f"{part_id}_page_{page:03d}.json").write_text(
+        _json.dumps(
+            {
+                "part_id": part_id,
+                "page_number": page,
+                "ocr_engine": "llm_vision",
+                "ocr_results": [
+                    {"layout_block_id": bid, "lines": [{"text": "본문"}]}
+                    for bid in block_ids
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_pending_reports_nothing_to_run_when_all_done(isolated_app):
+    """전부 끝났으면 will_run이 0이어야 한다."""
+    client, tmp_path = isolated_app
+    body = _register(client, tmp_path, "scan", "pend1", pages=3)
+    doc_id, part_id = body["document_id"], body["parts"][0]["part_id"]
+
+    from app._state import get_library_path
+
+    lib = get_library_path()
+    for page in range(1, 4):
+        _fake_ocr_done(lib, doc_id, part_id, page, [f"p{page:02d}_b01"])
+
+    r = client.get(f"/api/documents/{doc_id}/parts/{part_id}/ocr/pending")
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["page_count"] == 3
+    assert data["done"] == 3
+    assert data["will_run"] == 0
+    assert data["stale_pages"] == []
+
+
+def test_pending_finds_page_with_new_layout(isolated_app):
+    """레이아웃을 고친 쪽만 will_run에 잡혀야 한다.
+
+    이것이 사용자가 요청한 흐름이다 — 다 돌린 뒤 몇 쪽만 영역을 나누고
+    다시 실행하면 그 쪽만 돈다. 쪽 번호를 기억해 입력할 필요가 없다.
+    """
+    client, tmp_path = isolated_app
+    body = _register(client, tmp_path, "scan", "pend2", pages=5)
+    doc_id, part_id = body["document_id"], body["parts"][0]["part_id"]
+
+    from app._state import get_library_path
+
+    lib = get_library_path()
+    for page in range(1, 6):
+        _fake_ocr_done(lib, doc_id, part_id, page, [f"p{page:02d}_b01"])
+
+    # 3쪽만 2단으로 다시 잡았다 (L2는 그대로 — 아직 다시 안 돌렸다).
+    import json as _json
+
+    l3 = (
+        lib
+        / "documents"
+        / doc_id
+        / "L3_layout"
+        / f"{part_id}_page_003.json"
+    )
+    layout = _json.loads(l3.read_text(encoding="utf-8"))
+    layout["blocks"].append(
+        {
+            "block_id": "p03_b02",
+            "block_type": "main_text",
+            "bbox": [595, 0, 1190, 1684],
+            "reading_order": 2,
+            "skip": False,
+        }
+    )
+    l3.write_text(_json.dumps(layout, ensure_ascii=False), encoding="utf-8")
+
+    r = client.get(f"/api/documents/{doc_id}/parts/{part_id}/ocr/pending")
+    data = r.json()
+    assert data["stale_pages"] == [3]
+    assert data["will_run"] == 1
+    assert data["done"] == 4
+
+
+def test_pending_counts_untouched_pages(isolated_app):
+    """아직 한 번도 안 돌린 쪽은 todo로 잡힌다."""
+    client, tmp_path = isolated_app
+    body = _register(client, tmp_path, "scan", "pend3", pages=4)
+    doc_id, part_id = body["document_id"], body["parts"][0]["part_id"]
+
+    from app._state import get_library_path
+
+    _fake_ocr_done(get_library_path(), doc_id, part_id, 1, ["p01_b01"])
+
+    data = client.get(
+        f"/api/documents/{doc_id}/parts/{part_id}/ocr/pending"
+    ).json()
+    assert data["todo_pages"] == [2, 3, 4]
+    assert data["will_run"] == 3
+
+
+def test_batch_skips_pages_whose_layout_is_unchanged(isolated_app):
+    """레이아웃이 그대로면 배치가 전부 건너뛴다 (LLM 호출 0회).
+
+    이 테스트가 LLM 없이 끝난다는 사실 자체가 «건너뛰었다»의 증거다.
+    """
+    client, tmp_path = isolated_app
+    body = _register(client, tmp_path, "scan", "batch1", pages=3)
+    doc_id, part_id = body["document_id"], body["parts"][0]["part_id"]
+
+    from app._state import get_library_path
+
+    lib = get_library_path()
+    for page in range(1, 4):
+        _fake_ocr_done(lib, doc_id, part_id, page, [f"p{page:02d}_b01"])
+
+    r = client.post(
+        f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch",
+        json={"engine_id": "llm_vision", "embed_after": False},
+    )
+    assert r.status_code == 200
+    events = [
+        json.loads(line[6:]) for line in r.text.splitlines() if line.startswith("data: ")
+    ]
+    done = next(e for e in events if e["type"] == "complete")
+    assert done["skipped"] == 3
+    assert done["processed"] == 0
+    assert done["redone"] == 0
+    assert done["usage"]["calls"] == 0
+
+
+def test_redo_can_be_turned_off(isolated_app):
+    """redo_changed_layout=False면 레이아웃이 바뀌어도 건너뛴다.
+
+    대량 배치처럼 «어떤 일이 있어도 다시 돌지 않는다»를 보장해야 하는
+    상황을 위한 안전장치다.
+    """
+    client, tmp_path = isolated_app
+    body = _register(client, tmp_path, "scan", "batch2", pages=2)
+    doc_id, part_id = body["document_id"], body["parts"][0]["part_id"]
+
+    from app._state import get_library_path
+
+    lib = get_library_path()
+    for page in (1, 2):
+        _fake_ocr_done(lib, doc_id, part_id, page, [f"p{page:02d}_b01"])
+
+    import json as _json
+
+    l3 = lib / "documents" / doc_id / "L3_layout" / f"{part_id}_page_001.json"
+    layout = _json.loads(l3.read_text(encoding="utf-8"))
+    layout["blocks"].append(
+        {
+            "block_id": "p01_b02",
+            "block_type": "main_text",
+            "bbox": [595, 0, 1190, 1684],
+            "reading_order": 2,
+            "skip": False,
+        }
+    )
+    l3.write_text(_json.dumps(layout, ensure_ascii=False), encoding="utf-8")
+
+    r = client.post(
+        f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch",
+        json={
+            "engine_id": "llm_vision",
+            "embed_after": False,
+            "redo_changed_layout": False,
+        },
+    )
+    events = [
+        json.loads(line[6:]) for line in r.text.splitlines() if line.startswith("data: ")
+    ]
+    done = next(e for e in events if e["type"] == "complete")
+    assert done["skipped"] == 2
+    assert done["usage"]["calls"] == 0

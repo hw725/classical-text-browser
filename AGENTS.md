@@ -38,9 +38,9 @@ src/app/
 ├── __main__.py          ← CLI 진입점 (python -m app serve)
 └── routers/
     ├── library.py       ← 서고/설정/백업/휴지통 (16 라우트)
-    ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 + 텍스트레이어 진단·가져오기·입히기 (38 라우트)
-    ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티 (23 라우트)
-    ├── llm_ocr.py       ← LLM 상태·분석·초안 + OCR 엔진·실행·권단위 일괄 (15 라우트)
+    ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 + 텍스트레이어 진단·가져오기·입히기 (39 라우트)
+    ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티 (25 라우트)
+    ├── llm_ocr.py       ← LLM 상태·분석·초안 + OCR 엔진·실행·권단위 일괄 (16 라우트)
     ├── alignment.py     ← 이체자 사전/정렬/일괄교정 (17 라우트)
     ├── reading.py       ← L5 표점·현토 + L6 번역 + 비고 + AI보조 (26 라우트)
     ├── annotation.py    ← L7 주석·사전형·인용마크 + AI보조 (34 라우트)
@@ -87,8 +87,9 @@ src/app/
 - "서버 시작" = 최대 3개 프로세스: start_server.bat가 uvicorn 외에 OpenAI OAuth 프록시
   (`npx -y openai-oauth`, 포트 10531–10540 스캔, Bearer 토큰 `oauth-proxy` 하드코딩)와
   SikuRoBERTa 표점 Docker(punctuation-service/.env 존재 시)를 자동 기동.
-- 코드 총 77,344줄 중 프론트(static/)가 약 30,000줄 — index.html 4,477줄 단일 파일,
-  workspace.css 6,826줄, JS 에디터 20여 개. 테스트 28파일은 전부 백엔드, 프론트 테스트 0, CI 없음.
+- 코드 총 82,718줄 중 프론트(static/)가 38,090줄 — index.html 4,702줄 단일 파일,
+  workspace.css 7,233줄, JS 에디터 20여 개. 테스트 34파일은 전부 백엔드, 프론트 테스트 0, CI 없음.
+  (2026-07-26 실측)
 
 ### 안다고 착각하기 쉬운 지점
 1. ~~`src/app/_state.py`에 `_parse_llm_json`이 **두 번 정의**~~ → **해소됨(ee8db13)**, 아래
@@ -117,6 +118,11 @@ src/app/
 10. **정적 파일은 `_NoCacheStaticFiles`로 서빙된다**(server.py) — 기본 `StaticFiles`는
    `Cache-Control`을 붙이지 않아 브라우저가 고친 JS·CSS를 다시 받지 않는 사고가 있었다.
    `?v=` 쿼리에 의존하지 말 것.
+11. **배치 OCR의 «건너뛴다»는 두 조건이다**(D-057) — L2 결과가 있고 **그 결과가 지금
+   L3와 맞을 때**만 건너뛴다. `ocr/layout_staleness.py`가 L2의 `layout_block_id` 집합과
+   L3의 `block_id` 집합을 비교한다. 스키마에 타임스탬프가 없어서 이 방식을 쓴다
+   (`layout_page`·`ocr_page` 둘 다 `additionalProperties: false`). 판정이 애매하면
+   «안 바뀌었다»로 둔다 — 오판하면 쪽마다 LLM 호출이 다시 나가기 때문이다.
 5. 서지 파서 5종(`src/parsers/` korcis 1,807줄·archives_jp·kyujanggak·kostma·ndl)은 외부
    사이트 HTML 구조 의존 — 사이트 개편 시 침묵 파손. 테스트가 실제 네트워크를 안 타면 못 잡음.
 6. `llm_usage_log.jsonl`은 서고 루트에, 서고 미설정 시 `~/.classical-text-browser/`에 기록 —
@@ -126,7 +132,7 @@ src/app/
 | 순위 | 경로 | 위험 |
 |---|---|---|
 | 1 | `src/app/_state.py` (968줄) | 전역 상태+프롬프트+캐시+JSON 파서 응집, 중복 정의 잠복 |
-| 2 | `src/app/static/` 프론트 모놀리스 | 테스트 0·CI 없음, index.html 4,477줄 수정 회귀 감지 불가. D-055의 작업 모드는 jsdom 일회성 하네스로 22건 실측했으나 **그 하네스는 저장소에 없다** — 정식 프론트 스모크 테스트는 여전히 미결(D-053 착수 조건) |
+| 2 | `src/app/static/` 프론트 모놀리스 | 테스트 0·CI 없음, index.html 4,702줄 수정 회귀 감지 불가. D-055의 작업 모드는 jsdom 일회성 하네스로 22건 실측했으나 **그 하네스는 저장소에 없다** — 정식 프론트 스모크 테스트는 여전히 미결(D-053 착수 조건) |
 | 3 | `start_server.bat` | 암묵 부수효과 3종(프록시·Docker·포트 스캔), 실패 시 원인 추적 곤란 |
 | 4 | `src/parsers/` 5종 | 외부 사이트 의존 침묵 파손 |
 | 5 | 봉인된 HWP 가져오기 경로 | 존재를 모르면 중복 재구현, 알면 onclick 복원만으로 재개 |

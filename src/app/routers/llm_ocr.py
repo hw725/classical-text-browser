@@ -70,6 +70,13 @@ class OcrBatchRequest(BaseModel):
     pages: list[int] | None = None  # None이면 전체 쪽
     # 이미 L2 결과가 있는 쪽을 건너뛴다. 중단 후 이어서 돌리는 기본 동작이다.
     skip_existing: bool = True
+    # 레이아웃을 OCR 이후에 다시 잡은 쪽은 건너뛰지 않고 다시 돌린다.
+    #
+    # 왜 기본값이 True인가: 논문 수십 쪽을 한 번에 돌린 뒤 결과가 나쁜 몇 쪽만
+    # 레이아웃 탭에서 영역을 나누는 것이 실제 작업 흐름이다. 그런데
+    # skip_existing이 그 쪽까지 건너뛰면 손으로 고친 작업이 반영되지 않는다.
+    # 어느 쪽을 고쳤는지 사용자가 기억해 입력하게 만들지 않는다.
+    redo_changed_layout: bool = True
     # 레이아웃이 없는 쪽에 페이지 전면 블록을 자동 생성한다.
     # 근현대 단일 컬럼 문헌용. 고서에서는 꺼야 한다.
     auto_full_page_block: bool = True
@@ -1055,6 +1062,74 @@ async def api_rerun_ocr_block(
 #   이 라우트는 쪽마다 기존 run_page()를 부르는 루프일 뿐이다.
 
 
+@router.get("/api/documents/{doc_id}/parts/{part_id}/ocr/pending")
+async def api_ocr_pending(doc_id: str, part_id: str):
+    """돌리기 전에 «무엇이 몇 쪽 돌 것인지»를 알려 준다.
+
+    입력: doc_id, part_id.
+    출력: {
+        "page_count": 15,
+        "done": 14,        # OCR 결과가 있고 레이아웃과도 맞는 쪽
+        "todo": 0,         # 아직 OCR 안 한 쪽
+        "todo_pages": [],
+        "stale": 1,        # 레이아웃을 고쳐 다시 돌아야 하는 쪽
+        "stale_pages": [12],
+        "will_run": 1      # 이대로 실행하면 실제로 도는 쪽 수
+    }
+
+    왜 필요한가:
+        OCR 한 쪽마다 LLM 호출이 나간다. 버튼을 누르기 전에 «몇 쪽이 도는가»를
+        알 수 있어야 한다. 특히 레이아웃을 고친 뒤 다시 돌릴 때, 전체가 다시
+        도는 것인지 고친 쪽만 도는 것인지가 화면에 보여야 안심하고 누른다.
+    """
+    library_path = get_library_path()
+    if library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = library_path / "documents" / doc_id
+    if not (doc_path / "manifest.json").exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404
+        )
+
+    from core.document import get_document_info
+
+    manifest = get_document_info(doc_path)
+    part = next(
+        (p for p in manifest.get("parts", []) if p.get("part_id") == part_id), None
+    )
+    if part is None:
+        return JSONResponse(
+            {"error": f"권을 찾을 수 없습니다: part_id='{part_id}'"}, status_code=404
+        )
+
+    from ocr.layout_staleness import has_ocr_result, layout_changed_since_ocr
+
+    page_count = _resolve_page_count(doc_path, part)
+    todo_pages: list[int] = []
+    stale_pages: list[int] = []
+    done = 0
+    for page_number in range(1, page_count + 1):
+        if not has_ocr_result(doc_path, part_id, page_number):
+            todo_pages.append(page_number)
+            continue
+        changed, _why = layout_changed_since_ocr(doc_path, part_id, page_number)
+        if changed:
+            stale_pages.append(page_number)
+        else:
+            done += 1
+
+    return {
+        "page_count": page_count,
+        "done": done,
+        "todo": len(todo_pages),
+        "todo_pages": todo_pages,
+        "stale": len(stale_pages),
+        "stale_pages": stale_pages,
+        "will_run": len(todo_pages) + len(stale_pages),
+    }
+
+
 @router.post("/api/documents/{doc_id}/parts/{part_id}/ocr/batch")
 async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
     """권 전체를 쪽 단위로 이어서 OCR 하고 SSE로 진행률을 보낸다.
@@ -1066,7 +1141,9 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
         - page     : {"type":"page","page":3,"index":2,"total":10,"status":"ok",
                       "lines":12,"block_created":true}
         - skip     : {"type":"skip","page":3,...,"reason":"이미 OCR 결과가 있습니다."}
-        - complete : {"type":"complete","processed":8,"skipped":2,"failed":0,...}
+        - redo     : {"type":"redo","page":3,...,"reason":"레이아웃이 바뀌었습니다 ..."}
+        - complete : {"type":"complete","processed":8,"skipped":2,"failed":0,
+                      "redone":1,...}
         - error    : {"type":"error","error":"..."}
 
     중단과 재개:
@@ -1074,10 +1151,17 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
         결과는 L2에 남아 있으므로, 같은 요청을 다시 보내면
         skip_existing=True에 의해 남은 쪽부터 이어서 돈다.
         (별도 상태 파일이 필요 없다 — L2 자체가 체크포인트다.)
+
+    부분 재-OCR:
+        결과가 나쁜 몇 쪽만 레이아웃 탭에서 영역을 나눈 뒤 이 라우트를
+        그대로 다시 부르면 된다. redo_changed_layout=True(기본)이면
+        **레이아웃이 OCR 이후에 바뀐 쪽만** 골라 다시 돌고 나머지는
+        건너뛴다. 쪽 번호를 기억해 입력할 필요가 없다.
+        embed_after=True이면 그 결과가 반영된 텍스트 레이어 PDF가
+        권 전체 기준으로 다시 만들어진다.
     """
     import asyncio
     import json as _json
-    from pathlib import Path as _Path
 
     library_path = get_library_path()
     if library_path is None:
@@ -1150,22 +1234,36 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
 
     progress_queue: asyncio.Queue = asyncio.Queue()
 
-    def _l2_exists(page_number: int) -> bool:
-        """이 쪽에 이미 OCR 결과가 있는지 확인한다 (재개 판단)."""
-        l2 = doc_path / "L2_ocr" / f"{part_id}_page_{page_number:03d}.json"
-        if not l2.exists():
-            return False
-        try:
-            data = _json.loads(_Path(l2).read_text(encoding="utf-8"))
-        except (OSError, _json.JSONDecodeError):
-            return False
-        # 파일만 있고 내용이 비어 있으면 다시 돌린다.
-        return bool(data.get("ocr_results"))
+    def _decide(page_number: int) -> tuple[bool, str]:
+        """이 쪽을 돌릴지 판단한다.
+
+        입력: page_number — 1-based 쪽 번호.
+        출력: (돌릴 것인가, 사람이 읽을 사유)
+
+        두 가지를 함께 본다:
+          1) OCR 결과가 이미 있는가 (재개 — L2 자체가 체크포인트다)
+          2) 그 결과가 지금 레이아웃과 맞는가 (부분 재-OCR)
+
+        2)가 없으면 레이아웃 탭에서 손으로 나눈 쪽이 영원히 건너뛰어진다.
+        """
+        from ocr.layout_staleness import has_ocr_result, layout_changed_since_ocr
+
+        if not body.skip_existing:
+            return True, ""
+        if not has_ocr_result(doc_path, part_id, page_number):
+            return True, ""
+
+        if body.redo_changed_layout:
+            changed, why = layout_changed_since_ocr(doc_path, part_id, page_number)
+            if changed:
+                return True, why
+
+        return False, "이미 OCR 결과가 있습니다."
 
     async def _run_batch():
         """쪽을 하나씩 돌며 결과를 큐에 넣는다."""
         loop = asyncio.get_event_loop()
-        processed = skipped = failed = 0
+        processed = skipped = failed = redone = 0
         total_lines = 0
 
         # 이번 배치에서 쓴 LLM 사용량만 집계하려고 시작 지점을 기억한다.
@@ -1182,7 +1280,8 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
 
         try:
             for index, page_number in enumerate(targets):
-                if body.skip_existing and _l2_exists(page_number):
+                should_run, reason = _decide(page_number)
+                if not should_run:
                     skipped += 1
                     await progress_queue.put(
                         {
@@ -1190,10 +1289,23 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                             "page": page_number,
                             "index": index,
                             "total": len(targets),
-                            "reason": "이미 OCR 결과가 있습니다.",
+                            "reason": reason,
                         }
                     )
                     continue
+                if reason:
+                    # 레이아웃이 바뀌어 다시 도는 쪽이다. 왜 다시 도는지
+                    # 그 자리에서 보이지 않으면 «건너뛴다더니 왜 도나»가 된다.
+                    redone += 1
+                    await progress_queue.put(
+                        {
+                            "type": "redo",
+                            "page": page_number,
+                            "index": index,
+                            "total": len(targets),
+                            "reason": reason,
+                        }
+                    )
 
                 block_created = False
                 try:
@@ -1281,6 +1393,9 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                     "processed": processed,
                     "skipped": skipped,
                     "failed": failed,
+                    # processed 안에 포함된 값이다(따로 더하면 안 된다).
+                    # 레이아웃을 고쳐 다시 돈 쪽이 몇 개인지 알려 준다.
+                    "redone": redone,
                     "total": len(targets),
                     "total_lines": total_lines,
                     "engine_id": effective_engine,

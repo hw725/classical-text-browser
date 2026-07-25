@@ -1524,6 +1524,29 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
   font-size: 11px;
 }
 
+/* 버튼을 누르기 전에 «실제로 몇 쪽이 도는가»를 보여 준다.
+   진단 배너와 같은 색 규약(extract-diag-*)을 함께 쓴다. */
+.extract-pending {
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* 되돌릴 수 없는 비용이 걸린 스위치라 눈에 띄게 둔다. */
+.extract-check {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.extract-check input {
+  margin: 0;
+}
+
 .extract-run-btn {
   padding: 6px 10px;
   font-size: 12px;

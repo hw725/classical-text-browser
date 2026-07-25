@@ -3215,9 +3215,29 @@
                     placeholder="비우면 전체 (예: 1-10, 15)"
                   />
                 </label>
+                <!-- 레이아웃을 고친 쪽은 자동으로 다시 돈다. 이 체크박스는
+                     그 판정과 무관하게 «전부 다시»를 강제하는 안전장치다.
+                     쪽마다 LLM 호출이 나가므로 기본은 꺼 둔다. -->
+                <label class="extract-check">
+                  <input
+                    type="checkbox"
+                    id="extract-force-redo"
+                  />
+                  <span>이미 처리한 쪽도 다시 (비용이 다시 듭니다)</span>
+                </label>
+
                 <div
                   class="extract-cost"
                   id="extract-cost"
+                ></div>
+
+                <!-- 버튼을 누르기 전에 «몇 쪽이 실제로 도는가»를 보여 준다.
+                     레이아웃을 고친 뒤 다시 실행할 때 전체가 도는 것인지
+                     고친 쪽만 도는 것인지가 보여야 안심하고 누른다. -->
+                <div
+                  class="extract-pending"
+                  id="extract-pending"
+                  hidden
                 ></div>
 
                 <button
