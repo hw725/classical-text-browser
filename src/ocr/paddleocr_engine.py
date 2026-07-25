@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import io
 import logging
+import os
 import platform
 import sys
 from typing import Optional
@@ -173,20 +174,50 @@ class PaddleOcrEngine(BaseOcrEngine):
         try:
             from paddleocr import PaddleOCR as _PaddleOCR
 
-            ocr_kwargs = {
+            # Windows + CPU 환경에서는 OneDNN(MKLDNN) 경로가 런타임 오류를 낸다.
+            #
+            # paddlepaddle 3.x에서는 증상이 더 분명하다 — OneDNN이 PIR 속성 변환을
+            # 지원하지 않아 `ConvertPirAttribute2RuntimeAttribute not support`로
+            # 추론 자체가 실패한다(실측 2026-07-25, paddlepaddle 3.3.1 + Windows).
+            # 생성자 인자만으로는 늦는 경우가 있어 환경 변수로도 못 박는다.
+            windows_cpu = not self._use_gpu and platform.system() == "Windows"
+            if windows_cpu:
+                os.environ.setdefault("FLAGS_use_mkldnn", "0")
+                os.environ.setdefault("FLAGS_enable_pir_api", "0")
+
+            # PaddleOCR 3.x는 생성자 인자가 크게 바뀌었다.
+            #   2.x: use_angle_cls / use_gpu / show_log
+            #   3.x: use_textline_orientation / device (앞의 것들은 제거되어 오류가 난다)
+            # 어느 쪽이 설치돼 있을지 모르므로 3.x 인자를 먼저 시도하고
+            # TypeError·ValueError가 나면 2.x 인자로 물러난다.
+            kwargs_v3 = {
+                "lang": target_lang,
+                "use_doc_orientation_classify": False,
+                "use_doc_unwarping": False,
+                "use_textline_orientation": False,
+            }
+            kwargs_v2 = {
                 "lang": target_lang,
                 "use_angle_cls": True,
                 "use_gpu": self._use_gpu,
                 "show_log": False,
             }
+            if windows_cpu:
+                kwargs_v3["enable_mkldnn"] = False
+                kwargs_v2["enable_mkldnn"] = False
 
-            # Windows + CPU 환경에서는 OneDNN(MKLDNN) 경로가
-            # fused_conv2d 런타임 오류를 낼 수 있어 기본 비활성화한다.
-            # 왜: OCR이 "설치되어도 실행 실패" 하는 현상을 최소 변경으로 막기 위함.
-            if not self._use_gpu and platform.system() == "Windows":
-                ocr_kwargs["enable_mkldnn"] = False
+            instance = None
+            last_error: Exception | None = None
+            for kwargs in (kwargs_v3, kwargs_v2):
+                try:
+                    instance = _PaddleOCR(**kwargs)
+                    break
+                except (TypeError, ValueError) as e:
+                    # "Unknown argument: show_log" 처럼 버전이 안 맞는 경우다.
+                    last_error = e
+            if instance is None:
+                raise last_error or RuntimeError("PaddleOCR 생성 실패")
 
-            instance = _PaddleOCR(**ocr_kwargs)
             self._lang_cache[target_lang] = instance
 
             # 기본 언어이면 기존 필드도 갱신 (하위 호환)
@@ -255,8 +286,19 @@ class PaddleOcrEngine(BaseOcrEngine):
         #      각도 분류기가 텍스트를 180° 회전시키는 오인식이 발생한다.
         use_cls = writing_direction != "vertical_rtl"
 
+        # 호출 방식도 버전마다 다르다.
+        #   2.x: ocr.ocr(img, cls=bool)
+        #   3.x: ocr.predict(img)  — cls 인자가 없어지고, 각도 분류는 생성 시 정한다
+        # 3.x에 2.x 방식으로 부르면 "unexpected keyword argument 'cls'"가 난다.
         try:
-            raw_result = ocr.ocr(img_array, cls=use_cls)
+            if hasattr(ocr, "predict"):
+                try:
+                    raw_result = ocr.predict(img_array)
+                except TypeError:
+                    # predict가 있어도 시그니처가 다를 수 있어 한 번 더 물러난다.
+                    raw_result = ocr.ocr(img_array, cls=use_cls)
+            else:
+                raw_result = ocr.ocr(img_array, cls=use_cls)
         except Exception as e:
             raise OcrEngineError(f"PaddleOCR 인식 실패: {e}")
 

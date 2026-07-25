@@ -20,7 +20,9 @@ dependencies = [
     "cssselect>=1.4.0",
     "pymupdf>=1.27.1",
     "pillow>=12.1.1",
-    "pyyaml>=6.0.3",
+    # 6.0.2로 하한을 둔 이유: paddleocr 3.7이 pyyaml==6.0.2를 고정한다.
+    # 6.0.2와 6.0.3은 패치 릴리스라 이 프로젝트가 쓰는 API에 차이가 없다.
+    "pyyaml>=6.0.2",
     "anthropic>=0.79.0",
     "openai>=1.50.0",
     "google-genai>=1.0.0",
@@ -30,16 +32,30 @@ dependencies = [
 ]
 
 # PaddleOCR 선택 설치(extra): uv sync --extra paddleocr
-# paddlepaddle ~500MB. Python 3.13+에서는 3.x가 설치된다.
-# Windows + Python 3.13 + PaddlePaddle 3.x(CPU)에서 OneDNN 런타임 오류 가능.
+#
+# 왜 Python 3.12를 쓰는가 (.python-version 참조):
+#   PaddleOCR는 Python 3.13에서 설치·동작이 확인되지 않는다. 3.12로 맞췄다.
+#
+# Windows 주의 — OneDNN을 꺼야 한다:
+#   paddlepaddle 3.x는 Windows에서 OneDNN 경로가 PIR 속성 변환을 지원하지 않아
+#   `ConvertPirAttribute2RuntimeAttribute` 오류로 추론이 실패한다(실측 2026-07-25).
+#   src/ocr/paddleocr_engine.py가 FLAGS_use_mkldnn=0 을 설정해 이를 회피한다.
+#
+# 인식 언어 주의 (실측 2026-07-25, 국한문 혼용 논문 1쪽):
+#   lang="korean"      → 한글 479자, **한자 0자**
+#   lang="chinese_cht" → 한자 202자, **한글 0자**
+#   두 모델은 상보적이라 국한문 혼용 문헌은 어느 하나로도 읽을 수 없다.
+#   그래서 이 저장소는 PaddleOCR를 **검출(위치)** 용도로 쓰고
+#   인식은 LLM Vision에 맡기는 조합을 지원한다.
 [project.optional-dependencies]
 paddleocr = [
-    "paddlepaddle>=3.3.0",
-    "paddleocr>=2.10.0",
+    "paddlepaddle>=3.3.1",
+    "paddleocr>=3.7.0",
+    "setuptools",  # paddle.utils.cpp_extension이 import한다 (3.12에는 기본 포함이 아니다)
 ]
 # NDLOCR-Lite 선택 설치(extra): uv sync --extra ndlocr
 # ONNX 기반 오프라인 OCR — 한문(CJK 한자)/일본어 전용. 한글 미지원.
-# Python 3.10+ 호환. PaddleOCR이 동작하지 않는 Python 3.13 환경의 대안.
+# Python 3.10+ 호환. PaddleOCR을 설치하지 않을 때의 오프라인 대안.
 # 원본: https://github.com/ndl-lab/ndlocr-lite (CC BY 4.0, National Diet Library, Japan)
 ndlocr = [
     "onnxruntime>=1.20.0",
@@ -86,7 +102,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/core", "src/parsers", "src/cli", "src/app", "src/ocr", "src/llm", "src/hwp", "src/text_import"]
+packages = ["src/core", "src/parsers", "src/cli", "src/app", "src/ocr", "src/llm", "src/hwp", "src/text_import", "src/export"]
 
 [tool.ruff]
 target-version = "py310"
