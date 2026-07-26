@@ -803,10 +803,12 @@ async def api_dict_generate_stage1(
 
     try:
         llm_router = _get_llm_router()
-        if body and body.force_provider:
-            llm_router.force_provider = body.force_provider
-        if body and body.force_model:
-            llm_router.force_model = body.force_model
+        # 사용자가 고른 공급자·모델은 **호출 인자로** 넘긴다.
+        # 예전에는 라우터 객체에 속성으로 대입했는데 LlmRouter에는 그런 속성이
+        # 없어 조용히 무시됐다 — 화면에서 «Claude로 돌려라»를 골라도 기본
+        # 폴백 순서대로 돌았고, 오류도 나지 않아 알 길이 없었다(D-069).
+        force_provider = body.force_provider if body else None
+        force_model = body.force_model if body else None
 
         block_id = _resolve_stage_block_id(request, body, interp_path, page_num, "main")
 
@@ -819,6 +821,8 @@ async def api_dict_generate_stage1(
             block_id=block_id,
             router=llm_router,
             existing_annotations=existing_annotations,
+            force_provider=force_provider,
+            force_model=force_model,
         )
 
         # 기존 주석(수동 태깅 등)과 병합하여 저장한다.
@@ -862,10 +866,12 @@ async def api_dict_generate_stage2(
 
     try:
         llm_router = _get_llm_router()
-        if body and body.force_provider:
-            llm_router.force_provider = body.force_provider
-        if body and body.force_model:
-            llm_router.force_model = body.force_model
+        # 사용자가 고른 공급자·모델은 **호출 인자로** 넘긴다.
+        # 예전에는 라우터 객체에 속성으로 대입했는데 LlmRouter에는 그런 속성이
+        # 없어 조용히 무시됐다 — 화면에서 «Claude로 돌려라»를 골라도 기본
+        # 폴백 순서대로 돌았고, 오류도 나지 않아 알 길이 없었다(D-069).
+        force_provider = body.force_provider if body else None
+        force_model = body.force_model if body else None
 
         block_id = _resolve_stage_block_id(request, body, interp_path, page_num, "main")
 
@@ -880,6 +886,8 @@ async def api_dict_generate_stage2(
             block_id=block_id,
             router=llm_router,
             existing_annotations=existing_annotations,
+            force_provider=force_provider,
+            force_model=force_model,
         )
 
         _set_block_annotations(ann_data, block_id, generated)
@@ -919,10 +927,12 @@ async def api_dict_generate_stage3(
 
     try:
         llm_router = _get_llm_router()
-        if body and body.force_provider:
-            llm_router.force_provider = body.force_provider
-        if body and body.force_model:
-            llm_router.force_model = body.force_model
+        # 사용자가 고른 공급자·모델은 **호출 인자로** 넘긴다.
+        # 예전에는 라우터 객체에 속성으로 대입했는데 LlmRouter에는 그런 속성이
+        # 없어 조용히 무시됐다 — 화면에서 «Claude로 돌려라»를 골라도 기본
+        # 폴백 순서대로 돌았고, 오류도 나지 않아 알 길이 없었다(D-069).
+        force_provider = body.force_provider if body else None
+        force_model = body.force_model if body else None
 
         block_id = _resolve_stage_block_id(request, body, interp_path, page_num, "main")
 
@@ -937,6 +947,8 @@ async def api_dict_generate_stage3(
             block_id=block_id,
             router=llm_router,
             existing_annotations=existing_annotations,
+            force_provider=force_provider,
+            force_model=force_model,
         )
 
         _set_block_annotations(ann_data, block_id, generated)
@@ -982,10 +994,12 @@ async def api_dict_generate_batch(interp_id: str, body: DictBatchRequest | None 
 
     try:
         llm_router = _get_llm_router()
-        if body and body.force_provider:
-            llm_router.force_provider = body.force_provider
-        if body and body.force_model:
-            llm_router.force_model = body.force_model
+        # 사용자가 고른 공급자·모델은 **호출 인자로** 넘긴다.
+        # 예전에는 라우터 객체에 속성으로 대입했는데 LlmRouter에는 그런 속성이
+        # 없어 조용히 무시됐다 — 화면에서 «Claude로 돌려라»를 골라도 기본
+        # 폴백 순서대로 돌았고, 오류도 나지 않아 알 길이 없었다(D-069).
+        force_provider = body.force_provider if body else None
+        force_model = body.force_model if body else None
 
         text_dir = interp_path / "L4_text" / "main_text"
         if (not text_dir.exists()) and (
@@ -995,7 +1009,6 @@ async def api_dict_generate_batch(interp_id: str, body: DictBatchRequest | None 
                 {"error": "사전 생성 가능한 입력 데이터가 없습니다. (L4/L6 없음)"},
                 status_code=404,
             )
-            return JSONResponse({"error": "L4 텍스트가 없습니다."}, status_code=404)
 
         # 대상 페이지 결정
         if body and body.pages:
@@ -1055,6 +1068,8 @@ async def api_dict_generate_batch(interp_id: str, body: DictBatchRequest | None 
                             block_id=block_id,
                             router=llm_router,
                             existing_annotations=existing_annotations,
+                            force_provider=force_provider,
+                            force_model=force_model,
                         )
 
                         _set_block_annotations(ann_data, block_id, generated)

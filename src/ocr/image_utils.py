@@ -230,11 +230,49 @@ def get_page_image_path(
     return None
 
 
+def resolve_part_pdf(doc_path: Path, part_id: Optional[str]) -> Optional[Path]:
+    """문헌 디렉터리에서 **그 권의** PDF 경로를 찾는다.
+
+    입력: doc_path — 문헌 디렉터리. part_id — 권 식별자(예: "vol2"). None이면 첫 권.
+    출력: PDF 경로. 찾지 못하면 None.
+
+    왜 이 함수가 필요한가 — **엉뚱한 권을 읽는 사고를 막기 위해서다.**
+    예전에는 `L1_source/*.pdf`를 glob 해서 **첫 번째**를 썼다. glob은 순서를
+    보장하지 않을뿐더러 part_id를 아예 보지 않는다. 卷上·卷下가 함께 있는
+    문헌에서 2권 5쪽을 OCR 하면 **1권 5쪽 이미지가 LLM에 넘어가고**, 오류 없이
+    그럴듯한 결과가 저장된다. 원본과 텍스트의 대응이 조용히 끊어지는 것이라
+    나중에 발견하기가 가장 어려운 종류다.
+
+    manifest의 parts[].file이 정본이다(`core.document.get_pdf_path`). 그것을
+    못 읽을 때만 파일 이름 정렬로 물러난다 — glob 순서에 기대지 않는다.
+    """
+    try:
+        from core.document import get_pdf_path
+
+        return get_pdf_path(doc_path, part_id)
+    except Exception:  # noqa: BLE001 — manifest가 없거나 깨진 옛 문헌
+        pass
+
+    source_dir = doc_path / "L1_source"
+    if not source_dir.exists():
+        return None
+    # 이름 순으로 정렬한다. vol1 → vol2 순서가 되어 «첫 권»이 실제로 첫 권이다.
+    pdfs = sorted(source_dir.glob("*.pdf"), key=lambda p: p.name)
+    if not pdfs:
+        return None
+    if part_id:
+        for p in pdfs:
+            if part_id.lower() in p.stem.lower():
+                return p
+    return pdfs[0]
+
+
 def load_page_image_from_pdf(
     library_root: str,
     doc_id: str,
     page_number: int,
     scale: float = 2.0,
+    part_id: Optional[str] = None,
 ) -> Optional[Image.Image]:
     """L1_source의 PDF에서 특정 페이지를 이미지로 추출한다.
 
@@ -243,6 +281,7 @@ def load_page_image_from_pdf(
       doc_id: 문서 ID
       page_number: 페이지 번호 (1-indexed)
       scale: 렌더링 배율 (기본 2.0 = 144 DPI)
+      part_id: 권 식별자. **다권본에서는 반드시 넘겨야 한다** — 없으면 첫 권을 읽는다.
 
     출력: PIL Image 객체 (없으면 None)
 
@@ -251,34 +290,29 @@ def load_page_image_from_pdf(
       OCR을 위해 PDF에서 페이지를 추출해야 한다.
       pymupdf(fitz)를 사용 (없으면 None 반환).
     """
-    source_dir = Path(library_root) / "documents" / doc_id / "L1_source"
-    if not source_dir.exists():
-        return None
-
-    pdf_files = list(source_dir.glob("*.pdf"))
-    if not pdf_files:
+    doc_path = Path(library_root) / "documents" / doc_id
+    pdf_path = resolve_part_pdf(doc_path, part_id)
+    if pdf_path is None or not pdf_path.exists():
         return None
 
     try:
         import fitz  # pymupdf
-
-        doc = fitz.open(str(pdf_files[0]))
-        # page_number는 1-indexed, fitz는 0-indexed
-        page_idx = page_number - 1
-        if page_idx < 0 or page_idx >= len(doc):
-            doc.close()
-            return None
-
-        pdf_page = doc[page_idx]
-        pix = pdf_page.get_pixmap(matrix=fitz.Matrix(scale, scale))
-        # PNG 바이트 → PIL Image
-        from io import BytesIO
-
-        pil_image = Image.open(BytesIO(pix.tobytes("png")))
-        doc.close()
-        return pil_image
     except ImportError:
         # pymupdf가 설치되지 않은 경우
         return None
+
+    # with를 쓰는 이유: 예외가 나도 파일 핸들이 반드시 닫힌다. Windows에서는
+    # 핸들이 남으면 그 PDF가 잠겨 다음 작업(문헌 삭제·이동)이 부분 실패한다.
+    try:
+        with fitz.open(str(pdf_path)) as doc:
+            # page_number는 1-indexed, fitz는 0-indexed
+            page_idx = page_number - 1
+            if page_idx < 0 or page_idx >= len(doc):
+                return None
+            pix = doc[page_idx].get_pixmap(matrix=fitz.Matrix(scale, scale))
+            # PNG 바이트 → PIL Image
+            from io import BytesIO
+
+            return Image.open(BytesIO(pix.tobytes("png")))
     except Exception:
         return None

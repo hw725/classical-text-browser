@@ -123,11 +123,14 @@ def _validate_entity(entity_type: str, data: dict) -> None:
 
 
 def _write_json(path: Path, data: dict) -> None:
-    """JSON 파일을 UTF-8로 저장한다. (interpretation.py 641~646행 패턴)"""
-    path.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    """JSON을 원자적으로 저장한다. 정본은 core.document.write_json_atomic이다.
+
+    왜 위임하는가: 같은 함수가 다섯 모듈에 복제돼 있었다. 한 곳만 안전하게
+    고치면 나머지 넷은 그대로 위험한 채 남는다.
+    """
+    from .document import write_json_atomic
+
+    write_json_atomic(path, data)
 
 
 def _get_source_head_commit(doc_path: Path) -> str:

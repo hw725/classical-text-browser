@@ -17,6 +17,7 @@ platform-v7.md 섹션 10.1의 구조를 따른다:
 
 import difflib
 import json
+import os
 import re
 import shutil
 from datetime import datetime, timezone
@@ -1354,12 +1355,40 @@ def _update_library_manifest(library_path: Path, doc_id: str, title: str) -> Non
     _write_json(manifest_path, manifest)
 
 
+def write_json_atomic(path: Path, data) -> None:
+    """JSON을 **원자적으로** 저장한다. 임시 파일에 다 쓴 뒤 갈아 끼운다.
+
+    입력: path — 최종 경로. data — JSON으로 직렬화할 값.
+
+    왜 이렇게까지 하는가 — `Path.write_text()`는 **먼저 파일을 0바이트로 자르고**
+    쓴다. 그 사이에 정전·강제종료·디스크 부족이 나면 `manifest.json`이 빈 파일로
+    남고, 그 문헌은 **통째로 열리지 않는다.** 서고 안에서 되돌릴 수 없는 손실이
+    나는 자리가 여기다.
+
+    `os.replace`는 같은 볼륨 안에서 원자적이라, 도중에 실패해도 예전 내용이
+    그대로 남는다. 임시 파일을 같은 디렉터리에 두는 것이 그 조건이다.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+    tmp = path.with_name(f".{path.name}.tmp")
+    try:
+        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())  # 내용이 실제 디스크에 닿은 뒤에 갈아 끼운다
+        os.replace(tmp, path)
+    except Exception:
+        # 임시 파일을 남기지 않는다 — 서고에 정체불명 파일이 쌓이면 안 된다.
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+
+
 def _write_json(path: Path, data: dict) -> None:
     """JSON 파일을 UTF-8로 저장한다. (내부 유틸리티)"""
-    path.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    write_json_atomic(path, data)
 
 
 def _formatting_file_path(doc_path: Path, part_id: str, page_num: int) -> Path:

@@ -764,6 +764,24 @@ function _updatePropsForm() {
    우측 패널: 전체 블록 목록
    ────────────────────────── */
 
+/**
+ * HTML 특수문자를 이스케이프한다.
+ *
+ * 왜 이렇게 하는가:
+ *   블록 타입 라벨과 block_id는 서버 설정·manifest에서 온 값이라
+ *   <나 &가 들어 있을 수 있다. innerHTML 템플릿에 날것으로 끼우면
+ *   그 부분이 태그로 해석되어 목록 항목이 깨진다.
+ *
+ * 입력: str — 임의의 문자열(null/undefined 허용)
+ * 출력: HTML에 그대로 넣어도 안전한 문자열
+ */
+function _layoutEscHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str == null ? "" : String(str);
+  return div.innerHTML;
+}
+
+
 function _updateBlockList() {
   const listEl = document.getElementById("layout-block-list");
   const countEl = document.getElementById("layout-block-count");
@@ -791,8 +809,8 @@ function _updateBlockList() {
       <span class="block-list-drag-handle" title="드래그하여 순서 변경">⠿</span>
       <span class="block-list-color" style="background:${color}"></span>
       <span class="block-list-order">${block.reading_order}</span>
-      <span class="block-list-label">${label}</span>
-      <span class="block-list-id">${block.block_id}</span>
+      <span class="block-list-label">${_layoutEscHtml(label)}</span>
+      <span class="block-list-id">${_layoutEscHtml(block.block_id)}</span>
     `;
 
     item.addEventListener("click", () => {

@@ -145,9 +145,11 @@ async function _previewHwpFile(file, statusEl) {
     // 메타데이터 표시
     const metaEl = document.getElementById("hwp-import-meta");
     const meta = data.metadata || {};
+    // 제목·형식은 «업로드한 문서 안»에서 뽑아낸 값이다 — 문서를 만든 쪽이
+    // 정한 문자열이므로 innerHTML에 날것으로 넣으면 안 된다.
     metaEl.innerHTML = [
-      `<b>제목:</b> ${meta.title || "(없음)"}`,
-      `<b>형식:</b> ${meta.format || "?"}`,
+      `<b>제목:</b> ${_escapeHtml(meta.title || "(없음)")}`,
+      `<b>형식:</b> ${_escapeHtml(meta.format || "?")}`,
       `<b>섹션 수:</b> ${data.sections_count || 0}`,
       `<b>전체 길이:</b> ${(data.full_text_length || 0).toLocaleString()}자`,
     ].join(" &nbsp;|&nbsp; ");

@@ -303,43 +303,17 @@ async function _loadVariantDict() {
     if (!res.ok) return;
     const data = await res.json();
     alignmentState.variantDict = data;
-    _renderVariantList(data);
   } catch (err) {
     console.error("이체자 사전 로드 실패:", err);
   }
 }
 
-/**
- * 이체자 사전 목록을 렌더링한다.
- */
-function _renderVariantList(data) {
-  const container = document.getElementById("alignment-variant-list");
-  if (!container) return;
-
-  const variants = data.variants || {};
-  const keys = Object.keys(variants);
-
-  if (keys.length === 0) {
-    container.innerHTML =
-      '<div class="placeholder">등록된 이체자가 없습니다</div>';
-    return;
-  }
-
-  // 양방향이므로 중복 제거 (A↔B 한 쌍만 표시)
-  const shown = new Set();
-  let html = "";
-
-  keys.forEach((char) => {
-    variants[char].forEach((alt) => {
-      const pairKey = [char, alt].sort().join("↔");
-      if (shown.has(pairKey)) return;
-      shown.add(pairKey);
-      html += `<span class="variant-pair">${_escapeHtml(char)} ↔ ${_escapeHtml(alt)}</span>`;
-    });
-  });
-
-  container.innerHTML = html;
-}
+/* 여기 있던 `_renderVariantList()`를 뺐다 (D-069).
+   대조 뷰 안에 이체자 목록을 그리던 함수인데, 그 자리(`alignment-variant-list`)가
+   사라진 지 오래다 — 이체자 사전 관리는 전용 「이체자」 탭(`variant-panel`,
+   `vm-*`)으로 옮겨 갔다. 컨테이너가 없으니 첫 줄의 null 가드에서 늘 되돌아갔고,
+   그래서 «아무 일도 안 일어난다»는 것이 눈에 띄지 않았다.
+   사전 자체는 여전히 `_loadVariantDict()`가 읽어 정렬에 쓴다. */
 
 /**
  * 이체자 추가 다이얼로그를 표시한다.
@@ -608,7 +582,9 @@ function _escapeHtml(str) {
 
 function _showAlignmentPlaceholder(msg) {
   const statsBar = document.getElementById("alignment-stats-bar");
-  if (statsBar) statsBar.innerHTML = `<div class="placeholder">${msg}</div>`;
+  // msg에는 서버 오류 메시지가 그대로 실려 오기도 한다 — <가 섞이면
+  // 태그로 읽혀 안내문이 사라지므로 넣기 직전에 이스케이프한다.
+  if (statsBar) statsBar.innerHTML = `<div class="placeholder">${_escapeHtml(msg)}</div>`;
   const table = document.getElementById("alignment-table");
   if (table) table.innerHTML = "";
 }

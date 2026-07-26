@@ -14,6 +14,31 @@
  *   - 문헌 > 권 > 페이지의 3단 계층이 platform-v7.md의 다권본 구조와 일치한다.
  */
 
+/**
+ * HTML 특수문자를 이스케이프한다.
+ *
+ * 왜 이렇게 하는가:
+ *   문헌 제목은 «드롭한 파일 이름»에서 그대로 만들어진다(backend documents.py).
+ *   즉 사용자가 파일명을 지어 붙이는 순간 그 문자열이 트리 라벨의 innerHTML로
+ *   들어간다 — `<img onerror=...>.pdf` 같은 이름이면 그대로 실행된다.
+ *   브라우저의 textContent 경로를 빌려 «태그가 될 수 있는 글자»를 전부 무해한
+ *   엔티티로 바꾼 뒤 innerHTML에 넣는다.
+ *
+ * 이름에 tree를 붙인 까닭:
+ *   이 프로젝트의 JS 파일들은 모듈이 아니라 <script>로 나란히 읽히므로
+ *   함수 이름이 «전부 하나의 전역 공간»을 공유한다. 다른 파일에도 _escHtml이
+ *   여럿 있어서, 같은 이름을 쓰면 나중에 읽힌 파일의 것이 이겨 버린다.
+ *
+ * 입력: str — 임의의 문자열(null/undefined 허용)
+ * 출력: HTML에 그대로 끼워 넣어도 안전한 문자열
+ */
+function _treeEscHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str == null ? "" : String(str);
+  return div.innerHTML;
+}
+
+
 /* ──────────────────────────
    전역 상태: 현재 선택된 문헌/권/페이지
    다른 JS 모듈(pdf-renderer, text-editor)에서 참조한다.
@@ -77,8 +102,8 @@ function _createDocumentNode(doc) {
   header.className = "tree-node-header";
   header.innerHTML = `
     <span class="tree-toggle">▶</span>
-    <span class="tree-label">${doc.title || "제목 없음"}</span>
-    <span class="tree-badge">${doc.document_id || ""}</span>
+    <span class="tree-label">${_treeEscHtml(doc.title || "제목 없음")}</span>
+    <span class="tree-badge">${_treeEscHtml(doc.document_id || "")}</span>
     <button class="tree-addpart-btn" title="이 문헌에 권 추가 (PDF)">＋</button>
     <button class="tree-delete-btn" title="문헌 삭제 (휴지통 이동)">×</button>
   `;
@@ -210,8 +235,8 @@ function _createPartNode(docId, part, docInfo) {
   header.className = "tree-node-header";
   header.innerHTML = `
     <span class="tree-toggle">▶</span>
-    <span class="tree-label">${part.label || part.part_id}</span>
-    <span class="tree-badge">${pageCountLabel}</span>
+    <span class="tree-label">${_treeEscHtml(part.label || part.part_id)}</span>
+    <span class="tree-badge">${_treeEscHtml(pageCountLabel)}</span>
   `;
 
   const children = document.createElement("div");

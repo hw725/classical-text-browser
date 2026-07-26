@@ -156,9 +156,14 @@ function _bindPunctEvents() {
  * 현재 페이지의 원문과 표점 데이터를 로드한다.
  */
 // eslint-disable-next-line no-unused-vars
-function activatePunctuationMode() {
+async function activatePunctuationMode() {
   punctState.active = true;
-  _populateBlockSelect();
+  // await가 «반드시» 필요하다: _populateBlockSelect는 서버에서 블록 목록을
+  // 받아온 뒤에야 punctState.blockId를 새 페이지 것으로 바꾼다. 기다리지 않으면
+  // 바로 아래 if가 «이전 페이지의» blockId를 읽어 엉뚱한 표점을 불러오고,
+  // 그 요청이 _populateBlockSelect가 띄운 정상 요청과 경쟁해 뒤늦게 도착한
+  // 쪽이 화면을 덮어쓴다.
+  await _populateBlockSelect();
   if (punctState.blockId) {
     _loadPunctuationData();
   }

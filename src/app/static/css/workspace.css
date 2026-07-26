@@ -206,8 +206,6 @@
   --align-ins-del-text: #999;
   --align-accuracy-bar-bg: #3c3c3c;
   --align-accuracy-label: #ccc;
-  --variant-pair-bg: rgba(255, 249, 196, 0.15);
-  --variant-pair-border: #f9a825;
   --align-exact-text: #4caf50;
   --align-variant-text: #ff9800;
   --align-mismatch-text: #ef5350;
@@ -334,8 +332,6 @@
   --align-ins-del-text: #757575;
   --align-accuracy-bar-bg: #e0e0e0;
   --align-accuracy-label: #333;
-  --variant-pair-bg: #fff9c4;
-  --variant-pair-border: #f9a825;
   --align-exact-text: #2e7d32;
   --align-variant-text: #f57f17;
   --align-mismatch-text: #c62828;
@@ -3061,21 +3057,6 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
 }
 
 /* L5 종류(표점/현토) 선택 바 */
-.l5-kind-bar {
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
-}
-
-.l5-kind-label {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  margin-right: 4px;
-}
-
-.l5-kind-bar input[type="radio"] {
-  accent-color: #34d399; /* emerald — L5 레이어 색상 */
-}
-
 /* --- 해석 도구 바 --- */
 
 .interp-toolbar {
@@ -3112,159 +3093,11 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
   box-shadow: inset 0 0 0 1px #22c55e;
 }
 
-/* === 비교 모드 === */
-
-/* 비교 모드 토글 */
-.compare-toggle-label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  user-select: none;
-}
-
-.compare-toggle-label input[type="checkbox"] {
-  accent-color: #22c55e;
-}
-
-.compare-toggle-label:hover {
-  color: var(--text-primary);
-}
-
-/* 비교 컨테이너 — 좌우 분할 */
-.compare-container {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-  min-height: 0;
-}
-
-/* 각 비교 패널 — 50% 폭 */
-.compare-pane {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  min-width: 0;
-}
-
-.compare-pane-header {
-  height: 28px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 8px;
-  background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.compare-repo-select {
-  flex: 1;
-  height: 22px;
-  font-size: 11px;
-  background: var(--bg-input);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 0 4px;
-  outline: none;
-}
-
-.compare-repo-select:focus {
-  border-color: var(--border-active);
-}
-
-.compare-pane-label {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  flex-shrink: 0;
-}
-
-/* 비교 콘텐츠 영역 — 읽기 전용 + diff 하이라이트 */
-.compare-content {
-  flex: 1;
-  padding: 12px;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: 14px;
-  line-height: 1.6;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-/* 패널 사이 구분선 */
-.compare-divider {
-  width: 1px;
-  background: var(--border);
-  flex-shrink: 0;
-}
-
-/* Diff 하이라이트 — 줄 단위 */
-.diff-line-added {
-  background: rgba(34, 197, 94, 0.15);
-}
-
-.diff-line-removed {
-  background: rgba(239, 68, 68, 0.15);
-}
-
-.diff-line-unchanged {
-  /* 기본 스타일 유지 */
-}
-
-/* 비교 모드 안내 메시지 */
-.compare-content .compare-placeholder {
-  color: var(--text-muted);
-  font-style: italic;
-  padding: 24px 0;
-  text-align: center;
-}
-
-/* 비교 모드에서 편집 도구 숨김 */
-.compare-mode-active #interp-save,
-.compare-mode-active #interp-save-status,
-.compare-mode-active #entity-create-textblock-btn,
-.compare-mode-active #entity-llm-request-btn {
-  display: none !important;
-}
-
-/* --- 버전 간 비교 모드 --- */
-
-.compare-type-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 4px 8px;
-  background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-  width: 100%;
-}
-
-.compare-type-radio {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.compare-type-radio input[type="radio"] {
-  accent-color: #22c55e;
-  margin: 0;
-}
-
-.compare-type-radio:hover {
-  color: var(--text-primary);
-}
+/* === 비교 모드 — 제거됨 ===
+   해석 저장소/커밋을 좌우로 놓고 비교하던 화면의 스타일이 여기 있었다.
+   해당 HTML 요소와 interpretation.js의 비교 모드 코드가 모두 사라져
+   이 규칙들에 걸리는 요소가 하나도 없으므로 함께 지웠다.
+   (되살릴 때는 git 이력에서 이 블록도 함께 복원한다.) */
 
 /* --- 사이드바 해석 저장소 목록 --- */
 
@@ -4419,26 +4252,11 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
   filter: brightness(0.95);
 }
 
-/* --- 이체자 사전 섹션 --- */
-.alignment-variant-section {
-  margin-top: 8px;
-}
-
-.alignment-variant-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 4px 0;
-}
-
-.variant-pair {
-  display: inline-block;
-  padding: 2px 8px;
-  background: var(--variant-pair-bg);
-  border: 1px solid var(--variant-pair-border);
-  border-radius: 12px;
-  font-size: 13px;
-}
+/* --- 이체자 사전 섹션 ---
+   .alignment-variant-section / .alignment-variant-list 규칙은 제거했다.
+   그 클래스를 붙이는 요소가 HTML에도 JS에도 없기 때문이다.
+   (alignment-view.js는 «id»로 alignment-variant-list를 찾는데, 그 id를
+   가진 요소 역시 index.html에 없어 null로 끝난다 — 클래스와는 무관하다.) */
 
 /* .text-btn-small → .text-btn-sm으로 통합됨 (L1928 참조) */
 

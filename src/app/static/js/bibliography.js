@@ -348,8 +348,11 @@ function _openFetchDialog() {
   // 파서 목록으로 드롭다운 채우기
   const parserSelect = document.getElementById("bib-parser-select");
   if (parserSelect) {
+    // 파서 목록은 서버가 준 값이다 — 이름에 <나 &가 있으면 innerHTML이
+    // 그것을 태그로 읽어 드롭다운이 통째로 깨진다. 넣기 직전에 이스케이프한다.
+    // (id는 value="…" 속성 안이므로 따옴표까지 막는 _escAttr를 쓴다.)
     parserSelect.innerHTML = _parsers
-      .map((p) => `<option value="${p.id}">${p.name}</option>`)
+      .map((p) => `<option value="${_bibEscAttr(p.id)}">${_escapeHtml(p.name)}</option>`)
       .join("");
   }
 
@@ -670,6 +673,30 @@ function _escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
+}
+
+/**
+ * HTML «속성값»용 이스케이프.
+ *
+ * 왜 _escapeHtml과 따로 두는가:
+ *   textContent 경로는 <, >, &만 바꾸고 따옴표는 그대로 둔다. 본문에서는
+ *   그래도 괜찮지만 value="…" 안에서는 따옴표 하나로 속성을 빠져나가
+ *   onclick 같은 새 속성을 붙일 수 있다. 그래서 따옴표까지 막는다.
+ *
+ * 이름에 bib를 붙인 까닭:
+ *   JS 파일들이 모듈이 아니라 <script>로 나란히 읽혀 함수 이름이 «전역 하나»를
+ *   공유한다. 다른 파일에도 _escAttr가 있어 같은 이름이면 서로 덮어쓴다.
+ *
+ * 입력: str — 임의의 문자열(null/undefined 허용)
+ * 출력: 큰따옴표로 감싼 속성값에 넣어도 안전한 문자열
+ */
+function _bibEscAttr(str) {
+  return String(str == null ? "" : str)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 function _setEditField(id, value) {

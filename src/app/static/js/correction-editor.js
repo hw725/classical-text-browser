@@ -602,7 +602,7 @@ function _createBlockSection(segment, segIdx) {
   header.innerHTML = `
     <span class="corr-block-toggle">▶</span>
     <span class="corr-block-color" style="background:${color}"></span>
-    <span class="corr-block-label">${segment.label}</span>
+    <span class="corr-block-label">${_escapeHtml(segment.label)}</span>
     <span class="corr-block-id">seg_${segIdx}</span>
   `;
 

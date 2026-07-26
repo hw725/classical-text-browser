@@ -285,19 +285,23 @@ HANGUL_INCAPABLE_ENGINES = ("ndlocr", "ndlkotenocr", "ndlkotenocr-full")
 # ===========================================================================
 
 
-def _load_page_image(doc_id: str, page: int) -> bytes | None:
+def _load_page_image(doc_id: str, page: int, part_id: str | None = None) -> bytes | None:
     """페이지 이미지를 바이트로 로드한다 (LLM 전송용 리사이즈 포함).
 
     L1_source에서 PDF를 찾아 해당 페이지를 이미지로 변환.
     또는 이미 이미지 파일이면 직접 읽는다.
     LLM 비전 모델에 보내기 위해 최대 2000px, JPEG 압축을 적용한다.
 
+    왜 part_id가 필요한가: 다권본에서 이것이 없으면 **첫 권의 같은 쪽**을
+    읽어 LLM에 넘긴다. 오류가 나지 않고 그럴듯한 결과가 나오므로 가장
+    발견하기 어려운 종류의 오답이 된다.
+
     왜 리사이즈하는가:
         PDF에서 144 DPI로 추출하면 10MB+ PNG가 된다.
         base64 인코딩 시 14MB+ → Ollama 클라우드 프록시가 타임아웃/거부.
         LLM 비전 모델은 내부적으로 리사이즈하므로 2000px이면 충분하다.
     """
-    from ocr.image_utils import resize_for_llm
+    from ocr.image_utils import resize_for_llm, resolve_part_pdf
 
     library_path = get_library_path()
     if library_path is None:
@@ -324,24 +328,26 @@ def _load_page_image(doc_id: str, page: int) -> bytes | None:
                     return resize_for_llm(raw, max_long_side=2000)
 
     # 2. PDF에서 페이지 추출 (pymupdf/fitz 사용)
-    pdf_files = list(source_dir.glob("*.pdf")) if source_dir.exists() else []
-    if pdf_files:
+    pdf_path = resolve_part_pdf(doc_dir, part_id)
+    if pdf_path is not None and pdf_path.exists():
         try:
             import fitz  # pymupdf
-
-            doc = fitz.open(str(pdf_files[0]))
-            # page는 1-indexed (API 경로), fitz는 0-indexed
-            page_idx = page - 1
-            if 0 <= page_idx < len(doc):
-                pdf_page = doc[page_idx]
-                # scale=2.0 → 144 DPI (기본 72 DPI × 2)
-                pix = pdf_page.get_pixmap(matrix=fitz.Matrix(2.0, 2.0))
-                raw = pix.tobytes("png")
-                doc.close()
-                return resize_for_llm(raw, max_long_side=2000)
-            doc.close()
         except ImportError:
-            pass  # pymupdf가 없으면 건너뜀
+            return None  # pymupdf가 없으면 건너뜀
+
+        # with를 쓰는 이유: 렌더 도중 예외가 나도 파일 핸들이 닫힌다.
+        # Windows에서 핸들이 남으면 그 PDF가 잠겨 문헌 삭제·이동이 부분 실패한다.
+        try:
+            with fitz.open(str(pdf_path)) as doc:
+                # page는 1-indexed (API 경로), fitz는 0-indexed
+                page_idx = page - 1
+                if 0 <= page_idx < len(doc):
+                    # scale=2.0 → 144 DPI (기본 72 DPI × 2)
+                    pix = doc[page_idx].get_pixmap(matrix=fitz.Matrix(2.0, 2.0))
+                    raw = pix.tobytes("png")
+                    return resize_for_llm(raw, max_long_side=2000)
+        except Exception:
+            return None
 
     return None
 
@@ -525,6 +531,7 @@ async def api_llm_usage():
 async def api_analyze_layout(
     doc_id: str,
     page: int,
+    part_id: str | None = Query(None, description="권 식별자. 다권본에서는 반드시 넘길 것"),
     force_provider: str | None = Query(None),
     force_model: str | None = Query(None),
 ):
@@ -543,7 +550,7 @@ async def api_analyze_layout(
     router_inst = _get_llm_router()
 
     # 페이지 이미지 로드
-    page_image = _load_page_image(doc_id, page)
+    page_image = _load_page_image(doc_id, page, part_id)
     if not page_image:
         return JSONResponse(
             {"error": f"페이지 이미지 없음: {doc_id} page {page}"},
@@ -567,7 +574,12 @@ async def api_analyze_layout(
 
 
 @router.post("/api/llm/compare-layout/{doc_id}/{page}")
-async def api_compare_layout(doc_id: str, page: int, body: CompareLayoutRequest):
+async def api_compare_layout(
+    doc_id: str,
+    page: int,
+    body: CompareLayoutRequest,
+    part_id: str | None = Query(None, description="권 식별자. 다권본에서는 반드시 넘길 것"),
+):
     """여러 모델로 레이아웃 분석 비교."""
     library_path = get_library_path()
     if library_path is None:
@@ -577,7 +589,7 @@ async def api_compare_layout(doc_id: str, page: int, body: CompareLayoutRequest)
 
     router_inst = _get_llm_router()
 
-    page_image = _load_page_image(doc_id, page)
+    page_image = _load_page_image(doc_id, page, part_id)
     if not page_image:
         return JSONResponse(
             {"error": f"페이지 이미지 없음: {doc_id} page {page}"},

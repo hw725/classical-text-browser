@@ -29,6 +29,7 @@ from .image_utils import (
     load_page_image,
     load_page_image_from_pdf,
     preprocess_for_ocr,
+    resolve_part_pdf,
 )
 from .registry import OcrEngineRegistry
 
@@ -165,7 +166,10 @@ class OcrPipeline:
             page_image = load_page_image(image_path)
         else:
             # PDF에서 페이지 추출 시도
-            page_image = load_page_image_from_pdf(self.library_root, doc_id, page_number)
+            # part_id를 반드시 넘긴다 — 없으면 다권본에서 첫 권을 읽는다.
+            page_image = load_page_image_from_pdf(
+                self.library_root, doc_id, page_number, part_id=part_id
+            )
             if page_image is None:
                 result.errors.append(
                     f"L1 이미지를 찾을 수 없습니다: page {page_number} "
@@ -188,7 +192,7 @@ class OcrPipeline:
         #   1x 좌표로 2x 이미지를 crop하게 되어 엉뚱한 영역이 잘린다.
         if (layout_w <= 0 or layout_h <= 0) and actual_w > 0:
             # PDF에서 1x 뷰포트 크기를 얻어 layout 크기로 사용
-            pdf_vp_size = self._get_pdf_viewport_size(doc_id, page_number)
+            pdf_vp_size = self._get_pdf_viewport_size(doc_id, page_number, part_id)
             if pdf_vp_size:
                 layout_w, layout_h = pdf_vp_size
                 logger.warning(
@@ -367,6 +371,7 @@ class OcrPipeline:
         self,
         doc_id: str,
         page_number: int,
+        part_id: Optional[str] = None,
     ) -> Optional[tuple[int, int]]:
         """PDF의 1x 뷰포트 크기를 반환한다.
 
@@ -377,27 +382,29 @@ class OcrPipeline:
             PyMuPDF의 page.rect가 PDF.js viewport(scale=1.0)과 동일한 크기다.
             (PDF.js의 userUnit=1, PyMuPDF의 기본 단위 = 72 DPI = 1x)
 
+        왜 part_id가 필요한가: 권마다 종이 크기가 다를 수 있다. 엉뚱한 권의
+        크기로 배율을 잡으면 crop 영역이 통째로 어긋난다.
+
         반환: (width, height) 정수 튜플, PDF가 없으면 None
         """
-        source_dir = Path(self.library_root) / "documents" / doc_id / "L1_source"
-        if not source_dir.exists():
-            return None
-
-        pdf_files = list(source_dir.glob("*.pdf"))
-        if not pdf_files:
+        doc_path = Path(self.library_root) / "documents" / doc_id
+        pdf_path = resolve_part_pdf(doc_path, part_id)
+        if pdf_path is None or not pdf_path.exists():
             return None
 
         try:
             import fitz
+        except ImportError:
+            return None
 
-            doc = fitz.open(str(pdf_files[0]))
-            page_idx = page_number - 1
-            if page_idx < 0 or page_idx >= len(doc):
-                doc.close()
-                return None
-            rect = doc[page_idx].rect
-            doc.close()
-            return (round(rect.width), round(rect.height))
+        # with를 쓰는 이유: 예외 경로에서도 파일 핸들이 닫힌다(Windows 잠금 방지).
+        try:
+            with fitz.open(str(pdf_path)) as doc:
+                page_idx = page_number - 1
+                if page_idx < 0 or page_idx >= len(doc):
+                    return None
+                rect = doc[page_idx].rect
+                return (round(rect.width), round(rect.height))
         except Exception:
             return None
 

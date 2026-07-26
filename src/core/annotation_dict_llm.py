@@ -298,6 +298,8 @@ async def generate_stage1_from_original(
     block_id: str,
     router: LlmRouter,
     existing_annotations: list[dict] | None = None,
+    force_provider: str | None = None,
+    force_model: str | None = None,
 ) -> list[dict]:
     """Stage 1: 표점된 원문만으로 사전 항목 초안을 생성한다.
 
@@ -306,6 +308,9 @@ async def generate_stage1_from_original(
         original_text — L4 원문 문자열.
         block_id — 대상 블록 ID.
         router — LlmRouter 인스턴스.
+        force_provider / force_model — 사용자가 화면에서 고른 공급자·모델.
+            **반드시 router.call()로 전달해야 한다** — 예전에는 라우터 객체에
+            속성으로 대입했는데 그런 속성이 없어 조용히 무시됐다(D-069).
         existing_annotations — 기존 주석 목록 (있으면 프롬프트에 포함).
     출력: annotation 항목 리스트 (annotation_page v2 형식).
     """
@@ -327,6 +332,8 @@ async def generate_stage1_from_original(
         system=prompt_config["system"],
         purpose="annotation_dict_stage1",
         max_tokens=4096,
+        force_provider=force_provider,
+        force_model=force_model,
     )
 
     raw_annotations = _parse_llm_annotations(response.text)
@@ -370,6 +377,8 @@ async def generate_stage2_from_translation(
     block_id: str,
     router: LlmRouter,
     existing_annotations: list[dict],
+    force_provider: str | None = None,
+    force_model: str | None = None,
 ) -> list[dict]:
     """Stage 2: 번역을 참조하여 기존 주석의 문맥적 의미를 보강한다.
 
@@ -379,6 +388,9 @@ async def generate_stage2_from_translation(
         translation_text — L6 번역 텍스트.
         block_id — 대상 블록 ID.
         router — LlmRouter 인스턴스.
+        force_provider / force_model — 사용자가 화면에서 고른 공급자·모델.
+            **반드시 router.call()로 전달해야 한다** — 예전에는 라우터 객체에
+            속성으로 대입했는데 그런 속성이 없어 조용히 무시됐다(D-069).
         existing_annotations — 1단계 결과 (기존 주석 목록).
     출력: 보강된 annotation 항목 리스트. 기존 항목과 병합하여 사용.
     """
@@ -395,6 +407,8 @@ async def generate_stage2_from_translation(
         system=prompt_config["system"],
         purpose="annotation_dict_stage2",
         max_tokens=4096,
+        force_provider=force_provider,
+        force_model=force_model,
     )
 
     raw_annotations = _parse_llm_annotations(response.text)
@@ -442,6 +456,8 @@ async def generate_stage3_from_both(
     block_id: str,
     router: LlmRouter,
     existing_annotations: list[dict] | None = None,
+    force_provider: str | None = None,
+    force_model: str | None = None,
 ) -> list[dict]:
     """Stage 3: 원문+번역을 종합하여 최종 통합한다.
 
@@ -455,6 +471,9 @@ async def generate_stage3_from_both(
         translation_text — L6 번역 텍스트.
         block_id — 대상 블록 ID.
         router — LlmRouter 인스턴스.
+        force_provider / force_model — 사용자가 화면에서 고른 공급자·모델.
+            **반드시 router.call()로 전달해야 한다** — 예전에는 라우터 객체에
+            속성으로 대입했는데 그런 속성이 없어 조용히 무시됐다(D-069).
         existing_annotations — 이전 단계 결과. None이면 일괄 생성 모드.
     출력: 최종 통합된 annotation 항목 리스트.
     """
@@ -474,6 +493,8 @@ async def generate_stage3_from_both(
         system=prompt_config["system"],
         purpose="annotation_dict_stage3",
         max_tokens=4096,
+        force_provider=force_provider,
+        force_model=force_model,
     )
 
     raw_annotations = _parse_llm_annotations(response.text)

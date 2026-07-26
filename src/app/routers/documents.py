@@ -36,6 +36,7 @@ from core.document import (
     save_page_corrections,
     save_page_layout,
     save_page_text,
+    write_json_atomic,
 )
 from core.library import (
     list_documents,
@@ -92,16 +93,6 @@ class MatchHwpToBlocksRequest(BaseModel):
     part_id: str
     page_num: int
     block_text_mapping: list[dict]
-
-
-class PdfSeparateRequest(BaseModel):
-    """PDF 텍스트 분리 요청."""
-
-    structure: dict  # DocumentStructure 딕셔너리
-    pages: list[dict] | None = None  # [{page_num, text}] — None이면 전체
-    custom_instructions: str = ""
-    force_provider: str | None = None
-    force_model: str | None = None
 
 
 class AlignPreviewRequest(BaseModel):
@@ -963,10 +954,7 @@ async def api_create_from_files(
         manifest_path = doc_path / "manifest.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         manifest["parts"] = parts
-        manifest_path.write_text(
-            json.dumps(manifest, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        write_json_atomic(manifest_path, manifest)
 
         # 7. manifest 변경분 commit (LFS 후크 부재 등은 비치명적)
         try:
@@ -1674,10 +1662,7 @@ async def api_pdf_apply(body: PdfApplyRequest, background_tasks: BackgroundTasks
 
         # completeness_status 업데이트
         manifest["completeness_status"] = "text_imported"
-        (doc_path / "manifest.json").write_text(
-            json.dumps(manifest, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        write_json_atomic(doc_path / "manifest.json", manifest)
 
         # page_count 업데이트 — 사이드바에 페이지 목록이 뜨도록
         max_page = 0
@@ -1690,10 +1675,7 @@ async def api_pdf_apply(body: PdfApplyRequest, background_tasks: BackgroundTasks
                 if part["part_id"] == default_part_id:
                     existing = part.get("page_count") or 0
                     part["page_count"] = max(existing, max_page)
-            (doc_path / "manifest.json").write_text(
-                json.dumps(manifest, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
+            write_json_atomic(doc_path / "manifest.json", manifest)
 
         # git commit (백그라운드)
         commit_msg = f"feat: 텍스트 가져오기 — {pages_saved}페이지"
@@ -1779,9 +1761,14 @@ async def api_add_parts(
         name = Path(upload.filename or "part.pdf").name
         # 같은 이름이 이미 있으면 덮어쓰지 않는다. 앞서 넣은 권의 파일을
         # 지우면 그 권의 OCR 결과가 가리키는 원본이 사라진다.
+        #
+        # manifest뿐 아니라 **디스크도** 본다: 앞선 권 추가가 파일을 쓴 뒤
+        # manifest 저장 전에 죽으면 manifest에 없는 고아 파일이 남는다.
+        # manifest만 보면 그 파일을 말없이 덮어쓰게 되고, L1_source는
+        # 덮어쓰면 안 되는 곳이다.
         stem, suffix = Path(name).stem, Path(name).suffix
         n = 2
-        while name in existing_files:
+        while name in existing_files or (source_dir / name).exists():
             name = f"{stem}_{n}{suffix}"
             n += 1
         existing_files.add(name)
@@ -1850,9 +1837,7 @@ async def api_add_parts(
                 status_code=400,
             )
 
-    manifest_path.write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    write_json_atomic(manifest_path, manifest)
 
     git_commit_document(
         doc_path,

@@ -829,7 +829,9 @@ async function loadGitGraph(interpId) {
     );
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
-      container.innerHTML = `<div class="placeholder">오류: ${err.error || resp.statusText}</div>`;
+      // 서버 오류 메시지·예외 메시지도 그대로 믿을 수 없다 — 파일명이나 커밋
+      // 메시지가 섞여 들어오면 <가 태그로 읽혀 패널이 깨진다.
+      container.innerHTML = `<div class="placeholder">오류: ${_escapeHtml(err.error || resp.statusText)}</div>`;
       return;
     }
 
@@ -853,7 +855,7 @@ async function loadGitGraph(interpId) {
     // d3.js 세로 렌더링
     renderLadderGraph(container, data);
   } catch (err) {
-    container.innerHTML = `<div class="placeholder">그래프 로딩 실패: ${err.message}</div>`;
+    container.innerHTML = `<div class="placeholder">그래프 로딩 실패: ${_escapeHtml(err.message)}</div>`;
   }
 }
 

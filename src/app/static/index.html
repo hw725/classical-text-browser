@@ -2145,30 +2145,12 @@
               </label>
             </div>
 
-            <!-- L5 종류(표점/현토) 선택 — L5_reading 탭에서만 표시 -->
-            <div
-              class="interp-subtype-bar l5-kind-bar"
-              id="l5-kind-bar"
-            >
-              <span class="l5-kind-label">L5 종류:</span>
-              <label class="interp-radio-label">
-                <input
-                  type="radio"
-                  name="l5-kind"
-                  value="punctuation"
-                  checked
-                />
-                표점
-              </label>
-              <label class="interp-radio-label">
-                <input
-                  type="radio"
-                  name="l5-kind"
-                  value="hyeonto"
-                />
-                현토
-              </label>
-            </div>
+            <!-- 여기 있던 「L5 종류: ○표점 ○현토」 라디오를 뺐다 (D-069).
+                 고른 값을 읽는 곳이 「비교 모드」뿐이었는데, 그 기능은 마크업이
+                 사라져 오래전부터 실행되지 않았다. 즉 **눌러도 아무 일도
+                 일어나지 않는 버튼**이 남아 있었다. 표점·현토는 상단 작업 탭
+                 「표점」·「현토」로 각각 들어간다. 되살릴 일이 생기면 값을
+                 읽는 쪽을 먼저 만들고 이 라디오를 다시 넣는다. -->
 
             <!-- 도구 바 -->
             <div class="interp-toolbar">

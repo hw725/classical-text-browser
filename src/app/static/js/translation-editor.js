@@ -81,9 +81,12 @@ function _bindTransEvents() {
    ────────────────────────── */
 
 // eslint-disable-next-line no-unused-vars
-function activateTranslationMode() {
+async function activateTranslationMode() {
   transState.active = true;
-  _populateTransBlockSelect();
+  // await가 «반드시» 필요하다: _populateTransBlockSelect는 서버 응답을 받은
+  // 뒤에야 transState.blockId를 새 페이지 것으로 바꾼다. 기다리지 않으면
+  // 아래 if가 «이전 페이지의» blockId를 읽어 엉뚱한 번역을 불러온다.
+  await _populateTransBlockSelect();
   if (transState.blockId) {
     _loadTranslationData();
   }
@@ -1020,6 +1023,29 @@ async function _loadRefDictMatches() {
 }
 
 
+/**
+ * HTML 특수문자를 이스케이프한다.
+ *
+ * 왜 이렇게 하는가:
+ *   참조 사전의 표제어·뜻풀이·출처는 외부에서 가져온 사전 데이터라
+ *   <나 &가 섞여 있을 수 있다. innerHTML에 날것으로 넣으면 그 부분이
+ *   태그로 해석되어 목록이 깨지거나, 최악의 경우 스크립트가 실행된다.
+ *   따옴표까지 바꾸는 이유는 이 값이 data-key="…" «속성 안»에도 들어가기
+ *   때문이다 — 따옴표 하나면 속성을 빠져나갈 수 있다.
+ *
+ * 입력: str — 임의의 문자열(null/undefined 허용)
+ * 출력: 본문·속성 어디에 넣어도 안전한 문자열
+ */
+function _transEscHtml(str) {
+  return String(str == null ? "" : str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+
 function _renderRefDictMatches() {
   /* 매칭 결과를 리스트로 표시한다. */
   const container = document.getElementById("trans-refdict-list");
@@ -1041,11 +1067,11 @@ function _renderRefDictMatches() {
     const item = document.createElement("label");
     item.className = "trans-refdict-item";
     item.innerHTML = `
-      <input type="checkbox" data-key="${key}" ${checked}>
-      <span class="trans-refdict-hw">${m.headword}${reading}</span>
-      <span class="trans-refdict-type">[${m.type || ""}]</span>
-      <span class="trans-refdict-meaning">${meaning.slice(0, 60)}${meaning.length > 60 ? "…" : ""}</span>
-      <span class="trans-refdict-source">${source}</span>
+      <input type="checkbox" data-key="${_transEscHtml(key)}" ${checked}>
+      <span class="trans-refdict-hw">${_transEscHtml(m.headword)}${_transEscHtml(reading)}</span>
+      <span class="trans-refdict-type">[${_transEscHtml(m.type || "")}]</span>
+      <span class="trans-refdict-meaning">${_transEscHtml(meaning.slice(0, 60))}${meaning.length > 60 ? "…" : ""}</span>
+      <span class="trans-refdict-source">${_transEscHtml(source)}</span>
     `;
 
     const checkbox = item.querySelector("input");

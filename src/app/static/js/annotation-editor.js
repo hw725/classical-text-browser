@@ -921,16 +921,19 @@ function _renderAnnList() {
           ? "ann-status-draft"
           : "ann-status-reviewed";
 
+    // 원문 조각·주석 라벨·설명은 OCR 결과나 LLM 응답에서 온 «남이 만든 문자열»이다.
+    // 원문에 <나 &가 섞여 있으면(이체자 표기, 교정 메모 등) innerHTML이 그것을
+    // 태그로 읽어 카드가 깨지거나 스크립트가 실행된다 — 넣기 직전에 이스케이프한다.
     card.innerHTML = `
       <div class="ann-card-header">
         <span class="ann-card-type" style="color:${typeInfo.color}">${typeInfo.icon} ${typeInfo.label}</span>
-        <span class="ann-card-range">"${sourceText}" [${ann.target.start}–${ann.target.end}]</span>
+        <span class="ann-card-range">"${_escHtml(sourceText)}" [${ann.target.start}–${ann.target.end}]</span>
         ${_renderDictBadge(ann)}
-        <span class="ann-card-status ${statusClass}">${ann.status}</span>
+        <span class="ann-card-status ${statusClass}">${_escHtml(ann.status)}</span>
       </div>
       <div class="ann-card-body">
-        <div class="ann-card-label">${ann.content.label}</div>
-        <div class="ann-card-desc">${ann.content.description}</div>
+        <div class="ann-card-label">${_escHtml(ann.content.label)}</div>
+        <div class="ann-card-desc">${_escHtml(ann.content.description)}</div>
         ${_renderDictExpanded(ann)}
       </div>
     `;
@@ -1879,78 +1882,9 @@ function _findNearestOccurrence(haystack, needle, hintIndex) {
   return bestPos;
 }
 
-function _resolveAiAnnotationRange(ann, originalText) {
-  const n = originalText.length;
-  if (n === 0) return null;
-
-  const target = ann && typeof ann === "object" ? ann.target || {} : {};
-  let start = _toAiIndex(ann?.start, _toAiIndex(target.start, 0));
-  let end = _toAiIndex(ann?.end, _toAiIndex(target.end, start));
-  if (end < start) {
-    const tmp = start;
-    start = end;
-    end = tmp;
-  }
-
-  start = Math.max(0, Math.min(start, n - 1));
-  end = Math.max(start, Math.min(end, n - 1));
-
-  const normalizedText = _normalizeAiTagText(ann?.text || "");
-  if (!normalizedText) {
-    return { start, end };
-  }
-
-  const currentSlice = originalText.slice(start, end + 1);
-  const localIndex = currentSlice.indexOf(normalizedText);
-  if (localIndex !== -1) {
-    const fixedStart = start + localIndex;
-    return {
-      start: fixedStart,
-      end: Math.min(n - 1, fixedStart + normalizedText.length - 1),
-    };
-  }
-
-  const foundStart = _findNearestOccurrence(originalText, normalizedText, start);
-  if (foundStart !== -1) {
-    return {
-      start: foundStart,
-      end: Math.min(n - 1, foundStart + normalizedText.length - 1),
-    };
-  }
-
-  // AI가 표점을 포함한 텍스트를 반환해도 원문 인덱스로 되돌릴 수 있게 보정한다.
-  const sourceMap = _buildAiRangeIndexMap(originalText);
-  const queryMap = _buildAiRangeIndexMap(normalizedText);
-  const strippedNeedle = queryMap.strippedText;
-  if (strippedNeedle) {
-    const strippedHint = sourceMap.originalToStripped[start];
-    const hintIndex = strippedHint >= 0 ? strippedHint : 0;
-    const strippedMatchStart = _findNearestOccurrence(
-      sourceMap.strippedText,
-      strippedNeedle,
-      hintIndex,
-    );
-    if (strippedMatchStart !== -1) {
-      const mappedStart = sourceMap.strippedToOriginal[strippedMatchStart];
-      const mappedEnd =
-        sourceMap.strippedToOriginal[
-          strippedMatchStart + strippedNeedle.length - 1
-        ];
-      if (Number.isInteger(mappedStart) && Number.isInteger(mappedEnd)) {
-        return { start: mappedStart, end: mappedEnd };
-      }
-    }
-  }
-
-  if (start <= end) {
-    return {
-      start,
-      end,
-    };
-  }
-
-  return null;
-}
+// 참고: 예전의 _resolveAiAnnotationRange는 표점을 고려하지 않는 구버전이라
+// _resolveAiAnnotationRangeWithPunctuation이 그 역할을 모두 넘겨받았다.
+// 부르는 곳이 하나도 남지 않아 제거했다.
 
 function _stripAiIgnorableChars(text) {
   if (!text) return "";

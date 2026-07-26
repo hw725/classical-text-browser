@@ -4,12 +4,15 @@
  * 기능:
  *   1. 사이드바 너비 드래그 조절
  *   2. 에디터 좌우 분할 비율 드래그 조절
- *   3. 하단 패널 높이 드래그 조절 + 접기/펴기
- *   4. 액티비티 바 탭 전환
- *   5. API에서 서고 정보 로드
- *   6. PDF 렌더러 초기화 (pdf-renderer.js)
- *   7. 텍스트 에디터 초기화 (text-editor.js)
- *   8. 교정 편집기 초기화 (correction-editor.js)
+ *   3. 액티비티 바 탭 전환
+ *   4. API에서 서고 정보 로드
+ *   5. PDF 렌더러 초기화 (pdf-renderer.js)
+ *   6. 텍스트 에디터 초기화 (text-editor.js)
+ *   7. 교정 편집기 초기화 (correction-editor.js)
+ *
+ * 참고: 예전의 «하단 패널»(높이 드래그 + 접기/펴기)은 사이드바로 옮겨졌다.
+ *   관련 DOM(panel-toggle, bottom-panel)이 index.html에서 사라졌으므로
+ *   그 코드도 함께 제거했다.
  */
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -26,7 +29,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   _safeInit("ResizeHandlers", initResizeHandlers);
-  _safeInit("PanelToggle", initPanelToggle);
   _safeInit("ActivityBar", initActivityBar);
   _safeInit("ModeBar", initModeBar);
   _safeInit("LibraryInfo", loadLibraryInfo);
@@ -164,70 +166,8 @@ function setupColResize({ handle, getTarget, cssVar, minSize, maxSize }) {
   });
 }
 
-/**
- * 수직(행) 리사이즈를 설정한다.
- * handle을 드래그하면 target의 높이가 바뀐다.
- * (위로 드래그 = 높이 증가)
- */
-function setupRowResize({ handle, getTarget, cssVar, minSize, maxSize }) {
-  if (!handle) return;
-
-  let startY, startHeight;
-
-  handle.addEventListener("mousedown", (e) => {
-    e.preventDefault();
-    const target = getTarget();
-
-    // 접힌 상태면 리사이즈 무시
-    if (target.classList.contains("collapsed")) return;
-
-    startY = e.clientY;
-    startHeight = target.getBoundingClientRect().height;
-
-    handle.classList.add("active");
-    document.body.classList.add("resizing-row");
-
-    const onMouseMove = (e) => {
-      // 위로 드래그 = delta 음수 = 높이 증가
-      const delta = startY - e.clientY;
-      let newHeight = startHeight + delta;
-
-      if (minSize) newHeight = Math.max(newHeight, minSize);
-      if (maxSize) newHeight = Math.min(newHeight, maxSize);
-
-      if (cssVar) {
-        document.documentElement.style.setProperty(cssVar, newHeight + "px");
-      }
-    };
-
-    const onMouseUp = () => {
-      handle.classList.remove("active");
-      document.body.classList.remove("resizing-row");
-      document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
-    };
-
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
-  });
-}
-
 /* ──────────────────────────
-   2. 하단 패널 접기/펴기
-   ────────────────────────── */
-
-function initPanelToggle() {
-  const toggle = document.getElementById("panel-toggle");
-  const panel = document.getElementById("bottom-panel");
-  if (!toggle || !panel) return;
-
-  toggle.addEventListener("click", () => {
-    panel.classList.toggle("collapsed");
-  });
-}
-
-/* ──────────────────────────
-   3. 액티비티 바 탭 전환
+   2. 액티비티 바 탭 전환
    ────────────────────────── */
 
 function initActivityBar() {

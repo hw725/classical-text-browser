@@ -110,9 +110,12 @@ function _bindHyeontoEvents() {
    ────────────────────────── */
 
 // eslint-disable-next-line no-unused-vars
-function activateHyeontoMode() {
+async function activateHyeontoMode() {
   hyeontoState.active = true;
-  _populateHyeontoBlockSelect();
+  // await가 «반드시» 필요하다: _populateHyeontoBlockSelect는 서버 응답을 받은
+  // 뒤에야 hyeontoState.blockId를 새 페이지 것으로 바꾼다. 기다리지 않으면
+  // 아래 if가 «이전 페이지의» blockId를 읽어 엉뚱한 현토를 불러온다.
+  await _populateHyeontoBlockSelect();
   if (hyeontoState.blockId) {
     _loadHyeontoData();
   }
