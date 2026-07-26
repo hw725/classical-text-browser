@@ -107,7 +107,11 @@ PDF/이미지 위에 **읽기 순서대로 번호가 매겨진 파란색 블록*
 원본은 아카이브로 옮긴 뒤 텍스트 레이어 PDF를 원래 이름 그대로 제자리에 놓습니다.
 
 ```bash
-uv run python -m cli embed-folder "C:/논문" --library C:/작업서고            # 미리보기
+# 한 편만 — 서고를 미리 만들 필요가 없습니다
+uv run python -m cli ocr "논문.pdf" --execute
+
+# 폴더째 — 기본이 미리보기라 --execute 없이는 아무것도 바뀌지 않습니다
+uv run python -m cli embed-folder "C:/논문" --library C:/작업서고
 uv run python -m cli embed-folder "C:/논문" --library C:/작업서고 --limit 1 --execute
 ```
 
@@ -191,7 +195,7 @@ schemas/
 |------|------|------|
 | [**user-guide.md**](docs/user-guide.md) | 연구자 | 사용 방법 단계별 안내 |
 | [platform-v7.md](docs/platform-v7.md) | 개발자 | 전체 아키텍처 |
-| [DECISIONS.md](docs/DECISIONS.md) | 개발자 | 설계 결정 근거 (D-001~D-059) |
+| [DECISIONS.md](docs/DECISIONS.md) | 개발자 | 설계 결정 근거 (D-001~D-060) |
 | [core-schema-v1.3.md](docs/core-schema-v1.3.md) | 개발자 | 코어 엔티티 모델 |
 | [schemas/README.md](schemas/README.md) | 개발자 | JSON 스키마 구조 |
 | [architecture-diagrams.md](docs/architecture-diagrams.md) | 전체 | Mermaid 다이어그램 |

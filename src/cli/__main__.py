@@ -73,6 +73,93 @@ def cmd_list_documents(args):
         sys.exit(1)
 
 
+def _default_workspace() -> Path:
+    """CLI가 쓸 기본 작업 서고 경로.
+
+    왜 홈 아래인가: 논문 파일 옆에 서고를 만들면 논문 폴더가 지저분해지고,
+    서지 관리 도구가 그 폴더를 훑을 때 걸린다. 한 곳에 모아 두면 나중에
+    GUI로 열 때도 «어디였더라»를 묻지 않아도 된다.
+    """
+    return Path.home() / "Documents" / "고전서지서고_추출"
+
+
+def cmd_ocr(args):
+    """파일 하나(또는 폴더 하나)를 OCR 해서 텍스트 레이어 PDF로 만든다.
+
+    embed-folder와 같은 일을 하지만 **묻는 것을 최소로 줄인 진입점**이다.
+    서고를 미리 만들 필요도, 폴더 구조를 맞출 필요도 없다.
+
+        uv run python -m cli ocr 논문.pdf
+
+    왜 따로 두는가:
+        embed-folder는 «주제 폴더로 정리된 수백 편»을 전제로 한다. 폴더 경로와
+        --library를 모두 요구하고 기본이 미리보기다. 한 편만 처리하려는
+        사람에게는 그 전제가 전부 장벽이다. «논문 하나 넣고 텍스트 레이어
+        PDF 받기»가 한 줄로 끝나야 한다.
+    """
+    import shutil
+    import tempfile
+
+    from cli.embed_folder import embed_folder
+
+    source = Path(args.target).expanduser().resolve()
+    if not source.exists():
+        print(f"오류: 찾을 수 없습니다 — {source}", file=sys.stderr)
+        sys.exit(1)
+
+    library = Path(args.library).expanduser() if args.library else _default_workspace()
+    library.mkdir(parents=True, exist_ok=True)
+
+    # embed_folder는 «주제 폴더/파일» 구조를 훑는다. 파일 하나를 받은 경우
+    # 임시로 그 구조를 만들어 준다 — 원본은 복사하지 않고 그대로 쓰기 위해
+    # 원본이 이미 «폴더 안의 파일»이면 그 부모를 쓴다.
+    staging = None
+    if source.is_dir():
+        root = source
+    else:
+        staging = Path(tempfile.mkdtemp(prefix="ctb_ocr_"))
+        (staging / "기타").mkdir()
+        # 복사가 아니라 링크를 걸면 원본을 아카이브로 «옮기는» 단계에서
+        # 원본이 사라진다. 여기서는 복사본을 쓰고, 산출물만 원본 옆에 놓는다.
+        shutil.copy2(source, staging / "기타" / source.name)
+        root = staging
+
+    try:
+        report = embed_folder(
+            root,
+            library,
+            engine_id=args.engine,
+            dry_run=not args.execute,
+            replace_original=True,
+            keep_workspace=True,  # 나중에 GUI로 검수할 수 있어야 한다
+            use_line_detection=not args.no_line_detection,
+            page_sleep=args.sleep,
+        )
+
+        if not args.execute:
+            # 미리보기 안내는 embed_folder가 이미 출력했다. 두 번 찍지 않는다.
+            return
+
+        # 파일 하나를 받은 경우, 산출물을 원본 옆에 놓는다.
+        if staging is not None and report.processed:
+            made = staging / "기타" / source.name
+            if made.exists():
+                out = args.output and Path(args.output).expanduser()
+                if not out:
+                    out = source.with_name(f"{source.stem}_text{source.suffix}")
+                shutil.copy2(made, out)
+                print(f"\n산출물: {out}")
+
+        print(
+            f"\n처리 {report.processed}편 / 실패 {report.failed}편"
+            f"\n작업 서고: {library}"
+            "\n  결과가 이상하면 GUI를 켜서 이 서고를 열고 쪽별 검수를 하세요."
+        )
+    finally:
+        if staging is not None:
+            shutil.rmtree(staging, ignore_errors=True)
+
+
 def cmd_embed_folder(args):
     """논문 폴더의 스캔본에 텍스트 레이어를 입힌다."""
     from cli.embed_folder import embed_folder
@@ -248,6 +335,47 @@ def main():
         help="논문 사이 대기 시간(초)",
     )
     p_embed.set_defaults(func=cmd_embed_folder)
+
+    # ocr — 한 줄 진입점 (파일 하나 또는 폴더 하나)
+    p_ocr = subparsers.add_parser(
+        "ocr",
+        help="논문 PDF에 텍스트 레이어를 입힌다 (파일 하나도 가능)",
+        description="스캔본 PDF를 OCR 해서 검색 가능한 PDF로 만든다. "
+        "서고를 미리 만들 필요가 없다.",
+    )
+    p_ocr.add_argument("target", help="PDF 파일 또는 폴더 경로")
+    p_ocr.add_argument(
+        "--execute",
+        action="store_true",
+        help="실제로 실행한다. 없으면 무엇을 할지 보여 주기만 한다.",
+    )
+    p_ocr.add_argument(
+        "-o",
+        "--output",
+        default=None,
+        help="산출물 경로 (기본: 원본 옆에 <이름>_text.pdf)",
+    )
+    p_ocr.add_argument(
+        "--library",
+        default=None,
+        help=f"작업 서고 경로 (기본: {_default_workspace()}). "
+        "OCR 결과가 여기 남아 나중에 GUI로 검수할 수 있다.",
+    )
+    p_ocr.add_argument(
+        "--engine",
+        default="llm_vision",
+        help="OCR 엔진 (기본: llm_vision — 한글 문헌은 바꾸지 마세요)",
+    )
+    p_ocr.add_argument(
+        "--no-line-detection",
+        action="store_true",
+        help="줄 위치 검출을 끈다. 쪽당 약 8초를 아끼는 대신 "
+        "검색 형광이 제자리에 뜨지 않는다.",
+    )
+    p_ocr.add_argument(
+        "--sleep", type=float, default=0.0, help="쪽 사이 대기 시간(초)"
+    )
+    p_ocr.set_defaults(func=cmd_ocr)
 
     args = parser.parse_args()
 

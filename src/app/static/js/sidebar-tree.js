@@ -148,6 +148,20 @@ async function _toggleDocument(docId, headerEl, childrenEl) {
       return;
     }
 
+    // 권이 하나뿐이면 그 단계를 건너뛰고 쪽을 문헌 바로 아래에 붙인다.
+    //
+    // 왜: 문헌 → 권 → 쪽은 여러 권으로 나뉜 고서(蒙求 등) 때문에 필요한
+    // 구조다. 그러나 논문이나 단권 문헌은 권이 언제나 하나여서, 그 단계가
+    // 아무 정보도 주지 않으면서 클릭만 한 번 더 요구한다.
+    //
+    // **데이터는 그대로 두고 표시만 접는다** — manifest의 parts는 손대지
+    // 않으므로 여러 권 문헌은 예전과 똑같이 보인다. (D-055가 작업 모드에서
+    // 쓴 것과 같은 방식이다.)
+    if (docInfo.parts.length === 1) {
+      await _renderPageNodes(docId, docInfo.parts[0], docInfo, headerEl, childrenEl);
+      return;
+    }
+
     // 각 part에 대한 노드 생성
     docInfo.parts.forEach((part) => {
       const partNode = _createPartNode(docId, part, docInfo);
@@ -229,6 +243,20 @@ async function _togglePart(docId, part, docInfo, headerEl, childrenEl) {
   childrenEl.style.display = "";
   toggle.classList.add("expanded");
 
+  await _renderPageNodes(docId, part, docInfo, headerEl, childrenEl);
+}
+
+
+/**
+ * 쪽 노드를 채운다 (펼침/접힘 판단은 하지 않는다).
+ *
+ * 왜 따로 떼는가:
+ *   권이 하나뿐인 문헌은 권 단계를 건너뛰고 문헌 아래에 쪽을 바로 붙인다.
+ *   그때 _togglePart를 그대로 부르면 «이미 펼쳐져 있다»고 보고 곧바로 접어
+ *   버린다(문헌 노드를 펼치면서 display를 이미 비워 뒀기 때문이다).
+ *   채우는 일만 하는 함수가 따로 있어야 두 경로가 같은 코드를 쓴다.
+ */
+async function _renderPageNodes(docId, part, docInfo, headerEl, childrenEl) {
   // 이미 로드된 경우 스킵
   if (childrenEl.children.length > 0) return;
 
@@ -249,8 +277,11 @@ async function _togglePart(docId, part, docInfo, headerEl, childrenEl) {
         return;
       }
     }
-    // 뱃지 업데이트
-    if (pageCount) {
+    // 뱃지 업데이트 — **권 노드일 때만.**
+    //
+    // 권이 하나뿐이라 이 함수를 문헌 노드에서 부른 경우 headerEl은 문헌
+    // 헤더이고, 그 뱃지에는 문헌 ID가 들어 있다. 덮어쓰면 문헌 ID가 사라진다.
+    if (pageCount && headerEl.closest(".tree-part")) {
       const badge = headerEl.querySelector(".tree-badge");
       if (badge) badge.textContent = `${pageCount}p`;
     }

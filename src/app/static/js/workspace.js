@@ -1072,6 +1072,15 @@ function applyWorkspaceProfile(profile) {
     _switchMode("view");
   }
 
+  // 사이드바도 마찬가지다. 해석 저장소 전용 패널(검증·의존·엔티티·비고·
+  // 인용 양식)을 보고 있는데 그 버튼이 숨겨지면, **볼 수는 있는데 돌아올
+  // 방법이 없는** 화면에 갇힌다. 서고 브라우저로 되돌린다.
+  const activeActivity = document.querySelector(".activity-btn.active");
+  if (activeActivity && activeActivity.hidden) {
+    const explorer = document.querySelector('.activity-btn[data-panel="explorer"]');
+    if (explorer) explorer.click();
+  }
+
   // 지금 어느 모드인지가 한눈에 보여야 한다.
   // 탭 몇 개가 사라지는 것만으로는 신호가 약하다.
   //
