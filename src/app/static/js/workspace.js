@@ -1844,10 +1844,8 @@ function _fillLlmSelect(select, models) {
     // 컨테이너가 떴는지 **누르기 전에** 알려 준다.
     //
     // 왜: 표점 서비스는 Docker 컨테이너라 앱보다 늦게 올라온다.
-    // 예전에는 상태를 확인하는 곳이 「AI 표점」 버튼을 누른 뒤 하나뿐이라,
-    // 준비되기 전에 누르면 오류만 보고 왜 그런지 알 수 없었다.
-    // `/api/llm/punctuation/external/health`의 docstring이 「실행 전에 상태를
-    // 보여줄 수 있게 한다」고 적어 둔 목적이 구현되지 않은 상태였다.
+    // 준비되기 전에 누르면 오류만 보이고 왜 그런지 알 수 없다. 누르기 전에
+    // 알려 주는 것이 `/api/llm/punctuation/external/health`의 목적이다.
     _annotateExternalPunctStatus(opt);
   }
 }
@@ -2237,9 +2235,9 @@ window.notifyLlmTruncation = notifyLlmTruncation;
 /**
  * 화면 아래 상태바의 버전을 서버에서 읽어 채운다.
  *
- * 왜 하드코딩하지 않는가: index.html에 `v1.1.4`가 박혀 있어 v1.2.0을 낸 뒤에도
- * 화면에는 옛 버전이 떠 있었다. 버전을 적는 곳이 pyproject·server.py·상태바
- * 셋이었고 셋째는 아무도 몰랐다. 이제 서버(`/api/app/version`)가 정본이다.
+ * 왜 하드코딩하지 않는가: 버전을 여러 곳에 적으면 릴리스 때 일부만 고쳐져
+ * 화면이 옛 버전을 말하게 된다. 정본은 `pyproject.toml` 하나이고,
+ * 화면은 서버(`/api/app/version`)에서 받는다.
  */
 async function _loadAppVersion() {
   const el = document.getElementById("app-version");

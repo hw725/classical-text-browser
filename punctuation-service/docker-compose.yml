@@ -56,9 +56,9 @@ services:
 volumes:
   # HuggingFace 캐시 볼륨.
   #
-  # 예전에는 `external: true`로 개발자 PC의 csp-workspace 볼륨을 직접 참조했다.
-  # 그 볼륨이 없는 PC에서는 `docker compose up`이 **볼륨을 찾을 수 없다**며
-  # 바로 실패했다. 이름만 인자로 받게 바꿔, 기본은 알아서 만들어지고
-  # 기존 볼륨을 재사용하고 싶으면 .env에 HF_CACHE_VOLUME을 적는다.
+  # `external: true`로 특정 볼륨을 참조하면 그 볼륨이 없는 PC에서
+  # `docker compose up`이 **볼륨을 찾을 수 없다**며 바로 실패한다.
+  # 이름만 인자로 받아, 기본은 알아서 만들어지고 기존 볼륨을 재사용하고
+  # 싶으면 .env에 HF_CACHE_VOLUME을 적는다.
   hf_cache:
     name: ${HF_CACHE_VOLUME:-punct_huggingface_cache}

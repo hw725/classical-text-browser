@@ -185,13 +185,35 @@ uv run python -m pytest
 6. `docs/releases/vX.Y.Z.md` — 되돌릴 수 없는 변화는 **맨 위에** 적는다
 7. 버전 올리기: **`pyproject.toml` 한 곳뿐이다.** `server.py`와 화면 아래
    상태바는 설치된 패키지 메타데이터에서 읽는다(`/api/app/version`).
-   예전에는 세 곳에 적혀 있었고 상태바는 아무도 몰라서, v1.2.0을 낸 뒤에도
-   화면에 v1.1.4가 떠 있었다(D-072)
+   **여기에 버전을 새로 적지 말 것** — 적는 곳이 둘 이상이면 반드시 어긋난다
 8. `/doc-sync` (Release/Range Mode, base = 직전 태그)
 9. 커밋 → 푸시 → `git tag -a vX.Y.Z` → `git push origin vX.Y.Z`
 
 `release`·`feat`·`refactor` 커밋은 doc-sync 게이트가 걸린다.
 `--no-verify`로 우회하지 않는다.
+
+### 태그를 이미 낸 뒤에 옮겨야 할 때
+
+**GitHub 릴리스는 태그에 매달려 있다.** 태그를 지우면 릴리스가 조용히
+**초안(draft)** 으로 떨어지고, 목록에서는 그 전 판이 다시 «Latest»가 된다.
+오류도 경고도 없다 — 사람이 릴리스 목록을 봐야 안다.
+
+순서를 지킨다. **릴리스는 언제나 마지막이다.**
+
+```bash
+git tag -d vX.Y.Z                      # 로컬
+git push origin :refs/tags/vX.Y.Z      # 원격
+git tag -a vX.Y.Z -m "..."             # 새 커밋에 다시
+git push origin vX.Y.Z
+gh release edit vX.Y.Z --draft=false   # ← 초안으로 떨어진 것을 게시
+```
+
+확인은 SHA만 보지 말고 **목록의 «Latest» 표시**까지 본다.
+
+```bash
+gh release list --limit 3              # v X.Y.Z 가 Latest 인가
+git rev-parse refs/tags/vX.Y.Z^{}      # HEAD와 같은가
+```
 
 ---
 

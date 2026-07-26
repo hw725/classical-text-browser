@@ -35,13 +35,13 @@ LLM 표점과 동일한 UI 흐름에서 결과가 표시된다.
 CUDA 이미지(`pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime`)라 **누구나 그대로
 빌드할 수 있다.** 처음 빌드에서 약 3.5GB를 내려받는다.
 
-예전에는 `FROM csp-csp:latest`로 고정돼 있었다. 그것은 개발자 PC에만 있는
-개인 이미지라 다른 사람은 **빌드 자체가 불가능**했다. 이제 그 이미지는
-`BASE_IMAGE`로 넘기는 선택지일 뿐이다.
+베이스를 고정하지 않고 `BASE_IMAGE`로 받는 이유: 특정 이미지를 박아 두면
+그것이 없는 PC에서는 **빌드 자체가 불가능**하다. 공식 이미지를 기본으로 두고,
+가진 이미지가 있으면 그것을 넘긴다.
 
 ```bash
 # 이미 torch+CUDA 이미지가 있다면 재사용해 내려받기를 아낀다 (.env에 적어도 된다)
-BASE_IMAGE=csp-csp:latest docker compose up -d --build
+BASE_IMAGE=<그 이미지> docker compose up -d --build
 ```
 
 GPU가 없다면 이 컨테이너를 쓰지 않는다 — 아래 「로컬 설치」로 CPU에서 돌릴 수

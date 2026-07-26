@@ -84,10 +84,10 @@ ctb = "cli.__main__:main"
 # ─────────────────────────────────────────────────────────────
 #  선택 설치 (extra) — 없어도 근현대 한글 논문 처리는 전부 된다
 #
-#  이름을 용도로 지은 이유: 예전에는 ndlocr / ndlkotenocr / ndlkotenocr-full이
-#  나란히 있어 «오프라인 OCR»로 뭉뚱그려 안내됐고, 그 결과 한글 논문을
-#  하려는 사람이 **한글을 못 읽는** 고전적 전용 엔진을 설치하는 일이 있었다.
-#  무엇에 쓰는 것인지가 이름에서 보여야 한다.
+#  이름을 용도로 지은 이유: 세 엔진을 엔진 이름으로만 늘어놓으면 «오프라인 OCR»로
+#  뭉뚱그려 읽혀, 한글 논문을 하려는 사람이 **한글을 못 읽는** 고전적 전용 엔진을
+#  고르게 된다. 무엇에 쓰는 것인지가 이름에서 보여야 한다.
+#  엔진 이름(NDLOCR-Lite 등)은 문서에서 함께 밝힌다 — CC BY 4.0 출처 표기 의무.
 #
 #  opencv는 **반드시 contrib 배포판**을 쓴다. paddlex(기본 의존성 paddleocr가
 #  끌어온다)가 opencv-contrib-python을 요구하는데, 여기에 opencv-python-headless를
@@ -121,9 +121,9 @@ classical = [
 
 # 고서 — 최고 품질 (TrOCR). CUDA GPU 권장.
 #
-# 용량 주의: **약 4.5GB**다. 예전에 340MB라고 적어 두었는데 13배 틀린 값이었다.
-# Windows에서는 CUDA 런타임이 별도 nvidia-* 패키지가 아니라 `torch/lib` 안에
-# 통째로 들어간다 — 그 폴더 하나가 4,359MB다(실측 2026-07-26, torch 2.6+cu124).
+# 용량 주의: **약 4.5GB**다(실측 2026-07-26, torch 2.6+cu124).
+# Windows는 CUDA 런타임이 별도 nvidia-* 패키지가 아니라 `torch/lib` 안에
+# 통째로 들어간다 — 그 폴더 하나가 4,359MB다.
 # Linux도 torch 1,550 + nvidia-* 2,742 + triton 440 ≈ 4.7GB로 비슷하다.
 # 원본: https://github.com/ndl-lab/ndlkotenocr_cli (CC BY 4.0, National Diet Library, Japan)
 classical-gpu = [
