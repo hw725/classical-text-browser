@@ -1152,6 +1152,26 @@ async function _importExtractText() {
 }
 
 /** 검색되는 PDF를 다시 만든다 (교정 후 갱신용). */
+/**
+ * 만든 PDF의 점검 결과를 내려받기 버튼 옆에 남긴다.
+ *
+ * 입력: 백엔드가 산출물을 다시 열어 재고 돌려준 경고 문자열 목록.
+ *
+ * 왜 토스트가 아닌가: 「글자가 2pt로 들어갔다」는 몇 초 뒤에 사라지면 안 되는
+ * 종류의 소식이다. 산출물을 서지 관리 도구로 넘긴 뒤에 알면 늦는다.
+ */
+function _showEmbedWarnings(warnings) {
+  const box = document.getElementById("extract-embed-warn");
+  if (!box) return;
+  if (!warnings.length) {
+    box.hidden = true;
+    box.textContent = "";
+    return;
+  }
+  box.textContent = `만든 PDF를 다시 열어 확인한 결과:\n${warnings.join("\n")}`;
+  box.hidden = false;
+}
+
 async function _embedExtractPdf() {
   const target = _extractTarget();
   if (!target) {
@@ -1184,7 +1204,9 @@ async function _embedExtractPdf() {
         "success"
       );
     }
-    (data.warnings || []).forEach((w) => showToast(w, "info"));
+    // 경고는 토스트로만 보내지 않는다 — 사라지기 때문이다.
+    // 산출물이 이상하다는 말은 내려받기 버튼 바로 옆에 남아 있어야 한다.
+    _showEmbedWarnings(data.warnings || []);
     await _refreshExtractExport();
   } catch (e) {
     showToast(`PDF 만들기 중 오류: ${e.message}`, "error");

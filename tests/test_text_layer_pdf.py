@@ -519,3 +519,204 @@ def test_without_embedding_the_loss_is_real(scanned_doc):
     finally:
         out.close()
     assert LOST_CHARS[2] not in got, "비임베드에서도 살아남았다 — 측정 전제를 다시 볼 것"
+
+
+# ── 실제 스캔본의 «남은 좌표 변환» 회귀 (D-068) ──────────────────
+#
+# 왜 이 시험이 따로 필요한가: 위의 fixture는 PyMuPDF가 만든 **깨끗한** PDF다.
+# 실제 스캔 PDF는 픽셀 단위로 작업하려고 내용 스트림 첫 줄에 배율을 걸어 두고
+# 되돌리지 않는 일이 흔하다. 그 상태에서 TextWriter로 덧붙이면 텍스트가
+# 통째로 축소돼 쪽 구석에 박힌다 — get_text()로는 «있다»고 나오므로
+# 기존 시험은 전부 통과한다. 실제 논문에서만 드러났던 결함이다.
+
+
+def _make_unwrapped_scan(path: Path, pages: int = 1) -> None:
+    """내용 스트림이 `0.24 … cm`으로 시작하고 되돌리지 않는 스캔본을 만든다.
+
+    실제 논문(박준원 2001)의 스트림 모양을 그대로 본떴다:
+        0.24 0 0 0.24 0 0 cm      ← q 없이, Q도 없다
+        q 2064 0 0 2893 0 0 cm /I0 Do Q
+    """
+    scale = 0.24
+    img_w, img_h = round(PAGE_W / scale), round(PAGE_H / scale)
+
+    out = fitz.open()
+    for _ in range(pages):
+        tmp = fitz.open()
+        p = tmp.new_page(width=PAGE_W, height=PAGE_H)
+        y = 100.0
+        for text, _bbox in LINES:
+            p.insert_text((80, y), text, fontname="korea", fontsize=14)
+            y += 40
+        jpg = p.get_pixmap(matrix=fitz.Matrix(RENDER_SCALE, RENDER_SCALE)).tobytes(
+            "jpeg", jpg_quality=70
+        )
+        tmp.close()
+        np_ = out.new_page(width=PAGE_W, height=PAGE_H)
+        np_.insert_image(np_.rect, stream=jpg)
+        # 내용 스트림을 실제 스캔본 모양으로 갈아 끼운다.
+        # 이미지 이름은 방금 넣은 것에서 읽어 온다 — 이름을 지어내면 이미지가
+        # 그려지지 않아 시험이 «글자 없는 흰 종이»를 상대하게 된다.
+        img_name = np_.get_images()[0][7]
+        xref = np_.get_contents()[0]
+        out.update_stream(
+            xref,
+            (
+                f"{scale} 0 0 {scale} 0 0 cm\n"
+                f"q\n{img_w} 0 0 {img_h} 0 0 cm\n/{img_name} Do\nQ\n"
+            ).encode(),
+        )
+    out.save(str(path))
+    out.close()
+
+
+@pytest.fixture
+def unwrapped_doc(tmp_path):
+    """되돌리지 않은 좌표 변환을 가진 스캔본 문헌."""
+    doc_path = tmp_path / "doc_unwrapped"
+    (doc_path / "L1_source").mkdir(parents=True)
+    _make_unwrapped_scan(doc_path / "L1_source" / "paper.pdf", pages=1)
+    (doc_path / "manifest.json").write_text(
+        json.dumps(
+            {
+                "document_id": "doc_unwrapped",
+                "title": "좌표 변환이 남은 스캔본",
+                "parts": [
+                    {
+                        "part_id": "vol1",
+                        "label": "본문",
+                        "file": "L1_source/paper.pdf",
+                        "page_count": 1,
+                    }
+                ],
+                "created_at": "2026-07-26T00:00:00",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return doc_path
+
+
+def test_source_really_has_unwrapped_transform(unwrapped_doc):
+    """시험 대상이 실제로 «되돌리지 않은 변환»을 갖고 있는지부터 확인한다.
+
+    이것이 깨지면 아래 두 시험은 아무것도 지키지 못한 채 통과한다.
+    """
+    doc = fitz.open(str(unwrapped_doc / "L1_source" / "paper.pdf"))
+    try:
+        page = doc[0]
+        assert page.is_wrapped is False
+        assert page.read_contents().startswith(b"0.24 0 0 0.24 0 0 cm")
+    finally:
+        doc.close()
+
+
+@pytest.mark.parametrize("embed_font", [True, False])
+def test_text_lands_at_full_page_scale(unwrapped_doc, embed_font):
+    """남은 변환에 끌려가지 않고 제 크기·제자리에 놓여야 한다.
+
+    임베드(TextWriter)와 비임베드(insert_text) 양쪽을 모두 건다 —
+    실제로 깨진 것은 TextWriter 쪽이었지만, 어느 경로로 바뀌든
+    산출물 계약은 같아야 한다.
+    """
+    _write_l2(unwrapped_doc, "vol1", 1, with_bbox=True)
+
+    result = embed_text_layer(
+        unwrapped_doc, "vol1", pages=[1], embed_font=embed_font, use_line_detection=False
+    )
+
+    out = fitz.open(result.output_path)
+    try:
+        page = out[0]
+        spans = [
+            s
+            for b in page.get_text("dict")["blocks"]
+            if b["type"] == 0
+            for line in b["lines"]
+            for s in line["spans"]
+        ]
+        assert spans, "텍스트가 하나도 들어가지 않았다"
+
+        # 1) 글자 크기: 0.24배로 끌려가면 14pt가 3.4pt가 된다.
+        assert min(s["size"] for s in spans) > 6.0, (
+            f"글자가 너무 작다 — 남은 변환에 끌려갔다: "
+            f"{[round(s['size'], 1) for s in spans]}"
+        )
+
+        # 2) 놓인 자리: L2 bbox는 x=160px(=80pt)에서 시작한다.
+        #    0.24배로 끌려가면 19pt 언저리로 몰린다.
+        assert min(s["bbox"][0] for s in spans) > 40.0
+
+        # 3) 세로로도 쪽 전체에 퍼져 있어야 한다 (구석에 뭉치지 않는다).
+        top = min(s["bbox"][1] for s in spans)
+        bottom = max(s["bbox"][3] for s in spans)
+        assert (bottom - top) > PAGE_H * 0.1
+
+        # 4) 검색 형광이 OCR이 가리킨 자리와 겹치는가.
+        #    좌표를 점으로 비교하지 않는 이유: 글자 크기를 bbox 폭에 맞추므로
+        #    글리프 높이가 bbox보다 조금 크거나 작을 수 있다. 중요한 것은
+        #    형광이 **그 줄 위에 뜨는가**지 위끝이 몇 pt 어긋났는가가 아니다.
+        text, bbox = LINES[0]
+        hits = page.search_for(text)
+        assert hits, "검색되지 않는다"
+        want = fitz.Rect(
+            bbox[0] / RENDER_SCALE,
+            bbox[1] / RENDER_SCALE,
+            bbox[2] / RENDER_SCALE,
+            bbox[3] / RENDER_SCALE,
+        )
+        got = hits[0]
+        assert abs(got.x0 - want.x0) < 3.0, f"가로 시작이 어긋났다: {got.x0} vs {want.x0}"
+        assert (got & want).get_area() > want.get_area() * 0.5, (
+            f"형광이 그 줄을 벗어났다: {got} vs {want}"
+        )
+    finally:
+        out.close()
+
+
+def test_source_pdf_untouched_by_wrapping(unwrapped_doc):
+    """wrap_contents()는 **산출물에만** 적용되어야 한다 — 원본은 그대로다."""
+    src = unwrapped_doc / "L1_source" / "paper.pdf"
+    before = src.read_bytes()
+
+    _write_l2(unwrapped_doc, "vol1", 1, with_bbox=True)
+    embed_text_layer(unwrapped_doc, "vol1", pages=[1])
+
+    assert src.read_bytes() == before, "L1_source 원본이 바뀌었다"
+
+
+def test_audit_catches_shrunken_text(tmp_path):
+    """산출물 검사가 «축소돼 구석에 박힌 텍스트»를 잡아내는가.
+
+    D-068에서 실제로 나온 모양을 그대로 만든다 — 495×694 쪽의 왼쪽 아래에
+    2.9pt 글자가 뭉쳐 있는 상태. 고침이 사라져 이 모양이 다시 나오면
+    embed_text_layer()의 warnings에 그대로 실려 화면까지 올라간다.
+    """
+    from export.text_layer_pdf import _audit_output
+
+    bad = tmp_path / "bad.pdf"
+    doc = fitz.open()
+    page = doc.new_page(width=495.36, height=694.32)
+    y = 539.0
+    for text, _bbox in LINES * 3:
+        page.insert_text((9.6, y), text, fontname="korea", fontsize=2.88, render_mode=3)
+        y += 4.9
+    doc.save(str(bad))
+    doc.close()
+
+    problems = _audit_output(bad)
+
+    assert problems, "축소된 텍스트를 그대로 통과시켰다"
+    joined = " ".join(problems)
+    assert "너무 작" in joined, joined
+    assert "몰려" in joined, joined
+
+
+def test_audit_stays_quiet_on_good_output(unwrapped_doc):
+    """정상 산출물에는 경고를 붙이지 않는다 (거짓 경보 방지)."""
+    _write_l2(unwrapped_doc, "vol1", 1, with_bbox=True)
+    result = embed_text_layer(
+        unwrapped_doc, "vol1", pages=[1], use_line_detection=False
+    )
+    assert result.warnings == [], result.warnings

@@ -7584,6 +7584,19 @@ button.mode-tab {
 
 /* 되돌리기 — 되돌릴 수 있는 쪽에만 뜬다.
    결과를 바꾸는 동작이라 다른 행동 버튼과 색을 달리한다. */
+/* 만든 PDF의 점검 결과 — 이상이 있을 때만 보인다.
+   토스트와 달리 사라지지 않는다. 산출물을 넘긴 뒤에 알면 늦기 때문이다. */
+.extract-embed-warn {
+  white-space: pre-line;
+  line-height: 1.5;
+  padding: 8px;
+  border-radius: 4px;
+  border-left: 3px solid #e0a030;
+  background: var(--hover-bg);
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
 .extract-overview-undo {
   border-color: #e0a030;
   color: #b07818;

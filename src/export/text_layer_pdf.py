@@ -245,6 +245,30 @@ def _embed_page(
     with_bbox = [(t, b) for t, b in lines if b is not None]
     without_bbox = [t for t, b in lines if b is None]
 
+    # 원본 페이지가 남긴 좌표 변환을 끊는다. **이것이 없으면 텍스트가
+    # 엉뚱한 크기·자리에 박힌다.**
+    #
+    # 무슨 일이 있었나: 스캔 PDF는 픽셀 단위로 작업하려고 내용 스트림 첫
+    # 줄에 배율을 걸어 두는 일이 흔하다. 실제로 이 논문은 이렇게 시작한다.
+    #
+    #     0.24 0 0 0.24 0 0 cm     ← q 없이, 되돌리는 Q도 없다
+    #     q 2064 0 0 2893 0 0 cm /I0 Do Q
+    #
+    # 첫 줄의 `cm`이 q/Q 밖에 있어 **그 뒤에 덧붙이는 모든 것이 0.24배로
+    # 줄어든다.** 40pt 자리에 넣은 글자가 9.6pt 자리에, 12pt 글자가 2.88pt로
+    # 들어갔다 — 495×694 쪽의 왼쪽 아래 구석에 우표만 하게. 텍스트는
+    # 「있는데」 드래그로 잡히지도, 원문 위에서 형광이 뜨지도 않는다.
+    #
+    # 왜 이제야 드러났나: page.insert_text()는 자기 출력을 q/Q로 감싸 이
+    # 영향을 받지 않는다. 폰트 임베드를 기본으로 바꾸면서(D-062) TextWriter
+    # 경로로 갈아탔는데, TextWriter.write_text()는 감싸지 않는다.
+    # 자동 테스트는 **PyMuPDF로 만든 깨끗한 시험 PDF**를 써서 이 상황이
+    # 아예 생기지 않았다.
+    #
+    # wrap_contents()는 기존 스트림을 q…Q로 감싸 그 안에서 끝나게 한다.
+    if not page.is_wrapped:
+        page.wrap_contents()
+
     writer = fitz.TextWriter(page_rect) if font is not None else None
 
     def _emit(text: str, x: float, baseline_y: float, size: float) -> bool:
@@ -426,6 +450,17 @@ def embed_text_layer(
     finally:
         doc.close()
 
+    # 만든 것을 **다시 열어 확인한다.**
+    #
+    # 왜 필요한가: 여기까지의 숫자(제자리 N줄)는 «넣으려고 시도한» 기록일 뿐
+    # 결과가 아니다. 실제로 D-068에서, 줄 수와 좌표 계산이 전부 맞는데도
+    # 원본 PDF가 남긴 좌표 변환에 끌려 글자가 0.24배로 쪽 구석에 박혔다.
+    # 로그도 API 응답도 «30줄 제자리»라고 말했고 아무도 이상을 몰랐다.
+    # 산출물을 직접 재어야만 그 부류가 드러난다.
+    # 제자리에 놓았다고 주장한 쪽이 있을 때만 «잉크 위인가»까지 잰다.
+    # 좌표를 못 얻어 순서대로 늘어놓은 쪽은 원래 글자 위가 아니다(이미 알린다).
+    warnings.extend(_audit_output(output_path, check_ink=positioned > 0))
+
     size = output_path.stat().st_size
     logger.info(
         f"텍스트 레이어 입히기 완료: {output_path} — "
@@ -448,6 +483,136 @@ def embed_text_layer(
         embed_font=embed_font,
         warnings=warnings,
     )
+
+
+def _ink_check(page, spans: list[dict]) -> float | None:
+    """이 쪽의 텍스트가 **실제 글자 위**에 놓였는지 잉크 밀도로 잰다.
+
+    입력: 대상 페이지와 그 쪽의 span 목록.
+    출력: (텍스트가 덮은 자리의 검은 화소 비율) ÷ (쪽 전체 비율).
+          1보다 충분히 크면 글자 위, 1 언저리 이하면 빈 곳이다. 잴 수 없으면 None.
+
+    왜 이렇게까지 하는가: 줄 수·좌표 계산이 전부 맞아도 산출물이 틀릴 수
+    있다는 것을 D-068에서 겪었다. 「몇 줄 넣었다」는 시도의 기록이지
+    결과가 아니다. 원본은 이미지뿐이므로, 텍스트가 제자리인지 확인할
+    유일한 방법은 **그 자리에 잉크가 있는지 보는 것**이다.
+
+    실측(2026-07-26, 박준원 2001 1쪽): 제자리일 때 4.3배(25.6% vs 5.96%).
+    """
+    try:
+        import numpy as np
+
+        pix = page.get_pixmap(colorspace=fitz.csGRAY)
+        arr = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width)
+    except Exception:  # noqa: BLE001 — 렌더 실패는 확인을 포기할 뿐이다
+        return None
+
+    dark = arr < 128
+    page_ratio = float(dark.mean())
+    if page_ratio <= 0:
+        return None  # 완전한 백지 — 비교할 기준이 없다
+
+    # 쪽마다 최대 30줄만 본다. 전부 재도 결론은 같고 시간만 든다.
+    sx = pix.width / max(page.rect.width, 1e-6)
+    sy = pix.height / max(page.rect.height, 1e-6)
+    hits = 0
+    total = 0
+    for s in spans[:30]:
+        x0, y0, x1, y1 = s["bbox"]
+        a = int(max(0, x0 * sx))
+        b = int(max(0, y0 * sy))
+        c = int(min(pix.width, x1 * sx))
+        d = int(min(pix.height, y1 * sy))
+        if c <= a or d <= b:
+            continue
+        region = dark[b:d, a:c]
+        hits += int(region.sum())
+        total += region.size
+    if total == 0:
+        return None
+    return (hits / total) / page_ratio
+
+
+def _audit_output(output_path: Path, *, check_ink: bool = False) -> list[str]:
+    """만든 PDF를 다시 열어 텍스트가 «쓸 만한 자리에» 있는지 잰다.
+
+    입력: 방금 저장한 PDF 경로.
+    출력: 사람에게 보여 줄 경고 목록. 이상이 없으면 빈 목록.
+
+    무엇을 재는가 (쪽마다):
+        1. 글자 크기 — 너무 작으면 드래그로 잡히지 않는다.
+        2. 텍스트가 덮는 넓이 — 한 구석에 뭉쳐 있으면 원문과 어긋난 것이다.
+    두 가지 모두 D-068에서 실제로 벌어진 일이다(12pt → 2.88pt,
+    495×694 쪽의 왼쪽 아래 100×150pt 구석).
+
+    왜 «틀렸다»가 아니라 경고인가: 표지처럼 글자가 몇 자뿐인 쪽은 정상적으로도
+    좁게 나온다. 막지 않고 알린다 — 판단은 사람이 한다.
+    """
+    MIN_FONT_PT = 5.0  # 이보다 작으면 화면에서 잡을 수 없다
+    MIN_COVERAGE = 0.02  # 쪽 넓이의 2% 미만이면 뭉친 것으로 본다
+    MIN_LINES_TO_JUDGE = 5  # 줄이 적은 쪽은 좁아도 정상이다
+    MIN_INK_RATIO = 1.3  # 쪽 평균보다 이만큼은 진해야 «글자 위»로 본다
+    INK_SAMPLE_PAGES = 3  # 잉크 확인은 표본만 — 300쪽을 다 렌더하지 않는다
+
+    problems: list[str] = []
+    try:
+        doc = fitz.open(str(output_path))
+    except Exception as e:  # noqa: BLE001 — 확인 자체가 실패해도 산출물은 남긴다
+        return [f"산출물을 다시 열어 확인하지 못했습니다: {e}"]
+
+    try:
+        # 잉크를 확인할 표본 쪽: 처음·가운데·끝. 한쪽 끝만 보면 놓친다.
+        n = doc.page_count
+        ink_targets: set[int] = set()
+        if check_ink and n:
+            ink_targets = {1, (n + 1) // 2, n}
+            ink_targets = set(sorted(ink_targets)[:INK_SAMPLE_PAGES])
+
+        for idx, page in enumerate(doc, start=1):
+            spans = [
+                s
+                for b in page.get_text("dict")["blocks"]
+                if b["type"] == 0
+                for line in b["lines"]
+                for s in line["spans"]
+            ]
+            if not spans:
+                continue
+
+            smallest = min(s["size"] for s in spans)
+            if smallest < MIN_FONT_PT:
+                problems.append(
+                    f"{idx}쪽: 글자가 {smallest:.1f}pt로 너무 작습니다 — "
+                    f"드래그로 선택되지 않습니다."
+                )
+
+            if len(spans) >= MIN_LINES_TO_JUDGE:
+                union = fitz.Rect(spans[0]["bbox"])
+                for s in spans[1:]:
+                    union |= fitz.Rect(s["bbox"])
+                page_area = page.rect.get_area()
+                coverage = union.get_area() / page_area if page_area else 0.0
+                if coverage < MIN_COVERAGE:
+                    problems.append(
+                        f"{idx}쪽: 텍스트가 쪽의 {coverage * 100:.1f}%에만 몰려 "
+                        f"있습니다 — 원문 위가 아닐 수 있습니다."
+                    )
+
+            if idx in ink_targets and len(spans) >= MIN_LINES_TO_JUDGE:
+                ratio = _ink_check(page, spans)
+                if ratio is not None and ratio < MIN_INK_RATIO:
+                    problems.append(
+                        f"{idx}쪽: 텍스트가 놓인 자리에 글자가 거의 없습니다"
+                        f"(쪽 평균의 {ratio:.1f}배) — 위치가 어긋났을 수 있습니다."
+                    )
+    finally:
+        doc.close()
+
+    # 300쪽짜리에서 전부 나열하면 읽을 수 없다. 앞의 몇 개만 보이고 수를 알린다.
+    if len(problems) > 5:
+        rest = len(problems) - 5
+        problems = problems[:5] + [f"…같은 문제 {rest}쪽 더 있습니다."]
+    return problems
 
 
 def _fill_positions_by_detection(
