@@ -929,6 +929,16 @@
             (applyWorkspaceProfile — workspace.js).
           -->
         <div class="mode-bar" role="tablist" aria-label="작업 모드">
+          <!-- 아이콘 줄 접기/펴기.
+               추출 모드에서는 아이콘이 둘뿐이라 줄 자체가 군더더기가 된다.
+               사이드바를 접어도 그 줄은 남으므로 따로 접을 수단이 필요하다. -->
+          <button
+            type="button"
+            class="rail-toggle"
+            id="rail-toggle"
+            title="왼쪽 아이콘 줄 접기/펴기"
+            aria-label="왼쪽 아이콘 줄 접기/펴기"
+          >☰</button>
           <!-- 원본 작업 -->
           <button class="mode-tab active" data-mode="view" role="tab" aria-selected="true">열람</button>
           <button class="mode-tab" data-mode="layout" role="tab">레이아웃</button>

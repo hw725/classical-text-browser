@@ -1554,3 +1554,77 @@ def test_fill_text_accepts_page_selection(isolated_app):
     ).json()
     assert filled["text"] == "2쪽 본문"
     assert not untouched["text"], "지정하지 않은 쪽까지 채웠다"
+
+
+def test_batch_backs_up_before_overwriting(batch_ready):
+    """다시 돌리면 이전 결과를 남기고, 되돌릴 수 있다.
+
+    L2는 Git으로 추적되지 않아 이것이 유일한 안전망이다.
+    """
+    client, doc_id, part_id = batch_ready
+
+    # 1차 실행
+    client.post(
+        f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch",
+        json={"engine_id": "dummy", "embed_after": False, "pages": [1]},
+    )
+    first = client.get(
+        f"/api/documents/{doc_id}/pages/1/text?part_id={part_id}"
+    ).json()["text"]
+    assert first.strip()
+
+    # 훑어보기에는 아직 백업이 없다 (덮어쓴 적이 없다)
+    ov = client.get(f"/api/documents/{doc_id}/parts/{part_id}/ocr/overview").json()
+    assert ov["pages"][0]["has_backup"] is False
+
+    # 2차 실행 — 덮어쓰므로 백업이 생긴다
+    client.post(
+        f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch",
+        json={
+            "engine_id": "dummy",
+            "embed_after": False,
+            "pages": [1],
+            "skip_existing": False,
+        },
+    )
+    ov2 = client.get(f"/api/documents/{doc_id}/parts/{part_id}/ocr/overview").json()
+    assert ov2["pages"][0]["has_backup"] is True, "덮어썼는데 백업이 없다"
+
+    # 되돌리기
+    r = client.post(
+        f"/api/documents/{doc_id}/parts/{part_id}/ocr/restore?pages=1"
+    )
+    assert r.status_code == 200
+    assert r.json() == {"restored": [1], "no_backup": []}
+
+
+def test_restore_reports_pages_without_backup(batch_ready):
+    """백업이 없는 쪽은 조용히 넘어가지 않고 알려 준다."""
+    client, doc_id, part_id = batch_ready
+    r = client.post(f"/api/documents/{doc_id}/parts/{part_id}/ocr/restore?pages=2,3")
+    assert r.json() == {"restored": [], "no_backup": [2, 3]}
+
+
+def test_restore_requires_pages(batch_ready):
+    """쪽을 지정하지 않으면 400 — 전체를 되돌리는 실수를 막는다."""
+    client, doc_id, part_id = batch_ready
+    r = client.post(f"/api/documents/{doc_id}/parts/{part_id}/ocr/restore?pages=")
+    assert r.status_code == 400
+
+
+def test_backup_can_be_turned_off(batch_ready):
+    """backup_before_overwrite=False면 남기지 않는다 (디스크를 아낄 때)."""
+    client, doc_id, part_id = batch_ready
+    for _ in range(2):
+        client.post(
+            f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch",
+            json={
+                "engine_id": "dummy",
+                "embed_after": False,
+                "pages": [1],
+                "skip_existing": False,
+                "backup_before_overwrite": False,
+            },
+        )
+    ov = client.get(f"/api/documents/{doc_id}/parts/{part_id}/ocr/overview").json()
+    assert ov["pages"][0]["has_backup"] is False

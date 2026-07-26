@@ -77,6 +77,13 @@ class OcrBatchRequest(BaseModel):
     # skip_existing이 그 쪽까지 건너뛰면 손으로 고친 작업이 반영되지 않는다.
     # 어느 쪽을 고쳤는지 사용자가 기억해 입력하게 만들지 않는다.
     redo_changed_layout: bool = True
+    # 덮어쓰기 전에 기존 OCR 결과를 한 벌 남긴다.
+    #
+    # 왜 기본값이 True인가: L2는 Git으로 추적되지 않아 되돌릴 방법이 없다.
+    # 모델을 바꿔 다시 돌려 보는 것이 추출 흐름의 일부인데(D-057), 결과가
+    # 이전만 못해도 돌아갈 길이 없으면 «다시 돌려 보기»가 위험한 선택이 된다.
+    # 쪽마다 파일 한 벌이고 한 세대만 남긴다.
+    backup_before_overwrite: bool = True
     # 레이아웃이 없는 쪽에 페이지 전면 블록을 자동 생성한다.
     # 근현대 단일 컬럼 문헌용. 고서에서는 꺼야 한다.
     auto_full_page_block: bool = True
@@ -1289,6 +1296,54 @@ async def api_ocr_pending(doc_id: str, part_id: str):
     }
 
 
+@router.post("/api/documents/{doc_id}/parts/{part_id}/ocr/restore")
+async def api_restore_ocr(
+    doc_id: str,
+    part_id: str,
+    pages: str = Query(..., description="쉼표로 구분한 쪽 번호. 예: 3 또는 3,7"),
+):
+    """다시 돌리기 직전의 OCR 결과로 되돌린다. LLM을 부르지 않는다.
+
+    입력: doc_id, part_id, pages — 되돌릴 쪽.
+    출력: {"restored": [3], "no_backup": [7]}
+
+    왜 필요한가:
+        L2는 Git으로 추적되지 않아 «다시 돌렸는데 더 나빠졌다»에서 돌아갈
+        길이 없었다. 배치가 덮어쓰기 직전에 한 벌 남기므로(한 세대),
+        그것을 제자리에 돌려놓는다.
+
+    되돌린 뒤에도 백업은 남는다 — 지금 것과 자리를 바꾸므로 **두 상태를
+    오갈 수 있다.** 어느 쪽이 나은지 비교하다 되돌아올 수 있어야 한다.
+    """
+    library_path = get_library_path()
+    if library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = library_path / "documents" / doc_id
+    if not (doc_path / "manifest.json").exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404
+        )
+
+    from ocr.l2_backup import restore_backup
+
+    wanted = [int(c) for c in pages.replace(" ", "").split(",") if c.isdigit()]
+    if not wanted:
+        return JSONResponse(
+            {"error": "되돌릴 쪽을 지정하세요. 예: pages=3 또는 pages=3,7"},
+            status_code=400,
+        )
+
+    restored, missing = [], []
+    for page_number in wanted:
+        if restore_backup(doc_path, part_id, page_number):
+            restored.append(page_number)
+        else:
+            missing.append(page_number)
+
+    return {"restored": restored, "no_backup": missing}
+
+
 @router.post("/api/documents/{doc_id}/parts/{part_id}/ocr/fill-text")
 async def api_fill_text_from_ocr(
     doc_id: str,
@@ -1436,6 +1491,7 @@ async def api_ocr_overview(doc_id: str, part_id: str, preview_chars: int = 70):
 
     import statistics
 
+    from ocr.l2_backup import has_backup
     from ocr.layout_staleness import ocr_path, read_page_json
 
     page_count = _resolve_page_count(doc_path, part)
@@ -1453,6 +1509,7 @@ async def api_ocr_overview(doc_id: str, part_id: str, preview_chars: int = 70):
                     "blocks": 0,
                     "preview": "",
                     "flags": ["not_run"],
+                    "has_backup": has_backup(doc_path, part_id, page_number),
                 }
             )
             continue
@@ -1478,6 +1535,8 @@ async def api_ocr_overview(doc_id: str, part_id: str, preview_chars: int = 70):
                 "blocks": len(results),
                 "preview": joined[:preview_chars],
                 "flags": [],
+                # 되돌릴 수 있는 이전 결과가 있는가 (다시 돌린 쪽에만 생긴다).
+                "has_backup": has_backup(doc_path, part_id, page_number),
             }
         )
 
@@ -1686,6 +1745,18 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
 
                 block_created = False
                 try:
+                    # 0) 지금 결과를 한 벌 남긴다 (덮어쓰기 직전).
+                    #
+                    # 다시 돌렸는데 더 나빠졌을 때 돌아갈 곳이 필요하다.
+                    # L2는 Git으로 추적되지 않으므로 이것이 유일한 안전망이다.
+                    if body.backup_before_overwrite:
+                        from ocr.l2_backup import save_backup
+
+                        await loop.run_in_executor(
+                            None,
+                            lambda p=page_number: save_backup(doc_path, part_id, p),
+                        )
+
                     # 1) 레이아웃이 없으면 페이지 전면 블록을 만든다.
                     if body.auto_full_page_block:
                         from ocr.full_page_block import ensure_full_page_block

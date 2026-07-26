@@ -275,8 +275,8 @@ function initActivityBar() {
         // 그리드 컬럼 조정: 사이드바+리사이즈 영역을 0으로
         if (workspace) {
           workspace.style.gridTemplateColumns = isCollapsed
-            ? "48px 0px 0px 1fr"
-            : `48px var(--sidebar-width) 4px 1fr`;
+            ? "var(--activity-width) 0px 0px 1fr"
+            : `var(--activity-width) var(--sidebar-width) 4px 1fr`;
         }
         // 세로맞춤 시 PDF가 새 너비에 맞게 재조정
         if (typeof _autoFit === "function") {
@@ -294,7 +294,7 @@ function initActivityBar() {
         sidebar.classList.remove("collapsed");
         if (resizeHandle) resizeHandle.style.display = "";
         if (workspace) {
-          workspace.style.gridTemplateColumns = `48px var(--sidebar-width) 4px 1fr`;
+          workspace.style.gridTemplateColumns = `var(--activity-width) var(--sidebar-width) 4px 1fr`;
         }
         if (typeof _autoFit === "function") {
           setTimeout(() => _autoFit(), 50);
@@ -965,7 +965,78 @@ async function _gitSync(repoType, repoId, action) {
  */
 let currentMode = "view";
 
+/* ──────────────────────────
+   아이콘 줄 접기/펴기
+   ──────────────────────────
+
+   왜 필요한가:
+     사이드바는 접을 수 있지만 **왼쪽 아이콘 줄은 접어도 남는다.**
+     추출 모드에서는 아이콘이 둘뿐이라(서고 브라우저·설정) 그 줄이
+     화면만 차지한다.
+
+   왜 모드 바에 두는가:
+     줄을 접으면 그 안의 버튼으로는 되돌릴 수 없다. 되돌릴 수단은
+     **줄 밖에, 항상 보이는 자리에** 있어야 한다. 모드 바가 그 자리다.
+*/
+
+const RAIL_STORAGE_KEY = "ctb.railHidden";
+
+function _applyRailState(hidden) {
+  document.body.dataset.rail = hidden ? "hidden" : "shown";
+  const btn = document.getElementById("rail-toggle");
+  if (btn) {
+    btn.setAttribute("aria-pressed", hidden ? "true" : "false");
+    btn.title = hidden ? "왼쪽 아이콘 줄 펴기" : "왼쪽 아이콘 줄 접기";
+  }
+  // 그리드 폭은 CSS 변수를 따라가지만, 사이드바 접기 코드가 인라인으로
+  // 덮어쓴 상태일 수 있다. 그 값을 다시 계산해 준다.
+  const workspace = document.querySelector(".workspace");
+  const sidebar = document.getElementById("sidebar");
+  if (workspace && sidebar) {
+    workspace.style.gridTemplateColumns = sidebar.classList.contains("collapsed")
+      ? "var(--activity-width) 0px 0px 1fr"
+      : "var(--activity-width) var(--sidebar-width) 4px 1fr";
+  }
+}
+
+function initRailToggle() {
+  const btn = document.getElementById("rail-toggle");
+  if (!btn) return;
+
+  let hidden = false;
+  try {
+    hidden = localStorage.getItem(RAIL_STORAGE_KEY) === "1";
+  } catch (e) {
+    hidden = false;
+  }
+  _applyRailState(hidden);
+
+  btn.addEventListener("click", () => {
+    const next = document.body.dataset.rail !== "hidden";
+    _applyRailState(next);
+    try {
+      localStorage.setItem(RAIL_STORAGE_KEY, next ? "1" : "0");
+    } catch (e) {
+      // 저장 실패해도 이번 세션에서는 동작한다.
+    }
+
+    // 펼 때는 서고 브라우저로 맞춘다.
+    //
+    // 왜: 줄을 펴는 행동은 대개 «문헌을 보러 간다»는 뜻이다. 설정은
+    // 어쩌다 한 번 쓴다. 접기 직전에 설정을 보고 있었다는 이유로 다시
+    // 설정이 열리면 한 번 더 눌러야 한다.
+    if (!next) {
+      const explorer = document.querySelector('.activity-btn[data-panel="explorer"]');
+      if (explorer && !explorer.classList.contains("active")) explorer.click();
+    }
+
+    if (typeof _autoFit === "function") setTimeout(() => _autoFit(), 50);
+  });
+}
+
 function initModeBar() {
+  initRailToggle();
+
   const modeTabs = document.querySelectorAll(".mode-tab");
   modeTabs.forEach((tab) => {
     tab.addEventListener("click", () => {

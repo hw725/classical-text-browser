@@ -402,7 +402,7 @@ body {
 
 .workspace {
   display: grid;
-  grid-template-columns: 48px var(--sidebar-width) 4px 1fr;
+  grid-template-columns: var(--activity-width) var(--sidebar-width) 4px 1fr;
   grid-template-rows: 1fr 24px;
   grid-template-areas:
     "activity sidebar resize-sb main"
@@ -412,6 +412,23 @@ body {
 }
 
 /* === 액티비티 바 === */
+
+/* 아이콘 줄의 폭. 숨길 때 0으로 바꾼다.
+   JS도 이 변수를 쓰므로 한 곳만 고치면 된다. */
+:root {
+  --activity-width: 48px;
+}
+
+/* 추출 모드에서는 아이콘이 둘뿐이라(서고 브라우저·설정) 줄 자체를 접을 수
+   있게 한다. 사이드바를 접어도 이 줄은 남아 화면을 계속 차지했다.
+   되돌릴 길은 모드 바 왼쪽의 토글이다 — 항상 보이는 자리다. */
+body[data-rail="hidden"] {
+  --activity-width: 0px;
+}
+
+body[data-rail="hidden"] .activity-bar {
+  display: none;
+}
 
 .activity-bar {
   grid-area: activity;
@@ -1288,6 +1305,23 @@ body.resizing-row {
 }
 
 /* === Phase 4: 모드 탭 바 (열람 / 레이아웃 / 교정) === */
+
+/* 아이콘 줄 접기/펴기 — 모드 바 왼쪽 끝. */
+.rail-toggle {
+  width: 24px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.rail-toggle:hover {
+  color: var(--text-primary);
+  background: var(--hover-bg);
+}
 
 .mode-bar {
   height: 32px;
