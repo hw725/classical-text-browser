@@ -3,7 +3,6 @@
 Phase 11-1 / 11-2 엔드포인트를 포함한다.
 - L5 표점(句讀) CRUD + 프리셋
 - L5 현토(懸吐) CRUD
-- L5 비교 모드 (l5_compare)
 - L6 번역(Translation) CRUD
 - 페이지 비고(Notes) 조회/저장
 - LLM 표점·번역 생성
@@ -11,7 +10,6 @@ Phase 11-1 / 11-2 엔드포인트를 포함한다.
 모든 경로에서 서고 경로는 get_library_path()로 참조한다.
 """
 
-import json
 import logging
 from pathlib import Path
 
@@ -34,7 +32,6 @@ from core.hyeonto import (
     save_hyeonto,
 )
 from core.interpretation import (
-    get_l5_compare_at_commit,
     get_layer_content,
     get_page_notes,
     git_commit_interpretation,
@@ -187,179 +184,6 @@ async def api_punctuation_presets():
 # ───────────────────────────────────────────────────
 # Phase 11-1: L5 표점(句讀) API
 # ───────────────────────────────────────────────────
-
-
-@router.get("/api/interpretations/{interp_id}/pages/{page_num}/l5_compare")
-async def api_l5_compare(
-    interp_id: str,
-    page_num: int,
-    kind: str = Query("punctuation", description="L5 종류: punctuation | hyeonto"),
-    part_id: str = Query("main", description="권 식별자"),
-):
-    """비교 모드용 L5 페이지 전체 데이터 조회.
-
-    목적: 한 페이지에 속한 모든 블록의 표점 또는 현토 데이터를 수집하여
-          텍스트 비교에 적합한 형태로 반환한다.
-
-    왜 이렇게 하는가:
-        기존 /punctuation, /hyeonto API는 block_id를 필수로 받아
-        단일 블록만 반환한다. 비교 탭은 페이지 단위로 두 저장소를
-        비교하므로, 페이지의 모든 블록을 한 번에 가져와야 한다.
-
-    입력:
-        kind — "punctuation" (표점, 기본) 또는 "hyeonto" (현토).
-        part_id — 권 식별자 (기본 "main").
-    출력: {"blocks": [...], "text_summary": "줄 단위 비교용 텍스트"}.
-    """
-    _library_path = get_library_path()
-    if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
-
-    if kind not in ("punctuation", "hyeonto"):
-        return JSONResponse(
-            {"error": f"kind는 'punctuation' 또는 'hyeonto'여야 합니다. 받은 값: {kind}"},
-            status_code=400,
-        )
-
-    interp_path = require_repo_path("interpretations", interp_id)
-    if not interp_path.exists():
-        return JSONResponse(
-            {"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."},
-            status_code=404,
-        )
-
-    # L5_reading/main_text/ 디렉토리에서 해당 페이지·종류의 파일을 모두 수집
-    l5_dir = interp_path / "L5_reading" / "main_text"
-    if not l5_dir.exists():
-        return {"blocks": [], "text_summary": ""}
-
-    page_prefix = f"{part_id}_page_{page_num:03d}"
-    suffix = f"_{kind}.json"
-    blocks = []
-
-    import glob as glob_mod
-
-    # 블록별 파일 + 레거시 페이지 파일 모두 수집
-    pattern = str(l5_dir / f"{page_prefix}*{suffix}")
-    for fpath in sorted(glob_mod.glob(pattern)):
-        try:
-            with open(fpath, encoding="utf-8") as f:
-                data = json.load(f)
-            blocks.append(data)
-        except (json.JSONDecodeError, OSError):
-            continue
-
-    # Legacy fallback: if only page-level JSON exists, use its block list for
-    # block-oriented compare.
-    if not blocks:
-        legacy_file = l5_dir / f"{page_prefix}.json"
-        if legacy_file.exists():
-            try:
-                with open(legacy_file, encoding="utf-8") as f:
-                    legacy_data = json.load(f)
-                if isinstance(legacy_data, dict):
-                    if isinstance(legacy_data.get("blocks"), list):
-                        blocks = legacy_data.get("blocks", [])
-                    else:
-                        blocks = [legacy_data]
-            except (json.JSONDecodeError, OSError):
-                pass
-
-    # 비교용 텍스트 요약 생성
-    lines = []
-    for blk in blocks:
-        if not isinstance(blk, dict):
-            continue
-
-        bid = blk.get("block_id", "unknown")
-        if kind == "punctuation":
-            items = blk.get("marks", [])
-            if items:
-                lines.append(f"[블록: {bid}]")
-                for m in items:
-                    t = m.get("target", {})
-                    s, e = t.get("start", "?"), t.get("end", "?")
-                    before = m.get("before") or ""
-                    after = m.get("after") or ""
-                    # before와 after를 모두 보여주어 비교 시 차이를 명확히 함
-                    parts = []
-                    if before:
-                        parts.append(f"앞:{before}")
-                    if after:
-                        parts.append(f"뒤:{after}")
-                    desc = " ".join(parts) if parts else "(빈 표점)"
-                    lines.append(f"  [{s}-{e}] {desc}")
-                lines.append("")
-                continue
-        else:
-            items = blk.get("annotations", [])
-            if items:
-                lines.append(f"[블록: {bid}]")
-                for a in items:
-                    t = a.get("target", {})
-                    s, e = t.get("start", "?"), t.get("end", "?")
-                    text = a.get("text", "")
-                    pos = a.get("position", "after")
-                    lines.append(f'  [{s}-{e}] "{text}" ({pos})')
-                lines.append("")
-                continue
-
-        # Generic block fallback (text-block unit), used when marks/annotations are absent.
-        text_value = (
-            blk.get("text")
-            or blk.get("source_text")
-            or blk.get("original_text")
-            or blk.get("corrected_text")
-            or ""
-        )
-        text_flat = " ".join(str(text_value).split()).strip()
-        if text_flat:
-            lines.append(f"[블록: {bid}] {text_flat}")
-        else:
-            lines.append(f"[블록: {bid}]")
-        lines.append("")
-
-    return {"blocks": blocks, "text_summary": "\n".join(lines).strip()}
-
-
-@router.get("/api/interpretations/{interp_id}/commits/{commit_hash}/pages/{page_num}/l5_compare")
-async def api_l5_compare_at_commit(
-    interp_id: str,
-    commit_hash: str,
-    page_num: int,
-    kind: str = Query("punctuation", description="L5 종류: punctuation | hyeonto"),
-    part_id: str = Query("main", description="권 식별자"),
-):
-    """버전 간 비교용: 특정 커밋 시점의 L5 페이지 전체 데이터 조회.
-
-    왜 기존 api_l5_compare()를 수정하지 않는가:
-        기존 엔드포인트는 파일시스템(HEAD)을 glob으로 탐색한다.
-        커밋 시점은 git tree 순회가 필요하므로 별도 엔드포인트로 분리.
-    """
-    _library_path = get_library_path()
-    if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
-
-    if kind not in ("punctuation", "hyeonto"):
-        return JSONResponse(
-            {"error": f"kind는 'punctuation' 또는 'hyeonto'여야 합니다. 받은 값: {kind}"},
-            status_code=400,
-        )
-
-    interp_path = require_repo_path("interpretations", interp_id)
-    if not interp_path.exists():
-        return JSONResponse(
-            {"error": f"해석 저장소 '{interp_id}'를 찾을 수 없습니다."},
-            status_code=404,
-        )
-
-    try:
-        return get_l5_compare_at_commit(interp_path, commit_hash, page_num, kind, part_id)
-    except Exception as e:
-        return JSONResponse(
-            {"error": f"커밋 시점 L5 비교 조회 중 오류: {e}"},
-            status_code=500,
-        )
 
 
 @router.get("/api/interpretations/{interp_id}/pages/{page_num}/punctuation")

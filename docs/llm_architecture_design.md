@@ -1,7 +1,9 @@
 # LLM 호출 아키텍처 상세 설계
 
 > Phase 10-2의 핵심 — 전체 프로젝트 공용 LLM 연동 기반
-> 작성: 2026-02-15
+> 작성: 2026-02-15 · **2026-07-26 확인: 5단 폴백 순서는 `router.py`와 여전히 일치**
+> (Ollama → OpenAI OAuth → Gemini → OpenAI → Anthropic).
+> v1.2.0에서 더해진 것: 사용량을 화면에 표시(D-056), LLM Vision을 OCR 엔진으로 사용.
 
 ---
 

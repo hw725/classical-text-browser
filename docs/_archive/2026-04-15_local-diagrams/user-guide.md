@@ -1,0 +1,739 @@
+# 사용자 가이드 — 고전서지 통합 브라우저
+
+> ⚠️ **이 파일은 오래된 사본입니다 (2026-04-15).** Mermaid를 못 그리는 뷰어를 위해
+> HTML/CSS로 다시 그린 것인데, 그 뒤로 원본만 갱신됐습니다.
+> **정본은 [../user-guide.md](../user-guide.md)입니다.** 내용이 다르면 정본이 맞습니다.
+
+> 이 문서는 **처음 사용하는 연구자**를 위한 단계별 안내서입니다.
+> 프로그래밍 지식은 필요하지 않습니다.
+
+---
+
+## 목차
+
+1. [이 프로그램은 무엇인가](#1-이-프로그램은-무엇인가)
+2. [설치와 실행](#2-설치와-실행)
+3. [화면 구성 이해하기](#3-화면-구성-이해하기)
+4. [시작하기: 첫 문헌 등록](#4-시작하기-첫-문헌-등록)
+5. [작업 흐름 1: 이미지에서 텍스트 만들기](#5-작업-흐름-1-이미지에서-텍스트-만들기)
+6. [작업 흐름 2: 텍스트 해석하기](#6-작업-흐름-2-텍스트-해석하기)
+7. [작업 흐름 3: 연구 도구 활용하기](#7-작업-흐름-3-연구-도구-활용하기)
+8. [LLM 설정 안내](#8-llm-설정-안내)
+9. [서고 관리](#9-서고-관리)
+10. [자주 묻는 질문](#10-자주-묻는-질문)
+
+---
+
+## 1. 이 프로그램은 무엇인가
+
+개발자에게 VSCode가 있듯이, **고전 텍스트 연구자에게는 이 플랫폼**이 있습니다.
+
+하나의 화면에서:
+- 원본 이미지(PDF/스캔본)를 보면서
+- 글자를 읽어내고(OCR)
+- 교정하고
+- 표점(구두점)을 찍고
+- 현토를 달고
+- 번역하고
+- 주석을 붙이고
+- 논문 인용을 준비할 수 있습니다.
+
+**모든 작업 이력이 자동으로 기록**됩니다 (Git 기반). 이전 버전으로 되돌리거나, 다른 연구자와 작업을 공유할 수 있습니다.
+
+### 핵심 개념: 8층 데이터 모델
+
+데이터는 8개 층으로 구분됩니다. 아래에서 위로 쌓아올리는 구조입니다.
+
+<div style="max-width: 1000px; width: 100%;">
+<style scoped>
+.arch-wrapper { display: flex; gap: 12px; }.arch-main { flex: 1; min-width: 0; }.arch-title { text-align: center; font-size: 20px; font-weight: bold; color: #78350f; margin-bottom: 14px; }
+.arch-layer { margin: 8px 0; padding: 12px; border-radius: 6px; box-shadow: 0 2px 6px rgba(120, 53, 15, 0.08); }.arch-layer-title { font-size: 12px; font-weight: bold; margin-bottom: 8px; text-align: center; }
+.arch-grid { display: grid; gap: 6px; }.arch-grid-2 { grid-template-columns: repeat(2, 1fr); }.arch-grid-3 { grid-template-columns: repeat(3, 1fr); }.arch-grid-4 { grid-template-columns: repeat(4, 1fr); }
+.arch-box { border-radius: 5px; padding: 7px; text-align: center; font-size: 11px; font-weight: 600; line-height: 1.3; color: #44220e; background: #fffcf7; border: 1px solid #d4c4a8; }.arch-box.highlight { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #b45309; }
+.arch-layer.user { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #d97706; }.arch-layer.user .arch-layer-title { color: #92400e; }.arch-layer.application { background: linear-gradient(135deg, #ffedd5 0%, #fdba74 100%); border: 2px solid #ea580c; }.arch-layer.application .arch-layer-title { color: #9a3412; }.arch-layer.data { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 2px solid #059669; }.arch-layer.data .arch-layer-title { color: #065f46; }.arch-layer.infra { background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); border: 2px solid #64748b; }.arch-layer.infra .arch-layer-title { color: #334155; }
+.d1-cols { display: flex; gap: 16px; align-items: stretch; }
+.d1-col { flex: 1; min-width: 0; }
+.d1-arrow { display: flex; align-items: center; justify-content: center; font-size: 28px; color: #b45309; font-weight: bold; padding: 0 4px; }
+</style>
+<div class="arch-title">8층 데이터 모델</div>
+<div class="d1-cols">
+<div class="d1-col">
+<div class="arch-layer data">
+<div class="arch-layer-title">원본 저장소 (변경 불가)</div>
+<div class="arch-grid">
+<div class="arch-box">L1 원본 PDF/이미지</div>
+<div class="arch-box">L2 OCR 인식 결과</div>
+<div class="arch-box">L3 레이아웃 분석</div>
+<div class="arch-box">L4 교정 텍스트</div>
+</div>
+</div>
+</div>
+<div class="d1-arrow">&#x27A1;</div>
+<div class="d1-col">
+<div class="arch-layer user">
+<div class="arch-layer-title">해석 저장소 (연구자의 작업)</div>
+<div class="arch-grid">
+<div class="arch-box">L5 표점(句讀) · 현토</div>
+<div class="arch-box">L6 번역</div>
+<div class="arch-box">L7 주석 · 사전</div>
+<div class="arch-box">L8 관계 그래프 (예정)</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+- **원본 저장소**(L1-L4)는 문헌 자체의 디지털화 작업입니다
+- **해석 저장소**(L5-L8)는 연구자의 해석 작업입니다
+- 두 저장소는 독립적이므로, 하나의 원본에 여러 해석을 붙일 수 있습니다 (예: 내 번역 vs LLM 번역)
+
+---
+
+## 2. 설치와 실행
+
+### 2.1 다운로드
+
+[**ZIP 다운로드**](https://github.com/hw725/classical-text-browser/archive/refs/heads/master.zip)를 클릭하고 원하는 위치에 압축을 풀어주세요.
+
+> Git을 아는 분은 `git clone https://github.com/hw725/classical-text-browser.git`으로도 가능합니다.
+
+### 2.2 설치
+
+압축을 푼 폴더에서:
+
+| OS | 설치 방법 |
+|----|----------|
+| **Windows** | `install.bat` 더블클릭 |
+| **macOS/Linux** | 터미널에서 `./install.sh` 실행 |
+
+설치 스크립트가 Python, Git, uv를 **자동으로 설치**하고, 의존성 설치(`uv sync`)도 처리합니다.
+컴퓨터에 이미 설치된 것은 건너뜁니다. 처음 실행 시 1-2분 소요됩니다.
+
+<details>
+<summary>수동 설치 (고급)</summary>
+
+```bash
+cd classical-text-browser
+
+# uv가 없다면 먼저 설치:
+# Windows: irm https://astral.sh/uv/install.ps1 | iex
+# macOS/Linux: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+uv sync
+
+# (선택) 오프라인 OCR 엔진 설치 — 아래 중 택일:
+uv sync --extra ndlkotenocr       # 고전적(古典籍) 전용, ONNX 경량 (~80MB)
+uv sync --extra ndlocr            # 근현대 자료 범용, ONNX (~100MB)
+uv sync --extra ndlkotenocr-full  # 최고 품질 TrOCR, GPU 권장 (~4GB)
+uv sync --extra paddleocr         # PaddleOCR (~500MB, Python 3.13 주의)
+```
+</details>
+
+### 2.3 서버 실행
+
+| OS | 실행 방법 |
+|----|----------|
+| **Windows** | `start_server.bat` 더블클릭 |
+| **macOS/Linux** | `./start_server.sh` |
+
+또는 터미널에서 직접:
+```bash
+uv run python -m app serve                              # GUI에서 서고 선택
+uv run python -m app serve --library /path/to/my-library # 서고 지정
+```
+
+실행 후 **브라우저에서 `http://localhost:8000`**을 엽니다 (자동으로 열립니다).
+
+### 2.4 서고 만들기 (처음일 때)
+
+CLI로 서고를 먼저 만들 수도 있습니다:
+```bash
+uv run python -m cli init-library /path/to/my-library
+```
+
+또는 GUI 설정 탭에서 "새 서고" 버튼을 누릅니다 ([9. 서고 관리](#9-서고-관리) 참조).
+
+---
+
+## 3. 화면 구성 이해하기
+
+화면은 크게 4개 영역으로 나뉩니다.
+
+<div style="max-width: 1000px; width: 100%;">
+<style scoped>
+.arch-wrapper { display: flex; gap: 12px; }.arch-main { flex: 1; min-width: 0; }.arch-title { text-align: center; font-size: 20px; font-weight: bold; color: #78350f; margin-bottom: 14px; }
+.arch-layer { margin: 8px 0; padding: 12px; border-radius: 6px; box-shadow: 0 2px 6px rgba(120, 53, 15, 0.08); }.arch-layer-title { font-size: 12px; font-weight: bold; margin-bottom: 8px; text-align: center; }
+.arch-grid { display: grid; gap: 6px; }.arch-grid-2 { grid-template-columns: repeat(2, 1fr); }.arch-grid-3 { grid-template-columns: repeat(3, 1fr); }.arch-grid-4 { grid-template-columns: repeat(4, 1fr); }
+.arch-box { border-radius: 5px; padding: 7px; text-align: center; font-size: 11px; font-weight: 600; line-height: 1.3; color: #44220e; background: #fffcf7; border: 1px solid #d4c4a8; }.arch-box.highlight { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #b45309; }
+.arch-layer.user { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #d97706; }.arch-layer.user .arch-layer-title { color: #92400e; }.arch-layer.application { background: linear-gradient(135deg, #ffedd5 0%, #fdba74 100%); border: 2px solid #ea580c; }.arch-layer.application .arch-layer-title { color: #9a3412; }.arch-layer.data { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 2px solid #059669; }.arch-layer.data .arch-layer-title { color: #065f46; }.arch-layer.infra { background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); border: 2px solid #64748b; }.arch-layer.infra .arch-layer-title { color: #334155; }
+.d2-layout { display: flex; flex-direction: column; gap: 0; border: 2px solid #d97706; border-radius: 8px; overflow: hidden; }
+.d2-top { display: flex; min-height: 180px; }
+.d2-actbar { width: 60px; background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); border-right: 2px solid #64748b; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px 0; gap: 10px; }
+.d2-actbar-label { writing-mode: vertical-rl; text-orientation: upright; font-size: 11px; font-weight: 700; color: #334155; letter-spacing: 4px; }
+.d2-sidebar { width: 130px; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-right: 2px solid #d97706; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 6px; gap: 6px; }
+.d2-sidebar-title { font-size: 12px; font-weight: 700; color: #92400e; }
+.d2-sidebar-item { font-size: 10px; color: #78350f; }
+.d2-center { flex: 1; display: flex; flex-direction: column; }
+.d2-modetab { background: linear-gradient(135deg, #ffedd5 0%, #fdba74 100%); border-bottom: 2px solid #ea580c; padding: 6px 10px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.d2-modetab-label { font-size: 10px; font-weight: 700; color: #9a3412; margin-right: 4px; }
+.d2-tab { font-size: 10px; background: #fffcf7; border: 1px solid #d4c4a8; border-radius: 4px; padding: 2px 7px; color: #44220e; font-weight: 600; }
+.d2-panels { display: flex; flex: 1; }
+.d2-pdf { flex: 1; background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border-right: 2px solid #059669; display: flex; align-items: center; justify-content: center; padding: 14px; }
+.d2-pdf-label { font-size: 13px; font-weight: 700; color: #065f46; }
+.d2-editor { flex: 1; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); display: flex; align-items: center; justify-content: center; padding: 14px; }
+.d2-editor-label { font-size: 13px; font-weight: 700; color: #92400e; text-align: center; line-height: 1.5; }
+.d2-bottom { background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); border-top: 2px solid #64748b; padding: 8px 12px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.d2-bottom-label { font-size: 10px; font-weight: 700; color: #334155; margin-right: 4px; }
+.d2-bottom-tab { font-size: 10px; background: #fffcf7; border: 1px solid #d4c4a8; border-radius: 4px; padding: 2px 7px; color: #44220e; font-weight: 600; }
+</style>
+<div class="arch-title">화면 구성</div>
+<div class="d2-layout">
+<div class="d2-top">
+<div class="d2-actbar">
+<div class="d2-actbar-label">액티비티바</div>
+</div>
+<div class="d2-sidebar">
+<div class="d2-sidebar-title">사이드바</div>
+<div class="d2-sidebar-item">문헌 목록</div>
+<div class="d2-sidebar-item">서지정보</div>
+<div class="d2-sidebar-item">해석 저장소</div>
+</div>
+<div class="d2-center">
+<div class="d2-modetab">
+<div class="d2-modetab-label">모드 탭:</div>
+<div class="d2-tab">열람</div>
+<div class="d2-tab">레이아웃</div>
+<div class="d2-tab">교정</div>
+<div class="d2-tab">편성</div>
+<div class="d2-tab">표점</div>
+<div class="d2-tab">번역</div>
+<div class="d2-tab">주석</div>
+</div>
+<div class="d2-panels">
+<div class="d2-pdf">
+<div class="d2-pdf-label">PDF 뷰어 (원본 이미지)</div>
+</div>
+<div class="d2-editor">
+<div class="d2-editor-label">에디터 패널<br>(모드에 따라 내용 변경)</div>
+</div>
+</div>
+</div>
+</div>
+<div class="d2-bottom">
+<div class="d2-bottom-label">하단 패널:</div>
+<div class="d2-bottom-tab">Git이력</div>
+<div class="d2-bottom-tab">검증</div>
+<div class="d2-bottom-tab">의존</div>
+<div class="d2-bottom-tab">엔티티</div>
+<div class="d2-bottom-tab">비고</div>
+</div>
+</div>
+</div>
+
+### 3.1 액티비티 바 (맨 왼쪽, 아이콘 세로줄)
+
+| 위치 | 아이콘 | 기능 |
+|------|--------|------|
+| 상단 | 폴더 | **서고 브라우저** — 문헌 목록, 서지정보, 해석 저장소 |
+| 하단 | 해/달 | **테마 전환** — 밝은 모드 / 어두운 모드 |
+| 하단 | 톱니바퀴 | **설정** — 서고 경로 변경, 최근 서고 |
+
+> **팁**: 같은 아이콘을 다시 클릭하면 사이드바가 접힙니다. 넓은 화면이 필요할 때 유용합니다.
+
+### 3.2 사이드바
+
+**서고 브라우저** 모드일 때 세 섹션이 표시됩니다:
+
+1. **문헌 목록** — 서고에 등록된 모든 문헌. 트리 형태로 권(卷)→페이지 탐색
+2. **서지정보** — 선택한 문헌의 제목·저자·시기 등 메타데이터
+3. **해석 저장소** — 선택한 문헌에 연결된 해석 작업 목록
+
+### 3.3 모드 탭 바
+
+작업 종류에 따라 10개 모드를 전환합니다. **왼쪽에서 오른쪽으로 작업 순서**입니다.
+
+| 모드 | 층 | 하는 일 |
+|------|-----|---------|
+| **열람** | L1-L4 | PDF 보기 + 텍스트 읽기 (기본 모드) |
+| **레이아웃** | L3 | 이미지에서 텍스트 영역 지정 (본문 / 주석 / 제목 구분) |
+| **교정** | L4 | OCR 결과를 글자 단위로 교정 |
+| **편성** | L3→L5 | 레이아웃 블록을 해석 단위로 묶기 |
+| **표점** | L5 | 한문에 구두점(。、；) 삽입 |
+| **현토** | L5 | 한문에 한국어 토(은, 하고, 이니) 삽입 |
+| **번역** | L6 | 문장별 현대어 번역 |
+| **주석** | L7 | 인물·지명·용어·전거 주석 |
+| **인용** | — | 논문 인용 구절 마크업 + 학술 인용 형식 내보내기 |
+| **교차뷰어** | L5-L7 | 표점·번역·주석을 한눈에 통합 열람 |
+
+### 3.4 메인 영역 (좌우 분할)
+
+- **왼쪽**: PDF/이미지 뷰어 (원본 열람)
+- **오른쪽**: 에디터 패널 (모드에 따라 내용이 바뀜)
+- 경계선을 드래그하여 비율 조절 가능
+
+### 3.5 하단 패널
+
+| 탭 | 용도 |
+|----|------|
+| **Git 이력** | 작업 저장 이력 보기, 사다리형 그래프 |
+| **검증** | 데이터 무결성 검사 결과 (예정) |
+| **의존** | 원본이 변경되었는지 추적 |
+| **엔티티** | TextBlock, Tag, Concept 등 코어 엔티티 |
+| **비고** | 자유 메모 |
+
+---
+
+## 4. 시작하기: 첫 문헌 등록
+
+### 방법 A: URL로 등록 (권장)
+
+1. 사이드바 상단의 **"+ 새 문헌"** 클릭
+2. **URL 입력**:
+
+![URL 입력 다이얼로그](screenshots/ug_url_input.png)
+
+   지원하는 서지정보 소스:
+   - 한국고문헌종합목록(KORCIS) URL
+   - 일본 국립국회도서관(NDL Search) URL
+   - 일본 국립공문서관 디지털 아카이브 URL — **PDF 자동 다운로드** (구형/신형 IIIF 모두 지원)
+   - 고려대 해외한국학자료센터(KOSTMA) URL — **PDF 자동 다운로드**
+   - 한국학중앙연구원 장서각 URL — **PDF 자동 다운로드**
+   - 서울대 규장각한국학연구원 URL — **PDF 자동 다운로드**
+   - 기타 모든 URL (범용 LLM 파서 사용)
+3. 시스템이 자동으로:
+   - 서지정보를 파싱하여 제목·저자·시기를 채움
+   - PDF/이미지가 있으면 자동 다운로드 제안
+
+![서지정보 미리보기 및 다운로드 옵션](screenshots/ug_url_preview.png)
+
+4. **"등록"** 클릭하면 서고에 문헌이 추가됩니다
+
+### 방법 B: CLI로 등록
+
+```bash
+uv run python -m cli add-document /path/to/my-library \
+    --title "蒙求" --doc-id monggu
+```
+
+등록 후 PDF 파일을 `documents/monggu/L1_source/` 폴더에 직접 복사합니다.
+
+### 방법 C: HWP/HWPX 가져오기
+
+1. 사이드바의 **"HWP"** 버튼 클릭
+2. 한글 파일(.hwp 또는 .hwpx) 선택
+3. 미리보기에서 옵션 설정:
+   - **표점·현토 자동 분리**: 한문 원문에서 구두점과 토를 자동 분리
+   - **대두(擡頭) 감지**: 줄바꿈 형식 메타데이터 추출
+4. **가져오기 모드** 선택:
+   - **새 문헌 만들기** (기본): 새 문헌 ID를 지정하여 등록
+   - **기존 문헌에 텍스트 추가**: 이미 등록된 문헌(OCR 텍스트 보유)에 HWP 텍스트를 매핑
+     - 한자 앵커로 기존 페이지와 HWP 텍스트를 자동 대조합니다
+     - 매핑 미리보기에서 페이지별 대응을 확인할 수 있습니다
+5. **"가져오기"** 클릭
+
+---
+
+## 5. 작업 흐름 1: 이미지에서 텍스트 만들기
+
+> PDF/이미지 원본이 있는 문헌에 해당합니다.
+> HWP에서 텍스트를 가져왔다면 이 단계를 건너뛸 수 있습니다.
+
+### 5.1 레이아웃 분석 (L3)
+
+**목적**: 페이지 이미지에서 "어디에 무슨 종류의 글자가 있는지" 지정합니다.
+
+1. **레이아웃** 모드 탭 선택
+2. **"AI 분석"** 버튼 클릭 → LLM이 자동으로 영역을 감지합니다
+3. 결과를 확인합니다:
+   - 초록색 박스 = 본문(大字)
+   - 파란색 박스 = 주석(小字雙行)
+   - 회색 박스 = 판심제, 장차 등
+4. **잘못된 박스 수정**:
+   - 박스 클릭 → 오른쪽 패널에서 속성(유형, 읽기 순서) 변경
+   - 박스 드래그로 위치/크기 조정
+   - 새 박스 추가 또는 삭제
+5. **저장** (Ctrl+S 또는 저장 버튼)
+
+> **읽기 순서(reading_order)**: OCR이 블록을 읽는 순서입니다. 고전 한문은 보통 오른쪽에서 왼쪽(세로쓰기, RTL)이므로 오른쪽 블록에 작은 번호를 부여합니다.
+
+### 5.2 OCR (L2)
+
+**목적**: 각 블록의 이미지를 글자로 변환합니다.
+
+1. **레이아웃** 모드에서 우측 하단의 **OCR 실행** 패널 확인
+2. 설정:
+   - **엔진**: 드롭다운에서 선택 (설치된 엔진만 표시)
+     - **NDL古典籍OCR Full** — 최고 품질, GPU 필요 (`uv sync --extra ndlkotenocr-full`)
+     - **NDL古典籍OCR-Lite** — 고전적 전용, CPU OK (`uv sync --extra ndlkotenocr`)
+     - **NDLOCR-Lite** — 근현대 자료 범용 (`uv sync --extra ndlocr`)
+     - **LLM Vision** — 온라인, API 키 필요
+     - **PaddleOCR** — 범용 (`uv sync --extra paddleocr`)
+   - **언어**: classical_chinese(고전 한문)
+3. **"전체 OCR"** 클릭 → 모든 블록을 순서대로 OCR
+   - 또는 특정 블록만 선택하여 **"선택 OCR"**
+
+![레이아웃 블록 선택 및 OCR 결과 확인](screenshots/ug_ocr_block.jpg)
+
+4. 진행률 표시줄에서 **실시간** 진행 상황 확인 (블록별 스트리밍)
+5. 완료 후 결과 미리보기
+
+### 5.3 교정 (L4)
+
+**목적**: OCR이 잘못 읽은 글자를 바로잡습니다.
+
+1. **교정** 모드 탭 선택
+2. **"OCR 채우기"** 클릭 → OCR 결과를 교정 편집기에 불러옵니다
+3. 왼쪽 PDF 이미지와 비교하면서 글자를 수정합니다
+   - 틀린 글자를 클릭 → 올바른 글자 입력
+   - 교정 유형 지정: OCR 오류 / 이체자 / 해독 불가 등
+4. **대조** 서브탭: OCR 결과와 교정본을 글자별로 나란히 비교
+   - 빨간색 = 불일치, 초록색 = 일치, 노란색 = 이체자
+
+![일괄 교정 — 이체자 찾기/교정](screenshots/ug_batch_correction.png)
+
+5. **저장** (Ctrl+S)
+
+---
+
+## 6. 작업 흐름 2: 텍스트 해석하기
+
+> 해석 작업을 시작하려면 먼저 **해석 저장소를 생성**해야 합니다.
+> 사이드바 "해석 저장소" 섹션에서 **"새로 만들기"**를 클릭합니다.
+
+### 6.1 표점 (L5) — 한문에 구두점 삽입
+
+1. **표점** 모드 탭 선택
+2. 상단에서 블록 선택
+3. 글자를 클릭하면 **표점 부호 팔레트**가 나타납니다
+   - 기본 부호: 。 、 ， ； ： ？ ！ 《》
+4. 부호를 선택하면 해당 글자 뒤에 삽입됩니다
+   - 서명호(《》)는 범위 선택 필요
+5. **"AI 표점"**: LLM이 자동으로 구두점을 제안합니다 → 경과 시간이 표시됩니다 → 검토 후 확정
+6. **저장**
+
+### 6.2 현토 (L5) — 한국어 토 달기
+
+1. **현토** 모드 탭 선택
+2. 글자를 클릭하면 **현토 입력 팝업**이 나타납니다
+   - **위치**: before(글자 앞) 또는 after(글자 뒤)
+   - **토**: 한국어 토 입력 (예: 은, 이, 하고, 이니)
+3. **삽입** 클릭
+4. **저장**
+
+### 6.3 번역 (L6) — 현대어 번역
+
+1. **번역** 모드 탭 선택
+2. 상단에서 블록 선택
+3. 원문이 표시되고 (표점·현토 적용된 상태), 아래에 문장별 번역 입력란이 나타납니다
+4. 직접 번역을 입력하거나 **"전체 AI 번역"** 클릭
+   - LLM이 문장별로 초안을 생성합니다
+   - 초안(draft)을 검토하고 수정합니다
+5. **참조 사전 활용**:
+   - **"참조사전 ON"** 토글 → 주석에서 만든 사전 항목이 번역에 참고됩니다
+   - **"사전 관리"** → 다른 문헌에서 가져온 참조 사전 관리
+6. **저장**
+
+### 6.4 주석 (L7) — 인물·지명·용어·전거
+
+1. **주석** 모드 탭 선택
+2. 상단에서 블록 선택
+3. 원문에서 주석할 범위를 드래그로 선택
+4. 주석 유형 선택: 인물(person), 지명(place), 용어(term), 전거(allusion), 메모(note)
+5. 내용 입력: 표제어, 설명, 참고문헌
+
+![주석 편집 폼](screenshots/ug_annotation_form.png)
+
+6. **AI 태깅**: LLM이 자동으로 주석 후보를 생성합니다
+
+#### 사전형 주석 (고급)
+
+단순 태깅 외에 사전 형식의 체계적 주석을 만들 수 있습니다:
+
+| 필드 | 설명 | 예시 |
+|------|------|------|
+| 표제어 | 한자 원문 | 王戎 |
+| 독음 | 한국어 독음 | 왕융 |
+| 사전적 의미 | 일반적 정의 | 서진의 관료, 죽림칠현의 한 사람 |
+| 문맥적 의미 | 이 텍스트에서의 뜻 | 간결한 행정으로 유명한 인물의 예시 |
+| 출전 | 참고문헌 | 《晉書》 列傳 第十三 |
+
+**4단계 LLM 생성**:
+1. **[1단계]**: 원문만으로 사전 항목 생성
+2. **[2단계]**: 번역을 참고하여 보강
+3. **[3단계]**: 원문+번역 통합하여 최종 생성
+4. 연구자가 검토·편집 → **확정(accepted)**
+
+확정된 주석은 LLM이 덮어쓰지 않습니다. 안심하고 편집하세요.
+
+---
+
+## 7. 작업 흐름 3: 연구 도구 활용하기
+
+### 7.1 인용 마크
+
+논문 인용을 위해 구절을 마크업합니다.
+
+1. **인용** 모드 탭 선택
+2. 원문 또는 번역에서 인용할 범위를 드래그로 선택
+3. **"인용 마크 추가"** 클릭
+4. 레이블(메모)과 태그(분류)를 붙일 수 있습니다
+5. **통합 컨텍스트 뷰**: 마크된 구절에 대해 원문·표점본·번역·주석을 한눈에 확인
+6. **"내보내기"**: 학술 인용 형식으로 변환, 클립보드에 복사
+
+![인용 내보내기 화면](screenshots/ug_citation_export.jpg)
+
+인용 형식 예시:
+```
+朴趾源, 燕岩集卷2, 答巡使書 25면(韓國文集叢刊252집, 48면) : 若吾所樂者善，而所敬者天也。
+```
+
+### 7.2 사전 내보내기/가져오기
+
+하나의 문헌에서 만든 주석 사전을 다른 문헌에서 참조할 수 있습니다.
+
+1. **주석** 모드 → **"내보내기"** 클릭 → JSON 파일 저장
+2. 다른 해석 저장소에서 **"사전 관리"** → **"가져오기"** → JSON 파일 선택
+3. 가져온 사전의 표제어가 원문에서 자동 매칭됩니다
+4. 매칭 결과를 체크박스로 선택 → 번역 프롬프트에 참고 사전으로 포함
+
+### 7.3 교차 뷰어
+
+모든 해석을 한 화면에서 확인합니다.
+
+1. **교차뷰어** 모드 탭 선택
+2. 상단 탭에서 L5(표점)·L6(번역)·L7(주석)을 전환
+3. 본문/주석 토글로 본문 해석과 주석 해석을 구분하여 확인
+
+#### 비교 모드
+
+두 해석 저장소의 내용을 나란히 비교할 수 있습니다.
+
+1. **"비교"** 체크박스를 켭니다
+2. 좌측(A)·우측(B) 드롭다운에서 비교할 해석 저장소를 선택합니다
+3. 동일한 페이지·층에 대한 두 저장소의 내용이 나란히 표시됩니다
+   - 동일한 줄은 흰색, 차이가 있는 줄은 빨강/초록으로 강조됩니다
+4. **L5(표점) 탭**에서는 "L5 종류" 라디오가 추가로 표시됩니다:
+   - **표점** (기본): 두 저장소의 구두점(句讀) 차이를 비교
+   - **현토**: 두 저장소의 현토(懸吐) 차이를 비교
+
+### 7.4 Git 이력 관리
+
+모든 저장은 자동으로 Git 커밋으로 기록됩니다.
+
+1. **하단 패널** → **"Git 이력"** 탭 선택
+2. **커밋 목록**: 최근 저장 이력을 시간순으로 보여줍니다
+3. **사다리형 그래프**: 원본 저장소와 해석 저장소의 이력을 나란히 비교합니다
+   - 가로 연결선은 "이 해석이 원본의 어떤 시점을 기반했는지"를 보여줍니다
+   - **금색 링**: 현재 작업 중인 저장 시점을 표시합니다
+4. **파일 미리보기**: 커밋 노드를 클릭하면 그 시점에 저장된 파일 목록을 볼 수 있습니다
+   - 파일을 클릭하면 읽기 전용으로 내용을 미리봅니다
+   - JSON 파일은 자동으로 보기 좋게 정렬됩니다
+5. **이 버전으로 되돌리기**: 과거 시점의 상태로 복원합니다
+   - 확인 다이얼로그가 표시됩니다
+   - 되돌리기는 새로운 저장 시점으로 기록되므로, 기존 이력은 모두 보존됩니다
+   - 저장하지 않은 변경사항이 있으면 먼저 저장해야 합니다
+
+### 7.5 JSON 스냅샷 내보내기/가져오기
+
+문헌의 현재 상태를 단일 JSON 파일로 저장하거나, 다른 환경에서 가져올 수 있습니다.
+
+- **내보내기**: 사이드바 해석 저장소 → 선택 → "JSON 내보내기"
+- **가져오기**: 사이드바 해석 저장소 → "가져오기" → JSON 파일 선택
+
+---
+
+## 8. LLM 설정 안내
+
+이 플랫폼은 여러 LLM 프로바이더를 지원합니다. 설정하지 않아도 기본 폴백이 동작하지만, API 키를 설정하면 더 좋은 품질과 안정성을 얻을 수 있습니다.
+
+### 8.1 프로바이더 목록
+
+시스템은 위에서 아래로 순서대로 시도하며, 첫 번째로 응답한 프로바이더를 사용합니다. 하나가 실패하면 자동으로 다음을 시도합니다. 사용 불가한 프로바이더는 캐시하여 건너뛰므로 폴백이 빠르게 동작합니다.
+
+| 순위 | 프로바이더 | 설정 방법 | 비전(이미지) | 비용 |
+|------|-----------|----------|-------------|------|
+| 1 | Ollama (로컬 gemma4:e4b) | `ollama pull gemma4:e4b` + `ollama serve` | O | 무료 |
+| 2 | Google Gemini | `.env`에 `GOOGLE_API_KEY` | O | 유료 (저렴) |
+| 3 | OpenAI | `.env`에 `OPENAI_API_KEY` | O | 유료 (중간) |
+| 4 | Anthropic (Claude) | `.env`에 `ANTHROPIC_API_KEY` | O | 유료 (최후) |
+
+> **권장**: Ollama(gemma4:e4b)만으로도 대부분의 기능을 사용할 수 있습니다.
+> 안정적인 표점·번역 품질이 필요하면 Gemini API 키를 설정하세요 (무료 티어 제공).
+
+### 8.2 API 키 설정
+
+**프로젝트 루트**에 `.env` 파일을 만들어 API 키를 등록합니다.
+(`.env.example` 파일을 `.env`로 복사한 뒤 필요한 값만 채우세요.)
+
+```bash
+# .env 파일 위치: classical-text-browser/.env  (프로젝트 루트)
+
+# Google Gemini (권장, 무료 티어 있음)
+# 발급: https://aistudio.google.com/apikey
+GOOGLE_API_KEY=AI...
+
+# OpenAI
+# 발급: https://platform.openai.com/api-keys
+OPENAI_API_KEY=sk-...
+
+# Anthropic Claude
+# 발급: https://console.anthropic.com/
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+**설정 우선순위**: 시스템 환경변수 → 서고 `.env` → 프로젝트 루트 `.env` → 기본값
+
+- **프로젝트 루트 `.env`**: 모든 서고에 공통 적용 (API 키는 여기에)
+- **서고 `.env`**: 특정 서고에만 적용 (서고별 설정 덮어쓰기용)
+- **시스템 환경변수**: Windows 설정 → 환경 변수에서 직접 등록 (최우선)
+
+> **주의**: `.env` 파일에는 API 키가 포함되므로 `.gitignore`에 등록되어 있습니다. Git에 커밋되지 않습니다.
+
+### 8.3 비전 모델
+
+OCR과 레이아웃 분석은 **이미지를 볼 수 있는 모델**만 사용할 수 있습니다. 드롭다운에서 모델 옆에 눈 아이콘이 있으면 비전을 지원합니다.
+
+### 8.4 모델 선택 팁
+
+- **오프라인 작업**: NDL古典籍OCR-Lite 또는 NDLOCR-Lite(OCR용) + 수동 해석
+- **무료 온라인**: Ollama + 클라우드 모델(kimi-k2.5, glm-5 등)
+- **저렴한 고품질**: Gemini 2.5 Flash (무료 티어 제공, API 키 필요)
+- **최고 품질**: Gemini 3 Pro, OpenAI gpt-5, 또는 Anthropic Claude
+
+---
+
+## 9. 서고 관리
+
+### 9.1 서고란?
+
+"서고(Library)"는 여러 문헌과 해석 저장소를 묶어 관리하는 최상위 폴더입니다.
+
+```
+내_서고/
+├── documents/           # 문헌들 (원본 저장소)
+│   ├── monggu/          #   예: 蒙求
+│   └── cheonjamun/      #   예: 千字文
+├── interpretations/     # 해석 저장소들
+│   ├── monggu_interp/   #   예: 蒙求 해석
+│   └── ...
+├── resources/           # 공유 리소스 (이체자 사전, 주석 유형 등)
+└── .trash/              # 휴지통 (삭제된 항목)
+```
+
+![서고 폴더 선택 다이얼로그](screenshots/ug_library_folder.jpg)
+
+### 9.2 서고 전환
+
+1. 액티비티 바에서 **톱니바퀴(설정)** 클릭
+2. **서고 경로** 옆의 **"편집"** 클릭
+3. 새 경로를 입력하고 **"변경"** 클릭
+4. 페이지가 새로고침되며 새 서고로 전환됩니다
+
+**최근 서고**: 이전에 사용한 서고 목록이 표시됩니다. 클릭하면 바로 전환됩니다.
+
+### 9.3 새 서고 만들기
+
+1. 설정 탭에서 **"새 서고"** 클릭
+2. 경로 입력 (예: `C:\연구\조선시대_문집`)
+3. 기본 폴더 구조가 자동으로 생성됩니다
+
+### 9.4 문헌/해석 삭제와 복원
+
+**삭제**: 사이드바에서 문헌 또는 해석 저장소 선택 → 삭제 버튼
+- 영구 삭제가 아닙니다! `.trash/` 폴더로 이동합니다
+- 해당 문헌을 참조하는 해석 저장소가 있으면 경고를 표시합니다
+
+**복원**: 설정 → 휴지통 → 복원할 항목 선택 → "복원"
+
+### 9.5 서고 백업
+
+서고를 구글 드라이브 등 외부 폴더에 백업할 수 있습니다.
+
+> **이 기능은 선택 사항입니다.** 백업을 설정하지 않아도 모든 기능이 정상 동작합니다.
+
+**설정 방법**:
+1. 설정 탭에서 **"서고 백업"** 영역의 **"폴더 선택"** 클릭
+2. 백업 대상 폴더를 선택 (예: 구글 드라이브 동기화 폴더)
+3. **"저장"** 클릭
+
+**백업 실행**:
+- **"서고 백업"** 버튼 클릭 → 확인 → 서고 전체가 백업 폴더에 복사됩니다
+- 기존 백업이 있으면 자동으로 교체됩니다 (이전 백업은 `_prev` 접미사로 보존)
+- `.git` 이력 파일은 제외됩니다 (로컬 전용이므로)
+
+**구글 드라이브 연동**:
+- 백업 폴더를 구글 드라이브 동기화 폴더로 지정하면, 백업 후 자동으로 클라우드에 동기화됩니다
+- zip이 아닌 폴더 그대로 복사하므로, 구글 드라이브에서 파일을 개별적으로 열람할 수 있습니다
+
+### 9.6 필수/선택 설정 구분
+
+| 항목 | 필수 여부 | 설명 |
+|------|-----------|------|
+| 서고 경로 | **필수** | 로컬 서고 폴더 경로 |
+| 서고 백업 | 선택 | 구글 드라이브 등 외부 폴더에 백업 |
+| 원격 저장소 | 선택 | GitHub 등에 push/pull |
+
+**이 앱은 로컬 서고 경로만 설정하면 완전히 동작합니다.** 원격 저장소나 백업은 필요할 때 설정하세요.
+
+---
+
+## 10. 자주 묻는 질문
+
+### Q. 인터넷이 없어도 사용할 수 있나요?
+
+**네.** 핵심 기능(PDF 보기, 텍스트 편집, 교정, 표점, 현토)은 완전히 오프라인에서 동작합니다.
+오프라인 OCR은 NDL古典籍OCR-Lite(`uv sync --extra ndlkotenocr`) 또는 NDLOCR-Lite(`uv sync --extra ndlocr`)를 설치하세요. GPU가 있다면 NDL古典籍OCR Full(`uv sync --extra ndlkotenocr-full`)로 최고 품질을 얻을 수 있습니다. LLM을 오프라인에서 쓰려면 Ollama 로컬 모델을 설치하세요.
+
+### Q. Git을 알아야 하나요?
+
+**아니요.** Git은 내부적으로 자동 관리됩니다. 연구자는 "저장" 버튼만 누르면 됩니다. 사다리형 그래프에서 현재 작업 시점 확인, 과거 버전 파일 미리보기, 이전 버전으로 되돌리기를 모두 GUI에서 할 수 있습니다.
+
+### Q. 원본 파일이 변경되지는 않나요?
+
+**절대 변경되지 않습니다.** L1(원본 PDF/이미지)은 시스템이 읽기 전용으로 보호합니다. 모든 작업(OCR, 교정, 번역 등)은 별도의 파일에 저장됩니다.
+
+### Q. 같은 문헌에 여러 해석을 만들 수 있나요?
+
+**네.** 하나의 원본 저장소에 여러 해석 저장소를 연결할 수 있습니다. 예를 들어 "내 번역"과 "LLM 번역"을 따로 만들어 비교할 수 있습니다.
+
+### Q. LLM이 생성한 결과를 반드시 사용해야 하나요?
+
+**아니요.** LLM 결과는 항상 "초안(draft)" 상태로 생성됩니다. 연구자가 검토하여 수정·확정·거부할 수 있습니다. 확정된 내용은 LLM이 덮어쓰지 않습니다.
+
+### Q. 원격 저장소(GitHub) 없이도 사용할 수 있나요?
+
+**네.** 원격 저장소는 완전히 선택 사항입니다. 로컬 서고 경로만 설정하면 모든 기능이 동작합니다. 원격 저장소는 다른 연구자와 공유하거나 GitHub에 백업하고 싶을 때만 설정하세요.
+
+### Q. 작업 데이터는 어디에 저장되나요?
+
+서고 폴더 안에 모두 저장됩니다. 클라우드에 자동 전송되지 않습니다. 서고를 구글 드라이브 동기화 폴더에 백업하면 자동으로 클라우드에 동기화됩니다 ([9.5 서고 백업](#95-서고-백업) 참조).
+
+### Q. 어떤 순서로 작업해야 하나요?
+
+권장 순서: **레이아웃 → OCR → 교정 → (편성 →) 표점 → 현토 → 번역 → 주석**
+
+단, 이 순서가 필수는 아닙니다:
+- HWP에서 텍스트를 가져왔다면 레이아웃/OCR/교정을 건너뛸 수 있습니다
+- 표점 없이 바로 번역을 할 수도 있습니다 (표점이 있으면 문장 단위 분리가 더 정확합니다)
+- 주석은 번역 전이나 후 언제든 가능합니다
+
+### Q. 다른 연구자와 공유하려면?
+
+두 가지 방법이 있습니다:
+1. **JSON 스냅샷**: 해석 저장소를 JSON으로 내보내기 → 상대방이 가져오기
+2. **Git 원격 저장소**: GitHub 등에 Push → 상대방이 Clone/Pull
+
+---
+
+## 문서 안내
+
+더 자세한 내용은 다음 문서를 참고하세요:
+
+| 문서 | 대상 | 내용 |
+|------|------|------|
+| 이 문서 (`user-guide.md`) | 연구자 | 사용 방법 |
+| [README.md](../README.md) | 설치자 | 설치·실행 |
+| [platform-v7.md](platform-v7.md) | 개발자/설계자 | 전체 아키텍처 |
+| [DECISIONS.md](DECISIONS.md) | 개발자 | 설계 결정 근거 |
+| [schemas/README.md](../schemas/README.md) | 개발자 | JSON 스키마 구조 |
+| [architecture-diagrams.md](architecture-diagrams.md) | 전체 | Mermaid 다이어그램 |

@@ -44,24 +44,79 @@ ctb ocr "논문.pdf" --execute
 
 ## 빠른 시작
 
-1. [저장소 내려받기](https://github.com/hw725/classical-text-browser/archive/refs/heads/master.zip) 후 압축 풀기
-2. `install.bat` 더블클릭 (Windows) 또는 `./install.sh` (macOS·Linux)
-3. `start_server.bat` 더블클릭 (Windows) 또는 `./start_server.sh`
-4. 브라우저에서 `http://localhost:8000`
-5. **PDF나 이미지를 창 안에 끌어다 놓으세요.** 서고가 없으면 자동으로 만들어집니다.
+### 1단계 — 내려받기 (모두 같습니다)
 
-Git을 아신다면 `git clone https://github.com/hw725/classical-text-browser.git`도 됩니다.
+[ZIP으로 내려받아](https://github.com/hw725/classical-text-browser/archive/refs/heads/master.zip)
+압축을 풀거나, Git을 아신다면
+`git clone https://github.com/hw725/classical-text-browser.git`.
 
-**기본 설치만으로 한글 논문 처리는 전부 됩니다** — OCR, 텍스트 레이어 PDF,
-형광 위치까지. 아래는 다른 종류의 문헌을 다룰 때만 추가하세요.
+**저장소 자체는 가볍습니다(수 MB).** 무거워지는 것은 다음 단계의 OCR 라이브러리이고,
+거기서 갈립니다.
 
-| 추가 설치 | 언제 | 크기 |
-|---|---|---|
-| `uv sync --extra japanese` | 일본어 문헌(근현대) | 약 170MB |
-| `uv sync --extra classical` | 고서(古典籍) | 약 170MB |
-| `uv sync --extra classical-gpu` | 고서 최고 품질(TrOCR, GPU 권장) | 약 340MB |
+### 2단계 — 설치: 두 갈래 중 하나
 
-> 뒤 둘은 **한글을 인식하지 못합니다** — 한글 논문에는 쓰지 마세요.
+| | 명령 | 설치 용량 | 무엇이 되나 |
+|---|---|---|---|
+| **표준** (권장) | `install.bat` · `./install.sh` | 약 **830MB** | 전부. 형광이 원문 글자 위에 정확히 뜬다 |
+| **가벼운 설치** | 아래 명령 | 약 **320MB** | OCR·검색·복사 전부 되지만 **형광 위치만 부정확** |
+
+```bash
+# 가벼운 설치 — PaddleOCR(377MB)와 그 의존을 빼고 설치한다
+uv sync --no-install-package paddlepaddle --no-install-package paddleocr
+```
+
+<details>
+<summary>가벼운 설치를 고르면 정확히 무엇을 잃나</summary>
+
+읽기(인식)는 LLM Vision이 하고, PaddleOCR는 **글자 위치 찾기(검출)** 만 맡습니다.
+그래서 PaddleOCR가 없어도 텍스트는 그대로 들어갑니다 — 복사도, Ctrl+F도, 참고문헌
+추출도 됩니다.
+
+다만 위치를 모르므로 텍스트가 **왼쪽 여백에 줄 순서대로 균등 배치**됩니다.
+검색하면 형광이 뜨긴 하는데 **그 자리에 원본 글자가 없습니다**.
+산출물에 `page-approximated`로 기록되고 화면에도 알립니다.
+
+실측(15쪽 논문): PaddleOCR 있음 → 502줄 중 433줄이 제자리 / 없음 → 0줄.
+
+논문을 **읽으려고** 뽑는 것이라면 가벼운 설치로 충분합니다.
+인용할 자리를 원문에서 **찾아 가며** 쓸 것이라면 표준 설치를 권합니다.
+</details>
+
+### 3단계 — 쓰기: 앱 또는 명령 한 줄
+
+**앱** — `start_server.bat` (Windows) 또는 `./start_server.sh` → `http://localhost:8000`
+→ **PDF나 이미지를 창 안에 끌어다 놓으세요.** 서고가 없으면 자동으로 만들어집니다.
+
+**명령 한 줄** — 논문 몇 편만 처리할 것이라면 앱을 열 필요가 없습니다.
+
+```bash
+ctb ocr "논문.pdf" --execute
+```
+
+두 방법 모두 **같은 설치**를 씁니다. 골라야 하는 것은 설치가 아니라 쓰는 방식입니다.
+
+### 다른 종류의 문헌을 다룰 때만 — 오프라인 OCR 추가
+
+위 설치만으로 **한글 논문 처리는 전부 됩니다.** 아래는 일본 국립국회도서관(NDL)이
+공개한 오프라인 OCR 엔진으로, 다른 문헌을 다룰 때만 더합니다.
+
+| 엔진 | 설치 명령 | 언제 | 크기 |
+|---|---|---|---|
+| **NDLOCR-Lite** | `uv sync --extra japanese` | 일본어 문헌(근현대) | 약 170MB |
+| **NDL古典籍OCR-Lite** | `uv sync --extra classical` | 고서(古典籍) | 약 170MB |
+| **NDL古典籍OCR Full** (TrOCR) | `uv sync --extra classical-gpu` | 고서 최고 품질, GPU 권장 | 약 340MB |
+
+> extra 이름을 용도(`japanese`·`classical`)로 지은 것은, 예전에 세 엔진이
+> `ndlocr`·`ndlkotenocr`·`ndlkotenocr-full`로 나란히 있어 한글 논문을 하려던 사람이
+> **한글을 못 읽는** 고전적 전용 엔진을 설치하는 일이 있었기 때문입니다.
+> 예전 이름도 그대로 동작합니다.
+>
+> **셋 다 한글을 인식하지 못합니다** — 한글 논문에는 쓰지 마세요.
+> 세 엔진 모두 NDL이 CC BY 4.0으로 공개한 것입니다
+> ([ndlocr-lite](https://github.com/ndl-lab/ndlocr-lite) ·
+> [ndlkotenocr-lite](https://github.com/ndl-lab/ndlkotenocr-lite) ·
+> [ndlkotenocr_cli](https://github.com/ndl-lab/ndlkotenocr_cli)).
+>
 > Python은 3.10~3.12를 씁니다(paddlepaddle 휠이 3.13까지 나와 있지 않습니다).
 
 ---

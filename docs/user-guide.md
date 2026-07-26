@@ -103,19 +103,34 @@ cd classical-text-browser
 # Windows: irm https://astral.sh/uv/install.ps1 | iex
 # macOS/Linux: curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 기본 설치. 한글 논문 처리는 이것만으로 전부 됩니다
-# (OCR, 텍스트 레이어 PDF, 형광 위치까지).
+# 표준 설치 (권장). 약 830MB. 한글 논문 처리는 이것만으로 전부 됩니다
+# — OCR, 텍스트 레이어 PDF, 형광 위치까지.
 uv sync
+
+# 가벼운 설치. 약 320MB. PaddleOCR(377MB)와 그 의존을 빼고 받습니다.
+# OCR·검색·복사는 그대로 되고 형광 위치만 부정확해집니다 (아래 설명).
+uv sync --no-install-package paddlepaddle --no-install-package paddleocr
 
 # Python은 3.10~3.12를 씁니다 (.python-version은 3.12).
 # uv가 알아서 받아 쓰므로 따로 설치할 필요는 없습니다.
 # 3.13은 아직 안 됩니다 — paddlepaddle 휠이 cp312까지만 나와 있습니다.
 
 # (선택) 다른 종류의 문헌을 다룰 때만 추가합니다.
-uv sync --extra japanese       # 일본어 문헌(근현대) — 약 170MB
-uv sync --extra classical      # 고서(古典籍) — 약 170MB, 한글 인식 불가
-uv sync --extra classical-gpu  # 고서 최고 품질(TrOCR, GPU 권장) — 약 340MB
+# 셋 다 일본 국립국회도서관(NDL)이 CC BY 4.0으로 공개한 오프라인 엔진입니다.
+uv sync --extra japanese       # NDLOCR-Lite — 일본어 문헌(근현대), 약 170MB
+uv sync --extra classical      # NDL古典籍OCR-Lite — 고서(古典籍), 약 170MB
+uv sync --extra classical-gpu  # NDL古典籍OCR Full (TrOCR) — 고서 최고 품질, 약 340MB
 ```
+
+> **가벼운 설치를 고르면 무엇을 잃나.** 읽기(인식)는 LLM Vision이 하고
+> PaddleOCR는 **글자 위치 찾기(검출)** 만 맡습니다. 그래서 없어도 텍스트는
+> 그대로 들어가 복사·Ctrl+F·참고문헌 추출이 됩니다. 다만 위치를 모르므로
+> 텍스트가 **왼쪽 여백에 줄 순서대로 균등 배치**되어, 검색하면 형광은 뜨는데
+> **그 자리에 원본 글자가 없습니다.** 산출물에 `page-approximated`로 기록되고
+> 화면에도 알립니다. 실측(15쪽 논문): 있음 → 502줄 중 433줄 제자리 / 없음 → 0줄.
+>
+> 논문을 **읽으려고** 뽑는 것이면 가벼운 설치로 충분하고, 인용할 자리를
+> 원문에서 **찾아 가며** 쓸 것이면 표준 설치를 권합니다.
 
 > **한글 논문에 `classical`을 설치하지 마세요.** 고전적 전용 엔진은
 > 학습 데이터에 한글이 없어 **한글을 인식하지 못합니다.** 예전 안내가
