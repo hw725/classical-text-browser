@@ -24,7 +24,6 @@ platform-v7.md 섹션 4의 구조를 따른다:
 
 import hashlib
 import json
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 

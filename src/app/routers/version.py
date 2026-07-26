@@ -30,7 +30,6 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app._state import _resolve_repo_path, get_library_path, require_repo_path
-from core.repo_id import REPO_ID_RULE_TEXT, is_valid_repo_id
 from core.git_graph import (
     get_commit_file_content,
     get_commit_file_list,
@@ -38,6 +37,7 @@ from core.git_graph import (
     revert_to_commit,
 )
 from core.interpretation import _append_based_on_trailer
+from core.repo_id import REPO_ID_RULE_TEXT, is_valid_repo_id
 from core.snapshot import build_snapshot, create_work_from_snapshot, detect_imported_layers
 from core.snapshot_validator import validate_snapshot
 

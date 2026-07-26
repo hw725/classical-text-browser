@@ -104,6 +104,34 @@ _static_dir = Path(__file__).parent / "static"
 app.mount("/static", _NoCacheStaticFiles(directory=str(_static_dir)), name="static")
 
 
+@app.middleware("http")
+async def _no_store_api(request, call_next):
+    """API 응답에 캐시 금지를 붙인다.
+
+    왜 필요한가:
+        API가 돌려주는 것은 **작업 중에 바뀌는 데이터**다 — OCR 결과, 레이아웃,
+        교정, 진행 상황. 그런데 응답에 Cache-Control이 없으면 브라우저가
+        스스로 캐시 기간을 추정한다(heuristic caching).
+
+        실제로 그 사고가 있었다: 배치 OCR이 L3 전면 블록을 새로 만들었는데
+        레이아웃 탭에는 «블록이 없던 시절»이 남아 있었다. 교정 탭은 요청마다
+        `cache: "no-store"`를 붙여 두어 바로 반영됐고, 레이아웃만 빠져 있었다.
+
+    왜 호출부가 아니라 여기인가:
+        점검해 보니 프론트에서 **변하는 데이터를 캐시 지정 없이 읽는 곳이
+        47군데**였다. 한 곳씩 고치면 새로 쓰는 코드에서 또 빠진다.
+        서버가 한 번 붙이면 그 부류가 통째로 사라진다.
+
+    정적 파일과 달리 no-store인 이유:
+        정적 파일은 내용이 그대로면 304로 끝나 이득이 있다(위 참조).
+        API 응답은 매번 달라지는 것이 정상이라 재검증할 값이 없다.
+    """
+    response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 def configure(library_path: str | Path) -> FastAPI:
     """서고 경로를 설정하고 정적 파일 마운트를 수행한다.
 

@@ -1586,9 +1586,13 @@
                 <option value="all">전체</option>
               </select>
               <div class="text-toolbar-divider"></div>
+              <!-- 추출 모드에서는 숨는다 — 배치 OCR이 L4를 이미 채워 둔다
+                   (fill_text_layer, D-057). 눌러도 같은 값을 다시 넣을 뿐이고,
+                   손으로 고친 교정이 있으면 그것을 덮는다. -->
               <button
                 id="corr-fill-ocr"
                 class="text-btn"
+                data-profile="collation"
                 title="OCR 결과로 텍스트 채우기"
               >
                 OCR 채우기
