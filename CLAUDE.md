@@ -58,8 +58,8 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
    기존 서고를 열 수 없게 되는 변경은 **되돌릴 수 없다.**
 
 ## 백엔드 모듈 구조 (src/app/)
-server.py는 FastAPI 앱 생성 + 라우터 마운트만 담당하는 조립 파일(~85줄).
-실제 API 엔드포인트는 8개 라우터 모듈에 분산 (2026-07-26 기준 실측):
+server.py는 FastAPI 앱 생성 + 라우터 마운트 + 미들웨어만 담당하는 조립 파일(152줄).
+실제 API 엔드포인트 185개가 8개 라우터 모듈에 분산 (2026-07-26 기준 실측):
 
 ```
 src/app/
@@ -80,10 +80,35 @@ src/app/
 - 라우터 간 직접 import 금지. 공유 상태는 반드시 _state.py를 통해 접근.
 - 새 엔드포인트 추가 시 해당 도메인의 라우터 파일에 추가할 것.
 - Pydantic 모델은 사용하는 라우터 파일 내부에 정의.
+- **API 응답에는 `Cache-Control: no-store`가 미들웨어에서 자동으로 붙는다**(D-066).
+  호출부에 `cache: "no-store"`를 다시 적지 않아도 된다.
+
+## 추출 모드 관련 모듈 (v1.2.0에서 추가)
+
+논문 스캔본 경로에만 쓰이는 것들. 고서 흐름은 이 모듈들을 타지 않는다.
+
+| 모듈 | 하는 일 |
+|---|---|
+| `src/ocr/full_page_block.py` | 레이아웃이 없는 쪽에 「쪽 전면 1블록」 L3를 만든다 |
+| `src/ocr/layout_staleness.py` | 레이아웃을 고친 쪽을 찾아 다시 돌릴 대상을 고른다 |
+| `src/ocr/page_backup.py` | OCR 재실행 **직전** 상태를 로컬 JSON으로 백업(D-065) |
+| `src/ocr/line_detector.py` | 좌표를 주지 않는 엔진을 위해 줄 위치를 검출 |
+| `src/export/text_layer_pdf.py` | 보이지 않는 텍스트를 얹은 PDF를 만들고 **결과를 다시 재서 검사**(D-068) |
+| `src/cli/embed_folder.py` · `src/cli/__main__.py` | `ctb ocr` 한 줄 진입점 |
+
+## 파일 다루기 — 되풀이하지 말 것
+
+| 규칙 | 왜 |
+|---|---|
+| **JSON 저장은 `core.document.write_json_atomic()`**. `Path.write_text()` 금지 | write_text는 먼저 0바이트로 자른다. 도중에 죽으면 manifest가 빈 파일이 되고 문헌이 통째로 열리지 않는다(D-069) |
+| **PDF는 `resolve_part_pdf(doc_path, part_id)`로 연다**. `glob("*.pdf")[0]` 금지 | glob은 순서를 보장하지 않고 part_id도 안 본다. 다권본에서 엉뚱한 권을 읽는다(D-069) |
+| **`fitz.open()`은 `with`로** | 예외 경로에서 핸들이 남으면 Windows가 그 PDF를 잠근다 |
+| **기존 PDF에 덧쓸 때는 `page.wrap_contents()` 먼저** | 원본이 남긴 좌표 변환에 끌려 들어간다(D-068) |
+| **화면에 넣는 파일명·OCR 원문은 이스케이프** | 드롭한 파일명이 문헌 제목이 되어 `innerHTML`로 들어간다(D-069) |
 
 ## 코딩 규칙
 - 이 프로젝트의 사용자는 비개발자 인문학 연구자다
-- 코드 주석은 한국어로, 상세하게, "왜 이렇게 하는지" 포함
+- 코드 주석은 한국어로, 상세하게, 「왜 이렇게 하는지」 포함
 - 함수마다 docstring에 입력/출력/목적 설명
 - UTF-8 인코딩, LF 줄바꿈
 - JSON 파일은 jsonschema로 검증
@@ -94,7 +119,7 @@ src/app/
 - LayoutBlock: 원본 저장소 L3의 페이지 영역 (OCR 읽기 순서 단위)
 - OcrResult: 원본 저장소 L2의 OCR 인식 결과
 - TextBlock: 코어 스키마의 해석용 텍스트 단위 (source_ref로 원본 추적)
-- "Block"이라고만 쓰지 말고 항상 위 세 이름 중 하나를 사용할 것
+- 「Block」이라고만 쓰지 말고 항상 위 세 이름 중 하나를 사용할 것
 
 ## 작업 방식: CLI를 적극 활용할 것
 - 코드를 작성한 뒤 반드시 실행해서 확인하라. 작성만 하고 검증 없이 넘어가지 마라.
@@ -102,7 +127,7 @@ src/app/
 - 웹 스크래핑 파서를 작성할 때는 대상 사이트의 HTML 구조를 먼저 curl/wget으로 가져와서 확인하라.
 - JSON 파일을 생성하면 jsonschema로 검증하라.
 - 테스트를 작성했으면 실행해서 통과하는지 확인하라.
-- "될 것 같다"로 끝내지 말고, 실제로 동작하는 것을 보여줘라.
+- 「될 것 같다」로 끝내지 말고, 실제로 동작하는 것을 보여줘라.
 
 ## Git 커밋 규칙
 형식: <타입>: <설명>
