@@ -346,6 +346,27 @@ async function _refreshExtractExport() {
  *   다시 실행할 때, 전체 300쪽이 다시 도는 것인지 고친 1쪽만 도는 것인지가
  *   버튼을 누르기 전에 보여야 한다.
  */
+/**
+ * 지정한 쪽으로 이동한다.
+ *
+ * 왜 함수로 감싸는가:
+ *   예전에는 호출부마다 `typeof goToPage === "function"`으로 감쌌는데,
+ *   **그 함수가 실제로 없었다.** 가드가 오류를 삼켜 버려서 버튼을 눌러도
+ *   아무 일이 일어나지 않았고 콘솔에도 아무것도 남지 않았다.
+ *   없으면 조용히 넘어가는 대신 **화면에 알린다.**
+ */
+function _navigateToPage(pageNumber) {
+  if (typeof goToPage !== "function") {
+    showToast(
+      "쪽 이동 기능을 찾지 못했습니다. 페이지를 새로 고쳐 보세요.",
+      "error"
+    );
+    return false;
+  }
+  return goToPage(pageNumber);
+}
+
+
 function _formatPageList(pages, limit = 8) {
   /** 쪽 번호 목록을 «1, 2, 3쪽 외»처럼 줄여 적는다. */
   const shown = pages.slice(0, limit).join(", ");
@@ -370,7 +391,7 @@ async function _refreshExtractPending() {
   if (force && force.checked) {
     const count = range ? range.length : _extractPageCount();
     box.textContent = count
-      ? `«이미 처리한 쪽도 다시»가 켜져 있어 ${count}쪽이 다시 돕니다${rangeNote}.`
+      ? `«이미 처리한 쪽도 다시»가 켜져 있어 쪽 ${count}개가 다시 돕니다${rangeNote}.`
       : "«이미 처리한 쪽도 다시»가 켜져 있어 전체가 다시 돕니다.";
     box.className = "extract-pending extract-diag-scan";
     box.hidden = false;
@@ -395,24 +416,27 @@ async function _refreshExtractPending() {
 
     if (willRun === 0) {
       box.textContent = range
-        ? `지정한 ${range.length}쪽은 이미 처리됐습니다. ` +
+        ? `지정한 ${_formatPageList(range)}은 이미 처리됐습니다. ` +
           "다시 돌리려면 «이미 처리한 쪽도 다시»를 켜세요."
-        : `${data.page_count}쪽 모두 처리됐습니다. 실행해도 도는 쪽이 없습니다.`;
+        : `쪽 ${data.page_count}개를 모두 처리했습니다. 실행해도 도는 쪽이 없습니다.`;
       box.className = "extract-pending extract-diag-ok";
       box.hidden = false;
       return;
     }
 
+    // 내역은 «개수»가 아니라 **쪽 번호**로 적는다.
+    //
+    // 왜: 한국어에서 «쪽»이 개수 단위이자 번호 단위라 «3쪽 미처리»가
+    // «세 쪽이 미처리»로도 «3쪽이 미처리»로도 읽힌다. 쪽 범위를 비워 둔
+    // 상태에서 «실행하면 3쪽이 돕니다 — 3쪽 미처리»가 뜨면 어느 쪽이
+    // 도는지 오히려 헷갈린다. 번호를 그대로 보여 주면 그 애매함이 없다.
     const parts = [];
-    if (todo.length) parts.push(`${todo.length}쪽 미처리`);
+    // 라벨은 «쪽»을 겹쳐 쓰지 않는다 — _formatPageList가 이미 «쪽»으로 끝난다.
+    if (todo.length) parts.push(`아직 안 함: ${_formatPageList(todo)}`);
     if (stale.length) {
-      // 어느 쪽이 다시 도는지 번호까지 보여 준다. 사용자가 방금 고친 쪽과
-      // 일치하는지 눈으로 확인할 수 있어야 한다.
-      parts.push(
-        `${stale.length}쪽은 레이아웃을 고쳐 다시 (${_formatPageList(stale)})`
-      );
+      parts.push(`레이아웃 수정: ${_formatPageList(stale)}`);
     }
-    box.textContent = `실행하면 ${willRun}쪽이 돕니다${rangeNote} — ${parts.join(" · ")}`;
+    box.textContent = `실행하면 쪽 ${willRun}개가 돕니다${rangeNote} — ${parts.join(" · ")}`;
     box.className = "extract-pending extract-diag-warn";
     box.hidden = false;
   } catch (e) {
@@ -605,7 +629,7 @@ async function refreshCorrectionReviewBar(pageNum) {
       } catch (e) {
         // 채우지 못해도 이동은 막지 않는다.
       }
-      if (typeof goToPage === "function") goToPage(target_.page);
+      _navigateToPage(target_.page);
     };
   }
 
@@ -813,7 +837,7 @@ async function _openPageInTab(pageNumber, mode) {
     }
   }
 
-  if (typeof goToPage === "function") goToPage(pageNumber);
+  _navigateToPage(pageNumber);
   tab.click();
 }
 
@@ -852,11 +876,7 @@ function _refreshReviewStatus(pages, reviewed) {
  * 쪽 번호를 외웠다가 아래 칸에 옮겨 적게 만들면 그 사이에 틀린다.
  */
 function _focusExtractPage(pageNumber) {
-  if (typeof goToPage === "function") {
-    goToPage(pageNumber);
-  } else if (typeof viewerState !== "undefined" && viewerState) {
-    viewerState.pageNum = pageNumber;
-  }
+  _navigateToPage(pageNumber);
 
   const input = document.getElementById("extract-pages-input");
   if (input) {
@@ -997,6 +1017,15 @@ async function _runExtractOcr() {
       // 지금 보고 있는 쪽의 텍스트를 다시 읽어 화면에 반영한다.
       if (typeof loadPageText === "function") {
         loadPageText(target.docId, target.partId, viewerState.pageNum);
+      }
+      // 레이아웃도 함께 다시 읽는다.
+      //
+      // 왜: 배치는 쪽마다 **L3 전면 블록을 새로 만든다**(D-055).
+      // 그런데 onPageChanged는 레이아웃 탭이 활성일 때만 다시 읽고,
+      // 배치는 열람 탭에서 도니 그 경로를 타지 않는다. 그래서 배치 뒤
+      // 레이아웃 탭으로 가면 **블록이 없던 시절의 화면**이 남아 있었다.
+      if (typeof loadPageLayout === "function") {
+        loadPageLayout(target.docId, target.partId, viewerState.pageNum);
       }
     }
   } catch (e) {

@@ -48,6 +48,7 @@
         <button
           class="activity-btn"
           data-panel="git"
+          data-profile="collation"
           title="Git 이력"
           aria-label="Git 이력"
         >
@@ -462,43 +463,49 @@
               </div>
             </div>
 
-            <div class="settings-divider"></div>
+            <!-- 원격 저장소 — 추출 모드에서는 숨는다.
+                 Git 이력 자체를 숨기므로(같은 프로필 표시) 원격 연결도
+                 볼 이유가 없다. 논문 추출은 산출물 PDF를 밖으로 내보내는
+                 흐름이고, 저장소 동기화는 교감 작업의 관심사다. -->
+            <div data-profile="collation">
+              <div class="settings-divider"></div>
 
-            <div
-              class="section-header"
-              style="margin-top: 12px"
-            >
-              원격 저장소 <span class="badge-optional">선택</span>
-            </div>
-            <div class="settings-info-note" style="margin-bottom: 8px">
-              원격 저장소를 설정하지 않아도 모든 기능이 동작합니다.
-              GitHub 등에 백업하고 싶을 때만 설정하세요.
-            </div>
+              <div
+                class="section-header"
+                style="margin-top: 12px"
+              >
+                원격 저장소 <span class="badge-optional">선택</span>
+              </div>
+              <div class="settings-info-note" style="margin-bottom: 8px">
+                원격 저장소를 설정하지 않아도 모든 기능이 동작합니다.
+                GitHub 등에 백업하고 싶을 때만 설정하세요.
+              </div>
 
-            <div
-              class="section-header sub-header"
-              style="margin-top: 8px"
-            >
-              원본 저장소
-            </div>
-            <div
-              id="settings-doc-repos"
-              class="settings-repo-list"
-            >
-              <div class="placeholder">로딩 중...</div>
-            </div>
+              <div
+                class="section-header sub-header"
+                style="margin-top: 8px"
+              >
+                원본 저장소
+              </div>
+              <div
+                id="settings-doc-repos"
+                class="settings-repo-list"
+              >
+                <div class="placeholder">로딩 중...</div>
+              </div>
 
-            <div
-              class="section-header sub-header"
-              style="margin-top: 12px"
-            >
-              해석 저장소
-            </div>
-            <div
-              id="settings-interp-repos"
-              class="settings-repo-list"
-            >
-              <div class="placeholder">로딩 중...</div>
+              <div
+                class="section-header sub-header"
+                style="margin-top: 12px"
+              >
+                해석 저장소
+              </div>
+              <div
+                id="settings-interp-repos"
+                class="settings-repo-list"
+              >
+                <div class="placeholder">로딩 중...</div>
+              </div>
             </div>
 
             <div class="settings-divider"></div>

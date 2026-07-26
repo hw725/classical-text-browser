@@ -974,7 +974,11 @@ async function loadPageLayout(docId, partId, pageNum) {
 
   const url = `/api/documents/${docId}/pages/${pageNum}/layout?part_id=${partId}`;
   try {
-    const res = await fetch(url);
+    // no-store가 없으면 브라우저가 예전 응답을 그대로 준다.
+    // 배치 OCR이 L3 전면 블록을 새로 만들어도 레이아웃 탭에는 «블록이 없던
+    // 시절»이 남아 있었다. 교정 탭(loadPageCorrections)은 세 요청 모두
+    // no-store를 붙여 두어 바로 반영됐는데, 여기만 빠져 있었다.
+    const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) throw new Error("레이아웃 API 응답 오류");
     const data = await res.json();
 

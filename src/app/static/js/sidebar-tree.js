@@ -435,8 +435,51 @@ function _highlightPage(pageNode) {
   document.querySelectorAll(".tree-page.active").forEach((el) => {
     el.classList.remove("active");
   });
-  // 새 하이라이트
-  pageNode.classList.add("active");
+  // 새 하이라이트. 트리를 거치지 않고 이동한 경우 노드가 없을 수 있다.
+  if (pageNode) pageNode.classList.add("active");
+}
+
+
+/**
+ * 현재 문헌·권에서 지정한 쪽으로 이동한다 (트리 밖에서 부르는 진입점).
+ *
+ * 입력: pageNum — 1-based 쪽 번호. 출력: 이동했으면 true.
+ *
+ * 왜 필요한가:
+ *   쪽 이동은 지금까지 **트리 노드를 클릭하는 것**으로만 됐다
+ *   (`_selectPage`는 docInfo와 노드를 인자로 받는 비공개 함수다).
+ *   그래서 추출 패널의 «대조»·«다음 미확인 쪽» 같은 버튼이 이동을
+ *   시킬 방법이 없었다. 실제로 그 버튼들이 **조용히 아무 일도 하지
+ *   않았다** — `typeof goToPage === "function"` 가드에 걸려 넘어갔기 때문에
+ *   오류조차 나지 않았다.
+ *
+ * 왜 노드를 먼저 찾아 클릭하는가:
+ *   그 경로에 저장 확인·프로필 전환·하이라이트가 다 걸려 있다. 직접
+ *   `_selectPage`를 부르면 그중 하나를 빠뜨리기 쉽다. 트리가 접혀 있어
+ *   노드가 없을 때만 직접 부른다.
+ */
+// eslint-disable-next-line no-unused-vars
+function goToPage(pageNum) {
+  if (!viewerState.docId || !viewerState.partId || !pageNum) return false;
+
+  const node = document.querySelector(
+    `.tree-page[data-doc-id="${viewerState.docId}"]` +
+      `[data-part-id="${viewerState.partId}"][data-page="${pageNum}"]`
+  );
+  if (node) {
+    node.click();
+    return true;
+  }
+
+  // 트리가 접혀 있어 노드가 없다. 화면은 옮기되 하이라이트는 생략된다.
+  _selectPage(
+    viewerState.docId,
+    viewerState.partId,
+    pageNum,
+    viewerState.documentInfo,
+    null
+  );
+  return true;
 }
 
 

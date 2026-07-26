@@ -196,7 +196,7 @@ schemas/
 |------|------|------|
 | [**user-guide.md**](docs/user-guide.md) | 연구자 | 사용 방법 단계별 안내 |
 | [platform-v7.md](docs/platform-v7.md) | 개발자 | 전체 아키텍처 |
-| [DECISIONS.md](docs/DECISIONS.md) | 개발자 | 설계 결정 근거 (D-001~D-062) |
+| [DECISIONS.md](docs/DECISIONS.md) | 개발자 | 설계 결정 근거 (D-001~D-063) |
 | [core-schema-v1.3.md](docs/core-schema-v1.3.md) | 개발자 | 코어 엔티티 모델 |
 | [schemas/README.md](schemas/README.md) | 개발자 | JSON 스키마 구조 |
 | [architecture-diagrams.md](docs/architecture-diagrams.md) | 전체 | Mermaid 다이어그램 |
