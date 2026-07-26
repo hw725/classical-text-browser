@@ -776,6 +776,23 @@ function _buildOverviewRow(page, { target, reviewed, allNoPosition }) {
 
   const actions = document.createElement("span");
   actions.className = "extract-overview-actions";
+
+  // 되돌릴 수 있는 쪽에만 버튼을 둔다. 다시 돌린 적 없는 쪽에는 뜨지 않는다.
+  if (page.has_backup) {
+    const undo = document.createElement("button");
+    undo.type = "button";
+    undo.className = "extract-overview-action extract-overview-undo";
+    undo.textContent = "되돌리기";
+    undo.title =
+      "다시 돌리기 직전의 결과로 되돌립니다 (교정 텍스트도 함께). " +
+      "한 번 더 누르면 원래대로 옵니다.";
+    undo.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await _restoreExtractPage(target, page.page);
+    });
+    actions.appendChild(undo);
+  }
+
   for (const [label, mode, title] of [
     ["대조", "correction", "교정 탭에서 원본과 나란히 보고 고칩니다"],
     ["영역", "layout", "레이아웃 탭에서 읽을 영역을 확인·수정합니다"],
@@ -803,6 +820,49 @@ function _buildOverviewRow(page, { target, reviewed, allNoPosition }) {
   row.addEventListener("click", () => _focusExtractPage(page.page));
   return row;
 }
+
+/**
+ * 한 쪽을 다시 돌리기 직전 상태로 되돌린다.
+ *
+ * OCR 결과(L2)와 교정 텍스트(L4)를 함께 되돌린다 — 배치가 둘 다 덮어쓰므로
+ * 하나만 되돌리면 «OCR은 예전 것인데 교정은 사라진» 어긋난 상태가 된다.
+ */
+async function _restoreExtractPage(target, pageNumber) {
+  try {
+    const res = await fetch(
+      `/api/documents/${target.docId}/parts/${target.partId}` +
+        `/ocr/restore?pages=${pageNumber}`,
+      { method: "POST" }
+    );
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error || "되돌리지 못했습니다.", "error");
+      return;
+    }
+    if (!(data.restored || []).length) {
+      showToast(`${pageNumber}쪽에는 되돌릴 결과가 없습니다.`, "info");
+      return;
+    }
+    showToast(
+      `${pageNumber}쪽을 되돌렸습니다. 한 번 더 누르면 원래대로 옵니다.`,
+      "success"
+    );
+    await _refreshExtractOverview();
+    await _refreshExtractPending();
+    // 지금 그 쪽을 보고 있으면 화면도 다시 읽는다.
+    if (viewerState && viewerState.pageNum === pageNumber) {
+      if (typeof loadPageText === "function") {
+        loadPageText(target.docId, target.partId, pageNumber);
+      }
+      if (typeof loadPageCorrections === "function") {
+        loadPageCorrections(target.docId, target.partId, pageNumber);
+      }
+    }
+  } catch (err) {
+    showToast(`되돌리기 중 오류: ${err.message}`, "error");
+  }
+}
+
 
 /**
  * 그 쪽으로 이동한 뒤 지정한 탭을 연다.

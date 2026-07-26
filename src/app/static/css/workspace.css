@@ -7573,3 +7573,16 @@ button.mode-tab {
   color: var(--text-muted);
   cursor: default;
 }
+
+/* 되돌리기 — 되돌릴 수 있는 쪽에만 뜬다.
+   결과를 바꾸는 동작이라 다른 행동 버튼과 색을 달리한다. */
+.extract-overview-undo {
+  border-color: #e0a030;
+  color: #b07818;
+}
+
+.extract-overview-undo:hover {
+  background: #e0a030;
+  border-color: #e0a030;
+  color: #fff;
+}

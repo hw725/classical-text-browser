@@ -1,4 +1,4 @@
-"""OCR 결과 되돌리기 테스트 — 다시 돌렸는데 더 나빠졌을 때.
+"""쪽 되돌리기 테스트 — 다시 돌렸는데 더 나빠졌을 때.
 
 왜 이 테스트가 있는가:
     원본 저장소는 Git으로 관리되지만 **L2_ocr/는 커밋되지 않는다.**
@@ -13,7 +13,7 @@ import json
 
 import pytest
 
-from ocr.l2_backup import has_backup, restore_backup, save_backup
+from ocr.page_backup import has_backup, restore_backup, save_backup
 
 
 @pytest.fixture()
@@ -108,8 +108,68 @@ def test_backup_keeps_one_generation(doc):
     assert _read(doc, 1) == "2세대", "가장 최근 것으로만 돌아간다"
 
 
-def test_backup_lives_under_l2(doc):
-    """백업은 L2_ocr 안에 둔다 — 문헌을 옮기거나 지울 때 함께 따라간다."""
+def test_backup_lives_under_document(doc):
+    """백업은 문헌 안에 둔다 — 옮기거나 지울 때 함께 따라간다."""
     _write(doc, 1, "본문")
     save_backup(doc, "vol1", 1)
-    assert (doc / "L2_ocr" / ".backup" / "vol1_page_001.json").exists()
+    assert (doc / ".page_backup" / "vol1_page_001" / "l2.json").exists()
+
+
+def _write_l4(doc, page, text, corrections=None):
+    """교정 텍스트와 교정 기록을 쓴다 (사람이 손댄 상태를 흉내낸다)."""
+    pages = doc / "L4_text" / "pages"
+    pages.mkdir(parents=True, exist_ok=True)
+    (pages / f"vol1_page_{page:03d}.txt").write_text(text, encoding="utf-8")
+    if corrections is not None:
+        corr = doc / "L4_text" / "corrections"
+        corr.mkdir(parents=True, exist_ok=True)
+        (corr / f"vol1_page_{page:03d}_corrections.json").write_text(
+            json.dumps({"corrections": corrections}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+
+def _read_l4(doc, page):
+    f = doc / "L4_text" / "pages" / f"vol1_page_{page:03d}.txt"
+    return f.read_text(encoding="utf-8") if f.exists() else None
+
+
+def test_manual_corrections_are_restored_too(doc):
+    """손으로 고친 교정도 함께 되돌아온다.
+
+    배치는 fill_text_layer로 **L4 교정 텍스트도 덮어쓴다**(교정 탭이 L4를
+    읽으므로 채워 줘야 한다). L2만 되돌리면 «OCR은 예전 것인데 교정은
+    사라진» 어긋난 상태가 된다.
+    """
+    _write(doc, 1, "OCR 원문 A")
+    _write_l4(doc, 1, "사람이 고친 텍스트", corrections=[{"from": "A", "to": "B"}])
+    assert save_backup(doc, "vol1", 1) is True
+
+    # 다시 돌려 둘 다 덮였다
+    _write(doc, 1, "OCR 원문 B")
+    _write_l4(doc, 1, "OCR 원문 B")
+
+    assert restore_backup(doc, "vol1", 1) is True
+    assert _read(doc, 1) == "OCR 원문 A"
+    assert _read_l4(doc, 1) == "사람이 고친 텍스트", "교정이 되돌아오지 않았다"
+    corr = doc / "L4_text" / "corrections" / "vol1_page_001_corrections.json"
+    assert corr.exists(), "교정 기록이 되돌아오지 않았다"
+
+
+def test_files_absent_at_backup_time_are_removed_on_restore(doc):
+    """백업 시점에 없던 파일은 되돌릴 때 사라져야 한다.
+
+    안 그러면 «그때 없던 교정»이 되살아나 그 시점 상태와 달라진다.
+    """
+    _write(doc, 1, "OCR만 있던 시절")
+    save_backup(doc, "vol1", 1)  # L4 없음
+
+    _write_l4(doc, 1, "나중에 생긴 교정")
+    assert _read_l4(doc, 1) == "나중에 생긴 교정"
+
+    restore_backup(doc, "vol1", 1)
+    assert _read_l4(doc, 1) is None, "백업 시점에 없던 파일이 남았다"
+
+    # 한 번 더 되돌리면 다시 생긴다 (두 상태를 오간다)
+    restore_backup(doc, "vol1", 1)
+    assert _read_l4(doc, 1) == "나중에 생긴 교정"

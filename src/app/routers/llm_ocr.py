@@ -1325,7 +1325,7 @@ async def api_restore_ocr(
             {"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404
         )
 
-    from ocr.l2_backup import restore_backup
+    from ocr.page_backup import restore_backup
 
     wanted = [int(c) for c in pages.replace(" ", "").split(",") if c.isdigit()]
     if not wanted:
@@ -1491,8 +1491,8 @@ async def api_ocr_overview(doc_id: str, part_id: str, preview_chars: int = 70):
 
     import statistics
 
-    from ocr.l2_backup import has_backup
     from ocr.layout_staleness import ocr_path, read_page_json
+    from ocr.page_backup import has_backup
 
     page_count = _resolve_page_count(doc_path, part)
     pages = []
@@ -1750,7 +1750,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                     # 다시 돌렸는데 더 나빠졌을 때 돌아갈 곳이 필요하다.
                     # L2는 Git으로 추적되지 않으므로 이것이 유일한 안전망이다.
                     if body.backup_before_overwrite:
-                        from ocr.l2_backup import save_backup
+                        from ocr.page_backup import save_backup
 
                         await loop.run_in_executor(
                             None,
