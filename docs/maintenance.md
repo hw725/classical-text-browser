@@ -205,6 +205,28 @@ uv run python -m pytest
 
 ---
 
+## 7. 디렉터리 지도
+
+```
+src/
+├── core/         # 핵심 로직 (표점, 번역, 주석 등)
+├── hwp/          # HWP/HWPX 처리 (hwp-hwpx-parser)
+├── text_import/  # 텍스트 가져오기 (HWP 표점분리 + PDF 참조텍스트)
+├── llm/          # LLM 라우터 + 프로바이더
+├── ocr/          # OCR 엔진 (NDL古典籍OCR Full/Lite + NDLOCR + LLM 비전 + PaddleOCR)
+│              #  + line_detector: 인식 없이 줄 위치만 찾는다 (텍스트 레이어 배치용)
+├── export/       # 연구 산출물 내보내기 (텍스트 레이어를 텍스트 레이어 PDF)
+├── parsers/      # 서지정보 파서 (NDL, 국립공문서관, KORCIS, KOSTMA, 장서각, 규장각 + 범용 LLM)
+├── cli/          # CLI 도구
+└── app/          # 웹 앱 (FastAPI + static)
+schemas/
+├── source_repo/  # 원본 저장소 스키마 (7개)
+├── interp/       # 해석 저장소 스키마 (5개)
+└── core/         # 코어 엔티티 스키마 (6개)
+```
+
+---
+
 ## 관련 문서
 
 | 문서 | 언제 보나 |

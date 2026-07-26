@@ -1,18 +1,22 @@
 # 아키텍처 다이어그램
 
-> 2026-03-14 기준. Mermaid 문법으로 작성.
+> **2026-07-26 기준 — v1.2.0(D-055 ~ D-069)에 맞춰 갱신.** Mermaid 문법으로 작성.
 > GitHub, VSCode (Mermaid 확장), [Mermaid Live Editor](https://mermaid.live)에서 렌더링 가능.
 >
-> **구성**: 12개 다이어그램 — 데이터 모델(1-3), 시스템 아키텍처(4-5), 워크플로우(6-7), 스키마(8-9), 저장소(10-11), UI(12)
-
-> ⚠️ **v1.2.0(2026-07-26)의 다음 변화가 아직 그림에 없다.** 갱신 예정이며,
-> 그림과 코드가 어긋나면 코드가 기준이다.
+> **구성**: 13개 다이어그램 — 데이터 모델·스키마(1·3·7), 시스템·모듈(2·8),
+> 처리 엔진(4·5), 워크플로우(6·12·13), 저장소·의존(9·10), 화면(11)
 >
-> - **추출 모드** — 작업 프로필(논문/교감)에 따라 탭·메뉴가 달라진다(D-055·D-060)
-> - **텍스트 레이어 PDF 산출** — `exports/`로 나가는 새 출구(D-055·D-062·D-068)
-> - **쪽 전면 1블록 자동 생성** — L3를 사람이 잡지 않는 경로(D-067)
-> - **권 추가** — 문헌이 만들어진 뒤에도 자란다(D-061)
-> - 6번 「사용자 워크플로우」와 11번 「프론트엔드 UI 구조」가 특히 오래됐다.
+> **이번 판에서 손댄 곳**
+>
+> | 다이어그램 | 무엇이 바뀌었나 |
+> |---|---|
+> | 6 · 11 · 13 | 추출 모드와 화면 구조 — 전면 개작. 13번은 새로 만든 것 |
+> | 1 · 5 · 9 · 10 | 텍스트 레이어 PDF 산출, 쪽 전면 1블록, 부분 재-OCR, 되돌리기 |
+> | 2 · 8 | 라우트 185개 · JS 모듈 29개 · API 캐시 금지 미들웨어 |
+> | 4 | LLM 사용량을 화면에 표시(D-056), LLM Vision OCR을 소비자로 추가 |
+> | 3 · 7 · 12 | **바뀐 것 없음** — 코어 스키마 6종, 스키마 19개의 참조 관계, L7 주석 4단계는 v1.2.0이 건드리지 않았다 |
+>
+> 그림과 코드가 어긋나면 **코드가 기준**이다.
 
 ---
 
@@ -20,6 +24,10 @@
 
 원본 저장소(L1-L4, 단일 정본)와 해석 저장소(L5-L8, 다수 병존)의 구조.
 저장소 경계에서 `dependency.json`이 변경을 추적한다.
+
+**여기서 읽어야 할 것**: v1.2.0은 층을 더하지 않았다. 8층은 그대로이고,
+L2·L4를 읽어 `exports/`로 나가는 **출구**가 하나 생겼을 뿐이다.
+추출 모드도 새 층이 아니라 화면 표시 방식일 뿐이다.
 
 ```mermaid
 flowchart TB
@@ -30,6 +38,10 @@ flowchart TB
         L3["<b>L3 레이아웃 분석</b><br/>본문/주석/서문 구분 · 읽기 순서<br/><i>layout_page (LayoutBlock)</i>"]
         L4["<b>L4 사람 수정</b><br/>OCR 교정 · 이체자 확인 · 확정본<br/><i>corrections</i>"]
         L1 --> L2 --> L3 --> L4
+    end
+
+    subgraph OUT["산출물 -- 저장소 밖으로 나가는 출구 (v1.2.0)"]
+        EXPDF["<b>텍스트 레이어 PDF</b><br/>원본 이미지 위에 보이지 않는 글자<br/><i>exports/권ID_text.pdf · L1은 읽기만</i>"]
     end
 
     subgraph BOUNDARY["저장소 경계"]
@@ -61,7 +73,10 @@ flowchart TB
 
     SOURCE --> BOUNDARY --> INTERP
     INTERP --- CORE
+    SOURCE -->|"L2 또는 L4를 읽어 새 파일로"| OUT
 
+    style OUT fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style EXPDF fill:#fef3c7,stroke:#b45309,stroke-width:2px
     style SOURCE fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
     style L1 fill:#fef3c7,stroke:#b45309,stroke-width:2px
     style L2 fill:#e8f5e9,stroke:#2e7d32
@@ -89,12 +104,21 @@ flowchart TB
 - 해석 저장소는 **다수 병존** (해석은 연구자마다 다르다)
 - L4 확정 → `dependency.json` → 해석 저장소 시작점 (저장소 경계)
 - 코어 스키마 6개 엔티티(Work, TextBlock, Tag, Concept, Agent, Relation)는 해석 저장소 내부에 위치
+- **추출 모드는 층이 아니라 표시 프로필**이다 — 어떤 탭을 보여 줄지만 바뀌고,
+  그 상태는 브라우저 `localStorage`(`ctb.profile.<문헌ID>`)에만 남는다.
+  `manifest.json`에는 아무것도 기록되지 않으므로 저장되는 데이터는 교감 모드와 완전히 같다 (D-055 · D-060)
+- 산출물 `exports/`는 **새 파일**이다 — `L1_source/`는 어떤 경우에도 수정하지 않는다 (D-062 · D-068)
 
 ---
 
 ## 2. 전체 시스템 아키텍처
 
-프론트엔드(27개 JS 모듈) · 백엔드(FastAPI + 8 라우터) · 처리 엔진(OCR 5종 + LLM 5단) · Git 저장소 · 외부 서비스.
+프론트엔드(29개 JS 모듈) · 백엔드(FastAPI + 8 라우터, 라우트 185개) ·
+처리 엔진(OCR 5종 + LLM 5단 + 산출·검출 보조) · Git 저장소 · 외부 서비스.
+
+**여기서 읽어야 할 것**: 화면과 서버 사이에는 REST API 하나뿐이고 빌드 도구도
+프레임워크도 없다. v1.2.0에서 서버가 API 응답에 캐시 금지를 붙여
+「고쳤는데 화면이 그대로」를 원천 차단한다 — 호출부 47곳이 아니라 미들웨어 한 곳에서다(D-066).
 
 ```mermaid
 flowchart TB
@@ -108,15 +132,22 @@ flowchart TB
         direction TB
         subgraph FE_CORE["코어 UI"]
             direction LR
-            WS["workspace.js<br/>메인 오케스트레이션"]
+            WS["workspace.js<br/>메인 오케스트레이션 · 작업 프로필"]
             PDF["pdf-renderer.js<br/>PDF.js 뷰어"]
             TREE["sidebar-tree.js<br/>문헌/권/페이지 탐색"]
+            DD["drag-drop.js<br/>파일 끌어다 놓기 · 첫 서고 자동 생성"]
+            CD["create-document.js<br/>URL/파일에서 문헌 생성"]
         end
         subgraph FE_SRC["원본 작업 (L1-L4)"]
             direction LR
-            LE["layout-editor.js<br/>L3 영역 편집"]
-            CE["correction-editor.js<br/>L4 텍스트 교정"]
+            LE["layout-editor.js<br/>L3 영역 편집 · 전면 1블록 자동 생성"]
+            CE["correction-editor.js<br/>L4 교정 대조"]
+            TXE["text-editor.js<br/>L4 텍스트 편집"]
             BC["batch-correction.js<br/>일괄 이체자 교정"]
+            COMP["composition-editor.js<br/>LayoutBlock을 TextBlock으로"]
+        end
+        subgraph FE_EXT["추출 모드 전용 (v1.2.0)"]
+            EXP["extract-panel.js<br/>진단 · 권 일괄 OCR · 쪽별 검수 · PDF 산출"]
         end
         subgraph FE_INT["해석 작업 (L5-L8)"]
             direction LR
@@ -136,6 +167,11 @@ flowchart TB
             NP["notes-panel.js"]
             HWP["hwp-import.js"]
             AV["alignment-view.js"]
+            VM["variant-manager.js"]
+            CFM["cite-format-manager.js"]
+            RL["reader-line.js"]
+            KLD["koten-layout-detector.js"]
+            TOAST["toast.js"]
         end
     end
 
@@ -143,17 +179,18 @@ flowchart TB
 
     subgraph BE["백엔드 (Python · FastAPI)"]
         direction TB
-        SRV["server.py<br/>앱 생성 + 라우터 마운트 (~85줄)"]
+        SRV["server.py<br/>앱 생성 + 라우터 마운트 + 캐시 금지 (152줄)"]
         ST["_state.py<br/>공유 상태 · 헬퍼 · LLM/OCR 캐시"]
-        subgraph ROUTERS["8개 도메인 라우터 (158 API)"]
+        MW["미들웨어<br/>API 응답에 Cache-Control no-store<br/>정적 파일에는 no-cache + ETag (D-066)"]
+        subgraph ROUTERS["8개 도메인 라우터 (라우트 185개)"]
             direction LR
-            R1["library <b>15</b>"]
-            R2["documents <b>32</b>"]
-            R3["interpretations <b>22</b>"]
-            R4["llm_ocr <b>13</b>"]
+            R1["library <b>16</b>"]
+            R2["documents <b>40</b>"]
+            R3["interpretations <b>25</b>"]
+            R4["llm_ocr <b>20</b>"]
             R5["alignment <b>17</b>"]
-            R6["reading <b>24</b>"]
-            R7["annotation <b>32</b>"]
+            R6["reading <b>26</b>"]
+            R7["annotation <b>34</b>"]
             R8["version <b>7</b>"]
         end
     end
@@ -175,6 +212,13 @@ flowchart TB
             LR3["3. Gemini"]
             LR4["4. OpenAI"]
             LR5["5. Anthropic"]
+        end
+        subgraph OUT_ENG["산출 · 보조 (v1.2.0)"]
+            X1["export/text_layer_pdf.py<br/>검색되는 PDF 산출 + 다시 열어 재기"]
+            X2["ocr/line_detector.py<br/>줄 위치 검출"]
+            X3["ocr/full_page_block.py<br/>쪽 전면 1블록 L3 생성"]
+            X4["ocr/layout_staleness.py<br/>다시 돌릴 쪽 판정"]
+            X5["ocr/page_backup.py<br/>직전 상태 백업 (되돌리기)"]
         end
         subgraph ETC_ENG["기타"]
             JS_VAL["jsonschema 검증"]
@@ -200,6 +244,11 @@ flowchart TB
     style BE fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
     style SRV fill:#fef3c7,stroke:#b45309
     style ST fill:#fef3c7,stroke:#b45309
+    style MW fill:#fef3c7,stroke:#b45309
+    style FE_EXT fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style EXP fill:#fef3c7,stroke:#b45309,stroke-width:2px
+    style OUT_ENG fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style X1 fill:#fef3c7,stroke:#b45309,stroke-width:2px
     style ENGINE fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
     style EXT fill:#fce4ec,stroke:#c62828,stroke-width:2px,stroke-dasharray: 5 5
     style EXT_LLM fill:#fef3c7,stroke:#b45309
@@ -269,6 +318,10 @@ flowchart TB
 전체 프로젝트 공용 LLM 연동. `src/llm/router.py`가 단일 진입점.
 자동으로 1순위부터 시도, 실패 시 다음으로 폴백.
 
+**여기서 읽어야 할 것**: 순서는 무료 → 저렴 → 최후 폴백이다.
+v1.2.0에서 달라진 것은 폴백 구조가 아니라 **투명성**이다 —
+어느 모델로 몇 번 불렀고 얼마가 나갔는지가 화면에 표시된다(D-056).
+
 ```mermaid
 flowchart TB
     ENTRY["<b>src/llm/router.py</b><br/>LLMRouter -- 단일 진입점 · 자동 폴백"]
@@ -296,6 +349,7 @@ flowchart TB
         C4["annotation_llm.py<br/>L7 주석 자동생성"]
         C5["annotation_dict_llm.py<br/>L7 사전 생성"]
         C6["draft.py<br/>범용 LLM 초안"]
+        C7["ocr/llm_ocr_engine.py<br/>LLM Vision OCR"]
     end
 
     CONSUMERS --> ENTRY
@@ -307,10 +361,17 @@ flowchart TB
         CF1 --> CF2 --> CF3
     end
 
-    subgraph USAGE["사용량 추적"]
+    subgraph USAGE["사용량 추적 (D-056)"]
+        direction TB
         UT["usage_tracker.py<br/>토큰 · 비용 · 모델별 집계"]
+        UT2["추출 패널에 표시<br/>어느 모델로 몇 번, 얼마"]
+        UT --> UT2
     end
 
+    ENTRY --> USAGE
+
+    style UT2 fill:#fef3c7,stroke:#b45309
+    style C7 fill:#e0f2fe,stroke:#0369a1
     style ENTRY fill:#fef3c7,stroke:#b45309,stroke-width:2px
     style TIER1 fill:#e8f5e9,stroke:#2e7d32
     style TIER2 fill:#e0f2fe,stroke:#0369a1
@@ -336,11 +397,22 @@ flowchart TB
 
 5개 OCR 엔진의 레지스트리 기반 자동 선택. LayoutBlock 단위로 이미지 크롭 → 전처리 → 인식 → 후처리.
 
+**여기서 읽어야 할 것**: 파이프라인의 입구는 언제나 L3 LayoutBlock이다.
+v1.2.0은 그 계약을 바꾸지 않았다 — 대신 입구를 자동으로 채우고(쪽 전면 1블록),
+다시 돌릴 쪽을 골라내고(재-OCR 판정), 덮어쓰기 직전 상태를 남기는(되돌리기)
+보조 모듈을 그 앞뒤에 붙였다. 출구에는 텍스트 레이어 PDF 산출이 새로 붙었다.
+
 ```mermaid
 flowchart LR
     subgraph INPUT["입력"]
         IN1["L1 이미지/PDF<br/>페이지 단위"]
         IN2["L3 LayoutBlock<br/>영역 · 읽기순서 · block_type"]
+    end
+
+    subgraph PREP["입구 채우기 (v1.2.0)"]
+        direction TB
+        PR1["full_page_block.py<br/>L3가 없으면 쪽 전면 1블록을 만든다<br/><i>사람이 사각형을 그리지 않는다 -- D-067</i>"]
+        PR2["layout_staleness.py<br/>L3가 OCR 이후에 바뀐 쪽만 골라낸다<br/><i>부분 재-OCR -- D-057</i>"]
     end
 
     subgraph REGISTRY["OCR 레지스트리 (registry.py)"]
@@ -376,8 +448,21 @@ flowchart LR
         OR3["割注 블록 감지"]
     end
 
-    INPUT --> REGISTRY --> ENGINES --> PIPELINE --> OUTPUT
+    subgraph SAFE["되돌리기 (v1.2.0 · D-065)"]
+        SF1["page_backup.py<br/>덮어쓰기 직전 L2 + L4를 한 벌 남긴다<br/><i>문헌/.page_backup/ · Git 이력과 무관 · 한 세대만</i>"]
+    end
+
+    subgraph DOWN["산출 (v1.2.0)"]
+        direction TB
+        DN2["line_detector.py<br/>엔진이 좌표를 안 주면 줄 위치를 검출"]
+        DN1["export/text_layer_pdf.py<br/>보이지 않는 텍스트 + 폰트 임베드<br/>만든 뒤 다시 열어 잰다"]
+        DN2 --> DN1
+    end
+
+    INPUT --> PREP --> REGISTRY --> ENGINES --> PIPELINE --> OUTPUT
     OUTPUT --- ORDERING
+    OUTPUT --- SAFE
+    OUTPUT --> DOWN
 
     style INPUT fill:#fff3e0,stroke:#e65100,stroke-width:2px
     style REGISTRY fill:#fff3e0,stroke:#e65100,stroke-width:2px
@@ -387,55 +472,74 @@ flowchart LR
     style OUTPUT fill:#fce4ec,stroke:#c62828,stroke-width:2px
     style OUT1 fill:#fef3c7,stroke:#b45309,stroke-width:2px
     style ORDERING fill:#eceff1,stroke:#546e7a,stroke-width:2px
+    style PREP fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style SAFE fill:#eceff1,stroke:#546e7a,stroke-width:2px
+    style DOWN fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style DN1 fill:#fef3c7,stroke:#b45309,stroke-width:2px
 ```
 
 ---
 
 ## 6. 사용자 워크플로우
 
-연구자의 작업 흐름. 자료 수집 → 원본 작업(L1-L4) → 해석 작업(L5-L8) → 관리.
+연구자의 작업 흐름은 v1.2.0부터 **두 갈래**다. 문헌을 열 때 고르는 작업 모드가
+그 갈래를 정한다 — 고서를 한 글자씩 다루는 「교감 모드」와,
+근현대 논문에서 텍스트만 뽑는 「추출 모드」다.
+
+**여기서 읽어야 할 것**: 두 갈래는 **같은 데이터**를 쓴다. 추출 모드는 저장 형식을
+바꾸지 않고 거쳐야 할 단계와 화면을 줄일 뿐이므로, 언제든 모드를 바꿔
+반대쪽 흐름을 이어서 할 수 있다. 어느 쪽으로 가든 관리 기능은 공통이다.
 
 ```mermaid
 flowchart TB
-    subgraph PHASE1["Phase 1: 자료 수집"]
-        direction LR
-        P1A["문헌 가져오기<br/>PDF/이미지 업로드 · HWP 임포트"]
-        P1B["서지정보 파싱<br/>NDL · KORCIS · Archives.JP"]
+    START["<b>문헌 등록</b><br/>창에 파일 끌어다 놓기 · URL · 폴더<br/>또는 명령 한 줄 -- ctb ocr 논문.pdf"]
+    BIBP["서지정보 파싱<br/>NDL · KORCIS · Archives.JP"]
+    MODE{"작업 모드를 고른다<br/>문헌마다 기억된다"}
+    START --> BIBP --> MODE
+
+    MODE -->|"교감 모드 -- 탭 10개 모두"| C1
+    MODE -->|"추출 모드 -- 탭 3개"| E1
+
+    subgraph COLLATE["교감 모드 -- 고서를 한 글자씩"]
+        direction TB
+        C1["<b>1. 열람</b><br/>PDF.js 뷰어 · 확대/축소 · 읽기 보조선"]
+        C2["<b>2. 레이아웃 (L3)</b><br/>본문 · 주석 · 판심제 영역 나누기<br/>자동감지 또는 손으로 · 읽기 순서 지정"]
+        C3["<b>3. OCR (L2)</b><br/>엔진 선택 · LayoutBlock별 인식"]
+        C4["<b>4. 교정 (L4)</b><br/>OCR 대조 · 이체자 확인 · 확정"]
+        C5["<b>5. 편성</b><br/>LayoutBlock을 TextBlock으로 · source_ref 추적"]
+        C6["<b>6. 해석 (L5-L7)</b><br/>표점 · 현토 · 번역 · 주석 · 인용마크<br/><i>저장소 경계를 넘는다</i>"]
+        C1 --> C2 --> C3 --> C4 --> C5 --> C6
     end
 
-    PHASE1 -->|"↓"| PHASE2
-
-    subgraph PHASE2["Phase 2: 원본 작업 (L1-L4)"]
-        direction LR
-        P2A["열람<br/>PDF.js 뷰어<br/>이미지 확대/축소"]
-        P2B["레이아웃 분석<br/>영역 자동감지 (LLM)<br/>수동 편집 · 읽기순서"]
-        P2C["OCR 실행<br/>엔진 선택<br/>블록별 인식"]
-        P2D["교정<br/>OCR→텍스트 대조<br/>이체자 확인 · 확정"]
-        P2E["편성<br/>LayoutBlock→TextBlock<br/>source_ref 추적"]
-        P2A --> P2B --> P2C --> P2D --> P2E
+    subgraph EXTRACT["추출 모드 -- 논문 한 편에서 텍스트만"]
+        direction TB
+        E1["<b>1. 진단</b><br/>이 PDF에 텍스트 레이어가 이미 있는가"]
+        E2A["<b>있다 → 바로 가져오기</b><br/>OCR 없이 L4로 · 비용 0"]
+        E2B["<b>없다, 스캔본 → 권 전체 OCR</b><br/>L3는 쪽 전면 1블록으로 자동 생성<br/>끝난 쪽은 건너뛴다 -- 중단해도 이어서"]
+        E3["<b>2. 쪽별 검수</b><br/>글자 수 · 줄 수 · 미리보기<br/>빈 쪽/짧은 쪽 표시 · 확인한 쪽 체크<br/>LLM 사용량 표시"]
+        E4["<b>3. 검색되는 PDF 만들기</b><br/>exports/로 새 파일 · 만든 뒤 다시 열어 잰다"]
+        E5["<b>4. 내려받기</b><br/>파일 이름은 원본 논문 그대로"]
+        E1 --> E2A --> E3
+        E1 --> E2B --> E3
+        E3 --> E4 --> E5
     end
 
-    PHASE2 ==>|"저장소 경계"| PHASE3
+    FIX["<b>나쁜 쪽만 손본다</b><br/>레이아웃을 고친 쪽을 기계가 찾아 그 쪽만 다시 OCR<br/>새 결과가 이전만 못하면 직전 상태로 되돌리기<br/><i>L2와 L4를 함께 -- D-057 · D-065</i>"]
+    E3 -.-> FIX
+    C4 -.-> FIX
+    FIX -.-> E3
 
-    subgraph PHASE3["Phase 3: 해석 작업 (L5-L8)"]
+    subgraph MANAGE["관리 -- 두 갈래 공통"]
         direction LR
-        P3A["표점 (L5)<br/>句讀 삽입<br/>글자 인덱스 기반"]
-        P3B["현토 (L5)<br/>懸吐 달기<br/>after/before/over/under"]
-        P3C["번역 (L6)<br/>LLM draft→사람 review<br/>사전 참조 · 주석 컨텍스트"]
-        P3D["주석 (L7)<br/>4단계 사전 생성<br/>인물/지명 자동태깅"]
-        P3E["인용마크 (L7)<br/>학술 인용 구절 지정<br/>교차 레이어 해소"]
-        P3A --> P3B --> P3C --> P3D --> P3E
+        M1["Git 이력<br/>커밋 · diff · 되돌리기"]
+        M2["스냅샷<br/>JSON 내보내기/가져오기"]
+        M3["권 추가<br/>문헌은 만든 뒤에도 자란다"]
+        M4["이체자 사전 · 일괄 교정"]
+        M5["백업 · 휴지통"]
     end
 
-    PHASE3 --> PHASE4
-
-    subgraph PHASE4["Phase 4: 관리"]
-        direction LR
-        P4A["Git 이력<br/>커밋 · diff · 되돌리기"]
-        P4B["스냅샷<br/>JSON 내보내기/가져오기"]
-        P4C["이체자 정렬<br/>일괄 교정"]
-        P4D["이체자 사전<br/>variant_chars.json"]
-    end
+    COLLATE --> MANAGE
+    EXTRACT --> MANAGE
 
     subgraph LLM_PATTERN["LLM 협업 패턴 (2-8층 공통)"]
         direction TB
@@ -445,22 +549,31 @@ flowchart TB
         LP1 --> LP2 --> LP3
     end
 
-    style PHASE1 fill:#fff3e0,stroke:#e65100,stroke-width:2px
-    style PHASE2 fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
-    style PHASE3 fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
-    style PHASE4 fill:#eceff1,stroke:#546e7a,stroke-width:2px
+    style START fill:#fef3c7,stroke:#b45309,stroke-width:2px
+    style MODE fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+    style COLLATE fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style EXTRACT fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style FIX fill:#fce4ec,stroke:#c62828,stroke-width:2px
+    style E4 fill:#fef3c7,stroke:#b45309,stroke-width:2px
+    style MANAGE fill:#eceff1,stroke:#546e7a,stroke-width:2px
     style LLM_PATTERN fill:#fef3c7,stroke:#b45309,stroke-width:2px
     style LP1 fill:#fef3c7,stroke:#b45309
     style LP2 fill:#fef3c7,stroke:#b45309
     style LP3 fill:#fef3c7,stroke:#b45309
 ```
 
+**두 갈래의 차이는 화면뿐이다:**
+- 추출 모드에서 숨는 것은 상단 탭 7개(편성 · 표점 · 현토 · 번역 · 주석 · 인용 · 이체자)와
+  사이드바 패널 6개(Git 이력 · 검증 · 의존 · 엔티티 · 비고 · 인용 양식)다
+- 숨기는 것은 표시뿐이고 모드 · 패널 · 데이터는 그대로 남는다
+- 프로필은 문헌마다 브라우저에 기억된다 — 한 서고에 고서와 논문이 섞여도 된다
+
 ---
 
 ## 7. 스키마 간 참조 관계도
 
 19개 스키마(원본 7 + 해석 5 + 코어 6 + 교환 1)의 연결 구조.
-화살표는 참조 방향: A → B = "A가 B를 참조".
+화살표는 참조 방향: A → B = 「A가 B를 참조」.
 
 ```mermaid
 flowchart TB
@@ -537,25 +650,29 @@ flowchart TB
 
 ## 8. 백엔드 모듈 의존 구조
 
-`server.py`(조립) → 8개 라우터 → `_state.py`(공유 상태) → core/llm/ocr 모듈.
+`server.py`(조립) → 8개 라우터 → `_state.py`(공유 상태) → core/llm/ocr/export 모듈.
 라우터 간 직접 import 금지. `_state.py`가 lazy import로 순환 방지.
+
+**여기서 읽어야 할 것**: 새 기능은 새 라우터를 만들지 않고 기존 도메인 라우터에 붙었다.
+v1.2.0에서 늘어난 27개 라우트는 `documents`(텍스트 레이어 진단 · 가져오기 · PDF 산출 · 권 추가)와
+`llm_ocr`(권 단위 일괄 OCR · 되돌리기 · 훑어보기)에 몰려 있다.
 
 ```mermaid
 flowchart TB
     subgraph APP["src/app/ -- API 레이어"]
         direction TB
         MAIN["__main__.py<br/>CLI 진입점"]
-        SRV["<b>server.py</b><br/>FastAPI 앱 생성 · 라우터 마운트"]
+        SRV["<b>server.py</b><br/>FastAPI 앱 생성 · 라우터 마운트 · 캐시 금지 (152줄)"]
         STATE["<b>_state.py</b><br/>공유 상태, 헬퍼 · LLM 캐시, 토큰 계산"]
-        subgraph ROUTERS["routers/ -- 8개 도메인"]
+        subgraph ROUTERS["routers/ -- 8개 도메인 · 라우트 185개"]
             direction LR
-            R1["library <b>15</b>"]
-            R2["documents <b>32</b>"]
-            R3["interpretations <b>22</b>"]
-            R4["llm_ocr <b>13</b>"]
+            R1["library <b>16</b>"]
+            R2["documents <b>40</b>"]
+            R3["interpretations <b>25</b>"]
+            R4["llm_ocr <b>20</b>"]
             R5["alignment <b>17</b>"]
-            R6["reading <b>24</b>"]
-            R7["annotation <b>32</b>"]
+            R6["reading <b>26</b>"]
+            R7["annotation <b>34</b>"]
             R8["version <b>7</b>"]
         end
         MAIN --> SRV --> ROUTERS --> STATE
@@ -564,6 +681,7 @@ flowchart TB
     APP -->|"lazy import"| CORE_MOD
     APP -->|"lazy import"| LLM_MOD
     APP -->|"lazy import"| OCR_MOD
+    APP -->|"lazy import"| EXPORT_MOD
 
     subgraph CORE_MOD["src/core/ -- 비즈니스 로직"]
         direction TB
@@ -598,7 +716,7 @@ flowchart TB
         end
     end
 
-    subgraph OCR_MOD["src/ocr/ -- OCR 엔진"]
+    subgraph OCR_MOD["src/ocr/ -- OCR 엔진 + 보조"]
         direction TB
         OM1["registry.py"]
         OM2["pipeline.py"]
@@ -607,18 +725,27 @@ flowchart TB
         OM5["ndlocr_lite"]
         OM6["llm_ocr"]
         OM7["paddleocr"]
+        OM8["<b>full_page_block.py</b> (v1.2.0)"]
+        OM9["<b>layout_staleness.py</b> (v1.2.0)"]
+        OM10["<b>page_backup.py</b> (v1.2.0)"]
+        OM11["<b>line_detector.py</b> (v1.2.0)"]
+    end
+
+    subgraph EXPORT_MOD["src/export/ -- 산출물 (v1.2.0)"]
+        EM1["<b>text_layer_pdf.py</b><br/>검색되는 PDF 산출 + 다시 열어 재기"]
     end
 
     subgraph MISC["기타 모듈"]
         direction TB
         MI1["src/parsers/<br/>ndl, korcis, archives_jp"]
         MI2["src/hwp/<br/>reader, text_cleaner"]
-        MI3["src/text_import/<br/>pdf_extractor"]
-        MI4["src/cli/"]
+        MI3["src/text_import/<br/>pdf_extractor, text_separator"]
+        MI4["src/cli/<br/>ctb 진입점 · embed_folder"]
     end
 
     CORE_MOD --> LLM_MOD
     CORE_MOD --> OCR_MOD
+    OCR_MOD --> EXPORT_MOD
 
     style APP fill:#fff3e0,stroke:#e65100,stroke-width:2px
     style SRV fill:#fef3c7,stroke:#b45309,stroke-width:2px
@@ -627,13 +754,17 @@ flowchart TB
     style LLM_MOD fill:#fff3e0,stroke:#e65100,stroke-width:2px
     style LM1 fill:#fef3c7,stroke:#b45309,stroke-width:2px
     style OCR_MOD fill:#fce4ec,stroke:#c62828,stroke-width:2px
+    style EXPORT_MOD fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style EM1 fill:#fef3c7,stroke:#b45309,stroke-width:2px
     style MISC fill:#eceff1,stroke:#546e7a,stroke-width:2px
 ```
 
 **규칙:**
 - 라우터 간 직접 import 금지 → 공유 로직은 `_state.py`에 배치
-- `_state.py`는 core/llm/ocr 모듈을 lazy import (순환 방지)
+- `_state.py`는 core/llm/ocr/export 모듈을 lazy import (순환 방지)
 - Pydantic 모델은 사용하는 라우터 파일 내부에 정의
+- JSON 저장은 반드시 `core.document.write_json_atomic()` — 저장 도중 죽으면
+  `manifest.json`이 빈 파일이 되어 문헌이 통째로 열리지 않는다 (D-069)
 
 ---
 
@@ -641,6 +772,11 @@ flowchart TB
 
 하나의 원본 저장소 위에 여러 해석 저장소가 독립 Git 리포로 병존.
 `library_manifest.json`이 서고 전체 지도 역할.
+
+**여기서 읽어야 할 것**: v1.2.0에서 문헌 폴더 안에 두 개가 늘었다 —
+밖으로 내보낼 산출물을 담는 `exports/`와, 되돌리기용 `.page_backup/`이다.
+둘 다 **Git 이력과는 다른 층위**다. 되돌리기는 커밋을 되감는 것이 아니라
+직전 파일 한 벌을 되돌려 놓는 것이고, 남기는 세대는 하나뿐이다.
 
 ```mermaid
 flowchart TB
@@ -650,12 +786,14 @@ flowchart TB
 
     subgraph SRC_REPO["원본 저장소 (Git repo)"]
         direction TB
-        SR_MAN["manifest.json<br/>document_id, parts"]
+        SR_MAN["manifest.json<br/>document_id, parts (권은 나중에 더할 수 있다)"]
         SR_L1["<b>L1_source/</b><br/>PDF, 이미지 (불변)"]
         SR_L2["L2_ocr/<br/>ocr_page JSON"]
         SR_L3["L3_layout/<br/>layout_page JSON"]
-        SR_L4["L4_text/<br/>corrections JSON"]
+        SR_L4["L4_text/<br/>corrections JSON · 교정 텍스트"]
         SR_BIB["bibliography.json"]
+        SR_EXP["<b>exports/</b> (v1.2.0)<br/>텍스트 레이어 PDF -- 밖으로 내보내는 산출물"]
+        SR_BAK["<b>.page_backup/</b> (v1.2.0)<br/>덮어쓰기 직전 L2 + L4 한 벌<br/><i>로컬 되돌리기 · Git 이력과 무관 · 한 세대만</i>"]
         SR_GIT["Git 이력: commit, diff, log"]
     end
 
@@ -703,6 +841,8 @@ flowchart TB
     style LIB fill:#fef3c7,stroke:#b45309,stroke-width:2px
     style SRC_REPO fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
     style SR_L1 fill:#fef3c7,stroke:#b45309,stroke-width:2px
+    style SR_EXP fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style SR_BAK fill:#eceff1,stroke:#546e7a,stroke-width:2px
     style REMOTE fill:#eceff1,stroke:#546e7a,stroke-width:2px,stroke-dasharray: 5 5
     style INTERP_A fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
     style IA_DEP fill:#fef3c7,stroke:#b45309,stroke-width:2px
@@ -717,6 +857,10 @@ flowchart TB
 
 하위층 변경이 상위층에 미치는 영향. `dependency.json`의 `dependency_status` 상태 전이.
 
+**여기서 읽어야 할 것**: 원본 저장소 안에는 v1.2.0에서 **거꾸로 가는 화살표**가 하나 생겼다.
+레이아웃(L3)을 고치면 그 쪽의 OCR(L2)이 낡은 것이 되는데, 예전에는 사용자가
+그것을 기억해 쪽 번호를 입력해야 했다. 이제 기계가 찾아낸다.
+
 ```mermaid
 flowchart LR
     subgraph SRC_DEP["원본 저장소 내부"]
@@ -728,6 +872,7 @@ flowchart LR
         D_L1 -->|"거의 없음"| D_L2
         D_L2 -->|"OCR 재실행 필요"| D_L3
         D_L3 -->|"블록 재분류 필요"| D_L4
+        D_L3 -.->|"레이아웃을 고치면 그 쪽만 다시 OCR<br/>layout_staleness.py가 찾아낸다 (v1.2.0)"| D_L2
     end
 
     subgraph BOUNDARY_DEP["저장소 경계"]
@@ -773,53 +918,105 @@ flowchart LR
 
 ## 11. 프론트엔드 UI 구조
 
-VSCode 스타일 3패널 레이아웃. 왼쪽(탐색) · 가운데(PDF 뷰어) · 오른쪽(작업 탭).
+VSCode 스타일 화면. 왼쪽(액티비티 바 + 사이드바) · 가운데(원본 뷰어) ·
+오른쪽(작업 패널), 그리고 그 위에 상단 작업 탭 10개.
+
+**여기서 읽어야 할 것**: v1.2.0에서 **하단 패널이 사라졌다.** 거기 있던
+Git 이력 · 검증 · 의존 추적 · 엔티티 · 비고는 모두 왼쪽 액티비티 바의
+사이드바로 옮겨졌다. 그리고 추출 모드에서는 「추출 모드에서 숨음」이라고
+적힌 것들이 통째로 숨는다 — 탭 7개와 사이드바 패널 6개다.
+숨는 것은 표시뿐이고, 데이터와 API는 그대로 남아 있다.
 
 ```mermaid
 flowchart TB
-    subgraph LAYOUT["VSCode 스타일 3패널 레이아웃"]
+    subgraph TABS["상단 작업 탭 -- 모두 10개"]
+        direction LR
+        T_KEEP["<b>추출 모드에도 남는 셋</b><br/>열람 · 레이아웃 · 교정<br/><i>원본을 보고, 드물게 영역을 나누고, 결과를 손본다</i>"]
+        T_HIDE["<b>추출 모드에서 숨는 일곱</b><br/>편성 · 표점 · 현토 · 번역 · 주석 · 인용 · 이체자"]
+    end
+
+    subgraph LAYOUT["3영역 레이아웃"]
         direction LR
         subgraph LEFT["왼쪽: 액티비티 바 + 사이드바"]
             direction TB
-            ACT["액티비티 바<br/>8개 패널 전환"]
-            SIDE_TREE["sidebar-tree.js<br/>문헌 목록 · 권/페이지 트리"]
-            SIDE_INT["interpretation.js<br/>해석 저장소 목록 · 생성/선택/삭제"]
+            ACT["<b>액티비티 바</b><br/>아이콘으로 사이드바 패널 전환"]
+            A1["서고 브라우저 -- sidebar-tree.js<br/>문헌 · 권 · 쪽 트리 · 새 문헌 · 권 추가"]
+            A2["Git 이력 -- git-graph.js<br/><i>추출 모드에서 숨음</i>"]
+            A3["검증 결과<br/><i>추출 모드에서 숨음</i>"]
+            A4["의존 추적 -- interpretation.js<br/>해석 저장소 목록 · dependency 상태<br/><i>추출 모드에서 숨음</i>"]
+            A5["엔티티 -- entity-manager.js<br/><i>추출 모드에서 숨음</i>"]
+            A6["비고 -- notes-panel.js<br/><i>추출 모드에서 숨음</i>"]
+            A7["인용 양식 -- cite-format-manager.js<br/><i>추출 모드에서 숨음</i>"]
+            A8["설정 · 서지정보 · 테마<br/><i>원격 저장소 절만 추출 모드에서 숨음</i>"]
+            ACT --> A1
+            ACT --> A2
+            ACT --> A3
+            ACT --> A4
+            ACT --> A5
+            ACT --> A6
+            ACT --> A7
+            ACT --> A8
         end
-        subgraph CENTER["가운데: PDF/이미지 뷰어"]
+        subgraph CENTER["가운데: 원본 뷰어"]
             direction TB
             PDF_R["<b>pdf-renderer.js</b><br/>PDF.js 통합 · 확대/축소/회전"]
-            LAY_E["layout-editor.js<br/>LayoutBlock 오버레이 · 영역 편집/읽기순서"]
+            LAY_E["layout-editor.js<br/>LayoutBlock 오버레이 · 영역 편집 · 읽기순서<br/>블록이 없으면 쪽 전면 1블록을 만들어 바로 저장 (D-067)"]
+            RL["reader-line.js<br/>읽기 보조선 -- 가로/세로"]
+            EXPANEL["<b>extract-panel.js</b><br/>열람 탭 안에 놓인 추출 패널<br/>진단 · 권 일괄 OCR · 쪽별 검수 · PDF 산출<br/><i>추출 모드에서만 보인다</i>"]
         end
-        subgraph RIGHT["오른쪽: 작업 패널 (탭 전환)"]
+        subgraph RIGHT["오른쪽: 작업 패널 -- 탭으로 전환"]
             direction TB
-            TAB1["교정 탭 -- correction-editor.js<br/>OCR vs 교정 텍스트"]
-            TAB2["표점 탭 -- punctuation-editor.js<br/>구두점 삽입"]
-            TAB3["현토 탭 -- hyeonto-editor.js<br/>懸吐 달기"]
-            TAB4["번역 탭 -- translation-editor.js<br/>LLM draft + 편집"]
-            TAB5["주석 탭 -- annotation-editor.js<br/>사전형 주석 + 태깅"]
-            TAB6["인용 탭 -- citation-editor.js<br/>학술 인용 마크"]
-            TAB7["비고 탭 -- notes-panel.js<br/>페이지별 메모"]
+            TAB0["교정 -- correction-editor.js · text-editor.js"]
+            TAB1["편성 -- composition-editor.js"]
+            TAB2["표점 -- punctuation-editor.js"]
+            TAB3["현토 -- hyeonto-editor.js"]
+            TAB4["번역 -- translation-editor.js"]
+            TAB5["주석 -- annotation-editor.js"]
+            TAB6["인용 -- citation-editor.js"]
+            TAB7["이체자 -- variant-manager.js · alignment-view.js"]
         end
     end
 
-    subgraph BOTTOM["하단/팝업"]
-        direction LR
-        BT1["toast.js<br/>알림"]
-        BT2["ocr-panel.js<br/>OCR 엔진 선택/실행"]
-        BT3["git-graph.js<br/>커밋 이력/diff"]
-        BT4["bibliography.js<br/>서지정보 편집"]
-        BT5["alignment-view.js<br/>이체자 정렬"]
-        BT6["entity-manager.js<br/>코어 엔티티 관리"]
-        BT7["hwp-import.js<br/>HWP 가져오기"]
-        BT8["batch-correction.js<br/>일괄 교정"]
+    TABS --> LAYOUT
+
+    subgraph PROFILE["작업 프로필 전환 (D-055 · D-060)"]
+        direction TB
+        PF1["workspace.js -- applyWorkspaceProfile()"]
+        PF2["data-profile 표시가 붙은 요소에 hidden을 건다"]
+        PF3["숨은 탭이나 패널을 보고 있었다면<br/>열람 탭 · 서고 브라우저로 되돌린다<br/><i>돌아올 방법이 없는 화면에 갇히지 않게</i>"]
+        PF4["상태는 브라우저 localStorage에만<br/>ctb.profile.문헌ID -- manifest에는 남지 않는다"]
+        PF1 --> PF2 --> PF3 --> PF4
     end
 
+    PROFILE -.->|"탭 7개 · 사이드바 패널 6개를 숨긴다"| LAYOUT
+
+    GONE["<b>하단 패널은 제거됐다 (v1.2.0)</b><br/>높이 드래그 · 접기/펴기와 함께 사라졌고<br/>내용은 전부 왼쪽 사이드바로 옮겨졌다"]
+    GONE -.-> LEFT
+
+    subgraph POPUP["다이얼로그 · 전역"]
+        direction LR
+        P1["toast.js -- 알림"]
+        P2["drag-drop.js -- 창 어디에나 끌어다 놓기"]
+        P3["create-document.js -- 새 문헌"]
+        P4["bibliography.js -- 서지정보"]
+        P5["ocr-panel.js -- 쪽 단위 OCR 실행"]
+        P6["batch-correction.js -- 일괄 교정"]
+        P7["hwp-import.js -- D-037로 잠김"]
+    end
+
+    style TABS fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+    style T_KEEP fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style T_HIDE fill:#eceff1,stroke:#546e7a
     style LAYOUT fill:#fff3e0,stroke:#e65100,stroke-width:2px
     style LEFT fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style A1 fill:#fef3c7,stroke:#b45309
     style CENTER fill:#fff3e0,stroke:#e65100,stroke-width:2px
     style PDF_R fill:#fef3c7,stroke:#b45309,stroke-width:2px
+    style EXPANEL fill:#fef3c7,stroke:#b45309,stroke-width:2px
     style RIGHT fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    style BOTTOM fill:#eceff1,stroke:#546e7a,stroke-width:2px
+    style PROFILE fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style GONE fill:#fce4ec,stroke:#c62828,stroke-width:2px
+    style POPUP fill:#eceff1,stroke:#546e7a,stroke-width:2px
 ```
 
 ---
@@ -901,6 +1098,92 @@ flowchart TB
 
 ---
 
+## 13. 추출 모드 — 논문 한 편의 경로
+
+근현대 논문 스캔본에서 텍스트만 뽑아 **검색되는 PDF**로 내보내는 흐름.
+D-055 · D-057 · D-062 · D-065 · D-067 · D-068이 여기에 모인다.
+
+**여기서 읽어야 할 것**: 이 경로는 8층 모델을 우회하지 않는다.
+L3(레이아웃)와 L2(OCR)를 그대로 거치되, 사람이 손대야 하던 자리를 기계가 채운다.
+그리고 마지막에 「만든 것을 다시 열어 재는」 단계가 있다 —
+글자가 조용히 사라지거나 엉뚱한 크기로 박히는 사고를 여기서 잡는다.
+
+```mermaid
+flowchart TB
+    IN["<b>L1 원본 PDF</b><br/>끌어다 놓기 · URL · ctb ocr 명령<br/><i>L1_source/ -- 절대 수정하지 않는다</i>"]
+
+    DIAG{"텍스트 레이어가<br/>이미 있는가"}
+    IN --> DIAG
+
+    DIAG -->|"있다"| IMP["<b>바로 가져오기</b><br/>PDF에 박힌 글자를 L4로<br/><i>OCR 비용 0</i>"]
+
+    DIAG -->|"없다 -- 스캔본"| L3AUTO["<b>L3를 앱이 만든다</b><br/>full_page_block.py<br/>쪽 전면을 덮는 LayoutBlock 하나<br/><i>사람이 사각형을 그리지 않는다</i>"]
+
+    L3AUTO --> BATCH["<b>권 전체 OCR</b><br/>끝난 쪽은 건너뛴다 -- 중단해도 이어서<br/><i>덮어쓰기 직전 상태를 page_backup.py가 남긴다</i>"]
+    BATCH --> L2["<b>L2 OCR 결과</b><br/>글자 · 좌표 · 신뢰도"]
+    L2 --> L4["<b>L4 교정 텍스트</b><br/>배치가 함께 채운다 -- fill_text_layer"]
+    IMP --> L4
+
+    L4 --> REVIEW["<b>쪽별 검수</b><br/>글자 수 · 줄 수 · 미리보기<br/>빈 쪽/짧은 쪽 표시 · 확인한 쪽 체크<br/>LLM 사용량 -- 어느 모델로 몇 번, 얼마 (D-056)"]
+
+    REVIEW -->|"나쁜 쪽이 있다"| REDO
+    REVIEW -->|"충분하다"| LINE
+
+    subgraph REDO_G["다시 돌리기 · 되돌리기 (D-057 · D-064 · D-065)"]
+        direction TB
+        REDO["레이아웃 탭에서 영역을 나눈다"]
+        STALE["layout_staleness.py<br/>L2의 layout_block_id 집합과 현재 L3를 비교<br/>바뀐 쪽만 골라낸다"]
+        UNDO["되돌리기 -- 새 결과가 이전만 못할 때<br/>직전 L2 + L4를 함께 복원<br/><i>문헌/.page_backup/ · Git 이력과 무관</i>"]
+        REDO --> STALE
+        STALE --> UNDO
+    end
+
+    STALE -->|"그 쪽만 다시"| BATCH
+    UNDO -.-> REVIEW
+
+    subgraph MAKE_G["검색되는 PDF 만들기 -- export/text_layer_pdf.py"]
+        direction TB
+        LINE["<b>줄 위치 검출</b><br/>line_detector.py<br/>엔진이 좌표를 안 주면 여기서 자리를 찾는다<br/><i>실패하면 page-approximated로 기록하고 알린다</i>"]
+        CONV["<b>좌표 환산</b><br/>L2의 픽셀 좌표를 PDF 포인트로<br/>배율은 L3의 image_width에서 구한다"]
+        WRAP["<b>원본이 남긴 좌표 변환을 끊는다</b><br/>page.wrap_contents<br/><i>이것을 빠뜨려 0.24배로 박혔다 -- D-068</i>"]
+        FONT["<b>폰트를 임베드한다</b><br/>표준 CID 폰트에 없는 한자가 사라지지 않게<br/><i>실측 51종 130자 누락 → 2종 2자 -- D-062</i>"]
+        INVIS["<b>보이지 않는 텍스트로 써넣는다</b><br/>render_mode 3 -- 이미지는 그대로 보인다"]
+        LINE --> CONV --> WRAP --> FONT --> INVIS
+    end
+
+    INVIS --> VERIFY["<b>만든 것을 다시 열어 잰다</b><br/>글자 크기 · 텍스트가 덮은 넓이<br/>표본 3쪽은 잉크 밀도까지<br/><i>이상하면 내려받기 버튼 옆에 남는다</i>"]
+
+    VERIFY --> OUTPDF["<b>exports/권ID_text.pdf</b><br/>내려받는 이름은 원본 논문 파일명 그대로<br/><i>L1_source/는 그대로 남는다</i>"]
+
+    style IN fill:#fef3c7,stroke:#b45309,stroke-width:2px
+    style DIAG fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+    style L3AUTO fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style BATCH fill:#e8f5e9,stroke:#2e7d32
+    style L2 fill:#fce4ec,stroke:#c62828
+    style L4 fill:#fce4ec,stroke:#c62828
+    style REVIEW fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style REDO_G fill:#eceff1,stroke:#546e7a,stroke-width:2px
+    style MAKE_G fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style WRAP fill:#fce4ec,stroke:#c62828,stroke-width:2px
+    style FONT fill:#fce4ec,stroke:#c62828,stroke-width:2px
+    style VERIFY fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style OUTPDF fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px
+```
+
+**이 경로가 지키는 약속:**
+- 원본은 읽기만 한다 — `L1_source/`는 어떤 단계에서도 수정되지 않는다
+- 만든 것은 믿지 않고 잰다 — 산출물을 다시 열어 글자 크기 · 덮개 · 잉크 밀도를 확인한다
+- 되돌릴 수 있다 — 저장할 때마다 직전 한 벌을 남기므로 되돌리기는 언제나 「방금 저장한 것 취소」다
+- 중단할 수 있다 — 끝난 쪽은 건너뛰므로 권 전체 OCR을 언제 멈춰도 이어서 돌아간다
+
+**알려진 한계** (v1.2.0 릴리스 노트와 같음):
+- 줄 위치 검출이 실패한 쪽은 텍스트가 원문 자리가 아닌 곳에 순서대로 놓인다.
+  검색은 되지만 형광이 엉뚱한 데 뜬다
+- 앱 안의 PDF 뷰어는 텍스트 레이어를 그리지 않는다.
+  Ctrl+F는 내보낸 파일을 외부 뷰어에서 열 때 동작한다
+
+---
+
 ## 부록: 설계 원칙 요약
 
 | 원칙 | 설명 |
@@ -913,7 +1196,11 @@ flowchart TB
 | **출처 추적** | `source_ref`로 원본 저장소 역참조 |
 | **온톨로지 비강제** | Concept 자유 확장. 부재 = 미지정 |
 | **Promotion Flow** | Tag(잠정) → Concept(확정), 연구자 판단 |
-| **용어 규칙** | LayoutBlock / OcrResult / TextBlock. "Block" 단독 사용 금지 |
+| **용어 규칙** | LayoutBlock / OcrResult / TextBlock. 「Block」 단독 사용 금지 |
 | **오프라인 퍼스트** | 핵심 작업(교정, 열람, 커밋)은 인터넷 없이 동작 |
+| **작업 모드는 표시만 바꾼다** | 추출 모드는 탭·패널을 숨길 뿐, 저장 형식과 데이터는 교감 모드와 같다 (D-055) |
+| **산출물은 다시 열어 잰다** | 만든 PDF를 앱이 열어 글자 크기·덮개·잉크 밀도를 확인한다 (D-068) |
+| **덮어쓰기 전에 한 벌 남긴다** | 되돌리기는 언제나 「방금 저장한 것 취소」. 세대는 하나만 (D-065) |
+| **JSON은 원자적으로 저장** | 임시 파일에 다 쓴 뒤 갈아 끼운다. 중간에 죽어도 빈 파일이 남지 않는다 (D-069) |
 
 ---
