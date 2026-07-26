@@ -1,0 +1,223 @@
+"""LLM 연결 상태 라우트 테스트 — 배포판에서 «무엇을 해야 하는가».
+
+왜 이 테스트가 있는가:
+    배포판 사용자는 각자 자기 계정으로 LLM을 연결해야 한다. API 키는
+    `.env`에 넣으면 끝이지만, 구독형(Ollama 클라우드·OpenAI OAuth)은
+    **터미널 로그인**이 필요하고 앱이 대신할 수 없다.
+
+    더 나쁜 것은 그 중간 상태다. Ollama 서버는 로그인 없이도 뜬다.
+    그래서 `is_available()`은 True인데 `:cloud` 모델을 부르면 실패하고,
+    라우터가 조용히 다음 프로바이더(유료 API)로 넘어간다. 실제로 그 사고가
+    있었다(D-056) — 무료로 도는 줄 알았는데 Gemini가 처리하고 있었다.
+
+    그래서 이 라우트는 «닿는가»와 «인증됐는가»를 **따로** 판정해야 한다.
+"""
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.routers.llm_ocr import _account_status
+
+
+def _entry(**kw):
+    """_account_status()에 넣을 항목을 만든다. 기본은 «준비된 종량제»."""
+    base = {
+        "display_name": "테스트 프로바이더",
+        "billing_model": "metered",
+        "setup_kind": "env_key",
+        "reachable": True,
+        "authenticated": True,
+        "account": None,
+        "plan": None,
+    }
+    base.update(kw)
+    return base
+
+
+# ---------------------------------------------------------------------------
+#  상태 판정
+# ---------------------------------------------------------------------------
+
+
+def test_reachable_but_not_signed_in_is_not_ready():
+    """서버는 떴지만 로그인이 안 된 상태를 «사용 가능»으로 보이면 안 된다.
+
+    이것이 D-056 사고의 핵심이다. 여기서 ready가 나오면 사용자는
+    실행하고 나서야 안 되는 것을 알게 된다.
+    """
+    status, note = _account_status(
+        _entry(setup_kind="cli_signin", billing_model="free", authenticated=False)
+    )
+    assert status == "needs_signin"
+    assert "로그인" in note
+    # 왜 위험한지까지 적어야 한다 — 조용히 유료 API로 넘어간다는 사실.
+    assert "유료" in note
+
+
+def test_signed_in_shows_account_and_plan():
+    """로그인돼 있으면 어느 계정·어느 요금제인지 보여 준다."""
+    status, note = _account_status(
+        _entry(
+            setup_kind="cli_signin",
+            billing_model="free",
+            account="user@example.com",
+            plan="pro",
+        )
+    )
+    assert status == "ready"
+    assert "user@example.com" in note
+    assert "pro" in note
+
+
+def test_missing_api_key_says_what_to_do():
+    """키가 없으면 «키를 넣으세요»라고 말한다 («실행 안 됨»이 아니라)."""
+    status, note = _account_status(_entry(reachable=False, authenticated=False))
+    assert status == "needs_key"
+    assert ".env" in note
+
+
+def test_offline_subscription_service_is_not_a_key_problem():
+    """구독형이 안 뜬 것은 키 문제가 아니다. 안내가 달라야 한다."""
+    status, note = _account_status(
+        _entry(setup_kind="cli_signin", billing_model="subscription", reachable=False)
+    )
+    assert status == "offline"
+    assert ".env" not in note
+
+
+def test_metered_ready_warns_about_charges():
+    """종량제가 연결됐으면 «쓴 만큼 청구된다»를 명시한다."""
+    status, note = _account_status(_entry())
+    assert status == "ready"
+    assert "청구" in note
+
+
+def test_subscription_ready_does_not_say_free():
+    """구독형을 «무료»라고 하지 않는다. 금액은 0이지만 한도를 쓴다."""
+    status, note = _account_status(
+        _entry(setup_kind="cli_signin", billing_model="subscription")
+    )
+    assert status == "ready"
+    assert "무료" not in note
+    assert "한도" in note
+
+
+# ---------------------------------------------------------------------------
+#  라우트
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def client(tmp_path, monkeypatch):
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setenv("USERPROFILE", str(fake_home))
+    monkeypatch.setenv("HOME", str(fake_home))
+    from app.server import app
+
+    with TestClient(app) as c:
+        yield c
+
+
+def test_accounts_route_returns_every_provider(client):
+    """등록된 프로바이더가 빠짐없이 나오고, 각 항목이 필요한 키를 갖는다.
+
+    화면이 이 키들을 그대로 읽으므로 하나라도 빠지면 칸이 빈다.
+    """
+    r = client.get("/api/llm/accounts")
+    assert r.status_code == 200, r.text
+    providers = r.json()["providers"]
+    assert providers, "프로바이더가 하나도 없다"
+
+    ids = {p["provider_id"] for p in providers}
+    assert {"ollama", "gemini", "openai", "anthropic"} <= ids
+
+    for p in providers:
+        for key in (
+            "display_name",
+            "billing_model",
+            "setup_kind",
+            "setup_steps",
+            "reachable",
+            "authenticated",
+            "status",
+            "note",
+        ):
+            assert key in p, f"{p['provider_id']}에 {key}가 없다"
+        assert p["status"] in ("ready", "needs_signin", "needs_key", "offline")
+        assert p["billing_model"] in ("metered", "subscription", "free")
+
+
+def test_accounts_route_never_leaks_api_keys(client):
+    """응답에 API 키가 실려 나가면 안 된다.
+
+    설정 화면은 «키가 있는가»만 알면 된다. 키 자체를 브라우저로 보내면
+    화면 캡처·로그·확장 프로그램을 통해 새어 나갈 수 있다.
+    """
+    body = client.get("/api/llm/accounts").text
+    for marker in ("sk-", "AIza", "sk-ant-"):
+        assert marker not in body, f"응답에 키처럼 보이는 문자열({marker})이 있다"
+
+
+def test_subscription_providers_explain_how_to_sign_in(client):
+    """구독형 프로바이더는 로그인 방법을 함께 준다.
+
+    앱이 대신 로그인할 수 없으므로, 사용자가 터미널에서 무엇을 쳐야 하는지
+    화면에 있어야 한다.
+    """
+    providers = client.get("/api/llm/accounts").json()["providers"]
+    signin = [p for p in providers if p["setup_kind"] == "cli_signin"]
+    assert signin, "cli_signin 프로바이더가 하나도 없다"
+    for p in signin:
+        assert p["setup_steps"], f"{p['provider_id']}에 로그인 절차가 없다"
+
+
+def test_signed_in_subscription_still_warns_about_quota():
+    """로그인돼 있어도 구독 한도를 쓴다는 사실이 가려지면 안 된다.
+
+    «로그인돼 있습니다»로 끝내면 공짜로 오해한다. Ollama는 클래스 기본값이
+    "free"(로컬)인데 실제로 고르는 비전 모델은 클라우드일 수 있다 —
+    D-056에서 문제 삼은 오해가 그대로 재발한다.
+    """
+    status, note = _account_status(
+        _entry(
+            setup_kind="cli_signin",
+            billing_model="subscription",
+            account="user@example.com",
+            plan="pro",
+            active_model="qwen3.5:397b-cloud",
+        )
+    )
+    assert status == "ready"
+    assert "한도" in note
+    assert "qwen3.5:397b-cloud" in note, "어느 모델이 한도를 쓰는지 밝혀야 한다"
+
+
+def test_local_model_is_not_called_subscription():
+    """로컬 모델을 쓰면 한도 경고를 붙이지 않는다 (실제로 소모가 없다)."""
+    status, note = _account_status(
+        _entry(
+            setup_kind="cli_signin",
+            billing_model="free",
+            account="user@example.com",
+            active_model="qwen3.5:4b",
+        )
+    )
+    assert status == "ready"
+    assert "한도" not in note
+
+
+def test_ollama_billing_reflects_the_model_it_would_actually_use(client):
+    """Ollama의 과금 표시는 «실제로 고를 모델» 기준이어야 한다.
+
+    클래스 기본값(free)을 그대로 쓰면, 클라우드 모델로 도는 환경에서
+    «로컬 무료»라고 표시된다.
+    """
+    providers = client.get("/api/llm/accounts").json()["providers"]
+    ollama = next(p for p in providers if p["provider_id"] == "ollama")
+    if not ollama["reachable"]:
+        pytest.skip("이 환경에는 Ollama가 떠 있지 않다")
+    model = ollama.get("active_model")
+    assert model, "쓸 비전 모델을 알려 주지 않는다"
+    expected = "subscription" if "cloud" in model else "free"
+    assert ollama["billing_model"] == expected

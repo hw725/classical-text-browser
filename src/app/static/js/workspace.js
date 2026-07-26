@@ -406,8 +406,99 @@ async function _loadSettings() {
 
     // 백업 경로 및 백업 정보 표시
     _loadBackupInfo(data);
+
+    // LLM 연결 상태 (프로바이더마다 도달·인증을 따로 본다)
+    _loadLlmAccounts();
   } catch (e) {
     console.warn("설정 로드 실패:", e);
+  }
+}
+
+/* ─── LLM 연결 상태 ─────────────────────────────
+ *
+ * 왜 별도 절인가:
+ *   API 키 방식(.env)은 키만 넣으면 되지만, 구독형(Ollama 클라우드·
+ *   OpenAI OAuth)은 터미널 로그인이 필요하고 앱이 대신할 수 없다.
+ *   더 나쁜 것은 «서버는 떴는데 로그인은 안 된» 상태다 — 가용해 보이지만
+ *   클라우드 모델 호출이 실패하고 라우터가 조용히 유료 API로 넘어간다.
+ *   그 사실이 화면에 보여야 한다(D-056).
+ */
+
+const _LLM_STATUS_LABEL = {
+  ready: "연결됨",
+  needs_signin: "로그인 필요",
+  needs_key: "키 필요",
+  offline: "실행 안 됨",
+};
+
+async function _loadLlmAccounts() {
+  const box = document.getElementById("settings-llm-accounts");
+  if (!box) return;
+
+  try {
+    const res = await fetch("/api/llm/accounts");
+    if (!res.ok) {
+      box.innerHTML = '<div class="placeholder">연결 상태를 확인하지 못했습니다.</div>';
+      return;
+    }
+    const data = await res.json();
+    const providers = data.providers || [];
+    if (!providers.length) {
+      box.innerHTML = '<div class="placeholder">등록된 프로바이더가 없습니다.</div>';
+      return;
+    }
+
+    box.innerHTML = "";
+    for (const p of providers) {
+      const row = document.createElement("div");
+      row.className = `settings-llm-row llm-${p.status}`;
+
+      const head = document.createElement("div");
+      head.className = "settings-llm-head";
+
+      const name = document.createElement("span");
+      name.className = "settings-llm-name";
+      name.textContent = p.display_name;
+      head.appendChild(name);
+
+      const badge = document.createElement("span");
+      badge.className = `settings-llm-badge llm-badge-${p.status}`;
+      badge.textContent = _LLM_STATUS_LABEL[p.status] || p.status;
+      head.appendChild(badge);
+
+      // 과금 방식은 늘 보인다. 구독형이 «무료»로 오해되지 않도록.
+      const billing = document.createElement("span");
+      billing.className = "settings-llm-billing";
+      billing.textContent =
+        { metered: "종량 과금", subscription: "구독 한도", free: "로컬 무료" }[
+          p.billing_model
+        ] || p.billing_model;
+      head.appendChild(billing);
+
+      row.appendChild(head);
+
+      const note = document.createElement("div");
+      note.className = "settings-llm-note";
+      // 백엔드가 **강조**를 마크다운처럼 보내므로 그대로 두지 않고 벗긴다.
+      note.textContent = (p.note || "").replace(/\*\*/g, "");
+      row.appendChild(note);
+
+      // 아직 못 쓰는 프로바이더만 «무엇을 해야 하는가»를 펼쳐 보여 준다.
+      if (p.status !== "ready" && (p.setup_steps || []).length) {
+        const steps = document.createElement("ol");
+        steps.className = "settings-llm-steps";
+        for (const s of p.setup_steps) {
+          const li = document.createElement("li");
+          li.textContent = s;
+          steps.appendChild(li);
+        }
+        row.appendChild(steps);
+      }
+
+      box.appendChild(row);
+    }
+  } catch (e) {
+    box.innerHTML = '<div class="placeholder">연결 상태를 확인하지 못했습니다.</div>';
   }
 }
 
@@ -446,6 +537,16 @@ function _initLibraryControls() {
   const execBackupBtn = document.getElementById("btn-execute-backup");
   if (execBackupBtn) {
     execBackupBtn.addEventListener("click", _executeBackup);
+  }
+
+  // 터미널에서 로그인한 뒤 앱을 다시 켜지 않아도 되도록 다시 확인을 둔다.
+  const refreshLlmBtn = document.getElementById("btn-refresh-llm-accounts");
+  if (refreshLlmBtn) {
+    refreshLlmBtn.addEventListener("click", () => {
+      const box = document.getElementById("settings-llm-accounts");
+      if (box) box.innerHTML = '<div class="placeholder">확인 중...</div>';
+      _loadLlmAccounts();
+    });
   }
 }
 

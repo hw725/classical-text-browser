@@ -1189,3 +1189,368 @@ def test_redo_can_be_turned_off(isolated_app):
     done = next(e for e in events if e["type"] == "complete")
     assert done["skipped"] == 2
     assert done["usage"]["calls"] == 0
+
+
+def test_page_range_with_force_runs_only_those_pages(isolated_app):
+    """쪽 범위 + 강제 재실행 = 지정한 쪽만 다시 돈다.
+
+    이것이 «수동 지정» 경로다. 자동 판정은 레이아웃이 바뀐 쪽만 찾으므로,
+    레이아웃은 그대로인데 결과만 나쁜 쪽(모델을 바꿔 다시 돌리고 싶은 경우)은
+    사람이 직접 골라야 한다.
+
+    강제 재실행이 **지정한 범위를 무시하고 전체를 돌면** 300쪽짜리 문헌에서
+    한 쪽을 고치려다 300회를 태우게 된다. 그 사고를 막는 회귀다.
+    """
+    client, tmp_path = isolated_app
+    body = _register(client, tmp_path, "scan", "manual1", pages=5)
+    doc_id, part_id = body["document_id"], body["parts"][0]["part_id"]
+
+    from app._state import get_library_path
+
+    lib = get_library_path()
+    for page in range(1, 6):
+        _fake_ocr_done(lib, doc_id, part_id, page, [f"p{page:02d}_b01"])
+
+    # 3쪽만, 그리고 이미 결과가 있어도 다시.
+    # 엔진은 실패해도 상관없다 — 확인할 것은 «어느 쪽을 건드렸나»이다.
+    r = client.post(
+        f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch",
+        json={
+            "engine_id": "llm_vision",
+            "pages": [3],
+            "skip_existing": False,
+            "embed_after": False,
+        },
+    )
+    assert r.status_code == 200
+    events = [
+        json.loads(line[6:]) for line in r.text.splitlines() if line.startswith("data: ")
+    ]
+    start = next(e for e in events if e["type"] == "start")
+    assert start["total"] == 1, "지정한 범위를 벗어나 돌았다"
+
+    touched = {e["page"] for e in events if e["type"] in ("page", "skip")}
+    assert touched == {3}, f"3쪽만 건드려야 하는데 {touched}를 건드렸다"
+
+    done = next(e for e in events if e["type"] == "complete")
+    assert done["skipped"] == 0, "강제 재실행인데 건너뛰었다"
+
+
+def test_page_range_without_force_still_skips_done_pages(isolated_app):
+    """쪽 범위만 지정하고 강제를 끄면, 그 범위 안에서도 끝난 쪽은 건너뛴다.
+
+    범위 지정이 곧 «다시 돌려라»는 아니다. 이어 돌리기를 위해 범위를 좁히는
+    경우가 있으므로 두 스위치는 독립이어야 한다.
+    """
+    client, tmp_path = isolated_app
+    body = _register(client, tmp_path, "scan", "manual2", pages=4)
+    doc_id, part_id = body["document_id"], body["parts"][0]["part_id"]
+
+    from app._state import get_library_path
+
+    _fake_ocr_done(get_library_path(), doc_id, part_id, 2, ["p02_b01"])
+
+    r = client.post(
+        f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch",
+        json={"engine_id": "llm_vision", "pages": [2], "embed_after": False},
+    )
+    events = [
+        json.loads(line[6:]) for line in r.text.splitlines() if line.startswith("data: ")
+    ]
+    done = next(e for e in events if e["type"] == "complete")
+    assert done["skipped"] == 1
+    assert done["processed"] == 0
+    assert done["usage"]["calls"] == 0
+
+
+# ===========================================================================
+#  쪽별 결과 훑어보기 — 어느 쪽이 나쁜지 알아내는 수단
+# ===========================================================================
+#
+# 왜 필요한가:
+#   부분 재-OCR은 «12쪽이 나쁘다»를 이미 안다는 전제 위에 서 있다. 그런데
+#   텍스트를 보는 경로가 쪽 단위뿐이라 15쪽이면 15번 눌러 봐야 한다.
+#   실제로 15쪽짜리 논문에서 4쪽이 빈 채로 남아 있는 것을 아무도 모르고
+#   있었다 — 훑어볼 수단이 없었기 때문이다.
+
+
+def _write_l2(library_path, doc_id, part_id, page, texts, *, with_bbox=False):
+    """L2 결과를 직접 쓴다. texts가 비면 «돌았지만 아무것도 못 읽은» 쪽."""
+    import json as _json
+
+    doc_path = library_path / "documents" / doc_id
+    (doc_path / "L2_ocr").mkdir(exist_ok=True)
+    lines = [
+        {"text": t, **({"bbox": [0, i * 20, 100, i * 20 + 18]} if with_bbox else {})}
+        for i, t in enumerate(texts)
+    ]
+    (doc_path / "L2_ocr" / f"{part_id}_page_{page:03d}.json").write_text(
+        _json.dumps(
+            {
+                "part_id": part_id,
+                "page_number": page,
+                "ocr_engine": "llm_vision",
+                "ocr_results": [{"layout_block_id": f"p{page:02d}_b01", "lines": lines}]
+                if lines
+                else [],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_overview_separates_empty_from_not_run(isolated_app):
+    """«돌았는데 아무것도 못 읽은 쪽»과 «아직 안 돌린 쪽»은 다르다.
+
+    둘을 뭉뚱그리면 원인을 좁힐 수 없다. 앞은 엔진·이미지 문제이고
+    뒤는 그냥 아직 차례가 안 온 것이다.
+    """
+    client, tmp_path = isolated_app
+    body = _register(client, tmp_path, "scan", "ov1", pages=3)
+    doc_id, part_id = body["document_id"], body["parts"][0]["part_id"]
+
+    from app._state import get_library_path
+
+    lib = get_library_path()
+    _write_l2(lib, doc_id, part_id, 1, [])  # 돌았지만 결과 없음
+    _write_l2(lib, doc_id, part_id, 2, ["본문입니다"] * 10, with_bbox=True)
+    # 3쪽은 파일 자체를 만들지 않는다 (안 돌림)
+
+    data = client.get(
+        f"/api/documents/{doc_id}/parts/{part_id}/ocr/overview"
+    ).json()
+    by_page = {p["page"]: p for p in data["pages"]}
+    assert "empty" in by_page[1]["flags"]
+    assert "not_run" not in by_page[1]["flags"]
+    assert by_page[2]["flags"] == []
+    assert by_page[3]["flags"] == ["not_run"]
+    # 빈 쪽에는 no_position을 붙이지 않는다 — 좌표를 가질 줄이 애초에 없다.
+    # 붙이면 «좌표 문제»로 오인해 엉뚱한 곳을 고치게 된다.
+    assert "no_position" not in by_page[1]["flags"]
+
+
+def test_overview_median_ignores_empty_pages(isolated_app):
+    """중앙값은 글자가 나온 쪽만 놓고 낸다.
+
+    빈 쪽을 섞으면 기준선이 끌려 내려가 진짜 부실한 쪽이 정상으로 보인다.
+    실제로 15쪽 중 4쪽이 비어 있던 논문에서 840 → 939로 달라졌다.
+    """
+    client, tmp_path = isolated_app
+    body = _register(client, tmp_path, "scan", "ov2", pages=5)
+    doc_id, part_id = body["document_id"], body["parts"][0]["part_id"]
+
+    from app._state import get_library_path
+
+    lib = get_library_path()
+    for page in (1, 2):
+        _write_l2(lib, doc_id, part_id, page, [])
+    for page in (3, 4, 5):
+        _write_l2(lib, doc_id, part_id, page, ["가" * 100])
+
+    data = client.get(
+        f"/api/documents/{doc_id}/parts/{part_id}/ocr/overview"
+    ).json()
+    # 빈 쪽을 섞었다면 중앙값이 0이 됐을 것이다.
+    assert data["median_chars"] == 100
+
+
+def test_overview_flags_short_page(isolated_app):
+    """중앙값의 40% 미만인 쪽은 «글자 적음»으로 표시한다."""
+    client, tmp_path = isolated_app
+    body = _register(client, tmp_path, "scan", "ov3", pages=4)
+    doc_id, part_id = body["document_id"], body["parts"][0]["part_id"]
+
+    from app._state import get_library_path
+
+    lib = get_library_path()
+    for page in (1, 2, 3):
+        _write_l2(lib, doc_id, part_id, page, ["가" * 100])
+    _write_l2(lib, doc_id, part_id, 4, ["가" * 20])  # 20% — 기준 미만
+
+    data = client.get(
+        f"/api/documents/{doc_id}/parts/{part_id}/ocr/overview"
+    ).json()
+    by_page = {p["page"]: p for p in data["pages"]}
+    assert "few_chars" in by_page[4]["flags"]
+    assert "few_chars" not in by_page[1]["flags"]
+    # 판정만 주면 사용자가 확인할 방법이 없다. 실제 글자 수도 함께 준다.
+    assert by_page[4]["chars"] == 20
+
+
+def test_overview_gives_preview_text(isolated_app):
+    """미리보기가 있어야 «글자는 나왔는데 엉뚱한 내용»을 알아볼 수 있다.
+
+    실제로 미리보기 덕분에 머리글이 «玄同»이어야 할 쪽이 «友同»으로
+    읽힌 것을 발견했다. 글자 수만 봐서는 정상으로 보이는 쪽이었다.
+    """
+    client, tmp_path = isolated_app
+    body = _register(client, tmp_path, "scan", "ov4", pages=1)
+    doc_id, part_id = body["document_id"], body["parts"][0]["part_id"]
+
+    from app._state import get_library_path
+
+    _write_l2(
+        get_library_path(), doc_id, part_id, 1, ["玄同 李安中硏究", "본문 첫 줄입니다"]
+    )
+
+    data = client.get(
+        f"/api/documents/{doc_id}/parts/{part_id}/ocr/overview?preview_chars=20"
+    ).json()
+    preview = data["pages"][0]["preview"]
+    assert preview.startswith("玄同")
+    assert len(preview) <= 20
+
+
+def test_overview_reports_position_coverage(isolated_app):
+    """좌표를 가진 줄 수를 알려 준다 (형광 표시가 제자리에 뜨는지)."""
+    client, tmp_path = isolated_app
+    body = _register(client, tmp_path, "scan", "ov5", pages=2)
+    doc_id, part_id = body["document_id"], body["parts"][0]["part_id"]
+
+    from app._state import get_library_path
+
+    lib = get_library_path()
+    _write_l2(lib, doc_id, part_id, 1, ["가나다"] * 5, with_bbox=True)
+    _write_l2(lib, doc_id, part_id, 2, ["가나다"] * 5, with_bbox=False)
+
+    data = client.get(
+        f"/api/documents/{doc_id}/parts/{part_id}/ocr/overview"
+    ).json()
+    by_page = {p["page"]: p for p in data["pages"]}
+    assert by_page[1]["positioned"] == 5
+    assert "no_position" not in by_page[1]["flags"]
+    assert by_page[2]["positioned"] == 0
+    assert "no_position" in by_page[2]["flags"]
+
+
+# ===========================================================================
+#  OCR 결과를 교정 텍스트(L4)로 — 검수 화면을 채운다
+# ===========================================================================
+#
+# 왜 필요한가:
+#   검수는 «원본 이미지와 전체 텍스트를 나란히 놓고 보는» 일이고, 그 화면은
+#   교정 탭뿐이다. 그런데 교정 탭은 L4를 읽는데 배치 OCR은 L2까지만 썼다.
+#   그래서 OCR을 멀쩡히 돌린 문헌인데도 교정 탭이 **빈 화면**이었다.
+
+
+def test_batch_fills_correction_text(batch_ready):
+    """배치 OCR이 교정 텍스트(L4)까지 채운다.
+
+    이것이 없으면 「대조」 버튼이 빈 화면으로 안내한다. 실제로 그랬다 —
+    OCR을 멀쩡히 돌린 문헌인데 교정 탭이 비어 있었다.
+    """
+    client, doc_id, part_id = batch_ready
+
+    r = client.post(
+        f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch",
+        json={"engine_id": "dummy", "embed_after": False, "pages": [1, 2]},
+    )
+    assert r.status_code == 200
+    done = next(e for e in _sse_events(r) if e["type"] == "complete")
+    assert done["processed"] == 2, done
+
+    # 교정 탭이 읽는 바로 그 라우트로 확인한다.
+    got = client.get(f"/api/documents/{doc_id}/pages/1/text?part_id={part_id}").json()
+    assert got["text"].strip(), "교정 탭이 읽을 텍스트가 비어 있다"
+    assert "18세기" in got["text"]
+
+
+def test_batch_can_skip_filling_correction_text(batch_ready):
+    """fill_text_layer=False면 L4를 건드리지 않는다 (기존 동작 보존)."""
+    client, doc_id, part_id = batch_ready
+
+    client.post(
+        f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch",
+        json={
+            "engine_id": "dummy",
+            "embed_after": False,
+            "fill_text_layer": False,
+            "pages": [1],
+        },
+    )
+    got = client.get(f"/api/documents/{doc_id}/pages/1/text?part_id={part_id}").json()
+    assert not got["text"]
+
+
+def test_fill_text_moves_existing_ocr_without_llm(isolated_app):
+    """이미 OCR 한 문헌은 다시 돌리지 않고 옮기기만 한다.
+
+    검수하려고 쪽마다 LLM을 다시 부르는 것은 낭비다.
+    """
+    client, tmp_path = isolated_app
+    body = _register(client, tmp_path, "scan", "l4b", pages=3)
+    doc_id, part_id = body["document_id"], body["parts"][0]["part_id"]
+
+    from app._state import get_library_path
+
+    lib = get_library_path()
+    _write_l2(lib, doc_id, part_id, 1, ["첫 줄", "둘째 줄"])
+    _write_l2(lib, doc_id, part_id, 2, [])  # 결과 없는 쪽
+    # 3쪽은 L2 자체가 없다
+
+    r = client.post(f"/api/documents/{doc_id}/parts/{part_id}/ocr/fill-text")
+    data = r.json()
+    assert data["filled"] == 1
+    assert data["empty"] == 2  # 빈 쪽 + L2 없는 쪽
+
+    got = client.get(f"/api/documents/{doc_id}/pages/1/text?part_id={part_id}").json()
+    assert got["text"] == "첫 줄\n둘째 줄"
+
+
+def test_fill_text_does_not_overwrite_human_corrections(isolated_app):
+    """이미 L4가 있으면 덮지 않는다.
+
+    L4에는 사람이 손으로 고친 교정이 들어 있을 수 있다. OCR 원문으로 덮으면
+    그 작업이 사라진다 — 되돌릴 수 없는 쪽을 기본값으로 두지 않는다.
+    """
+    client, tmp_path = isolated_app
+    body = _register(client, tmp_path, "scan", "l4c", pages=1)
+    doc_id, part_id = body["document_id"], body["parts"][0]["part_id"]
+
+    from app._state import get_library_path
+
+    _write_l2(get_library_path(), doc_id, part_id, 1, ["友同 李安中研究"])
+    client.put(
+        f"/api/documents/{doc_id}/pages/1/text?part_id={part_id}",
+        json={"text": "玄同 李安中研究"},  # 사람이 고친 것
+    )
+
+    r = client.post(f"/api/documents/{doc_id}/parts/{part_id}/ocr/fill-text")
+    assert r.json()["skipped"] == 1
+    got = client.get(f"/api/documents/{doc_id}/pages/1/text?part_id={part_id}").json()
+    assert got["text"] == "玄同 李安中研究", "손으로 고친 교정이 덮였다"
+
+    # 명시적으로 요청하면 덮는다.
+    r2 = client.post(
+        f"/api/documents/{doc_id}/parts/{part_id}/ocr/fill-text?overwrite=true"
+    )
+    assert r2.json()["filled"] == 1
+    got2 = client.get(f"/api/documents/{doc_id}/pages/1/text?part_id={part_id}").json()
+    assert got2["text"] == "友同 李安中研究"
+
+
+def test_fill_text_accepts_page_selection(isolated_app):
+    """쪽을 지정하면 그 쪽만 채운다 (「대조」 버튼이 한 쪽만 준비시킬 때)."""
+    client, tmp_path = isolated_app
+    body = _register(client, tmp_path, "scan", "l4d", pages=3)
+    doc_id, part_id = body["document_id"], body["parts"][0]["part_id"]
+
+    from app._state import get_library_path
+
+    lib = get_library_path()
+    for page in (1, 2, 3):
+        _write_l2(lib, doc_id, part_id, page, [f"{page}쪽 본문"])
+
+    r = client.post(f"/api/documents/{doc_id}/parts/{part_id}/ocr/fill-text?pages=2")
+    assert r.json()["filled"] == 1
+    assert r.json()["total"] == 1
+
+    filled = client.get(
+        f"/api/documents/{doc_id}/pages/2/text?part_id={part_id}"
+    ).json()
+    untouched = client.get(
+        f"/api/documents/{doc_id}/pages/1/text?part_id={part_id}"
+    ).json()
+    assert filled["text"] == "2쪽 본문"
+    assert not untouched["text"], "지정하지 않은 쪽까지 채웠다"

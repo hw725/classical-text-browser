@@ -56,14 +56,20 @@ def ocr_path(doc_path: Path, part_id: str, page_number: int) -> Path:
     return Path(doc_path) / "L2_ocr" / f"{part_id}_page_{page_number:03d}.json"
 
 
-def _read_json(path: Path) -> dict | None:
-    """JSON 파일을 읽는다. 없거나 깨졌으면 None."""
+def read_page_json(path: Path) -> dict | None:
+    """L2/L3 페이지 JSON을 읽는다. 없거나 깨졌으면 None.
+
+    깨진 파일을 예외로 올리지 않는 이유: 한 쪽이 깨졌다고 권 전체의 판정이
+    멈추면 안 된다. 읽지 못한 쪽은 «결과가 없는 쪽»으로 취급하면 다시 돌면서
+    저절로 고쳐진다.
+    """
     if not path.exists():
         return None
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
+
 
 
 def has_ocr_result(doc_path: Path, part_id: str, page_number: int) -> bool:
@@ -75,7 +81,7 @@ def has_ocr_result(doc_path: Path, part_id: str, page_number: int) -> bool:
     파일만 있고 내용이 비어 있으면 False다 — 실패한 쪽을 영원히
     건너뛰게 되면 사용자는 왜 그 쪽만 비었는지 알 수 없다.
     """
-    data = _read_json(ocr_path(doc_path, part_id, page_number))
+    data = read_page_json(ocr_path(doc_path, part_id, page_number))
     return bool(data and data.get("ocr_results"))
 
 
@@ -132,8 +138,8 @@ def layout_changed_since_ocr(
     l3 = layout_path(doc_path, part_id, page_number)
     l2 = ocr_path(doc_path, part_id, page_number)
 
-    layout_data = _read_json(l3)
-    ocr_data = _read_json(l2)
+    layout_data = read_page_json(l3)
+    ocr_data = read_page_json(l2)
     if layout_data is None or ocr_data is None:
         # 레이아웃이 없으면 전면 블록이 새로 생길 것이고,
         # OCR 결과가 없으면 애초에 건너뛸 쪽이 아니다.

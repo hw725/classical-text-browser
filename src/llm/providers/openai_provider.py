@@ -22,6 +22,13 @@ class OpenAiProvider(BaseLlmProvider):
     billing_model = "metered"  # 쓴 만큼 과금된다
     DEFAULT_MODEL = "gpt-5-mini"  # 비용 효율적 기본 모델
 
+    # 배포판에서는 각자 자기 키를 .env에 넣는다.
+    setup_kind = "env_key"
+    setup_steps = (
+        "https://platform.openai.com/api-keys 에서 키 발급",
+        ".env에 OPENAI_API_KEY=... 를 적고 서버 재시작",
+    )
+
     def _create_client(self):
         """AsyncOpenAI 클라이언트 생성.
 

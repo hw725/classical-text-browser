@@ -492,6 +492,35 @@
             >
               <div class="placeholder">로딩 중...</div>
             </div>
+
+            <div class="settings-divider"></div>
+
+            <!-- ====== LLM 연결 ======
+                 API 키 방식은 .env에 넣으면 끝이지만, 구독형(Ollama 클라우드·
+                 OpenAI OAuth)은 터미널 로그인이 필요하고 앱이 대신할 수 없다.
+                 «서버는 떴는데 로그인은 안 된» 상태가 조용히 유료 API 폴백으로
+                 이어진 사고가 있어(D-056), 그 구분을 화면에 드러낸다. -->
+            <div
+              class="section-header"
+              style="margin-top: 12px"
+            >
+              LLM 연결
+              <button
+                class="btn-sm"
+                id="btn-refresh-llm-accounts"
+                title="연결 상태를 다시 확인합니다"
+                style="float: right"
+              >다시 확인</button>
+            </div>
+            <div
+              id="settings-llm-accounts"
+              class="settings-llm-list"
+            >
+              <div class="placeholder">로딩 중...</div>
+            </div>
+            <div class="settings-info-note">
+              하나만 연결돼 있어도 동작합니다. 위에서부터 순서대로 시도합니다.
+            </div>
           </div>
 
           <!-- ====== Git 이력 사이드바 섹션 ====== -->
@@ -1475,6 +1504,34 @@
             style="display: none"
           >
             <div class="panel-label">교정 편집기 (L4)</div>
+
+            <!-- ====== 쪽별 검수 바 (추출 모드에서만) ======
+                 검수는 여기서 한다 — 원본 이미지와 전체 텍스트가 나란히 있는
+                 화면이 여기뿐이기 때문이다. 확인 표시를 추출 패널(열람 탭)에만
+                 두면 쪽마다 탭을 두 번 오가야 해서 15쪽이면 30번이 된다.
+                 「다음 미확인 쪽」으로 이 탭에 머문 채 쭉 흐르게 한다. -->
+            <div
+              class="corr-review-bar"
+              id="corr-review-bar"
+              hidden
+            >
+              <span
+                class="corr-review-progress"
+                id="corr-review-progress"
+              ></span>
+              <label class="corr-review-check">
+                <input
+                  type="checkbox"
+                  id="corr-review-checkbox"
+                />
+                <span>이 쪽 확인함</span>
+              </label>
+              <button
+                type="button"
+                class="corr-review-next"
+                id="corr-review-next"
+              >다음 미확인 쪽 →</button>
+            </div>
 
             <!-- 교정 도구 바 -->
             <div class="corr-toolbar">
@@ -3264,6 +3321,27 @@
                   id="extract-usage"
                   hidden
                 ></div>
+
+                <!-- ====== 쪽별 결과 훑어보기 ======
+                     «12쪽만 다시 돌린다»를 하려면 12쪽이 나쁘다는 것을 먼저
+                     알아야 한다. 그런데 텍스트를 보는 경로가 쪽 단위뿐이라
+                     15쪽이면 15번 눌러 봐야 한다. 여기서 한눈에 보고,
+                     이상한 쪽을 누르면 쪽 범위에 그대로 들어간다. -->
+                <details
+                  class="extract-overview"
+                  id="extract-overview"
+                  hidden
+                >
+                  <summary id="extract-overview-summary">쪽별 결과 훑어보기</summary>
+                  <div
+                    class="extract-overview-hint"
+                    id="extract-overview-hint"
+                  ></div>
+                  <div
+                    class="extract-overview-list"
+                    id="extract-overview-list"
+                  ></div>
+                </details>
               </div>
 
               <!-- 3) born-digital일 때: 바로 가져오기 -->
@@ -3288,11 +3366,21 @@
                   class="extract-export-status"
                   id="extract-export-status"
                 ></div>
+
+                <!-- 굽기 전에 «쪽마다 확인이 끝났는가»를 알려 준다.
+                     산출물이 서지 관리 도구로 넘어가면 되돌리기 어려우므로,
+                     확신 없이 내보내지 않도록 여기서 한 번 멈춰 세운다. -->
+                <div
+                  class="extract-review-status"
+                  id="extract-review-status"
+                  hidden
+                ></div>
+
                 <button
                   type="button"
                   class="extract-run-btn extract-secondary"
                   id="extract-embed-btn"
-                >텍스트 레이어 PDF 다시 굽기</button>
+                >텍스트 레이어 PDF 다시 만들기</button>
                 <a
                   class="extract-download"
                   id="extract-download-link"

@@ -310,6 +310,13 @@ async function loadPageCorrections(docId, partId, pageNum) {
 
     // Git 이력도 로드
     _loadGitLog(docId);
+
+    // 추출 모드에서는 이 화면이 곧 검수 화면이다. 확인 표시와 «다음 미확인
+    // 쪽»을 여기에 띄워, 쪽마다 열람 탭으로 돌아가지 않아도 되게 한다.
+    // (교감 모드에서는 이 함수가 스스로 아무것도 하지 않는다.)
+    if (typeof refreshCorrectionReviewBar === "function") {
+      refreshCorrectionReviewBar(pageNum);
+    }
   } catch (err) {
     console.error("교정 데이터 로드 실패:", err);
     _updateCorrSaveStatus("error");

@@ -81,6 +81,16 @@ class OcrBatchRequest(BaseModel):
     # 근현대 단일 컬럼 문헌용. 고서에서는 꺼야 한다.
     auto_full_page_block: bool = True
     writing_direction: str = "horizontal_ltr"
+    # OCR 결과를 교정 텍스트(L4)에도 넣는다.
+    #
+    # 왜 기본값이 True인가: 교정 탭은 L4를 읽는다. 배치 OCR은 L2까지만 쓰므로
+    # L4가 비고, 교정 탭이 **빈 화면**이 된다. 고서 흐름에서는 「OCR 채우기」
+    # 단추를 쪽마다 눌러 이 복사를 하는데(ocr-panel.js), 추출 흐름에는 그
+    # 단계가 없다. 결과를 원본과 대조하려면 교정 탭이 채워져 있어야 한다.
+    #
+    # 사람이 이미 고쳐 둔 L4는 덮지 않는다 — 아래 루프에서 그 쪽을 실제로
+    # 새로 OCR 했을 때만 쓴다. 건너뛴 쪽은 손대지 않는다.
+    fill_text_layer: bool = True
     # OCR이 끝나면 텍스트 레이어 PDF까지 만든다.
     #
     # 왜 기본값이 True인가: OCR 결과는 L2 JSON에만 들어가므로, 입히기를 따로
@@ -339,6 +349,155 @@ async def api_llm_status():
     """각 provider의 가용 상태."""
     router_inst = _get_llm_router()
     return await router_inst.get_status()
+
+
+@router.get("/api/llm/accounts")
+async def api_llm_accounts():
+    """프로바이더별 «쓸 수 있는 상태인가»와 «아니면 무엇을 해야 하는가».
+
+    출력: {"providers": [{
+        "provider_id": "ollama",
+        "display_name": "Ollama",
+        "billing_model": "free",      # metered | subscription | free
+        "reachable": true,            # 서비스에 닿는가
+        "authenticated": true,        # 로그인·키가 있는가 (null이면 확인 불가)
+        "account": "user@example.com",# 알 수 있을 때만
+        "plan": "pro",
+        "setup_kind": "cli_signin",   # env_key | cli_signin | local
+        "setup_steps": [...],
+        "status": "ready" | "needs_signin" | "needs_key" | "offline",
+        "note": "사람이 읽을 한 줄"
+    }, ...]}
+
+    왜 /api/llm/status와 따로 두는가:
+        status는 «가용한가»만 준다. 그런데 구독형은 **서비스가 떠 있는 것과
+        로그인된 것이 다르다.** Ollama 서버는 로그인 없이도 뜨므로 status는
+        available=True를 주지만, 클라우드 모델을 부르면 실패하고 라우터가
+        조용히 유료 API로 넘어간다(D-056에서 실제로 겪은 사고다).
+
+        배포판에서는 이 구분이 특히 중요하다. API 키는 «.env에 넣으세요»로
+        끝나지만 구독형은 터미널 로그인이 필요하고, 그것을 앱이 대신할 수 없다.
+        무엇을 해야 하는지 화면에 적어 주는 것이 이 라우트의 목적이다.
+    """
+    import asyncio
+
+    router_inst = _get_llm_router()
+
+    async def _one(provider):
+        entry = {
+            "provider_id": provider.provider_id,
+            "display_name": provider.display_name,
+            "billing_model": provider.billing_model,
+            "setup_kind": getattr(provider, "setup_kind", "env_key"),
+            "setup_steps": list(getattr(provider, "setup_steps", ())),
+            "account": None,
+            "plan": None,
+        }
+
+        try:
+            reachable = await provider.is_available()
+        except Exception as e:  # noqa: BLE001 — 한 프로바이더 실패로 화면이 비면 안 된다
+            reachable = False
+            entry["error"] = str(e)
+        entry["reachable"] = reachable
+
+        # 로그인 여부는 조회할 방법이 있는 프로바이더만 확인한다.
+        # 없으면 None으로 둔다 — 모르는 것을 안다고 하지 않는다.
+        account = None
+        if reachable:
+            try:
+                account = await provider.account_info()
+            except Exception:  # noqa: BLE001
+                account = None
+        # 실제로 쓸 비전 모델을 알 수 있으면 그 모델의 과금 방식을 쓴다.
+        #
+        # 왜 클래스 값을 그대로 쓰면 안 되는가: Ollama의 billing_model은
+        # "free"(로컬)지만, 이 PC에서 실제로 고르는 비전 모델은
+        # `qwen3.5:397b-cloud`처럼 **구독 한도를 쓰는 클라우드 모델**일 수 있다.
+        # 화면에 «로컬 무료»라고 띄우면 D-056에서 문제 삼은 그 오해가
+        # 그대로 재발한다.
+        if reachable and hasattr(provider, "_pick_vision_model"):
+            try:
+                model = await provider._pick_vision_model()
+            except Exception:  # noqa: BLE001
+                model = None
+            if model:
+                entry["active_model"] = model
+                entry["billing_model"] = provider.billing_for_model(model)
+
+        if account:
+            entry["account"] = account.get("account")
+            entry["plan"] = account.get("plan")
+            entry["authenticated"] = True
+        elif entry["setup_kind"] == "cli_signin":
+            # 조회 수단이 있는데 못 받았으면 «로그인 안 됨», 조회 수단 자체가
+            # 없으면 «모름». Ollama는 /api/me가 있고 OAuth 프록시는 없다.
+            entry["authenticated"] = False if provider.provider_id == "ollama" else None
+        else:
+            # API 키 방식은 is_available()이 곧 키 유무다.
+            entry["authenticated"] = reachable
+
+        entry["status"], entry["note"] = _account_status(entry)
+        return entry
+
+    # 프로바이더를 **동시에** 확인한다. 직렬로 하면 느린 하나(프록시 포트
+    # 스캔 등)가 나머지 전부를 붙잡아 설정 화면이 그만큼 멈춘다.
+    # 순서는 폴백 순서 그대로 유지한다 — 화면의 «위에서부터 시도합니다»와
+    # 어긋나면 안 된다.
+    return {
+        "providers": list(
+            await asyncio.gather(*(_one(p) for p in router_inst.providers))
+        )
+    }
+
+
+def _account_status(entry: dict) -> tuple[str, str]:
+    """프로바이더 상태를 한 단어와 한 줄로 요약한다.
+
+    입력: api_llm_accounts()가 만든 항목 dict.
+    출력: (status, note)
+
+    구독형에서 «로그인 안 됨»을 «사용 가능»으로 보이게 하면 안 된다.
+    실행하고 나서야 안 되는 것을 알게 되기 때문이다.
+    """
+    name = entry["display_name"]
+    kind = entry["setup_kind"]
+
+    if not entry["reachable"]:
+        if kind == "env_key":
+            return "needs_key", f"{name}: API 키가 없습니다. .env에 키를 넣으세요."
+        if kind == "cli_signin":
+            return "offline", f"{name}: 서비스가 실행 중이 아닙니다."
+        return "offline", f"{name}: 연결할 수 없습니다."
+
+    if entry["authenticated"] is False:
+        return (
+            "needs_signin",
+            f"{name}: 서버는 떠 있지만 **로그인돼 있지 않습니다.** "
+            "로컬 모델은 쓸 수 있지만 클라우드 모델은 실패하고, "
+            "그러면 다음 프로바이더(유료 API)로 넘어갑니다.",
+        )
+
+    if entry["account"]:
+        plan = f", {entry['plan']} 요금제" if entry.get("plan") else ""
+        note = f"{name}: {entry['account']}{plan}로 로그인돼 있습니다."
+        # 로그인돼 있다는 사실만 적고 끝내면, 실제로 도는 모델이 구독 한도를
+        # 쓰는 클라우드 모델일 때 그 사실이 가려진다.
+        if entry["billing_model"] == "subscription":
+            model = entry.get("active_model")
+            which = f" {model}은(는)" if model else ""
+            note += f"{which} **구독 한도를 씁니다** — 남은 한도는 제공자 대시보드에서 확인하세요."
+        return "ready", note
+
+    if entry["billing_model"] == "metered":
+        return "ready", f"{name}: 키가 등록돼 있습니다. **쓴 만큼 청구됩니다.**"
+    if entry["billing_model"] == "subscription":
+        return (
+            "ready",
+            f"{name}: 사용 가능합니다. 금액은 0이지만 **구독 한도를 씁니다** — "
+            "남은 한도는 제공자 대시보드에서 확인하세요.",
+        )
+    return "ready", f"{name}: 사용 가능합니다."
 
 
 @router.get("/api/llm/models")
@@ -1130,6 +1289,224 @@ async def api_ocr_pending(doc_id: str, part_id: str):
     }
 
 
+@router.post("/api/documents/{doc_id}/parts/{part_id}/ocr/fill-text")
+async def api_fill_text_from_ocr(
+    doc_id: str,
+    part_id: str,
+    overwrite: bool = False,
+    pages: str | None = Query(None, description="쉼표로 구분한 쪽 번호. 비우면 전체"),
+):
+    """이미 있는 OCR 결과(L2)를 교정 텍스트(L4)로 옮긴다. LLM을 부르지 않는다.
+
+    입력:
+        doc_id, part_id.
+        overwrite — 이미 있는 L4를 덮어쓸지(기본 False).
+        pages — "3" 또는 "3,7,12". 비우면 이 권 전체.
+    출력: {"filled": 12, "skipped": 3, "empty": 0, "total": 15}
+
+    왜 필요한가:
+        교정 탭은 L4를 읽는다. 그런데 배치 OCR이 L4를 채우기 전에 돌린 문헌은
+        L2에 결과가 있어도 **교정 탭이 빈 화면**이다. 결과를 원본과 대조하려면
+        교정 탭이 채워져 있어야 하는데, 그것 때문에 쪽마다 LLM을 다시 부르는
+        것은 낭비다. 이 라우트는 이미 있는 결과를 옮기기만 한다.
+
+    왜 기본이 덮어쓰지 않기인가:
+        L4에는 사람이 손으로 고친 교정이 들어 있을 수 있다. OCR 원문으로
+        덮으면 그 작업이 사라진다. 되돌릴 수 없는 쪽을 기본값으로 두지 않는다.
+    """
+    library_path = get_library_path()
+    if library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = library_path / "documents" / doc_id
+    if not (doc_path / "manifest.json").exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404
+        )
+
+    from core.document import get_document_info, get_page_text, save_page_text
+    from ocr.layout_staleness import ocr_path, read_page_json
+
+    manifest = get_document_info(doc_path)
+    part = next(
+        (p for p in manifest.get("parts", []) if p.get("part_id") == part_id), None
+    )
+    if part is None:
+        return JSONResponse(
+            {"error": f"권을 찾을 수 없습니다: part_id='{part_id}'"}, status_code=404
+        )
+
+    page_count = _resolve_page_count(doc_path, part)
+
+    # 쪽을 지정하면 그 쪽만. 「대조」 버튼이 한 쪽만 준비시킬 때 쓴다.
+    targets = list(range(1, page_count + 1))
+    if pages:
+        wanted = {
+            int(chunk) for chunk in pages.replace(" ", "").split(",") if chunk.isdigit()
+        }
+        targets = [p for p in targets if p in wanted]
+
+    filled = skipped = empty = 0
+
+    for page_number in targets:
+        data = read_page_json(ocr_path(doc_path, part_id, page_number))
+        results = (data or {}).get("ocr_results") or []
+        text = "\n\n".join(
+            "\n".join(ln.get("text") or "" for ln in (r.get("lines") or []))
+            for r in results
+        ).strip()
+        if not text:
+            empty += 1
+            continue
+
+        if not overwrite:
+            try:
+                existing = (get_page_text(doc_path, part_id, page_number) or {}).get(
+                    "text"
+                )
+            except (FileNotFoundError, OSError):
+                existing = None
+            if existing and existing.strip():
+                skipped += 1
+                continue
+
+        save_page_text(doc_path, part_id, page_number, text)
+        filled += 1
+
+    return {
+        "filled": filled,
+        "skipped": skipped,
+        "empty": empty,
+        "total": len(targets),
+        "page_count": page_count,
+    }
+
+
+@router.get("/api/documents/{doc_id}/parts/{part_id}/ocr/overview")
+async def api_ocr_overview(doc_id: str, part_id: str, preview_chars: int = 70):
+    """쪽마다 OCR 결과가 어떤지 한눈에 보여 준다.
+
+    입력: doc_id, part_id, preview_chars — 미리보기 글자 수.
+    출력: {
+        "page_count": 15,
+        "median_chars": 950,          # 이상 판정의 기준선
+        "pages": [{
+            "page": 1, "lines": 32, "chars": 1098,
+            "positioned": 30,          # 좌표를 가진 줄 수
+            "blocks": 1,               # 읽은 LayoutBlock 수
+            "preview": "본고는 18세기…",
+            "flags": ["few_chars"]
+        }, ...]
+    }
+
+    왜 필요한가:
+        «12쪽만 다시 돌린다»를 하려면 **12쪽이 나쁘다는 것을 먼저 알아야 한다.**
+        그런데 텍스트를 보는 경로가 쪽 단위뿐이라, 15쪽이면 15번 눌러 봐야
+        어디가 나쁜지 알 수 있다. 300쪽이면 사실상 불가능하다.
+
+    무엇을 «이상»이라 부르는가 (flags):
+        empty      — 줄이 하나도 없다. 확실한 실패다.
+        few_chars  — 글자 수가 이 권 중앙값의 40% 미만이다.
+        no_position— 좌표를 가진 줄이 하나도 없다(형광 표시가 제자리에 안 뜬다).
+
+    **few_chars는 «틀렸다»가 아니라 «봐 두라»는 표시다.** 표지·간지·참고문헌
+    쪽은 원래 글자가 적다. 그래서 판정을 숨기지 않고 실제 글자 수를 함께
+    돌려준다 — 최종 판단은 사람이 한다.
+    """
+    library_path = get_library_path()
+    if library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = library_path / "documents" / doc_id
+    if not (doc_path / "manifest.json").exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404
+        )
+
+    from core.document import get_document_info
+
+    manifest = get_document_info(doc_path)
+    part = next(
+        (p for p in manifest.get("parts", []) if p.get("part_id") == part_id), None
+    )
+    if part is None:
+        return JSONResponse(
+            {"error": f"권을 찾을 수 없습니다: part_id='{part_id}'"}, status_code=404
+        )
+
+    import statistics
+
+    from ocr.layout_staleness import ocr_path, read_page_json
+
+    page_count = _resolve_page_count(doc_path, part)
+    pages = []
+    for page_number in range(1, page_count + 1):
+        data = read_page_json(ocr_path(doc_path, part_id, page_number))
+        if data is None:
+            # 아직 OCR 하지 않은 쪽. «결과가 나쁘다»와 구별해야 한다.
+            pages.append(
+                {
+                    "page": page_number,
+                    "lines": 0,
+                    "chars": 0,
+                    "positioned": 0,
+                    "blocks": 0,
+                    "preview": "",
+                    "flags": ["not_run"],
+                }
+            )
+            continue
+
+        results = data.get("ocr_results") or []
+        texts, positioned, lines = [], 0, 0
+        for result in results:
+            for line in result.get("lines") or []:
+                lines += 1
+                text = line.get("text") or ""
+                texts.append(text)
+                if line.get("bbox"):
+                    positioned += 1
+
+        joined = " ".join(t.strip() for t in texts if t.strip())
+        chars = sum(len(t.strip()) for t in texts)
+        pages.append(
+            {
+                "page": page_number,
+                "lines": lines,
+                "chars": chars,
+                "positioned": positioned,
+                "blocks": len(results),
+                "preview": joined[:preview_chars],
+                "flags": [],
+            }
+        )
+
+    # 중앙값은 **글자가 나온 쪽만** 놓고 낸다. 안 돌린 쪽과 빈 쪽(0자)을
+    # 섞으면 기준선이 끌려 내려가 진짜 부실한 쪽이 정상으로 보인다.
+    # 실측 예: 15쪽 중 4쪽이 비어 있던 논문에서 중앙값이 840 → 939로 올라간다.
+    scored = [p["chars"] for p in pages if p["lines"] > 0]
+    median_chars = int(statistics.median(scored)) if scored else 0
+
+    for entry in pages:
+        if "not_run" in entry["flags"]:
+            continue
+        if entry["lines"] == 0:
+            # 파일은 있는데 결과가 없다 = OCR이 돌았지만 아무것도 못 읽었다.
+            # 아예 안 돌린 쪽(not_run)과 구별해야 원인을 좁힐 수 있다.
+            entry["flags"].append("empty")
+            continue
+        if median_chars and entry["chars"] < median_chars * 0.4:
+            entry["flags"].append("few_chars")
+        if entry["positioned"] == 0:
+            entry["flags"].append("no_position")
+
+    return {
+        "page_count": page_count,
+        "median_chars": median_chars,
+        "pages": pages,
+    }
+
+
 @router.post("/api/documents/{doc_id}/parts/{part_id}/ocr/batch")
 async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
     """권 전체를 쪽 단위로 이어서 OCR 하고 SSE로 진행률을 보낸다.
@@ -1336,12 +1713,41 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                         ),
                     )
                     summary = result.to_summary()
-                    lines = sum(
-                        len(r.get("lines") or [])
-                        for r in (summary.get("ocr_results") or [])
-                    )
+                    results = summary.get("ocr_results") or []
+                    lines = sum(len(r.get("lines") or []) for r in results)
                     total_lines += lines
                     processed += 1
+
+                    # 3) OCR 텍스트를 교정 텍스트(L4)에도 넣는다.
+                    #
+                    # 이 쪽은 방금 새로 OCR 했으므로 덮어써도 잃을 것이 없다.
+                    # (건너뛴 쪽은 여기 오지 않으니 사람이 고친 교정은 안전하다.)
+                    # 고서 흐름의 「OCR 채우기」 단추와 같은 일을 자동으로 한다.
+                    if body.fill_text_layer and lines:
+                        try:
+                            from core.document import save_page_text
+
+                            text = "\n\n".join(
+                                "\n".join(
+                                    ln.get("text") or "" for ln in (r.get("lines") or [])
+                                )
+                                for r in results
+                            )
+                            await loop.run_in_executor(
+                                None,
+                                lambda p=page_number, t=text: save_page_text(
+                                    doc_path, part_id, p, t
+                                ),
+                            )
+                        except Exception as e:  # noqa: BLE001
+                            # L4 저장 실패로 OCR 결과까지 버리지 않는다.
+                            # 다만 교정 탭이 비어 보일 것이므로 사유를 남긴다.
+                            warnings.append(
+                                f"{page_number}쪽의 교정 텍스트(L4)를 저장하지 "
+                                f"못했습니다: {e}\n"
+                                "→ 교정 탭이 비어 보이면 해당 쪽에서 "
+                                "「OCR 채우기」를 눌러 주세요."
+                            )
                     await progress_queue.put(
                         {
                             "type": "page",

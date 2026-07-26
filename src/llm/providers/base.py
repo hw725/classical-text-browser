@@ -77,8 +77,40 @@ class BaseLlmProvider(ABC):
         """
         return self.billing_model
 
+    # 이 프로바이더를 쓰려면 사용자가 무엇을 해야 하는가.
+    #
+    #   "env_key"    — .env에 API 키를 넣는다. 배포판에서는 각자 자기 키를 쓴다.
+    #   "cli_signin" — 터미널에서 로그인한다(구독형). 앱이 대신 해 줄 수 없다.
+    #   "local"      — 설치하고 띄우기만 하면 된다. 계정이 필요 없다.
+    #
+    # 왜 필요한가: API 키 방식은 «.env에 키를 넣으세요»로 끝나지만, 구독형은
+    # 터미널 로그인이 필요하고 그 사실이 어디에도 적혀 있지 않으면 사용자는
+    # «왜 안 되는지» 알 수 없다. 폴백이 조용히 다음 프로바이더로 넘어가므로
+    # 화면에는 아무 표시도 남지 않는다(D-056).
+    setup_kind: str = "env_key"
+
+    # 로그인·설정에 필요한 명령. setup_kind에 맞춰 화면에 그대로 보여 준다.
+    setup_steps: tuple[str, ...] = ()
+
     def __init__(self, config):
         self.config = config
+
+    async def account_info(self) -> dict | None:
+        """로그인한 계정 정보를 돌려준다. 알 수 없으면 None.
+
+        출력 예: {"account": "user@example.com", "plan": "pro"}
+
+        왜 이 메서드가 있는가:
+            구독형 프로바이더는 «서비스가 떠 있다»와 «로그인돼 있다»가 다르다.
+            Ollama 서버는 로그인 없이도 뜨지만 클라우드 모델을 부르면 실패한다.
+            is_available()만 보면 «사용 가능»으로 보이므로, 실행하고 나서야
+            안 되는 것을 알게 된다.
+
+        기본은 None이다 — 조회할 방법이 확인되지 않은 프로바이더는
+        **있는 것처럼 만들지 않는다.** 남은 한도는 어느 프로바이더도
+        제공하지 않으므로 이 메서드로 돌려주지 않는다(D-056).
+        """
+        return None
 
     @abstractmethod
     async def is_available(self) -> bool:

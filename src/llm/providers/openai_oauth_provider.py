@@ -45,6 +45,14 @@ class OpenAiOAuthProvider(OpenAiProvider):
     billing_model = "subscription"
     DEFAULT_MODEL = "gpt-5.4-mini"  # OAuth 프록시 기본 모델 (비용 효율적)
 
+    # API 키가 아니라 ChatGPT 계정으로 로그인한다. 프록시가 브라우저를 열어
+    # 인증을 받으므로 앱이 대신할 수 없다.
+    setup_kind = "cli_signin"
+    setup_steps = (
+        "npx -y openai-oauth   (Windows에서는 start_server.bat가 자동 기동)",
+        "브라우저가 열리면 ChatGPT 계정으로 로그인",
+    )
+
     # is_available()에서 발견한 프록시 URL을 캐싱.
     # 매 호출마다 포트 스캔을 반복하지 않기 위함.
     _discovered_url: Optional[str] = None
@@ -131,10 +139,22 @@ class OpenAiOAuthProvider(OpenAiProvider):
             except Exception:
                 pass
 
-        # 전체 범위 스캔
-        for port in _PORT_SCAN_RANGE:
-            models = await self._probe_port(port)
-            if models is not None:
+        # 전체 범위 스캔 — 10개 포트를 **동시에** 훑는다.
+        #
+        # 왜 직렬로 하면 안 되는가: 프록시가 안 떠 있으면 포트마다 2초씩
+        # 기다려 총 20초가 걸린다. 그동안 설정 화면은 «로딩 중»에 멈춰 있고,
+        # 이 프로바이더 하나 때문에 나머지 넷의 상태도 못 본다.
+        # 실측(2026-07-26): 직렬 20.2초 → 동시 2초 남짓.
+        import asyncio
+
+        ports = list(_PORT_SCAN_RANGE)
+        results = await asyncio.gather(
+            *(self._probe_port(p) for p in ports), return_exceptions=True
+        )
+        for port, models in zip(ports, results):
+            # 낮은 포트를 우선한다 — openai-oauth가 기본 포트부터 올리므로
+            # 여러 개가 떠 있으면 먼저 뜬 것이 정본일 가능성이 높다.
+            if isinstance(models, list):
                 self._discovered_url = f"http://127.0.0.1:{port}/v1"
                 self._discovered_models = models
                 _logger.info(f"openai-oauth 프록시 발견: port {port}")

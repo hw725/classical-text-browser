@@ -54,6 +54,44 @@ class OllamaProvider(BaseLlmProvider):
     # 로컬 실행이 기본이지만 `:cloud` 모델은 구독 한도를 쓴다.
     billing_model = "free"
 
+    # 로컬 모델만 쓸 거면 설치·기동으로 끝난다. `:cloud` 모델을 쓰려면
+    # ollama.com 계정으로 로그인해야 하고, 그것은 터미널에서만 된다.
+    setup_kind = "cli_signin"
+    setup_steps = (
+        "ollama serve   (서버가 이미 떠 있으면 생략)",
+        "ollama signin  (클라우드 모델을 쓸 때만 — 브라우저가 열립니다)",
+    )
+
+    async def account_info(self) -> dict | None:
+        """ollama.com 로그인 계정을 조회한다.
+
+        출력: {"account": 이메일, "plan": 요금제} — 로그인 안 됐으면 None.
+
+        왜 이 조회가 필요한가:
+            Ollama 서버는 **로그인하지 않아도 뜬다.** 그래서 is_available()은
+            True인데 `:cloud` 모델을 부르면 실패한다. 라우터는 조용히 다음
+            프로바이더(유료 API)로 넘어가므로 사용자는 왜 Ollama가 아니라
+            Gemini가 돌았는지 알 수 없다 — 실제로 그 사고가 있었다(D-056).
+
+        남은 한도는 돌려주지 않는다. Ollama가 그 정보를 제공하지 않는다
+            (실측 2026-07-26: /api/me 응답에 사용량·잔여 한도 없음,
+             응답 헤더에도 X-RateLimit-* 없음).
+        """
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                # GET이 아니라 POST다 (GET은 405를 준다).
+                resp = await client.post(f"{self._url}/api/me", json={})
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+        except (httpx.HTTPError, OSError, ValueError):
+            return None
+
+        email = data.get("email") or data.get("name")
+        if not email:
+            return None
+        return {"account": email, "plan": data.get("plan")}
+
     def billing_for_model(self, model: str | None = None) -> str:
         """모델 이름으로 과금 방식을 가른다.
 

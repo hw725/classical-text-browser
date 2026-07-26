@@ -20,6 +20,13 @@ class AnthropicProvider(BaseLlmProvider):
     billing_model = "metered"  # 쓴 만큼 과금된다
     DEFAULT_MODEL = "claude-sonnet-4-20250514"
 
+    # 배포판에서는 각자 자기 키를 .env에 넣는다.
+    setup_kind = "env_key"
+    setup_steps = (
+        "https://console.anthropic.com/settings/keys 에서 키 발급",
+        ".env에 ANTHROPIC_API_KEY=... 를 적고 서버 재시작",
+    )
+
     # 대략적 가격 (1K tokens 기준, USD)
     PRICING = {
         "claude-sonnet-4-20250514": {"input": 0.003, "output": 0.015},

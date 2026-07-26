@@ -1533,6 +1533,146 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
   line-height: 1.5;
 }
 
+/* ─── 쪽별 결과 훑어보기 ─────────────────────────
+   어느 쪽이 나쁜지 알아야 그 쪽만 다시 돌릴 수 있다. */
+.extract-overview {
+  font-size: 11px;
+}
+
+.extract-overview > summary {
+  cursor: pointer;
+  padding: 4px 0;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.extract-overview-hint {
+  padding: 4px 0 6px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.extract-overview-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  /* 300쪽짜리도 있으므로 목록 자체가 패널을 밀어내지 않게 한다. */
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.extract-overview-row {
+  display: block;
+  width: 100%;
+  padding: 5px 7px;
+  border: none;
+  border-left: 3px solid transparent;
+  border-radius: 3px;
+  background: var(--hover-bg);
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.extract-overview-row:hover {
+  background: var(--border);
+}
+
+/* 살펴볼 쪽만 색을 준다. 전부 칠하면 아무것도 눈에 안 띈다. */
+.extract-overview-row.extract-overview-suspect {
+  border-left-color: #e0a030;
+}
+
+/* 확인이 끝난 쪽은 가라앉혀 «남은 것»이 도드라지게 한다. */
+.extract-overview-row.extract-overview-done {
+  border-left-color: #4caf50;
+  opacity: 0.6;
+}
+
+.extract-overview-check {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.extract-overview-check input {
+  margin: 0;
+}
+
+/* 행동 버튼은 오른쪽 끝에 모아 둔다. */
+.extract-overview-actions {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 3px;
+}
+
+.extract-overview-action {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.extract-overview-action:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* 만들기 전에 «다 봤는가»를 알린다. */
+.extract-review-status {
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.extract-overview-head {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.extract-overview-page {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.extract-overview-stat {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.extract-overview-flag {
+  padding: 0 5px;
+  border-radius: 7px;
+  font-size: 10px;
+  background: rgba(224, 160, 48, 0.18);
+  color: #b07818;
+}
+
+/* 좌표 없음은 엔진 특성이라 정상일 수 있다. 경고색을 쓰지 않는다. */
+.extract-overview-flag.flag-no_position {
+  background: var(--border);
+  color: var(--text-muted);
+}
+
+.extract-overview-preview {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+  /* 한 줄로 잘라 목록이 길어지지 않게 한다. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* 되돌릴 수 없는 비용이 걸린 스위치라 눈에 띄게 둔다. */
 .extract-check {
   display: flex;
@@ -4909,6 +5049,93 @@ details[open] > .punct-section-summary::before {
   color: var(--text-secondary);
 }
 
+/* ─── LLM 연결 상태 ───────────────────────────────
+   구독형이 «무료»로 오해되면 안 되고, «서버는 떴는데 로그인은 안 된» 상태가
+   «사용 가능»으로 보이면 안 된다. 색으로 그 셋을 가른다. */
+.settings-llm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-llm-row {
+  padding: 7px 9px;
+  border-radius: 4px;
+  background: var(--hover-bg);
+  border-left: 3px solid var(--border);
+  font-size: 11px;
+}
+
+.settings-llm-row.llm-ready {
+  border-left-color: #4caf50;
+}
+
+/* 로그인만 하면 되는 상태 — 가장 흔한 «왜 안 되지»의 원인이다. */
+.settings-llm-row.llm-needs_signin {
+  border-left-color: #e0a030;
+}
+
+.settings-llm-row.llm-needs_key,
+.settings-llm-row.llm-offline {
+  border-left-color: var(--border);
+  opacity: 0.75;
+}
+
+.settings-llm-head {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.settings-llm-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-llm-badge {
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  background: var(--border);
+  color: var(--text-secondary);
+}
+
+.settings-llm-badge.llm-badge-ready {
+  background: rgba(76, 175, 80, 0.18);
+  color: #3a8a3d;
+}
+
+.settings-llm-badge.llm-badge-needs_signin {
+  background: rgba(224, 160, 48, 0.18);
+  color: #b07818;
+}
+
+.settings-llm-billing {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.settings-llm-note {
+  margin-top: 3px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.settings-llm-steps {
+  margin: 5px 0 0;
+  padding-left: 18px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.settings-llm-steps li {
+  /* 그대로 타이핑할 명령이므로 고정폭으로 둔다. */
+  font-family: monospace;
+  font-size: 10px;
+}
+
 .btn-backup {
   margin-top: 6px;
   background: #d97706;
@@ -7230,4 +7457,63 @@ button.mode-tab {
   line-height: 1.6;
   opacity: 0.85;
   text-align: center;
+}
+
+/* ─── 교정 탭의 검수 바 (추출 모드) ─────────────────
+   검수는 원본과 텍스트가 나란한 이 화면에서 이뤄진다. 확인 표시를 여기 두어
+   쪽마다 열람 탭으로 돌아가지 않게 한다. */
+.corr-review-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 8px;
+  margin-bottom: 6px;
+  border-radius: 4px;
+  border-left: 3px solid #e0a030;
+  background: var(--hover-bg);
+  font-size: 11px;
+}
+
+/* 다 끝나면 색을 바꿔 «더 볼 것이 없다»를 한눈에 알린다. */
+.corr-review-bar.corr-review-complete {
+  border-left-color: #4caf50;
+}
+
+.corr-review-progress {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.corr-review-check {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.corr-review-check input {
+  margin: 0;
+}
+
+.corr-review-next {
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.corr-review-next:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+}
+
+.corr-review-next:disabled {
+  border-color: var(--border);
+  color: var(--text-muted);
+  cursor: default;
 }
