@@ -99,9 +99,9 @@ PDF/이미지 위에 **읽기 순서대로 번호가 매겨진 파란색 블록*
 
 > 한글이 포함된 문헌은 **LLM Vision** 엔진을 쓰세요. NDL 계열 엔진은 한글을 인식하지 못합니다.
 
-**형광 표시를 제자리에 띄우려면** `uv sync --extra paddleocr`를 함께 설치하세요.
-읽기는 LLM Vision이, 글자 위치 찾기는 PaddleOCR 검출이 맡는 분업입니다
-(실측: 15쪽 논문에서 502줄 중 433줄이 제자리). 없으면 자동으로 예전 방식이 됩니다.
+**형광 표시는 기본 설치만으로 제자리에 뜹니다.** 읽기는 LLM Vision이,
+글자 위치 찾기는 PaddleOCR 검출이 맡는 분업입니다
+(실측: 15쪽 논문에서 502줄 중 433줄이 제자리). PaddleOCR는 기본 번들입니다.
 
 **논문이 수십 편이면 폴더째** 처리할 수 있습니다. 스캔본만 골라 OCR하고,
 원본은 아카이브로 옮긴 뒤 텍스트 레이어 PDF를 원래 이름 그대로 제자리에 놓습니다.
@@ -139,8 +139,18 @@ uv run python -m cli embed-folder "C:/논문" --library C:/작업서고 --limit 
 Windows의 `start_server.bat`는 설정된 표점 Docker 서비스와 OpenAI OAuth 프록시도 창 없이 함께 시작합니다. OAuth 첫 실행에서 로그인이 필요하면 `logs\openai-oauth.log`의 안내를 따라 진행하세요.
 
 > Git을 아는 분은 `git clone https://github.com/hw725/classical-text-browser.git`으로도 가능합니다.
-> 오프라인 OCR 설치: `uv sync --extra ndlkotenocr` (고전적 전용, 권장) 또는 `uv sync --extra ndlocr` (근현대 범용).
-> GPU가 있다면: `uv sync --extra ndlkotenocr-full` (TrOCR, 최고 품질).
+> **기본 설치(`uv sync`)만으로 한글 논문 처리는 전부 됩니다** — OCR, 텍스트 레이어 PDF, 형광 위치까지.
+> 아래는 다른 종류의 문헌을 다룰 때만 추가하세요.
+>
+> | 추가 설치 | 언제 | 크기 |
+> |---|---|---|
+> | `uv sync --extra japanese` | 일본어 문헌(근현대) | 약 170MB |
+> | `uv sync --extra classical` | 고서(古典籍) | 약 170MB |
+> | `uv sync --extra classical-gpu` | 고서 최고 품질(TrOCR, GPU 권장) | 약 340MB |
+>
+> 뒤 둘은 **한글을 인식하지 못합니다** — 한글 논문에는 쓰지 마세요.
+> (예전 이름 `ndlocr`·`ndlkotenocr`·`ndlkotenocr-full`도 그대로 동작합니다.)
+> Python은 3.10~3.12를 씁니다. paddlepaddle 휠이 3.13까지 나와 있지 않습니다.
 
 ## 기술 스택
 
@@ -181,7 +191,7 @@ schemas/
 |------|------|------|
 | [**user-guide.md**](docs/user-guide.md) | 연구자 | 사용 방법 단계별 안내 |
 | [platform-v7.md](docs/platform-v7.md) | 개발자 | 전체 아키텍처 |
-| [DECISIONS.md](docs/DECISIONS.md) | 개발자 | 설계 결정 근거 (D-001~D-058) |
+| [DECISIONS.md](docs/DECISIONS.md) | 개발자 | 설계 결정 근거 (D-001~D-059) |
 | [core-schema-v1.3.md](docs/core-schema-v1.3.md) | 개발자 | 코어 엔티티 모델 |
 | [schemas/README.md](schemas/README.md) | 개발자 | JSON 스키마 구조 |
 | [architecture-diagrams.md](docs/architecture-diagrams.md) | 전체 | Mermaid 다이어그램 |

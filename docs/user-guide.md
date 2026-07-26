@@ -103,17 +103,25 @@ cd classical-text-browser
 # Windows: irm https://astral.sh/uv/install.ps1 | iex
 # macOS/Linux: curl -LsSf https://astral.sh/uv/install.sh | sh
 
+# 기본 설치. 한글 논문 처리는 이것만으로 전부 됩니다
+# (OCR, 텍스트 레이어 PDF, 형광 위치까지).
 uv sync
 
-# 이 프로젝트는 Python 3.12를 씁니다 (.python-version).
-# uv가 알아서 3.12를 받아 쓰므로 따로 설치할 필요는 없습니다.
+# Python은 3.10~3.12를 씁니다 (.python-version은 3.12).
+# uv가 알아서 받아 쓰므로 따로 설치할 필요는 없습니다.
+# 3.13은 아직 안 됩니다 — paddlepaddle 휠이 cp312까지만 나와 있습니다.
 
-# (선택) 오프라인 OCR 엔진 설치 — 아래 중 택일:
-uv sync --extra ndlkotenocr       # 고전적(古典籍) 전용, ONNX 경량 (~80MB)
-uv sync --extra ndlocr            # 근현대 자료 범용, ONNX (~100MB)
-uv sync --extra ndlkotenocr-full  # 최고 품질 TrOCR, GPU 권장 (~4GB)
-uv sync --extra paddleocr         # PaddleOCR (~1GB, 줄 위치 검출용)
+# (선택) 다른 종류의 문헌을 다룰 때만 추가합니다.
+uv sync --extra japanese       # 일본어 문헌(근현대) — 약 170MB
+uv sync --extra classical      # 고서(古典籍) — 약 170MB, 한글 인식 불가
+uv sync --extra classical-gpu  # 고서 최고 품질(TrOCR, GPU 권장) — 약 340MB
 ```
+
+> **한글 논문에 `classical`을 설치하지 마세요.** 고전적 전용 엔진은
+> 학습 데이터에 한글이 없어 **한글을 인식하지 못합니다.** 예전 안내가
+> 이 엔진을 「권장」이라고 적어 두어 혼동을 준 적이 있습니다.
+>
+> 예전 이름(`ndlocr`·`ndlkotenocr`·`ndlkotenocr-full`)도 그대로 동작합니다.
 </details>
 
 ### 2.3 서버 실행

@@ -4,7 +4,20 @@ version = "1.1.5"
 description = "고전서지 통합 브라우저 — 사람과 LLM이 함께 고전 텍스트를 읽고 번역하고 연구하는 통합 작업 환경"
 readme = "README.md"
 license = "LicenseRef-PolyForm-Noncommercial-1.0.0"
-requires-python = ">=3.10"
+# 하한 3.10은 그대로 둔다. 상한만 실제 제약에 맞춰 명시한다.
+#
+# 상한이 3.13 미만인 이유 — **paddlepaddle** 때문이다 (paddleocr가 아니다):
+#   paddleocr  : 순수 파이썬, requires-python >=3.8 → 3.13에서도 설치된다.
+#   paddlepaddle: 컴파일 패키지인데 휠이 cp310·cp311·cp312까지만 있다.
+#                 3.13 휠이 없으므로 설치 자체가 불가능하다 (uv.lock 실측).
+#
+# paddlepaddle이 기본 의존성이 됐으니 이 제약이 프로젝트 전체에 걸린다.
+# 상한을 적지 않으면 3.13 환경에서 «맞는 배포판을 못 찾았다»는 형태로
+# 실패해 원인을 알기 어렵다. `.python-version`이 이미 3.12를 가리키고
+# 있었으므로 실제로 쓰던 범위를 메타데이터에 옮겨 적는 것일 뿐이다.
+#
+# paddlepaddle이 3.13 휠을 내면 이 상한을 풀 수 있다.
+requires-python = ">=3.10,<3.13"
 authors = [
     { name = "hw725" },
 ]
@@ -29,57 +42,72 @@ dependencies = [
     "hwp-hwpx-parser>=1.0.0",
     "python-multipart>=0.0.22",
     "regex>=2026.2.19",
-]
-
-# PaddleOCR 선택 설치(extra): uv sync --extra paddleocr
-#
-# 왜 Python 3.12를 쓰는가 (.python-version 참조):
-#   PaddleOCR는 Python 3.13에서 설치·동작이 확인되지 않는다. 3.12로 맞췄다.
-#
-# Windows 주의 — OneDNN을 꺼야 한다:
-#   paddlepaddle 3.x는 Windows에서 OneDNN 경로가 PIR 속성 변환을 지원하지 않아
-#   `ConvertPirAttribute2RuntimeAttribute` 오류로 추론이 실패한다(실측 2026-07-25).
-#   src/ocr/paddleocr_engine.py가 FLAGS_use_mkldnn=0 을 설정해 이를 회피한다.
-#
-# 인식 언어 주의 (실측 2026-07-25, 국한문 혼용 논문 1쪽):
-#   lang="korean"      → 한글 479자, **한자 0자**
-#   lang="chinese_cht" → 한자 202자, **한글 0자**
-#   두 모델은 상보적이라 국한문 혼용 문헌은 어느 하나로도 읽을 수 없다.
-#   그래서 이 저장소는 PaddleOCR를 **검출(위치)** 용도로 쓰고
-#   인식은 LLM Vision에 맡기는 조합을 지원한다.
-[project.optional-dependencies]
-paddleocr = [
+    # PaddleOCR — 기본 번들 (약 377MB).
+    #
+    # 왜 extra가 아니라 기본인가:
+    #   OCR 산출물의 쓸모가 여기서 갈린다. PaddleOCR가 없으면 텍스트는 들어가되
+    #   **줄 위치를 모른 채** 왼쪽 여백에 균등 배치된다. 검색은 되지만 형광
+    #   표시가 글자가 없는 자리에 뜬다(실측: 502줄 중 433줄이 제자리 → 0줄).
+    #   "설치 안내를 따랐는데 형광이 엉뚱한 곳에 뜬다"는 상태를 기본값으로
+    #   두지 않는다. 용량은 크지만 한 번 치르는 비용이다.
+    #
+    #   읽기(인식)는 LLM Vision이 하고 PaddleOCR는 **검출(위치)** 만 맡는다.
+    #   검출은 언어와 무관하므로 한글·한자 혼용 문헌에도 그대로 쓸 수 있다.
     "paddlepaddle>=3.3.1",
     "paddleocr>=3.7.0",
     "setuptools",  # paddle.utils.cpp_extension이 import한다 (3.12에는 기본 포함이 아니다)
 ]
-# NDLOCR-Lite 선택 설치(extra): uv sync --extra ndlocr
-# ONNX 기반 오프라인 OCR — 한문(CJK 한자)/일본어 전용. 한글 미지원.
-# Python 3.10+ 호환. PaddleOCR을 설치하지 않을 때의 오프라인 대안.
+
+
+# PaddleOCR 운영 주의 (기본 의존성으로 들어 있다)
+#
+# Windows — OneDNN을 꺼야 한다:
+#   paddlepaddle 3.x는 Windows에서 OneDNN 경로가 PIR 속성 변환을 지원하지 않아
+#   `ConvertPirAttribute2RuntimeAttribute` 오류로 추론이 실패한다(실측 2026-07-25).
+#   src/ocr/paddleocr_engine.py가 FLAGS_use_mkldnn=0 을 설정해 이를 회피한다.
+#
+# 인식 언어의 한계 (실측 2026-07-25, 국한문 혼용 논문 1쪽):
+#   lang="korean"      → 한글 479자, **한자 0자**
+#   lang="chinese_cht" → 한자 202자, **한글 0자**
+#   두 모델은 상보적이라 국한문 혼용 문헌은 어느 하나로도 읽을 수 없다.
+#   그래서 이 저장소는 PaddleOCR를 **검출(위치)** 용도로 쓰고
+#   인식은 LLM Vision에 맡기는 조합을 기본으로 삼는다.
+
+# ─────────────────────────────────────────────────────────────
+#  선택 설치 (extra) — 없어도 근현대 한글 논문 처리는 전부 된다
+#
+#  이름을 용도로 지은 이유: 예전에는 ndlocr / ndlkotenocr / ndlkotenocr-full이
+#  나란히 있어 «오프라인 OCR»로 뭉뚱그려 안내됐고, 그 결과 한글 논문을
+#  하려는 사람이 **한글을 못 읽는** 고전적 전용 엔진을 설치하는 일이 있었다.
+#  무엇에 쓰는 것인지가 이름에서 보여야 한다.
+# ─────────────────────────────────────────────────────────────
+[project.optional-dependencies]
+
+# 일본어 문헌 (근현대) — NDLOCR-Lite. 약 170MB.
+# ONNX 기반 오프라인 OCR. 한문(CJK 한자)/일본어 전용, **한글 미지원**.
 # 원본: https://github.com/ndl-lab/ndlocr-lite (CC BY 4.0, National Diet Library, Japan)
-ndlocr = [
+japanese = [
     "onnxruntime>=1.20.0",
     "opencv-python-headless>=4.8.0",
     "networkx>=3.0",
     "ordered-set>=4.1.0",
     "tqdm>=4.60.0",
 ]
-# NDL古典籍OCR-Lite 선택 설치(extra): uv sync --extra ndlkotenocr
-# ONNX 기반 오프라인 OCR — 고전적(古典籍) 전용. 변체가나/고서체/한문 특화.
-# ndlocr과 의존성 동일. uv sync --extra ndlocr 했으면 추가 설치 불필요.
+
+# 고서(古典籍) — NDL古典籍OCR-Lite. 약 170MB.
+# 변체가나·고서체·한문 특화. 근현대 논문에는 쓰지 않는다(한글 미지원).
 # 원본: https://github.com/ndl-lab/ndlkotenocr-lite (CC BY 4.0, National Diet Library, Japan)
-ndlkotenocr = [
+classical = [
     "onnxruntime>=1.20.0",
     "opencv-python-headless>=4.8.0",
     "networkx>=3.0",
     "ordered-set>=4.1.0",
     "tqdm>=4.60.0",
 ]
-# NDL古典籍OCR Full (TrOCR) 선택 설치: uv sync --extra ndlkotenocr-full
-# PyTorch + HuggingFace TrOCR 기반. CUDA GPU 권장 (CPU도 동작하나 느림).
-# RTMDet ONNX 레이아웃은 ndlocr/ndlkotenocr extra와 의존성 공유.
+
+# 고서 — 최고 품질 (TrOCR). torch 계열까지 더해 약 340MB. CUDA GPU 권장.
 # 원본: https://github.com/ndl-lab/ndlkotenocr_cli (CC BY 4.0, National Diet Library, Japan)
-ndlkotenocr-full = [
+classical-gpu = [
     "torch>=2.6.0",
     "torchvision>=0.21.0",
     "transformers>=4.47.0",
@@ -89,6 +117,14 @@ ndlkotenocr-full = [
     "ordered-set>=4.1.0",
     "tqdm>=4.60.0",
 ]
+
+# ── 예전 이름 (하위 호환) ─────────────────────────────
+# 문서와 스크립트에 흩어져 있던 이름이라 남겨 둔다. 새로 쓸 때는 위 이름을 쓴다.
+# paddleocr은 기본 의존성이 됐으므로 이 extra는 아무것도 더 설치하지 않는다.
+ndlocr = ["classical-text-browser[japanese]"]
+ndlkotenocr = ["classical-text-browser[classical]"]
+ndlkotenocr-full = ["classical-text-browser[classical-gpu]"]
+paddleocr = []
 
 [dependency-groups]
 dev = [

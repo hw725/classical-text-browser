@@ -18,14 +18,16 @@
 
 사본을 늘리지 않는다:
     OCR을 하려면 파이프라인이 서고 구조(L1_source/L2/L3)를 요구하므로
-    작업 서고에 잠시 복사본이 생긴다. 그러나 처리가 끝나면 산출물은 원래
-    자리로 갔고 원본은 아카이브에 있으므로 그 복사본은 쓸모가 없다.
-    그래서 **끝나면 작업 서고에서 지운다**(기본). 최종 상태는 두 벌이다.
+    작업 서고에 복사본이 생긴다. 처리가 끝나면 최종 상태는 세 벌이다.
 
         논문/<주제>/저자_연도_제목.pdf        ← 텍스트 레이어를 입힌 것 (서지 도구가 가져감)
         논문/_scan_originals/<주제>/…        ← 원본 스캔본
+        <작업서고>/documents/embed_NNNN/      ← OCR 결과 (L2/L3) — 검수용
 
-    OCR 이력을 남기고 싶으면 --keep-workspace 를 쓴다.
+    세 번째를 **남기는 것이 기본이다**. 결과가 이상해 보이면 GUI를 켜서
+    이 서고를 열고 쪽별 검수를 하면 된다(D-057). 지워 버리면 볼 것이 없어
+    OCR을 처음부터 다시 돌려야 하고 **비용을 두 번 낸다.**
+    디스크를 아껴야 하면 --drop-workspace 로 지울 수 있다.
 
 안전 장치:
     - **기본은 dry-run이다.** 무엇을 할지 보여 주기만 하고 아무것도 바꾸지 않는다.
@@ -232,7 +234,7 @@ def _process_one(
     archive_root: Path,
     replace_original: bool,
     pipeline,
-    keep_workspace: bool = False,
+    keep_workspace: bool = True,
     page_sleep: float = 0.0,
     use_line_detection: bool = True,
 ) -> dict:
@@ -348,10 +350,11 @@ def _process_one(
 
         # 5) 작업 서고의 복사본을 지운다.
         #
-        # 왜 지우는가: 산출물은 원래 자리로 갔고 원본은 아카이브에 있다.
-        # 서고에 남은 것은 같은 논문의 세 번째 사본일 뿐이다.
-        # 사본이 늘어나면 어느 것이 정본인지 알 수 없게 된다.
-        # OCR 이력이 필요하면 --keep-workspace 로 남긴다.
+        # 왜 기본으로 지우지 않는가: 여기에 OCR 결과(L2/L3)가 들어 있다.
+        # 지우면 나중에 GUI로 쪽별 검수를 할 수 없고, 결과가 이상해 보여도
+        # OCR을 처음부터 다시 돌려야 한다 — 쪽마다 LLM 호출이 다시 나간다.
+        # «CLI로 빠르게 돌리고, 이상하면 GUI로 검수한다»는 흐름이 성립하려면
+        # 결과가 남아 있어야 한다. --drop-workspace 를 준 경우에만 지운다.
         if not keep_workspace and record.get("replaced"):
             ok, why = _force_rmtree(doc_path)
             # 문헌을 만들 때 기본 해석 저장소가 함께 생긴다(D-054).
@@ -388,7 +391,7 @@ def embed_folder(
     replace_original: bool = True,
     archive_root: Path | None = None,
     log_path: Path | None = None,
-    keep_workspace: bool = False,
+    keep_workspace: bool = True,
     page_sleep: float = 0.0,
     paper_sleep: float = 0.0,
     use_line_detection: bool = True,

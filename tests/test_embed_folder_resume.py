@@ -153,3 +153,41 @@ def test_resume_does_not_duplicate_document(library, scan_pdf):
     after = sorted(p.name for p in (library / "documents").iterdir())
 
     assert before == after == ["embed_0003"]
+
+
+def test_ocr_results_survive_for_later_review(library, scan_pdf):
+    """처리가 끝나도 OCR 결과(L2/L3)를 남긴다 — 나중에 GUI로 검수하려면 필요하다.
+
+    지우면 «CLI로 빠르게 돌리고, 이상하면 GUI로 검수한다»는 흐름이 성립하지
+    않는다. 볼 것이 없어 OCR을 처음부터 다시 돌려야 하고 비용을 두 번 낸다.
+    """
+    archive = library.parent / "archive"
+    pipe = FakePipeline(library)
+    rec = _process_one(
+        _task(scan_pdf), library, "embed_0004", None, archive, True, pipe
+    )
+    assert rec["status"] == "ok"
+    assert rec["replaced"] is True, "자리바꿈까지 끝나야 정리 여부가 갈린다"
+
+    doc = library / "documents" / "embed_0004"
+    assert doc.exists(), "작업 서고가 지워졌다 — 검수할 수 없다"
+    assert list((doc / "L2_ocr").glob("*.json")), "OCR 결과가 남지 않았다"
+
+
+def test_drop_workspace_removes_results_when_asked(library, scan_pdf):
+    """--drop-workspace를 주면 지운다 (디스크를 아껴야 할 때)."""
+    archive = library.parent / "archive"
+    pipe = FakePipeline(library)
+    rec = _process_one(
+        _task(scan_pdf),
+        library,
+        "embed_0005",
+        None,
+        archive,
+        True,
+        pipe,
+        keep_workspace=False,
+    )
+    assert rec["status"] == "ok"
+    assert rec.get("workspace_cleaned") is True
+    assert not (library / "documents" / "embed_0005").exists()

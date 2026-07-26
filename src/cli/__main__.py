@@ -87,7 +87,7 @@ def cmd_embed_folder(args):
         only=args.only,
         replace_original=not args.keep_original_in_place,
         archive_root=Path(args.archive_dir) if args.archive_dir else None,
-        keep_workspace=args.keep_workspace,
+        keep_workspace=not args.drop_workspace,
         page_sleep=args.sleep,
         paper_sleep=args.sleep_between,
         use_line_detection=not args.no_line_detection,
@@ -106,7 +106,30 @@ def cmd_embed_folder(args):
                 print(f"    {Path(f['source']).name[:60]} — {f.get('error', '')[:70]}")
 
 
+def _force_utf8_output() -> None:
+    """표준 출력을 UTF-8로 맞춘다.
+
+    왜 필요한가:
+        한국어 Windows의 콘솔 기본 인코딩은 cp949다. 이 CLI의 안내문에는
+        «—»(em dash)와 «»» 같은 글자가 들어 있는데 cp949로는 인코딩되지 않아
+        **`--help`가 UnicodeEncodeError로 죽는다**(실측 2026-07-26).
+        도움말조차 볼 수 없으면 CLI를 쓸 수 없다.
+
+        errors="replace"를 함께 주는 이유: 재설정이 통하지 않는 환경(파이프,
+        일부 터미널)에서도 안내가 «죽는» 대신 «일부 글자가 ?로 보이는» 쪽으로
+        끝나게 하기 위함이다. 안내문을 못 읽는 것보다 낫다.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError, OSError):
+            # 재설정을 지원하지 않는 스트림이면 그대로 둔다.
+            pass
+
+
 def main():
+    _force_utf8_output()
+
     parser = argparse.ArgumentParser(
         prog="classical-text-browser",
         description="고전서지 통합 브라우저 — CLI 도구",
@@ -192,10 +215,18 @@ def main():
         help="원본 아카이브 위치 (기본: <논문폴더>/_scan_originals)",
     )
     p_embed.add_argument(
+        "--drop-workspace",
+        action="store_true",
+        help="처리가 끝나면 작업 서고의 복사본을 지운다. "
+        "**지우면 나중에 GUI로 검수할 수 없다** — OCR을 처음부터 다시 돌려야 하고 "
+        "비용을 두 번 낸다. 디스크를 아껴야 할 때만 쓴다.",
+    )
+    # 예전 이름. 기본값이 뒤집혔으므로 이제 아무 일도 하지 않지만,
+    # 이 옵션을 쓰던 스크립트가 오류로 멈추지 않게 받아만 둔다.
+    p_embed.add_argument(
         "--keep-workspace",
         action="store_true",
-        help="작업 서고의 복사본을 지우지 않고 남긴다 (OCR 이력 보존). "
-        "기본은 지운다 — 같은 논문의 사본이 늘어나지 않게.",
+        help=argparse.SUPPRESS,
     )
     p_embed.add_argument(
         "--no-line-detection",
