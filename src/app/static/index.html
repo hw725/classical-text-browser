@@ -4721,7 +4721,13 @@
         <div class="status-right">
           <span class="status-item">UTF-8</span>
           <span class="status-item">LF</span>
-          <span class="status-item">v1.1.4</span>
+          <!-- 버전은 하드코딩하지 않는다 — 서버에서 읽어 채운다.
+               예전에는 여기에 v1.1.4가 박혀 있어 v1.2.0을 낸 뒤에도
+               화면에는 옛 버전이 떠 있었다. -->
+          <span
+            class="status-item"
+            id="app-version"
+          ></span>
         </div>
       </footer>
     </div>

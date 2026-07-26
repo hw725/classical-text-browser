@@ -28,6 +28,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  _safeInit("AppVersion", _loadAppVersion);
   _safeInit("ResizeHandlers", initResizeHandlers);
   _safeInit("ActivityBar", initActivityBar);
   _safeInit("ModeBar", initModeBar);
@@ -1840,7 +1841,60 @@ function _fillLlmSelect(select, models) {
     opt.textContent = "● 외부 표점 서비스 (SikuRoBERTa, 양정현 2025)";
     opt.title = "출처: yachagye/korean-classical-chinese-punctuation · CC BY-NC-SA 4.0 · DOI 10.37924/JSSW.100.9";
     select.appendChild(opt);
+    // 컨테이너가 떴는지 **누르기 전에** 알려 준다.
+    //
+    // 왜: 표점 서비스는 Docker 컨테이너라 앱보다 늦게 올라온다.
+    // 예전에는 상태를 확인하는 곳이 「AI 표점」 버튼을 누른 뒤 하나뿐이라,
+    // 준비되기 전에 누르면 오류만 보고 왜 그런지 알 수 없었다.
+    // `/api/llm/punctuation/external/health`의 docstring이 「실행 전에 상태를
+    // 보여줄 수 있게 한다」고 적어 둔 목적이 구현되지 않은 상태였다.
+    _annotateExternalPunctStatus(opt);
   }
+}
+
+/**
+ * 외부 표점 서비스 상태를 선택지 라벨에 붙인다.
+ *
+ * 입력: 그 서비스의 `<option>` 요소.
+ *
+ * 컨테이너가 아직 올라오는 중이면 몇 초 간격으로 다시 확인한다 —
+ * 앱을 열어 둔 채 기다리면 라벨이 스스로 「준비됨」으로 바뀐다.
+ */
+function _annotateExternalPunctStatus(opt) {
+  const BASE = "● 외부 표점 서비스 (SikuRoBERTa, 양정현 2025)";
+  let tries = 0;
+
+  const check = async () => {
+    tries += 1;
+    let h = null;
+    try {
+      const res = await fetch("/api/llm/punctuation/external/health");
+      h = await res.json();
+    } catch {
+      // 상태 확인 자체가 실패하면 라벨을 건드리지 않는다.
+      return;
+    }
+    if (!opt.isConnected) return; // 드롭다운이 다시 그려졌다
+
+    if (!h.configured) {
+      opt.textContent = `${BASE} — 설정 안 됨`;
+      opt.disabled = true;
+      opt.title = "punctuation-service/.env에 PUNCT_MODEL_HOST_PATH를 적어야 합니다.";
+      return;
+    }
+    if (h.reachable) {
+      opt.textContent = `${BASE} — 준비됨`;
+      opt.disabled = false;
+      return;
+    }
+
+    opt.textContent = `${BASE} — 시작 중…`;
+    // 컨테이너 기동은 보통 10~30초다. 2초 간격으로 30번(약 1분)까지 지켜본다.
+    if (tries < 30) setTimeout(check, 2000);
+    else opt.textContent = `${BASE} — 응답 없음`;
+  };
+
+  check();
 }
 
 /**
@@ -2180,6 +2234,26 @@ window.notifyLlmTruncation = notifyLlmTruncation;
  * @param {number} current  현재 진행 (선택)
  * @param {number} total    전체 수 (선택, 0이면 불확정)
  */
+/**
+ * 화면 아래 상태바의 버전을 서버에서 읽어 채운다.
+ *
+ * 왜 하드코딩하지 않는가: index.html에 `v1.1.4`가 박혀 있어 v1.2.0을 낸 뒤에도
+ * 화면에는 옛 버전이 떠 있었다. 버전을 적는 곳이 pyproject·server.py·상태바
+ * 셋이었고 셋째는 아무도 몰랐다. 이제 서버(`/api/app/version`)가 정본이다.
+ */
+async function _loadAppVersion() {
+  const el = document.getElementById("app-version");
+  if (!el) return;
+  try {
+    const res = await fetch("/api/app/version");
+    const data = await res.json();
+    el.textContent = data.version ? `v${data.version}` : "";
+  } catch {
+    // 버전을 못 읽어도 화면은 정상 동작해야 한다 — 비워 둔다.
+    el.textContent = "";
+  }
+}
+
 function showEditorProgress(prefix, show, text, current, total) {
   const el = document.getElementById(`${prefix}-progress`);
   const textEl = document.getElementById(`${prefix}-progress-text`);

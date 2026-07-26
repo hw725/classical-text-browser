@@ -1434,7 +1434,10 @@ body[data-workspace-profile="extract"] .mode-bar {
 
 /* 추출 모드에서는 우측 패널 제목도 달라진다 */
 body[data-workspace-profile="extract"] #right-panel-label::after {
+  /* `::after`의 선행 공백은 렌더링에서 접혀 «(4층)— 추출 모드»로 붙어 나온다.
+     white-space를 pre로 두어 적은 대로 보이게 한다. */
   content: " — 추출 모드";
+  white-space: pre;
   color: var(--accent);
   font-weight: 700;
 }

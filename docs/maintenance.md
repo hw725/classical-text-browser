@@ -183,7 +183,10 @@ uv run python -m pytest
    **산출물을 열어서 본다.** 숫자만 보지 않는다.
 5. `docs/DECISIONS.md`에 결정 카드(다음 번호)
 6. `docs/releases/vX.Y.Z.md` — 되돌릴 수 없는 변화는 **맨 위에** 적는다
-7. 버전 올리기: `pyproject.toml`, `src/app/server.py` **두 곳**
+7. 버전 올리기: **`pyproject.toml` 한 곳뿐이다.** `server.py`와 화면 아래
+   상태바는 설치된 패키지 메타데이터에서 읽는다(`/api/app/version`).
+   예전에는 세 곳에 적혀 있었고 상태바는 아무도 몰라서, v1.2.0을 낸 뒤에도
+   화면에 v1.1.4가 떠 있었다(D-072)
 8. `/doc-sync` (Release/Range Mode, base = 직전 태그)
 9. 커밋 → 푸시 → `git tag -a vX.Y.Z` → `git push origin vX.Y.Z`
 
@@ -196,6 +199,14 @@ uv run python -m pytest
 
 - **라우터 간 직접 import 금지.** 공유 상태는 `_state.py`를 통해서만.
 - 새 엔드포인트는 해당 도메인의 라우터 파일에(현재 8개, 183 라우트).
+  **문서의 라우트 수는 손으로 적은 것이라 어긋난다.** 세는 명령:
+
+  ```bash
+  grep -c "^@router\.\(get\|post\|put\|patch\|delete\)(" src/app/routers/*.py
+  ```
+
+  실제로 `server.py` 머리말이 documents 34·interpretations 23·llm_ocr 14로
+  오래 어긋나 있었다(실제 40·25·20). 문서와 코드가 다르면 **코드가 기준**이다.
 - Pydantic 모델은 쓰는 라우터 파일 안에 정의.
 - JSON 파일은 `jsonschema`로 검증(스키마 19개).
 - 코드 주석은 한국어로, **왜 그렇게 했는지**를 담는다. 이 저장소의

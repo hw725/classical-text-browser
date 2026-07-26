@@ -4,19 +4,23 @@ FastAPI 기반. 서고 데이터를 API로 제공하고 정적 파일(HTML/CSS/J
 D-001: 이 플랫폼의 주 인터페이스는 GUI이며, CLI는 보조 도구다.
 
 아키텍처:
-    이 파일은 FastAPI 앱 생성과 라우터 마운트만 담당한다.
-    실제 API 엔드포인트는 app/routers/ 패키지의 8개 라우터 모듈에 분산:
+    이 파일은 FastAPI 앱 생성과 라우터 마운트, 미들웨어만 담당한다.
+    실제 API 엔드포인트 183개가 app/routers/ 패키지의 8개 모듈에 분산된다
+    (2026-07-26 실측):
 
-    routers/library.py       — 서고/설정/백업/휴지통 (16 라우트)
-    routers/documents.py     — 문헌 CRUD/페이지/교정/서지/파서 (34 라우트)
-    routers/interpretations.py — 해석 CRUD/레이어/의존/엔티티 (23 라우트)
-    routers/llm_ocr.py       — LLM 상태·분석·초안 + OCR 엔진·실행 (14 라우트)
-    routers/alignment.py     — 이체자 사전/정렬/일괄교정 (17 라우트)
-    routers/reading.py       — L5 표점·현토 + L6 번역 + 비고 + AI보조 (26 라우트)
+    routers/documents.py     — 문헌 CRUD/페이지/교정/서지/파서 + 권 추가 (40 라우트)
     routers/annotation.py    — L7 주석·사전형·인용마크 + AI보조 (34 라우트)
+    routers/reading.py       — L5 표점·현토 + L6 번역 + 비고 + AI보조 (24 라우트)
+    routers/interpretations.py — 해석 CRUD/레이어/의존/엔티티 (25 라우트)
+    routers/llm_ocr.py       — LLM 상태·분석 + OCR 엔진·권단위 일괄·되돌리기 (20 라우트)
+    routers/alignment.py     — 이체자 사전/정렬/일괄교정 (17 라우트)
+    routers/library.py       — 서고/설정/백업/휴지통 (16 라우트)
     routers/version.py       — Git 그래프/되돌리기/스냅샷/가져오기 (7 라우트)
 
     공유 상태 및 헬퍼는 app/_state.py에 집약.
+
+    이 숫자는 손으로 세어 적은 것이라 실제와 어긋날 수 있다. 어긋나면 코드가
+    기준이다 — 세는 명령은 docs/maintenance.md 6장에 있다.
 """
 
 import sys
@@ -46,11 +50,40 @@ from app.routers import (  # noqa: E402,F401
     version,
 )
 
+
+# 앱 버전.
+#
+# 왜 여기서 pyproject를 읽는가: 예전에는 이 파일과 pyproject.toml에 각각 적어
+# 두었고, 화면 아래 상태바(index.html)에도 **세 번째로** 하드코딩돼 있었다.
+# 그래서 v1.2.0을 낸 뒤에도 화면에는 v1.1.4가 떠 있었다 — 아무도 안 고쳤고
+# 고쳐야 하는 줄 몰랐다. 설치된 배포판의 메타데이터에서 읽으면 적을 곳이 하나뿐이다.
+def _app_version() -> str:
+    """설치된 패키지 메타데이터에서 버전을 읽는다. 실패하면 «unknown»."""
+    try:
+        from importlib.metadata import version as _pkg_version
+
+        return _pkg_version("classical-text-browser")
+    except Exception:  # noqa: BLE001 — 편집 가능 설치가 아닐 때 등
+        return "unknown"
+
+
+APP_VERSION = _app_version()
+
 app = FastAPI(
     title="고전서지 통합 브라우저",
     description="사람과 LLM이 함께 고전 텍스트를 읽고 번역하고 연구하는 통합 작업 환경",
-    version="1.2.0",
+    version=APP_VERSION,
 )
+
+
+@app.get("/api/app/version")
+async def api_app_version():
+    """앱 버전을 알려준다.
+
+    목적: 화면 아래 상태바가 버전을 **하드코딩하지 않도록** 한다.
+    출력: {"version": "1.2.0"}
+    """
+    return {"version": APP_VERSION}
 
 
 # ── 저장소 경로 오류 → 표준 에러 응답 변환 ─────────────

@@ -440,7 +440,10 @@ async function _refreshExtractPending() {
     if (stale.length) {
       parts.push(`레이아웃 수정: ${_formatPageList(stale)}`);
     }
-    box.textContent = `실행하면 쪽 ${willRun}개가 돕니다${rangeNote} — ${parts.join(" · ")}`;
+    // 「실행하면 쪽 2개가 돕니다」로 적었더니 한국어가 되지 않았다.
+    // 개수와 번호를 한 문장에 섞지 않고, 개수는 괄호로 뒤에 붙인다 —
+    // 번호가 앞에 오므로 «2쪽»이 번호로 오해될 여지도 없다.
+    box.textContent = `실행 대상: ${parts.join(" · ")} (${willRun}쪽)${rangeNote}`;
     box.className = "extract-pending extract-diag-warn";
     box.hidden = false;
   } catch (e) {
