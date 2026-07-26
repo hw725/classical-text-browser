@@ -109,6 +109,9 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 4. 스키마·저장 형식이 바뀌면 `docs/DECISIONS.md`에 마이그레이션 경로를 남긴다.
    기존 서고를 열 수 없게 되는 변경은 **되돌릴 수 없다.**
 
+> 고치기 전에 **[docs/maintenance.md](docs/maintenance.md)**를 먼저 본다 —
+> 되돌릴 수 없는 것, 되풀이하지 말 것, 자동 테스트가 못 잡는 자리.
+
 ## 인지 부채 지도
 
 > 2026-07-04 감사. AI 작성 코드와 사용자 이해의 간극 요약. 상세·퀴즈: 루트 cognitive-debt-audit.html

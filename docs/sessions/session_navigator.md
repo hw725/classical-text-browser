@@ -159,6 +159,19 @@ Claude Code에 다음 세션 문서를 전달한다.
 
 ---
 
+## Phase 밖 세션 (explain-diff)
+
+Phase 로드맵에 속하지 않고, **왜 그렇게 고쳤는지**를 설명하는 문서들이다.
+Phase 문서가 「무엇을 만드는가」라면 이쪽은 「무엇을 잘못 알고 있었는가」다.
+
+| 세션 문서 | 날짜 | 무엇에 대한 설명인가 |
+|---|---|---|
+| [session_silent_failures.md](session_silent_failures.md) | 2026-07-26 | **조용히 틀리는 코드** — 텍스트 레이어가 0.24배로 박힌 일과, 같은 부류 넷을 더 찾은 감사 (D-068·D-069) |
+| [session_extract_mode.md](session_extract_mode.md) | 2026-07-25 | 추출 모드 — 논문 스캔본을 위한 작업 프로필 (D-055) |
+| [session_dragdrop_onboarding.md](session_dragdrop_onboarding.md) | 2026-07-17 | 드래그 앤 드롭 온보딩 (D-052·D-054) |
+| [session_truncation_warning.md](session_truncation_warning.md) | 2026-07-06 | 잘린 LLM 응답을 화면에 알리기 |
+| [session_fix_parsers.md](session_fix_parsers.md) | — | 파서 수선 |
+
 ## 추가 작업 (Phase 외)
 
 | 작업 | 상태 | 포함 위치 |
