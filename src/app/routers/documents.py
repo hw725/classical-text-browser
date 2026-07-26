@@ -1717,6 +1717,152 @@ async def api_pdf_apply(body: PdfApplyRequest, background_tasks: BackgroundTasks
         )
 
 
+@router.post("/api/documents/{doc_id}/parts")
+async def api_add_parts(
+    doc_id: str,
+    files: list[UploadFile] = File(...),
+    label: str | None = Form(None),
+):
+    """이미 있는 문헌에 권(part)을 더한다.
+
+    입력:
+        doc_id — 대상 문헌.
+        files — 추가할 PDF 파일들. 하나씩 별도 권이 된다.
+        label — 권 이름. 비우면 파일 이름(확장자 제외)을 쓴다.
+                파일이 여럿이면 무시한다(각자 자기 이름을 쓴다).
+    출력: {"added": [{part_id, label, page_count}, ...], "parts": 전체 권 수}
+
+    왜 필요한가:
+        `parts`는 지금까지 **문헌을 만들 때 한 번 정해지면 끝**이었다
+        (add_document / create-from-files 안에서만 채워진다). 그래서 卷下를
+        뒤늦게 구하면 방법이 없었다 — 문헌을 지우고 처음부터 다시 만들어야
+        했고, 그러면 이미 한 OCR·교정이 전부 사라진다.
+
+    왜 PDF만 받는가:
+        사이드바 트리가 권을 PDF.js로 연다(`part.file`). 이미지 묶음을
+        받으려면 create-from-files처럼 PDF로 합치는 처리가 필요한데, 그것은
+        생성 경로의 몫으로 두고 여기서는 «이미 PDF인 것을 더한다»만 한다.
+        경계를 좁게 두면 이 라우트가 생성 경로와 갈라질 여지가 줄어든다.
+    """
+    library_path = get_library_path()
+    if library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = require_repo_path("documents", doc_id)
+    manifest_path = doc_path / "manifest.json"
+    if not manifest_path.exists():
+        return JSONResponse(
+            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404
+        )
+
+    pdfs = [f for f in files if (f.filename or "").lower().endswith(".pdf")]
+    if not pdfs:
+        return JSONResponse(
+            {
+                "error": "추가할 PDF가 없습니다.\n"
+                "→ 권으로 더할 수 있는 것은 PDF뿐입니다. "
+                "이미지를 넣으려면 새 문헌으로 만든 뒤 합쳐 주세요."
+            },
+            status_code=400,
+        )
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    parts = manifest.get("parts") or []
+    existing_ids = {p.get("part_id") for p in parts}
+    existing_files = {Path(p.get("file", "")).name for p in parts}
+
+    source_dir = doc_path / "L1_source"
+    source_dir.mkdir(parents=True, exist_ok=True)
+
+    added = []
+    for upload in pdfs:
+        name = Path(upload.filename or "part.pdf").name
+        # 같은 이름이 이미 있으면 덮어쓰지 않는다. 앞서 넣은 권의 파일을
+        # 지우면 그 권의 OCR 결과가 가리키는 원본이 사라진다.
+        stem, suffix = Path(name).stem, Path(name).suffix
+        n = 2
+        while name in existing_files:
+            name = f"{stem}_{n}{suffix}"
+            n += 1
+        existing_files.add(name)
+
+        dest = source_dir / name
+        try:
+            dest.write_bytes(await upload.read())
+        except OSError as e:
+            return JSONResponse(
+                {"error": f"파일을 저장하지 못했습니다: {name}\n→ 원인: {e}"},
+                status_code=500,
+            )
+
+        # part_id는 스키마 패턴 ^[a-z][a-z0-9_]{0,31}$ 를 지켜야 하고
+        # 문헌 안에서 유일해야 한다. 기존 번호와 겹치지 않는 다음 번호를 쓴다.
+        idx = len(parts) + 1
+        while f"vol{idx}" in existing_ids:
+            idx += 1
+        part_id = f"vol{idx}"
+        existing_ids.add(part_id)
+
+        try:
+            import fitz
+
+            with fitz.open(str(dest)) as pdf:
+                page_count = pdf.page_count
+        except Exception:  # noqa: BLE001 — 쪽 수를 못 세도 등록은 진행한다
+            page_count = None
+
+        entry = {
+            "part_id": part_id,
+            "label": (label if (label and len(pdfs) == 1) else Path(name).stem),
+            "file": f"L1_source/{name}",
+            "page_count": page_count,
+        }
+        parts.append(entry)
+        added.append(entry)
+
+    manifest["parts"] = parts
+
+    # 저장 전에 스키마로 검증한다. 잘못된 manifest를 남기면 문헌이 통째로
+    # 열리지 않게 되므로, 실패하면 **넣은 파일까지 되돌리고** 그대로 둔다.
+    schema_path = (
+        Path(__file__).resolve().parent.parent.parent.parent
+        / "schemas"
+        / "source_repo"
+        / "manifest.schema.json"
+    )
+    if schema_path.exists():
+        import jsonschema
+
+        try:
+            jsonschema.validate(
+                instance=manifest,
+                schema=json.loads(schema_path.read_text(encoding="utf-8")),
+            )
+        except jsonschema.ValidationError as e:
+            for entry in added:
+                (doc_path / entry["file"]).unlink(missing_ok=True)
+            return JSONResponse(
+                {
+                    "error": "권을 더하면 문헌 정보가 규칙에 맞지 않게 됩니다.\n"
+                    f"→ 원인: {e.message}\n"
+                    "→ 아무것도 바꾸지 않았습니다."
+                },
+                status_code=400,
+            )
+
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+    git_commit_document(
+        doc_path,
+        f"data: {doc_id}에 권 {len(added)}개 추가 "
+        f"({', '.join(e['part_id'] for e in added)})",
+    )
+
+    return {"added": added, "parts": len(parts)}
+
+
 # ── 문헌 상세 / PDF / 텍스트 API ──────────────────
 
 

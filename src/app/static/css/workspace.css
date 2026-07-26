@@ -950,6 +950,28 @@ body.resizing-row {
   display: inline-block;
 }
 
+/* 권 추가 버튼 — 삭제와 같이 hover에서만 나온다.
+   상시 노출하면 트리가 버튼으로 어수선해지고, 자주 쓰는 기능도 아니다. */
+.tree-addpart-btn {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 0 2px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.tree-addpart-btn:hover {
+  color: var(--accent);
+}
+
+.tree-node-header:hover .tree-addpart-btn {
+  display: inline-block;
+}
+
 /* 편성 모드 TextBlock 삭제 버튼 */
 .comp-tb-delete-btn {
   display: inline-block;

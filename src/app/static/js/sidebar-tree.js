@@ -79,12 +79,20 @@ function _createDocumentNode(doc) {
     <span class="tree-toggle">▶</span>
     <span class="tree-label">${doc.title || "제목 없음"}</span>
     <span class="tree-badge">${doc.document_id || ""}</span>
+    <button class="tree-addpart-btn" title="이 문헌에 권 추가 (PDF)">＋</button>
     <button class="tree-delete-btn" title="문헌 삭제 (휴지통 이동)">×</button>
   `;
 
   const children = document.createElement("div");
   children.className = "tree-children";
   children.style.display = "none";
+
+  // 권 추가 버튼 클릭 → PDF 고르기
+  const addBtn = header.querySelector(".tree-addpart-btn");
+  addBtn.addEventListener("click", (e) => {
+    e.stopPropagation(); // 문헌 펼침 방지
+    _addPartToDocument(doc.document_id, node, children);
+  });
 
   // 삭제 버튼 클릭 → 휴지통 이동
   const deleteBtn = header.querySelector(".tree-delete-btn");
@@ -450,6 +458,68 @@ function highlightTreePage(pageNum) {
     // 스크롤하여 보이도록
     target.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
+}
+
+
+/**
+ * 이미 있는 문헌에 권(PDF)을 더한다.
+ *
+ * 왜 필요한가:
+ *   `parts`는 지금까지 문헌을 만들 때 한 번 정해지면 끝이었다. 그래서
+ *   卷下를 뒤늦게 구하면 문헌을 지우고 처음부터 다시 만들어야 했고,
+ *   그러면 이미 한 OCR·교정이 전부 사라졌다.
+ *
+ *   단권 문헌은 트리에서 권 단계를 접어 두므로(D-060) «권을 더한다»는
+ *   자리가 화면에 없다. 그래서 문헌 노드에 버튼을 둔다.
+ */
+async function _addPartToDocument(docId, nodeEl, childrenEl) {
+  // 파일 선택 창을 그때그때 만든다. 숨은 <input>을 마크업에 두면 어느
+  // 문헌에 대한 것인지 상태로 들고 있어야 해서 오히려 헷갈린다.
+  const picker = document.createElement("input");
+  picker.type = "file";
+  picker.accept = ".pdf,application/pdf";
+  picker.multiple = true;
+
+  picker.addEventListener("change", async () => {
+    if (!picker.files || !picker.files.length) return;
+
+    const form = new FormData();
+    for (const file of picker.files) form.append("files", file);
+    // 파일이 하나일 때만 이름을 물어본다. 여럿이면 각자 자기 파일 이름을 쓴다.
+    if (picker.files.length === 1) {
+      const stem = picker.files[0].name.replace(/\.pdf$/i, "");
+      const label = window.prompt("권 이름을 정하세요 (예: 卷下)", stem);
+      if (label === null) return; // 취소
+      if (label.trim()) form.append("label", label.trim());
+    }
+
+    try {
+      const res = await fetch(`/api/documents/${docId}/parts`, {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || "권을 더하지 못했습니다.", "error");
+        return;
+      }
+
+      const names = (data.added || []).map((p) => p.label).join(", ");
+      showToast(`권 ${data.added.length}개를 더했습니다 — ${names}`, "success");
+
+      // 트리를 다시 그린다. 권이 2개가 되면 접혀 있던 단계가 저절로 펼쳐진다.
+      childrenEl.innerHTML = "";
+      childrenEl.style.display = "none";
+      const toggle = nodeEl.querySelector(".tree-toggle");
+      if (toggle) toggle.classList.remove("expanded");
+      const header = nodeEl.querySelector(".tree-node-header");
+      if (header) _toggleDocument(docId, header, childrenEl);
+    } catch (err) {
+      showToast(`권 추가 중 오류: ${err.message}`, "error");
+    }
+  });
+
+  picker.click();
 }
 
 
