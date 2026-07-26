@@ -223,8 +223,18 @@ class OllamaProvider(BaseLlmProvider):
         except (httpx.ConnectError, httpx.TimeoutException, OSError):
             return False
 
-    async def list_models(self) -> list[dict]:
+    # 모델 목록 캐시. 세션 중에 모델이 바뀌는 일은 드물다.
+    #
+    # 왜 캐시하는가: 이 함수는 설치된 모델마다 /api/show 를 부른다.
+    # 이 PC에서 11개 모델에 **4.2초**가 걸렸다(실측 2026-07-26).
+    # /api/llm/status·/api/llm/models가 이것을 부르고, 그 둘은 패널을 열 때마다
+    # 불린다. 캐시가 없으면 화면 전환마다 그 시간을 다시 낸다.
+    _models_cache: list[dict] | None = None
+
+    async def list_models(self, *, force: bool = False) -> list[dict]:
         """설치된 모델 목록 조회. GUI 드롭다운에서 사용.
+
+        입력: force — 캐시를 무시하고 다시 조회한다(모델을 새로 받은 뒤 등).
 
         비전 지원 판별:
             Ollama /api/show 의 capabilities 배열에 "vision"이 있으면 비전 모델.
@@ -233,6 +243,9 @@ class OllamaProvider(BaseLlmProvider):
             /api/show는 GGUF 메타데이터에서 vision.block_count를 확인하므로
             모델 이름과 무관하게 정확히 판별한다.
         """
+        if self._models_cache is not None and not force:
+            return self._models_cache
+
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(f"{self._url}/api/tags")
             data = resp.json()
@@ -248,6 +261,7 @@ class OllamaProvider(BaseLlmProvider):
                     "vision": has_vision,
                 }
             )
+        self._models_cache = models
         return models
 
     async def _check_vision_capability(self, model_name: str) -> bool:

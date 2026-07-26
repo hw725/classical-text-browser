@@ -60,6 +60,11 @@ class OpenAiOAuthProvider(OpenAiProvider):
     # 프록시에서 발견된 모델 목록을 캐싱 (list_models 용)
     _discovered_models: Optional[list[dict]] = None
 
+    # «없더라»를 기억해 두는 시각. 화면을 열 때마다 2.4초를 다시 내지 않기 위함.
+    # 짧게 잡아 프록시를 나중에 띄웠을 때 오래 기다리지 않게 한다.
+    _miss_until: float = 0.0
+    MISS_TTL_SEC = 30.0
+
     def _get_base_url(self) -> str:
         """프록시 URL 조회.
 
@@ -139,6 +144,18 @@ class OpenAiOAuthProvider(OpenAiProvider):
             except Exception:
                 pass
 
+        # 못 찾은 결과를 잠깐 기억한다.
+        #
+        # 왜: 프록시가 안 떠 있으면 10개 포트가 모두 타임아웃해 **2.4초**가
+        # 걸린다(동시 실행으로 20초에서 줄인 값이다). 그런데 이 확인은
+        # /api/llm/status·/api/llm/models가 부르고, 그 둘은 화면을 열 때마다
+        # 불린다. 프록시가 그 사이에 뜨는 일은 드무니 짧게 기억한다.
+        import time as _time
+
+        now = _time.monotonic()
+        if self._miss_until and now < self._miss_until:
+            return False
+
         # 전체 범위 스캔 — 10개 포트를 **동시에** 훑는다.
         #
         # 왜 직렬로 하면 안 되는가: 프록시가 안 떠 있으면 포트마다 2초씩
@@ -162,6 +179,7 @@ class OpenAiOAuthProvider(OpenAiProvider):
 
         self._discovered_url = None
         self._discovered_models = None
+        self._miss_until = now + self.MISS_TTL_SEC
         return False
 
     async def list_models(self) -> list[dict]:

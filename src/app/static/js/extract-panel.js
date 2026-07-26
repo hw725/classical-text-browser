@@ -93,6 +93,10 @@ async function refreshExtractPanel(force) {
   _extractLast = { ...target };
   // 다른 문헌으로 옮겼다. 이전 문헌의 쪽 정보를 검수 바가 쓰면 안 된다.
   resetReviewCache();
+  // 쪽 범위도 비운다 — 앞 문헌에서 지정한 쪽이 남아 있으면 엉뚱한 쪽이
+  // 대상이 되고, «지정한 5쪽은 이미 처리됐습니다» 같은 안내가 이유 없이 뜬다.
+  const pagesInput = document.getElementById("extract-pages-input");
+  if (pagesInput) pagesInput.value = "";
 
   diagnosis.textContent = "진단 중…";
   diagnosis.className = "extract-diagnosis";
@@ -307,7 +311,7 @@ ${usage.note || ""}`;
   box.hidden = false;
 }
 
-/** 구운 PDF가 있는지 확인해 내려받기 링크를 갱신한다. */
+/** 만들어 둔 PDF가 있는지 확인해 내려받기 링크를 갱신한다. */
 async function _refreshExtractExport() {
   const status = document.getElementById("extract-export-status");
   const link = document.getElementById("extract-download-link");
@@ -910,7 +914,7 @@ async function _openPageInTab(pageNumber, mode) {
 }
 
 /**
- * 굽기 전에 «쪽마다 확인이 끝났는가»를 알린다.
+ * PDF를 만들기 전에 «쪽마다 확인이 끝났는가»를 알린다.
  *
  * 산출물은 서지 관리 도구로 넘어가 원본을 대체한다. 확신 없이 내보내면
  * 잘못된 텍스트가 그대로 굳는다. 막지는 않되 사실은 알린다.
@@ -958,6 +962,7 @@ function _focusExtractPage(pageNumber) {
     _refreshExtractPending();
   }
 }
+
 
 /** 권 전체 OCR을 실행하고 진행률을 표시한다. */
 async function _runExtractOcr() {
@@ -1056,8 +1061,13 @@ async function _runExtractOcr() {
           const label = evt.type === "skip" ? "건너뜀" : `${evt.lines || 0}줄`;
           text.textContent = `${evt.index + 1}/${evt.total}쪽 — ${evt.page}쪽 ${label}`;
         } else if (evt.type === "baking") {
+          // OCR이 끝나고 **다른 단계**가 시작된 것이다. 그 사실이 보여야 한다 —
+          // 진행 막대만 100%로 두면 «끝났는데 멈춘 것»처럼 보인다.
+          // 검출이 쪽당 8초쯤 걸려 15쪽이면 2분 가까이 이 화면에 머문다.
           fill.style.width = "100%";
-          text.textContent = "텍스트 레이어 PDF를 굽는 중…";
+          text.textContent =
+            `OCR 완료. 이제 검색되는 PDF를 만듭니다 — ${evt.total || ""}쪽에서 ` +
+            "글자 위치를 찾는 중이라 1~2분 걸립니다.";
         } else if (evt.type === "complete") {
           done = evt;
         } else if (evt.type === "error") {
@@ -1141,7 +1151,7 @@ async function _importExtractText() {
   }
 }
 
-/** 텍스트 레이어 PDF를 다시 굽는다 (교정 후 갱신용). */
+/** 검색되는 PDF를 다시 만든다 (교정 후 갱신용). */
 async function _embedExtractPdf() {
   const target = _extractTarget();
   if (!target) {
@@ -1161,7 +1171,7 @@ async function _embedExtractPdf() {
     );
     const data = await res.json();
     if (!res.ok) {
-      showToast(data.error || "굽기에 실패했습니다.", "error");
+      showToast(data.error || "PDF를 만들지 못했습니다.", "error");
       return;
     }
     if (data.embedded_pages > 0) {
@@ -1177,7 +1187,7 @@ async function _embedExtractPdf() {
     (data.warnings || []).forEach((w) => showToast(w, "info"));
     await _refreshExtractExport();
   } catch (e) {
-    showToast(`굽기 중 오류: ${e.message}`, "error");
+    showToast(`PDF 만들기 중 오류: ${e.message}`, "error");
   } finally {
     btn.disabled = false;
   }

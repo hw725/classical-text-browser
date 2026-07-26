@@ -458,8 +458,12 @@
                 서고 백업
               </button>
               <div class="settings-info-note">
-                구글 드라이브 동기화 폴더를 지정하면 자동으로 클라우드에 백업됩니다.
+                서고를 지정한 폴더로 <strong>복사</strong>합니다. 이 컴퓨터 안에서만
+                일어나는 일이며, 인터넷으로 보내지 않습니다.
                 설정하지 않아도 모든 기능이 동작합니다.
+                <br />
+                복사 위치를 클라우드 동기화 폴더(구글 드라이브 등)로 잡으면
+                그 프로그램이 알아서 올려 줍니다 — 이 앱이 하는 일은 아닙니다.
               </div>
             </div>
 
@@ -3236,7 +3240,7 @@
             <!--
               텍스트 추출 패널 — 「논문」 프로필에서만 보인다 (extract-panel.js).
               고서 흐름에는 나타나지 않으므로 기존 열람 화면은 그대로다.
-              진단 → 엔진 선택 → 권 전체 OCR → 구운 PDF 내려받기를 한자리에 모은다.
+              진단 → 엔진 선택 → 권 전체 OCR → PDF 만들기·내려받기를 한자리에 모은다.
             -->
             <div
               class="extract-panel"
@@ -3265,6 +3269,7 @@
                 id="extract-ocr-section"
                 hidden
               >
+                <div class="extract-section-title">1. 글자 읽기 (OCR)</div>
                 <label
                   class="extract-field"
                   for="extract-engine-select"
@@ -3295,9 +3300,12 @@
                   for="extract-pages-input"
                 >
                   <span>쪽 범위</span>
+                  <!-- autocomplete="off": 브라우저가 새로고침 때 옛 값을 되살려
+                       «처음 들어왔는데 쪽이 지정돼 있다»가 되는 것을 막는다. -->
                   <input
                     type="text"
                     id="extract-pages-input"
+                    autocomplete="off"
                     placeholder="비우면 전체 (예: 1-10, 15)"
                   />
                 </label>
@@ -3379,6 +3387,7 @@
                 id="extract-import-section"
                 hidden
               >
+                <div class="extract-section-title">텍스트 가져오기</div>
                 <button
                   type="button"
                   class="extract-run-btn"
@@ -3391,12 +3400,13 @@
                 class="extract-section"
                 id="extract-export-section"
               >
+                <div class="extract-section-title">2. 검색되는 PDF 만들기</div>
                 <div
                   class="extract-export-status"
                   id="extract-export-status"
                 ></div>
 
-                <!-- 굽기 전에 «쪽마다 확인이 끝났는가»를 알려 준다.
+                <!-- PDF를 만들기 전에 «쪽마다 확인이 끝났는가»를 알려 준다.
                      산출물이 서지 관리 도구로 넘어가면 되돌리기 어려우므로,
                      확신 없이 내보내지 않도록 여기서 한 번 멈춰 세운다. -->
                 <div
@@ -3415,7 +3425,7 @@
                   id="extract-download-link"
                   hidden
                   download
-                >구운 PDF 내려받기</a>
+                >만든 PDF 내려받기</a>
               </div>
             </div>
 

@@ -50,6 +50,19 @@ async function loadPageText(docId, partId, pageNum) {
     if (!res.ok) throw new Error("텍스트 API 응답 오류");
     const data = await res.json();
 
+    // 늦게 도착한 응답이 **새 쪽을 덮지 않게** 한다.
+    //
+    // 쪽을 빠르게 옮기면 요청이 순서대로 돌아오지 않는다. 3쪽 요청이
+    // 5쪽 요청보다 늦게 도착하면 화면에는 5쪽인데 내용은 3쪽이 된다.
+    // «텍스트가 뜨기도 하고 안 뜨기도 한다»의 실체가 이것이었다.
+    if (
+      viewerState.docId !== docId ||
+      viewerState.partId !== partId ||
+      viewerState.pageNum !== pageNum
+    ) {
+      return;
+    }
+
     const textarea = document.getElementById("text-content");
     textarea.value = data.text;
     editorState.originalText = data.text;

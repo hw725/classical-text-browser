@@ -27,8 +27,13 @@ const layoutState = {
   selectedBlockId: null,   // 현재 선택된 블록 ID
   blockTypes: [],          // resources/block_types.json에서 로드한 블록 타입 목록
   isDirty: false,          // 수정 여부
-  imageWidth: null,        // PDF 페이지의 원본 너비 (px)
-  imageHeight: null,       // PDF 페이지의 원본 높이 (px)
+  imageWidth: null,        // L3가 쓰는 좌표계의 너비 (px)
+  imageHeight: null,       // L3가 쓰는 좌표계의 높이 (px)
+
+  // PDF 뷰포트(scale=1.0) 크기. imageWidth와 다를 수 있어 따로 둔다 —
+  // 화면에 그릴 때 _layoutScale()로 환산하는 데 쓴다.
+  viewportWidth: null,
+  viewportHeight: null,
 
   // 드래그 상태
   dragMode: null,          // null | "draw" | "move" | "resize"
@@ -157,17 +162,39 @@ function _canvasCoords(e) {
 
 
 /**
+ * L3 좌표계 → PDF 뷰포트(72 DPI, scale=1.0) 배율을 구한다.
+ *
+ * 왜 필요한가: L3의 bbox는 «렌더된 페이지 이미지의 픽셀» 좌표다. 그런데
+ * 그 이미지를 몇 배로 렌더했는지는 만든 쪽마다 다르다 — 배치 OCR이 만든
+ * 전면 블록은 2배(991px), 사람이 화면에서 그린 블록은 1배(495pt)다.
+ * 화면은 언제나 뷰포트 기준이므로, 그리기 전에 이 배율로 환산해야 한다.
+ *
+ * 예전에는 이 차이를 만나면 bbox를 통째로 고쳐 쓰고 «수정됨»으로 표시했다.
+ * 그래서 배치 OCR이 만든 쪽을 열 때마다 저장 버튼을 눌러야 했고, 누르기
+ * 전에는 블록이 두 배 크기로 그려져 화면 밖으로 나가 보이지 않았다.
+ * 데이터를 고치지 않고 **그릴 때만 환산**하면 그 두 문제가 함께 사라진다.
+ *
+ * 출력: 뷰포트폭 / L3 image_width. 알 수 없으면 1 (환산하지 않음).
+ */
+function _layoutScale() {
+  const vpW = layoutState.viewportWidth || 0;
+  const imgW = layoutState.imageWidth || 0;
+  if (vpW > 0 && imgW > 0) return vpW / imgW;
+  return 1;
+}
+
+/**
  * 캔버스 내부 좌표를 이미지 좌표(bbox용)로 변환한다.
  *
- * 왜 이렇게 하는가: bbox는 원본 이미지 기준 좌표여야 한다.
- *                    캔버스 좌표 = 이미지 좌표 × scale × devicePixelRatio 이므로,
- *                    역변환이 필요하다.
+ * 왜 이렇게 하는가: bbox는 그 페이지 L3가 쓰는 좌표계여야 한다.
+ *                    캔버스 좌표 = 이미지 좌표 × L3배율 × scale × devicePixelRatio.
  */
 function _canvasToImage(cx, cy) {
   const outputScale = window.devicePixelRatio || 1;
+  const ls = _layoutScale();
   return {
-    x: cx / outputScale / pdfState.scale,
-    y: cy / outputScale / pdfState.scale,
+    x: cx / outputScale / pdfState.scale / ls,
+    y: cy / outputScale / pdfState.scale / ls,
   };
 }
 
@@ -176,9 +203,10 @@ function _canvasToImage(cx, cy) {
  */
 function _imageToCanvas(ix, iy) {
   const outputScale = window.devicePixelRatio || 1;
+  const ls = _layoutScale();
   return {
-    x: ix * pdfState.scale * outputScale,
-    y: iy * pdfState.scale * outputScale,
+    x: ix * ls * pdfState.scale * outputScale,
+    y: iy * ls * pdfState.scale * outputScale,
   };
 }
 
@@ -982,16 +1010,28 @@ async function loadPageLayout(docId, partId, pageNum) {
     if (!res.ok) throw new Error("레이아웃 API 응답 오류");
     const data = await res.json();
 
+    // 늦게 도착한 응답이 **새 쪽을 덮지 않게** 한다.
+    //
+    // 쪽을 빠르게 옮기면 요청이 순서대로 돌아오지 않는다. 3쪽 요청이
+    // 5쪽 요청보다 늦게 도착하면 화면에는 5쪽인데 내용은 3쪽이 된다.
+    // «텍스트가 뜨기도 하고 안 뜨기도 한다»의 실체가 이것이었다.
+    if (
+      viewerState.docId !== docId ||
+      viewerState.partId !== partId ||
+      viewerState.pageNum !== pageNum
+    ) {
+      return;
+    }
+
     layoutState.blocks = data.blocks || [];
     layoutState.imageWidth = data.image_width;
     layoutState.imageHeight = data.image_height;
     layoutState.selectedBlockId = null;
     layoutState.isDirty = false;
 
-    // PDF 뷰포트(scale=1.0) 크기를 기준값으로 가져옴
-    // 왜 필요한가:
-    //   1. imageWidth가 없으면 LLM bbox_ratio 변환에 필요
-    //   2. 기존 L3의 imageWidth가 뷰포트와 다르면 블록 좌표 보정 필요
+    // PDF 뷰포트(scale=1.0) 크기를 함께 갖고 있는다.
+    // 왜: 화면에 그릴 때 L3 좌표계를 뷰포트로 환산해야 하고(_layoutScale),
+    //     레이아웃이 없는 쪽에 전면 블록을 만들 때 그 크기가 필요하다.
     let vpWidth = 0, vpHeight = 0;
     if (typeof pdfState !== "undefined" && pdfState.pdfDoc) {
       try {
@@ -1001,39 +1041,26 @@ async function loadPageLayout(docId, partId, pageNum) {
         vpHeight = Math.round(vp.height);
       } catch (_) { /* 무시 */ }
     }
+    layoutState.viewportWidth = vpWidth || null;
+    layoutState.viewportHeight = vpHeight || null;
 
     if (!layoutState.imageWidth && vpWidth > 0) {
-      // 레이아웃이 아직 작성되지 않은 페이지 → PDF 뷰포트에서 설정
+      // 레이아웃이 아직 작성되지 않은 페이지 → PDF 뷰포트를 좌표계로 삼는다
       layoutState.imageWidth = vpWidth;
       layoutState.imageHeight = vpHeight;
-    } else if (layoutState.imageWidth && vpWidth > 0 && layoutState.imageWidth !== vpWidth) {
-      // 기존 L3의 image_width가 PDF 뷰포트와 다른 경우
-      // (예: 이전 버그로 3120이 저장되었지만, 실제 뷰포트는 1560)
-      // → 블록 bbox를 뷰포트 좌표계로 리스케일
-      const scaleX = vpWidth / layoutState.imageWidth;
-      const scaleY = vpHeight / layoutState.imageHeight;
-      console.info(
-        `L3 imageWidth(${layoutState.imageWidth})가 PDF 뷰포트(${vpWidth})와 다릅니다.`,
-        `블록 좌표를 리스케일합니다 (×${scaleX.toFixed(2)}, ×${scaleY.toFixed(2)})`
-      );
-      for (const block of layoutState.blocks) {
-        if (block.bbox && block.bbox.length === 4) {
-          block.bbox = [
-            Math.round(block.bbox[0] * scaleX),
-            Math.round(block.bbox[1] * scaleY),
-            Math.round(block.bbox[2] * scaleX),
-            Math.round(block.bbox[3] * scaleY),
-          ];
-        }
-      }
-      layoutState.imageWidth = vpWidth;
-      layoutState.imageHeight = vpHeight;
-      layoutState.isDirty = true;  // 리스케일했으므로 저장 필요
     }
 
-    _updateLayoutSaveStatus(
-      layoutState.isDirty ? "modified" : (data._meta?.exists ? "saved" : "empty")
-    );
+    // 블록이 하나도 없으면 페이지 전면 1블록을 만들어 **바로 저장**한다.
+    //
+    // 왜: 블록이 없으면 OCR을 돌릴 수 없고, 그렇다고 사람이 쪽마다 사각형을
+    // 그려 저장을 누르는 것은 300쪽짜리에서 600동작이 된다. 논문이든 고서든
+    // 「쪽 전체가 본문」이 가장 흔한 출발점이므로 그것을 기본값으로 깔아 두고,
+    // 이상하면 그때 고치게 한다. 이미 블록이 있으면 절대 건드리지 않는다.
+    if (layoutState.blocks.length === 0 && vpWidth > 0) {
+      await _autoCreateFullPageBlock(docId, partId, pageNum, vpWidth, vpHeight);
+    } else {
+      _updateLayoutSaveStatus(data._meta?.exists ? "saved" : "empty");
+    }
     _redrawOverlay();
     _updatePropsForm();
     _updateBlockList();
@@ -1048,11 +1075,70 @@ async function loadPageLayout(docId, partId, pageNum) {
         const vp = pdfPage.getViewport({ scale: 1.0 });
         layoutState.imageWidth = Math.round(vp.width);
         layoutState.imageHeight = Math.round(vp.height);
+        layoutState.viewportWidth = layoutState.imageWidth;
+        layoutState.viewportHeight = layoutState.imageHeight;
       } catch (_) { /* 무시 */ }
     }
 
     _redrawOverlay();
     _updateBlockList();
+  }
+}
+
+
+/**
+ * 블록이 없는 쪽에 「페이지 전면 1블록」을 만들어 저장한다.
+ *
+ * 입력: docId/partId/pageNum — 대상 쪽. vpWidth/vpHeight — PDF 뷰포트 크기(pt).
+ *
+ * 왜 여기서 저장까지 하는가: 만들어만 두고 «수정됨»으로 남기면 결국 쪽마다
+ * 저장을 눌러야 한다. 그것이 지금 고치려는 불편 그 자체다. 사람이 그린 것을
+ * 덮어쓸 위험은 없다 — 블록이 0개일 때만 부른다.
+ *
+ * 왜 쓰기 방향을 프로필로 가르는가: 근현대 논문은 가로쓰기 좌→우, 고서는
+ * 세로쓰기 우→좌가 압도적으로 흔하다. 틀렸으면 속성 창에서 한 번에 바꾼다.
+ */
+async function _autoCreateFullPageBlock(docId, partId, pageNum, vpWidth, vpHeight) {
+  const isExtract = document.body.dataset.workspaceProfile === "extract";
+  const block = {
+    block_id: `p${String(pageNum).padStart(2, "0")}_b01`,
+    block_type: "main_text",
+    bbox: [0, 0, vpWidth, vpHeight],
+    reading_order: 1,
+    writing_direction: isExtract ? "horizontal_ltr" : "vertical_rtl",
+    skip: false,
+  };
+
+  layoutState.blocks = [block];
+  layoutState.imageWidth = vpWidth;
+  layoutState.imageHeight = vpHeight;
+
+  const payload = {
+    part_id: partId,
+    page_number: pageNum,
+    image_width: vpWidth,
+    image_height: vpHeight,
+    analysis_method: "auto_detect",
+    blocks: [block],
+  };
+
+  try {
+    const res = await fetch(
+      `/api/documents/${docId}/pages/${pageNum}/layout?part_id=${partId}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    );
+    if (!res.ok) throw new Error("전면 블록 저장 실패");
+    layoutState.isDirty = false;
+    _updateLayoutSaveStatus("saved");
+  } catch (err) {
+    // 저장에 실패해도 화면에는 블록을 보여 준다 — 사람이 저장을 누르면 된다.
+    console.error("전면 블록 자동 저장 실패:", err);
+    layoutState.isDirty = true;
+    _updateLayoutSaveStatus("modified");
   }
 }
 

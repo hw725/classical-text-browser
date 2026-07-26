@@ -1456,7 +1456,15 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
   display: flex;
   flex-direction: column;
   gap: 10px;
+
+  /* 부모(.editor-panel)가 overflow:hidden이라, 이 패널이 그보다 길어지면
+     넘치는 부분이 그대로 **잘려 나간다**. 「쪽별 검수」를 펼쳤을 때 목록
+     아래쪽과 「검색되는 PDF 만들기」 절이 통째로 안 보이던 것이 이것이었다.
+     높이를 패널 절반쯤으로 묶고 그 안에서 스크롤시킨다 — 아래 텍스트
+     편집기도 자리를 잃지 않는다. */
   flex-shrink: 0;
+  max-height: 55%;
+  overflow-y: auto;
 }
 
 .extract-panel-head {
@@ -7585,4 +7593,15 @@ button.mode-tab {
   background: #e0a030;
   border-color: #e0a030;
   color: #fff;
+}
+
+/* 추출 패널의 절 제목 — 어느 단계인지 보이게 한다.
+   제목이 없어 «PDF를 어디서 만드는지 보이지도 않는다»는 지적이 있었다. */
+.extract-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2px;
 }
