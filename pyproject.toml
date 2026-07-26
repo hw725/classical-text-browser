@@ -119,7 +119,12 @@ classical = [
     "tqdm>=4.60.0",
 ]
 
-# 고서 — 최고 품질 (TrOCR). torch 계열까지 더해 약 340MB. CUDA GPU 권장.
+# 고서 — 최고 품질 (TrOCR). CUDA GPU 권장.
+#
+# 용량 주의: **약 4.5GB**다. 예전에 340MB라고 적어 두었는데 13배 틀린 값이었다.
+# Windows에서는 CUDA 런타임이 별도 nvidia-* 패키지가 아니라 `torch/lib` 안에
+# 통째로 들어간다 — 그 폴더 하나가 4,359MB다(실측 2026-07-26, torch 2.6+cu124).
+# Linux도 torch 1,550 + nvidia-* 2,742 + triton 440 ≈ 4.7GB로 비슷하다.
 # 원본: https://github.com/ndl-lab/ndlkotenocr_cli (CC BY 4.0, National Diet Library, Japan)
 classical-gpu = [
     "torch>=2.6.0",

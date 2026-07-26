@@ -2,19 +2,32 @@
 #
 # 준비 (한 번만):
 #   1) 표점 모델 .ckpt 파일을 호스트 임의 경로에 둔다 (예: D:/models/punct.ckpt).
+#      가중치는 yachagye/korean-classical-chinese-punctuation 레포 README의
+#      Google Drive 링크에서 받는다. 이 저장소는 가중치를 배포하지 않는다.
 #   2) 같은 폴더에 .env 파일을 두고 다음을 적는다:
 #        PUNCT_MODEL_HOST_PATH=D:/models/punct.ckpt
 #      (또는 셸에서 환경변수로 export)
 #
 # 실행:
-#   docker compose up -d        # 백그라운드 기동
-#   docker compose logs -f      # 로그 확인
-#   docker compose down         # 정지
+#   docker compose up -d --build   # 처음 (이미지 생성)
+#   docker compose up -d           # 이후
+#   docker compose logs -f         # 로그 확인
+#   docker compose down            # 정지
+#
+# GPU가 없다면 이 컨테이너를 쓰지 않는다 — README의 「로컬 설치」 경로를 쓴다
+# (`uv sync --extra real`, PUNCT_DEVICE=cpu). PyTorch 공식 이미지는 2.6.0에
+# CUDA판만 있어서 CPU 전용 compose를 유지할 근거가 없다.
 #
 # 본체는 기본적으로 http://127.0.0.1:8765 를 사용하므로 별도 환경변수 없이 자동 연결.
 services:
   punctuation:
-    build: .
+    build:
+      context: .
+      args:
+        # 기본은 PyTorch 공식 CUDA 이미지 — 어느 PC에서나 빌드된다.
+        # 이미 torch+CUDA 이미지를 갖고 있으면 .env에 BASE_IMAGE를 적어
+        # 재사용한다(내려받기 수 GB 절약). 자세한 이유는 Dockerfile 머리말 참조.
+        BASE_IMAGE: ${BASE_IMAGE:-pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime}
     image: classical-text-punctuation-service:latest
     container_name: classical-text-punctuation
     restart: unless-stopped
@@ -30,8 +43,8 @@ services:
       # PUNCT_MODEL_HOST_PATH 미설정 시 compose가 즉시 에러를 내므로
       # 실수로 가짜 경로로 떠 있는 일을 방지한다.
       - "${PUNCT_MODEL_HOST_PATH:?PUNCT_MODEL_HOST_PATH 환경변수가 필요합니다 (.env 또는 export)}:/models/checkpoint.ckpt:ro"
-      # 베이스 BERT 모델 재다운로드 방지 — csp-workspace와 HF 캐시 공유.
-      - csp_huggingface_cache:/root/.cache/huggingface
+      # 베이스 BERT 모델 재다운로드 방지용 캐시.
+      - hf_cache:/root/.cache/huggingface
     deploy:
       resources:
         reservations:
@@ -41,6 +54,11 @@ services:
               capabilities: [gpu]
 
 volumes:
-  # 외부에서 이미 만들어진 볼륨(csp-workspace가 사용 중)을 그대로 참조.
-  csp_huggingface_cache:
-    external: true
+  # HuggingFace 캐시 볼륨.
+  #
+  # 예전에는 `external: true`로 개발자 PC의 csp-workspace 볼륨을 직접 참조했다.
+  # 그 볼륨이 없는 PC에서는 `docker compose up`이 **볼륨을 찾을 수 없다**며
+  # 바로 실패했다. 이름만 인자로 받게 바꿔, 기본은 알아서 만들어지고
+  # 기존 볼륨을 재사용하고 싶으면 .env에 HF_CACHE_VOLUME을 적는다.
+  hf_cache:
+    name: ${HF_CACHE_VOLUME:-punct_huggingface_cache}

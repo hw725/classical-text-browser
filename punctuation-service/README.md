@@ -31,9 +31,21 @@ LLM 표점과 동일한 UI 흐름에서 결과가 표시된다.
 
 ## 빠른 시작 — Docker (권장)
 
-전제: 사용자의 NLP 작업 이미지 `csp-csp:latest`가 이미 있다 (torch 2.6.0+cu124,
-transformers 4.57.3 포함). 이 이미지를 베이스로 재활용하므로 본 서비스의 추가
-설치는 fastapi/uvicorn 정도(수 MB)만 발생한다.
+전제는 **NVIDIA GPU와 Docker Desktop**뿐이다. 베이스 이미지는 PyTorch 공식
+CUDA 이미지(`pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime`)라 **누구나 그대로
+빌드할 수 있다.** 처음 빌드에서 약 3.5GB를 내려받는다.
+
+예전에는 `FROM csp-csp:latest`로 고정돼 있었다. 그것은 개발자 PC에만 있는
+개인 이미지라 다른 사람은 **빌드 자체가 불가능**했다. 이제 그 이미지는
+`BASE_IMAGE`로 넘기는 선택지일 뿐이다.
+
+```bash
+# 이미 torch+CUDA 이미지가 있다면 재사용해 내려받기를 아낀다 (.env에 적어도 된다)
+BASE_IMAGE=csp-csp:latest docker compose up -d --build
+```
+
+GPU가 없다면 이 컨테이너를 쓰지 않는다 — 아래 「로컬 설치」로 CPU에서 돌릴 수
+있다. 다만 **쪽마다 눈에 띄게 느리다.**
 
 ```bash
 # 1. 가중치 다운로드 — yachagye 레포 README의 Google Drive 링크에서 v2.5 .ckpt 받기
@@ -162,7 +174,8 @@ EXTERNAL_PUNCT_URL=http://192.168.0.10:8765 uv run python -m app serve
 - 첫 호출 시 가중치 로드 (lazy). `/health`는 파일 존재 여부만 검사하므로 가볍다.
 - 토큰 한도 512에 맞춰 400자 청크로 자른 뒤 결과를 합친다.
 - 베이스 BERT는 `hyper_parameters.model_name`이 가리키는 HF 모델을 자동 다운로드.
-  Docker 사용 시 `csp_huggingface_cache` 볼륨을 공유하므로 보통 재다운로드 없음.
+  Docker 사용 시 HuggingFace 캐시 볼륨(`punct_huggingface_cache`, 기본값)에 남으므로
+  두 번째부터는 재다운로드 없음. 기존 볼륨을 재사용하려면 `.env`에 `HF_CACHE_VOLUME`을 적는다.
 
 ## 출처 표기 및 라이선스
 
@@ -206,7 +219,8 @@ Google Drive 링크에서 `.ckpt`를 받는다. 두 버전 중 v2.5 (SikuRoBERTa
 
 **첫 호출이 매우 느림 (수십 초~분)**
 - base BERT가 HuggingFace에서 다운로드되는 중. 이후 호출은 빠름.
-- 컨테이너 재시작 시 캐시 유지를 위해 `csp_huggingface_cache` 볼륨이 마운트되어 있는지 확인.
+- 컨테이너 재시작 시 캐시 유지를 위해 HuggingFace 캐시 볼륨이 마운트되어 있는지 확인
+  (`docker volume ls`에서 `punct_huggingface_cache` 또는 `HF_CACHE_VOLUME`에 적은 이름).
 
 **`hyper_parameters` 또는 `state_dict` 키 mismatch 에러**
 - yachagye 모델 구조와 본 어댑터의 가정이 어긋났을 가능성. 컨테이너 안에서 다음으로 진단:
@@ -230,7 +244,9 @@ Google Drive 링크에서 `.ckpt`를 받는다. 두 버전 중 v2.5 (SikuRoBERTa
 
 ## 검증 상태 (2026-05-08 시점)
 
-- ✅ Docker 빌드 성공 (`csp-csp:latest` 베이스)
+- ✅ Docker 빌드 성공 — **공식 베이스**(`pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime`)에서
+  실측 확인(2026-07-26): torch 2.6.0+cu124 · CUDA 사용가능 True · RTX 3070 Ti 인식 ·
+  transformers 4.57.6 · 컨테이너 기동 후 `/health` 200, `/punctuate` 200
 - ✅ 컨테이너 안에서 `punctuation_service.sikurroberta` 모듈 import 정상
 - ✅ Mock 엔진으로 본체 ↔ 서비스 HTTP 통합 동작 확인
 - ✅ v2.5 가중치 다운로드 및 `PUNCT_MODEL_HOST_PATH` 방식 확인
@@ -243,7 +259,7 @@ Google Drive 링크에서 `.ckpt`를 받는다. 두 버전 중 v2.5 (SikuRoBERTa
 punctuation-service/
 ├── pyproject.toml          ← 독립 uv 프로젝트
 ├── uv.lock
-├── Dockerfile              ← FROM csp-csp:latest
+├── Dockerfile              ← ARG BASE_IMAGE (기본: PyTorch 공식 CUDA 이미지)
 ├── docker-compose.yml      ← GPU + HF 캐시 공유
 ├── .dockerignore
 ├── .gitignore

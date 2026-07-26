@@ -44,42 +44,41 @@ ctb ocr "논문.pdf" --execute
 
 ## 빠른 시작
 
-### 1단계 — 내려받기 (모두 같습니다)
+### 1단계 — 내려받기
 
 [ZIP으로 내려받아](https://github.com/hw725/classical-text-browser/archive/refs/heads/master.zip)
 압축을 풀거나, Git을 아신다면
 `git clone https://github.com/hw725/classical-text-browser.git`.
 
-**저장소 자체는 가볍습니다(수 MB).** 무거워지는 것은 다음 단계의 OCR 라이브러리이고,
-거기서 갈립니다.
+저장소 자체는 가볍습니다(수 MB). 무거워지는 것은 다음 단계의 OCR 라이브러리입니다.
 
-### 2단계 — 설치: 두 갈래 중 하나
+### 2단계 — 설치
 
-| | 명령 | 설치 용량 | 무엇이 되나 |
-|---|---|---|---|
-| **표준** (권장) | `install.bat` · `./install.sh` | 약 **830MB** | 전부. 형광이 원문 글자 위에 정확히 뜬다 |
-| **가벼운 설치** | 아래 명령 | 약 **320MB** | OCR·검색·복사 전부 되지만 **형광 위치만 부정확** |
+`install.bat` 더블클릭 (Windows) 또는 `./install.sh` (macOS·Linux).
+Python·Git·uv가 없으면 함께 설치되고, 이어서 `uv sync`가 돕니다.
 
-```bash
-# 가벼운 설치 — PaddleOCR(377MB)와 그 의존을 빼고 설치한다
-uv sync --no-install-package paddlepaddle --no-install-package paddleocr
-```
+**설치는 하나뿐이고, 약 828MB입니다.** 그중 **79%가 OCR 스택**입니다.
 
 <details>
-<summary>가벼운 설치를 고르면 정확히 무엇을 잃나</summary>
+<summary>무엇이 그렇게 큰가 — 덜어낼 수는 없나 (실측)</summary>
 
-읽기(인식)는 LLM Vision이 하고, PaddleOCR는 **글자 위치 찾기(검출)** 만 맡습니다.
-그래서 PaddleOCR가 없어도 텍스트는 그대로 들어갑니다 — 복사도, Ctrl+F도, 참고문헌
-추출도 됩니다.
+| 무엇 | 크기 | 뺄 수 있나 |
+|---|---:|---|
+| OCR 스택 (PaddleOCR + numpy·OpenCV·pandas 등 전이 의존) | **651MB** | ❌ |
+| PDF 처리 (PyMuPDF) | 51MB | ❌ |
+| 나머지 **전부** (웹 앱·LLM SDK·Git·서지 파서·개발 도구) | 127MB | 일부만 |
 
-다만 위치를 모르므로 텍스트가 **왼쪽 여백에 줄 순서대로 균등 배치**됩니다.
-검색하면 형광이 뜨긴 하는데 **그 자리에 원본 글자가 없습니다**.
-산출물에 `page-approximated`로 기록되고 화면에도 알립니다.
+**덜어내도 의미가 없습니다.** 웹 앱 뼈대(FastAPI+uvicorn)를 통째로 빼도 14MB,
+개발 도구까지 빼도 17MB — 828MB 중 **2%**입니다. 무거운 것은 OCR이고, OCR은
+뺄 수 없습니다.
 
-실측(15쪽 논문): PaddleOCR 있음 → 502줄 중 433줄이 제자리 / 없음 → 0줄.
+왜 뺄 수 없는가: 읽기(인식)는 LLM Vision이 하고 PaddleOCR는 **글자 위치
+찾기(검출)** 만 맡습니다. 없으면 텍스트가 **왼쪽 여백에 줄 순서대로 균등
+배치**되어, 검색하면 형광은 뜨는데 **그 자리에 원본 글자가 없습니다.**
+실측(15쪽 논문): 있음 → 502줄 중 433줄 제자리 / 없음 → **0줄**.
 
-논문을 **읽으려고** 뽑는 것이라면 가벼운 설치로 충분합니다.
-인용할 자리를 원문에서 **찾아 가며** 쓸 것이라면 표준 설치를 권합니다.
+「설치 안내를 그대로 따랐는데 형광이 엉뚱한 데 뜬다」를 기본 상태로 두지
+않기로 했습니다(D-055). PaddleOCR는 **선택이 아니라 기본 번들**입니다.
 </details>
 
 ### 3단계 — 쓰기: 앱 또는 명령 한 줄
@@ -104,7 +103,7 @@ ctb ocr "논문.pdf" --execute
 |---|---|---|---|
 | **NDLOCR-Lite** | `uv sync --extra japanese` | 일본어 문헌(근현대) | 약 170MB |
 | **NDL古典籍OCR-Lite** | `uv sync --extra classical` | 고서(古典籍) | 약 170MB |
-| **NDL古典籍OCR Full** (TrOCR) | `uv sync --extra classical-gpu` | 고서 최고 품질, GPU 권장 | 약 340MB |
+| **NDL古典籍OCR Full** (TrOCR) | `uv sync --extra classical-gpu` | 고서 최고 품질, GPU 권장 | **약 4.5GB** |
 
 > extra 이름을 용도(`japanese`·`classical`)로 지은 것은, 예전에 세 엔진이
 > `ndlocr`·`ndlkotenocr`·`ndlkotenocr-full`로 나란히 있어 한글 논문을 하려던 사람이
@@ -118,6 +117,26 @@ ctb ocr "논문.pdf" --execute
 > [ndlkotenocr_cli](https://github.com/ndl-lab/ndlkotenocr_cli)).
 >
 > Python은 3.10~3.12를 씁니다(paddlepaddle 휠이 3.13까지 나와 있지 않습니다).
+
+### 표점(句讀) 자동 제안을 쓸 때만 — 별도 서비스
+
+고전 한문에 구두점을 기계로 제안받는 기능은 **본체에 들어 있지 않습니다.**
+SikuRoBERTa 모델(torch·transformers·가중치 수 GB)을 본체에 박으면 설치가
+폭증하고 paddlepaddle과 충돌하므로, **HTTP로 분리된 컨테이너**로 뺐습니다.
+
+```bash
+cd punctuation-service
+# 가중치 경로를 .env에 적고 (yachagye 레포의 Google Drive 링크에서 받습니다)
+docker compose up -d --build
+```
+
+베이스 이미지는 PyTorch 공식 CUDA 이미지라 **GPU가 있으면 누구나 자기 이미지를
+만들 수 있습니다.** 이미 torch+CUDA 이미지를 갖고 있으면 `.env`에
+`BASE_IMAGE=<그 이미지>`를 적어 재사용하면 내려받기 수 GB를 아낍니다.
+
+모델과 가중치는 **외부 저장소의 것**이고 이 저장소는 배포하지 않습니다 —
+출처와 인용은 맨 아래 「외부 모델 출처」를 보세요.
+자세히: [punctuation-service/README.md](punctuation-service/README.md)
 
 ---
 
@@ -136,7 +155,7 @@ ctb ocr "논문.pdf" --execute
 | 문서 | 무엇이 있나 |
 |---|---|
 | [**유지보수 안내**](docs/maintenance.md) | **고치기 전에 볼 것** — 되돌릴 수 없는 것, 되풀이하지 말 것, 테스트 사각지대 |
-| [DECISIONS.md](docs/DECISIONS.md) | 설계 결정 근거 (D-001~D-069) |
+| [DECISIONS.md](docs/DECISIONS.md) | 설계 결정 근거 (D-001~D-071) |
 | [아키텍처 다이어그램](docs/architecture-diagrams.md) | 전체 그림 (Mermaid 13종) |
 | [platform-v7.md](docs/platform-v7.md) | 8층 모델·이중 저장소 설계 |
 | [AGENTS.md](AGENTS.md) · [인지 부채 감사](cognitive-debt-audit.html) | 어디가 위험한가 |
