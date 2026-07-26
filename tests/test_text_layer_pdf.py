@@ -56,6 +56,29 @@ def _make_scanned_pdf(path: Path, pages: int = 2) -> None:
     out.close()
 
 
+def _write_l2_custom(doc_path: Path, part_id: str, page: int, lines) -> None:
+    """줄 목록을 직접 주어 L2를 쓴다 (글리프 누락 시험용)."""
+    doc_path = Path(doc_path)
+    (doc_path / "L2_ocr").mkdir(parents=True, exist_ok=True)
+    (doc_path / "L2_ocr" / f"{part_id}_page_{page:03d}.json").write_text(
+        json.dumps(
+            {
+                "part_id": part_id,
+                "page_number": page,
+                "ocr_engine": "test",
+                "ocr_results": [
+                    {
+                        "layout_block_id": f"p{page:02d}_b01",
+                        "lines": [{"text": t, "bbox": b} for t, b in lines],
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+
 def _write_l2(doc_path: Path, part_id: str, page: int, *, with_bbox: bool) -> None:
     """L2 OCR 결과 JSON을 쓴다.
 
@@ -229,20 +252,28 @@ def test_embed_does_not_touch_original(scanned_doc):
     assert (scanned_doc / "exports" / "vol1_text.pdf").exists()
 
 
-def test_embedded_font_is_much_larger(scanned_doc):
-    """폰트 임베드는 파일을 크게 만든다 — 기본값이 비임베드인 이유.
+def test_embedded_font_costs_size_but_is_the_default(scanned_doc):
+    """폰트 임베드는 파일을 키운다. 그래도 그것이 기본값이다.
 
-    실측(2026-07-25): 비임베드 +0.9KB/쪽, subset 임베드 +10.6KB/쪽.
-    이 관계가 뒤집히면 기본값 선택 근거가 무너지므로 회귀로 잡는다.
+    처음에는 비임베드가 기본이었다(쪽당 +0.9KB, 실측 2026-07-25).
+    그런데 실제 논문에서 **Adobe-Korea1 charset에 없는 한자가 조용히
+    사라졌다** — 51종 130자, 하필 한시 인용문에 몰려 있었다
+    (실측 2026-07-26). 산출물의 계약은 «검색되는 PDF»이므로
+    크기(쪽당 +4.9KB)를 치르고 임베드하는 쪽으로 뒤집었다.
+
+    여기서 고정하는 것은 **크기 관계**다. 임베드가 더 작아지면
+    측정이나 구현이 달라진 것이니 다시 봐야 한다.
     """
     _write_l2(scanned_doc, "vol1", 1, with_bbox=True)
     _write_l2(scanned_doc, "vol1", 2, with_bbox=True)
 
-    lean = embed_text_layer(scanned_doc, "vol1", output_path=scanned_doc / "lean.pdf")
-    fat = embed_text_layer(
-        scanned_doc, "vol1", output_path=scanned_doc / "fat.pdf", embed_font=True
+    lean = embed_text_layer(
+        scanned_doc, "vol1", output_path=scanned_doc / "lean.pdf", embed_font=False
     )
+    fat = embed_text_layer(scanned_doc, "vol1", output_path=scanned_doc / "fat.pdf")
 
+    assert fat.embed_font is True, "임베드가 기본값이어야 한다"
+    assert lean.embed_font is False
     assert lean.size_bytes < fat.size_bytes
     # 임베드 쪽에서도 텍스트는 정상 추출돼야 한다.
     out = fitz.open(fat.output_path)
@@ -427,3 +458,64 @@ def test_existing_bbox_is_not_overwritten(scanned_doc, monkeypatch):
 
     assert result.detected_lines == 0, "OCR이 준 좌표를 검출로 덮어썼다"
     assert result.positioned_lines == len(LINES)
+
+
+# Adobe-Korea1 charset에 없어 비임베드 방식에서 조용히 사라지던 글자들.
+# 실측(2026-07-26, 15쪽 논문)에서 51종 130자가 누락됐고 그중 상위 셋이다.
+# 전부 한시 인용문에 쓰이는 한자라, 연구자가 가장 찾고 싶어 할 글자다.
+LOST_CHARS = "郎儂研"
+
+
+def test_chars_outside_korea1_survive(scanned_doc):
+    """Adobe-Korea1에 없는 한자가 PDF에서 사라지면 안 된다.
+
+    이것이 임베드를 기본값으로 뒤집은 이유다. 산출물의 계약은
+    «검색되는 PDF»인데, 검색하고 싶은 글자가 빠지면 계약이 깨진다.
+    """
+    text = f"勸{LOST_CHARS[0]}合歡酒 {LOST_CHARS[1]}不信 李安中{LOST_CHARS[2]}究"
+    _write_l2_custom(scanned_doc, "vol1", 1, [(text, [160.0, 200.0, 900.0, 240.0])])
+
+    result = embed_text_layer(scanned_doc, "vol1")
+    out = fitz.open(result.output_path)
+    try:
+        got = out[0].get_text()
+    finally:
+        out.close()
+
+    missing = [c for c in LOST_CHARS if c not in got]
+    assert not missing, f"PDF에서 사라진 글자: {missing}"
+
+
+def test_chars_are_searchable(scanned_doc):
+    """사라지지 않을 뿐 아니라 **검색되어야** 한다.
+
+    글자가 텍스트로는 뽑히는데 search_for가 못 찾으면 사용자에게는
+    없는 것과 같다.
+    """
+    _write_l2_custom(
+        scanned_doc, "vol1", 1, [("玄同 李安中研究", [160.0, 200.0, 900.0, 240.0])]
+    )
+    result = embed_text_layer(scanned_doc, "vol1")
+    out = fitz.open(result.output_path)
+    try:
+        assert out[0].search_for("李安中研究"), "임베드했는데도 검색되지 않는다"
+    finally:
+        out.close()
+
+
+def test_without_embedding_the_loss_is_real(scanned_doc):
+    """임베드를 끄면 실제로 사라진다 — 기본값을 되돌리면 안 되는 이유.
+
+    이 테스트가 실패하면 (a) PyMuPDF가 동작을 바꿨거나 (b) 측정이
+    틀렸다는 뜻이므로, 기본값 결정을 다시 봐야 한다.
+    """
+    _write_l2_custom(
+        scanned_doc, "vol1", 1, [(f"李安中{LOST_CHARS[2]}究", [160.0, 200.0, 900.0, 240.0])]
+    )
+    result = embed_text_layer(scanned_doc, "vol1", embed_font=False)
+    out = fitz.open(result.output_path)
+    try:
+        got = out[0].get_text()
+    finally:
+        out.close()
+    assert LOST_CHARS[2] not in got, "비임베드에서도 살아남았다 — 측정 전제를 다시 볼 것"

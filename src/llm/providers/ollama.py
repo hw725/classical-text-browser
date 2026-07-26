@@ -153,13 +153,66 @@ class OllamaProvider(BaseLlmProvider):
 
         # 클라우드 모델을 앞세운다 (로컬 소형 모델은 이 PC에서 성능이 낮다).
         cloud = [n for n in vision if n and "cloud" in n]
-        picked = (cloud or vision)[0]
-        self._vision_model_cache = picked
-        logger.info(
-            f"Ollama 비전 모델 자동 선택: {picked} "
-            f"(기본값 {default}이(가) 설치돼 있지 않음)"
+        for candidate in cloud + [n for n in vision if n not in cloud]:
+            if candidate and await self._is_model_alive(candidate):
+                self._vision_model_cache = candidate
+                logger.info(
+                    f"Ollama 비전 모델 자동 선택: {candidate} "
+                    f"(기본값 {default}이(가) 설치돼 있지 않음)"
+                )
+                return candidate
+
+        logger.warning(
+            "Ollama의 비전 모델이 모두 응답하지 않습니다. "
+            "이미지 호출은 다음 프로바이더로 넘어갑니다(유료일 수 있습니다). "
+            "→ 확인: ollama list 로 남은 모델을 보고 .env의 "
+            "OLLAMA_VISION_MODEL 을 지정하세요."
         )
-        return picked
+        return default
+
+    async def _is_model_alive(self, model: str) -> bool:
+        """이 모델이 실제로 응답하는지 확인한다.
+
+        입력: model — 확인할 모델 이름. 출력: 부를 수 있으면 True.
+
+        왜 목록만 믿으면 안 되는가:
+            `/api/tags`는 **은퇴한 클라우드 모델도 그대로 올려 둔다.**
+            실측(2026-07-26): `qwen3-vl:235b-cloud`가 목록에 있는데 부르면
+            HTTP 410 — "qwen3-vl:235b was retired at 2026-06-16".
+
+            그 모델이 자동 선택되면 쪽마다 실패하고 라우터가 조용히 다음
+            프로바이더(유료 API)로 넘어간다. 무료로 도는 줄 알았는데 요금이
+            나가던 D-056의 사고가 그대로 재현된다. 그래서 고르기 전에
+            **한 번 불러 본다.**
+
+            비용은 토큰 1개짜리 호출 한 번뿐이고, 결과는 캐시되므로
+            (`_vision_model_cache`) 배치 전체에서 한 번만 일어난다.
+        """
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                resp = await client.post(
+                    f"{self._url}/api/generate",
+                    json={
+                        "model": model,
+                        "prompt": "hi",
+                        "stream": False,
+                        "options": {"num_predict": 1},
+                    },
+                )
+        except (httpx.HTTPError, OSError) as e:
+            logger.warning(f"Ollama 모델 확인 실패: {model} — {e}")
+            return False
+
+        if resp.status_code == 200:
+            return True
+
+        # 은퇴 안내는 본문에 사유가 들어 있다. 그대로 남겨야 원인을 알 수 있다.
+        detail = (resp.text or "")[:200]
+        logger.warning(
+            f"Ollama 비전 모델 {model} 을(를) 쓸 수 없습니다 "
+            f"(HTTP {resp.status_code}): {detail}"
+        )
+        return False
 
     async def is_available(self) -> bool:
         """Ollama 서버가 실행 중인지 확인."""

@@ -221,3 +221,116 @@ def test_ollama_billing_reflects_the_model_it_would_actually_use(client):
     assert model, "쓸 비전 모델을 알려 주지 않는다"
     expected = "subscription" if "cloud" in model else "free"
     assert ollama["billing_model"] == expected
+
+
+# ===========================================================================
+#  은퇴한 Ollama 모델 회피
+# ===========================================================================
+#
+# 왜 필요한가:
+#   Ollama의 /api/tags는 **은퇴한 클라우드 모델도 그대로 올려 둔다.**
+#   실측(2026-07-26): qwen3-vl:235b-cloud가 목록에 있는데 부르면 HTTP 410
+#   — "qwen3-vl:235b was retired at 2026-06-16".
+#
+#   그 모델이 자동 선택되면 쪽마다 실패하고 라우터가 조용히 다음
+#   프로바이더(유료 API)로 넘어간다. 무료로 도는 줄 알았는데 요금이 나가던
+#   D-056의 사고가 그대로 재현된다.
+
+
+class _FakeResponse:
+    def __init__(self, status_code, text=""):
+        self.status_code = status_code
+        self.text = text
+
+
+def _ollama(monkeypatch, *, models, alive):
+    """list_models와 살아 있는지 확인을 가짜로 바꾼 OllamaProvider."""
+    from llm.config import LlmConfig
+    from llm.providers.ollama import OllamaProvider
+
+    p = OllamaProvider(LlmConfig())
+    p._vision_model_cache = None
+
+    async def fake_list():
+        return models
+
+    async def fake_alive(model):
+        return model in alive
+
+    monkeypatch.setattr(p, "list_models", fake_list)
+    monkeypatch.setattr(p, "_is_model_alive", fake_alive)
+    return p
+
+
+@pytest.mark.asyncio
+async def test_retired_model_is_skipped(monkeypatch):
+    """목록에 있어도 응답하지 않는 모델은 고르지 않는다."""
+    p = _ollama(
+        monkeypatch,
+        models=[
+            {"name": "qwen3-vl:235b-cloud", "vision": True},  # 은퇴
+            {"name": "qwen3.5:cloud", "vision": True},
+        ],
+        alive={"qwen3.5:cloud"},
+    )
+    assert await p._pick_vision_model() == "qwen3.5:cloud"
+
+
+@pytest.mark.asyncio
+async def test_local_vision_model_is_last_resort(monkeypatch):
+    """클라우드를 먼저 보되, 클라우드가 전부 죽었으면 로컬이라도 쓴다."""
+    p = _ollama(
+        monkeypatch,
+        models=[
+            {"name": "qwen3-vl:235b-cloud", "vision": True},  # 은퇴
+            {"name": "gemma4:4b", "vision": True},
+        ],
+        alive={"gemma4:4b"},
+    )
+    assert await p._pick_vision_model() == "gemma4:4b"
+
+
+@pytest.mark.asyncio
+async def test_all_dead_falls_back_to_default(monkeypatch):
+    """전부 죽었으면 기본값을 돌려주고 라우터가 다음 프로바이더로 넘어간다.
+
+    이때 **경고를 남겨야 한다** — 조용히 유료 API로 넘어가는 것이 문제였다.
+    """
+    p = _ollama(
+        monkeypatch,
+        models=[{"name": "qwen3-vl:235b-cloud", "vision": True}],
+        alive=set(),
+    )
+    picked = await p._pick_vision_model()
+    assert picked == p.DEFAULT_MODELS["vision"]
+
+
+@pytest.mark.asyncio
+async def test_alive_check_reads_status_code(monkeypatch):
+    """410 같은 오류 상태는 «못 쓴다»로 판정한다."""
+    import httpx
+
+    from llm.config import LlmConfig
+    from llm.providers.ollama import OllamaProvider
+
+    p = OllamaProvider(LlmConfig())
+
+    class _Client:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, json=None):
+            name = (json or {}).get("model")
+            if name == "dead":
+                return _FakeResponse(410, '{"error":"retired"}')
+            return _FakeResponse(200, "{}")
+
+    monkeypatch.setattr(httpx, "AsyncClient", _Client)
+    assert await p._is_model_alive("dead") is False
+    assert await p._is_model_alive("live") is True

@@ -14,13 +14,25 @@
     텍스트만 겹친다. OCRmyPDF가 하는 일과 같은 원리이며,
     PyMuPDF만으로 되므로 새 의존성이 필요 없다.
 
-폰트를 왜 "korea"로 쓰는가:
-    PDF 표준의 Adobe-Korea1 CID 폰트라 **파일에 폰트를 임베드하지 않는다**.
-    실측(2026-07-25): 쪽당 +0.9KB. 같은 텍스트를 fitz.Font("korea")로
-    임베드하면 +1,663KB, subset_fonts()를 써도 +10.6KB가 된다.
-    300쪽 문헌이면 이 차이가 결정적이다.
-    다만 임베드가 없으므로 CJK CMap을 지원하지 않는 뷰어에서는 텍스트가
-    안 잡힐 수 있다. 그런 경우를 위해 embed_font=True 옵션을 남겼다.
+폰트를 왜 임베드하는가 (기본값 embed_font=True):
+    처음에는 임베드하지 않았다. Adobe-Korea1 CID 폰트를 참조만 하면
+    쪽당 +0.9KB로 끝나기 때문이다(실측 2026-07-25).
+
+    그런데 실제 논문에서 **글자가 조용히 사라졌다.** 전수 집계
+    (실측 2026-07-26, 15쪽 논문): L2에는 있는데 PDF에 없는 글자가
+    **51종 130자.** `郎`(27회) `儂`(22회) `研`(16회) — 전부 한자이고
+    하필 한시 인용문에 몰려 있었다. Adobe-Korea1 charset에 없는 글자를
+    insert_text가 버린 것이다. 처음 실측이 «정상»이라고 한 것은
+    시험 텍스트가 우연히 그 charset 안에 있었기 때문이다.
+
+    임베드하면 누락이 51종 130자 → **2종 2자**로 줄고(남은 둘은 OCR이
+    잘못 읽은 한글 자모 조각이라 폰트 문제가 아니다), 크기는
+    **쪽당 +4.9KB**다. 3,358쪽이면 +16MB — 검색되지 않는 한자와 바꿀
+    값이 아니다.
+
+    산출물의 계약은 «검색되는 PDF»다. 연구자가 가장 찾고 싶어 할 글자가
+    빠지면 그 계약이 깨진다. 그래서 크기를 치르고 임베드한다.
+    embed_font=False로 끌 수 있지만, 그때는 위 손실을 감수하는 것이다.
 
 좌표를 어떻게 되돌리는가:
     OCR 결과의 bbox는 **렌더된 페이지 이미지의 픽셀** 좌표다(base.py 참조).
@@ -169,17 +181,39 @@ def _collect_lines(l2: dict) -> list[tuple[str, list[float] | None]]:
     return lines
 
 
-def _fit_fontsize(text: str, target_width: float, target_height: float, fontname: str) -> float:
+def _fit_fontsize(
+    text: str,
+    target_width: float,
+    target_height: float,
+    fontname: str,
+    font: fitz.Font | None = None,
+) -> float:
     """bbox 안에 텍스트가 꼭 맞도록 글자 크기를 정한다.
+
+    입력:
+        fontname — 임베드하지 않을 때 쓰는 PDF 표준 폰트 이름.
+        font — 임베드할 때 실제로 쓰는 폰트 객체. 주어지면 이것으로 잰다.
 
     왜 폭까지 맞추는가: 보이지 않는 텍스트라도 **검색 하이라이트의 위치와
     길이**가 이 글자 크기로 정해진다. 높이만 보고 정하면 하이라이트가
     실제 글자보다 길거나 짧아져 어긋난 위치를 가리킨다.
+
+    왜 «실제로 쓸 폰트»로 재야 하는가:
+        임베드 폰트와 CID 폰트는 글리프 폭이 다르다. 항상 CID 기준으로
+        재면 임베드했을 때 하이라이트가 **26% 좁아진다**(실측 2026-07-26:
+        270pt 자리에 199pt). 쓰는 폰트와 재는 폰트가 같아야 한다.
     """
     # 높이 기준 후보. 행간을 감안해 0.85를 곱한다.
     size = max(target_height * 0.85, 1.0)
     if target_width > 0:
-        measured = fitz.get_text_length(text, fontname=fontname, fontsize=size)
+        try:
+            measured = (
+                font.text_length(text, fontsize=size)
+                if font is not None
+                else fitz.get_text_length(text, fontname=fontname, fontsize=size)
+            )
+        except Exception:  # noqa: BLE001 — 폰트에 없는 글리프 등. 높이 기준으로 둔다.
+            measured = 0
         if measured > 0:
             # 폭이 넘치면 줄이고, 남으면 늘려서 bbox 폭에 맞춘다.
             size = size * (target_width / measured)
@@ -240,7 +274,7 @@ def _embed_page(
         x0, y0, x1, y1 = (c / scale for c in bbox)
         height = max(y1 - y0, 1.0)
         width = max(x1 - x0, 1.0)
-        size = _fit_fontsize(text, width, height, fontname)
+        size = _fit_fontsize(text, width, height, fontname, font)
         # 베이스라인은 박스 아래쪽에서 살짝 올린 지점.
         if _emit(text, x0, y1 - height * 0.2, size):
             positioned += 1
@@ -263,7 +297,7 @@ def _embed_page(
         size_base = min(step * 0.8, 12.0)
         for idx, text in enumerate(without_bbox):
             baseline = PAGE_MARGIN + step * (idx + 1)
-            size = _fit_fontsize(text, usable_w, size_base / 0.85, fontname)
+            size = _fit_fontsize(text, usable_w, size_base / 0.85, fontname, font)
             # 폭에 맞춘 크기가 행간보다 크면 겹치므로 잘라낸다.
             size = min(size, size_base)
             if _emit(text, PAGE_MARGIN, baseline, size):
@@ -282,7 +316,7 @@ def embed_text_layer(
     output_path: str | Path | None = None,
     pages: list[int] | None = None,
     source_layer: str = "l2",
-    embed_font: bool = False,
+    embed_font: bool = True,
     use_line_detection: bool = True,
 ) -> EmbedResult:
     """문헌의 한 권(part)에 텍스트 레이어를 입혀 새 PDF를 만든다.
@@ -294,7 +328,8 @@ def embed_text_layer(
         pages — 대상 쪽 번호(1-based) 목록. None이면 전체.
         source_layer — "l2"(OCR 결과, 좌표 있음) 또는 "l4"(사람이 교정한 텍스트).
                        l4는 좌표가 없어 왼쪽 여백에 순서대로 놓인다.
-        embed_font — True면 폰트를 임베드한다(파일이 커지지만 뷰어 호환성이 높다).
+        embed_font — 폰트를 임베드한다(기본 True). 끄면 쪽당 4.9KB를 아끼는
+            대신 Adobe-Korea1에 없는 한자가 **조용히 사라진다**(위 설명 참조).
         use_line_detection — 좌표 없는 줄에 검출로 찾은 위치를 채운다.
             PaddleOCR가 없으면 조용히 건너뛴다. 끄면 항상 순서 배치가 된다.
     출력: EmbedResult.

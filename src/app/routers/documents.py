@@ -2822,7 +2822,9 @@ class TextLayerBakeRequest(BaseModel):
 
     pages: list[int] | None = None  # None이면 전체 쪽
     source_layer: str = "l2"  # "l2"=OCR 결과, "l4"=사람이 교정한 텍스트
-    embed_font: bool = False  # True면 폰트 임베드 (크지만 뷰어 호환성 높음)
+    # 폰트 임베드(기본 True). 끄면 Adobe-Korea1에 없는 한자가 조용히
+    # 사라진다 — 실측 51종 130자(export/text_layer_pdf.py 설명 참조).
+    embed_font: bool = True
 
 
 @router.post("/api/documents/{doc_id}/parts/{part_id}/export/text-layer-pdf")

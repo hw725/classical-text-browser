@@ -96,6 +96,7 @@ PDF/이미지 위에 **읽기 순서대로 번호가 매겨진 파란색 블록*
   **고친 쪽만** 돕니다. 쪽 번호를 기억해 입력할 필요가 없습니다.
 - **텍스트 레이어를 텍스트 레이어 PDF**: 원본 이미지 위에 보이지 않는 텍스트를 얹어 내보냅니다.
   사이드카 `.txt`와 달리 **복사·Ctrl+F·구조 분석·참고문헌 추출**이 한꺼번에 살아납니다.
+  폰트를 임베드하므로 한시 인용문의 벽자(`儂`·`纔`·`鬬` 등)도 그대로 검색됩니다.
 
 > 한글이 포함된 문헌은 **LLM Vision** 엔진을 쓰세요. NDL 계열 엔진은 한글을 인식하지 못합니다.
 
@@ -195,7 +196,7 @@ schemas/
 |------|------|------|
 | [**user-guide.md**](docs/user-guide.md) | 연구자 | 사용 방법 단계별 안내 |
 | [platform-v7.md](docs/platform-v7.md) | 개발자 | 전체 아키텍처 |
-| [DECISIONS.md](docs/DECISIONS.md) | 개발자 | 설계 결정 근거 (D-001~D-061) |
+| [DECISIONS.md](docs/DECISIONS.md) | 개발자 | 설계 결정 근거 (D-001~D-062) |
 | [core-schema-v1.3.md](docs/core-schema-v1.3.md) | 개발자 | 코어 엔티티 모델 |
 | [schemas/README.md](schemas/README.md) | 개발자 | JSON 스키마 구조 |
 | [architecture-diagrams.md](docs/architecture-diagrams.md) | 전체 | Mermaid 다이어그램 |
