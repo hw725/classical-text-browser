@@ -108,7 +108,7 @@ PDF/이미지 위에 **읽기 순서대로 번호가 매겨진 파란색 블록*
 
 ```bash
 # 한 편만 — 서고를 미리 만들 필요가 없습니다
-uv run python -m cli ocr "논문.pdf" --execute
+ctb ocr "논문.pdf" --execute
 
 # 폴더째 — 기본이 미리보기라 --execute 없이는 아무것도 바뀌지 않습니다
 uv run python -m cli embed-folder "C:/논문" --library C:/작업서고

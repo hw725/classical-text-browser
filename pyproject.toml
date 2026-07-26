@@ -73,6 +73,14 @@ dependencies = [
 #   그래서 이 저장소는 PaddleOCR를 **검출(위치)** 용도로 쓰고
 #   인식은 LLM Vision에 맡기는 조합을 기본으로 삼는다.
 
+# 콘솔 명령. 설치하면 `ctb ocr 논문.pdf` 로 쓸 수 있다.
+#
+# 왜 두는가: `uv run python -m cli ocr ...`는 «파이썬 모듈을 실행한다»는
+# 사정을 사용자가 알아야 하는 형태다. 이 저장소의 사용자는 비개발자
+# 연구자이고, 논문 한 편을 처리하려는 사람에게 그 사정은 군더더기다.
+[project.scripts]
+ctb = "cli.__main__:main"
+
 # ─────────────────────────────────────────────────────────────
 #  선택 설치 (extra) — 없어도 근현대 한글 논문 처리는 전부 된다
 #
@@ -80,6 +88,12 @@ dependencies = [
 #  나란히 있어 «오프라인 OCR»로 뭉뚱그려 안내됐고, 그 결과 한글 논문을
 #  하려는 사람이 **한글을 못 읽는** 고전적 전용 엔진을 설치하는 일이 있었다.
 #  무엇에 쓰는 것인지가 이름에서 보여야 한다.
+#
+#  opencv는 **반드시 contrib 배포판**을 쓴다. paddlex(기본 의존성 paddleocr가
+#  끌어온다)가 opencv-contrib-python을 요구하는데, 여기에 opencv-python-headless를
+#  더하면 같은 `cv2` 패키지를 두 배포판이 제공하게 된다. 그 상태에서 한쪽을 지우면
+#  공유 디렉터리가 통째로 사라져 남은 쪽까지 깨진다
+#  (실측 2026-07-26: `module 'cv2' has no attribute 'IMREAD_COLOR'`).
 # ─────────────────────────────────────────────────────────────
 [project.optional-dependencies]
 
@@ -88,7 +102,7 @@ dependencies = [
 # 원본: https://github.com/ndl-lab/ndlocr-lite (CC BY 4.0, National Diet Library, Japan)
 japanese = [
     "onnxruntime>=1.20.0",
-    "opencv-python-headless>=4.8.0",
+    "opencv-contrib-python>=4.8.0",  # headless판과 섞지 말 것 — 아래 주석 참조
     "networkx>=3.0",
     "ordered-set>=4.1.0",
     "tqdm>=4.60.0",
@@ -99,7 +113,7 @@ japanese = [
 # 원본: https://github.com/ndl-lab/ndlkotenocr-lite (CC BY 4.0, National Diet Library, Japan)
 classical = [
     "onnxruntime>=1.20.0",
-    "opencv-python-headless>=4.8.0",
+    "opencv-contrib-python>=4.8.0",  # headless판과 섞지 말 것 — 아래 주석 참조
     "networkx>=3.0",
     "ordered-set>=4.1.0",
     "tqdm>=4.60.0",
@@ -112,7 +126,7 @@ classical-gpu = [
     "torchvision>=0.21.0",
     "transformers>=4.47.0",
     "onnxruntime>=1.20.0",
-    "opencv-python-headless>=4.8.0",
+    "opencv-contrib-python>=4.8.0",  # headless판과 섞지 말 것 — 아래 주석 참조
     "networkx>=3.0",
     "ordered-set>=4.1.0",
     "tqdm>=4.60.0",

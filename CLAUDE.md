@@ -27,6 +27,36 @@ OCR, 교정, 번역, 주석 작업을 모두 수행한다.
   - 실행: uv run python -m <모듈>
   - uv.lock은 git에 포함
 
+## 의존성 업그레이드 — 먼저 볼 것
+
+OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+transformers**)이
+전이 의존을 공유한다 — `numpy`·`protobuf`·`pyyaml`·`typing-extensions`·`setuptools`·
+`networkx`·`pillow`. 하나를 올리면 다른 스택이 **조용히** 죽는다: 엔진 등록 실패는
+예외가 아니라 `available=False`로 나타나고 라우터는 다음 엔진으로 넘어간다(D-044·D-056).
+
+**이미 겪은 결합 지점**
+
+| 무엇 | 결과 |
+|---|---|
+| `paddleocr` 2.x → 3.x | `show_log`·`use_angle_cls`·`use_gpu` 제거, `ocr.ocr()` → `ocr.predict()` (a3894c2) |
+| `paddleocr` 3.7이 `pyyaml==6.0.2` 고정 | 이 저장소의 하한도 6.0.2로 내림 |
+| `paddlepaddle` 휠이 cp312까지 | `requires-python`에 `<3.13` (D-059) |
+| Windows + paddlepaddle 3.x | OneDNN이 PIR 속성 변환 미지원 → `FLAGS_use_mkldnn=0` 회피 |
+| `torch`는 전용 인덱스(`pytorch-cu124`) | CUDA 버전을 바꾸면 `[[tool.uv.index]]` URL도 함께 고쳐야 한다 |
+| `opencv-contrib-python`(paddlex) ↔ `opencv-python-headless`(extras) | **같은 `cv2`를 두 배포판이 제공.** 한쪽을 지우면 공유 디렉터리가 사라져 남은 쪽까지 깨진다 — `module 'cv2' has no attribute 'IMREAD_COLOR'`. extras도 contrib판으로 통일했다 |
+
+**올릴 때 절차**
+
+1. `uv lock --upgrade-package <이름>` — **전체 갱신은 하지 않는다.** 한꺼번에 올리면
+   무엇이 깼는지 가릴 수 없다.
+2. `uv run python -m pytest`
+3. **실제 이미지로 OCR 1쪽.** 자동 테스트의 사각지대가 여기다 —
+   `test_ocr_paddle.py::test_recognize_real`이 PaddleOCR `recognize()`를 실제로
+   부르지만(설치 시에만), **검출(`line_detector`)은 순수 함수만 검증하고
+   배치·파이프라인 경로는 더미 엔진을 쓴다.** 엔진 API가 바뀌어도 초록으로 통과한다.
+4. 스키마·저장 형식이 바뀌면 `docs/DECISIONS.md`에 마이그레이션 경로를 남긴다.
+   기존 서고를 열 수 없게 되는 변경은 **되돌릴 수 없다.**
+
 ## 백엔드 모듈 구조 (src/app/)
 server.py는 FastAPI 앱 생성 + 라우터 마운트만 담당하는 조립 파일(~85줄).
 실제 API 엔드포인트는 8개 라우터 모듈에 분산 (2026-07-26 기준 실측):

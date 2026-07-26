@@ -331,8 +331,12 @@ function initActivityBar() {
         if (bibSec && typeof viewerState !== "undefined" && viewerState.docId) {
           bibSec.style.display = "";
         }
+        // 해석 저장소는 추출 모드에서 숨긴다(L5~L7을 쓰지 않는다).
+        // hidden 속성만으로도 CSS가 막지만, 여기서 style.display를 비우는
+        // 코드가 «보이게 하는 의도»로 읽히므로 조건을 명시해 둔다.
         if (
           interpSec &&
+          !interpSec.hidden &&
           typeof viewerState !== "undefined" &&
           viewerState.docId
         ) {

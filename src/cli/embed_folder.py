@@ -143,8 +143,18 @@ def _force_rmtree(path: Path) -> tuple[bool, str]:
         그래서 실패한 파일의 읽기 전용 속성을 벗기고 다시 시도한다.
         그러고도 남으면 사실대로 실패를 돌려준다.
     """
+    import gc
     import os
     import stat
+
+    # GitPython의 Repo는 `.git/objects/pack/*` 에 파일 핸들을 열어 두고,
+    # 이 저장소는 대부분 `git.Repo(path)`를 with 없이 쓴다(core/document.py).
+    # Windows는 열린 파일을 지우지 못하므로 «정리했다»가 조용히 실패한다.
+    # 참조가 끊긴 Repo를 지금 회수해 __del__이 핸들을 닫게 한다.
+    #
+    # 왜 여기서 하는가: 호출부마다 Repo를 들고 있지 않아 close()를 부를 수
+    # 없다. 지우기 직전이 남은 핸들을 정리할 수 있는 유일한 지점이다.
+    gc.collect()
 
     def _on_error(func, target, exc_info):
         # 읽기 전용이라 지우지 못한 것이면 속성을 벗기고 다시 시도한다.

@@ -818,11 +818,14 @@ GUI를 켜지 않고 처리할 수 있습니다. 서고를 미리 만들 필요�
 
 ```bash
 # 무엇을 할지 먼저 봅니다 (아무것도 바꾸지 않습니다)
-uv run python -m cli ocr "논문.pdf"
+ctb ocr "논문.pdf"
 
 # 실제로 실행
-uv run python -m cli ocr "논문.pdf" --execute
+ctb ocr "논문.pdf" --execute
 ```
+
+> `ctb`는 설치하면 함께 깔리는 명령입니다. 안 잡히면
+> `uv run ctb ocr "논문.pdf"` 또는 `uv run python -m cli ocr "논문.pdf"`로도 됩니다.
 
 산출물은 **원본 옆에** `논문_text.pdf`로 놓입니다. `-o`로 위치를 지정할 수도 있습니다.
 

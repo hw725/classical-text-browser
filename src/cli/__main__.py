@@ -218,7 +218,9 @@ def main():
     _force_utf8_output()
 
     parser = argparse.ArgumentParser(
-        prog="classical-text-browser",
+        # 설치하면 `ctb`로 부를 수 있다([project.scripts]).
+        # `python -m cli`로도 도므로 도움말에는 짧은 쪽을 적는다.
+        prog="ctb",
         description="고전서지 통합 브라우저 — CLI 도구",
     )
     subparsers = parser.add_subparsers(dest="command")
