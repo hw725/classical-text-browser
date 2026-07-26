@@ -782,10 +782,11 @@ function _buildOverviewRow(page, { target, reviewed, allNoPosition }) {
     const undo = document.createElement("button");
     undo.type = "button";
     undo.className = "extract-overview-action extract-overview-undo";
-    undo.textContent = "되돌리기";
+    undo.textContent = "OCR 되돌리기";
     undo.title =
-      "다시 돌리기 직전의 결과로 되돌립니다 (교정 텍스트도 함께). " +
-      "한 번 더 누르면 원래대로 옵니다.";
+      "새로 돌린 결과가 이전만 못할 때 쓰세요. " +
+      "다시 돌리기 직전으로 되돌립니다 (교정도 함께). " +
+      "교정만 되돌리려면 교정 탭의 교정 목록을 쓰세요.";
     undo.addEventListener("click", async (e) => {
       e.stopPropagation();
       await _restoreExtractPage(target, page.page);
@@ -822,7 +823,14 @@ function _buildOverviewRow(page, { target, reviewed, allNoPosition }) {
 }
 
 /**
- * 한 쪽을 다시 돌리기 직전 상태로 되돌린다.
+ * 한 쪽을 **OCR 다시 돌리기 직전** 상태로 되돌린다.
+ *
+ * 무엇에 쓰는 것인가 — **새로 돌린 결과가 이전만 못할 때 하나뿐이다.**
+ * 다시 돌리면 그 쪽의 교정 텍스트가 새 OCR 결과로 덮이므로, 새 결과가
+ * 나쁘면 이전 것(교정 포함)으로 물러설 길이 필요하다.
+ *
+ * 교정만 취소하려는 것이라면 이 버튼이 아니다 — 교정 탭의 교정 목록에서
+ * 항목별 삭제나 «모두 삭제»를 쓰면 된다. 그쪽이 더 세밀하고 차수 제한도 없다.
  *
  * OCR 결과(L2)와 교정 텍스트(L4)를 함께 되돌린다 — 배치가 둘 다 덮어쓰므로
  * 하나만 되돌리면 «OCR은 예전 것인데 교정은 사라진» 어긋난 상태가 된다.
@@ -840,11 +848,11 @@ async function _restoreExtractPage(target, pageNumber) {
       return;
     }
     if (!(data.restored || []).length) {
-      showToast(`${pageNumber}쪽에는 되돌릴 결과가 없습니다.`, "info");
+      showToast(`${pageNumber}쪽에는 되돌릴 OCR 실행이 없습니다.`, "info");
       return;
     }
     showToast(
-      `${pageNumber}쪽을 되돌렸습니다. 한 번 더 누르면 원래대로 옵니다.`,
+      `${pageNumber}쪽을 다시 돌리기 직전으로 되돌렸습니다. 다시 누르면 원래대로.`,
       "success"
     );
     await _refreshExtractOverview();

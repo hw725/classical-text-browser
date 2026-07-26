@@ -1972,6 +1972,13 @@ async def api_save_page_text(
             status_code=404,
         )
 
+    # 여기서는 백업을 뜨지 않는다.
+    #
+    # 교정을 되돌리는 수단은 교정 탭에 이미 있고 더 낫다 —
+    # 항목별 삭제(고친 글자 하나만)와 «모두 삭제»(그 쪽 교정 전부)다.
+    # 교정 기록은 «어느 글자를 무엇으로»의 목록이라 차수 제한이 없다.
+    # 그 위에 쪽 통째 1단계 스냅샷을 얹으면 성능은 더 낮으면서
+    # 개념만 하나 늘어난다. 백업은 **OCR 재실행**에만 둔다(llm_ocr.py).
     try:
         return save_page_text(doc_path, part_id, page_num, body.text)
     except FileNotFoundError as e:
@@ -2138,6 +2145,8 @@ async def api_save_page_corrections(
             status_code=404,
         )
 
+    # 백업을 뜨지 않는다 — 교정 되돌리기는 교정 목록이 맡는다
+    # (항목별 삭제 / 모두 삭제). 자세한 이유는 api_save_page_text 참조.
     corrections_data = body.model_dump()
 
     # 자유편집 모드: corrected_text에서 diff로 corrections 자동 생성
