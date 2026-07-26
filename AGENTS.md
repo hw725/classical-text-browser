@@ -130,7 +130,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
    "인지부채 해소 반영" 참조. 현재는 단일 정의다.
 2. ~~LLM 응답이 잘리면 조용히 부분 결과 반환~~ → **해소됨(56000f8·b91f3ef)**: `_truncated`
    플래그가 UI 경고로 노출된다. 아래 "인지부채 해소 반영" 참조.
-3. LLM 결과 캐시(TTL 600초·최대 256건, _state.py:317) — 같은 텍스트 재요청 시 10분간
+3. LLM 결과 캐시(TTL 600초·최대 256건, `_state.py:360`) — 같은 텍스트 재요청 시 10분간
    옛 결과가 돌아올 수 있음.
 4. "가져오기" 버튼의 "준비중"은 UI만 봉인(D-037). hwp-import.js 1,034줄과 백엔드
    엔드포인트(`/api/documents/import-hwp` 등)는 살아 있음 — 재구현하지 말고 복원할 것.

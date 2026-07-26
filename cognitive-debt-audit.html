@@ -67,28 +67,32 @@
 <body>
 <div class="wrap">
 
-<div style="background:#e8f5e9;border-left:4px solid #43a047;padding:12px;margin:12px 0;font-family:sans-serif"><strong>✅ 해소 반영 (2026-07-07):</strong> 죽은 _parse_llm_json 이중정의 제거(ee8db13) 수정 완료. 아래 감사 본문은 수정 이전 스냅샷.</div>
+<div style="background:#e8f5e9;border-left:4px solid #43a047;padding:12px;margin:12px 0;font-family:sans-serif"><strong>✅ 갱신 (2026-07-26 · v1.2.0):</strong> 2026-07-04 감사 이후 넉 달, 릴리스 둘(v1.1.5 · v1.2.0)이 지났다. 이 판은 <em>수치를 전부 다시 재고</em>, 해소된 항목을 표시하고, 그동안 드러난 하나의 결함 유형(<strong>침묵하는 실패</strong>)을 새 절로 더한 것이다. 이전 판의 핫스팟 1위(<code>_parse_llm_json</code> 이중 정의)와 3위 일부(잘림 복구의 침묵)는 <strong>해소됐다</strong>.</div>
 
 <header>
   <h1>인지 부채 감사 — classical-text-browser</h1>
-  <div class="meta">감사일 2026-07-04 · 기준 v1.1.4 · 마지막 커밋 6a7fdab(2026-05-19) · 대상: <span class="mono">hw725\classical-text-browser</span></div>
+  <div class="meta">최초 감사 2026-07-04 · <strong>2차 감사 2026-07-26</strong> · 기준 v1.2.0 · 마지막 커밋 daa73e3(2026-07-26, 작업 트리 깨끗함) · 대상: <span class="mono">hw725\classical-text-browser</span></div>
+  <div class="meta">모든 수치는 <strong>2026-07-26 실측</strong>(파일 직접 계수). 이 페이지는 <span class="mono">AGENTS.md</span>의 「인지 부채 지도」를 서술형으로 푼 것이며, 두 문서는 같은 순위·같은 경로를 쓴다.</div>
 </header>
 
 <section id="bg">
   <h2>1. 배경 — 왜 이 감사인가</h2>
-  <p>이 프로젝트의 코드 대부분은 AI 에이전트가 작성했다. 총 77,344줄(Python + JS + HTML + CSS)이 존재하지만, 사용자(비개발자 CJK 인문학 연구자)의 이해는 <em>문서에 적힌 지도</em> 수준에 머물러 있고, 실제 <em>영토</em>(코드가 실제로 하는 일)와의 간극이 누적되고 있다. 이 보고서는 유지보수 문서(<span class="mono">docs/유지보수문서/04_classical_text_browser.md</span>)가 이미 다루는 내용은 반복하지 않고, 문서가 놓친 보이지 않는 코드 경로·암묵 관례·부수효과와 문서-코드 drift만 다룬다.</p>
+  <p>이 프로젝트의 코드 대부분은 AI 에이전트가 작성했다. <span class="mono">src/</span>와 <span class="mono">tests/</span>의 Python·JS·HTML·CSS를 합쳐 <strong>183개 파일 96,642줄</strong>(2026-07-26 실측)이 존재하지만, 사용자(비개발자 CJK 인문학 연구자)의 이해는 <em>문서에 적힌 지도</em> 수준에 머물러 있고, 실제 <em>영토</em>(코드가 실제로 하는 일)와의 간극이 누적되고 있다. 이 보고서는 유지보수 문서(<span class="mono">docs/유지보수문서/04_classical_text_browser.md</span>)가 이미 다루는 내용은 반복하지 않고, 문서가 놓친 보이지 않는 코드 경로·암묵 관례·부수효과와 문서-코드 drift만 다룬다.</p>
+  <p><strong>2차 감사에서 달라진 것.</strong> 최초 감사는 «어디가 이해되지 않았나»를 물었다. 넉 달 뒤인 지금은 답이 하나 더 생겼다 — 이 기간에 실제로 터진 결함은 전부 <strong>같은 모양</strong>이었다. 그 모양을 6절에서 따로 다룬다.</p>
+  <div class="callout">이번 판에서 다시 잰 값 요약 — 백엔드 Python <strong>112파일 46,144줄</strong>, 프론트 <strong>38,550줄</strong>(index.html 4,821 + workspace.css 7,438 + JS 29파일 26,291), 테스트 <strong>39파일 11,948줄</strong>, API 라우트 <strong>185개</strong>(라우터 8개). <span class="mono">.github/workflows</span>는 <strong>여전히 없다</strong>.</div>
 </section>
 
 <section id="intuition">
   <h2>2. 직관 — 이 앱을 한 문장으로 다시 보기</h2>
-  <p>겉보기에는 "브라우저에서 고전 문헌을 열람·교정·번역하는 웹앱 하나"지만, 실제로는 <strong>최대 3개 프로세스</strong>(uvicorn 서버 + OpenAI OAuth 프록시 + 표점 Docker 컨테이너)가 배치파일 한 번으로 함께 기동되고, 결과물은 서고 폴더 안의 <strong>문헌별·해석별 독립 git 저장소 수십 개</strong>에 흩어져 기록되며, LLM 호출은 5단 폴백 라우터와 10분짜리 결과 캐시를 조용히 통과한다. "버튼 하나"의 뒤에서 무엇이 움직이는지가 이 감사의 핵심이다.</p>
+  <p>겉보기에는 «브라우저에서 고전 문헌을 열람·교정·번역하는 웹앱 하나»지만, 실제로는 <strong>최대 3개 프로세스</strong>(uvicorn 서버 + OpenAI OAuth 프록시 + 표점 Docker 컨테이너)가 배치파일 한 번으로 함께 기동되고, 결과물은 서고 폴더 안의 <strong>문헌별·해석별 독립 git 저장소 수십 개</strong>에 흩어져 기록되며, LLM 호출은 5단 폴백 라우터와 10분짜리 결과 캐시를 조용히 통과한다. «버튼 하나»의 뒤에서 무엇이 움직이는지가 이 감사의 핵심이다.</p>
+  <p>v1.2.0이 여기에 <strong>두 번째 얼굴</strong>을 더했다(D-055·D-060). 근현대 논문 스캔본을 끌어다 놓으면 8층 모델도 이중 저장소도 통과하지 않고 <em>OCR → 검색되는 PDF</em>까지 한 화면에서 끝나는 <strong>추출 모드</strong>다. 같은 서버·같은 데이터 구조 위에서 사이드바 아이콘이 8개에서 2개로 줄고 탭 절반이 숨는다. 즉 지금 이 앱은 <strong>한 코드베이스에 두 개의 서로 다른 사용 흐름</strong>을 얹고 있고, «화면에 없다»가 «코드에 없다»를 뜻하지 않게 됐다 — 이 구분이 4절과 6절의 밑바탕이다.</p>
 </section>
 
 <section id="flow">
   <h2>3. 핵심 흐름</h2>
-  <p>텍스트가 원본 이미지에서 주석까지 흐르는 경로와, 그 곁에서 모든 AI 기능이 통과하는 LLM 라우터 경로.</p>
+  <p>텍스트가 원본 이미지에서 주석까지 흐르는 경로, 그 곁에서 모든 AI 기능이 통과하는 LLM 라우터 경로, 그리고 v1.2.0이 더한 추출 모드 지름길.</p>
   <div class="svgbox">
-  <svg viewBox="0 0 880 360" width="880" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="8층 데이터 흐름과 LLM 폴백">
+  <svg viewBox="0 0 880 440" width="880" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="8층 데이터 흐름과 LLM 폴백, 추출 모드 지름길">
     <defs>
       <marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
         <path d="M0,0 L8,4 L0,8 z" fill="#8a3b12"/>
@@ -133,144 +137,258 @@
     <line x1="765" y1="78" x2="783" y2="78" class="ln"/>
     <!-- LLM 라우터 -->
     <rect x="150" y="200" width="580" height="60" class="box2" rx="10"/>
-    <text x="165" y="222" class="lbl">LLM 라우터 (src/llm/router.py) — 5단 폴백</text>
-    <text x="165" y="244" class="sm">Ollama(로컬) → OpenAI OAuth 프록시 → Gemini → OpenAI → Anthropic · 가용성 캐시 2분/30초</text>
+    <text x="165" y="222" class="lbl">LLM 라우터 (src/llm/router.py, 548줄) — 5단 폴백</text>
+    <text x="165" y="244" class="sm">Ollama(로컬) → OpenAI OAuth 프록시 → Gemini → OpenAI → Anthropic · 특정 모델 지정은 call(force_provider=…) 인자로만 (D-069)</text>
     <line x1="615" y1="103" x2="500" y2="198" class="ln"/>
     <line x1="720" y1="103" x2="560" y2="198" class="ln"/>
     <!-- 상태 허브 -->
     <rect x="150" y="290" width="580" height="52" class="box2" rx="10"/>
-    <text x="165" y="311" class="lbl">_state.py — 프롬프트 · 결과 캐시(10분) · JSON 파싱 · 잘림 복구(침묵) · LLM 초안(메모리, 재시작 시 소멸)</text>
+    <text x="165" y="311" class="lbl">_state.py (922줄) — 프롬프트 · 결과 캐시(600초·256건) · JSON 파싱 · 잘림 복구(_truncated 플래그로 UI 경고)</text>
     <text x="165" y="331" class="sm">모든 라우터가 여기를 경유 — 라우터 간 직접 import 금지 규칙의 실체</text>
     <line x1="440" y1="262" x2="440" y2="288" class="ln dash"/>
+    <!-- 추출 모드 지름길 -->
+    <path d="M 380,101 V 125 H 60 V 396 H 146" class="ln dash"/>
+    <rect x="150" y="368" width="580" height="58" class="box2" rx="10"/>
+    <text x="165" y="390" class="lbl">추출 모드 지름길 (D-055·D-060) — L5~L8을 건너뛰고 exports/ 검색되는 PDF로</text>
+    <text x="165" y="410" class="sm">쓰고 끝내지 않는다: 만든 PDF를 다시 열어 글자 크기·덮은 넓이·잉크 밀도를 잰다 (_audit_output, D-068)</text>
   </svg>
   </div>
-  <div class="callout">서버 기동 시 <code>start_server.bat</code>이 (a) <code>npx -y openai-oauth</code> 프록시 자동 실행(포트 10531–10540 스캔, Bearer 토큰 <code>oauth-proxy</code> 하드코딩), (b) <code>punctuation-service/.env</code>가 있으면 표점 Docker 자동 기동, (c) 2초 후 브라우저 자동 오픈까지 수행한다. "서버가 안 뜬다"의 원인이 셋 중 어디인지 아는 것이 디버깅의 절반이다.</div>
+  <div class="callout">서버 기동 시 <code>start_server.bat</code>(178줄)이 (a) <code>npx -y openai-oauth</code> 프록시 자동 실행(포트 10531–10540 스캔, Bearer 토큰 <code>oauth-proxy</code> 하드코딩, 숨김 창), (b) <code>punctuation-service/.env</code>가 있으면 표점 Docker 자동 기동, (c) 2초 후 브라우저 자동 오픈까지 수행한다. «서버가 안 뜬다»의 원인이 셋 중 어디인지 아는 것이 디버깅의 절반이다. 끄는 스위치는 <code>OPENAI_OAUTH_AUTO_START=0</code>·<code>PUNCT_AUTO_START=0</code>.</div>
 </section>
 
 <section id="hotspots">
   <h2>4. 인지 부채 핫스팟 — 위험 순위와 방치 시 비용</h2>
+  <p>순위는 <span class="mono">AGENTS.md</span>의 「인지 부채 핫스팟(위험 순)」과 <strong>같은 번호·같은 경로</strong>를 쓴다. 다만 지난 넉 달에 <em>실제로 피해를 낸</em> 것은 6번 하나였으므로, 「실현된 피해」 배지로 다시 매겼다 — 번호는 잠재 위험 순, 배지는 실현 순이다.</p>
   <div class="scroll">
   <table>
     <thead><tr><th>순위</th><th>경로</th><th>무엇이 숨어 있나</th><th>방치 시 비용</th></tr></thead>
     <tbody>
       <tr>
-        <td class="rank">1 <span class="badge b-high">높음</span></td>
-        <td class="mono">src/app/_state.py (968줄)</td>
-        <td>전역 상태 + LLM 프롬프트 사전 + 결과 캐시 + JSON 파서가 한 파일에 응집. 특히 <code>_parse_llm_json</code>이 775행과 906행에 <strong>이중 정의</strong> — 파이썬은 뒤 정의가 앞을 덮으므로 775행(한국어 docstring 쪽)은 죽은 코드.</td>
-        <td>죽은 쪽 정의를 수정해도 동작이 안 바뀌어 "고쳤는데 그대로"라는 미궁에 빠짐. AI에게 수정을 시켜도 어느 정의를 건드릴지 복불복. 프롬프트·캐시·파싱이 얽혀 있어 부분 수정이 연쇄 파손 유발.</td>
+        <td class="rank">1 <span class="badge b-mid">중간</span></td>
+        <td class="mono">src/app/_state.py (922줄)</td>
+        <td>전역 상태 + LLM 프롬프트 사전 + 결과 캐시 + JSON 파서가 한 파일에 응집. <strong>이전 판의 «<code>_parse_llm_json</code> 이중 정의»는 해소됐다</strong>(ee8db13) — 현재 <code>_state.py:860</code>에 단일 정의뿐임을 실측 확인. 결과 캐시는 <code>_state.py:360–361</code>(TTL 600초·최대 256건), 잘림 복구는 <code>_state.py:776</code>.</td>
+        <td>중복 정의는 사라졌지만 <em>응집 자체</em>는 그대로다. 프롬프트·캐시·파싱이 얽혀 있어 부분 수정이 연쇄 파손을 부르고, 같은 종류의 중복이 다시 자라도 눈에 띄지 않는다.</td>
       </tr>
       <tr>
         <td class="rank">2 <span class="badge b-high">높음</span></td>
-        <td class="mono">src/app/static/ (프론트 약 3만 줄)</td>
-        <td>index.html 4,477줄 단일 파일 + workspace.css 6,826줄 + JS 에디터 20여 개(annotation-editor 2,546줄 등). 빌드 도구·프론트 테스트·CI(<span class="mono">.github/workflows</span> 부재) 전무. 백엔드 테스트 28파일과 대조적.</td>
-        <td>버튼 하나 고치는 수정이 다른 탭을 조용히 깨뜨려도 감지 수단이 사람 눈뿐. 회귀가 누적되면 어느 시점의 어떤 수정이 원인인지 재구성 불가능.</td>
+        <td class="mono">src/app/static/ (프론트 38,550줄)</td>
+        <td>index.html <strong>4,821줄</strong> 단일 파일 + workspace.css <strong>7,438줄</strong> + JS <strong>29파일 26,291줄</strong>. <strong>프론트 테스트 0, CI 없음</strong>(<span class="mono">.github/workflows</span> 부재를 이번에도 확인). D-055·D-067·D-069의 화면 검증은 매번 <strong>jsdom 일회성 하네스</strong>로 했고 <strong>그 하네스들은 저장소에 없다</strong>. 백엔드 테스트 39파일과 대조적.</td>
+        <td>버튼 하나 고치는 수정이 다른 탭을 조용히 깨뜨려도 감지 수단이 사람 눈뿐. <strong>이 부채가 실제로 값을 치렀다</strong> — D-069가 걷어낸 죽은 코드 약 1,000줄(비교 모드 880줄 등)이 몇 달을 살아남은 이유가 여기다. 정식 프론트 스모크 테스트는 여전히 미결(D-053).</td>
       </tr>
       <tr>
         <td class="rank">3 <span class="badge b-mid">중간</span></td>
-        <td class="mono">_state.py:733 잘림 복구 + :317 결과 캐시</td>
-        <td>LLM 주석·인용 응답이 잘리면 <code>_salvage_truncated_array_payload</code>가 완성된 항목만 건져 <strong>조용히 부분 결과 반환</strong>(서버 로그 warning뿐, UI 무경고). 결과 캐시는 TTL 600초·최대 256건.</td>
-        <td>연구 데이터 품질 문제: 주석 10개를 요청했는데 7개만 온 것을 모른 채 확정할 수 있음. 캐시 때문에 프롬프트를 고쳐도 10분간 옛 결과가 보여 "수정이 안 먹힌다"는 오해 유발.</td>
-      </tr>
-      <tr>
-        <td class="rank">4 <span class="badge b-mid">중간</span></td>
-        <td class="mono">start_server.bat (부수효과 3종)</td>
-        <td>OAuth 프록시 자동 기동(외부 npm 패키지를 실행 시마다 신뢰), 포트 스캔, Docker 기동. 끄는 스위치(<code>OPENAI_OAUTH_AUTO_START=0</code>, <code>PUNCT_AUTO_START=0</code>)는 존재하나 문서화 약함.</td>
+        <td class="mono">start_server.bat (178줄, 부수효과 3종)</td>
+        <td>OAuth 프록시 자동 기동(외부 npm 패키지를 실행 시마다 신뢰), 포트 10531–10540 스캔, 표점 Docker 기동. 끄는 스위치는 존재하나 문서화 약함.</td>
         <td>기동 실패 시 원인 3갈래를 구분 못 해 매번 처음부터 헤맴. <code>openai-oauth</code> 패키지가 업스트림에서 변경·오염되면 자동으로 실행됨(공급망 위험).</td>
       </tr>
       <tr>
-        <td class="rank">5 <span class="badge b-mid">중간</span></td>
-        <td class="mono">src/parsers/ (5종, 약 4,600줄)</td>
-        <td>korcis(1,807줄)·archives_jp·kyujanggak·kostma·ndl — 외부 기관 사이트의 HTML 구조에 의존하는 스크래핑 파서. 유지보수 문서는 KORCIS API만 언급.</td>
-        <td>대상 사이트 개편 시 침묵 파손. 서지 자동 입력이 어느 날 빈 값을 돌려줘도 코드 결함인지 사이트 변경인지 판별할 지식이 없음.</td>
+        <td class="rank">4 <span class="badge b-mid">중간</span></td>
+        <td class="mono">src/parsers/ (5종 서지 파서)</td>
+        <td>korcis(1,807줄)·archives_jp(1,007)·kyujanggak(635)·ndl(572)·kostma(568) — 외부 기관 사이트의 HTML 구조에 의존하는 스크래핑 파서. 유지보수 문서는 KORCIS API만 언급. (<span class="mono">src/parsers/</span> 전체는 11파일 7,337줄로 공통 기반·IIIF·LLM 파서를 포함한다.)</td>
+        <td>대상 사이트 개편 시 <strong>침묵 파손</strong>. 서지 자동 입력이 어느 날 빈 값을 돌려줘도 코드 결함인지 사이트 변경인지 판별할 지식이 없음. 테스트가 실제 네트워크를 타지 않으므로 자동 검증으로는 못 잡는다.</td>
       </tr>
       <tr>
-        <td class="rank">6 <span class="badge b-low2">낮음</span></td>
-        <td class="mono">index.html의 봉인된 HWP 가져오기 (D-037)</td>
-        <td>"가져오기" 버튼의 "준비중"은 UI 차단일 뿐. hwp-import.js 1,034줄과 백엔드 엔드포인트(<code>/api/documents/import-hwp</code> 등)는 살아 있고, onclick 복원만으로 재개 가능.</td>
-        <td>존재를 모르면 최우선 TODO(HWP 표점·현토 분리 가져오기)를 처음부터 재구현 — 수 세션 낭비. 반대로 살아 있는 백엔드 경로는 API 직접 호출 시 여전히 동작함을 모르면 보안·데이터 정합 사각지대.</td>
+        <td class="rank">5 <span class="badge b-low2">낮음</span></td>
+        <td class="mono">봉인된 HWP 가져오기 (D-037)</td>
+        <td>«가져오기» 버튼의 «준비중»은 UI 차단일 뿐. <span class="mono">hwp-import.js</span> <strong>1,036줄</strong>과 백엔드 엔드포인트는 살아 있고, <code>_openHwpImportDialog()</code>는 <strong>정의만 있고 호출자가 0건</strong>이다(실측). D-069의 죽은 코드 정리에서도 <strong>일부러 남겼다</strong> — 죽은 코드가 아니라 잠긴 기능이기 때문. 단 D-055 이후 이 버튼은 <strong>추출 모드에서는 다른 곳</strong>(<code>text-import/from-text-layer</code>)에 연결된다.</td>
+        <td>존재를 모르면 최우선 TODO를 처음부터 재구현 — 수 세션 낭비. 반대로 살아 있는 백엔드 경로는 API 직접 호출 시 여전히 동작함을 모르면 보안·데이터 정합 사각지대.</td>
+      </tr>
+      <tr>
+        <td class="rank">6 <span class="badge b-high">높음 · 실현됨</span></td>
+        <td class="mono">합성 입력만으로 검증하는 습관 / 침묵하는 실패</td>
+        <td><strong>이번 기간의 모든 심각 결함이 여기서 났다.</strong> 시험용 PDF를 PyMuPDF로 만들어 썼기 때문에, 실제 스캐너 출력에만 있는 되돌리지 않은 좌표 변환을 자동 테스트가 <strong>영영 만나지 못했다</strong>(D-068). 같은 구조로 다권본·모델 지정·죽은 코드가 «테스트 초록»인 채 살아 있었다(D-069). 짝이 되는 습관이 <strong>null 가드</strong>다 — <code>if (!x) return</code>·<code>typeof x === "function"</code>이 «되지 않는다»를 «없다»처럼 보이게 한다.</td>
+        <td>오류가 나지 않으므로 <strong>잘못된 결과가 그대로 저장된다.</strong> 卷下를 OCR 했는데 卷上이 들어가고, 텍스트 레이어가 2pt로 박히고, 고른 모델이 무시된다. 연구 데이터의 <em>원본-텍스트 대응</em>이 조용히 끊어지는 것이라 이 저장소가 지키려는 것을 정면으로 때린다. 발견은 항상 <strong>사람이 산출물을 직접 열어 본 뒤</strong>였다.</td>
       </tr>
     </tbody>
   </table>
   </div>
+
+  <h3>해소된 항목 (이전 판에서 이월)</h3>
+  <ul>
+    <li><strong>해소</strong> — <code>_state.py</code>의 <code>_parse_llm_json</code> 이중 정의(775행·906행). 앞 정의 제거, AST로 단일 정의 확인. 커밋 <code>ee8db13</code>. 현재 위치는 <code>_state.py:860</code> 하나뿐.</li>
+    <li><strong>부분 해소</strong> — 잘린 LLM 응답의 조용한 부분 결과 반환. <code>_truncated</code> 플래그를 도입해 <span class="mono">workspace.js</span>·<span class="mono">annotation-editor.js</span>가 화면에 경고를 띄운다. 커밋 <code>56000f8</code>·<code>b91f3ef</code>. 복구 로직 자체(<code>_salvage_truncated_array_payload</code>, <code>_state.py:776</code>)는 그대로이므로 <em>개수 확인 습관</em>은 여전히 필요하다.</li>
+    <li><strong>해소</strong> — 「변하는 데이터를 캐시 지정 없이 읽는 GET 47건」. 호출부를 고치지 않고 <strong>서버 미들웨어 한 곳</strong>에서 <code>Cache-Control: no-store</code>를 붙인다(D-066, <span class="mono">src/app/server.py:107–131</span>).</li>
+    <li><strong>해소</strong> — AGENTS.md가 git 미추적이던 것. 현재 추적된다(<code>git ls-files AGENTS.md</code> 확인).</li>
+  </ul>
+
   <h3>unknown unknowns (검증 자체가 안 된 영역)</h3>
   <ul>
-    <li>테스트 28파일의 <strong>현재 통과 여부 미확인</strong> — CI가 없어 마지막 실행 시점을 아무도 모름.</li>
-    <li>2026-05-08 하루에 대량 style 커밋(포맷 정리 수십 건) — <code>git blame</code>이 그날로 덮여 실질 변경 이력 추적성이 저하된 정도 미확인.</li>
-    <li><code>llm_usage_log.jsonl</code>이 서고별로 분산 기록(서고 미설정 시 <span class="mono">~/.classical-text-browser/</span>) — 예산 합산이 실제로 이뤄지는지 미확인.</li>
+    <li><strong>프론트에는 재현 가능한 검증이 없다.</strong> 백엔드 테스트는 D-069 시점에 655건 통과가 기록돼 있지만(2026-07-26), 프론트 화면 검증은 매번 버려지는 jsdom 하네스로 했고 저장소에 남아 있지 않다. 다음 사람이 같은 확인을 하려면 처음부터 만들어야 한다.</li>
+    <li><code>llm_usage_log.jsonl</code>이 서고별로 분산 기록(서고 미설정 시 <span class="mono">~/.classical-text-browser/</span>, <span class="mono">src/llm/usage_tracker.py:39·41</span>) — 예산 합산이 실제로 이뤄지는지 미확인.</li>
     <li>OCR extras(NDLOCR 계열)와 별도 폴더 <span class="mono">classical-text-browser-models</span>의 가중치 버전 정합 미확인.</li>
+    <li><strong>기본 OCR 엔진은 문헌 성격을 보지 않는다</strong> — «설치된 것 중 첫 번째»(<span class="mono">registry.py</span>). torch가 있으면 한글 인식이 안 되는 고전적 전용 엔진이 기본이 된다. 배치 라우트는 경고하지만 <strong>페이지 단위 라우트에는 그 경고가 없다</strong> — 이 경로로 얼마나 많은 결과가 만들어졌는지 알 수 없다.</li>
+    <li><code>_audit_output</code>이 잡는 것은 <em>이미 겪은 모양</em>(너무 작은 글자·한 구석에 몰린 텍스트·글자 없는 자리)뿐이다. 다른 모양의 침묵하는 실패가 남아 있는지는 <strong>검사할 방법이 없다</strong>.</li>
   </ul>
 </section>
 
+<section id="silent">
+  <h2>5. 이번 기간의 유일한 패턴 — 오류를 내지 않고 틀리는 코드</h2>
+  <p>D-063부터 D-069까지, 이 기간에 드러난 <strong>심각한 결함은 예외 없이 한 가지 모양</strong>이었다. 그럴듯한 틀린 답을 내놓고, 테스트는 전부 초록이고, <strong>사람이 산출물을 실제로 열어 보기 전까지 아무도 몰랐다.</strong></p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>결정</th><th>무엇이 조용히 틀렸나</th><th>왜 안 잡혔나</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="mono">D-068</td>
+        <td>텍스트 레이어 PDF가 텍스트를 <strong>0.24배</strong>로 쪽 왼쪽 아래 구석에 박았다. 넣으려던 12pt가 <strong>2.88pt</strong>로, 쪽의 60%를 덮어야 할 것이 <strong>4%</strong>로. 줄 수도, 좌표 계산도, 로그도 전부 맞았다.</td>
+        <td>원본 스캔 PDF가 <code>0.24 0 0 0.24 0 0 cm</code>을 <code>q…Q</code> 밖에 남겨 둔다(스캐너가 2064px을 495pt 종이에 맞춘 배율). 시험용 PDF를 <strong>PyMuPDF로 만들었기</strong> 때문에 그 스트림을 만난 적이 없다. 18개 시험 전부 초록.</td>
+      </tr>
+      <tr>
+        <td class="mono">D-069 ①</td>
+        <td>다권본에서 <strong>엉뚱한 권</strong>을 읽었다. 卷下 5쪽을 OCR 하면 卷上 5쪽 이미지가 엔진에 넘어가고, 오류 없이 그럴듯한 판독이 저장된다.</td>
+        <td>세 곳(<span class="mono">image_utils.py</span>·<span class="mono">pipeline.py</span>·<span class="mono">llm_ocr.py</span>)이 <code>L1_source/*.pdf</code>를 glob 해 <strong>첫 번째</strong>를 쓰고 <code>part_id</code>를 아예 보지 않았다. 테스트는 <strong>단권 문헌</strong>만 본다.</td>
+      </tr>
+      <tr>
+        <td class="mono">D-069 ②</td>
+        <td>사용자가 고른 <strong>LLM 모델이 무시</strong>됐다. 화면에서 «Claude로 돌려라»를 골라도 기본 폴백 순서대로 돌았다.</td>
+        <td>L7 주석 AI 보조 4개 경로가 <code>llm_router.force_provider = …</code>로 <strong>존재하지 않는 속성에 대입</strong>했다. 파이썬은 없는 속성에 대입해도 조용히 만들어 준다 — 예외가 없다.</td>
+      </tr>
+      <tr>
+        <td class="mono">D-069 ⑤</td>
+        <td><strong>죽은 코드 약 1,000줄</strong>이 몇 달을 살아남았다. 「비교 모드」 880줄은 필요한 DOM id 8개가 index.html에 하나도 없었고, 「L5 종류」 라디오는 <strong>눌러도 아무 일도 일어나지 않았다</strong>.</td>
+        <td>죽은 참조 17건이 <strong>전부 <code>if (!x) return</code>으로 감싸여</strong> 있었다. 예외가 나지 않으니 «되지 않는다»가 «없다»처럼 보였다.</td>
+      </tr>
+      <tr>
+        <td class="mono">D-063</td>
+        <td>추출 패널의 「대조」·「영역」·「다음 미확인 쪽」이 <strong>아무 일도 하지 않았다</strong>. <code>goToPage</code>라는 함수가 애초에 없었다.</td>
+        <td><code>typeof goToPage === "function"</code> 가드가 삼켰다. 오류도 콘솔 경고도 없다. 게다가 검증에서 <strong>없는 함수를 가짜로 주입해</strong> 통과시켰다 — 스텁이 실제 계약과 어긋나면 테스트는 자기 자신을 검증한다.</td>
+      </tr>
+      <tr>
+        <td class="mono">D-066</td>
+        <td>«고쳤는데 화면에 반영되지 않는다» — 변하는 데이터를 캐시 지정 없이 읽는 GET이 <strong>47건</strong>. 브라우저가 캐시 기간을 스스로 추정했다.</td>
+        <td>D-063에서 그 부류 <strong>한 곳</strong>(레이아웃 탭)만 고쳤다. 기계적으로 훑어 보니 같은 모양이 46곳 더 있었다. 한 곳을 고치고 끝냈으면 나머지는 사고가 날 때까지 남아 있었을 것이다.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="callout"><strong>교훈은 한 줄이다 — null 가드와 폴백은 실패를 침묵으로 바꾼다.</strong> 정말로 있어도 없어도 되는 것에는 옳은 도구지만, <em>반드시 있어야 하는 것</em>에는 틀린 도구다. 없어야 정상인 것에는 가드를, 있어야 정상인 것에는 <strong>없으면 시끄럽게 알리기</strong>를 쓴다. D-063이 호출부의 «없으면 조용히 넘어가기»를 «화면에 알리기»로 바꾼 것이 그 적용이다.</div>
+  <p>그리고 <strong>«몇 줄 넣었다»는 시도의 기록이지 결과의 기록이 아니다.</strong> D-068에서 로그도 API 응답도 «30줄 제자리»라고 말했고 그것은 사실이었다 — 그 30줄이 어디에 얼마만 하게 놓였는지는 아무도 재지 않았을 뿐이다. 원본이 이미지뿐인 이상, 확인할 길은 <strong>결과물을 다시 열어 재는 것</strong>밖에 없다.</p>
+</section>
+
+<section id="guards">
+  <h2>6. 지금 코드베이스가 스스로를 지키는 방법 — 그리고 그 한계</h2>
+  <p>위 패턴에 대응해 v1.2.0이 넣은 장치 넷이다. <strong>넷 다 «이미 겪은 특정 모양»을 잡는 것이지 결함 일반을 잡지 못한다</strong>는 점을 분명히 해 둔다.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>장치</th><th>무엇을 하나</th><th>무엇을 못 하나</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="mono">_audit_output<br><span style="font-size:0.85em;color:var(--sub)">export/text_layer_pdf.py:536</span></td>
+        <td>만든 PDF를 <strong>다시 열어 잰다.</strong> 쪽마다 ①가장 작은 글자 크기(5.0pt 미만이면 경고) ②텍스트가 덮은 넓이(쪽의 2% 미만이면 경고, 줄이 5개 이상인 쪽만 판정), 표본 3쪽(처음·가운데·끝)은 ③<strong>그 자리에 실제로 잉크가 있는지</strong>(쪽 평균의 1.3배 이상)까지. 이상은 <code>warnings</code>로 <strong>화면에 남는다</strong>(사라지는 토스트가 아니다).</td>
+        <td>세 가지 지표 <em>바깥</em>의 결함은 못 본다. 글자가 정상 크기로 정상 넓이에 <strong>틀린 내용</strong>으로 들어가면 통과한다. 잉크 검사는 좌표를 얻은 쪽에만 걸고, 좌표 없이 순서대로 늘어놓은 쪽은 아예 검사하지 않는다(거짓 경보를 피하려고). 판정 기준은 <strong>실측 한 건</strong>(박준원 2001, 15쪽)에서 잡은 값이다.</td>
+      </tr>
+      <tr>
+        <td class="mono">resolve_part_pdf<br><span style="font-size:0.85em;color:var(--sub)">ocr/image_utils.py:233</span></td>
+        <td>다권본에서 어느 권의 PDF를 쓸지 <strong>한 함수로 모았다.</strong> manifest가 정본이고, 못 읽을 때만 <strong>이름 순서</strong>로 물러난다. 실측 참조 6곳(정의 포함).</td>
+        <td>맞는 권을 고르는 것뿐, 그 권의 <strong>쪽 번호가 맞는지는 보지 않는다</strong>. manifest가 이미 틀려 있으면 틀린 대로 따른다. 자동 테스트가 다권본을 보게 되긴 했지만(신규 5건), 실물 확인은 여전히 사람 몫이다 — D-069도 卷上·卷下를 실제로 만들어 눈으로 대조했다.</td>
+      </tr>
+      <tr>
+        <td class="mono">write_json_atomic<br><span style="font-size:0.85em;color:var(--sub)">core/document.py:1358</span></td>
+        <td>JSON 저장을 <strong>임시 파일 → fsync → os.replace</strong>로 한다. <code>Path.write_text()</code>는 먼저 파일을 0바이트로 자르므로 그 사이 정전·강제종료가 나면 <code>manifest.json</code>이 빈 파일이 되고 <strong>그 문헌이 통째로 열리지 않는다.</strong> 다섯 모듈에 복제돼 있던 <code>_write_json</code>이 전부 이것을 부른다(실측 참조 19곳).</td>
+        <td>저장이 <strong>깨지지 않게</strong> 할 뿐, <strong>내용이 맞는지는 모른다</strong>. 틀린 값을 원자적으로 저장하는 데도 똑같이 성공한다. 또 이 보호는 JSON 경로에만 있고 다른 산출물에는 없다.</td>
+      </tr>
+      <tr>
+        <td class="mono">no-store 미들웨어<br><span style="font-size:0.85em;color:var(--sub)">app/server.py:107–131</span></td>
+        <td><code>/api/*</code> 응답에 <strong>서버가</strong> <code>Cache-Control: no-store</code>를 붙인다. 성공이든 500이든 붙는다. 호출부 47곳을 각각 고치는 대신 한 곳에서 막았으므로 <strong>새로 쓰는 코드에서 다시 빠질 수 없다</strong>. 정적 파일은 <code>_NoCacheStaticFiles</code>(server.py:80)로 <code>no-cache, must-revalidate</code>를 유지한다 — 내용이 그대로면 304로 끝나기 때문.</td>
+        <td>브라우저 캐시만 막는다. 서버 쪽 <strong>LLM 결과 캐시(600초·256건)는 그대로</strong>이므로, 프롬프트를 고쳤는데 같은 텍스트에 옛 결과가 돌아오는 일은 여전히 일어난다. 조건부 요청(304)의 이득도 포기했다.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <p><strong>남은 구멍.</strong> D-069가 후속 과제로 적어 둔 것 — 개발 중에는 <code>getElementById</code> 실패를 <em>경고로 남기는</em> 편이 죽은 참조 계열을 즉시 드러낸다. 아직 없다. 그리고 자동 검사는 «없다»를 증명하지 못한다: D-066의 네 가지 기계 검사에서 <strong>오탐이 39건</strong> 나왔고 전부 사람이 하나씩 확인해 걸러냈다. 검사는 <strong>볼 곳을 좁혀 줄 뿐</strong>이다.</p>
+</section>
+
 <section id="drift">
-  <h2>5. Drift 로그 (증거 포함)</h2>
+  <h2>7. Drift 로그 (증거 포함)</h2>
   <div class="scroll">
   <table>
     <thead><tr><th>#</th><th>증거</th><th>내용</th></tr></thead>
     <tbody>
-      <tr><td>1</td><td class="mono">git status: M CLAUDE.md</td><td>커밋된 CLAUDE.md는 documents.py를 "32 라우트"로 기재, 미커밋 수정본은 34로 갱신. 실측(<code>grep -c '@router.'</code>) 결과 <strong>34가 정답</strong> — 2026-05-19 이후 문서 갱신이 커밋되지 않은 채 6주 이상 방치.</td></tr>
-      <tr><td>2</td><td class="mono">git status: ?? AGENTS.md</td><td>AGENTS.md 파일 자체가 git 미추적(이력 0건). CLAUDE.md와 내용이 같은 복제본인데, 한쪽만 고치면 두 지침이 갈라지는 구조적 drift 씨앗.</td></tr>
-      <tr><td>3</td><td class="mono">git status: ?? logs/</td><td>미추적 logs/에 codex 리뷰 기록(2026-02-23·02-24 JSONL, 04-30 입출력 md 총 252KB)과 <strong>release-notes-v1.1.3.md</strong>가 방치. 릴리스 노트가 로그 폴더에만 존재하는 상태.</td></tr>
-      <tr><td>4</td><td class="mono">git log: 6a7fdab 2026-05-19</td><td>마지막 커밋 후 감사일(2026-07-04)까지 약 6.5주 공백. 그 사이 수정은 위 3건뿐 — 개발 중단기이나 미커밋 상태로 남은 것이 문제.</td></tr>
-      <tr><td>5</td><td class="mono">D-037 vs 유지보수 문서 04 TODO</td><td>유지보수 문서는 "HWP/HWPX 가져오기 최우선 TODO"로 기재하지만, D-037(2026-02-24)에 따라 코드는 이미 존재하고 UI만 봉인된 상태 — "처음부터 만들 일"이 아니라 "복원+안정화할 일"임이 문서 간 불일치.</td></tr>
-      <tr><td>6</td><td class="mono">_state.py:775 / :906</td><td>동일 함수 <code>_parse_llm_json</code> 이중 정의(뒤가 앞을 덮음, <code># type: ignore[no-redef]</code> 주석이 의도적 방치임을 시사). 어떤 문서에도 기록 없음 — 코드-문서 간 최대 간극.</td></tr>
+      <tr><td>1</td><td class="mono">이 파일 자신</td><td><strong>이 감사 페이지가 넉 달·릴리스 2회 동안 갱신되지 않았다.</strong> 2026-07-04 기준으로 «77,344줄»·«_parse_llm_json 이중 정의»·«documents.py 34 라우트»를 말하고 있었고, 셋 다 지금은 틀리다(96,642줄 / 단일 정의 / 40 라우트). 부채를 기록하는 문서 자체가 부채가 됐다.</td></tr>
+      <tr><td>2</td><td class="mono">git status: clean</td><td><strong>해소</strong> — 이전 판의 drift #1·#2·#3(CLAUDE.md 미커밋 수정, AGENTS.md 미추적, logs/ 방치)이 모두 정리됐다. AGENTS.md·CLAUDE.md·이 파일 전부 git 추적 중이고 작업 트리가 깨끗하다.</td></tr>
+      <tr><td>3</td><td class="mono">_state.py:860</td><td><strong>해소</strong> — 이전 판 drift #6의 <code>_parse_llm_json</code> 이중 정의. 커밋 <code>ee8db13</code>으로 앞 정의 제거. 실측 결과 <span class="mono">_state.py</span>에는 860행 단일 정의뿐이다(동명 함수가 <span class="mono">layout_analyzer.py</span>·<span class="mono">punctuation_llm.py</span>·<span class="mono">generic_llm.py</span>에도 있으나 서로 다른 모듈의 별개 함수다).</td></tr>
+      <tr><td>4</td><td class="mono">AGENTS.md:130 vs _state.py:360–361</td><td>AGENTS.md의 「인지 부채 지도」가 LLM 결과 캐시를 <code>_state.py:317</code>이라 적지만, 실제 위치는 <strong>360–361행</strong>(<code>_LLM_RESULT_CACHE_TTL_SEC = 600</code>·<code>_LLM_RESULT_CACHE_MAX_SIZE = 256</code>)이다. 값 자체(600초·256건)는 맞다 — 행 번호만 옛 스냅샷이다.</td></tr>
+      <tr><td>5</td><td class="mono">hwp-import.js 실측 1,036줄</td><td>같은 파일을 세 문서가 세 값으로 적는다 — AGENTS.md «1,034줄», D-069 «1,035줄», 실측 <strong>1,036줄</strong>. 결론(«재구현하지 말고 복원할 것»)에는 영향이 없지만, 줄 수를 근거로 쓰는 문장이 여러 곳에 있다는 신호다.</td></tr>
+      <tr><td>6</td><td class="mono">D-068 · docs/releases/v1.2.0.md</td><td><strong>산출물 drift</strong> — 문서는 맞았고 결과물이 틀렸던 사례. v1.2.0 이전에 만든 텍스트 레이어 PDF는 <strong>전부 쓸 수 없다.</strong> 서고 4개를 훑어 확인(최소 글자 1.2~1.8pt)하고 다시 만들었으나, <strong>사용자가 이미 외부로 내보낸 파일은 되돌릴 수 없다</strong>. 릴리스 노트 맨 앞이 이 안내로 시작한다.</td></tr>
+      <tr><td>7</td><td class="mono">.github/workflows 부재</td><td>CI는 이번에도 <strong>없다</strong>. 프론트 테스트도 0. D-053이 지목한 «프론트·실물 검증 부채»는 D-068로 <strong>백엔드에도 있었음</strong>이 드러났는데도 미결이다 — 이 항목만 최초 감사 이후 넉 달째 그대로다.</td></tr>
+      <tr><td>8</td><td class="mono">tests/ 정적 622 vs D-069 기록 655</td><td>테스트 «수»가 문서마다 다르게 보이는 이유. <span class="mono">tests/</span> 39파일에서 <code>def test_</code>를 정적으로 세면 <strong>622개</strong>이고, D-069가 기록한 실행 결과는 <strong>655 passed</strong>다. 매개변수화(<code>parametrize</code> 4곳)로 한 정의가 여러 번 도는 것이 차이의 유력한 설명이지만, <strong>이번 감사에서 pytest를 다시 돌리지는 않았다</strong> — 두 숫자는 서로 다른 것을 센다는 점만 기록해 둔다.</td></tr>
+      <tr><td>9</td><td class="mono">index.html:278–285</td><td>「가져오기」 버튼은 여전히 <code>style="opacity: 0.5; cursor: default;"</code>에 <code>title="… (준비중)"</code>인 채로 남아 있다(D-037). 다만 <strong>같은 자리가 모드에 따라 다른 일을 한다</strong> — 추출 모드에서는 <code>initTextLayerImport</code>(단순 추출)에 연결된다. 화면의 라벨 하나가 두 경로를 가리는 구조가 새로 생겼다.</td></tr>
     </tbody>
   </table>
   </div>
 </section>
 
 <section id="quiz">
-  <h2>6. 이해 점검 퀴즈 (5문항)</h2>
-  <p>기존 코드 경로에 의존하는 동작을 겨냥한 문제. 오답 시 정답·해설·다시 읽을 위치를 보여준다.</p>
-
-  <div class="q" data-answer="b">
-    <p class="stem">Q1. <span class="mono">_state.py</span>에는 <code>_parse_llm_json</code>이 775행과 906행에 두 번 정의돼 있다. LLM 응답 파싱 시 실제로 실행되는 것은?</p>
-    <label><input type="radio" name="q1" value="a"> 775행 정의 (한국어 docstring이 있는 원본)</label>
-    <label><input type="radio" name="q1" value="b"> 906행 정의 (뒤에 나오는 영어 docstring 버전)</label>
-    <label><input type="radio" name="q1" value="c"> 호출 위치에 따라 둘 다 번갈아 실행된다</label>
-    <label><input type="radio" name="q1" value="d"> 이중 정의는 문법 오류라 서버가 아예 안 뜬다</label>
-    <div class="fb" data-explain="파이썬은 같은 이름의 함수를 다시 정의하면 뒤의 것이 앞을 통째로 덮는다. 775행 정의는 죽은 코드라 거기를 고쳐도 동작이 바뀌지 않는다. 다시 읽기: src/app/_state.py 775행·906행, 이 보고서 4절 핫스팟 1위."></div>
-  </div>
+  <h2>8. 이해 점검 퀴즈 (7문항)</h2>
+  <p>실제 코드 경로에 의존하는 동작을 겨냥한 문제. 앞의 다섯은 v1.2.0 기간에 새로 드러난 것이다. 오답 시 정답·해설·다시 읽을 위치를 보여준다.</p>
 
   <div class="q" data-answer="c">
-    <p class="stem">Q2. AI 주석 생성 중 LLM 응답 JSON이 중간에 잘려서 왔다. 이 앱의 실제 동작은?</p>
-    <label><input type="radio" name="q2" value="a"> 오류 팝업을 띄우고 작업을 중단한다</label>
-    <label><input type="radio" name="q2" value="b"> 자동으로 같은 프로바이더에 무한 재시도한다</label>
-    <label><input type="radio" name="q2" value="c"> 완성된 항목만 건져 조용히 부분 결과를 보여준다 (서버 로그에만 경고)</label>
-    <label><input type="radio" name="q2" value="d"> 잘린 응답은 캐시에서 이전 결과로 자동 대체된다</label>
-    <div class="fb" data-explain="_salvage_truncated_array_payload(_state.py:733)가 잘린 배열에서 완성된 dict만 복구해 반환한다. UI에는 경고가 없어 주석 일부가 소리 없이 누락될 수 있다 — 확정 전 개수 확인 습관이 필요하다. 다시 읽기: src/app/_state.py 733행·851행 부근, 이 보고서 4절 3위."></div>
+    <p class="stem">Q1. 내려받은 텍스트 레이어 PDF에서 드래그가 되지 않았다. 열어 재 보니 텍스트는 <em>있었다</em> — 쪽 왼쪽 아래 구석에 2.88pt로. OCR도 좌표 계산도 정상이었다. 원인은?</p>
+    <label><input type="radio" name="q1" value="a"> OCR 엔진이 좌표를 0.24배로 잘못 돌려줬다</label>
+    <label><input type="radio" name="q1" value="b"> 폰트 임베드에 실패해 글자가 축소 대체됐다</label>
+    <label><input type="radio" name="q1" value="c"> 원본 스캔 PDF가 되돌리지 않은 <code>0.24 … cm</code> 좌표 변환을 남겨 두었고, 그 뒤에 덧붙인 모든 것이 함께 줄었다</label>
+    <label><input type="radio" name="q1" value="d"> PDF 뷰어가 축소 배율로 열려 있었을 뿐 파일은 정상이었다</label>
+    <div class="fb" data-explain="스캐너가 2064픽셀을 495pt 종이에 맞추려고 적어 둔 배율(495.36 ÷ 2064 = 0.24)이 q…Q 밖에 있어 되돌려지지 않았다. page.insert_text()는 자기 출력을 q…Q로 감싸므로 무사했는데, 폰트 임베드를 기본으로 바꾸며(D-062) 갈아탄 TextWriter.write_text()는 감싸지 않는다. 고침은 page.wrap_contents()로 원본 스트림을 가둔 것이다(메모리의 사본에만 적용, L1_source/는 그대로). 다시 읽기: docs/DECISIONS.md D-068, src/export/text_layer_pdf.py 268행, 이 보고서 5절."></div>
+  </div>
+
+  <div class="q" data-answer="b">
+    <p class="stem">Q2. Q1의 결함이 자동 테스트 18개를 전부 초록으로 통과한 이유는?</p>
+    <label><input type="radio" name="q2" value="a"> 텍스트 레이어 테스트가 애초에 없었다</label>
+    <label><input type="radio" name="q2" value="b"> 시험용 PDF를 PyMuPDF로 만들어 썼기 때문에, 실제 스캐너 출력에만 있는 그 좌표 변환을 만난 적이 없다</label>
+    <label><input type="radio" name="q2" value="c"> 테스트가 실행되지 않도록 skip 표시가 붙어 있었다</label>
+    <label><input type="radio" name="q2" value="d"> 글자 크기 검사가 2.88pt를 정상 범위로 잡고 있었다</label>
+    <div class="fb" data-explain="합성 입력만으로는 파일 형식을 다루는 코드를 지킬 수 없다. 깨끗한 스트림에서는 이 상황이 아예 생기지 않아, D-055의 「좌표 오차 0.2pt」도 D-062의 「한자 소실 2자」도 합성 PDF에서만 참인 값이었다. 고침에 「되돌리지 않은 변환을 가진 시험용 PDF」를 실제 논문 스트림 모양대로 추가했다. 다시 읽기: D-068, AGENTS.md 핫스팟 6번, 이 보고서 4절 6위·5절."></div>
   </div>
 
   <div class="q" data-answer="d">
-    <p class="stem">Q3. Windows에서 <code>start_server.bat</code>을 실행하면 함께 일어나는 일이 <em>아닌</em> 것은?</p>
-    <label><input type="radio" name="q3" value="a"> npx가 있으면 OpenAI OAuth 프록시를 자동 기동한다 (포트 10531–10540 스캔)</label>
-    <label><input type="radio" name="q3" value="b"> punctuation-service/.env가 있으면 표점 Docker를 자동 기동한다</label>
-    <label><input type="radio" name="q3" value="c"> 2초 후 기본 브라우저를 자동으로 연다</label>
-    <label><input type="radio" name="q3" value="d"> PaddleOCR 모델 가중치를 자동으로 내려받는다</label>
-    <div class="fb" data-explain="배치파일의 부수효과는 OAuth 프록시·표점 Docker·브라우저 오픈 3종이다. OCR 모델 다운로드는 배치파일이 아니라 OCR 엔진 첫 사용 시점의 일이다. 다시 읽기: start_server.bat, .env.example 주석, 이 보고서 3절 callout."></div>
+    <p class="stem">Q3. 卷上·卷下가 함께 있는 문헌에서 卷下 5쪽을 OCR 했더니 卷上 5쪽 내용이 저장돼 있었다. 이 결함의 가장 위험한 성질은?</p>
+    <label><input type="radio" name="q3" value="a"> 서버가 500 오류를 내며 작업이 중단된다</label>
+    <label><input type="radio" name="q3" value="b"> OCR 속도가 느려져 배치가 타임아웃된다</label>
+    <label><input type="radio" name="q3" value="c"> 원본 PDF 파일이 덮어써져 복구할 수 없다</label>
+    <label><input type="radio" name="q3" value="d"> 오류가 전혀 나지 않고 그럴듯한 판독이 저장돼, 원본과 텍스트의 대응이 조용히 끊어진다</label>
+    <div class="fb" data-explain="세 곳(image_utils.py·pipeline.py·llm_ocr.py)이 L1_source/*.pdf를 glob 해 첫 번째를 쓰고 part_id를 보지 않았다. glob은 순서를 보장하지도 않는다. 원본은 읽기만 하므로 파일이 덮어써지지는 않지만, 이 저장소가 지키려는 것(원본-텍스트 대응)이 정확히 깨진다. resolve_part_pdf(doc_path, part_id) 하나로 모았다 — manifest가 정본, 못 읽을 때만 이름 순서로 물러난다. 다시 읽기: D-069 결정 1, src/ocr/image_utils.py 233행, 이 보고서 5절·6절."></div>
+  </div>
+
+  <div class="q" data-answer="a">
+    <p class="stem">Q4. D-069가 걷어낸 죽은 코드 약 1,000줄(「비교 모드」 880줄, 눌러도 아무 일 없던 「L5 종류」 라디오)이 몇 달을 살아남을 수 있었던 공통 원인은?</p>
+    <label><input type="radio" name="q4" value="a"> 죽은 참조 17건이 전부 <code>if (!x) return</code>·<code>typeof x === "function"</code> 가드에 감싸여, 예외가 나지 않아 «되지 않는다»가 «없다»처럼 보였다</label>
+    <label><input type="radio" name="q4" value="b"> 해당 파일들이 <code>.gitignore</code>에 들어 있어 아무도 열어 보지 않았다</label>
+    <label><input type="radio" name="q4" value="c"> 린터가 죽은 코드를 경고하지 못하도록 규칙이 꺼져 있었다</label>
+    <label><input type="radio" name="q4" value="d"> 실제로는 동작하고 있었으나 화면이 너무 작아 보이지 않았다</label>
+    <div class="fb" data-explain="null 가드와 폴백은 실패를 침묵으로 바꾼다 — 정말 있어도 없어도 되는 것에는 옳은 도구지만, 반드시 있어야 하는 것에는 틀린 도구다. 같은 구조가 D-063에서도 났다: 존재하지 않는 goToPage를 typeof 가드가 삼켜 버튼 셋이 조용히 아무 일도 하지 않았다. 고침은 「없으면 조용히 넘어가기」를 「화면에 알리기」로 바꾼 것이다. 후속 과제로 개발 중 getElementById 실패를 경고로 남기는 것이 남아 있다. 다시 읽기: D-069 결정 5, D-063, 이 보고서 5절·6절 「남은 구멍」."></div>
   </div>
 
   <div class="q" data-answer="b">
-    <p class="stem">Q4. 사이드바의 "가져오기" 버튼이 "준비중입니다"만 표시하는 이유는? (D-037)</p>
-    <label><input type="radio" name="q4" value="a"> HWP 가져오기 코드가 아직 작성되지 않았기 때문</label>
-    <label><input type="radio" name="q4" value="b"> 코드(hwp-import.js 1,034줄)와 백엔드 API는 살아 있고, index.html의 onclick만 차단해 둔 것</label>
-    <label><input type="radio" name="q4" value="c"> hwp-hwpx-parser 의존성이 제거되었기 때문</label>
-    <label><input type="radio" name="q4" value="d"> 라이선스 문제로 기능 전체가 삭제되었기 때문</label>
-    <div class="fb" data-explain="D-037은 UI 진입점만 봉인했다. 복원은 index.html의 import-hwp-btn onclick을 _openHwpImportDialog()로 되돌리는 것으로 시작한다. 처음부터 재구현하면 안 된다. 다시 읽기: docs/DECISIONS.md D-037, 이 보고서 4절 6위·5절 drift #5."></div>
+    <p class="stem">Q5. 「검색되는 PDF 만들기」를 눌러 만든 결과물이 제대로 됐는지 앱은 어떻게 확인하나?</p>
+    <label><input type="radio" name="q5" value="a"> 넣은 줄 수와 OCR 결과의 줄 수가 같은지 대조한다</label>
+    <label><input type="radio" name="q5" value="b"> 만든 PDF를 <strong>다시 열어</strong> 글자 크기·텍스트가 덮은 넓이를 쪽마다 재고, 표본 3쪽은 그 자리의 잉크 밀도까지 잰다</label>
+    <label><input type="radio" name="q5" value="c"> 사용자가 내려받은 뒤 이상을 신고하면 그때 검사한다</label>
+    <label><input type="radio" name="q5" value="d"> 좌표 계산 결과를 로그에 남기고 예외가 없으면 성공으로 본다</label>
+    <div class="fb" data-explain="_audit_output(text_layer_pdf.py:536)이 5.0pt 미만·쪽의 2% 미만 덮음을 경고하고, 표본 3쪽(처음·가운데·끝)에서 텍스트 자리의 잉크가 쪽 평균의 1.3배 이상인지 본다. 이상은 사라지는 토스트가 아니라 화면에 남는다. d를 고르고 싶었다면 그것이 바로 D-068의 함정이다 — 「30줄 제자리」는 시도의 기록이지 결과의 기록이 아니다. 한계도 분명하다: 정상 크기·정상 넓이로 「틀린 내용」이 들어가면 통과한다. 다시 읽기: D-068 결정 2, 이 보고서 6절."></div>
   </div>
 
   <div class="q" data-answer="c">
-    <p class="stem">Q5. LLM 사용량(비용 추적) 기록 <code>llm_usage_log.jsonl</code>은 어디에 쌓이나?</p>
-    <label><input type="radio" name="q5" value="a"> 프로젝트 루트의 logs/ 폴더</label>
-    <label><input type="radio" name="q5" value="b"> 각 문헌 저장소(documents/{id}/) 안</label>
-    <label><input type="radio" name="q5" value="c"> 현재 열린 서고 루트 — 서고가 없으면 홈 폴더의 .classical-text-browser/</label>
-    <label><input type="radio" name="q5" value="d"> 메모리에만 있어 서버 재시작 시 사라진다</label>
-    <div class="fb" data-explain="usage_tracker.py의 _get_log_path()가 library_root/llm_usage_log.jsonl, 미설정 시 ~/.classical-text-browser/llm_usage_log.jsonl에 기록한다. 서고를 여러 개 쓰면 비용 기록이 분산되므로 MONTHLY_BUDGET_USD 합산을 맹신하면 안 된다. 다시 읽기: src/llm/usage_tracker.py 32–44행, 이 보고서 4절 unknown unknowns."></div>
+    <p class="stem">Q6. 화면에서 「Claude로 돌려라」를 골랐는데 실제로는 기본 폴백 순서대로 돌고 있었다(D-069). 지금 특정 모델을 강제하는 <em>올바른</em> 방법은?</p>
+    <label><input type="radio" name="q6" value="a"> <code>llm_router.force_provider = "anthropic"</code>으로 라우터 객체에 속성을 대입한다</label>
+    <label><input type="radio" name="q6" value="b"> 환경변수로 다른 프로바이더를 전부 꺼 둔다</label>
+    <label><input type="radio" name="q6" value="c"> <code>router.call(..., force_provider=...)</code>처럼 <strong>호출 인자</strong>로 넘긴다</label>
+    <label><input type="radio" name="q6" value="d"> 라우터를 쓰지 않고 프로바이더를 직접 부른다</label>
+    <div class="fb" data-explain="LlmRouter에는 force_provider라는 속성이 없다. 파이썬은 없는 속성에 대입해도 조용히 만들어 주므로 오류가 나지 않고, 값은 아무 데도 쓰이지 않은 채 기본 5단 폴백(Ollama → OAuth 프록시 → Gemini → OpenAI → Anthropic)이 돈다. L7 주석 AI 보조 4개 경로가 이 상태였다. 다시 읽기: D-069 결정 2, src/llm/router.py, src/app/_state.py 526행 부근, 이 보고서 3절 도해."></div>
+  </div>
+
+  <div class="q" data-answer="d">
+    <p class="stem">Q7. Windows에서 <code>start_server.bat</code>을 실행하면 함께 일어나는 일이 <em>아닌</em> 것은?</p>
+    <label><input type="radio" name="q7" value="a"> npx가 있으면 OpenAI OAuth 프록시를 자동 기동한다 (포트 10531–10540 스캔)</label>
+    <label><input type="radio" name="q7" value="b"> punctuation-service/.env가 있으면 표점 Docker를 자동 기동한다</label>
+    <label><input type="radio" name="q7" value="c"> 2초 후 기본 브라우저를 자동으로 연다</label>
+    <label><input type="radio" name="q7" value="d"> PaddleOCR 모델 가중치를 자동으로 내려받는다</label>
+    <div class="fb" data-explain="배치파일의 부수효과는 OAuth 프록시·표점 Docker·브라우저 오픈 3종이다(각각 OPENAI_OAUTH_AUTO_START=0·PUNCT_AUTO_START=0으로 끌 수 있다). OCR 모델 다운로드는 배치파일이 아니라 OCR 엔진 첫 사용 시점의 일이다. 다시 읽기: start_server.bat 60·96·152행, 이 보고서 3절 callout·4절 3위."></div>
   </div>
 
   <div class="score" id="score"></div>
 </section>
 
-<footer>인지 부채 감사 · classical-text-browser · 2026-07-04 · 이 파일은 자립형 HTML(외부 리소스 없음)</footer>
+<footer>인지 부채 감사 · classical-text-browser · 최초 2026-07-04 · 2차 2026-07-26(v1.2.0 기준) · 이 파일은 자립형 HTML(외부 리소스 없음)</footer>
 </div>
 
 <script>
