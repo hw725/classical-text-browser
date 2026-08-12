@@ -531,6 +531,12 @@ class OllamaProvider(BaseLlmProvider):
             "prompt": prompt,
             "images": [base64.b64encode(image).decode("ascii")],
             "stream": False,
+            # max_tokens를 받아 놓고 쓰지 않고 있었다. 그래서 OCR 응답이 모델
+            # 기본값에서 잘리고, 잘린 JSON은 파싱에 실패해 **원문 JSON 문자열이
+            # 통째로** 텍스트 레이어에 박혔다. 그러면 줄 정보가 없어 한 덩어리로
+            # 얹히므로 형광·드래그 위치도 전부 어긋난다
+            # (실측 2026-08-12: y 위치가 73개 → 1개로 붕괴).
+            "options": {"num_predict": max_tokens},
         }
         # reasoning 비전 모델(qwen3-vl:235b-cloud 등)은 명시될 때만 think 전달.
         if "think" in kwargs and kwargs["think"] is not None:
@@ -547,7 +553,16 @@ class OllamaProvider(BaseLlmProvider):
         elapsed = time.monotonic() - t0
 
         # reasoning 모델 폴백: response가 비면 thinking 사용.
-        text = data.get("response", "") or data.get("thinking", "")
+        #
+        # 단, 호출자가 allow_thinking_fallback=False를 주면 쓰지 않는다.
+        # OCR이 그 경우다 — 사고문("The user wants me to extract text...")이
+        # 그대로 PDF 텍스트 레이어로 구워지면, 문서는 멀쩡해 보이는데 검색은
+        # 안 되고 복사하면 영어 사고문이 나온다. 무증상 오염이라 빈 결과보다
+        # 나쁘다. 빈 결과는 «실패»로 드러나기라도 한다.
+        # (실측 2026-08-12, qwen3.5:4b 1쪽: response 0자 / thinking 2,228자)
+        text = data.get("response", "") or ""
+        if not text.strip() and kwargs.get("allow_thinking_fallback", True):
+            text = data.get("thinking", "") or ""
 
         return LlmResponse(
             text=text,

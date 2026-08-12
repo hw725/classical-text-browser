@@ -212,6 +212,17 @@ class LlmOcrEngine(BaseOcrEngine):
             image_mime="image/png",
             purpose="ocr",
             system=_OCR_SYSTEM_PROMPT,
+            # reasoning 모델 대응 (실측 2026-08-12, Ollama qwen3.5:4b 1쪽):
+            #   think 미지정 → response 0자 / thinking 2,742자
+            #   think=False  → response 1,106자 / thinking 0자 (제대로 된 OCR)
+            # 사고에 토큰을 다 쓰면 OCR 결과가 아예 안 나온다. OCR은 판단이
+            # 아니라 옮겨 적기이므로 사고를 끄는 편이 결과가 낫다.
+            think=False,
+            # 그래도 빈 응답이 오면 thinking을 대신 쓰지 않는다. 사고문이
+            # PDF 텍스트 레이어로 구워지면 문서는 멀쩡해 보이는데 검색이
+            # 안 되고 복사하면 사고문이 나온다. 빈 결과는 «실패»로 드러나기라도
+            # 하지만 이 오염은 드러나지 않는다.
+            allow_thinking_fallback=False,
         )
         if force_provider:
             call_kwargs["force_provider"] = force_provider

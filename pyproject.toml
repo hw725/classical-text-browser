@@ -1,6 +1,6 @@
 [project]
 name = "classical-text-browser"
-version = "1.2.0"
+version = "1.2.1"
 description = "고전서지 통합 브라우저 — 사람과 LLM이 함께 고전 텍스트를 읽고 번역하고 연구하는 통합 작업 환경"
 readme = "README.md"
 license = "LicenseRef-PolyForm-Noncommercial-1.0.0"
@@ -10,6 +10,7 @@ license = "LicenseRef-PolyForm-Noncommercial-1.0.0"
 #   paddleocr  : 순수 파이썬, requires-python >=3.8 → 3.13에서도 설치된다.
 #   paddlepaddle: 컴파일 패키지인데 휠이 cp310·cp311·cp312까지만 있다.
 #                 3.13 휠이 없으므로 설치 자체가 불가능하다 (uv.lock 실측).
+#                 GPU판(paddlepaddle-gpu)도 같은 범위다.
 #
 # paddlepaddle이 기본 의존성이 됐으니 이 제약이 프로젝트 전체에 걸린다.
 # 상한을 적지 않으면 3.13 환경에서 «맞는 배포판을 못 찾았다»는 형태로
@@ -53,6 +54,13 @@ dependencies = [
     #
     #   읽기(인식)는 LLM Vision이 하고 PaddleOCR는 **검출(위치)** 만 맡는다.
     #   검출은 언어와 무관하므로 한글·한자 혼용 문헌에도 그대로 쓸 수 있다.
+    #
+    # 기본은 **CPU판**이다. GPU판(paddlepaddle-gpu)으로 바꾸면 검출·인식이
+    # 쪽당 52.1초 → 1.0초가 되지만(실측 2026-08-12, RTX 3070 Ti Laptop, 200DPI),
+    # 설치가 828MB → 약 4.3GB가 된다(paddle 1,077MB + nvidia-* 2,708MB 실측).
+    # 그 덩치는 `classical-gpu` extra(+4.5GB)와 맞먹는다. 이 저장소는 GPU 스택을
+    # 언제나 선택으로 두어 왔으므로 기본값으로 올리지 않는다.
+    # 바꾸는 절차는 docs/user-guide.md의 「PaddleOCR를 GPU로 돌리기」에 있다.
     "paddlepaddle>=3.3.1",
     "paddleocr>=3.7.0",
     "setuptools",  # paddle.utils.cpp_extension이 import한다 (3.12에는 기본 포함이 아니다)
@@ -175,7 +183,16 @@ testpaths = ["tests"]
 # ── PyTorch CUDA 인덱스 설정 ──
 # torch/torchvision은 CUDA 빌드를 PyTorch 전용 인덱스에서 가져온다.
 # explicit = true → 이 인덱스는 torch/torchvision만 사용 (다른 패키지는 PyPI에서).
+#
 # CUDA 12.4 기준. 다른 CUDA 버전이 필요하면 URL의 cu124를 변경.
+#
+# PaddleOCR를 GPU로 바꿔 쓸 때 주의 (실측 2026-08-12):
+#   Linux에서 torch와 paddlepaddle-gpu는 nvidia-* 런타임을 같은 패키지로
+#   공유하면서 서로 다른 «정확한» 버전을 고정한다. torch cu124는
+#   nvidia-cublas-cu12==12.4.5.8, paddlepaddle-gpu 3.3.1은 ==12.6.4.1을
+#   요구해 둘을 함께 해석하면 «No solution found»가 된다.
+#   `classical-gpu` extra와 GPU PaddleOCR를 같이 쓸 생각이면 CUDA 버전을
+#   맞춰야 한다(이 인덱스를 cu126으로 올리는 식).
 [[tool.uv.index]]
 name = "pytorch-cu124"
 url = "https://download.pytorch.org/whl/cu124"

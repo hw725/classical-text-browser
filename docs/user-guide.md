@@ -884,10 +884,58 @@ ctb ocr "논문.pdf" --execute
 | `--library 경로` | 작업 서고 (기본: `~/Documents/고전서지서고_추출`) |
 | `--no-line-detection` | 줄 위치 검출을 끔 — 쪽당 약 8초를 아끼는 대신 형광이 제자리에 안 뜸 |
 | `--sleep 초` | 쪽 사이 대기 (LLM 한도를 아낄 때) |
+| `--engine 이름` | OCR 엔진 (기본 `llm_vision` — 한글 문헌은 바꾸지 마세요) |
+| `--paddle-lang 코드` | PaddleOCR 언어 모델. `korean`·`chinese_cht`·`ch`·`japan`·`en` |
+| `--paddle-device 장치` | `auto`(기본)·`cpu`·`gpu` |
+
+> **`--paddle-lang`이 필요한 경우.** PaddleOCR는 **한글과 한자를 동시에 읽지
+> 못합니다.** `korean`은 한글만, `chinese_cht`는 한자만 읽습니다. 기본값 `ch`는
+> 중국어 간체라 한국어 논문에서는 한글이 통째로 빠집니다.
+> 국한문 혼용 문헌은 인식을 LLM Vision에 맡기는 기본 조합이 낫습니다 —
+> PaddleOCR는 **줄 위치를 잡는 데** 쓰입니다.
 
 **OCR 결과는 작업 서고에 남습니다.** 결과가 이상해 보이면 GUI를 켜서 그 서고를
 열고 [쪽별 검수](#7-a4-2-쪽별-검수--만들기-전에-확인하기)를 하면 됩니다 —
 OCR을 다시 돌릴 필요가 없습니다.
+
+### 7-A.6-2 PaddleOCR를 GPU로 돌리기 (선택)
+
+**줄 위치 검출이 느리다고 느껴질 때만** 하십시오. 그 외에는 할 이유가 없습니다.
+
+NVIDIA GPU가 있으면 CPU판을 GPU판으로 **교체**할 수 있습니다. 두 배포판은 같은
+`paddle` 모듈을 제공해 **함께 설치할 수 없습니다.**
+
+```bash
+uv pip uninstall paddlepaddle
+uv pip install "paddlepaddle-gpu==3.3.1" --index-url https://www.paddlepaddle.org.cn/packages/stable/cu126/
+```
+
+확인:
+
+```bash
+uv run python -c "import paddle; print(paddle.device.is_compiled_with_cuda(), paddle.device.get_device())"
+```
+
+`True gpu:0`이 나오면 됩니다. 코드는 손댈 것이 없습니다 — 장치 기본값이 `auto`라
+GPU 빌드가 보이면 알아서 씁니다. CPU로 되돌려 재보려면 `--paddle-device cpu`.
+
+**알아 둘 것 네 가지.**
+
+1. **설치가 828MB → 약 4.3GB가 됩니다**(실측: paddle 1,077MB + nvidia 런타임
+   2,708MB). 이것이 기본값이 아닌 이유입니다.
+2. **`uv sync`를 돌리면 되돌아갑니다.** `pyproject.toml`에 적힌 것은 CPU판이므로
+   sync가 GPU판을 지우고 CPU판을 다시 깝니다. sync 뒤에는 위 두 줄을 다시
+   실행하십시오.
+3. **Windows에서는 sync가 CUDA 런타임까지 지웁니다.** paddlepaddle-gpu 휠이
+   nvidia-* 의존성에 리눅스 조건만 달아 두었는데 Windows 빌드도 그 DLL을 찾기
+   때문입니다. 지워진 상태로 돌리면
+   `cublas64_12.dll ... error code 126`으로 죽습니다. 역시 위 두 줄로 복구합니다.
+4. **`classical-gpu` extra와 함께 쓰려면 CUDA 버전을 맞춰야 합니다.** 리눅스에서
+   torch와 paddle이 nvidia 런타임을 공유하면서 서로 다른 버전을 고정해 충돌합니다
+   (`pyproject.toml`의 PyTorch 인덱스 주석 참조).
+
+**얼마나 빨라지나** — 실측(RTX 3070 Ti Laptop, 200DPI, `korean` 모델):
+쪽당 **52.1초 → 1.0초**. 500쪽짜리 배치가 7시간 반에서 8분이 됩니다.
 
 폴더를 주면 그 안의 스캔본을 모두 처리합니다. 수십 편이면 아래 `embed-folder`가
 더 많은 조절 수단을 줍니다.

@@ -66,15 +66,34 @@ class PaddleOcrEngine(BaseOcrEngine):
     display_name = "PaddleOCR (오프라인)"
     requires_network = False
 
-    def __init__(self, lang: str = "ch", use_gpu: bool = False):
+    def __init__(self, lang: str | None = None, use_gpu: bool | None = None):
         """PaddleOCR 엔진 초기화.
 
         입력:
           lang: PaddleOCR 언어 코드 ("ch" = 중국어/한자, "chinese_cht" = 번체 등)
-          use_gpu: GPU 사용 여부
+                None이면 환경변수 CTB_PADDLE_LANG, 그것도 없으면 "ch".
+          use_gpu: GPU 사용 여부. None이면 환경변수 CTB_PADDLE_DEVICE를 본다
+                   (auto | cpu | gpu, 기본 auto).
+
+        환경변수를 두는 이유 (2026-08-12):
+          registry.auto_register()가 `PaddleOcrEngine()`을 인자 없이 만든다.
+          그래서 CLI로 들어오면 언어와 장치를 **바꿀 방법이 없었다** — 국한문 혼용
+          한국 논문에 중국어 간체("ch") 모델이 걸려 한글이 통째로 빠진다.
+          호출부를 고치지 않고 바깥에서 지정할 수 있도록 환경변수를 연다.
+          CLI에서는 `ctb ocr --paddle-lang korean --paddle-device gpu`로 쓴다.
+
+        기본을 auto로 두는 이유:
+          GPU가 없는 환경이 다수다. auto는 **설치된 paddle이 CUDA 빌드이고 실제로
+          장치가 보일 때만** gpu를 고르고, 그 외에는 전부 cpu로 간다. 그래서
+          GPU 없는 사람은 아무것도 지정하지 않아도 예전과 똑같이 동작한다.
+          GPU가 있는데도 CPU로 재보고 싶으면 `--paddle-device cpu`로 못 박는다.
 
         주의: 첫 호출 시 모델 자동 다운로드 (~100MB).
         """
+        if lang is None:
+            lang = os.environ.get("CTB_PADDLE_LANG") or "ch"
+        if use_gpu is None:
+            use_gpu = self._resolve_use_gpu(os.environ.get("CTB_PADDLE_DEVICE"))
         self._lang = lang
         self._use_gpu = use_gpu
         self._ocr = None  # lazy init
@@ -82,6 +101,29 @@ class PaddleOcrEngine(BaseOcrEngine):
         self._lang_cache: dict = {}  # 언어별 PaddleOCR 인스턴스 캐시 (동시 요청 안전)
         self._available: Optional[bool] = None
         self._unavailable_reason: Optional[str] = None
+
+    @staticmethod
+    def _resolve_use_gpu(setting: str | None) -> bool:
+        """"auto" | "cpu" | "gpu" 를 실제 사용 여부로 바꾼다.
+
+        auto는 paddle이 CUDA 빌드이고 장치가 실제로 보일 때만 True다.
+        paddle import 자체가 실패해도 조용히 False로 떨어져 CPU 경로를 탄다 —
+        장치 판정 때문에 엔진이 죽는 일은 없어야 한다.
+        """
+        value = (setting or "auto").strip().lower()
+        if value in ("gpu", "cuda", "1", "true", "yes", "on"):
+            return True
+        if value in ("cpu", "0", "false", "no", "off"):
+            return False
+        try:  # auto
+            import paddle
+
+            return bool(
+                paddle.device.is_compiled_with_cuda()
+                and paddle.device.cuda.device_count() > 0
+            )
+        except Exception:
+            return False
 
     @property
     def lang(self) -> str:
@@ -196,6 +238,12 @@ class PaddleOcrEngine(BaseOcrEngine):
                 "use_doc_unwarping": False,
                 "use_textline_orientation": False,
             }
+            # 3.x는 use_gpu 대신 device를 받는다. 이걸 넘기지 않으면 use_gpu 설정이
+            # 3.x 경로에서 조용히 무시된다(2.x kwargs에만 쓰이고 있었다).
+            # paddlepaddle-gpu 설치 시 paddle이 알아서 gpu를 고르기도 하지만,
+            # 의도를 코드에 남기고 CPU 강제도 가능하게 명시한다.
+            # 실측 2026-08-12 (RTX 3070 Ti Laptop, 200DPI): CPU 52.1초/쪽 → GPU 1.0초/쪽.
+            kwargs_v3["device"] = "gpu" if self._use_gpu else "cpu"
             kwargs_v2 = {
                 "lang": target_lang,
                 "use_angle_cls": True,
@@ -206,9 +254,14 @@ class PaddleOcrEngine(BaseOcrEngine):
                 kwargs_v3["enable_mkldnn"] = False
                 kwargs_v2["enable_mkldnn"] = False
 
+            # device를 안 받는 3.x 판본이 있을 수 있다. 그때 곧바로 2.x 인자로
+            # 물러나면 3.x가 use_gpu·show_log를 거부해 생성 자체가 실패한다.
+            # device만 뺀 3.x 인자를 사이에 한 단계 둔다.
+            kwargs_v3_nodevice = {k: v for k, v in kwargs_v3.items() if k != "device"}
+
             instance = None
             last_error: Exception | None = None
-            for kwargs in (kwargs_v3, kwargs_v2):
+            for kwargs in (kwargs_v3, kwargs_v3_nodevice, kwargs_v2):
                 try:
                     instance = _PaddleOCR(**kwargs)
                     break
@@ -330,10 +383,19 @@ class PaddleOcrEngine(BaseOcrEngine):
         if not raw_result:
             return lines
 
-        # v3 result 객체 감지: list가 아니면 v3 형식일 수 있음
-        # v3에서는 result에 .boxes, .texts, .scores 등 속성이 있음
-        if not isinstance(raw_result, list) and hasattr(raw_result, "rec_texts"):
-            return self._parse_v3_result(raw_result, writing_direction)
+        # v3 result 감지.
+        #
+        # 예전 조건은 `not isinstance(raw_result, list)`였는데, PaddleOCR 3.x의
+        # predict()는 **이미지별 결과의 리스트**를 돌려준다. 그래서 v3인데도 이
+        # 조건이 거짓이 되어 v2 경로로 흘렀고, v2 파서가 dict를 순회하며 키(str)를
+        # item으로 받아 «구조 이상 — 건너뜀»을 줄마다 찍고 결과가 0줄이 되었다
+        # (실측 2026-08-12, paddleocr 3.7.0: 한 쪽에서 15줄 전부 유실).
+        #
+        # 리스트면 첫 이미지 결과를 꺼내 보고, rec_texts를 속성이든 키로든
+        # 가지고 있으면 v3로 본다.
+        v3_payload = self._as_v3_payload(raw_result)
+        if v3_payload is not None:
+            return self._parse_v3_result(v3_payload, writing_direction)
 
         # v2 형식: raw_result는 이미지별 리스트 (보통 1개 이미지)
         page_result = raw_result[0] if raw_result else None
@@ -389,18 +451,57 @@ class PaddleOcrEngine(BaseOcrEngine):
 
         return lines
 
+    @staticmethod
+    def _v3_field(payload, name):
+        """v3 결과에서 필드 하나를 꺼낸다. 속성·매핑 어느 쪽이든 받는다.
+
+        3.7.0의 결과 객체는 dict처럼 키로 접근되고, 판본에 따라 속성으로도
+        열린다. 한쪽만 가정하면 조용히 빈 결과가 된다.
+        """
+        value = getattr(payload, name, None)
+        if value is None:
+            try:
+                value = payload[name]
+            except Exception:
+                value = None
+        return value if value is not None else []
+
+    def _as_v3_payload(self, raw_result):
+        """raw_result가 v3 형식이면 파싱할 알맹이를, 아니면 None을 돌려준다."""
+        candidate = raw_result
+        if isinstance(raw_result, list):
+            if not raw_result:
+                return None
+            candidate = raw_result[0]
+        # 일부 판본은 실제 필드를 .res 아래에 둔다.
+        for obj in (candidate, getattr(candidate, "res", None)):
+            if obj is None:
+                continue
+            if hasattr(obj, "rec_texts"):
+                return obj
+            try:
+                if "rec_texts" in obj:
+                    return obj
+            except TypeError:
+                pass
+        return None
+
     def _parse_v3_result(self, result, writing_direction: str) -> list[OcrLineResult]:
         """PaddleOCR v3 result 객체를 파싱한다.
 
-        v3에서는 result.rec_texts, result.rec_scores, result.dt_polys 등
-        속성으로 결과에 접근한다.
+        v3에서는 result.rec_texts, result.rec_scores, result.dt_polys 등으로
+        결과에 접근한다(속성 또는 키).
         """
         lines: list[OcrLineResult] = []
 
         try:
-            texts = getattr(result, "rec_texts", None) or []
-            scores = getattr(result, "rec_scores", None) or []
-            polys = getattr(result, "dt_polys", None) or []
+            texts = self._v3_field(result, "rec_texts")
+            scores = self._v3_field(result, "rec_scores")
+            # rec_polys가 인식된 줄과 1:1로 맞는다. dt_polys는 검출만 된 것도
+            # 포함할 수 있어 인덱스가 어긋날 수 있으므로 rec_polys를 먼저 쓴다.
+            polys = self._v3_field(result, "rec_polys")
+            if len(polys) == 0:
+                polys = self._v3_field(result, "dt_polys")
 
             for idx, text in enumerate(texts):
                 if not text or not str(text).strip():

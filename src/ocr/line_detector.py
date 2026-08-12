@@ -114,10 +114,25 @@ def _get_detector():
     kwargs = {}
     if platform.system() == "Windows":
         kwargs["enable_mkldnn"] = False
-    try:
-        _detector = TextDetection(**kwargs)
-    except TypeError:
-        # 인자 이름이 다른 버전이면 기본값으로 만든다.
+
+    # 인식과 같은 장치를 쓰게 맞춘다. 이걸 안 넘기면 `--paddle-device cpu`를 줘도
+    # 검출만 GPU로 가서, 「CPU로 재본다」가 성립하지 않는다.
+    # 판정 규칙은 PaddleOcrEngine과 같은 것을 쓴다(auto | cpu | gpu).
+    from .paddleocr_engine import PaddleOcrEngine
+
+    use_gpu = PaddleOcrEngine._resolve_use_gpu(os.environ.get("CTB_PADDLE_DEVICE"))
+    kwargs["device"] = "gpu" if use_gpu else "cpu"
+
+    # device를 안 받는 판본 → device만 뺀 인자 → 전부 기본값 순으로 물러난다.
+    kwargs_nodevice = {k: v for k, v in kwargs.items() if k != "device"}
+    _detector = None
+    for attempt in (kwargs, kwargs_nodevice, {}):
+        try:
+            _detector = TextDetection(**attempt)
+            break
+        except TypeError:
+            continue
+    if _detector is None:
         _detector = TextDetection()
     logger.info("텍스트 줄 검출기 로드 완료 (PaddleOCR TextDetection)")
     return _detector

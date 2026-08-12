@@ -9,6 +9,7 @@ pip install -e . 후 실행하거나, src/ 디렉토리에서 실행한다.
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -123,6 +124,13 @@ def cmd_ocr(args):
         # 원본이 사라진다. 여기서는 복사본을 쓰고, 산출물만 원본 옆에 놓는다.
         shutil.copy2(source, staging / "기타" / source.name)
         root = staging
+
+    # 엔진은 registry.auto_register()가 인자 없이 만든다. 생성 전에 환경변수로
+    # 의사를 남겨 두면 PaddleOcrEngine.__init__이 읽어 간다.
+    if args.paddle_lang:
+        os.environ["CTB_PADDLE_LANG"] = args.paddle_lang
+    if args.paddle_device:
+        os.environ["CTB_PADDLE_DEVICE"] = args.paddle_device
 
     try:
         report = embed_folder(
@@ -367,6 +375,20 @@ def main():
         "--engine",
         default="llm_vision",
         help="OCR 엔진 (기본: llm_vision — 한글 문헌은 바꾸지 마세요)",
+    )
+    # PaddleOCR 세부 설정. 엔진이 registry에서 인자 없이 생성되므로 환경변수로 넘긴다.
+    p_ocr.add_argument(
+        "--paddle-lang",
+        default=None,
+        help="PaddleOCR 언어 모델 (korean/chinese_cht/ch/japan/en). "
+        "국한문 혼용 한국 논문은 korean. 기본값 ch는 한글을 읽지 못한다.",
+    )
+    p_ocr.add_argument(
+        "--paddle-device",
+        default=None,
+        choices=["auto", "cpu", "gpu"],
+        help="PaddleOCR 연산 장치 (기본: auto — CUDA 빌드이고 GPU가 보일 때만 GPU). "
+        "GPU가 없으면 auto가 알아서 cpu로 간다.",
     )
     p_ocr.add_argument(
         "--no-line-detection",
