@@ -135,7 +135,11 @@ classical = [
 # Linux도 torch 1,550 + nvidia-* 2,742 + triton 440 ≈ 4.7GB로 비슷하다.
 # 원본: https://github.com/ndl-lab/ndlkotenocr_cli (CC BY 4.0, National Diet Library, Japan)
 classical-gpu = [
-    "torch>=2.6.0",
+    # 상한 <2.8인 이유 — paddlepaddle-gpu와 nvidia-* 런타임 핀을 맞추기 위해서다.
+    # torch 2.7.x+cu126은 nvidia-cublas-cu12==12.6.4.1 계열(paddle과 동일)을 쓰지만,
+    # 2.13+cu126은 Windows에서도 nvidia-* pip 패키지를 쓰면서 더 새 버전을 고정해
+    # paddle의 cudnn DLL 로드가 WinError 127로 죽는다 (실측 2026-08-20).
+    "torch>=2.6.0,<2.8",
     "torchvision>=0.21.0",
     "transformers>=4.47.0",
     "onnxruntime>=1.20.0",
@@ -184,20 +188,33 @@ testpaths = ["tests"]
 # torch/torchvision은 CUDA 빌드를 PyTorch 전용 인덱스에서 가져온다.
 # explicit = true → 이 인덱스는 torch/torchvision만 사용 (다른 패키지는 PyPI에서).
 #
-# CUDA 12.6 기준 — paddlepaddle-gpu(cu126)와 CUDA 세대를 맞췄다 (2026-08-20, D-078 후속).
-#   왜: Linux에서 torch와 paddlepaddle-gpu는 nvidia-* 런타임을 같은 패키지로
-#   공유하면서 서로 다른 «정확한» 버전을 고정한다. cu124 시절에는 torch가
-#   nvidia-cublas-cu12==12.4.5.8, paddle이 ==12.6.4.1을 요구해 한 환경에서
-#   해석이 불가능했다(«No solution found»). 같은 cu126 세대로 맞추면 소거된다.
-#   Windows는 휠이 DLL을 동봉해 세대가 달라도 공존했지만(실측), 인덱스는
-#   플랫폼 공통이므로 낮은 쪽에 맞춰 둘 이유가 없다.
-#   주의: cu126 인덱스의 Windows torch는 2.7.0부터다 — 2.6.x로 내리려면
-#   cu124로 돌아가야 한다.
+# CUDA 인덱스는 플랫폼별로 갈린다 (2026-08-20 실측, D-078 후속).
+#
+#   Linux  → cu126: torch 2.7.x+cu126의 nvidia-* 핀(nvidia-cublas-cu12==12.6.4.1)이
+#            paddlepaddle-gpu 3.3.1과 정확히 일치해, 한 환경에서 두 스택의
+#            의존성 해석이 성립한다. (cu124 시절엔 ==12.4.5.8 vs ==12.6.4.1로
+#            «No solution found»)
+#   Windows → cu124: torch 2.6.x+cu124는 CUDA DLL을 휠에 동봉해 nvidia-* 패키지를
+#            쓰지 않으므로 paddle과 부딪힐 공유 층 자체가 없다 — 공존 실증됨.
+#            cu126 통일도 시도했으나(2.7·2.13) Windows에서는 torch도 nvidia-*
+#            패키지를 쓰는데 그 cudnn(9.5·9.10·9.24 모두 시험)을 paddle이
+#            WinError 127로 로드하지 못했다. Windows에서 cu126 통일은 불가.
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
 [[tool.uv.index]]
 name = "pytorch-cu126"
 url = "https://download.pytorch.org/whl/cu126"
 explicit = true
 
 [tool.uv.sources]
-torch = { index = "pytorch-cu126" }
-torchvision = { index = "pytorch-cu126" }
+torch = [
+  { index = "pytorch-cu124", marker = "sys_platform == 'win32'" },
+  { index = "pytorch-cu126", marker = "sys_platform != 'win32'" },
+]
+torchvision = [
+  { index = "pytorch-cu124", marker = "sys_platform == 'win32'" },
+  { index = "pytorch-cu126", marker = "sys_platform != 'win32'" },
+]
