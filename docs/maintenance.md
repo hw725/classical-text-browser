@@ -188,6 +188,9 @@ uv run python -m pytest
    **여기에 버전을 새로 적지 말 것** — 적는 곳이 둘 이상이면 반드시 어긋난다
 8. `/doc-sync` (Release/Range Mode, base = 직전 태그)
 9. 커밋 → 푸시 → `git tag -a vX.Y.Z` → `git push origin vX.Y.Z`
+10. GitHub 릴리스(`gh release create`) 본문은 **하드랩을 푼 변환본**으로 게시한다 —
+    릴리스 본문은 문단 안 개행을 그대로 렌더링해서, 저장소의 72자 랩 그대로 올리면
+    문장이 중간에 끊겨 보인다 (v1.2.2에서 실측)
 
 `release`·`feat`·`refactor` 커밋은 doc-sync 게이트가 걸린다.
 `--no-verify`로 우회하지 않는다.
