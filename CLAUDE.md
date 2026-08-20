@@ -31,6 +31,10 @@ OCR, 교정, 번역, 주석 작업을 모두 수행한다.
 
 ## 의존성 업그레이드 — 먼저 볼 것
 
+**GPU 스택은 이 환경(.venv)에 설치하지 않는다.** GPU는 별도 환경 `.venv-gpu`가
+정본이며(`D-078`, user-guide §7-A.6-2), `start_server.bat`이 실행 시 자동 선택한다.
+`.venv-gpu`에는 `uv sync`·`uv run` 금지 — python 직접 호출만.
+
 OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+transformers**)이
 전이 의존을 공유한다 — `numpy`·`protobuf`·`pyyaml`·`typing-extensions`·`setuptools`·
 `networkx`·`pillow`. 하나를 올리면 다른 스택이 **조용히** 죽는다: 엔진 등록 실패는

@@ -17,6 +17,24 @@ if !ERRORLEVEL! neq 0 (
     exit /b 1
 )
 
+REM -- GPU auto-detect (D-078) -----------------
+REM .venv = CPU 정본(락파일 그대로), .venv-gpu = GPU 환경(별도 생성).
+REM NVIDIA GPU가 보이고 .venv-gpu가 있으면 그 환경의 python을 직접 쓴다.
+REM 왜 uv run을 안 쓰나: uv run은 실행 전 락 기준으로 환경을 되돌려서
+REM GPU 환경의 추가 스택을 지운다 - 직접 호출이 유일하게 안전하다.
+set "APP_PY=uv run python"
+if exist ".venv-gpu\Scripts\python.exe" (
+    call nvidia-smi -L >nul 2>&1
+    if !ERRORLEVEL! equ 0 (
+        set "APP_PY=.venv-gpu\Scripts\python.exe"
+        echo [Env] NVIDIA GPU detected - using .venv-gpu
+    ) else (
+        echo [Env] no GPU detected - using .venv ^(CPU^)
+    )
+) else (
+    echo [Env] using .venv ^(CPU^)
+)
+
 REM -- Settings --------------------------------
 REM First arg: library path (optional, empty = choose in GUI)
 REM Second arg: port (optional, default 8000)
@@ -153,9 +171,9 @@ start /b "" powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Sec
 
 REM -- Run server ------------------------------
 if "%LIBRARY_PATH%"=="" (
-    uv run python -m app serve --port !PORT!
+    !APP_PY! -m app serve --port !PORT!
 ) else (
-    uv run python -m app serve --library "%LIBRARY_PATH%" --port !PORT!
+    !APP_PY! -m app serve --library "%LIBRARY_PATH%" --port !PORT!
 )
 set APP_EXIT_CODE=!ERRORLEVEL!
 

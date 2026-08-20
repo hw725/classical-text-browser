@@ -898,41 +898,50 @@ ctb ocr "논문.pdf" --execute
 열고 [쪽별 검수](#7-a4-2-쪽별-검수--만들기-전에-확인하기)를 하면 됩니다 —
 OCR을 다시 돌릴 필요가 없습니다.
 
-### 7-A.6-2 PaddleOCR를 GPU로 돌리기 (선택)
+### 7-A.6-2 GPU로 돌리기 — 별도 환경 `.venv-gpu` (선택)
 
-**줄 위치 검출이 느리다고 느껴질 때만** 하십시오. 그 외에는 할 이유가 없습니다.
+NVIDIA GPU가 있으면 **GPU 전용 가상환경을 따로 만듭니다.** 예전 방식(단일
+환경에 GPU판을 수동 교체)은 `uv sync`가 돌 때마다 되돌아가는 함정이 있어
+**폐기했습니다**(D-078). 이제 환경이 두 개입니다:
 
-NVIDIA GPU가 있으면 CPU판을 GPU판으로 **교체**할 수 있습니다. 두 배포판은 같은
-`paddle` 모듈을 제공해 **함께 설치할 수 없습니다.**
+| 환경 | 내용 | 관리 |
+|---|---|---|
+| `.venv` | CPU 정본 — 락파일과 항상 일치 | `uv sync`·`uv run` 자유롭게 사용 |
+| `.venv-gpu` | GPU 스택(torch cu124 + NDL Full + paddlepaddle-gpu) | 아래 재생성 명령으로만 관리. **이 환경에 `uv sync`·`uv run` 금지** |
 
-```bash
-uv pip uninstall paddlepaddle
-uv pip install "paddlepaddle-gpu==3.3.1" --index-url https://www.paddlepaddle.org.cn/packages/stable/cu126/
+`start_server.bat`이 실행할 때마다 `nvidia-smi`로 GPU를 감지해 **자동으로
+골라 줍니다** — GPU가 보이고 `.venv-gpu`가 있으면 그쪽 python을 직접 실행하고,
+아니면 `.venv`(CPU)로 갑니다. 사용자가 고를 것은 없습니다.
+
+`.venv-gpu` 만들기(또는 재생성):
+
+```bat
+set UV_PROJECT_ENVIRONMENT=.venv-gpu
+uv sync --extra ndlkotenocr --extra classical-gpu
+uv pip uninstall --python .venv-gpu\Scripts\python.exe paddlepaddle
+uv pip install --python .venv-gpu\Scripts\python.exe "paddlepaddle-gpu==3.3.1" --index-url https://www.paddlepaddle.org.cn/packages/stable/cu126/
+set UV_PROJECT_ENVIRONMENT=
 ```
 
 확인:
 
-```bash
-uv run python -c "import paddle; print(paddle.device.is_compiled_with_cuda(), paddle.device.get_device())"
+```bat
+.venv-gpu\Scripts\python.exe -c "import paddle, torch; print(paddle.device.is_compiled_with_cuda(), torch.cuda.is_available())"
 ```
 
-`True gpu:0`이 나오면 됩니다. 코드는 손댈 것이 없습니다 — 장치 기본값이 `auto`라
-GPU 빌드가 보이면 알아서 씁니다. CPU로 되돌려 재보려면 `--paddle-device cpu`.
+`True True`가 나오면 됩니다. 코드는 손댈 것이 없습니다 — 장치 기본값이 `auto`라
+GPU 빌드가 보이면 알아서 씁니다.
 
-**알아 둘 것 네 가지.**
+**알아 둘 것 세 가지.**
 
-1. **설치가 828MB → 약 4.3GB가 됩니다**(실측: paddle 1,077MB + nvidia 런타임
-   2,708MB). 이것이 기본값이 아닌 이유입니다.
-2. **`uv sync`를 돌리면 되돌아갑니다.** `pyproject.toml`에 적힌 것은 CPU판이므로
-   sync가 GPU판을 지우고 CPU판을 다시 깝니다. sync 뒤에는 위 두 줄을 다시
-   실행하십시오.
-3. **Windows에서는 sync가 CUDA 런타임까지 지웁니다.** paddlepaddle-gpu 휠이
-   nvidia-* 의존성에 리눅스 조건만 달아 두었는데 Windows 빌드도 그 DLL을 찾기
-   때문입니다. 지워진 상태로 돌리면
-   `cublas64_12.dll ... error code 126`으로 죽습니다. 역시 위 두 줄로 복구합니다.
-4. **`classical-gpu` extra와 함께 쓰려면 CUDA 버전을 맞춰야 합니다.** 리눅스에서
-   torch와 paddle이 nvidia 런타임을 공유하면서 서로 다른 버전을 고정해 충돌합니다
-   (`pyproject.toml`의 PyTorch 인덱스 주석 참조).
+1. **디스크가 두 환경 몫으로 듭니다**(GPU 환경 약 4.3GB+torch). uv가 패키지를
+   하드링크로 공유하므로 겉보기 합계만큼 다 쓰지는 않습니다.
+2. **`uv pip`은 대상 환경을 못 알아듣습니다** — `UV_PROJECT_ENVIRONMENT`를
+   무시하고 기본 `.venv`에 설치합니다(2026-08-20 실측). `.venv-gpu`를 만질 때는
+   반드시 `--python .venv-gpu\Scripts\python.exe`를 붙이십시오.
+3. **`uv run`도 `.venv-gpu`에 쓰면 안 됩니다** — 실행 전에 락 기준으로 환경을
+   되돌려 GPU 스택을 지웁니다. `.venv-gpu`는 python을 직접 호출합니다
+   (start_server.bat이 그렇게 합니다).
 
 **얼마나 빨라지나** — 실측(RTX 3070 Ti Laptop, 200DPI, `korean` 모델):
 쪽당 **52.1초 → 1.0초**. 500쪽짜리 배치가 7시간 반에서 8분이 됩니다.

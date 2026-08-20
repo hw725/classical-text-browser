@@ -113,7 +113,7 @@ ctb ocr "논문.pdf" --execute
 |---|---|---|---|
 | **NDLOCR-Lite** | `uv sync --extra japanese` | 일본어 문헌(근현대) | 약 170MB |
 | **NDL古典籍OCR-Lite** | `uv sync --extra classical` | 고서(古典籍) | 약 170MB |
-| **NDL古典籍OCR Full** (TrOCR) | `uv sync --extra classical-gpu` | 고서 최고 품질, GPU 권장 | **약 4.5GB** |
+| **NDL古典籍OCR Full** (TrOCR) | 별도 GPU 환경 `.venv-gpu` — [사용자 안내서 §7-A.6-2](docs/user-guide.md) | 고서 최고 품질, GPU 권장 | **약 4.5GB** |
 
 > extra 이름을 용도(`japanese`·`classical`)로 지은 것은, 예전에 세 엔진이
 > `ndlocr`·`ndlkotenocr`·`ndlkotenocr-full`로 나란히 있어 한글 논문을 하려던 사람이
