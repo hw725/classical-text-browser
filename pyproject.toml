@@ -184,20 +184,20 @@ testpaths = ["tests"]
 # torch/torchvision은 CUDA 빌드를 PyTorch 전용 인덱스에서 가져온다.
 # explicit = true → 이 인덱스는 torch/torchvision만 사용 (다른 패키지는 PyPI에서).
 #
-# CUDA 12.4 기준. 다른 CUDA 버전이 필요하면 URL의 cu124를 변경.
-#
-# PaddleOCR를 GPU로 바꿔 쓸 때 주의 (실측 2026-08-12):
-#   Linux에서 torch와 paddlepaddle-gpu는 nvidia-* 런타임을 같은 패키지로
-#   공유하면서 서로 다른 «정확한» 버전을 고정한다. torch cu124는
-#   nvidia-cublas-cu12==12.4.5.8, paddlepaddle-gpu 3.3.1은 ==12.6.4.1을
-#   요구해 둘을 함께 해석하면 «No solution found»가 된다.
-#   `classical-gpu` extra와 GPU PaddleOCR를 같이 쓸 생각이면 CUDA 버전을
-#   맞춰야 한다(이 인덱스를 cu126으로 올리는 식).
+# CUDA 12.6 기준 — paddlepaddle-gpu(cu126)와 CUDA 세대를 맞췄다 (2026-08-20, D-078 후속).
+#   왜: Linux에서 torch와 paddlepaddle-gpu는 nvidia-* 런타임을 같은 패키지로
+#   공유하면서 서로 다른 «정확한» 버전을 고정한다. cu124 시절에는 torch가
+#   nvidia-cublas-cu12==12.4.5.8, paddle이 ==12.6.4.1을 요구해 한 환경에서
+#   해석이 불가능했다(«No solution found»). 같은 cu126 세대로 맞추면 소거된다.
+#   Windows는 휠이 DLL을 동봉해 세대가 달라도 공존했지만(실측), 인덱스는
+#   플랫폼 공통이므로 낮은 쪽에 맞춰 둘 이유가 없다.
+#   주의: cu126 인덱스의 Windows torch는 2.7.0부터다 — 2.6.x로 내리려면
+#   cu124로 돌아가야 한다.
 [[tool.uv.index]]
-name = "pytorch-cu124"
-url = "https://download.pytorch.org/whl/cu124"
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
 explicit = true
 
 [tool.uv.sources]
-torch = { index = "pytorch-cu124" }
-torchvision = { index = "pytorch-cu124" }
+torch = { index = "pytorch-cu126" }
+torchvision = { index = "pytorch-cu126" }

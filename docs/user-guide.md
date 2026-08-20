@@ -907,7 +907,7 @@ NVIDIA GPU가 있으면 **GPU 전용 가상환경을 따로 만듭니다.** 예�
 | 환경 | 내용 | 관리 |
 |---|---|---|
 | `.venv` | CPU 정본 — 락파일과 항상 일치 | `uv sync`·`uv run` 자유롭게 사용 |
-| `.venv-gpu` | GPU 스택(torch cu124 + NDL Full + paddlepaddle-gpu) | 아래 재생성 명령으로만 관리. **이 환경에 `uv sync`·`uv run` 금지** |
+| `.venv-gpu` | GPU 스택(torch cu126 + NDL Full + paddlepaddle-gpu — CUDA 세대 일치) | 아래 재생성 명령으로만 관리. **이 환경에 `uv sync`·`uv run` 금지** |
 
 `start_server.bat`이 실행할 때마다 `nvidia-smi`로 GPU를 감지해 **자동으로
 골라 줍니다** — GPU가 보이고 `.venv-gpu`가 있으면 그쪽 python을 직접 실행하고,
