@@ -85,6 +85,9 @@ src/app/
 
 - 라우터 간 직접 import 금지. 공유 상태는 반드시 _state.py를 통해 접근.
 - 새 엔드포인트 추가 시 해당 도메인의 라우터 파일에 추가할 것.
+  **위 라우트 수는 기계가 검사한다**(D-079) — 라우트를 늘리거나 줄이면 이 트리와
+  `AGENTS.md`·`server.py` 머리말의 숫자도 함께 고쳐야 pytest가 통과한다.
+  `uv run python scripts/check_doc_drift.py`가 어디가 어긋났는지 짚어 준다.
 - Pydantic 모델은 사용하는 라우터 파일 내부에 정의.
 - **API 응답에는 `Cache-Control: no-store`가 미들웨어에서 자동으로 붙는다**(D-066).
   호출부에 `cache: "no-store"`를 다시 적지 않아도 된다.

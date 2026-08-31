@@ -42,7 +42,7 @@ src/app/
     ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티 (25 라우트)
     ├── llm_ocr.py       ← LLM 상태·분석·초안 + OCR 엔진·실행·권단위 일괄·백업 되돌리기 (20 라우트)
     ├── alignment.py     ← 이체자 사전/정렬/일괄교정 (17 라우트)
-    ├── reading.py       ← L5 표점·현토 + L6 번역 + 비고 + AI보조 (26 라우트)
+    ├── reading.py       ← L5 표점·현토 + L6 번역 + 비고 + AI보조 (24 라우트)
     ├── annotation.py    ← L7 주석·사전형·인용마크 + AI보조 (34 라우트)
     └── version.py       ← Git 그래프/되돌리기/스냅샷/가져오기 (7 라우트)
 ```
@@ -120,10 +120,10 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 - "서버 시작" = 최대 3개 프로세스: start_server.bat가 uvicorn 외에 OpenAI OAuth 프록시
   (`npx -y openai-oauth`, 포트 10531–10540 스캔, Bearer 토큰 `oauth-proxy` 하드코딩)와
   SikuRoBERTa 표점 Docker(punctuation-service/.env 존재 시)를 자동 기동.
-- 프론트(static/)가 38,550줄 — index.html 4,821줄 단일 파일, workspace.css 7,438줄,
-  JS 29개. 테스트 39파일은 전부 백엔드, **프론트 테스트 0, CI 없음.**
-  (2026-07-26 v1.2.0 실측. 직전 감사 대비 프론트가 줄어든 것은 D-069에서
-  죽은 코드 약 1,000줄을 걷어냈기 때문이다.)
+- 프론트(static/)가 38,633줄 — index.html 4,826줄 단일 파일, workspace.css 7,441줄,
+  JS 29개. 테스트 41파일은 전부 백엔드, **프론트 테스트 0, CI 없음.**
+  (2026-09-01 재실측. 2026-07-26 v1.2.0 감사 때 직전 대비 프론트가 줄어든 것은
+  D-069에서 죽은 코드 약 1,000줄을 걷어냈기 때문이다.)
 
 ### 안다고 착각하기 쉬운 지점
 1. ~~`src/app/_state.py`에 `_parse_llm_json`이 **두 번 정의**~~ → **해소됨(ee8db13)**, 아래
@@ -172,7 +172,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 | 순위 | 경로 | 위험 |
 |---|---|---|
 | 1 | `src/app/_state.py` (922줄) | 전역 상태+프롬프트+캐시+JSON 파서 응집, 중복 정의 잠복 |
-| 2 | `src/app/static/` 프론트 모놀리스 | 테스트 0·CI 없음, index.html 4,821줄 수정 회귀 감지 불가. D-055·D-067·D-069의 화면 검증은 매번 **jsdom 일회성 하네스**로 했고 **그 하네스들은 저장소에 없다** — 정식 프론트 스모크 테스트는 여전히 미결(D-053 착수 조건). 이 부채 때문에 D-069의 죽은 코드 1,000줄이 오래 살아남았다 |
+| 2 | `src/app/static/` 프론트 모놀리스 | 테스트 0·CI 없음, index.html 4,826줄 수정 회귀 감지 불가. D-055·D-067·D-069의 화면 검증은 매번 **jsdom 일회성 하네스**로 했고 **그 하네스들은 저장소에 없다** — 정식 프론트 스모크 테스트는 여전히 미결(D-053 착수 조건). 이 부채 때문에 D-069의 죽은 코드 1,000줄이 오래 살아남았다 |
 | 3 | `start_server.bat` | 암묵 부수효과 3종(프록시·Docker·포트 스캔), 실패 시 원인 추적 곤란 |
 | 4 | `src/parsers/` 5종 | 외부 사이트 의존 침묵 파손 |
 | 5 | **비교 모드 백엔드 잔재** | D-069에서 프론트 880줄을 걷어냈으나 `routers/reading.py`의 `l5_compare`·`l5_compare_at_commit` 두 라우트와 `core`의 `get_l5_compare*`가 남아 있다. **프론트에서 부르는 곳 0건.** v1.2.0 태그와 어긋나지 않게 이번에는 두었다 — 다음 판에서 정리하거나, 되살릴 계획이 있으면 그 근거를 여기 적을 것 |
