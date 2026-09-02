@@ -114,6 +114,7 @@ src/app/
 | `src/ocr/correction_pass.py` | 승급 사다리 1·2단계. 기계적 선별 → 앵커 있는 LLM 교정(사고 끔) → 정밀 판독(문맥 확대·사고 켬). **L2는 건드리지 않고** L4 초안만 만든다 |
 | `src/ocr/eval_cer.py` · `scripts/eval_cer.py` | L4 확정본을 정답으로 L2·초안의 CER. 프롬프트를 바꿨으면 이것으로 잰다 |
 | `src/core/variant_sources.py` · `scripts/build_variant_dicts.py` | 이체자 사전 원자료(OpenCC·Unihan·cjkvi) 파서와 생성. 파일마다 `_tier`·`_source` |
+| `src/ocr/line_block_match.py` | 쪽 단위 엔진(NDL 셋)이 쪽 전체에서 찾은 행을 LayoutBlock에 배정. **블록 밖 행은 버린다.** 그래서 파이프라인이 커버리지 조건 없이 언제나 쪽 전체에 돌린다(D-086) |
 | `src/llm/providers/base.py::thinking_options` | 사고 예산을 답변 예산에 **더하는** 공통 해석. 비전 경로 4종이 이것을 따른다 |
 
 - **사전은 지식이고 정책은 문헌의 것**: `strict`만 동치, `loose`·`script`는 힌트. 승인은 `documents/{doc_id}/variant_approvals.json`에만.

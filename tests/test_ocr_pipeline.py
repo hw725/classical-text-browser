@@ -230,3 +230,107 @@ class TestOcrPipeline:
         assert "elapsed_sec" in s
         assert "ocr_results" in s
         assert s["status"] == "completed"
+
+
+# ── D-086: 쪽 단위 엔진은 언제나 쪽 전체 + 블록 밖 행 제외 ──────────────
+
+
+class PageLevelDummyEngine(BaseOcrEngine):
+    """recognize_page()만 쓰는 더미. recognize()가 불리면 실패 — 크롭 경로 감지용."""
+
+    engine_id = "pagedummy"
+    display_name = "PageDummy"
+    requires_network = False
+    supports_page_level = True
+
+    def __init__(self):
+        self.page_calls: list[list[str]] = []
+
+    def is_available(self):
+        return True
+
+    def recognize(self, image_bytes, **kwargs):
+        raise AssertionError("쪽 단위 엔진에 블록 크롭이 넘어왔다")
+
+    def recognize_page(self, page_image_bytes, blocks, progress_callback=None, **kwargs):
+        ids = [b["block_id"] for b in blocks if not b.get("skip")]
+        self.page_calls.append(ids)
+        return [{"layout_block_id": bid, "lines": [{"text": f"T-{bid}"}]} for bid in ids]
+
+
+class TestPageLevelAlways:
+    def test_low_coverage_still_page_level(self, test_library):
+        """픽스처 블록은 쪽의 70% 미만을 덮는다 — 예전에는 크롭 경로로 떨어졌다."""
+        registry = OcrEngineRegistry()
+        eng = PageLevelDummyEngine()
+        registry.register(eng)
+        pipeline = OcrPipeline(registry, library_root=str(test_library))
+        result = pipeline.run_page("doc001", "vol1", 1)
+        assert eng.page_calls == [["p01_b01", "p01_b02"]]
+        assert sorted(r["layout_block_id"] for r in result.ocr_results) == ["p01_b01", "p01_b02"]
+
+    def test_single_block_rerun_uses_page_level_and_merges(self, test_library):
+        registry = OcrEngineRegistry()
+        eng = PageLevelDummyEngine()
+        registry.register(eng)
+        pipeline = OcrPipeline(registry, library_root=str(test_library))
+        pipeline.run_page("doc001", "vol1", 1)
+        pipeline.run_block("doc001", "vol1", 1, "p01_b02")
+        # 두 번째 호출은 요청한 블록만 넘긴다 — 그 블록 안의 행만 남는다
+        assert eng.page_calls[-1] == ["p01_b02"]
+        l2 = json.loads(
+            (test_library / "documents" / "doc001" / "L2_ocr" / "vol1_page_001.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        ids = sorted(r["layout_block_id"] for r in l2["ocr_results"])
+        assert ids == ["p01_b01", "p01_b02"], "한 블록 재실행이 다른 블록 결과를 지웠다"
+
+
+class TestMatchLinesToBlocks:
+    def _blocks(self):
+        return [
+            {"block_id": "a", "bbox": [0, 0, 100, 400]},
+            {"block_id": "b", "bbox": [200, 0, 300, 400]},
+            {"block_id": "s", "bbox": [400, 0, 500, 400], "skip": True},
+        ]
+
+    def test_center_inside(self):
+        from src.ocr.line_block_match import match_lines_to_blocks
+
+        lines = [
+            {"text": "x", "bbox": [10, 10, 40, 300]},
+            {"text": "y", "bbox": [210, 10, 240, 300]},
+        ]
+        out = match_lines_to_blocks(lines, self._blocks())
+        assert [ln["text"] for ln in out["a"]] == ["x"]
+        assert [ln["text"] for ln in out["b"]] == ["y"]
+
+    def test_outside_lines_are_dropped_not_nearest(self):
+        """블록 사이 빈 곳의 행은 버린다 — 예전에는 가장 가까운 블록에 들어갔다."""
+        from src.ocr.line_block_match import match_lines_to_blocks
+
+        out = match_lines_to_blocks([{"text": "gap", "bbox": [120, 10, 180, 300]}], self._blocks())
+        assert out == {}
+
+    def test_partial_overlap_threshold(self):
+        from src.ocr.line_block_match import match_lines_to_blocks
+
+        # 중심(x=105)은 a 밖이지만 넓이의 60%가 a 안 → 배정
+        out = match_lines_to_blocks([{"text": "p", "bbox": [70, 0, 120, 100]}], self._blocks())
+        assert "a" in out and out["a"][0]["text"] == "p"
+        # 30%만 들어가면 제외
+        out = match_lines_to_blocks([{"text": "q", "bbox": [85, 0, 135, 100]}], self._blocks())
+        assert out == {}
+
+    def test_skip_block_never_receives(self):
+        from src.ocr.line_block_match import match_lines_to_blocks
+
+        out = match_lines_to_blocks([{"text": "z", "bbox": [410, 10, 440, 300]}], self._blocks())
+        assert out == {}
+
+    def test_no_blocks_unmatched(self):
+        from src.ocr.line_block_match import match_lines_to_blocks
+
+        lines = [{"text": "z", "bbox": [0, 0, 10, 10]}]
+        assert match_lines_to_blocks(lines, []) == {"unmatched": lines}

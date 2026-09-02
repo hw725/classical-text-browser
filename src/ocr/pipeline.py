@@ -290,24 +290,18 @@ class OcrPipeline:
             if guidance:
                 engine_kwargs["doc_guidance"] = guidance
 
-        # ── 페이지 단위 OCR 분기 (ndlocr 등) ────────────────────
-        # supports_page_level=True인 엔진은 페이지 전체를 한 번에 처리한다.
-        # 조건:
-        #   - 엔진이 페이지 단위를 지원
-        #   - 전체 블록 처리 (block_ids가 None)
-        #   - 블록이 페이지의 70% 이상을 덮을 때만 사용
-        #
-        # 왜 커버리지 조건이 필요한가:
-        #   페이지 단위 OCR은 전체 페이지에서 라인을 탐지한 뒤 블록에 매칭한다.
-        #   블록이 페이지 일부만 덮으면 블록 밖의 텍스트가 가장 가까운 블록에
-        #   할당되어, 사용자가 선택하지 않은 영역의 글자가 결과에 섞인다.
-        #   블록 커버리지가 낮으면 블록별 crop 경로를 사용하여
-        #   각 블록 영역만 정확하게 잘라서 OCR한다.
-        use_page_level = (
-            getattr(engine, "supports_page_level", False)
-            and block_ids is None
-            and self._blocks_cover_page(blocks, actual_w, actual_h, threshold=0.7)
-        )
+        # ── 페이지 단위 OCR 분기 (NDL 계열) — D-086 ───────────────
+        # supports_page_level=True인 엔진은 **언제나** 쪽 전체에 행 탐지를 돌린다.
+        # 예전에는 「블록이 쪽의 70% 이상을 덮고 전체 블록을 처리할 때만」이었고,
+        # 그 밖(블록 몇 개만 그린 쪽, 한 블록만 다시 돌리기)은 블록 크롭을 엔진에
+        # 넘겼다. 그런데 이 엔진들의 행 탐지기는 1280px 쪽 전체로 학습된 것이라
+        # 좁은 크롭 위에서는 행을 못 찾고 폴백(블록 전체를 한 행으로)으로 떨어졌다.
+        # 합성 세로쓰기 쪽 실측: 쪽 전체 CER 0.09 vs 열 크롭 0.45.
+        # 커버리지 조건이 있던 이유(선택하지 않은 영역의 글자가 섞임)는 행 배정
+        # 규칙에서 해결했다 — 블록 밖의 행은 버린다(line_block_match).
+        # block_ids가 있으면 blocks는 이미 그 블록들로 좁혀져 있어(prepare_page)
+        # 그 블록 안의 행만 남고, 저장은 기존 L2와 병합한다.
+        use_page_level = bool(getattr(engine, "supports_page_level", False))
         if use_page_level:
             try:
                 page_bytes = self._page_image_to_bytes(page_image)
@@ -326,7 +320,7 @@ class OcrPipeline:
                     part_id,
                     page_number,
                     result,
-                    merge_with_existing=False,
+                    merge_with_existing=(block_ids is not None),
                 )
 
                 logger.info(
@@ -460,48 +454,6 @@ class OcrPipeline:
                 return (round(rect.width), round(rect.height))
         except Exception:
             return None
-
-    @staticmethod
-    def _blocks_cover_page(
-        blocks: list[dict],
-        page_w: int,
-        page_h: int,
-        threshold: float = 0.7,
-    ) -> bool:
-        """블록들이 페이지의 일정 비율 이상을 덮는지 확인한다.
-
-        왜 필요한가:
-            페이지 단위 OCR(recognize_page)은 전체 페이지를 스캔하므로,
-            블록이 일부만 덮으면 블록 밖 텍스트가 결과에 섞인다.
-            커버리지가 threshold 미만이면 블록별 crop 경로가 더 정확하다.
-
-        입력:
-            blocks: L3 블록 목록 (bbox 포함)
-            page_w, page_h: 페이지 이미지 크기 (실제 픽셀)
-            threshold: 최소 커버리지 비율 (0.0~1.0)
-        출력:
-            True면 페이지 단위 OCR 사용 가능, False면 블록별 crop 사용
-        """
-        if page_w <= 0 or page_h <= 0:
-            return False
-
-        page_area = page_w * page_h
-        block_area = 0
-        for b in blocks:
-            bbox = b.get("bbox")
-            if not bbox or len(bbox) != 4 or b.get("skip", False):
-                continue
-            w = abs(bbox[2] - bbox[0])
-            h = abs(bbox[3] - bbox[1])
-            block_area += w * h
-
-        coverage = block_area / page_area
-        if coverage < threshold:
-            logger.info(
-                f"블록 커버리지 {coverage:.1%} < {threshold:.0%} → "
-                f"페이지 단위 대신 블록별 crop OCR 사용"
-            )
-        return coverage >= threshold
 
     def recognize_block(self, engine, page_image, block: dict, **engine_kwargs) -> dict:
         """블록 하나를 잘라 인식만 하고 **저장하지 않는다.** 교정 패스(D-082)용.

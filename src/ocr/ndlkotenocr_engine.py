@@ -52,6 +52,7 @@ from .base import (
     OcrEngineUnavailableError,
     OcrLineResult,
 )
+from .line_block_match import match_lines_to_blocks
 
 logger = logging.getLogger(__name__)
 
@@ -589,87 +590,12 @@ class NdlkotenOcrEngine(BaseOcrEngine):
         lines: list[dict],
         blocks: list[dict],
     ) -> dict[str, list[dict]]:
-        """탐지된 LINE을 L3 block에 공간적으로 매칭한다.
+        """탐지된 LINE을 L3 block에 배정한다 — ocr.line_block_match 공용 규칙(D-086).
 
-        각 LINE의 bbox 중심점이 어떤 block의 bbox 안에 들어가는지로 매칭.
-        매칭되지 않는 LINE은 가장 가까운 block에 할당.
-
-        ndlocr_engine._match_lines_to_blocks()와 동일한 로직.
-
-        입력:
-          lines: [{"text": str, "bbox": [x1,y1,x2,y2], "order": int}, ...]
-          blocks: L3 레이아웃 블록 목록 [{"block_id": str, "bbox": [...], ...}, ...]
-
-        출력:
-          {block_id: [line_info, ...], ...}
+        블록 밖의 행은 버린다(가장 가까운 블록에 주지 않는다). 그래서 파이프라인이
+        블록 커버리지와 무관하게 언제나 쪽 전체에 탐지를 돌릴 수 있다.
         """
-        result: dict[str, list[dict]] = {}
-
-        # skip 블록 제외한 유효 블록
-        valid_blocks = [b for b in blocks if not b.get("skip", False)]
-
-        if not valid_blocks:
-            # 블록이 없으면 모든 LINE을 "unmatched" 블록으로
-            if lines:
-                result["unmatched"] = lines
-            return result
-
-        for line in lines:
-            lx1, ly1, lx2, ly2 = line["bbox"]
-            # LINE의 중심점
-            cx = (lx1 + lx2) / 2
-            cy = (ly1 + ly2) / 2
-
-            best_block_id = None
-            best_overlap = -1
-
-            for block in valid_blocks:
-                bbox = block.get("bbox")
-                if not bbox or len(bbox) != 4:
-                    continue
-
-                bx1, by1, bx2, by2 = bbox
-
-                # 중심점이 블록 내부에 있는지
-                if bx1 <= cx <= bx2 and by1 <= cy <= by2:
-                    # 내부에 있으면 겹침 영역 계산으로 최적 매칭
-                    overlap = self._calc_overlap(line["bbox"], bbox)
-                    if overlap > best_overlap:
-                        best_overlap = overlap
-                        best_block_id = block.get("block_id")
-
-            if best_block_id is None:
-                # 중심점이 어떤 블록에도 안 들어가면 가장 가까운 블록 선택.
-                # 단, 거리가 블록 크기의 50%를 초과하면 무시한다.
-                # 왜 임계값이 필요한가:
-                #   블록이 1~2개뿐이면 페이지 반대편의 텍스트까지
-                #   가장 가까운 블록에 강제 할당되어, 선택하지 않은
-                #   영역의 글자가 OCR 결과에 섞이는 문제가 발생한다.
-                min_dist = float("inf")
-                best_candidate_id = None
-                best_candidate_bbox = None
-                for block in valid_blocks:
-                    bbox = block.get("bbox")
-                    if not bbox or len(bbox) != 4:
-                        continue
-                    dist = self._distance_to_bbox(cx, cy, bbox)
-                    if dist < min_dist:
-                        min_dist = dist
-                        best_candidate_id = block.get("block_id")
-                        best_candidate_bbox = bbox
-
-                # 거리 임계값: 가장 가까운 블록의 대각선 길이의 50%
-                if best_candidate_id and best_candidate_bbox:
-                    bw = abs(best_candidate_bbox[2] - best_candidate_bbox[0])
-                    bh = abs(best_candidate_bbox[3] - best_candidate_bbox[1])
-                    diag = (bw**2 + bh**2) ** 0.5
-                    if min_dist <= diag * 0.5:
-                        best_block_id = best_candidate_id
-
-            if best_block_id:
-                result.setdefault(best_block_id, []).append(line)
-
-        return result
+        return match_lines_to_blocks(lines, blocks)
 
     @staticmethod
     def _calc_overlap(bbox1: list, bbox2: list) -> float:
