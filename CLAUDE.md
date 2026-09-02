@@ -105,6 +105,19 @@ src/app/
 | `src/export/text_layer_pdf.py` | 보이지 않는 텍스트를 얹은 PDF를 만들고 **결과를 다시 재서 검사**(D-068) |
 | `src/cli/embed_folder.py` · `src/cli/__main__.py` | `ctb ocr` 한 줄 진입점 |
 
+## OCR 품질 모듈 (D-080~D-084, 2026-09-02)
+
+| 모듈 | 하는 일 |
+|---|---|
+| `src/ocr/ocr_prompt.py` | LLM OCR 프롬프트를 다섯 조각(정책·문헌 지침·블록 종류·자형 주의·앵커)으로 **조립**. `[?]`·`□`를 글자 신뢰도로 변환. 도메인 목록을 코드에 하드코딩하지 않는다 |
+| `src/ocr/correction_pass.py` | 승급 사다리 1·2단계. 기계적 선별 → 앵커 있는 LLM 교정(사고 끔) → 정밀 판독(문맥 확대·사고 켬). **L2는 건드리지 않고** L4 초안만 만든다 |
+| `src/ocr/eval_cer.py` · `scripts/eval_cer.py` | L4 확정본을 정답으로 L2·초안의 CER. 프롬프트를 바꿨으면 이것으로 잰다 |
+| `src/core/variant_sources.py` · `scripts/build_variant_dicts.py` | 이체자 사전 원자료(OpenCC·Unihan·cjkvi) 파서와 생성. 파일마다 `_tier`·`_source` |
+| `src/llm/providers/base.py::thinking_options` | 사고 예산을 답변 예산에 **더하는** 공통 해석. 비전 경로 4종이 이것을 따른다 |
+
+- **사전은 지식이고 정책은 문헌의 것**: `strict`만 동치, `loose`·`script`는 힌트. 승인은 `documents/{doc_id}/variant_approvals.json`에만.
+- **사고(thinking)는 전역 스위치가 아니다**: 기본 끔(D-074). 정밀 판독과 사용자가 명시한 호출만 켠다. thinking 필드를 본문으로 쓰는 폴백은 어디에도 없다.
+
 ## 파일 다루기 — 되풀이하지 말 것
 
 | 규칙 | 왜 |
