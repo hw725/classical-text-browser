@@ -90,9 +90,27 @@ function initOcrPanel() {
 /* ─── 엔진 목록 ────────────────────────────────── */
 
 async function refreshOcrEngines() {
+  const select = document.getElementById("ocr-engine-select");
+  // 첫 호출은 PaddleOCR 모듈을 처음 읽느라 수 초가 걸린다. «로딩 중»만 있으면
+  // 멈춘 것처럼 보이므로 무엇을 기다리는지 적는다.
+  if (select && !ocrState.engines.length) {
+    select.innerHTML = '<option value="">엔진 확인 중… (첫 실행은 수 초 걸립니다)</option>';
+    select.disabled = true;
+  }
   try {
     const resp = await fetch("/api/ocr/engines");
-    if (!resp.ok) return;
+    if (!resp.ok) {
+      // 서고가 아직 없으면 서버가 500을 준다. 예전에는 여기서 조용히 돌아가
+      // 드롭다운이 «로딩 중…»에 영원히 머물렀다 — 서고를 나중에 골라도 다시
+      // 부르는 곳이 없었기 때문이다. 이제 이유를 적고, 서고가 정해지면
+      // loadLibraryInfo()가 다시 부른다.
+      if (select) {
+        select.innerHTML =
+          '<option value="">서고를 선택하면 엔진 목록이 표시됩니다</option>';
+        select.disabled = true;
+      }
+      return;
+    }
     const data = await resp.json();
 
     ocrState.engines = data.engines || [];
@@ -101,6 +119,10 @@ async function refreshOcrEngines() {
     _populateEngineSelect();
   } catch (e) {
     console.warn("OCR 엔진 목록 로드 실패:", e);
+    if (select) {
+      select.innerHTML = '<option value="">엔진 목록을 불러오지 못했습니다</option>';
+      select.disabled = true;
+    }
   }
 }
 

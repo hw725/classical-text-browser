@@ -1476,6 +1476,9 @@ async function loadLibraryInfo(options) {
     // Phase 3: 트리 뷰 사용 (sidebar-tree.js)
     if (typeof initSidebarTree === "function") {
       initSidebarTree(docs);
+      // 서고가 정해졌으니 OCR 엔진 목록을 (다시) 불러온다. 화면이 서고보다 먼저
+      // 열리면 첫 호출이 500으로 끝나 드롭다운이 «로딩 중»에 멈춰 있었다.
+      if (typeof refreshOcrEngines === "function") refreshOcrEngines();
       // 내용 트리 새로고침 단추 (D-085). 한 번만 바인딩한다.
       const contentsBtn = document.getElementById("contents-refresh-btn");
       if (contentsBtn && !contentsBtn.dataset.bound) {
