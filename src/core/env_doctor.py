@@ -212,12 +212,13 @@ def diagnose(root: Path) -> dict:
 def gpu_env_usable(gpu_env: Optional[dict], gpu: bool) -> bool:
     """start_server.bat의 선택 규칙.
 
-    GPU가 보이고 .venv-gpu에서 paddle·paddleocr이 import되면 그것, 아니면 .venv.
+    GPU가 보이고 .venv-gpu에서 torch(TrOCR)나 paddle 중 하나라도 import되면 그것(D-091),
+    아니면 .venv.
     """
     if not (gpu and gpu_env and gpu_env.get("python_path")) or gpu_env.get("probe_error"):
         return False
-    err = gpu_env.get("errors", {})
-    return "paddle" not in err and "paddleocr" not in err
+    pk, err = gpu_env.get("packages", {}), gpu_env.get("errors", {})
+    return any(name in pk and name not in err for name in ("torch", "paddle"))
 
 
 def _torch_breaks_paddleocr(e: dict) -> bool:
@@ -287,11 +288,11 @@ def recommend(report: dict) -> list[dict]:
                 {
                     "level": "fix",
                     "text": f"{tag}: torch와 paddle이 각각 혼자서는 뜨지만 한 프로세스에서는 둘 중 "
-                    "하나가 죽습니다(cuDNN DLL 판이 다름). 앱은 torch(NDL古典籍 Full)를 먼저 읽어 "
-                    "PaddleOCR이 사용 불가로 보입니다. 이 환경에서는 하나만 고르세요 — PaddleOCR을 "
-                    "GPU로 쓸 거면 `.venv-gpu\\Scripts\\python -m pip uninstall -y torch "
-                    "torchvision`, "
-                    "NDL古典籍 TrOCR을 쓸 거면 그대로 두고 PaddleOCR은 .venv(CPU)에서 씁니다.",
+                    "하나가 죽습니다(cuDNN DLL 판이 다름). start_server.bat이 이 환경을 고르면 "
+                    "PaddleOCR은 .venv(CPU)의 파이썬을 자식 프로세스로 띄워 돌립니다(D-091) — "
+                    ".venv가 정상이면 그대로 두면 됩니다. GPU로 PaddleOCR을 돌리려면 torch를 "
+                    "빼야 합니다: `.venv-gpu\\Scripts\\python -m pip uninstall -y torch "
+                    "torchvision`.",
                 }
             )
             continue

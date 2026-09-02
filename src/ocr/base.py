@@ -112,6 +112,24 @@ class OcrBlockResult:
         """인식된 총 글자 수."""
         return sum(len(line.text) for line in self.lines)
 
+    @classmethod
+    def from_dict(cls, data: dict, **meta) -> "OcrBlockResult":
+        """to_dict()의 역 — 워커 프로세스(D-091)가 돌려준 결과를 다시 객체로."""
+        lines = []
+        for ln in data.get("lines") or []:
+            chars = [
+                OcrCharResult(
+                    char=c.get("char", ""),
+                    bbox=c.get("bbox"),
+                    confidence=float(c.get("confidence") or 0.0),
+                )
+                for c in (ln.get("characters") or [])
+            ]
+            lines.append(
+                OcrLineResult(text=ln.get("text", ""), bbox=ln.get("bbox"), characters=chars)
+            )
+        return cls(lines=lines, **meta)
+
     def to_dict(self) -> dict:
         """ocr_page.schema.json의 OcrResult 호환 딕셔너리.
 

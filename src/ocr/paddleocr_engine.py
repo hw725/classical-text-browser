@@ -23,10 +23,14 @@ PaddleOCR v3 호환:
 from __future__ import annotations
 
 import io
+import json
 import logging
 import os
 import platform
+import subprocess
 import sys
+import threading
+from pathlib import Path
 from typing import Optional
 
 from .base import (
@@ -48,6 +52,14 @@ PADDLE_LANGUAGES = {
     "japan": "일본어 (Japanese)",
     "en": "영어 (English)",
 }
+
+
+def _same_python(a: str, b: str) -> bool:
+    """두 파이썬 경로가 같은 실행 파일인가 (대소문자·상대 경로 차이 무시)."""
+    try:
+        return Path(a).resolve() == Path(b).resolve()
+    except OSError:
+        return a == b
 
 
 class PaddleOcrEngine(BaseOcrEngine):
@@ -96,6 +108,17 @@ class PaddleOcrEngine(BaseOcrEngine):
             use_gpu = self._resolve_use_gpu(os.environ.get("CTB_PADDLE_DEVICE"))
         self._lang = lang
         self._use_gpu = use_gpu
+        # 워커 모드 (D-091): 다른 가상환경의 파이썬으로 PaddleOCR을 돌린다.
+        # CTB_PADDLE_PYTHON이 지금 파이썬과 다르면(또는 CTB_PADDLE_FORCE_WORKER=1) 자식 프로세스.
+        # 왜: torch(cu124)와 paddlepaddle-gpu의 cuDNN DLL이 한 프로세스에 공존하지 못한다.
+        worker_py = (os.environ.get("CTB_PADDLE_PYTHON") or "").strip()
+        force = os.environ.get("CTB_PADDLE_FORCE_WORKER") == "1"
+        self._worker_python: str | None = None
+        if worker_py and (force or not _same_python(worker_py, sys.executable)):
+            self._worker_python = worker_py
+        self._worker = None  # subprocess.Popen
+        self._worker_lock = threading.Lock()
+        self._worker_info: dict | None = None
         self._ocr = None  # lazy init
         self._ocr_lang = None  # 현재 로드된 모델의 언어
         self._lang_cache: dict = {}  # 언어별 PaddleOCR 인스턴스 캐시 (동시 요청 안전)
@@ -138,9 +161,75 @@ class PaddleOcrEngine(BaseOcrEngine):
                 self._ocr = None
                 logger.info(f"PaddleOCR 언어 변경: {self._ocr_lang} → {value} (재초기화 예정)")
 
+    # ── 워커 모드 (D-091) ──────────────────────────────────────
+
+    def _worker_start(self):
+        """자식 파이썬을 띄운다(이미 살아 있으면 그대로). 실패하면 예외."""
+        if self._worker is not None and self._worker.poll() is None:
+            return self._worker
+        src_dir = str(Path(__file__).resolve().parent.parent)
+        env = dict(os.environ)
+        env.pop("CTB_PADDLE_PYTHON", None)
+        env.pop("CTB_PADDLE_FORCE_WORKER", None)
+        env["PYTHONPATH"] = src_dir + (
+            os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
+        )
+        env["PYTHONIOENCODING"] = "utf-8"
+        self._worker = subprocess.Popen(
+            [self._worker_python, "-m", "ocr.paddle_worker"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            encoding="utf-8",
+            cwd=src_dir,
+            env=env,
+        )
+        return self._worker
+
+    def _worker_call(self, req: dict, timeout: float = 600.0) -> dict:
+        """요청 하나를 보내고 응답을 받는다. 자식이 죽었으면 한 번 다시 띄운다."""
+        with self._worker_lock:
+            for attempt in (1, 2):
+                proc = self._worker_start()
+                try:
+                    proc.stdin.write(json.dumps(req, ensure_ascii=False) + "\n")
+                    proc.stdin.flush()
+                    line = proc.stdout.readline()
+                    if not line:
+                        raise BrokenPipeError("워커가 응답 없이 종료")
+                    return json.loads(line)
+                except (BrokenPipeError, OSError, ValueError) as e:
+                    self._worker = None
+                    if attempt == 2:
+                        raise OcrEngineError(
+                            f"PaddleOCR 워커({self._worker_python}) 통신 실패: {e}"
+                        )
+        raise OcrEngineError("PaddleOCR 워커 통신 실패")
+
+    def _worker_ping(self) -> dict:
+        if self._worker_info is None:
+            try:
+                self._worker_info = self._worker_call({"op": "ping"}, timeout=180)
+            except Exception as e:  # noqa: BLE001
+                self._worker_info = {
+                    "ok": False,
+                    "available": False,
+                    "reason": f"워커 시작 실패: {e}",
+                }
+        return self._worker_info
+
     def is_available(self) -> bool:
         """PaddleOCR 패키지 + 현재 런타임 호환성을 확인."""
         if self._available is not None:
+            return self._available
+
+        if self._worker_python:
+            info = self._worker_ping()
+            self._available = bool(info.get("ok") and info.get("available"))
+            if not self._available:
+                why = info.get("reason") or info.get("error") or "사용 불가"
+                self._unavailable_reason = f"PaddleOCR 워커({self._worker_python}): {why}"
             return self._available
 
         try:
@@ -330,6 +419,31 @@ class PaddleOcrEngine(BaseOcrEngine):
           paddle_lang: PaddleOCR 언어 코드 오버라이드 (공유 인스턴스 mutation 없음).
                        지정하면 해당 언어의 캐시된 인스턴스를 사용한다.
         """
+        if self._worker_python:
+            if not self.is_available():
+                raise OcrEngineUnavailableError(
+                    self._unavailable_reason or "PaddleOCR 워커 사용 불가"
+                )
+            import base64
+
+            resp = self._worker_call(
+                {
+                    "op": "recognize",
+                    "image_b64": base64.b64encode(image_bytes).decode("ascii"),
+                    "writing_direction": writing_direction,
+                    "language": language,
+                    "kwargs": {k: v for k, v in kwargs.items() if k in ("paddle_lang",)},
+                }
+            )
+            if not resp.get("ok"):
+                raise OcrEngineError(f"PaddleOCR 워커 오류: {resp.get('error')}")
+            return OcrBlockResult.from_dict(
+                resp["result"],
+                engine_id=self.engine_id,
+                language=language,
+                writing_direction=writing_direction,
+            )
+
         import numpy as np
         from PIL import Image
 
@@ -596,6 +710,13 @@ class PaddleOcrEngine(BaseOcrEngine):
         """
         info = super().get_info()
         info["lang"] = self._lang
-        info["use_gpu"] = self._use_gpu
+        info["use_gpu"] = self._use_gpu if not self._worker_python else False
         info["supported_languages"] = PADDLE_LANGUAGES
+        if self._worker_python:
+            info["worker_python"] = self._worker_python
+            wi = self._worker_info or {}
+            info["model_source"] = (
+                f"별도 프로세스(.venv CPU, Python {wi.get('python', '?')}, "
+                f"paddle {wi.get('paddle', '?')}) — torch와 cuDNN 충돌을 피하기 위해 (D-091)"
+            )
         return info

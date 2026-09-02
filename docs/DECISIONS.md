@@ -1006,6 +1006,7 @@ Selection API가 반환하는 문자 오프셋에 표점 문자가 포함되어
 - [x] 글 단위 경계 제안 — 문헌 무관 신호(날짜·형식)는 코드, 표제 어휘·억제는 문헌 설정 → D-088
 - [x] 목차를 경계 신호로 — 판별·추출은 규칙+LLM, 본문 대조는 순서 지키는 정렬 → D-089
 - [x] 경계 색인 — 별도 엔티티가 아니라 TextBlock.source_refs에서 계산한 보기. 행 단위 먼저 → D-090
+- [x] PaddleOCR 워커 — GPU 환경에서 torch와 cuDNN 충돌을 프로세스 분리로 피한다 → D-091
 
 ### LLM 협업
 - [x] LLM 호출 아키텍처 → D-010 (Phase 10-2)
@@ -3990,3 +3991,40 @@ TextBlock의 `source_refs`에는 이미 쪽·글자 범위가 있다. 경계의 
   표시는 행 bbox 위의 비율 위치.
 - L4가 바뀐 뒤 앵커 재대조(`l4_commit`이 다르면 경계 행 텍스트로 다시 찾기).
 - 승인 전 제안을 세션 사이에 남기는 작업 파일. CSV 가져오기. 목차 스킬 패키지(D-089 후속).
+
+## D-091: PaddleOCR 워커 — torch와 paddle은 한 프로세스에 못 산다, 그러니 나눈다
+
+**날짜**: 2026-09-02
+**상태**: 확정
+
+### 배경
+
+Windows `.venv-gpu`에서 torch 2.6.0+cu124와 paddlepaddle-gpu 3.3.1은 각각 혼자서는 뜨지만
+한 프로세스에서는 뒤에 뜨는 쪽이 `cudnn_cnn64_9.dll` WinError 127로 죽는다. 둘이 서로 다른
+판의 cuDNN 9 DLL을 들고 오고(`torch/lib`, `nvidia/cudnn/bin`), Windows는 같은 이름의 DLL을
+먼저 올라온 것으로 재사용하기 때문이다. 앱은 엔진 등록 때 NDL古典籍 Full(torch)을 먼저
+읽으므로 GPU 환경에서는 늘 PaddleOCR이 사용 불가였다. 2026-08-20 실측에서는 torch
+2.7.x+cu126(paddle과 같은 cublas 핀)도 같은 이유로 죽었다 — torch가 cuDNN을 휠 안에 묶어
+오는 Windows에서는 pip로 판을 맞출 길이 없다. **둘 다 뜨는 교집합 버전은 확인된 것이 없다.**
+
+사용자 선택: 「NDL古典籍 TrOCR은 GPU 환경에 두고, PaddleOCR은 .venv(CPU)에서 쓴다.」
+
+### 결정
+
+1. **PaddleOCR을 별도 프로세스에서 돌릴 수 있게 한다** (`src/ocr/paddle_worker.py`). 부모는
+   `CTB_PADDLE_PYTHON`이 가리키는 파이썬(보통 `.venv`)을 자식으로 띄우고 stdin/stdout JSON
+   한 줄씩으로 ping·recognize를 주고받는다. 자식은 같은 `PaddleOcrEngine` 코드를 in-process로
+   돈다. 결과는 `OcrBlockResult.from_dict`로 되돌린다. 자식이 죽으면 한 번 다시 띄운다.
+2. `start_server.bat`은 `.venv-gpu`에서 torch가 뜨면 그 환경을 고르고, `.venv`가 있으면
+   `CTB_PADDLE_PYTHON`을 `.venv`의 파이썬으로 놓는다. torch 없이 paddle만 뜨면 in-process
+   GPU PaddleOCR. 둘 다 안 뜨면 `.venv`(CPU).
+3. 드롭다운의 PaddleOCR 툴팁에 「별도 프로세스(.venv CPU, Python x, paddle y)」가 보인다.
+   `doctor.bat`은 cuDNN 충돌을 판정하면 이 경로를 안내한다.
+4. 같은 파이썬을 가리키면 워커를 쓰지 않는다(`CTB_PADDLE_FORCE_WORKER=1`은 시험용).
+
+### 비용·한계
+
+- 워커 경로의 PaddleOCR은 CPU다. GPU로 PaddleOCR을 돌리려면 그 환경에서 torch를 빼야 한다.
+- 이미지가 base64로 한 번 오간다 — 블록 크롭 크기에서는 무시할 만하다.
+- Linux는 nvidia-* pip 패키지를 공유하므로 판을 맞출 수 있을지 모르나 실측하지 않았다.
+

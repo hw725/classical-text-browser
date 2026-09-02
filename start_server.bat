@@ -28,12 +28,25 @@ if exist ".venv-gpu\Scripts\python.exe" (
     if !ERRORLEVEL! equ 0 (
         REM GPU 환경이 실제로 쓸 수 있는지 확인한다. 옛 .venv-gpu(파이썬 3.13, 깨진 paddle)가
         REM 남아 있으면 예전에는 그대로 골라서 화면에 «PaddleOCR 사용 불가»만 떴다.
-        ".venv-gpu\Scripts\python.exe" -c "import paddle, paddleocr" >nul 2>&1
-        if !ERRORLEVEL! equ 0 (
+        REM torch(TrOCR)나 paddle 중 하나라도 뜨면 GPU 환경을 쓴다.
+        ".venv-gpu\Scripts\python.exe" -c "import torch" >nul 2>&1
+        set "GPU_HAS_TORCH=!ERRORLEVEL!"
+        ".venv-gpu\Scripts\python.exe" -c "import paddle" >nul 2>&1
+        set "GPU_HAS_PADDLE=!ERRORLEVEL!"
+        if "!GPU_HAS_TORCH!"=="0" (
             set "APP_PY=.venv-gpu\Scripts\python.exe"
             echo [Env] NVIDIA GPU detected - using .venv-gpu
+            REM torch와 paddle은 cuDNN DLL이 달라 한 프로세스에 못 산다(D-091).
+            REM PaddleOCR은 .venv^(CPU^)의 파이썬을 자식 프로세스로 띄워 돌린다.
+            if exist ".venv\Scripts\python.exe" (
+                set "CTB_PADDLE_PYTHON=%CD%\.venv\Scripts\python.exe"
+                echo [Env] PaddleOCR runs in .venv ^(CPU worker^) - torch/paddle cuDNN conflict
+            )
+        ) else if "!GPU_HAS_PADDLE!"=="0" (
+            set "APP_PY=.venv-gpu\Scripts\python.exe"
+            echo [Env] NVIDIA GPU detected - using .venv-gpu ^(paddle GPU^)
         ) else (
-            echo [Env] .venv-gpu 에서 paddle 을 불러올 수 없어 .venv ^(CPU^) 로 뜁니다.
+            echo [Env] .venv-gpu 에서 torch 도 paddle 도 뜨지 않아 .venv ^(CPU^) 로 뜁니다.
             echo [Env] 원인은 doctor.bat 으로 확인하세요. 안 쓰는 .venv-gpu 는 지워도 됩니다.
         )
     ) else (

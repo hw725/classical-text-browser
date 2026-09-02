@@ -125,10 +125,10 @@ def test_broken_torch_in_gpu_env_offers_uninstall():
     )
     gpu["paddle_cuda"] = True
     report = _report([venv, gpu], gpu=True)
-    assert report["start_server_picks"] == ".venv"
+    # paddle은 뜨므로 start_server는 .venv-gpu를 고른다(paddle GPU in-process)
+    assert report["start_server_picks"] == ".venv-gpu"
     texts = [r["text"] for r in recommend(report)]
     assert any("pip uninstall -y torch torchvision" in t for t in texts)
-    assert any("start_server는 .venv(CPU)로 뜁니다" in t for t in texts)
 
 
 def test_cudnn_conflict_between_torch_and_paddle():
@@ -146,5 +146,5 @@ def test_cudnn_conflict_between_torch_and_paddle():
     }
     venv = _env(".venv", "3.12.13", engines=PADDLE_OK)
     texts = [r["text"] for r in recommend(_report([venv, gpu], gpu=True))]
-    assert any("cuDNN DLL 판이 다름" in t and "하나만 고르세요" in t for t in texts)
+    assert any("cuDNN DLL 판이 다름" in t and "자식 프로세스" in t for t in texts)
     assert not any("paddle import 실패" in t for t in texts)

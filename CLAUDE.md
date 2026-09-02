@@ -50,7 +50,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 | Windows + paddlepaddle 3.x | OneDNN이 PIR 속성 변환 미지원 → `FLAGS_use_mkldnn=0` 회피 |
 | `torch`는 전용 인덱스(플랫폼 분기: Windows `pytorch-cu124`·Linux `pytorch-cu126`, 2026-08-20 실측) | CUDA 버전을 바꾸면 `[[tool.uv.index]]` URL도 함께 고쳐야 한다 |
 | `ndl-lab/ndlocr-lite` **master**에서 모델 받기 | 원본이 v1.2.0에서 PARSeq 셋을 바꿔(16px→24px, 파일명 변경) 셋이 404. 모델 URL은 **태그 1.1.3**에 고정(`src/ocr/ndlocr/__init__.py`). 古典籍-Lite는 이미 1.3.1 고정 |
-| `torch`(cu124) ↔ `paddlepaddle-gpu` **같은 프로세스** | 둘이 cuDNN 9 DLL을 따로 들고 온다(`torch/lib`, `nvidia/cudnn/bin`). 판이 다르면 먼저 뜬 쪽이 이기고 뒤쪽이 WinError 127. 앱은 torch(NDL Full)를 먼저 읽어 **PaddleOCR이 사용 불가**로 보인다(2026-09-02 실측). `.venv-gpu`는 하나만 — `doctor.bat`이 판정한다 |
+| `torch`(cu124) ↔ `paddlepaddle-gpu` **같은 프로세스** | 둘이 cuDNN 9 DLL을 따로 들고 온다(`torch/lib`, `nvidia/cudnn/bin`). 판이 다르면 먼저 뜬 쪽이 이기고 뒤쪽이 WinError 127. 앱은 torch(NDL Full)를 먼저 읽어 **PaddleOCR이 사용 불가**로 보인다(2026-09-02 실측). 해법은 프로세스 분리 — `start_server.bat`이 `CTB_PADDLE_PYTHON=.venv`를 놓아 PaddleOCR을 자식 프로세스로 돌린다(D-091). `doctor.bat`이 판정한다 |
 | `opencv-contrib-python`(paddlex) ↔ `opencv-python-headless`(extras) | **같은 `cv2`를 두 배포판이 제공.** 한쪽을 지우면 공유 디렉터리가 사라져 남은 쪽까지 깨진다 — `module 'cv2' has no attribute 'IMREAD_COLOR'`. extras도 contrib판으로 통일했다 |
 
 **환경이 이상하면 먼저 `doctor.bat`(`uv run python scripts/doctor.py`).** `.venv`·`.venv-gpu`를
