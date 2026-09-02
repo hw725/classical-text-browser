@@ -238,11 +238,19 @@ class BaseOcrEngine(ABC):
         raise NotImplementedError(f"{self.engine_id}은(는) 레이아웃 탐지를 지원하지 않습니다.")
 
     def get_info(self) -> dict:
-        """엔진 정보를 딕셔너리로 반환. API 응답용."""
-        return {
+        """엔진 정보를 딕셔너리로 반환. API 응답용.
+
+        엔진이 `_unavailable_reason`을 남겼으면 `unavailable_reason`으로 함께 내보낸다.
+        왜: 드롭다운의 «(사용 불가)»만으로는 사용자가 무엇을 고쳐야 하는지 알 수 없다.
+        """
+        info = {
             "engine_id": self.engine_id,
             "display_name": self.display_name,
             "requires_network": self.requires_network,
             "available": self.is_available(),
             "supports_layout_detection": self.supports_layout_detection,
         }
+        reason = getattr(self, "_unavailable_reason", None)
+        if not info["available"] and reason:
+            info["unavailable_reason"] = reason
+        return info

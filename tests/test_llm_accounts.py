@@ -332,3 +332,25 @@ async def test_alive_check_reads_status_code(monkeypatch):
     monkeypatch.setattr(httpx, "AsyncClient", _Client)
     assert await p._is_model_alive("dead") is False
     assert await p._is_model_alive("live") is True
+
+
+class TestDotenvEncoding:
+    """.env가 BOM이 붙었거나 UTF-8이 아니어도 LlmConfig가 죽지 않는다.
+
+    왜: 여기서 UnicodeDecodeError가 나면 LLM 라우터 초기화가 실패하고, 그 라우터를
+    주입받는 OCR 엔진 목록 API까지 500이 된다. Windows 메모장이 BOM을 남긴다.
+    """
+
+    def test_bom_is_stripped(self, tmp_path):
+        from llm.config import LlmConfig
+
+        (tmp_path / ".env").write_bytes("GEMINI_API_KEY=abc123\n".encode("utf-8-sig"))
+        cfg = LlmConfig(library_root=tmp_path)
+        assert cfg._env_cache.get("GEMINI_API_KEY") == "abc123"
+
+    def test_cp949_does_not_raise(self, tmp_path):
+        from llm.config import LlmConfig
+
+        (tmp_path / ".env").write_bytes("# 메모\nGEMINI_API_KEY=abc123\n".encode("cp949"))
+        cfg = LlmConfig(library_root=tmp_path)
+        assert cfg._env_cache.get("GEMINI_API_KEY") == "abc123"

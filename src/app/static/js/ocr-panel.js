@@ -100,14 +100,28 @@ async function refreshOcrEngines() {
   try {
     const resp = await fetch("/api/ocr/engines");
     if (!resp.ok) {
-      // 서고가 아직 없으면 서버가 500을 준다. 예전에는 여기서 조용히 돌아가
-      // 드롭다운이 «로딩 중…»에 영원히 머물렀다 — 서고를 나중에 골라도 다시
-      // 부르는 곳이 없었기 때문이다. 이제 이유를 적고, 서고가 정해지면
-      // loadLibraryInfo()가 다시 부른다.
+      // 서버가 500을 주는 경우는 둘이다: (1) 서고가 아직 없다, (2) 엔진 등록이나
+      // LLM 라우터 초기화가 예외로 죽었다. 예전에는 둘을 구분하지 않고 «서고를
+      // 선택하면…»만 적어 서고가 있는 사용자를 헷갈리게 했다. 서버가 준 문구를
+      // 그대로 보이고, (2)는 토스트로도 알린다. 서고가 정해지면 loadLibraryInfo()가
+      // 다시 부른다.
+      const err = await resp.json().catch(() => ({}));
+      const msg = err.error || `엔진 목록 요청 실패 (HTTP ${resp.status})`;
+      const noLibrary = /서고가 설정되지/.test(msg);
       if (select) {
-        select.innerHTML =
-          '<option value="">서고를 선택하면 엔진 목록이 표시됩니다</option>';
+        select.innerHTML = "";
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = noLibrary
+          ? "서고를 선택하면 엔진 목록이 표시됩니다"
+          : `엔진 목록 실패: ${msg}`;
+        opt.title = msg;
+        select.appendChild(opt);
         select.disabled = true;
+      }
+      if (!noLibrary) {
+        console.error("OCR 엔진 목록 실패:", msg);
+        if (typeof showToast === "function") showToast(msg, "error");
       }
       return;
     }
@@ -162,6 +176,10 @@ function _populateEngineSelect() {
     opt.disabled = !eng.available;
     if (engineHints[eng.engine_id]) {
       opt.title = engineHints[eng.engine_id];
+    }
+    // 사용 불가 이유가 있으면 힌트 대신 그 이유를 보인다 — 무엇을 고쳐야 하는지가 먼저다.
+    if (!eng.available && eng.unavailable_reason) {
+      opt.title = eng.unavailable_reason;
     }
     if (eng.engine_id === ocrState.defaultEngine) {
       opt.selected = true;

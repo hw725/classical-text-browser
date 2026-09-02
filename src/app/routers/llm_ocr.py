@@ -21,6 +21,7 @@ server.py의 Phase 10-2 (LLM) / Phase 10-1 (OCR) 엔드포인트를 분리한 �
 """
 
 import json
+import logging
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -38,6 +39,7 @@ from app._state import (
 )
 
 router = APIRouter(tags=["llm_ocr"])
+logger = logging.getLogger(__name__)
 
 
 # ===========================================================================
@@ -833,9 +835,26 @@ async def api_ocr_engines():
     if library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
-    _pipeline, registry = _get_ocr_pipeline()
+    try:
+        _pipeline, registry = _get_ocr_pipeline()
+        engines = registry.list_engines()
+    except Exception as e:  # noqa: BLE001
+        # 엔진 등록·LLM 라우터 초기화(.env 읽기 등)에서 난 예외. 예전에는 그대로
+        # 500 HTML로 새어 나가 화면이 «서고를 선택하면…»으로 잘못 안내했다.
+        # 원인을 본문에 적어 드롭다운과 토스트에 보이게 하고, traceback은 서버 로그로.
+        logger.exception("OCR 엔진 목록 초기화 실패")
+        return JSONResponse(
+            {
+                "error": (
+                    f"OCR 엔진 목록을 만들지 못했습니다: {type(e).__name__}: {e} "
+                    "— 서버 콘솔의 오류 내용을 확인하세요."
+                ),
+                "error_type": type(e).__name__,
+            },
+            status_code=500,
+        )
     return {
-        "engines": registry.list_engines(),
+        "engines": engines,
         "default_engine": registry.default_engine_id,
     }
 

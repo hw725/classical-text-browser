@@ -92,3 +92,33 @@ class TestPaddleOcrEngine:
         engine = PaddleOcrEngine()
         result = engine.recognize(buf.getvalue())
         assert result.engine_id == "paddleocr"
+
+
+class TestPaddleImportFailure:
+    """import paddle이 ImportError가 아닌 예외로 죽어도 «사용 불가»로 끝나야 한다.
+
+    Windows에서 DLL 로드 실패(OSError)가 실제 사례다. 예외가 새어 나가면 엔진 목록
+    API 전체가 500이 된다.
+    """
+
+    def test_non_import_error_becomes_unavailable(self, monkeypatch):
+        import importlib.abc
+        import sys
+
+        class _Exploding(importlib.abc.MetaPathFinder):
+            def find_spec(self, fullname, path, target=None):
+                if fullname == "paddle":
+                    raise OSError("[WinError 126] 지정된 모듈을 찾을 수 없습니다")
+                return None
+
+        for name in [m for m in sys.modules if m == "paddle" or m.startswith("paddle.")]:
+            monkeypatch.delitem(sys.modules, name)
+        monkeypatch.setattr(sys, "meta_path", [_Exploding()] + sys.meta_path)
+
+        engine = PaddleOcrEngine()
+        assert engine.is_available() is False
+        assert "OSError" in engine._unavailable_reason
+        assert "WinError 126" in engine._unavailable_reason
+        # get_info()도 예외 없이 이유를 내보낸다
+        info = engine.get_info()
+        assert info["available"] is False and "OSError" in info["unavailable_reason"]

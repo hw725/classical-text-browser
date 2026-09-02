@@ -3,6 +3,7 @@
 설정 우선순위: 환경변수 → .env 파일 → 기본값.
 """
 
+import logging
 import os
 from pathlib import Path
 from typing import Optional
@@ -53,9 +54,23 @@ class LlmConfig:
                 self._env_cache.update(self._load_dotenv(lib_env))
 
     def _load_dotenv(self, path: Path) -> dict:
-        """간단한 .env 파서. python-dotenv 없이 동작."""
+        """간단한 .env 파서. python-dotenv 없이 동작.
+
+        인코딩: UTF-8(BOM 허용). Windows 메모장이 남기는 BOM이나 cp949로 저장된
+        파일에서 UnicodeDecodeError로 죽으면 LLM 라우터 초기화가 실패하고, 그
+        라우터를 주입받는 OCR 엔진 목록까지 500이 된다. 못 읽는 글자는 치환하고
+        경고만 남긴다 — API 키는 ASCII라 영향이 없다.
+        """
         result = {}
-        for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            text = path.read_text(encoding="utf-8-sig")
+        except UnicodeDecodeError:
+            logging.getLogger(__name__).warning(
+                f".env가 UTF-8이 아닙니다: {path} — 못 읽는 글자는 치환합니다. "
+                "UTF-8로 다시 저장하세요."
+            )
+            text = path.read_text(encoding="utf-8", errors="replace")
+        for line in text.splitlines():
             line = line.strip()
             if not line or line.startswith("#"):
                 continue

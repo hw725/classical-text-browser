@@ -169,6 +169,18 @@ class PaddleOcrEngine(BaseOcrEngine):
         except ImportError:
             self._available = False
             self._unavailable_reason = "PaddleOCR 또는 PaddlePaddle 패키지가 설치되지 않았습니다."
+        except Exception as e:  # noqa: BLE001
+            # import paddle이 ImportError가 아닌 예외로 죽는 경우가 실제로 있다 —
+            # Windows에서 DLL 로드 실패(OSError), 공유 cv2 배포판 충돌(AttributeError) 등.
+            # 이걸 밖으로 던지면 엔진 목록 API 전체가 500이 된다(D-044: 등록 실패는
+            # available=False로 나타나야 한다).
+            self._available = False
+            self._unavailable_reason = (
+                f"PaddleOCR을 불러오는 중 오류가 났습니다 ({type(e).__name__}: {e}). "
+                "GPU 환경이면 start_server가 .venv-gpu를 골랐는지, CPU 환경이면 "
+                "`uv sync --extra paddleocr`이 끝났는지 확인하세요."
+            )
+            logger.warning(f"PaddleOCR 사용 불가 처리: {self._unavailable_reason}")
 
         return self._available
 

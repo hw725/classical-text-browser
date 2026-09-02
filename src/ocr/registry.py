@@ -69,8 +69,31 @@ class OcrEngineRegistry:
         return engine
 
     def list_engines(self) -> list[dict]:
-        """등록된 모든 엔진의 정보를 반환한다. API 응답용."""
-        return [engine.get_info() for engine in self._engines.values()]
+        """등록된 모든 엔진의 정보를 반환한다. API 응답용.
+
+        엔진 하나의 get_info()/is_available()이 예외를 내도 목록 전체가 죽지 않는다.
+        왜: 등록 실패는 예외가 아니라 available=False로 나타나야 한다(D-044·D-056).
+        실제로 한 엔진의 import 오류(DLL·cv2 배포판 충돌 등)가 /api/ocr/engines를
+        500으로 만들어 드롭다운이 «서고를 선택하면…»에 멈춘 일이 있었다 — 나머지
+        엔진은 멀쩡했는데도. 여기서 잡아 그 엔진만 «사용 불가 + 이유»로 내보낸다.
+        """
+        infos: list[dict] = []
+        for engine_id, engine in self._engines.items():
+            try:
+                infos.append(engine.get_info())
+            except Exception as e:  # noqa: BLE001 — 어떤 예외든 목록을 살리는 게 목적
+                logger.exception(f"OCR 엔진 정보 조회 실패: {engine_id}")
+                infos.append(
+                    {
+                        "engine_id": engine_id,
+                        "display_name": getattr(engine, "display_name", engine_id),
+                        "requires_network": getattr(engine, "requires_network", False),
+                        "available": False,
+                        "supports_layout_detection": False,
+                        "unavailable_reason": f"엔진 상태 확인 중 오류: {type(e).__name__}: {e}",
+                    }
+                )
+        return infos
 
     @property
     def default_engine_id(self) -> Optional[str]:
