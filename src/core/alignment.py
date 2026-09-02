@@ -75,16 +75,22 @@ class AlignedPair:
     match_type: MatchType
     ocr_index: Optional[int] = None
     ref_index: Optional[int] = None
+    # 불일치인데 넓은 사전(loose)이나 문자 체계 사전(script)에 관계가 있으면 그 층 이름.
+    # 분류는 그대로 mismatch다 — 동치가 아니라 «승인할지 보라»는 신호다 (D-080).
+    variant_hint: Optional[str] = None
 
     def to_dict(self) -> dict:
         """API 응답용 딕셔너리."""
-        return {
+        d = {
             "ocr_char": self.ocr_char,
             "ref_char": self.ref_char,
             "match_type": self.match_type.value,
             "ocr_index": self.ocr_index,
             "ref_index": self.ref_index,
         }
+        if self.variant_hint:
+            d["variant_hint"] = self.variant_hint
+        return d
 
 
 @dataclass
@@ -188,14 +194,30 @@ class VariantCharDict:
         입력: dict_path — 사전 파일 경로. None이면 기본 경로를 탐색.
         """
         self._variants: dict[str, set[str]] = {}
+        # 관계 강도 층 (D-080). 파일의 `_tier`가 없으면 strict — 지금까지의 판정이
+        # 바뀌지 않는다. `_source`는 어디서 가져왔는가의 기록.
+        self.tier: str = "strict"
+        self.source: Optional[dict] = None
+        self.path: Optional[str] = dict_path
 
         if dict_path is None:
             dict_path = self._find_default_path()
+            self.path = dict_path
 
         if dict_path and os.path.exists(dict_path):
             self._load(dict_path)
         else:
             logger.warning("이체자 사전을 찾을 수 없습니다: %s", dict_path)
+
+    @classmethod
+    def empty(cls, path: Optional[str] = None) -> "VariantCharDict":
+        """파일을 읽지 않는 빈 사전. 저장 경로만 기억한다 (문헌별 승인 파일이 아직 없을 때)."""
+        vd = cls.__new__(cls)
+        vd._variants = {}
+        vd.tier = "strict"
+        vd.source = None
+        vd.path = path
+        return vd
 
     def _find_default_path(self) -> Optional[str]:
         """기본 사전 경로를 찾는다.
@@ -218,6 +240,13 @@ class VariantCharDict:
         """JSON 파일에서 이체자 사전을 로드한다."""
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
+
+        tier = data.get("_tier")
+        if tier in ("strict", "loose", "script"):
+            self.tier = tier
+        src = data.get("_source")
+        if isinstance(src, dict):
+            self.source = src
 
         variants_raw = data.get("variants", {})
         for char, alts in variants_raw.items():
@@ -267,6 +296,12 @@ class VariantCharDict:
             "_version": "0.1.0",
             "variants": serializable,
         }
+        # 층·출처는 있을 때만 적는다 — 기존 파일 형식을 그대로 유지한다 (D-080).
+        if self.tier != "strict":
+            data["_tier"] = self.tier
+        if self.source:
+            data["_tier"] = self.tier
+            data["_source"] = self.source
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
@@ -496,6 +531,93 @@ class VariantCharDict:
 
 
 # ──────────────────────────────────────
+# 층이 있는 사전 묶음 + 문헌별 승인 (D-080)
+# ──────────────────────────────────────
+
+TIER_RANK = {"strict": 3, "loose": 2, "script": 1}
+
+
+class TieredVariantDicts:
+    """여러 이체자 사전을 층(tier)과 함께 묶어 한 쌍의 관계 강도를 판정한다.
+
+    is_variant()는 **strict 층에서만** True다. 그래서 align_texts()에 그대로 넘겨도
+    예전 동작(strict 사전만 있을 때)과 같다. classify()가 loose·script를 알려 주고,
+    align_texts()는 그것을 mismatch의 variant_hint로 붙인다.
+
+    왜 동치를 strict에 한정하는가:
+        교육부 사전 추출본에는 上→二, 丘→业 같은 통가·차자 수준의 관계가 «이체자»로
+        들어 있다. 이것을 동치로 쓰면 OCR이 丘를 业으로 잘못 읽은 것이 «이체자,
+        정상»으로 분류되어 오독이 숨는다. 넓은 사전은 힌트일 뿐이어야 한다.
+    """
+
+    def __init__(self, dicts: Optional[list[VariantCharDict]] = None):
+        self._dicts: list[VariantCharDict] = list(dicts or [])
+
+    def add(self, vd: Optional[VariantCharDict]) -> "TieredVariantDicts":
+        if vd is not None:
+            self._dicts.append(vd)
+        return self
+
+    @property
+    def dicts(self) -> list[VariantCharDict]:
+        return list(self._dicts)
+
+    def classify(self, char_a: str, char_b: str) -> Optional[str]:
+        """두 글자의 관계 층. 여러 사전에 있으면 가장 강한 층. 없으면 None."""
+        best: Optional[str] = None
+        for vd in self._dicts:
+            if vd.is_variant(char_a, char_b):
+                if best is None or TIER_RANK.get(vd.tier, 0) > TIER_RANK.get(best, 0):
+                    best = vd.tier
+        return best
+
+    def is_variant(self, char_a: str, char_b: str) -> bool:
+        """strict 층에서만 True. align_texts()가 이 이름으로 부른다."""
+        return self.classify(char_a, char_b) == "strict"
+
+    def hint(self, char_a: str, char_b: str) -> Optional[str]:
+        """동치가 아닌 관계(loose·script)면 그 층 이름. 아니면 None."""
+        tier = self.classify(char_a, char_b)
+        return tier if tier in ("loose", "script") else None
+
+
+DOCUMENT_APPROVALS_FILE = "variant_approvals.json"
+
+
+def document_approvals_path(doc_path) -> "os.PathLike[str] | str":
+    """문헌별 승인 파일 경로. documents/{doc_id}/variant_approvals.json."""
+    return os.path.join(str(doc_path), DOCUMENT_APPROVALS_FILE)
+
+
+def load_document_approvals(doc_path) -> VariantCharDict:
+    """문헌별로 승인된 이체자 쌍을 strict 사전으로 읽는다. 파일이 없으면 빈 사전.
+
+    왜 문헌 단위인가 (D-080 결정 3):
+        어느 관계까지 «같은 글자»로 볼지는 문헌마다 다르다. 15세기 목판본 교정에서
+        竝·並은 같은 글자지만 자형 연구 문헌에서는 구별해야 한다. 그래서 승인은
+        문헌 안에만 저장되고 전역 사전으로 올라가지 않는다.
+    """
+    path = document_approvals_path(doc_path)
+    # 파일이 없으면 «없다»가 정상이다 — 경고 없이 빈 사전을 만든다.
+    vd = VariantCharDict(dict_path=path) if os.path.exists(path) else VariantCharDict.empty(path)
+    vd.tier = "strict"
+    if not vd.source:
+        vd.source = {
+            "name": "document_approval",
+            "note": "이 문헌에서 연구자가 «같은 글자»로 승인한 쌍. 전역 사전으로 올라가지 않는다.",
+        }
+    return vd
+
+
+def save_document_approvals(doc_path, vd: VariantCharDict) -> str:
+    """승인 사전을 문헌 디렉터리에 저장하고 경로를 돌려준다."""
+    path = document_approvals_path(doc_path)
+    vd.tier = "strict"
+    vd.save(path)
+    return path
+
+
+# ──────────────────────────────────────
 # 핵심 정렬 알고리즘 (작업 3)
 # ──────────────────────────────────────
 
@@ -603,16 +725,18 @@ def align_texts(
                     )
                 )
 
-    # 3단계: 이체자 보정
+    # 3단계: 이체자 보정 (D-080 — strict 층만 동치, 나머지는 힌트)
     if variant_dict:
+        hint_fn = getattr(variant_dict, "hint", None)
         for pair in pairs:
-            if (
-                pair.match_type == MatchType.MISMATCH
-                and pair.ocr_char
-                and pair.ref_char
-                and variant_dict.is_variant(pair.ocr_char, pair.ref_char)
-            ):
+            if pair.match_type != MatchType.MISMATCH or not pair.ocr_char or not pair.ref_char:
+                continue
+            if variant_dict.is_variant(pair.ocr_char, pair.ref_char):
                 pair.match_type = MatchType.VARIANT
+            elif hint_fn is not None:
+                # 넓은 사전·문자 체계 사전에만 있는 관계는 mismatch로 두되 표시만 한다.
+                # 빨강이 늘 수 있지만, 오독을 숨기는 것보다 낫다.
+                pair.variant_hint = hint_fn(pair.ocr_char, pair.ref_char)
 
     return pairs
 

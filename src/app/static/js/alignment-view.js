@@ -263,7 +263,9 @@ function _renderAlignmentTable(pairs) {
     const ocrChar = pair.ocr_char || "—";
     const refChar = pair.ref_char || "—";
     const icon = _matchTypeIcon(pair.match_type);
-    const label = _matchTypeLabel(pair.match_type);
+    // 불일치인데 넓은 사전·문자 체계 사전에 관계가 있으면 힌트를 덧붙인다 (D-080).
+    // 분류는 그대로 불일치다 — «이 문헌에서 승인할지 보라»는 신호일 뿐이다.
+    const label = _matchTypeLabel(pair.match_type) + _variantHintSuffix(pair.variant_hint);
 
     html += `<div class="${cls}" data-pair-idx="${idx}">`;
     html += `  <span class="ag-col ag-char">${_escapeHtml(ocrChar)}</span>`;
@@ -523,9 +525,18 @@ async function _importVariantData(text, format) {
  */
 function _onAlignmentPairClick(pair) {
   if (pair.match_type === "mismatch") {
-    // mismatch → 이체자로 등록할지 묻기
-    const msg = `"${pair.ocr_char}" ↔ "${pair.ref_char}"\n이체자로 등록하시겠습니까?`;
+    // mismatch → 이 문헌에서만 승인할지, 전역 사전에 등록할지 묻기 (D-080)
+    //
+    // 기본은 «이 문헌에서만»이다. 어느 관계까지 같은 글자로 볼지는 문헌마다 다르고,
+    // A 문헌의 판단이 B 문헌의 판정을 바꾸면 안 된다. 전역 등록은 두 번째 물음이다.
+    const hint = pair.variant_hint ? `\n(사전 힌트: ${_variantHintLabel(pair.variant_hint)})` : "";
+    const msg =
+      `"${pair.ocr_char}" ↔ "${pair.ref_char}"${hint}\n` +
+      "이 문헌에서 같은 글자(이체자)로 승인하시겠습니까?\n" +
+      "(취소를 누르면 전역 사전 등록을 따로 묻습니다)";
     if (confirm(msg)) {
+      _approveVariantForDocument(pair.ocr_char, pair.ref_char);
+    } else if (confirm(`"${pair.ocr_char}" ↔ "${pair.ref_char}"\n전역 이체자 사전에 등록하시겠습니까?`)) {
       _addVariantPair(pair.ocr_char, pair.ref_char);
     }
   } else if (pair.match_type === "variant") {
@@ -534,6 +545,51 @@ function _onAlignmentPairClick(pair) {
       `"${pair.ocr_char}" ↔ "${pair.ref_char}" — 이체자(同字異形)로 등록되어 있습니다.`,
       'info');
   }
+}
+
+/**
+ * 이 문헌에서만 두 글자를 같은 글자로 승인한다 (D-080 결정 3).
+ * 저장 위치: documents/{doc_id}/variant_approvals.json — 전역 사전으로 올라가지 않는다.
+ */
+async function _approveVariantForDocument(charA, charB) {
+  const docId = typeof viewerState !== "undefined" ? viewerState.docId : null;
+  if (!docId) {
+    showToast("문헌을 먼저 여세요.", "warning");
+    return;
+  }
+  try {
+    const res = await fetch(`/api/documents/${encodeURIComponent(docId)}/variant-approvals`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ char_a: charA, char_b: charB }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error || "승인에 실패했습니다.", "error");
+      return;
+    }
+    showToast(`"${charA}" ↔ "${charB}" — 이 문헌에서 이체자로 승인했습니다 (${data.pair_count}쌍).`, "success");
+    // 다시 대조하면 승인한 쌍이 «이체자»로 바뀐다.
+    _runAlignment();
+  } catch (e) {
+    showToast(`승인 요청 실패: ${e.message}`, "error");
+  }
+}
+
+function _variantHintLabel(hint) {
+  switch (hint) {
+    case "loose":
+      return "넓은 이체 사전에 관계 있음";
+    case "script":
+      return "간체·신자체 등 문자 체계 차이";
+    default:
+      return hint || "";
+  }
+}
+
+function _variantHintSuffix(hint) {
+  if (!hint) return "";
+  return ` <span class="align-hint" title="${_escapeHtml(_variantHintLabel(hint))}">· 사전 힌트</span>`;
 }
 
 /* ──────────────────────────

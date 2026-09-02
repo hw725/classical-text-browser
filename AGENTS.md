@@ -41,7 +41,7 @@ src/app/
     ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 + 텍스트레이어 진단·가져오기·입히기 + 권 추가 (40 라우트)
     ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티 (25 라우트)
     ├── llm_ocr.py       ← LLM 상태·분석·초안 + OCR 엔진·실행·권단위 일괄·백업 되돌리기·판독 지침 (21 라우트)
-    ├── alignment.py     ← 이체자 사전/정렬/일괄교정 (17 라우트)
+    ├── alignment.py     ← 이체자 사전/정렬/일괄교정/문헌별 승인 (20 라우트)
     ├── reading.py       ← L5 표점·현토 + L6 번역 + 비고 + AI보조 (24 라우트)
     ├── annotation.py    ← L7 주석·사전형·인용마크 + AI보조 (34 라우트)
     └── version.py       ← Git 그래프/되돌리기/스냅샷/가져오기 (7 라우트)
@@ -121,7 +121,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
   (`npx -y openai-oauth`, 포트 10531–10540 스캔, Bearer 토큰 `oauth-proxy` 하드코딩)와
   SikuRoBERTa 표점 Docker(punctuation-service/.env 존재 시)를 자동 기동.
 - 프론트(static/)가 38,633줄 — index.html 4,826줄 단일 파일, workspace.css 7,441줄,
-  JS 29개. 테스트 43파일은 전부 백엔드, **프론트 테스트 0, CI 없음.**
+  JS 29개. 테스트 44파일은 전부 백엔드, **프론트 테스트 0, CI 없음.**
   (2026-09-01 재실측. 2026-07-26 v1.2.0 감사 때 직전 대비 프론트가 줄어든 것은
   D-069에서 죽은 코드 약 1,000줄을 걷어냈기 때문이다.)
 

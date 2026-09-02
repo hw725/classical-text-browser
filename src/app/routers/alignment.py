@@ -122,9 +122,49 @@ def _list_variant_dicts() -> list[dict]:
                 "name": name,
                 "file": basename,
                 "active": name == active,
+                # 층(D-080). 파일 머리의 _tier. 없으면 strict — 예전 파일 그대로.
+                "tier": _read_dict_tier(path),
             }
         )
     return result
+
+
+def _read_dict_tier(path: str) -> str:
+    """사전 파일의 `_tier`를 읽는다. 없거나 깨져 있으면 strict."""
+    import json as _json
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = _json.load(f)
+        tier = data.get("_tier") if isinstance(data, dict) else None
+        return tier if tier in ("strict", "loose", "script") else "strict"
+    except (OSError, ValueError):
+        return "strict"
+
+
+def _get_tiered_dicts(doc_path=None):
+    """정렬에 쓸 사전 묶음을 만든다 (D-080).
+
+    구성:
+      1. 활성 사전 — 파일의 _tier 그대로(예전 파일은 strict)
+      2. 문헌별 승인 사전 — strict (doc_path가 있을 때)
+      3. resources/의 나머지 사전 중 _tier가 loose·script인 것 — 힌트만
+
+    strict 층은 1·2에서만 나온다. 넓은 사전이 우연히 활성이 아니어도 힌트는
+    보이고, 활성이어도 그 파일의 층이 loose면 동치가 되지 않는다.
+    """
+    from core.alignment import TieredVariantDicts, VariantCharDict, load_document_approvals
+
+    bundle = TieredVariantDicts()
+    active_name = _get_active_dict_name()
+    bundle.add(_get_variant_dict(active_name))
+    if doc_path is not None:
+        bundle.add(load_document_approvals(doc_path))
+    for entry in _list_variant_dicts():
+        if entry["name"] == active_name or entry["tier"] == "strict":
+            continue
+        bundle.add(VariantCharDict(dict_path=_dict_name_to_path(entry["name"])))
+    return bundle
 
 
 # ── Pydantic 모델 ─────────────────────────────────
@@ -206,7 +246,8 @@ async def api_run_alignment(
 
     from core.alignment import align_page
 
-    variant_dict = _get_variant_dict()
+    # 활성 사전 + 이 문헌의 승인 쌍 + 힌트용 넓은 사전 (D-080)
+    variant_dict = _get_tiered_dicts(doc_path)
 
     try:
         block_results = align_page(
@@ -479,6 +520,60 @@ async def api_delete_pair_from_dict(name: str, body: VariantPairRequest):
 
     _save_variant_dict(vd, name)
     return {"status": "ok", "removed": True, "size": vd.size}
+
+
+# ── 문헌별 이체자 승인 (D-080 결정 3) ──
+#
+# 넓은 사전(loose)·문자 체계 사전(script)에만 있는 쌍을 사람이 «이 문헌에서는 같은
+# 글자»로 승인하면 그 문헌 안에서만 strict로 승격된다. 전역 사전으로 올라가지 않는다.
+# A 문헌의 승인이 B 문헌의 판정을 바꾸면 안 되기 때문이다.
+
+
+@router.get("/api/documents/{doc_id}/variant-approvals")
+async def api_list_variant_approvals(doc_id: str):
+    """이 문헌에서 승인된 이체자 쌍 목록."""
+    from core.alignment import load_document_approvals
+
+    doc_path = require_repo_path("documents", doc_id)
+    if not doc_path.exists():
+        return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
+    vd = load_document_approvals(doc_path)
+    return {"doc_id": doc_id, "pair_count": vd.pair_count, "variants": vd.to_dict()}
+
+
+@router.post("/api/documents/{doc_id}/variant-approvals")
+async def api_approve_variant_pair(doc_id: str, body: VariantPairRequest):
+    """이 문헌에서 두 글자를 같은 글자로 승인한다 (문헌 안에서만 strict)."""
+    from core.alignment import load_document_approvals, save_document_approvals
+
+    doc_path = require_repo_path("documents", doc_id)
+    if not doc_path.exists():
+        return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
+    if not body.char_a or not body.char_b:
+        return JSONResponse({"error": "두 글자 모두 입력해야 합니다."}, status_code=400)
+    if body.char_a == body.char_b:
+        return JSONResponse({"error": "같은 글자는 승인할 필요가 없습니다."}, status_code=400)
+
+    vd = load_document_approvals(doc_path)
+    vd.add_pair(body.char_a, body.char_b)
+    save_document_approvals(doc_path, vd)
+    return {"status": "ok", "doc_id": doc_id, "pair_count": vd.pair_count}
+
+
+@router.delete("/api/documents/{doc_id}/variant-approvals")
+async def api_revoke_variant_pair(doc_id: str, body: VariantPairRequest):
+    """이 문헌의 승인 쌍 하나를 철회한다."""
+    from core.alignment import load_document_approvals, save_document_approvals
+
+    doc_path = require_repo_path("documents", doc_id)
+    if not doc_path.exists():
+        return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
+
+    vd = load_document_approvals(doc_path)
+    if not vd.remove_pair(body.char_a, body.char_b):
+        return JSONResponse({"error": "승인된 쌍이 아닙니다."}, status_code=404)
+    save_document_approvals(doc_path, vd)
+    return {"status": "ok", "removed": True, "pair_count": vd.pair_count}
 
 
 @router.post("/api/variant-dicts/{name}/import")

@@ -87,3 +87,6 @@ docs/local-diagrams/
 # 로컬 참고용 — 공개 저장소에 남기지 않는 작업 기록
 docs/_local/
 .venv-gpu/
+
+# 이체자 사전 — 라이선스가 확인되지 않은 원자료(cjkvi-variants)에서 생성한 것은 배포하지 않는다 (D-080)
+resources/variant_chars_cjkvi_*.json
