@@ -24,7 +24,10 @@ def _write(path: Path, data: dict) -> None:
 
 def _interp(tmp_path: Path) -> Path:
     root = tmp_path / "interp"
-    _write(root / "core_entities" / "works" / "w1.json", {"id": "w1", "title": "蒙求", "author": "李瀚"})
+    _write(
+        root / "core_entities" / "works" / "w1.json",
+        {"id": "w1", "title": "蒙求", "author": "李瀚"},
+    )
     _write(root / "core_entities" / "works" / "w2.json", {"id": "w2", "title": "빈 작품"})
     # 순서가 뒤섞인 블록 셋 + 두 쪽에 걸친 블록 + Work 없는 블록 + 다른 문헌 블록
     _write(
