@@ -179,7 +179,7 @@ function initActivityBar() {
   // settings: 설정 패널
   // git~notes: 구 하단 패널 탭들 → 사이드바로 이동
   const panelSections = {
-    explorer: ["document-list", "bib-section", "interp-section"],
+    explorer: ["document-list", "bib-section", "interp-section", "contents-section"],
     settings: ["settings-section"],
     git: ["git-sidebar-section"],
     validation: ["validation-sidebar-section"],
@@ -282,6 +282,8 @@ function initActivityBar() {
           viewerState.docId
         ) {
           interpSec.style.display = "";
+          // 내용 트리(D-085)는 해석 섹션과 같은 조건으로 보인다.
+          if (typeof setContentsSectionVisible === "function") setContentsSectionVisible(true);
         }
       } else {
         // git, validation, dependency, entity, notes — 해당 섹션 표시
@@ -2023,6 +2025,7 @@ async function _restoreFromHash() {
     const interpSec = document.getElementById("interp-section");
     if (bibSec) bibSec.style.display = "";
     if (interpSec) interpSec.style.display = "";
+    if (typeof setContentsSectionVisible === "function") setContentsSectionVisible(true);
 
     _suppressHashUpdate = false;
   } catch (e) {

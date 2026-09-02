@@ -25,6 +25,22 @@ const contentsState = {
 };
 
 /**
+ * 「내용」 섹션을 보이거나 숨긴다.
+ *
+ * 왜 따로 있는가: 사이드바 섹션은 모두 HTML에서 display:none으로 시작하고 JS가
+ * 모드에 따라 켠다. 이 섹션은 처음 만들 때 켜는 코드가 없어 **어디서도 보이지
+ * 않았다** (v1.2.3 첫 배포에서 발견). 해석 섹션(interp-section)을 켜고 끄는 네 자리가
+ * 이 함수를 같이 부른다 — 내용 트리는 해석 저장소가 있어야 뜨는 것이므로 같은 조건이다.
+ * 추출 프로필(data-profile="collation" → hidden)에서는 hidden 속성이 우선하므로
+ * 여기서 display를 비워도 보이지 않는다.
+ */
+function setContentsSectionVisible(visible) {
+  const section = document.getElementById("contents-section");
+  if (!section) return;
+  section.style.display = visible ? "" : "none";
+}
+
+/**
  * 내용 트리를 다시 불러 그린다. 해석 저장소를 고르거나 편성이 바뀔 때 부른다.
  * interpState.interpId가 없으면 안내문만 남긴다.
  */

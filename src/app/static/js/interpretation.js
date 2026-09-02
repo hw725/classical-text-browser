@@ -215,9 +215,10 @@ async function _importInterpretationFolder() {
 function activateInterpretationMode() {
   interpState.active = true;
 
-  // 사이드바 해석 섹션 표시
+  // 사이드바 해석 섹션 표시 (내용 트리도 함께 — D-085)
   const section = document.getElementById("interp-section");
   if (section) section.style.display = "";
+  if (typeof setContentsSectionVisible === "function") setContentsSectionVisible(true);
 
   // 해석 저장소 목록 로드
   _loadInterpretationList();
@@ -230,9 +231,10 @@ function activateInterpretationMode() {
 function deactivateInterpretationMode() {
   interpState.active = false;
 
-  // 사이드바 해석 섹션 숨김
+  // 사이드바 해석 섹션 숨김 (내용 트리도 함께)
   const section = document.getElementById("interp-section");
   if (section) section.style.display = "none";
+  if (typeof setContentsSectionVisible === "function") setContentsSectionVisible(false);
 
   // 의존 배너 숨김
   _hideDepBanner();
@@ -253,6 +255,7 @@ async function _loadInterpretationList() {
   if (typeof viewerState !== "undefined" && viewerState.docId) {
     const section = document.getElementById("interp-section");
     if (section) section.style.display = "";
+    if (typeof setContentsSectionVisible === "function") setContentsSectionVisible(true);
   }
 
   try {
