@@ -7612,6 +7612,16 @@ button.mode-tab {
   color: var(--text-muted);
 }
 .contents-shift-btn:hover { color: #d33; }
+.contents-level1 .contents-preview { font-weight: 600; }
+.contents-insert-form {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 3px;
+  font-size: 11px; color: var(--text-muted); padding: 2px 4px 6px;
+}
+.contents-insert-label { font-weight: 600; margin-right: 2px; }
+.contents-insert-num { width: 3.2em; font-size: 11px; }
+.contents-insert-title { width: 7em; font-size: 11px; }
+.contents-insert-form select { font-size: 11px; }
+.contents-insert-btn { opacity: 1; font-weight: 700; }
 
 /* 사용 불가 엔진 이유 (D-059·D-078 진단 안내) */
 .ocr-engine-note {

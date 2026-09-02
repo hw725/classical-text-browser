@@ -152,6 +152,219 @@ def _get_source_head_commit(doc_path: Path) -> str:
 # ──────────────────────────
 
 
+# ──────────────────────────
+# text_block = 경계 목록의 보기 (D-092)
+# ──────────────────────────
+#
+# v1.3부터 글 단위의 정본은 core_entities/boundaries/{doc}__{part}.json이다. 이 모듈의
+# text_block 조회·생성·갱신은 그 목록을 읽고 쓰는 얇은 층이며, blocks/*.json은 만들지
+# 않는다.
+# 옛 저장소(blocks/만 있는)는 처음 읽을 때 한 번 옮긴다(migrate_from_blocks —
+# 옛 파일은 이름만 바꿈).
+
+
+def _library_root(interp_path: str | Path) -> Path:
+    """해석 저장소 경로에서 서고 루트(…/interpretations/{id} → …)."""
+    return Path(interp_path).resolve().parent.parent
+
+
+def _ensure_boundaries(interp_path: Path) -> None:
+    from core.boundaries import migrate_from_blocks, needs_migration
+
+    if needs_migration(interp_path):
+        result = migrate_from_blocks(interp_path, _library_root(interp_path))
+        logger.info("TextBlock → 경계 목록 마이그레이션: %s", result)
+        # 해석 저장소는 Git이다 — 옮긴 상태를 한 커밋으로 남겨야 되돌릴 수 있다.
+        try:
+            from core.interpretation import git_commit_interpretation
+
+            git_commit_interpretation(
+                interp_path,
+                f"chore: TextBlock → 경계 목록 마이그레이션 (D-092) — {len(result['parts'])}권",
+            )
+        except Exception as e:  # noqa: BLE001 — 커밋 실패가 읽기를 막으면 안 된다
+            logger.warning("마이그레이션 커밋 실패: %s", e)
+
+
+def _part_lines(interp_path: Path, document_id: str, part_id: str):
+    """그 권의 L4 행 목록과 쪽 텍스트. 문헌이 없거나 L4가 없으면 빈 것."""
+    from core.segmentation import collect_document_lines
+
+    doc_path = _library_root(interp_path) / "documents" / document_id
+    if not doc_path.exists():
+        return [], {}
+    try:
+        return collect_document_lines(doc_path, part_id, None)
+    except Exception as e:  # noqa: BLE001 — L4가 없으면 본문 없는 단위로 보인다
+        logger.warning("확정본을 읽지 못했습니다 (%s/%s): %s", document_id, part_id, e)
+        return [], {}
+
+
+def _text_block_view(interp_path: str | Path) -> list[dict]:
+    """모든 권의 경계 목록에서 TextBlock 모양의 단위 목록을 만든다(읽기 전용)."""
+    from core.boundaries import compute_units, list_boundary_parts, load_boundaries
+
+    interp_path = Path(interp_path).resolve()
+    _ensure_boundaries(interp_path)
+    from core.boundaries import rematch, save_boundaries
+
+    units: list[dict] = []
+    for doc_id, part_id in list_boundary_parts(interp_path):
+        lines, page_texts = _part_lines(interp_path, doc_id, part_id)
+        data = load_boundaries(interp_path, doc_id, part_id)
+        # L4가 바뀐 뒤(교감) 오프셋 대신 anchor_text로 자리를 다시 찾는다(D-092 결정 4).
+        head = _document_head(_library_root(interp_path) / "documents" / doc_id)
+        if page_texts and head and any(b.get("l4_commit") != head for b in data["boundaries"]):
+            if rematch(data, page_texts, head):
+                save_boundaries(interp_path, data)
+        units.extend(compute_units(data, lines, page_texts))
+    return units
+
+
+def _document_head(doc_path: Path) -> str | None:
+    """원본 저장소의 현재 커밋(없으면 None)."""
+    try:
+        import git as _git
+
+        return _git.Repo(doc_path).head.commit.hexsha
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _find_boundary_home(interp_path: Path, boundary_id: str):
+    """id가 든 경계 파일의 (data, item). 없으면 (None, None)."""
+    from core.boundaries import find_boundary, list_boundary_parts, load_boundaries
+
+    for doc_id, part_id in list_boundary_parts(interp_path):
+        data = load_boundaries(interp_path, doc_id, part_id)
+        item = find_boundary(data, boundary_id)
+        if item is not None:
+            return data, item
+    return None, None
+
+
+def _create_boundary_from_textblock(interp_path: Path, data: dict) -> dict:
+    """TextBlock 모양의 입력(apply·from-source·split이 만들던 것)을 경계 하나로 저장한다."""
+    from core.boundaries import (
+        boundaries_file,
+        insert_boundary,
+        load_boundaries,
+        new_boundary,
+        position_from_char,
+        save_boundaries,
+    )
+
+    refs = data.get("source_refs") or ([data["source_ref"]] if data.get("source_ref") else [])
+    refs = [r for r in refs if r and r.get("page")]
+    if not refs:
+        raise ValueError("TextBlock을 경계로 만들려면 출처(source_refs의 쪽)가 필요합니다.")
+    r0 = refs[0]
+    doc_id = r0.get("document_id")
+    part_id = r0.get("part_id") or (data.get("metadata") or {}).get("part_id") or "vol1"
+    if not doc_id:
+        raise ValueError("source_refs에 document_id가 없습니다.")
+    _lines, page_texts = _part_lines(interp_path, doc_id, part_id)
+    page = int(r0["page"])
+    cr = r0.get("char_range")
+    if cr and page_texts.get(page) is not None:
+        pos = position_from_char(page_texts, page, int(cr[0]))
+    else:
+        pos = {"page": page, "line": 0, "offset": 0}
+    meta = data.get("metadata") or {}
+    anchor = meta.get("anchor") or {}
+    item = new_boundary(
+        start=pos,
+        level=int(anchor.get("level") or meta.get("level") or 2),
+        title=meta.get("title") or (data.get("original_text") or "").strip()[:20] or None,
+        kind=anchor.get("kind") or meta.get("kind") or "manual",
+        work_id=data.get("work_id"),
+        status=data.get("status", "draft"),
+        anchor_status=anchor.get("status") or "approved",
+        boundary_id=data.get("id"),
+        page_texts=page_texts or None,
+        l4_commit=anchor.get("l4_commit") or r0.get("commit"),
+        confidence=anchor.get("confidence"),
+        reasons=anchor.get("reasons"),
+        bbox=anchor.get("bbox"),
+    )
+    item["notes"] = data.get("notes")
+    rest = {
+        k: v
+        for k, v in meta.items()
+        if k not in ("title", "kind", "anchor", "part_id", "segmentation", "level")
+    }
+    item["metadata"] = rest or None
+    bdata = load_boundaries(interp_path, doc_id, part_id)
+    insert_boundary(bdata, item)
+    save_boundaries(interp_path, bdata)
+    rel = boundaries_file(interp_path, doc_id, part_id).relative_to(interp_path).as_posix()
+    return {"status": "created", "entity_type": "text_block", "id": item["id"], "file_path": rel}
+
+
+def _update_boundary_from_textblock(interp_path: Path, entity_id: str, updates: dict) -> dict:
+    """TextBlock 갱신 요청(status·notes·metadata·work_id)을 경계 항목에 적용한다."""
+    from core.boundaries import save_boundaries, update_boundary
+
+    data, item = _find_boundary_home(interp_path, entity_id)
+    if item is None:
+        raise FileNotFoundError(
+            f"text_block 엔티티를 찾을 수 없습니다: {entity_id}\n"
+            "→ 해결: 엔티티 ID와 유형을 확인하세요."
+        )
+    if "id" in updates and updates["id"] != entity_id:
+        raise ValueError(
+            "엔티티 ID는 변경할 수 없습니다.\n→ 해결: id 필드를 updates에서 제거하세요."
+        )
+    if "status" in updates and updates["status"] != item.get("status"):
+        old_status = item.get("status", "draft")
+        allowed = VALID_STATUS_TRANSITIONS.get(old_status, [])
+        if updates["status"] not in allowed:
+            raise ValueError(
+                f"상태 전이가 허용되지 않습니다: '{old_status}' → '{updates['status']}'\n"
+                f"→ 해결: '{old_status}'에서 가능한 전이: {allowed or '없음 (최종 상태)'}"
+            )
+    fields: dict = {}
+    for k in ("status", "notes", "work_id"):
+        if k in updates:
+            fields[k] = updates[k]
+    # 옛 계약: source_refs를 바꾸면 «위치를 옮긴다». 첫 참조의 쪽·char_range[0]이 새 시작이다.
+    # (끝은 저장하지 않으므로 char_range[1]은 무시한다 — 다음 경계가 정한다.)
+    refs = [r for r in (updates.get("source_refs") or []) if r and r.get("page")]
+    if refs:
+        from core.boundaries import move_boundary, position_from_char
+
+        r0 = refs[0]
+        _lines, page_texts = _part_lines(interp_path, data["document_id"], data["part_id"])
+        cr = r0.get("char_range")
+        page = int(r0["page"])
+        if cr and page_texts.get(page) is not None:
+            pos = position_from_char(page_texts, page, int(cr[0]))
+        else:
+            pos = {"page": page, "line": 0, "offset": 0}
+        move_boundary(data, entity_id, pos, page_texts or None)
+    meta = updates.get("metadata")
+    if isinstance(meta, dict):
+        if "title" in meta:
+            fields["title"] = meta["title"]
+        if "kind" in meta:
+            fields["kind"] = meta["kind"]
+        if "level" in meta:
+            fields["level"] = int(meta["level"])
+        anchor = meta.get("anchor") or {}
+        if "status" in anchor:
+            fields["anchor_status"] = anchor["status"]
+        rest = {
+            k: v
+            for k, v in meta.items()
+            if k not in ("title", "kind", "anchor", "part_id", "segmentation", "level")
+        }
+        if rest:
+            fields["metadata"] = {**(item.get("metadata") or {}), **rest}
+    update_boundary(data, entity_id, fields)
+    save_boundaries(interp_path, data)
+    return {"status": "updated", "entity_type": "text_block", "id": entity_id}
+
+
 def create_entity(
     interp_path: str | Path,
     entity_type: str,
@@ -172,6 +385,9 @@ def create_entity(
         - 동일 ID의 엔티티가 이미 있으면 오류를 발생시킨다 (operation-rules 2.1).
     """
     interp_path = Path(interp_path).resolve()
+    if entity_type == "text_block":
+        _ensure_boundaries(interp_path)
+        return _create_boundary_from_textblock(interp_path, data)
 
     # id 자동 생성
     if "id" not in data or not data["id"]:
@@ -219,6 +435,14 @@ def get_entity(
         FileNotFoundError: 엔티티를 찾을 수 없을 때.
     """
     interp_path = Path(interp_path).resolve()
+    if entity_type == "text_block":
+        hit = next((u for u in _text_block_view(interp_path) if u.get("id") == entity_id), None)
+        if hit is None:
+            raise FileNotFoundError(
+                f"text_block 엔티티를 찾을 수 없습니다: {entity_id}\n"
+                "→ 해결: 엔티티 ID와 유형을 확인하세요."
+            )
+        return hit
     dir_path = _entity_dir_path(interp_path, entity_type)
     file_path = dir_path / f"{entity_id}.json"
 
@@ -254,6 +478,9 @@ def update_entity(
         - id 필드는 변경할 수 없다.
     """
     interp_path = Path(interp_path).resolve()
+    if entity_type == "text_block":
+        _ensure_boundaries(interp_path)
+        return _update_boundary_from_textblock(interp_path, entity_id, updates)
     dir_path = _entity_dir_path(interp_path, entity_type)
     file_path = dir_path / f"{entity_id}.json"
 
@@ -317,6 +544,11 @@ def list_entities(
         필터가 있으면 해당 필드가 일치하는 엔티티만 반환한다.
     """
     interp_path = Path(interp_path).resolve()
+    if entity_type == "text_block":
+        entities = _text_block_view(interp_path)
+        if filters:
+            entities = [e for e in entities if all(e.get(k) == v for k, v in filters.items())]
+        return entities
     dir_path = _entity_dir_path(interp_path, entity_type)
 
     entities = []
@@ -759,6 +991,8 @@ def list_contents(interp_path: str | Path, document_id: str | None = None) -> di
             "sequence_index": blk.get("sequence_index"),
             # 경계 앵커(D-090): 위치의 정본은 source_refs. 종류·신뢰도·좌표 캐시는 metadata.anchor
             "anchor": (blk.get("metadata") or {}).get("anchor"),
+            "level": int(((blk.get("metadata") or {}).get("level")) or 2),
+            "title": (blk.get("metadata") or {}).get("title"),
             "source_refs": refs,
             "preview": _block_preview(blk.get("original_text")),
             "char_count": len("".join((blk.get("original_text") or "").split())),

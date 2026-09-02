@@ -22,6 +22,7 @@
 |--------|------|------|
 | `work.schema.json` | 작품 | core-schema-v1.3 섹션 1 |
 | `text_block.schema.json` | 해석용 텍스트 단위 (source_ref 포함) | core-schema-v1.3 섹션 2, D-005 |
+| `boundaries.schema.json` | 권 하나의 글 단위 경계 목록 — **단위의 정본**(시작 위치·id·층위). TextBlock은 이 목록에서 만든 읽기 보기 | D-092 |
 | `tag.schema.json` | 표면 주석 (LLM/자동 추출) | core-schema-v1.3 섹션 3 |
 | `concept.schema.json` | 승격된 의미 엔티티 | core-schema-v1.3 섹션 4 |
 | `agent.schema.json` | 역사적/서사적 행위자 | core-schema-v1.3 섹션 5 |

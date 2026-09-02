@@ -79,9 +79,12 @@ async function refreshContentsTree() {
 function _renderContentsTree(container) {
   const data = contentsState.data;
   container.innerHTML = "";
+  container.appendChild(_renderInsertForm());
   if (!data || data.total_blocks === 0) {
-    container.innerHTML =
-      '<div class="placeholder">편성된 TextBlock이 없습니다. 편성 탭에서 블록을 만들면 여기 나타납니다.</div>';
+    const ph = document.createElement("div");
+    ph.className = "placeholder";
+    ph.textContent = "단위가 없습니다. 위의 «경계 넣기»로 첫 경계를 놓거나, 편성 탭의 경계 제안·자동 편성을 쓰세요.";
+    container.appendChild(ph);
     return;
   }
 
@@ -129,11 +132,19 @@ function _createBlockRow(block) {
   row.dataset.blockId = block.id || "";
   row.dataset.pages = (block.pages || []).map((p) => p.page).join(",");
   const seq = block.sequence_index != null ? `${block.sequence_index}. ` : "";
-  row.title = `${seq}${block.preview}  (${block.char_count}자${block.status ? ", " + block.status : ""})`;
+  // 층위(D-092): 1 = 卷·편(굵게), 2 = 기사, 3 이상 = 기사 안 조각(들여쓰기)
+  const level = Number(block.level) || 2;
+  if (level > 2) row.style.paddingLeft = `${(level - 2) * 14 + 8}px`;
+  if (level === 1) row.classList.add("contents-level1");
+  const stale = block.anchor && block.anchor.status === "stale";
+  row.title =
+    `${seq}${block.preview}  (${block.char_count}자, 층위 ${level}${block.status ? ", " + block.status : ""})` +
+    (stale ? "\n⚠ 확정본이 바뀐 뒤 자리를 못 찾았습니다 — ▲▼로 옮겨 주세요" : "");
 
   const label = document.createElement("span");
   label.className = "tree-label contents-preview";
-  label.textContent = `${seq}${block.preview || "(비어있음)"}`;
+  const head = block.title ? `${block.title} · ` : "";
+  label.textContent = `${stale ? "⚠ " : ""}${seq}${head}${block.preview || "(비어있음)"}`;
   row.appendChild(label);
 
   const badges = document.createElement("span");
@@ -170,6 +181,28 @@ function _createBlockRow(block) {
       });
       tools.appendChild(b);
     }
+    // 층위 바꾸기 (D-092): 1 → 2 → 3 → 1. 층위 n을 바꿔도 더 얕은 층위의 id는 그대로다.
+    const lv = document.createElement("button");
+    lv.type = "button";
+    lv.className = "contents-shift-btn";
+    lv.textContent = `L${level}`;
+    lv.title = "층위 바꾸기 — 1 卷·편, 2 기사, 3 기사 안 조각";
+    lv.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      _setBoundaryLevel(block, (level % 3) + 1);
+    });
+    tools.appendChild(lv);
+    // 지우기 = 앞 단위에 합치기 (앞 단위의 id가 남는다)
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "contents-shift-btn";
+    del.textContent = "×";
+    del.title = "이 경계를 지워 앞 단위에 합치기";
+    del.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      _deleteBoundary(block);
+    });
+    tools.appendChild(del);
     row.appendChild(tools);
   }
 
@@ -237,6 +270,86 @@ function _highlightAnchor(block, pageRef) {
     if (Date.now() - started < 1500) setTimeout(tick, 300);
   };
   setTimeout(tick, 100);
+}
+
+/**
+ * «경계 넣기» 폼 (D-092) — 임의 쪽·행·글자에 경계를 놓아 단위를 나눈다. 새 id는 뒤 단위에 붙는다.
+ * 쪽은 지금 보는 쪽이 기본값이다. 행·글자는 확정본(교정 탭) 기준 0부터.
+ */
+function _renderInsertForm() {
+  const form = document.createElement("div");
+  form.className = "contents-insert-form";
+  const page = Number(viewerState.pageNum) || 1;
+  form.innerHTML =
+    `<span class="contents-insert-label">경계 넣기</span>` +
+    `<input type="number" min="1" value="${page}" title="쪽" class="contents-insert-num" data-k="page">쪽` +
+    `<input type="number" min="0" value="0" title="행 (0부터)" class="contents-insert-num" data-k="line">행` +
+    `<input type="number" min="0" value="0" title="글자 (0 = 행 첫머리)" class="contents-insert-num" data-k="offset">자` +
+    `<select title="층위" data-k="level"><option value="1">L1 卷</option><option value="2" selected>L2 기사</option><option value="3">L3 조각</option></select>` +
+    `<input type="text" placeholder="제목(선택)" class="contents-insert-title" data-k="title">` +
+    `<button type="button" class="contents-shift-btn contents-insert-btn" title="이 자리에서 단위를 나눈다">＋</button>`;
+  form.querySelector(".contents-insert-btn").addEventListener("click", async () => {
+    const v = (k) => form.querySelector(`[data-k="${k}"]`).value;
+    await _insertBoundary({
+      start: { page: Number(v("page")), line: Number(v("line")), offset: Number(v("offset")) },
+      level: Number(v("level")),
+      title: v("title").trim() || null,
+    });
+  });
+  return form;
+}
+
+async function _insertBoundary(spec) {
+  if (!contentsState.interpId || !viewerState.docId || !viewerState.partId) {
+    showToast("해석 저장소·문헌·권이 정해져야 경계를 넣을 수 있습니다.", "warning");
+    return;
+  }
+  try {
+    const res = await fetch(`/api/interpretations/${encodeURIComponent(contentsState.interpId)}/boundaries`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ document_id: viewerState.docId, part_id: viewerState.partId, ...spec }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    showToast(`경계를 넣었습니다: ${data.boundary?.title || ""}`, "success");
+    await refreshContentsTree();
+  } catch (e) {
+    showToast(`경계 넣기 실패: ${e.message}`, "error");
+  }
+}
+
+async function _deleteBoundary(block) {
+  if (!contentsState.interpId) return;
+  if (!confirm("이 경계를 지우면 이 단위가 앞 단위에 합쳐집니다. 계속할까요?")) return;
+  try {
+    const res = await fetch(
+      `/api/interpretations/${encodeURIComponent(contentsState.interpId)}/boundaries/${encodeURIComponent(block.id)}`,
+      { method: "DELETE" },
+    );
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    const warn = data.dangling_tags?.length ? ` (이 단위를 가리키던 태그 ${data.dangling_tags.length}개는 그대로 남았습니다)` : "";
+    showToast(`앞 단위에 합쳤습니다.${warn}`, data.dangling_tags?.length ? "warning" : "success");
+    await refreshContentsTree();
+  } catch (e) {
+    showToast(`경계 지우기 실패: ${e.message}`, "error");
+  }
+}
+
+async function _setBoundaryLevel(block, level) {
+  if (!contentsState.interpId) return;
+  try {
+    const res = await fetch(
+      `/api/interpretations/${encodeURIComponent(contentsState.interpId)}/boundaries/${encodeURIComponent(block.id)}`,
+      { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ level }) },
+    );
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    await refreshContentsTree();
+  } catch (e) {
+    showToast(`층위 변경 실패: ${e.message}`, "error");
+  }
 }
 
 /**

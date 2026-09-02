@@ -1138,8 +1138,10 @@ def _boundary_rows(interp_path, document_id: str | None, part_id: str | None) ->
                 "sequence_index": blk.get("sequence_index"),
                 "title": meta.get("title") or (blk.get("original_text") or "").strip()[:20],
                 "kind": a.get("kind") or meta.get("kind") or "manual",
-                "level": a.get("level", 2),
+                "level": int(a.get("level", 2) or 2),
                 "status": a.get("status") or blk.get("status"),
+                "anchor_status": a.get("status"),
+                "unit_status": blk.get("status"),
                 "confidence": a.get("confidence"),
                 "reasons": a.get("reasons") or [],
                 "start": anchor_pos.get("start"),
@@ -1173,6 +1175,7 @@ class BoundaryUpdateRequest(BaseModel):
     status: str | None = None
     start: dict | None = None  # {"page", "line", "offset"?}
     end: dict | None = None
+    level: int | None = None  # 층위 바꾸기 (D-092)
     shift_start: int | None = None
     shift_end: int | None = None
 
@@ -1204,10 +1207,8 @@ async def api_update_boundary(interp_id: str, text_block_id: str, body: Boundary
     늘고, 끝을 내리면 뒤 블록의 시작이 밀린다. 이웃은 같은 Work·권에서 원본 위치 순서로 잡는다.
     """
     from core.segmentation import (
-        anchor_from_refs,
         boundary_bbox,
         collect_document_lines,
-        span_to_text_and_refs,
     )
 
     _library_path = get_library_path()
@@ -1229,6 +1230,15 @@ async def api_update_boundary(interp_id: str, text_block_id: str, body: Boundary
         return JSONResponse(
             {"error": "출처(source_refs)가 없는 블록은 옮길 수 없습니다."}, status_code=400
         )
+    from core.boundaries import (
+        find_boundary,
+        load_boundaries,
+        move_boundary,
+        save_boundaries,
+        unit_end,
+        update_boundary,
+    )
+
     doc_id = refs[0]["document_id"]
     pid = refs[0].get("part_id") or (blk.get("metadata") or {}).get("part_id")
     doc_path = require_repo_path("documents", doc_id)
@@ -1236,122 +1246,234 @@ async def api_update_boundary(interp_id: str, text_block_id: str, body: Boundary
     keys = [(ln.page, ln.line_index) for ln in lines]
     if not keys:
         return JSONResponse({"error": "확정 텍스트(L4)가 없습니다."}, status_code=400)
+    data = load_boundaries(interp_path, doc_id, pid)
+    item = find_boundary(data, text_block_id)
+    if item is None:
+        return JSONResponse({"error": "경계를 찾을 수 없습니다. 다시 제안하세요."}, status_code=409)
 
-    def _pos(anchor):
-        try:
-            return keys.index((int(anchor["page"]), int(anchor["line"])))
-        except (ValueError, KeyError, TypeError):
-            return None
-
-    def _norm_end(i: int, off) -> int | None:
-        """끝 오프셋이 행 길이 이상이면 «행 끝»(None)으로."""
-        if off is None:
-            return None
-        off = int(off)
-        return None if off >= len(lines[i].text) else max(0, off)
-
-    cur = anchor_from_refs(refs, page_texts)
-    start_i, end_i = _pos(cur["start"]), _pos(cur["end"])
-    if start_i is None or end_i is None:
-        return JSONResponse(
-            {"error": "블록의 출처가 현재 확정본에 없습니다. 다시 제안하세요."}, status_code=409
-        )
-    s_off = int(cur["start"].get("offset") or 0)
-    e_end = _norm_end(end_i, cur["end"].get("offset"))
-    if body.start and _pos(body.start) is not None:
-        start_i = _pos(body.start)
-        s_off = int(body.start.get("offset") or 0)
-    if body.end and _pos(body.end) is not None:
-        end_i = _pos(body.end)
-        e_end = _norm_end(end_i, body.end.get("offset"))
-    if body.shift_start:
-        start_i = max(0, min(len(keys) - 1, start_i + int(body.shift_start)))
-        s_off = 0
-    if body.shift_end:
-        end_i = max(0, min(len(keys) - 1, end_i + int(body.shift_end)))
-        e_end = None
-    s_off = max(0, min(s_off, max(0, len(lines[start_i].text) - 1)))
-    if end_i < start_i or (end_i == start_i and e_end is not None and e_end <= s_off):
-        return JSONResponse({"error": "끝이 시작보다 앞에 올 수 없습니다."}, status_code=400)
-
-    # 이웃: 같은 Work·권의 블록을 원본 위치 순서로
-    rows = [
-        r for r in _boundary_rows(interp_path, doc_id, pid) if r["work_id"] == blk.get("work_id")
-    ]
-    idx = next((i for i, r in enumerate(rows) if r["id"] == blk["id"]), None)
-    prev_row = rows[idx - 1] if idx is not None and idx > 0 else None
-    next_row = rows[idx + 1] if idx is not None and idx + 1 < len(rows) else None
-    touched = []
-
-    def _restitch(
-        target_id: str,
-        s_i: int,
-        e_i: int,
-        extra: dict | None = None,
-        s_off: int = 0,
-        e_end: int | None = None,
-    ):
-        tb = get_entity(interp_path, "text_block", target_id)
-        span = {
-            "start": {"page": keys[s_i][0], "line_index": keys[s_i][1], "char_offset": s_off},
-            "end": {"page": keys[e_i][0], "line_index": keys[e_i][1], "char_end": e_end},
+    def _norm(pos: dict | None, fallback: dict) -> dict:
+        if not pos:
+            return dict(fallback)
+        return {
+            "page": int(pos.get("page", fallback["page"])),
+            "line": int(pos.get("line", 0)),
+            "offset": int(pos.get("offset") or 0),
         }
-        text, new_refs = span_to_text_and_refs(span, lines, page_texts, doc_id, pid)
-        meta = dict(tb.get("metadata") or {})
-        anchor = dict(meta.get("anchor") or {})
-        anchor["bbox"] = boundary_bbox(
-            doc_path,
-            pid,
-            {"page": keys[s_i][0], "line": keys[s_i][1], "offset": s_off},
-            {"page": keys[e_i][0], "line": keys[e_i][1], "offset": e_end},
-        )
-        anchor["l4_commit"] = _document_head(doc_path)
-        if extra:
-            anchor.update({k: v for k, v in extra.items() if k in ("status",)})
-            if "title" in extra:
-                meta["title"] = extra["title"]
-        meta["anchor"] = anchor
-        update_entity(
-            interp_path,
-            "text_block",
-            target_id,
-            {
-                "original_text": text,
-                "source_refs": new_refs,
-                "source_ref": {k: v for k, v in new_refs[0].items() if k != "char_range"},
-                "metadata": meta,
-            },
-        )
-        touched.append(target_id)
 
-    extra = {}
+    def _shift_lines(pos: dict, delta: int) -> dict:
+        k = (int(pos["page"]), int(pos["line"]))
+        i = keys.index(k) if k in keys else 0
+        i = max(0, min(len(keys) - 1, i + int(delta)))
+        return {"page": keys[i][0], "line": keys[i][1], "offset": 0}
+
+    touched: list[str] = []
+    start = _norm(body.start, item["start"])
+    if body.shift_start:
+        start = _shift_lines(start, body.shift_start)
+    if (int(start["page"]), int(start["line"])) not in keys:
+        return JSONResponse({"error": "시작 행이 현재 확정본에 없습니다."}, status_code=400)
+    if start != item["start"]:
+        move_boundary(data, text_block_id, start, page_texts)
+        item["l4_commit"] = _document_head(doc_path)
+        touched.append(text_block_id)
+    # 끝은 저장하지 않는다 — «끝을 옮긴다»는 곧 «다음 경계(같은 층위 이상)를 옮긴다»이다.
+    if body.end or body.shift_end:
+        bounds = data["boundaries"]
+        idx = next(i for i, b in enumerate(bounds) if b.get("id") == text_block_id)
+        nxt_start = unit_end(bounds, idx)
+        _dead = ("deprecated", "archived")
+        nxt = next(
+            (
+                b
+                for b in bounds[idx + 1 :]
+                if b.get("start") == nxt_start and b.get("status") not in _dead
+            ),
+            None,
+        )
+        if nxt is not None:
+            # end는 «이 단위의 마지막 자리»이므로 다음 경계는 그 바로 뒤
+            # (end.offset이 있으면 그 글자)
+            if body.end:
+                e = _norm(body.end, nxt["start"])
+                new_next = e if e.get("offset") else _shift_lines(e, 1)
+            else:
+                new_next = _shift_lines(nxt["start"], body.shift_end)
+            if new_next != nxt["start"]:
+                move_boundary(data, nxt["id"], new_next, page_texts)
+                nxt["l4_commit"] = _document_head(doc_path)
+                touched.append(nxt["id"])
+    fields: dict = {}
     if body.title is not None:
-        extra["title"] = body.title
+        fields["title"] = body.title
     if body.status is not None:
-        extra["status"] = body.status
-    _restitch(blk["id"], start_i, end_i, extra, s_off, e_end)
-    # 이웃 다시 잇기 — 시작이 행 중간이면 앞 블록은 같은 행의 그 글자 앞에서 끝나고,
-    # 끝이 행 중간이면 뒤 블록은 같은 행의 그 글자에서 시작한다(D-090 2단계).
-    if prev_row and prev_row["start"]:
-        p_start = _pos(prev_row["start"])
-        p_off = int(prev_row["start"].get("offset") or 0)
-        pe_i, pe_end = (start_i, s_off) if s_off > 0 else (start_i - 1, None)
-        if p_start is not None and (
-            p_start < pe_i or (p_start == pe_i and pe_end is not None and p_off < pe_end)
-        ):
-            _restitch(prev_row["id"], p_start, pe_i, None, p_off, pe_end)
-    if next_row and next_row["end"]:
-        n_end = _pos(next_row["end"])
-        n_off = _norm_end(n_end, next_row["end"].get("offset")) if n_end is not None else None
-        ns_i, ns_off = (end_i, e_end) if e_end is not None else (end_i + 1, 0)
-        if n_end is not None and (
-            ns_i < n_end or (ns_i == n_end and (n_off is None or ns_off < n_off))
-        ):
-            _restitch(next_row["id"], ns_i, n_end, None, ns_off, n_off)
-    title = (blk.get("metadata") or {}).get("title") or blk["id"][:8]
-    git = git_commit_interpretation(interp_path, f"fix: 경계 수정 — {title} (D-090)")
-    row = next((r for r in _boundary_rows(interp_path, doc_id, pid) if r["id"] == blk["id"]), None)
+        fields["anchor_status"] = body.status
+    if body.level is not None:
+        fields["level"] = int(body.level)
+    if fields:
+        update_boundary(data, text_block_id, fields)
+        if text_block_id not in touched:
+            touched.append(text_block_id)
+    # 시작 행의 L2 좌표 캐시(화면 표시용)
+    b = find_boundary(data, text_block_id)
+    b["bbox"] = boundary_bbox(
+        doc_path,
+        pid,
+        {"page": b["start"]["page"], "line": b["start"]["line"], "offset": b["start"]["offset"]},
+        {"page": b["start"]["page"], "line": b["start"]["line"], "offset": None},
+    )
+    save_boundaries(interp_path, data)
+    title = b.get("title") or text_block_id[:8]
+    git = git_commit_interpretation(interp_path, f"fix: 경계 수정 — {title} (D-092)")
+    row = next(
+        (r for r in _boundary_rows(interp_path, doc_id, pid) if r["id"] == text_block_id), None
+    )
     return {"boundary": row, "touched": touched, "git": git}
+
+
+class BoundaryInsertRequest(BaseModel):
+    """경계 넣기 (D-092) — 임의 행·행 중간에서 단위를 나눈다. 새 id는 뒤 단위(이 경계)에 붙는다."""
+
+    document_id: str
+    part_id: str
+    start: dict  # {"page", "line", "offset"}
+    level: int = 2
+    title: str | None = None
+    kind: str = "manual"
+    work_id: str | None = None  # 없으면 그 자리를 품는 단위의 Work, 그것도 없으면 첫 Work
+
+
+@router.post("/api/interpretations/{interp_id}/boundaries")
+async def api_insert_boundary(interp_id: str, body: BoundaryInsertRequest):
+    """경계를 넣는다 = 그 자리에서 단위를 쪼갠다. 앞 단위의 id는 그대로, 새 id는 뒤 단위에."""
+    from core.boundaries import (
+        insert_boundary,
+        load_boundaries,
+        new_boundary,
+        save_boundaries,
+        sort_key,
+    )
+    from core.segmentation import boundary_bbox, collect_document_lines
+
+    _library_path = get_library_path()
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+    interp_path = require_repo_path("interpretations", interp_id)
+    doc_path = require_repo_path("documents", body.document_id)
+    if not interp_path.exists() or not doc_path.exists():
+        return JSONResponse({"error": "해석 저장소 또는 문헌을 찾을 수 없습니다."}, status_code=404)
+    lines, page_texts = collect_document_lines(doc_path, body.part_id, None)
+    keys = [(ln.page, ln.line_index) for ln in lines]
+    start = {
+        "page": int(body.start.get("page", 0)),
+        "line": int(body.start.get("line", 0)),
+        "offset": int(body.start.get("offset") or 0),
+    }
+    if (start["page"], start["line"]) not in keys:
+        return JSONResponse({"error": "그 쪽·행에 확정 텍스트(L4)가 없습니다."}, status_code=400)
+    data = load_boundaries(interp_path, body.document_id, body.part_id)
+    work_id = body.work_id
+    if not work_id:
+        # 그 자리를 품는(앞에 있는) 경계의 Work → 없으면 첫 Work
+        before = [
+            b
+            for b in data["boundaries"]
+            if sort_key(b) <= (start["page"], start["line"], start["offset"], 99)
+        ]
+        work_id = next((b.get("work_id") for b in reversed(before) if b.get("work_id")), None)
+        if not work_id:
+            works = list_entities(interp_path, "work")
+            work_id = works[0]["id"] if works else None
+    item = new_boundary(
+        start=start,
+        level=int(body.level),
+        title=body.title
+        or (
+            lines[keys.index((start["page"], start["line"]))].text[start["offset"] :].strip()[:20]
+            or None
+        ),
+        kind=body.kind or "manual",
+        work_id=work_id,
+        status="draft",
+        page_texts=page_texts,
+        l4_commit=_document_head(doc_path),
+    )
+    item["bbox"] = boundary_bbox(
+        doc_path,
+        body.part_id,
+        {"page": start["page"], "line": start["line"], "offset": start["offset"]},
+        {"page": start["page"], "line": start["line"], "offset": None},
+    )
+    try:
+        insert_boundary(data, item)
+    except FileExistsError as e:
+        return JSONResponse({"error": str(e)}, status_code=409)
+    save_boundaries(interp_path, data)
+    git = git_commit_interpretation(
+        interp_path, f"feat: 경계 넣기 — {item.get('title') or item['id'][:8]} (D-092)"
+    )
+    row = next(
+        (
+            r
+            for r in _boundary_rows(interp_path, body.document_id, body.part_id)
+            if r["id"] == item["id"]
+        ),
+        None,
+    )
+    return {"boundary": row, "git": git}
+
+
+@router.delete("/api/interpretations/{interp_id}/boundaries/{text_block_id}")
+async def api_delete_boundary(interp_id: str, text_block_id: str):
+    """경계를 지운다 = 그 단위를 앞 단위에 합친다. 앞 단위의 id가 남는다 (D-092).
+
+    관계·태그가 지운 id를 가리키고 있으면 그대로 두고 응답에 알린다 — 사람이 옮긴다.
+    """
+    from core.boundaries import (
+        delete_boundary,
+        list_boundary_parts,
+        load_boundaries,
+        save_boundaries,
+    )
+
+    _library_path = get_library_path()
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+    interp_path = require_repo_path("interpretations", interp_id)
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"}, status_code=404
+        )
+    for doc_id, pid in list_boundary_parts(interp_path):
+        data = load_boundaries(interp_path, doc_id, pid)
+        ids = [b["id"] for b in data["boundaries"]]
+        if text_block_id not in ids:
+            continue
+        idx = ids.index(text_block_id)
+        prev_id = next(
+            (
+                b["id"]
+                for b in reversed(data["boundaries"][:idx])
+                if b.get("status") not in ("deprecated", "archived")
+            ),
+            None,
+        )
+        removed = delete_boundary(data, text_block_id)
+        save_boundaries(interp_path, data)
+        dangling = [
+            tg["id"]
+            for tg in list_entities(interp_path, "tag")
+            if tg.get("block_id") == text_block_id
+        ]
+        git = git_commit_interpretation(
+            interp_path, f"fix: 경계 지우기 — {removed.get('title') or text_block_id[:8]} (D-092)"
+        )
+        return {
+            "deleted": text_block_id,
+            "merged_into": prev_id,
+            "dangling_tags": dangling,
+            "git": git,
+        }
+    return JSONResponse({"error": f"경계를 찾을 수 없습니다: {text_block_id}"}, status_code=404)
 
 
 @router.get("/api/interpretations/{interp_id}/boundaries/export.csv")
@@ -1440,7 +1562,6 @@ async def api_split_textblock(interp_id: str, body: SplitTextBlockRequest, bg: B
         3. 원본 TextBlock을 deprecated 전환 (git commit 없이)
         4. 마지막에 한 번만 git commit
     """
-    import uuid as _uuid
 
     _library_path = get_library_path()
     if _library_path is None:
@@ -1453,7 +1574,19 @@ async def api_split_textblock(interp_id: str, body: SplitTextBlockRequest, bg: B
             status_code=404,
         )
 
-    # 원본 TextBlock 로드
+    # D-092: 쪼개기 = 원본 단위 안에 경계를 더 넣는 것. 원본 id는 첫 조각으로 그대로 남고,
+    # 둘째 조각부터 새 경계(새 id)가 선다. 본문은 저장하지 않으므로 «조각 텍스트»는 자리를 찾는
+    # 열쇠일 뿐이다 — 조각의 첫 글자들이 원본 본문에서 나오는 자리에 경계를 놓는다.
+    from core.boundaries import (
+        find_boundary,
+        insert_boundary,
+        load_boundaries,
+        new_boundary,
+        position_from_char,
+        save_boundaries,
+    )
+    from core.segmentation import collect_document_lines
+
     try:
         original = get_entity(interp_path, "text_block", body.original_text_block_id)
     except FileNotFoundError:
@@ -1461,114 +1594,83 @@ async def api_split_textblock(interp_id: str, body: SplitTextBlockRequest, bg: B
             {"error": f"원본 TextBlock을 찾을 수 없습니다: {body.original_text_block_id}"},
             status_code=404,
         )
-
-    base_seq = int(original.get("sequence_index", 0))
-    work_id = original.get("work_id")
-    if not work_id:
-        return JSONResponse({"error": "원본 TextBlock의 work_id가 없습니다."}, status_code=400)
-
     pieces = [str(piece).strip() for piece in (body.pieces or []) if str(piece).strip()]
     if len(pieces) < 2:
         return JSONResponse({"error": "쪼개기 조각은 2개 이상이어야 합니다."}, status_code=400)
+    refs = [r for r in (original.get("source_refs") or []) if r and r.get("page")]
+    if not refs:
+        return JSONResponse({"error": "원본 단위에 출처(쪽)가 없습니다."}, status_code=400)
+    doc_id = refs[0].get("document_id")
+    pid = refs[0].get("part_id") or body.part_id
+    data = load_boundaries(interp_path, doc_id, pid)
+    orig_b = find_boundary(data, body.original_text_block_id)
+    if orig_b is None:
+        return JSONResponse({"error": "원본 경계를 찾을 수 없습니다."}, status_code=404)
+    doc_path = _resolve_repo_path("documents", doc_id)
+    lines, page_texts = collect_document_lines(doc_path, pid, None) if doc_path else ([], {})
+    text = original.get("original_text") or ""
 
-    inherited_refs = original.get("source_refs") or []
-    # source_ref(단수) 하위호환
-    if not inherited_refs and original.get("source_ref"):
-        inherited_refs = [original["source_ref"]]
-
-    # source_refs에 현재 원본 commit 해시 채우기
-    import git as _git
-
-    for ref in inherited_refs:
-        if not ref.get("commit"):
-            # ID 형식이 안 맞는 ref는 건너뛴다 (best-effort 보강 — 기존 관용 동작 유지)
-            doc_path = _resolve_repo_path("documents", ref.get("document_id", ""))
-            if doc_path is None:
+    def _to_page_abs(idx: int):
+        """단위 본문 안의 오프셋 → (쪽, 쪽 텍스트 절대 오프셋). 본문은 쪽 조각을 개행으로 이었다."""
+        consumed = 0
+        for r in refs:
+            cr = r.get("char_range")
+            if not cr:
                 continue
-            try:
-                repo = _git.Repo(doc_path)
-                ref["commit"] = repo.head.commit.hexsha
-            except Exception:
-                pass
+            seg = int(cr[1]) - int(cr[0])
+            if idx <= consumed + seg:
+                return int(r["page"]), int(cr[0]) + (idx - consumed)
+            consumed += seg + 1
+        return None
 
-    # 하위 호환: 첫 번째 ref를 source_ref로도 저장
-    first_ref = inherited_refs[0] if inherited_refs else None
-    source_ref_compat = None
-    if first_ref:
-        source_ref_compat = {k: v for k, v in first_ref.items() if k != "char_range"}
-
-    created_ids = []
-    errors = []
-
-    # 순서 보존: 원본 뒤에 있는 활성 TextBlock의 sequence를 뒤로 민다.
-    try:
-        active_blocks = [
-            tb
-            for tb in list_entities(interp_path, "text_block")
-            if tb.get("id") != body.original_text_block_id
-            and tb.get("status") not in ("deprecated", "archived")
-            and int(tb.get("sequence_index", 0)) > base_seq
-        ]
-        active_blocks.sort(key=lambda tb: int(tb.get("sequence_index", 0)))
-
-        shift = len(pieces) - 1
-        for tb in active_blocks:
-            seq = int(tb.get("sequence_index", 0))
-            update_entity(interp_path, "text_block", tb["id"], {"sequence_index": seq + shift})
-    except Exception as e:
-        return JSONResponse({"error": f"sequence 재배치 실패: {e}"}, status_code=400)
-
-    # 각 조각마다 새 TextBlock 생성 (원래 위치에 연속 삽입)
-    for i, piece_text in enumerate(pieces):
-        text_block_data = {
-            "id": str(_uuid.uuid4()),
-            "work_id": work_id,
-            "sequence_index": base_seq + i,
-            "original_text": piece_text,
-            "normalized_text": None,
-            "source_ref": source_ref_compat,
-            "source_refs": [{**r, "char_range": None} for r in inherited_refs],
-            "status": "draft",
-            "notes": None,
-            "metadata": {"part_id": body.part_id},
-        }
-
+    created_ids: list[str] = []
+    errors: list[str] = []
+    cursor = 0
+    for i, piece in enumerate(pieces[1:], start=2):
+        key = piece[:6]
+        at = text.find(key, cursor) if key else -1
+        if at < 0:
+            errors.append(f"조각 {i}: 첫 글자 «{key}»를 원본 본문에서 찾지 못했습니다")
+            continue
+        cursor = at + max(1, len(key))
+        where = _to_page_abs(at)
+        if where is None:
+            errors.append(f"조각 {i}: 자리를 쪽으로 옮기지 못했습니다")
+            continue
+        page, abs_off = where
+        item = new_boundary(
+            start=position_from_char(page_texts, page, abs_off),
+            level=int(orig_b.get("level", 2)),
+            title=piece[:20],
+            kind="manual",
+            work_id=orig_b.get("work_id"),
+            status="draft",
+            page_texts=page_texts or None,
+            l4_commit=_document_head(doc_path) if doc_path else None,
+        )
         try:
-            create_entity(interp_path, "text_block", text_block_data)
-            created_ids.append(text_block_data["id"])
-        except Exception as e:
-            errors.append(f"조각 {i + 1}: {e}")
-
-    # 원본 TextBlock을 deprecated 전환
+            insert_boundary(data, item)
+            created_ids.append(item["id"])
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"조각 {i}: {e}")
     if created_ids:
-        try:
-            update_entity(
-                interp_path,
-                "text_block",
-                body.original_text_block_id,
-                {"status": "deprecated"},
-            )
-        except Exception as e:
-            errors.append(f"원본 deprecated 실패: {e}")
-
-    # 백그라운드 git commit — API는 즉시 응답
-    commit_msg = f"feat: TextBlock 쪼개기 — {len(created_ids)}개 생성"
+        save_boundaries(interp_path, data)
+    commit_msg = f"feat: 단위 쪼개기 — 경계 {len(created_ids)}개 삽입 (D-092)"
     bg.add_task(git_commit_interpretation, interp_path, commit_msg)
-
     if errors:
         return JSONResponse(
             {
                 "created_count": len(created_ids),
+                "created_ids": created_ids,
                 "errors": errors,
                 "git": "background",
             },
             status_code=207,
         )
-
     return {
         "created_count": len(created_ids),
         "created_ids": created_ids,
-        "deprecated_id": body.original_text_block_id,
+        "deprecated_id": None,  # 원본은 첫 조각으로 남는다(D-092: 앞 id 유지)
         "git": "background",
     }
 

@@ -12,9 +12,9 @@
 > |---|---|
 > | 6 · 11 · 13 | 추출 모드와 화면 구조 — 전면 개작. 13번은 새로 만든 것 |
 > | 1 · 5 · 9 · 10 | 텍스트 레이어 PDF 산출, 쪽 전면 1블록, 부분 재-OCR, 되돌리기 |
-> | 2 · 8 | 라우트 198개 · JS 모듈 30개 · API 캐시 금지 미들웨어 |
+> | 2 · 8 | 라우트 200개 · JS 모듈 30개 · API 캐시 금지 미들웨어 |
 > | 4 | LLM 사용량을 화면에 표시(D-056), LLM Vision OCR을 소비자로 추가 |
-> | 3 · 7 · 12 | **바뀐 것 없음** — 코어 스키마 6종, 스키마 19개의 참조 관계, L7 주석 4단계는 v1.2.0이 건드리지 않았다 |
+> | 3 · 7 · 12 | **바뀐 것 없음** — 코어 스키마 7종(D-092 경계 목록 추가), 스키마 20개의 참조 관계, L7 주석 4단계는 v1.2.0이 건드리지 않았다 |
 >
 > 그림과 코드가 어긋나면 **코드가 기준**이다.
 
@@ -103,7 +103,7 @@ flowchart TB
 - 원본 저장소는 **단일 정본**으로 수렴 (정답이 있다)
 - 해석 저장소는 **다수 병존** (해석은 연구자마다 다르다)
 - L4 확정 → `dependency.json` → 해석 저장소 시작점 (저장소 경계)
-- 코어 스키마 6개 엔티티(Work, TextBlock, Tag, Concept, Agent, Relation)는 해석 저장소 내부에 위치
+- 코어 스키마 7개(Work, TextBlock(보기), Boundaries(경계 목록 — 단위의 정본, D-092), Tag, Concept, Agent, Relation)는 해석 저장소 내부에 위치
 - **추출 모드는 층이 아니라 표시 프로필**이다 — 어떤 탭을 보여 줄지만 바뀌고,
   그 상태는 브라우저 `localStorage`(`ctb.profile.<문헌ID>`)에만 남는다.
   `manifest.json`에는 아무것도 기록되지 않으므로 저장되는 데이터는 교감 모드와 완전히 같다 (D-055 · D-060)
@@ -113,7 +113,7 @@ flowchart TB
 
 ## 2. 전체 시스템 아키텍처
 
-프론트엔드(30개 JS 모듈) · 백엔드(FastAPI + 8 라우터, 라우트 198개) ·
+프론트엔드(30개 JS 모듈) · 백엔드(FastAPI + 8 라우터, 라우트 200개) ·
 처리 엔진(OCR 5종 + LLM 5단 + 산출·검출 보조) · Git 저장소 · 외부 서비스.
 
 **여기서 읽어야 할 것**: 화면과 서버 사이에는 REST API 하나뿐이고 빌드 도구도
@@ -182,7 +182,7 @@ flowchart TB
         SRV["server.py<br/>앱 생성 + 라우터 마운트 + 캐시 금지 (152줄)"]
         ST["_state.py<br/>공유 상태 · 헬퍼 · LLM/OCR 캐시"]
         MW["미들웨어<br/>API 응답에 Cache-Control no-store<br/>정적 파일에는 no-cache + ETag (D-066)"]
-        subgraph ROUTERS["8개 도메인 라우터 (라우트 198개)"]
+        subgraph ROUTERS["8개 도메인 라우터 (라우트 200개)"]
             direction LR
             R1["library <b>16</b>"]
             R2["documents <b>40</b>"]
@@ -572,7 +572,7 @@ flowchart TB
 
 ## 7. 스키마 간 참조 관계도
 
-19개 스키마(원본 7 + 해석 5 + 코어 6 + 교환 1)의 연결 구조.
+20개 스키마(원본 7 + 해석 5 + 코어 7 + 교환 1)의 연결 구조.
 화살표는 참조 방향: A → B = 「A가 B를 참조」.
 
 ```mermaid
@@ -664,7 +664,7 @@ flowchart TB
         MAIN["__main__.py<br/>CLI 진입점"]
         SRV["<b>server.py</b><br/>FastAPI 앱 생성 · 라우터 마운트 · 캐시 금지 (152줄)"]
         STATE["<b>_state.py</b><br/>공유 상태, 헬퍼 · LLM 캐시, 토큰 계산"]
-        subgraph ROUTERS["routers/ -- 8개 도메인 · 라우트 198개"]
+        subgraph ROUTERS["routers/ -- 8개 도메인 · 라우트 200개"]
             direction LR
             R1["library <b>16</b>"]
             R2["documents <b>40</b>"]

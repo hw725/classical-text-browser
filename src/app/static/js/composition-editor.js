@@ -688,6 +688,22 @@ function _renderTextBlocks() {
 
   container.innerHTML = "";
 
+  // 목록 접기 (D-092 사용자 요청): 경계 제안 단계에서는 단위 목록이 방해가 된다.
+  // 제안 패널이 열려 있으면 기본으로 접고, 머리줄을 누르면 펼친다.
+  const proposeOpen = document.getElementById("comp-propose-panel")?.style.display !== "none";
+  const collapsed = compState.tbCollapsed ?? proposeOpen;
+  const head = document.createElement("button");
+  head.type = "button";
+  head.className = "text-btn comp-tb-toggle";
+  head.style.cssText = "font-size:11px; text-align:left; padding:2px 0;";
+  head.textContent = `${collapsed ? "▸" : "▾"} 단위 ${compState.textBlocks.length}개 ${collapsed ? "(접힘 — 누르면 펼침)" : ""}`;
+  head.addEventListener("click", () => {
+    compState.tbCollapsed = !collapsed;
+    _renderTextBlocks();
+  });
+  container.appendChild(head);
+  if (collapsed) return;
+
   // sequence_index 순으로 정렬
   const sorted = [...compState.textBlocks].sort(
     (a, b) => (a.sequence_index || 0) - (b.sequence_index || 0),

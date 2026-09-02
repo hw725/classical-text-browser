@@ -543,7 +543,9 @@ def test_boundary_index_is_a_view_over_textblocks(client, tmp_path):
     from pathlib import Path
 
     interp_dir = Path(lib) / "interpretations" / "i1"
-    assert not (interp_dir / "core_entities" / "boundaries").exists()  # 경계 엔티티는 없다
+    # D-092: 단위의 정본은 경계 목록 하나. TextBlock 파일(blocks/*.json)은 만들지 않는다.
+    assert (interp_dir / "core_entities" / "boundaries" / f"d1__{part_id}.json").exists()
+    assert not list((interp_dir / "core_entities" / "blocks").glob("*.json"))
 
     # 목록 = TextBlock을 원본 위치 순서로, 행 앵커는 source_refs에서 계산
     url = f"/api/interpretations/i1/boundaries?document_id=d1&part_id={part_id}"
@@ -960,3 +962,103 @@ def test_char_boundary_apply_and_move_via_api(client, tmp_path):
     r = client.put(f"/api/interpretations/i1/boundaries/{lst[1]['id']}", json={"shift_start": 1})
     assert r.status_code == 200, r.text
     assert r.json()["boundary"]["start"] == {"page": 1, "line": 1, "offset": 0}
+
+
+# ── 경계 목록이 정본 (D-092): 삽입·삭제·쪼개기 API ────────────────────────
+
+
+def test_boundary_insert_delete_split_via_api(client, tmp_path):
+    """경계 넣기 = 쪼개기(새 id는 뒤에), 지우기 = 합치기(앞 id 유지), 층위 바꾸기, 조각 쪼개기."""
+    lib, part_id, work_id = _setup(client, tmp_path)
+    from pathlib import Path
+
+    pages = Path(lib) / "documents" / "d1" / "L4_text" / "pages"
+    for n in (1, 2, 3):
+        (pages / f"{part_id}_page_{n:03d}.txt").unlink()
+    (pages / f"{part_id}_page_001.txt").write_text(
+        DAM_L0 + "\n" + DAM_L1 + "\n" + DAM_L2, encoding="utf-8"
+    )
+    base = "/api/interpretations/i1/boundaries"
+    url = f"{base}?document_id=d1&part_id={part_id}"
+    k8 = DAM_L0.index("○八日")
+    k9 = DAM_L1.index("○九日")
+    # 1) 첫 경계(쪽 첫머리) — 단위 하나가 권 전체
+    r = client.post(
+        base,
+        json={
+            "document_id": "d1",
+            "part_id": part_id,
+            "start": {"page": 1, "line": 0, "offset": 0},
+            "title": "七日",
+            "work_id": work_id,
+        },
+    )
+    assert r.status_code == 200, r.text
+    a_id = r.json()["boundary"]["id"]
+    # 2) 행 중간에 경계 삽입 → 앞 단위(a)는 그 글자 앞까지, 새 id는 뒤 단위
+    r = client.post(
+        base,
+        json={
+            "document_id": "d1",
+            "part_id": part_id,
+            "start": {"page": 1, "line": 0, "offset": k8},
+            "title": "八日",
+        },
+    )
+    assert r.status_code == 200, r.text
+    b_id = r.json()["boundary"]["id"]
+    assert r.json()["boundary"]["work_id"] == work_id  # 품는 단위의 Work를 물려받는다
+    lst = client.get(url).json()["boundaries"]
+    assert [b["id"] for b in lst] == [a_id, b_id]
+    assert lst[0]["end"] == {"page": 1, "line": 0, "offset": k8}
+    ta = client.get(f"/api/interpretations/i1/entities/text_block/{a_id}").json()
+    assert ta["original_text"] == DAM_L0[:k8]
+    # 3) 층위 3 조각을 안에 넣어도 층위 2의 id·끝은 그대로
+    r = client.post(
+        base,
+        json={
+            "document_id": "d1",
+            "part_id": part_id,
+            "start": {"page": 1, "line": 1, "offset": 0},
+            "level": 3,
+            "title": "조각",
+        },
+    )
+    assert r.status_code == 200, r.text
+    c_id = r.json()["boundary"]["id"]
+    lst = client.get(url).json()["boundaries"]
+    assert [(b["id"], b["level"]) for b in lst] == [(a_id, 2), (b_id, 2), (c_id, 3)]
+    tb = client.get(f"/api/interpretations/i1/entities/text_block/{b_id}").json()
+    assert (
+        tb["original_text"] == DAM_L0[k8:] + "\n" + DAM_L1 + "\n" + DAM_L2
+    )  # 층위 3은 끝을 정하지 않는다
+    # 4) 층위를 2로 올리면 b가 거기서 끝난다
+    r = client.put(f"{base}/{c_id}", json={"level": 2})
+    assert r.status_code == 200, r.text
+    tb = client.get(f"/api/interpretations/i1/entities/text_block/{b_id}").json()
+    assert tb["original_text"] == DAM_L0[k8:]
+    # 5) 쪼개기 API: 조각 텍스트로 자리를 찾아 경계를 넣는다. 원본 id는 첫 조각으로 남는다
+    r = client.post(
+        "/api/interpretations/i1/entities/text_block/split",
+        json={
+            "original_text_block_id": c_id,
+            "part_id": part_id,
+            "pieces": [DAM_L1[:k9], DAM_L1[k9:] + "\n" + DAM_L2],
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["created_count"] == 1 and r.json()["deprecated_id"] is None
+    d_id = r.json()["created_ids"][0]
+    lst = client.get(url).json()["boundaries"]
+    assert [b["id"] for b in lst] == [a_id, b_id, c_id, d_id]
+    assert lst[3]["start"] == {"page": 1, "line": 1, "offset": k9}
+    # 6) 지우기 = 앞 단위에 합치기(앞 id 유지)
+    r = client.delete(f"{base}/{d_id}")
+    assert r.status_code == 200, r.text
+    assert r.json()["merged_into"] == c_id
+    tc = client.get(f"/api/interpretations/i1/entities/text_block/{c_id}").json()
+    assert tc["original_text"] == DAM_L1 + "\n" + DAM_L2
+    # 7) 옛 TextBlock 파일은 생기지 않는다
+    assert not list(
+        (Path(lib) / "interpretations" / "i1" / "core_entities" / "blocks").glob("*.json")
+    )
