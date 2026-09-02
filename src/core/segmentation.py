@@ -641,3 +641,31 @@ def boundary_span(boundary: dict) -> dict:
         "start": {"page": boundary["start"]["page"], "line_index": boundary["start"]["line"]},
         "end": {"page": boundary["end"]["page"], "line_index": boundary["end"]["line"]},
     }
+
+
+def line_of_offset(page_text: str, offset: int) -> int:
+    """쪽 텍스트 안의 글자 오프셋이 몇 번째 행(0-based, 빈 행 포함)인지."""
+    if offset <= 0:
+        return 0
+    return page_text.count("\n", 0, min(offset, len(page_text)))
+
+
+def anchor_from_refs(refs: list[dict], page_texts: dict[int, str]) -> Optional[dict]:
+    """TextBlock의 source_refs(쪽·char_range)에서 시작·끝 행 앵커를 계산한다 (D-090).
+
+    위치의 정본은 source_refs 하나다. 행 번호는 저장하지 않고 읽을 때 계산한다 — 그래야
+    합치기·쪼개기·경계 옮기기 어느 경로로 바꿔도 색인이 어긋나지 않는다.
+    char_range가 없는 참조(옛 편성)는 그 쪽 전체로 본다.
+    """
+    refs = [r for r in (refs or []) if r.get("page")]
+    if not refs:
+        return None
+    first, last = refs[0], refs[-1]
+    t0 = page_texts.get(int(first["page"]), "")
+    t1 = page_texts.get(int(last["page"]), "")
+    cr0 = first.get("char_range") or [0, len(t0)]
+    cr1 = last.get("char_range") or [0, len(t1)]
+    return {
+        "start": {"page": int(first["page"]), "line": line_of_offset(t0, int(cr0[0]))},
+        "end": {"page": int(last["page"]), "line": line_of_offset(t1, max(0, int(cr1[1]) - 1))},
+    }

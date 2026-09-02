@@ -1013,12 +1013,6 @@ async def api_segmentation_apply(interp_id: str, body: SegmentationApplyRequest)
     from core.segmentation import boundary_bbox
 
     l4_commit = _document_head(doc_path)
-    existing_b = [
-        b
-        for b in list_entities(interp_path, "boundary")
-        if b.get("work_id") == body.work_id and b.get("part_id") == body.part_id
-    ]
-    order = max((b.get("order") or 0) for b in existing_b) + 1 if existing_b else 0
 
     created = []
     errors = []
@@ -1032,32 +1026,21 @@ async def api_segmentation_apply(interp_id: str, body: SegmentationApplyRequest)
             continue
         if not text:
             continue
-        # 1) 경계 색인 항목 — 경계의 정본 (D-090)
-        boundary = {
-            "id": str(_uuid.uuid4()),
-            "work_id": body.work_id,
-            "document_id": body.document_id,
-            "part_id": body.part_id,
-            "order": order,
-            "title": span.title,
+        # 위치의 정본은 source_refs(쪽·글자 범위). 경계의 나머지 속성은 metadata.anchor (D-090).
+        anchor = {
             "kind": span.kind or "manual",
             "level": 1 if span.kind == "volume" else 2,
             "status": "approved",
             "confidence": None,
             "reasons": [],
-            "start": {"page": int(span.start["page"]), "line": int(span.start["line_index"])},
-            "end": {"page": int(span.end["page"]), "line": int(span.end["line_index"])},
+            "l4_commit": l4_commit,
             "bbox": boundary_bbox(
                 doc_path,
                 body.part_id,
-                span.start | {"line": span.start["line_index"]},
-                span.end | {"line": span.end["line_index"]},
+                {"page": span.start["page"], "line": span.start["line_index"]},
+                {"page": span.end["page"], "line": span.end["line_index"]},
             ),
-            "text_block_id": None,
-            "l4_commit": l4_commit,
-            "metadata": None,
         }
-        # 2) TextBlock — 경계에서 파생
         data = {
             "id": str(_uuid.uuid4()),
             "work_id": body.work_id,
@@ -1073,23 +1056,13 @@ async def api_segmentation_apply(interp_id: str, body: SegmentationApplyRequest)
                 "title": span.title,
                 "kind": span.kind or None,
                 "segmentation": "proposed",
-                "boundary_id": boundary["id"],
+                "anchor": anchor,
             },
         }
-        boundary["text_block_id"] = data["id"]
         try:
-            create_entity(interp_path, "boundary", boundary)
             create_entity(interp_path, "text_block", data)
-            created.append(
-                {
-                    "id": data["id"],
-                    "boundary_id": boundary["id"],
-                    "title": span.title,
-                    "sequence_index": seq,
-                }
-            )
+            created.append({"id": data["id"], "title": span.title, "sequence_index": seq})
             seq += 1
-            order += 1
         except Exception as e:  # noqa: BLE001 — 한 구간의 실패가 나머지를 막지 않는다
             errors.append(f"{span.title}: {e}")
 
@@ -1102,7 +1075,7 @@ async def api_segmentation_apply(interp_id: str, body: SegmentationApplyRequest)
 
 
 def _document_head(doc_path) -> str | None:
-    """원본 저장소의 현재 커밋. 경계 앵커가 어느 확정본 기준인지 남긴다."""
+    """원본 저장소의 현재 커밋. 앵커가 어느 확정본 기준인지 남긴다."""
     try:
         import git as _git
 
@@ -1111,14 +1084,83 @@ def _document_head(doc_path) -> str | None:
         return None
 
 
+def _boundary_rows(interp_path, document_id: str | None, part_id: str | None) -> list[dict]:
+    """경계 색인 «보기» (D-090): TextBlock을 원본 위치 순서로 늘어놓고 행 앵커를 계산한다.
+
+    경계는 별도 데이터가 아니다. 위치의 정본은 TextBlock.source_refs(쪽·글자 범위)이고,
+    행 번호·좌표는 여기서 계산한다. 그래서 합치기·쪼개기·옮기기 어느 경로로 바꿔도 색인이
+    어긋나지 않는다.
+    """
+    from core.segmentation import anchor_from_refs
+
+    _library_path = get_library_path()
+    rows = []
+    page_cache: dict[tuple[str, str], dict[int, str]] = {}
+    for blk in list_entities(interp_path, "text_block"):
+        if blk.get("status") == "deprecated":
+            continue
+        refs = blk.get("source_refs") or ([blk["source_ref"]] if blk.get("source_ref") else [])
+        refs = [r for r in refs if r and r.get("page")]
+        if not refs:
+            continue
+        doc_id = refs[0].get("document_id")
+        pid = refs[0].get("part_id") or (blk.get("metadata") or {}).get("part_id")
+        if document_id and doc_id != document_id:
+            continue
+        if part_id and pid != part_id:
+            continue
+        key = (doc_id, pid or "")
+        if key not in page_cache:
+            texts: dict[int, str] = {}
+            doc_path = _resolve_repo_path("documents", doc_id) if doc_id else None
+            if doc_path is not None and doc_path.exists() and pid:
+                from core.segmentation import collect_document_lines
+
+                _ls, texts = collect_document_lines(doc_path, pid, None)
+            page_cache[key] = texts
+        anchor_pos = anchor_from_refs(refs, page_cache[key]) or {}
+        meta = blk.get("metadata") or {}
+        a = meta.get("anchor") or {}
+        rows.append(
+            {
+                "id": blk["id"],
+                "work_id": blk.get("work_id"),
+                "document_id": doc_id,
+                "part_id": pid,
+                "sequence_index": blk.get("sequence_index"),
+                "title": meta.get("title") or (blk.get("original_text") or "").strip()[:20],
+                "kind": a.get("kind") or meta.get("kind") or "manual",
+                "level": a.get("level", 2),
+                "status": a.get("status") or blk.get("status"),
+                "confidence": a.get("confidence"),
+                "reasons": a.get("reasons") or [],
+                "start": anchor_pos.get("start"),
+                "end": anchor_pos.get("end"),
+                "bbox": a.get("bbox"),
+                "l4_commit": a.get("l4_commit"),
+            }
+        )
+    rows.sort(
+        key=lambda r: (
+            r["part_id"] or "",
+            (r["start"] or {}).get("page", 0),
+            (r["start"] or {}).get("line", 0),
+            r["sequence_index"] or 0,
+        )
+    )
+    for i, r in enumerate(rows):
+        r["order"] = i
+    return rows
+
+
 class BoundaryUpdateRequest(BaseModel):
-    """경계 한 항목 수정 (D-090). 행 단위로 옮기거나 제목·상태를 바꾼다."""
+    """TextBlock의 경계를 행 단위로 옮기거나 제목·상태를 바꾼다 (D-090)."""
 
     title: str | None = None
-    status: str | None = None  # proposed | approved | manual | deprecated
+    status: str | None = None
     start: dict | None = None  # {"page", "line"}
     end: dict | None = None
-    shift_start: int | None = None  # 시작 행을 ±n 행 (같은 쪽 안에서)
+    shift_start: int | None = None
     shift_end: int | None = None
 
 
@@ -1128,7 +1170,7 @@ async def api_list_boundaries(
     document_id: str | None = Query(None),
     part_id: str | None = Query(None),
 ):
-    """경계 색인 목록 (D-090) — 권 안 순서대로."""
+    """경계 색인 보기 (D-090): TextBlock을 원본 위치 순서로, 시작·끝 행과 좌표 캐시를 붙여."""
     _library_path = get_library_path()
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
@@ -1137,26 +1179,20 @@ async def api_list_boundaries(
         return JSONResponse(
             {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"}, status_code=404
         )
-    items = [
-        b
-        for b in list_entities(interp_path, "boundary")
-        if (document_id is None or b.get("document_id") == document_id)
-        and (part_id is None or b.get("part_id") == part_id)
-    ]
-    items.sort(key=lambda b: (b.get("part_id") or "", b.get("order") or 0))
-    return {"boundaries": items, "total": len(items)}
+    rows = _boundary_rows(interp_path, document_id, part_id)
+    return {"boundaries": rows, "total": len(rows)}
 
 
-@router.put("/api/interpretations/{interp_id}/boundaries/{boundary_id}")
-async def api_update_boundary(interp_id: str, boundary_id: str, body: BoundaryUpdateRequest):
-    """경계를 옮기거나 고친다. 경계가 정본이므로 파생 TextBlock의 본문·출처를 다시 잇는다.
+@router.put("/api/interpretations/{interp_id}/boundaries/{text_block_id}")
+async def api_update_boundary(interp_id: str, text_block_id: str, body: BoundaryUpdateRequest):
+    """TextBlock의 경계를 옮긴다. 위치의 정본(source_refs)과 본문을 다시 잇는다.
 
-    행 단위(shift_start/shift_end 또는 start/end). 앞뒤 경계와 겹치지 않게 한다 — 이 경계의
-    시작을 올리면 앞 경계의 끝도 그만큼 당겨지고, 끝을 내리면 뒤 경계의 시작이 밀린다.
+    행 단위. 앞뒤 블록과 겹치거나 비지 않게 한다 — 시작을 뒤로 밀면 앞 블록의 끝이 그만큼
+    늘고, 끝을 내리면 뒤 블록의 시작이 밀린다. 이웃은 같은 Work·권에서 원본 위치 순서로 잡는다.
     """
     from core.segmentation import (
+        anchor_from_refs,
         boundary_bbox,
-        boundary_span,
         collect_document_lines,
         span_to_text_and_refs,
     )
@@ -1170,11 +1206,20 @@ async def api_update_boundary(interp_id: str, boundary_id: str, body: BoundaryUp
             {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"}, status_code=404
         )
     try:
-        b = get_entity(interp_path, "boundary", boundary_id)
+        blk = get_entity(interp_path, "text_block", text_block_id)
     except FileNotFoundError:
-        return JSONResponse({"error": f"경계를 찾을 수 없습니다: {boundary_id}"}, status_code=404)
-    doc_path = require_repo_path("documents", b["document_id"])
-    lines, page_texts = collect_document_lines(doc_path, b["part_id"], None)
+        return JSONResponse(
+            {"error": f"TextBlock을 찾을 수 없습니다: {text_block_id}"}, status_code=404
+        )
+    refs = blk.get("source_refs") or []
+    if not refs or not refs[0].get("page"):
+        return JSONResponse(
+            {"error": "출처(source_refs)가 없는 블록은 옮길 수 없습니다."}, status_code=400
+        )
+    doc_id = refs[0]["document_id"]
+    pid = refs[0].get("part_id") or (blk.get("metadata") or {}).get("part_id")
+    doc_path = require_repo_path("documents", doc_id)
+    lines, page_texts = collect_document_lines(doc_path, pid, None)
     keys = [(ln.page, ln.line_index) for ln in lines]
     if not keys:
         return JSONResponse({"error": "확정 텍스트(L4)가 없습니다."}, status_code=400)
@@ -1182,18 +1227,19 @@ async def api_update_boundary(interp_id: str, boundary_id: str, body: BoundaryUp
     def _pos(anchor):
         try:
             return keys.index((int(anchor["page"]), int(anchor["line"])))
-        except ValueError:
+        except (ValueError, KeyError, TypeError):
             return None
 
-    start_i, end_i = _pos(b["start"]), _pos(b["end"])
+    cur = anchor_from_refs(refs, page_texts)
+    start_i, end_i = _pos(cur["start"]), _pos(cur["end"])
     if start_i is None or end_i is None:
         return JSONResponse(
-            {"error": "경계의 앵커가 현재 확정본에 없습니다. 다시 제안하세요."}, status_code=409
+            {"error": "블록의 출처가 현재 확정본에 없습니다. 다시 제안하세요."}, status_code=409
         )
-    if body.start:
-        start_i = _pos(body.start) if _pos(body.start) is not None else start_i
-    if body.end:
-        end_i = _pos(body.end) if _pos(body.end) is not None else end_i
+    if body.start and _pos(body.start) is not None:
+        start_i = _pos(body.start)
+    if body.end and _pos(body.end) is not None:
+        end_i = _pos(body.end)
     if body.shift_start:
         start_i = max(0, min(len(keys) - 1, start_i + int(body.shift_start)))
     if body.shift_end:
@@ -1201,77 +1247,67 @@ async def api_update_boundary(interp_id: str, boundary_id: str, body: BoundaryUp
     if end_i < start_i:
         return JSONResponse({"error": "끝이 시작보다 앞에 올 수 없습니다."}, status_code=400)
 
-    # 이웃 경계와의 정합: 같은 Work·권에서 order 앞뒤
-    siblings = sorted(
-        (
-            x
-            for x in list_entities(interp_path, "boundary")
-            if x.get("work_id") == b["work_id"]
-            and x.get("part_id") == b["part_id"]
-            and x.get("status") != "deprecated"
-            and x["id"] != b["id"]
-        ),
-        key=lambda x: x.get("order") or 0,
-    )
-    prev_b = max(
-        (x for x in siblings if (x.get("order") or 0) < (b.get("order") or 0)),
-        key=lambda x: x["order"],
-        default=None,
-    )
-    next_b = min(
-        (x for x in siblings if (x.get("order") or 0) > (b.get("order") or 0)),
-        key=lambda x: x["order"],
-        default=None,
-    )
+    # 이웃: 같은 Work·권의 블록을 원본 위치 순서로
+    rows = [
+        r for r in _boundary_rows(interp_path, doc_id, pid) if r["work_id"] == blk.get("work_id")
+    ]
+    idx = next((i for i, r in enumerate(rows) if r["id"] == blk["id"]), None)
+    prev_row = rows[idx - 1] if idx is not None and idx > 0 else None
+    next_row = rows[idx + 1] if idx is not None and idx + 1 < len(rows) else None
     touched = []
 
-    def _apply(bnd, s_i, e_i):
-        bnd["start"] = {"page": keys[s_i][0], "line": keys[s_i][1]}
-        bnd["end"] = {"page": keys[e_i][0], "line": keys[e_i][1]}
-        bnd["bbox"] = boundary_bbox(doc_path, bnd["part_id"], bnd["start"], bnd["end"])
-        text, refs = span_to_text_and_refs(
-            boundary_span(bnd), lines, page_texts, bnd["document_id"], bnd["part_id"]
+    def _restitch(target_id: str, s_i: int, e_i: int, extra: dict | None = None):
+        tb = get_entity(interp_path, "text_block", target_id)
+        span = {
+            "start": {"page": keys[s_i][0], "line_index": keys[s_i][1]},
+            "end": {"page": keys[e_i][0], "line_index": keys[e_i][1]},
+        }
+        text, new_refs = span_to_text_and_refs(span, lines, page_texts, doc_id, pid)
+        meta = dict(tb.get("metadata") or {})
+        anchor = dict(meta.get("anchor") or {})
+        anchor["bbox"] = boundary_bbox(
+            doc_path,
+            pid,
+            {"page": keys[s_i][0], "line": keys[s_i][1]},
+            {"page": keys[e_i][0], "line": keys[e_i][1]},
         )
+        anchor["l4_commit"] = _document_head(doc_path)
+        if extra:
+            anchor.update({k: v for k, v in extra.items() if k in ("status",)})
+            if "title" in extra:
+                meta["title"] = extra["title"]
+        meta["anchor"] = anchor
         update_entity(
             interp_path,
-            "boundary",
-            bnd["id"],
-            {k: bnd[k] for k in ("start", "end", "bbox", "title", "status")},
+            "text_block",
+            target_id,
+            {
+                "original_text": text,
+                "source_refs": new_refs,
+                "source_ref": {k: v for k, v in new_refs[0].items() if k != "char_range"},
+                "metadata": meta,
+            },
         )
-        if bnd.get("text_block_id"):
-            update_entity(
-                interp_path,
-                "text_block",
-                bnd["text_block_id"],
-                {
-                    "original_text": text,
-                    "source_refs": refs,
-                    "source_ref": {k: v for k, v in refs[0].items() if k != "char_range"}
-                    if refs
-                    else None,
-                },
-            )
-        touched.append(bnd["id"])
+        touched.append(target_id)
 
+    extra = {}
     if body.title is not None:
-        b["title"] = body.title
+        extra["title"] = body.title
     if body.status is not None:
-        b["status"] = body.status
-    _apply(b, start_i, end_i)
-    if prev_b is not None:
-        p_start = _pos(prev_b["start"])
+        extra["status"] = body.status
+    _restitch(blk["id"], start_i, end_i, extra)
+    if prev_row and prev_row["start"]:
+        p_start = _pos(prev_row["start"])
         if p_start is not None and p_start <= start_i - 1:
-            _apply(prev_b, p_start, start_i - 1)
-    if next_b is not None:
-        n_end = _pos(next_b["end"])
+            _restitch(prev_row["id"], p_start, start_i - 1)
+    if next_row and next_row["end"]:
+        n_end = _pos(next_row["end"])
         if n_end is not None and end_i + 1 <= n_end:
-            _apply(next_b, end_i + 1, n_end)
-    git = git_commit_interpretation(interp_path, f"fix: 경계 수정 — {b['title']} (D-090)")
-    return {
-        "boundary": get_entity(interp_path, "boundary", b["id"]),
-        "touched": touched,
-        "git": git,
-    }
+            _restitch(next_row["id"], end_i + 1, n_end)
+    title = (blk.get("metadata") or {}).get("title") or blk["id"][:8]
+    git = git_commit_interpretation(interp_path, f"fix: 경계 수정 — {title} (D-090)")
+    row = next((r for r in _boundary_rows(interp_path, doc_id, pid) if r["id"] == blk["id"]), None)
+    return {"boundary": row, "touched": touched, "git": git}
 
 
 @router.get("/api/interpretations/{interp_id}/boundaries/export.csv")
@@ -1280,10 +1316,7 @@ async def api_export_boundaries_csv(
     document_id: str | None = Query(None),
     part_id: str | None = Query(None),
 ):
-    """경계 색인을 CSV로 (D-090). 열 이름은 연구자 DB의 article_index 관례에 맞춘다.
-
-    UTF-8 BOM — Excel이 바로 읽는다. 행 번호는 0-based(확정 텍스트의 행), 끝 행은 포함.
-    """
+    """경계 색인을 CSV로 (D-090). 열 이름은 연구자 DB의 article_index 관례. UTF-8 BOM."""
     import csv
     import io as _io
 
@@ -1297,13 +1330,7 @@ async def api_export_boundaries_csv(
         return JSONResponse(
             {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"}, status_code=404
         )
-    items = [
-        b
-        for b in list_entities(interp_path, "boundary")
-        if (document_id is None or b.get("document_id") == document_id)
-        and (part_id is None or b.get("part_id") == part_id)
-    ]
-    items.sort(key=lambda b: (b.get("part_id") or "", b.get("order") or 0))
+    rows = _boundary_rows(interp_path, document_id, part_id)
     buf = _io.StringIO()
     w = csv.writer(buf)
     w.writerow(
@@ -1322,29 +1349,28 @@ async def api_export_boundaries_csv(
             "상태",
             "신뢰도",
             "근거",
-            "text_block_id",
             "l4_commit",
         ]
     )
-    for b in items:
+    for r in rows:
+        s_, e_ = r.get("start") or {}, r.get("end") or {}
         w.writerow(
             [
-                b["id"],
-                b.get("document_id"),
-                b.get("part_id"),
-                b.get("order"),
-                b.get("kind"),
-                b.get("level", 2),
-                b.get("title"),
-                b["start"]["page"],
-                b["start"]["line"],
-                b["end"]["page"],
-                b["end"]["line"],
-                b.get("status"),
-                b.get("confidence") if b.get("confidence") is not None else "",
-                " ".join(b.get("reasons") or []),
-                b.get("text_block_id") or "",
-                (b.get("l4_commit") or "")[:12],
+                r["id"],
+                r.get("document_id"),
+                r.get("part_id"),
+                r["order"],
+                r.get("kind"),
+                r.get("level", 2),
+                r.get("title"),
+                s_.get("page", ""),
+                s_.get("line", ""),
+                e_.get("page", ""),
+                e_.get("line", ""),
+                r.get("status"),
+                r.get("confidence") if r.get("confidence") is not None else "",
+                " ".join(r.get("reasons") or []),
+                (r.get("l4_commit") or "")[:12],
             ]
         )
     data = ("\ufeff" + buf.getvalue()).encode("utf-8")

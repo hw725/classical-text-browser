@@ -155,7 +155,7 @@ function _createBlockRow(block) {
   row.appendChild(badges);
 
   // 경계 색인에서 파생된 블록: 시작 행을 한 행씩 옮기는 단추 (D-090)
-  if (block.boundary_id) {
+  if (block.anchor) {
     const tools = document.createElement("span");
     tools.className = "contents-boundary-tools";
     for (const [label, delta, tip] of [["▲", -1, "시작을 한 행 앞으로"], ["▼", 1, "시작을 한 행 뒤로"]]) {
@@ -217,12 +217,15 @@ async function _jumpToBlockPage(block, pageRef) {
  */
 function _highlightAnchor(block, pageRef) {
   if (typeof layoutState === "undefined") return;
+  // anchor.bbox는 적용 때 캐시한 L2 행 좌표 {start_line, end_line, image_width}
   const a = block.anchor;
-  if (a && a.start_line_bbox && a.start && Number(a.start.page) === Number(pageRef.page)) {
+  const bb = a && a.bbox;
+  const firstPage = (block.pages || [])[0];
+  if (bb && bb.start_line && firstPage && Number(firstPage.page) === Number(pageRef.page)) {
     layoutState.anchorHighlight = {
-      bbox: a.start_line_bbox,
-      imageWidth: a.image_width,
-      page: Number(a.start.page),
+      bbox: bb.start_line,
+      imageWidth: bb.image_width,
+      page: Number(firstPage.page),
     };
   } else {
     layoutState.anchorHighlight = null;
@@ -240,10 +243,10 @@ function _highlightAnchor(block, pageRef) {
  * 경계의 시작 행을 ±1 행 옮긴다 (D-090). 앞 경계의 끝도 함께 조정되고 TextBlock 본문이 다시 이어진다.
  */
 async function _shiftBoundary(block, delta) {
-  if (!block.boundary_id || !contentsState.interpId) return;
+  if (!block.anchor || !contentsState.interpId) return;
   try {
     const res = await fetch(
-      `/api/interpretations/${encodeURIComponent(contentsState.interpId)}/boundaries/${encodeURIComponent(block.boundary_id)}`,
+      `/api/interpretations/${encodeURIComponent(contentsState.interpId)}/boundaries/${encodeURIComponent(block.id)}`,
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -284,7 +287,7 @@ function _selectLayoutBlocksWhenLoaded(blockIds) {
 function _updateExportLink(interpId, docId) {
   const a = document.getElementById("contents-export-csv");
   if (!a) return;
-  const has = (contentsState.data?.works || []).some((w) => w.blocks.some((b) => b.boundary_id));
+  const has = (contentsState.data?.works || []).some((w) => w.blocks.some((b) => b.anchor));
   a.hidden = !has;
   const qs = docId ? `?document_id=${encodeURIComponent(docId)}` : "";
   a.href = `/api/interpretations/${encodeURIComponent(interpId)}/boundaries/export.csv${qs}`;

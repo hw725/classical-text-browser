@@ -493,10 +493,11 @@ def test_toc_api_and_propose_with_toc(client, tmp_path):
     assert all(ln["page"] != 1 for ln in data["lines"])
 
 
-# ── 경계 색인 (D-090) ─────────────────────────────────────────────────────
+# ── 경계 색인 보기 (D-090) ─────────────────────────────────────────────────
 
 
-def test_boundary_index_created_listed_shifted_exported(client, tmp_path):
+def test_boundary_index_is_a_view_over_textblocks(client, tmp_path):
+    """경계 색인은 별도 데이터가 아니다 — TextBlock의 source_refs에서 계산한 보기 (D-090)."""
     lib, part_id, work_id = _setup(client, tmp_path)
     rules = {"rules": {"title_words": ["談草", "口談"]}}
     client.put("/api/documents/d1/segmentation-rules", json=rules)
@@ -514,48 +515,69 @@ def test_boundary_index_created_listed_shifted_exported(client, tmp_path):
     )
     assert r.status_code == 200, r.text
     created = r.json()["created"]
-    assert all(c["boundary_id"] for c in created)
+    from pathlib import Path
 
-    # 목록: 순서대로, TextBlock과 서로 가리킨다
+    interp_dir = Path(lib) / "interpretations" / "i1"
+    assert not (interp_dir / "core_entities" / "boundaries").exists()  # 경계 엔티티는 없다
+
+    # 목록 = TextBlock을 원본 위치 순서로, 행 앵커는 source_refs에서 계산
     url = f"/api/interpretations/i1/boundaries?document_id=d1&part_id={part_id}"
     lst = client.get(url).json()
     assert lst["total"] == 4 and [b["order"] for b in lst["boundaries"]] == [0, 1, 2, 3]
     b1 = lst["boundaries"][1]
+    assert b1["id"] == created[1]["id"]
     assert b1["title"] == "辛巳十一月二十八日保定督署談草" and b1["status"] == "approved"
     assert b1["start"] == {"page": 1, "line": 2} and b1["end"] == {"page": 2, "line": 0}
-    assert b1["text_block_id"] == created[1]["id"] and b1["l4_commit"]
-    assert b1["bbox"] is None  # 이 픽스처에는 L2가 없다 — 틀린 좌표를 만들지 않는다
+    assert b1["l4_commit"] and b1["bbox"] is None  # L2가 없는 픽스처 — 좌표를 만들지 않는다
 
-    # 내용 트리에 boundary_id·anchor가 붙는다
+    # 내용 트리에도 anchor(metadata.anchor)가 붙는다
     tree = client.get("/api/interpretations/i1/contents?document_id=d1").json()
     blk = tree["works"][0]["blocks"][1]
-    assert blk["boundary_id"] == b1["id"] and blk["anchor"]["start"] == {"page": 1, "line": 2}
+    assert blk["anchor"]["kind"] == "談草" and blk["anchor"]["status"] == "approved"
 
-    # 시작을 한 행 뒤로: 이 경계는 1쪽 3행부터, 앞(front) 경계는 1쪽 2행까지 늘어난다
+    # 시작을 한 행 뒤로 — 앞 블록의 끝이 늘고 두 블록의 본문·출처가 다시 이어진다
     r = client.put(f"/api/interpretations/i1/boundaries/{b1['id']}", json={"shift_start": 1})
     assert r.status_code == 200, r.text
     assert r.json()["boundary"]["start"] == {"page": 1, "line": 3}
-    lst = client.get("/api/interpretations/i1/boundaries?document_id=d1").json()["boundaries"]
+    lst = client.get(url).json()["boundaries"]
     assert lst[0]["end"] == {"page": 1, "line": 2}
-    # 파생 TextBlock의 본문이 다시 이어졌다 — 표제 행이 앞 블록으로 넘어갔다
-    from pathlib import Path
-
     from src.core.entity import get_entity
 
-    interp_dir = Path(lib) / "interpretations" / "i1"
-    tb1 = get_entity(interp_dir, "text_block", b1["text_block_id"])
-    tb0 = get_entity(interp_dir, "text_block", lst[0]["text_block_id"])
+    tb1 = get_entity(interp_dir, "text_block", b1["id"])
+    tb0 = get_entity(interp_dir, "text_block", lst[0]["id"])
     assert not tb1["original_text"].startswith("辛巳")
     assert tb0["original_text"].rstrip().endswith("辛巳十一月二十八日保定督署談草")
     assert tb1["source_refs"][0]["char_range"][0] > 0
+    assert tb1["metadata"]["anchor"]["status"] == "approved"
 
-    # CSV: article_index 관례의 열, BOM, 4행
-    r = client.get(f"{url.replace('boundaries?', 'boundaries/export.csv?')}")
+    # 편성 탭 경로로 만든(경계 제안을 거치지 않은) TextBlock도 색인 보기에 나타난다
+    r = client.post(
+        "/api/interpretations/i1/entities/text_block/compose",
+        json={
+            "work_id": work_id,
+            "sequence_index": 99,
+            "original_text": BODY,
+            "part_id": part_id,
+            "source_refs": [
+                {
+                    "document_id": "d1",
+                    "page": 3,
+                    "layout_block_id": None,
+                    "char_range": [len("十二月初一日替着遣飮時使通詞傳語口談") + 1, 999],
+                }
+            ],
+        },
+    )
+    assert r.status_code == 200, r.text
+    lst = client.get(url).json()["boundaries"]
+    assert lst[-1]["start"] == {"page": 3, "line": 1} and lst[-1]["kind"] == "manual"
+
+    # CSV: article_index 관례의 열, BOM
+    r = client.get(url.replace("boundaries?", "boundaries/export.csv?"))
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv")
-    text = r.content.decode("utf-8-sig")
-    rows = [ln for ln in text.splitlines() if ln.strip()]
+    rows = [ln for ln in r.content.decode("utf-8-sig").splitlines() if ln.strip()]
     assert rows[0].startswith("기사id,문헌,권,순서,유형,층위,제목,시작쪽,시작행,끝쪽,끝행,상태")
-    assert len(rows) == 5 and ",1,3,2,0,approved," in rows[2]
+    assert len(rows) == 6 and ",1,3,2,0,approved," in rows[2]
 
 
 def test_boundary_bbox_from_l2_when_line_counts_match(tmp_path):

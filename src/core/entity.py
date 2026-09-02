@@ -38,7 +38,6 @@ logger = logging.getLogger(__name__)
 ENTITY_TYPES: dict[str, str] = {
     "work": "works",
     "text_block": "blocks",
-    "boundary": "boundaries",
     "tag": "tags",
     "concept": "concepts",
     "agent": "agents",
@@ -57,7 +56,6 @@ VALID_STATUS_TRANSITIONS: dict[str, list[str]] = {
 SCHEMA_FILES: dict[str, str] = {
     "work": "work.schema.json",
     "text_block": "text_block.schema.json",
-    "boundary": "boundary.schema.json",
     "tag": "tag.schema.json",
     "concept": "concept.schema.json",
     "agent": "agent.schema.json",
@@ -715,22 +713,6 @@ def _block_preview(text: str | None, length: int = 14) -> str:
     return compact[:length] + ("…" if len(compact) > length else "")
 
 
-def _boundary_anchor(boundary: dict | None) -> dict | None:
-    """내용 트리 행에 붙일 경계 앵커 요약. 경계가 없으면 None."""
-    if not boundary:
-        return None
-    bbox = boundary.get("bbox") or {}
-    return {
-        "start": boundary.get("start"),
-        "end": boundary.get("end"),
-        "start_line_bbox": bbox.get("start_line"),
-        "image_width": bbox.get("image_width"),
-        "image_height": bbox.get("image_height"),
-        "status": boundary.get("status"),
-        "kind": boundary.get("kind"),
-    }
-
-
 def list_contents(interp_path: str | Path, document_id: str | None = None) -> dict:
     """해석 저장소의 내용 트리 — Work마다 TextBlock을 sequence_index 순으로.
 
@@ -753,8 +735,6 @@ def list_contents(interp_path: str | Path, document_id: str | None = None) -> di
     interp_path = Path(interp_path).resolve()
     works = {w["id"]: w for w in list_entities(interp_path, "work") if w.get("id")}
     grouped: dict[str, list[dict]] = {wid: [] for wid in works}
-    # 경계 색인(D-090): 블록이 경계에서 파생됐으면 앵커(시작 행·bbox)를 함께 준다
-    boundaries = {b["id"]: b for b in list_entities(interp_path, "boundary") if b.get("id")}
     unassigned: list[dict] = []
 
     for blk in list_entities(interp_path, "text_block"):
@@ -777,10 +757,9 @@ def list_contents(interp_path: str | Path, document_id: str | None = None) -> di
         item = {
             "id": blk.get("id"),
             "sequence_index": blk.get("sequence_index"),
-            "boundary_id": (blk.get("metadata") or {}).get("boundary_id"),
-            "anchor": _boundary_anchor(
-                boundaries.get((blk.get("metadata") or {}).get("boundary_id"))
-            ),
+            # 경계 앵커(D-090): 위치의 정본은 source_refs. 종류·신뢰도·좌표 캐시는 metadata.anchor
+            "anchor": (blk.get("metadata") or {}).get("anchor"),
+            "source_refs": refs,
             "preview": _block_preview(blk.get("original_text")),
             "char_count": len("".join((blk.get("original_text") or "").split())),
             "status": blk.get("status"),
