@@ -29,21 +29,29 @@ from typing import Optional
 ENV_NAMES = (".venv", ".venv-gpu")
 
 # 각 환경의 파이썬 안에서 돈다. 앱 코드를 import해 엔진 등록까지 실제로 해 본다.
-PROBE_SOURCE = r"""
-import json, sys, platform, importlib, os
+PROBE_PACKAGES = r"""
+import json, sys, platform, importlib
 out = {"python": sys.version.split()[0], "executable": sys.executable,
-       "platform": platform.system(), "packages": {}, "errors": {}, "engines": []}
-for name in ("paddle", "paddleocr", "onnxruntime", "torch", "cv2", "numpy"):
+       "platform": platform.system(), "packages": {}, "errors": {}}
+for name in ("numpy", "cv2", "onnxruntime", "torch", "paddle", "paddleocr"):
     try:
         m = importlib.import_module(name)
         out["packages"][name] = getattr(m, "__version__", "?")
     except Exception as e:  # noqa: BLE001
-        out["errors"][name] = f"{type(e).__name__}: {e}"[:300]
+        out["errors"][name] = f"{type(e).__name__}: {e}"[:400]
 try:
     import paddle  # noqa: F401
     out["paddle_cuda"] = bool(paddle.device.is_compiled_with_cuda())
 except Exception:  # noqa: BLE001
     out["paddle_cuda"] = None
+print(json.dumps(out, ensure_ascii=False))
+"""
+
+# 엔진 등록은 별도 프로세스에서 한다. 같은 프로세스에서 paddleocr을 두 번 import하면
+# paddlex가 «PDX has already been initialized»를 던져 진짜 원인이 가려진다.
+PROBE_ENGINES = r"""
+import json, sys, os
+out = {"engines": [], "errors": {}}
 try:
     sys.path.insert(0, os.path.join(os.getcwd(), "src"))
     import logging; logging.disable(logging.CRITICAL)
@@ -68,19 +76,10 @@ def env_python(root: Path, name: str) -> Optional[Path]:
     return None
 
 
-def probe_env(root: Path, name: str, timeout: int = 180) -> dict:
-    """환경 하나를 조사한다. 그 환경의 파이썬으로 PROBE_SOURCE를 실행해 JSON을 받는다."""
-    py = env_python(root, name)
-    result: dict = {
-        "name": name,
-        "exists": (root / name).exists(),
-        "python_path": str(py) if py else None,
-    }
-    if py is None:
-        return result
+def _run_probe(py: Path, root: Path, source: str, timeout: int) -> dict:
     try:
         proc = subprocess.run(
-            [str(py), "-c", PROBE_SOURCE],
+            [str(py), "-c", source],
             cwd=str(root),
             capture_output=True,
             text=True,
@@ -90,13 +89,35 @@ def probe_env(root: Path, name: str, timeout: int = 180) -> dict:
         )
         line = next((ln for ln in reversed(proc.stdout.splitlines()) if ln.startswith("{")), None)
         if line:
-            result.update(json.loads(line))
-        else:
-            result["probe_error"] = (proc.stderr or proc.stdout)[-600:]
+            return json.loads(line)
+        return {"probe_error": (proc.stderr or proc.stdout)[-600:]}
     except subprocess.TimeoutExpired:
-        result["probe_error"] = f"{timeout}초 안에 끝나지 않았습니다 (paddle import가 멈춤?)"
+        return {"probe_error": f"{timeout}초 안에 끝나지 않았습니다 (paddle import가 멈춤?)"}
     except Exception as e:  # noqa: BLE001
-        result["probe_error"] = f"{type(e).__name__}: {e}"
+        return {"probe_error": f"{type(e).__name__}: {e}"}
+
+
+def probe_env(root: Path, name: str, timeout: int = 180) -> dict:
+    """환경 하나를 조사한다. 패키지 조사와 엔진 조사를 각각 새 프로세스로 돌려 합친다."""
+    py = env_python(root, name)
+    result: dict = {
+        "name": name,
+        "exists": (root / name).exists(),
+        "python_path": str(py) if py else None,
+    }
+    if py is None:
+        return result
+    pk = _run_probe(py, root, PROBE_PACKAGES, timeout)
+    if "probe_error" in pk:
+        result["probe_error"] = pk["probe_error"]
+        return result
+    result.update(pk)
+    en = _run_probe(py, root, PROBE_ENGINES, timeout)
+    result["engines"] = en.get("engines", [])
+    if en.get("errors"):
+        result.setdefault("errors", {}).update(en["errors"])
+    if "probe_error" in en:
+        result["engine_probe_error"] = en["probe_error"]
     return result
 
 
@@ -126,7 +147,7 @@ def diagnose(root: Path) -> dict:
     gpu = has_nvidia_gpu()
     # start_server가 고를 환경 (D-078): GPU가 보이고 .venv-gpu가 있으면 그것, 아니면 .venv
     gpu_env = next((e for e in envs if e["name"] == ".venv-gpu"), None)
-    chosen = ".venv-gpu" if (gpu and gpu_env and gpu_env.get("python_path")) else ".venv"
+    chosen = ".venv-gpu" if gpu_env_usable(gpu_env, gpu) else ".venv"
     return {
         "root": str(root),
         "host_python": sys.version.split()[0],
@@ -136,6 +157,29 @@ def diagnose(root: Path) -> dict:
         "start_server_picks": chosen,
         "envs": envs,
     }
+
+
+def gpu_env_usable(gpu_env: Optional[dict], gpu: bool) -> bool:
+    """start_server.bat의 선택 규칙.
+
+    GPU가 보이고 .venv-gpu에서 paddle·paddleocr이 import되면 그것, 아니면 .venv.
+    """
+    if not (gpu and gpu_env and gpu_env.get("python_path")) or gpu_env.get("probe_error"):
+        return False
+    err = gpu_env.get("errors", {})
+    return "paddle" not in err and "paddleocr" not in err
+
+
+def _torch_breaks_paddleocr(e: dict) -> bool:
+    """paddleocr import 실패 원인이 torch DLL인가.
+
+    paddleocr 3.x(paddlex)는 torch가 **설치돼 있으면** import한다(paddlex/utils/env.py).
+    그래서 깨진 torch가 있으면 paddleocr까지 못 뜬다 — 실측 2026-09-02: .venv에 torch가
+    들어 있고 shm.dll이 WinError 127, .venv-gpu는 cudnn_cnn64_9.dll이 WinError 127.
+    """
+    err = e.get("errors", {})
+    msg = (err.get("paddleocr") or "") + " " + (err.get("torch") or "")
+    return "paddleocr" in err and ("torch" in msg.lower())
 
 
 def _py_tuple(v: Optional[str]) -> tuple[int, ...]:
@@ -187,6 +231,28 @@ def recommend(report: dict) -> list[dict]:
                 }
             )
         err = e.get("errors", {})
+        if _torch_breaks_paddleocr(e):
+            cause = (err.get("torch") or err.get("paddleocr") or "")[:120]
+            if e["name"] == ".venv":
+                recs.append(
+                    {
+                        "level": "fix",
+                        "text": f"{tag}: 깨진 torch 때문에 paddleocr이 못 뜹니다 ({cause}). "
+                        "torch는 CPU 번들에 없는 패키지입니다 — 설치 폴더에서 `uv sync`를 한 번 "
+                        "돌리면 torch가 빠지고 paddleocr이 살아납니다.",
+                    }
+                )
+            else:
+                recs.append(
+                    {
+                        "level": "fix",
+                        "text": f"{tag}: 깨진 torch(cuDNN DLL) 때문에 paddleocr이 못 뜹니다. "
+                        "PaddleOCR만 GPU로 쓸 거면 `.venv-gpu\\Scripts\\python -m pip uninstall -y "
+                        "torch torchvision`. NDL古典籍 TrOCR도 쓸 거면 user-guide §7-A.6-2의 "
+                        "torch 핀(<2.8, cu124)으로 다시 설치하세요.",
+                    }
+                )
+            continue
         if "paddle" in err:
             recs.append({"level": "fix", "text": f"{tag}: paddle import 실패 — {err['paddle']}"})
         elif "paddleocr" in err:
@@ -210,6 +276,14 @@ def recommend(report: dict) -> list[dict]:
                     }
                 )
 
+    if venv and venv.get("python_path") and "torch" in venv.get("packages", {}):
+        recs.append(
+            {
+                "level": "warn",
+                "text": ".venv에 torch가 들어 있습니다. CPU 번들에는 없는 패키지라 `uv sync`가 "
+                "빼 버립니다. GPU 스택은 .venv-gpu에만 두세요(D-078).",
+            }
+        )
     if gpu_env and gpu_env.get("python_path"):
         if not report.get("nvidia_gpu"):
             recs.append(
@@ -220,18 +294,14 @@ def recommend(report: dict) -> list[dict]:
                 }
             )
         else:
-            bad = (
-                gpu_env.get("probe_error")
-                or "paddle" in gpu_env.get("errors", {})
-                or _py_tuple(gpu_env.get("python")) >= (3, 13)
-            )
+            bad = (not gpu_env_usable(gpu_env, True)) or _py_tuple(gpu_env.get("python")) >= (3, 13)
             if bad:
                 recs.append(
                     {
                         "level": "fix",
-                        "text": "start_server는 GPU를 보고 .venv-gpu를 고르는데 그 환경이 깨져 "
-                        "있습니다. .venv-gpu 폴더를 지우거나 이름을 바꾸면 .venv(CPU)로 뜹니다. "
-                        "GPU를 쓰려면 user-guide §7-A.6-2대로 3.12로 다시 만드세요.",
+                        "text": "GPU가 보이지만 .venv-gpu에서 paddle·paddleocr이 뜨지 않아 "
+                        "start_server는 .venv(CPU)로 뜁니다. GPU로 OCR하려면 위 항목대로 "
+                        ".venv-gpu를 고치세요. 안 쓸 거면 지워도 됩니다.",
                     }
                 )
     if chosen == ".venv" and venv and venv.get("python_path") and not venv.get("probe_error"):
