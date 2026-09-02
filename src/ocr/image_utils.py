@@ -267,11 +267,58 @@ def resolve_part_pdf(doc_path: Path, part_id: Optional[str]) -> Optional[Path]:
     return pdfs[0]
 
 
+# PDF 쪽을 렌더할 때의 기본(최소) 배율. 2.0 = 144 DPI. 글자만 있는 PDF는 이 배율로
+# 충분하고, L3·L2·텍스트 레이어 내보내기가 예전부터 이 값을 전제로 좌표를 다뤘다.
+DEFAULT_RENDER_SCALE = 2.0
+# 렌더 결과의 긴 변 상한(px). 스캔 해상도가 아무리 높아도 이 위로는 키우지 않는다 —
+# NDL 행 탐지는 1280px로 줄여 쓰고, PARSeq 행 크롭은 32px 높이라 그 이상은 시간만 든다.
+MAX_RENDER_LONG_SIDE = 4000
+
+
+def native_render_scale(page, default: float = DEFAULT_RENDER_SCALE) -> float:
+    """쪽에 깔린 스캔 이미지의 화소 밀도에 맞는 렌더 배율을 구한다 (D-087).
+
+    입력: fitz.Page
+    출력: 배율(pt→px). 스캔 이미지가 없으면 default. default보다 작아지지는 않고,
+          긴 변이 MAX_RENDER_LONG_SIDE를 넘지 않게 잡는다.
+
+    왜 필요한가: 스캔 PDF는 300dpi 이상의 이미지를 담고 있는데 2.0(144dpi)으로 렌더하면
+    원본 화소의 절반 이하만 엔진에 간다. 합성 쪽 실측에서 해상도 절반이 CER을
+    0.087→0.106으로 올렸다(D-086). 원본 ndlkotenocr-lite는 스캔 파일을 그대로 읽는다.
+
+    왜 이미지를 직접 꺼내지 않고 «그 배율로 렌더»하는가: 회전·자르기·여러 장 합성이
+    있는 쪽도 렌더는 좌표계를 그대로 지킨다. 화소 밀도는 넓이의 제곱근으로 재서
+    90도 회전에도 같은 값이 나온다. 쪽 넓이의 절반이 안 되는 이미지(삽화·도장)는 무시.
+    """
+    try:
+        rect = page.rect
+        page_area = float(rect.width * rect.height)
+        if page_area <= 0:
+            return default
+        best = 0.0
+        for info in page.get_image_info():
+            bbox = info.get("bbox")
+            w_px, h_px = info.get("width") or 0, info.get("height") or 0
+            if not bbox or w_px <= 0 or h_px <= 0:
+                continue
+            bw, bh = float(bbox[2] - bbox[0]), float(bbox[3] - bbox[1])
+            if bw <= 0 or bh <= 0 or (bw * bh) / page_area < 0.5:
+                continue
+            best = max(best, ((w_px * h_px) / (bw * bh)) ** 0.5)
+        scale = max(default, best) if best > 0 else default
+        long_pt = float(max(rect.width, rect.height))
+        if long_pt > 0:
+            scale = min(scale, MAX_RENDER_LONG_SIDE / long_pt)
+        return scale
+    except Exception:  # noqa: BLE001 — 배율 추정 실패는 기본값으로
+        return default
+
+
 def load_page_image_from_pdf(
     library_root: str,
     doc_id: str,
     page_number: int,
-    scale: float = 2.0,
+    scale: Optional[float] = None,
     part_id: Optional[str] = None,
 ) -> Optional[Image.Image]:
     """L1_source의 PDF에서 특정 페이지를 이미지로 추출한다.
@@ -280,7 +327,8 @@ def load_page_image_from_pdf(
       library_root: 서고 루트 경로
       doc_id: 문서 ID
       page_number: 페이지 번호 (1-indexed)
-      scale: 렌더링 배율 (기본 2.0 = 144 DPI)
+      scale: 렌더링 배율. None(기본)이면 쪽에 깔린 스캔 이미지의 해상도에 맞춘다
+             (native_render_scale, 최소 2.0). 숫자를 주면 그 배율로 고정.
       part_id: 권 식별자. **다권본에서는 반드시 넘겨야 한다** — 없으면 첫 권을 읽는다.
 
     출력: PIL Image 객체 (없으면 None)
@@ -309,7 +357,10 @@ def load_page_image_from_pdf(
             page_idx = page_number - 1
             if page_idx < 0 or page_idx >= len(doc):
                 return None
-            pix = doc[page_idx].get_pixmap(matrix=fitz.Matrix(scale, scale))
+            page = doc[page_idx]
+            if scale is None:
+                scale = native_render_scale(page)
+            pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale))
             # PNG 바이트 → PIL Image
             from io import BytesIO
 

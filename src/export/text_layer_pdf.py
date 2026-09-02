@@ -146,10 +146,15 @@ def _render_scale(doc_path: Path, part_id: str, page_num: int, pdf_width: float)
         pdf_width — PDF 페이지의 폭(포인트).
     출력: 배율. pixel / scale = point.
 
-    왜 L3에서 구하는가: L2에는 렌더 배율이 저장되지 않는다.
-    L3 레이아웃에는 image_width가 있으므로 실제 렌더 크기를 알 수 있고,
-    이것이 하드코딩된 2.0보다 정확하다(사용자가 다른 배율로 렌더했을 수 있다).
+    우선순위: L2의 image_width(D-087, bbox가 만들어진 바로 그 이미지) → L3의 image_width
+    → 기본 2.0. L2 기록이 없는 옛 파일은 배율 2.0으로 렌더된 것이지만, L3에 다른 배율이
+    적혀 있으면 그쪽이 더 정확할 수 있어 예전 순서를 유지한다.
     """
+    l2 = _read_json(_l2_path(doc_path, part_id, page_num))
+    if l2:
+        image_width = l2.get("image_width")
+        if isinstance(image_width, (int, float)) and image_width > 0 and pdf_width > 0:
+            return float(image_width) / float(pdf_width)
     layout = _read_json(_l3_path(doc_path, part_id, page_num))
     if layout:
         image_width = layout.get("image_width")

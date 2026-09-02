@@ -118,8 +118,9 @@ def test_render_scale_matches_repository_default():
     """
     from export.text_layer_pdf import DEFAULT_RENDER_SCALE as export_scale
     from ocr.full_page_block import DEFAULT_RENDER_SCALE as block_scale
+    from ocr.image_utils import DEFAULT_RENDER_SCALE as render_default
 
-    assert DEFAULT_RENDER_SCALE == export_scale == block_scale == 2.0
+    assert DEFAULT_RENDER_SCALE == export_scale == block_scale == render_default == 2.0
 
 
 def test_is_available_returns_bool():

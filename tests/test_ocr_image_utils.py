@@ -132,3 +132,78 @@ class TestGetPageImagePath:
         """L1_source 디렉토리 자체가 없으면 None."""
         result = get_page_image_path(str(tmp_path), "doc001", "vol1", 1)
         assert result is None
+
+
+class TestNativeRenderScale:
+    """스캔 PDF는 내장 이미지 해상도에 맞춰 렌더한다 (D-087)."""
+
+    @staticmethod
+    def _pdf_with_image(path, page_w, page_h, img_w, img_h, cover=1.0):
+        import fitz
+
+        img = Image.new("RGB", (img_w, img_h), "white")
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+        doc = fitz.open()
+        page = doc.new_page(width=page_w, height=page_h)
+        rect = fitz.Rect(0, 0, page_w * cover, page_h * cover)
+        page.insert_image(rect, stream=buf.getvalue())
+        doc.save(str(path))
+        doc.close()
+
+    def test_scanned_page_renders_at_image_resolution(self, tmp_path):
+        import fitz
+
+        from src.ocr.image_utils import native_render_scale
+
+        pdf = tmp_path / "scan.pdf"
+        self._pdf_with_image(pdf, 400, 600, 2000, 3000)  # 5 px/pt
+        with fitz.open(str(pdf)) as doc:
+            assert abs(native_render_scale(doc[0]) - 5.0) < 0.05
+
+    def test_text_only_page_keeps_default(self, tmp_path):
+        import fitz
+
+        from src.ocr.image_utils import DEFAULT_RENDER_SCALE, native_render_scale
+
+        pdf = tmp_path / "text.pdf"
+        doc = fitz.open()
+        doc.new_page(width=400, height=600).insert_text((40, 80), "text", fontsize=20)
+        doc.save(str(pdf))
+        with fitz.open(str(pdf)) as d:
+            assert native_render_scale(d[0]) == DEFAULT_RENDER_SCALE
+
+    def test_small_illustration_is_ignored(self, tmp_path):
+        import fitz
+
+        from src.ocr.image_utils import DEFAULT_RENDER_SCALE, native_render_scale
+
+        pdf = tmp_path / "ill.pdf"
+        self._pdf_with_image(pdf, 400, 600, 2000, 3000, cover=0.3)  # 쪽의 9%
+        with fitz.open(str(pdf)) as d:
+            assert native_render_scale(d[0]) == DEFAULT_RENDER_SCALE
+
+    def test_long_side_is_capped(self, tmp_path):
+        import fitz
+
+        from src.ocr.image_utils import MAX_RENDER_LONG_SIDE, native_render_scale
+
+        pdf = tmp_path / "huge.pdf"
+        self._pdf_with_image(pdf, 400, 600, 6000, 9000)  # 15 px/pt → 9000px는 상한 초과
+        with fitz.open(str(pdf)) as d:
+            scale = native_render_scale(d[0])
+            assert abs(scale * 600 - MAX_RENDER_LONG_SIDE) < 1
+
+    def test_load_page_image_from_pdf_uses_native_scale(self, tmp_path):
+        from src.ocr.image_utils import load_page_image_from_pdf
+
+        doc_dir = tmp_path / "documents" / "d" / "L1_source"
+        doc_dir.mkdir(parents=True)
+        self._pdf_with_image(doc_dir / "v1.pdf", 400, 600, 2000, 3000)
+        (tmp_path / "documents" / "d" / "manifest.json").write_text(
+            '{"parts": [{"part_id": "v1", "file": "L1_source/v1.pdf"}]}', encoding="utf-8"
+        )
+        img = load_page_image_from_pdf(str(tmp_path), "d", 1, part_id="v1")
+        assert img is not None and img.size == (2000, 3000)
+        fixed = load_page_image_from_pdf(str(tmp_path), "d", 1, scale=2.0, part_id="v1")
+        assert fixed.size == (800, 1200)

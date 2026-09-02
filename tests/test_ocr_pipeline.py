@@ -334,3 +334,48 @@ class TestMatchLinesToBlocks:
 
         lines = [{"text": "z", "bbox": [0, 0, 10, 10]}]
         assert match_lines_to_blocks(lines, []) == {"unmatched": lines}
+
+
+class TestL2ImageSize:
+    """L2에 bbox 좌표계(이미지 크기)를 기록하고, 병합 때 옛 좌표를 환산한다 (D-087)."""
+
+    def _l2(self, test_library):
+        return json.loads(
+            (test_library / "documents" / "doc001" / "L2_ocr" / "vol1_page_001.json").read_text(
+                encoding="utf-8"
+            )
+        )
+
+    def test_image_size_recorded(self, test_library):
+        registry = OcrEngineRegistry()
+        registry.register(DummyOcrEngine())
+        pipeline = OcrPipeline(registry, library_root=str(test_library))
+        pipeline.run_page("doc001", "vol1", 1)
+        l2 = self._l2(test_library)
+        assert (l2["image_width"], l2["image_height"]) == (1000, 1500)
+
+    def test_merge_rescales_old_coordinates(self, test_library):
+        registry = OcrEngineRegistry()
+        registry.register(DummyOcrEngine())
+        pipeline = OcrPipeline(registry, library_root=str(test_library))
+        pipeline.run_page("doc001", "vol1", 1)
+        # 옛 파일 흉내: 절반 크기 이미지 위의 좌표였다고 기록을 고친다
+        path = test_library / "documents" / "doc001" / "L2_ocr" / "vol1_page_001.json"
+        l2 = json.loads(path.read_text(encoding="utf-8"))
+        l2["image_width"], l2["image_height"] = 500, 750
+        path.write_text(json.dumps(l2), encoding="utf-8")
+        pipeline.run_block("doc001", "vol1", 1, "p01_b02")
+        l2 = json.loads(path.read_text(encoding="utf-8"))
+        assert (l2["image_width"], l2["image_height"]) == (1000, 1500)
+        by_id = {r["layout_block_id"]: r for r in l2["ocr_results"]}
+        # 건드리지 않은 블록의 좌표가 2배로 환산됐다 (더미 엔진 bbox [0,0,50,200] → [0,0,100,400])
+        assert by_id["p01_b01"]["lines"][0]["bbox"] == [0, 0, 100, 400]
+        assert by_id["p01_b01"]["lines"][0]["characters"][1]["bbox"] == [0, 100, 100, 200]
+        # 다시 돌린 블록은 현재 좌표계 그대로
+        assert by_id["p01_b02"]["lines"][0]["bbox"] == [0, 0, 50, 200]
+
+    def test_rescale_helper_keeps_text(self):
+        results = [{"layout_block_id": "x", "lines": [{"text": "王", "bbox": [1, 2, 3, 4]}]}]
+        out = OcrPipeline._rescale_ocr_results(results, 2.0, 0.5)
+        assert out[0]["lines"][0] == {"text": "王", "bbox": [2, 1, 6, 2]}
+        assert results[0]["lines"][0]["bbox"] == [1, 2, 3, 4], "원본을 바꾸면 안 된다"

@@ -713,3 +713,16 @@ def test_audit_stays_quiet_on_good_output(unwrapped_doc):
     _write_l2(unwrapped_doc, "vol1", 1, with_bbox=True)
     result = embed_text_layer(unwrapped_doc, "vol1", pages=[1], use_line_detection=False)
     assert result.warnings == [], result.warnings
+
+
+def test_render_scale_prefers_l2_record(scanned_doc):
+    """L2에 image_width가 있으면 그것이 bbox의 좌표계다 — L3보다 앞선다 (D-087)."""
+    from export.text_layer_pdf import _l2_path, _render_scale
+
+    _write_l2(scanned_doc, "vol1", 1, with_bbox=True)
+    _write_l3(scanned_doc, "vol1", 1, image_width=PAGE_W * 3.0)
+    p = _l2_path(scanned_doc, "vol1", 1)
+    l2 = json.loads(p.read_text(encoding="utf-8"))
+    l2["image_width"], l2["image_height"] = round(PAGE_W * 5), round(PAGE_H * 5)
+    p.write_text(json.dumps(l2), encoding="utf-8")
+    assert abs(_render_scale(scanned_doc, "vol1", 1, PAGE_W) - 5.0) < 0.01

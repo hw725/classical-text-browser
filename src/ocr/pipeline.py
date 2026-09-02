@@ -24,6 +24,7 @@ from typing import Callable, Optional
 
 from .base import OcrBlockResult, OcrEngineError
 from .image_utils import (
+    DEFAULT_RENDER_SCALE,
     crop_block,
     get_page_image_path,
     load_page_image,
@@ -321,6 +322,7 @@ class OcrPipeline:
                     page_number,
                     result,
                     merge_with_existing=(block_ids is not None),
+                    image_size=page_image.size,
                 )
 
                 logger.info(
@@ -381,6 +383,7 @@ class OcrPipeline:
             page_number,
             result,
             merge_with_existing=(block_ids is not None),
+            image_size=page_image.size,
         )
 
         logger.info(
@@ -549,6 +552,7 @@ class OcrPipeline:
         page_number: int,
         result: OcrPageResult,
         merge_with_existing: bool = False,
+        image_size: Optional[tuple[int, int]] = None,
     ) -> str:
         """OCR 결과를 L2 JSON으로 저장한다.
 
@@ -564,12 +568,28 @@ class OcrPipeline:
         output_path = l2_dir / filename
 
         data = result.to_dict()
+        # 좌표계 기록 (D-087): bbox는 이 크기의 이미지 픽셀이다. 예전에는 배율 2.0을
+        # 전제로 기록하지 않았는데, 스캔 해상도에 맞춰 렌더하면서 쪽마다 달라졌다.
+        if image_size:
+            data["image_width"], data["image_height"] = int(image_size[0]), int(image_size[1])
 
         if merge_with_existing and output_path.exists():
             with open(output_path, "r", encoding="utf-8") as f:
                 existing_data = json.load(f)
 
             existing_results = existing_data.get("ocr_results", [])
+            # 옛 결과가 다른 크기의 이미지 위에서 만들어졸 수 있다(예: 배율 2.0 시절).
+            # 그대로 섞으면 한 파일 안에 두 좌표계가 공존한다. 새 크기로 환산한다.
+            if image_size:
+                old_size = self._existing_image_size(existing_data, doc_id, part_id, page_number)
+                if old_size and tuple(old_size) != (int(image_size[0]), int(image_size[1])):
+                    sx = image_size[0] / old_size[0]
+                    sy = image_size[1] / old_size[1]
+                    existing_results = self._rescale_ocr_results(existing_results, sx, sy)
+                    logger.info(
+                        f"기존 L2 좌표 환산: {old_size[0]}×{old_size[1]} → "
+                        f"{image_size[0]}×{image_size[1]}"
+                    )
             incoming_results = data.get("ocr_results", [])
 
             incoming_by_id = {
@@ -602,6 +622,57 @@ class OcrPipeline:
 
         logger.info(f"L2 OCR 결과 저장: {output_path}")
         return str(output_path)
+
+    def _existing_image_size(
+        self, existing_data: dict, doc_id: str, part_id: str, page_number: int
+    ) -> Optional[tuple[int, int]]:
+        """기존 L2가 어떤 크기의 이미지 좌표인지 알아낸다.
+
+        기록이 있으면 그것. 없으면(D-087 이전 파일) PDF 원본은 배율 2.0으로 렌더했으므로
+        뷰포트×2.0. 이미지 파일 원본은 렌더가 없으니 크기가 바뀌지 않았다 → None(환산 없음).
+        """
+        w, h = existing_data.get("image_width"), existing_data.get("image_height")
+        if isinstance(w, (int, float)) and isinstance(h, (int, float)) and w > 0 and h > 0:
+            return (int(w), int(h))
+        vp = self._get_pdf_viewport_size(doc_id, page_number, part_id)
+        if vp:
+            return (round(vp[0] * DEFAULT_RENDER_SCALE), round(vp[1] * DEFAULT_RENDER_SCALE))
+        return None
+
+    @staticmethod
+    def _rescale_ocr_results(results: list[dict], sx: float, sy: float) -> list[dict]:
+        """L2 결과의 행·글자 bbox를 (sx, sy)배 한다. 텍스트는 건드리지 않는다."""
+
+        def _scale(bbox):
+            if not bbox or len(bbox) != 4:
+                return bbox
+            return [
+                round(bbox[0] * sx, 2),
+                round(bbox[1] * sy, 2),
+                round(bbox[2] * sx, 2),
+                round(bbox[3] * sy, 2),
+            ]
+
+        out = []
+        for item in results:
+            item = dict(item)
+            lines = []
+            for line in item.get("lines") or []:
+                line = dict(line)
+                if line.get("bbox"):
+                    line["bbox"] = _scale(line["bbox"])
+                if line.get("characters"):
+                    chars = []
+                    for ch in line["characters"]:
+                        ch = dict(ch)
+                        if ch.get("bbox"):
+                            ch["bbox"] = _scale(ch["bbox"])
+                        chars.append(ch)
+                    line["characters"] = chars
+                lines.append(line)
+            item["lines"] = lines
+            out.append(item)
+        return out
 
     @staticmethod
     def _page_image_to_bytes(page_image) -> bytes:

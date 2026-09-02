@@ -16,6 +16,16 @@
       "description": "페이지 번호 (1-based).",
       "minimum": 1
     },
+    "image_width": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "bbox 좌표계인 페이지 이미지의 폭(px). 스캔 해상도에 맞춰 렌더하므로 쪽마다 다를 수 있다(D-087). 없으면 PDF 뷰포트×2.0으로 본다."
+    },
+    "image_height": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "bbox 좌표계인 페이지 이미지의 높이(px)."
+    },
     "ocr_engine": {
       "type": ["string", "null"],
       "description": "사용된 OCR 엔진. 예: paddleocr, tesseract, google_vision, claude_vision",
