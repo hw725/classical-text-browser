@@ -10,7 +10,13 @@ import base64
 import time
 from typing import Optional
 
-from .base import BaseLlmProvider, LlmProviderError, LlmResponse
+from .base import (
+    TRUNCATED_MARK,
+    BaseLlmProvider,
+    LlmProviderError,
+    LlmResponse,
+    thinking_options,
+)
 
 
 class OpenAiProvider(BaseLlmProvider):
@@ -305,35 +311,89 @@ class OpenAiProvider(BaseLlmProvider):
             }
         )
 
+        # 사고 예산을 답변 예산에 더한다 (D-083). OpenAI 추론 모델은 추론 토큰이
+        # max_completion_tokens 안에서 소모된다. 사고 강도는 reasoning_effort로
+        # 조절하는데, 추론 모델이 아닌 곳에 보내면 400이 나므로 모델을 가려 보낸다.
+        think, thinking_budget = thinking_options(kwargs)
+        create_kwargs = self._vision_create_kwargs(
+            selected_model, messages, max_tokens + thinking_budget, response_format, think
+        )
+
         t0 = time.monotonic()
         try:
-            response = await client.chat.completions.create(
-                model=selected_model,
-                messages=messages,
-                max_completion_tokens=max_tokens,
-            )
+            response = await client.chat.completions.create(**create_kwargs)
         except openai.BadRequestError as e:
             if "max_completion_tokens" in str(e):
-                response = await client.chat.completions.create(
-                    model=selected_model,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                )
+                create_kwargs["max_tokens"] = create_kwargs.pop("max_completion_tokens")
+                response = await client.chat.completions.create(**create_kwargs)
             else:
                 raise
         elapsed = time.monotonic() - t0
 
-        text = response.choices[0].message.content if response.choices else ""
+        choice = response.choices[0] if response.choices else None
+        text = (choice.message.content if choice else "") or ""
+        finish_reason = str(getattr(choice, "finish_reason", "") or "").lower()
+        # 잘림·빈 응답은 실패로 드러낸다 (D-083 원칙 3). 텍스트 경로와 동일.
+        if response_format == "json" and finish_reason in ("length", "max_tokens"):
+            raise LlmProviderError(
+                f"OpenAI vision JSON output {TRUNCATED_MARK} (finish_reason={finish_reason}, "
+                f"max_tokens={max_tokens}, thinking_budget={thinking_budget})"
+            )
+        if response_format == "json" and not text.strip():
+            raise LlmProviderError(
+                f"OpenAI vision empty JSON output (finish_reason={finish_reason}, "
+                f"max_tokens={max_tokens})"
+            )
         tokens_in = response.usage.prompt_tokens if response.usage else None
         tokens_out = response.usage.completion_tokens if response.usage else None
 
         return LlmResponse(
-            text=text or "",
+            text=text,
             provider=self.provider_id,
             model=response.model or selected_model,
             tokens_in=tokens_in,
             tokens_out=tokens_out,
             cost_usd=self._estimate_cost(selected_model, tokens_in, tokens_out),
             elapsed_sec=round(elapsed, 2),
-            raw={"id": response.id},
+            raw={"id": response.id, "finish_reason": finish_reason},
         )
+
+    @staticmethod
+    def _is_reasoning_model(model: str) -> bool:
+        """reasoning_effort를 받는 모델인가. o-계열과 gpt-5 계열만 받는다."""
+        name = (model or "").lower()
+        return name.startswith(("o1", "o3", "o4", "gpt-5"))
+
+    @classmethod
+    def _vision_create_kwargs(
+        cls, model: str, messages: list, max_completion_tokens: int, response_format: str, think
+    ) -> dict:
+        """비전 호출 인자를 조립한다. 순수 함수라 테스트로 고정한다.
+
+        입력: 모델, 메시지, 상한(답변+사고), 응답 형식, think(None|bool|str)
+        출력: client.chat.completions.create(**kwargs)에 넘길 dict
+
+        reasoning_effort 대응:
+          - think=None        → 보내지 않는다 (모델 기본)
+          - think=False       → gpt-5 계열은 "minimal", o-계열은 "low"(그 계열의 최소치)
+          - think=True        → "medium"
+          - think="low" 등    → 그대로
+          추론 모델이 아니면 어떤 경우에도 보내지 않는다 — 400으로 호출이 죽는다.
+        """
+        kwargs = {
+            "model": model,
+            "messages": messages,
+            "max_completion_tokens": max_completion_tokens,
+        }
+        if response_format == "json":
+            kwargs["response_format"] = {"type": "json_object"}
+        if think is not None and cls._is_reasoning_model(model):
+            if isinstance(think, str):
+                kwargs["reasoning_effort"] = think
+            elif think:
+                kwargs["reasoning_effort"] = "medium"
+            else:
+                kwargs["reasoning_effort"] = (
+                    "minimal" if model.lower().startswith("gpt-5") else "low"
+                )
+        return kwargs

@@ -40,6 +40,11 @@ from .base import (
     OcrLineResult,
 )
 
+try:  # 프로바이더가 잘림을 알리는 표식. 경로 문제로 못 읽으면 문자열로 대체.
+    from llm.providers.base import TRUNCATED_MARK
+except ImportError:  # pragma: no cover — src 경로 설정이 다른 실행 환경
+    TRUNCATED_MARK = "truncated"
+
 logger = logging.getLogger(__name__)
 
 
@@ -59,6 +64,25 @@ _OCR_SYSTEM_PROMPT = """\
 출력 형식 (JSON):
 {"lines": [{"text": "첫째 줄 텍스트"}, {"text": "둘째 줄 텍스트"}, ...]}
 """
+
+
+# 답변 JSON 스키마. Ollama는 format에 이 객체를 그대로 받고, 다른 프로바이더는
+# JSON 모드만 켠다(스키마 미지원이거나 형식이 달라서). 스키마와 시스템 프롬프트의
+# 출력 형식 설명은 같은 모양이어야 한다 — 어긋나면 모델이 둘 중 하나를 따른다.
+OCR_LINES_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "lines": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"text": {"type": "string"}},
+                "required": ["text"],
+            },
+        }
+    },
+    "required": ["lines"],
+}
 
 
 def _build_ocr_prompt(writing_direction: str, language: str) -> str:
@@ -208,32 +232,48 @@ class LlmOcrEngine(BaseOcrEngine):
         force_provider = kwargs.get("force_provider")
         force_model = kwargs.get("force_model")
 
-        call_kwargs = dict(
+        base_kwargs = dict(
             image_mime="image/png",
             purpose="ocr",
             system=_OCR_SYSTEM_PROMPT,
-            # reasoning 모델 대응 (실측 2026-08-12, Ollama qwen3.5:4b 1쪽):
-            #   think 미지정 → response 0자 / thinking 2,742자
-            #   think=False  → response 1,106자 / thinking 0자 (제대로 된 OCR)
-            # 사고에 토큰을 다 쓰면 OCR 결과가 아예 안 나온다. OCR은 판단이
-            # 아니라 옮겨 적기이므로 사고를 끄는 편이 결과가 낫다.
-            think=False,
-            # 그래도 빈 응답이 오면 thinking을 대신 쓰지 않는다. 사고문이
+            # 답변을 스키마로 묶는다 (D-083 원칙 2). 사고를 켠 모델이 추론 문장을
+            # 답변 자리에 흘리는 것을 막는 가장 확실한 방법이다. 프로바이더마다
+            # 형식 강제 수단이 다르므로(Ollama format / Gemini mime / OpenAI
+            # response_format) 여기서는 의도만 말하고 수단은 프로바이더가 고른다.
+            response_format="json",
+            json_schema=OCR_LINES_SCHEMA,
+            # 빈 응답이 오면 thinking을 대신 쓰지 않는다 (D-074). 사고문이
             # PDF 텍스트 레이어로 구워지면 문서는 멀쩡해 보이는데 검색이
             # 안 되고 복사하면 사고문이 나온다. 빈 결과는 «실패»로 드러나기라도
-            # 하지만 이 오염은 드러나지 않는다.
+            # 하지만 이 오염은 드러나지 않는다. 어떤 시도에서도 이 값은 바뀌지 않는다.
             allow_thinking_fallback=False,
         )
         if force_provider:
-            call_kwargs["force_provider"] = force_provider
+            base_kwargs["force_provider"] = force_provider
         if force_model:
-            call_kwargs["force_model"] = force_model
+            base_kwargs["force_model"] = force_model
 
-        response = await self._router.call_with_image(
-            prompt,
-            image_bytes,
-            **call_kwargs,
-        )
+        response = None
+        last_error: Optional[Exception] = None
+        for attempt in self._plan_attempts(kwargs):
+            call_kwargs = dict(base_kwargs, **attempt)
+            try:
+                response = await self._router.call_with_image(prompt, image_bytes, **call_kwargs)
+                break
+            except Exception as e:  # noqa: BLE001 — 잘림만 사다리를 타고 나머지는 그대로 올린다
+                last_error = e
+                if TRUNCATED_MARK in str(e).lower() or "잘렸" in str(e):
+                    logger.warning(
+                        f"LLM OCR 출력 잘림 (think={attempt.get('think')!r}, "
+                        f"max_tokens={attempt.get('max_tokens')}) → 다음 단계로: {e}"
+                    )
+                    continue
+                raise
+        if response is None:
+            raise OcrEngineError(
+                f"LLM OCR 출력이 모든 시도에서 잘렸습니다: {last_error}\n"
+                "→ 블록을 더 작게 나누거나, 추론을 끄고 다시 시도하세요."
+            )
 
         # 응답 텍스트에서 JSON 추출
         raw_text = response.text.strip()
@@ -274,6 +314,40 @@ class LlmOcrEngine(BaseOcrEngine):
         )
 
         return result
+
+    @staticmethod
+    def _plan_attempts(kwargs: dict) -> list[dict]:
+        """호출 시도 사다리를 짠다 (D-083 원칙 3).
+
+        입력: recognize()가 받은 kwargs. 보는 키:
+            think            — None/False(기본: 사고 끔, D-074) | True | "low" 등
+            thinking_budget  — 사고 예산(토큰). 없으면 프로바이더 기본값
+            max_tokens       — 답변 예산. 없으면 4096
+        출력: 시도마다 router.call_with_image에 덧붙일 kwargs 목록. 앞에서부터
+              시도하고, 출력이 **잘렸을 때만** 다음으로 넘어간다.
+
+        사다리:
+          1) 요청대로 (사고를 켰으면 켠 채로, 예산 분리)
+          2) 사고를 켰다면 → 사고를 끄고 같은 답변 예산으로
+          3) 답변 예산을 두 배로 (사고 끔)
+        빈 응답은 여기서 다루지 않는다 — 그것은 «실패»로 그대로 드러나야 한다.
+        thinking 필드를 본문으로 쓰는 폴백은 어떤 단계에도 없다.
+        """
+        think = kwargs.get("think", False)
+        if think is None:
+            think = False
+        budget = kwargs.get("thinking_budget")
+        max_tokens = int(kwargs.get("max_tokens") or 4096)
+
+        attempts: list[dict] = []
+        first = {"think": think, "max_tokens": max_tokens}
+        if think and budget:
+            first["thinking_budget"] = int(budget)
+        attempts.append(first)
+        if think:
+            attempts.append({"think": False, "max_tokens": max_tokens})
+        attempts.append({"think": False, "max_tokens": max_tokens * 2})
+        return attempts
 
     def _parse_response(self, raw_text: str) -> list[dict]:
         """LLM 응답에서 lines 배열을 추출한다.

@@ -9,6 +9,57 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
+# ─── 추론(thinking) 옵션 — 프로바이더 공통 해석 (D-083) ────────────────
+#
+# 호출자는 kwargs로 두 값을 넘길 수 있다.
+#   think            : None(지정 안 함) | False(끔) | True(켬) | "low"/"medium"/"high"
+#   thinking_budget  : 사고에 허용하는 토큰 수. think가 켜져 있을 때만 의미가 있다.
+#
+# 왜 공통 헬퍼인가:
+#   D-074가 관측한 「thinking 2,742자 / response 0자」의 원인은 사고와 답변이
+#   **한 상한을 나눠 쓰는** 것이었다. 프로바이더마다 상한의 이름이 다르지만
+#   (num_predict / max_output_tokens / max_tokens / max_completion_tokens)
+#   「답변 예산 + 사고 예산」으로 잡아야 한다는 규칙은 같다. 네 곳이 각자
+#   해석하면 한 곳이 어긋나고, 어긋난 곳은 조용히 빈 응답을 낸다.
+
+# 사고를 켰는데 예산을 안 준 경우의 기본값. 로컬 4B 모델 1쪽 기준 실측치
+# (D-074: 사고문 2,742자 ≈ 2,000토큰 안쪽)에 여유를 두었다. 실측으로 조정한다.
+DEFAULT_THINKING_BUDGET = 4096
+
+
+def thinking_options(kwargs: dict) -> tuple:
+    """kwargs에서 (think, thinking_budget)을 꺼내 정리한다.
+
+    입력: 프로바이더 call*()이 받은 **kwargs.
+    출력: (think, budget)
+        think  — None | False | True | str. None이면 «지정 안 함»이라 페이로드에 넣지 않는다.
+        budget — int. think가 꺼져 있으면 0. 켜져 있고 예산이 없으면 기본값.
+
+    예산이 0이 아닌 것은 think가 True/str일 때뿐이다. 그래서 호출자는
+    `max_tokens + budget`을 그대로 상한에 더하면 된다 — 사고가 꺼져 있으면
+    아무것도 더해지지 않는다.
+    """
+    think = kwargs.get("think", None)
+    if isinstance(think, str) and not think.strip():
+        think = None
+    enabled = bool(think) if not isinstance(think, str) else True
+    if not enabled:
+        return think, 0
+    raw = kwargs.get("thinking_budget")
+    try:
+        budget = int(raw) if raw is not None else DEFAULT_THINKING_BUDGET
+    except (TypeError, ValueError):
+        budget = DEFAULT_THINKING_BUDGET
+    if budget <= 0:
+        budget = DEFAULT_THINKING_BUDGET
+    return think, budget
+
+
+# 잘림 예외 메시지에 반드시 들어가는 표식. `_state._is_retryable_llm_error`가
+# "truncated"로 재시도 여부를 판단하고, LlmOcrEngine이 이것으로 «사고 끈 재시도»
+# 사다리를 탄다. 프로바이더마다 다른 문장을 쓰면 사다리가 한 곳에서 끊어진다.
+TRUNCATED_MARK = "truncated"
+
 
 @dataclass
 class LlmResponse:

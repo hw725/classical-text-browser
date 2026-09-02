@@ -61,6 +61,11 @@ class OcrRunRequest(BaseModel):
     force_model: str | None = None  # LLM 모델 지정 (llm_vision 엔진 전용)
     # PaddleOCR 언어 코드 (paddleocr 엔진 전용: ch, chinese_cht, korean, japan, en)
     paddle_lang: str | None = None
+    # 추론(thinking) 제어 (llm_vision 엔진 전용, D-083).
+    #   None → 엔진 기본(사고 끔, D-074). True → 켬. "low"/"medium"/"high" → 강도 지정.
+    #   예산은 답변 예산에 더해진다. 잘리면 엔진이 사고를 끄고 한 번 더 시도한다.
+    llm_think: bool | str | None = None
+    llm_thinking_budget: int | None = None
 
 
 class OcrBatchRequest(BaseModel):
@@ -108,6 +113,10 @@ class OcrBatchRequest(BaseModel):
     force_provider: str | None = None
     force_model: str | None = None
     paddle_lang: str | None = None
+    # 추론 제어 (llm_vision 전용, D-083). 일괄 OCR의 기본은 사고 끔이다 —
+    # 사고는 D-082의 2단계(정밀 판독)에서만 켠다.
+    llm_think: bool | str | None = None
+    llm_thinking_budget: int | None = None
 
 
 def _usage_log_path():
@@ -278,6 +287,25 @@ def _resolve_page_count(doc_path, part: dict) -> int:
 # 근거는 각 엔진 파일의 docstring이다 (ndlocr_engine.py, ndlkotenocr_engine.py,
 # ndlkotenocr_full_engine.py). 추측이 아니라 문서화된 제약이다.
 HANGUL_INCAPABLE_ENGINES = ("ndlocr", "ndlkotenocr", "ndlkotenocr-full")
+
+
+def _add_llm_reasoning_kwargs(engine_kwargs: dict, body) -> dict:
+    """요청 본문의 추론 옵션을 엔진 kwargs로 옮긴다 (D-083).
+
+    입력: engine_kwargs — 엔진 recognize()에 넘길 dict (제자리 수정).
+          body — llm_think / llm_thinking_budget 필드를 가질 수 있는 요청 모델.
+    출력: 같은 dict.
+
+    네 라우트(쪽 OCR·스트림·블록 재실행·권 일괄)가 같은 옵션을 받으므로 한 곳에
+    둔다. 지정하지 않으면 아무것도 넣지 않는다 — 엔진 기본(사고 끔)이 그대로다.
+    """
+    think = getattr(body, "llm_think", None)
+    if think is not None:
+        engine_kwargs["think"] = think
+    budget = getattr(body, "llm_thinking_budget", None)
+    if budget:
+        engine_kwargs["thinking_budget"] = int(budget)
+    return engine_kwargs
 
 
 # ===========================================================================
@@ -842,6 +870,7 @@ async def api_run_ocr(
         engine_kwargs["force_provider"] = body.force_provider
     if body.force_model:
         engine_kwargs["force_model"] = body.force_model
+    _add_llm_reasoning_kwargs(engine_kwargs, body)
 
     # PaddleOCR 엔진: 요청별 언어 지정 (공유 인스턴스 mutation 없음)
     # 왜 engine_kwargs로 전달하는가:
@@ -906,6 +935,7 @@ async def api_run_ocr_stream(
         engine_kwargs["force_provider"] = body.force_provider
     if body.force_model:
         engine_kwargs["force_model"] = body.force_model
+    _add_llm_reasoning_kwargs(engine_kwargs, body)
     # PaddleOCR 요청별 언어 지정 (공유 인스턴스 mutation 없음)
     if body.paddle_lang and body.engine_id == "paddleocr":
         engine_kwargs["paddle_lang"] = body.paddle_lang
@@ -1205,6 +1235,7 @@ async def api_rerun_ocr_block(
         engine_kwargs["force_provider"] = body.force_provider
     if body.force_model:
         engine_kwargs["force_model"] = body.force_model
+    _add_llm_reasoning_kwargs(engine_kwargs, body)
     # PaddleOCR 요청별 언어 지정 (공유 인스턴스 mutation 없음)
     if body.paddle_lang and body.engine_id == "paddleocr":
         engine_kwargs["paddle_lang"] = body.paddle_lang
@@ -1667,6 +1698,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
         engine_kwargs["force_provider"] = body.force_provider
     if body.force_model:
         engine_kwargs["force_model"] = body.force_model
+    _add_llm_reasoning_kwargs(engine_kwargs, body)
     if body.paddle_lang and body.engine_id == "paddleocr":
         engine_kwargs["paddle_lang"] = body.paddle_lang
 

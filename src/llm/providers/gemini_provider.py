@@ -10,7 +10,13 @@ import inspect
 import time
 from typing import Optional
 
-from .base import BaseLlmProvider, LlmProviderError, LlmResponse
+from .base import (
+    TRUNCATED_MARK,
+    BaseLlmProvider,
+    LlmProviderError,
+    LlmResponse,
+    thinking_options,
+)
 
 
 class GeminiProvider(BaseLlmProvider):
@@ -320,11 +326,22 @@ class GeminiProvider(BaseLlmProvider):
         client = genai.Client(api_key=api_key)
         selected_model = model or self.DEFAULT_MODEL
 
+        # 사고 예산을 답변 예산에 더한다 (D-083).
+        # Gemini 2.5 계열은 기본으로 사고하고, 사고 토큰이 max_output_tokens에
+        # 포함된다. 그래서 상한을 답변 크기로만 잡으면 사고가 상한을 삼키고
+        # 답변이 빈다 — Ollama와 같은 함정이다.
+        think, thinking_budget = thinking_options(kwargs)
         config = types.GenerateContentConfig(
-            max_output_tokens=max_tokens,
+            max_output_tokens=max_tokens + thinking_budget,
         )
         if system:
             config.system_instruction = system
+        # 답변 형식 강제 — 텍스트 경로와 같은 규칙 (D-033·D-083).
+        if response_format == "json":
+            config.response_mime_type = "application/json"
+        thinking_config = self._build_thinking_config(types, selected_model, think, thinking_budget)
+        if thinking_config is not None:
+            config.thinking_config = thinking_config
 
         # 이미지 + 텍스트를 contents로 전달
         contents = [
@@ -341,6 +358,18 @@ class GeminiProvider(BaseLlmProvider):
         elapsed = time.monotonic() - t0
 
         text = response.text or ""
+        finish_reason = self._extract_finish_reason(response)
+        # 잘림·빈 응답은 실패로 드러낸다 (D-083 원칙 3). 텍스트 경로와 동일.
+        if response_format == "json" and self._is_truncated_finish_reason(finish_reason):
+            raise LlmProviderError(
+                f"Gemini vision JSON output {TRUNCATED_MARK} (finish_reason={finish_reason}, "
+                f"max_tokens={max_tokens}, thinking_budget={thinking_budget})"
+            )
+        if response_format == "json" and not text.strip():
+            raise LlmProviderError(
+                f"Gemini vision empty JSON output (finish_reason={finish_reason}, "
+                f"max_tokens={max_tokens})"
+            )
         tokens_in = getattr(response.usage_metadata, "prompt_token_count", None)
         tokens_out = getattr(response.usage_metadata, "candidates_token_count", None)
 
@@ -352,5 +381,32 @@ class GeminiProvider(BaseLlmProvider):
             tokens_out=tokens_out,
             cost_usd=self._estimate_cost(selected_model, tokens_in, tokens_out),
             elapsed_sec=round(elapsed, 2),
-            raw={"model": selected_model},
+            raw={"model": selected_model, "finish_reason": finish_reason},
         )
+
+    @staticmethod
+    def _build_thinking_config(types_mod, model: str, think, thinking_budget: int):
+        """think 요청을 Gemini ThinkingConfig로 옮긴다. 만들 수 없으면 None.
+
+        입력:
+          types_mod        — google.genai.types (테스트에서 대체 가능하도록 인자로 받는다)
+          model            — 선택된 모델 이름
+          think            — thinking_options()가 돌려준 값
+          thinking_budget  — 사고 예산(토큰). think가 꺼져 있으면 0
+        출력: ThinkingConfig 또는 None
+
+        규칙:
+          - think가 None(지정 안 함)이면 모델 기본 동작을 건드리지 않는다.
+          - think=False → thinking_budget=0. 단 Pro 계열은 0을 거부하므로(최소치가
+            있다) 그 경우는 건드리지 않는다. 억지로 0을 보내면 호출 자체가 실패한다.
+          - think 켬 → 예산을 주고 사고문은 응답에 포함하지 않는다
+            (include_thoughts=False). 사고문이 본문에 섞이는 것이 D-074의 사고였다.
+        """
+        thinking_cls = getattr(types_mod, "ThinkingConfig", None)
+        if thinking_cls is None or think is None:
+            return None
+        if think is False:
+            if "pro" in (model or "").lower():
+                return None
+            return thinking_cls(thinking_budget=0)
+        return thinking_cls(thinking_budget=thinking_budget, include_thoughts=False)

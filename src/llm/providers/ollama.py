@@ -15,7 +15,13 @@ import time
 
 import httpx
 
-from .base import BaseLlmProvider, LlmProviderError, LlmResponse
+from .base import (
+    TRUNCATED_MARK,
+    BaseLlmProvider,
+    LlmProviderError,
+    LlmResponse,
+    thinking_options,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -209,8 +215,7 @@ class OllamaProvider(BaseLlmProvider):
         # 은퇴 안내는 본문에 사유가 들어 있다. 그대로 남겨야 원인을 알 수 있다.
         detail = (resp.text or "")[:200]
         logger.warning(
-            f"Ollama 비전 모델 {model} 을(를) 쓸 수 없습니다 "
-            f"(HTTP {resp.status_code}): {detail}"
+            f"Ollama 비전 모델 {model} 을(를) 쓸 수 없습니다 (HTTP {resp.status_code}): {detail}"
         )
         return False
 
@@ -498,6 +503,25 @@ class OllamaProvider(BaseLlmProvider):
             raw={"stream": True},
         )
 
+    async def _post_generate(self, payload: dict, *, label: str = "Ollama") -> dict:
+        """`/api/generate`에 페이로드를 보내고 JSON을 돌려준다.
+
+        입력: payload — Ollama generate 요청 본문. label — 오류 메시지에 쓸 이름.
+        출력: 응답 JSON(dict). HTTP 오류나 Ollama 오류 필드는 LlmProviderError로.
+
+        왜 따로 뗐는가: 비전 경로의 페이로드 조립·잘림 판정을 서버 없이 시험하려면
+        네트워크 한 줄이 바꿔 끼울 수 있는 자리에 있어야 한다. 이 환경에는
+        Ollama 서버가 없고, 그 사정은 CI도 같다.
+        """
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            resp = await client.post(f"{self._url}/api/generate", json=payload)
+            if resp.status_code != 200:
+                raise LlmProviderError(f"{label} 응답 {resp.status_code}: {resp.text[:200]}")
+            data = resp.json()
+        if data.get("error"):
+            raise LlmProviderError(f"{label} 에러: {data['error']}")
+        return data
+
     async def call_with_image(
         self,
         prompt,
@@ -526,6 +550,15 @@ class OllamaProvider(BaseLlmProvider):
         """
         selected_model = model or await self._pick_vision_model()
 
+        # 사고 예산은 답변 예산에 **더한다** (D-083).
+        #
+        # num_predict는 Ollama가 생성하는 토큰 전체의 상한이고, reasoning 모델은
+        # 사고 토큰도 여기서 소모한다. 그래서 4096을 그대로 두고 think=True를
+        # 켜면 사고가 상한을 다 쓰고 response가 빈다 — D-074가 본 현상이다.
+        # 사고가 꺼져 있으면 budget은 0이라 예전과 같다.
+        think, thinking_budget = thinking_options(kwargs)
+        num_predict = max_tokens + thinking_budget
+
         payload = {
             "model": selected_model,
             "prompt": prompt,
@@ -536,21 +569,41 @@ class OllamaProvider(BaseLlmProvider):
             # 통째로** 텍스트 레이어에 박혔다. 그러면 줄 정보가 없어 한 덩어리로
             # 얹히므로 형광·드래그 위치도 전부 어긋난다
             # (실측 2026-08-12: y 위치가 73개 → 1개로 붕괴).
-            "options": {"num_predict": max_tokens},
+            "options": {"num_predict": num_predict},
         }
         # reasoning 비전 모델(qwen3-vl:235b-cloud 등)은 명시될 때만 think 전달.
-        if "think" in kwargs and kwargs["think"] is not None:
-            payload["think"] = bool(kwargs["think"])
+        # gpt-oss 계열은 "low"/"medium"/"high" 문자열도 받으므로 str은 그대로 넘긴다.
+        if think is not None:
+            payload["think"] = think if isinstance(think, str) else bool(think)
         if system:
             payload["system"] = system
+        # 답변을 구조로 제약한다 (D-083 원칙 2).
+        #
+        # 텍스트 경로 call()에는 있던 분기가 비전 경로에는 없었다. 사고를 켠
+        # 모델이 추론 문장을 response에 흘리는 것을 막는 가장 확실한 방법은
+        # format으로 답변을 스키마에 묶는 것이다. Ollama는 사고를 `thinking`
+        # 필드에 따로 두므로 format은 response에만 걸린다.
+        # 호출자가 json_schema(dict)를 주면 그것을, 없으면 "json"을 쓴다.
+        if response_format == "json":
+            payload["format"] = kwargs.get("json_schema") or "json"
 
         t0 = time.monotonic()
-        async with httpx.AsyncClient(timeout=300.0) as client:
-            resp = await client.post(f"{self._url}/api/generate", json=payload)
-            if resp.status_code != 200:
-                raise LlmProviderError(f"Ollama vision 응답 {resp.status_code}")
-            data = resp.json()
+        data = await self._post_generate(payload, label="Ollama vision")
         elapsed = time.monotonic() - t0
+
+        # 잘림 감지 (D-083 원칙 3).
+        #
+        # Gemini·OpenAI 프로바이더는 finish_reason으로 잘림을 예외로 올리는데
+        # (D-033) Ollama만 done_reason을 읽지 않고 조용히 성공으로 돌려줬다.
+        # 잘린 JSON은 파서가 «줄바꿈 분리»로 받아 한 덩어리 텍스트를 만든다 —
+        # D-075가 본 «y 위치 42개 → 1개» 붕괴가 그 결과다. 실패로 드러내는
+        # 편이 낫다. 메시지에 TRUNCATED_MARK를 넣어 호출자가 사다리를 탄다.
+        if data.get("done_reason") == "length":
+            raise LlmProviderError(
+                f"Ollama vision 출력이 num_predict={num_predict}에서 잘렸습니다 "
+                f"({TRUNCATED_MARK}; think={think!r}, thinking_budget={thinking_budget}). "
+                "→ 사고를 끄거나 예산을 늘려 다시 시도합니다."
+            )
 
         # reasoning 모델 폴백: response가 비면 thinking 사용.
         #
