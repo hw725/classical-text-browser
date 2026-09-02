@@ -77,7 +77,7 @@ flowchart LR
 
 ### 2.1 다운로드
 
-[**ZIP 다운로드**](https://github.com/hw725/classical-text-browser/archive/refs/heads/master.zip)를 클릭하고 원하는 위치에 압축을 풀어주세요.
+[**ZIP 다운로드**](https://github.com/hw725/classical-text-browser/archive/refs/heads/main.zip)를 클릭하고 원하는 위치에 압축을 풀어주세요.
 
 > Git을 아는 분은 `git clone https://github.com/hw725/classical-text-browser.git`으로도 가능합니다.
 

@@ -56,7 +56,7 @@ ctb ocr "논문.pdf" --execute
 
 ### 1단계 — 내려받기
 
-[ZIP으로 내려받아](https://github.com/hw725/classical-text-browser/archive/refs/heads/master.zip)
+[ZIP으로 내려받아](https://github.com/hw725/classical-text-browser/archive/refs/heads/main.zip)
 압축을 풀거나, Git을 아신다면
 `git clone https://github.com/hw725/classical-text-browser.git`.
 
