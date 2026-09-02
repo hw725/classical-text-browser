@@ -26,14 +26,23 @@ set "APP_PY=uv run python"
 if exist ".venv-gpu\Scripts\python.exe" (
     call nvidia-smi -L >nul 2>&1
     if !ERRORLEVEL! equ 0 (
-        set "APP_PY=.venv-gpu\Scripts\python.exe"
-        echo [Env] NVIDIA GPU detected - using .venv-gpu
+        REM GPU 환경이 실제로 쓸 수 있는지 확인한다. 옛 .venv-gpu(파이썬 3.13, 깨진 paddle)가
+        REM 남아 있으면 예전에는 그대로 골라서 화면에 «PaddleOCR 사용 불가»만 떴다.
+        ".venv-gpu\Scripts\python.exe" -c "import paddle, paddleocr" >nul 2>&1
+        if !ERRORLEVEL! equ 0 (
+            set "APP_PY=.venv-gpu\Scripts\python.exe"
+            echo [Env] NVIDIA GPU detected - using .venv-gpu
+        ) else (
+            echo [Env] .venv-gpu 에서 paddle 을 불러올 수 없어 .venv ^(CPU^) 로 뜁니다.
+            echo [Env] 원인은 doctor.bat 으로 확인하세요. 안 쓰는 .venv-gpu 는 지워도 됩니다.
+        )
     ) else (
         echo [Env] no GPU detected - using .venv ^(CPU^)
     )
 ) else (
     echo [Env] using .venv ^(CPU^)
 )
+for /f "tokens=*" %%v in ('%APP_PY% -c "import sys; print(sys.version.split()[0])" 2^>nul') do echo [Env] Python %%v
 
 REM -- Settings --------------------------------
 REM First arg: library path (optional, empty = choose in GUI)

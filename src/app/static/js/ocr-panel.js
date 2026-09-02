@@ -193,6 +193,18 @@ function _populateEngineSelect() {
     select.appendChild(opt);
   }
 
+  // 사용 불가 엔진의 이유를 드롭다운 아래에 적는다 — 툴팁은 마우스를 올려야 보인다.
+  // 왜: «PaddleOCR (사용 불가)»만 보이면 무엇을 고쳐야 하는지 알 수 없다(파이썬 3.13,
+  // 옛 .venv-gpu, DLL 실패 …). 자세한 진단은 doctor.bat.
+  const note = document.getElementById("ocr-engine-note");
+  if (note) {
+    const bad = ocrState.engines.filter((e) => !e.available && e.unavailable_reason);
+    note.hidden = bad.length === 0;
+    note.textContent = bad
+      .map((e) => `${e.display_name.split(" ")[0]} 사용 불가: ${e.unavailable_reason}`)
+      .join("\n") + (bad.length ? "\n(자세한 진단: 설치 폴더의 doctor.bat)" : "");
+  }
+
   // 등록된 엔진이 2개 이상이면 엔진 선택 행을 표시한다.
   // available 여부와 무관하게 표시 — "사용 불가" 엔진도 보여줘야
   // 사용자가 설치 가능한 엔진이 있다는 것을 알 수 있다.

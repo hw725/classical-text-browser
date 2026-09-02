@@ -7612,3 +7612,14 @@ button.mode-tab {
   color: var(--text-muted);
 }
 .contents-shift-btn:hover { color: #d33; }
+
+/* 사용 불가 엔진 이유 (D-059·D-078 진단 안내) */
+.ocr-engine-note {
+  white-space: pre-line;
+  font-size: 11px;
+  color: #b8860b;
+  background: rgba(210, 153, 34, 0.08);
+  border-radius: 4px;
+  padding: 4px 6px;
+  margin: 2px 0 6px;
+}

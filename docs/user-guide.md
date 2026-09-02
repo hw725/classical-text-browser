@@ -1353,3 +1353,19 @@ OCR과 레이아웃 분석은 **이미지를 볼 수 있는 모델**만 사용�
 | [DECISIONS.md](DECISIONS.md) | 개발자 | 설계 결정 근거 |
 | [schemas/README.md](../schemas/README.md) | 개발자 | JSON 스키마 구조 |
 | [architecture-diagrams.md](architecture-diagrams.md) | 전체 | Mermaid 다이어그램 |
+
+## 부록: 환경 진단 (doctor.bat)
+
+OCR 엔진 드롭다운에 「PaddleOCR (사용 불가)」가 뜨거나 서버가 엉뚱한 파이썬으로 뜨는 것 같으면
+설치 폴더의 **`doctor.bat`**을 실행하세요(macOS·Linux: `uv run python scripts/doctor.py`).
+`.venv`와 `.venv-gpu`를 각각 조사해 다음을 보여 줍니다.
+
+- start_server가 어느 환경을 고르는지, 각 환경의 파이썬 버전
+- paddle·paddleocr·onnxruntime·torch·cv2를 불러올 수 있는지, 실패했다면 그 오류
+- OCR 엔진별 사용 가능 여부와 사용 불가 이유
+- **권고**: 예를 들어 「.venv-gpu의 파이썬이 3.13이라 PaddleOCR을 쓸 수 없습니다. 지우거나 이름을
+  바꾸면 .venv(CPU)로 뜹니다」
+
+파일을 지우지는 않습니다. 권고를 보고 직접 지우세요. `start_server.bat`도 `.venv-gpu`에서 paddle이
+실제로 뜨는지 확인한 뒤에만 그 환경을 고릅니다.
+

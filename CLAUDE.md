@@ -52,6 +52,10 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 | `ndl-lab/ndlocr-lite` **master**에서 모델 받기 | 원본이 v1.2.0에서 PARSeq 셋을 바꿔(16px→24px, 파일명 변경) 셋이 404. 모델 URL은 **태그 1.1.3**에 고정(`src/ocr/ndlocr/__init__.py`). 古典籍-Lite는 이미 1.3.1 고정 |
 | `opencv-contrib-python`(paddlex) ↔ `opencv-python-headless`(extras) | **같은 `cv2`를 두 배포판이 제공.** 한쪽을 지우면 공유 디렉터리가 사라져 남은 쪽까지 깨진다 — `module 'cv2' has no attribute 'IMREAD_COLOR'`. extras도 contrib판으로 통일했다 |
 
+**환경이 이상하면 먼저 `doctor.bat`(`uv run python scripts/doctor.py`).** `.venv`·`.venv-gpu`를
+각각 조사해 어느 환경이 뜨는지, 파이썬 버전, paddle/onnxruntime/torch import, 엔진별 사용 불가
+이유, 지울 것을 권고한다. 옛 `.venv-gpu`(3.13)가 남아 start_server가 그쪽을 고른 사례가 있었다.
+
 **올릴 때 절차**
 
 1. `uv lock --upgrade-package <이름>` — **전체 갱신은 하지 않는다.** 한꺼번에 올리면
