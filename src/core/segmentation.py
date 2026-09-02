@@ -38,7 +38,13 @@ _GANZHI = "[甲乙丙丁戊己庚辛壬癸][子丑寅卯辰巳午未申酉戌亥
 _NUM = "[一二三四五六七八九十廿卄卅]+"
 _MONTH = rf"(?:是月|閏?(?:正|臘|{_NUM})月)"
 _DAY = rf"(?:是日|翌日|同日|朔日?|晦日?|初{_NUM}日|{_NUM}日)"
-DATE_HEAD_RE = re.compile(rf"^(?P<ganzhi>{_GANZHI})?年?(?P<month>{_MONTH})?(?P<day>{_DAY})?")
+# 「○七日」처럼 날짜 앞에 오는 조목 표지 — 澹齋日錄류는 개행 없이 이 표지로 날을 나눈다
+# (D-090 2단계).
+_MARK = "[○◯〇●]"
+_MARK_RE = re.compile(_MARK)
+DATE_HEAD_RE = re.compile(
+    rf"^(?P<mark>{_MARK})?(?P<ganzhi>{_GANZHI})?年?(?P<month>{_MONTH})?(?P<day>{_DAY})?"
+)
 
 _DIGITS = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
 
@@ -84,6 +90,7 @@ class DateHead:
     day: Optional[int] = None
     is_month_rel: bool = False  # 是月
     is_day_rel: bool = False  # 是日·翌日
+    mark: bool = False  # 날짜 앞의 ○ 표지가 있었나
     matched: str = ""  # 날짜로 읽은 원문 조각
 
     @property
@@ -96,7 +103,7 @@ def parse_date_head(text: str) -> DateHead:
     m = DATE_HEAD_RE.match(text)
     if not m or not (m.group("month") or m.group("day")):
         return DateHead()
-    head = DateHead(ganzhi=m.group("ganzhi"), matched=m.group(0))
+    head = DateHead(ganzhi=m.group("ganzhi"), matched=m.group(0), mark=bool(m.group("mark")))
     mon = m.group("month")
     if mon:
         if mon == "是月":
@@ -161,6 +168,7 @@ class Line:
 class Proposal:
     page: int
     line_index: int
+    char_offset: int  # 행 안의 시작 글자(0 = 행 첫머리). 행 중간 경계는 D-090 2단계
     title: str
     date: dict
     kind: str  # 맞은 title_word, 없으면 ""
@@ -174,6 +182,7 @@ class Proposal:
         return {
             "page": self.page,
             "line_index": self.line_index,
+            "char_offset": self.char_offset,
             "title": self.title,
             "date": self.date,
             "kind": self.kind,
@@ -256,6 +265,24 @@ def _find_title_word(text: str, words: list[str], limit: int) -> tuple[str, int]
     return best
 
 
+def _line_candidates(raw: str) -> list[tuple[int, str]]:
+    """행 하나에서 경계 후보가 설 자리 — 행 첫머리(0)와 행 안의 ○+날짜 자리. 오프셋은 raw 기준.
+
+    왜: 澹齋日錄류 일기는 개행 없이 「…○七日晴…○八日雨…」처럼 열 중간에서 날이 바뀐다.
+    행 단위 앵커로는 이런 판식을 자를 수 없다(D-090 «남은 것»). ○ 뒤에 날짜 문법이 있을 때만
+    후보로 삼는다 — ○만으로는 구두점·표기 부호와 구별할 수 없다.
+    """
+    lead = len(raw) - len(raw.lstrip())
+    out = [(0, raw.strip())]
+    for m in _MARK_RE.finditer(raw):
+        if m.start() <= lead:
+            continue  # 첫머리의 ○는 오프셋 0 후보가 다룬다
+        sub = raw[m.start() :].strip()
+        if parse_date_head(sub).present:
+            out.append((m.start(), sub))
+    return out
+
+
 def propose_boundaries(
     lines: list[Line],
     rules: Optional[dict] = None,
@@ -283,149 +310,158 @@ def propose_boundaries(
     prev_month: Optional[int] = None
     prev_day: Optional[int] = None
     for ln in lines:
-        text = ln.text.strip()
-        if not text:
+        if not ln.text.strip():
             continue
-        head = parse_date_head(text) if rules["use_date"] else DateHead()
-        word, wpos = _find_title_word(text, rules["title_words"], limit)
-        sig = layout.get((ln.page, ln.line_index), [])
-        toc = toc_by_line.get((ln.page, ln.line_index))
-        if not head.present and not word and toc is None:
-            continue
+        for char_offset, text in _line_candidates(ln.text):
+            head = parse_date_head(text) if rules["use_date"] else DateHead()
+            word, wpos = _find_title_word(text, rules["title_words"], limit)
+            # 형식·목차 신호는 행 첫머리에만 있다 — 행 중간 후보는 ○ 표지와 날짜가 신호다
+            sig = layout.get((ln.page, ln.line_index), []) if char_offset == 0 else []
+            toc = toc_by_line.get((ln.page, ln.line_index)) if char_offset == 0 else None
+            if not head.present and not word and toc is None:
+                continue
 
-        reasons: list[str] = []
-        conf = 0.0
-        if toc is not None:
-            # 목차가 «여기서 글이 시작한다»고 적어 둔 행 — 가장 강한 신호
-            conf += 0.5 + 0.2 * float(toc.get("score", 0))
-            reasons.append(f"toc:{toc.get('title', '')}")
-        if head.present:
-            conf += 0.5
-            reasons.append("date")
-        if word:
-            conf += 0.3
-            reasons.append(f"title_word:{word}")
-        if "short_line" in sig:
-            conf += 0.2
-            reasons.append("short_line")
-        if "indent" in sig:
-            conf += 0.25
-            reasons.append("indent")
-        # 표제 어휘 없이 날짜만 있고 행이 본문만큼 길면 본문 속 날짜일 가능성
-        if (
-            head.present
-            and not word
-            and not sig
-            and toc is None
-            and len(text) > rules["max_title_chars"]
-        ):
-            conf -= 0.25
-            reasons.append("long_line")
-        # 어휘는 있는데 날짜가 없고 본문만큼 긴 행 — 어휘가 문장 속에 쓰인 것
-        # (「…并闕日記故談草無一見存者」). 짧은 행 신호가 있으면 표제일 수 있으니 뺀다.
-        if (
-            word
-            and not head.present
-            and toc is None
-            and "short_line" not in sig
-            and len(text) > rules["max_title_chars"]
-        ):
-            conf -= 0.25
-            reasons.append("long_line")
-        # 어휘 바로 앞이 문장 표지(以·故·而…)면 표제가 아니라 서술이다
-        if word and wpos > 0 and text[:wpos].endswith(_CLAUSE_MARKERS):
-            conf -= 0.3
-            reasons.append("word_in_clause")
-        # 문헌이 표제 어휘를 정해 두었는데 날짜만 있는 행 — 두주(頭註)·간행 정보·본문 속
-        # 날짜 조각이 대부분이다. 어휘 없는 일기류(title_words 비어 있음)에는 적용하지 않는다.
-        if head.present and rules["title_words"] and not word and toc is None:
-            conf -= 0.25
-            reasons.append("no_title_word")
-
-        # 날짜 사슬
-        month, day = head.month, head.day
-        month_inferred = False
-        month_rolled = False
-        if head.present:
-            if month is None:
-                month = prev_month
-                month_inferred = True
-                if (
-                    day is not None
-                    and prev_day is not None
-                    and day < prev_day
-                    and month is not None
-                ):
-                    month = month % 12 + 1
-                    month_rolled = True
-                    reasons.append("month_rolled")
-            elif prev_month is not None:
-                forward = (month - prev_month) % 12
-                if forward > 2 or (
-                    forward == 0 and day is not None and prev_day is not None and day < prev_day
-                ):
-                    # 본문 속 날짜(예: 三月廿一日李中堂以筆談問曰)가 표제처럼 보일 때 걸리는 자리.
-                    # 짧은 행·내려쓰기 신호가 없으면 min_confidence(0.5) 아래로 내려간다.
-                    conf -= 0.35
-                    reasons.append("date_jump")
-            if head.is_day_rel:
-                day = prev_day
-                reasons.append("same_day")
-            elif (
-                not word
+            reasons: list[str] = []
+            conf = 0.0
+            if toc is not None:
+                # 목차가 «여기서 글이 시작한다»고 적어 둔 행 — 가장 강한 신호
+                conf += 0.5 + 0.2 * float(toc.get("score", 0))
+                reasons.append(f"toc:{toc.get('title', '')}")
+            if head.present:
+                conf += 0.5
+                reasons.append("date")
+            if head.mark:
+                # ○+날짜는 그 자체가 조목 표지다. 긴 행·어휘 없음 감점은 이 판식에 맞지 않는다.
+                conf += 0.25
+                reasons.append("mark")
+            if word:
+                conf += 0.3
+                reasons.append(f"title_word:{word}")
+            if "short_line" in sig:
+                conf += 0.2
+                reasons.append("short_line")
+            if "indent" in sig:
+                conf += 0.25
+                reasons.append("indent")
+            # 표제 어휘 없이 날짜만 있고 행이 본문만큼 길면 본문 속 날짜일 가능성
+            if (
+                head.present
+                and not word
+                and not sig
                 and toc is None
-                and day is not None
-                and day == prev_day
-                and (month is None or month == prev_month)
+                and not head.mark
+                and len(text) > rules["max_title_chars"]
             ):
-                # 앞 회차와 같은 날짜를 어휘 없이 되적은 행(「初四日…談草」 다음 쪽의 「四日」) —
-                # 두주나 되풀이 표기다. 是日·同日처럼 «같은 날» 표지를 쓴 것은 위에서 걸렀다.
-                conf -= 0.35
-                reasons.append("same_day_repeat")
+                conf -= 0.25
+                reasons.append("long_line")
+            # 어휘는 있는데 날짜가 없고 본문만큼 긴 행 — 어휘가 문장 속에 쓰인 것
+            # (「…并闕日記故談草無一見存者」). 짧은 행 신호가 있으면 표제일 수 있으니 뺀다.
+            if (
+                word
+                and not head.present
+                and toc is None
+                and "short_line" not in sig
+                and len(text) > rules["max_title_chars"]
+            ):
+                conf -= 0.25
+                reasons.append("long_line")
+            # 어휘 바로 앞이 문장 표지(以·故·而…)면 표제가 아니라 서술이다
+            if word and wpos > 0 and text[:wpos].endswith(_CLAUSE_MARKERS):
+                conf -= 0.3
+                reasons.append("word_in_clause")
+            # 문헌이 표제 어휘를 정해 두었는데 날짜만 있는 행 — 두주(頭註)·간행 정보·본문 속
+            # 날짜 조각이 대부분이다. 어휘 없는 일기류(title_words 비어 있음)에는 적용하지 않는다.
+            if head.present and rules["title_words"] and not word and toc is None and not head.mark:
+                conf -= 0.25
+                reasons.append("no_title_word")
 
-        suppressed = any(text == s or text.startswith(s) for s in rules["suppress"])
-        if suppressed:
-            reasons.append("suppressed")
+            # 날짜 사슬
+            month, day = head.month, head.day
+            month_inferred = False
+            month_rolled = False
+            if head.present:
+                if month is None:
+                    month = prev_month
+                    month_inferred = True
+                    if (
+                        day is not None
+                        and prev_day is not None
+                        and day < prev_day
+                        and month is not None
+                    ):
+                        month = month % 12 + 1
+                        month_rolled = True
+                        reasons.append("month_rolled")
+                elif prev_month is not None:
+                    forward = (month - prev_month) % 12
+                    if forward > 2 or (
+                        forward == 0 and day is not None and prev_day is not None and day < prev_day
+                    ):
+                        # 본문 속 날짜(예: 三月廿一日李中堂以筆談問曰)가 표제처럼 보일 때
+                        # 걸리는 자리.
+                        # 짧은 행·내려쓰기 신호가 없으면 min_confidence(0.5) 아래로 내려간다.
+                        conf -= 0.35
+                        reasons.append("date_jump")
+                if head.is_day_rel:
+                    day = prev_day
+                    reasons.append("same_day")
+                elif (
+                    not word
+                    and toc is None
+                    and day is not None
+                    and day == prev_day
+                    and (month is None or month == prev_month)
+                ):
+                    # 앞 회차와 같은 날짜를 어휘 없이 되적은 행
+                    # (「初四日…談草」 다음 쪽의 「四日」) —
+                    # 두주나 되풀이 표기다. 是日·同日처럼 «같은 날» 표지를 쓴 것은 위에서 걸렀다.
+                    conf -= 0.35
+                    reasons.append("same_day_repeat")
 
-        # 장소·상대: 날짜 뒤부터 표제 어휘 앞까지
-        tail_start = len(head.matched)
-        place = text[tail_start:wpos] if word and wpos >= tail_start else text[tail_start:limit]
-        place = place.strip()
-        title = text[: (wpos + len(word)) if word else min(len(text), limit)]
-        kind = word
-        if toc is not None:
-            title = toc.get("title") or title
-            if int(toc.get("level", 2)) == 1:
-                kind = "volume"
+            suppressed = any(text == s or text.startswith(s) for s in rules["suppress"])
+            if suppressed:
+                reasons.append("suppressed")
 
-        conf = max(0.0, min(1.0, conf))
-        accepted = (not suppressed) and conf >= rules["min_confidence"]
-        proposals.append(
-            Proposal(
-                page=ln.page,
-                line_index=ln.line_index,
-                title=title,
-                date={
-                    "ganzhi": head.ganzhi,
-                    "month": month,
-                    "day": day,
-                    "month_inferred": month_inferred,
-                    "month_rolled": month_rolled,
-                    "text": head.matched,
-                },
-                kind=kind,
-                place=place,
-                confidence=conf,
-                reasons=reasons,
-                suppressed=suppressed,
-                accepted=accepted,
+            # 장소·상대: 날짜 뒤부터 표제 어휘 앞까지
+            tail_start = len(head.matched)
+            place = text[tail_start:wpos] if word and wpos >= tail_start else text[tail_start:limit]
+            place = place.strip()
+            title = text[: (wpos + len(word)) if word else min(len(text), limit)]
+            kind = word
+            if toc is not None:
+                title = toc.get("title") or title
+                if int(toc.get("level", 2)) == 1:
+                    kind = "volume"
+
+            conf = max(0.0, min(1.0, conf))
+            accepted = (not suppressed) and conf >= rules["min_confidence"]
+            proposals.append(
+                Proposal(
+                    page=ln.page,
+                    line_index=ln.line_index,
+                    char_offset=char_offset,
+                    title=title,
+                    date={
+                        "ganzhi": head.ganzhi,
+                        "month": month,
+                        "day": day,
+                        "month_inferred": month_inferred,
+                        "month_rolled": month_rolled,
+                        "text": head.matched,
+                    },
+                    kind=kind,
+                    place=place,
+                    confidence=conf,
+                    reasons=reasons,
+                    suppressed=suppressed,
+                    accepted=accepted,
+                )
             )
-        )
-        if accepted and head.present:
-            if month is not None:
-                prev_month = month
-            if day is not None:
-                prev_day = day
+            if accepted and head.present:
+                if month is not None:
+                    prev_month = month
+                if day is not None:
+                    prev_day = day
 
     spans = _build_spans(lines, proposals)
     return {
@@ -442,36 +478,44 @@ def propose_boundaries(
 
 
 def _build_spans(lines: list[Line], proposals: list[Proposal]) -> list[dict]:
-    """accepted 제안을 경계로 행 목록을 구간으로 나눈다."""
+    """accepted 제안을 경계로 행 목록을 구간으로 나눈다. 경계는 (행, 글자 오프셋)이다.
+
+    start.char_offset — 시작 행 안의 시작 글자. end.char_end — 끝 행 안의 끝 글자(exclusive),
+    None이면 행 끝까지. 다음 경계가 행 중간이면 이 구간은 같은 행의 그 글자 앞에서 끝난다.
+    """
     if not lines:
         return []
     accepted = [p for p in proposals if p.accepted]
     keys = [(ln.page, ln.line_index) for ln in lines]
-    bounds = sorted({(p.page, p.line_index) for p in accepted})
     idx_of = {k: i for i, k in enumerate(keys)}
-    cut_indices = [idx_of[b] for b in bounds if b in idx_of]
+    prop_at = {}
+    for p in accepted:
+        if (p.page, p.line_index) in idx_of:
+            prop_at.setdefault((idx_of[(p.page, p.line_index)], p.char_offset), p)
+    bounds = sorted(prop_at)
+    if not bounds:
+        return []
+    starts = ([(0, 0)] if bounds[0] != (0, 0) else []) + bounds
     spans = []
-    starts = ([0] if (cut_indices and cut_indices[0] > 0) else []) + cut_indices
-    for si, start in enumerate(starts):
-        end = (starts[si + 1] - 1) if si + 1 < len(starts) else len(lines) - 1
-        if end < start:
+    for si, (s_i, s_off) in enumerate(starts):
+        if si + 1 < len(starts):
+            n_i, n_off = starts[si + 1]
+            e_i, e_end = (n_i, n_off) if n_off > 0 else (n_i - 1, None)
+        else:
+            e_i, e_end = len(lines) - 1, None
+        if e_i < s_i or (e_i == s_i and e_end is not None and e_end <= s_off):
             continue
-        is_front = start not in cut_indices
-        prop = None
-        if not is_front:
-            prop = next(p for p in accepted if (p.page, p.line_index) == keys[start])
+        prop = prop_at.get((s_i, s_off))
         spans.append(
             {
-                "title": prop.title if prop else lines[start].text.strip()[:20],
+                "title": prop.title if prop else lines[s_i].text.strip()[:20],
                 "kind": prop.kind if prop else "front",
-                "start": {"page": keys[start][0], "line_index": keys[start][1]},
-                "end": {"page": keys[end][0], "line_index": keys[end][1]},
-                "line_count": end - start + 1,
+                "start": {"page": keys[s_i][0], "line_index": keys[s_i][1], "char_offset": s_off},
+                "end": {"page": keys[e_i][0], "line_index": keys[e_i][1], "char_end": e_end},
+                "line_count": e_i - s_i + 1,
                 "proposal_index": (proposals.index(prop) if prop else None),
             }
         )
-    if not cut_indices:
-        return []
     return spans
 
 
@@ -577,18 +621,30 @@ def span_to_text_and_refs(
 ) -> tuple[str, list[dict]]:
     """구간 하나를 TextBlock의 original_text와 source_refs(쪽별 char_range)로 바꾼다."""
     s, e = span["start"], span["end"]
+    s_off = int(s.get("char_offset") or 0)
+    e_end = e.get("char_end")
+    e_end = int(e_end) if e_end is not None else None
     keys = [(ln.page, ln.line_index) for ln in lines]
     i0 = keys.index((s["page"], s["line_index"]))
     i1 = keys.index((e["page"], e["line_index"]))
     chunk = lines[i0 : i1 + 1]
-    text = "\n".join(ln.text for ln in chunk).strip()
+    texts = [ln.text for ln in chunk]
+    # 끝을 먼저 자르고 시작을 자른다 — 같은 행 안의 구간(시작·끝이 한 행)도 맞는다
+    if e_end is not None:
+        texts[-1] = texts[-1][:e_end]
+    if s_off:
+        texts[0] = texts[0][s_off:]
+    text = "\n".join(texts).strip()
     refs = []
     by_page: dict[int, list[Line]] = {}
     for ln in chunk:
         by_page.setdefault(ln.page, []).append(ln)
     for page, pls in by_page.items():
-        start = pls[0].char_start
-        end = pls[-1].char_start + len(pls[-1].text)
+        start = pls[0].char_start + (s_off if pls[0] is chunk[0] else 0)
+        if pls[-1] is chunk[-1] and e_end is not None:
+            end = pls[-1].char_start + e_end
+        else:
+            end = pls[-1].char_start + len(pls[-1].text)
         refs.append(
             {
                 "document_id": document_id,
@@ -619,16 +675,28 @@ def line_bbox_index(doc_path: str | Path, part_id: str, page: int) -> dict:
         data = json.loads(p.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
-    boxes = [b for b, _d in _l2_line_boxes(Path(doc_path), part_id, page)]
+    pairs = _l2_line_boxes(Path(doc_path), part_id, page)
     return {
-        "boxes": boxes,
+        "boxes": [b for b, _d in pairs],
+        "directions": [d for _b, d in pairs],
         "image_width": data.get("image_width"),
         "image_height": data.get("image_height"),
     }
 
 
-def anchor_bbox(doc_path: str | Path, part_id: str, page: int, line_index: int) -> Optional[dict]:
-    """경계 앵커(쪽·행)를 L2 행 bbox로. L4 행과 L2 행 수가 맞아야 신뢰할 수 있다.
+def anchor_bbox(
+    doc_path: str | Path,
+    part_id: str,
+    page: int,
+    line_index: int,
+    offset: int = 0,
+    offset_end: Optional[int] = None,
+) -> Optional[dict]:
+    """경계 앵커(쪽·행·글자)를 L2 행 bbox로. L4 행과 L2 행 수가 맞아야 신뢰할 수 있다.
+
+    offset·offset_end(글자, exclusive)가 행 중간이면 행 bbox를 글자 비율로 잘라 돌려준다
+    (D-090 2단계). 글자마다 좌표가 없으므로 «행 길이 × 글자 비율»의 추정이다 — 세로쓰기는
+    위아래, 가로쓰기는 좌우로 자른다.
 
     L4의 line_index는 빈 행을 포함한 번호다. L2 행은 비어 있지 않은 행만 있으므로,
     같은 쪽의 L4 텍스트에서 앞선 빈 행 수를 빼서 대응시킨다. 수가 어긋나면 None —
@@ -647,7 +715,20 @@ def anchor_bbox(doc_path: str | Path, part_id: str, page: int, line_index: int) 
     nonempty = [i for i, t in enumerate(raw) if t.strip()]
     if len(nonempty) != len(idx["boxes"]) or line_index not in nonempty:
         return None
-    box = idx["boxes"][nonempty.index(line_index)]
+    k = nonempty.index(line_index)
+    box = list(idx["boxes"][k])
+    n = max(1, len(raw[line_index]))
+    cut_start = bool(offset and offset > 0)
+    cut_end = offset_end is not None and offset_end < n
+    if box and len(box) == 4 and (cut_start or cut_end):
+        f0 = min(1.0, max(0.0, (offset or 0) / n))
+        f1 = min(1.0, max(f0, (offset_end if offset_end is not None else n) / n))
+        dirs = idx.get("directions") or ["vertical_rtl"] * len(idx["boxes"])
+        x1, y1, x2, y2 = box
+        if str(dirs[k]).startswith("vertical"):
+            box = [x1, y1 + (y2 - y1) * f0, x2, y1 + (y2 - y1) * f1]
+        else:
+            box = [x1 + (x2 - x1) * f0, y1, x1 + (x2 - x1) * f1, y2]
     return {
         "bbox": box,
         "image_width": idx["image_width"],
@@ -657,8 +738,18 @@ def anchor_bbox(doc_path: str | Path, part_id: str, page: int, line_index: int) 
 
 def boundary_bbox(doc_path: str | Path, part_id: str, start: dict, end: dict) -> Optional[dict]:
     """경계의 시작·끝 행 bbox 캐시(boundary.schema의 bbox)."""
-    s = anchor_bbox(doc_path, part_id, int(start["page"]), int(start["line"]))
-    e = anchor_bbox(doc_path, part_id, int(end["page"]), int(end["line"]))
+    s = anchor_bbox(
+        doc_path, part_id, int(start["page"]), int(start["line"]), int(start.get("offset") or 0)
+    )
+    e_off = end.get("offset")
+    e = anchor_bbox(
+        doc_path,
+        part_id,
+        int(end["page"]),
+        int(end["line"]),
+        0,
+        int(e_off) if e_off is not None else None,
+    )
     if not s and not e:
         return None
     ref = s or e
@@ -702,7 +793,25 @@ def anchor_from_refs(refs: list[dict], page_texts: dict[int, str]) -> Optional[d
     t1 = page_texts.get(int(last["page"]), "")
     cr0 = first.get("char_range") or [0, len(t0)]
     cr1 = last.get("char_range") or [0, len(t1)]
+    s_at = int(cr0[0])
+    e_at = max(0, int(cr1[1]) - 1)  # 마지막 글자
+    s_line_start = t0.rfind("\n", 0, min(s_at, len(t0))) + 1
+    e_line_start = t1.rfind("\n", 0, min(e_at, len(t1))) + 1
+    e_line_end = t1.find("\n", e_line_start)
+    e_line_end = len(t1) if e_line_end < 0 else e_line_end
+    e_off: Optional[int] = max(0, int(cr1[1]) - e_line_start)
+    if e_off >= e_line_end - e_line_start:
+        e_off = None  # 행 끝까지 — 행 단위 경계와 같은 뜻
     return {
-        "start": {"page": int(first["page"]), "line": line_of_offset(t0, int(cr0[0]))},
-        "end": {"page": int(last["page"]), "line": line_of_offset(t1, max(0, int(cr1[1]) - 1))},
+        # offset — 행 안의 시작 글자(0 = 행 첫머리). end.offset은 exclusive 끝 글자(행 길이면 행 끝)
+        "start": {
+            "page": int(first["page"]),
+            "line": line_of_offset(t0, s_at),
+            "offset": max(0, s_at - s_line_start),
+        },
+        "end": {
+            "page": int(last["page"]),
+            "line": line_of_offset(t1, e_at),
+            "offset": e_off,
+        },
     }

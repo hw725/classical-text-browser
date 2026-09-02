@@ -1037,8 +1037,16 @@ async def api_segmentation_apply(interp_id: str, body: SegmentationApplyRequest)
             "bbox": boundary_bbox(
                 doc_path,
                 body.part_id,
-                {"page": span.start["page"], "line": span.start["line_index"]},
-                {"page": span.end["page"], "line": span.end["line_index"]},
+                {
+                    "page": span.start["page"],
+                    "line": span.start["line_index"],
+                    "offset": span.start.get("char_offset") or 0,
+                },
+                {
+                    "page": span.end["page"],
+                    "line": span.end["line_index"],
+                    "offset": span.end.get("char_end"),
+                },
             ),
         }
         data = {
@@ -1154,11 +1162,16 @@ def _boundary_rows(interp_path, document_id: str | None, part_id: str | None) ->
 
 
 class BoundaryUpdateRequest(BaseModel):
-    """TextBlock의 경계를 행 단위로 옮기거나 제목·상태를 바꾼다 (D-090)."""
+    """TextBlock의 경계를 옮기거나 제목·상태를 바꾼다 (D-090).
+
+    start·end는 {"page", "line", "offset"}. offset은 행 안의 글자(2단계 — 澹齋日錄류처럼
+    행 중간에서 날이 바뀌는 판식). start.offset 생략 = 행 첫머리, end.offset 생략 = 행 끝.
+    shift_start·shift_end는 행 단위이며 옮긴 뒤 오프셋은 행 첫머리·행 끝이 된다.
+    """
 
     title: str | None = None
     status: str | None = None
-    start: dict | None = None  # {"page", "line"}
+    start: dict | None = None  # {"page", "line", "offset"?}
     end: dict | None = None
     shift_start: int | None = None
     shift_end: int | None = None
@@ -1230,21 +1243,35 @@ async def api_update_boundary(interp_id: str, text_block_id: str, body: Boundary
         except (ValueError, KeyError, TypeError):
             return None
 
+    def _norm_end(i: int, off) -> int | None:
+        """끝 오프셋이 행 길이 이상이면 «행 끝»(None)으로."""
+        if off is None:
+            return None
+        off = int(off)
+        return None if off >= len(lines[i].text) else max(0, off)
+
     cur = anchor_from_refs(refs, page_texts)
     start_i, end_i = _pos(cur["start"]), _pos(cur["end"])
     if start_i is None or end_i is None:
         return JSONResponse(
             {"error": "블록의 출처가 현재 확정본에 없습니다. 다시 제안하세요."}, status_code=409
         )
+    s_off = int(cur["start"].get("offset") or 0)
+    e_end = _norm_end(end_i, cur["end"].get("offset"))
     if body.start and _pos(body.start) is not None:
         start_i = _pos(body.start)
+        s_off = int(body.start.get("offset") or 0)
     if body.end and _pos(body.end) is not None:
         end_i = _pos(body.end)
+        e_end = _norm_end(end_i, body.end.get("offset"))
     if body.shift_start:
         start_i = max(0, min(len(keys) - 1, start_i + int(body.shift_start)))
+        s_off = 0
     if body.shift_end:
         end_i = max(0, min(len(keys) - 1, end_i + int(body.shift_end)))
-    if end_i < start_i:
+        e_end = None
+    s_off = max(0, min(s_off, max(0, len(lines[start_i].text) - 1)))
+    if end_i < start_i or (end_i == start_i and e_end is not None and e_end <= s_off):
         return JSONResponse({"error": "끝이 시작보다 앞에 올 수 없습니다."}, status_code=400)
 
     # 이웃: 같은 Work·권의 블록을 원본 위치 순서로
@@ -1256,11 +1283,18 @@ async def api_update_boundary(interp_id: str, text_block_id: str, body: Boundary
     next_row = rows[idx + 1] if idx is not None and idx + 1 < len(rows) else None
     touched = []
 
-    def _restitch(target_id: str, s_i: int, e_i: int, extra: dict | None = None):
+    def _restitch(
+        target_id: str,
+        s_i: int,
+        e_i: int,
+        extra: dict | None = None,
+        s_off: int = 0,
+        e_end: int | None = None,
+    ):
         tb = get_entity(interp_path, "text_block", target_id)
         span = {
-            "start": {"page": keys[s_i][0], "line_index": keys[s_i][1]},
-            "end": {"page": keys[e_i][0], "line_index": keys[e_i][1]},
+            "start": {"page": keys[s_i][0], "line_index": keys[s_i][1], "char_offset": s_off},
+            "end": {"page": keys[e_i][0], "line_index": keys[e_i][1], "char_end": e_end},
         }
         text, new_refs = span_to_text_and_refs(span, lines, page_texts, doc_id, pid)
         meta = dict(tb.get("metadata") or {})
@@ -1268,8 +1302,8 @@ async def api_update_boundary(interp_id: str, text_block_id: str, body: Boundary
         anchor["bbox"] = boundary_bbox(
             doc_path,
             pid,
-            {"page": keys[s_i][0], "line": keys[s_i][1]},
-            {"page": keys[e_i][0], "line": keys[e_i][1]},
+            {"page": keys[s_i][0], "line": keys[s_i][1], "offset": s_off},
+            {"page": keys[e_i][0], "line": keys[e_i][1], "offset": e_end},
         )
         anchor["l4_commit"] = _document_head(doc_path)
         if extra:
@@ -1295,15 +1329,25 @@ async def api_update_boundary(interp_id: str, text_block_id: str, body: Boundary
         extra["title"] = body.title
     if body.status is not None:
         extra["status"] = body.status
-    _restitch(blk["id"], start_i, end_i, extra)
+    _restitch(blk["id"], start_i, end_i, extra, s_off, e_end)
+    # 이웃 다시 잇기 — 시작이 행 중간이면 앞 블록은 같은 행의 그 글자 앞에서 끝나고,
+    # 끝이 행 중간이면 뒤 블록은 같은 행의 그 글자에서 시작한다(D-090 2단계).
     if prev_row and prev_row["start"]:
         p_start = _pos(prev_row["start"])
-        if p_start is not None and p_start <= start_i - 1:
-            _restitch(prev_row["id"], p_start, start_i - 1)
+        p_off = int(prev_row["start"].get("offset") or 0)
+        pe_i, pe_end = (start_i, s_off) if s_off > 0 else (start_i - 1, None)
+        if p_start is not None and (
+            p_start < pe_i or (p_start == pe_i and pe_end is not None and p_off < pe_end)
+        ):
+            _restitch(prev_row["id"], p_start, pe_i, None, p_off, pe_end)
     if next_row and next_row["end"]:
         n_end = _pos(next_row["end"])
-        if n_end is not None and end_i + 1 <= n_end:
-            _restitch(next_row["id"], end_i + 1, n_end)
+        n_off = _norm_end(n_end, next_row["end"].get("offset")) if n_end is not None else None
+        ns_i, ns_off = (end_i, e_end) if e_end is not None else (end_i + 1, 0)
+        if n_end is not None and (
+            ns_i < n_end or (ns_i == n_end and (n_off is None or ns_off < n_off))
+        ):
+            _restitch(next_row["id"], ns_i, n_end, None, ns_off, n_off)
     title = (blk.get("metadata") or {}).get("title") or blk["id"][:8]
     git = git_commit_interpretation(interp_path, f"fix: 경계 수정 — {title} (D-090)")
     row = next((r for r in _boundary_rows(interp_path, doc_id, pid) if r["id"] == blk["id"]), None)

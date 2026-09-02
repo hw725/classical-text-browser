@@ -1604,7 +1604,9 @@ function _renderProposals() {
       ? `${d.ganzhi ? d.ganzhi + " " : ""}${d.month ? d.month + "월" : "?월"} ${d.day ? d.day + "일" : ""}` +
         (d.month_inferred ? (d.month_rolled ? " (달 넘김 추정)" : " (달 물려받음)") : "")
       : "";
-    meta.textContent = [`${p.page}쪽 ${p.line_index + 1}행`, dateTxt, p.place ? `장소·상대: ${p.place}` : "", p.reasons.join(" · ")]
+    // 행 중간 경계(D-090 2단계): 「○七日」처럼 열 중간에서 날이 바뀌는 판식은 몇째 글자인지도 보인다
+    const where = `${p.page}쪽 ${p.line_index + 1}행` + (p.char_offset ? ` ${p.char_offset + 1}자째` : "");
+    meta.textContent = [where, dateTxt, p.place ? `장소·상대: ${p.place}` : "", p.reasons.join(" · ")]
       .filter(Boolean)
       .join("  |  ");
     body.appendChild(title);
@@ -1684,19 +1686,27 @@ async function _applyProposals() {
   const lines = data.lines;
   const keyOf = (l) => `${l.page}:${l.line_index}`;
   const pos = new Map(lines.map((l, i) => [keyOf(l), i]));
-  const starts = idx.map((i) => pos.get(keyOf(data.proposals[i])));
+  // 경계 = (행, 행 안 글자 오프셋). 다음 경계가 행 중간이면 이 구간은 같은 행의 그 글자 앞에서 끝난다 (D-090 2단계)
+  const starts = idx
+    .map((i) => ({ li: pos.get(keyOf(data.proposals[i])), off: data.proposals[i].char_offset || 0, p: data.proposals[i] }))
+    .sort((a, b) => a.li - b.li || a.off - b.off);
+  const endBefore = (next) =>
+    next.off > 0
+      ? { page: lines[next.li].page, line_index: lines[next.li].line_index, char_end: next.off }
+      : { page: lines[next.li - 1].page, line_index: lines[next.li - 1].line_index, char_end: null };
   const spans = [];
-  if (starts[0] > 0) {
+  if (starts[0].li > 0 || starts[0].off > 0) {
     spans.push({ title: lines[0].text.trim().slice(0, 20) || "(앞부분)", kind: "front",
-      start: { page: lines[0].page, line_index: lines[0].line_index },
-      end: { page: lines[starts[0] - 1].page, line_index: lines[starts[0] - 1].line_index } });
+      start: { page: lines[0].page, line_index: lines[0].line_index, char_offset: 0 },
+      end: endBefore(starts[0]) });
   }
   starts.forEach((s, k) => {
-    const e = k + 1 < starts.length ? starts[k + 1] - 1 : lines.length - 1;
-    const p = data.proposals[idx[k]];
-    spans.push({ title: p.title, kind: p.kind || "",
-      start: { page: lines[s].page, line_index: lines[s].line_index },
-      end: { page: lines[e].page, line_index: lines[e].line_index } });
+    const end = k + 1 < starts.length
+      ? endBefore(starts[k + 1])
+      : { page: lines[lines.length - 1].page, line_index: lines[lines.length - 1].line_index, char_end: null };
+    spans.push({ title: s.p.title, kind: s.p.kind || "",
+      start: { page: lines[s.li].page, line_index: lines[s.li].line_index, char_offset: s.off },
+      end });
   });
   if (!confirm(`${spans.length}개의 TextBlock을 만듭니다. 계속할까요?`)) return;
   try {

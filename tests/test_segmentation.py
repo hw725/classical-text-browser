@@ -168,8 +168,8 @@ class TestSignals:
         ]
         r = propose_boundaries(lines, {"title_words": ["談草"]})
         assert [s["kind"] for s in r["spans"]] == ["front", "談草"]
-        assert r["spans"][0]["start"] == {"page": 1, "line_index": 0}
-        assert r["spans"][1]["end"] == {"page": 1, "line_index": 3}
+        assert r["spans"][0]["start"] == {"page": 1, "line_index": 0, "char_offset": 0}
+        assert r["spans"][1]["end"] == {"page": 1, "line_index": 3, "char_end": None}
 
     def test_rules_normalized(self):
         r = normalize_rules({"title_words": [" 談草 ", ""], "max_title_chars": "12"})
@@ -552,7 +552,8 @@ def test_boundary_index_is_a_view_over_textblocks(client, tmp_path):
     b1 = lst["boundaries"][1]
     assert b1["id"] == created[1]["id"]
     assert b1["title"] == "辛巳十一月二十八日保定督署談草" and b1["status"] == "approved"
-    assert b1["start"] == {"page": 1, "line": 2} and b1["end"] == {"page": 2, "line": 0}
+    assert b1["start"] == {"page": 1, "line": 2, "offset": 0}
+    assert b1["end"] == {"page": 2, "line": 0, "offset": None}
     assert b1["l4_commit"] and b1["bbox"] is None  # L2가 없는 픽스처 — 좌표를 만들지 않는다
 
     # 내용 트리에도 anchor(metadata.anchor)가 붙는다
@@ -563,9 +564,9 @@ def test_boundary_index_is_a_view_over_textblocks(client, tmp_path):
     # 시작을 한 행 뒤로 — 앞 블록의 끝이 늘고 두 블록의 본문·출처가 다시 이어진다
     r = client.put(f"/api/interpretations/i1/boundaries/{b1['id']}", json={"shift_start": 1})
     assert r.status_code == 200, r.text
-    assert r.json()["boundary"]["start"] == {"page": 1, "line": 3}
+    assert r.json()["boundary"]["start"] == {"page": 1, "line": 3, "offset": 0}
     lst = client.get(url).json()["boundaries"]
-    assert lst[0]["end"] == {"page": 1, "line": 2}
+    assert lst[0]["end"] == {"page": 1, "line": 2, "offset": None}
     from src.core.entity import get_entity
 
     tb1 = get_entity(interp_dir, "text_block", b1["id"])
@@ -595,7 +596,7 @@ def test_boundary_index_is_a_view_over_textblocks(client, tmp_path):
     )
     assert r.status_code == 200, r.text
     lst = client.get(url).json()["boundaries"]
-    assert lst[-1]["start"] == {"page": 3, "line": 1} and lst[-1]["kind"] == "manual"
+    assert lst[-1]["start"] == {"page": 3, "line": 1, "offset": 0} and lst[-1]["kind"] == "manual"
 
     # CSV: article_index 관례의 열, BOM
     r = client.get(url.replace("boundaries?", "boundaries/export.csv?"))
@@ -776,3 +777,186 @@ class TestTocUnyangjipLessons:
             title_similarity("同六", "同六") == 1.0 and title_similarity("同六", "同六人談話") > 0.9
         )
         assert title_similarity("同六", "同六人談話甚長不可勝記也") == 0.0
+
+
+# ── 글자 단위 앵커 (D-090 2단계) ───────────────────────────────────────────
+
+# 澹齋日錄류: 개행 없이 「○七日…○八日…」로 날이 바뀐다. 행 끝에서 날이 바뀌지 않는다.
+DAM_L0 = "○七日晴朝食後往訪金生歸路遇雨○八日雨終日在家讀書"
+DAM_L1 = "夜半風止○九日晴與客論詩至暮"
+DAM_L2 = BODY
+
+
+class TestCharAnchors:
+    def _lines(self):
+        return [Line(1, 0, DAM_L0), Line(1, 1, DAM_L1), Line(1, 2, DAM_L2)]
+
+    def test_inline_mark_dates_become_proposals_with_offsets(self):
+        r = propose_boundaries(self._lines(), None)
+        got = [
+            (p["line_index"], p["char_offset"], p["date"]["day"], p["accepted"])
+            for p in r["proposals"]
+        ]
+        k8 = DAM_L0.index("○八日")
+        k9 = DAM_L1.index("○九日")
+        assert got == [(0, 0, 7, True), (0, k8, 8, True), (1, k9, 9, True)]
+        assert all("mark" in p["reasons"] for p in r["proposals"])
+        # 긴 행이라도 ○ 표지가 있으면 long_line 감점을 받지 않는다
+        assert not any("long_line" in p["reasons"] for p in r["proposals"])
+        # 구간은 행 중간에서 끝난다: 첫 구간은 같은 행의 ○八日 앞까지
+        sp = r["spans"]
+        assert [s["kind"] for s in sp] == ["", "", ""]
+        assert sp[0]["start"] == {"page": 1, "line_index": 0, "char_offset": 0}
+        assert sp[0]["end"] == {"page": 1, "line_index": 0, "char_end": k8}
+        assert sp[1]["start"]["char_offset"] == k8 and sp[1]["end"] == {
+            "page": 1,
+            "line_index": 1,
+            "char_end": k9,
+        }
+        assert sp[2]["start"] == {"page": 1, "line_index": 1, "char_offset": k9}
+        assert sp[2]["end"] == {"page": 1, "line_index": 2, "char_end": None}
+
+    def test_span_text_and_refs_cut_inside_lines(self):
+        from src.core.segmentation import anchor_from_refs, span_to_text_and_refs
+
+        lines = self._lines()
+        # collect_document_lines가 넣는 char_start를 흉내 낸다
+        off = 0
+        for ln in lines:
+            ln.char_start = off
+            off += len(ln.text) + 1
+        page_text = "\n".join(ln.text for ln in lines)
+        r = propose_boundaries(lines, None)
+        k8 = DAM_L0.index("○八日")
+        k9 = DAM_L1.index("○九日")
+        t0, refs0 = span_to_text_and_refs(r["spans"][0], lines, {1: page_text}, "d", "v1")
+        t1, refs1 = span_to_text_and_refs(r["spans"][1], lines, {1: page_text}, "d", "v1")
+        t2, refs2 = span_to_text_and_refs(r["spans"][2], lines, {1: page_text}, "d", "v1")
+        assert t0 == DAM_L0[:k8]
+        assert t1 == DAM_L0[k8:] + "\n" + DAM_L1[:k9]
+        assert t2 == DAM_L1[k9:] + "\n" + DAM_L2
+        assert refs0[0]["char_range"] == [0, k8]
+        assert refs1[0]["char_range"] == [k8, len(DAM_L0) + 1 + k9]
+        assert refs2[0]["char_range"] == [len(DAM_L0) + 1 + k9, len(page_text)]
+        # 출처 → 앵커: 행과 행 안 글자가 돌아온다. 끝이 행 끝이면 offset=None
+        a1 = anchor_from_refs(refs1, {1: page_text})
+        assert a1["start"] == {"page": 1, "line": 0, "offset": k8}
+        assert a1["end"] == {"page": 1, "line": 1, "offset": k9}
+        a2 = anchor_from_refs(refs2, {1: page_text})
+        assert a2["start"] == {"page": 1, "line": 1, "offset": k9}
+        assert a2["end"] == {"page": 1, "line": 2, "offset": None}
+
+    def test_plain_lines_keep_line_level_shape(self):
+        """행 첫머리 경계만 있는 문헌은 예전과 같은 결과(오프셋 0·행 끝)."""
+        r = _doc(["壬午三月二十二日海關署談草", "十二日海關署談草"], {"title_words": ["談草"]})
+        assert all(p["char_offset"] == 0 for p in r["proposals"])
+        assert all(
+            s["start"]["char_offset"] == 0 and s["end"]["char_end"] is None for s in r["spans"]
+        )
+
+    def test_mark_alone_is_not_a_boundary(self):
+        """○만 있고 날짜가 없으면(구두점·표기 부호) 후보가 아니다."""
+        r = propose_boundaries([Line(1, 0, "○七日晴○雨止○又雨")], None)
+        assert [p["char_offset"] for p in r["proposals"]] == [0]
+
+
+def test_anchor_bbox_cuts_line_box_by_char_fraction(tmp_path):
+    """행 중간 앵커는 행 bbox를 글자 비율로 자른다(세로쓰기는 위아래)."""
+    import json
+
+    from src.core.segmentation import anchor_bbox, boundary_bbox
+
+    doc = tmp_path / "documents" / "d"
+    (doc / "L4_text" / "pages").mkdir(parents=True)
+    (doc / "L2_ocr").mkdir()
+    (doc / "manifest.json").write_text(
+        json.dumps({"document_id": "d", "parts": [{"part_id": "v1"}]}), encoding="utf-8"
+    )
+    text = "○七日晴○八日雨"  # 8자
+    (doc / "L4_text" / "pages" / "v1_page_001.txt").write_text(text, encoding="utf-8")
+    l2 = {
+        "part_id": "v1",
+        "page_number": 1,
+        "image_width": 1000,
+        "image_height": 1500,
+        "ocr_results": [
+            {
+                "layout_block_id": "b",
+                "writing_direction": "vertical_rtl",
+                "lines": [{"text": text, "bbox": [900, 100, 940, 900]}],
+            }
+        ],
+    }
+    (doc / "L2_ocr" / "v1_page_001.json").write_text(json.dumps(l2), encoding="utf-8")
+    whole = anchor_bbox(doc, "v1", 1, 0)
+    assert whole["bbox"] == [900, 100, 940, 900]
+    half = anchor_bbox(doc, "v1", 1, 0, offset=4)  # ○八日雨 — 뒤 절반
+    assert half["bbox"] == [900, 500, 940, 900]
+    head = anchor_bbox(doc, "v1", 1, 0, offset=0, offset_end=4)  # 앞 절반
+    assert head["bbox"] == [900, 100, 940, 500]
+    bb = boundary_bbox(
+        doc, "v1", {"page": 1, "line": 0, "offset": 4}, {"page": 1, "line": 0, "offset": None}
+    )
+    assert bb["start_line"] == [900, 500, 940, 900] and bb["end_line"] == [900, 100, 940, 900]
+
+
+def test_char_boundary_apply_and_move_via_api(client, tmp_path):
+    """행 중간 경계가 적용·색인·옮기기(이웃 재잇기)까지 글자 단위로 돈다 (D-090 2단계)."""
+    lib, part_id, work_id = _setup(client, tmp_path)
+    from pathlib import Path
+
+    pages = Path(lib) / "documents" / "d1" / "L4_text" / "pages"
+    for n in (1, 2, 3):
+        (pages / f"{part_id}_page_{n:03d}.txt").unlink()
+    (pages / f"{part_id}_page_001.txt").write_text(
+        DAM_L0 + "\n" + DAM_L1 + "\n" + DAM_L2, encoding="utf-8"
+    )
+    client.put("/api/documents/d1/segmentation-rules", json={"rules": None})
+    body = {"document_id": "d1", "part_id": part_id, "pages": [1]}
+    data = client.post("/api/interpretations/i1/segmentation/propose", json=body).json()
+    k8 = DAM_L0.index("○八日")
+    k9 = DAM_L1.index("○九日")
+    assert [(p["line_index"], p["char_offset"]) for p in data["proposals"]] == [
+        (0, 0),
+        (0, k8),
+        (1, k9),
+    ]
+    keep = ("title", "kind", "start", "end")
+    r = client.post(
+        "/api/interpretations/i1/segmentation/apply",
+        json={
+            "document_id": "d1",
+            "part_id": part_id,
+            "work_id": work_id,
+            "pages": [1],
+            "spans": [{k: v for k, v in s.items() if k in keep} for s in data["spans"]],
+        },
+    )
+    assert r.status_code == 200, r.text
+    url = f"/api/interpretations/i1/boundaries?document_id=d1&part_id={part_id}"
+    lst = client.get(url).json()["boundaries"]
+    assert [(b["start"]["line"], b["start"]["offset"]) for b in lst] == [(0, 0), (0, k8), (1, k9)]
+    assert lst[0]["end"] == {"page": 1, "line": 0, "offset": k8}
+    assert lst[1]["end"] == {"page": 1, "line": 1, "offset": k9}
+    assert lst[2]["end"] == {"page": 1, "line": 2, "offset": None}
+    tb = client.get(f"/api/interpretations/i1/entities/text_block/{lst[1]['id']}").json()
+    assert tb["original_text"] == DAM_L0[k8:] + "\n" + DAM_L1[:k9]
+
+    # 둘째 블록의 시작을 두 글자 앞으로(○八日 앞의 「遇雨」부터) — 앞 블록의 끝이 같이 줄어든다
+    r = client.put(
+        f"/api/interpretations/i1/boundaries/{lst[1]['id']}",
+        json={"start": {"page": 1, "line": 0, "offset": k8 - 2}},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["boundary"]["start"] == {"page": 1, "line": 0, "offset": k8 - 2}
+    lst2 = client.get(url).json()["boundaries"]
+    assert lst2[0]["end"] == {"page": 1, "line": 0, "offset": k8 - 2}
+    t0 = client.get(f"/api/interpretations/i1/entities/text_block/{lst2[0]['id']}").json()
+    t1 = client.get(f"/api/interpretations/i1/entities/text_block/{lst2[1]['id']}").json()
+    assert t0["original_text"] == DAM_L0[: k8 - 2]
+    assert t1["original_text"].startswith("遇雨○八日")
+
+    # 행 단위로 옮기면(▼) 오프셋은 행 첫머리로 돌아간다
+    r = client.put(f"/api/interpretations/i1/boundaries/{lst[1]['id']}", json={"shift_start": 1})
+    assert r.status_code == 200, r.text
+    assert r.json()["boundary"]["start"] == {"page": 1, "line": 1, "offset": 0}
