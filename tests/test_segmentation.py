@@ -339,3 +339,155 @@ def test_propose_without_l4_is_400(client, tmp_path):
         json={"document_id": "d1", "part_id": part_id},
     )
     assert r.status_code == 400 and "L4" in r.json()["error"]
+
+
+# ── 목차 신호 (D-089) ─────────────────────────────────────────────────────
+
+from src.core.toc import (  # noqa: E402
+    TocEntry,
+    align_toc_to_body,
+    detect_toc_pages,
+    extract_toc_entries_llm,
+    extract_toc_entries_rule,
+    title_similarity,
+    toc_page_score,
+)
+
+TOC_PAGE = [
+    "雲養集目錄",
+    "卷之一",
+    "詩",
+    "感懷 一",
+    "次韻贈李參判 二",
+    "登北漢 三",
+    "卷之二",
+    "疏",
+    "辭職疏 一",
+    "論時務疏 五",
+]
+BODY_P5 = ["雲養集卷之一", "詩", "感懷", BODY, "次韻贈李參判幷序", BODY, "登北漢山", BODY]
+BODY_P6 = ["雲養集卷之二", "疏", "辭職疏 壬午", BODY, "論時務疏", BODY]
+
+
+class TestTocDetection:
+    def test_toc_page_scores_high_body_low(self):
+        assert toc_page_score(TOC_PAGE) >= 0.9
+        assert toc_page_score(BODY_P5) < 0.7
+
+    def test_detect_first_run_only(self):
+        pages = {1: ["雲養集", "重刊本"], 2: TOC_PAGE, 3: TOC_PAGE[:6], 5: BODY_P5, 6: BODY_P6}
+        assert detect_toc_pages(pages) == [2, 3]
+
+    def test_rule_extraction_levels_and_leaf_hint(self):
+        entries = extract_toc_entries_rule({2: TOC_PAGE}, [2])
+        titles = [(e.level, e.title, e.page_hint) for e in entries]
+        assert titles[0] == (1, "卷之一", None)  # 卷之一의 수사는 葉 번호가 아니다
+        assert (2, "感懷", "一") in titles and (2, "論時務疏", "五") in titles
+        assert all(e.title != "雲養集目錄" for e in entries)
+
+
+class TestTocAlignment:
+    def test_similarity_head_and_containment(self):
+        assert title_similarity("感懷", "感懷") == 1.0
+        assert title_similarity("次韻贈李參判", "次韻贈李參判幷序") >= 0.95
+        assert title_similarity("卷之一", "雲養集卷之一") >= 0.9
+        assert title_similarity("感懷", BODY) < 0.6
+
+    def test_order_preserving_alignment_with_decoy(self):
+        entries = extract_toc_entries_rule({2: TOC_PAGE}, [2])
+        # 본문 앞에 미끼 행(뒤 항목과 같은 제목)을 두어도 순서 때문에 앞 항목이 먼저 온다
+        body = [Line(5, i, t) for i, t in enumerate(["論時務疏"] + BODY_P5)]
+        body += [Line(6, i, t) for i, t in enumerate(BODY_P6)]
+        matches, unmatched = align_toc_to_body(entries, body)
+        got = {m.title: (m.page, m.line_index) for m in matches}
+        assert got["論時務疏"] == (6, 4)  # 미끼(5쪽 0행)가 아니라 순서상 맞는 자리
+        assert got["卷之一"] == (5, 1) and got["感懷"] == (5, 3)
+        assert unmatched == []
+
+    def test_unmatched_entries_reported(self):
+        entries = [TocEntry("感懷"), TocEntry("없는글"), TocEntry("登北漢")]
+        body = [Line(5, i, t) for i, t in enumerate(BODY_P5)]
+        matches, unmatched = align_toc_to_body(entries, body)
+        assert [m.title for m in matches] == ["感懷", "登北漢"] and unmatched == [1]
+
+
+class _FakeRouter:
+    def __init__(self, text):
+        self._text = text
+        self.calls = []
+
+    async def call(self, prompt, **kwargs):
+        self.calls.append(kwargs)
+
+        class R:
+            pass
+
+        r = R()
+        r.text, r.provider, r.model = self._text, "fake", "fake-1"
+        return r
+
+
+class TestTocLlm:
+    def test_llm_json_used_and_json_forced(self):
+        import asyncio
+
+        router = _FakeRouter(
+            '{"is_toc": true, "entries": [{"title": "感懷", "level": 2, "page_hint": "一"}, '
+            '{"title": "卷之二", "level": 1}]}'
+        )
+        entries, meta = asyncio.run(extract_toc_entries_llm({2: TOC_PAGE}, [2], router))
+        assert meta["method"] == "llm" and meta["provider"] == "fake"
+        assert [(e.title, e.level, e.page_hint) for e in entries] == [
+            ("感懷", 2, "一"),
+            ("卷之二", 1, None),
+        ]
+        assert router.calls[0]["response_format"] == "json" and "think" not in router.calls[0]
+
+    def test_llm_garbage_falls_back_to_rule(self):
+        import asyncio
+
+        entries, meta = asyncio.run(
+            extract_toc_entries_llm({2: TOC_PAGE}, [2], _FakeRouter("응답이 이상합니다"))
+        )
+        assert meta["method"] == "rule" and meta["error"]
+        assert any(e.title == "感懷" for e in entries)
+
+
+class TestTocSignalInProposer:
+    def test_toc_match_creates_boundary_without_date(self):
+        lines = [Line(5, i, t) for i, t in enumerate(BODY_P5)]
+        entries = extract_toc_entries_rule({2: TOC_PAGE}, [2])
+        matches, _ = align_toc_to_body(entries, lines)
+        r = propose_boundaries(lines, None, toc_matches=[m.to_dict() for m in matches])
+        titles = [(p["title"], p["kind"], p["accepted"]) for p in r["proposals"]]
+        assert ("卷之一", "volume", True) in titles and ("感懷", "", True) in titles
+        assert all(any(x.startswith("toc:") for x in p["reasons"]) for p in r["proposals"])
+        assert r["proposals"][0]["confidence"] >= 0.6
+
+
+def test_toc_api_and_propose_with_toc(client, tmp_path):
+    lib, part_id, work_id = _setup(client, tmp_path)
+    from pathlib import Path
+
+    pages = Path(lib) / "documents" / "d1" / "L4_text" / "pages"
+    (pages / f"{part_id}_page_001.txt").write_text("\n".join(TOC_PAGE), encoding="utf-8")
+    (pages / f"{part_id}_page_002.txt").write_text("\n".join(BODY_P5), encoding="utf-8")
+    (pages / f"{part_id}_page_003.txt").write_text("\n".join(BODY_P6), encoding="utf-8")
+
+    r = client.post(
+        "/api/interpretations/i1/segmentation/toc", json={"document_id": "d1", "part_id": part_id}
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["toc_pages"] == [1] and r.json()["method"] == "rule"
+    assert [e["title"] for e in r.json()["entries"]][:3] == ["卷之一", "詩", "感懷"]
+
+    body = {"document_id": "d1", "part_id": part_id}
+    r = client.post("/api/interpretations/i1/segmentation/propose", json=body)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["toc"]["pages"] == [1] and data["pages"] == [2, 3]  # 목차 쪽은 본문 후보에서 빠진다
+    # 卷之一·卷之二(포함 관계)까지 9항목 전부 대조
+    assert len(data["toc"]["matches"]) == 9 and data["toc"]["unmatched"] == []
+    accepted = [p["title"] for p in data["proposals"] if p["accepted"]]
+    assert accepted[:3] == ["卷之一", "詩", "感懷"] and "論時務疏" in accepted
+    assert all(ln["page"] != 1 for ln in data["lines"])

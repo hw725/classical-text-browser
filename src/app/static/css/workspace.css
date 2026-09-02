@@ -7569,3 +7569,28 @@ button.mode-tab {
   background: none;
 }
 .comp-propose-row .prop-suppress:hover { color: #c0392b; }
+
+.comp-toc-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0 6px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.comp-toc-unmatched {
+  font-size: 11px;
+  color: #b8860b;
+  padding: 4px 6px;
+  margin-bottom: 4px;
+  background: rgba(210, 153, 34, 0.08);
+  border-radius: 4px;
+}
+.prop-badge-toc {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: rgba(60, 120, 200, 0.15);
+  color: #2b6cb0;
+  margin-left: 4px;
+}

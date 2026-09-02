@@ -102,6 +102,10 @@ function _bindCompEvents() {
     });
   const rulesSave = document.getElementById("comp-rules-save-btn");
   if (rulesSave) rulesSave.addEventListener("click", _saveRulesAndRepropose);
+  const tocDetect = document.getElementById("comp-toc-detect-btn");
+  if (tocDetect) tocDetect.addEventListener("click", () => _detectToc(false));
+  const tocLlm = document.getElementById("comp-toc-llm-btn");
+  if (tocLlm) tocLlm.addEventListener("click", () => _detectToc(true));
   // textarea 입력 시 쪼개기 미리보기 업데이트
   if (splitTextarea)
     splitTextarea.addEventListener("input", _updateSplitPreview);
@@ -1422,7 +1426,58 @@ async function _executeSplit() {
 const proposeState = {
   data: null, // /segmentation/propose 응답
   checked: new Set(), // 승인한 제안 index
+  toc: null, // {pages, entries} — 「목차 감지」로 확인한 것. null이면 서버가 규칙으로 자동
 };
+
+function _tocPagesFromInput() {
+  const raw = document.getElementById("comp-toc-pages")?.value || "";
+  const pages = raw.split(/[,，\s]+/).map((x) => Number(x)).filter((n) => Number.isInteger(n) && n > 0);
+  return pages.length ? pages : null;
+}
+
+/**
+ * 목차 쪽을 판별하고 항목을 뽑는다 (D-089). 규칙 또는 LLM. 결과는 다음 제안에 신호로 들어간다.
+ */
+async function _detectToc(useLlm) {
+  if (!interpState.interpId) {
+    showToast("해석 저장소를 먼저 선택하세요.", "warning");
+    return;
+  }
+  const summary = document.getElementById("comp-toc-summary");
+  if (summary) summary.textContent = useLlm ? "목차: LLM이 읽는 중…" : "목차: 찾는 중…";
+  try {
+    const llmSel =
+      typeof getLlmModelSelection === "function"
+        ? getLlmModelSelection()
+        : { force_provider: null, force_model: null };
+    const res = await fetch(`/api/interpretations/${interpState.interpId}/segmentation/toc`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        document_id: viewerState.docId,
+        part_id: viewerState.partId,
+        toc_pages: _tocPagesFromInput(),
+        use_llm: !!useLlm,
+        force_provider: useLlm ? llmSel.force_provider : null,
+        force_model: useLlm ? llmSel.force_model : null,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!data.toc_pages.length) {
+      proposeState.toc = null;
+      if (summary) summary.textContent = "목차: 목차로 보이는 쪽이 없습니다 (쪽 번호를 직접 넣어 보세요)";
+      return;
+    }
+    proposeState.toc = { pages: data.toc_pages, entries: data.entries };
+    const input = document.getElementById("comp-toc-pages");
+    if (input && !input.value) input.value = data.toc_pages.join(",");
+    if (data.meta?.error) showToast(`LLM 실패로 규칙 추출을 썼습니다: ${data.meta.error}`, "warning");
+    await _proposeBoundaries();
+  } catch (e) {
+    if (summary) summary.textContent = `목차: 실패 — ${e.message}`;
+  }
+}
 
 function _rulesFromForm() {
   const words = (document.getElementById("comp-rules-words")?.value || "")
@@ -1464,6 +1519,8 @@ async function _proposeBoundaries(rulesOverride) {
         document_id: viewerState.docId,
         part_id: viewerState.partId,
         rules: rulesOverride || null,
+        use_toc: true,
+        toc: proposeState.toc,
       }),
     });
     const data = await res.json();
@@ -1488,6 +1545,25 @@ function _renderProposals() {
   if (stats)
     stats.textContent = `${data.stats.lines}행 · 후보 ${data.proposals.length} · 승인 ${acceptedCount}` +
       (data.stats.suppressed ? ` · 억제 ${data.stats.suppressed}` : "");
+  // 목차 신호 요약 (D-089)
+  const tocSummary = document.getElementById("comp-toc-summary");
+  const unmatchedBox = document.getElementById("comp-toc-unmatched");
+  if (data.toc && data.toc.entries?.length) {
+    const n = data.toc.entries.length;
+    const m = data.toc.matches?.length || 0;
+    if (tocSummary)
+      tocSummary.textContent = `목차: ${data.toc.pages.join(",")}쪽 · ${n}항목 중 ${m} 대조`;
+    if (unmatchedBox) {
+      const un = data.toc.unmatched || [];
+      unmatchedBox.style.display = un.length ? "" : "none";
+      unmatchedBox.textContent = un.length
+        ? `목차에는 있으나 본문에서 못 찾음 (${un.length}): ` + un.map((u) => u.title).join(" · ")
+        : "";
+    }
+  } else {
+    if (tocSummary && !proposeState.toc) tocSummary.textContent = "목차: 없음 또는 미확인";
+    if (unmatchedBox) unmatchedBox.style.display = "none";
+  }
   list.innerHTML = "";
   if (!data.proposals.length) {
     list.innerHTML =
@@ -1511,6 +1587,12 @@ function _renderProposals() {
     const title = document.createElement("div");
     title.className = "prop-title";
     title.textContent = p.title;
+    if (p.reasons.some((r) => r.startsWith("toc:"))) {
+      const badge = document.createElement("span");
+      badge.className = "prop-badge-toc";
+      badge.textContent = p.kind === "volume" ? "목차·권" : "목차";
+      title.appendChild(badge);
+    }
     title.title = "누르면 그 쪽으로 이동";
     title.addEventListener("click", () => {
       if (typeof goToPage === "function") goToPage(p.page);

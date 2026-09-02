@@ -250,8 +250,15 @@ def _find_title_word(text: str, words: list[str], limit: int) -> tuple[str, int]
     return best
 
 
-def propose_boundaries(lines: list[Line], rules: Optional[dict] = None) -> dict:
+def propose_boundaries(
+    lines: list[Line],
+    rules: Optional[dict] = None,
+    toc_matches: Optional[list[dict]] = None,
+) -> dict:
     """행 목록에서 글 경계 후보를 만든다.
+
+    toc_matches — core.toc.align_toc_to_body()의 결과(dict 목록). 대응된 행은 날짜·형식이
+    없어도 후보가 되고 신뢰도가 크게 오른다(D-089). level 1(卷·篇)은 kind="volume".
 
     출력: {"proposals": [...], "spans": [...], "stats": {...}, "rules": 적용된 규칙}
       proposals — 날짜나 표제 어휘가 있는 모든 행 (억제된 것도 표시용으로 포함)
@@ -262,6 +269,9 @@ def propose_boundaries(lines: list[Line], rules: Optional[dict] = None) -> dict:
     rules = normalize_rules(rules)
     layout = _layout_signals(lines, rules)
     limit = rules["max_title_chars"] + 8
+    toc_by_line: dict[tuple[int, int], dict] = {
+        (int(m["page"]), int(m["line_index"])): m for m in (toc_matches or [])
+    }
 
     proposals: list[Proposal] = []
     prev_month: Optional[int] = None
@@ -273,11 +283,16 @@ def propose_boundaries(lines: list[Line], rules: Optional[dict] = None) -> dict:
         head = parse_date_head(text) if rules["use_date"] else DateHead()
         word, wpos = _find_title_word(text, rules["title_words"], limit)
         sig = layout.get((ln.page, ln.line_index), [])
-        if not head.present and not word:
+        toc = toc_by_line.get((ln.page, ln.line_index))
+        if not head.present and not word and toc is None:
             continue
 
         reasons: list[str] = []
         conf = 0.0
+        if toc is not None:
+            # 목차가 «여기서 글이 시작한다»고 적어 둔 행 — 가장 강한 신호
+            conf += 0.5 + 0.2 * float(toc.get("score", 0))
+            reasons.append(f"toc:{toc.get('title', '')}")
         if head.present:
             conf += 0.5
             reasons.append("date")
@@ -291,7 +306,13 @@ def propose_boundaries(lines: list[Line], rules: Optional[dict] = None) -> dict:
             conf += 0.25
             reasons.append("indent")
         # 표제 어휘 없이 날짜만 있고 행이 본문만큼 길면 본문 속 날짜일 가능성
-        if head.present and not word and not sig and len(text) > rules["max_title_chars"]:
+        if (
+            head.present
+            and not word
+            and not sig
+            and toc is None
+            and len(text) > rules["max_title_chars"]
+        ):
             conf -= 0.25
             reasons.append("long_line")
 
@@ -334,6 +355,11 @@ def propose_boundaries(lines: list[Line], rules: Optional[dict] = None) -> dict:
         place = text[tail_start:wpos] if word and wpos >= tail_start else text[tail_start:limit]
         place = place.strip()
         title = text[: (wpos + len(word)) if word else min(len(text), limit)]
+        kind = word
+        if toc is not None:
+            title = toc.get("title") or title
+            if int(toc.get("level", 2)) == 1:
+                kind = "volume"
 
         conf = max(0.0, min(1.0, conf))
         accepted = (not suppressed) and conf >= rules["min_confidence"]
@@ -350,7 +376,7 @@ def propose_boundaries(lines: list[Line], rules: Optional[dict] = None) -> dict:
                     "month_rolled": month_rolled,
                     "text": head.matched,
                 },
-                kind=word,
+                kind=kind,
                 place=place,
                 confidence=conf,
                 reasons=reasons,

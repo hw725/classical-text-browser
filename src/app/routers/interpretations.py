@@ -152,6 +152,20 @@ class SegmentationProposeRequest(BaseModel):
     part_id: str
     pages: list[int] | None = None  # None이면 권 전체
     rules: dict | None = None  # None이면 manifest.segmentation_rules → 기본값
+    # 목차 신호 (D-089). use_toc=True면 toc가 없을 때 규칙으로 자동 판별·추출한다.
+    use_toc: bool = True
+    toc: dict | None = None  # {"pages": [...], "entries": [{"title","level","page_hint"}]}
+
+
+class SegmentationTocRequest(BaseModel):
+    """목차 판별·추출 요청 (D-089). 아무것도 저장하지 않는다."""
+
+    document_id: str
+    part_id: str
+    toc_pages: list[int] | None = None  # None이면 앞쪽 쪽에서 자동 판별
+    use_llm: bool = False  # True면 LLM으로 항목 구조화(실패 시 규칙으로)
+    force_provider: str | None = None
+    force_model: str | None = None
 
 
 class SegmentationSpan(BaseModel):
@@ -873,12 +887,99 @@ async def api_segmentation_propose(interp_id: str, body: SegmentationProposeRequ
             {"error": "확정 텍스트(L4)가 있는 쪽이 없습니다. OCR·교정을 먼저 하세요."},
             status_code=400,
         )
-    result = propose_boundaries(lines, rules)
+
+    # 목차 신호 (D-089): 목차 쪽은 본문 후보에서 빼고, 항목을 본문 행에 순서대로 대응시킨다
+    toc_info = None
+    toc_matches = None
+    if body.use_toc:
+        from core.toc import (
+            TocEntry,
+            align_toc_to_body,
+            detect_toc_pages,
+            extract_toc_entries_rule,
+        )
+
+        page_lines = {p: t.split("\n") for p, t in page_texts.items()}
+        if body.toc and body.toc.get("entries"):
+            toc_pages = [int(p) for p in (body.toc.get("pages") or [])]
+            entries = [
+                TocEntry(
+                    title=str(e.get("title", "")).strip(),
+                    level=int(e.get("level", 2)),
+                    page_hint=e.get("page_hint"),
+                )
+                for e in body.toc["entries"]
+                if str(e.get("title", "")).strip()
+            ]
+        else:
+            toc_pages = detect_toc_pages(page_lines, rules["max_title_chars"])
+            entries = extract_toc_entries_rule(page_lines, toc_pages) if toc_pages else []
+        if entries:
+            body_lines = [ln for ln in lines if ln.page not in set(toc_pages)]
+            matches, unmatched = align_toc_to_body(entries, body_lines)
+            toc_matches = [m.to_dict() for m in matches]
+            toc_info = {
+                "pages": toc_pages,
+                "entries": [e.to_dict() for e in entries],
+                "matches": toc_matches,
+                "unmatched": [entries[i].to_dict() | {"index": i} for i in unmatched],
+            }
+            lines = body_lines
+            for p in toc_pages:
+                page_texts.pop(p, None)
+
+    result = propose_boundaries(lines, rules, toc_matches=toc_matches)
     result["lines"] = [
         {"page": ln.page, "line_index": ln.line_index, "text": ln.text} for ln in lines
     ]
     result["pages"] = sorted(page_texts)
+    result["toc"] = toc_info
     return result
+
+
+@router.post("/api/interpretations/{interp_id}/segmentation/toc")
+async def api_segmentation_toc(interp_id: str, body: SegmentationTocRequest):
+    """목차 쪽을 판별하고 항목을 뽑는다 (D-089). 저장하지 않는다.
+
+    규칙(짧은 행 비율·目錄/卷之 표지·葉 번호 꼬리)으로 앞쪽 쪽을 고르고, use_llm이면 LLM이
+    항목을 구조화한다(텍스트만 넘긴다 — 비전 불필요, JSON 강제, 사고 끔). 실패하면 규칙 추출.
+    출력: {"toc_pages", "entries", "method", "meta"}
+    """
+    from app._state import _get_llm_router
+    from core.segmentation import collect_document_lines
+    from core.toc import detect_toc_pages, extract_toc_entries_llm, extract_toc_entries_rule
+
+    _library_path = get_library_path()
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+    doc_path = require_repo_path("documents", body.document_id)
+    if not doc_path.exists():
+        return JSONResponse({"error": "문헌을 찾을 수 없습니다."}, status_code=404)
+
+    _lines, page_texts = collect_document_lines(doc_path, body.part_id, None)
+    if not page_texts:
+        return JSONResponse({"error": "확정 텍스트(L4)가 있는 쪽이 없습니다."}, status_code=400)
+    page_lines = {p: t.split("\n") for p, t in page_texts.items()}
+    toc_pages = body.toc_pages or detect_toc_pages(page_lines)
+    if not toc_pages:
+        return {
+            "toc_pages": [],
+            "entries": [],
+            "method": "rule",
+            "meta": {"reason": "목차로 보이는 쪽이 없습니다"},
+        }
+    if body.use_llm:
+        entries, meta = await extract_toc_entries_llm(
+            page_lines, toc_pages, _get_llm_router(), body.force_provider, body.force_model
+        )
+    else:
+        entries, meta = extract_toc_entries_rule(page_lines, toc_pages), {"method": "rule"}
+    return {
+        "toc_pages": toc_pages,
+        "entries": [e.to_dict() for e in entries],
+        "method": meta.get("method", "rule"),
+        "meta": meta,
+    }
 
 
 @router.post("/api/interpretations/{interp_id}/segmentation/apply")

@@ -2045,6 +2045,17 @@
                     <button id="comp-rules-save-btn" class="text-btn" style="font-size: 11px">저장하고 다시 제안</button>
                   </div>
                 </div>
+                <!-- 목차 신호 (D-089) -->
+                <div id="comp-toc-row" class="comp-toc-row">
+                  <span id="comp-toc-summary" class="comp-propose-stats">목차: 확인 전</span>
+                  <div style="flex: 1"></div>
+                  <label class="comp-propose-stats">목차 쪽
+                    <input id="comp-toc-pages" type="text" placeholder="자동" style="width: 70px; font-size: 11px" title="쉼표로 구분 (예: 3,4). 비우면 자동 판별" />
+                  </label>
+                  <button id="comp-toc-detect-btn" class="text-btn" style="font-size: 11px" title="규칙으로 목차 쪽을 찾아 항목을 뽑고 본문과 대조">목차 감지</button>
+                  <button id="comp-toc-llm-btn" class="text-btn" style="font-size: 11px" title="LLM으로 목차 항목을 구조화 (텍스트만 보냄)">목차 감지(LLM)</button>
+                </div>
+                <div id="comp-toc-unmatched" class="comp-toc-unmatched" style="display: none"></div>
                 <div id="comp-propose-list" class="comp-propose-list"></div>
               </div>
               <div
