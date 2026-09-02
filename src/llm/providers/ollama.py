@@ -616,6 +616,13 @@ class OllamaProvider(BaseLlmProvider):
         text = data.get("response", "") or ""
         if not text.strip() and kwargs.get("allow_thinking_fallback", True):
             text = data.get("thinking", "") or ""
+        # JSON을 요구했는데 비어 있으면 실패로 드러낸다 — 다른 세 프로바이더와 같다.
+        # 조용히 빈 결과를 돌려주면 줄 0개짜리 L2가 «처리 완료»로 저장된다.
+        if response_format == "json" and not text.strip():
+            raise LlmProviderError(
+                f"Ollama vision empty JSON output (done_reason={data.get('done_reason')!r}, "
+                f"think={think!r}, num_predict={num_predict})"
+            )
 
         return LlmResponse(
             text=text,

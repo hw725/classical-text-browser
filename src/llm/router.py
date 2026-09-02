@@ -35,6 +35,7 @@ from typing import Optional
 from .config import LlmConfig
 from .providers.anthropic_provider import AnthropicProvider
 from .providers.base import (
+    TRUNCATED_MARK,
     BaseLlmProvider,
     LlmProviderError,
     LlmResponse,
@@ -355,7 +356,15 @@ class LlmRouter:
         purpose: str = "vision",
         **kwargs,
     ) -> LlmResponse:
-        """이미지 분석 호출. supports_image인 provider만 시도."""
+        """이미지 분석 호출. supports_image인 provider만 시도.
+
+        fallback_on_truncation=False 를 주면 출력 잘림(TRUNCATED_MARK)은 다음
+        프로바이더로 넘기지 않고 그대로 올린다 (D-083). 잘림은 «이 프로바이더가
+        못 쓴다»가 아니라 «예산이 모자랐다»이므로, 사고를 끄고 같은 프로바이더에
+        다시 묻는 것이 맞다. 그냥 넘기면 무료 로컬 모델의 잘림이 곧바로 유료 API
+        호출이 된다 — ollama.py가 경고하는 바로 그 비용 누출이다.
+        """
+        no_fallback_on_truncation = kwargs.pop("fallback_on_truncation", True) is False
         if force_provider:
             provider = self._get_provider(force_provider)
             if not provider:
@@ -396,6 +405,8 @@ class LlmRouter:
                 self.usage_tracker.log(response, purpose=purpose)
                 return response
             except Exception as e:
+                if no_fallback_on_truncation and TRUNCATED_MARK in str(e).lower():
+                    raise
                 self._avail_cache.pop(provider.provider_id, None)
                 errors.append(f"{provider.provider_id}: {e}")
                 continue

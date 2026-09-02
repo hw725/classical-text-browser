@@ -107,17 +107,13 @@ def test_interrupted_paper_resumes_from_where_it_stopped(library, scan_pdf):
     # 1차 실행 — 2쪽까지 돌고 3쪽에서 끊긴다.
     pipe = FakePipeline(library)
     pipe.fail_after = 2
-    rec = _process_one(
-        _task(scan_pdf), library, "embed_0001", None, archive, False, pipe
-    )
+    rec = _process_one(_task(scan_pdf), library, "embed_0001", None, archive, False, pipe)
     assert rec["status"] == "failed"
     assert pipe.called_pages == [1, 2]
 
     # 2차 실행 — 같은 doc_id로 다시 온다.
     pipe2 = FakePipeline(library)
-    rec2 = _process_one(
-        _task(scan_pdf), library, "embed_0001", None, archive, False, pipe2
-    )
+    rec2 = _process_one(_task(scan_pdf), library, "embed_0001", None, archive, False, pipe2)
 
     # 1·2쪽은 결과가 있으니 건너뛰고 3쪽만 새로 돈다.
     assert pipe2.called_pages == [3], "이미 돌린 쪽에 LLM 호출이 다시 나갔다"
@@ -163,9 +159,7 @@ def test_ocr_results_survive_for_later_review(library, scan_pdf):
     """
     archive = library.parent / "archive"
     pipe = FakePipeline(library)
-    rec = _process_one(
-        _task(scan_pdf), library, "embed_0004", None, archive, True, pipe
-    )
+    rec = _process_one(_task(scan_pdf), library, "embed_0004", None, archive, True, pipe)
     assert rec["status"] == "ok"
     assert rec["replaced"] is True, "자리바꿈까지 끝나야 정리 여부가 갈린다"
 

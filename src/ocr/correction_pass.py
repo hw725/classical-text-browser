@@ -310,15 +310,6 @@ def run_correction(
                        blocks: [{block_id, reasons, anchor_text, corrected_text, agreement,
                                  uncertain_count, accepted, lines, pairs, error?}]}
     """
-    l2_path = Path(doc_path) / "L2_ocr" / f"{part_id}_page_{page_number:03d}.json"
-    l2_page = json.loads(l2_path.read_text(encoding="utf-8")) if l2_path.exists() else {}
-
-    wanted = {c.block_id for c in candidates}
-    prepared = pipeline.prepare_page(doc_id, part_id, page_number, sorted(wanted))
-    if prepared.error:
-        raise RuntimeError(prepared.error)
-    blocks_by_id = {b.get("block_id"): b for b in prepared.blocks}
-
     draft = {
         "doc_id": doc_id,
         "part_id": part_id,
@@ -328,6 +319,19 @@ def run_correction(
         "created_at": datetime.now(timezone.utc).isoformat(),
         "blocks": [],
     }
+    if not candidates:
+        # 다시 볼 블록이 없으면 이미지도 열지 않고 초안 파일도 만들지 않는다.
+        # 빈 초안이 남으면 eval_cer가 «교정 초안이 있는 쪽»으로 세어 통계가 부푼다.
+        return draft
+
+    l2_path = Path(doc_path) / "L2_ocr" / f"{part_id}_page_{page_number:03d}.json"
+    l2_page = json.loads(l2_path.read_text(encoding="utf-8")) if l2_path.exists() else {}
+
+    wanted = {c.block_id for c in candidates}
+    prepared = pipeline.prepare_page(doc_id, part_id, page_number, sorted(wanted))
+    if prepared.error:
+        raise RuntimeError(prepared.error)
+    blocks_by_id = {b.get("block_id"): b for b in prepared.blocks}
     for cand in candidates:
         block = blocks_by_id.get(cand.block_id)
         entry = {
@@ -396,12 +400,21 @@ def compose_page_text(l2_page: dict, draft: Optional[dict], block_ids: Optional[
 def apply_draft(
     doc_path: Path, part_id: str, page_number: int, block_ids: Optional[list[str]]
 ) -> dict:
-    """초안의 블록을 L4에 쓴다. block_ids가 None이면 accepted 블록만.
+    """초안의 블록을 **현재 L4 위에** 적용한다. block_ids가 None이면 accepted 블록만.
 
-    출력: {"applied_blocks": [...], "text_length": N}
-    L4 저장은 core.document.save_page_text (LF·UTF-8 통일)를 쓴다.
+    출력: {"applied_blocks": [...], "not_found_blocks": [...], "text_length": N}
+
+    왜 L2에서 다시 조립하지 않는가:
+        예전 구현은 L2 텍스트 + 이번에 고른 블록으로 쪽 전체를 다시 만들어 덮어썼다.
+        그러면 «적용»을 두 번째 누를 때 첫 번째 적용이 되돌아가고, 연구자가 L4
+        편집기에서 손으로 고친 것도 사라진다. 그래서 지금 L4를 읽어 그 블록의
+        엔진 원문(앵커)만 교정본으로 바꾼다. 앵커를 못 찾으면(이미 손으로 고쳤거나
+        구조가 달라졌으면) 건드리지 않고 not_found로 알린다.
+        L4가 아직 비어 있을 때만 L2 기준으로 조립한다.
+
+    적용한 블록 목록은 초안 파일의 applied_blocks에 누적된다.
     """
-    from core.document import save_page_text
+    from core.document import get_page_text, save_page_text, write_json_atomic
 
     l2_path = Path(doc_path) / "L2_ocr" / f"{part_id}_page_{page_number:03d}.json"
     if not l2_path.exists():
@@ -410,14 +423,48 @@ def apply_draft(
     draft = load_draft(doc_path, part_id, page_number)
     if draft is None:
         raise FileNotFoundError("교정 초안이 없습니다. 먼저 LLM 교정을 실행하세요.")
-    chosen = set(block_ids) if block_ids is not None else None
-    text = compose_page_text(l2_page, draft, chosen)
-    save_page_text(doc_path, part_id, page_number, text)
-    applied = [
-        b["block_id"]
+
+    entries = {
+        b["block_id"]: b
         for b in draft.get("blocks", [])
-        if not b.get("error")
-        and b.get("corrected_text")
-        and (b["block_id"] in chosen if chosen is not None else b.get("accepted"))
-    ]
-    return {"applied_blocks": applied, "text_length": len(text)}
+        if not b.get("error") and b.get("corrected_text")
+    }
+    if block_ids is not None:
+        chosen = [bid for bid in block_ids if bid in entries]
+    else:
+        chosen = [bid for bid, b in entries.items() if b.get("accepted")]
+    already = set(draft.get("applied_blocks") or [])
+
+    try:
+        current = get_page_text(doc_path, part_id, page_number).get("text") or ""
+    except Exception:  # noqa: BLE001 — 매니페스트가 없어도 L4 파일 유무로 판단한다
+        l4 = Path(doc_path) / "L4_text" / "pages" / f"{part_id}_page_{page_number:03d}.txt"
+        current = l4.read_text(encoding="utf-8") if l4.exists() else ""
+
+    applied: list[str] = []
+    not_found: list[str] = []
+    if not current.strip():
+        # L4가 비어 있다 — L2 기준으로 조립 (이전에 적용한 블록 + 이번 선택)
+        text = compose_page_text(l2_page, draft, already | set(chosen))
+        applied = [bid for bid in chosen if bid in entries]
+    else:
+        text = current
+        anchors = {
+            str(r.get("layout_block_id") or ""): block_text(r)
+            for r in l2_page.get("ocr_results") or []
+        }
+        for bid in chosen:
+            corrected = entries[bid]["corrected_text"]
+            anchor = anchors.get(bid, "")
+            if anchor and anchor in text:
+                text = text.replace(anchor, corrected, 1)
+                applied.append(bid)
+            elif bid in already or (corrected and corrected in text):
+                applied.append(bid)  # 이미 적용되어 있다
+            else:
+                not_found.append(bid)
+
+    save_page_text(doc_path, part_id, page_number, text)
+    draft["applied_blocks"] = sorted(already | set(applied))
+    write_json_atomic(draft_path(doc_path, part_id, page_number), draft)
+    return {"applied_blocks": applied, "not_found_blocks": not_found, "text_length": len(text)}

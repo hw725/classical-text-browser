@@ -700,7 +700,12 @@ async function _runCorrection(mode, blockIds) {
     const n = (data.blocks || []).length;
     const accepted = (data.blocks || []).filter((b) => b.accepted).length;
     if (n === 0) {
-      showToast("다시 볼 블록이 없습니다. 엔진 신뢰도가 모두 기준 이상입니다.", "info");
+      showToast(
+        blockIds
+          ? "지정한 블록에 L2 결과가 없습니다. 먼저 OCR을 실행하세요."
+          : "다시 볼 블록이 없습니다. 엔진 신뢰도가 모두 기준 이상입니다.",
+        "info",
+      );
     } else {
       showToast(`LLM 교정 초안: ${n}블록 중 ${accepted}블록 자동 수용 기준 통과`, "success");
     }
@@ -791,7 +796,15 @@ async function _applyCorrection(blockIds) {
       showToast(data.error || "적용에 실패했습니다.", "error");
       return;
     }
-    showToast(`교정본을 L4에 적용했습니다: ${(data.applied_blocks || []).join(", ")}`, "success");
+    const nf = data.not_found_blocks || [];
+    if (nf.length) {
+      showToast(
+        `적용 ${(data.applied_blocks || []).length}블록. ${nf.join(", ")}은(는) L4에서 엔진 원문을 찾지 못해 건너뛰었습니다 (이미 손으로 고친 자리일 수 있습니다).`,
+        "warning",
+      );
+    } else {
+      showToast(`교정본을 L4에 적용했습니다: ${(data.applied_blocks || []).join(", ")}`, "success");
+    }
   } catch (e) {
     showToast(`적용 실패: ${e.message}`, "error");
   }

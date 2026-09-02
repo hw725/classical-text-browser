@@ -201,12 +201,15 @@ class AnthropicProvider(BaseLlmProvider):
         max_tokens를 N만큼 늘린다. Anthropic의 budget_tokens 최소치는 1024다.
         think=False/None이면 사고 설정을 보내지 않는다(모델 기본은 사고 없음).
         """
+        # 실제로 보내는 예산(최소 1024)을 상한에도 더한다. 원값을 더하면 예산이
+        # 1024 미만일 때 max_tokens ≤ budget_tokens가 되어 400이 난다.
+        budget = max(1024, thinking_budget) if think else 0
         kwargs = {
             "model": model,
-            "max_tokens": max_tokens + (thinking_budget if think else 0),
+            "max_tokens": max_tokens + budget,
             "system": system or "",
             "messages": messages,
         }
         if think:
-            kwargs["thinking"] = {"type": "enabled", "budget_tokens": max(1024, thinking_budget)}
+            kwargs["thinking"] = {"type": "enabled", "budget_tokens": budget}
         return kwargs

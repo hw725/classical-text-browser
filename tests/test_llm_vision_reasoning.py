@@ -150,6 +150,13 @@ class TestOllamaVision:
             asyncio.run(prov.call_with_image("p", b"img", model="m", response_format="json"))
         assert TRUNCATED_MARK in str(ei.value)
 
+    def test_empty_json_output_raises(self):
+        """JSON을 요구했는데 비면 실패 — 다른 프로바이더와 같은 규칙."""
+        prov = _ollama_with_reply({"response": "", "done_reason": "stop"}, [])
+        with pytest.raises(LlmProviderError) as ei:
+            asyncio.run(prov.call_with_image("p", b"img", model="m", response_format="json"))
+        assert "empty" in str(ei.value)
+
     def test_thinking_fallback_disabled_returns_empty(self):
         """allow_thinking_fallback=False면 사고문을 본문으로 쓰지 않는다 (D-074 유지)."""
         prov = _ollama_with_reply(
@@ -209,24 +216,19 @@ class TestOpenAiVisionKwargs:
         assert "reasoning_effort" not in kw
 
     def test_reasoning_model_effort_mapping(self):
-        assert (
-            OpenAiProvider._vision_create_kwargs("gpt-5", [], 1, "text", True)["reasoning_effort"]
-            == "medium"
-        )
-        assert (
-            OpenAiProvider._vision_create_kwargs("gpt-5", [], 1, "text", False)["reasoning_effort"]
-            == "minimal"
-        )
-        assert (
-            OpenAiProvider._vision_create_kwargs("o3", [], 1, "text", False)["reasoning_effort"]
-            == "low"
-        )
-        assert (
-            OpenAiProvider._vision_create_kwargs("o4-mini", [], 1, "text", "high")[
+        def eff(model, think):
+            return OpenAiProvider._vision_create_kwargs(model, [], 1, "text", think).get(
                 "reasoning_effort"
-            ]
-            == "high"
-        )
+            )
+
+        assert eff("gpt-5", True) == "medium"
+        assert eff("gpt-5", False) == "minimal"
+        assert eff("gpt-5-mini-2025-08-07", False) == "minimal"
+        # gpt-5.1·5.2는 minimal을 거부한다 — 최소치 low로
+        assert eff("gpt-5.2", False) == "low"
+        assert eff("o3", False) == "low"
+        assert eff("o4-mini", "high") == "high"
+        assert eff("gpt-4o", False) is None
 
 
 # ─── Anthropic ───────────────────────────────────────────────────
@@ -253,8 +255,9 @@ class TestAnthropicVision:
         }
 
     def test_kwargs_min_budget_1024(self):
-        kw = AnthropicProvider._vision_create_kwargs("claude", [], None, 1000, True, 100)
+        kw = AnthropicProvider._vision_create_kwargs("claude", [], None, 400, True, 100)
         assert kw["thinking"]["budget_tokens"] == 1024
+        assert kw["max_tokens"] > kw["thinking"]["budget_tokens"]  # API 불변식
 
     def test_kwargs_without_thinking(self):
         kw = AnthropicProvider._vision_create_kwargs("claude", [], None, 1000, False, 0)
@@ -334,3 +337,72 @@ class TestEngineLadder:
         engine = LlmOcrEngine(router)
         engine.recognize(b"img")
         assert router.calls[0]["think"] is False
+
+
+# ─── 라우터: 잘림은 폴백 대상이 아니다 ──────────────────────────
+
+
+class _TruncatingProvider:
+    provider_id = "ollama"
+    supports_image = True
+
+    def __init__(self, log):
+        self.log = log
+
+    async def is_available(self):
+        return True
+
+    async def call_with_image(self, prompt, image, **kwargs):
+        self.log.append(("ollama", kwargs.get("think")))
+        raise LlmProviderError(f"Ollama vision 출력이 잘렸습니다 ({TRUNCATED_MARK})")
+
+
+class _PaidProvider:
+    provider_id = "gemini"
+    supports_image = True
+
+    def __init__(self, log):
+        self.log = log
+
+    async def is_available(self):
+        return True
+
+    async def call_with_image(self, prompt, image, **kwargs):
+        self.log.append(("gemini", kwargs.get("think")))
+        return LlmResponse(text='{"lines":[]}', provider="gemini", model="m")
+
+
+class TestRouterTruncationFallback:
+    def _router(self, log):
+        from llm.config import LlmConfig
+        from llm.router import LlmRouter
+
+        router = LlmRouter(LlmConfig())
+        router.providers = [_TruncatingProvider(log), _PaidProvider(log)]
+        router._avail_cache = {}
+        return router
+
+    def test_default_falls_back_to_next_provider(self):
+        log: list = []
+        router = self._router(log)
+        resp = asyncio.run(router.call_with_image("p", b"img", think=True))
+        assert resp.provider == "gemini"
+
+    def test_no_fallback_flag_raises_so_engine_can_retry_same_provider(self):
+        log: list = []
+        router = self._router(log)
+        with pytest.raises(LlmProviderError):
+            asyncio.run(
+                router.call_with_image("p", b"img", think=True, fallback_on_truncation=False)
+            )
+        assert log == [("ollama", True)]  # 유료 프로바이더는 호출되지 않았다
+
+    def test_engine_ladder_stays_on_same_provider(self):
+        """엔진 사다리: 잘림 → 사고 끔 재시도가 같은(무료) 프로바이더에서 돈다."""
+        log: list = []
+        router = self._router(log)
+        engine = LlmOcrEngine(router)
+        with pytest.raises(OcrEngineError):
+            engine.recognize(b"img", think=True)
+        assert all(p == "ollama" for p, _ in log)
+        assert [t for _, t in log] == [True, False, False]

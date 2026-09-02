@@ -306,3 +306,57 @@ class TestRunAndApply:
         _, doc = library
         with pytest.raises(FileNotFoundError):
             apply_draft(doc, "v1", 1, None)
+
+
+class TestApplyPreservesPriorWork:
+    def _setup(self, library):
+        root, doc = library
+        engine = _EchoLlmEngine({"裴楷清通": "裴楷淸通", "孔明卧龍": "孔明臥龍"})
+        registry = OcrEngineRegistry()
+        registry.register(engine)
+        pipeline = OcrPipeline(registry, library_root=str(root))
+        cands = select_candidates(_l2(), LAYOUT)
+        run_correction(pipeline, engine, doc, "doc1", "v1", 1, cands)
+        return doc
+
+    def test_sequential_apply_keeps_earlier_block(self, library):
+        doc = self._setup(library)
+        apply_draft(doc, "v1", 1, ["b2"])
+        apply_draft(doc, "v1", 1, ["b3"])
+        saved = (doc / "L4_text" / "pages" / "v1_page_001.txt").read_text(encoding="utf-8")
+        assert "裴楷淸通" in saved and "孔明臥龍" in saved  # 둘 다 살아 있다
+        from ocr.correction_pass import load_draft
+
+        assert load_draft(doc, "v1", 1)["applied_blocks"] == ["b2", "b3"]
+
+    def test_manual_l4_edit_is_preserved(self, library):
+        doc = self._setup(library)
+        l4 = doc / "L4_text" / "pages" / "v1_page_001.txt"
+        l4.parent.mkdir(parents=True, exist_ok=True)
+        # 연구자가 L4를 손으로 고쳐 둔 상태 (첫 블록을 바꾸고 메모 줄을 덧붙임)
+        l4.write_text("王戎簡要(손으로 고침)\n\n裴楷清通\n\n孔明卧龍\n\n[메모]", encoding="utf-8")
+        result = apply_draft(doc, "v1", 1, ["b3"])
+        saved = l4.read_text(encoding="utf-8")
+        assert result["applied_blocks"] == ["b3"] and result["not_found_blocks"] == []
+        assert saved.startswith("王戎簡要(손으로 고침)") and saved.endswith("[메모]")
+        assert "孔明臥龍" in saved and "孔明卧龍" not in saved
+
+    def test_missing_anchor_is_reported_not_overwritten(self, library):
+        doc = self._setup(library)
+        l4 = doc / "L4_text" / "pages" / "v1_page_001.txt"
+        l4.parent.mkdir(parents=True, exist_ok=True)
+        l4.write_text("전혀 다른 내용", encoding="utf-8")
+        result = apply_draft(doc, "v1", 1, ["b3"])
+        assert result["not_found_blocks"] == ["b3"] and result["applied_blocks"] == []
+        assert l4.read_text(encoding="utf-8") == "전혀 다른 내용"
+
+    def test_no_candidates_writes_no_draft(self, library):
+        root, doc = library
+        engine = _EchoLlmEngine({})
+        registry = OcrEngineRegistry()
+        registry.register(engine)
+        pipeline = OcrPipeline(registry, library_root=str(root))
+        draft = run_correction(pipeline, engine, doc, "doc1", "v1", 1, [])
+        assert draft["blocks"] == []
+        assert not draft_path(doc, "v1", 1).exists()
+        assert engine.calls == []

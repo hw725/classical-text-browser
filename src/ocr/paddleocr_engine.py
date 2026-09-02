@@ -104,7 +104,7 @@ class PaddleOcrEngine(BaseOcrEngine):
 
     @staticmethod
     def _resolve_use_gpu(setting: str | None) -> bool:
-        """"auto" | "cpu" | "gpu" 를 실제 사용 여부로 바꾼다.
+        """ "auto" | "cpu" | "gpu" 를 실제 사용 여부로 바꾼다.
 
         auto는 paddle이 CUDA 빌드이고 장치가 실제로 보일 때만 True다.
         paddle import 자체가 실패해도 조용히 False로 떨어져 CPU 경로를 탄다 —
@@ -119,8 +119,7 @@ class PaddleOcrEngine(BaseOcrEngine):
             import paddle
 
             return bool(
-                paddle.device.is_compiled_with_cuda()
-                and paddle.device.cuda.device_count() > 0
+                paddle.device.is_compiled_with_cuda() and paddle.device.cuda.device_count() > 0
             )
         except Exception:
             return False

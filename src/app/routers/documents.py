@@ -686,11 +686,7 @@ async def api_create_from_files(
     # _suggest_doc_id 변경 시 여기가 최후 방어선이 된다). 규칙 정본: core/repo_id.py.
     if not is_valid_repo_id(doc_id):
         return JSONResponse(
-            {
-                "error": (
-                    f"문헌 ID 형식이 올바르지 않습니다: {doc_id!r}\n→ {REPO_ID_RULE_TEXT}"
-                )
-            },
+            {"error": (f"문헌 ID 형식이 올바르지 않습니다: {doc_id!r}\n→ {REPO_ID_RULE_TEXT}")},
             status_code=400,
         )
 
@@ -1733,9 +1729,7 @@ async def api_add_parts(
     doc_path = require_repo_path("documents", doc_id)
     manifest_path = doc_path / "manifest.json"
     if not manifest_path.exists():
-        return JSONResponse(
-            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404
-        )
+        return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
 
     pdfs = [f for f in files if (f.filename or "").lower().endswith(".pdf")]
     if not pdfs:
@@ -1841,8 +1835,7 @@ async def api_add_parts(
 
     git_commit_document(
         doc_path,
-        f"data: {doc_id}에 권 {len(added)}개 추가 "
-        f"({', '.join(e['part_id'] for e in added)})",
+        f"data: {doc_id}에 권 {len(added)}개 추가 ({', '.join(e['part_id'] for e in added)})",
     )
 
     return {"added": added, "parts": len(parts)}
@@ -2644,14 +2637,10 @@ def api_probe_text_layer(doc_id: str, part_id: str):
     """
     doc_path = require_repo_path("documents", doc_id)
     if not (doc_path / "manifest.json").exists():
-        return JSONResponse(
-            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404
-        )
+        return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
 
     manifest = get_document_info(doc_path)
-    part = next(
-        (p for p in manifest.get("parts", []) if p.get("part_id") == part_id), None
-    )
+    part = next((p for p in manifest.get("parts", []) if p.get("part_id") == part_id), None)
     if part is None:
         available = [p.get("part_id") for p in manifest.get("parts", [])]
         return JSONResponse(
@@ -2688,9 +2677,7 @@ def _text_layer_recommendation(probe: dict) -> str:
     """
     verdict = probe.get("verdict")
     if verdict == "born_digital":
-        return (
-            "텍스트 레이어가 이미 있습니다. OCR 없이 바로 텍스트를 가져올 수 있습니다."
-        )
+        return "텍스트 레이어가 이미 있습니다. OCR 없이 바로 텍스트를 가져올 수 있습니다."
     if verdict == "partial":
         with_text = probe.get("pages_with_text", 0)
         sampled = probe.get("sampled", 0)
@@ -2725,9 +2712,7 @@ class TextLayerImportRequest(BaseModel):
 
 
 @router.post("/api/documents/{doc_id}/parts/{part_id}/text-import/from-text-layer")
-def api_import_from_text_layer(
-    doc_id: str, part_id: str, body: TextLayerImportRequest
-):
+def api_import_from_text_layer(doc_id: str, part_id: str, body: TextLayerImportRequest):
     """PDF의 텍스트 레이어를 쪽 그대로 L4 텍스트로 가져온다 (OCR 없음).
 
     목적: 이미 텍스트가 있는 논문 PDF에서 OCR을 건너뛰고 바로 텍스트를 얻는다.
@@ -2739,9 +2724,7 @@ def api_import_from_text_layer(
     """
     doc_path = require_repo_path("documents", doc_id)
     if not (doc_path / "manifest.json").exists():
-        return JSONResponse(
-            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404
-        )
+        return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
 
     try:
         pdf_path = get_pdf_path(doc_path, part_id)

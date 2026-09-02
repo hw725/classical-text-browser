@@ -186,14 +186,18 @@ class LlmOcrEngine(BaseOcrEngine):
             except Exception as e:
                 result_holder["error"] = e
 
+        # 시도 사다리(최대 3회)와 사고 예산만큼 기다린다. 120초 고정이면 정밀
+        # 판독의 2번째 시도 도중 끊기고, 데몬 스레드는 결과를 버린 채 LLM을
+        # 계속 부른다 — 실패로 표시되면서 토큰은 소모되는 최악의 조합이다.
+        timeout_sec = self._join_timeout(kwargs)
         thread = threading.Thread(target=_run_in_thread, daemon=True)
         thread.start()
-        thread.join(timeout=120)
+        thread.join(timeout=timeout_sec)
 
         if "error" in result_holder:
             raise OcrEngineError(f"LLM OCR 실패: {result_holder['error']}")
         if "value" not in result_holder:
-            raise OcrEngineError("LLM OCR 타임아웃 (120초)")
+            raise OcrEngineError(f"LLM OCR 타임아웃 ({timeout_sec}초)")
 
         return result_holder["value"]
 
@@ -233,6 +237,10 @@ class LlmOcrEngine(BaseOcrEngine):
             # 안 되고 복사하면 사고문이 나온다. 빈 결과는 «실패»로 드러나기라도
             # 하지만 이 오염은 드러나지 않는다. 어떤 시도에서도 이 값은 바뀌지 않는다.
             allow_thinking_fallback=False,
+            # 잘림은 라우터가 다음 프로바이더로 넘기지 않고 여기로 올린다.
+            # 그래야 아래 사다리(사고 끔 → 예산 두 배)가 **같은 프로바이더**에서
+            # 돈다. 넘기면 로컬 모델의 잘림이 곧 유료 API 호출이 된다 (D-083).
+            fallback_on_truncation=False,
         )
         if force_provider:
             base_kwargs["force_provider"] = force_provider
@@ -276,10 +284,13 @@ class LlmOcrEngine(BaseOcrEngine):
             # 0.9를 박았다 — 하류(선별·형광)가 신뢰도로 오해할 가짜 값이었다.
             # 마커는 텍스트에서 걷어 낸다. 남으면 PDF 텍스트 레이어에 구워진다.
             clean_text, confidences = parse_uncertainty(text)
-            if not clean_text:
+            if not clean_text.strip():
                 continue
+            # 줄 텍스트는 공백을 보존하고(가로쓰기 한글 문헌의 어절 경계), 글자
+            # 목록은 예전처럼 공백을 건너뛴다. 신뢰도 목록도 공백 없는 글자 순서다.
             characters = [
-                OcrCharResult(char=ch, confidence=conf) for ch, conf in zip(clean_text, confidences)
+                OcrCharResult(char=ch, confidence=conf)
+                for ch, conf in zip((c for c in clean_text if not c.isspace()), confidences)
             ]
 
             ocr_lines.append(
@@ -303,6 +314,14 @@ class LlmOcrEngine(BaseOcrEngine):
         )
 
         return result
+
+    # 시도 1회당 기다리는 시간(초). 로컬 4B 모델 한 블록이 수십 초, 사고를 켜면 더 든다.
+    PER_ATTEMPT_TIMEOUT_SEC = 120
+
+    @classmethod
+    def _join_timeout(cls, kwargs: dict) -> int:
+        """사다리 단계 수 × 단계당 시간. think가 켜져 있으면 단계가 하나 더 있다."""
+        return cls.PER_ATTEMPT_TIMEOUT_SEC * len(cls._plan_attempts(kwargs))
 
     @staticmethod
     def _plan_attempts(kwargs: dict) -> list[dict]:

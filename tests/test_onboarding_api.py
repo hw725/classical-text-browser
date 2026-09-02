@@ -108,9 +108,7 @@ def test_create_from_files_auto_doc_id_cjk(isolated_app, tmp_path):
     assert d1["interpretation_id"] == d1["document_id"] + "_interp"
     assert d1["warning"] is None
     interp_list = client.get("/api/interpretations").json()
-    interp_ids = [
-        i.get("interpretation_id") or i.get("id") for i in interp_list
-    ]
+    interp_ids = [i.get("interpretation_id") or i.get("id") for i in interp_list]
     assert d1["interpretation_id"] in interp_ids
 
     # 같은 조건 재업로드 → 충돌 회피 접미사

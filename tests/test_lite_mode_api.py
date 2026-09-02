@@ -210,8 +210,9 @@ class _DummyEngine:
     def get_info(self):
         return {"engine_id": self.engine_id, "display_name": self.display_name}
 
-    def recognize(self, image_bytes, writing_direction="vertical_rtl",
-                  language="classical_chinese", **kwargs):
+    def recognize(
+        self, image_bytes, writing_direction="vertical_rtl", language="classical_chinese", **kwargs
+    ):
         from ocr.base import OcrBlockResult, OcrCharResult, OcrLineResult
 
         lines = [
@@ -252,9 +253,7 @@ def _sse_events(response) -> list[dict]:
     import json
 
     return [
-        json.loads(line[6:])
-        for line in response.text.splitlines()
-        if line.startswith("data: ")
+        json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")
     ]
 
 
@@ -304,11 +303,7 @@ def test_full_page_block_matches_page_geometry(batch_ready):
     )
 
     layout_path = (
-        Path(get_library_path())
-        / "documents"
-        / doc_id
-        / "L3_layout"
-        / f"{part_id}_page_001.json"
+        Path(get_library_path()) / "documents" / doc_id / "L3_layout" / f"{part_id}_page_001.json"
     )
     layout = json.loads(layout_path.read_text(encoding="utf-8"))
 
@@ -431,9 +426,7 @@ def test_batch_embeds_pdf_automatically(batch_ready):
     client, doc_id, part_id = batch_ready
 
     # 입히기 전에는 산출물이 없다.
-    r = client.get(
-        f"/api/documents/{doc_id}/parts/{part_id}/export/text-layer-pdf/status"
-    )
+    r = client.get(f"/api/documents/{doc_id}/parts/{part_id}/export/text-layer-pdf/status")
     assert r.json()["exists"] is False
 
     events = _sse_events(
@@ -448,9 +441,7 @@ def test_batch_embeds_pdf_automatically(batch_ready):
     assert done["embedded"]["embedded_pages"] == 5
 
     # 별도 입히기 요청 없이 바로 내려받을 수 있어야 한다.
-    r = client.get(
-        f"/api/documents/{doc_id}/parts/{part_id}/export/text-layer-pdf/status"
-    )
+    r = client.get(f"/api/documents/{doc_id}/parts/{part_id}/export/text-layer-pdf/status")
     assert r.json()["exists"] is True
     assert r.json()["size_bytes"] > 0
 
@@ -504,9 +495,7 @@ def test_batch_can_skip_baking(batch_ready):
         )
     )
     assert events[-1]["embedded"] is None
-    r = client.get(
-        f"/api/documents/{doc_id}/parts/{part_id}/export/text-layer-pdf/status"
-    )
+    r = client.get(f"/api/documents/{doc_id}/parts/{part_id}/export/text-layer-pdf/status")
     assert r.json()["exists"] is False
 
 
@@ -553,9 +542,7 @@ def test_batch_to_embedded_pdf_end_to_end(batch_ready):
         json={"engine_id": "dummy", "embed_after": False},
     )
 
-    r = client.post(
-        f"/api/documents/{doc_id}/parts/{part_id}/export/text-layer-pdf", json={}
-    )
+    r = client.post(f"/api/documents/{doc_id}/parts/{part_id}/export/text-layer-pdf", json={})
     assert r.status_code == 200
     result = r.json()
     assert result["embedded_pages"] == 5
@@ -583,9 +570,7 @@ def test_batch_unknown_part(batch_ready):
 def test_batch_out_of_range_pages(batch_ready):
     """범위를 벗어난 쪽만 요청하면 쪽 수를 알려 주며 400이어야 한다."""
     client, doc_id, part_id = batch_ready
-    r = client.post(
-        f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch", json={"pages": [999]}
-    )
+    r = client.post(f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch", json={"pages": [999]})
     assert r.status_code == 400
     assert "쪽 수는 5" in r.json()["error"]
 
@@ -622,9 +607,7 @@ def test_full_page_block_on_non_integer_page_size(tmp_path):
     info = ensure_full_page_block(doc_path, "vol1", 1)
     assert info["created"] is True
 
-    layout = json.loads(
-        (doc_path / "L3_layout" / "vol1_page_001.json").read_text(encoding="utf-8")
-    )
+    layout = json.loads((doc_path / "L3_layout" / "vol1_page_001.json").read_text(encoding="utf-8"))
     assert isinstance(layout["image_width"], int), layout["image_width"]
     assert isinstance(layout["image_height"], int), layout["image_height"]
     assert layout["image_width"] == round(495.36 * 2.0)
@@ -655,10 +638,7 @@ def test_discard_empty_interpretation(isolated_app):
 
     # 삭제가 아니라 휴지통이어야 한다 — 되돌릴 수 있어야 하므로.
     trash = client.get("/api/trash").json()
-    names = [
-        t.get("name") or t.get("trash_name")
-        for t in trash.get("interpretations", [])
-    ]
+    names = [t.get("name") or t.get("trash_name") for t in trash.get("interpretations", [])]
     assert any(interp_id in (n or "") for n in names), names
 
 
@@ -677,13 +657,7 @@ def test_discard_keeps_interpretation_with_work(isolated_app):
     doc_id = body["document_id"]
     interp_id = body["interpretation_id"]
 
-    work = (
-        Path(get_library_path())
-        / "interpretations"
-        / interp_id
-        / "L6_translation"
-        / "main_text"
-    )
+    work = Path(get_library_path()) / "interpretations" / interp_id / "L6_translation" / "main_text"
     work.mkdir(parents=True, exist_ok=True)
     (work / "vol1_page_001.json").write_text('{"translations": []}', encoding="utf-8")
 
@@ -846,9 +820,7 @@ def test_batch_works_when_manifest_page_count_missing(batch_ready):
     manifest_path = Path(get_library_path()) / "documents" / doc_id / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["parts"][0]["page_count"] = None
-    manifest_path.write_text(
-        json.dumps(manifest, ensure_ascii=False), encoding="utf-8"
-    )
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
 
     r = client.post(
         f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch",
@@ -1021,8 +993,7 @@ def _fake_ocr_done(library_path, doc_id, part_id, page: int, block_ids):
                 "page_number": page,
                 "ocr_engine": "llm_vision",
                 "ocr_results": [
-                    {"layout_block_id": bid, "lines": [{"text": "본문"}]}
-                    for bid in block_ids
+                    {"layout_block_id": bid, "lines": [{"text": "본문"}]} for bid in block_ids
                 ],
             },
             ensure_ascii=False,
@@ -1071,13 +1042,7 @@ def test_pending_finds_page_with_new_layout(isolated_app):
     # 3쪽만 2단으로 다시 잡았다 (L2는 그대로 — 아직 다시 안 돌렸다).
     import json as _json
 
-    l3 = (
-        lib
-        / "documents"
-        / doc_id
-        / "L3_layout"
-        / f"{part_id}_page_003.json"
-    )
+    l3 = lib / "documents" / doc_id / "L3_layout" / f"{part_id}_page_003.json"
     layout = _json.loads(l3.read_text(encoding="utf-8"))
     layout["blocks"].append(
         {
@@ -1107,9 +1072,7 @@ def test_pending_counts_untouched_pages(isolated_app):
 
     _fake_ocr_done(get_library_path(), doc_id, part_id, 1, ["p01_b01"])
 
-    data = client.get(
-        f"/api/documents/{doc_id}/parts/{part_id}/ocr/pending"
-    ).json()
+    data = client.get(f"/api/documents/{doc_id}/parts/{part_id}/ocr/pending").json()
     assert data["todo_pages"] == [2, 3, 4]
     assert data["will_run"] == 3
 
@@ -1134,9 +1097,7 @@ def test_batch_skips_pages_whose_layout_is_unchanged(isolated_app):
         json={"engine_id": "llm_vision", "embed_after": False},
     )
     assert r.status_code == 200
-    events = [
-        json.loads(line[6:]) for line in r.text.splitlines() if line.startswith("data: ")
-    ]
+    events = [json.loads(line[6:]) for line in r.text.splitlines() if line.startswith("data: ")]
     done = next(e for e in events if e["type"] == "complete")
     assert done["skipped"] == 3
     assert done["processed"] == 0
@@ -1183,9 +1144,7 @@ def test_redo_can_be_turned_off(isolated_app):
             "redo_changed_layout": False,
         },
     )
-    events = [
-        json.loads(line[6:]) for line in r.text.splitlines() if line.startswith("data: ")
-    ]
+    events = [json.loads(line[6:]) for line in r.text.splitlines() if line.startswith("data: ")]
     done = next(e for e in events if e["type"] == "complete")
     assert done["skipped"] == 2
     assert done["usage"]["calls"] == 0
@@ -1223,9 +1182,7 @@ def test_page_range_with_force_runs_only_those_pages(isolated_app):
         },
     )
     assert r.status_code == 200
-    events = [
-        json.loads(line[6:]) for line in r.text.splitlines() if line.startswith("data: ")
-    ]
+    events = [json.loads(line[6:]) for line in r.text.splitlines() if line.startswith("data: ")]
     start = next(e for e in events if e["type"] == "start")
     assert start["total"] == 1, "지정한 범위를 벗어나 돌았다"
 
@@ -1254,9 +1211,7 @@ def test_page_range_without_force_still_skips_done_pages(isolated_app):
         f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch",
         json={"engine_id": "llm_vision", "pages": [2], "embed_after": False},
     )
-    events = [
-        json.loads(line[6:]) for line in r.text.splitlines() if line.startswith("data: ")
-    ]
+    events = [json.loads(line[6:]) for line in r.text.splitlines() if line.startswith("data: ")]
     done = next(e for e in events if e["type"] == "complete")
     assert done["skipped"] == 1
     assert done["processed"] == 0
@@ -1317,9 +1272,7 @@ def test_overview_separates_empty_from_not_run(isolated_app):
     _write_l2(lib, doc_id, part_id, 2, ["본문입니다"] * 10, with_bbox=True)
     # 3쪽은 파일 자체를 만들지 않는다 (안 돌림)
 
-    data = client.get(
-        f"/api/documents/{doc_id}/parts/{part_id}/ocr/overview"
-    ).json()
+    data = client.get(f"/api/documents/{doc_id}/parts/{part_id}/ocr/overview").json()
     by_page = {p["page"]: p for p in data["pages"]}
     assert "empty" in by_page[1]["flags"]
     assert "not_run" not in by_page[1]["flags"]
@@ -1348,9 +1301,7 @@ def test_overview_median_ignores_empty_pages(isolated_app):
     for page in (3, 4, 5):
         _write_l2(lib, doc_id, part_id, page, ["가" * 100])
 
-    data = client.get(
-        f"/api/documents/{doc_id}/parts/{part_id}/ocr/overview"
-    ).json()
+    data = client.get(f"/api/documents/{doc_id}/parts/{part_id}/ocr/overview").json()
     # 빈 쪽을 섞었다면 중앙값이 0이 됐을 것이다.
     assert data["median_chars"] == 100
 
@@ -1368,9 +1319,7 @@ def test_overview_flags_short_page(isolated_app):
         _write_l2(lib, doc_id, part_id, page, ["가" * 100])
     _write_l2(lib, doc_id, part_id, 4, ["가" * 20])  # 20% — 기준 미만
 
-    data = client.get(
-        f"/api/documents/{doc_id}/parts/{part_id}/ocr/overview"
-    ).json()
+    data = client.get(f"/api/documents/{doc_id}/parts/{part_id}/ocr/overview").json()
     by_page = {p["page"]: p for p in data["pages"]}
     assert "few_chars" in by_page[4]["flags"]
     assert "few_chars" not in by_page[1]["flags"]
@@ -1390,9 +1339,7 @@ def test_overview_gives_preview_text(isolated_app):
 
     from app._state import get_library_path
 
-    _write_l2(
-        get_library_path(), doc_id, part_id, 1, ["玄同 李安中硏究", "본문 첫 줄입니다"]
-    )
+    _write_l2(get_library_path(), doc_id, part_id, 1, ["玄同 李安中硏究", "본문 첫 줄입니다"])
 
     data = client.get(
         f"/api/documents/{doc_id}/parts/{part_id}/ocr/overview?preview_chars=20"
@@ -1414,9 +1361,7 @@ def test_overview_reports_position_coverage(isolated_app):
     _write_l2(lib, doc_id, part_id, 1, ["가나다"] * 5, with_bbox=True)
     _write_l2(lib, doc_id, part_id, 2, ["가나다"] * 5, with_bbox=False)
 
-    data = client.get(
-        f"/api/documents/{doc_id}/parts/{part_id}/ocr/overview"
-    ).json()
+    data = client.get(f"/api/documents/{doc_id}/parts/{part_id}/ocr/overview").json()
     by_page = {p["page"]: p for p in data["pages"]}
     assert by_page[1]["positioned"] == 5
     assert "no_position" not in by_page[1]["flags"]
@@ -1522,9 +1467,7 @@ def test_fill_text_does_not_overwrite_human_corrections(isolated_app):
     assert got["text"] == "玄同 李安中研究", "손으로 고친 교정이 덮였다"
 
     # 명시적으로 요청하면 덮는다.
-    r2 = client.post(
-        f"/api/documents/{doc_id}/parts/{part_id}/ocr/fill-text?overwrite=true"
-    )
+    r2 = client.post(f"/api/documents/{doc_id}/parts/{part_id}/ocr/fill-text?overwrite=true")
     assert r2.json()["filled"] == 1
     got2 = client.get(f"/api/documents/{doc_id}/pages/1/text?part_id={part_id}").json()
     assert got2["text"] == "友同 李安中研究"
@@ -1546,12 +1489,8 @@ def test_fill_text_accepts_page_selection(isolated_app):
     assert r.json()["filled"] == 1
     assert r.json()["total"] == 1
 
-    filled = client.get(
-        f"/api/documents/{doc_id}/pages/2/text?part_id={part_id}"
-    ).json()
-    untouched = client.get(
-        f"/api/documents/{doc_id}/pages/1/text?part_id={part_id}"
-    ).json()
+    filled = client.get(f"/api/documents/{doc_id}/pages/2/text?part_id={part_id}").json()
+    untouched = client.get(f"/api/documents/{doc_id}/pages/1/text?part_id={part_id}").json()
     assert filled["text"] == "2쪽 본문"
     assert not untouched["text"], "지정하지 않은 쪽까지 채웠다"
 
@@ -1568,9 +1507,7 @@ def test_batch_backs_up_before_overwriting(batch_ready):
         f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch",
         json={"engine_id": "dummy", "embed_after": False, "pages": [1]},
     )
-    first = client.get(
-        f"/api/documents/{doc_id}/pages/1/text?part_id={part_id}"
-    ).json()["text"]
+    first = client.get(f"/api/documents/{doc_id}/pages/1/text?part_id={part_id}").json()["text"]
     assert first.strip()
 
     # 훑어보기에는 아직 백업이 없다 (덮어쓴 적이 없다)
@@ -1591,9 +1528,7 @@ def test_batch_backs_up_before_overwriting(batch_ready):
     assert ov2["pages"][0]["has_backup"] is True, "덮어썼는데 백업이 없다"
 
     # 되돌리기
-    r = client.post(
-        f"/api/documents/{doc_id}/parts/{part_id}/ocr/restore?pages=1"
-    )
+    r = client.post(f"/api/documents/{doc_id}/parts/{part_id}/ocr/restore?pages=1")
     assert r.status_code == 200
     assert r.json() == {"restored": [1], "no_backup": []}
 

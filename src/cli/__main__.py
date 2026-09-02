@@ -287,9 +287,7 @@ def main():
         action="store_true",
         help="실제로 실행한다 (없으면 계획만 보여 준다)",
     )
-    p_embed.add_argument(
-        "--limit", type=int, default=None, help="처리할 최대 편수 (시범 실행용)"
-    )
+    p_embed.add_argument("--limit", type=int, default=None, help="처리할 최대 편수 (시범 실행용)")
     p_embed.add_argument(
         "--only",
         default=None,
@@ -350,8 +348,7 @@ def main():
     p_ocr = subparsers.add_parser(
         "ocr",
         help="논문 PDF에 텍스트 레이어를 입힌다 (파일 하나도 가능)",
-        description="스캔본 PDF를 OCR 해서 검색 가능한 PDF로 만든다. "
-        "서고를 미리 만들 필요가 없다.",
+        description="스캔본 PDF를 OCR 해서 검색 가능한 PDF로 만든다. 서고를 미리 만들 필요가 없다.",
     )
     p_ocr.add_argument("target", help="PDF 파일 또는 폴더 경로")
     p_ocr.add_argument(
@@ -393,12 +390,9 @@ def main():
     p_ocr.add_argument(
         "--no-line-detection",
         action="store_true",
-        help="줄 위치 검출을 끈다. 쪽당 약 8초를 아끼는 대신 "
-        "검색 형광이 제자리에 뜨지 않는다.",
+        help="줄 위치 검출을 끈다. 쪽당 약 8초를 아끼는 대신 검색 형광이 제자리에 뜨지 않는다.",
     )
-    p_ocr.add_argument(
-        "--sleep", type=float, default=0.0, help="쪽 사이 대기 시간(초)"
-    )
+    p_ocr.add_argument("--sleep", type=float, default=0.0, help="쪽 사이 대기 시간(초)")
     p_ocr.set_defaults(func=cmd_ocr)
 
     args = parser.parse_args()

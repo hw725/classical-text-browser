@@ -186,9 +186,14 @@ class TestParseUncertainty:
         text, _ = parse_uncertainty("[?]甲[?][?]乙 [?]")
         assert "[?]" not in text and text == "甲乙"
 
-    def test_whitespace_skipped(self):
-        text, confs = parse_uncertainty("甲 乙\t丙")
-        assert text == "甲乙丙" and len(confs) == 3
+    def test_whitespace_preserved_in_text_but_not_counted(self):
+        """어절 경계는 텍스트에 남고, 신뢰도는 공백 아닌 글자 수만큼이다."""
+        text, confs = parse_uncertainty("조선 총독부\t관보")
+        assert text == "조선 총독부\t관보" and len(confs) == 7
+
+    def test_leading_trailing_whitespace_trimmed(self):
+        text, _ = parse_uncertainty("  甲乙  ")
+        assert text == "甲乙"
 
     def test_empty(self):
         assert parse_uncertainty("") == ("", [])
@@ -230,6 +235,14 @@ class TestEngineUsesAssembledPrompt:
         line = result.lines[0]
         assert line.text == "王戎簡要□"
         assert [round(c.confidence, 1) for c in line.characters] == [0.9, 0.5, 0.9, 0.9, 0.1]
+
+    def test_line_text_keeps_spaces_and_characters_skip_them(self):
+        router = _CapturingRouter('{"lines":[{"text":"조선 총독부[?] 관보"}]}')
+        result = LlmOcrEngine(router).recognize(b"img", writing_direction="horizontal_ltr")
+        line = result.lines[0]
+        assert line.text == "조선 총독부 관보"
+        assert [c.char for c in line.characters] == list("조선총독부관보")
+        assert round(line.characters[4].confidence, 1) == 0.5  # «부» 뒤의 [?]
 
     def test_line_of_only_markers_is_dropped(self):
         router = _CapturingRouter('{"lines":[{"text":"[?]"},{"text":"甲"}]}')

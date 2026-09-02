@@ -304,10 +304,12 @@ def parse_uncertainty(text: str) -> tuple[str, list[float]]:
     """`[?]` 마커와 `□` 를 글자별 신뢰도로 바꾼다.
 
     입력: 모델이 돌려준 한 줄. 예: "王戎[?]簡要□"
-    출력: (마커를 걷어 낸 텍스트, 글자별 신뢰도 목록). 위 예 →
+    출력: (마커를 걷어 낸 텍스트, 공백 아닌 글자별 신뢰도 목록). 위 예 →
           ("王戎簡要□", [0.9, 0.5, 0.9, 0.9, 0.1])
 
-    공백은 글자로 세지 않는다(엔진이 공백을 건너뛰기 때문). 마커가 문장 맨 앞에
+    텍스트의 공백은 **보존**한다 — 가로쓰기 한글 문헌의 어절 경계가 여기서 사라지면
+    L4와 PDF 텍스트 레이어에서 단어가 붙어 버린다. 신뢰도 목록은 공백을 건너뛴 글자
+    순서다(엔진의 글자 목록이 공백을 세지 않기 때문). 마커가 문장 맨 앞에
     오면(붙일 글자가 없으면) 버린다. 마커 문자열 자체는 어떤 경우에도 텍스트에
     남지 않는다 — 남으면 PDF 텍스트 레이어에 «[?]»가 구워진다.
     """
@@ -323,8 +325,8 @@ def parse_uncertainty(text: str) -> tuple[str, list[float]]:
             continue
         ch = text[i]
         i += 1
+        chars.append(ch)
         if ch.isspace():
             continue
-        chars.append(ch)
         confs.append(ILLEGIBLE_CONFIDENCE if ch == ILLEGIBLE_CHAR else CERTAIN_CONFIDENCE)
-    return "".join(chars), confs
+    return "".join(chars).strip(), confs

@@ -71,7 +71,6 @@ def read_page_json(path: Path) -> dict | None:
         return None
 
 
-
 def has_ocr_result(doc_path: Path, part_id: str, page_number: int) -> bool:
     """이 쪽에 쓸 만한 OCR 결과가 있는지 확인한다 (재개 판단).
 
@@ -150,8 +149,7 @@ def layout_changed_since_ocr(
 
     if current and used and current != used:
         return True, (
-            f"레이아웃이 바뀌었습니다 "
-            f"(OCR 당시 블록 {len(used)}개 → 현재 {len(current)}개)."
+            f"레이아웃이 바뀌었습니다 (OCR 당시 블록 {len(used)}개 → 현재 {len(current)}개)."
         )
 
     if not use_mtime:
@@ -185,9 +183,7 @@ def find_stale_pages(
     """
     stale = []
     for page_number in pages:
-        changed, _ = layout_changed_since_ocr(
-            doc_path, part_id, page_number, use_mtime=use_mtime
-        )
+        changed, _ = layout_changed_since_ocr(doc_path, part_id, page_number, use_mtime=use_mtime)
         if changed:
             stale.append(page_number)
     return sorted(stale)

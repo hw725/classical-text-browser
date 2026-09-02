@@ -89,9 +89,7 @@ class BatchReport:
     failures: list[dict] = field(default_factory=list)
 
 
-def survey_folder(
-    root: Path, skip_dirs: set[str] | None = None
-) -> tuple[list[PaperTask], int]:
+def survey_folder(root: Path, skip_dirs: set[str] | None = None) -> tuple[list[PaperTask], int]:
     """폴더를 훑어 OCR이 필요한 PDF만 골라낸다.
 
     입력: root — 논문 폴더. skip_dirs — 건너뛸 하위 폴더 이름들.
@@ -316,9 +314,7 @@ def _process_one(
             record["resumed_pages"] = resumed_pages
 
         # 3) 텍스트 레이어를 입힌다
-        embedded = embed_text_layer(
-            doc_path, "vol1", use_line_detection=use_line_detection
-        )
+        embedded = embed_text_layer(doc_path, "vol1", use_line_detection=use_line_detection)
         record.update(
             {
                 "ocr_pages": ok_pages,
@@ -331,9 +327,7 @@ def _process_one(
         )
 
         if embedded.embedded_pages == 0:
-            record.update(
-                {"status": "failed", "error": "텍스트를 얹은 쪽이 없습니다 (OCR 실패)"}
-            )
+            record.update({"status": "failed", "error": "텍스트를 얹은 쪽이 없습니다 (OCR 실패)"})
             return record
 
         # 4) 원본을 아카이브로 옮기고, 텍스트 레이어를 입힌 것을 원래 자리·원래 이름으로 놓는다.

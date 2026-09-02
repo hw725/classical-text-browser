@@ -95,6 +95,7 @@ async def _repo_path_error_handler(request, exc: RepoPathError):
 
     return JSONResponse({"error": str(exc)}, status_code=exc.status_code)
 
+
 # ── 라우터 마운트 ─────────────────────────────────
 app.include_router(library.router)
 app.include_router(documents.router)

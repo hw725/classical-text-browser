@@ -241,13 +241,18 @@ def scan_text(text: str, relpath: str, facts: dict) -> list[Mismatch]:
                     if actual is None:
                         # 문서가 존재하지 않는 라우터를 말하고 있다 — 그 자체가 드리프트.
                         mismatches.append(
-                            Mismatch(relpath, lineno, f"라우터 {name}.py (실존하지 않음)",
-                                     claimed, -1, line)
+                            Mismatch(
+                                relpath,
+                                lineno,
+                                f"라우터 {name}.py (실존하지 않음)",
+                                claimed,
+                                -1,
+                                line,
+                            )
                         )
                     elif actual != claimed:
                         mismatches.append(
-                            Mismatch(relpath, lineno, f"{name}.py 라우트 수",
-                                     claimed, actual, line)
+                            Mismatch(relpath, lineno, f"{name}.py 라우트 수", claimed, actual, line)
                         )
                     continue
 
@@ -287,11 +292,13 @@ def main() -> int:
     mismatches = collect_mismatches()
 
     print("── 문서 드리프트 검사 ──")
-    print(f"실측: 라우트 {facts['route_total']} (라우터 {facts['router_count']}개), "
-          f"JS 모듈 {facts['js_count']}개, 스키마 {facts['schema_total']}개 "
-          f"(원본 {facts['schema_groups']['source_repo']}·해석 {facts['schema_groups']['interp']}·"
-          f"코어 {facts['schema_groups']['core']}·교환 {facts['schema_groups']['exchange']}), "
-          f"테스트 {facts['test_file_count']}파일")
+    print(
+        f"실측: 라우트 {facts['route_total']} (라우터 {facts['router_count']}개), "
+        f"JS 모듈 {facts['js_count']}개, 스키마 {facts['schema_total']}개 "
+        f"(원본 {facts['schema_groups']['source_repo']}·해석 {facts['schema_groups']['interp']}·"
+        f"코어 {facts['schema_groups']['core']}·교환 {facts['schema_groups']['exchange']}), "
+        f"테스트 {facts['test_file_count']}파일"
+    )
 
     if not mismatches:
         print("문서와 코드가 일치한다. ✓")

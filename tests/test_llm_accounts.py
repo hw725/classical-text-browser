@@ -94,9 +94,7 @@ def test_metered_ready_warns_about_charges():
 
 def test_subscription_ready_does_not_say_free():
     """구독형을 «무료»라고 하지 않는다. 금액은 0이지만 한도를 쓴다."""
-    status, note = _account_status(
-        _entry(setup_kind="cli_signin", billing_model="subscription")
-    )
+    status, note = _account_status(_entry(setup_kind="cli_signin", billing_model="subscription"))
     assert status == "ready"
     assert "무료" not in note
     assert "한도" in note

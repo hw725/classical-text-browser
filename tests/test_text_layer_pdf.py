@@ -209,9 +209,7 @@ def test_embed_without_bbox_still_extractable(scanned_doc):
     """
     _write_l2(scanned_doc, "vol1", 1, with_bbox=False)
 
-    result = embed_text_layer(
-        scanned_doc, "vol1", pages=[1], use_line_detection=False
-    )
+    result = embed_text_layer(scanned_doc, "vol1", pages=[1], use_line_detection=False)
 
     assert result.positioned_lines == 0
     assert result.approximated_lines == len(LINES)
@@ -350,9 +348,7 @@ def test_lines_without_bbox_are_stacked_not_placed(scanned_doc):
     import fitz
 
     _write_l2(scanned_doc, "vol1", 1, with_bbox=False)
-    result = embed_text_layer(
-        scanned_doc, "vol1", pages=[1], use_line_detection=False
-    )
+    result = embed_text_layer(scanned_doc, "vol1", pages=[1], use_line_detection=False)
     assert result.approximated_lines == len(LINES)
     assert result.positioned_lines == 0
 
@@ -396,19 +392,23 @@ def test_detection_fills_positions_only_when_counts_match(scanned_doc, monkeypat
     _write_l2(scanned_doc, "vol1", 1, with_bbox=False)
 
     # 1) 개수가 맞을 때 — 검출 위치로 채운다
-    fake = [DetectedLine(100.0 + i * 10, 200.0 + i * 40, 800.0, 236.0 + i * 40)
-            for i in range(len(LINES))]
+    fake = [
+        DetectedLine(100.0 + i * 10, 200.0 + i * 40, 800.0, 236.0 + i * 40)
+        for i in range(len(LINES))
+    ]
     monkeypatch.setattr("ocr.line_detector.detect_lines", lambda *a, **k: fake)
-    result = embed_text_layer(scanned_doc, "vol1", pages=[1],
-                              output_path=scanned_doc / "matched.pdf")
+    result = embed_text_layer(
+        scanned_doc, "vol1", pages=[1], output_path=scanned_doc / "matched.pdf"
+    )
     assert result.detected_lines == len(LINES)
     assert result.positioned_lines == len(LINES)
     assert result.approximated_lines == 0
 
     # 2) 개수가 어긋날 때 — 손대지 않고 순서 배치로 물러난다
     monkeypatch.setattr("ocr.line_detector.detect_lines", lambda *a, **k: fake[:1])
-    result = embed_text_layer(scanned_doc, "vol1", pages=[1],
-                              output_path=scanned_doc / "mismatched.pdf")
+    result = embed_text_layer(
+        scanned_doc, "vol1", pages=[1], output_path=scanned_doc / "mismatched.pdf"
+    )
     assert result.detected_lines == 0, "개수가 다른데 위치를 채웠다 — 줄이 밀린다"
     assert result.approximated_lines == len(LINES)
 
@@ -416,12 +416,10 @@ def test_detection_fills_positions_only_when_counts_match(scanned_doc, monkeypat
 def test_detection_can_be_disabled(scanned_doc, monkeypatch):
     """use_line_detection=False면 검출을 부르지 않는다."""
     called = []
-    monkeypatch.setattr("ocr.line_detector.detect_lines",
-                        lambda *a, **k: called.append(1) or [])
+    monkeypatch.setattr("ocr.line_detector.detect_lines", lambda *a, **k: called.append(1) or [])
 
     _write_l2(scanned_doc, "vol1", 1, with_bbox=False)
-    result = embed_text_layer(scanned_doc, "vol1", pages=[1],
-                              use_line_detection=False)
+    result = embed_text_layer(scanned_doc, "vol1", pages=[1], use_line_detection=False)
 
     assert not called, "끄라고 했는데 검출을 불렀다"
     assert result.detected_lines == 0
@@ -433,6 +431,7 @@ def test_detection_failure_falls_back_quietly(scanned_doc, monkeypatch):
 
     검출은 위치를 개선하는 보조 수단이지 필수가 아니다.
     """
+
     def boom(*a, **k):
         raise RuntimeError("모델 로드 실패")
 
@@ -492,9 +491,7 @@ def test_chars_are_searchable(scanned_doc):
     글자가 텍스트로는 뽑히는데 search_for가 못 찾으면 사용자에게는
     없는 것과 같다.
     """
-    _write_l2_custom(
-        scanned_doc, "vol1", 1, [("玄同 李安中研究", [160.0, 200.0, 900.0, 240.0])]
-    )
+    _write_l2_custom(scanned_doc, "vol1", 1, [("玄同 李安中研究", [160.0, 200.0, 900.0, 240.0])])
     result = embed_text_layer(scanned_doc, "vol1")
     out = fitz.open(result.output_path)
     try:
@@ -562,8 +559,7 @@ def _make_unwrapped_scan(path: Path, pages: int = 1) -> None:
         out.update_stream(
             xref,
             (
-                f"{scale} 0 0 {scale} 0 0 cm\n"
-                f"q\n{img_w} 0 0 {img_h} 0 0 cm\n/{img_name} Do\nQ\n"
+                f"{scale} 0 0 {scale} 0 0 cm\nq\n{img_w} 0 0 {img_h} 0 0 cm\n/{img_name} Do\nQ\n"
             ).encode(),
         )
     out.save(str(path))
@@ -640,8 +636,7 @@ def test_text_lands_at_full_page_scale(unwrapped_doc, embed_font):
 
         # 1) 글자 크기: 0.24배로 끌려가면 14pt가 3.4pt가 된다.
         assert min(s["size"] for s in spans) > 6.0, (
-            f"글자가 너무 작다 — 남은 변환에 끌려갔다: "
-            f"{[round(s['size'], 1) for s in spans]}"
+            f"글자가 너무 작다 — 남은 변환에 끌려갔다: {[round(s['size'], 1) for s in spans]}"
         )
 
         # 2) 놓인 자리: L2 bbox는 x=160px(=80pt)에서 시작한다.
@@ -716,7 +711,5 @@ def test_audit_catches_shrunken_text(tmp_path):
 def test_audit_stays_quiet_on_good_output(unwrapped_doc):
     """정상 산출물에는 경고를 붙이지 않는다 (거짓 경보 방지)."""
     _write_l2(unwrapped_doc, "vol1", 1, with_bbox=True)
-    result = embed_text_layer(
-        unwrapped_doc, "vol1", pages=[1], use_line_detection=False
-    )
+    result = embed_text_layer(unwrapped_doc, "vol1", pages=[1], use_line_detection=False)
     assert result.warnings == [], result.warnings

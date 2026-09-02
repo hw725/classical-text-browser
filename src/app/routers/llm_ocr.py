@@ -1989,6 +1989,24 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
             status_code=400,
         )
 
+    # LLM 교정 옵션 검증 — 오타가 조용히 «선별»로 동작하면 안 된다.
+    if body.llm_correction not in ("off", "selected", "all"):
+        return JSONResponse(
+            {
+                "error": f"llm_correction 값이 잘못되었습니다: {body.llm_correction!r} "
+                "→ off | selected | all 중 하나"
+            },
+            status_code=400,
+        )
+    if body.llm_correction_mode not in ("fast", "precise"):
+        return JSONResponse(
+            {
+                "error": f"llm_correction_mode 값이 잘못되었습니다: {body.llm_correction_mode!r} "
+                "→ fast | precise"
+            },
+            status_code=400,
+        )
+
     pipeline, registry = _get_ocr_pipeline()
 
     engine_kwargs = {}

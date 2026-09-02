@@ -119,9 +119,7 @@ def test_missing_part_does_not_crash(multivol_library):
 def test_source_pdfs_are_not_modified(multivol_library):
     """L1_source는 읽기만 한다 — 이미지를 뽑아도 원본이 바뀌면 안 된다."""
     lib_root, doc_path = multivol_library
-    before = {
-        p.name: p.read_bytes() for p in (doc_path / "L1_source").glob("*.pdf")
-    }
+    before = {p.name: p.read_bytes() for p in (doc_path / "L1_source").glob("*.pdf")}
 
     for part_id in ("vol1", "vol2"):
         for page in (1, 2, 3):

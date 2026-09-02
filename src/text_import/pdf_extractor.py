@@ -130,9 +130,7 @@ class PdfTextExtractor:
                 return True
         return False
 
-    def probe_text_layer(
-        self, sample_max: int = 30, min_chars_per_page: int = 50
-    ) -> dict:
+    def probe_text_layer(self, sample_max: int = 30, min_chars_per_page: int = 50) -> dict:
         """텍스트 레이어의 유무를 **문서 전체에 걸쳐** 판정한다.
 
         입력:

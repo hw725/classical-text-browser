@@ -27,6 +27,7 @@ import difflib
 import json
 import logging
 import os
+import tempfile
 import unicodedata
 from dataclasses import dataclass, field
 from enum import Enum
@@ -302,8 +303,20 @@ class VariantCharDict:
         if self.source:
             data["_tier"] = self.tier
             data["_source"] = self.source
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        # 임시 파일에 다 쓴 뒤 갈아 끼운다. open(path, "w")는 먼저 0바이트로 자르므로
+        # 도중에 죽으면 사전이 빈 파일이 되고 그 문헌의 정렬·교정이 전부 막힌다(D-069).
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=str(target.parent), prefix=target.name, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            os.chmod(tmp, 0o644)
+            os.replace(tmp, target)
+        except Exception:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+            raise
 
     @property
     def size(self) -> int:

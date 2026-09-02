@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 # 기본값과 같아야 L3의 image_width가 실제 렌더 크기와 맞는다. (2.0 = 144 DPI)
 DEFAULT_RENDER_SCALE = 2.0
 
+
 def full_page_block_id(page_number: int) -> str:
     """전면 블록의 ID를 만든다.
 

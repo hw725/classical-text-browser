@@ -649,9 +649,7 @@ def _fill_positions_by_detection(
         pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale))
         # 목표 줄 수를 함께 넘긴다. 쪽마다 알맞은 임계값이 달라
         # 고정값으로는 2단 목차와 한시 대역을 동시에 맞출 수 없다.
-        detected = detect_lines(
-            pix.tobytes("png"), float(pix.width), target_count=len(lines)
-        )
+        detected = detect_lines(pix.tobytes("png"), float(pix.width), target_count=len(lines))
     except Exception as e:  # noqa: BLE001
         logger.warning(f"줄 위치 검출을 건너뜁니다: {e}")
         return lines, 0

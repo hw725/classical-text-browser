@@ -129,17 +129,33 @@ def _list_variant_dicts() -> list[dict]:
     return result
 
 
-def _read_dict_tier(path: str) -> str:
-    """사전 파일의 `_tier`를 읽는다. 없거나 깨져 있으면 strict."""
-    import json as _json
+# 비활성 사전 캐시: {이름: (mtime, VariantCharDict)}. 정렬 요청마다 OpenCC 4천 쌍
+# 사전을 다시 읽지 않기 위해서다. 파일이 바뀌면(mtime) 다시 읽는다.
+_dict_cache: dict[str, tuple[float, object]] = {}
 
+
+def _load_dict_cached(name: str):
+    """이름의 사전을 (mtime 기준) 캐시해서 돌려준다. 파일이 없으면 None."""
+    from core.alignment import VariantCharDict
+
+    path = _dict_name_to_path(name)
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = _json.load(f)
-        tier = data.get("_tier") if isinstance(data, dict) else None
-        return tier if tier in ("strict", "loose", "script") else "strict"
-    except (OSError, ValueError):
-        return "strict"
+        mtime = os.path.getmtime(path)
+    except OSError:
+        return None
+    hit = _dict_cache.get(name)
+    if hit and hit[0] == mtime:
+        return hit[1]
+    vd = VariantCharDict(dict_path=path)
+    _dict_cache[name] = (mtime, vd)
+    return vd
+
+
+def _read_dict_tier(path: str) -> str:
+    """사전 파일의 `_tier`. 캐시된 사전 객체에서 읽는다 — 파일을 두 번 파싱하지 않는다."""
+    name = os.path.basename(path).rsplit(".json", 1)[0]
+    vd = _load_dict_cached(name)
+    return vd.tier if vd is not None else "strict"
 
 
 def _get_tiered_dicts(doc_path=None):
@@ -153,7 +169,7 @@ def _get_tiered_dicts(doc_path=None):
     strict 층은 1·2에서만 나온다. 넓은 사전이 우연히 활성이 아니어도 힌트는
     보이고, 활성이어도 그 파일의 층이 loose면 동치가 되지 않는다.
     """
-    from core.alignment import TieredVariantDicts, VariantCharDict, load_document_approvals
+    from core.alignment import TieredVariantDicts, load_document_approvals
 
     bundle = TieredVariantDicts()
     active_name = _get_active_dict_name()
@@ -163,7 +179,7 @@ def _get_tiered_dicts(doc_path=None):
     for entry in _list_variant_dicts():
         if entry["name"] == active_name or entry["tier"] == "strict":
             continue
-        bundle.add(VariantCharDict(dict_path=_dict_name_to_path(entry["name"])))
+        bundle.add(_load_dict_cached(entry["name"]))
     return bundle
 
 

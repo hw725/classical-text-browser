@@ -375,7 +375,7 @@ class OpenAiProvider(BaseLlmProvider):
 
         reasoning_effort 대응:
           - think=None        → 보내지 않는다 (모델 기본)
-          - think=False       → gpt-5 계열은 "minimal", o-계열은 "low"(그 계열의 최소치)
+          - think=False       → gpt-5/-mini/-nano는 "minimal", 그 외 추론 모델은 "low"(최소치)
           - think=True        → "medium"
           - think="low" 등    → 그대로
           추론 모델이 아니면 어떤 경우에도 보내지 않는다 — 400으로 호출이 죽는다.
@@ -393,7 +393,17 @@ class OpenAiProvider(BaseLlmProvider):
             elif think:
                 kwargs["reasoning_effort"] = "medium"
             else:
-                kwargs["reasoning_effort"] = (
-                    "minimal" if model.lower().startswith("gpt-5") else "low"
-                )
+                kwargs["reasoning_effort"] = "minimal" if cls._accepts_minimal(model) else "low"
         return kwargs
+
+    @staticmethod
+    def _accepts_minimal(model: str) -> bool:
+        """reasoning_effort="minimal"을 받는 모델인가.
+
+        gpt-5·gpt-5-mini·gpt-5-nano(및 날짜 접미 판)만 받는다. gpt-5.1·5.2는
+        none|low|medium|high 계열이라 "minimal"을 거부한다(400). 사고 끔이 OCR의
+        기본값이라 이 판정이 틀리면 기본 경로가 통째로 죽는다.
+        """
+        name = (model or "").lower()
+        base = name.split("-20", 1)[0]  # 날짜 접미 제거: gpt-5-mini-2025-08-07 → gpt-5-mini
+        return base in ("gpt-5", "gpt-5-mini", "gpt-5-nano")

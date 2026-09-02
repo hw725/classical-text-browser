@@ -118,8 +118,13 @@ def test_rec_polys_preferred_over_dt_polys(engine):
 
 
 def test_empty_and_blank_are_dropped(engine):
-    raw = [{"rec_texts": ["", "   ", "실제"], "rec_scores": [0.1, 0.1, 0.9],
-            "rec_polys": [_poly(0, 0, 1, 1), _poly(0, 2, 1, 3), _poly(0, 4, 1, 5)]}]
+    raw = [
+        {
+            "rec_texts": ["", "   ", "실제"],
+            "rec_scores": [0.1, 0.1, 0.9],
+            "rec_polys": [_poly(0, 0, 1, 1), _poly(0, 2, 1, 3), _poly(0, 4, 1, 5)],
+        }
+    ]
     lines = engine._parse_result(raw, HORIZONTAL)
     assert [ln.text for ln in lines] == ["실제"]
 
