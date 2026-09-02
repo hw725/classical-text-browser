@@ -2,6 +2,12 @@
 chcp 65001 >nul 2>&1
 setlocal enabledelayedexpansion
 
+REM NOTE: keep this file pure ASCII (no Korean, even in comments).
+REM With "chcp 65001" active, cmd.exe miscounts its byte position in a batch file
+REM that contains multi-byte characters and resumes parsing in the middle of a later
+REM line (observed 2026-09-03: "'3...' is not recognized as an internal command").
+REM tests/test_doc_drift.py::test_batch_files_are_ascii enforces this.
+
 REM ============================================
 REM  Classical Text Browser
 REM ============================================
@@ -9,26 +15,26 @@ REM ============================================
 REM -- Check uv --------------------------------
 uv --version >nul 2>&1
 if !ERRORLEVEL! neq 0 (
-    echo [오류] uv가 설치되어 있지 않습니다.
+    echo [ERROR] uv is not installed.
     echo.
-    echo   먼저 install.bat 을 실행하세요.
+    echo   Run install.bat first.
     echo.
     pause
     exit /b 1
 )
 
 REM -- GPU auto-detect (D-078) -----------------
-REM .venv = CPU 정본(락파일 그대로), .venv-gpu = GPU 환경(별도 생성).
-REM NVIDIA GPU가 보이고 .venv-gpu가 있으면 그 환경의 python을 직접 쓴다.
-REM 왜 uv run을 안 쓰나: uv run은 실행 전 락 기준으로 환경을 되돌려서
-REM GPU 환경의 추가 스택을 지운다 - 직접 호출이 유일하게 안전하다.
+REM .venv = CPU baseline (lockfile as-is), .venv-gpu = GPU env (created separately).
+REM If an NVIDIA GPU is visible and .venv-gpu exists, call that python directly.
+REM Why not "uv run": it re-syncs the env to the lockfile before running and
+REM would strip the extra GPU stack. Direct invocation is the only safe way.
 set "APP_PY=uv run python"
 if exist ".venv-gpu\Scripts\python.exe" (
     call nvidia-smi -L >nul 2>&1
     if !ERRORLEVEL! equ 0 (
-        REM GPU 환경이 실제로 쓸 수 있는지 확인한다. 옛 .venv-gpu(파이썬 3.13, 깨진 paddle)가
-        REM 남아 있으면 예전에는 그대로 골라서 화면에 «PaddleOCR 사용 불가»만 떴다.
-        REM torch(TrOCR)나 paddle 중 하나라도 뜨면 GPU 환경을 쓴다.
+        REM Check that the GPU env actually works. A stale .venv-gpu (Python 3.13, broken paddle)
+        REM used to be picked anyway and the UI only showed "PaddleOCR unavailable".
+        REM Use the GPU env if either torch (TrOCR) or paddle imports.
         ".venv-gpu\Scripts\python.exe" -c "import torch" >nul 2>&1
         set "GPU_HAS_TORCH=!ERRORLEVEL!"
         ".venv-gpu\Scripts\python.exe" -c "import paddle" >nul 2>&1
@@ -36,8 +42,8 @@ if exist ".venv-gpu\Scripts\python.exe" (
         if "!GPU_HAS_TORCH!"=="0" (
             set "APP_PY=.venv-gpu\Scripts\python.exe"
             echo [Env] NVIDIA GPU detected - using .venv-gpu
-            REM torch와 paddle은 cuDNN DLL이 달라 한 프로세스에 못 산다(D-091).
-            REM PaddleOCR은 .venv^(CPU^)의 파이썬을 자식 프로세스로 띄워 돌린다.
+            REM torch and paddle ship different cuDNN DLLs and cannot share a process (D-091).
+            REM PaddleOCR therefore runs in a child process using the .venv (CPU) python.
             if exist ".venv\Scripts\python.exe" (
                 set "CTB_PADDLE_PYTHON=%CD%\.venv\Scripts\python.exe"
                 echo [Env] PaddleOCR runs in .venv ^(CPU worker^) - torch/paddle cuDNN conflict
@@ -46,8 +52,8 @@ if exist ".venv-gpu\Scripts\python.exe" (
             set "APP_PY=.venv-gpu\Scripts\python.exe"
             echo [Env] NVIDIA GPU detected - using .venv-gpu ^(paddle GPU^)
         ) else (
-            echo [Env] .venv-gpu 에서 torch 도 paddle 도 뜨지 않아 .venv ^(CPU^) 로 뜁니다.
-            echo [Env] 원인은 doctor.bat 으로 확인하세요. 안 쓰는 .venv-gpu 는 지워도 됩니다.
+            echo [Env] neither torch nor paddle imports in .venv-gpu - falling back to .venv ^(CPU^)
+            echo [Env] run doctor.bat to see why. An unused .venv-gpu can be deleted.
         )
     ) else (
         echo [Env] no GPU detected - using .venv ^(CPU^)
@@ -134,14 +140,14 @@ if /I "%PUNCT_AUTO_START%"=="0" (
 REM -- Optional OpenAI OAuth proxy -----------------
 REM The UI exposes "OpenAI (OAuth)", so start the local OpenAI-compatible proxy
 REM when npx.cmd is available. Set OPENAI_OAUTH_AUTO_START=0 to skip this.
-REM 프록시는 창 없이 백그라운드로 돌린다 - start /b 는 새 창을 만들지 않고
-REM 이 콘솔 뒤에서 실행하며, 출력은 logs\openai-oauth.log 로 보낸다.
-REM 왜 창을 안 만드는가: start /min 은 Windows 11 기본 터미널인
-REM Windows Terminal 에서 무시되어 창이 그대로 떠서 시끄럽다 - 2026-07-17 실측.
-REM 로그인 안내가 필요하면 사용자가 로그 파일을 열어 확인한다.
-REM 부수 효과: 이 창을 닫으면 프록시도 함께 종료된다 - 잔여 프로세스가 없다.
-REM 주의: 괄호 블록 안에는 REM을 넣지 말 것 - 주석 속 닫는 괄호가
-REM 블록을 조기 종료시켜 스크립트 전체가 파싱 오류로 죽는다.
+REM The proxy runs in the background without a window: "start /b" opens no new window,
+REM runs behind this console, and its output goes to logs\openai-oauth.log.
+REM Why no window: "start /min" is ignored by Windows Terminal (the Windows 11
+REM default), so the window stays open and is noisy - observed 2026-07-17.
+REM If login is required, the user opens the log file to see the instructions.
+REM Side effect: closing this window also ends the proxy - no leftover process.
+REM Caution: never put REM inside a parenthesized block - a closing paren in the
+REM comment ends the block early and the whole script dies with a parse error.
 if /I "%OPENAI_OAUTH_AUTO_START%"=="0" (
     echo [OpenAI OAuth] auto-start disabled by OPENAI_OAUTH_AUTO_START=0
 ) else (
@@ -187,8 +193,8 @@ echo Press Ctrl+C to stop the server.
 echo.
 
 REM -- Open browser after 2 seconds -----------
-REM start /b + 숨김 PowerShell: 예전 방식(start cmd /c timeout...)은 2초짜리
-REM cmd 창을 하나 더 띄워 시작 시 창이 3개처럼 보였다. 이제 창 없이 연다.
+REM start /b + hidden PowerShell: the old way (start cmd /c timeout...) opened a
+REM 2-second cmd window, so startup looked like 3 windows. Now no extra window.
 start /b "" powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Start-Process 'http://127.0.0.1:!PORT!'"
 
 REM -- Run server ------------------------------

@@ -148,3 +148,37 @@ def test_cudnn_conflict_between_torch_and_paddle():
     texts = [r["text"] for r in recommend(_report([venv, gpu], gpu=True))]
     assert any("cuDNN DLL 판이 다름" in t and "자식 프로세스" in t for t in texts)
     assert not any("paddle import 실패" in t for t in texts)
+
+
+def test_worker_ping_failure_is_fix_even_if_engine_probe_passes():
+    """실측 2026-09-03: .venv에 GPU torch가 들어 있어도 엔진 조사(torch 먼저)는 paddleocr ✓.
+    그러나 서버의 워커(paddle 먼저)는 shm.dll WinError 127로 죽어 PaddleOCR이 사용 불가였다.
+    워커 ping이 실패하면 «고칠 것»으로, uv sync를 가리켜야 한다."""
+    venv = _env(".venv", "3.12.13", engines=PADDLE_OK)
+    venv["packages"]["torch"] = "2.6.0+cu124"
+    venv["worker"] = {
+        "available": False,
+        "reason": r"PaddleOCR을 불러오는 중 오류가 났습니다 "
+        r"(OSError: [WinError 127] … torch\lib\shm.dll)",
+    }
+    gpu = _env(
+        ".venv-gpu", "3.12.13", errors={"paddle": "OSError: [WinError 127] … cudnn_cnn64_9.dll"}
+    )
+    gpu["packages"]["torch"] = "2.6.0+cu124"
+    gpu["alone"] = {"paddle": {"ok": True}, "torch": {"ok": True}}
+    report = _report([venv, gpu], gpu=True)
+    recs = recommend(report)
+    fixes = [r["text"] for r in recs if r["level"] == "fix"]
+    assert any("워커(paddle → paddleocr 순서)가 죽습니다" in t and "uv sync" in t for t in fixes)
+    assert not any(r["level"] == "ok" for r in recs)
+    out = format_report(report, recs)
+    assert "✗ paddle 워커 ping" in out
+
+
+def test_worker_ping_ok_is_reported():
+    venv = _env(".venv", "3.12.13", engines=PADDLE_OK)
+    venv["worker"] = {"available": True, "reason": None, "paddle": "3.3.1"}
+    report = _report([venv], gpu=False)
+    recs = recommend(report)
+    assert any(r["level"] == "ok" for r in recs)
+    assert "✓ paddle 워커 ping" in format_report(report, recs)

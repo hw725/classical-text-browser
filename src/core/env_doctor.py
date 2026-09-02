@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import json
+import os
 import platform
 import shutil
 import subprocess
@@ -126,6 +127,52 @@ def _run_probe_alone(py: Path, root: Path, module: str, timeout: int) -> dict:
         return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
 
+def _run_worker_ping(py: Path, root: Path, timeout: int) -> dict:
+    """PaddleOCR 워커(D-091)를 실제로 띄워 ping 한다 — «워커 순서»로 import되는지 본다.
+
+    왜 엔진 조사와 별도인가: 엔진 조사(PROBE_ENGINES)는 registry 등록 순서대로 NDL古典籍
+    Full(torch)을 먼저 import하고 paddle을 나중에 읽는다. 그 순서는 .venv에 GPU torch가
+    잘못 들어 있어도 산다(torch → paddle 순서는 뜬다). 그런데 워커는 paddle을 먼저 읽고
+    paddleocr(paddlex)이 torch를 끌어오는 순서라 같은 환경에서 죽는다(shm.dll WinError 127).
+    2026-09-03 실측: doctor는 .venv paddleocr ✓라고 했지만 서버에서는 PaddleOCR 사용 불가였다.
+    등록 순서로 검사하면 이 실패를 못 보므로 워커 자체를 띄워 본다.
+    """
+    src_dir = root / "src"
+    env = dict(os.environ)
+    env.pop("CTB_PADDLE_PYTHON", None)
+    env.pop("CTB_PADDLE_FORCE_WORKER", None)
+    env["PYTHONPATH"] = str(src_dir) + (
+        os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
+    )
+    env["PYTHONIOENCODING"] = "utf-8"
+    try:
+        proc = subprocess.run(
+            [str(py), "-m", "ocr.paddle_worker"],
+            input='{"op": "ping"}' + chr(10) + '{"op": "quit"}' + chr(10),
+            cwd=str(src_dir),
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+        )
+        line = next((ln for ln in proc.stdout.splitlines() if ln.startswith("{")), None)
+        if not line:
+            tail = (proc.stderr or "")[-300:]
+            return {"available": False, "reason": "워커가 응답하지 않음: " + tail}
+        resp = json.loads(line)
+        return {
+            "available": bool(resp.get("ok") and resp.get("available")),
+            "reason": resp.get("reason") or resp.get("error"),
+            "paddle": resp.get("paddle"),
+        }
+    except subprocess.TimeoutExpired:
+        return {"available": False, "reason": f"{timeout}초 안에 끝나지 않았습니다"}
+    except Exception as e:  # noqa: BLE001
+        return {"available": False, "reason": f"{type(e).__name__}: {e}"}
+
+
 def cudnn_conflict(e: dict) -> bool:
     """torch와 paddle이 각각 혼자서는 뜨는데 한 프로세스에서는 둘 중 하나가 죽는가.
 
@@ -162,6 +209,11 @@ def probe_env(root: Path, name: str, timeout: int = 180) -> dict:
         for name in ("paddle", "torch"):
             alone[name] = _run_probe_alone(py, root, name, timeout)
         result["alone"] = alone
+    # .venv는 GPU 환경에서 PaddleOCR 워커로 쓰인다(D-091). 워커는 paddle을 먼저 읽으므로
+    # 등록 순서(torch 먼저)의 엔진 조사와 다르게 죽을 수 있다 — 워커를 직접 띄워 본다.
+    # 주의: 위 루프가 `name`을 덮어쓴다 — result["name"]으로 판정한다.
+    if result["name"] == ".venv" and "paddle" in pk.get("packages", {}):
+        result["worker"] = _run_worker_ping(py, root, timeout)
     en = _run_probe(py, root, PROBE_ENGINES, timeout)
     result["engines"] = en.get("engines", [])
     if en.get("errors"):
@@ -341,6 +393,23 @@ def recommend(report: dict) -> list[dict]:
                     }
                 )
 
+    worker = (venv or {}).get("worker")
+    worker_dead = bool(worker) and not worker.get("available")
+    if worker_dead:
+        why = (worker.get("reason") or "이유 없음")[:160]
+        if "torch" in venv.get("packages", {}):
+            recs.append(
+                {
+                    "level": "fix",
+                    "text": ".venv: PaddleOCR 워커(paddle → paddleocr 순서)가 죽습니다 — "
+                    f"{why}. .venv에 든 GPU torch가 원인입니다(paddleocr이 torch를 끌어옴). "
+                    "엔진 목록 조사는 torch를 먼저 읽어 통과하지만 서버의 워커는 이 순서라 "
+                    "PaddleOCR이 사용 불가로 뜹니다. 설치 폴더에서 `uv sync`를 돌려 torch를 "
+                    "빼세요.",
+                }
+            )
+        else:
+            recs.append({"level": "fix", "text": f".venv: PaddleOCR 워커 ping 실패 — {why}"})
     if venv and venv.get("python_path") and "torch" in venv.get("packages", {}):
         recs.append(
             {
@@ -371,7 +440,7 @@ def recommend(report: dict) -> list[dict]:
                 )
     if chosen == ".venv" and venv and venv.get("python_path") and not venv.get("probe_error"):
         pe = next((x for x in venv.get("engines", []) if x.get("engine_id") == "paddleocr"), None)
-        if pe and pe.get("available"):
+        if pe and pe.get("available") and not worker_dead:
             recs.append(
                 {
                     "level": "ok",
@@ -436,6 +505,14 @@ def format_report(report: dict, recs: list[dict]) -> str:
                 f" — {eng['reason']}" if (not eng.get("available") and eng.get("reason")) else ""
             )
             lines.append(f"    {mark} {eng['engine_id']}{reason}")
+        w = e.get("worker")
+        if w:
+            if w.get("available"):
+                lines.append(
+                    f"    ✓ paddle 워커 ping (paddle→paddleocr 순서, paddle {w.get('paddle')})"
+                )
+            else:
+                lines.append(f"    ✗ paddle 워커 ping — {(w.get('reason') or '')[:200]}")
         lines.append("")
     lines.append("── 권고 ──")
     if not recs:

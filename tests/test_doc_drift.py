@@ -91,3 +91,22 @@ def test_scanner_silent_on_correct_claims(checker):
         f"JS 모듈 {facts['js_count']}개 · 스키마 {facts['schema_total']}개\n"
     )
     assert checker.scan_text(sample, "sample.md", facts) == []
+
+
+# ── 배치 파일은 ASCII만 ─────────────────────────────────────────
+
+
+@pytest.mark.parametrize("name", ["start_server.bat", "doctor.bat"])
+def test_batch_files_are_ascii(name):
+    """`.bat` 파일에 비ASCII 바이트가 없어야 한다.
+
+    왜: `chcp 65001` 상태의 cmd.exe는 다중바이트 문자가 든 배치 파일에서 자기 위치를
+    잘못 세어, 뒤쪽 줄의 중간부터 다시 읽는다. 한글 REM 주석이 늘어나자 새 콘솔에서
+    `'3개처럼' is not recognized as an internal or external command`가 찍혔다
+    (2026-09-03 실측, 주석을 영어로 바꾸자 사라짐). 하네스 안(콘솔 없음)에서는
+    chcp가 실패해 cp949로 읽히므로 재현되지 않는다 — 그래서 사람 눈이 아니라
+    바이트 검사로 막는다. install.bat은 아직 한글이 남아 있어 대상에서 뺐다.
+    """
+    data = (_ROOT / name).read_bytes()
+    bad = [(i + 1, line) for i, line in enumerate(data.split(b"\n")) if any(b > 127 for b in line)]
+    assert not bad, f"{name}에 비ASCII 줄이 있습니다 (cmd 파싱 오류 원인): {bad[:3]}"

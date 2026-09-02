@@ -85,6 +85,19 @@ q 2064 0 0 2893 0 0 cm /I0 Do Q
 
 `<img src=x onerror=…>.pdf`라는 이름의 파일을 끌어다 놓으면 스크립트가 돌았다.
 
+### 1.6 배치 파일(`.bat`)에는 ASCII만 (2026-09-03)
+
+`chcp 65001` 상태의 cmd.exe는 다중바이트 문자가 든 배치 파일에서 **자기 위치를
+잘못 센다.** 한글 REM 주석이 쌓이자 `start_server.bat`이 새 콘솔에서
+`'3개처럼' is not recognized as an internal or external command`를 찍고 계속 돌았다
+— 뒤쪽 주석 줄의 중간부터 다시 읽은 것이다. 주석을 영어로 바꾸니 사라졌다.
+
+- 주석·메시지 모두 영어로 적는다. 한국어 설명은 `docs/DECISIONS.md`(D-078·D-091)에 둔다.
+- 하네스·파이프 안에서는 콘솔이 없어 `chcp`가 실패하고 cp949로 읽히므로 **재현되지
+  않는다.** 더블클릭(새 콘솔)에서만 난다. 그래서 `tests/test_doc_drift.py::
+  test_batch_files_are_ascii`가 바이트로 검사한다.
+- `install.bat`은 한글 안내문이 많아 아직 대상 밖이다. 같은 증상이 보이면 같은 처방.
+
 ---
 
 ## 2. 의존성을 올릴 때
