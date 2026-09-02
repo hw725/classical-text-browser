@@ -62,6 +62,18 @@ function initOcrPanel() {
     fillOcrBtn.addEventListener("click", _fillFromOcr);
   }
 
+  // LLM 교정 패스 (D-082)
+  const correctBtn = document.getElementById("ocr-llm-correct");
+  const preciseBtn = document.getElementById("ocr-llm-precise");
+  if (correctBtn) correctBtn.addEventListener("click", () => _runCorrection("fast", null));
+  if (preciseBtn) {
+    preciseBtn.addEventListener("click", () => {
+      if (typeof layoutState !== "undefined" && layoutState.selectedBlockId) {
+        _runCorrection("precise", [layoutState.selectedBlockId]);
+      }
+    });
+  }
+
   // OCR 결과 세로쓰기 토글
   const ocrVertBtn = document.getElementById("ocr-vertical-btn");
   if (ocrVertBtn) ocrVertBtn.addEventListener("click", _toggleOcrVerticalView);
@@ -625,10 +637,164 @@ function _disableButtons(disabled) {
   const runAll = document.getElementById("ocr-run-all");
   const runSelected = document.getElementById("ocr-run-selected");
   const deleteBtn = document.getElementById("ocr-delete-page");
+  const correctBtn = document.getElementById("ocr-llm-correct");
+  const preciseBtn = document.getElementById("ocr-llm-precise");
   if (runAll) runAll.disabled = disabled;
   if (runSelected) runSelected.disabled = disabled || !_hasSelectedBlock();
   if (deleteBtn)
     deleteBtn.disabled = disabled || !_canDeleteSelectedOcrResult();
+  if (correctBtn) correctBtn.disabled = disabled;
+  if (preciseBtn) preciseBtn.disabled = disabled || !_hasSelectedBlock();
+}
+
+/* ─── LLM 교정 패스 (D-082) ─────────────────────────────── */
+
+/**
+ * LLM 교정 패스를 실행하고 초안을 표시한다. L2는 바뀌지 않는다.
+ *
+ * mode "fast"   : 기계적으로 선별된 블록(신뢰도 낮음·협주·한글 미지원 엔진)만, 사고 끔.
+ * mode "precise": 지정 블록을 앞뒤 문맥과 함께, 사고를 켜서(예산 분리) 다시 읽는다.
+ *                 행초·흘림체처럼 자형만으로 안 풀리는 곳에 쓴다.
+ */
+async function _runCorrection(mode, blockIds) {
+  if (ocrState.running) return;
+  if (typeof viewerState === "undefined") return;
+  const { docId, partId, pageNum } = viewerState;
+  if (!docId || !partId || !pageNum) {
+    showToast("문헌과 페이지를 먼저 선택하세요.", "warning");
+    return;
+  }
+
+  const llmSel =
+    typeof getLlmModelSelection === "function"
+      ? getLlmModelSelection("ocr-llm-model-select")
+      : { force_provider: null, force_model: null };
+  const body = { mode };
+  if (blockIds) body.block_ids = blockIds;
+  if (llmSel.force_provider) body.force_provider = llmSel.force_provider;
+  if (llmSel.force_model) body.force_model = llmSel.force_model;
+
+  ocrState.running = true;
+  _disableButtons(true);
+  _showProgress(
+    true,
+    mode === "precise" ? "정밀 판독 중 (추론 켬)..." : "LLM 교정 중 (선별 블록)...",
+    0,
+    0,
+  );
+  try {
+    const res = await fetch(
+      `/api/documents/${docId}/parts/${partId}/pages/${pageNum}/ocr/correct`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    );
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error || "LLM 교정에 실패했습니다.", "error");
+      return;
+    }
+    _renderCorrectionDraft(data);
+    const n = (data.blocks || []).length;
+    const accepted = (data.blocks || []).filter((b) => b.accepted).length;
+    if (n === 0) {
+      showToast("다시 볼 블록이 없습니다. 엔진 신뢰도가 모두 기준 이상입니다.", "info");
+    } else {
+      showToast(`LLM 교정 초안: ${n}블록 중 ${accepted}블록 자동 수용 기준 통과`, "success");
+    }
+  } catch (e) {
+    showToast(`LLM 교정 실패: ${e.message}`, "error");
+  } finally {
+    _showProgress(false);
+    ocrState.running = false;
+    _disableButtons(false);
+  }
+}
+
+/**
+ * 교정 초안을 블록별로 보여 준다: 이유 · 앵커(엔진) → 교정본 · 일치율 · [적용].
+ * 자동 수용 기준을 넘은 블록은 표시만 다르고, 적용은 사람이 누른다.
+ */
+function _renderCorrectionDraft(draft) {
+  const list = document.getElementById("ocr-correction-list");
+  if (!list) return;
+  const blocks = draft.blocks || [];
+  list.innerHTML = "";
+  list.style.display = blocks.length ? "" : "none";
+  if (!blocks.length) return;
+
+  const head = document.createElement("div");
+  head.className = "ocr-result-block-id";
+  head.textContent = `LLM 교정 초안 (${draft.mode === "precise" ? "정밀 판독" : "교정"}) — L2는 그대로, 적용한 블록만 L4에 들어갑니다`;
+  list.appendChild(head);
+
+  for (const b of blocks) {
+    const row = document.createElement("div");
+    row.className = "ocr-result-item";
+    row.title = (b.reasons || []).join(", ");
+
+    const id = document.createElement("span");
+    id.className = "ocr-result-block-id";
+    id.textContent = `${b.block_id} · ${(b.reasons || []).join(", ")}`;
+
+    const text = document.createElement("span");
+    text.className = "ocr-result-text";
+    if (b.error) {
+      text.textContent = `실패: ${b.error}`;
+    } else {
+      text.textContent = `${b.anchor_text || "(비어있음)"} → ${b.corrected_text || "(비어있음)"}`;
+    }
+
+    const stat = document.createElement("span");
+    stat.className =
+      "ocr-result-confidence " + (b.accepted ? "conf-high" : b.error ? "conf-low" : "conf-mid");
+    stat.textContent = b.error
+      ? "—"
+      : `${Math.round((b.agreement || 0) * 100)}%${b.uncertain_count ? ` [?]${b.uncertain_count}` : ""}`;
+    stat.title = b.accepted ? "앵커와 일치율이 높고 불확실 표시가 없음 — 자동 수용 기준 통과" : "사람 확인 필요";
+
+    row.appendChild(id);
+    row.appendChild(text);
+    row.appendChild(stat);
+
+    if (!b.error && b.corrected_text) {
+      const apply = document.createElement("button");
+      apply.className = "text-btn text-btn-sm";
+      apply.textContent = "적용";
+      apply.title = "이 블록의 교정본을 L4(교정 텍스트)에 쓴다";
+      apply.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        _applyCorrection([b.block_id]);
+      });
+      row.appendChild(apply);
+    }
+    list.appendChild(row);
+  }
+}
+
+async function _applyCorrection(blockIds) {
+  if (typeof viewerState === "undefined") return;
+  const { docId, partId, pageNum } = viewerState;
+  try {
+    const res = await fetch(
+      `/api/documents/${docId}/parts/${partId}/pages/${pageNum}/ocr/correct/apply`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ block_ids: blockIds }),
+      },
+    );
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error || "적용에 실패했습니다.", "error");
+      return;
+    }
+    showToast(`교정본을 L4에 적용했습니다: ${(data.applied_blocks || []).join(", ")}`, "success");
+  } catch (e) {
+    showToast(`적용 실패: ${e.message}`, "error");
+  }
 }
 
 function _hasSelectedBlock() {

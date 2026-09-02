@@ -84,6 +84,17 @@ class OcrPageResult:
         }
 
 
+@dataclass
+class PreparedPage:
+    """OCR 직전까지 준비된 쪽 — 레이아웃·블록(좌표 보정됨)·이미지. run_page와 교정 패스가 공유."""
+
+    layout: Optional[dict] = None
+    blocks: list = field(default_factory=list)
+    page_image: object = None  # PIL.Image.Image
+    total_blocks: int = 0
+    error: Optional[str] = None
+
+
 class OcrPipeline:
     """OCR 파이프라인.
 
@@ -106,61 +117,31 @@ class OcrPipeline:
         self.registry = registry
         self.library_root = library_root
 
-    def run_page(
+    def prepare_page(
         self,
         doc_id: str,
         part_id: str,
         page_number: int,
-        engine_id: Optional[str] = None,
         block_ids: Optional[list[str]] = None,
-        progress_callback: Optional[Callable[[dict], None]] = None,
-        **engine_kwargs,
-    ) -> OcrPageResult:
-        """페이지의 블록들을 OCR 실행한다.
+    ) -> "PreparedPage":
+        """레이아웃·이미지를 읽고 bbox를 실제 이미지 좌표로 맞춘다 (OCR 직전 상태).
 
-        입력:
-          doc_id: 문서 ID
-          part_id: 파트 ID
-          page_number: 페이지 번호 (1-indexed)
-          engine_id: OCR 엔진 (None이면 기본 엔진)
-          block_ids: OCR할 블록 ID 목록 (None이면 전체)
-          progress_callback: 블록 처리 진행 시 호출되는 콜백 (SSE 스트리밍용).
-              호출 형식:
-              callback({"current": 2, "total": 5, "block_id": "p01_b02", ...})
-          **engine_kwargs: 엔진에 전달할 추가 인자 (force_provider, force_model 등)
+        입력: doc_id, part_id, page_number, block_ids(None이면 전체).
+        출력: PreparedPage — layout·blocks(reading_order 정렬, 스케일 보정됨)·page_image.
+              실패하면 error 문자열만 채워진다.
 
-        출력: OcrPageResult
-
-        처리 순서:
-          1. L3 layout_page.json 로드 → 블록 목록
-          2. L1 이미지 로드
-          3. 각 블록: 크롭 → OCR → 결과 수집
-          4. 결과를 L2 JSON으로 저장
+        왜 run_page에서 떼어 냈는가 (D-082):
+            LLM 교정 패스는 같은 블록 이미지를 잘라 «다시 읽되 L2에 저장하지 않는다».
+            레이아웃 로드·이미지 로드·좌표 보정은 OCR과 완전히 같은 절차라 두 곳에
+            두면 한쪽만 고쳐지는 날이 온다(좌표 보정은 D-069류 사고의 단골 자리다).
         """
-        start_time = time.time()
-        result = OcrPageResult(doc_id=doc_id, part_id=part_id, page_number=page_number)
-
-        # 1. 엔진 확인
-        engine = self.registry.get_engine(engine_id)
-        result.engine_id = engine.engine_id
-
         # 2. L3 레이아웃 로드
         layout = self._load_layout(doc_id, part_id, page_number)
         if layout is None:
-            result.errors.append(f"L3 레이아웃을 찾을 수 없습니다: page {page_number}")
-            return result
+            return PreparedPage(error=f"L3 레이아웃을 찾을 수 없습니다: page {page_number}")
 
         blocks = layout.get("blocks", [])
-        result.total_blocks = len(blocks)
-
-        # 문헌 지침을 한 번 만들어 모든 블록 호출에 싣는다 (D-081).
-        # 서지(연대·판종·문자 체계)와 manifest.ocr_guidance 에서 조립한다.
-        # 호출자가 이미 doc_guidance 를 줬으면 그것을 존중한다. 좌표 기반 엔진은
-        # 이 인자를 무시한다.
-        if "doc_guidance" not in engine_kwargs:
-            guidance = load_document_guidance(Path(self.library_root) / "documents" / doc_id)
-            if guidance:
-                engine_kwargs["doc_guidance"] = guidance
+        total_blocks = len(blocks)
 
         # block_ids 필터링
         if block_ids is not None:
@@ -181,11 +162,12 @@ class OcrPipeline:
                 self.library_root, doc_id, page_number, part_id=part_id
             )
             if page_image is None:
-                result.errors.append(
-                    f"L1 이미지를 찾을 수 없습니다: page {page_number} "
-                    f"(L1_source에 이미지 파일도 PDF도 없음)"
+                return PreparedPage(
+                    error=(
+                        f"L1 이미지를 찾을 수 없습니다: page {page_number} "
+                        f"(L1_source에 이미지 파일도 PDF도 없음)"
+                    )
                 )
-                return result
 
         # 4-a. 좌표계 보정: L3 레이아웃의 image_width/height와 실제 이미지 크기가
         #       다를 수 있다. (예: GUI에서 PDF.js 1x 뷰포트 기준으로 저장했는데,
@@ -246,6 +228,67 @@ class OcrPipeline:
                     )
         elif layout_w > 0 and layout_w == actual_w:
             logger.debug(f"bbox 스케일링 불필요: L3 = 실제 = {actual_w}×{actual_h}")
+
+        return PreparedPage(
+            layout=layout, blocks=blocks, page_image=page_image, total_blocks=total_blocks
+        )
+
+    def run_page(
+        self,
+        doc_id: str,
+        part_id: str,
+        page_number: int,
+        engine_id: Optional[str] = None,
+        block_ids: Optional[list[str]] = None,
+        progress_callback: Optional[Callable[[dict], None]] = None,
+        **engine_kwargs,
+    ) -> OcrPageResult:
+        """페이지의 블록들을 OCR 실행한다.
+
+        입력:
+          doc_id: 문서 ID
+          part_id: 파트 ID
+          page_number: 페이지 번호 (1-indexed)
+          engine_id: OCR 엔진 (None이면 기본 엔진)
+          block_ids: OCR할 블록 ID 목록 (None이면 전체)
+          progress_callback: 블록 처리 진행 시 호출되는 콜백 (SSE 스트리밍용).
+              호출 형식:
+              callback({"current": 2, "total": 5, "block_id": "p01_b02", ...})
+          **engine_kwargs: 엔진에 전달할 추가 인자 (force_provider, force_model 등)
+
+        출력: OcrPageResult
+
+        처리 순서:
+          1. L3 layout_page.json 로드 → 블록 목록
+          2. L1 이미지 로드
+          3. 각 블록: 크롭 → OCR → 결과 수집
+          4. 결과를 L2 JSON으로 저장
+        """
+        start_time = time.time()
+        result = OcrPageResult(doc_id=doc_id, part_id=part_id, page_number=page_number)
+
+        # 1. 엔진 확인
+        engine = self.registry.get_engine(engine_id)
+        result.engine_id = engine.engine_id
+
+        # 2. 레이아웃·이미지 준비 (교정 패스와 공유하는 절차)
+        prepared = self.prepare_page(doc_id, part_id, page_number, block_ids)
+        if prepared.error:
+            result.errors.append(prepared.error)
+            return result
+        blocks = prepared.blocks
+        page_image = prepared.page_image
+        result.total_blocks = prepared.total_blocks
+        actual_w, actual_h = page_image.size
+
+        # 문헌 지침을 한 번 만들어 모든 블록 호출에 싣는다 (D-081).
+        # 서지(연대·판종·문자 체계)와 manifest.ocr_guidance 에서 조립한다.
+        # 호출자가 이미 doc_guidance 를 줬으면 그것을 존중한다. 좌표 기반 엔진은
+        # 이 인자를 무시한다.
+        if "doc_guidance" not in engine_kwargs:
+            guidance = load_document_guidance(Path(self.library_root) / "documents" / doc_id)
+            if guidance:
+                engine_kwargs["doc_guidance"] = guidance
 
         # ── 페이지 단위 OCR 분기 (ndlocr 등) ────────────────────
         # supports_page_level=True인 엔진은 페이지 전체를 한 번에 처리한다.
@@ -459,6 +502,16 @@ class OcrPipeline:
                 f"페이지 단위 대신 블록별 crop OCR 사용"
             )
         return coverage >= threshold
+
+    def recognize_block(self, engine, page_image, block: dict, **engine_kwargs) -> dict:
+        """블록 하나를 잘라 인식만 하고 **저장하지 않는다.** 교정 패스(D-082)용.
+
+        입력: engine, prepare_page()가 돌려준 page_image와 block, 엔진 kwargs.
+        출력: OcrBlockResult.to_dict() (layout_block_id 포함).
+        """
+        ocr_dict = self._process_block(engine, page_image, block, **engine_kwargs)
+        ocr_dict["layout_block_id"] = block.get("block_id", "unknown")
+        return ocr_dict
 
     def _process_block(
         self,

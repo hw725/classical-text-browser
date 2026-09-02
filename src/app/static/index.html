@@ -1473,6 +1473,32 @@
                   </button>
                 </div>
 
+                <!-- LLM 교정 패스 (D-082). L2는 그대로 두고 L4 초안을 만든다.
+                     교정: 신뢰도가 낮은 블록·협주·한글 미지원 엔진 결과만 사고 없이 다시 읽는다.
+                     정밀 판독: 선택한 블록 하나를 앞뒤 문맥과 함께, 사고를 켜서 다시 읽는다(행초용). -->
+                <div class="ocr-buttons" id="ocr-correction-buttons">
+                  <button
+                    id="ocr-llm-correct"
+                    class="text-btn"
+                    title="엔진 결과 중 다시 볼 블록만 LLM으로 교정 (사고 끔, L2 유지)"
+                  >
+                    LLM 교정(선별)
+                  </button>
+                  <button
+                    id="ocr-llm-precise"
+                    class="text-btn"
+                    title="선택한 블록을 앞뒤 문맥과 함께 추론을 켜서 정밀 판독 (행초·흘림체)"
+                    disabled
+                  >
+                    정밀 판독(선택)
+                  </button>
+                </div>
+                <div
+                  id="ocr-correction-list"
+                  class="ocr-results-list"
+                  style="display: none"
+                ></div>
+
                 <div
                   id="ocr-progress"
                   class="ocr-progress"
@@ -3300,6 +3326,19 @@
                     id="extract-force-redo"
                   />
                   <span>이미 처리한 쪽도 다시 (비용이 다시 듭니다)</span>
+                </label>
+                <!-- LLM 교정 패스 (D-082). 기본 끔 — 켜면 쪽마다 LLM 호출이 나간다.
+                     «선별»은 신뢰도가 낮은 블록·협주·한글 미지원 엔진 결과만 다시 본다. -->
+                <label
+                  class="extract-label"
+                  for="extract-llm-correction"
+                >
+                  <span>LLM 교정</span>
+                  <select id="extract-llm-correction">
+                    <option value="off" selected>끔</option>
+                    <option value="selected">선별만 (신뢰도 낮은 블록·협주·한글)</option>
+                    <option value="all">전체 (비용 큼)</option>
+                  </select>
                 </label>
 
                 <div

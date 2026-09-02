@@ -125,6 +125,15 @@ class OcrBatchRequest(BaseModel):
     # 사고는 D-082의 2단계(정밀 판독)에서만 켠다.
     llm_think: bool | str | None = None
     llm_thinking_budget: int | None = None
+    # LLM 교정 패스 (D-082 1단계). "off" | "selected"(기계적 선별) | "all"(전량).
+    #
+    # 왜 기본이 off인가: 엔진 OCR은 무료·빠름인데 LLM 교정은 쪽당 수십 초에 비용이
+    # 든다. 켜는 것은 사용자의 선택이어야 한다. "selected"는 신뢰도가 낮은 블록·
+    # 협주·한글 미지원 엔진의 결과만 다시 본다. 결과는 L4 초안이고 자동 수용 기준을
+    # 넘은 블록만 L4에 들어간다(나머지는 엔진 결과 그대로).
+    llm_correction: str = "off"
+    # "fast"(사고 끔) | "precise"(사고 켬·문맥 확대). 일괄에서는 fast가 기본이다.
+    llm_correction_mode: str = "fast"
 
 
 def _usage_log_path():
@@ -829,6 +838,255 @@ async def api_ocr_engines():
         "engines": registry.list_engines(),
         "default_engine": registry.default_engine_id,
     }
+
+
+class CorrectionRunRequest(BaseModel):
+    """LLM 교정 패스 실행 요청 (D-082)."""
+
+    # 다시 볼 블록. None이면 기계적 선별(select_all이면 전량).
+    block_ids: list[str] | None = None
+    select_all: bool = False
+    # "fast"(1단계, 사고 끔) | "precise"(2단계, 사고 켬·앞뒤 문맥 확대 — 행초용)
+    mode: str = "fast"
+    confidence_threshold: float | None = None
+    force_provider: str | None = None
+    force_model: str | None = None
+    llm_thinking_budget: int | None = None
+
+
+class CorrectionApplyRequest(BaseModel):
+    """교정 초안 적용 요청. block_ids가 None이면 자동 수용된 블록만."""
+
+    block_ids: list[str] | None = None
+
+
+def _load_l2_page(doc_path: Path, part_id: str, page_number: int) -> dict | None:
+    l2_path = doc_path / "L2_ocr" / f"{part_id}_page_{page_number:03d}.json"
+    if not l2_path.exists():
+        return None
+    return json.loads(l2_path.read_text(encoding="utf-8"))
+
+
+def _document_language(doc_path: Path) -> str | None:
+    try:
+        from core.document import get_bibliography
+
+        return (get_bibliography(doc_path) or {}).get("language")
+    except Exception:  # noqa: BLE001 — 서지가 없어도 선별은 돌아가야 한다
+        return None
+
+
+def _correction_dicts(doc_path: Path):
+    """교정 패스의 정렬 사전과 프롬프트 자형 주의 목록 (D-080·D-081).
+
+    기본 사전(strict) + 이 문헌의 승인 쌍. 승인 쌍은 프롬프트의 주의 목록으로도 쓴다.
+    라우터 간 직접 import는 금지라(CLAUDE.md) alignment 라우터의 묶음 함수를 부르지
+    않고 core에서 직접 조립한다.
+    """
+    from core.alignment import TieredVariantDicts, VariantCharDict, load_document_approvals
+
+    approvals = load_document_approvals(doc_path)
+    bundle = TieredVariantDicts([VariantCharDict(), approvals])
+    pairs = []
+    seen = set()
+    for a, alts in approvals.to_dict().items():
+        for b in alts:
+            key = tuple(sorted((a, b)))
+            if key not in seen:
+                seen.add(key)
+                pairs.append([a, b])
+    return bundle, pairs
+
+
+def _run_page_correction(
+    doc_path: Path,
+    doc_id: str,
+    part_id: str,
+    page_number: int,
+    pipeline,
+    registry,
+    *,
+    block_ids: list[str] | None = None,
+    select_all: bool = False,
+    mode: str = "fast",
+    confidence_threshold: float | None = None,
+    force_provider: str | None = None,
+    force_model: str | None = None,
+    thinking_budget: int | None = None,
+) -> dict:
+    """한 쪽의 교정 패스를 끝까지 돈다 — 선별 → LLM → 초안 저장. 동기 함수(executor용).
+
+    출력: 초안 dict (candidates가 없으면 blocks가 빈 초안).
+    """
+    from core.document import get_page_layout, get_page_text
+    from ocr.correction_pass import (
+        DEFAULT_CONFIDENCE_THRESHOLD,
+        llm_kwargs_for_mode,
+        run_correction,
+        select_candidates,
+    )
+
+    l2_page = _load_l2_page(doc_path, part_id, page_number)
+    if l2_page is None:
+        raise FileNotFoundError(f"{page_number}쪽에 L2 OCR 결과가 없습니다. 먼저 OCR을 실행하세요.")
+    try:
+        layout = get_page_layout(doc_path, part_id, page_number)
+    except Exception:  # noqa: BLE001
+        layout = None
+
+    candidates = select_candidates(
+        l2_page,
+        layout,
+        confidence_threshold=confidence_threshold or DEFAULT_CONFIDENCE_THRESHOLD,
+        document_language=_document_language(doc_path),
+        force_block_ids=block_ids,
+        select_all=select_all,
+    )
+    if block_ids is not None:
+        # 사람이 지정했으면 그 블록만 — 기계적 선별에 걸린 다른 블록은 이번에는 안 본다.
+        wanted = set(block_ids)
+        candidates = [c for c in candidates if c.block_id in wanted]
+
+    engine = registry.get_engine("llm_vision")
+    bundle, hint_pairs = _correction_dicts(doc_path)
+
+    prev_text = next_text = None
+    if mode == "precise":
+        # 행초용 문맥: 앞뒤 쪽의 확정본 (없으면 None)
+        for delta, setter in ((-1, "prev"), (1, "next")):
+            try:
+                info = get_page_text(doc_path, part_id, page_number + delta)
+                text = info.get("text") or None
+            except Exception:  # noqa: BLE001
+                text = None
+            if setter == "prev":
+                prev_text = text
+            else:
+                next_text = text
+
+    return run_correction(
+        pipeline,
+        engine,
+        doc_path,
+        doc_id,
+        part_id,
+        page_number,
+        candidates,
+        mode=mode,
+        llm_kwargs=llm_kwargs_for_mode(
+            mode,
+            thinking_budget=thinking_budget,
+            force_provider=force_provider,
+            force_model=force_model,
+        ),
+        variant_dict=bundle,
+        variant_hint_pairs=hint_pairs,
+        prev_page_text=prev_text,
+        next_page_text=next_text,
+    )
+
+
+@router.get("/api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr/correction-candidates")
+async def api_correction_candidates(
+    doc_id: str,
+    part_id: str,
+    page_number: int,
+    select_all: bool = Query(False),
+    confidence_threshold: float | None = Query(None),
+):
+    """LLM 교정 패스에 넘길 블록을 기계적으로 고른다 (D-082). LLM을 부르지 않는다.
+
+    출력: {"candidates": [...], "engine": L2 엔진, "draft": 기존 초안 또는 null}
+    """
+    from core.document import get_page_layout
+    from ocr.correction_pass import (
+        DEFAULT_CONFIDENCE_THRESHOLD,
+        load_draft,
+        select_candidates,
+    )
+
+    doc_path = require_repo_path("documents", doc_id)
+    l2_page = _load_l2_page(doc_path, part_id, page_number)
+    if l2_page is None:
+        return JSONResponse(
+            {"error": f"{page_number}쪽에 L2 OCR 결과가 없습니다. 먼저 OCR을 실행하세요."},
+            status_code=404,
+        )
+    try:
+        layout = get_page_layout(doc_path, part_id, page_number)
+    except Exception:  # noqa: BLE001
+        layout = None
+    candidates = select_candidates(
+        l2_page,
+        layout,
+        confidence_threshold=confidence_threshold or DEFAULT_CONFIDENCE_THRESHOLD,
+        document_language=_document_language(doc_path),
+        select_all=select_all,
+    )
+    return {
+        "engine": l2_page.get("ocr_engine"),
+        "candidates": [c.to_dict() for c in candidates],
+        "draft": load_draft(doc_path, part_id, page_number),
+    }
+
+
+@router.post("/api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr/correct")
+async def api_run_correction(
+    doc_id: str, part_id: str, page_number: int, body: CorrectionRunRequest
+):
+    """LLM 교정 패스를 실행하고 초안을 저장한다 (D-082 1·2단계). L2는 바뀌지 않는다.
+
+    mode="fast"    — 앵커 있는 교정, 사고 끔.
+    mode="precise" — 앞뒤 문맥 확대 + 사고 켬(예산 분리, D-083). 행초·흘림체용.
+    출력: 초안 dict. 블록마다 anchor_text·corrected_text·agreement·accepted·pairs.
+    """
+    import asyncio
+
+    if body.mode not in ("fast", "precise"):
+        return JSONResponse({"error": "mode는 fast 또는 precise입니다."}, status_code=400)
+    doc_path = require_repo_path("documents", doc_id)
+    pipeline, registry = _get_ocr_pipeline()
+    try:
+        loop = asyncio.get_running_loop()
+        draft = await loop.run_in_executor(
+            None,
+            lambda: _run_page_correction(
+                doc_path,
+                doc_id,
+                part_id,
+                page_number,
+                pipeline,
+                registry,
+                block_ids=body.block_ids,
+                select_all=body.select_all,
+                mode=body.mode,
+                confidence_threshold=body.confidence_threshold,
+                force_provider=body.force_provider,
+                force_model=body.force_model,
+                thinking_budget=body.llm_thinking_budget,
+            ),
+        )
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": f"LLM 교정 실패: {e}"}, status_code=500)
+    return draft
+
+
+@router.post("/api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr/correct/apply")
+async def api_apply_correction(
+    doc_id: str, part_id: str, page_number: int, body: CorrectionApplyRequest
+):
+    """교정 초안을 L4에 쓴다. block_ids가 없으면 자동 수용된 블록만 (D-082)."""
+    from ocr.correction_pass import apply_draft
+
+    doc_path = require_repo_path("documents", doc_id)
+    try:
+        return apply_draft(doc_path, part_id, page_number, body.block_ids)
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": f"초안 적용 실패: {e}"}, status_code=500)
 
 
 class OcrGuidanceRequest(BaseModel):
@@ -1877,19 +2135,47 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                     total_lines += lines
                     processed += 1
 
+                    # 2.5) LLM 교정 패스 (D-082 1단계). 기본 off. "selected"면 신뢰도가
+                    #      낮은 블록·협주·한글 미지원 엔진 결과만, "all"이면 전량을
+                    #      LLM Vision으로 다시 읽어 초안을 만든다. L2는 그대로다.
+                    correction_draft = None
+                    corrected_blocks = 0
+                    if body.llm_correction != "off" and results:
+                        try:
+                            correction_draft = await loop.run_in_executor(
+                                None,
+                                lambda p=page_number: _run_page_correction(
+                                    doc_path,
+                                    doc_id,
+                                    part_id,
+                                    p,
+                                    pipeline,
+                                    registry,
+                                    select_all=(body.llm_correction == "all"),
+                                    mode=body.llm_correction_mode,
+                                    force_provider=body.force_provider,
+                                    force_model=body.force_model,
+                                    thinking_budget=body.llm_thinking_budget,
+                                ),
+                            )
+                            corrected_blocks = sum(
+                                1 for b in correction_draft.get("blocks", []) if b.get("accepted")
+                            )
+                        except Exception as e:  # noqa: BLE001 — 교정 실패로 OCR 결과를 버리지 않는다
+                            warnings.append(f"{page_number}쪽 LLM 교정을 건너뜁니다: {e}")
+
                     # 3) OCR 텍스트를 교정 텍스트(L4)에도 넣는다.
                     #
                     # 이 쪽은 방금 새로 OCR 했으므로 덮어써도 잃을 것이 없다.
                     # (건너뛴 쪽은 여기 오지 않으니 사람이 고친 교정은 안전하다.)
                     # 고서 흐름의 「OCR 채우기」 단추와 같은 일을 자동으로 한다.
+                    # 교정 초안이 있으면 자동 수용된 블록은 교정본으로 바꿔 넣는다.
                     if body.fill_text_layer and lines:
                         try:
                             from core.document import save_page_text
+                            from ocr.correction_pass import compose_page_text
 
-                            text = "\n\n".join(
-                                "\n".join(ln.get("text") or "" for ln in (r.get("lines") or []))
-                                for r in results
-                            )
+                            text = compose_page_text({"ocr_results": results}, correction_draft)
                             await loop.run_in_executor(
                                 None,
                                 lambda p=page_number, t=text: save_page_text(
@@ -1914,6 +2200,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                             "status": summary.get("status"),
                             "lines": lines,
                             "block_created": block_created,
+                            "corrected_blocks": corrected_blocks,
                             "errors": summary.get("errors") or [],
                         }
                     )

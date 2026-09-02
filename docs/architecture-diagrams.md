@@ -12,7 +12,7 @@
 > |---|---|
 > | 6 · 11 · 13 | 추출 모드와 화면 구조 — 전면 개작. 13번은 새로 만든 것 |
 > | 1 · 5 · 9 · 10 | 텍스트 레이어 PDF 산출, 쪽 전면 1블록, 부분 재-OCR, 되돌리기 |
-> | 2 · 8 | 라우트 187개 · JS 모듈 29개 · API 캐시 금지 미들웨어 |
+> | 2 · 8 | 라우트 190개 · JS 모듈 29개 · API 캐시 금지 미들웨어 |
 > | 4 | LLM 사용량을 화면에 표시(D-056), LLM Vision OCR을 소비자로 추가 |
 > | 3 · 7 · 12 | **바뀐 것 없음** — 코어 스키마 6종, 스키마 19개의 참조 관계, L7 주석 4단계는 v1.2.0이 건드리지 않았다 |
 >
@@ -113,7 +113,7 @@ flowchart TB
 
 ## 2. 전체 시스템 아키텍처
 
-프론트엔드(29개 JS 모듈) · 백엔드(FastAPI + 8 라우터, 라우트 187개) ·
+프론트엔드(29개 JS 모듈) · 백엔드(FastAPI + 8 라우터, 라우트 190개) ·
 처리 엔진(OCR 5종 + LLM 5단 + 산출·검출 보조) · Git 저장소 · 외부 서비스.
 
 **여기서 읽어야 할 것**: 화면과 서버 사이에는 REST API 하나뿐이고 빌드 도구도
@@ -182,12 +182,12 @@ flowchart TB
         SRV["server.py<br/>앱 생성 + 라우터 마운트 + 캐시 금지 (152줄)"]
         ST["_state.py<br/>공유 상태 · 헬퍼 · LLM/OCR 캐시"]
         MW["미들웨어<br/>API 응답에 Cache-Control no-store<br/>정적 파일에는 no-cache + ETag (D-066)"]
-        subgraph ROUTERS["8개 도메인 라우터 (라우트 187개)"]
+        subgraph ROUTERS["8개 도메인 라우터 (라우트 190개)"]
             direction LR
             R1["library <b>16</b>"]
             R2["documents <b>40</b>"]
             R3["interpretations <b>25</b>"]
-            R4["llm_ocr <b>21</b>"]
+            R4["llm_ocr <b>24</b>"]
             R5["alignment <b>20</b>"]
             R6["reading <b>24</b>"]
             R7["annotation <b>34</b>"]
@@ -664,12 +664,12 @@ flowchart TB
         MAIN["__main__.py<br/>CLI 진입점"]
         SRV["<b>server.py</b><br/>FastAPI 앱 생성 · 라우터 마운트 · 캐시 금지 (152줄)"]
         STATE["<b>_state.py</b><br/>공유 상태, 헬퍼 · LLM 캐시, 토큰 계산"]
-        subgraph ROUTERS["routers/ -- 8개 도메인 · 라우트 187개"]
+        subgraph ROUTERS["routers/ -- 8개 도메인 · 라우트 190개"]
             direction LR
             R1["library <b>16</b>"]
             R2["documents <b>40</b>"]
             R3["interpretations <b>25</b>"]
-            R4["llm_ocr <b>21</b>"]
+            R4["llm_ocr <b>24</b>"]
             R5["alignment <b>20</b>"]
             R6["reading <b>24</b>"]
             R7["annotation <b>34</b>"]

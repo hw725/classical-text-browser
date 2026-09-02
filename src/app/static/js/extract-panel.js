@@ -997,6 +997,10 @@ async function _runExtractOcr() {
   const force = document.getElementById("extract-force-redo");
   if (force && force.checked) body.skip_existing = false;
 
+  // LLM 교정 패스 (D-082). 끔이 기본. «선별»은 다시 볼 블록만, «전체»는 전량.
+  const corr = document.getElementById("extract-llm-correction");
+  if (corr && corr.value && corr.value !== "off") body.llm_correction = corr.value;
+
   // 모델을 골랐으면 그것으로 고정한다 (비우면 폴백 순서를 따른다).
   const modelSelect = document.getElementById("extract-model-select");
   if (modelSelect && modelSelect.value) {
