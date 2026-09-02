@@ -179,7 +179,8 @@ def _torch_breaks_paddleocr(e: dict) -> bool:
     """
     err = e.get("errors", {})
     msg = (err.get("paddleocr") or "") + " " + (err.get("torch") or "")
-    return "paddleocr" in err and ("torch" in msg.lower())
+    # torch import 자체가 실패했거나, paddleocr 오류 문구에 torch 경로가 보이면 torch가 원인
+    return "paddleocr" in err and ("torch" in err or "torch" in msg.lower())
 
 
 def _py_tuple(v: Optional[str]) -> tuple[int, ...]:
