@@ -47,6 +47,18 @@ except Exception:  # noqa: BLE001
 print(json.dumps(out, ensure_ascii=False))
 """
 
+# 한 패키지만 새 프로세스에서 import한다. torch와 paddle이 둘 다 있을 때 «함께 뜨지 않는»
+# 것(cuDNN DLL 충돌)과 «혼자서도 안 뜨는» 것을 가르기 위해서다.
+PROBE_ALONE = r"""
+import json, sys, importlib
+name = sys.argv[1] if len(sys.argv) > 1 else "paddle"
+try:
+    m = importlib.import_module(name)
+    print(json.dumps({"ok": True, "version": getattr(m, "__version__", "?")}))
+except Exception as e:  # noqa: BLE001
+    print(json.dumps({"ok": False, "error": f"{type(e).__name__}: {e}"[:400]}))
+"""
+
 # 엔진 등록은 별도 프로세스에서 한다. 같은 프로세스에서 paddleocr을 두 번 import하면
 # paddlex가 «PDX has already been initialized»를 던져 진짜 원인이 가려진다.
 PROBE_ENGINES = r"""
@@ -97,6 +109,37 @@ def _run_probe(py: Path, root: Path, source: str, timeout: int) -> dict:
         return {"probe_error": f"{type(e).__name__}: {e}"}
 
 
+def _run_probe_alone(py: Path, root: Path, module: str, timeout: int) -> dict:
+    try:
+        proc = subprocess.run(
+            [str(py), "-c", PROBE_ALONE, module],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+        )
+        line = next((ln for ln in reversed(proc.stdout.splitlines()) if ln.startswith("{")), None)
+        return json.loads(line) if line else {"ok": False, "error": (proc.stderr or "")[-300:]}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
+
+def cudnn_conflict(e: dict) -> bool:
+    """torch와 paddle이 각각 혼자서는 뜨는데 한 프로세스에서는 둘 중 하나가 죽는가.
+
+    Windows에서 둘은 cuDNN 9 DLL을 따로 들고 온다(torch/lib, nvidia/cudnn/bin). 판이 다르면
+    먼저 뜬 쪽의 DLL이 이름으로 재사용되어 뒤에 뜨는 쪽이 WinError 127로 죽는다.
+    앱은 엔진 등록 때 NDL古典籍 Full(torch) → PaddleOCR(paddle) 순으로 import하므로
+    이 경우 화면에서는 PaddleOCR이 사용 불가로 보인다. 실측 2026-09-02.
+    """
+    alone = e.get("alone") or {}
+    if not alone:
+        return False
+    return all(alone.get(n, {}).get("ok") for n in ("torch", "paddle"))
+
+
 def probe_env(root: Path, name: str, timeout: int = 180) -> dict:
     """환경 하나를 조사한다. 패키지 조사와 엔진 조사를 각각 새 프로세스로 돌려 합친다."""
     py = env_python(root, name)
@@ -112,6 +155,13 @@ def probe_env(root: Path, name: str, timeout: int = 180) -> dict:
         result["probe_error"] = pk["probe_error"]
         return result
     result.update(pk)
+    # torch·paddle이 둘 다 있는데 하나가 죽었다 → 각각 혼자서는 뜨는지 본다 (cuDNN 충돌 판정)
+    both = {"torch", "paddle"} <= (set(pk.get("packages", {})) | set(pk.get("errors", {})))
+    if both and ({"torch", "paddle"} & set(pk.get("errors", {}))):
+        alone = {}
+        for name in ("paddle", "torch"):
+            alone[name] = _run_probe_alone(py, root, name, timeout)
+        result["alone"] = alone
     en = _run_probe(py, root, PROBE_ENGINES, timeout)
     result["engines"] = en.get("engines", [])
     if en.get("errors"):
@@ -232,6 +282,19 @@ def recommend(report: dict) -> list[dict]:
                 }
             )
         err = e.get("errors", {})
+        if cudnn_conflict(e):
+            recs.append(
+                {
+                    "level": "fix",
+                    "text": f"{tag}: torch와 paddle이 각각 혼자서는 뜨지만 한 프로세스에서는 둘 중 "
+                    "하나가 죽습니다(cuDNN DLL 판이 다름). 앱은 torch(NDL古典籍 Full)를 먼저 읽어 "
+                    "PaddleOCR이 사용 불가로 보입니다. 이 환경에서는 하나만 고르세요 — PaddleOCR을 "
+                    "GPU로 쓸 거면 `.venv-gpu\\Scripts\\python -m pip uninstall -y torch "
+                    "torchvision`, "
+                    "NDL古典籍 TrOCR을 쓸 거면 그대로 두고 PaddleOCR은 .venv(CPU)에서 씁니다.",
+                }
+            )
+            continue
         if _torch_breaks_paddleocr(e):
             cause = (err.get("torch") or err.get("paddleocr") or "")[:120]
             if e["name"] == ".venv":
@@ -361,6 +424,11 @@ def format_report(report: dict, recs: list[dict]) -> str:
         )
         for name, err in e.get("errors", {}).items():
             lines.append(f"    ✗ {name}: {err}")
+        for name, res in (e.get("alone") or {}).items():
+            state = (
+                "혼자서는 뜸" if res.get("ok") else f"혼자서도 실패: {res.get('error', '')[:120]}"
+            )
+            lines.append(f"    ({name} 단독 import: {state})")
         for eng in e.get("engines", []):
             mark = "✓" if eng.get("available") else "✗"
             reason = (

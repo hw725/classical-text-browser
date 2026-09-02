@@ -1366,6 +1366,11 @@ OCR 엔진 드롭다운에 「PaddleOCR (사용 불가)」가 뜨거나 서버�
 - **권고**: 예를 들어 「.venv-gpu의 파이썬이 3.13이라 PaddleOCR을 쓸 수 없습니다. 지우거나 이름을
   바꾸면 .venv(CPU)로 뜹니다」
 
+**GPU 환경에서 PaddleOCR만 사용 불가라면** torch와 paddle의 cuDNN 충돌일 가능성이 큽니다. 둘은
+각각 혼자서는 뜨지만 한 프로세스에서는 뒤에 읽히는 쪽(앱에서는 paddle)이 죽습니다. `doctor.bat`이
+「혼자서는 뜸」으로 판정해 알려 주며, `.venv-gpu`에서는 PaddleOCR(GPU)과 NDL古典籍 TrOCR(torch) 중
+하나만 고르세요. 권고 문구에 지울 명령이 그대로 나옵니다.
+
 파일을 지우지는 않습니다. 권고를 보고 직접 지우세요. `start_server.bat`도 `.venv-gpu`에서 paddle이
 실제로 뜨는지 확인한 뒤에만 그 환경을 고릅니다.
 

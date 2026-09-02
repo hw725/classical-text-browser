@@ -129,3 +129,22 @@ def test_broken_torch_in_gpu_env_offers_uninstall():
     texts = [r["text"] for r in recommend(report)]
     assert any("pip uninstall -y torch torchvision" in t for t in texts)
     assert any("start_server는 .venv(CPU)로 뜁니다" in t for t in texts)
+
+
+def test_cudnn_conflict_between_torch_and_paddle():
+    """실측: .venv-gpu에서 torch 2.6+cu124가 먼저 뜨면 paddle의 cudnn_cnn64_9.dll이 WinError 127.
+    각각 혼자서는 뜬다 → 충돌 판정, 하나만 고르라는 권고."""
+    gpu = _env(
+        ".venv-gpu",
+        "3.12.13",
+        errors={"paddle": "OSError: [WinError 127] … nvidia\\cudnn\\bin\\cudnn_cnn64_9.dll"},
+    )
+    gpu["packages"]["torch"] = "2.6.0+cu124"
+    gpu["alone"] = {
+        "paddle": {"ok": True, "version": "3.3.1"},
+        "torch": {"ok": True, "version": "2.6.0+cu124"},
+    }
+    venv = _env(".venv", "3.12.13", engines=PADDLE_OK)
+    texts = [r["text"] for r in recommend(_report([venv, gpu], gpu=True))]
+    assert any("cuDNN DLL 판이 다름" in t and "하나만 고르세요" in t for t in texts)
+    assert not any("paddle import 실패" in t for t in texts)
