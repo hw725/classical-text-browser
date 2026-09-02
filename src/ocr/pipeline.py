@@ -31,6 +31,7 @@ from .image_utils import (
     preprocess_for_ocr,
     resolve_part_pdf,
 )
+from .ocr_prompt import load_document_guidance
 from .registry import OcrEngineRegistry
 
 logger = logging.getLogger(__name__)
@@ -151,6 +152,15 @@ class OcrPipeline:
 
         blocks = layout.get("blocks", [])
         result.total_blocks = len(blocks)
+
+        # 문헌 지침을 한 번 만들어 모든 블록 호출에 싣는다 (D-081).
+        # 서지(연대·판종·문자 체계)와 manifest.ocr_guidance 에서 조립한다.
+        # 호출자가 이미 doc_guidance 를 줬으면 그것을 존중한다. 좌표 기반 엔진은
+        # 이 인자를 무시한다.
+        if "doc_guidance" not in engine_kwargs:
+            guidance = load_document_guidance(Path(self.library_root) / "documents" / doc_id)
+            if guidance:
+                engine_kwargs["doc_guidance"] = guidance
 
         # block_ids 필터링
         if block_ids is not None:
@@ -483,12 +493,22 @@ class OcrPipeline:
         language = block.get("language", "classical_chinese")
         processed = preprocess_for_ocr(cropped, writing_direction=writing_direction)
 
+        # 블록 종류를 엔진에 넘긴다 (D-081).
+        #
+        # 예전에는 여기서 block_type을 버렸다. 협주는 작은 글자 2행 병기라 읽기
+        # 순서가 본문과 다른데, LLM 엔진은 그 사실을 이미지에서 스스로 알아내야
+        # 했다. 레이아웃 분석은 이 어휘를 다 알고 있으니 정보가 없는 게 아니라
+        # 전달되지 않은 것이었다. 좌표 기반 엔진은 이 인자를 무시한다(**kwargs).
+        block_kwargs = dict(engine_kwargs)
+        if block.get("block_type") and "block_type" not in block_kwargs:
+            block_kwargs["block_type"] = block["block_type"]
+
         # OCR 실행
         ocr_result: OcrBlockResult = engine.recognize(
             processed,
             writing_direction=writing_direction,
             language=language,
-            **engine_kwargs,
+            **block_kwargs,
         )
 
         return ocr_result.to_dict()

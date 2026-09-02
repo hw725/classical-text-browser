@@ -39,6 +39,7 @@ from .base import (
     OcrEngineUnavailableError,
     OcrLineResult,
 )
+from .ocr_prompt import build_system_prompt, build_user_prompt, parse_uncertainty
 
 try:  # 프로바이더가 잘림을 알리는 표식. 경로 문제로 못 읽으면 문자열로 대체.
     from llm.providers.base import TRUNCATED_MARK
@@ -50,20 +51,10 @@ logger = logging.getLogger(__name__)
 
 # ─── 프롬프트 템플릿 ──────────────────────────────────────
 
-_OCR_SYSTEM_PROMPT = """\
-당신은 고전 텍스트 OCR 전문가입니다.
-이미지에서 텍스트를 정확하게 읽어 JSON으로 반환하세요.
-
-규칙:
-1. 이미지에 보이는 텍스트를 한 줄씩 읽습니다.
-2. 세로쓰기(vertical_rtl)이면 오른쪽 열부터 왼쪽으로, 각 열은 위에서 아래로 읽습니다.
-3. 가로쓰기(horizontal_ltr)이면 위에서 아래로, 각 행은 왼쪽에서 오른쪽으로 읽습니다.
-4. 이체자, 약자는 원문 그대로 옮기되, 판독 불가 글자는 □로 표기합니다.
-5. 반드시 순수 JSON만 출력하세요. 설명이나 markdown은 절대 포함하지 마세요.
-
-출력 형식 (JSON):
-{"lines": [{"text": "첫째 줄 텍스트"}, {"text": "둘째 줄 텍스트"}, ...]}
-"""
+# 시스템 프롬프트는 ocr_prompt.build_system_prompt()가 만든다 (D-081).
+# 예전에는 여기 문자열 상수로 있었다 — 페르소나 한 줄·규칙 5개가 전부였고,
+# 문헌·블록·자형·앵커 정보는 어디에도 들어가지 않았다.
+_OCR_SYSTEM_PROMPT = build_system_prompt()
 
 
 # 답변 JSON 스키마. Ollama는 format에 이 객체를 그대로 받고, 다른 프로바이더는
@@ -85,28 +76,23 @@ OCR_LINES_SCHEMA: dict = {
 }
 
 
-def _build_ocr_prompt(writing_direction: str, language: str) -> str:
-    """OCR 요청 프롬프트를 생성한다."""
-    dir_desc = {
-        "vertical_rtl": "세로쓰기 (오른쪽→왼쪽)",
-        "vertical_ltr": "세로쓰기 (왼쪽→오른쪽)",
-        "horizontal_ltr": "가로쓰기 (왼쪽→오른쪽)",
-        "horizontal_rtl": "가로쓰기 (오른쪽→왼쪽)",
-    }
-    lang_desc = {
-        "classical_chinese": "고전 한문(漢文)",
-        "korean": "한국어",
-        "japanese": "일본어",
-    }
+def _build_ocr_prompt(writing_direction: str, language: str, **context) -> str:
+    """OCR 요청 프롬프트를 조립한다 (D-081).
 
-    direction = dir_desc.get(writing_direction, writing_direction)
-    lang = lang_desc.get(language, language)
-
-    return (
-        f"이 이미지의 텍스트를 읽어주세요.\n"
-        f"서사 방향: {direction}\n"
-        f"언어: {lang}\n"
-        f"JSON으로만 응답하세요."
+    입력: 서사 방향·언어, 그리고 recognize() kwargs에서 넘어온 문맥:
+          block_type / doc_guidance / variant_hints / anchor_text /
+          context_before / context_after. 없는 조각은 자리 자체가 빠진다.
+    출력: 사용자 프롬프트 문자열.
+    """
+    return build_user_prompt(
+        writing_direction,
+        language,
+        block_type=context.get("block_type"),
+        doc_guidance=context.get("doc_guidance"),
+        variant_hints=context.get("variant_hints"),
+        anchor_text=context.get("anchor_text"),
+        context_before=context.get("context_before"),
+        context_after=context.get("context_after"),
     )
 
 
@@ -226,7 +212,7 @@ class LlmOcrEngine(BaseOcrEngine):
           3. JSON 응답 파싱
           4. OcrBlockResult로 변환
         """
-        prompt = _build_ocr_prompt(writing_direction, language)
+        prompt = _build_ocr_prompt(writing_direction, language, **kwargs)
 
         # kwargs에서 force_provider/force_model 추출 (UI 프로바이더 선택 지원)
         force_provider = kwargs.get("force_provider")
@@ -286,16 +272,19 @@ class LlmOcrEngine(BaseOcrEngine):
             if not text:
                 continue
 
-            # 글자별 OcrCharResult 생성 (bbox 없음, 신뢰도 LLM 기본값)
+            # [?]·□ 마커를 글자별 신뢰도로 바꾼다 (D-081). 예전에는 모든 글자에
+            # 0.9를 박았다 — 하류(선별·형광)가 신뢰도로 오해할 가짜 값이었다.
+            # 마커는 텍스트에서 걷어 낸다. 남으면 PDF 텍스트 레이어에 구워진다.
+            clean_text, confidences = parse_uncertainty(text)
+            if not clean_text:
+                continue
             characters = [
-                OcrCharResult(char=ch, confidence=0.9)
-                for ch in text
-                if ch.strip()  # 공백 제외
+                OcrCharResult(char=ch, confidence=conf) for ch, conf in zip(clean_text, confidences)
             ]
 
             ocr_lines.append(
                 OcrLineResult(
-                    text=text,
+                    text=clean_text,
                     characters=characters,
                 )
             )

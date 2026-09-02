@@ -20,14 +20,22 @@ server.py의 Phase 10-2 (LLM) / Phase 10-1 (OCR) 엔드포인트를 분리한 �
     POST /api/documents/{doc_id}/parts/{part_id}/ocr/batch
 """
 
+import json
 import shutil
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from app._state import _get_llm_router, _get_ocr_pipeline, get_library_path, get_llm_drafts
+from app._state import (
+    _get_llm_router,
+    _get_ocr_pipeline,
+    get_library_path,
+    get_llm_drafts,
+    require_repo_path,
+)
 
 router = APIRouter(tags=["llm_ocr"])
 
@@ -485,11 +493,7 @@ async def api_llm_accounts():
     # 스캔 등)가 나머지 전부를 붙잡아 설정 화면이 그만큼 멈춘다.
     # 순서는 폴백 순서 그대로 유지한다 — 화면의 «위에서부터 시도합니다»와
     # 어긋나면 안 된다.
-    return {
-        "providers": list(
-            await asyncio.gather(*(_one(p) for p in router_inst.providers))
-        )
-    }
+    return {"providers": list(await asyncio.gather(*(_one(p) for p in router_inst.providers)))}
 
 
 def _account_status(entry: dict) -> tuple[str, str]:
@@ -824,6 +828,65 @@ async def api_ocr_engines():
     return {
         "engines": registry.list_engines(),
         "default_engine": registry.default_engine_id,
+    }
+
+
+class OcrGuidanceRequest(BaseModel):
+    """문헌 판독 지침 저장 요청 본문 (D-081)."""
+
+    # 자유문. 빈 문자열·None이면 지침을 지운다.
+    ocr_guidance: str | None = None
+
+
+@router.put("/api/documents/{doc_id}/ocr-guidance")
+async def api_put_ocr_guidance(doc_id: str, body: OcrGuidanceRequest):
+    """문헌 판독 지침(manifest.ocr_guidance)을 저장한다 (D-081).
+
+    목적: 시대·문서 종류·핵심 인명·지명·주의할 자형처럼 **이 문헌에만** 해당하는
+          판독 지침을 연구자가 적어 두면, LLM OCR 프롬프트의 [문헌 정보] 조각에
+          서지 자동 문장 뒤로 이어 붙는다. 자료마다 다른 어휘를 코드에 두지 않는다.
+    입력: doc_id, body.ocr_guidance (None·빈 문자열 → 지움).
+    출력: {"ocr_guidance": 저장된 값, "preview": 프롬프트에 실릴 [문헌 정보] 전문}
+    """
+    import jsonschema
+
+    from core.document import get_bibliography, get_document_info, write_json_atomic
+    from ocr.ocr_prompt import build_document_guidance
+
+    doc_path = require_repo_path("documents", doc_id)
+    try:
+        manifest = get_document_info(doc_path)
+    except FileNotFoundError:
+        return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
+
+    text = (body.ocr_guidance or "").strip()
+    manifest["ocr_guidance"] = text or None
+
+    # 스키마 검증 — 매니페스트는 문헌을 여는 열쇠라 깨진 채로 쓰면 되돌릴 수 없다.
+    schema_path = (
+        Path(__file__).resolve().parent.parent.parent.parent
+        / "schemas"
+        / "source_repo"
+        / "manifest.schema.json"
+    )
+    if schema_path.exists():
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        try:
+            jsonschema.validate(instance=manifest, schema=schema)
+        except jsonschema.ValidationError as e:
+            return JSONResponse(
+                {"error": f"매니페스트 검증 실패: {e.message}\n→ 지침은 문자열이어야 합니다."},
+                status_code=400,
+            )
+    write_json_atomic(doc_path / "manifest.json", manifest)
+
+    try:
+        bibliography = get_bibliography(doc_path)
+    except Exception:  # noqa: BLE001 — 서지가 없어도 지침 저장은 성공이다
+        bibliography = None
+    return {
+        "ocr_guidance": manifest["ocr_guidance"],
+        "preview": build_document_guidance(manifest, bibliography),
     }
 
 
@@ -1297,16 +1360,12 @@ async def api_ocr_pending(doc_id: str, part_id: str):
 
     doc_path = library_path / "documents" / doc_id
     if not (doc_path / "manifest.json").exists():
-        return JSONResponse(
-            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404
-        )
+        return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
 
     from core.document import get_document_info
 
     manifest = get_document_info(doc_path)
-    part = next(
-        (p for p in manifest.get("parts", []) if p.get("part_id") == part_id), None
-    )
+    part = next((p for p in manifest.get("parts", []) if p.get("part_id") == part_id), None)
     if part is None:
         return JSONResponse(
             {"error": f"권을 찾을 수 없습니다: part_id='{part_id}'"}, status_code=404
@@ -1368,9 +1427,7 @@ async def api_restore_ocr(
 
     doc_path = library_path / "documents" / doc_id
     if not (doc_path / "manifest.json").exists():
-        return JSONResponse(
-            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404
-        )
+        return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
 
     from ocr.page_backup import restore_backup
 
@@ -1422,17 +1479,13 @@ async def api_fill_text_from_ocr(
 
     doc_path = library_path / "documents" / doc_id
     if not (doc_path / "manifest.json").exists():
-        return JSONResponse(
-            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404
-        )
+        return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
 
     from core.document import get_document_info, get_page_text, save_page_text
     from ocr.layout_staleness import ocr_path, read_page_json
 
     manifest = get_document_info(doc_path)
-    part = next(
-        (p for p in manifest.get("parts", []) if p.get("part_id") == part_id), None
-    )
+    part = next((p for p in manifest.get("parts", []) if p.get("part_id") == part_id), None)
     if part is None:
         return JSONResponse(
             {"error": f"권을 찾을 수 없습니다: part_id='{part_id}'"}, status_code=404
@@ -1443,9 +1496,7 @@ async def api_fill_text_from_ocr(
     # 쪽을 지정하면 그 쪽만. 「대조」 버튼이 한 쪽만 준비시킬 때 쓴다.
     targets = list(range(1, page_count + 1))
     if pages:
-        wanted = {
-            int(chunk) for chunk in pages.replace(" ", "").split(",") if chunk.isdigit()
-        }
+        wanted = {int(chunk) for chunk in pages.replace(" ", "").split(",") if chunk.isdigit()}
         targets = [p for p in targets if p in wanted]
 
     filled = skipped = empty = 0
@@ -1454,8 +1505,7 @@ async def api_fill_text_from_ocr(
         data = read_page_json(ocr_path(doc_path, part_id, page_number))
         results = (data or {}).get("ocr_results") or []
         text = "\n\n".join(
-            "\n".join(ln.get("text") or "" for ln in (r.get("lines") or []))
-            for r in results
+            "\n".join(ln.get("text") or "" for ln in (r.get("lines") or [])) for r in results
         ).strip()
         if not text:
             empty += 1
@@ -1463,9 +1513,7 @@ async def api_fill_text_from_ocr(
 
         if not overwrite:
             try:
-                existing = (get_page_text(doc_path, part_id, page_number) or {}).get(
-                    "text"
-                )
+                existing = (get_page_text(doc_path, part_id, page_number) or {}).get("text")
             except (FileNotFoundError, OSError):
                 existing = None
             if existing and existing.strip():
@@ -1521,16 +1569,12 @@ async def api_ocr_overview(doc_id: str, part_id: str, preview_chars: int = 70):
 
     doc_path = library_path / "documents" / doc_id
     if not (doc_path / "manifest.json").exists():
-        return JSONResponse(
-            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404
-        )
+        return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
 
     from core.document import get_document_info
 
     manifest = get_document_info(doc_path)
-    part = next(
-        (p for p in manifest.get("parts", []) if p.get("part_id") == part_id), None
-    )
+    part = next((p for p in manifest.get("parts", []) if p.get("part_id") == part_id), None)
     if part is None:
         return JSONResponse(
             {"error": f"권을 찾을 수 없습니다: part_id='{part_id}'"}, status_code=404
@@ -1652,17 +1696,13 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
 
     doc_path = library_path / "documents" / doc_id
     if not (doc_path / "manifest.json").exists():
-        return JSONResponse(
-            {"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404
-        )
+        return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
 
     # 대상 쪽 목록을 정한다.
     from core.document import get_document_info
 
     manifest = get_document_info(doc_path)
-    part = next(
-        (p for p in manifest.get("parts", []) if p.get("part_id") == part_id), None
-    )
+    part = next((p for p in manifest.get("parts", []) if p.get("part_id") == part_id), None)
     if part is None:
         available = [p.get("part_id") for p in manifest.get("parts", [])]
         return JSONResponse(
@@ -1847,9 +1887,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                             from core.document import save_page_text
 
                             text = "\n\n".join(
-                                "\n".join(
-                                    ln.get("text") or "" for ln in (r.get("lines") or [])
-                                )
+                                "\n".join(ln.get("text") or "" for ln in (r.get("lines") or []))
                                 for r in results
                             )
                             await loop.run_in_executor(

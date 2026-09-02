@@ -76,6 +76,11 @@
       "type": ["string", "null"],
       "description": "자유 메모.",
       "default": null
+    },
+    "ocr_guidance": {
+      "type": ["string", "null"],
+      "description": "LLM OCR 프롬프트에 덧붙일 문헌 판독 지침 (D-081). 시대·문서 종류·핵심 인명·지명·주의할 자형 등 이 문헌에만 해당하는 내용을 연구자가 자유문으로 적는다. 서지에서 자동 생성되는 문장 뒤에 이어 붙는다. 없어도 OCR은 돌아간다.",
+      "default": null
     }
   }
 }
