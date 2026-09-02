@@ -491,3 +491,99 @@ def test_toc_api_and_propose_with_toc(client, tmp_path):
     accepted = [p["title"] for p in data["proposals"] if p["accepted"]]
     assert accepted[:3] == ["卷之一", "詩", "感懷"] and "論時務疏" in accepted
     assert all(ln["page"] != 1 for ln in data["lines"])
+
+
+# ── 경계 색인 (D-090) ─────────────────────────────────────────────────────
+
+
+def test_boundary_index_created_listed_shifted_exported(client, tmp_path):
+    lib, part_id, work_id = _setup(client, tmp_path)
+    rules = {"rules": {"title_words": ["談草", "口談"]}}
+    client.put("/api/documents/d1/segmentation-rules", json=rules)
+    body = {"document_id": "d1", "part_id": part_id}
+    data = client.post("/api/interpretations/i1/segmentation/propose", json=body).json()
+    keep = ("title", "kind", "start", "end")
+    r = client.post(
+        "/api/interpretations/i1/segmentation/apply",
+        json={
+            "document_id": "d1",
+            "part_id": part_id,
+            "work_id": work_id,
+            "spans": [{k: v for k, v in s.items() if k in keep} for s in data["spans"]],
+        },
+    )
+    assert r.status_code == 200, r.text
+    created = r.json()["created"]
+    assert all(c["boundary_id"] for c in created)
+
+    # 목록: 순서대로, TextBlock과 서로 가리킨다
+    url = f"/api/interpretations/i1/boundaries?document_id=d1&part_id={part_id}"
+    lst = client.get(url).json()
+    assert lst["total"] == 4 and [b["order"] for b in lst["boundaries"]] == [0, 1, 2, 3]
+    b1 = lst["boundaries"][1]
+    assert b1["title"] == "辛巳十一月二十八日保定督署談草" and b1["status"] == "approved"
+    assert b1["start"] == {"page": 1, "line": 2} and b1["end"] == {"page": 2, "line": 0}
+    assert b1["text_block_id"] == created[1]["id"] and b1["l4_commit"]
+    assert b1["bbox"] is None  # 이 픽스처에는 L2가 없다 — 틀린 좌표를 만들지 않는다
+
+    # 내용 트리에 boundary_id·anchor가 붙는다
+    tree = client.get("/api/interpretations/i1/contents?document_id=d1").json()
+    blk = tree["works"][0]["blocks"][1]
+    assert blk["boundary_id"] == b1["id"] and blk["anchor"]["start"] == {"page": 1, "line": 2}
+
+    # 시작을 한 행 뒤로: 이 경계는 1쪽 3행부터, 앞(front) 경계는 1쪽 2행까지 늘어난다
+    r = client.put(f"/api/interpretations/i1/boundaries/{b1['id']}", json={"shift_start": 1})
+    assert r.status_code == 200, r.text
+    assert r.json()["boundary"]["start"] == {"page": 1, "line": 3}
+    lst = client.get("/api/interpretations/i1/boundaries?document_id=d1").json()["boundaries"]
+    assert lst[0]["end"] == {"page": 1, "line": 2}
+    # 파생 TextBlock의 본문이 다시 이어졌다 — 표제 행이 앞 블록으로 넘어갔다
+    from pathlib import Path
+
+    from src.core.entity import get_entity
+
+    interp_dir = Path(lib) / "interpretations" / "i1"
+    tb1 = get_entity(interp_dir, "text_block", b1["text_block_id"])
+    tb0 = get_entity(interp_dir, "text_block", lst[0]["text_block_id"])
+    assert not tb1["original_text"].startswith("辛巳")
+    assert tb0["original_text"].rstrip().endswith("辛巳十一月二十八日保定督署談草")
+    assert tb1["source_refs"][0]["char_range"][0] > 0
+
+    # CSV: article_index 관례의 열, BOM, 4행
+    r = client.get(f"{url.replace('boundaries?', 'boundaries/export.csv?')}")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv")
+    text = r.content.decode("utf-8-sig")
+    rows = [ln for ln in text.splitlines() if ln.strip()]
+    assert rows[0].startswith("기사id,문헌,권,순서,유형,층위,제목,시작쪽,시작행,끝쪽,끝행,상태")
+    assert len(rows) == 5 and ",1,3,2,0,approved," in rows[2]
+
+
+def test_boundary_bbox_from_l2_when_line_counts_match(tmp_path):
+    """L2 행 수가 L4 행 수와 맞을 때만 앵커 bbox를 만든다."""
+    import json
+
+    from src.core.segmentation import anchor_bbox
+
+    doc = tmp_path / "documents" / "d"
+    (doc / "L4_text" / "pages").mkdir(parents=True)
+    (doc / "L2_ocr").mkdir()
+    manifest = {"document_id": "d", "parts": [{"part_id": "v1"}]}
+    (doc / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (doc / "L4_text" / "pages" / "v1_page_001.txt").write_text("甲\n\n乙\n丙", encoding="utf-8")
+    lines = [
+        {"text": "甲", "bbox": [900, 100, 940, 500]},
+        {"text": "乙", "bbox": [800, 100, 840, 500]},
+        {"text": "丙", "bbox": [700, 100, 740, 500]},
+    ]
+    l2 = {
+        "part_id": "v1",
+        "page_number": 1,
+        "image_width": 1000,
+        "image_height": 1500,
+        "ocr_results": [{"layout_block_id": "b", "lines": lines}],
+    }
+    (doc / "L2_ocr" / "v1_page_001.json").write_text(json.dumps(l2), encoding="utf-8")
+    # L4 행 2(빈 행 다음 乙)는 L2의 두 번째 행
+    a = anchor_bbox(doc, "v1", 1, 2)
+    assert a["bbox"] == [800, 100, 840, 500] and a["image_width"] == 1000
+    assert anchor_bbox(doc, "v1", 1, 1) is None  # 빈 행에는 앵커가 없다

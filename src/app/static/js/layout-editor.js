@@ -228,6 +228,7 @@ function _redrawOverlay() {
   _syncOverlaySize();
   const ctx = overlay.getContext("2d");
   ctx.clearRect(0, 0, overlay.width, overlay.height);
+  _drawAnchorHighlight(ctx);
 
   layoutState.blocks.forEach((block) => {
     const [x1, y1, x2, y2] = block.bbox;
@@ -287,6 +288,29 @@ function _redrawOverlay() {
   });
 }
 
+
+/**
+ * 경계 색인의 앵커 행(D-090)을 이미지 위에 표시한다.
+ *
+ * layoutState.anchorHighlight = {bbox:[x1,y1,x2,y2], imageWidth, page} — bbox는 L2 좌표계
+ * (L2의 image_width 기준)이고 오버레이는 L3 image_width 기준이므로 비율로 환산한다.
+ * 내용 트리에서 블록을 눌렀을 때 contents-tree.js가 넣고, 쪽이 바뀌면 지운다.
+ */
+function _drawAnchorHighlight(ctx) {
+  const a = layoutState.anchorHighlight;
+  if (!a || !a.bbox || a.page !== Number(viewerState.pageNum)) return;
+  const f = a.imageWidth && layoutState.imageWidth ? layoutState.imageWidth / a.imageWidth : 1;
+  const p1 = _imageToCanvas(a.bbox[0] * f, a.bbox[1] * f);
+  const p2 = _imageToCanvas(a.bbox[2] * f, a.bbox[3] * f);
+  ctx.save();
+  ctx.strokeStyle = "#d33";
+  ctx.lineWidth = 3;
+  ctx.setLineDash([8, 5]);
+  ctx.strokeRect(p1.x - 3, p1.y - 3, p2.x - p1.x + 6, p2.y - p1.y + 6);
+  ctx.fillStyle = "rgba(221, 51, 51, 0.12)";
+  ctx.fillRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
+  ctx.restore();
+}
 
 /* ──────────────────────────
    오버레이 이벤트: 마우스 드래그

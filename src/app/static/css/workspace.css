@@ -7594,3 +7594,21 @@ button.mode-tab {
   color: #2b6cb0;
   margin-left: 4px;
 }
+
+/* 경계 색인 옮기기 단추 (D-090) */
+.contents-boundary-tools {
+  display: inline-flex;
+  gap: 1px;
+  margin-left: 4px;
+  opacity: 0;
+}
+.contents-block:hover .contents-boundary-tools { opacity: 1; }
+.contents-shift-btn {
+  border: none;
+  background: none;
+  font-size: 9px;
+  padding: 0 2px;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+.contents-shift-btn:hover { color: #d33; }

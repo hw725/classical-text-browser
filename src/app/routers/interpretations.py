@@ -1010,6 +1010,16 @@ async def api_segmentation_apply(interp_id: str, body: SegmentationApplyRequest)
 
     import uuid as _uuid
 
+    from core.segmentation import boundary_bbox
+
+    l4_commit = _document_head(doc_path)
+    existing_b = [
+        b
+        for b in list_entities(interp_path, "boundary")
+        if b.get("work_id") == body.work_id and b.get("part_id") == body.part_id
+    ]
+    order = max((b.get("order") or 0) for b in existing_b) + 1 if existing_b else 0
+
     created = []
     errors = []
     for span in body.spans:
@@ -1022,6 +1032,32 @@ async def api_segmentation_apply(interp_id: str, body: SegmentationApplyRequest)
             continue
         if not text:
             continue
+        # 1) 경계 색인 항목 — 경계의 정본 (D-090)
+        boundary = {
+            "id": str(_uuid.uuid4()),
+            "work_id": body.work_id,
+            "document_id": body.document_id,
+            "part_id": body.part_id,
+            "order": order,
+            "title": span.title,
+            "kind": span.kind or "manual",
+            "level": 1 if span.kind == "volume" else 2,
+            "status": "approved",
+            "confidence": None,
+            "reasons": [],
+            "start": {"page": int(span.start["page"]), "line": int(span.start["line_index"])},
+            "end": {"page": int(span.end["page"]), "line": int(span.end["line_index"])},
+            "bbox": boundary_bbox(
+                doc_path,
+                body.part_id,
+                span.start | {"line": span.start["line_index"]},
+                span.end | {"line": span.end["line_index"]},
+            ),
+            "text_block_id": None,
+            "l4_commit": l4_commit,
+            "metadata": None,
+        }
+        # 2) TextBlock — 경계에서 파생
         data = {
             "id": str(_uuid.uuid4()),
             "work_id": body.work_id,
@@ -1037,12 +1073,23 @@ async def api_segmentation_apply(interp_id: str, body: SegmentationApplyRequest)
                 "title": span.title,
                 "kind": span.kind or None,
                 "segmentation": "proposed",
+                "boundary_id": boundary["id"],
             },
         }
+        boundary["text_block_id"] = data["id"]
         try:
+            create_entity(interp_path, "boundary", boundary)
             create_entity(interp_path, "text_block", data)
-            created.append({"id": data["id"], "title": span.title, "sequence_index": seq})
+            created.append(
+                {
+                    "id": data["id"],
+                    "boundary_id": boundary["id"],
+                    "title": span.title,
+                    "sequence_index": seq,
+                }
+            )
             seq += 1
+            order += 1
         except Exception as e:  # noqa: BLE001 — 한 구간의 실패가 나머지를 막지 않는다
             errors.append(f"{span.title}: {e}")
 
@@ -1052,6 +1099,261 @@ async def api_segmentation_apply(interp_id: str, body: SegmentationApplyRequest)
             interp_path, f"feat: 경계 제안 적용 — TextBlock {len(created)}개 (D-088)"
         )
     return {"created": created, "errors": errors, "git": git}
+
+
+def _document_head(doc_path) -> str | None:
+    """원본 저장소의 현재 커밋. 경계 앵커가 어느 확정본 기준인지 남긴다."""
+    try:
+        import git as _git
+
+        return _git.Repo(doc_path).head.commit.hexsha
+    except Exception:  # noqa: BLE001
+        return None
+
+
+class BoundaryUpdateRequest(BaseModel):
+    """경계 한 항목 수정 (D-090). 행 단위로 옮기거나 제목·상태를 바꾼다."""
+
+    title: str | None = None
+    status: str | None = None  # proposed | approved | manual | deprecated
+    start: dict | None = None  # {"page", "line"}
+    end: dict | None = None
+    shift_start: int | None = None  # 시작 행을 ±n 행 (같은 쪽 안에서)
+    shift_end: int | None = None
+
+
+@router.get("/api/interpretations/{interp_id}/boundaries")
+async def api_list_boundaries(
+    interp_id: str,
+    document_id: str | None = Query(None),
+    part_id: str | None = Query(None),
+):
+    """경계 색인 목록 (D-090) — 권 안 순서대로."""
+    _library_path = get_library_path()
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+    interp_path = require_repo_path("interpretations", interp_id)
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"}, status_code=404
+        )
+    items = [
+        b
+        for b in list_entities(interp_path, "boundary")
+        if (document_id is None or b.get("document_id") == document_id)
+        and (part_id is None or b.get("part_id") == part_id)
+    ]
+    items.sort(key=lambda b: (b.get("part_id") or "", b.get("order") or 0))
+    return {"boundaries": items, "total": len(items)}
+
+
+@router.put("/api/interpretations/{interp_id}/boundaries/{boundary_id}")
+async def api_update_boundary(interp_id: str, boundary_id: str, body: BoundaryUpdateRequest):
+    """경계를 옮기거나 고친다. 경계가 정본이므로 파생 TextBlock의 본문·출처를 다시 잇는다.
+
+    행 단위(shift_start/shift_end 또는 start/end). 앞뒤 경계와 겹치지 않게 한다 — 이 경계의
+    시작을 올리면 앞 경계의 끝도 그만큼 당겨지고, 끝을 내리면 뒤 경계의 시작이 밀린다.
+    """
+    from core.segmentation import (
+        boundary_bbox,
+        boundary_span,
+        collect_document_lines,
+        span_to_text_and_refs,
+    )
+
+    _library_path = get_library_path()
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+    interp_path = require_repo_path("interpretations", interp_id)
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"}, status_code=404
+        )
+    try:
+        b = get_entity(interp_path, "boundary", boundary_id)
+    except FileNotFoundError:
+        return JSONResponse({"error": f"경계를 찾을 수 없습니다: {boundary_id}"}, status_code=404)
+    doc_path = require_repo_path("documents", b["document_id"])
+    lines, page_texts = collect_document_lines(doc_path, b["part_id"], None)
+    keys = [(ln.page, ln.line_index) for ln in lines]
+    if not keys:
+        return JSONResponse({"error": "확정 텍스트(L4)가 없습니다."}, status_code=400)
+
+    def _pos(anchor):
+        try:
+            return keys.index((int(anchor["page"]), int(anchor["line"])))
+        except ValueError:
+            return None
+
+    start_i, end_i = _pos(b["start"]), _pos(b["end"])
+    if start_i is None or end_i is None:
+        return JSONResponse(
+            {"error": "경계의 앵커가 현재 확정본에 없습니다. 다시 제안하세요."}, status_code=409
+        )
+    if body.start:
+        start_i = _pos(body.start) if _pos(body.start) is not None else start_i
+    if body.end:
+        end_i = _pos(body.end) if _pos(body.end) is not None else end_i
+    if body.shift_start:
+        start_i = max(0, min(len(keys) - 1, start_i + int(body.shift_start)))
+    if body.shift_end:
+        end_i = max(0, min(len(keys) - 1, end_i + int(body.shift_end)))
+    if end_i < start_i:
+        return JSONResponse({"error": "끝이 시작보다 앞에 올 수 없습니다."}, status_code=400)
+
+    # 이웃 경계와의 정합: 같은 Work·권에서 order 앞뒤
+    siblings = sorted(
+        (
+            x
+            for x in list_entities(interp_path, "boundary")
+            if x.get("work_id") == b["work_id"]
+            and x.get("part_id") == b["part_id"]
+            and x.get("status") != "deprecated"
+            and x["id"] != b["id"]
+        ),
+        key=lambda x: x.get("order") or 0,
+    )
+    prev_b = max(
+        (x for x in siblings if (x.get("order") or 0) < (b.get("order") or 0)),
+        key=lambda x: x["order"],
+        default=None,
+    )
+    next_b = min(
+        (x for x in siblings if (x.get("order") or 0) > (b.get("order") or 0)),
+        key=lambda x: x["order"],
+        default=None,
+    )
+    touched = []
+
+    def _apply(bnd, s_i, e_i):
+        bnd["start"] = {"page": keys[s_i][0], "line": keys[s_i][1]}
+        bnd["end"] = {"page": keys[e_i][0], "line": keys[e_i][1]}
+        bnd["bbox"] = boundary_bbox(doc_path, bnd["part_id"], bnd["start"], bnd["end"])
+        text, refs = span_to_text_and_refs(
+            boundary_span(bnd), lines, page_texts, bnd["document_id"], bnd["part_id"]
+        )
+        update_entity(
+            interp_path,
+            "boundary",
+            bnd["id"],
+            {k: bnd[k] for k in ("start", "end", "bbox", "title", "status")},
+        )
+        if bnd.get("text_block_id"):
+            update_entity(
+                interp_path,
+                "text_block",
+                bnd["text_block_id"],
+                {
+                    "original_text": text,
+                    "source_refs": refs,
+                    "source_ref": {k: v for k, v in refs[0].items() if k != "char_range"}
+                    if refs
+                    else None,
+                },
+            )
+        touched.append(bnd["id"])
+
+    if body.title is not None:
+        b["title"] = body.title
+    if body.status is not None:
+        b["status"] = body.status
+    _apply(b, start_i, end_i)
+    if prev_b is not None:
+        p_start = _pos(prev_b["start"])
+        if p_start is not None and p_start <= start_i - 1:
+            _apply(prev_b, p_start, start_i - 1)
+    if next_b is not None:
+        n_end = _pos(next_b["end"])
+        if n_end is not None and end_i + 1 <= n_end:
+            _apply(next_b, end_i + 1, n_end)
+    git = git_commit_interpretation(interp_path, f"fix: 경계 수정 — {b['title']} (D-090)")
+    return {
+        "boundary": get_entity(interp_path, "boundary", b["id"]),
+        "touched": touched,
+        "git": git,
+    }
+
+
+@router.get("/api/interpretations/{interp_id}/boundaries/export.csv")
+async def api_export_boundaries_csv(
+    interp_id: str,
+    document_id: str | None = Query(None),
+    part_id: str | None = Query(None),
+):
+    """경계 색인을 CSV로 (D-090). 열 이름은 연구자 DB의 article_index 관례에 맞춘다.
+
+    UTF-8 BOM — Excel이 바로 읽는다. 행 번호는 0-based(확정 텍스트의 행), 끝 행은 포함.
+    """
+    import csv
+    import io as _io
+
+    from fastapi.responses import Response
+
+    _library_path = get_library_path()
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+    interp_path = require_repo_path("interpretations", interp_id)
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"}, status_code=404
+        )
+    items = [
+        b
+        for b in list_entities(interp_path, "boundary")
+        if (document_id is None or b.get("document_id") == document_id)
+        and (part_id is None or b.get("part_id") == part_id)
+    ]
+    items.sort(key=lambda b: (b.get("part_id") or "", b.get("order") or 0))
+    buf = _io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(
+        [
+            "기사id",
+            "문헌",
+            "권",
+            "순서",
+            "유형",
+            "층위",
+            "제목",
+            "시작쪽",
+            "시작행",
+            "끝쪽",
+            "끝행",
+            "상태",
+            "신뢰도",
+            "근거",
+            "text_block_id",
+            "l4_commit",
+        ]
+    )
+    for b in items:
+        w.writerow(
+            [
+                b["id"],
+                b.get("document_id"),
+                b.get("part_id"),
+                b.get("order"),
+                b.get("kind"),
+                b.get("level", 2),
+                b.get("title"),
+                b["start"]["page"],
+                b["start"]["line"],
+                b["end"]["page"],
+                b["end"]["line"],
+                b.get("status"),
+                b.get("confidence") if b.get("confidence") is not None else "",
+                " ".join(b.get("reasons") or []),
+                b.get("text_block_id") or "",
+                (b.get("l4_commit") or "")[:12],
+            ]
+        )
+    data = ("\ufeff" + buf.getvalue()).encode("utf-8")
+    name = f"boundaries_{document_id or interp_id}{('_' + part_id) if part_id else ''}.csv"
+    return Response(
+        content=data,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
 
 
 @router.post("/api/interpretations/{interp_id}/entities/text_block/split")

@@ -175,7 +175,7 @@ docker compose up -d --build
 | 문서 | 무엇이 있나 |
 |---|---|
 | [core-schema-v1.3.md](docs/core-schema-v1.3.md) · [operation-rules-v1.0.md](docs/operation-rules-v1.0.md) | 코어 엔티티 모델과 운영 규약 |
-| [schemas/README.md](schemas/README.md) · [스키마 개요](docs/schema-overview.md) | JSON 스키마 19개 |
+| [schemas/README.md](schemas/README.md) · [스키마 개요](docs/schema-overview.md) | JSON 스키마 20개 |
 | [llm_architecture_design.md](docs/llm_architecture_design.md) | LLM 5단 폴백 설계 |
 | [세션 기록](docs/sessions/session_navigator.md) · [회고](docs/retrospective/README.md) | 만들면서 무엇을 배웠나 |
 

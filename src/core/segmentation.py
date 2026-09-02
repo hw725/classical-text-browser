@@ -563,3 +563,81 @@ def span_to_text_and_refs(
             }
         )
     return text, refs
+
+
+# ── 경계 색인 (D-090) 보조 ────────────────────────────────────────────────
+
+
+def line_bbox_index(doc_path: str | Path, part_id: str, page: int) -> dict:
+    """쪽의 L2 행 bbox를 «비어 있지 않은 행 번호» 기준으로. 없으면 빈 dict.
+
+    출력: {"boxes": [bbox,...] (블록 순서), "image_width", "image_height"}
+    """
+    import json
+
+    p = Path(doc_path) / "L2_ocr" / f"{part_id}_page_{page:03d}.json"
+    if not p.exists():
+        return {}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    boxes = [b for b, _d in _l2_line_boxes(Path(doc_path), part_id, page)]
+    return {
+        "boxes": boxes,
+        "image_width": data.get("image_width"),
+        "image_height": data.get("image_height"),
+    }
+
+
+def anchor_bbox(doc_path: str | Path, part_id: str, page: int, line_index: int) -> Optional[dict]:
+    """경계 앵커(쪽·행)를 L2 행 bbox로. L4 행과 L2 행 수가 맞아야 신뢰할 수 있다.
+
+    L4의 line_index는 빈 행을 포함한 번호다. L2 행은 비어 있지 않은 행만 있으므로,
+    같은 쪽의 L4 텍스트에서 앞선 빈 행 수를 빼서 대응시킨다. 수가 어긋나면 None —
+    틀린 좌표를 보여 주는 것보다 안 보여 주는 게 낫다.
+    """
+    from core.document import get_corrected_text
+
+    idx = line_bbox_index(doc_path, part_id, page)
+    if not idx or not idx["boxes"]:
+        return None
+    try:
+        text = get_corrected_text(Path(doc_path), part_id, page).get("corrected_text") or ""
+    except Exception:  # noqa: BLE001
+        return None
+    raw = text.split("\n")
+    nonempty = [i for i, t in enumerate(raw) if t.strip()]
+    if len(nonempty) != len(idx["boxes"]) or line_index not in nonempty:
+        return None
+    box = idx["boxes"][nonempty.index(line_index)]
+    return {
+        "bbox": box,
+        "image_width": idx["image_width"],
+        "image_height": idx["image_height"],
+    }
+
+
+def boundary_bbox(doc_path: str | Path, part_id: str, start: dict, end: dict) -> Optional[dict]:
+    """경계의 시작·끝 행 bbox 캐시(boundary.schema의 bbox)."""
+    s = anchor_bbox(doc_path, part_id, int(start["page"]), int(start["line"]))
+    e = anchor_bbox(doc_path, part_id, int(end["page"]), int(end["line"]))
+    if not s and not e:
+        return None
+    ref = s or e
+    return {
+        "start_line": (s or {}).get("bbox"),
+        "end_line": (e or {}).get("bbox"),
+        "image_width": ref.get("image_width"),
+        "image_height": ref.get("image_height"),
+    }
+
+
+def boundary_span(boundary: dict) -> dict:
+    """경계 항목을 span_to_text_and_refs()가 받는 구간 형식으로."""
+    return {
+        "title": boundary.get("title", ""),
+        "kind": boundary.get("kind", ""),
+        "start": {"page": boundary["start"]["page"], "line_index": boundary["start"]["line"]},
+        "end": {"page": boundary["end"]["page"], "line_index": boundary["end"]["line"]},
+    }

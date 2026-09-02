@@ -69,6 +69,7 @@ async function refreshContentsTree() {
     contentsState.interpId = interpId;
     contentsState.data = await res.json();
     _renderContentsTree(container);
+    _updateExportLink(interpId, docId);
     highlightContentsForPage(viewerState.pageNum);
   } catch (e) {
     container.innerHTML = `<div class="placeholder">내용 트리 오류: ${_treeEscHtml(e.message)}</div>`;
@@ -153,6 +154,25 @@ function _createBlockRow(block) {
   }
   row.appendChild(badges);
 
+  // 경계 색인에서 파생된 블록: 시작 행을 한 행씩 옮기는 단추 (D-090)
+  if (block.boundary_id) {
+    const tools = document.createElement("span");
+    tools.className = "contents-boundary-tools";
+    for (const [label, delta, tip] of [["▲", -1, "시작을 한 행 앞으로"], ["▼", 1, "시작을 한 행 뒤로"]]) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "contents-shift-btn";
+      b.textContent = label;
+      b.title = tip;
+      b.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        _shiftBoundary(block, delta);
+      });
+      tools.appendChild(b);
+    }
+    row.appendChild(tools);
+  }
+
   row.addEventListener("click", () => {
     const first = (block.pages || [])[0];
     if (first) _jumpToBlockPage(block, first);
@@ -188,6 +208,57 @@ async function _jumpToBlockPage(block, pageRef) {
   }
   _selectLayoutBlocksWhenLoaded(pageRef.layout_block_ids || []);
   _markActiveBlock(block.id);
+  _highlightAnchor(block, pageRef);
+}
+
+/**
+ * 경계 색인의 시작 행을 이미지 위에 점선으로 표시한다 (D-090).
+ * 시작 쪽으로 갔을 때만. 다른 쪽 배지를 눌렀으면 강조를 지운다.
+ */
+function _highlightAnchor(block, pageRef) {
+  if (typeof layoutState === "undefined") return;
+  const a = block.anchor;
+  if (a && a.start_line_bbox && a.start && Number(a.start.page) === Number(pageRef.page)) {
+    layoutState.anchorHighlight = {
+      bbox: a.start_line_bbox,
+      imageWidth: a.image_width,
+      page: Number(a.start.page),
+    };
+  } else {
+    layoutState.anchorHighlight = null;
+  }
+  // 레이아웃이 비동기로 그려지므로 잠깐 뒤 다시 그린다
+  const started = Date.now();
+  const tick = () => {
+    if (typeof _redrawOverlay === "function") _redrawOverlay();
+    if (Date.now() - started < 1500) setTimeout(tick, 300);
+  };
+  setTimeout(tick, 100);
+}
+
+/**
+ * 경계의 시작 행을 ±1 행 옮긴다 (D-090). 앞 경계의 끝도 함께 조정되고 TextBlock 본문이 다시 이어진다.
+ */
+async function _shiftBoundary(block, delta) {
+  if (!block.boundary_id || !contentsState.interpId) return;
+  try {
+    const res = await fetch(
+      `/api/interpretations/${encodeURIComponent(contentsState.interpId)}/boundaries/${encodeURIComponent(block.boundary_id)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shift_start: delta }),
+      },
+    );
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    showToast(`경계를 ${delta > 0 ? "한 행 뒤로" : "한 행 앞으로"} 옮겼습니다.`, "success");
+    await refreshContentsTree();
+    const b = contentsState.data?.works.flatMap((w) => w.blocks).find((x) => x.id === block.id);
+    if (b && b.pages?.[0]) _jumpToBlockPage(b, b.pages[0]);
+  } catch (e) {
+    showToast(`경계 이동 실패: ${e.message}`, "error");
+  }
 }
 
 /**
@@ -207,6 +278,16 @@ function _selectLayoutBlocksWhenLoaded(blockIds) {
     if (Date.now() - started < 3000) setTimeout(tick, 150);
   };
   setTimeout(tick, 150);
+}
+
+/** 경계 색인 CSV 내보내기 링크 (D-090). 경계가 하나라도 있을 때만 보인다. */
+function _updateExportLink(interpId, docId) {
+  const a = document.getElementById("contents-export-csv");
+  if (!a) return;
+  const has = (contentsState.data?.works || []).some((w) => w.blocks.some((b) => b.boundary_id));
+  a.hidden = !has;
+  const qs = docId ? `?document_id=${encodeURIComponent(docId)}` : "";
+  a.href = `/api/interpretations/${encodeURIComponent(interpId)}/boundaries/export.csv${qs}`;
 }
 
 function _markActiveBlock(blockId) {
