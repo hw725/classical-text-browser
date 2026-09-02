@@ -78,7 +78,7 @@ class NdlocrEngine(BaseOcrEngine):
     """
 
     engine_id = "ndlocr"
-    display_name = "NDLOCR-Lite (오프라인·한문/일본어)"
+    display_name = "NDLOCR-Lite 1.1.3 (근현대 인쇄물·오프라인)"
     requires_network = False
     supports_page_level = True
     supports_layout_detection = True
@@ -358,6 +358,11 @@ class NdlocrEngine(BaseOcrEngine):
         info = super().get_info()
         info["supported_languages"] = ["classical_chinese", "japanese"]
         info["language_warning"] = "한문(漢文)·일본어만 인식 가능합니다. 한글은 인식할 수 없습니다."
+        # 어떤 원본의 어떤 모델인지 화면에서 확인할 수 있게 적는다.
+        info["model_source"] = (
+            "ndl-lab/ndlocr-lite 1.1.3 — DEIM-s 1024 (레이아웃) + "
+            "PARSeq-tiny 16px ×3 (30/50/100자 캐스케이드)"
+        )
         if self._unavailable_reason:
             info["unavailable_reason"] = self._unavailable_reason
         return info
@@ -378,7 +383,7 @@ class NdlocrEngine(BaseOcrEngine):
         if model_dir is None:
             raise OcrEngineUnavailableError(
                 "NDLOCR-Lite 모델 파일을 찾을 수 없고, 다운로드에도 실패했습니다. "
-                "수동 다운로드: https://github.com/ndl-lab/ndlocr-lite/tree/master/src/model"
+                "수동 다운로드: https://github.com/ndl-lab/ndlocr-lite/tree/1.1.3/src/model"
             )
 
         config_dir = get_config_dir()

@@ -23,7 +23,13 @@ logger = logging.getLogger(__name__)
 _DEFAULT_MODEL_DIR = Path.home() / ".cache" / "classical-text-browser" / "ndlocr-models"
 
 # GitHub 원본 저장소에서 모델 다운로드 (raw URL)
-_GITHUB_RAW_BASE = "https://github.com/ndl-lab/ndlocr-lite/raw/master/src/model/"
+# 원본 저장소의 **태그**에 고정한다. master를 가리키던 때 원본이 v1.2.0(2026-04-21)에서
+# PARSeq 모델 셋을 통째로 바꿨다(16px → 24px 입력, r8data-202604 학습본, 파일명 변경).
+# 그 뒤로 아래 MODEL_FILES 중 셋이 404가 나 새 설치에서 자동 다운로드가 실패했다.
+# 이 파일명들은 1.1.3 태그의 것이다. 새 모델로 올리려면 MODEL_FILES와 이 태그를
+# 함께 바꾸고 실제 이미지로 인식 결과를 확인해야 한다 — 글자 사전(charset)이 다를 수 있다.
+MODEL_VERSION = "1.1.3"
+_GITHUB_RAW_BASE = f"https://raw.githubusercontent.com/ndl-lab/ndlocr-lite/{MODEL_VERSION}/src/model/"
 
 # 필요한 ONNX 모델 파일 목록
 MODEL_FILES = [

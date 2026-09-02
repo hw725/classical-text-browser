@@ -222,3 +222,32 @@ class TestEnginesApi:
         assert r.status_code == 200
         assert r.json()["default_engine"] == "dummy"
         assert [e["engine_id"] for e in r.json()["engines"]] == ["dummy"]
+
+
+class TestNdlModelSourcesPinned:
+    """NDL 계열 모델 URL은 태그에 고정되어야 한다.
+
+    왜: ndlocr-lite가 master에서 모델 파일명을 바꿔(v1.2.0) 자동 다운로드가 404로 죽었다.
+    움직이는 브랜치를 가리키면 원본이 바뀔 때 이쪽이 조용히 깨진다.
+    """
+
+    def test_ndlocr_lite_pinned(self):
+        from src.ocr import ndlocr
+
+        assert ndlocr.MODEL_VERSION in ndlocr._GITHUB_RAW_BASE
+        assert "/master/" not in ndlocr._GITHUB_RAW_BASE and "/main/" not in ndlocr._GITHUB_RAW_BASE
+        # 파일명은 그 태그의 것이다 (16px 입력 세대)
+        assert all("16x" in f for f in ndlocr.MODEL_FILES if f.startswith("parseq"))
+
+    def test_ndlkotenocr_lite_pinned(self):
+        from src.ocr import ndlkotenocr
+
+        assert "/master/" not in ndlkotenocr._GITHUB_RAW_BASE
+        assert "/1.3.1/" in ndlkotenocr._GITHUB_RAW_BASE
+
+    def test_engines_report_model_source(self):
+        from src.ocr.ndlkotenocr_engine import NdlkotenOcrEngine
+        from src.ocr.ndlocr_engine import NdlocrEngine
+
+        assert "ndlocr-lite 1.1.3" in NdlocrEngine().get_info()["model_source"]
+        assert "ndlkotenocr-lite 1.3.1" in NdlkotenOcrEngine().get_info()["model_source"]

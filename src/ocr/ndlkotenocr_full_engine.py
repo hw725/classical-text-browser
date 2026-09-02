@@ -87,7 +87,7 @@ class NdlkotenOcrFullEngine(BaseOcrEngine):
     """
 
     engine_id = "ndlkotenocr-full"
-    display_name = "NDL古典籍OCR Full (TrOCR·고전적 전용)"
+    display_name = "NDL古典籍OCR TrOCR ver2 (Lite 레이아웃 + TrOCR 인식·GPU 권장)"
     requires_network = False
     supports_page_level = True
     supports_layout_detection = True
@@ -381,6 +381,12 @@ class NdlkotenOcrFullEngine(BaseOcrEngine):
         )
         info["model_type"] = "TrOCR (HuggingFace VisionEncoderDecoder)"
         info["layout_model"] = "RTMDet ONNX (lite 공유)"
+        # 원본 ndlkotenocr_cli는 레이아웃에 ndl_kotenseki_layout_ver3.pth(PyTorch)를 쓴다.
+        # 여기서는 그 대신 Lite의 RTMDet ONNX를 쓰고 인식기(model-ver2 TrOCR)만 같다 — D-044.
+        info["model_source"] = (
+            "인식: ndl-lab/ndlkotenocr_cli model-ver2 (kotenseki-trocr-honkoku-ver2) · "
+            "레이아웃: ndlkotenocr-lite 1.3.1 RTMDet-s (원본 CLI의 layout_ver3.pth 대신)"
+        )
 
         # device 정보 추가
         try:

@@ -177,6 +177,10 @@ function _populateEngineSelect() {
     if (engineHints[eng.engine_id]) {
       opt.title = engineHints[eng.engine_id];
     }
+    // 어떤 원본 저장소의 어떤 모델인지 — 이름만으로는 매칭을 믿기 어렵다.
+    if (eng.model_source) {
+      opt.title = (opt.title ? opt.title + "\n" : "") + "모델: " + eng.model_source;
+    }
     // 사용 불가 이유가 있으면 힌트 대신 그 이유를 보인다 — 무엇을 고쳐야 하는지가 먼저다.
     if (!eng.available && eng.unavailable_reason) {
       opt.title = eng.unavailable_reason;

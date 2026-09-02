@@ -100,7 +100,7 @@ class NdlkotenOcrEngine(BaseOcrEngine):
     """
 
     engine_id = "ndlkotenocr"
-    display_name = "NDL古典籍OCR-Lite (오프라인·고전적 전용)"
+    display_name = "NDL古典籍OCR-Lite 1.3.1 (고전적 전용·오프라인)"
     requires_network = False
     supports_page_level = True
     supports_layout_detection = True
@@ -397,6 +397,9 @@ class NdlkotenOcrEngine(BaseOcrEngine):
             "고전적(古典籍) 한문·일본어 전용입니다. "
             "한글은 인식할 수 없습니다. "
             "근현대 자료에는 NDLOCR-Lite를 사용하세요."
+        )
+        info["model_source"] = (
+            "ndl-lab/ndlkotenocr-lite 1.3.1 — RTMDet-s 1280 (레이아웃) + PARSeq-tiny 32x384 (인식)"
         )
         if self._unavailable_reason:
             info["unavailable_reason"] = self._unavailable_reason
