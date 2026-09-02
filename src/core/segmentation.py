@@ -37,7 +37,7 @@ from typing import Optional
 _GANZHI = "[甲乙丙丁戊己庚辛壬癸][子丑寅卯辰巳午未申酉戌亥]"
 _NUM = "[一二三四五六七八九十廿卄卅]+"
 _MONTH = rf"(?:是月|閏?(?:正|臘|{_NUM})月)"
-_DAY = rf"(?:是日|翌日|朔日?|晦日?|初{_NUM}日|{_NUM}日)"
+_DAY = rf"(?:是日|翌日|同日|朔日?|晦日?|初{_NUM}日|{_NUM}日)"
 DATE_HEAD_RE = re.compile(rf"^(?P<ganzhi>{_GANZHI})?年?(?P<month>{_MONTH})?(?P<day>{_DAY})?")
 
 _DIGITS = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
@@ -105,7 +105,7 @@ def parse_date_head(text: str) -> DateHead:
             head.month = cjk_number(mon.replace("閏", "").rstrip("月"))
     day = m.group("day")
     if day:
-        if day in ("是日", "翌日"):
+        if day in ("是日", "翌日", "同日"):
             head.is_day_rel = True
         elif day.startswith("朔"):
             head.day = 1
@@ -239,6 +239,12 @@ def _layout_signals(lines: list[Line], rules: dict) -> dict[tuple[int, int], lis
     return out
 
 
+# 표제 어휘 바로 앞의 문장 표지. 「以筆談問曰」「故談草無一見存者」「以上口談」처럼 어휘가
+# 서술어·목적어로 쓰인 자리다 — 표제라면 어휘 앞에는 날짜·장소·상대가 온다.
+# 문헌 무관 문법이므로 코드에 둔다(천진담초 실측 2026-09-03, D-088 «남은 것»).
+_CLAUSE_MARKERS = ("以上", "以", "故", "而", "則", "乃", "遂", "因", "其")
+
+
 def _find_title_word(text: str, words: list[str], limit: int) -> tuple[str, int]:
     """표제 어휘가 앞부분(limit 글자 안)에 있으면 (어휘, 위치). 없으면 ("", -1)."""
     best = ("", -1)
@@ -315,6 +321,26 @@ def propose_boundaries(
         ):
             conf -= 0.25
             reasons.append("long_line")
+        # 어휘는 있는데 날짜가 없고 본문만큼 긴 행 — 어휘가 문장 속에 쓰인 것
+        # (「…并闕日記故談草無一見存者」). 짧은 행 신호가 있으면 표제일 수 있으니 뺀다.
+        if (
+            word
+            and not head.present
+            and toc is None
+            and "short_line" not in sig
+            and len(text) > rules["max_title_chars"]
+        ):
+            conf -= 0.25
+            reasons.append("long_line")
+        # 어휘 바로 앞이 문장 표지(以·故·而…)면 표제가 아니라 서술이다
+        if word and wpos > 0 and text[:wpos].endswith(_CLAUSE_MARKERS):
+            conf -= 0.3
+            reasons.append("word_in_clause")
+        # 문헌이 표제 어휘를 정해 두었는데 날짜만 있는 행 — 두주(頭註)·간행 정보·본문 속
+        # 날짜 조각이 대부분이다. 어휘 없는 일기류(title_words 비어 있음)에는 적용하지 않는다.
+        if head.present and rules["title_words"] and not word and toc is None:
+            conf -= 0.25
+            reasons.append("no_title_word")
 
         # 날짜 사슬
         month, day = head.month, head.day
@@ -345,6 +371,17 @@ def propose_boundaries(
             if head.is_day_rel:
                 day = prev_day
                 reasons.append("same_day")
+            elif (
+                not word
+                and toc is None
+                and day is not None
+                and day == prev_day
+                and (month is None or month == prev_month)
+            ):
+                # 앞 회차와 같은 날짜를 어휘 없이 되적은 행(「初四日…談草」 다음 쪽의 「四日」) —
+                # 두주나 되풀이 표기다. 是日·同日처럼 «같은 날» 표지를 쓴 것은 위에서 걸렀다.
+                conf -= 0.35
+                reasons.append("same_day_repeat")
 
         suppressed = any(text == s or text.startswith(s) for s in rules["suppress"])
         if suppressed:

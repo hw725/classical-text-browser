@@ -1363,6 +1363,9 @@ OCR 엔진 드롭다운에 「PaddleOCR (사용 불가)」가 뜨거나 서버�
 - start_server가 어느 환경을 고르는지, 각 환경의 파이썬 버전
 - paddle·paddleocr·onnxruntime·torch·cv2를 불러올 수 있는지, 실패했다면 그 오류
 - OCR 엔진별 사용 가능 여부와 사용 불가 이유
+- `.venv`의 **PaddleOCR 워커 ping** — GPU 환경에서 PaddleOCR이 실제로 도는 자식 프로세스를
+  직접 띄워 봅니다. 엔진 목록은 ✓인데 화면에서는 사용 불가인 경우(`.venv`에 GPU torch가 잘못
+  들어간 경우가 그렇습니다)를 여기서 잡고, «고칠 것: `uv sync`»로 안내합니다
 - **권고**: 예를 들어 「.venv-gpu의 파이썬이 3.13이라 PaddleOCR을 쓸 수 없습니다. 지우거나 이름을
   바꾸면 .venv(CPU)로 뜹니다」
 

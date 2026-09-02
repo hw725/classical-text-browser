@@ -441,7 +441,32 @@ class TestTocLlm:
             ("感懷", 2, "一"),
             ("卷之二", 1, None),
         ]
-        assert router.calls[0]["response_format"] == "json" and "think" not in router.calls[0]
+        # 사고는 명시적으로 끈다(D-083·D-089). Gemini 2.5 flash는 지정하지 않으면 기본으로 사고해
+        # 출력 상한을 삼킨다 — 운양집 총목 실측(2026-09-03)에서 한 쪽 JSON도 잘렸다.
+        assert router.calls[0]["response_format"] == "json" and router.calls[0]["think"] is False
+
+    def test_llm_is_called_per_page_and_partial_failure_falls_back_per_page(self):
+        """쪽마다 따로 부른다 — 한 번에 넘기면 항목 100여 개의 JSON이 max_tokens에서 잘린다."""
+        import asyncio
+
+        class _PerPageRouter(_FakeRouter):
+            async def call(self, prompt, **kwargs):
+                if "[3쪽]" in prompt:
+                    self._text = "이 쪽은 이상합니다"
+                else:
+                    self._text = '{"is_toc": true, "entries": [{"title": "感懷", "level": 2}]}'
+                return await super().call(prompt, **kwargs)
+
+        router = _PerPageRouter("")
+        entries, meta = asyncio.run(
+            extract_toc_entries_llm({2: TOC_PAGE, 3: TOC_PAGE}, [2, 3], router)
+        )
+        assert len(router.calls) == 2
+        assert (
+            meta["method"] == "llm+rule" and meta["pages_llm"] == [2] and meta["pages_rule"] == [3]
+        )
+        assert entries[0].title == "感懷" and entries[0].source_page == 2
+        assert any(e.title == "論時務疏" and e.source_page == 3 for e in entries)  # 3쪽은 규칙으로
 
     def test_llm_garbage_falls_back_to_rule(self):
         import asyncio
@@ -609,3 +634,145 @@ def test_boundary_bbox_from_l2_when_line_counts_match(tmp_path):
     a = anchor_bbox(doc, "v1", 1, 2)
     assert a["bbox"] == [800, 100, 840, 500] and a["image_width"] == 1000
     assert anchor_bbox(doc, "v1", 1, 1) is None  # 빈 행에는 앵커가 없다
+
+
+class TestCheonjinFalsePositives:
+    """천진담초 208쪽 실측(2026-09-03)에서 나온 오탐 유형을 고정한다 — D-088 «남은 것»."""
+
+    def test_marginal_date_note_needs_title_word_when_configured(self):
+        """어휘를 정한 문헌에서 날짜만 있는 짧은 행(두주 「廿一日」)은 승인하지 않는다."""
+        lines = [Line(1, 0, "十二月十九日北洋衙門談草")]
+        lines += [Line(1, i, BODY) for i in range(1, 4)]
+        lines.append(Line(1, 4, "廿一日"))
+        lines += [Line(1, i, BODY) for i in range(5, 8)]
+        r = propose_boundaries(lines, {"title_words": ["談草"]})
+        note = next(p for p in r["proposals"] if p["title"] == "廿一日")
+        assert "no_title_word" in note["reasons"] and note["accepted"] is False
+        # 어휘 없는 일기류에는 그대로 승인 (기존 동작)
+        r2 = propose_boundaries(lines, None)
+        assert next(p for p in r2["proposals"] if p["title"] == "廿一日")["accepted"] is True
+
+    def test_word_after_clause_marker_is_not_a_title(self):
+        r = _doc(
+            ["十二月十九日北洋衙門談草", "李中堂以筆談問曰", "以上口談使通"],
+            {"title_words": ["談草", "筆談", "口談"]},
+        )
+        by = {p["title"]: p for p in r["proposals"]}
+        assert "word_in_clause" in by["李中堂以筆談"]["reasons"]
+        assert by["李中堂以筆談"]["accepted"] is False
+        assert by["以上口談"]["accepted"] is False
+        assert by["十二月十九日北洋衙門談草"]["accepted"] is True
+
+    def test_same_day_repeat_without_word(self):
+        r = _doc(["三月初四日北洋大臣衙門談草", "四日"], {"title_words": ["談草"]})
+        rep = r["proposals"][1]
+        assert "same_day_repeat" in rep["reasons"] and rep["accepted"] is False
+
+    def test_dongil_is_same_day_marker(self):
+        r = _doc(["七月十四日北洋衙門談草", "同日移麟德口談略"], {"title_words": ["談草", "口談"]})
+        p = r["proposals"][1]
+        assert "same_day" in p["reasons"] and p["date"]["day"] == 14 and p["accepted"] is True
+
+    def test_word_in_long_line_without_date(self):
+        """「同北洋大臣衙門筆談事情及海關談略」(16자, 날짜 없음) — 어휘만으로 승인하지 않는다."""
+        r = _doc(
+            ["十二月十九日北洋衙門談草", "同北洋大臣衙門筆談事情及海關談略"],
+            {"title_words": ["談草", "筆談"]},
+        )
+        p = r["proposals"][1]
+        assert "long_line" in p["reasons"] and p["accepted"] is False
+
+
+class TestTocUnyangjipLessons:
+    """운양집 중간본 총목 실측(2026-09-03)에서 나온 것들 — D-089 «남은 것»."""
+
+    SEO_TAIL = [
+        "之辭不足見重今頓得其",
+        "賛美之辭乎将使我顔伍",
+        "泥而心不寧矣頓得其時",
+        "薄之蒔乎於吾心亦必不",
+        "悦何以竭文為哉癸丑夏",
+        "至日雲養老人序并書",
+    ]
+    TOC_P9 = SEO_TAIL + [
+        "雲養集総目",
+        "第一巻詩一百九十八首",
+        "撃磬集",
+        "混游漫吟",
+        "昇平館集",
+        "松屋雜詠",
+        "健齋集",
+        "雲嶽飲泉集",
+        "第二巻詩二百七十八首",
+        "江北唱和集",
+        "北山集",
+    ]
+    TOC_P10 = [
+        "継時",
+        "第三巻詩三百四首",
+        "関宮唱献集",
+        "海西持斧集",
+        "續昇平館集",
+        "新津于役集",
+        "慈江避暑集",
+        "河陽行吟集",
+        "第七巻",
+        "賦五",
+        "三十",
+        "序四十五",
+    ]
+    BODY_P14 = [
+        "北山集二百二十七",
+        "雲養集巻之一",
+        "清風金允植洵卿著",
+        "詩",
+        "撃磬集",
+        "自甲寅至甲子在",
+        "歸川天雲樓",
+        "乙丑秋江漲淹舎笥中詩稾皆没於水心研従兄収拾",
+        "拾樓有之餘得若千首時余客湖西聞之恐然有",
+        "撃客入海之想帰家後騰写一冊命之曰撃磬集益",
+        "孟春夜會石荘山房分韻得凍字",
+    ]
+
+    def test_shinjitai_marker_and_midpage_start(self):
+        """NDL 엔진의 신자체(総目·巻)를 정자로 보고, 序 꼬리 뒤에서 시작하는 총목을 잡는다."""
+        assert toc_page_score(self.TOC_P9) >= 0.7
+        assert toc_page_score(self.SEO_TAIL + ["本文" * 8] * 6) < 0.7
+
+    def test_continuation_by_short_ratio_stops_at_body(self):
+        pages = {
+            8: ["本文本文本文本文本文本文本文本文本文本文"] * 8,
+            9: self.TOC_P9,
+            10: self.TOC_P10,
+            11: self.TOC_P10,
+            14: self.BODY_P14,
+        }
+        pages[12] = self.TOC_P10
+        pages[13] = self.TOC_P10
+        # 10~13쪽은 표지어가 없어 0.7에 못 미치지만 짧은 행 비율로 이어진다.
+        # 14쪽(본문 첫 쪽)에서 끊긴다.
+        assert toc_page_score(self.TOC_P10) < 0.7
+        assert detect_toc_pages(pages) == [9, 10, 11, 12, 13]
+
+    def test_entries_skip_seo_tail_and_strip_counts(self):
+        entries = extract_toc_entries_rule({9: self.TOC_P9, 10: self.TOC_P10}, [9, 10])
+        titles = [e.title for e in entries]
+        assert not any(t.startswith("之辭") for t in titles)  # 序 꼬리는 항목이 아니다
+        assert "雲養集總目" not in titles and "雲養集総目" not in titles
+        first = entries[0]
+        assert (first.title, first.level) == (
+            "第一卷詩一百九十八首",
+            1,
+        )  # 卷 줄은 층위 1, 편수 그대로
+        by = {e.title: e for e in entries}
+        assert by["賦"].count == "五" and by["序"].count == "四十五"
+        assert "三十" not in titles  # 편수만 남은 조각은 버린다
+        assert by["撃磬集"].level == 2
+
+    def test_short_titles_match_strictly(self):
+        assert title_similarity("月", "月") > 0.9 and title_similarity("月", "月流会棟向憐") == 0.0
+        assert (
+            title_similarity("同六", "同六") == 1.0 and title_similarity("同六", "同六人談話") > 0.9
+        )
+        assert title_similarity("同六", "同六人談話甚長不可勝記也") == 0.0

@@ -120,9 +120,9 @@ src/app/
 | `src/ocr/eval_cer.py` · `scripts/eval_cer.py` | L4 확정본을 정답으로 L2·초안의 CER. 프롬프트를 바꿨으면 이것으로 잰다 |
 | `src/core/variant_sources.py` · `scripts/build_variant_dicts.py` | 이체자 사전 원자료(OpenCC·Unihan·cjkvi) 파서와 생성. 파일마다 `_tier`·`_source` |
 | `src/ocr/line_block_match.py` | 쪽 단위 엔진(NDL 셋)이 쪽 전체에서 찾은 행을 LayoutBlock에 배정. **블록 밖 행은 버린다.** 그래서 파이프라인이 커버리지 조건 없이 언제나 쪽 전체에 돌린다(D-086) |
-| `src/core/segmentation.py` | 글 단위 경계 제안(D-088). 날짜 문법·사슬·형식 신호는 코드, 표제 어휘·억제 목록은 `manifest.segmentation_rules`. 제안은 저장하지 않고 승인한 구간만 TextBlock |
-| `src/core/toc.py` | 목차 판별·추출·본문 대조(D-089). LLM은 판별 보조와 항목 구조화에만(텍스트 입력, JSON 강제). 본문 대조는 순서 지키는 정렬 |
-| `src/llm/providers/base.py::thinking_options` | 사고 예산을 답변 예산에 **더하는** 공통 해석. 비전 경로 4종이 이것을 따른다 |
+| `src/core/segmentation.py` | 글 단위 경계 제안(D-088). 날짜 문법·사슬·형식·문장 표지(以·故·而 앞의 어휘)·두주성 날짜 감점은 코드, 표제 어휘·억제 목록은 `manifest.segmentation_rules`. 제안은 저장하지 않고 승인한 구간만 TextBlock. 천진담초 실측 재현 35/35·정밀 0.83 |
+| `src/core/toc.py` | 목차 판별·추출·본문 대조(D-089). NDL 신자체(巻·総)는 정자로 맞춘 뒤 본다. 첫 쪽만 문턱 0.7, 이어지는 쪽은 짧은 행 비율로. LLM은 항목 구조화에만(쪽마다 따로, 텍스트 입력, JSON 강제, 사고 끔). 본문 대조는 순서 지키는 정렬, 1~2자 제목은 엄격 대조 |
+| `src/llm/providers/base.py::thinking_options` | 사고 예산을 답변 예산에 **더하는** 공통 해석. 비전 경로 4종과 Gemini 텍스트 경로가 이것을 따른다(JSON 호출은 사고 미지정 = 끔) |
 
 - **사전은 지식이고 정책은 문헌의 것**: `strict`만 동치, `loose`·`script`는 힌트. 승인은 `documents/{doc_id}/variant_approvals.json`에만.
 - **사고(thinking)는 전역 스위치가 아니다**: 기본 끔(D-074). 정밀 판독과 사용자가 명시한 호출만 켠다. thinking 필드를 본문으로 쓰는 폴백은 어디에도 없다.
