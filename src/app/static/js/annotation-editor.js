@@ -189,7 +189,10 @@ async function _populateAnnBlockSelect() {
             const srcLabel = refs
               .map((r) => r.layout_block_id || "?")
               .join("+");
-            opt.textContent = `#${tb.sequence_index} TextBlock (${srcLabel})`;
+            const _lv = Number(tb.metadata?.level) || 2;
+            const _kind = _lv === 1 ? "권" : _lv === 2 ? "기사" : "조각";
+            const _title = tb.metadata?.title ? ` · ${tb.metadata.title}` : "";
+            opt.textContent = `#${tb.sequence_index} ${_kind}${_title} (${srcLabel})`;
             opt.dataset.text = tb.original_text || "";
             sel.appendChild(opt);
           });

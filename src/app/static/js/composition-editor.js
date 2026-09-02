@@ -682,7 +682,7 @@ function _renderTextBlocks() {
   if (compState.textBlocks.length === 0) {
     container.innerHTML =
       '<div class="placeholder" style="padding:20px; text-align:center; color:var(--text-muted);">' +
-      '아직 TextBlock이 없습니다. "자동 편성" 또는 "합치기"를 사용하세요.</div>';
+      '아직 단위가 없습니다. 「경계 제안」이나 「자동 편성」을 쓰거나, 사이드바 「내용」의 «경계 넣기»로 첫 경계를 놓으세요.</div>';
     return;
   }
 
@@ -765,7 +765,7 @@ function _renderTextBlocks() {
     // 삭제 버튼 (× 표시, hover 시에만 표시됨)
     const deleteBtn = document.createElement("button");
     deleteBtn.className = "comp-tb-delete-btn";
-    deleteBtn.title = "이 TextBlock 삭제 (deprecated 전환)";
+    deleteBtn.title = "이 단위를 물리기 (경계를 deprecated로 — 되돌릴 수 있음)";
     deleteBtn.textContent = "\u00d7";
     deleteBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -811,7 +811,7 @@ function _renderTextBlocks() {
 function _updateBlockCount() {
   const el = document.getElementById("comp-block-count");
   if (el) {
-    el.textContent = `소스 ${compState.sourceBlocks.length}개 / TextBlock ${compState.textBlocks.length}개`;
+    el.textContent = `소스 ${compState.sourceBlocks.length}개 / 단위 ${compState.textBlocks.length}개`;
   }
 }
 
@@ -1224,7 +1224,7 @@ async function _resetComposition() {
   );
 
   if (targets.length === 0) {
-    showToast("리셋할 TextBlock이 없습니다.", 'warning');
+    showToast("물릴 단위가 없습니다.", 'warning');
     return;
   }
 
@@ -1321,7 +1321,7 @@ function _updateSplitPreview() {
       "구분선(===)을 넣으면 여러 TextBlock으로 쪼갤 수 있습니다.";
     preview.style.color = "var(--text-muted)";
   } else {
-    preview.textContent = `→ ${nonEmpty.length}개의 TextBlock으로 쪼개집니다.`;
+    preview.textContent = `→ ${nonEmpty.length}개의 단위로 나뉩니다 (경계 ${nonEmpty.length - 1}개가 들어갑니다).`;
     preview.style.color = "var(--accent-primary, #3b82f6)";
   }
 }
@@ -1361,7 +1361,7 @@ function _parseSplitPieces(text) {
  */
 async function _executeSplit() {
   if (!compState.selectedTb || !compState.selectedTbId) {
-    showToast("쪼갤 TextBlock을 먼저 선택하세요.", 'warning');
+    showToast("나눌 단위를 먼저 선택하세요.", 'warning');
     return;
   }
   if (!interpState.interpId) {
@@ -1464,7 +1464,7 @@ async function _detectToc(useLlm) {
   try {
     const llmSel =
       typeof getLlmModelSelection === "function"
-        ? getLlmModelSelection()
+        ? getLlmModelSelection("comp-llm-model-select")
         : { force_provider: null, force_model: null };
     const res = await fetch(`/api/interpretations/${interpState.interpId}/segmentation/toc`, {
       method: "POST",
@@ -1724,7 +1724,7 @@ async function _applyProposals() {
       start: { page: lines[s.li].page, line_index: lines[s.li].line_index, char_offset: s.off },
       end });
   });
-  if (!confirm(`${spans.length}개의 TextBlock을 만듭니다. 계속할까요?`)) return;
+  if (!confirm(`${spans.length}개의 단위(기사)를 만듭니다. 계속할까요?`)) return;
   try {
     const res = await fetch(`/api/interpretations/${interpState.interpId}/segmentation/apply`, {
       method: "POST",
@@ -1739,7 +1739,7 @@ async function _applyProposals() {
     });
     const result = await res.json();
     if (!res.ok) throw new Error(result.error || `HTTP ${res.status}`);
-    showToast(`TextBlock ${result.created.length}개 생성` + (result.errors.length ? ` · 실패 ${result.errors.length}` : ""),
+    showToast(`단위 ${result.created.length}개 생성` + (result.errors.length ? ` · 실패 ${result.errors.length}` : ""),
       result.errors.length ? "warning" : "success");
     _closeProposePanel();
     await _loadCompositionData();

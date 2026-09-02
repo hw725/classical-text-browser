@@ -328,3 +328,15 @@ class TestEntityView:
             E.get_entity(interp, "text_block", "없는-id")
         tree = E.list_contents(interp, "d")
         assert tree["unassigned"][0]["level"] == 2 and tree["unassigned"][0]["title"] == "九日談"
+
+
+def test_insert_at_same_place_and_level_is_idempotent():
+    """경계 제안을 두 번 적용해도 같은 자리에 경계가 둘 생기지 않는다(먼저 있던 id가 남는다)."""
+    a = B.new_boundary({"page": 1, "line": 0, "offset": 0}, level=2, title="a")
+    data = _data(a)
+    again = B.new_boundary({"page": 1, "line": 0, "offset": 0}, level=2, title="a2")
+    kept = B.insert_boundary(data, again)
+    assert kept is a and len(data["boundaries"]) == 1
+    # 층위가 다르면 같은 자리라도 다른 경계다(기사 첫머리에 서는 조각)
+    frag = B.new_boundary({"page": 1, "line": 0, "offset": 0}, level=3, title="frag")
+    assert B.insert_boundary(data, frag) is frag and len(data["boundaries"]) == 2

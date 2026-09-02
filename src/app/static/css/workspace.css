@@ -7613,6 +7613,8 @@ button.mode-tab {
 }
 .contents-shift-btn:hover { color: #d33; }
 .contents-level1 .contents-preview { font-weight: 600; }
+.anchor-overlay { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 3; }
+.contents-frag-badge { font-style: italic; }
 .contents-insert-form {
   display: flex; flex-wrap: wrap; align-items: center; gap: 3px;
   font-size: 11px; color: var(--text-muted); padding: 2px 4px 6px;

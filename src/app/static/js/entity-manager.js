@@ -683,7 +683,7 @@ async function _openTextBlockCreator() {
 
   const form = document.getElementById("entity-dialog-form");
   const title = document.getElementById("entity-dialog-title");
-  title.textContent = "TextBlock 만들기 (source_ref 자동 채움)";
+  title.textContent = "단위 만들기 (출처 자동 채움)";
 
   // Work 목록 로드
   let works = [];

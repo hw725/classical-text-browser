@@ -391,9 +391,27 @@ def find_boundary(data: dict, boundary_id: str) -> Optional[dict]:
     return next((b for b in data.get("boundaries") or [] if b.get("id") == boundary_id), None)
 
 
+def find_at(data: dict, start: dict, level: int) -> Optional[dict]:
+    """같은 자리(쪽·행·글자)·같은 층위의 살아 있는 경계."""
+    key = (int(start["page"]), int(start.get("line", 0)), int(start.get("offset", 0)), int(level))
+    for b in data.get("boundaries") or []:
+        if _live(b) and sort_key(b) == key:
+            return b
+    return None
+
+
 def insert_boundary(data: dict, item: dict) -> dict:
+    """경계를 넣는다. 같은 자리·같은 층위에 이미 살아 있는 경계가 있으면 **그것을 돌려준다**.
+
+    왜: 경계 제안을 두 번 «선택 적용»하면 같은 자리에 경계가 둘 생겨 빈 단위와 겹친 항목이
+    트리에 두 번 떴다(운양집 실측 2026-09-03, 77 → 148). 같은 자리는 같은 단위이므로 두 번 넣는
+    것은 아무 일도 아니어야 한다 — 먼저 있던 id가 남고, 관계·태그가 가리키는 id도 그것이다.
+    """
     if find_boundary(data, item["id"]) is not None:
         raise FileExistsError(f"같은 id의 경계가 이미 있습니다: {item['id']}")
+    existing = find_at(data, item["start"], int(item.get("level", 2)))
+    if existing is not None:
+        return existing
     data.setdefault("boundaries", []).append(item)
     data["boundaries"].sort(key=sort_key)
     return item

@@ -22,6 +22,8 @@ const contentsState = {
   interpId: null, // 마지막으로 그린 해석 저장소
   data: null, // /contents 응답
   collapsedWorks: new Set(), // 접어 둔 Work id
+  openFragments: new Set(), // 조각(층위 3+)을 펼쳐 둔 기사 id
+  anchorHighlight: null, // 시작 행 점선 {bbox, imageWidth, imageHeight, page}
 };
 
 /**
@@ -83,7 +85,7 @@ function _renderContentsTree(container) {
   if (!data || data.total_blocks === 0) {
     const ph = document.createElement("div");
     ph.className = "placeholder";
-    ph.textContent = "단위가 없습니다. 위의 «경계 넣기»로 첫 경계를 놓거나, 편성 탭의 경계 제안·자동 편성을 쓰세요.";
+    ph.textContent = "단위(권·기사)가 없습니다. 위의 «경계 넣기»로 첫 경계를 놓거나, 편성 탭의 경계 제안·자동 편성을 쓰세요.";
     container.appendChild(ph);
     return;
   }
@@ -116,7 +118,41 @@ function _renderContentsTree(container) {
     const children = document.createElement("div");
     children.className = "tree-children";
     children.style.display = collapsed ? "none" : "";
-    for (const b of g.blocks) children.appendChild(_createBlockRow(b));
+    // 층위 3 이상(기사 안 조각 — 지은이 이름·문답·협주)은 트리 한 층으로 세우지 않는다.
+    // 바로 앞의 권·기사 행 아래에 접어 두고, 배지를 누르면 펼친다.
+    let host = null;
+    let sub = null;
+    for (const b of g.blocks) {
+      const lv = Number(b.level) || 2;
+      if (lv <= 2 || !host) {
+        host = _createBlockRow(b);
+        sub = null;
+        children.appendChild(host);
+        continue;
+      }
+      if (!sub) {
+        sub = document.createElement("div");
+        sub.className = "tree-children contents-fragments";
+        sub.style.display = contentsState.openFragments.has(host.dataset.blockId) ? "" : "none";
+        const badge = document.createElement("button");
+        badge.type = "button";
+        badge.className = "contents-page-badge contents-frag-badge";
+        badge.title = "기사 안 조각 — 누르면 펼침/접힘";
+        const hostId = host.dataset.blockId;
+        badge.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          if (contentsState.openFragments.has(hostId)) contentsState.openFragments.delete(hostId);
+          else contentsState.openFragments.add(hostId);
+          _renderContentsTree(container);
+          highlightContentsForPage(viewerState.pageNum);
+        });
+        host.querySelector(".contents-badges")?.prepend(badge);
+        host._fragBadge = badge;
+        children.appendChild(sub);
+      }
+      sub.appendChild(_createBlockRow(b));
+      host._fragBadge.textContent = `조각 ${sub.childElementCount}`;
+    }
     node.appendChild(children);
     container.appendChild(node);
   }
@@ -147,19 +183,21 @@ function _createBlockRow(block) {
   label.textContent = `${stale ? "⚠ " : ""}${seq}${head}${block.preview || "(비어있음)"}`;
   row.appendChild(label);
 
+  // 쪽 배지는 하나만: 시작 쪽(여러 쪽에 걸치면 「14~16쪽」). 쪽마다 배지를 달면 번잡하다.
   const badges = document.createElement("span");
   badges.className = "contents-badges";
-  for (const p of block.pages || []) {
+  const pages = block.pages || [];
+  if (pages.length) {
+    const first = pages[0];
+    const last = pages[pages.length - 1];
     const badge = document.createElement("button");
     badge.type = "button";
     badge.className = "contents-page-badge";
-    badge.textContent = `${p.page}쪽`;
-    badge.title = p.layout_block_ids.length
-      ? `${p.page}쪽 · 레이아웃 블록 ${p.layout_block_ids.join(", ")}`
-      : `${p.page}쪽`;
+    badge.textContent = pages.length > 1 ? `${first.page}~${last.page}쪽` : `${first.page}쪽`;
+    badge.title = `${first.page}쪽으로 이동` + (block.anchor?.start ? ` · ${block.anchor.start.line + 1}행` : "");
     badge.addEventListener("click", (ev) => {
       ev.stopPropagation();
-      _jumpToBlockPage(block, p);
+      _jumpToBlockPage(block, first);
     });
     badges.appendChild(badge);
   }
@@ -249,27 +287,79 @@ async function _jumpToBlockPage(block, pageRef) {
  * 시작 쪽으로 갔을 때만. 다른 쪽 배지를 눌렀으면 강조를 지운다.
  */
 function _highlightAnchor(block, pageRef) {
-  if (typeof layoutState === "undefined") return;
-  // anchor.bbox는 적용 때 캐시한 L2 행 좌표 {start_line, end_line, image_width}
+  // anchor.bbox는 적용·삽입 때 캐시한 L2 행 좌표 {start_line, image_width, image_height}
   const a = block.anchor;
   const bb = a && a.bbox;
   const firstPage = (block.pages || [])[0];
   if (bb && bb.start_line && firstPage && Number(firstPage.page) === Number(pageRef.page)) {
-    layoutState.anchorHighlight = {
+    contentsState.anchorHighlight = {
       bbox: bb.start_line,
       imageWidth: bb.image_width,
+      imageHeight: bb.image_height,
       page: Number(firstPage.page),
     };
   } else {
-    layoutState.anchorHighlight = null;
+    contentsState.anchorHighlight = null;
   }
-  // 레이아웃이 비동기로 그려지므로 잠깐 뒤 다시 그린다
+  // 레이아웃 모드의 오버레이에도 같은 것을 준다(그 모드에서는 블록 상자와 함께 그린다)
+  if (typeof layoutState !== "undefined") {
+    layoutState.anchorHighlight = contentsState.anchorHighlight
+      ? { bbox: contentsState.anchorHighlight.bbox, imageWidth: contentsState.anchorHighlight.imageWidth, page: contentsState.anchorHighlight.page }
+      : null;
+  }
+  // PDF가 비동기로 그려지므로 잠깐 뒤까지 다시 그린다
   const started = Date.now();
   const tick = () => {
-    if (typeof _redrawOverlay === "function") _redrawOverlay();
+    _drawAnchorCanvas();
+    if (typeof _redrawOverlay === "function" && typeof layoutState !== "undefined" && layoutState.active) _redrawOverlay();
     if (Date.now() - started < 1500) setTimeout(tick, 300);
   };
   setTimeout(tick, 100);
+}
+
+/**
+ * 시작 행 점선을 **항상 보이는** 캔버스에 그린다 (D-090·D-092).
+ *
+ * 왜 따로 그리는가: 레이아웃 오버레이(layout-overlay)는 레이아웃 모드에서만 display:block이라
+ * 교정·편성·표점 탭에서 내용 트리를 눌러도 점선이 보이지 않았다(실측 2026-09-03). 이 캔버스는
+ * PDF 캔버스 위에 같은 크기로 겹치고 마우스를 받지 않는다(pointer-events: none).
+ * 좌표: L2 픽셀 → PDF 캔버스 픽셀은 «캔버스 폭 / L2 image_width» 비율로 옮긴다(쪽 전체를
+ * 렌더한 것이라 가로·세로 비율이 같다). 회전은 다루지 않는다.
+ */
+function _ensureAnchorCanvas() {
+  const pdfCanvas = document.getElementById("pdf-canvas");
+  if (!pdfCanvas || !pdfCanvas.parentElement) return null;
+  let c = document.getElementById("anchor-overlay");
+  if (!c) {
+    c = document.createElement("canvas");
+    c.id = "anchor-overlay";
+    c.className = "anchor-overlay";
+    pdfCanvas.parentElement.appendChild(c);
+  }
+  c.style.width = pdfCanvas.style.width;
+  c.style.height = pdfCanvas.style.height;
+  c.width = pdfCanvas.width;
+  c.height = pdfCanvas.height;
+  return c;
+}
+
+function _drawAnchorCanvas() {
+  const c = _ensureAnchorCanvas();
+  if (!c) return;
+  const ctx = c.getContext("2d");
+  ctx.clearRect(0, 0, c.width, c.height);
+  const a = contentsState.anchorHighlight;
+  if (!a || !a.bbox || Number(a.page) !== Number(viewerState.pageNum) || !a.imageWidth) return;
+  const f = c.width / a.imageWidth;
+  const [x1, y1, x2, y2] = a.bbox.map((v) => v * f);
+  ctx.save();
+  ctx.strokeStyle = "#d33";
+  ctx.lineWidth = 3;
+  ctx.setLineDash([8, 5]);
+  ctx.strokeRect(x1 - 3, y1 - 3, x2 - x1 + 6, y2 - y1 + 6);
+  ctx.fillStyle = "rgba(221, 51, 51, 0.12)";
+  ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
+  ctx.restore();
 }
 
 /**
@@ -421,6 +511,8 @@ function _markActiveBlock(blockId) {
  */
 function highlightContentsForPage(pageNum) {
   const page = Number(pageNum);
+  // 쪽이 바뀌면 점선도 다시 판단한다(다른 쪽이면 지워진다)
+  setTimeout(_drawAnchorCanvas, 150);
   document.querySelectorAll(".contents-block").forEach((el) => {
     const pages = (el.dataset.pages || "").split(",").filter(Boolean).map(Number);
     el.classList.toggle("on-page", pages.includes(page));

@@ -295,10 +295,15 @@ def _create_boundary_from_textblock(interp_path: Path, data: dict) -> dict:
     }
     item["metadata"] = rest or None
     bdata = load_boundaries(interp_path, doc_id, part_id)
-    insert_boundary(bdata, item)
+    kept = insert_boundary(bdata, item)  # 같은 자리·층위가 이미 있으면 그것(중복 없음)
     save_boundaries(interp_path, bdata)
     rel = boundaries_file(interp_path, doc_id, part_id).relative_to(interp_path).as_posix()
-    return {"status": "created", "entity_type": "text_block", "id": item["id"], "file_path": rel}
+    return {
+        "status": "created" if kept is item else "exists",
+        "entity_type": "text_block",
+        "id": kept["id"],
+        "file_path": rel,
+    }
 
 
 def _update_boundary_from_textblock(interp_path: Path, entity_id: str, updates: dict) -> dict:
