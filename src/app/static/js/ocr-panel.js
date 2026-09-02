@@ -38,6 +38,8 @@ function initOcrPanel() {
   }
 
   // 버튼 이벤트
+  const runPartBtn = document.getElementById("ocr-run-part");
+  if (runPartBtn) runPartBtn.addEventListener("click", _runPartOcr);
   const runAllBtn = document.getElementById("ocr-run-all");
   const runSelectedBtn = document.getElementById("ocr-run-selected");
   const deleteOcrBtn = document.getElementById("ocr-delete-page");
@@ -653,6 +655,112 @@ function _toggleOcrVerticalView() {
  *   current — 현재 처리 완료 수 (0이면 불확정)
  *   total — 전체 처리 대상 수 (0이면 불확정)
  */
+/**
+ * 권(PDF) 전체를 한 번에 OCR한다 — 추출 패널의 일괄 OCR과 같은 엔드포인트.
+ *
+ * 왜 여기 있는가: 일괄 OCR은 추출(논문) 프로필의 패널에만 있어서 고서 흐름에서는
+ * 쪽마다 눌러야 했다. 편성(글 단위 나누기)은 권 전체의 확정본이 있어야 시작되므로
+ * 고서에서도 한 번에 돌릴 수 있어야 한다. 이미 결과가 있는 쪽은 건너뛰고(중단 뒤
+ * 이어 돌리기), 레이아웃이 없는 쪽은 쪽 전면 1블록으로 돌린다 — 쪽 단위 엔진(NDL)은
+ * 어차피 쪽 전체에서 행을 찾으므로(D-086) 고서에서도 손해가 없다. 텍스트 레이어
+ * PDF는 만들지 않는다(고서 흐름에서는 L4 교정이 먼저다).
+ */
+async function _runPartOcr() {
+  const docId = viewerState.docId;
+  const partId = viewerState.partId;
+  if (!docId || !partId) {
+    showToast("문헌과 권을 먼저 선택하세요.", "warning");
+    return;
+  }
+  const engineSelect = document.getElementById("ocr-engine-select");
+  const engineId = engineSelect ? engineSelect.value || null : null;
+  const total = viewerState.documentInfo?.parts?.find((p) => p.part_id === partId)?.page_count;
+  if (
+    !confirm(
+      `이 권${total ? ` ${total}쪽` : ""} 전체를 OCR합니다.\n` +
+        "이미 결과가 있는 쪽은 건너뛰고, 레이아웃이 없는 쪽은 쪽 전면 1블록으로 돌립니다.\n" +
+        "계속할까요?",
+    )
+  )
+    return;
+
+  const llmSel =
+    typeof getLlmModelSelection === "function"
+      ? getLlmModelSelection()
+      : { force_provider: null, force_model: null };
+  const body = {
+    engine_id: engineId,
+    skip_existing: true,
+    redo_changed_layout: true,
+    backup_before_overwrite: true,
+    auto_full_page_block: true,
+    writing_direction: "vertical_rtl",
+    fill_text_layer: false,
+    llm_correction: "off",
+  };
+  if (llmSel.force_provider) body.force_provider = llmSel.force_provider;
+  if (llmSel.force_model) body.force_model = llmSel.force_model;
+
+  _disableButtons(true);
+  _showProgress(true, "권 전체 OCR 시작…", 0, 0);
+  let summary = null;
+  try {
+    const res = await fetch(`/api/documents/${docId}/parts/${partId}/ocr/batch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok || !res.body) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      buffer += decoder.decode(chunk.value, { stream: true });
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() || "";
+      for (const part of parts) {
+        const line = part.split("\n").find((l) => l.startsWith("data: "));
+        if (!line) continue;
+        let evt;
+        try {
+          evt = JSON.parse(line.slice(6));
+        } catch (e) {
+          continue;
+        }
+        if (evt.type === "start") {
+          _showProgress(true, `${evt.total}쪽 처리 예정`, 0, evt.total);
+          (evt.warnings || []).forEach((w) => showToast(w, "info"));
+        } else if (evt.type === "page" || evt.type === "skip" || evt.type === "redo") {
+          const label =
+            evt.type === "skip" ? "건너뜀" : evt.type === "redo" ? "다시" : `${evt.lines || 0}줄`;
+          _showProgress(true, `${evt.index + 1}/${evt.total}쪽 — ${evt.page}쪽 ${label}`, evt.index + 1, evt.total);
+        } else if (evt.type === "complete") {
+          summary = evt;
+        } else if (evt.type === "error") {
+          throw new Error(evt.error || "일괄 OCR 실패");
+        }
+      }
+    }
+    if (summary) {
+      showToast(
+        `권 전체 OCR 완료 — 처리 ${summary.processed}쪽, 건너뜀 ${summary.skipped}쪽, 실패 ${summary.failed}쪽`,
+        summary.failed ? "warning" : "success",
+      );
+    }
+    if (typeof loadOcrResults === "function") loadOcrResults();
+  } catch (e) {
+    showToast(`권 전체 OCR 실패: ${e.message}`, "error");
+  } finally {
+    _showProgress(false);
+    _disableButtons(false);
+  }
+}
+
 function _showProgress(show, text, current, total) {
   const el = document.getElementById("ocr-progress");
   const textEl = document.getElementById("ocr-progress-text");

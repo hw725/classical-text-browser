@@ -66,7 +66,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 
 ## 백엔드 모듈 구조 (src/app/)
 server.py는 FastAPI 앱 생성 + 라우터 마운트 + 미들웨어만 담당하는 조립 파일(152줄).
-실제 API 엔드포인트 191개가 8개 라우터 모듈에 분산 (2026-09-02 기준 실측):
+실제 API 엔드포인트 194개가 8개 라우터 모듈에 분산 (2026-09-02 기준 실측):
 
 ```
 src/app/
@@ -75,8 +75,8 @@ src/app/
 ├── __main__.py          ← CLI 진입점 (python -m app serve)
 └── routers/
     ├── library.py       ← 서고/설정/백업/휴지통 (16 라우트)
-    ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 + 텍스트레이어 진단·가져오기·입히기 + 권 추가 (40 라우트)
-    ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티/내용 트리 (26 라우트)
+    ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 + 텍스트레이어 진단·가져오기·입히기 + 권 추가 + 경계 규칙 (41 라우트)
+    ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티/내용 트리/경계 제안·적용 (28 라우트)
     ├── llm_ocr.py       ← LLM 상태·분석·초안 + OCR 엔진·실행·권단위 일괄·백업 되돌리기·판독 지침·LLM 교정 패스 (24 라우트)
     ├── alignment.py     ← 이체자 사전/정렬/일괄교정/문헌별 승인 (20 라우트)
     ├── reading.py       ← L5 표점·현토 + L6 번역 + 비고 + AI보조 (24 라우트)
@@ -115,6 +115,7 @@ src/app/
 | `src/ocr/eval_cer.py` · `scripts/eval_cer.py` | L4 확정본을 정답으로 L2·초안의 CER. 프롬프트를 바꿨으면 이것으로 잰다 |
 | `src/core/variant_sources.py` · `scripts/build_variant_dicts.py` | 이체자 사전 원자료(OpenCC·Unihan·cjkvi) 파서와 생성. 파일마다 `_tier`·`_source` |
 | `src/ocr/line_block_match.py` | 쪽 단위 엔진(NDL 셋)이 쪽 전체에서 찾은 행을 LayoutBlock에 배정. **블록 밖 행은 버린다.** 그래서 파이프라인이 커버리지 조건 없이 언제나 쪽 전체에 돌린다(D-086) |
+| `src/core/segmentation.py` | 글 단위 경계 제안(D-088). 날짜 문법·사슬·형식 신호는 코드, 표제 어휘·억제 목록은 `manifest.segmentation_rules`. 제안은 저장하지 않고 승인한 구간만 TextBlock |
 | `src/llm/providers/base.py::thinking_options` | 사고 예산을 답변 예산에 **더하는** 공통 해석. 비전 경로 4종이 이것을 따른다 |
 
 - **사전은 지식이고 정책은 문헌의 것**: `strict`만 동치, `loose`·`script`는 힌트. 승인은 `documents/{doc_id}/variant_approvals.json`에만.

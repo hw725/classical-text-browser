@@ -1495,6 +1495,13 @@
                     선택 블록 OCR
                   </button>
                   <button
+                    id="ocr-run-part"
+                    class="text-btn"
+                    title="이 권(PDF 전체)의 모든 쪽을 한 번에 OCR. 이미 결과가 있는 쪽은 건너뛰고, 레이아웃이 없는 쪽은 쪽 전면 1블록으로 돌린다"
+                  >
+                    권 전체 OCR
+                  </button>
+                  <button
                     id="ocr-delete-page"
                     class="text-btn"
                     title="선택한 OCR 1건 삭제"
@@ -1867,6 +1874,13 @@
               >
                 리셋
               </button>
+              <button
+                id="comp-propose-btn"
+                class="text-btn text-btn-primary"
+                title="권 전체 확정본에서 글 단위 경계를 제안합니다 (날짜·표제 어휘·형식). 승인한 것만 TextBlock이 됩니다"
+              >
+                경계 제안
+              </button>
               <div class="text-toolbar-spacer"></div>
               <span
                 id="comp-block-count"
@@ -2007,6 +2021,32 @@
               </div>
 
               <!-- 쪼개기 편집 영역 (TextBlock 선택 시 표시) -->
+              <!-- 경계 제안 (D-088): 권 전체 행 흐름에 경계 후보를 표시하고 승인한 것만 적용 -->
+              <div id="comp-propose-panel" class="comp-propose-panel" style="display: none">
+                <div class="comp-propose-head">
+                  <span class="comp-propose-title">경계 제안</span>
+                  <span id="comp-propose-stats" class="comp-propose-stats"></span>
+                  <div style="flex: 1"></div>
+                  <button id="comp-propose-rules-btn" class="text-btn" style="font-size: 11px" title="표제 어휘·억제 목록 (이 문헌의 설정)">규칙</button>
+                  <button id="comp-propose-cancel-btn" class="text-btn" style="font-size: 11px">닫기</button>
+                  <button id="comp-propose-apply-btn" class="text-btn text-btn-primary" style="font-size: 11px">선택 적용</button>
+                </div>
+                <div id="comp-propose-rules" class="comp-propose-rules" style="display: none">
+                  <label>표제 어휘 <small>(쉼표로 구분 — 예: 談草, 筆談, 口談)</small>
+                    <input id="comp-rules-words" type="text" placeholder="이 문헌에서 표제를 끝맺는 말" />
+                  </label>
+                  <label>억제 목록 <small>(표제로 보지 않을 행, 한 줄에 하나)</small>
+                    <textarea id="comp-rules-suppress" rows="2"></textarea>
+                  </label>
+                  <label>별행 표제 최대 글자수
+                    <input id="comp-rules-maxchars" type="number" min="2" max="60" value="14" style="width: 60px" />
+                  </label>
+                  <div style="display: flex; gap: 6px">
+                    <button id="comp-rules-save-btn" class="text-btn" style="font-size: 11px">저장하고 다시 제안</button>
+                  </div>
+                </div>
+                <div id="comp-propose-list" class="comp-propose-list"></div>
+              </div>
               <div
                 id="comp-split-editor"
                 style="
@@ -4874,11 +4914,11 @@
     <script src="/static/js/create-document.js?v=20260717c"></script>
     <script src="/static/js/drag-drop.js?v=20260717a"></script>
     <script src="/static/js/hwp-import.js?v=20260223b"></script>
-    <script src="/static/js/ocr-panel.js?v=20260220c"></script>
+    <script src="/static/js/ocr-panel.js?v=20260902b"></script>
     <script src="/static/js/alignment-view.js?v=20260223"></script>
     <script src="/static/js/variant-manager.js?v=20260221b"></script>
     <script src="/static/js/batch-correction.js?v=20260221"></script>
-    <script src="/static/js/composition-editor.js?v=20260220c"></script>
+    <script src="/static/js/composition-editor.js?v=20260902b"></script>
     <script src="/static/js/punctuation-editor.js?v=20260717a"></script>
     <script src="/static/js/hyeonto-editor.js?v=20260220c"></script>
     <script src="/static/js/translation-editor.js?v=20260220c"></script>

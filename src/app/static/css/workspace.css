@@ -7481,3 +7481,91 @@ button.mode-tab {
 .contents-block.on-page .contents-preview {
   font-weight: 600;
 }
+
+
+/* ── 경계 제안 패널 (D-088) ─────────────────────────────── */
+.comp-propose-panel {
+  border-top: 1px solid var(--border);
+  padding: 8px;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+.comp-propose-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.comp-propose-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.comp-propose-stats {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.comp-propose-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  margin-bottom: 6px;
+  background: var(--bg-secondary, rgba(0, 0, 0, 0.03));
+  border-radius: 4px;
+  font-size: 11px;
+}
+.comp-propose-rules label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.comp-propose-rules input,
+.comp-propose-rules textarea {
+  font-size: 12px;
+  padding: 3px 5px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-primary, #fff);
+  color: inherit;
+}
+.comp-propose-row {
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  gap: 6px;
+  align-items: start;
+  padding: 5px 4px;
+  border-bottom: 1px dashed var(--border);
+  font-size: 12px;
+}
+.comp-propose-row.suppressed {
+  opacity: 0.5;
+}
+.comp-propose-row .prop-title {
+  font-weight: 600;
+  cursor: pointer;
+}
+.comp-propose-row .prop-title:hover {
+  text-decoration: underline;
+}
+.comp-propose-row .prop-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.comp-propose-row .prop-conf {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+.prop-conf.high { background: rgba(46, 160, 67, 0.15); color: #2ea043; }
+.prop-conf.mid { background: rgba(210, 153, 34, 0.15); color: #b8860b; }
+.prop-conf.low { background: rgba(200, 60, 60, 0.15); color: #c0392b; }
+.comp-propose-row .prop-suppress {
+  font-size: 10px;
+  color: var(--text-muted);
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+.comp-propose-row .prop-suppress:hover { color: #c0392b; }

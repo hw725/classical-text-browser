@@ -145,6 +145,32 @@ class ComposeTextBlockRequest(BaseModel):
     source_refs: list[CompositionSourceRef]
 
 
+class SegmentationProposeRequest(BaseModel):
+    """글 경계 제안 요청 (D-088)."""
+
+    document_id: str
+    part_id: str
+    pages: list[int] | None = None  # None이면 권 전체
+    rules: dict | None = None  # None이면 manifest.segmentation_rules → 기본값
+
+
+class SegmentationSpan(BaseModel):
+    title: str
+    kind: str = ""
+    start: dict  # {"page": int, "line_index": int}
+    end: dict
+
+
+class SegmentationApplyRequest(BaseModel):
+    """승인한 구간을 TextBlock으로 만든다."""
+
+    document_id: str
+    part_id: str
+    work_id: str
+    spans: list[SegmentationSpan]
+    pages: list[int] | None = None  # 제안 때와 같은 범위여야 행 번호가 맞는다
+
+
 class SplitTextBlockRequest(BaseModel):
     """TextBlock 쪼개기 요청 본문."""
 
@@ -811,6 +837,120 @@ async def api_compose_textblock(
     result["text_block"] = text_block_data
 
     return result
+
+
+@router.post("/api/interpretations/{interp_id}/segmentation/propose")
+async def api_segmentation_propose(interp_id: str, body: SegmentationProposeRequest):
+    """L4 확정 텍스트에서 글 단위 경계 후보를 제안한다 (D-088). 아무것도 저장하지 않는다.
+
+    목적: 일기·담초처럼 글마다 표제가 서는 문헌에서 «어디서 글이 바뀌는가»를 기계가
+          먼저 찍고, 사용자가 승인한 것만 TextBlock이 된다.
+    입력: document_id, part_id, pages(None=전체), rules(None=문헌 설정 → 기본값).
+    출력: core.segmentation.propose_boundaries() 결과 + "lines"(화면 표시용 행 목록).
+    """
+    from core.document import get_document_info
+    from core.segmentation import collect_document_lines, normalize_rules, propose_boundaries
+
+    _library_path = get_library_path()
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+    interp_path = require_repo_path("interpretations", interp_id)
+    doc_path = require_repo_path("documents", body.document_id)
+    if not interp_path.exists() or not doc_path.exists():
+        return JSONResponse({"error": "해석 저장소 또는 문헌을 찾을 수 없습니다."}, status_code=404)
+
+    rules = body.rules
+    if rules is None:
+        try:
+            rules = get_document_info(doc_path).get("segmentation_rules")
+        except FileNotFoundError:
+            rules = None
+    rules = normalize_rules(rules)
+
+    lines, page_texts = collect_document_lines(doc_path, body.part_id, body.pages)
+    if not lines:
+        return JSONResponse(
+            {"error": "확정 텍스트(L4)가 있는 쪽이 없습니다. OCR·교정을 먼저 하세요."},
+            status_code=400,
+        )
+    result = propose_boundaries(lines, rules)
+    result["lines"] = [
+        {"page": ln.page, "line_index": ln.line_index, "text": ln.text} for ln in lines
+    ]
+    result["pages"] = sorted(page_texts)
+    return result
+
+
+@router.post("/api/interpretations/{interp_id}/segmentation/apply")
+async def api_segmentation_apply(interp_id: str, body: SegmentationApplyRequest):
+    """승인한 구간들을 TextBlock으로 만든다 (D-088).
+
+    각 구간은 쪽마다 char_range를 가진 source_refs로 출처를 남긴다 — «3쪽 12행부터
+    4쪽 5행까지»가 그대로 기록된다. sequence_index는 이 Work의 기존 최대값 다음부터.
+    한 번의 git commit으로 묶는다.
+    """
+    from core.segmentation import collect_document_lines, span_to_text_and_refs
+
+    _library_path = get_library_path()
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+    interp_path = require_repo_path("interpretations", interp_id)
+    doc_path = require_repo_path("documents", body.document_id)
+    if not interp_path.exists() or not doc_path.exists():
+        return JSONResponse({"error": "해석 저장소 또는 문헌을 찾을 수 없습니다."}, status_code=404)
+    if not body.spans:
+        return JSONResponse({"error": "적용할 구간이 없습니다."}, status_code=400)
+
+    lines, page_texts = collect_document_lines(doc_path, body.part_id, body.pages)
+    existing = [
+        b for b in list_entities(interp_path, "text_block") if b.get("work_id") == body.work_id
+    ]
+    seq = max((b.get("sequence_index") or 0) for b in existing) + 1 if existing else 0
+
+    import uuid as _uuid
+
+    created = []
+    errors = []
+    for span in body.spans:
+        try:
+            text, refs = span_to_text_and_refs(
+                span.model_dump(), lines, page_texts, body.document_id, body.part_id
+            )
+        except ValueError:
+            errors.append(f"구간을 찾을 수 없습니다: {span.title}")
+            continue
+        if not text:
+            continue
+        data = {
+            "id": str(_uuid.uuid4()),
+            "work_id": body.work_id,
+            "sequence_index": seq,
+            "original_text": text,
+            "normalized_text": None,
+            "source_ref": {k: v for k, v in refs[0].items() if k != "char_range"},
+            "source_refs": refs,
+            "status": "draft",
+            "notes": None,
+            "metadata": {
+                "part_id": body.part_id,
+                "title": span.title,
+                "kind": span.kind or None,
+                "segmentation": "proposed",
+            },
+        }
+        try:
+            create_entity(interp_path, "text_block", data)
+            created.append({"id": data["id"], "title": span.title, "sequence_index": seq})
+            seq += 1
+        except Exception as e:  # noqa: BLE001 — 한 구간의 실패가 나머지를 막지 않는다
+            errors.append(f"{span.title}: {e}")
+
+    git = None
+    if created:
+        git = git_commit_interpretation(
+            interp_path, f"feat: 경계 제안 적용 — TextBlock {len(created)}개 (D-088)"
+        )
+    return {"created": created, "errors": errors, "git": git}
 
 
 @router.post("/api/interpretations/{interp_id}/entities/text_block/split")

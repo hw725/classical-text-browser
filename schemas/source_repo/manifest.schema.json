@@ -77,6 +77,25 @@
       "description": "자유 메모.",
       "default": null
     },
+    "segmentation_rules": {
+      "description": "글 단위 경계 제안 규칙 (D-088). 표제 어휘·억제 목록처럼 이 문헌에만 해당하는 것을 담는다. 엔진의 문헌 무관 신호(날짜 문법·형식)는 코드에 있다. 없으면 기본값.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "use_date": { "type": "boolean" },
+            "use_layout": { "type": "boolean" },
+            "title_words": { "type": "array", "items": { "type": "string" } },
+            "suppress": { "type": "array", "items": { "type": "string" } },
+            "max_title_chars": { "type": "integer", "minimum": 2, "maximum": 60 },
+            "min_confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        }
+      ],
+      "default": null
+    },
     "ocr_guidance": {
       "type": ["string", "null"],
       "description": "LLM OCR 프롬프트에 덧붙일 문헌 판독 지침 (D-081). 시대·문서 종류·핵심 인명·지명·주의할 자형 등 이 문헌에만 해당하는 내용을 연구자가 자유문으로 적는다. 서지에서 자동 생성되는 문장 뒤에 이어 붙는다. 없어도 OCR은 돌아간다.",

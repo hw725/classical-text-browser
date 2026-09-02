@@ -87,6 +87,21 @@ function _bindCompEvents() {
   if (splitExecBtn) splitExecBtn.addEventListener("click", _executeSplit);
   if (splitCancelBtn) splitCancelBtn.addEventListener("click", _cancelSplit);
   if (resetBtn) resetBtn.addEventListener("click", _resetComposition);
+  // 경계 제안 (D-088)
+  const proposeBtn = document.getElementById("comp-propose-btn");
+  if (proposeBtn) proposeBtn.addEventListener("click", () => _proposeBoundaries());
+  const proposeCancel = document.getElementById("comp-propose-cancel-btn");
+  if (proposeCancel) proposeCancel.addEventListener("click", _closeProposePanel);
+  const proposeApply = document.getElementById("comp-propose-apply-btn");
+  if (proposeApply) proposeApply.addEventListener("click", _applyProposals);
+  const rulesBtn = document.getElementById("comp-propose-rules-btn");
+  if (rulesBtn)
+    rulesBtn.addEventListener("click", () => {
+      const box = document.getElementById("comp-propose-rules");
+      if (box) box.style.display = box.style.display === "none" ? "" : "none";
+    });
+  const rulesSave = document.getElementById("comp-rules-save-btn");
+  if (rulesSave) rulesSave.addEventListener("click", _saveRulesAndRepropose);
   // textarea 입력 시 쪼개기 미리보기 업데이트
   if (splitTextarea)
     splitTextarea.addEventListener("input", _updateSplitPreview);
@@ -1395,4 +1410,233 @@ async function _executeSplit() {
 
   // 데이터 새로고침
   await _loadCompositionData();
+}
+
+
+/* ──────────────────────────
+   경계 제안 (D-088)
+   권 전체 확정본에서 글 단위 경계 후보를 받아 보이고, 승인한 것만 TextBlock으로.
+   합치기·쪼개기를 블록 단위로 반복하는 대신 «어디서 글이 바뀌는가»만 정한다.
+   ────────────────────────── */
+
+const proposeState = {
+  data: null, // /segmentation/propose 응답
+  checked: new Set(), // 승인한 제안 index
+};
+
+function _rulesFromForm() {
+  const words = (document.getElementById("comp-rules-words")?.value || "")
+    .split(/[,，、\s]+/)
+    .map((w) => w.trim())
+    .filter(Boolean);
+  const suppress = (document.getElementById("comp-rules-suppress")?.value || "")
+    .split("\n")
+    .map((w) => w.trim())
+    .filter(Boolean);
+  const maxChars = Number(document.getElementById("comp-rules-maxchars")?.value || 14);
+  return { title_words: words, suppress, max_title_chars: maxChars };
+}
+
+function _rulesToForm(rules) {
+  const w = document.getElementById("comp-rules-words");
+  const s = document.getElementById("comp-rules-suppress");
+  const m = document.getElementById("comp-rules-maxchars");
+  if (w) w.value = (rules?.title_words || []).join(", ");
+  if (s) s.value = (rules?.suppress || []).join("\n");
+  if (m) m.value = rules?.max_title_chars || 14;
+}
+
+async function _proposeBoundaries(rulesOverride) {
+  if (!interpState.interpId) {
+    showToast("편성 패널 상단의 해석 저장소 드롭다운에서 먼저 선택하세요.", "warning");
+    return;
+  }
+  const panel = document.getElementById("comp-propose-panel");
+  const list = document.getElementById("comp-propose-list");
+  if (!panel || !list) return;
+  panel.style.display = "";
+  list.innerHTML = '<div class="placeholder">권 전체 확정본을 읽어 경계를 찾는 중…</div>';
+  try {
+    const res = await fetch(`/api/interpretations/${interpState.interpId}/segmentation/propose`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        document_id: viewerState.docId,
+        part_id: viewerState.partId,
+        rules: rulesOverride || null,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    proposeState.data = data;
+    proposeState.checked = new Set(
+      data.proposals.map((p, i) => (p.accepted ? i : -1)).filter((i) => i >= 0),
+    );
+    _rulesToForm(data.rules);
+    _renderProposals();
+  } catch (e) {
+    list.innerHTML = `<div class="placeholder">${_treeEscHtml ? _treeEscHtml(e.message) : e.message}</div>`;
+  }
+}
+
+function _renderProposals() {
+  const data = proposeState.data;
+  const list = document.getElementById("comp-propose-list");
+  const stats = document.getElementById("comp-propose-stats");
+  if (!data || !list) return;
+  const acceptedCount = proposeState.checked.size;
+  if (stats)
+    stats.textContent = `${data.stats.lines}행 · 후보 ${data.proposals.length} · 승인 ${acceptedCount}` +
+      (data.stats.suppressed ? ` · 억제 ${data.stats.suppressed}` : "");
+  list.innerHTML = "";
+  if (!data.proposals.length) {
+    list.innerHTML =
+      '<div class="placeholder">경계 후보가 없습니다. 「규칙」에서 표제 어휘를 적어 보세요 (예: 談草, 筆談).</div>';
+    return;
+  }
+  // 제안마다 다음 승인 경계까지의 쪽 범위를 계산해 보인다
+  data.proposals.forEach((p, i) => {
+    const row = document.createElement("div");
+    row.className = "comp-propose-row" + (p.suppressed ? " suppressed" : "");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = proposeState.checked.has(i);
+    cb.disabled = p.suppressed;
+    cb.addEventListener("change", () => {
+      if (cb.checked) proposeState.checked.add(i);
+      else proposeState.checked.delete(i);
+      _renderProposals();
+    });
+    const body = document.createElement("div");
+    const title = document.createElement("div");
+    title.className = "prop-title";
+    title.textContent = p.title;
+    title.title = "누르면 그 쪽으로 이동";
+    title.addEventListener("click", () => {
+      if (typeof goToPage === "function") goToPage(p.page);
+    });
+    const meta = document.createElement("div");
+    meta.className = "prop-meta";
+    const d = p.date || {};
+    const dateTxt = d.month || d.day
+      ? `${d.ganzhi ? d.ganzhi + " " : ""}${d.month ? d.month + "월" : "?월"} ${d.day ? d.day + "일" : ""}` +
+        (d.month_inferred ? (d.month_rolled ? " (달 넘김 추정)" : " (달 물려받음)") : "")
+      : "";
+    meta.textContent = [`${p.page}쪽 ${p.line_index + 1}행`, dateTxt, p.place ? `장소·상대: ${p.place}` : "", p.reasons.join(" · ")]
+      .filter(Boolean)
+      .join("  |  ");
+    body.appendChild(title);
+    body.appendChild(meta);
+    const right = document.createElement("div");
+    right.style.display = "flex";
+    right.style.flexDirection = "column";
+    right.style.alignItems = "flex-end";
+    right.style.gap = "3px";
+    const conf = document.createElement("span");
+    const cls = p.confidence >= 0.8 ? "high" : p.confidence >= 0.5 ? "mid" : "low";
+    conf.className = `prop-conf ${cls}`;
+    conf.textContent = `${Math.round(p.confidence * 100)}%`;
+    right.appendChild(conf);
+    if (!p.suppressed) {
+      const sup = document.createElement("button");
+      sup.type = "button";
+      sup.className = "prop-suppress";
+      sup.textContent = "억제";
+      sup.title = "이 행을 표제로 보지 않도록 문헌 규칙에 추가";
+      sup.addEventListener("click", async () => {
+        const rules = _rulesFromForm();
+        rules.suppress = [...rules.suppress, (data.lines.find((l) => l.page === p.page && l.line_index === p.line_index)?.text || p.title).trim()];
+        _rulesToForm(rules);
+        await _saveRulesAndRepropose();
+      });
+      right.appendChild(sup);
+    }
+    row.appendChild(cb);
+    row.appendChild(body);
+    row.appendChild(right);
+    list.appendChild(row);
+  });
+}
+
+async function _saveRulesAndRepropose() {
+  const rules = _rulesFromForm();
+  try {
+    const res = await fetch(`/api/documents/${viewerState.docId}/segmentation-rules`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rules }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+  } catch (e) {
+    showToast(`규칙 저장 실패: ${e.message}`, "error");
+    return;
+  }
+  await _proposeBoundaries(rules);
+}
+
+function _closeProposePanel() {
+  const panel = document.getElementById("comp-propose-panel");
+  if (panel) panel.style.display = "none";
+}
+
+/**
+ * 승인한 제안 사이의 구간을 TextBlock으로 만든다.
+ * 구간은 화면에서 다시 계산한다 — 사용자가 체크를 바꾸면 서버의 spans와 달라지기 때문이다.
+ */
+async function _applyProposals() {
+  const data = proposeState.data;
+  if (!data) return;
+  const idx = [...proposeState.checked].sort((a, b) => a - b);
+  if (!idx.length) {
+    showToast("승인한 경계가 없습니다.", "warning");
+    return;
+  }
+  await _ensureWork();
+  if (!compState.workId) {
+    showToast("Work를 확보할 수 없습니다.", "warning");
+    return;
+  }
+  const lines = data.lines;
+  const keyOf = (l) => `${l.page}:${l.line_index}`;
+  const pos = new Map(lines.map((l, i) => [keyOf(l), i]));
+  const starts = idx.map((i) => pos.get(keyOf(data.proposals[i])));
+  const spans = [];
+  if (starts[0] > 0) {
+    spans.push({ title: lines[0].text.trim().slice(0, 20) || "(앞부분)", kind: "front",
+      start: { page: lines[0].page, line_index: lines[0].line_index },
+      end: { page: lines[starts[0] - 1].page, line_index: lines[starts[0] - 1].line_index } });
+  }
+  starts.forEach((s, k) => {
+    const e = k + 1 < starts.length ? starts[k + 1] - 1 : lines.length - 1;
+    const p = data.proposals[idx[k]];
+    spans.push({ title: p.title, kind: p.kind || "",
+      start: { page: lines[s].page, line_index: lines[s].line_index },
+      end: { page: lines[e].page, line_index: lines[e].line_index } });
+  });
+  if (!confirm(`${spans.length}개의 TextBlock을 만듭니다. 계속할까요?`)) return;
+  try {
+    const res = await fetch(`/api/interpretations/${interpState.interpId}/segmentation/apply`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        document_id: viewerState.docId,
+        part_id: viewerState.partId,
+        work_id: compState.workId,
+        spans,
+        pages: data.pages || null,
+      }),
+    });
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.error || `HTTP ${res.status}`);
+    showToast(`TextBlock ${result.created.length}개 생성` + (result.errors.length ? ` · 실패 ${result.errors.length}` : ""),
+      result.errors.length ? "warning" : "success");
+    _closeProposePanel();
+    await _loadCompositionData();
+    if (typeof refreshContentsTree === "function") refreshContentsTree();
+  } catch (e) {
+    showToast(`적용 실패: ${e.message}`, "error");
+  }
 }

@@ -2201,6 +2201,49 @@ async def api_save_page_corrections(
 # --- 교정 적용 텍스트 API (편성 탭용) ---
 
 
+class SegmentationRulesRequest(BaseModel):
+    """글 경계 제안 규칙 (D-088) — manifest.segmentation_rules."""
+
+    rules: dict | None = None  # None → 지움(기본값으로)
+
+
+@router.put("/api/documents/{doc_id}/segmentation-rules")
+async def api_put_segmentation_rules(doc_id: str, body: SegmentationRulesRequest):
+    """문헌의 경계 제안 규칙을 저장한다 (D-088).
+
+    표제 어휘(談草·筆談 …)·억제 목록처럼 **이 문헌에만** 해당하는 것을 여기 둔다.
+    코드에는 문헌 무관 신호(날짜 문법·형식)만 있다. manifest는 스키마 검증 뒤 원자적으로 쓴다.
+    출력: {"segmentation_rules": 저장된 값(정규화)}
+    """
+    import jsonschema
+
+    from core.segmentation import normalize_rules
+
+    doc_path = require_repo_path("documents", doc_id)
+    try:
+        manifest = get_document_info(doc_path)
+    except FileNotFoundError:
+        return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
+
+    rules = normalize_rules(body.rules) if body.rules is not None else None
+    manifest["segmentation_rules"] = rules
+    schema_path = (
+        Path(__file__).resolve().parent.parent.parent.parent
+        / "schemas"
+        / "source_repo"
+        / "manifest.schema.json"
+    )
+    try:
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        jsonschema.validate(manifest, schema)
+    except jsonschema.ValidationError as e:
+        return JSONResponse(
+            {"error": f"규칙 형식이 스키마에 맞지 않습니다: {e.message}"}, status_code=400
+        )
+    write_json_atomic(doc_path / "manifest.json", manifest)
+    return {"segmentation_rules": rules}
+
+
 @router.get("/api/documents/{doc_id}/pages/{page_num}/corrected-text")
 async def api_corrected_text(
     doc_id: str,
