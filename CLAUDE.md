@@ -65,7 +65,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 
 ## 백엔드 모듈 구조 (src/app/)
 server.py는 FastAPI 앱 생성 + 라우터 마운트 + 미들웨어만 담당하는 조립 파일(152줄).
-실제 API 엔드포인트 190개가 8개 라우터 모듈에 분산 (2026-09-02 기준 실측):
+실제 API 엔드포인트 191개가 8개 라우터 모듈에 분산 (2026-09-02 기준 실측):
 
 ```
 src/app/
@@ -75,7 +75,7 @@ src/app/
 └── routers/
     ├── library.py       ← 서고/설정/백업/휴지통 (16 라우트)
     ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 + 텍스트레이어 진단·가져오기·입히기 + 권 추가 (40 라우트)
-    ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티 (25 라우트)
+    ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티/내용 트리 (26 라우트)
     ├── llm_ocr.py       ← LLM 상태·분석·초안 + OCR 엔진·실행·권단위 일괄·백업 되돌리기·판독 지침·LLM 교정 패스 (24 라우트)
     ├── alignment.py     ← 이체자 사전/정렬/일괄교정/문헌별 승인 (20 라우트)
     ├── reading.py       ← L5 표점·현토 + L6 번역 + 비고 + AI보조 (24 라우트)

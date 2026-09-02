@@ -373,6 +373,36 @@
             </div>
           </div>
 
+          <!-- 내용 트리 (D-085 1단계): Work → TextBlock 순서. 블록을 누르면 그 내용이
+               있는 쪽으로 간다. 해석 저장소를 골랐을 때만 채워진다. -->
+          <div
+            class="sidebar-section"
+            id="contents-section"
+            data-profile="collation"
+            style="display: none"
+          >
+            <div class="section-header">
+              내용
+              <div class="section-header-actions">
+                <button
+                  id="contents-refresh-btn"
+                  class="section-action-btn"
+                  title="내용 트리 다시 불러오기"
+                >
+                  새로고침
+                </button>
+              </div>
+            </div>
+            <div
+              id="contents-tree"
+              class="contents-tree"
+            >
+              <div class="placeholder">
+                해석 저장소를 선택하면 편성된 내용이 표시됩니다
+              </div>
+            </div>
+          </div>
+
           <!-- 설정 패널 (settings 버튼 클릭 시 표시) -->
           <div
             class="sidebar-section"
@@ -4860,6 +4890,7 @@
     <script src="/static/js/notes-panel.js?v=20260220c"></script>
     <!-- 텍스트 추출 패널 — workspace.js보다 먼저 정의돼야 프로필 적용 시 호출된다 -->
     <script src="/static/js/extract-panel.js?v=20260725b"></script>
+    <script src="/static/js/contents-tree.js?v=20260902a"></script>
     <script src="/static/js/workspace.js?v=20260725b"></script>
   </body>
 </html>

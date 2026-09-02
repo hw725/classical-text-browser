@@ -264,6 +264,8 @@ function _getPageRange(currentPage) {
  *   페이지 경계를 넘는 합치기를 지원한다.
  */
 async function _loadCompositionData() {
+  // 편성이 바뀌면 사이드바 「내용」 트리도 따라간다 (D-085)
+  if (typeof refreshContentsTree === "function") refreshContentsTree();
   const { docId, partId, pageNum } = viewerState;
   if (!docId || !partId || !pageNum) {
     _renderSourceBlocks();

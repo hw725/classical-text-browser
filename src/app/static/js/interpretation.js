@@ -376,6 +376,9 @@ async function _selectInterpretation(interpId) {
 
   // 내용 로드 (viewerState에 페이지가 있으면)
   _loadLayerContent();
+
+  // 사이드바 「내용」 트리 (D-085)
+  if (typeof refreshContentsTree === "function") refreshContentsTree();
 }
 
 /* ──────────────────────────

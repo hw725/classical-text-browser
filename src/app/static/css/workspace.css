@@ -7439,3 +7439,45 @@ button.mode-tab {
   border-bottom: 1px solid var(--border);
   margin-bottom: 2px;
 }
+
+
+/* ── 내용 트리 (D-085) ─────────────────────────────── */
+.contents-tree .contents-block {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.contents-tree .contents-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.contents-tree .contents-count {
+  margin-left: auto;
+  font-size: 11px;
+  opacity: 0.7;
+}
+.contents-badges {
+  display: inline-flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.contents-page-badge {
+  font-size: 10px;
+  line-height: 1.4;
+  padding: 0 5px;
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.contents-page-badge:hover {
+  background: var(--accent-bg, rgba(0, 120, 215, 0.12));
+}
+/* 지금 보는 쪽에 있는 블록 — 쪽 → 내용 방향의 동기화 표시 */
+.contents-block.on-page .contents-preview {
+  font-weight: 600;
+}

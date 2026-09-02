@@ -78,6 +78,11 @@
           "type": "string",
           "description": "원본 저장소의 document_id."
         },
+        "part_id": {
+          "type": ["string", "null"],
+          "description": "원본 저장소의 권(part_id). 다권본에서 쪽 번호만으로는 어느 권인지 알 수 없어, 내용 트리에서 쪽으로 이동할 때 쓴다 (D-085). 예전 참조에는 없을 수 있다.",
+          "default": null
+        },
         "page": {
           "type": ["integer", "null"],
           "description": "페이지 번호.",

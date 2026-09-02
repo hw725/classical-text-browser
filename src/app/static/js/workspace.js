@@ -1476,6 +1476,14 @@ async function loadLibraryInfo(options) {
     // Phase 3: 트리 뷰 사용 (sidebar-tree.js)
     if (typeof initSidebarTree === "function") {
       initSidebarTree(docs);
+      // 내용 트리 새로고침 단추 (D-085). 한 번만 바인딩한다.
+      const contentsBtn = document.getElementById("contents-refresh-btn");
+      if (contentsBtn && !contentsBtn.dataset.bound) {
+        contentsBtn.dataset.bound = "1";
+        contentsBtn.addEventListener("click", () => {
+          if (typeof refreshContentsTree === "function") refreshContentsTree();
+        });
+      }
     } else {
       renderDocumentList(docs);
     }
@@ -1693,6 +1701,8 @@ function onPageChanged(opts) {
   if (!opts.skipHighlight && typeof highlightTreePage === "function") {
     highlightTreePage(pageNum);
   }
+  // 내용 트리: 이 쪽에 있는 블록 표시 (D-085)
+  if (typeof highlightContentsForPage === "function") highlightContentsForPage(pageNum);
 
   // 3. 레이아웃 동기화 (활성 시)
   if (

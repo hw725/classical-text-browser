@@ -700,3 +700,101 @@ def auto_create_textblocks_from_text(
         created_blocks.append(block_result)
 
     return created_blocks
+
+
+# ──────────────────────────────────────
+# 내용 트리 — Work → TextBlock 순서 (D-085)
+# ──────────────────────────────────────
+
+
+def _block_preview(text: str | None, length: int = 14) -> str:
+    """미리보기용 첫 글자들. 공백·줄바꿈을 걷어 낸 뒤 length 글자."""
+    compact = "".join((text or "").split())
+    return compact[:length] + ("…" if len(compact) > length else "")
+
+
+def list_contents(interp_path: str | Path, document_id: str | None = None) -> dict:
+    """해석 저장소의 내용 트리 — Work마다 TextBlock을 sequence_index 순으로.
+
+    목적: 교감 뒤에는 쪽이 아니라 **내용**으로 찾아가야 한다(D-085). 사이드바의
+          「내용」 트리가 이 결과로 그려지고, 블록을 누르면 source_refs의 쪽으로
+          이동한다. 저장 형식은 건드리지 않는다 — blocks/·works/를 읽어 묶기만 한다.
+    입력:
+        interp_path — 해석 저장소 경로.
+        document_id — 주면 그 문헌을 가리키는 블록만. None이면 전부.
+    출력: {
+        "works": [{"id", "title", "author", "block_count", "blocks": [...]}, ...],
+        "unassigned": [...블록...],          # work_id가 없거나 Work가 사라진 블록
+        "total_blocks": N
+    }
+      블록 하나: {"id", "sequence_index", "preview", "char_count", "status",
+                  "pages": [{"page", "part_id", "layout_block_ids": [...]}, ...]}
+      pages는 source_refs를 쪽 번호로 묶은 것(등장 순서). 두 쪽에 걸친 블록은 둘이다.
+      part_id는 참조에 있을 때만 — 예전 참조에는 없어 null일 수 있다.
+    """
+    interp_path = Path(interp_path).resolve()
+    works = {w["id"]: w for w in list_entities(interp_path, "work") if w.get("id")}
+    grouped: dict[str, list[dict]] = {wid: [] for wid in works}
+    unassigned: list[dict] = []
+
+    for blk in list_entities(interp_path, "text_block"):
+        refs = blk.get("source_refs") or ([blk["source_ref"]] if blk.get("source_ref") else [])
+        if document_id and refs and not any(r.get("document_id") == document_id for r in refs):
+            continue
+        pages: list[dict] = []
+        for r in refs:
+            page = r.get("page")
+            if page is None:
+                continue
+            slot = next((p for p in pages if p["page"] == page), None)
+            if slot is None:
+                slot = {"page": page, "part_id": r.get("part_id"), "layout_block_ids": []}
+                pages.append(slot)
+            if r.get("layout_block_id") and r["layout_block_id"] not in slot["layout_block_ids"]:
+                slot["layout_block_ids"].append(r["layout_block_id"])
+            if slot["part_id"] is None and r.get("part_id"):
+                slot["part_id"] = r["part_id"]
+        item = {
+            "id": blk.get("id"),
+            "sequence_index": blk.get("sequence_index"),
+            "preview": _block_preview(blk.get("original_text")),
+            "char_count": len("".join((blk.get("original_text") or "").split())),
+            "status": blk.get("status"),
+            "pages": pages,
+        }
+        wid = blk.get("work_id")
+        if wid in grouped:
+            grouped[wid].append(item)
+        else:
+            unassigned.append(item)
+
+    def _order(items: list[dict]) -> list[dict]:
+        # sequence_index가 없는 블록은 뒤로, 그 안에서는 첫 쪽 번호로.
+        return sorted(
+            items,
+            key=lambda b: (
+                b["sequence_index"] is None,
+                b["sequence_index"] if b["sequence_index"] is not None else 0,
+                b["pages"][0]["page"] if b["pages"] else 0,
+            ),
+        )
+
+    out_works = []
+    for wid, w in works.items():
+        blocks = _order(grouped[wid])
+        out_works.append(
+            {
+                "id": wid,
+                "title": w.get("title") or "(제목 없음)",
+                "author": w.get("author"),
+                "block_count": len(blocks),
+                "blocks": blocks,
+            }
+        )
+    out_works.sort(key=lambda w: (w["block_count"] == 0, w["title"]))
+    unassigned = _order(unassigned)
+    return {
+        "works": out_works,
+        "unassigned": unassigned,
+        "total_blocks": sum(w["block_count"] for w in out_works) + len(unassigned),
+    }

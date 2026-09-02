@@ -19,6 +19,7 @@ from core.entity import (
     create_entity,
     create_textblock_from_source,
     get_entity,
+    list_contents,
     list_entities,
     list_entities_for_page,
     promote_tag_to_concept,
@@ -126,6 +127,8 @@ class CompositionSourceRef(BaseModel):
     page: int
     layout_block_id: str | None = None
     char_range: list[int] | None = None  # [start, end) or null
+    # 권(part). 없으면 요청 본문의 part_id로 채운다 (D-085 — 내용 트리에서 쪽으로 이동할 때 필요).
+    part_id: str | None = None
 
 
 class ComposeTextBlockRequest(BaseModel):
@@ -516,6 +519,34 @@ async def api_entities_for_page(
         return JSONResponse({"error": f"엔티티 조회 실패: {e}"}, status_code=400)
 
 
+@router.get("/api/interpretations/{interp_id}/contents")
+async def api_contents_tree(
+    interp_id: str,
+    document_id: str | None = Query(None, description="이 문헌을 가리키는 블록만"),
+):
+    """내용 트리 — Work → TextBlock(sequence_index 순) + 각 블록이 있는 쪽 (D-085).
+
+    목적: 교감 뒤에는 쪽이 아니라 내용으로 찾아가야 한다. 사이드바 「내용」 트리가
+          이 응답으로 그려지고, 블록을 누르면 pages[].page 로 이동해 layout_block_ids 를
+          강조한다. 저장 형식은 바꾸지 않는다 — blocks/·works/ 를 읽어 묶기만 한다.
+    출력: core.entity.list_contents() 참조.
+    """
+    _library_path = get_library_path()
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = require_repo_path("interpretations", interp_id)
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
+            status_code=404,
+        )
+    try:
+        return list_contents(interp_path, document_id)
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": f"내용 트리 조회 실패: {e}"}, status_code=400)
+
+
 @router.get("/api/interpretations/{interp_id}/entities/{entity_type}")
 async def api_list_entities(
     interp_id: str,
@@ -738,6 +769,7 @@ async def api_compose_textblock(
                 "document_id": ref.document_id,
                 "page": ref.page,
                 "layout_block_id": ref.layout_block_id,
+                "part_id": ref.part_id or body.part_id,
                 "char_range": ref.char_range,
                 "layer": "L4",
                 "commit": commit_hash,
