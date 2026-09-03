@@ -321,10 +321,7 @@ async function _loadPunctuationData() {
       // 단위 기반: 원본 문서의 최신 교정 텍스트를 우선 사용
       //
       // 왜 이렇게 하는가:
-      //   단위의 original_text는 편성(composition) 시점의 스냅샷이다.
-      //   편성 이후에 교감/교정을 수정하면 단위에는 반영되지 않는다.
-      //   따라서 source_refs를 통해 원본 문서의 최신 교정 텍스트를 가져온다.
-      //   교정 텍스트를 못 가져오면 단위 원본을 폴백으로 사용한다.
+      //   서버가 L4에서 잘라 주므로 교감·교정이 곧바로 반영된다(D-092).
       const unitId = punctState.blockId.replace("unit:", "");
       let tbData = null;
 
@@ -336,50 +333,18 @@ async function _loadPunctuationData() {
         if (tbRes.ok) tbData = await tbRes.json();
       } catch { /* 폴백 처리 아래 */ }
 
-      // source_refs에서 원본 문서의 교정 텍스트를 가져온다
-      let correctedText = "";
-      if (tbData && tbData.source_refs && tbData.source_refs.length > 0) {
-        const refPages = [...new Set(tbData.source_refs.map((r) => r.page))];
-        const texts = [];
-        for (const refPage of refPages) {
-          try {
-            const ctRes = await fetch(
-              `/api/documents/${viewerState.docId}/pages/${refPage}/corrected-text?part_id=${viewerState.partId}`
-            );
-            if (ctRes.ok) {
-              const ctData = await ctRes.json();
-              // source_refs에 layout_block_id가 있으면 해당 블록만 추출
-              const pageRefs = tbData.source_refs.filter((r) => r.page === refPage);
-              for (const ref of pageRefs) {
-                if (ref.layout_block_id && ctData.blocks) {
-                  const match = ctData.blocks.find((b) => b.block_id === ref.layout_block_id);
-                  if (match) {
-                    texts.push(match.corrected_text || match.original_text || "");
-                    continue;
-                  }
-                }
-                // 블록 매칭 실패 시 전체 교정 텍스트
-                if (texts.length === 0) {
-                  texts.push(ctData.corrected_text || "");
-                }
-              }
-            }
-          } catch { /* skip */ }
-        }
-        correctedText = texts.join("\n");
-      }
+      // 본문은 서버가 준 것을 그대로 쓴다.
+      //
+      // 왜 여기서 쪽을 다시 이어 붙이지 않는가: v1.3부터 단위는 본문을 저장하지 않고
+      // **읽을 때 L4에서 잘라 온다**(D-092). 즉 서버의 original_text가 이미 «지금 교정본»이고,
+      // 쪽 중간에서 시작·끝나는 경계도 글자 단위로 반영돼 있다.
+      // 화면이 쪽 전체를 다시 받아 이으면 두 가지가 어긋났다(사용자 지적 2026-09-04):
+      //   ① 둘째 쪽부터 빠졌다 — «texts.length === 0»일 때만 담아 첫 쪽만 들어갔다
+      //      (layout_block_id는 v1.3부터 늘 null이라 블록 매칭이 언제나 실패한다)
+      //   ② 쪽 중간 경계가 무시됐다 — char_range를 보지 않고 쪽 전체를 담았다
+      const correctedText = (tbData && tbData.original_text) || "";
 
-      // 교정 텍스트가 있으면 사용, 없으면 단위 원본 폴백
-      if (correctedText.trim()) {
-        punctState.originalText = correctedText;
-      } else {
-        // 폴백: 단위의 원본 텍스트 (편성 시점 스냅샷)
-        const select = document.getElementById("punct-block-select");
-        const selectedOpt = select ? select.querySelector(`option[value="${punctState.blockId}"]`) : null;
-        punctState.originalText = (selectedOpt && selectedOpt.dataset.text)
-          ? selectedOpt.dataset.text
-          : (tbData ? tbData.original_text || "" : "");
-      }
+      punctState.originalText = correctedText;
 
       // 표점 로드 (block_id는 단위 ID)
       const punctBlockId = unitId;
