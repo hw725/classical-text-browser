@@ -172,8 +172,11 @@ async function _populateHyeontoBlockSelect() {
             opt.value = `tb:${tb.id}`;
             const refs = tb.source_refs || [];
             const srcLabel = refs.map((r) => r.layout_block_id || "?").join("+");
+            // 이름은 깊이가 아니라 역할이 정한다(D-092) — 3단에 오는 기사도 있다
             const _lv = Number(tb.metadata?.level) || 2;
-            const _kind = _lv === 1 ? "권" : _lv === 2 ? "기사" : "조각";
+            const _role =
+              tb.metadata?.role || (_lv <= 1 ? "container" : _lv === 2 ? "article" : "fragment");
+            const _kind = { container: "묶음", article: "기사", fragment: "조각" }[_role];
             const _title = tb.metadata?.title ? ` · ${tb.metadata.title}` : "";
             opt.textContent = `#${tb.sequence_index} ${_kind}${_title} (${srcLabel})`;
             opt.dataset.text = tb.original_text || "";

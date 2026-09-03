@@ -11,7 +11,9 @@
     - 항목 = «여기서 단위가 시작한다». 끝은 저장하지 않는다 — 같은 층위 이상의 다음 경계 앞까지.
     - 단위의 id는 시작 경계에 붙는다. 합치기 = 뒤 경계 삭제(앞 id가 남는다), 쪼개기 = 경계 삽입
       (새 id는 뒤 단위에), 옮기기 = start만 바꾼다.
-    - 층위: 1 = 卷·편, 2 = 기사, 3 이상 = 기사 안 조각. 층위 n을 손대도 더 얕은 층위의 id는 그대로.
+    - 깊이(level)는 제한 없는 중첩이고, 뜻은 역할(role: container·article·fragment)이 갖는다.
+      «기사»가 2단에도 3단에도 오는 책이 있어 숫자에 뜻을 붙이지 않는다.
+      깊이 n을 손대도 더 얕은 id는 그대로.
     - 본문은 저장하지 않고 L4에서 잘라 온다. L4 커밋이 바뀌면 오프셋이 아니라 anchor_text로
       자리를 다시 찾고, 못 찾으면 anchor_status="stale"로 표시한다
       (조용히 틀린 자리를 가리키지 않는다).
@@ -269,6 +271,7 @@ def compute_units(
                 "title": b.get("title"),
                 "kind": b.get("kind"),
                 "level": int(b.get("level", 2)),
+                "role": b.get("role") or role_for_level(int(b.get("level", 2))),
                 "segmentation": "boundary",
                 "anchor": anchor,
             }
@@ -347,11 +350,21 @@ def rematch(data: dict, page_texts: dict[int, str], l4_commit: Optional[str]) ->
 # ── CRUD (파일에 쓰지 않는다 — 호출자가 save_boundaries) ────────────────
 
 
+ROLES = ("container", "article", "fragment")
+
+
+def role_for_level(level: int) -> str:
+    """role이 비어 있을 때 깊이로 추정한다 — 1 묶음, 2 기사, 3 이상 조각(옛 데이터 호환)."""
+    lv = int(level or 2)
+    return "container" if lv <= 1 else ("article" if lv == 2 else "fragment")
+
+
 def new_boundary(
     start: dict,
     level: int = 2,
     title: Optional[str] = None,
     kind: Optional[str] = None,
+    role: Optional[str] = None,
     work_id: Optional[str] = None,
     status: str = "draft",
     anchor_status: str = "approved",
@@ -371,6 +384,7 @@ def new_boundary(
     return {
         "id": boundary_id or str(uuid.uuid4()),
         "level": int(level),
+        "role": role if role in ROLES else None,
         "start": pos,
         "title": title,
         "kind": kind,
@@ -446,6 +460,7 @@ def move_boundary(
 
 _UPDATABLE = (
     "title",
+    "role",
     "kind",
     "status",
     "anchor_status",

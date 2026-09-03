@@ -330,6 +330,45 @@ class TestEntityView:
         assert tree["unassigned"][0]["level"] == 2 and tree["unassigned"][0]["title"] == "九日談"
 
 
+class TestRoles:
+    """역할(role)은 깊이(level)와 따로 산다 — «기사»가 2단에도 3단에도 오는 책이 있다(D-092 후속).
+
+    왜 시험하는가: 숫자에 뜻을 붙이면 다층 문집(集 > 卷 > 기사 > 협주)에서 기사가 3단으로
+    내려가는 순간 번역·주석의 단위가 조용히 «조각»이 된다.
+    """
+
+    def test_new_boundary_keeps_only_known_roles(self):
+        pos = {"page": 1, "line": 0, "offset": 0}
+        assert B.new_boundary(pos, role="container")["role"] == "container"
+        assert B.new_boundary(pos, role="기사")["role"] is None  # 모르는 값은 버린다
+        assert B.new_boundary(pos)["role"] is None  # 안 주면 비워 두고 깊이로 추정
+
+    def test_missing_role_is_guessed_from_level(self):
+        assert B.role_for_level(1) == "container"
+        assert B.role_for_level(2) == "article"
+        assert B.role_for_level(7) == "fragment"
+        lines, pt = _lines()
+        old = B.new_boundary({"page": 1, "line": 0, "offset": 0}, level=1, page_texts=pt)
+        del old["role"]  # 역할 칸이 없던 옛 파일
+        units = B.compute_units(_data(old), lines, pt)
+        assert units[0]["metadata"]["role"] == "container"
+
+    def test_deep_level_can_still_be_an_article(self):
+        lines, pt = _lines()
+        b = B.new_boundary(
+            {"page": 1, "line": 0, "offset": 0}, level=5, role="article", page_texts=pt
+        )
+        units = B.compute_units(_data(b), lines, pt)
+        assert units[0]["metadata"]["level"] == 5
+        assert units[0]["metadata"]["role"] == "article"
+
+    def test_update_boundary_can_change_role(self):
+        b = B.new_boundary({"page": 1, "line": 0, "offset": 0}, level=2, role="article")
+        data = _data(b)
+        B.update_boundary(data, b["id"], {"role": "fragment"})
+        assert data["boundaries"][0]["role"] == "fragment"
+
+
 def test_insert_at_same_place_and_level_is_idempotent():
     """경계 제안을 두 번 적용해도 같은 자리에 경계가 둘 생기지 않는다(먼저 있던 id가 남는다)."""
     a = B.new_boundary({"page": 1, "line": 0, "offset": 0}, level=2, title="a")

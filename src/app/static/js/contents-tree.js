@@ -120,7 +120,7 @@ function _renderContentsTree(container) {
     children.className = "tree-children";
     children.style.display = collapsed ? "none" : "";
     // Workflowy식 중첩 개요: 층위가 깊은 행은 바로 앞의 얕은 행 아래에 들어간다.
-    // (권 > 기사 > 조각). 자식이 있는 행은 ▸/▾로 접힌다 — 접힘 상태는 contentsState.closedNodes.
+    // 깊이(level)대로 중첩한다. 자식이 있는 행은 ▸/▾로 접힌다 — 접힘 상태는 contentsState.closedNodes.
     _renderOutline(children, g.blocks, container);
     node.appendChild(children);
     container.appendChild(node);
@@ -176,18 +176,21 @@ function _createBlockRow(block) {
   row.dataset.blockId = block.id || "";
   row.dataset.pages = (block.pages || []).map((p) => p.page).join(",");
   const seq = block.sequence_index != null ? `${block.sequence_index}. ` : "";
-  // 층위(D-092): 1 = 卷·편(굵게), 2 = 기사, 3 이상 = 기사 안 조각(들여쓰기)
   const level = Number(block.level) || 2;
-  row.classList.add(`contents-level${Math.min(level, 3)}`);
+  // 깊이는 중첩이 보여 준다. 역할(뜻)은 따로 — container 묶음 / article 기사 / fragment 조각
+  const role = block.role || (level <= 1 ? "container" : level === 2 ? "article" : "fragment");
+  row.classList.add(`contents-role-${role}`);
+  row.dataset.role = role;
   const stale = block.anchor && block.anchor.status === "stale";
   row.title =
-    `${seq}${block.preview}  (${block.char_count}자, 층위 ${level}${block.status ? ", " + block.status : ""})` +
+    `${seq}${block.preview}  (${block.char_count}자, ${{ container: "묶음", article: "기사", fragment: "조각" }[role]} · 깊이 ${level}${block.status ? ", " + block.status : ""})` +
     (stale ? "\n⚠ 확정본이 바뀐 뒤 자리를 못 찾았습니다 — ▲▼로 옮겨 주세요" : "");
 
   const label = document.createElement("span");
   label.className = "tree-label contents-preview";
   const head = block.title ? `${block.title} · ` : "";
-  label.textContent = `${stale ? "⚠ " : ""}${seq}${head}${block.preview || "(비어있음)"}`;
+  const roleMark = { container: "▣ ", article: "", fragment: "· " }[role] || "";
+  label.textContent = `${stale ? "⚠ " : ""}${roleMark}${seq}${head}${block.preview || "(비어있음)"}`;
   row.appendChild(label);
 
   // 쪽 배지는 하나만: 시작 쪽(여러 쪽에 걸치면 「14~16쪽」). 쪽마다 배지를 달면 번잡하다.
@@ -227,19 +230,31 @@ function _createBlockRow(block) {
       tools.appendChild(b);
     }
     // 내어쓰기·들여쓰기 = 층위 바꾸기 (D-092). 층위 n을 바꿔도 더 얕은 층위의 id는 그대로다.
-    for (const [label, delta, tip] of [["⇤", -1, "내어쓰기 — 한 층위 위로 (기사 → 권)"], ["⇥", 1, "들여쓰기 — 한 층위 아래로 (기사 → 조각)"]]) {
+    for (const [label, delta, tip] of [["⇤", -1, "내어쓰기 — 한 단 위로"], ["⇥", 1, "들여쓰기 — 한 단 아래로 (깊이는 제한 없음)"]]) {
       const lv = document.createElement("button");
       lv.type = "button";
       lv.className = "contents-shift-btn";
       lv.textContent = label;
       lv.title = tip;
-      lv.disabled = (delta < 0 && level <= 1) || (delta > 0 && level >= 3);
+      lv.disabled = delta < 0 && level <= 1; // 깊이는 위로만 제한(1), 아래는 무제한
       lv.addEventListener("click", (ev) => {
         ev.stopPropagation();
         _setBoundaryLevel(block, level + delta);
       });
       tools.appendChild(lv);
     }
+    // 역할 바꾸기 — 묶음 → 기사 → 조각 → 묶음. 깊이와 무관하다(3단에 오는 기사도 있다)
+    const rl = document.createElement("button");
+    rl.type = "button";
+    rl.className = "contents-shift-btn";
+    rl.textContent = { container: "묶음", article: "기사", fragment: "조각" }[role];
+    rl.title = "역할 바꾸기 — 묶음(卷·集·編) / 기사(번역·주석 단위) / 조각(기사 안 문단·문답)";
+    rl.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const order = ["container", "article", "fragment"];
+      _setBoundaryRole(block, order[(order.indexOf(role) + 1) % 3]);
+    });
+    tools.appendChild(rl);
     // 지우기 = 앞 단위에 합치기 (앞 단위의 id가 남는다)
     const del = document.createElement("button");
     del.type = "button";
@@ -385,14 +400,16 @@ function _renderInsertForm() {
     `<input type="number" min="1" value="${page}" title="쪽" class="contents-insert-num" data-k="page">쪽` +
     `<input type="number" min="0" value="0" title="행 (0부터)" class="contents-insert-num" data-k="line">행` +
     `<input type="number" min="0" value="0" title="글자 (0 = 행 첫머리)" class="contents-insert-num" data-k="offset">자` +
-    `<select title="층위" data-k="level"><option value="1">L1 卷</option><option value="2" selected>L2 기사</option><option value="3">L3 조각</option></select>` +
+    `<input type="number" min="1" value="2" title="깊이(중첩 단계, 1부터)" class="contents-insert-num" data-k="level">단` +
+    `<select title="역할" data-k="role"><option value="container">묶음</option><option value="article" selected>기사</option><option value="fragment">조각</option></select>` +
     `<input type="text" placeholder="제목(선택)" class="contents-insert-title" data-k="title">` +
     `<button type="button" class="contents-shift-btn contents-insert-btn" title="이 자리에서 단위를 나눈다">＋</button>`;
   form.querySelector(".contents-insert-btn").addEventListener("click", async () => {
     const v = (k) => form.querySelector(`[data-k="${k}"]`).value;
     await _insertBoundary({
       start: { page: Number(v("page")), line: Number(v("line")), offset: Number(v("offset")) },
-      level: Number(v("level")),
+      level: Math.max(1, Number(v("level")) || 2),
+      role: v("role"),
       title: v("title").trim() || null,
     });
   });
@@ -434,6 +451,21 @@ async function _deleteBoundary(block) {
     await refreshContentsTree();
   } catch (e) {
     showToast(`경계 지우기 실패: ${e.message}`, "error");
+  }
+}
+
+async function _setBoundaryRole(block, role) {
+  if (!contentsState.interpId) return;
+  try {
+    const res = await fetch(
+      `/api/interpretations/${encodeURIComponent(contentsState.interpId)}/boundaries/${encodeURIComponent(block.id)}`,
+      { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role }) },
+    );
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    await refreshContentsTree();
+  } catch (e) {
+    showToast(`역할 변경 실패: ${e.message}`, "error");
   }
 }
 

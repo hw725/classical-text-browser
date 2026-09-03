@@ -1014,6 +1014,7 @@ def list_contents(interp_path: str | Path, document_id: str | None = None) -> di
             # 경계 앵커(D-090): 위치의 정본은 source_refs. 종류·신뢰도·좌표 캐시는 metadata.anchor
             "anchor": (blk.get("metadata") or {}).get("anchor"),
             "level": int(((blk.get("metadata") or {}).get("level")) or 2),
+            "role": (blk.get("metadata") or {}).get("role"),
             "title": (blk.get("metadata") or {}).get("title"),
             "source_refs": refs,
             "preview": _block_preview(blk.get("original_text")),

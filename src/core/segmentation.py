@@ -181,7 +181,8 @@ class Proposal:
     reasons: list = field(default_factory=list)
     suppressed: bool = False
     accepted: bool = False  # min_confidence 이상 & 억제 아님 → 스팬 경계
-    level: int = 2  # 추정 층위(D-092): 1 = 卷·편, 2 = 기사, 3 = 조각. 사람이 바꿀 수 있다
+    level: int = 2  # 추정 깊이(D-092). 사람이 바꿀 수 있다
+    role: str = "article"  # 추정 역할: container(묶음)·article(기사)·fragment(조각)
 
     def to_dict(self) -> dict:
         return {
@@ -190,6 +191,7 @@ class Proposal:
             "char_offset": self.char_offset,
             "title": self.title,
             "level": self.level,
+            "role": self.role,
             "date": self.date,
             "kind": self.kind,
             "place": self.place,
@@ -498,11 +500,12 @@ def _assign_levels(proposals: list[Proposal]) -> None:
 
     규칙:
       - 목차 대응은 목차의 층위를 따른다(kind="volume" → 1, 그 밖은 2).
-      - 나머지는 들여쓰기 글자 수로: 승인된 제안들의 **가장 흔한 들여쓰기**가 기사(2)이고,
-        그보다 한 글자 넘게 얕으면 卷·편(1), 한 글자 넘게 깊으면 조각(3).
-        bbox가 없어 들여쓰기를 모르면 2.
+      - 나머지는 들여쓰기 글자 수로: 승인된 제안들의 **가장 흔한 들여쓰기**가 깊이 2이고,
+        그보다 한 글자 넘게 얕으면 1, 한 글자 넘게 깊으면 3. bbox가 없어 들여쓰기를 모르면 2.
     왜 최빈값 기준인가: 표제의 들여쓰기는 판식마다 다르다(천진담초는 2자 내려쓰기, 문집은 시제
     頂格에 부기가 내려쓰기). 절대값 문턱은 한 문헌에만 맞는다.
+
+    깊이를 정한 뒤 역할(role)을 따로 매긴다 — 숫자가 아니라 역할이 뜻을 갖는다(D-092).
     """
     import statistics
 
@@ -515,26 +518,43 @@ def _assign_levels(proposals: list[Proposal]) -> None:
         if p.accepted and p.char_offset == 0 and not any(r.startswith("toc:") for r in p.reasons)
     ]
     base_vals = [v for v in base_vals if v is not None]
-    if not base_vals:
-        return
-    try:
-        mode = statistics.mode([round(v) for v in base_vals])
-    except statistics.StatisticsError:
-        mode = round(statistics.median(base_vals))
+    # 들여쓰기를 하나도 모르면 깊이는 그대로 두고 역할만 매긴다 (아래 _assign_roles).
+    if base_vals:
+        try:
+            mode = statistics.mode([round(v) for v in base_vals])
+        except statistics.StatisticsError:
+            mode = round(statistics.median(base_vals))
+        for p in proposals:
+            if any(r.startswith("toc:") for r in p.reasons) or p.char_offset != 0:
+                continue
+            v = _INDENT_CHARS.get((p.page, p.line_index))
+            if v is None:
+                continue
+            if v <= mode - 1.5:
+                p.level = 1
+                p.reasons.append("indent_shallow")
+            elif v >= mode + 1.5:
+                p.level = 3
+                p.reasons.append("indent_deep")
+            else:
+                p.level = 2
+    _assign_roles(proposals)
+
+
+def _assign_roles(proposals: list[Proposal]) -> None:
+    """역할(뜻)을 매긴다 — 깊이(구조)와 따로 두는 것이 D-092의 요지다.
+
+    입력: 깊이가 매겨진 제안 목록(제자리에서 고친다). 출력: 없음.
+    卷 표제와 얕은 들여쓰기는 묶음(container), 깊은 들여쓰기는 조각(fragment), 나머지는 기사.
+    왜 깊이로 바로 정하지 않는가: «기사»가 2단에도 3단에도 오는 책이 있다.
+    """
     for p in proposals:
-        if any(r.startswith("toc:") for r in p.reasons) or p.char_offset != 0:
-            continue
-        v = _INDENT_CHARS.get((p.page, p.line_index))
-        if v is None:
-            continue
-        if v <= mode - 1.5:
-            p.level = 1
-            p.reasons.append("indent_shallow")
-        elif v >= mode + 1.5:
-            p.level = 3
-            p.reasons.append("indent_deep")
+        if p.kind == "volume" or "indent_shallow" in p.reasons:
+            p.role = "container"
+        elif "indent_deep" in p.reasons:
+            p.role = "fragment"
         else:
-            p.level = 2
+            p.role = "article"
 
 
 def _build_spans(lines: list[Line], proposals: list[Proposal]) -> list[dict]:
@@ -571,6 +591,7 @@ def _build_spans(lines: list[Line], proposals: list[Proposal]) -> list[dict]:
                 "title": prop.title if prop else lines[s_i].text.strip()[:20],
                 "kind": prop.kind if prop else "front",
                 "level": prop.level if prop else 2,
+                "role": prop.role if prop else "article",
                 "start": {"page": keys[s_i][0], "line_index": keys[s_i][1], "char_offset": s_off},
                 "end": {"page": keys[e_i][0], "line_index": keys[e_i][1], "char_end": e_end},
                 "line_count": e_i - s_i + 1,

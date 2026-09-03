@@ -2048,18 +2048,21 @@
                   <button id="comp-propose-apply-btn" class="text-btn text-btn-primary" style="font-size: 11px">선택 적용</button>
                 </div>
                 <div id="comp-propose-rules" class="comp-propose-rules" style="display: none">
-                  <label>표제 어휘 <small>(쉼표로 구분 — 예: 談草, 筆談, 口談)</small>
-                    <input id="comp-rules-words" type="text" placeholder="이 문헌에서 표제를 끝맺는 말" />
-                  </label>
-                  <label>억제 목록 <small>(표제로 보지 않을 행, 한 줄에 하나)</small>
-                    <textarea id="comp-rules-suppress" rows="2"></textarea>
-                  </label>
-                  <label>별행 표제 최대 글자수
-                    <input id="comp-rules-maxchars" type="number" min="2" max="60" value="14" style="width: 60px" />
-                  </label>
                   <label>해제·참고 텍스트 <small>(붙여 넣으면 목차 감지(LLM)가 참고합니다 — 편차·권차·수록 작품 설명 등)</small>
                     <textarea id="comp-rules-reference" rows="3" placeholder="예: 운양집 중간본 16권 8책. 권1~6 시, 권7 이하 문. 각 권 앞에 총목이 있다…"></textarea>
                   </label>
+                  <details class="comp-rules-advanced">
+                    <summary>고급 규칙 — 표제 어휘·억제·글자수 <small>(談草·筆談처럼 표제가 규칙적인 일기·담초류에만)</small></summary>
+                    <label>표제 어휘 <small>(쉼표로 구분 — 예: 談草, 筆談, 口談)</small>
+                      <input id="comp-rules-words" type="text" placeholder="이 문헌에서 표제를 끝맺는 말" />
+                    </label>
+                    <label>억제 목록 <small>(표제로 보지 않을 행, 한 줄에 하나)</small>
+                      <textarea id="comp-rules-suppress" rows="2"></textarea>
+                    </label>
+                    <label>별행 표제 최대 글자수
+                      <input id="comp-rules-maxchars" type="number" min="2" max="60" value="14" style="width: 60px" />
+                    </label>
+                  </details>
                   <div style="display: flex; gap: 6px">
                     <button id="comp-rules-save-btn" class="text-btn" style="font-size: 11px">저장하고 다시 제안</button>
                   </div>

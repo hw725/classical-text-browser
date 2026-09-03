@@ -7612,10 +7612,10 @@ button.mode-tab {
   color: var(--text-muted);
 }
 .contents-shift-btn:hover { color: #d33; }
-.contents-level1 .contents-preview { font-weight: 600; }
 .anchor-overlay { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 3; }
 .contents-frag-badge { font-style: italic; }
 .prop-level { font-size: 10px; }
+input.prop-level { width: 3.2em; }
 .contents-insert-form {
   display: flex; flex-wrap: wrap; align-items: center; gap: 3px;
   font-size: 11px; color: var(--text-muted); padding: 2px 4px 6px;
@@ -7675,5 +7675,8 @@ button.mode-tab {
 /* 중첩 개요 (Workflowy식) */
 .contents-kids { margin-left: 14px; border-left: 1px dotted var(--border); padding-left: 4px; }
 .contents-node-toggle { width: 12px; display: inline-block; font-size: 10px; margin-right: 2px; cursor: pointer; }
-.contents-level1 .contents-preview { font-weight: 600; }
-.contents-level3 .contents-preview { color: var(--text-muted); font-size: 11px; }
+
+/* 역할 (D-092): 묶음은 굵게, 조각은 흐리게 — 깊이와 무관 */
+.contents-role-container .contents-preview { font-weight: 600; }
+.contents-role-fragment .contents-preview { color: var(--text-muted); font-size: 11px; }
+.comp-rules-advanced summary { cursor: pointer; font-size: 11px; color: var(--text-muted); }

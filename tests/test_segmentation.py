@@ -1062,6 +1062,14 @@ def test_boundary_insert_delete_split_via_api(client, tmp_path):
     assert not list(
         (Path(lib) / "interpretations" / "i1" / "core_entities" / "blocks").glob("*.json")
     )
+    # 8) 역할은 깊이와 따로 바꾼다 — 3단에 그대로 있는 채로 «기사»가 된다
+    r = client.put(f"{base}/{c_id}", json={"role": "article"})
+    assert r.status_code == 200, r.text
+    assert r.json()["boundary"]["role"] == "article"
+    assert client.put(f"{base}/{c_id}", json={"role": "묶음"}).status_code == 400
+    rows = {b["id"]: b for b in client.get(url).json()["boundaries"]}
+    assert rows[c_id]["role"] == "article"
+    assert rows[a_id]["role"] == "article"  # 역할을 안 준 옛 경계는 깊이로 추정
 
 
 class TestLevelFromIndent:
@@ -1093,10 +1101,16 @@ class TestLevelFromIndent:
         assert by["十一月談草"]["level"] == 1 and "indent_shallow" in by["十一月談草"]["reasons"]
         assert by["是日談草"]["level"] == 3 and "indent_deep" in by["是日談草"]["reasons"]
         assert all(s["level"] in (1, 2, 3) for s in r["spans"])
+        # 역할은 깊이와 따로 매겨진다 — 얕으면 묶음, 깊으면 조각, 나머지는 기사
+        assert by["十二月十九日北洋衙門談草"]["role"] == "article"
+        assert by["十一月談草"]["role"] == "container"
+        assert by["是日談草"]["role"] == "fragment"
 
     def test_no_bbox_means_level_2(self):
         r = _doc(["壬午三月二十二日海關署談草", "十二日海關署談草"], {"title_words": ["談草"]})
         assert [p["level"] for p in r["proposals"]] == [2, 2]
+        # 들여쓰기를 하나도 몰라도 역할은 매겨진다(옛날엔 이 자리에서 함수가 먼저 돌아갔다)
+        assert [p["role"] for p in r["proposals"]] == ["article", "article"]
 
 
 class TestTocReferenceText:

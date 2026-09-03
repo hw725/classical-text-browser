@@ -1444,7 +1444,8 @@ const proposeState = {
   checked: new Set(), // 승인한 제안 index
   tocOnly: false, // 목차 대응만 기본 선택 중인가
   showRejected: false, // 문턱 아래 후보도 보이는가
-  levels: new Map(), // 제안 index → 사람이 바꾼 층위
+  levels: new Map(), // 제안 index → 사람이 바꾼 깊이
+  roles: new Map(), // 제안 index → 사람이 바꾼 역할
   toc: null, // {pages, entries} — 「목차 감지」로 확인한 것. null이면 서버가 규칙으로 자동
 };
 
@@ -1553,6 +1554,7 @@ async function _proposeBoundaries(rulesOverride) {
     const hasToc = !!(data.toc && data.toc.matches && data.toc.matches.length);
     proposeState.tocOnly = hasToc;
     proposeState.levels = new Map();
+    proposeState.roles = new Map();
     _resetChecked(hasToc);
     _rulesToForm(data.rules);
     _renderProposals();
@@ -1708,19 +1710,28 @@ function _renderProposals() {
     conf.className = `prop-conf ${cls}`;
     conf.textContent = `${Math.round(p.confidence * 100)}%`;
     right.appendChild(conf);
-    // 층위 (D-092): 들여쓰기·목차로 추정한 값. 적용 전에 바꿀 수 있다
-    const lv = document.createElement("select");
-    lv.className = "prop-level";
-    lv.title = "층위 — 1 권·편, 2 기사, 3 기사 안 조각 (들여쓰기·목차로 추정)";
-    for (const [v, label] of [[1, "L1 권"], [2, "L2 기사"], [3, "L3 조각"]]) {
+    // 역할(뜻)과 깊이(구조)는 따로(D-092). 들여쓰기·목차로 추정한 값이고 적용 전에 바꿀 수 있다
+    const rl = document.createElement("select");
+    rl.className = "prop-level";
+    rl.title = "역할 — 묶음(卷·集·編) / 기사(번역·주석 단위) / 조각(기사 안 문단)";
+    for (const [v, label] of [["container", "묶음"], ["article", "기사"], ["fragment", "조각"]]) {
       const o = document.createElement("option");
-      o.value = String(v);
+      o.value = v;
       o.textContent = label;
-      lv.appendChild(o);
+      rl.appendChild(o);
     }
+    rl.value = proposeState.roles.get(i) ?? p.role ?? "article";
+    rl.addEventListener("click", (ev) => ev.stopPropagation());
+    rl.addEventListener("change", () => proposeState.roles.set(i, rl.value));
+    right.appendChild(rl);
+    const lv = document.createElement("input");
+    lv.type = "number";
+    lv.min = "1";
+    lv.className = "prop-level";
+    lv.title = "깊이(중첩 단계, 1부터) — 들여쓰기·목차로 추정";
     lv.value = String(proposeState.levels.get(i) ?? p.level ?? 2);
     lv.addEventListener("click", (ev) => ev.stopPropagation());
-    lv.addEventListener("change", () => proposeState.levels.set(i, Number(lv.value)));
+    lv.addEventListener("change", () => proposeState.levels.set(i, Math.max(1, Number(lv.value) || 2)));
     right.appendChild(lv);
     if (!p.suppressed) {
       const sup = document.createElement("button");
@@ -1797,7 +1808,7 @@ async function _applyProposals() {
       : { page: lines[next.li - 1].page, line_index: lines[next.li - 1].line_index, char_end: null };
   const spans = [];
   if (starts[0].li > 0 || starts[0].off > 0) {
-    spans.push({ title: lines[0].text.trim().slice(0, 20) || "(앞부분)", kind: "front", level: 2,
+    spans.push({ title: lines[0].text.trim().slice(0, 20) || "(앞부분)", kind: "front", level: 2, role: "article",
       start: { page: lines[0].page, line_index: lines[0].line_index, char_offset: 0 },
       end: endBefore(starts[0]) });
   }
@@ -1807,6 +1818,7 @@ async function _applyProposals() {
       : { page: lines[lines.length - 1].page, line_index: lines[lines.length - 1].line_index, char_end: null };
     spans.push({ title: s.p.title, kind: s.p.kind || "",
       level: proposeState.levels.get(s.i) ?? s.p.level ?? 2,
+      role: proposeState.roles.get(s.i) ?? s.p.role ?? "article",
       start: { page: lines[s.li].page, line_index: lines[s.li].line_index, char_offset: s.off },
       end });
   });

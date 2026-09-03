@@ -171,7 +171,8 @@ class SegmentationTocRequest(BaseModel):
 class SegmentationSpan(BaseModel):
     title: str
     kind: str = ""
-    level: int | None = None  # 층위 (D-092). 없으면 volume → 1, 그 밖 2
+    level: int | None = None  # 깊이 (D-092). 없으면 volume → 1, 그 밖 2
+    role: str | None = None  # container·article·fragment. 없으면 깊이로 추정
     start: dict  # {"page": int, "line_index": int, "char_offset"?}
     end: dict
 
@@ -1052,6 +1053,7 @@ async def api_segmentation_apply(interp_id: str, body: SegmentationApplyRequest)
         item = new_boundary(
             start=start,
             level=level,
+            role=span.role or None,
             title=span.title or None,
             kind=span.kind or "manual",
             work_id=body.work_id,
@@ -1221,6 +1223,7 @@ async def api_segmentation_auto(interp_id: str, body: SegmentationAutoRequest):
             title=p["title"],
             kind=p["kind"] or "",
             level=int(p.get("level") or 2),
+            role=p.get("role"),
             start={
                 "page": p["page"],
                 "line_index": p["line_index"],
@@ -1321,6 +1324,7 @@ def _boundary_rows(interp_path, document_id: str | None, part_id: str | None) ->
                 "title": meta.get("title") or (blk.get("original_text") or "").strip()[:20],
                 "kind": a.get("kind") or meta.get("kind") or "manual",
                 "level": int(a.get("level", 2) or 2),
+                "role": meta.get("role"),
                 "status": a.get("status") or blk.get("status"),
                 "anchor_status": a.get("status"),
                 "unit_status": blk.get("status"),
@@ -1357,7 +1361,8 @@ class BoundaryUpdateRequest(BaseModel):
     status: str | None = None
     start: dict | None = None  # {"page", "line", "offset"?}
     end: dict | None = None
-    level: int | None = None  # 층위 바꾸기 (D-092)
+    level: int | None = None  # 깊이 바꾸기 (D-092)
+    role: str | None = None  # 역할 바꾸기: container·article·fragment
     shift_start: int | None = None
     shift_end: int | None = None
 
@@ -1490,7 +1495,13 @@ async def api_update_boundary(interp_id: str, text_block_id: str, body: Boundary
     if body.status is not None:
         fields["anchor_status"] = body.status
     if body.level is not None:
-        fields["level"] = int(body.level)
+        fields["level"] = max(1, int(body.level))
+    if body.role is not None:
+        if body.role not in ("container", "article", "fragment"):
+            return JSONResponse(
+                {"error": "role은 container·article·fragment 중 하나입니다."}, status_code=400
+            )
+        fields["role"] = body.role
     if fields:
         update_boundary(data, text_block_id, fields)
         if text_block_id not in touched:
@@ -1519,6 +1530,7 @@ class BoundaryInsertRequest(BaseModel):
     part_id: str
     start: dict  # {"page", "line", "offset"}
     level: int = 2
+    role: str | None = None  # container·article·fragment (없으면 깊이로 추정)
     title: str | None = None
     kind: str = "manual"
     work_id: str | None = None  # 없으면 그 자리를 품는 단위의 Work, 그것도 없으면 첫 Work
@@ -1567,7 +1579,8 @@ async def api_insert_boundary(interp_id: str, body: BoundaryInsertRequest):
             work_id = works[0]["id"] if works else None
     item = new_boundary(
         start=start,
-        level=int(body.level),
+        level=max(1, int(body.level)),
+        role=body.role or None,
         title=body.title
         or (
             lines[keys.index((start["page"], start["line"]))].text[start["offset"] :].strip()[:20]

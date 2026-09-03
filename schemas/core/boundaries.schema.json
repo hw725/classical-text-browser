@@ -32,7 +32,13 @@
       "additionalProperties": false,
       "properties": {
         "id": { "type": "string", "description": "단위의 id(UUID). TextBlock에서 옮겨 온 것은 그 id를 그대로 물려받는다." },
-        "level": { "type": "integer", "minimum": 1, "description": "층위. 1 = 卷·편, 2 = 기사(글), 3 이상 = 기사 안 조각(문답·협주·연)." },
+        "level": { "type": "integer", "minimum": 1, "description": "깊이(중첩 단계). 제한 없음. 뜻은 role이 갖는다 — 깊이는 구조, 역할은 뜻." },
+        "role": {
+          "type": ["string", "null"],
+          "enum": ["container", "article", "fragment", null],
+          "default": null,
+          "description": "역할. container = 卷·集·編 같은 묶음, article = 기사(번역·주석의 단위), fragment = 기사 안 문단·문답·협주. null이면 깊이로 추정(1 → container, 2 → article, 3+ → fragment)."
+        },
         "start": { "$ref": "#/$defs/Position" },
         "title": { "type": ["string", "null"], "default": null, "description": "표제(목차·제안·사람이 적은 것)." },
         "kind": { "type": ["string", "null"], "default": null, "description": "종류: toc·date·표제 어휘·manual·front·volume 등." },
