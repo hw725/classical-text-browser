@@ -2277,6 +2277,50 @@ async def api_corrected_text(
         return JSONResponse({"error": str(e)}, status_code=404)
 
 
+@router.get("/api/documents/{doc_id}/pages/{page_num}/position-at")
+async def api_position_at(
+    doc_id: str,
+    page_num: int,
+    part_id: str = Query(..., description="권 식별자 (예: vol1)"),
+    x: float = Query(..., description="찍은 자리의 가로 좌표"),
+    y: float = Query(..., description="찍은 자리의 세로 좌표"),
+    image_width: float | None = Query(
+        None, description="위 좌표가 기준으로 삼은 이미지 폭. 비우면 L2 좌표 그대로"
+    ),
+):
+    """원본 이미지에서 찍은 점이 확정본의 어느 행·글자인지 돌려준다 (B-002).
+
+    목적: 내용 트리의 «찍어 넣기» — 쪽·행·글자를 손으로 적는 대신 이미지를 눌러 정한다.
+    입력: doc_id, page_num, part_id, x, y, image_width(선택 — 화면 캔버스 폭을 그대로 넘길 수 있게).
+    출력: {page, line, offset, line_text, anchor_text, bbox, image_width, image_height, inside}.
+          찾지 못하면 404 (L2 행과 L4 행 수가 어긋나거나 좌표가 없는 쪽).
+
+    왜 서버가 하는가: L4 행 번호(빈 행 포함)와 L2 행(비어 있지 않은 행만)의 대응은 이미
+    anchor_bbox가 푸는 문제다. 화면에서 다시 풀면 두 곳이 어긋난다.
+    """
+    _library_path = get_library_path()
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    doc_path = require_repo_path("documents", doc_id)
+    if not doc_path.exists():
+        return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
+
+    from core.segmentation import position_at_point
+
+    hit = position_at_point(doc_path, part_id, page_num, x, y, image_width)
+    if hit is None:
+        return JSONResponse(
+            {
+                "error": "이 쪽에서는 찍은 자리를 행으로 옮길 수 없습니다.\n"
+                "→ 원인: OCR 행 좌표가 없거나, 확정본의 행 수가 OCR 행 수와 다릅니다.\n"
+                "→ 해결: 쪽·행·글자를 손으로 적어 경계를 넣으세요."
+            },
+            status_code=404,
+        )
+    return hit
+
+
 # --- Git API (Phase 6) ---
 
 

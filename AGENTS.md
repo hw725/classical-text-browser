@@ -38,7 +38,7 @@ src/app/
 ├── __main__.py          ← CLI 진입점 (python -m app serve)
 └── routers/
     ├── library.py       ← 서고/설정/백업/휴지통 (16 라우트)
-    ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 + 텍스트레이어 진단·가져오기·입히기 + 권 추가 (41 라우트)
+    ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 + 텍스트레이어 진단·가져오기·입히기 + 권 추가 + 찍은 자리 (42 라우트)
     ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티/내용 트리·경계 제안·색인 (35 라우트)
     ├── llm_ocr.py       ← LLM 상태·분석·초안 + OCR 엔진·실행·권단위 일괄·백업 되돌리기·판독 지침·LLM 교정 패스 (24 라우트)
     ├── alignment.py     ← 이체자 사전/정렬/일괄교정/문헌별 승인 (20 라우트)

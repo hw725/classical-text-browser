@@ -7680,3 +7680,7 @@ input.prop-level { width: 3.2em; }
 .contents-role-container .contents-preview { font-weight: 600; }
 .contents-role-fragment .contents-preview { color: var(--text-muted); font-size: 11px; }
 .comp-rules-advanced summary { cursor: pointer; font-size: 11px; color: var(--text-muted); }
+
+/* 찍어 넣기 (B-002): 찍기 모드일 때만 앵커 캔버스가 마우스를 받는다 */
+.contents-pick-btn.is-on { background: var(--accent, #d33); color: #fff; }
+.contents-pick-hint { flex-basis: 100%; font-size: 10px; color: var(--text-muted); }

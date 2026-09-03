@@ -743,6 +743,9 @@ def span_to_text_and_refs(
 # ── 경계 색인 (D-090) 보조 ────────────────────────────────────────────────
 
 
+ANCHOR_PREVIEW_LEN = 8  # 찍은 자리를 사람이 알아볼 만큼만 보여 준다
+
+
 def line_bbox_index(doc_path: str | Path, part_id: str, page: int) -> dict:
     """쪽의 L2 행 bbox를 «비어 있지 않은 행 번호» 기준으로. 없으면 빈 dict.
 
@@ -763,6 +766,86 @@ def line_bbox_index(doc_path: str | Path, part_id: str, page: int) -> dict:
         "directions": [d for _b, d in pairs],
         "image_width": data.get("image_width"),
         "image_height": data.get("image_height"),
+    }
+
+
+def position_at_point(
+    doc_path: str | Path,
+    part_id: str,
+    page: int,
+    x: float,
+    y: float,
+    image_width: Optional[float] = None,
+) -> Optional[dict]:
+    """원본 이미지에서 찍은 점을 확정본의 (행·글자) 자리로 옮긴다 — anchor_bbox의 역(B-002).
+
+    입력:
+        doc_path, part_id, page — 어느 문헌의 어느 권 몇 쪽인가.
+        x, y — 찍은 자리. image_width를 주면 그 폭 기준의 좌표로 보고 L2 폭으로 환산한다
+               (화면 캔버스 폭을 그대로 넘길 수 있게 — 쪽 전체를 렌더하므로 가로·세로 비율이 같다).
+        image_width — 위 좌표가 기준으로 삼은 폭. 비우면 L2 좌표 그대로.
+    출력: {"page", "line", "offset", "line_text", "anchor_text", "bbox", "inside"} 또는 None.
+        line — 확정본(L4)의 행 번호(빈 행 포함). offset — 그 행 안 글자 번호(0부터).
+        inside — 찍은 점이 그 행 상자 **안**이었는가. 밖이면 가장 가까운 행을 골랐다는 뜻이다.
+
+    왜 서버가 하는가: L4 행 번호(빈 행 포함)와 L2 행(비어 있지 않은 행만)의 대응은 이미
+    anchor_bbox가 푸는 문제다. 화면에서 다시 풀면 두 곳이 어긋난다.
+
+    한계: 글자마다 좌표가 없으므로 글자 번호는 «행 길이 × 비율»의 추정이다. 협주·부기가 섞인
+    행은 한두 자 어긋날 수 있어, 부르는 쪽은 이 자리를 확정으로 쓰지 말고 anchor_text를
+    보여 주고 사람이 다듬게 한다.
+    """
+    from core.document import get_corrected_text
+
+    idx = line_bbox_index(doc_path, part_id, page)
+    boxes = (idx or {}).get("boxes") or []
+    if not boxes:
+        return None
+    try:
+        text = get_corrected_text(Path(doc_path), part_id, page).get("corrected_text") or ""
+    except Exception:  # noqa: BLE001
+        return None
+    raw = text.split("\n")
+    nonempty = [i for i, ln in enumerate(raw) if ln.strip()]
+    if len(nonempty) != len(boxes):
+        return None  # 행 수가 어긋나면 틀린 자리를 주는 것보다 안 주는 게 낫다
+    scale = 1.0
+    if image_width and idx.get("image_width"):
+        scale = float(idx["image_width"]) / float(image_width)
+    px, py = float(x) * scale, float(y) * scale
+
+    def _dist(box) -> float:
+        """점에서 상자까지의 거리(안이면 0)."""
+        x1, y1, x2, y2 = box
+        dx = max(x1 - px, 0.0, px - x2)
+        dy = max(y1 - py, 0.0, py - y2)
+        return (dx * dx + dy * dy) ** 0.5
+
+    usable = [(k, b) for k, b in enumerate(boxes) if b and len(b) == 4]
+    if not usable:
+        return None
+    k, box = min(usable, key=lambda kb: _dist(kb[1]))
+    x1, y1, x2, y2 = box
+    inside = x1 <= px <= x2 and y1 <= py <= y2
+    line_index = nonempty[k]
+    line_text = raw[line_index]
+    n = max(1, len(line_text))
+    dirs = idx.get("directions") or ["vertical_rtl"] * len(boxes)
+    if str(dirs[k]).startswith("vertical"):
+        frac = (py - y1) / (y2 - y1) if y2 > y1 else 0.0
+    else:
+        frac = (px - x1) / (x2 - x1) if x2 > x1 else 0.0
+    offset = int(min(n - 1, max(0, round(frac * n))))
+    return {
+        "page": int(page),
+        "line": int(line_index),
+        "offset": offset,
+        "line_text": line_text,
+        "anchor_text": line_text[offset : offset + ANCHOR_PREVIEW_LEN],
+        "bbox": list(box),
+        "image_width": idx.get("image_width"),
+        "image_height": idx.get("image_height"),
+        "inside": bool(inside),
     }
 
 

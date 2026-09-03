@@ -862,6 +862,105 @@ class TestCharAnchors:
         assert [p["char_offset"] for p in r["proposals"]] == [0]
 
 
+def _doc_with_two_lines(tmp_path, direction="vertical_rtl"):
+    """L2 행 좌표와 L4 확정본을 가진 최소 문헌. 세로쓰기 두 줄, 각 8자."""
+    import json
+
+    doc = tmp_path / "documents" / "d"
+    (doc / "L4_text" / "pages").mkdir(parents=True)
+    (doc / "L2_ocr").mkdir()
+    (doc / "manifest.json").write_text(
+        json.dumps({"document_id": "d", "parts": [{"part_id": "v1"}]}), encoding="utf-8"
+    )
+    l0, l1 = "○七日晴○八日雨", "夜半風止○九日晴"
+    (doc / "L4_text" / "pages" / "v1_page_001.txt").write_text(l0 + "\n" + l1, encoding="utf-8")
+    boxes = [[900, 100, 940, 900], [840, 100, 880, 900]]  # 세로쓰기: 오른쪽 줄이 먼저
+    l2 = {
+        "part_id": "v1",
+        "page_number": 1,
+        "image_width": 1000,
+        "image_height": 1500,
+        "ocr_results": [
+            {
+                "layout_block_id": "b",
+                "writing_direction": direction,
+                "lines": [
+                    {"text": l0, "bbox": boxes[0]},
+                    {"text": l1, "bbox": boxes[1]},
+                ],
+            }
+        ],
+    }
+    (doc / "L2_ocr" / "v1_page_001.json").write_text(json.dumps(l2), encoding="utf-8")
+    return doc, l0, l1
+
+
+class TestPositionAtPoint:
+    """원본 이미지에서 찍은 점 → (행·글자). anchor_bbox의 역 (B-002).
+
+    왜 시험하는가: 화면이 아니라 서버가 L4 행(빈 행 포함)과 L2 행(비어 있지 않은 행만)의
+    대응을 푼다. 이 대응이 어긋나면 엉뚱한 행에 경계가 놓인다 — 자동 테스트가 아니면
+    «한 행 밀림»을 알아보기 어렵다.
+    """
+
+    def test_point_inside_a_line_gives_line_and_char(self, tmp_path):
+        from src.core.segmentation import position_at_point
+
+        doc, l0, _ = _doc_with_two_lines(tmp_path)
+        # 첫 줄(x 900~940) 한가운데 높이 → 8자의 절반인 4자째
+        hit = position_at_point(doc, "v1", 1, 920, 500)
+        assert hit["line"] == 0 and hit["offset"] == 4 and hit["inside"] is True
+        assert hit["anchor_text"] == l0[4:]
+        # 줄 머리
+        assert position_at_point(doc, "v1", 1, 920, 100)["offset"] == 0
+
+    def test_second_line_is_the_second_box(self, tmp_path):
+        from src.core.segmentation import position_at_point
+
+        doc, _, l1 = _doc_with_two_lines(tmp_path)
+        hit = position_at_point(doc, "v1", 1, 860, 100)
+        assert hit["line"] == 1 and hit["offset"] == 0 and hit["anchor_text"] == l1[:8]
+
+    def test_point_outside_falls_back_to_nearest_line(self, tmp_path):
+        from src.core.segmentation import position_at_point
+
+        doc, _, _ = _doc_with_two_lines(tmp_path)
+        hit = position_at_point(doc, "v1", 1, 990, 500)  # 첫 줄보다 오른쪽 여백
+        assert hit["line"] == 0 and hit["inside"] is False
+
+    def test_screen_width_is_converted_to_l2_width(self, tmp_path):
+        from src.core.segmentation import position_at_point
+
+        doc, _, _ = _doc_with_two_lines(tmp_path)
+        # 화면 캔버스가 500px이면 좌표는 절반. 결과는 L2 기준과 같아야 한다
+        a = position_at_point(doc, "v1", 1, 920, 500)
+        b = position_at_point(doc, "v1", 1, 460, 250, image_width=500)
+        assert (a["line"], a["offset"]) == (b["line"], b["offset"])
+
+    def test_horizontal_text_cuts_left_to_right(self, tmp_path):
+        from src.core.segmentation import position_at_point
+
+        doc, _, _ = _doc_with_two_lines(tmp_path, direction="horizontal_lr")
+        # 가로쓰기는 x가 글자 번호를 정한다. 상자 폭 900~940의 한가운데
+        hit = position_at_point(doc, "v1", 1, 920, 500)
+        assert hit["line"] == 0 and hit["offset"] == 4
+
+    def test_line_count_mismatch_gives_nothing(self, tmp_path):
+        from src.core.segmentation import position_at_point
+
+        doc, _, _ = _doc_with_two_lines(tmp_path)
+        # 확정본에 행을 하나 더 넣으면 L2와 수가 어긋난다 — 틀린 자리보다 없는 게 낫다
+        pp = doc / "L4_text" / "pages" / "v1_page_001.txt"
+        pp.write_text(pp.read_text(encoding="utf-8") + "\n덧붙인행", encoding="utf-8")
+        assert position_at_point(doc, "v1", 1, 920, 500) is None
+
+    def test_page_without_l2_gives_nothing(self, tmp_path):
+        from src.core.segmentation import position_at_point
+
+        doc, _, _ = _doc_with_two_lines(tmp_path)
+        assert position_at_point(doc, "v1", 9, 920, 500) is None
+
+
 def test_anchor_bbox_cuts_line_box_by_char_fraction(tmp_path):
     """행 중간 앵커는 행 bbox를 글자 비율로 자른다(세로쓰기는 위아래)."""
     import json

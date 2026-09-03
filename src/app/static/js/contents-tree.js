@@ -19,6 +19,8 @@
  */
 
 const contentsState = {
+  picking: false, // «찍기» 모드 — 원본 이미지를 눌러 경계 자리를 정하는 중 (B-002)
+  pickForm: null,
   interpId: null, // 마지막으로 그린 해석 저장소
   data: null, // /contents 응답
   collapsedWorks: new Set(), // 접어 둔 Work id
@@ -436,7 +438,13 @@ function _renderInsertForm() {
     `<input type="number" min="1" value="2" title="깊이(중첩 단계, 1부터)" class="contents-insert-num" data-k="level">단` +
     `<select title="역할" data-k="role"><option value="container">묶음</option><option value="article" selected>기사</option><option value="fragment">조각</option></select>` +
     `<input type="text" placeholder="제목(선택)" class="contents-insert-title" data-k="title">` +
-    `<button type="button" class="contents-shift-btn contents-insert-btn" title="이 자리에서 단위를 나눈다">＋</button>`;
+    `<button type="button" class="contents-shift-btn contents-pick-btn" title="원본 이미지에서 자리를 찍어 쪽·행·글자를 채웁니다 (B-002)">찍기</button>` +
+    `<button type="button" class="contents-shift-btn contents-insert-btn" title="이 자리에서 단위를 나눈다">＋</button>` +
+    `<span class="contents-pick-hint"></span>`;
+  form.querySelector(".contents-pick-btn").addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    _togglePickMode(form);
+  });
   form.querySelector(".contents-insert-btn").addEventListener("click", async () => {
     const v = (k) => form.querySelector(`[data-k="${k}"]`).value;
     await _insertBoundary({
@@ -449,7 +457,79 @@ function _renderInsertForm() {
   return form;
 }
 
+/**
+ * «찍기» 모드를 켜고 끈다 (B-002).
+ *
+ * 왜 이렇게 하는가: 경계 넣기가 쪽·행·글자를 숫자로 묻는데, 고서는 이미지로 읽는다.
+ * 시작 행 점선을 그리는 캔버스(anchor-overlay)가 이미 PDF 위에 꼭 맞게 겹쳐 있으므로,
+ * 그 캔버스에 잠깐 마우스를 받게 하고 누른 자리를 서버에 물어 폼을 채운다.
+ * 바로 넣지 않는 이유: 글자 번호는 «행 길이 × 비율»의 추정이라 협주가 섞인 행에서
+ * 한두 자 어긋난다. 찍은 자리의 글자를 보여 주고 ＋는 사람이 누른다.
+ */
+function _togglePickMode(form) {
+  const on = !contentsState.picking;
+  contentsState.picking = on;
+  contentsState.pickForm = on ? form : null;
+  const btn = form.querySelector(".contents-pick-btn");
+  if (btn) btn.classList.toggle("is-on", on);
+  const hint = form.querySelector(".contents-pick-hint");
+  if (hint) hint.textContent = on ? "원본 이미지에서 자리를 누르세요" : "";
+  const c = _ensureAnchorCanvas();
+  if (c) {
+    c.style.pointerEvents = on ? "auto" : "none";
+    c.style.cursor = on ? "crosshair" : "";
+    if (on && !c._pickBound) {
+      c.addEventListener("click", _onPickClick);
+      c._pickBound = true;
+    }
+  }
+}
+
+async function _onPickClick(ev) {
+  const form = contentsState.pickForm;
+  if (!contentsState.picking || !form) return;
+  ev.stopPropagation();
+  const c = ev.currentTarget;
+  const r = c.getBoundingClientRect();
+  // 화면 좌표 → 캔버스 픽셀. 캔버스 폭을 그대로 넘기면 서버가 L2 폭으로 환산한다
+  const x = ((ev.clientX - r.left) / r.width) * c.width;
+  const y = ((ev.clientY - r.top) / r.height) * c.height;
+  const hint = form.querySelector(".contents-pick-hint");
+  if (hint) hint.textContent = "찾는 중…";
+  try {
+    const q = new URLSearchParams({
+      part_id: viewerState.partId,
+      x: String(Math.round(x)),
+      y: String(Math.round(y)),
+      image_width: String(c.width),
+    });
+    const res = await fetch(
+      `/api/documents/${encodeURIComponent(viewerState.docId)}/pages/${viewerState.pageNum}/position-at?${q}`,
+    );
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    form.querySelector('[data-k="page"]').value = String(data.page);
+    form.querySelector('[data-k="line"]').value = String(data.line);
+    form.querySelector('[data-k="offset"]').value = String(data.offset);
+    if (hint) {
+      hint.textContent =
+        `${data.inside ? "" : "(행 밖 — 가장 가까운 행) "}${data.line}행 ${data.offset}자 「${data.anchor_text || "?"}」`;
+    }
+    // 찍은 자리를 점선으로 보여 준다 (넣기 전 확인)
+    contentsState.anchorHighlight = {
+      bbox: data.bbox,
+      imageWidth: data.image_width,
+      imageHeight: data.image_height,
+      page: Number(data.page),
+    };
+    _drawAnchorCanvas();
+  } catch (e) {
+    if (hint) hint.textContent = `찍기 실패: ${e.message}`;
+  }
+}
+
 async function _insertBoundary(spec) {
+  if (contentsState.picking && contentsState.pickForm) _togglePickMode(contentsState.pickForm);
   if (!contentsState.interpId || !viewerState.docId || !viewerState.partId) {
     showToast("해석 저장소·문헌·권이 정해져야 경계를 넣을 수 있습니다.", "warning");
     return;
