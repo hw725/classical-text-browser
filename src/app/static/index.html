@@ -1987,8 +1987,9 @@
                   <button id="comp-propose-apply-btn" class="text-btn text-btn-primary" style="font-size: 11px">선택 적용</button>
                 </div>
                 <div id="comp-propose-rules" class="comp-propose-rules" style="display: none">
-                  <label>해제·참고 텍스트 <small>(붙여 넣으면 목차 감지(LLM)가 참고합니다 — 편차·권차·수록 작품 설명 등)</small>
-                    <textarea id="comp-rules-reference" rows="3" placeholder="예: 운양집 중간본 16권 8책. 권1~6 시, 권7 이하 문. 각 권 앞에 총목이 있다…"></textarea>
+                  <label>해제·참고 텍스트 <small>(한국고전종합DB 해제 같은 것을 <b>통째로</b> 붙여 넣으세요 — 권별 내용을 골라 씁니다)</small>
+                    <textarea id="comp-rules-reference" rows="6" placeholder="해제 전문을 그대로 붙여 넣어도 됩니다. 길면 권별 내용이 있는 데를 골라 LLM에 넘깁니다.&#10;예: 운양집 중간본 16권 8책. 권1~6 시, 권7 이하 문. 각 권 앞에 총목이 있다…"></textarea>
+                    <span id="comp-rules-reference-count" class="comp-rules-count"></span>
                   </label>
                   <details class="comp-rules-advanced">
                     <summary>고급 규칙 — 표제 어휘·억제·글자수 <small>(談草·筆談처럼 표제가 규칙적인 일기·담초류에만)</small></summary>

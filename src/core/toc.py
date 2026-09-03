@@ -216,6 +216,100 @@ def extract_toc_entries_rule(pages: dict[int, list[str]], toc_pages: list[int]) 
     return entries
 
 
+# ── 해제 간추리기 ─────────────────────────────────────────────────────────
+#
+# 왜 앞에서 자르면 안 되는가: 한국문집총간류 해제는 «저자 생애 → 교유 → 간행과 권별 내용»
+# 순으로 쓰인다. 우리에게 필요한 것은 마지막의 권별 서술인데, 그것이 뒤에 있다.
+# 운양집 해제(ITKC_BT_0650A) 실측 2026-09-03: 전체 23,894자, 94문단. 「3. 간행과 그 권별
+# 내용」은 40번째 문단(43% 지점)에서 시작한다. 앞 4,000자로 자르면 17문단까지만 남아
+# 권별 서술이 통째로 사라진다 — 정확히 쓸모 있는 데만 버리는 셈이다.
+
+_REF_STRUCTURE_RE = re.compile(
+    r"권\s*[0-9一二三四五六七八九十]"
+    r"|[卷巻]"
+    r"|제\s*[0-9一二三四五六七八九十]+\s*권"
+)
+_REF_KEYWORDS = (
+    "목차",
+    "총목",
+    "편차",
+    "편찬",
+    "간행",
+    "수록",
+    "구성",
+    "부록",
+    "속집",
+    "중간",
+    "초간",
+    "권수",
+    "책수",
+    "서발",
+    "체재",
+    "目錄",
+    "總目",
+    "附錄",
+)
+
+
+def reference_excerpt(text: str, limit: int = 8000) -> str:
+    """해제에서 «편차·권별 내용»에 해당하는 데를 골라 limit 글자 안으로 간추린다.
+
+    입력: text — 해제 전문. limit — 프롬프트에 넣을 최대 글자 수.
+    출력: 간추린 글. 건너뛴 자리에는 「…(중략)…」을 넣어 이어 붙인다.
+          limit 안이면 원문 그대로.
+
+    고르는 법: ① 머리 몇 문단(문헌을 가리키는 데)은 늘 남긴다. ② 나머지는 «권 번호가 보이는가»,
+    «편차·간행·수록 같은 말이 있는가»로 점수를 매겨 높은 것부터 넣되, **원문 순서**를 지킨다.
+    순서를 지키는 이유: 권1·권2… 서술은 순서 자체가 정보다.
+    """
+    text = (text or "").strip()
+    if len(text) <= limit:
+        return text
+    paras = [s.strip() for s in re.split(r"\n\s*\n|\n", text) if s.strip()]
+    if not paras:
+        return text[:limit]
+    head: list[int] = []
+    used = 0
+    for i, s in enumerate(paras):
+        if used + len(s) > min(limit // 4, 800):
+            break
+        head.append(i)
+        used += len(s)
+    scored = []
+    for i, s in enumerate(paras):
+        if i in head:
+            continue
+        score = 0
+        if _REF_STRUCTURE_RE.search(s):
+            score += 3
+        score += 2 * sum(1 for k in _REF_KEYWORDS if k in s)
+        if score:
+            scored.append((score, -len(s), i))
+    scored.sort(reverse=True)
+    chosen = set(head)
+    for _score, _neg_len, i in scored:
+        if used + len(paras[i]) > limit:
+            continue
+        chosen.add(i)
+        used += len(paras[i])
+    if len(chosen) == len(head):  # 점수 붙은 데가 없으면 앞에서부터 채운다
+        for i, s in enumerate(paras):
+            if i in chosen or used + len(s) > limit:
+                continue
+            chosen.add(i)
+            used += len(s)
+    out: list[str] = []
+    prev = -1
+    for i in sorted(chosen):
+        if prev >= 0 and i > prev + 1:
+            out.append("…(중략)…")
+        out.append(paras[i])
+        prev = i
+    if prev < len(paras) - 1:
+        out.append("…(이하 줄임)…")
+    return "\n".join(out)
+
+
 # ── 항목 추출 (LLM 보조) ──────────────────────────────────────────────────
 
 TOC_JSON_SCHEMA = {
@@ -282,7 +376,7 @@ async def _llm_toc_page(
     if reference_text and reference_text.strip():
         ref = (
             "참고 — 이 문헌의 해제·서지 설명(사람이 적음, 그대로 옮기지 말고 판단에만 쓸 것):\n"
-            + reference_text.strip()[:4000]
+            + reference_excerpt(reference_text, 8000)
             + "\n\n"
         )
     prompt = (

@@ -7685,6 +7685,7 @@ input.prop-level { width: 3.2em; }
 .contents-pick-btn.is-on { background: var(--accent, #d33); color: #fff; }
 .contents-pick-hint { flex-basis: 100%; font-size: 10px; color: var(--text-muted); }
 
+.comp-rules-count { font-size: 10px; color: var(--text-muted); }
 /* 규칙 제안 (D-092 남은 것): 후보는 눌러서 넣는다 */
 .comp-rules-suggest { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .comp-rules-suggest-out { font-size: 10px; color: var(--text-muted); flex-basis: 100%; }

@@ -1205,7 +1205,35 @@ function _rulesToForm(rules) {
   if (s) s.value = (rules?.suppress || []).join("\n");
   if (m) m.value = rules?.max_title_chars || 14;
   const r = document.getElementById("comp-rules-reference");
-  if (r) r.value = rules?.reference_text || "";
+  if (r) {
+    r.value = rules?.reference_text || "";
+    _updateReferenceCount();
+    if (!r._countBound) {
+      r.addEventListener("input", _updateReferenceCount);
+      r._countBound = true;
+    }
+  }
+}
+
+/**
+ * 해제 글자수를 알려 준다. 길면 «골라서 넘긴다»는 것도 함께.
+ *
+ * 왜 필요한가: 한국고전종합DB 해제는 2만 자가 넘는다(운양집 23,894자 실측). 통째로 붙여
+ * 넣는 것이 맞는데, 그러면 «너무 길어서 잘리지 않나»가 걱정된다. 저장은 통째로 하고
+ * 프롬프트에 넣을 때만 권별 서술을 골라 8,000자로 간추린다는 것을 여기서 알린다.
+ */
+function _updateReferenceCount() {
+  const r = document.getElementById("comp-rules-reference");
+  const out = document.getElementById("comp-rules-reference-count");
+  if (!r || !out) return;
+  const n = r.value.length;
+  if (!n) {
+    out.textContent = "";
+  } else if (n <= 8000) {
+    out.textContent = `${n.toLocaleString()}자 — 그대로 넘깁니다`;
+  } else {
+    out.textContent = `${n.toLocaleString()}자 — 통째로 저장하고, LLM에는 권별 내용이 있는 데를 골라 8,000자로 간추려 넘깁니다`;
+  }
 }
 
 async function _proposeBoundaries(rulesOverride) {

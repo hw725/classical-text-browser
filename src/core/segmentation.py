@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from core.toc import kanji_norm, lenient_json
+from core.toc import kanji_norm, lenient_json, reference_excerpt
 
 # ── 날짜 문법 (문헌 무관) ────────────────────────────────────────────────
 
@@ -150,7 +150,9 @@ def normalize_rules(rules: Optional[dict]) -> dict:
     out["suppress"] = [str(w).strip() for w in out["suppress"] if str(w).strip()]
     out["max_title_chars"] = int(out["max_title_chars"])
     out["min_confidence"] = float(out["min_confidence"])
-    out["reference_text"] = str(out.get("reference_text") or "").strip()[:8000]
+    # 해제는 길다 — 운양집 해제가 23,894자다. 자르는 것은 저장이 아니라 프롬프트에서
+    # 하고(core.toc.reference_excerpt), 여기서는 통째로 둔다.
+    out["reference_text"] = str(out.get("reference_text") or "").strip()[:100000]
     return out
 
 
@@ -407,7 +409,7 @@ async def extract_title_words_llm(
     if reference_text and reference_text.strip():
         ref = (
             "해제·서지 설명(사람이 적음, 그대로 옮기지 말고 판단에만 쓸 것):\n"
-            + reference_text.strip()[:4000]
+            + reference_excerpt(reference_text, 8000)
             + "\n\n"
         )
     prompt = (

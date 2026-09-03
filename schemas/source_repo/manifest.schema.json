@@ -91,7 +91,7 @@
             "suppress": { "type": "array", "items": { "type": "string" } },
             "max_title_chars": { "type": "integer", "minimum": 2, "maximum": 60 },
             "min_confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-            "reference_text": { "type": "string", "maxLength": 8000, "description": "해제·서지 설명 등 참고 텍스트. 목차 감지(LLM)가 참고한다." }
+            "reference_text": { "type": "string", "maxLength": 100000, "description": "해제·서지 설명 등 참고 텍스트. 통째로 둔다 — 프롬프트에 넣을 때 core.toc.reference_excerpt가 권별 서술을 골라 간추린다(한국문집총간 해제는 2만 자가 넘고 권별 내용이 뒤에 있다)." }
           }
         }
       ],

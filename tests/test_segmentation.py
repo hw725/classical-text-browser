@@ -895,6 +895,59 @@ def _doc_with_two_lines(tmp_path, direction="vertical_rtl"):
     return doc, l0, l1
 
 
+class TestReferenceExcerpt:
+    """긴 해제는 앞을 자르지 말고 «권별 서술»을 골라 간추린다.
+
+    왜 시험하는가: 한국문집총간류 해제는 «생애 → 교유 → 간행과 권별 내용» 순서다. 앞에서
+    자르면 정확히 쓸모 있는 데(뒤의 권별 서술)만 사라진다. 운양집 해제 실측(2026-09-03)에서
+    전체 23,894자 중 권별 서술은 43% 지점에서 시작했고, 옛 방식(앞 4,000자)에는 「권N」이
+    **하나도** 들어가지 않았다.
+    """
+
+    def _long_heje(self):
+        bio = ["김윤식은 1835년에 태어나 여러 관직을 거쳤다." * 12 for _ in range(30)]
+        vols = [f"권{i}에는 시 {i * 20}수가 수록되어 있다." * 3 for i in range(1, 16)]
+        return "머리말 《운양집》 해제\n" + "\n".join(bio + ["3. 간행과 그 권별 내용"] + vols)
+
+    def test_short_text_is_untouched(self):
+        from src.core.toc import reference_excerpt
+
+        assert reference_excerpt("짧은 해제", 8000) == "짧은 해제"
+        assert reference_excerpt("", 8000) == ""
+
+    def test_volume_paragraphs_survive_and_head_is_kept(self):
+        import re
+
+        from src.core.toc import reference_excerpt
+
+        text = self._long_heje()
+        assert len(text) > 8000
+        got = reference_excerpt(text, 4000)
+        assert len(got) <= 4000 + len("…(이하 줄임)…") + 40
+        assert got.startswith("머리말 《운양집》 해제")  # 문헌을 가리키는 머리는 남는다
+        # 옛 방식(앞에서 자르기)에는 「권N」이 하나도 없다
+        assert not re.findall(r"권\d+", text[:4000])
+        assert len(set(re.findall(r"권\d+", got))) >= 10  # 간추린 글에는 권별 서술이 남는다
+
+    def test_order_is_preserved_and_gaps_are_marked(self):
+        import re
+
+        from src.core.toc import reference_excerpt
+
+        got = reference_excerpt(self._long_heje(), 4000)
+        nums = [int(n) for n in re.findall(r"권(\d+)에는", got)]
+        assert nums == sorted(nums)  # 권1·권2… 순서 자체가 정보다
+        assert "…(중략)…" in got or "…(이하 줄임)…" in got
+
+    def test_text_with_no_structure_words_falls_back_to_the_head(self):
+        from src.core.toc import reference_excerpt
+
+        text = "\n".join(["아무 말이나 적은 문단입니다." * 20 for _ in range(50)])
+        got = reference_excerpt(text, 2000)
+        assert len(got) <= 2000 + 40
+        assert got.startswith("아무 말이나")
+
+
 class TestTitleWordSuggest:
     """해제·본문 표본에서 표제 어휘 뽑기 (D-092 남은 것).
 

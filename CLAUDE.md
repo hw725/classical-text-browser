@@ -124,6 +124,7 @@ src/app/
 | `src/core/boundaries.py` | **글 단위의 정본**(D-092). 권마다 경계 목록 하나 — 항목은 시작 위치·id·깊이(level, 제한 없음)·역할(role: container·article·fragment)·제목·상태·앵커 글자. 끝은 저장하지 않고 같은 층위 이상의 다음 경계가 정한다. 본문은 L4에서 잘라 오고, L4 커밋이 바뀌면 앵커 글자로 재대조(`rematch`). `entity.py`의 `unit`은 이 목록의 읽기 보기다(D-093 — 옛 이름 `text_block`) |
 | `src/core/segmentation.py` (B-002 부분) | `position_at_point` — 원본 이미지에서 찍은 점을 확정본의 (행·글자)로 (D-094). `anchor_bbox`의 역이고, L4 행(빈 행 포함)과 L2 행(비어 있지 않은 행)의 대응이 어긋나면 `None` |
 | `src/core/segmentation.py` (D-095) | `volume_head` — 행 **끝**이 卷 이름이면 卷頭(묶음). 신자체는 정자로. `extract_title_words_llm` — 해제 + 본문 짧은 행 표본에서 표제 어휘 후보(표본에 없는 말은 버린다, 저장하지 않는다) |
+| `src/core/toc.py` (해제) | `reference_excerpt` — 긴 해제에서 권별 서술을 골라 간추린다. 앞에서 자르면 안 된다: 해제는 «생애 → 교유 → 권별 내용» 순이라 필요한 데가 뒤에 있다(운양집 해제 23,894자, 권별은 43% 지점부터) |
 | `src/core/toc.py` | 목차 판별·추출·본문 대조(D-089). NDL 신자체(巻·総)는 정자로 맞춘 뒤 본다. 첫 쪽만 문턱 0.7, 이어지는 쪽은 짧은 행 비율로. LLM은 항목 구조화에만(쪽마다 따로, 텍스트 입력, JSON 강제, 사고 끔). 본문 대조는 순서 지키는 정렬, 1~2자 제목은 엄격 대조 |
 | `src/llm/providers/base.py::thinking_options` | 사고 예산을 답변 예산에 **더하는** 공통 해석. 비전 경로 4종과 Gemini 텍스트 경로가 이것을 따른다(JSON 호출은 사고 미지정 = 끔) |
 
