@@ -203,10 +203,13 @@ REM 2-second cmd window, so startup looked like 3 windows. Now no extra window.
 start /b "" powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Start-Process 'http://127.0.0.1:!PORT!'"
 
 REM -- Run server ------------------------------
+REM --reload: the server restarts itself when a .py under src/ changes, so a code update
+REM no longer needs Ctrl+C + restart (static JS/CSS only needs a browser refresh).
+REM OCR engines are re-initialised on each restart (a few seconds). Added 2026-09-03.
 if "%LIBRARY_PATH%"=="" (
-    !APP_PY! -m app serve --port !PORT!
+    !APP_PY! -m app serve --port !PORT! --reload
 ) else (
-    !APP_PY! -m app serve --library "%LIBRARY_PATH%" --port !PORT!
+    !APP_PY! -m app serve --library "%LIBRARY_PATH%" --port !PORT! --reload
 )
 set APP_EXIT_CODE=!ERRORLEVEL!
 

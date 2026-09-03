@@ -22,7 +22,8 @@ const contentsState = {
   interpId: null, // 마지막으로 그린 해석 저장소
   data: null, // /contents 응답
   collapsedWorks: new Set(), // 접어 둔 Work id
-  openFragments: new Set(), // 조각(층위 3+)을 펼쳐 둔 기사 id
+  openFragments: new Set(), // (구) 조각 접기 — 중첩 개요로 대체
+  closedNodes: new Set(), // 접어 둔 단위 id (중첩 개요)
   anchorHighlight: null, // 시작 행 점선 {bbox, imageWidth, imageHeight, page}
 };
 
@@ -118,43 +119,50 @@ function _renderContentsTree(container) {
     const children = document.createElement("div");
     children.className = "tree-children";
     children.style.display = collapsed ? "none" : "";
-    // 층위 3 이상(기사 안 조각 — 지은이 이름·문답·협주)은 트리 한 층으로 세우지 않는다.
-    // 바로 앞의 권·기사 행 아래에 접어 두고, 배지를 누르면 펼친다.
-    let host = null;
-    let sub = null;
-    for (const b of g.blocks) {
-      const lv = Number(b.level) || 2;
-      if (lv <= 2 || !host) {
-        host = _createBlockRow(b);
-        sub = null;
-        children.appendChild(host);
-        continue;
-      }
-      if (!sub) {
-        sub = document.createElement("div");
-        sub.className = "tree-children contents-fragments";
-        sub.style.display = contentsState.openFragments.has(host.dataset.blockId) ? "" : "none";
-        const badge = document.createElement("button");
-        badge.type = "button";
-        badge.className = "contents-page-badge contents-frag-badge";
-        badge.title = "기사 안 조각 — 누르면 펼침/접힘";
-        const hostId = host.dataset.blockId;
-        badge.addEventListener("click", (ev) => {
-          ev.stopPropagation();
-          if (contentsState.openFragments.has(hostId)) contentsState.openFragments.delete(hostId);
-          else contentsState.openFragments.add(hostId);
-          _renderContentsTree(container);
-          highlightContentsForPage(viewerState.pageNum);
-        });
-        host.querySelector(".contents-badges")?.prepend(badge);
-        host._fragBadge = badge;
-        children.appendChild(sub);
-      }
-      sub.appendChild(_createBlockRow(b));
-      host._fragBadge.textContent = `조각 ${sub.childElementCount}`;
-    }
+    // Workflowy식 중첩 개요: 층위가 깊은 행은 바로 앞의 얕은 행 아래에 들어간다.
+    // (권 > 기사 > 조각). 자식이 있는 행은 ▸/▾로 접힌다 — 접힘 상태는 contentsState.closedNodes.
+    _renderOutline(children, g.blocks, container);
     node.appendChild(children);
     container.appendChild(node);
+  }
+}
+
+/**
+ * 평평한(위치순) 단위 목록을 층위로 중첩해 그린다. 스택에 «열린 조상»을 두고, 각 행은
+ * 자기보다 얕은 마지막 조상의 자식 컨테이너에 붙는다.
+ */
+function _renderOutline(root, blocks, container) {
+  const stack = []; // {level, kids}
+  for (const b of blocks) {
+    const lv = Number(b.level) || 2;
+    while (stack.length && stack[stack.length - 1].level >= lv) stack.pop();
+    const parent = stack.length ? stack[stack.length - 1].kids : root;
+    const row = _createBlockRow(b);
+    const kids = document.createElement("div");
+    kids.className = "tree-children contents-kids";
+    const closed = contentsState.closedNodes.has(b.id);
+    kids.style.display = closed ? "none" : "";
+    const tg = document.createElement("span");
+    tg.className = "tree-toggle contents-node-toggle";
+    tg.textContent = closed ? "▸" : "▾";
+    tg.title = "접기/펼치기";
+    tg.style.visibility = "hidden"; // 자식이 생기면 보인다
+    tg.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      if (contentsState.closedNodes.has(b.id)) contentsState.closedNodes.delete(b.id);
+      else contentsState.closedNodes.add(b.id);
+      _renderContentsTree(container);
+      highlightContentsForPage(viewerState.pageNum);
+    });
+    row.prepend(tg);
+    parent.appendChild(row);
+    parent.appendChild(kids);
+    if (stack.length) {
+      const pt = stack[stack.length - 1];
+      if (pt.toggle) pt.toggle.style.visibility = "";
+      if (pt.count) pt.count.textContent = String(Number(pt.count.textContent || 0) + 1);
+    }
+    stack.push({ level: lv, kids, toggle: tg });
   }
 }
 
@@ -170,8 +178,7 @@ function _createBlockRow(block) {
   const seq = block.sequence_index != null ? `${block.sequence_index}. ` : "";
   // 층위(D-092): 1 = 卷·편(굵게), 2 = 기사, 3 이상 = 기사 안 조각(들여쓰기)
   const level = Number(block.level) || 2;
-  if (level > 2) row.style.paddingLeft = `${(level - 2) * 14 + 8}px`;
-  if (level === 1) row.classList.add("contents-level1");
+  row.classList.add(`contents-level${Math.min(level, 3)}`);
   const stale = block.anchor && block.anchor.status === "stale";
   row.title =
     `${seq}${block.preview}  (${block.char_count}자, 층위 ${level}${block.status ? ", " + block.status : ""})` +
@@ -219,17 +226,20 @@ function _createBlockRow(block) {
       });
       tools.appendChild(b);
     }
-    // 층위 바꾸기 (D-092): 1 → 2 → 3 → 1. 층위 n을 바꿔도 더 얕은 층위의 id는 그대로다.
-    const lv = document.createElement("button");
-    lv.type = "button";
-    lv.className = "contents-shift-btn";
-    lv.textContent = `L${level}`;
-    lv.title = "층위 바꾸기 — 1 卷·편, 2 기사, 3 기사 안 조각";
-    lv.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      _setBoundaryLevel(block, (level % 3) + 1);
-    });
-    tools.appendChild(lv);
+    // 내어쓰기·들여쓰기 = 층위 바꾸기 (D-092). 층위 n을 바꿔도 더 얕은 층위의 id는 그대로다.
+    for (const [label, delta, tip] of [["⇤", -1, "내어쓰기 — 한 층위 위로 (기사 → 권)"], ["⇥", 1, "들여쓰기 — 한 층위 아래로 (기사 → 조각)"]]) {
+      const lv = document.createElement("button");
+      lv.type = "button";
+      lv.className = "contents-shift-btn";
+      lv.textContent = label;
+      lv.title = tip;
+      lv.disabled = (delta < 0 && level <= 1) || (delta > 0 && level >= 3);
+      lv.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        _setBoundaryLevel(block, level + delta);
+      });
+      tools.appendChild(lv);
+    }
     // 지우기 = 앞 단위에 합치기 (앞 단위의 id가 남는다)
     const del = document.createElement("button");
     del.type = "button";
@@ -518,3 +528,57 @@ function highlightContentsForPage(pageNum) {
     el.classList.toggle("on-page", pages.includes(page));
   });
 }
+
+
+/**
+ * 「자동 트리」: 목차·해제·들여쓰기·위치를 합쳐 개요를 한 번에 세운다 (D-092 후속).
+ * 이 권의 기존 경계는 새로 세워진다(Git으로 되돌릴 수 있다). 손으로 고친 것이 많으면 편성 탭의
+ * 제안 패널에서 체크해 적용하는 쪽이 낫다 — 그쪽은 제안 경계만 바꿔치기한다.
+ */
+async function _autoTree() {
+  const interpId = typeof interpState !== "undefined" ? interpState.interpId : null;
+  if (!interpId || !viewerState.docId || !viewerState.partId) {
+    showToast("문헌·권·해석 저장소가 정해져야 트리를 세울 수 있습니다.", "warning");
+    return;
+  }
+  const n = contentsState.data?.total_blocks || 0;
+  const msg = n
+    ? `이 권의 단위 ${n}개를 지우고 목차·해제·들여쓰기로 개요를 다시 세웁니다. 계속할까요?`
+    : "목차·해제·들여쓰기·위치로 개요를 세웁니다. 계속할까요?";
+  if (!confirm(msg)) return;
+  const useLlm = confirm("목차 항목 구조화에 LLM(해제 참고)을 쓸까요? (취소 = 규칙만)");
+  const llmSel = typeof getLlmModelSelection === "function" ? getLlmModelSelection("comp-llm-model-select") : {};
+  const btn = document.getElementById("contents-auto-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "세우는 중…"; }
+  try {
+    const res = await fetch(`/api/interpretations/${encodeURIComponent(interpId)}/segmentation/auto`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        document_id: viewerState.docId,
+        part_id: viewerState.partId,
+        use_llm_toc: useLlm,
+        force_provider: useLlm ? llmSel.force_provider || null : null,
+        force_model: useLlm ? llmSel.force_model || null : null,
+        replace: "all",
+      }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+    const toc = d.toc_pages?.length ? `목차 ${d.toc_pages.join(",")}쪽 · ` : "목차 없음 · ";
+    showToast(`${toc}후보 ${d.proposals} 중 ${d.applied}개로 개요를 세웠습니다` + (d.removed ? ` (이전 ${d.removed}개 정리)` : "") + (d.unmatched_toc?.length ? ` · 목차에만 있는 항목 ${d.unmatched_toc.length}` : ""), "success");
+    await refreshContentsTree();
+  } catch (e) {
+    showToast(`자동 트리 실패: ${e.message}`, "error");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "자동 트리"; }
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const b = document.getElementById("contents-auto-btn");
+  if (b && !b.dataset.bound) {
+    b.dataset.bound = "1";
+    b.addEventListener("click", _autoTree);
+  }
+});

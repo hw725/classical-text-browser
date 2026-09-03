@@ -1119,3 +1119,81 @@ class TestTocReferenceText:
         assert "운양집 중간본 16권 8책" in _R.prompts[0]
         assert normalize_rules({"reference_text": "  해제  "})["reference_text"] == "해제"
         assert normalize_rules(None)["reference_text"] == ""
+
+
+def test_apply_replaces_proposal_boundaries_and_keeps_manual(client, tmp_path):
+    """적용은 누적이 아니다 — 체크 상태가 곧 트리. 손으로 넣은 경계는 남는다 (D-092 후속)."""
+    lib, part_id, work_id = _setup(client, tmp_path)
+    client.put(
+        "/api/documents/d1/segmentation-rules", json={"rules": {"title_words": ["談草", "口談"]}}
+    )
+    body = {"document_id": "d1", "part_id": part_id}
+    data = client.post("/api/interpretations/i1/segmentation/propose", json=body).json()
+    keep = ("title", "kind", "level", "start", "end")
+    spans = [
+        {k: v for k, v in s.items() if k in keep} for s in data["spans"] if s["kind"] != "front"
+    ]
+    assert len(spans) >= 2
+    url = f"/api/interpretations/i1/boundaries?document_id=d1&part_id={part_id}"
+    r = client.post(
+        "/api/interpretations/i1/segmentation/apply",
+        json={"document_id": "d1", "part_id": part_id, "work_id": work_id, "spans": spans},
+    )
+    assert r.status_code == 200, r.text
+    n_all = client.get(url).json()["total"]
+    assert n_all == len(spans)
+    # 손으로 경계 하나 넣는다
+    r = client.post(
+        "/api/interpretations/i1/boundaries",
+        json={
+            "document_id": "d1",
+            "part_id": part_id,
+            "start": {"page": 3, "line": 0, "offset": 2},
+            "title": "손",
+        },
+    )
+    assert r.status_code == 200, r.text
+    manual_id = r.json()["boundary"]["id"]
+    # 첫 구간만 체크해 다시 적용 → 제안 경계는 1개만 남고 손 경계는 그대로
+    r = client.post(
+        "/api/interpretations/i1/segmentation/apply",
+        json={"document_id": "d1", "part_id": part_id, "work_id": work_id, "spans": spans[:1]},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["removed"] == len(spans) - 1
+    lst = client.get(url).json()["boundaries"]
+    assert len(lst) == 2 and any(b["id"] == manual_id for b in lst)
+    # replace="none"이면 예전처럼 더하기만
+    r = client.post(
+        "/api/interpretations/i1/segmentation/apply",
+        json={
+            "document_id": "d1",
+            "part_id": part_id,
+            "work_id": work_id,
+            "spans": spans,
+            "replace": "none",
+        },
+    )
+    assert r.status_code == 200 and r.json()["removed"] == 0
+    assert client.get(url).json()["total"] == len(spans) + 1
+
+
+def test_segmentation_auto_builds_tree_in_one_call(client, tmp_path):
+    """자동 트리: 제안 → 승인 → 적용을 한 번에. 다시 부르면 새로 세운다(누적 없음)."""
+    lib, part_id, work_id = _setup(client, tmp_path)
+    client.put(
+        "/api/documents/d1/segmentation-rules", json={"rules": {"title_words": ["談草", "口談"]}}
+    )
+    r = client.post(
+        "/api/interpretations/i1/segmentation/auto",
+        json={"document_id": "d1", "part_id": part_id},
+    )
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["applied"] >= 2 and d["toc_pages"] == [] and d["toc_only"] is False
+    url = f"/api/interpretations/i1/boundaries?document_id=d1&part_id={part_id}"
+    n1 = client.get(url).json()["total"]
+    r = client.post(
+        "/api/interpretations/i1/segmentation/auto", json={"document_id": "d1", "part_id": part_id}
+    )
+    assert r.status_code == 200 and client.get(url).json()["total"] == n1

@@ -7671,3 +7671,9 @@ button.mode-tab {
   background: var(--bg-secondary, rgba(0, 0, 0, 0.05)); font-size: 10px; }
 .prop-reason.neg { color: #b04040; }
 .prop-reason.pos { color: #2d6a4f; }
+
+/* 중첩 개요 (Workflowy식) */
+.contents-kids { margin-left: 14px; border-left: 1px dotted var(--border); padding-left: 4px; }
+.contents-node-toggle { width: 12px; display: inline-block; font-size: 10px; margin-right: 2px; cursor: pointer; }
+.contents-level1 .contents-preview { font-weight: 600; }
+.contents-level3 .contents-preview { color: var(--text-muted); font-size: 11px; }

@@ -184,6 +184,12 @@ class SegmentationApplyRequest(BaseModel):
     work_id: str
     spans: list[SegmentationSpan]
     pages: list[int] | None = None  # 제안 때와 같은 범위여야 행 번호가 맞는다
+    # 적용은 누적이 아니다 — «제안 패널의 체크 상태가 곧 트리»(사용자, 2026-09-03).
+    # replace="proposal": 전에 제안으로 만든 경계 중 이번 선택에 없는 것은 지운다
+    #   (손으로 넣은 것은 둔다).
+    # replace="all": 이 권의 살아 있는 경계를 전부 지우고 새로 세운다(자동 트리).
+    # replace="none": 예전처럼 더하기만.
+    replace: str = "proposal"
 
 
 class SplitTextBlockRequest(BaseModel):
@@ -1032,6 +1038,7 @@ async def api_segmentation_apply(interp_id: str, body: SegmentationApplyRequest)
     keys = [(ln.page, ln.line_index) for ln in lines]
     l4_commit = _document_head(doc_path)
     data = load_boundaries(interp_path, body.document_id, body.part_id)
+    removed = _replace_boundaries(data, body.spans, body.replace)
     created = []
     errors = []
     for span in body.spans:
@@ -1059,6 +1066,7 @@ async def api_segmentation_apply(interp_id: str, body: SegmentationApplyRequest)
                 {"page": start["page"], "line": start["line"], "offset": None},
             ),
         )
+        item["metadata"] = {"source": "proposal"}  # 제안에서 온 경계 — 다음 적용 때 바꿔치기 대상
         try:
             kept = insert_boundary(data, item)  # 같은 자리·층위가 있으면 그것(중복 없음)
             created.append(
@@ -1067,12 +1075,193 @@ async def api_segmentation_apply(interp_id: str, body: SegmentationApplyRequest)
         except Exception as e:  # noqa: BLE001 — 한 구간의 실패가 나머지를 막지 않는다
             errors.append(f"{span.title}: {e}")
     git = None
-    if created:
+    if created or removed:
         save_boundaries(interp_path, data)
         git = git_commit_interpretation(
-            interp_path, f"feat: 경계 제안 적용 — 경계 {len(created)}개 (D-088·D-092)"
+            interp_path,
+            f"feat: 경계 제안 적용 — 경계 {len(created)}개, 바꿔치기로 {removed}개 제거 "
+            "(D-088·D-092)",
         )
-    return {"created": created, "errors": errors, "git": git}
+    return {"created": created, "removed": removed, "errors": errors, "git": git}
+
+
+def _is_proposal_boundary(b: dict) -> bool:
+    """제안(날짜·어휘·목차·front)에서 온 경계인가.
+
+    손으로 넣은 것(kind manual, source 없음)과 구분한다.
+    """
+    if (b.get("metadata") or {}).get("source") == "proposal":
+        return True
+    return b.get("kind") not in (None, "", "manual")
+
+
+def _replace_boundaries(data: dict, spans, mode: str) -> int:
+    """적용 전에 바꿔치기 대상 경계를 지운다. 지운 수를 돌려준다.
+
+    proposal — 제안에서 온 경계 중 이번 선택(같은 자리·층위)에 없는 것.
+    all — 살아 있는 경계 전부(자동 트리가 다시 세운다).
+    none — 지우지 않는다(예전 동작).
+    """
+    if mode == "none":
+        return 0
+    keep_keys = set()
+    for s in spans:
+        st = s.start or {}
+        keep_keys.add(
+            (
+                int(st.get("page", 0)),
+                int(st.get("line_index", 0)),
+                int(st.get("char_offset") or 0),
+                int(s.level) if s.level else (1 if s.kind == "volume" else 2),
+            )
+        )
+    before = data.get("boundaries") or []
+    kept = []
+    removed = 0
+    for b in before:
+        st = b.get("start") or {}
+        key = (
+            int(st.get("page", 0)),
+            int(st.get("line", 0)),
+            int(st.get("offset", 0)),
+            int(b.get("level", 2)),
+        )
+        live = b.get("status") not in ("deprecated", "archived")
+        if not live or key in keep_keys:
+            kept.append(b)
+            continue
+        if mode == "all" or (mode == "proposal" and _is_proposal_boundary(b)):
+            removed += 1
+            continue
+        kept.append(b)
+    data["boundaries"] = kept
+    return removed
+
+
+class SegmentationAutoRequest(BaseModel):
+    """자동 트리 (D-092 후속): 목차·해제·들여쓰기·위치를 합쳐 한 번에 개요를 세운다."""
+
+    document_id: str
+    part_id: str
+    work_id: str | None = None
+    use_llm_toc: bool = False  # 목차 항목 구조화에 LLM(해제 참고)
+    force_provider: str | None = None
+    force_model: str | None = None
+    toc_only: bool | None = None  # None이면 목차가 있을 때 목차 항목만
+    replace: str = "all"  # 기본: 이 권의 경계를 새로 세운다
+
+
+@router.post("/api/interpretations/{interp_id}/segmentation/auto")
+async def api_segmentation_auto(interp_id: str, body: SegmentationAutoRequest):
+    """자동 트리: 목차 감지 → (LLM 구조화) → 경계 제안(층위 추정) → 승인된 것을 적용(바꿔치기).
+
+    사용자가 원한 것: Workflowy처럼 사이드바에 개요가 자동으로 서고, 그 안에서 고친다.
+    편성 탭의 제안 패널은 검토용이고 이것이 기본 경로다.
+    출력: {"toc_pages", "proposals", "accepted", "applied", "removed", "unmatched_toc", "git"}
+    """
+    from app._state import _get_llm_router
+    from core.document import get_document_info
+    from core.segmentation import collect_document_lines, normalize_rules, propose_boundaries
+    from core.toc import (
+        align_toc_to_body,
+        detect_toc_pages,
+        extract_toc_entries_llm,
+        extract_toc_entries_rule,
+    )
+
+    _library_path = get_library_path()
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+    interp_path = require_repo_path("interpretations", interp_id)
+    doc_path = require_repo_path("documents", body.document_id)
+    if not interp_path.exists() or not doc_path.exists():
+        return JSONResponse({"error": "해석 저장소 또는 문헌을 찾을 수 없습니다."}, status_code=404)
+    try:
+        rules = normalize_rules(get_document_info(doc_path).get("segmentation_rules"))
+    except FileNotFoundError:
+        rules = normalize_rules(None)
+    lines, page_texts = collect_document_lines(doc_path, body.part_id, None)
+    if not lines:
+        return JSONResponse(
+            {"error": "확정 텍스트(L4)가 있는 쪽이 없습니다. OCR·교정을 먼저 하세요."},
+            status_code=400,
+        )
+    page_lines = {p: t.split("\n") for p, t in page_texts.items()}
+    toc_pages = detect_toc_pages(page_lines, rules["max_title_chars"])
+    toc_matches = None
+    unmatched = []
+    toc_meta = None
+    if toc_pages:
+        if body.use_llm_toc:
+            entries, toc_meta = await extract_toc_entries_llm(
+                page_lines,
+                toc_pages,
+                _get_llm_router(),
+                body.force_provider,
+                body.force_model,
+                reference_text=rules.get("reference_text") or "",
+            )
+        else:
+            entries = extract_toc_entries_rule(page_lines, toc_pages)
+        body_lines = [ln for ln in lines if ln.page not in set(toc_pages)]
+        matches, un = align_toc_to_body(entries, body_lines)
+        toc_matches = [m.to_dict() for m in matches]
+        unmatched = [entries[i].to_dict() for i in un]
+        lines = body_lines
+    result = propose_boundaries(lines, rules, toc_matches=toc_matches)
+    toc_only = body.toc_only if body.toc_only is not None else bool(toc_matches)
+    chosen = [
+        p
+        for p in result["proposals"]
+        if p["accepted"] and (not toc_only or any(r.startswith("toc:") for r in p["reasons"]))
+    ]
+    # 구간은 «다음 선택 경계 앞까지»가 아니라 경계 목록이 알아서 정하므로 시작만 넘기면 된다
+    spans = [
+        SegmentationSpan(
+            title=p["title"],
+            kind=p["kind"] or "",
+            level=int(p.get("level") or 2),
+            start={
+                "page": p["page"],
+                "line_index": p["line_index"],
+                "char_offset": p.get("char_offset") or 0,
+            },
+            end={"page": p["page"], "line_index": p["line_index"], "char_end": None},
+        )
+        for p in chosen
+    ]
+    work_id = body.work_id
+    if not work_id:
+        works = list_entities(interp_path, "work")
+        work_id = works[0]["id"] if works else None
+    if not work_id:
+        return JSONResponse(
+            {"error": "Work가 없습니다. 해석 저장소에 Work를 먼저 만드세요."}, status_code=400
+        )
+    applied = await api_segmentation_apply(
+        interp_id,
+        SegmentationApplyRequest(
+            document_id=body.document_id,
+            part_id=body.part_id,
+            work_id=work_id,
+            spans=spans,
+            replace=body.replace,
+        ),
+    )
+    if isinstance(applied, JSONResponse):
+        return applied
+    return {
+        "toc_pages": toc_pages,
+        "toc_meta": toc_meta,
+        "proposals": len(result["proposals"]),
+        "accepted": sum(1 for p in result["proposals"] if p["accepted"]),
+        "toc_only": toc_only,
+        "applied": len(applied.get("created", [])),
+        "removed": applied.get("removed", 0),
+        "errors": applied.get("errors", []),
+        "unmatched_toc": unmatched,
+        "git": applied.get("git"),
+    }
 
 
 def _document_head(doc_path) -> str | None:
@@ -1397,22 +1586,25 @@ async def api_insert_boundary(interp_id: str, body: BoundaryInsertRequest):
         {"page": start["page"], "line": start["line"], "offset": None},
     )
     try:
-        insert_boundary(data, item)
+        kept = insert_boundary(data, item)  # 같은 자리·층위가 이미 있으면 그것을 돌려준다
     except FileExistsError as e:
         return JSONResponse({"error": str(e)}, status_code=409)
-    save_boundaries(interp_path, data)
-    git = git_commit_interpretation(
-        interp_path, f"feat: 경계 넣기 — {item.get('title') or item['id'][:8]} (D-092)"
-    )
+    existing = kept is not item
+    git = None
+    if not existing:
+        save_boundaries(interp_path, data)
+        git = git_commit_interpretation(
+            interp_path, f"feat: 경계 넣기 — {item.get('title') or item['id'][:8]} (D-092)"
+        )
     row = next(
         (
             r
             for r in _boundary_rows(interp_path, body.document_id, body.part_id)
-            if r["id"] == item["id"]
+            if r["id"] == kept["id"]
         ),
         None,
     )
-    return {"boundary": row, "git": git}
+    return {"boundary": row, "existing": existing, "git": git}
 
 
 @router.delete("/api/interpretations/{interp_id}/boundaries/{text_block_id}")

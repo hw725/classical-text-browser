@@ -1810,7 +1810,7 @@ async function _applyProposals() {
       start: { page: lines[s.li].page, line_index: lines[s.li].line_index, char_offset: s.off },
       end });
   });
-  if (!confirm(`${spans.length}개의 단위(기사)를 만듭니다. 계속할까요?`)) return;
+  if (!confirm(`체크한 ${starts.length}개로 단위를 다시 세웁니다(전에 제안으로 만든 경계 중 체크가 빠진 것은 지워지고, 손으로 넣은 경계는 남습니다). 계속할까요?`)) return;
   try {
     const res = await fetch(`/api/interpretations/${interpState.interpId}/segmentation/apply`, {
       method: "POST",
@@ -1821,11 +1821,12 @@ async function _applyProposals() {
         work_id: compState.workId,
         spans,
         pages: data.pages || null,
+        replace: "proposal", // 체크 상태가 곧 트리 — 전에 제안으로 만든 경계 중 빠진 것은 지운다
       }),
     });
     const result = await res.json();
     if (!res.ok) throw new Error(result.error || `HTTP ${res.status}`);
-    showToast(`단위 ${result.created.length}개 생성` + (result.errors.length ? ` · 실패 ${result.errors.length}` : ""),
+    showToast(`단위 ${result.created.length}개 적용` + (result.removed ? ` · 이전 제안 경계 ${result.removed}개 정리` : "") + (result.errors.length ? ` · 실패 ${result.errors.length}` : ""),
       result.errors.length ? "warning" : "success");
     _closeProposePanel();
     await _loadCompositionData();

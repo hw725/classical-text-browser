@@ -5,13 +5,13 @@ D-001: 이 플랫폼의 주 인터페이스는 GUI이며, CLI는 보조 도구�
 
 아키텍처:
     이 파일은 FastAPI 앱 생성과 라우터 마운트, 미들웨어만 담당한다.
-    실제 API 엔드포인트 200개가 app/routers/ 패키지의 8개 모듈에 분산된다
+    실제 API 엔드포인트 201개가 app/routers/ 패키지의 8개 모듈에 분산된다
     (2026-07-26 실측):
 
     routers/documents.py     — 문헌 CRUD/페이지/교정/서지/파서 + 권 추가 + 경계 규칙 (41 라우트)
     routers/annotation.py    — L7 주석·사전형·인용마크 + AI보조 (34 라우트)
     routers/reading.py       — L5 표점·현토 + L6 번역 + 비고 + AI보조 (24 라우트)
-    routers/interpretations.py — 해석 CRUD·레이어·의존·엔티티·내용 트리·경계 (34 라우트)
+    routers/interpretations.py — 해석 CRUD·레이어·의존·엔티티·내용 트리·경계 (35 라우트)
     routers/llm_ocr.py       — LLM 상태·분석 + OCR 실행·일괄·되돌리기·교정 패스 (24 라우트)
     routers/alignment.py     — 이체자 사전/정렬/일괄교정/문헌별 승인 (20 라우트)
     routers/library.py       — 서고/설정/백업/휴지통 (16 라우트)
@@ -23,6 +23,7 @@ D-001: 이 플랫폼의 주 인터페이스는 GUI이며, CLI는 보조 도구�
     기준이다 — 세는 명령은 docs/maintenance.md 6장에 있다.
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -163,6 +164,14 @@ async def _no_store_api(request, call_next):
     if request.url.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
     return response
+
+
+# CTB_LIBRARY 환경변수가 있으면 그 서고로 시작한다(스크립트·컨테이너에서 서고를 넘길 때). 없으면
+# serve --library 또는 브라우저에서 고른다.
+_env_library = os.environ.get("CTB_LIBRARY")
+if _env_library and Path(_env_library).exists():
+    configure_library(_env_library)
+    print(f"서고(자동 재적재): {_env_library}")
 
 
 def configure(library_path: str | Path) -> FastAPI:
