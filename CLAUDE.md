@@ -120,8 +120,8 @@ src/app/
 | `src/ocr/eval_cer.py` · `scripts/eval_cer.py` | L4 확정본을 정답으로 L2·초안의 CER. 프롬프트를 바꿨으면 이것으로 잰다 |
 | `src/core/variant_sources.py` · `scripts/build_variant_dicts.py` | 이체자 사전 원자료(OpenCC·Unihan·cjkvi) 파서와 생성. 파일마다 `_tier`·`_source` |
 | `src/ocr/line_block_match.py` | 쪽 단위 엔진(NDL 셋)이 쪽 전체에서 찾은 행을 LayoutBlock에 배정. **블록 밖 행은 버린다.** 그래서 파이프라인이 커버리지 조건 없이 언제나 쪽 전체에 돌린다(D-086) |
-| `src/core/segmentation.py` | 글 단위 경계 제안(D-088). 날짜 문법·사슬·형식·문장 표지(以·故·而 앞의 어휘)·두주성 날짜 감점은 코드, 표제 어휘·억제 목록은 `manifest.segmentation_rules`. 제안은 저장하지 않고 승인한 구간만 TextBlock. 천진담초 실측 재현 35/35·정밀 0.83 |
-| `src/core/boundaries.py` | **글 단위의 정본**(D-092). 권마다 경계 목록 하나 — 항목은 시작 위치·id·깊이(level, 제한 없음)·역할(role: container·article·fragment)·제목·상태·앵커 글자. 끝은 저장하지 않고 같은 층위 이상의 다음 경계가 정한다. 본문은 L4에서 잘라 오고, L4 커밋이 바뀌면 앵커 글자로 재대조(`rematch`). `entity.py`의 `text_block`은 이 목록의 읽기 보기다 |
+| `src/core/segmentation.py` | 글 단위 경계 제안(D-088). 날짜 문법·사슬·형식·문장 표지(以·故·而 앞의 어휘)·두주성 날짜 감점은 코드, 표제 어휘·억제 목록은 `manifest.segmentation_rules`. 제안은 저장하지 않고 승인한 구간만 단위가 된다. 천진담초 실측 재현 35/35·정밀 0.83 |
+| `src/core/boundaries.py` | **글 단위의 정본**(D-092). 권마다 경계 목록 하나 — 항목은 시작 위치·id·깊이(level, 제한 없음)·역할(role: container·article·fragment)·제목·상태·앵커 글자. 끝은 저장하지 않고 같은 층위 이상의 다음 경계가 정한다. 본문은 L4에서 잘라 오고, L4 커밋이 바뀌면 앵커 글자로 재대조(`rematch`). `entity.py`의 `unit`은 이 목록의 읽기 보기다(D-093 — 옛 이름 `text_block`) |
 | `src/core/toc.py` | 목차 판별·추출·본문 대조(D-089). NDL 신자체(巻·総)는 정자로 맞춘 뒤 본다. 첫 쪽만 문턱 0.7, 이어지는 쪽은 짧은 행 비율로. LLM은 항목 구조화에만(쪽마다 따로, 텍스트 입력, JSON 강제, 사고 끔). 본문 대조는 순서 지키는 정렬, 1~2자 제목은 엄격 대조 |
 | `src/llm/providers/base.py::thinking_options` | 사고 예산을 답변 예산에 **더하는** 공통 해석. 비전 경로 4종과 Gemini 텍스트 경로가 이것을 따른다(JSON 호출은 사고 미지정 = 끔) |
 
@@ -152,7 +152,8 @@ src/app/
 ## 용어 규칙 (혼동 방지)
 - LayoutBlock: 원본 저장소 L3의 페이지 영역 (OCR 읽기 순서 단위)
 - OcrResult: 원본 저장소 L2의 OCR 인식 결과
-- TextBlock: 코어 스키마의 해석용 텍스트 단위. **v1.3(D-092)부터는 저장하지 않고** 경계 목록(`core/boundaries.py`)에서 만든 읽기 보기다. 단위의 id = 시작 경계의 id
+- 단위(unit): 코어 스키마의 해석용 텍스트 단위. **v1.3(D-092)부터는 저장하지 않고** 경계 목록(`core/boundaries.py`)에서 만든 읽기 보기다. 단위의 id = 시작 경계의 id.
+  코드·API·스키마의 이름도 `unit`이다(D-093 — v1.2까지는 `text_block`·TextBlock). 저장 파일이 단위를 가리키는 필드는 아직 `block_id`다(B-003)
 - 「Block」이라고만 쓰지 말고 항상 위 세 이름 중 하나를 사용할 것
 
 ## 작업 방식: CLI를 적극 활용할 것

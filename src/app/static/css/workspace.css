@@ -985,7 +985,7 @@ body.resizing-row {
   display: inline-block;
 }
 
-/* 편성 모드 TextBlock 삭제 버튼 */
+/* 편성 모드 단위 삭제 버튼 */
 .comp-tb-delete-btn {
   display: inline-block;
   background: none;
@@ -3331,7 +3331,7 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
 .entity-type-badge.type-work {
   background: #ec4899;
 }
-.entity-type-badge.type-text-block {
+.entity-type-badge.type-unit {
   background: #3b82f6;
 }
 .entity-type-badge.type-tag {

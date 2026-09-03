@@ -247,12 +247,12 @@ def _load_page_block_ids(interp_path: Path, page_num: int, part_id: str = "main"
     if block_ids:
         return block_ids
 
-    # Last fallback: derive from text_block entities for this page.
+    # Last fallback: derive from unit entities for this page.
     try:
-        text_blocks = list_entities(interp_path, "text_block")
+        units = list_entities(interp_path, "unit")
     except Exception:
-        text_blocks = []
-    for tb in text_blocks:
+        units = []
+    for tb in units:
         refs = tb.get("source_refs") or []
         if not refs and tb.get("source_ref"):
             refs = [tb.get("source_ref")]
@@ -313,13 +313,13 @@ def _load_original_block_text(
         if source_text:
             return source_text
 
-    # Fallback: text_block entities may carry original text even without L4 files.
+    # Fallback: unit entities may carry original text even without L4 files.
     try:
-        text_blocks = list_entities(interp_path, "text_block")
+        units = list_entities(interp_path, "unit")
     except Exception:
-        text_blocks = []
+        units = []
 
-    for tb in text_blocks:
+    for tb in units:
         tb_text = (
             str(tb.get("original_text", "")).strip() or str(tb.get("normalized_text", "")).strip()
         )
@@ -362,13 +362,13 @@ def _load_translation_block_text(
     ]
 
     if not items:
-        # Fallback: map text_block id -> layout_block_id(s) in source_refs.
+        # Fallback: map unit id -> layout_block_id(s) in source_refs.
         try:
-            text_blocks = list_entities(interp_path, "text_block")
+            units = list_entities(interp_path, "unit")
         except Exception:
-            text_blocks = []
+            units = []
         mapped_ids: set[str] = set()
-        for tb in text_blocks:
+        for tb in units:
             if tb.get("id") != block_id:
                 continue
             refs = tb.get("source_refs") or []

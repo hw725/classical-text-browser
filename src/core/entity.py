@@ -1,7 +1,7 @@
 """코어 스키마 엔티티 관리 모듈.
 
 해석 저장소(Interpretation) 내부에서 코어 스키마 엔티티
-(Work, TextBlock, Tag, Concept, Agent, Relation)를 생성·조회·수정한다.
+(Work, 단위, Tag, Concept, Agent, Relation)를 생성·조회·수정한다.
 core-schema-v1.3.md 및 operation-rules-v1.0.md에 따른다.
 
     {interp_id}/
@@ -35,9 +35,14 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────
 
 # 엔티티 유형 → 서브디렉터리 이름 매핑
+#
+# unit(단위)만 사정이 다르다: 파일 하나에 단위 하나가 아니라 권마다 경계 목록 하나이고
+# (boundaries/{doc}__{part}.json) 단위는 그 목록에서 계산한 보기다(D-092). 아래 값은
+# «어느 디렉터리에 사는가»만 알리며, 조회·생성·갱신은 _entity_dir_path에 닿기 전에
+# 경계 목록 쪽으로 갈라진다.
 ENTITY_TYPES: dict[str, str] = {
     "work": "works",
-    "text_block": "blocks",
+    "unit": "boundaries",
     "tag": "tags",
     "concept": "concepts",
     "agent": "agents",
@@ -53,9 +58,18 @@ VALID_STATUS_TRANSITIONS: dict[str, list[str]] = {
 }
 
 # 엔티티 유형 → JSON 스키마 파일명
+# v1.3까지 쓰던 엔티티 이름. 옛 이름이 사는 자리는 여기 하나뿐이며 v1.4에서 지운다(D-093).
+LEGACY_ENTITY_TYPES: dict[str, str] = {"text_block": "unit"}
+
+
+def normalize_entity_type(entity_type: str) -> str:
+    """옛 엔티티 이름을 지금 이름으로 옮긴다. 입력: 종류 문자열. 출력: 종류 문자열."""
+    return LEGACY_ENTITY_TYPES.get(entity_type, entity_type)
+
+
 SCHEMA_FILES: dict[str, str] = {
     "work": "work.schema.json",
-    "text_block": "text_block.schema.json",
+    "unit": "unit.schema.json",
     "tag": "tag.schema.json",
     "concept": "concept.schema.json",
     "agent": "agent.schema.json",
@@ -74,7 +88,7 @@ def _entity_dir_path(interp_path: Path, entity_type: str) -> Path:
     목적: core_entities/{subdir}/ 경로를 일관되게 관리한다.
     입력:
         interp_path — 해석 저장소 루트 경로.
-        entity_type — ENTITY_TYPES의 키 (work, text_block 등).
+        entity_type — ENTITY_TYPES의 키 (work, unit 등).
     출력: Path 객체.
     왜 이렇게 하는가:
         기존 해석 저장소에 core_entities가 없을 수 있으므로 lazy 생성한다.
@@ -137,7 +151,7 @@ def _get_source_head_commit(doc_path: Path) -> str:
     """원본 저장소의 HEAD 커밋 해시를 반환한다.
 
     왜 이렇게 하는가:
-        TextBlock의 source_ref.commit에 사용된다.
+        단위의 source_ref.commit에 사용된다.
         원본에 git이 없으면 'no_git'을 반환하여 방어한다.
     """
     try:
@@ -153,11 +167,11 @@ def _get_source_head_commit(doc_path: Path) -> str:
 
 
 # ──────────────────────────
-# text_block = 경계 목록의 보기 (D-092)
+# unit(단위) = 경계 목록의 보기 (D-092·D-093)
 # ──────────────────────────
 #
 # v1.3부터 글 단위의 정본은 core_entities/boundaries/{doc}__{part}.json이다. 이 모듈의
-# text_block 조회·생성·갱신은 그 목록을 읽고 쓰는 얇은 층이며, blocks/*.json은 만들지
+# unit 조회·생성·갱신은 그 목록을 읽고 쓰는 얇은 층이며, blocks/*.json은 만들지
 # 않는다.
 # 옛 저장소(blocks/만 있는)는 처음 읽을 때 한 번 옮긴다(migrate_from_blocks —
 # 옛 파일은 이름만 바꿈).
@@ -173,14 +187,14 @@ def _ensure_boundaries(interp_path: Path) -> None:
 
     if needs_migration(interp_path):
         result = migrate_from_blocks(interp_path, _library_root(interp_path))
-        logger.info("TextBlock → 경계 목록 마이그레이션: %s", result)
+        logger.info("옛 blocks/ → 경계 목록 마이그레이션: %s", result)
         # 해석 저장소는 Git이다 — 옮긴 상태를 한 커밋으로 남겨야 되돌릴 수 있다.
         try:
             from core.interpretation import git_commit_interpretation
 
             git_commit_interpretation(
                 interp_path,
-                f"chore: TextBlock → 경계 목록 마이그레이션 (D-092) — {len(result['parts'])}권",
+                f"chore: blocks/ → 경계 목록 마이그레이션 (D-092) — {len(result['parts'])}권",
             )
         except Exception as e:  # noqa: BLE001 — 커밋 실패가 읽기를 막으면 안 된다
             logger.warning("마이그레이션 커밋 실패: %s", e)
@@ -193,7 +207,7 @@ _PART_LINES_TTL = 3.0  # 초. 화면 한 번 그릴 때 쪽마다 오는 요청�
 def _part_lines(interp_path: Path, document_id: str, part_id: str):
     """그 권의 L4 행 목록과 쪽 텍스트. 문헌이 없거나 L4가 없으면 빈 것.
 
-    짧은 캐시(3초): 편성 탭이 쪽마다 `entities/text_block?page=` 요청을 보내고 그때마다 권 전체
+    짧은 캐시(3초): 편성 탭이 쪽마다 `entities/unit?page=` 요청을 보내고 그때마다 권 전체
     확정본(208쪽 0.6초)을 읽었다. 교정 저장은 3초 뒤에 반영된다 — 같은 화면 안의 되풀이만 막는다.
     """
     import time
@@ -217,8 +231,8 @@ def _part_lines(interp_path: Path, document_id: str, part_id: str):
     return result
 
 
-def _text_block_view(interp_path: str | Path) -> list[dict]:
-    """모든 권의 경계 목록에서 TextBlock 모양의 단위 목록을 만든다(읽기 전용)."""
+def _unit_view(interp_path: str | Path) -> list[dict]:
+    """모든 권의 경계 목록에서 단위 목록을 만든다(읽기 전용)."""
     from core.boundaries import compute_units, list_boundary_parts, load_boundaries
 
     interp_path = Path(interp_path).resolve()
@@ -260,8 +274,8 @@ def _find_boundary_home(interp_path: Path, boundary_id: str):
     return None, None
 
 
-def _create_boundary_from_textblock(interp_path: Path, data: dict) -> dict:
-    """TextBlock 모양의 입력(apply·from-source·split이 만들던 것)을 경계 하나로 저장한다."""
+def _create_boundary_from_unit(interp_path: Path, data: dict) -> dict:
+    """단위 모양의 입력(apply·from-source·split이 만들던 것)을 경계 하나로 저장한다."""
     from core.boundaries import (
         boundaries_file,
         insert_boundary,
@@ -274,7 +288,7 @@ def _create_boundary_from_textblock(interp_path: Path, data: dict) -> dict:
     refs = data.get("source_refs") or ([data["source_ref"]] if data.get("source_ref") else [])
     refs = [r for r in refs if r and r.get("page")]
     if not refs:
-        raise ValueError("TextBlock을 경계로 만들려면 출처(source_refs의 쪽)가 필요합니다.")
+        raise ValueError("단위를 경계로 만들려면 출처(source_refs의 쪽)가 필요합니다.")
     r0 = refs[0]
     doc_id = r0.get("document_id")
     part_id = r0.get("part_id") or (data.get("metadata") or {}).get("part_id") or "vol1"
@@ -317,20 +331,20 @@ def _create_boundary_from_textblock(interp_path: Path, data: dict) -> dict:
     rel = boundaries_file(interp_path, doc_id, part_id).relative_to(interp_path).as_posix()
     return {
         "status": "created" if kept is item else "exists",
-        "entity_type": "text_block",
+        "entity_type": "unit",
         "id": kept["id"],
         "file_path": rel,
     }
 
 
-def _update_boundary_from_textblock(interp_path: Path, entity_id: str, updates: dict) -> dict:
-    """TextBlock 갱신 요청(status·notes·metadata·work_id)을 경계 항목에 적용한다."""
+def _update_boundary_from_unit(interp_path: Path, entity_id: str, updates: dict) -> dict:
+    """단위 갱신 요청(status·notes·metadata·work_id)을 경계 항목에 적용한다."""
     from core.boundaries import save_boundaries, update_boundary
 
     data, item = _find_boundary_home(interp_path, entity_id)
     if item is None:
         raise FileNotFoundError(
-            f"text_block 엔티티를 찾을 수 없습니다: {entity_id}\n"
+            f"단위(unit) 엔티티를 찾을 수 없습니다: {entity_id}\n"
             "→ 해결: 엔티티 ID와 유형을 확인하세요."
         )
     if "id" in updates and updates["id"] != entity_id:
@@ -384,7 +398,7 @@ def _update_boundary_from_textblock(interp_path: Path, entity_id: str, updates: 
             fields["metadata"] = {**(item.get("metadata") or {}), **rest}
     update_boundary(data, entity_id, fields)
     save_boundaries(interp_path, data)
-    return {"status": "updated", "entity_type": "text_block", "id": entity_id}
+    return {"status": "updated", "entity_type": "unit", "id": entity_id}
 
 
 def create_entity(
@@ -397,7 +411,7 @@ def create_entity(
     목적: 코어 스키마 엔티티를 해석 저장소에 추가한다.
     입력:
         interp_path — 해석 저장소 경로.
-        entity_type — 엔티티 유형 (work, text_block, tag, concept, agent, relation).
+        entity_type — 엔티티 유형 (work, unit, tag, concept, agent, relation).
         data — 엔티티 딕셔너리. id가 없으면 UUID를 자동 생성한다.
     출력: {"status": "created", "entity_type": ..., "id": ..., "file_path": ...}
 
@@ -407,9 +421,10 @@ def create_entity(
         - 동일 ID의 엔티티가 이미 있으면 오류를 발생시킨다 (operation-rules 2.1).
     """
     interp_path = Path(interp_path).resolve()
-    if entity_type == "text_block":
+    entity_type = normalize_entity_type(entity_type)
+    if entity_type == "unit":
         _ensure_boundaries(interp_path)
-        return _create_boundary_from_textblock(interp_path, data)
+        return _create_boundary_from_unit(interp_path, data)
 
     # id 자동 생성
     if "id" not in data or not data["id"]:
@@ -457,11 +472,12 @@ def get_entity(
         FileNotFoundError: 엔티티를 찾을 수 없을 때.
     """
     interp_path = Path(interp_path).resolve()
-    if entity_type == "text_block":
-        hit = next((u for u in _text_block_view(interp_path) if u.get("id") == entity_id), None)
+    entity_type = normalize_entity_type(entity_type)
+    if entity_type == "unit":
+        hit = next((u for u in _unit_view(interp_path) if u.get("id") == entity_id), None)
         if hit is None:
             raise FileNotFoundError(
-                f"text_block 엔티티를 찾을 수 없습니다: {entity_id}\n"
+                f"단위(unit) 엔티티를 찾을 수 없습니다: {entity_id}\n"
                 "→ 해결: 엔티티 ID와 유형을 확인하세요."
             )
         return hit
@@ -500,9 +516,10 @@ def update_entity(
         - id 필드는 변경할 수 없다.
     """
     interp_path = Path(interp_path).resolve()
-    if entity_type == "text_block":
+    entity_type = normalize_entity_type(entity_type)
+    if entity_type == "unit":
         _ensure_boundaries(interp_path)
-        return _update_boundary_from_textblock(interp_path, entity_id, updates)
+        return _update_boundary_from_unit(interp_path, entity_id, updates)
     dir_path = _entity_dir_path(interp_path, entity_type)
     file_path = dir_path / f"{entity_id}.json"
 
@@ -566,8 +583,9 @@ def list_entities(
         필터가 있으면 해당 필드가 일치하는 엔티티만 반환한다.
     """
     interp_path = Path(interp_path).resolve()
-    if entity_type == "text_block":
-        entities = _text_block_view(interp_path)
+    entity_type = normalize_entity_type(entity_type)
+    if entity_type == "unit":
+        entities = _unit_view(interp_path)
         if filters:
             entities = [e for e in entities if all(e.get(k) == v for k, v in filters.items())]
         return entities
@@ -615,15 +633,15 @@ def list_entities_for_page(
     }
 
     왜 이렇게 하는가:
-        - 먼저 source_ref.page가 일치하는 TextBlock을 찾고,
-        - 그 TextBlock의 block_id를 가진 Tag를 찾고,
+        - 먼저 source_ref.page가 일치하는 단위를 찾고,
+        - 그 단위의 block_id를 가진 Tag를 찾고,
         - 관련된 Relation, Agent, Concept을 찾아 함께 반환한다.
         - 연구자가 현재 보고 있는 페이지의 맥락에서 엔티티를 파악할 수 있게 한다.
     """
     interp_path = Path(interp_path).resolve()
 
-    # 1) TextBlock: source_ref.document_id == document_id and source_ref.page == page_num
-    all_blocks = list_entities(interp_path, "text_block")
+    # 1) 단위: source_ref.document_id == document_id and source_ref.page == page_num
+    all_blocks = list_entities(interp_path, "unit")
     page_blocks = []
     for blk in all_blocks:
         ref = blk.get("source_ref")
@@ -753,7 +771,7 @@ def promote_tag_to_concept(
     return {**result, "concept": concept_data}
 
 
-def create_textblock_from_source(
+def create_unit_from_source(
     interp_path: str | Path,
     library_path: str | Path,
     document_id: str,
@@ -764,11 +782,11 @@ def create_textblock_from_source(
     work_id: str,
     sequence_index: int,
 ) -> dict:
-    """L4 확정 텍스트에서 TextBlock을 생성한다 (source_ref 자동 채움).
+    """L4 확정 텍스트에서 단위를 생성한다 (source_ref 자동 채움).
 
-    목적: 연구자가 "TextBlock 만들기" 버튼을 클릭하면,
+    목적: 연구자가 "단위 만들기" 버튼을 클릭하면,
           현재 문서·페이지·블록 정보에서 source_ref를 자동으로 채워
-          TextBlock을 생성한다.
+          단위를 생성한다.
     입력:
         interp_path — 해석 저장소 경로.
         library_path — 서고 루트 경로.
@@ -779,10 +797,10 @@ def create_textblock_from_source(
         original_text — L4 확정 텍스트.
         work_id — 소속 Work의 UUID.
         sequence_index — 작품 내 순서 (0-based).
-    출력: 생성된 TextBlock 딕셔너리.
+    출력: 생성된 단위 딕셔너리.
 
     왜 이렇게 하는가:
-        D-005: source_ref로 TextBlock이 원본 저장소의 어디에서 왔는지를
+        D-005: source_ref로 단위가 원본 저장소의 어디에서 왔는지를
         항상 추적해야 한다. commit 해시를 기록하여 정확한 시점을 고정한다.
     """
     interp_path = Path(interp_path).resolve()
@@ -800,7 +818,7 @@ def create_textblock_from_source(
         "commit": commit_hash,
     }
 
-    text_block_data = {
+    unit_data = {
         "id": str(uuid.uuid4()),
         "work_id": work_id,
         "sequence_index": sequence_index,
@@ -815,8 +833,8 @@ def create_textblock_from_source(
         },
     }
 
-    result = create_entity(interp_path, "text_block", text_block_data)
-    return {**result, "text_block": text_block_data}
+    result = create_entity(interp_path, "unit", unit_data)
+    return {**result, "unit": unit_data}
 
 
 def auto_create_work(
@@ -826,7 +844,7 @@ def auto_create_work(
 ) -> dict:
     """문헌의 메타데이터로부터 Work 엔티티를 자동 생성한다.
 
-    목적: TextBlock을 만들기 전에 소속 Work가 필요한데,
+    목적: 단위를 만들기 전에 소속 Work가 필요한데,
           연구자가 직접 만들지 않아도 문헌 정보에서 자동 생성할 수 있다.
     입력:
         interp_path — 해석 저장소 경로.
@@ -896,16 +914,16 @@ def auto_create_work(
     return {**result, "work": work_data}
 
 
-def auto_create_textblocks_from_text(
+def auto_create_units_from_text(
     interp_path: str | Path,
     library_path: str | Path,
     document_id: str,
     pages: list[dict],
 ) -> list[dict]:
-    """텍스트에서 TextBlock을 직접 생성한다 (시나리오 2: HWP만).
+    """텍스트에서 단위를 직접 생성한다 (시나리오 2: HWP만).
 
     목적: HWP 파일로 새 문헌을 만든 후, 레이아웃 분석(L3) 없이
-          바로 TextBlock을 생성하여 표점·현토·번역 작업을 시작할 수 있게 한다.
+          바로 단위를 생성하여 표점·현토·번역 작업을 시작할 수 있게 한다.
     입력:
         interp_path — 해석 저장소 경로.
         library_path — 서고 루트 경로.
@@ -913,7 +931,7 @@ def auto_create_textblocks_from_text(
         pages — [{page_num, text, part_id(선택)}].
             각 항목은 한 페이지의 텍스트.
             part_id가 없으면 "vol1" 사용.
-    출력: 생성된 TextBlock 딕셔너리 리스트.
+    출력: 생성된 단위 딕셔너리 리스트.
 
     왜 이렇게 하는가:
         시나리오 2에서는 PDF/이미지가 없으므로 LayoutBlock도 없다.
@@ -938,8 +956,8 @@ def auto_create_textblocks_from_text(
         if not text.strip():
             continue
 
-        # TextBlock 생성 — layout_block_id=null (HWP 직접 가져오기)
-        block_result = create_textblock_from_source(
+        # 단위 생성 — layout_block_id=null (HWP 직접 가져오기)
+        block_result = create_unit_from_source(
             interp_path=interp_path,
             library_path=library_path,
             document_id=document_id,
@@ -957,7 +975,7 @@ def auto_create_textblocks_from_text(
 
 
 # ──────────────────────────────────────
-# 내용 트리 — Work → TextBlock 순서 (D-085)
+# 내용 트리 — Work → 단위 순서 (D-085)
 # ──────────────────────────────────────
 
 
@@ -968,7 +986,7 @@ def _block_preview(text: str | None, length: int = 14) -> str:
 
 
 def list_contents(interp_path: str | Path, document_id: str | None = None) -> dict:
-    """해석 저장소의 내용 트리 — Work마다 TextBlock을 sequence_index 순으로.
+    """해석 저장소의 내용 트리 — Work마다 단위를 sequence_index 순으로.
 
     목적: 교감 뒤에는 쪽이 아니라 **내용**으로 찾아가야 한다(D-085). 사이드바의
           「내용」 트리가 이 결과로 그려지고, 블록을 누르면 source_refs의 쪽으로
@@ -991,7 +1009,7 @@ def list_contents(interp_path: str | Path, document_id: str | None = None) -> di
     grouped: dict[str, list[dict]] = {wid: [] for wid in works}
     unassigned: list[dict] = []
 
-    for blk in list_entities(interp_path, "text_block"):
+    for blk in list_entities(interp_path, "unit"):
         refs = blk.get("source_refs") or ([blk["source_ref"]] if blk.get("source_ref") else [])
         if document_id and refs and not any(r.get("document_id") == document_id for r in refs):
             continue

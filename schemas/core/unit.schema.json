@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "text_block.schema.json",
-  "title": "TextBlock — 해석용 텍스트 단위",
-  "description": "코어 스키마의 최소 텍스트 단위 (문장/절/구). D-003에 따라 'TextBlock'이라 부른다 (LayoutBlock, OcrResult과 구분). source_refs로 원본 저장소의 출처를 항상 추적한다 (D-005). 여러 LayoutBlock 합치기(source_refs 배열) 및 하나의 LayoutBlock 쪼개기(char_range)를 모두 지원한다.",
+  "$id": "unit.schema.json",
+  "title": "Unit — 해석용 글 단위",
+  "description": "해석의 글 단위. v1.3부터 저장하지 않고 경계 목록(boundaries.schema.json)에서 만든 읽기 보기이며, 이 스키마는 그 보기의 모양을 고정한다 (D-092·D-093 — 옛 이름은 TextBlock). 원본 저장소의 LayoutBlock·OcrResult와는 다른 것이다. source_refs로 출처를 항상 추적한다 (D-005).",
   "type": "object",
   "required": ["id", "work_id", "sequence_index", "original_text", "status"],
   "additionalProperties": false,
@@ -40,7 +40,7 @@
       "default": null
     },
     "source_refs": {
-      "description": "원본 저장소에서의 출처 정보 배열. TextBlock이 어디서 왔는지를 항상 추적한다 (D-005). 배열 순서대로 텍스트를 이어붙인다. 여러 LayoutBlock 합치기 및 하나의 LayoutBlock 쪼개기(char_range)를 모두 지원한다.",
+      "description": "원본 저장소에서의 출처 정보 배열. 단위가 어디서 왔는지를 항상 추적한다 (D-005). 배열 순서대로 텍스트를 이어붙인다. 여러 LayoutBlock 합치기 및 하나의 LayoutBlock 쪼개기(char_range)를 모두 지원한다.",
       "oneOf": [
         { "type": "null" },
         {

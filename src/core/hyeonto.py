@@ -123,7 +123,7 @@ def _hyeonto_block_file_path(
     """블록별 현토 파일 경로 조립.
 
     컨벤션: L5_reading/main_text/{part_id}_page_{NNN}_blk_{XXXXXXXX}_hyeonto.json
-    한 페이지에 여러 TextBlock이 있을 때 각각의 현토를 독립적으로 저장한다.
+    한 페이지에 여러 단위가 있을 때 각각의 현토를 독립적으로 저장한다.
     block_id가 긴 UUID일 수 있으므로 앞 8자만 사용한다 (표점과 동일한 규칙).
     """
     # block_id가 빈 문자열이면 "unknown"으로 대체

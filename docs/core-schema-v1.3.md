@@ -22,14 +22,16 @@ Fields: - id - title - author - period - metadata
 
 ------------------------------------------------------------------------
 
-# 2. TextBlock
+# 2. Unit (단위)
 
 Smallest structural unit (sentence / clause / segment).
 
-> **Implementation note**: In code, the entity type is `text_block` and
-> the class is `TextBlock`. The storage directory is `blocks/`.
-> See CLAUDE.md "용어 규칙" for the distinction between LayoutBlock,
-> OcrResult, and TextBlock.
+> **Implementation note**: In code the entity type is `unit` (D-093; it was
+> `text_block` through v1.2). Since v1.3 units are not stored one file each —
+> they are a read-only view computed from the boundary list in
+> `core_entities/boundaries/{doc}__{part}.json` (D-092), and the schema file is
+> `unit.schema.json`. See CLAUDE.md "용어 규칙" for the distinction between
+> LayoutBlock, OcrResult, and unit.
 
 Fields: - id - work_id - sequence_index - original_text -
 normalized_text (optional) - source_ref - source_refs - notes - metadata

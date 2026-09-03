@@ -274,7 +274,7 @@ git rev-parse refs/tags/vX.Y.Z^{}      # HEAD와 같은가
 - JSON 파일은 `jsonschema`로 검증(스키마 20개).
 - 코드 주석은 한국어로, **왜 그렇게 했는지**를 담는다. 이 저장소의
   사용자는 비개발자 연구자이고, 주석이 유일한 설명이다.
-- 용어: `LayoutBlock`(L3 영역) / `OcrResult`(L2 인식 결과) / `TextBlock`(해석용 단위).
+- 용어: `LayoutBlock`(L3 영역) / `OcrResult`(L2 인식 결과) / `unit`(단위 — 해석용, D-093).
   **「Block」이라고만 쓰지 않는다.**
 
 ---

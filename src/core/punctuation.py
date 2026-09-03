@@ -124,7 +124,7 @@ def _punctuation_block_file_path(
     """블록별 표점 파일 경로 조립.
 
     컨벤션: L5_reading/main_text/{part_id}_page_{NNN}_blk_{XXXXXXXX}_punctuation.json
-    한 페이지에 여러 TextBlock이 있을 때 각각의 표점을 독립적으로 저장한다.
+    한 페이지에 여러 단위가 있을 때 각각의 표점을 독립적으로 저장한다.
     block_id 앞 8자리를 파일명에 사용하여 충돌 가능성을 낮춘다.
     """
     short_id = block_id[:8] if block_id else "unknown"

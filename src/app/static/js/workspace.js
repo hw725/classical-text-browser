@@ -53,7 +53,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (typeof initOcrPanel === "function") _safeInit("OcrPanel", initOcrPanel);
   // Phase 10-3: 대조 뷰 초기화
   if (typeof initAlignmentView === "function") _safeInit("AlignmentView", initAlignmentView);
-  // 편성 에디터 초기화 (LayoutBlock → TextBlock)
+  // 편성 에디터 초기화 (LayoutBlock → 단위)
   if (typeof initCompositionEditor === "function") _safeInit("CompositionEditor", initCompositionEditor);
   // Phase 11-1: 표점 편집기 초기화
   if (typeof initPunctuationEditor === "function") _safeInit("PunctuationEditor", initPunctuationEditor);

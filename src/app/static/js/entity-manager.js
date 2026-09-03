@@ -3,7 +3,7 @@
    ──────────────────────────────────────────
 
    해석 저장소 내의 코어 스키마 엔티티
-   (Work, TextBlock, Tag, Concept, Agent, Relation)를
+   (Work, 단위, Tag, Concept, Agent, Relation)를
    생성·조회·편집하는 프론트엔드 모듈.
 
    의존:
@@ -15,7 +15,7 @@
 const entityState = {
   active: false,            // 엔티티 패널 활성 여부
   entities: {},             // 캐시: { works:[], blocks:[], tags:[], concepts:[], agents:[], relations:[] }
-  currentFilter: "all",     // 유형 필터: all / text_block / tag / concept / agent / relation / work
+  currentFilter: "all",     // 유형 필터: all / unit / tag / concept / agent / relation / work
   pageFilter: true,         // "현재 페이지만" 체크 여부
   editingEntity: null,      // 편집 중인 엔티티 (null이면 신규 생성)
   editingType: null,        // 편집 중인 엔티티 유형
@@ -24,7 +24,7 @@ const entityState = {
 // 엔티티 유형별 표시 정보
 const ENTITY_TYPE_INFO = {
   work:       { label: "Work",      cssClass: "type-work",       displayField: "title" },
-  text_block: { label: "TextBlock", cssClass: "type-text-block", displayField: "original_text" },
+  unit:       { label: "단위",      cssClass: "type-unit",       displayField: "original_text" },
   tag:        { label: "Tag",       cssClass: "type-tag",        displayField: "surface" },
   concept:    { label: "Concept",   cssClass: "type-concept",    displayField: "label" },
   agent:      { label: "Agent",     cssClass: "type-agent",      displayField: "name" },
@@ -83,10 +83,10 @@ function initEntityManager() {
     createBtn.addEventListener("click", _showEntityTypeChooser);
   }
 
-  // "TextBlock 만들기" 버튼
+  // "단위 만들기" 버튼
   const tbBtn = document.getElementById("entity-create-textblock-btn");
   if (tbBtn) {
-    tbBtn.addEventListener("click", _openTextBlockCreator);
+    tbBtn.addEventListener("click", _openUnitCreator);
   }
 
   // "LLM에게 요청" 버튼
@@ -179,8 +179,8 @@ function _loadEntitiesForCurrentPage() {
 function _loadAllEntities() {
   if (!interpState || !interpState.interpId) return;
 
-  const types = ["work", "text_block", "tag", "concept", "agent", "relation"];
-  const typeMap = { work: "works", text_block: "blocks", tag: "tags", concept: "concepts", agent: "agents", relation: "relations" };
+  const types = ["work", "unit", "tag", "concept", "agent", "relation"];
+  const typeMap = { work: "works", unit: "units", tag: "tags", concept: "concepts", agent: "agents", relation: "relations" };
 
   Promise.all(
     types.map((t) =>
@@ -262,7 +262,7 @@ function _renderEntityList() {
 function _getFilteredEntities() {
   const ent = entityState.entities || {};
   const typeMap = {
-    work: "works", text_block: "blocks", tag: "tags",
+    work: "works", unit: "units", tag: "tags",
     concept: "concepts", agent: "agents", relation: "relations",
   };
 
@@ -390,8 +390,8 @@ function _buildFormFields(entityType, existing) {
 
     case "tag":
       return `
-        <label class="bib-edit-label">TextBlock ID (block_id)</label>
-        <input id="ef-block-id" type="text" class="bib-input" value="${val("block_id")}" placeholder="TextBlock UUID" />
+        <label class="bib-edit-label">단위 ID (block_id)</label>
+        <input id="ef-block-id" type="text" class="bib-input" value="${val("block_id")}" placeholder="단위 UUID" />
         <label class="bib-edit-label">표면 문자열 (surface)</label>
         <input id="ef-surface" type="text" class="bib-input" value="${val("surface")}" placeholder="예: 王戎" />
         <label class="bib-edit-label">핵심 범주 (core_category)</label>
@@ -665,21 +665,21 @@ function _closeEntityDialog() {
 
 
 /* ──────────────────────────
-   TextBlock 생성 (source_ref 자동)
+   단위 생성 (source_ref 자동)
    ────────────────────────── */
 
 /**
- * "TextBlock 만들기" 전용 다이얼로그를 연다.
+ * "단위 만들기" 전용 다이얼로그를 연다.
  * source_ref 필드가 현재 문서/페이지 정보로 자동 채워진다.
  */
-async function _openTextBlockCreator() {
+async function _openUnitCreator() {
   if (!interpState || !interpState.interpId || !viewerState || !viewerState.docId) {
     showToast("해석 저장소와 문헌을 먼저 선택하세요.", 'warning');
     return;
   }
 
   entityState.editingEntity = null;
-  entityState.editingType = "text_block";
+  entityState.editingType = "unit";
 
   const form = document.getElementById("entity-dialog-form");
   const title = document.getElementById("entity-dialog-title");
@@ -752,12 +752,12 @@ async function _openTextBlockCreator() {
     });
   }
 
-  // 저장 버튼 동작을 TextBlock 전용으로 교체
+  // 저장 버튼 동작을 단위 전용으로 교체
   const saveBtn = document.getElementById("entity-dialog-save");
   // 기존 리스너 제거를 위해 교체
   const newSaveBtn = saveBtn.cloneNode(true);
   saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
-  newSaveBtn.addEventListener("click", _saveTextBlockFromSource);
+  newSaveBtn.addEventListener("click", _saveUnitFromSource);
 
   document.getElementById("entity-dialog-status").textContent = "";
   document.getElementById("entity-dialog-overlay").style.display = "";
@@ -765,9 +765,9 @@ async function _openTextBlockCreator() {
 
 
 /**
- * TextBlock from source 저장 처리.
+ * 단위 from source 저장 처리.
  */
-async function _saveTextBlockFromSource() {
+async function _saveUnitFromSource() {
   const statusEl = document.getElementById("entity-dialog-status");
 
   const originalText = (document.getElementById("ef-tb-original-text") || {}).value?.trim();
@@ -791,7 +791,7 @@ async function _saveTextBlockFromSource() {
 
   try {
     const resp = await fetch(
-      `/api/interpretations/${interpState.interpId}/entities/text_block/from-source`,
+      `/api/interpretations/${interpState.interpId}/entities/unit/from-source`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -832,7 +832,7 @@ async function _saveTextBlockFromSource() {
 
 
 /**
- * TextBlock 다이얼로그에서 교체된 저장 버튼을 원래 핸들러로 복원한다.
+ * 단위 다이얼로그에서 교체된 저장 버튼을 원래 핸들러로 복원한다.
  */
 function _restoreSaveButton() {
   const saveBtn = document.getElementById("entity-dialog-save");

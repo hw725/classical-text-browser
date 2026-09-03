@@ -21,8 +21,8 @@
 | 스키마 | 설명 | 근거 |
 |--------|------|------|
 | `work.schema.json` | 작품 | core-schema-v1.3 섹션 1 |
-| `text_block.schema.json` | 해석용 텍스트 단위 (source_ref 포함) | core-schema-v1.3 섹션 2, D-005 |
-| `boundaries.schema.json` | 권 하나의 글 단위 경계 목록 — **단위의 정본**(시작 위치·id·층위). TextBlock은 이 목록에서 만든 읽기 보기 | D-092 |
+| `unit.schema.json` | 해석용 글 단위 (source_ref 포함). v1.2까지 이름은 `text_block` | core-schema-v1.3 섹션 2, D-005, D-093 |
+| `boundaries.schema.json` | 권 하나의 글 단위 경계 목록 — **단위의 정본**(시작 위치·id·층위). 단위는 이 목록에서 만든 읽기 보기 | D-092 |
 | `tag.schema.json` | 표면 주석 (LLM/자동 추출) | core-schema-v1.3 섹션 3 |
 | `concept.schema.json` | 승격된 의미 엔티티 | core-schema-v1.3 섹션 4 |
 | `agent.schema.json` | 역사적/서사적 행위자 | core-schema-v1.3 섹션 5 |
@@ -50,7 +50,7 @@
 |------|------|------|
 | **LayoutBlock** | 원본 저장소 L3 (`layout_page.schema.json`) | 페이지 이미지 위의 사각형 영역. OCR 읽기 순서 단위. |
 | **OcrResult** | 원본 저장소 L2 (`ocr_page.schema.json`) | LayoutBlock 안에서 OCR이 인식한 글자들. |
-| **TextBlock** | 코어 스키마 (`text_block.schema.json`) | 해석 작업의 최소 텍스트 단위 (문장/절/구). |
+| **단위(unit)** | 코어 스키마 (`unit.schema.json`) | 해석 작업의 글 단위 (기사·조각). |
 
 ## 데이터 흐름
 
@@ -76,7 +76,7 @@ L4 사람 교정 ─────── corrections.schema.json
   ═══ 저장소 경계 ═══
   │
   ▼
-TextBlock ──────────── text_block.schema.json
+단위(unit) ─────────── unit.schema.json
   │  source_ref로 원본(L4) 추적
   │  해석 저장소의 시작점
   │
@@ -90,7 +90,7 @@ TextBlock ──────────── text_block.schema.json
   │     역사적 인물/행위자
   │
   └─→ Relation ────────── relation.schema.json
-        Agent/Concept/TextBlock 간 관계
+        Agent/Concept/단위 간 관계
 
 --- 해석 작업 (interp/) ---
 

@@ -59,13 +59,13 @@ flowchart TB
 
     subgraph CORE["코어 스키마 엔티티"]
         Work["Work"]
-        TextBlock["TextBlock"]
+        Unit["단위(unit)"]
         Tag["Tag"]
         PROMO["승격 (선택적)"]
         Concept["Concept"]
         Agent["Agent"]
         Relation["Relation"]
-        Work --- TextBlock --- Tag
+        Work --- Unit --- Tag
         Tag -.-> PROMO -.-> Concept
         Concept --- Relation
         Agent --- Relation
@@ -91,7 +91,7 @@ flowchart TB
     style L8 fill:#e3f2fd,stroke:#1565c0
     style CORE fill:#e1bee7,stroke:#6a2d6a,stroke-width:2px
     style Work fill:#fef3c7,stroke:#b45309
-    style TextBlock fill:#fef3c7,stroke:#b45309
+    style Unit fill:#fef3c7,stroke:#b45309
     style Tag fill:#fef3c7,stroke:#b45309
     style Concept fill:#fef3c7,stroke:#b45309
     style Agent fill:#fef3c7,stroke:#b45309
@@ -103,7 +103,7 @@ flowchart TB
 - 원본 저장소는 **단일 정본**으로 수렴 (정답이 있다)
 - 해석 저장소는 **다수 병존** (해석은 연구자마다 다르다)
 - L4 확정 → `dependency.json` → 해석 저장소 시작점 (저장소 경계)
-- 코어 스키마 7개(Work, TextBlock(보기), Boundaries(경계 목록 — 단위의 정본, D-092), Tag, Concept, Agent, Relation)는 해석 저장소 내부에 위치
+- 코어 스키마 7개(Work, 단위(unit — 보기), Boundaries(경계 목록 — 단위의 정본, D-092), Tag, Concept, Agent, Relation)는 해석 저장소 내부에 위치
 - **추출 모드는 층이 아니라 표시 프로필**이다 — 어떤 탭을 보여 줄지만 바뀌고,
   그 상태는 브라우저 `localStorage`(`ctb.profile.<문헌ID>`)에만 남는다.
   `manifest.json`에는 아무것도 기록되지 않으므로 저장되는 데이터는 교감 모드와 완전히 같다 (D-055 · D-060)
@@ -144,7 +144,7 @@ flowchart TB
             CE["correction-editor.js<br/>L4 교정 대조"]
             TXE["text-editor.js<br/>L4 텍스트 편집"]
             BC["batch-correction.js<br/>일괄 이체자 교정"]
-            COMP["composition-editor.js<br/>LayoutBlock을 TextBlock으로"]
+            COMP["composition-editor.js<br/>LayoutBlock을 단위로"]
         end
         subgraph FE_EXT["추출 모드 전용 (v1.2.0)"]
             EXP["extract-panel.js<br/>진단 · 권 일괄 OCR · 쪽별 검수 · PDF 산출"]
@@ -275,14 +275,14 @@ flowchart TB
         subgraph ROW1[" "]
             direction LR
             WORK["<b>Work</b><br/>id: UUID (PK)<br/>title: 원어 제목 (필수)<br/>author: 저자<br/>period: 시대<br/>status: draft|active|deprecated|archived<br/>metadata: 자유 확장 필드"]
-            TB_NODE["<b>TextBlock</b><br/>id: UUID (PK)<br/>work_id: FK → Work<br/>sequence_index: 순서 (필수)<br/>original_text: 원문 (불변, 필수)<br/>normalized_text: 정규화<br/>source_ref: 출처 추적 JSON<br/>status: draft|active|..."]
-            TAG["<b>Tag</b><br/>id: UUID (PK)<br/>block_id: FK → TextBlock<br/>surface: 표면 텍스트 (필수)<br/>core_category: person|place|...<br/>confidence: 신뢰도 0-1<br/>extractor: llm|rule|human<br/>status: draft|active|..."]
+            TB_NODE["<b>단위(unit)</b><br/>id: UUID (PK)<br/>work_id: FK → Work<br/>sequence_index: 순서 (필수)<br/>original_text: 원문 (불변, 필수)<br/>normalized_text: 정규화<br/>source_ref: 출처 추적 JSON<br/>status: draft|active|..."]
+            TAG["<b>Tag</b><br/>id: UUID (PK)<br/>block_id: FK → 단위<br/>surface: 표면 텍스트 (필수)<br/>core_category: person|place|...<br/>confidence: 신뢰도 0-1<br/>extractor: llm|rule|human<br/>status: draft|active|..."]
         end
         subgraph ROW2[" "]
             direction LR
             CONCEPT["<b>Concept</b><br/>id: UUID (PK)<br/>label: 대표 이름 (필수)<br/>scope_work: 범위 Work (선택)<br/>description: 학술 설명<br/>concept_features: 자유 확장<br/>status: draft|active|..."]
             AGENT["<b>Agent</b><br/>id: UUID (PK)<br/>name: 이름 (필수)<br/>period: 활동 시대<br/>biography_note: 약전<br/>status: draft|active|..."]
-            RELATION["<b>Relation</b><br/>id: UUID (PK)<br/>subject_id / subject_type<br/>predicate: snake_case (필수)<br/>object_id / object_type<br/>object_value: 자유 텍스트<br/>evidence_blocks: TextBlock ID[]<br/>confidence / status"]
+            RELATION["<b>Relation</b><br/>id: UUID (PK)<br/>subject_id / subject_type<br/>predicate: snake_case (필수)<br/>object_id / object_type<br/>object_value: 자유 텍스트<br/>evidence_blocks: 단위 ID[]<br/>confidence / status"]
         end
 
         WORK -->|"contains"| TB_NODE
@@ -506,7 +506,7 @@ flowchart TB
         C2["<b>2. 레이아웃 (L3)</b><br/>본문 · 주석 · 판심제 영역 나누기<br/>자동감지 또는 손으로 · 읽기 순서 지정"]
         C3["<b>3. OCR (L2)</b><br/>엔진 선택 · LayoutBlock별 인식"]
         C4["<b>4. 교정 (L4)</b><br/>OCR 대조 · 이체자 확인 · 확정"]
-        C5["<b>5. 편성</b><br/>LayoutBlock을 TextBlock으로 · source_ref 추적"]
+        C5["<b>5. 편성</b><br/>LayoutBlock을 단위로 · source_ref 추적"]
         C6["<b>6. 해석 (L5-L7)</b><br/>표점 · 현토 · 번역 · 주석 · 인용마크<br/><i>저장소 경계를 넘는다</i>"]
         C1 --> C2 --> C3 --> C4 --> C5 --> C6
     end
@@ -600,7 +600,7 @@ flowchart TB
     subgraph CORE_SCHEMA["코어 스키마 (6개)"]
         direction TB
         C_WOR["<b>Work</b><br/><i>title, author, period</i>"]
-        C_TB["<b>TextBlock</b><br/><i>work_id, original_text, source_ref</i>"]
+        C_TB["<b>단위(unit)</b><br/><i>work_id, original_text, source_ref</i>"]
         C_TAG["<b>Tag</b><br/><i>block_id, surface, core_category</i>"]
         C_CON["<b>Concept</b><br/><i>label, concept_features</i>"]
         C_AGE["<b>Agent</b><br/><i>name, period</i>"]
@@ -644,7 +644,7 @@ flowchart TB
 - 저장소 간: `interp_manifest/dependency` → `manifest` (document_id + base_commit)
 - 해석→원본: 모든 해석 스키마 → `layout_page` (block_id로 연결)
 - 해석 내부: `translation_page` ↔ `annotation_page` (annotation_context)
-- 코어→원본: `TextBlock.source_ref` → `manifest` (역참조)
+- 코어→원본: `단위(unit).source_ref` → `manifest` (역참조)
 
 ---
 
@@ -808,7 +808,7 @@ flowchart TB
         IA_L5["L5/<br/>punctuation, hyeonto"]
         IA_L6["L6/<br/>translation"]
         IA_L7["L7/<br/>annotation, citation"]
-        IA_CORE["core/ -- Work, TextBlock, Tag, Concept, Agent, Relation"]
+        IA_CORE["core/ -- Work, 단위(unit), Tag, Concept, Agent, Relation"]
     end
 
     subgraph INTERP_B["해석 B (LLM draft, Git repo)"]
@@ -1196,7 +1196,7 @@ flowchart TB
 | **출처 추적** | `source_ref`로 원본 저장소 역참조 |
 | **온톨로지 비강제** | Concept 자유 확장. 부재 = 미지정 |
 | **Promotion Flow** | Tag(잠정) → Concept(확정), 연구자 판단 |
-| **용어 규칙** | LayoutBlock / OcrResult / TextBlock. 「Block」 단독 사용 금지 |
+| **용어 규칙** | LayoutBlock / OcrResult / 단위(unit). 「Block」 단독 사용 금지 |
 | **오프라인 퍼스트** | 핵심 작업(교정, 열람, 커밋)은 인터넷 없이 동작 |
 | **작업 모드는 표시만 바꾼다** | 추출 모드는 탭·패널을 숨길 뿐, 저장 형식과 데이터는 교감 모드와 같다 (D-055) |
 | **산출물은 다시 열어 잰다** | 만든 PDF를 앱이 열어 글자 크기·덮개·잉크 밀도를 확인한다 (D-068) |

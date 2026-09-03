@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "boundaries.schema.json",
   "title": "Boundaries — 권 하나의 글 단위 경계 목록 (D-092)",
-  "description": "단위(글)의 정본. 항목 하나가 «여기서 단위가 시작한다»이며, 끝은 저장하지 않고 같은 층위 이상의 다음 경계 앞까지로 정한다. 단위의 id는 시작 경계에 붙는다 — 관계·태그·L5~L7의 tb:UUID가 이 id를 가리킨다. 본문은 저장하지 않고 L4에서 잘라 온다(교감 자동 반영).",
+  "description": "단위(글)의 정본. 항목 하나가 «여기서 단위가 시작한다»이며, 끝은 저장하지 않고 같은 층위 이상의 다음 경계 앞까지로 정한다. 단위의 id는 시작 경계에 붙는다 — 관계·태그·L5~L7의 block_id가 이 id를 가리킨다. 본문은 저장하지 않고 L4에서 잘라 온다(교감 자동 반영).",
   "type": "object",
   "required": ["document_id", "part_id", "boundaries"],
   "additionalProperties": false,

@@ -2,9 +2,10 @@
 
 왜 이것이 정본인가:
     v1.2.x까지 글 단위는 TextBlock(본문 복사본 + 쪽·글자 범위)이었고 경계는 그 위치의 보기였다
-    (D-090). 임의 행·행 중간에 경계를 넣을 수 있게 되자(D-090 2단계) TextBlock이 따로 가진
+    (D-090). 임의 행·행 중간에 경계를 넣을 수 있게 되자(D-090 2단계) 그것이 따로 가진
     정보는 «단위의 id·제목·상태»뿐이었고, 본문 복사본은 교감이 반영되지 않는 짐이었다.
-    그래서 뒤집었다 — **경계 목록이 정본**이고 TextBlock은 이 목록에서 만든 읽기 전용 보기다.
+    그래서 뒤집었다 — **경계 목록이 정본**이고 단위는 이 목록에서 만든 읽기 전용 보기다.
+    (이름은 v1.3에서 TextBlock → 단위(unit)로 바꿨다 — D-093.)
 
 규칙 (D-092 결정):
     - 권마다 파일 하나: core_entities/boundaries/{document_id}__{part_id}.json
@@ -216,13 +217,13 @@ def compute_units(
     lines: list,
     page_texts: dict[int, str],
 ) -> list[dict]:
-    """경계 목록 → TextBlock 모양의 단위 목록(읽기 전용 보기).
+    """경계 목록 → 단위 목록(읽기 전용 보기).
 
     입력:
         data — load_boundaries() 결과.
         lines, page_texts — segmentation.collect_document_lines()의 결과(그 권).
-    출력: TextBlock 스키마와 같은 모양의 dict 목록(위치 순서). 관계·태그·표점 편집기가
-          `text_block` 엔티티로 읽던 것과 같은 필드를 준다 — id·work_id·sequence_index·
+    출력: 단위 스키마와 같은 모양의 dict 목록(위치 순서). 관계·태그·표점 편집기가
+          `unit` 엔티티로 읽던 것과 같은 필드를 준다 — id·work_id·sequence_index·
           original_text·source_ref·source_refs·status·notes·metadata(title·kind·level·anchor).
     """
     from core.segmentation import span_to_text_and_refs
@@ -489,7 +490,7 @@ def update_boundary(data: dict, boundary_id: str, fields: dict) -> dict:
 
 
 def needs_migration(interp_path: str | Path) -> bool:
-    """옛 TextBlock 파일은 있는데 경계 목록이 없는 저장소인가."""
+    """옛 단위 파일은 있는데 경계 목록이 없는 저장소인가."""
     interp_path = Path(interp_path)
     blocks = interp_path / "core_entities" / LEGACY_BLOCKS_DIRNAME
     return (

@@ -7,7 +7,7 @@
 
 무엇을 하지 않는가:
     확정하지 않는다. 결과는 신뢰도 붙은 후보 목록이고, 사용자가 승인한 것만
-    TextBlock이 된다(D-085 결정 2 — 단위는 잠정적).
+    단위가 된다(D-085 결정 2 — 단위는 잠정적).
 
 신호를 두 층으로 나눈다 — 하드코딩 금지 원칙(D-080·D-081과 같은 태도):
     1. 문헌 무관 신호 (코드):
@@ -701,7 +701,7 @@ def span_to_text_and_refs(
     document_id: str,
     part_id: str,
 ) -> tuple[str, list[dict]]:
-    """구간 하나를 TextBlock의 original_text와 source_refs(쪽별 char_range)로 바꾼다."""
+    """구간 하나를 단위의 original_text와 source_refs(쪽별 char_range)로 바꾼다."""
     s, e = span["start"], span["end"]
     s_off = int(s.get("char_offset") or 0)
     e_end = e.get("char_end")
@@ -861,7 +861,7 @@ def line_of_offset(page_text: str, offset: int) -> int:
 
 
 def anchor_from_refs(refs: list[dict], page_texts: dict[int, str]) -> Optional[dict]:
-    """TextBlock의 source_refs(쪽·char_range)에서 시작·끝 행 앵커를 계산한다 (D-090).
+    """단위의 source_refs(쪽·char_range)에서 시작·끝 행 앵커를 계산한다 (D-090).
 
     위치의 정본은 source_refs 하나다. 행 번호는 저장하지 않고 읽을 때 계산한다 — 그래야
     합치기·쪼개기·경계 옮기기 어느 경로로 바꿔도 색인이 어긋나지 않는다.

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "relation.schema.json",
   "title": "Relation — 엔티티 간 관계",
-  "description": "Agent, Concept, TextBlock 사이의 관계를 표현한다. predicate는 구조적 동사만 허용하고, 해석적 뉘앙스는 코어 밖에 저장한다 (operation-rules 5). core-schema-v1.3.md 섹션 6 기반.",
+  "description": "Agent, Concept, 단위(unit) 사이의 관계를 표현한다. predicate는 구조적 동사만 허용하고, 해석적 뉘앙스는 코어 밖에 저장한다 (operation-rules 5). core-schema-v1.3.md 섹션 6 기반.",
   "type": "object",
   "required": ["id", "subject_id", "subject_type", "predicate", "status"],
   "additionalProperties": false,
@@ -46,7 +46,7 @@
     },
     "evidence_blocks": {
       "type": ["array", "null"],
-      "description": "이 관계의 근거가 되는 TextBlock id 목록. operation-rules 4.2: 활성화 시 근거 검증 필요.",
+      "description": "이 관계의 근거가 되는 단위(unit) id 목록. operation-rules 4.2: 활성화 시 근거 검증 필요.",
       "items": {
         "type": "string",
         "format": "uuid"

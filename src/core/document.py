@@ -645,7 +645,7 @@ def get_corrected_text(doc_path: str | Path, part_id: str, page_num: int) -> dic
 
     목적: L4_text/pages/의 원본 텍스트에 L4_text/corrections/의 교정 기록을
           적용하여, "교정된 텍스트"를 생성한다. 편성(composition) 단계에서
-          TextBlock을 만들 때 이 텍스트를 사용한다.
+          단위를 만들 때 이 텍스트를 사용한다.
     입력:
         doc_path — 문헌 디렉토리 경로.
         part_id — 권 식별자.

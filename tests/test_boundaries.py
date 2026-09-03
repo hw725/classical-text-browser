@@ -1,7 +1,7 @@
 """경계 목록(D-092) — 단위의 정본. 순수 계산·파일·마이그레이션·entity 보기를 고정한다.
 
 왜 이 시험이 필요한가:
-    TextBlock을 없애고 경계 목록으로 바꾸는 것은 저장 형식 변경이다. «끝은 다음 경계가 정한다»,
+    단위를 없애고 경계 목록으로 바꾸는 것은 저장 형식 변경이다. «끝은 다음 경계가 정한다»,
     «id는 시작 경계에 붙는다», «층위 n을 손대도 더 얕은 층위의 id는 그대로», «옛 blocks/는 손실
     없이 옮겨진다»가 깨지면 관계·태그·표점 파일의 참조가 끊긴다.
 """
@@ -288,7 +288,7 @@ class TestEntityView:
         (interp / "core_entities" / "works").mkdir(parents=True)
         created = E.create_entity(
             interp,
-            "text_block",
+            "unit",
             {
                 "work_id": "22222222-2222-2222-2222-222222222222",
                 "sequence_index": 0,
@@ -311,21 +311,21 @@ class TestEntityView:
         assert not (interp / "core_entities" / "blocks").exists() or not list(
             (interp / "core_entities" / "blocks").glob("*.json")
         )
-        got = E.get_entity(interp, "text_block", created["id"])
+        got = E.get_entity(interp, "unit", created["id"])
         assert got["original_text"] == L1[K9:] + "\n" + L2 and got["metadata"]["title"] == "九日"
-        assert E.list_entities(interp, "text_block", {"status": "draft"})[0]["id"] == created["id"]
+        assert E.list_entities(interp, "unit", {"status": "draft"})[0]["id"] == created["id"]
         E.update_entity(
             interp,
-            "text_block",
+            "unit",
             created["id"],
             {"status": "active", "metadata": {"title": "九日談"}},
         )
-        got2 = E.get_entity(interp, "text_block", created["id"])
+        got2 = E.get_entity(interp, "unit", created["id"])
         assert got2["status"] == "active" and got2["metadata"]["title"] == "九日談"
         with pytest.raises(ValueError):
-            E.update_entity(interp, "text_block", created["id"], {"status": "draft"})  # 역전이 금지
+            E.update_entity(interp, "unit", created["id"], {"status": "draft"})  # 역전이 금지
         with pytest.raises(FileNotFoundError):
-            E.get_entity(interp, "text_block", "없는-id")
+            E.get_entity(interp, "unit", "없는-id")
         tree = E.list_contents(interp, "d")
         assert tree["unassigned"][0]["level"] == 2 and tree["unassigned"][0]["title"] == "九日談"
 

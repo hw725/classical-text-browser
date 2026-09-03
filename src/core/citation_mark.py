@@ -275,21 +275,21 @@ def resolve_citation_context(
     snapshot = mark.get("source_text_snapshot", "")
 
     # ─── L4: 원문 텍스트 ───
-    # TextBlock 기반 마크인지 확인:
-    #   TextBlock ID (UUID)로 저장된 경우, start/end는 TextBlock.original_text 기준이다.
+    # 단위 기반 마크인지 확인:
+    #   단위 ID (UUID)로 저장된 경우, start/end는 단위.original_text 기준이다.
     #   L4 전체 페이지 텍스트에서 슬라이스하면 오프셋이 불일치한다.
-    #   따라서 TextBlock entity를 먼저 조회하여 블록 텍스트를 사용한다.
+    #   따라서 단위 entity를 먼저 조회하여 블록 텍스트를 사용한다.
     full_block_text = ""
     original_text = ""
-    _used_textblock = False
+    _used_unit = False
     _used_snapshot_fallback = False
 
     try:
-        tb = get_entity(interp_path, "text_block", block_id)
+        tb = get_entity(interp_path, "unit", block_id)
         full_block_text = tb.get("original_text", "")
-        _used_textblock = True
+        _used_unit = True
     except (FileNotFoundError, Exception):
-        # TextBlock이 아닌 경우 (LayoutBlock ID 등) → L4 페이지 텍스트 폴백
+        # 단위가 아닌 경우 (LayoutBlock ID 등) → L4 페이지 텍스트 폴백
         try:
             page_data = get_page_text(doc_path, part_id, page_num)
             full_block_text = page_data.get("text", "")
@@ -304,7 +304,7 @@ def resolve_citation_context(
         # 마지막 폴백: 인용 생성 시 저장한 스냅샷.
         #
         # 왜 필요한가:
-        #   실제 UI 흐름에서는 LayoutBlock/TextBlock 파일 구조가 아직 완전히
+        #   실제 UI 흐름에서는 LayoutBlock/단위 파일 구조가 아직 완전히
         #   동기화되지 않았더라도 마크 자체에는 사용자가 드래그한 원문이
         #   source_text_snapshot으로 저장된다. 원문 복원 실패 시 이를 쓰면
         #   통합 컨텍스트가 "(원문 없음)"으로 비는 일을 피할 수 있다.

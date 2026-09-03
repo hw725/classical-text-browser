@@ -188,8 +188,8 @@ function deactivatePunctuationMode() {
  * 블록 선택 드롭다운을 채운다.
  *
  * 왜 이렇게 하는가:
- *   편성 단계를 거쳤으면 TextBlock이 존재한다.
- *   TextBlock이 있으면 TextBlock 목록을 드롭다운에 표시하고,
+ *   편성 단계를 거쳤으면 단위가 존재한다.
+ *   단위가 있으면 단위 목록을 드롭다운에 표시하고,
  *   없으면 기존처럼 LayoutBlock 목록을 표시한다 (하위 호환).
  */
 async function _populateBlockSelect() {
@@ -201,15 +201,15 @@ async function _populateBlockSelect() {
 
   if (!viewerState.docId || !viewerState.partId || !viewerState.pageNum) return;
 
-  // TextBlock이 있으면 우선 사용
+  // 단위가 있으면 우선 사용
   if (interpState.interpId) {
     try {
       const tbRes = await fetch(
-        `/api/interpretations/${interpState.interpId}/entities/text_block?page=${viewerState.pageNum}&document_id=${viewerState.docId}`
+        `/api/interpretations/${interpState.interpId}/entities/unit?page=${viewerState.pageNum}&document_id=${viewerState.docId}`
       );
       if (tbRes.ok) {
         const tbData = await tbRes.json();
-        const textBlocks = (tbData.entities || []).filter((e) => {
+        const units = (tbData.entities || []).filter((e) => {
           const refs = e.source_refs || [];
           const ref = e.source_ref;
           if (refs.length > 0) return refs.some((r) => r.page === viewerState.pageNum);
@@ -217,12 +217,12 @@ async function _populateBlockSelect() {
           return false;
         }).sort((a, b) => (a.sequence_index || 0) - (b.sequence_index || 0));
 
-        if (textBlocks.length > 0) {
-          // TextBlock 기반 드롭다운
-          textBlocks.forEach((tb) => {
+        if (units.length > 0) {
+          // 단위 기반 드롭다운
+          units.forEach((tb) => {
             const opt = document.createElement("option");
-            // TextBlock ID를 value로 사용 (UUID)
-            opt.value = `tb:${tb.id}`;
+            // 단위 ID를 value로 사용 (UUID)
+            opt.value = `unit:${tb.id}`;
             const refs = tb.source_refs || [];
             const srcLabel = refs.map((r) => r.layout_block_id || "?").join("+");
             // 이름은 깊이가 아니라 역할이 정한다(D-092) — 3단에 오는 기사도 있다
@@ -232,7 +232,7 @@ async function _populateBlockSelect() {
             const _kind = { container: "묶음", article: "기사", fragment: "조각" }[_role];
             const _title = tb.metadata?.title ? ` · ${tb.metadata.title}` : "";
             opt.textContent = `#${tb.sequence_index} ${_kind}${_title} (${srcLabel})`;
-            // TextBlock 텍스트를 data 속성에 저장
+            // 단위 텍스트를 data 속성에 저장
             opt.dataset.text = tb.original_text || "";
             select.appendChild(opt);
           });
@@ -249,7 +249,7 @@ async function _populateBlockSelect() {
         }
       }
     } catch {
-      // TextBlock 조회 실패 시 LayoutBlock 폴백
+      // 단위 조회 실패 시 LayoutBlock 폴백
     }
   }
 
@@ -307,9 +307,9 @@ async function _populateBlockSelect() {
  * 현재 블록의 원문 + 표점 데이터를 로드한다.
  *
  * 왜 이렇게 하는가:
- *   blockId가 "tb:UUID" 형식이면 TextBlock에서 텍스트를 가져오고,
+ *   blockId가 "unit:UUID" 형식이면 단위에서 텍스트를 가져오고,
  *   그렇지 않으면 기존처럼 L4 텍스트에서 가져온다 (하위 호환).
- *   TextBlock을 사용하면 교정이 적용된 텍스트를 자동으로 받을 수 있다.
+ *   단위를 사용하면 교정이 적용된 텍스트를 자동으로 받을 수 있다.
  */
 async function _loadPunctuationData() {
   if (!interpState.interpId || !viewerState.pageNum || !punctState.blockId) {
@@ -317,24 +317,24 @@ async function _loadPunctuationData() {
     return;
   }
 
-  const isTextBlock = punctState.blockId.startsWith("tb:");
+  const isUnit = punctState.blockId.startsWith("unit:");
 
   try {
-    if (isTextBlock) {
-      // TextBlock 기반: 원본 문서의 최신 교정 텍스트를 우선 사용
+    if (isUnit) {
+      // 단위 기반: 원본 문서의 최신 교정 텍스트를 우선 사용
       //
       // 왜 이렇게 하는가:
-      //   TextBlock의 original_text는 편성(composition) 시점의 스냅샷이다.
-      //   편성 이후에 교감/교정을 수정하면 TextBlock에는 반영되지 않는다.
+      //   단위의 original_text는 편성(composition) 시점의 스냅샷이다.
+      //   편성 이후에 교감/교정을 수정하면 단위에는 반영되지 않는다.
       //   따라서 source_refs를 통해 원본 문서의 최신 교정 텍스트를 가져온다.
-      //   교정 텍스트를 못 가져오면 TextBlock 원본을 폴백으로 사용한다.
-      const tbId = punctState.blockId.replace("tb:", "");
+      //   교정 텍스트를 못 가져오면 단위 원본을 폴백으로 사용한다.
+      const unitId = punctState.blockId.replace("unit:", "");
       let tbData = null;
 
-      // TextBlock 정보 조회 (source_refs 필요)
+      // 단위 정보 조회 (source_refs 필요)
       try {
         const tbRes = await fetch(
-          `/api/interpretations/${interpState.interpId}/entities/text_block/${tbId}`
+          `/api/interpretations/${interpState.interpId}/entities/unit/${unitId}`
         );
         if (tbRes.ok) tbData = await tbRes.json();
       } catch { /* 폴백 처리 아래 */ }
@@ -372,11 +372,11 @@ async function _loadPunctuationData() {
         correctedText = texts.join("\n");
       }
 
-      // 교정 텍스트가 있으면 사용, 없으면 TextBlock 원본 폴백
+      // 교정 텍스트가 있으면 사용, 없으면 단위 원본 폴백
       if (correctedText.trim()) {
         punctState.originalText = correctedText;
       } else {
-        // 폴백: TextBlock의 원본 텍스트 (편성 시점 스냅샷)
+        // 폴백: 단위의 원본 텍스트 (편성 시점 스냅샷)
         const select = document.getElementById("punct-block-select");
         const selectedOpt = select ? select.querySelector(`option[value="${punctState.blockId}"]`) : null;
         punctState.originalText = (selectedOpt && selectedOpt.dataset.text)
@@ -384,8 +384,8 @@ async function _loadPunctuationData() {
           : (tbData ? tbData.original_text || "" : "");
       }
 
-      // 표점 로드 (block_id는 TextBlock ID)
-      const punctBlockId = tbId;
+      // 표점 로드 (block_id는 단위 ID)
+      const punctBlockId = unitId;
       const punctRes = await fetch(
         `/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation?block_id=${punctBlockId}`
       );
@@ -844,11 +844,11 @@ async function _savePunctuation() {
   if (statusEl) statusEl.textContent = "저장 중...";
 
   try {
-    // TextBlock 경로("tb:xxx")의 접두사를 제거하여 저장.
-    // 로드(_loadPunctuationData)에서도 "tb:"를 제거해 API 호출하므로,
+    // 단위 경로("unit:xxx")의 접두사를 제거하여 저장.
+    // 로드(_loadPunctuationData)에서도 "unit:"를 제거해 API 호출하므로,
     // 저장 시에도 동일하게 제거해야 block_id가 일치한다.
-    const saveBlockId = punctState.blockId.startsWith("tb:")
-      ? punctState.blockId.slice(3)
+    const saveBlockId = punctState.blockId.startsWith("unit:")
+      ? punctState.blockId.slice(5)
       : punctState.blockId;
 
     const res = await fetch(

@@ -6,7 +6,7 @@
   - 본문 속 날짜(달 역행)는 신뢰도가 내려가 승인되지 않는다
   - 표제 어휘·억제 목록은 규칙(문헌 설정)에서 오고 코드에는 없다
   - 형식 신호: 짧은 행·내려쓰기(bbox)
-  - API: 제안은 저장하지 않고, 적용은 쪽별 char_range 출처를 가진 TextBlock을 만든다
+  - API: 제안은 저장하지 않고, 적용은 쪽별 char_range 출처를 가진 단위를 만든다
 """
 
 from __future__ import annotations
@@ -321,7 +321,7 @@ def test_propose_and_apply(client, tmp_path):
 
     tb = next(
         b
-        for b in list_entities(Path(lib) / "interpretations" / "i1", "text_block")
+        for b in list_entities(Path(lib) / "interpretations" / "i1", "unit")
         if b["sequence_index"] == 1
     )
     assert tb["source_refs"][0]["part_id"] == part_id and tb["source_refs"][0]["char_range"][0] > 0
@@ -522,7 +522,7 @@ def test_toc_api_and_propose_with_toc(client, tmp_path):
 
 
 def test_boundary_index_is_a_view_over_textblocks(client, tmp_path):
-    """경계 색인은 별도 데이터가 아니다 — TextBlock의 source_refs에서 계산한 보기 (D-090)."""
+    """경계 색인은 별도 데이터가 아니다 — 단위의 source_refs에서 계산한 보기 (D-090)."""
     lib, part_id, work_id = _setup(client, tmp_path)
     rules = {"rules": {"title_words": ["談草", "口談"]}}
     client.put("/api/documents/d1/segmentation-rules", json=rules)
@@ -543,11 +543,11 @@ def test_boundary_index_is_a_view_over_textblocks(client, tmp_path):
     from pathlib import Path
 
     interp_dir = Path(lib) / "interpretations" / "i1"
-    # D-092: 단위의 정본은 경계 목록 하나. TextBlock 파일(blocks/*.json)은 만들지 않는다.
+    # D-092: 단위의 정본은 경계 목록 하나. 단위 파일(blocks/*.json)은 만들지 않는다.
     assert (interp_dir / "core_entities" / "boundaries" / f"d1__{part_id}.json").exists()
     assert not list((interp_dir / "core_entities" / "blocks").glob("*.json"))
 
-    # 목록 = TextBlock을 원본 위치 순서로, 행 앵커는 source_refs에서 계산
+    # 목록 = 단위를 원본 위치 순서로, 행 앵커는 source_refs에서 계산
     url = f"/api/interpretations/i1/boundaries?document_id=d1&part_id={part_id}"
     lst = client.get(url).json()
     assert lst["total"] == 4 and [b["order"] for b in lst["boundaries"]] == [0, 1, 2, 3]
@@ -571,16 +571,16 @@ def test_boundary_index_is_a_view_over_textblocks(client, tmp_path):
     assert lst[0]["end"] == {"page": 1, "line": 2, "offset": None}
     from src.core.entity import get_entity
 
-    tb1 = get_entity(interp_dir, "text_block", b1["id"])
-    tb0 = get_entity(interp_dir, "text_block", lst[0]["id"])
+    tb1 = get_entity(interp_dir, "unit", b1["id"])
+    tb0 = get_entity(interp_dir, "unit", lst[0]["id"])
     assert not tb1["original_text"].startswith("辛巳")
     assert tb0["original_text"].rstrip().endswith("辛巳十一月二十八日保定督署談草")
     assert tb1["source_refs"][0]["char_range"][0] > 0
     assert tb1["metadata"]["anchor"]["status"] == "approved"
 
-    # 편성 탭 경로로 만든(경계 제안을 거치지 않은) TextBlock도 색인 보기에 나타난다
+    # 편성 탭 경로로 만든(경계 제안을 거치지 않은) 단위도 색인 보기에 나타난다
     r = client.post(
-        "/api/interpretations/i1/entities/text_block/compose",
+        "/api/interpretations/i1/entities/unit/compose",
         json={
             "work_id": work_id,
             "sequence_index": 99,
@@ -941,7 +941,7 @@ def test_char_boundary_apply_and_move_via_api(client, tmp_path):
     assert lst[0]["end"] == {"page": 1, "line": 0, "offset": k8}
     assert lst[1]["end"] == {"page": 1, "line": 1, "offset": k9}
     assert lst[2]["end"] == {"page": 1, "line": 2, "offset": None}
-    tb = client.get(f"/api/interpretations/i1/entities/text_block/{lst[1]['id']}").json()
+    tb = client.get(f"/api/interpretations/i1/entities/unit/{lst[1]['id']}").json()
     assert tb["original_text"] == DAM_L0[k8:] + "\n" + DAM_L1[:k9]
 
     # 둘째 블록의 시작을 두 글자 앞으로(○八日 앞의 「遇雨」부터) — 앞 블록의 끝이 같이 줄어든다
@@ -953,8 +953,8 @@ def test_char_boundary_apply_and_move_via_api(client, tmp_path):
     assert r.json()["boundary"]["start"] == {"page": 1, "line": 0, "offset": k8 - 2}
     lst2 = client.get(url).json()["boundaries"]
     assert lst2[0]["end"] == {"page": 1, "line": 0, "offset": k8 - 2}
-    t0 = client.get(f"/api/interpretations/i1/entities/text_block/{lst2[0]['id']}").json()
-    t1 = client.get(f"/api/interpretations/i1/entities/text_block/{lst2[1]['id']}").json()
+    t0 = client.get(f"/api/interpretations/i1/entities/unit/{lst2[0]['id']}").json()
+    t1 = client.get(f"/api/interpretations/i1/entities/unit/{lst2[1]['id']}").json()
     assert t0["original_text"] == DAM_L0[: k8 - 2]
     assert t1["original_text"].startswith("遇雨○八日")
 
@@ -1011,7 +1011,7 @@ def test_boundary_insert_delete_split_via_api(client, tmp_path):
     lst = client.get(url).json()["boundaries"]
     assert [b["id"] for b in lst] == [a_id, b_id]
     assert lst[0]["end"] == {"page": 1, "line": 0, "offset": k8}
-    ta = client.get(f"/api/interpretations/i1/entities/text_block/{a_id}").json()
+    ta = client.get(f"/api/interpretations/i1/entities/unit/{a_id}").json()
     assert ta["original_text"] == DAM_L0[:k8]
     # 3) 층위 3 조각을 안에 넣어도 층위 2의 id·끝은 그대로
     r = client.post(
@@ -1028,20 +1028,20 @@ def test_boundary_insert_delete_split_via_api(client, tmp_path):
     c_id = r.json()["boundary"]["id"]
     lst = client.get(url).json()["boundaries"]
     assert [(b["id"], b["level"]) for b in lst] == [(a_id, 2), (b_id, 2), (c_id, 3)]
-    tb = client.get(f"/api/interpretations/i1/entities/text_block/{b_id}").json()
+    tb = client.get(f"/api/interpretations/i1/entities/unit/{b_id}").json()
     assert (
         tb["original_text"] == DAM_L0[k8:] + "\n" + DAM_L1 + "\n" + DAM_L2
     )  # 층위 3은 끝을 정하지 않는다
     # 4) 층위를 2로 올리면 b가 거기서 끝난다
     r = client.put(f"{base}/{c_id}", json={"level": 2})
     assert r.status_code == 200, r.text
-    tb = client.get(f"/api/interpretations/i1/entities/text_block/{b_id}").json()
+    tb = client.get(f"/api/interpretations/i1/entities/unit/{b_id}").json()
     assert tb["original_text"] == DAM_L0[k8:]
     # 5) 쪼개기 API: 조각 텍스트로 자리를 찾아 경계를 넣는다. 원본 id는 첫 조각으로 남는다
     r = client.post(
-        "/api/interpretations/i1/entities/text_block/split",
+        "/api/interpretations/i1/entities/unit/split",
         json={
-            "original_text_block_id": c_id,
+            "original_unit_id": c_id,
             "part_id": part_id,
             "pieces": [DAM_L1[:k9], DAM_L1[k9:] + "\n" + DAM_L2],
         },
@@ -1056,9 +1056,9 @@ def test_boundary_insert_delete_split_via_api(client, tmp_path):
     r = client.delete(f"{base}/{d_id}")
     assert r.status_code == 200, r.text
     assert r.json()["merged_into"] == c_id
-    tc = client.get(f"/api/interpretations/i1/entities/text_block/{c_id}").json()
+    tc = client.get(f"/api/interpretations/i1/entities/unit/{c_id}").json()
     assert tc["original_text"] == DAM_L1 + "\n" + DAM_L2
-    # 7) 옛 TextBlock 파일은 생기지 않는다
+    # 7) 옛 단위 파일은 생기지 않는다
     assert not list(
         (Path(lib) / "interpretations" / "i1" / "core_entities" / "blocks").glob("*.json")
     )

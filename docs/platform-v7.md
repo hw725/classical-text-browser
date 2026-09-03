@@ -1262,7 +1262,7 @@ flowchart TB
 | | `annotation_page.schema.json` | **v2** | L7 주석 + 사전형(DictionaryEntry) + 4단계 이력 |
 | | `citation_mark_page.schema.json` | v1 | L7 인용 마크 |
 | `core/` | `work.schema.json` | — | 코어: 작품 |
-| | `text_block.schema.json` | — | 코어: TextBlock |
+| | `unit.schema.json` | — | 코어: 단위(unit) |
 | | `tag.schema.json` | — | 코어: Tag |
 | | `concept.schema.json` | — | 코어: Concept |
 | | `agent.schema.json` | — | 코어: Agent |

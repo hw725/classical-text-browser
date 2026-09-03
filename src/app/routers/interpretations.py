@@ -2,7 +2,7 @@
 
 Phase 7 + Phase 8 엔드포인트를 포함한다.
 - Phase 7: 해석 저장소 CRUD, 의존 변경 확인, 층 내용 조회/저장, git 이력/커밋
-- Phase 8: 코어 스키마 엔티티 CRUD, TextBlock 생성/편성/쪼개기/리셋, Work 자동 생성, Tag 승격
+- Phase 8: 코어 스키마 엔티티 CRUD, 단위 생성/편성/쪼개기/리셋, Work 자동 생성, Tag 승격
 
 모든 경로에서 서고 경로는 get_library_path()로 참조한다.
 """
@@ -17,7 +17,7 @@ from app._state import _resolve_repo_path, get_library_path, require_repo_path
 from core.entity import (
     auto_create_work,
     create_entity,
-    create_textblock_from_source,
+    create_unit_from_source,
     get_entity,
     list_contents,
     list_entities,
@@ -84,7 +84,7 @@ class ManualCommitRequest(BaseModel):
 class EntityCreateRequest(BaseModel):
     """엔티티 생성 요청 본문."""
 
-    entity_type: str  # work, text_block, tag, concept, agent, relation
+    entity_type: str  # work, unit, tag, concept, agent, relation
     data: dict  # 스키마에 맞는 엔티티 데이터
 
 
@@ -94,8 +94,8 @@ class EntityUpdateRequest(BaseModel):
     updates: dict  # 갱신할 필드 딕셔너리
 
 
-class TextBlockFromSourceRequest(BaseModel):
-    """TextBlock 생성 요청 (source_ref 자동 채움)."""
+class UnitFromSourceRequest(BaseModel):
+    """단위 생성 요청 (source_ref 자동 채움)."""
 
     document_id: str
     part_id: str
@@ -131,10 +131,10 @@ class CompositionSourceRef(BaseModel):
     part_id: str | None = None
 
 
-class ComposeTextBlockRequest(BaseModel):
-    """편성 탭에서 TextBlock을 생성하는 요청.
+class ComposeUnitRequest(BaseModel):
+    """편성 탭에서 단위를 생성하는 요청.
 
-    여러 LayoutBlock을 합치거나 하나를 쪼개서 TextBlock을 만든다.
+    여러 LayoutBlock을 합치거나 하나를 쪼개서 단위를 만든다.
     source_refs 배열 순서대로 텍스트를 이어붙인다.
     """
 
@@ -178,7 +178,7 @@ class SegmentationSpan(BaseModel):
 
 
 class SegmentationApplyRequest(BaseModel):
-    """승인한 구간을 TextBlock으로 만든다."""
+    """승인한 구간을 단위로 만든다."""
 
     document_id: str
     part_id: str
@@ -193,10 +193,10 @@ class SegmentationApplyRequest(BaseModel):
     replace: str = "proposal"
 
 
-class SplitTextBlockRequest(BaseModel):
-    """TextBlock 쪼개기 요청 본문."""
+class SplitUnitRequest(BaseModel):
+    """단위 쪼개기 요청 본문."""
 
-    original_text_block_id: str
+    original_unit_id: str
     part_id: str
     pieces: list[str]  # === 구분선으로 나눈 텍스트 조각들
 
@@ -204,7 +204,7 @@ class SplitTextBlockRequest(BaseModel):
 class ResetCompositionRequest(BaseModel):
     """편성 리셋 요청 본문."""
 
-    text_block_ids: list[str]  # deprecated로 전환할 TextBlock ID 목록
+    unit_ids: list[str]  # deprecated로 전환할 단위 ID 목록
 
 
 # =========================================
@@ -511,7 +511,7 @@ async def api_interp_manual_commit(interp_id: str, body: ManualCommitRequest, bg
 async def api_create_entity(interp_id: str, body: EntityCreateRequest):
     """코어 스키마 엔티티를 생성한다.
 
-    목적: Work, TextBlock, Tag, Concept, Agent, Relation 엔티티를 해석 저장소에 추가한다.
+    목적: Work, 단위, Tag, Concept, Agent, Relation 엔티티를 해석 저장소에 추가한다.
     입력: entity_type + data (JSON 스키마 형식).
     출력: {"status": "created", "entity_type": ..., "id": ..., "file_path": ...}
     """
@@ -572,7 +572,7 @@ async def api_contents_tree(
     interp_id: str,
     document_id: str | None = Query(None, description="이 문헌을 가리키는 블록만"),
 ):
-    """내용 트리 — Work → TextBlock(sequence_index 순) + 각 블록이 있는 쪽 (D-085).
+    """내용 트리 — Work → 단위(sequence_index 순) + 각 블록이 있는 쪽 (D-085).
 
     목적: 교감 뒤에는 쪽이 아니라 내용으로 찾아가야 한다. 사이드바 「내용」 트리가
           이 응답으로 그려지고, 블록을 누르면 pages[].page 로 이동해 layout_block_ids 를
@@ -600,7 +600,7 @@ async def api_list_entities(
     interp_id: str,
     entity_type: str,
     status: str | None = Query(None, description="상태 필터"),
-    block_id: str | None = Query(None, description="TextBlock ID 필터"),
+    block_id: str | None = Query(None, description="단위 ID 필터"),
     page: int | None = Query(None, description="페이지 번호 필터 (source_ref.page)"),
     document_id: str | None = Query(None, description="문헌 ID 필터 (source_ref.document_id)"),
 ):
@@ -720,14 +720,14 @@ async def api_update_entity(
     return result
 
 
-@router.post("/api/interpretations/{interp_id}/entities/text_block/from-source")
-async def api_create_textblock_from_source(
+@router.post("/api/interpretations/{interp_id}/entities/unit/from-source")
+async def api_create_unit_from_source(
     interp_id: str,
-    body: TextBlockFromSourceRequest,
+    body: UnitFromSourceRequest,
 ):
-    """L4 확정 텍스트에서 TextBlock을 생성한다 (source_ref 자동 채움).
+    """L4 확정 텍스트에서 단위를 생성한다 (source_ref 자동 채움).
 
-    목적: 연구자가 현재 보고 있는 페이지/블록에서 TextBlock을 만들면,
+    목적: 연구자가 현재 보고 있는 페이지/블록에서 단위를 만들면,
           source_ref가 자동으로 채워진다.
     """
     _library_path = get_library_path()
@@ -742,7 +742,7 @@ async def api_create_textblock_from_source(
         )
 
     try:
-        result = create_textblock_from_source(
+        result = create_unit_from_source(
             interp_path,
             _library_path,
             body.document_id,
@@ -754,27 +754,27 @@ async def api_create_textblock_from_source(
             body.sequence_index,
         )
     except Exception as e:
-        return JSONResponse({"error": f"TextBlock 생성 실패: {e}"}, status_code=400)
+        return JSONResponse({"error": f"단위 생성 실패: {e}"}, status_code=400)
 
     # 자동 git commit
     block_info = body.layout_block_id or ""
-    commit_msg = f"feat: TextBlock 생성 — page {body.page_num:03d} {block_info}"
+    commit_msg = f"feat: 단위 생성 — page {body.page_num:03d} {block_info}"
     result["git"] = git_commit_interpretation(interp_path, commit_msg)
 
     return result
 
 
-@router.post("/api/interpretations/{interp_id}/entities/text_block/compose")
-async def api_compose_textblock(
+@router.post("/api/interpretations/{interp_id}/entities/unit/compose")
+async def api_compose_unit(
     interp_id: str,
-    body: ComposeTextBlockRequest,
+    body: ComposeUnitRequest,
     bg: BackgroundTasks,
     no_commit: bool = Query(False, description="True이면 git commit을 건너뛴다 (배치 작업용)"),
 ):
-    """편성 탭에서 TextBlock을 생성한다 (source_refs 배열 지원).
+    """편성 탭에서 단위를 생성한다 (source_refs 배열 지원).
 
     목적: 여러 LayoutBlock을 합치거나, 하나의 LayoutBlock을 쪼개서
-          TextBlock을 만든다. source_refs로 출처를 정확히 추적한다.
+          단위를 만든다. source_refs로 출처를 정확히 추적한다.
     입력:
         work_id — 소속 Work UUID.
         sequence_index — 작품 내 순서.
@@ -782,7 +782,7 @@ async def api_compose_textblock(
         part_id — 파트 ID.
         source_refs — 출처 참조 배열 (순서대로 이어붙인 것).
         no_commit — True이면 git commit을 건너뛴다 (쪼개기 등 배치 작업 시).
-    출력: {"status": "created", "id": ..., "text_block": {...}}
+    출력: {"status": "created", "id": ..., "unit": {...}}
     """
     import uuid as _uuid
 
@@ -830,7 +830,7 @@ async def api_compose_textblock(
     if first_ref:
         source_ref_compat = {k: v for k, v in first_ref.items() if k != "char_range"}
 
-    text_block_data = {
+    unit_data = {
         "id": str(_uuid.uuid4()),
         "work_id": body.work_id,
         "sequence_index": body.sequence_index,
@@ -844,19 +844,19 @@ async def api_compose_textblock(
     }
 
     try:
-        result = create_entity(interp_path, "text_block", text_block_data)
+        result = create_entity(interp_path, "unit", unit_data)
     except Exception as e:
-        return JSONResponse({"error": f"TextBlock 생성 실패: {e}"}, status_code=400)
+        return JSONResponse({"error": f"단위 생성 실패: {e}"}, status_code=400)
 
     # git commit — 백그라운드로 실행하여 API 즉시 응답
     if not no_commit:
         block_ids = [r.layout_block_id or "?" for r in body.source_refs]
-        commit_msg = f"feat: TextBlock 편성 — {'+'.join(block_ids)}"
+        commit_msg = f"feat: 단위 편성 — {'+'.join(block_ids)}"
         bg.add_task(git_commit_interpretation, interp_path, commit_msg)
         result["git"] = "background"
     else:
         result["git"] = {"committed": False, "reason": "no_commit=true"}
-    result["text_block"] = text_block_data
+    result["unit"] = unit_data
 
     return result
 
@@ -866,7 +866,7 @@ async def api_segmentation_propose(interp_id: str, body: SegmentationProposeRequ
     """L4 확정 텍스트에서 글 단위 경계 후보를 제안한다 (D-088). 아무것도 저장하지 않는다.
 
     목적: 일기·담초처럼 글마다 표제가 서는 문헌에서 «어디서 글이 바뀌는가»를 기계가
-          먼저 찍고, 사용자가 승인한 것만 TextBlock이 된다.
+          먼저 찍고, 사용자가 승인한 것만 단위가 된다.
     입력: document_id, part_id, pages(None=전체), rules(None=문헌 설정 → 기본값).
     출력: core.segmentation.propose_boundaries() 결과 + "lines"(화면 표시용 행 목록).
     """
@@ -1006,7 +1006,7 @@ async def api_segmentation_toc(interp_id: str, body: SegmentationTocRequest):
 
 @router.post("/api/interpretations/{interp_id}/segmentation/apply")
 async def api_segmentation_apply(interp_id: str, body: SegmentationApplyRequest):
-    """승인한 구간들을 TextBlock으로 만든다 (D-088).
+    """승인한 구간들을 단위로 만든다 (D-088).
 
     각 구간은 쪽마다 char_range를 가진 source_refs로 출처를 남긴다 — «3쪽 12행부터
     4쪽 5행까지»가 그대로 기록된다. sequence_index는 이 Work의 기존 최대값 다음부터.
@@ -1283,9 +1283,9 @@ def _boundary_rows(
     part_id: str | None,
     page_cache: dict | None = None,
 ) -> list[dict]:
-    """경계 색인 «보기» (D-090): TextBlock을 원본 위치 순서로 늘어놓고 행 앵커를 계산한다.
+    """경계 색인 «보기» (D-090): 단위를 원본 위치 순서로 늘어놓고 행 앵커를 계산한다.
 
-    경계는 별도 데이터가 아니다. 위치의 정본은 TextBlock.source_refs(쪽·글자 범위)이고,
+    경계는 별도 데이터가 아니다. 위치의 정본은 단위.source_refs(쪽·글자 범위)이고,
     행 번호·좌표는 여기서 계산한다. 그래서 합치기·쪼개기·옮기기 어느 경로로 바꿔도 색인이
     어긋나지 않는다.
 
@@ -1298,7 +1298,7 @@ def _boundary_rows(
     rows = []
     if page_cache is None:
         page_cache = {}
-    for blk in list_entities(interp_path, "text_block"):
+    for blk in list_entities(interp_path, "unit"):
         if blk.get("status") == "deprecated":
             continue
         refs = blk.get("source_refs") or ([blk["source_ref"]] if blk.get("source_ref") else [])
@@ -1359,7 +1359,7 @@ def _boundary_rows(
 
 
 class BoundaryUpdateRequest(BaseModel):
-    """TextBlock의 경계를 옮기거나 제목·상태를 바꾼다 (D-090).
+    """단위의 경계를 옮기거나 제목·상태를 바꾼다 (D-090).
 
     start·end는 {"page", "line", "offset"}. offset은 행 안의 글자(2단계 — 澹齋日錄류처럼
     행 중간에서 날이 바뀌는 판식). start.offset 생략 = 행 첫머리, end.offset 생략 = 행 끝.
@@ -1382,7 +1382,7 @@ async def api_list_boundaries(
     document_id: str | None = Query(None),
     part_id: str | None = Query(None),
 ):
-    """경계 색인 보기 (D-090): TextBlock을 원본 위치 순서로, 시작·끝 행과 좌표 캐시를 붙여."""
+    """경계 색인 보기 (D-090): 단위를 원본 위치 순서로, 시작·끝 행과 좌표 캐시를 붙여."""
     _library_path = get_library_path()
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
@@ -1395,9 +1395,9 @@ async def api_list_boundaries(
     return {"boundaries": rows, "total": len(rows)}
 
 
-@router.put("/api/interpretations/{interp_id}/boundaries/{text_block_id}")
-async def api_update_boundary(interp_id: str, text_block_id: str, body: BoundaryUpdateRequest):
-    """TextBlock의 경계를 옮긴다. 위치의 정본(source_refs)과 본문을 다시 잇는다.
+@router.put("/api/interpretations/{interp_id}/boundaries/{unit_id}")
+async def api_update_boundary(interp_id: str, unit_id: str, body: BoundaryUpdateRequest):
+    """단위의 경계를 옮긴다. 위치의 정본(source_refs)과 본문을 다시 잇는다.
 
     행 단위. 앞뒤 블록과 겹치거나 비지 않게 한다 — 시작을 뒤로 밀면 앞 블록의 끝이 그만큼
     늘고, 끝을 내리면 뒤 블록의 시작이 밀린다. 이웃은 같은 Work·권에서 원본 위치 순서로 잡는다.
@@ -1416,11 +1416,9 @@ async def api_update_boundary(interp_id: str, text_block_id: str, body: Boundary
             {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"}, status_code=404
         )
     try:
-        blk = get_entity(interp_path, "text_block", text_block_id)
+        blk = get_entity(interp_path, "unit", unit_id)
     except FileNotFoundError:
-        return JSONResponse(
-            {"error": f"TextBlock을 찾을 수 없습니다: {text_block_id}"}, status_code=404
-        )
+        return JSONResponse({"error": f"단위를 찾을 수 없습니다: {unit_id}"}, status_code=404)
     refs = blk.get("source_refs") or []
     if not refs or not refs[0].get("page"):
         return JSONResponse(
@@ -1443,7 +1441,7 @@ async def api_update_boundary(interp_id: str, text_block_id: str, body: Boundary
     if not keys:
         return JSONResponse({"error": "확정 텍스트(L4)가 없습니다."}, status_code=400)
     data = load_boundaries(interp_path, doc_id, pid)
-    item = find_boundary(data, text_block_id)
+    item = find_boundary(data, unit_id)
     if item is None:
         return JSONResponse({"error": "경계를 찾을 수 없습니다. 다시 제안하세요."}, status_code=409)
 
@@ -1470,14 +1468,14 @@ async def api_update_boundary(interp_id: str, text_block_id: str, body: Boundary
     if (int(start["page"]), int(start["line"])) not in keys:
         return JSONResponse({"error": "시작 행이 현재 확정본에 없습니다."}, status_code=400)
     if start != item["start"]:
-        move_boundary(data, text_block_id, start, page_texts)
+        move_boundary(data, unit_id, start, page_texts)
         item["l4_commit"] = _document_head(doc_path)
-        touched.append(text_block_id)
+        touched.append(unit_id)
         start_moved = True
     # 끝은 저장하지 않는다 — «끝을 옮긴다»는 곧 «다음 경계(같은 층위 이상)를 옮긴다»이다.
     if body.end or body.shift_end:
         bounds = data["boundaries"]
-        idx = next(i for i, b in enumerate(bounds) if b.get("id") == text_block_id)
+        idx = next(i for i, b in enumerate(bounds) if b.get("id") == unit_id)
         nxt_start = unit_end(bounds, idx)
         _dead = ("deprecated", "archived")
         nxt = next(
@@ -1514,12 +1512,12 @@ async def api_update_boundary(interp_id: str, text_block_id: str, body: Boundary
             )
         fields["role"] = body.role
     if fields:
-        update_boundary(data, text_block_id, fields)
-        if text_block_id not in touched:
-            touched.append(text_block_id)
+        update_boundary(data, unit_id, fields)
+        if unit_id not in touched:
+            touched.append(unit_id)
     # 시작 행의 L2 좌표 캐시(화면 표시용). 시작이 그대로면 다시 재지 않는다 —
     # 제목·역할·층위만 바꿔도 L2를 읽어 오던 군더더기였다.
-    b = find_boundary(data, text_block_id)
+    b = find_boundary(data, unit_id)
     if start_moved or b.get("bbox") is None:
         b["bbox"] = boundary_bbox(
             doc_path,
@@ -1532,13 +1530,13 @@ async def api_update_boundary(interp_id: str, text_block_id: str, body: Boundary
             {"page": b["start"]["page"], "line": b["start"]["line"], "offset": None},
         )
     save_boundaries(interp_path, data)
-    title = b.get("title") or text_block_id[:8]
+    title = b.get("title") or unit_id[:8]
     git = git_commit_interpretation(interp_path, f"fix: 경계 수정 — {title} (D-092)")
     row = next(
         (
             r
             for r in _boundary_rows(interp_path, doc_id, pid, {(doc_id, pid or ""): page_texts})
-            if r["id"] == text_block_id
+            if r["id"] == unit_id
         ),
         None,
     )
@@ -1642,8 +1640,8 @@ async def api_insert_boundary(interp_id: str, body: BoundaryInsertRequest):
     return {"boundary": row, "existing": existing, "git": git}
 
 
-@router.delete("/api/interpretations/{interp_id}/boundaries/{text_block_id}")
-async def api_delete_boundary(interp_id: str, text_block_id: str):
+@router.delete("/api/interpretations/{interp_id}/boundaries/{unit_id}")
+async def api_delete_boundary(interp_id: str, unit_id: str):
     """경계를 지운다 = 그 단위를 앞 단위에 합친다. 앞 단위의 id가 남는다 (D-092).
 
     관계·태그가 지운 id를 가리키고 있으면 그대로 두고 응답에 알린다 — 사람이 옮긴다.
@@ -1666,9 +1664,9 @@ async def api_delete_boundary(interp_id: str, text_block_id: str):
     for doc_id, pid in list_boundary_parts(interp_path):
         data = load_boundaries(interp_path, doc_id, pid)
         ids = [b["id"] for b in data["boundaries"]]
-        if text_block_id not in ids:
+        if unit_id not in ids:
             continue
-        idx = ids.index(text_block_id)
+        idx = ids.index(unit_id)
         prev_id = next(
             (
                 b["id"]
@@ -1677,23 +1675,21 @@ async def api_delete_boundary(interp_id: str, text_block_id: str):
             ),
             None,
         )
-        removed = delete_boundary(data, text_block_id)
+        removed = delete_boundary(data, unit_id)
         save_boundaries(interp_path, data)
         dangling = [
-            tg["id"]
-            for tg in list_entities(interp_path, "tag")
-            if tg.get("block_id") == text_block_id
+            tg["id"] for tg in list_entities(interp_path, "tag") if tg.get("block_id") == unit_id
         ]
         git = git_commit_interpretation(
-            interp_path, f"fix: 경계 지우기 — {removed.get('title') or text_block_id[:8]} (D-092)"
+            interp_path, f"fix: 경계 지우기 — {removed.get('title') or unit_id[:8]} (D-092)"
         )
         return {
-            "deleted": text_block_id,
+            "deleted": unit_id,
             "merged_into": prev_id,
             "dangling_tags": dangling,
             "git": git,
         }
-    return JSONResponse({"error": f"경계를 찾을 수 없습니다: {text_block_id}"}, status_code=404)
+    return JSONResponse({"error": f"경계를 찾을 수 없습니다: {unit_id}"}, status_code=404)
 
 
 @router.get("/api/interpretations/{interp_id}/boundaries/export.csv")
@@ -1768,18 +1764,18 @@ async def api_export_boundaries_csv(
     )
 
 
-@router.post("/api/interpretations/{interp_id}/entities/text_block/split")
-async def api_split_textblock(interp_id: str, body: SplitTextBlockRequest, bg: BackgroundTasks):
-    """TextBlock을 여러 조각으로 쪼갠다 (백그라운드 git commit).
+@router.post("/api/interpretations/{interp_id}/entities/unit/split")
+async def api_split_unit(interp_id: str, body: SplitUnitRequest, bg: BackgroundTasks):
+    """단위를 여러 조각으로 쪼갠다 (백그라운드 git commit).
 
-    목적: 한 TextBlock을 단락 단위로 나누는 배치 작업.
+    목적: 한 단위를 단락 단위로 나누는 배치 작업.
           모든 조각 생성 + 원본 deprecated 를 한 번의 git commit으로 처리하여
           사용자 대기 시간을 최소화한다.
 
     처리 순서:
-        1. 원본 TextBlock에서 source_refs, work_id 상속
-        2. 각 조각마다 새 TextBlock 생성 (git commit 없이)
-        3. 원본 TextBlock을 deprecated 전환 (git commit 없이)
+        1. 원본 단위에서 source_refs, work_id 상속
+        2. 각 조각마다 새 단위 생성 (git commit 없이)
+        3. 원본 단위를 deprecated 전환 (git commit 없이)
         4. 마지막에 한 번만 git commit
     """
 
@@ -1808,10 +1804,10 @@ async def api_split_textblock(interp_id: str, body: SplitTextBlockRequest, bg: B
     from core.segmentation import collect_document_lines
 
     try:
-        original = get_entity(interp_path, "text_block", body.original_text_block_id)
+        original = get_entity(interp_path, "unit", body.original_unit_id)
     except FileNotFoundError:
         return JSONResponse(
-            {"error": f"원본 TextBlock을 찾을 수 없습니다: {body.original_text_block_id}"},
+            {"error": f"원본 단위를 찾을 수 없습니다: {body.original_unit_id}"},
             status_code=404,
         )
     pieces = [str(piece).strip() for piece in (body.pieces or []) if str(piece).strip()]
@@ -1823,7 +1819,7 @@ async def api_split_textblock(interp_id: str, body: SplitTextBlockRequest, bg: B
     doc_id = refs[0].get("document_id")
     pid = refs[0].get("part_id") or body.part_id
     data = load_boundaries(interp_path, doc_id, pid)
-    orig_b = find_boundary(data, body.original_text_block_id)
+    orig_b = find_boundary(data, body.original_unit_id)
     if orig_b is None:
         return JSONResponse({"error": "원본 경계를 찾을 수 없습니다."}, status_code=404)
     doc_path = _resolve_repo_path("documents", doc_id)
@@ -1895,11 +1891,11 @@ async def api_split_textblock(interp_id: str, body: SplitTextBlockRequest, bg: B
     }
 
 
-@router.post("/api/interpretations/{interp_id}/entities/text_block/reset")
+@router.post("/api/interpretations/{interp_id}/entities/unit/reset")
 async def api_reset_composition(interp_id: str, body: ResetCompositionRequest, bg: BackgroundTasks):
-    """여러 TextBlock을 한꺼번에 deprecated 전환한다 (백그라운드 git commit).
+    """여러 단위를 한꺼번에 deprecated 전환한다 (백그라운드 git commit).
 
-    목적: 편성 리셋 시 모든 TextBlock을 배치로 deprecated 전환.
+    목적: 편성 리셋 시 모든 단위를 배치로 deprecated 전환.
           개별 PUT 호출 대신 단일 엔드포인트로 처리하여 속도를 높인다.
     """
     _library_path = get_library_path()
@@ -1916,15 +1912,15 @@ async def api_reset_composition(interp_id: str, body: ResetCompositionRequest, b
     deprecated_count = 0
     errors = []
 
-    for tb_id in body.text_block_ids:
+    for tb_id in body.unit_ids:
         try:
-            update_entity(interp_path, "text_block", tb_id, {"status": "deprecated"})
+            update_entity(interp_path, "unit", tb_id, {"status": "deprecated"})
             deprecated_count += 1
         except Exception as e:
             errors.append(f"{tb_id[:8]}: {e}")
 
     # 백그라운드 git commit — API는 즉시 응답
-    commit_msg = f"fix: TextBlock 편성 리셋 — {deprecated_count}개 deprecated"
+    commit_msg = f"fix: 단위 편성 리셋 — {deprecated_count}개 deprecated"
     bg.add_task(git_commit_interpretation, interp_path, commit_msg)
 
     if errors:
@@ -1947,7 +1943,7 @@ async def api_reset_composition(interp_id: str, body: ResetCompositionRequest, b
 async def api_auto_create_work(interp_id: str, body: AutoCreateWorkRequest):
     """문헌 메타데이터로부터 Work 엔티티를 자동 생성한다.
 
-    목적: TextBlock 생성에 필요한 Work가 없을 때,
+    목적: 단위 생성에 필요한 Work가 없을 때,
           문헌의 서지정보/매니페스트에서 자동으로 Work를 만든다.
     """
     _library_path = get_library_path()

@@ -1,11 +1,11 @@
 /**
- * 편성 에디터 — LayoutBlock → TextBlock 변환
+ * 편성 에디터 — LayoutBlock → 단위 변환
  *
  * 기능:
  *   1. 교정된 텍스트를 블록별로 표시 (교정 적용 후)
- *   2. 각 LayoutBlock을 1:1로 TextBlock 자동 생성 ("자동 편성")
- *   3. 여러 LayoutBlock을 합쳐서 하나의 TextBlock 생성 ("합치기")
- *   4. 이미 생성된 TextBlock 목록 표시
+ *   2. 각 LayoutBlock을 1:1로 단위 자동 생성 ("자동 편성")
+ *   3. 여러 LayoutBlock을 합쳐서 하나의 단위 생성 ("합치기")
+ *   4. 이미 생성된 단위 목록 표시
  *   5. 크로스 페이지 합치기 (시작~끝 페이지 범위)
  *
  * 의존성:
@@ -14,8 +14,8 @@
  *
  * 왜 이렇게 하는가:
  *   교정은 LayoutBlock(물리적 단위) 기반이지만,
- *   표점·현토·번역은 TextBlock(논리적 단위) 기반이다.
- *   이 편성 단계에서 연구자가 LayoutBlock을 TextBlock으로
+ *   표점·현토·번역은 단위(논리적 단위) 기반이다.
+ *   이 편성 단계에서 연구자가 LayoutBlock을 단위으로
  *   재편성(합치기·쪼개기)하여 후속 작업의 기본 단위를 정한다.
  *
  *   고전 텍스트에서 문장이 페이지 경계를 넘는 경우가 흔하므로,
@@ -30,12 +30,12 @@ const compState = {
   active: false, // 편성 모드 활성화 여부
   sourceBlocks: [], // 자동 편성이 쓰는 교정된 LayoutBlock 목록 (화면에는 그리지 않는다)
   // _page: 이 블록이 소속된 페이지 번호 (크로스 페이지 지원용)
-  textBlocks: [], // 이미 생성된 TextBlock 목록
-  workId: null, // 현재 Work UUID (TextBlock 생성에 필요)
+  units: [], // 이미 생성된 단위 목록
+  workId: null, // 현재 Work UUID (단위 생성에 필요)
   rangeStart: null, // 시작 페이지 (null이면 현재 페이지)
   rangeEnd: null, // 끝 페이지 (null이면 현재 페이지)
-  selectedTbId: null, // 쪼개기를 위해 선택된 TextBlock ID
-  selectedTb: null, // 쪼개기를 위해 선택된 TextBlock 객체
+  selectedTbId: null, // 쪼개기를 위해 선택된 단위 ID
+  selectedTb: null, // 쪼개기를 위해 선택된 단위 객체
 };
 
 function _toBlockKey(page, blockId) {
@@ -153,7 +153,7 @@ function _bindCompEvents() {
  * 편성 패널 상단의 해석 저장소 드롭다운 이벤트를 바인딩한다.
  *
  * 왜 이렇게 하는가:
- *   편성 탭에서 TextBlock을 생성하려면 해석 저장소가 필수인데,
+ *   편성 탭에서 단위를 생성하려면 해석 저장소가 필수인데,
  *   기존에는 "비교" 모드에서만 선택할 수 있었다.
  *   편성 패널에 직접 드롭다운을 두면 모드 전환 없이 선택 가능하다.
  */
@@ -268,12 +268,12 @@ function _getPageRange(currentPage) {
    ────────────────────────── */
 
 /**
- * 교정된 텍스트 + 기존 TextBlock을 로드한다.
+ * 교정된 텍스트 + 기존 단위를 로드한다.
  *
  * 왜 이렇게 하는가:
  *   편성 화면은 두 영역으로 나뉜다:
  *   (1) 위: 교정된 LayoutBlock 텍스트 (소스)
- *   (2) 아래: 이미 생성된 TextBlock (결과)
+ *   (2) 아래: 이미 생성된 단위 (결과)
  *
  *   페이지 범위 모드가 켜져 있으면 인접 페이지의 블록도 함께 로드하여
  *   페이지 경계를 넘는 합치기를 지원한다.
@@ -283,7 +283,7 @@ async function _loadCompositionData() {
   if (typeof refreshContentsTree === "function") refreshContentsTree();
   const { docId, partId, pageNum } = viewerState;
   if (!docId || !partId || !pageNum) {
-    _renderTextBlocks();
+    _renderUnits();
     return;
   }
 
@@ -309,13 +309,13 @@ async function _loadCompositionData() {
 
   const promises = [...correctedPromises];
 
-  // 해석 저장소가 선택되어 있으면 TextBlock도 로드
+  // 해석 저장소가 선택되어 있으면 단위도 로드
   if (interpState.interpId) {
-    // 범위 내 모든 페이지의 TextBlock을 로드하기 위해 각 페이지별 요청
+    // 범위 내 모든 페이지의 단위를 로드하기 위해 각 페이지별 요청
     for (const p of pages) {
       promises.push(
         fetch(
-          `/api/interpretations/${interpState.interpId}/entities/text_block?page=${p}&document_id=${docId}`,
+          `/api/interpretations/${interpState.interpId}/entities/unit?page=${p}&document_id=${docId}`,
         )
           .then((r) => (r.ok ? r.json() : null))
           .catch(() => null),
@@ -341,10 +341,10 @@ async function _loadCompositionData() {
     }
   }
 
-  // TextBlock 목록: 범위 내 모든 페이지의 결과를 합침 (중복 제거)
-  const tbStart = correctedPromises.length; // TextBlock 결과 시작 인덱스
+  // 단위 목록: 범위 내 모든 페이지의 결과를 합침 (중복 제거)
+  const tbStart = correctedPromises.length; // 단위 결과 시작 인덱스
   const seenTbIds = new Set();
-  compState.textBlocks = [];
+  compState.units = [];
 
   if (interpState.interpId) {
     for (let i = 0; i < pages.length; i++) {
@@ -356,14 +356,14 @@ async function _loadCompositionData() {
             continue;
           if (!seenTbIds.has(entity.id)) {
             seenTbIds.add(entity.id);
-            compState.textBlocks.push(entity);
+            compState.units.push(entity);
           }
         }
       }
     }
   }
 
-  _renderTextBlocks();
+  _renderUnits();
   _updateBlockCount();
 }
 
@@ -422,7 +422,7 @@ async function _commitBatch(message) {
  * Work를 자동 확보한다 (없으면 생성).
  *
  * 왜 이렇게 하는가:
- *   TextBlock을 만들려면 소속 Work가 필요하다.
+ *   단위를 만들려면 소속 Work가 필요하다.
  *   편성 탭을 열 때 자동으로 Work를 확보하여
  *   연구자가 별도 작업 없이 바로 편성할 수 있게 한다.
  */
@@ -471,13 +471,13 @@ async function _ensureWork() {
 }
 
 /* ──────────────────────────
-   렌더링: TextBlock 목록
+   렌더링: 단위 목록
    ────────────────────────── */
 
 /**
- * 이미 생성된 TextBlock 목록을 렌더링한다.
+ * 이미 생성된 단위 목록을 렌더링한다.
  */
-function _renderTextBlocks() {
+function _renderUnits() {
   const container = document.getElementById("comp-textblock-list");
   if (!container) return;
 
@@ -489,7 +489,7 @@ function _renderTextBlocks() {
     return;
   }
 
-  if (compState.textBlocks.length === 0) {
+  if (compState.units.length === 0) {
     container.innerHTML =
       '<div class="placeholder" style="padding:20px; text-align:center; color:var(--text-muted);">' +
       '아직 단위가 없습니다. 「경계 제안」이나 「자동 편성」을 쓰거나, 사이드바 「내용」의 «경계 넣기»로 첫 경계를 놓으세요.</div>';
@@ -506,16 +506,16 @@ function _renderTextBlocks() {
   head.type = "button";
   head.className = "text-btn comp-tb-toggle";
   head.style.cssText = "font-size:11px; text-align:left; padding:2px 0;";
-  head.textContent = `${collapsed ? "▸" : "▾"} 단위 ${compState.textBlocks.length}개 ${collapsed ? "(접힘 — 누르면 펼침)" : ""}`;
+  head.textContent = `${collapsed ? "▸" : "▾"} 단위 ${compState.units.length}개 ${collapsed ? "(접힘 — 누르면 펼침)" : ""}`;
   head.addEventListener("click", () => {
     compState.tbCollapsed = !collapsed;
-    _renderTextBlocks();
+    _renderUnits();
   });
   container.appendChild(head);
   if (collapsed) return;
 
   // sequence_index 순으로 정렬
-  const sorted = [...compState.textBlocks].sort(
+  const sorted = [...compState.units].sort(
     (a, b) => (a.sequence_index || 0) - (b.sequence_index || 0),
   );
 
@@ -533,7 +533,7 @@ function _renderTextBlocks() {
     card.addEventListener("click", (e) => {
       // 삭제 버튼 클릭 시에는 쪼개기 편집기를 열지 않음
       if (e.target.classList.contains("comp-tb-delete-btn")) return;
-      _selectTextBlock(tb);
+      _selectUnit(tb);
     });
 
     // 헤더: seq# + source 요약 + 삭제 버튼
@@ -554,7 +554,7 @@ function _renderTextBlocks() {
       // 크로스 페이지 source_refs이면 페이지도 표시
       const pages = new Set(refs.map((r) => r.page));
       if (pages.size > 1) {
-        // 여러 페이지에 걸친 TextBlock
+        // 여러 페이지에 걸친 단위
         sourceInfo.textContent = refs
           .map((r) => `p${r.page}:${r.layout_block_id || "?"}`)
           .join(" + ");
@@ -579,14 +579,14 @@ function _renderTextBlocks() {
     deleteBtn.textContent = "\u00d7";
     deleteBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      _deleteTextBlock(tb);
+      _deleteUnit(tb);
     });
 
     header.appendChild(seqBadge);
     header.appendChild(sourceInfo);
     header.appendChild(statusBadge);
 
-    // 크로스 페이지 TextBlock이면 뱃지 추가
+    // 크로스 페이지 단위이면 뱃지 추가
     if (refs.length > 0) {
       const pages = new Set(refs.map((r) => r.page));
       if (pages.size > 1) {
@@ -621,7 +621,7 @@ function _renderTextBlocks() {
 function _updateBlockCount() {
   const el = document.getElementById("comp-block-count");
   if (el) {
-    el.textContent = `단위 ${compState.textBlocks.length}개`;
+    el.textContent = `단위 ${compState.units.length}개`;
   }
 }
 
@@ -643,10 +643,10 @@ function _updateCompStatus(text, isError) {
    ────────────────────────── */
 
 /**
- * 현재 페이지의 LayoutBlock을 1:1로 TextBlock으로 자동 생성한다.
+ * 현재 페이지의 LayoutBlock을 1:1로 단위으로 자동 생성한다.
  *
  * 왜 이렇게 하는가:
- *   대부분의 경우 LayoutBlock과 TextBlock이 1:1 대응한다.
+ *   대부분의 경우 LayoutBlock과 단위가 1:1 대응한다.
  *   "자동 편성" 버튼 하나로 빠르게 편성을 완료할 수 있게 한다.
  *   이미 편성된 블록은 건너뛴다.
  *
@@ -680,7 +680,7 @@ async function _autoCompose() {
 
   // 이미 편성된 블록 ID 수집
   const composedKeys = new Set();
-  compState.textBlocks.forEach((tb) => {
+  compState.units.forEach((tb) => {
     const refs = tb.source_refs || [];
     refs.forEach((r) => {
       const key = _sourceRefToKey(r, currentPage);
@@ -706,7 +706,7 @@ async function _autoCompose() {
 
   let created = 0;
   const errors = [];
-  const baseSeq = compState.textBlocks.length;
+  const baseSeq = compState.units.length;
 
   for (let i = 0; i < toCompose.length; i++) {
     const block = toCompose[i];
@@ -716,7 +716,7 @@ async function _autoCompose() {
     // 여러 블록 생성 시 no_commit=true로 git commit을 건너뛴다
     const useNoCommit = toCompose.length > 1;
     const url =
-      `/api/interpretations/${interpState.interpId}/entities/text_block/compose` +
+      `/api/interpretations/${interpState.interpId}/entities/unit/compose` +
       (useNoCommit ? "?no_commit=true" : "");
 
     try {
@@ -746,17 +746,17 @@ async function _autoCompose() {
         errors.push(
           `${block.block_id}: ${err.error || err.detail || "HTTP " + res.status}`,
         );
-        console.error(`TextBlock 생성 실패 (${block.block_id}):`, err);
+        console.error(`단위 생성 실패 (${block.block_id}):`, err);
       }
     } catch (e) {
       errors.push(`${block.block_id}: ${e.message}`);
-      console.error(`TextBlock 생성 실패 (${block.block_id}):`, e);
+      console.error(`단위 생성 실패 (${block.block_id}):`, e);
     }
   }
 
   // no_commit 모드였으면 마지막에 한 번만 커밋
   if (created > 0 && toCompose.length > 1) {
-    await _commitBatch(`feat: 자동 편성 — ${created}개 TextBlock 생성`);
+    await _commitBatch(`feat: 자동 편성 — ${created}개 단위 생성`);
   }
 
   if (errors.length > 0 && created === 0) {
@@ -771,7 +771,7 @@ async function _autoCompose() {
     );
   }
 
-  _updateCompStatus(`${created}개 TextBlock 생성 완료`, false);
+  _updateCompStatus(`${created}개 단위 생성 완료`, false);
 
   // 데이터 새로고침
   await _loadCompositionData();
@@ -782,17 +782,17 @@ async function _autoCompose() {
    ────────────────────────── */
 
 /**
- * TextBlock을 선택하고 쪼개기 편집기를 연다.
+ * 단위를 선택하고 쪼개기 편집기를 연다.
  *
  * 왜 이렇게 하는가:
- *   크로스 페이지 합치기로 만든 큰 TextBlock을
+ *   크로스 페이지 합치기로 만든 큰 단위를
  *   연구자가 수동으로 단락별로 나눌 수 있어야 한다.
- *   TextBlock 카드를 클릭하면 쪼개기 편집기가 열리고,
+ *   단위 카드를 클릭하면 쪼개기 편집기가 열리고,
  *   텍스트 중간에 === 구분선을 넣어 쪼갤 위치를 지정한다.
  *
- * 입력: tb — TextBlock 객체 ({id, original_text, source_refs, ...})
+ * 입력: tb — 단위 객체 ({id, original_text, source_refs, ...})
  */
-function _selectTextBlock(tb) {
+function _selectUnit(tb) {
   compState.selectedTbId = tb.id;
   compState.selectedTb = tb;
 
@@ -810,25 +810,25 @@ function _selectTextBlock(tb) {
 
   _updateSplitPreview();
 
-  // TextBlock 목록에서 선택 표시 갱신
-  _renderTextBlocks();
+  // 단위 목록에서 선택 표시 갱신
+  _renderUnits();
 }
 
 /* ──────────────────────────
-   편성 액션: 개별 TextBlock 삭제
+   편성 액션: 개별 단위 삭제
    ────────────────────────── */
 
 /**
- * 개별 TextBlock을 deprecated 상태로 전환하여 삭제한다.
+ * 개별 단위를 deprecated 상태로 전환하여 삭제한다.
  *
  * 왜 이렇게 하는가:
- *   잘못 편성된 TextBlock 하나만 골라서 삭제하고 싶을 때,
+ *   잘못 편성된 단위 하나만 골라서 삭제하고 싶을 때,
  *   전체 리셋 없이 개별 단위로 deprecated 전환할 수 있게 한다.
- *   deprecated된 TextBlock은 목록에서 숨겨지지만 이력은 보존된다.
+ *   deprecated된 단위는 목록에서 숨겨지지만 이력은 보존된다.
  *
- * 입력: tb — TextBlock 객체 ({id, original_text, sequence_index, ...})
+ * 입력: tb — 단위 객체 ({id, original_text, sequence_index, ...})
  */
-async function _deleteTextBlock(tb) {
+async function _deleteUnit(tb) {
   if (!interpState.interpId) {
     showToast("해석 저장소가 선택되지 않았습니다.", 'warning');
     return;
@@ -842,7 +842,7 @@ async function _deleteTextBlock(tb) {
 
   if (
     !confirm(
-      `TextBlock #${tb.sequence_index} 을(를) 삭제하시겠습니까?\n\n"${displayText}"\n\n(deprecated 전환 — 이력은 보존됩니다)`,
+      `단위 #${tb.sequence_index} 을(를) 삭제하시겠습니까?\n\n"${displayText}"\n\n(deprecated 전환 — 이력은 보존됩니다)`,
     )
   ) {
     return;
@@ -853,18 +853,18 @@ async function _deleteTextBlock(tb) {
   try {
     // 배치 리셋 엔드포인트를 1개 ID로 호출 (단일 git commit)
     const res = await fetch(
-      `/api/interpretations/${interpState.interpId}/entities/text_block/reset`,
+      `/api/interpretations/${interpState.interpId}/entities/unit/reset`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text_block_ids: [tb.id] }),
+        body: JSON.stringify({ unit_ids: [tb.id] }),
       },
     );
 
     if (res.ok || res.status === 207) {
-      _updateCompStatus(`TextBlock #${tb.sequence_index} 삭제 완료`, false);
+      _updateCompStatus(`단위 #${tb.sequence_index} 삭제 완료`, false);
 
-      // 삭제한 TextBlock이 현재 쪼개기 편집기에 열려 있으면 닫기
+      // 삭제한 단위가 현재 쪼개기 편집기에 열려 있으면 닫기
       if (compState.selectedTbId === tb.id) {
         _cancelSplit();
       }
@@ -888,12 +888,12 @@ async function _deleteTextBlock(tb) {
    ────────────────────────── */
 
 /**
- * 현재 페이지의 TextBlock을 모두 deprecated 상태로 전환한다.
+ * 현재 페이지의 단위를 모두 deprecated 상태로 전환한다.
  *
  * 왜 이렇게 하는가:
- *   편성을 처음부터 다시 하고 싶을 때, 기존 TextBlock을 삭제하는 대신
+ *   편성을 처음부터 다시 하고 싶을 때, 기존 단위를 삭제하는 대신
  *   deprecated 상태로 전환하여 이력을 보존한다.
- *   deprecated된 TextBlock은 목록에서 숨겨지므로 깨끗하게 재시작할 수 있다.
+ *   deprecated된 단위는 목록에서 숨겨지므로 깨끗하게 재시작할 수 있다.
  */
 async function _resetComposition() {
   if (!interpState.interpId) {
@@ -901,7 +901,7 @@ async function _resetComposition() {
     return;
   }
 
-  const targets = compState.textBlocks.filter(
+  const targets = compState.units.filter(
     (tb) => tb.status !== "deprecated" && tb.status !== "archived",
   );
 
@@ -912,7 +912,7 @@ async function _resetComposition() {
 
   if (
     !confirm(
-      `현재 표시된 TextBlock ${targets.length}개를 모두 리셋(deprecated)하시겠습니까?\n\n이력은 보존되며, 나중에 복원할 수 있습니다.`,
+      `현재 표시된 단위 ${targets.length}개를 모두 리셋(deprecated)하시겠습니까?\n\n이력은 보존되며, 나중에 복원할 수 있습니다.`,
     )
   ) {
     return;
@@ -923,12 +923,12 @@ async function _resetComposition() {
   try {
     // 배치 리셋 엔드포인트: 한 번의 API 호출 + 한 번의 git commit
     const res = await fetch(
-      `/api/interpretations/${interpState.interpId}/entities/text_block/reset`,
+      `/api/interpretations/${interpState.interpId}/entities/unit/reset`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          text_block_ids: targets.map((tb) => tb.id),
+          unit_ids: targets.map((tb) => tb.id),
         }),
       },
     );
@@ -980,7 +980,7 @@ function _cancelSplit() {
   if (splitBtn) splitBtn.disabled = true;
   if (preview) preview.textContent = "";
 
-  _renderTextBlocks();
+  _renderUnits();
 }
 
 /**
@@ -1000,7 +1000,7 @@ function _updateSplitPreview() {
 
   if (nonEmpty.length <= 1) {
     preview.textContent =
-      "구분선(===)을 넣으면 여러 TextBlock으로 쪼갤 수 있습니다.";
+      "구분선(===)을 넣으면 여러 단위으로 쪼갤 수 있습니다.";
     preview.style.color = "var(--text-muted)";
   } else {
     preview.textContent = `→ ${nonEmpty.length}개의 단위로 나뉩니다 (경계 ${nonEmpty.length - 1}개가 들어갑니다).`;
@@ -1030,12 +1030,12 @@ function _parseSplitPieces(text) {
  * 처리 순서:
  *   1. 텍스트를 === 구분선으로 파싱
  *   2. 비어 있는 조각 제거
- *   3. 각 조각마다 새 TextBlock 생성 (source_refs는 원본 전체를 상속)
- *   4. 원본 TextBlock을 deprecated 상태로 전환
+ *   3. 각 조각마다 새 단위 생성 (source_refs는 원본 전체를 상속)
+ *   4. 원본 단위를 deprecated 상태로 전환
  *   5. 데이터 새로고침
  *
  * 왜 source_refs를 전체 상속하는가:
- *   쪼개기는 이미 합쳐진 TextBlock을 단락별로 나누는 작업이다.
+ *   쪼개기는 이미 합쳐진 단위를 단락별로 나누는 작업이다.
  *   나눠진 각 조각이 어느 원본 LayoutBlock에서 왔는지
  *   정확한 char_range를 자동 계산하기 어렵다.
  *   전체 source_refs를 상속하되 char_range를 null로 두면
@@ -1078,12 +1078,12 @@ async function _executeSplit() {
 
   try {
     const res = await fetch(
-      `/api/interpretations/${interpState.interpId}/entities/text_block/split`,
+      `/api/interpretations/${interpState.interpId}/entities/unit/split`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          original_text_block_id: compState.selectedTbId,
+          original_unit_id: compState.selectedTbId,
           pieces: nonEmpty,
           part_id: viewerState.partId,
         }),
@@ -1098,7 +1098,7 @@ async function _executeSplit() {
     }
 
     _updateCompStatus(
-      `쪼개기 완료: ${nonEmpty.length}개 TextBlock 생성`,
+      `쪼개기 완료: ${nonEmpty.length}개 단위 생성`,
       false,
     );
   } catch (e) {
@@ -1117,7 +1117,7 @@ async function _executeSplit() {
 
 /* ──────────────────────────
    경계 제안 (D-088)
-   권 전체 확정본에서 글 단위 경계 후보를 받아 보이고, 승인한 것만 TextBlock으로.
+   권 전체 확정본에서 글 단위 경계 후보를 받아 보이고, 승인한 것만 단위으로.
    합치기·쪼개기를 블록 단위로 반복하는 대신 «어디서 글이 바뀌는가»만 정한다.
    ────────────────────────── */
 
@@ -1461,7 +1461,7 @@ function _closeProposePanel() {
 }
 
 /**
- * 승인한 제안 사이의 구간을 TextBlock으로 만든다.
+ * 승인한 제안 사이의 구간을 단위으로 만든다.
  * 구간은 화면에서 다시 계산한다 — 사용자가 체크를 바꾸면 서버의 spans와 달라지기 때문이다.
  */
 async function _applyProposals() {

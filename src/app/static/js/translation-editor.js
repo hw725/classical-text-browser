@@ -30,13 +30,13 @@ const transState = {
 };
 
 /**
- * API용 block_id 반환 — "tb:" 접두사 제거.
+ * API용 block_id 반환 — "unit:" 접두사 제거.
  * 표점·번역 모두 서버에는 접두사 없이 저장해야
  * block_id 매칭이 일치한다.
  */
 function _transApiBlockId() {
-  return transState.blockId.startsWith("tb:")
-    ? transState.blockId.slice(3)
+  return transState.blockId.startsWith("unit:")
+    ? transState.blockId.slice(5)
     : transState.blockId;
 }
 
@@ -110,17 +110,17 @@ async function _populateTransBlockSelect() {
 
   if (!viewerState.docId || !viewerState.partId || !viewerState.pageNum) return;
 
-  // TextBlock이 있으면 우선 사용 (표점 편집기와 동일한 block_id 체계).
-  // 왜: 표점이 TextBlock ID로 저장되므로, 번역에서도 같은 ID를 써야
+  // 단위가 있으면 우선 사용 (표점 편집기와 동일한 block_id 체계).
+  // 왜: 표점이 단위 ID로 저장되므로, 번역에서도 같은 ID를 써야
   //     표점 데이터를 찾을 수 있다.
   if (interpState.interpId) {
     try {
       const tbRes = await fetch(
-        `/api/interpretations/${interpState.interpId}/entities/text_block?page=${viewerState.pageNum}&document_id=${viewerState.docId}`
+        `/api/interpretations/${interpState.interpId}/entities/unit?page=${viewerState.pageNum}&document_id=${viewerState.docId}`
       );
       if (tbRes.ok) {
         const tbData = await tbRes.json();
-        const textBlocks = (tbData.entities || []).filter((e) => {
+        const units = (tbData.entities || []).filter((e) => {
           const refs = e.source_refs || [];
           const ref = e.source_ref;
           if (refs.length > 0) return refs.some((r) => r.page === viewerState.pageNum);
@@ -128,10 +128,10 @@ async function _populateTransBlockSelect() {
           return false;
         }).sort((a, b) => (a.sequence_index || 0) - (b.sequence_index || 0));
 
-        if (textBlocks.length > 0) {
-          textBlocks.forEach((tb) => {
+        if (units.length > 0) {
+          units.forEach((tb) => {
             const opt = document.createElement("option");
-            opt.value = `tb:${tb.id}`;
+            opt.value = `unit:${tb.id}`;
             const refs = tb.source_refs || [];
             const srcLabel = refs.map((r) => r.layout_block_id || "?").join("+");
             // 이름은 깊이가 아니라 역할이 정한다(D-092) — 3단에 오는 기사도 있다
@@ -156,7 +156,7 @@ async function _populateTransBlockSelect() {
         }
       }
     } catch {
-      // TextBlock 조회 실패 시 LayoutBlock 폴백
+      // 단위 조회 실패 시 LayoutBlock 폴백
     }
   }
 
@@ -213,28 +213,28 @@ async function _loadTranslationData() {
     return;
   }
 
-  const isTextBlock = transState.blockId.startsWith("tb:");
-  // API에 전달할 block_id: TextBlock이면 "tb:" 접두사 제거.
+  const isUnit = transState.blockId.startsWith("unit:");
+  // API에 전달할 block_id: 단위이면 "unit:" 접두사 제거.
   // 표점 편집기와 동일한 규칙 — 저장/로드 모두 접두사 없이 사용.
-  const apiBlockId = isTextBlock
-    ? transState.blockId.slice(3)
+  const apiBlockId = isUnit
+    ? transState.blockId.slice(5)
     : transState.blockId;
 
   try {
-    if (isTextBlock) {
-      // ── TextBlock 모드: 최신 교정 텍스트를 우선 사용 ──
+    if (isUnit) {
+      // ── 단위 모드: 최신 교정 텍스트를 우선 사용 ──
       //
       // 왜 이렇게 하는가:
-      //   TextBlock의 original_text는 편성(composition) 시점의 스냅샷이다.
-      //   편성 이후에 교감/교정을 수정하면 TextBlock에는 반영되지 않는다.
+      //   단위의 original_text는 편성(composition) 시점의 스냅샷이다.
+      //   편성 이후에 교감/교정을 수정하면 단위에는 반영되지 않는다.
       //   따라서 source_refs를 통해 원본 문서의 최신 교정 텍스트를 가져온다.
-      //   교정 텍스트를 못 가져오면 TextBlock 원본을 폴백으로 사용한다.
+      //   교정 텍스트를 못 가져오면 단위 원본을 폴백으로 사용한다.
       let tbData = null;
 
-      // TextBlock 정보 조회 (source_refs 필요)
+      // 단위 정보 조회 (source_refs 필요)
       try {
         const tbRes = await fetch(
-          `/api/interpretations/${interpState.interpId}/entities/text_block/${apiBlockId}`
+          `/api/interpretations/${interpState.interpId}/entities/unit/${apiBlockId}`
         );
         if (tbRes.ok) tbData = await tbRes.json();
       } catch { /* 폴백 처리 아래 */ }
@@ -270,7 +270,7 @@ async function _loadTranslationData() {
         correctedText = texts.join("\n");
       }
 
-      // 교정 텍스트가 있으면 사용, 없으면 TextBlock 원본 폴백
+      // 교정 텍스트가 있으면 사용, 없으면 단위 원본 폴백
       if (correctedText.trim()) {
         transState.originalText = correctedText;
       } else {

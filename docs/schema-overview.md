@@ -13,7 +13,7 @@
 | **L8** | 연결 | 엔티티 간 관계, 외부 DB 연동 | `relation` (코어) |
 | **L7** | 주석 | 주석(v2 사전형), 인용 마크, 인물/지명 태깅 | `annotation_page` v2, `citation_mark_page` (해석) / `tag`, `concept`, `agent` (코어) |
 | **L6** | 번역 | 현대어 번역문 | `translation_page` (해석) |
-| **L5** | 표점/현토 | 구두점(句讀) 부여, 한국어 현토(懸吐) | `punctuation_page`, `hyeonto_page` (해석) / `text_block`, `work` (코어) |
+| **L5** | 표점/현토 | 구두점(句讀) 부여, 한국어 현토(懸吐) | `punctuation_page`, `hyeonto_page` (해석) / `unit`, `work` (코어) |
 | | **경계** | **해석 저장소 ↑ dependency.json ↓ 원본 저장소** | |
 | **L4** | 사람 수정 | OCR 교정, 확정 텍스트 | `corrections` (원본) |
 | **L3** | 레이아웃 | 페이지 영역 분할, 읽기 순서 지정 | `layout_page` (원본) |
@@ -50,7 +50,7 @@ schemas/
 │
 ├── core/                 ─ 코어 스키마 엔티티 (L5-L8)
 │   ├── work.schema.json              작품
-│   ├── text_block.schema.json        텍스트 단위
+│   ├── unit.schema.json             글 단위
 │   ├── tag.schema.json               표면 태그
 │   ├── concept.schema.json           승격된 의미 엔티티
 │   ├── agent.schema.json             역사적 행위자
@@ -100,18 +100,18 @@ schemas/
 
 | 참조 원본 | 참조 대상 | 필드 |
 |-----------|----------|------|
-| `text_block`.work_id | `work`.id | ──▶ |
-| `tag`.block_id | `text_block`.id | ──▶ |
+| `unit`.work_id | `work`.id | ──▶ |
+| `tag`.block_id | `unit`.id | ──▶ |
 | `concept`.scope_work | `work`.id | ──▶ (선택) |
 | `relation`.subject_id | `agent`.id \| `concept`.id | ──▶ |
-| `relation`.object_id | `agent`.id \| `concept`.id \| `text_block`.id | ──▶ |
-| `relation`.evidence_blocks[] | `text_block`.id | ──▶ |
+| `relation`.object_id | `agent`.id \| `concept`.id \| `unit`.id | ──▶ |
+| `relation`.evidence_blocks[] | `unit`.id | ──▶ |
 
 ### 코어 → 원본 역참조
 
 | 참조 원본 | 참조 대상 | 설명 |
 |-----------|----------|------|
-| `text_block`.source_ref | `manifest`.document_id + page + `layout_page`.block_id + git commit | 원본 출처 추적 |
+| `unit`.source_ref | `manifest`.document_id + page + `layout_page`.block_id + git commit | 원본 출처 추적 |
 
 ---
 
@@ -329,7 +329,7 @@ L7 인용 마크. 논문 인용을 위한 텍스트 구절 마크업. L4→L5→
 
 > `core/work.schema.json`
 
-최상위. 하나의 텍스트 작품. TextBlock의 소속 기준.
+최상위. 하나의 텍스트 작품. 단위의 소속 기준.
 
 | 필드 | 타입 | 설명 |
 |------|------|------|
@@ -337,9 +337,9 @@ L7 인용 마크. 논문 인용을 위한 텍스트 구절 마크업. L4→L5→
 | author | string? | 저자 |
 | period | string? | 시대 |
 
-### TextBlock
+### 단위 (unit)
 
-> `core/text_block.schema.json`
+> `core/unit.schema.json`
 
 최소 해석 단위. original_text 불변. source_ref로 원본 출처 추적.
 
@@ -358,7 +358,7 @@ L7 인용 마크. 논문 인용을 위한 텍스트 구절 마크업. L4→L5→
 
 | 필드 | 타입 | 설명 |
 |------|------|------|
-| **\*block_id** | uuid | → TextBlock |
+| **\*block_id** | uuid | → 단위(unit) |
 | **\*surface** | string | 표면 텍스트 |
 | **\*core_category** | enum | person \| place \| book \| office \| object \| concept \| event \| other |
 | confidence | float? | 신뢰도 0-1 |
@@ -393,7 +393,7 @@ L7 인용 마크. 논문 인용을 위한 텍스트 구절 마크업. L4→L5→
 
 > `core/relation.schema.json`
 
-Agent/Concept/TextBlock 간 관계. predicate는 구조적 동사만.
+Agent/Concept/단위 간 관계. predicate는 구조적 동사만.
 
 | 필드 | 타입 | 설명 |
 |------|------|------|
@@ -403,7 +403,7 @@ Agent/Concept/TextBlock 간 관계. predicate는 구조적 동사만.
 | object_id | uuid? | 목적어 ID |
 | object_type | enum? | agent \| concept \| block \| null |
 | object_value | string? | 자유 텍스트 (object_id 없을 때) |
-| evidence_blocks[] | uuid[]? | 근거 TextBlock ID 배열 |
+| evidence_blocks[] | uuid[]? | 근거 단위 ID 배열 |
 
 ---
 
@@ -439,7 +439,7 @@ Agent/Concept/TextBlock 간 관계. predicate는 구조적 동사만.
 | **원문 비변형** | 표점/현토/번역은 글자 인덱스 오버레이. 원문은 그대로 |
 | **온톨로지 비강제** | 자유 확장. 부재 = 미지정 |
 | **Promotion Flow** | Tag(잠정) → Concept(확정) |
-| **용어 규칙** | LayoutBlock / OcrResult / TextBlock. "Block" 단독 사용 금지 |
+| **용어 규칙** | LayoutBlock / OcrResult / 단위(unit). "Block" 단독 사용 금지 |
 
 ---
 

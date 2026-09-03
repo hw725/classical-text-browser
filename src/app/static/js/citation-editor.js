@@ -14,7 +14,7 @@
 
 const citeState = {
   active: false,
-  blockId: "",            // "tb:<id>" (TextBlock) 또는 LayoutBlock ID
+  blockId: "",            // "unit:<id>" (단위) 또는 LayoutBlock ID
   originalText: "",       // 현재 블록의 L4 원문
   punctMarks: [],         // 표점 marks (원문 미리보기에 적용)
   marks: [],              // 현재 페이지의 인용 마크 배열
@@ -104,13 +104,13 @@ function _refreshCitePresetSelect() {
 }
 
 /**
- * API용 block_id 반환 — "tb:" 접두사 제거.
+ * API용 block_id 반환 — "unit:" 접두사 제거.
  * 표점·번역·주석·인용 모두 서버에는 접두사 없이 저장해야
  * block_id 매칭이 일치한다.
  */
 function _citeApiBlockId() {
-  return citeState.blockId.startsWith("tb:")
-    ? citeState.blockId.slice(3)
+  return citeState.blockId.startsWith("unit:")
+    ? citeState.blockId.slice(5)
     : citeState.blockId;
 }
 
@@ -203,18 +203,18 @@ async function _populateCiteBlockSelect() {
     (typeof hyeontoState !== "undefined" ? hyeontoState.blockId : "") ||
     (typeof punctState !== "undefined" ? punctState.blockId : "");
 
-  // TextBlock이 있으면 우선 사용 (번역·주석 편집기와 동일한 block_id 체계).
-  // 왜: 표점·번역·주석이 TextBlock ID로 저장되므로, 인용에서도 같은 ID를
+  // 단위가 있으면 우선 사용 (번역·주석 편집기와 동일한 block_id 체계).
+  // 왜: 표점·번역·주석이 단위 ID로 저장되므로, 인용에서도 같은 ID를
   //     사용해야 resolve 시 올바른 데이터를 매칭할 수 있다.
   const is = typeof interpState !== "undefined" ? interpState : null;
   if (is && is.interpId) {
     try {
       const tbRes = await fetch(
-        `/api/interpretations/${is.interpId}/entities/text_block?page=${vs.pageNum}&document_id=${vs.docId}`
+        `/api/interpretations/${is.interpId}/entities/unit?page=${vs.pageNum}&document_id=${vs.docId}`
       );
       if (tbRes.ok) {
         const tbData = await tbRes.json();
-        const textBlocks = (tbData.entities || []).filter((e) => {
+        const units = (tbData.entities || []).filter((e) => {
           const refs = e.source_refs || [];
           const ref = e.source_ref;
           if (refs.length > 0) return refs.some((r) => r.page === vs.pageNum);
@@ -222,10 +222,10 @@ async function _populateCiteBlockSelect() {
           return false;
         }).sort((a, b) => (a.sequence_index || 0) - (b.sequence_index || 0));
 
-        if (textBlocks.length > 0) {
-          textBlocks.forEach((tb) => {
+        if (units.length > 0) {
+          units.forEach((tb) => {
             const opt = document.createElement("option");
-            opt.value = `tb:${tb.id}`;
+            opt.value = `unit:${tb.id}`;
             const refs = tb.source_refs || [];
             const srcLabel = refs.map((r) => r.layout_block_id || "?").join("+");
             // 이름은 깊이가 아니라 역할이 정한다(D-092) — 3단에 오는 기사도 있다
@@ -252,7 +252,7 @@ async function _populateCiteBlockSelect() {
         }
       }
     } catch {
-      // TextBlock 조회 실패 시 LayoutBlock 폴백
+      // 단위 조회 실패 시 LayoutBlock 폴백
     }
   }
 
@@ -341,25 +341,25 @@ async function _loadCiteBlockText(blockId) {
   const vs = typeof viewerState !== "undefined" ? viewerState : null;
   if (!vs || !vs.docId || !vs.pageNum) return;
 
-  const isTextBlock = blockId.startsWith("tb:");
+  const isUnit = blockId.startsWith("unit:");
   const is = typeof interpState !== "undefined" ? interpState : null;
 
-  if (isTextBlock) {
-    // ── TextBlock 모드: 최신 교정 텍스트를 우선 사용 ──
+  if (isUnit) {
+    // ── 단위 모드: 최신 교정 텍스트를 우선 사용 ──
     //
     // 왜 이렇게 하는가:
-    //   TextBlock의 original_text는 편성(composition) 시점의 스냅샷이다.
-    //   편성 이후에 교감/교정을 수정하면 TextBlock에는 반영되지 않는다.
+    //   단위의 original_text는 편성(composition) 시점의 스냅샷이다.
+    //   편성 이후에 교감/교정을 수정하면 단위에는 반영되지 않는다.
     //   따라서 source_refs를 통해 원본 문서의 최신 교정 텍스트를 가져온다.
-    //   교정 텍스트를 못 가져오면 TextBlock 원본을 폴백으로 사용한다.
+    //   교정 텍스트를 못 가져오면 단위 원본을 폴백으로 사용한다.
     if (!is || !is.interpId) { citeState.originalText = ""; return; }
-    const apiBlockId = blockId.slice(3);
+    const apiBlockId = blockId.slice(5);
     let tbData = null;
 
-    // TextBlock 정보 조회 (source_refs 필요)
+    // 단위 정보 조회 (source_refs 필요)
     try {
       const tbRes = await fetch(
-        `/api/interpretations/${is.interpId}/entities/text_block/${apiBlockId}`
+        `/api/interpretations/${is.interpId}/entities/unit/${apiBlockId}`
       );
       if (tbRes.ok) tbData = await tbRes.json();
     } catch { /* 폴백 처리 아래 */ }
@@ -395,7 +395,7 @@ async function _loadCiteBlockText(blockId) {
       correctedText = texts.join("\n");
     }
 
-    // 교정 텍스트가 있으면 사용, 없으면 TextBlock 원본 폴백
+    // 교정 텍스트가 있으면 사용, 없으면 단위 원본 폴백
     if (correctedText.trim()) {
       citeState.originalText = correctedText;
     } else {
@@ -457,7 +457,7 @@ async function _loadCitePunctuation(blockId) {
     return;
   }
 
-  const apiBlockId = blockId.startsWith("tb:") ? blockId.slice(3) : blockId;
+  const apiBlockId = blockId.startsWith("unit:") ? blockId.slice(5) : blockId;
 
   try {
     const resp = await fetch(
