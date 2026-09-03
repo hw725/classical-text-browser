@@ -1277,18 +1277,27 @@ def _document_head(doc_path) -> str | None:
         return None
 
 
-def _boundary_rows(interp_path, document_id: str | None, part_id: str | None) -> list[dict]:
+def _boundary_rows(
+    interp_path,
+    document_id: str | None,
+    part_id: str | None,
+    page_cache: dict | None = None,
+) -> list[dict]:
     """경계 색인 «보기» (D-090): TextBlock을 원본 위치 순서로 늘어놓고 행 앵커를 계산한다.
 
     경계는 별도 데이터가 아니다. 위치의 정본은 TextBlock.source_refs(쪽·글자 범위)이고,
     행 번호·좌표는 여기서 계산한다. 그래서 합치기·쪼개기·옮기기 어느 경로로 바꿔도 색인이
     어긋나지 않는다.
+
+    page_cache — {(document_id, part_id): {쪽: 텍스트}}. 부르는 쪽이 이미 권 텍스트를 읽었으면
+    넘긴다. 208쪽짜리 권을 다시 읽는 데만 0.25초가 든다(운양집 실측).
     """
     from core.segmentation import anchor_from_refs
 
     _library_path = get_library_path()
     rows = []
-    page_cache: dict[tuple[str, str], dict[int, str]] = {}
+    if page_cache is None:
+        page_cache = {}
     for blk in list_entities(interp_path, "text_block"):
         if blk.get("status") == "deprecated":
             continue
@@ -1454,6 +1463,7 @@ async def api_update_boundary(interp_id: str, text_block_id: str, body: Boundary
         return {"page": keys[i][0], "line": keys[i][1], "offset": 0}
 
     touched: list[str] = []
+    start_moved = False
     start = _norm(body.start, item["start"])
     if body.shift_start:
         start = _shift_lines(start, body.shift_start)
@@ -1463,6 +1473,7 @@ async def api_update_boundary(interp_id: str, text_block_id: str, body: Boundary
         move_boundary(data, text_block_id, start, page_texts)
         item["l4_commit"] = _document_head(doc_path)
         touched.append(text_block_id)
+        start_moved = True
     # 끝은 저장하지 않는다 — «끝을 옮긴다»는 곧 «다음 경계(같은 층위 이상)를 옮긴다»이다.
     if body.end or body.shift_end:
         bounds = data["boundaries"]
@@ -1506,19 +1517,30 @@ async def api_update_boundary(interp_id: str, text_block_id: str, body: Boundary
         update_boundary(data, text_block_id, fields)
         if text_block_id not in touched:
             touched.append(text_block_id)
-    # 시작 행의 L2 좌표 캐시(화면 표시용)
+    # 시작 행의 L2 좌표 캐시(화면 표시용). 시작이 그대로면 다시 재지 않는다 —
+    # 제목·역할·층위만 바꿔도 L2를 읽어 오던 군더더기였다.
     b = find_boundary(data, text_block_id)
-    b["bbox"] = boundary_bbox(
-        doc_path,
-        pid,
-        {"page": b["start"]["page"], "line": b["start"]["line"], "offset": b["start"]["offset"]},
-        {"page": b["start"]["page"], "line": b["start"]["line"], "offset": None},
-    )
+    if start_moved or b.get("bbox") is None:
+        b["bbox"] = boundary_bbox(
+            doc_path,
+            pid,
+            {
+                "page": b["start"]["page"],
+                "line": b["start"]["line"],
+                "offset": b["start"]["offset"],
+            },
+            {"page": b["start"]["page"], "line": b["start"]["line"], "offset": None},
+        )
     save_boundaries(interp_path, data)
     title = b.get("title") or text_block_id[:8]
     git = git_commit_interpretation(interp_path, f"fix: 경계 수정 — {title} (D-092)")
     row = next(
-        (r for r in _boundary_rows(interp_path, doc_id, pid) if r["id"] == text_block_id), None
+        (
+            r
+            for r in _boundary_rows(interp_path, doc_id, pid, {(doc_id, pid or ""): page_texts})
+            if r["id"] == text_block_id
+        ),
+        None,
     )
     return {"boundary": row, "touched": touched, "git": git}
 

@@ -170,27 +170,59 @@ function _renderOutline(root, blocks, container) {
  * 블록 한 줄: [순번] 미리보기 … 쪽 배지들.
  * 줄을 누르면 첫 쪽으로, 배지를 누르면 그 쪽으로 간다. 두 쪽에 걸친 블록은 배지가 둘이다.
  */
+const ROLE_NAME = { container: "묶음", article: "기사", fragment: "조각" };
+const ROLE_MARK = { container: "▣ ", article: "", fragment: "· " };
+
+/** 역할이 비어 있으면 깊이로 추정한다 (옛 데이터 호환 — 서버의 role_for_level과 같은 규칙). */
+function _roleOf(block) {
+  const lv = Number(block.level) || 2;
+  return block.role || (lv <= 1 ? "container" : lv === 2 ? "article" : "fragment");
+}
+
+/** 한 행의 역할 표시(클래스·머리표·이름표·설명)를 다시 칠한다. 트리를 다시 그리지 않는다. */
+function _paintRole(row, block, role) {
+  row.classList.remove(`contents-role-${row.dataset.role}`);
+  row.classList.add(`contents-role-${role}`);
+  row.dataset.role = role;
+  block.role = role;
+  if (row._roleBtn) row._roleBtn.textContent = ROLE_NAME[role];
+  if (row._label) row._label.textContent = _rowLabel(block, role);
+  row.title = _rowTitle(block, role);
+}
+
+function _rowLabel(block, role) {
+  const seq = block.sequence_index != null ? `${block.sequence_index}. ` : "";
+  const head = block.title ? `${block.title} · ` : "";
+  const stale = block.anchor && block.anchor.status === "stale";
+  return `${stale ? "⚠ " : ""}${ROLE_MARK[role] || ""}${seq}${head}${block.preview || "(비어있음)"}`;
+}
+
+function _rowTitle(block, role) {
+  const seq = block.sequence_index != null ? `${block.sequence_index}. ` : "";
+  const level = Number(block.level) || 2;
+  const stale = block.anchor && block.anchor.status === "stale";
+  return (
+    `${seq}${block.preview}  (${block.char_count}자, ${ROLE_NAME[role]} · 깊이 ${level}${block.status ? ", " + block.status : ""})` +
+    (stale ? "\n⚠ 확정본이 바뀐 뒤 자리를 못 찾았습니다 — ▲▼로 옮겨 주세요" : "")
+  );
+}
+
 function _createBlockRow(block) {
   const row = document.createElement("div");
   row.className = "tree-page contents-block";
   row.dataset.blockId = block.id || "";
   row.dataset.pages = (block.pages || []).map((p) => p.page).join(",");
-  const seq = block.sequence_index != null ? `${block.sequence_index}. ` : "";
   const level = Number(block.level) || 2;
   // 깊이는 중첩이 보여 준다. 역할(뜻)은 따로 — container 묶음 / article 기사 / fragment 조각
-  const role = block.role || (level <= 1 ? "container" : level === 2 ? "article" : "fragment");
+  const role = _roleOf(block);
   row.classList.add(`contents-role-${role}`);
   row.dataset.role = role;
-  const stale = block.anchor && block.anchor.status === "stale";
-  row.title =
-    `${seq}${block.preview}  (${block.char_count}자, ${{ container: "묶음", article: "기사", fragment: "조각" }[role]} · 깊이 ${level}${block.status ? ", " + block.status : ""})` +
-    (stale ? "\n⚠ 확정본이 바뀐 뒤 자리를 못 찾았습니다 — ▲▼로 옮겨 주세요" : "");
+  row.title = _rowTitle(block, role);
 
   const label = document.createElement("span");
   label.className = "tree-label contents-preview";
-  const head = block.title ? `${block.title} · ` : "";
-  const roleMark = { container: "▣ ", article: "", fragment: "· " }[role] || "";
-  label.textContent = `${stale ? "⚠ " : ""}${roleMark}${seq}${head}${block.preview || "(비어있음)"}`;
+  label.textContent = _rowLabel(block, role);
+  row._label = label;
   row.appendChild(label);
 
   // 쪽 배지는 하나만: 시작 쪽(여러 쪽에 걸치면 「14~16쪽」). 쪽마다 배지를 달면 번잡하다.
@@ -247,13 +279,14 @@ function _createBlockRow(block) {
     const rl = document.createElement("button");
     rl.type = "button";
     rl.className = "contents-shift-btn";
-    rl.textContent = { container: "묶음", article: "기사", fragment: "조각" }[role];
+    rl.textContent = ROLE_NAME[role];
     rl.title = "역할 바꾸기 — 묶음(卷·集·編) / 기사(번역·주석 단위) / 조각(기사 안 문단·문답)";
     rl.addEventListener("click", (ev) => {
       ev.stopPropagation();
       const order = ["container", "article", "fragment"];
-      _setBoundaryRole(block, order[(order.indexOf(role) + 1) % 3]);
+      _setBoundaryRole(row, block, order[(order.indexOf(_roleOf(block)) + 1) % 3]);
     });
+    row._roleBtn = rl;
     tools.appendChild(rl);
     // 지우기 = 앞 단위에 합치기 (앞 단위의 id가 남는다)
     const del = document.createElement("button");
@@ -454,18 +487,53 @@ async function _deleteBoundary(block) {
   }
 }
 
-async function _setBoundaryRole(block, role) {
+// 저장 중인 역할 변경 (경계 id → {desired}). 연타하면 마지막 값 하나만 더 보낸다.
+const _rolePending = new Map();
+
+/**
+ * 역할을 바꾼다. 화면은 곧바로, 저장은 뒤에서.
+ *
+ * 왜 이렇게 하는가: 역할은 단위의 끝도 중첩도 바꾸지 않는다. 그런데 저장(경계 파일 쓰기 +
+ * git 커밋)과 트리 다시 읽기가 합쳐 1초 넘게 걸린다 — 운양집 1책(경계 90)에서 PUT 0.9초 +
+ * 내용 0.3초 실측. 구조가 안 바뀌는 변경까지 서버 왕복을 기다릴 이유가 없어, 그 행만 다시
+ * 칠하고 저장은 뒤로 보낸다. 실패하면 트리를 다시 읽어 서버의 사실로 되돌린다.
+ */
+function _setBoundaryRole(row, block, role) {
   if (!contentsState.interpId) return;
+  _paintRole(row, block, role);
+  _saveRole(block.id, role);
+}
+
+async function _saveRole(boundaryId, role) {
+  const running = _rolePending.get(boundaryId);
+  if (running) {
+    running.desired = role; // 진행 중이면 마지막 값만 남긴다 (연타로 요청이 쌓이지 않게)
+    return;
+  }
+  const state = { desired: role };
+  _rolePending.set(boundaryId, state);
   try {
-    const res = await fetch(
-      `/api/interpretations/${encodeURIComponent(contentsState.interpId)}/boundaries/${encodeURIComponent(block.id)}`,
-      { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role }) },
-    );
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    await refreshContentsTree();
+    while (state.desired) {
+      const next = state.desired;
+      state.desired = null;
+      const res = await fetch(
+        `/api/interpretations/${encodeURIComponent(contentsState.interpId)}/boundaries/${encodeURIComponent(boundaryId)}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role: next }),
+        },
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+    }
   } catch (e) {
     showToast(`역할 변경 실패: ${e.message}`, "error");
+    await refreshContentsTree(); // 화면을 서버의 사실로 되돌린다
+  } finally {
+    _rolePending.delete(boundaryId);
   }
 }
 

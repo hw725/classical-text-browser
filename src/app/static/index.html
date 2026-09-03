@@ -1864,16 +1864,9 @@
               <button
                 id="comp-auto-btn"
                 class="text-btn"
-                title="레이아웃 블록마다 경계를 하나씩 놓아 단위(기사)를 만듭니다"
+                title="이 쪽의 레이아웃 블록마다 경계를 하나씩 — 글 단위가 잘 안 보이는 문헌의 출발점입니다"
               >
                 자동 편성
-              </button>
-              <button
-                id="comp-merge-btn"
-                class="text-btn"
-                title="선택한 블록들을 하나의 단위로 — 사이의 경계를 지웁니다"
-              >
-                합치기
               </button>
               <button
                 id="comp-split-btn"
@@ -1951,60 +1944,6 @@
                 padding: 8px;
               "
             >
-              <!-- 소스 블록 영역 -->
-              <div class="comp-section">
-                <div
-                  class="comp-section-title"
-                  style="
-                    font-size: 11px;
-                    font-weight: 600;
-                    color: var(--text-muted);
-                    margin-bottom: 6px;
-                  "
-                >
-                  교정된 LayoutBlock (소스)
-                </div>
-                <div
-                  id="comp-source-blocks"
-                  class="comp-block-list"
-                  style="display: flex; flex-direction: column; gap: 6px"
-                >
-                  <div
-                    class="placeholder"
-                    style="
-                      padding: 20px;
-                      text-align: center;
-                      color: var(--text-muted);
-                    "
-                  >
-                    페이지를 선택하세요
-                  </div>
-                </div>
-              </div>
-
-              <!-- 구분선 -->
-              <div
-                style="
-                  border-top: 1px solid var(--border);
-                  margin: 12px 0;
-                  position: relative;
-                "
-              >
-                <span
-                  style="
-                    position: absolute;
-                    top: -9px;
-                    left: 50%;
-                    transform: translateX(-50%);
-                    background: var(--bg-primary);
-                    padding: 0 8px;
-                    font-size: 10px;
-                    color: var(--text-muted);
-                  "
-                  >▼ 단위 ▼</span
-                >
-              </div>
-
               <!-- 생성된 TextBlock 목록 -->
               <div class="comp-section">
                 <div
@@ -2016,7 +1955,7 @@
                     margin-bottom: 6px;
                   "
                 >
-                  단위 — 권·기사·조각 (해석 저장소)
+                  단위 — 묶음·기사·조각 (해석 저장소)
                 </div>
                 <div
                   id="comp-textblock-list"

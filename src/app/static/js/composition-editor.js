@@ -28,10 +28,9 @@
 
 const compState = {
   active: false, // 편성 모드 활성화 여부
-  sourceBlocks: [], // 교정된 LayoutBlock 목록 [{block_id, block_type, original_text, corrected_text, _page, ...}]
+  sourceBlocks: [], // 자동 편성이 쓰는 교정된 LayoutBlock 목록 (화면에는 그리지 않는다)
   // _page: 이 블록이 소속된 페이지 번호 (크로스 페이지 지원용)
   textBlocks: [], // 이미 생성된 TextBlock 목록
-  selectedBlockKeys: [], // 합치기를 위해 선택된 LayoutBlock 키 목록 ("{page}::{block_id}")
   workId: null, // 현재 Work UUID (TextBlock 생성에 필요)
   rangeStart: null, // 시작 페이지 (null이면 현재 페이지)
   rangeEnd: null, // 끝 페이지 (null이면 현재 페이지)
@@ -73,7 +72,6 @@ function initCompositionEditor() {
  */
 function _bindCompEvents() {
   const autoBtn = document.getElementById("comp-auto-btn");
-  const mergeBtn = document.getElementById("comp-merge-btn");
   const splitBtn = document.getElementById("comp-split-btn");
   const splitCancelBtn = document.getElementById("comp-split-cancel-btn");
   const splitTextarea = document.getElementById("comp-split-textarea");
@@ -82,7 +80,6 @@ function _bindCompEvents() {
   const resetBtn = document.getElementById("comp-reset-btn");
 
   if (autoBtn) autoBtn.addEventListener("click", _autoCompose);
-  if (mergeBtn) mergeBtn.addEventListener("click", _mergeSelectedBlocks);
   if (splitBtn) splitBtn.addEventListener("click", _executeSplit);
   if (splitExecBtn) splitExecBtn.addEventListener("click", _executeSplit);
   if (splitCancelBtn) splitCancelBtn.addEventListener("click", _cancelSplit);
@@ -237,7 +234,6 @@ function activateCompositionMode() {
 // eslint-disable-next-line no-unused-vars
 function deactivateCompositionMode() {
   compState.active = false;
-  compState.selectedBlockKeys = [];
 }
 
 /* ──────────────────────────
@@ -287,7 +283,6 @@ async function _loadCompositionData() {
   if (typeof refreshContentsTree === "function") refreshContentsTree();
   const { docId, partId, pageNum } = viewerState;
   if (!docId || !partId || !pageNum) {
-    _renderSourceBlocks();
     _renderTextBlocks();
     return;
   }
@@ -368,8 +363,6 @@ async function _loadCompositionData() {
     }
   }
 
-  compState.selectedBlockKeys = [];
-  _renderSourceBlocks();
   _renderTextBlocks();
   _updateBlockCount();
 }
@@ -475,189 +468,6 @@ async function _ensureWork() {
   } catch (e) {
     console.error("Work 확보 실패:", e);
   }
-}
-
-/* ──────────────────────────
-   렌더링: 소스 블록 (교정된 LayoutBlock)
-   ────────────────────────── */
-
-/**
- * 교정된 LayoutBlock 목록을 렌더링한다.
- *
- * 왜 이렇게 하는가:
- *   연구자가 각 블록의 교정된 텍스트를 확인하고,
- *   체크박스로 합칠 블록을 선택할 수 있게 한다.
- *
- * 페이지 범위 모드:
- *   블록이 여러 페이지에서 왔을 때 페이지별 구분선을 넣고,
- *   현재 페이지가 아닌 블록은 연한 배경으로 표시한다.
- */
-function _renderSourceBlocks() {
-  const container = document.getElementById("comp-source-blocks");
-  if (!container) return;
-
-  if (compState.sourceBlocks.length === 0) {
-    container.innerHTML =
-      '<div class="placeholder" style="padding:20px; text-align:center; color:var(--text-muted);">' +
-      "이 페이지에 교정된 텍스트가 없습니다.</div>";
-    return;
-  }
-
-  container.innerHTML = "";
-  const currentPage = viewerState.pageNum;
-
-  // 페이지별 그룹핑
-  let lastPage = null;
-
-  compState.sourceBlocks.forEach((block) => {
-    const blockPage = block._page || currentPage;
-
-    // 페이지 구분선 (다른 페이지 블록이 시작될 때)
-    if (blockPage !== lastPage) {
-      lastPage = blockPage;
-      const divider = document.createElement("div");
-      const isCurrent = blockPage === currentPage;
-      divider.style.cssText = `
-        font-size: 10px;
-        font-weight: 600;
-        color: ${isCurrent ? "var(--text-primary)" : "var(--text-muted)"};
-        padding: 4px 6px;
-        margin-top: ${blockPage === compState.sourceBlocks[0]._page ? "0" : "8px"};
-        border-bottom: 1px solid var(--border);
-        display: flex;
-        align-items: center;
-        gap: 4px;
-      `;
-      divider.innerHTML = isCurrent
-        ? `<span>p.${blockPage}</span> <span style="color:var(--accent-primary,#3b82f6);font-size:9px;">(현재)</span>`
-        : `<span style="opacity:0.7;">p.${blockPage}</span>`;
-      container.appendChild(divider);
-    }
-
-    const isForeignPage = blockPage !== currentPage;
-
-    const card = document.createElement("div");
-    card.className = "comp-source-card";
-    card.dataset.blockId = block.block_id;
-    card.dataset.blockPage = String(blockPage);
-
-    // 이미 TextBlock으로 편성된 블록인지 확인
-    const blockKey = _blockToKey(block, currentPage);
-    const alreadyComposed = compState.textBlocks.some((tb) => {
-      const refs = tb.source_refs || [];
-      const inRefs = refs.some(
-        (r) => _sourceRefToKey(r, blockPage) === blockKey,
-      );
-      if (inRefs) return true;
-      return _sourceRefToKey(tb.source_ref, blockPage) === blockKey;
-    });
-
-    const isSelected = compState.selectedBlockKeys.includes(blockKey);
-
-    // 현재 페이지가 아닌 블록은 왼쪽에 색깔 줄을 넣어 시각적으로 구분
-    const borderLeft = isForeignPage
-      ? "3px solid var(--accent-warning, #f59e0b)"
-      : "none";
-    card.style.cssText = `
-      border: 1px solid ${alreadyComposed ? "var(--accent-green, #22c55e)" : isSelected ? "var(--accent-primary, #3b82f6)" : "var(--border)"};
-      border-left: ${alreadyComposed ? "1px solid var(--accent-green, #22c55e)" : isSelected ? "1px solid var(--accent-primary, #3b82f6)" : borderLeft};
-      border-radius: 4px;
-      padding: 8px;
-      cursor: pointer;
-      background: ${alreadyComposed ? "rgba(34,197,94,0.05)" : isSelected ? "rgba(59,130,246,0.08)" : isForeignPage ? "rgba(245,158,11,0.03)" : "var(--bg-secondary)"};
-      transition: border-color 0.15s;
-    `;
-
-    // 헤더: 체크박스 + 블록 ID + 페이지 뱃지 + 상태 뱃지
-    const header = document.createElement("div");
-    header.style.cssText =
-      "display:flex; align-items:center; gap:6px; margin-bottom:4px;";
-
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.checked = isSelected;
-    checkbox.disabled = alreadyComposed;
-    checkbox.style.cssText = "margin:0;";
-    checkbox.addEventListener("change", () => {
-      _toggleBlockSelection(blockKey, checkbox.checked);
-    });
-
-    const label = document.createElement("span");
-    label.style.cssText =
-      "font-size:11px; font-weight:600; font-family:var(--font-mono);";
-    label.textContent = block.block_id;
-
-    const typeBadge = document.createElement("span");
-    typeBadge.style.cssText =
-      "font-size:10px; color:var(--text-muted); background:var(--bg-tertiary, #f0f0f0); padding:1px 4px; border-radius:2px;";
-    typeBadge.textContent = block.block_type || "text";
-
-    header.appendChild(checkbox);
-    header.appendChild(label);
-    header.appendChild(typeBadge);
-
-    // 다른 페이지 블록이면 페이지 뱃지 표시
-    if (isForeignPage) {
-      const pageBadge = document.createElement("span");
-      pageBadge.style.cssText =
-        "font-size:9px; color:var(--accent-warning, #f59e0b); background:rgba(245,158,11,0.1); padding:1px 4px; border-radius:2px;";
-      pageBadge.textContent = `p.${blockPage}`;
-      header.appendChild(pageBadge);
-    }
-
-    if (alreadyComposed) {
-      const doneBadge = document.createElement("span");
-      doneBadge.style.cssText =
-        "font-size:10px; color:var(--accent-green, #22c55e); margin-left:auto;";
-      doneBadge.textContent = "편성됨";
-      header.appendChild(doneBadge);
-    }
-
-    if (block.corrections_applied > 0) {
-      const corrBadge = document.createElement("span");
-      corrBadge.style.cssText =
-        "font-size:10px; color:var(--accent-warning, #f59e0b); margin-left:auto;";
-      corrBadge.textContent = `교정 ${block.corrections_applied}건`;
-      header.appendChild(corrBadge);
-    }
-
-    // 텍스트 미리보기
-    const preview = document.createElement("div");
-    preview.style.cssText =
-      "font-size:12px; line-height:1.6; white-space:pre-wrap; max-height:80px; overflow:hidden; color:var(--text-primary);";
-    const displayText = block.corrected_text || block.original_text || "";
-    preview.textContent =
-      displayText.length > 200
-        ? displayText.substring(0, 200) + "..."
-        : displayText;
-
-    card.appendChild(header);
-    card.appendChild(preview);
-    container.appendChild(card);
-
-    // 카드 클릭으로도 선택 토글 (체크박스 외 영역)
-    card.addEventListener("click", (e) => {
-      if (e.target === checkbox || alreadyComposed) return;
-      checkbox.checked = !checkbox.checked;
-      _toggleBlockSelection(blockKey, checkbox.checked);
-    });
-  });
-}
-
-/**
- * 블록 선택 토글.
- */
-function _toggleBlockSelection(blockKey, selected) {
-  if (selected) {
-    if (!compState.selectedBlockKeys.includes(blockKey)) {
-      compState.selectedBlockKeys.push(blockKey);
-    }
-  } else {
-    compState.selectedBlockKeys = compState.selectedBlockKeys.filter(
-      (key) => key !== blockKey,
-    );
-  }
-  _renderSourceBlocks();
 }
 
 /* ──────────────────────────
@@ -811,7 +621,7 @@ function _renderTextBlocks() {
 function _updateBlockCount() {
   const el = document.getElementById("comp-block-count");
   if (el) {
-    el.textContent = `소스 ${compState.sourceBlocks.length}개 / 단위 ${compState.textBlocks.length}개`;
+    el.textContent = `단위 ${compState.textBlocks.length}개`;
   }
 }
 
@@ -962,134 +772,6 @@ async function _autoCompose() {
   }
 
   _updateCompStatus(`${created}개 TextBlock 생성 완료`, false);
-
-  // 데이터 새로고침
-  await _loadCompositionData();
-}
-
-/* ──────────────────────────
-   편성 액션: 합치기 (크로스 페이지 지원)
-   ────────────────────────── */
-
-/**
- * 선택한 LayoutBlock들을 합쳐서 하나의 TextBlock을 생성한다.
- *
- * 왜 이렇게 하는가:
- *   고전 텍스트에서 문장이 여러 블록 또는 여러 페이지에 걸쳐 있는 경우,
- *   연구자가 해당 블록들을 선택하고 "합치기"를 누르면
- *   하나의 TextBlock으로 만들어진다.
- *
- * 크로스 페이지 지원:
- *   각 블록의 _page를 참조하여 source_refs에 정확한 page를 기록한다.
- *   이전 페이지의 마지막 블록 + 현재 페이지의 첫 블록처럼
- *   페이지 경계를 넘는 합치기가 가능하다.
- */
-async function _mergeSelectedBlocks() {
-  if (!interpState.interpId) {
-    showToast("편성 패널 상단의 해석 저장소 드롭다운에서 먼저 선택하세요.", 'warning');
-    return;
-  }
-  if (!compState.workId) {
-    await _ensureWork();
-    if (!compState.workId) {
-      showToast("Work를 확보할 수 없습니다. 해석 저장소를 다시 선택해주세요.", 'warning');
-      return;
-    }
-  }
-
-  const selectedKeys = compState.selectedBlockKeys;
-  if (selectedKeys.length < 2) {
-    showToast("합치려면 2개 이상의 블록을 선택하세요.", 'warning');
-    return;
-  }
-
-  const currentPage = viewerState.pageNum;
-
-  // 선택된 블록의 텍스트를 순서대로 이어붙이기
-  // (소스 블록 목록의 순서를 유지 — 이미 페이지 순 + reading_order 순)
-  const selectedSet = new Set(selectedKeys);
-  const orderedBlocks = compState.sourceBlocks.filter((b) =>
-    selectedSet.has(_blockToKey(b, currentPage)),
-  );
-
-  if (orderedBlocks.length !== selectedKeys.length) {
-    showToast(
-      "선택한 블록을 모두 찾지 못했습니다. 범위를 다시 불러온 뒤 시도해주세요.",
-      'warning',
-    );
-    return;
-  }
-
-  // 선택 블록은 순서가 섞이지 않는 연속 구간이어야 한다.
-  const selectedIndices = compState.sourceBlocks
-    .map((block, index) => ({ block, index }))
-    .filter(({ block }) => selectedSet.has(_blockToKey(block, currentPage)))
-    .map(({ index }) => index)
-    .sort((a, b) => a - b);
-  const minIndex = selectedIndices[0];
-  const maxIndex = selectedIndices[selectedIndices.length - 1];
-  const expectedCount = maxIndex - minIndex + 1;
-  if (expectedCount !== selectedIndices.length) {
-    showToast(
-      "합치기는 순서가 섞이지 않는 연속 구간만 지원합니다.\n" +
-        "중간 블록을 포함해서 다시 선택해주세요.",
-      'warning',
-    );
-    return;
-  }
-
-  const mergedText = orderedBlocks
-    .map((b) => b.corrected_text || b.original_text || "")
-    .join("\n");
-
-  // 각 블록의 실제 페이지를 source_refs에 기록 (크로스 페이지 핵심)
-  const sourceRefs = orderedBlocks.map((b) => ({
-    document_id: viewerState.docId,
-    page: b._page || currentPage,
-    layout_block_id: b.block_id,
-    char_range: null,
-  }));
-
-  // 크로스 페이지 합치기인지 확인 (사용자에게 알림)
-  const pages = new Set(sourceRefs.map((r) => r.page));
-  const isCrossPage = pages.size > 1;
-
-  _updateCompStatus(
-    isCrossPage ? `${pages.size}개 페이지에서 합치는 중...` : "합치는 중...",
-    false,
-  );
-
-  try {
-    const res = await fetch(
-      `/api/interpretations/${interpState.interpId}/entities/text_block/compose?no_commit=true`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          work_id: compState.workId,
-          sequence_index: compState.textBlocks.length,
-          original_text: mergedText,
-          part_id: viewerState.partId,
-          source_refs: sourceRefs,
-        }),
-      },
-    );
-
-    if (res.ok) {
-      // 합치기 성공 → 배치 커밋 (git commit 1회만)
-      const blockIds = orderedBlocks.map((b) => b.block_id).join(" + ");
-      const suffix = isCrossPage
-        ? ` (p.${[...pages].join("+")} 크로스 페이지)`
-        : "";
-      await _commitBatch(`feat: TextBlock 합치기 — ${blockIds}${suffix}`);
-      _updateCompStatus(`합치기 완료: ${blockIds}${suffix}`, false);
-    } else {
-      const err = await res.json().catch(() => ({}));
-      _updateCompStatus(`합치기 실패: ${err.error || "알 수 없는 오류"}`, true);
-    }
-  } catch (e) {
-    _updateCompStatus(`합치기 실패: ${e.message}`, true);
-  }
 
   // 데이터 새로고침
   await _loadCompositionData();
