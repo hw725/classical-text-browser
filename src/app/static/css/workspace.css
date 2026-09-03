@@ -7917,3 +7917,28 @@ select.prop-level { max-width: 4.6em; }
   color: var(--text-primary);
 }
 .comp-split-preview { font-size: 10px; color: var(--text-muted); }
+
+/* 「내용」에서 고른 단위 — 해석 편집기 다섯이 이것을 따라간다 */
+.contents-tree .contents-block.unit-selected {
+  background: var(--selected-bg);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* 단위는 사이드바 「내용」에서 고른다 — 편집기 머리줄은 «지금 무엇을 보고 있는지»만 말한다 */
+.unit-select-hidden { display: none !important; }
+.unit-pick-label {
+  /* 도구 바의 남는 자리를 먼저 가져간다 — 「#4 기사 · 是…」처럼 잘리면 어느 대목인지 모른다.
+     뒤의 text-toolbar-spacer도 flex:1이라 그냥 두면 반씩 나눠 가진다. */
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 0 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 단위 이름 옆의 빈 자리는 이름이 먼저 쓰고 남으면 밀어낸다 */
+.unit-pick-label + .text-toolbar-spacer { flex: 0 1 auto; }
+.unit-pick-label.is-empty { font-weight: 400; color: var(--text-muted); }

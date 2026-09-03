@@ -19,6 +19,7 @@
  */
 
 const contentsState = {
+  selectedUnitId: null, // 「내용」에서 고른 단위 — 해석 편집기 다섯이 이것을 따라간다
   insertOpen: false, // «경계 넣기» 폼을 펼쳤는가 (기본 접힘)
   picking: false, // «찍기» 모드 — 원본 이미지를 눌러 경계 자리를 정하는 중 (B-002)
   pickForm: null,
@@ -75,6 +76,12 @@ async function refreshContentsTree() {
     contentsState.interpId = interpId;
     contentsState.data = await res.json();
     _renderContentsTree(container);
+    if (contentsState.selectedUnitId) {
+      const row = document.querySelector(
+        `#contents-tree .contents-block[data-block-id="${CSS.escape(contentsState.selectedUnitId)}"]`,
+      );
+      if (row) row.classList.add("unit-selected");
+    }
     _updateExportLink(interpId, docId);
     highlightContentsForPage(viewerState.pageNum);
   } catch (e) {
@@ -306,6 +313,7 @@ function _createBlockRow(block) {
   }
 
   row.addEventListener("click", () => {
+    selectUnit(block); // 표점·현토·번역·주석·인용이 이 단위를 따라간다
     const first = (block.pages || [])[0];
     if (first) _jumpToBlockPage(block, first);
     else showToast("이 블록에는 출처 쪽 정보가 없습니다.", "warning");
@@ -650,6 +658,104 @@ const _rolePending = new Map();
  * 내용 0.3초 실측. 구조가 안 바뀌는 변경까지 서버 왕복을 기다릴 이유가 없어, 그 행만 다시
  * 칠하고 저장은 뒤로 보낸다. 실패하면 트리를 다시 읽어 서버의 사실로 되돌린다.
  */
+/**
+ * 「내용」 트리에서 단위을 고른다 — 해석 편집기 다섯의 «지금 단위»가 된다.
+ *
+ * 왜 트리인가: 편집기마다 드롭다운을 두면 같은 것을 다섯 번 고르게 되고, 「#3 기사 …」라는
+ * 이름만으로는 어느 대목인지 알기 어렵다. 트리는 전체 구조를 보며 고르는 자리다
+ * (사용자 요청 2026-09-04 — «드롭다운 없애고 사이드바 트리에서 고르면 따라가게»).
+ *
+ * 알림은 DOM 이벤트로 보낸다: 편집기 다섯이 서로를 모르고, 불러오는 순서에도 매이지 않는다.
+ */
+function selectUnit(block) {
+  contentsState.selectedUnitId = block && block.id ? block.id : null;
+  document.querySelectorAll("#contents-tree .contents-block.unit-selected").forEach((el) => {
+    el.classList.remove("unit-selected");
+  });
+  if (!block || !block.id) return;
+  const row = document.querySelector(
+    `#contents-tree .contents-block[data-block-id="${CSS.escape(block.id)}"]`,
+  );
+  if (row) row.classList.add("unit-selected");
+  document.dispatchEvent(
+    new CustomEvent("unit-selected", {
+      detail: {
+        id: block.id,
+        title: block.title || "",
+        role: _roleOf(block),
+        level: Number(block.level) || 2,
+        sequence_index: block.sequence_index,
+      },
+    }),
+  );
+}
+
+/** 지금 고른 단위의 id (없으면 null). 편집기가 목록을 채운 뒤 물어본다. */
+// 해석 편집기 다섯의 «블록 선택». 화면에서는 감춰 두고 트리가 값을 넣는다(D-096).
+const UNIT_SELECT_IDS = [
+  "punct-block-select",
+  "hyeonto-block-select",
+  "trans-block-select",
+  "ann-block-select",
+  "cite-block-select",
+];
+
+/**
+ * 고른 단위를 편집기 다섯에 흘려 보낸다.
+ *
+ * 왜 select에 값을 넣고 change를 쏘는가: 편집기마다 이미 «고르면 불러온다»는 길이 있다.
+ * 그 길을 그대로 쓰면 다섯 곳을 새로 짤 필요가 없고, 저장·되돌리기 같은 뒷일도 그대로다.
+ * 목록이 아직 안 채워졌을 수 있어 잠깐 뒤 한 번 더 시도한다(탭을 옮기며 고르는 경우).
+ */
+function _applyUnitToEditors(unitId, tries = 0) {
+  let hit = 0;
+  for (const id of UNIT_SELECT_IDS) {
+    const sel = document.getElementById(id);
+    if (!sel) continue;
+    const opt = sel.querySelector(`option[value="unit:${unitId}"]`);
+    if (!opt) continue;
+    hit++;
+    if (sel.value === opt.value) continue;
+    sel.value = opt.value;
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  // 지금 열린 편집기의 목록이 아직 안 채워졌으면 잠깐 뒤에 다시 (최대 세 번)
+  if (hit === 0 && tries < 3) setTimeout(() => _applyUnitToEditors(unitId, tries + 1), 400);
+  _renderUnitLabels();
+}
+
+/** 편집기 머리줄의 «지금 단위» 표시를 갱신한다. */
+function _renderUnitLabels() {
+  const u = currentUnit();
+  const text = u
+    ? `${u.sequence_index != null ? "#" + u.sequence_index + " " : ""}${ROLE_NAME[_roleOf(u)]}${u.title ? " · " + u.title : ""}`
+    : "";
+  document.querySelectorAll(".unit-pick-label").forEach((el) => {
+    el.textContent = text || "사이드바 「내용」에서 기사를 고르세요";
+    el.classList.toggle("is-empty", !text);
+    el.title = text ? "사이드바 「내용」에서 다른 단위를 고르면 바뀝니다" : "";
+  });
+}
+
+document.addEventListener("unit-selected", (ev) => {
+  _applyUnitToEditors(ev.detail.id);
+});
+
+function currentUnitId() {
+  return contentsState.selectedUnitId || null;
+}
+
+/** 지금 고른 단위 (없으면 null). 편집기가 처음 열릴 때 물어본다. */
+function currentUnit() {
+  const id = contentsState.selectedUnitId;
+  if (!id || !contentsState.data) return null;
+  for (const work of contentsState.data.works || []) {
+    for (const b of work.blocks || []) if (b.id === id) return b;
+  }
+  for (const b of contentsState.data.unassigned || []) if (b.id === id) return b;
+  return null;
+}
+
 function _setBoundaryRole(row, block, role) {
   if (!contentsState.interpId) return;
   _paintRole(row, block, role);

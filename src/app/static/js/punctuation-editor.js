@@ -205,17 +205,11 @@ async function _populateBlockSelect() {
   if (interpState.interpId) {
     try {
       const tbRes = await fetch(
-        `/api/interpretations/${interpState.interpId}/entities/unit?page=${viewerState.pageNum}&document_id=${viewerState.docId}`
+        `/api/interpretations/${interpState.interpId}/entities/unit?document_id=${viewerState.docId}`
       );
       if (tbRes.ok) {
         const tbData = await tbRes.json();
-        const units = (tbData.entities || []).filter((e) => {
-          const refs = e.source_refs || [];
-          const ref = e.source_ref;
-          if (refs.length > 0) return refs.some((r) => r.page === viewerState.pageNum);
-          if (ref) return ref.page === viewerState.pageNum;
-          return false;
-        }).sort((a, b) => (a.sequence_index || 0) - (b.sequence_index || 0));
+        const units = (tbData.entities || []).sort((a, b) => (a.sequence_index || 0) - (b.sequence_index || 0));
 
         if (units.length > 0) {
           // 단위 기반 드롭다운
@@ -223,15 +217,13 @@ async function _populateBlockSelect() {
             const opt = document.createElement("option");
             // 단위 ID를 value로 사용 (UUID)
             opt.value = `unit:${tb.id}`;
-            const refs = tb.source_refs || [];
-            const srcLabel = refs.map((r) => r.layout_block_id || "?").join("+");
             // 이름은 깊이가 아니라 역할이 정한다(D-092) — 3단에 오는 기사도 있다
             const _lv = Number(tb.metadata?.level) || 2;
             const _role =
               tb.metadata?.role || (_lv <= 1 ? "container" : _lv === 2 ? "article" : "fragment");
             const _kind = { container: "묶음", article: "기사", fragment: "조각" }[_role];
             const _title = tb.metadata?.title ? ` · ${tb.metadata.title}` : "";
-            opt.textContent = `#${tb.sequence_index} ${_kind}${_title} (${srcLabel})`;
+            opt.textContent = `#${tb.sequence_index} ${_kind}${_title}`;
             // 단위 텍스트를 data 속성에 저장
             opt.dataset.text = tb.original_text || "";
             select.appendChild(opt);
@@ -241,7 +233,12 @@ async function _populateBlockSelect() {
           if (punctState.blockId && select.querySelector(`option[value="${punctState.blockId}"]`)) {
             select.value = punctState.blockId;
           } else if (select.options.length > 1) {
-            select.selectedIndex = 1;
+            // 첫 번째를 저절로 고르지 않는다 — 어느 대목인지 모른 채 표점이 찍힌다.
+            // 「내용」 트리에서 고른 단위를 따라간다(사용자 요청 2026-09-04).
+            const _sel = typeof currentUnitId === "function" ? currentUnitId() : null;
+            const _opt = _sel && select.querySelector(`option[value="unit:${_sel}"]`);
+            if (_opt) select.value = _opt.value;
+            else select.selectedIndex = 0;
             punctState.blockId = select.value;
             _loadPunctuationData();
           }
