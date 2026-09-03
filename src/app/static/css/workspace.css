@@ -7721,10 +7721,24 @@ input.prop-level { width: 3.2em; }
 .comp-range-field > span { opacity: 0.6; }
 .comp-range-now { font-size: 11px; font-weight: 600; color: var(--text-primary); }
 
-/* 손질 도구 — 기본 접힘. 단위를 세우는 일이 아니라 «기사 안에서 문단 나누기»다 */
+/* 손질 도구 — 패널 «맨 아래»에 붙어 위로 펼쳐진다(기본 접힘).
+   왜 아래인가: 기사 단위는 경계만 정하면 저절로 정해진다(D-092). 여기 있는 것은
+   «기사 하나 안에서 문단 나누기»라 주 흐름이 아니고, 스크롤 통 안에 있으면 목록 끝에
+   붙어 중간에 뜬 것처럼 보였다(사용자 지적).
+   column-reverse: summary를 아래에 두고 본문이 그 위로 자라게 한다. */
 .comp-manual {
+  margin-top: auto;
+  flex: none;
   border-top: 1px solid var(--border);
-  padding: 6px 8px 10px;
+  padding: 6px 8px 8px;
+  display: flex;
+  flex-direction: column-reverse;
+  background: var(--bg-primary);
+}
+.comp-manual-body {
+  max-height: 45vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .comp-manual > summary {
   cursor: pointer;

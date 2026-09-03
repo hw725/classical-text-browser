@@ -1921,151 +1921,154 @@
                 <div id="comp-toc-unmatched" class="comp-toc-unmatched" style="display: none"></div>
                 <div id="comp-propose-list" class="comp-propose-list"></div>
               </div>
-              <!-- 손질 도구 (기본 접힘) — 여기 있는 것은 «기사 하나 안에서 문단 나누기»와
-                   그 언저리다. 단위를 세우는 일은 위의 «경계 제안»과 사이드바 「내용」이 한다. -->
-              <details id="comp-manual" class="comp-manual">
-                <summary>단위 손보기 <small>— 자동 편성 · 쪼개기 · 리셋</small></summary>
-                <div class="comp-manual-tools">
-                  <label class="comp-range-field" title="아래 목록에 보일 쪽 범위 — 이 목록에만 걸립니다">쪽
-                    <input type="number" id="comp-page-start" min="1" step="1" />
-                    <span>~</span>
-                    <input type="number" id="comp-page-end" min="1" step="1" />
-                  </label>
-                  <button id="comp-page-range-apply" class="text-btn text-btn-sm" title="쪽 범위 적용">적용</button>
-                  <span id="comp-page-indicator" class="comp-range-now" title="지금 보는 쪽">—</span>
-                  <span class="comp-toolbar-sep"></span>
-                  <button
-                    id="comp-auto-btn"
-                    class="text-btn text-btn-sm"
-                    title="이 쪽의 레이아웃 블록마다 경계를 하나씩 — 글 단위가 잘 안 보이는 문헌의 출발점입니다"
-                  >자동 편성</button>
-                  <button
-                    id="comp-split-btn"
-                    class="text-btn text-btn-sm"
-                    disabled
-                    title="고른 단위를 구분선(===) 자리에서 나눕니다 — 그 자리에 경계가 들어갑니다"
-                  >쪼개기</button>
-                  <button
-                    id="comp-reset-btn"
-                    class="text-btn text-btn-sm text-btn-danger"
-                    title="이 쪽의 단위를 모두 물립니다 (경계는 deprecated로 남아 되돌릴 수 있음)"
-                  >리셋</button>
-                </div>
-              <!-- 생성된 단위 목록 -->
-              <div class="comp-section">
+            </div>
+          <!-- 손질 도구 — 패널 «맨 아래»에 붙어 위로 펼쳐진다(기본 접힘).
+               여기 있는 것은 «기사 하나 안에서 문단 나누기»와 그 언저리다. 기사 단위 자체는
+               경계만 정하면 저절로 정해지므로(D-092), 이 도구는 주 흐름이 아니다. -->
+            <details id="comp-manual" class="comp-manual">
+              <summary>단위 손보기 <small>— 자동 편성 · 쪼개기 · 리셋</small></summary>
+              <div class="comp-manual-body">
+              <div class="comp-manual-tools">
+                <label class="comp-range-field" title="아래 목록에 보일 쪽 범위 — 이 목록에만 걸립니다">쪽
+                  <input type="number" id="comp-page-start" min="1" step="1" />
+                  <span>~</span>
+                  <input type="number" id="comp-page-end" min="1" step="1" />
+                </label>
+                <button id="comp-page-range-apply" class="text-btn text-btn-sm" title="쪽 범위 적용">적용</button>
+                <span id="comp-page-indicator" class="comp-range-now" title="지금 보는 쪽">—</span>
+                <span class="comp-toolbar-sep"></span>
+                <button
+                  id="comp-auto-btn"
+                  class="text-btn text-btn-sm"
+                  title="이 쪽의 레이아웃 블록마다 경계를 하나씩 — 글 단위가 잘 안 보이는 문헌의 출발점입니다"
+                >자동 편성</button>
+                <button
+                  id="comp-split-btn"
+                  class="text-btn text-btn-sm"
+                  disabled
+                  title="고른 단위를 구분선(===) 자리에서 나눕니다 — 그 자리에 경계가 들어갑니다"
+                >쪼개기</button>
+                <button
+                  id="comp-reset-btn"
+                  class="text-btn text-btn-sm text-btn-danger"
+                  title="이 쪽의 단위를 모두 물립니다 (경계는 deprecated로 남아 되돌릴 수 있음)"
+                >리셋</button>
+              </div>
+            <!-- 생성된 단위 목록 -->
+            <div class="comp-section">
+              <div
+                class="comp-section-title"
+                style="
+                  font-size: 11px;
+                  font-weight: 600;
+                  color: var(--text-muted);
+                  margin-bottom: 6px;
+                "
+              >
+                단위 — 묶음·기사·조각 (해석 저장소)
+              </div>
+              <div
+                id="comp-textblock-list"
+                class="comp-block-list"
+                style="display: flex; flex-direction: column; gap: 6px"
+              >
                 <div
-                  class="comp-section-title"
+                  class="placeholder"
+                  style="
+                    padding: 20px;
+                    text-align: center;
+                    color: var(--text-muted);
+                  "
+                >
+                  해석 저장소를 선택하세요
+                </div>
+              </div>
+            </div>
+            <div
+              id="comp-split-editor"
+              style="
+                display: none;
+                border-top: 1px solid var(--border);
+                padding: 8px;
+              "
+            >
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 6px;
+                  margin-bottom: 6px;
+                "
+              >
+                <span
                   style="
                     font-size: 11px;
                     font-weight: 600;
                     color: var(--text-muted);
-                    margin-bottom: 6px;
+                  "
+                  >쪼개기 편집</span
+                >
+                <span
+                  id="comp-split-info"
+                  style="font-size: 10px; color: var(--text-muted)"
+                ></span>
+                <div style="flex: 1"></div>
+                <button
+                  id="comp-split-cancel-btn"
+                  class="text-btn"
+                  style="font-size: 11px"
+                >
+                  취소
+                </button>
+                <button
+                  id="comp-split-exec-btn"
+                  class="text-btn"
+                  style="
+                    font-size: 11px;
+                    background: var(--accent-primary, #3b82f6);
+                    color: #fff;
                   "
                 >
-                  단위 — 묶음·기사·조각 (해석 저장소)
-                </div>
-                <div
-                  id="comp-textblock-list"
-                  class="comp-block-list"
-                  style="display: flex; flex-direction: column; gap: 6px"
-                >
-                  <div
-                    class="placeholder"
-                    style="
-                      padding: 20px;
-                      text-align: center;
-                      color: var(--text-muted);
-                    "
-                  >
-                    해석 저장소를 선택하세요
-                  </div>
-                </div>
+                  쪼개기 실행
+                </button>
               </div>
               <div
-                id="comp-split-editor"
                 style="
-                  display: none;
-                  border-top: 1px solid var(--border);
-                  padding: 8px;
+                  font-size: 10px;
+                  color: var(--text-muted);
+                  margin-bottom: 4px;
                 "
               >
-                <div
-                  style="
-                    display: flex;
-                    align-items: center;
-                    gap: 6px;
-                    margin-bottom: 6px;
-                  "
-                >
-                  <span
-                    style="
-                      font-size: 11px;
-                      font-weight: 600;
-                      color: var(--text-muted);
-                    "
-                    >쪼개기 편집</span
-                  >
-                  <span
-                    id="comp-split-info"
-                    style="font-size: 10px; color: var(--text-muted)"
-                  ></span>
-                  <div style="flex: 1"></div>
-                  <button
-                    id="comp-split-cancel-btn"
-                    class="text-btn"
-                    style="font-size: 11px"
-                  >
-                    취소
-                  </button>
-                  <button
-                    id="comp-split-exec-btn"
-                    class="text-btn"
-                    style="
-                      font-size: 11px;
-                      background: var(--accent-primary, #3b82f6);
-                      color: #fff;
-                    "
-                  >
-                    쪼개기 실행
-                  </button>
-                </div>
-                <div
-                  style="
-                    font-size: 10px;
-                    color: var(--text-muted);
-                    margin-bottom: 4px;
-                  "
-                >
-                  쪼개고 싶은 위치에 빈 줄을 넣고 <code>===</code>를 입력하세요.
-                </div>
-                <textarea
-                  id="comp-split-textarea"
-                  style="
-                    width: 100%;
-                    min-height: 120px;
-                    resize: vertical;
-                    font-size: 12px;
-                    line-height: 1.6;
-                    font-family: var(--font-mono);
-                    border: 1px solid var(--border);
-                    border-radius: 4px;
-                    padding: 6px;
-                    background: var(--bg-secondary);
-                    color: var(--text-primary);
-                  "
-                  spellcheck="false"
-                ></textarea>
-                <div
-                  id="comp-split-preview"
-                  style="
-                    font-size: 10px;
-                    color: var(--text-muted);
-                    margin-top: 4px;
-                  "
-                ></div>
+                쪼개고 싶은 위치에 빈 줄을 넣고 <code>===</code>를 입력하세요.
               </div>
-              </details>
+              <textarea
+                id="comp-split-textarea"
+                style="
+                  width: 100%;
+                  min-height: 120px;
+                  resize: vertical;
+                  font-size: 12px;
+                  line-height: 1.6;
+                  font-family: var(--font-mono);
+                  border: 1px solid var(--border);
+                  border-radius: 4px;
+                  padding: 6px;
+                  background: var(--bg-secondary);
+                  color: var(--text-primary);
+                "
+                spellcheck="false"
+              ></textarea>
+              <div
+                id="comp-split-preview"
+                style="
+                  font-size: 10px;
+                  color: var(--text-muted);
+                  margin-top: 4px;
+                "
+              ></div>
             </div>
+              </div>
+            </details>
           </div>
 
           <!-- 우측 패널: 해석 (interpretation 모드에서만 표시) -->
