@@ -19,6 +19,7 @@
  */
 
 const contentsState = {
+  insertOpen: false, // «경계 넣기» 폼을 펼쳤는가 (기본 접힘)
   picking: false, // «찍기» 모드 — 원본 이미지를 눌러 경계 자리를 정하는 중 (B-002)
   pickForm: null,
   interpId: null, // 마지막으로 그린 해석 저장소
@@ -427,11 +428,21 @@ function _drawAnchorCanvas() {
  * 쪽은 지금 보는 쪽이 기본값이다. 행·글자는 확정본(교정 탭) 기준 0부터.
  */
 function _renderInsertForm() {
+  // 늘 두 줄을 차지하던 것을 <details>로 접었다 — 사이드바에서 「내용」 트리가 먼저 보여야 한다.
+  const box = document.createElement("details");
+  box.className = "contents-insert-box";
+  box.open = !!contentsState.insertOpen;
+  box.addEventListener("toggle", () => {
+    contentsState.insertOpen = box.open;
+  });
+  const sum = document.createElement("summary");
+  sum.textContent = "＋ 경계 넣기";
+  sum.title = "아무 쪽·행·글자에 경계를 놓아 단위를 나눕니다. 「찍기」로 원본 이미지나 교정 텍스트에서 자리를 잡을 수 있습니다";
+  box.appendChild(sum);
   const form = document.createElement("div");
   form.className = "contents-insert-form";
   const page = Number(viewerState.pageNum) || 1;
   form.innerHTML =
-    `<span class="contents-insert-label">경계 넣기</span>` +
     `<input type="number" min="1" value="${page}" title="쪽" class="contents-insert-num" data-k="page">쪽` +
     `<input type="number" min="0" value="0" title="행 (0부터)" class="contents-insert-num" data-k="line">행` +
     `<input type="number" min="0" value="0" title="글자 (0 = 행 첫머리)" class="contents-insert-num" data-k="offset">자` +
@@ -441,6 +452,7 @@ function _renderInsertForm() {
     `<button type="button" class="contents-shift-btn contents-pick-btn" title="원본 이미지에서 자리를 찍어 쪽·행·글자를 채웁니다 (B-002)">찍기</button>` +
     `<button type="button" class="contents-shift-btn contents-insert-btn" title="이 자리에서 단위를 나눈다">＋</button>` +
     `<span class="contents-pick-hint"></span>`;
+  box.appendChild(form);
   form.querySelector(".contents-pick-btn").addEventListener("click", (ev) => {
     ev.stopPropagation();
     _togglePickMode(form);
@@ -454,7 +466,7 @@ function _renderInsertForm() {
       title: v("title").trim() || null,
     });
   });
-  return form;
+  return box;
 }
 
 /**

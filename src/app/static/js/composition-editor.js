@@ -374,14 +374,8 @@ async function _loadCompositionData() {
  */
 function _updatePageIndicator(pageNum) {
   const el = document.getElementById("comp-page-indicator");
-  if (el) {
-    const pages = _getPageRange(pageNum);
-    if (pages.length === 1) {
-      el.textContent = `p.${pageNum}`;
-    } else {
-      el.textContent = `p.${pages[0]}–${pages[pages.length - 1]}`;
-    }
-  }
+  // 범위 입력 옆에 「p.20」만 떠 있으면 그게 시작인지 지금인지 알 수 없다 — 말로 적는다
+  if (el) el.textContent = `지금 ${pageNum}쪽`;
 }
 
 /**
@@ -498,23 +492,8 @@ function _renderUnits() {
     return;
   }
 
+  // 접기는 바깥 <details id="comp-manual">가 맡는다 — 여기서 또 접으면 두 겹이 된다.
   container.innerHTML = "";
-
-  // 목록 접기 (D-092 사용자 요청): 경계 제안 단계에서는 단위 목록이 방해가 된다.
-  // 제안 패널이 열려 있으면 기본으로 접고, 머리줄을 누르면 펼친다.
-  const proposeOpen = document.getElementById("comp-propose-panel")?.style.display !== "none";
-  const collapsed = compState.tbCollapsed ?? proposeOpen;
-  const head = document.createElement("button");
-  head.type = "button";
-  head.className = "text-btn comp-tb-toggle";
-  head.style.cssText = "font-size:11px; text-align:left; padding:2px 0;";
-  head.textContent = `${collapsed ? "▸" : "▾"} 단위 ${compState.units.length}개 ${collapsed ? "(접힘 — 누르면 펼침)" : ""}`;
-  head.addEventListener("click", () => {
-    compState.tbCollapsed = !collapsed;
-    _renderUnits();
-  });
-  container.appendChild(head);
-  if (collapsed) return;
 
   // sequence_index 순으로 정렬
   const sorted = [...compState.units].sort(
@@ -548,26 +527,21 @@ function _renderUnits() {
       "font-size:10px; font-weight:700; color:var(--accent-green, #22c55e); background:rgba(34,197,94,0.1); padding:1px 5px; border-radius:2px;";
     seqBadge.textContent = `#${tb.sequence_index}`;
 
+    // 출처는 «몇 쪽에 걸쳐 있는가»만 보인다. v1.3부터 단위는 LayoutBlock을 기억하지 않아
+    // 그 id는 전부 «?»로 나왔다 — 카드의 절반을 뜻 없는 문자열이 차지하고 있었다(D-092).
     const sourceInfo = document.createElement("span");
-    sourceInfo.style.cssText =
-      "font-size:10px; color:var(--text-muted); font-family:var(--font-mono);";
-    const refs = tb.source_refs || [];
-    if (refs.length > 0) {
-      // 크로스 페이지 source_refs이면 페이지도 표시
-      const pages = new Set(refs.map((r) => r.page));
-      if (pages.size > 1) {
-        // 여러 페이지에 걸친 단위
-        sourceInfo.textContent = refs
-          .map((r) => `p${r.page}:${r.layout_block_id || "?"}`)
-          .join(" + ");
-      } else {
-        sourceInfo.textContent = refs
-          .map((r) => r.layout_block_id || "?")
-          .join(" + ");
-      }
-    } else if (tb.source_ref) {
-      sourceInfo.textContent = tb.source_ref.layout_block_id || "?";
-    }
+    sourceInfo.style.cssText = "font-size:10px; color:var(--text-muted);";
+    const refs = (tb.source_refs || []).length
+      ? tb.source_refs
+      : tb.source_ref
+        ? [tb.source_ref]
+        : [];
+    const pageNums = [...new Set(refs.map((r) => r.page).filter((n) => n != null))].sort(
+      (a, b) => a - b,
+    );
+    if (pageNums.length === 1) sourceInfo.textContent = `${pageNums[0]}쪽`;
+    else if (pageNums.length > 1)
+      sourceInfo.textContent = `${pageNums[0]}~${pageNums[pageNums.length - 1]}쪽`;
 
     const statusBadge = document.createElement("span");
     statusBadge.style.cssText =
@@ -588,18 +562,7 @@ function _renderUnits() {
     header.appendChild(sourceInfo);
     header.appendChild(statusBadge);
 
-    // 크로스 페이지 단위이면 뱃지 추가
-    if (refs.length > 0) {
-      const pages = new Set(refs.map((r) => r.page));
-      if (pages.size > 1) {
-        const crossBadge = document.createElement("span");
-        crossBadge.style.cssText =
-          "font-size:9px; color:var(--accent-warning, #f59e0b); background:rgba(245,158,11,0.1); padding:1px 4px; border-radius:2px;";
-        crossBadge.textContent = `${pages.size}페이지`;
-        header.insertBefore(crossBadge, statusBadge);
-      }
-    }
-
+    // 「52페이지」 뱃지는 없앴다 — 바로 옆의 「11~62쪽」이 같은 것을 더 잘 말한다
     // 삭제 버튼은 항상 맨 오른쪽에 위치
     header.appendChild(deleteBtn);
 
@@ -797,6 +760,8 @@ async function _autoCompose() {
 function _selectUnit(tb) {
   compState.selectedTbId = tb.id;
   compState.selectedTb = tb;
+  const manual = document.getElementById("comp-manual");
+  if (manual) manual.open = true; // 쪼개기 편집기가 접힌 섹션 안에 있다
 
   // 쪼개기 편집기 표시
   const editor = document.getElementById("comp-split-editor");
@@ -1416,11 +1381,9 @@ function _renderProposals() {
     for (const r of p.reasons) meta.appendChild(_reasonChip(r));
     body.appendChild(title);
     body.appendChild(meta);
+    // 신뢰도·역할·깊이·억제를 한 줄로 (세로로 쌓으면 행마다 60px을 먹었다)
     const right = document.createElement("div");
-    right.style.display = "flex";
-    right.style.flexDirection = "column";
-    right.style.alignItems = "flex-end";
-    right.style.gap = "3px";
+    right.className = "prop-actions";
     const conf = document.createElement("span");
     const cls = p.confidence >= 0.8 ? "high" : p.confidence >= 0.5 ? "mid" : "low";
     conf.className = `prop-conf ${cls}`;

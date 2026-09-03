@@ -1859,78 +1859,26 @@
               </select>
             </div>
 
-            <!-- 도구 바 -->
+            <!-- 도구 바 — 주 동작은 «경계 제안» 하나.
+                 옛 손질 도구(자동 편성·쪼개기·리셋)는 맨 아래 접이식으로 내렸다 -->
             <div class="comp-toolbar">
-              <button
-                id="comp-auto-btn"
-                class="text-btn"
-                title="이 쪽의 레이아웃 블록마다 경계를 하나씩 — 글 단위가 잘 안 보이는 문헌의 출발점입니다"
-              >
-                자동 편성
-              </button>
-              <button
-                id="comp-split-btn"
-                class="text-btn"
-                disabled
-                title="선택한 단위를 구분선(===) 자리에서 나눕니다 — 그 자리에 경계가 들어갑니다"
-              >
-                쪼개기
-              </button>
-              <button
-                id="comp-reset-btn"
-                class="text-btn text-btn-danger"
-                title="현재 쪽의 단위를 모두 물립니다 (경계는 deprecated로 남아 되돌릴 수 있음)"
-              >
-                리셋
-              </button>
               <button
                 id="comp-propose-btn"
                 class="text-btn text-btn-primary"
-                title="권 전체 확정본에서 글 단위 경계를 제안합니다 (날짜·표제 어휘·형식). 승인한 것만 단위(기사)가 됩니다"
+                title="권 전체 확정본에서 글 단위 경계를 제안합니다 (날짜·표제 어휘·형식·卷 표제). 승인한 것만 단위가 됩니다"
               >
                 경계 제안
               </button>
+              <span class="comp-toolbar-sep"></span>
+              <label class="comp-range-field" title="단위 목록에 보일 쪽 범위">쪽
+                <input type="number" id="comp-page-start" min="1" step="1" />
+                <span>~</span>
+                <input type="number" id="comp-page-end" min="1" step="1" />
+              </label>
+              <button id="comp-page-range-apply" class="text-btn text-btn-sm" title="쪽 범위 적용">적용</button>
+              <span id="comp-page-indicator" class="comp-range-now" title="지금 보는 쪽">—</span>
               <div class="text-toolbar-spacer"></div>
-              <span
-                id="comp-block-count"
-                class="text-save-status text-btn-sm"
-              ></span>
-            </div>
-            <!-- 페이지 범위 컨트롤 -->
-            <div class="comp-page-range">
-              <label style="display: flex; align-items: center; gap: 4px">
-                시작
-                <input
-                  type="number"
-                  id="comp-page-start"
-                  min="1"
-                  step="1"
-                  style="width: 64px"
-                />
-              </label>
-              <span
-                id="comp-page-indicator"
-                style="font-weight: 600; color: var(--text-primary)"
-                >—</span
-              >
-              <label style="display: flex; align-items: center; gap: 4px">
-                끝
-                <input
-                  type="number"
-                  id="comp-page-end"
-                  min="1"
-                  step="1"
-                  style="width: 64px"
-                />
-              </label>
-              <button
-                id="comp-page-range-apply"
-                class="text-btn"
-                style="padding: 2px 8px; font-size: 11px"
-                title="페이지 범위 적용"
-              >
-                적용
-              </button>
+              <span id="comp-block-count" class="text-save-status text-btn-sm"></span>
             </div>
 
             <!-- 교정된 텍스트 블록 목록 (좌측: 소스) -->
@@ -1944,37 +1892,6 @@
                 padding: 8px;
               "
             >
-              <!-- 생성된 단위 목록 -->
-              <div class="comp-section">
-                <div
-                  class="comp-section-title"
-                  style="
-                    font-size: 11px;
-                    font-weight: 600;
-                    color: var(--text-muted);
-                    margin-bottom: 6px;
-                  "
-                >
-                  단위 — 묶음·기사·조각 (해석 저장소)
-                </div>
-                <div
-                  id="comp-textblock-list"
-                  class="comp-block-list"
-                  style="display: flex; flex-direction: column; gap: 6px"
-                >
-                  <div
-                    class="placeholder"
-                    style="
-                      padding: 20px;
-                      text-align: center;
-                      color: var(--text-muted);
-                    "
-                  >
-                    해석 저장소를 선택하세요
-                  </div>
-                </div>
-              </div>
-
               <!-- 쪼개기 편집 영역 (단위 선택 시 표시) -->
               <!-- 경계 제안 (D-088): 권 전체 행 흐름에 경계 후보를 표시하고 승인한 것만 적용 -->
               <div id="comp-propose-panel" class="comp-propose-panel" style="display: none">
@@ -2021,10 +1938,62 @@
                   <button id="comp-toc-detect-btn" class="text-btn" style="font-size: 11px" title="규칙으로 목차 쪽을 찾아 항목을 뽑고 본문과 대조">목차 감지</button>
                   <select id="comp-llm-model-select" class="props-select llm-model-select" style="font-size: 11px; max-width: 150px"
                     title="목차 감지(LLM)에 쓸 모델. «자동»은 사용 가능한 프로바이더 순서(Ollama → Gemini …)로 넘어갑니다"></select>
-                  <button id="comp-toc-llm-btn" class="text-btn" style="font-size: 11px" title="LLM으로 목차 항목을 구조화 (텍스트만 보냄)">목차 감지(LLM)</button>
+                  <button id="comp-toc-llm-btn" class="text-btn" style="font-size: 11px" title="LLM으로 목차 항목을 구조화 (텍스트만 보냄)">LLM으로</button>
                 </div>
                 <div id="comp-toc-unmatched" class="comp-toc-unmatched" style="display: none"></div>
                 <div id="comp-propose-list" class="comp-propose-list"></div>
+              </div>
+              <!-- 손질 도구 (기본 접힘) — 여기 있는 것은 «기사 하나 안에서 문단 나누기»와
+                   그 언저리다. 단위를 세우는 일은 위의 «경계 제안»과 사이드바 「내용」이 한다. -->
+              <details id="comp-manual" class="comp-manual">
+                <summary>단위 손보기 <small>— 자동 편성 · 쪼개기 · 리셋</small></summary>
+                <div class="comp-manual-tools">
+                  <button
+                    id="comp-auto-btn"
+                    class="text-btn text-btn-sm"
+                    title="이 쪽의 레이아웃 블록마다 경계를 하나씩 — 글 단위가 잘 안 보이는 문헌의 출발점입니다"
+                  >자동 편성</button>
+                  <button
+                    id="comp-split-btn"
+                    class="text-btn text-btn-sm"
+                    disabled
+                    title="고른 단위를 구분선(===) 자리에서 나눕니다 — 그 자리에 경계가 들어갑니다"
+                  >쪼개기</button>
+                  <button
+                    id="comp-reset-btn"
+                    class="text-btn text-btn-sm text-btn-danger"
+                    title="이 쪽의 단위를 모두 물립니다 (경계는 deprecated로 남아 되돌릴 수 있음)"
+                  >리셋</button>
+                </div>
+              <!-- 생성된 단위 목록 -->
+              <div class="comp-section">
+                <div
+                  class="comp-section-title"
+                  style="
+                    font-size: 11px;
+                    font-weight: 600;
+                    color: var(--text-muted);
+                    margin-bottom: 6px;
+                  "
+                >
+                  단위 — 묶음·기사·조각 (해석 저장소)
+                </div>
+                <div
+                  id="comp-textblock-list"
+                  class="comp-block-list"
+                  style="display: flex; flex-direction: column; gap: 6px"
+                >
+                  <div
+                    class="placeholder"
+                    style="
+                      padding: 20px;
+                      text-align: center;
+                      color: var(--text-muted);
+                    "
+                  >
+                    해석 저장소를 선택하세요
+                  </div>
+                </div>
               </div>
               <div
                 id="comp-split-editor"
@@ -2109,6 +2078,7 @@
                   "
                 ></div>
               </div>
+              </details>
             </div>
           </div>
 

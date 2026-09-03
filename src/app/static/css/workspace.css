@@ -7149,16 +7149,6 @@ button.mode-tab {
   border-bottom: 1px solid var(--border);
 }
 
-/* 편성 페이지 범위 컨트롤 */
-.comp-page-range {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  border-bottom: 1px solid var(--border);
-  font-size: 11px;
-  color: var(--text-muted);
-}
 
 /* 대조 뷰 — 이체자 탭 안내 */
 .alignment-footer {
@@ -7446,6 +7436,7 @@ button.mode-tab {
   display: flex;
   align-items: center;
   gap: 6px;
+  position: relative; /* 행 도구를 겹쳐 띄운다 */
 }
 .contents-tree .contents-preview {
   flex: 1;
@@ -7596,13 +7587,22 @@ button.mode-tab {
 }
 
 /* 경계 색인 옮기기 단추 (D-090) */
+/* 행 도구는 마우스를 올렸을 때만. opacity만 0으로 두면 여섯 단추가 90px쯤을 계속 차지해
+   제목이 「1. …」로 잘렸다 — 자리에서 아예 빼고, 올렸을 때 오른쪽에 겹쳐 띄운다. */
 .contents-boundary-tools {
   display: inline-flex;
   gap: 1px;
-  margin-left: 4px;
   opacity: 0;
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 1px 2px 1px 8px;
+  border-radius: 4px;
+  background: var(--hover-bg);
+  pointer-events: none;
 }
-.contents-block:hover .contents-boundary-tools { opacity: 1; }
+.contents-block:hover .contents-boundary-tools { opacity: 1; pointer-events: auto; }
 .contents-shift-btn {
   border: none;
   background: none;
@@ -7620,7 +7620,6 @@ input.prop-level { width: 3.2em; }
   display: flex; flex-wrap: wrap; align-items: center; gap: 3px;
   font-size: 11px; color: var(--text-muted); padding: 2px 4px 6px;
 }
-.contents-insert-label { font-weight: 600; margin-right: 2px; }
 .contents-insert-num { width: 3.2em; font-size: 11px; }
 .contents-insert-title { width: 7em; font-size: 11px; }
 .contents-insert-form select { font-size: 11px; }
@@ -7692,3 +7691,79 @@ input.prop-level { width: 3.2em; }
 .comp-rules-cand { font-size: 10px; padding: 1px 5px; border: 1px solid var(--border);
   border-radius: 8px; cursor: pointer; background: transparent; color: inherit; }
 .comp-rules-cand:hover { background: var(--bg-hover, rgba(127,127,127,0.15)); }
+
+/* === 화면 정리 (2026-09-03, 사용자 요청 «전체적으로 어지럽다») === */
+
+/* 사이드바: 208쪽짜리 격자가 화면 절반을 먹어 「내용」이 늘 접혀 있었다.
+   높이를 묶고 스스로 스크롤하게 한다 — 여덟 줄쯤 보인다. */
+.tree-children:has(> .tree-page[data-page]) {
+  max-height: 172px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* 편성 툴바: 주 동작 하나 + 쪽 범위를 한 줄에 */
+.comp-toolbar { align-items: center; }
+.comp-toolbar-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--border);
+  margin: 0 2px;
+}
+.comp-range-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.comp-range-field input { width: 48px; }
+.comp-range-field > span { opacity: 0.6; }
+.comp-range-now { font-size: 11px; font-weight: 600; color: var(--text-primary); }
+
+/* 손질 도구 — 기본 접힘. 단위를 세우는 일이 아니라 «기사 안에서 문단 나누기»다 */
+.comp-manual {
+  border-top: 1px solid var(--border);
+  padding: 6px 8px 10px;
+}
+.comp-manual > summary {
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 2px 0;
+  list-style: none;
+}
+.comp-manual > summary::before { content: "▸ "; font-size: 10px; }
+.comp-manual[open] > summary::before { content: "▾ "; }
+.comp-manual > summary::-webkit-details-marker { display: none; }
+.comp-manual > summary small { font-weight: 400; }
+.comp-manual-tools { display: flex; gap: 6px; padding: 6px 0; flex-wrap: wrap; }
+
+/* 제안 행: 신뢰도·역할·깊이·억제를 한 줄로 (세로로 쌓으면 행마다 60px을 먹었다) */
+.comp-propose-row { align-items: center; }
+.prop-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+select.prop-level { max-width: 4.6em; }
+.prop-suppress { flex: none; }
+
+/* «경계 넣기»는 접어 둔다 — 사이드바에서는 「내용」 트리가 먼저다 */
+.contents-insert-box > summary {
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 2px 4px;
+  list-style: none;
+}
+.contents-insert-box > summary::-webkit-details-marker { display: none; }
+.contents-insert-box > summary:hover { color: var(--text-primary); }
+
+/* 목차 줄: 모델 선택기가 한 줄을 밀어냈다 */
+#comp-llm-model-select { max-width: 128px; }
+.comp-toc-row { gap: 4px; }
