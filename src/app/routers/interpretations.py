@@ -171,7 +171,8 @@ class SegmentationTocRequest(BaseModel):
 class SegmentationSpan(BaseModel):
     title: str
     kind: str = ""
-    start: dict  # {"page": int, "line_index": int}
+    level: int | None = None  # 층위 (D-092). 없으면 volume → 1, 그 밖 2
+    start: dict  # {"page": int, "line_index": int, "char_offset"?}
     end: dict
 
 
@@ -1029,7 +1030,7 @@ async def api_segmentation_apply(interp_id: str, body: SegmentationApplyRequest)
         # 위치의 정본은 source_refs(쪽·글자 범위). 경계의 나머지 속성은 metadata.anchor (D-090).
         anchor = {
             "kind": span.kind or "manual",
-            "level": 1 if span.kind == "volume" else 2,
+            "level": int(span.level) if span.level else (1 if span.kind == "volume" else 2),
             "status": "approved",
             "confidence": None,
             "reasons": [],

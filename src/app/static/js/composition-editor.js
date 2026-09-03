@@ -1442,6 +1442,8 @@ async function _executeSplit() {
 const proposeState = {
   data: null, // /segmentation/propose 응답
   checked: new Set(), // 승인한 제안 index
+  tocOnly: false, // 목차 대응만 기본 선택 중인가
+  levels: new Map(), // 제안 index → 사람이 바꾼 층위
   toc: null, // {pages, entries} — 「목차 감지」로 확인한 것. null이면 서버가 규칙으로 자동
 };
 
@@ -1542,14 +1544,32 @@ async function _proposeBoundaries(rulesOverride) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     proposeState.data = data;
-    proposeState.checked = new Set(
-      data.proposals.map((p, i) => (p.accepted ? i : -1)).filter((i) => i >= 0),
-    );
+    // 목차가 있는 책은 목차 항목만 기본 선택한다(사용자 요청). 날짜·형식 후보는 목차 없는
+    // 일기류를 위한 것이다. 「전부 선택」 단추로 언제든 넓힐 수 있다.
+    const hasToc = !!(data.toc && data.toc.matches && data.toc.matches.length);
+    proposeState.tocOnly = hasToc;
+    proposeState.levels = new Map();
+    _resetChecked(hasToc);
     _rulesToForm(data.rules);
     _renderProposals();
   } catch (e) {
     list.innerHTML = `<div class="placeholder">${_treeEscHtml ? _treeEscHtml(e.message) : e.message}</div>`;
   }
+}
+
+function _isTocProposal(p) {
+  return (p.reasons || []).some((r) => r.startsWith("toc:"));
+}
+
+/** 기본 체크를 다시 놓는다. tocOnly면 목차 대응만, 아니면 승인된 것 전부. */
+function _resetChecked(tocOnly) {
+  const data = proposeState.data;
+  proposeState.tocOnly = !!tocOnly;
+  proposeState.checked = new Set(
+    data.proposals
+      .map((p, i) => (p.accepted && (!tocOnly || _isTocProposal(p)) ? i : -1))
+      .filter((i) => i >= 0),
+  );
 }
 
 function _renderProposals() {
@@ -1558,9 +1578,24 @@ function _renderProposals() {
   const stats = document.getElementById("comp-propose-stats");
   if (!data || !list) return;
   const acceptedCount = proposeState.checked.size;
-  if (stats)
+  if (stats) {
     stats.textContent = `${data.stats.lines}행 · 후보 ${data.proposals.length} · 승인 ${acceptedCount}` +
       (data.stats.suppressed ? ` · 억제 ${data.stats.suppressed}` : "");
+    const hasToc = !!(data.toc && data.toc.matches && data.toc.matches.length);
+    if (hasToc) {
+      const sw = document.createElement("button");
+      sw.type = "button";
+      sw.className = "text-btn";
+      sw.style.cssText = "font-size:11px; margin-left:6px;";
+      sw.textContent = proposeState.tocOnly ? "목차 항목만 선택 중 → 전부 선택" : "전부 선택 중 → 목차 항목만";
+      sw.title = "목차가 있는 책은 목차 항목만 단위로 삼는 것이 기본입니다. 날짜·형식 후보까지 넓히려면 누르세요";
+      sw.addEventListener("click", () => {
+        _resetChecked(!proposeState.tocOnly);
+        _renderProposals();
+      });
+      stats.appendChild(sw);
+    }
+  }
   // 목차 신호 요약 (D-089)
   const tocSummary = document.getElementById("comp-toc-summary");
   const unmatchedBox = document.getElementById("comp-toc-unmatched");
@@ -1637,6 +1672,20 @@ function _renderProposals() {
     conf.className = `prop-conf ${cls}`;
     conf.textContent = `${Math.round(p.confidence * 100)}%`;
     right.appendChild(conf);
+    // 층위 (D-092): 들여쓰기·목차로 추정한 값. 적용 전에 바꿀 수 있다
+    const lv = document.createElement("select");
+    lv.className = "prop-level";
+    lv.title = "층위 — 1 권·편, 2 기사, 3 기사 안 조각 (들여쓰기·목차로 추정)";
+    for (const [v, label] of [[1, "L1 권"], [2, "L2 기사"], [3, "L3 조각"]]) {
+      const o = document.createElement("option");
+      o.value = String(v);
+      o.textContent = label;
+      lv.appendChild(o);
+    }
+    lv.value = String(proposeState.levels.get(i) ?? p.level ?? 2);
+    lv.addEventListener("click", (ev) => ev.stopPropagation());
+    lv.addEventListener("change", () => proposeState.levels.set(i, Number(lv.value)));
+    right.appendChild(lv);
     if (!p.suppressed) {
       const sup = document.createElement("button");
       sup.type = "button";
@@ -1704,7 +1753,7 @@ async function _applyProposals() {
   const pos = new Map(lines.map((l, i) => [keyOf(l), i]));
   // 경계 = (행, 행 안 글자 오프셋). 다음 경계가 행 중간이면 이 구간은 같은 행의 그 글자 앞에서 끝난다 (D-090 2단계)
   const starts = idx
-    .map((i) => ({ li: pos.get(keyOf(data.proposals[i])), off: data.proposals[i].char_offset || 0, p: data.proposals[i] }))
+    .map((i) => ({ i, li: pos.get(keyOf(data.proposals[i])), off: data.proposals[i].char_offset || 0, p: data.proposals[i] }))
     .sort((a, b) => a.li - b.li || a.off - b.off);
   const endBefore = (next) =>
     next.off > 0
@@ -1712,7 +1761,7 @@ async function _applyProposals() {
       : { page: lines[next.li - 1].page, line_index: lines[next.li - 1].line_index, char_end: null };
   const spans = [];
   if (starts[0].li > 0 || starts[0].off > 0) {
-    spans.push({ title: lines[0].text.trim().slice(0, 20) || "(앞부분)", kind: "front",
+    spans.push({ title: lines[0].text.trim().slice(0, 20) || "(앞부분)", kind: "front", level: 2,
       start: { page: lines[0].page, line_index: lines[0].line_index, char_offset: 0 },
       end: endBefore(starts[0]) });
   }
@@ -1721,6 +1770,7 @@ async function _applyProposals() {
       ? endBefore(starts[k + 1])
       : { page: lines[lines.length - 1].page, line_index: lines[lines.length - 1].line_index, char_end: null };
     spans.push({ title: s.p.title, kind: s.p.kind || "",
+      level: proposeState.levels.get(s.i) ?? s.p.level ?? 2,
       start: { page: lines[s.li].page, line_index: lines[s.li].line_index, char_offset: s.off },
       end });
   });

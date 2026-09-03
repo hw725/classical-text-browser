@@ -1187,7 +1187,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 ### 8.3 OpenAI OAuth
 
-Windows에서는 `start_server.bat`가 `npx.cmd -y openai-oauth`를 별도 창에서 자동 실행합니다. 포트 `10531`이 다른 프로그램에 잡혀 있으면 프록시가 `10532~10540` 중 가능한 포트로 올라오고, 배치파일이 감지한 URL을 서버에 전달합니다.
+Windows에서는 `start_server.bat`가 `npx.cmd -y openai-oauth`를 창 없이 자동 실행합니다. 포트 `10531`이 다른 프로그램에 잡혀 있으면(은행 보안 프로그램 AnySign4PC가 10530·10531을 쓰는 사례가 있습니다) 배치파일이 `10532~10540` 중 빈 포트를 골라 `--port`로 넘기고, 감지한 URL을 서버에 전달합니다. 프록시가 뜨지 않으면 `logs\openai-oauth.log`를 보세요 — `EADDRINUSE`면 포트 충돌, 로그인 안내가 있으면 그 URL로 로그인합니다.
 
 첫 실행에서 로그인이 필요하면 열린 `OpenAI OAuth Proxy` 창의 안내를 따르세요. 직접 프록시를 띄운 포트를 고정해야 하는 경우 프로젝트 루트 `.env`에 다음처럼 적을 수 있습니다.
 

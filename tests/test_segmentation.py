@@ -1062,3 +1062,38 @@ def test_boundary_insert_delete_split_via_api(client, tmp_path):
     assert not list(
         (Path(lib) / "interpretations" / "i1" / "core_entities" / "blocks").glob("*.json")
     )
+
+
+class TestLevelFromIndent:
+    """층위 추정 (D-092): 들여쓰기 최빈값이 기사(2), 그보다 얕으면 卷·편(1), 깊으면 조각(3)."""
+
+    def _line(self, page, i, text, top):
+        # 세로쓰기: bbox[1]=top. 글자 한 자 26px. 본문 열은 top 120.
+        # 행 길이(px)는 글자 수 × 26 — 글자 크기 추정(char_px)이 행 길이/글자수로 나오기 때문
+        return Line(
+            page, i, text, bbox=[1000 - i * 40, top, 1000 - i * 40 + 30, top + len(text) * 26]
+        )
+
+    def test_levels_follow_indent_mode(self):
+        BODYT = BODY
+        lines = []
+        # 集 표제(頂格, 0자), 기사 표제(2자 내려쓰기 ×3), 부기(4자 내려쓰기), 본문
+        lines.append(self._line(1, 0, "十一月談草集", 120))
+        lines.append(self._line(1, 1, BODYT, 120))
+        lines.append(self._line(1, 2, "十二月十九日北洋衙門談草", 120 + 26 * 2))
+        lines.append(self._line(1, 3, BODYT, 120))
+        lines.append(self._line(1, 4, "二十日海關署談草", 120 + 26 * 2))
+        lines.append(self._line(1, 5, BODYT, 120))
+        lines.append(self._line(1, 6, "廿一日海關署談草", 120 + 26 * 2))
+        lines.append(self._line(1, 7, "是日談草附記", 120 + 26 * 4))
+        lines.append(self._line(1, 8, BODYT, 120))
+        r = propose_boundaries(lines, {"title_words": ["談草"]})
+        by = {p["title"]: p for p in r["proposals"]}
+        assert by["十二月十九日北洋衙門談草"]["level"] == 2
+        assert by["十一月談草"]["level"] == 1 and "indent_shallow" in by["十一月談草"]["reasons"]
+        assert by["是日談草"]["level"] == 3 and "indent_deep" in by["是日談草"]["reasons"]
+        assert all(s["level"] in (1, 2, 3) for s in r["spans"])
+
+    def test_no_bbox_means_level_2(self):
+        r = _doc(["壬午三月二十二日海關署談草", "十二日海關署談草"], {"title_words": ["談草"]})
+        assert [p["level"] for p in r["proposals"]] == [2, 2]

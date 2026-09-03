@@ -177,6 +177,7 @@ class Proposal:
     reasons: list = field(default_factory=list)
     suppressed: bool = False
     accepted: bool = False  # min_confidence 이상 & 억제 아님 → 스팬 경계
+    level: int = 2  # 추정 층위(D-092): 1 = 卷·편, 2 = 기사, 3 = 조각. 사람이 바꿀 수 있다
 
     def to_dict(self) -> dict:
         return {
@@ -184,6 +185,7 @@ class Proposal:
             "line_index": self.line_index,
             "char_offset": self.char_offset,
             "title": self.title,
+            "level": self.level,
             "date": self.date,
             "kind": self.kind,
             "place": self.place,
@@ -194,13 +196,21 @@ class Proposal:
         }
 
 
+_INDENT_CHARS: dict[tuple[int, int], float] = {}
+
+
 def _layout_signals(lines: list[Line], rules: dict) -> dict[tuple[int, int], list[str]]:
     """형식 신호: 짧은 행·내려쓰기. 쪽 안의 본문 행 분포와 비교한다.
 
     왜 쪽 단위 비교인가: 글자 크기·행 길이는 판식(板式)마다 다르니 절대값을 쓸 수 없다.
     같은 쪽의 중앙값보다 눈에 띄게 짧거나 위가 낮으면 표제로 본다.
+
+    부수 산출: 행마다 내려쓰기 «글자 수»(본문 중앙값 대비, 반올림)를 `_INDENT_CHARS`에 남긴다.
+    층위 추정(`_assign_levels`)이 이것을 쓴다 — 판식마다 표제의 들여쓰기가 다르므로 절대값이
+    아니라 «이 문헌에서 가장 흔한 표제 들여쓰기»를 기준으로 얕고 깊음을 가른다.
     """
     out: dict[tuple[int, int], list[str]] = {}
+    _INDENT_CHARS.clear()
     if not rules["use_layout"]:
         return out
     by_page: dict[int, list[Line]] = {}
@@ -241,6 +251,7 @@ def _layout_signals(lines: list[Line], rules: dict) -> dict[tuple[int, int], lis
                 reasons.append("short_line")
             if median_top is not None and char_px and ln.bbox and len(ln.bbox) == 4:
                 top = ln.bbox[1] if ln.writing_direction.startswith("vertical") else ln.bbox[0]
+                _INDENT_CHARS[(ln.page, ln.line_index)] = round((top - median_top) / char_px, 1)
                 if top - median_top >= char_px * 0.8:
                     reasons.append("indent")
             if reasons:
@@ -463,6 +474,7 @@ def propose_boundaries(
                 if day is not None:
                     prev_day = day
 
+    _assign_levels(proposals)
     spans = _build_spans(lines, proposals)
     return {
         "proposals": [p.to_dict() for p in proposals],
@@ -475,6 +487,50 @@ def propose_boundaries(
         },
         "rules": rules,
     }
+
+
+def _assign_levels(proposals: list[Proposal]) -> None:
+    """제안마다 층위를 추정한다 (D-092 — 사용자 요청 «들여쓰기로 레이어를 미리 구분»).
+
+    규칙:
+      - 목차 대응은 목차의 층위를 따른다(kind="volume" → 1, 그 밖은 2).
+      - 나머지는 들여쓰기 글자 수로: 승인된 제안들의 **가장 흔한 들여쓰기**가 기사(2)이고,
+        그보다 한 글자 넘게 얕으면 卷·편(1), 한 글자 넘게 깊으면 조각(3).
+        bbox가 없어 들여쓰기를 모르면 2.
+    왜 최빈값 기준인가: 표제의 들여쓰기는 판식마다 다르다(천진담초는 2자 내려쓰기, 문집은 시제
+    頂格에 부기가 내려쓰기). 절대값 문턱은 한 문헌에만 맞는다.
+    """
+    import statistics
+
+    for p in proposals:
+        if any(r.startswith("toc:") for r in p.reasons):
+            p.level = 1 if p.kind == "volume" else 2
+    base_vals = [
+        _INDENT_CHARS.get((p.page, p.line_index))
+        for p in proposals
+        if p.accepted and p.char_offset == 0 and not any(r.startswith("toc:") for r in p.reasons)
+    ]
+    base_vals = [v for v in base_vals if v is not None]
+    if not base_vals:
+        return
+    try:
+        mode = statistics.mode([round(v) for v in base_vals])
+    except statistics.StatisticsError:
+        mode = round(statistics.median(base_vals))
+    for p in proposals:
+        if any(r.startswith("toc:") for r in p.reasons) or p.char_offset != 0:
+            continue
+        v = _INDENT_CHARS.get((p.page, p.line_index))
+        if v is None:
+            continue
+        if v <= mode - 1.5:
+            p.level = 1
+            p.reasons.append("indent_shallow")
+        elif v >= mode + 1.5:
+            p.level = 3
+            p.reasons.append("indent_deep")
+        else:
+            p.level = 2
 
 
 def _build_spans(lines: list[Line], proposals: list[Proposal]) -> list[dict]:
@@ -510,6 +566,7 @@ def _build_spans(lines: list[Line], proposals: list[Proposal]) -> list[dict]:
             {
                 "title": prop.title if prop else lines[s_i].text.strip()[:20],
                 "kind": prop.kind if prop else "front",
+                "level": prop.level if prop else 2,
                 "start": {"page": keys[s_i][0], "line_index": keys[s_i][1], "char_offset": s_off},
                 "end": {"page": keys[e_i][0], "line_index": keys[e_i][1], "char_end": e_end},
                 "line_count": e_i - s_i + 1,

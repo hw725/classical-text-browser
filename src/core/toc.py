@@ -343,7 +343,16 @@ async def extract_toc_entries_llm(
         try:
             got, info = await _llm_toc_page(router, page, pages.get(page, []), kwargs)
         except Exception as e:  # noqa: BLE001 — 이 쪽만 규칙으로
-            errors.append(f"{page}쪽: {type(e).__name__}: {e}")
+            msg = f"{type(e).__name__}: {e}"
+            if "사용할 수 없습니다" in str(e) or "찾을 수 없습니다" in str(e):
+                # 프로바이더 자체가 없거나 죽은 것 — 쪽마다 같은 실패를 되풀이할 이유가 없다.
+                # 남은 쪽은 전부 규칙으로 가고, 오류는 한 번만 적는다.
+                rest = toc_pages[toc_pages.index(page) :]
+                errors.append(f"{msg} (남은 {len(rest)}쪽 모두 규칙으로)")
+                meta["pages_rule"].extend(rest)
+                entries.extend(extract_toc_entries_rule(pages, rest))
+                break
+            errors.append(f"{page}쪽: {msg}")
             meta["pages_rule"].append(page)
             entries.extend(extract_toc_entries_rule(pages, [page]))
             continue

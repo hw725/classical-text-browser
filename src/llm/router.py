@@ -142,7 +142,14 @@ class LlmRouter:
                 )
             if not await provider.is_available():
                 raise LlmProviderError(
-                    f"provider '{force_provider}'이(가) 현재 사용할 수 없습니다."
+                    f"provider '{force_provider}'이(가) 현재 사용할 수 없습니다. "
+                    + (
+                        "Ollama 서버가 3초 안에 응답하지 않았습니다 — `ollama serve`가 떠 있는지, "
+                        "모델을 막 받는 중이 아닌지 확인하세요."
+                        if force_provider == "ollama"
+                        else "API 키·네트워크를 확인하세요. 모델 선택을 «자동»으로 두면 "
+                        "다른 프로바이더로 넘어갑니다."
+                    )
                 )
 
             response = await provider.call(
@@ -264,7 +271,14 @@ class LlmRouter:
                 )
             if not await provider.is_available():
                 raise LlmProviderError(
-                    f"provider '{force_provider}'이(가) 현재 사용할 수 없습니다."
+                    f"provider '{force_provider}'이(가) 현재 사용할 수 없습니다. "
+                    + (
+                        "Ollama 서버가 3초 안에 응답하지 않았습니다 — `ollama serve`가 떠 있는지, "
+                        "모델을 막 받는 중이 아닌지 확인하세요."
+                        if force_provider == "ollama"
+                        else "API 키·네트워크를 확인하세요. 모델 선택을 «자동»으로 두면 "
+                        "다른 프로바이더로 넘어갑니다."
+                    )
                 )
 
             response = await provider.call_stream(

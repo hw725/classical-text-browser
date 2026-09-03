@@ -162,7 +162,12 @@ if /I "%OPENAI_OAUTH_AUTO_START%"=="0" (
         ) else (
             echo [OpenAI OAuth] starting local proxy in the background...
             if not exist "logs" mkdir "logs"
-            start "" /b cmd /c "npx.cmd -y openai-oauth >> logs\openai-oauth.log 2>&1"
+            REM The proxy binds 10531 by default and dies with EADDRINUSE if another program
+            REM holds it (AnySign4PC on this machine, observed 2026-09-03). Pick the first
+            REM free port in 10531-10540 and pass it explicitly. The detection loop below
+            REM scans the same range, so the server finds whichever port was chosen.
+            call :find_free_oauth_port
+            start "" /b cmd /c "npx.cmd -y openai-oauth --port !OAUTH_START_PORT! >> logs\openai-oauth.log 2>&1"
             timeout /t 4 /nobreak >nul
             call :check_openai_oauth
             if "!OPENAI_OAUTH_READY!"=="1" (
@@ -209,6 +214,17 @@ echo.
 echo Server stopped.
 pause
 exit /b !APP_EXIT_CODE!
+
+:find_free_oauth_port
+set OAUTH_START_PORT=10531
+for /L %%P in (10531,1,10540) do (
+    netstat -an 2>nul | findstr ":%%P " | findstr "LISTENING" >nul 2>&1
+    if !ERRORLEVEL! neq 0 (
+        set OAUTH_START_PORT=%%P
+        goto :eof
+    )
+)
+goto :eof
 
 :check_openai_oauth
 set OPENAI_OAUTH_READY=0
