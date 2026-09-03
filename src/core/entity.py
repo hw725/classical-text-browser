@@ -186,18 +186,35 @@ def _ensure_boundaries(interp_path: Path) -> None:
             logger.warning("마이그레이션 커밋 실패: %s", e)
 
 
+_PART_LINES_CACHE: dict[tuple, tuple[float, tuple]] = {}
+_PART_LINES_TTL = 3.0  # 초. 화면 한 번 그릴 때 쪽마다 오는 요청들이 같은 208쪽을 되풀이해 읽지 않게
+
+
 def _part_lines(interp_path: Path, document_id: str, part_id: str):
-    """그 권의 L4 행 목록과 쪽 텍스트. 문헌이 없거나 L4가 없으면 빈 것."""
+    """그 권의 L4 행 목록과 쪽 텍스트. 문헌이 없거나 L4가 없으면 빈 것.
+
+    짧은 캐시(3초): 편성 탭이 쪽마다 `entities/text_block?page=` 요청을 보내고 그때마다 권 전체
+    확정본(208쪽 0.6초)을 읽었다. 교정 저장은 3초 뒤에 반영된다 — 같은 화면 안의 되풀이만 막는다.
+    """
+    import time
+
     from core.segmentation import collect_document_lines
 
+    key = (str(Path(interp_path).resolve()), document_id, part_id)
+    hit = _PART_LINES_CACHE.get(key)
+    now = time.monotonic()
+    if hit and now - hit[0] < _PART_LINES_TTL:
+        return hit[1]
     doc_path = _library_root(interp_path) / "documents" / document_id
     if not doc_path.exists():
         return [], {}
     try:
-        return collect_document_lines(doc_path, part_id, None)
-    except Exception as e:  # noqa: BLE001 — L4가 없으면 본문 없는 단위로 보인다
-        logger.warning("확정본을 읽지 못했습니다 (%s/%s): %s", document_id, part_id, e)
-        return [], {}
+        result = collect_document_lines(doc_path, part_id, None)
+    except Exception as ex:  # noqa: BLE001 — L4가 없으면 본문 없는 단위로 보인다
+        logger.warning("확정본을 읽지 못했습니다 (%s/%s): %s", document_id, part_id, ex)
+        result = ([], {})
+    _PART_LINES_CACHE[key] = (now, result)
+    return result
 
 
 def _text_block_view(interp_path: str | Path) -> list[dict]:

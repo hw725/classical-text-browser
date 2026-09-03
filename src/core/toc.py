@@ -270,12 +270,24 @@ def _is_toc_header(title: str) -> bool:
 
 
 async def _llm_toc_page(
-    router, page: int, texts: list[str], kwargs: dict
+    router, page: int, texts: list[str], kwargs: dict, reference_text: str = ""
 ) -> tuple[list[TocEntry], dict]:
-    """목차 쪽 하나를 LLM에 넘겨 항목을 구조화한다. 실패는 예외로 올린다."""
+    """목차 쪽 하나를 LLM에 넘겨 항목을 구조화한다. 실패는 예외로 올린다.
+
+    reference_text — 사람이 붙여 넣은 해제·서지 설명(manifest.segmentation_rules.reference_text).
+    권차·편차·수록 작품 같은 배경을 알면 OCR이 깨진 항목의 층위·제목을 더 잘 세운다.
+    """
     body = f"[{page}쪽]\n" + "\n".join(t for t in texts if t.strip())
+    ref = ""
+    if reference_text and reference_text.strip():
+        ref = (
+            "참고 — 이 문헌의 해제·서지 설명(사람이 적음, 그대로 옮기지 말고 판단에만 쓸 것):\n"
+            + reference_text.strip()[:4000]
+            + "\n\n"
+        )
     prompt = (
-        "다음은 고서 앞부분 한 쪽의 OCR 텍스트입니다. 목차인지 판단하고 항목을 JSON으로 뽑으세요.\n"
+        ref + "다음은 고서 앞부분 한 쪽의 OCR 텍스트입니다. "
+        "목차인지 판단하고 항목을 JSON으로 뽑으세요.\n"
         '형식: {"is_toc": true, "entries": '
         '[{"title": "...", "level": 1|2, "page_hint": "..."|null}, ...]}\n\n' + body
     )
@@ -307,6 +319,7 @@ async def extract_toc_entries_llm(
     router,
     force_provider: Optional[str] = None,
     force_model: Optional[str] = None,
+    reference_text: str = "",
 ) -> tuple[list[TocEntry], dict]:
     """LLM에 목차 쪽 텍스트를 넘겨 항목을 구조화한다. 실패한 쪽은 규칙 추출로 물러난다.
 
@@ -341,7 +354,9 @@ async def extract_toc_entries_llm(
     errors: list[str] = []
     for page in toc_pages:
         try:
-            got, info = await _llm_toc_page(router, page, pages.get(page, []), kwargs)
+            got, info = await _llm_toc_page(
+                router, page, pages.get(page, []), kwargs, reference_text
+            )
         except Exception as e:  # noqa: BLE001 — 이 쪽만 규칙으로
             msg = f"{type(e).__name__}: {e}"
             if "사용할 수 없습니다" in str(e) or "찾을 수 없습니다" in str(e):

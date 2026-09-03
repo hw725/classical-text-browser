@@ -970,8 +970,22 @@ async def api_segmentation_toc(interp_id: str, body: SegmentationTocRequest):
             "meta": {"reason": "목차로 보이는 쪽이 없습니다"},
         }
     if body.use_llm:
+        # 사람이 붙여 넣은 해제·참고 텍스트(문헌 설정)를 LLM에 같이 준다
+        try:
+            from core.document import get_document_info
+            from core.segmentation import normalize_rules
+
+            _rules = normalize_rules(get_document_info(doc_path).get("segmentation_rules"))
+            reference_text = _rules.get("reference_text") or ""
+        except Exception:  # noqa: BLE001 — 참고는 없어도 된다
+            reference_text = ""
         entries, meta = await extract_toc_entries_llm(
-            page_lines, toc_pages, _get_llm_router(), body.force_provider, body.force_model
+            page_lines,
+            toc_pages,
+            _get_llm_router(),
+            body.force_provider,
+            body.force_model,
+            reference_text=reference_text,
         )
     else:
         entries, meta = extract_toc_entries_rule(page_lines, toc_pages), {"method": "rule"}
@@ -991,7 +1005,7 @@ async def api_segmentation_apply(interp_id: str, body: SegmentationApplyRequest)
     4쪽 5행까지»가 그대로 기록된다. sequence_index는 이 Work의 기존 최대값 다음부터.
     한 번의 git commit으로 묶는다.
     """
-    from core.segmentation import collect_document_lines, span_to_text_and_refs
+    from core.segmentation import collect_document_lines
 
     _library_path = get_library_path()
     if _library_path is None:
@@ -1003,82 +1017,60 @@ async def api_segmentation_apply(interp_id: str, body: SegmentationApplyRequest)
     if not body.spans:
         return JSONResponse({"error": "적용할 구간이 없습니다."}, status_code=400)
 
-    lines, page_texts = collect_document_lines(doc_path, body.part_id, body.pages)
-    existing = [
-        b for b in list_entities(interp_path, "text_block") if b.get("work_id") == body.work_id
-    ]
-    seq = max((b.get("sequence_index") or 0) for b in existing) + 1 if existing else 0
-
-    import uuid as _uuid
-
+    # D-092: 구간 하나 = 경계 하나. 행 목록은 한 번만 읽고, 경계 파일은 한 번만 쓰고, 커밋도 한 번.
+    # 전에는 구간마다 create_entity → 권 전체 확정본을 다시 읽어(208쪽 0.6초) 43구간에 30초가
+    # 걸렸고, 그 사이에 «내용 새로고침»을 누르면 아직 없는 것으로 보였다(실측 2026-09-03).
+    from core.boundaries import (
+        insert_boundary,
+        load_boundaries,
+        new_boundary,
+        save_boundaries,
+    )
     from core.segmentation import boundary_bbox
 
+    lines, page_texts = collect_document_lines(doc_path, body.part_id, body.pages)
+    keys = [(ln.page, ln.line_index) for ln in lines]
     l4_commit = _document_head(doc_path)
-
+    data = load_boundaries(interp_path, body.document_id, body.part_id)
     created = []
     errors = []
     for span in body.spans:
-        try:
-            text, refs = span_to_text_and_refs(
-                span.model_dump(), lines, page_texts, body.document_id, body.part_id
-            )
-        except ValueError:
+        s = span.start or {}
+        key = (int(s.get("page", 0)), int(s.get("line_index", 0)))
+        if key not in keys:
             errors.append(f"구간을 찾을 수 없습니다: {span.title}")
             continue
-        if not text:
-            continue
-        # 위치의 정본은 source_refs(쪽·글자 범위). 경계의 나머지 속성은 metadata.anchor (D-090).
-        anchor = {
-            "kind": span.kind or "manual",
-            "level": int(span.level) if span.level else (1 if span.kind == "volume" else 2),
-            "status": "approved",
-            "confidence": None,
-            "reasons": [],
-            "l4_commit": l4_commit,
-            "bbox": boundary_bbox(
+        start = {"page": key[0], "line": key[1], "offset": int(s.get("char_offset") or 0)}
+        level = int(span.level) if span.level else (1 if span.kind == "volume" else 2)
+        item = new_boundary(
+            start=start,
+            level=level,
+            title=span.title or None,
+            kind=span.kind or "manual",
+            work_id=body.work_id,
+            status="draft",
+            anchor_status="approved",
+            page_texts=page_texts,
+            l4_commit=l4_commit,
+            bbox=boundary_bbox(
                 doc_path,
                 body.part_id,
-                {
-                    "page": span.start["page"],
-                    "line": span.start["line_index"],
-                    "offset": span.start.get("char_offset") or 0,
-                },
-                {
-                    "page": span.end["page"],
-                    "line": span.end["line_index"],
-                    "offset": span.end.get("char_end"),
-                },
+                {"page": start["page"], "line": start["line"], "offset": start["offset"]},
+                {"page": start["page"], "line": start["line"], "offset": None},
             ),
-        }
-        data = {
-            "id": str(_uuid.uuid4()),
-            "work_id": body.work_id,
-            "sequence_index": seq,
-            "original_text": text,
-            "normalized_text": None,
-            "source_ref": {k: v for k, v in refs[0].items() if k != "char_range"},
-            "source_refs": refs,
-            "status": "draft",
-            "notes": None,
-            "metadata": {
-                "part_id": body.part_id,
-                "title": span.title,
-                "kind": span.kind or None,
-                "segmentation": "proposed",
-                "anchor": anchor,
-            },
-        }
+        )
         try:
-            create_entity(interp_path, "text_block", data)
-            created.append({"id": data["id"], "title": span.title, "sequence_index": seq})
-            seq += 1
+            kept = insert_boundary(data, item)  # 같은 자리·층위가 있으면 그것(중복 없음)
+            created.append(
+                {"id": kept["id"], "title": kept.get("title"), "sequence_index": len(created)}
+            )
         except Exception as e:  # noqa: BLE001 — 한 구간의 실패가 나머지를 막지 않는다
             errors.append(f"{span.title}: {e}")
-
     git = None
     if created:
+        save_boundaries(interp_path, data)
         git = git_commit_interpretation(
-            interp_path, f"feat: 경계 제안 적용 — TextBlock {len(created)}개 (D-088)"
+            interp_path, f"feat: 경계 제안 적용 — 경계 {len(created)}개 (D-088·D-092)"
         )
     return {"created": created, "errors": errors, "git": git}
 

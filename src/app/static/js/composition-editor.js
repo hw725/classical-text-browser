@@ -1443,6 +1443,7 @@ const proposeState = {
   data: null, // /segmentation/propose 응답
   checked: new Set(), // 승인한 제안 index
   tocOnly: false, // 목차 대응만 기본 선택 중인가
+  showRejected: false, // 문턱 아래 후보도 보이는가
   levels: new Map(), // 제안 index → 사람이 바꾼 층위
   toc: null, // {pages, entries} — 「목차 감지」로 확인한 것. null이면 서버가 규칙으로 자동
 };
@@ -1507,7 +1508,8 @@ function _rulesFromForm() {
     .map((w) => w.trim())
     .filter(Boolean);
   const maxChars = Number(document.getElementById("comp-rules-maxchars")?.value || 14);
-  return { title_words: words, suppress, max_title_chars: maxChars };
+  const reference = (document.getElementById("comp-rules-reference")?.value || "").trim();
+  return { title_words: words, suppress, max_title_chars: maxChars, reference_text: reference };
 }
 
 function _rulesToForm(rules) {
@@ -1517,6 +1519,8 @@ function _rulesToForm(rules) {
   if (w) w.value = (rules?.title_words || []).join(", ");
   if (s) s.value = (rules?.suppress || []).join("\n");
   if (m) m.value = rules?.max_title_chars || 14;
+  const r = document.getElementById("comp-rules-reference");
+  if (r) r.value = rules?.reference_text || "";
 }
 
 async function _proposeBoundaries(rulesOverride) {
@@ -1555,6 +1559,25 @@ async function _proposeBoundaries(rulesOverride) {
   } catch (e) {
     list.innerHTML = `<div class="placeholder">${_treeEscHtml ? _treeEscHtml(e.message) : e.message}</div>`;
   }
+}
+
+// 근거 토큰 → 사람 말 (양수 신호는 초록, 감점은 붉게)
+const _REASON_LABELS = {
+  date: ["날짜", "pos"], mark: ["○ 표지", "pos"], short_line: ["짧은 행", "pos"], indent: ["내려쓰기", "pos"],
+  same_day: ["같은 날", "pos"], month_rolled: ["달 넘김", ""], long_line: ["긴 행", "neg"],
+  no_title_word: ["어휘 없음", "neg"], same_day_repeat: ["같은 날짜 되풀이", "neg"],
+  word_in_clause: ["문장 속 어휘", "neg"], date_jump: ["날짜 역행", "neg"], suppressed: ["억제", "neg"],
+  indent_shallow: ["얕은 들여쓰기 → 권", ""], indent_deep: ["깊은 들여쓰기 → 조각", ""],
+};
+function _reasonChip(r) {
+  let label = r, cls = "";
+  if (r.startsWith("toc:")) { label = `목차 ${r.slice(4)}`; cls = "pos"; }
+  else if (r.startsWith("title_word:")) { label = `어휘 ${r.slice(11)}`; cls = "pos"; }
+  else if (_REASON_LABELS[r]) [label, cls] = _REASON_LABELS[r];
+  const s = document.createElement("span");
+  s.className = `prop-reason ${cls}`;
+  s.textContent = label;
+  return s;
 }
 
 function _isTocProposal(p) {
@@ -1621,8 +1644,22 @@ function _renderProposals() {
       '<div class="placeholder">경계 후보가 없습니다. 「규칙」에서 표제 어휘를 적어 보세요 (예: 談草, 筆談).</div>';
     return;
   }
-  // 제안마다 다음 승인 경계까지의 쪽 범위를 계산해 보인다
+  // 문턱 아래 후보는 기본으로 숨긴다 — 보이는 목록은 «승인 후보»여야 읽힌다
+  const rejected = data.proposals.filter((p) => !p.accepted).length;
+  if (rejected && stats) {
+    const tg = document.createElement("button");
+    tg.type = "button";
+    tg.className = "text-btn";
+    tg.style.cssText = "font-size:11px; margin-left:6px;";
+    tg.textContent = proposeState.showRejected ? `문턱 아래 ${rejected}개 숨기기` : `문턱 아래 ${rejected}개 보기`;
+    tg.addEventListener("click", () => {
+      proposeState.showRejected = !proposeState.showRejected;
+      _renderProposals();
+    });
+    stats.appendChild(tg);
+  }
   data.proposals.forEach((p, i) => {
+    if (!p.accepted && !proposeState.showRejected && !proposeState.checked.has(i)) return;
     const row = document.createElement("div");
     row.className = "comp-propose-row" + (p.suppressed ? " suppressed" : "");
     const cb = document.createElement("input");
@@ -1657,9 +1694,8 @@ function _renderProposals() {
       : "";
     // 행 중간 경계(D-090 2단계): 「○七日」처럼 열 중간에서 날이 바뀌는 판식은 몇째 글자인지도 보인다
     const where = `${p.page}쪽 ${p.line_index + 1}행` + (p.char_offset ? ` ${p.char_offset + 1}자째` : "");
-    meta.textContent = [where, dateTxt, p.place ? `장소·상대: ${p.place}` : "", p.reasons.join(" · ")]
-      .filter(Boolean)
-      .join("  |  ");
+    meta.textContent = [where, dateTxt, p.place ? `장소·상대: ${p.place}` : ""].filter(Boolean).join("  |  ") + "  ";
+    for (const r of p.reasons) meta.appendChild(_reasonChip(r));
     body.appendChild(title);
     body.appendChild(meta);
     const right = document.createElement("div");

@@ -384,10 +384,9 @@ function _createPageNode(docId, partId, pageNum, docInfo) {
   node.dataset.docId = docId;
   node.dataset.partId = partId;
 
-  node.innerHTML = `
-    <span class="tree-page-icon"></span>
-    <span class="tree-label">${pageNum}페이지</span>
-  `;
+  // 쪽은 번호만 격자로(208쪽을 한 줄씩 세우면 아래 섹션이 화면 밖으로 밀린다 — 2026-09-03 실측)
+  node.title = `${pageNum}쪽`;
+  node.innerHTML = `<span class="tree-label">${pageNum}</span>`;
 
   // 페이지 클릭 → PDF + 텍스트 로드
   node.addEventListener("click", (e) => {

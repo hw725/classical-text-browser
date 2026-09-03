@@ -1097,3 +1097,25 @@ class TestLevelFromIndent:
     def test_no_bbox_means_level_2(self):
         r = _doc(["壬午三月二十二日海關署談草", "十二日海關署談草"], {"title_words": ["談草"]})
         assert [p["level"] for p in r["proposals"]] == [2, 2]
+
+
+class TestTocReferenceText:
+    def test_reference_text_goes_into_prompt_and_rules_keep_it(self):
+        import asyncio
+
+        class _R(_FakeRouter):
+            prompts = []
+
+            async def call(self, prompt, **kwargs):
+                _R.prompts.append(prompt)
+                return await super().call(prompt, **kwargs)
+
+        router = _R('{"is_toc": true, "entries": [{"title": "感懷", "level": 2}]}')
+        asyncio.run(
+            extract_toc_entries_llm(
+                {2: TOC_PAGE}, [2], router, reference_text="운양집 중간본 16권 8책. 권1~6 시."
+            )
+        )
+        assert "운양집 중간본 16권 8책" in _R.prompts[0]
+        assert normalize_rules({"reference_text": "  해제  "})["reference_text"] == "해제"
+        assert normalize_rules(None)["reference_text"] == ""

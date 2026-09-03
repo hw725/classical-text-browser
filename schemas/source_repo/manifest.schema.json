@@ -90,7 +90,8 @@
             "title_words": { "type": "array", "items": { "type": "string" } },
             "suppress": { "type": "array", "items": { "type": "string" } },
             "max_title_chars": { "type": "integer", "minimum": 2, "maximum": 60 },
-            "min_confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+            "min_confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+            "reference_text": { "type": "string", "maxLength": 8000, "description": "해제·서지 설명 등 참고 텍스트. 목차 감지(LLM)가 참고한다." }
           }
         }
       ],

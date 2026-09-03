@@ -16,6 +16,7 @@
  */
 
 document.addEventListener("DOMContentLoaded", () => {
+  _initCollapsibleSidebarSections();
   // 각 모듈 초기화를 try-catch로 감싸서, 한 모듈이 실패해도
   // 나머지 모듈이 정상 초기화되도록 보호한다.
   // 왜: 모듈 하나가 에러를 던지면 그 이후의 모든 init이 실행되지 않아
@@ -2288,4 +2289,39 @@ function showEditorProgress(prefix, show, text, current, total) {
       fillEl.classList.add("ocr-progress-indeterminate");
     }
   }
+}
+
+
+/**
+ * 사이드바 섹션 머리를 누르면 접고 펼친다. 접힘 상태는 localStorage에 남는다.
+ * 서지사항은 기본으로 접는다(사용자 요청 2026-09-03 — 늘 펼쳐져 있어 화면을 차지했다).
+ * 머리 안의 단추·링크(section-header-actions)는 눌러도 접히지 않는다.
+ */
+function _initCollapsibleSidebarSections() {
+  const DEFAULT_COLLAPSED = new Set(["bib-section"]);
+  document.querySelectorAll(".sidebar-section").forEach((section) => {
+    const header = section.querySelector(":scope > .section-header");
+    if (!header || !section.id) return;
+    const key = `sidebar.collapsed.${section.id}`;
+    let collapsed;
+    try {
+      const saved = localStorage.getItem(key);
+      collapsed = saved === null ? DEFAULT_COLLAPSED.has(section.id) : saved === "1";
+    } catch {
+      collapsed = DEFAULT_COLLAPSED.has(section.id);
+    }
+    section.classList.toggle("collapsed", collapsed);
+    header.classList.add("collapsible");
+    header.title = "누르면 접기/펼치기";
+    header.addEventListener("click", (ev) => {
+      if (ev.target.closest(".section-header-actions, button, a, select, input")) return;
+      const now = !section.classList.contains("collapsed");
+      section.classList.toggle("collapsed", now);
+      try {
+        localStorage.setItem(key, now ? "1" : "0");
+      } catch {
+        /* 저장 못 해도 동작에는 지장 없음 */
+      }
+    });
+  });
 }

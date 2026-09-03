@@ -132,6 +132,9 @@ DEFAULT_RULES: dict = {
     "suppress": [],
     "max_title_chars": 14,
     "min_confidence": 0.5,
+    # 해제·서지 설명 등 사람이 붙여 넣은 참고 텍스트. 목차 감지(LLM)가 프롬프트에 넣어 참고한다.
+    # 규칙(코드)은 이것을 읽지 않는다 — 지식은 데이터, 판단은 사람·LLM의 것(D-080·D-081 태도).
+    "reference_text": "",
 }
 
 
@@ -145,6 +148,7 @@ def normalize_rules(rules: Optional[dict]) -> dict:
     out["suppress"] = [str(w).strip() for w in out["suppress"] if str(w).strip()]
     out["max_title_chars"] = int(out["max_title_chars"])
     out["min_confidence"] = float(out["min_confidence"])
+    out["reference_text"] = str(out.get("reference_text") or "").strip()[:8000]
     return out
 
 
