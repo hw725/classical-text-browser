@@ -7734,11 +7734,43 @@ input.prop-level { width: 3.2em; }
   display: flex;
   flex-direction: column-reverse;
   background: var(--bg-primary);
+  /* column-reverse는 내용이 넘치면 «위»로 넘친다 — 가두지 않으면 패널 머리줄을 덮는다 */
+  overflow: hidden;
+}
+/* 요즘 크롬은 <details>의 내용을 ::details-content 안에 감싼다 — 그 상자가 flex 항목이므로
+   여기에 높이를 주지 않으면 본문의 flex:1이 닿지 않고 내용 높이 그대로 자란다(4,428px 실측).
+   그러면 column-reverse가 아래로 정렬해 위쪽이 잘려 나간다. */
+.comp-manual::details-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 .comp-manual-body {
-  max-height: 45vh;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+/* 인라인 style로 있던 것을 여기로 옮겼다 — 인라인은 스타일시트를 이겨서 아래
+   «펼친 쪽이 세로를 온전히» 규칙이 먹지 않았다 */
+.comp-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+}
+
+/* 펼친 쪽이 세로를 온전히 쓴다 — 둘이 반씩 나눠 가지면 어느 쪽도 못 읽는다(사용자 요청).
+   손보기를 펼치면 위(제안·단위 목록)를 접고, 접으면 위가 다 쓴다. */
+.composition-panel:has(#comp-manual[open]) > .comp-container { display: none; }
+.comp-manual[open] {
+  flex: 1;
+  min-height: 0;
+  margin-top: 0;
 }
 .comp-manual > summary {
   cursor: pointer;

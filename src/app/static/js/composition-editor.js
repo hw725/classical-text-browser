@@ -253,6 +253,8 @@ function deactivateCompositionMode() {
  * 출력: [start..end] 형태의 페이지 번호 배열.
  */
 function _getPageRange(currentPage) {
+  // 쪽 범위 UI는 없앴다(단위는 권 전체를 목록에서 고른다). 남은 쓰임은 «자동 편성»이
+  // 볼 교정 텍스트뿐이라 늘 지금 쪽 하나다.
   const rawStart = Number(compState.rangeStart ?? currentPage);
   const rawEnd = Number(compState.rangeEnd ?? currentPage);
   const start = Math.max(1, Math.floor(Math.min(rawStart, rawEnd)));
@@ -311,18 +313,15 @@ async function _loadCompositionData() {
 
   const promises = [...correctedPromises];
 
-  // 해석 저장소가 선택되어 있으면 단위도 로드
+  // 해석 저장소가 선택되어 있으면 단위도 로드 — **권 전체**를 한 번에.
+  // 왜 쪽으로 거르지 않는가: 손보기는 «경계를 적용한 뒤 그 단위 안에서 문단을 나누는» 일이다.
+  // 어느 쪽에 있는지 숫자로 짚는 것보다 단위를 목록에서 고르는 편이 낫다(사용자 지적).
   if (interpState.interpId) {
-    // 범위 내 모든 페이지의 단위를 로드하기 위해 각 페이지별 요청
-    for (const p of pages) {
-      promises.push(
-        fetch(
-          `/api/interpretations/${interpState.interpId}/entities/unit?page=${p}&document_id=${docId}`,
-        )
-          .then((r) => (r.ok ? r.json() : null))
-          .catch(() => null),
-      );
-    }
+    promises.push(
+      fetch(`/api/interpretations/${interpState.interpId}/entities/unit?document_id=${docId}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null),
+    );
     // Work 자동 확보
     promises.push(_ensureWork());
   }
@@ -343,25 +342,14 @@ async function _loadCompositionData() {
     }
   }
 
-  // 단위 목록: 범위 내 모든 페이지의 결과를 합침 (중복 제거)
-  const tbStart = correctedPromises.length; // 단위 결과 시작 인덱스
-  const seenTbIds = new Set();
+  // 단위 목록 — 권 전체
   compState.units = [];
-
   if (interpState.interpId) {
-    for (let i = 0; i < pages.length; i++) {
-      const tbData = results[tbStart + i];
-      if (tbData && tbData.entities) {
-        for (const entity of tbData.entities) {
-          // deprecated / archived는 목록에서 숨김
-          if (entity.status === "deprecated" || entity.status === "archived")
-            continue;
-          if (!seenTbIds.has(entity.id)) {
-            seenTbIds.add(entity.id);
-            compState.units.push(entity);
-          }
-        }
-      }
+    const tbData = results[correctedPromises.length];
+    for (const entity of (tbData && tbData.entities) || []) {
+      // deprecated / archived는 목록에서 숨김
+      if (entity.status === "deprecated" || entity.status === "archived") continue;
+      compState.units.push(entity);
     }
   }
 
@@ -499,6 +487,20 @@ function _renderUnits() {
   const sorted = [...compState.units].sort(
     (a, b) => (a.sequence_index || 0) - (b.sequence_index || 0),
   );
+  // «기사인데 아래 단위를 품은» 것을 찾는다.
+  // 단위의 끝은 «같은 깊이 이상의 다음 경계»다(D-092). 그래서 깊이가 이웃보다 얕은 기사는
+  // 뒤따르는 기사들을 통째로 삼킨다 — 천진담초 실측에서 기사 하나가 30,906자(권 뒤쪽 전부)였다.
+  // 논리로는 맞지만 사람이 알아채기 어려우므로 카드에 적어 준다.
+  const swallows = new Map();
+  sorted.forEach((u, i) => {
+    const lv = Number(u.metadata?.level) || 2;
+    let n = 0;
+    for (let j = i + 1; j < sorted.length; j++) {
+      if ((Number(sorted[j].metadata?.level) || 2) <= lv) break;
+      n++;
+    }
+    if (n > 0 && (u.metadata?.role || "article") !== "container") swallows.set(u.id, n);
+  });
 
   sorted.forEach((tb) => {
     const isSelectedTb = compState.selectedTbId === tb.id;
@@ -526,6 +528,13 @@ function _renderUnits() {
     seqBadge.style.cssText =
       "font-size:10px; font-weight:700; color:var(--accent-green, #22c55e); background:rgba(34,197,94,0.1); padding:1px 5px; border-radius:2px;";
     seqBadge.textContent = `#${tb.sequence_index}`;
+
+    // 역할·글자 수 — 무엇을 고르는지 카드에서 바로 보이게
+    const roleName = { container: "묶음", article: "기사", fragment: "조각" };
+    const kindBadge = document.createElement("span");
+    kindBadge.style.cssText = "font-size:10px; color:var(--text-muted);";
+    const chars = (tb.original_text || "").length;
+    kindBadge.textContent = `${roleName[tb.metadata?.role || "article"] || "기사"} · ${chars.toLocaleString()}자`;
 
     // 출처는 «몇 쪽에 걸쳐 있는가»만 보인다. v1.3부터 단위는 LayoutBlock을 기억하지 않아
     // 그 id는 전부 «?»로 나왔다 — 카드의 절반을 뜻 없는 문자열이 차지하고 있었다(D-092).
@@ -563,6 +572,19 @@ function _renderUnits() {
     header.appendChild(statusBadge);
 
     // 「52페이지」 뱃지는 없앴다 — 바로 옆의 「11~62쪽」이 같은 것을 더 잘 말한다
+    header.insertBefore(kindBadge, statusBadge);
+    const swallowed = swallows.get(tb.id);
+    if (swallowed) {
+      const warn = document.createElement("span");
+      warn.style.cssText =
+        "font-size:10px; color:var(--accent-warning, #f59e0b); background:rgba(245,158,11,0.12); padding:1px 5px; border-radius:2px;";
+      warn.textContent = `⚠ 아래 단위 ${swallowed}개를 품음`;
+      warn.title =
+        "이 단위의 깊이가 뒤따르는 단위들보다 얕아, 그것들을 통째로 삼키고 있습니다." +
+        "\n" +
+        "사이드바 「내용」에서 ⇥로 깊이를 한 단 내리거나, 역할을 «묶음»으로 바꾸세요.";
+      header.insertBefore(warn, statusBadge);
+    }
     // 삭제 버튼은 항상 맨 오른쪽에 위치
     header.appendChild(deleteBtn);
 

@@ -1860,16 +1860,7 @@
             </div>
 
             <!-- 교정된 텍스트 블록 목록 (좌측: 소스) -->
-            <div
-              class="comp-container"
-              style="
-                display: flex;
-                flex-direction: column;
-                flex: 1;
-                overflow: auto;
-                padding: 8px;
-              "
-            >
+            <div class="comp-container">
               <!-- 쪼개기 편집 영역 (단위 선택 시 표시) -->
               <!-- 경계 제안 (D-088): 권 전체 행 흐름에 경계 후보를 표시하고 승인한 것만 적용 -->
               <div id="comp-propose-panel" class="comp-propose-panel" style="display: none">
@@ -1926,17 +1917,9 @@
                여기 있는 것은 «기사 하나 안에서 문단 나누기»와 그 언저리다. 기사 단위 자체는
                경계만 정하면 저절로 정해지므로(D-092), 이 도구는 주 흐름이 아니다. -->
             <details id="comp-manual" class="comp-manual">
-              <summary>단위 손보기 <small>— 자동 편성 · 쪼개기 · 리셋</small></summary>
+              <summary>단위 손보기 <small>— 기사 하나를 골라 문단으로 나눕니다</small></summary>
               <div class="comp-manual-body">
               <div class="comp-manual-tools">
-                <label class="comp-range-field" title="아래 목록에 보일 쪽 범위 — 이 목록에만 걸립니다">쪽
-                  <input type="number" id="comp-page-start" min="1" step="1" />
-                  <span>~</span>
-                  <input type="number" id="comp-page-end" min="1" step="1" />
-                </label>
-                <button id="comp-page-range-apply" class="text-btn text-btn-sm" title="쪽 범위 적용">적용</button>
-                <span id="comp-page-indicator" class="comp-range-now" title="지금 보는 쪽">—</span>
-                <span class="comp-toolbar-sep"></span>
                 <button
                   id="comp-auto-btn"
                   class="text-btn text-btn-sm"
