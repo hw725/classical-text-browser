@@ -7478,7 +7478,19 @@ button.mode-tab {
 .comp-propose-panel {
   border-top: 1px solid var(--border);
   padding: 8px;
-  max-height: 55vh;
+  /* max-height: 55vh였다 — 위·아래로 다른 것과 나눠 쓰던 시절의 값이다. 지금은 펼친 쪽이
+     세로를 온전히 쓰므로(사용자 요청), 남은 높이를 다 받고 넘치면 스스로 스크롤한다.
+     화면 아래가 비어 보이던 까닭이 이 55vh였다. */
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+/* 머리·규칙·목차 줄은 자기 높이대로, 제안 목록이 남은 높이를 받는다 */
+.comp-propose-panel > #comp-propose-list {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 .comp-propose-head {
