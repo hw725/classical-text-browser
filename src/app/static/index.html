@@ -1995,6 +1995,10 @@
                     <label>표제 어휘 <small>(쉼표로 구분 — 예: 談草, 筆談, 口談)</small>
                       <input id="comp-rules-words" type="text" placeholder="이 문헌에서 표제를 끝맺는 말" />
                     </label>
+                    <div class="comp-rules-suggest">
+                      <button id="comp-rules-suggest-btn" class="text-btn" style="font-size: 11px" title="해제와 본문의 짧은 행을 LLM에 보여 표제 어휘 후보를 뽑습니다. 넣을지는 직접 정합니다">해제·본문에서 뽑기</button>
+                      <span id="comp-rules-suggest-out" class="comp-rules-suggest-out"></span>
+                    </div>
                     <label>억제 목록 <small>(표제로 보지 않을 행, 한 줄에 하나)</small>
                       <textarea id="comp-rules-suppress" rows="2"></textarea>
                     </label>

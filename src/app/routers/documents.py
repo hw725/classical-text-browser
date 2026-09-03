@@ -2244,6 +2244,58 @@ async def api_put_segmentation_rules(doc_id: str, body: SegmentationRulesRequest
     return {"segmentation_rules": rules}
 
 
+class SegmentationRulesSuggestRequest(BaseModel):
+    """해제·본문에서 표제 어휘 후보를 뽑는 요청 (D-092 남은 것)."""
+
+    part_id: str
+    reference_text: str | None = None  # 없으면 저장된 규칙의 것을 쓴다
+    force_provider: str | None = None
+    force_model: str | None = None
+
+
+@router.post("/api/documents/{doc_id}/segmentation-rules/suggest")
+async def api_suggest_segmentation_rules(doc_id: str, body: SegmentationRulesSuggestRequest):
+    """해제와 본문의 짧은 행을 LLM에 보여 이 문헌의 표제 어휘·억제 후보를 뽑는다.
+
+    목적: 「談草·筆談·口談」처럼 문헌마다 다른 표제 어휘를 사람이 해제를 읽고 찾아 적던 것을 던다.
+    입력: doc_id, part_id, reference_text(선택), force_provider·force_model(선택).
+    출력: {"title_words", "suppress", "note", "sample_count", "provider", "model", "error"}.
+          **저장하지 않는다** — 규칙 칸을 채워 주기만 하고 넣을지는 사람이 정한다.
+
+    왜 본문 표본을 함께 보내는가: 해제만으로는 «이 책이 무엇으로 표제를 끝맺는가»가 드러나지
+    않는 일이 많다. 짧은 행 예순 개면 판식이 보인다.
+    """
+    from app._state import _get_llm_router
+    from core.segmentation import (
+        collect_document_lines,
+        extract_title_words_llm,
+        normalize_rules,
+        sample_heading_lines,
+    )
+
+    _library_path = get_library_path()
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+    doc_path = require_repo_path("documents", doc_id)
+    if not doc_path.exists():
+        return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
+    try:
+        rules = normalize_rules(get_document_info(doc_path).get("segmentation_rules"))
+    except FileNotFoundError:
+        return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
+    lines, _texts = collect_document_lines(doc_path, body.part_id, None)
+    sample = sample_heading_lines(lines, rules["max_title_chars"])
+    ref = body.reference_text if body.reference_text is not None else rules.get("reference_text")
+    got, meta = await extract_title_words_llm(
+        ref or "",
+        sample,
+        _get_llm_router(),
+        body.force_provider,
+        body.force_model,
+    )
+    return {**got, "sample_count": len(sample), **meta}
+
+
 @router.get("/api/documents/{doc_id}/pages/{page_num}/corrected-text")
 async def api_corrected_text(
     doc_id: str,

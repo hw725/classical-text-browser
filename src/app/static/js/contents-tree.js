@@ -473,7 +473,7 @@ function _togglePickMode(form) {
   const btn = form.querySelector(".contents-pick-btn");
   if (btn) btn.classList.toggle("is-on", on);
   const hint = form.querySelector(".contents-pick-hint");
-  if (hint) hint.textContent = on ? "원본 이미지에서 자리를 누르세요" : "";
+  if (hint) hint.textContent = on ? "원본 이미지나 교정 텍스트에서 자리를 누르세요" : "";
   const c = _ensureAnchorCanvas();
   if (c) {
     c.style.pointerEvents = on ? "auto" : "none";
@@ -483,6 +483,49 @@ function _togglePickMode(form) {
       c._pickBound = true;
     }
   }
+}
+
+/**
+ * 교정 텍스트(오른쪽 패널)에서 글자를 눌렀을 때 그 자리를 «경계 넣기»에 채운다 (D-094 다음).
+ *
+ * 입력: globalIdx — correctionState.pageText 안의 글자 번호(교정 편집기의 data-idx).
+ * 출력: 자리를 채웠으면 true. «찍기»가 꺼져 있으면 false — 그때는 교정 대화상자가 열린다.
+ *
+ * 왜 서버에 묻지 않는가: 이미지와 달리 여기서는 행·글자를 바로 셀 수 있다(D-094의 이미지
+ * 경로는 좌표를 행으로 옮겨야 해서 서버가 필요했다).
+ *
+ * 교정으로 글자 수가 달라진 만큼은 더해 준다: 확정본(L4)은 교정을 적용한 것이고
+ * data-idx는 적용 전 텍스트의 번호다. 같은 행에서 앞선 교정의 길이 차이를 더하면 맞는다.
+ */
+function pickBoundaryFromCorrectionChar(globalIdx) {
+  if (!contentsState.picking || !contentsState.pickForm) return false;
+  if (typeof correctionState === "undefined" || !correctionState.pageText) return false;
+  const raw = correctionState.pageText;
+  const idx = Math.max(0, Math.min(raw.length, Number(globalIdx) || 0));
+  const before = raw.slice(0, idx);
+  const line = (before.match(/\n/g) || []).length;
+  const lineStart = before.lastIndexOf("\n") + 1;
+  let offset = idx - lineStart;
+  // 같은 행에서 이 글자보다 앞에 있는 교정의 길이 차이
+  for (const c of correctionState.corrections || []) {
+    const ci = Number(c.char_index);
+    if (!Number.isFinite(ci) || ci >= idx) continue;
+    if ((raw.slice(0, ci).match(/\n/g) || []).length !== line) continue;
+    offset += String(c.corrected ?? "").length - String(c.original_ocr ?? "").length;
+  }
+  offset = Math.max(0, offset);
+  const form = contentsState.pickForm;
+  form.querySelector('[data-k="page"]').value = String(viewerState.pageNum);
+  form.querySelector('[data-k="line"]').value = String(line);
+  form.querySelector('[data-k="offset"]').value = String(offset);
+  const hint = form.querySelector(".contents-pick-hint");
+  if (hint) {
+    const lineText = (correctionState.correctedText || raw).split("\n")[line] || "";
+    hint.textContent = `${line}행 ${offset}자 「${lineText.slice(offset, offset + 8) || "?"}」 (교정 텍스트)`;
+  }
+  contentsState.anchorHighlight = null; // 이미지 점선은 이 경로에서 그리지 않는다
+  _drawAnchorCanvas();
+  return true;
 }
 
 async function _onPickClick(ev) {

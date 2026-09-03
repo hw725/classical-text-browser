@@ -99,6 +99,8 @@ function _bindCompEvents() {
     });
   const rulesSave = document.getElementById("comp-rules-save-btn");
   if (rulesSave) rulesSave.addEventListener("click", _saveRulesAndRepropose);
+  const rulesSuggest = document.getElementById("comp-rules-suggest-btn");
+  if (rulesSuggest) rulesSuggest.addEventListener("click", _suggestRules);
   const tocDetect = document.getElementById("comp-toc-detect-btn");
   if (tocDetect) tocDetect.addEventListener("click", () => _detectToc(false));
   const tocLlm = document.getElementById("comp-toc-llm-btn");
@@ -1251,11 +1253,13 @@ const _REASON_LABELS = {
   same_day: ["같은 날", "pos"], month_rolled: ["달 넘김", ""], long_line: ["긴 행", "neg"],
   no_title_word: ["어휘 없음", "neg"], same_day_repeat: ["같은 날짜 되풀이", "neg"],
   word_in_clause: ["문장 속 어휘", "neg"], date_jump: ["날짜 역행", "neg"], suppressed: ["억제", "neg"],
-  indent_shallow: ["얕은 들여쓰기 → 권", ""], indent_deep: ["깊은 들여쓰기 → 조각", ""],
+  volume_repeat: ["卷 되풀이(판심)", "neg"],
+  indent_shallow: ["얕은 들여쓰기 → 묶음", ""], indent_deep: ["깊은 들여쓰기 → 조각", ""],
 };
 function _reasonChip(r) {
   let label = r, cls = "";
   if (r.startsWith("toc:")) { label = `목차 ${r.slice(4)}`; cls = "pos"; }
+  else if (r.startsWith("volume:")) { label = `卷 ${r.slice(7)}`; cls = "pos"; }
   else if (r.startsWith("title_word:")) { label = `어휘 ${r.slice(11)}`; cls = "pos"; }
   else if (_REASON_LABELS[r]) [label, cls] = _REASON_LABELS[r];
   const s = document.createElement("span");
@@ -1264,7 +1268,9 @@ function _reasonChip(r) {
   return s;
 }
 
+/** 목차 대응이거나 卷 표제 — «목차 항목만» 기본 선택에서 살아남는 것들. */
 function _isTocProposal(p) {
+  if (p.kind === "volume") return true; // 卷이 빠지면 트리에 묶음이 없다
   return (p.reasons || []).some((r) => r.startsWith("toc:"));
 }
 
@@ -1434,6 +1440,87 @@ function _renderProposals() {
     row.appendChild(right);
     list.appendChild(row);
   });
+}
+
+/**
+ * 해제와 본문의 짧은 행에서 표제 어휘 후보를 뽑는다 (D-092 남은 것).
+ *
+ * 왜 바로 넣지 않는가: 규칙은 이 문헌의 편집 정책이고 판단은 사람의 것이다(D-080 계열).
+ * 후보를 칩으로 보여 주고, 누른 것만 표제 어휘 칸에 붙는다.
+ */
+async function _suggestRules() {
+  const out = document.getElementById("comp-rules-suggest-out");
+  const btn = document.getElementById("comp-rules-suggest-btn");
+  if (!out || !viewerState.docId || !viewerState.partId) {
+    if (out) out.textContent = "문헌과 권을 먼저 고르세요.";
+    return;
+  }
+  const sel = document.getElementById("comp-llm-model-select");
+  const [provider, model] = (sel && sel.value ? sel.value : "").split(":");
+  out.textContent = "해제와 본문을 보는 중…";
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch(
+      `/api/documents/${encodeURIComponent(viewerState.docId)}/segmentation-rules/suggest`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          part_id: viewerState.partId,
+          reference_text: document.getElementById("comp-rules-reference")?.value ?? null,
+          force_provider: provider || null,
+          force_model: model || null,
+        }),
+      },
+    );
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+    _renderRuleCandidates(d);
+  } catch (e) {
+    out.textContent = `뽑기 실패: ${e.message}`;
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function _renderRuleCandidates(d) {
+  const out = document.getElementById("comp-rules-suggest-out");
+  out.textContent = "";
+  const words = d.title_words || [];
+  const sup = d.suppress || [];
+  if (!words.length && !sup.length) {
+    out.textContent = d.error
+      ? `뽑지 못했습니다: ${d.error}`
+      : `후보가 없습니다 (표본 ${d.sample_count || 0}행). 손으로 적으세요.`;
+    return;
+  }
+  const line = document.createElement("div");
+  line.textContent = `표본 ${d.sample_count || 0}행${d.model ? ` · ${d.model}` : ""} — 누르면 넣습니다`;
+  out.appendChild(line);
+  const add = (text, targetId, isList) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "comp-rules-cand";
+    b.textContent = text;
+    b.title = isList ? "억제 목록에 넣기" : "표제 어휘에 넣기";
+    b.addEventListener("click", () => {
+      const el = document.getElementById(targetId);
+      if (!el) return;
+      const cur = el.value.trim();
+      const sep = isList ? "\n" : ", ";
+      const has = cur.split(isList ? /\n/ : /\s*,\s*/).some((x) => x.trim() === text);
+      if (!has) el.value = cur ? cur + sep + text : text;
+      b.disabled = true;
+    });
+    out.appendChild(b);
+  };
+  for (const w of words) add(w, "comp-rules-words", false);
+  for (const s of sup) add(s, "comp-rules-suppress", true);
+  if (d.note) {
+    const n = document.createElement("div");
+    n.textContent = d.note;
+    out.appendChild(n);
+  }
 }
 
 async function _saveRulesAndRepropose() {

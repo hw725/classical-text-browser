@@ -1212,10 +1212,16 @@ async def api_segmentation_auto(interp_id: str, body: SegmentationAutoRequest):
         lines = body_lines
     result = propose_boundaries(lines, rules, toc_matches=toc_matches)
     toc_only = body.toc_only if body.toc_only is not None else bool(toc_matches)
+    # 목차만 고르는 기본값에서도 卷 표제(kind="volume")는 남긴다 — 빠지면 트리에 묶음이 없다
     chosen = [
         p
         for p in result["proposals"]
-        if p["accepted"] and (not toc_only or any(r.startswith("toc:") for r in p["reasons"]))
+        if p["accepted"]
+        and (
+            not toc_only
+            or p["kind"] == "volume"
+            or any(r.startswith("toc:") for r in p["reasons"])
+        )
     ]
     # 구간은 «다음 선택 경계 앞까지»가 아니라 경계 목록이 알아서 정하므로 시작만 넘기면 된다
     spans = [

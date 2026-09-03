@@ -32,6 +32,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from core.toc import kanji_norm, lenient_json
+
 # ── 날짜 문법 (문헌 무관) ────────────────────────────────────────────────
 
 _GANZHI = "[甲乙丙丁戊己庚辛壬癸][子丑寅卯辰巳午未申酉戌亥]"
@@ -300,6 +302,168 @@ def _line_candidates(raw: str) -> list[tuple[int, str]]:
     return out
 
 
+# 卷 표제(D-092 남은 것): 「卷之一」「第一卷」, 그리고 서명이 앞에 붙은 「雲養集卷之一」.
+# 행 **끝**에 붙어야 한다 — 「卷螺巾車」(卷이 낱말)나 「弁諸卷首乎余曰」(본문 속 卷)은 걸러진다.
+_VOLUME_TAIL_RE = re.compile(
+    r"(?:卷之[一二三四五六七八九十百廿卅]+"
+    r"|第[一二三四五六七八九十百廿卅]+卷"
+    r"|卷[一二三四五六七八九十百廿卅]+"
+    r"|附錄|續集|別集|補遺|外集|拾遺)"
+    r"[\s·]*$"
+)
+
+
+def volume_head(text: str, max_chars: int) -> Optional[str]:
+    """행이 卷 표제면 그 표제 부분을 돌려준다. 아니면 None.
+
+    입력: text — 행 텍스트. max_chars — 표제로 볼 최대 글자 수(문헌 규칙).
+    출력: 잡힌 표제 문자열(정자로 고친 것) 또는 None.
+
+    왜 «행 끝»인가: 卷頭는 짧은 한 행이고 卷 이름이 그 행을 끝맺는다. 본문 속의 卷은
+    뒤에 말이 이어진다. NDL 계열 엔진은 신자체(巻)로 읽으므로 정자로 맞춘 뒤 본다.
+    """
+    t = kanji_norm((text or "").strip())
+    if not t or len(t) > max_chars:
+        return None
+    m = _VOLUME_TAIL_RE.search(t)
+    return m.group(0).strip() if m else None
+
+
+# ── 표제 어휘 뽑기 (LLM 보조, D-092 남은 것) ──────────────────────────────
+#
+# 왜 LLM인가: 표제 어휘(談草·筆談·口談)는 문헌마다 다르고, 사람이 해제를 읽고 찾아 적어
+# 왔다. 해제와 본문의 짧은 행 몇 십 개를 보면 «이 책은 무엇으로 글을 끝맺는가»가 드러난다.
+# 판단은 사람이 한다 — 뽑은 것은 규칙 칸을 채워 주기만 하고 저장하지 않는다.
+
+TITLE_WORD_SYSTEM_PROMPT = (
+    "당신은 한문 고서의 편집 규칙을 찾는 도구입니다. 해제와 본문 표본을 보고 "
+    "«글의 표제를 끝맺는 말»(예: 談草·筆談·口談·日記·書·記)을 찾습니다. 규칙: "
+    "(1) 표본에 실제로 여러 번 나오는 말만 고른다. 지어내지 않는다. "
+    "(2) 두 자 안팎의 한자어. 날짜·간지·사람 이름·지명은 제외한다. "
+    "(3) 표제처럼 보이지만 표제가 아닌 행(권차·판권·두주)이 있으면 "
+    "suppress에 그 행을 그대로 적는다. "
+    "(4) 확신이 없으면 빈 배열. 억지로 채우지 않는다. "
+    "(5) note에는 왜 그렇게 보았는지 한국어 한두 문장. 반드시 JSON만 출력한다."
+)
+
+TITLE_WORD_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title_words": {"type": "array", "items": {"type": "string"}},
+        "suppress": {"type": "array", "items": {"type": "string"}},
+        "note": {"type": "string"},
+    },
+    "required": ["title_words"],
+}
+
+
+def sample_heading_lines(lines: list[Line], max_chars: int, limit: int = 60) -> list[str]:
+    """표제일 법한 짧은 행을 권 전체에서 고르게 뽑는다.
+
+    입력: lines — 권의 행 목록. max_chars — 표제로 볼 최대 글자 수. limit — 최대 개수.
+    출력: 행 텍스트 목록(중복 없음, 원문 순서).
+
+    왜 짧은 행인가: 표제는 한 행을 다 채우지 않는다. 본문을 다 넘기면 토큰만 쓰고
+    신호는 묽어진다. 앞부분에만 몰리지 않게 권 전체에서 고르게 집는다.
+    """
+    cand = [ln.text.strip() for ln in lines if 1 < len(ln.text.strip()) <= max_chars]
+    seen: set = set()
+    uniq = []
+    for t in cand:
+        if t not in seen:
+            seen.add(t)
+            uniq.append(t)
+    if len(uniq) <= limit:
+        return uniq
+    step = len(uniq) / limit
+    return [uniq[int(i * step)] for i in range(limit)]
+
+
+async def extract_title_words_llm(
+    reference_text: str,
+    sample_lines: list[str],
+    router,
+    force_provider: Optional[str] = None,
+    force_model: Optional[str] = None,
+) -> tuple[dict, dict]:
+    """해제·본문 표본에서 표제 어휘·억제 후보를 뽑는다.
+
+    입력:
+        reference_text — 사람이 붙여 넣은 해제·서지 설명(없어도 된다).
+        sample_lines — 본문의 짧은 행 표본(sample_heading_lines의 결과).
+        router — LLM 라우터. force_provider·force_model — 사람이 고른 것.
+    출력: ({"title_words": [...], "suppress": [...], "note": "..."},
+           {"provider", "model", "error"}).
+          실패하면 후보는 빈 목록이고 meta["error"]에 까닭이 적힌다 — 예외로 올리지 않는다.
+
+    저장하지 않는다. 규칙은 사람이 보고 넣는다(지식은 데이터, 판단은 사람 — D-080 계열).
+    """
+    meta: dict = {"provider": None, "model": None, "error": None}
+    empty = {"title_words": [], "suppress": [], "note": ""}
+    if not sample_lines and not (reference_text or "").strip():
+        meta["error"] = "해제도 본문 표본도 없습니다."
+        return empty, meta
+    ref = ""
+    if reference_text and reference_text.strip():
+        ref = (
+            "해제·서지 설명(사람이 적음, 그대로 옮기지 말고 판단에만 쓸 것):\n"
+            + reference_text.strip()[:4000]
+            + "\n\n"
+        )
+    prompt = (
+        ref
+        + "다음은 이 문헌 본문에서 뽑은 짧은 행들입니다(표제일 수도, 아닐 수도 있습니다).\n"
+        + "이 책이 글의 표제를 끝맺는 데 쓰는 말을 찾아 JSON으로 답하세요.\n"
+        + '형식: {"title_words": ["談草", ...], "suppress": ["...", ...], "note": "..."}\n\n'
+        + "\n".join(sample_lines[:120])
+    )
+    kwargs = {
+        "system": TITLE_WORD_SYSTEM_PROMPT,
+        "response_format": "json",
+        "max_tokens": 1024,
+        "purpose": "segmentation_rules",
+        "think": False,  # 목록 뽑기다 — 사고 예산을 쓸 일이 아니다(D-083)
+    }
+    if force_provider:
+        kwargs["force_provider"] = force_provider
+    if force_model:
+        kwargs["force_model"] = force_model
+    try:
+        response = await router.call(prompt, **kwargs)
+    except Exception as e:  # noqa: BLE001 — LLM이 없어도 규칙 칸은 손으로 채울 수 있다
+        meta["error"] = f"{type(e).__name__}: {e}"
+        return empty, meta
+    meta["provider"] = getattr(response, "provider", None)
+    meta["model"] = getattr(response, "model", None)
+    data = lenient_json(getattr(response, "text", "") or "")
+    if not isinstance(data, dict):
+        meta["error"] = "JSON 응답을 해석할 수 없습니다."
+        return empty, meta
+    seen_lines = set(sample_lines)
+
+    def _clean(items, allow_any: bool) -> list[str]:
+        out = []
+        for it in items or []:
+            s = str(it).strip()
+            # 표본에 없는 말을 지어내는 것을 막는다 — 어휘는 표본 어딘가에 실제로 있어야 한다
+            if not s or len(s) > 40:
+                continue
+            if not allow_any and not any(s in ln for ln in seen_lines):
+                continue
+            if s not in out:
+                out.append(s)
+        return out[:12]
+
+    return (
+        {
+            "title_words": _clean(data.get("title_words"), allow_any=False),
+            "suppress": _clean(data.get("suppress"), allow_any=True),
+            "note": str(data.get("note") or "").strip()[:500],
+        },
+        meta,
+    )
+
+
 def propose_boundaries(
     lines: list[Line],
     rules: Optional[dict] = None,
@@ -324,6 +488,10 @@ def propose_boundaries(
     }
 
     proposals: list[Proposal] = []
+    # 이미 나온 卷 이름. 고서는 판심(版心)에 卷 이름을 잎마다 되풀이해 적고 OCR이 그 열을
+    # 행으로 읽는다(운양집 실측 2026-09-03: 「卷之一」이 14·18·21·25쪽에 나왔다).
+    # 卷頭는 처음 나온 자리 하나뿐이고 나머지는 되풀이다.
+    seen_volumes: set = set()
     prev_month: Optional[int] = None
     prev_day: Optional[int] = None
     for ln in lines:
@@ -335,7 +503,8 @@ def propose_boundaries(
             # 형식·목차 신호는 행 첫머리에만 있다 — 행 중간 후보는 ○ 표지와 날짜가 신호다
             sig = layout.get((ln.page, ln.line_index), []) if char_offset == 0 else []
             toc = toc_by_line.get((ln.page, ln.line_index)) if char_offset == 0 else None
-            if not head.present and not word and toc is None:
+            vol = volume_head(text, rules["max_title_chars"]) if char_offset == 0 else None
+            if not head.present and not word and toc is None and vol is None:
                 continue
 
             reasons: list[str] = []
@@ -354,6 +523,16 @@ def propose_boundaries(
             if word:
                 conf += 0.3
                 reasons.append(f"title_word:{word}")
+            if vol is not None:
+                if vol in seen_volumes:
+                    # 판심의 되풀이 — 여기서 卷이 새로 시작하지 않는다
+                    conf -= 0.6
+                    reasons.append("volume_repeat")
+                else:
+                    # 卷頭는 저자·편자가 적어 둔 구조다. 날짜·어휘 추정보다 확실하다.
+                    conf += 0.75
+                    reasons.append(f"volume:{vol}")
+                    seen_volumes.add(vol)
             if "short_line" in sig:
                 conf += 0.2
                 reasons.append("short_line")
@@ -449,6 +628,10 @@ def propose_boundaries(
                 title = toc.get("title") or title
                 if int(toc.get("level", 2)) == 1:
                     kind = "volume"
+            elif vol is not None:
+                # 卷頭 행은 통째로 제목이다 (「雲養集卷之一」)
+                title = text.strip()[:limit]
+                kind = "volume"
 
             conf = max(0.0, min(1.0, conf))
             accepted = (not suppressed) and conf >= rules["min_confidence"]
@@ -538,6 +721,9 @@ def _assign_levels(proposals: list[Proposal]) -> None:
                 p.reasons.append("indent_deep")
             else:
                 p.level = 2
+    for p in proposals:
+        if p.kind == "volume":
+            p.level = 1  # 卷은 묶음이고 트리의 맨 위 단이다 (들여쓰기 추정보다 우선)
     _assign_roles(proposals)
 
 

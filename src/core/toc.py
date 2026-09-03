@@ -65,7 +65,7 @@ _SHINJITAI = str.maketrans(
 )
 
 
-def _kanji_norm(t: str) -> str:
+def kanji_norm(t: str) -> str:
     """신자체를 정자로. 문자 대 문자 치환만 한다(뜻이 갈리는 글자는 넣지 않는다)."""
     return (t or "").translate(_SHINJITAI)
 
@@ -102,7 +102,7 @@ def toc_page_score(lines: list[str], max_title_chars: int = 14) -> float:
 
     본문 쪽은 행이 길고 고르며, 목차 쪽은 대부분이 표제 길이의 짧은 행이다.
     """
-    texts = [_kanji_norm(t.strip()) for t in lines if t.strip()]
+    texts = [kanji_norm(t.strip()) for t in lines if t.strip()]
     # 목차 시작 표지(目錄·總目)가 쪽 중간에 있으면 그 줄부터가 목차다 — 앞의 序 꼬리는 빼고 잰다.
     start = next((i for i, t in enumerate(texts) if any(m in t for m in TOC_START_MARKERS)), None)
     if start:
@@ -174,14 +174,14 @@ def extract_toc_entries_rule(pages: dict[int, list[str]], toc_pages: list[int]) 
             (
                 i
                 for i, raw in enumerate(raws)
-                if any(m in _kanji_norm(raw) for m in TOC_START_MARKERS)
+                if any(m in kanji_norm(raw) for m in TOC_START_MARKERS)
             ),
             None,
         )
         for i, raw in enumerate(raws):
             if start is not None and i <= start:
                 continue
-            t = _kanji_norm(raw.strip())
+            t = kanji_norm(raw.strip())
             if not t or any(t == m or t.endswith(m) for m in ("目錄", "目次", "總目")):
                 continue
             level = 1 if _VOLUME_RE.match(t) else 2
@@ -248,7 +248,7 @@ TOC_SYSTEM_PROMPT = (
 )
 
 
-def _lenient_json(text: str) -> Optional[dict]:
+def lenient_json(text: str) -> Optional[dict]:
     text = (text or "").strip()
     for candidate in (text, text[text.find("{") : text.rfind("}") + 1] if "{" in text else ""):
         if not candidate:
@@ -265,7 +265,7 @@ def _is_toc_header(title: str) -> bool:
 
     LLM이 곧잘 항목으로 넣는다(운양집 실측). 규칙 추출과 같은 기준으로 거른다.
     """
-    t = _kanji_norm(title.strip())
+    t = kanji_norm(title.strip())
     return any(t == m or t.endswith(m) for m in TOC_START_MARKERS)
 
 
@@ -292,7 +292,7 @@ async def _llm_toc_page(
         '[{"title": "...", "level": 1|2, "page_hint": "..."|null}, ...]}\n\n' + body
     )
     response = await router.call(prompt, **kwargs)
-    data = _lenient_json(getattr(response, "text", "") or "")
+    data = lenient_json(getattr(response, "text", "") or "")
     if not data or "entries" not in data:
         raise ValueError("JSON 응답을 해석할 수 없습니다")
     entries = [
@@ -388,7 +388,7 @@ async def extract_toc_entries_llm(
 
 
 def _norm(t: str) -> str:
-    return _kanji_norm(re.sub(r"[\s·。、，,．.:：;；○〇□]+", "", t or ""))
+    return kanji_norm(re.sub(r"[\s·。、，,．.:：;；○〇□]+", "", t or ""))
 
 
 def title_similarity(title: str, line: str) -> float:

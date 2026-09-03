@@ -895,6 +895,151 @@ def _doc_with_two_lines(tmp_path, direction="vertical_rtl"):
     return doc, l0, l1
 
 
+class TestTitleWordSuggest:
+    """해제·본문 표본에서 표제 어휘 뽑기 (D-092 남은 것).
+
+    왜 시험하는가: LLM이 그럴듯한 한자어를 지어내면 규칙이 오염되고, 그 규칙으로 만든 경계는
+    누구도 되짚지 못한다. «표본에 실제로 있는 말만»이 이 기능의 안전장치다.
+    """
+
+    def test_sampler_takes_short_lines_spread_over_the_volume(self):
+        from src.core.segmentation import Line, sample_heading_lines
+
+        lines = [Line(1, i, "표제談草" if i % 2 == 0 else BODY) for i in range(40)]
+        got = sample_heading_lines(lines, 14, limit=5)
+        assert got == ["표제談草"]  # 중복은 하나로
+        many = [Line(1, i, f"표제{i}談草") for i in range(40)]
+        got2 = sample_heading_lines(many, 14, limit=5)
+        assert len(got2) == 5 and got2[0] == "표제0談草" and len(set(got2)) == 5
+
+    def test_only_words_present_in_the_sample_survive(self):
+        import asyncio
+
+        from src.core.segmentation import extract_title_words_llm
+
+        router = _FakeRouter(
+            '{"title_words": ["談草", "筆談", "日記"], "suppress": ["雲養集卷之一"],'
+            ' "note": "표본의 표제가 談草로 끝난다"}'
+        )
+        sample = ["辛巳十一月二十八日保定督署談草", "是月十八日周玉山筆談"]
+        got, meta = asyncio.run(extract_title_words_llm("해제", sample, router))
+        # 日記는 표본에 없다 — 지어낸 것으로 보고 버린다
+        assert got["title_words"] == ["談草", "筆談"]
+        assert got["suppress"] == ["雲養集卷之一"]  # 억제는 표본 밖 행도 받는다
+        assert got["note"].startswith("표본의")
+        assert meta["model"] == "fake-1" and meta["error"] is None
+
+    def test_json_is_forced_and_thinking_off_and_reference_goes_in(self):
+        import asyncio
+
+        from src.core.segmentation import extract_title_words_llm
+
+        router = _FakeRouter('{"title_words": []}')
+        asyncio.run(
+            extract_title_words_llm(
+                "운양집 중간본 16권 8책.", ["아무행談草"], router, "ollama", "m"
+            )
+        )
+        kw = router.calls[0]
+        assert kw["response_format"] == "json" and kw["think"] is False
+        assert kw["force_provider"] == "ollama" and kw["force_model"] == "m"
+
+    def test_llm_failure_is_reported_not_raised(self):
+        import asyncio
+
+        from src.core.segmentation import extract_title_words_llm
+
+        class _Dead:
+            async def call(self, prompt, **kwargs):
+                raise RuntimeError("프로바이더를 사용할 수 없습니다")
+
+        got, meta = asyncio.run(extract_title_words_llm("", ["아무행談草"], _Dead()))
+        assert got["title_words"] == [] and "사용할 수 없습니다" in meta["error"]
+
+    def test_nothing_to_look_at_is_said_plainly(self):
+        import asyncio
+
+        from src.core.segmentation import extract_title_words_llm
+
+        got, meta = asyncio.run(extract_title_words_llm("", [], _FakeRouter("{}")))
+        assert got["title_words"] == [] and "해제도 본문 표본도 없습니다" in meta["error"]
+
+
+class TestVolumeHead:
+    """卷 표제를 본문에서 직접 잡는다 (D-092 남은 것 — 목차가 없거나 대조가 빗나가도 묶음이 선다).
+
+    왜 «행 끝»인가: 卷頭는 짧은 한 행이고 卷 이름이 그 행을 끝맺는다. 본문 속의 卷은 말이
+    이어진다. 이 구분이 무너지면 「弁諸卷首乎余曰序者所」 같은 본문 행이 묶음이 된다.
+    """
+
+    def test_volume_lines_are_caught_including_shinjitai_and_title_prefix(self):
+        from src.core.segmentation import volume_head
+
+        assert volume_head("卷之一", 14) == "卷之一"
+        assert volume_head("雲養集巻之一", 14) == "卷之一"  # NDL 신자체 + 서명 앞머리
+        assert volume_head("第一巻", 14) == "第一卷"
+        assert volume_head("附錄", 14) == "附錄"
+        assert volume_head("卷之十七", 14) == "卷之十七"
+
+    def test_volume_word_inside_a_sentence_is_not_a_heading(self):
+        from src.core.segmentation import volume_head
+
+        assert volume_head("巻螺巾車", 14) is None  # 卷이 낱말로 쓰인 제목
+        assert volume_head("弁諸巻首乎余曰序者所", 14) is None  # 본문 속 卷
+        assert volume_head("第一巻詩一百九十八首", 14) is None  # 총목의 편수 꼬리
+        assert volume_head("雲養集第一巻篇数", 14) is None
+        assert volume_head("天津談草", 14) is None
+
+    def test_long_line_is_not_a_heading(self):
+        from src.core.segmentation import volume_head
+
+        assert volume_head("이 행은 아주 길어서 표제로 보지 않는다 卷之一", 8) is None
+
+    def test_repeated_volume_name_is_the_printing_gutter_not_a_new_volume(self):
+        """같은 卷 이름이 또 나오면 판심(版心)이다 — 거기서 卷이 새로 시작하지 않는다.
+
+        운양집 실측(2026-09-03): 「卷之一」이 14·18·21·25쪽에 나왔다. 고서는 판심에 卷 이름을
+        잎마다 되풀이해 적고 OCR이 그 열을 행으로 읽는다. 되풀이를 그냥 두면 卷 하나가
+        네 조각으로 갈린다.
+        """
+        from src.core.segmentation import Line, propose_boundaries
+
+        lines = [
+            Line(1, 0, "雲養集巻之一"),
+            Line(1, 1, BODY),
+            Line(2, 0, "巻之一"),  # 판심
+            Line(2, 1, BODY),
+            Line(3, 0, "巻之二"),  # 다른 卷 — 이건 새 卷이다
+            Line(3, 1, BODY),
+        ]
+        r = propose_boundaries(lines, None)
+        vol = {(p["page"], p["line_index"]): p for p in r["proposals"] if p["kind"] == "volume"}
+        assert vol[(1, 0)]["accepted"] is True
+        assert vol[(2, 0)]["accepted"] is False
+        assert "volume_repeat" in vol[(2, 0)]["reasons"]
+        assert vol[(3, 0)]["accepted"] is True  # 이름이 다르면 되풀이가 아니다
+
+    def test_proposal_gets_volume_kind_level_and_role(self):
+        from src.core.segmentation import Line, propose_boundaries
+
+        lines = [
+            Line(1, 0, "雲養集巻之一"),
+            Line(1, 1, BODY),
+            Line(1, 2, "壬午正月初十日天津海關道署談草"),
+            Line(1, 3, BODY),
+        ]
+        r = propose_boundaries(lines, {"title_words": ["談草"]})
+        by = {p["title"]: p for p in r["proposals"]}
+        vol = by["雲養集巻之一"]
+        assert vol["kind"] == "volume"
+        assert vol["level"] == 1 and vol["role"] == "container"
+        assert vol["accepted"] is True
+        assert any(x.startswith("volume:") for x in vol["reasons"])
+        # 기사는 그대로 기사다
+        art = by["壬午正月初十日天津海關道署談草"]
+        assert art["kind"] == "談草" and art["role"] == "article"
+
+
 class TestPositionAtPoint:
     """원본 이미지에서 찍은 점 → (행·글자). anchor_bbox의 역 (B-002).
 
@@ -1310,3 +1455,37 @@ def test_segmentation_auto_builds_tree_in_one_call(client, tmp_path):
         "/api/interpretations/i1/segmentation/auto", json={"document_id": "d1", "part_id": part_id}
     )
     assert r.status_code == 200 and client.get(url).json()["total"] == n1
+
+
+def test_auto_tree_makes_a_container_from_a_volume_heading(client, tmp_path):
+    """卷 표제는 목차가 없어도 묶음(container) 경계가 된다 (D-092 남은 것).
+
+    왜 시험하는가: «목차 항목만 기본 선택»이 들어오면서 목차 없는 문헌의 卷이 통째로
+    빠질 수 있었다. 卷이 빠지면 트리에 묶음이 하나도 없어 개요가 평평해진다.
+    """
+    from pathlib import Path
+
+    lib, part_id, work_id = _setup(client, tmp_path)
+    pages = Path(lib) / "documents" / "d1" / "L4_text" / "pages"
+    # 첫 쪽 첫 행을 卷頭로 바꾼다 (NDL 신자체 그대로 — 정자로 맞춘 뒤 보아야 한다)
+    (pages / f"{part_id}_page_001.txt").write_text(
+        "雲養集巻之一\n" + BODY + "\n辛巳十一月二十八日保定督署談草\n" + BODY,
+        encoding="utf-8",
+    )
+    client.put(
+        "/api/documents/d1/segmentation-rules", json={"rules": {"title_words": ["談草", "口談"]}}
+    )
+    r = client.post(
+        "/api/interpretations/i1/segmentation/auto",
+        json={"document_id": "d1", "part_id": part_id},
+    )
+    assert r.status_code == 200, r.text
+    rows = client.get(
+        f"/api/interpretations/i1/boundaries?document_id=d1&part_id={part_id}"
+    ).json()["boundaries"]
+    vol = [b for b in rows if b["kind"] == "volume"]
+    assert len(vol) == 1, [b["title"] for b in rows]
+    assert vol[0]["level"] == 1 and vol[0]["role"] == "container"
+    assert vol[0]["start"] == {"page": 1, "line": 0, "offset": 0}
+    # 기사도 함께 선다 — 卷만 남고 나머지가 사라지면 안 된다
+    assert any(b["role"] == "article" for b in rows)

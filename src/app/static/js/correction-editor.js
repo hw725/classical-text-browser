@@ -727,6 +727,13 @@ function _onCharClick(
   blockType,
   existingCorrIdx,
 ) {
+  // «경계 넣기»의 찍기가 켜져 있으면 교정이 아니라 자리 잡기다 (D-094 다음)
+  if (
+    typeof pickBoundaryFromCorrectionChar === "function" &&
+    pickBoundaryFromCorrectionChar(globalIdx)
+  ) {
+    return;
+  }
   // 이전 선택 해제
   document.querySelectorAll(".corr-char.selected").forEach((el) => {
     el.classList.remove("selected");
