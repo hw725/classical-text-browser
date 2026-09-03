@@ -7767,3 +7767,62 @@ select.prop-level { max-width: 4.6em; }
 /* 목차 줄: 모델 선택기가 한 줄을 밀어냈다 */
 #comp-llm-model-select { max-width: 128px; }
 .comp-toc-row { gap: 4px; }
+
+/* === 모드 탭을 오른쪽 세로 줄로 (2026-09-03, 사용자 선택) ===
+   왜 옮겼나: 위 탭 + 접힌 패널 조합은 «지금 어느 모드인가»를 알 수 없게 만든다.
+   왼쪽 아이콘 줄이 이미 «활성 아이콘을 다시 누르면 접힘»으로 동작하므로, 오른쪽도
+   같은 규칙을 쓰면 새로 배울 것이 없다. */
+
+.mode-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 30px;
+  flex: none;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
+  padding: 4px 0;
+  gap: 1px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.mode-rail .mode-tab {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  padding: 9px 0;
+  justify-content: center;
+  border-bottom: none;
+  border-left: 3px solid transparent;
+  border-radius: 0;
+  letter-spacing: 1px;
+  line-height: 1;
+}
+.mode-rail .mode-tab.active {
+  border-left-color: currentColor;
+  background: var(--hover-bg);
+}
+.mode-rail .mode-tab-divider {
+  height: 1px;
+  width: 14px;
+  margin: 4px auto;
+  background: var(--border);
+  flex: none;
+}
+
+/* 위 바에는 ☰ · 지금 보는 문헌 · 작업 프로필만 남는다 */
+.mode-bar { height: 28px; align-items: center; }
+.mode-bar-context {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 0 10px;
+}
+.mode-bar-context b { font-weight: 600; color: var(--text-secondary); }
+
+/* 오른쪽 패널 접기 — 활성 탭을 다시 누르면 */
+.editor-area.right-collapsed > .editor-panel.editor-right { display: none !important; }
+.editor-area.right-collapsed > .resize-editor { display: none; }

@@ -988,23 +988,9 @@
             title="왼쪽 아이콘 줄 접기/펴기"
             aria-label="왼쪽 아이콘 줄 접기/펴기"
           >☰</button>
-          <!-- 원본 작업 -->
-          <button class="mode-tab active" data-mode="view" role="tab" aria-selected="true">열람</button>
-          <button class="mode-tab" data-mode="layout" role="tab">레이아웃</button>
-          <span class="mode-tab-divider" aria-hidden="true"></span>
-          <!-- 교정 작업 -->
-          <button class="mode-tab" data-mode="correction" role="tab">교정</button>
-          <button class="mode-tab" data-mode="composition" data-profile="collation" role="tab">편성</button>
-          <span class="mode-tab-divider" data-profile="collation" aria-hidden="true"></span>
-          <!-- 해석 작업 -->
-          <button class="mode-tab" data-mode="punctuation" data-profile="collation" role="tab">표점</button>
-          <button class="mode-tab" data-mode="hyeonto" data-profile="collation" role="tab">현토</button>
-          <button class="mode-tab" data-mode="translation" data-profile="collation" role="tab">번역</button>
-          <button class="mode-tab" data-mode="annotation" data-profile="collation" role="tab">주석</button>
-          <button class="mode-tab" data-mode="citation" data-profile="collation" role="tab">인용</button>
-          <span class="mode-tab-divider" data-profile="collation" aria-hidden="true"></span>
-          <!-- 도구 -->
-          <button class="mode-tab" data-mode="variant" data-profile="collation" role="tab">이체자</button>
+          <!-- 모드 탭이 오른쪽 세로 줄로 간 자리 — 지금 무엇을 보고 있는지를 적는다.
+               문헌 이름은 사이드바의 강조 표시로만 알 수 있었다. -->
+          <span class="mode-bar-context" id="mode-bar-context"></span>
           <!-- 작업 프로필: 현재 상태(배지) + 전환(버튼)을 나눠 보여 준다.
                버튼 하나로 겸하면 지금이 어느 모드인지 읽기 어렵다. -->
           <div class="profile-switch">
@@ -3562,6 +3548,29 @@
                 spellcheck="false"
               ></textarea>
             </div>
+          </div>
+
+          <!-- 모드 탭 (오른쪽 세로 줄) — 왼쪽 아이콘 줄과 짝을 이룬다.
+               활성 탭을 다시 누르면 오른쪽 패널이 접힌다(왼쪽 아이콘 줄과 같은 규칙).
+               접혀도 이 줄은 남으므로 «지금 어느 모드인가»를 늘 알 수 있다. -->
+          <div class="mode-rail" role="tablist" aria-label="작업 모드">
+            <!-- 원본 작업 -->
+            <button class="mode-tab active" data-mode="view" role="tab" aria-selected="true">열람</button>
+            <button class="mode-tab" data-mode="layout" role="tab">레이아웃</button>
+            <span class="mode-tab-divider" aria-hidden="true"></span>
+            <!-- 교정 작업 -->
+            <button class="mode-tab" data-mode="correction" role="tab">교정</button>
+            <button class="mode-tab" data-mode="composition" data-profile="collation" role="tab">편성</button>
+            <span class="mode-tab-divider" data-profile="collation" aria-hidden="true"></span>
+            <!-- 해석 작업 -->
+            <button class="mode-tab" data-mode="punctuation" data-profile="collation" role="tab">표점</button>
+            <button class="mode-tab" data-mode="hyeonto" data-profile="collation" role="tab">현토</button>
+            <button class="mode-tab" data-mode="translation" data-profile="collation" role="tab">번역</button>
+            <button class="mode-tab" data-mode="annotation" data-profile="collation" role="tab">주석</button>
+            <button class="mode-tab" data-mode="citation" data-profile="collation" role="tab">인용</button>
+            <span class="mode-tab-divider" data-profile="collation" aria-hidden="true"></span>
+            <!-- 도구 -->
+            <button class="mode-tab" data-mode="variant" data-profile="collation" role="tab">이체자</button>
           </div>
         </div>
 

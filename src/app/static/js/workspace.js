@@ -978,14 +978,89 @@ function initRailToggle() {
   });
 }
 
+/**
+ * 위 바에 «지금 보는 문헌·권·쪽»을 적는다.
+ *
+ * 왜 필요한가: 모드 탭이 오른쪽 세로 줄로 가면서 위 바가 비었고, 어느 문헌을 보고 있는지는
+ * 사이드바의 강조 표시로만 알 수 있었다. 사이드바를 접으면 그마저 사라진다.
+ */
+function updateModeBarContext() {
+  const el = document.getElementById("mode-bar-context");
+  if (!el) return;
+  const v = typeof viewerState !== "undefined" ? viewerState : null;
+  if (!v || !v.docId) {
+    el.textContent = "";
+    return;
+  }
+  const title = (v.documentInfo && (v.documentInfo.title || v.documentInfo.doc_id)) || v.docId;
+  const part = v.partId ? ` · ${v.partId}` : "";
+  const page = v.pageNum ? ` · ${v.pageNum}쪽` : "";
+  el.innerHTML = "";
+  const b = document.createElement("b");
+  b.textContent = title; // 문헌 제목은 사용자 입력이다 — innerHTML로 넣지 않는다(D-069)
+  el.appendChild(b);
+  el.appendChild(document.createTextNode(part + page));
+}
+
+const RIGHT_PANEL_KEY = "ctb.rightPanelCollapsed";
+
+/**
+ * 오른쪽 패널을 접거나 편다.
+ *
+ * 왜 클래스 하나로 하는가: 오른쪽 패널은 열 개(모드마다 하나)이고 어느 것이 보이는지는
+ * _switchMode가 style.display로 정한다. 여기서 각각을 건드리면 두 곳이 같은 것을 다투게 된다.
+ * .editor-area에 클래스를 붙이고 CSS가 !important로 덮으면, 펼 때 원래 상태가 그대로 돌아온다.
+ */
+function _setRightPanelCollapsed(collapsed) {
+  const area = document.querySelector(".editor-area");
+  if (!area) return;
+  area.classList.toggle("right-collapsed", !!collapsed);
+  try {
+    localStorage.setItem(RIGHT_PANEL_KEY, collapsed ? "1" : "0");
+  } catch (e) {
+    /* 저장 못 해도 이번 판은 동작한다 */
+  }
+  const tab = document.querySelector(".mode-rail .mode-tab.active");
+  if (tab) {
+    tab.title = collapsed
+      ? "다시 누르면 오른쪽 패널을 폅니다"
+      : "다시 누르면 오른쪽 패널을 접습니다";
+  }
+  // 세로맞춤이면 PDF가 새 너비에 맞게 다시 그려져야 한다 (사이드바 접기와 같다)
+  if (typeof _autoFit === "function") setTimeout(() => _autoFit(), 50);
+}
+
+function _toggleRightPanel() {
+  const area = document.querySelector(".editor-area");
+  _setRightPanelCollapsed(!(area && area.classList.contains("right-collapsed")));
+}
+
+function initRightPanelCollapse() {
+  let collapsed = false;
+  try {
+    collapsed = localStorage.getItem(RIGHT_PANEL_KEY) === "1";
+  } catch (e) {
+    collapsed = false;
+  }
+  _setRightPanelCollapsed(collapsed);
+}
+
 function initModeBar() {
   initRailToggle();
+
+  initRightPanelCollapse();
 
   const modeTabs = document.querySelectorAll(".mode-tab");
   modeTabs.forEach((tab) => {
     tab.addEventListener("click", () => {
       const newMode = tab.dataset.mode;
-      if (newMode === currentMode) return;
+      // 활성 탭을 다시 누르면 오른쪽 패널을 접는다 — 왼쪽 아이콘 줄과 같은 규칙이다.
+      if (newMode === currentMode) {
+        _toggleRightPanel();
+        return;
+      }
+      // 다른 탭으로 옮기면 접혀 있던 것을 편다 (안 그러면 눌러도 아무 일도 안 일어나 보인다)
+      _setRightPanelCollapsed(false);
 
       // 모드 탭 하이라이트 전환
       modeTabs.forEach((t) => {

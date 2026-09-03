@@ -419,6 +419,7 @@ function _selectPage(docId, partId, pageNum, docInfo, pageNode) {
   viewerState.partId = partId;
   viewerState.pageNum = pageNum;
   viewerState.documentInfo = docInfo;
+  if (typeof updateModeBarContext === "function") updateModeBarContext();
 
   // 문헌이 바뀌면 그 문헌의 작업 프로필(고서/논문)을 따라간다.
   // 한 서고에 고서와 논문이 섞여 있으므로 문헌마다 기억해야 쓸모가 있다.
