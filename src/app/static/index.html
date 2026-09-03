@@ -1855,14 +1855,6 @@
               >
                 경계 제안
               </button>
-              <span class="comp-toolbar-sep"></span>
-              <label class="comp-range-field" title="단위 목록에 보일 쪽 범위">쪽
-                <input type="number" id="comp-page-start" min="1" step="1" />
-                <span>~</span>
-                <input type="number" id="comp-page-end" min="1" step="1" />
-              </label>
-              <button id="comp-page-range-apply" class="text-btn text-btn-sm" title="쪽 범위 적용">적용</button>
-              <span id="comp-page-indicator" class="comp-range-now" title="지금 보는 쪽">—</span>
               <div class="text-toolbar-spacer"></div>
               <span id="comp-block-count" class="text-save-status text-btn-sm"></span>
             </div>
@@ -1934,6 +1926,14 @@
               <details id="comp-manual" class="comp-manual">
                 <summary>단위 손보기 <small>— 자동 편성 · 쪼개기 · 리셋</small></summary>
                 <div class="comp-manual-tools">
+                  <label class="comp-range-field" title="아래 목록에 보일 쪽 범위 — 이 목록에만 걸립니다">쪽
+                    <input type="number" id="comp-page-start" min="1" step="1" />
+                    <span>~</span>
+                    <input type="number" id="comp-page-end" min="1" step="1" />
+                  </label>
+                  <button id="comp-page-range-apply" class="text-btn text-btn-sm" title="쪽 범위 적용">적용</button>
+                  <span id="comp-page-indicator" class="comp-range-now" title="지금 보는 쪽">—</span>
+                  <span class="comp-toolbar-sep"></span>
                   <button
                     id="comp-auto-btn"
                     class="text-btn text-btn-sm"

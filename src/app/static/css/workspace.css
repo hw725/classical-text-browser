@@ -7738,7 +7738,7 @@ input.prop-level { width: 3.2em; }
 .comp-manual[open] > summary::before { content: "▾ "; }
 .comp-manual > summary::-webkit-details-marker { display: none; }
 .comp-manual > summary small { font-weight: 400; }
-.comp-manual-tools { display: flex; gap: 6px; padding: 6px 0; flex-wrap: wrap; }
+.comp-manual-tools { display: flex; align-items: center; gap: 6px; padding: 6px 0; flex-wrap: wrap; }
 
 /* 제안 행: 신뢰도·역할·깊이·억제를 한 줄로 (세로로 쌓으면 행마다 60px을 먹었다) */
 .comp-propose-row { align-items: center; }
@@ -7826,3 +7826,16 @@ select.prop-level { max-width: 4.6em; }
 /* 오른쪽 패널 접기 — 활성 탭을 다시 누르면 */
 .editor-area.right-collapsed > .editor-panel.editor-right { display: none !important; }
 .editor-area.right-collapsed > .resize-editor { display: none; }
+/* 경계 넣기 — 찍는 것이 기본, 숫자는 접어 둔다 */
+.contents-insert-manual { flex-basis: 100%; }
+.contents-insert-manual > summary {
+  cursor: pointer;
+  font-size: 10px;
+  color: var(--text-muted);
+  list-style: none;
+  padding: 2px 0;
+}
+.contents-insert-manual > summary::-webkit-details-marker { display: none; }
+.contents-insert-manual > summary::before { content: "▸ "; }
+.contents-insert-manual[open] > summary::before { content: "▾ "; }
+.contents-insert-btn[disabled] { opacity: 0.4; cursor: default; }

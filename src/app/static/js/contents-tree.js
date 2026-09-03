@@ -428,34 +428,37 @@ function _drawAnchorCanvas() {
  * 쪽은 지금 보는 쪽이 기본값이다. 행·글자는 확정본(교정 탭) 기준 0부터.
  */
 function _renderInsertForm() {
-  // 늘 두 줄을 차지하던 것을 <details>로 접었다 — 사이드바에서 「내용」 트리가 먼저 보여야 한다.
+  // 펼치면 곧바로 «찍기»가 켜진다 — 경계 자리는 숫자로 세는 것이 아니라 눈으로 찍는 것이다.
+  // 쪽·행·글자 칸은 「숫자로 적기」 안으로 넣었다: OCR 행 좌표가 없어 찍을 수 없는 쪽에서만 쓴다.
   const box = document.createElement("details");
   box.className = "contents-insert-box";
   box.open = !!contentsState.insertOpen;
-  box.addEventListener("toggle", () => {
-    contentsState.insertOpen = box.open;
-  });
   const sum = document.createElement("summary");
   sum.textContent = "＋ 경계 넣기";
-  sum.title = "아무 쪽·행·글자에 경계를 놓아 단위를 나눕니다. 「찍기」로 원본 이미지나 교정 텍스트에서 자리를 잡을 수 있습니다";
+  sum.title = "펼치면 «찍기»가 켜집니다. 원본 이미지나 교정 텍스트에서 자리를 누르세요";
   box.appendChild(sum);
+
   const form = document.createElement("div");
   form.className = "contents-insert-form";
   const page = Number(viewerState.pageNum) || 1;
   form.innerHTML =
+    `<select title="역할 — 묶음(卷·集·編) / 기사(번역·주석 단위) / 조각(기사 안 문단)" data-k="role">` +
+    `<option value="container">묶음</option><option value="article" selected>기사</option>` +
+    `<option value="fragment">조각</option></select>` +
+    `<input type="number" min="1" value="2" title="깊이(중첩 단계, 1부터)" class="contents-insert-num" data-k="level">단` +
+    `<input type="text" placeholder="제목(선택)" class="contents-insert-title" data-k="title">` +
+    `<button type="button" class="contents-shift-btn contents-insert-btn" disabled title="찍은 자리에서 단위를 나눕니다">넣기</button>` +
+    `<span class="contents-pick-hint"></span>` +
+    `<details class="contents-insert-manual"><summary>숫자로 적기</summary>` +
     `<input type="number" min="1" value="${page}" title="쪽" class="contents-insert-num" data-k="page">쪽` +
     `<input type="number" min="0" value="0" title="행 (0부터)" class="contents-insert-num" data-k="line">행` +
     `<input type="number" min="0" value="0" title="글자 (0 = 행 첫머리)" class="contents-insert-num" data-k="offset">자` +
-    `<input type="number" min="1" value="2" title="깊이(중첩 단계, 1부터)" class="contents-insert-num" data-k="level">단` +
-    `<select title="역할" data-k="role"><option value="container">묶음</option><option value="article" selected>기사</option><option value="fragment">조각</option></select>` +
-    `<input type="text" placeholder="제목(선택)" class="contents-insert-title" data-k="title">` +
-    `<button type="button" class="contents-shift-btn contents-pick-btn" title="원본 이미지에서 자리를 찍어 쪽·행·글자를 채웁니다 (B-002)">찍기</button>` +
-    `<button type="button" class="contents-shift-btn contents-insert-btn" title="이 자리에서 단위를 나눈다">＋</button>` +
-    `<span class="contents-pick-hint"></span>`;
+    `</details>`;
   box.appendChild(form);
-  form.querySelector(".contents-pick-btn").addEventListener("click", (ev) => {
-    ev.stopPropagation();
-    _togglePickMode(form);
+
+  // 숫자를 손으로 고쳐도 넣을 수 있어야 한다
+  form.querySelectorAll('[data-k="page"], [data-k="line"], [data-k="offset"]').forEach((el) => {
+    el.addEventListener("input", () => _markPicked(form, true));
   });
   form.querySelector(".contents-insert-btn").addEventListener("click", async () => {
     const v = (k) => form.querySelector(`[data-k="${k}"]`).value;
@@ -466,24 +469,36 @@ function _renderInsertForm() {
       title: v("title").trim() || null,
     });
   });
+  // 펼치면 찍기 켜고, 접으면 끈다
+  box.addEventListener("toggle", () => {
+    contentsState.insertOpen = box.open;
+    _setPickMode(form, box.open);
+  });
+  if (box.open) setTimeout(() => _setPickMode(form, true), 0);
   return box;
 }
 
+/** 자리를 찍었는가에 따라 「넣기」를 켜고 끈다. 안 찍고 누르면 엉뚱한 자리에 들어간다. */
+function _markPicked(form, picked) {
+  const btn = form.querySelector(".contents-insert-btn");
+  if (btn) btn.disabled = !picked;
+}
+
 /**
- * «찍기» 모드를 켜고 끈다 (B-002).
+ * «찍기» 모드를 켜고 끈다 (B-002·D-094).
  *
- * 왜 이렇게 하는가: 경계 넣기가 쪽·행·글자를 숫자로 묻는데, 고서는 이미지로 읽는다.
+ * 왜 찍는 것이 기본인가: 고서는 이미지로 읽는다. 확정본의 몇 번째 행인지 세는 것은
+ * 도구가 할 일을 사람에게 미루는 것이다. 그래서 「경계 넣기」를 펼치면 곧바로 켜진다.
  * 시작 행 점선을 그리는 캔버스(anchor-overlay)가 이미 PDF 위에 꼭 맞게 겹쳐 있으므로,
- * 그 캔버스에 잠깐 마우스를 받게 하고 누른 자리를 서버에 물어 폼을 채운다.
+ * 그 캔버스에 마우스를 받게 하고 누른 자리를 서버에 물어 폼을 채운다.
  * 바로 넣지 않는 이유: 글자 번호는 «행 길이 × 비율»의 추정이라 협주가 섞인 행에서
- * 한두 자 어긋난다. 찍은 자리의 글자를 보여 주고 ＋는 사람이 누른다.
+ * 한두 자 어긋난다. 찍은 자리의 글자를 보여 주고 「넣기」는 사람이 누른다.
  */
-function _togglePickMode(form) {
-  const on = !contentsState.picking;
+function _setPickMode(form, on) {
+  on = !!on;
   contentsState.picking = on;
   contentsState.pickForm = on ? form : null;
-  const btn = form.querySelector(".contents-pick-btn");
-  if (btn) btn.classList.toggle("is-on", on);
+  if (!on) _markPicked(form, false);
   const hint = form.querySelector(".contents-pick-hint");
   if (hint) hint.textContent = on ? "원본 이미지나 교정 텍스트에서 자리를 누르세요" : "";
   const c = _ensureAnchorCanvas();
@@ -537,6 +552,7 @@ function pickBoundaryFromCorrectionChar(globalIdx) {
   }
   contentsState.anchorHighlight = null; // 이미지 점선은 이 경로에서 그리지 않는다
   _drawAnchorCanvas();
+  _markPicked(form, true);
   return true;
 }
 
@@ -578,13 +594,14 @@ async function _onPickClick(ev) {
       page: Number(data.page),
     };
     _drawAnchorCanvas();
+    _markPicked(form, true);
   } catch (e) {
     if (hint) hint.textContent = `찍기 실패: ${e.message}`;
   }
 }
 
 async function _insertBoundary(spec) {
-  if (contentsState.picking && contentsState.pickForm) _togglePickMode(contentsState.pickForm);
+  if (contentsState.picking && contentsState.pickForm) _setPickMode(contentsState.pickForm, false);
   if (!contentsState.interpId || !viewerState.docId || !viewerState.partId) {
     showToast("해석 저장소·문헌·권이 정해져야 경계를 넣을 수 있습니다.", "warning");
     return;
