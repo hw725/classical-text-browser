@@ -83,6 +83,13 @@ function _bindCompEvents() {
   if (splitBtn) splitBtn.addEventListener("click", _executeSplit);
   if (splitExecBtn) splitExecBtn.addEventListener("click", _executeSplit);
   if (splitCancelBtn) splitCancelBtn.addEventListener("click", _cancelSplit);
+  const splitClose = document.getElementById("comp-split-close");
+  if (splitClose) splitClose.addEventListener("click", _cancelSplit);
+  const splitOverlay = document.getElementById("comp-split-overlay");
+  if (splitOverlay)
+    splitOverlay.addEventListener("click", (ev) => {
+      if (ev.target === splitOverlay) _cancelSplit(); // 겉막을 누르면 닫는다
+    });
   if (resetBtn) resetBtn.addEventListener("click", _resetComposition);
   // 경계 제안 (D-088)
   const proposeBtn = document.getElementById("comp-propose-btn");
@@ -782,15 +789,18 @@ async function _autoCompose() {
 function _selectUnit(tb) {
   compState.selectedTbId = tb.id;
   compState.selectedTb = tb;
-  const manual = document.getElementById("comp-manual");
-  if (manual) manual.open = true; // 쪼개기 편집기가 접힌 섹션 안에 있다
-
-  // 쪼개기 편집기 표시
-  const editor = document.getElementById("comp-split-editor");
+  // 쪼개기는 가운데 모달로 뜬다 — 패널 맨 밑으로 내려가면 긴 본문을 다루기 어렵다(사용자 요청)
+  const editor = document.getElementById("comp-split-overlay");
   const textarea = document.getElementById("comp-split-textarea");
   const splitBtn = document.getElementById("comp-split-btn");
 
-  if (editor) editor.style.display = "block";
+  if (editor) editor.style.display = "flex";
+  const info = document.getElementById("comp-split-info");
+  if (info) {
+    const role = { container: "묶음", article: "기사", fragment: "조각" }[tb.metadata?.role || "article"];
+    const title = tb.metadata?.title || "";
+    info.textContent = `#${tb.sequence_index} ${role}${title ? " · " + title : ""} · ${(tb.original_text || "").length.toLocaleString()}자`;
+  }
   if (textarea) {
     textarea.value = tb.original_text || "";
     textarea.focus();
@@ -959,7 +969,7 @@ function _cancelSplit() {
   compState.selectedTbId = null;
   compState.selectedTb = null;
 
-  const editor = document.getElementById("comp-split-editor");
+  const editor = document.getElementById("comp-split-overlay");
   const textarea = document.getElementById("comp-split-textarea");
   const splitBtn = document.getElementById("comp-split-btn");
   const preview = document.getElementById("comp-split-preview");
@@ -988,11 +998,11 @@ function _updateSplitPreview() {
   const nonEmpty = pieces.filter((p) => p.trim().length > 0);
 
   if (nonEmpty.length <= 1) {
-    preview.textContent =
-      "구분선(===)을 넣으면 여러 단위으로 쪼갤 수 있습니다.";
+    preview.textContent = "구분선(===)을 넣으면 여러 문단으로 나뉩니다.";
     preview.style.color = "var(--text-muted)";
   } else {
-    preview.textContent = `→ ${nonEmpty.length}개의 단위로 나뉩니다 (경계 ${nonEmpty.length - 1}개가 들어갑니다).`;
+    // 첫 조각은 원래 기사의 자리에 남는다 — 새로 서는 경계는 둘째 조각부터다
+    preview.textContent = `→ 이 기사 안이 문단 ${nonEmpty.length}개로 나뉩니다 (조각 경계 ${nonEmpty.length - 1}개가 들어갑니다).`;
     preview.style.color = "var(--accent-primary, #3b82f6)";
   }
 }

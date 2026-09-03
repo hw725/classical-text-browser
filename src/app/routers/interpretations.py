@@ -194,7 +194,11 @@ class SegmentationApplyRequest(BaseModel):
 
 
 class SplitUnitRequest(BaseModel):
-    """단위 쪼개기 요청 본문."""
+    """단위 쪼개기 요청 본문.
+
+    쪼개기는 언제나 «기사 **안**을 문단으로 나누는» 일이다 — 별도 기사를 만들지 않는다
+    (사용자 명시 2026-09-03). 기사 단위는 경계 제안·«경계 넣기»가 정한다.
+    """
 
     original_unit_id: str
     part_id: str
@@ -1218,9 +1222,7 @@ async def api_segmentation_auto(interp_id: str, body: SegmentationAutoRequest):
         for p in result["proposals"]
         if p["accepted"]
         and (
-            not toc_only
-            or p["kind"] == "volume"
-            or any(r.startswith("toc:") for r in p["reasons"])
+            not toc_only or p["kind"] == "volume" or any(r.startswith("toc:") for r in p["reasons"])
         )
     ]
     # 구간은 «다음 선택 경계 앞까지»가 아니라 경계 목록이 알아서 정하므로 시작만 넘기면 된다
@@ -1796,9 +1798,10 @@ async def api_split_unit(interp_id: str, body: SplitUnitRequest, bg: BackgroundT
             status_code=404,
         )
 
-    # D-092: 쪼개기 = 원본 단위 안에 경계를 더 넣는 것. 원본 id는 첫 조각으로 그대로 남고,
-    # 둘째 조각부터 새 경계(새 id)가 선다. 본문은 저장하지 않으므로 «조각 텍스트»는 자리를 찾는
-    # 열쇠일 뿐이다 — 조각의 첫 글자들이 원본 본문에서 나오는 자리에 경계를 놓는다.
+    # D-092: 쪼개기 = 원본 단위 **안에** 경계를 더 넣는 것. 원본 id는 첫 조각으로 그대로 남고,
+    # 둘째 조각부터 새 경계(새 id)가 선다. 새 경계는 원본보다 한 단 깊은 «조각»이라 원본 기사가
+    # 그것들을 품는다 — 기사 자체는 쪼개지지 않는다. 본문은 저장하지 않으므로 «조각 텍스트»는
+    # 자리를 찾는 열쇠일 뿐이다 — 조각의 첫 글자들이 원본 본문에서 나오는 자리에 경계를 놓는다.
     from core.boundaries import (
         find_boundary,
         insert_boundary,
@@ -1860,9 +1863,12 @@ async def api_split_unit(interp_id: str, body: SplitUnitRequest, bg: BackgroundT
             errors.append(f"조각 {i}: 자리를 쪽으로 옮기지 못했습니다")
             continue
         page, abs_off = where
+        # 조각은 원본보다 «한 단 안쪽»이다. 같은 층위로 넣으면 원본과 나란한 별도 기사가 되어
+        # 기사가 쪼개져 버린다 — v1.3.0까지 그렇게 동작했다(사용자 지적).
         item = new_boundary(
             start=position_from_char(page_texts, page, abs_off),
-            level=int(orig_b.get("level", 2)),
+            level=int(orig_b.get("level", 2)) + 1,
+            role="fragment",
             title=piece[:20],
             kind="manual",
             work_id=orig_b.get("work_id"),

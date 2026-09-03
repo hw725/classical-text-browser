@@ -1349,6 +1349,15 @@ def test_boundary_insert_delete_split_via_api(client, tmp_path):
     lst = client.get(url).json()["boundaries"]
     assert [b["id"] for b in lst] == [a_id, b_id, c_id, d_id]
     assert lst[3]["start"] == {"page": 1, "line": 1, "offset": k9}
+    # 쪼개기는 «기사 안 조각»만 만든다 — 원본보다 한 단 깊고 역할은 조각이다.
+    # 같은 층위로 넣으면 원본과 나란한 별도 기사가 되어 기사가 쪼개진다(v1.3.0까지 그랬다).
+    # 별도 기사는 사이드바 「경계 넣기」에서만 만든다 — 한 곳에서만 되게 해야 헷갈리지 않는다.
+    orig_level = next(b["level"] for b in lst if b["id"] == c_id)
+    assert lst[3]["level"] == orig_level + 1
+    assert lst[3]["role"] == "fragment"
+    # 원본 기사는 쪼개지지 않고 조각을 품는다 — 본문이 그대로다
+    tb_c = client.get(f"/api/interpretations/i1/entities/unit/{c_id}").json()
+    assert tb_c["original_text"] == DAM_L1 + "\n" + DAM_L2
     # 6) 지우기 = 앞 단위에 합치기(앞 id 유지)
     r = client.delete(f"{base}/{d_id}")
     assert r.status_code == 200, r.text

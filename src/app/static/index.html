@@ -1917,7 +1917,7 @@
                여기 있는 것은 «기사 하나 안에서 문단 나누기»와 그 언저리다. 기사 단위 자체는
                경계만 정하면 저절로 정해지므로(D-092), 이 도구는 주 흐름이 아니다. -->
             <details id="comp-manual" class="comp-manual">
-              <summary>단위 손보기 <small>— 기사 하나를 골라 문단으로 나눕니다</small></summary>
+              <summary>단위 손보기 <small>— 기사 하나를 골라 그 «안»을 문단으로 나눕니다</small></summary>
               <div class="comp-manual-body">
               <div class="comp-manual-tools">
                 <button
@@ -1929,7 +1929,7 @@
                   id="comp-split-btn"
                   class="text-btn text-btn-sm"
                   disabled
-                  title="고른 단위를 구분선(===) 자리에서 나눕니다 — 그 자리에 경계가 들어갑니다"
+                  title="고른 기사 «안»을 구분선(===) 자리에서 문단(조각)으로 나눕니다. 새 기사는 만들지 않습니다 — 그것은 사이드바 「경계 넣기」의 몫입니다"
                 >쪼개기</button>
                 <button
                   id="comp-reset-btn"
@@ -1966,89 +1966,6 @@
                   해석 저장소를 선택하세요
                 </div>
               </div>
-            </div>
-            <div
-              id="comp-split-editor"
-              style="
-                display: none;
-                border-top: 1px solid var(--border);
-                padding: 8px;
-              "
-            >
-              <div
-                style="
-                  display: flex;
-                  align-items: center;
-                  gap: 6px;
-                  margin-bottom: 6px;
-                "
-              >
-                <span
-                  style="
-                    font-size: 11px;
-                    font-weight: 600;
-                    color: var(--text-muted);
-                  "
-                  >쪼개기 편집</span
-                >
-                <span
-                  id="comp-split-info"
-                  style="font-size: 10px; color: var(--text-muted)"
-                ></span>
-                <div style="flex: 1"></div>
-                <button
-                  id="comp-split-cancel-btn"
-                  class="text-btn"
-                  style="font-size: 11px"
-                >
-                  취소
-                </button>
-                <button
-                  id="comp-split-exec-btn"
-                  class="text-btn"
-                  style="
-                    font-size: 11px;
-                    background: var(--accent-primary, #3b82f6);
-                    color: #fff;
-                  "
-                >
-                  쪼개기 실행
-                </button>
-              </div>
-              <div
-                style="
-                  font-size: 10px;
-                  color: var(--text-muted);
-                  margin-bottom: 4px;
-                "
-              >
-                쪼개고 싶은 위치에 빈 줄을 넣고 <code>===</code>를 입력하세요.
-              </div>
-              <textarea
-                id="comp-split-textarea"
-                style="
-                  width: 100%;
-                  min-height: 120px;
-                  resize: vertical;
-                  font-size: 12px;
-                  line-height: 1.6;
-                  font-family: var(--font-mono);
-                  border: 1px solid var(--border);
-                  border-radius: 4px;
-                  padding: 6px;
-                  background: var(--bg-secondary);
-                  color: var(--text-primary);
-                "
-                spellcheck="false"
-              ></textarea>
-              <div
-                id="comp-split-preview"
-                style="
-                  font-size: 10px;
-                  color: var(--text-muted);
-                  margin-top: 4px;
-                "
-              ></div>
             </div>
               </div>
             </details>
@@ -3868,6 +3785,38 @@
       </div>
 
       <!-- Phase 6: 교정 다이얼로그 오버레이 -->
+      <!-- 쪼개기 모달 — 기사 «안»을 문단으로 나눈다. 별도 기사를 만들지 않는다:
+           그것은 사이드바 「경계 넣기」의 몫이다(한 곳에서만 되게 해야 헷갈리지 않는다). -->
+      <div
+        class="corr-dialog-overlay"
+        id="comp-split-overlay"
+        style="display: none"
+      >
+        <div class="corr-dialog comp-split-dialog">
+          <div class="bib-dialog-header">
+            <span class="bib-dialog-title">문단으로 나누기</span>
+            <span id="comp-split-info" class="comp-split-info"></span>
+            <div style="flex: 1"></div>
+            <button class="bib-dialog-close" id="comp-split-close" title="닫기">&times;</button>
+          </div>
+          <div class="comp-split-note">
+            이 <b>기사 안</b>을 문단(조각)으로 나눕니다 — 새 기사는 만들지 않습니다.
+            나눈 조각은 이 기사 아래에 들어갑니다.
+            <br />별도의 기사로 나누려면 사이드바 「내용」의 «＋ 경계 넣기»를 쓰세요.
+          </div>
+          <div class="comp-split-note">
+            나눌 자리에 빈 줄을 넣고 <code>===</code>를 입력하세요.
+          </div>
+          <textarea id="comp-split-textarea" class="comp-split-textarea" spellcheck="false"></textarea>
+          <div id="comp-split-preview" class="comp-split-preview"></div>
+          <div class="corr-dialog-actions">
+            <div style="flex: 1"></div>
+            <button id="comp-split-cancel-btn" class="text-btn">취소</button>
+            <button id="comp-split-exec-btn" class="text-btn text-btn-primary">나누기</button>
+          </div>
+        </div>
+      </div>
+
       <div
         class="corr-dialog-overlay"
         id="corr-dialog-overlay"

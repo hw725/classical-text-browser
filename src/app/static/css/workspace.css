@@ -7897,3 +7897,23 @@ select.prop-level { max-width: 4.6em; }
 .contents-insert-manual > summary::before { content: "▸ "; }
 .contents-insert-manual[open] > summary::before { content: "▾ "; }
 .contents-insert-btn[disabled] { opacity: 0.4; cursor: default; }
+
+/* 쪼개기 모달 — 본문이 길 수 있어 넓고 높게 */
+.comp-split-dialog { width: 720px; max-height: 82vh; padding: 12px; gap: 8px; }
+.comp-split-info { font-size: 10px; color: var(--text-muted); margin-left: 6px; }
+.comp-split-note { font-size: 11px; color: var(--text-muted); line-height: 1.5; }
+.comp-split-note code { font-family: var(--font-mono); }
+.comp-split-textarea {
+  flex: 1;
+  min-height: 220px;
+  resize: vertical;
+  font-size: 12px;
+  line-height: 1.7;
+  font-family: var(--font-mono);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+.comp-split-preview { font-size: 10px; color: var(--text-muted); }
