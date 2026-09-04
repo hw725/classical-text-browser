@@ -270,12 +270,20 @@ async function _loadInterpretationList() {
       return;
     }
 
-    container.innerHTML = list
+    // 지금 문헌의 것을 위로 올린다 — 목록에 남의 문헌 것이 섞여 있으면 어느 것을 고를지 헷갈린다
+    const _docId = typeof viewerState !== "undefined" ? viewerState.docId : null;
+    const ordered = [...list].sort((a, b) => {
+      const am = a.source_document_id === _docId ? 0 : 1;
+      const bm = b.source_document_id === _docId ? 0 : 1;
+      return am - bm;
+    });
+    container.innerHTML = ordered
       .map((item) => {
         const typeClass = `type-${item.interpreter?.type || "human"}`;
         const typeLabel = item.interpreter?.type || "human";
+        const other = _docId && item.source_document_id !== _docId ? " is-other-doc" : "";
         return `
-        <div class="interp-list-item" data-interp-id="${item.interpretation_id}">
+        <div class="interp-list-item${other}" data-interp-id="${item.interpretation_id}" data-doc-id="${item.source_document_id}">
           <span class="interp-type-badge ${typeClass}">${typeLabel}</span>
           <span class="interp-list-title">${item.title || item.interpretation_id}</span>
           <span class="interp-list-source">${item.source_document_id}</span>
@@ -285,11 +293,14 @@ async function _loadInterpretationList() {
       })
       .join("");
 
+    _autoLinkInterpretation(list);
+
     // 클릭 이벤트
     container.querySelectorAll(".interp-list-item").forEach((el) => {
       el.addEventListener("click", (e) => {
         // 삭제 버튼 클릭은 무시 (삭제 버튼에 자체 핸들러가 있음)
         if (e.target.classList.contains("interp-delete-btn")) return;
+        _rememberInterpFor(el.dataset.docId, el.dataset.interpId);
         _selectInterpretation(el.dataset.interpId);
         // 하이라이트
         container
@@ -357,6 +368,64 @@ async function _trashInterpretation(interpId, interpTitle) {
 /* ──────────────────────────
    해석 저장소 선택
    ────────────────────────── */
+
+// 문헌마다 «마지막에 쓴 저장소»를 기억한다 — 한 문헌에 여럿일 때만 쓸모가 있다
+const INTERP_PICK_KEY = "ctb.interpFor";
+
+function _readInterpPicks() {
+  try {
+    return JSON.parse(localStorage.getItem(INTERP_PICK_KEY) || "{}");
+  } catch (e) {
+    return {};
+  }
+}
+
+function _rememberInterpFor(docId, interpId) {
+  if (!docId || !interpId) return;
+  try {
+    const m = _readInterpPicks();
+    m[docId] = interpId;
+    localStorage.setItem(INTERP_PICK_KEY, JSON.stringify(m));
+  } catch (e) {
+    /* 못 적어도 이번 판은 동작한다 */
+  }
+}
+
+/**
+ * 문헌을 고르면 그 문헌의 저장소를 저절로 잇는다.
+ *
+ * 왜: 편성까지 가려면 «문헌 고르기 → 저장소 고르기» 두 번을 눌러야 했고, 목록에는 남의 문헌
+ * 저장소까지 섞여 있었다(사용자 지적 2026-09-04). 대개 문헌마다 저장소는 하나다 —
+ * 여럿으로 갈라지는 경우에만 고르게 하면 된다.
+ *
+ * 규칙: ① 이미 이 문헌의 것을 고른 상태면 그대로 ② 하나면 그것 ③ 여럿이면 마지막에 쓴 것,
+ * 없으면 첫 번째 ④ 하나도 없으면 고르지 않는다(「새로 만들기」로 안내).
+ */
+function _autoLinkInterpretation(list) {
+  const docId = typeof viewerState !== "undefined" ? viewerState.docId : null;
+  if (!docId) return;
+  const mine = (list || []).filter((x) => x.source_document_id === docId);
+  const highlight = (id) => {
+    document.querySelectorAll("#interp-list .interp-list-item").forEach((el) => {
+      el.classList.toggle("active", el.dataset.interpId === id);
+    });
+  };
+  if (interpState.interpId && mine.some((x) => x.interpretation_id === interpState.interpId)) {
+    highlight(interpState.interpId);
+    return;
+  }
+  if (!mine.length) {
+    interpState.interpId = null;
+    return;
+  }
+  const remembered = _readInterpPicks()[docId];
+  const pick =
+    remembered && mine.some((x) => x.interpretation_id === remembered)
+      ? remembered
+      : mine[0].interpretation_id;
+  highlight(pick);
+  _selectInterpretation(pick);
+}
 
 async function _selectInterpretation(interpId) {
   interpState.interpId = interpId;

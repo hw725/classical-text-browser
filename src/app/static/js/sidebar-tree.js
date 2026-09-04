@@ -426,6 +426,11 @@ function _selectPage(docId, partId, pageNum, docInfo, pageNode) {
   if (previousDocId !== docId && typeof applyProfileForDocument === "function") {
     applyProfileForDocument(docId);
   }
+  // 문헌이 바뀌면 저장소 목록을 다시 읽어 그 문헌 것으로 잇는다.
+  // 목록을 다시 읽지 않으면 앞 문헌의 저장소가 그대로 붙어 있었다(실측 2026-09-04).
+  if (previousDocId !== docId && typeof _loadInterpretationList === "function") {
+    _loadInterpretationList();
+  }
   // 추출 패널은 열린 권(part)을 대상으로 진단하므로 권이 바뀌어도 갱신한다.
   if (typeof refreshExtractPanel === "function") {
     refreshExtractPanel(false);

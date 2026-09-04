@@ -7963,3 +7963,7 @@ select.prop-level { max-width: 4.6em; }
 .comp-cur-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .comp-cur-meta { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
 .comp-cur-stale { color: var(--accent-warning, #f59e0b); }
+
+/* 다른 문헌의 저장소 — 목록에 남겨 두되 지금 문헌 것과 구별한다 */
+.interp-list-item.is-other-doc { opacity: 0.5; }
+.interp-list-item.is-other-doc:hover { opacity: 1; }
