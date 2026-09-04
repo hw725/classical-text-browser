@@ -172,6 +172,10 @@ class TestFilesAndMigration:
         (doc / "L4_text" / "pages" / "v1_page_001.txt").write_text(PAGE1, encoding="utf-8")
         interp = lib / "interpretations" / "i"
         (interp / "core_entities" / "blocks").mkdir(parents=True)
+        # D-097: 경계는 문헌에 산다. 어느 문헌인지는 dependency.json이 말한다.
+        (interp / "dependency.json").write_text(
+            json.dumps({"source": {"document_id": "d"}}), encoding="utf-8"
+        )
         return lib, interp
 
     def test_save_load_validates_and_sorts(self, tmp_path):
@@ -286,6 +290,9 @@ class TestEntityView:
         (doc / "L4_text" / "pages" / "v1_page_001.txt").write_text(PAGE1, encoding="utf-8")
         interp = lib / "interpretations" / "i"
         (interp / "core_entities" / "works").mkdir(parents=True)
+        (interp / "dependency.json").write_text(
+            json.dumps({"source": {"document_id": "d"}}), encoding="utf-8"
+        )
         created = E.create_entity(
             interp,
             "unit",
@@ -307,7 +314,8 @@ class TestEntityView:
                 "metadata": {"part_id": "v1", "title": "九日", "anchor": {"level": 2}},
             },
         )
-        assert created["file_path"] == "core_entities/boundaries/d__v1.json"
+        # D-097: 경계는 원본 저장소에 산다 — 자리는 서고 루트 기준으로 적힌다
+        assert created["file_path"] == "documents/d/boundaries/v1.json"
         assert not (interp / "core_entities" / "blocks").exists() or not list(
             (interp / "core_entities" / "blocks").glob("*.json")
         )
@@ -379,3 +387,115 @@ def test_insert_at_same_place_and_level_is_idempotent():
     # 층위가 다르면 같은 자리라도 다른 경계다(기사 첫머리에 서는 조각)
     frag = B.new_boundary({"page": 1, "line": 0, "offset": 0}, level=3, title="frag")
     assert B.insert_boundary(data, frag) is frag and len(data["boundaries"]) == 2
+
+
+class TestBoundariesLiveInTheDocument:
+    """D-097 — 편성은 원본 저장소(문헌)의 것이다.
+
+    무엇을 고정하는가:
+      - 경계 파일 자리는 documents/{doc}/boundaries/{part}.json
+      - 해석 저장소 안에 남아 있던 옛 경계는 열 때 문헌으로 옮겨지고, 옛 폴더는 이름만 바뀐다
+      - 남의 문헌 파일은 옮기지 않는다(화면 버그로 섞여 든 것을 그 문헌의 편성으로 삼으면 안 된다)
+      - 한 문헌에 해석 저장소가 둘이면 편성을 공유한다
+    """
+
+    def _lib(self, tmp_path: Path, doc_ids=("d",)):
+        lib = tmp_path / "lib"
+        for doc_id in doc_ids:
+            doc = lib / "documents" / doc_id
+            (doc / "L4_text" / "pages").mkdir(parents=True)
+            (doc / "manifest.json").write_text(
+                json.dumps(
+                    {"document_id": doc_id, "parts": [{"part_id": "v1", "page_count": 1}]},
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            (doc / "L4_text" / "pages" / "v1_page_001.txt").write_text(PAGE1, encoding="utf-8")
+        return lib
+
+    def _interp(self, lib: Path, name: str, doc_id: str) -> Path:
+        interp = lib / "interpretations" / name
+        (interp / "core_entities").mkdir(parents=True)
+        (interp / "dependency.json").write_text(
+            json.dumps({"source": {"document_id": doc_id}}), encoding="utf-8"
+        )
+        return interp
+
+    def _old_file(self, interp: Path, doc_id: str, part_id: str, boundaries: list) -> Path:
+        """옛 자리(해석 저장소 안)에 경계 파일을 놓는다 — v1.3.0까지의 모습."""
+        d = interp / "core_entities" / "boundaries"
+        d.mkdir(parents=True, exist_ok=True)
+        f = d / f"{doc_id}__{part_id}.json"
+        f.write_text(
+            json.dumps(
+                {"document_id": doc_id, "part_id": part_id, "boundaries": boundaries},
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        return f
+
+    def test_save_goes_to_the_document_not_the_interpretation(self, tmp_path):
+        lib = self._lib(tmp_path)
+        interp = self._interp(lib, "i", "d")
+        b = B.new_boundary({"page": 1, "line": 0, "offset": 0}, title="a")
+        B.save_boundaries(interp, _data(b))
+        assert (lib / "documents" / "d" / "boundaries" / "v1.json").exists()
+        assert not (interp / "core_entities" / "boundaries").exists()
+
+    def test_old_files_move_into_the_document_and_the_folder_is_kept(self, tmp_path):
+        from src.core.entity import list_entities
+
+        lib = self._lib(tmp_path)
+        interp = self._interp(lib, "i", "d")
+        b = B.new_boundary({"page": 1, "line": 0, "offset": 0}, title="옛것")
+        self._old_file(interp, "d", "v1", [b])
+
+        assert B.needs_boundary_move(interp) is True
+        units = list_entities(interp, "unit")  # 열기만 해도 옮겨진다
+
+        assert [u["metadata"]["title"] for u in units] == ["옛것"]
+        assert (lib / "documents" / "d" / "boundaries" / "v1.json").exists()
+        # 옛 폴더는 지우지 않는다 — 이름만 바꿔 남긴다(D-092와 같은 방식)
+        assert not (interp / "core_entities" / "boundaries").exists()
+        assert (interp / "core_entities" / "boundaries_migrated_v2" / "d__v1.json").exists()
+        assert B.needs_boundary_move(interp) is False
+
+    def test_a_foreign_documents_file_is_not_moved(self, tmp_path):
+        """남의 문헌 경계는 옮기지 않는다 — 화면 버그로 섞여 들어간 것이기 때문이다."""
+        lib = self._lib(tmp_path, ("d", "d2"))
+        interp = self._interp(lib, "i", "d")
+        b = B.new_boundary({"page": 1, "line": 0, "offset": 0}, title="남의 것")
+        self._old_file(interp, "d2", "v1", [b])
+
+        result = B.move_boundaries_to_document(interp)
+
+        assert result["moved"] == []
+        assert len(result["skipped"]) == 1 and "d" in result["skipped"][0]
+        assert not (lib / "documents" / "d2" / "boundaries").exists()
+
+    def test_the_document_wins_when_both_have_a_file(self, tmp_path):
+        """문헌에 이미 편성이 있으면 덮어쓰지 않는다 — 먼저 옮겨진 것이 그 문헌의 편성이다."""
+        lib = self._lib(tmp_path)
+        first = self._interp(lib, "i1", "d")
+        second = self._interp(lib, "i2", "d")
+        B.save_boundaries(first, _data(B.new_boundary({"page": 1, "line": 0}, title="먼저")))
+        self._old_file(second, "d", "v1", [B.new_boundary({"page": 1, "line": 1}, title="나중")])
+
+        result = B.move_boundaries_to_document(second)
+
+        assert result["moved"] == [] and len(result["kept"]) == 1
+        data = B.load_boundaries(second, "d", "v1")
+        assert [b["title"] for b in data["boundaries"]] == ["먼저"]
+
+    def test_two_interpretations_share_one_composition(self, tmp_path):
+        """원본 하나에 해석 저장소 여럿이면 편성은 하나다 (사용자 확인 2026-09-04)."""
+        from src.core.entity import list_entities
+
+        lib = self._lib(tmp_path)
+        first = self._interp(lib, "i1", "d")
+        second = self._interp(lib, "i2", "d")
+        B.save_boundaries(first, _data(B.new_boundary({"page": 1, "line": 0}, title="한 기사")))
+
+        assert [u["metadata"]["title"] for u in list_entities(second, "unit")] == ["한 기사"]

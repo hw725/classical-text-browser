@@ -278,8 +278,8 @@ def test_propose_and_apply(client, tmp_path):
     assert manifest["segmentation_rules"]["title_words"] == ["談草", "口談"]
 
     r = client.post(
-        "/api/interpretations/i1/segmentation/propose",
-        json={"document_id": "d1", "part_id": part_id},
+        "/api/documents/d1/segmentation/propose",
+        json={"part_id": part_id},
     )
     assert r.status_code == 200, r.text
     data = r.json()
@@ -296,9 +296,8 @@ def test_propose_and_apply(client, tmp_path):
     assert client.get("/api/interpretations/i1/contents?document_id=d1").json()["total_blocks"] == 0
 
     r = client.post(
-        "/api/interpretations/i1/segmentation/apply",
+        "/api/documents/d1/segmentation/apply",
         json={
-            "document_id": "d1",
             "part_id": part_id,
             "work_id": work_id,
             "spans": [
@@ -335,8 +334,8 @@ def test_propose_without_l4_is_400(client, tmp_path):
 
     shutil.rmtree(Path(lib) / "documents" / "d1" / "L4_text" / "pages")
     r = client.post(
-        "/api/interpretations/i1/segmentation/propose",
-        json={"document_id": "d1", "part_id": part_id},
+        "/api/documents/d1/segmentation/propose",
+        json={"part_id": part_id},
     )
     assert r.status_code == 400 and "L4" in r.json()["error"]
 
@@ -499,15 +498,13 @@ def test_toc_api_and_propose_with_toc(client, tmp_path):
     (pages / f"{part_id}_page_002.txt").write_text("\n".join(BODY_P5), encoding="utf-8")
     (pages / f"{part_id}_page_003.txt").write_text("\n".join(BODY_P6), encoding="utf-8")
 
-    r = client.post(
-        "/api/interpretations/i1/segmentation/toc", json={"document_id": "d1", "part_id": part_id}
-    )
+    r = client.post("/api/documents/d1/segmentation/toc", json={"part_id": part_id})
     assert r.status_code == 200, r.text
     assert r.json()["toc_pages"] == [1] and r.json()["method"] == "rule"
     assert [e["title"] for e in r.json()["entries"]][:3] == ["卷之一", "詩", "感懷"]
 
     body = {"document_id": "d1", "part_id": part_id}
-    r = client.post("/api/interpretations/i1/segmentation/propose", json=body)
+    r = client.post("/api/documents/d1/segmentation/propose", json=body)
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["toc"]["pages"] == [1] and data["pages"] == [2, 3]  # 목차 쪽은 본문 후보에서 빠진다
@@ -527,12 +524,11 @@ def test_boundary_index_is_a_view_over_textblocks(client, tmp_path):
     rules = {"rules": {"title_words": ["談草", "口談"]}}
     client.put("/api/documents/d1/segmentation-rules", json=rules)
     body = {"document_id": "d1", "part_id": part_id}
-    data = client.post("/api/interpretations/i1/segmentation/propose", json=body).json()
+    data = client.post("/api/documents/d1/segmentation/propose", json=body).json()
     keep = ("title", "kind", "start", "end")
     r = client.post(
-        "/api/interpretations/i1/segmentation/apply",
+        "/api/documents/d1/segmentation/apply",
         json={
-            "document_id": "d1",
             "part_id": part_id,
             "work_id": work_id,
             "spans": [{k: v for k, v in s.items() if k in keep} for s in data["spans"]],
@@ -544,11 +540,13 @@ def test_boundary_index_is_a_view_over_textblocks(client, tmp_path):
 
     interp_dir = Path(lib) / "interpretations" / "i1"
     # D-092: 단위의 정본은 경계 목록 하나. 단위 파일(blocks/*.json)은 만들지 않는다.
-    assert (interp_dir / "core_entities" / "boundaries" / f"d1__{part_id}.json").exists()
+    # D-097: 그 목록은 원본 저장소(문헌)에 산다 — 해석 저장소는 참조만 한다.
+    assert (Path(lib) / "documents" / "d1" / "boundaries" / f"{part_id}.json").exists()
+    assert not (interp_dir / "core_entities" / "boundaries").exists()
     assert not list((interp_dir / "core_entities" / "blocks").glob("*.json"))
 
     # 목록 = 단위를 원본 위치 순서로, 행 앵커는 source_refs에서 계산
-    url = f"/api/interpretations/i1/boundaries?document_id=d1&part_id={part_id}"
+    url = f"/api/documents/d1/boundaries?part_id={part_id}"
     lst = client.get(url).json()
     assert lst["total"] == 4 and [b["order"] for b in lst["boundaries"]] == [0, 1, 2, 3]
     b1 = lst["boundaries"][1]
@@ -564,7 +562,7 @@ def test_boundary_index_is_a_view_over_textblocks(client, tmp_path):
     assert blk["anchor"]["kind"] == "談草" and blk["anchor"]["status"] == "approved"
 
     # 시작을 한 행 뒤로 — 앞 블록의 끝이 늘고 두 블록의 본문·출처가 다시 이어진다
-    r = client.put(f"/api/interpretations/i1/boundaries/{b1['id']}", json={"shift_start": 1})
+    r = client.put(f"/api/documents/d1/boundaries/{b1['id']}", json={"shift_start": 1})
     assert r.status_code == 200, r.text
     assert r.json()["boundary"]["start"] == {"page": 1, "line": 3, "offset": 0}
     lst = client.get(url).json()["boundaries"]
@@ -895,62 +893,34 @@ def _doc_with_two_lines(tmp_path, direction="vertical_rtl"):
     return doc, l0, l1
 
 
-def test_apply_refuses_a_foreign_document(client, tmp_path):
-    """해석 저장소는 자기 문헌의 경계만 받는다.
+def test_interp_cannot_write_a_foreign_documents_boundary(client, tmp_path):
+    """해석 저장소를 통해 남의 문헌에 경계를 만들 수 없다 (D-097).
 
     왜 시험하는가: 화면에서 문헌을 바꿔도 앞 문헌의 해석 저장소가 붙어 있던 버그와 겹쳐,
-    운양집 저장소에 천진담초 경계 42개가 들어갔다(실측 2026-09-04). 화면이 또 어긋나도
-    데이터가 갈리지 않으려면 서버가 막아야 한다 — dependency.json이 «어느 문헌의 해석인가»를
-    이미 알고 있는데 보지 않고 있었다.
+    운양집 저장소에 천진담초 경계 42개가 들어갔다(실측 2026-09-04). 편성 API는 이제 경로가
+    문헌이라 남의 문헌을 가리킬 방법 자체가 없지만, 해석 저장소를 통해 단위를 만드는 길
+    (entities/unit/compose)은 여전히 source_refs의 문헌을 믿는다 — 거기서 막는다.
     """
-    import fitz
-
     lib, part_id, work_id = _setup(client, tmp_path)
-    # 같은 서고에 두 번째 문헌을 둔다 — 실제로 문헌을 바꿔 가며 쓰는 상황이다
-    pdf2 = tmp_path / "t2.pdf"
-    d2 = fitz.open()
-    d2.new_page(width=400, height=600)
-    d2.save(str(pdf2))
-    with open(pdf2, "rb") as f:
-        r = client.post(
-            "/api/documents/create-from-files",
-            data={"doc_id": "d2", "title": "다른 문헌"},
-            files=[("files", ("t2.pdf", f.read(), "application/pdf"))],
-        )
-    assert r.status_code == 200, r.text
-    part2 = r.json()["parts"][0]["part_id"]
-
-    span = {
-        "title": "남의 문헌",
-        "kind": "manual",
-        "role": "article",
-        "start": {"page": 1, "line_index": 0, "char_offset": 0},
-        "end": {"page": 1, "line_index": 0, "char_end": None},
-    }
-    # i1은 d1의 해석 저장소다 — d2의 경계를 쓰려 하면 거절한다
     r = client.post(
-        "/api/interpretations/i1/segmentation/apply",
-        json={"document_id": "d2", "part_id": part2, "work_id": work_id, "spans": [span]},
-    )
-    assert r.status_code == 400
-    assert "d1" in r.json()["error"]  # 이 저장소의 문헌 이름을 알려 준다
-    # 자기 문헌은 그대로 된다
-    r = client.post(
-        "/api/interpretations/i1/segmentation/apply",
-        json={"document_id": "d1", "part_id": part_id, "work_id": work_id, "spans": [span]},
-    )
-    assert r.status_code == 200, r.text
-    # 경계 넣기도 같은 검사를 받는다
-    r = client.post(
-        "/api/interpretations/i1/boundaries",
+        "/api/interpretations/i1/entities/unit/compose",
         json={
-            "document_id": "d2",
-            "part_id": part2,
-            "start": {"page": 1, "line": 0, "offset": 0},
-            "title": "남의 문헌",
+            "work_id": work_id,
+            "sequence_index": 0,
+            "original_text": "남의 문헌",
+            "part_id": part_id,
+            "source_refs": [
+                {
+                    "document_id": "d2",
+                    "page": 1,
+                    "layout_block_id": None,
+                    "char_range": [0, 3],
+                }
+            ],
         },
     )
-    assert r.status_code == 400
+    assert r.status_code >= 400, r.text
+    assert "d1" in r.text  # 이 저장소의 문헌 이름을 알려 준다
 
 
 def test_role_estimated_marks_boundaries_without_a_role(client, tmp_path):
@@ -970,18 +940,18 @@ def test_role_estimated_marks_boundaries_without_a_role(client, tmp_path):
         "end": {"page": 1, "line_index": 0, "char_end": None},
     }
     r = client.post(
-        "/api/interpretations/i1/segmentation/apply",
+        "/api/documents/d1/segmentation/apply",
         json={"document_id": "d1", "part_id": part_id, "work_id": work_id, "spans": [span]},
     )
     assert r.status_code == 200, r.text
-    url = f"/api/interpretations/i1/boundaries?document_id=d1&part_id={part_id}"
+    url = f"/api/documents/d1/boundaries?part_id={part_id}"
     row = client.get(url).json()["boundaries"][0]
     assert row["role_estimated"] is False  # 적용은 역할을 적는다
 
     # 역할을 지운 옛 파일을 흉내 낸다
     import json as _json
 
-    f = _P(lib) / "interpretations" / "i1" / "core_entities" / "boundaries" / f"d1__{part_id}.json"
+    f = _P(lib) / "documents" / "d1" / "boundaries" / f"{part_id}.json"
     data = _json.loads(f.read_text(encoding="utf-8"))
     for b in data["boundaries"]:
         b.pop("role", None)
@@ -1309,7 +1279,7 @@ def test_char_boundary_apply_and_move_via_api(client, tmp_path):
     )
     client.put("/api/documents/d1/segmentation-rules", json={"rules": None})
     body = {"document_id": "d1", "part_id": part_id, "pages": [1]}
-    data = client.post("/api/interpretations/i1/segmentation/propose", json=body).json()
+    data = client.post("/api/documents/d1/segmentation/propose", json=body).json()
     k8 = DAM_L0.index("○八日")
     k9 = DAM_L1.index("○九日")
     assert [(p["line_index"], p["char_offset"]) for p in data["proposals"]] == [
@@ -1319,9 +1289,8 @@ def test_char_boundary_apply_and_move_via_api(client, tmp_path):
     ]
     keep = ("title", "kind", "start", "end")
     r = client.post(
-        "/api/interpretations/i1/segmentation/apply",
+        "/api/documents/d1/segmentation/apply",
         json={
-            "document_id": "d1",
             "part_id": part_id,
             "work_id": work_id,
             "pages": [1],
@@ -1329,7 +1298,7 @@ def test_char_boundary_apply_and_move_via_api(client, tmp_path):
         },
     )
     assert r.status_code == 200, r.text
-    url = f"/api/interpretations/i1/boundaries?document_id=d1&part_id={part_id}"
+    url = f"/api/documents/d1/boundaries?part_id={part_id}"
     lst = client.get(url).json()["boundaries"]
     assert [(b["start"]["line"], b["start"]["offset"]) for b in lst] == [(0, 0), (0, k8), (1, k9)]
     assert lst[0]["end"] == {"page": 1, "line": 0, "offset": k8}
@@ -1340,7 +1309,7 @@ def test_char_boundary_apply_and_move_via_api(client, tmp_path):
 
     # 둘째 블록의 시작을 두 글자 앞으로(○八日 앞의 「遇雨」부터) — 앞 블록의 끝이 같이 줄어든다
     r = client.put(
-        f"/api/interpretations/i1/boundaries/{lst[1]['id']}",
+        f"/api/documents/d1/boundaries/{lst[1]['id']}",
         json={"start": {"page": 1, "line": 0, "offset": k8 - 2}},
     )
     assert r.status_code == 200, r.text
@@ -1353,7 +1322,7 @@ def test_char_boundary_apply_and_move_via_api(client, tmp_path):
     assert t1["original_text"].startswith("遇雨○八日")
 
     # 행 단위로 옮기면(▼) 오프셋은 행 첫머리로 돌아간다
-    r = client.put(f"/api/interpretations/i1/boundaries/{lst[1]['id']}", json={"shift_start": 1})
+    r = client.put(f"/api/documents/d1/boundaries/{lst[1]['id']}", json={"shift_start": 1})
     assert r.status_code == 200, r.text
     assert r.json()["boundary"]["start"] == {"page": 1, "line": 1, "offset": 0}
 
@@ -1372,7 +1341,7 @@ def test_boundary_insert_delete_split_via_api(client, tmp_path):
     (pages / f"{part_id}_page_001.txt").write_text(
         DAM_L0 + "\n" + DAM_L1 + "\n" + DAM_L2, encoding="utf-8"
     )
-    base = "/api/interpretations/i1/boundaries"
+    base = "/api/documents/d1/boundaries"
     url = f"{base}?document_id=d1&part_id={part_id}"
     k8 = DAM_L0.index("○八日")
     k9 = DAM_L1.index("○九日")
@@ -1380,7 +1349,6 @@ def test_boundary_insert_delete_split_via_api(client, tmp_path):
     r = client.post(
         base,
         json={
-            "document_id": "d1",
             "part_id": part_id,
             "start": {"page": 1, "line": 0, "offset": 0},
             "title": "七日",
@@ -1393,7 +1361,6 @@ def test_boundary_insert_delete_split_via_api(client, tmp_path):
     r = client.post(
         base,
         json={
-            "document_id": "d1",
             "part_id": part_id,
             "start": {"page": 1, "line": 0, "offset": k8},
             "title": "八日",
@@ -1411,7 +1378,6 @@ def test_boundary_insert_delete_split_via_api(client, tmp_path):
     r = client.post(
         base,
         json={
-            "document_id": "d1",
             "part_id": part_id,
             "start": {"page": 1, "line": 1, "offset": 0},
             "level": 3,
@@ -1433,7 +1399,7 @@ def test_boundary_insert_delete_split_via_api(client, tmp_path):
     assert tb["original_text"] == DAM_L0[k8:]
     # 5) 쪼개기 API: 조각 텍스트로 자리를 찾아 경계를 넣는다. 원본 id는 첫 조각으로 남는다
     r = client.post(
-        "/api/interpretations/i1/entities/unit/split",
+        "/api/documents/d1/composition/split",
         json={
             "original_unit_id": c_id,
             "part_id": part_id,
@@ -1545,15 +1511,15 @@ def test_apply_replaces_proposal_boundaries_and_keeps_manual(client, tmp_path):
         "/api/documents/d1/segmentation-rules", json={"rules": {"title_words": ["談草", "口談"]}}
     )
     body = {"document_id": "d1", "part_id": part_id}
-    data = client.post("/api/interpretations/i1/segmentation/propose", json=body).json()
+    data = client.post("/api/documents/d1/segmentation/propose", json=body).json()
     keep = ("title", "kind", "level", "start", "end")
     spans = [
         {k: v for k, v in s.items() if k in keep} for s in data["spans"] if s["kind"] != "front"
     ]
     assert len(spans) >= 2
-    url = f"/api/interpretations/i1/boundaries?document_id=d1&part_id={part_id}"
+    url = f"/api/documents/d1/boundaries?part_id={part_id}"
     r = client.post(
-        "/api/interpretations/i1/segmentation/apply",
+        "/api/documents/d1/segmentation/apply",
         json={"document_id": "d1", "part_id": part_id, "work_id": work_id, "spans": spans},
     )
     assert r.status_code == 200, r.text
@@ -1561,9 +1527,8 @@ def test_apply_replaces_proposal_boundaries_and_keeps_manual(client, tmp_path):
     assert n_all == len(spans)
     # 손으로 경계 하나 넣는다
     r = client.post(
-        "/api/interpretations/i1/boundaries",
+        "/api/documents/d1/boundaries",
         json={
-            "document_id": "d1",
             "part_id": part_id,
             "start": {"page": 3, "line": 0, "offset": 2},
             "title": "손",
@@ -1573,7 +1538,7 @@ def test_apply_replaces_proposal_boundaries_and_keeps_manual(client, tmp_path):
     manual_id = r.json()["boundary"]["id"]
     # 첫 구간만 체크해 다시 적용 → 제안 경계는 1개만 남고 손 경계는 그대로
     r = client.post(
-        "/api/interpretations/i1/segmentation/apply",
+        "/api/documents/d1/segmentation/apply",
         json={"document_id": "d1", "part_id": part_id, "work_id": work_id, "spans": spans[:1]},
     )
     assert r.status_code == 200, r.text
@@ -1582,9 +1547,8 @@ def test_apply_replaces_proposal_boundaries_and_keeps_manual(client, tmp_path):
     assert len(lst) == 2 and any(b["id"] == manual_id for b in lst)
     # replace="none"이면 예전처럼 더하기만
     r = client.post(
-        "/api/interpretations/i1/segmentation/apply",
+        "/api/documents/d1/segmentation/apply",
         json={
-            "document_id": "d1",
             "part_id": part_id,
             "work_id": work_id,
             "spans": spans,
@@ -1602,17 +1566,15 @@ def test_segmentation_auto_builds_tree_in_one_call(client, tmp_path):
         "/api/documents/d1/segmentation-rules", json={"rules": {"title_words": ["談草", "口談"]}}
     )
     r = client.post(
-        "/api/interpretations/i1/segmentation/auto",
-        json={"document_id": "d1", "part_id": part_id},
+        "/api/documents/d1/segmentation/auto",
+        json={"part_id": part_id},
     )
     assert r.status_code == 200, r.text
     d = r.json()
     assert d["applied"] >= 2 and d["toc_pages"] == [] and d["toc_only"] is False
-    url = f"/api/interpretations/i1/boundaries?document_id=d1&part_id={part_id}"
+    url = f"/api/documents/d1/boundaries?part_id={part_id}"
     n1 = client.get(url).json()["total"]
-    r = client.post(
-        "/api/interpretations/i1/segmentation/auto", json={"document_id": "d1", "part_id": part_id}
-    )
+    r = client.post("/api/documents/d1/segmentation/auto", json={"part_id": part_id})
     assert r.status_code == 200 and client.get(url).json()["total"] == n1
 
 
@@ -1635,13 +1597,11 @@ def test_auto_tree_makes_a_container_from_a_volume_heading(client, tmp_path):
         "/api/documents/d1/segmentation-rules", json={"rules": {"title_words": ["談草", "口談"]}}
     )
     r = client.post(
-        "/api/interpretations/i1/segmentation/auto",
-        json={"document_id": "d1", "part_id": part_id},
+        "/api/documents/d1/segmentation/auto",
+        json={"part_id": part_id},
     )
     assert r.status_code == 200, r.text
-    rows = client.get(
-        f"/api/interpretations/i1/boundaries?document_id=d1&part_id={part_id}"
-    ).json()["boundaries"]
+    rows = client.get(f"/api/documents/d1/boundaries?part_id={part_id}").json()["boundaries"]
     vol = [b for b in rows if b["kind"] == "volume"]
     assert len(vol) == 1, [b["title"] for b in rows]
     assert vol[0]["level"] == 1 and vol[0]["role"] == "container"

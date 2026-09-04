@@ -616,15 +616,15 @@ async function _onPickClick(ev) {
 
 async function _insertBoundary(spec) {
   if (contentsState.picking && contentsState.pickForm) _setPickMode(contentsState.pickForm, false);
-  if (!contentsState.interpId || !viewerState.docId || !viewerState.partId) {
-    showToast("해석 저장소·문헌·권이 정해져야 경계를 넣을 수 있습니다.", "warning");
+  if (!viewerState.docId || !viewerState.partId) {
+    showToast("문헌·권이 정해져야 경계를 넣을 수 있습니다.", "warning");
     return;
   }
   try {
-    const res = await fetch(`/api/interpretations/${encodeURIComponent(contentsState.interpId)}/boundaries`, {
+    const res = await fetch(`/api/documents/${encodeURIComponent(viewerState.docId)}/boundaries`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ document_id: viewerState.docId, part_id: viewerState.partId, ...spec }),
+      body: JSON.stringify({ part_id: viewerState.partId, ...spec }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
@@ -636,11 +636,11 @@ async function _insertBoundary(spec) {
 }
 
 async function _deleteBoundary(block) {
-  if (!contentsState.interpId) return;
+  if (!viewerState.docId) return;
   if (!confirm("이 경계를 지우면 이 단위가 앞 단위에 합쳐집니다. 계속할까요?")) return;
   try {
     const res = await fetch(
-      `/api/interpretations/${encodeURIComponent(contentsState.interpId)}/boundaries/${encodeURIComponent(block.id)}`,
+      `${_boundaryUrl(block.id)}`,
       { method: "DELETE" },
     );
     const data = await res.json();
@@ -651,6 +651,15 @@ async function _deleteBoundary(block) {
   } catch (e) {
     showToast(`경계 지우기 실패: ${e.message}`, "error");
   }
+}
+
+/**
+ * 경계 하나의 API 주소. 편성은 문헌의 것이므로 해석 저장소가 끼지 않는다 (D-097).
+ * part_id를 붙이면 서버가 그 권부터 찾는다(없으면 문헌의 모든 권을 훑는다).
+ */
+function _boundaryUrl(boundaryId) {
+  const q = viewerState.partId ? `?part_id=${encodeURIComponent(viewerState.partId)}` : "";
+  return `/api/documents/${encodeURIComponent(viewerState.docId)}/boundaries/${encodeURIComponent(boundaryId)}${q}`;
 }
 
 // 저장 중인 역할 변경 (경계 id → {desired}). 연타하면 마지막 값 하나만 더 보낸다.
@@ -781,7 +790,7 @@ async function _saveRole(boundaryId, role) {
       const next = state.desired;
       state.desired = null;
       const res = await fetch(
-        `/api/interpretations/${encodeURIComponent(contentsState.interpId)}/boundaries/${encodeURIComponent(boundaryId)}`,
+        `${_boundaryUrl(boundaryId)}`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -802,10 +811,10 @@ async function _saveRole(boundaryId, role) {
 }
 
 async function _setBoundaryLevel(block, level) {
-  if (!contentsState.interpId) return;
+  if (!viewerState.docId) return;
   try {
     const res = await fetch(
-      `/api/interpretations/${encodeURIComponent(contentsState.interpId)}/boundaries/${encodeURIComponent(block.id)}`,
+      `${_boundaryUrl(block.id)}`,
       { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ level }) },
     );
     const data = await res.json();
@@ -829,10 +838,10 @@ async function _setBoundaryLevel(block, level) {
 async function _shiftPreview(block, delta) {
   const line = (txt) => (txt || "").trim().slice(0, 14);
   try {
-    const q = `document_id=${encodeURIComponent(viewerState.docId)}&part_id=${encodeURIComponent(viewerState.partId)}`;
+    const q = `part_id=${encodeURIComponent(viewerState.partId)}`;
     const bs = await (
       await fetch(
-        `/api/interpretations/${encodeURIComponent(contentsState.interpId)}/boundaries?${q}`,
+        `/api/documents/${encodeURIComponent(viewerState.docId)}/boundaries?${q}`,
       )
     ).json();
     const row = (bs.boundaries || []).find((b) => b.id === block.id);
@@ -873,7 +882,7 @@ async function _shiftBoundary(block, delta) {
   if (!confirm(`이 단위의 시작을 ${arrow} 옮깁니다.\n\n${where}\n\n계속할까요?`)) return;
   try {
     const res = await fetch(
-      `/api/interpretations/${encodeURIComponent(contentsState.interpId)}/boundaries/${encodeURIComponent(block.id)}`,
+      `${_boundaryUrl(block.id)}`,
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -916,8 +925,9 @@ function _updateExportLink(interpId, docId) {
   if (!a) return;
   const has = (contentsState.data?.works || []).some((w) => w.blocks.some((b) => b.anchor));
   a.hidden = !has;
-  const qs = docId ? `?document_id=${encodeURIComponent(docId)}` : "";
-  a.href = `/api/interpretations/${encodeURIComponent(interpId)}/boundaries/export.csv${qs}`;
+  if (!docId) { a.hidden = true; return; }
+  const qs = viewerState.partId ? `?part_id=${encodeURIComponent(viewerState.partId)}` : "";
+  a.href = `/api/documents/${encodeURIComponent(docId)}/boundaries/export.csv${qs}`;
 }
 
 function _markActiveBlock(blockId) {
@@ -951,8 +961,8 @@ function highlightContentsForPage(pageNum) {
  */
 async function _autoTree() {
   const interpId = typeof interpState !== "undefined" ? interpState.interpId : null;
-  if (!interpId || !viewerState.docId || !viewerState.partId) {
-    showToast("문헌·권·해석 저장소가 정해져야 트리를 세울 수 있습니다.", "warning");
+  if (!viewerState.docId || !viewerState.partId) {
+    showToast("문헌·권이 정해져야 트리를 세울 수 있습니다.", "warning");
     return;
   }
   const n = contentsState.data?.total_blocks || 0;
@@ -965,11 +975,10 @@ async function _autoTree() {
   const btn = document.getElementById("contents-auto-btn");
   if (btn) { btn.disabled = true; btn.textContent = "세우는 중…"; }
   try {
-    const res = await fetch(`/api/interpretations/${encodeURIComponent(interpId)}/segmentation/auto`, {
+    const res = await fetch(`/api/documents/${encodeURIComponent(viewerState.docId)}/segmentation/auto`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        document_id: viewerState.docId,
         part_id: viewerState.partId,
         use_llm_toc: useLlm,
         force_provider: useLlm ? llmSel.force_provider || null : null,

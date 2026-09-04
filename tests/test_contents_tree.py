@@ -3,7 +3,7 @@
 무엇을 고정하는가:
   - Work → 단위를 원본 위치 순으로 묶는다. Work가 없는 단위는 unassigned로
   - 단위의 pages는 본문이 있는 쪽들이다(경계 사이의 L4 쪽). 두 쪽에 걸친 단위는 둘이다
-  - document_id 필터가 다른 문헌의 단위를 걸러낸다
+  - 해석 저장소는 제 문헌 하나만 본다 (D-097 — 편성은 문헌의 것)
   - 미리보기는 L4에서 잘라 온 본문의 첫 글자들이다 — 본문은 저장하지 않는다(D-092)
   - 층위(level)와 제목이 항목에 붙는다
 
@@ -46,6 +46,8 @@ def _interp(tmp_path: Path) -> Path:
     _doc(lib, "d1", {3: P3, 4: P4, 7: P7})
     _doc(lib, "d2", {1: "다른 문헌"})
     root = lib / "interpretations" / "i"
+    # D-097: 편성은 문헌의 것이고, 저장소가 어느 문헌의 것인지는 dependency.json이 말한다.
+    _write(root / "dependency.json", {"source": {"document_id": "d1"}})
     _write(
         root / "core_entities" / "works" / "w1.json",
         {"id": "w1", "title": "蒙求", "author": "李瀚"},
@@ -63,6 +65,7 @@ def _interp(tmp_path: Path) -> Path:
     )
     b9["level"] = 2  # 3으로 두면 b2(층위 2) 안의 조각이 되어 b2가 7쪽까지 이어진다
     B.save_boundaries(root, {"document_id": "d1", "part_id": "v1", "boundaries": [b2, b1, b9]})
+    # 다른 문헌(d2)의 경계 — 이 저장소에서는 보이지 않아야 한다(D-097)
     other = B.new_boundary(
         {"page": 1, "line": 0, "offset": 0}, title="다른", work_id="w1", boundary_id="other"
     )
@@ -99,13 +102,18 @@ class TestListContents:
         b1 = next(b for w in tree["works"] for b in w["blocks"] if b["id"] == "b1")
         assert b1["preview"] == "王戎簡要" and b1["char_count"] == 4
 
-    def test_document_filter(self, tmp_path):
+    def test_only_its_own_document_is_visible(self, tmp_path):
+        """해석 저장소는 dependency.json이 가리키는 문헌 하나만 본다 (D-097).
+
+        전에는 저장소 안에 문헌별 경계 파일을 여럿 둘 수 있었고, 화면 버그가 겹치자
+        운양집 저장소에 천진담초 경계 42개가 들어갔다(실측 2026-09-04). 이제 경계는
+        문헌에 살고 저장소는 제 문헌만 읽는다.
+        """
         root = _interp(tmp_path)
         all_tree = list_contents(root, None)
-        assert all_tree["total_blocks"] == 4
-        d2 = list_contents(root, "d2")
-        assert d2["total_blocks"] == 1
-        assert d2["works"][0]["blocks"][0]["id"] == "other"
+        assert all_tree["total_blocks"] == 3  # d2의 「other」는 이 저장소에 보이지 않는다
+        assert "other" not in [b["id"] for w in all_tree["works"] for b in w["blocks"]]
+        assert list_contents(root, "d2")["total_blocks"] == 0
 
     def test_empty_store(self, tmp_path):
         tree = list_contents(tmp_path / "empty", None)

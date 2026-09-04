@@ -183,7 +183,12 @@ def _library_root(interp_path: str | Path) -> Path:
 
 
 def _ensure_boundaries(interp_path: Path) -> None:
-    from core.boundaries import migrate_from_blocks, needs_migration
+    from core.boundaries import (
+        migrate_from_blocks,
+        move_boundaries_to_document,
+        needs_boundary_move,
+        needs_migration,
+    )
 
     if needs_migration(interp_path):
         result = migrate_from_blocks(interp_path, _library_root(interp_path))
@@ -199,27 +204,50 @@ def _ensure_boundaries(interp_path: Path) -> None:
         except Exception as e:  # noqa: BLE001 — 커밋 실패가 읽기를 막으면 안 된다
             logger.warning("마이그레이션 커밋 실패: %s", e)
 
+    # D-097: 경계는 원본 저장소에 산다. 해석 저장소 안에 남아 있으면 옮긴다.
+    if needs_boundary_move(interp_path):
+        result = move_boundaries_to_document(interp_path)
+        logger.info("경계 → 원본 저장소 옮기기: %s", result)
+        try:
+            from core.document import git_commit_document
+            from core.interpretation import git_commit_interpretation
+
+            lib = _library_root(interp_path)
+            for doc_id, part_id, n in result["moved"]:
+                git_commit_document(
+                    lib / "documents" / doc_id,
+                    f"feat: 경계 목록을 원본 저장소로 (D-097) — {part_id} {n}개",
+                )
+            git_commit_interpretation(
+                interp_path,
+                "chore: 경계를 원본 저장소로 옮김 (D-097) — "
+                f"{len(result['moved'])}권, 옛 자리는 boundaries_migrated_v2/",
+            )
+        except Exception as e:  # noqa: BLE001 — 커밋 실패가 읽기를 막으면 안 된다
+            logger.warning("경계 옮기기 커밋 실패: %s", e)
+
 
 _PART_LINES_CACHE: dict[tuple, tuple[float, tuple]] = {}
 _PART_LINES_TTL = 3.0  # 초. 화면 한 번 그릴 때 쪽마다 오는 요청들이 같은 208쪽을 되풀이해 읽지 않게
 
 
-def _part_lines(interp_path: Path, document_id: str, part_id: str):
+def doc_part_lines(doc_path: Path, document_id: str, part_id: str):
     """그 권의 L4 행 목록과 쪽 텍스트. 문헌이 없거나 L4가 없으면 빈 것.
 
     짧은 캐시(3초): 편성 탭이 쪽마다 `entities/unit?page=` 요청을 보내고 그때마다 권 전체
     확정본(208쪽 0.6초)을 읽었다. 교정 저장은 3초 뒤에 반영된다 — 같은 화면 안의 되풀이만 막는다.
+    캐시 열쇠는 **문헌** 경로다(D-097) — 한 문헌을 보는 해석 저장소가 여럿이어도 한 번만 읽는다.
     """
     import time
 
     from core.segmentation import collect_document_lines
 
-    key = (str(Path(interp_path).resolve()), document_id, part_id)
+    doc_path = Path(doc_path)
+    key = (str(doc_path.resolve()), document_id, part_id)
     hit = _PART_LINES_CACHE.get(key)
     now = time.monotonic()
     if hit and now - hit[0] < _PART_LINES_TTL:
         return hit[1]
-    doc_path = _library_root(interp_path) / "documents" / document_id
     if not doc_path.exists():
         return [], {}
     try:
@@ -231,25 +259,54 @@ def _part_lines(interp_path: Path, document_id: str, part_id: str):
     return result
 
 
+def _part_lines(interp_path: Path, document_id: str, part_id: str):
+    """해석 저장소 경로로 부르는 옛 길 — 서고 루트를 얻어 문헌으로 내려간다."""
+    return doc_part_lines(
+        _library_root(interp_path) / "documents" / document_id, document_id, part_id
+    )
+
+
+def doc_units(doc_path: str | Path, document_id: str, part_id: str | None = None) -> list[dict]:
+    """문헌의 경계 목록에서 단위 목록을 만든다(읽기 전용) — 해석 저장소가 없어도 된다(D-097).
+
+    입력: 문헌 경로, 문헌 id, (선택) 권 id. 출력: 단위 dict 목록(권 순서·위치 순서).
+    L4가 바뀌었으면 앵커 글자로 자리를 다시 찾아 저장한다(D-092 결정 4).
+    """
+    from core.boundaries import (
+        compute_units,
+        list_doc_parts,
+        load_doc_boundaries,
+        rematch,
+        save_doc_boundaries,
+    )
+
+    doc_path = Path(doc_path)
+    parts = [part_id] if part_id else list_doc_parts(doc_path)
+    head = _document_head(doc_path)
+    units: list[dict] = []
+    for pid in parts:
+        lines, page_texts = doc_part_lines(doc_path, document_id, pid)
+        data = load_doc_boundaries(doc_path, document_id, pid)
+        if page_texts and head and any(b.get("l4_commit") != head for b in data["boundaries"]):
+            if rematch(data, page_texts, head):
+                save_doc_boundaries(doc_path, data)
+        units.extend(compute_units(data, lines, page_texts))
+    return units
+
+
 def _unit_view(interp_path: str | Path) -> list[dict]:
-    """모든 권의 경계 목록에서 단위 목록을 만든다(읽기 전용)."""
-    from core.boundaries import compute_units, list_boundary_parts, load_boundaries
+    """모든 권의 경계 목록에서 단위 목록을 만든다(읽기 전용).
+
+    해석 저장소가 보는 문헌 하나의 편성을 그대로 읽는다 — 편성은 그 문헌의 것이다(D-097).
+    """
+    from core.boundaries import document_of
 
     interp_path = Path(interp_path).resolve()
     _ensure_boundaries(interp_path)
-    from core.boundaries import rematch, save_boundaries
-
-    units: list[dict] = []
-    for doc_id, part_id in list_boundary_parts(interp_path):
-        lines, page_texts = _part_lines(interp_path, doc_id, part_id)
-        data = load_boundaries(interp_path, doc_id, part_id)
-        # L4가 바뀐 뒤(교감) 오프셋 대신 anchor_text로 자리를 다시 찾는다(D-092 결정 4).
-        head = _document_head(_library_root(interp_path) / "documents" / doc_id)
-        if page_texts and head and any(b.get("l4_commit") != head for b in data["boundaries"]):
-            if rematch(data, page_texts, head):
-                save_boundaries(interp_path, data)
-        units.extend(compute_units(data, lines, page_texts))
-    return units
+    doc_id = document_of(interp_path)
+    if not doc_id:
+        return []
+    return doc_units(_library_root(interp_path) / "documents" / doc_id, doc_id)
 
 
 def _document_head(doc_path: Path) -> str | None:
@@ -278,6 +335,7 @@ def _create_boundary_from_unit(interp_path: Path, data: dict) -> dict:
     """단위 모양의 입력(apply·from-source·split이 만들던 것)을 경계 하나로 저장한다."""
     from core.boundaries import (
         boundaries_file,
+        document_of,
         insert_boundary,
         load_boundaries,
         new_boundary,
@@ -294,6 +352,16 @@ def _create_boundary_from_unit(interp_path: Path, data: dict) -> dict:
     part_id = r0.get("part_id") or (data.get("metadata") or {}).get("part_id") or "vol1"
     if not doc_id:
         raise ValueError("source_refs에 document_id가 없습니다.")
+    # 남의 문헌에 쓰지 않는다. 경계는 이제 문헌에 살기 때문에(D-097) 여기서 막지 않으면
+    # 화면이 «앞 문헌의 해석 저장소»를 붙들고 있을 때 그 문헌의 편성이 갈린다 —
+    # 실제로 운양집 저장소에 천진담초 경계 42개가 들어갔다(실측 2026-09-04).
+    # 옛 저장소는 dependency.json이 없을 수 있다. 그때는 막을 근거가 없으므로 통과시킨다.
+    owner = document_of(interp_path)
+    if owner and owner != doc_id:
+        raise ValueError(
+            f"이 해석 저장소는 «{owner}»의 것입니다 — «{doc_id}»의 경계를 쓸 수 없습니다.\n"
+            "→ 해결: 그 문헌의 해석 저장소를 고르거나 새로 만드세요."
+        )
     _lines, page_texts = _part_lines(interp_path, doc_id, part_id)
     page = int(r0["page"])
     cr = r0.get("char_range")
@@ -331,7 +399,12 @@ def _create_boundary_from_unit(interp_path: Path, data: dict) -> dict:
     bdata = load_boundaries(interp_path, doc_id, part_id)
     kept = insert_boundary(bdata, item)  # 같은 자리·층위가 이미 있으면 그것(중복 없음)
     save_boundaries(interp_path, bdata)
-    rel = boundaries_file(interp_path, doc_id, part_id).relative_to(interp_path).as_posix()
+    # 경계 파일은 이제 해석 저장소 밖(원본 저장소)에 있다 — 서고 루트 기준으로 적는다(D-097)
+    rel = (
+        boundaries_file(interp_path, doc_id, part_id)
+        .relative_to(_library_root(interp_path))
+        .as_posix()
+    )
     return {
         "status": "created" if kept is item else "exists",
         "entity_type": "unit",

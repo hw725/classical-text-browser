@@ -71,7 +71,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 
 ## 백엔드 모듈 구조 (src/app/)
 server.py는 FastAPI 앱 생성 + 라우터 마운트 + 미들웨어만 담당하는 조립 파일(152줄).
-실제 API 엔드포인트 203개가 8개 라우터 모듈에 분산 (2026-09-03 기준 실측):
+실제 API 엔드포인트 203개가 9개 라우터 모듈에 분산 (2026-09-04 기준 실측):
 
 ```
 src/app/
@@ -81,7 +81,8 @@ src/app/
 └── routers/
     ├── library.py       ← 서고/설정/백업/휴지통 (16 라우트)
     ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 + 텍스트레이어 진단·가져오기·입히기 + 권 추가 + 경계 규칙 + 찍은 자리·규칙 제안 (43 라우트)
-    ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티/내용 트리/경계 제안·목차·적용/경계 색인·삽입·삭제 (35 라우트)
+    ├── composition.py   ← 편성 — 경계 색인·넣기·옮기기·지우기 + 제안·목차·적용·자동 트리 + 쪼개기·리셋 (11 라우트)
+    ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티/내용 트리 (24 라우트)
     ├── llm_ocr.py       ← LLM 상태·분석·초안 + OCR 엔진·실행·권단위 일괄·백업 되돌리기·판독 지침·LLM 교정 패스 (24 라우트)
     ├── alignment.py     ← 이체자 사전/정렬/일괄교정/문헌별 승인 (20 라우트)
     ├── reading.py       ← L5 표점·현토 + L6 번역 + 비고 + AI보조 (24 라우트)
@@ -121,7 +122,7 @@ src/app/
 | `src/core/variant_sources.py` · `scripts/build_variant_dicts.py` | 이체자 사전 원자료(OpenCC·Unihan·cjkvi) 파서와 생성. 파일마다 `_tier`·`_source` |
 | `src/ocr/line_block_match.py` | 쪽 단위 엔진(NDL 셋)이 쪽 전체에서 찾은 행을 LayoutBlock에 배정. **블록 밖 행은 버린다.** 그래서 파이프라인이 커버리지 조건 없이 언제나 쪽 전체에 돌린다(D-086) |
 | `src/core/segmentation.py` | 글 단위 경계 제안(D-088). 날짜 문법·사슬·형식·문장 표지(以·故·而 앞의 어휘)·두주성 날짜 감점은 코드, 표제 어휘·억제 목록은 `manifest.segmentation_rules`. 제안은 저장하지 않고 승인한 구간만 단위가 된다. 천진담초 실측 재현 35/35·정밀 0.83 |
-| `src/core/boundaries.py` | **글 단위의 정본**(D-092). 권마다 경계 목록 하나 — 항목은 시작 위치·id·깊이(level, 제한 없음)·역할(role: container·article·fragment)·제목·상태·앵커 글자. 끝은 저장하지 않고 같은 층위 이상의 다음 경계가 정한다. 본문은 L4에서 잘라 오고, L4 커밋이 바뀌면 앵커 글자로 재대조(`rematch`). `entity.py`의 `unit`은 이 목록의 읽기 보기다(D-093 — 옛 이름 `text_block`) |
+| `src/core/boundaries.py` | **글 단위의 정본**(D-092). 파일은 **원본 저장소**에 산다 — `documents/{doc}/boundaries/{part}.json`(D-097). 권마다 경계 목록 하나 — 항목은 시작 위치·id·깊이(level, 제한 없음)·역할(role: container·article·fragment)·제목·상태·앵커 글자. 끝은 저장하지 않고 같은 층위 이상의 다음 경계가 정한다. 본문은 L4에서 잘라 오고, L4 커밋이 바뀌면 앵커 글자로 재대조(`rematch`). `entity.py`의 `unit`은 이 목록의 읽기 보기다(D-093 — 옛 이름 `text_block`) |
 | `src/core/segmentation.py` (B-002 부분) | `position_at_point` — 원본 이미지에서 찍은 점을 확정본의 (행·글자)로 (D-094). `anchor_bbox`의 역이고, L4 행(빈 행 포함)과 L2 행(비어 있지 않은 행)의 대응이 어긋나면 `None` |
 | `src/core/segmentation.py` (D-095) | `volume_head` — 행 **끝**이 卷 이름이면 卷頭(묶음). 신자체는 정자로. `extract_title_words_llm` — 해제 + 본문 짧은 행 표본에서 표제 어휘 후보(표본에 없는 말은 버린다, 저장하지 않는다) |
 | `src/core/toc.py` (해제) | `reference_excerpt` — 긴 해제에서 권별 서술을 골라 간추린다. 앞에서 자르면 안 된다: 해제는 «생애 → 교유 → 권별 내용» 순이라 필요한 데가 뒤에 있다(운양집 해제 23,894자, 권별은 43% 지점부터) |
@@ -156,6 +157,7 @@ src/app/
 - LayoutBlock: 원본 저장소 L3의 페이지 영역 (OCR 읽기 순서 단위)
 - OcrResult: 원본 저장소 L2의 OCR 인식 결과
 - 단위(unit): 코어 스키마의 해석용 텍스트 단위. **v1.3(D-092)부터는 저장하지 않고** 경계 목록(`core/boundaries.py`)에서 만든 읽기 보기다. 단위의 id = 시작 경계의 id.
+- 편성(composition): 경계를 정하는 일. **원본 저장소의 것이다**(D-097) — 해석 저장소는 그것을 참조만 하고 표점·현토·번역·주석을 담당한다.
   코드·API·스키마의 이름도 `unit`이다(D-093 — v1.2까지는 `text_block`·TextBlock). 저장 파일이 단위를 가리키는 필드는 아직 `block_id`다(B-003)
 - 「Block」이라고만 쓰지 말고 항상 위 세 이름 중 하나를 사용할 것
 - 해석 편집기 다섯(표점·현토·번역·주석·인용)의 «지금 단위»는 사이드바 「내용」 트리가 정한다(D-096).

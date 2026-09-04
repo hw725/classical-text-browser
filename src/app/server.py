@@ -5,14 +5,16 @@ D-001: 이 플랫폼의 주 인터페이스는 GUI이며, CLI는 보조 도구�
 
 아키텍처:
     이 파일은 FastAPI 앱 생성과 라우터 마운트, 미들웨어만 담당한다.
-    실제 API 엔드포인트 203개가 app/routers/ 패키지의 8개 모듈에 분산된다
-    (2026-07-26 실측):
+    실제 API 엔드포인트 203개가 app/routers/ 패키지의 9개 모듈에 분산된다
+    (2026-09-04 실측):
 
     routers/documents.py     — 문헌 CRUD/페이지/교정/서지/파서 + 권 추가 + 경계 규칙
                                + 찍은 자리·규칙 제안 (43 라우트)
     routers/annotation.py    — L7 주석·사전형·인용마크 + AI보조 (34 라우트)
     routers/reading.py       — L5 표점·현토 + L6 번역 + 비고 + AI보조 (24 라우트)
-    routers/interpretations.py — 해석 CRUD·레이어·의존·엔티티·내용 트리·경계 (35 라우트)
+    routers/composition.py   — 편성 — 경계 색인·CRUD + 제안·목차·적용·자동 트리
+                               + 쪼개기·리셋 (11 라우트)
+    routers/interpretations.py — 해석 CRUD·레이어·의존·엔티티·내용 트리 (24 라우트)
     routers/llm_ocr.py       — LLM 상태·분석 + OCR 실행·일괄·되돌리기·교정 패스 (24 라우트)
     routers/alignment.py     — 이체자 사전/정렬/일괄교정/문헌별 승인 (20 라우트)
     routers/library.py       — 서고/설정/백업/휴지통 (16 라우트)
@@ -44,6 +46,7 @@ from app._state import (  # noqa: E402,F401
 from app.routers import (  # noqa: E402,F401
     alignment,
     annotation,
+    composition,
     documents,
     interpretations,
     library,
@@ -101,6 +104,7 @@ async def _repo_path_error_handler(request, exc: RepoPathError):
 # ── 라우터 마운트 ─────────────────────────────────
 app.include_router(library.router)
 app.include_router(documents.router)
+app.include_router(composition.router)
 app.include_router(interpretations.router)
 app.include_router(llm_ocr.router)
 app.include_router(alignment.router)

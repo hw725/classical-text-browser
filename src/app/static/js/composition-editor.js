@@ -65,7 +65,6 @@ function _sourceRefToKey(ref, fallbackPage) {
 // eslint-disable-next-line no-unused-vars
 function initCompositionEditor() {
   _bindCompEvents();
-  _bindCompInterpSelect();
 }
 
 /**
@@ -166,75 +165,6 @@ function _bindCompEvents() {
 }
 
 /* ──────────────────────────
-   편성 패널 내 해석 저장소 선택 드롭다운
-   ────────────────────────── */
-
-/**
- * 편성 패널 상단의 해석 저장소 드롭다운 이벤트를 바인딩한다.
- *
- * 왜 이렇게 하는가:
- *   편성 탭에서 단위를 생성하려면 해석 저장소가 필수인데,
- *   기존에는 "비교" 모드에서만 선택할 수 있었다.
- *   편성 패널에 직접 드롭다운을 두면 모드 전환 없이 선택 가능하다.
- */
-function _bindCompInterpSelect() {
-  const select = document.getElementById("comp-interp-select");
-  if (!select) return;
-
-  select.addEventListener("change", () => {
-    const interpId = select.value;
-    if (interpId) {
-      // interpretation.js의 _selectInterpretation을 직접 호출
-      if (typeof _selectInterpretation === "function") {
-        _selectInterpretation(interpId);
-      } else {
-        // fallback: 상태만 직접 설정
-        interpState.interpId = interpId;
-      }
-    } else {
-      interpState.interpId = null;
-      interpState.interpInfo = null;
-    }
-    // 편성 데이터 다시 로드
-    _loadCompositionData();
-  });
-}
-
-/**
- * 편성 패널의 해석 저장소 드롭다운 옵션을 갱신한다.
- * activateCompositionMode()에서 호출된다.
- */
-async function _refreshCompInterpSelect() {
-  const select = document.getElementById("comp-interp-select");
-  if (!select) return;
-
-  try {
-    const res = await fetch("/api/interpretations");
-    if (!res.ok) return;
-    const list = await res.json();
-
-    // 기존 옵션 초기화
-    select.innerHTML = '<option value="">-- 선택하세요 --</option>';
-
-    list.forEach((item) => {
-      const opt = document.createElement("option");
-      opt.value = item.interpretation_id;
-      const label = item.title || item.interpretation_id;
-      const type = item.interpreter?.type || "human";
-      opt.textContent = `[${type}] ${label}`;
-      select.appendChild(opt);
-    });
-
-    // 현재 선택된 해석 저장소가 있으면 드롭다운에 반영
-    if (interpState.interpId) {
-      select.value = interpState.interpId;
-    }
-  } catch (err) {
-    console.error("편성 패널 해석 저장소 목록 로드 실패:", err);
-  }
-}
-
-/* ──────────────────────────
    모드 활성화 / 비활성화
    ────────────────────────── */
 
@@ -244,7 +174,6 @@ async function _refreshCompInterpSelect() {
 // eslint-disable-next-line no-unused-vars
 function activateCompositionMode() {
   compState.active = true;
-  _refreshCompInterpSelect(); // 해석 저장소 드롭다운 갱신
   _loadCompositionData();
 }
 
@@ -484,11 +413,11 @@ function _renderUnits() {
   const container = document.getElementById("comp-textblock-list");
   if (!container) return;
 
-  if (!interpState.interpId) {
+  if (!viewerState.docId || !viewerState.partId) {
     container.innerHTML =
       '<div class="placeholder" style="padding:20px; text-align:center; color:var(--text-muted);">' +
-      "위의 해석 저장소 드롭다운에서 선택하세요.<br>" +
-      '<span style="font-size:11px;">(없으면 사이드바 해석 저장소 섹션에서 새로 만들기)</span></div>';
+      "사이드바에서 문헌과 권을 고르세요.<br>" +
+      '<span style="font-size:11px;">(편성은 원본 저장소의 것입니다 — 해석 저장소는 표점 탭부터 씁니다)</span></div>';
     return;
   }
 
@@ -660,8 +589,8 @@ function _updateCompStatus(text, isError) {
  * 왜: 인접 페이지 블록은 합치기 전용이다. 자동 편성은 그 페이지에서 직접 해야 한다.
  */
 async function _autoCompose() {
-  if (!interpState.interpId) {
-    showToast("편성 패널 상단의 해석 저장소 드롭다운에서 먼저 선택하세요.", 'warning');
+  if (!viewerState.docId || !viewerState.partId) {
+    showToast("사이드바에서 문헌과 권을 먼저 고르세요.", "warning");
     return;
   }
   if (!compState.workId) {
@@ -840,8 +769,8 @@ function _selectUnit(tb) {
  * 입력: tb — 단위 객체 ({id, original_text, sequence_index, ...})
  */
 async function _deleteUnit(tb) {
-  if (!interpState.interpId) {
-    showToast("해석 저장소가 선택되지 않았습니다.", 'warning');
+  if (!viewerState.docId || !viewerState.partId) {
+    showToast("사이드바에서 문헌과 권을 먼저 고르세요.", "warning");
     return;
   }
 
@@ -864,11 +793,11 @@ async function _deleteUnit(tb) {
   try {
     // 배치 리셋 엔드포인트를 1개 ID로 호출 (단일 git commit)
     const res = await fetch(
-      `/api/interpretations/${interpState.interpId}/entities/unit/reset`,
+      `/api/documents/${encodeURIComponent(viewerState.docId)}/composition/reset`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ unit_ids: [tb.id] }),
+        body: JSON.stringify({ part_id: viewerState.partId, unit_ids: [tb.id] }),
       },
     );
 
@@ -907,8 +836,8 @@ async function _deleteUnit(tb) {
  *   deprecated된 단위는 목록에서 숨겨지므로 깨끗하게 재시작할 수 있다.
  */
 async function _resetComposition() {
-  if (!interpState.interpId) {
-    showToast("편성 패널 상단의 해석 저장소 드롭다운에서 먼저 선택하세요.", 'warning');
+  if (!viewerState.docId || !viewerState.partId) {
+    showToast("사이드바에서 문헌과 권을 먼저 고르세요.", "warning");
     return;
   }
 
@@ -934,11 +863,12 @@ async function _resetComposition() {
   try {
     // 배치 리셋 엔드포인트: 한 번의 API 호출 + 한 번의 git commit
     const res = await fetch(
-      `/api/interpretations/${interpState.interpId}/entities/unit/reset`,
+      `/api/documents/${encodeURIComponent(viewerState.docId)}/composition/reset`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          part_id: viewerState.partId,
           unit_ids: targets.map((tb) => tb.id),
         }),
       },
@@ -1057,8 +987,8 @@ async function _executeSplit() {
     showToast("나눌 단위를 먼저 선택하세요.", 'warning');
     return;
   }
-  if (!interpState.interpId) {
-    showToast("편성 패널 상단의 해석 저장소 드롭다운에서 먼저 선택하세요.", 'warning');
+  if (!viewerState.docId || !viewerState.partId) {
+    showToast("사이드바에서 문헌과 권을 먼저 고르세요.", "warning");
     return;
   }
 
@@ -1089,7 +1019,7 @@ async function _executeSplit() {
 
   try {
     const res = await fetch(
-      `/api/interpretations/${interpState.interpId}/entities/unit/split`,
+      `/api/documents/${encodeURIComponent(viewerState.docId)}/composition/split`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1152,8 +1082,8 @@ function _tocPagesFromInput() {
  * 목차 쪽을 판별하고 항목을 뽑는다 (D-089). 규칙 또는 LLM. 결과는 다음 제안에 신호로 들어간다.
  */
 async function _detectToc(useLlm) {
-  if (!interpState.interpId) {
-    showToast("해석 저장소를 먼저 선택하세요.", "warning");
+  if (!viewerState.docId || !viewerState.partId) {
+    showToast("사이드바에서 문헌과 권을 먼저 고르세요.", "warning");
     return;
   }
   const summary = document.getElementById("comp-toc-summary");
@@ -1163,11 +1093,10 @@ async function _detectToc(useLlm) {
       typeof getLlmModelSelection === "function"
         ? getLlmModelSelection("comp-llm-model-select")
         : { force_provider: null, force_model: null };
-    const res = await fetch(`/api/interpretations/${interpState.interpId}/segmentation/toc`, {
+    const res = await fetch(`/api/documents/${encodeURIComponent(viewerState.docId)}/segmentation/toc`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        document_id: viewerState.docId,
         part_id: viewerState.partId,
         toc_pages: _tocPagesFromInput(),
         use_llm: !!useLlm,
@@ -1258,15 +1187,15 @@ async function _renderCurrentBoundaries() {
   const list = document.getElementById("comp-current-list");
   const stats = document.getElementById("comp-current-stats");
   if (!list) return;
-  if (!interpState.interpId || !viewerState.docId || !viewerState.partId) {
-    list.innerHTML = '<div class="placeholder">해석 저장소와 권을 고르면 지금 경계가 보입니다.</div>';
+  if (!viewerState.docId || !viewerState.partId) {
+    list.innerHTML = '<div class="placeholder">문헌과 권을 고르면 지금 경계가 보입니다.</div>';
     if (stats) stats.textContent = "";
     return;
   }
   try {
-    const q = `document_id=${encodeURIComponent(viewerState.docId)}&part_id=${encodeURIComponent(viewerState.partId)}`;
+    const q = `part_id=${encodeURIComponent(viewerState.partId)}`;
     const res = await fetch(
-      `/api/interpretations/${encodeURIComponent(interpState.interpId)}/boundaries?${q}`,
+      `/api/documents/${encodeURIComponent(viewerState.docId)}/boundaries?${q}`,
     );
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
@@ -1336,8 +1265,8 @@ async function _renderCurrentBoundaries() {
 }
 
 async function _proposeBoundaries(rulesOverride) {
-  if (!interpState.interpId) {
-    showToast("편성 패널 상단의 해석 저장소 드롭다운에서 먼저 선택하세요.", "warning");
+  if (!viewerState.docId || !viewerState.partId) {
+    showToast("사이드바에서 문헌과 권을 먼저 고르세요.", "warning");
     return;
   }
   const panel = document.getElementById("comp-propose-panel");
@@ -1346,11 +1275,10 @@ async function _proposeBoundaries(rulesOverride) {
   panel.style.display = "";
   list.innerHTML = '<div class="placeholder">권 전체 확정본을 읽어 경계를 찾는 중…</div>';
   try {
-    const res = await fetch(`/api/interpretations/${interpState.interpId}/segmentation/propose`, {
+    const res = await fetch(`/api/documents/${encodeURIComponent(viewerState.docId)}/segmentation/propose`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        document_id: viewerState.docId,
         part_id: viewerState.partId,
         rules: rulesOverride || null,
         use_toc: true,
@@ -1719,11 +1647,10 @@ async function _applyProposals() {
   });
   if (!confirm(`체크한 ${starts.length}개로 단위를 다시 세웁니다(전에 제안으로 만든 경계 중 체크가 빠진 것은 지워지고, 손으로 넣은 경계는 남습니다). 계속할까요?`)) return;
   try {
-    const res = await fetch(`/api/interpretations/${interpState.interpId}/segmentation/apply`, {
+    const res = await fetch(`/api/documents/${encodeURIComponent(viewerState.docId)}/segmentation/apply`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        document_id: viewerState.docId,
         part_id: viewerState.partId,
         work_id: compState.workId,
         spans,

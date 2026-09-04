@@ -7124,22 +7124,6 @@ button.mode-tab {
 
 /* === Part 5: 인라인 스타일 대체 클래스 === */
 
-/* 편성 패널 — 해석 저장소 선택 바 */
-.comp-interp-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-secondary);
-}
-
-.comp-interp-label {
-  font-size: 11px;
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
 /* 편성 도구 바 */
 .comp-toolbar {
   display: flex;

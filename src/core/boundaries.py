@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 BOUNDARIES_DIRNAME = "boundaries"
 LEGACY_BLOCKS_DIRNAME = "blocks"
 MIGRATED_BLOCKS_DIRNAME = "blocks_migrated_v1"
+MIGRATED_BOUNDARIES_DIRNAME = "boundaries_migrated_v2"  # D-097 — 원본 저장소로 옮긴 뒤의 옛 자리
 ANCHOR_TEXT_LEN = (
     8  # 자리를 다시 찾을 때 쓰는 글자 수 — 너무 짧으면 여러 곳에 맞고, 길면 교감에 깨진다
 )
@@ -46,17 +47,56 @@ _SCHEMA_CACHE: dict | None = None
 # ── 파일 ─────────────────────────────────────────────────────────────────
 
 
+def library_root_of(interp_path: str | Path) -> Path:
+    """해석 저장소 경로에서 서고 루트(…/interpretations/{id} → …)."""
+    return Path(interp_path).resolve().parent.parent
+
+
+def document_of(interp_path: str | Path) -> Optional[str]:
+    """이 해석 저장소가 어느 문헌의 것인가 (dependency.json)."""
+    try:
+        dep = json.loads((Path(interp_path) / "dependency.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return (dep.get("source") or {}).get("document_id")
+
+
+def doc_boundaries_dir(doc_path: str | Path) -> Path:
+    """경계는 **원본 저장소**에 산다 (D-097): documents/{doc}/boundaries/.
+
+    왜 L4_text/ 안이 아닌가: 경계는 L4의 일부가 아니라 L4 «위»의 구조 판단이다. L4 안에 두면
+    재OCR·교정 되돌리기·쪽 백업(D-065)의 사정권에 들어가 「텍스트를 다시 뽑았더니 편성이
+    사라졌다」가 일어난다. 문헌 루트에 두면 «L1~L4는 원본을 층으로 나눈 것, 경계는 그 구조»가
+    폴더에서 그대로 읽힌다.
+    """
+    return Path(doc_path) / BOUNDARIES_DIRNAME
+
+
+def doc_boundaries_file(doc_path: str | Path, part_id: str) -> Path:
+    """권 하나의 경계 파일. 문헌 폴더 안이므로 이름은 part_id만으로 충분하다."""
+    return doc_boundaries_dir(doc_path) / f"{part_id}.json"
+
+
 def boundaries_dir(interp_path: str | Path) -> Path:
+    """옛 자리(해석 저장소 안). 마이그레이션과 «옮길 것이 있는가» 검사에만 쓴다."""
     return Path(interp_path) / "core_entities" / BOUNDARIES_DIRNAME
 
 
 def boundaries_file(interp_path: str | Path, document_id: str, part_id: str) -> Path:
-    return boundaries_dir(interp_path) / f"{document_id}__{part_id}.json"
+    """경계 파일 자리 — 이제 원본 저장소다(D-097).
+
+    부르는 쪽이 해석 저장소 경로를 주는 것은 그대로 두었다: 서고 루트를 그것에서 얻고,
+    문헌 폴더로 내려간다. 해석 저장소는 경계를 **참조만** 한다.
+    """
+    return doc_boundaries_file(library_root_of(interp_path) / "documents" / document_id, part_id)
 
 
 def list_boundary_parts(interp_path: str | Path) -> list[tuple[str, str]]:
-    """경계 파일이 있는 (document_id, part_id) 목록."""
-    d = boundaries_dir(interp_path)
+    """이 해석 저장소가 보는 (document_id, part_id) 목록 — 그 문헌의 경계 파일들."""
+    doc_id = document_of(interp_path)
+    if not doc_id:
+        return []
+    d = doc_boundaries_dir(library_root_of(interp_path) / "documents" / doc_id)
     if not d.exists():
         return []
     out = []
@@ -98,8 +138,54 @@ def sort_key(b: dict) -> tuple:
     )
 
 
+def list_doc_parts(doc_path: str | Path) -> list[str]:
+    """이 문헌에 경계 파일이 있는 권 목록(part_id). 파일 이름이 곧 part_id다."""
+    d = doc_boundaries_dir(doc_path)
+    if not d.exists():
+        return []
+    return sorted(f.stem for f in d.glob("*.json"))
+
+
+def load_doc_boundaries(doc_path: str | Path, document_id: str, part_id: str) -> dict:
+    """권의 경계 목록 — **문헌 경로로** 읽는다(D-097). 파일이 없으면 빈 목록."""
+    p = doc_boundaries_file(doc_path, part_id)
+    if not p.exists():
+        return {"document_id": document_id, "part_id": part_id, "boundaries": []}
+    data = json.loads(p.read_text(encoding="utf-8"))
+    data["boundaries"] = sorted(data.get("boundaries") or [], key=sort_key)
+    return data
+
+
+def save_doc_boundaries(doc_path: str | Path, data: dict) -> Path:
+    """검증하고 원자적으로 쓴다(write_json_atomic — D-069). 순서는 위치순으로 고정한다."""
+    from core.document import write_json_atomic
+
+    data = dict(data)
+    data["boundaries"] = sorted(data.get("boundaries") or [], key=sort_key)
+    validate(data)
+    p = doc_boundaries_file(doc_path, data["part_id"])
+    p.parent.mkdir(parents=True, exist_ok=True)
+    write_json_atomic(p, data)
+    return p
+
+
+def git_commit_boundaries(doc_path: str | Path, message: str) -> dict:
+    """경계를 바꾼 뒤의 커밋은 **원본 저장소**에 남긴다(D-097).
+
+    왜: 파일이 그 저장소에 있기 때문이다. 해석 저장소에 커밋하면 아무것도 담기지 않은
+    빈 커밋이 되거나(변경 없음) 커밋 자체가 나지 않아, 편성을 고쳐도 이력이 남지 않는다.
+    해석 저장소는 base_commit으로 이 커밋을 가리켜 «어느 편성을 보고 해석했는가»를 남긴다.
+    """
+    from core.document import git_commit_document
+
+    return git_commit_document(doc_path, message)
+
+
 def load_boundaries(interp_path: str | Path, document_id: str, part_id: str) -> dict:
-    """권의 경계 목록. 파일이 없으면 빈 목록(파일은 만들지 않는다)."""
+    """권의 경계 목록. 파일이 없으면 빈 목록(파일은 만들지 않는다).
+
+    해석 저장소 경로로 부르는 옛 길 — 서고 루트를 얻어 문헌으로 내려간다.
+    """
     p = boundaries_file(interp_path, document_id, part_id)
     if not p.exists():
         return {"document_id": document_id, "part_id": part_id, "boundaries": []}
@@ -491,6 +577,67 @@ def update_boundary(data: dict, boundary_id: str, fields: dict) -> dict:
 
 
 # ── 마이그레이션 (blocks/ → boundaries/) ─────────────────────────────────
+
+
+def needs_boundary_move(interp_path: str | Path) -> bool:
+    """해석 저장소 안에 아직 경계 파일이 남아 있는가 (D-097 — 원본 저장소로 옮길 것)."""
+    d = boundaries_dir(interp_path)
+    return d.exists() and any(d.glob("*.json"))
+
+
+def move_boundaries_to_document(interp_path: str | Path) -> dict:
+    """해석 저장소의 경계를 원본 저장소로 옮긴다 (D-097). 옛 자리는 이름만 바꿔 남긴다.
+
+    입력: 해석 저장소 경로. 출력: {"moved": [(doc, part, n)], "kept": [...], "skipped": [...]}
+
+    규칙:
+      - 그 문헌의 경계 파일이 **이미 있으면 덮어쓰지 않는다**(kept). 한 문헌에 해석 저장소가
+        여럿일 때 나중에 열린 쪽이 먼저 것을 지우면 안 된다 — 편성은 이제 문헌의 것이고,
+        먼저 옮겨진 것이 그 문헌의 편성이다.
+      - 남의 문헌 파일이 섞여 있으면 옮기지 않는다(skipped). 화면 버그로 들어간 것이므로
+        그 문헌의 편성으로 삼으면 안 된다(실측 2026-09-04).
+      - 옛 폴더는 지우지 않고 boundaries_migrated_v2/로 이름만 바꾼다. 해석 저장소는 Git이라
+        되돌릴 수 있다.
+    """
+    from core.document import write_json_atomic
+
+    interp_path = Path(interp_path)
+    owner = document_of(interp_path)
+    src = boundaries_dir(interp_path)
+    moved: list[tuple[str, str, int]] = []
+    kept: list[str] = []
+    skipped: list[str] = []
+    if not src.exists():
+        return {"moved": moved, "kept": kept, "skipped": skipped}
+    lib = library_root_of(interp_path)
+    for f in sorted(src.glob("*.json")):
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+            doc_id, part_id = str(data["document_id"]), str(data["part_id"])
+        except (OSError, ValueError, KeyError) as e:
+            skipped.append(f"{f.name}: 읽기 실패 {e}")
+            continue
+        if owner and doc_id != owner:
+            skipped.append(f"{f.name}: 이 저장소({owner})의 문헌이 아니다")
+            continue
+        doc_path = lib / "documents" / doc_id
+        if not doc_path.exists():
+            skipped.append(f"{f.name}: 문헌 폴더가 없다")
+            continue
+        target = doc_boundaries_file(doc_path, part_id)
+        if target.exists():
+            kept.append(f"{doc_id}/{part_id}: 문헌에 이미 있다 — 그대로 둔다")
+            continue
+        data["boundaries"] = sorted(data.get("boundaries") or [], key=sort_key)
+        validate(data)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        write_json_atomic(target, data)
+        moved.append((doc_id, part_id, len(data["boundaries"])))
+    if moved or kept:
+        dest = interp_path / "core_entities" / MIGRATED_BOUNDARIES_DIRNAME
+        if not dest.exists():
+            src.rename(dest)
+    return {"moved": moved, "kept": kept, "skipped": skipped}
 
 
 def needs_migration(interp_path: str | Path) -> bool:
