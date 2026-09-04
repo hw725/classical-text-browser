@@ -7979,3 +7979,57 @@ select.prop-level { max-width: 4.6em; }
 .val-item-where { color: var(--text-muted); font-family: var(--font-mono, monospace); }
 .val-item-msg { color: var(--danger, #f87171); margin-top: 2px; }
 .val-more { padding: 6px 8px; font-size: 11px; color: var(--text-muted); }
+
+/* === 연결·업데이트 설정 (D-102 · D-103) === */
+.settings-key-row {
+  display: flex; align-items: center; gap: 6px;
+  margin-top: 6px; flex-wrap: wrap;
+}
+.settings-key-input { flex: 1; min-width: 140px; font-size: 12px; }
+.settings-update { padding: 6px 8px; }
+.settings-update-warn {
+  margin-top: 6px; padding: 6px 8px; border-radius: 3px; font-size: 11px;
+  background: var(--danger-bg, #3d1f1f); color: var(--danger, #f87171);
+}
+.settings-update-ok {
+  margin-top: 6px; padding: 6px 8px; border-radius: 3px; font-size: 11px;
+  background: var(--success-bg, #1f3d2b); color: var(--success, #6ee7a0);
+}
+.settings-update-log {
+  margin-top: 6px; padding: 6px 8px; max-height: 220px; overflow: auto;
+  white-space: pre-wrap; word-break: break-all;
+  font-family: var(--font-mono, monospace); font-size: 10px;
+  background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 3px;
+}
+
+/* === 처음 설정 마법사 (D-102) === */
+.wizard-overlay {
+  position: fixed; inset: 0; z-index: 1200;
+  display: none; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+}
+.wizard-box {
+  width: min(560px, 92vw); max-height: 86vh; display: flex; flex-direction: column;
+  background: var(--bg-primary); border: 1px solid var(--border);
+  border-radius: 6px; box-shadow: var(--shadow-card);
+}
+.wizard-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  font-weight: 600; color: var(--text-primary);
+}
+.wizard-step-dots { margin-left: auto; font-size: 11px; color: var(--text-muted); }
+.wizard-body { padding: 14px; overflow: auto; }
+.wizard-foot {
+  display: flex; align-items: center; gap: 6px;
+  padding: 10px 14px; border-top: 1px solid var(--border);
+}
+.wizard-lead { font-size: 12px; color: var(--text-secondary); line-height: 1.7; margin: 0 0 10px; }
+.wizard-status, .wizard-row {
+  display: flex; align-items: center; gap: 8px; justify-content: space-between;
+  padding: 6px 8px; margin-bottom: 4px; border-radius: 3px; font-size: 12px;
+  border: 1px solid var(--border); background: var(--bg-secondary);
+}
+.wizard-status.ok, .wizard-row.ok { border-left: 3px solid var(--success, #6ee7a0); }
+.wizard-status.todo, .wizard-row.todo { border-left: 3px solid var(--warning, #f0b429); }
+.wizard-row span { font-size: 11px; color: var(--text-muted); text-align: right; }

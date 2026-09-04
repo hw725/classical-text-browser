@@ -752,3 +752,88 @@ async def api_validate_repos(doc_id: str, interpretation_id: str | None = Query(
     result["document_id"] = doc_id
     result["interpretation_id"] = interpretation_id
     return result
+
+
+class LlmKeysRequest(BaseModel):
+    """LLM 연결 설정 저장 요청 (D-102).
+
+    provider별 값. 빈 문자열이면 그 줄을 지운다. **값은 응답에도 로그에도 나가지 않는다.**
+    """
+
+    anthropic: str | None = None
+    openai: str | None = None
+    gemini: str | None = None
+    ollama_url: str | None = None
+
+
+@router.get("/api/settings/llm-keys")
+async def api_get_llm_keys():
+    """서고 .env에 어떤 키가 들어 있는가 — **값이 아니라 «있는가»만** (D-102).
+
+    출력: {"path", "exists", "keys": {provider: {set, hint, env_name}}}
+    hint는 끝 네 글자뿐이다(«…abcd»). 사람이 «내가 넣은 그 키가 맞다»를 알아볼 만큼만.
+    """
+    from core.env_settings import read_status
+
+    _library_path = get_library_path()
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+    return read_status(_library_path)
+
+
+@router.post("/api/settings/llm-keys")
+async def api_set_llm_keys(body: LlmKeysRequest):
+    """LLM 키·주소를 서고 .env에 저장한다 (D-102).
+
+    왜 서고에 쓰는가: 앱을 새 판으로 갈아도 키가 남고(서고는 앱 폴더 밖), 서고마다 다른
+    계정을 쓸 수 있다. 프로젝트 루트 .env는 건드리지 않는다.
+    저장 뒤 LLM 라우터 캐시를 비워 다음 호출부터 새 설정으로 돈다.
+    """
+    from core.env_settings import write_values
+
+    _library_path = get_library_path()
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not updates:
+        return JSONResponse({"error": "저장할 값이 없습니다."}, status_code=400)
+    try:
+        status = write_values(_library_path, updates)
+    except OSError as e:
+        return JSONResponse({"error": f"설정을 저장하지 못했습니다: {e}"}, status_code=400)
+
+    import app._state as _st
+
+    _st._llm_router = None  # 다음 호출부터 새 .env로 다시 만든다
+    return status
+
+
+@router.get("/api/settings/ollama")
+async def api_detect_ollama(base_url: str | None = Query(None)):
+    """Ollama가 도는지, 어떤 모델이 있는지 (D-102). 사람에게 묻지 않고 직접 확인한다."""
+    from core.env_settings import detect_ollama
+
+    return detect_ollama(base_url)
+
+
+@router.get("/api/app/update-check")
+async def api_update_check():
+    """새 판이 나왔는가 (D-103). 네트워크가 없어도 화면이 막히지 않게 error만 담아 돌려준다."""
+    from core.updater import check, is_git_checkout
+
+    result = check()
+    result["can_self_update"] = is_git_checkout()
+    return result
+
+
+@router.post("/api/app/update")
+async def api_apply_update():
+    """새 판을 받아 의존까지 맞춘다 (D-103).
+
+    안전장치: 작업 트리가 더러우면 받지 않는다(고친 코드를 덮어쓰지 않는다).
+    서고는 앱 폴더 밖이라 건드리지 않는다. 받은 뒤에는 서버를 껐다 켜야 한다.
+    """
+    from core.updater import apply_update
+
+    result = apply_update()
+    return JSONResponse(result, status_code=200 if result["ok"] else 400)

@@ -393,6 +393,14 @@ async function _loadLlmAccounts() {
       return;
     }
     const data = await res.json();
+    // 어떤 키가 이미 들어 있는가(값이 아니라 «있는가»만 온다 — D-102)
+    let keyState = {};
+    try {
+      const kr = await fetch("/api/settings/llm-keys");
+      if (kr.ok) keyState = (await kr.json()).keys || {};
+    } catch (_) {
+      /* 키 상태를 못 읽어도 연결 목록은 보여 준다 */
+    }
     const providers = data.providers || [];
     if (!providers.length) {
       box.innerHTML = '<div class="placeholder">등록된 프로바이더가 없습니다.</div>';
@@ -444,6 +452,14 @@ async function _loadLlmAccounts() {
           steps.appendChild(li);
         }
         row.appendChild(steps);
+      }
+
+      // 키로 붙는 곳은 여기서 바로 넣는다 — .env를 메모장으로 여는 일이 없게(D-102).
+      if (p.setup_kind === "env_key" && typeof _llmKeyRow === "function") {
+        row.appendChild(_llmKeyRow(p.provider_id, keyState));
+      }
+      if (p.provider_id === "ollama" && typeof _ollamaRow === "function") {
+        row.appendChild(_ollamaRow());
       }
 
       box.appendChild(row);
