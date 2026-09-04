@@ -813,8 +813,58 @@ async function _setBoundaryLevel(block, level) {
 /**
  * 경계의 시작 행을 ±1 행 옮긴다 (D-090). 앞 경계의 끝도 함께 조정되고 단위 본문이 다시 이어진다.
  */
+/**
+ * 옮기면 어디로 가는지 미리 보여 준다. 「14쪽 3행 「…」 → 14쪽 2행 「…」」.
+ *
+ * 입력: block(단위 보기), delta(±1 행). 출력: 사람이 읽을 두 줄.
+ * 시작 행 번호는 내용 트리에 없다(트리는 쪽과 미리보기만 안다) — 경계 색인에서 가져온다.
+ * 확인 대화 한 번에 두 번 물어보는 값이지만, 무엇이 어디로 가는지 모른 채 누르는 것보다 낫다.
+ */
+async function _shiftPreview(block, delta) {
+  const line = (txt) => (txt || "").trim().slice(0, 14);
+  try {
+    const q = `document_id=${encodeURIComponent(viewerState.docId)}&part_id=${encodeURIComponent(viewerState.partId)}`;
+    const bs = await (
+      await fetch(
+        `/api/interpretations/${encodeURIComponent(contentsState.interpId)}/boundaries?${q}`,
+      )
+    ).json();
+    const row = (bs.boundaries || []).find((b) => b.id === block.id);
+    if (!row || !row.start) return "";
+    const { page, line: ln } = row.start;
+    const to = Number(ln) + delta;
+    let now = line(block.preview);
+    let next = "";
+    const res = await fetch(
+      `/api/documents/${encodeURIComponent(viewerState.docId)}/pages/${page}/corrected-text?part_id=${encodeURIComponent(viewerState.partId)}`,
+    );
+    if (res.ok) {
+      const lines = ((await res.json()).corrected_text || "").split("\n");
+      now = line(lines[ln]) || now;
+      next = line(lines[to]);
+    }
+    if (to < 0) return `${page}쪽 ${ln}행이 이 쪽의 첫 행입니다 — 더 앞으로는 못 갑니다.`;
+    return (
+      `지금:   ${page}쪽 ${ln}행${now ? " 「" + now + "」" : ""}` +
+      `\n옮기면: ${page}쪽 ${to}행${next ? " 「" + next + "」" : ""}`
+    );
+  } catch (e) {
+    return ""; // 미리보기를 못 만들어도 물어보기는 한다
+  }
+}
+
 async function _shiftBoundary(block, delta) {
   if (!block.anchor || !contentsState.interpId) return;
+  // 옮기기 전에 묻는다.
+  //
+  // 왜: 이 단추들은 행 오른쪽에 겹쳐 떠 있어(마우스를 올렸을 때만) 스치듯 눌리기 쉽다.
+  // 그런데 시작 행이 한 줄만 밀려도 «그 기사가 어디서 시작하는가»가 바뀌고, 붙어 있던
+  // 표점·번역이 딴 대목을 가리키게 된다. 되돌리려면 어느 경계가 밀렸는지 먼저 알아내야
+  // 하는데, 조용히 바뀌면 그것부터 어렵다(실측 2026-09-04 — 시험이 모르고 밀었다).
+  // 역할·깊이는 화면에서 곧바로 보이고 되돌리기 쉬워 묻지 않는다.
+  const where = await _shiftPreview(block, delta);
+  const arrow = delta > 0 ? "한 행 뒤로" : "한 행 앞으로";
+  if (!confirm(`이 단위의 시작을 ${arrow} 옮깁니다.\n\n${where}\n\n계속할까요?`)) return;
   try {
     const res = await fetch(
       `/api/interpretations/${encodeURIComponent(contentsState.interpId)}/boundaries/${encodeURIComponent(block.id)}`,
