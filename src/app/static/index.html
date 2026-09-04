@@ -1862,6 +1862,18 @@
             <!-- 교정된 텍스트 블록 목록 (좌측: 소스) -->
             <div class="comp-container">
               <!-- 쪼개기 편집 영역 (단위 선택 시 표시) -->
+              <!-- 지금 경계 (D-096 후속) — 이미 저장된 것. 편성 탭을 열면 이것이 먼저 보인다.
+                   «경계 제안»을 누르기 전에는 화면이 비어 있어 «아무것도 없다»고 읽혔고,
+                   그래서 매번 다시 제안해야 하는 것처럼 느껴졌다(사용자 지적). -->
+              <div id="comp-current" class="comp-current">
+                <div class="comp-current-head">
+                  <span class="comp-current-title">지금 경계</span>
+                  <span id="comp-current-stats" class="comp-propose-stats"></span>
+                  <div style="flex: 1"></div>
+                  <button id="comp-current-refresh" class="text-btn text-btn-sm" title="다시 읽기">↻</button>
+                </div>
+                <div id="comp-current-list" class="comp-current-list"></div>
+              </div>
               <!-- 경계 제안 (D-088): 권 전체 행 흐름에 경계 후보를 표시하고 승인한 것만 적용 -->
               <div id="comp-propose-panel" class="comp-propose-panel" style="display: none">
                 <div class="comp-propose-head">

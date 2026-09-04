@@ -29,6 +29,7 @@
 const compState = {
   active: false, // 편성 모드 활성화 여부
   sourceBlocks: [], // 자동 편성이 쓰는 교정된 LayoutBlock 목록 (화면에는 그리지 않는다)
+  currentBoundaries: [], // 지금 저장돼 있는 경계 — 편성 탭의 기본 화면
   // _page: 이 블록이 소속된 페이지 번호 (크로스 페이지 지원용)
   units: [], // 이미 생성된 단위 목록
   workId: null, // 현재 Work UUID (단위 생성에 필요)
@@ -106,6 +107,16 @@ function _bindCompEvents() {
     });
   const rulesSave = document.getElementById("comp-rules-save-btn");
   if (rulesSave) rulesSave.addEventListener("click", _saveRulesAndRepropose);
+  const curRefresh = document.getElementById("comp-current-refresh");
+  if (curRefresh) curRefresh.addEventListener("click", _renderCurrentBoundaries);
+  // 사이드바에서 고른 것을 여기서도 표시한다 — 양쪽이 어긋나 보이면 안 된다
+  document.addEventListener("unit-selected", (ev) => {
+    const list = document.getElementById("comp-current-list");
+    if (!list) return;
+    list.querySelectorAll(".comp-cur-row").forEach((el) => {
+      el.classList.toggle("is-selected", el.dataset.unitId === ev.detail.id);
+    });
+  });
   const rulesSuggest = document.getElementById("comp-rules-suggest-btn");
   if (rulesSuggest) rulesSuggest.addEventListener("click", _suggestRules);
   const tocDetect = document.getElementById("comp-toc-detect-btn");
@@ -362,6 +373,7 @@ async function _loadCompositionData() {
 
   _renderUnits();
   _updateBlockCount();
+  _renderCurrentBoundaries();
 }
 
 /**
@@ -1233,6 +1245,95 @@ function _updateReferenceCount() {
   }
 }
 
+/**
+ * «지금 경계» — 이미 저장된 경계를 편성 탭에도 띄운다.
+ *
+ * 왜 필요한가: 편성 탭을 열면 「경계 제안」을 누르기 전까지 화면이 비어 있었다. 저장된 것은
+ * 사이드바 「내용」에만 있어서, 양쪽이 어긋나 보이고 «매번 새로 제안해서 적용해야 하나»로
+ * 읽혔다(사용자 지적 2026-09-04). 제안은 «새로 훑어 보는 것»이고, 이미 한 일은 여기 있다.
+ *
+ * 사이드바와 같은 것을 가리킨다 — 행을 누르면 같은 단위가 골라지고(unit-selected) 그 쪽으로 간다.
+ */
+async function _renderCurrentBoundaries() {
+  const list = document.getElementById("comp-current-list");
+  const stats = document.getElementById("comp-current-stats");
+  if (!list) return;
+  if (!interpState.interpId || !viewerState.docId || !viewerState.partId) {
+    list.innerHTML = '<div class="placeholder">해석 저장소와 권을 고르면 지금 경계가 보입니다.</div>';
+    if (stats) stats.textContent = "";
+    return;
+  }
+  try {
+    const q = `document_id=${encodeURIComponent(viewerState.docId)}&part_id=${encodeURIComponent(viewerState.partId)}`;
+    const res = await fetch(
+      `/api/interpretations/${encodeURIComponent(interpState.interpId)}/boundaries?${q}`,
+    );
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    const rows = (data.boundaries || []).filter((b) => b.status !== "deprecated");
+    compState.currentBoundaries = rows;
+    const roleName = { container: "묶음", article: "기사", fragment: "조각" };
+    const byRole = rows.reduce((a, b) => {
+      const r = b.role || "article";
+      a[r] = (a[r] || 0) + 1;
+      return a;
+    }, {});
+    if (stats) {
+      stats.textContent = rows.length
+        ? `${rows.length}개 — ` +
+          ["container", "article", "fragment"]
+            .filter((r) => byRole[r])
+            .map((r) => `${roleName[r]} ${byRole[r]}`)
+            .join(" · ")
+        : "";
+    }
+    list.innerHTML = "";
+    if (!rows.length) {
+      list.innerHTML =
+        '<div class="placeholder">아직 경계가 없습니다. 「경계 제안」으로 찾아 보거나, 사이드바 「내용」의 «＋ 경계 넣기»로 첫 경계를 놓으세요.</div>';
+      return;
+    }
+    const selected = typeof currentUnitId === "function" ? currentUnitId() : null;
+    for (const b of rows) {
+      const row = document.createElement("div");
+      row.className = "comp-cur-row" + (b.id === selected ? " is-selected" : "");
+      row.dataset.unitId = b.id;
+      const role = b.role || "article";
+      const title = document.createElement("span");
+      title.className = "comp-cur-title";
+      const mark = { container: "▣ ", article: "", fragment: "· " }[role] || "";
+      const stale = b.anchor_status === "stale";
+      title.textContent = `${stale ? "⚠ " : ""}${mark}${b.title || "(제목 없음)"}`;
+      if (stale) title.classList.add("comp-cur-stale");
+      const meta = document.createElement("span");
+      meta.className = "comp-cur-meta";
+      const p0 = b.start ? b.start.page : null;
+      const p1 = b.end ? b.end.page : null;
+      const pages = p0 == null ? "" : p1 && p1 !== p0 ? `${p0}~${p1}쪽` : `${p0}쪽`;
+      meta.textContent = `${roleName[role]} · ${b.level}단 · ${pages}`;
+      row.appendChild(title);
+      row.appendChild(meta);
+      row.title = stale
+        ? "확정본이 바뀐 뒤 자리를 못 찾았습니다 — 사이드바 「내용」에서 ▲▼로 옮겨 주세요"
+        : "누르면 그 기사로 갑니다 (사이드바 「내용」과 같은 선택)";
+      row.addEventListener("click", () => {
+        // 사이드바와 같은 것을 가리킨다 — 트리 행을 눌렀을 때와 똑같이 동작한다
+        const tree = document.querySelector(
+          `#contents-tree .contents-block[data-block-id="${CSS.escape(b.id)}"]`,
+        );
+        if (tree) tree.click();
+        list.querySelectorAll(".comp-cur-row.is-selected").forEach((el) => {
+          el.classList.remove("is-selected");
+        });
+        row.classList.add("is-selected");
+      });
+      list.appendChild(row);
+    }
+  } catch (e) {
+    list.innerHTML = `<div class="placeholder">지금 경계를 읽지 못했습니다: ${e.message}</div>`;
+  }
+}
+
 async function _proposeBoundaries(rulesOverride) {
   if (!interpState.interpId) {
     showToast("편성 패널 상단의 해석 저장소 드롭다운에서 먼저 선택하세요.", "warning");
@@ -1566,6 +1667,7 @@ async function _saveRulesAndRepropose() {
 }
 
 function _closeProposePanel() {
+  _renderCurrentBoundaries(); // 제안을 접으면 «지금 경계»로 돌아온다
   const panel = document.getElementById("comp-propose-panel");
   if (panel) panel.style.display = "none";
 }

@@ -7942,3 +7942,24 @@ select.prop-level { max-width: 4.6em; }
 /* 단위 이름 옆의 빈 자리는 이름이 먼저 쓰고 남으면 밀어낸다 */
 .unit-pick-label + .text-toolbar-spacer { flex: 0 1 auto; }
 .unit-pick-label.is-empty { font-weight: 400; color: var(--text-muted); }
+
+/* «지금 경계» — 편성 탭의 기본 화면. 제안 패널이 열리면 자리를 내준다 */
+.comp-current { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.comp-propose-panel:not([style*="display: none"]) ~ .comp-current,
+.comp-container:has(#comp-propose-panel:not([style*="display: none"])) .comp-current { display: none; }
+.comp-current-head {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 0 6px; border-bottom: 1px solid var(--border);
+}
+.comp-current-title { font-size: 11px; font-weight: 600; color: var(--text-muted); }
+.comp-current-list { flex: 1; min-height: 0; overflow-y: auto; }
+.comp-cur-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 4px; border-bottom: 1px dashed var(--border);
+  font-size: 12px; cursor: pointer;
+}
+.comp-cur-row:hover { background: var(--hover-bg); }
+.comp-cur-row.is-selected { background: var(--selected-bg); box-shadow: inset 2px 0 0 var(--accent); }
+.comp-cur-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.comp-cur-meta { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+.comp-cur-stale { color: var(--accent-warning, #f59e0b); }
