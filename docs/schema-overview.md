@@ -403,17 +403,23 @@ Agent/Concept/단위 간 관계. predicate는 구조적 동사만.
 
 > `exchange.schema.json`
 
-단일 JSON 스냅샷. 내보내기/가져오기용.
+단일 JSON 스냅샷(문헌 하나 + 해석 하나의 현재 HEAD). 내보내기/가져오기용.
+**교환 형식의 정본은 이 스키마 하나다**(B-005) — `build_snapshot()`이 이 모양으로 쓰고,
+`snapshot_validator.py`가 이것으로 검증하며, 시험이 내보내기 결과를 이것에 맞춰 본다.
 
 | 필드 | 타입 | 설명 |
 |------|------|------|
-| **\*schema_version** | string | 스키마 버전 |
-| **\*export_info** | object | 내보내기 정보 |
-| **\*source_info** | object | 원본 정보 |
-| parts[] | array? | 권 목록 |
-| pages[] | array? | 페이지 데이터 |
-| corrected_text | object? | 교정 텍스트 |
-| corrections[] | array? | 교정 기록 |
+| **\*schema_version** | string | `"1.0"` |
+| export_timestamp | string? | 내보낸 일시(ISO 8601) |
+| platform_version | string? | 내보낸 앱의 판 |
+| **\*source_info** | object | 어느 문헌·해석의 것인가(제목·권·서지·해석자). v1.3까지 이름은 `work` |
+| **\*original** | object | 원본 층 — `head_hash` + `layers.L1_source`(경로 참조)·`L3_layout`·`L4_text` |
+| interpretation | object? | 해석 층 — `head_hash`·`dependency`·`layers.L5~L7`·`core_entities` |
+| variant_characters | object? | 이체자 사전 |
+| annotation_types[] | array? | 주석 유형(기본 + 서고 커스텀) |
+
+담지 않는 것: L1 바이너리(경로만) · L2 OCR(L4에서 다시 만든다) · git 이력 ·
+단위(편성은 원본 저장소의 경계 목록이다 — D-092·D-097).
 
 ---
 

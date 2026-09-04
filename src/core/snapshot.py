@@ -40,6 +40,34 @@ def source_info(data: dict) -> dict:
     return data.get("source_info") or data.get("work") or {}
 
 
+def normalize_snapshot(data: dict) -> dict:
+    """옛 스냅샷을 지금 모양으로 맞춘다 (얕은 사본을 돌려준다).
+
+    왜 필요한가: 교환 형식의 정본은 `schemas/exchange.schema.json` 하나다(B-005). 검증도
+    가져오기도 그 스키마를 쓰려면, 옛 이름으로 적힌 파일을 **먼저** 지금 이름으로 옮겨야
+    한다 — 스키마에 옛 이름까지 넣으면 정본이 둘이 된다.
+
+    지금 옮기는 것: `work` → `source_info` (v1.3, D-099).
+    """
+    if "work" not in data:
+        return data
+    out = dict(data)
+    out["source_info"] = out.pop("work") or {}
+    return out
+
+
+def exchange_schema() -> dict:
+    """교환 형식 스키마(정본). schemas/exchange.schema.json을 읽어 캐시한다."""
+    global _EXCHANGE_SCHEMA
+    if _EXCHANGE_SCHEMA is None:
+        path = Path(__file__).resolve().parent.parent.parent / "schemas" / "exchange.schema.json"
+        _EXCHANGE_SCHEMA = json.loads(path.read_text(encoding="utf-8"))
+    return _EXCHANGE_SCHEMA
+
+
+_EXCHANGE_SCHEMA: dict | None = None
+
+
 PLATFORM_VERSION = "1.1.4"
 
 
@@ -175,6 +203,17 @@ def _serialize_original(doc_path: Path) -> dict:
     return result
 
 
+# 물린 폴더 — 스냅샷에 담지 않는다.
+#
+# 왜: 마이그레이션이 옛 파일을 지우지 않고 이름만 바꿔 남기는데(blocks → 경계 목록 D-092,
+# 경계 → 원본 저장소 D-097, Work 삭제 D-099), 그것은 «되돌릴 수 있게» 남긴 흔적이지 지금의
+# 엔티티가 아니다. 담으면 스냅샷이 커지고, 가져오기가 남의 서고에 죽은 폴더를 되살린다
+# (실측 2026-09-04: 천진담초 스냅샷의 core_entities가 물린 폴더 셋뿐이었다).
+RETIRED_ENTITY_DIRS = frozenset(
+    {"blocks", "blocks_migrated_v1", "boundaries", "boundaries_migrated_v2", "works_removed_v1"}
+)
+
+
 def _serialize_interpretation(interp_path: Path) -> dict:
     """해석 저장소(L5~L7 + 코어 엔티티)를 직렬화한다."""
     result = {
@@ -211,7 +250,7 @@ def _serialize_interpretation(interp_path: Path) -> dict:
     entity_dir = interp_path / "core_entities"
     if entity_dir.exists():
         for type_dir in sorted(entity_dir.iterdir()):
-            if type_dir.is_dir():
+            if type_dir.is_dir() and type_dir.name not in RETIRED_ENTITY_DIRS:
                 items = []
                 for f in sorted(type_dir.glob("*.json")):
                     data = _read_json(f)
@@ -309,6 +348,7 @@ def create_work_from_snapshot(
         같은 스냅샷을 여러 번 import해도 각각 독립된 Work가 된다.
     """
     library_path = Path(library_path).resolve()
+    data = normalize_snapshot(data)
     src_info = source_info(data)
     original = data.get("original", {})
     interpretation = data.get("interpretation", {})

@@ -393,6 +393,29 @@ class TestBuildSnapshot:
         assert "person" in entities
         assert entities["person"][0]["name"] == "白起"
 
+    def test_retired_folders_are_not_exported(self, tmp_path):
+        """물린 폴더(마이그레이션이 남긴 흔적)는 스냅샷에 담지 않는다.
+
+        왜: blocks_migrated_v1/·boundaries_migrated_v2/·works_removed_v1/은 «되돌릴 수 있게»
+        남긴 옛 파일이지 지금의 엔티티가 아니다. 담으면 가져오기가 남의 서고에 죽은 폴더를
+        되살린다(실측 2026-09-04: 천진담초 스냅샷의 core_entities가 물린 폴더 셋뿐이었다).
+        """
+        import json as _json
+
+        from core.snapshot import build_snapshot
+
+        lib, doc_id, interp_id = _make_library(tmp_path)
+        ce = lib / "interpretations" / interp_id / "core_entities"
+        for name in ("blocks_migrated_v1", "boundaries_migrated_v2", "works_removed_v1"):
+            d = ce / name
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "x.json").write_text(_json.dumps({"id": "x"}), encoding="utf-8")
+
+        entities = build_snapshot(lib, doc_id, interp_id)["interpretation"]["core_entities"]
+
+        assert "person" in entities  # 진짜 엔티티는 그대로
+        assert not [k for k in entities if k.endswith(("_migrated_v1", "_v2", "_removed_v1"))]
+
     def test_dependency_included(self, tmp_path):
         """dependency.json이 포함된다."""
         from core.snapshot import build_snapshot
@@ -732,3 +755,49 @@ class TestRoundTrip:
         ids1 = [b["block_id"] for b in blocks1]
         ids2 = [b["block_id"] for b in blocks2]
         assert ids1 == ids2
+
+
+class TestExchangeSchemaIsTheSingleSourceOfTruth:
+    """교환 형식의 정본은 `schemas/exchange.schema.json` 하나다 (B-005).
+
+    왜 이 시험이 필요한가: v1.3까지 스키마와 구현이 **다른 모양**이었고(문서는 export_info·
+    parts·pages, 구현은 export_timestamp·original·interpretation), 게다가 스키마를 파이썬
+    어디서도 읽지 않아 아무도 그 사실을 몰랐다. 여기서 «내보낸 것이 스키마를 통과하는가»를
+    고정해 두면, 구현이 바뀌었는데 스키마를 안 고치면 곧바로 빨간불이 된다.
+    """
+
+    def test_exported_snapshot_conforms(self, tmp_path):
+        import jsonschema
+
+        from core.snapshot import build_snapshot, exchange_schema
+
+        lib, doc_id, interp_id = _make_library(tmp_path)
+        snapshot = build_snapshot(lib, doc_id, interp_id)
+
+        jsonschema.Draft202012Validator(exchange_schema()).validate(snapshot)
+
+    def test_validator_uses_that_schema(self, tmp_path):
+        """검증기가 스키마를 실제로 쓴다 — 모르는 칸이 있으면 error."""
+        from core.snapshot import build_snapshot
+        from core.snapshot_validator import validate_snapshot
+
+        lib, doc_id, interp_id = _make_library(tmp_path)
+        snapshot = build_snapshot(lib, doc_id, interp_id)
+        assert validate_snapshot(snapshot)[0] == []
+
+        snapshot["뜬금없는칸"] = 1
+        errors, _ = validate_snapshot(snapshot)
+        assert any("뜬금없는칸" in e for e in errors)
+
+    def test_old_name_is_normalised_before_validating(self, tmp_path):
+        """옛 이름("work")은 검증 전에 옮긴다 — 스키마에 옛 이름을 넣으면 정본이 둘이 된다."""
+        from core.snapshot import build_snapshot, exchange_schema, normalize_snapshot
+        from core.snapshot_validator import validate_snapshot
+
+        lib, doc_id, interp_id = _make_library(tmp_path)
+        old = build_snapshot(lib, doc_id, interp_id)
+        old["work"] = old.pop("source_info")
+
+        assert validate_snapshot(old)[0] == []
+        assert "work" not in exchange_schema()["properties"]  # 스키마는 지금 이름만 안다
+        assert "source_info" in normalize_snapshot(old)

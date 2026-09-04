@@ -1391,95 +1391,86 @@ library/
 
 ### 11.2 교환 형식 스키마
 
+> **정본은 `schemas/exchange.schema.json` 하나다** (B-005, 2026-09-04). 아래는 그 스키마를
+> 사람이 읽기 좋게 간추린 것이며, 어긋나면 스키마가 기준이다.
+> `core/snapshot.py::build_snapshot()`이 이 모양으로 쓰고, `snapshot_validator.py`가 이
+> 스키마로 검증하며, `tests/test_snapshot.py`가 «내보낸 것이 스키마를 통과하는가»를 고정한다.
+>
+> v1.3까지는 이 절과 구현이 **다른 모양**이었고(문서는 `export_info`·`parts`·`pages`,
+> 구현은 `export_timestamp`·`original`·`interpretation`) 스키마를 아무도 읽지 않아
+> 그 사실이 드러나지 않았다.
+
 ```json
 {
   "schema_version": "1.0",
-  "export_info": {
-    "exported_at": "2026-02-13T...",
-    "source_repo": "https://git.example.com/library/monggu.git",
-    "source_commit": "a1b2c3d4...",
-    "source_version_tag": "v2.0"
-  },
+  "export_timestamp": "2026-09-04T10:00:00+00:00",
+  "platform_version": "1.1.4",
 
   "source_info": {
+    "document_id": "monggu",
     "title": "蒙求",
-    "source_type": "manuscript",
-    "original_language": "classical_chinese",
-    "date_created": "唐代(原著), 南宋(補注)",
-    "provenance": "国立公文書館",
-    "external_link": "https://..."
+    "title_ko": "몽구",
+    "parts": [{ "part_id": "vol1", "page_count": 42 }],
+    "created_at": "2026-02-13T...",
+    "notes": null,
+    "interpretation_id": "monggu_interp",
+    "interpretation_title": "蒙求 해석",
+    "interpreter": { "type": "human", "name": "홍길동" },
+    "bibliography": { "title": "蒙求", "creator": { "name": "李瀚" } }
   },
 
-  "parts": [
-    {
-      "part_id": "vol1",
-      "label": "蒙求1",
-      "file_type": "pdf",
-      "file_url": "https://...",
-      "file_hash": "sha256:...",
-      "page_count": 42
-    }
-  ],
-
-  "pages": [
-    {
-      "part_id": "vol1",
-      "page_number": 1,
-      "mapping_precision": "character",
-      "ocr": {
-        "blocks": [
+  "original": {
+    "head_hash": "a1b2c3d4...",
+    "layers": {
+      "L1_source": {
+        "type": "reference",
+        "note": "이미지/PDF 파일은 경로 참조만 포함. 바이너리 미포함.",
+        "files": [{ "path": "L1_source/vol1.pdf", "name": "vol1.pdf", "size_bytes": 1048576 }]
+      },
+      "L3_layout": { "type": "inline", "pages": [{ "page": 1, "blocks": [] }] },
+      "L4_text": {
+        "type": "inline",
+        "pages": [
           {
-            "block_id": "p01_b01",
-            "block_type": "main_text",
-            "bbox": [50, 30, 180, 600],
-            "writing_direction": "vertical_rtl",
-            "lines": [
-              {
-                "text": "王戎簡要裴楷清通",
-                "bbox": [50, 30, 70, 600],
-                "characters": [
-                  {"char": "王", "bbox": [50, 30, 70, 55], "confidence": 0.98}
-                ]
-              }
-            ]
-          },
-          {
-            "block_id": "p01_b02",
-            "block_type": "annotation",
-            "refers_to_block": "p01_b01",
-            "bbox": [120, 30, 200, 600],
-            "writing_direction": "vertical_rtl",
-            "line_style": "double_line",
-            "font_size_class": "small",
-            "lines": [...]
+            "file_name": "vol1_page_001.txt",
+            "text": "王戎簡要裴楷清通",
+            "corrections": { "page": 1, "edits": [] }
           }
         ]
       }
     }
-  ],
-
-  "corrected_text": {
-    "main_text": "王戎簡要 裴楷清通 孔明臥龍...",
-    "annotation": "王戎字濬沖瑯邪臨沂人..."
   },
 
-  "corrections": [
-    {
-      "page": 3, "block_id": "p03_b01", "line": 2, "char_index": 5,
-      "type": "variant_reading",
-      "original_ocr": "元",
-      "corrected": "元",
-      "common_reading": "玄",
-      "note": "이 판본에서는 元. 피휘 가능성."
-    }
-  ]
+  "interpretation": {
+    "head_hash": "e5f6...",
+    "base_original_hash": "a1b2c3d4...",
+    "dependency": { "source": { "document_id": "monggu", "base_commit": "a1b2c3d4..." } },
+    "layers": {
+      "L5_punctuation": [{ "_source_path": "L5_reading/main_text/..._punctuation.json" }],
+      "L5_hyeonto": [],
+      "L6_translation": [],
+      "L7_annotation": []
+    },
+    "core_entities": { "tags": [], "concepts": [], "agents": [], "relations": [] }
+  },
+
+  "variant_characters": {},
+  "annotation_types": [{ "id": "person", "label": "인물" }]
 }
 ```
 
-**내부 작업 형식 → 교환 형식 변환:**
-앱이 원본 저장소의 L1-L4 데이터를 합쳐서 이 JSON을 생성.
-**교환 형식 → 내부 작업 형식 변환:**
-앱이 이 JSON을 분해해서 L1/L2/L3/L4에 배치하고 git init.
+**담지 않는 것**
+
+- **L1 바이너리** — 경로·크기만. 이미지·PDF는 따로 옮긴다.
+- **L2(OCR)** — L4 확정본이 있으면 다시 만들 수 있고, 담으면 스냅샷만 커진다.
+- **git 이력** — 현재 HEAD 상태만. 이력이 필요하면 저장소를 통째로 옮긴다.
+- **단위(unit)** — 편성은 원본 저장소의 경계 목록이다(D-092·D-097). `core_entities`에 없다.
+
+**내부 작업 형식 ↔ 교환 형식**
+
+- 내보내기: `build_snapshot(서고, 문헌, 해석)` — 두 저장소의 HEAD를 읽어 위 JSON 하나로.
+- 가져오기: `create_work_from_snapshot(서고, data)` — 새 문헌·해석 저장소를 만들고 git init.
+  옛 이름(`work`)으로 적힌 스냅샷은 `normalize_snapshot()`이 먼저 지금 이름으로 옮긴다.
 
 ---
 
