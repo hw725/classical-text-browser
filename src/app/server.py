@@ -164,10 +164,20 @@ async def _no_store_api(request, call_next):
     정적 파일과 달리 no-store인 이유:
         정적 파일은 내용이 그대로면 304로 끝나 이득이 있다(위 참조).
         API 응답은 매번 달라지는 것이 정상이라 재검증할 값이 없다.
+
+    빼는 것 하나 — 원본 PDF:
+        `/pdf/{part}`는 «작업 중에 바뀌는 데이터»가 아니라 **원본 파일**이다. 78.9MB짜리
+        문헌에 no-store를 붙이면 쪽을 넘길 때마다 조각을 다시 받는다. ETag가 함께 나가므로
+        no-cache(«쓸 때마다 물어보라»)면 바뀌지 않은 동안 304로 끝난다 —
+        «고쳤는데 반영이 안 된다»는 그대로 막으면서 재전송만 없앤다.
     """
     response = await call_next(request)
-    if request.url.path.startswith("/api/"):
-        response.headers["Cache-Control"] = "no-store"
+    path = request.url.path
+    if path.startswith("/api/"):
+        if "/pdf/" in path:
+            response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        else:
+            response.headers["Cache-Control"] = "no-store"
     return response
 
 

@@ -1880,11 +1880,9 @@ async def api_document_pdf(doc_id: str, part_id: str):
     doc_path = require_repo_path("documents", doc_id)
     try:
         pdf_path = get_pdf_path(doc_path, part_id)
-        return FileResponse(
-            str(pdf_path),
-            media_type="application/pdf",
-            filename=pdf_path.name,
-        )
+        # filename=을 주지 않는다: Content-Disposition: attachment가 붙어 «내려받기»가 되고,
+        # 화면에서 보는 용도와 어긋난다. Range 응답(206)은 그대로 나간다.
+        return FileResponse(str(pdf_path), media_type="application/pdf")
     except FileNotFoundError as e:
         return JSONResponse({"error": str(e)}, status_code=404)
 

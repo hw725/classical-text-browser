@@ -2445,7 +2445,9 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
   padding: 12px;
   overflow-y: auto;
   font-family: var(--font-mono);
-  font-size: 16px;
+  /* 한자를 한 글자씩 눌러 고치는 화면이다 — 16px는 작아서 획을 분간하기 어려웠다.
+     기본 20px, 「가−/가+」로 14~40px 사이에서 조절한다(브라우저에 기억된다). */
+  font-size: var(--corr-font-size, 20px);
   line-height: 2;
   color: var(--text-primary);
   background: var(--bg-primary);

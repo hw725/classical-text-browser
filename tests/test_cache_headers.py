@@ -62,3 +62,17 @@ def test_non_api_pages_are_untouched(client):
     """API가 아닌 경로에는 이 미들웨어가 손대지 않는다."""
     r = client.get("/")
     assert r.headers.get("cache-control") != "no-store"
+
+
+def test_original_pdf_revalidates_instead_of_no_store(client):
+    """원본 PDF는 no-store가 아니라 no-cache다 (2026-09-05 성능 실측).
+
+    왜: PDF는 «작업 중에 바뀌는 데이터»가 아니라 원본 파일이다. 78.9MB짜리 문헌에
+    no-store를 붙이면 쪽을 넘길 때마다 조각을 다시 받는다. ETag가 나가므로 no-cache면
+    바뀌지 않은 동안 304로 끝난다 — «고쳤는데 반영이 안 된다»는 그대로 막힌다.
+    """
+    r = client.get("/api/documents/없는문헌/pdf/vol1")
+    cc = r.headers.get("cache-control") or ""
+    assert "no-cache" in cc and "no-store" not in cc, (
+        f"PDF 경로의 캐시 지시가 {cc!r}다 (status={r.status_code})"
+    )

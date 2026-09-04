@@ -94,6 +94,62 @@ function initCorrectionEditor() {
   // 편집 모드 토글 (글자 교정 ↔ 자유 편집)
   const modeToggle = document.getElementById("corr-mode-toggle");
   if (modeToggle) modeToggle.addEventListener("click", _toggleEditMode);
+
+  _initCorrFontSize();
+}
+
+
+/* ── 교정 글씨 크기 ─────────────────────────────────────────────── */
+
+const CORR_FONT_MIN = 14;
+const CORR_FONT_MAX = 40;
+const CORR_FONT_DEFAULT = 20;
+const CORR_FONT_KEY = "ctb.corrFontSize";
+
+/**
+ * 교정 글씨 크기를 켤 때 되살리고 「가−/가+」를 잇는다.
+ *
+ * 왜: 한자를 한 글자씩 눌러 고치는 화면인데 16px은 획을 분간하기에 작았다(사용자 지적).
+ * 기본을 20px로 올리고, 눈과 화면에 따라 다르므로 조절 가능하게 두었다. 고른 크기는
+ * 브라우저에 기억되므로 다시 켤 때 그대로다 — 서고에 저장할 성질이 아니다.
+ */
+function _initCorrFontSize() {
+  let size = CORR_FONT_DEFAULT;
+  try {
+    const saved = parseInt(localStorage.getItem(CORR_FONT_KEY), 10);
+    if (saved >= CORR_FONT_MIN && saved <= CORR_FONT_MAX) size = saved;
+  } catch (_) {
+    /* 사생활 보호 모드 등에서 localStorage가 막혀도 기본값으로 돈다 */
+  }
+  _applyCorrFontSize(size);
+
+  const minus = document.getElementById("corr-font-minus");
+  const plus = document.getElementById("corr-font-plus");
+  if (minus) minus.addEventListener("click", () => _stepCorrFontSize(-2));
+  if (plus) plus.addEventListener("click", () => _stepCorrFontSize(+2));
+}
+
+function _stepCorrFontSize(delta) {
+  const now = parseInt(
+    getComputedStyle(document.documentElement).getPropertyValue("--corr-font-size"),
+    10,
+  );
+  const next = Math.max(
+    CORR_FONT_MIN,
+    Math.min(CORR_FONT_MAX, (Number.isFinite(now) ? now : CORR_FONT_DEFAULT) + delta),
+  );
+  _applyCorrFontSize(next);
+  try {
+    localStorage.setItem(CORR_FONT_KEY, String(next));
+  } catch (_) {
+    /* 기억하지 못해도 이번 판에서는 그대로 쓴다 */
+  }
+}
+
+function _applyCorrFontSize(px) {
+  document.documentElement.style.setProperty("--corr-font-size", `${px}px`);
+  const label = document.getElementById("corr-font-size");
+  if (label) label.textContent = String(px);
 }
 
 /**

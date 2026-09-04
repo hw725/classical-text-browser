@@ -169,7 +169,20 @@ async function loadPdfPage(docId, partId, pageNum) {
   // 새 PDF 로드
   const url = `/api/documents/${docId}/pdf/${partId}`;
   try {
-    const loadingTask = pdfjsLib.getDocument(url);
+    // 쪽 하나를 보려고 PDF 전체를 내려받지 않는다.
+    //
+    // 왜: PDF.js는 기본값(disableAutoFetch: false)에서 문서를 **통째로** 뒤에서 받아 둔다.
+    // 78.9MB짜리 천진담초를 열면 12쪽 하나를 보는데 79MB를 전송했다(실측 2026-09-05,
+    // 요청 7건·81,115KB). 서버는 Range를 지원하므로(206·Accept-Ranges) 필요한 조각만
+    // 받으면 된다 — 저사양 노트북에서 첫 쪽이 뜨는 시간이 여기서 갈린다.
+    const loadingTask = pdfjsLib.getDocument({
+      url,
+      // 둘을 함께 꺼야 한다. disableStream이 false면 PDF.js가 본문을 **스트림으로 끝까지**
+      // 받아 버려서 disableAutoFetch만으로는 전송량이 그대로다(실측 2026-09-05).
+      disableAutoFetch: true,
+      disableStream: true,
+      rangeChunkSize: 262144,
+    });
     pdfState.pdfDoc = await loadingTask.promise;
     pdfState.totalPages = pdfState.pdfDoc.numPages;
     pdfState.currentDocId = docId;
