@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "exchange.schema.json",
   "title": "교환 형식 (내보내기/가져오기)",
-  "description": "내부 작업 형식(다수 파일, git 버전관리)과 별도로, 단일 JSON으로 문서 상태를 스냅샷하는 교환 형식. 다른 연구자에게 공유하거나 외부 시스템과 데이터를 교환할 때 사용한다. platform-v7.md 섹션 11.2 기반.",
+  "description": "내부 작업 형식(다수 파일, git 버전관리)과 별도로, 단일 JSON으로 문서 상태를 스냅샷하는 교환 형식. platform-v7.md 섹션 11.2 기반. ⚠ 이 스키마는 아직 구현과 다르다 — 실제 내보내기(core/snapshot.py)는 source_info·original·interpretation·variant_characters·annotation_types 구조로 쓰고 이 스키마로 검증하지 않는다. 둘을 맞추는 일은 백로그 B-005.",
   "type": "object",
   "required": ["schema_version", "export_info", "source_info"],
   "additionalProperties": false,

@@ -29,6 +29,17 @@ logger = logging.getLogger(__name__)
 # Export: 스냅샷 조립
 # ──────────────────────────────────────
 
+
+def source_info(data: dict) -> dict:
+    """스냅샷의 머리말 절. 옛 이름("work")으로 적힌 파일도 받는다 (D-099 후속).
+
+    입력: 스냅샷 dict. 출력: {document_id, title, parts, bibliography,
+    interpretation_id, interpretation_title, interpreter, ...}.
+    이미 내보낸 스냅샷을 다시 가져올 수 있어야 하므로 읽기는 두 이름을 다 본다.
+    """
+    return data.get("source_info") or data.get("work") or {}
+
+
 PLATFORM_VERSION = "1.1.4"
 
 
@@ -54,7 +65,9 @@ def build_snapshot(
         "schema_version": "1.0",
         "export_timestamp": datetime.now(timezone.utc).isoformat(),
         "platform_version": PLATFORM_VERSION,
-        "work": _serialize_work_metadata(doc_path, interp_path),
+        # D-099 후속: 옛 이름은 "work"였다. Work 엔티티를 없앤 뒤로 «엔티티 Work»와 헷갈려서
+        # 이름을 바꿨다 — 이 절은 엔티티가 아니라 «이 스냅샷이 어느 문헌·해석의 것인가»다.
+        "source_info": _serialize_source_info(doc_path, interp_path),
         "original": _serialize_original(doc_path),
         "interpretation": _serialize_interpretation(interp_path),
         "variant_characters": _serialize_variant_chars(library_path),
@@ -62,12 +75,13 @@ def build_snapshot(
     }
 
 
-def _serialize_work_metadata(doc_path: Path, interp_path: Path) -> dict:
-    """Work 메타데이터를 직렬화한다.
+def _serialize_source_info(doc_path: Path, interp_path: Path) -> dict:
+    """이 스냅샷이 어느 문헌·해석의 것인지를 직렬화한다.
 
     왜 이렇게 하는가:
-        문헌 manifest + 해석 manifest에서 필요한 필드를 모아
-        하나의 work 섹션으로 만든다.
+        문헌 manifest + 해석 manifest에서 필요한 필드를 모아 하나의 머리말로 만든다.
+        v1.3까지 이름이 "work"였는데, 코어 스키마의 Work 엔티티(D-099에서 삭제)와
+        이름만 같고 다른 것이라 헷갈렸다.
     """
     result = {}
 
@@ -295,17 +309,17 @@ def create_work_from_snapshot(
         같은 스냅샷을 여러 번 import해도 각각 독립된 Work가 된다.
     """
     library_path = Path(library_path).resolve()
-    work = data.get("work", {})
+    src_info = source_info(data)
     original = data.get("original", {})
     interpretation = data.get("interpretation", {})
     warnings = []
 
     # 새 ID 생성 (원본 ID에 타임스탬프 접미사)
-    base_doc_id = work.get("document_id", "imported")
+    base_doc_id = src_info.get("document_id", "imported")
     timestamp_suffix = datetime.now().strftime("%Y%m%d%H%M%S")
     new_doc_id = f"{base_doc_id}_{timestamp_suffix}"
 
-    base_interp_id = work.get("interpretation_id", "imported_interp")
+    base_interp_id = src_info.get("interpretation_id", "imported_interp")
     new_interp_id = f"{base_interp_id}_{timestamp_suffix}"
 
     doc_path = library_path / "documents" / new_doc_id
@@ -315,10 +329,10 @@ def create_work_from_snapshot(
     interp_path.mkdir(parents=True, exist_ok=True)
 
     # 1. 원본 저장소 복원
-    _write_original_layers(doc_path, work, original, warnings)
+    _write_original_layers(doc_path, src_info, original, warnings)
 
     # 2. 해석 저장소 복원
-    _write_interpretation_layers(interp_path, work, new_doc_id, interpretation, warnings)
+    _write_interpretation_layers(interp_path, src_info, new_doc_id, interpretation, warnings)
 
     # 3. 이체자 사전
     variant_chars = data.get("variant_characters", {})
@@ -330,19 +344,19 @@ def create_work_from_snapshot(
     _git_init_and_commit(interp_path, "Import: 스냅샷에서 해석 데이터 복원")
 
     # 5. library_manifest 업데이트
-    _update_library_manifest(library_path, new_doc_id, new_interp_id, work)
+    _update_library_manifest(library_path, new_doc_id, new_interp_id, src_info)
 
     return {
         "doc_id": new_doc_id,
         "interp_id": new_interp_id,
-        "title": work.get("title", ""),
+        "title": src_info.get("title", ""),
         "warnings": warnings,
     }
 
 
 def _write_original_layers(
     doc_path: Path,
-    work: dict,
+    src_info: dict,
     original: dict,
     warnings: list,
 ) -> None:
@@ -352,17 +366,17 @@ def _write_original_layers(
     # manifest.json
     manifest = {
         "document_id": doc_path.name,
-        "title": work.get("title", ""),
-        "title_ko": work.get("title_ko"),
-        "parts": work.get("parts", []),
+        "title": src_info.get("title", ""),
+        "title_ko": src_info.get("title_ko"),
+        "parts": src_info.get("parts", []),
         "completeness_status": "imported",
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "notes": f"스냅샷에서 Import됨. 원본 ID: {work.get('document_id', 'unknown')}",
+        "notes": f"스냅샷에서 Import됨. 원본 ID: {src_info.get('document_id', 'unknown')}",
     }
     _write_json(doc_path / "manifest.json", manifest)
 
     # bibliography
-    bib = work.get("bibliography")
+    bib = src_info.get("bibliography")
     if bib:
         _write_json(doc_path / "bibliography.json", bib)
 
@@ -408,7 +422,7 @@ def _write_original_layers(
 
 def _write_interpretation_layers(
     interp_path: Path,
-    work: dict,
+    src_info: dict,
     new_doc_id: str,
     interpretation: dict,
     warnings: list,
@@ -420,10 +434,12 @@ def _write_interpretation_layers(
     manifest = {
         "interpretation_id": interp_path.name,
         "source_document_id": new_doc_id,
-        "title": work.get("interpretation_title", work.get("title", "")),
-        "interpreter": work.get("interpreter", {"type": "human", "name": "imported"}),
+        "title": src_info.get("interpretation_title", src_info.get("title", "")),
+        "interpreter": src_info.get("interpreter", {"type": "human", "name": "imported"}),
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "notes": f"스냅샷에서 Import됨. 원본 해석 ID: {work.get('interpretation_id', 'unknown')}",
+        "notes": (
+            f"스냅샷에서 Import됨. 원본 해석 ID: {src_info.get('interpretation_id', 'unknown')}"
+        ),
     }
     _write_json(interp_path / "manifest.json", manifest)
 
@@ -539,7 +555,7 @@ def _update_library_manifest(
     library_path: Path,
     doc_id: str,
     interp_id: str,
-    work: dict,
+    src_info: dict,
 ) -> None:
     """library_manifest.json에 새 문헌/해석 항목을 추가한다."""
     manifest_path = library_path / "library_manifest.json"
@@ -558,7 +574,7 @@ def _update_library_manifest(
     docs.append(
         {
             "document_id": doc_id,
-            "title": work.get("title", ""),
+            "title": src_info.get("title", ""),
             "path": f"documents/{doc_id}",
         }
     )
@@ -569,7 +585,7 @@ def _update_library_manifest(
         {
             "interpretation_id": interp_id,
             "source_document_id": doc_id,
-            "title": work.get("interpretation_title", work.get("title", "")),
+            "title": src_info.get("interpretation_title", src_info.get("title", "")),
             "path": f"interpretations/{interp_id}",
         }
     )

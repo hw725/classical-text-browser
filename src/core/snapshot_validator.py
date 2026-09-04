@@ -8,7 +8,7 @@ Phase 12-3: 스냅샷 데이터의 구조적 무결성을 검증한다.
     분리하여 사용자에게 알려준다.
 
 검증 항목:
-    1. 필수 필드 존재 (schema_version, work.title)
+    1. 필수 필드 존재 (schema_version, source_info.title)
     2. 버전 호환성
     3. original 섹션 구조
     4. block_id 참조 무결성 (L5~L7 → L3 block_id)
@@ -40,10 +40,11 @@ def validate_snapshot(data: dict) -> tuple[list[str], list[str]]:
         errors.append(f"지원하지 않는 스키마 버전: {version}")
         return errors, warnings
 
-    # 3. work 섹션
-    work = data.get("work", {})
-    if not work.get("title"):
-        errors.append("work.title 누락")
+    # 3. 머리말 절 — 옛 스냅샷은 이름이 "work"였다 (D-099 후속)
+    from core.snapshot import source_info
+
+    if not source_info(data).get("title"):
+        errors.append("source_info.title 누락 (옛 이름: work.title)")
 
     # 4. original 섹션
     if "original" not in data:

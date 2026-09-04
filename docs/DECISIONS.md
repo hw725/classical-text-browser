@@ -4766,3 +4766,19 @@ Work의 유일하게 그럴듯한 미래 용도는 **이본 대조**(같은 작�
 
 해석 저장소는 Git이다. `works_removed_v1/`에 제목·저자가 그대로 있으므로, 이본 대조를
 설계할 때 참고할 수 있다. 다만 그때의 Work는 서고 수준의 다른 물건이 될 것이다.
+
+### 곁들여 — 스냅샷의 `work` 절을 `source_info`로
+
+JSON 스냅샷(`core/snapshot.py`)의 최상위 `"work"` 절은 **엔티티가 아니라** 「이 스냅샷이
+어느 문헌·해석의 것인가」를 담은 머리말이다(document_id·title·parts·bibliography·
+interpretation_id·interpreter). 엔티티 Work를 없앤 뒤로는 이름만 같은 다른 것이 남아
+더 헷갈리므로 **`source_info`로 바꿨다**.
+
+- 마침 문서·스키마(platform-v7 §11.2, `exchange.schema.json`)가 같은 뜻으로 이미
+  `source_info`를 쓰고 있었다 — 이름을 바꾸는 편이 문서에 **가까워지는** 쪽이다.
+- 쓰기는 새 이름만, **읽기는 두 이름을 다 받는다**(`snapshot.source_info(data)`).
+  이미 내보낸 스냅샷이 가져오기에서 깨지면 안 된다.
+
+이 과정에서 **교환 형식이 두 벌**임을 발견했다 — `exchange.schema.json`은 파이썬 어디서도
+참조하지 않고 모양도 구현과 다르다. 검증에 쓰이지 않으므로 깨진 스냅샷을 막지 못한다.
+정리는 백로그 B-005.

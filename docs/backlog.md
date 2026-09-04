@@ -30,3 +30,22 @@ D-093이 이름을 `unit`으로 바꿨지만 **저장 파일이 단위를 가리
 - 대상 파일: `L5_reading/**`(표점·현토), `L6_translation/**`, `L7_annotation/**`,
   `citation_marks/**`, `core_entities/tags/*.json`.
 - 지금 서고에는 이 파일이 0건이라 급하지 않다.
+
+## B-005 교환 형식이 두 벌이다 — 문서·스키마와 구현이 다르다 (2026-09-04, D-099 후속에서 발견)
+
+`schemas/exchange.schema.json`(= platform-v7 §11.2)과 실제 내보내기(`core/snapshot.py`)가
+**다른 모양**이다. 그리고 그 스키마는 **파이썬 어디서도 참조하지 않는다**(실측).
+
+| | 문서·스키마 | 구현 |
+|---|---|---|
+| 머리말 | `export_info` + `source_info` | `export_timestamp` + `platform_version` + `source_info` |
+| 본문 | `parts` + `pages` + `corrected_text` + `corrections` | `original` + `interpretation` |
+| 덤 | 없음 | `variant_characters` + `annotation_types` |
+
+- 지금 무엇이 문제인가: 스키마가 검증에 쓰이지 않으므로 **깨진 스냅샷을 막지 못한다**.
+  검증은 `snapshot_validator.py`의 손으로 적은 규칙뿐이다. 문서를 믿고 만든 외부 도구는
+  가져오기가 안 된다.
+- 하려면 정할 것: ① 어느 쪽을 정본으로 삼는가(구현 쪽이 실제로 도는 것이다)
+  ② 스키마를 구현에 맞춘 뒤 `build_snapshot` 결과를 그 스키마로 검증할 것인가
+  ③ `schema_version`을 올릴 것인가(옛 스냅샷 가져오기 폴백이 이미 있다 — `source_info(data)`).
+- 급하지 않은 이유: 스냅샷 내보내기·가져오기는 지금 한 사람이 한 서고에서만 쓴다.

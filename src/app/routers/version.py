@@ -274,7 +274,9 @@ async def api_export_json(interp_id: str):
     snapshot = build_snapshot(_library_path, doc_id, interp_id)
 
     # JSON 파일 다운로드
-    title = snapshot.get("work", {}).get("title", interp_id)
+    from core.snapshot import source_info
+
+    title = source_info(snapshot).get("title") or interp_id
     date_str = datetime.now().strftime("%Y%m%d")
     filename = f"{title}_{date_str}.json"
 

@@ -295,17 +295,18 @@ class TestBuildSnapshot:
         result = build_snapshot(lib, doc_id, interp_id)
         assert "export_timestamp" in result
 
-    def test_work_metadata(self, tmp_path):
-        """work 섹션에 문헌+해석 메타데이터가 포함된다."""
+    def test_source_info(self, tmp_path):
+        """source_info 절에 문헌+해석 메타데이터가 포함된다 (옛 이름 work — D-099 후속)."""
         from core.snapshot import build_snapshot
 
         lib, doc_id, interp_id = _make_library(tmp_path)
         result = build_snapshot(lib, doc_id, interp_id)
-        work = result["work"]
-        assert work["title"] == "蒙求"
-        assert work["title_ko"] == "몽구"
-        assert work["interpretation_title"] == "蒙求 해석"
-        assert work["bibliography"]["author"] == "李瀚"
+        assert "work" not in result  # 옛 이름으로는 쓰지 않는다
+        src = result["source_info"]
+        assert src["title"] == "蒙求"
+        assert src["title_ko"] == "몽구"
+        assert src["interpretation_title"] == "蒙求 해석"
+        assert src["bibliography"]["author"] == "李瀚"
 
     def test_l1_reference_only(self, tmp_path):
         """L1은 경로 참조만 포함한다 (바이너리 미포함)."""
@@ -432,7 +433,7 @@ class TestValidateSnapshot:
         """검증 통과하는 최소 스냅샷."""
         return {
             "schema_version": "1.0",
-            "work": {"title": "테스트"},
+            "source_info": {"title": "테스트"},
             "original": {"layers": {}},
             "interpretation": {"layers": {}},
         }
@@ -463,13 +464,22 @@ class TestValidateSnapshot:
         assert any("99.0" in e for e in errors)
 
     def test_missing_title(self):
-        """work.title 누락 시 error."""
+        """source_info.title 누락 시 error."""
         from core.snapshot_validator import validate_snapshot
 
         data = self._minimal_snapshot()
-        data["work"]["title"] = ""
+        data["source_info"]["title"] = ""
         errors, _ = validate_snapshot(data)
         assert any("title" in e for e in errors)
+
+    def test_old_snapshots_with_a_work_section_still_import(self):
+        """v1.3 이전에 내보낸 스냅샷은 머리말 이름이 "work"다 — 읽기는 그것도 받는다."""
+        from core.snapshot_validator import validate_snapshot
+
+        data = self._minimal_snapshot()
+        data["work"] = data.pop("source_info")
+        errors, _ = validate_snapshot(data)
+        assert errors == []
 
     def test_missing_original(self):
         """original 섹션 누락 시 error."""
