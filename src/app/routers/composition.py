@@ -22,7 +22,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app._state import get_library_path, require_repo_path
-from core.entity import doc_part_lines, doc_units
+from core.entity import doc_contents, doc_part_lines, doc_units
 
 logger = logging.getLogger(__name__)
 
@@ -69,9 +69,6 @@ class SegmentationApplyRequest(BaseModel):
 
     part_id: str
     spans: list[SegmentationSpan]
-    # Work는 해석 저장소의 엔티티다 — 편성이 문헌으로 내려온 뒤로는 없어도 된다(D-097).
-    # 있으면 그대로 적어 두어 옛 서고의 트리 묶음이 그대로 보이게 한다.
-    work_id: str | None = None
     pages: list[int] | None = None  # 제안 때와 같은 범위여야 행 번호가 맞는다
     # 적용은 누적이 아니다 — «제안 패널의 체크 상태가 곧 트리»(사용자, 2026-09-03).
     # replace="proposal": 전에 제안으로 만든 경계 중 이번 선택에 없는 것은 지운다
@@ -88,7 +85,6 @@ class SegmentationAutoRequest(BaseModel):
     use_llm_toc: bool = False
     force_provider: str | None = None
     force_model: str | None = None
-    work_id: str | None = None
     replace: str = "all"
     toc_only: bool | None = None  # None이면 목차가 잡혔을 때만 True
 
@@ -120,7 +116,6 @@ class BoundaryInsertRequest(BaseModel):
     role: str | None = None  # container·article·fragment (없으면 깊이로 추정)
     title: str | None = None
     kind: str = "manual"
-    work_id: str | None = None  # 없으면 그 자리를 품는 단위의 Work
 
 
 class SplitUnitRequest(BaseModel):
@@ -167,30 +162,6 @@ def _document_head(doc_path) -> str | None:
         return None
 
 
-def _default_work_id(data: dict, doc_path, doc_id: str) -> str | None:
-    """이 권(없으면 다른 권)의 경계에 이미 적힌 Work id. 없으면 None.
-
-    왜: Work는 해석 저장소의 엔티티라 편성이 스스로 만들 수 없다(D-097). 그래도 옛 서고는
-    경계마다 work_id가 있고 트리가 그것으로 묶으므로, 이미 있는 값을 그대로 이어 쓴다.
-    새 문헌은 None이 되고 트리에서 «(Work 미배정)»으로 묶인다 — 편성에는 아무 영향이 없다.
-    """
-    from core.boundaries import list_doc_parts, load_doc_boundaries
-
-    wid = next((b.get("work_id") for b in data.get("boundaries") or [] if b.get("work_id")), None)
-    if wid:
-        return wid
-    for pid in list_doc_parts(doc_path):
-        if pid == data.get("part_id"):
-            continue
-        other = load_doc_boundaries(doc_path, doc_id, pid)
-        wid = next(
-            (b.get("work_id") for b in other.get("boundaries") or [] if b.get("work_id")), None
-        )
-        if wid:
-            return wid
-    return None
-
-
 def _boundary_rows(doc_path, document_id: str, part_id: str | None) -> list[dict]:
     """경계 색인 «보기» (D-090): 단위를 원본 위치 순서로 늘어놓고 행 앵커를 계산한다.
 
@@ -218,7 +189,6 @@ def _boundary_rows(doc_path, document_id: str, part_id: str | None) -> list[dict
         rows.append(
             {
                 "id": blk["id"],
-                "work_id": blk.get("work_id"),
                 "document_id": document_id,
                 "part_id": pid,
                 "sequence_index": blk.get("sequence_index"),
@@ -519,7 +489,6 @@ async def api_segmentation_apply(doc_id: str, body: SegmentationApplyRequest):
     keys = [(ln.page, ln.line_index) for ln in lines]
     l4_commit = _document_head(doc_path)
     data = load_doc_boundaries(doc_path, doc_id, body.part_id)
-    work_id = body.work_id or _default_work_id(data, doc_path, doc_id)
     removed = _replace_boundaries(data, body.spans, body.replace)
     created = []
     errors = []
@@ -537,7 +506,6 @@ async def api_segmentation_apply(doc_id: str, body: SegmentationApplyRequest):
             role=span.role or None,
             title=span.title or None,
             kind=span.kind or "manual",
-            work_id=work_id,
             status="draft",
             anchor_status="approved",
             page_texts=page_texts,
@@ -652,7 +620,6 @@ async def api_segmentation_auto(doc_id: str, body: SegmentationAutoRequest):
         doc_id,
         SegmentationApplyRequest(
             part_id=body.part_id,
-            work_id=body.work_id,
             spans=spans,
             replace=body.replace,
         ),
@@ -741,6 +708,26 @@ async def api_export_boundaries_csv(doc_id: str, part_id: str | None = Query(Non
     )
 
 
+@router.get("/api/documents/{doc_id}/contents")
+async def api_contents_tree(doc_id: str):
+    """내용 트리 — 문헌 > 권 > 단위 (D-085 → B-004).
+
+    목적: 교감 뒤에는 쪽이 아니라 내용으로 찾아가야 한다. 사이드바 「내용」 트리가 이 응답으로
+          그려지고, 단위를 누르면 pages[].page로 가며 해석 편집기 다섯이 그 단위로 맞춰진다(D-096).
+    출력: core.entity.doc_contents() 참조.
+
+    왜 Work로 묶지 않는가: Work(저작)는 해석 저장소의 엔티티인데 편성은 문헌의 것이다(D-097).
+    저작이 여럿인 문집은 층위 1의 «묶음» 경계가 나타낸다 — 트리의 층위 그대로다(B-004).
+    """
+    doc_path, err = _doc(doc_id)
+    if err is not None:
+        return err
+    try:
+        return doc_contents(doc_path, doc_id)
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": f"내용 트리 조회 실패: {e}"}, status_code=400)
+
+
 @router.get("/api/documents/{doc_id}/boundaries")
 async def api_list_boundaries(doc_id: str, part_id: str | None = Query(None)):
     """경계 색인 보기 (D-090): 단위를 원본 위치 순서로, 시작·끝 행과 좌표 캐시를 붙여."""
@@ -765,7 +752,6 @@ async def api_insert_boundary(doc_id: str, body: BoundaryInsertRequest):
         load_doc_boundaries,
         new_boundary,
         save_doc_boundaries,
-        sort_key,
     )
     from core.segmentation import boundary_bbox, collect_document_lines
 
@@ -782,17 +768,6 @@ async def api_insert_boundary(doc_id: str, body: BoundaryInsertRequest):
     if (start["page"], start["line"]) not in keys:
         return JSONResponse({"error": "그 쪽·행에 확정 텍스트(L4)가 없습니다."}, status_code=400)
     data = load_doc_boundaries(doc_path, doc_id, body.part_id)
-    work_id = body.work_id
-    if not work_id:
-        # 그 자리를 품는(앞에 있는) 경계의 Work → 없으면 이 문헌이 쓰던 Work
-        before = [
-            b
-            for b in data["boundaries"]
-            if sort_key(b) <= (start["page"], start["line"], start["offset"], 99)
-        ]
-        work_id = next((b.get("work_id") for b in reversed(before) if b.get("work_id")), None)
-        if not work_id:
-            work_id = _default_work_id(data, doc_path, doc_id)
     item = new_boundary(
         start=start,
         level=max(1, int(body.level)),
@@ -803,7 +778,6 @@ async def api_insert_boundary(doc_id: str, body: BoundaryInsertRequest):
             or None
         ),
         kind=body.kind or "manual",
-        work_id=work_id,
         status="draft",
         page_texts=page_texts,
         l4_commit=_document_head(doc_path),
@@ -1071,7 +1045,6 @@ async def api_split_unit(doc_id: str, body: SplitUnitRequest, bg: BackgroundTask
             role="fragment",
             title=piece[:20],
             kind="manual",
-            work_id=orig_b.get("work_id"),
             status="draft",
             page_texts=page_texts or None,
             l4_commit=_document_head(doc_path),

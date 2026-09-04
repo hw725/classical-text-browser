@@ -34,8 +34,13 @@ Smallest structural unit (sentence / clause / segment).
 > `unit.schema.json`. See CLAUDE.md "용어 규칙" for the distinction between
 > LayoutBlock, OcrResult, and unit.
 
-Fields: - id - work_id - sequence_index - original_text -
+Fields: - id - sequence_index - original_text -
 normalized_text (optional) - source_ref - source_refs - notes - metadata
+
+> **D-098**: `work_id` was dropped. Units no longer point at a Work — a Work
+> belongs to the interpretation store while composition belongs to the document
+> (D-097). A collection holding several works is expressed by level-1
+> «container» boundaries instead. `sequence_index` now counts within the part.
 
 ------------------------------------------------------------------------
 

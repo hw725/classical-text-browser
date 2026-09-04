@@ -266,6 +266,10 @@ async function _renderPage(pageNum) {
   if (typeof _redrawOverlay === "function" && typeof layoutState !== "undefined" && layoutState.active) {
     _redrawOverlay();
   }
+  // 시작 행 점선(D-090)은 레이아웃 모드가 아닌 탭에서도 보이므로 여기서 함께 다시 그린다.
+  // 이것이 없으면 줌·맞춤으로 PDF 캔버스 크기가 바뀌었을 때 점선 캔버스만 옛 크기로 남아
+  // 네모가 엉뚱한 자리에 작게 그려진다(실측 2026-09-04: 816px → 1238px인데 점선은 816px).
+  if (typeof _drawAnchorCanvas === "function") _drawAnchorCanvas();
 
   // 렌더링 완료 후 회전/필터 상태 재적용
   if (pdfState.rotation !== 0) _applyRotation();

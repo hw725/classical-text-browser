@@ -153,7 +153,21 @@ def load_doc_boundaries(doc_path: str | Path, document_id: str, part_id: str) ->
         return {"document_id": document_id, "part_id": part_id, "boundaries": []}
     data = json.loads(p.read_text(encoding="utf-8"))
     data["boundaries"] = sorted(data.get("boundaries") or [], key=sort_key)
+    _drop_work_id(data)
     return data
+
+
+def _drop_work_id(data: dict) -> None:
+    """옛 파일의 `work_id`를 버린다 (B-004).
+
+    왜: Work(저작)는 해석 저장소의 엔티티인데 경계는 문헌의 것이다(D-097) — 문헌의 데이터가
+    남의 저장소 엔티티를 가리키고 있었고, 해석 저장소가 여럿이면 그중 하나만 가리켰다.
+    저작 묶음은 이제 층위 1의 «묶음(container)» 경계가 나타낸다.
+    따로 마이그레이션을 돌리지 않는 것은 스키마가 additionalProperties:false라 다음 저장 때
+    반드시 걸리기 때문이다 — 읽는 자리에서 버리면 그것으로 끝난다.
+    """
+    for b in data.get("boundaries") or []:
+        b.pop("work_id", None)
 
 
 def save_doc_boundaries(doc_path: str | Path, data: dict) -> Path:
@@ -191,6 +205,7 @@ def load_boundaries(interp_path: str | Path, document_id: str, part_id: str) -> 
         return {"document_id": document_id, "part_id": part_id, "boundaries": []}
     data = json.loads(p.read_text(encoding="utf-8"))
     data["boundaries"] = sorted(data.get("boundaries") or [], key=sort_key)
+    _drop_work_id(data)
     return data
 
 
@@ -309,7 +324,7 @@ def compute_units(
         data — load_boundaries() 결과.
         lines, page_texts — segmentation.collect_document_lines()의 결과(그 권).
     출력: 단위 스키마와 같은 모양의 dict 목록(위치 순서). 관계·태그·표점 편집기가
-          `unit` 엔티티로 읽던 것과 같은 필드를 준다 — id·work_id·sequence_index·
+          `unit` 엔티티로 읽던 것과 같은 필드를 준다 — id·sequence_index·
           original_text·source_ref·source_refs·status·notes·metadata(title·kind·level·anchor).
     """
     from core.segmentation import span_to_text_and_refs
@@ -318,7 +333,6 @@ def compute_units(
     keys = [(ln.page, ln.line_index) for ln in lines]
     doc_id, part_id = data["document_id"], data["part_id"]
     units: list[dict] = []
-    seq_by_work: dict[Optional[str], int] = {}
     for i, b in enumerate(bounds):
         if not _live(b):
             continue
@@ -339,9 +353,7 @@ def compute_units(
             )
         else:
             text, refs = span_to_text_and_refs(span, lines, page_texts, doc_id, part_id)
-        wid = b.get("work_id")
-        seq = seq_by_work.get(wid, 0)
-        seq_by_work[wid] = seq + 1
+        seq = len(units)  # 권 안의 차례. 전에는 Work마다 따로 셌다(B-004)
         anchor = {
             "kind": b.get("kind") or "manual",
             "level": int(b.get("level", 2)),
@@ -370,7 +382,6 @@ def compute_units(
         units.append(
             {
                 "id": b["id"],
-                "work_id": wid,
                 "sequence_index": seq,
                 "original_text": text,
                 "normalized_text": None,
@@ -456,7 +467,6 @@ def new_boundary(
     title: Optional[str] = None,
     kind: Optional[str] = None,
     role: Optional[str] = None,
-    work_id: Optional[str] = None,
     status: str = "draft",
     anchor_status: str = "approved",
     boundary_id: Optional[str] = None,
@@ -481,7 +491,6 @@ def new_boundary(
         "kind": kind,
         "status": status,
         "anchor_status": anchor_status,
-        "work_id": work_id,
         "anchor_text": anchor_text_at(page_texts, pos) if page_texts else None,
         "l4_commit": l4_commit,
         "confidence": confidence,
@@ -556,7 +565,6 @@ _UPDATABLE = (
     "status",
     "anchor_status",
     "level",
-    "work_id",
     "notes",
     "metadata",
     "bbox",
@@ -655,7 +663,7 @@ def migrate_from_blocks(interp_path: str | Path, library_root: str | Path) -> di
     규칙(D-092 마이그레이션):
       - 첫 source_ref의 쪽·char_range[0]에서 시작 경계를 만든다.
         char_range가 없으면 쪽 첫 행 0.
-      - id·제목·종류·상태·work_id·metadata.anchor(층위·신뢰도·근거·bbox)는 그대로.
+      - id·제목·종류·상태·metadata.anchor(층위·신뢰도·근거·bbox)는 그대로.
       - 끝 위치는 버린다(다음 경계가 정한다). deprecated·archived 블록도 옮기되 단위를
         만들지 않는다.
     출력: {"parts": [(document_id, part_id, n)], "skipped": [...이유...]}
@@ -712,7 +720,6 @@ def migrate_from_blocks(interp_path: str | Path, library_root: str | Path) -> di
                 level=int(anchor.get("level") or 2),
                 title=meta.get("title") or (blk.get("original_text") or "").strip()[:20] or None,
                 kind=anchor.get("kind") or meta.get("kind") or "manual",
-                work_id=blk.get("work_id"),
                 status=blk.get("status", "draft"),
                 anchor_status=anchor.get("status") or "approved",
                 boundary_id=blk["id"],

@@ -53,7 +53,6 @@
           "default": null,
           "description": "위치의 신뢰: 제안됨·승인됨·L4가 바뀐 뒤 못 찾음(stale — 사람이 옮겨야 한다)."
         },
-        "work_id": { "type": ["string", "null"], "default": null, "description": "소속 Work의 id." },
         "anchor_text": { "type": ["string", "null"], "default": null, "description": "start 자리의 글자 몇 자. L4 커밋이 바뀌면 오프셋 대신 이것으로 자리를 다시 찾는다." },
         "l4_commit": { "type": ["string", "null"], "default": null, "description": "start가 어느 확정본 기준인지." },
         "confidence": { "type": ["number", "null"], "default": null },

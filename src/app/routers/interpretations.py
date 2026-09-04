@@ -19,7 +19,6 @@ from core.entity import (
     create_entity,
     create_unit_from_source,
     get_entity,
-    list_contents,
     list_entities,
     list_entities_for_page,
     promote_tag_to_concept,
@@ -102,7 +101,8 @@ class UnitFromSourceRequest(BaseModel):
     page_num: int
     layout_block_id: str | None = None
     original_text: str
-    work_id: str
+    # work_id는 v1.3(B-004)에서 없앴다 — 단위는 Work를 가리키지 않는다. 옛 화면이 보내도 무시한다.
+    work_id: str | None = None
     sequence_index: int
 
 
@@ -138,7 +138,7 @@ class ComposeUnitRequest(BaseModel):
     source_refs 배열 순서대로 텍스트를 이어붙인다.
     """
 
-    work_id: str
+    work_id: str | None = None  # 남은 칸(B-004에서 무시한다)
     sequence_index: int
     original_text: str
     part_id: str
@@ -505,34 +505,6 @@ async def api_entities_for_page(
         return JSONResponse({"error": f"엔티티 조회 실패: {e}"}, status_code=400)
 
 
-@router.get("/api/interpretations/{interp_id}/contents")
-async def api_contents_tree(
-    interp_id: str,
-    document_id: str | None = Query(None, description="이 문헌을 가리키는 블록만"),
-):
-    """내용 트리 — Work → 단위(sequence_index 순) + 각 블록이 있는 쪽 (D-085).
-
-    목적: 교감 뒤에는 쪽이 아니라 내용으로 찾아가야 한다. 사이드바 「내용」 트리가
-          이 응답으로 그려지고, 블록을 누르면 pages[].page 로 이동해 layout_block_ids 를
-          강조한다. 저장 형식은 바꾸지 않는다 — blocks/·works/ 를 읽어 묶기만 한다.
-    출력: core.entity.list_contents() 참조.
-    """
-    _library_path = get_library_path()
-    if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
-
-    interp_path = require_repo_path("interpretations", interp_id)
-    if not interp_path.exists():
-        return JSONResponse(
-            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
-            status_code=404,
-        )
-    try:
-        return list_contents(interp_path, document_id)
-    except Exception as e:  # noqa: BLE001
-        return JSONResponse({"error": f"내용 트리 조회 실패: {e}"}, status_code=400)
-
-
 @router.get("/api/interpretations/{interp_id}/entities/{entity_type}")
 async def api_list_entities(
     interp_id: str,
@@ -688,7 +660,6 @@ async def api_create_unit_from_source(
             body.page_num,
             body.layout_block_id,
             body.original_text,
-            body.work_id,
             body.sequence_index,
         )
     except Exception as e:
@@ -770,7 +741,6 @@ async def api_compose_unit(
 
     unit_data = {
         "id": str(_uuid.uuid4()),
-        "work_id": body.work_id,
         "sequence_index": body.sequence_index,
         "original_text": body.original_text,
         "normalized_text": None,

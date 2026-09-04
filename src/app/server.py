@@ -12,9 +12,9 @@ D-001: 이 플랫폼의 주 인터페이스는 GUI이며, CLI는 보조 도구�
                                + 찍은 자리·규칙 제안 (43 라우트)
     routers/annotation.py    — L7 주석·사전형·인용마크 + AI보조 (34 라우트)
     routers/reading.py       — L5 표점·현토 + L6 번역 + 비고 + AI보조 (24 라우트)
-    routers/composition.py   — 편성 — 경계 색인·CRUD + 제안·목차·적용·자동 트리
-                               + 쪼개기·리셋 (11 라우트)
-    routers/interpretations.py — 해석 CRUD·레이어·의존·엔티티·내용 트리 (24 라우트)
+    routers/composition.py   — 편성 — 내용 트리·경계 색인·CRUD + 제안·목차·적용·자동 트리
+                               + 쪼개기·리셋 (12 라우트)
+    routers/interpretations.py — 해석 CRUD·레이어·의존·엔티티·관계·태그 (23 라우트)
     routers/llm_ocr.py       — LLM 상태·분석 + OCR 실행·일괄·되돌리기·교정 패스 (24 라우트)
     routers/alignment.py     — 이체자 사전/정렬/일괄교정/문헌별 승인 (20 라우트)
     routers/library.py       — 서고/설정/백업/휴지통 (16 라우트)

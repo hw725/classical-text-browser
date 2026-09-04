@@ -32,7 +32,6 @@ const compState = {
   currentBoundaries: [], // 지금 저장돼 있는 경계 — 편성 탭의 기본 화면
   // _page: 이 블록이 소속된 페이지 번호 (크로스 페이지 지원용)
   units: [], // 이미 생성된 단위 목록
-  workId: null, // 현재 Work UUID (단위 생성에 필요)
   rangeStart: null, // 시작 페이지 (null이면 현재 페이지)
   rangeEnd: null, // 끝 페이지 (null이면 현재 페이지)
   selectedTbId: null, // 쪼개기를 위해 선택된 단위 ID
@@ -269,8 +268,6 @@ async function _loadCompositionData() {
         .then((r) => (r.ok ? r.json() : null))
         .catch(() => null),
     );
-    // Work 자동 확보
-    promises.push(_ensureWork());
   }
 
   const results = await Promise.all(promises);
@@ -349,62 +346,6 @@ async function _commitBatch(message) {
     console.error("배치 커밋 실패:", e);
   }
 }
-
-/**
- * Work를 자동 확보한다 (없으면 생성).
- *
- * 왜 이렇게 하는가:
- *   단위를 만들려면 소속 Work가 필요하다.
- *   편성 탭을 열 때 자동으로 Work를 확보하여
- *   연구자가 별도 작업 없이 바로 편성할 수 있게 한다.
- */
-async function _ensureWork() {
-  if (compState.workId) return;
-
-  try {
-    // 기존 Work 목록 확인
-    const listRes = await fetch(
-      `/api/interpretations/${interpState.interpId}/entities/work`,
-    );
-    if (listRes.ok) {
-      const data = await listRes.json();
-      const works = data.entities || [];
-      // 현재 문헌에 해당하는 Work 찾기
-      const match = works.find(
-        (w) => w.metadata && w.metadata.document_id === viewerState.docId,
-      );
-      if (match) {
-        compState.workId = match.id;
-        return;
-      }
-      // 아무 Work나 있으면 사용
-      if (works.length > 0) {
-        compState.workId = works[0].id;
-        return;
-      }
-    }
-
-    // Work 자동 생성
-    const createRes = await fetch(
-      `/api/interpretations/${interpState.interpId}/entities/work/auto-create`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ document_id: viewerState.docId }),
-      },
-    );
-    if (createRes.ok) {
-      const result = await createRes.json();
-      compState.workId = result.work?.id || null;
-    }
-  } catch (e) {
-    console.error("Work 확보 실패:", e);
-  }
-}
-
-/* ──────────────────────────
-   렌더링: 단위 목록
-   ────────────────────────── */
 
 /**
  * 이미 생성된 단위 목록을 렌더링한다.
@@ -593,14 +534,6 @@ async function _autoCompose() {
     showToast("사이드바에서 문헌과 권을 먼저 고르세요.", "warning");
     return;
   }
-  if (!compState.workId) {
-    await _ensureWork();
-    if (!compState.workId) {
-      showToast("Work를 확보할 수 없습니다. 해석 저장소를 다시 선택해주세요.", 'warning');
-      return;
-    }
-  }
-
   const currentPage = viewerState.pageNum;
 
   // 현재 페이지 블록만 필터
@@ -659,7 +592,6 @@ async function _autoCompose() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          work_id: compState.workId,
           sequence_index: baseSeq + i,
           original_text: text,
           part_id: viewerState.partId,
@@ -990,15 +922,6 @@ async function _executeSplit() {
   if (!viewerState.docId || !viewerState.partId) {
     showToast("사이드바에서 문헌과 권을 먼저 고르세요.", "warning");
     return;
-  }
-
-  // Work가 없으면 확보 시도
-  if (!compState.workId) {
-    await _ensureWork();
-    if (!compState.workId) {
-      showToast("Work를 확보할 수 없습니다. 해석 저장소를 다시 선택해주세요.", 'warning');
-      return;
-    }
   }
 
   const textarea = document.getElementById("comp-split-textarea");
@@ -1613,11 +1536,6 @@ async function _applyProposals() {
     showToast("승인한 경계가 없습니다.", "warning");
     return;
   }
-  await _ensureWork();
-  if (!compState.workId) {
-    showToast("Work를 확보할 수 없습니다.", "warning");
-    return;
-  }
   const lines = data.lines;
   const keyOf = (l) => `${l.page}:${l.line_index}`;
   const pos = new Map(lines.map((l, i) => [keyOf(l), i]));
@@ -1652,7 +1570,6 @@ async function _applyProposals() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         part_id: viewerState.partId,
-        work_id: compState.workId,
         spans,
         pages: data.pages || null,
         replace: "proposal", // 체크 상태가 곧 트리 — 전에 제안으로 만든 경계 중 빠진 것은 지운다

@@ -25,7 +25,7 @@ const contentsState = {
   pickForm: null,
   interpId: null, // 마지막으로 그린 해석 저장소
   data: null, // /contents 응답
-  collapsedWorks: new Set(), // 접어 둔 Work id
+  collapsedParts: new Set(), // 접어 둔 권(part) id
   openFragments: new Set(), // (구) 조각 접기 — 중첩 개요로 대체
   closedNodes: new Set(), // 접어 둔 단위 id (중첩 개요)
   anchorHighlight: null, // 시작 행 점선 {bbox, imageWidth, imageHeight, page}
@@ -48,32 +48,29 @@ function setContentsSectionVisible(visible) {
 }
 
 /**
- * 내용 트리를 다시 불러 그린다. 해석 저장소를 고르거나 편성이 바뀔 때 부른다.
- * interpState.interpId가 없으면 안내문만 남긴다.
+ * 내용 트리를 다시 불러 그린다. 문헌을 고르거나 편성이 바뀔 때 부른다.
+ *
+ * 편성은 문헌의 것이므로(D-097) 해석 저장소가 없어도 그린다 — 문헌만 있으면 된다.
  */
 async function refreshContentsTree() {
   const container = document.getElementById("contents-tree");
   if (!container) return;
 
-  const interpId = typeof interpState !== "undefined" ? interpState.interpId : null;
-  if (!interpId) {
-    contentsState.interpId = null;
+  const docId = typeof viewerState !== "undefined" ? viewerState.docId : null;
+  if (!docId) {
     contentsState.data = null;
     container.innerHTML =
-      '<div class="placeholder">해석 저장소를 선택하면 편성된 내용이 표시됩니다</div>';
+      '<div class="placeholder">문헌을 고르면 편성된 내용이 표시됩니다</div>';
     return;
   }
-
-  const docId = typeof viewerState !== "undefined" ? viewerState.docId : null;
-  const qs = docId ? `?document_id=${encodeURIComponent(docId)}` : "";
+  contentsState.interpId = typeof interpState !== "undefined" ? interpState.interpId : null;
   try {
-    const res = await fetch(`/api/interpretations/${encodeURIComponent(interpId)}/contents${qs}`);
+    const res = await fetch(`/api/documents/${encodeURIComponent(docId)}/contents`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       container.innerHTML = `<div class="placeholder">${_treeEscHtml(err.error || "내용 트리를 불러오지 못했습니다")}</div>`;
       return;
     }
-    contentsState.interpId = interpId;
     contentsState.data = await res.json();
     _renderContentsTree(container);
     if (contentsState.selectedUnitId) {
@@ -82,7 +79,7 @@ async function refreshContentsTree() {
       );
       if (row) row.classList.add("unit-selected");
     }
-    _updateExportLink(interpId, docId);
+    _updateExportLink(docId);
     highlightContentsForPage(viewerState.pageNum);
   } catch (e) {
     container.innerHTML = `<div class="placeholder">내용 트리 오류: ${_treeEscHtml(e.message)}</div>`;
@@ -93,7 +90,7 @@ function _renderContentsTree(container) {
   const data = contentsState.data;
   container.innerHTML = "";
   container.appendChild(_renderInsertForm());
-  if (!data || data.total_blocks === 0) {
+  if (!data || data.total_units === 0) {
     const ph = document.createElement("div");
     ph.className = "placeholder";
     ph.textContent = "단위(권·기사)가 없습니다. 위의 «경계 넣기»로 첫 경계를 놓거나, 편성 탭의 경계 제안·자동 편성을 쓰세요.";
@@ -101,40 +98,69 @@ function _renderContentsTree(container) {
     return;
   }
 
-  const groups = data.works.map((w) => ({ key: w.id, title: w.title, blocks: w.blocks }));
-  if (data.unassigned && data.unassigned.length) {
-    groups.push({ key: "__unassigned__", title: "(Work 미배정)", blocks: data.unassigned });
-  }
+  // 문헌 > 권 > 단위 (B-004). 전에는 Work로 묶었는데, Work는 해석 저장소의 엔티티라
+  // 편성이 문헌으로 내려온 뒤로는 가리킬 수 없다(D-097). 저작이 여럿인 문집은 층위 1의
+  // «묶음» 경계가 나타낸다 — 아래 개요의 첫 단계가 그것이다.
+  const docNode = document.createElement("div");
+  docNode.className = "tree-node contents-doc";
+  const docHead = document.createElement("div");
+  docHead.className = "tree-node-header";
+  // 문헌 머리를 누르면 트리 전체가 접힌다(전에 Work 머리가 하던 일).
+  const docClosed = contentsState.collapsedParts.has("__doc__");
+  docHead.innerHTML =
+    `<span class="tree-toggle">${docClosed ? "▶" : "▼"}</span>` +
+    `<span class="tree-label" title="${_treeEscHtml(data.title)}">${_treeEscHtml(data.title)}</span>` +
+    `<span class="contents-count">${data.total_units}</span>`;
+  docHead.addEventListener("click", () => {
+    if (docClosed) contentsState.collapsedParts.delete("__doc__");
+    else contentsState.collapsedParts.add("__doc__");
+    _renderContentsTree(container);
+    highlightContentsForPage(viewerState.pageNum);
+  });
+  docNode.appendChild(docHead);
+  container.appendChild(docNode);
+  if (docClosed) return;
 
-  for (const g of groups) {
-    if (!g.blocks.length) continue;
+  // 권이 하나뿐인 문헌에서는 권 머리를 두지 않는다 — 한 단계가 헛돈다.
+  const parts = (data.parts || []).filter((p) => p.unit_count);
+  const single = parts.length === 1;
+  for (const part of parts) {
     const node = document.createElement("div");
-    node.className = "tree-node contents-work";
+    node.className = "tree-node contents-part";
 
-    const header = document.createElement("div");
-    header.className = "tree-node-header";
-    const collapsed = contentsState.collapsedWorks.has(g.key);
-    header.innerHTML =
-      `<span class="tree-toggle">${collapsed ? "▶" : "▼"}</span>` +
-      `<span class="tree-label" title="${_treeEscHtml(g.title)}">${_treeEscHtml(g.title)}</span>` +
-      `<span class="contents-count">${g.blocks.length}</span>`;
-    header.addEventListener("click", () => {
-      if (contentsState.collapsedWorks.has(g.key)) contentsState.collapsedWorks.delete(g.key);
-      else contentsState.collapsedWorks.add(g.key);
-      _renderContentsTree(container);
-      highlightContentsForPage(viewerState.pageNum);
-    });
-    node.appendChild(header);
-
+    const collapsed = contentsState.collapsedParts.has(part.part_id);
     const children = document.createElement("div");
     children.className = "tree-children";
     children.style.display = collapsed ? "none" : "";
+
+    if (!single) {
+      const header = document.createElement("div");
+      header.className = "tree-node-header";
+      header.innerHTML =
+        `<span class="tree-toggle">${collapsed ? "▶" : "▼"}</span>` +
+        `<span class="tree-label" title="${_treeEscHtml(part.title)}">${_treeEscHtml(part.title)}</span>` +
+        `<span class="contents-count">${part.unit_count}</span>`;
+      header.addEventListener("click", () => {
+        if (contentsState.collapsedParts.has(part.part_id))
+          contentsState.collapsedParts.delete(part.part_id);
+        else contentsState.collapsedParts.add(part.part_id);
+        _renderContentsTree(container);
+        highlightContentsForPage(viewerState.pageNum);
+      });
+      node.appendChild(header);
+    }
+
     // Workflowy식 중첩 개요: 층위가 깊은 행은 바로 앞의 얕은 행 아래에 들어간다.
     // 깊이(level)대로 중첩한다. 자식이 있는 행은 ▸/▾로 접힌다 — 접힘 상태는 contentsState.closedNodes.
-    _renderOutline(children, g.blocks, container);
+    _renderOutline(children, part.units, container);
     node.appendChild(children);
     container.appendChild(node);
   }
+}
+
+/** 이 문헌의 모든 단위를 한 줄로 (권 순서 → 권 안의 차례). */
+function _allUnits() {
+  return (contentsState.data?.parts || []).flatMap((p) => p.units || []);
 }
 
 /**
@@ -418,7 +444,25 @@ function _ensureAnchorCanvas() {
   return c;
 }
 
+/**
+ * PDF 캔버스가 커지거나 작아지면 점선을 다시 그린다.
+ *
+ * 왜 필요한가: 패널을 접거나 펴면 «가로·세로 맞춤»이 다시 돌아 PDF 캔버스 크기가 바뀌는데,
+ * 점선 캔버스는 고를 때 한 번 맞춰 둔 크기 그대로였다. 그래서 네모가 자동 맞춤을 따라가지
+ * 못하고 옛 자리에 남았다(사용자 지적 2026-09-04). 크기가 바뀌는 길이 여럿이라
+ * (줌·맞춤·회전·패널 접기·창 크기) 원인마다 손대는 대신 «바뀌면 다시 그린다»로 잡는다.
+ */
+function _watchPdfCanvasResize() {
+  const pdfCanvas = document.getElementById("pdf-canvas");
+  if (!pdfCanvas || pdfCanvas.dataset.anchorWatch || typeof ResizeObserver === "undefined") return;
+  pdfCanvas.dataset.anchorWatch = "1";
+  new ResizeObserver(() => _drawAnchorCanvas()).observe(pdfCanvas);
+}
+
+document.addEventListener("DOMContentLoaded", _watchPdfCanvasResize);
+
 function _drawAnchorCanvas() {
+  _watchPdfCanvasResize(); // 캔버스가 나중에 생겼으면 그때 붙인다
   const c = _ensureAnchorCanvas();
   if (!c) return;
   const ctx = c.getContext("2d");
@@ -764,11 +808,7 @@ function currentUnitId() {
 function currentUnit() {
   const id = contentsState.selectedUnitId;
   if (!id || !contentsState.data) return null;
-  for (const work of contentsState.data.works || []) {
-    for (const b of work.blocks || []) if (b.id === id) return b;
-  }
-  for (const b of contentsState.data.unassigned || []) if (b.id === id) return b;
-  return null;
+  return _allUnits().find((b) => b.id === id) || null;
 }
 
 function _setBoundaryRole(row, block, role) {
@@ -893,7 +933,7 @@ async function _shiftBoundary(block, delta) {
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     showToast(`경계를 ${delta > 0 ? "한 행 뒤로" : "한 행 앞으로"} 옮겼습니다.`, "success");
     await refreshContentsTree();
-    const b = contentsState.data?.works.flatMap((w) => w.blocks).find((x) => x.id === block.id);
+    const b = _allUnits().find((x) => x.id === block.id);
     if (b && b.pages?.[0]) _jumpToBlockPage(b, b.pages[0]);
   } catch (e) {
     showToast(`경계 이동 실패: ${e.message}`, "error");
@@ -920,10 +960,10 @@ function _selectLayoutBlocksWhenLoaded(blockIds) {
 }
 
 /** 경계 색인 CSV 내보내기 링크 (D-090). 경계가 하나라도 있을 때만 보인다. */
-function _updateExportLink(interpId, docId) {
+function _updateExportLink(docId) {
   const a = document.getElementById("contents-export-csv");
   if (!a) return;
-  const has = (contentsState.data?.works || []).some((w) => w.blocks.some((b) => b.anchor));
+  const has = _allUnits().some((b) => b.anchor);
   a.hidden = !has;
   if (!docId) { a.hidden = true; return; }
   const qs = viewerState.partId ? `?part_id=${encodeURIComponent(viewerState.partId)}` : "";
@@ -965,7 +1005,7 @@ async function _autoTree() {
     showToast("문헌·권이 정해져야 트리를 세울 수 있습니다.", "warning");
     return;
   }
-  const n = contentsState.data?.total_blocks || 0;
+  const n = contentsState.data?.total_units || 0;
   const msg = n
     ? `이 권의 단위 ${n}개를 지우고 목차·해제·들여쓰기로 개요를 다시 세웁니다. 계속할까요?`
     : "목차·해제·들여쓰기·위치로 개요를 세웁니다. 계속할까요?";

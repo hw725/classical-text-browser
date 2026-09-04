@@ -186,8 +186,8 @@ flowchart TB
             direction LR
             R1["library <b>16</b>"]
             R2["documents <b>43</b>"]
-            R3["interpretations <b>24</b>"]
-            R9["composition <b>11</b>"]
+            R3["interpretations <b>23</b>"]
+            R9["composition <b>12</b>"]
             R4["llm_ocr <b>24</b>"]
             R5["alignment <b>20</b>"]
             R6["reading <b>24</b>"]
@@ -669,8 +669,8 @@ flowchart TB
             direction LR
             R1["library <b>16</b>"]
             R2["documents <b>43</b>"]
-            R3["interpretations <b>24</b>"]
-            R9["composition <b>11</b>"]
+            R3["interpretations <b>23</b>"]
+            R9["composition <b>12</b>"]
             R4["llm_ocr <b>24</b>"]
             R5["alignment <b>20</b>"]
             R6["reading <b>24</b>"]

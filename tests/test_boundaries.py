@@ -194,7 +194,6 @@ class TestFilesAndMigration:
         blocks = interp / "core_entities" / "blocks"
         old = {
             "id": "11111111-1111-1111-1111-111111111111",
-            "work_id": "22222222-2222-2222-2222-222222222222",
             "sequence_index": 1,
             "original_text": L1[K9:] + "\n" + L2,
             "source_refs": [
@@ -297,7 +296,6 @@ class TestEntityView:
             interp,
             "unit",
             {
-                "work_id": "22222222-2222-2222-2222-222222222222",
                 "sequence_index": 0,
                 "original_text": "무시된다 — 본문은 L4에서 온다",
                 "source_refs": [
@@ -334,8 +332,9 @@ class TestEntityView:
             E.update_entity(interp, "unit", created["id"], {"status": "draft"})  # 역전이 금지
         with pytest.raises(FileNotFoundError):
             E.get_entity(interp, "unit", "없는-id")
-        tree = E.list_contents(interp, "d")
-        assert tree["unassigned"][0]["level"] == 2 and tree["unassigned"][0]["title"] == "九日談"
+        tree = E.doc_contents(lib / "documents" / "d", "d")
+        unit = tree["parts"][0]["units"][0]
+        assert unit["level"] == 2 and unit["title"] == "九日談"
 
 
 class TestRoles:

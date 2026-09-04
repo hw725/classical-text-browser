@@ -379,7 +379,6 @@ def _create_boundary_from_unit(interp_path: Path, data: dict) -> dict:
         role=meta.get("role") or "article",
         title=meta.get("title") or (data.get("original_text") or "").strip()[:20] or None,
         kind=anchor.get("kind") or meta.get("kind") or "manual",
-        work_id=data.get("work_id"),
         status=data.get("status", "draft"),
         anchor_status=anchor.get("status") or "approved",
         boundary_id=data.get("id"),
@@ -414,7 +413,7 @@ def _create_boundary_from_unit(interp_path: Path, data: dict) -> dict:
 
 
 def _update_boundary_from_unit(interp_path: Path, entity_id: str, updates: dict) -> dict:
-    """단위 갱신 요청(status·notes·metadata·work_id)을 경계 항목에 적용한다."""
+    """단위 갱신 요청(status·notes·metadata)을 경계 항목에 적용한다."""
     from core.boundaries import save_boundaries, update_boundary
 
     data, item = _find_boundary_home(interp_path, entity_id)
@@ -436,7 +435,7 @@ def _update_boundary_from_unit(interp_path: Path, entity_id: str, updates: dict)
                 f"→ 해결: '{old_status}'에서 가능한 전이: {allowed or '없음 (최종 상태)'}"
             )
     fields: dict = {}
-    for k in ("status", "notes", "work_id"):
+    for k in ("status", "notes"):
         if k in updates:
             fields[k] = updates[k]
     # 옛 계약: source_refs를 바꾸면 «위치를 옮긴다». 첫 참조의 쪽·char_range[0]이 새 시작이다.
@@ -778,10 +777,9 @@ def list_entities_for_page(
     # agent_ids/concept_ids에 없더라도 scope_work가 일치하는 것은 포함하지 않음
     # (너무 많아질 수 있으므로, 페이지 필터는 관계로 연결된 것만)
 
-    # 5) Work: blocks의 work_id
-    work_ids = {blk.get("work_id") for blk in page_blocks if blk.get("work_id")}
-    all_works = list_entities(interp_path, "work")
-    page_works = [w for w in all_works if w["id"] in work_ids]
+    # 5) Work: 단위는 더 이상 Work를 가리키지 않는다(B-004) — 이 쪽의 Work는 빈 목록이다.
+    #    저작 묶음은 층위 1의 «묶음» 경계가 나타낸다. 칸은 응답 모양을 지키려 남긴다.
+    page_works: list[dict] = []
 
     return {
         "works": page_works,
@@ -855,7 +853,6 @@ def create_unit_from_source(
     page_num: int,
     layout_block_id: str | None,
     original_text: str,
-    work_id: str,
     sequence_index: int,
 ) -> dict:
     """L4 확정 텍스트에서 단위를 생성한다 (source_ref 자동 채움).
@@ -871,8 +868,7 @@ def create_unit_from_source(
         page_num — 페이지 번호 (1-based).
         layout_block_id — L3 LayoutBlock ID (없으면 null).
         original_text — L4 확정 텍스트.
-        work_id — 소속 Work의 UUID.
-        sequence_index — 작품 내 순서 (0-based).
+        sequence_index — 권 안의 차례 (0-based).
     출력: 생성된 단위 딕셔너리.
 
     왜 이렇게 하는가:
@@ -896,7 +892,6 @@ def create_unit_from_source(
 
     unit_data = {
         "id": str(uuid.uuid4()),
-        "work_id": work_id,
         "sequence_index": sequence_index,
         "original_text": original_text,
         "normalized_text": None,
@@ -1013,14 +1008,10 @@ def auto_create_units_from_text(
         시나리오 2에서는 PDF/이미지가 없으므로 LayoutBlock도 없다.
         source_ref.layout_block_id=null로 설정하고,
         source_ref.page만으로 원본을 추적한다.
-        Work가 아직 없으면 자동으로 생성한다 (auto_create_work).
+        단위는 Work를 가리키지 않는다(B-004) — 저작 묶음은 층위 1의 «묶음» 경계다.
     """
     interp_path = Path(interp_path).resolve()
     library_path = Path(library_path).resolve()
-
-    # Work 자동 생성 (없으면 생성, 있으면 기존 것 사용)
-    work_result = auto_create_work(interp_path, library_path, document_id)
-    work_id = work_result["work"]["id"]
 
     created_blocks = []
 
@@ -1041,7 +1032,6 @@ def auto_create_units_from_text(
             page_num=page_num,
             layout_block_id=None,
             original_text=text,
-            work_id=work_id,
             sequence_index=seq_idx,
         )
 
@@ -1061,95 +1051,108 @@ def _block_preview(text: str | None, length: int = 14) -> str:
     return compact[:length] + ("…" if len(compact) > length else "")
 
 
-def list_contents(interp_path: str | Path, document_id: str | None = None) -> dict:
-    """해석 저장소의 내용 트리 — Work마다 단위를 sequence_index 순으로.
+def doc_contents(doc_path: str | Path, document_id: str, title: str | None = None) -> dict:
+    """문헌의 내용 트리 — 권마다 단위를 원본 위치 순서로 (B-004).
 
-    목적: 교감 뒤에는 쪽이 아니라 **내용**으로 찾아가야 한다(D-085). 사이드바의
-          「내용」 트리가 이 결과로 그려지고, 블록을 누르면 source_refs의 쪽으로
-          이동한다. 저장 형식은 건드리지 않는다 — blocks/·works/를 읽어 묶기만 한다.
+    목적: 교감 뒤에는 쪽이 아니라 **내용**으로 찾아가야 한다(D-085). 사이드바 「내용」 트리가
+          이 결과로 그려지고, 단위를 누르면 그 쪽으로 가며 해석 편집기 다섯이 따라간다(D-096).
     입력:
-        interp_path — 해석 저장소 경로.
-        document_id — 주면 그 문헌을 가리키는 블록만. None이면 전부.
+        doc_path — 문헌 경로. document_id — 문헌 id. title — 문헌 제목(없으면 manifest에서).
     출력: {
-        "works": [{"id", "title", "author", "block_count", "blocks": [...]}, ...],
-        "unassigned": [...블록...],          # work_id가 없거나 Work가 사라진 블록
-        "total_blocks": N
+        "document_id", "title",
+        "parts": [{"part_id", "title", "unit_count", "units": [...]}, ...],
+        "total_units": N
     }
-      블록 하나: {"id", "sequence_index", "preview", "char_count", "status",
+      단위 하나: {"id", "sequence_index", "anchor", "level", "role", "role_estimated",
+                  "title", "source_refs", "preview", "char_count", "status",
                   "pages": [{"page", "part_id", "layout_block_ids": [...]}, ...]}
-      pages는 source_refs를 쪽 번호로 묶은 것(등장 순서). 두 쪽에 걸친 블록은 둘이다.
-      part_id는 참조에 있을 때만 — 예전 참조에는 없어 null일 수 있다.
+      pages는 source_refs를 쪽 번호로 묶은 것(등장 순서). 두 쪽에 걸친 단위는 둘이다.
+
+    왜 Work로 묶지 않는가: Work(저작)는 해석 저장소의 엔티티인데 편성은 문헌의 것이다(D-097).
+    문헌의 데이터가 남의 저장소 엔티티를 가리키고 있었고, 해석 저장소가 여럿이면 그중 하나만
+    가리켰다. 저작이 여럿인 문집은 층위 1의 «묶음(container)» 경계가 나타낸다 — 트리의 층위
+    그대로다(B-004).
     """
-    interp_path = Path(interp_path).resolve()
-    works = {w["id"]: w for w in list_entities(interp_path, "work") if w.get("id")}
-    grouped: dict[str, list[dict]] = {wid: [] for wid in works}
-    unassigned: list[dict] = []
+    from core.boundaries import list_doc_parts
 
-    for blk in list_entities(interp_path, "unit"):
-        refs = blk.get("source_refs") or ([blk["source_ref"]] if blk.get("source_ref") else [])
-        if document_id and refs and not any(r.get("document_id") == document_id for r in refs):
-            continue
-        pages: list[dict] = []
-        for r in refs:
-            page = r.get("page")
-            if page is None:
-                continue
-            slot = next((p for p in pages if p["page"] == page), None)
-            if slot is None:
-                slot = {"page": page, "part_id": r.get("part_id"), "layout_block_ids": []}
-                pages.append(slot)
-            if r.get("layout_block_id") and r["layout_block_id"] not in slot["layout_block_ids"]:
-                slot["layout_block_ids"].append(r["layout_block_id"])
-            if slot["part_id"] is None and r.get("part_id"):
-                slot["part_id"] = r["part_id"]
-        item = {
-            "id": blk.get("id"),
-            "sequence_index": blk.get("sequence_index"),
-            # 경계 앵커(D-090): 위치의 정본은 source_refs. 종류·신뢰도·좌표 캐시는 metadata.anchor
-            "anchor": (blk.get("metadata") or {}).get("anchor"),
-            "level": int(((blk.get("metadata") or {}).get("level")) or 2),
-            "role": (blk.get("metadata") or {}).get("role"),
-            "role_estimated": bool((blk.get("metadata") or {}).get("role_estimated")),
-            "title": (blk.get("metadata") or {}).get("title"),
-            "source_refs": refs,
-            "preview": _block_preview(blk.get("original_text")),
-            "char_count": len("".join((blk.get("original_text") or "").split())),
-            "status": blk.get("status"),
-            "pages": pages,
-        }
-        wid = blk.get("work_id")
-        if wid in grouped:
-            grouped[wid].append(item)
-        else:
-            unassigned.append(item)
+    doc_path = Path(doc_path)
+    info: dict = {}
+    if title is None:
+        try:
+            from core.document import get_document_info
 
-    def _order(items: list[dict]) -> list[dict]:
-        # sequence_index가 없는 블록은 뒤로, 그 안에서는 첫 쪽 번호로.
-        return sorted(
-            items,
-            key=lambda b: (
-                b["sequence_index"] is None,
-                b["sequence_index"] if b["sequence_index"] is not None else 0,
-                b["pages"][0]["page"] if b["pages"] else 0,
-            ),
-        )
+            info = get_document_info(doc_path) or {}
+            title = info.get("title")
+        except Exception:  # noqa: BLE001 — 제목이 없어도 트리는 그린다
+            info = {}
+    part_titles = {
+        str(pt.get("part_id")): pt.get("title")
+        for pt in (info.get("parts") or [])
+        if pt.get("part_id")
+    }
 
-    out_works = []
-    for wid, w in works.items():
-        blocks = _order(grouped[wid])
-        out_works.append(
+    parts_out = []
+    total = 0
+    for pid in list_doc_parts(doc_path):
+        units = _order_units([_contents_item(u) for u in doc_units(doc_path, document_id, pid)])
+        total += len(units)
+        parts_out.append(
             {
-                "id": wid,
-                "title": w.get("title") or "(제목 없음)",
-                "author": w.get("author"),
-                "block_count": len(blocks),
-                "blocks": blocks,
+                "part_id": pid,
+                "title": part_titles.get(pid) or pid,
+                "unit_count": len(units),
+                "units": units,
             }
         )
-    out_works.sort(key=lambda w: (w["block_count"] == 0, w["title"]))
-    unassigned = _order(unassigned)
     return {
-        "works": out_works,
-        "unassigned": unassigned,
-        "total_blocks": sum(w["block_count"] for w in out_works) + len(unassigned),
+        "document_id": document_id,
+        "title": title or document_id,
+        "parts": parts_out,
+        "total_units": total,
     }
+
+
+def _contents_item(blk: dict) -> dict:
+    """단위 하나를 트리 항목으로. 쪽은 source_refs를 쪽 번호로 묶은 것(등장 순서)."""
+    refs = blk.get("source_refs") or ([blk["source_ref"]] if blk.get("source_ref") else [])
+    pages: list[dict] = []
+    for r in refs:
+        page = r.get("page")
+        if page is None:
+            continue
+        slot = next((p for p in pages if p["page"] == page), None)
+        if slot is None:
+            slot = {"page": page, "part_id": r.get("part_id"), "layout_block_ids": []}
+            pages.append(slot)
+        if r.get("layout_block_id") and r["layout_block_id"] not in slot["layout_block_ids"]:
+            slot["layout_block_ids"].append(r["layout_block_id"])
+        if slot["part_id"] is None and r.get("part_id"):
+            slot["part_id"] = r["part_id"]
+    meta = blk.get("metadata") or {}
+    return {
+        "id": blk.get("id"),
+        "sequence_index": blk.get("sequence_index"),
+        # 경계 앵커(D-090): 위치의 정본은 source_refs. 종류·신뢰도·좌표 캐시는 metadata.anchor
+        "anchor": meta.get("anchor"),
+        "level": int(meta.get("level") or 2),
+        "role": meta.get("role"),
+        "role_estimated": bool(meta.get("role_estimated")),
+        "title": meta.get("title"),
+        "source_refs": refs,
+        "preview": _block_preview(blk.get("original_text")),
+        "char_count": len("".join((blk.get("original_text") or "").split())),
+        "status": blk.get("status"),
+        "pages": pages,
+    }
+
+
+def _order_units(items: list[dict]) -> list[dict]:
+    """차례가 없는 단위는 뒤로, 그 안에서는 첫 쪽 번호로."""
+    return sorted(
+        items,
+        key=lambda b: (
+            b["sequence_index"] is None,
+            b["sequence_index"] if b["sequence_index"] is not None else 0,
+            b["pages"][0]["page"] if b["pages"] else 0,
+        ),
+    )
