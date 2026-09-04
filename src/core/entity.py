@@ -323,9 +323,13 @@ def doc_units(doc_path: str | Path, document_id: str, part_id: str | None = None
     for pid in parts:
         lines, page_texts = doc_part_lines(doc_path, document_id, pid)
         data = load_doc_boundaries(doc_path, document_id, pid)
+        # 읽으면서 버린 것이 있으면(옛 work_id — D-099) 파일에도 굳힌다.
+        # 읽기만 하고 두면 파일에는 남아 「검증 결과」가 계속 어긋남으로 짚는다.
+        dirty = bool(data.pop("_dropped", 0))
         if page_texts and head and any(b.get("l4_commit") != head for b in data["boundaries"]):
-            if rematch(data, page_texts, head):
-                save_doc_boundaries(doc_path, data)
+            dirty = rematch(data, page_texts, head) > 0 or dirty
+        if dirty:
+            save_doc_boundaries(doc_path, data)
         units.extend(compute_units(data, lines, page_texts))
     return units
 

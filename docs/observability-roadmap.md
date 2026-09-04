@@ -10,6 +10,7 @@
 - 결정 카드 50개([`DECISIONS.md`](DECISIONS.md))
 - 세션 카드 14개([`sessions/`](sessions/))의 4단 구조
 - 릴리스 노트의 재실행 가능한 검증 명령([`releases/v1.1.4.md`](releases/v1.1.4.md))
+- 「검증 결과」 패널 — 서고 파일이 제 스키마를 지키는지 언제든 확인(D-101)
 - `CLAUDE.md`라는 단일 진실 원천
 
 그러나 **런타임 관측 가능성**(runtime observability)은 부분적이다.

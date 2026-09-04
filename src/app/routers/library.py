@@ -14,7 +14,7 @@ import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
@@ -722,3 +722,33 @@ async def api_restore_from_trash(trash_type: str, trash_name: str):
         return JSONResponse({"error": str(e)}, status_code=404)
     except FileExistsError as e:
         return JSONResponse({"error": str(e)}, status_code=409)
+
+
+@router.get("/api/documents/{doc_id}/validation")
+async def api_validate_repos(doc_id: str, interpretation_id: str | None = Query(None)):
+    """서고 파일이 제 스키마를 지키는가 — 「검증 결과」 패널 (D-101).
+
+    목적: 스키마를 «적어 두기만 한 것»에서 «언제든 확인할 수 있는 것»으로. 문헌(과 있으면
+          해석) 저장소의 JSON을 훑어 파일마다 정해진 스키마로 검증하고, 어긋난 곳을
+          «파일 · 위치 · 무엇이 틀렸나»로 돌려준다.
+    입력: doc_id, (선택) interpretation_id.
+    출력: core.validation.validate_repos() 참조.
+    """
+    from core.validation import validate_repos
+
+    _library_path = get_library_path()
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+    doc_path = _resolve_repo_path("documents", doc_id)
+    if doc_path is None or not doc_path.exists():
+        return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
+    interp_path = None
+    if interpretation_id:
+        interp_path = _resolve_repo_path("interpretations", interpretation_id)
+    try:
+        result = validate_repos(doc_path, interp_path)
+    except Exception as e:  # noqa: BLE001 — 검증이 실패해도 화면은 살아 있어야 한다
+        return JSONResponse({"error": f"검증 실패: {e}"}, status_code=400)
+    result["document_id"] = doc_id
+    result["interpretation_id"] = interpretation_id
+    return result

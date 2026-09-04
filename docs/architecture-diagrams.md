@@ -12,9 +12,9 @@
 > |---|---|
 > | 6 · 11 · 13 | 추출 모드와 화면 구조 — 전면 개작. 13번은 새로 만든 것 |
 > | 1 · 5 · 9 · 10 | 텍스트 레이어 PDF 산출, 쪽 전면 1블록, 부분 재-OCR, 되돌리기 |
-> | 2 · 8 | 라우트 202개 · JS 모듈 30개 · API 캐시 금지 미들웨어 |
+> | 2 · 8 | 라우트 203개 · JS 모듈 31개 · API 캐시 금지 미들웨어 |
 > | 4 | LLM 사용량을 화면에 표시(D-056), LLM Vision OCR을 소비자로 추가 |
-> | 3 · 7 · 12 | **바뀐 것 없음** — 코어 스키마 6종(D-092 경계 목록 추가, D-099 Work 삭제), 스키마 19개의 참조 관계, L7 주석 4단계는 v1.2.0이 건드리지 않았다 |
+> | 3 · 7 · 12 | **v1.3.0에서 바뀜** — 코어 엔티티가 6종으로(경계 목록 추가 D-092, Work 삭제 D-099), 경계 목록은 **원본 저장소**에 산다(D-097). 스키마 19개, L7 주석 4단계는 그대로 |
 >
 > 그림과 코드가 어긋나면 **코드가 기준**이다.
 
@@ -58,14 +58,14 @@ flowchart TB
     end
 
     subgraph CORE["코어 스키마 엔티티"]
-        Work["Work"]
+        BND["경계 목록<br/><i>원본 저장소</i>"]
         Unit["단위(unit)"]
         Tag["Tag"]
         PROMO["승격 (선택적)"]
         Concept["Concept"]
         Agent["Agent"]
         Relation["Relation"]
-        Work --- Unit --- Tag
+        BND --- Unit --- Tag
         Tag -.-> PROMO -.-> Concept
         Concept --- Relation
         Agent --- Relation
@@ -90,7 +90,7 @@ flowchart TB
     style L7 fill:#e3f2fd,stroke:#1565c0
     style L8 fill:#e3f2fd,stroke:#1565c0
     style CORE fill:#e1bee7,stroke:#6a2d6a,stroke-width:2px
-    style Work fill:#fef3c7,stroke:#b45309
+    style BND fill:#fef3c7,stroke:#b45309
     style Unit fill:#fef3c7,stroke:#b45309
     style Tag fill:#fef3c7,stroke:#b45309
     style Concept fill:#fef3c7,stroke:#b45309
@@ -114,7 +114,7 @@ flowchart TB
 
 ## 2. 전체 시스템 아키텍처
 
-프론트엔드(30개 JS 모듈) · 백엔드(FastAPI + 9 라우터, 라우트 202개) ·
+프론트엔드(31개 JS 모듈) · 백엔드(FastAPI + 9 라우터, 라우트 203개) ·
 처리 엔진(OCR 5종 + LLM 5단 + 산출·검출 보조) · Git 저장소 · 외부 서비스.
 
 **여기서 읽어야 할 것**: 화면과 서버 사이에는 REST API 하나뿐이고 빌드 도구도
@@ -183,9 +183,9 @@ flowchart TB
         SRV["server.py<br/>앱 생성 + 라우터 마운트 + 캐시 금지 (152줄)"]
         ST["_state.py<br/>공유 상태 · 헬퍼 · LLM/OCR 캐시"]
         MW["미들웨어<br/>API 응답에 Cache-Control no-store<br/>정적 파일에는 no-cache + ETag (D-066)"]
-        subgraph ROUTERS["9개 도메인 라우터 (라우트 202개)"]
+        subgraph ROUTERS["9개 도메인 라우터 (라우트 203개)"]
             direction LR
-            R1["library <b>16</b>"]
+            R1["library <b>17</b>"]
             R2["documents <b>43</b>"]
             R3["interpretations <b>23</b>"]
             R9["composition <b>12</b>"]
@@ -272,22 +272,22 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    subgraph SCHEMA["6개 엔티티 -- 해석 저장소 내부"]
+    subgraph SCHEMA["코어 5 + 경계 목록"]
         direction TB
         subgraph ROW1[" "]
             direction LR
-            WORK["<b>Work</b><br/>id: UUID (PK)<br/>title: 원어 제목 (필수)<br/>author: 저자<br/>period: 시대<br/>status: draft|active|deprecated|archived<br/>metadata: 자유 확장 필드"]
-            TB_NODE["<b>단위(unit)</b><br/>id: UUID (PK)<br/>work_id: FK → Work<br/>sequence_index: 순서 (필수)<br/>original_text: 원문 (불변, 필수)<br/>normalized_text: 정규화<br/>source_ref: 출처 추적 JSON<br/>status: draft|active|..."]
+            BND2["<b>경계 목록</b> <i>(원본 저장소)</i><br/>document_id / part_id<br/>boundaries[]: id · level · role<br/>start: page/line/offset<br/>anchor_text · l4_commit<br/><i>권마다 파일 하나 — D-092·D-097</i>"]
+            TB_NODE["<b>단위(unit)</b> <i>(읽기 보기)</i><br/>id = 시작 경계의 id<br/>sequence_index: 권 안의 차례<br/>original_text: L4에서 잘라 온다<br/>normalized_text: 정규화<br/>source_ref: 출처 추적 JSON<br/>status: draft|active|..."]
             TAG["<b>Tag</b><br/>id: UUID (PK)<br/>block_id: FK → 단위<br/>surface: 표면 텍스트 (필수)<br/>core_category: person|place|...<br/>confidence: 신뢰도 0-1<br/>extractor: llm|rule|human<br/>status: draft|active|..."]
         end
         subgraph ROW2[" "]
             direction LR
-            CONCEPT["<b>Concept</b><br/>id: UUID (PK)<br/>label: 대표 이름 (필수)<br/>scope_work: 범위 Work (선택)<br/>description: 학술 설명<br/>concept_features: 자유 확장<br/>status: draft|active|..."]
+            CONCEPT["<b>Concept</b><br/>id: UUID (PK)<br/>label: 대표 이름 (필수)<br/>scope_document: 범위 문헌 (선택)<br/>description: 학술 설명<br/>concept_features: 자유 확장<br/>status: draft|active|..."]
             AGENT["<b>Agent</b><br/>id: UUID (PK)<br/>name: 이름 (필수)<br/>period: 활동 시대<br/>biography_note: 약전<br/>status: draft|active|..."]
             RELATION["<b>Relation</b><br/>id: UUID (PK)<br/>subject_id / subject_type<br/>predicate: snake_case (필수)<br/>object_id / object_type<br/>object_value: 자유 텍스트<br/>evidence_blocks: 단위 ID[]<br/>confidence / status"]
         end
 
-        WORK -->|"contains"| TB_NODE
+        BND2 -->|"만든다"| TB_NODE
         TB_NODE -->|"has tags"| TAG
         TAG -.->|"승격"| CONCEPT
         AGENT -->|"subject/object"| RELATION
@@ -296,7 +296,7 @@ flowchart TB
     end
 
     style SCHEMA fill:#f3e5f5,stroke:#6a2d6a,stroke-width:2px
-    style WORK fill:#fef3c7,stroke:#b45309,stroke-width:2px
+    style BND2 fill:#fef3c7,stroke:#b45309,stroke-width:2px
     style TB_NODE fill:#fef3c7,stroke:#b45309,stroke-width:2px
     style TAG fill:#e3f2fd,stroke:#1565c0
     style CONCEPT fill:#e3f2fd,stroke:#1565c0
@@ -601,8 +601,8 @@ flowchart TB
 
     subgraph CORE_SCHEMA["코어 스키마 (6개)"]
         direction TB
-        C_WOR["<b>Work</b><br/><i>title, author, period</i>"]
-        C_TB["<b>단위(unit)</b><br/><i>work_id, original_text, source_ref</i>"]
+        C_BND["<b>경계 목록</b><br/><i>원본 저장소 · 권마다 하나</i>"]
+        C_TB["<b>단위(unit)</b><br/><i>경계의 읽기 보기 · original_text는 L4에서</i>"]
         C_TAG["<b>Tag</b><br/><i>block_id, surface, core_category</i>"]
         C_CON["<b>Concept</b><br/><i>label, concept_features</i>"]
         C_AGE["<b>Agent</b><br/><i>name, period</i>"]
@@ -666,9 +666,9 @@ flowchart TB
         MAIN["__main__.py<br/>CLI 진입점"]
         SRV["<b>server.py</b><br/>FastAPI 앱 생성 · 라우터 마운트 · 캐시 금지 (152줄)"]
         STATE["<b>_state.py</b><br/>공유 상태, 헬퍼 · LLM 캐시, 토큰 계산"]
-        subgraph ROUTERS["routers/ -- 9개 도메인 · 라우트 202개"]
+        subgraph ROUTERS["routers/ -- 9개 도메인 · 라우트 203개"]
             direction LR
-            R1["library <b>16</b>"]
+            R1["library <b>17</b>"]
             R2["documents <b>43</b>"]
             R3["interpretations <b>23</b>"]
             R9["composition <b>12</b>"]
@@ -811,7 +811,7 @@ flowchart TB
         IA_L5["L5/<br/>punctuation, hyeonto"]
         IA_L6["L6/<br/>translation"]
         IA_L7["L7/<br/>annotation, citation"]
-        IA_CORE["core/ -- Work, 단위(unit), Tag, Concept, Agent, Relation"]
+        IA_CORE["core/ -- 경계 목록, 단위(unit), Tag, Concept, Agent, Relation"]
     end
 
     subgraph INTERP_B["해석 B (LLM draft, Git repo)"]

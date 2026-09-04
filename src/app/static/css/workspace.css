@@ -7955,3 +7955,25 @@ select.prop-level { max-width: 4.6em; }
 /* 아직 정해지지 않아 깊이로 어림한 역할 — 사람이 정한 것과 구별한다 */
 .contents-shift-btn.is-estimated { opacity: 0.55; font-style: italic; }
 .comp-cur-meta.is-estimated { opacity: 0.7; font-style: italic; }
+
+/* === 검증 결과 패널 (D-101) === */
+.val-head {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 8px; border-bottom: 1px solid var(--border);
+}
+.val-badge { font-size: 12px; font-weight: 600; padding: 1px 6px; border-radius: 3px; }
+.val-ok .val-badge { background: var(--success-bg, #1f3d2b); color: var(--success, #6ee7a0); }
+.val-bad .val-badge { background: var(--danger-bg, #3d1f1f); color: var(--danger, #f87171); }
+.val-sub { font-size: 11px; color: var(--text-muted); flex: 1; }
+.val-groups { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 8px; }
+.val-group {
+  font-size: 11px; color: var(--text-secondary);
+  background: var(--bg-secondary); border: 1px solid var(--border);
+  border-radius: 3px; padding: 1px 5px;
+}
+.val-items { max-height: 60vh; overflow: auto; }
+.val-item { padding: 5px 8px; border-bottom: 1px solid var(--border); font-size: 11px; }
+.val-item-file { color: var(--text-secondary); word-break: break-all; }
+.val-item-where { color: var(--text-muted); font-family: var(--font-mono, monospace); }
+.val-item-msg { color: var(--danger, #f87171); margin-top: 2px; }
+.val-more { padding: 6px 8px; font-size: 11px; color: var(--text-muted); }

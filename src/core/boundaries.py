@@ -153,28 +153,33 @@ def load_doc_boundaries(doc_path: str | Path, document_id: str, part_id: str) ->
         return {"document_id": document_id, "part_id": part_id, "boundaries": []}
     data = json.loads(p.read_text(encoding="utf-8"))
     data["boundaries"] = sorted(data.get("boundaries") or [], key=sort_key)
-    _drop_work_id(data)
+    data["_dropped"] = _drop_work_id(data)
     return data
 
 
-def _drop_work_id(data: dict) -> None:
+def _drop_work_id(data: dict) -> int:
     """옛 파일의 `work_id`를 버린다 (B-004).
 
     왜: Work(저작)는 해석 저장소의 엔티티인데 경계는 문헌의 것이다(D-097) — 문헌의 데이터가
     남의 저장소 엔티티를 가리키고 있었고, 해석 저장소가 여럿이면 그중 하나만 가리켰다.
     저작 묶음은 이제 층위 1의 «묶음(container)» 경계가 나타낸다.
-    따로 마이그레이션을 돌리지 않는 것은 스키마가 additionalProperties:false라 다음 저장 때
-    반드시 걸리기 때문이다 — 읽는 자리에서 버리면 그것으로 끝난다.
+    출력: 버린 개수. 읽는 쪽이 `data["_dropped"]`에 담아 두고, 0보다 크면 파일을 다시 써서
+    굳힌다(doc_units) — 읽기만 하고 두면 파일에는 남아 「검증 결과」 패널이 계속 짚는다
+    (실측 2026-09-04). `_`로 시작하는 칸은 저장할 때 떼어 낸다.
     """
+    dropped = 0
     for b in data.get("boundaries") or []:
-        b.pop("work_id", None)
+        if b.pop("work_id", None) is not None:
+            dropped += 1
+    return dropped
 
 
 def save_doc_boundaries(doc_path: str | Path, data: dict) -> Path:
     """검증하고 원자적으로 쓴다(write_json_atomic — D-069). 순서는 위치순으로 고정한다."""
     from core.document import write_json_atomic
 
-    data = dict(data)
+    # «_»로 시작하는 칸은 읽는 쪽이 붙인 메모다 — 파일에 쓰지 않는다(스키마도 거부한다)
+    data = {k: v for k, v in data.items() if not k.startswith("_")}
     data["boundaries"] = sorted(data.get("boundaries") or [], key=sort_key)
     validate(data)
     p = doc_boundaries_file(doc_path, data["part_id"])
@@ -205,7 +210,7 @@ def load_boundaries(interp_path: str | Path, document_id: str, part_id: str) -> 
         return {"document_id": document_id, "part_id": part_id, "boundaries": []}
     data = json.loads(p.read_text(encoding="utf-8"))
     data["boundaries"] = sorted(data.get("boundaries") or [], key=sort_key)
-    _drop_work_id(data)
+    data["_dropped"] = _drop_work_id(data)
     return data
 
 
@@ -213,7 +218,8 @@ def save_boundaries(interp_path: str | Path, data: dict) -> Path:
     """검증하고 원자적으로 쓴다(write_json_atomic — D-069). 순서는 위치순으로 고정한다."""
     from core.document import write_json_atomic
 
-    data = dict(data)
+    # «_»로 시작하는 칸은 읽는 쪽이 붙인 메모다 — 파일에 쓰지 않는다(스키마도 거부한다)
+    data = {k: v for k, v in data.items() if not k.startswith("_")}
     data["boundaries"] = sorted(data.get("boundaries") or [], key=sort_key)
     validate(data)
     p = boundaries_file(interp_path, data["document_id"], data["part_id"])

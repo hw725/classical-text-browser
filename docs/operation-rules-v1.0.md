@@ -60,15 +60,20 @@ Entities are stored under `core_entities/` within each interpretation
 repository:
 
 ```
+{doc_id}/
+└── boundaries/{part_id}.json    (글 단위의 경계 목록 — D-092·D-097)
+
 {interp_id}/
 └── core_entities/
-    ├── works/{uuid}.json
-    ├── blocks/{uuid}.json       (TextBlock)
     ├── tags/{uuid}.json
     ├── concepts/{uuid}.json
     ├── agents/{uuid}.json
     └── relations/{uuid}.json
 ```
+
+> **v1.3 변경**: `works/`와 `blocks/`는 없다. 단위(unit)는 파일 하나씩 저장하지 않고
+> 권마다 하나인 경계 목록에서 계산하는 읽기 보기이며(D-092), 그 목록은 편성이 원본의
+> 일이므로 **원본 저장소**에 산다(D-097). Work 엔티티는 없앴다(D-099).
 
 Each entity stored as single JSON file. File name matches entity ID.
 

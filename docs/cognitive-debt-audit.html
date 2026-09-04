@@ -67,12 +67,12 @@
 <body>
 <div class="wrap">
 
-<div style="background:#e8f5e9;border-left:4px solid #43a047;padding:12px;margin:12px 0;font-family:sans-serif"><strong>✅ 갱신 (2026-07-26 · v1.2.0):</strong> 2026-07-04 감사 이후 넉 달, 릴리스 둘(v1.1.5 · v1.2.0)이 지났다. 이 판은 <em>수치를 전부 다시 재고</em>, 해소된 항목을 표시하고, 그동안 드러난 하나의 결함 유형(<strong>침묵하는 실패</strong>)을 새 절로 더한 것이다. 이전 판의 핫스팟 1위(<code>_parse_llm_json</code> 이중 정의)와 3위 일부(잘림 복구의 침묵)는 <strong>해소됐다</strong>.</div>
+<div style="background:#e8f5e9;border-left:4px solid #43a047;padding:12px;margin:12px 0;font-family:sans-serif"><strong>✅ 3차 감사 (2026-09-04 · v1.3.0):</strong> 결정 아홉(D-092~D-100)이 저장 형식과 소유 경계를 옮겼다. 이 판은 <strong>9절</strong>을 더해 그 기간에 <em>실제로 발견된 것</em>만 적는다 — 검증이 없던 자리에서 나온 네 건과, 그에 대응해 더한 방어 장치 셋. 1~8절은 2차 감사(2026-07-26 · v1.2.0) 본문 그대로이며 수치를 다시 재지 않았다.</div>
 
 <header>
   <h1>인지 부채 감사 — classical-text-browser</h1>
-  <div class="meta">최초 감사 2026-07-04 · <strong>2차 감사 2026-07-26</strong> · 기준 v1.2.0 · 마지막 커밋 daa73e3(2026-07-26, 작업 트리 깨끗함) · 대상: <span class="mono">hw725\classical-text-browser</span></div>
-  <div class="meta">모든 수치는 <strong>2026-07-26 실측</strong>(파일 직접 계수). 이 페이지는 <span class="mono">AGENTS.md</span>의 「인지 부채 지도」를 서술형으로 푼 것이며, 두 문서는 같은 순위·같은 경로를 쓴다.</div>
+  <div class="meta">최초 2026-07-04 · 2차 2026-07-26(v1.2.0) · <strong>3차 2026-09-04(v1.3.0 — 9절)</strong> · 대상: <span class="mono">hw725\classical-text-browser</span></div>
+  <div class="meta">1~8절의 수치는 <strong>2026-07-26 실측</strong>, 9절의 수치는 <strong>2026-09-04 실측</strong>(파일 직접 계수). 이 페이지는 <span class="mono">AGENTS.md</span>의 「인지 부채 지도」를 서술형으로 푼 것이며, 두 문서는 같은 순위·같은 경로를 쓴다.</div>
 </header>
 
 <section id="bg">
@@ -388,7 +388,61 @@
   <div class="score" id="score"></div>
 </section>
 
-<footer>인지 부채 감사 · classical-text-browser · 최초 2026-07-04 · 2차 2026-07-26(v1.2.0 기준) · 이 파일은 자립형 HTML(외부 리소스 없음)</footer>
+<section id="audit3">
+  <h2>9. 3차 감사 (2026-09-04 · v1.3.0) — 검증이 없던 자리에서 무엇이 나왔나</h2>
+
+  <p>v1.2.0 이후 결정 아홉(D-092 ~ D-100)이 쌓였고, 그 대부분은 <strong>저장 형식과 소유
+  경계</strong>를 옮기는 일이었다. 이 절은 그 기간에 <em>실제로 발견된 것</em>만 적는다 —
+  추정은 없다.</p>
+
+  <h3>9.1 구조가 바뀐 곳</h3>
+  <table>
+    <thead><tr><th>무엇</th><th>전</th><th>후</th></tr></thead>
+    <tbody>
+      <tr><td>글 단위의 정본</td><td>TextBlock 파일 하나씩</td><td>권마다 <strong>경계 목록 하나</strong>(D-092). 본문은 저장하지 않고 L4에서 잘라 온다</td></tr>
+      <tr><td>편성의 소유</td><td>해석 저장소</td><td><strong>원본 저장소</strong>(D-097). 해석 저장소들이 공유한다</td></tr>
+      <tr><td>내용 트리</td><td>Work &gt; 단위</td><td>문헌 &gt; 권 &gt; 단위(D-098)</td></tr>
+      <tr><td>Work 엔티티</td><td>있음</td><td><strong>삭제</strong>(D-099)</td></tr>
+      <tr><td>교환 형식</td><td>문서·구현이 서로 다름</td><td>스키마 하나가 정본(D-100)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>9.2 «검증이 없어서 몰랐던 것» 넷 — 이 감사의 지적이 그대로 실현됐다</h3>
+  <p>2차 감사의 핵심 지적은 <strong>「프론트에는 재현 가능한 검증이 없다」</strong>와
+  <strong>「오류를 내지 않고 틀리는 코드」</strong>였다. 이번 기간에 그 둘이 각각 실물로 나왔다.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>#</th><th>무엇</th><th>얼마나 오래</th><th>어떻게 드러났나</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><strong>비고 패널이 죽어 있었다</strong> — <span class="mono">notes-panel.js</span>가 <span class="mono">viewerState.interpId</span>를 읽는데 그런 칸이 없다(해석 저장소 id는 <span class="mono">interpState.interpId</span>). 불러오지도 저장하지도 않았다</td><td>알 수 없음(그 칸을 읽는 유일한 파일이라 언제부터인지 짚을 수 없다)</td><td>사이드바 여덟 패널을 하나씩 열어 본 점검에서. <strong>오류를 내지 않는다</strong> — 「해석 저장소를 선택하면…」 안내문만 조용히 띄웠다</td></tr>
+      <tr><td>2</td><td><strong>시험 픽스처가 제 스키마를 전부 어기고 있었다</strong> — L3 블록 id 패턴, dependency 필수 칸 넷, 표점의 <span class="mono">marks</span> 등</td><td>스키마가 생긴 이래</td><td>교환 스키마가 다른 스키마를 <span class="mono">$ref</span>로 물게 하자 그 자리에서 전부 빨간불. 실서고 데이터는 어기지 않았다(L3 311쪽 위반 0)</td></tr>
+      <tr><td>3</td><td><strong>교환 형식이 두 벌이었다</strong> — <span class="mono">exchange.schema.json</span>과 <span class="mono">snapshot.py</span>가 다른 모양이고, 그 스키마를 파이썬 어디서도 읽지 않았다</td><td>Phase 12-3 이래</td><td>스냅샷의 <span class="mono">work</span> 절 이름을 고치다가</td></tr>
+      <tr><td>4</td><td><strong>스냅샷이 적는 앱 판이 "1.1.4"에 멈춰 있었다</strong> — 상수로 적어 두어 릴리스마다 함께 고쳐지지 않았다</td><td>v1.1.4 ~ v1.2.3</td><td>같은 감사에서. 「버전 적는 곳은 하나」 규칙이 왜 있는지의 실례</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>네 건의 공통점은 2차 감사가 이름 붙인 그대로다 — <strong>예외를 던지지 않는다.</strong>
+  ①은 안내문, ②·③은 아무도 부르지 않는 스키마, ④는 그럴듯한 숫자였다.</p>
+
+  <h3>9.3 이번에 더한 방어 장치</h3>
+  <ul>
+    <li><strong>「검증 결과」 패널</strong>(D-101) — 서고 파일이 제 스키마를 지키는지 사람이 언제든 눌러 본다. 문헌·해석의 JSON을 훑어 파일·위치·무엇이 틀렸나를 보여 준다. 실측: 천진담초 424 파일 검사, 운양집 210 파일 검사. <strong>이 패널이 v1.2까지 「향후 구현」 안내문만 띄우던 빈 껍데기였다</strong> — 그것 자체가 부채였다.</li>
+    <li><strong>교환 형식 시험</strong> — 「내보낸 것이 스키마를 통과하는가」를 시험이 고정한다. 구현만 바꾸고 스키마를 안 고치면 그 자리에서 깨진다.</li>
+    <li><strong>층 안쪽 <span class="mono">$ref</span></strong> — 교환 스키마가 페이로드 모양을 다시 베끼지 않고 각자의 스키마를 문다. 고칠 곳이 언제나 하나다.</li>
+  </ul>
+
+  <h3>9.4 남은 부채 — 다음 감사가 볼 것</h3>
+  <ul>
+    <li><strong>프론트 검증은 여전히 없다.</strong> 이번에 발견한 ①은 사람이 여덟 패널을 손으로 열어 본 덕에 나왔다. 자동으로 다시 잡히지 않는다 — 2차 감사의 지적이 그대로 살아 있다.</li>
+    <li><strong>스크린샷과 화면의 drift.</strong> <span class="mono">docs/screenshots/</span>의 02~11은 2026-03~04월 것이고, 그 사이 모드 탭이 오른쪽 세로 줄로 옮겨졌다. 이번에 01(작업 화면)과 12(추출)만 다시 찍었다.</li>
+    <li><strong>L5~L7은 교환 스키마가 <span class="mono">$ref</span>로 물지 못한다</strong> — 내보내기가 찍는 <span class="mono">_source_path</span> 도장을 그 스키마들이 거부한다. 저장할 때와 시험에서 각각 검증되므로 구멍은 아니지만, 자리가 둘로 나뉘어 있다(D-100).</li>
+    <li><strong>이 페이지의 갱신 주기.</strong> 2차 감사가 「넉 달·릴리스 2회 동안 갱신되지 않았다」를 drift #1로 적었는데, 3차까지 다시 <strong>한 달 열흘·릴리스 2회</strong>가 걸렸다. 구조가 아니라 습관에 기대고 있다는 뜻이다.</li>
+  </ul>
+</section>
+
+
+
+<footer>인지 부채 감사 · classical-text-browser · 최초 2026-07-04 · 2차 2026-07-26(v1.2.0) · 3차 2026-09-04(v1.3.0) · 이 파일은 자립형 HTML(외부 리소스 없음)</footer>
 </div>
 
 <script>

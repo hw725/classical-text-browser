@@ -314,6 +314,9 @@ function initActivityBar() {
         if (panel === "notes" && typeof loadPageNotes === "function") {
           loadPageNotes();
         }
+        if (panel === "validation" && typeof loadValidation === "function") {
+          loadValidation();
+        }
       }
     });
   });
