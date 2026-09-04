@@ -306,6 +306,9 @@ def _create_boundary_from_unit(interp_path: Path, data: dict) -> dict:
     item = new_boundary(
         start=pos,
         level=int(anchor.get("level") or meta.get("level") or 2),
+        # 자동 편성은 «레이아웃 블록마다 기사 하나»다 — 뜻이 분명하므로 적어 둔다.
+        # (추정값을 굳히는 것이 아니라, 이 길이 실제로 무엇을 만드는지를 적는 것이다)
+        role=meta.get("role") or "article",
         title=meta.get("title") or (data.get("original_text") or "").strip()[:20] or None,
         kind=anchor.get("kind") or meta.get("kind") or "manual",
         work_id=data.get("work_id"),
@@ -1033,6 +1036,7 @@ def list_contents(interp_path: str | Path, document_id: str | None = None) -> di
             "anchor": (blk.get("metadata") or {}).get("anchor"),
             "level": int(((blk.get("metadata") or {}).get("level")) or 2),
             "role": (blk.get("metadata") or {}).get("role"),
+            "role_estimated": bool((blk.get("metadata") or {}).get("role_estimated")),
             "title": (blk.get("metadata") or {}).get("title"),
             "source_refs": refs,
             "preview": _block_preview(blk.get("original_text")),

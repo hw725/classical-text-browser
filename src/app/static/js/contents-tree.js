@@ -195,6 +195,7 @@ function _paintRole(row, block, role) {
   row.classList.add(`contents-role-${role}`);
   row.dataset.role = role;
   block.role = role;
+  block.role_estimated = false; // 사람이 정했다
   if (row._roleBtn) row._roleBtn.textContent = ROLE_NAME[role];
   if (row._label) row._label.textContent = _rowLabel(block, role);
   row.title = _rowTitle(block, role);
@@ -290,7 +291,12 @@ function _createBlockRow(block) {
     rl.type = "button";
     rl.className = "contents-shift-btn";
     rl.textContent = ROLE_NAME[role];
-    rl.title = "역할 바꾸기 — 묶음(卷·集·編) / 기사(번역·주석 단위) / 조각(기사 안 문단·문답)";
+    // 파일에 실제 값이 없어 깊이로 어림한 역할은 흐리게 — 사람이 정한 것과 구별되어야 한다.
+    // 단추를 한 번 누르면 그때 실제 값이 저장되므로 표시가 저절로 사라진다.
+    rl.classList.toggle("is-estimated", !!block.role_estimated);
+    rl.title = block.role_estimated
+      ? "역할이 아직 정해지지 않아 깊이로 어림한 것입니다 — 누르면 정해집니다 (묶음/기사/조각)"
+      : "역할 바꾸기 — 묶음(卷·集·編) / 기사(번역·주석 단위) / 조각(기사 안 문단·문답)";
     rl.addEventListener("click", (ev) => {
       ev.stopPropagation();
       const order = ["container", "article", "fragment"];

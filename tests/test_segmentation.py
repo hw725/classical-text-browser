@@ -895,6 +895,103 @@ def _doc_with_two_lines(tmp_path, direction="vertical_rtl"):
     return doc, l0, l1
 
 
+def test_apply_refuses_a_foreign_document(client, tmp_path):
+    """해석 저장소는 자기 문헌의 경계만 받는다.
+
+    왜 시험하는가: 화면에서 문헌을 바꿔도 앞 문헌의 해석 저장소가 붙어 있던 버그와 겹쳐,
+    운양집 저장소에 천진담초 경계 42개가 들어갔다(실측 2026-09-04). 화면이 또 어긋나도
+    데이터가 갈리지 않으려면 서버가 막아야 한다 — dependency.json이 «어느 문헌의 해석인가»를
+    이미 알고 있는데 보지 않고 있었다.
+    """
+    import fitz
+
+    lib, part_id, work_id = _setup(client, tmp_path)
+    # 같은 서고에 두 번째 문헌을 둔다 — 실제로 문헌을 바꿔 가며 쓰는 상황이다
+    pdf2 = tmp_path / "t2.pdf"
+    d2 = fitz.open()
+    d2.new_page(width=400, height=600)
+    d2.save(str(pdf2))
+    with open(pdf2, "rb") as f:
+        r = client.post(
+            "/api/documents/create-from-files",
+            data={"doc_id": "d2", "title": "다른 문헌"},
+            files=[("files", ("t2.pdf", f.read(), "application/pdf"))],
+        )
+    assert r.status_code == 200, r.text
+    part2 = r.json()["parts"][0]["part_id"]
+
+    span = {
+        "title": "남의 문헌",
+        "kind": "manual",
+        "role": "article",
+        "start": {"page": 1, "line_index": 0, "char_offset": 0},
+        "end": {"page": 1, "line_index": 0, "char_end": None},
+    }
+    # i1은 d1의 해석 저장소다 — d2의 경계를 쓰려 하면 거절한다
+    r = client.post(
+        "/api/interpretations/i1/segmentation/apply",
+        json={"document_id": "d2", "part_id": part2, "work_id": work_id, "spans": [span]},
+    )
+    assert r.status_code == 400
+    assert "d1" in r.json()["error"]  # 이 저장소의 문헌 이름을 알려 준다
+    # 자기 문헌은 그대로 된다
+    r = client.post(
+        "/api/interpretations/i1/segmentation/apply",
+        json={"document_id": "d1", "part_id": part_id, "work_id": work_id, "spans": [span]},
+    )
+    assert r.status_code == 200, r.text
+    # 경계 넣기도 같은 검사를 받는다
+    r = client.post(
+        "/api/interpretations/i1/boundaries",
+        json={
+            "document_id": "d2",
+            "part_id": part2,
+            "start": {"page": 1, "line": 0, "offset": 0},
+            "title": "남의 문헌",
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_role_estimated_marks_boundaries_without_a_role(client, tmp_path):
+    """역할이 없는 옛 경계는 «추정»이라고 알린다 — 파일에 적어 굳히지 않는다.
+
+    왜: 추정값을 파일에 넣으면 사람이 정한 것과 구별되지 않고, 나중에 추정 규칙이 좋아져도
+    옛 데이터가 따라오지 않는다. 그래서 저장은 그대로 두고 «어림한 값»이라고 표시만 한다.
+    """
+    from pathlib import Path as _P
+
+    lib, part_id, work_id = _setup(client, tmp_path)
+    span = {
+        "title": "기사",
+        "kind": "manual",
+        "role": "article",  # 화면은 언제나 역할을 함께 보낸다(제안이 추정한 값 또는 사람이 고른 값)
+        "start": {"page": 1, "line_index": 0, "char_offset": 0},
+        "end": {"page": 1, "line_index": 0, "char_end": None},
+    }
+    r = client.post(
+        "/api/interpretations/i1/segmentation/apply",
+        json={"document_id": "d1", "part_id": part_id, "work_id": work_id, "spans": [span]},
+    )
+    assert r.status_code == 200, r.text
+    url = f"/api/interpretations/i1/boundaries?document_id=d1&part_id={part_id}"
+    row = client.get(url).json()["boundaries"][0]
+    assert row["role_estimated"] is False  # 적용은 역할을 적는다
+
+    # 역할을 지운 옛 파일을 흉내 낸다
+    import json as _json
+
+    f = _P(lib) / "interpretations" / "i1" / "core_entities" / "boundaries" / f"d1__{part_id}.json"
+    data = _json.loads(f.read_text(encoding="utf-8"))
+    for b in data["boundaries"]:
+        b.pop("role", None)
+    f.write_text(_json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    row = client.get(url).json()["boundaries"][0]
+    assert row["role_estimated"] is True
+    assert row["role"] == "article"  # 깊이 2 → 기사로 어림
+
+
 class TestReferenceExcerpt:
     """긴 해제는 앞을 자르지 말고 «권별 서술»을 골라 간추린다.
 

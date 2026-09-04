@@ -273,6 +273,10 @@ def compute_units(
                 "kind": b.get("kind"),
                 "level": int(b.get("level", 2)),
                 "role": b.get("role") or role_for_level(int(b.get("level", 2))),
+                # 파일에 실제 값이 없어 깊이로 어림한 것인가. 화면이 «(추정)»으로 표시한다 —
+                # 값을 파일에 적어 굳히지 않는 이유는, 그러면 사람이 정한 것과 구별되지 않고
+                # 나중에 추정 규칙이 좋아져도 옛 데이터가 따라오지 않기 때문이다.
+                "role_estimated": not b.get("role"),
                 "segmentation": "boundary",
                 "anchor": anchor,
             }

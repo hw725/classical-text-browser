@@ -1042,6 +1042,9 @@ async def api_segmentation_apply(interp_id: str, body: SegmentationApplyRequest)
     lines, page_texts = collect_document_lines(doc_path, body.part_id, body.pages)
     keys = [(ln.page, ln.line_index) for ln in lines]
     l4_commit = _document_head(doc_path)
+    bad = _wrong_document(interp_path, body.document_id)
+    if bad is not None:
+        return bad
     data = load_boundaries(interp_path, body.document_id, body.part_id)
     removed = _replace_boundaries(data, body.spans, body.replace)
     created = []
@@ -1186,6 +1189,9 @@ async def api_segmentation_auto(interp_id: str, body: SegmentationAutoRequest):
         rules = normalize_rules(get_document_info(doc_path).get("segmentation_rules"))
     except FileNotFoundError:
         rules = normalize_rules(None)
+    bad = _wrong_document(interp_path, body.document_id)
+    if bad is not None:
+        return bad
     lines, page_texts = collect_document_lines(doc_path, body.part_id, None)
     if not lines:
         return JSONResponse(
@@ -1285,6 +1291,39 @@ def _document_head(doc_path) -> str | None:
         return None
 
 
+def _wrong_document(interp_path, doc_id):
+    """이 해석 저장소의 문헌이 아니면 까닭을 담은 응답, 맞으면 None.
+
+    왜 필요한가: 저장소는 dependency.json에 «어느 문헌의 해석인가»를 적어 두는데, 경계 쓰기는
+    그것을 보지 않고 요청이 준 document_id를 그대로 믿었다. 화면에서 문헌을 바꿔도 앞 문헌의
+    저장소가 붙어 있던 버그와 겹치자, 운양집 저장소에 천진담초 경계 42개가 들어갔다
+    (실측 2026-09-04). 화면이 또 어긋나도 데이터는 갈리지 않게 여기서 막는다.
+
+    옛 저장소는 dependency.json이 없을 수 있다 — 그때는 막지 않는다(막을 근거가 없다).
+    """
+    import json as _json
+    from pathlib import Path as _Path
+
+    if not doc_id:
+        return None
+    try:
+        dep = _json.loads((_Path(interp_path) / "dependency.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    owner = (dep.get("source") or {}).get("document_id")
+    if not owner or owner == doc_id:
+        return None
+    return JSONResponse(
+        {
+            "error": (
+                f"이 해석 저장소는 «{owner}»의 것입니다 — «{doc_id}»의 경계를 쓸 수 없습니다.\n"
+                "→ 해결: 사이드바에서 그 문헌의 해석 저장소를 고르거나 새로 만드세요."
+            )
+        },
+        status_code=400,
+    )
+
+
 def _boundary_rows(
     interp_path,
     document_id: str | None,
@@ -1342,6 +1381,7 @@ def _boundary_rows(
                 "kind": a.get("kind") or meta.get("kind") or "manual",
                 "level": int(a.get("level", 2) or 2),
                 "role": meta.get("role"),
+                "role_estimated": bool(meta.get("role_estimated")),
                 "status": a.get("status") or blk.get("status"),
                 "anchor_status": a.get("status"),
                 "unit_status": blk.get("status"),
@@ -1592,6 +1632,9 @@ async def api_insert_boundary(interp_id: str, body: BoundaryInsertRequest):
     }
     if (start["page"], start["line"]) not in keys:
         return JSONResponse({"error": "그 쪽·행에 확정 텍스트(L4)가 없습니다."}, status_code=400)
+    bad = _wrong_document(interp_path, body.document_id)
+    if bad is not None:
+        return bad
     data = load_boundaries(interp_path, body.document_id, body.part_id)
     work_id = body.work_id
     if not work_id:

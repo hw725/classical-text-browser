@@ -1310,7 +1310,8 @@ async function _renderCurrentBoundaries() {
       const p0 = b.start ? b.start.page : null;
       const p1 = b.end ? b.end.page : null;
       const pages = p0 == null ? "" : p1 && p1 !== p0 ? `${p0}~${p1}쪽` : `${p0}쪽`;
-      meta.textContent = `${roleName[role]} · ${b.level}단 · ${pages}`;
+      meta.textContent = `${roleName[role]}${b.role_estimated ? "(추정)" : ""} · ${b.level}단 · ${pages}`;
+      if (b.role_estimated) meta.classList.add("is-estimated");
       row.appendChild(title);
       row.appendChild(meta);
       row.title = stale

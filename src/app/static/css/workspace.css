@@ -7967,3 +7967,7 @@ select.prop-level { max-width: 4.6em; }
 /* 다른 문헌의 저장소 — 목록에 남겨 두되 지금 문헌 것과 구별한다 */
 .interp-list-item.is-other-doc { opacity: 0.5; }
 .interp-list-item.is-other-doc:hover { opacity: 1; }
+
+/* 아직 정해지지 않아 깊이로 어림한 역할 — 사람이 정한 것과 구별한다 */
+.contents-shift-btn.is-estimated { opacity: 0.55; font-style: italic; }
+.comp-cur-meta.is-estimated { opacity: 0.7; font-style: italic; }
