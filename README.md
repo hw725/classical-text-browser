@@ -18,8 +18,9 @@ VSCode 스타일 3단 화면입니다.
 ![추출 모드 — 텍스트 추출 패널](docs/screenshots/12_extract.jpg)
 
 *탭이 **열람·레이아웃·교정 셋**으로 줄고, 오른쪽에 「텍스트 추출」 패널이
-붙습니다. 진단(스캔본인지) → OCR 엔진·모델·쪽 범위 → 비용 예고 → 쪽별 검수가
-한 자리에 있습니다.*
+붙습니다. 먼저 진단합니다 — 그림처럼 **텍스트 레이어가 이미 있으면 OCR 없이 바로
+가져옵니다.** 스캔본이면 OCR 엔진·모델·쪽 범위를 고르고 비용을 미리 알려 준 뒤
+쪽별로 검수합니다.*
 
 근현대 논문·단행본처럼 표점·현토가 필요 없는 자료용입니다.
 **끌어다 놓고 → OCR → 검색되는 PDF**까지 한 화면에서 끝납니다.
@@ -169,7 +170,7 @@ docker compose up -d --build
 | [DECISIONS.md](docs/DECISIONS.md) | 설계 결정 근거 (D-001~D-078) |
 | [아키텍처 다이어그램](docs/architecture-diagrams.md) | 전체 그림 (Mermaid 13종) |
 | [platform-v7.md](docs/platform-v7.md) | 8층 모델·이중 저장소 설계 |
-| [AGENTS.md](AGENTS.md) · [인지 부채 감사](cognitive-debt-audit.html) | 어디가 위험한가 |
+| [AGENTS.md](AGENTS.md) · [인지 부채 감사](docs/cognitive-debt-audit.html) | 어디가 위험한가 |
 
 ### 자료 구조
 

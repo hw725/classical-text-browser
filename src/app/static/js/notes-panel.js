@@ -36,6 +36,20 @@ function initNotesPanel() {
 /* ─── 메모 로드 ────────────────────────────────── */
 
 /**
+ * 지금 고른 해석 저장소 id. 없으면 null.
+ *
+ * 왜 이 함수가 있는가: 이 파일은 `viewerState.interpId`를 읽고 있었는데 **그런 칸이 없다** —
+ * 해석 저장소 id는 `interpState.interpId`에 산다. 그래서 저장소를 골라도 비고 패널은
+ * 언제나 「해석 저장소를 선택하면…」만 보여 주고 불러오지도 저장하지도 않았다
+ * (실측 2026-09-04, 사이드바 여덟 패널 점검).
+ */
+function _notesInterpId() {
+  if (typeof interpState !== "undefined" && interpState.interpId) return interpState.interpId;
+  return null;
+}
+
+
+/**
  * 현재 페이지의 비고를 서버에서 로드하여 표시한다.
  *
  * 왜 이렇게 하는가: 페이지 이동 시마다 호출하여 해당 페이지의 메모를 보여준다.
@@ -49,14 +63,14 @@ async function loadPageNotes() {
   const status = document.getElementById("notes-save-status");
 
   // 해석 저장소가 선택되지 않으면 비활성 표시
-  if (typeof viewerState === "undefined" || !viewerState.interpId) {
+  if (!_notesInterpId()) {
     if (list) list.innerHTML = '<div class="placeholder">해석 저장소를 선택하면 비고를 작성할 수 있습니다</div>';
     notesState.entries = [];
     notesState.loaded = false;
     return;
   }
 
-  const interpId = viewerState.interpId;
+  const interpId = _notesInterpId();
   const partId = viewerState.partId || "main";
   const pageNum = viewerState.pageNum;
 
@@ -98,10 +112,10 @@ async function loadPageNotes() {
  *   타이핑이 멈추면 2초 후 자동으로 서버에 전송한다.
  */
 async function _saveNotes() {
-  if (typeof viewerState === "undefined" || !viewerState.interpId) return;
+  if (!_notesInterpId()) return;
   if (notesState.saving) return;
 
-  const interpId = viewerState.interpId;
+  const interpId = _notesInterpId();
   const partId = viewerState.partId || "main";
   const pageNum = viewerState.pageNum;
   if (!pageNum) return;

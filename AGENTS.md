@@ -115,7 +115,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 
 ## 인지 부채 지도
 
-> 2026-07-04 감사. AI 작성 코드와 사용자 이해의 간극 요약. 상세·퀴즈: 루트 cognitive-debt-audit.html
+> 2026-07-04 감사. AI 작성 코드와 사용자 이해의 간극 요약. 상세·퀴즈: docs/cognitive-debt-audit.html
 
 ### 실제 하는 일 (문서에 없는 층위)
 - "서버 시작" = 최대 3개 프로세스: start_server.bat가 uvicorn 외에 OpenAI OAuth 프록시
