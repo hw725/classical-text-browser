@@ -35,9 +35,7 @@ def validate_snapshot(data: dict) -> tuple[list[str], list[str]]:
         errors — import를 차단하는 심각한 문제 목록.
         warnings — import는 가능하지만 주의가 필요한 사항 목록.
     """
-    import jsonschema
-
-    from core.snapshot import exchange_schema, normalize_snapshot
+    from core.snapshot import exchange_validator, normalize_snapshot
 
     errors: list[str] = []
     warnings: list[str] = []
@@ -54,8 +52,7 @@ def validate_snapshot(data: dict) -> tuple[list[str], list[str]]:
     # 옛 이름을 먼저 지금 이름으로 옮긴다 — 스키마에 옛 이름을 넣으면 정본이 둘이 된다
     data = normalize_snapshot(data)
 
-    validator = jsonschema.Draft202012Validator(exchange_schema())
-    for err in sorted(validator.iter_errors(data), key=lambda e: list(e.absolute_path)):
+    for err in sorted(exchange_validator().iter_errors(data), key=lambda e: list(e.absolute_path)):
         where = "/".join(str(p) for p in err.absolute_path) or "(최상위)"
         hint = _MESSAGE_HINTS.get(where)  # 절 자체가 통째로 어긋난 때만 사람 말로 바꾼다
         errors.append(f"{where}: {hint or err.message}")

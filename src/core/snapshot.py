@@ -56,19 +56,71 @@ def normalize_snapshot(data: dict) -> dict:
     return out
 
 
+def _schemas_dir() -> Path:
+    return Path(__file__).resolve().parent.parent.parent / "schemas"
+
+
 def exchange_schema() -> dict:
     """교환 형식 스키마(정본). schemas/exchange.schema.json을 읽어 캐시한다."""
     global _EXCHANGE_SCHEMA
     if _EXCHANGE_SCHEMA is None:
-        path = Path(__file__).resolve().parent.parent.parent / "schemas" / "exchange.schema.json"
-        _EXCHANGE_SCHEMA = json.loads(path.read_text(encoding="utf-8"))
+        _EXCHANGE_SCHEMA = json.loads(
+            (_schemas_dir() / "exchange.schema.json").read_text(encoding="utf-8")
+        )
     return _EXCHANGE_SCHEMA
 
 
+def exchange_validator():
+    """교환 형식 검증기. 다른 스키마를 `$ref`로 물 수 있게 레지스트리를 붙인다.
+
+    왜 이렇게 하는가: 스냅샷 안의 L3 쪽·교정 기록·서지·dependency·코어 엔티티는 **이미 각자
+    스키마가 있다**(`schemas/source_repo/…`, `schemas/core/…`). 교환 스키마가 그 모양을 다시
+    베끼면 정본이 또 갈라진다 — `$ref`로 물면 고칠 곳이 언제나 하나다(D-100).
+
+    `$id`가 `layout_page.schema.json`처럼 파일 이름뿐이라 기본 해석기로는 찾지 못한다.
+    schemas/ 아래를 훑어 이름 → 스키마 레지스트리를 만들어 넘긴다.
+    """
+    import jsonschema
+    from referencing import Registry, Resource
+    from referencing.jsonschema import DRAFT202012
+
+    global _EXCHANGE_VALIDATOR
+    if _EXCHANGE_VALIDATOR is None:
+        resources = []
+        for f in sorted(_schemas_dir().rglob("*.schema.json")):
+            doc = json.loads(f.read_text(encoding="utf-8"))
+            # default_specification: $schema를 적지 않은 스키마도 레지스트리에 들어가게
+            resources.append(
+                (
+                    doc.get("$id") or f.name,
+                    Resource.from_contents(doc, default_specification=DRAFT202012),
+                )
+            )
+        registry = Registry().with_resources(resources)
+        _EXCHANGE_VALIDATOR = jsonschema.Draft202012Validator(exchange_schema(), registry=registry)
+    return _EXCHANGE_VALIDATOR
+
+
 _EXCHANGE_SCHEMA: dict | None = None
+_EXCHANGE_VALIDATOR = None
 
 
-PLATFORM_VERSION = "1.1.4"
+def _platform_version() -> str:
+    """설치된 패키지 메타데이터에서 앱 판을 읽는다. 실패하면 «unknown».
+
+    왜 여기 적지 않는가: **버전을 적는 곳은 pyproject.toml 하나여야 한다**(릴리스 절차 7).
+    v1.1.4부터 v1.2.3까지 이 상수가 "1.1.4"에 멈춰 있어 스냅샷마다 거짓 판을 적고 있었다
+    (실측 2026-09-04) — 적는 곳이 둘이면 반드시 어긋난다는 그 규칙의 사례다.
+    """
+    try:
+        from importlib.metadata import version as _pkg_version
+
+        return _pkg_version("classical-text-browser")
+    except Exception:  # noqa: BLE001 — 개발 중 미설치 상태에서도 스냅샷은 떠야 한다
+        return "unknown"
+
+
+PLATFORM_VERSION = _platform_version()
 
 
 def build_snapshot(

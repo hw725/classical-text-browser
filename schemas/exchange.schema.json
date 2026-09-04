@@ -4,7 +4,11 @@
   "title": "교환 형식 (내보내기/가져오기) — JSON 스냅샷",
   "description": "내부 작업 형식(다수 파일, git 버전관리)과 별도로, 문헌 하나 + 해석 하나의 현재 HEAD 상태를 단일 JSON으로 담는 교환 형식. 다른 연구자에게 공유하거나 백업·이동할 때 쓴다. 이 스키마는 core/snapshot.py의 build_snapshot() 출력을 그대로 기술하며 **정본이 하나**다 — tests/test_snapshot.py가 내보내기 결과를 이 스키마로 검증하므로 구현이 바뀌면 시험이 깨진다(B-005). L2(OCR)는 담지 않는다: L4 확정본이 있으면 다시 만들 수 있고 스냅샷만 커진다.",
   "type": "object",
-  "required": ["schema_version", "source_info", "original"],
+  "required": [
+    "schema_version",
+    "source_info",
+    "original"
+  ],
   "additionalProperties": false,
   "properties": {
     "schema_version": {
@@ -24,30 +28,66 @@
     "source_info": {
       "type": "object",
       "description": "이 스냅샷이 어느 문헌·해석의 것인가. v1.3까지 이름이 \"work\"였다(D-099 — 코어 스키마의 Work 엔티티와 이름만 같고 다른 것이라 바꿨다). 읽기는 옛 이름도 받는다 — core.snapshot.normalize_snapshot().",
-      "required": ["title"],
+      "required": [
+        "title"
+      ],
       "additionalProperties": false,
       "properties": {
-        "document_id": { "type": "string", "description": "원본 문헌 id." },
-        "title": { "type": "string", "minLength": 1, "description": "문헌 제목. 원어 표기. 비어 있으면 안 된다 — 가져올 때 저장소 이름의 바탕이 된다." },
-        "title_ko": { "type": ["string", "null"], "description": "한국어 제목." },
+        "document_id": {
+          "type": "string",
+          "description": "원본 문헌 id."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "description": "문헌 제목. 원어 표기. 비어 있으면 안 된다 — 가져올 때 저장소 이름의 바탕이 된다."
+        },
+        "title_ko": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "한국어 제목."
+        },
         "parts": {
           "type": "array",
           "description": "권 목록(문헌 manifest의 것 그대로).",
-          "items": { "type": "object", "additionalProperties": true }
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
         },
-        "created_at": { "type": ["string", "null"], "description": "문헌 등록 일시." },
-        "notes": { "type": ["string", "null"] },
-        "interpretation_id": { "type": "string", "description": "해석 저장소 id." },
-        "interpretation_title": { "type": "string" },
+        "created_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "문헌 등록 일시."
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "interpretation_id": {
+          "type": "string",
+          "description": "해석 저장소 id."
+        },
+        "interpretation_title": {
+          "type": "string"
+        },
         "interpreter": {
-          "type": ["object", "null"],
+          "type": [
+            "object",
+            "null"
+          ],
           "description": "{type: human|llm|hybrid, name, ...}",
           "additionalProperties": true
         },
         "bibliography": {
-          "type": "object",
-          "description": "문헌의 bibliography.json 그대로(source_repo/bibliography.schema.json).",
-          "additionalProperties": true
+          "$ref": "bibliography.schema.json",
+          "description": "문헌의 bibliography.json 그대로 — 정본은 그 스키마다."
         }
       }
     },
@@ -57,7 +97,10 @@
       "additionalProperties": false,
       "properties": {
         "head_hash": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "description": "내보낼 때 원본 저장소의 HEAD 커밋."
         },
         "layers": {
@@ -69,18 +112,33 @@
               "description": "원본 이미지·PDF는 **경로 참조만** 담는다(바이너리 미포함).",
               "additionalProperties": false,
               "properties": {
-                "type": { "const": "reference" },
-                "note": { "type": "string" },
+                "type": {
+                  "const": "reference"
+                },
+                "note": {
+                  "type": "string"
+                },
                 "files": {
                   "type": "array",
                   "items": {
                     "type": "object",
-                    "required": ["path", "name"],
+                    "required": [
+                      "path",
+                      "name"
+                    ],
                     "additionalProperties": false,
                     "properties": {
-                      "path": { "type": "string", "description": "문헌 폴더 기준 상대 경로." },
-                      "name": { "type": "string" },
-                      "size_bytes": { "type": "integer", "minimum": 0 }
+                      "path": {
+                        "type": "string",
+                        "description": "문헌 폴더 기준 상대 경로."
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "size_bytes": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
                     }
                   }
                 }
@@ -91,10 +149,15 @@
               "description": "쪽마다 레이아웃 분석 결과(source_repo/layout_page.schema.json).",
               "additionalProperties": false,
               "properties": {
-                "type": { "const": "inline" },
+                "type": {
+                  "const": "inline"
+                },
                 "pages": {
                   "type": "array",
-                  "items": { "type": "object", "additionalProperties": true }
+                  "description": "쪽마다 레이아웃 분석 결과. 정본은 layout_page.schema.json.",
+                  "items": {
+                    "$ref": "layout_page.schema.json"
+                  }
                 }
               }
             },
@@ -103,23 +166,29 @@
               "description": "확정 텍스트와 교정 기록.",
               "additionalProperties": false,
               "properties": {
-                "type": { "const": "inline" },
+                "type": {
+                  "const": "inline"
+                },
                 "pages": {
                   "type": "array",
                   "items": {
                     "type": "object",
-                    "required": ["file_name", "text"],
+                    "required": [
+                      "file_name",
+                      "text"
+                    ],
                     "additionalProperties": false,
                     "properties": {
                       "file_name": {
                         "type": "string",
                         "description": "예: vol1_page_001.txt — 가져올 때 이 이름으로 되살린다."
                       },
-                      "text": { "type": "string" },
+                      "text": {
+                        "type": "string"
+                      },
                       "corrections": {
-                        "type": "object",
-                        "description": "같은 쪽의 교정 기록(source_repo/corrections.schema.json).",
-                        "additionalProperties": true
+                        "$ref": "corrections.schema.json",
+                        "description": "같은 쪽의 교정 기록 — 정본은 그 스키마다."
                       }
                     }
                   }
@@ -135,32 +204,76 @@
       "description": "해석 저장소(L5~L7 + 코어 엔티티). 없으면 원본만 담긴 스냅샷이다(경고).",
       "additionalProperties": false,
       "properties": {
-        "head_hash": { "type": ["string", "null"] },
+        "head_hash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "base_original_hash": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "description": "이 해석이 보고 있던 원본 커밋(dependency.source.base_commit)."
         },
         "dependency": {
-          "type": "object",
-          "description": "dependency.json 그대로(source_repo/dependency.schema.json).",
-          "additionalProperties": true
+          "$ref": "dependency.schema.json",
+          "description": "dependency.json 그대로 — 정본은 그 스키마다."
         },
         "layers": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "L5_punctuation": { "$ref": "#/$defs/LayerItems" },
-            "L5_hyeonto": { "$ref": "#/$defs/LayerItems" },
-            "L6_translation": { "$ref": "#/$defs/LayerItems" },
-            "L7_annotation": { "$ref": "#/$defs/LayerItems" }
+            "L5_punctuation": {
+              "$ref": "#/$defs/LayerItems"
+            },
+            "L5_hyeonto": {
+              "$ref": "#/$defs/LayerItems"
+            },
+            "L6_translation": {
+              "$ref": "#/$defs/LayerItems"
+            },
+            "L7_annotation": {
+              "$ref": "#/$defs/LayerItems"
+            }
           }
         },
         "core_entities": {
           "type": "object",
-          "description": "폴더 이름(tags·concepts·agents·relations…) → 그 안의 엔티티 목록. 빈 폴더는 담지 않는다. **단위(unit)는 여기 없다** — 편성은 원본 저장소의 경계 목록이다(D-092·D-097).",
+          "description": "폴더 이름 → 그 안의 엔티티 목록. 빈 폴더와 «물린» 폴더(blocks_migrated_v1 등)는 담지 않는다. 아는 유형은 코어 스키마로 검증하고, 모르는 폴더는 통과시킨다(옛 서고·실험). **단위(unit)는 여기 없다** — 편성은 원본 저장소의 경계 목록이다(D-092·D-097).",
+          "properties": {
+            "tags": {
+              "type": "array",
+              "items": {
+                "$ref": "tag.schema.json"
+              }
+            },
+            "concepts": {
+              "type": "array",
+              "items": {
+                "$ref": "concept.schema.json"
+              }
+            },
+            "agents": {
+              "type": "array",
+              "items": {
+                "$ref": "agent.schema.json"
+              }
+            },
+            "relations": {
+              "type": "array",
+              "items": {
+                "$ref": "relation.schema.json"
+              }
+            }
+          },
           "additionalProperties": {
             "type": "array",
-            "items": { "type": "object", "additionalProperties": true }
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
           }
         }
       }
@@ -173,13 +286,16 @@
     "annotation_types": {
       "type": "array",
       "description": "주석 유형 목록 = 앱 기본 프리셋 + 서고의 커스텀.",
-      "items": { "type": "object", "additionalProperties": true }
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
     }
   },
   "$defs": {
     "LayerItems": {
       "type": "array",
-      "description": "그 층의 쪽·단위별 JSON을 모은 것. 항목마다 `_source_path`(해석 저장소 기준 상대 경로)가 붙어 있어 가져올 때 같은 자리에 되살린다.",
+      "description": "그 층의 쪽·단위별 JSON을 모은 것. 항목마다 `_source_path`(해석 저장소 기준 상대 경로)가 붙어 있어 가져올 때 같은 자리에 되살린다. **여기만 `$ref`를 걸지 않는 까닭**: 각 항목의 정본은 interp/*.schema.json인데 그것들이 additionalProperties:false라 이 `_source_path` 도장을 거부한다. 대신 ① 파일은 저장할 때 이미 그 스키마로 검증된다(core/punctuation.py·hyeonto.py·translation.py·annotation.py) ② 시험이 «스냅샷 항목에서 도장을 뗀 것이 제 스키마를 지키는가»를 본다(tests/test_snapshot.py). 검증이 빠진 것이 아니라 자리가 «쓸 때»와 «시험»으로 나뉘어 있다(D-100).",
       "items": {
         "type": "object",
         "additionalProperties": true,

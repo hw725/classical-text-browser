@@ -4837,9 +4837,34 @@ v1.3 이전 스냅샷은 머리말이 `work`다(D-099). 스키마에 두 이름�
 되살아났다. 스냅샷에서 뺐다 — 천진담초 0.30MB → 0.24MB, `core_entities`는 비게 되었다
 (그 저장소에 살아 있는 엔티티가 실제로 없다).
 
+### 층 안쪽도 `$ref`로 물렸다 (사용자 확인: 「그거 그렇게 놔둬도 문제없는 거 확실해?」)
+
+처음에는 층 안쪽(L3 쪽·교정 기록·서지·dependency·코어 엔티티)을 `additionalProperties: true`로
+열어 두었다. **열어 둘 이유가 없었다** — 그것들은 이미 각자 스키마가 있으므로 다시 베끼는 대신
+`$ref`로 물면 정본이 갈라지지 않는다. `$id`가 파일 이름뿐이라 기본 해석기로는 못 찾으므로
+`schemas/` 아래를 훑어 레지스트리를 만들어 넘긴다(`snapshot.exchange_validator()`).
+
+물린 것: `layout_page` · `corrections` · `bibliography` · `dependency` · 코어 엔티티
+(`tag`·`concept`·`agent`·`relation`; 모르는 폴더는 통과 — 옛 서고·실험).
+
+**L5~L7만 `$ref`를 걸지 않았다.** 내보내기가 항목마다 `_source_path` 도장을 찍는데
+`interp/*.schema.json`이 `additionalProperties: false`라 그것을 거부한다. 도장을 없애려면
+형식을 바꿔야 하고, 페이지 스키마에 도장을 허용하면 그 스키마가 두 문맥을 기술하게 된다.
+대신 **검증이 두 자리에 있다**: ① 파일은 저장할 때 이미 그 스키마로 검증된다
+(`core/punctuation.py`·`hyeonto.py`·`translation.py`·`annotation.py`가 `validate()`를 부른다)
+② 시험이 「스냅샷 항목에서 도장을 뗀 것이 제 스키마를 지키는가」를 본다. 검증이 빠진 것이
+아니라 자리가 나뉜 것이고, 스키마 설명에 그 사실을 적어 두었다.
+
+**물리자마자 드러난 것**: 시험 픽스처가 만들던 L3 블록·교정 기록·서지·dependency·L5~L7이
+**전부 제 스키마를 어기고 있었다**(`block_id: "blk_001"`는 `^p\d+_b\d+$`가 아니고,
+dependency는 필수 칸 넷이 빠졌고, 표점은 `marks` 대신 `punctuated_text`를 썼다). 아무도
+검증하지 않았으므로 여태 몰랐다 — 픽스처를 진짜 모양으로 고쳤다. 실서고 데이터는 처음부터
+어기지 않았다(L3 311쪽 위반 0, 실측).
+
 ### 남은 것
 
-- `additionalProperties`를 층 안쪽(L3 쪽·L5~L7 항목·core_entities 항목)에서는 열어 두었다.
-  그 안은 각자의 스키마가 있고(`source_repo/layout_page` 등), 교환 형식이 그것들을 다시
-  베끼면 정본이 또 갈라진다. 필요해지면 `$ref`로 이어 붙이는 것이 맞다.
 - L2(OCR)는 여전히 담지 않는다 — L4가 있으면 다시 만들 수 있다. 스키마 설명에 적어 두었다.
+- `interp_manifest.schema.json`은 아직 코드에서 쓰이지 않는다(참조 0건).
+- 같은 감사에서 `snapshot.PLATFORM_VERSION`이 **"1.1.4"에 멈춰** 있는 것을 찾았다 — 상수로
+  적어 두어 릴리스 때 함께 고쳐지지 않았고, v1.2.x 내내 스냅샷마다 거짓 판을 적고 있었다.
+  `pyproject.toml`에서 읽게 고쳤다(「적는 곳은 하나」 — 릴리스 절차 7).

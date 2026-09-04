@@ -54,13 +54,13 @@ def _make_library(tmp_path: Path, doc_id: str = "test_doc", interp_id: str = "te
         encoding="utf-8",
     )
 
-    # bibliography
+    # bibliography (source_repo/bibliography.schema.json)
     (doc_path / "bibliography.json").write_text(
         json.dumps(
             {
                 "title": "蒙求",
-                "author": "李瀚",
-                "date": "唐",
+                "creator": {"name": "李瀚", "role": "author"},
+                "date_created": "唐",
             },
             ensure_ascii=False,
             indent=2,
@@ -81,17 +81,19 @@ def _make_library(tmp_path: Path, doc_id: str = "test_doc", interp_id: str = "te
             {
                 "part_id": "vol1",
                 "page_number": 1,
+                "image_width": 595,
+                "image_height": 842,
                 "blocks": [
                     {
-                        "block_id": "blk_001",
-                        "type": "text",
-                        "order": 1,
+                        "block_id": "p01_b01",
+                        "block_type": "main_text",
+                        "reading_order": 1,
                         "bbox": [100, 100, 500, 200],
                     },
                     {
-                        "block_id": "blk_002",
-                        "type": "text",
-                        "order": 2,
+                        "block_id": "p01_b02",
+                        "block_type": "main_text",
+                        "reading_order": 2,
                         "bbox": [100, 200, 500, 300],
                     },
                 ],
@@ -111,9 +113,16 @@ def _make_library(tmp_path: Path, doc_id: str = "test_doc", interp_id: str = "te
     (l4_corr / "vol1_page_001_corrections.json").write_text(
         json.dumps(
             {
-                "page": "vol1_page_001",
+                "part_id": "vol1",
+                "corrected_text": None,
                 "corrections": [
-                    {"position": 0, "original": "白", "corrected": "白", "note": "확인"}
+                    {
+                        "block_id": "p01_b01",
+                        "type": "ocr_error",
+                        "original_ocr": "自",
+                        "corrected": "白",
+                        "note": "확인",
+                    }
                 ],
             },
             ensure_ascii=False,
@@ -145,14 +154,18 @@ def _make_library(tmp_path: Path, doc_id: str = "test_doc", interp_id: str = "te
         encoding="utf-8",
     )
 
-    # dependency.json
+    # dependency.json (source_repo/dependency.schema.json)
     (interp_path / "dependency.json").write_text(
         json.dumps(
             {
+                "interpretation_id": interp_id,
+                "interpreter": {"type": "human", "name": "테스터"},
                 "source": {
                     "document_id": doc_id,
                     "base_commit": "abc123",
                 },
+                "tracked_files": [],
+                "dependency_status": "current",
             },
             ensure_ascii=False,
             indent=2,
@@ -166,8 +179,15 @@ def _make_library(tmp_path: Path, doc_id: str = "test_doc", interp_id: str = "te
     (l5_dir / "vol1_page_001_punctuation.json").write_text(
         json.dumps(
             {
-                "block_id": "blk_001",
-                "punctuated_text": "白起坑趙，",
+                "block_id": "p01_b01",
+                "marks": [
+                    {
+                        "id": "pm_001",
+                        "target": {"start": 3, "end": 3},
+                        "before": None,
+                        "after": "，",
+                    }
+                ],
             },
             ensure_ascii=False,
             indent=2,
@@ -179,8 +199,16 @@ def _make_library(tmp_path: Path, doc_id: str = "test_doc", interp_id: str = "te
     (l5_dir / "vol1_page_001_hyeonto.json").write_text(
         json.dumps(
             {
-                "block_id": "blk_001",
-                "hyeonto_text": "白起ㅣ 趙를 坑하니",
+                "block_id": "p01_b01",
+                "annotations": [
+                    {
+                        "id": "ht_001",
+                        "target": {"start": 1, "end": 1},
+                        "position": "after",
+                        "text": "ㅣ",
+                        "category": "주격",
+                    }
+                ],
             },
             ensure_ascii=False,
             indent=2,
@@ -194,8 +222,18 @@ def _make_library(tmp_path: Path, doc_id: str = "test_doc", interp_id: str = "te
     (l6_dir / "vol1_page_001_translation.json").write_text(
         json.dumps(
             {
+                "part_id": "vol1",
+                "page_number": 1,
                 "translations": [
-                    {"source": {"block_id": "blk_001"}, "text": "백기가 조나라를 구덩이에 묻었다"},
+                    {
+                        "id": "tr_001",
+                        "source": {"block_id": "p01_b01", "start": 0, "end": 3},
+                        "source_text": "白起坑趙",
+                        "target_language": "ko",
+                        "translation": "백기가 조나라를 구덩이에 묻었다",
+                        "translator": {"type": "human"},
+                        "status": "draft",
+                    },
                 ],
             },
             ensure_ascii=False,
@@ -210,11 +248,23 @@ def _make_library(tmp_path: Path, doc_id: str = "test_doc", interp_id: str = "te
     (l7_dir / "vol1_page_001_annotation.json").write_text(
         json.dumps(
             {
+                "part_id": "vol1",
+                "page_number": 1,
                 "blocks": [
                     {
-                        "block_id": "blk_001",
+                        "block_id": "p01_b01",
                         "annotations": [
-                            {"type": "person", "text": "白起", "note": "진나라 장군"},
+                            {
+                                "id": "ann_001",
+                                "target": {"start": 0, "end": 1},
+                                "type": "person",
+                                "content": {
+                                    "label": "백기(白起)",
+                                    "description": "진나라 장군.",
+                                },
+                                "annotator": {"type": "human"},
+                                "status": "draft",
+                            },
                         ],
                     },
                 ],
@@ -306,7 +356,7 @@ class TestBuildSnapshot:
         assert src["title"] == "蒙求"
         assert src["title_ko"] == "몽구"
         assert src["interpretation_title"] == "蒙求 해석"
-        assert src["bibliography"]["author"] == "李瀚"
+        assert src["bibliography"]["creator"]["name"] == "李瀚"
 
     def test_l1_reference_only(self, tmp_path):
         """L1은 경로 참조만 포함한다 (바이너리 미포함)."""
@@ -329,7 +379,7 @@ class TestBuildSnapshot:
         l3 = result["original"]["layers"]["L3_layout"]
         assert l3["type"] == "inline"
         assert len(l3["pages"]) == 1
-        assert l3["pages"][0]["blocks"][0]["block_id"] == "blk_001"
+        assert l3["pages"][0]["blocks"][0]["block_id"] == "p01_b01"
 
     def test_l4_text_and_corrections(self, tmp_path):
         """L4 텍스트와 교정 기록이 포함된다."""
@@ -350,7 +400,7 @@ class TestBuildSnapshot:
         result = build_snapshot(lib, doc_id, interp_id)
         l5p = result["interpretation"]["layers"]["L5_punctuation"]
         assert len(l5p) >= 1
-        assert l5p[0]["block_id"] == "blk_001"
+        assert l5p[0]["block_id"] == "p01_b01"
         # _source_path 메타데이터 포함 확인
         assert "_source_path" in l5p[0]
 
@@ -362,8 +412,8 @@ class TestBuildSnapshot:
         result = build_snapshot(lib, doc_id, interp_id)
         l5h = result["interpretation"]["layers"]["L5_hyeonto"]
         assert len(l5h) >= 1
-        assert l5h[0].get("hyeonto_text") is not None
-        assert l5h[0]["block_id"] == "blk_001"
+        assert l5h[0]["annotations"][0]["text"] == "ㅣ"
+        assert l5h[0]["block_id"] == "p01_b01"
 
     def test_l6_translation(self, tmp_path):
         """L6 번역이 수집된다."""
@@ -539,7 +589,7 @@ class TestValidateSnapshot:
 
         data = self._minimal_snapshot()
         data["original"]["layers"]["L3_layout"] = {
-            "pages": [{"blocks": [{"block_id": "blk_001"}]}],
+            "pages": [{"blocks": [{"block_id": "p01_b01"}]}],
         }
         data["interpretation"]["layers"]["L5_punctuation"] = [
             {"block_id": "blk_999"},  # L3에 없는 ID
@@ -553,10 +603,10 @@ class TestValidateSnapshot:
 
         data = self._minimal_snapshot()
         data["original"]["layers"]["L3_layout"] = {
-            "pages": [{"blocks": [{"block_id": "blk_001"}]}],
+            "pages": [{"blocks": [{"block_id": "p01_b01"}]}],
         }
         data["interpretation"]["layers"]["L5_punctuation"] = [
-            {"block_id": "blk_001"},
+            {"block_id": "p01_b01"},
         ]
         _, warnings = validate_snapshot(data)
         # block_id 관련 warning이 없어야 함
@@ -572,7 +622,7 @@ class TestValidateSnapshot:
             {
                 "blocks": [
                     {
-                        "block_id": "blk_001",
+                        "block_id": "p01_b01",
                         "annotations": [{"type": "unknown_type", "text": "test"}],
                     }
                 ],
@@ -767,14 +817,63 @@ class TestExchangeSchemaIsTheSingleSourceOfTruth:
     """
 
     def test_exported_snapshot_conforms(self, tmp_path):
-        import jsonschema
-
-        from core.snapshot import build_snapshot, exchange_schema
+        from core.snapshot import build_snapshot, exchange_validator
 
         lib, doc_id, interp_id = _make_library(tmp_path)
         snapshot = build_snapshot(lib, doc_id, interp_id)
 
-        jsonschema.Draft202012Validator(exchange_schema()).validate(snapshot)
+        exchange_validator().validate(snapshot)
+
+    def test_payload_schemas_are_reached_by_ref(self, tmp_path):
+        """페이로드는 각자의 스키마가 정본이다 — 교환 스키마가 $ref로 문다 (D-100).
+
+        여기서 고정하는 것: L3 쪽 하나를 어기면 **교환 형식 검증이** 그것을 짚는다.
+        전에는 층 안쪽이 열려 있어 아무 모양이나 통과했다.
+        """
+        from core.snapshot import build_snapshot
+        from core.snapshot_validator import validate_snapshot
+
+        lib, doc_id, interp_id = _make_library(tmp_path)
+        snapshot = build_snapshot(lib, doc_id, interp_id)
+        snapshot["original"]["layers"]["L3_layout"]["pages"][0]["blocks"][0]["block_id"] = "틀린id"
+
+        errors, _ = validate_snapshot(snapshot)
+        assert any("block_id" in e for e in errors)
+
+    def test_interp_layer_items_conform_to_their_own_schemas(self, tmp_path):
+        """L5~L7 항목은 `_source_path` 도장만 떼면 제 스키마를 지킨다.
+
+        왜 교환 스키마가 $ref를 걸지 않는가: interp/*.schema.json이
+        additionalProperties:false라 그 도장을 거부한다. 파일은 저장할 때 이미 그 스키마로
+        검증되므로(core/punctuation.py 등) 검증이 빠진 것이 아니라 자리가 나뉜 것이고,
+        이 시험이 «내보낸 것도 그 스키마를 지키는가»를 확인한다.
+        """
+        import json as _json
+
+        import jsonschema
+
+        from core.snapshot import _schemas_dir, build_snapshot
+
+        lib, doc_id, interp_id = _make_library(tmp_path)
+        layers = build_snapshot(lib, doc_id, interp_id)["interpretation"]["layers"]
+        by_layer = {
+            "L5_punctuation": "punctuation_page.schema.json",
+            "L5_hyeonto": "hyeonto_page.schema.json",
+            "L6_translation": "translation_page.schema.json",
+            "L7_annotation": "annotation_page.schema.json",
+        }
+        checked = 0
+        for layer, schema_name in by_layer.items():
+            schema = _json.loads(
+                (_schemas_dir() / "interp" / schema_name).read_text(encoding="utf-8")
+            )
+            for item in layers.get(layer, []):
+                assert "_source_path" in item  # 도장이 붙어 있다
+                jsonschema.Draft202012Validator(schema).validate(
+                    {k: v for k, v in item.items() if k != "_source_path"}
+                )
+                checked += 1
+        assert checked, "픽스처에 L5~L7 항목이 없다 — 시험이 아무것도 보지 않는다"
 
     def test_validator_uses_that_schema(self, tmp_path):
         """검증기가 스키마를 실제로 쓴다 — 모르는 칸이 있으면 error."""
