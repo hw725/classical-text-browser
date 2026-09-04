@@ -212,7 +212,7 @@ def client(tmp_path, monkeypatch):
 
 
 def _setup(client, tmp_path):
-    """서고 + 문헌(PDF 3쪽) + L4 확정본 + 해석 저장소 + Work."""
+    """서고 + 문헌(PDF 3쪽) + L4 확정본 + 해석 저장소."""
     import fitz
 
     r = client.post("/api/library/quick-start")
@@ -255,13 +255,12 @@ def _setup(client, tmp_path):
         },
     )
     assert r.status_code == 200, r.text
-    r = client.post("/api/interpretations/i1/entities/work/auto-create", json={"document_id": "d1"})
-    assert r.status_code == 200, r.text
-    return lib, part_id, r.json()["work"]["id"] if "work" in r.json() else r.json()["id"]
+    # Work 엔티티는 D-099에서 없앴다 — 편성은 문헌·권만으로 된다.
+    return lib, part_id
 
 
 def test_propose_and_apply(client, tmp_path):
-    lib, part_id, work_id = _setup(client, tmp_path)
+    lib, part_id = _setup(client, tmp_path)
     # 규칙 저장 (문헌 설정)
     r = client.put(
         "/api/documents/d1/segmentation-rules", json={"rules": {"title_words": ["談草", "口談"]}}
@@ -327,7 +326,7 @@ def test_propose_and_apply(client, tmp_path):
 
 
 def test_propose_without_l4_is_400(client, tmp_path):
-    lib, part_id, _ = _setup(client, tmp_path)
+    lib, part_id = _setup(client, tmp_path)
     import shutil
     from pathlib import Path
 
@@ -489,7 +488,7 @@ class TestTocSignalInProposer:
 
 
 def test_toc_api_and_propose_with_toc(client, tmp_path):
-    lib, part_id, work_id = _setup(client, tmp_path)
+    lib, part_id = _setup(client, tmp_path)
     from pathlib import Path
 
     pages = Path(lib) / "documents" / "d1" / "L4_text" / "pages"
@@ -519,7 +518,7 @@ def test_toc_api_and_propose_with_toc(client, tmp_path):
 
 def test_boundary_index_is_a_view_over_textblocks(client, tmp_path):
     """경계 색인은 별도 데이터가 아니다 — 단위의 source_refs에서 계산한 보기 (D-090)."""
-    lib, part_id, work_id = _setup(client, tmp_path)
+    lib, part_id = _setup(client, tmp_path)
     rules = {"rules": {"title_words": ["談草", "口談"]}}
     client.put("/api/documents/d1/segmentation-rules", json=rules)
     body = {"document_id": "d1", "part_id": part_id}
@@ -898,7 +897,7 @@ def test_interp_cannot_write_a_foreign_documents_boundary(client, tmp_path):
     문헌이라 남의 문헌을 가리킬 방법 자체가 없지만, 해석 저장소를 통해 단위를 만드는 길
     (entities/unit/compose)은 여전히 source_refs의 문헌을 믿는다 — 거기서 막는다.
     """
-    lib, part_id, work_id = _setup(client, tmp_path)
+    lib, part_id = _setup(client, tmp_path)
     r = client.post(
         "/api/interpretations/i1/entities/unit/compose",
         json={
@@ -927,7 +926,7 @@ def test_role_estimated_marks_boundaries_without_a_role(client, tmp_path):
     """
     from pathlib import Path as _P
 
-    lib, part_id, work_id = _setup(client, tmp_path)
+    lib, part_id = _setup(client, tmp_path)
     span = {
         "title": "기사",
         "kind": "manual",
@@ -1264,7 +1263,7 @@ def test_anchor_bbox_cuts_line_box_by_char_fraction(tmp_path):
 
 def test_char_boundary_apply_and_move_via_api(client, tmp_path):
     """행 중간 경계가 적용·색인·옮기기(이웃 재잇기)까지 글자 단위로 돈다 (D-090 2단계)."""
-    lib, part_id, work_id = _setup(client, tmp_path)
+    lib, part_id = _setup(client, tmp_path)
     from pathlib import Path
 
     pages = Path(lib) / "documents" / "d1" / "L4_text" / "pages"
@@ -1327,7 +1326,7 @@ def test_char_boundary_apply_and_move_via_api(client, tmp_path):
 
 def test_boundary_insert_delete_split_via_api(client, tmp_path):
     """경계 넣기 = 쪼개기(새 id는 뒤에), 지우기 = 합치기(앞 id 유지), 층위 바꾸기, 조각 쪼개기."""
-    lib, part_id, work_id = _setup(client, tmp_path)
+    lib, part_id = _setup(client, tmp_path)
     from pathlib import Path
 
     pages = Path(lib) / "documents" / "d1" / "L4_text" / "pages"
@@ -1499,7 +1498,7 @@ class TestTocReferenceText:
 
 def test_apply_replaces_proposal_boundaries_and_keeps_manual(client, tmp_path):
     """적용은 누적이 아니다 — 체크 상태가 곧 트리. 손으로 넣은 경계는 남는다 (D-092 후속)."""
-    lib, part_id, work_id = _setup(client, tmp_path)
+    lib, part_id = _setup(client, tmp_path)
     client.put(
         "/api/documents/d1/segmentation-rules", json={"rules": {"title_words": ["談草", "口談"]}}
     )
@@ -1553,7 +1552,7 @@ def test_apply_replaces_proposal_boundaries_and_keeps_manual(client, tmp_path):
 
 def test_segmentation_auto_builds_tree_in_one_call(client, tmp_path):
     """자동 트리: 제안 → 승인 → 적용을 한 번에. 다시 부르면 새로 세운다(누적 없음)."""
-    lib, part_id, work_id = _setup(client, tmp_path)
+    lib, part_id = _setup(client, tmp_path)
     client.put(
         "/api/documents/d1/segmentation-rules", json={"rules": {"title_words": ["談草", "口談"]}}
     )
@@ -1578,7 +1577,7 @@ def test_auto_tree_makes_a_container_from_a_volume_heading(client, tmp_path):
     """
     from pathlib import Path
 
-    lib, part_id, work_id = _setup(client, tmp_path)
+    lib, part_id = _setup(client, tmp_path)
     pages = Path(lib) / "documents" / "d1" / "L4_text" / "pages"
     # 첫 쪽 첫 행을 卷頭로 바꾼다 (NDL 신자체 그대로 — 정자로 맞춘 뒤 보아야 한다)
     (pages / f"{part_id}_page_001.txt").write_text(

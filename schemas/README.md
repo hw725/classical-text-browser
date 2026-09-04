@@ -20,7 +20,6 @@
 
 | 스키마 | 설명 | 근거 |
 |--------|------|------|
-| `work.schema.json` | 작품 | core-schema-v1.3 섹션 1 |
 | `unit.schema.json` | 해석용 글 단위 (source_ref 포함). v1.2까지 이름은 `text_block` | core-schema-v1.3 섹션 2, D-005, D-093 |
 | `boundaries.schema.json` | 권 하나의 글 단위 경계 목록 — **단위의 정본**(시작 위치·id·층위). 단위는 이 목록에서 만든 읽기 보기 | D-092 |
 | `tag.schema.json` | 표면 주석 (LLM/자동 추출) | core-schema-v1.3 섹션 3 |

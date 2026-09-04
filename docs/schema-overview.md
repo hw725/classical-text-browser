@@ -317,25 +317,16 @@ L7 인용 마크. 논문 인용을 위한 텍스트 구절 마크업. L4→L5→
 
 ---
 
-## 6. 코어 스키마 엔티티 (6개)
+## 6. 코어 스키마 엔티티 (5개 + 경계 목록)
+
+> Work는 D-099에서 없앴다. 경계 목록(`core/boundaries.schema.json`, D-092)은 단위의 정본이며
+> 원본 저장소에 산다(D-097) — 아래 「단위」는 그 목록에서 만든 읽기 보기다.
 
 **공통 상태 전이 (삭제 금지):**
 
 `draft` → `active` → `deprecated` → `archived`
 
 **공통 필드:** id (UUID), status (enum), metadata (object? 자유 확장)
-
-### Work
-
-> `core/work.schema.json`
-
-최상위. 하나의 텍스트 작품. 단위의 소속 기준.
-
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| **\*title** | string | 원어 제목 |
-| author | string? | 저자 |
-| period | string? | 시대 |
 
 ### 단위 (unit)
 
@@ -345,8 +336,7 @@ L7 인용 마크. 논문 인용을 위한 텍스트 구절 마크업. L4→L5→
 
 | 필드 | 타입 | 설명 |
 |------|------|------|
-| **\*work_id** | uuid | → Work |
-| **\*sequence_index** | int | 순서 인덱스 |
+| **\*sequence_index** | int | 권 안의 차례 |
 | **\*original_text** | string | 원문 (불변) |
 | source_ref | object? | {document_id, page, layout_block_id, commit} |
 
@@ -373,7 +363,7 @@ L7 인용 마크. 논문 인용을 위한 텍스트 구절 마크업. L4→L5→
 | 필드 | 타입 | 설명 |
 |------|------|------|
 | **\*label** | string | 대표 이름 |
-| scope_work | uuid? | 범위 Work |
+| scope_document | string? | 범위 문헌(비우면 전역) |
 | description | string? | 학술 설명 |
 | concept_features | json? | 자유 확장 (온톨로지 비강제) |
 

@@ -16,10 +16,9 @@
       "type": "string",
       "description": "엔티티 라벨. 사람이 읽을 수 있는 이름. 예: 王戎"
     },
-    "scope_work": {
+    "scope_document": {
       "type": ["string", "null"],
-      "description": "이 Concept이 유효한 Work의 id. null이면 전역.",
-      "format": "uuid",
+      "description": "이 Concept이 유효한 문헌의 id. null이면 전역(서고 전체).",
       "default": null
     },
     "description": {

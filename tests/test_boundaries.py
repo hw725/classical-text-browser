@@ -498,3 +498,45 @@ class TestBoundariesLiveInTheDocument:
         B.save_boundaries(first, _data(B.new_boundary({"page": 1, "line": 0}, title="한 기사")))
 
         assert [u["metadata"]["title"] for u in list_entities(second, "unit")] == ["한 기사"]
+
+
+class TestWorkIsGone:
+    """D-099 — Work 엔티티를 없앴다. 옛 폴더는 지우지 않고 이름만 바꾼다."""
+
+    def test_work_is_not_an_entity_type_any_more(self):
+        from src.core import entity as E
+
+        assert "work" not in E.ENTITY_TYPES
+        assert "work" not in E.SCHEMA_FILES
+        assert not hasattr(E, "auto_create_work")
+
+    def test_old_works_folder_is_retired_on_open(self, tmp_path):
+        """저장소를 열면 works/가 works_removed_v1/로 바뀐다 — 지우지 않는다."""
+        import json as _json
+
+        from src.core import entity as E
+
+        lib = tmp_path / "lib"
+        doc = lib / "documents" / "d"
+        (doc / "L4_text" / "pages").mkdir(parents=True)
+        (doc / "manifest.json").write_text(
+            _json.dumps({"document_id": "d", "parts": [{"part_id": "v1", "page_count": 1}]}),
+            encoding="utf-8",
+        )
+        (doc / "L4_text" / "pages" / "v1_page_001.txt").write_text(PAGE1, encoding="utf-8")
+        interp = lib / "interpretations" / "i"
+        works = interp / "core_entities" / "works"
+        works.mkdir(parents=True)
+        (interp / "dependency.json").write_text(
+            _json.dumps({"source": {"document_id": "d"}}), encoding="utf-8"
+        )
+        (works / "w1.json").write_text(
+            _json.dumps({"id": "w1", "title": "옛 작품", "status": "draft"}), encoding="utf-8"
+        )
+
+        E.list_entities(interp, "unit")  # 열기만 해도 물린다
+
+        assert not works.exists()
+        retired = interp / "core_entities" / "works_removed_v1" / "w1.json"
+        assert retired.exists()
+        assert _json.loads(retired.read_text(encoding="utf-8"))["title"] == "옛 작품"

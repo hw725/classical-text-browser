@@ -15,7 +15,6 @@ from pydantic import BaseModel
 
 from app._state import _resolve_repo_path, get_library_path, require_repo_path
 from core.entity import (
-    auto_create_work,
     create_entity,
     create_unit_from_source,
     get_entity,
@@ -101,7 +100,7 @@ class UnitFromSourceRequest(BaseModel):
     page_num: int
     layout_block_id: str | None = None
     original_text: str
-    # work_id는 v1.3(B-004)에서 없앴다 — 단위는 Work를 가리키지 않는다. 옛 화면이 보내도 무시한다.
+    # work_id는 v1.3(D-099)에서 없앴다 — Work 엔티티 자체가 사라졌다. 옛 화면이 보내도 무시한다.
     work_id: str | None = None
     sequence_index: int
 
@@ -110,14 +109,8 @@ class PromoteTagRequest(BaseModel):
     """Tag -> Concept 승격 요청."""
 
     label: str | None = None
-    scope_work: str | None = None
+    scope_document: str | None = None
     description: str | None = None
-
-
-class AutoCreateWorkRequest(BaseModel):
-    """Work 자동 생성 요청."""
-
-    document_id: str
 
 
 class CompositionSourceRef(BaseModel):
@@ -138,7 +131,7 @@ class ComposeUnitRequest(BaseModel):
     source_refs 배열 순서대로 텍스트를 이어붙인다.
     """
 
-    work_id: str | None = None  # 남은 칸(B-004에서 무시한다)
+    work_id: str | None = None  # 남은 칸(D-099에서 무시한다)
     sequence_index: int
     original_text: str
     part_id: str
@@ -685,7 +678,6 @@ async def api_compose_unit(
     목적: 여러 LayoutBlock을 합치거나, 하나의 LayoutBlock을 쪼개서
           단위를 만든다. source_refs로 출처를 정확히 추적한다.
     입력:
-        work_id — 소속 Work UUID.
         sequence_index — 작품 내 순서.
         original_text — 편성된 텍스트 (교정 적용 후).
         part_id — 파트 ID.
@@ -769,38 +761,6 @@ async def api_compose_unit(
     return result
 
 
-@router.post("/api/interpretations/{interp_id}/entities/work/auto-create")
-async def api_auto_create_work(interp_id: str, body: AutoCreateWorkRequest):
-    """문헌 메타데이터로부터 Work 엔티티를 자동 생성한다.
-
-    목적: 단위 생성에 필요한 Work가 없을 때,
-          문헌의 서지정보/매니페스트에서 자동으로 Work를 만든다.
-    """
-    _library_path = get_library_path()
-    if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
-
-    interp_path = require_repo_path("interpretations", interp_id)
-    if not interp_path.exists():
-        return JSONResponse(
-            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
-            status_code=404,
-        )
-
-    try:
-        result = auto_create_work(interp_path, _library_path, body.document_id)
-    except Exception as e:
-        return JSONResponse({"error": f"Work 자동 생성 실패: {e}"}, status_code=400)
-
-    # 기존 Work 반환인 경우 커밋 불필요
-    if result["status"] == "created":
-        work_title = result["work"].get("title", "")
-        commit_msg = f"feat: Work 자동 생성 — {work_title}"
-        result["git"] = git_commit_interpretation(interp_path, commit_msg)
-
-    return result
-
-
 @router.post("/api/interpretations/{interp_id}/entities/tags/{tag_id}/promote")
 async def api_promote_tag(
     interp_id: str,
@@ -828,7 +788,7 @@ async def api_promote_tag(
             interp_path,
             tag_id,
             label=body.label,
-            scope_work=body.scope_work,
+            scope_document=body.scope_document,
             description=body.description,
         )
     except FileNotFoundError as e:

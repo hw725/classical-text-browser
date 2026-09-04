@@ -1,13 +1,12 @@
 """코어 스키마 엔티티 관리 모듈.
 
 해석 저장소(Interpretation) 내부에서 코어 스키마 엔티티
-(Work, 단위, Tag, Concept, Agent, Relation)를 생성·조회·수정한다.
+(단위, Tag, Concept, Agent, Relation)를 생성·조회·수정한다.
 core-schema-v1.3.md 및 operation-rules-v1.0.md에 따른다.
 
     {interp_id}/
     └── core_entities/
-        ├── works/{uuid}.json
-        ├── blocks/{uuid}.json
+                ├── blocks/{uuid}.json
         ├── tags/{uuid}.json
         ├── concepts/{uuid}.json
         ├── agents/{uuid}.json
@@ -41,7 +40,6 @@ logger = logging.getLogger(__name__)
 # «어느 디렉터리에 사는가»만 알리며, 조회·생성·갱신은 _entity_dir_path에 닿기 전에
 # 경계 목록 쪽으로 갈라진다.
 ENTITY_TYPES: dict[str, str] = {
-    "work": "works",
     "unit": "boundaries",
     "tag": "tags",
     "concept": "concepts",
@@ -68,7 +66,6 @@ def normalize_entity_type(entity_type: str) -> str:
 
 
 SCHEMA_FILES: dict[str, str] = {
-    "work": "work.schema.json",
     "unit": "unit.schema.json",
     "tag": "tag.schema.json",
     "concept": "concept.schema.json",
@@ -88,7 +85,7 @@ def _entity_dir_path(interp_path: Path, entity_type: str) -> Path:
     목적: core_entities/{subdir}/ 경로를 일관되게 관리한다.
     입력:
         interp_path — 해석 저장소 루트 경로.
-        entity_type — ENTITY_TYPES의 키 (work, unit 등).
+        entity_type — ENTITY_TYPES의 키 (unit, tag 등).
     출력: Path 객체.
     왜 이렇게 하는가:
         기존 해석 저장소에 core_entities가 없을 수 있으므로 lazy 생성한다.
@@ -225,6 +222,45 @@ def _ensure_boundaries(interp_path: Path) -> None:
             )
         except Exception as e:  # noqa: BLE001 — 커밋 실패가 읽기를 막으면 안 된다
             logger.warning("경계 옮기기 커밋 실패: %s", e)
+
+
+RETIRED_WORKS_DIRNAME = "works_removed_v1"  # D-099 — 없앤 Work 엔티티의 옛 자리
+_RETIRED_CHECKED: set[str] = set()  # 저장소마다 한 번만 본다(프로세스 수명 동안)
+
+
+def _retire_works(interp_path: Path) -> None:
+    """옛 `works/` 폴더를 물린다 (D-099). 지우지 않고 이름만 바꾼다.
+
+    왜: Work(저작)는 v1.3까지 단위를 묶는 엔티티였는데, 편성이 문헌으로 내려가고(D-097)
+    트리가 문헌 > 권 > 단위가 되면서(D-098) 아무것도 가리키지 않게 되었다. 실제로 만들어진
+    Work는 문헌마다 하나씩, 문헌 제목을 그대로 베낀 것뿐이었다 — 문헌 manifest·서지정보가
+    이미 가진 것의 사본이다. 남겨 두면 화면에서 «있는데 아무 일도 안 하는 것»이 된다.
+
+    지우지 않는 것은 되돌릴 수 있게 하려는 것이다. 해석 저장소는 Git이므로 이름만 바꿔도
+    이력이 남고, 나중에 이본 대조를 만들 때 그 안의 제목·저자를 참고할 수 있다.
+    """
+    key = str(interp_path)
+    if key in _RETIRED_CHECKED:
+        return
+    _RETIRED_CHECKED.add(key)
+    src = interp_path / "core_entities" / "works"
+    if not src.exists() or not any(src.glob("*.json")):
+        return
+    dest = interp_path / "core_entities" / RETIRED_WORKS_DIRNAME
+    if dest.exists():
+        return
+    n = len(list(src.glob("*.json")))
+    src.rename(dest)
+    logger.info("Work %d개를 %s로 물렸다 (D-099)", n, RETIRED_WORKS_DIRNAME)
+    try:
+        from core.interpretation import git_commit_interpretation
+
+        git_commit_interpretation(
+            interp_path,
+            f"chore: Work 엔티티 물림 (D-099) — {n}개, 옛 자리는 {RETIRED_WORKS_DIRNAME}/",
+        )
+    except Exception as e:  # noqa: BLE001 — 커밋 실패가 읽기를 막으면 안 된다
+        logger.warning("Work 물림 커밋 실패: %s", e)
 
 
 _PART_LINES_CACHE: dict[tuple, tuple[float, tuple]] = {}
@@ -486,7 +522,7 @@ def create_entity(
     목적: 코어 스키마 엔티티를 해석 저장소에 추가한다.
     입력:
         interp_path — 해석 저장소 경로.
-        entity_type — 엔티티 유형 (work, unit, tag, concept, agent, relation).
+        entity_type — 엔티티 유형 (unit, tag, concept, agent, relation).
         data — 엔티티 딕셔너리. id가 없으면 UUID를 자동 생성한다.
     출력: {"status": "created", "entity_type": ..., "id": ..., "file_path": ...}
 
@@ -658,6 +694,7 @@ def list_entities(
         필터가 있으면 해당 필드가 일치하는 엔티티만 반환한다.
     """
     interp_path = Path(interp_path).resolve()
+    _retire_works(interp_path)  # D-099 — 저장소를 처음 읽을 때 옛 works/를 물린다
     entity_type = normalize_entity_type(entity_type)
     if entity_type == "unit":
         entities = _unit_view(interp_path)
@@ -704,7 +741,7 @@ def list_entities_for_page(
         page_num — 페이지 번호 (1-based).
     출력: {
         "blocks": [...], "tags": [...], "concepts": [...],
-        "agents": [...], "relations": [...], "works": [...]
+        "agents": [...], "relations": [...]
     }
 
     왜 이렇게 하는가:
@@ -774,15 +811,9 @@ def list_entities_for_page(
     page_agents = [a for a in all_agents if a["id"] in agent_ids]
     page_concepts = [c for c in all_concepts if c["id"] in concept_ids]
 
-    # agent_ids/concept_ids에 없더라도 scope_work가 일치하는 것은 포함하지 않음
-    # (너무 많아질 수 있으므로, 페이지 필터는 관계로 연결된 것만)
-
-    # 5) Work: 단위는 더 이상 Work를 가리키지 않는다(B-004) — 이 쪽의 Work는 빈 목록이다.
-    #    저작 묶음은 층위 1의 «묶음» 경계가 나타낸다. 칸은 응답 모양을 지키려 남긴다.
-    page_works: list[dict] = []
+    # scope_document가 일치해도 포함하지 않는다 — 페이지 필터는 관계로 연결된 것만
 
     return {
-        "works": page_works,
         "blocks": page_blocks,
         "tags": page_tags,
         "concepts": page_concepts,
@@ -795,7 +826,7 @@ def promote_tag_to_concept(
     interp_path: str | Path,
     tag_id: str,
     label: str | None = None,
-    scope_work: str | None = None,
+    scope_document: str | None = None,
     description: str | None = None,
 ) -> dict:
     """Tag를 Concept으로 승격한다 (Promotion Flow).
@@ -805,7 +836,7 @@ def promote_tag_to_concept(
         interp_path — 해석 저장소 경로.
         tag_id — 승격할 Tag의 UUID.
         label — Concept의 라벨. 미지정 시 Tag의 surface를 사용.
-        scope_work — Concept이 유효한 Work의 ID. null이면 전역.
+        scope_document — Concept이 유효한 문헌의 ID. null이면 전역.
         description — 학술적 설명.
     출력: 생성된 Concept 딕셔너리.
 
@@ -832,7 +863,7 @@ def promote_tag_to_concept(
     concept_data = {
         "id": str(uuid.uuid4()),
         "label": effective_label,
-        "scope_work": scope_work,
+        "scope_document": scope_document,
         "description": description,
         "concept_features": None,
         "status": "draft",
@@ -908,83 +939,6 @@ def create_unit_from_source(
     return {**result, "unit": unit_data}
 
 
-def auto_create_work(
-    interp_path: str | Path,
-    library_path: str | Path,
-    document_id: str,
-) -> dict:
-    """문헌의 메타데이터로부터 Work 엔티티를 자동 생성한다.
-
-    목적: 단위를 만들기 전에 소속 Work가 필요한데,
-          연구자가 직접 만들지 않아도 문헌 정보에서 자동 생성할 수 있다.
-    입력:
-        interp_path — 해석 저장소 경로.
-        library_path — 서고 루트 경로.
-        document_id — 원본 문헌 ID.
-    출력: {"status": "created"/"existing", "work": {...}}
-
-    왜 이렇게 하는가:
-        - 이미 같은 document_id로 생성된 Work가 있으면 중복 생성하지 않는다.
-        - bibliography.json → title, creator.name, period를 채운다.
-        - 없으면 manifest.json의 title을 사용한다.
-    """
-    interp_path = Path(interp_path).resolve()
-    library_path = Path(library_path).resolve()
-
-    # 이미 같은 document_id로 생성된 Work가 있는지 확인
-    existing_works = list_entities(interp_path, "work")
-    for work in existing_works:
-        meta = work.get("metadata") or {}
-        if meta.get("source_document_id") == document_id:
-            return {"status": "existing", "work": work}
-
-    # 문헌 메타데이터 읽기
-    doc_path = library_path / "documents" / document_id
-    title = document_id  # 기본값
-    author = None
-    period = None
-
-    # bibliography.json 시도
-    bib_path = doc_path / "bibliography.json"
-    if bib_path.exists():
-        try:
-            bib = json.loads(bib_path.read_text(encoding="utf-8"))
-            if bib.get("title"):
-                title = bib["title"]
-            creator = bib.get("creator")
-            if isinstance(creator, dict) and creator.get("name"):
-                author = creator["name"]
-            if bib.get("date_created"):
-                period = bib["date_created"]
-        except (json.JSONDecodeError, OSError):
-            pass
-
-    # manifest.json 폴백
-    if title == document_id:
-        manifest_path = doc_path / "manifest.json"
-        if manifest_path.exists():
-            try:
-                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-                if manifest.get("title"):
-                    title = manifest["title"]
-            except (json.JSONDecodeError, OSError):
-                pass
-
-    work_data = {
-        "id": str(uuid.uuid4()),
-        "title": title,
-        "author": author,
-        "period": period,
-        "status": "draft",
-        "metadata": {
-            "source_document_id": document_id,
-        },
-    }
-
-    result = create_entity(interp_path, "work", work_data)
-    return {**result, "work": work_data}
-
-
 def auto_create_units_from_text(
     interp_path: str | Path,
     library_path: str | Path,
@@ -1008,7 +962,7 @@ def auto_create_units_from_text(
         시나리오 2에서는 PDF/이미지가 없으므로 LayoutBlock도 없다.
         source_ref.layout_block_id=null로 설정하고,
         source_ref.page만으로 원본을 추적한다.
-        단위는 Work를 가리키지 않는다(B-004) — 저작 묶음은 층위 1의 «묶음» 경계다.
+        단위는 저작을 가리키지 않는다(D-099) — 저작 묶음은 층위 1의 «묶음» 경계다.
     """
     interp_path = Path(interp_path).resolve()
     library_path = Path(library_path).resolve()
@@ -1041,7 +995,7 @@ def auto_create_units_from_text(
 
 
 # ──────────────────────────────────────
-# 내용 트리 — Work → 단위 순서 (D-085)
+# 내용 트리 — 문헌 > 권 > 단위 (D-085 → D-098)
 # ──────────────────────────────────────
 
 
@@ -1068,10 +1022,9 @@ def doc_contents(doc_path: str | Path, document_id: str, title: str | None = Non
                   "pages": [{"page", "part_id", "layout_block_ids": [...]}, ...]}
       pages는 source_refs를 쪽 번호로 묶은 것(등장 순서). 두 쪽에 걸친 단위는 둘이다.
 
-    왜 Work로 묶지 않는가: Work(저작)는 해석 저장소의 엔티티인데 편성은 문헌의 것이다(D-097).
-    문헌의 데이터가 남의 저장소 엔티티를 가리키고 있었고, 해석 저장소가 여럿이면 그중 하나만
-    가리켰다. 저작이 여럿인 문집은 층위 1의 «묶음(container)» 경계가 나타낸다 — 트리의 층위
-    그대로다(B-004).
+    왜 저작으로 묶지 않는가: 편성은 문헌의 것이고(D-097), 저작이 여럿인 문집은 층위 1의
+    «묶음(container)» 경계가 나타낸다 — 트리의 층위 그대로다(D-098). Work 엔티티는 D-099에서
+    없앴다.
     """
     from core.boundaries import list_doc_parts
 

@@ -14,11 +14,19 @@ Core must remain stable, minimal, and future-proof.
 
 ------------------------------------------------------------------------
 
-# 1. Work
+# 1. Work — removed (D-099)
 
-Represents a textual work.
+The Work entity was dropped in v1.3. In practice every Work was auto-created
+from the document title, duplicating what the document manifest and
+`bibliography.json` already hold, and after D-097/D-098 nothing referenced it:
+composition lives in the document store and a collection holding several works
+is expressed by level-1 «container» boundaries. Existing `core_entities/works/`
+folders are renamed to `works_removed_v1/` (not deleted) the first time the
+store is opened.
 
-Fields: - id - title - author - period - metadata
+If cross-witness linking (이본 대조) is built later, that anchor belongs *above*
+the documents — at the library level — not inside one interpretation store, so
+it will be a new design rather than this entity.
 
 ------------------------------------------------------------------------
 
@@ -37,10 +45,9 @@ Smallest structural unit (sentence / clause / segment).
 Fields: - id - sequence_index - original_text -
 normalized_text (optional) - source_ref - source_refs - notes - metadata
 
-> **D-098**: `work_id` was dropped. Units no longer point at a Work — a Work
-> belongs to the interpretation store while composition belongs to the document
-> (D-097). A collection holding several works is expressed by level-1
-> «container» boundaries instead. `sequence_index` now counts within the part.
+> **D-098/D-099**: `work_id` was dropped and the Work entity itself removed.
+> A collection holding several works is expressed by level-1 «container»
+> boundaries instead. `sequence_index` now counts within the part.
 
 ------------------------------------------------------------------------
 

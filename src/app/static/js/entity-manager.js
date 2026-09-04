@@ -3,7 +3,7 @@
    ──────────────────────────────────────────
 
    해석 저장소 내의 코어 스키마 엔티티
-   (Work, 단위, Tag, Concept, Agent, Relation)를
+   (단위, Tag, Concept, Agent, Relation)를
    생성·조회·편집하는 프론트엔드 모듈.
 
    의존:
@@ -14,8 +14,8 @@
 // eslint-disable-next-line no-unused-vars
 const entityState = {
   active: false,            // 엔티티 패널 활성 여부
-  entities: {},             // 캐시: { works:[], blocks:[], tags:[], concepts:[], agents:[], relations:[] }
-  currentFilter: "all",     // 유형 필터: all / unit / tag / concept / agent / relation / work
+  entities: {},             // 캐시: { units:[], tags:[], concepts:[], agents:[], relations:[] }
+  currentFilter: "all",     // 유형 필터: all / unit / tag / concept / agent / relation
   pageFilter: true,         // "현재 페이지만" 체크 여부
   editingEntity: null,      // 편집 중인 엔티티 (null이면 신규 생성)
   editingType: null,        // 편집 중인 엔티티 유형
@@ -23,7 +23,6 @@ const entityState = {
 
 // 엔티티 유형별 표시 정보
 const ENTITY_TYPE_INFO = {
-  work:       { label: "Work",      cssClass: "type-work",       displayField: "title" },
   unit:       { label: "단위",      cssClass: "type-unit",       displayField: "original_text" },
   tag:        { label: "Tag",       cssClass: "type-tag",        displayField: "surface" },
   concept:    { label: "Concept",   cssClass: "type-concept",    displayField: "label" },
@@ -179,8 +178,8 @@ function _loadEntitiesForCurrentPage() {
 function _loadAllEntities() {
   if (!interpState || !interpState.interpId) return;
 
-  const types = ["work", "unit", "tag", "concept", "agent", "relation"];
-  const typeMap = { work: "works", unit: "units", tag: "tags", concept: "concepts", agent: "agents", relation: "relations" };
+  const types = ["unit", "tag", "concept", "agent", "relation"];
+  const typeMap = { unit: "units", tag: "tags", concept: "concepts", agent: "agents", relation: "relations" };
 
   Promise.all(
     types.map((t) =>
@@ -262,7 +261,7 @@ function _renderEntityList() {
 function _getFilteredEntities() {
   const ent = entityState.entities || {};
   const typeMap = {
-    work: "works", unit: "units", tag: "tags",
+    unit: "units", tag: "tags",
     concept: "concepts", agent: "agents", relation: "relations",
   };
 
@@ -310,7 +309,6 @@ function _showEntityTypeChooser() {
     <label class="bib-edit-label">엔티티 유형</label>
     <select id="entity-new-type-select" class="bib-select entity-type-select">
       <option value="">유형을 선택하세요</option>
-      <option value="work">Work (작품)</option>
       <option value="tag">Tag (태그)</option>
       <option value="concept">Concept (개념)</option>
       <option value="agent">Agent (인물)</option>
@@ -376,18 +374,6 @@ function _buildFormFields(entityType, existing) {
   const statusOptions = _buildStatusOptions(existing ? existing.status : "draft");
 
   switch (entityType) {
-    case "work":
-      return `
-        <label class="bib-edit-label">제목 (title)</label>
-        <input id="ef-title" type="text" class="bib-input" value="${val("title")}" placeholder="예: 蒙求" />
-        <label class="bib-edit-label">저자 (author)</label>
-        <input id="ef-author" type="text" class="bib-input" value="${val("author")}" placeholder="예: 李瀚" />
-        <label class="bib-edit-label">시대 (period)</label>
-        <input id="ef-period" type="text" class="bib-input" value="${val("period")}" placeholder="예: 唐" />
-        <label class="bib-edit-label">상태 (status)</label>
-        <select id="ef-status" class="bib-select" style="width:100%;">${statusOptions}</select>
-      `;
-
     case "tag":
       return `
         <label class="bib-edit-label">단위 ID (block_id)</label>
@@ -412,8 +398,8 @@ function _buildFormFields(entityType, existing) {
       return `
         <label class="bib-edit-label">라벨 (label)</label>
         <input id="ef-label" type="text" class="bib-input" value="${val("label")}" placeholder="예: 王戎" />
-        <label class="bib-edit-label">유효 범위 Work ID (scope_work, 비우면 전역)</label>
-        <input id="ef-scope-work" type="text" class="bib-input" value="${val("scope_work")}" placeholder="Work UUID (전역이면 비움)" />
+        <label class="bib-edit-label">유효 범위 문헌 ID (scope_document, 비우면 전역)</label>
+        <input id="ef-scope-doc" type="text" class="bib-input" value="${val("scope_document")}" placeholder="Work UUID (전역이면 비움)" />
         <label class="bib-edit-label">설명 (description)</label>
         <textarea id="ef-description" class="bib-textarea" rows="3" placeholder="학술적 설명">${val("description")}</textarea>
         <label class="bib-edit-label">상태 (status)</label>
@@ -578,18 +564,6 @@ function _collectFormData(entityType) {
   };
 
   switch (entityType) {
-    case "work": {
-      const title = _val("ef-title");
-      if (!title) return null;
-      return {
-        title,
-        author: _val("ef-author") || null,
-        period: _val("ef-period") || null,
-        status: _val("ef-status") || "draft",
-        metadata: null,
-      };
-    }
-
     case "tag": {
       const surface = _val("ef-surface");
       const blockId = _val("ef-block-id");
@@ -611,7 +585,7 @@ function _collectFormData(entityType) {
       if (!label) return null;
       return {
         label,
-        scope_work: _val("ef-scope-work") || null,
+        scope_document: _val("ef-scope-doc") || null,
         description: _val("ef-description") || null,
         concept_features: null,
         status: _val("ef-status") || "draft",
@@ -685,19 +659,6 @@ async function _openUnitCreator() {
   const title = document.getElementById("entity-dialog-title");
   title.textContent = "단위 만들기 (출처 자동 채움)";
 
-  // Work 목록 로드
-  let works = [];
-  try {
-    const resp = await fetch(`/api/interpretations/${interpState.interpId}/entities/work`);
-    if (!resp.ok) throw new Error(`서버 오류 (${resp.status})`);
-    const data = await resp.json();
-    works = data.entities || [];
-  } catch { /* Work 목록 로드 실패 시 빈 목록으로 진행 */ }
-
-  const workOptions = works.map((w) =>
-    `<option value="${w.id}">${_escHtml(w.title)} (${w.id.substring(0, 8)})</option>`
-  ).join("");
-
   form.innerHTML = `
     <label class="bib-edit-label">원본 문헌</label>
     <input type="text" class="bib-input" value="${viewerState.docId}" readonly />
@@ -707,50 +668,9 @@ async function _openUnitCreator() {
     <input id="ef-tb-layout-block" type="text" class="bib-input" placeholder="예: p01_b01 (없으면 비움)" />
     <label class="bib-edit-label">원문 텍스트 (original_text)</label>
     <textarea id="ef-tb-original-text" class="bib-textarea" rows="3" placeholder="L4 텍스트에서 블록에 해당하는 부분을 붙여넣으세요"></textarea>
-    <label class="bib-edit-label">소속 Work</label>
-    <select id="ef-tb-work-id" class="bib-select" style="width:100%;">
-      <option value="">Work를 선택하세요</option>
-      ${workOptions}
-    </select>
-    <button id="ef-tb-auto-work" class="text-btn" type="button" style="margin-top:4px;">Work 자동 생성</button>
     <label class="bib-edit-label">순서 인덱스 (sequence_index, 0-based)</label>
     <input id="ef-tb-seq-index" type="number" class="bib-input" value="0" min="0" />
   `;
-
-  // Work 자동 생성 버튼
-  const autoWorkBtn = document.getElementById("ef-tb-auto-work");
-  if (autoWorkBtn) {
-    autoWorkBtn.addEventListener("click", async () => {
-      autoWorkBtn.textContent = "생성 중...";
-      autoWorkBtn.disabled = true;
-      try {
-        const resp = await fetch(
-          `/api/interpretations/${interpState.interpId}/entities/work/auto-create`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ document_id: viewerState.docId }),
-          }
-        );
-        if (!resp.ok) {
-          const errBody = await resp.json().catch(() => ({}));
-          throw new Error(errBody.error || `서버 오류 (${resp.status})`);
-        }
-        const result = await resp.json();
-        if (result.work) {
-          const sel = document.getElementById("ef-tb-work-id");
-          const opt = document.createElement("option");
-          opt.value = result.work.id;
-          opt.textContent = `${result.work.title} (${result.work.id.substring(0, 8)})`;
-          opt.selected = true;
-          sel.appendChild(opt);
-          autoWorkBtn.textContent = result.status === "existing" ? "기존 Work 사용" : "Work 생성 완료";
-        }
-      } catch (err) {
-        autoWorkBtn.textContent = `실패: ${err.message}`;
-      }
-    });
-  }
 
   // 저장 버튼 동작을 단위 전용으로 교체
   const saveBtn = document.getElementById("entity-dialog-save");
@@ -771,17 +691,11 @@ async function _saveUnitFromSource() {
   const statusEl = document.getElementById("entity-dialog-status");
 
   const originalText = (document.getElementById("ef-tb-original-text") || {}).value?.trim();
-  const workId = (document.getElementById("ef-tb-work-id") || {}).value;
   const seqIndex = parseInt((document.getElementById("ef-tb-seq-index") || {}).value, 10);
   const layoutBlockId = (document.getElementById("ef-tb-layout-block") || {}).value?.trim() || null;
 
   if (!originalText) {
     statusEl.textContent = "원문 텍스트를 입력하세요";
-    statusEl.style.color = "#ef4444";
-    return;
-  }
-  if (!workId) {
-    statusEl.textContent = "소속 Work를 선택하세요";
     statusEl.style.color = "#ef4444";
     return;
   }
@@ -801,8 +715,7 @@ async function _saveUnitFromSource() {
           page_num: viewerState.pageNum || 1,
           layout_block_id: layoutBlockId,
           original_text: originalText,
-          work_id: workId,
-          sequence_index: isNaN(seqIndex) ? 0 : seqIndex,
+            sequence_index: isNaN(seqIndex) ? 0 : seqIndex,
         }),
       }
     );
@@ -863,7 +776,7 @@ async function _promoteTag(tagId) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           label: label || null,
-          scope_work: null,
+          scope_document: null,
           description: null,
         }),
       }
