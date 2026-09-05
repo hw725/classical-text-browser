@@ -92,6 +92,10 @@ def write_values(library_root: str | Path, updates: dict[str, str | None]) -> di
     p = env_path(library_root)
     lines = _read_lines(p)
     wanted = {MANAGED_KEYS[k]: (v or "").strip() for k, v in updates.items() if k in MANAGED_KEYS}
+    # 값 속 개행은 다른 줄(=다른 키)이 된다 — 키 하나 저장으로 설정을 덮어쓰게 할 수 없다.
+    for k, v in wanted.items():
+        if "\n" in v or "\r" in v:
+            raise ValueError(f"{k} 값에 줄바꿈이 들어 있습니다.")
     if not wanted:
         return read_status(library_root)
 

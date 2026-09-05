@@ -96,7 +96,7 @@ def test_scanner_silent_on_correct_claims(checker):
 # ── 배치 파일은 ASCII만 ─────────────────────────────────────────
 
 
-@pytest.mark.parametrize("name", ["start_server.bat", "doctor.bat"])
+@pytest.mark.parametrize("name", ["start_server.bat", "doctor.bat", "install.bat"])
 def test_batch_files_are_ascii(name):
     """`.bat` 파일에 비ASCII 바이트가 없어야 한다.
 
@@ -105,8 +105,19 @@ def test_batch_files_are_ascii(name):
     `'3개처럼' is not recognized as an internal or external command`가 찍혔다
     (2026-09-03 실측, 주석을 영어로 바꾸자 사라짐). 하네스 안(콘솔 없음)에서는
     chcp가 실패해 cp949로 읽히므로 재현되지 않는다 — 그래서 사람 눈이 아니라
-    바이트 검사로 막는다. install.bat은 아직 한글이 남아 있어 대상에서 뺐다.
+    바이트 검사로 막는다. install.bat도 ASCII 껍데기가 됐다(한글은 install.ps1에).
     """
     data = (_ROOT / name).read_bytes()
     bad = [(i + 1, line) for i, line in enumerate(data.split(b"\n")) if any(b > 127 for b in line)]
     assert not bad, f"{name}에 비ASCII 줄이 있습니다 (cmd 파싱 오류 원인): {bad[:3]}"
+
+
+def test_install_ps1_has_bom_and_crlf():
+    """install.ps1은 UTF-8 BOM + CRLF여야 한다.
+
+    BOM이 없으면 PowerShell 5.1이 ANSI로 읽어 한글이 깨진다.
+    """
+    raw = (_ROOT / "install.ps1").read_bytes()
+    assert raw.startswith(b"\xef\xbb\xbf"), "install.ps1에 UTF-8 BOM이 없다"
+    assert b"\r\n" in raw, "install.ps1 줄바꿈은 CRLF여야 한다"
+    assert b"\n" not in raw.replace(b"\r\n", b""), "LF만 있는 줄이 섞여 있다"

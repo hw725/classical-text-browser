@@ -36,6 +36,20 @@ def app_root() -> Path:
 
 
 def current_version() -> str:
+    """지금 판 번호 — **pyproject.toml**에서 읽는다.
+
+    dist-info는 실행 인터프리터의 것이라, GPU PC(.venv-gpu로 뜸)에서는 uv sync가 갱신하는 .venv와
+    어긋나 «새 판 있음»이 영원히 켜졌다(리뷰 실측: .venv-gpu 1.2.1 vs pyproject 1.3.0).
+    """
+    try:
+        import tomllib
+
+        with open(app_root() / "pyproject.toml", "rb") as f:
+            v = tomllib.load(f).get("project", {}).get("version")
+        if v:
+            return str(v)
+    except Exception:  # noqa: BLE001
+        pass
     try:
         from importlib.metadata import version
 
@@ -186,6 +200,13 @@ def apply_update() -> dict:
         }
     try:
         return _apply_update_locked(root, steps, sync_args)
+    except Exception as e:  # noqa: BLE001 — 500으로 새면 화면은 «받지 못했습니다»조차 못 보여 준다
+        steps.append({"name": "업데이트", "ok": False, "output": f"{type(e).__name__}: {e}"[:2000]})
+        return {
+            "ok": False,
+            "steps": steps,
+            "hint": "업데이트 도중 오류가 났습니다. 위 기록을 보세요.",
+        }
     finally:
         JOB_LOCK.release()
 

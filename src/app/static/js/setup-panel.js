@@ -121,6 +121,7 @@ function _oauthRow() {
   wrap.append(note, btn, link);
 
   let timer = null;
+  let ticks = 0; // 프록시는 떴는데 로그인을 안 하면 영원히 묻게 된다 — 5분(150틱) 상한
   // 마지막으로 본 상태. «안 됨 → 됨» 전이에서만 이벤트를 쏜다. 처음 물었을 때부터 «됨»이면
   // 쏘지 않는다 — 쏘면 마법사가 자기를 다시 그리며 새 줄을 만들고, 그 줄이 또 «됨»을 보고
   // 쏘는 무한 루프가 된다(2026-09-05 실측: /api/llm/models가 ERR_INSUFFICIENT_RESOURCES).
@@ -167,6 +168,10 @@ function _oauthRow() {
     if (!wrap.isConnected) stop();
   };
   const poll = async () => {
+    if (++ticks > 150 || !wrap.isConnected) {
+      stop();
+      return;
+    }
     try {
       render(await (await fetch("/api/settings/oauth")).json());
     } catch (_) {
@@ -175,6 +180,7 @@ function _oauthRow() {
   };
   btn.addEventListener("click", async () => {
     btn.disabled = true;
+    ticks = 0;
     try {
       const r = await fetch("/api/settings/oauth/start", { method: "POST" });
       const d = await r.json();
@@ -246,7 +252,8 @@ function _ollamaRow() {
       } else {
         out.textContent = "로그인 창이 열렸으면 그 안에서 진행하세요. 안 열렸으면 다시 누르세요.";
       }
-      document.dispatchEvent(new CustomEvent("llm-accounts-changed"));
+      // 여기서 llm-accounts-changed를 쏘지 않는다 — 로그인이 끝난 게 아니고, 마법사가 이 줄을
+      // 다시 그려 방금 띄운 「로그인 창 열기」 링크를 지워 버린다(리뷰 지적).
     } catch (e) {
       out.textContent = `로그인을 시작하지 못했습니다: ${e.message}`;
     } finally {
@@ -313,7 +320,7 @@ async function _checkUpdate() {
       if (d.can_self_update) {
         const go = document.createElement("button");
         go.className = "text-btn text-btn-primary text-btn-sm";
-        go.textContent = "지금 받기";
+        go.textContent = "받기";
         go.addEventListener("click", () => _applyUpdate(d, box, go));
         row.appendChild(go);
       } else {
@@ -359,7 +366,7 @@ async function _applyUpdate(info, box, btn) {
     showToast(`업데이트 실패: ${e.message}`, "error");
   } finally {
     btn.disabled = false;
-    btn.textContent = "지금 받기";
+    btn.textContent = "받기";
   }
 }
 
@@ -430,6 +437,11 @@ function _closeWizard(remember) {
   if (_extrasPollTimer) {
     clearInterval(_extrasPollTimer);
     _extrasPollTimer = null;
+  }
+  // 3단계의 «다시 그리기» 리스너도 뗀다 — 닫힌 뒤에도 키 저장마다 숨은 화면을 다시 그리지 않게.
+  if (_wizardState.llmListener) {
+    document.removeEventListener("llm-accounts-changed", _wizardState.llmListener);
+    _wizardState.llmListener = null;
   }
   if (remember) {
     try {
@@ -595,10 +607,12 @@ function _pollExtras(body) {
     } catch (_) {
       return; // 잠깐 못 닿아도 다음 틱에 다시 본다
     }
+    if (!s || !s.job) return; // 5xx가 JSON({detail})로 와도 타이머가 예외로 굳지 않게
     const log = document.getElementById("wizard-extras-log");
+    const tail = (s.job.log || []).slice(-12).join("\n");
     if (log) {
       log.hidden = false;
-      log.textContent = (s.job.log || []).slice(-12).join("\n") || "받는 중…";
+      log.textContent = tail || "받는 중…";
     }
     if (!s.job.running) {
       clearInterval(_extrasPollTimer);
@@ -609,7 +623,15 @@ function _pollExtras(body) {
           s.job.ok ? "success" : "error",
         );
       }
-      if (s.job.ok && body.isConnected && _wizardState.step === 1) await _wizardOcr(body);
+      // 실패해도 다시 그린다 — 안 그리면 «설치 중…»과 비활성 단추로 굳는다. 실패 기록은 남긴다.
+      if (body.isConnected && _wizardState.step === 1) {
+        await _wizardOcr(body);
+        const again = document.getElementById("wizard-extras-log");
+        if (again && !s.job.ok && tail) {
+          again.hidden = false;
+          again.textContent = tail;
+        }
+      }
     }
   };
   _extrasPollTimer = setInterval(tick, 2000);
@@ -655,15 +677,29 @@ async function _wizardLlm(body) {
     document.removeEventListener("llm-accounts-changed", _wizardState.llmListener);
   }
   _wizardState.llmListener = () => {
-    if (body.isConnected && _wizardState.step === 2) _wizardLlm(body);
+    const overlay = document.getElementById("setup-wizard-overlay");
+    const shown = overlay && overlay.style.display !== "none";
+    if (!shown || !body.isConnected || _wizardState.step !== 2) return;
+    // 다른 칸에 치던 키를 잃지 않게 — 입력값을 챙겼다가 다시 그린 뒤 되돌려 넣는다.
+    const typed = {};
+    body.querySelectorAll("input[aria-label]").forEach((el) => {
+      if (el.value) typed[el.getAttribute("aria-label")] = el.value;
+    });
+    _wizardLlm(body).then(() => {
+      body.querySelectorAll("input[aria-label]").forEach((el) => {
+        const v = typed[el.getAttribute("aria-label")];
+        if (v) el.value = v;
+      });
+    });
   };
   document.addEventListener("llm-accounts-changed", _wizardState.llmListener);
 }
 
 function _wizEsc(s) {
+  // 속성값에도 쓰므로 따옴표까지 — textContent→innerHTML은 & < >만 바꾼다.
   const d = document.createElement("div");
   d.textContent = String(s == null ? "" : s);
-  return d.innerHTML;
+  return d.innerHTML.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 document.addEventListener("DOMContentLoaded", () => {

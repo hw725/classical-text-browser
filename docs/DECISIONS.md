@@ -5113,8 +5113,9 @@ pyproject에 **없는** extras였다.
 ### 결정
 
 - `POST /api/app/extras/{name}/install`이 `uv sync --extra …`를 뒤에서 돌리고,
-  `GET /api/app/extras`가 무엇이 깔렸는지·지금 도는지·로그 꼬리를 준다. 마법사 2단계와
-  `install.ps1`이 이것을 쓴다.
+  `GET /api/app/extras`가 무엇이 깔렸는지·지금 도는지·로그 꼬리를 준다. 마법사 2단계가
+  이것을 쓴다. `install.ps1`은 서버가 없는 시점이라 `uv sync --extra`를 직접 돌리고, 기록은
+  첫 실행 때 probe로 만들어진다.
 - **uv sync는 적지 않은 extras를 지운다.** 고른 것을 앱 루트 `.ctb-extras.json`(gitignore)에
   기록하고, 업데이트(D-103)와 추가 설치가 언제나 기록 전부를 넘긴다. 기록이 없으면 지금 깔린
   것을 자식 프로세스 import로 짚어 처음 기록을 만든다. 이 기록이 없던 v1.3.0 첫 판의

@@ -466,9 +466,45 @@ async function _loadLlmAccounts() {
         if (p.status === "no_model" && p.active_model) {
           const pullBtn = document.createElement("button");
           pullBtn.className = "text-btn text-btn-sm";
-          pullBtn.textContent = `모델 받기 (${p.active_model}, 약 5GB)`;
+          pullBtn.textContent = `모델 받기 (${p.active_model})`;
+          pullBtn.title = "크기는 모델에 따라 다릅니다(수 GB). 인터넷이 필요합니다";
           const prog = document.createElement("div");
           prog.className = "settings-llm-note";
+          const askStatus = () =>
+            fetch("/api/settings/ollama/pull", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: "{}",
+            }).then((r) => r.json());
+          // 진행 묻기 — 하나만 돈다. 이 줄이 떨어지면(목록 재렌더) 스스로 멈춘다.
+          const startPolling = () => {
+            if (_pullPollTimer) clearInterval(_pullPollTimer);
+            const timer = setInterval(async () => {
+              if (!prog.isConnected) {
+                clearInterval(timer);
+                if (_pullPollTimer === timer) _pullPollTimer = null;
+                return;
+              }
+              try {
+                const s = await askStatus();
+                prog.textContent = (s.log || []).slice(-1)[0] || "받는 중…";
+                if (!s.running) {
+                  clearInterval(timer);
+                  if (_pullPollTimer === timer) _pullPollTimer = null;
+                  prog.textContent = s.ok
+                    ? "받았습니다. 목록을 새로 읽습니다."
+                    : "받지 못했습니다. 위 기록을 보세요.";
+                  if (s.ok) {
+                    _loadLlmAccounts();
+                    document.dispatchEvent(new CustomEvent("llm-accounts-changed"));
+                  }
+                }
+              } catch (_) {
+                /* 다음 틱 */
+              }
+            }, 2000);
+            _pullPollTimer = timer;
+          };
           pullBtn.addEventListener("click", async () => {
             pullBtn.disabled = true;
             prog.textContent = "받는 중… 몇 분 걸립니다.";
@@ -480,32 +516,23 @@ async function _loadLlmAccounts() {
               });
               const d = await r.json();
               if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
-              const timer = setInterval(async () => {
-                try {
-                  const s = await (await fetch("/api/settings/ollama/pull", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: "{}",
-                  })).json();
-                  prog.textContent = (s.log || []).slice(-1)[0] || "받는 중…";
-                  if (!s.running) {
-                    clearInterval(timer);
-                    prog.textContent = s.ok ? "받았습니다. 목록을 새로 읽습니다." : "받지 못했습니다. 위 기록을 보세요.";
-                    if (s.ok) {
-                      _loadLlmAccounts();
-                      document.dispatchEvent(new CustomEvent("llm-accounts-changed"));
-                    }
-                  }
-                } catch (_) {
-                  /* 다음 틱 */
-                }
-              }, 2000);
+              startPolling();
             } catch (e) {
               prog.textContent = `시작하지 못했습니다: ${e.message}`;
               pullBtn.disabled = false;
             }
           });
           row.append(pullBtn, prog);
+          // 목록이 다시 그려졌는데 받기가 아직 돌고 있으면 «모델 없음 + 단추»로 되돌리지 않는다.
+          askStatus()
+            .then((s) => {
+              if (s && s.running && s.model === p.active_model) {
+                pullBtn.disabled = true;
+                prog.textContent = (s.log || []).slice(-1)[0] || "받는 중… 몇 분 걸립니다.";
+                startPolling();
+              }
+            })
+            .catch(() => {});
         }
       }
       // ChatGPT 계정 길은 단추로 프록시를 띄우고 로그인 창을 연다 — 로그를 열게 하지 않는다(D-107).
@@ -527,6 +554,7 @@ async function _loadLlmAccounts() {
   }
 }
 let _llmAccountsRecheck = 0;
+let _pullPollTimer = null;
 
 /* ─── 서고 경로 관리 ───────────────────────────── */
 
@@ -1993,7 +2021,8 @@ function _fillLlmSelect(select, models) {
     const opt = document.createElement("option");
     opt.value = `${m.provider}:${m.model}`;
     const icon = m.available ? "●" : "○";
-    const costLabel = m.cost === "free" ? "" : " [유료]";
+    const costLabel =
+      m.cost === "free" ? "" : m.cost === "subscription" ? " [구독 한도]" : " [유료]";
     // <option> 안에는 SVG를 넣을 수 없다 — 이모지(👁)는 OS 폰트에 따라
     // 렌더링이 크게 달라 텍스트 라벨로 표기한다.
     const visionLabel = m.vision ? " [비전]" : "";
@@ -2034,7 +2063,7 @@ document.addEventListener("llm-accounts-changed", () => {
 // 창이 다시 활성화되면 목록을 다시 받는다(1분에 한 번까지). 프록시가 새 모델을 얻거나
 // 서버가 갈린 뒤에도 드롭다운은 페이지를 열 때 채운 목록을 들고 있었다 — «gpt-6-astra가
 // 왜 안 보이나»(2026-09-05). 새로고침 없이 따라오게 한다.
-let _llmSelectsRefreshedAt = 0;
+let _llmSelectsRefreshedAt = Date.now(); // 첫 포커스에 한 번 더 받지 않게
 window.addEventListener("focus", () => {
   const now = Date.now();
   if (now - _llmSelectsRefreshedAt < 60000) return;

@@ -54,7 +54,7 @@ def resolve(spec: str, models: list[dict] | None = None) -> tuple[str, str | Non
       후보를 알린다.
     """
     spec = spec.strip()
-    if not spec:
+    if not spec or not spec.strip(": "):
         raise ValueError("모델을 비워 둘 수 없습니다.")
     if spec.isdigit():
         models = list_vision_models() if models is None else models
@@ -67,10 +67,10 @@ def resolve(spec: str, models: list[dict] | None = None) -> tuple[str, str | Non
         provider, _, model = spec.partition(":")
         # 콜론 앞이 프로바이더일 때만 «프로바이더:모델»이다. «glm-ocr:latest»처럼 태그가 붙은
         # 모델 이름은 그대로 모델 이름이다.
-        if provider.strip() in known_providers:
-            return provider.strip(), (model.strip() or None)
-    if spec in known_providers:
-        return spec, None
+        if provider.strip().lower() in known_providers:
+            return provider.strip().lower(), (model.strip() or None)
+    if spec.lower() in known_providers:
+        return spec.lower(), None
     models = list_vision_models() if models is None else models
     exact = [m for m in models if spec.lower() == m["model"].lower()]
     if len(exact) == 1:

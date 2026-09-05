@@ -69,6 +69,17 @@ def defined_extras() -> set[str]:
     return set(data.get("project", {}).get("optional-dependencies", {}).keys())
 
 
+def _venv_python() -> str:
+    """uv sync가 갱신하는 환경(.venv)의 파이썬. GPU PC는 서버가 .venv-gpu로 뜨므로 sys.executable로
+    짚으면 «깔림» 판정과 설치 대상이 어긋난다(리뷰 지적)."""
+
+    for rel in ("Scripts/python.exe", "bin/python"):
+        cand = app_root() / ".venv" / rel
+        if cand.exists():
+            return str(cand)
+    return sys.executable
+
+
 def _probe(module: str) -> bool:
     """이 프로세스가 아니라 **.venv의 파이썬**으로 import해 본다.
 
@@ -77,7 +88,7 @@ def _probe(module: str) -> bool:
     """
     try:
         p = subprocess.run(
-            [sys.executable, "-c", f"import {module}"],
+            [_venv_python(), "-c", f"import {module}"],
             capture_output=True,
             timeout=60,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
@@ -132,7 +143,10 @@ def _save_record(extras: list[str]) -> None:
 
 def sync_args(extra_extras: list[str] | None = None) -> list[str]:
     """`uv sync`에 넘길 인자 — 기록된 extras 전부 + 이번에 더할 것."""
-    wanted = sorted(set(recorded_extras()) | set(extra_extras or []))
+    # 기록에 남은 «지금 pyproject에 없는 이름»은 넘기지 않는다 — uv sync --extra bogus는 rc=2로
+    # 죽고, 그 뒤로 업데이트·설치가 화면에서 복구할 길 없이 전부 실패한다(리뷰 실측).
+    defined = defined_extras()
+    wanted = sorted((set(recorded_extras()) | set(extra_extras or [])) & defined)
     args = ["uv", "sync"]
     for e in wanted:
         args += ["--extra", e]
@@ -166,6 +180,31 @@ def status() -> dict:
         ],
         "job": job,
     }
+
+
+def _kill_tree(p) -> None:
+    """자식과 그 손자까지 끝낸다.
+
+    Windows에서 uv만 죽이면 uv가 띄운 pip/빌드 프로세스가 stdout을 물고 살아 있어 읽기가
+    끝나지 않는다 — 감시가 있어도 running·JOB_LOCK이 안 풀린다(리뷰 실측).
+    """
+    import sys
+
+    try:
+        if sys.platform == "win32":
+            subprocess.run(
+                ["taskkill", "/T", "/F", "/PID", str(p.pid)],
+                capture_output=True,
+                timeout=30,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        else:
+            p.kill()
+    except Exception:  # noqa: BLE001
+        try:
+            p.kill()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def start_install(extra: str, on_done=None) -> dict:
@@ -221,6 +260,8 @@ def start_install(extra: str, on_done=None) -> dict:
     def _run():
         code = -1
         p = None
+        # **본문 전체**가 한 try 안이다 — OSError가 아닌 예외(Timer.start의 RuntimeError 등)가
+        # 새면 running=True와 JOB_LOCK이 영원히 남아 이후 설치·업데이트가 전부 거절된다(리뷰 지적).
         try:
             p = subprocess.Popen(
                 args,
@@ -238,7 +279,7 @@ def start_install(extra: str, on_done=None) -> dict:
             def _kill():
                 if p.poll() is None:
                     timed_out["hit"] = True
-                    p.kill()
+                    _kill_tree(p)
 
             watchdog = threading.Timer(1800, _kill)
             watchdog.daemon = True
@@ -248,6 +289,7 @@ def start_install(extra: str, on_done=None) -> dict:
                 for line in p.stdout:
                     with _lock:
                         _job["log"].append(line.rstrip())
+                        del _job["log"][:-500]  # 무한히 자라지 않게
                 code = p.wait()
             finally:
                 watchdog.cancel()
@@ -255,9 +297,10 @@ def start_install(extra: str, on_done=None) -> dict:
                 code = -1
                 with _lock:
                     _job["log"].append("30분을 넘겨 중단했습니다.")
-        except OSError as e:
+        except Exception as e:  # noqa: BLE001 — 어떤 예외든 «도는 중»을 남기지 않는다
+            code = -1
             with _lock:
-                _job["log"].append(f"실패: {e}")
+                _job["log"].append(f"실패: {type(e).__name__}: {e}")
         ok = code == 0
         try:
             if ok:

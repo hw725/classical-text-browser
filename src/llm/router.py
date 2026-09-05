@@ -511,14 +511,26 @@ class LlmRouter:
                 try:
                     provider_models = await provider.list_models()
                     for m in provider_models:
-                        is_free = provider.provider_id in ("ollama", "openai_oauth")
+                        # «cloud»가 붙은 Ollama 모델과 ChatGPT 계정 모델은 무료가 아니라
+                        # 구독 한도다.
+                        # 계정 카드와 같은 규칙(billing_for_model)을 쓴다 — 여기만 달랐다(D-056).
+                        if provider.provider_id == "ollama":
+                            cost = (
+                                "free"
+                                if provider.billing_for_model(m["name"]) == "free"
+                                else "subscription"
+                            )
+                        elif provider.provider_id == "openai_oauth":
+                            cost = "subscription"
+                        else:
+                            cost = m.get("cost", "paid")
                         models.append(
                             {
                                 "provider": provider.provider_id,
                                 "model": m["name"],
                                 "available": True,
                                 "display": f"{provider.display_name} — {m['name']}",
-                                "cost": "free" if is_free else m.get("cost", "paid"),
+                                "cost": cost,
                                 "vision": m.get("vision", False),
                             }
                         )

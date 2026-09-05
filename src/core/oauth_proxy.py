@@ -18,6 +18,7 @@ start_server.bat이 이미 띄운 프록시가 있으면 그것을 쓴다 — �
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import socket
@@ -43,6 +44,8 @@ _state: dict = {
     "started": None,
 }
 _lock = threading.Lock()
+# 시작은 한 번에 하나 — 동시에 두 번 누르면 프록시가 둘 뜨고 하나는 고아가 된다.
+_start_lock = threading.Lock()
 
 
 def app_root() -> Path:
@@ -136,6 +139,11 @@ def start() -> dict:
 
     출력: status()와 같은 꼴. npx가 없거나 빈 포트가 없으면 {"error": ...}.
     """
+    with _start_lock:
+        return _start_locked()
+
+
+def _start_locked() -> dict:
     if find_running():
         return status()
     npx = find_npx()
@@ -186,7 +194,12 @@ def start() -> dict:
         # 프록시 출력을 한 줄씩 받아 «준비됨»과 로그인 주소를 건진다. 파일에도 덧붙인다 —
         # start_server.bat이 쓰던 그 로그라 사람이 보던 자리가 바뀌지 않는다.
         assert proc.stdout is not None
-        with open(logs / "openai-oauth.log", "a", encoding="utf-8") as f:
+        try:
+            f = open(logs / "openai-oauth.log", "a", encoding="utf-8")
+        except OSError:
+            # 로그 파일을 못 열어도 출력은 계속 읽는다 — 안 읽으면 프록시가 stdout에 막힌다
+            f = None
+        with (f if f is not None else open(os.devnull, "w", encoding="utf-8")) as f:
             for line in proc.stdout:
                 f.write(line)
                 text = line.strip()

@@ -16,6 +16,7 @@ import time
 _URL = re.compile(r"(https://(?:[a-z0-9.-]+\.)?ollama\.com/[^\s\"'<>]*)")  # 로그인 주소만
 _state: dict = {"proc": None, "url": None, "log": [], "started": None}
 _lock = threading.Lock()
+_spawn_lock = threading.Lock()  # 시작·받기는 한 번에 하나 — 동시 클릭이 프로세스 둘을 띄우지 않게
 
 
 def find_ollama() -> str | None:
@@ -46,10 +47,20 @@ def start(wait: float = 4.0, host: str | None = None) -> dict:
     if exe is None:
         return {"ok": False, "url": None, "running": False, "log": [],
                 "error": "ollama 명령을 찾지 못했습니다. Ollama가 깔려 있고 PATH에 있어야 합니다."}
-    with _lock:
-        proc = _state["proc"]
-        if proc is not None and proc.poll() is None and _state["url"]:
-            return {"ok": True, "url": _state["url"], "running": True, "log": _state["log"][-10:]}
+    with _spawn_lock:
+        with _lock:
+            proc = _state["proc"]
+            if proc is not None and proc.poll() is None and _state["url"]:
+                return {
+                    "ok": True,
+                    "url": _state["url"],
+                    "running": True,
+                    "log": _state["log"][-10:],
+                }
+        return _start_spawn(exe, wait, host)
+
+
+def _start_spawn(exe: str, wait: float, host: str | None) -> dict:
     try:
         proc = subprocess.Popen(
             [exe, "signin"],
@@ -113,14 +124,20 @@ def pull(model: str, host: str | None = None, on_done=None) -> dict:
     exe = find_ollama()
     if exe is None:
         return {**pull_status(), "error": "ollama 명령을 찾지 못했습니다."}
-    if not re.fullmatch(r"[A-Za-z0-9._:/-]{1,100}", model or ""):
+    # 앞의 «-»는 금지 — «-h» 같은 옵션이 모델 이름으로 통과해 rc 0으로 «받았다»가 된다(리뷰 실측).
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,99}", model or ""):
         return {**pull_status(), "error": f"모델 이름이 이상합니다: {model!r}"}
-    with _lock:
-        proc = _pull["proc"]
-        busy = proc is not None and proc.poll() is None
-        busy_model = _pull["model"]
-    if busy:
-        return {**pull_status(), "error": f"{busy_model} 받기가 아직 돌고 있습니다."}
+    with _spawn_lock:
+        with _lock:
+            proc = _pull["proc"]
+            busy = proc is not None and proc.poll() is None
+            busy_model = _pull["model"]
+        if busy:
+            return {**pull_status(), "error": f"{busy_model} 받기가 아직 돌고 있습니다."}
+        return _pull_spawn(exe, model, host, on_done)
+
+
+def _pull_spawn(exe: str, model: str, host: str | None, on_done) -> dict:
     try:
         proc = subprocess.Popen(
             [exe, "pull", model],
@@ -138,6 +155,7 @@ def pull(model: str, host: str | None = None, on_done=None) -> dict:
         for line in proc.stdout:
             with _lock:
                 _pull["log"].append(line.strip()[:160])
+                del _pull["log"][:-300]
         code = proc.wait()
         with _lock:
             _pull["ok"] = code == 0

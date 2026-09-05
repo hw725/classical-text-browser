@@ -22,6 +22,9 @@ import json
 from pathlib import Path
 
 # 저장할 수 있는 키와 설명. 여기 없는 키는 거절한다 — 오타가 조용히 무시되지 않게.
+ENGINES = ("llm_vision", "paddleocr", "ndlocr", "ndlkotenocr", "ndlkotenocr-full")
+PROVIDERS = ("ollama", "openai_oauth", "gemini", "openai", "anthropic")
+
 KEYS: dict[str, str] = {
     "engine": "OCR 엔진 (llm_vision·paddleocr·ndlocr·ndlkotenocr)",
     "model": "llm_vision이 쓸 LLM «프로바이더:모델» (예: openai_oauth:gpt-6-astra)",
@@ -44,7 +47,18 @@ def load() -> dict:
         data = json.loads(p.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
-    return {k: v for k, v in data.items() if k in KEYS} if isinstance(data, dict) else {}
+    if not isinstance(data, dict):
+        return {}
+    # 손으로 고친 파일("sleep": "1")도 형을 맞춰 읽는다 — time.sleep에 문자열이 가면 죽는다.
+    out = {}
+    for k, v in data.items():
+        if k not in KEYS:
+            continue
+        try:
+            out[k] = coerce(k, str(v)) if not isinstance(v, (bool, float)) else v
+        except ValueError:
+            continue  # 잘못된 값은 없는 것으로 — 저장값 때문에 CLI가 멈추면 안 된다
+    return out
 
 
 def save(data: dict) -> Path:
@@ -73,8 +87,20 @@ def coerce(key: str, value: str):
             raise ValueError("sleep은 초(숫자)") from e
     if key == "paddle_device" and value not in ("auto", "cpu", "gpu"):
         raise ValueError("paddle_device는 auto·cpu·gpu 중 하나")
-    if key == "model" and ":" not in value and not value.strip():
-        raise ValueError("model은 «프로바이더:모델» 꼴")
+    if key == "engine" and value.strip() not in ENGINES:
+        raise ValueError(f"engine은 {', '.join(ENGINES)} 중 하나")
+    if key == "model":
+        v = value.strip()
+        head = v.split(":", 1)[0]
+        if not v or head not in PROVIDERS:
+            raise ValueError(
+                "model은 «프로바이더:모델» 꼴 (프로바이더: " + ", ".join(PROVIDERS) + ")"
+            )
+    if key == "library":
+        from pathlib import Path
+
+        # 상대 경로를 저장하면 다른 폴더에서 치는 순간 새 서고가 생긴다 — 절대 경로로.
+        return str(Path(value.strip()).expanduser().resolve())
     return value.strip()
 
 

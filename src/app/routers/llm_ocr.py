@@ -486,7 +486,7 @@ async def api_llm_accounts():
                 model = None
                 entry["active_model_pending"] = True
                 entry["billing_model"] = "unknown"  # 모델이 정해지기 전에는 과금도 모른다
-                asyncio.create_task(_warm_vision_model(provider))
+                _schedule_warm(provider)
             except Exception:  # noqa: BLE001
                 model = None
             if model:
@@ -495,7 +495,10 @@ async def api_llm_accounts():
                 # 고른 모델이 실제로 깔려 있는가 — _pick_vision_model은 아무것도 없을 때
                 # 기본 이름을 그대로 돌려준다. 그것을 «로컬 모델로 돕니다»라고 하면 거짓이다.
                 try:
-                    installed = {m.get("name") for m in await provider.list_models()}
+                    installed = {
+                        m.get("name")
+                        for m in await asyncio.wait_for(provider.list_models(), timeout=2.0)
+                    }
                     entry["active_model_installed"] = model in installed
                 except Exception:  # noqa: BLE001
                     entry["active_model_installed"] = None
@@ -520,6 +523,23 @@ async def api_llm_accounts():
     # 순서는 폴백 순서 그대로 유지한다 — 화면의 «위에서부터 시도합니다»와
     # 어긋나면 안 된다.
     return {"providers": list(await asyncio.gather(*(_one(p) for p in router_inst.providers)))}
+
+
+# 프로바이더 주소별로 «뒤에서 고르는 중»인 태스크 하나만 — 화면이 3초마다 다시 물을 때마다
+# /api/show 전부와 클라우드 generate가 겹쳐 나가면 안 된다(리뷰 실측: 동시 4회). 참조도 보관한다.
+_warm_tasks: dict[str, object] = {}  # {주소: asyncio.Task}
+
+
+def _schedule_warm(provider) -> None:
+    import asyncio
+
+    key = getattr(provider, "_url", provider.provider_id)
+    task = _warm_tasks.get(key)
+    if task is not None and not task.done():
+        return
+    task = asyncio.create_task(_warm_vision_model(provider))
+    _warm_tasks[key] = task
+    task.add_done_callback(lambda t: _warm_tasks.pop(key, None))
 
 
 async def _warm_vision_model(provider) -> None:

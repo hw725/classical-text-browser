@@ -71,9 +71,17 @@ if ($pyVer) {
 Write-Host ""
 Say "[2/4] Git 확인" "White"
 if (-not (Have "git")) {
+    if (-not (Have "winget")) {
+        Fail "Git이 없고 winget(앱 설치 도구)도 없어 자동으로 받을 수 없습니다." `
+             "https://git-scm.com/download/win 에서 Git을 깐 뒤 install.bat을 다시 실행하세요."
+    }
     Say "  없습니다. 자동으로 받습니다..."
     winget install --id Git.Git -e --source winget `
         --accept-package-agreements --accept-source-agreements
+    if ($LASTEXITCODE -ne 0) {
+        Fail "Git 자동 설치가 실패했습니다 (winget 종료 코드 $LASTEXITCODE)." `
+             "https://git-scm.com/download/win 에서 직접 깐 뒤 install.bat을 다시 실행하세요."
+    }
     Refresh-Path
     if (-not (Have "git")) {
         Fail "Git을 깔았지만 이 창이 아직 못 찾습니다." `
@@ -108,7 +116,11 @@ Write-Host ""
 Say "  나중에 바꿔도 됩니다 — 앱 안 설정 ▸ 처음 설정 ▸ 글자 인식의 「설치」 단추."
 Say "  GPU판(4.5GB)은 별도 환경에 깝니다 — 사용자 가이드 7-A.6-2." "DarkGray"
 Write-Host ""
-$pick = Read-Host "  고르세요 [1/2/3] (그냥 Enter = 1)"
+$pick = (Read-Host "  고르세요 [1/2/3] (그냥 Enter = 1)").Trim()
+if ($pick -and $pick -notin @("1", "2", "3")) {
+    Say "  «$pick»은 없는 번호라 본체만 깝니다." "Yellow"
+    $pick = "1"
+}
 
 # extras 이름은 pyproject.toml의 [project.optional-dependencies]와 같아야 한다.
 # 없는 이름을 적으면 uv가 «unknown extra»로 서고, 처음 까는 사람은 왜인지 모른다.

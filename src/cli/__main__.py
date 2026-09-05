@@ -124,11 +124,20 @@ def cmd_ocr(args):
         return builtin
 
     engine = pick("engine", args.engine, "llm_vision")
-    model = pick("model", args.model, None)
+    # 저장된 model은 llm_vision일 때만 뜻이 있다 — paddleocr로 돌리면서 «model 적용»이라
+    # 찍지 않는다.
+    model = (
+        pick("model", args.model, None) if engine == "llm_vision" else args.model
+    )
     paddle_lang = pick("paddle_lang", args.paddle_lang, None)
     paddle_device = pick("paddle_device", args.paddle_device, None)
     sleep = pick("sleep", args.sleep, 0.0)
-    line_detection = False if args.no_line_detection else pick("line_detection", None, True)
+    if args.no_line_detection:
+        line_detection = False
+    elif getattr(args, "line_detection", False):
+        line_detection = True  # 저장값이 false여도 명령줄로 되켠다
+    else:
+        line_detection = pick("line_detection", None, True)
     library_arg = pick("library", args.library, None)
     if used:
         print(
@@ -166,6 +175,17 @@ def cmd_ocr(args):
         }
         if args.no_line_detection:
             given["line_detection"] = False
+        elif getattr(args, "line_detection", False):
+            given["line_detection"] = True
+        # 저장하기 전에 검증한다 — 오타 엔진·상대 경로가 «다음 실행의 기본값»이 되면 안 된다.
+        try:
+            given = {
+                k: (cli_config.coerce(k, str(v)) if not isinstance(v, bool) else v)
+                for k, v in given.items()
+            }
+        except ValueError as e:
+            print(f"오류: --remember 저장 취소 — {e}", file=sys.stderr)
+            sys.exit(2)
         if given:
             saved.update(given)
             where = cli_config.save(saved)
@@ -494,6 +514,11 @@ def main():
         "--engine",
         default=None,
         help="OCR 엔진 (기본: llm_vision — 한글 문헌은 바꾸지 마세요)",
+    )
+    p_ocr.add_argument(
+        "--line-detection",
+        action="store_true",
+        help="줄 위치 검출을 켠다 (저장된 기본값이 꺼져 있을 때 되켤 때)",
     )
     p_ocr.add_argument(
         "--remember",

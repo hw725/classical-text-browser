@@ -239,17 +239,24 @@ class OllamaProvider(BaseLlmProvider):
         OLLAMA_HOST=localhost로 띄운 Windows에서 IPv6에만 붙는 경우가 있다(2026-09-05 보고).
         찾은 주소는 프로세스 전체가 기억한다.
         """
+        default = "http://127.0.0.1:11434"
+        configured = self.config.get("ollama_url", default).replace("://localhost:", "://127.0.0.1:")
+        # 사용자가 «다른» 주소를 적어 둔 경우에만 그 주소 하나만 본다. .env.example대로
+        # localhost:11434를 적어 둔 것은 기본과 같으므로 [::1] 폴백을 막지 않는다(리뷰 지적).
+        explicit_other = self.config.is_set("ollama_url") and configured.rstrip("/") != default
         candidates = [self._url]
-        if not self.config.is_set("ollama_url") and "127.0.0.1" in self._url:
-            candidates.append(self._url.replace("127.0.0.1", "[::1]"))
+        if not explicit_other:
+            for c in (default, "http://[::1]:11434"):
+                if c not in candidates:
+                    candidates.append(c)  # override가 [::1]이어도 127.0.0.1로 돌아온 서버를 본다
         for url in candidates:
             try:
                 async with httpx.AsyncClient(timeout=3.0, trust_env=False) as client:
                     resp = await client.get(f"{url}/api/tags")
                 if resp.status_code == 200:
                     if url != self._url:
-                        OllamaProvider._url_override = url
-                        logger.info(f"Ollama를 {url}에서 찾았습니다 (기본 주소로는 닿지 않음)")
+                        OllamaProvider._url_override = None if url == default else url
+                        logger.info(f"Ollama를 {url}에서 찾았습니다")
                     return True
             except (httpx.ConnectError, httpx.TimeoutException, OSError):
                 continue

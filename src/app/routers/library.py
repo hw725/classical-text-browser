@@ -799,7 +799,7 @@ async def api_set_llm_keys(body: LlmKeysRequest):
         return JSONResponse({"error": "저장할 값이 없습니다."}, status_code=400)
     try:
         status = write_values(_library_path, updates)
-    except OSError as e:
+    except (OSError, ValueError) as e:
         return JSONResponse({"error": f"설정을 저장하지 못했습니다: {e}"}, status_code=400)
 
     import app._state as _st

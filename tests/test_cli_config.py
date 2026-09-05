@@ -72,3 +72,33 @@ def test_format_list_labels_subscription_not_free():
     assert "openai_oauth:gpt-6-astra    구독 한도" in text
     assert "ollama:glm-ocr:latest    로컬 무료" in text
     assert "gemini:gemini-2.5-flash    종량 과금" in text
+
+
+def test_resolve_tagged_model_name_and_case():
+    """«glm-ocr:latest»는 프로바이더가 아니라 모델 이름이다. 프로바이더는 대문자로 적어도 된다."""
+    tagged = MODELS  # 첫 항목이 glm-ocr:latest
+    assert cli_models.resolve("glm-ocr:latest", tagged) == ("ollama", "glm-ocr:latest")
+    assert cli_models.resolve("OLLAMA:glm-ocr:latest", tagged) == ("ollama", "glm-ocr:latest")
+    with pytest.raises(ValueError):
+        cli_models.resolve(" : ", tagged)
+
+
+def test_coerce_engine_library_model(home: Path):
+    """엔진 오타·상대 경로·프로바이더 없는 model은 저장 전에 거절하거나 정규화한다."""
+    with pytest.raises(ValueError):
+        cli_config.coerce("engine", "paddle")
+    assert cli_config.coerce("engine", "paddleocr") == "paddleocr"
+    assert Path(cli_config.coerce("library", "서고")).is_absolute()
+    with pytest.raises(ValueError):
+        cli_config.coerce("model", "gpt-6-astra")
+    assert cli_config.coerce("model", "openai_oauth:gpt-6-astra") == "openai_oauth:gpt-6-astra"
+
+
+def test_load_coerces_hand_edited_values(home: Path):
+    """손으로 고친 파일("sleep": "1")도 형을 맞춰 읽고, 잘못된 값은 버린다."""
+    (home / "cli.json").write_text(
+        '{"sleep": "1", "engine": "bogus", "line_detection": false}', encoding="utf-8"
+    )
+    loaded = cli_config.load()
+    assert loaded["sleep"] == 1.0 and loaded["line_detection"] is False
+    assert "engine" not in loaded

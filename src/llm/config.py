@@ -100,6 +100,6 @@ class LlmConfig:
         """설정값 조회. 환경변수(대문자) → .env → DEFAULTS → default."""
         env_key = key.upper()
         val = os.environ.get(env_key) or self._env_cache.get(env_key)
-        if val is not None:
+        if val:  # 빈 문자열(OLLAMA_URL=)은 «지우고 기본값»이다
             return val
         return self.DEFAULTS.get(key, default)

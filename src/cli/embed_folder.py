@@ -261,6 +261,16 @@ def describe_llm_target(force_provider: str | None = None, force_model: str | No
             raise ValueError(
                 f"'{force_provider}'를 지금 쓸 수 없습니다 — 키·프록시·Ollama를 확인하세요."
             )
+        # 모델 이름 오타는 여기서 잡는다 — 「도는 모델」까지 찍고 쪽마다 404로 죽지 않게.
+        if force_model and hasattr(p, "list_models"):
+            try:
+                names = {m.get("name") for m in asyncio.run(p.list_models())}
+            except Exception:  # noqa: BLE001 — 목록을 못 받으면 대조를 건너뛴다
+                names = set()
+            if names and force_model not in names:
+                near = [n for n in names if force_model.lower() in str(n).lower()][:5]
+                hint = f" 비슷한 것: {', '.join(near)}" if near else ""
+                raise ValueError(f"'{force_provider}'에 '{force_model}' 모델이 없습니다.{hint}")
         return f"{p.display_name} — {force_model or _default_model(p)} (지정)"
     for p in router.providers:
         if p.supports_image and asyncio.run(p.is_available()):
