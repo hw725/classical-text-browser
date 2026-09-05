@@ -57,3 +57,16 @@ mobile 검출 52초, 스레드 20개로도 61초. OneDNN을 켜면 여전히
 - 해 볼 것: paddlepaddle 3.4+에서 OneDNN 크래시가 풀렸는지(풀리면 CPU가 몇 배 빨라진다),
   PaddleOCR 대신 onnxruntime 경로(NDL 엔진이 쓰는 것, 7초/쪽)로 검출만 옮기기.
 - 실측 스크립트: scratchpad `paddle_prof2.py` (server|mobile|mkldnn|threads).
+
+## B-006 PaddleOCR 검출을 onnxruntime으로 (2026-09-06, 조건부 채택)
+
+기본 번들의 PaddleOCR은 인식이 아니라 **글자 위치 검출**(형광 자리, D-055) 때문에 들어 있다.
+대가가 크다 — 설치 651MB, 첫 실행 모델 240MB(Baidu), Windows CPU에서 OneDNN 크래시 회피 경로.
+같은 PP-OCRv5 검출 모델을 onnxruntime으로 돌리면(예: rapidocr-onnxruntime) 이 셋이 사라진다.
+
+- **조건**: 현동 이안중 연구 논문(15쪽, 기준 433/502줄 제자리)으로 교체 전후를 같은 잣대
+  (`embed_text_layer`의 positioned/detected + D-068 잉크 검사)로 재서 **숫자가 유지될 때만** 바꾼다.
+  인식 품질은 기본 흐름(LLM이 읽음)과 무관하지만, Paddle을 직접 고르는 경우를 위해 CER도 잰다.
+- 바꾸면: paddlepaddle은 `--extra paddle`(선택)로, 기본은 onnxruntime + 검출 모델. install.ps1의
+  5단계(모델 미리 받기)는 필요 없어진다.
+- 실측 스크립트·결과는 이 항목 아래에 덧붙인다.

@@ -10,7 +10,7 @@ echo "============================================"
 echo ""
 
 # ── 1. Python 확인/설치 ────────────────────
-echo "[1/4] Python 확인 중..."
+echo "[1/5] Python 확인 중..."
 if ! command -v python3 >/dev/null 2>&1; then
     echo "  Python 3이 설치되어 있지 않습니다. 자동 설치합니다..."
     echo ""
@@ -45,7 +45,7 @@ echo "  $(python3 --version) 확인됨"
 
 # ── 2. Git 확인/설치 ──────────────────────
 echo ""
-echo "[2/4] Git 확인 중..."
+echo "[2/5] Git 확인 중..."
 if ! command -v git >/dev/null 2>&1; then
     echo "  Git이 설치되어 있지 않습니다. 자동 설치합니다..."
     echo ""
@@ -79,7 +79,7 @@ echo "  $(git --version) 확인됨"
 
 # ── 3. uv 확인/설치 ───────────────────────
 echo ""
-echo "[3/4] uv (패키지 관리자) 확인 중..."
+echo "[3/5] uv (패키지 관리자) 확인 중..."
 if ! command -v uv >/dev/null 2>&1; then
     echo "  uv가 설치되어 있지 않습니다. 자동 설치합니다..."
     echo ""
@@ -95,7 +95,7 @@ echo "  $(uv --version) 확인됨"
 
 # ── 4. 본체와 글자 인식 엔진 ─────────────────
 echo ""
-echo "[4/4] 본체 설치"
+echo "[4/5] 본체 설치"
 echo "  글자 인식(OCR) 엔진을 함께 깔 수 있습니다."
 echo ""
 echo "    1) 본체만              1~2분. 한글 논문·글자가 든 PDF는 이것만으로 다 됩니다."
@@ -115,6 +115,11 @@ esac
 echo ""
 echo "  받는 중… (진행 표시가 멈춰 보여도 기다리세요)"
 uv sync "${extras[@]}"
+
+# ── 5. 글자 인식 모델 미리 받기 ──────────────
+echo ""
+echo "[5/5] 글자 인식 모델 미리 받기 (처음 한 번, 약 240MB, 인터넷 필요)"
+uv run python scripts/warmup_paddle.py korean ch || echo "  모델을 지금 받지 못했습니다. 첫 OCR 때 다시 받습니다."
 
 # ── 완료 ───────────────────────────────────
 echo "============================================"

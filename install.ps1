@@ -51,7 +51,7 @@ Write-Host ""
 # 앱은 .python-version(3.12)에 맞는 파이썬을 uv가 알아서 받아 .venv에 붙인다. 시스템에
 # 파이썬이 없어도 되고, 3.13이 깔려 있어도 uv는 3.12를 따로 받아 쓴다. 그래서 여기서는
 # 있으면 알려 주기만 하고, 없어도 막지 않는다 — winget이 안 되는 기기에서 설치가 멈추지 않게.
-Say "[1/4] Python 확인" "White"
+Say "[1/5] Python 확인" "White"
 $pyVer = $null
 if (Have "python") {
     # Store의 python 별칭(실행하면 스토어를 열고 stderr에 안내를 씀)이나 stderr 출력은
@@ -69,7 +69,7 @@ if ($pyVer) {
 
 # ── 2. Git ───────────────────────────────────────────────────
 Write-Host ""
-Say "[2/4] Git 확인" "White"
+Say "[2/5] Git 확인" "White"
 if (-not (Have "git")) {
     if (-not (Have "winget")) {
         Fail "Git이 없고 winget(앱 설치 도구)도 없어 자동으로 받을 수 없습니다." `
@@ -92,7 +92,7 @@ Say "  $((git --version) -join ' ')" "Green"
 
 # ── 3. uv ────────────────────────────────────────────────────
 Write-Host ""
-Say "[3/4] uv (꾸러미 관리자) 확인" "White"
+Say "[3/5] uv (꾸러미 관리자) 확인" "White"
 if (-not (Have "uv")) {
     Say "  없습니다. 자동으로 받습니다..."
     Invoke-RestMethod https://astral.sh/uv/install.ps1 | Invoke-Expression
@@ -106,7 +106,7 @@ Say "  $((uv --version) -join ' ')" "Green"
 
 # ── 4. 본체와 글자 인식 엔진 ─────────────────────────────────
 Write-Host ""
-Say "[4/4] 본체 설치" "White"
+Say "[4/5] 본체 설치" "White"
 Say "  글자 인식(OCR) 엔진을 함께 깔 수 있습니다."
 Write-Host ""
 Say "    1) 본체만              1~2분, 약 830MB. 한글 논문·글자가 든 PDF는 이것만으로 다 됩니다."
@@ -134,6 +134,16 @@ Write-Host ""
 uv sync @extras
 if ($LASTEXITCODE -ne 0) {
     Fail "설치에 실패했습니다." "위에 찍힌 오류를 그대로 알려 주시면 됩니다."
+}
+
+# ── 5. 글자 인식 모델 미리 받기 ──────────────────────────────
+# PaddleOCR은 처음 쓰일 때 모델(약 240MB)을 Baidu 서버에서 받는다. 앱 안에서 받으면 진행이
+# 안 보여 «멈췄다»로 보이므로(2026-09-06 다른 PC 보고) 여기서 받아 둔다. 실패해도 설치는 끝낸다.
+Write-Host ""
+Say "[5/5] 글자 인식 모델 미리 받기 (처음 한 번, 약 240MB, 인터넷 필요)" "White"
+uv run python scripts/warmup_paddle.py korean ch
+if ($LASTEXITCODE -ne 0) {
+    Say "  모델을 지금 받지 못했습니다. 첫 OCR 때 다시 받습니다 — 그때는 몇 분 걸릴 수 있습니다." "Yellow"
 }
 
 # ── 마무리 ───────────────────────────────────────────────────

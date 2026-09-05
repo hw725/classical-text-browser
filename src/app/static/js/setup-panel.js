@@ -475,7 +475,10 @@ async function _renderWizard() {
     .join("  ");
   prev.disabled = _wizardState.step === 0;
   next.textContent = _wizardState.step === _wizardState.steps.length - 1 ? "마침" : "다음";
-  body.innerHTML = '<div class="placeholder">불러오는 중…</div>';
+  body.innerHTML =
+    _wizardState.step === 1
+      ? '<div class="placeholder">엔진을 확인하는 중… 처음이면 수십 초 걸릴 수 있습니다.</div>'
+      : '<div class="placeholder">불러오는 중…</div>';
 
   if (_wizardState.step === 0) await _wizardLibrary(body);
   else if (_wizardState.step === 1) await _wizardOcr(body);

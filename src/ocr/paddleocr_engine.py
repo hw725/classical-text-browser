@@ -139,6 +139,16 @@ class PaddleOcrEngine(BaseOcrEngine):
         if value in ("cpu", "0", "false", "no", "off"):
             return False
         try:  # auto
+            # CPU판(paddlepaddle)만 깔린 환경에서는 paddle을 import하지 않고 False — 그 import가
+            # 서버 기동·엔진 목록을 몇 초~몇 분 붙든다(2026-09-06 보고). GPU 꾸러미가 있을 때만
+            # 실제로 장치가 보이는지 확인한다.
+            from importlib.metadata import PackageNotFoundError
+            from importlib.metadata import version as _v
+
+            try:
+                _v("paddlepaddle-gpu")
+            except PackageNotFoundError:
+                return False
             import paddle
 
             return bool(
@@ -233,13 +243,30 @@ class PaddleOcrEngine(BaseOcrEngine):
             return self._available
 
         try:
-            import paddle  # noqa: F401
-            import paddleocr  # noqa: F401
+            # import하지 않는다 — paddle import는 이 PC에서 4.6초, 느린 PC·백신 검사 중이면
+            # 분 단위라 서버 기동과 엔진 목록(마법사 2단계)이 그만큼 멈춘다(2026-09-06 보고).
+            # 설치 여부는 메타데이터로 보고, 실제 import는 첫 OCR 때 _get_ocr()에서 한다.
+            import importlib.util
+            from importlib.metadata import PackageNotFoundError
+            from importlib.metadata import version as _pkg_version
+
+            missing = (
+                importlib.util.find_spec("paddle") is None
+                or importlib.util.find_spec("paddleocr") is None
+            )
+            if missing:
+                raise ImportError("paddle/paddleocr 없음")
+            try:
+                paddle_version = _pkg_version("paddlepaddle")
+            except PackageNotFoundError:
+                try:
+                    paddle_version = _pkg_version("paddlepaddle-gpu")
+                except PackageNotFoundError:
+                    paddle_version = ""
 
             # Windows + Python 3.13 + PaddlePaddle 3.x 조합에서
             # OneDNN fused_conv2d 런타임 에러가 빈번히 발생한다.
             # 이 조합은 설치되어 있어도 실사용이 불안정하므로 사용 불가로 간주한다.
-            paddle_version = getattr(paddle, "__version__", "")
             is_windows = platform.system() == "Windows"
             is_py313_or_newer = sys.version_info >= (3, 13)
             major_version = paddle_version.split(".")[0]
