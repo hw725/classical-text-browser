@@ -461,6 +461,51 @@ async function _loadLlmAccounts() {
       }
       if (p.provider_id === "ollama" && typeof _ollamaRow === "function") {
         row.appendChild(_ollamaRow());
+        // 비전 모델이 없으면 앱이 받아 준다 — 터미널을 시키지 않는다.
+        if (p.status === "no_model" && p.active_model) {
+          const pullBtn = document.createElement("button");
+          pullBtn.className = "text-btn text-btn-sm";
+          pullBtn.textContent = `모델 받기 (${p.active_model}, 약 5GB)`;
+          const prog = document.createElement("div");
+          prog.className = "settings-llm-note";
+          pullBtn.addEventListener("click", async () => {
+            pullBtn.disabled = true;
+            prog.textContent = "받는 중… 몇 분 걸립니다.";
+            try {
+              const r = await fetch("/api/settings/ollama/pull", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ model: p.active_model }),
+              });
+              const d = await r.json();
+              if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+              const timer = setInterval(async () => {
+                try {
+                  const s = await (await fetch("/api/settings/ollama/pull", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: "{}",
+                  })).json();
+                  prog.textContent = (s.log || []).slice(-1)[0] || "받는 중…";
+                  if (!s.running) {
+                    clearInterval(timer);
+                    prog.textContent = s.ok ? "받았습니다. 목록을 새로 읽습니다." : "받지 못했습니다. 위 기록을 보세요.";
+                    if (s.ok) {
+                      _loadLlmAccounts();
+                      document.dispatchEvent(new CustomEvent("llm-accounts-changed"));
+                    }
+                  }
+                } catch (_) {
+                  /* 다음 틱 */
+                }
+              }, 2000);
+            } catch (e) {
+              prog.textContent = `시작하지 못했습니다: ${e.message}`;
+              pullBtn.disabled = false;
+            }
+          });
+          row.append(pullBtn, prog);
+        }
       }
       // ChatGPT 계정 길은 단추로 프록시를 띄우고 로그인 창을 연다 — 로그를 열게 하지 않는다(D-107).
       if (p.provider_id === "openai_oauth" && typeof _oauthRow === "function") {

@@ -894,3 +894,35 @@ async def api_oauth_start():
         return JSONResponse(result, status_code=400)
     _st._llm_router = None
     return result
+
+
+@router.post("/api/settings/ollama/signin")
+async def api_ollama_signin():
+    """`ollama signin`을 앱이 대신 띄우고 로그인 주소를 준다 — «로그인 필요»에서 끝내지 않는다."""
+    import app._state as _st
+    from core.ollama_signin import start
+
+    result = start()
+    if not result.get("ok"):
+        return JSONResponse(result, status_code=400)
+    _st._llm_router = None  # 로그인 뒤 상태를 새로 보게
+    return result
+
+
+@router.post("/api/settings/ollama/pull")
+async def api_ollama_pull(body: dict):
+    """비전 모델이 없으면 앱이 `ollama pull`을 대신 돌린다. GET으로 부르면 진행 상태만 준다."""
+    import app._state as _st
+    from core.ollama_signin import pull, pull_status
+
+    model = (body or {}).get("model")
+    if not model:
+        return pull_status()
+    result = pull(str(model))
+    if result.get("error"):
+        return JSONResponse(result, status_code=400)
+    _st._llm_router = None
+    from llm.providers.ollama import OllamaProvider
+
+    OllamaProvider._SHARED.clear()  # 받고 나면 모델 목록·비전 모델 선택을 다시 본다
+    return result

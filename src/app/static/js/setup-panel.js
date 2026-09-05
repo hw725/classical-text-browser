@@ -220,7 +220,41 @@ function _ollamaRow() {
     }
   });
 
-  wrap.append(btn, out);
+  // «로그인 필요»에서 끝내지 않는다 — 앱이 ollama signin을 띄우고 주소를 연다.
+  const login = document.createElement("button");
+  login.className = "text-btn text-btn-sm";
+  login.textContent = "로그인";
+  login.title = "ollama.com 계정으로 로그인(클라우드 모델용). 로컬 모델만 쓰면 필요 없습니다";
+  const link = document.createElement("a");
+  link.className = "text-btn text-btn-sm";
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.textContent = "로그인 창 열기";
+  link.hidden = true;
+  login.addEventListener("click", async () => {
+    login.disabled = true;
+    out.textContent = "로그인 주소를 받는 중…";
+    try {
+      const r = await fetch("/api/settings/ollama/signin", { method: "POST" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      if (d.url) {
+        link.href = d.url;
+        link.hidden = false;
+        window.open(d.url, "_blank", "noopener");
+        out.textContent = "브라우저에서 로그인한 뒤 「지금 확인」을 누르세요.";
+      } else {
+        out.textContent = "로그인 창이 열렸으면 그 안에서 진행하세요. 안 열렸으면 다시 누르세요.";
+      }
+      document.dispatchEvent(new CustomEvent("llm-accounts-changed"));
+    } catch (e) {
+      out.textContent = `로그인을 시작하지 못했습니다: ${e.message}`;
+    } finally {
+      login.disabled = false;
+    }
+  });
+
+  wrap.append(btn, login, link, out);
   return wrap;
 }
 
