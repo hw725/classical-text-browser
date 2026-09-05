@@ -81,11 +81,17 @@ gpt-5.4-mini로 새로 만든 것(첫 시도는 D-110의 OAuth 이미지 거부�
 | rapidocr 3.x(onnxruntime) PP-OCRv6 small, 기본 설정 | 97/440 | 0.9s | 25s |
 | rapidocr PP-OCRv6 medium, limit 736/min | 97/440 | — | 190s |
 | rapidocr PP-OCRv6 medium, limit 1280/max | 97/440 | — | 186s |
+| rapidocr PP-OCRv6 medium, limit 64/min | 97/440 | — | 181s |
+| rapidocr PP-OCRv6 medium, box_thresh 0.6·unclip 1.5(Paddle 기본값) | 97/440 | — | 174s |
+| rapidocr **PP-OCRv5 server**, 기본 설정 | **142**/440 | 약 10s | 158s |
 
-잉크 경고는 둘 다 0건. 검출은 9배 빠르지만 제자리 줄이 142 → 97로 줄어 조건을 못 지켰다.
+잉크 경고는 전부 0건. v6 small·medium은 검출이 9배 빠르지만 제자리 줄이 142 → 97로 줄어 조건을 못 지켰다.
+**PP-OCRv5 server는 142줄로 Paddle과 같다** — 다만 쪽당 약 10초로 Paddle(8초)보다 느려 속도 이득이 없다.
+그래서 v1.3.0은 PaddleOCR 기본 번들 그대로 간다(2026-09-06 사용자 결정: 나아지는 것이 없으면 유지).
+남는 이점은 설치 크기(paddle 스택 651MB → onnxruntime 수십 MB)와 OneDNN 회피 경로 제거뿐이라, 그것을
+원하면 v1.4.0에서 v5 server 검출로 바꿀 수 있다.
 (기준 L2가 바뀌어 위의 433/502와는 절대값이 다르다 — 같은 L2 안의 비교만 뜻이 있다.)
-남은 가설: rapidocr의 후처리(unclip_ratio 1.6·box_thresh 0.5·use_dilation)가 Paddle 기본과 달라
-행 상자가 다르게 묶인다. 후처리를 Paddle과 맞춘 뒤 다시 재면 뒤집힐 수 있다 — 다음 판에서.
+v6 계열은 축소 크기(64~1280)·후처리를 바꿔도 97줄 그대로였다 — 모델 세대 차이지 설정 차이가 아니다.
 
 ## B-007 자동 업데이트 (2026-09-06, 사용자 제안)
 
