@@ -502,7 +502,7 @@ class LlmRouter:
         models = []
 
         # list_models()를 지원하는 프로바이더 ID
-        EXPANDABLE = {"ollama", "openai", "openai_oauth", "gemini"}
+        EXPANDABLE = {"ollama", "openai", "openai_oauth", "gemini", "anthropic"}
 
         for provider in self.providers:
             available = await provider.is_available()

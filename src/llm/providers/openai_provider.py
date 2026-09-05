@@ -7,6 +7,8 @@ OpenAI Chat Completions API 호출.
 """
 
 import base64
+import logging
+import re
 import time
 from typing import Optional
 
@@ -26,13 +28,13 @@ class OpenAiProvider(BaseLlmProvider):
     display_name = "OpenAI"
     supports_image = True
     billing_model = "metered"  # 쓴 만큼 과금된다
-    DEFAULT_MODEL = "gpt-5-mini"  # 비용 효율적 기본 모델
+    DEFAULT_MODEL = "gpt-5.4-mini"  # 비용 효율적 기본 모델 (2026-09 기준 mini 최신)
 
-    # 배포판에서는 각자 자기 키를 .env에 넣는다.
+    # 키는 화면(설정 ▸ LLM 연결)에서 넣는다 — 서고 .env에 저장된다(D-102).
     setup_kind = "env_key"
     setup_steps = (
         "https://platform.openai.com/api-keys 에서 키 발급",
-        ".env에 OPENAI_API_KEY=... 를 적고 서버 재시작",
+        "설정 ▸ LLM 연결의 입력 칸에 붙여 넣고 「저장」",
     )
 
     def _create_client(self):
@@ -48,9 +50,10 @@ class OpenAiProvider(BaseLlmProvider):
             raise LlmProviderError("OPENAI_API_KEY가 설정되지 않았습니다.")
         return openai.AsyncOpenAI(api_key=api_key)
 
-    # 주요 모델 목록 (2026-02 기준, 수동 관리)
-    # API로 모델 목록을 가져올 수 있지만 불필요한 모델이 너무 많아서 수동 관리가 실용적.
-    # 가격: 1K 토큰당 USD. 출처: https://platform.openai.com/docs/pricing
+    # 모델 목록은 API(/v1/models)에서 받는다 — 손으로 적은 목록은 반년이면 낡는다(2026-09-05:
+    # gpt-5.6까지 나왔는데 목록은 gpt-5.2까지였다). 아래는 API를 못 부를 때의 폴백이자
+    # 가격·비전 힌트다. 가격(1K 토큰당 USD)은 공식 표에서 확인한 것만 적는다 —
+    # 없는 모델은 _estimate_cost의 기본값으로 추정한다. 출처: https://platform.openai.com/docs/pricing
     MODELS = [
         {
             "name": "gpt-5-nano",
@@ -60,29 +63,73 @@ class OpenAiProvider(BaseLlmProvider):
             "output": 0.0004,
         },
         {"name": "gpt-5-mini", "vision": True, "cost": "low", "input": 0.00025, "output": 0.002},
+        {"name": "gpt-5.4-mini", "vision": True, "cost": "low"},
         {"name": "gpt-5", "vision": True, "cost": "medium", "input": 0.00125, "output": 0.01},
+        {"name": "gpt-5.4", "vision": True, "cost": "medium"},
         {"name": "gpt-5.2", "vision": True, "cost": "high", "input": 0.00175, "output": 0.014},
-        {"name": "o4-mini", "vision": False, "cost": "medium", "input": 0.0011, "output": 0.0044},
+        {"name": "gpt-5.5", "vision": True, "cost": "high"},
+        {"name": "gpt-5.6", "vision": True, "cost": "high"},
         {"name": "gpt-4.1", "vision": True, "cost": "high", "input": 0.002, "output": 0.008},
     ]
 
-    # 가격표 (1K tokens 기준, USD)
-    PRICING = {m["name"]: {"input": m["input"], "output": m["output"]} for m in MODELS}
+    # 가격표 (1K tokens 기준, USD) — 가격이 확인된 것만
+    PRICING = {
+        m["name"]: {"input": m["input"], "output": m["output"]} for m in MODELS if "input" in m
+    }
+
+    # API 목록에서 남길 것: 대화 모델. 실시간·음성·이미지 생성·임베딩·검색 전용은 뺀다.
+    _MODEL_KEEP = re.compile(r"^(gpt-5|gpt-4\.1|o[1-9])")
+    _MODEL_DROP = re.compile(
+        r"realtime|audio|tts|transcribe|image|embedding|moderation|search|codex|instruct"
+    )
+    _DATED = re.compile(r"-20\d\d-\d\d-\d\d$")
+    _models_cache: Optional[tuple[float, list[dict]]] = None
+    _MODELS_TTL = 600.0
 
     async def is_available(self) -> bool:
         """OPENAI_API_KEY가 설정되어 있는지 확인."""
         return bool(self.config.get_api_key("openai"))
 
     async def list_models(self) -> list[dict]:
-        """주요 모델 목록 반환. GUI 드롭다운용."""
-        return [
-            {
-                "name": m["name"],
-                "vision": m["vision"],
-                "cost": m["cost"],
-            }
-            for m in self.MODELS
-        ]
+        """드롭다운용 모델 목록 — API에서 받고, 못 받으면 MODELS. 10분 동안 기억한다.
+
+        날짜 접미 판(gpt-5-mini-2025-08-07)은 별칭이 따로 있으므로 뺀다.
+        """
+        now = time.time()
+        if self._models_cache and now - self._models_cache[0] < self._MODELS_TTL:
+            return self._models_cache[1]
+        known = {m["name"]: m for m in self.MODELS}
+        result: Optional[list[dict]] = None
+        try:
+            client = self._create_client()
+            page = await client.models.list()
+            ids = sorted(
+                {
+                    m.id
+                    for m in page.data
+                    if self._MODEL_KEEP.match(m.id)
+                    and not self._MODEL_DROP.search(m.id)
+                    and not self._DATED.search(m.id)
+                },
+                reverse=True,
+            )
+            if ids:
+                result = [
+                    {
+                        "name": i,
+                        "vision": known.get(i, {}).get("vision", not i.startswith("o")),
+                        "cost": known.get(i, {}).get("cost", "unknown"),
+                    }
+                    for i in ids
+                ]
+        except Exception as e:  # noqa: BLE001 — 목록을 못 받아도 폴백으로 화면은 뜬다
+            logging.getLogger(__name__).debug("OpenAI 모델 목록 조회 실패: %s", e)
+        if result is None:
+            result = [
+                {"name": m["name"], "vision": m["vision"], "cost": m["cost"]} for m in self.MODELS
+            ]
+        self._models_cache = (now, result)
+        return result
 
     def _estimate_cost(
         self, model: str, tokens_in: Optional[int], tokens_out: Optional[int]

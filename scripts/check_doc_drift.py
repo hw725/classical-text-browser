@@ -279,6 +279,84 @@ def collect_mismatches(root: Path = ROOT) -> list[Mismatch]:
     return result
 
 
+# ── 그림 낡음 검사 ─────────────────────────────────────────────────────────
+#
+# 왜 따로 있는가: v1.3.0을 내면서 사용자 가이드의 그림 일곱 장이 넉 달 반 전(2026-04-14)
+# 화면인 채로 나갔다. 수치 검사는 «셀 수 있는 것»만 보고, 그림은 아무도 세지 않았다.
+# 화면 코드(src/app/static)가 마지막으로 바뀐 날보다 오래된 그림은 옛 화면일 가능성이
+# 크다 — «가능성»이라 커밋마다 막지는 않고(화면을 조금만 고쳐도 전부 걸린다), 릴리스
+# 절차에서 `--screenshots`로 돌린다(maintenance.md 릴리스 절차).
+
+SCREENSHOT_DOC_GLOBS = ["README.md", "docs/*.md", "docs/releases/*.md"]
+SCREENSHOT_REF = re.compile(r"\(([^)\s]*screenshots/[^)\s]+\.(?:png|jpe?g|gif|webp))\)")
+UI_DIRS = ["src/app/static"]
+
+
+def _git_date(root: Path, relpath: str) -> str | None:
+    """그 경로를 마지막으로 건드린 커밋의 날짜(YYYY-MM-DD). 추적되지 않으면 None."""
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["git", "log", "-1", "--format=%cs", "--", relpath],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        ).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return out or None
+
+
+def stale_screenshots(root: Path = ROOT) -> tuple[str | None, list[dict]]:
+    """문서가 가리키는 그림 가운데 화면 코드보다 오래된 것.
+
+    출력: (화면 코드가 마지막으로 바뀐 날, [{image, image_date, docs, missing}, ...])
+      - image_date가 None이면 추적되지 않은 파일(커밋 전) — 낡았다고 보지 않는다.
+      - missing=True는 문서가 가리키는데 파일이 없는 것 — 언제나 문제다.
+    """
+    ui_date = max((d for d in (_git_date(root, u) for u in UI_DIRS) if d), default=None)
+
+    refs: dict[str, set[str]] = {}
+    for pattern in SCREENSHOT_DOC_GLOBS:
+        for doc in sorted(root.glob(pattern)):
+            text = doc.read_text(encoding="utf-8")
+            for m in SCREENSHOT_REF.finditer(text):
+                rel = (doc.parent / m.group(1)).resolve().relative_to(root.resolve())
+                refs.setdefault(rel.as_posix(), set()).add(doc.relative_to(root).as_posix())
+
+    stale: list[dict] = []
+    for image, docs in sorted(refs.items()):
+        if not (root / image).exists():
+            stale.append(
+                {"image": image, "image_date": None, "docs": sorted(docs), "missing": True}
+            )
+            continue
+        date = _git_date(root, image)
+        if date and ui_date and date < ui_date:
+            stale.append(
+                {"image": image, "image_date": date, "docs": sorted(docs), "missing": False}
+            )
+    return ui_date, stale
+
+
+def report_screenshots(root: Path = ROOT) -> int:
+    """그림 낡음을 사람이 읽을 꼴로 찍고, 낡은 것이 있으면 1."""
+    ui_date, stale = stale_screenshots(root)
+    print("── 그림 낡음 검사 ──")
+    print(f"화면 코드 마지막 변경: {ui_date or '(git 기록 없음)'}")
+    if not stale:
+        print("문서가 가리키는 그림이 모두 화면 코드 이후에 찍혔다. ✓")
+        return 0
+    print(f"\n낡았거나 없는 그림 {len(stale)}건:")
+    for s in stale:
+        state = "파일 없음" if s["missing"] else f"찍은 날 {s['image_date']}"
+        print(f"  {s['image']} — {state}  ← {', '.join(s['docs'])}")
+    print("\n→ 지금 화면으로 다시 찍거나, 문서에서 그 그림을 빼야 한다.")
+    return 1
+
+
 def main() -> int:
     # Windows 콘솔 기본 인코딩(cp949)에서 한국어가 깨지지 않게 UTF-8 로 강제.
     # 읽을 수 없는 보고는 보고가 아니다 (doc-sync hook.py 에서 실측한 교훈).
@@ -287,6 +365,9 @@ def main() -> int:
             stream.reconfigure(encoding="utf-8")
         except Exception:
             pass
+
+    if "--screenshots" in sys.argv[1:]:
+        return report_screenshots()
 
     facts = measure_facts()
     mismatches = collect_mismatches()

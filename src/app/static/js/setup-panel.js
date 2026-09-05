@@ -81,12 +81,113 @@ async function _saveLlmKeys(payload, btn, okMessage) {
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     showToast(okMessage, "success");
     if (typeof _loadLlmAccounts === "function") await _loadLlmAccounts();
+    // 서버는 라우터 캐시를 비웠다. 화면의 모델 드롭다운·추출 패널·마법사도 다시 채워야
+    // 방금 넣은 연결이 «바로» 보인다(2026-09-05 지적 — 전에는 새로고침해야 했다).
+    document.dispatchEvent(new CustomEvent("llm-accounts-changed"));
   } catch (e) {
     showToast(`저장 실패: ${e.message}`, "error");
   } finally {
     btn.disabled = false;
     btn.textContent = before;
   }
+}
+
+/**
+ * OpenAI(ChatGPT 계정) 카드 — 프록시 상태와 «시작·로그인» 단추 (D-107).
+ *
+ * 왜: 이 길은 키가 없고 프록시(Node)가 로그인을 대신한다. 전에는 프록시가 창 없이 떠서
+ * 로그인이 필요해도 로그 파일을 열어야 주소를 알 수 있었다. 단추를 누르면 앱이 프록시를
+ * 띄우고, 프록시가 브라우저를 열며, 주소가 찍히면 링크로도 보여 준다.
+ */
+function _oauthRow() {
+  const wrap = document.createElement("div");
+  wrap.className = "settings-key-row settings-oauth-row";
+
+  const note = document.createElement("span");
+  note.className = "settings-llm-note";
+  note.textContent = "확인 중…";
+
+  const btn = document.createElement("button");
+  btn.className = "text-btn text-btn-sm";
+  btn.textContent = "시작·로그인";
+
+  const link = document.createElement("a");
+  link.className = "text-btn text-btn-sm";
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.textContent = "브라우저에서 로그인 열기";
+  link.hidden = true;
+
+  wrap.append(note, btn, link);
+
+  let timer = null;
+  // 마지막으로 본 상태. «안 됨 → 됨» 전이에서만 이벤트를 쏜다. 처음 물었을 때부터 «됨»이면
+  // 쏘지 않는다 — 쏘면 마법사가 자기를 다시 그리며 새 줄을 만들고, 그 줄이 또 «됨»을 보고
+  // 쏘는 무한 루프가 된다(2026-09-05 실측: /api/llm/models가 ERR_INSUFFICIENT_RESOURCES).
+  let lastReady = null;
+  const stop = () => {
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+  };
+  const render = (s) => {
+    if (!s.npx) {
+      note.textContent = "Node.js(npx)가 없어 이 길은 쓸 수 없습니다 — nodejs.org에서 LTS를 깔면 됩니다.";
+      btn.disabled = true;
+      stop();
+      return;
+    }
+    if (s.ready) {
+      note.textContent = `연결됨 — ${s.base_url}`;
+      btn.textContent = "연결됨";
+      btn.disabled = true;
+      link.hidden = true;
+      stop();
+      if (lastReady === false) {
+        // 방금 연결됐다 — 드롭다운이 구독 모델을 보게 한다
+        document.dispatchEvent(new CustomEvent("llm-accounts-changed"));
+      }
+      lastReady = true;
+      return;
+    }
+    lastReady = false;
+    if (s.running) {
+      note.textContent = "프록시가 뜨는 중… 로그인 창이 열리면 ChatGPT 계정으로 들어가세요.";
+      btn.disabled = true;
+    } else {
+      note.textContent = "ChatGPT 구독으로 씁니다(키 없음). 누르면 프록시가 뜨고, 필요하면 로그인 창이 열립니다.";
+      btn.textContent = "시작·로그인";
+      btn.disabled = false;
+    }
+    if (s.login_url) {
+      link.href = s.login_url;
+      link.hidden = false;
+    }
+    if (!wrap.isConnected) stop();
+  };
+  const poll = async () => {
+    try {
+      render(await (await fetch("/api/settings/oauth")).json());
+    } catch (_) {
+      /* 다음 틱에 다시 */
+    }
+  };
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    try {
+      const r = await fetch("/api/settings/oauth/start", { method: "POST" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      render(d);
+      if (!timer && !d.ready) timer = setInterval(poll, 2000);
+    } catch (e) {
+      if (typeof showToast === "function") showToast(`프록시를 띄우지 못했습니다: ${e.message}`, "error");
+      btn.disabled = false;
+    }
+  });
+  poll();
+  return wrap;
 }
 
 /** Ollama 카드에 붙는 «지금 도는지 확인» 줄. */
@@ -283,6 +384,11 @@ const _wizardState = { step: 0, steps: ["서고", "글자 인식", "AI 연결"] 
 function _closeWizard(remember) {
   const o = document.getElementById("setup-wizard-overlay");
   if (o) o.style.display = "none";
+  // 설치 진행 묻기는 마법사가 닫히면 그만둔다 — 설치 자체는 서버에서 계속 돈다.
+  if (_extrasPollTimer) {
+    clearInterval(_extrasPollTimer);
+    _extrasPollTimer = null;
+  }
   if (remember) {
     try {
       localStorage.setItem(WIZARD_SEEN_KEY, "1");
@@ -382,37 +488,134 @@ async function _wizardOcr(body) {
       </div>`;
     })
     .join("");
+  // 더 넣을 수 있는 엔진 묶음과 지금 도는 설치(D-106). 사용자는 터미널을 쓰지 않는다 —
+  // 단추를 누르면 서버가 uv sync를 대신 돌린다.
+  let extras = { extras: [], job: { running: false } };
+  try {
+    extras = await (await fetch("/api/app/extras")).json();
+  } catch (_) {
+    /* 목록을 못 읽어도 엔진 상태는 보여 준다 */
+  }
+  const job = extras.job || { running: false };
+  const extraRows = (extras.extras || []).map((x) => _extrasRowHtml(x, job)).join("");
   body.innerHTML = `
     <p class="wizard-lead">스캔 이미지에서 글자를 읽는 엔진입니다. <b>하나만 있어도 됩니다.</b>
       없어도 텍스트가 들어 있는 PDF는 그대로 쓸 수 있습니다.</p>
     ${rows || '<div class="placeholder">엔진 목록을 읽지 못했습니다.</div>'}
-    <p class="wizard-lead">더 넣으려면 앱 폴더에서 아래를 실행하세요. 시간이 걸립니다.</p>
-    <div class="settings-update-log">uv sync --extra ocr        # 가벼운 엔진(ONNX)
-uv sync --extra ocr-full   # 무거운 엔진(torch 계열)</div>`;
+    <p class="wizard-lead">더 넣기 — 단추를 누르면 앱이 받아서 깝니다. 인터넷이 필요하고 몇 분 걸립니다.</p>
+    <div id="wizard-extras">${extraRows || '<div class="placeholder">추가할 수 있는 엔진 목록을 읽지 못했습니다.</div>'}</div>
+    <div id="wizard-extras-log" class="settings-update-log" ${job.running ? "" : "hidden"}></div>
+    <p class="wizard-lead">한글 논문과 글자가 든 PDF는 본체만으로 다 됩니다. GPU판은 별도 환경 —
+      사용자 가이드 7-A.6-2.</p>`;
+  body.querySelectorAll("[data-install-extra]").forEach((btn) => {
+    btn.addEventListener("click", () => _installExtra(btn.dataset.installExtra, body));
+  });
+  if (job.running) _pollExtras(body);
 }
 
-/** 3단계 — AI 연결. 설정 패널과 같은 카드를 그대로 쓴다. */
+/** 엔진 묶음 한 줄 — 깔려 있음 / 설치 중 / [설치] 단추. */
+function _extrasRowHtml(x, job) {
+  const running = job.running && job.extra === x.name;
+  let state;
+  if (x.installed) state = '<span class="wizard-extra-state">깔려 있음</span>';
+  else if (running) state = '<span class="wizard-extra-state">설치 중…</span>';
+  else
+    state = `<button class="text-btn text-btn-sm" data-install-extra="${_wizEsc(x.name)}"
+      ${job.running ? "disabled" : ""}>설치 (${_wizEsc(x.size)})</button>`;
+  return `<div class="wizard-row ${x.installed ? "ok" : "todo"}">
+    <b>${_wizEsc(x.label)}</b>
+    <span>${_wizEsc(x.for)}</span>
+    ${state}
+  </div>`;
+}
+
+async function _installExtra(name, body) {
+  try {
+    const r = await fetch(`/api/app/extras/${encodeURIComponent(name)}/install`, { method: "POST" });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+    if (typeof showToast === "function") showToast("받기 시작했습니다. 끝나면 알려 드립니다.", "info");
+    await _wizardOcr(body); // «설치 중…»을 바로 보여 준다
+  } catch (e) {
+    if (typeof showToast === "function") showToast(`설치를 시작하지 못했습니다: ${e.message}`, "error");
+  }
+}
+
+let _extrasPollTimer = null;
+
+/** 설치가 끝날 때까지 2초마다 묻는다. 끝나면 로그를 남기고 엔진 목록을 다시 그린다. */
+function _pollExtras(body) {
+  if (_extrasPollTimer) return;
+  const tick = async () => {
+    let s;
+    try {
+      s = await (await fetch("/api/app/extras")).json();
+    } catch (_) {
+      return; // 잠깐 못 닿아도 다음 틱에 다시 본다
+    }
+    const log = document.getElementById("wizard-extras-log");
+    if (log) {
+      log.hidden = false;
+      log.textContent = (s.job.log || []).slice(-12).join("\n") || "받는 중…";
+    }
+    if (!s.job.running) {
+      clearInterval(_extrasPollTimer);
+      _extrasPollTimer = null;
+      if (typeof showToast === "function") {
+        showToast(
+          s.job.ok ? "엔진을 깔았습니다." : "설치가 실패했습니다. 기록을 보세요.",
+          s.job.ok ? "success" : "error",
+        );
+      }
+      if (s.job.ok && body.isConnected && _wizardState.step === 1) await _wizardOcr(body);
+    }
+  };
+  _extrasPollTimer = setInterval(tick, 2000);
+  tick();
+}
+
+/** 3단계 — AI 연결. 키를 **여기서 바로** 넣는다 — 설정 패널과 같은 입력 줄을 쓴다. */
 async function _wizardLlm(body) {
+  let keyState = {};
+  try {
+    keyState = (await (await fetch("/api/settings/llm-keys")).json()).keys || {};
+  } catch (_) {
+    /* 상태를 못 읽어도 입력 줄은 보여 준다 */
+  }
   body.innerHTML = `
     <p class="wizard-lead">번역·주석 초안, 목차 읽기에 씁니다. <b>하나만 연결돼 있어도</b> 됩니다.
-      키는 서고 폴더의 <code>.env</code>에 저장되므로 앱을 갈아도 남습니다.</p>
-    <div id="wizard-llm-list" class="settings-llm-list"><div class="placeholder">불러오는 중…</div></div>`;
+      키는 서고 폴더에 저장되므로 앱을 갈아도 남고, 화면 어디에도 키 전체는 나오지 않습니다.
+      지금 없으면 그냥 「마침」 — 설정 ▸ LLM 연결에서 언제든 넣습니다.</p>
+    <div id="wizard-llm-list" class="settings-llm-list"></div>`;
   const box = document.getElementById("wizard-llm-list");
-  // 설정 패널의 목록을 그대로 옮겨 담는다 — 두 벌로 만들지 않는다.
-  const src = document.getElementById("settings-llm-accounts");
-  if (typeof _loadLlmAccounts === "function" && src) {
-    await _loadLlmAccounts();
-    box.innerHTML = src.innerHTML;
-    // innerHTML 복사는 이벤트를 잃는다. 입력·단추는 설정 패널에서 쓰라고 안내한다.
-    box.querySelectorAll("input, button").forEach((el) => {
-      el.disabled = true;
-    });
-    const note = document.createElement("div");
-    note.className = "settings-info-note";
-    note.textContent =
-      "키를 넣으려면 마침 뒤 왼쪽 아이콘 줄의 ⚙ 설정 ▸ LLM 연결에서 입력하세요.";
-    box.appendChild(note);
+
+  const card = (title) => {
+    const row = document.createElement("div");
+    row.className = "settings-llm-row";
+    const head = document.createElement("div");
+    head.className = "settings-llm-head";
+    const name = document.createElement("span");
+    name.className = "settings-llm-name";
+    name.textContent = title;
+    head.appendChild(name);
+    row.appendChild(head);
+    box.appendChild(row);
+    return row;
+  };
+  for (const pid of Object.keys(PROVIDER_KEY_HELP)) {
+    card(PROVIDER_KEY_HELP[pid].label.replace(" API 키", "")).appendChild(_llmKeyRow(pid, keyState));
   }
+  card("Ollama (내 컴퓨터, 무료)").appendChild(_ollamaRow());
+  card("OpenAI — ChatGPT 계정으로 (구독 한도)").appendChild(_oauthRow());
+
+  // 저장·지우기 뒤에는 «저장됨 (…)» 표시가 바뀌어야 한다 — 이 단계가 떠 있을 때만 다시 그린다.
+  if (_wizardState.llmListener) {
+    document.removeEventListener("llm-accounts-changed", _wizardState.llmListener);
+  }
+  _wizardState.llmListener = () => {
+    if (body.isConnected && _wizardState.step === 2) _wizardLlm(body);
+  };
+  document.addEventListener("llm-accounts-changed", _wizardState.llmListener);
 }
 
 function _wizEsc(s) {

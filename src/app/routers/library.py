@@ -837,3 +837,60 @@ async def api_apply_update():
 
     result = apply_update()
     return JSONResponse(result, status_code=200 if result["ok"] else 400)
+
+
+# ── 엔진 추가 설치 (D-106) ────────────────────────────────────────────
+
+
+@router.get("/api/app/extras")
+async def api_extras_status():
+    """무엇이 깔렸고 지금 도는 설치가 있는가 (D-106). 화면이 2초마다 묻는다."""
+    from core.extras import status
+
+    return status()
+
+
+@router.post("/api/app/extras/{name}/install")
+async def api_extras_install(name: str):
+    """엔진 묶음(extras)을 서버가 대신 깐다 — 사용자는 터미널을 쓰지 않는다 (D-106).
+
+    성공하면 엔진 등록 캐시를 비워 다음 /api/ocr/engines가 새로 깔린 엔진을 짚게 한다.
+    """
+    import app._state as _st
+    from core.extras import start_install
+
+    def _forget_engines():
+        _st._ocr_registry = None
+        _st._ocr_pipeline = None
+
+    result = start_install(name, on_done=_forget_engines)
+    if not result.get("ok"):
+        return JSONResponse(result, status_code=400)
+    return result
+
+
+# ── OpenAI OAuth 프록시 (D-107) ──────────────────────────────────────
+
+
+@router.get("/api/settings/oauth")
+async def api_oauth_status():
+    """ChatGPT 구독 프록시가 떠 있는가·로그인 주소가 있는가 (D-107)."""
+    from core.oauth_proxy import status
+
+    return status()
+
+
+@router.post("/api/settings/oauth/start")
+async def api_oauth_start():
+    """프록시를 앱이 띄운다 — 로그를 열어 주소를 찾게 하지 않는다 (D-107).
+
+    프록시가 뜨면 LLM 라우터 캐시를 비워 다음 목록 조회가 새 포트를 찾게 한다.
+    """
+    import app._state as _st
+    from core.oauth_proxy import start
+
+    result = start()
+    if result.get("error"):
+        return JSONResponse(result, status_code=400)
+    _st._llm_router = None
+    return result

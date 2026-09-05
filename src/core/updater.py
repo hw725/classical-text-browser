@@ -143,9 +143,13 @@ def apply_update() -> dict:
                 "먼저 커밋하거나 되돌린 뒤 다시 시도하세요."
             ),
         }
+    # uv sync는 적지 않은 extras를 **지운다.** 기록된 엔진 묶음을 같이 넘겨야 업데이트가
+    # 고서 엔진을 뽑아 버리지 않는다(D-106).
+    from core.extras import sync_args
+
     for name, args, timeout in (
         ("새 판 받기 (git pull)", ["git", "pull", "--ff-only"], 300),
-        ("의존 맞추기 (uv sync)", ["uv", "sync"], 900),
+        ("의존 맞추기 (uv sync)", sync_args(), 900),
     ):
         try:
             code, out = _run(args, root, timeout)

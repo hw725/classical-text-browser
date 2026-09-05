@@ -180,16 +180,26 @@ def test_variant_dictionary_lives_in_the_library(client):
     """
     import json as _json
 
-    app_dict = Path(__file__).resolve().parent.parent / "resources" / "variant_chars.json"
-    before = _json.loads(app_dict.read_text(encoding="utf-8")) if app_dict.exists() else None
+    app_res = Path(__file__).resolve().parent.parent / "resources"
+    # 손으로 쌓은 사전은 배포본에 들어가면 안 된다(D-105 — 2026-02-15부터 공개돼 있던 것을
+    # 히스토리에서까지 지웠다). 누가 다시 넣으면 여기서 막힌다.
+    assert not (app_res / "variant_chars.json").exists(), (
+        "resources/variant_chars.json은 공개 저장소에 두지 않는다 — 서고의 resources/에 산다"
+    )
+    shipped = sorted(p.name for p in app_res.glob("variant_*.json"))
 
     r = client.post("/api/alignment/variant-dict", json={"char_a": "檢", "char_b": "検"})
     assert r.status_code == 200, r.text
 
-    lib_dict = Path(client.library_path) / "resources" / "variant_chars.json"
+    lib_res = Path(client.library_path) / "resources"
+    lib_dict = lib_res / "variant_chars.json"
     assert lib_dict.exists(), "서고에 사전이 만들어지지 않았다"
     assert "檢" in _json.loads(lib_dict.read_text(encoding="utf-8")).get("variants", {})
 
-    # 앱이 들고 다니는 기본 사전은 그대로여야 한다
-    if before is not None:
-        assert _json.loads(app_dict.read_text(encoding="utf-8")) == before
+    # 앱이 들고 온 사전(OpenCC 파생본)은 **전부** 서고에 옮겨 심겨야 한다. 하나만 옮기면
+    # 나머지가 목록에서 사라진다 — D-104 첫 판의 버그였다.
+    for name in shipped:
+        assert (lib_res / name).exists(), f"{name}이 서고에 복사되지 않았다"
+        assert _json.loads((lib_res / name).read_text(encoding="utf-8")) == _json.loads(
+            (app_res / name).read_text(encoding="utf-8")
+        )

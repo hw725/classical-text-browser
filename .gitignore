@@ -88,5 +88,11 @@ docs/local-diagrams/
 docs/_local/
 .venv-gpu/
 
-# 이체자 사전 — 라이선스가 확인되지 않은 원자료(cjkvi-variants)에서 생성한 것은 배포하지 않는다 (D-080)
+# 이체자 사전 — 사람이 쌓는 작업물이라 배포하지 않는다. 서고의 resources/에 산다(D-104).
+# variant_chars.json은 2026-02-15 ~ 2026-09-05 공개돼 있었고 히스토리에서도 지웠다(D-105).
+# OpenCC(Apache-2.0)에서 기계로 만든 variant_chars_opencc_script.json만 배포한다.
+resources/variant_chars.json
 resources/variant_chars_cjkvi_*.json
+
+# 설치한 extras 기록 — 앱 업데이트·엔진 추가 설치가 uv sync에 같이 넘긴다(이 파일이 없으면 uv sync가 extras를 지운다)
+.ctb-extras.json

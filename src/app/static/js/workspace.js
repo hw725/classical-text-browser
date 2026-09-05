@@ -461,6 +461,10 @@ async function _loadLlmAccounts() {
       if (p.provider_id === "ollama" && typeof _ollamaRow === "function") {
         row.appendChild(_ollamaRow());
       }
+      // ChatGPT 계정 길은 단추로 프록시를 띄우고 로그인 창을 연다 — 로그를 열게 하지 않는다(D-107).
+      if (p.provider_id === "openai_oauth" && typeof _oauthRow === "function") {
+        row.appendChild(_oauthRow());
+      }
 
       box.appendChild(row);
     }
@@ -1925,6 +1929,8 @@ async function _loadAllLlmModelSelects() {
 function _fillLlmSelect(select, models) {
   // data-vision-only 속성이 있으면 비전 지원 모델만 표시 (OCR, 레이아웃 분석용)
   const visionOnly = select.hasAttribute("data-vision-only");
+  // 다시 채울 때(키를 새로 넣은 뒤) 고른 것을 잃지 않는다.
+  const previous = select.value;
 
   select.innerHTML = '<option value="auto">자동 (폴백순서)</option>';
   for (const m of models) {
@@ -1958,7 +1964,17 @@ function _fillLlmSelect(select, models) {
     // 알려 주는 것이 `/api/llm/punctuation/external/health`의 목적이다.
     _annotateExternalPunctStatus(opt);
   }
+
+  if (previous && Array.from(select.options).some((o) => o.value === previous)) {
+    select.value = previous;
+  }
 }
+
+// 키를 새로 넣거나 지우면(설정·마법사) 드롭다운을 다시 채운다. 서버는 라우터 캐시를 비우지만
+// 화면은 처음 한 번 채운 목록을 들고 있었다 — 새로고침해야 새 연결이 보였다(2026-09-05 지적).
+document.addEventListener("llm-accounts-changed", () => {
+  _loadAllLlmModelSelects();
+});
 
 /**
  * 외부 표점 서비스 상태를 선택지 라벨에 붙인다.

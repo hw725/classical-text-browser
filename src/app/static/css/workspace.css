@@ -32,101 +32,15 @@
 
 /* === 폰트 정의 ===
  *
- * 폰트 규칙:
- *   - 한자(CJK Unified Ideographs, \p{han}) → Spoqa Han Sans Neo
- *   - 나머지(한글, 숫자, 히라가나, 카타카나, 라틴 등) → Pretendard GOV Variable
+ * UI 글꼴은 정하지 않는다 — 브라우저에 설정된 기본 글꼴(sans-serif)을 쓴다(D-108).
  *
- * 구현 방식: @font-face + unicode-range
- *   같은 font-family 이름('AppFont')으로 선언하되,
- *   unicode-range로 문자 범위를 분리하여 서로 다른 폰트를 적용한다.
- *   브라우저가 문자별로 해당 범위의 @font-face를 자동 선택한다.
+ * 왜: v1.3.0까지 UI 폰트를 CDN에서 받았다. Pretendard GOV 가변 폰트 하나가 5.3MB라
+ * 첫 화면 7MB 가운데 76%였다(2026-09-05 실측 — 그 밖의 전부를 합쳐 1.7MB). 저사양·느린
+ * 회선에서 글자가 늦게 뜨는 가장 큰 이유였고, 오프라인이면 매번 실패를 기다렸다.
+ * 이름을 하나 골라 박는 대신(맑은 고딕 등) 사용자가 브라우저 설정에서 고른 글꼴을 따른다 —
+ * 글꼴 취향은 앱이 아니라 사람의 것이다(2026-09-05 지시).
+ * 본문 창(교정·표점)은 원래 serif 계열로 따로 지정돼 있어 영향이 없다.
  */
-
-/* --- Pretendard GOV Variable: 기본 폰트 (한글, 라틴, 숫자, 기호 등 모든 문자) --- */
-@font-face {
-  font-family: "AppFont";
-  src: url("https://unpkg.com/pretendard-gov@1.3.9/dist/web/variable/woff2/PretendardGOVVariable.woff2")
-    format("woff2-variations");
-  font-weight: 45 920;
-  font-style: normal;
-  font-display: swap;
-}
-
-/* --- Spoqa Han Sans Neo: 한자(CJK) 전용 오버라이드 ---
- *
- * unicode-range가 지정된 @font-face는 해당 범위의 문자에 대해서만 적용된다.
- * 한자가 아닌 문자(한글, 숫자 등)는 위의 Pretendard GOV Variable이 담당한다.
- *
- * 포함 범위:
- *   U+2E80-2EFF  CJK Radicals Supplement (部首補助)
- *   U+2F00-2FDF  Kangxi Radicals (康熙部首)
- *   U+3400-4DBF  CJK Unified Ideographs Extension A
- *   U+4E00-9FFF  CJK Unified Ideographs (기본 한자)
- *   U+F900-FAFF  CJK Compatibility Ideographs
- *   U+20000-2A6DF CJK Unified Ideographs Extension B
- *   U+2A700-2B73F CJK Unified Ideographs Extension C
- *   U+2B740-2B81F CJK Unified Ideographs Extension D
- */
-
-@font-face {
-  font-family: "AppFont";
-  src: url("https://cdn.jsdelivr.net/gh/spoqa/spoqa-han-sans@latest/Subset/SpoqaHanSansNeo/SpoqaHanSansNeo-Thin.woff2")
-    format("woff2");
-  font-weight: 100;
-  font-style: normal;
-  font-display: swap;
-  unicode-range:
-    U+2E80-2EFF, U+2F00-2FDF, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF,
-    U+20000-2A6DF, U+2A700-2B81F;
-}
-
-@font-face {
-  font-family: "AppFont";
-  src: url("https://cdn.jsdelivr.net/gh/spoqa/spoqa-han-sans@latest/Subset/SpoqaHanSansNeo/SpoqaHanSansNeo-Light.woff2")
-    format("woff2");
-  font-weight: 300;
-  font-style: normal;
-  font-display: swap;
-  unicode-range:
-    U+2E80-2EFF, U+2F00-2FDF, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF,
-    U+20000-2A6DF, U+2A700-2B81F;
-}
-
-@font-face {
-  font-family: "AppFont";
-  src: url("https://cdn.jsdelivr.net/gh/spoqa/spoqa-han-sans@latest/Subset/SpoqaHanSansNeo/SpoqaHanSansNeo-Regular.woff2")
-    format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-  unicode-range:
-    U+2E80-2EFF, U+2F00-2FDF, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF,
-    U+20000-2A6DF, U+2A700-2B81F;
-}
-
-@font-face {
-  font-family: "AppFont";
-  src: url("https://cdn.jsdelivr.net/gh/spoqa/spoqa-han-sans@latest/Subset/SpoqaHanSansNeo/SpoqaHanSansNeo-Medium.woff2")
-    format("woff2");
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-  unicode-range:
-    U+2E80-2EFF, U+2F00-2FDF, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF,
-    U+20000-2A6DF, U+2A700-2B81F;
-}
-
-@font-face {
-  font-family: "AppFont";
-  src: url("https://cdn.jsdelivr.net/gh/spoqa/spoqa-han-sans@latest/Subset/SpoqaHanSansNeo/SpoqaHanSansNeo-Bold.woff2")
-    format("woff2");
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-  unicode-range:
-    U+2E80-2EFF, U+2F00-2FDF, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF,
-    U+20000-2A6DF, U+2A700-2B81F;
-}
 
 /* === 리셋 & 변수 === */
 
@@ -257,9 +171,8 @@
   --git-detail-msg-text: #bbb;
   --git-detail-code-bg: #333;
 
-  /* 폰트 — AppFont: 한자=Spoqa Han Sans Neo, 나머지=Pretendard GOV Variable */
-  --font-ui:
-    "AppFont", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* 폰트 — UI는 브라우저 기본 글꼴(D-108). 위 «폰트 정의» 절 참고 */
+  --font-ui: sans-serif;
   --font-mono: "Sarasa Fixed K", "Sarasa Mono K", monospace;
   --font-size: 13px;
 }

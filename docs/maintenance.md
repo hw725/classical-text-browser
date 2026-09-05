@@ -200,6 +200,10 @@ uv run python -m pytest
 1. `uv run python -m pytest` — 전부 통과
 2. `uv run ruff check src/ tests/`
 3. JS 문법: `for f in src/app/static/js/*.js; do node --check "$f"; done`
+3-1. **그림**: `uv run python scripts/check_doc_drift.py --screenshots` — 문서가 가리키는
+   그림 가운데 화면 코드(`src/app/static`)보다 오래된 것을 짚는다. v1.3.0에서 사용자
+   가이드 그림 일곱 장이 넉 달 반 전 화면인 채로 나갔다. 수치 검사는 셀 수 있는 것만
+   보고, 그림은 아무도 세지 않았다. 낡은 것은 다시 찍거나 문서에서 뺀다
 4. **실제 문헌으로 E2E** — 등록 → OCR → 검수 → PDF → 내려받기, 그리고
    **산출물을 열어서 본다.** 숫자만 보지 않는다.
 5. `docs/DECISIONS.md`에 결정 카드(다음 번호)
@@ -244,7 +248,7 @@ git rev-parse refs/tags/vX.Y.Z^{}      # HEAD와 같은가
 ## 6. 구조 규칙
 
 - **라우터 간 직접 import 금지.** 공유 상태는 `_state.py`를 통해서만.
-- 새 엔드포인트는 해당 도메인의 라우터 파일에(현재 9개, 208 라우트).
+- 새 엔드포인트는 해당 도메인의 라우터 파일에(현재 9개, 212 라우트).
   **문서의 라우트 수는 손으로 적은 것이라 어긋난다.** 세는 명령:
 
   ```bash

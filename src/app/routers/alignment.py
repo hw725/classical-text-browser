@@ -50,9 +50,15 @@ def _get_resources_dir() -> str:
            넣어도 그렇게 된다(실측 2026-09-05).
         ② 서고마다 다른 사전을 쓸 수 없다.
 
-    처음 쓰는 서고에는 앱 기본 사전을 **한 번 복사해 넣는다.** 그 뒤로는 서고의 것만 고친다.
+    처음 쓰는 서고에는 앱이 들고 온 사전을 **한 번 복사해 넣는다.** 그 뒤로는 서고의 것만 고친다.
     서고가 아직 없으면(설정 전) 앱 폴더를 그대로 쓴다 — 읽기만 하는 상황이다.
+
+    복사는 `variant_*.json` **전부**를 대상으로 한다. 하나만 옮기면 나머지가 목록에서
+    사라진다 — 사전 목록은 서고의 resources/만 보기 때문이다(2026-09-05 실측).
+    앱이 사전을 하나도 들고 오지 않을 수도 있다. 사전은 사람이 쌓는 작업물이라
+    배포본에 넣지 않는다 — 그때는 빈 폴더로 시작하고 화면에서 만들거나 가져온다.
     """
+    import glob as glob_mod
     import shutil
 
     lib = get_library_path()
@@ -60,26 +66,36 @@ def _get_resources_dir() -> str:
         return _app_resources_dir()
     target = os.path.join(str(lib), "resources")
     os.makedirs(target, exist_ok=True)
-    seed = os.path.join(target, "variant_chars.json")
-    if not os.path.exists(seed):
-        src = os.path.join(_app_resources_dir(), "variant_chars.json")
-        if os.path.exists(src):
+    for src in sorted(glob_mod.glob(os.path.join(_app_resources_dir(), "variant_*.json"))):
+        seed = os.path.join(target, os.path.basename(src))
+        if not os.path.exists(seed):
             shutil.copy2(src, seed)
+    # 사용자 사전(strict)은 앱이 들고 오지 않는다 — 없으면 **빈 파일**로 만들어 둔다.
+    # 파일이 있어야 목록에 뜨고 활성으로 잡힌다. 없는 채로 두면 폴백이 OpenCC 힌트
+    # 사전(script 층)을 활성으로 골라 거기에 확정 쌍을 쓰게 된다(2026-09-05 테스트로 잡음).
+    own = os.path.join(target, "variant_chars.json")
+    if not os.path.exists(own):
+        from core.alignment import VariantCharDict
+
+        VariantCharDict.empty(own).save(own)
     return target
 
 
 def _get_active_dict_name() -> str:
     """활성 이체자 사전 파일명을 반환한다.
 
-    resources/.active_variant_dict 파일에 기록된 이름을 읽는다.
-    파일이 없으면 기본값 'variant_chars'를 반환한다.
+    resources/.active_variant_dict 파일에 기록된 이름을 읽는다. 기록이 없거나 그 이름의
+    파일이 사라졌으면 사용자 사전 'variant_chars'다 — `_get_resources_dir()`가 그 파일을
+    언제나 만들어 두므로 반드시 있다. 다른 사전(OpenCC 힌트)으로 대신 떨어지지 않는다:
+    거기에 확정 쌍을 쓰면 힌트 층이 오염된다.
     """
-    marker = os.path.join(_get_resources_dir(), ".active_variant_dict")
+    resources = _get_resources_dir()
+    marker = os.path.join(resources, ".active_variant_dict")
     if os.path.exists(marker):
         with open(marker, "r", encoding="utf-8") as f:
             name = f.read().strip()
-            if name:
-                return name
+        if name and os.path.exists(os.path.join(resources, f"{name}.json")):
+            return name
     return "variant_chars"
 
 

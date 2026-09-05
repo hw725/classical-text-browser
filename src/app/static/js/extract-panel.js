@@ -377,6 +377,18 @@ function _formatPageList(pages, limit = 8) {
   return `${shown}쪽${pages.length > limit ? " 외" : ""}`;
 }
 
+/**
+ * 실행 단추의 이름 — 쪽 범위가 걸려 있으면 «전체»라고 쓰지 않는다.
+ *
+ * 왜: 범위를 «12-15»로 좁혀 놓고도 단추가 「전체 OCR 실행」이면, 누르는 사람은 권 전체가
+ * 도는 줄 알고 망설이거나(비용이 걸린 자리다), 반대로 전체가 돈다고 믿고 범위를 잊는다.
+ * 단추는 실제로 하는 일을 말해야 한다(2026-09-05 지적).
+ */
+function _extractRunLabel(range) {
+  if (!range || !range.length) return "전체 OCR 실행";
+  return `지정한 ${range.length}쪽만 OCR 실행`;
+}
+
 async function _refreshExtractPending() {
   const box = document.getElementById("extract-pending");
   const target = _extractTarget();
@@ -388,6 +400,12 @@ async function _refreshExtractPending() {
   const input = document.getElementById("extract-pages-input");
   const range = parsePageRange(input ? input.value : "", _extractPageCount());
   const rangeNote = range ? ` (지정한 범위 ${_formatPageList(range)})` : "";
+
+  // 단추 이름도 범위를 따른다. 도는 중(«중단»)에는 건드리지 않는다.
+  const runBtn = document.getElementById("extract-run-ocr");
+  if (runBtn && !runBtn.classList.contains("extract-running")) {
+    runBtn.textContent = _extractRunLabel(range);
+  }
 
   // 「이미 처리한 쪽도 다시」를 켰으면 재개 판정이 통째로 꺼지므로
   // 서버에 물어볼 것 없이 대상이 곧 실행 대상이다.
@@ -1123,8 +1141,8 @@ async function _runExtractOcr() {
     }
   } finally {
     _extractAbort = null;
-    btn.textContent = "전체 OCR 실행";
     btn.classList.remove("extract-running");
+    btn.textContent = _extractRunLabel(parsePageRange(input.value, _extractPageCount()));
   }
 }
 
@@ -1258,3 +1276,16 @@ function initExtractPanel() {
     });
   }
 }
+
+// 키를 새로 넣으면 추출 패널의 모델 목록도 다시 채운다 — «한 번 채웠다»는 표시를 지우고
+// 고른 것은 남긴다(2026-09-05 지적).
+document.addEventListener("llm-accounts-changed", async () => {
+  const select = document.getElementById("extract-model-select");
+  if (!select) return;
+  const previous = select.value;
+  delete select.dataset.loaded;
+  await _loadExtractModels();
+  if (previous && Array.from(select.options).some((o) => o.value === previous)) {
+    select.value = previous;
+  }
+});

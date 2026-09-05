@@ -5,6 +5,7 @@ Anthropic Claude API 직접 호출. 최후 수단.
 """
 
 import base64
+import logging
 import time
 from typing import Optional
 
@@ -24,19 +25,69 @@ class AnthropicProvider(BaseLlmProvider):
     display_name = "Claude (Anthropic)"
     supports_image = True
     billing_model = "metered"  # 쓴 만큼 과금된다
-    DEFAULT_MODEL = "claude-sonnet-4-20250514"
+    DEFAULT_MODEL = "claude-sonnet-5"
 
-    # 배포판에서는 각자 자기 키를 .env에 넣는다.
+    # 키는 화면(설정 ▸ LLM 연결)에서 넣는다 — 서고 .env에 저장된다(D-102).
     setup_kind = "env_key"
     setup_steps = (
         "https://console.anthropic.com/settings/keys 에서 키 발급",
-        ".env에 ANTHROPIC_API_KEY=... 를 적고 서버 재시작",
+        "설정 ▸ LLM 연결의 입력 칸에 붙여 넣고 「저장」",
     )
 
-    # 대략적 가격 (1K tokens 기준, USD)
+    # 목록은 API(/v1/models)에서 받는다 — 손으로 적은 목록은 반년이면 낡는다(2026-09-05:
+    # 목록이 sonnet-4 하나였다). 아래는 API를 못 부를 때의 폴백이자 층(cost) 힌트다.
+    # 가격은 공식 표에서 확인한 것만 적는다 — 없는 모델은 _estimate_cost의 기본값으로 추정한다.
+    MODELS = [
+        {"name": "claude-haiku-4-5-20251001", "vision": True, "cost": "low"},
+        {"name": "claude-sonnet-5", "vision": True, "cost": "medium"},
+        {"name": "claude-opus-5", "vision": True, "cost": "high"},
+        {"name": "claude-fable-5-1", "vision": True, "cost": "high"},
+    ]
+
+    # 대략적 가격 (1K tokens 기준, USD). 확인된 것만.
     PRICING = {
         "claude-sonnet-4-20250514": {"input": 0.003, "output": 0.015},
     }
+
+    _models_cache: Optional[tuple[float, list[dict]]] = None
+    _MODELS_TTL = 600.0
+
+    @staticmethod
+    def _cost_tier(model_id: str) -> str:
+        if "haiku" in model_id:
+            return "low"
+        if "sonnet" in model_id:
+            return "medium"
+        return "high"
+
+    async def list_models(self) -> list[dict]:
+        """드롭다운용 모델 목록 — API에서 받고, 못 받으면 MODELS.
+
+        날짜 접미가 붙은 id(claude-haiku-4-5-20251001)도 그대로 둔다 — Anthropic은 별칭이 없는
+        모델이 있다. 10분 동안 기억한다.
+        """
+        now = time.time()
+        if self._models_cache and now - self._models_cache[0] < self._MODELS_TTL:
+            return self._models_cache[1]
+        result: Optional[list[dict]] = None
+        api_key = self.config.get_api_key("anthropic")
+        if api_key:
+            try:
+                import anthropic
+
+                client = anthropic.AsyncAnthropic(api_key=api_key)
+                page = await client.models.list(limit=100)
+                ids = sorted(
+                    {m.id for m in page.data if str(m.id).startswith("claude-")}, reverse=True
+                )
+                if ids:
+                    result = [{"name": i, "vision": True, "cost": self._cost_tier(i)} for i in ids]
+            except Exception as e:  # noqa: BLE001 — 목록을 못 받아도 폴백으로 화면은 뜬다
+                logging.getLogger(__name__).debug("Anthropic 모델 목록 조회 실패: %s", e)
+        if result is None:
+            result = [dict(m) for m in self.MODELS]
+        self._models_cache = (now, result)
+        return result
 
     async def is_available(self) -> bool:
         """ANTHROPIC_API_KEY가 설정되어 있는지 확인."""
