@@ -5080,6 +5080,15 @@ v1.3.0 스크린샷 `09_variant.png`에 이체자 사전의 쌍 스무 개와 �
 원본은 저장소 밖에 사본을 두었고, 서고의 「이체자」 화면 ▸ 가져오기(JSON·CSV)로 되돌려
 넣는다.
 
+### 강제 푸시 뒤에도 남는 것 (실측 2026-09-05)
+
+`git filter-repo` → `push --force` 뒤에 GitHub API로 확인하니 **옛 커밋 SHA로는 사전이
+그대로 받아졌다** — `contents/resources/variant_chars.json?ref=ff8c963`가 97,494바이트를
+돌려줬다. 히스토리 재작성은 «도달 가능한» 이력만 바꾸고, 서버에 남은 dangling 객체는
+GitHub가 GC하기 전까지 SHA만 알면 열린다. 완전히 지우려면 GitHub Support에
+«remove cached views / dangling commits» 요청을 보내야 한다(GitHub 문서 «Removing
+sensitive data from a repository»). 기존 clone·fork를 가진 사람은 다시 받아야 한다.
+
 ### 교훈
 
 `.gitignore`에 규칙이 «있다»는 기억은 그 규칙이 «무엇을» 잡는지와 다르다. 민감한 파일은
