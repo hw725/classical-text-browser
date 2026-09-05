@@ -113,6 +113,10 @@ def commits_behind(timeout: int = 30) -> int:
     """
     root = app_root()
     try:
+        # main이 아닌 브랜치(개발 중)에서는 «뒤처짐»을 세지 않는다 — 언제나 뒤처진 것으로 보인다.
+        code, branch = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], root, timeout)
+        if code != 0 or branch.strip() != "main":
+            return 0
         code, _ = _run(["git", "fetch", "--quiet", "origin", "main"], root, timeout)
         if code != 0:
             return 0
@@ -184,10 +188,22 @@ def apply_update() -> dict:
             # 확인했으니(사용자 수정 없음) 원격 main에 그대로 맞춘다.
             if code != 0 and args[:2] == ["git", "pull"]:
                 steps.append({"name": name, "ok": False, "output": out[:2000]})
+                # 원격에 맞추기는 **main에서, 여기만의 커밋이 없을 때만**. 개발 PC의 미푸시
+                # 커밋·기능 브랜치를 덮으면 되돌릴 수 없다(리뷰 지적 2026-09-05).
                 name = "원격에 맞추기 (git reset --hard origin/main)"
                 code, out = _run(["git", "fetch", "origin", "main"], root, 300)
                 if code == 0:
-                    code, out = _run(["git", "reset", "--hard", "origin/main"], root, 60)
+                    _, branch = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], root, 30)
+                    _, ahead = _run(["git", "rev-list", "--count", "origin/main..HEAD"], root, 30)
+                    if branch.strip() != "main" or (ahead.strip() or "0") != "0":
+                        code, out = 1, (
+                            f"지금 브랜치 {branch.strip()!r}, "
+                            f"원격에 없는 로컬 커밋 {ahead.strip() or '?'}개 — "
+                            "덮어쓰면 사라지므로 맞추지 않았습니다. "
+                            "먼저 푸시하거나 main으로 옮기세요."
+                        )
+                    else:
+                        code, out = _run(["git", "reset", "--hard", "origin/main"], root, 60)
         except (OSError, subprocess.TimeoutExpired) as e:
             steps.append({"name": name, "ok": False, "output": str(e)[:2000]})
             return {"ok": False, "steps": steps, "hint": f"{name}에서 멈췄습니다."}

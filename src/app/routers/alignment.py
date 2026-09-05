@@ -69,7 +69,10 @@ def _get_resources_dir() -> str:
     for src in sorted(glob_mod.glob(os.path.join(_app_resources_dir(), "variant_*.json"))):
         seed = os.path.join(target, os.path.basename(src))
         if not os.path.exists(seed):
-            shutil.copy2(src, seed)
+            # 복사 도중 죽으면 반쪽짜리 사전이 «있는 것»으로 남는다 — 임시 파일로 받아 갈아 끼운다.
+            tmp = seed + ".tmp"
+            shutil.copy2(src, tmp)
+            os.replace(tmp, seed)
     # 사용자 사전(strict)은 앱이 들고 오지 않는다 — 없으면 **빈 파일**로 만들어 둔다.
     # 파일이 있어야 목록에 뜨고 활성으로 잡힌다. 없는 채로 두면 폴백이 OpenCC 힌트
     # 사전(script 층)을 활성으로 골라 거기에 확정 쌍을 쓰게 된다(2026-09-05 테스트로 잡음).

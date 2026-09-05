@@ -52,8 +52,16 @@ Write-Host ""
 # 파이썬이 없어도 되고, 3.13이 깔려 있어도 uv는 3.12를 따로 받아 쓴다. 그래서 여기서는
 # 있으면 알려 주기만 하고, 없어도 막지 않는다 — winget이 안 되는 기기에서 설치가 멈추지 않게.
 Say "[1/4] Python 확인" "White"
+$pyVer = $null
 if (Have "python") {
-    $pyVer = (python --version 2>&1) -join " "
+    # Store의 python 별칭(실행하면 스토어를 열고 stderr에 안내를 씀)이나 stderr 출력은
+    # $ErrorActionPreference=Stop 아래에서 오류로 승격된다 — 여기서만 끄고 실패는 «없음»으로.
+    try {
+        $ErrorActionPreference = "Continue"
+        $pyVer = (& python --version 2>$null | Out-String).Trim()
+    } catch { $pyVer = $null } finally { $ErrorActionPreference = "Stop" }
+}
+if ($pyVer) {
     Say "  $pyVer (있음 — 앱은 별도로 3.12를 씁니다)" "Green"
 } else {
     Say "  시스템에 Python이 없습니다. 괜찮습니다 — 4단계에서 uv가 3.12를 받아 앱 전용으로 깝니다." "Yellow"

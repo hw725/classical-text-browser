@@ -115,9 +115,10 @@ class OllamaProvider(BaseLlmProvider):
 
     @property
     def _url(self) -> str:
-        if OllamaProvider._url_override:
-            return OllamaProvider._url_override
         url = self.config.get("ollama_url", "http://127.0.0.1:11434")
+        # 찾아낸 주소는 사용자가 주소를 정해 두지 않았을 때만 쓴다 — 설정이 우선이다.
+        if OllamaProvider._url_override and not self.config.get("ollama_url"):
+            return OllamaProvider._url_override
         # 사람이 .env에 localhost로 적어 두어도 127.0.0.1로 부른다 — Windows의 IPv6 우선 시도가
         # 호출마다 2초를 버리고, 느린 기기에서는 제한 시간을 넘겨 «Ollama 없음»으로 오판한다
         # (2026-09-05, 다른 PC에서 Ollama가 떠 있는데 안 잡히던 보고).
@@ -252,6 +253,8 @@ class OllamaProvider(BaseLlmProvider):
                     return True
             except (httpx.ConnectError, httpx.TimeoutException, OSError):
                 continue
+        # 기억해 둔 주소로도 안 닿으면 잊는다 — 다음엔 기본 주소부터 다시 본다.
+        OllamaProvider._url_override = None
         return False
 
     # 모델 목록 캐시. 세션 중에 모델이 바뀌는 일은 드물다.

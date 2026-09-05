@@ -31,7 +31,8 @@ PORT_RANGE = range(10531, 10541)
 
 _READY = re.compile(r"ready at (http://[^\s]+)")
 # 로그인 주소 — 프록시·OpenAI가 찍는 https 주소 가운데 내 컴퓨터가 아닌 것.
-_LOGIN_URL = re.compile(r"(https://[^\s\"'<>]+)")
+# 로그인 주소만 — npm 안내 링크 같은 아무 https를 «로그인 열기»로 내밀지 않는다.
+_LOGIN_URL = re.compile(r"(https://(?:[a-z0-9.-]+\.)?(?:openai\.com|chatgpt\.com)/[^\s\"'<>]*)")
 
 _state: dict = {
     "proc": None,  # Popen — 이 앱이 띄운 경우에만

@@ -13,7 +13,7 @@ import subprocess
 import threading
 import time
 
-_URL = re.compile(r"(https://[^\s\"'<>]+)")
+_URL = re.compile(r"(https://(?:[a-z0-9.-]+\.)?ollama\.com/[^\s\"'<>]*)")  # 로그인 주소만
 _state: dict = {"proc": None, "url": None, "log": [], "started": None}
 _lock = threading.Lock()
 

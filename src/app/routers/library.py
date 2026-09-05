@@ -813,7 +813,7 @@ async def api_detect_ollama(base_url: str | None = Query(None)):
     """Ollama가 도는지, 어떤 모델이 있는지 (D-102). 사람에게 묻지 않고 직접 확인한다."""
     from core.env_settings import detect_ollama
 
-    return detect_ollama(base_url)
+    return await asyncio.to_thread(detect_ollama, base_url)
 
 
 @router.get("/api/app/update-check")
@@ -821,7 +821,7 @@ async def api_update_check():
     """새 판이 나왔는가 (D-103). 네트워크가 없어도 화면이 막히지 않게 error만 담아 돌려준다."""
     from core.updater import check, is_git_checkout
 
-    result = check()
+    result = await asyncio.to_thread(check)
     result["can_self_update"] = is_git_checkout()
     return result
 
@@ -847,7 +847,8 @@ async def api_extras_status():
     """무엇이 깔렸고 지금 도는 설치가 있는가 (D-106). 화면이 2초마다 묻는다."""
     from core.extras import status
 
-    return status()
+    # 자식 프로세스 probe·git·네트워크 대기는 이벤트 루프 밖에서 — 설정 화면이 서버를 멈추지 않게
+    return await asyncio.to_thread(status)
 
 
 @router.post("/api/app/extras/{name}/install")
@@ -877,7 +878,7 @@ async def api_oauth_status():
     """ChatGPT 구독 프록시가 떠 있는가·로그인 주소가 있는가 (D-107)."""
     from core.oauth_proxy import status
 
-    return status()
+    return await asyncio.to_thread(status)
 
 
 @router.post("/api/settings/oauth/start")
@@ -889,7 +890,7 @@ async def api_oauth_start():
     import app._state as _st
     from core.oauth_proxy import start
 
-    result = start()
+    result = await asyncio.to_thread(start)
     if result.get("error"):
         return JSONResponse(result, status_code=400)
     _st._llm_router = None
@@ -902,7 +903,7 @@ async def api_ollama_signin():
     import app._state as _st
     from core.ollama_signin import start
 
-    result = start()
+    result = await asyncio.to_thread(start)
     if not result.get("ok"):
         return JSONResponse(result, status_code=400)
     _st._llm_router = None  # 로그인 뒤 상태를 새로 보게
@@ -918,7 +919,7 @@ async def api_ollama_pull(body: dict):
     model = (body or {}).get("model")
     if not model:
         return pull_status()
-    result = pull(str(model))
+    result = await asyncio.to_thread(pull, str(model))
     if result.get("error"):
         return JSONResponse(result, status_code=400)
     _st._llm_router = None
