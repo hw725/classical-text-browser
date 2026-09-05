@@ -125,7 +125,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
   (`npx -y openai-oauth`, 포트 10531–10540 스캔, Bearer 토큰 `oauth-proxy` 하드코딩)와
   SikuRoBERTa 표점 Docker(punctuation-service/.env 존재 시)를 자동 기동.
 - 프론트(static/)가 38,633줄 — index.html 4,826줄 단일 파일, workspace.css 7,441줄,
-  JS 32개. 테스트 56파일은 전부 백엔드, **프론트 테스트 0, CI 없음.**
+  JS 32개. 테스트 57파일은 전부 백엔드, **프론트 테스트 0, CI 없음.**
   (2026-09-01 재실측. 2026-07-26 v1.2.0 감사 때 직전 대비 프론트가 줄어든 것은
   D-069에서 죽은 코드 약 1,000줄을 걷어냈기 때문이다.)
 

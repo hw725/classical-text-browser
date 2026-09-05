@@ -21,6 +21,7 @@ OPENAI_API_KEY가 설정된 경우에도, 프록시가 살아있으면 이 프�
 import logging
 from typing import Optional
 
+from .base import TRUNCATED_MARK, LlmProviderError, LlmResponse, thinking_options
 from .openai_provider import OpenAiProvider
 
 _logger = logging.getLogger(__name__)
@@ -203,6 +204,92 @@ class OpenAiOAuthProvider(OpenAiProvider):
             for m in (self._discovered_models or [])
             if "image" not in str(m.get("id", ""))
         ]
+
+    async def call_with_image(
+        self,
+        prompt,
+        image,
+        *,
+        image_mime="image/png",
+        system=None,
+        response_format="text",
+        model=None,
+        max_tokens=4096,
+        **kwargs,
+    ) -> LlmResponse:
+        """ChatGPT 계정(프록시)으로 이미지 분석 — **Responses API**로 보낸다.
+
+        왜 chat.completions가 아닌가: openai-oauth 프록시는 chat.completions의 data: URL 이미지를
+        «URL scheme must be http or https, got data:»(500)로 거부한다. 같은 이미지를
+        Responses API의 input_image로 보내면 받는다(2026-09-06 실측). 이 경로가 막혀 있어
+        «gpt는 OAuth로» 쓰는 사용자는 LLM OCR이 전부 실패했다.
+        """
+        import base64 as _b64
+        import time as _time
+
+        client = self._create_client()
+        selected_model = model or self.DEFAULT_MODEL
+        data_uri = f"data:{image_mime};base64,{_b64.b64encode(image).decode('ascii')}"
+
+        think, thinking_budget = thinking_options(kwargs)
+        req = {
+            "model": selected_model,
+            "input": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "input_image", "image_url": data_uri},
+                        {"type": "input_text", "text": prompt},
+                    ],
+                }
+            ],
+            "max_output_tokens": max_tokens + thinking_budget,
+        }
+        if system:
+            req["instructions"] = system
+        if response_format == "json":
+            req["text"] = {"format": {"type": "json_object"}}
+        if self._is_reasoning_model(selected_model):
+            req["reasoning"] = {"effort": "medium" if think else "low"}
+
+        t0 = _time.monotonic()
+        try:
+            response = await client.responses.create(**req)
+        except Exception as e:
+            msg = str(e)
+            # 이 프록시 판이 모르는 인자는 빼고 한 번 더 — 형식 강제·추론 옵션은 없어도 돈다.
+            if "text" in req or "reasoning" in req:
+                req.pop("text", None)
+                req.pop("reasoning", None)
+                response = await client.responses.create(**req)
+            else:
+                raise LlmProviderError(f"OpenAI(OAuth) vision 호출 실패: {msg[:200]}") from e
+        elapsed = _time.monotonic() - t0
+
+        text = (getattr(response, "output_text", None) or "").strip()
+        status = str(getattr(response, "status", "") or "")
+        incomplete = getattr(response, "incomplete_details", None)
+        reason = str(getattr(incomplete, "reason", "") or "") if incomplete else ""
+        if response_format == "json" and (status == "incomplete" or reason == "max_output_tokens"):
+            raise LlmProviderError(
+                f"OpenAI(OAuth) vision JSON output {TRUNCATED_MARK} (reason={reason or status}, "
+                f"max_tokens={max_tokens}, thinking_budget={thinking_budget})"
+            )
+        if response_format == "json" and not text:
+            raise LlmProviderError(f"OpenAI(OAuth) vision empty JSON output (status={status})")
+        usage = getattr(response, "usage", None)
+        tokens_in = getattr(usage, "input_tokens", None) if usage else None
+        tokens_out = getattr(usage, "output_tokens", None) if usage else None
+        return LlmResponse(
+            text=text,
+            provider=self.provider_id,
+            model=getattr(response, "model", None) or selected_model,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost_usd=0.0,  # 구독 한도 — 금액은 0이지만 한도를 쓴다
+            elapsed_sec=round(elapsed, 2),
+            raw={"id": getattr(response, "id", None), "status": status},
+        )
 
     def _create_client(self):
         """openai-oauth 프록시를 가리키는 AsyncOpenAI 클라이언트 생성.

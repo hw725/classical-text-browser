@@ -5224,3 +5224,33 @@ pyproject에 **없는** extras였다.
 
 「느리다」는 폰트 하나로 끝나지 않았다. 재지 않은 것은 고칠 수 없다 — API마다 시간을 찍는
 스크립트(`/c/tmp/prof*.py` 계열)를 릴리스 전에 한 번 돌리는 편이 낫다.
+
+---
+
+## D-110: ChatGPT 계정(OAuth) 비전 호출은 Responses API로
+
+**날짜**: 2026-09-06
+**상태**: 채택
+**관련**: D-056(조용한 폴백), D-107(OAuth 프록시)
+
+### 어떻게 드러났나
+
+B-006 실측을 위해 `--model openai_oauth:gpt-5.4-mini`로 15쪽을 읽히자 전부 500 —
+`URL scheme must be http or https, got data:`. openai-oauth 프록시(2.0.0)는 chat.completions의
+`image_url: data:…`를 상류에 그대로 넘겨 거부당한다. 같은 이미지를 **Responses API**의
+`input_image`로 보내면 받는다(직접 확인: chat 500 / responses 200 / http URL 200).
+즉 «gpt는 OAuth로» 쓰는 사용자에게 LLM OCR이 통째로 막혀 있었고, 라우터는 조용히 다음
+프로바이더(유료 API)로 넘어갔다 — D-056의 사고 그대로.
+
+### 결정
+
+- `OpenAiOAuthProvider.call_with_image`를 Responses API(`client.responses.create`, `input_image`
+  data URI, `instructions`, `max_output_tokens`, JSON은 `text.format`)로 재정의한다.
+  잘림(`status=incomplete`)·빈 JSON은 실패로 드러낸다(D-083 원칙).
+- 프록시가 `text`·`reasoning` 인자를 모르면 그것만 빼고 한 번 더 보낸다.
+- 유닛 테스트(가짜 클라이언트)가 요청 꼴을 고정한다: `input_image` + `input_text`.
+
+### 교훈
+
+이 경로는 릴리스 전 실제로 한 번도 돌려 보지 않았다 — 텍스트 호출만 확인했다.
+비전 경로 다섯 종(D-083)은 프로바이더마다 실제 이미지 한 장을 보내는 검증이 릴리스 절차에 있어야 한다.

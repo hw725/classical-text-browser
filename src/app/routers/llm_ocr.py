@@ -500,6 +500,10 @@ async def api_llm_accounts():
                         for m in await asyncio.wait_for(provider.list_models(), timeout=2.0)
                     }
                     entry["active_model_installed"] = model in installed
+                    if model not in installed and provider.provider_id == "ollama":
+                        # 비전 모델이 하나도 없으면 기본 모델을 저절로 받기 시작한다 — 사람이
+                        # 단추를 찾게 하지 않는다(2026-09-06 지시). 프로세스당 한 번만 시도.
+                        _auto_pull_default(provider, model)
                 except Exception:  # noqa: BLE001
                     entry["active_model_installed"] = None
 
@@ -540,6 +544,34 @@ def _schedule_warm(provider) -> None:
     task = asyncio.create_task(_warm_vision_model(provider))
     _warm_tasks[key] = task
     task.add_done_callback(lambda t: _warm_tasks.pop(key, None))
+
+
+_auto_pull_started: set[str] = set()
+
+
+def _auto_pull_default(provider, model: str) -> None:
+    """Ollama에 비전 모델이 없을 때 기본 모델을 뒤에서 받기 시작한다(주소당 한 번)."""
+    key = f"{getattr(provider, '_url', '')}:{model}"
+    if key in _auto_pull_started:
+        return
+    _auto_pull_started.add(key)
+    try:
+        from urllib.parse import urlparse
+
+        from core.ollama_signin import pull
+
+        host = urlparse(provider._url).netloc or None
+
+        def _after(ok: bool):
+            from llm.providers.ollama import OllamaProvider
+
+            OllamaProvider._SHARED.clear()
+
+        result = pull(model, host, _after)
+        if result.get("error"):
+            _auto_pull_started.discard(key)  # 다음 확인 때 다시 시도
+    except Exception:  # noqa: BLE001 — 자동 받기 실패는 카드의 «모델 없음»으로 드러난다
+        _auto_pull_started.discard(key)
 
 
 async def _warm_vision_model(provider) -> None:
@@ -583,9 +615,9 @@ def _account_status(entry: dict) -> tuple[str, str]:
     if model and entry.get("active_model_installed") is False:
         return (
             "no_model",
-            f"{name}: 서버는 떠 있지만 **비전 모델이 없습니다.** 터미널에서 "
-            f"`ollama pull {model}`을 한 번 실행하세요(약 5GB). "
-            "그 전까지 이미지 작업은 다음 프로바이더로 넘어갑니다.",
+            f"{name}: 서버는 떠 있지만 **비전 모델이 없습니다.** 기본 모델 {model}을(를) "
+            "받기 시작했습니다(약 5GB) — 아래 진행을 보세요. 끝날 때까지 이미지 작업은 "
+            "다음 프로바이더로 넘어갑니다.",
         )
 
     if entry["authenticated"] is False:

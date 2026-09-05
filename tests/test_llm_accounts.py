@@ -221,10 +221,20 @@ def test_ollama_billing_reflects_the_model_it_would_actually_use(client):
     클래스 기본값(free)을 그대로 쓰면, 클라우드 모델로 도는 환경에서
     «로컬 무료»라고 표시된다.
     """
-    providers = client.get("/api/llm/accounts").json()["providers"]
-    ollama = next(p for p in providers if p["provider_id"] == "ollama")
-    if not ollama["reachable"]:
-        pytest.skip("이 환경에는 Ollama가 떠 있지 않다")
+    import time
+
+    # 첫 호출은 모델 고르기가 1.5초 안에 못 끝나 «확인 중»(active_model_pending)으로
+    # 돌아올 수 있다(D-109 — 화면을 기다리게 하지 않는다). 뒤에서 마저 고르므로 잠시 다시 묻는다.
+    for _ in range(20):
+        providers = client.get("/api/llm/accounts").json()["providers"]
+        ollama = next(p for p in providers if p["provider_id"] == "ollama")
+        if not ollama["reachable"]:
+            pytest.skip("이 환경에는 Ollama가 떠 있지 않다")
+        if not ollama.get("active_model_pending"):
+            break
+        time.sleep(1.0)
+    else:
+        pytest.skip("Ollama 모델 고르기가 20초 안에 끝나지 않았다(클라우드 왕복 지연)")
     model = ollama.get("active_model")
     assert model, "쓸 비전 모델을 알려 주지 않는다"
     expected = "subscription" if "cloud" in model else "free"
@@ -395,4 +405,4 @@ def test_ollama_without_installed_vision_model_says_so():
         active_model="gemma4:e4b", active_model_installed=False,
     )
     status, note = _account_status(e)
-    assert status == "no_model" and "ollama pull gemma4:e4b" in note
+    assert status == "no_model" and "gemma4:e4b" in note and "받기 시작" in note

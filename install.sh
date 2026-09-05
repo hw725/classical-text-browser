@@ -121,6 +121,20 @@ echo ""
 echo "[5/5] 글자 인식 모델 미리 받기 (처음 한 번, 약 240MB, 인터넷 필요)"
 uv run python scripts/warmup_paddle.py korean ch || echo "  모델을 지금 받지 못했습니다. 첫 OCR 때 다시 받습니다."
 
+# ── 5-1. Ollama 기본 비전 모델 ────────────────
+if command -v ollama >/dev/null 2>&1; then
+    echo ""
+    echo "[5-1] Ollama 기본 비전 모델 확인 (gemma4:e4b)"
+    if ollama list 2>/dev/null | grep -q "gemma4:e4b"; then
+        echo "  이미 있습니다."
+    elif ollama list >/dev/null 2>&1; then
+        echo "  없습니다. 받습니다 (약 5GB, 인터넷 필요)…"
+        ollama pull gemma4:e4b || echo "  지금 받지 못했습니다. 앱 설정 ▸ LLM 연결 ▸ Ollama의 「모델 받기」로 받을 수 있습니다."
+    else
+        echo "  Ollama가 떠 있지 않아 건너뜁니다."
+    fi
+fi
+
 # ── 완료 ───────────────────────────────────
 echo "============================================"
 echo "  설치가 완료되었습니다!"

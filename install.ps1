@@ -146,6 +146,25 @@ if ($LASTEXITCODE -ne 0) {
     Say "  모델을 지금 받지 못했습니다. 첫 OCR 때 다시 받습니다 — 그때는 몇 분 걸릴 수 있습니다." "Yellow"
 }
 
+# ── 5-1. Ollama 기본 비전 모델 ───────────────────────────────
+# Ollama가 깔려 있는데 이미지를 읽는 모델이 하나도 없으면 앱이 이미지 작업을 다음 프로바이더로
+# 넘긴다(대개 유료). 기본 모델 하나는 여기서 받아 둔다(2026-09-06 지시). 없으면 건너뛴다.
+if (Have "ollama") {
+    Write-Host ""
+    Say "[5-1] Ollama 기본 비전 모델 확인 (gemma4:e4b)" "White"
+    $models = ""
+    try { $ErrorActionPreference = "Continue"; $models = (& ollama list 2>$null | Out-String) } catch { $models = "" } finally { $ErrorActionPreference = "Stop" }
+    if ($models -match "gemma4:e4b") {
+        Say "  이미 있습니다." "Green"
+    } elseif ($models) {
+        Say "  없습니다. 받습니다 (약 5GB, 인터넷 필요 — 몇 분 걸립니다)…"
+        & ollama pull gemma4:e4b
+        if ($LASTEXITCODE -ne 0) { Say "  지금 받지 못했습니다. 앱 설정 ▸ LLM 연결 ▸ Ollama의 「모델 받기」로 받을 수 있습니다." "Yellow" }
+    } else {
+        Say "  Ollama가 떠 있지 않아 건너뜁니다. 앱을 켠 뒤 설정에서 받을 수 있습니다." "Yellow"
+    }
+}
+
 # ── 마무리 ───────────────────────────────────────────────────
 Write-Host ""
 Say "============================================" "Green"
