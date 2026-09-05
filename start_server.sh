@@ -105,6 +105,14 @@ echo ""
     fi
 ) &
 
+# ── 자동 업데이트 (D-112) ────────────────────────
+# 서버를 켜기 전에 새 판(같은 판 번호의 고친 것 포함)이 있으면 받는다. 손으로 고친 파일이
+# 있거나 오프라인이거나 CTB_NO_AUTO_UPDATE=1이면 건너뛴다. zip 설치는 먼저 git 사본으로 바꾼다.
+if [ -z "${CTB_NO_AUTO_UPDATE:-}" ]; then
+    echo "[update] 새 판 확인 중..."
+    uv run python -c "import sys; sys.path.insert(0, 'src'); from core.updater import auto_update_cli; auto_update_cli()" || true
+fi
+
 # ── 서버 실행 ─────────────────────────────────
 if [ -n "$LIBRARY_PATH" ]; then
     uv run python -m app serve --library "$LIBRARY_PATH" --port "$PORT"

@@ -132,7 +132,7 @@ GPU 스택은 `.venv`에 설치하지 않는다 — 별도 환경 `.venv-gpu`가
   (`npx -y openai-oauth`, 포트 10531–10540 스캔, Bearer 토큰 `oauth-proxy` 하드코딩)와
   SikuRoBERTa 표점 Docker(punctuation-service/.env 존재 시)를 자동 기동.
 - 프론트(static/)가 약 4.2만 줄 — index.html 약 4.9천 줄 단일 파일, workspace.css 약 7.9천 줄,
-  JS 32개. 테스트 57파일은 전부 백엔드, **프론트 테스트 0, CI 없음.**
+  JS 32개. 테스트 58파일은 전부 백엔드, **프론트 테스트 0, CI 없음.**
   (2026-09-06 재실측. 2026-07-26 v1.2.0 감사 때 직전 대비 프론트가 줄어든 것은
   D-069에서 죽은 코드 약 1,000줄을 걷어냈기 때문이다.)
 

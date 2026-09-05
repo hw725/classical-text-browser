@@ -202,6 +202,16 @@ REM start /b + hidden PowerShell: the old way (start cmd /c timeout...) opened a
 REM 2-second cmd window, so startup looked like 3 windows. Now no extra window.
 start /b "" powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Start-Process 'http://127.0.0.1:!PORT!'"
 
+REM -- Auto update (D-112) ----------------------
+REM Before the server starts, fetch a newer build if one exists (same version
+REM number included). Skips when files were edited locally, when offline, or when
+REM CTB_NO_AUTO_UPDATE=1. A zip install is converted to a git checkout first.
+REM Never blocks startup: the python entry point always exits 0.
+if "%CTB_NO_AUTO_UPDATE%"=="" (
+    echo [update] checking for a newer build...
+    !APP_PY! -c "import sys; sys.path.insert(0, 'src'); from core.updater import auto_update_cli; auto_update_cli()"
+)
+
 REM -- Run server ------------------------------
 REM --reload: the server restarts itself when a .py under src/ changes, so a code update
 REM no longer needs Ctrl+C + restart (static JS/CSS only needs a browser refresh).

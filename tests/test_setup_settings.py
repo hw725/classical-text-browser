@@ -139,12 +139,17 @@ def test_update_refuses_when_working_tree_is_dirty(monkeypatch):
 
 
 def test_update_tells_zip_users_what_to_do(monkeypatch):
-    """Git 사본이 아니면 앱 안에서 받을 수 없다 — 무엇을 해야 하는지 알린다."""
+    """Git 사본이 아니고 git도 없어 바꾸지 못하면 — 무엇을 해야 하는지 알린다(D-112)."""
     from src.core import updater
 
-    monkeypatch.setattr(updater, "is_git_checkout", lambda: False)
+    monkeypatch.setattr(updater, "is_git_checkout", lambda root=None: False)
+    monkeypatch.setattr(
+        updater,
+        "ensure_git_checkout",
+        lambda *a, **k: {"ok": False, "converted": False, "reason": "git이 없습니다"},
+    )
     r = updater.apply_update()
-    assert r["ok"] is False and "zip" in r["hint"]
+    assert r["ok"] is False and "zip" in r["hint"] and "git이 없습니다" in r["hint"]
 
 
 def test_api_never_echoes_the_key(client, tmp_path):

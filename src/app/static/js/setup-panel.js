@@ -285,7 +285,9 @@ async function _checkUpdate() {
     if (d.error) {
       line.textContent = `${d.error} (지금 판 ${d.current})`;
     } else if (d.update_available && d.same_version) {
-      line.textContent = `${d.current} 그대로지만 고친 것이 ${d.commits_behind}건 있습니다 — 받으세요`;
+      line.textContent = d.from_zip
+        ? `${d.current} 그대로지만 최신 판과 파일이 다릅니다(zip 설치) — 받으세요`
+        : `${d.current} 그대로지만 고친 것이 ${d.commits_behind}건 있습니다 — 받으세요`;
     } else if (d.update_available) {
       line.textContent = `새 판이 있습니다 — ${d.latest} (지금 ${d.current})`;
     } else {
@@ -345,7 +347,9 @@ async function _applyUpdate(info, box, btn) {
     ? "\n\n이 판은 서고 형식을 바꿉니다 — 되돌릴 수 없습니다."
     : "";
   const what = info.same_version
-    ? `${info.current} 안에서 고친 것 ${info.commits_behind}건을 받습니다.`
+    ? info.from_zip
+      ? `${info.current} 안에서 고친 것을 받습니다(zip 설치를 git 사본으로 바꿉니다).`
+      : `${info.current} 안에서 고친 것 ${info.commits_behind}건을 받습니다.`
     : `${info.current} → ${info.latest} 로 올립니다.`;
   if (!confirm(`${what}${warn}\n\n계속할까요?`)) return;
   btn.disabled = true;
@@ -372,7 +376,33 @@ async function _applyUpdate(info, box, btn) {
   }
 }
 
+/**
+ * 앱을 열면 새 판을 저절로 확인해 알린다(D-112). 받는 것은 사람이 누를 때만 — 도는 서버의
+ * 코드를 뒤에서 바꾸지 않는다. 세션마다 한 번, 첫 화면이 다 뜬 뒤(8초).
+ */
+function _autoCheckUpdateOnce() {
+  try {
+    if (sessionStorage.getItem("ctb-update-checked")) return;
+    sessionStorage.setItem("ctb-update-checked", "1");
+  } catch (_) {
+    /* 저장이 막힌 브라우저 — 매번 확인해도 해가 없다 */
+  }
+  setTimeout(async () => {
+    try {
+      const d = await (await fetch("/api/app/update-check")).json();
+      if (!d || d.error || !d.update_available) return;
+      const what = d.same_version ? `${d.current} 안에서 고친 것` : `새 판 ${d.latest}`;
+      if (typeof showToast === "function") {
+        showToast(`${what}이 있습니다 — 설정 ▸ 앱 업데이트 ▸ 「받기」`, "info");
+      }
+    } catch (_) {
+      /* 오프라인이 정상이다 */
+    }
+  }, 8000);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  _autoCheckUpdateOnce();
   const btn = document.getElementById("btn-check-update");
   if (btn && !btn.dataset.bound) {
     btn.dataset.bound = "1";

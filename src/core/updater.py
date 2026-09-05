@@ -7,7 +7,11 @@
   - **서고를 건드리지 않는다.** 서고는 앱 폴더 밖에 있고, 이 모듈은 앱 저장소만 다룬다.
   - **작업 트리가 더러우면 받지 않는다.** `git pull --ff-only`가 실패하면 그대로 알린다 —
     사용자가 고친 코드를 조용히 덮어쓰는 일이 없어야 한다.
-  - **저절로 받지 않는다.** 확인은 자동, 내려받기는 사람이 누를 때만.
+  - **앱 안에서는 저절로 받지 않는다.** 확인은 자동, 내려받기는 사람이 누를 때만.
+    다만 `start_server`가 서버를 켜기 **전**에는 저절로 받는다(D-112) — 켜기 전이라 도중에
+    코드가 바뀌는 일이 없고, 사용자가 고친 파일이 있으면 받지 않는다.
+  - **zip으로 받은 폴더도 새 판을 안다.** `.git`이 없으면 git 사본으로 바꾼다(파일은 그대로,
+    HEAD·index만 원격 main) — 그 뒤로는 커밋으로 비교하고 「받기」가 된다(D-112).
 
 되돌릴 수 없는 판: 릴리스 본문에 「되돌릴 수 없는 변화 — 있음」이 있으면 그 사실을 함께
 돌려준다. 화면이 그것을 보여 주고 동의를 받은 뒤에만 받게 하기 위해서다(D-092·D-097처럼
@@ -27,7 +31,11 @@ logger = logging.getLogger(__name__)
 
 REPO = "hw725/classical-text-browser"
 RELEASES_URL = f"https://api.github.com/repos/{REPO}/releases/latest"
+REMOTE_URL = f"https://github.com/{REPO}.git"
 _TIMEOUT = 6.0
+# zip 폴더를 git 사본으로 바꾼 뒤 «아직 원격에 맞추지 않았다»는 표시. 있으면 작업 트리의 차이는
+# 사용자 수정이 아니라 zip 시점의 옛 파일이므로, 「받기」가 reset --hard로 맞춘다.
+ZIP_MARK = ".ctb-from-zip"
 
 
 def app_root() -> Path:
@@ -110,12 +118,24 @@ def check(timeout: float = _TIMEOUT) -> dict:
     )
     # 같은 판 번호 안에서 고친 것 — 태그를 옮겨 다시 낸 경우. 번호만 보면 «최신»이라 받지 못한다
     # (2026-09-05, v1.3.0을 유지한 채 고친 판을 다른 PC가 받지 못한 보고). 커밋을 비교한다.
+    # zip 폴더면 먼저 git 사본으로 바꾼다 — 그래야 비교할 것이 생긴다(D-112).
+    if not is_git_checkout():
+        conv = ensure_git_checkout()
+        if not conv["ok"]:
+            out["note"] = f"zip 설치라 고친 것을 비교하지 못합니다({conv['reason']})."
     if not out["update_available"] and is_git_checkout():
-        behind = commits_behind()
-        if behind:
-            out["update_available"] = True
-            out["same_version"] = True
-            out["commits_behind"] = behind
+        if from_zip():
+            if zip_differs():
+                out["update_available"] = True
+                out["same_version"] = True
+                out["commits_behind"] = None  # zip에는 커밋이 없어 «몇 건»은 모른다
+                out["from_zip"] = True
+        else:
+            behind = commits_behind()
+            if behind:
+                out["update_available"] = True
+                out["same_version"] = True
+                out["commits_behind"] = behind
     return out
 
 
@@ -149,16 +169,88 @@ def _run(args: list[str], cwd: Path, timeout: int) -> tuple[int, str]:
     return p.returncode, ((p.stdout or "") + (p.stderr or "")).strip()
 
 
-def is_git_checkout() -> bool:
-    return (app_root() / ".git").exists()
+def is_git_checkout(root: Path | None = None) -> bool:
+    return ((root or app_root()) / ".git").exists()
 
 
-def working_tree_dirty() -> tuple[bool, str]:
-    """고친 것이 남아 있는가. 있으면 받지 않는다 — 조용히 덮어쓰면 안 된다."""
-    code, out = _run(["git", "status", "--porcelain"], app_root(), 30)
+def git_available() -> bool:
+    """git 명령이 있는가. 설치 스크립트가 Git을 깔지만, 손으로 푼 zip에는 없을 수 있다."""
+    try:
+        code, _ = _run(["git", "--version"], app_root(), 15)
+        return code == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def working_tree_dirty(root: Path | None = None) -> tuple[bool, str]:
+    """고친 것이 남아 있는가. 있으면 받지 않는다 — 조용히 덮어쓰면 안 된다.
+
+    추적하지 않는 파일(logs·.env 같은 것)은 세지 않는다 — pull이 덮어쓰지 않고, 겹치는 경로가
+    있으면 git이 스스로 거부한다.
+    """
+    code, out = _run(
+        ["git", "status", "--porcelain", "--untracked-files=no"], root or app_root(), 30
+    )
     if code != 0:
         return True, out or "git status 실패"
     return bool(out.strip()), out.strip()
+
+
+def ensure_git_checkout(
+    root: Path | None = None, remote: str = REMOTE_URL, timeout: int = 180
+) -> dict:
+    """zip으로 푼 폴더를 git 사본으로 바꾼다 — **파일은 건드리지 않는다.**
+
+    입력: root — 앱 폴더(기본 app_root). remote — 원격 주소(테스트는 로컬 경로).
+    출력: {"ok", "converted", "reason"}.
+    하는 일: git init → origin 추가 → main 받기(depth 50) → HEAD·index만 origin/main으로
+    (`git reset --mixed`). 작업 트리는 zip 그대로라, 그 뒤 `git status`가 보여 주는 차이가
+    곧 «zip 시점 이후 바뀐 것»이다. ZIP_MARK를 남겨 「받기」가 그 차이를 사용자 수정으로
+    오해하지 않게 한다.
+    왜: 설치 안내가 zip → install.bat이라 다른 PC에는 .git이 없었고, 판 번호가 같으면 «최신»으로만
+    보였다(2026-09-06 보고 — «커밋이 바뀌어도 업데이트가 안 된다»).
+    """
+    root = root or app_root()
+    if is_git_checkout(root):
+        return {"ok": True, "converted": False, "reason": ""}
+    if not git_available():
+        return {"ok": False, "converted": False, "reason": "git이 없습니다"}
+    steps = (
+        ["git", "init", "-q"],
+        ["git", "symbolic-ref", "HEAD", "refs/heads/main"],
+        ["git", "remote", "add", "origin", remote],
+        ["git", "fetch", "-q", "--depth=50", "origin", "main"],
+        ["git", "reset", "-q", "--mixed", "origin/main"],
+        ["git", "branch", "--set-upstream-to=origin/main", "main"],
+    )
+    for args in steps:
+        try:
+            code, out = _run(args, root, timeout)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            code, out = 1, str(e)
+        if code != 0:
+            return {"ok": False, "converted": False, "reason": f"{' '.join(args[:2])}: {out[:200]}"}
+    try:
+        (root / ZIP_MARK).write_text("converted from zip\n", encoding="utf-8")
+    except OSError:
+        pass
+    return {"ok": True, "converted": True, "reason": ""}
+
+
+def from_zip(root: Path | None = None) -> bool:
+    return ((root or app_root()) / ZIP_MARK).exists()
+
+
+def zip_differs(root: Path | None = None) -> bool:
+    """zip에서 바꾼 사본의 파일이 원격 main과 다른가(= 받을 것이 있는가)."""
+    root = root or app_root()
+    try:
+        _run(["git", "fetch", "-q", "origin", "main"], root, 60)
+        _run(["git", "reset", "-q", "--mixed", "origin/main"], root, 30)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    dirty, _ = working_tree_dirty(root)
+    return dirty
 
 
 def apply_update() -> dict:
@@ -170,15 +262,21 @@ def apply_update() -> dict:
     root = app_root()
     steps: list[dict] = []
     if not is_git_checkout():
-        return {
-            "ok": False,
-            "steps": [],
-            "hint": (
-                "이 설치는 Git 사본이 아닙니다(zip으로 받은 폴더). 새 판 zip을 내려받아 "
-                "덮어써 주세요 — 서고는 앱 폴더 밖에 있으므로 영향이 없습니다."
-            ),
-        }
+        conv = ensure_git_checkout()
+        if not conv["ok"]:
+            return {
+                "ok": False,
+                "steps": [],
+                "hint": (
+                    f"이 설치는 Git 사본이 아니고 바꾸지도 못했습니다({conv['reason']}). "
+                    "새 판 zip을 내려받아 덮어써 주세요 — 서고는 앱 폴더 밖에 있으므로 "
+                    "영향이 없습니다."
+                ),
+            }
     dirty, detail = working_tree_dirty()
+    if dirty and from_zip():
+        # zip 시점의 옛 파일이지 사용자 수정이 아니다 — 원격에 그대로 맞춘다(한 번뿐, 마커 삭제)
+        dirty = False
     if dirty:
         return {
             "ok": False,
@@ -212,6 +310,23 @@ def apply_update() -> dict:
 
 
 def _apply_update_locked(root: Path, steps: list[dict], sync_args) -> dict:
+    if from_zip(root):
+        # zip에서 바꾼 사본: 파일을 원격 main에 맞추는 것이 곧 «받기»다
+        for name, args in (
+            ("원격 main 받기 (git fetch)", ["git", "fetch", "-q", "origin", "main"]),
+            (
+                "파일을 새 판에 맞추기 (git reset --hard origin/main)",
+                ["git", "reset", "--hard", "origin/main"],
+            ),
+        ):
+            code, out = _run(args, root, 300)
+            steps.append({"name": name, "ok": code == 0, "output": out[:4000]})
+            if code != 0:
+                return {"ok": False, "steps": steps, "hint": f"{name}에서 멈췄습니다."}
+        try:
+            (root / ZIP_MARK).unlink()
+        except OSError:
+            pass
     for name, args, timeout in (
         ("새 판 받기 (git pull)", ["git", "pull", "--ff-only"], 300),
         ("의존 맞추기 (uv sync)", None, 900),
@@ -255,3 +370,59 @@ def _apply_update_locked(root: Path, steps: list[dict], sync_args) -> dict:
         "steps": steps,
         "hint": "받았습니다. **서버를 껐다 켜고 브라우저를 새로 고치세요**(Ctrl+Shift+R).",
     }
+
+
+def auto_update(timeout: float = _TIMEOUT) -> dict:
+    """서버를 켜기 전에 새 판이 있으면 받는다(D-112). 출력: {"did", "why", "result"}.
+
+    받는 조건: git 사본(zip이면 먼저 바꾼다) · 새 판 또는 같은 판의 고친 것 있음 · 사용자가 고친
+    파일 없음. 어느 하나라도 아니면 아무것도 하지 않고 까닭만 돌려준다. 네트워크가 없으면
+    바로 끝난다.
+    """
+    if not git_available():
+        return {"did": False, "why": "git 없음", "result": None}
+    info = check(timeout=timeout)
+    if info.get("error"):
+        return {"did": False, "why": info["error"], "result": None}
+    if not info.get("update_available"):
+        return {"did": False, "why": "최신", "result": None}
+    if not is_git_checkout():
+        return {"did": False, "why": info.get("note") or "git 사본 아님", "result": None}
+    dirty, _ = working_tree_dirty()
+    if dirty and not from_zip():
+        return {"did": False, "why": "고친 파일이 있어 받지 않음", "result": None}
+    result = apply_update()
+    return {
+        "did": bool(result.get("ok")),
+        "why": "받음" if result.get("ok") else result.get("hint", ""),
+        "result": result,
+    }
+
+
+def auto_update_cli() -> int:
+    """start_server가 부르는 한 줄 진입점. 무슨 일이 있어도 0으로 끝난다 — 서버 켜기를 막지 않는다.
+
+    입력: 없음(환경변수 CTB_NO_AUTO_UPDATE=1이면 건너뛴다). 출력: 종료 코드 0.
+    """
+    import os
+
+    if os.environ.get("CTB_NO_AUTO_UPDATE"):
+        print("  자동 업데이트: 끔(CTB_NO_AUTO_UPDATE)")
+        return 0
+    try:
+        r = auto_update()
+    except Exception as e:  # noqa: BLE001
+        print(f"  자동 업데이트: 건너뜀 ({type(e).__name__}: {str(e)[:100]})")
+        return 0
+    if r["did"]:
+        print("  자동 업데이트: 새 판을 받았습니다.")
+    else:
+        print(f"  자동 업데이트: {r['why']}")
+    return 0
+
+
+if __name__ == "__main__":
+    import sys as _sys
+
+    _sys.exit(auto_update_cli())
+

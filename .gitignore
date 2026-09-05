@@ -99,3 +99,5 @@ resources/variant_chars_cjkvi_*.json
 
 # 비공개 할 일 메모 — 저장소에 올리지 않는다
 PRIVATE_TODO.md
+# zip 설치를 git 사본으로 바꾼 표시(core/updater.py)
+.ctb-from-zip
