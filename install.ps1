@@ -48,23 +48,15 @@ Say "  처음이면 5~10분쯤 걸립니다. 창을 닫지 마세요."
 Write-Host ""
 
 # ── 1. Python ────────────────────────────────────────────────
+# 앱은 .python-version(3.12)에 맞는 파이썬을 uv가 알아서 받아 .venv에 붙인다. 시스템에
+# 파이썬이 없어도 되고, 3.13이 깔려 있어도 uv는 3.12를 따로 받아 쓴다. 그래서 여기서는
+# 있으면 알려 주기만 하고, 없어도 막지 않는다 — winget이 안 되는 기기에서 설치가 멈추지 않게.
 Say "[1/4] Python 확인" "White"
-if (-not (Have "python")) {
-    Say "  없습니다. 자동으로 받습니다 (Python 3.12)..."
-    winget install --id Python.Python.3.12 -e --source winget `
-        --accept-package-agreements --accept-source-agreements
-    Refresh-Path
-    if (-not (Have "python")) {
-        Fail "Python을 깔았지만 이 창이 아직 못 찾습니다." `
-             "이 창을 닫고 install.bat을 한 번 더 실행하세요. 그래도 안 되면 https://www.python.org/downloads/ 에서 직접 깔되 «Add Python to PATH»를 체크하세요."
-    }
-}
-$pyVer = (python --version 2>&1) -join " "
-Say "  $pyVer" "Green"
-
-# 3.13에는 아직 글자 인식 엔진(paddlepaddle) 휠이 없다 — 미리 알려 준다(D-059).
-if ($pyVer -match "3\.13") {
-    Say "  ※ 3.13에서는 일부 글자 인식 엔진을 쓸 수 없습니다. 3.12를 권합니다." "Yellow"
+if (Have "python") {
+    $pyVer = (python --version 2>&1) -join " "
+    Say "  $pyVer (있음 — 앱은 별도로 3.12를 씁니다)" "Green"
+} else {
+    Say "  시스템에 Python이 없습니다. 괜찮습니다 — 4단계에서 uv가 3.12를 받아 앱 전용으로 깝니다." "Yellow"
 }
 
 # ── 2. Git ───────────────────────────────────────────────────
@@ -105,8 +97,7 @@ Say "    1) 본체만              1~2분, 약 830MB. 한글 논문·글자가 �
 Say "    2) + 고서 엔진         3~5분, +170MB. 한문 고서(古典籍) 스캔을 읽습니다."
 Say "    3) + 고서·일본어 엔진  5분+, +340MB. 근현대 일본어 자료까지."
 Write-Host ""
-Say "  나중에 바꿔도 됩니다:  uv sync --extra classical   (고서)"
-Say "                          uv sync --extra japanese    (일본어)"
+Say "  나중에 바꿔도 됩니다 — 앱 안 설정 ▸ 처음 설정 ▸ 글자 인식의 「설치」 단추."
 Say "  GPU판(4.5GB)은 별도 환경에 깝니다 — 사용자 가이드 7-A.6-2." "DarkGray"
 Write-Host ""
 $pick = Read-Host "  고르세요 [1/2/3] (그냥 Enter = 1)"
