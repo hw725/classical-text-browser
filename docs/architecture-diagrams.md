@@ -743,7 +743,7 @@ flowchart TB
         MI1["src/parsers/<br/>ndl, korcis, archives_jp"]
         MI2["src/hwp/<br/>reader, text_cleaner"]
         MI3["src/text_import/<br/>pdf_extractor, text_separator"]
-        MI4["src/cli/<br/>ctb 진입점 · embed_folder"]
+        MI4["src/cli/<br/>ctb 진입점 · embed_folder<br/>models(모델 고르기) · config(기본값 기억)"]
     end
 
     CORE_MOD --> LLM_MOD

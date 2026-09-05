@@ -56,6 +56,8 @@ uv run python -m cli embed-folder "C:/논문" --library C:/작업서고 --limit 
 ```
 
 기본이 미리보기라 `--execute` 없이는 아무것도 바뀌지 않고, 중단해도 다음 실행이 이어서 합니다.
+실행 전에 **어느 LLM 모델이 도는지** 한 줄 찍고(`--model`로 고정 — `ctb models`의 번호나 이름 일부),
+자주 쓰는 옵션은 `ctb config`로 저장해 둡니다.
 
 자세한 사용법: [사용자 안내서 7-A](user-guide.md#7-a-근현대-논문에서-텍스트만-빠르게-뽑기)
 
