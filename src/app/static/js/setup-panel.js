@@ -209,7 +209,10 @@ function _ollamaRow() {
       const d = await res.json();
       out.textContent = d.reachable
         ? `연결됨 — 모델 ${d.models.length}개 (${d.models.slice(0, 3).join(", ")}${d.models.length > 3 ? " …" : ""})`
-        : `닿지 않습니다 — Ollama를 켜 두셨는지 확인하세요 (${d.base_url})`;
+        : `닿지 않습니다 — Ollama를 켜 두셨는지 확인하세요. 시도한 주소: ${(d.tried || [d.base_url]).join(", ")}`
+          + (d.error ? `
+오류: ${d.error}` : "");
+      out.style.whiteSpace = "pre-line";
     } catch (e) {
       out.textContent = `확인 실패: ${e.message}`;
     } finally {

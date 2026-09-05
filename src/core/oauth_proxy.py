@@ -60,7 +60,8 @@ def _probe(port: int, timeout: float = 0.7) -> bool:
             f"http://127.0.0.1:{port}/v1/models",
             headers={"Authorization": "Bearer oauth-proxy"},
         )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # 로컬은 프록시 없이
+        with opener.open(req, timeout=timeout) as resp:
             if resp.status != 200:
                 return False
             data = json.loads(resp.read())

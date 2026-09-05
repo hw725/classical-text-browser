@@ -84,7 +84,7 @@ class OllamaProvider(BaseLlmProvider):
              응답 헤더에도 X-RateLimit-* 없음).
         """
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=5.0, trust_env=False) as client:
                 # GET이 아니라 POST다 (GET은 405를 준다).
                 resp = await client.post(f"{self._url}/api/me", json={})
             if resp.status_code != 200:
@@ -110,8 +110,13 @@ class OllamaProvider(BaseLlmProvider):
             return "subscription"
         return "free"
 
+    # 기본 주소로 안 닿을 때 찾아낸 주소. 프로세스 전체가 공유한다(라우터를 새로 만들어도 유지).
+    _url_override: str | None = None
+
     @property
     def _url(self) -> str:
+        if OllamaProvider._url_override:
+            return OllamaProvider._url_override
         url = self.config.get("ollama_url", "http://127.0.0.1:11434")
         # 사람이 .env에 localhost로 적어 두어도 127.0.0.1로 부른다 — Windows의 IPv6 우선 시도가
         # 호출마다 2초를 버리고, 느린 기기에서는 제한 시간을 넘겨 «Ollama 없음»으로 오판한다
@@ -202,7 +207,7 @@ class OllamaProvider(BaseLlmProvider):
             (`_vision_model_cache`) 배치 전체에서 한 번만 일어난다.
         """
         try:
-            async with httpx.AsyncClient(timeout=20.0) as client:
+            async with httpx.AsyncClient(timeout=20.0, trust_env=False) as client:
                 resp = await client.post(
                     f"{self._url}/api/generate",
                     json={
@@ -227,13 +232,27 @@ class OllamaProvider(BaseLlmProvider):
         return False
 
     async def is_available(self) -> bool:
-        """Ollama 서버가 실행 중인지 확인."""
-        try:
-            async with httpx.AsyncClient(timeout=3.0) as client:
-                resp = await client.get(f"{self._url}/api/tags")
-                return resp.status_code == 200
-        except (httpx.ConnectError, httpx.TimeoutException, OSError):
-            return False
+        """Ollama 서버가 실행 중인지 확인.
+
+        기본 주소(127.0.0.1)로 안 닿고 사용자가 주소를 정해 두지 않았으면 [::1]도 본다 —
+        OLLAMA_HOST=localhost로 띄운 Windows에서 IPv6에만 붙는 경우가 있다(2026-09-05 보고).
+        찾은 주소는 프로세스 전체가 기억한다.
+        """
+        candidates = [self._url]
+        if not self.config.get("ollama_url") and "127.0.0.1" in self._url:
+            candidates.append(self._url.replace("127.0.0.1", "[::1]"))
+        for url in candidates:
+            try:
+                async with httpx.AsyncClient(timeout=3.0, trust_env=False) as client:
+                    resp = await client.get(f"{url}/api/tags")
+                if resp.status_code == 200:
+                    if url != self._url:
+                        OllamaProvider._url_override = url
+                        logger.info(f"Ollama를 {url}에서 찾았습니다 (기본 주소로는 닿지 않음)")
+                    return True
+            except (httpx.ConnectError, httpx.TimeoutException, OSError):
+                continue
+        return False
 
     # 모델 목록 캐시. 세션 중에 모델이 바뀌는 일은 드물다.
     #
@@ -284,7 +303,7 @@ class OllamaProvider(BaseLlmProvider):
             if self._models_cache is not None:
                 return self._models_cache
 
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with httpx.AsyncClient(timeout=5.0, trust_env=False) as client:
             resp = await client.get(f"{self._url}/api/tags")
             data = resp.json()
 
@@ -318,7 +337,7 @@ class OllamaProvider(BaseLlmProvider):
             capabilities가 없는 구버전 Ollama에서는 모델 이름 키워드로 폴백한다.
         """
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=5.0, trust_env=False) as client:
                 resp = await client.post(
                     f"{self._url}/api/show",
                     json={"name": model_name},
@@ -411,7 +430,7 @@ class OllamaProvider(BaseLlmProvider):
         t0 = time.monotonic()
         # 클라우드 프록시 모델(gemini-3-flash-preview:cloud 등)은
         # 네트워크 지연이 추가되므로 타임아웃을 넉넉히 300초로 설정.
-        async with httpx.AsyncClient(timeout=300.0) as client:
+        async with httpx.AsyncClient(timeout=300.0, trust_env=False) as client:
             resp = await client.post(f"{self._url}/api/generate", json=payload)
             if resp.status_code != 200:
                 raise LlmProviderError(f"Ollama 응답 {resp.status_code}: {resp.text[:200]}")
@@ -484,7 +503,7 @@ class OllamaProvider(BaseLlmProvider):
         tokens_in = None
         last_report = t0
 
-        async with httpx.AsyncClient(timeout=300.0) as client:
+        async with httpx.AsyncClient(timeout=300.0, trust_env=False) as client:
             async with client.stream("POST", f"{self._url}/api/generate", json=payload) as resp:
                 if resp.status_code != 200:
                     raise LlmProviderError(f"Ollama 스트리밍 응답 {resp.status_code}")
@@ -552,7 +571,7 @@ class OllamaProvider(BaseLlmProvider):
         네트워크 한 줄이 바꿔 끼울 수 있는 자리에 있어야 한다. 이 환경에는
         Ollama 서버가 없고, 그 사정은 CI도 같다.
         """
-        async with httpx.AsyncClient(timeout=300.0) as client:
+        async with httpx.AsyncClient(timeout=300.0, trust_env=False) as client:
             resp = await client.post(f"{self._url}/api/generate", json=payload)
             if resp.status_code != 200:
                 raise LlmProviderError(f"{label} 응답 {resp.status_code}: {resp.text[:200]}")

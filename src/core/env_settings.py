@@ -120,24 +120,50 @@ def write_values(library_root: str | Path, updates: dict[str, str | None]) -> di
     return read_status(library_root)
 
 
+OLLAMA_CANDIDATES = (
+    "http://127.0.0.1:11434",
+    "http://[::1]:11434",  # OLLAMA_HOST=localhost로 띄우면 Windows에서 IPv6에만 붙는 경우가 있다
+)
+
+
 def detect_ollama(base_url: str | None = None, timeout: float = 2.0) -> dict:
     """Ollama가 도는지, 어떤 모델이 있는지 본다.
 
-    출력: {"reachable": bool, "base_url": str, "models": [이름…], "error": str|None}
+    출력: {"reachable": bool, "base_url": str, "models": [이름…], "error": str|None,
+           "tried": [주소…]}
     왜 여기 있는가: 마법사가 「Ollama를 켜 두셨나요」를 사람에게 묻는 대신 직접 확인한다.
+    주소를 안 주면 후보(127.0.0.1 → [::1])를 차례로 본다 — 어느 쪽에 떠 있는지는 기기마다
+    다르다(2026-09-05: 한 PC는 127.0.0.1만, 다른 PC는 그것으로 안 잡힘).
     """
     import json
-    import urllib.error
     import urllib.request
 
-    url = (base_url or "http://127.0.0.1:11434").rstrip("/")
-    # localhost → 127.0.0.1: Windows가 IPv6를 먼저 시도해 2초를 버리고, 그 사이 제한 시간(2초)을
-    # 넘기면 떠 있는 Ollama를 «없음»으로 판정한다(2026-09-05 실측·보고).
-    url = url.replace("://localhost:", "://127.0.0.1:")
-    try:
-        with urllib.request.urlopen(f"{url}/api/tags", timeout=timeout) as r:
-            data = json.loads(r.read().decode("utf-8"))
-        models = [m.get("name", "") for m in (data.get("models") or []) if m.get("name")]
-        return {"reachable": True, "base_url": url, "models": models, "error": None}
-    except Exception as e:  # noqa: BLE001 — 안 떠 있는 것이 정상 상태의 하나다
-        return {"reachable": False, "base_url": url, "models": [], "error": str(e)[:200]}
+    if base_url:
+        candidates = [base_url.rstrip("/").replace("://localhost:", "://127.0.0.1:")]
+    else:
+        candidates = list(OLLAMA_CANDIDATES)
+    # 시스템 프록시(HTTP_PROXY)가 잡힌 PC에서 127.0.0.1 요청이 프록시로 나가 실패한다 —
+    # 로컬 호출은 프록시를 타지 않는다.
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    errors = []
+    for url in candidates:
+        try:
+            with opener.open(f"{url}/api/tags", timeout=timeout) as r:
+                data = json.loads(r.read().decode("utf-8"))
+            models = [m.get("name", "") for m in (data.get("models") or []) if m.get("name")]
+            return {
+                "reachable": True,
+                "base_url": url,
+                "models": models,
+                "error": None,
+                "tried": candidates,
+            }
+        except Exception as e:  # noqa: BLE001 — 안 떠 있는 것이 정상 상태의 하나다
+            errors.append(f"{url}: {str(e)[:120]}")
+    return {
+        "reachable": False,
+        "base_url": candidates[0],
+        "models": [],
+        "error": " | ".join(errors)[:400],
+        "tried": candidates,
+    }
