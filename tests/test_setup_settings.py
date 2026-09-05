@@ -169,3 +169,27 @@ def test_env_written_by_api_lands_in_the_library(client):
     assert path.name == ".env"
     assert path.parent == Path(client.library_path)
     assert path.exists()
+
+
+def test_variant_dictionary_lives_in_the_library(client):
+    """이체자 사전은 앱 폴더가 아니라 서고에 산다 (D-104).
+
+    왜: 사전은 사람이 늘려 가는 작업물이다. 앱 폴더에 쓰면 `git pull`로 새 판을 받을 때
+    충돌하거나 사라지고, 실제로 앱 업데이트(D-103)가 「작업 트리가 더러워 받지 않습니다」로
+    막힌다 — 이체자를 하나만 넣어도 그렇게 된다(실측 2026-09-05).
+    """
+    import json as _json
+
+    app_dict = Path(__file__).resolve().parent.parent / "resources" / "variant_chars.json"
+    before = _json.loads(app_dict.read_text(encoding="utf-8")) if app_dict.exists() else None
+
+    r = client.post("/api/alignment/variant-dict", json={"char_a": "檢", "char_b": "検"})
+    assert r.status_code == 200, r.text
+
+    lib_dict = Path(client.library_path) / "resources" / "variant_chars.json"
+    assert lib_dict.exists(), "서고에 사전이 만들어지지 않았다"
+    assert "檢" in _json.loads(lib_dict.read_text(encoding="utf-8")).get("variants", {})
+
+    # 앱이 들고 다니는 기본 사전은 그대로여야 한다
+    if before is not None:
+        assert _json.loads(app_dict.read_text(encoding="utf-8")) == before

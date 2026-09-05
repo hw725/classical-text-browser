@@ -32,15 +32,40 @@ _variant_dict = None
 _variant_dict_name: str | None = None  # 현재 로드된 사전 파일명
 
 
-def _get_resources_dir() -> str:
-    """resources/ 디렉토리의 절대 경로를 반환한다.
+def _app_resources_dir() -> str:
+    """앱이 들고 다니는 기본 자료 폴더 (읽기 전용으로 쓴다).
 
-    왜 3단계 상위인가:
-        이 파일은 src/app/routers/alignment.py에 위치한다.
-        routers/ → app/ → src/ → 프로젝트루트 (3단계)
-        resources/는 프로젝트 루트에 있으므로 3번 올라가야 한다.
+    이 파일은 src/app/routers/alignment.py이므로 routers/ → app/ → src/ → 프로젝트루트.
     """
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "resources"))
+
+
+def _get_resources_dir() -> str:
+    """이체자 사전이 사는 자리 — **서고의 resources/** (D-104).
+
+    왜 앱 폴더가 아닌가:
+        사전은 사람이 작업하며 늘려 가는 **작업물**이다. 앱 폴더에 쓰면 두 가지가 깨진다 —
+        ① 앱을 새 판으로 갈 때(`git pull`) 그 수정이 충돌하거나 사라진다. 실제로 새로 넣은
+           앱 업데이트(D-103)가 「작업 트리가 더러워 받지 않습니다」로 막힌다. 이체자를 하나만
+           넣어도 그렇게 된다(실측 2026-09-05).
+        ② 서고마다 다른 사전을 쓸 수 없다.
+
+    처음 쓰는 서고에는 앱 기본 사전을 **한 번 복사해 넣는다.** 그 뒤로는 서고의 것만 고친다.
+    서고가 아직 없으면(설정 전) 앱 폴더를 그대로 쓴다 — 읽기만 하는 상황이다.
+    """
+    import shutil
+
+    lib = get_library_path()
+    if lib is None:
+        return _app_resources_dir()
+    target = os.path.join(str(lib), "resources")
+    os.makedirs(target, exist_ok=True)
+    seed = os.path.join(target, "variant_chars.json")
+    if not os.path.exists(seed):
+        src = os.path.join(_app_resources_dir(), "variant_chars.json")
+        if os.path.exists(src):
+            shutil.copy2(src, seed)
+    return target
 
 
 def _get_active_dict_name() -> str:
@@ -82,13 +107,14 @@ def _get_variant_dict(name: str | None = None):
     if name is None:
         name = _get_active_dict_name()
 
-    # 캐시된 사전과 같은 이름이면 그대로 반환
-    if _variant_dict is not None and _variant_dict_name == name:
+    # 캐시 열쇠는 **경로**다. 이름만으로 잡으면 서고를 바꿔도 앞 서고의 사전이 돌아온다
+    # (사전이 서고 안에 살게 된 뒤로는 이름이 같아도 다른 파일이다 — D-104).
+    path = _dict_name_to_path(name)
+    if _variant_dict is not None and _variant_dict_name == path:
         return _variant_dict
 
-    path = _dict_name_to_path(name)
     _variant_dict = VariantCharDict(dict_path=path)
-    _variant_dict_name = name
+    _variant_dict_name = path
     return _variant_dict
 
 
@@ -99,6 +125,8 @@ def _save_variant_dict(vd, name: str | None = None) -> str:
     path = _dict_name_to_path(name)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     vd.save(path)
+    global _variant_dict, _variant_dict_name
+    _variant_dict, _variant_dict_name = vd, path
     return path
 
 
