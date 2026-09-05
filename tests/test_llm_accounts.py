@@ -364,3 +364,35 @@ class TestDotenvEncoding:
         (tmp_path / ".env").write_bytes("# 메모\nGEMINI_API_KEY=abc123\n".encode("cp949"))
         cfg = LlmConfig(library_root=tmp_path)
         assert cfg._env_cache.get("GEMINI_API_KEY") == "abc123"
+
+
+def test_ollama_local_model_without_signin_is_ready():
+    """로그인 안 된 Ollama라도 고른 비전 모델이 로컬이면 «사용 가능»이다(2026-09-05 보고)."""
+    e = _entry(
+        provider_id="ollama", display_name="Ollama", setup_kind="cli_signin",
+        reachable=True, authenticated=False, account=None, billing_model="free",
+        active_model="gemma4:e4b",
+    )
+    status, note = _account_status(e)
+    assert status == "ready" and "gemma4:e4b" in note
+
+
+def test_ollama_cloud_model_without_signin_needs_signin():
+    """클라우드 모델을 골랐는데 로그인이 없으면 여전히 «로그인 필요» — 유료 폴백 사고를 막는다."""
+    e = _entry(
+        provider_id="ollama", display_name="Ollama", setup_kind="cli_signin",
+        reachable=True, authenticated=False, account=None, billing_model="subscription",
+        active_model="qwen3.5:cloud",
+    )
+    assert _account_status(e)[0] == "needs_signin"
+
+
+def test_ollama_without_installed_vision_model_says_so():
+    """비전 모델이 하나도 없으면 «모델 없음»과 받을 명령을 말한다 — 로그인 여부와 무관하게."""
+    e = _entry(
+        provider_id="ollama", display_name="Ollama", setup_kind="cli_signin",
+        reachable=True, authenticated=True, account="me@x", billing_model="free",
+        active_model="gemma4:e4b", active_model_installed=False,
+    )
+    status, note = _account_status(e)
+    assert status == "no_model" and "ollama pull gemma4:e4b" in note

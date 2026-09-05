@@ -491,6 +491,13 @@ async def api_llm_accounts():
             if model:
                 entry["active_model"] = model
                 entry["billing_model"] = provider.billing_for_model(model)
+                # 고른 모델이 실제로 깔려 있는가 — _pick_vision_model은 아무것도 없을 때
+                # 기본 이름을 그대로 돌려준다. 그것을 «로컬 모델로 돕니다»라고 하면 거짓이다.
+                try:
+                    installed = {m.get("name") for m in await provider.list_models()}
+                    entry["active_model_installed"] = model in installed
+                except Exception:  # noqa: BLE001
+                    entry["active_model_installed"] = None
 
         if account:
             entry["account"] = account.get("account")
@@ -544,12 +551,34 @@ def _account_status(entry: dict) -> tuple[str, str]:
             return "offline", f"{name}: 서비스가 실행 중이 아닙니다."
         return "offline", f"{name}: 연결할 수 없습니다."
 
+    model = entry.get("active_model")
+    if model and entry.get("active_model_installed") is False:
+        return (
+            "no_model",
+            f"{name}: 서버는 떠 있지만 **비전 모델이 없습니다.** 터미널에서 "
+            f"`ollama pull {model}`을 한 번 실행하세요(약 5GB). "
+            "그 전까지 이미지 작업은 다음 프로바이더로 넘어갑니다.",
+        )
+
     if entry["authenticated"] is False:
+        # Ollama는 로그인 없이도 **로컬 모델로는 돈다.** 실제로 고른 비전 모델이 로컬이면
+        # «사용 가능»이다 — 로그인 필요라고 하면 로컬만 쓰는 PC에서 «Ollama가 떠 있는데
+        # 안 된다»로 보인다(2026-09-05 보고). 클라우드 모델을 고른 경우에만 로그인이 문제다.
+        model = entry.get("active_model")
+        if model and "cloud" not in model:
+            return (
+                "ready",
+                f"{name}: 로컬 모델 {model}(으)로 돕니다. "
+                "클라우드 모델까지 쓰려면 ollama.com 로그인이 필요합니다(`ollama signin`).",
+            )
+        if entry.get("active_model_pending"):
+            return "ready", f"{name}: 서버가 떠 있습니다. 어느 모델로 돌지 확인하는 중입니다."
         return (
             "needs_signin",
             f"{name}: 서버는 떠 있지만 **로그인돼 있지 않습니다.** "
-            "로컬 모델은 쓸 수 있지만 클라우드 모델은 실패하고, "
-            "그러면 다음 프로바이더(유료 API)로 넘어갑니다.",
+            "로컬 비전 모델이 없어 클라우드 모델을 골랐는데 로그인 없이는 실패하고, "
+            "그러면 다음 프로바이더(유료 API)로 넘어갑니다. "
+            "`ollama pull gemma4:e4b`처럼 로컬 비전 모델을 받거나 `ollama signin`을 하세요.",
         )
 
     if entry["account"]:

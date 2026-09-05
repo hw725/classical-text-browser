@@ -380,6 +380,7 @@ const _LLM_STATUS_LABEL = {
   needs_signin: "로그인 필요",
   needs_key: "키 필요",
   offline: "실행 안 됨",
+  no_model: "모델 없음",
 };
 
 async function _loadLlmAccounts() {
