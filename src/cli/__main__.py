@@ -147,12 +147,13 @@ def cmd_ocr(args):
 
     # --model은 번호(ctb models)·이름 일부·«프로바이더:모델» 어느 것이든 받는다. 해석은
     # **저장보다 먼저** — --remember가 «1» 같은 번호를 저장하면 다음 실행에서 다른 모델이 된다.
+    library = Path(library_arg).expanduser() if library_arg else _default_workspace()
     force_provider = force_model = None
     if model:
         from cli.models import resolve
 
         try:
-            force_provider, force_model = resolve(str(model))
+            force_provider, force_model = resolve(str(model), library=library)
         except ValueError as e:
             print(f"오류: {e}", file=sys.stderr)
             sys.exit(2)
@@ -194,7 +195,6 @@ def cmd_ocr(args):
         else:
             print("--remember: 저장할 옵션이 없습니다 — 명령줄에 준 옵션만 저장합니다.")
 
-    library = Path(library_arg).expanduser() if library_arg else _default_workspace()
     library.mkdir(parents=True, exist_ok=True)
 
     # embed_folder는 «주제 폴더/파일» 구조를 훑는다. 파일 하나를 받은 경우
@@ -232,6 +232,10 @@ def cmd_ocr(args):
             force_model=force_model,
         )
 
+        if report.aborted:
+            # 시작도 못 했다(엔진·모델 준비 실패) — 미리보기든 실행이든 종료 코드 2로 말한다.
+            # 자동화가 «성공»으로 오해하지 않게(Codex 지적 2026-09-06). finally가 정리한다.
+            sys.exit(2)
         if not args.execute:
             # 미리보기 안내는 embed_folder가 이미 출력했다. 두 번 찍지 않는다.
             return
@@ -254,6 +258,9 @@ def cmd_ocr(args):
     finally:
         if staging is not None:
             shutil.rmtree(staging, ignore_errors=True)
+    # 종료 코드로 결과를 말한다 — 1 = 일부 편 실패, 0 = 전부 성공(2 = 시작도 못 함, 위).
+    if report.failed:
+        sys.exit(1)
 
 
 def cmd_models(args):
@@ -261,9 +268,14 @@ def cmd_models(args):
 
     --model이나 ctb config set model에서 그 번호를 쓴다.
     """
+    from cli import config as cli_config
     from cli.models import format_list, list_vision_models
 
-    print(format_list(list_vision_models()))
+    # 서고 .env(앱이 키를 넣는 곳)를 읽어야 GUI와 같은 목록이 나온다.
+    # 우선순위: --library > 저장값 > 기본 서고.
+    saved = cli_config.load()
+    library = args.library or saved.get("library") or str(_default_workspace())
+    print(format_list(list_vision_models(library)))
 
 
 def cmd_config(args):
@@ -289,11 +301,12 @@ def cmd_config(args):
         # 이름을 외워 치지 않는다 — 값이 없으면 목록에서 번호로, 있으면 번호·일부 이름도 받는다.
         from cli.models import pick_interactive, resolve
 
+        library = data.get("library") or str(_default_workspace())
         try:
             if value is None:
-                value = pick_interactive()
+                value = pick_interactive(library)
             else:
-                provider, model = resolve(value)
+                provider, model = resolve(value, library=library)
                 value = f"{provider}:{model}" if model else provider
         except (ValueError, EOFError) as e:
             print(f"오류: {e}", file=sys.stderr)
@@ -562,6 +575,12 @@ def main():
 
     p_models = subparsers.add_parser(
         "models", help="지금 쓸 수 있는 LLM 비전 모델을 번호와 함께 보여 준다"
+    )
+    p_models.add_argument(
+        "--library",
+        default=None,
+        help="서고 경로 — 그 서고의 .env에 넣어 둔 키·주소로 목록을 만든다 "
+        "(기본: 저장값 또는 기본 서고)",
     )
     p_models.set_defaults(func=cmd_models)
 

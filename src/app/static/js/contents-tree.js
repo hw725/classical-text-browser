@@ -92,7 +92,7 @@ function _renderContentsTree(container) {
   if (!data || data.total_units === 0) {
     const ph = document.createElement("div");
     ph.className = "placeholder";
-    ph.textContent = "단위(권·기사)가 없습니다. 위의 «경계 넣기»로 첫 경계를 놓거나, 편성 탭의 경계 제안·자동 편성을 쓰세요.";
+    ph.textContent = "단위(권·기사)가 없습니다. 위의 «경계 넣기»로 첫 경계를 놓거나, 편성 인덱스의 경계 제안·자동 편성을 쓰세요.";
     container.appendChild(ph);
     return;
   }

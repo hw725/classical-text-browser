@@ -102,3 +102,19 @@ def test_load_coerces_hand_edited_values(home: Path):
     loaded = cli_config.load()
     assert loaded["sleep"] == 1.0 and loaded["line_detection"] is False
     assert "engine" not in loaded
+
+
+def test_coerce_rejects_bad_paddle_lang_and_negative_sleep():
+    """오타 언어·음수 대기가 «다음 실행의 기본값»이 되면 안 된다 (Codex 지적 2026-09-06)."""
+    assert cli_config.coerce("paddle_lang", "korean") == "korean"
+    with pytest.raises(ValueError):
+        cli_config.coerce("paddle_lang", "kor")
+    with pytest.raises(ValueError):
+        cli_config.coerce("sleep", "-1")
+
+
+def test_paddle_langs_mirror_engine_list():
+    """config.PADDLE_LANGS는 엔진의 PADDLE_LANGUAGES를 베낀 것 — 어긋나면 여기서 잡는다."""
+    from ocr.paddleocr_engine import PADDLE_LANGUAGES
+
+    assert set(cli_config.PADDLE_LANGS) == set(PADDLE_LANGUAGES)

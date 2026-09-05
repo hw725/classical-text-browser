@@ -87,6 +87,9 @@ class BatchReport:
     total_pages: int = 0
     elapsed_sec: float = 0.0
     failures: list[dict] = field(default_factory=list)
+    # 시작도 못 한 이유(엔진·LLM 준비 실패). 비어 있지 않으면 CLI가 종료 코드 2를 낸다 —
+    # 전에는 «도는 모델»을 못 골라도 0으로 끝나 자동화가 성공으로 알았다(Codex 지적 2026-09-06).
+    aborted: str = ""
 
 
 def survey_folder(root: Path, skip_dirs: set[str] | None = None) -> tuple[list[PaperTask], int]:
@@ -211,7 +214,7 @@ def build_pipeline(library_path: Path):
         CLI는 그 경로를 타지 않으므로 여기서 같은 일을 해 줘야 한다.
         (이 주입이 없어 CLI로 llm_vision을 쓰면 모든 편이 실패했다.)
     """
-    from llm.router import LlmRouter
+    from cli.models import make_router
     from ocr.pipeline import OcrPipeline
     from ocr.registry import OcrEngineRegistry
 
@@ -220,26 +223,31 @@ def build_pipeline(library_path: Path):
 
     llm_engine = registry._engines.get("llm_vision")
     if llm_engine is not None:
-        llm_engine.set_router(LlmRouter())
+        # 서고 .env를 읽는 라우터 — 앱이 키를 저장하는 곳이 거기다.
+        llm_engine.set_router(make_router(library_path))
 
     return OcrPipeline(registry, library_root=str(library_path)), registry
 
 
-def describe_llm_target(force_provider: str | None = None, force_model: str | None = None) -> str:
+def describe_llm_target(
+    force_provider: str | None = None, force_model: str | None = None, library_path=None
+) -> str:
     """어느 LLM이 이 실행을 맡을지 한 줄로.
 
     입력: force_provider·force_model — `--model provider:model`로 지정한 것. 없으면 폴백 순서
           (Ollama → ChatGPT 계정 → Gemini → OpenAI → Anthropic)에서 처음 되는 비전 프로바이더.
-    출력: 사람이 읽을 한 줄. 지정한 프로바이더가 없거나 지금 안 되면 ValueError.
+          library_path — 서고. 그 서고의 .env(앱이 키를 넣는 곳)를 읽는다.
+    출력: 사람이 읽을 한 줄. 지정한 프로바이더가 없거나 지금 안 되면, 또는 쓸 수 있는 LLM이
+          하나도 없으면 ValueError — 호출자가 실행을 멈추고 0이 아닌 종료 코드를 낸다.
 
     왜: 폴백은 조용하다. «무료 로컬로 돈다»고 믿었는데 유료 API가 처리하고 있던 사고가
     있었다(D-056). 실행 전에 이름을 찍어 두면 그 사고가 없다.
     """
     import asyncio
 
-    from llm.router import LlmRouter
+    from cli.models import make_router
 
-    router = LlmRouter()
+    router = make_router(library_path)
 
     def _default_model(p) -> str:
         # Ollama는 «기본 모델»이 설치된 것 가운데서 정해진다 — 그 이름을 실제로 고른다.
@@ -279,7 +287,7 @@ def describe_llm_target(force_provider: str | None = None, force_model: str | No
                 "(폴백 순서에서 처음 되는 것. 도중에 실패하면 다음으로 넘어갑니다 — "
                 "고정하려면 --model)"
             )
-    return "쓸 수 있는 LLM이 없습니다 — 키·프록시·Ollama를 확인하세요"
+    raise ValueError("쓸 수 있는 LLM이 없습니다 — 키·프록시·Ollama를 확인하세요")
 
 
 def _safe_doc_id(index: int) -> str:
@@ -526,9 +534,12 @@ def embed_folder(
         # 어느 모델이 맡는지 실행 전에 찍는다 — 폴백은 조용해서 유료 API가 처리하는 줄
         # 모르고 돌린 사고가 있었다(D-056). 미리보기에서도 찍어 --execute 전에 보게 한다.
         try:
-            progress(f"  → 도는 모델: {describe_llm_target(force_provider, force_model)}")
+            progress(
+                f"  → 도는 모델: {describe_llm_target(force_provider, force_model, library_path)}"
+            )
         except ValueError as e:
             progress(f"\n{e}")
+            report.aborted = str(e)
             report.elapsed_sec = time.time() - started
             return report
 
@@ -554,6 +565,7 @@ def embed_folder(
             f"\n엔진 '{engine_id}'을(를) 쓸 수 없습니다.\n"
             "→ llm_vision이면 LLM 프로바이더 설정(.env·Ollama·OAuth 프록시)을 확인하세요."
         )
+        report.aborted = f"엔진 '{engine_id}'을(를) 쓸 수 없습니다"
         report.elapsed_sec = time.time() - started
         return report
 

@@ -813,7 +813,7 @@ function _buildOverviewRow(page, { target, reviewed, allNoPosition }) {
     undo.title =
       "새로 돌린 결과가 이전만 못할 때 쓰세요. " +
       "다시 돌리기 직전으로 되돌립니다 (교정도 함께). " +
-      "교정만 되돌리려면 교정 탭의 교정 목록을 쓰세요.";
+      "교정만 되돌리려면 교정 인덱스의 교정 목록을 쓰세요.";
     undo.addEventListener("click", async (e) => {
       e.stopPropagation();
       await _restoreExtractPage(target, page.page);
@@ -822,8 +822,8 @@ function _buildOverviewRow(page, { target, reviewed, allNoPosition }) {
   }
 
   for (const [label, mode, title] of [
-    ["대조", "correction", "교정 탭에서 원본과 나란히 보고 고칩니다"],
-    ["영역", "layout", "레이아웃 탭에서 읽을 영역을 확인·수정합니다"],
+    ["대조", "correction", "교정 인덱스에서 원본과 나란히 보고 고칩니다"],
+    ["영역", "layout", "레이아웃 인덱스에서 읽을 영역을 확인·수정합니다"],
   ]) {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -910,7 +910,7 @@ async function _restoreExtractPage(target, pageNumber) {
 async function _openPageInTab(pageNumber, mode) {
   const tab = document.querySelector(`.mode-tab[data-mode="${mode}"]`);
   if (!tab || tab.hidden) {
-    showToast(`«${mode}» 탭을 찾을 수 없습니다.`, "error");
+    showToast(`«${mode}» 인덱스를 찾을 수 없습니다.`, "error");
     return;
   }
 

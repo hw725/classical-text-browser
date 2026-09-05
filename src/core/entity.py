@@ -330,7 +330,39 @@ def doc_units(doc_path: str | Path, document_id: str, part_id: str | None = None
             dirty = rematch(data, page_texts, head) > 0 or dirty
         if dirty:
             save_doc_boundaries(doc_path, data)
-        units.extend(compute_units(data, lines, page_texts))
+        # 시작 행 좌표(bbox)가 없는 경계 — 옛 파일이거나 만들 때 L2와 안 맞았던 것 — 는 지금
+        # 다시 잰다. 이것이 없으면 트리를 눌러도 PDF에 시작 행 점선이 안 보인다(2026-09-06 지적).
+        # 파일에는 쓰지 않는다: 읽기 경로에서 원본 저장소를 바꾸지 않고, 잰 값이 None이면
+        # 다음에 다시 시도한다.
+        built = compute_units(data, lines, page_texts)
+        units.extend(_fill_missing_bbox(doc_path, pid, data, built))
+    return units
+
+
+def _fill_missing_bbox(doc_path: Path, part_id: str, data: dict, units: list[dict]) -> list[dict]:
+    """anchor.bbox가 비어 있는 단위에 시작 행의 L2 좌표를 채운다(메모리에서만).
+
+    입력: 문헌 경로·권·경계 파일(data — 시작 위치를 여기서 찾는다)·단위 목록.
+    출력: 같은 목록(제자리 수정).
+    """
+    from core.segmentation import boundary_bbox
+
+    starts = {b.get("id"): b.get("start") for b in data.get("boundaries") or []}
+    for u in units:
+        meta = u.get("metadata") or {}
+        anchor = meta.get("anchor") or {}
+        if anchor.get("bbox") is not None:
+            continue
+        start = starts.get(u.get("id"))
+        if not start:
+            continue
+        try:
+            pos = {"page": start["page"], "line": start["line"], "offset": start.get("offset") or 0}
+            anchor["bbox"] = boundary_bbox(doc_path, part_id, pos, {**pos, "offset": None})
+        except Exception:  # noqa: BLE001 — 좌표를 못 재도 트리는 나와야 한다
+            continue
+        meta["anchor"] = anchor
+        u["metadata"] = meta
     return units
 
 

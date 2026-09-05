@@ -1427,7 +1427,7 @@ function initWorkspaceProfile() {
         showToast(
           next === "extract"
             ? "추출 모드 — 열람·레이아웃·교정만 남겼습니다."
-            : "교감 모드 — 모든 작업 탭을 표시합니다.",
+            : "교감 모드 — 모든 작업 인덱스를 표시합니다.",
           "info"
         );
       }

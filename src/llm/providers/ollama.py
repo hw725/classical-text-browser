@@ -115,14 +115,19 @@ class OllamaProvider(BaseLlmProvider):
 
     @property
     def _url(self) -> str:
-        url = self.config.get("ollama_url", "http://127.0.0.1:11434")
-        # 찾아낸 주소는 사용자가 주소를 정해 두지 않았을 때만 쓴다 — 설정이 우선이다.
-        if OllamaProvider._url_override and not self.config.is_set("ollama_url"):
-            return OllamaProvider._url_override
+        default = "http://127.0.0.1:11434"
+        url = self.config.get("ollama_url", default)
         # 사람이 .env에 localhost로 적어 두어도 127.0.0.1로 부른다 — Windows의 IPv6 우선 시도가
         # 호출마다 2초를 버리고, 느린 기기에서는 제한 시간을 넘겨 «Ollama 없음»으로 오판한다
         # (2026-09-05, 다른 PC에서 Ollama가 떠 있는데 안 잡히던 보고).
-        return url.replace("://localhost:", "://127.0.0.1:").replace("://localhost/", "://127.0.0.1/")
+        url = url.replace("://localhost:", "://127.0.0.1:").replace("://localhost/", "://127.0.0.1/")
+        # 찾아낸 주소([::1])는 사용자가 «다른» 주소를 정해 두지 않았을 때 쓴다. 기본 주소를 그대로
+        # 적어 둔 것은 is_alive가 [::1]도 보는 조건과 같아야 한다 — 전에는 is_alive는 [::1]에서
+        # 찾았다고 «떠 있음»으로 보고하면서 호출은 127.0.0.1로 나가 실패했다(Codex 지적 2026-09-06).
+        explicit_other = self.config.is_set("ollama_url") and url.rstrip("/") != default
+        if OllamaProvider._url_override and not explicit_other:
+            return OllamaProvider._url_override
+        return url
 
     async def _pick_vision_model(self) -> str:
         """실제로 쓸 수 있는 비전 모델을 고른다.

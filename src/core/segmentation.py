@@ -827,7 +827,12 @@ def collect_document_lines(
             bbox = None
             direction = "vertical_rtl"
             if raw.strip() and use_bbox:
-                bbox, direction = l2_lines[nonempty_i]
+                bbox, direction, _t = l2_lines[nonempty_i]
+            elif raw.strip() and l2_lines:
+                # 행 수가 어긋난 쪽 — 글자로 닮은 L2 행을 찾아 좌표를 준다(anchor_bbox와 같은 규칙)
+                k = _match_line_by_text(raw, [t for _b, _d, t in l2_lines])
+                if k is not None:
+                    bbox, direction, _t = l2_lines[k]
             if raw.strip():
                 nonempty_i += 1
             lines.append(
@@ -878,7 +883,7 @@ def _l2_line_boxes(doc_path: Path, part_id: str, page: int) -> list[tuple[list, 
         direction = res.get("writing_direction") or "vertical_rtl"
         for line in res.get("lines") or []:
             if (line.get("text") or "").strip():
-                out.append((line.get("bbox"), direction))
+                out.append((line.get("bbox"), direction, line.get("text") or ""))
     return out
 
 
@@ -950,8 +955,9 @@ def line_bbox_index(doc_path: str | Path, part_id: str, page: int) -> dict:
         return {}
     pairs = _l2_line_boxes(Path(doc_path), part_id, page)
     return {
-        "boxes": [b for b, _d in pairs],
-        "directions": [d for _b, d in pairs],
+        "boxes": [b for b, _d, _t in pairs],
+        "directions": [d for _b, d, _t in pairs],
+        "texts": [t for _b, _d, t in pairs],
         "image_width": data.get("image_width"),
         "image_height": data.get("image_height"),
     }
@@ -1052,8 +1058,9 @@ def anchor_bbox(
     위아래, 가로쓰기는 좌우로 자른다.
 
     L4의 line_index는 빈 행을 포함한 번호다. L2 행은 비어 있지 않은 행만 있으므로,
-    같은 쪽의 L4 텍스트에서 앞선 빈 행 수를 빼서 대응시킨다. 수가 어긋나면 None —
-    틀린 좌표를 보여 주는 것보다 안 보여 주는 게 낫다.
+    같은 쪽의 L4 텍스트에서 앞선 빈 행 수를 빼서 대응시킨다. 수가 어긋나면 그 행의 **글자**로
+    L2 행을 찾는다(교정으로 행이 합쳐지거나 갈라진 쪽 — 2026-09-06 실측: L2 11행·L4 10행이라
+    트리를 눌러도 점선이 안 보였다). 닮은 행이 없으면 None — 틀린 좌표보다 안 보여 주는 게 낫다.
     """
     from core.document import get_corrected_text
 
@@ -1066,9 +1073,14 @@ def anchor_bbox(
         return None
     raw = text.split("\n")
     nonempty = [i for i, t in enumerate(raw) if t.strip()]
-    if len(nonempty) != len(idx["boxes"]) or line_index not in nonempty:
+    if line_index not in nonempty:
         return None
-    k = nonempty.index(line_index)
+    if len(nonempty) == len(idx["boxes"]):
+        k = nonempty.index(line_index)
+    else:
+        k = _match_line_by_text(raw[line_index], idx.get("texts") or [])
+        if k is None:
+            return None
     box = list(idx["boxes"][k])
     n = max(1, len(raw[line_index]))
     cut_start = bool(offset and offset > 0)
@@ -1087,6 +1099,29 @@ def anchor_bbox(
         "image_width": idx["image_width"],
         "image_height": idx["image_height"],
     }
+
+
+def _match_line_by_text(l4_line: str, l2_texts: list[str]) -> Optional[int]:
+    """L4 행 글자로 가장 닮은 L2 행의 번호. 공백을 뺀 글자열의 유사도가 0.6 이상일 때만.
+
+    입력: l4_line — 확정본의 한 행. l2_texts — 그 쪽 L2 행들(비어 있지 않은 것만, 블록 순서).
+    출력: 번호 또는 None(닮은 행이 없다). 같은 점수면 앞 행.
+    왜 0.6인가: 교정으로 두세 자가 바뀐 행은 0.8 안팎, 전혀 다른 행은 0.3 아래였다(사본 실측).
+    """
+    import difflib
+
+    want = "".join(l4_line.split())
+    if not want:
+        return None
+    best, best_k = 0.0, None
+    for k, t in enumerate(l2_texts):
+        have = "".join(str(t).split())
+        if not have:
+            continue
+        score = difflib.SequenceMatcher(None, want, have).ratio()
+        if score > best:
+            best, best_k = score, k
+    return best_k if best >= 0.6 else None
 
 
 def boundary_bbox(doc_path: str | Path, part_id: str, start: dict, end: dict) -> Optional[dict]:

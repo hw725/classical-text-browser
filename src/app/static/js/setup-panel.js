@@ -167,8 +167,10 @@ function _oauthRow() {
     }
     if (!wrap.isConnected) stop();
   };
-  const poll = async () => {
-    if (++ticks > 150 || !wrap.isConnected) {
+  const poll = async (initial = false) => {
+    // 처음 한 번은 아직 DOM에 붙기 전에 불린다 — isConnected로 끊으면 상태를 영영 묻지 않는다
+    // («확인 중…»이 단추를 누를 때까지 남았다, Codex 지적 2026-09-06).
+    if (!initial && (++ticks > 150 || !wrap.isConnected)) {
       stop();
       return;
     }
@@ -192,7 +194,7 @@ function _oauthRow() {
       btn.disabled = false;
     }
   });
-  poll();
+  poll(true);
   return wrap;
 }
 

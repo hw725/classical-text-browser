@@ -152,8 +152,9 @@ def test_accounts_route_returns_every_provider(client):
             "note",
         ):
             assert key in p, f"{p['provider_id']}에 {key}가 없다"
-        assert p["status"] in ("ready", "needs_signin", "needs_key", "offline")
-        assert p["billing_model"] in ("metered", "subscription", "free")
+        # «checking»·«unknown»은 Ollama 모델 고르기가 1.5초 안에 못 끝나 뒤로 미룬 상태(D-109)
+        assert p["status"] in ("ready", "needs_signin", "needs_key", "offline", "checking")
+        assert p["billing_model"] in ("metered", "subscription", "free", "unknown")
 
 
 def test_accounts_route_never_leaks_api_keys(client):
@@ -406,3 +407,23 @@ def test_ollama_without_installed_vision_model_says_so():
     )
     status, note = _account_status(e)
     assert status == "no_model" and "gemma4:e4b" in note and "받기 시작" in note
+
+
+def test_ollama_url_uses_ipv6_override_even_if_default_is_written(monkeypatch):
+    """기본 주소를 .env에 «명시»해 둔 경우에도 [::1]에서 찾은 주소로 부른다.
+
+    is_alive는 그 경우 [::1]도 보고 override를 남기는데 _url이 무시하면 «떠 있음»으로
+    보고하고 호출은 127.0.0.1로 나가 실패한다 (Codex 지적 2026-09-06).
+    """
+    from llm.config import LlmConfig
+    from llm.providers.ollama import OllamaProvider
+
+    monkeypatch.setenv("OLLAMA_URL", "http://localhost:11434")
+    p = OllamaProvider(LlmConfig())
+    monkeypatch.setattr(OllamaProvider, "_url_override", "http://[::1]:11434")
+    try:
+        assert p._url == "http://[::1]:11434"
+        monkeypatch.setenv("OLLAMA_URL", "http://10.0.0.5:11434")
+        assert p._url == "http://10.0.0.5:11434"  # 다른 주소를 정해 두면 그것이 우선
+    finally:
+        OllamaProvider._url_override = None

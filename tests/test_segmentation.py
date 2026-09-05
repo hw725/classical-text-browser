@@ -1599,3 +1599,36 @@ def test_auto_tree_makes_a_container_from_a_volume_heading(client, tmp_path):
     assert vol[0]["start"] == {"page": 1, "line": 0, "offset": 0}
     # 기사도 함께 선다 — 卷만 남고 나머지가 사라지면 안 된다
     assert any(b["role"] == "article" for b in rows)
+
+
+def test_boundary_bbox_falls_back_to_text_match_when_counts_differ(tmp_path):
+    """교정으로 행이 합쳐져 L4 행 수가 L2와 달라도, 글자로 닮은 L2 행을 찾아 좌표를 준다.
+
+    2026-09-06 실측: 자동 트리 문헌에서 L2 11행·L4 10행이라 트리를 눌러도 시작 행 점선이
+    안 보였다. 위치↔텍스트 연동은 핵심 기능이라 «수가 다르면 포기»는 안 된다.
+    """
+    import json
+
+    from src.core.segmentation import anchor_bbox
+
+    doc = tmp_path / "documents" / "d"
+    (doc / "L4_text" / "pages").mkdir(parents=True)
+    (doc / "L2_ocr").mkdir()
+    manifest = {"document_id": "d", "parts": [{"part_id": "v1"}]}
+    (doc / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    # L4는 앞 두 행이 한 행으로 합쳐졌다(2행) — L2는 3행
+    l4 = doc / "L4_text" / "pages" / "v1_page_001.txt"
+    l4.write_text("甲乙丙丁戊己\n黄李語録劉尹綱目", encoding="utf-8")
+    lines = [
+        {"text": "甲乙丙", "bbox": [900, 100, 940, 500]},
+        {"text": "丁戊己", "bbox": [800, 100, 840, 500]},
+        {"text": "黄李語錄劉尹網目", "bbox": [700, 100, 740, 500]},  # 두 자가 이체자
+    ]
+    l2 = {"part_id": "v1", "page_number": 1, "image_width": 1000, "image_height": 1500,
+          "ocr_results": [{"layout_block_id": "b", "lines": lines}]}
+    (doc / "L2_ocr" / "v1_page_001.json").write_text(json.dumps(l2), encoding="utf-8")
+    a = anchor_bbox(doc, "v1", 1, 1)
+    assert a and a["bbox"] == [700, 100, 740, 500]
+    # 닮은 행이 전혀 없으면 None — 틀린 좌표보다 안 보여 주는 게 낫다
+    l4.write_text("甲乙丙丁戊己\n天地玄黃宇宙洪荒", encoding="utf-8")
+    assert anchor_bbox(doc, "v1", 1, 1) is None

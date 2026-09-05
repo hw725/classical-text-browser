@@ -258,10 +258,17 @@ class OpenAiOAuthProvider(OpenAiProvider):
         except Exception as e:
             msg = str(e)
             # 이 프록시 판이 모르는 인자는 빼고 한 번 더 — 형식 강제·추론 옵션은 없어도 돈다.
-            if "text" in req or "reasoning" in req:
+            # 단, «인자를 거부한» 오류(400)일 때만이다. 로그인 만료(401)·한도(429)·연결 실패에
+            # 같은 요청을 되풀이하면 한도만 축나고 결과는 같다(Codex 지적 2026-09-06).
+            if ("text" in req or "reasoning" in req) and self._is_param_rejection(e):
                 req.pop("text", None)
                 req.pop("reasoning", None)
-                response = await client.responses.create(**req)
+                try:
+                    response = await client.responses.create(**req)
+                except Exception as e2:  # noqa: BLE001
+                    raise LlmProviderError(
+                        f"OpenAI(OAuth) vision 호출 실패: {str(e2)[:200]}"
+                    ) from e2
             else:
                 raise LlmProviderError(f"OpenAI(OAuth) vision 호출 실패: {msg[:200]}") from e
         elapsed = _time.monotonic() - t0
@@ -290,6 +297,24 @@ class OpenAiOAuthProvider(OpenAiProvider):
             elapsed_sec=round(elapsed, 2),
             raw={"id": getattr(response, "id", None), "status": status},
         )
+
+    @staticmethod
+    def _is_param_rejection(exc: Exception) -> bool:
+        """프록시가 «모르는 인자»라고 거부한 오류인가 — 그때만 인자를 빼고 다시 부른다.
+
+        입력: 예외. 출력: 400 계열이거나 문구가 인자 거부를 말하면 True.
+        401(로그인)·403·429(한도)·5xx·연결 오류는 False — 다시 보내도 같다.
+        """
+        status = getattr(exc, "status_code", None)
+        if status in (401, 403, 429) or (isinstance(status, int) and status >= 500):
+            return False
+        if status == 400:
+            return True
+        msg = str(exc).lower()
+        marks = (
+            "unknown parameter", "unsupported", "unrecognized", "invalid_request", "not supported",
+        )
+        return any(k in msg for k in marks)
 
     def _create_client(self):
         """openai-oauth 프록시를 가리키는 AsyncOpenAI 클라이언트 생성.

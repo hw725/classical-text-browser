@@ -37,6 +37,8 @@ const pdfState = {
   scale: 1.0,          // 현재 줌 배율
   rendering: false,    // 렌더링 중 여부 (중복 렌더링 방지)
   pendingPage: null,   // 렌더링 대기 중인 페이지 번호
+  loading: null,       // 받는 중인 PDF {docId, partId, promise, wantPage} — 같은 PDF를 두 번 받지 않는다
+  loadSeq: 0,          // 로드 순번 — 늦게 끝난 옛 로드가 새 로드를 덮어쓰지 않게
   currentDocId: null,  // 현재 로드된 문헌 ID
   currentPartId: null, // 현재 로드된 권 ID
   filterMode: 0,       // 이미지 필터: 0=원본, 1=흑백, 2=고대비, 3=반전
@@ -166,8 +168,19 @@ async function loadPdfPage(docId, partId, pageNum) {
     return;
   }
 
-  // 새 PDF 로드
+  // 같은 PDF를 **지금 받는 중**이면 그 로드를 기다렸다가 쪽만 옮긴다. 두 번 받으면 늦게 끝난
+  // 쪽이 먼저 끝난 쪽을 덮어쓴다 — 문헌을 열자마자 8쪽을 누르면 상태는 8쪽인데 그림은
+  // 1쪽(표지)이었다(실측 2026-09-06, headless).
+  if (pdfState.loading && pdfState.loading.docId === docId && pdfState.loading.partId === partId) {
+    pdfState.loading.wantPage = pageNum;
+    try { await pdfState.loading.promise; } catch (_) { return; }
+    await _renderPage(pdfState.loading && pdfState.loading.wantPage ? pdfState.loading.wantPage : pageNum);
+    return;
+  }
+
+  // 새 PDF 로드 — 순번을 붙여, 더 새 로드가 시작됐으면 이 결과는 버린다.
   const url = `/api/documents/${docId}/pdf/${partId}`;
+  const mySeq = (pdfState.loadSeq = (pdfState.loadSeq || 0) + 1);
   try {
     // 쪽 하나를 보려고 PDF 전체를 내려받지 않는다.
     //
@@ -183,10 +196,16 @@ async function loadPdfPage(docId, partId, pageNum) {
       disableStream: true,
       rangeChunkSize: 262144,
     });
-    pdfState.pdfDoc = await loadingTask.promise;
+    pdfState.loading = { docId, partId, promise: loadingTask.promise, wantPage: pageNum };
+    const loadedDoc = await loadingTask.promise;
+    if (mySeq !== pdfState.loadSeq) return; // 그 사이 다른 PDF를 열었다 — 이 결과는 버린다
+    const wantPage = (pdfState.loading && pdfState.loading.wantPage) || pageNum;
+    pdfState.loading = null;
+    pdfState.pdfDoc = loadedDoc;
     pdfState.totalPages = pdfState.pdfDoc.numPages;
     pdfState.currentDocId = docId;
     pdfState.currentPartId = partId;
+    pageNum = wantPage; // 받는 동안 다른 쪽을 눌렀으면 그 쪽을 그린다
 
     // UI 업데이트
     document.getElementById("pdf-page-total").textContent =
@@ -194,11 +213,16 @@ async function loadPdfPage(docId, partId, pageNum) {
     const pageInput = document.getElementById("pdf-page-input");
     pageInput.max = pdfState.totalPages;
 
-    // 첫 로드 시 사용자가 선택한 맞춤 모드로 자동 맞춤
+    // 첫 로드 시 사용자가 선택한 맞춤 모드로 자동 맞춤.
+    // 맞춤이 «현재 쪽»을 그리므로 먼저 요청한 쪽으로 놓는다 — 전에는 기본값 1쪽을 한 번
+    // 그린 뒤에야 요청한 쪽을 그려, 무거운 스캔에서는 몇 초 동안 표지가 보였다(2026-09-06).
+    pdfState.currentPage = pageNum;
     await _autoFit();
     await _renderPage(pageNum);
     _updateFitLabel();
   } catch (err) {
+    if (mySeq !== pdfState.loadSeq) return;
+    pdfState.loading = null;
     console.error("PDF 로드 실패:", err);
     const container = document.getElementById("pdf-canvas-container");
     // PDF가 없는 문헌 (HWP 전용 등)이면 친절한 메시지 표시

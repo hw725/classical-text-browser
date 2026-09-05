@@ -8,13 +8,26 @@
 from __future__ import annotations
 
 
-def list_vision_models() -> list[dict]:
+def make_router(library=None):
+    """CLI용 LlmRouter. 서고를 주면 그 서고의 .env(앱이 키를 저장하는 곳)를 읽는다.
+
+    입력: library — 서고 경로(Path·str) 또는 None(프로젝트 루트 .env만).
+    왜: 앱은 API 키·Ollama 주소를 서고 .env에 쓴다. CLI가 프로젝트 루트만 보면 GUI에서 넣은
+    키가 «없는 것»이 된다(Codex 지적 2026-09-06).
+    """
+    from pathlib import Path
+
+    from llm.config import LlmConfig
+    from llm.router import LlmRouter
+
+    return LlmRouter(LlmConfig(library_root=Path(library)) if library else None)
+
+
+def list_vision_models(library=None) -> list[dict]:
     """지금 쓸 수 있는 비전 모델. [{provider, model, display, cost}] — 폴백 순서대로."""
     import asyncio
 
-    from llm.router import LlmRouter
-
-    models = asyncio.run(LlmRouter().get_available_models())
+    models = asyncio.run(make_router(library).get_available_models())
     return [
         {
             "provider": m["provider"],
@@ -44,7 +57,7 @@ def format_list(models: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def resolve(spec: str, models: list[dict] | None = None) -> tuple[str, str | None]:
+def resolve(spec: str, models: list[dict] | None = None, library=None) -> tuple[str, str | None]:
     """«3»·«astra»·«openai_oauth:gpt-6-astra»·«gemini» → (provider, model).
 
     - 번호: 목록의 그 줄.
@@ -57,7 +70,7 @@ def resolve(spec: str, models: list[dict] | None = None) -> tuple[str, str | Non
     if not spec or not spec.strip(": "):
         raise ValueError("모델을 비워 둘 수 없습니다.")
     if spec.isdigit():
-        models = list_vision_models() if models is None else models
+        models = list_vision_models(library) if models is None else models
         i = int(spec)
         if not 1 <= i <= len(models):
             raise ValueError(f"{i}번은 없습니다.\n" + format_list(models))
@@ -71,7 +84,7 @@ def resolve(spec: str, models: list[dict] | None = None) -> tuple[str, str | Non
             return provider.strip().lower(), (model.strip() or None)
     if spec.lower() in known_providers:
         return spec.lower(), None
-    models = list_vision_models() if models is None else models
+    models = list_vision_models(library) if models is None else models
     exact = [m for m in models if spec.lower() == m["model"].lower()]
     if len(exact) == 1:
         return exact[0]["provider"], exact[0]["model"]
@@ -84,9 +97,9 @@ def resolve(spec: str, models: list[dict] | None = None) -> tuple[str, str | Non
     raise ValueError(f"'{spec}'에 맞는 모델이 여럿입니다 — 더 길게 적으세요:\n{cands}")
 
 
-def pick_interactive() -> str:
+def pick_interactive(library=None) -> str:
     """목록을 보여 주고 번호를 묻는다. 돌려주는 값은 «프로바이더:모델»."""
-    models = list_vision_models()
+    models = list_vision_models(library)
     print(format_list(models))
     if not models:
         raise ValueError("고를 모델이 없습니다.")

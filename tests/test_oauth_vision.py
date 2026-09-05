@@ -61,3 +61,40 @@ def test_truncated_json_is_an_error(monkeypatch):
     monkeypatch.setattr(p, "_create_client", lambda: SimpleNamespace(responses=_Trunc([])))
     with pytest.raises(Exception, match="truncated"):
         asyncio.run(p.call_with_image("read", b"x", response_format="json"))
+
+
+def test_no_retry_on_auth_or_quota_errors(monkeypatch):
+    """401·429에는 같은 요청을 되풀이하지 않는다 — 한도만 축난다 (Codex 지적 2026-09-06)."""
+    from llm.providers.base import LlmProviderError
+
+    class _Auth(_FakeResponses):
+        async def create(self, **req):
+            self.log.append(req)
+            raise type("AuthErr", (Exception,), {"status_code": 401})("Unauthorized")
+
+    log = []
+    p = OpenAiOAuthProvider(LlmConfig())
+    monkeypatch.setattr(p, "_create_client", lambda: SimpleNamespace(responses=_Auth(log)))
+    with pytest.raises(LlmProviderError):
+        asyncio.run(p.call_with_image("read", b"PNGDATA", response_format="json", model="m"))
+    assert len(log) == 1
+
+
+def test_retry_without_format_on_param_rejection(monkeypatch):
+    """400(모르는 인자)에는 text/reasoning을 빼고 한 번 더 부른다."""
+
+    class _Bad(_FakeResponses):
+        async def create(self, **req):
+            self.log.append(req)
+            if "text" in req:
+                raise type("BadReq", (Exception,), {"status_code": 400})("Unknown parameter: text")
+            return SimpleNamespace(
+                output_text='{"text":"hi"}', status="completed", incomplete_details=None,
+                usage=None, model="m", id="r2",
+            )
+
+    log = []
+    p = OpenAiOAuthProvider(LlmConfig())
+    monkeypatch.setattr(p, "_create_client", lambda: SimpleNamespace(responses=_Bad(log)))
+    r = asyncio.run(p.call_with_image("read", b"PNGDATA", response_format="json", model="m"))
+    assert r.text and len(log) == 2 and "text" not in log[1]

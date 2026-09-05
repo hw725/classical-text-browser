@@ -24,6 +24,9 @@ from pathlib import Path
 # 저장할 수 있는 키와 설명. 여기 없는 키는 거절한다 — 오타가 조용히 무시되지 않게.
 ENGINES = ("llm_vision", "paddleocr", "ndlocr", "ndlkotenocr", "ndlkotenocr-full")
 PROVIDERS = ("ollama", "openai_oauth", "gemini", "openai", "anthropic")
+# ocr.paddleocr_engine.PADDLE_LANGUAGES와 같은 다섯. 그 모듈을 여기서 import하면 설정 한 줄
+# 저장에 OCR 스택이 딸려 온다 — 이름만 베낀다(바뀌면 test_cli_config가 잡는다).
+PADDLE_LANGS = ("ch", "chinese_cht", "korean", "japan", "en")
 
 KEYS: dict[str, str] = {
     "engine": "OCR 엔진 (llm_vision·paddleocr·ndlocr·ndlkotenocr)",
@@ -82,9 +85,14 @@ def coerce(key: str, value: str):
         raise ValueError("line_detection은 true 또는 false")
     if key == "sleep":
         try:
-            return float(value)
+            sec = float(value)
         except ValueError as e:
             raise ValueError("sleep은 초(숫자)") from e
+        if sec < 0 or sec != sec:  # 음수·NaN
+            raise ValueError("sleep은 0 이상의 초")
+        return sec
+    if key == "paddle_lang" and value.strip() not in PADDLE_LANGS:
+        raise ValueError(f"paddle_lang은 {', '.join(PADDLE_LANGS)} 중 하나")
     if key == "paddle_device" and value not in ("auto", "cpu", "gpu"):
         raise ValueError("paddle_device는 auto·cpu·gpu 중 하나")
     if key == "engine" and value.strip() not in ENGINES:
