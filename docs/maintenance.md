@@ -23,7 +23,7 @@
 
 ## 1. 파일을 다룰 때 — 되풀이하지 말 것
 
-다섯 가지 모두 **실제로 사고가 난 뒤** 적힌 것이다. 각각의 사고 기록이 괄호 안에 있다.
+여섯 가지 모두 **실제로 사고가 난 뒤** 적힌 것이다. 각각의 사고 기록이 괄호 안에 있다.
 
 ### 1.1 JSON 저장은 `write_json_atomic()` (D-069)
 
@@ -96,7 +96,7 @@ q 2064 0 0 2893 0 0 cm /I0 Do Q
 - 하네스·파이프 안에서는 콘솔이 없어 `chcp`가 실패하고 cp949로 읽히므로 **재현되지
   않는다.** 더블클릭(새 콘솔)에서만 난다. 그래서 `tests/test_doc_drift.py::
   test_batch_files_are_ascii`가 바이트로 검사한다.
-- `install.bat`은 한글 안내문이 많아 아직 대상 밖이다. 같은 증상이 보이면 같은 처방.
+- `install.bat`도 ASCII 껍데기가 됐고 한글 안내는 `install.ps1`에 있다. 세 `.bat` 모두 같은 테스트가 검사한다.
 - **서버가 떠 있는 동안 `start_server.bat`을 편집하지 않는다.** cmd는 배치 파일을 실행하면서
   디스크에서 다시 읽는다. 서버를 끄면 그 cmd가 «편집된» 파일의 엉뚱한 줄(else 분기
   `--library ""`)을 이어서 실행해 유령 서버가 8000에 떴다(2026-09-03 실측). 편집 전에 서버를
@@ -207,7 +207,8 @@ uv run python -m pytest
 4. **실제 문헌으로 E2E** — 등록 → OCR → 검수 → PDF → 내려받기, 그리고
    **산출물을 열어서 본다.** 숫자만 보지 않는다.
 5. `docs/DECISIONS.md`에 결정 카드(다음 번호)
-6. `docs/releases/vX.Y.Z.md` — 되돌릴 수 없는 변화는 **맨 위에** 적는다
+6. `docs/releases/vX.Y.Z.md` — 되돌릴 수 없는 변화는 **맨 위에** 적는다. 표제 문구
+   «되돌릴 수 없는 변화 — 있음»을 바꾸면 앱의 새 판 경고(`core/updater.py`)가 안 뜬다
 7. 버전 올리기: **`pyproject.toml` 한 곳뿐이다.** `server.py`와 화면 아래
    상태바는 설치된 패키지 메타데이터에서 읽는다(`/api/app/version`).
    **여기에 버전을 새로 적지 말 것** — 적는 곳이 둘 이상이면 반드시 어긋난다
@@ -215,7 +216,9 @@ uv run python -m pytest
 9. 커밋 → 푸시 → `git tag -a vX.Y.Z` → `git push origin vX.Y.Z`
 10. GitHub 릴리스(`gh release create`) 본문은 **하드랩을 푼 변환본**으로 게시한다 —
     릴리스 본문은 문단 안 개행을 그대로 렌더링해서, 저장소의 72자 랩 그대로 올리면
-    문장이 중간에 끊겨 보인다 (v1.2.2에서 실측)
+    문장이 중간에 끊겨 보인다 (v1.2.2에서 실측). **첫 줄 H1은 뺀다** — 릴리스 제목이
+    이미 그것이라 두 번 보인다(v1.3.0에서 실측). 같은 판 번호로 태그를 옮기면 앱의
+    「새 판 확인」은 원격 main보다 뒤진 커밋 수로 새 판을 판정한다
 
 `release`·`feat`·`refactor` 커밋은 doc-sync 게이트가 걸린다.
 `--no-verify`로 우회하지 않는다.
@@ -293,14 +296,14 @@ src/
 ├── llm/          # LLM 라우터 + 프로바이더
 ├── ocr/          # OCR 엔진 (NDL古典籍OCR Full/Lite + NDLOCR + LLM 비전 + PaddleOCR)
 │              #  + line_detector: 인식 없이 줄 위치만 찾는다 (텍스트 레이어 배치용)
-├── export/       # 연구 산출물 내보내기 (텍스트 레이어를 텍스트 레이어 PDF)
+├── export/       # 연구 산출물 내보내기 (텍스트 레이어 PDF — 검색되는 PDF)
 ├── parsers/      # 서지정보 파서 (NDL, 국립공문서관, KORCIS, KOSTMA, 장서각, 규장각 + 범용 LLM)
 ├── cli/          # CLI 도구
 └── app/          # 웹 앱 (FastAPI + static)
 schemas/
 ├── source_repo/  # 원본 저장소 스키마 (7개)
 ├── interp/       # 해석 저장소 스키마 (5개)
-└── core/         # 코어 엔티티 스키마 (7개 — 경계 목록 포함, D-092)
+└── core/         # 코어 엔티티 스키마 (6개 — 경계 목록 포함, D-092) + schemas/exchange.schema.json 1개
 ```
 
 ---
@@ -312,5 +315,5 @@ schemas/
 | [DECISIONS.md](DECISIONS.md) | 왜 이렇게 되어 있는지 — **고치기 전에 반드시** |
 | [architecture-diagrams.md](architecture-diagrams.md) | 전체 그림이 필요할 때 |
 | [../AGENTS.md](../AGENTS.md) | 인지 부채 지도 — 어디가 위험한지 |
-| [../CLAUDE.md](../CLAUDE.md) | 작업 규칙 요약(이 문서의 축약본) |
+| [../CLAUDE.md](../CLAUDE.md) | 작업 규칙 요약 — 의존성 결합 지점·파일 다루기 표는 그쪽이 더 자세하다 |
 | [core-schema-v1.3.md](core-schema-v1.3.md) · [operation-rules-v1.0.md](operation-rules-v1.0.md) | 스키마를 건드릴 때 |

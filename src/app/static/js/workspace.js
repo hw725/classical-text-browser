@@ -1462,7 +1462,7 @@ async function _discardEmptyInterpretations(docId) {
     if (data.discarded && data.discarded.length && typeof showToast === "function") {
       showToast(
         `쓰지 않는 해석 저장소 ${data.discarded.length}개를 휴지통으로 옮겼습니다. ` +
-          "(설정 → 휴지통에서 복원할 수 있습니다)",
+          "(서고 폴더의 .trash/ 에 있습니다)",
         "info"
       );
       if (typeof loadLibraryInfo === "function") loadLibraryInfo();

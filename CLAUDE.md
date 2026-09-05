@@ -70,7 +70,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
    기존 서고를 열 수 없게 되는 변경은 **되돌릴 수 없다.**
 
 ## 백엔드 모듈 구조 (src/app/)
-server.py는 FastAPI 앱 생성 + 라우터 마운트 + 미들웨어만 담당하는 조립 파일(152줄).
+server.py는 FastAPI 앱 생성 + 라우터 마운트 + 미들웨어만 담당하는 조립 파일.
 실제 API 엔드포인트 214개가 9개 라우터 모듈에 분산 (2026-09-05 기준 실측):
 
 ```

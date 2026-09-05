@@ -67,7 +67,8 @@ ctb ocr "논문.pdf" --execute
 ### 2단계 — 설치
 
 `install.bat` 더블클릭 (Windows) 또는 `./install.sh` (macOS·Linux).
-Python·Git·uv가 없으면 함께 설치되고, 이어서 `uv sync`가 돕니다. 고서·일본어 엔진을
+Git·uv가 없으면 함께 설치되고 앱 전용 Python 3.12는 uv가 받아 오며, 이어서 `uv sync`가 돕니다.
+Ollama가 떠 있으면 기본 비전 모델(약 5GB)도 받습니다. 고서·일본어 엔진을
 함께 깔지 물어봅니다 — 나중에 앱 안(처음 설정 ▸ 글자 인식)에서 단추로 더할 수 있습니다.
 
 **설치는 하나뿐이고, 약 828MB입니다.** 그중 **79%가 OCR 스택**입니다.
@@ -96,7 +97,7 @@ Python·Git·uv가 없으면 함께 설치되고, 이어서 `uv sync`가 돕니�
 
 ### 3단계 — 쓰기: 앱 또는 명령 한 줄
 
-**앱** — `start_server.bat` (Windows) 또는 `./start_server.sh` → `http://localhost:8000`
+**앱** — `start_server.bat` (Windows) 또는 `./start_server.sh` → `http://127.0.0.1:8000`
 → **PDF나 이미지를 창 안에 끌어다 놓으세요.** 서고가 없으면 자동으로 만들어집니다.
 
 **명령 한 줄** — 논문 몇 편만 처리할 것이라면 앱을 열 필요가 없습니다.
@@ -175,7 +176,7 @@ docker compose up -d --build
 | 문서 | 무엇이 있나 |
 |---|---|
 | [**유지보수 안내**](docs/maintenance.md) | **고치기 전에 볼 것** — 되돌릴 수 없는 것, 되풀이하지 말 것, 테스트 사각지대 |
-| [DECISIONS.md](docs/DECISIONS.md) | 설계 결정 근거 (D-001~D-078) |
+| [DECISIONS.md](docs/DECISIONS.md) | 설계 결정 근거 (D-001~D-110) |
 | [아키텍처 다이어그램](docs/architecture-diagrams.md) | 전체 그림 (Mermaid 13종) |
 | [platform-v7.md](docs/platform-v7.md) | 8층 모델·이중 저장소 설계 |
 | [AGENTS.md](AGENTS.md) · [인지 부채 감사](docs/cognitive-debt-audit.html) | 어디가 위험한가 |

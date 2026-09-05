@@ -58,7 +58,7 @@ mobile 검출 52초, 스레드 20개로도 61초. OneDNN을 켜면 여전히
   PaddleOCR 대신 onnxruntime 경로(NDL 엔진이 쓰는 것, 7초/쪽)로 검출만 옮기기.
 - 실측 스크립트: scratchpad `paddle_prof2.py` (server|mobile|mkldnn|threads).
 
-## B-006 PaddleOCR 검출을 onnxruntime으로 (2026-09-06, 조건부 채택)
+## B-006 PaddleOCR 검출을 onnxruntime으로 (2026-09-06, 실측 조건부 — 제자리 줄 수 유지 시 교체 → **미달, 보류**)
 
 기본 번들의 PaddleOCR은 인식이 아니라 **글자 위치 검출**(형광 자리, D-055) 때문에 들어 있다.
 대가가 크다 — 설치 651MB, 첫 실행 모델 240MB(Baidu), Windows CPU에서 OneDNN 크래시 회피 경로.
@@ -70,6 +70,22 @@ mobile 검출 52초, 스레드 20개로도 61초. OneDNN을 켜면 여전히
 - 바꾸면: paddlepaddle은 `--extra paddle`(선택)로, 기본은 onnxruntime + 검출 모델. install.ps1의
   5단계(모델 미리 받기)는 필요 없어진다.
 - 실측 스크립트·결과는 이 항목 아래에 덧붙인다.
+
+**실측 결과(2026-09-06) — 미달, 바꾸지 않았다.** 같은 논문 15쪽, 기준 L2는 ChatGPT 계정(OAuth)
+gpt-5.4-mini로 새로 만든 것(첫 시도는 D-110의 OAuth 이미지 거부로 막혀 고친 뒤 다시 돌렸다).
+같은 L2 위에 검출기만 바꿔 `embed_text_layer`를 돌렸다(스크립트 `C:	mp006_compare.py`).
+
+| 검출기 | 제자리 줄 | 검출 시간/쪽 | 전체 |
+|---|---|---|---|
+| PaddleOCR TextDetection(현재, PP-OCRv6 medium) | **142**/440 | 8.1s | 133s |
+| rapidocr 3.x(onnxruntime) PP-OCRv6 small, 기본 설정 | 97/440 | 0.9s | 25s |
+| rapidocr PP-OCRv6 medium, limit 736/min | 97/440 | — | 190s |
+| rapidocr PP-OCRv6 medium, limit 1280/max | 97/440 | — | 186s |
+
+잉크 경고는 둘 다 0건. 검출은 9배 빠르지만 제자리 줄이 142 → 97로 줄어 조건을 못 지켰다.
+(기준 L2가 바뀌어 위의 433/502와는 절대값이 다르다 — 같은 L2 안의 비교만 뜻이 있다.)
+남은 가설: rapidocr의 후처리(unclip_ratio 1.6·box_thresh 0.5·use_dilation)가 Paddle 기본과 달라
+행 상자가 다르게 묶인다. 후처리를 Paddle과 맞춘 뒤 다시 재면 뒤집힐 수 있다 — 다음 판에서.
 
 ## B-007 자동 업데이트 (2026-09-06, 사용자 제안)
 

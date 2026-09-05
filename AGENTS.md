@@ -28,8 +28,8 @@ OCR, 교정, 번역, 주석 작업을 모두 수행한다.
   - uv.lock은 git에 포함
 
 ## 백엔드 모듈 구조 (src/app/)
-server.py는 FastAPI 앱 생성 + 라우터 마운트만 담당하는 조립 파일(~85줄).
-실제 API 엔드포인트는 9개 라우터 모듈에 분산 (2026-09-04 기준 실측):
+server.py는 FastAPI 앱 생성 + 라우터 마운트만 담당하는 조립 파일.
+실제 API 엔드포인트는 9개 라우터 모듈에 분산 (2026-09-05 기준 실측):
 
 ```
 src/app/
@@ -65,6 +65,7 @@ src/app/
 - LayoutBlock: 원본 저장소 L3의 페이지 영역 (OCR 읽기 순서 단위)
 - OcrResult: 원본 저장소 L2의 OCR 인식 결과
 - 단위(unit): 코어 스키마의 해석용 텍스트 단위 (source_ref로 원본 추적). v1.3부터 경계 목록에서 만든 읽기 보기이고 이름도 `unit`이다(D-092·D-093)
+- 편성(composition): 경계를 정하는 일. **원본 저장소의 것**(D-097). 사이드바 「내용」 트리는 문헌 > 권 > 단위(D-098) — Work 엔티티는 D-099에서 없앴다
 - "Block"이라고만 쓰지 말고 항상 위 세 이름 중 하나를 사용할 것
 
 ## 작업 방식: CLI를 적극 활용할 것
@@ -95,8 +96,14 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 | `paddleocr` 3.7이 `pyyaml==6.0.2` 고정 | 이 저장소의 하한도 6.0.2로 내림 |
 | `paddlepaddle` 휠이 cp312까지 | `requires-python`에 `<3.13` (D-059) |
 | Windows + paddlepaddle 3.x | OneDNN이 PIR 속성 변환 미지원 → `FLAGS_use_mkldnn=0` 회피 |
-| `torch`는 전용 인덱스(`pytorch-cu124`) | CUDA 버전을 바꾸면 `[[tool.uv.index]]` URL도 함께 고쳐야 한다 |
+| `torch`는 전용 인덱스(플랫폼 분기: Windows `pytorch-cu124`·Linux `pytorch-cu126`, 2026-08-20 실측) | CUDA 버전을 바꾸면 `[[tool.uv.index]]` URL도 함께 고쳐야 한다 |
+| `ndl-lab/ndlocr-lite` **master**에서 모델 받기 | 원본이 v1.2.0에서 PARSeq 셋을 바꿔 셋이 404. 모델 URL은 **태그 1.1.3**에 고정(`src/ocr/ndlocr/__init__.py`) |
+| `torch`(cu124) ↔ `paddlepaddle-gpu` **같은 프로세스** | cuDNN 9 DLL을 따로 들고 와 먼저 뜬 쪽이 이긴다 → PaddleOCR 사용 불가. 해법은 프로세스 분리(`CTB_PADDLE_PYTHON`, D-091). `doctor.bat`이 판정한다 |
 | `opencv-contrib-python`(paddlex) ↔ `opencv-python-headless`(extras) | **같은 `cv2`를 두 배포판이 제공.** 한쪽을 지우면 공유 디렉터리가 사라져 남은 쪽까지 깨진다 — `module 'cv2' has no attribute 'IMREAD_COLOR'`. extras도 contrib판으로 통일했다 |
+
+GPU 스택은 `.venv`에 설치하지 않는다 — 별도 환경 `.venv-gpu`가 정본(D-078). 환경이 이상하면 먼저
+`doctor.bat`. **파일 다루기 규칙**(`write_json_atomic`·`resolve_part_pdf`·`fitz.open` with·L2 배율·
+로컬 서비스는 `127.0.0.1`·`.bat`은 ASCII만)은 `CLAUDE.md`「파일 다루기」표와 `docs/maintenance.md`가 정본이다.
 
 **올릴 때 절차**
 
@@ -124,9 +131,9 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 - "서버 시작" = 최대 3개 프로세스: start_server.bat가 uvicorn 외에 OpenAI OAuth 프록시
   (`npx -y openai-oauth`, 포트 10531–10540 스캔, Bearer 토큰 `oauth-proxy` 하드코딩)와
   SikuRoBERTa 표점 Docker(punctuation-service/.env 존재 시)를 자동 기동.
-- 프론트(static/)가 38,633줄 — index.html 4,826줄 단일 파일, workspace.css 7,441줄,
+- 프론트(static/)가 약 4.2만 줄 — index.html 약 4.9천 줄 단일 파일, workspace.css 약 7.9천 줄,
   JS 32개. 테스트 57파일은 전부 백엔드, **프론트 테스트 0, CI 없음.**
-  (2026-09-01 재실측. 2026-07-26 v1.2.0 감사 때 직전 대비 프론트가 줄어든 것은
+  (2026-09-06 재실측. 2026-07-26 v1.2.0 감사 때 직전 대비 프론트가 줄어든 것은
   D-069에서 죽은 코드 약 1,000줄을 걷어냈기 때문이다.)
 
 ### 안다고 착각하기 쉬운 지점
@@ -136,7 +143,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
    플래그가 UI 경고로 노출된다. 아래 "인지부채 해소 반영" 참조.
 3. LLM 결과 캐시(TTL 600초·최대 256건, `_state.py:360`) — 같은 텍스트 재요청 시 10분간
    옛 결과가 돌아올 수 있음.
-4. "가져오기" 버튼의 "준비중"은 UI만 봉인(D-037). hwp-import.js 1,034줄과 백엔드
+4. "가져오기" 버튼의 "준비중"은 UI만 봉인(D-037). hwp-import.js 약 1천 줄과 백엔드
    엔드포인트(`/api/documents/import-hwp` 등)는 살아 있음 — 재구현하지 말고 복원할 것.
    **단 D-055 이후 이 버튼은 프로필에 따라 동작이 갈린다**: 「추출」 모드에서는
    hwp-import 다이얼로그가 아니라 `POST .../text-import/from-text-layer`(단순 추출)에
@@ -179,7 +186,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 | 2 | `src/app/static/` 프론트 모놀리스 | 테스트 0·CI 없음, index.html 4,826줄 수정 회귀 감지 불가. D-055·D-067·D-069의 화면 검증은 매번 **jsdom 일회성 하네스**로 했고 **그 하네스들은 저장소에 없다** — 정식 프론트 스모크 테스트는 여전히 미결(D-053 착수 조건). 이 부채 때문에 D-069의 죽은 코드 1,000줄이 오래 살아남았다 |
 | 3 | `start_server.bat` | 암묵 부수효과 3종(프록시·Docker·포트 스캔), 실패 시 원인 추적 곤란 |
 | 4 | `src/parsers/` 5종 | 외부 사이트 의존 침묵 파손 |
-| 5 | **비교 모드 백엔드 잔재** | D-069에서 프론트 880줄을 걷어냈으나 `routers/reading.py`의 `l5_compare`·`l5_compare_at_commit` 두 라우트와 `core`의 `get_l5_compare*`가 남아 있다. **프론트에서 부르는 곳 0건.** v1.2.0 태그와 어긋나지 않게 이번에는 두었다 — 다음 판에서 정리하거나, 되살릴 계획이 있으면 그 근거를 여기 적을 것 |
+| 5 | ~~**비교 모드 백엔드 잔재**~~ | v1.3.0에서 정리됨 — `l5_compare`·`get_l5_compare*`는 코드에 없다(2026-09-06 grep 0건). D-069에서 프론트 880줄을 걷어낸 뒤 남았던 백엔드 라우트 |
 | 6 | 봉인된 「외부 파일 → 새 문헌」 가져오기 | 존재를 모르면 중복 재구현, 알면 진입점 복원만으로 재개(D-037). 백엔드는 살아 있고 `_openHwpImportDialog()` 호출자가 0건일 뿐이다. **추출 모드의 「텍스트 바로 가져오기」(`/text-import/from-text-layer`)와 혼동하지 말 것** — 그쪽은 정상 동작하는 별개 경로다 |
 | 7 | **합성 입력만으로 검증하는 습관** | D-068이 여기서 났다 — 시험용 PDF를 PyMuPDF로 만들어 써서, 실제 스캔본에만 있는 좌표 변환을 자동 테스트가 영영 만나지 못했다. 파일 형식·외부 엔진을 다루는 코드는 **실물로 한 번 돌려야** 한다 |
 
