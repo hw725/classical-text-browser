@@ -62,13 +62,19 @@ def resolve(spec: str, models: list[dict] | None = None) -> tuple[str, str | Non
         if not 1 <= i <= len(models):
             raise ValueError(f"{i}번은 없습니다.\n" + format_list(models))
         return models[i - 1]["provider"], models[i - 1]["model"]
+    known_providers = ("ollama", "openai_oauth", "gemini", "openai", "anthropic")
     if ":" in spec:
         provider, _, model = spec.partition(":")
-        return provider.strip(), (model.strip() or None)
-    known_providers = ("ollama", "openai_oauth", "gemini", "openai", "anthropic")
+        # 콜론 앞이 프로바이더일 때만 «프로바이더:모델»이다. «glm-ocr:latest»처럼 태그가 붙은
+        # 모델 이름은 그대로 모델 이름이다.
+        if provider.strip() in known_providers:
+            return provider.strip(), (model.strip() or None)
     if spec in known_providers:
         return spec, None
     models = list_vision_models() if models is None else models
+    exact = [m for m in models if spec.lower() == m["model"].lower()]
+    if len(exact) == 1:
+        return exact[0]["provider"], exact[0]["model"]
     hits = [m for m in models if spec.lower() in m["model"].lower()]
     if len(hits) == 1:
         return hits[0]["provider"], hits[0]["model"]

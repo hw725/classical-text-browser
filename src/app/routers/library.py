@@ -835,7 +835,7 @@ async def api_apply_update():
     """
     from core.updater import apply_update
 
-    result = apply_update()
+    result = await asyncio.to_thread(apply_update)  # git·uv 대기 — 이벤트 루프 밖에서
     return JSONResponse(result, status_code=200 if result["ok"] else 400)
 
 
@@ -864,7 +864,8 @@ async def api_extras_install(name: str):
         _st._ocr_registry = None
         _st._ocr_pipeline = None
 
-    result = start_install(name, on_done=_forget_engines)
+    # 준비(설치 여부 probe = 자식 프로세스)도 이벤트 루프 밖에서
+    result = await asyncio.to_thread(start_install, name, _forget_engines)
     if not result.get("ok"):
         return JSONResponse(result, status_code=400)
     return result
@@ -903,11 +904,25 @@ async def api_ollama_signin():
     import app._state as _st
     from core.ollama_signin import start
 
-    result = await asyncio.to_thread(start)
+    result = await asyncio.to_thread(start, 4.0, _ollama_host())
     if not result.get("ok"):
         return JSONResponse(result, status_code=400)
     _st._llm_router = None  # 로그인 뒤 상태를 새로 보게
     return result
+
+
+def _ollama_host() -> str | None:
+    """앱이 실제로 쓰는 Ollama 서버(host:port) — ollama CLI(signin·pull)에 같은 서버를 알려 준다."""
+    from urllib.parse import urlparse
+
+    from app._state import _get_llm_router
+
+    try:
+        p = _get_llm_router()._get_provider("ollama")
+        u = urlparse(p._url)
+        return u.netloc or None
+    except Exception:  # noqa: BLE001 — 못 알아내면 CLI 기본대로
+        return None
 
 
 @router.post("/api/settings/ollama/pull")
@@ -919,11 +934,15 @@ async def api_ollama_pull(body: dict):
     model = (body or {}).get("model")
     if not model:
         return pull_status()
-    result = await asyncio.to_thread(pull, str(model))
+
+    def _after(ok: bool):
+        # **끝난 뒤**에 비운다 — 시작 시점에 비우면 받는 동안 읽은 옛 목록이 완료 후에도 남는다.
+        from llm.providers.ollama import OllamaProvider
+
+        OllamaProvider._SHARED.clear()
+        _st._llm_router = None
+
+    result = await asyncio.to_thread(pull, str(model), _ollama_host(), _after)
     if result.get("error"):
         return JSONResponse(result, status_code=400)
-    _st._llm_router = None
-    from llm.providers.ollama import OllamaProvider
-
-    OllamaProvider._SHARED.clear()  # 받고 나면 모델 목록·비전 모델 선택을 다시 본다
     return result

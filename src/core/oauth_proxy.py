@@ -146,8 +146,9 @@ def start() -> dict:
         }
     with _lock:
         proc = _state["proc"]
-        if proc is not None and proc.poll() is None:
-            return status()
+        alive = proc is not None and proc.poll() is None
+    if alive:
+        return status()  # 잠금 밖에서 — status()도 같은 잠금을 잡는다(재진입 불가)
     port = _free_port()
     if port is None:
         return {"error": "10531~10540 포트가 모두 차 있습니다.", **status()}

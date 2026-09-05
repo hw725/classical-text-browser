@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 
 from fastapi import APIRouter, BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse
@@ -30,6 +31,9 @@ router = APIRouter(tags=["alignment"])
 # 활성 사전 이름은 resources/.active_variant_dict 에 기록.
 _variant_dict = None
 _variant_dict_name: str | None = None  # 현재 로드된 사전 파일명
+# 서고 resources/ 처음 만들기(시드 복사·빈 사전 생성)는 한 번에 하나만 — 두 요청이 같은 임시
+# 파일을 쓰면 한쪽이 FileNotFoundError로 죽는다(리뷰 지적 2026-09-05).
+_seed_lock = threading.Lock()
 
 
 def _app_resources_dir() -> str:
@@ -64,23 +68,32 @@ def _get_resources_dir() -> str:
     lib = get_library_path()
     if lib is None:
         return _app_resources_dir()
+    import tempfile
+
     target = os.path.join(str(lib), "resources")
     os.makedirs(target, exist_ok=True)
-    for src in sorted(glob_mod.glob(os.path.join(_app_resources_dir(), "variant_*.json"))):
-        seed = os.path.join(target, os.path.basename(src))
-        if not os.path.exists(seed):
-            # 복사 도중 죽으면 반쪽짜리 사전이 «있는 것»으로 남는다 — 임시 파일로 받아 갈아 끼운다.
-            tmp = seed + ".tmp"
-            shutil.copy2(src, tmp)
-            os.replace(tmp, seed)
-    # 사용자 사전(strict)은 앱이 들고 오지 않는다 — 없으면 **빈 파일**로 만들어 둔다.
-    # 파일이 있어야 목록에 뜨고 활성으로 잡힌다. 없는 채로 두면 폴백이 OpenCC 힌트
-    # 사전(script 층)을 활성으로 골라 거기에 확정 쌍을 쓰게 된다(2026-09-05 테스트로 잡음).
-    own = os.path.join(target, "variant_chars.json")
-    if not os.path.exists(own):
-        from core.alignment import VariantCharDict
+    with _seed_lock:
+        for src in sorted(glob_mod.glob(os.path.join(_app_resources_dir(), "variant_*.json"))):
+            seed = os.path.join(target, os.path.basename(src))
+            if not os.path.exists(seed):
+                # 복사 도중 죽으면 반쪽짜리 사전이 «있는 것»으로 남는다 — 고유한 임시 파일로
+                # 받아 갈아 끼운다.
+                fd, tmp = tempfile.mkstemp(dir=target, prefix=os.path.basename(src), suffix=".tmp")
+                os.close(fd)
+                try:
+                    shutil.copy2(src, tmp)
+                    os.replace(tmp, seed)
+                finally:
+                    if os.path.exists(tmp):
+                        os.remove(tmp)
+        # 사용자 사전(strict)은 앱이 들고 오지 않는다 — 없으면 **빈 파일**로 만들어 둔다.
+        # 파일이 있어야 목록에 뜨고 활성으로 잡힌다. 없는 채로 두면 폴백이 OpenCC 힌트
+        # 사전(script 층)을 활성으로 골라 거기에 확정 쌍을 쓰게 된다(2026-09-05 테스트로 잡음).
+        own = os.path.join(target, "variant_chars.json")
+        if not os.path.exists(own):
+            from core.alignment import VariantCharDict
 
-        VariantCharDict.empty(own).save(own)
+            VariantCharDict.empty(own).save(own)
     return target
 
 

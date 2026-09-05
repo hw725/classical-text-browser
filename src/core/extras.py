@@ -149,6 +149,9 @@ _job: dict = {
     "finished": None,
 }
 _lock = threading.Lock()
+# 업데이트(uv sync)와 추가 설치(uv sync --extra)가 같은 환경을 서로 다른 extras 집합으로
+# 동기화하지 않게 — 둘 중 하나가 도는 동안 다른 쪽은 거절한다. updater가 같은 잠금을 쓴다.
+JOB_LOCK = threading.Lock()
 
 
 def status() -> dict:
@@ -182,8 +185,14 @@ def start_install(extra: str, on_done=None) -> dict:
         }
     if extra not in defined_extras():
         return {"ok": False, "error": f"모르는 엔진 묶음입니다: {extra}"}
+    if not JOB_LOCK.acquire(blocking=False):
+        return {
+            "ok": False,
+            "error": "앱 업데이트나 다른 설치가 도는 중입니다. 끝나면 다시 누르세요.",
+        }
     with _lock:
         if _job["running"]:
+            JOB_LOCK.release()
             return {
                 "ok": False,
                 "error": f"{_job['extra']} 설치가 아직 돌고 있습니다. 끝나면 다시 누르세요.",
@@ -199,10 +208,19 @@ def start_install(extra: str, on_done=None) -> dict:
             }
         )
 
-    args = sync_args([extra])
+    # 준비(기록 읽기·probe)에서 죽어도 «도는 중»이 영원히 남지 않게 — 예외 경계 안에서.
+    try:
+        args = sync_args([extra])
+    except Exception as e:  # noqa: BLE001
+        with _lock:
+            _job.update({"running": False, "ok": False, "finished": time.time()})
+            _job["log"].append(f"준비 실패: {e}")
+        JOB_LOCK.release()
+        return {"ok": False, "error": f"설치를 준비하지 못했습니다: {e}"}
 
     def _run():
         code = -1
+        p = None
         try:
             p = subprocess.Popen(
                 args,
@@ -214,26 +232,51 @@ def start_install(extra: str, on_done=None) -> dict:
                 errors="replace",
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
-            assert p.stdout is not None
-            for line in p.stdout:
+            # 마감은 시작 시점부터 — 출력을 다 읽을 때까지 기다린 뒤 재면 제한이 없는 것과 같다.
+            timed_out = {"hit": False}
+
+            def _kill():
+                if p.poll() is None:
+                    timed_out["hit"] = True
+                    p.kill()
+
+            watchdog = threading.Timer(1800, _kill)
+            watchdog.daemon = True
+            watchdog.start()
+            try:
+                assert p.stdout is not None
+                for line in p.stdout:
+                    with _lock:
+                        _job["log"].append(line.rstrip())
+                code = p.wait()
+            finally:
+                watchdog.cancel()
+            if timed_out["hit"]:
+                code = -1
                 with _lock:
-                    _job["log"].append(line.rstrip())
-            code = p.wait(timeout=1800)
-        except (OSError, subprocess.TimeoutExpired) as e:
+                    _job["log"].append("30분을 넘겨 중단했습니다.")
+        except OSError as e:
             with _lock:
                 _job["log"].append(f"실패: {e}")
         ok = code == 0
-        if ok:
-            _save_record(recorded_extras() + [extra])
-            installed_extras(force=True)  # 방금 깔린 것을 바로 짚는다
-            if on_done is not None:
+        try:
+            if ok:
                 try:
-                    on_done()
-                except Exception as e:  # noqa: BLE001 — 뒷정리 실패가 설치 성공을 가리면 안 된다
+                    _save_record(recorded_extras() + [extra])
+                except Exception as e:  # noqa: BLE001 — 설치는 됐는데 기록만 실패
                     with _lock:
-                        _job["log"].append(f"엔진 목록 새로 고침 실패: {e}")
-        with _lock:
-            _job.update({"running": False, "ok": ok, "finished": time.time()})
+                        _job["log"].append(f"설치는 됐지만 기록에 실패했습니다: {e}")
+                installed_extras(force=True)  # 방금 깔린 것을 바로 짚는다
+                if on_done is not None:
+                    try:
+                        on_done()
+                    except Exception as e:  # noqa: BLE001 — 뒷정리 실패가 설치 성공을 가리면 안 된다
+                        with _lock:
+                            _job["log"].append(f"엔진 목록 새로 고침 실패: {e}")
+        finally:
+            with _lock:
+                _job.update({"running": False, "ok": ok, "finished": time.time()})
+            JOB_LOCK.release()
 
     threading.Thread(target=_run, name=f"extras-install-{extra}", daemon=True).start()
     return {"ok": True, "args": args}

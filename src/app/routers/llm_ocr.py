@@ -485,6 +485,7 @@ async def api_llm_accounts():
             except asyncio.TimeoutError:
                 model = None
                 entry["active_model_pending"] = True
+                entry["billing_model"] = "unknown"  # 모델이 정해지기 전에는 과금도 모른다
                 asyncio.create_task(_warm_vision_model(provider))
             except Exception:  # noqa: BLE001
                 model = None
@@ -551,6 +552,13 @@ def _account_status(entry: dict) -> tuple[str, str]:
             return "offline", f"{name}: 서비스가 실행 중이 아닙니다."
         return "offline", f"{name}: 연결할 수 없습니다."
 
+    if entry.get("active_model_pending"):
+        return (
+            "checking",
+            f"{name}: 서버가 떠 있습니다. 어느 모델로 돌지 확인하는 중입니다 — "
+            "잠시 뒤 다시 봅니다.",
+        )
+
     model = entry.get("active_model")
     if model and entry.get("active_model_installed") is False:
         return (
@@ -571,8 +579,6 @@ def _account_status(entry: dict) -> tuple[str, str]:
                 f"{name}: 로컬 모델 {model}(으)로 돕니다. "
                 "클라우드 모델까지 쓰려면 ollama.com 로그인이 필요합니다(`ollama signin`).",
             )
-        if entry.get("active_model_pending"):
-            return "ready", f"{name}: 서버가 떠 있습니다. 어느 모델로 돌지 확인하는 중입니다."
         return (
             "needs_signin",
             f"{name}: 서버는 떠 있지만 **로그인돼 있지 않습니다.** "

@@ -22,9 +22,24 @@ def find_ollama() -> str | None:
     return shutil.which("ollama") or shutil.which("ollama.exe")
 
 
-def start(wait: float = 4.0) -> dict:
+def _env_for(host: str | None) -> dict | None:
+    """앱이 보는 Ollama 서버를 ollama CLI에도 알려 준다.
+
+    다른 서버에 받아 놓고 화면에는 «없음»이 뜨는 어긋남을 막는다.
+    """
+    if not host:
+        return None
+    import os
+
+    env = dict(os.environ)
+    env["OLLAMA_HOST"] = host
+    return env
+
+
+def start(wait: float = 4.0, host: str | None = None) -> dict:
     """`ollama signin`을 띄우고 로그인 주소가 찍힐 때까지(최대 wait초) 기다린다.
 
+    입력: host — 앱이 쓰는 Ollama 서버(host:port). 없으면 CLI 기본.
     출력: {"ok", "url", "running", "log", "error"?}. ollama 명령이 없으면 error.
     """
     exe = find_ollama()
@@ -39,7 +54,7 @@ def start(wait: float = 4.0) -> dict:
         proc = subprocess.Popen(
             [exe, "signin"],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-            text=True, encoding="utf-8", errors="replace",
+            text=True, encoding="utf-8", errors="replace", env=_env_for(host),
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except OSError as e:
@@ -90,8 +105,11 @@ def pull_status() -> dict:
         }
 
 
-def pull(model: str) -> dict:
-    """`ollama pull <model>`을 뒤에서 돌린다. 출력: pull_status()와 같은 꼴(+error)."""
+def pull(model: str, host: str | None = None, on_done=None) -> dict:
+    """`ollama pull <model>`을 뒤에서 돌린다. 출력: pull_status()와 같은 꼴(+error).
+
+    입력: host — 앱이 쓰는 Ollama 서버. on_done(ok) — 끝났을 때 부르는 함수(캐시 비우기용).
+    """
     exe = find_ollama()
     if exe is None:
         return {**pull_status(), "error": "ollama 명령을 찾지 못했습니다."}
@@ -99,13 +117,15 @@ def pull(model: str) -> dict:
         return {**pull_status(), "error": f"모델 이름이 이상합니다: {model!r}"}
     with _lock:
         proc = _pull["proc"]
-        if proc is not None and proc.poll() is None:
-            return {**pull_status(), "error": f"{_pull['model']} 받기가 아직 돌고 있습니다."}
+        busy = proc is not None and proc.poll() is None
+        busy_model = _pull["model"]
+    if busy:
+        return {**pull_status(), "error": f"{busy_model} 받기가 아직 돌고 있습니다."}
     try:
         proc = subprocess.Popen(
             [exe, "pull", model],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-            text=True, encoding="utf-8", errors="replace",
+            text=True, encoding="utf-8", errors="replace", env=_env_for(host),
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except OSError as e:
@@ -121,6 +141,11 @@ def pull(model: str) -> dict:
         code = proc.wait()
         with _lock:
             _pull["ok"] = code == 0
+        if on_done is not None:
+            try:
+                on_done(code == 0)  # 캐시 비우기는 **끝난 뒤** — 받는 중에 읽은 옛 목록이 남지 않게
+            except Exception:  # noqa: BLE001
+                pass
 
     threading.Thread(target=_pump, name=f"ollama-pull-{model}", daemon=True).start()
     return pull_status()

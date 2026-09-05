@@ -117,7 +117,7 @@ class OllamaProvider(BaseLlmProvider):
     def _url(self) -> str:
         url = self.config.get("ollama_url", "http://127.0.0.1:11434")
         # 찾아낸 주소는 사용자가 주소를 정해 두지 않았을 때만 쓴다 — 설정이 우선이다.
-        if OllamaProvider._url_override and not self.config.get("ollama_url"):
+        if OllamaProvider._url_override and not self.config.is_set("ollama_url"):
             return OllamaProvider._url_override
         # 사람이 .env에 localhost로 적어 두어도 127.0.0.1로 부른다 — Windows의 IPv6 우선 시도가
         # 호출마다 2초를 버리고, 느린 기기에서는 제한 시간을 넘겨 «Ollama 없음»으로 오판한다
@@ -143,9 +143,9 @@ class OllamaProvider(BaseLlmProvider):
         if configured:
             return configured
 
-        cached = getattr(self, "_vision_model_cache", None) or self._shared_get("vision")
+        # 공유 캐시만 본다 — 인스턴스 캐시를 먼저 보면 공유 캐시가 만료·무효화돼도 옛 값이 남는다.
+        cached = self._shared_get("vision")
         if cached:
-            self._vision_model_cache = cached
             return cached
 
         default = self.DEFAULT_MODELS["vision"]
@@ -240,7 +240,7 @@ class OllamaProvider(BaseLlmProvider):
         찾은 주소는 프로세스 전체가 기억한다.
         """
         candidates = [self._url]
-        if not self.config.get("ollama_url") and "127.0.0.1" in self._url:
+        if not self.config.is_set("ollama_url") and "127.0.0.1" in self._url:
             candidates.append(self._url.replace("127.0.0.1", "[::1]"))
         for url in candidates:
             try:
@@ -301,10 +301,7 @@ class OllamaProvider(BaseLlmProvider):
         if not force:
             shared = self._shared_get("models")
             if shared is not None:
-                self._models_cache = shared
                 return shared
-            if self._models_cache is not None:
-                return self._models_cache
 
         async with httpx.AsyncClient(timeout=5.0, trust_env=False) as client:
             resp = await client.get(f"{self._url}/api/tags")

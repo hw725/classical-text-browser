@@ -381,6 +381,7 @@ const _LLM_STATUS_LABEL = {
   needs_key: "키 필요",
   offline: "실행 안 됨",
   no_model: "모델 없음",
+  checking: "확인 중",
 };
 
 async function _loadLlmAccounts() {
@@ -430,7 +431,7 @@ async function _loadLlmAccounts() {
       const billing = document.createElement("span");
       billing.className = "settings-llm-billing";
       billing.textContent =
-        { metered: "종량 과금", subscription: "구독 한도", free: "로컬 무료" }[
+        { metered: "종량 과금", subscription: "구독 한도", free: "로컬 무료", unknown: "확인 중" }[
           p.billing_model
         ] || p.billing_model;
       head.appendChild(billing);
@@ -514,10 +515,18 @@ async function _loadLlmAccounts() {
 
       box.appendChild(row);
     }
+    // «확인 중»이 있으면 뒤에서 마저 고른 결과를 몇 초 뒤 다시 받아 온다(최대 3번).
+    if (providers.some((p) => p.status === "checking")) {
+      _llmAccountsRecheck = (_llmAccountsRecheck || 0) + 1;
+      if (_llmAccountsRecheck <= 3) setTimeout(_loadLlmAccounts, 3000);
+    } else {
+      _llmAccountsRecheck = 0;
+    }
   } catch (e) {
     box.innerHTML = '<div class="placeholder">연결 상태를 확인하지 못했습니다.</div>';
   }
 }
+let _llmAccountsRecheck = 0;
 
 /* ─── 서고 경로 관리 ───────────────────────────── */
 

@@ -136,12 +136,27 @@ def cmd_ocr(args):
             + "  (바꾸려면 명령줄 옵션, 지우려면 ctb config unset)"
         )
 
+    # --model은 번호(ctb models)·이름 일부·«프로바이더:모델» 어느 것이든 받는다. 해석은
+    # **저장보다 먼저** — --remember가 «1» 같은 번호를 저장하면 다음 실행에서 다른 모델이 된다.
+    force_provider = force_model = None
+    if model:
+        from cli.models import resolve
+
+        try:
+            force_provider, force_model = resolve(str(model))
+        except ValueError as e:
+            print(f"오류: {e}", file=sys.stderr)
+            sys.exit(2)
+    normalized_model = None
+    if args.model is not None and force_provider:
+        normalized_model = f"{force_provider}:{force_model}" if force_model else force_provider
+
     if args.remember:
         given = {
             k: v
             for k, v in {
                 "engine": args.engine,
-                "model": args.model,
+                "model": normalized_model,
                 "paddle_lang": args.paddle_lang,
                 "paddle_device": args.paddle_device,
                 "sleep": args.sleep,
@@ -182,17 +197,6 @@ def cmd_ocr(args):
         os.environ["CTB_PADDLE_LANG"] = paddle_lang
     if paddle_device:
         os.environ["CTB_PADDLE_DEVICE"] = paddle_device
-
-    # --model은 번호(ctb models)·이름 일부·«프로바이더:모델» 어느 것이든 받는다.
-    force_provider = force_model = None
-    if model:
-        from cli.models import resolve
-
-        try:
-            force_provider, force_model = resolve(str(model))
-        except ValueError as e:
-            print(f"오류: {e}", file=sys.stderr)
-            sys.exit(2)
 
     try:
         report = embed_folder(

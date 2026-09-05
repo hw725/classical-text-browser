@@ -91,6 +91,11 @@ class LlmConfig:
             return None
         return os.environ.get(env_name) or self._env_cache.get(env_name)
 
+    def is_set(self, key: str) -> bool:
+        """사람이 정해 둔 값이 있는가 — 환경변수나 .env에. DEFAULTS는 «정한 것»이 아니다."""
+        env_key = key.upper()
+        return bool(os.environ.get(env_key) or self._env_cache.get(env_key))
+
     def get(self, key: str, default=None):
         """설정값 조회. 환경변수(대문자) → .env → DEFAULTS → default."""
         env_key = key.upper()

@@ -176,13 +176,29 @@ def apply_update() -> dict:
         }
     # uv sync는 적지 않은 extras를 **지운다.** 기록된 엔진 묶음을 같이 넘겨야 업데이트가
     # 고서 엔진을 뽑아 버리지 않는다(D-106).
-    from core.extras import sync_args
+    from core.extras import JOB_LOCK, sync_args
 
+    if not JOB_LOCK.acquire(blocking=False):
+        return {
+            "ok": False,
+            "steps": [],
+            "hint": "엔진 설치가 도는 중입니다. 끝난 뒤 다시 받으세요.",
+        }
+    try:
+        return _apply_update_locked(root, steps, sync_args)
+    finally:
+        JOB_LOCK.release()
+
+
+def _apply_update_locked(root: Path, steps: list[dict], sync_args) -> dict:
     for name, args, timeout in (
         ("새 판 받기 (git pull)", ["git", "pull", "--ff-only"], 300),
-        ("의존 맞추기 (uv sync)", sync_args(), 900),
+        ("의존 맞추기 (uv sync)", None, 900),
     ):
         try:
+            if args is None:
+                # 실행 직전에 계산 — 그 사이 기록된 extras를 빠뜨리지 않게
+                args = sync_args()
             code, out = _run(args, root, timeout)
             # 히스토리를 다시 쓴 뒤에는 fast-forward가 안 된다. 작업 트리가 깨끗한 것은 위에서
             # 확인했으니(사용자 수정 없음) 원격 main에 그대로 맞춘다.
@@ -193,9 +209,12 @@ def apply_update() -> dict:
                 name = "원격에 맞추기 (git reset --hard origin/main)"
                 code, out = _run(["git", "fetch", "origin", "main"], root, 300)
                 if code == 0:
-                    _, branch = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], root, 30)
-                    _, ahead = _run(["git", "rev-list", "--count", "origin/main..HEAD"], root, 30)
-                    if branch.strip() != "main" or (ahead.strip() or "0") != "0":
+                    rc1, branch = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], root, 30)
+                    rc2, ahead = _run(["git", "rev-list", "--count", "origin/main..HEAD"], root, 30)
+                    # 조회가 실패하면(rc≠0·빈 출력) «로컬 커밋 없음»으로 보지 않는다 —
+                    # 맞추지 않는다.
+                    checks_ok = rc1 == 0 and rc2 == 0 and ahead.strip().isdigit()
+                    if not checks_ok or branch.strip() != "main" or ahead.strip() != "0":
                         code, out = 1, (
                             f"지금 브랜치 {branch.strip()!r}, "
                             f"원격에 없는 로컬 커밋 {ahead.strip() or '?'}개 — "
