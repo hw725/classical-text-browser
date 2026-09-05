@@ -4,3 +4,4 @@
 # Windows 배치 파일은 CRLF 유지
 *.bat text eol=crlf
 *.cmd text eol=crlf
+*.ps1 text eol=crlf
