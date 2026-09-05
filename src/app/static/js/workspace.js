@@ -1976,6 +1976,17 @@ document.addEventListener("llm-accounts-changed", () => {
   _loadAllLlmModelSelects();
 });
 
+// 창이 다시 활성화되면 목록을 다시 받는다(1분에 한 번까지). 프록시가 새 모델을 얻거나
+// 서버가 갈린 뒤에도 드롭다운은 페이지를 열 때 채운 목록을 들고 있었다 — «gpt-6-astra가
+// 왜 안 보이나»(2026-09-05). 새로고침 없이 따라오게 한다.
+let _llmSelectsRefreshedAt = 0;
+window.addEventListener("focus", () => {
+  const now = Date.now();
+  if (now - _llmSelectsRefreshedAt < 60000) return;
+  _llmSelectsRefreshedAt = now;
+  _loadAllLlmModelSelects();
+});
+
 /**
  * 외부 표점 서비스 상태를 선택지 라벨에 붙인다.
  *

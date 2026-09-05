@@ -188,27 +188,18 @@ class OpenAiOAuthProvider(OpenAiProvider):
         is_available()에서 캐싱된 목록을 사용한다.
         캐시가 없으면 다시 프록시에 질의한다.
         """
-        if self._discovered_models:
-            return [
-                {
-                    "name": m.get("id", "unknown"),
-                    "vision": True,  # ChatGPT 모델은 대부분 비전 지원
-                    "cost": "free",
-                }
-                for m in self._discovered_models
-            ]
-        # 캐시 없으면 다시 확인
-        await self.is_available()
-        if self._discovered_models:
-            return [
-                {
-                    "name": m.get("id", "unknown"),
-                    "vision": True,
-                    "cost": "free",
-                }
-                for m in self._discovered_models
-            ]
-        return []
+        if not self._discovered_models:
+            await self.is_available()  # 캐시 없으면 다시 확인
+        # 이미지 생성 전용(gpt-image-*)은 대화·비전 호출이 안 되므로 뺀다.
+        return [
+            {
+                "name": m.get("id", "unknown"),
+                "vision": True,  # ChatGPT 모델은 대부분 비전 지원
+                "cost": "free",
+            }
+            for m in (self._discovered_models or [])
+            if "image" not in str(m.get("id", ""))
+        ]
 
     def _create_client(self):
         """openai-oauth 프록시를 가리키는 AsyncOpenAI 클라이언트 생성.

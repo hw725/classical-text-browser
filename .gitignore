@@ -96,3 +96,6 @@ resources/variant_chars_cjkvi_*.json
 
 # 설치한 extras 기록 — 앱 업데이트·엔진 추가 설치가 uv sync에 같이 넘긴다(이 파일이 없으면 uv sync가 extras를 지운다)
 .ctb-extras.json
+
+# 비공개 할 일 메모 — 저장소에 올리지 않는다
+PRIVATE_TODO.md
