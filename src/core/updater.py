@@ -94,7 +94,34 @@ def check(timeout: float = _TIMEOUT) -> dict:
             "update_available": bool(latest) and _as_tuple(latest) > _as_tuple(cur),
         }
     )
+    # 같은 판 번호 안에서 고친 것 — 태그를 옮겨 다시 낸 경우. 번호만 보면 «최신»이라 받지 못한다
+    # (2026-09-05, v1.3.0을 유지한 채 고친 판을 다른 PC가 받지 못한 보고). 커밋을 비교한다.
+    if not out["update_available"] and is_git_checkout():
+        behind = commits_behind()
+        if behind:
+            out["update_available"] = True
+            out["same_version"] = True
+            out["commits_behind"] = behind
     return out
+
+
+def commits_behind(timeout: int = 30) -> int:
+    """원격 main에 있고 여기에는 없는 커밋 수. 네트워크가 없거나 git이 아니면 0.
+
+    히스토리를 다시 쓴 뒤(강제 푸시)에는 «뒤처짐»이 아니라 «갈라짐»이다 — 그것도 받을 것으로
+    센다(사용자는 커밋을 만들지 않으므로 갈라짐은 곧 원격이 새로 쓴 것이다).
+    """
+    root = app_root()
+    try:
+        code, _ = _run(["git", "fetch", "--quiet", "origin", "main"], root, timeout)
+        if code != 0:
+            return 0
+        code, out = _run(["git", "rev-list", "--count", "HEAD..origin/main"], root, timeout)
+        if code != 0:
+            return 0
+        return int(out.strip() or 0)
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return 0
 
 
 def _run(args: list[str], cwd: Path, timeout: int) -> tuple[int, str]:
@@ -153,6 +180,14 @@ def apply_update() -> dict:
     ):
         try:
             code, out = _run(args, root, timeout)
+            # 히스토리를 다시 쓴 뒤에는 fast-forward가 안 된다. 작업 트리가 깨끗한 것은 위에서
+            # 확인했으니(사용자 수정 없음) 원격 main에 그대로 맞춘다.
+            if code != 0 and args[:2] == ["git", "pull"]:
+                steps.append({"name": name, "ok": False, "output": out[:2000]})
+                name = "원격에 맞추기 (git reset --hard origin/main)"
+                code, out = _run(["git", "fetch", "origin", "main"], root, 300)
+                if code == 0:
+                    code, out = _run(["git", "reset", "--hard", "origin/main"], root, 60)
         except (OSError, subprocess.TimeoutExpired) as e:
             steps.append({"name": name, "ok": False, "output": str(e)[:2000]})
             return {"ok": False, "steps": steps, "hint": f"{name}에서 멈췄습니다."}

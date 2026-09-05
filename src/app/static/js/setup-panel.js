@@ -241,6 +241,8 @@ async function _checkUpdate() {
     line.className = "settings-llm-note";
     if (d.error) {
       line.textContent = `${d.error} (지금 판 ${d.current})`;
+    } else if (d.update_available && d.same_version) {
+      line.textContent = `${d.current} 그대로지만 고친 것이 ${d.commits_behind}건 있습니다 — 받으세요`;
     } else if (d.update_available) {
       line.textContent = `새 판이 있습니다 — ${d.latest} (지금 ${d.current})`;
     } else {
@@ -299,7 +301,10 @@ async function _applyUpdate(info, box, btn) {
   const warn = info.breaking
     ? "\n\n이 판은 서고 형식을 바꿉니다 — 되돌릴 수 없습니다."
     : "";
-  if (!confirm(`${info.current} → ${info.latest} 로 올립니다.${warn}\n\n계속할까요?`)) return;
+  const what = info.same_version
+    ? `${info.current} 안에서 고친 것 ${info.commits_behind}건을 받습니다.`
+    : `${info.current} → ${info.latest} 로 올립니다.`;
+  if (!confirm(`${what}${warn}\n\n계속할까요?`)) return;
   btn.disabled = true;
   btn.textContent = "받는 중…";
   try {
