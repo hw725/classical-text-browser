@@ -1094,6 +1094,30 @@ ctb ocr "논문.pdf" --execute
 | `-o 경로` | 산출물 위치 (기본: 원본 옆 `<이름>_text.pdf`) |
 | `--library 경로` | 작업 서고 (기본: `~/Documents/고전서지서고_추출`) |
 | `--no-line-detection` | 줄 위치 검출을 끔 — 쪽당 약 8초를 아끼는 대신 형광이 제자리에 안 뜸 |
+| `--engine 이름` | OCR 엔진. 기본 `llm_vision`(LLM이 읽고 PaddleOCR이 위치를 잡음). `paddleocr`이면 `--paddle-lang korean`을 함께 |
+| `--model 값` | LLM을 고정. `ctb models`의 **번호**(예: `9`), **이름 일부**(예: `astra`), 또는 `프로바이더:모델`. 없으면 폴백 순서 |
+| `--remember` | 이번에 준 옵션을 다음부터의 기본값으로 저장 |
+
+실행 전에 **어느 모델이 도는지 한 줄** 찍습니다 — 미리보기에서도 찍으므로 `--execute` 전에 확인할 수 있습니다.
+폴백은 조용해서 «무료 로컬로 돈다»고 믿었는데 유료 API가 처리하던 일이 있었습니다(D-056).
+
+```
+  → 도는 모델: OpenAI (OAuth) — gpt-6-astra (지정)
+```
+
+**자주 쓰는 옵션은 저장해 두세요.** 다음부터는 `ctb ocr "논문.pdf" --execute`만 치면 됩니다.
+
+```bash
+ctb models                              # 지금 쓸 수 있는 모델을 번호와 함께
+ctb config set model 9                  # 번호로 (이름 일부·프로바이더:모델도 됨)
+ctb config set model                    # 값 없이 치면 목록에서 고릅니다
+ctb config set paddle_lang korean
+ctb config                              # 저장된 것 보기
+ctb config unset model
+```
+
+저장 위치는 `~/.classical-text-browser/cli.json`이고, 명령줄 옵션이 언제나 저장값보다 우선합니다.
+저장값을 썼을 때는 「저장된 기본값 적용: …」이라고 알려 줍니다.
 | `--sleep 초` | 쪽 사이 대기 (LLM 한도를 아낄 때) |
 | `--engine 이름` | OCR 엔진 (기본 `llm_vision` — 한글 문헌은 바꾸지 마세요) |
 | `--paddle-lang 코드` | PaddleOCR 언어 모델. `korean`·`chinese_cht`·`ch`·`japan`·`en` |

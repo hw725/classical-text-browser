@@ -225,6 +225,53 @@ def build_pipeline(library_path: Path):
     return OcrPipeline(registry, library_root=str(library_path)), registry
 
 
+def describe_llm_target(force_provider: str | None = None, force_model: str | None = None) -> str:
+    """어느 LLM이 이 실행을 맡을지 한 줄로.
+
+    입력: force_provider·force_model — `--model provider:model`로 지정한 것. 없으면 폴백 순서
+          (Ollama → ChatGPT 계정 → Gemini → OpenAI → Anthropic)에서 처음 되는 비전 프로바이더.
+    출력: 사람이 읽을 한 줄. 지정한 프로바이더가 없거나 지금 안 되면 ValueError.
+
+    왜: 폴백은 조용하다. «무료 로컬로 돈다»고 믿었는데 유료 API가 처리하고 있던 사고가
+    있었다(D-056). 실행 전에 이름을 찍어 두면 그 사고가 없다.
+    """
+    import asyncio
+
+    from llm.router import LlmRouter
+
+    router = LlmRouter()
+
+    def _default_model(p) -> str:
+        # Ollama는 «기본 모델»이 설치된 것 가운데서 정해진다 — 그 이름을 실제로 고른다.
+        if p.provider_id == "ollama" and hasattr(p, "_pick_vision_model"):
+            try:
+                return asyncio.run(p._pick_vision_model())
+            except Exception:  # noqa: BLE001 — 이름을 못 골라도 실행은 막지 않는다
+                pass
+        return getattr(p, "DEFAULT_MODEL", "기본 모델")
+
+    if force_provider:
+        p = router._get_provider(force_provider)
+        if p is None:
+            names = ", ".join(x.provider_id for x in router.providers)
+            raise ValueError(f"프로바이더 '{force_provider}'가 없습니다. 있는 것: {names}")
+        if not p.supports_image:
+            raise ValueError(f"'{force_provider}'는 이미지를 읽지 못합니다.")
+        if not asyncio.run(p.is_available()):
+            raise ValueError(
+                f"'{force_provider}'를 지금 쓸 수 없습니다 — 키·프록시·Ollama를 확인하세요."
+            )
+        return f"{p.display_name} — {force_model or _default_model(p)} (지정)"
+    for p in router.providers:
+        if p.supports_image and asyncio.run(p.is_available()):
+            return (
+                f"{p.display_name} — {_default_model(p)} "
+                "(폴백 순서에서 처음 되는 것. 도중에 실패하면 다음으로 넘어갑니다 — "
+                "고정하려면 --model)"
+            )
+    return "쓸 수 있는 LLM이 없습니다 — 키·프록시·Ollama를 확인하세요"
+
+
 def _safe_doc_id(index: int) -> str:
     """작업 서고에서 쓸 문헌 ID를 만든다.
 
@@ -245,6 +292,8 @@ def _process_one(
     keep_workspace: bool = True,
     page_sleep: float = 0.0,
     use_line_detection: bool = True,
+    force_provider: str | None = None,
+    force_model: str | None = None,
 ) -> dict:
     """논문 한 편을 등록 → OCR → 입히기 → 자리바꿈까지 처리한다.
 
@@ -298,11 +347,14 @@ def _process_one(
                 continue
 
             ensure_full_page_block(doc_path, "vol1", page_num)
+            # --model로 고른 프로바이더·모델은 llm_vision 엔진만 본다(다른 엔진은 무시한다).
             result = pipeline.run_page(
                 doc_id=doc_id,
                 part_id="vol1",
                 page_number=page_num,
                 engine_id=engine_id,
+                **({"force_provider": force_provider} if force_provider else {}),
+                **({"force_model": force_model} if force_model else {}),
             )
             if result.ocr_results:
                 ok_pages += 1
@@ -399,6 +451,8 @@ def embed_folder(
     page_sleep: float = 0.0,
     paper_sleep: float = 0.0,
     use_line_detection: bool = True,
+    force_provider: str | None = None,
+    force_model: str | None = None,
     progress=print,
 ) -> BatchReport:
     """논문 폴더 전체를 처리한다.
@@ -406,6 +460,8 @@ def embed_folder(
     입력:
         root — 논문 폴더. library_path — 작업 서고(없으면 만든다).
         engine_id — OCR 엔진. None이면 기본 엔진(주의: 한글을 못 읽을 수 있다).
+        force_provider·force_model — llm_vision이 쓸 LLM을 고정(`--model provider:model`).
+            없으면 폴백 순서. 어느 쪽이든 실행 전에 «도는 모델»을 한 줄 찍는다.
         dry_run — True면 계획만 보여 준다.
         limit — 처리할 최대 편수 (시범 실행용).
         max_pages — 이 쪽수를 넘는 문헌은 건너뛴다 (큰 것을 나중으로 미룰 때).
@@ -457,6 +513,14 @@ def embed_folder(
     progress(f"  이번에 처리할 것: {report.targets}편 / {report.total_pages}쪽")
     if engine_id == "llm_vision" or engine_id is None:
         progress(f"  → LLM 호출 예상 {report.total_pages}회")
+        # 어느 모델이 맡는지 실행 전에 찍는다 — 폴백은 조용해서 유료 API가 처리하는 줄
+        # 모르고 돌린 사고가 있었다(D-056). 미리보기에서도 찍어 --execute 전에 보게 한다.
+        try:
+            progress(f"  → 도는 모델: {describe_llm_target(force_provider, force_model)}")
+        except ValueError as e:
+            progress(f"\n{e}")
+            report.elapsed_sec = time.time() - started
+            return report
 
     if dry_run:
         progress("\n[미리보기] 실제로는 아무것도 바꾸지 않았습니다.")
@@ -497,6 +561,8 @@ def embed_folder(
             keep_workspace=keep_workspace,
             page_sleep=page_sleep,
             use_line_detection=use_line_detection,
+            force_provider=force_provider,
+            force_model=force_model,
         )
         _append_log(log_path, record)
 

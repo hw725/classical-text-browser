@@ -108,7 +108,58 @@ def cmd_ocr(args):
         print(f"오류: 찾을 수 없습니다 — {source}", file=sys.stderr)
         sys.exit(1)
 
-    library = Path(args.library).expanduser() if args.library else _default_workspace()
+    # 명령줄 > 저장한 기본값(ctb config) > 내장 기본값. 저장한 것을 썼으면 그렇다고 찍는다 —
+    # «왜 이 모델로 돌지»를 화면에서 알 수 있어야 한다.
+    from cli import config as cli_config
+
+    saved = cli_config.load()
+    used: list[str] = []
+
+    def pick(name, cli_value, builtin):
+        if cli_value is not None:
+            return cli_value
+        if name in saved:
+            used.append(f"{name}={saved[name]}")
+            return saved[name]
+        return builtin
+
+    engine = pick("engine", args.engine, "llm_vision")
+    model = pick("model", args.model, None)
+    paddle_lang = pick("paddle_lang", args.paddle_lang, None)
+    paddle_device = pick("paddle_device", args.paddle_device, None)
+    sleep = pick("sleep", args.sleep, 0.0)
+    line_detection = False if args.no_line_detection else pick("line_detection", None, True)
+    library_arg = pick("library", args.library, None)
+    if used:
+        print(
+            "저장된 기본값 적용: " + ", ".join(used)
+            + "  (바꾸려면 명령줄 옵션, 지우려면 ctb config unset)"
+        )
+
+    if args.remember:
+        given = {
+            k: v
+            for k, v in {
+                "engine": args.engine,
+                "model": args.model,
+                "paddle_lang": args.paddle_lang,
+                "paddle_device": args.paddle_device,
+                "sleep": args.sleep,
+                "library": args.library,
+            }.items()
+            if v is not None
+        }
+        if args.no_line_detection:
+            given["line_detection"] = False
+        if given:
+            saved.update(given)
+            where = cli_config.save(saved)
+            shown = ", ".join(f"{k}={v}" for k, v in given.items())
+            print(f"기본값으로 저장: {shown} → {where}")
+        else:
+            print("--remember: 저장할 옵션이 없습니다 — 명령줄에 준 옵션만 저장합니다.")
+
+    library = Path(library_arg).expanduser() if library_arg else _default_workspace()
     library.mkdir(parents=True, exist_ok=True)
 
     # embed_folder는 «주제 폴더/파일» 구조를 훑는다. 파일 하나를 받은 경우
@@ -127,21 +178,34 @@ def cmd_ocr(args):
 
     # 엔진은 registry.auto_register()가 인자 없이 만든다. 생성 전에 환경변수로
     # 의사를 남겨 두면 PaddleOcrEngine.__init__이 읽어 간다.
-    if args.paddle_lang:
-        os.environ["CTB_PADDLE_LANG"] = args.paddle_lang
-    if args.paddle_device:
-        os.environ["CTB_PADDLE_DEVICE"] = args.paddle_device
+    if paddle_lang:
+        os.environ["CTB_PADDLE_LANG"] = paddle_lang
+    if paddle_device:
+        os.environ["CTB_PADDLE_DEVICE"] = paddle_device
+
+    # --model은 번호(ctb models)·이름 일부·«프로바이더:모델» 어느 것이든 받는다.
+    force_provider = force_model = None
+    if model:
+        from cli.models import resolve
+
+        try:
+            force_provider, force_model = resolve(str(model))
+        except ValueError as e:
+            print(f"오류: {e}", file=sys.stderr)
+            sys.exit(2)
 
     try:
         report = embed_folder(
             root,
             library,
-            engine_id=args.engine,
+            engine_id=engine,
             dry_run=not args.execute,
             replace_original=True,
             keep_workspace=True,  # 나중에 GUI로 검수할 수 있어야 한다
-            use_line_detection=not args.no_line_detection,
-            page_sleep=args.sleep,
+            use_line_detection=line_detection,
+            page_sleep=sleep,
+            force_provider=force_provider,
+            force_model=force_model,
         )
 
         if not args.execute:
@@ -166,6 +230,60 @@ def cmd_ocr(args):
     finally:
         if staging is not None:
             shutil.rmtree(staging, ignore_errors=True)
+
+
+def cmd_models(args):
+    """지금 쓸 수 있는 비전 모델을 번호와 함께.
+
+    --model이나 ctb config set model에서 그 번호를 쓴다.
+    """
+    from cli.models import format_list, list_vision_models
+
+    print(format_list(list_vision_models()))
+
+
+def cmd_config(args):
+    """ctb ocr 기본값 보기·저장·지우기. 파일은 사용자 홈의 .classical-text-browser/cli.json."""
+    from cli import config as cli_config
+
+    data = cli_config.load()
+    if args.action == "show":
+        print(cli_config.describe(data))
+        return
+    if not args.key:
+        print(f"오류: 키를 주세요. 쓸 수 있는 키: {', '.join(cli_config.KEYS)}", file=sys.stderr)
+        sys.exit(2)
+    if args.action == "unset":
+        if data.pop(args.key, None) is None:
+            print(f"{args.key}은(는) 저장돼 있지 않습니다.")
+            return
+        cli_config.save(data)
+        print(f"지웠습니다: {args.key}")
+        return
+    value = args.value
+    if args.key == "model":
+        # 이름을 외워 치지 않는다 — 값이 없으면 목록에서 번호로, 있으면 번호·일부 이름도 받는다.
+        from cli.models import pick_interactive, resolve
+
+        try:
+            if value is None:
+                value = pick_interactive()
+            else:
+                provider, model = resolve(value)
+                value = f"{provider}:{model}" if model else provider
+        except (ValueError, EOFError) as e:
+            print(f"오류: {e}", file=sys.stderr)
+            sys.exit(2)
+    if value is None:
+        print("오류: 값을 주세요 (예: ctb config set paddle_lang korean)", file=sys.stderr)
+        sys.exit(2)
+    try:
+        data[args.key] = cli_config.coerce(args.key, value)
+    except ValueError as e:
+        print(f"오류: {e}", file=sys.stderr)
+        sys.exit(2)
+    where = cli_config.save(data)
+    print(f"저장했습니다: {args.key} = {data[args.key]}  ({where})")
 
 
 def cmd_embed_folder(args):
@@ -370,8 +488,26 @@ def main():
     )
     p_ocr.add_argument(
         "--engine",
-        default="llm_vision",
+        default=None,
         help="OCR 엔진 (기본: llm_vision — 한글 문헌은 바꾸지 마세요)",
+    )
+    p_ocr.add_argument(
+        "--remember",
+        action="store_true",
+        help=(
+            "이번에 명령줄에 준 옵션(--engine·--model·--paddle-lang 등)을 다음부터의 기본값으로 "
+            "저장 (ctb config와 같다)"
+        ),
+    )
+    p_ocr.add_argument(
+        "--model",
+        default=None,
+        help=(
+            "llm_vision이 쓸 LLM. «ctb models»의 번호(예: 3), 이름 일부(예: astra), "
+            "또는 «프로바이더:모델». 프로바이더만 적으면 그 기본 모델. "
+            "없으면 폴백 순서(ollama → openai_oauth → gemini → openai → anthropic)에서 "
+            "처음 되는 것 — 어느 쪽이든 실행 전에 «도는 모델»을 한 줄 찍는다."
+        ),
     )
     # PaddleOCR 세부 설정. 엔진이 registry에서 인자 없이 생성되므로 환경변수로 넘긴다.
     p_ocr.add_argument(
@@ -392,8 +528,27 @@ def main():
         action="store_true",
         help="줄 위치 검출을 끈다. 쪽당 약 8초를 아끼는 대신 검색 형광이 제자리에 뜨지 않는다.",
     )
-    p_ocr.add_argument("--sleep", type=float, default=0.0, help="쪽 사이 대기 시간(초)")
+    p_ocr.add_argument("--sleep", type=float, default=None, help="쪽 사이 대기 시간(초, 기본 0)")
     p_ocr.set_defaults(func=cmd_ocr)
+
+    p_models = subparsers.add_parser(
+        "models", help="지금 쓸 수 있는 LLM 비전 모델을 번호와 함께 보여 준다"
+    )
+    p_models.set_defaults(func=cmd_models)
+
+    # ── config: 자주 쓰는 옵션을 기억한다 ──
+    p_cfg = subparsers.add_parser(
+        "config",
+        help="ctb ocr의 기본값 보기·저장·지우기 (예: ctb config set model 9)",
+    )
+    p_cfg.add_argument("action", nargs="?", choices=["show", "set", "unset"], default="show")
+    p_cfg.add_argument(
+        "key",
+        nargs="?",
+        help="engine·model·paddle_lang·paddle_device·line_detection·sleep·library",
+    )
+    p_cfg.add_argument("value", nargs="?")
+    p_cfg.set_defaults(func=cmd_config)
 
     args = parser.parse_args()
 
