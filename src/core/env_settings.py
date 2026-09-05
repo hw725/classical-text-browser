@@ -130,7 +130,10 @@ def detect_ollama(base_url: str | None = None, timeout: float = 2.0) -> dict:
     import urllib.error
     import urllib.request
 
-    url = (base_url or "http://localhost:11434").rstrip("/")
+    url = (base_url or "http://127.0.0.1:11434").rstrip("/")
+    # localhost → 127.0.0.1: Windows가 IPv6를 먼저 시도해 2초를 버리고, 그 사이 제한 시간(2초)을
+    # 넘기면 떠 있는 Ollama를 «없음»으로 판정한다(2026-09-05 실측·보고).
+    url = url.replace("://localhost:", "://127.0.0.1:")
     try:
         with urllib.request.urlopen(f"{url}/api/tags", timeout=timeout) as r:
             data = json.loads(r.read().decode("utf-8"))

@@ -46,3 +46,14 @@ D-093이 이름을 `unit`으로 바꿨지만 **저장 파일이 단위를 가리
   그대로 들어가므로 설치 파일도 그 크기다 — 엔진을 뺀 «본체만» exe와 엔진 추가 설치(D-106)의
   조합이 현실적이다.
 - 관련: D-103(업데이트), D-106(엔진 설치 GUI), 사용자 가이드 0장.
+
+## B-005 PaddleOCR CPU 쪽당 50~75초 (2026-09-05 실측)
+
+Windows + paddlepaddle 3.3.1 CPU에서 한 쪽(1376×1929, 33행) 인식이 server 검출 75초,
+mobile 검출 52초, 스레드 20개로도 61초. OneDNN을 켜면 여전히
+`ConvertPirAttribute2RuntimeAttribute not support`로 크래시(D-078 시절과 같음). GPU는 1초.
+
+- 지금 해 둔 것: 사용자 가이드 7-A.4에 실측치를 적고 여러 쪽이면 LLM Vision을 권함.
+- 해 볼 것: paddlepaddle 3.4+에서 OneDNN 크래시가 풀렸는지(풀리면 CPU가 몇 배 빨라진다),
+  PaddleOCR 대신 onnxruntime 경로(NDL 엔진이 쓰는 것, 7초/쪽)로 검출만 옮기기.
+- 실측 스크립트: scratchpad `paddle_prof2.py` (server|mobile|mkldnn|threads).

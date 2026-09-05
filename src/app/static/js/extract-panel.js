@@ -226,9 +226,11 @@ async function _loadExtractModels() {
   }
 }
 
-/** 선택한 엔진이 한글을 못 읽으면 경고를 보여 준다. */
+/** 선택한 엔진이 한글을 못 읽으면 경고를 보여 주고, PaddleOCR이면 언어 칸을 보인다. */
 function _updateEngineWarning() {
   const select = document.getElementById("extract-engine-select");
+  const langRow = document.getElementById("extract-paddle-lang-row");
+  if (langRow && select) langRow.hidden = select.value !== "paddleocr";
   const warn = document.getElementById("extract-engine-warn");
   if (!select || !warn) return;
   // LLM Vision일 때만 모델을 고르게 한다 (다른 엔진은 모델 개념이 없다).
@@ -1008,6 +1010,9 @@ async function _runExtractOcr() {
 
   const pages = parsePageRange(input.value, _extractPageCount());
   const body = { engine_id: select.value || null };
+  // PaddleOCR은 언어 모델이 갈린다 — 안 넘기면 서버 기본(ch)이라 한글이 깨진다.
+  const lang = document.getElementById("extract-paddle-lang");
+  if (body.engine_id === "paddleocr" && lang && lang.value) body.paddle_lang = lang.value;
   if (pages) body.pages = pages;
 
   // 「이미 처리한 쪽도 다시」를 켜면 재개 판정을 통째로 끈다.

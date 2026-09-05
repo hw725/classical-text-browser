@@ -19,6 +19,16 @@ from fastapi.testclient import TestClient
 from app.routers.llm_ocr import _account_status
 
 
+@pytest.fixture(autouse=True)
+def _isolate_ollama_shared_cache():
+    """Ollama 모델 캐시는 프로세스 전체가 공유한다 — 테스트끼리 새지 않게 비운다."""
+    from llm.providers.ollama import OllamaProvider
+
+    OllamaProvider._SHARED.clear()
+    yield
+    OllamaProvider._SHARED.clear()
+
+
 def _entry(**kw):
     """_account_status()에 넣을 항목을 만든다. 기본은 «준비된 종량제»."""
     base = {

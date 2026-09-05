@@ -477,8 +477,15 @@ async def api_llm_accounts():
         # 화면에 «로컬 무료»라고 띄우면 D-056에서 문제 삼은 그 오해가
         # 그대로 재발한다.
         if reachable and hasattr(provider, "_pick_vision_model"):
+            # 모델 고르기는 «살아 있나» 호출(클라우드 왕복)을 포함해 2~10초가 걸릴 수 있다
+            # (2026-09-05 실측). 설정 화면이 그것을 기다리게 하지 않는다 — 1.5초 안에 못 고르면
+            # 뒤에서 마저 고르게 두고(캐시 10분) 이번에는 «확인 중»으로 보낸다.
             try:
-                model = await provider._pick_vision_model()
+                model = await asyncio.wait_for(provider._pick_vision_model(), timeout=1.5)
+            except asyncio.TimeoutError:
+                model = None
+                entry["active_model_pending"] = True
+                asyncio.create_task(_warm_vision_model(provider))
             except Exception:  # noqa: BLE001
                 model = None
             if model:
@@ -505,6 +512,17 @@ async def api_llm_accounts():
     # 순서는 폴백 순서 그대로 유지한다 — 화면의 «위에서부터 시도합니다»와
     # 어긋나면 안 된다.
     return {"providers": list(await asyncio.gather(*(_one(p) for p in router_inst.providers)))}
+
+
+async def _warm_vision_model(provider) -> None:
+    """설정 화면이 기다리지 않고 넘긴 «비전 모델 고르기»를 뒤에서 마친다.
+
+    결과는 공유 캐시에 남는다.
+    """
+    try:
+        await provider._pick_vision_model()
+    except Exception:  # noqa: BLE001 — 뒤에서 도는 일이라 실패해도 알릴 데가 없다
+        pass
 
 
 def _account_status(entry: dict) -> tuple[str, str]:

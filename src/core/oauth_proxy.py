@@ -53,7 +53,7 @@ def find_npx() -> str | None:
     return shutil.which("npx.cmd") or shutil.which("npx")
 
 
-def _probe(port: int, timeout: float = 1.5) -> bool:
+def _probe(port: int, timeout: float = 0.7) -> bool:
     """그 포트에 OpenAI 호환 프록시가 살아 있는가 (/v1/models가 200)."""
     try:
         req = urllib.request.Request(
@@ -69,11 +69,27 @@ def _probe(port: int, timeout: float = 1.5) -> bool:
         return False
 
 
+_last_found_port: int | None = None
+
+
 def find_running() -> str | None:
-    """이미 떠 있는 프록시의 base URL. 없으면 None."""
-    for port in PORT_RANGE:
-        if _probe(port):
+    """이미 떠 있는 프록시의 base URL. 없으면 None.
+
+    지난번에 찾은 포트를 먼저 보고, 없으면 열 포트를 **동시에** 찔러 본다 — 차례로 하면
+    답하지 않는 포트마다 시간 제한만큼 설정 화면이 멈춘다.
+    """
+    global _last_found_port
+    if _last_found_port and _probe(_last_found_port):
+        return f"http://127.0.0.1:{_last_found_port}/v1"
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=len(PORT_RANGE)) as ex:
+        hits = list(ex.map(_probe, PORT_RANGE))
+    for port, ok in zip(PORT_RANGE, hits):
+        if ok:
+            _last_found_port = port
             return f"http://127.0.0.1:{port}/v1"
+    _last_found_port = None
     return None
 
 

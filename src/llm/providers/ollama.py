@@ -112,7 +112,11 @@ class OllamaProvider(BaseLlmProvider):
 
     @property
     def _url(self) -> str:
-        return self.config.get("ollama_url", "http://localhost:11434")
+        url = self.config.get("ollama_url", "http://127.0.0.1:11434")
+        # 사람이 .env에 localhost로 적어 두어도 127.0.0.1로 부른다 — Windows의 IPv6 우선 시도가
+        # 호출마다 2초를 버리고, 느린 기기에서는 제한 시간을 넘겨 «Ollama 없음»으로 오판한다
+        # (2026-09-05, 다른 PC에서 Ollama가 떠 있는데 안 잡히던 보고).
+        return url.replace("://localhost:", "://127.0.0.1:").replace("://localhost/", "://127.0.0.1/")
 
     async def _pick_vision_model(self) -> str:
         """실제로 쓸 수 있는 비전 모델을 고른다.
@@ -133,8 +137,9 @@ class OllamaProvider(BaseLlmProvider):
         if configured:
             return configured
 
-        cached = getattr(self, "_vision_model_cache", None)
+        cached = getattr(self, "_vision_model_cache", None) or self._shared_get("vision")
         if cached:
+            self._vision_model_cache = cached
             return cached
 
         default = self.DEFAULT_MODELS["vision"]
@@ -146,6 +151,7 @@ class OllamaProvider(BaseLlmProvider):
         names = {m.get("name") for m in models}
         if default in names:
             self._vision_model_cache = default
+            self._shared_set("vision", default)
             return default
 
         vision = [m.get("name") for m in models if m.get("vision")]
@@ -162,6 +168,7 @@ class OllamaProvider(BaseLlmProvider):
         for candidate in cloud + [n for n in vision if n not in cloud]:
             if candidate and await self._is_model_alive(candidate):
                 self._vision_model_cache = candidate
+                self._shared_set("vision", candidate)
                 logger.info(
                     f"Ollama 비전 모델 자동 선택: {candidate} "
                     f"(기본값 {default}이(가) 설치돼 있지 않음)"
@@ -235,6 +242,27 @@ class OllamaProvider(BaseLlmProvider):
     # /api/llm/status·/api/llm/models가 이것을 부르고, 그 둘은 패널을 열 때마다
     # 불린다. 캐시가 없으면 화면 전환마다 그 시간을 다시 낸다.
     _models_cache: list[dict] | None = None
+    # 모델 목록·비전 모델 선택은 **프로세스 전체가 공유**한다(주소별). 인스턴스에만 두면
+    # 키를 저장할 때마다 라우터가 새로 만들어져 캐시가 날아가고, 설정 화면이 열릴 때마다
+    # 모델마다 /api/show + 살아 있는지 호출로 10초를 다시 낸다(2026-09-05 실측 9.9초).
+    _SHARED: dict[str, dict] = {}
+    _SHARED_TTL = 600.0
+
+    def _shared(self) -> dict:
+        return self._SHARED.setdefault(self._url, {})
+
+    def _shared_get(self, key: str):
+        import time as _t
+
+        hit = self._shared().get(key)
+        if hit and _t.time() - hit[0] < self._SHARED_TTL:
+            return hit[1]
+        return None
+
+    def _shared_set(self, key: str, value) -> None:
+        import time as _t
+
+        self._shared()[key] = (_t.time(), value)
 
     async def list_models(self, *, force: bool = False) -> list[dict]:
         """설치된 모델 목록 조회. GUI 드롭다운에서 사용.
@@ -248,25 +276,36 @@ class OllamaProvider(BaseLlmProvider):
             /api/show는 GGUF 메타데이터에서 vision.block_count를 확인하므로
             모델 이름과 무관하게 정확히 판별한다.
         """
-        if self._models_cache is not None and not force:
-            return self._models_cache
+        if not force:
+            shared = self._shared_get("models")
+            if shared is not None:
+                self._models_cache = shared
+                return shared
+            if self._models_cache is not None:
+                return self._models_cache
 
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(f"{self._url}/api/tags")
             data = resp.json()
 
-        models = []
-        for m in data.get("models", []):
-            name = m.get("name", "")
-            has_vision = await self._check_vision_capability(name)
-            models.append(
-                {
-                    "name": name,
-                    "size": m.get("size", "N/A"),
-                    "vision": has_vision,
-                }
-            )
+        import asyncio as _aio
+
+        entries = data.get("models", [])
+        # /api/show를 모델마다 차례로 부르면 모델 수 × 왕복이다 — 동시에 묻는다.
+        flags = await _aio.gather(
+            *(self._check_vision_capability(m.get("name", "")) for m in entries),
+            return_exceptions=True,
+        )
+        models = [
+            {
+                "name": m.get("name", ""),
+                "size": m.get("size", "N/A"),
+                "vision": bool(flag) if not isinstance(flag, Exception) else False,
+            }
+            for m, flag in zip(entries, flags)
+        ]
         self._models_cache = models
+        self._shared_set("models", models)
         return models
 
     async def _check_vision_capability(self, model_name: str) -> bool:

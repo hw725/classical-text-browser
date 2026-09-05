@@ -21,7 +21,9 @@ class LlmConfig:
     """
 
     DEFAULTS = {
-        "ollama_url": "http://localhost:11434",
+        # localhost가 아니라 127.0.0.1: Windows는 localhost를 IPv6(::1)부터 시도해 Ollama(IPv4)에
+        # 닿기까지 2초를 버린다(2026-09-05 실측 2.11s vs 0.04s). 호출마다 그랬다.
+        "ollama_url": "http://127.0.0.1:11434",
         "monthly_budget_usd": 10.0,
     }
 

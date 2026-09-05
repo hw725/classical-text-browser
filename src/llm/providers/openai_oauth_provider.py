@@ -89,7 +89,10 @@ class OpenAiOAuthProvider(OpenAiProvider):
             import httpx
 
             url = f"http://127.0.0.1:{port}/v1/models"
-            async with httpx.AsyncClient(timeout=2.0) as client:
+            # 0.7초: 프록시는 로컬이라 있으면 수십 ms 안에 답한다. 2초로 두면 다른 프로그램이
+            # 잡고 답하지 않는 포트(AnySign4PC의 10531)마다 2초씩 설정 화면이 멈춘다
+            # (2026-09-05 실측).
+            async with httpx.AsyncClient(timeout=0.7) as client:
                 resp = await client.get(
                     url,
                     headers={"Authorization": "Bearer oauth-proxy"},

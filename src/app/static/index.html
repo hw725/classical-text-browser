@@ -3227,6 +3227,24 @@
                   <span>OCR 엔진</span>
                   <select id="extract-engine-select"></select>
                 </label>
+                <!-- PaddleOCR 언어: paddleocr을 골랐을 때만. 기본 한국어 — 추출 모드는 근현대
+                     한글 논문이 대상이고, 언어를 안 넘기면 엔진 기본 ch(중국어)로 돌아
+                     한글이 깨진다(2026-09-05 지적). -->
+                <label
+                  class="extract-field"
+                  for="extract-paddle-lang"
+                  id="extract-paddle-lang-row"
+                  hidden
+                >
+                  <span>언어</span>
+                  <select id="extract-paddle-lang" title="PaddleOCR 인식 언어">
+                    <option value="korean" selected>한국어 (국한문 혼용 포함)</option>
+                    <option value="ch">중국어 간체</option>
+                    <option value="chinese_cht">중국어 번체</option>
+                    <option value="japan">일본어</option>
+                    <option value="en">영어</option>
+                  </select>
+                </label>
                 <div
                   class="extract-warn"
                   id="extract-engine-warn"

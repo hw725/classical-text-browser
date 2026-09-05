@@ -331,7 +331,7 @@ flowchart TB
     ENTRY -->|"시도"| TIER1
 
     subgraph TIER1_GROUP["1순위: Ollama (로컬)"]
-        TIER1["localhost:11434 -- gemma4:e4b (멀티모달)"]
+        TIER1["127.0.0.1:11434 -- gemma4:e4b (멀티모달)"]
     end
 
     TIER1_GROUP -->|"실패 시"| TIER2
