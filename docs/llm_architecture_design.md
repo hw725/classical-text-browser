@@ -19,7 +19,7 @@
 │      │                                                      │
 │      ├─ 1순위: Ollama (로컬 서버)                            │
 │      │   localhost:11434/api/generate                       │
-│      │   모델: gemma4:e4b (Google Gemma 4, 멀티모달)        │
+│      │   모델: 텍스트 gemma4:e4b · 비전 gemma4:cloud(D-114)  │
 │      │   조건: Ollama 서버가 실행 중                         │
 │      │   장점: 무료, 로컬 실행, 비전 포함, 오프라인 가능     │
 │      │                                                      │
@@ -46,13 +46,13 @@
 
 | 순위 | 방식 | 비용 | 이미지 분석 | 의존성 | 오프라인 |
 |------|------|------|-------------|--------|----------|
-| 1 | Ollama (gemma4:e4b) | 무료 | ✅ (멀티모달) | Ollama 실행 | ✅ |
+| 1 | Ollama (텍스트 gemma4:e4b · 비전 gemma4:cloud) | 무료 / 클라우드는 구독 한도 | ✅ | Ollama 실행(+클라우드는 로그인) | ✅ |
 | 2 | OpenAI OAuth | 무료 | ✅ | openai-oauth 프록시 | ✗ |
 | 3 | Gemini | 저렴 | ✅ | API 키 | ✗ |
 | 4 | OpenAI | 중간 | ✅ | API 키 | ✗ |
 | 5 | Anthropic | 유료 | ✅ | API 키 | ✗ |
 
-- 1순위는 Ollama의 로컬 gemma4:e4b 모델 (무료, 오프라인 가능)
+- 1순위는 Ollama — 텍스트는 로컬 gemma4:e4b(무료, 오프라인), 비전 기본은 gemma4:cloud(D-114, 2026-09-06 — 로그인 필요, 화면 「모델 받기」에서 로컬 후보로 바꿀 수 있다)
 - 2순위는 ChatGPT 계정 OAuth 프록시 (API 키 없이 무료, 온라인)
 - 3~5순위는 유료 API (비용 순: Gemini < OpenAI < Anthropic)
 
@@ -454,10 +454,10 @@ class OllamaProvider(BaseLlmProvider):
     
     OLLAMA_URL = "http://localhost:11434"
     
-    # 용도별 기본 모델 — gemma4:e4b (멀티모달, 텍스트+비전 통합)
+    # 용도별 기본 모델 — 텍스트 gemma4:e4b, 비전은 클라우드 gemma4:cloud (D-114, 2026-09-06)
     DEFAULT_MODELS = {
         "text": "gemma4:e4b",
-        "vision": "gemma4:e4b",
+        "vision": "gemma4:cloud",  # llm/ollama_catalog.DEFAULT_VISION_MODEL
         "translation": "gemma4:e4b",
         "json": "gemma4:e4b",
         "punctuation": "gemma4:e4b",
@@ -514,7 +514,7 @@ class OllamaProvider(BaseLlmProvider):
                               **kwargs) -> LlmResponse:
         """Ollama 비전 모델로 이미지 분석.
         
-        qwen3-vl:235b-cloud가 기본 비전 모델.
+        gemma4:cloud가 기본 비전 모델(D-114). qwen3-vl:235b-cloud는 2026-06-16 은퇴.
         Ollama API는 images 필드에 base64 배열을 받는다.
         """
         import base64
@@ -653,7 +653,7 @@ class LlmConfig:
 
 # Ollama (1순위 — 무료, 로컬 gemma4:e4b)
 # Ollama가 localhost:11434에서 실행 중이면 자동 감지
-# 모델 설치: ollama pull gemma4:e4b
+# 모델 설치: ollama pull gemma4:cloud  (또는 앱 설정 ▸ LLM 연결 ▸ Ollama 「모델 받기」에서 고른다)
 # OLLAMA_URL=http://localhost:11434
 
 # OpenAI OAuth (2순위 — start_server.bat 자동 기동, 직접 고정할 때만 설정)

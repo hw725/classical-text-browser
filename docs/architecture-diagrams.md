@@ -185,9 +185,9 @@ flowchart TB
         MW["미들웨어<br/>API 응답에 Cache-Control no-store<br/>정적 파일에는 no-cache + ETag (D-066)"]
         subgraph ROUTERS["9개 도메인 라우터 (라우트 215개)"]
             direction LR
-            R1["library <b>22</b>"]
+            R1["library <b>29</b>"]
             R2["documents <b>43</b>"]
-            R3["interpretations <b>23</b>"]
+            R3["interpretations <b>22</b>"]
             R9["composition <b>12</b>"]
             R4["llm_ocr <b>24</b>"]
             R5["alignment <b>20</b>"]
@@ -209,7 +209,7 @@ flowchart TB
             O5["PaddleOCR"]
         end
         subgraph LLM_ENG["LLM 라우터 (router.py)"]
-            LR1["1. Ollama (gemma4:e4b)"]
+            LR1["1. Ollama (텍스트 gemma4:e4b · 비전 gemma4:cloud)"]
             LR2["2. OpenAI OAuth"]
             LR3["3. Gemini"]
             LR4["4. OpenAI"]
@@ -331,7 +331,7 @@ flowchart TB
     ENTRY -->|"시도"| TIER1
 
     subgraph TIER1_GROUP["1순위: Ollama (로컬)"]
-        TIER1["127.0.0.1:11434 -- gemma4:e4b (멀티모달)"]
+        TIER1["127.0.0.1:11434 -- 비전 gemma4:cloud · 텍스트 gemma4:e4b"]
     end
 
     TIER1_GROUP -->|"실패 시"| TIER2
@@ -668,9 +668,9 @@ flowchart TB
         STATE["<b>_state.py</b><br/>공유 상태, 헬퍼 · LLM 캐시, 토큰 계산"]
         subgraph ROUTERS["routers/ -- 9개 도메인 · 라우트 215개"]
             direction LR
-            R1["library <b>22</b>"]
+            R1["library <b>29</b>"]
             R2["documents <b>43</b>"]
-            R3["interpretations <b>23</b>"]
+            R3["interpretations <b>22</b>"]
             R9["composition <b>12</b>"]
             R4["llm_ocr <b>24</b>"]
             R5["alignment <b>20</b>"]
@@ -711,7 +711,7 @@ flowchart TB
         LM3["draft.py"]
         LM4["usage_tracker.py"]
         subgraph PROVIDERS["providers/"]
-            LP1["ollama (gemma4:e4b)"]
+            LP1["ollama (텍스트 gemma4:e4b · 비전 gemma4:cloud)"]
             LP2["openai_oauth"]
             LP3["gemini"]
             LP4["openai"]

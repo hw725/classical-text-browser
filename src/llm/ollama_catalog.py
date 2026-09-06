@@ -45,9 +45,9 @@ BUILTIN: list[tuple[str, str, float, str]] = [
     ("gemma4:e2b", "local", 7.2, "Google Gemma 4 E2B — 조금 작은 판"),
     ("qwen3-vl:8b", "local", 6.1, "Alibaba Qwen3-VL 8B"),
     ("qwen3-vl:4b", "local", 3.3, "Alibaba Qwen3-VL 4B"),
-    ("qwen3-vl:2b", "local", 1.9, "Alibaba Qwen3-VL 2B — 가장 작습니다"),
+    ("qwen3-vl:2b", "local", 1.9, "Alibaba Qwen3-VL 2B"),
     ("glm-ocr:latest", "local", 2.2, "GLM-OCR — 글자 읽기 전용(대화 불가)"),
-    ("minicpm-v4.6:latest", "local", 1.6, "MiniCPM-V 4.6"),
+    ("minicpm-v4.6:latest", "local", 1.6, "MiniCPM-V 4.6 — 가장 작습니다"),
 ]
 
 _SEARCH_URL = "https://ollama.com/search?c=vision&c=cloud"
