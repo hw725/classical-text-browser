@@ -116,7 +116,9 @@ Write-Host ""
 Say "  나중에 바꿔도 됩니다 — 앱 안 설정 ▸ 처음 설정 ▸ 글자 인식의 「설치」 단추."
 Say "  GPU판(4.5GB)은 별도 환경에 깝니다 — 사용자 가이드 7-A.6-2." "DarkGray"
 Write-Host ""
-$pick = (Read-Host "  고르세요 [1/2/3] (그냥 Enter = 1)").Trim()
+# 설치 프로그램(CTB-Setup.exe)이 창에서 고른 값을 환경 변수로 넘긴다 — 그때는 묻지 않는다.
+if ($env:CTB_INSTALL_PICK) { $pick = "$env:CTB_INSTALL_PICK".Trim() }
+else { $pick = (Read-Host "  고르세요 [1/2/3] (그냥 Enter = 1)").Trim() }
 if ($pick -and $pick -notin @("1", "2", "3")) {
     Say "  «$pick»은 없는 번호라 본체만 깝니다." "Yellow"
     $pick = "1"
@@ -131,8 +133,16 @@ elseif ($pick -eq "3") { $extras = @("--extra", "classical", "--extra", "japanes
 Write-Host ""
 Say "  받는 중… (진행 표시가 멈춰 보여도 기다리세요)"
 Write-Host ""
-uv sync @extras
-if ($LASTEXITCODE -ne 0) {
+# 세 번까지 다시 시도한다 — Defender가 방금 푼 실행 파일(uv trampoline)을 검사하는 순간과 겹치면
+# «액세스가 거부되었습니다»로 한 번 실패하고 바로 다시 하면 된다(2026-09-06 실측, D-113).
+$synced = $false
+foreach ($try in 1..3) {
+    uv sync @extras
+    if ($LASTEXITCODE -eq 0) { $synced = $true; break }
+    Say "  설치가 중간에 막혔습니다 — 잠시 뒤 다시 시도합니다 ($try/3)" "Yellow"
+    Start-Sleep -Seconds 5
+}
+if (-not $synced) {
     Fail "설치에 실패했습니다." "위에 찍힌 오류를 그대로 알려 주시면 됩니다."
 }
 

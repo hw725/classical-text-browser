@@ -57,16 +57,18 @@ ctb ocr "논문.pdf" --execute
 
 ## 빠른 시작
 
-### 1단계 — 내려받기
+### 1단계 — 설치 파일 하나 (Windows)
+
+[**CTB-Setup.exe**](https://github.com/hw725/classical-text-browser/releases/latest/download/CTB-Setup.exe)를 받아 두 번 누릅니다. 폴더와 글자 인식 엔진을 고르면
+앱을 내려받아 필요한 것을 전부 깔고 바탕화면에 「고전서지 브라우저」 아이콘을 만듭니다.
+그 뒤로는 아이콘으로 켜고, 새 판은 켤 때 저절로 받습니다.
+
+macOS·Linux, 또는 Git을 아신다면 아래 두 단계.
+
+### 2단계 — zip 또는 git으로
 
 [ZIP으로 내려받아](https://github.com/hw725/classical-text-browser/archive/refs/heads/main.zip)
-압축을 풀거나, Git을 아신다면
-`git clone https://github.com/hw725/classical-text-browser.git`.
-
-저장소 자체는 가볍습니다(수 MB). 무거워지는 것은 다음 단계의 OCR 라이브러리입니다.
-
-### 2단계 — 설치
-
+압축을 풀거나 `git clone https://github.com/hw725/classical-text-browser.git`.
 `install.bat` 더블클릭 (Windows) 또는 `./install.sh` (macOS·Linux).
 Git·uv가 없으면 함께 설치되고 앱 전용 Python 3.12는 uv가 받아 오며, 이어서 `uv sync`가 돕니다.
 Ollama가 떠 있으면 기본 비전 모델(약 5GB)도 받습니다. 고서·일본어 엔진을

@@ -5348,3 +5348,30 @@ B-006 실측을 위해 `--model openai_oauth:gpt-5.4-mini`로 15쪽을 읽히자
 실측(2026-09-06): 178cf13에 맞춘 얕은 사본 → `commits_behind` 4·`update_available` True.
 같은 커밋의 `git archive` 폴더(.git 없음) → 바꾸기 성공·`zip_differs` True. `tests/test_updater.py`.
 
+---
+
+## D-113: 설치 파일 하나(CTB-Setup.exe) — 앱을 통째로 담지 않고 «설치만 하는» exe
+
+- 날짜: 2026-09-06
+- 상태: 확정 (B-004)
+
+### 결정
+
+`installer/ctb_setup.py`를 PyInstaller로 한 파일 exe로 만든다(약 11MB, 표준 라이브러리 + tkinter).
+창 하나에서 설치 폴더·글자 인식 엔진을 고르면 ① 릴리스 태그의 소스 zip을 받아 풀고 ② `install.ps1`을
+돌리고(엔진 선택은 `CTB_INSTALL_PICK` 환경 변수로 넘겨 묻지 않는다) ③ 바탕화면에
+「고전서지 브라우저」 바로 가기를 만들고 ④ 「지금 실행」으로 켠다. `--auto --dir --pick`으로 창 없이도
+돌아 자동 검증에 쓴다. 빌드는 `scripts/build_installer.ps1`(uvx pyinstaller — 앱 .venv에 넣지 않는다).
+
+### 왜 앱을 통째로 담지 않는가
+
+OCR 스택(약 830MB)을 exe에 넣으면 판마다 그 크기를 다시 받아야 하고, 자동 업데이트(D-112 — git 사본 +
+`uv sync`)와 어긋난다. 설치 파일은 «처음 한 번»만 맡고, 그 뒤는 앱이 스스로 갱신하는 편이 사용자에게
+가장 적게 시킨다. 설치 파일이 받는 것은 릴리스 태그 zip이라 «릴리스 안 된 커밋»을 받지 않는다.
+
+### 한계
+
+- 서명이 없어 Windows Defender SmartScreen이 막을 수 있다 — 「추가 정보」 ▸ 「실행」. 가이드 0장에 적었다.
+- Windows 전용. macOS·Linux는 `install.sh`.
+- 실측(2026-09-06): 격리 HOME에서 `--auto`로 설치 → `install.ps1` 완료 → 바로 가기 생성까지 확인.
+

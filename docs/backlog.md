@@ -31,7 +31,10 @@ D-093이 이름을 `unit`으로 바꿨지만 **저장 파일이 단위를 가리
   `citation_marks/**`, `core_entities/tags/*.json`.
 - 지금 서고에는 이 파일이 0건이라 급하지 않다.
 
-## B-004 Windows 설치 파일(exe) (2026-09-05, v1.4.0으로 미룸)
+## B-004 Windows 설치 파일(exe) (2026-09-05 → **2026-09-06 D-113으로 구현**)
+
+> 구현됨: `CTB-Setup.exe`(설치 프로그램, 약 11MB, `installer/ctb_setup.py`). 앱을 내려받아 `install.ps1`을
+> 돌리고 바탕화면 아이콘을 만든다. 업데이트는 D-112 자동 경로. 아래는 미루던 때의 기록.
 
 지금 설치는 zip → `install.bat`(ASCII 껍데기) → `install.ps1`이 Python·Git·uv를 받아 깐다.
 처음 접하는 사람에게는 exe 하나가 낫다는 데 합의했지만 v1.3.0에는 넣지 않았다.
