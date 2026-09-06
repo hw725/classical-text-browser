@@ -56,16 +56,18 @@ from app.routers import (  # noqa: E402,F401
 
 # 앱 버전.
 #
-# 왜 여기서 pyproject를 읽는가: **버전을 적는 곳은 하나여야 한다.**
+# 왜 pyproject.toml을 직접 읽는가: **버전을 적는 곳은 하나여야 한다.**
 # 여러 곳에 적으면 릴리스 때 일부만 고쳐져 화면이 옛 버전을 말하게 된다.
-# 설치된 배포판의 메타데이터를 읽으면 정본이 pyproject.toml 하나로 유지된다.
+# 설치된 배포판의 메타데이터(dist-info)는 «실행 중인 인터프리터»의 것이라, GPU PC(.venv-gpu로 뜸)에서는
+# uv sync가 갱신하는 .venv와 어긋나 화면 아래에 옛 판(1.2.1)이 남았다(2026-09-06 보고).
+# core.updater.current_version()이 pyproject → dist-info 순으로 읽는 정본이다.
 def _app_version() -> str:
-    """설치된 패키지 메타데이터에서 버전을 읽는다. 실패하면 «unknown»."""
+    """pyproject.toml의 판 번호. 실패하면 «unknown»."""
     try:
-        from importlib.metadata import version as _pkg_version
+        from core.updater import current_version
 
-        return _pkg_version("classical-text-browser")
-    except Exception:  # noqa: BLE001 — 편집 가능 설치가 아닐 때 등
+        return current_version()
+    except Exception:  # noqa: BLE001 — 저장소 밖에서 임포트될 때 등
         return "unknown"
 
 
