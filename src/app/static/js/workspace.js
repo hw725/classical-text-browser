@@ -462,78 +462,9 @@ async function _loadLlmAccounts() {
       }
       if (p.provider_id === "ollama" && typeof _ollamaRow === "function") {
         row.appendChild(_ollamaRow());
-        // 비전 모델이 없으면 앱이 받아 준다 — 터미널을 시키지 않는다.
-        if (p.status === "no_model" && p.active_model) {
-          const pullBtn = document.createElement("button");
-          pullBtn.className = "text-btn text-btn-sm";
-          pullBtn.textContent = `모델 받기 (${p.active_model})`;
-          pullBtn.title = "크기는 모델에 따라 다릅니다(수 GB). 인터넷이 필요합니다";
-          const prog = document.createElement("div");
-          prog.className = "settings-llm-note";
-          const askStatus = () =>
-            fetch("/api/settings/ollama/pull", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: "{}",
-            }).then((r) => r.json());
-          // 진행 묻기 — 하나만 돈다. 이 줄이 떨어지면(목록 재렌더) 스스로 멈춘다.
-          const startPolling = () => {
-            if (_pullPollTimer) clearInterval(_pullPollTimer);
-            const timer = setInterval(async () => {
-              if (!prog.isConnected) {
-                clearInterval(timer);
-                if (_pullPollTimer === timer) _pullPollTimer = null;
-                return;
-              }
-              try {
-                const s = await askStatus();
-                prog.textContent = (s.log || []).slice(-1)[0] || "받는 중…";
-                if (!s.running) {
-                  clearInterval(timer);
-                  if (_pullPollTimer === timer) _pullPollTimer = null;
-                  prog.textContent = s.ok
-                    ? "받았습니다. 목록을 새로 읽습니다."
-                    : "받지 못했습니다. 위 기록을 보세요.";
-                  if (s.ok) {
-                    _loadLlmAccounts();
-                    document.dispatchEvent(new CustomEvent("llm-accounts-changed"));
-                  }
-                }
-              } catch (_) {
-                /* 다음 틱 */
-              }
-            }, 2000);
-            _pullPollTimer = timer;
-          };
-          pullBtn.addEventListener("click", async () => {
-            pullBtn.disabled = true;
-            prog.textContent = "받는 중… 몇 분 걸립니다.";
-            try {
-              const r = await fetch("/api/settings/ollama/pull", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ model: p.active_model }),
-              });
-              const d = await r.json();
-              if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
-              startPolling();
-            } catch (e) {
-              prog.textContent = `시작하지 못했습니다: ${e.message}`;
-              pullBtn.disabled = false;
-            }
-          });
-          row.append(pullBtn, prog);
-          // 목록이 다시 그려졌는데 받기가 아직 돌고 있으면 «모델 없음 + 단추»로 되돌리지 않는다.
-          askStatus()
-            .then((s) => {
-              if (s && s.running && s.model === p.active_model) {
-                pullBtn.disabled = true;
-                prog.textContent = (s.log || []).slice(-1)[0] || "받는 중… 몇 분 걸립니다.";
-                startPolling();
-              }
-            })
-            .catch(() => {});
-        }
+        // 비전 모델을 골라 받는다 — 기본은 클라우드(내려받는 파일 없음), 로그인하지 않을 PC는
+        // 로컬을 고른다(D-114). 서버가 떠 있으면 상태와 무관하게 보인다.
+        if (p.status !== "offline") row.appendChild(_ollamaPullRow(p));
       }
       // ChatGPT 계정 길은 단추로 프록시를 띄우고 로그인 창을 연다 — 로그를 열게 하지 않는다(D-107).
       if (p.provider_id === "openai_oauth" && typeof _oauthRow === "function") {
@@ -555,6 +486,188 @@ async function _loadLlmAccounts() {
 }
 let _llmAccountsRecheck = 0;
 let _pullPollTimer = null;
+
+/* ─── Ollama 비전 모델 골라 받기 (D-114) ─────────────────────────────── */
+/**
+ * 후보 목록(클라우드·로컬)에서 골라 `ollama pull`을 앱이 대신 돌린다.
+ *
+ * 왜 고르게 하는가: 기본은 클라우드 모델(내려받는 파일 없음)이지만 ollama.com 로그인이
+ * 있어야 돈다. 로그인하지 않을 PC는 로컬 모델이 필요하고, 그건 PC마다 다르다.
+ * 입력: p — /api/llm/accounts의 Ollama 항목(status·active_model). 출력: 붙일 요소.
+ */
+function _ollamaPullRow(p) {
+  const wrap = document.createElement("div");
+  wrap.className = "settings-key-row";
+
+  const select = document.createElement("select");
+  select.className = "settings-llm-select";
+  select.setAttribute("aria-label", "받을 비전 모델");
+  select.innerHTML = '<option value="">후보를 읽는 중…</option>';
+
+  const custom = document.createElement("input");
+  custom.type = "text";
+  custom.className = "settings-key-input";
+  custom.placeholder = "모델 이름 (예: qwen3-vl:4b)";
+  custom.setAttribute("aria-label", "직접 입력한 모델 이름");
+  custom.hidden = true;
+
+  const btn = document.createElement("button");
+  btn.className = "text-btn text-btn-sm";
+  btn.textContent = "모델 받기";
+  btn.disabled = true;
+  // 단추는 «후보를 읽었고 받기가 돌지 않을 때»만 산다 — 두 응답이 어느 순서로 와도 같다.
+  const state = { ready: false, pulling: false };
+  const refreshBtn = () => {
+    btn.disabled = !state.ready || state.pulling;
+  };
+
+  const prog = document.createElement("div");
+  prog.className = "settings-llm-note";
+
+  wrap.append(select, custom, btn);
+  const box = document.createElement("div");
+  box.append(wrap, prog);
+
+  const label = (m) => {
+    const where = m.kind === "cloud" ? "클라우드 · 내려받기 없음" : `내 PC · ${m.size_gb}GB`;
+    const tail = (m.installed ? " · 설치됨" : "") + (m.maybe_retired ? " · 은퇴했을 수 있음" : "");
+    return `${m.name} — ${where}${tail}`;
+  };
+  const chosen = () => (select.value === "__custom__" ? custom.value.trim() : select.value);
+
+  fetch("/api/settings/ollama/catalog")
+    .then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    })
+    .then((d) => {
+      const models = d.models || [];
+      select.innerHTML = "";
+      const groups = {
+        cloud: "클라우드 — 내려받기 없음, ollama.com 로그인 필요(구독 한도)",
+        local: "내 PC — 내려받기, 로그인 불필요",
+      };
+      for (const kind of ["cloud", "local"]) {
+        const og = document.createElement("optgroup");
+        og.label = groups[kind];
+        for (const m of models.filter((x) => x.kind === kind)) {
+          const o = document.createElement("option");
+          o.value = m.name;
+          o.textContent = label(m);
+          o.title = m.note || "";
+          og.appendChild(o);
+        }
+        if (og.children.length) select.appendChild(og);
+      }
+      const other = document.createElement("option");
+      other.value = "__custom__";
+      other.textContent = "직접 입력…";
+      select.appendChild(other);
+      // 처음 고른 것: 기본 모델이 없으면 그것, 있으면 아직 없는 첫 후보(클라우드가 앞이다).
+      const pick =
+        models.find((m) => m.name === d.default && !m.installed) ||
+        models.find((m) => !m.installed) ||
+        models[0];
+      if (pick) select.value = pick.name;
+      else select.value = "__custom__";
+      custom.hidden = select.value !== "__custom__"; // 후보가 하나도 없으면 입력칸이 바로 보여야 한다
+      state.ready = true;
+      refreshBtn();
+    })
+    .catch(() => {
+      select.innerHTML = '<option value="__custom__">직접 입력…</option>';
+      custom.hidden = false;
+      state.ready = true;
+      refreshBtn();
+      prog.textContent = "후보 목록을 읽지 못했습니다. 이름을 직접 넣어 받을 수 있습니다.";
+    });
+
+  select.addEventListener("change", () => {
+    custom.hidden = select.value !== "__custom__";
+    if (!custom.hidden) custom.focus();
+  });
+
+  const askStatus = () =>
+    fetch("/api/settings/ollama/pull", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    }).then((r) => r.json());
+
+  // 진행 묻기 — 하나만 돈다. 이 줄이 떨어지면(목록 재렌더) 스스로 멈춘다.
+  const startPolling = () => {
+    if (_pullPollTimer) clearInterval(_pullPollTimer);
+    const timer = setInterval(async () => {
+      if (!prog.isConnected) {
+        clearInterval(timer);
+        if (_pullPollTimer === timer) _pullPollTimer = null;
+        return;
+      }
+      try {
+        const s = await askStatus();
+        prog.textContent = `${s.model || ""} ${(s.log || []).slice(-1)[0] || "받는 중…"}`.trim();
+        if (!s.running) {
+          clearInterval(timer);
+          if (_pullPollTimer === timer) _pullPollTimer = null;
+          state.pulling = false;
+          refreshBtn();
+          if (s.ok) {
+            prog.textContent = String(s.model || "").includes("cloud")
+              ? `${s.model} 등록했습니다. 쓰려면 위 「로그인」 — 목록을 새로 읽습니다.`
+              : `${s.model} 받았습니다. 목록을 새로 읽습니다.`;
+            _loadLlmAccounts();
+            document.dispatchEvent(new CustomEvent("llm-accounts-changed"));
+          } else {
+            prog.textContent = `${s.model || ""} 받지 못했습니다: ${(s.log || []).slice(-1)[0] || "까닭 없음"}`;
+          }
+        }
+      } catch (_) {
+        /* 다음 틱 */
+      }
+    }, 2000);
+    _pullPollTimer = timer;
+  };
+
+  btn.addEventListener("click", async () => {
+    const model = chosen();
+    if (!model) {
+      prog.textContent = "모델 이름을 넣으세요.";
+      return;
+    }
+    state.pulling = true;
+    refreshBtn();
+    prog.textContent = model.includes("cloud")
+      ? "등록하는 중… 클라우드 모델은 내려받는 파일이 없어 금방 끝납니다."
+      : "받는 중… 크기에 따라 몇 분에서 수십 분 걸립니다.";
+    try {
+      const r = await fetch("/api/settings/ollama/pull", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      startPolling();
+    } catch (e) {
+      prog.textContent = `시작하지 못했습니다: ${e.message}`;
+      state.pulling = false;
+      refreshBtn();
+    }
+  });
+
+  // 목록이 다시 그려졌는데 받기가 아직 돌고 있으면 그 진행을 이어서 보여 준다.
+  askStatus()
+    .then((s) => {
+      if (s && s.running) {
+        state.pulling = true;
+        refreshBtn();
+        prog.textContent = `${s.model || ""} ${(s.log || []).slice(-1)[0] || "받는 중…"}`.trim();
+        startPolling();
+      }
+    })
+    .catch(() => {});
+  return box;
+}
 
 /* ─── 서고 경로 관리 ───────────────────────────── */
 

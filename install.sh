@@ -124,12 +124,14 @@ uv run python scripts/warmup_paddle.py korean ch || echo "  모델을 지금 받
 # ── 5-1. Ollama 기본 비전 모델 ────────────────
 if command -v ollama >/dev/null 2>&1; then
     echo ""
-    echo "[5-1] Ollama 기본 비전 모델 확인 (gemma4:e4b)"
-    if ollama list 2>/dev/null | grep -q "gemma4:e4b"; then
+    # 기본은 클라우드 모델 — 내려받는 파일이 없고(몇 초) ollama.com 로그인이 있어야 돈다(D-114).
+    echo "[5-1] Ollama 기본 비전 모델 확인 (gemma4:cloud)"
+    if ollama list 2>/dev/null | grep -q "gemma4:cloud"; then
         echo "  이미 있습니다."
     elif ollama list >/dev/null 2>&1; then
-        echo "  없습니다. 받습니다 (약 5GB, 인터넷 필요)…"
-        ollama pull gemma4:e4b || echo "  지금 받지 못했습니다. 앱 설정 ▸ LLM 연결 ▸ Ollama의 「모델 받기」로 받을 수 있습니다."
+        echo "  없습니다. 등록합니다 (클라우드 모델 — 내려받는 파일 없음, 몇 초)…"
+        ollama pull gemma4:cloud || echo "  지금 등록하지 못했습니다. 앱 설정 ▸ LLM 연결 ▸ Ollama의 「모델 받기」에서 고를 수 있습니다."
+        echo "  쓰려면 앱 설정 ▸ LLM 연결 ▸ Ollama의 「로그인」. 로그인 없이 쓰려면 같은 자리 「모델 받기」에서 내 PC용 모델을 고르세요."
     else
         echo "  Ollama가 떠 있지 않아 건너뜁니다."
     fi

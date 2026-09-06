@@ -704,7 +704,10 @@ async function _wizardLlm(body) {
   for (const pid of Object.keys(PROVIDER_KEY_HELP)) {
     card(PROVIDER_KEY_HELP[pid].label.replace(" API 키", "")).appendChild(_llmKeyRow(pid, keyState));
   }
-  card("Ollama (내 컴퓨터, 무료)").appendChild(_ollamaRow());
+  const ollamaCard = card("Ollama (내 컴퓨터, 무료)");
+  ollamaCard.appendChild(_ollamaRow());
+  // 비전 모델 골라 받기(D-114) — workspace.js가 정의한다(이 파일보다 뒤에 읽히지만 호출은 나중이다)
+  if (typeof _ollamaPullRow === "function") ollamaCard.appendChild(_ollamaPullRow({ status: "unknown" }));
   card("OpenAI — ChatGPT 계정으로 (구독 한도)").appendChild(_oauthRow());
 
   // 저장·지우기 뒤에는 «저장됨 (…)» 표시가 바뀌어야 한다 — 이 단계가 떠 있을 때만 다시 그린다.

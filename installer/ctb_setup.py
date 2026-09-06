@@ -9,7 +9,10 @@
 설치만 맡고, 그 뒤는 앱이 스스로 갱신하는 편이 사용자에게 가장 적게 시킨다.
 
 표준 라이브러리만 쓴다(tkinter·urllib·zipfile·subprocess) — PyInstaller로 한 파일이 된다.
-`--auto --dir <폴더> --pick 1`로 창 없이도 돈다(자동 검증용).
+`--auto --dir <폴더> --pick 1`로 창 없이도 돈다(자동 검증용). **`--auto`는 바탕화면 바로 가기를
+만들지 않는다**(`--shortcut`으로 켠다) — 격리 HOME에서 돌린 검증이 실제 바탕화면에 임시 폴더를
+가리키는 「고전서지 브라우저」 아이콘을 남겼다(2026-09-06). 바탕화면 경로는 HOME이 아니라
+Windows에 묻기 때문이다.
 
 빌드: scripts/build_installer.ps1  (uvx pyinstaller)
 """
@@ -20,6 +23,7 @@ import argparse
 import io
 import os
 import queue
+import re
 import subprocess
 import sys
 import threading
@@ -34,6 +38,8 @@ ZIP_URL = os.environ.get("CTB_SETUP_ZIP") or (
 )
 DEFAULT_DIR = Path.home() / "ClassicalTextBrowser"
 SHORTCUT_NAME = "고전서지 브라우저.lnk"
+# uv·PaddleX·ollama가 찍는 색·커서 제어열 — 터미널이 아니면 글자 그대로 창에 남는다([32m …).
+_ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[()][A-Za-z0-9]|[\x00-\x08\x0b-\x1f]")
 
 
 # ── 실제 작업 (창이 있든 없든 같은 코드) ─────────────────────────────────
@@ -105,6 +111,7 @@ def run_install_ps1(target: Path, pick: str, say) -> int:
             line = raw.decode("utf-8").rstrip()
         except UnicodeDecodeError:
             line = raw.decode("cp949", "replace").rstrip()
+        line = _ANSI.sub("", line)
         if line.strip():
             say("  " + line)
     return p.wait()
@@ -293,7 +300,8 @@ def main(argv=None) -> int:
     ap.add_argument("--auto", action="store_true", help="창 없이 설치(검증용)")
     ap.add_argument("--dir", default=None, help="설치 폴더")
     ap.add_argument("--pick", default="1", choices=["1", "2", "3"], help="글자 인식 엔진")
-    ap.add_argument("--no-shortcut", action="store_true")
+    ap.add_argument("--no-shortcut", action="store_true", help="(옛 이름) --auto의 기본 동작")
+    ap.add_argument("--shortcut", action="store_true", help="--auto에서도 바탕화면 바로 가기를 만든다")
     a = ap.parse_args(argv)
     if not a.auto:
         return gui()
@@ -317,7 +325,8 @@ def main(argv=None) -> int:
         print(text, flush=True)
 
     target = Path(a.dir).expanduser() if a.dir else DEFAULT_DIR
-    if a.no_shortcut:
+    if not a.shortcut:
+        # 검증용 실행이 실제 바탕화면을 건드리지 않게 — 창으로 설치할 때만 아이콘을 만든다.
         global make_shortcut
         make_shortcut = lambda t, s: None  # noqa: E731
     return 0 if install(target, a.pick, say) else 1

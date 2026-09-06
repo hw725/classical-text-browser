@@ -14,6 +14,8 @@ import threading
 import time
 
 _URL = re.compile(r"(https://(?:[a-z0-9.-]+\.)?ollama\.com/[^\s\"'<>]*)")  # 로그인 주소만
+# ollama CLI는 터미널이 아니어도 커서·지우기 제어열([K, [?25h …)을 찍는다 — 화면에 그대로 나온다.
+_ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[()][A-Za-z0-9]|[\x00-\x08\x0b-\x1f]")
 _state: dict = {"proc": None, "url": None, "log": [], "started": None}
 _lock = threading.Lock()
 _spawn_lock = threading.Lock()  # 시작·받기는 한 번에 하나 — 동시 클릭이 프로세스 둘을 띄우지 않게
@@ -154,7 +156,10 @@ def _pull_spawn(exe: str, model: str, host: str | None, on_done) -> dict:
         assert proc.stdout is not None
         for line in proc.stdout:
             with _lock:
-                _pull["log"].append(line.strip()[:160])
+                clean = _ANSI.sub("", line).strip()
+                if not clean:
+                    continue
+                _pull["log"].append(clean[:160])
                 del _pull["log"][:-300]
         code = proc.wait()
         with _lock:

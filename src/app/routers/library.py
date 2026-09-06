@@ -946,3 +946,30 @@ async def api_ollama_pull(body: dict):
     if result.get("error"):
         return JSONResponse(result, status_code=400)
     return result
+
+
+@router.get("/api/settings/ollama/catalog")
+async def api_ollama_catalog():
+    """받을 수 있는 비전 모델 후보와 이 PC에 깔린 것 (D-114). 기본은 클라우드 모델.
+
+    사람이 골라서 받는다 — 로그인하지 않을 PC는 로컬 모델이 필요하고, 그 반대도 있다.
+    """
+    from core.env_settings import detect_ollama
+    from llm.ollama_catalog import catalog
+
+    # 프로바이더가 실제 쓰는 주소로 본다 — 기본 주소만 보면 다른 포트·원격 서버의 설치 목록과 어긋난다
+    from app._state import _get_llm_router
+
+    try:
+        base_url = _get_llm_router()._get_provider("ollama")._url
+    except Exception:  # noqa: BLE001 — 못 알아내면 기본 주소
+        base_url = None
+
+    def _build() -> dict:
+        info = detect_ollama(base_url)  # /api/tags — 3초 안에 못 닿으면 빈 목록
+        out = catalog(set(info.get("models") or []))
+        out["reachable"] = bool(info.get("reachable"))
+        return out
+
+    # ollama.com 읽기(최대 5초)는 이벤트 루프 밖에서 — 설정 화면이 서버를 멈추지 않게
+    return await asyncio.to_thread(_build)

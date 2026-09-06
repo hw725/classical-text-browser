@@ -71,7 +71,8 @@ macOS·Linux, 또는 Git을 아신다면 아래 두 단계.
 압축을 풀거나 `git clone https://github.com/hw725/classical-text-browser.git`.
 `install.bat` 더블클릭 (Windows) 또는 `./install.sh` (macOS·Linux).
 Git·uv가 없으면 함께 설치되고 앱 전용 Python 3.12는 uv가 받아 오며, 이어서 `uv sync`가 돕니다.
-Ollama가 떠 있으면 기본 비전 모델(약 5GB)도 받습니다. 고서·일본어 엔진을
+Ollama가 떠 있으면 기본 비전 모델(`gemma4:cloud`, 내려받는 파일 없음 — 로그인 필요)을 등록합니다.
+로그인하지 않을 PC는 앱 안 「모델 받기」에서 내 PC용 모델을 고릅니다. 고서·일본어 엔진을
 함께 깔지 물어봅니다 — 나중에 앱 안(처음 설정 ▸ 글자 인식)에서 단추로 더할 수 있습니다.
 
 **설치는 하나뿐이고, 약 828MB입니다.** 그중 **79%가 OCR 스택**입니다.

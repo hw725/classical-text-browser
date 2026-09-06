@@ -1,7 +1,8 @@
 """Ollama Provider (1순위).
 
 Ollama 로컬 서버(localhost:11434)를 통한 LLM 호출.
-기본 로컬 모델: gemma4:e4b (Google Gemma 4, 멀티모달)
+기본 비전 모델: gemma4:cloud — 클라우드(내려받는 파일 없음, ollama.com 로그인 필요, D-114)
+기본 텍스트 모델: gemma4:e4b (로컬)
 
 호출 흐름:
     Python → HTTP POST localhost:11434/api/generate
@@ -15,6 +16,7 @@ import time
 
 import httpx
 
+from ..ollama_catalog import DEFAULT_VISION_MODEL
 from .base import (
     TRUNCATED_MARK,
     BaseLlmProvider,
@@ -27,14 +29,17 @@ logger = logging.getLogger(__name__)
 
 
 class OllamaProvider(BaseLlmProvider):
-    """Ollama 로컬 서버를 통한 LLM 호출. 기본 모델: gemma4:e4b."""
+    """Ollama 로컬 서버를 통한 LLM 호출. 기본 비전 모델: gemma4:cloud, 텍스트: gemma4:e4b."""
 
     provider_id = "ollama"
     display_name = "Ollama"
     supports_image = True
 
     # 용도별 기본 모델
-    # 일반 텍스트/비전: gemma4:e4b (로컬, 멀티모달)
+    # 비전: gemma4:cloud (D-114) — 비전 모델이 없는 PC가 처음 받는 것. 내려받는 파일이 없어
+    #   몇 초에 끝나지만 ollama.com 로그인이 있어야 돈다. 로그인하지 않을 PC는 화면의
+    #   「모델 받기」에서 로컬 모델을 고른다(llm/ollama_catalog.py). v1.3.0까지는 gemma4:e4b(9.6GB)였다.
+    # 일반 텍스트: gemma4:e4b (로컬, 멀티모달)
     # JSON 구조화 출력(표점/주석): 소형 로컬 모델은 품질이 떨어지므로
     #   클라우드 프록시 모델을 우선 사용한다.
     #   클라우드 프록시가 없으면 gemma4:e4b로 폴백.
@@ -45,7 +50,7 @@ class OllamaProvider(BaseLlmProvider):
     #   구두점 위치 정확도와 JSON 구조 준수율이 크게 떨어진다.
     DEFAULT_MODELS = {
         "text": "gemma4:e4b",
-        "vision": "gemma4:e4b",
+        "vision": DEFAULT_VISION_MODEL,
         "translation": "gemma4:e4b",
         "json": "gemma4:e4b",
         "punctuation": "gemma4:e4b",
@@ -137,7 +142,8 @@ class OllamaProvider(BaseLlmProvider):
 
         고르는 순서:
             1. 설정에 `ollama_vision_model`이 있으면 그것 (사용자 지정 우선)
-            2. DEFAULT_MODELS["vision"]이 실제로 설치돼 있으면 그것
+            2. DEFAULT_MODELS["vision"]이 설치돼 있으면 그것 — 단 클라우드 기본은 한 번 불러
+               본다(로그인이 없거나 은퇴했으면 아래로 내려간다, D-114)
             3. 설치된 비전 모델 중 **클라우드 우선** — 로컬 소형 모델은
                이 PC 사양에서 성능이 떨어진다는 사용자 판단에 따른다.
             4. 그래도 없으면 로컬 비전 모델
@@ -160,9 +166,12 @@ class OllamaProvider(BaseLlmProvider):
             return default
 
         names = {m.get("name") for m in models}
-        if default in names:
+        # 기본이 클라우드 모델이면 목록에 있어도 한 번 불러 본다 — 로그인이 없거나 은퇴했으면
+        # 아래에서 로컬 모델을 찾는다(D-114). 로컬 기본은 목록에 있으면 그대로 쓴다.
+        if default in names and ("cloud" not in default or await self._is_model_alive(default)):
             self._vision_model_cache = default
             self._shared_set("vision", default)
+            self._shared_set("vision_dead", None)
             return default
 
         vision = [m.get("name") for m in models if m.get("vision")]
@@ -177,6 +186,8 @@ class OllamaProvider(BaseLlmProvider):
         # 클라우드 모델을 앞세운다 (로컬 소형 모델은 이 PC에서 성능이 낮다).
         cloud = [n for n in vision if n and "cloud" in n]
         for candidate in cloud + [n for n in vision if n not in cloud]:
+            if candidate == default:
+                continue  # 위에서 이미 불러 봤다
             if candidate and await self._is_model_alive(candidate):
                 self._vision_model_cache = candidate
                 self._shared_set("vision", candidate)
@@ -184,8 +195,12 @@ class OllamaProvider(BaseLlmProvider):
                     f"Ollama 비전 모델 자동 선택: {candidate} "
                     f"(기본값 {default}이(가) 설치돼 있지 않음)"
                 )
+                self._shared_set("vision_dead", None)
                 return candidate
 
+        # 기본을 돌려주되 «응답하지 않았다»를 남긴다 — 설정 카드가 «연결됨»으로 보이면 안 된다
+        # (Codex 리뷰 2026-09-06: 은퇴·로그인 실패를 확인하고도 정상처럼 보였다).
+        self._shared_set("vision_dead", default)
         logger.warning(
             "Ollama의 비전 모델이 모두 응답하지 않습니다. "
             "이미지 호출은 다음 프로바이더로 넘어갑니다(유료일 수 있습니다). "

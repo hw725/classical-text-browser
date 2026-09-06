@@ -427,3 +427,156 @@ def test_ollama_url_uses_ipv6_override_even_if_default_is_written(monkeypatch):
         assert p._url == "http://10.0.0.5:11434"  # 다른 주소를 정해 두면 그것이 우선
     finally:
         OllamaProvider._url_override = None
+
+
+# ---------------------------------------------------------------------------
+#  D-114: 기본 비전 모델은 클라우드, 어느 모델을 받을지는 사람이 고른다
+# ---------------------------------------------------------------------------
+
+
+def test_default_vision_model_is_cloud():
+    """기본 비전 모델은 내려받는 파일이 없는 클라우드 모델이다 — 처음 켠 PC가 9.6GB를 받지 않는다."""
+    from llm.ollama_catalog import DEFAULT_VISION_MODEL
+    from llm.providers.ollama import OllamaProvider
+
+    assert OllamaProvider.DEFAULT_MODELS["vision"] == DEFAULT_VISION_MODEL
+    assert "cloud" in DEFAULT_VISION_MODEL
+
+
+@pytest.mark.asyncio
+async def test_cloud_default_is_probed_and_local_used_when_it_fails(monkeypatch):
+    """클라우드 기본은 목록에 있어도 한 번 불러 본다. 로그인이 없어 실패하면 로컬로 내려간다."""
+    from llm.providers.ollama import OllamaProvider
+
+    OllamaProvider._SHARED.clear()
+    p = _ollama(
+        monkeypatch,
+        models=[{"name": "gemma4:cloud", "vision": True}, {"name": "gemma4:e4b", "vision": True}],
+        alive={"gemma4:e4b"},
+    )
+    assert await p._pick_vision_model() == "gemma4:e4b"
+
+
+@pytest.mark.asyncio
+async def test_cloud_default_is_used_when_it_answers(monkeypatch):
+    """로그인이 있어 클라우드 기본이 답하면 로컬이 같이 있어도 기본을 쓴다."""
+    from llm.providers.ollama import OllamaProvider
+
+    OllamaProvider._SHARED.clear()
+    p = _ollama(
+        monkeypatch,
+        models=[{"name": "gemma4:e4b", "vision": True}, {"name": "gemma4:cloud", "vision": True}],
+        alive={"gemma4:cloud", "gemma4:e4b"},
+    )
+    assert await p._pick_vision_model() == "gemma4:cloud"
+
+
+def test_catalog_marks_installed_and_puts_default_first(monkeypatch):
+    """후보 목록: 기본이 맨 앞, 클라우드가 로컬 앞, 깔린 것·은퇴 의심·새로 찾은 것이 표시된다."""
+    from llm import ollama_catalog as oc
+
+    monkeypatch.setattr(
+        oc, "fetch_cloud_vision_names", lambda *a, **k: ["gemma4", "qwen3.5", "brand-new", "no-tag"]
+    )
+    # 레지스트리 확인도 가짜로 — «no-tag»는 검색 페이지에 있지만 :cloud 태그가 없는 경우(mistral-large-3 실측)
+    monkeypatch.setattr(oc, "cloud_tag_exists", lambda repo, timeout=3.0: repo != "no-tag")
+    out = oc.catalog({"gemma4:e4b", "glm-ocr:latest", "kimi-k3:cloud"})
+    assert "no-tag:cloud" not in {m["name"] for m in out["models"]}, "태그 없는 이름은 목록에서 뺀다"
+    names = [m["name"] for m in out["models"]]
+    assert names[0] == out["default"] == "gemma4:cloud"
+    kinds = [m["kind"] for m in out["models"]]
+    assert kinds == sorted(kinds, key=lambda k: k != "cloud"), "클라우드가 전부 로컬 앞이어야 한다"
+    by = {m["name"]: m for m in out["models"]}
+    assert by["gemma4:e4b"]["installed"] and by["glm-ocr:latest"]["installed"]
+    assert not by["gemma4:cloud"]["installed"]
+    assert by["kimi-k3:cloud"]["maybe_retired"] is True  # 검색 페이지에 없다
+    assert by["gemma4:cloud"]["maybe_retired"] is False
+    assert by["brand-new:cloud"]["kind"] == "cloud"  # 검색 페이지에서 새로 찾은 것이 더해진다
+    assert all(m["size_gb"] == 0 for m in out["models"] if m["kind"] == "cloud")
+    assert all(m["size_gb"] > 0 for m in out["models"] if m["kind"] == "local")
+
+
+def test_catalog_offline_keeps_builtin_without_retired_marks(monkeypatch):
+    """ollama.com을 못 읽으면(None) 내장 목록만 주고, 아무것도 «은퇴»로 찍지 않는다."""
+    from llm import ollama_catalog as oc
+
+    monkeypatch.setattr(oc, "fetch_cloud_vision_names", lambda *a, **k: None)
+    out = oc.catalog(set())
+    assert len(out["models"]) == len(oc.BUILTIN)
+    assert not any(m["maybe_retired"] for m in out["models"])
+
+
+def test_catalog_route(client, monkeypatch):
+    """GET /api/settings/ollama/catalog — 화면이 그대로 읽는 꼴(default·models·reachable)."""
+    import core.env_settings as es
+    from llm import ollama_catalog as oc
+
+    monkeypatch.setattr(oc, "fetch_cloud_vision_names", lambda *a, **k: None)
+    monkeypatch.setattr(
+        es, "detect_ollama",
+        lambda base_url=None: {"reachable": True, "base_url": "x", "models": ["gemma4:e4b"], "error": None},
+    )
+    r = client.get("/api/settings/ollama/catalog")
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["default"] == "gemma4:cloud" and d["reachable"] is True
+    installed = {m["name"]: m["installed"] for m in d["models"]}
+    assert installed["gemma4:e4b"] is True and installed["gemma4:cloud"] is False
+
+
+def test_no_model_note_for_cloud_default_points_to_login_and_chooser():
+    """기본이 클라우드일 때 «모델 없음»은 크기(GB)가 아니라 로그인과 「모델 받기」를 말한다."""
+    e = _entry(
+        provider_id="ollama", display_name="Ollama", setup_kind="cli_signin",
+        reachable=True, authenticated=False, account=None, billing_model="subscription",
+        active_model="gemma4:cloud", active_model_installed=False,
+    )
+    status, note = _account_status(e)
+    assert status == "no_model"
+    assert "받기 시작" in note and "로그인" in note and "모델 받기" in note and "GB" not in note
+
+
+def test_needs_signin_note_points_to_buttons_not_terminal():
+    """«로그인 필요» 안내는 터미널 명령이 아니라 카드의 두 단추(로그인·모델 받기)를 가리킨다."""
+    e = _entry(
+        provider_id="ollama", display_name="Ollama", setup_kind="cli_signin",
+        reachable=True, authenticated=False, account=None, billing_model="subscription",
+        active_model="gemma4:cloud",
+    )
+    status, note = _account_status(e)
+    assert status == "needs_signin" and "ollama pull" not in note and "모델 받기" in note
+
+
+def test_pull_log_strips_terminal_control_sequences():
+    """ollama CLI가 찍는 커서·지우기 제어열은 진행 문구에서 지운다 — 화면에 «[K[?25h»가 남았다."""
+    from core.ollama_signin import _ANSI
+
+    raw = "\x1b[?2026h\x1b[?25l\x1b[1G⠙ pulling manifest \x1b[K\x1b[?25h\x1b[?2026l"
+    assert _ANSI.sub("", raw).strip() == "⠙ pulling manifest"
+    assert _ANSI.sub("", "\x1b[32mModel files already exist\x1b[0m") == "Model files already exist"
+
+
+def test_dead_vision_model_is_not_ready():
+    """고른 모델이 응답하지 않았으면(은퇴·로그인 실패) 깔려 있고 로그인돼 있어도 «연결됨»이 아니다."""
+    e = _entry(
+        provider_id="ollama", display_name="Ollama", setup_kind="cli_signin",
+        reachable=True, authenticated=True, account="me@x", billing_model="subscription",
+        active_model="gemma4:cloud", active_model_installed=True, active_model_dead=True,
+    )
+    status, note = _account_status(e)
+    assert status == "no_model" and "응답하지 않습니다" in note and "모델 받기" in note
+
+
+@pytest.mark.asyncio
+async def test_all_dead_leaves_a_mark_for_the_card(monkeypatch):
+    """전부 죽어 기본을 돌려줄 때 vision_dead를 남기고, 하나라도 살면 지운다."""
+    from llm.providers.ollama import OllamaProvider
+
+    OllamaProvider._SHARED.clear()
+    p = _ollama(monkeypatch, models=[{"name": "gemma4:cloud", "vision": True}], alive=set())
+    assert await p._pick_vision_model() == "gemma4:cloud"
+    assert p._shared_get("vision_dead") == "gemma4:cloud"
+    OllamaProvider._SHARED.clear()
+    p = _ollama(monkeypatch, models=[{"name": "gemma4:cloud", "vision": True}], alive={"gemma4:cloud"})
+    assert await p._pick_vision_model() == "gemma4:cloud"
+    assert not p._shared_get("vision_dead")

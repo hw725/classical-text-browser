@@ -500,6 +500,9 @@ async def api_llm_accounts():
                         for m in await asyncio.wait_for(provider.list_models(), timeout=2.0)
                     }
                     entry["active_model_installed"] = model in installed
+                    # 고르기가 «전부 응답 없음»으로 끝나 기본 이름만 돌려준 경우 — 깔려 있어도 못 쓴다
+                    dead = provider._shared_get("vision_dead") if hasattr(provider, "_shared_get") else None
+                    entry["active_model_dead"] = bool(dead) and dead == model
                     if model not in installed and provider.provider_id == "ollama":
                         # 비전 모델이 하나도 없으면 기본 모델을 저절로 받기 시작한다 — 사람이
                         # 단추를 찾게 하지 않는다(2026-09-06 지시). 프로세스당 한 번만 시도.
@@ -612,12 +615,26 @@ def _account_status(entry: dict) -> tuple[str, str]:
         )
 
     model = entry.get("active_model")
+    if model and entry.get("active_model_dead"):
+        return (
+            "no_model",
+            f"{name}: 비전 모델 {model}이(가) **응답하지 않습니다** — 은퇴했거나 로그인이 필요합니다. "
+            "「로그인」을 확인하거나 「모델 받기」에서 다른 모델을 고르세요. 그때까지 이미지 작업은 "
+            "다음 프로바이더로 넘어갑니다.",
+        )
     if model and entry.get("active_model_installed") is False:
+        if "cloud" in model:
+            # 클라우드 모델은 내려받는 파일이 없다(등록만). 대신 로그인이 있어야 돈다(D-114).
+            how = (
+                "클라우드 모델이라 내려받는 파일은 없고 몇 초면 등록됩니다. 쓰려면 「로그인」이 "
+                "필요합니다 — 로그인하지 않을 PC는 아래 「모델 받기」에서 내 PC용 모델을 고르세요."
+            )
+        else:
+            how = "수 GB라 몇 분 걸립니다 — 아래 진행을 보세요."
         return (
             "no_model",
             f"{name}: 서버는 떠 있지만 **비전 모델이 없습니다.** 기본 모델 {model}을(를) "
-            "받기 시작했습니다(약 5GB) — 아래 진행을 보세요. 끝날 때까지 이미지 작업은 "
-            "다음 프로바이더로 넘어갑니다.",
+            f"받기 시작했습니다. {how} 끝날 때까지 이미지 작업은 다음 프로바이더로 넘어갑니다.",
         )
 
     if entry["authenticated"] is False:
@@ -636,7 +653,7 @@ def _account_status(entry: dict) -> tuple[str, str]:
             f"{name}: 서버는 떠 있지만 **로그인돼 있지 않습니다.** "
             "로컬 비전 모델이 없어 클라우드 모델을 골랐는데 로그인 없이는 실패하고, "
             "그러면 다음 프로바이더(유료 API)로 넘어갑니다. "
-            "`ollama pull gemma4:e4b`처럼 로컬 비전 모델을 받거나 `ollama signin`을 하세요.",
+            "「로그인」을 누르거나, 로그인하지 않을 PC는 「모델 받기」에서 내 PC용(로컬) 모델을 골라 받으세요.",
         )
 
     if entry["account"]:

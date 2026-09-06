@@ -7899,6 +7899,8 @@ select.prop-level { max-width: 4.6em; }
   margin-top: 6px; flex-wrap: wrap;
 }
 .settings-key-input { flex: 1; min-width: 140px; font-size: 12px; }
+/* Ollama 비전 모델 골라 받기(D-114) — 긴 이름·설명이 한 줄에 들어가게 넉넉히 */
+.settings-llm-select { flex: 1; min-width: 220px; max-width: 100%; font-size: 12px; }
 .settings-update { padding: 6px 8px; }
 .settings-update-warn {
   margin-top: 6px; padding: 6px 8px; border-radius: 3px; font-size: 11px;

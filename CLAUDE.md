@@ -71,7 +71,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 
 ## 백엔드 모듈 구조 (src/app/)
 server.py는 FastAPI 앱 생성 + 라우터 마운트 + 미들웨어만 담당하는 조립 파일.
-실제 API 엔드포인트 214개가 9개 라우터 모듈에 분산 (2026-09-05 기준 실측):
+실제 API 엔드포인트 215개가 9개 라우터 모듈에 분산 (2026-09-06 기준 실측):
 
 ```
 src/app/
@@ -79,7 +79,7 @@ src/app/
 ├── _state.py            ← 공유 상태 + 헬퍼 + LLM 프롬프트/캐시/동적 토큰 계산
 ├── __main__.py          ← CLI 진입점 (python -m app serve)
 └── routers/
-    ├── library.py       ← 서고/설정/백업/휴지통 + 스키마 검증 + 연결 설정·앱 업데이트·엔진 추가 설치·OAuth 프록시·Ollama 로그인·모델 받기 (28 라우트)
+    ├── library.py       ← 서고/설정/백업/휴지통 + 스키마 검증 + 연결 설정·앱 업데이트·엔진 추가 설치·OAuth 프록시·Ollama 로그인·모델 골라 받기 (29 라우트)
     ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 + 텍스트레이어 진단·가져오기·입히기 + 권 추가 + 경계 규칙 + 찍은 자리·규칙 제안 (43 라우트)
     ├── composition.py   ← 편성 — 내용 트리·경계 색인·넣기·옮기기·지우기 + 제안·목차·적용·자동 트리 + 쪼개기·리셋 (12 라우트)
     ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티/관계·태그 (22 라우트)
@@ -112,7 +112,8 @@ src/app/
 | `src/export/text_layer_pdf.py` | 보이지 않는 텍스트를 얹은 PDF를 만들고 **결과를 다시 재서 검사**(D-068) |
 | `src/cli/embed_folder.py` · `src/cli/__main__.py` | `ctb ocr` 한 줄 진입점. 실행 전에 «도는 모델»을 한 줄 찍는다(`describe_llm_target`) |
 | `scripts/warmup_paddle.py` | 설치 마지막 단계에서 PaddleOCR 모델(약 240MB)을 미리 받는다. `is_available()`은 paddle을 import하지 않고(메타데이터만) 첫 OCR 때 `_get_ocr()`이 읽는다 — import가 서버 기동·엔진 목록을 붙들었다(2026-09-06) |
-| `installer/ctb_setup.py` · `scripts/build_installer.ps1` | Windows 설치 파일 `CTB-Setup.exe`(D-113). 표준 라이브러리만 — 릴리스 태그 zip을 받아 풀고 `install.ps1`(`CTB_INSTALL_PICK`)을 돌리고 바탕화면 바로 가기. `--auto --dir --pick`으로 창 없이 검증. 빌드는 uvx pyinstaller(앱 .venv에 넣지 않는다) |
+| `installer/ctb_setup.py` · `scripts/build_installer.ps1` | Windows 설치 파일 `CTB-Setup.exe`(D-113). 표준 라이브러리만 — 릴리스 태그 zip을 받아 풀고 `install.ps1`(`CTB_INSTALL_PICK`)을 돌리고 바탕화면 바로 가기. `--auto --dir --pick`으로 창 없이 검증 — **`--auto`는 바로 가기를 만들지 않는다**(`--shortcut`으로 켠다; 격리 HOME 검증이 실제 바탕화면에 임시 폴더 아이콘을 남겼다, 2026-09-06). 빌드는 uvx pyinstaller(앱 .venv에 넣지 않는다) |
+| `src/llm/ollama_catalog.py` | Ollama 비전 모델 후보(D-114). 기본은 `gemma4:cloud`(내려받는 파일 없음, 로그인 필요) — 로그인하지 않을 PC는 화면 「모델 받기」에서 로컬 후보를 고른다. 내장 목록(크기는 레지스트리 매니페스트 실측) + ollama.com 검색 페이지의 클라우드 목록(1시간 캐시). `install.ps1`·`install.sh` 5-1도 같은 기본을 등록한다 |
 | `src/cli/models.py` · `src/cli/config.py` | `ctb models`(번호 목록)·`--model`(번호·이름 일부·`provider:model`) · `ctb config`(기본값 `~/.classical-text-browser/cli.json`, 명령줄 > 저장값 > 내장) |
 
 ## OCR 품질 모듈 (D-080~D-084, 2026-09-02)
@@ -133,6 +134,7 @@ src/app/
 | `src/llm/providers/base.py::thinking_options` | 사고 예산을 답변 예산에 **더하는** 공통 해석. 비전 경로 4종과 Gemini 텍스트 경로가 이것을 따른다(JSON 호출은 사고 미지정 = 끔) |
 
 - **사전은 지식이고 정책은 문헌의 것**: `strict`만 동치, `loose`·`script`는 힌트. 승인은 `documents/{doc_id}/variant_approvals.json`에만.
+- **Ollama 기본 비전 모델은 클라우드(`gemma4:cloud`)다**(D-114). 로컬 기본을 두면 처음 켠 PC가 9.6GB를 받기만 한다. 클라우드 기본은 목록에 있어도 `_pick_vision_model`이 한 번 불러 보고(로그인 없음·은퇴면 실패) 로컬 후보로 내려간다.
 - **사고(thinking)는 전역 스위치가 아니다**: 기본 끔(D-074). 정밀 판독과 사용자가 명시한 호출만 켠다. thinking 필드를 본문으로 쓰는 폴백은 어디에도 없다.
 
 ## 파일 다루기 — 되풀이하지 말 것
