@@ -137,6 +137,8 @@ flowchart LR
 
 ### 2.1 다운로드
 
+**Windows는 [CTB-Setup.exe](https://github.com/hw725/classical-text-browser/releases/latest/download/CTB-Setup.exe) 하나**로 끝납니다 — 0장 ①. 아래는 zip으로 직접 까는 방법(macOS·Linux, 또는 폴더를 손수 두고 싶을 때)입니다.
+
 [**ZIP 다운로드**](https://github.com/hw725/classical-text-browser/archive/refs/heads/main.zip)를 클릭하고 원하는 위치에 압축을 풀어주세요.
 
 > Git을 아는 분은 `git clone https://github.com/hw725/classical-text-browser.git`으로도 가능합니다.

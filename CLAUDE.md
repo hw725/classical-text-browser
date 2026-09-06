@@ -112,6 +112,7 @@ src/app/
 | `src/export/text_layer_pdf.py` | 보이지 않는 텍스트를 얹은 PDF를 만들고 **결과를 다시 재서 검사**(D-068) |
 | `src/cli/embed_folder.py` · `src/cli/__main__.py` | `ctb ocr` 한 줄 진입점. 실행 전에 «도는 모델»을 한 줄 찍는다(`describe_llm_target`) |
 | `scripts/warmup_paddle.py` | 설치 마지막 단계에서 PaddleOCR 모델(약 240MB)을 미리 받는다. `is_available()`은 paddle을 import하지 않고(메타데이터만) 첫 OCR 때 `_get_ocr()`이 읽는다 — import가 서버 기동·엔진 목록을 붙들었다(2026-09-06) |
+| `installer/ctb_setup.py` · `scripts/build_installer.ps1` | Windows 설치 파일 `CTB-Setup.exe`(D-113). 표준 라이브러리만 — 릴리스 태그 zip을 받아 풀고 `install.ps1`(`CTB_INSTALL_PICK`)을 돌리고 바탕화면 바로 가기. `--auto --dir --pick`으로 창 없이 검증. 빌드는 uvx pyinstaller(앱 .venv에 넣지 않는다) |
 | `src/cli/models.py` · `src/cli/config.py` | `ctb models`(번호 목록)·`--model`(번호·이름 일부·`provider:model`) · `ctb config`(기본값 `~/.classical-text-browser/cli.json`, 명령줄 > 저장값 > 내장) |
 
 ## OCR 품질 모듈 (D-080~D-084, 2026-09-02)
