@@ -580,3 +580,21 @@ async def test_all_dead_leaves_a_mark_for_the_card(monkeypatch):
     p = _ollama(monkeypatch, models=[{"name": "gemma4:cloud", "vision": True}], alive={"gemma4:cloud"})
     assert await p._pick_vision_model() == "gemma4:cloud"
     assert not p._shared_get("vision_dead")
+
+
+def test_app_version_comes_from_pyproject_not_dist_info(monkeypatch):
+    """화면 아래 버전은 pyproject.toml이 정본이다 — 실행 환경(.venv-gpu)의 dist-info가 낡아도 옛 판이 보이면 안 된다.
+
+    2026-09-06 보고: .venv-gpu의 편집 가능 설치 메타데이터가 1.2.1에 멈춰 화면에 v1.2.1이 남았다.
+    """
+    import importlib.metadata as md
+    import tomllib
+    from pathlib import Path
+
+    from app.server import _app_version
+
+    monkeypatch.setattr(md, "version", lambda name: "0.0.1")  # 낡은 dist-info를 흉내 낸다
+    root = Path(__file__).resolve().parents[1]
+    with open(root / "pyproject.toml", "rb") as f:
+        expected = tomllib.load(f)["project"]["version"]
+    assert _app_version() == expected != "0.0.1"
