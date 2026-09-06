@@ -206,11 +206,19 @@ uv run python -m pytest
    보고, 그림은 아무도 세지 않았다. 낡은 것은 다시 찍거나 문서에서 뺀다
 4. **실제 문헌으로 E2E** — 등록 → OCR → 검수 → PDF → 내려받기, 그리고
    **산출물을 열어서 본다.** 숫자만 보지 않는다.
+4-1. **화면 전체 훑기 — 사용자가 켜는 환경으로.** GPU PC는 아이콘이 `.venv-gpu`를 고르므로
+   `.venv-gpu\Scripts\python.exe -m app serve --port 8179`로 띄우고
+   `uv run --with playwright python scripts/ui_sweep.py 8179`. 버전 표시·패널 전부·콘솔 오류·4xx/5xx·
+   처음 설정 마법사를 한 번에 본다(오류가 있으면 종료 코드 1). v1.3.0에서 diff 리뷰와 pytest를 다
+   통과하고도 화면 아래 «v1.2.1»이 남았다 — 검증은 `uv run`(.venv)으로, 실행은 `.venv-gpu`로 해서
+   생긴 일이다. 판마다 `uv pip install --python .venv-gpu/Scripts/python.exe --no-deps -e .`로
+   GPU 환경 메타데이터도 맞춘다
 5. `docs/DECISIONS.md`에 결정 카드(다음 번호)
 6. `docs/releases/vX.Y.Z.md` — 되돌릴 수 없는 변화는 **맨 위에** 적는다. 표제 문구
    «되돌릴 수 없는 변화 — 있음»을 바꾸면 앱의 새 판 경고(`core/updater.py`)가 안 뜬다
 7. 버전 올리기: **`pyproject.toml` 한 곳뿐이다.** `server.py`와 화면 아래
-   상태바는 설치된 패키지 메타데이터에서 읽는다(`/api/app/version`).
+   상태바는 `core.updater.current_version()`으로 pyproject를 직접 읽는다(`/api/app/version`).
+   설치 메타데이터(dist-info)는 실행 환경마다 달라 `.venv-gpu`에서 옛 판이 보였다(2026-09-06).
    **여기에 버전을 새로 적지 말 것** — 적는 곳이 둘 이상이면 반드시 어긋난다
 8. `/doc-sync` (Release/Range Mode, base = 직전 태그)
 9. 커밋 → 푸시 → `git tag -a vX.Y.Z` → `git push origin vX.Y.Z`
