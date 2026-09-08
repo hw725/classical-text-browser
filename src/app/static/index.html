@@ -1938,6 +1938,7 @@
                   <summary>
                     <span class="comp-signals-title">자세히 · 고치기</span>
                     <span id="comp-signals-summary" class="comp-propose-stats"></span>
+                    <button id="comp-preview-btn" class="text-btn text-btn-sm" title="지금 체크한 대로 바꾸면 경계가 어떻게 달라지는지 먼저 재서 보입니다. 아무것도 저장하지 않습니다">바꾸면?</button>
                     <button id="comp-signals-propose-btn" class="text-btn text-btn-sm" title="체크한 신호를 이 문헌의 규칙으로 저장하고 후보를 다시 찾습니다 (규칙만)">후보 보기</button>
                   </summary>
                   <!-- 목차 줄 (D-089) — 신호 목록의 첫 줄. LLM 스위치는 여기 하나(항목 구조화)뿐이다 -->
@@ -1954,6 +1955,8 @@
                     <input id="comp-toc-llm" type="checkbox" hidden />
                     <span id="comp-toc-llm-mark" class="comp-sig-aux" hidden title="「LLM에 묻기」에서 목차 항목 구조화를 켜 두었습니다 — 「후보 보기」·「전부 적용」 때 목차 쪽 텍스트를 모델에 보냅니다">LLM 구조화 켬</span>
                   </div>
+                  <!-- 규칙을 바꾸면 무엇이 달라지는가(D-121) — 사람·통계·LLM이 다 이 자리를 지난다 -->
+                  <div id="comp-preview-out" class="comp-preview-out" hidden></div>
                   <div id="comp-signals-list" class="comp-signals-list">
                     <div class="placeholder">전문을 세는 중…</div>
                   </div>

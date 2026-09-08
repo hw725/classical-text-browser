@@ -145,7 +145,9 @@ class CorrectionsSaveRequest(BaseModel):
 
 
 class BibliographySaveRequest(BaseModel):
-    """서지정보 저장 요청 본문. bibliography.schema.json 형식."""
+    """입력: 서지 편집 칸. 출력: 저장 요청. 목적: 스키마의 모든 칸 수용."""
+
+    from pydantic import Field as _Field
 
     title: str | None = None
     title_reading: str | None = None
@@ -169,7 +171,8 @@ class BibliographySaveRequest(BaseModel):
     repository: dict | None = None
     digital_source: dict | None = None
     raw_metadata: dict | None = None
-    _mapping_info: dict | None = None
+    # 밑줄 이름은 비공개 속성이 되므로 외부 이름만 별칭으로 보존한다.
+    mapping_info: dict | None = _Field(default=None, alias="_mapping_info")
     notes: str | None = None
 
 
@@ -2448,9 +2451,17 @@ async def api_bibliography(doc_id: str):
         )
 
     try:
-        return get_bibliography(doc_path)
+        bibliography = get_bibliography(doc_path)
+        if not isinstance(bibliography, dict):
+            raise ValueError("서지정보 최상위 값은 객체여야 합니다.")
+        return bibliography
     except FileNotFoundError as e:
         return JSONResponse({"error": str(e)}, status_code=404)
+    except (OSError, ValueError) as e:
+        return JSONResponse(
+            {"error": f"서지정보 읽기 실패: {e}. 파일 형식과 읽기 권한을 확인하세요."},
+            status_code=500,
+        )
 
 
 @router.post("/api/documents/{doc_id}/bibliography/from-url")
@@ -2550,25 +2561,57 @@ async def api_save_bibliography(doc_id: str, body: BibliographySaveRequest):
 
     # 보낸 칸만 덮어쓴다(exclude_unset) — 화면이 모르는 칸(판식·간행·권책수)을 지우지 않기
     # 위해서다. 사람이 칸을 비우려고 null을 보낸 것은 «보낸 것»이라 그대로 반영된다.
-    incoming = body.model_dump(exclude_unset=True)
+    incoming = body.model_dump(exclude_unset=True, by_alias=True)
     try:
-        existing = get_bibliography(doc_path) or {}
+        existing = get_bibliography(doc_path)
+        if not isinstance(existing, dict):
+            raise ValueError("서지정보 최상위 값은 객체여야 합니다.")
     except (FileNotFoundError, OSError, ValueError):
-        existing = {}
+        # 읽지 못한 파일을 빈 서지로 간주하면 복구 가능한 기존 정보까지 잃는다.
+        return JSONResponse(
+            {"error": "기존 서지를 읽지 못했습니다. 파일 형식과 읽기 권한을 확인하세요."},
+            status_code=500,
+        )
     bib_data = {**existing, **incoming}
-    pansik = (bib_data.get("printing_info") or {}).get("summary")
+    if isinstance(incoming.get("printing_info"), dict):
+        # 원문만 붙여 넣어도 기존 수동 판정을 지우지 않는다. 전체 null은 그대로 둔다.
+        previous = existing.get("printing_info")
+        bib_data["printing_info"] = {
+            **(previous if isinstance(previous, dict) else {}),
+            **incoming["printing_info"],
+        }
+    printing_info = bib_data.get("printing_info")
+    # 잘못된 기존 값도 아래 저장 검증에서 오류로 돌려주어 파일을 보존한다.
+    pansik = printing_info.get("summary") if isinstance(printing_info, dict) else None
     if pansik and str(pansik).strip():
         # 사람이 목록의 형태사항(KORMARC 300▼b)을 통째로 붙여 넣었다 — 파서가 갈라 담는다.
         # 파서는 못 읽은 부분을 summary에 그대로 남기므로 정보가 사라지지 않는다(D-120 ②).
         from parsers.korcis import parse_pansik_info
 
         parsed = parse_pansik_info(str(pansik))
-        # 사람이 개별 칸을 손본 것이 있으면 그것을 이긴다 — 파서는 빈 칸만 채운다
-        merged = dict(parsed)
-        for key, value in (bib_data.get("printing_info") or {}).items():
-            if key != "summary" and value:
-                merged[key] = value
-        bib_data["printing_info"] = merged
+        was = (
+            existing.get("printing_info") if isinstance(existing.get("printing_info"), dict) else {}
+        )
+        sent = incoming["printing_info"] if isinstance(incoming.get("printing_info"), dict) else {}
+        if str(was.get("summary") or "") == str(pansik):
+            # 원문은 그대로고 사람이 개별 칸을 손봤다 — 그 손질이 이긴다. 파서는 빈 칸만 채운다.
+            bib_data["printing_info"] = {**parsed, **bib_data["printing_info"]}
+        else:
+            # 원문이 바뀌었다 → 갈라 담은 값이 기준이다. 화면은 옛 값을 그대로 안고 새 원문만
+            # 얹어 보내므로(…bib.printing_info, summary: 새 원문), 안고 온 값이 이기면 고친
+            # 판식이 반영되지 않는다(2026-09-09 확인).
+            # 다만 «안고 온 것»과 «뜻을 담아 보낸 것»은 다르다 — 전에 저장된 값과 똑같으면
+            # 안고 온 것이고, 다르면 사람이 이번에 손댄 것이라 그대로 둔다.
+            # 새 원문이 말하지 않는 칸(전에 손으로 적어 둔 어미 같은 것)은 그대로 남긴다 —
+            # 갈라 담은 것만 남기면 언급되지 않았다는 이유로 지워진다.
+            merged = {**was, **parsed}
+            for key, value in sent.items():
+                if key == "summary":
+                    continue
+                if not (key in was and was[key] == value):
+                    merged[key] = value
+            merged["summary"] = pansik
+            bib_data["printing_info"] = merged
     try:
         return save_bibliography(doc_path, bib_data)
     except Exception as e:

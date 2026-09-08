@@ -7633,6 +7633,29 @@ input.prop-level { width: 3.2em; }
 .comp-signals > summary { cursor: pointer; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .comp-signals-title { font-weight: 600; }
 .comp-signals > summary .text-btn-sm { margin-left: auto; }
+/* 규칙을 바꾸면 무엇이 달라지는가 (D-121) — 적용 전에 재서 보이는 자리 */
+.comp-preview-out {
+  border: 1px solid var(--accent-primary, #3b82f6);
+  border-radius: 4px;
+  padding: 8px;
+  margin: 6px 0;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.comp-preview-head { font-weight: 600; }
+.comp-preview-note { font-size: 11px; color: var(--text-muted); }
+.comp-preview-list { max-height: 140px; overflow-y: auto; }
+.comp-preview-row {
+  font-size: 11px;
+  padding: 1px 0 1px 8px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .comp-signals-list { display: flex; flex-direction: column; gap: 1px; margin-top: 2px; }
 .comp-sig-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 1px 0; }
 .comp-sig-row.is-aux { color: var(--text-secondary); }

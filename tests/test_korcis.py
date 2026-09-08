@@ -18,11 +18,116 @@ from src.parsers.korcis import (
     _parse_openapi_search_xml,
     parse_008_field,
     parse_pansik_info,
+    read_eomi,
 )
 
 # ──────────────────────────────────────
 # 픽스처: MARC 샘플 데이터
 # ──────────────────────────────────────
+
+
+@pytest.mark.parametrize("text", ["  四周雙邊\n", " 특이한 형태 \t"])
+def test_pansik_summary_preserves_original(text):
+    """입력: 공백 포함 원문. 출력: 원문 그대로. 목적: 서지 원문 보존."""
+    assert parse_pansik_info(text)["summary"] == text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "無上黑魚尾",
+        "無二葉魚尾",
+        "上下向黑魚尾",
+        "上內黑魚尾",
+        "魚尾草",
+        "金魚尾",
+        "上2花紋魚尾",
+        "上葉花紋魚尾",
+    ],
+)
+def test_eomi_does_not_read_suffix_of_invalid_token(text):
+    """입력: 비문·긴 단어. 출력: 미판정. 목적: 부분 일치로 확정하지 않기."""
+    assert read_eomi(text) == ("", "")
+
+
+@pytest.mark.parametrize(
+    ("text", "reading"),
+    [
+        ("上貳葉花紋魚尾", "상이엽화문어미"),
+        ("上四葉花紋魚尾", "상사엽화문어미"),
+        ("上４葉花紋魚尾", "상사엽화문어미"),
+    ],
+)
+def test_eomi_leaf_numeral_variants(text, reading):
+    """입력: 잎 수 이체 표기. 출력: 동일 독음. 목적: 수식어 탈락 방지."""
+    assert read_eomi(text) == (reading, text)
+
+
+@pytest.mark.parametrize("text", ["無魚尾 上黑魚尾", "上黑魚尾 下白魚尾"])
+def test_eomi_conflicting_mentions_are_not_reduced_to_first(text):
+    """입력: 서로 다른 어미 둘. 출력: 미판정. 목적: 한 칸으로 단정 방지."""
+    assert read_eomi(text) == ("", "")
+    assert parse_pansik_info(text) == {"summary": text}
+
+
+def test_bare_eomi_is_not_guessed_and_the_title_survives():
+    """입력: 어미 글자가 든 서명. 출력: 어미는 비우고 서명은 보존.
+
+    목적: 「魚尾」 한 낱말만으로는 어느 어미인지 알 수 없다. 그것을 «어미»라고 읽어 주면
+    「金魚尾」·「魚尾草」 같은 낱말도 함께 읽히므로, 조각이 하나도 없으면 비워 둔다
+    (2026-09-09 — 붙여 쓴 판식을 읽게 고치면서 정한 계약).
+    """
+    text = "版心題 魚尾草  魚尾"
+    assert read_eomi(text) == ("", "")
+    assert parse_pansik_info(text)["pansimje"] == "魚尾草"
+    assert "eomi" not in parse_pansik_info(text)
+
+
+@pytest.mark.parametrize(
+    ("text", "absent"),
+    [("10x四周雙邊20cm", "gwangwak_size"), ("有10x20cm界", "gyeseon")],
+)
+def test_pansik_removal_does_not_join_unrelated_fragments(text, absent):
+    """입력: 다른 항목 사이 조각. 출력: 미결합. 목적: 삭제 후 거짓 일치 방지."""
+    assert absent not in parse_pansik_info(text)
+
+
+def test_pansik_title_is_not_consumed_as_format():
+    """입력: 판식 어휘가 든 서명. 출력: 서명 보존. 목적: 앞 규칙의 침범 방지."""
+    text = "版心題 四周雙邊 有界 魚尾  10行20字"
+    result = parse_pansik_info(text)
+    assert result["pansimje"] == "四周雙邊 有界 魚尾"
+    assert set(result) == {"summary", "pansimje", "haengja"}
+
+
+@pytest.mark.parametrize(
+    ("text", "haengja", "columns"),
+    [
+        ("10行\n20字", "반엽 10행 20자", 10),
+        ("半葉10行20字", "반엽 10행 20자", 10),
+        ("10行 대자20자", None, 10),
+        ("10行", None, 10),
+        ("10行20字 10行20字", "반엽 10행 20자", 10),
+        ("", None, None),
+        ("   ", None, None),
+        ("특이한 형태", None, None),
+    ],
+)
+def test_pansik_catalog_contract(text, haengja, columns):
+    """입력: 행자수 변형. 출력: 파싱·대조값. 목적: 생산자와 소비자 계약 확인."""
+    from core.page_format import catalog_columns
+
+    info = parse_pansik_info(text)
+    assert info.get("haengja") == haengja
+    assert catalog_columns(info) == columns
+    assert info.get("summary", text) == text
+
+
+def test_pansik_repeated_identical_tokens():
+    """입력: 동일 판식 반복. 출력: 단일 판정. 목적: 반복과 상충 구분."""
+    text = "四周雙邊 四周雙邊 無魚尾 無魚尾"
+    assert parse_pansik_info(text) == {"summary": text, "gwangwak": "사주쌍변", "eomi": "무어미"}
+    assert read_eomi("四周雙邊 無魚尾 有界") == ("무어미", "無魚尾")
 
 
 @pytest.fixture

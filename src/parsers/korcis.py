@@ -1501,13 +1501,20 @@ _GWANGWAK_PATTERNS = [
 # 빠질 때마다 못 읽는다 — 실제로 국립중앙도서관 KOL000019624의 「上2葉花紋魚尾」가 그렇게
 # 통째로 빠졌다(2026-09-08). 아라비아 숫자를 쓴 표기도 목록마다 섞여 있다.
 # 그래서 조각을 읽어 이어 붙인다. 조각의 한자→한글 대응만 지식이고, 조합은 세지 않는다.
+# 어미 글자만으로 이어진 구간을 떼어 내 «통째로» 해석되는지 본다.
+# 왜 낱말 경계(·\w)를 쓰지 않는가: 한문에는 띄어쓰기가 없어 「…20字上下內向二葉花紋魚尾」처럼
+# 붙여 쓴 목록이 흔하고, 가드를 두면 그런 표기를 통째로 못 읽는다(2026-09-09 실측).
+# 왜 «통째로»인가: 「金魚尾」「魚尾草」는 어미가 아니고, 「上下向黑魚尾」「上2花紋魚尾」처럼 조각이
+# 어긋난 표기는 짐작하지 않고 비워 둔다 — 목록이 그렇게 적혔다면 사람이 봐야 한다.
+_EOMI_CHARS = "無上下內外向二貳三四2-4２-４葉花紋黑白魚尾"
+_EOMI_RUN = re.compile(f"[{_EOMI_CHARS}]*魚尾")
 _EOMI_RE = re.compile(
-    r"(?P<none>無)?"
+    r"(?:(?P<none>無魚尾)|"
     r"(?P<place>上下|上|下)?"
     r"(?P<face>內向|外向)?"
-    r"(?P<leaf>[二三四2-4])?葉?"
+    r"(?:(?P<leaf>[二貳三四2-4２-４])葉)?"
     r"(?P<style>花紋|黑|白)?"
-    r"魚尾"
+    r"魚尾)"
 )
 _EOMI_WORDS = {
     "上下": "상하",
@@ -1516,11 +1523,15 @@ _EOMI_WORDS = {
     "內向": "내향",
     "外向": "외향",
     "二": "이",
+    "貳": "이",
     "2": "이",
+    "２": "이",
     "三": "삼",
     "3": "삼",
+    "３": "삼",
     "四": "사",
     "4": "사",
+    "４": "사",
     "花紋": "화문",
     "黑": "흑",
     "白": "백",
@@ -1531,20 +1542,31 @@ def read_eomi(text: str) -> tuple[str, str]:
     """어미 표기를 한글 독음으로 읽는다.
 
     입력: 판식정보 원문 조각(예: "上2葉花紋魚尾").
-    출력: (한글 독음, 읽어 낸 원문). 어미가 없으면 ("", "").
+    출력: (한글 독음, 읽어 낸 원문). 어미가 없거나 조각이 어긋나면 ("", "").
     목적: 조합을 표로 나열하지 않고 조각을 이어 붙여, 목록마다 다른 표기를 견딘다.
     """
-    m = _EOMI_RE.search(text or "")
-    if not m:
+    readings, raws = [], []
+    for run in _EOMI_RUN.finditer(text or ""):
+        m = _EOMI_RE.fullmatch(run.group(0))
+        if m is None:
+            # 어미처럼 보이지만 조각이 어긋난다(「金魚尾」·「上下向黑魚尾」) — 짐작하지 않는다
+            return "", ""
+        if m.group("none"):
+            readings.append("무어미")
+            raws.append(run.group(0))
+            continue
+        parts = [_EOMI_WORDS.get(m.group(k) or "", "") for k in ("place", "face", "leaf", "style")]
+        if not any(parts):
+            return "", ""  # 「魚尾」 한 낱말뿐 — 어느 어미인지 알 수 없다
+        if m.group("leaf"):
+            # 잎 수와 葉를 함께 읽어야 원문에 없는 단위를 보충하지 않는다.
+            parts[2] += "엽"
+        readings.append("".join(parts) + "어미")
+        raws.append(run.group(0))
+    # 서로 다른 표기를 한 칸에 넣을 근거가 없으므로 원문만 남긴다.
+    if not readings or len(set(readings)) != 1:
         return "", ""
-    if m.group("none"):
-        return "무어미", m.group(0)
-    parts = [_EOMI_WORDS.get(m.group(k) or "", "") for k in ("place", "face", "leaf", "style")]
-    if m.group("leaf"):
-        # 「二葉」의 «엽»은 잎 수 뒤에만 붙는다
-        parts[2] = parts[2] + "엽"
-    reading = "".join(p for p in parts if p) + "어미"
-    return reading, m.group(0)
+    return readings[0], raws[0]
 
 
 # 판구(版口) 패턴 → 한국어 독음
@@ -1573,14 +1595,22 @@ def parse_pansik_info(text: str) -> dict[str, Any]:
     if not text or not text.strip():
         return {}
 
-    result: dict[str, Any] = {"summary": text.strip()}
+    result: dict[str, Any] = {"summary": text}
     remaining = text.strip()
 
+    # 서명의 판식 어휘를 오인하지 않도록 이름 영역을 먼저 분리한다.
+    # 기존 문법처럼 두 칸 이상의 공백 또는 끝을 서명 경계로 삼는다.
+    pansimje_match = re.search(r"版心題\s*[:：]?\s*(.+?)(?:\s{2,}|$)", remaining)
+    if pansimje_match:
+        result["pansimje"] = pansimje_match.group(1).strip()
+        remaining = remaining[: pansimje_match.start()] + ", " + remaining[pansimje_match.end() :]
+
+    # 각 규칙은 같은 텍스트를 읽는다. 먼저 읽은 부분을 삭제하면
+    # 떨어진 글자가 붙어 원문에 없던 크기·계선이 생길 수 있다.
     # 1. 광곽 (匡郭)
     for pattern, value in _GWANGWAK_PATTERNS:
         if pattern.search(remaining):
             result["gwangwak"] = value
-            remaining = pattern.sub("", remaining)
             break
 
     # 2. 반곽 크기 (세로×가로 cm)
@@ -1591,18 +1621,12 @@ def parse_pansik_info(text: str) -> dict[str, Any]:
     )
     if size_match:
         result["gwangwak_size"] = f"{size_match.group(1)} × {size_match.group(2)} cm"
-        remaining = remaining[: size_match.start()] + remaining[size_match.end() :]
-
-    # "半郭" 단독 키워드 제거 (크기와 함께 쓰이지 않은 경우)
-    remaining = re.sub(r"半郭", "", remaining)
 
     # 3. 계선 (界線)
     if "有界" in remaining:
         result["gyeseon"] = "유계"
-        remaining = remaining.replace("有界", "")
     elif "無界" in remaining:
         result["gyeseon"] = "무계"
-        remaining = remaining.replace("無界", "")
 
     # 4. 행자수 (行字數)
     hj_match = re.search(r"(\d+)\s*行\s*(\d+)\s*字", remaining)
@@ -1610,38 +1634,27 @@ def parse_pansik_info(text: str) -> dict[str, Any]:
         rows = int(hj_match.group(1))
         chars = int(hj_match.group(2))
         result["haengja"] = f"반엽 {rows}행 {chars}자"
-        remaining = remaining[: hj_match.start()] + remaining[hj_match.end() :]
 
     # 5. 주(注) 행자수
     # 註와 注, 雙과 双은 같은 말이다 — 국립중앙도서관은 「註雙行」, KORCIS는 「注雙行」을 쓴다
     ju_match = re.search(r"[註注][雙双]行|주쌍행", remaining)
     if ju_match:
         result["ju_haengja"] = "주쌍행"
-        remaining = remaining[: ju_match.start()] + remaining[ju_match.end() :]
     else:
         ju_match2 = re.search(r"[註注][單单]行|주단행", remaining)
         if ju_match2:
             result["ju_haengja"] = "주단행"
-            remaining = remaining[: ju_match2.start()] + remaining[ju_match2.end() :]
 
     # 6. 판구 (版口)
     for pattern, value in _PANGOO_PATTERNS:
         if pattern.search(remaining):
             result["pangoo"] = value
-            remaining = pattern.sub("", remaining)
             break
 
     # 7. 어미 (魚尾) — 조각을 읽어 이어 붙인다(표로 나열하지 않는다)
-    eomi_reading, eomi_raw = read_eomi(remaining)
+    eomi_reading, _ = read_eomi(remaining)
     if eomi_reading:
         result["eomi"] = eomi_reading
-        remaining = remaining.replace(eomi_raw, "", 1)
-
-    # 8. 판심제 (版心題) — "版心題 <서명>" 패턴
-    pansimje_match = re.search(r"版心題\s*[:：]?\s*(.+?)(?:\s{2,}|$)", remaining)
-    if pansimje_match:
-        result["pansimje"] = pansimje_match.group(1).strip()
-        remaining = remaining[: pansimje_match.start()] + remaining[pansimje_match.end() :]
 
     return result
 

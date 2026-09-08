@@ -95,6 +95,8 @@ function _bindCompEvents() {
     const el = document.getElementById(id);
     if (el) el.addEventListener("click", _closeLlmModal);
   }
+  const previewBtn = document.getElementById("comp-preview-btn");
+  if (previewBtn) previewBtn.addEventListener("click", _previewRules);
   const llmRef = document.getElementById("comp-llm-ref-open");
   if (llmRef) llmRef.addEventListener("click", _openReferenceBox);
   const llmScope = document.getElementById("comp-llm-scope");
@@ -1996,6 +1998,112 @@ function _renderRuleCandidates(d) {
     n.textContent = d.note;
     out.appendChild(n);
   }
+}
+
+/**
+ * 지금 체크한 대로 바꾸면 경계가 어떻게 달라지는지 재서 보인다 (D-121). 저장하지 않는다.
+ *
+ * 왜: 규칙 변경은 사람·통계·LLM 셋 어디서든 온다. 어디서 왔든 «켜면 이렇게 달라집니다»를 먼저
+ * 보이고 사람이 정하게 한다 — 이 프로젝트가 LLM의 말을 세어 확인하는 것과 같은 태도다.
+ */
+async function _previewRules() {
+  const out = document.getElementById("comp-preview-out");
+  if (!out) return;
+  if (!_signalsCurrent()) {
+    await _openProposePanel();
+    if (!_signalsCurrent()) return;
+  }
+  out.hidden = false;
+  out.textContent = "재는 중…";
+  try {
+    const useToc = document.getElementById("comp-toc-use")?.checked !== false;
+    const res = await fetch(
+      `/api/documents/${encodeURIComponent(viewerState.docId)}/segmentation/preview`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          part_id: viewerState.partId,
+          rules: _rulesFromForm(),
+          use_toc: useToc,
+          toc_pages: useToc ? _tocPagesFromInput() : null,
+        }),
+      },
+    );
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+    _renderRulePreview(d);
+  } catch (e) {
+    out.textContent = `재지 못했습니다: ${e.message}`;
+  }
+}
+
+/**
+ * 미리 보기 결과를 그린다. 입력: preview 응답. 출력: 없음. 목적: 숫자와 «달라지는 자리»를 보인다.
+ *
+ * 이름이 긴 이유: 이 저장소의 JS는 모듈이 아니라 전역 스크립트라 파일이 달라도 이름이 겹치면
+ * 나중에 읽힌 쪽이 이긴다. 짧게 _renderPreview로 두었더니 punctuation-editor.js의 같은 이름에
+ * 가려져 아무 일도 일어나지 않았다(2026-09-09).
+ */
+function _renderRulePreview(d) {
+  const out = document.getElementById("comp-preview-out");
+  if (!out) return;
+  out.textContent = "";
+  const head = document.createElement("div");
+  head.className = "comp-preview-head";
+  head.textContent = d.summary || "";
+  out.appendChild(head);
+
+  if (!d.changes?.length) {
+    const same = document.createElement("div");
+    same.className = "comp-preview-note";
+    same.textContent = "저장된 규칙과 같습니다 — 바꿀 것이 없습니다.";
+    out.appendChild(same);
+    return;
+  }
+  const what = document.createElement("div");
+  what.className = "comp-preview-note";
+  what.textContent =
+    "바꾸는 것: " +
+    d.changes
+      .map((c) =>
+        c.added || c.removed
+          ? `${c.field}${c.added?.length ? " +" + c.added.join(",") : ""}${c.removed?.length ? " −" + c.removed.join(",") : ""}`
+          : `${c.field} ${c.before} → ${c.after}`,
+      )
+      .join(" · ");
+  out.appendChild(what);
+
+  for (const [rows, total, label] of [
+    [d.added, d.added_total, "새로 잡히는 자리"],
+    [d.removed, d.removed_total, "빠지는 자리"],
+  ]) {
+    if (!total) continue;
+    const box = document.createElement("div");
+    box.className = "comp-preview-list";
+    const title = document.createElement("div");
+    title.className = "comp-preview-note";
+    title.textContent = `${label} ${total}${total > rows.length ? ` (앞의 ${rows.length}개만 보임)` : ""}`;
+    box.appendChild(title);
+    for (const r of rows) {
+      const line = document.createElement("div");
+      line.className = "comp-preview-row";
+      line.textContent = `${r.page}쪽 ${r.title || "(제목 없음)"}`;
+      line.title = (r.reasons || []).join(" · ");
+      box.appendChild(line);
+    }
+    out.appendChild(box);
+  }
+
+  const act = document.createElement("button");
+  act.className = "text-btn text-btn-sm text-btn-primary";
+  act.textContent = "이대로 적용";
+  act.title = "이 규칙을 문헌 설정에 저장하고 후보를 다시 찾습니다";
+  act.addEventListener("click", () => {
+    out.hidden = true;
+    _saveRulesAndRepropose();
+  });
+  out.appendChild(act);
 }
 
 async function _saveRulesAndRepropose() {

@@ -101,6 +101,15 @@ class SegmentationSignalsRequest(BaseModel):
     toc_pages: list[int] | None = None  # 사람이 적은 목차 쪽(없으면 규칙으로 판별)
 
 
+class SegmentationPreviewRequest(BaseModel):
+    """규칙을 바꾸면 경계가 어떻게 달라지는지 미리 재는 요청 (D-121). 저장하지 않는다."""
+
+    part_id: str
+    rules: dict  # 바꾸려는 규칙 전체(화면이 만든 것). 지금 저장된 규칙과 견준다
+    use_toc: bool = True
+    toc_pages: list[int] | None = None
+
+
 class SegmentationSignalsLlmRequest(BaseModel):
     # 해제는 문헌에 저장되지만, 화면에서 막 붙여 넣고 아직 저장하지 않았을 수 있다 —
     # 모달이 «해제 N자를 함께 보냅니다»라고 적으므로 온 것을 그대로 쓴다(없으면 저장본)
@@ -479,6 +488,55 @@ async def api_segmentation_signals(doc_id: str, body: SegmentationSignalsRequest
         result["page_format"]["catalog"] = None
     result["saved_rules"] = normalize_rules(saved) if saved else None
     result["recommended_rules"] = rules_from_signals(result, saved)
+    return result
+
+
+@router.post("/api/documents/{doc_id}/segmentation/preview")
+async def api_segmentation_preview(doc_id: str, body: SegmentationPreviewRequest):
+    """규칙을 바꾸면 경계가 어떻게 달라지는지 미리 센다 (D-121). **아무것도 저장하지 않는다.**
+
+    목적: 규칙 변경은 사람·통계·LLM 셋 어디서든 온다. 어디서 왔든 «켜면 이렇게 달라집니다»를
+          먼저 보이고 사람이 정하게 한다 — 이 프로젝트가 LLM의 말을 세어 확인하는 것과 같은 태도다.
+    입력: part_id, rules(바꾸려는 규칙 전체), use_toc·toc_pages(제안 때와 같은 조건으로 견주려고).
+    출력: core.rule_preview.preview_rule_change() 결과 + "saved_rules".
+    """
+    from core.document import get_document_info
+    from core.rule_preview import preview_rule_change
+    from core.segmentation import collect_document_lines, normalize_rules
+    from core.toc import align_toc_to_body, detect_toc_pages, extract_toc_entries_rule
+
+    doc_path, err = _doc(doc_id)
+    if err is not None:
+        return err
+    try:
+        saved = get_document_info(doc_path).get("segmentation_rules")
+    except FileNotFoundError:
+        saved = None
+    lines, page_texts = collect_document_lines(doc_path, body.part_id, None)
+    if not lines:
+        return JSONResponse(
+            {"error": "확정 텍스트(L4)가 있는 쪽이 없습니다. OCR·교정을 먼저 하세요."},
+            status_code=400,
+        )
+    # 목차는 규칙이 아니다 — 양쪽에 똑같이 준다. 안 그러면 목차 때문에 달라진 것을
+    # 규칙 때문이라고 잘못 읽는다.
+    toc_matches = None
+    if body.use_toc:
+        page_lines = {p: t.split("\n") for p, t in page_texts.items()}
+        rules_now = normalize_rules(saved)
+        pages = (
+            [int(p) for p in body.toc_pages if int(p) in page_lines]
+            if body.toc_pages
+            else detect_toc_pages(page_lines, rules_now["max_title_chars"])
+        )
+        if pages:
+            entries = extract_toc_entries_rule(page_lines, pages)
+            body_lines = [ln for ln in lines if ln.page not in set(pages)]
+            matches, _un = align_toc_to_body(entries, body_lines)
+            toc_matches = [m.to_dict() for m in matches]
+            lines = body_lines
+    result = preview_rule_change(lines, saved, body.rules, toc_matches=toc_matches)
+    result["saved_rules"] = normalize_rules(saved) if saved else None
     return result
 
 

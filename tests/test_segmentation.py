@@ -457,6 +457,78 @@ def test_boundary_index_can_carry_text_for_the_manual_panel(client, tmp_path):  
     assert any(row["original_text"].strip() for row in heavy)
 
 
+class TestRulePreview:
+    """규칙을 바꾸면 무엇이 달라지는가 (D-121). 사람·통계·LLM이 모두 이 관문을 지난다."""
+
+    def _book(self):
+        rows = []
+        for p in range(1, 5):
+            rows += [
+                Line(p, 0, f"{'一二三四'[p - 1]}日雨"),
+                Line(p, 1, BODY),
+                Line(p, 2, BODY),
+                Line(p, 3, "又題"),
+                Line(p, 4, BODY),
+            ]
+        return rows
+
+    def test_turning_a_signal_off_is_counted_before_applying(self):
+        """입력: 날짜를 끈 규칙. 출력: 빠지는 자리와 숫자. 목적: 켜기 전에 결과를 보인다."""
+        from src.core.rule_preview import preview_rule_change
+
+        lines = self._book()
+        before = {"signals": {"date": True}}
+        after = {"signals": {"date": False}}
+        r = preview_rule_change(lines, before, after)
+        assert r["before"]["accepted"] > r["after"]["accepted"]
+        assert r["removed_total"] >= 1
+        assert r["added_total"] == 0
+        assert r["changes"] == [{"field": "signals.date", "before": True, "after": False}]
+        assert "빠지는 자리" in r["summary"]
+        assert all(row["page"] and row["title"] is not None for row in r["removed"])
+
+    def test_reordering_a_list_is_not_a_change(self):
+        """입력: 어휘 순서만 뒤집기. 출력: 변경 없음. 목적: 뜻 없는 차이를 말하지 않는다."""
+        from src.core.rule_preview import preview_rule_change
+
+        lines = self._book()
+        before = {"title_words": ["題", "談草"]}
+        after = {"title_words": ["談草", "題"]}
+        r = preview_rule_change(lines, before, after)
+        assert r["changes"] == []
+        assert "그대로" in r["summary"]
+
+    def test_a_list_change_says_what_was_added(self):
+        """입력: 어휘 하나 더. 출력: added만. 목적: 목록은 «늘고 준 것»으로 말한다."""
+        from src.core.rule_preview import preview_rule_change
+
+        r = preview_rule_change(self._book(), {"title_words": []}, {"title_words": ["題"]})
+        assert r["changes"] == [{"field": "title_words", "added": ["題"], "removed": []}]
+
+    def test_unwritten_switch_is_compared_by_its_effect(self):
+        """입력: 안 적힌 스위치 → 끔. 출력: True → False. 목적: «None → False»로 말하지 않는다."""
+        from src.core.rule_preview import preview_rule_change
+
+        r = preview_rule_change(self._book(), {}, {"signals": {"date": False}})
+        assert {"field": "signals.date", "before": True, "after": False} in r["changes"]
+
+    def test_preview_saves_nothing(self, client, tmp_path):  # noqa: F811
+        """입력: 미리 보기 요청. 출력: 200과 숫자. 목적: 문헌 설정이 그대로여야 한다."""
+        from pathlib import Path as _P
+
+        lib, part_id = _setup(client, tmp_path)
+        manifest = _P(lib) / "documents" / "d1" / "manifest.json"
+        before_bytes = manifest.read_bytes()
+        r = client.post(
+            "/api/documents/d1/segmentation/preview",
+            json={"part_id": part_id, "rules": {"signals": {"date": False}}, "use_toc": False},
+        )
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert "summary" in d and "before" in d and "after" in d
+        assert manifest.read_bytes() == before_bytes  # 아무것도 저장하지 않는다
+
+
 def test_propose_without_l4_is_400(client, tmp_path):
     lib, part_id = _setup(client, tmp_path)
     import shutil
