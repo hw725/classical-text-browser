@@ -529,6 +529,87 @@ class TestRulePreview:
         assert manifest.read_bytes() == before_bytes  # 아무것도 저장하지 않는다
 
 
+class TestRuleTalk:
+    """사람이 말한 것을 규칙 변경으로 옮긴다 (D-121 두 번째 입구).
+
+    가장 중요한 계약: 옮기지 못한 말은 조용히 넘어가지 않고 그대로 돌려준다.
+    """
+
+    def _book(self):
+        rows = []
+        for p in range(1, 4):
+            rows += [
+                Line(p, 0, f"{'一二三'[p - 1]}日某處談草"),
+                Line(p, 1, BODY),
+                Line(p, 2, BODY),
+            ]
+        return rows
+
+    def test_known_fields_are_moved_and_counted(self):
+        """입력: 아는 칸으로 옮길 말. 출력: 규칙 변경과 횟수. 목적: 사람 말도 세어 본다."""
+        from src.core.rule_talk import apply_changes
+
+        rules, accepted, rejected = apply_changes(
+            {},
+            [
+                {"field": "title_words", "op": "add", "value": "談草", "why": "표제를 끝맺는다"},
+                {"field": "signals.date", "op": "set", "value": False, "why": "날짜로 안 나뉜다"},
+            ],
+            self._book(),
+        )
+        assert rejected == []
+        assert "談草" in rules["title_words"]
+        assert rules["signals"]["date"] is False
+        counted = next(a for a in accepted if a["field"] == "title_words")
+        assert counted["count"] == 3  # 세 쪽에 한 번씩
+        switched = next(a for a in accepted if a["field"] == "signals.date")
+        assert switched["before"] is True  # 안 적힌 스위치는 켜진 것
+
+    def test_a_word_that_is_not_in_this_book_is_counted_zero(self):
+        """입력: 이 책에 없는 말. 출력: 0번. 목적: 버리지 않되 사람이 알아보게 한다."""
+        from src.core.rule_talk import apply_changes
+
+        _rules, accepted, _rejected = apply_changes(
+            {}, [{"field": "title_words", "op": "add", "value": "筆談"}], self._book()
+        )
+        assert accepted[0]["count"] == 0
+
+    def test_what_cannot_be_expressed_is_returned_not_substituted(self):
+        """입력: 범위·조건이 든 말. 출력: 거절 목록. 목적: 비슷한 칸으로 바꿔치기하지 않는다.
+
+        이 계약이 무너지면 사람은 말했다고 여기는데 시스템은 다른 일을 한다 — 이 대화에서
+        되풀이해 확인된 위험이다(2026-09-09).
+        """
+        from src.core.rule_talk import apply_changes
+
+        rules, accepted, rejected = apply_changes(
+            {},
+            [
+                {"field": "volume_scope", "op": "set", "value": "권2부터", "why": "범위"},
+                {"field": "signals.date", "op": "set", "value": "가끔", "why": "조건"},
+            ],
+            self._book(),
+        )
+        assert accepted == []
+        assert len(rejected) == 2
+        assert all("옮길 수 없습니다" in r["reason"] for r in rejected)
+        assert rules["title_words"] == []  # 아무것도 바뀌지 않았다
+
+    def test_words_route_does_not_save(self, client, tmp_path):  # noqa: F811
+        """입력: 말 한 줄. 출력: 200 또는 400. 목적: 어느 쪽이든 문헌 설정은 그대로."""
+        from pathlib import Path as _P
+
+        lib, part_id = _setup(client, tmp_path)
+        manifest = _P(lib) / "documents" / "d1" / "manifest.json"
+        before = manifest.read_bytes()
+        r = client.post(
+            "/api/documents/d1/segmentation/rules-from-words",
+            json={"part_id": part_id, "said": "제목은 어떤 말로 끝난다"},
+        )
+        assert r.status_code in (200, 400)
+        assert manifest.read_bytes() == before
+
+
 def test_propose_without_l4_is_400(client, tmp_path):
     lib, part_id = _setup(client, tmp_path)
     import shutil

@@ -110,6 +110,17 @@ class SegmentationPreviewRequest(BaseModel):
     toc_pages: list[int] | None = None
 
 
+class SegmentationWordsRequest(BaseModel):
+    """사람이 말한 것을 규칙 변경으로 옮기는 요청 (D-121). 저장하지 않는다."""
+
+    part_id: str
+    said: str  # 연구자가 쓴 문장
+    force_provider: str | None = None
+    force_model: str | None = None
+    use_toc: bool = True
+    toc_pages: list[int] | None = None
+
+
 class SegmentationSignalsLlmRequest(BaseModel):
     # 해제는 문헌에 저장되지만, 화면에서 막 붙여 넣고 아직 저장하지 않았을 수 있다 —
     # 모달이 «해제 N자를 함께 보냅니다»라고 적으므로 온 것을 그대로 쓴다(없으면 저장본)
@@ -489,6 +500,55 @@ async def api_segmentation_signals(doc_id: str, body: SegmentationSignalsRequest
     result["saved_rules"] = normalize_rules(saved) if saved else None
     result["recommended_rules"] = rules_from_signals(result, saved)
     return result
+
+
+@router.post("/api/documents/{doc_id}/segmentation/rules-from-words")
+async def api_rules_from_words(doc_id: str, body: SegmentationWordsRequest):
+    """연구자가 말한 것을 규칙 변경으로 옮기고, 무엇이 달라지는지 함께 잰다 (D-121 두 번째 입구).
+
+    **아무것도 저장하지 않는다.** 경계도 만들지 않는다. 모델은 말을 규칙 칸으로 옮기기만 하고,
+    옮기지 못한 말은 unsupported로 그대로 돌려준다 — 비슷한 칸으로 조용히 바꿔치기하지 않는다.
+    어휘를 더하라는 말은 전문에서 세어 «몇 번 나오는지»를 함께 준다(0번이면 이 책의 말이 아니다).
+
+    입력: part_id, said(사람이 쓴 문장), force_provider·force_model, use_toc·toc_pages.
+    출력: {"rules": 바꾼 규칙 또는 null, "talk": 옮김 결과, "preview": 미리 보기 또는 null}.
+    """
+    from app._state import _get_llm_router
+    from core.document import get_document_info
+    from core.rule_preview import preview_rule_change
+    from core.rule_talk import rules_from_words
+    from core.segmentation import collect_document_lines, normalize_rules
+
+    doc_path, err = _doc(doc_id)
+    if err is not None:
+        return err
+    try:
+        saved = get_document_info(doc_path).get("segmentation_rules")
+    except FileNotFoundError:
+        saved = None
+    lines, _texts = collect_document_lines(doc_path, body.part_id, None)
+    if not lines:
+        return JSONResponse(
+            {"error": "확정 텍스트(L4)가 있는 쪽이 없습니다. OCR·교정을 먼저 하세요."},
+            status_code=400,
+        )
+    proposed, talk = await rules_from_words(
+        body.said,
+        lines,
+        saved,
+        _get_llm_router(),
+        body.force_provider,
+        body.force_model,
+    )
+    preview = None
+    if proposed is not None:
+        preview = preview_rule_change(lines, saved, proposed)
+    return {
+        "rules": proposed,
+        "talk": talk,
+        "preview": preview,
+        "saved_rules": normalize_rules(saved) if saved else None,
+    }
 
 
 @router.post("/api/documents/{doc_id}/segmentation/preview")

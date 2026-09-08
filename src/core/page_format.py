@@ -264,24 +264,21 @@ def body_lines(lines: list[Line], result: Optional[dict] = None) -> list[Line]:
 
 
 def describe(result: dict) -> str:
-    """사람에게 한 줄로. 입력: analyze() 결과. 출력: 한국어 한 줄. 목적: 무엇을 뺐는지 보인다."""
+    """사람에게 아주 짧게. 입력: analyze() 결과. 출력: 「판심 24행 · 두주 83행 · 반엽 10행」.
+
+    화면은 좁다 — 여기서는 수만 말하고, 어떤 행을 뺐는지는 samples가 들고 있으니 툴팁이 보인다.
+    """
     c = result["counts"]
     if not c["pansim"] and not c["margin"]:
         return ""
     parts = []
     if c["pansim"]:
-        parts.append(f"판심 자리 {c['pansim']}행")
+        parts.append(f"판심 {c['pansim']}행")
     if c["margin"]:
-        parts.append(f"두주·난외 {c['margin']}행")
-    out = "판식으로 뺀 것: " + " · ".join(parts)
-    if result["fold"]:
-        out += f" (판심을 {result['fold']['pages']}쪽에서 찾음)"
+        parts.append(f"두주 {c['margin']}행")
     if result.get("haengja"):
-        left, right = result["haengja"]
-        out += f" · 반엽 {left}행"
-        if left != right:
-            out += f"(다른 쪽은 {right}행)"
-    return out
+        parts.append(f"반엽 {result['haengja'][0]}행")
+    return " · ".join(parts)
 
 
 # ── 목록과 맞대기 (D-120 ③) ───────────────────────────────────────────────────
@@ -330,27 +327,18 @@ def compare_with_catalog(result: dict, printing_info: Optional[dict]) -> Optiona
             "catalog": None,
             "measured": list(measured),
             "agree": None,
-            "summary": (
-                f"좌표에서 잰 판식은 반엽 {measured[0]}행입니다 "
-                "(목록에 행자수가 없어 견주지 못했습니다 — 서지의 판식 칸에 적으면 확인합니다)."
-            ),
+            "summary": (f"잰 값 {measured[0]}행 (목록에 행자수 없음)"),
         }
     if not measured:
         return {
             "catalog": catalog,
             "measured": None,
             "agree": None,
-            "summary": (
-                f"목록은 반엽 {catalog}행이라고 적었지만 좌표에서는 판식을 읽지 못했습니다 "
-                "(반엽 하나씩 찍은 스캔이거나 OCR 좌표가 없는 문헌입니다)."
-            ),
+            "summary": (f"목록 {catalog}행 (좌표로는 판식을 읽지 못함)"),
         }
     agree = catalog in measured
     if agree:
-        summary = f"목록의 반엽 {catalog}행과 좌표에서 잰 값이 같습니다."
+        summary = f"목록과 일치({catalog}행)"
     else:
-        summary = (
-            f"목록은 반엽 {catalog}행인데 좌표에서는 {measured[0]}·{measured[1]}행을 셌습니다 "
-            "— 이 문헌의 OCR이 열을 놓쳤거나 붙였을 수 있습니다."
-        )
+        summary = f"목록 {catalog}행 ≠ 잰 값 {measured[0]}·{measured[1]}행"
     return {"catalog": catalog, "measured": list(measured), "agree": agree, "summary": summary}

@@ -900,9 +900,10 @@ function _updateLlmRefNote() {
   const btn = document.getElementById("comp-llm-ref-open");
   if (!note) return;
   const n = _llmReferenceText().length;
-  note.textContent = n
-    ? `해제 ${n.toLocaleString()}자를 함께 보냅니다 — 긴 해제는 권별 서술이 있는 데를 골라 넘깁니다.`
-    : "해제 없음 — 붙여 넣으면 세 가지 모두 더 정확해집니다 (한국고전종합DB 해제 같은 것을 통째로).";
+  note.textContent = n ? `해제 ${n.toLocaleString()}자` : "해제 없음";
+  note.title = n
+    ? "아래 선택지가 모두 함께 읽습니다. 긴 해제는 권별 서술이 있는 데를 골라 넘깁니다"
+    : "한국고전종합DB 해제 같은 것을 통째로 붙여 넣으면 아래 선택지가 모두 더 정확해집니다";
   if (btn) btn.textContent = n ? "해제 고치기" : "해제 넣기";
 }
 
@@ -949,6 +950,7 @@ async function _runLlmModal() {
   const wantToc = !!document.getElementById("comp-llm-opt-toc")?.checked;
   const wantWords = !!document.getElementById("comp-llm-opt-words")?.checked;
   const wantPat = !!document.getElementById("comp-llm-opt-patterns")?.checked;
+  const wantSay = !!document.getElementById("comp-llm-opt-say")?.checked;
   const status = document.getElementById("comp-llm-status");
   const run = document.getElementById("comp-llm-run");
   const say = (t) => {
@@ -970,8 +972,12 @@ async function _runLlmModal() {
     signalState.touched = true;
   }
   if (mark) mark.hidden = !wantToc;
-  if (!wantToc && !wantWords && !wantPat) {
+  if (!wantToc && !wantWords && !wantPat && !wantSay) {
     say("고른 것이 없습니다.");
+    return;
+  }
+  if (wantSay && !(document.getElementById("comp-llm-say")?.value || "").trim()) {
+    say("아는 것을 한 줄 적어 주세요.");
     return;
   }
   if (run) run.disabled = true;
@@ -986,6 +992,12 @@ async function _runLlmModal() {
       say("시작 표지 표본을 보내는 중…");
       await _askLlmPatterns();
       done.push("시작 표지");
+    }
+    if (wantSay) {
+      say("말을 규칙 칸으로 옮기는 중…");
+      const moved = await _rulesFromWords();
+      if (moved) done.push("말로 이르기");
+      else return; // 옮기지 못했으면 창을 닫지 않는다 — 무엇이 안 됐는지 그 자리에서 읽게
     }
     if (wantToc) {
       say("목차 쪽 텍스트를 보내는 중…");
@@ -1212,18 +1224,30 @@ function _renderSignals() {
     const note = document.createElement("div");
     note.className = "comp-sig-dropped";
     const parts = [];
-    // 뺀 이유가 둘이다(판심 자리 / 날짜뿐인 행 끝) — 한 이름으로 묶으면 틀린 말이 된다
+    // 화면은 좁다 — 수만 말하고 자세한 것은 툴팁으로 보인다(2026-09-09 사용자 지적)
     const byWhy = { page_furniture: [], date_tail: [] };
     for (const x of d.dropped || []) (byWhy[x.why] || (byWhy[x.why] = [])).push(`${x.label} ${x.count}회`);
-    if (byWhy.page_furniture.length) parts.push("쪽마다 같은 자리라 뺀 것: " + byWhy.page_furniture.join(" · "));
-    if (byWhy.date_tail.length) parts.push("날짜뿐이라 뺀 것: " + byWhy.date_tail.join(" · "));
-    // 판식(D-120) — 좌표로 판심·두주를 가려낸 책이면 무엇을 뺐는지 말한다
-    if (d.page_format?.summary) parts.push(d.page_format.summary);
-    // 목록(서지의 판식)과 맞댄 결과 — 어긋나면 OCR을 다시 보라는 신호다(D-120 ③)
+    const detail = [];
+    if (byWhy.page_furniture.length) {
+      parts.push(`판심 문구 ${byWhy.page_furniture.length}가지`);
+      detail.push("쪽마다 같은 자리라 뺀 것: " + byWhy.page_furniture.join(" · "));
+    }
+    if (byWhy.date_tail.length) {
+      parts.push(`날짜뿐 ${byWhy.date_tail.length}가지`);
+      detail.push("날짜뿐이라 뺀 것: " + byWhy.date_tail.join(" · "));
+    }
+    if (d.furniture?.length) detail.push("판심·엽수로 본 행: " + d.furniture.slice(0, 8).join(" · "));
+    if (d.page_format?.summary) {
+      parts.push(d.page_format.summary); // 「판심 24 · 두주 83 · 반엽 10행」
+      const s = d.page_format.samples || {};
+      if (s.pansim?.length) detail.push("판심 자리: " + s.pansim.join(" · "));
+      if (s.margin?.length) detail.push("두주·난외: " + s.margin.join(" · "));
+    }
     if (d.page_format?.catalog?.summary) parts.push(d.page_format.catalog.summary);
-    if (d.furniture?.length) parts.push("판심·엽수로 본 행: " + d.furniture.slice(0, 6).join(" · ") + (d.furniture.length > 6 ? ` … (${d.furniture.length})` : ""));
-    note.textContent = parts.join("  |  ");
-    note.title = "종이의 규약(판심·엽수·인쇄소 도장)은 글의 시작이 아니므로 후보에서 뺍니다";
+    note.textContent = parts.length ? "뺀 것 — " + parts.join(" · ") : "";
+    note.title = detail.length
+      ? detail.join(String.fromCharCode(10))
+      : "종이의 규약(판심·엽수·인쇄소 도장)은 글의 시작이 아니므로 후보에서 뺍니다";
     list.appendChild(note);
   }
 }
@@ -2006,6 +2030,88 @@ function _renderRuleCandidates(d) {
  * 왜: 규칙 변경은 사람·통계·LLM 셋 어디서든 온다. 어디서 왔든 «켜면 이렇게 달라집니다»를 먼저
  * 보이고 사람이 정하게 한다 — 이 프로젝트가 LLM의 말을 세어 확인하는 것과 같은 태도다.
  */
+/**
+ * 연구자가 쓴 문장을 규칙 변경으로 옮긴다 (D-121 두 번째 입구). 저장하지 않는다.
+ *
+ * 출력: 옮긴 것이 하나라도 있으면 true. 결과는 「바꾸면?」과 같은 자리에 그려 사람이 승인한다.
+ * 옮기지 못한 말은 반드시 보인다 — 비슷한 칸으로 바꿔치기하면 사람은 말했다고 여기는데
+ * 시스템은 다른 일을 한다.
+ */
+async function _rulesFromWords() {
+  const said = (document.getElementById("comp-llm-say")?.value || "").trim();
+  const status = document.getElementById("comp-llm-status");
+  const llmSel = typeof getLlmModelSelection === "function" ? getLlmModelSelection("comp-llm-model-select") : {};
+  try {
+    const res = await fetch(
+      `/api/documents/${encodeURIComponent(viewerState.docId)}/segmentation/rules-from-words`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          part_id: viewerState.partId,
+          said,
+          force_provider: llmSel.force_provider || null,
+          force_model: llmSel.force_model || null,
+        }),
+      },
+    );
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+    const talk = d.talk || {};
+    if (talk.error) {
+      if (status) status.textContent = `옮기지 못했습니다: ${talk.error}`;
+      return false;
+    }
+    signalState.talk = talk;
+    signalState.talkRules = d.rules || null;
+    if (d.preview) _renderRulePreview({ ...d.preview, _talk: talk, _rules: d.rules });
+    else _renderTalkOnly(talk);
+    if (status) {
+      const n = (talk.accepted || []).length;
+      const u = (talk.unsupported || []).length;
+      status.textContent = n
+        ? `옮긴 것 ${n}${u ? ` · 옮기지 못한 말 ${u}` : ""} — «자세히 · 고치기»에서 확인하세요`
+        : "규칙 칸으로 옮길 수 있는 말이 없었습니다.";
+    }
+    return (talk.accepted || []).length > 0;
+  } catch (e) {
+    if (status) status.textContent = `옮기지 못했습니다: ${e.message}`;
+    return false;
+  }
+}
+
+/** 옮긴 것이 없을 때 — 무엇을 못 옮겼는지만 보인다. 입력: talk. 출력: 없음. */
+function _renderTalkOnly(talk) {
+  const out = document.getElementById("comp-preview-out");
+  if (!out) return;
+  out.hidden = false;
+  out.textContent = "";
+  const head = document.createElement("div");
+  head.className = "comp-preview-head";
+  head.textContent = "규칙 칸으로 옮길 수 있는 말이 없었습니다.";
+  out.appendChild(head);
+  _appendUnsupported(out, talk);
+}
+
+/** «옮기지 못한 말»을 붙인다. 입력: 담을 자리·talk. 출력: 없음. 목적: 조용히 넘어가지 않는다. */
+function _appendUnsupported(out, talk) {
+  if (!talk?.unsupported?.length) return;
+  const box = document.createElement("div");
+  box.className = "comp-preview-list";
+  const title = document.createElement("div");
+  title.className = "comp-preview-note";
+  title.textContent = `옮기지 못한 말 ${talk.unsupported.length} — 지금 규칙에는 범위·조건이 없습니다`;
+  box.appendChild(title);
+  for (const u of talk.unsupported) {
+    const line = document.createElement("div");
+    line.className = "comp-preview-row";
+    line.textContent = `「${u.said}」 — ${u.why}`;
+    line.title = u.why || "";
+    box.appendChild(line);
+  }
+  out.appendChild(box);
+}
+
 async function _previewRules() {
   const out = document.getElementById("comp-preview-out");
   if (!out) return;
@@ -2095,15 +2201,53 @@ function _renderRulePreview(d) {
     out.appendChild(box);
   }
 
+  if (d._talk) {
+    // 말로 온 변경이면 «무엇을 옮겼는지»와 «전문에 몇 번 나오는지»를 함께 보인다
+    for (const a of d._talk.accepted || []) {
+      const line = document.createElement("div");
+      line.className = "comp-preview-note";
+      const count = a.count == null ? "" : ` · 전문에 ${a.count}번`;
+      line.textContent = `옮김: ${a.field} ${a.op} ${a.value}${count}${a.why ? ` — ${a.why}` : ""}`;
+      if (a.count === 0) line.textContent += " (이 책에 없는 말입니다)";
+      out.appendChild(line);
+    }
+    _appendUnsupported(out, d._talk);
+  }
   const act = document.createElement("button");
   act.className = "text-btn text-btn-sm text-btn-primary";
   act.textContent = "이대로 적용";
   act.title = "이 규칙을 문헌 설정에 저장하고 후보를 다시 찾습니다";
   act.addEventListener("click", () => {
     out.hidden = true;
-    _saveRulesAndRepropose();
+    if (d._rules) _saveRulesDirect(d._rules);
+    else _saveRulesAndRepropose();
   });
   out.appendChild(act);
+}
+
+/**
+ * 주어진 규칙을 그대로 저장하고 후보를 다시 찾는다. 입력: 규칙. 출력: 없음.
+ * 목적: 말로 온 변경은 화면의 체크 상태가 아니라 «옮겨진 규칙»을 저장해야 한다.
+ */
+async function _saveRulesDirect(rules) {
+  try {
+    const res = await fetch(`/api/documents/${viewerState.docId}/segmentation-rules`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rules }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    const saved = await res.json().catch(() => null);
+    _markRulesSaved(saved?.segmentation_rules || rules);
+  } catch (e) {
+    showToast(`규칙 저장 실패: ${e.message}`, "error");
+    return;
+  }
+  await _loadSignals(); // 체크 상태를 저장된 규칙에 맞춘다
+  await _proposeBoundaries();
 }
 
 async function _saveRulesAndRepropose() {

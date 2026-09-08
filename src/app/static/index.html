@@ -1930,7 +1930,7 @@
                 </div>
                 <!-- 규칙 도구와 LLM 도구가 한 패널에 있다. 무엇이 모델을 부르는지 여기서 한 번 말한다 -->
                 <div class="comp-llm-legend">
-                  신호 세기·경계 제안·적용은 <b>규칙만</b> 씁니다. 모델을 부르는 것은 <b>「LLM에 묻기」</b> 하나뿐이고, 거기서 고른 것만 텍스트를 보냅니다 (이미지는 보내지 않음).
+                  모델을 부르는 것은 <b>「LLM에 묻기」</b> 하나뿐입니다.
                 </div>
                 <!-- 이 책의 신호 (D-116·D-117): 전문에서 센 규약 후보를 체크박스로. 고른 것이 규칙(문헌 설정)이 된다.
                      기본은 접힘 — 층계가 잘못 골랐을 때만 펼쳐 켜고 끈다. 흐름: 고치기 → 「후보 보기」 → 「골라 적용」/「전부 적용」 -->
@@ -1962,22 +1962,22 @@
                   </div>
                   <div class="comp-signals-foot">
                     <label class="comp-sig-opt">어휘 더하기
-                      <input id="comp-signals-add-word" type="text" placeholder="예: 筆談" style="width: 70px; font-size: 11px" title="표제를 끝맺는 말(짧은 행 끝)을 직접 넣습니다. 행 첫머리 어휘는 앞에 ^를 붙이세요 (예: ^有). 기호 한 글자(예: ●)는 그대로 넣으면 기호 신호가 됩니다" />
+                      <input id="comp-signals-add-word" type="text" placeholder="예: 筆談" style="width: 70px; font-size: 11px" title="제목 행을 끝맺는 말을 넣습니다. 행 첫머리 어휘는 앞에 ^를 붙이고(^有), 기호 한 글자(●)는 그대로 넣습니다" />
                     </label>
                     <button id="comp-signals-add-btn" class="text-btn text-btn-sm">넣기</button>
                     <span id="comp-rules-suggest-out" class="comp-rules-suggest-out"></span>
                   </div>
                   <details class="comp-rules-advanced">
-                    <summary>참고·억제 <small>— 해제 텍스트(LLM만 읽음)·표제로 보지 않을 행·글자수</small></summary>
+                    <summary title="해제는 「LLM에 묻기」만 읽습니다. 억제는 표제로 보지 않을 행, 글자수는 별행 표제의 상한입니다">참고·억제</summary>
                     <div id="comp-propose-rules" class="comp-propose-rules">
-                      <label>해제·참고 텍스트 <small>(한국고전종합DB 해제 같은 것을 <b>통째로</b> 붙여 넣으세요 — 권별 내용을 골라 씁니다. 「LLM에 묻기」만 읽고, 규칙은 읽지 않습니다)</small>
-                        <textarea id="comp-rules-reference" rows="4" placeholder="해제 전문을 그대로 붙여 넣어도 됩니다. 길면 권별 내용이 있는 데를 골라 「LLM에 묻기」가 넘깁니다."></textarea>
+                      <label title="한국고전종합DB 해제 같은 것을 통째로 붙여 넣으세요. 길면 권별 내용이 있는 데를 골라 넘깁니다. 「LLM에 묻기」만 읽습니다">해제
+                        <textarea id="comp-rules-reference" rows="4" placeholder="해제를 통째로 붙여 넣으세요"></textarea>
                         <span id="comp-rules-reference-count" class="comp-rules-count"></span>
                       </label>
-                      <label>억제 목록 <small>(표제로 보지 않을 행, 한 줄에 하나)</small>
+                      <label title="표제로 보지 않을 행. 한 줄에 하나">억제 목록
                         <textarea id="comp-rules-suppress" rows="2"></textarea>
                       </label>
-                      <label>별행 표제 최대 글자수
+                      <label title="이보다 긴 행은 별행 표제로 보지 않습니다">표제 최대 글자수
                         <input id="comp-rules-maxchars" type="number" min="2" max="60" value="14" style="width: 60px" />
                       </label>
                     </div>
@@ -3875,9 +3875,9 @@
             <div style="flex: 1"></div>
             <button class="bib-dialog-close" id="comp-llm-close" title="닫기">&times;</button>
           </div>
-          <div class="comp-split-note">
-            텍스트 조각만 보냅니다 — 이미지·본문 전체는 보내지 않습니다. 결과는 «자세히 · 고치기» 목록에 <b>후보</b>로
-            들어오고, 「후보 보기」·「전부 적용해 새로 세우기」를 눌러야 저장됩니다.
+          <div class="comp-split-note"
+            title="이미지와 본문 전체는 보내지 않습니다. 답은 «자세히 · 고치기» 목록에 후보로 들어오고, 「후보 보기」나 「전부 적용해 새로 세우기」를 눌러야 저장됩니다">
+            텍스트 조각만 보냅니다. 답은 후보로 들어오고, 저장은 따로 누릅니다.
           </div>
           <!-- 해제는 세 선택지가 모두 읽는 «문헌에 저장되는» 데이터다. 고치는 곳은 「참고·억제」
                한 군데로 두고, 여기서는 붙어 있는지만 보이고 그 자리로 데려간다(2026-09-08). -->
@@ -3888,16 +3888,16 @@
           </div>
           <label class="comp-llm-opt">
             <input id="comp-llm-opt-toc" type="checkbox" />
-            <span><b>목차 항목 구조화</b> — 목차 쪽 텍스트와 해제만 보냅니다. <span id="comp-llm-opt-toc-note" class="comp-llm-opt-note"></span>
-            켜 두면 문헌 설정에 저장되어 「후보 보기」·「전부 적용」 때마다 씁니다 (사이드바 「자동 트리」는 쓰지 않음).</span>
+            <span title="켜 두면 문헌 설정에 저장되어 「후보 보기」·「전부 적용」 때마다 씁니다. 사이드바 「자동 트리」는 쓰지 않습니다"><b>목차 항목 구조화</b>
+              <span id="comp-llm-opt-toc-note" class="comp-llm-opt-note"></span></span>
           </label>
           <label class="comp-llm-opt">
             <input id="comp-llm-opt-words" type="checkbox" />
-            <span><b>해제·본문에서 표제 어휘 뽑기</b> — 해제와 짧은 행 표본(≤60줄)을 보냅니다. 談草·筆談처럼 표제를 끝맺는 말의 후보를 받습니다.</span>
+            <span title="해제와 짧은 행 표본(≤60줄)을 보내, 제목 행을 끝맺는 말의 후보를 받습니다"><b>표제 어휘 뽑기</b></span>
           </label>
           <label class="comp-llm-opt">
             <input id="comp-llm-opt-patterns" type="checkbox" />
-            <span><b>시작 표지 묻기</b> — 표본을 보내 «새 글이 시작하는 행의 공통점»을 정해진 종류(행머리 어휘·행끝 어휘·기호·없음)로 받고, 전문에서 넷 이상 되풀이되는 것만 목록에 넣습니다. 규약을 못 찾은 책에서 특히.
+            <span title="표본을 보내 «새 글이 시작하는 행의 공통점»을 정해진 종류(행머리 어휘·행끝 어휘·기호·없음)로 받습니다. 전문에서 넷 이상 되풀이되는 것만 목록에 넣습니다. 규약을 못 찾은 책에서 특히 씁니다"><b>시작 표지 묻기</b>
               <span class="comp-llm-scope">표본
                 <select id="comp-llm-scope" class="props-select" style="font-size: 11px" title="넓을수록 많이 보냅니다. 표지가 문맥이 있어야 보이면 «앞뒤 한 행», 행 중간 아무 데나 오면 «쪽 통째», 그래도 안 보이면 «권 전체»(클라우드 모델용 — 로컬 모델은 문맥이 모자랄 수 있음)">
                   <option value="starts">시작 자리 80줄</option>
@@ -3907,6 +3907,13 @@
                 </select>
                 <span id="comp-llm-scope-note" class="comp-llm-opt-note"></span>
               </span>
+            </span>
+          </label>
+          <label class="comp-llm-opt">
+            <input id="comp-llm-opt-say" type="checkbox" />
+            <span title="쓴 것을 규칙 칸으로 옮깁니다. 옮기지 못한 말(「권2부터는…」처럼 범위·조건이 든 말)은 비슷한 칸으로 바꾸지 않고 그대로 알려 드립니다. 어휘는 전문에서 몇 번 나오는지 세어 함께 보입니다"><b>아는 것을 말로</b>
+              <textarea id="comp-llm-say" rows="2" placeholder="예: 제목은 어떤 말로 끝난다 / 날짜로는 나뉘지 않는다"
+                style="width: 100%; font-size: 11px; margin-top: 4px"></textarea>
             </span>
           </label>
           <label class="comp-llm-opt comp-llm-model">모델
