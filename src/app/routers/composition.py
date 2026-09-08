@@ -101,6 +101,9 @@ class SegmentationSignalsRequest(BaseModel):
 
 
 class SegmentationSignalsLlmRequest(BaseModel):
+    # 해제는 문헌에 저장되지만, 화면에서 막 붙여 넣고 아직 저장하지 않았을 수 있다 —
+    # 모달이 «해제 N자를 함께 보냅니다»라고 적으므로 온 것을 그대로 쓴다(없으면 저장본)
+    reference_text: str | None = None
     """4단 — LLM에 시작 표지의 공통점을 묻는 요청 (D-117). 저장하지 않는다."""
 
     part_id: str
@@ -504,7 +507,10 @@ async def api_segmentation_signals_llm(doc_id: str, body: SegmentationSignalsLlm
         _get_llm_router(),
         body.force_provider,
         body.force_model,
-        reference_text=rules.get("reference_text") or "",
+        reference_text=(
+            body.reference_text if body.reference_text is not None else rules.get("reference_text")
+        )
+        or "",
         scope=scope,
     )
     return {"signals": rows, "sample_count": meta.get("sample_lines", 0), **meta}

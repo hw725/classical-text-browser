@@ -7860,6 +7860,18 @@ select.prop-level { max-width: 4.6em; }
 .comp-split-dialog { width: 720px; max-height: 82vh; padding: 12px; gap: 8px; }
 /* LLM에 묻기 모달 (D-117) */
 .comp-llm-dialog { width: 560px; max-height: 82vh; padding: 12px; gap: 8px; }
+/* 해제 상태 줄 — 고치는 곳은 「참고·억제」 칸이고 여기서는 보이기만 한다 */
+.comp-llm-ref {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+}
+.comp-llm-ref > span { flex: 1; }
+
 .comp-llm-opt { display: flex; align-items: flex-start; gap: 6px; font-size: 11.5px; line-height: 1.5; cursor: pointer; }
 .comp-llm-opt input { margin-top: 3px; }
 .comp-llm-opt-note { color: var(--text-muted); }

@@ -95,6 +95,8 @@ function _bindCompEvents() {
     const el = document.getElementById(id);
     if (el) el.addEventListener("click", _closeLlmModal);
   }
+  const llmRef = document.getElementById("comp-llm-ref-open");
+  if (llmRef) llmRef.addEventListener("click", _openReferenceBox);
   const llmScope = document.getElementById("comp-llm-scope");
   if (llmScope) llmScope.addEventListener("change", _updateLlmScopeNote);
   const llmOverlay = document.getElementById("comp-llm-overlay");
@@ -872,8 +874,44 @@ function _openLlmModal() {
   if (optWords) optWords.checked = false;
   const status = document.getElementById("comp-llm-status");
   if (status) status.textContent = _signalsCurrent() ? "" : "먼저 「경계 제안」으로 신호를 세면 표본이 준비됩니다 — 「묻기」를 누르면 세고 나서 묻습니다.";
+  _updateLlmRefNote();
   overlay.style.display = "";
   _updateLlmScopeNote();
+}
+
+/** 지금 화면의 해제 텍스트. 세 선택지가 다 이것을 보낸다(저장은 「참고·억제」 칸에서 한다). */
+function _llmReferenceText() {
+  return (document.getElementById("comp-rules-reference")?.value || "").trim();
+}
+
+/**
+ * 모달의 해제 상태 줄을 채운다.
+ * 입력: 없음(화면의 해제 칸을 읽는다). 출력: 없음. 목적: 붙어 있는지 여기서 보이게 한다 —
+ * 해제 칸이 「자세히 · 고치기 → 참고·억제」 두 겹 안에 있어 모달만 열면 알 수 없었다.
+ */
+function _updateLlmRefNote() {
+  const note = document.getElementById("comp-llm-ref-note");
+  const btn = document.getElementById("comp-llm-ref-open");
+  if (!note) return;
+  const n = _llmReferenceText().length;
+  note.textContent = n
+    ? `해제 ${n.toLocaleString()}자를 함께 보냅니다 — 긴 해제는 권별 서술이 있는 데를 골라 넘깁니다.`
+    : "해제 없음 — 붙여 넣으면 세 가지 모두 더 정확해집니다 (한국고전종합DB 해제 같은 것을 통째로).";
+  if (btn) btn.textContent = n ? "해제 고치기" : "해제 넣기";
+}
+
+/** 모달을 닫고 해제 칸을 펼쳐 거기로 데려간다. 고치는 곳은 한 군데뿐이다. */
+function _openReferenceBox() {
+  _closeLlmModal();
+  const sig = document.getElementById("comp-signals");
+  if (sig) sig.open = true;
+  const adv = document.querySelector("#composition-panel .comp-rules-advanced");
+  if (adv) adv.open = true;
+  const ta = document.getElementById("comp-rules-reference");
+  if (ta) {
+    ta.scrollIntoView({ block: "center", behavior: "smooth" });
+    ta.focus();
+  }
 }
 
 /** 표본 범위의 크기(줄·글자)를 보내기 전에 보인다 — 실행 게이트는 도구 층에(전역 규칙 11). */
@@ -982,6 +1020,7 @@ async function _askLlmPatterns() {
         force_provider: llmSel.force_provider || null,
         force_model: llmSel.force_model || null,
         scope: document.getElementById("comp-llm-scope")?.value || "starts",
+        reference_text: _llmReferenceText(),
       }),
     });
     const d = await res.json();
