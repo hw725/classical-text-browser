@@ -19,6 +19,7 @@ import logging
 
 from fastapi import APIRouter, BackgroundTasks, Query
 from fastapi.responses import JSONResponse
+from jsonschema import ValidationError
 from pydantic import BaseModel
 
 from app._state import get_library_path, require_repo_path
@@ -459,31 +460,10 @@ async def api_segmentation_signals(doc_id: str, body: SegmentationSignalsRequest
 
 
 def _toc_signal_for(lines, rules, toc_pages: list[int] | None):
-    """층계 1단 — 목차 요약. 사람이 쪽을 적었으면 판별을 건너뛰고 그 쪽으로 대조한다."""
-    from core.rule_induction import toc_decisive, toc_signal
-    from core.segmentation import normalize_rules
-    from core.toc import align_toc_to_body, extract_toc_entries_rule
+    """입력: 행·규칙·요청 쪽. 출력: 목차 요약. 목적: 대조는 코어에 위임한다."""
+    from core.rule_induction import toc_signal
 
-    if not toc_pages:
-        return toc_signal(lines, rules)
-    rules = normalize_rules(rules)
-    page_lines: dict[int, list[str]] = {}
-    for ln in lines:
-        page_lines.setdefault(ln.page, []).append(ln.text)
-    pages = [int(p) for p in toc_pages if int(p) in page_lines]
-    entries = extract_toc_entries_rule(page_lines, pages) if pages else []
-    if not entries:
-        return None
-    body_lines = [ln for ln in lines if ln.page not in set(pages) and ln.text.strip()]
-    matches, _un = align_toc_to_body(entries, body_lines)
-    ratio = len(matches) / max(1, len(entries))
-    return {
-        "pages": pages,
-        "entries": len(entries),
-        "matched": len(matches),
-        "ratio": round(ratio, 2),
-        "decisive": toc_decisive(len(matches), len(entries)),
-    }
+    return toc_signal(lines, rules, toc_pages=toc_pages)
 
 
 @router.post("/api/documents/{doc_id}/segmentation/signals/llm")
@@ -717,7 +697,21 @@ async def api_segmentation_auto(doc_id: str, body: SegmentationAutoRequest):
             saved_rules = rules_from_signals(induced, saved_rules)
             # 아무것도 못 찾았으면 저장하지 않는다 — 확정본이 늘면 다음 자동 트리가 다시 센다
             if induction_found_something(induced):
-                save_segmentation_rules(doc_path, saved_rules)
+                try:
+                    save_segmentation_rules(doc_path, saved_rules)
+                except ValidationError as exc:
+                    # 권 목록 등 기존 문헌 정보가 깨졌다면 적용 전에 멈추고 복구할 곳을 알린다.
+                    field = ".".join(str(p) for p in exc.absolute_path) or "manifest"
+                    return JSONResponse(
+                        {
+                            "error": (
+                                f"문헌 정보({field})가 스키마와 맞지 않아 규칙을 저장하지 "
+                                "못했습니다. → 해결: 서지 화면에서 문헌 정보를 고친 뒤 다시 "
+                                "실행하세요."
+                            )
+                        },
+                        status_code=400,
+                    )
     rules = normalize_rules(saved_rules)
     use_llm_toc = rules["toc_llm"] if body.use_llm_toc is None else bool(body.use_llm_toc)
     lines, page_texts = collect_document_lines(doc_path, body.part_id, None)

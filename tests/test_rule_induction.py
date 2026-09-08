@@ -81,6 +81,17 @@ def _diary_pages(n_pages=6, per_page=8, furniture="書"):
 
 
 class TestInduce:
+    def test_furniture_uses_nonempty_page_position_without_changing_source_indices(self):
+        """입력: 빈 행 수가 다른 L4·L2 자리. 출력: 판심 제외. 목적: 층 혼합을 견딘다."""
+        pages = []
+        for blanks in (1, 2, 3, 4, 0, 0):
+            pages.append([_COL, _COL] + [""] * blanks + ["刊記", _COL])
+        lines = _pages(pages)
+        indices = [(ln.page, ln.line_index) for ln in lines]
+        result = induce_signals(lines)
+        assert "刊記" in result["furniture"]
+        assert [(ln.page, ln.line_index) for ln in lines] == indices
+
     def test_mark_date_diary_is_recognised(self):
         r = induce_signals(_diary_pages())
         # 층계(D-117): 눈에 띄는 기호 ○가 2단에서 규약으로 결정되고,
@@ -437,6 +448,57 @@ class TestLlmPatterns:
         assert router.calls[0]["response_format"] == "json" and router.calls[0]["think"] is False
 
 
+def test_explicit_toc_page_is_excluded_even_without_entries(client, tmp_path, monkeypatch):  # noqa: F811
+    """입력: 항목을 못 읽은 목차 쪽. 출력: 그 쪽을 본문에서 제외.
+
+    목적: 목차를 규약으로 배우지 않는다.
+
+    사람이 «여기가 목차»라고 적었으면 항목을 못 읽어도 그 쪽의 짧은 행을 본문 규약으로 세면 안 된다
+    (D-117 1단). 전에는 항목 추출이 실패하면 목차 자체가 없던 일이 됐다(Codex 지적 2026-09-08).
+    """
+    from core import toc
+
+    _lib, part_id = _setup(client, tmp_path)
+    monkeypatch.setattr(toc, "extract_toc_entries_rule", lambda *_args: [])
+    r = client.post(
+        "/api/documents/d1/segmentation/signals",
+        json={"part_id": part_id, "toc_pages": [1]},
+    )
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["toc"] == {
+        "pages": [1],
+        "entries": 0,
+        "matched": 0,
+        "ratio": 0.0,
+        "decisive": False,
+    }
+    assert d["lines"] == 5  # 1쪽의 네 행을 뺀 나머지
+
+
+def test_auto_invalid_manifest_returns_repairable_error(client, tmp_path):  # noqa: F811
+    """입력: 권 목록이 깨진 문헌. 출력: 400과 고칠 곳. 목적: 저장 실패를 500으로 숨기지 않는다."""
+    from core.document import write_json_atomic
+
+    lib, part_id = _setup(client, tmp_path)
+    doc = Path(lib) / "documents" / "d1"
+    manifest_path = doc / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["parts"] = []
+    write_json_atomic(manifest_path, manifest)
+    before = manifest_path.read_bytes()
+    rows = [text for i in range(8) for text in (f"●제목{i}", "본문" * 20)]
+    (doc / "L4_text" / "pages" / f"{part_id}_page_001.txt").write_text(
+        chr(10).join(rows), encoding="utf-8", newline=""
+    )
+    r = client.post(
+        "/api/documents/d1/segmentation/auto", json={"part_id": part_id, "use_toc": False}
+    )
+    assert r.status_code == 400, r.text
+    assert "문헌 정보" in r.json()["error"]
+    assert manifest_path.read_bytes() == before  # 실패했으면 원본을 건드리지 않는다
+
+
 def test_signals_api_reports_stage(client, tmp_path):  # noqa: F811
     _lib, part_id = _setup(client, tmp_path)
     r = client.post("/api/documents/d1/segmentation/signals", json={"part_id": part_id})
@@ -447,6 +509,18 @@ def test_signals_api_reports_stage(client, tmp_path):  # noqa: F811
 
 
 class TestSampleScopes:
+    @pytest.mark.parametrize("patterns", [1, True, {"kind": "none"}, "none"])
+    def test_malformed_pattern_collection_returns_error(self, patterns):
+        """입력: 목록 아닌 응답. 출력: 오류 메타. 목적: 모델 오답의 예외 전파를 막는다."""
+        import asyncio
+
+        router = _FakeRouter(json.dumps({"patterns": patterns}))
+        rows, meta = asyncio.run(
+            extract_start_patterns_llm(self._book(), normalize_rules(None), router)
+        )
+        assert rows == []
+        assert meta["error"]
+
     def _book(self):
         pages = []
         for p in range(10):
@@ -463,7 +537,18 @@ class TestSampleScopes:
     def test_context_wraps_candidate_with_neighbours(self):
         lines = self._book()
         s = sample_start_lines(lines, normalize_rules(None), scope="context")
-        assert s and all("▶" in x and " ／ " in x for x in s)
+        assert s and all(set(json.loads(x)) == {"before", "candidate", "after"} for x in s)
+
+    def test_context_preserves_separator_inside_source_lines(self):
+        """입력: 구분자가 든 원문. 출력: 복원 가능한 세 행. 목적: 후보 오인을 막는다."""
+        lines = _pages([["앞 ／ ▶원문", '후보 "인용"', "뒤 \\ 원문"]])
+        sample = sample_start_lines(lines, normalize_rules(None), scope="context")
+        records = [json.loads(row) for row in sample]
+        assert records[1] == {
+            "before": lines[0].text,
+            "candidate": lines[1].text,
+            "after": lines[2].text,
+        }
 
     def test_pages_and_all_send_whole_pages(self):
         lines = self._book()

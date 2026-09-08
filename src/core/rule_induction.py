@@ -10,7 +10,7 @@
     1단 목차   목차 쪽이 있고 항목이 본문과 충분히 대조되면 목차가 규약이다. 여기서 멈춘다.
               목차 쪽은 아래 단에서 세지 않는다 — 목차의 짧은 행을 본문 규약으로 «배우면» 안 된다.
     2단 시각   되풀이되는 기호(○●△… 한자가 아닌 글자), 내려쓰기. 눈에 띄는 것이 먼저다.
-    3단 텍스트 날짜 문법, 짧은 행 끝 어휘, 행 첫머리 글자.
+    3단 텍스트 행 첫머리·행 끝·기호 뒤에 편중되어 되풀이되는 문자열.
     4단 LLM    통계가 아무것도 못 찾았을 때만, 사람이 누르면 — extract_start_patterns_llm.
     0단 없음   사람이 찍는다.
     위 단이 확실하면 아래 단은 «보조»로만 남고(세기는 하되 권고하지 않는다), 약하면 내려간다.
@@ -29,21 +29,23 @@
     화면이 체크박스로 보여 준 뒤 사람이 고른 것만 저장한다. 제안·적용은 segmentation.py가
     저장된 규칙으로 한다 — 이 모듈은 규칙을 «찾는» 쪽이고, 규칙을 «쓰는» 쪽은 그쪽이다.
 
-신호 가족과 규칙의 대응 (toggle 열):
-    toc          목차                      → (규칙이 아니라 제안 입력; 화면의 목차 줄)
-    symbol:X     되풀이되는 기호           → symbols 목록 (혼자 후보를 만든다)
-    indent_alone 내려쓰기만으로 경계       → indent_alone
-    date         행 첫머리 날짜            → signals.date
-    mark         ○+날짜 (행 어디서든)      → signals.mark
-    volume       卷頭                      → signals.volume
-    title_word:X 짧은 행을 끝맺는 어휘     → title_words 목록
-    head_word:X  행 첫머리에 편중된 글자   → head_words 목록
-    short_line·after_short·indent (보조)   → signals.* — 다른 신호가 있는 행의 신뢰도만 올린다
+신호 «종류»는 코드에 없다 (D-119):
+    발견기(_discover)가 «자리 × 접은 문자열»의 되풀이를 찾고, 찾은 뒤에 _classify가 문법으로
+    어느 규칙 칸에 넣을지 정한다. 그래서 아래 대응표의 왼쪽은 코드가 아니라 «판정 결과»다.
+        기호 자체              → symbols 목록 (혼자 후보를 만든다)
+        기호 뒤가 날짜 문법     → signals.mark
+        행 첫머리가 날짜 문법   → signals.date
+        행 끝이 卷 이름         → signals.volume
+        접은 글자(N·G·Z)가 든 꼴 → head_templates·tail_templates
+        그 밖의 되풀이 문자열    → head_words(행 첫머리)·title_words(행 끝)
+    판식 물리만은 코드가 센다: short_line·after_short·indent(보조) → signals.*,
+    내려쓰기만으로 경계 → indent_alone.
 """
 
 from __future__ import annotations
 
 import collections
+import json
 import math
 import statistics
 import unicodedata
@@ -133,17 +135,38 @@ def _adjacent_fraction(positions: list[int]) -> float:
     return sum(1 for k in positions if k - 1 in s) / len(positions)
 
 
-def _page_furniture(lines: list[Line], positions: list[int]) -> bool:
+def _page_ordinals(lines: list[Line]) -> dict[int, int]:
+    """행 → «그 쪽에서 비어 있지 않은 몇 번째 행인가».
+
+    입력: 행 목록. 출력: {행 번호: 쪽 안 순번}. 목적: L4(빈 행 포함)와 L2(빈 행 없음)의 행 번호를
+    섞어 세도 «같은 자리»를 견주게 한다 — 원본 번호는 좌표라서 고칠 수 없다.
+    """
+    seen: collections.Counter = collections.Counter()
+    out: dict[int, int] = {}
+    for k, ln in enumerate(lines):
+        if ln.text.strip():
+            out[k] = seen[ln.page]
+            seen[ln.page] += 1
+    return out
+
+
+def _page_furniture(
+    lines: list[Line], positions: list[int], ordinals: Optional[dict[int, int]] = None
+) -> bool:
     """판심·엽수·서명처럼 «쪽마다 한 번, 같은 행 자리»에 되풀이되는가.
 
     쪽당 1회인 쪽이 70% 이상이고 쪽 안 행 위치의 최빈값이 절반 이상이면 그렇다고 본다.
     (天津談草 실측 2026-09-06: 판심의 「京」「取」「六七」「三番」이 이것으로 빠졌다.)
+    입력: 행 목록·가족 위치. 출력: 판심 여부. 목적: 출처 층과 무관하게 행 자리를 비교한다.
     """
     per_page = collections.Counter(lines[k].page for k in positions)
     if len(per_page) < 3:
         return False
     frac_one = sum(1 for c in per_page.values() if c == 1) / len(per_page)
-    idx_mode = collections.Counter(lines[k].line_index for k in positions).most_common(1)[0][1]
+    # L4 행 번호는 빈 행을 포함하고 L2는 제외한다. 출처 번호를 고치면 좌표가 깨지므로
+    # 판심 비교만 비어 있지 않은 행의 쪽 내 순번으로 한다(Codex 지적 2026-09-08).
+    ordinals = _page_ordinals(lines) if ordinals is None else ordinals
+    idx_mode = collections.Counter(ordinals[k] for k in positions).most_common(1)[0][1]
     return frac_one >= 0.7 and idx_mode / len(positions) >= 0.5
 
 
@@ -176,9 +199,13 @@ def _examples(lines: list[Line], positions: list[int], limit: int = 3) -> list[s
     return [f"{lines[k].page}쪽 {lines[k].text.strip()[:20]}" for k in picks]
 
 
-def toc_signal(lines: list[Line], rules: Optional[dict] = None) -> Optional[dict]:
+def toc_signal(
+    lines: list[Line], rules: Optional[dict] = None, toc_pages: Optional[list[int]] = None
+) -> Optional[dict]:
     """1단 — 목차 쪽을 찾고 항목을 본문과 대조한 요약. 목차가 없으면 None.
 
+    입력: 행·규칙·선택한 목차 쪽(없으면 자동 감지).
+    목적: 목차 대조와 본문 제외 범위를 같은 곳에서 결정한다.
     출력: {"pages": [...], "entries": n, "matched": m, "ratio": m/n, "decisive": bool}
     규칙만 쓴다(LLM 없음). 항목 구조화에 LLM을 쓰는 것은 제안·자동 트리의 몫이다.
     """
@@ -190,12 +217,15 @@ def toc_signal(lines: list[Line], rules: Optional[dict] = None) -> Optional[dict
         page_lines.setdefault(ln.page, []).append(ln.text)
     if not page_lines:
         return None
-    toc_pages = detect_toc_pages(page_lines, rules["max_title_chars"])
+    toc_pages = (
+        sorted({p for p in toc_pages if p in page_lines})
+        if toc_pages
+        else detect_toc_pages(page_lines, rules["max_title_chars"])
+    )
     if not toc_pages:
         return None
     entries = extract_toc_entries_rule(page_lines, toc_pages)
-    if not entries:
-        return None
+    # 항목 추출 실패가 목차 쪽 자체를 본문으로 되돌려서는 안 된다(D-117).
     body = [ln for ln in lines if ln.page not in set(toc_pages) and ln.text.strip()]
     matches, _un = align_toc_to_body(entries, body)
     ratio = len(matches) / max(1, len(entries))
@@ -204,7 +234,7 @@ def toc_signal(lines: list[Line], rules: Optional[dict] = None) -> Optional[dict
         "entries": len(entries),
         "matched": len(matches),
         "ratio": round(ratio, 2),
-        "decisive": len(matches) >= _TOC_MIN_MATCHES and ratio >= _TOC_MIN_RATIO,
+        "decisive": toc_decisive(len(matches), len(entries)),
     }
 
 
@@ -244,6 +274,8 @@ def _solid(r: dict) -> bool:
 
 from core.segmentation import _MAX_NGRAM  # noqa: E402
 
+_STAGE2_KEEP = 0.4  # 2단(기호)에서 1위 점수의 이 비율 이상을 켠다 — 같은 기호의 이체
+# (浩齋의 ○ 217·◯ 158)를 함께 켜야 해서 3단보다 너그럽다. 기호 가족은 수가 적어 과다 선택이 없다.
 _STAGE3_KEEP = 0.6  # 3단에서 1위 점수의 이 비율 이상만 켠다(0.4는 문집에서 31가족을 켰다)
 _STAGE3_MAX = 6  # …그리고 최대 여섯
 _MIN_LIFT = 3.0  # 그 자리에 오는 빈도가 전문 어디서나 오는 빈도의 몇 배여야 «편중»인가
@@ -451,6 +483,7 @@ def induce_signals(
     lens = [len(t) for t in texts]
     median_len = statistics.median(lens)
     folded = [fold_text(t) for t in texts]
+    ordinals = _page_ordinals(lines)  # 판심 비교용 쪽 안 순번 — 가족마다 다시 세지 않는다
 
     # ── 텍스트 꼴 발견 → 분류 → 문법 스위치(날짜·권점+날짜·卷頭)로 판정된 꼴은 하나로 합친다 ──
     # 「翌日」「初N日」「同日」은 꼴은 달라도 다 «행 첫머리 날짜»다. 따로 두면 작은 가족 여럿이 되어
@@ -483,7 +516,9 @@ def induce_signals(
     entries: list[tuple[str, str, list[int], str, str, str, bool]] = []
     for toggle, (posset, forms) in grammar.items():
         key = toggle.split(".", 1)[1]
-        shown = "·".join(sorted(set(forms), key=lambda f: -len(f))[:4])
+        # 길이가 같은 꼴이 여럿이면 집합의 순회 순서가 라벨을 바꾼다(실행마다 달라졌다).
+        # 사람이 읽는 줄이므로 «긴 것 먼저, 같으면 사전순»으로 못 박는다
+        shown = "·".join(sorted(set(forms), key=lambda f: (-len(f), f))[:4])
         entries.append(
             (key, "", sorted(posset), toggle, "", f"{merged_labels[toggle]} ({shown})", True)
         )
@@ -495,7 +530,7 @@ def induce_signals(
         lift = _MIN_LIFT if is_grammar else _lift(folded, (pos, st), count)
         if not is_grammar and pos in ("head", "tail") and lift < _MIN_LIFT:
             continue  # 자리에 편중되지 않은 흔한 글자(「之」「也」)
-        if not is_grammar and _page_furniture(lines, positions):
+        if not is_grammar and _page_furniture(lines, positions, ordinals):
             dropped.append({"id": sid, "label": label, "count": count, "why": "page_furniture"})
             continue
         reg, med = _gap_regularity(positions)
@@ -606,7 +641,9 @@ def induce_signals(
     furniture = sorted(
         t
         for t, pos in by_text.items()
-        if len(pos) >= 3 and not parse_date_head(t).present and _page_furniture(lines, pos)
+        if len(pos) >= 3
+        and not parse_date_head(t).present
+        and _page_furniture(lines, pos, ordinals)
     )
 
     rows.sort(key=lambda r: (-r["score"], -r["count"], r["id"]))
@@ -640,7 +677,7 @@ def induce_signals(
         if visual:
             stage_level = 2
             top_v = visual[0]["score"]
-            by = [r["id"] for r in visual if r["score"] >= 0.4 * top_v]
+            by = [r["id"] for r in visual if r["score"] >= _STAGE2_KEEP * top_v]
         else:
             primary = [r for r in rows if r["group"] == "primary" and _solid(r)]
             if primary:
@@ -836,7 +873,8 @@ def sample_start_lines(
     왜 이 셋인가: 글의 시작은 별행 표제(짧은 행)이거나 행갈음 뒤의 첫 행이거나 내려쓴 행이다.
     본문 전체를 넘기면 토큰만 쓰고 신호는 묽어진다.
 
-    scope — "starts"(기본)·"context"(앞뒤 한 행을 붙임: «앞 ／ ▶후보 ／ 뒤»)·"pages"(고르게 고른
+    입력: 행 목록·규칙·상한·범위. context는 before·candidate·after JSON 객체로 보낸다.
+    scope — "starts"(기본)·"context"(앞뒤 한 행을 붙임)·"pages"(고르게 고른
     여섯 쪽의 행 전부, 쪽 머리 «— n쪽 —»)·"all"(권 전체, 쪽 머리 포함).
     출력: 모델에 보일 줄 목록.
     """
@@ -875,7 +913,13 @@ def sample_start_lines(
         for k in idx:
             prev = lines[k - 1].text.strip()[:24] if k > 0 else ""
             nxt = lines[k + 1].text.strip()[:24] if k + 1 < len(lines) else ""
-            out.append(f"{prev} ／ ▶{lines[k].text.strip()[:24]} ／ {nxt}")
+            # 원문의 구분자·따옴표도 데이터로 보존해야 후보와 문맥의 경계가 모호하지 않다.
+            out.append(
+                json.dumps(
+                    {"before": prev, "candidate": lines[k].text.strip()[:24], "after": nxt},
+                    ensure_ascii=False,
+                )
+            )
         return out
     return [lines[k].text.strip()[:24] for k in idx]
 
@@ -973,8 +1017,8 @@ async def extract_start_patterns_llm(
     elif scope == "context":
         intro = (
             "다음은 이 책에서 «글이 시작할 법한 자리»의 표본입니다. "
-            "한 줄이 «앞 행 ／ ▶후보 행 ／ 뒤 행»이고 "
-            "▶가 붙은 행이 후보입니다."
+            "한 줄은 JSON 객체이며 before는 앞 행, candidate는 후보 행, after는 뒤 행입니다. "
+            "필드 안의 구분자나 표시는 원문 글자입니다."
         )
     else:
         intro = (
@@ -1018,8 +1062,13 @@ async def extract_start_patterns_llm(
     if not isinstance(data, dict):
         meta["error"] = "JSON 응답을 해석할 수 없습니다."
         return [], meta
+    patterns = data.get("patterns")
+    # JSON 객체여도 목록 계약을 어길 수 있다. 오답을 빈 성공이나 서버 예외로 숨기지 않는다.
+    if not isinstance(patterns, list):
+        meta["error"] = "시작 표지 응답의 patterns가 목록이 아닙니다. 다시 묻거나 모델을 바꾸세요."
+        return [], meta
     out: list[dict] = []
-    for p in (data.get("patterns") or [])[:8]:
+    for p in patterns[:8]:
         if not isinstance(p, dict):
             continue
         kind = str(p.get("kind") or "").strip()

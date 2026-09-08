@@ -1057,7 +1057,8 @@ function describeAutoTreeResult(d, useLlm) {
   if (d.removed) text += ` (이전 ${d.removed}개 정리)`;
   if (d.unmatched_toc?.length) text += ` · 목차에만 있는 항목 ${d.unmatched_toc.length}`;
   if (d.stage && d.stage.summary) text += ` · 이 책의 규약: ${d.stage.summary}`;
-  if (d.induced) {
+  if (d.induced && d.stage?.level !== 1) {
+    // 목차로 결정한 1단은 저장할 텍스트 규칙이 없다. 미저장을 규약 발견 실패로 말하지 않는다.
     // 이번에 전문에서 규약을 새로 찾아 저장했다 — 무엇을 켰는지 말한다(D-116)
     const names = d.induced
       .filter((id) => !["short_line", "after_short", "indent"].includes(id))
