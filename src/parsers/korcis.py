@@ -1497,20 +1497,55 @@ _GWANGWAK_PATTERNS = [
     (re.compile(r"無邊"), "무변"),
 ]
 
-# 어미(魚尾) 패턴 → 한국어 독음
-# 순서 중요: 긴 패턴을 먼저 매칭해야 짧은 패턴에 잘못 걸리지 않는다.
-_EOMI_PATTERNS = [
-    (re.compile(r"上下內向二葉花紋魚尾"), "상하내향이엽화문어미"),
-    (re.compile(r"上下內向花紋魚尾"), "상하내향화문어미"),
-    (re.compile(r"上下內向黑魚尾"), "상하내향흑어미"),
-    (re.compile(r"上下白魚尾"), "상하백어미"),
-    (re.compile(r"上下黑魚尾"), "상하흑어미"),
-    (re.compile(r"上黑魚尾"), "상흑어미"),
-    (re.compile(r"下黑魚尾"), "하흑어미"),
-    (re.compile(r"上白魚尾"), "상백어미"),
-    (re.compile(r"下白魚尾"), "하백어미"),
-    (re.compile(r"無魚尾"), "무어미"),
-]
+# 어미(魚尾)는 «자리 + 향 + 잎 수 + 무늬·색 + 魚尾»의 조합이다. 표로 나열하면 조합 하나가
+# 빠질 때마다 못 읽는다 — 실제로 국립중앙도서관 KOL000019624의 「上2葉花紋魚尾」가 그렇게
+# 통째로 빠졌다(2026-09-08). 아라비아 숫자를 쓴 표기도 목록마다 섞여 있다.
+# 그래서 조각을 읽어 이어 붙인다. 조각의 한자→한글 대응만 지식이고, 조합은 세지 않는다.
+_EOMI_RE = re.compile(
+    r"(?P<none>無)?"
+    r"(?P<place>上下|上|下)?"
+    r"(?P<face>內向|外向)?"
+    r"(?P<leaf>[二三四2-4])?葉?"
+    r"(?P<style>花紋|黑|白)?"
+    r"魚尾"
+)
+_EOMI_WORDS = {
+    "上下": "상하",
+    "上": "상",
+    "下": "하",
+    "內向": "내향",
+    "外向": "외향",
+    "二": "이",
+    "2": "이",
+    "三": "삼",
+    "3": "삼",
+    "四": "사",
+    "4": "사",
+    "花紋": "화문",
+    "黑": "흑",
+    "白": "백",
+}
+
+
+def read_eomi(text: str) -> tuple[str, str]:
+    """어미 표기를 한글 독음으로 읽는다.
+
+    입력: 판식정보 원문 조각(예: "上2葉花紋魚尾").
+    출력: (한글 독음, 읽어 낸 원문). 어미가 없으면 ("", "").
+    목적: 조합을 표로 나열하지 않고 조각을 이어 붙여, 목록마다 다른 표기를 견딘다.
+    """
+    m = _EOMI_RE.search(text or "")
+    if not m:
+        return "", ""
+    if m.group("none"):
+        return "무어미", m.group(0)
+    parts = [_EOMI_WORDS.get(m.group(k) or "", "") for k in ("place", "face", "leaf", "style")]
+    if m.group("leaf"):
+        # 「二葉」의 «엽»은 잎 수 뒤에만 붙는다
+        parts[2] = parts[2] + "엽"
+    reading = "".join(p for p in parts if p) + "어미"
+    return reading, m.group(0)
+
 
 # 판구(版口) 패턴 → 한국어 독음
 _PANGOO_PATTERNS = [
@@ -1578,12 +1613,13 @@ def parse_pansik_info(text: str) -> dict[str, Any]:
         remaining = remaining[: hj_match.start()] + remaining[hj_match.end() :]
 
     # 5. 주(注) 행자수
-    ju_match = re.search(r"注雙行|주쌍행", remaining)
+    # 註와 注, 雙과 双은 같은 말이다 — 국립중앙도서관은 「註雙行」, KORCIS는 「注雙行」을 쓴다
+    ju_match = re.search(r"[註注][雙双]行|주쌍행", remaining)
     if ju_match:
         result["ju_haengja"] = "주쌍행"
         remaining = remaining[: ju_match.start()] + remaining[ju_match.end() :]
     else:
-        ju_match2 = re.search(r"注單行|주단행", remaining)
+        ju_match2 = re.search(r"[註注][單单]行|주단행", remaining)
         if ju_match2:
             result["ju_haengja"] = "주단행"
             remaining = remaining[: ju_match2.start()] + remaining[ju_match2.end() :]
@@ -1595,12 +1631,11 @@ def parse_pansik_info(text: str) -> dict[str, Any]:
             remaining = pattern.sub("", remaining)
             break
 
-    # 7. 어미 (魚尾) — 긴 패턴 우선
-    for pattern, value in _EOMI_PATTERNS:
-        if pattern.search(remaining):
-            result["eomi"] = value
-            remaining = pattern.sub("", remaining)
-            break
+    # 7. 어미 (魚尾) — 조각을 읽어 이어 붙인다(표로 나열하지 않는다)
+    eomi_reading, eomi_raw = read_eomi(remaining)
+    if eomi_reading:
+        result["eomi"] = eomi_reading
+        remaining = remaining.replace(eomi_raw, "", 1)
 
     # 8. 판심제 (版心題) — "版心題 <서명>" 패턴
     pansimje_match = re.search(r"版心題\s*[:：]?\s*(.+?)(?:\s{2,}|$)", remaining)

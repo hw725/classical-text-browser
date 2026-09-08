@@ -634,6 +634,202 @@ class TestDiscoveryIsGeneric:
 class TestPageFormat:
     """판식(版式)을 좌표에서 읽는다 (D-120). 자신 없으면 아무것도 빼지 않는 것이 계약이다."""
 
+    def test_irregular_format_has_no_geometric_labels(self):
+        """입력: 한 쪽과 좌표 없는 행. 출력: unknown만. 목적: 유보 계약 보존."""
+        lines = self._spread(pages=1)
+        lines.append(Line(1, 99, "좌표없음"))
+        result = page_format.analyze(lines)
+        assert result["regular"] is False
+        assert result["labels"] == {(1, 99): "unknown"}
+        assert page_format.body_lines(lines, result) == lines
+
+    @pytest.mark.parametrize(
+        "bbox",
+        [
+            [520, 1400, 400, 1480],
+            [400, 1480, 520, 1400],
+            [400, 1400, 400, 1480],
+            [400, 1400, 520, 1400],
+        ],
+    )
+    def test_invalid_rectangles_are_unknown(self, bbox):
+        """입력: 역전·면적 없는 좌표. 출력: 보존. 목적: 손상 좌표로 제외하지 않는다."""
+        lines = self._spread()
+        bad = Line(1, 99, "손상좌표", bbox=bbox)
+        lines.append(bad)
+        result = page_format.analyze(lines)
+        assert result["labels"][(1, 99)] == "unknown"
+        assert page_format.line_length(bad) is None
+        assert page_format.line_axis(bad) is None
+        assert bad in page_format.body_lines(lines, result)
+
+    def test_horizontal_transpose_preserves_classification(self):
+        """입력: 같은 판식의 축 교환. 출력: 같은 라벨. 목적: 가로쓰기 기준점 검증."""
+        lines = self._spread()
+        lines.extend(
+            [
+                Line(1, 90, "두주", bbox=[400, 1400, 520, 1480]),
+                Line(1, 91, "짧은표제", bbox=[600, 800, 720, 880]),
+            ]
+        )
+        horizontal = [
+            Line(
+                ln.page,
+                ln.line_index,
+                ln.text,
+                bbox=[ln.bbox[1], ln.bbox[0], ln.bbox[3], ln.bbox[2]],
+                writing_direction="horizontal_ltr",
+            )
+            for ln in lines
+        ]
+        assert page_format.analyze(horizontal) == page_format.analyze(lines)
+
+    def test_many_notes_do_not_define_body_reference(self):
+        """입력: 본문보다 많은 두주. 출력: 두주 분리. 목적: 기준의 자기 오염 방지."""
+        lines = self._spread()
+        for page in range(1, 9):
+            lines.extend(Line(page, 90 + i, "두주", bbox=[400, 1400, 520, 1480]) for i in range(25))
+        result = page_format.analyze(lines)
+        assert result["regular"] is True
+        assert result["counts"]["margin"] == 200
+        assert result["counts"]["body"] == 160
+
+    def test_two_fold_candidates_abstain(self):
+        """입력: 같은 크기의 틈 둘. 출력: 유보. 목적: 첫 틈을 임의로 확정하지 않는다."""
+        axes = [0, 10, 20, 60, 70, 80, 120, 130, 140]
+        assert page_format._page_fold(axes) is None
+
+    def test_duplicate_axes_do_not_change_columns_or_fold(self):
+        """입력: 같은 축의 OCR 중복. 출력: 같은 판식. 목적: 행을 열로 중복 세지 않는다."""
+        axes = [0, 10, 20, 60, 70, 80]
+        expected = (20, 60, 3, 3)
+        assert page_format._page_fold(axes) == expected
+        assert page_format._page_fold(axes + axes) == expected
+        assert page_format._page_fold([0, 0, 10, 60, 70, 70]) is None
+
+    def test_fold_agreement_does_not_depend_on_coordinate_origin(self):
+        """입력: 원점만 이동한 불규칙 판식. 출력: 같은 유보. 목적: 절대 좌표 편향 방지."""
+        lines = self._spread(pages=4)
+        for ln in lines:
+            shift = 3000 if ln.page > 2 else 0
+            ln.bbox = [ln.bbox[0] + shift, ln.bbox[1], ln.bbox[2] + shift, ln.bbox[3]]
+        assert page_format.analyze(lines)["regular"] is False
+        for ln in lines:
+            ln.bbox = [ln.bbox[0] + 100000, ln.bbox[1], ln.bbox[2] + 100000, ln.bbox[3]]
+        assert page_format.analyze(lines)["regular"] is False
+
+    @pytest.mark.parametrize("pages", range(3, 7))
+    @pytest.mark.parametrize("fold_pages", range(7))
+    def test_regular_page_count_boundary(self, pages, fold_pages):
+        """입력: 3~6쪽의 판심 비율. 출력: 기존 문턱. 목적: 반올림 경계 검산."""
+        lines = self._spread(pages=pages)
+        flat = self._spread(pages=pages, gap=0)
+        lines = [ln for ln in lines if ln.page <= fold_pages]
+        lines += [ln for ln in flat if ln.page > fold_pages]
+        result = page_format.analyze(lines)
+        assert result["regular"] == (min(pages, fold_pages) >= max(3, pages * 0.5))
+        if not result["regular"]:
+            assert result["labels"] == {}
+            assert page_format.body_lines(lines, result) == lines
+
+    @pytest.mark.parametrize("height", [0.001, 80, 1700])
+    def test_equal_lengths_have_no_absolute_size_cutoff(self, height):
+        """입력: 모두 같은 길이. 출력: 비례 문턱. 목적: 작다는 이유로 지우지 않는다."""
+        assert page_format._body_cut([height] * 20) == pytest.approx(height * 0.6)
+        lines = self._spread(height=height)
+        result = page_format.analyze(lines)
+        assert result["counts"]["body"] == len(lines)
+        assert page_format.body_lines(lines, result) == lines
+
+    def test_fold_minimum_and_equal_pitch(self):
+        """입력: 등간격·최소 열 수. 출력: 유보 또는 판심. 목적: 열 수 경계 검산."""
+        assert page_format._page_fold(list(range(6))) is None
+        assert page_format._page_fold([0, 10, 50, 60, 70]) is None
+        assert page_format._page_fold([0, 10, 20, 60, 70, 80]) == (20, 60, 3, 3)
+
+    @pytest.mark.parametrize("left,right", [(1, 19), (19, 1), (10, 10)])
+    def test_fold_has_no_assumed_center(self, left, right):
+        """입력: 한쪽으로 치우친 틈. 출력: 측정 행자. 목적: 중앙 판심을 가정하지 않는다."""
+        result = page_format.analyze(self._spread(left=left, right=right))
+        assert result["regular"] is True
+        assert result["haengja"] == (left, right)
+        assert result["fold"]["center"] == 200 + (left - 0.5) * 140 + 500 + 60
+
+    def test_variable_column_counts_abstain_without_dominant_pair(self):
+        """입력: 매쪽 다른 열 수. 출력: 유보. 목적: 반복 없는 판식의 본문 보존."""
+        lines = []
+        for page in range(1, 9):
+            spread = self._spread(pages=1, left=page + 3, right=page + 3)
+            for ln in spread:
+                ln.page = page
+            lines.extend(spread)
+        result = page_format.analyze(lines)
+        assert result["regular"] is False
+        assert page_format.body_lines(lines, result) == lines
+
+    def test_middle_length_title_and_merged_columns_are_kept(self):
+        """입력: 중간 길이 표제·합쳐진 열. 출력: 보존. 목적: 두 길이 문턱의 역할 검증."""
+        lines = self._spread()
+        lines.append(Line(1, 90, "표제", bbox=[400, 1400, 520, 2080]))
+        # OCR이 두 열을 합쳐도 길이는 본문이며, 판심 안쪽이라는 근거도 없다.
+        lines[0].bbox[2] = lines[1].bbox[2]
+        lines.pop(1)
+        result = page_format.analyze(lines)
+        assert result["regular"] is True
+        assert page_format.body_lines(lines, result) == lines
+
+    def test_analysis_is_repeatable_and_does_not_mutate_input(self):
+        """입력: 판심 조각·좌표 없는 행. 출력: 같은 결과. 목적: 재호출과 필터 합치 검증."""
+        import copy
+
+        lines = self._spread()
+        lines.extend(
+            [
+                Line(1, 90, "판심", bbox=[2000, 1400, 2100, 1480]),
+                Line(1, 91, "좌표없음"),
+            ]
+        )
+        before = copy.deepcopy(lines)
+        result = page_format.analyze(lines)
+        assert result == page_format.analyze(lines)
+        assert lines == before
+        assert result["labels"][(1, 90)] == "pansim"
+        assert page_format.body_lines(lines) == page_format.body_lines(lines, result)
+        assert page_format.body_lines(lines, result) == [ln for ln in lines if ln.line_index != 90]
+
+    def test_catalog_and_coordinates_check_each_other(self):
+        """입력: 목록의 행자수와 좌표에서 잰 값. 출력: 일치·불일치·유보. 목적: 서로의 검산.
+
+        좌표만으로 «접은 자리»를 확정할 수 없다는 것이 D-120의 알려진 한계다. 목록(KORMARC
+        300▼b)의 행자수는 그와 독립이므로 확인도 반증도 된다.
+        """
+        catalog = {"haengja": "반엽 10행 20자"}
+        same = page_format.compare_with_catalog({"haengja": (10, 10)}, catalog)
+        assert same["agree"] is True and same["catalog"] == 10
+
+        differ = page_format.compare_with_catalog({"haengja": (7, 8)}, catalog)
+        assert differ["agree"] is False
+        assert "7·8행" in differ["summary"]
+
+        # 한쪽 반엽만 열을 놓친 쪽은 «맞음»으로 본다 — 목록의 값이 어느 한쪽에 있으면 된다
+        partial = page_format.compare_with_catalog({"haengja": (9, 10)}, catalog)
+        assert partial["agree"] is True
+
+    def test_comparison_is_silent_when_there_is_nothing_to_compare(self):
+        """입력: 목록만·좌표만·둘 다 없음. 출력: 유보 또는 None. 목적: 없는 것을 지어내지 않는다."""
+        only_measured = page_format.compare_with_catalog({"haengja": (10, 10)}, None)
+        assert only_measured["agree"] is None and only_measured["catalog"] is None
+        only_catalog = page_format.compare_with_catalog({"haengja": None}, {"haengja": "10행"})
+        assert only_catalog["agree"] is None and only_catalog["measured"] is None
+        assert page_format.compare_with_catalog({"haengja": None}, None) is None
+
+    def test_catalog_reads_the_raw_line_when_fields_are_not_split(self):
+        """입력: 갈라 담지 않은 원문. 출력: 행 수. 목적: 붙여 넣기만 해도 견줄 수 있다."""
+        raw = {"summary": "四周雙邊 半郭 19.1 x 14.6 cm, 10行20字 註雙行, 上2葉花紋魚尾"}
+        assert page_format.catalog_columns(raw) == 10
+        assert page_format.catalog_columns({"summary": "판식 미상"}) is None
+        assert page_format.catalog_columns({"summary": "1935行"}) is None  # 행 수가 아닌 숫자
+
     def _spread(self, pages=8, left=10, right=10, gap=1000, pitch=140, height=1700, top=800):
         """접어 찍은 장(반엽 둘) 흉내 — 왼쪽 열들, 넓은 판심, 오른쪽 열들."""
         lines = []

@@ -180,6 +180,21 @@ function _renderBibliography(bib) {
   const container = document.getElementById("bib-fields");
   if (!container) return;
 
+/**
+ * 판식(版式)을 한 줄로. 입력: printing_info 객체. 출력: 표시 문자열.
+ * 목적: 갈라 담은 칸이 있으면 그것을 보이고, 못 읽은 것은 원문 그대로 보인다.
+ * 「반엽 10행」은 편성이 좌표에서 잰 값과 맞대어 볼 기준이다(D-120).
+ */
+function _formatPansik(info) {
+  if (!info || typeof info !== "object") return "";
+  const order = ["gwangwak", "gwangwak_size", "gyeseon", "haengja", "ju_haengja", "pangoo", "eomi", "pansimje"];
+  const parts = order.map((k) => info[k]).filter(Boolean);
+  if (!parts.length) return info.summary || "";
+  let out = parts.join(" · ");
+  if (info.summary) out += `\n원문: ${info.summary}`;
+  return out;
+}
+
   const fields = [
     { key: "title", label: "제목" },
     { key: "title_reading", label: "독음" },
@@ -188,6 +203,7 @@ function _renderBibliography(bib) {
     { key: "date_created", label: "성립/간행" },
     { key: "edition_type", label: "판종" },
     { key: "physical_description", label: "형태사항" },
+    { key: "printing_info", label: "판식", format: _formatPansik },
     { key: "material_type", label: "자료유형" },
     { key: "subject", label: "주제어", format: _formatArray },
     { key: "classification", label: "분류", format: _formatClassification },
@@ -550,6 +566,7 @@ function _openEditDialog() {
   _setEditField("bib-edit-date", bib.date_created);
   _setEditField("bib-edit-edition", bib.edition_type);
   _setEditField("bib-edit-physical", bib.physical_description);
+  _setEditField("bib-edit-pansik", bib.printing_info?.summary);
   _setEditField("bib-edit-material", bib.material_type);
   _setEditField("bib-edit-series", bib.series_title);
   _setEditField("bib-edit-notes", bib.notes);
@@ -587,6 +604,12 @@ async function _saveEditedBibliography() {
     date_created: _getEditField("bib-edit-date") || bib.date_created,
     edition_type: _getEditField("bib-edit-edition") || bib.edition_type,
     physical_description: _getEditField("bib-edit-physical") || bib.physical_description,
+    // 판식은 원문 한 줄만 보낸다 — 서버가 갈라 담는다(파서가 한곳이라 화면과 어긋나지 않는다)
+    printing_info: (() => {
+      const raw = _getEditField("bib-edit-pansik");
+      if (!raw) return bib.printing_info || null;
+      return { ...(bib.printing_info || {}), summary: raw };
+    })(),
     material_type: _getEditField("bib-edit-material") || bib.material_type,
     series_title: _getEditField("bib-edit-series") || bib.series_title,
     notes: _getEditField("bib-edit-notes") || bib.notes,

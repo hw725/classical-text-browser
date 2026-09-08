@@ -458,6 +458,18 @@ async def api_segmentation_signals(doc_id: str, body: SegmentationSignalsRequest
     toc = _toc_signal_for(lines, saved, body.toc_pages)
     result = induce_signals(lines, saved, toc=toc)
     result["source"] = source
+    # 좌표에서 잰 판식을 목록(서지)의 행자수와 맞댄다(D-120 ③) — 서로가 서로의 검산이다
+    try:
+        from core.document import get_bibliography
+        from core.page_format import compare_with_catalog
+
+        bib = get_bibliography(doc_path) or {}
+        result["page_format"]["catalog"] = compare_with_catalog(
+            {"haengja": tuple(result["page_format"]["haengja"] or ()) or None},
+            bib.get("printing_info"),
+        )
+    except Exception:  # noqa: BLE001 — 서지가 없어도 규약 세기는 그대로 된다
+        result["page_format"]["catalog"] = None
     result["saved_rules"] = normalize_rules(saved) if saved else None
     result["recommended_rules"] = rules_from_signals(result, saved)
     return result

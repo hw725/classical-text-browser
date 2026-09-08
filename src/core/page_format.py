@@ -22,6 +22,7 @@
 
 from __future__ import annotations
 
+import re
 import statistics
 from typing import Optional
 
@@ -47,7 +48,14 @@ _MARGIN_RATIO = 0.25
 
 
 def _is_vertical(ln: Line) -> bool:
+    """입력: 행. 출력: 세로쓰기 여부. 목적: 길이와 배열 축을 일관되게 고른다."""
     return (ln.writing_direction or "vertical_rtl").startswith("vertical")
+
+
+def _valid_bbox(ln: Line) -> bool:
+    """입력: 행. 출력: 유효한 사각형 여부. 목적: 손상 좌표로 본문을 빼지 않는다."""
+    b = ln.bbox
+    return bool(b and len(b) == 4 and b[2] > b[0] and b[3] > b[1])
 
 
 def line_length(ln: Line) -> Optional[float]:
@@ -56,7 +64,7 @@ def line_length(ln: Line) -> Optional[float]:
     입력: 행. 출력: 픽셀 길이 또는 None. 목적: 본문 열과 난외 조각을 크기로 가른다.
     """
     b = ln.bbox
-    if not b or len(b) != 4:
+    if not _valid_bbox(ln):
         return None
     return float(b[3] - b[1]) if _is_vertical(ln) else float(b[2] - b[0])
 
@@ -67,7 +75,7 @@ def line_axis(ln: Line) -> Optional[float]:
     입력: 행. 출력: 픽셀 좌표 또는 None. 목적: 열의 차례와 판심 자리를 본다.
     """
     b = ln.bbox
-    if not b or len(b) != 4:
+    if not _valid_bbox(ln):
         return None
     return (float(b[0]) + float(b[2])) / 2 if _is_vertical(ln) else (float(b[1]) + float(b[3])) / 2
 
@@ -79,6 +87,11 @@ def _body_cut(lengths: list[float]) -> float:
     return rep * _BODY_RATIO
 
 
+def _line_start(ln: Line) -> float:
+    """입력: 유효 좌표 행. 출력: 시작 변. 목적: 가로쓰기의 왼쪽 변도 비교한다."""
+    return float(ln.bbox[1] if _is_vertical(ln) else ln.bbox[0])
+
+
 def _page_fold(axes: list[float]) -> Optional[tuple[float, float, int, int]]:
     """한 쪽의 판심 — (왼쪽 끝, 오른쪽 끝, 왼쪽 열 수, 오른쪽 열 수). 없으면 None.
 
@@ -86,16 +99,19 @@ def _page_fold(axes: list[float]) -> Optional[tuple[float, float, int, int]]:
     목적: 접은 자리를 «열 사이가 유난히 벌어진 곳»으로 찾는다 — 반엽 하나씩 찍은 스캔은
           벌어진 데가 없으므로 None이 되고, 부르는 쪽은 그대로 넘어간다.
     """
-    if len(axes) < _MIN_COLUMNS:
+    # 같은 축의 여러 OCR 행은 물리적으로 한 열이므로 간격과 열 수에 한 번만 넣는다.
+    xs = sorted(set(axes))
+    if len(xs) < _MIN_COLUMNS:
         return None
-    xs = sorted(axes)
     gaps = [xs[i + 1] - xs[i] for i in range(len(xs) - 1)]
     med = statistics.median(gaps)
     if med <= 0:
         return None
-    widest = max(range(len(gaps)), key=lambda i: gaps[i])
-    if gaps[widest] < med * _FOLD_GAP:
+    # 후보가 여럿이면 어느 틈이 접힌 자리인지 좌표만으로 확정할 수 없다.
+    candidates = [i for i, gap in enumerate(gaps) if gap >= med * _FOLD_GAP]
+    if len(candidates) != 1:
         return None
+    widest = candidates[0]
     return xs[widest], xs[widest + 1], widest + 1, len(xs) - widest - 1
 
 
@@ -105,7 +121,7 @@ def analyze(lines: list[Line]) -> dict:
     입력: 행 목록(bbox가 있는 것과 없는 것이 섞여 있어도 된다).
     출력: {
       "labels": {(쪽, 행 번호): "body"|"pansim"|"margin"},
-      "fold": {"center": 쪽 너비 대비 비율, "pages": 판심을 찾은 쪽 수} 또는 None,
+      "fold": {"center": 배열 축의 좌표, "pages": 판심을 찾은 쪽 수} 또는 None,
       "columns": {(왼쪽 열, 오른쪽 열): 쪽 수}  — 목록의 «10행»과 견줄 값,
       "counts": {"body": n, "pansim": n, "margin": n, "unknown": n},
       "samples": {"pansim": [원문 …], "margin": [원문 …]},
@@ -170,8 +186,13 @@ def analyze(lines: list[Line]) -> dict:
     dominant: Optional[tuple[int, int]] = None
     if folds and len(folds) >= max(3, len(by_page) * _FOLD_PAGES):
         center = statistics.median(folds)
-        page_width = max(
-            (ln.bbox[2] for page in by_page.values() for ln in page if ln.bbox), default=0
+        # 좌표 최댓값은 너비가 아니다. 원점 이동이나 한 큰 쪽이 허용 오차를 늘리면 안 된다.
+        page_width = statistics.median(
+            [
+                max(ln.bbox[2] if _is_vertical(ln) else ln.bbox[3] for ln in page)
+                - min(ln.bbox[0] if _is_vertical(ln) else ln.bbox[1] for ln in page)
+                for page in by_page.values()
+            ]
         )
         spread = statistics.median(abs(f - center) for f in folds)
         agree = not page_width or spread / page_width <= _FOLD_AGREE
@@ -186,10 +207,10 @@ def analyze(lines: list[Line]) -> dict:
     #    밖이면 «짧고, 본문 열처럼 윗변에서 시작하지도 않는» 것만 두주로 본다 — 별행 표제는
     #    짧아도 본문과 같은 윗변에서 시작한다(浩齋 실측: 판심제·표제 94행이 윗변 일치,
     #    두주 117행이 아래에서 시작).
-    top_med = statistics.median([ln.bbox[1] for page in by_page.values() for ln in page if ln.bbox])
-    height_med = statistics.median(
-        [line_length(ln) or 0 for page in by_page.values() for ln in page]
-    )
+    # 두주가 과반이어도 두주 자체가 본문 기준이 되지 않도록 긴 열만 참조한다.
+    reference = [ln for page in by_page.values() for ln in page if line_length(ln) >= cut]
+    top_med = statistics.median([_line_start(ln) for ln in reference])
+    height_med = statistics.median([line_length(ln) for ln in reference])
     samples: dict[str, list[str]] = {"pansim": [], "margin": []}
     counts = {"body": 0, "pansim": 0, "margin": 0, "unknown": len(labels)}
     for page, page_lines in by_page.items():
@@ -197,7 +218,7 @@ def analyze(lines: list[Line]) -> dict:
         for ln in page_lines:
             axis = line_axis(ln)
             length = line_length(ln) or 0
-            top_off = abs(float(ln.bbox[1]) - top_med) if ln.bbox else 0.0
+            top_off = abs(_line_start(ln) - top_med)
             if band is not None and axis is not None and band[0] < axis < band[1]:
                 label = "pansim"
             elif (
@@ -208,7 +229,9 @@ def analyze(lines: list[Line]) -> dict:
                 label = "margin"
             else:
                 label = "body"
-            labels[(ln.page, ln.line_index)] = label
+            # 판식을 유보하면 본문으로 세기만 하고 기하 라벨은 붙이지 않는다.
+            if regular:
+                labels[(ln.page, ln.line_index)] = label
             counts[label] += 1
             if label != "body" and len(samples[label]) < 8:
                 samples[label].append(ln.text.strip()[:20])
@@ -259,3 +282,75 @@ def describe(result: dict) -> str:
         if left != right:
             out += f"(다른 쪽은 {right}행)"
     return out
+
+
+# ── 목록과 맞대기 (D-120 ③) ───────────────────────────────────────────────────
+#
+# 좌표에서 «반엽 몇 행»을 잰 것은 어디까지나 추정이다 — 반엽 하나씩 찍은 스캔에 빈 열이
+# 되풀이되면 접은 자리처럼 보일 수 있다(Codex 지적 2026-09-08). 목록(KORMARC 300▼b)의
+# 행자수가 있으면 그 추정을 확인하거나 반증할 수 있다. 둘은 서로 독립이라 검산이 된다.
+_HAENGJA_RE = re.compile(r"(\d+)\s*[行행]")
+
+
+def catalog_columns(printing_info: Optional[dict]) -> Optional[int]:
+    """목록이 적어 둔 «반엽 몇 행». 없으면 None.
+
+    입력: 서지의 printing_info(없어도 된다). 출력: 반엽의 행 수 또는 None.
+    목적: 좌표에서 잰 값과 견줄 기준을 얻는다.
+          갈라 담은 haengja를 먼저 보고, 없으면 원문에서 찾는다.
+    """
+    if not isinstance(printing_info, dict):
+        return None
+    for key in ("haengja", "summary"):
+        text = printing_info.get(key)
+        if not text:
+            continue
+        m = _HAENGJA_RE.search(str(text))
+        if m:
+            n = int(m.group(1))
+            if 1 <= n <= 40:  # 반엽 40행을 넘는 판식은 없다 — 잘못 읽은 숫자를 거른다
+                return n
+    return None
+
+
+def compare_with_catalog(result: dict, printing_info: Optional[dict]) -> Optional[dict]:
+    """좌표에서 잰 행 수와 목록의 행자수를 맞댄다. 견줄 것이 없으면 None.
+
+    입력: analyze() 결과, 서지의 printing_info.
+    출력: {"catalog": n, "measured": [왼쪽, 오른쪽], "agree": bool, "summary": 한국어 한 줄}.
+    목적: 판식 추정을 사람이 확인할 수 있게 한다. 어긋나도 고치지 않는다 — 어느 쪽이 틀렸는지는
+          사람이 판단할 일이고, 어긋났다는 사실 자체가 «이 쪽 OCR을 다시 보라»는 신호다.
+    """
+    catalog = catalog_columns(printing_info)
+    measured = result.get("haengja")
+    if catalog is None and not measured:
+        return None
+    if catalog is None:
+        return {
+            "catalog": None,
+            "measured": list(measured),
+            "agree": None,
+            "summary": (
+                f"좌표에서 잰 판식은 반엽 {measured[0]}행입니다 "
+                "(목록에 행자수가 없어 견주지 못했습니다 — 서지의 판식 칸에 적으면 확인합니다)."
+            ),
+        }
+    if not measured:
+        return {
+            "catalog": catalog,
+            "measured": None,
+            "agree": None,
+            "summary": (
+                f"목록은 반엽 {catalog}행이라고 적었지만 좌표에서는 판식을 읽지 못했습니다 "
+                "(반엽 하나씩 찍은 스캔이거나 OCR 좌표가 없는 문헌입니다)."
+            ),
+        }
+    agree = catalog in measured
+    if agree:
+        summary = f"목록의 반엽 {catalog}행과 좌표에서 잰 값이 같습니다."
+    else:
+        summary = (
+            f"목록은 반엽 {catalog}행인데 좌표에서는 {measured[0]}·{measured[1]}행을 셌습니다 "
+            "— 이 문헌의 OCR이 열을 놓쳤거나 붙였을 수 있습니다."
+        )
+    return {"catalog": catalog, "measured": list(measured), "agree": agree, "summary": summary}

@@ -157,6 +157,11 @@ class BibliographySaveRequest(BaseModel):
     language: str | None = None
     script: str | None = None
     physical_description: str | None = None
+    # 아래 셋은 스키마에 있는데 이 모델에 없었다 — 화면에서 제목만 고쳐도 함께 지워졌다
+    # (save_bibliography는 받은 dict를 통째로 쓴다). 2026-09-08 확인.
+    printing_info: dict | None = None
+    publishing: dict | None = None
+    extent: dict | None = None
     subject: list[str] | None = None
     classification: dict | None = None
     series_title: str | None = None
@@ -2543,7 +2548,27 @@ async def api_save_bibliography(doc_id: str, body: BibliographySaveRequest):
             status_code=404,
         )
 
-    bib_data = body.model_dump(exclude_none=False)
+    # 보낸 칸만 덮어쓴다(exclude_unset) — 화면이 모르는 칸(판식·간행·권책수)을 지우지 않기
+    # 위해서다. 사람이 칸을 비우려고 null을 보낸 것은 «보낸 것»이라 그대로 반영된다.
+    incoming = body.model_dump(exclude_unset=True)
+    try:
+        existing = get_bibliography(doc_path) or {}
+    except (FileNotFoundError, OSError, ValueError):
+        existing = {}
+    bib_data = {**existing, **incoming}
+    pansik = (bib_data.get("printing_info") or {}).get("summary")
+    if pansik and str(pansik).strip():
+        # 사람이 목록의 형태사항(KORMARC 300▼b)을 통째로 붙여 넣었다 — 파서가 갈라 담는다.
+        # 파서는 못 읽은 부분을 summary에 그대로 남기므로 정보가 사라지지 않는다(D-120 ②).
+        from parsers.korcis import parse_pansik_info
+
+        parsed = parse_pansik_info(str(pansik))
+        # 사람이 개별 칸을 손본 것이 있으면 그것을 이긴다 — 파서는 빈 칸만 채운다
+        merged = dict(parsed)
+        for key, value in (bib_data.get("printing_info") or {}).items():
+            if key != "summary" and value:
+                merged[key] = value
+        bib_data["printing_info"] = merged
     try:
         return save_bibliography(doc_path, bib_data)
     except Exception as e:

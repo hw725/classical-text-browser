@@ -186,3 +186,54 @@ class TestNdlMapperUnit:
         assert bib["classification"]["NDC10"] == "726.1"
         assert bib["series_title"] == "FUZ comics"
         assert bib["digital_source"]["system_ids"]["NDLBibID"] == "033286846"
+
+
+def test_saving_bibliography_keeps_and_parses_pansik(tmp_path, monkeypatch):
+    """입력: 판식이 있는 문헌에 제목만 고쳐 저장. 출력: 판식 보존·구조화.
+
+    목적: 화면이 모르는 칸을 지우지 않는다. 전에는 저장 요청 모델에 printing_info·publishing·
+    extent가 없어, 제목만 고쳐도 그 셋이 사라졌다(2026-09-08 확인).
+    """
+    from fastapi.testclient import TestClient
+
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setenv("USERPROFILE", str(fake_home))
+    monkeypatch.setenv("HOME", str(fake_home))
+    from app.server import app
+
+    with TestClient(app) as client:
+        assert client.post("/api/library/quick-start").status_code == 200
+        import fitz
+
+        pdf = tmp_path / "t.pdf"
+        doc = fitz.open()
+        doc.new_page(width=400, height=600)
+        doc.save(str(pdf))
+        with open(pdf, "rb") as f:
+            r = client.post(
+                "/api/documents/create-from-files",
+                data={"doc_id": "d1", "title": "책"},
+                files=[("files", ("t.pdf", f.read(), "application/pdf"))],
+            )
+        assert r.status_code == 200, r.text
+
+        # ① 판식 원문을 붙여 넣어 저장 — 서버가 갈라 담는다
+        r = client.put(
+            "/api/documents/d1/bibliography",
+            json={
+                "title": "책",
+                "printing_info": {"summary": "四周雙邊 半郭 19.1 x 14.6 cm, 10行20字 註雙行"},
+            },
+        )
+        assert r.status_code == 200, r.text
+        info = client.get("/api/documents/d1/bibliography").json()["printing_info"]
+        assert info["haengja"] == "반엽 10행 20자"
+        assert info["ju_haengja"] == "주쌍행"
+
+        # ② 화면이 판식을 모르는 채 제목만 고쳐 보내도 지워지지 않는다
+        r = client.put("/api/documents/d1/bibliography", json={"title": "고친 제목"})
+        assert r.status_code == 200, r.text
+        again = client.get("/api/documents/d1/bibliography").json()
+        assert again["title"] == "고친 제목"
+        assert again["printing_info"]["haengja"] == "반엽 10행 20자"

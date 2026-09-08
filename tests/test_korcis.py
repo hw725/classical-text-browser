@@ -168,6 +168,31 @@ class TestParsePansikInfo:
         assert parse_pansik_info("上黑魚尾")["eomi"] == "상흑어미"
         assert parse_pansik_info("無魚尾")["eomi"] == "무어미"
 
+    def test_national_library_record_is_read_whole(self):
+        """입력: 국립중앙도서관 300▼b. 출력: 네 칸 모두. 목적: 표에 없던 표기를 읽는다.
+
+        KOL000019624(浩齋辰巳日錄)의 실제 값이다. 전에는 「註雙行」(注가 아니라 註)과
+        아라비아 숫자를 쓴 「上2葉花紋魚尾」를 통째로 못 읽었다(2026-09-08).
+        """
+        got = parse_pansik_info("四周雙邊 半郭 19.1 x 14.6 cm, 10行20字 註雙行, 上2葉花紋魚尾")
+        assert got["gwangwak"] == "사주쌍변"
+        assert got["gwangwak_size"] == "19.1 × 14.6 cm"
+        assert got["haengja"] == "반엽 10행 20자"
+        assert got["ju_haengja"] == "주쌍행"
+        assert got["eomi"] == "상이엽화문어미"
+
+    def test_eomi_is_composed_not_enumerated(self):
+        """입력: 표에 없던 조합. 출력: 이어 붙인 독음. 목적: 나열표의 빈칸을 없앤다."""
+        assert parse_pansik_info("上三葉花紋魚尾")["eomi"] == "상삼엽화문어미"
+        assert parse_pansik_info("下外向白魚尾")["eomi"] == "하외향백어미"
+        assert parse_pansik_info("上下內向3葉花紋魚尾")["eomi"] == "상하내향삼엽화문어미"
+
+    def test_note_columns_accept_both_glyphs(self):
+        """입력: 註와 注. 출력: 같은 값. 목적: 목록마다 다른 글자를 견딘다."""
+        assert parse_pansik_info("註雙行")["ju_haengja"] == "주쌍행"
+        assert parse_pansik_info("注雙行")["ju_haengja"] == "주쌍행"
+        assert parse_pansik_info("註單行")["ju_haengja"] == "주단행"
+
     def test_pangoo(self):
         """판구 패턴."""
         result = parse_pansik_info("大黑口 上下內向黑魚尾")
