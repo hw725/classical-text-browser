@@ -378,6 +378,60 @@ def test_propose_and_apply(client, tmp_path):
     assert tb["metadata"]["title"] == "辛巳十一月二十八日保定督署談草"
 
 
+def test_boundary_move_to_occupied_position_is_rejected(client, tmp_path):
+    """입력: 같은 층위의 점유 자리. 출력: 거절. 목적: 빈 단위 중복 저장 방지."""
+    from pathlib import Path
+
+    lib, part_id = _setup(client, tmp_path)
+    ids = []
+    for line in (0, 1):
+        response = client.post(
+            "/api/documents/d1/boundaries",
+            json={"part_id": part_id, "start": {"page": 1, "line": line}},
+        )
+        ids.append(response.json()["boundary"]["id"])
+    path = Path(lib) / "documents" / "d1" / "boundaries" / f"{part_id}.json"
+    before = path.read_bytes()
+    response = client.put(
+        f"/api/documents/d1/boundaries/{ids[1]}?part_id={part_id}",
+        json={"start": {"page": 1, "line": 0}},
+    )
+    assert response.status_code == 400
+    assert path.read_bytes() == before
+
+
+def test_apply_invalid_span_preserves_file_and_commit(client, tmp_path):
+    """입력: 유효·누락 구간. 출력: 거절. 목적: 바꿔치기 실패 시 정본 보존."""
+    from pathlib import Path
+
+    import git
+
+    lib, part_id = _setup(client, tmp_path)
+    doc = Path(lib) / "documents" / "d1"
+    inserted = client.post(
+        "/api/documents/d1/boundaries",
+        json={"part_id": part_id, "start": {"page": 1, "line": 1}},
+    )
+    assert inserted.status_code == 200
+    path = doc / "boundaries" / f"{part_id}.json"
+    before = path.read_bytes()
+    head = git.Repo(doc).head.commit.hexsha
+    response = client.post(
+        "/api/documents/d1/segmentation/apply",
+        json={
+            "part_id": part_id,
+            "replace": "all",
+            "spans": [
+                {"title": "valid", "start": {"page": 1, "line_index": 0}, "end": {}},
+                {"title": "missing", "start": {"page": 999, "line_index": 0}, "end": {}},
+            ],
+        },
+    )
+    assert path.read_bytes() == before
+    assert git.Repo(doc).head.commit.hexsha == head
+    assert response.status_code == 400
+
+
 def test_propose_without_l4_is_400(client, tmp_path):
     lib, part_id = _setup(client, tmp_path)
     import shutil
@@ -437,6 +491,14 @@ class TestTocDetection:
 
 
 class TestTocAlignment:
+    def test_split_title_keeps_first_line_as_boundary(self):
+        """입력: 두 행 표제. 출력: 첫 행 경계. 목적: 제목 앞 글자 누락 방지."""
+        entries = [TocEntry("東山遊覽記")]
+        body = [Line(3, 0, "東"), Line(3, 1, "山遊覽記"), Line(3, 2, BODY)]
+        matches, unmatched = align_toc_to_body(entries, body)
+        assert unmatched == []
+        assert [(m.page, m.line_index) for m in matches] == [(3, 0)]
+
     def test_similarity_head_and_containment(self):
         assert title_similarity("感懷", "感懷") == 1.0
         assert title_similarity("次韻贈李參判", "次韻贈李參判幷序") >= 0.95
@@ -478,6 +540,31 @@ class _FakeRouter:
 
 
 class TestTocLlm:
+    def test_toc_uses_unsaved_reference_from_form(self, client, tmp_path, monkeypatch):
+        """입력: 저장 전 해제. 출력: 같은 LLM 입력. 목적: 화면 안내와 요청 일치."""
+        from core import toc
+
+        _lib, part_id = _setup(client, tmp_path)
+        seen = []
+
+        async def extract(*args, reference_text="", **kwargs):
+            """입력: 목차 요청. 출력: 빈 목차. 목적: 외부 호출 없이 해제 관찰."""
+            seen.append(reference_text)
+            return [], {"method": "llm"}
+
+        monkeypatch.setattr(toc, "extract_toc_entries_llm", extract)
+        response = client.post(
+            "/api/documents/d1/segmentation/toc",
+            json={
+                "part_id": part_id,
+                "toc_pages": [1],
+                "use_llm": True,
+                "reference_text": "저장 전 권별 해제",
+            },
+        )
+        assert response.status_code == 200
+        assert seen == ["저장 전 권별 해제"]
+
     def test_llm_json_used_and_json_forced(self):
         import asyncio
 
@@ -1018,6 +1105,15 @@ class TestReferenceExcerpt:
     전체 23,894자 중 권별 서술은 43% 지점에서 시작했고, 옛 방식(앞 4,000자)에는 「권N」이
     **하나도** 들어가지 않았다.
     """
+
+    def test_single_long_paragraph_keeps_late_volume_description(self):
+        """입력: 개행 없는 긴 해제. 출력: 권별 서술. 목적: 문단 크기로 누락 방지."""
+        from src.core.toc import reference_excerpt
+
+        text = "생애와 교유를 서술한다. " * 1000 + "권1에는 시가 수록된다. 권2에는 서간이 있다."
+        got = reference_excerpt(text, 2000)
+        assert "권1에는 시가 수록된다" in got
+        assert "권2에는 서간이 있다" in got
 
     def _long_heje(self):
         bio = ["김윤식은 1835년에 태어나 여러 관직을 거쳤다." * 12 for _ in range(30)]

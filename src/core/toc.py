@@ -266,6 +266,23 @@ def reference_excerpt(text: str, limit: int = 8000) -> str:
     if len(text) <= limit:
         return text
     paras = [s.strip() for s in re.split(r"\n\s*\n|\n", text) if s.strip()]
+    # 붙여 넣은 해제에 빈 줄이 없으면 문단이 하나뿐이라, 그 하나가 예산을 넘어 통째로 버려진다
+    # — 권별 서술이 뒤에 있는 해제에서 정작 필요한 데가 사라졌다(Codex 지적 2026-09-08).
+    # 예산을 넘는 문단만 문장으로 쪼개고, 문장 하나가 그래도 넘으면 일정 길이로 자른다.
+    chunk_size = max(1, min(limit // 2, 1000))
+    split: list[str] = []
+    for para in paras:
+        if len(para) <= limit:
+            split.append(para)
+            continue
+        for sentence in re.split(r"(?<=[.!?。])\s*", para):
+            if not sentence:
+                continue
+            if len(sentence) <= limit:
+                split.append(sentence)
+            else:
+                split += [sentence[i : i + chunk_size] for i in range(0, len(sentence), chunk_size)]
+    paras = [s for s in split if s]
     if not paras:
         return text[:limit]
     head: list[int] = []
@@ -548,15 +565,28 @@ def align_toc_to_body(
     if E == 0 or not body_lines:
         return [], list(range(E))
     # 후보: (entry_i, line_j, score)
-    cand: list[list[tuple[int, float]]] = []
+    cand: list[list[tuple[int, int, float]]] = []
     for e in entries:
         row = []
         for j, ln in enumerate(body_lines):
             if not ln.text.strip():
                 continue
             s = title_similarity(e.title, ln.text)
+            end = j
+            # 두 행을 이으면 표제 전체가 정확히 같을 때만 행갈음을 복원한다.
+            # 뒷부분의 유사도만 채택하면 제목 첫 글자가 앞 단위에 남는다.
+            if j + 1 < len(body_lines):
+                nxt = body_lines[j + 1]
+                if (
+                    nxt.page == ln.page
+                    and nxt.line_index == ln.line_index + 1
+                    and _norm(ln.text)
+                    and _norm(nxt.text)
+                    and _norm(ln.text + nxt.text) == _norm(e.title)
+                ):
+                    s, end = 1.0, j + 1
             if s >= min_score:
-                row.append((j, s))
+                row.append((j, end, s))
         cand.append(row)
     # DP over entries; state = last used line index (-1 = none). 후보만 다루므로 상태 수가 작다.
     # best[i] : dict last_j -> (score, backpointer)
@@ -570,12 +600,12 @@ def align_toc_to_body(
             if cur is None or sc - skip_penalty > cur[0]:
                 best[i + 1][last_j] = (sc - skip_penalty, (last_j, -1))
             # place entry i on candidate j > last_j
-            for j, s in cand[i]:
+            for j, end, s in cand[i]:
                 if j <= last_j:
                     continue
-                cur = best[i + 1].get(j)
+                cur = best[i + 1].get(end)
                 if cur is None or sc + s > cur[0]:
-                    best[i + 1][j] = (sc + s, (last_j, j))
+                    best[i + 1][end] = (sc + s, (last_j, j))
     # 최선 종점
     end_j, (end_score, _) = max(best[E].items(), key=lambda kv: kv[1][0])
     # 역추적
@@ -596,7 +626,10 @@ def align_toc_to_body(
                     entry_index=i,
                     page=ln.page,
                     line_index=ln.line_index,
-                    score=title_similarity(e.title, ln.text),
+                    score=next(
+                        (s for j, _end, s in cand[i] if j == placed[i]),
+                        title_similarity(e.title, ln.text),
+                    ),
                     title=e.title,
                     level=e.level,
                 )

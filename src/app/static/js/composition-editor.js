@@ -1343,6 +1343,14 @@ async function _applyAllFromSignals() {
     await _openProposePanel();
     if (!_signalsCurrent()) return;
   }
+  // 이 단추는 replace="all" — 이 권의 살아 있는 경계를 «손으로 넣은 것까지» 지우고 다시 세운다.
+  // 사이드바 「자동 트리」는 묻는데 여기만 묻지 않아, 눌러 놓고 손댄 경계를 잃을 수 있었다
+  // (되돌리려면 원본 저장소의 커밋을 되돌려야 한다 — 2026-09-08).
+  const live = (typeof contentsState !== "undefined" && contentsState.data?.total_units) || 0;
+  const msg = live
+    ? `이 권의 단위 ${live}개를 지우고, 지금 켠 신호로 개요를 다시 세웁니다.\n손으로 넣은 경계도 함께 지워집니다. 계속할까요?`
+    : "지금 켠 신호로 개요를 세웁니다. 계속할까요?";
+  if (!confirm(msg)) return;
   const rules = _rulesFromForm();
   const btn = document.getElementById("comp-apply-all-btn");
   if (btn) { btn.disabled = true; btn.textContent = "세우는 중…"; }
@@ -1426,6 +1434,7 @@ async function _detectToc(useLlm) {
         part_id: viewerState.partId,
         toc_pages: _tocPagesFromInput(),
         use_llm: !!useLlm,
+        reference_text: useLlm ? _llmReferenceText() : null,
         force_provider: useLlm ? llmSel.force_provider : null,
         force_model: useLlm ? llmSel.force_model : null,
       }),

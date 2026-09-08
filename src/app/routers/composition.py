@@ -50,6 +50,7 @@ class SegmentationTocRequest(BaseModel):
     """목차 판별·추출 요청 (D-089). 아무것도 저장하지 않는다."""
 
     part_id: str
+    reference_text: str | None = None  # 빈 문자열은 해제 없이, 생략은 저장본을 쓴다
     toc_pages: list[int] | None = None  # None이면 앞쪽 쪽에서 자동 판별
     use_llm: bool = False  # True면 LLM으로 항목 구조화(실패 시 규칙으로)
     force_provider: str | None = None
@@ -554,6 +555,8 @@ async def api_segmentation_toc(doc_id: str, body: SegmentationTocRequest):
             reference_text = _rules.get("reference_text") or ""
         except Exception:  # noqa: BLE001 — 참고는 없어도 된다
             reference_text = ""
+        if body.reference_text is not None:
+            reference_text = body.reference_text
         entries, meta = await extract_toc_entries_llm(
             page_lines,
             toc_pages,
@@ -640,6 +643,23 @@ async def api_segmentation_apply(doc_id: str, body: SegmentationApplyRequest):
             )
         except Exception as e:  # noqa: BLE001 — 한 구간의 실패가 나머지를 막지 않는다
             errors.append(f"{span.title}: {e}")
+    # 바꿔치기는 전체 선택이 성립할 때만 저장한다. 일부만 쓰면 «지우기»는 다 되고 «넣기»는
+    # 덜 된 채로 남아, 있던 경계만 잃는다(Codex 지적 2026-09-08). 아무것도 쓰지 않고 되돌린다.
+    if errors:
+        return JSONResponse(
+            {
+                "error": (
+                    f"구간 {len(errors)}개를 확정본에서 찾지 못해 아무것도 적용하지 않았습니다. "
+                    "→ 해결: 「경계 제안」으로 후보를 다시 세운 뒤 적용하세요 "
+                    "(제안한 뒤에 확정본이 바뀌면 행 번호가 어긋납니다)."
+                ),
+                "created": [],
+                "removed": 0,
+                "errors": errors,
+                "git": None,
+            },
+            status_code=400,
+        )
     git = None
     if created or removed:
         save_doc_boundaries(doc_path, data)
@@ -1036,7 +1056,14 @@ async def api_update_boundary(
     if (int(start["page"]), int(start["line"])) not in keys:
         return JSONResponse({"error": "시작 행이 현재 확정본에 없습니다."}, status_code=400)
     if start != item["start"]:
-        move_boundary(data, unit_id, start, page_texts)
+        try:
+            move_boundary(data, unit_id, start, page_texts)
+        except ValueError as e:
+            # 같은 자리에 겹쳐 놓으려 했다 — 아무것도 저장하지 않고 왜인지 말한다
+            return JSONResponse(
+                {"error": f"{e} → 해결: 다른 행으로 옮기거나 그 경계를 먼저 지우세요."},
+                status_code=400,
+            )
         item["l4_commit"] = _document_head(doc_path)
         touched.append(unit_id)
         start_moved = True

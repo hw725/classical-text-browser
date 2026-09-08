@@ -428,18 +428,21 @@ def rematch(data: dict, page_texts: dict[int, str], l4_commit: Optional[str]) ->
             b["l4_commit"] = l4_commit
             changed += 1
             continue
-        # 후보 자리들
+        # 앵커는 개행을 빼고 저장하므로 대조도 같은 표현으로 한다.
+        # 원문 오프셋 표를 남겨 행갈음이 달라져도 실제 글자 자리로 돌아간다.
+        offsets = [i for i, char in enumerate(t) if char != "\n"]
+        searchable = t.replace("\n", "")
         hits = []
-        k = t.find(want)
+        k = searchable.find(want)
         while k >= 0:
-            hits.append(k)
-            k = t.find(want, k + 1)
+            hits.append(offsets[k])
+            k = searchable.find(want, k + 1)
         if not hits and len(want) > 4:
             short = want[:4]
-            k = t.find(short)
+            k = searchable.find(short)
             while k >= 0:
-                hits.append(k)
-                k = t.find(short, k + 1)
+                hits.append(offsets[k])
+                k = searchable.find(short, k + 1)
         if not hits:
             if b.get("anchor_status") != "stale":
                 b["anchor_status"] = "stale"
@@ -549,9 +552,22 @@ def delete_boundary(data: dict, boundary_id: str) -> dict:
 def move_boundary(
     data: dict, boundary_id: str, start: dict, page_texts: Optional[dict[int, str]] = None
 ) -> dict:
+    """경계를 다른 자리로 옮긴다.
+
+    입력: 경계 목록, 옮길 id, 새 시작 자리, (있으면) 확정본 쪽 텍스트.
+    출력: 옮긴 경계.
+    목적: 같은 자리·같은 층위에 경계가 둘 생기지 않게 한다 — insert_boundary는 이것을 막지만
+          옮기는 길에는 검사가 없어, ▲▼로 옮기다 다른 경계 위에 올려놓으면 빈 단위가 생겼다
+          (같은 자리 = 같은 단위이므로 둘일 수 없다. D-092, Codex 지적 2026-09-08).
+    """
     b = find_boundary(data, boundary_id)
     if b is None:
         raise FileNotFoundError(f"경계를 찾을 수 없습니다: {boundary_id}")
+    taken = find_at(data, start, int(b.get("level", 2)))
+    if taken is not None and taken.get("id") != boundary_id:
+        raise ValueError(
+            f"그 자리에는 같은 층위의 경계가 이미 있습니다: {taken.get('title') or taken['id']}"
+        )
     b["start"] = {
         "page": int(start["page"]),
         "line": int(start.get("line", 0)),

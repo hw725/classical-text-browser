@@ -38,6 +38,18 @@ def _data(*items):
 
 
 class TestPositions:
+    def test_rematch_anchor_across_line_break(self):
+        """입력: 행을 넘는 앵커. 출력: 이동한 자리. 목적: 개행 재배치 보존."""
+        old = {1: "甲乙\n丙丁戊己庚辛"}
+        item = B.new_boundary(
+            {"page": 1, "line": 0, "offset": 0}, page_texts=old, l4_commit="old"
+        )
+        data = _data(item)
+        B.rematch(data, {1: "序\n甲\n乙丙丁戊己庚辛"}, "new")
+        assert item["start"] == {"page": 1, "line": 1, "offset": 0}
+        assert item["anchor_status"] == "approved"
+        assert item["l4_commit"] == "new"
+
     def test_char_and_position_round_trip(self):
         pt = {1: PAGE1}
         pos = B.position_from_char(pt, 1, len(L0) + 1 + K9)
