@@ -432,6 +432,31 @@ def test_apply_invalid_span_preserves_file_and_commit(client, tmp_path):
     assert response.status_code == 400
 
 
+def test_boundary_index_can_carry_text_for_the_manual_panel(client, tmp_path):  # noqa: F811
+    """입력: include_text 있고 없고. 출력: 본문 실림·안 실림.
+
+    목적: 편성 탭의 「단위 손보기」는 본문을 다루므로 색인에서 함께 받아야 한다. 그 패널이
+    해석 저장소에 묻고 있어서 해석 저장소를 안 고르면 목록이 늘 비었다(D-097 이후의 잔재,
+    2026-09-08 확인). 사이드바 색인은 가벼워야 하므로 기본은 싣지 않는다.
+    """
+    _lib, part_id = _setup(client, tmp_path)
+    r = client.post(
+        "/api/documents/d1/segmentation/auto", json={"part_id": part_id, "use_toc": False}
+    )
+    assert r.status_code == 200, r.text
+
+    light = client.get(f"/api/documents/d1/boundaries?part_id={part_id}").json()["boundaries"]
+    assert light, "경계가 있어야 이 시험이 뜻이 있다"
+    assert all("original_text" not in row for row in light)
+
+    heavy = client.get(f"/api/documents/d1/boundaries?part_id={part_id}&include_text=1").json()[
+        "boundaries"
+    ]
+    assert len(heavy) == len(light)
+    assert all("original_text" in row and "source_refs" in row for row in heavy)
+    assert any(row["original_text"].strip() for row in heavy)
+
+
 def test_propose_without_l4_is_400(client, tmp_path):
     lib, part_id = _setup(client, tmp_path)
     import shutil

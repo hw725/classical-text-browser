@@ -187,7 +187,9 @@ def _document_head(doc_path) -> str | None:
         return None
 
 
-def _boundary_rows(doc_path, document_id: str, part_id: str | None) -> list[dict]:
+def _boundary_rows(
+    doc_path, document_id: str, part_id: str | None, include_text: bool = False
+) -> list[dict]:
     """경계 색인 «보기» (D-090): 단위를 원본 위치 순서로 늘어놓고 행 앵커를 계산한다.
 
     경계는 별도 데이터가 아니다. 위치의 정본은 경계 목록이고, 행 번호·좌표는 여기서
@@ -233,6 +235,11 @@ def _boundary_rows(doc_path, document_id: str, part_id: str | None) -> list[dict
                 "l4_commit": a.get("l4_commit"),
             }
         )
+        if include_text:
+            # 「단위 손보기」가 본문을 다루므로 여기서만 싣는다 — 사이드바 색인은 이것 없이 가볍게.
+            # 한 단위가 3만 자를 넘는 일이 있어(천진담초 실측) 기본으로 실으면 색인이 무거워진다.
+            rows[-1]["original_text"] = blk.get("original_text") or ""
+            rows[-1]["source_refs"] = refs
     rows.sort(
         key=lambda r: (
             r["part_id"] or "",
@@ -936,12 +943,20 @@ async def api_contents_tree(doc_id: str):
 
 
 @router.get("/api/documents/{doc_id}/boundaries")
-async def api_list_boundaries(doc_id: str, part_id: str | None = Query(None)):
-    """경계 색인 보기 (D-090): 단위를 원본 위치 순서로, 시작·끝 행과 좌표 캐시를 붙여."""
+async def api_list_boundaries(
+    doc_id: str,
+    part_id: str | None = Query(None),
+    include_text: bool = Query(False),
+):
+    """경계 색인 보기 (D-090): 단위를 원본 위치 순서로, 시작·끝 행과 좌표 캐시를 붙여.
+
+    include_text=1이면 각 단위의 확정본 본문과 출처 쪽을 함께 싣는다 — 편성 탭의
+    「단위 손보기」가 본문을 다루기 때문이다. 사이드바 색인은 이것 없이 부른다(가볍게).
+    """
     doc_path, err = _doc(doc_id)
     if err is not None:
         return err
-    rows = _boundary_rows(doc_path, doc_id, part_id)
+    rows = _boundary_rows(doc_path, doc_id, part_id, include_text=include_text)
     return {"boundaries": rows, "total": len(rows)}
 
 

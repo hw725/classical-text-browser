@@ -177,27 +177,31 @@ async function _loadCompositionData() {
   }
   _updatePageIndicator(pageNum);
 
-  // 단위 목록만 읽는다 — 옛 「자동 편성」이 보던 쪽별 교정 텍스트 조회는 D-116에서 없앴다
-  const promises = [];
-  const correctedPromises = [];
-  if (interpState.interpId) {
-    promises.push(
-      fetch(`/api/interpretations/${interpState.interpId}/entities/unit?document_id=${docId}`)
-        .then((r) => (r.ok ? r.json() : null))
-        .catch(() => null),
-    );
-  }
-  const results = await Promise.all(promises);
-
-  // 단위 목록 — 권 전체
+  // 단위는 **원본 저장소**의 것이다(D-097). 이 패널만 해석 저장소에 묻고 있어서, 해석 저장소를
+  // 고르지 않으면 조회조차 하지 않았고 목록이 늘 비어 「쪼개기」가 영영 꺼져 있었다
+  // (浩齋65 실측 2026-09-08: 원본에 단위 581개가 있는데 화면은 «아직 단위가 없습니다»).
+  // 사이드바 「내용」 트리와 같은 곳을 본다.
   compState.units = [];
-  if (interpState.interpId) {
-    const tbData = results[correctedPromises.length];
-    for (const entity of (tbData && tbData.entities) || []) {
-      // deprecated / archived는 목록에서 숨김
-      if (entity.status === "deprecated" || entity.status === "archived") continue;
-      compState.units.push(entity);
+  try {
+    const url =
+      `/api/documents/${encodeURIComponent(docId)}/boundaries` +
+      `?part_id=${encodeURIComponent(viewerState.partId || "")}&include_text=1`;
+    const res = await fetch(url);
+    const data = res.ok ? await res.json() : null;
+    for (const row of (data && data.boundaries) || []) {
+      if (row.unit_status === "deprecated" || row.unit_status === "archived") continue;
+      // 경계 색인의 평평한 칸을 카드가 기대하는 모양으로 옮긴다
+      compState.units.push({
+        id: row.id,
+        sequence_index: row.order != null ? row.order + 1 : row.sequence_index,
+        original_text: row.original_text || "",
+        source_refs: row.source_refs || [],
+        status: row.unit_status || row.status || "draft",
+        metadata: { level: row.level, role: row.role, title: row.title },
+      });
     }
+  } catch (e) {
+    console.error("단위 목록을 읽지 못했습니다", e);
   }
 
   _renderUnits();
@@ -247,7 +251,7 @@ function _renderUnits() {
     container.innerHTML =
       '<div class="placeholder" style="padding:20px; text-align:center; color:var(--text-muted);">' +
       "사이드바에서 문헌과 권을 고르세요.<br>" +
-      '<span style="font-size:11px;">(편성은 원본 저장소의 것입니다 — 해석 저장소는 표점 탭부터 씁니다)</span></div>';
+      '<span style="font-size:11px;">(편성은 원본 저장소의 것이라 해석 저장소를 고르지 않아도 됩니다)</span></div>';
     return;
   }
 
