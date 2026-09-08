@@ -1145,88 +1145,111 @@ function _renderSignals() {
     list.innerHTML = '<div class="placeholder">되풀이되는 표지를 찾지 못했습니다. 어휘를 직접 더하거나 목차를 쓰세요.</div>';
   }
   const maxScore = Math.max(0.01, ...rows.map((r) => r.score || 0));
-  for (const r of rows) {
-    const row = document.createElement("div");
-    row.className = "comp-sig-row" + (r.group === "aux" ? " is-aux" : "") + (r.manual ? " is-manual" : "");
-    const main = document.createElement("label");
-    main.className = "comp-sig-main";
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = signalState.checked.has(r.id);
-    cb.addEventListener("change", () => {
-      if (cb.checked) signalState.checked.add(r.id);
-      else signalState.checked.delete(r.id);
-      signalState.touched = true;
-    });
-    const label = document.createElement("span");
-    label.className = "comp-sig-label";
-    label.textContent = r.label || _signalLabel(r.id);
-    const count = document.createElement("span");
-    count.className = "comp-sig-count";
-    count.textContent = r.count != null ? `${r.count}회` : "";
-    main.appendChild(cb);
-    main.appendChild(label);
-    main.appendChild(count);
-    if (r.marker) {
-      const mk = document.createElement("span");
-      mk.className = "comp-sig-aux";
-      mk.textContent = "되풀이";
-      mk.title = "행들이 대부분 같은 글이거나 앞 날짜를 되적습니다 — 판권·두주 같은 종이의 규약일 수 있어 권고하지 않습니다";
-      main.appendChild(mk);
-    }
-    if (r.group === "aux") {
-      const aux = document.createElement("span");
-      aux.className = "comp-sig-aux";
-      aux.textContent = "보조";
-      aux.title = "혼자서는 후보를 만들지 않고, 날짜·어휘가 있는 행의 신뢰도만 올립니다";
-      main.appendChild(aux);
-    }
-    row.appendChild(main);
-    if (r.score != null) {
-      const bar = document.createElement("span");
-      bar.className = "comp-sig-bar";
-      bar.title = `점수 ${r.score} — 횟수 × 간격의 고름` + (r.chain != null ? ` × 날짜 사슬 ${r.chain}` : "");
-      const fill = document.createElement("span");
-      fill.style.width = `${Math.round((r.score / maxScore) * 100)}%`;
-      bar.appendChild(fill);
-      row.appendChild(bar);
-    }
-    if (r.examples && r.examples.length) {
-      const ex = document.createElement("span");
-      ex.className = "comp-sig-ex";
-      ex.textContent = r.examples[0];
-      ex.title = r.examples.join("\n");
-      row.appendChild(ex);
-    }
-    if (r.manual) {
-      const rm = document.createElement("button");
-      rm.type = "button";
-      rm.className = "comp-sig-remove";
-      rm.textContent = "×";
-      rm.title = "이 어휘 행을 지웁니다";
-      rm.addEventListener("click", () => {
-        signalState.manual = signalState.manual.filter((m) => m.id !== r.id);
-        signalState.checked.delete(r.id);
-        // 목록 밖 스위치 행을 지우면 «저장에서 꺼 둠»도 지운다 — 기본(켬)으로 돌아간다
-        if (r.toggle.startsWith("signals.") && signalState.data?.saved_rules?.signals) delete signalState.data.saved_rules.signals[r.id];
-        signalState.touched = true;
-        _renderSignals();
-      });
-      row.appendChild(rm);
-    }
-    list.appendChild(row);
+  // 켠 것·손으로 넣은 것·권고된 것만 펼쳐 둔다. 나머지는 «센 근거»이지 규칙이 아니므로 접는다 —
+  // 종류를 없앤 뒤(D-119) 발견기가 스무 줄 넘게 세는 책이 있어 답이 묻혔다(2026-09-08 지적).
+  const open = rows.filter((r) => signalState.checked.has(r.id) || r.manual || r.recommended);
+  const folded = rows.filter((r) => !open.includes(r));
+  for (const r of open) list.appendChild(_signalRowEl(r, maxScore));
+  if (folded.length) {
+    const more = document.createElement("details");
+    more.className = "comp-sig-more";
+    more.open = !!signalState.showAll;
+    more.addEventListener("toggle", () => { signalState.showAll = more.open; });
+    const sum = document.createElement("summary");
+    sum.textContent = `센 것 ${folded.length}줄 더 — 점수가 낮아 켜지 않았습니다`;
+    sum.title = "이 책에서 되풀이되기는 하지만 규약으로 보기엔 약한 것들입니다. 켜면 규칙이 됩니다";
+    more.appendChild(sum);
+    for (const r of folded) more.appendChild(_signalRowEl(r, maxScore));
+    list.appendChild(more);
   }
   const d = signalState.data;
   if (d && (d.dropped?.length || d.furniture?.length)) {
     const note = document.createElement("div");
     note.className = "comp-sig-dropped";
     const parts = [];
-    if (d.dropped?.length) parts.push("쪽마다 같은 자리라 뺀 것: " + d.dropped.map((x) => `${x.label} ${x.count}회`).join(" · "));
+    // 뺀 이유가 둘이다(판심 자리 / 날짜뿐인 행 끝) — 한 이름으로 묶으면 틀린 말이 된다
+    const byWhy = { page_furniture: [], date_tail: [] };
+    for (const x of d.dropped || []) (byWhy[x.why] || (byWhy[x.why] = [])).push(`${x.label} ${x.count}회`);
+    if (byWhy.page_furniture.length) parts.push("쪽마다 같은 자리라 뺀 것: " + byWhy.page_furniture.join(" · "));
+    if (byWhy.date_tail.length) parts.push("날짜뿐이라 뺀 것: " + byWhy.date_tail.join(" · "));
     if (d.furniture?.length) parts.push("판심·엽수로 본 행: " + d.furniture.slice(0, 6).join(" · ") + (d.furniture.length > 6 ? ` … (${d.furniture.length})` : ""));
     note.textContent = parts.join("  |  ");
     note.title = "종이의 규약(판심·엽수·인쇄소 도장)은 글의 시작이 아니므로 후보에서 뺍니다";
     list.appendChild(note);
   }
+}
+
+/** 신호 한 줄을 만든다. 입력: 신호 행·점수 최댓값. 출력: <div>. 목적: 펼친 줄과 접힌 줄이 같게. */
+function _signalRowEl(r, maxScore) {
+  const row = document.createElement("div");
+  row.className = "comp-sig-row" + (r.group === "aux" ? " is-aux" : "") + (r.manual ? " is-manual" : "");
+  const main = document.createElement("label");
+  main.className = "comp-sig-main";
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.checked = signalState.checked.has(r.id);
+  cb.addEventListener("change", () => {
+    if (cb.checked) signalState.checked.add(r.id);
+    else signalState.checked.delete(r.id);
+    signalState.touched = true;
+  });
+  const label = document.createElement("span");
+  label.className = "comp-sig-label";
+  label.textContent = r.label || _signalLabel(r.id);
+  const count = document.createElement("span");
+  count.className = "comp-sig-count";
+  count.textContent = r.count != null ? `${r.count}회` : "";
+  main.appendChild(cb);
+  main.appendChild(label);
+  main.appendChild(count);
+  if (r.marker) {
+    const mk = document.createElement("span");
+    mk.className = "comp-sig-aux";
+    mk.textContent = "되풀이";
+    mk.title = "행들이 대부분 같은 글이거나 앞 날짜를 되적습니다 — 판권·두주 같은 종이의 규약일 수 있어 권고하지 않습니다";
+    main.appendChild(mk);
+  }
+  if (r.group === "aux") {
+    const aux = document.createElement("span");
+    aux.className = "comp-sig-aux";
+    aux.textContent = "보조";
+    aux.title = "혼자서는 후보를 만들지 않고, 날짜·어휘가 있는 행의 신뢰도만 올립니다";
+    main.appendChild(aux);
+  }
+  row.appendChild(main);
+  if (r.score != null) {
+    const bar = document.createElement("span");
+    bar.className = "comp-sig-bar";
+    bar.title = `점수 ${r.score} — 횟수 × 간격의 고름` + (r.chain != null ? ` × 날짜 사슬 ${r.chain}` : "");
+    const fill = document.createElement("span");
+    fill.style.width = `${Math.round((r.score / maxScore) * 100)}%`;
+    bar.appendChild(fill);
+    row.appendChild(bar);
+  }
+  if (r.examples && r.examples.length) {
+    const ex = document.createElement("span");
+    ex.className = "comp-sig-ex";
+    ex.textContent = r.examples[0];
+    ex.title = r.examples.join("\n");
+    row.appendChild(ex);
+  }
+  if (r.manual) {
+    const rm = document.createElement("button");
+    rm.type = "button";
+    rm.className = "comp-sig-remove";
+    rm.textContent = "×";
+    rm.title = "이 어휘 행을 지웁니다";
+    rm.addEventListener("click", () => {
+      signalState.manual = signalState.manual.filter((m) => m.id !== r.id);
+      signalState.checked.delete(r.id);
+      // 목록 밖 스위치 행을 지우면 «저장에서 꺼 둠»도 지운다 — 기본(켬)으로 돌아간다
+      if (r.toggle.startsWith("signals.") && signalState.data?.saved_rules?.signals) delete signalState.data.saved_rules.signals[r.id];
+      signalState.touched = true;
+      _renderSignals();
+    });
+    row.appendChild(rm);
+  }
+  return row;
 }
 
 /**

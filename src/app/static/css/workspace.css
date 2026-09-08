@@ -7646,6 +7646,18 @@ input.prop-level { width: 3.2em; }
 .comp-sig-opt { display: inline-flex; align-items: center; gap: 3px; font-size: 10.5px; color: var(--text-secondary); }
 .comp-sig-remove { border: none; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 12px; padding: 0 3px; }
 .comp-sig-remove:hover { color: #c0392b; }
+/* 권고하지 않은 신호 줄 묶음 — 답(켜진 줄)이 먼저 보이게 접어 둔다 */
+.comp-sig-more > summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 3px 2px;
+  list-style: none;
+}
+.comp-sig-more > summary::before { content: "▸ "; }
+.comp-sig-more[open] > summary::before { content: "▾ "; }
+.comp-sig-more > summary:hover { color: var(--text); }
+
 .comp-sig-dropped { font-size: 10px; color: var(--text-muted); margin-top: 3px; }
 .comp-signals-foot { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
 .comp-toc-row.comp-sig-row { border-bottom: 1px dotted var(--border); padding-bottom: 3px; margin-bottom: 2px; }

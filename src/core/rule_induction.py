@@ -1036,7 +1036,7 @@ async def extract_start_patterns_llm(
         + "새 글의 시작 행에 되풀이되는 표지를 찾으십시오. 종류는 넷뿐입니다:\n"
         + "  head_word(행 첫머리 글자·어휘) · title_word(행을 끝맺는 어휘) · symbol(기호 한 글자)"
         + " · none(없음)\n"
-        + '형식: {"patterns": [{"kind": "head_word", "value": "又", "why": "..."}], '
+        + '형식: {"patterns": [{"kind": "head_word", "value": "...", "why": "..."}], '
         + '"note": "..."}\n\n'
         + "\n".join(sample)
     )
