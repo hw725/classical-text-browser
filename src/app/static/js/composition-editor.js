@@ -1211,6 +1211,8 @@ function _renderSignals() {
     for (const x of d.dropped || []) (byWhy[x.why] || (byWhy[x.why] = [])).push(`${x.label} ${x.count}회`);
     if (byWhy.page_furniture.length) parts.push("쪽마다 같은 자리라 뺀 것: " + byWhy.page_furniture.join(" · "));
     if (byWhy.date_tail.length) parts.push("날짜뿐이라 뺀 것: " + byWhy.date_tail.join(" · "));
+    // 판식(D-120) — 좌표로 판심·두주를 가려낸 책이면 무엇을 뺐는지 말한다
+    if (d.page_format?.summary) parts.push(d.page_format.summary);
     if (d.furniture?.length) parts.push("판심·엽수로 본 행: " + d.furniture.slice(0, 6).join(" · ") + (d.furniture.length > 6 ? ` … (${d.furniture.length})` : ""));
     note.textContent = parts.join("  |  ");
     note.title = "종이의 규약(판심·엽수·인쇄소 도장)은 글의 시작이 아니므로 후보에서 뺍니다";

@@ -52,6 +52,9 @@ import unicodedata
 from pathlib import Path
 from typing import Optional
 
+from core.page_format import analyze as analyze_page_format
+from core.page_format import body_lines as page_format_body
+from core.page_format import describe as describe_page_format
 from core.segmentation import (
     Line,
     _layout_signals,
@@ -456,6 +459,11 @@ def induce_signals(
     rules = normalize_rules(rules)
     toc_pages = set((toc or {}).get("pages") or [])
     lines = [ln for ln in lines if ln.text.strip() and ln.page not in toc_pages]
+    # 종이의 규약은 글의 규약이 아니다(D-120) — 판식이 일정한 책이면 판심 자리와 두주를 뺀다.
+    # 판식이 일정하지 않거나 좌표가 없으면 아무것도 빼지 않는다(analyze가 regular=False).
+    page_format = analyze_page_format(lines)
+    if page_format["regular"]:
+        lines = page_format_body(lines, page_format)
     n = len(lines)
     if n < 4:
         # 본문이 거의 없어도 목차가 결정적이면 1단이다 — 조기 반환이 층계를 건너뛰면 안 된다
@@ -477,6 +485,13 @@ def induce_signals(
             "signals": [],
             "dropped": [],
             "furniture": [],
+            "page_format": {
+                "regular": page_format["regular"],
+                "haengja": list(page_format["haengja"]) if page_format.get("haengja") else None,
+                "counts": page_format["counts"],
+                "samples": page_format["samples"],
+                "summary": describe_page_format(page_format),
+            },
             "toc": toc,
         }
     texts = [ln.text.strip() for ln in lines]
@@ -737,6 +752,13 @@ def induce_signals(
         "signals": rows,
         "dropped": dropped,
         "furniture": furniture,
+        "page_format": {
+            "regular": page_format["regular"],
+            "haengja": list(page_format["haengja"]) if page_format.get("haengja") else None,
+            "counts": page_format["counts"],
+            "samples": page_format["samples"],
+            "summary": describe_page_format(page_format),
+        },
         "toc": toc,
     }
 

@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from src.core import page_format
 from src.core import rule_induction as induction
 from src.core.rule_induction import (
     extract_start_patterns_llm,
@@ -628,6 +629,99 @@ class TestDiscoveryIsGeneric:
         acc = [p for p in r["proposals"] if p["accepted"]]
         assert [p["line_index"] for p in acc] == [1, 3]
         assert any(x.startswith("head_template:") for x in acc[0]["reasons"])
+
+
+class TestPageFormat:
+    """판식(版式)을 좌표에서 읽는다 (D-120). 자신 없으면 아무것도 빼지 않는 것이 계약이다."""
+
+    def _spread(self, pages=8, left=10, right=10, gap=1000, pitch=140, height=1700, top=800):
+        """접어 찍은 장(반엽 둘) 흉내 — 왼쪽 열들, 넓은 판심, 오른쪽 열들."""
+        lines = []
+        for p in range(1, pages + 1):
+            idx = 0
+            x = 200
+            for i in range(left + right):
+                if i == left:
+                    x += gap  # 판심(접은 자리)
+                lines.append(
+                    Line(
+                        p,
+                        idx,
+                        f"本文{p}_{i}" + "文" * 12,
+                        bbox=[x, top, x + 120, top + height],
+                        writing_direction="vertical_rtl",
+                    )
+                )
+                idx += 1
+                x += pitch
+        return lines
+
+    def test_fold_and_haengja_are_measured_not_assumed(self):
+        """입력: 반엽 10열씩 접은 장. 출력: 일정한 판식·행자 (10, 10). 목적: 좌표로 잰다."""
+        lines = self._spread()
+        r = page_format.analyze(lines)
+        assert r["regular"] is True
+        assert r["haengja"] == (10, 10)
+        assert r["fold"]["pages"] == 8
+
+    def test_single_leaf_scan_has_no_fold_and_changes_nothing(self):
+        """입력: 접은 자리 없는 쪽. 출력: 전부 본문. 목적: 자신 없으면 잠자코 있는다."""
+        lines = self._spread(gap=140)  # 판심 없이 고른 간격
+        r = page_format.analyze(lines)
+        assert r["regular"] is False
+        assert r["counts"]["margin"] == 0 and r["counts"]["pansim"] == 0
+        assert len(page_format.body_lines(lines, r)) == len(lines)
+
+    def test_marginal_note_is_dropped_but_indented_title_is_kept(self):
+        """입력: 아주 작은 두주와 내려쓴 별행 표제. 출력: 두주만 뺀다.
+
+        목적: D-117의 indent_alone 판식(시집은 제목만 내려쓴다)을 지운다면 정작 찾아야 할
+        표제를 잃는다. 두주는 본문 열의 몇십 분의 일이고 표제는 그렇게까지 작지 않다.
+        """
+        lines = self._spread()
+        page, idx = 1, 90
+        lines.append(  # 두주 — 아주 작고 아래에서 시작
+            Line(page, idx, "同日", bbox=[400, 1400, 520, 1480], writing_direction="vertical_rtl")
+        )
+        lines.append(  # 내려쓴 별행 표제 — 짧지만 두주만큼 작지는 않다
+            Line(
+                page,
+                idx + 1,
+                "詩三首",
+                bbox=[600, 1000, 720, 1750],
+                writing_direction="vertical_rtl",
+            )
+        )
+        r = page_format.analyze(lines)
+        assert r["labels"][(page, idx)] == "margin"
+        assert r["labels"][(page, idx + 1)] == "body"
+        kept = {(ln.page, ln.line_index) for ln in page_format.body_lines(lines, r)}
+        assert (page, idx) not in kept and (page, idx + 1) in kept
+
+    def test_lines_without_coordinates_are_kept(self):
+        """입력: 좌표 없는 행. 출력: 남는다. 목적: 텍스트로 가져온 문헌을 망치지 않는다."""
+        lines = self._spread()
+        lines.append(Line(1, 99, "좌표없음"))
+        r = page_format.analyze(lines)
+        assert r["labels"][(1, 99)] == "unknown"
+        assert any(ln.line_index == 99 for ln in page_format.body_lines(lines, r))
+
+    def test_induction_only_drops_when_the_format_is_regular(self):
+        """입력: 판심 있는 책과 없는 책. 출력: 전자만 행이 준다. 목적: 발견기와의 계약."""
+        with_fold = self._spread()
+        noise = Line(1, 90, "同日", bbox=[400, 1400, 520, 1480], writing_direction="vertical_rtl")
+        with_fold.append(noise)
+        r1 = induce_signals(with_fold)
+        assert r1["page_format"]["regular"] is True
+        assert r1["lines"] == len(with_fold) - 1  # 두주 한 행이 빠졌다
+
+        flat = self._spread(gap=140)
+        flat.append(
+            Line(1, 90, "同日", bbox=[400, 1400, 520, 1480], writing_direction="vertical_rtl")
+        )
+        r2 = induce_signals(flat)
+        assert r2["page_format"]["regular"] is False
+        assert r2["lines"] == len(flat)  # 하나도 빼지 않았다
 
 
 class TestDiscoveryRegressions:
