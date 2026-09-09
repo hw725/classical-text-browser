@@ -222,6 +222,11 @@ async function _batchExecute() {
       `일괄 교정 완료 — 교정: ${data.total_corrected}건, 대상 페이지: ${data.pages_affected}개`,
       'success');
 
+    // 보고 있는 쪽의 본문을 다시 읽는다 — 확정본이 바뀌었는데 편집기가 옛 글을 들고 있으면
+    // 다음 저장이 일괄 교정을 되돌린다
+    if (typeof loadPageText === "function" && viewerState.pageNum) {
+      loadPageText(viewerState.docId, viewerState.partId, viewerState.pageNum);
+    }
     // 결과 초기화
     _lastPreviewData = null;
     const resultDiv = document.getElementById("batch-result");

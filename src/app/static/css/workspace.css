@@ -4832,12 +4832,6 @@ details[open] > .punct-section-summary::before {
   margin-left: 4px;
   line-height: 14px;
 }
-.comp-llm-legend {
-  font-size: 10.5px;
-  color: var(--text-secondary);
-  padding: 2px 6px 4px;
-}
-
 .badge-optional {
   display: inline-block;
   font-size: 10px;
@@ -7395,24 +7389,35 @@ button.mode-tab {
 
 
 /* ── 경계 제안 패널 (D-088) ─────────────────────────────── */
-.comp-propose-panel {
-  border-top: 1px solid var(--border);
-  padding: 8px;
-  /* max-height: 55vh였다 — 위·아래로 다른 것과 나눠 쓰던 시절의 값이다. 지금은 펼친 쪽이
-     세로를 온전히 쓰므로(사용자 요청), 남은 높이를 다 받고 넘치면 스스로 스크롤한다.
-     화면 아래가 비어 보이던 까닭이 이 55vh였다. */
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
+/* 편성 흐름 ①②③ (D-122): 한 패널에 위에서 아래로. 스크롤은 .comp-container가 한다 —
+   여기서 또 스크롤하면 일괄 줄·「적용」 줄의 sticky가 어디에 붙는지 흐려진다 */
+.comp-flow { display: flex; flex-direction: column; }
+.comp-step { border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px 6px; margin-top: 6px; font-size: 11px; }
+.comp-step-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+.comp-step-num {
+  display: inline-flex; width: 16px; height: 16px; border-radius: 50%; flex: none;
+  background: #2d6a4f; color: #fff; font-size: 10px; font-weight: 700;
+  align-items: center; justify-content: center;
 }
-/* 머리·규칙·목차 줄은 자기 높이대로, 제안 목록이 남은 높이를 받는다 */
-.comp-propose-panel > #comp-propose-list {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
+.comp-step-title { font-weight: 600; font-size: 12px; }
+.comp-step-hint { font-size: 10px; color: var(--text-muted); }
+.comp-step-foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+#comp-llm-say { width: 100%; box-sizing: border-box; font-size: 11px; margin-top: 4px; resize: vertical; }
+.comp-talk-out { margin-top: 4px; font-size: 11px; display: flex; flex-direction: column; gap: 2px; }
+.comp-talk-row { padding-left: 6px; }
+.comp-talk-row.is-zero, .comp-talk-row.is-unsupported { color: #b04040; }
+.comp-verdict-warn { flex-basis: 100%; color: #b04040; font-size: 11px; }
+/* 일괄 줄은 목록 위에 붙박이 — 몇백 행을 내려가도 「바꾸기」가 보인다 */
+.comp-batch-bar {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 3px 0; background: var(--bg-primary, #fff); border-bottom: 1px solid var(--border); font-size: 11px;
 }
+#comp-batch-tools { display: inline-flex; align-items: center; gap: 4px; }
+.comp-apply-foot { position: sticky; bottom: 0; z-index: 2; background: var(--bg-primary, #fff); padding: 6px 0 2px; border-top: 1px solid var(--border); }
+.comp-propose-row.is-selected { background: var(--selected-bg, rgba(60, 120, 200, 0.12)); box-shadow: inset 2px 0 0 var(--accent, #4a7bd0); }
+.prop-lvl { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+.prop-goto { cursor: pointer; text-decoration: underline dotted; }
 .comp-propose-head {
   display: flex;
   align-items: center;
@@ -7629,10 +7634,6 @@ input.prop-level { width: 3.2em; }
 .comp-verdict.is-none { border-left-color: #b04040; }
 .comp-verdict.is-toc { border-left-color: #4a7bd0; }
 .comp-verdict-stage { font-size: 10px; color: var(--text-muted); }
-.comp-signals { border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px 4px; margin: 4px 0; font-size: 11px; }
-.comp-signals > summary { cursor: pointer; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.comp-signals-title { font-weight: 600; }
-.comp-signals > summary .text-btn-sm { margin-left: auto; }
 /* 규칙을 바꾸면 무엇이 달라지는가 (D-121) — 적용 전에 재서 보이는 자리 */
 .comp-preview-out {
   border: 1px solid var(--accent-primary, #3b82f6);
@@ -7943,16 +7944,11 @@ select.prop-level { max-width: 4.6em; }
 .unit-pick-label + .text-toolbar-spacer { flex: 0 1 auto; }
 .unit-pick-label.is-empty { font-weight: 400; color: var(--text-muted); }
 
-/* «지금 경계» — 편성 탭의 기본 화면. 제안 패널이 열리면 자리를 내준다 */
-.comp-current { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.comp-propose-panel:not([style*="display: none"]) ~ .comp-current,
-.comp-container:has(#comp-propose-panel:not([style*="display: none"])) .comp-current { display: none; }
-.comp-current-head {
-  display: flex; align-items: center; gap: 6px;
-  padding: 4px 0 6px; border-bottom: 1px solid var(--border);
-}
+/* «지금 경계» — 이미 저장된 것. 접어 두고 수만 보인다(D-122). 목록은 사이드바 「내용」에도 있다 */
+.comp-current { flex: none; font-size: 11px; }
+.comp-current > summary { display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 2px 0; }
 .comp-current-title { font-size: 11px; font-weight: 600; color: var(--text-muted); }
-.comp-current-list { flex: 1; min-height: 0; overflow-y: auto; }
+.comp-current-list { max-height: 30vh; overflow-y: auto; }
 .comp-cur-row {
   display: flex; align-items: center; gap: 6px;
   padding: 3px 4px; border-bottom: 1px dashed var(--border);

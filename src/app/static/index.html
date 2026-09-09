@@ -1882,66 +1882,51 @@
             <!-- 해석 저장소 드롭다운은 D-097에서 없앴다 — 편성은 원본 저장소의 것이라
                  문헌·권만 있으면 된다. 해석 저장소는 표점 탭부터 쓴다. -->
 
-            <!-- 도구 바 — 주 동작은 «경계 제안» 하나.
-                 옛 손질 도구(자동 편성·쪼개기·리셋)는 맨 아래 접이식으로 내렸다 -->
-            <div class="comp-toolbar">
-              <button
-                id="comp-propose-btn"
-                class="text-btn text-btn-primary"
-                title="규칙만 씁니다 (LLM 안 씀). 권 전체 확정본에서 글 단위 경계를 제안합니다 (날짜·○권점·표제 어휘·짧은 행·들여쓰기·卷 표제). 승인한 것만 단위가 됩니다"
-              >
-                경계 제안
-              </button>
-              <div class="text-toolbar-spacer"></div>
-              <span id="comp-block-count" class="text-save-status text-btn-sm"></span>
-            </div>
-
-            <!-- 교정된 텍스트 블록 목록 (좌측: 소스) -->
+            <!-- 편성 흐름 (D-122): 위에서 아래로 ①②③. 처음 보는 사람이 «어딜 눌러야 하나»를 묻지 않게
+                 단추는 「말로 넣기」·「더 묻기」·「후보 보기」·「적용」 넷뿐이다. 탭을 열면 ①이 스스로 센다
+                 (규칙만, LLM 아님). 저장은 ③「적용」 한 곳 — 규칙과 경계를 한 요청으로. -->
             <div class="comp-container">
-              <!-- 쪼개기 편집 영역 (단위 선택 시 표시) -->
-              <!-- 지금 경계 (D-096 후속) — 이미 저장된 것. 편성 탭을 열면 이것이 먼저 보인다.
-                   «경계 제안»을 누르기 전에는 화면이 비어 있어 «아무것도 없다»고 읽혔고,
-                   그래서 매번 다시 제안해야 하는 것처럼 느껴졌다(사용자 지적). -->
-              <div id="comp-current" class="comp-current">
-                <div class="comp-current-head">
+              <!-- 지금 경계 — 이미 저장된 것. 접어 두고 수만 보인다(목록은 사이드바 「내용」에도 있다) -->
+              <details id="comp-current" class="comp-current">
+                <summary>
                   <span class="comp-current-title">지금 경계</span>
                   <span id="comp-current-stats" class="comp-propose-stats"></span>
                   <div style="flex: 1"></div>
-                  <button id="comp-current-refresh" class="text-btn text-btn-sm" title="다시 읽기">↻</button>
-                </div>
+                  <button id="comp-current-refresh" class="text-btn text-btn-sm" type="button" title="다시 읽기">↻</button>
+                </summary>
                 <div id="comp-current-list" class="comp-current-list"></div>
-              </div>
-              <!-- 경계 제안 (D-088): 권 전체 행 흐름에 경계 후보를 표시하고 승인한 것만 적용 -->
-              <div id="comp-propose-panel" class="comp-propose-panel" style="display: none">
-                <div class="comp-propose-head">
-                  <span class="comp-propose-title">경계 제안</span>
-                  <span id="comp-propose-stats" class="comp-propose-stats"></span>
-                  <div style="flex: 1"></div>
-                  <button id="comp-propose-cancel-btn" class="text-btn" style="font-size: 11px">닫기</button>
-                  <button id="comp-propose-apply-btn" class="text-btn text-btn-primary" style="font-size: 11px" title="아래 후보 중 체크한 것만 경계로 만듭니다. 전에 제안으로 만든 경계 중 체크가 빠진 것은 지워지고, 손으로 넣은 경계는 남습니다">골라 적용</button>
-                  <button id="comp-apply-all-btn" class="text-btn text-btn-primary" style="font-size: 11px" title="신호 설정을 저장하고, 그 규칙이 승인한 후보 전부로 이 권의 개요를 새로 세웁니다 (기존 경계는 지워지며 Git으로 되돌릴 수 있음). 사이드바 「자동 트리」와 같되, 「LLM에 묻기」에서 목차 항목 구조화를 켜 두었으면 여기서만 모델을 부릅니다">전부 적용해 새로 세우기</button>
-                </div>
-                <!-- 답 한 줄 (D-117): 층계(목차 → 시각 → 텍스트 → LLM → 사람)가 어디서 멈췄는지.
-                     처음 보는 사람은 이 줄과 아래 후보, 단추 셋만 본다. 신호 목록은 «자세히·고치기»에 접혀 있다 -->
-                <div id="comp-verdict" class="comp-verdict">
-                  <span id="comp-verdict-text">전문을 세는 중…</span>
-                  <button id="comp-llm-btn" class="text-btn text-btn-sm" title="이 탭에서 모델을 부르는 유일한 단추입니다. 누르면 무엇을 물을지(목차 항목 구조화 · 해제·본문에서 표제 어휘 뽑기 · 시작 표지 묻기)를 고르는 창이 뜹니다. 텍스트 조각만 보내고 이미지·본문 전체는 보내지 않습니다">LLM에 묻기 <span class="llm-tag">LLM</span></button>
-                  <span id="comp-llm-pattern-out" class="comp-rules-suggest-out"></span>
-                </div>
-                <!-- 규칙 도구와 LLM 도구가 한 패널에 있다. 무엇이 모델을 부르는지 여기서 한 번 말한다 -->
-                <div class="comp-llm-legend">
-                  모델을 부르는 것은 <b>「LLM에 묻기」</b> 하나뿐입니다.
-                </div>
-                <!-- 이 책의 신호 (D-116·D-117): 전문에서 센 규약 후보를 체크박스로. 고른 것이 규칙(문헌 설정)이 된다.
-                     기본은 접힘 — 층계가 잘못 골랐을 때만 펼쳐 켜고 끈다. 흐름: 고치기 → 「후보 보기」 → 「골라 적용」/「전부 적용」 -->
-                <details id="comp-signals" class="comp-signals">
-                  <summary>
-                    <span class="comp-signals-title">자세히 · 고치기</span>
+              </details>
+              <div id="comp-propose-panel" class="comp-flow">
+                <!-- ① 찾은 규약 한 줄(D-117) + 아는 것을 말로(D-121) -->
+                <section class="comp-step" id="comp-step-say">
+                  <div class="comp-step-head">
+                    <span class="comp-step-num">1</span>
+                    <span class="comp-step-title">이 책은 어떻게 나뉘나</span>
                     <span id="comp-signals-summary" class="comp-propose-stats"></span>
-                    <button id="comp-preview-btn" class="text-btn text-btn-sm" title="지금 체크한 대로 바꾸면 경계가 어떻게 달라지는지 먼저 재서 보입니다. 아무것도 저장하지 않습니다">바꾸면?</button>
-                    <button id="comp-signals-propose-btn" class="text-btn text-btn-sm" title="체크한 신호를 이 문헌의 규칙으로 저장하고 후보를 다시 찾습니다 (규칙만)">후보 보기</button>
-                  </summary>
-                  <!-- 목차 줄 (D-089) — 신호 목록의 첫 줄. LLM 스위치는 여기 하나(항목 구조화)뿐이다 -->
+                    <div style="flex: 1"></div>
+                    <button id="comp-signals-refresh" class="text-btn text-btn-sm" type="button" title="전문을 다시 셉니다 (규칙만)">↻</button>
+                  </div>
+                  <div id="comp-verdict" class="comp-verdict">
+                    <span id="comp-verdict-text">전문을 세는 중…</span>
+                  </div>
+                  <textarea id="comp-llm-say" rows="2"
+                    placeholder="아는 것을 한 줄 — 예) 목차와 제목이 없다. 기사는 ○ 뒤의 날짜로 시작한다 / 제목 행은 ○○로 끝난다"
+                    title="이 책에 대해 아는 것을 쓰면 ②의 규칙으로 옮깁니다. 목차·제목이 없으면 그것부터 말하고, 경계 표지가 무엇인지 이어서 쓰세요. 옮기지 못한 말은 바꿔치기하지 않고 그대로 알려 드립니다. Ctrl+Enter로 보냅니다"></textarea>
+                  <div class="comp-step-foot">
+                    <button id="comp-say-btn" class="text-btn text-btn-sm" type="button" title="쓴 것을 규칙 칸으로 옮깁니다. 저장하지 않습니다">말로 넣기 <span class="llm-tag">LLM</span></button>
+                    <button id="comp-llm-btn" class="text-btn text-btn-sm" type="button" title="목차 항목 구조화 · 표제 어휘 뽑기 · 시작 표지 묻기">더 묻기… <span class="llm-tag">LLM</span></button>
+                    <span id="comp-llm-pattern-out" class="comp-rules-suggest-out"></span>
+                  </div>
+                  <div id="comp-talk-out" class="comp-talk-out" hidden></div>
+                </section>
+                <!-- ② 이 책의 신호(D-116·D-117): 전문에서 센 규약 후보 + 말로 옮긴 것. 체크한 것이 규칙 -->
+                <section class="comp-step" id="comp-signals">
+                  <div class="comp-step-head">
+                    <span class="comp-step-num">2</span>
+                    <span class="comp-step-title">규칙 고르기</span>
+                    <span class="comp-step-hint">체크한 것이 이 책의 규칙</span>
+                  </div>
+                  <!-- 목차 줄 (D-089) — 체크박스가 곧 규칙의 signals.toc(D-122) -->
                   <div id="comp-toc-row" class="comp-sig-row comp-toc-row">
                     <label class="comp-sig-main">
                       <input id="comp-toc-use" type="checkbox" checked />
@@ -1951,12 +1936,10 @@
                     <label class="comp-sig-opt">쪽
                       <input id="comp-toc-pages" type="text" placeholder="자동" style="width: 56px; font-size: 11px" title="쉼표로 구분 (예: 3,4). 비우면 자동 판별" />
                     </label>
-                    <!-- 목차 항목 구조화에 LLM을 쓸지(문헌 설정 toc_llm). 켜고 끄는 자리는 「LLM에 묻기」 창이다 -->
+                    <!-- 목차 항목 구조화에 LLM을 쓸지(문헌 설정 toc_llm). 켜고 끄는 자리는 「더 묻기」 창이다 -->
                     <input id="comp-toc-llm" type="checkbox" hidden />
-                    <span id="comp-toc-llm-mark" class="comp-sig-aux" hidden title="「LLM에 묻기」에서 목차 항목 구조화를 켜 두었습니다 — 「후보 보기」·「전부 적용」 때 목차 쪽 텍스트를 모델에 보냅니다">LLM 구조화 켬</span>
+                    <span id="comp-toc-llm-mark" class="comp-sig-aux" hidden title="「더 묻기」에서 목차 항목 구조화를 켜 두었습니다">LLM 구조화 켬</span>
                   </div>
-                  <!-- 규칙을 바꾸면 무엇이 달라지는가(D-121) — 사람·통계·LLM이 다 이 자리를 지난다 -->
-                  <div id="comp-preview-out" class="comp-preview-out" hidden></div>
                   <div id="comp-signals-list" class="comp-signals-list">
                     <div class="placeholder">전문을 세는 중…</div>
                   </div>
@@ -1964,13 +1947,13 @@
                     <label class="comp-sig-opt">어휘 더하기
                       <input id="comp-signals-add-word" type="text" placeholder="예: 筆談" style="width: 70px; font-size: 11px" title="제목 행을 끝맺는 말을 넣습니다. 행 첫머리 어휘는 앞에 ^를 붙이고(^有), 기호 한 글자(●)는 그대로 넣습니다" />
                     </label>
-                    <button id="comp-signals-add-btn" class="text-btn text-btn-sm">넣기</button>
+                    <button id="comp-signals-add-btn" class="text-btn text-btn-sm" type="button">넣기</button>
                     <span id="comp-rules-suggest-out" class="comp-rules-suggest-out"></span>
                   </div>
                   <details class="comp-rules-advanced">
-                    <summary title="해제는 「LLM에 묻기」만 읽습니다. 억제는 표제로 보지 않을 행, 글자수는 별행 표제의 상한입니다">참고·억제</summary>
+                    <summary title="해제는 「더 묻기」만 읽습니다. 억제는 표제로 보지 않을 행, 글자수는 별행 표제의 상한입니다">참고·억제</summary>
                     <div id="comp-propose-rules" class="comp-propose-rules">
-                      <label title="한국고전종합DB 해제 같은 것을 통째로 붙여 넣으세요. 길면 권별 내용이 있는 데를 골라 넘깁니다. 「LLM에 묻기」만 읽습니다">해제
+                      <label title="한국고전종합DB 해제 같은 것을 통째로 붙여 넣으세요. 길면 권별 내용이 있는 데를 골라 넘깁니다. 「더 묻기」만 읽습니다">해제
                         <textarea id="comp-rules-reference" rows="4" placeholder="해제를 통째로 붙여 넣으세요"></textarea>
                         <span id="comp-rules-reference-count" class="comp-rules-count"></span>
                       </label>
@@ -1982,16 +1965,55 @@
                       </label>
                     </div>
                   </details>
-                </details>
-                <div id="comp-toc-unmatched" class="comp-toc-unmatched" style="display: none"></div>
-                <div id="comp-propose-list" class="comp-propose-list"></div>
+                  <div class="comp-step-foot">
+                    <button id="comp-signals-propose-btn" class="text-btn text-btn-sm text-btn-primary" type="button" title="체크한 규칙으로 후보를 다시 셉니다. 저장하지 않습니다">후보 보기 ↓</button>
+                  </div>
+                </section>
+                <!-- ③ 후보(D-088): 체크 = 경계가 될 것, 행 선택 = 한꺼번에 고칠 것(Shift 범위) -->
+                <section class="comp-step" id="comp-step-list">
+                  <div class="comp-step-head">
+                    <span class="comp-step-num">3</span>
+                    <span class="comp-step-title">후보 고르기</span>
+                    <span id="comp-propose-stats" class="comp-propose-stats"></span>
+                  </div>
+                  <!-- 저장된 규칙(없으면 권고)으로 센 후보와 견준 «바뀐 것» (D-121 관문) -->
+                  <div id="comp-preview-out" class="comp-preview-out" hidden></div>
+                  <div id="comp-toc-unmatched" class="comp-toc-unmatched" style="display: none"></div>
+                  <div class="comp-batch-bar">
+                    <label class="comp-sig-opt" title="보이는 후보 전부 체크·해제"><input id="comp-check-all" type="checkbox" /> 전체</label>
+                    <span id="comp-sel-count" class="comp-propose-stats" title="행을 누르면 고릅니다. Shift로 범위, Ctrl로 하나씩"></span>
+                    <span id="comp-batch-tools" hidden>
+                      <select id="comp-batch-role" class="prop-level" title="고른 행의 역할">
+                        <option value="">역할 그대로</option>
+                        <option value="container">묶음</option>
+                        <option value="article">기사</option>
+                        <option value="fragment">조각</option>
+                      </select>
+                      <input id="comp-batch-level" type="number" min="1" class="prop-level" placeholder="깊이" title="고른 행의 깊이(1부터). 비우면 그대로" />
+                      <button id="comp-batch-apply" class="text-btn text-btn-sm" type="button">바꾸기</button>
+                      <button id="comp-batch-check" class="text-btn text-btn-sm" type="button" title="고른 행을 체크">체크</button>
+                      <button id="comp-batch-uncheck" class="text-btn text-btn-sm" type="button" title="고른 행의 체크를 뺌">해제</button>
+                      <button id="comp-batch-suppress" class="text-btn text-btn-sm" type="button" title="고른 행을 표제로 보지 않도록 억제 목록에 넣고 다시 셉니다">억제</button>
+                    </span>
+                  </div>
+                  <div id="comp-propose-list" class="comp-propose-list">
+                    <div class="placeholder">①이 끝나면 후보가 보입니다.</div>
+                  </div>
+                  <div class="comp-step-foot comp-apply-foot">
+                    <label class="comp-sig-opt" title="체크에 없는 경계는 손으로 넣은 것도 지웁니다. 끄면 전에 제안으로 만든 경계만 정리하고 손으로 넣은 것은 남깁니다">
+                      <input id="comp-apply-replace-all" type="checkbox" /> 손으로 넣은 경계도 정리</label>
+                    <div style="flex: 1"></div>
+                    <span id="comp-apply-note" class="comp-propose-stats"></span>
+                    <button id="comp-propose-apply-btn" class="text-btn text-btn-primary" type="button" title="②의 규칙을 저장하고 체크한 후보로 경계를 세웁니다 (Git으로 되돌릴 수 있음)">적용</button>
+                  </div>
+                </section>
               </div>
             </div>
           <!-- 손질 도구 — 패널 «맨 아래»에 붙어 위로 펼쳐진다(기본 접힘).
                여기 있는 것은 «기사 하나 안에서 문단 나누기»와 그 언저리다. 기사 단위 자체는
                경계만 정하면 저절로 정해지므로(D-092), 이 도구는 주 흐름이 아니다. -->
             <details id="comp-manual" class="comp-manual">
-              <summary>단위 손보기 <small>— 기사 하나를 골라 그 «안»을 문단으로 나눕니다</small></summary>
+              <summary title="기사 하나를 골라 그 «안»을 문단으로 나눕니다">단위 손보기 <small id="comp-block-count"></small></summary>
               <div class="comp-manual-body">
               <!-- 옛 「자동 편성」(쪽의 레이아웃 블록마다 경계 하나)은 D-116에서 없앴다 —
                    경계는 신호 목록 → 「전부 적용해 새로 세우기」가 세운다 -->
@@ -3871,24 +3893,24 @@
       <div class="corr-dialog-overlay" id="comp-llm-overlay" style="display: none">
         <div class="corr-dialog comp-llm-dialog">
           <div class="bib-dialog-header">
-            <span class="bib-dialog-title">LLM에 묻기 <span class="llm-tag">LLM</span></span>
+            <span class="bib-dialog-title">더 묻기 <span class="llm-tag">LLM</span></span>
             <div style="flex: 1"></div>
             <button class="bib-dialog-close" id="comp-llm-close" title="닫기">&times;</button>
           </div>
           <div class="comp-split-note"
-            title="이미지와 본문 전체는 보내지 않습니다. 답은 «자세히 · 고치기» 목록에 후보로 들어오고, 「후보 보기」나 「전부 적용해 새로 세우기」를 눌러야 저장됩니다">
-            텍스트 조각만 보냅니다. 답은 후보로 들어오고, 저장은 따로 누릅니다.
+            title="이미지와 본문 전체는 보내지 않습니다. 답은 ②에 후보로 들어오고, ③「적용」을 눌러야 저장됩니다">
+            텍스트 조각만 보냅니다. 답은 ②에 후보로 들어오고, 저장은 「적용」이 합니다.
           </div>
           <!-- 해제는 세 선택지가 모두 읽는 «문헌에 저장되는» 데이터다. 고치는 곳은 「참고·억제」
                한 군데로 두고, 여기서는 붙어 있는지만 보이고 그 자리로 데려간다(2026-09-08). -->
           <div class="comp-llm-ref">
             <span id="comp-llm-ref-note" class="comp-llm-opt-note"></span>
             <button id="comp-llm-ref-open" class="text-btn text-btn-sm" type="button"
-              title="이 창을 닫고 「자세히 · 고치기 → 참고·억제」의 해제 칸으로 갑니다">해제 칸으로</button>
+              title="이 창을 닫고 ② 「참고·억제」의 해제 칸으로 갑니다">해제 칸으로</button>
           </div>
           <label class="comp-llm-opt">
             <input id="comp-llm-opt-toc" type="checkbox" />
-            <span title="켜 두면 문헌 설정에 저장되어 「후보 보기」·「전부 적용」 때마다 씁니다. 사이드바 「자동 트리」는 쓰지 않습니다"><b>목차 항목 구조화</b>
+            <span title="목차 쪽 텍스트와 해제를 보내 항목을 구조화합니다. 켜 두면 문헌 설정에 저장되어 사이드바 「자동 트리」도 따릅니다"><b>목차 항목 구조화</b>
               <span id="comp-llm-opt-toc-note" class="comp-llm-opt-note"></span></span>
           </label>
           <label class="comp-llm-opt">
@@ -3907,13 +3929,6 @@
                 </select>
                 <span id="comp-llm-scope-note" class="comp-llm-opt-note"></span>
               </span>
-            </span>
-          </label>
-          <label class="comp-llm-opt">
-            <input id="comp-llm-opt-say" type="checkbox" />
-            <span title="쓴 것을 규칙 칸으로 옮깁니다. 옮기지 못한 말(「권2부터는…」처럼 범위·조건이 든 말)은 비슷한 칸으로 바꾸지 않고 그대로 알려 드립니다. 어휘는 전문에서 몇 번 나오는지 세어 함께 보입니다"><b>아는 것을 말로</b>
-              <textarea id="comp-llm-say" rows="2" placeholder="예: 제목은 어떤 말로 끝난다 / 날짜로는 나뉘지 않는다"
-                style="width: 100%; font-size: 11px; margin-top: 4px"></textarea>
             </span>
           </label>
           <label class="comp-llm-opt comp-llm-model">모델

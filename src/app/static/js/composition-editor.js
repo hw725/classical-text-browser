@@ -70,23 +70,38 @@ function _bindCompEvents() {
       if (ev.target === splitOverlay) _cancelSplit(); // 겉막을 누르면 닫는다
     });
   if (resetBtn) resetBtn.addEventListener("click", _resetComposition);
-  // 경계 제안 (D-088)
-  const proposeBtn = document.getElementById("comp-propose-btn");
-  if (proposeBtn) proposeBtn.addEventListener("click", _openProposePanel);
-  const proposeCancel = document.getElementById("comp-propose-cancel-btn");
-  if (proposeCancel) proposeCancel.addEventListener("click", _closeProposePanel);
+  // 편성 흐름 ①②③ (D-122) — 단추는 「말로 넣기」·「더 묻기」·「후보 보기」·「적용」 넷뿐이다
+  const sayBtn = document.getElementById("comp-say-btn");
+  if (sayBtn) sayBtn.addEventListener("click", _rulesFromWords);
+  const sayBox = document.getElementById("comp-llm-say");
+  if (sayBox)
+    sayBox.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) _rulesFromWords();
+    });
+  const sigRefresh = document.getElementById("comp-signals-refresh");
+  if (sigRefresh) sigRefresh.addEventListener("click", () => _startFlow(true));
+  const sigPropose = document.getElementById("comp-signals-propose-btn");
+  if (sigPropose) sigPropose.addEventListener("click", () => _proposeBoundaries());
   const proposeApply = document.getElementById("comp-propose-apply-btn");
   if (proposeApply) proposeApply.addEventListener("click", _applyProposals);
-  // 신호 목록 (D-116): 고른 신호가 규칙이 된다 — 「후보 보기」는 저장 + 제안, 「전부 적용」은 저장 + 자동 트리
-  const sigPropose = document.getElementById("comp-signals-propose-btn");
-  if (sigPropose)
-    sigPropose.addEventListener("click", (ev) => {
-      ev.preventDefault(); // <summary> 안의 단추 — 접힘 토글을 막는다
-      _saveRulesAndRepropose();
-    });
-  const applyAll = document.getElementById("comp-apply-all-btn");
-  if (applyAll) applyAll.addEventListener("click", _applyAllFromSignals);
-  // LLM 진입점은 하나 — 「LLM에 묻기」 창에서 무엇을 물을지 고른다
+  // ②의 칸이 바뀌면 ③의 후보는 낡는다 — 「적용」을 막고 「후보 보기」를 가리킨다
+  const sigBox = document.getElementById("comp-signals");
+  if (sigBox) {
+    sigBox.addEventListener("change", _refreshApplyState);
+    sigBox.addEventListener("input", _refreshApplyState);
+  }
+  const checkAll = document.getElementById("comp-check-all");
+  if (checkAll) checkAll.addEventListener("change", () => _checkVisible(checkAll.checked));
+  for (const [id, fn] of [
+    ["comp-batch-apply", _batchChange],
+    ["comp-batch-check", () => _batchCheck(true)],
+    ["comp-batch-uncheck", () => _batchCheck(false)],
+    ["comp-batch-suppress", _batchSuppress],
+  ]) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("click", fn);
+  }
+  // LLM 진입점 — 「말로 넣기」와 「더 묻기」 창. 창에서 무엇을 물을지 고른다
   const llmBtn = document.getElementById("comp-llm-btn");
   if (llmBtn) llmBtn.addEventListener("click", _openLlmModal);
   const llmRun = document.getElementById("comp-llm-run");
@@ -95,8 +110,6 @@ function _bindCompEvents() {
     const el = document.getElementById(id);
     if (el) el.addEventListener("click", _closeLlmModal);
   }
-  const previewBtn = document.getElementById("comp-preview-btn");
-  if (previewBtn) previewBtn.addEventListener("click", _previewRules);
   const llmRef = document.getElementById("comp-llm-ref-open");
   if (llmRef) llmRef.addEventListener("click", _openReferenceBox);
   const llmScope = document.getElementById("comp-llm-scope");
@@ -139,7 +152,7 @@ function _bindCompEvents() {
 // eslint-disable-next-line no-unused-vars
 function activateCompositionMode() {
   compState.active = true;
-  _loadCompositionData();
+  _loadCompositionData(); // 끝에서 _startFlow()를 부른다 — 「경계 제안」 단추는 없다(D-122)
 }
 
 /**
@@ -209,6 +222,8 @@ async function _loadCompositionData() {
   _renderUnits();
   _updateBlockCount();
   _renderCurrentBoundaries();
+  // 편성 흐름은 스스로 시작한다 — 다른 문헌·권으로 바뀌었으면 다시 센다(같으면 아무 일도 없다)
+  if (compState.active) _startFlow();
 }
 
 /**
@@ -761,6 +776,9 @@ const signalState = {
   seq: 0, // 요청 세대. 늦게 끝난 옛 요청이 새 상태를 덮지 않게
   checked: new Set(), // 켜진 신호 id
   manual: [], // 사람이 더한 어휘 행 [{id, toggle, label}]
+  // 초안 규칙 전체 — 화면 칸에 없는 값(min_confidence·furniture 등)의 바탕. 처음엔 저장본(없으면 권고),
+  // 「말로 넣기」가 돌려준 규칙으로 바뀐다. 저장본을 바탕으로 쓰면 말로 바꾼 값이 사라진다(Codex 지적)
+  draft: null,
   touched: false, // 권고에서 하나라도 바꿨는가 → origin "manual"
 };
 
@@ -798,7 +816,6 @@ const _LIST_TOGGLES = ["title_words", "head_words", "symbols", "head_templates",
 function _renderVerdict() {
   const box = document.getElementById("comp-verdict");
   const text = document.getElementById("comp-verdict-text");
-  const details = document.getElementById("comp-signals");
   if (!box || !text) return;
   const d = signalState.data;
   const stage = d?.stage;
@@ -811,7 +828,7 @@ function _renderVerdict() {
   const hasSaved = !!saved && !!(saved.origin || saved.title_words?.length || saved.head_words?.length || saved.symbols?.length || Object.keys(saved.signals || {}).length);
   text.innerHTML = "";
   const lead = document.createElement("b");
-  lead.textContent = "이 책의 규약: ";
+  lead.textContent = "찾은 규약: ";
   text.appendChild(lead);
   text.appendChild(document.createTextNode(stage.summary));
   const tag = document.createElement("span");
@@ -819,9 +836,14 @@ function _renderVerdict() {
   tag.textContent = ` — ${stage.level ? `${stage.level}단 ${stage.name}` : "0단"}` + (hasSaved ? (saved.origin === "manual" ? " · 저장된 설정(손봄)을 따릅니다" : " · 저장된 설정") : " · 권고(아직 저장 안 됨)");
   text.appendChild(tag);
   if (stage.level === 1) box.classList.add("is-toc");
-  if (stage.level === 0) {
-    box.classList.add("is-none");
-    if (details) details.open = true;
+  if (stage.level === 0) box.classList.add("is-none");
+  // 규약은 OCR(L2)로도 세지만 후보는 확정본(L4)만 읽는다 — 없으면 ③이 비는 까닭을 여기서 말한다
+  box.querySelectorAll(".comp-verdict-warn").forEach((el) => el.remove());
+  if (!(d.source || {}).l4_pages) {
+    const warn = document.createElement("span");
+    warn.className = "comp-verdict-warn";
+    warn.textContent = "확정본(L4)이 없어 후보를 만들 수 없습니다 — 교정 인덱스의 「권 전체 OCR」을 먼저 하세요";
+    box.appendChild(warn);
   }
   // 저장된 설정이 이번 권고와 다르면(예: D-116 때 저장한 뒤 층계가 바뀜) 한 번에 권고로 돌아갈 길을 준다
   box.querySelectorAll(".comp-verdict-reset").forEach((el) => el.remove());
@@ -879,7 +901,7 @@ function _openLlmModal() {
   const optWords = document.getElementById("comp-llm-opt-words");
   if (optWords) optWords.checked = false;
   const status = document.getElementById("comp-llm-status");
-  if (status) status.textContent = _signalsCurrent() ? "" : "먼저 「경계 제안」으로 신호를 세면 표본이 준비됩니다 — 「묻기」를 누르면 세고 나서 묻습니다.";
+  if (status) status.textContent = "";
   _updateLlmRefNote();
   overlay.style.display = "";
   _updateLlmScopeNote();
@@ -910,8 +932,6 @@ function _updateLlmRefNote() {
 /** 모달을 닫고 해제 칸을 펼쳐 거기로 데려간다. 고치는 곳은 한 군데뿐이다. */
 function _openReferenceBox() {
   _closeLlmModal();
-  const sig = document.getElementById("comp-signals");
-  if (sig) sig.open = true;
   const adv = document.querySelector("#composition-panel .comp-rules-advanced");
   if (adv) adv.open = true;
   const ta = document.getElementById("comp-rules-reference");
@@ -950,7 +970,6 @@ async function _runLlmModal() {
   const wantToc = !!document.getElementById("comp-llm-opt-toc")?.checked;
   const wantWords = !!document.getElementById("comp-llm-opt-words")?.checked;
   const wantPat = !!document.getElementById("comp-llm-opt-patterns")?.checked;
-  const wantSay = !!document.getElementById("comp-llm-opt-say")?.checked;
   const status = document.getElementById("comp-llm-status");
   const run = document.getElementById("comp-llm-run");
   const say = (t) => {
@@ -958,7 +977,7 @@ async function _runLlmModal() {
   };
   if (!_signalsCurrent()) {
     say("신호를 세는 중…");
-    await _openProposePanel();
+    await _startFlow();
     if (!_signalsCurrent()) {
       say("신호를 세지 못했습니다.");
       return;
@@ -972,12 +991,8 @@ async function _runLlmModal() {
     signalState.touched = true;
   }
   if (mark) mark.hidden = !wantToc;
-  if (!wantToc && !wantWords && !wantPat && !wantSay) {
+  if (!wantToc && !wantWords && !wantPat) {
     say("고른 것이 없습니다.");
-    return;
-  }
-  if (wantSay && !(document.getElementById("comp-llm-say")?.value || "").trim()) {
-    say("아는 것을 한 줄 적어 주세요.");
     return;
   }
   if (run) run.disabled = true;
@@ -993,23 +1008,16 @@ async function _runLlmModal() {
       await _askLlmPatterns();
       done.push("시작 표지");
     }
-    if (wantSay) {
-      say("말을 규칙 칸으로 옮기는 중…");
-      const moved = await _rulesFromWords();
-      if (moved) done.push("말로 이르기");
-      else return; // 옮기지 못했으면 창을 닫지 않는다 — 무엇이 안 됐는지 그 자리에서 읽게
-    }
     if (wantToc) {
       say("목차 쪽 텍스트를 보내는 중…");
       await _detectToc(true);
       done.push("목차 구조화");
     }
     _closeLlmModal();
-    const details = document.getElementById("comp-signals");
-    if (details) details.open = true;
     const out = document.getElementById("comp-llm-pattern-out");
-    if (out && !wantPat) out.textContent = `LLM: ${done.join(" · ")} — «자세히 · 고치기»에서 후보를 확인하고 「후보 보기」로 저장하세요`;
+    if (out && !wantPat) out.textContent = `LLM: ${done.join(" · ")} — ②에서 확인하고 「후보 보기」`;
     if (wantToc) await _proposeBoundaries();
+    else _refreshApplyState();
   } finally {
     if (run) run.disabled = false;
   }
@@ -1021,14 +1029,12 @@ async function _runLlmModal() {
  */
 async function _askLlmPatterns() {
   const out = document.getElementById("comp-llm-pattern-out");
-  const btn = null;
   if (!_signalsCurrent()) {
-    showToast("먼저 「경계 제안」으로 신호를 세세요.", "warning");
+    showToast("신호를 아직 세지 못했습니다.", "warning");
     return;
   }
   const llmSel = typeof getLlmModelSelection === "function" ? getLlmModelSelection("comp-llm-model-select") : {};
   if (out) out.textContent = "표본을 모델에 보내는 중…";
-  if (btn) btn.disabled = true;
   try {
     const res = await fetch(`/api/documents/${encodeURIComponent(viewerState.docId)}/segmentation/signals/llm`, {
       method: "POST",
@@ -1055,8 +1061,6 @@ async function _askLlmPatterns() {
     }
     signalState.touched = signalState.touched || rows.length > 0;
     _renderSignals();
-    const details = document.getElementById("comp-signals");
-    if (details) details.open = true;
     if (out) {
       const said = (d.raw || []).map((p) => `${p.kind}:${p.value}`).filter((s) => !s.endsWith(":")).join(", ");
       const sent = d.sample_lines != null ? ` (보낸 표본 ${d.sample_lines}줄·${Number(d.sample_chars || 0).toLocaleString()}자)` : "";
@@ -1068,8 +1072,6 @@ async function _askLlmPatterns() {
     }
   } catch (e) {
     if (out) out.textContent = `실패: ${e.message}`;
-  } finally {
-    if (btn) btn.disabled = false;
   }
 }
 
@@ -1092,6 +1094,7 @@ async function _loadSignals() {
   list.innerHTML = '<div class="placeholder">전문을 세는 중…</div>';
   signalState.data = null;
   signalState.manual = [];
+  signalState.draft = null;
   signalState.touched = false;
   const seq = ++signalState.seq;
   const docId = viewerState.docId;
@@ -1114,49 +1117,12 @@ async function _loadSignals() {
     // (서버 rules_are_empty와 같은 판정). 없으면 서버가 권고에서 만든 recommended_rules를 따른다 —
     // 주 신호를 하나도 권고하지 못한 표본에서 서버는 주 신호를 기본값(켬)으로 두는데, 화면이
     // recommended 표시만 보고 다 끄면 「전부 적용」이 «적용할 구간이 없습니다»로 끝난다(Codex 지적).
-    const hasSaved = !!saved && !!(saved.origin || _LIST_TOGGLES.some((t) => saved[t]?.length) || Object.keys(saved.signals || {}).length);
+    // 서버 rules_are_empty와 같은 판정 — indent_alone만 켠 저장본도 저장본이다(Codex 지적)
+    const hasSaved = !!saved && !!(saved.origin || saved.indent_alone || _LIST_TOGGLES.some((t) => saved[t]?.length) || Object.keys(saved.signals || {}).length);
     const base = hasSaved ? saved : d.recommended_rules;
-    if (base) {
-      signalState.checked = new Set();
-      const listed = new Map(); // toggle → 목록에 있는 value들
-      for (const s of d.signals) {
-        if (s.toggle.startsWith("signals.")) {
-          const k = s.toggle.slice(8);
-          if (base.signals?.[k] !== false) signalState.checked.add(s.id);
-        } else if (_LIST_TOGGLES.includes(s.toggle)) {
-          if (!listed.has(s.toggle)) listed.set(s.toggle, new Set());
-          listed.get(s.toggle).add(s.value);
-          if ((base[s.toggle] || []).includes(s.value)) signalState.checked.add(s.id);
-        } else if (s.toggle === "indent_alone") {
-          if (base.indent_alone) signalState.checked.add(s.id);
-        }
-      }
-      // 저장에는 있는데 이번 셈에 없는 값 — 손으로 넣은 것이거나 표본이 바뀐 것. 행으로 남긴다
-      const prefix = { title_words: "tail", head_words: "head", symbols: "sym", head_templates: "head", tail_templates: "tail" };
-      for (const toggle of _LIST_TOGGLES) {
-        for (const w of base[toggle] || []) {
-          if (listed.get(toggle)?.has(w)) continue;
-          // 같은 글자라도 어휘와 접은 꼴은 서로 다른 규칙이므로 체크 ID도 분리한다.
-          const id = `manual:${toggle}:${w}`;
-          signalState.manual.push({ id, toggle, value: w, label: `${_signalLabel(`${prefix[toggle]}:${w}`)} (손으로 넣음)`, manual: true, group: toggle === "symbols" ? "visual" : "primary" });
-          if (!listed.has(toggle)) listed.set(toggle, new Set());
-          listed.get(toggle).add(w);
-          signalState.checked.add(id);
-        }
-      }
-      // 목록에 없는데 저장에서 꺼 둔 스위치(예: bbox가 없어 세지 못한 내려쓰기) — 화면에 행으로 보여
-      // 켤 수 있게 한다. 안 보이면 저장할 때 조용히 되살아난다(Codex 지적).
-      for (const [k, on] of Object.entries(base.signals || {})) {
-        const id = k;
-        if (on === false && !ids.has(id) && _SIGNAL_LABELS[k]) {
-          signalState.manual.push({ id, toggle: `signals.${k}`, label: `${_SIGNAL_LABELS[k]} (이번 셈에는 없음 — 저장에서 꺼 둠)`, manual: true, group: ["short_line", "after_short", "indent"].includes(k) ? "aux" : "primary" });
-        }
-      }
-      signalState.touched = hasSaved && saved.origin === "manual";
-    } else {
-      signalState.checked = new Set(d.signals.filter((s) => s.recommended).map((s) => s.id));
-    }
-    _rulesToForm(hasSaved ? saved : d.recommended_rules);
+    if (base) _checkFromRules(base);
+    else signalState.checked = new Set(d.signals.filter((s) => s.recommended).map((s) => s.id));
+    signalState.touched = hasSaved && saved.origin === "manual";
     if (summary) {
       const src = d.source || {};
       const where = src.l2_pages
@@ -1179,9 +1145,64 @@ async function _loadSignals() {
   }
 }
 
-/** 저장이 끝났다는 것을 요약 줄이 말하게 한다 — 「후보 보기」 뒤에도 «아직 저장 안 됨»이 남아 있었다. */
+/**
+ * 규칙(전체) → 화면의 체크 상태·손으로 넣은 행·참고 칸. 입력: 규칙. 출력: 없음.
+ *
+ * 처음 읽을 때(저장된 규칙 또는 권고)와 「말로 넣기」가 돌려준 규칙이 같은 길을 지난다(D-122).
+ * 행은 «칸+값»으로 맞춘다 — 같은 글자라도 어휘(head_words)와 접은 꼴(head_templates)은 다른 규칙이다.
+ */
+function _checkFromRules(base) {
+  const d = signalState.data;
+  if (!d || !base) return;
+  const ids = new Set(d.signals.map((s) => s.id));
+  signalState.checked = new Set();
+  const listed = new Map(); // toggle → 목록에 있는 value들
+  const note = (toggle, value) => {
+    if (!listed.has(toggle)) listed.set(toggle, new Set());
+    listed.get(toggle).add(value);
+  };
+  for (const s of d.signals) {
+    if (s.toggle.startsWith("signals.")) {
+      if (base.signals?.[s.toggle.slice(8)] !== false) signalState.checked.add(s.id);
+    } else if (_LIST_TOGGLES.includes(s.toggle)) {
+      note(s.toggle, s.value);
+      if ((base[s.toggle] || []).includes(s.value)) signalState.checked.add(s.id);
+    } else if (s.toggle === "indent_alone") {
+      if (base.indent_alone) signalState.checked.add(s.id);
+    }
+  }
+  // 손으로 넣은 행: 규칙 목록에 든 것은 아래서 다시 만들고(켜진 채), 안 든 것(꺼 둔 후보)은 그대로 둔다.
+  // 스위치 행은 규칙에서 다시 만든다
+  signalState.manual = signalState.manual.filter(
+    (m) => !m.toggle.startsWith("signals.") && !(_LIST_TOGGLES.includes(m.toggle) && (base[m.toggle] || []).includes(m.value)),
+  );
+  for (const m of signalState.manual) if (_LIST_TOGGLES.includes(m.toggle)) note(m.toggle, m.value);
+  // 규칙에는 있는데 이번 셈에 없는 값 — 손으로 넣은 것이거나 표본이 바뀐 것. 행으로 남긴다
+  const prefix = { title_words: "tail", head_words: "head", symbols: "sym", head_templates: "head", tail_templates: "tail" };
+  for (const toggle of _LIST_TOGGLES) {
+    for (const w of base[toggle] || []) {
+      if (listed.get(toggle)?.has(w)) continue;
+      const id = `manual:${toggle}:${w}`;
+      signalState.manual.push({ id, toggle, value: w, label: `${_signalLabel(`${prefix[toggle]}:${w}`)} (손으로 넣음)`, manual: true, group: toggle === "symbols" ? "visual" : "primary" });
+      note(toggle, w);
+      signalState.checked.add(id);
+    }
+  }
+  // 목록에 없는데 규칙에서 꺼 둔 스위치(예: bbox가 없어 세지 못한 내려쓰기) — 행으로 보여 켤 수 있게 한다.
+  // 안 보이면 저장할 때 조용히 되살아난다(Codex 지적)
+  for (const [k, on] of Object.entries(base.signals || {})) {
+    if (on === false && !ids.has(k) && _SIGNAL_LABELS[k]) {
+      signalState.manual.push({ id: k, toggle: `signals.${k}`, label: `${_SIGNAL_LABELS[k]} (이번 셈에는 없음 — 꺼 둠)`, manual: true, group: ["short_line", "after_short", "indent"].includes(k) ? "aux" : "primary" });
+    }
+  }
+  signalState.draft = base;
+  _rulesToForm(base);
+}
+
+/** 저장이 끝났다는 것을 요약 줄이 말하게 한다 — 「적용」 뒤에도 «아직 저장 안 됨»이 남으면 안 된다. */
 function _markRulesSaved(saved) {
   if (signalState.data) signalState.data.saved_rules = saved;
+  signalState.draft = saved;
   const summary = document.getElementById("comp-signals-summary");
   if (!summary || !signalState.data) return;
   const src = signalState.data.source || {};
@@ -1319,6 +1340,7 @@ function _signalRowEl(r, maxScore) {
       if (r.toggle.startsWith("signals.") && signalState.data?.saved_rules?.signals) delete signalState.data.saved_rules.signals[r.id];
       signalState.touched = true;
       _renderSignals();
+      _refreshApplyState();
     });
     row.appendChild(rm);
   }
@@ -1341,6 +1363,7 @@ function _addWordRow(id, toggle, label, value) {
   signalState.checked.add(id);
   signalState.touched = true;
   _renderSignals();
+  _refreshApplyState();
 }
 
 function _addManualWord() {
@@ -1349,7 +1372,7 @@ function _addManualWord() {
   let w = input.value.trim();
   if (!w) return;
   if (!signalState.data) {
-    showToast("먼저 「경계 제안」으로 신호를 세세요.", "warning");
+    showToast("신호를 아직 세지 못했습니다.", "warning");
     return;
   }
   if (w.startsWith("^")) {
@@ -1363,80 +1386,26 @@ function _addManualWord() {
   input.value = "";
 }
 
-/**
- * 「전부 적용해 새로 세우기」 — 신호 설정을 저장하고 그 규칙이 승인한 후보 전부로 개요를 세운다.
- * 사이드바 「자동 트리」와 같은 서버 경로(/segmentation/auto). 확인창 없음: 결과는 Git으로 되돌릴 수 있고,
- * 사용자가 신호를 골라 놓은 상태에서 누르는 단추라 «정말요?»는 되묻는 것이다.
- */
-async function _applyAllFromSignals() {
-  if (!viewerState.docId || !viewerState.partId) {
-    showToast("사이드바에서 문헌과 권을 먼저 고르세요.", "warning");
-    return;
-  }
-  if (!_signalsCurrent()) {
-    await _openProposePanel();
-    if (!_signalsCurrent()) return;
-  }
-  // 이 단추는 replace="all" — 이 권의 살아 있는 경계를 «손으로 넣은 것까지» 지우고 다시 세운다.
-  // 사이드바 「자동 트리」는 묻는데 여기만 묻지 않아, 눌러 놓고 손댄 경계를 잃을 수 있었다
-  // (되돌리려면 원본 저장소의 커밋을 되돌려야 한다 — 2026-09-08).
-  const live = (typeof contentsState !== "undefined" && contentsState.data?.total_units) || 0;
-  const msg = live
-    ? `이 권의 단위 ${live}개를 지우고, 지금 켠 신호로 개요를 다시 세웁니다.\n손으로 넣은 경계도 함께 지워집니다. 계속할까요?`
-    : "지금 켠 신호로 개요를 세웁니다. 계속할까요?";
-  if (!confirm(msg)) return;
-  const rules = _rulesFromForm();
-  const btn = document.getElementById("comp-apply-all-btn");
-  if (btn) { btn.disabled = true; btn.textContent = "세우는 중…"; }
-  try {
-    let res = await fetch(`/api/documents/${encodeURIComponent(viewerState.docId)}/segmentation-rules`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rules }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `HTTP ${res.status}`);
-    }
-    const llmSel = typeof getLlmModelSelection === "function" ? getLlmModelSelection("comp-llm-model-select") : {};
-    const useToc = document.getElementById("comp-toc-use")?.checked !== false;
-    res = await fetch(`/api/documents/${encodeURIComponent(viewerState.docId)}/segmentation/auto`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        part_id: viewerState.partId,
-        use_llm_toc: rules.toc_llm,
-        force_provider: rules.toc_llm ? llmSel.force_provider || null : null,
-        force_model: rules.toc_llm ? llmSel.force_model || null : null,
-        replace: "all",
-        use_toc: useToc, // 목차 줄을 껐으면 서버도 목차 감지·대조·LLM을 모두 건너뛴다
-        toc_pages: useToc ? _tocPagesFromInput() : null,
-        toc_only: useToc ? null : false,
-      }),
-    });
-    const d = await res.json();
-    if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
-    if (typeof describeAutoTreeResult === "function") showToast(describeAutoTreeResult(d, rules.toc_llm), "success");
-    else showToast(`후보 ${d.proposals} 중 ${d.applied}개로 개요를 세웠습니다`, "success");
-    _closeProposePanel();
-    await _loadCompositionData();
-    if (typeof refreshContentsTree === "function") refreshContentsTree();
-  } catch (e) {
-    showToast(`새로 세우기 실패: ${e.message}`, "error");
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "전부 적용해 새로 세우기"; }
-  }
-}
-
+// 후보의 자리 키 — 체크·깊이·역할·선택은 index가 아니라 이것으로 든다. 규칙을 고쳐 다시 세어도
+// 같은 자리는 같은 후보라 손본 것이 남는다(D-122, Codex 지적)
 const proposeState = {
   data: null, // /segmentation/propose 응답
-  checked: new Set(), // 승인한 제안 index
-  tocOnly: false, // 목차 대응만 기본 선택 중인가
+  docId: null,
+  partId: null,
+  seq: 0, // 요청 세대 — 늦게 온 옛 응답·다른 문헌의 응답은 버린다(Codex 지적)
+  rulesDigest: null, // 이 후보를 셀 때 **실제로 보낸** 입력(규칙 + 목차 쪽)의 JSON — 지금 ②와 다르면 낡은 것
+  tocRaw: null, // 목차 쪽 칸의 값(목차를 찾을 때의 것) — 바뀌면 다시 찾는다
+  baseline: null, // Map(자리 키 → 후보) — 저장된 규칙(없으면 권고)으로 센 채택 후보. «바뀐 것»의 기준
+  checked: new Set(), // 경계가 될 후보(자리 키)
+  selected: new Set(), // 한꺼번에 고칠 후보(자리 키) — 체크와 다른 상태다
+  anchor: null, // Shift 범위의 시작(자리 키)
+  visible: [], // 지금 그려진 자리 키(표시 순서) — Shift 범위는 이 순서를 따른다
   showRejected: false, // 문턱 아래 후보도 보이는가
-  levels: new Map(), // 제안 index → 사람이 바꾼 깊이
-  roles: new Map(), // 제안 index → 사람이 바꾼 역할
-  toc: null, // {pages, entries} — 「목차 감지」로 확인한 것. null이면 서버가 규칙으로 자동
+  levels: new Map(), // 자리 키 → 사람이 바꾼 깊이
+  roles: new Map(), // 자리 키 → 사람이 바꾼 역할
+  toc: null, // {pages, entries} — 목차 감지로 확인한 것. null이면 서버가 규칙으로 자동
 };
+const flowState = { loading: false }; // ①이 세는 중인가 — 겹쳐 시작하지 않는다
 
 function _tocPagesFromInput() {
   const raw = document.getElementById("comp-toc-pages")?.value || "";
@@ -1454,6 +1423,7 @@ async function _detectToc(useLlm) {
   }
   const summary = document.getElementById("comp-toc-summary");
   if (summary) summary.textContent = useLlm ? "목차: LLM이 읽는 중…" : "목차: 규칙으로 찾는 중…";
+  proposeState.tocRaw = document.getElementById("comp-toc-pages")?.value || "";
   // 결과 요약에 «규칙»인지 «LLM»인지 남긴다 — 제안 목록의 「목차 …」 근거가 어디서 왔는지 보이도록
   proposeState.tocSource = useLlm ? "LLM" : "규칙";
   try {
@@ -1484,7 +1454,10 @@ async function _detectToc(useLlm) {
     if (summary && (useLlm || !summary.textContent || summary.textContent === "찾는 중…"))
       summary.textContent = `${data.toc_pages.join(",")}쪽 · ${data.entries.length}항목 (${proposeState.tocSource})`;
     const input = document.getElementById("comp-toc-pages");
-    if (input && !input.value) input.value = data.toc_pages.join(",");
+    if (input && !input.value) {
+      input.value = data.toc_pages.join(",");
+      proposeState.tocRaw = input.value;
+    }
     if (data.meta?.error) showToast(`LLM 실패로 규칙 추출을 썼습니다: ${data.meta.error}`, "warning");
     return proposeState.toc;
   } catch (e) {
@@ -1508,10 +1481,10 @@ function _rulesFromForm() {
     .filter(Boolean);
   const maxChars = Number(document.getElementById("comp-rules-maxchars")?.value || 14);
   const reference = (document.getElementById("comp-rules-reference")?.value || "").trim();
-  // 바탕은 저장된 규칙 — 목록에 없는 스위치·min_confidence·옛 판심 목록을 잃지 않는다.
+  // 바탕은 초안 규칙(없으면 저장본) — 목록에 없는 스위치·min_confidence·옛 판심 목록을 잃지 않는다.
   // use_date·use_layout(옛 굵은 스위치)은 버린다: 이제 signals가 낱낱이 적히고, 남겨 두면
   // normalize_rules가 그것으로 하위 스위치를 다시 끈다.
-  const saved = signalState.data?.saved_rules || {};
+  const saved = signalState.draft || signalState.data?.saved_rules || {};
   const signals = { ...(saved.signals || {}) };
   const lists = Object.fromEntries(_LIST_TOGGLES.map((t) => [t, []]));
   let indent_alone = false;
@@ -1523,6 +1496,7 @@ function _rulesFromForm() {
     else if (on && row.toggle === "indent_alone") indent_alone = true;
     if (row.manual || on !== !!row.recommended) touched = true;
   }
+  signals.toc = document.getElementById("comp-toc-use")?.checked !== false; // 목차 줄 = signals.toc (D-122)
   const induced = signalState.data?.furniture || [];
   const furniture = [...new Set([...(saved.furniture || []), ...induced])];
   const { use_date, use_layout, origin, ...rest } = saved; // eslint-disable-line no-unused-vars
@@ -1548,6 +1522,8 @@ function _rulesToForm(rules) {
   if (tocLlm && rules && typeof rules.toc_llm === "boolean") tocLlm.checked = rules.toc_llm;
   const mark = document.getElementById("comp-toc-llm-mark");
   if (mark) mark.hidden = !(tocLlm && tocLlm.checked);
+  const tocUse = document.getElementById("comp-toc-use");
+  if (tocUse && rules) tocUse.checked = rules.signals?.toc !== false; // 안 적힌 스위치는 켜진 것
   if (m) m.value = rules?.max_title_chars || 14;
   const r = document.getElementById("comp-rules-reference");
   if (r) {
@@ -1626,7 +1602,7 @@ async function _renderCurrentBoundaries() {
     list.innerHTML = "";
     if (!rows.length) {
       list.innerHTML =
-        '<div class="placeholder">아직 경계가 없습니다. 「경계 제안」으로 찾아 보거나, 사이드바 「내용」의 «＋ 경계 넣기»로 첫 경계를 놓으세요.</div>';
+        '<div class="placeholder">아직 경계가 없습니다. 아래 ①②③으로 세우거나, 사이드바 「내용」의 «＋ 경계 넣기»로 첫 경계를 놓으세요.</div>';
       return;
     }
     const selected = typeof currentUnitId === "function" ? currentUnitId() : null;
@@ -1672,66 +1648,137 @@ async function _renderCurrentBoundaries() {
 }
 
 /**
- * 「경계 제안」 — 편성 흐름의 입구 (D-116).
+ * 편성 흐름의 입구 (D-116·D-122) — 탭을 열면 스스로 돈다. 단추가 아니다.
  *
  * 순서: 전문에서 신호를 센다(규칙만) → 목차 쪽을 찾는다(규칙만) → 저장된 규칙(없으면 권고)으로
- * 후보를 보인다. 여기서는 아무것도 저장하지 않는다 — 「후보 보기」·「전부 적용」이 저장한다.
+ * 후보를 보인다. 아무것도 저장하지 않는다 — 저장은 ③「적용」 한 곳이다.
+ * 입력: force(같은 문헌·권이어도 다시 셀 것인가). 출력: 없음.
  */
-async function _openProposePanel() {
-  if (!viewerState.docId || !viewerState.partId) {
-    showToast("사이드바에서 문헌과 권을 먼저 고르세요.", "warning");
-    return;
+async function _startFlow(force) {
+  if (!viewerState.docId || !viewerState.partId) return;
+  if (!force && (_signalsCurrent() || flowState.loading)) return;
+  flowState.loading = true;
+  try {
+    // 다른 문헌·권이면 전 책의 목차 쪽 번호가 이어지면 안 된다
+    const tocInput = document.getElementById("comp-toc-pages");
+    if (tocInput && (proposeState.docId !== viewerState.docId || proposeState.partId !== viewerState.partId)) tocInput.value = "";
+    proposeState.tocRaw = null;
+    proposeState.data = null;
+    proposeState.baseline = null;
+    proposeState.toc = null;
+    proposeState.selected = new Set();
+    proposeState.anchor = null;
+    const list = document.getElementById("comp-propose-list");
+    if (list) list.innerHTML = '<div class="placeholder">전문을 세는 중…</div>';
+    const summary = document.getElementById("comp-toc-summary");
+    if (summary) summary.textContent = "찾는 중…";
+    _renderTalk(null);
+    // 목차는 신호 세기의 1단이다(D-117). 제안에 넘길 항목 목록은 _detectToc(규칙)가 만든다 —
+    // 둘이 같은 규칙(detect_toc_pages·extract_toc_entries_rule)을 쓰므로 어긋나지 않는다.
+    await Promise.all([_loadSignals(), _detectToc(false)]);
+    if (!_signalsCurrent()) return;
+    await _proposeBoundaries(true);
+  } finally {
+    flowState.loading = false;
   }
-  const panel = document.getElementById("comp-propose-panel");
-  const list = document.getElementById("comp-propose-list");
-  if (!panel || !list) return;
-  panel.style.display = "";
-  list.innerHTML = '<div class="placeholder">전문을 세는 중…</div>';
-  proposeState.toc = null;
-  const summary = document.getElementById("comp-toc-summary");
-  if (summary) summary.textContent = "찾는 중…";
-  // 목차는 신호 세기의 1단이다(D-117). 제안에 넘길 항목 목록은 _detectToc(규칙)가 만든다 —
-  // 둘이 같은 규칙(detect_toc_pages·extract_toc_entries_rule)을 쓰므로 어긋나지 않는다.
-  await Promise.all([_loadSignals(), _detectToc(false)]);
-  await _proposeBoundaries();
 }
 
-async function _proposeBoundaries() {
+/**
+ * ②의 입력 지문 — 규칙 전체 + 목차 쪽 칸. 입력: (있으면) 규칙. 출력: JSON 문자열.
+ * 목적: 후보를 셀 때 보낸 것과 지금 화면을 같은 식으로 견준다. 목차 쪽도 후보를 바꾸므로 든다.
+ */
+function _formDigest(rules) {
+  return JSON.stringify({
+    rules: rules || _rulesFromForm(),
+    toc: document.getElementById("comp-toc-pages")?.value || "",
+  });
+}
+
+/** 후보의 자리 키. 입력: 후보. 출력: "쪽:행:글자". */
+function _propKey(p) {
+  return `${p.page}:${p.line_index}:${p.char_offset || 0}`;
+}
+
+/** 채택된 후보를 자리 키로. 입력: propose 응답. 출력: Map. 목적: «바뀐 것»을 자리로 견준다. */
+function _acceptedMap(data) {
+  const m = new Map();
+  for (const p of data?.proposals || []) if (p.accepted) m.set(_propKey(p), p);
+  return m;
+}
+
+/**
+ * ②의 규칙으로 후보를 센다 (D-088). **저장하지 않는다** — propose 라우트는 규칙을 받기만 한다.
+ * 입력: asBaseline(이 결과를 «바뀐 것»의 기준으로 삼을 것인가 — 처음·적용 직후). 출력: 없음.
+ */
+async function _proposeBoundaries(asBaseline) {
   if (!viewerState.docId || !viewerState.partId) {
     showToast("사이드바에서 문헌과 권을 먼저 고르세요.", "warning");
     return;
   }
-  const panel = document.getElementById("comp-propose-panel");
   const list = document.getElementById("comp-propose-list");
-  if (!panel || !list) return;
-  panel.style.display = "";
+  if (!list) return;
+  if (!_signalsCurrent()) {
+    await _startFlow(); // 신호부터 센다 — 끝에서 다시 여기로 온다
+    return;
+  }
   list.innerHTML = '<div class="placeholder">권 전체 확정본을 읽어 경계를 찾는 중…</div>';
+  const docId = viewerState.docId;
+  const partId = viewerState.partId;
+  const seq = ++proposeState.seq;
   const useToc = document.getElementById("comp-toc-use")?.checked !== false;
+  // 목차 쪽 칸을 고쳤으면 캐시(proposeState.toc)가 아니라 그 쪽으로 다시 찾는다(Codex 지적)
+  const tocRaw = document.getElementById("comp-toc-pages")?.value || "";
+  if (useToc && tocRaw !== proposeState.tocRaw) {
+    await _detectToc(false);
+    if (seq !== proposeState.seq) return;
+  }
+  const rules = _rulesFromForm();
+  const digest = _formDigest(rules); // «보낸 것»의 지문 — 응답 뒤의 폼이 아니라
   try {
-    const res = await fetch(`/api/documents/${encodeURIComponent(viewerState.docId)}/segmentation/propose`, {
+    const res = await fetch(`/api/documents/${encodeURIComponent(docId)}/segmentation/propose`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        part_id: viewerState.partId,
-        rules: signalState.data ? _rulesFromForm() : null,
+        part_id: partId,
+        rules,
         use_toc: useToc,
         toc: useToc ? proposeState.toc : null,
       }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    proposeState.data = data;
-    // 목차가 있는 책은 목차 항목만 기본 선택한다(사용자 요청). 날짜·형식 후보는 목차 없는
-    // 일기류를 위한 것이다. 「전부 선택」 단추로 언제든 넓힐 수 있다.
+    // 그 사이 다시 눌렀거나 다른 문헌·권으로 갔으면 이 응답은 버린다
+    if (seq !== proposeState.seq || docId !== viewerState.docId || partId !== viewerState.partId) return;
+    const same = proposeState.docId === docId && proposeState.partId === partId;
+    const prevKeys = same && proposeState.data ? new Set(proposeState.data.proposals.map(_propKey)) : null;
     const hasToc = !!(data.toc && data.toc.matches && data.toc.matches.length);
-    proposeState.tocOnly = hasToc;
-    proposeState.levels = new Map();
-    proposeState.roles = new Map();
-    _resetChecked(hasToc);
-    _rulesToForm(data.rules);
+    // 체크: 전에 있던 자리는 그대로, 새 자리는 기본(목차가 있는 책은 목차 항목만 — 날짜·형식 후보는
+    // 목차 없는 일기류를 위한 것이다. 「전체」로 언제든 넓힐 수 있다)
+    const checked = new Set();
+    for (const p of data.proposals) {
+      const k = _propKey(p);
+      if (p.suppressed) continue; // 억제한 자리는 체크에서 빠진다 — 남으면 적용은 되고 화면만 꺼진다(Codex 지적)
+      if (prevKeys && prevKeys.has(k)) {
+        if (proposeState.checked.has(k)) checked.add(k);
+      } else if (p.accepted && (!hasToc || _isTocProposal(p))) checked.add(k);
+    }
+    const keys = new Set(data.proposals.map(_propKey));
+    const keep = (map) => new Map([...map].filter(([k]) => keys.has(k)));
+    proposeState.data = data;
+    proposeState.docId = docId;
+    proposeState.partId = partId;
+    proposeState.rulesDigest = digest;
+    proposeState.checked = checked;
+    proposeState.levels = same ? keep(proposeState.levels) : new Map();
+    proposeState.roles = same ? keep(proposeState.roles) : new Map();
+    proposeState.selected = new Set([...proposeState.selected].filter((k) => keys.has(k)));
+    if (asBaseline || !proposeState.baseline || !same) proposeState.baseline = _acceptedMap(data);
     _renderProposals();
+    _renderDiff();
+    _refreshApplyState();
   } catch (e) {
     list.innerHTML = `<div class="placeholder">${_treeEscHtml ? _treeEscHtml(e.message) : e.message}</div>`;
+    _refreshApplyState();
   }
 }
 
@@ -1766,41 +1813,49 @@ function _isTocProposal(p) {
   return (p.reasons || []).some((r) => r.startsWith("toc:"));
 }
 
-/** 기본 체크를 다시 놓는다. tocOnly면 목차 대응만, 아니면 승인된 것 전부. */
-function _resetChecked(tocOnly) {
-  const data = proposeState.data;
-  proposeState.tocOnly = !!tocOnly;
-  proposeState.checked = new Set(
-    data.proposals
-      .map((p, i) => (p.accepted && (!tocOnly || _isTocProposal(p)) ? i : -1))
-      .filter((i) => i >= 0),
-  );
+const _ROLE_NAMES = { container: "묶음", article: "기사", fragment: "조각" };
+
+/** 후보 하나의 (역할, 깊이) — 사람이 바꾼 것이 있으면 그것. */
+function _propRoleLevel(p) {
+  const k = _propKey(p);
+  return {
+    role: proposeState.roles.get(k) ?? p.role ?? "article",
+    level: proposeState.levels.get(k) ?? p.level ?? 2,
+  };
 }
 
+/** ③ 머리 줄: 행 수·후보·체크 + 문턱 아래 보기. */
+function _updateStats() {
+  const data = proposeState.data;
+  const stats = document.getElementById("comp-propose-stats");
+  if (!data || !stats) return;
+  stats.textContent = `${data.stats.lines}행 · 후보 ${data.proposals.length} · 체크 ${proposeState.checked.size}` +
+    (data.stats.suppressed ? ` · 억제 ${data.stats.suppressed}` : "");
+  // 문턱 아래 후보는 기본으로 숨긴다 — 보이는 목록은 «승인 후보»여야 읽힌다
+  const rejected = data.proposals.filter((p) => !p.accepted).length;
+  if (rejected) {
+    const tg = document.createElement("button");
+    tg.type = "button";
+    tg.className = "text-btn";
+    tg.style.cssText = "font-size:11px; margin-left:6px;";
+    tg.textContent = proposeState.showRejected ? `문턱 아래 ${rejected}개 숨기기` : `문턱 아래 ${rejected}개 보기`;
+    tg.addEventListener("click", () => {
+      proposeState.showRejected = !proposeState.showRejected;
+      _renderProposals();
+    });
+    stats.appendChild(tg);
+  }
+}
+
+/**
+ * ③ 후보 목록. 체크 = 경계가 될 것, 행 선택(Shift 범위·Ctrl 하나씩) = 한꺼번에 고칠 것.
+ * 행마다 있던 역할 select·깊이 input·「억제」 단추는 없앴다 — 몇백 개를 하나씩 만지지 않는다(D-122).
+ */
 function _renderProposals() {
   const data = proposeState.data;
   const list = document.getElementById("comp-propose-list");
-  const stats = document.getElementById("comp-propose-stats");
   if (!data || !list) return;
-  const acceptedCount = proposeState.checked.size;
-  if (stats) {
-    stats.textContent = `${data.stats.lines}행 · 후보 ${data.proposals.length} · 승인 ${acceptedCount}` +
-      (data.stats.suppressed ? ` · 억제 ${data.stats.suppressed}` : "");
-    const hasToc = !!(data.toc && data.toc.matches && data.toc.matches.length);
-    if (hasToc) {
-      const sw = document.createElement("button");
-      sw.type = "button";
-      sw.className = "text-btn";
-      sw.style.cssText = "font-size:11px; margin-left:6px;";
-      sw.textContent = proposeState.tocOnly ? "목차 항목만 선택 중 → 전부 선택" : "전부 선택 중 → 목차 항목만";
-      sw.title = "목차가 있는 책은 목차 항목만 단위로 삼는 것이 기본입니다. 날짜·형식 후보까지 넓히려면 누르세요";
-      sw.addEventListener("click", () => {
-        _resetChecked(!proposeState.tocOnly);
-        _renderProposals();
-      });
-      stats.appendChild(sw);
-    }
-  }
+  _updateStats();
   // 목차 신호 요약 (D-089)
   const tocSummary = document.getElementById("comp-toc-summary");
   const unmatchedBox = document.getElementById("comp-toc-unmatched");
@@ -1823,37 +1878,32 @@ function _renderProposals() {
     if (unmatchedBox) unmatchedBox.style.display = "none";
   }
   list.innerHTML = "";
+  proposeState.visible = [];
   if (!data.proposals.length) {
     list.innerHTML =
-      '<div class="placeholder">경계 후보가 없습니다. 위 「자세히 · 고치기」에서 신호를 더 켜거나 어휘를 더해 보세요 (예: 談草, ^有).</div>';
+      '<div class="placeholder">경계 후보가 없습니다. ②에서 규칙을 더 켜거나 어휘를 더해 「후보 보기」를 누르세요.</div>';
+    _renderBatchBar();
+    _updateCheckAll();
     return;
   }
-  // 문턱 아래 후보는 기본으로 숨긴다 — 보이는 목록은 «승인 후보»여야 읽힌다
-  const rejected = data.proposals.filter((p) => !p.accepted).length;
-  if (rejected && stats) {
-    const tg = document.createElement("button");
-    tg.type = "button";
-    tg.className = "text-btn";
-    tg.style.cssText = "font-size:11px; margin-left:6px;";
-    tg.textContent = proposeState.showRejected ? `문턱 아래 ${rejected}개 숨기기` : `문턱 아래 ${rejected}개 보기`;
-    tg.addEventListener("click", () => {
-      proposeState.showRejected = !proposeState.showRejected;
-      _renderProposals();
-    });
-    stats.appendChild(tg);
-  }
-  data.proposals.forEach((p, i) => {
-    if (!p.accepted && !proposeState.showRejected && !proposeState.checked.has(i)) return;
+  for (const p of data.proposals) {
+    const k = _propKey(p);
+    if (!p.accepted && !proposeState.showRejected && !proposeState.checked.has(k)) continue;
+    proposeState.visible.push(k);
     const row = document.createElement("div");
-    row.className = "comp-propose-row" + (p.suppressed ? " suppressed" : "");
+    row.className = "comp-propose-row" + (p.suppressed ? " suppressed" : "") + (proposeState.selected.has(k) ? " is-selected" : "");
+    row.dataset.key = k;
     const cb = document.createElement("input");
     cb.type = "checkbox";
-    cb.checked = proposeState.checked.has(i);
-    cb.disabled = p.suppressed;
+    cb.checked = proposeState.checked.has(k);
+    cb.disabled = !!p.suppressed;
+    cb.addEventListener("click", (ev) => ev.stopPropagation());
     cb.addEventListener("change", () => {
-      if (cb.checked) proposeState.checked.add(i);
-      else proposeState.checked.delete(i);
-      _renderProposals();
+      if (cb.checked) proposeState.checked.add(k);
+      else proposeState.checked.delete(k);
+      _updateStats();
+      _updateCheckAll();
+      _refreshApplyState();
     });
     const body = document.createElement("div");
     const title = document.createElement("div");
@@ -1865,10 +1915,6 @@ function _renderProposals() {
       badge.textContent = p.kind === "volume" ? "목차·권" : "목차";
       title.appendChild(badge);
     }
-    title.title = "누르면 그 쪽으로 이동";
-    title.addEventListener("click", () => {
-      if (typeof goToPage === "function") goToPage(p.page);
-    });
     const meta = document.createElement("div");
     meta.className = "prop-meta";
     const d = p.date || {};
@@ -1877,12 +1923,20 @@ function _renderProposals() {
         (d.month_inferred ? (d.month_rolled ? " (달 넘김 추정)" : " (달 물려받음)") : "")
       : "";
     // 행 중간 경계(D-090 2단계): 「○七日」처럼 열 중간에서 날이 바뀌는 판식은 몇째 글자인지도 보인다
-    const where = `${p.page}쪽 ${p.line_index + 1}행` + (p.char_offset ? ` ${p.char_offset + 1}자째` : "");
-    meta.textContent = [where, dateTxt, p.place ? `장소·상대: ${p.place}` : ""].filter(Boolean).join("  |  ") + "  ";
+    const goto = document.createElement("span");
+    goto.className = "prop-goto";
+    goto.textContent = `${p.page}쪽 ${p.line_index + 1}행` + (p.char_offset ? ` ${p.char_offset + 1}자째` : "");
+    goto.title = "누르면 그 쪽으로 이동";
+    goto.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      if (typeof goToPage === "function") goToPage(p.page);
+    });
+    meta.appendChild(goto);
+    const rest = [dateTxt, p.place ? `장소·상대: ${p.place}` : ""].filter(Boolean).join("  |  ");
+    meta.appendChild(document.createTextNode((rest ? "  |  " + rest : "") + "  "));
     for (const r of p.reasons) meta.appendChild(_reasonChip(r));
     body.appendChild(title);
     body.appendChild(meta);
-    // 신뢰도·역할·깊이·억제를 한 줄로 (세로로 쌓으면 행마다 60px을 먹었다)
     const right = document.createElement("div");
     right.className = "prop-actions";
     const conf = document.createElement("span");
@@ -1890,48 +1944,197 @@ function _renderProposals() {
     conf.className = `prop-conf ${cls}`;
     conf.textContent = `${Math.round(p.confidence * 100)}%`;
     right.appendChild(conf);
-    // 역할(뜻)과 깊이(구조)는 따로(D-092). 들여쓰기·목차로 추정한 값이고 적용 전에 바꿀 수 있다
-    const rl = document.createElement("select");
-    rl.className = "prop-level";
-    rl.title = "역할 — 묶음(卷·集·編) / 기사(번역·주석 단위) / 조각(기사 안 문단)";
-    for (const [v, label] of [["container", "묶음"], ["article", "기사"], ["fragment", "조각"]]) {
-      const o = document.createElement("option");
-      o.value = v;
-      o.textContent = label;
-      rl.appendChild(o);
-    }
-    rl.value = proposeState.roles.get(i) ?? p.role ?? "article";
-    rl.addEventListener("click", (ev) => ev.stopPropagation());
-    rl.addEventListener("change", () => proposeState.roles.set(i, rl.value));
-    right.appendChild(rl);
-    const lv = document.createElement("input");
-    lv.type = "number";
-    lv.min = "1";
-    lv.className = "prop-level";
-    lv.title = "깊이(중첩 단계, 1부터) — 들여쓰기·목차로 추정";
-    lv.value = String(proposeState.levels.get(i) ?? p.level ?? 2);
-    lv.addEventListener("click", (ev) => ev.stopPropagation());
-    lv.addEventListener("change", () => proposeState.levels.set(i, Math.max(1, Number(lv.value) || 2)));
-    right.appendChild(lv);
-    if (!p.suppressed) {
-      const sup = document.createElement("button");
-      sup.type = "button";
-      sup.className = "prop-suppress";
-      sup.textContent = "억제";
-      sup.title = "이 행을 표제로 보지 않도록 문헌 규칙에 추가";
-      sup.addEventListener("click", async () => {
-        const rules = _rulesFromForm();
-        rules.suppress = [...rules.suppress, (data.lines.find((l) => l.page === p.page && l.line_index === p.line_index)?.text || p.title).trim()];
-        _rulesToForm(rules);
-        await _saveRulesAndRepropose();
-      });
-      right.appendChild(sup);
-    }
+    // 역할(뜻)과 깊이(구조)는 따로(D-092). 글자로만 보이고, 바꾸는 것은 행을 골라 위 줄에서
+    const lvl = document.createElement("span");
+    lvl.className = "prop-lvl";
+    const rl = _propRoleLevel(p);
+    lvl.textContent = `${_ROLE_NAMES[rl.role] || rl.role} ${rl.level}단`;
+    lvl.title = "역할 · 깊이 — 행을 골라 위 줄에서 바꿉니다";
+    right.appendChild(lvl);
     row.appendChild(cb);
     row.appendChild(body);
     row.appendChild(right);
+    row.addEventListener("click", (ev) => _selectRow(k, ev));
     list.appendChild(row);
+  }
+  _renderBatchBar();
+  _updateCheckAll();
+}
+
+/**
+ * 행 선택. 입력: 자리 키·마우스 이벤트. 출력: 없음.
+ * 그냥 누르면 그것만, Shift는 앞서 누른 것부터 범위(보이는 순서), Ctrl은 하나씩 더하고 뺀다.
+ */
+function _selectRow(k, ev) {
+  const vis = proposeState.visible;
+  if (ev.shiftKey && proposeState.anchor && vis.includes(proposeState.anchor)) {
+    const a = vis.indexOf(proposeState.anchor);
+    const b = vis.indexOf(k);
+    const [lo, hi] = a < b ? [a, b] : [b, a];
+    if (!(ev.ctrlKey || ev.metaKey)) proposeState.selected = new Set();
+    for (let i = lo; i <= hi; i++) proposeState.selected.add(vis[i]);
+  } else if (ev.ctrlKey || ev.metaKey) {
+    if (proposeState.selected.has(k)) proposeState.selected.delete(k);
+    else proposeState.selected.add(k);
+    proposeState.anchor = k;
+  } else {
+    proposeState.selected = proposeState.selected.size === 1 && proposeState.selected.has(k) ? new Set() : new Set([k]);
+    proposeState.anchor = k;
+  }
+  document.querySelectorAll("#comp-propose-list .comp-propose-row").forEach((el) => {
+    el.classList.toggle("is-selected", proposeState.selected.has(el.dataset.key));
   });
+  _renderBatchBar();
+}
+
+/** 일괄 줄: 고른 수와 도구. 고른 것이 없으면 도구를 감춘다. */
+function _renderBatchBar() {
+  const n = proposeState.selected.size;
+  const count = document.getElementById("comp-sel-count");
+  const tools = document.getElementById("comp-batch-tools");
+  if (count) count.textContent = n ? `선택 ${n}` : "행을 눌러 고르면 한꺼번에 바꿉니다";
+  if (tools) tools.hidden = !n;
+}
+
+/** 「전체」 체크박스를 보이는 행의 상태에 맞춘다(전부·일부·없음). */
+function _updateCheckAll() {
+  const el = document.getElementById("comp-check-all");
+  if (!el) return;
+  const vis = proposeState.visible;
+  const n = vis.filter((k) => proposeState.checked.has(k)).length;
+  el.checked = vis.length > 0 && n === vis.length;
+  el.indeterminate = n > 0 && n < vis.length;
+}
+
+/** 보이는 후보 전부 체크·해제. */
+function _checkVisible(on) {
+  const data = proposeState.data;
+  if (!data) return;
+  const suppressed = new Set(data.proposals.filter((p) => p.suppressed).map(_propKey));
+  for (const k of proposeState.visible) {
+    if (suppressed.has(k)) continue;
+    if (on) proposeState.checked.add(k);
+    else proposeState.checked.delete(k);
+  }
+  _renderProposals();
+  _refreshApplyState();
+}
+
+/** 고른 행의 체크를 한꺼번에. */
+function _batchCheck(on) {
+  const suppressed = new Set((proposeState.data?.proposals || []).filter((p) => p.suppressed).map(_propKey));
+  for (const k of proposeState.selected) {
+    if (on && !suppressed.has(k)) proposeState.checked.add(k);
+    else if (!on) proposeState.checked.delete(k);
+  }
+  _renderProposals();
+  _refreshApplyState();
+}
+
+/** 고른 행의 역할·깊이를 한꺼번에 바꾼다. 비운 칸은 그대로 둔다. */
+function _batchChange() {
+  const role = document.getElementById("comp-batch-role")?.value || "";
+  const raw = document.getElementById("comp-batch-level")?.value || "";
+  const level = raw ? Math.max(1, Number(raw) || 1) : null;
+  if (!role && level == null) {
+    showToast("바꿀 역할이나 깊이를 고르세요.", "warning");
+    return;
+  }
+  for (const k of proposeState.selected) {
+    if (role) proposeState.roles.set(k, role);
+    if (level != null) proposeState.levels.set(k, level);
+  }
+  _renderProposals();
+}
+
+/** 고른 행을 억제 목록에 넣고 다시 센다 — 저장은 「적용」이 한다. */
+async function _batchSuppress() {
+  const data = proposeState.data;
+  if (!data || !proposeState.selected.size) return;
+  const byKey = new Map(data.proposals.map((p) => [_propKey(p), p]));
+  const el = document.getElementById("comp-rules-suppress");
+  if (!el) return;
+  const cur = el.value.split(/\n/).map((x) => x.trim()).filter(Boolean);
+  for (const k of proposeState.selected) {
+    const p = byKey.get(k);
+    if (!p) continue;
+    const text = (data.lines.find((l) => l.page === p.page && l.line_index === p.line_index)?.text || p.title).trim();
+    if (text && !cur.includes(text)) cur.push(text);
+  }
+  el.value = cur.join(String.fromCharCode(10));
+  signalState.touched = true;
+  proposeState.selected = new Set();
+  await _proposeBoundaries();
+}
+
+/**
+ * «바뀐 것» (D-121 관문): 저장된 규칙(없으면 권고)으로 센 채택 후보와 지금 후보를 자리로 견준다.
+ * 수만 같고 자리가 바뀐 것도 잡힌다 — 「후보 615 → 608」만으로는 모자란다(Codex 지적).
+ */
+function _renderDiff() {
+  const out = document.getElementById("comp-preview-out");
+  const data = proposeState.data;
+  if (!out) return;
+  if (!data || !proposeState.baseline) {
+    out.hidden = true;
+    return;
+  }
+  const now = _acceptedMap(data);
+  const base = proposeState.baseline;
+  const added = [...now.keys()].filter((k) => !base.has(k));
+  const removed = [...base.keys()].filter((k) => !now.has(k));
+  if (!added.length && !removed.length) {
+    out.hidden = true;
+    return;
+  }
+  out.hidden = false;
+  out.textContent = "";
+  const head = document.createElement("div");
+  head.className = "comp-preview-head";
+  head.textContent = `바뀐 것 — 새로 잡히는 자리 ${added.length} · 빠지는 자리 ${removed.length}`;
+  head.title = "지금 저장된 규칙(없으면 권고)으로 센 채택 후보와 견줍니다. 「적용」하면 이것이 기준이 됩니다";
+  out.appendChild(head);
+  const where = (p) => `${p.page}쪽 ${p.line_index + 1}행`;
+  const box = document.createElement("div");
+  box.className = "comp-preview-list";
+  const show = (keys, src, sign) => {
+    const sorted = keys.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    for (const k of sorted.slice(0, 12)) {
+      const p = src.get(k);
+      const line = document.createElement("div");
+      line.className = "comp-preview-row";
+      line.textContent = `${sign} ${where(p)}  ${(p.title || "").slice(0, 30)}`;
+      box.appendChild(line);
+    }
+    if (sorted.length > 12) {
+      const more = document.createElement("div");
+      more.className = "comp-preview-note";
+      more.textContent = `… ${sorted.length - 12}자리 더`;
+      box.appendChild(more);
+    }
+  };
+  show(added, now, "+");
+  show(removed, base, "−");
+  out.appendChild(box);
+}
+
+/**
+ * 「적용」 단추의 상태. ②의 칸이 후보를 셀 때와 다르면 후보가 낡은 것이라 막는다 —
+ * 사람이 규칙을 고쳐 놓고 옛 후보를 적용하면 «말한 것과 다른 일»이 된다(D-122).
+ */
+function _refreshApplyState() {
+  const btn = document.getElementById("comp-propose-apply-btn");
+  const note = document.getElementById("comp-apply-note");
+  if (!btn) return;
+  const data = proposeState.data;
+  if (!data || !_signalsCurrent()) {
+    btn.disabled = true;
+    if (note) note.textContent = "";
+    return;
+  }
+  const stale = _formDigest() !== proposeState.rulesDigest;
+  btn.disabled = stale || !proposeState.checked.size;
+  if (note) note.textContent = stale ? "규칙이 바뀌었습니다 — 「후보 보기」로 다시 세우세요" : proposeState.checked.size ? "" : "체크한 후보가 없습니다";
 }
 
 /**
@@ -1942,7 +2145,6 @@ function _renderProposals() {
  */
 async function _suggestRules() {
   const out = document.getElementById("comp-rules-suggest-out");
-  const btn = null;
   if (!out || !viewerState.docId || !viewerState.partId) {
     if (out) out.textContent = "문헌과 권을 먼저 고르세요.";
     return;
@@ -1956,7 +2158,6 @@ async function _suggestRules() {
   const provider = llmSel.force_provider;
   const model = llmSel.force_model;
   out.textContent = "해제와 본문을 보는 중…";
-  if (btn) btn.disabled = true;
   try {
     const res = await fetch(
       `/api/documents/${encodeURIComponent(viewerState.docId)}/segmentation-rules/suggest`,
@@ -1976,8 +2177,6 @@ async function _suggestRules() {
     _renderRuleCandidates(d);
   } catch (e) {
     out.textContent = `뽑기 실패: ${e.message}`;
-  } finally {
-    if (btn) btn.disabled = false;
   }
 }
 
@@ -2025,22 +2224,31 @@ function _renderRuleCandidates(d) {
 }
 
 /**
- * 지금 체크한 대로 바꾸면 경계가 어떻게 달라지는지 재서 보인다 (D-121). 저장하지 않는다.
+ * ① 「말로 넣기」 — 연구자가 쓴 문장을 규칙 변경으로 옮긴다 (D-121 두 번째 입구). 저장하지 않는다.
  *
- * 왜: 규칙 변경은 사람·통계·LLM 셋 어디서든 온다. 어디서 왔든 «켜면 이렇게 달라집니다»를 먼저
- * 보이고 사람이 정하게 한다 — 이 프로젝트가 LLM의 말을 세어 확인하는 것과 같은 태도다.
- */
-/**
- * 연구자가 쓴 문장을 규칙 변경으로 옮긴다 (D-121 두 번째 입구). 저장하지 않는다.
- *
- * 출력: 옮긴 것이 하나라도 있으면 true. 결과는 「바꾸면?」과 같은 자리에 그려 사람이 승인한다.
- * 옮기지 못한 말은 반드시 보인다 — 비슷한 칸으로 바꿔치기하면 사람은 말했다고 여기는데
- * 시스템은 다른 일을 한다.
+ * 옮긴 것은 ②의 체크 상태·손으로 넣은 행·참고 칸에 바로 들어가고(_checkFromRules) ③이 다시 선다 —
+ * «바뀐 것»이 거기서 보인다. 옮기지 못한 말은 반드시 보인다: 비슷한 칸으로 바꿔치기하면 사람은
+ * 말했다고 여기는데 시스템은 다른 일을 한다.
  */
 async function _rulesFromWords() {
-  const said = (document.getElementById("comp-llm-say")?.value || "").trim();
-  const status = document.getElementById("comp-llm-status");
+  const box = document.getElementById("comp-llm-say");
+  const said = (box?.value || "").trim();
+  const btn = document.getElementById("comp-say-btn");
+  if (!said) {
+    showToast("이 책에 대해 아는 것을 한 줄 적어 주세요.", "warning");
+    if (box) box.focus();
+    return;
+  }
+  if (!_signalsCurrent()) {
+    await _startFlow();
+    if (!_signalsCurrent()) return;
+  }
   const llmSel = typeof getLlmModelSelection === "function" ? getLlmModelSelection("comp-llm-model-select") : {};
+  const useToc = document.getElementById("comp-toc-use")?.checked !== false;
+  if (btn) btn.disabled = true;
+  const docId = viewerState.docId;
+  const partId = viewerState.partId;
+  _renderTalk({ pending: true });
   try {
     const res = await fetch(
       `/api/documents/${encodeURIComponent(viewerState.docId)}/segmentation/rules-from-words`,
@@ -2050,6 +2258,9 @@ async function _rulesFromWords() {
         body: JSON.stringify({
           part_id: viewerState.partId,
           said,
+          rules: _rulesFromForm(), // 화면의 초안 위에 얹는다 — 저장본이 아니라(Codex 지적)
+          use_toc: useToc,
+          toc_pages: useToc ? _tocPagesFromInput() : null,
           force_provider: llmSel.force_provider || null,
           force_model: llmSel.force_model || null,
         }),
@@ -2057,252 +2268,114 @@ async function _rulesFromWords() {
     );
     const d = await res.json();
     if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+    if (docId !== viewerState.docId || partId !== viewerState.partId) return; // 다른 문헌으로 갔다
     const talk = d.talk || {};
     if (talk.error) {
-      if (status) status.textContent = `옮기지 못했습니다: ${talk.error}`;
-      return false;
+      _renderTalk({ error: talk.error });
+      return;
     }
-    signalState.talk = talk;
-    signalState.talkRules = d.rules || null;
-    if (d.preview) _renderRulePreview({ ...d.preview, _talk: talk, _rules: d.rules });
-    else _renderTalkOnly(talk);
-    if (status) {
-      const n = (talk.accepted || []).length;
-      const u = (talk.unsupported || []).length;
-      status.textContent = n
-        ? `옮긴 것 ${n}${u ? ` · 옮기지 못한 말 ${u}` : ""} — «자세히 · 고치기»에서 확인하세요`
-        : "규칙 칸으로 옮길 수 있는 말이 없었습니다.";
+    if (d.rules) {
+      _checkFromRules(d.rules);
+      signalState.touched = true;
+      _renderSignals();
+      _renderVerdict();
     }
-    return (talk.accepted || []).length > 0;
+    _renderTalk(talk);
+    if (d.rules) await _proposeBoundaries();
+    else _refreshApplyState();
   } catch (e) {
-    if (status) status.textContent = `옮기지 못했습니다: ${e.message}`;
-    return false;
+    _renderTalk({ error: e.message });
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
-/** 옮긴 것이 없을 때 — 무엇을 못 옮겼는지만 보인다. 입력: talk. 출력: 없음. */
-function _renderTalkOnly(talk) {
-  const out = document.getElementById("comp-preview-out");
-  if (!out) return;
-  out.hidden = false;
-  out.textContent = "";
-  const head = document.createElement("div");
-  head.className = "comp-preview-head";
-  head.textContent = "규칙 칸으로 옮길 수 있는 말이 없었습니다.";
-  out.appendChild(head);
-  _appendUnsupported(out, talk);
-}
+// 규칙 칸 이름 → 사람 말 (말로 옮긴 결과를 보일 때)
+const _FIELD_LABELS = {
+  title_words: "행 끝 어휘", head_words: "행 첫머리 어휘", symbols: "기호", head_templates: "행 첫머리 꼴",
+  tail_templates: "행 끝 꼴", suppress: "억제", furniture: "판심·엽수",
+  "signals.toc": "목차", "signals.date": "날짜", "signals.mark": "○ 권점 + 날짜", "signals.volume": "卷頭",
+  "signals.short_line": "짧은 행", "signals.after_short": "행갈음 뒤", "signals.indent": "내려쓰기",
+  indent_alone: "내려쓰기만으로 경계", max_title_chars: "표제 최대 글자수", min_confidence: "최소 신뢰도",
+};
 
-/** «옮기지 못한 말»을 붙인다. 입력: 담을 자리·talk. 출력: 없음. 목적: 조용히 넘어가지 않는다. */
-function _appendUnsupported(out, talk) {
-  if (!talk?.unsupported?.length) return;
-  const box = document.createElement("div");
-  box.className = "comp-preview-list";
-  const title = document.createElement("div");
-  title.className = "comp-preview-note";
-  title.textContent = `옮기지 못한 말 ${talk.unsupported.length} — 지금 규칙에는 범위·조건이 없습니다`;
-  box.appendChild(title);
-  for (const u of talk.unsupported) {
-    const line = document.createElement("div");
-    line.className = "comp-preview-row";
-    line.textContent = `「${u.said}」 — ${u.why}`;
-    line.title = u.why || "";
-    box.appendChild(line);
-  }
-  out.appendChild(box);
-}
-
-async function _previewRules() {
-  const out = document.getElementById("comp-preview-out");
-  if (!out) return;
-  if (!_signalsCurrent()) {
-    await _openProposePanel();
-    if (!_signalsCurrent()) return;
-  }
-  out.hidden = false;
-  out.textContent = "재는 중…";
-  try {
-    const useToc = document.getElementById("comp-toc-use")?.checked !== false;
-    const res = await fetch(
-      `/api/documents/${encodeURIComponent(viewerState.docId)}/segmentation/preview`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          part_id: viewerState.partId,
-          rules: _rulesFromForm(),
-          use_toc: useToc,
-          toc_pages: useToc ? _tocPagesFromInput() : null,
-        }),
-      },
-    );
-    const d = await res.json();
-    if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
-    _renderRulePreview(d);
-  } catch (e) {
-    out.textContent = `재지 못했습니다: ${e.message}`;
-  }
-}
-
-/**
- * 미리 보기 결과를 그린다. 입력: preview 응답. 출력: 없음. 목적: 숫자와 «달라지는 자리»를 보인다.
- *
- * 이름이 긴 이유: 이 저장소의 JS는 모듈이 아니라 전역 스크립트라 파일이 달라도 이름이 겹치면
- * 나중에 읽힌 쪽이 이긴다. 짧게 _renderPreview로 두었더니 punctuation-editor.js의 같은 이름에
- * 가려져 아무 일도 일어나지 않았다(2026-09-09).
- */
-function _renderRulePreview(d) {
-  const out = document.getElementById("comp-preview-out");
+/** 「말로 넣기」 결과. 입력: null(감춤) · {pending} · {error} · talk. 출력: 없음. */
+function _renderTalk(talk) {
+  const out = document.getElementById("comp-talk-out");
   if (!out) return;
   out.textContent = "";
-  const head = document.createElement("div");
-  head.className = "comp-preview-head";
-  head.textContent = d.summary || "";
-  out.appendChild(head);
-
-  if (!d.changes?.length) {
-    const same = document.createElement("div");
-    same.className = "comp-preview-note";
-    same.textContent = "저장된 규칙과 같습니다 — 바꿀 것이 없습니다.";
-    out.appendChild(same);
-    return;
-  }
-  const what = document.createElement("div");
-  what.className = "comp-preview-note";
-  what.textContent =
-    "바꾸는 것: " +
-    d.changes
-      .map((c) =>
-        c.added || c.removed
-          ? `${c.field}${c.added?.length ? " +" + c.added.join(",") : ""}${c.removed?.length ? " −" + c.removed.join(",") : ""}`
-          : `${c.field} ${c.before} → ${c.after}`,
-      )
-      .join(" · ");
-  out.appendChild(what);
-
-  for (const [rows, total, label] of [
-    [d.added, d.added_total, "새로 잡히는 자리"],
-    [d.removed, d.removed_total, "빠지는 자리"],
-  ]) {
-    if (!total) continue;
-    const box = document.createElement("div");
-    box.className = "comp-preview-list";
-    const title = document.createElement("div");
-    title.className = "comp-preview-note";
-    title.textContent = `${label} ${total}${total > rows.length ? ` (앞의 ${rows.length}개만 보임)` : ""}`;
-    box.appendChild(title);
-    for (const r of rows) {
-      const line = document.createElement("div");
-      line.className = "comp-preview-row";
-      line.textContent = `${r.page}쪽 ${r.title || "(제목 없음)"}`;
-      line.title = (r.reasons || []).join(" · ");
-      box.appendChild(line);
-    }
-    out.appendChild(box);
-  }
-
-  if (d._talk) {
-    // 말로 온 변경이면 «무엇을 옮겼는지»와 «전문에 몇 번 나오는지»를 함께 보인다
-    for (const a of d._talk.accepted || []) {
-      const line = document.createElement("div");
-      line.className = "comp-preview-note";
-      const count = a.count == null ? "" : ` · 전문에 ${a.count}번`;
-      line.textContent = `옮김: ${a.field} ${a.op} ${a.value}${count}${a.why ? ` — ${a.why}` : ""}`;
-      if (a.count === 0) line.textContent += " (이 책에 없는 말입니다)";
-      out.appendChild(line);
-    }
-    _appendUnsupported(out, d._talk);
-  }
-  const act = document.createElement("button");
-  act.className = "text-btn text-btn-sm text-btn-primary";
-  act.textContent = "이대로 적용";
-  act.title = "이 규칙을 문헌 설정에 저장하고 후보를 다시 찾습니다";
-  act.addEventListener("click", () => {
+  if (!talk) {
     out.hidden = true;
-    if (d._rules) _saveRulesDirect(d._rules);
-    else _saveRulesAndRepropose();
-  });
-  out.appendChild(act);
+    return;
+  }
+  out.hidden = false;
+  const line = (text, cls) => {
+    const el = document.createElement("div");
+    el.className = "comp-talk-row" + (cls ? ` ${cls}` : "");
+    el.textContent = text;
+    out.appendChild(el);
+    return el;
+  };
+  if (talk.pending) {
+    line("말을 규칙 칸으로 옮기는 중…");
+    return;
+  }
+  if (talk.error) {
+    line(`옮기지 못했습니다: ${talk.error}`, "is-unsupported");
+    return;
+  }
+  const acc = talk.accepted || [];
+  const un = talk.unsupported || [];
+  if (!acc.length && !un.length) {
+    line("규칙 칸으로 옮길 수 있는 말이 없었습니다.");
+    return;
+  }
+  for (const a of acc) {
+    const label = _FIELD_LABELS[a.field] || a.field;
+    let text;
+    if (a.op === "add") text = `옮김: ${label} 「${a.value}」 더함`;
+    else if (a.op === "remove") text = `옮김: ${label} 「${a.value}」 뺌`;
+    else text = `옮김: ${label} ${a.value === false ? "끔" : a.value === true ? "켬" : a.value}`;
+    if (a.count != null) text += ` · 전문에 ${a.count}번`;
+    const el = line(text + (a.count === 0 ? " — 이 책에 없는 말입니다" : ""), a.count === 0 ? "is-zero" : "");
+    if (a.why) el.title = a.why;
+  }
+  if (un.length) {
+    line(`옮기지 못한 말 ${un.length} — 지금 규칙에는 범위·조건이 없습니다`, "is-unsupported");
+    for (const u of un) {
+      const el = line(`「${u.said}」 — ${u.why}`, "is-unsupported");
+      el.title = u.why || "";
+    }
+  }
+  if (acc.length) line("→ ②에 반영했습니다. ③에서 «바뀐 것»을 보고 「적용」하세요.");
 }
 
 /**
- * 주어진 규칙을 그대로 저장하고 후보를 다시 찾는다. 입력: 규칙. 출력: 없음.
- * 목적: 말로 온 변경은 화면의 체크 상태가 아니라 «옮겨진 규칙»을 저장해야 한다.
- */
-async function _saveRulesDirect(rules) {
-  try {
-    const res = await fetch(`/api/documents/${viewerState.docId}/segmentation-rules`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rules }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `HTTP ${res.status}`);
-    }
-    const saved = await res.json().catch(() => null);
-    _markRulesSaved(saved?.segmentation_rules || rules);
-  } catch (e) {
-    showToast(`규칙 저장 실패: ${e.message}`, "error");
-    return;
-  }
-  await _loadSignals(); // 체크 상태를 저장된 규칙에 맞춘다
-  await _proposeBoundaries();
-}
-
-async function _saveRulesAndRepropose() {
-  if (!_signalsCurrent()) {
-    await _openProposePanel(); // 다른 문헌·권의 신호를 이 문헌에 저장하면 안 된다
-    return;
-  }
-  const rules = _rulesFromForm();
-  try {
-    const res = await fetch(`/api/documents/${viewerState.docId}/segmentation-rules`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rules }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `HTTP ${res.status}`);
-    }
-    const saved = await res.json().catch(() => null);
-    _markRulesSaved(saved?.segmentation_rules || rules);
-  } catch (e) {
-    showToast(`규칙 저장 실패: ${e.message}`, "error");
-    return;
-  }
-  // 목차 줄의 LLM 스위치가 켜져 있으면 여기서 한 번 모델을 부른다(목차 쪽 텍스트만)
-  if (document.getElementById("comp-toc-use")?.checked !== false) {
-    await _detectToc(!!rules.toc_llm);
-  }
-  await _proposeBoundaries();
-}
-
-function _closeProposePanel() {
-  _renderCurrentBoundaries(); // 제안을 접으면 «지금 경계»로 돌아온다
-  const panel = document.getElementById("comp-propose-panel");
-  if (panel) panel.style.display = "none";
-}
-
-/**
- * 승인한 제안 사이의 구간을 단위으로 만든다.
+ * ③ 「적용」 — ②의 규칙을 저장하고 체크한 후보로 경계를 세운다. 한 요청(D-122).
  * 구간은 화면에서 다시 계산한다 — 사용자가 체크를 바꾸면 서버의 spans와 달라지기 때문이다.
+ * 지울 수(실제 대상)는 dry_run으로 먼저 세어 묻는다.
  */
 async function _applyProposals() {
   const data = proposeState.data;
-  if (!data) return;
-  const idx = [...proposeState.checked].sort((a, b) => a - b);
-  if (!idx.length) {
-    showToast("승인한 경계가 없습니다.", "warning");
+  if (!data || !_signalsCurrent()) return;
+  if (_formDigest() !== proposeState.rulesDigest) {
+    showToast("규칙이 바뀌었습니다 — 「후보 보기」로 후보를 다시 세운 뒤 적용하세요.", "warning");
+    _refreshApplyState();
+    return;
+  }
+  const byKey = new Map(data.proposals.map((p) => [_propKey(p), p]));
+  const picked = [...proposeState.checked].map((k) => byKey.get(k)).filter(Boolean);
+  if (!picked.length) {
+    showToast("체크한 후보가 없습니다.", "warning");
     return;
   }
   const lines = data.lines;
   const keyOf = (l) => `${l.page}:${l.line_index}`;
   const pos = new Map(lines.map((l, i) => [keyOf(l), i]));
   // 경계 = (행, 행 안 글자 오프셋). 다음 경계가 행 중간이면 이 구간은 같은 행의 그 글자 앞에서 끝난다 (D-090 2단계)
-  const starts = idx
-    .map((i) => ({ i, li: pos.get(keyOf(data.proposals[i])), off: data.proposals[i].char_offset || 0, p: data.proposals[i] }))
+  const starts = picked
+    .map((p) => ({ li: pos.get(keyOf(p)), off: p.char_offset || 0, p }))
+    .filter((s) => s.li != null)
     .sort((a, b) => a.li - b.li || a.off - b.off);
   const endBefore = (next) =>
     next.off > 0
@@ -2318,32 +2391,50 @@ async function _applyProposals() {
     const end = k + 1 < starts.length
       ? endBefore(starts[k + 1])
       : { page: lines[lines.length - 1].page, line_index: lines[lines.length - 1].line_index, char_end: null };
-    spans.push({ title: s.p.title, kind: s.p.kind || "",
-      level: proposeState.levels.get(s.i) ?? s.p.level ?? 2,
-      role: proposeState.roles.get(s.i) ?? s.p.role ?? "article",
+    const rl = _propRoleLevel(s.p);
+    spans.push({ title: s.p.title, kind: s.p.kind || "", level: rl.level, role: rl.role,
       start: { page: lines[s.li].page, line_index: lines[s.li].line_index, char_offset: s.off },
       end });
   });
-  if (!confirm(`체크한 ${starts.length}개로 단위를 다시 세웁니다(전에 제안으로 만든 경계 중 체크가 빠진 것은 지워지고, 손으로 넣은 경계는 남습니다). 계속할까요?`)) return;
-  try {
-    const res = await fetch(`/api/documents/${encodeURIComponent(viewerState.docId)}/segmentation/apply`, {
+  const replace = document.getElementById("comp-apply-replace-all")?.checked ? "all" : "proposal";
+  const rules = _rulesFromForm();
+  const btn = document.getElementById("comp-propose-apply-btn");
+  const url = `/api/documents/${encodeURIComponent(viewerState.docId)}/segmentation/apply`;
+  const post = (extra) =>
+    fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        part_id: viewerState.partId,
-        spans,
-        pages: data.pages || null,
-        replace: "proposal", // 체크 상태가 곧 트리 — 전에 제안으로 만든 경계 중 빠진 것은 지운다
-      }),
+      body: JSON.stringify({ part_id: viewerState.partId, spans, pages: data.pages || null, replace, ...extra }),
     });
+  if (btn) btn.disabled = true;
+  try {
+    // 무엇을 지우는지 실제 수로 묻는다 — «손으로 넣은 것도»가 아니라 «M개».
+    // 세지 못했으면 멈춘다 — 확인 없이 지우는 길이 되면 안 된다(Codex 지적)
+    const dryRes = await post({ dry_run: true });
+    const dry = await dryRes.json().catch(() => ({}));
+    if (!dryRes.ok || dry.dry_run !== true) throw new Error(dry.error || `지울 수를 세지 못했습니다 (HTTP ${dryRes.status})`);
+    if (dry.removed) {
+      const msg = `경계 ${spans.length}개를 세우고, 지금 경계 중 ${dry.removed}개를 지웁니다` +
+        (replace === "all" ? " (손으로 넣은 것 포함)" : "") + ".\nGit으로 되돌릴 수 있습니다. 계속할까요?";
+      if (!confirm(msg)) return;
+    }
+    const res = await post({ rules });
     const result = await res.json();
     if (!res.ok) throw new Error(result.error || `HTTP ${res.status}`);
-    showToast(`단위 ${result.created.length}개 적용` + (result.removed ? ` · 이전 제안 경계 ${result.removed}개 정리` : "") + (result.errors.length ? ` · 실패 ${result.errors.length}` : ""),
-      result.errors.length ? "warning" : "success");
-    _closeProposePanel();
+    showToast(`경계 ${result.created.length}개 적용` + (result.removed ? ` · ${result.removed}개 정리` : "") +
+      (result.role_changed ? ` · 역할 ${result.role_changed}개 바꿈` : ""), "success");
+    if (result.rules_error) showToast(result.rules_error, "warning");
+    else _markRulesSaved(result.rules || rules);
+    // 적용한 규칙·후보가 다음 «바뀐 것»의 기준이 된다
+    proposeState.rulesDigest = _formDigest();
+    proposeState.baseline = _acceptedMap(data);
+    _renderDiff();
     await _loadCompositionData();
     if (typeof refreshContentsTree === "function") refreshContentsTree();
   } catch (e) {
     showToast(`적용 실패: ${e.message}`, "error");
+  } finally {
+    if (btn) btn.disabled = false;
+    _refreshApplyState();
   }
 }

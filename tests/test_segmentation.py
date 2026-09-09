@@ -610,6 +610,187 @@ class TestRuleTalk:
         assert manifest.read_bytes() == before
 
 
+class TestFlowD122:
+    """편성 흐름 하나(D-122): 목차도 스위치, 저장은 「적용」 한 요청, 지울 수는 먼저 센다."""
+
+    def test_toc_is_a_switch_in_rules(self):
+        """입력: signals.toc=False. 출력: 정규화가 지킨다. 목적: 「목차가 없다」를 규칙에 적는다."""
+        from src.core.segmentation import normalize_rules, signal_on
+
+        r = normalize_rules({"signals": {"toc": False}})
+        assert r["signals"]["toc"] is False
+        assert signal_on(r, "toc") is False
+        assert signal_on(normalize_rules({}), "toc") is True  # 안 적힌 스위치는 켜진 것
+
+    def test_words_can_turn_toc_off(self):
+        """입력: 목차 스위치 끄기. 출력: 받아들임. 목적: 전제(목차 없음)가 튕기지 않는다."""
+        from src.core.rule_talk import apply_changes
+
+        rules, accepted, rejected = apply_changes(
+            {}, [{"field": "signals.toc", "op": "set", "value": False, "why": "목차가 없다"}]
+        )
+        assert rejected == [] and accepted[0]["before"] is True
+        assert rules["signals"]["toc"] is False
+
+    def test_preview_compares_each_side_with_its_own_toc(self):
+        """입력: 목차 켬 → 끔. 출력: 끈 쪽만 대조가 빠진다. 목적: 한쪽만 끄면 입력도 한쪽만."""
+        from src.core.rule_preview import preview_rule_change
+
+        toc_page = [Line(1, 0, "目錄"), Line(1, 1, "感懷"), Line(1, 2, "又題")]
+        body = []
+        for p in (2, 3):
+            body += [Line(p, 0, "感懷" if p == 2 else "又題"), Line(p, 1, BODY), Line(p, 2, BODY)]
+        lines = toc_page + body
+        matches = [
+            {"page": 2, "line_index": 0, "title": "感懷", "level": 2, "score": 1.0},
+            {"page": 3, "line_index": 0, "title": "又題", "level": 2, "score": 1.0},
+        ]
+        r = preview_rule_change(
+            lines,
+            {"title_words": []},
+            {"title_words": [], "signals": {"toc": False}},
+            toc_matches=matches,
+            toc_pages=[1],
+        )
+        # 켠 쪽(before)은 목차 대조로 2자리를 채택하고 목차 쪽은 세지 않는다;
+        # 끈 쪽(after)은 대조를 안 쓰므로 그 두 자리가 빠진다
+        assert r["before"]["accepted"] == 2
+        assert r["removed_total"] == 2
+        assert all(row["page"] != 1 for row in r["removed"])
+
+    def test_preview_excludes_toc_pages_even_with_zero_matches(self):
+        """입력: 목차 쪽은 있고 대조는 0건. 출력: 양쪽 다 목차 쪽을 뺀다. 목적: propose와 같게."""
+        from src.core.rule_preview import preview_rule_change
+
+        toc_page = [Line(1, 0, "目錄"), Line(1, 1, "某某談草"), Line(1, 2, "又某談草")]
+        body = [
+            Line(2, 0, "十一日談草"),
+            Line(2, 1, BODY),
+            Line(3, 0, "十二日談草"),
+            Line(3, 1, BODY),
+        ]
+        r = preview_rule_change(
+            toc_page + body,
+            {"title_words": ["談草"]},
+            {"title_words": ["談草"], "min_confidence": 0.9},
+            toc_matches=[],
+            toc_pages=[1],
+        )
+        # 목차 쪽의 「談草」 행 둘이 후보에 끼면 before가 4가 된다 — 양쪽 다 2여야 한다
+        assert r["before"]["proposals"] == 2
+
+    def test_propose_ignores_toc_when_rules_say_so(self, client, tmp_path):  # noqa: F811
+        """입력: 목차 있는 책 + signals.toc=False. 출력: toc 없이 센다. 목적: 규칙이 이긴다."""
+        from pathlib import Path as _P
+
+        lib, part_id = _setup(client, tmp_path)
+        pages = _P(lib) / "documents" / "d1" / "L4_text" / "pages"
+        (pages / f"{part_id}_page_001.txt").write_text("\n".join(TOC_PAGE), encoding="utf-8")
+        (pages / f"{part_id}_page_002.txt").write_text("\n".join(BODY_P5), encoding="utf-8")
+        (pages / f"{part_id}_page_003.txt").write_text("\n".join(BODY_P6), encoding="utf-8")
+        on = client.post(
+            "/api/documents/d1/segmentation/propose", json={"part_id": part_id, "use_toc": True}
+        ).json()
+        off = client.post(
+            "/api/documents/d1/segmentation/propose",
+            json={"part_id": part_id, "use_toc": True, "rules": {"signals": {"toc": False}}},
+        ).json()
+        assert on["toc"] and on["toc"]["pages"] == [1]
+        assert off["toc"] is None and 1 in off["pages"]  # 목차 쪽도 본문으로 본다
+
+    def test_apply_saves_rules_in_the_same_request(self, client, tmp_path):  # noqa: F811
+        """입력: spans + rules. 출력: 경계·규칙 함께 저장. 목적: 저장 자리는 「적용」 하나."""
+        lib, part_id = _setup(client, tmp_path)
+        data = client.post(
+            "/api/documents/d1/segmentation/propose",
+            json={"part_id": part_id, "rules": {"title_words": ["談草"]}},
+        ).json()
+        keep = ("title", "kind", "start", "end", "level", "role")
+        spans = [{k: v for k, v in s.items() if k in keep} for s in data["spans"]]
+        assert spans
+        r = client.post(
+            "/api/documents/d1/segmentation/apply",
+            json={
+                "part_id": part_id,
+                "spans": spans,
+                "rules": {"title_words": ["談草"], "signals": {"toc": False}, "origin": "manual"},
+            },
+        )
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["rules"]["title_words"] == ["談草"] and d["rules"]["signals"]["toc"] is False
+        assert d["rules_error"] is None
+        saved = client.get("/api/documents/d1").json()["segmentation_rules"]
+        assert saved["signals"]["toc"] is False
+
+    def test_apply_dry_run_counts_without_writing(self, client, tmp_path):  # noqa: F811
+        """입력: dry_run. 출력: 지울 수·세울 수만. 목적: 확인창의 숫자는 실제 대상이어야 한다."""
+        from pathlib import Path as _P
+
+        lib, part_id = _setup(client, tmp_path)
+        data = client.post(
+            "/api/documents/d1/segmentation/propose",
+            json={"part_id": part_id, "rules": {"title_words": ["談草"]}},
+        ).json()
+        keep = ("title", "kind", "start", "end", "level", "role")
+        spans = [{k: v for k, v in s.items() if k in keep} for s in data["spans"]]
+        r = client.post(
+            "/api/documents/d1/segmentation/apply", json={"part_id": part_id, "spans": spans}
+        )
+        assert r.status_code == 200, r.text
+        bfile = _P(lib) / "documents" / "d1" / "boundaries" / f"{part_id}.json"
+        before = bfile.read_bytes()
+        # 첫 구간만 남기고 다시 적용하면 나머지는 지워질 대상이다 — dry_run은 그 수만 말한다
+        r = client.post(
+            "/api/documents/d1/segmentation/apply",
+            json={"part_id": part_id, "spans": spans[:1], "dry_run": True},
+        )
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["dry_run"] is True and d["removed"] == len(spans) - 1
+        assert bfile.read_bytes() == before  # 아무것도 쓰지 않았다
+
+    def test_apply_updates_role_of_boundary_at_same_place(self, client, tmp_path):  # noqa: F811
+        """입력: 같은 자리·깊이, 역할만 다른 span. 출력: 역할이 바뀐다. 목적: 역할은 옮겨 적는다."""
+        lib, part_id = _setup(client, tmp_path)
+        data = client.post(
+            "/api/documents/d1/segmentation/propose",
+            json={"part_id": part_id, "rules": {"title_words": ["談草"]}},
+        ).json()
+        keep = ("title", "kind", "start", "end", "level")
+        spans = [
+            {k: v for k, v in s.items() if k in keep} | {"role": "article"} for s in data["spans"]
+        ]
+        r = client.post(
+            "/api/documents/d1/segmentation/apply", json={"part_id": part_id, "spans": spans}
+        )
+        assert r.status_code == 200, r.text
+        first_id = r.json()["created"][0]["id"]
+        spans[0]["role"] = "container"
+        r = client.post(
+            "/api/documents/d1/segmentation/apply", json={"part_id": part_id, "spans": spans}
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["role_changed"] == 1
+        rows = client.get(f"/api/documents/d1/boundaries?part_id={part_id}").json()["boundaries"]
+        row = next(b for b in rows if b["id"] == first_id)
+        assert row["role"] == "container"
+
+    def test_words_route_accepts_screen_rules(self, client, tmp_path):  # noqa: F811
+        """입력: 화면 초안 규칙. 출력: 200 또는 400(모델 없음). 목적: 초안 위에 얹는다."""
+        from pathlib import Path as _P
+
+        lib, part_id = _setup(client, tmp_path)
+        manifest = _P(lib) / "documents" / "d1" / "manifest.json"
+        before = manifest.read_bytes()
+        r = client.post(
+            "/api/documents/d1/segmentation/rules-from-words",
+            json={"part_id": part_id, "said": "목차가 없다", "rules": {"title_words": ["談草"]}},
+        )
+        assert r.status_code in (200, 400)
+        assert manifest.read_bytes() == before
+
+
 def test_propose_without_l4_is_400(client, tmp_path):
     lib, part_id = _setup(client, tmp_path)
     import shutil

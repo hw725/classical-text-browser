@@ -78,14 +78,18 @@ def preview_rule_change(
     before: Optional[dict],
     after: Optional[dict],
     toc_matches: Optional[list[dict]] = None,
+    toc_pages: Optional[list[int]] = None,
 ) -> dict:
     """규칙을 바꾸면 경계가 어떻게 달라지는지 미리 센다. 저장하지 않는다.
 
     입력:
-        lines — 확정본 행 목록(제안을 세는 데 쓰는 것과 같은 것).
+        lines — 확정본 행 목록 **전체**(목차 쪽 포함). 목차를 켠 쪽만 목차 쪽을 뺀다.
         before — 지금 규칙(없으면 기본값).
         after — 바꾸려는 규칙.
-        toc_matches — 목차 대조 결과(있으면 양쪽에 똑같이 준다 — 목차는 규칙이 아니다).
+        toc_matches — 목차 대조 결과. 목차 자료는 양쪽에 같지만 **쓰는지는 규칙(signals.toc)이
+            정한다**(D-122). 한쪽만 목차를 껐으면 그쪽은 목차 쪽도 본문으로 보고 대조도 안 쓴다 —
+            같은 행 목록에 대조만 달리 주면 목차 쪽 행이 한쪽에만 없어 비교가 틀린다(Codex 지적).
+        toc_pages — 목차 쪽 번호(toc_matches와 함께).
     출력: {
         "before": {"proposals": n, "accepted": m},
         "after":  {"proposals": n, "accepted": m},
@@ -97,8 +101,19 @@ def preview_rule_change(
     }
     목적: 어디서 온 주장이든(사람·통계·LLM) 같은 관문을 지나게 한다. 사람은 숫자를 보고 정한다.
     """
-    b_result = propose_boundaries(lines, before, toc_matches=toc_matches)
-    a_result = propose_boundaries(lines, after, toc_matches=toc_matches)
+    from core.segmentation import signal_on
+
+    def _side(rules: Optional[dict]) -> dict:
+        # propose 라우트와 같은 판단: 목차 «항목»이 있으면(toc_pages) 대조가 0건이어도 목차 쪽은
+        # 본문에서 뺀다. 대조 유무로 가르면 대응을 못 찾은 책에서 양쪽 범위가 달라진다(Codex 지적)
+        if toc_pages and signal_on(rules or {}, "toc"):
+            skip = set(toc_pages)
+            body = [ln for ln in lines if ln.page not in skip]
+            return propose_boundaries(body, rules, toc_matches=toc_matches or None)
+        return propose_boundaries(lines, rules, toc_matches=None)
+
+    b_result = _side(before)
+    a_result = _side(after)
     b_acc, a_acc = _accepted(b_result), _accepted(a_result)
 
     added_keys = [k for k in a_acc if k not in b_acc]

@@ -98,6 +98,7 @@ function _applyFilter() {
 function _rotateCW() {
   pdfState.rotation = (pdfState.rotation + 90) % 360;
   _applyRotation();
+  _autoFit(); // 맞춤 모드가 켜져 있으면 돌린 모양으로 다시 잰다
 }
 
 /**
@@ -106,6 +107,7 @@ function _rotateCW() {
 function _rotateCCW() {
   pdfState.rotation = (pdfState.rotation + 270) % 360;
   _applyRotation();
+  _autoFit();
 }
 
 /**
@@ -119,7 +121,13 @@ function _applyRotation() {
   const deg = pdfState.rotation;
   wrapper.style.transform = deg === 0 ? "" : `rotate(${deg}deg)`;
 
-  // 90°/270°에서 너비↔높이가 뒤바뀌므로 마진으로 보정
+  // 90°/270°에서 너비↔높이가 뒤바뀌므로 마진으로 보정한다.
+  // transform은 배치(layout)를 바꾸지 않는다 — 래퍼는 여전히 w×h 자리를 차지하고 그림만 h×w로
+  // 돈다. 그래서 가로로 (h−w)/2씩 **더** 차지하게 하고 세로로는 그만큼 **덜** 차지하게 해야
+  // 배치 상자가 보이는 그림과 맞는다. 전에는 부호가 반대여서(세로 +, 가로 −) 상자가 그림보다
+  // 좁아져 왼쪽이 스크롤로도 닿지 않는 자리로 밀려나 잘렸다(사용자 보고 2026-09-09).
+  // diff는 세로 쪽(h>w)에서 양수, 가로 쪽에서 음수 — 부호가 바뀌어도 같은 식이 맞는다.
+  // 돌린 동안은 가운데 정렬(margin:auto)을 포기하고 왼쪽에 붙인다 — 그래야 넓을 때 잘리지 않는다.
   if (deg === 90 || deg === 270) {
     const canvas = document.getElementById("pdf-canvas");
     if (canvas && canvas.style.width) {
@@ -127,7 +135,7 @@ function _applyRotation() {
       const h = parseInt(canvas.style.height, 10);
       if (w && h) {
         const diff = (h - w) / 2;
-        wrapper.style.margin = `${diff}px ${-diff}px`;
+        wrapper.style.margin = `${-diff}px ${diff}px`;
       }
     }
   } else {
@@ -367,8 +375,9 @@ async function _fitToWidth() {
   const page = await pdfState.pdfDoc.getPage(pdfState.currentPage || 1);
   const viewport = page.getViewport({ scale: 1.0 });
   const container = document.getElementById("pdf-canvas-container");
-  // 패딩과 스크롤바 여유분 20px
-  const newScale = (container.clientWidth - 20) / viewport.width;
+  // 패딩과 스크롤바 여유분 20px. 90°/270°로 돌려 놓았으면 보이는 너비는 쪽의 «높이»다
+  const shown = _rotatedSize(viewport);
+  const newScale = (container.clientWidth - 20) / shown.width;
   _setZoom(newScale);
 }
 
@@ -384,9 +393,22 @@ async function _fitToHeight() {
   const page = await pdfState.pdfDoc.getPage(pdfState.currentPage || 1);
   const viewport = page.getViewport({ scale: 1.0 });
   const container = document.getElementById("pdf-canvas-container");
-  // 패딩 여유분 20px
-  const newScale = (container.clientHeight - 20) / viewport.height;
+  // 패딩 여유분 20px. 90°/270°로 돌려 놓았으면 보이는 높이는 쪽의 «너비»다
+  const shown = _rotatedSize(viewport);
+  const newScale = (container.clientHeight - 20) / shown.height;
   _setZoom(newScale);
+}
+
+/**
+ * 회전을 감안한 «보이는» 크기. 입력: 뷰포트(scale 1). 출력: {width, height}.
+ * 목적: 가로·세로 맞춤이 돌린 뒤의 모양을 재야 한다 — 안 그러면 90°에서 세로 쪽 길이로
+ * 가로를 맞춰 화면을 넘친다(사용자 보고 2026-09-09).
+ */
+function _rotatedSize(viewport) {
+  const deg = pdfState.rotation;
+  return deg === 90 || deg === 270
+    ? { width: viewport.height, height: viewport.width }
+    : { width: viewport.width, height: viewport.height };
 }
 
 

@@ -2242,21 +2242,13 @@ def search_char_in_pages(
         if not text:
             continue
 
-        # 기존 교정 로드 — 이미 교정된 위치를 제외하기 위해
-        corr_result = get_page_corrections(doc_path, part_id, page_num)
-        corrections = corr_result.get("corrections", [])
-
-        # 이미 교정된 char_index 집합 (line=null인 평면 인덱스)
-        corrected_indices = set()
-        for c in corrections:
-            ci = c.get("char_index")
-            if ci is not None and c.get("line") is None:
-                corrected_indices.add(ci)
-
-        # 텍스트에서 target_char 검색
+        # 교정 기록(corrections.json)으로 «이미 고친 자리»를 빼지 않는다. 확정본(L4) 본문이
+        # 정본이라, 글자가 본문에 남아 있으면 아직 안 고친 것이다. 전에는 기록만 남기고 본문은
+        # 안 고쳤으므로(아래 apply_batch_corrections 참조) 기록으로 빼면 «고쳤다고 적혔는데
+        # 본문엔 그대로»인 자리를 영영 못 고친다(사용자 보고 2026-09-09).
         positions = []
         for i, ch in enumerate(text):
-            if ch == target_char and i not in corrected_indices:
+            if ch == target_char:
                 # 컨텍스트: 앞뒤 5글자
                 ctx_start = max(0, i - 5)
                 ctx_end = min(len(text), i + 6)
@@ -2312,8 +2304,10 @@ def apply_batch_corrections(
             ]
         }
     왜 이렇게 하는가:
-        페이지마다 corrections.json에 교정 항목을 추가한다.
-        corrected_by를 'human_batch'로 표시하여 일괄 교정임을 구분한다.
+        **확정본(L4) 본문을 고친다** — 교정 탭이 보고 편집하는 것이 그 파일이다. 전에는 쪽마다
+        corrections.json에 항목만 적고 본문은 그대로 두어, 「실행」을 눌러도 화면에 아무 변화가
+        없었다(사용자 보고 2026-09-09 — «적용이 안 된다»). 기록은 지금도 남긴다(corrected_by
+        'human_batch') — 무엇을 언제 고쳤는지의 목록이지, 본문의 정본이 아니다.
     """
     doc_path = Path(doc_path).resolve()
     total = 0
@@ -2326,21 +2320,14 @@ def apply_batch_corrections(
         if not text:
             continue
 
-        # 기존 교정 로드
+        # 기존 교정 로드(기록에 덧붙이려고)
         corr_result = get_page_corrections(doc_path, part_id, page_num)
         corrections = corr_result.get("corrections", [])
 
-        # 이미 교정된 위치 집합
-        corrected_indices = set()
-        for c in corrections:
-            ci = c.get("char_index")
-            if ci is not None and c.get("line") is None:
-                corrected_indices.add(ci)
-
-        # 텍스트에서 original_char 검색 → 새 교정 항목 생성
+        # 텍스트에서 original_char 검색 → 본문을 바꾸고 기록 항목을 만든다
         new_corrs = []
         for i, ch in enumerate(text):
-            if ch == original_char and i not in corrected_indices:
+            if ch == original_char:
                 entry = {
                     "page": page_num,
                     "block_id": None,
@@ -2357,6 +2344,9 @@ def apply_batch_corrections(
 
         if not new_corrs:
             continue
+
+        # 본문부터 고친다 — 이것이 화면에 보이는 것이다
+        save_page_text(doc_path, part_id, page_num, text.replace(original_char, corrected_char))
 
         # 기존 교정에 추가하여 저장
         corrections.extend(new_corrs)

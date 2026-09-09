@@ -62,6 +62,8 @@ def test_library(tmp_path):
     l4_text = "王戎簡要裴楷清通\n孔明臥龍\n呂望非熊\n"
     with open(l4_dir / "vol1_page_001.txt", "w", encoding="utf-8") as f:
         f.write(l4_text)
+    # 쪽 텍스트 함수들은 manifest의 document_id만 본다 — 최소한만 둔다
+    (doc_dir / "manifest.json").write_text('{"document_id": "doc001"}', encoding="utf-8")
 
     return tmp_path
 
@@ -168,3 +170,48 @@ class TestAlignPage:
         b2 = [r for r in results if r.layout_block_id == "p01_b02"]
         assert len(b2) == 1
         assert b2[0].ocr_text == "孔明臥龍呂望非熊"
+
+
+class TestBatchCorrectionWritesL4:
+    """일괄 교정은 확정본(L4) 본문을 고친다 — 기록만 남기면 화면에 아무 변화가 없다(2026-09-09)."""
+
+    def test_execute_changes_page_text(self, test_library):
+        """입력: 裴→裵 일괄. 출력: L4 본문이 바뀌고 기록도 남는다. 목적: 재발 방지."""
+        from src.core.document import apply_batch_corrections, get_page_corrections, get_page_text
+
+        doc = test_library / "documents" / "doc001"
+        r = apply_batch_corrections(doc, "vol1", 1, 1, "裴", "裵", "variant_char", None)
+        assert r["total_corrected"] == 1 and r["pages_affected"] == 1
+        assert "裵楷" in get_page_text(doc, "vol1", 1)["text"]
+        assert "裴" not in get_page_text(doc, "vol1", 1)["text"]
+        log = get_page_corrections(doc, "vol1", 1)["corrections"]
+        assert log and log[-1]["corrected_by"] == "human_batch"
+
+    def test_preview_counts_from_text_not_from_log(self, test_library):
+        """입력: 기록만 있고 본문은 그대로인 옛 상태. 출력: 여전히 찾는다. 목적: 옛 기록 무시."""
+        from src.core.document import (
+            get_page_corrections,
+            save_page_corrections,
+            search_char_in_pages,
+        )
+
+        doc = test_library / "documents" / "doc001"
+        idx = "王戎簡要裴楷清通\n孔明臥龍\n呂望非熊\n".index("裴")
+        old = get_page_corrections(doc, "vol1", 1)["corrections"]
+        old.append(
+            {
+                "page": 1,
+                "block_id": None,
+                "line": None,
+                "char_index": idx,
+                "type": "ocr_error",
+                "original_ocr": "裴",
+                "corrected": "裵",
+                "corrected_by": "human_batch",
+                "confidence": None,
+                "note": None,
+            }
+        )
+        save_page_corrections(doc, "vol1", 1, {"part_id": "vol1", "corrections": old})
+        found = search_char_in_pages(doc, "vol1", 1, 1, "裴")
+        assert found and found[0]["count"] == 1

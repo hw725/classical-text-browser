@@ -41,7 +41,7 @@ LIST_FIELDS = (
     "suppress",  # 표제로 보지 않을 행
     "furniture",  # 판심·엽수처럼 종이의 규약인 행
 )
-SWITCH_FIELDS = ("date", "mark", "volume", "short_line", "after_short", "indent")
+SWITCH_FIELDS = ("toc", "date", "mark", "volume", "short_line", "after_short", "indent")
 NUMBER_FIELDS = ("max_title_chars", "min_confidence")
 
 SYSTEM_PROMPT = (
@@ -66,15 +66,21 @@ def _field_guide() -> str:
         "    suppress         — 제목처럼 보이지만 제목이 아닌 행(원문 그대로)\n"
         "    furniture        — 판심·엽수처럼 종이에 딸린 행(원문 그대로)\n"
         "  스위치 칸 (op: set, value: true | false)\n"
+        "    signals.toc      — 목차 항목으로 글이 나뉜다. «목차가 없다»고 하면 false\n"
         "    signals.date     — 행 첫머리의 날짜로 글이 나뉜다\n"
         "    signals.mark     — 기호 뒤의 날짜로 글이 나뉜다\n"
         "    signals.volume   — 행 끝의 卷 이름으로 묶음이 나뉜다\n"
-        "    signals.short_line / signals.after_short / signals.indent — 판식 보조 신호\n"
+        "    signals.short_line — 짧은 행(별행 제목)이 새 글의 보조 표지. «제목이 없다»고 하면 "
+        "false (title_words는 그대로 둔다)\n"
+        "    signals.after_short / signals.indent — 판식 보조 신호\n"
         "    indent_alone     — 내려쓴 것만으로 새 글이 시작한다\n"
         "  수 칸 (op: set, value: 숫자)\n"
         "    max_title_chars  — 별행 제목으로 볼 최대 글자 수\n"
         "    min_confidence   — 후보를 채택할 최소 신뢰도(0~1)\n"
         "\n"
+        "연구자가 «목차가 없다»·«제목이 없다»처럼 전제를 먼저 말하면 그것은 해당 스위치를 끄는 "
+        "변경입니다 — unsupported가 아닙니다. 이어서 «경계 표지는 무엇이다»라고 하면 그것을 목록 "
+        "칸이나 스위치로 옮깁니다.\n"
         "이 프로그램의 규칙에는 «범위»도 «조건»도 없습니다. 「어느 권부터」·「무엇이 있을 때만」·"
         "「이 책은 무슨 성격이다」 같은 말은 어떤 칸으로도 옮길 수 없습니다. "
         "unsupported에 그대로 적으십시오.\n"

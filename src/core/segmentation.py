@@ -197,6 +197,7 @@ DEFAULT_RULES: dict = {
     "furniture": [],
     # signals: 신호를 켜고 끄는 스위치. 빠진 키는 켜진 것(옛 규칙 파일과 호환).
     #   date·mark·volume은 혼자 후보를 만들고, short_line·after_short·indent는 보조다.
+    #   toc(D-122): 목차 항목으로 나눈다 — 「목차가 없다」는 말을 규칙으로 적을 자리.
     "signals": {},
     # toc_llm: 목차가 잡혔을 때 항목 구조화에 LLM을 쓸지. 사이드바 «자동 트리»가 이것을 따른다.
     "toc_llm": False,
@@ -213,7 +214,7 @@ DEFAULT_RULES: dict = {
     "tail_templates": [],
 }
 
-_SIGNAL_KEYS = ("date", "mark", "volume", "short_line", "after_short", "indent")
+_SIGNAL_KEYS = ("toc", "date", "mark", "volume", "short_line", "after_short", "indent")
 
 
 def signal_on(rules: dict, key: str) -> bool:

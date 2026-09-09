@@ -78,6 +78,11 @@ class SegmentationApplyRequest(BaseModel):
     # replace="all": 이 권의 살아 있는 경계를 전부 지우고 새로 세운다(자동 트리).
     # replace="none": 예전처럼 더하기만.
     replace: str = "proposal"
+    # D-122: 편성 탭의 저장 자리는 「적용」 하나다. 규칙을 함께 보내면 경계를 쓴 **뒤에** 저장한다 —
+    # 두 요청으로 나누면 경계 적용이 실패했는데 규칙만 저장된 채 남는다(Codex 지적 2026-09-09).
+    rules: dict | None = None
+    # dry_run: 무엇을 세우고 무엇을 지울지 세기만 한다(확인창의 숫자). 아무것도 쓰지 않는다.
+    dry_run: bool = False
 
 
 class SegmentationAutoRequest(BaseModel):
@@ -119,6 +124,8 @@ class SegmentationWordsRequest(BaseModel):
     force_model: str | None = None
     use_toc: bool = True
     toc_pages: list[int] | None = None
+    # 화면의 초안 규칙(아직 저장 안 된 체크 상태). 없으면 저장된 규칙 위에 얹는다(D-122).
+    rules: dict | None = None
 
 
 class SegmentationSignalsLlmRequest(BaseModel):
@@ -383,7 +390,12 @@ async def api_segmentation_propose(doc_id: str, body: SegmentationProposeRequest
     출력: core.segmentation.propose_boundaries() 결과 + "lines"(화면 표시용 행 목록).
     """
     from core.document import get_document_info
-    from core.segmentation import collect_document_lines, normalize_rules, propose_boundaries
+    from core.segmentation import (
+        collect_document_lines,
+        normalize_rules,
+        propose_boundaries,
+        signal_on,
+    )
 
     doc_path, err = _doc(doc_id)
     if err is not None:
@@ -404,10 +416,12 @@ async def api_segmentation_propose(doc_id: str, body: SegmentationProposeRequest
             status_code=400,
         )
 
-    # 목차 신호 (D-089): 목차 쪽은 본문 후보에서 빼고, 항목을 본문 행에 순서대로 대응시킨다
+    # 목차 신호 (D-089): 목차 쪽은 본문 후보에서 빼고, 항목을 본문 행에 순서대로 대응시킨다.
+    # 규칙의 signals.toc(D-122)가 꺼져 있으면 요청이 켜 달라고 해도 안 쓴다 — 「목차가 없다」는
+    # 말을 규칙에 적은 것이라 저장·자동 트리·제안이 다 같은 답을 내야 한다.
     toc_info = None
     toc_matches = None
-    if body.use_toc:
+    if body.use_toc and signal_on(rules, "toc"):
         from core.toc import (
             TocEntry,
             align_toc_to_body,
@@ -526,23 +540,29 @@ async def api_rules_from_words(doc_id: str, body: SegmentationWordsRequest):
         saved = get_document_info(doc_path).get("segmentation_rules")
     except FileNotFoundError:
         saved = None
-    lines, _texts = collect_document_lines(doc_path, body.part_id, None)
+    lines, page_texts = collect_document_lines(doc_path, body.part_id, None)
     if not lines:
         return JSONResponse(
             {"error": "확정 텍스트(L4)가 있는 쪽이 없습니다. OCR·교정을 먼저 하세요."},
             status_code=400,
         )
+    base = body.rules if body.rules is not None else saved
     proposed, talk = await rules_from_words(
         body.said,
         lines,
-        saved,
+        base,
         _get_llm_router(),
         body.force_provider,
         body.force_model,
     )
     preview = None
     if proposed is not None:
-        preview = preview_rule_change(lines, saved, proposed)
+        toc_pages, toc_matches = _toc_for_preview(
+            lines, page_texts, base, body.use_toc, body.toc_pages
+        )
+        preview = preview_rule_change(
+            lines, base, proposed, toc_matches=toc_matches, toc_pages=toc_pages
+        )
     return {
         "rules": proposed,
         "talk": talk,
@@ -563,7 +583,6 @@ async def api_segmentation_preview(doc_id: str, body: SegmentationPreviewRequest
     from core.document import get_document_info
     from core.rule_preview import preview_rule_change
     from core.segmentation import collect_document_lines, normalize_rules
-    from core.toc import align_toc_to_body, detect_toc_pages, extract_toc_entries_rule
 
     doc_path, err = _doc(doc_id)
     if err is not None:
@@ -578,26 +597,42 @@ async def api_segmentation_preview(doc_id: str, body: SegmentationPreviewRequest
             {"error": "확정 텍스트(L4)가 있는 쪽이 없습니다. OCR·교정을 먼저 하세요."},
             status_code=400,
         )
-    # 목차는 규칙이 아니다 — 양쪽에 똑같이 준다. 안 그러면 목차 때문에 달라진 것을
-    # 규칙 때문이라고 잘못 읽는다.
-    toc_matches = None
-    if body.use_toc:
-        page_lines = {p: t.split("\n") for p, t in page_texts.items()}
-        rules_now = normalize_rules(saved)
-        pages = (
-            [int(p) for p in body.toc_pages if int(p) in page_lines]
-            if body.toc_pages
-            else detect_toc_pages(page_lines, rules_now["max_title_chars"])
-        )
-        if pages:
-            entries = extract_toc_entries_rule(page_lines, pages)
-            body_lines = [ln for ln in lines if ln.page not in set(pages)]
-            matches, _un = align_toc_to_body(entries, body_lines)
-            toc_matches = [m.to_dict() for m in matches]
-            lines = body_lines
-    result = preview_rule_change(lines, saved, body.rules, toc_matches=toc_matches)
+    toc_pages, toc_matches = _toc_for_preview(
+        lines, page_texts, saved, body.use_toc, body.toc_pages
+    )
+    result = preview_rule_change(
+        lines, saved, body.rules, toc_matches=toc_matches, toc_pages=toc_pages
+    )
     result["saved_rules"] = normalize_rules(saved) if saved else None
     return result
+
+
+def _toc_for_preview(lines, page_texts, rules, use_toc: bool, toc_pages: list[int] | None):
+    """미리 보기용 목차 자료. 출력: (목차 쪽, 대조 목록) — 없으면 ([], None).
+
+    목차 자료는 규칙이 아니라 책의 것이라 양쪽이 같다. **쓰는지**는 양쪽 규칙의 signals.toc가
+    따로 정한다(D-122) — preview_rule_change가 한쪽씩 결정한다.
+    """
+    from core.segmentation import normalize_rules
+    from core.toc import align_toc_to_body, detect_toc_pages, extract_toc_entries_rule
+
+    if not use_toc:
+        return [], None
+    page_lines = {p: t.split("\n") for p, t in page_texts.items()}
+    rules_now = normalize_rules(rules)
+    pages = (
+        [int(p) for p in toc_pages if int(p) in page_lines]
+        if toc_pages
+        else detect_toc_pages(page_lines, rules_now["max_title_chars"])
+    )
+    if not pages:
+        return [], None
+    entries = extract_toc_entries_rule(page_lines, pages)
+    if not entries:  # propose와 같다 — 항목이 없으면 목차 쪽도 본문이다
+        return [], None
+    body_lines = [ln for ln in lines if ln.page not in set(pages)]
+    matches, _un = align_toc_to_body(entries, body_lines)
+    return pages, [m.to_dict() for m in matches]
 
 
 def _toc_signal_for(lines, rules, toc_pages: list[int] | None):
@@ -732,6 +767,7 @@ async def api_segmentation_apply(doc_id: str, body: SegmentationApplyRequest):
         new_boundary,
         save_doc_boundaries,
     )
+    from core.rule_induction import save_segmentation_rules
     from core.segmentation import boundary_bbox, collect_document_lines
 
     doc_path, err = _doc(doc_id)
@@ -739,6 +775,11 @@ async def api_segmentation_apply(doc_id: str, body: SegmentationApplyRequest):
         return err
     if not body.spans:
         return JSONResponse({"error": "적용할 구간이 없습니다."}, status_code=400)
+    if body.dry_run:
+        # 확인창의 숫자 — «지금 경계 중 M개를 지운다»는 실제 대상 수여야 한다(Codex 지적).
+        data = load_doc_boundaries(doc_path, doc_id, body.part_id)
+        removed = _replace_boundaries(data, body.spans, body.replace)
+        return {"created": [], "would_create": len(body.spans), "removed": removed, "dry_run": True}
 
     lines, page_texts = collect_document_lines(doc_path, body.part_id, body.pages)
     keys = [(ln.page, ln.line_index) for ln in lines]
@@ -747,6 +788,7 @@ async def api_segmentation_apply(doc_id: str, body: SegmentationApplyRequest):
     removed = _replace_boundaries(data, body.spans, body.replace)
     created = []
     errors = []
+    role_changed = 0
     for span in body.spans:
         s = span.start or {}
         key = (int(s.get("page", 0)), int(s.get("line_index", 0)))
@@ -775,6 +817,11 @@ async def api_segmentation_apply(doc_id: str, body: SegmentationApplyRequest):
         item["metadata"] = {"source": "proposal"}  # 제안에서 온 경계 — 다음 적용 때 바꿔치기 대상
         try:
             kept = insert_boundary(data, item)  # 같은 자리·층위가 있으면 그것(중복 없음)
+            if kept is not item and span.role and kept.get("role") != span.role:
+                # 같은 자리를 다시 적용하며 역할만 바꾼 것 — 끼워 넣기는 옛것을 돌려주므로
+                # 여기서 옮겨 적는다(D-122). 제목은 사람이 고쳤을 수 있어 건드리지 않는다.
+                kept["role"] = span.role
+                role_changed += 1
             created.append(
                 {"id": kept["id"], "title": kept.get("title"), "sequence_index": len(created)}
             )
@@ -787,7 +834,7 @@ async def api_segmentation_apply(doc_id: str, body: SegmentationApplyRequest):
             {
                 "error": (
                     f"구간 {len(errors)}개를 확정본에서 찾지 못해 아무것도 적용하지 않았습니다. "
-                    "→ 해결: 「경계 제안」으로 후보를 다시 세운 뒤 적용하세요 "
+                    "→ 해결: 「후보 보기」로 후보를 다시 세운 뒤 적용하세요 "
                     "(제안한 뒤에 확정본이 바뀌면 행 번호가 어긋납니다)."
                 ),
                 "created": [],
@@ -798,14 +845,30 @@ async def api_segmentation_apply(doc_id: str, body: SegmentationApplyRequest):
             status_code=400,
         )
     git = None
-    if created or removed:
+    if created or removed or role_changed:
         save_doc_boundaries(doc_path, data)
         git = git_commit_boundaries(
             doc_path,
             f"feat: 경계 제안 적용 — 경계 {len(created)}개, 바꿔치기로 {removed}개 제거 "
             "(D-088·D-092)",
         )
-    return {"created": created, "removed": removed, "errors": errors, "git": git}
+    # 규칙은 경계를 쓴 **뒤에** 저장한다 — 경계가 실패하면 규칙도 저장되지 않는다(D-122)
+    rules_saved = None
+    rules_error = None
+    if body.rules is not None:
+        try:
+            rules_saved = save_segmentation_rules(doc_path, body.rules)
+        except Exception as e:  # noqa: BLE001 — 경계는 이미 커밋됐다. 그 사실을 숨기지 않는다
+            rules_error = f"경계는 적용됐지만 규칙 저장에 실패했습니다: {e}"
+    return {
+        "created": created,
+        "removed": removed,
+        "role_changed": role_changed,
+        "errors": errors,
+        "git": git,
+        "rules": rules_saved,
+        "rules_error": rules_error,
+    }
 
 
 @router.post("/api/documents/{doc_id}/segmentation/auto")
@@ -831,6 +894,7 @@ async def api_segmentation_auto(doc_id: str, body: SegmentationAutoRequest):
         collect_document_lines,
         normalize_rules,
         propose_boundaries,
+        signal_on,
     )
     from core.toc import (
         align_toc_to_body,
@@ -888,7 +952,7 @@ async def api_segmentation_auto(doc_id: str, body: SegmentationAutoRequest):
     # OCR 77쪽 중 L4는 序 한 쪽이어서 날짜 340개를 두고 개요가 비었다).
     pages_total = len(_list_part_pages(doc_path, body.part_id, get_document_info))
     page_lines = {p: t.split("\n") for p, t in page_texts.items()}
-    if not body.use_toc:
+    if not body.use_toc or not signal_on(rules, "toc"):  # 규칙의 목차 스위치(D-122)
         toc_pages = []
     elif body.toc_pages:
         toc_pages = [int(p) for p in body.toc_pages if int(p) in page_lines]
