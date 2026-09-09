@@ -1915,6 +1915,11 @@
                   <div class="comp-step-foot">
                     <button id="comp-say-btn" class="text-btn text-btn-sm" type="button" title="쓴 것을 규칙 칸으로 옮깁니다. 저장하지 않습니다">말로 넣기 <span class="llm-tag">LLM</span></button>
                     <button id="comp-llm-btn" class="text-btn text-btn-sm" type="button" title="목차 항목 구조화 · 표제 어휘 뽑기 · 시작 표지 묻기">더 묻기… <span class="llm-tag">LLM</span></button>
+                    <!-- 두 단추가 같은 모델을 쓴다 — 창 안에 두면 「말로 넣기」만 쓰는 사람은 못 본다(2026-09-09) -->
+                    <label class="comp-llm-model">모델
+                      <select id="comp-llm-model-select" class="props-select llm-model-select"
+                        title="「말로 넣기」와 「더 묻기…」가 함께 씁니다. «자동»은 사용 가능한 프로바이더 순서(Ollama → Gemini …)로 넘어갑니다"></select>
+                    </label>
                     <span id="comp-llm-pattern-out" class="comp-rules-suggest-out"></span>
                   </div>
                   <div id="comp-talk-out" class="comp-talk-out" hidden></div>
@@ -3930,10 +3935,6 @@
                 <span id="comp-llm-scope-note" class="comp-llm-opt-note"></span>
               </span>
             </span>
-          </label>
-          <label class="comp-llm-opt comp-llm-model">모델
-            <select id="comp-llm-model-select" class="props-select llm-model-select" style="font-size: 11px; max-width: 220px"
-              title="«자동»은 사용 가능한 프로바이더 순서(Ollama → Gemini …)로 넘어갑니다"></select>
           </label>
           <div id="comp-llm-status" class="comp-split-note"></div>
           <div class="corr-dialog-actions">
