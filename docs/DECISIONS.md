@@ -6214,3 +6214,10 @@ Python/onnxruntime으로 옮겨 `OCR().process(image)` 한 줄로 행 좌표(원
 단추(`core/extras.py` KNOWN_EXTRAS, probe는 `honkoku_ocr` — onnxruntime만 보면 고서 엔진을 깐 PC에서
 «깔려 있다»고 잘못 말한다), `install.ps1`·`install.sh`의 4번 선택지(고서·일본어·くずし字 + 모델 미리
 받기 `honkoku-ocr --download`), `CTB-Setup`의 라디오 단추와 `--pick 4`, 안내서 §2의 `uv sync --extra honkoku`.
+
+실측(2026-09-10): `scripts/build_installer.ps1`로 CTB-Setup.exe(12MB)를 다시 빌드하고 `CTB_SETUP_ZIP`을
+main 아카이브로 두어(기본값은 v1.3.0 태그 zip — 4번이 없는 옛 install.ps1을 받는다) 격리 폴더에
+`--auto --pick 4`로 돌렸다. 시작 13:02:49 → 종료 13:04:06(캐시된 휠·모델 덕에 77초), 종료 코드 0,
+128 패키지(honkoku-ocr-py 0.3.0·onnx·onnxruntime 1.24.2 + PaddleOCR 스택), PaddleOCR·みんなで翻刻 모델
+넷 SHA-256 대조, 설치된 .venv에서 엔진 목록에 honkoku가 사용 가능으로 뜨고 앱 안 extras 상태도 셋 다
+깔림·기록됨. 다음 릴리스에서 `ZIP_URL`의 태그를 올려야 배포판이 이 선택지를 받는다.
