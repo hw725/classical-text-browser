@@ -98,20 +98,13 @@ class HonkokuOcrEngine(BaseOcrEngine):
         return True
 
     def _device(self) -> str:
-        """HONKOKU_OCR_DEVICE(cpu|cuda). 비우면 onnxruntime-gpu가 있을 때만 cuda."""
+        """HONKOKU_OCR_DEVICE(cpu|cuda). 비우면 ort_device() — GPU판이면 cuda(DLL 미리 올림)."""
         env = (os.environ.get("HONKOKU_OCR_DEVICE") or "").strip().lower()
         if env in ("cpu", "cuda"):
             return env
-        try:
-            import onnxruntime
+        from ocr.ort_device import ort_device
 
-            return (
-                "cuda"
-                if "CUDAExecutionProvider" in onnxruntime.get_available_providers()
-                else "cpu"
-            )
-        except Exception:  # noqa: BLE001
-            return "cpu"
+        return ort_device()
 
     def _get_ocr(self):
         """OCR 인스턴스를 lazy로 만든다. 모델이 없으면 여기서 받는다(실패는 사용 불가)."""
@@ -264,6 +257,7 @@ class HonkokuOcrEngine(BaseOcrEngine):
     def get_info(self) -> dict:
         info = super().get_info()
         info["supported_languages"] = ["classical_japanese", "classical_chinese"]
+        info["device"] = self._device()  # cuda면 onnxruntime GPU판(2026-09-10)
         info["language_warning"] = (
             "くずし字(초서·변체가나) 고문서 전용입니다. 한글은 인식할 수 없고, "
             "인쇄된 한문 판본에는 NDL古典籍OCR-Lite가 나을 수 있습니다."

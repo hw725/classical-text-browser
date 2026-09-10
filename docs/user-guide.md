@@ -1263,6 +1263,10 @@ uv pip uninstall --python .venv-gpu\Scripts\python.exe paddlepaddle
 uv pip install --python .venv-gpu\Scripts\python.exe "paddlepaddle-gpu==3.3.1" --index-url https://www.paddlepaddle.org.cn/packages/stable/cu126/
 # (선택) くずし字 엔진(みんなで翻刻OCR)도 이 환경에서 쓰려면 — 앱 안 「설치」 단추는 .venv에만 깝니다
 uv pip install --python .venv-gpu\Scripts\python.exe "honkoku-ocr-py>=0.3.0"
+# ONNX 엔진 셋(みんなで翻刻·NDL古典籍 Lite·NDLOCR)도 GPU로 — onnxruntime을 GPU판으로 바꿔 끼웁니다(207MB).
+# 둘을 같이 두면 서로 덮어쓰므로 반드시 빼고 넣습니다
+uv pip uninstall --python .venv-gpu\Scripts\python.exe onnxruntime
+uv pip install --python .venv-gpu\Scripts\python.exe "onnxruntime-gpu==1.24.4"
 set UV_PROJECT_ENVIRONMENT=
 ```
 
@@ -1270,6 +1274,7 @@ set UV_PROJECT_ENVIRONMENT=
 
 ```bat
 .venv-gpu\Scripts\python.exe -c "import paddle, torch; print(paddle.device.is_compiled_with_cuda(), torch.cuda.is_available())"
+.venv-gpu\Scripts\python.exe -c "import onnxruntime as o; print('CUDAExecutionProvider' in o.get_available_providers())"
 ```
 
 `True True`가 나오면 됩니다. 코드는 손댈 것이 없습니다 — 장치 기본값이 `auto`라
@@ -1658,11 +1663,17 @@ OCR 엔진 드롭다운에 「PaddleOCR (사용 불가)」가 뜨거나 서버�
 - **권고**: 예를 들어 「.venv-gpu의 파이썬이 3.13이라 PaddleOCR을 쓸 수 없습니다. 지우거나 이름을
   바꾸면 .venv(CPU)로 뜹니다」
 
+**GPU에서 네 계열이 다 돕니다**(2026-09-10 실측): torch(NDL古典籍 Full), onnxruntime GPU판(みんなで翻刻·古典籍 Lite·
+NDLOCR), PaddleOCR GPU판 — 한 PC에서 충돌 없이. 다만 아래 둘은 지켜야 합니다.
+
 **torch와 paddle은 한 프로세스에 같이 못 올립니다**(cuDNN DLL 판이 달라 뒤에 읽히는 쪽이 죽습니다). 그래서
 서버는 `.venv-gpu`에서 뜨고 PaddleOCR만 별도 자식 프로세스로 돌립니다 — 먼저 같은 `.venv-gpu` 파이썬에서 torch를
 막고 띄워 **GPU로**, 그게 안 뜨면 `.venv`(CPU)로(D-091). 충돌은 «한 프로세스»의 일이라 두 엔진 모두 GPU를 씁니다.
 **torch는 지우지 마세요** — NDL古典籍 Full이 씁니다. PaddleOCR이 어디서 도는지는 엔진 드롭다운의 PaddleOCR
 설명(«별도 프로세스(GPU, …)»)과 `doctor.bat`에 나옵니다.
+
+**onnxruntime은 GPU판이어야 합니다.** CPU판이 남아 있으면 みんなで翻刻이 한 쪽 22초(GPU면 6초)이고, `doctor.bat`이
+«onnxruntime이 CPU판입니다»로 바꾸는 명령을 알립니다. `CTB_ORT_DEVICE=cpu`로 강제로 CPU에 둘 수 있습니다.
 
 파일을 지우지는 않습니다. 권고를 보고 직접 지우세요. `start_server.bat`도 `.venv-gpu`에서 paddle이
 실제로 뜨는지 확인한 뒤에만 그 환경을 고릅니다.

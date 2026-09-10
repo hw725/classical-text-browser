@@ -51,6 +51,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 | `torch`는 전용 인덱스(플랫폼 분기: Windows `pytorch-cu124`·Linux `pytorch-cu126`, 2026-08-20 실측) | CUDA 버전을 바꾸면 `[[tool.uv.index]]` URL도 함께 고쳐야 한다 |
 | `ndl-lab/ndlocr-lite` **master**에서 모델 받기 | 원본이 v1.2.0에서 PARSeq 셋을 바꿔(16px→24px, 파일명 변경) 셋이 404. 모델 URL은 **태그 1.1.3**에 고정(`src/ocr/ndlocr/__init__.py`). 古典籍-Lite는 이미 1.3.1 고정 |
 | `torch`(cu124) ↔ `paddlepaddle-gpu` **같은 프로세스** | 둘이 cuDNN 9 DLL을 따로 들고 온다(`torch/lib`, `nvidia/cudnn/bin`). 판이 다르면 먼저 뜬 쪽이 이기고 뒤쪽이 WinError 127. 앱은 torch(NDL Full)를 먼저 읽어 **PaddleOCR이 사용 불가**로 보인다(2026-09-02 실측). 해법은 프로세스 분리 — PaddleOCR을 자식 프로세스로 돌린다(D-091). 자식은 **.venv-gpu 파이썬 + torch import 차단(`CTB_PADDLE_BLOCK_TORCH`)으로 먼저 띄워 GPU**로 돌고, 안 뜨면 `start_server.bat`이 놓은 `CTB_PADDLE_PYTHON=.venv`(CPU)로 내려간다(2026-09-10 덧붙임, 조각 하나 5초 → 0.06초). 충돌은 «한 프로세스»이지 «GPU를 같이 쓰는 것»이 아니다. `doctor.bat`이 판정한다 |
+| `onnxruntime`(CPU판) ↔ `onnxruntime-gpu` | **같은 `onnxruntime` 패키지 디렉터리를 두 배포판이 제공** — 같이 두면 서로 덮어쓴다. `.venv-gpu`는 CPU판을 빼고 GPU판 1.24.4를 넣는다(user-guide 7-A.6-2). GPU판이면 ONNX 엔진 셋이 `ort_device()`로 cuda를 잡는다. **torch보다 onnxruntime을 먼저 쓰는 프로세스는 `preload_dlls`가 필요하다** — 안 하면 첫 세션이 조용히 CPU로 떨어진다(2026-09-10 실측). torch·ORT GPU판·paddle GPU판(워커)은 한 PC에서 충돌 없이 돈다 |
 | `opencv-contrib-python`(paddlex) ↔ `opencv-python-headless`(extras) | **같은 `cv2`를 두 배포판이 제공.** 한쪽을 지우면 공유 디렉터리가 사라져 남은 쪽까지 깨진다 — `module 'cv2' has no attribute 'IMREAD_COLOR'`. extras도 contrib판으로 통일했다 |
 
 **환경이 이상하면 먼저 `doctor.bat`(`uv run python scripts/doctor.py`).** `.venv`·`.venv-gpu`를

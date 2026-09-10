@@ -4143,6 +4143,16 @@ GPU판을 **한 프로세스에** 올릴 때만 난다. 워커를 **.venv-gpu �
 CPU와 같았지만 계속 지켜본다. 2026-09-03에 워커를 .venv-gpu로 띄웠다 죽은 뒤 «torch를 막고 띄우는» 길을 확인하지
 않은 채 CPU로 정했고, 그 사실을 알리지도 않았다.
 
+**같은 날 두 번째 — onnxruntime도 GPU판으로.** 사용자: «gpu에서 전부 충돌 안 하고 쓸 수 있게 하는 방법은 없어?».
+`.venv-gpu`의 onnxruntime이 CPU판이라 みんなで翻刻·NDL古典籍 Lite·NDLOCR은 GPU PC에서도 CPU였다. 임시 폴더에
+onnxruntime-gpu 1.24.4를 받아 새 프로세스 다섯 경우(torch 먼저·ORT 먼저·preload 유무·paddle 워커)로 잰 결과 전부
+GPU로 돌고 어느 순서도 죽지 않았다 — cuDNN 충돌은 torch↔paddle 사이의 일이고 ORT GPU판은 둘 어느 쪽과도 산다.
+단 하나, torch보다 ORT를 먼저 쓰면 `preload_dlls` 없이는 첫 세션이 조용히 CPU였다(RTMDet providers가 CPU만).
+그래서 `ocr/ort_device.py`가 «CUDAExecutionProvider가 보이면 cuda + preload 한 번»을 한 곳에서 정하고 엔진 셋이
+그것을 쓴다(`CTB_ORT_DEVICE=cpu|cuda`로 강제). 실측 한 쪽: みんなで翻刻 22초 → 6초, 古典籍 Lite 1.6~3.6초 → 3초
+(작은 모델이라 이득 없음). 환경은 CPU판을 빼고 GPU판을 넣는다 — 같은 디렉터리를 두 배포판이 제공해 같이 두면
+덮어쓴다(cv2와 같은 함정). doctor가 `.venv-gpu`의 provider를 보고 CPU판이면 바꾸는 명령을 알린다.
+
 
 
 ## D-092: TextBlock을 없앤다 — 층위 있는 경계 목록이 단위의 정본이고, 단위의 id는 시작 경계에 붙는다

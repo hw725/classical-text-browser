@@ -238,3 +238,18 @@ def test_worker_ping_carries_gpu_flag(monkeypatch, tmp_path):
     got = env_doctor._run_worker_ping(tmp_path / "py.exe", tmp_path, 10, block_torch=True)
     assert got == {"available": True, "reason": None, "paddle": "3.3.1", "gpu": True}
     assert seen["env"].get("CTB_PADDLE_BLOCK_TORCH") == "1"
+
+
+def test_cpu_onnxruntime_in_gpu_env_is_warned():
+    """GPU 환경에 onnxruntime CPU판이 남으면 ONNX 엔진 셋이 CPU로 돈다 — 바꾸는 명령을 알린다."""
+    venv = _env(".venv", "3.12.13", engines=PADDLE_OK)
+    gpu = _env(".venv-gpu", "3.12.13", engines=PADDLE_OK)
+    gpu["packages"]["torch"] = "2.6.0+cu124"
+    gpu["ort_providers"] = ["CPUExecutionProvider"]
+    recs = recommend(_report([venv, gpu], gpu=True))
+    warn = [r["text"] for r in recs if r["level"] == "warn" and "onnxruntime이 CPU판" in r["text"]]
+    assert warn and "onnxruntime-gpu==1.24.4" in warn[0]
+    gpu["ort_providers"] = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    recs = recommend(_report([venv, gpu], gpu=True))
+    assert not any("onnxruntime이 CPU판" in r["text"] for r in recs)
+    assert "onnxruntime GPU판(CUDA)" in format_report(_report([venv, gpu], gpu=True), recs)

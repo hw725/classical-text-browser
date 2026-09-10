@@ -45,6 +45,11 @@ try:
     out["paddle_cuda"] = bool(paddle.device.is_compiled_with_cuda())
 except Exception:  # noqa: BLE001
     out["paddle_cuda"] = None
+try:
+    import onnxruntime  # noqa: F401
+    out["ort_providers"] = list(onnxruntime.get_available_providers())
+except Exception:  # noqa: BLE001
+    out["ort_providers"] = None
 print(json.dumps(out, ensure_ascii=False))
 """
 
@@ -376,6 +381,26 @@ def recommend(report: dict) -> list[dict]:
                 }
             )
         err = e.get("errors", {})
+        # onnxruntime 셋(みんなで翻刻·NDL古典籍 Lite·NDLOCR)은 GPU판이어야 GPU로 돈다(2026-09-10).
+        # GPU 환경에 CPU판이 남아 있으면 «GPU PC인데 みんなで翻刻이 한 쪽 22초»가 된다.
+        prov = e.get("ort_providers")
+        if (
+            e.get("name") == ".venv-gpu"
+            and prov is not None
+            and "CUDAExecutionProvider" not in prov
+        ):
+            recs.append(
+                {
+                    "level": "warn",
+                    "text": f"{tag}: onnxruntime이 CPU판입니다 — "
+                    "みんなで翻刻·NDL古典籍 Lite·NDLOCR이 "
+                    "CPU로 돕니다(みんなで翻刻 한 쪽 22초, GPU면 6초). GPU판으로 바꾸려면: "
+                    "`uv pip uninstall --python .venv-gpu\\Scripts\\python.exe onnxruntime` 뒤 "
+                    "`uv pip install --python .venv-gpu\\Scripts\\python.exe "
+                    "onnxruntime-gpu==1.24.4` "
+                    "(둘을 같이 두면 서로 덮어씁니다 — 반드시 빼고 넣으세요).",
+                }
+            )
         if cudnn_conflict(e):
             # 충돌은 «한 프로세스»의 일이다 — 서버는 PaddleOCR을 이 환경의 별도 자식 프로세스(torch
             # 차단)로 GPU에서 돌린다(D-091 덧붙임). torch를 지우라는 옛 권고는 NDL古典籍 Full을
@@ -550,6 +575,10 @@ def format_report(report: dict, recs: list[dict]) -> str:
             + " · cv2 "
             + pk.get("cv2", "—")
         )
+        if e.get("ort_providers") is not None:
+            lines[-1] += " · onnxruntime " + (
+                "GPU판(CUDA)" if "CUDAExecutionProvider" in e["ort_providers"] else "CPU판"
+            )
         for name, err in e.get("errors", {}).items():
             lines.append(f"    ✗ {name}: {err}")
         for name, res in (e.get("alone") or {}).items():

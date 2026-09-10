@@ -399,6 +399,9 @@ class NdlkotenOcrEngine(BaseOcrEngine):
             "한글은 인식할 수 없습니다. "
             "근현대 자료에는 NDLOCR-Lite를 사용하세요."
         )
+        from .ort_device import ort_device
+
+        info["device"] = ort_device()
         info["model_source"] = (
             "ndl-lab/ndlkotenocr-lite 1.3.1 — RTMDet-s 1280 (레이아웃) + PARSeq-tiny 32x384 (인식)"
         )
@@ -438,6 +441,7 @@ class NdlkotenOcrEngine(BaseOcrEngine):
 
         # PARSeq 클래스는 ndlocr 패키지에서 공유 (동일한 아키텍처)
         from .ndlocr.parseq import PARSEQ
+        from .ort_device import ort_device
 
         # RTMDet 레이아웃/행 탐지기 (ndlkotenocr 전용 모델)
         # 임계값은 업스트림 ndlkotenocr-lite와 동일하게 설정 (0.3).
@@ -449,6 +453,7 @@ class NdlkotenOcrEngine(BaseOcrEngine):
                 score_threshold=0.3,
                 conf_threshold=0.3,
                 iou_threshold=0.3,
+                device=ort_device(),  # GPU판 onnxruntime이면 cuda (2026-09-10)
             )
 
         # PARSeq 문자 인식기 (단일 모델 — 캐스케이드 없음)
@@ -467,6 +472,7 @@ class NdlkotenOcrEngine(BaseOcrEngine):
                 model_path=str(model_dir / "parseq-ndl-32x384-tiny-10.onnx"),
                 charlist=charlist,
                 bgr_input=False,  # ndlkotenocr = RGB 입력
+                device=ort_device(),
             )
 
         logger.info("NDL古典籍OCR-Lite 모델 로딩 완료")

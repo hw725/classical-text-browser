@@ -360,6 +360,9 @@ class NdlocrEngine(BaseOcrEngine):
         info["supported_languages"] = ["classical_chinese", "japanese"]
         info["language_warning"] = "한문(漢文)·일본어만 인식 가능합니다. 한글은 인식할 수 없습니다."
         # 어떤 원본의 어떤 모델인지 화면에서 확인할 수 있게 적는다.
+        from .ort_device import ort_device
+
+        info["device"] = ort_device()
         info["model_source"] = (
             "ndl-lab/ndlocr-lite 1.1.3 — DEIM-s 1024 (레이아웃) + "
             "PARSeq-tiny 16px ×3 (30/50/100자 캐스케이드)"
@@ -395,14 +398,17 @@ class NdlocrEngine(BaseOcrEngine):
 
         from .ndlocr.deim import DEIM
         from .ndlocr.parseq import PARSEQ
+        from .ort_device import ort_device
 
         # DEIM 레이아웃 탐지기
+        device = ort_device()  # GPU판 onnxruntime이면 cuda (2026-09-10)
         self._deim = DEIM(
             model_path=str(model_dir / "deim-s-1024x1024.onnx"),
             class_mapping_path=str(config_dir / "ndl.yaml"),
             score_threshold=0.2,
             conf_threshold=0.25,
             iou_threshold=0.2,
+            device=device,
         )
 
         # PARSeq 문자 인식기 (3개 모델 — 캐스케이드)
@@ -414,14 +420,17 @@ class NdlocrEngine(BaseOcrEngine):
         self._parseq30 = PARSEQ(
             model_path=str(model_dir / "parseq-ndl-16x256-30-tiny-192epoch-tegaki3.onnx"),
             charlist=charlist,
+            device=device,
         )
         self._parseq50 = PARSEQ(
             model_path=str(model_dir / "parseq-ndl-16x384-50-tiny-146epoch-tegaki2.onnx"),
             charlist=charlist,
+            device=device,
         )
         self._parseq100 = PARSEQ(
             model_path=str(model_dir / "parseq-ndl-16x768-100-tiny-165epoch-tegaki2.onnx"),
             charlist=charlist,
+            device=device,
         )
 
         logger.info("NDLOCR-Lite 모델 로딩 완료")
