@@ -26,6 +26,12 @@
       "minimum": 1,
       "description": "bbox 좌표계인 페이지 이미지의 높이(px)."
     },
+    "rotation": {
+      "type": "integer",
+      "enum": [0, 90, 180, 270],
+      "default": 0,
+      "description": "이 좌표계를 만든 권의 회전(D-123). manifest.parts[].rotation과 다르면 낡은 좌표계다 — 크기만으로는 180°나 정사각형의 90°를 못 가른다."
+    },
     "ocr_engine": {
       "type": ["string", "null"],
       "description": "사용된 OCR 엔진. 예: paddleocr, tesseract, google_vision, claude_vision",

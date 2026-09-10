@@ -325,6 +325,54 @@ def _text_file_path(doc_path: Path, part_id: str, page_num: int) -> Path:
     return doc_path / "L4_text" / "pages" / filename
 
 
+ROTATIONS = (0, 90, 180, 270)
+
+
+def part_rotation(doc_path: str | Path, part_id: str | None) -> int:
+    """이 권의 저장된 회전(시계 방향 도). 없거나 manifest가 없으면 0.
+
+    입력: 문헌 경로, 권 id(None이면 첫 권). 출력: 0·90·180·270.
+    목적: OCR·썸네일·내보내기·화면이 같은 값을 한 곳에서 읽는다(D-123).
+    """
+    try:
+        manifest = get_document_info(doc_path)
+    except FileNotFoundError:
+        return 0
+    parts = manifest.get("parts") or []
+    for part in parts:
+        if part_id is None or part.get("part_id") == part_id:
+            rot = int(part.get("rotation") or 0)
+            return rot if rot in ROTATIONS else 0
+    return 0
+
+
+def set_part_rotation(doc_path: str | Path, part_id: str, rotation: int) -> dict:
+    """권의 회전을 manifest에 적는다(스키마 검증 뒤 원자적 쓰기). 출력: 바뀐 part dict.
+
+    왜 지우지 않는가: 회전을 바꾸면 그 권의 L2·L3 좌표계가 어긋나지만, 지우는 것은
+    사람이 정한다 — 이 함수는 적기만 하고 라우트가 «다시 OCR해야 할 쪽 수»를 알린다.
+    """
+    import jsonschema
+
+    if rotation not in ROTATIONS:
+        raise ValueError(f"회전은 0·90·180·270 중 하나여야 합니다: {rotation}")
+    doc_path = Path(doc_path).resolve()
+    manifest = get_document_info(doc_path)
+    target = None
+    for part in manifest.get("parts") or []:
+        if part.get("part_id") == part_id:
+            target = part
+            break
+    if target is None:
+        raise FileNotFoundError(f"권을 찾을 수 없습니다: {part_id}")
+    target["rotation"] = int(rotation)
+    schema_path = Path(__file__).resolve().parent.parent.parent / "schemas" / "source_repo"
+    schema = json.loads((schema_path / "manifest.schema.json").read_text(encoding="utf-8"))
+    jsonschema.validate(manifest, schema)
+    write_json_atomic(doc_path / "manifest.json", manifest)
+    return target
+
+
 def get_page_text(doc_path: str | Path, part_id: str, page_num: int) -> dict:
     """특정 페이지의 텍스트를 읽어 반환한다.
 
@@ -481,6 +529,8 @@ def save_page_layout(
     import jsonschema
 
     doc_path = Path(doc_path).resolve()
+    # 이 좌표계가 어느 회전에서 만들어졌는지 도장을 찍는다(D-123). 화면은 권의 회전을 몰라도 된다
+    layout_data["rotation"] = part_rotation(doc_path, part_id)
     layout_path = _layout_file_path(doc_path, part_id, page_num)
 
     # L3_layout/ 디렉토리가 없으면 생성

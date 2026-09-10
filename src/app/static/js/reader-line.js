@@ -84,7 +84,7 @@ function _toggleReaderLine() {
   if (!readerLineState.enabled) {
     if (line) line.style.display = "none";
     if (btn) btn.classList.remove("active");
-    if (btn) btn.title = "읽기 보조선 (R)";
+    if (btn) btn.title = "읽기 보조선 (R) — 누를 때마다 가로선 → 세로선 → 끔";
   } else {
     if (line) {
       line.className = `reader-line reader-line-${readerLineState.mode}`;
@@ -92,8 +92,8 @@ function _toggleReaderLine() {
     if (btn) btn.classList.add("active");
     if (btn) {
       btn.title = readerLineState.mode === "horizontal"
-        ? "읽기 보조선: 가로 → 세로 (R)"
-        : "읽기 보조선: 세로 → 끄기 (R)";
+        ? "읽기 보조선: 지금 가로선 — 누르면 세로선 (R)"
+        : "읽기 보조선: 지금 세로선 — 누르면 끔 (R)";
     }
   }
 }

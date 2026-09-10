@@ -314,6 +314,51 @@ def native_render_scale(page, default: float = DEFAULT_RENDER_SCALE) -> float:
         return default
 
 
+def rotate_page_image(img: Image.Image, rotation: int) -> Image.Image:
+    """쪽 이미지를 저장된 회전만큼 시계 방향으로 돌린다(D-123). 0이면 그대로.
+
+    부호: 이 프로젝트의 회전은 «바로 세우려면 시계 방향으로 몇 도»다(PDF /Rotate·PDF.js와 같다).
+    PIL.rotate는 반시계가 양수라 부호를 뒤집는다. expand=True로 캔버스가 함께 돈다.
+    """
+    rotation = int(rotation or 0) % 360
+    if rotation == 0:
+        return img
+    return img.rotate(-rotation, expand=True)
+
+
+def unrotate_point(
+    x: float, y: float, rotation: int, rot_w: float, rot_h: float
+) -> tuple[float, float]:
+    """돌린 이미지의 점을 돌리기 전 이미지의 점으로(D-123).
+
+    입력: 돌린 이미지 좌표 (x, y), 회전(시계 방향), 돌린 이미지의 폭·높이.
+    출력: 돌리기 전 이미지 좌표.
+    목적: L2 bbox는 돌린 이미지에서 나오고, 텍스트 레이어 PDF는 원본 쪽에 얹으므로 되돌려야 한다.
+    부호는 tests/test_ocr_image_utils.py가 PIL 왕복으로 고정한다.
+    """
+    rotation = int(rotation or 0) % 360
+    if rotation == 90:
+        # 시계 90°: 원본 (x, y) → 돌린 (H − y, x). 역은 (y', W' − x'). 돌린 폭 rot_w = 원본 높이
+        return y, rot_w - x
+    if rotation == 180:
+        return rot_w - x, rot_h - y
+    if rotation == 270:
+        return rot_h - y, x
+    return x, y
+
+
+def unrotate_bbox(bbox, rotation: int, rot_w: float, rot_h: float) -> list[float]:
+    """돌린 이미지의 bbox [x0,y0,x1,y1]를 돌리기 전 이미지의 bbox로. 네 꼭짓점을 되돌려 감싼다."""
+    x0, y0, x1, y1 = (float(c) for c in bbox)
+    pts = [
+        unrotate_point(x, y, rotation, rot_w, rot_h)
+        for x, y in ((x0, y0), (x1, y0), (x0, y1), (x1, y1))
+    ]
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    return [min(xs), min(ys), max(xs), max(ys)]
+
+
 def load_page_image_from_pdf(
     library_root: str,
     doc_id: str,
@@ -331,14 +376,18 @@ def load_page_image_from_pdf(
              (native_render_scale, 최소 2.0). 숫자를 주면 그 배율로 고정.
       part_id: 권 식별자. **다권본에서는 반드시 넘겨야 한다** — 없으면 첫 권을 읽는다.
 
-    출력: PIL Image 객체 (없으면 None)
+    출력: PIL Image 객체 (없으면 None). **권에 회전이 저장돼 있으면 돌린 이미지**다(D-123) —
+          OCR·레이아웃·앵커 좌표가 모두 이 이미지를 기준으로 한다.
 
     왜 필요한가:
       L1_source에 PDF만 있고 개별 이미지가 없는 경우,
       OCR을 위해 PDF에서 페이지를 추출해야 한다.
       pymupdf(fitz)를 사용 (없으면 None 반환).
     """
+    from core.document import part_rotation
+
     doc_path = Path(library_root) / "documents" / doc_id
+    rotation = part_rotation(doc_path, part_id)
     pdf_path = resolve_part_pdf(doc_path, part_id)
     if pdf_path is None or not pdf_path.exists():
         return None
@@ -364,6 +413,6 @@ def load_page_image_from_pdf(
             # PNG 바이트 → PIL Image
             from io import BytesIO
 
-            return Image.open(BytesIO(pix.tobytes("png")))
+            return rotate_page_image(Image.open(BytesIO(pix.tobytes("png"))), rotation)
     except Exception:
         return None

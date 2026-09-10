@@ -54,7 +54,7 @@ from pathlib import Path
 
 import fitz
 
-from core.document import get_pdf_path
+from core.document import get_pdf_path, part_rotation
 
 logger = logging.getLogger(__name__)
 
@@ -246,9 +246,18 @@ def _embed_page(
     approximated = 0
     warnings: list[str] = []
 
-    page_rect = page.rect
+    page_rect = page.rect  # /Rotate가 적용된 «표시» 크기 — bbox·검출·잉크 검사가 다 이 공간이다
     with_bbox = [(t, b) for t, b in lines if b is not None]
     without_bbox = [t for t, b in lines if b is None]
+
+    # 회전된 쪽(D-123 저장 회전 또는 원본 /Rotate): 글자는 «표시 공간»에서 계산한 자리에 서야 읽는
+    # 방향이 맞고 검색 형광도 그 자리에 뜬다. 그런데 PyMuPDF의 삽입 좌표는 돌리기 전 쪽 공간이다.
+    # 그래서 점은 derotation_matrix로 옮기고, 글자는 그 점 둘레로 회전 부분의 역행렬만큼 돌린다
+    # (TextWriter는 morph=(고정점, 행렬)만 받으므로 줄마다 writer 하나). insert_text 경로는 rotate=로
+    # 세운다. 부호는 tests/test_part_rotation.py가 실제 PDF에서 잰다(~M이 맞았고 M은 거꾸로 섰다).
+    derot = page.derotation_matrix
+    rotated = page.rotation % 360 != 0
+    glyph_rot = ~fitz.Matrix(derot.a, derot.b, derot.c, derot.d, 0, 0) if rotated else None
 
     # 원본 페이지가 남긴 좌표 변환을 끊는다. **이것이 없으면 텍스트가
     # 엉뚱한 크기·자리에 박힌다.**
@@ -271,10 +280,11 @@ def _embed_page(
     # 아예 생기지 않았다.
     #
     # wrap_contents()는 기존 스트림을 q…Q로 감싸 그 안에서 끝나게 한다.
+    # (D-123 작업 중 이 블록이 한 번 잘려 나가 시험이 잡았다 — 2026-09-10)
     if not page.is_wrapped:
         page.wrap_contents()
 
-    writer = fitz.TextWriter(page_rect) if font is not None else None
+    writer = fitz.TextWriter(page_rect) if (font is not None and not rotated) else None
 
     def _emit(text: str, x: float, baseline_y: float, size: float) -> bool:
         """한 줄을 실제로 써넣는다. 성공하면 True.
@@ -283,14 +293,20 @@ def _embed_page(
         던진다. 한 줄 때문에 전체가 실패하면 안 되므로 건너뛰고 기록한다.
         """
         try:
-            if writer is not None:
+            if font is not None and rotated:
+                p_page = fitz.Point(x, baseline_y) * derot
+                w = fitz.TextWriter(page.rect)  # mediabox를 주면 자리가 어긋난다(실측)
+                w.append(p_page, text, font=font, fontsize=size)
+                w.write_text(page, render_mode=3, morph=(p_page, glyph_rot))
+            elif writer is not None:
                 writer.append((x, baseline_y), text, font=font, fontsize=size)
             else:
                 page.insert_text(
-                    (x, baseline_y),
+                    fitz.Point(x, baseline_y) * derot if rotated else (x, baseline_y),
                     text,
                     fontname=fontname,
                     fontsize=size,
+                    rotate=page.rotation if rotated else 0,
                     render_mode=3,  # invisible — 원본 이미지를 가리지 않는다
                 )
             return True
@@ -398,6 +414,10 @@ def embed_text_layer(
 
         embedded = skipped = total_lines = positioned = approximated = 0
         detected_lines = 0
+        # 권에 회전이 저장돼 있으면(D-123) 출력 복사본의 /Rotate를 그만큼 올린다 — 다른 뷰어에서도
+        # 연구자가 저장한 방향으로 열리고, 표시 공간이 곧 L2 좌표계(돌린 이미지)가 된다.
+        # 원본 L1은 그대로다(다른 경로에 저장한다).
+        saved_rotation = part_rotation(doc_path, part_id)
 
         for page_num in targets:
             if not 1 <= page_num <= total_pages:
@@ -405,6 +425,8 @@ def embed_text_layer(
                 continue
 
             page = doc[page_num - 1]
+            if saved_rotation:
+                page.set_rotation((page.rotation + saved_rotation) % 360)
             lines = _load_lines(doc_path, part_id, page_num, source_layer)
             if not lines:
                 skipped += 1
@@ -523,7 +545,9 @@ def _ink_check(page, spans: list[dict]) -> float | None:
     hits = 0
     total = 0
     for s in spans[:30]:
-        x0, y0, x1, y1 = s["bbox"]
+        # 추출된 bbox는 돌리기 전 쪽 공간, 렌더는 표시 공간 — /Rotate가 있으면 옮겨야 같은 자리다
+        rect = fitz.Rect(s["bbox"]) * page.rotation_matrix
+        x0, y0, x1, y1 = rect.x0, rect.y0, rect.x1, rect.y1
         a = int(max(0, x0 * sx))
         b = int(max(0, y0 * sy))
         c = int(min(pix.width, x1 * sx))

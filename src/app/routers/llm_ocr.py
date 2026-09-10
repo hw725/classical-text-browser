@@ -372,6 +372,19 @@ def _load_page_image(doc_id: str, page: int, part_id: str | None = None) -> byte
             for m in matches:
                 if m.suffix.lower() in (".jpg", ".jpeg", ".png", ".tiff", ".tif"):
                     raw = m.read_bytes()
+                    from core.document import part_rotation
+
+                    rot = part_rotation(doc_dir, part_id)
+                    if rot:  # 이미지 파일도 권의 회전을 따른다(D-123)
+                        from io import BytesIO
+
+                        from PIL import Image
+
+                        from ocr.image_utils import rotate_page_image
+
+                        buf = BytesIO()
+                        rotate_page_image(Image.open(BytesIO(raw)), rot).save(buf, format="PNG")
+                        raw = buf.getvalue()
                     return resize_for_llm(raw, max_long_side=2000)
 
     # 2. PDF에서 페이지 추출 (pymupdf/fitz 사용)
@@ -392,6 +405,20 @@ def _load_page_image(doc_id: str, page: int, part_id: str | None = None) -> byte
                     # scale=2.0 → 144 DPI (기본 72 DPI × 2)
                     pix = doc[page_idx].get_pixmap(matrix=fitz.Matrix(2.0, 2.0))
                     raw = pix.tobytes("png")
+                    # 권에 회전이 저장돼 있으면(D-123) 모델도 바로 선 쪽을 봐야 한다
+                    from core.document import part_rotation
+
+                    rot = part_rotation(doc_dir, part_id)
+                    if rot:
+                        from io import BytesIO
+
+                        from PIL import Image
+
+                        from ocr.image_utils import rotate_page_image
+
+                        buf = BytesIO()
+                        rotate_page_image(Image.open(BytesIO(raw)), rot).save(buf, format="PNG")
+                        raw = buf.getvalue()
                     return resize_for_llm(raw, max_long_side=2000)
         except Exception:
             return None
@@ -905,9 +932,16 @@ async def api_detect_layout(
 
     image_path = get_page_image_path(str(library_path), doc_id, part_id, page)
     if image_path is not None:
-        pil_image = load_page_image(image_path)
+        from core.document import part_rotation
+        from ocr.image_utils import rotate_page_image
+
+        pil_image = rotate_page_image(
+            load_page_image(image_path),
+            part_rotation(Path(library_path) / "documents" / doc_id, part_id),
+        )
     else:
-        pil_image = load_page_image_from_pdf(str(library_path), doc_id, page)
+        # part_id를 넘긴다 — 다권본에서 첫 권을 읽지 않고, 저장된 회전도 그 권의 것을 쓴다(D-123)
+        pil_image = load_page_image_from_pdf(str(library_path), doc_id, page, part_id=part_id)
 
     if pil_image is None:
         return JSONResponse(

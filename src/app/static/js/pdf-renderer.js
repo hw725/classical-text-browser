@@ -42,7 +42,8 @@ const pdfState = {
   currentDocId: null,  // 현재 로드된 문헌 ID
   currentPartId: null, // 현재 로드된 권 ID
   filterMode: 0,       // 이미지 필터: 0=원본, 1=흑백, 2=고대비, 3=반전
-  rotation: 0,         // 회전 각도: 0, 90, 180, 270
+  rotation: 0,         // 임시 회전(CSS transform): 0, 90, 180, 270 — 저장 전까지 화면의 것
+  savedRotation: 0,    // 권에 저장된 회전(D-123) — PDF.js가 이 각도로 그려 캔버스 좌표가 곧 돌린 이미지 좌표다
   fitMode: "width",    // 자동 맞춤: "width" | "height" | "none"
 };
 
@@ -91,6 +92,17 @@ function _applyFilter() {
    .pdf-canvas-wrapper에 CSS transform을 적용하여 #pdf-canvas와
    #layout-overlay가 함께 회전한다.
 */
+
+/**
+ * 저장 회전을 얹은 PDF.js 뷰포트 (D-123). 입력: PDF.js page, 배율. 출력: viewport.
+ * 목적: 그리기·맞춤·레이아웃·OCR 저장이 **모두** 이것을 쓴다 — 어디 하나라도 맨 getViewport를 쓰면
+ * 그 좌표계만 돌리기 전 것이 되어 어긋난다(Codex 지적). PDF 자체의 /Rotate(page.rotate)에 더한다.
+ */
+// eslint-disable-next-line no-unused-vars
+function pdfViewport(page, scale) {
+  const saved = (typeof pdfState !== "undefined" && pdfState.savedRotation) || 0;
+  return page.getViewport({ scale, rotation: ((page.rotate || 0) + saved) % 360 });
+}
 
 /**
  * 시계 방향 90° 회전.
@@ -142,9 +154,66 @@ function _applyRotation() {
     wrapper.style.margin = "";
   }
 
-  // 회전 각도 라벨 표시
+  // 회전 각도 라벨 표시 — 저장된 것과 임시 것을 따로 보인다
   const label = document.getElementById("pdf-rotation-label");
-  if (label) label.textContent = deg === 0 ? "" : `${deg}°`;
+  const saved = pdfState.savedRotation || 0;
+  if (label) label.textContent = [saved ? `저장 ${saved}°` : "", deg ? `+${deg}°` : ""].filter(Boolean).join(" ");
+  const save = document.getElementById("pdf-rotate-save");
+  if (save) save.hidden = deg === 0;
+}
+
+/**
+ * 임시 회전을 이 권에 저장한다 (D-123). 입력: 없음(pdfState·viewerState). 출력: 없음.
+ *
+ * 순서: 영향 조회(GET) → 결과가 있으면 실제 쪽 수로 묻기 → PUT → 화면은 PDF.js 회전으로 다시 그리고
+ * CSS 임시 회전은 명시적으로 푼다(0이면 _renderPage가 _applyRotation을 부르지 않는다 — Codex 지적).
+ * 요청 중 다른 권으로 갔으면 응답을 버린다.
+ */
+async function _saveRotation() {
+  const docId = pdfState.currentDocId;
+  const partId = pdfState.currentPartId;
+  const temp = pdfState.rotation || 0;
+  if (!docId || !partId || !temp) return;
+  const target = ((pdfState.savedRotation || 0) + temp) % 360;
+  const base = `/api/documents/${encodeURIComponent(docId)}/parts/${encodeURIComponent(partId)}/rotation`;
+  const btn = document.getElementById("pdf-rotate-save");
+  if (btn) btn.disabled = true;
+  try {
+    const eff = await (await fetch(base)).json();
+    const n = eff.effect?.pages || 0;
+    if (n) {
+      const ok = confirm(
+        `이 권을 ${target}° 돌려 저장합니다.\n` +
+          `OCR·레이아웃 결과가 있는 ${n}쪽은 좌표계가 어긋나므로 다시 돌려야 합니다 ` +
+          `(지우지는 않습니다). 계속할까요?`,
+      );
+      if (!ok) return;
+    }
+    const res = await fetch(base, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rotation: target }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+    if (docId !== pdfState.currentDocId || partId !== pdfState.currentPartId) return; // 다른 권으로 갔다
+    // 문헌 정보 캐시에도 적는다 — 다음에 이 권을 열 때 여기서 읽는다
+    const part = viewerState?.documentInfo?.parts?.find((p) => p.part_id === partId);
+    if (part) part.rotation = d.rotation;
+    pdfState.savedRotation = d.rotation;
+    pdfState.rotation = 0;
+    _applyRotation(); // 0이어도 불러 CSS transform·margin을 푼다
+    await _autoFit();
+    await _renderPage(pdfState.currentPage);
+    showToast(
+      `회전 ${d.rotation}°를 이 권에 저장했습니다` + (n ? ` — ${n}쪽은 다시 OCR해야 합니다` : ""),
+      n ? "warning" : "success",
+    );
+  } catch (e) {
+    showToast(`회전 저장 실패: ${e.message}`, "error");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 
@@ -214,6 +283,11 @@ async function loadPdfPage(docId, partId, pageNum) {
     pdfState.currentDocId = docId;
     pdfState.currentPartId = partId;
     pageNum = wantPage; // 받는 동안 다른 쪽을 눌렀으면 그 쪽을 그린다
+    // 권에 저장된 회전(D-123)은 PDF.js가 그린다. 임시 회전은 권을 바꾸면 푼다
+    const part = viewerState?.documentInfo?.parts?.find((p) => p.part_id === partId);
+    pdfState.savedRotation = Number(part?.rotation) || 0;
+    pdfState.rotation = 0;
+    _applyRotation();
 
     // UI 업데이트
     document.getElementById("pdf-page-total").textContent =
@@ -272,7 +346,7 @@ async function _renderPage(pageNum) {
 
   try {
     const page = await pdfState.pdfDoc.getPage(pageNum);
-    const viewport = page.getViewport({ scale: pdfState.scale });
+    const viewport = pdfViewport(page, pdfState.scale); // 저장 회전을 얹어 그린다(D-123)
 
     const canvas = document.getElementById("pdf-canvas");
     const ctx = canvas.getContext("2d");
@@ -373,7 +447,7 @@ function _setZoom(newScale) {
 async function _fitToWidth() {
   if (!pdfState.pdfDoc) return;
   const page = await pdfState.pdfDoc.getPage(pdfState.currentPage || 1);
-  const viewport = page.getViewport({ scale: 1.0 });
+  const viewport = pdfViewport(page, 1.0);
   const container = document.getElementById("pdf-canvas-container");
   // 패딩과 스크롤바 여유분 20px. 90°/270°로 돌려 놓았으면 보이는 너비는 쪽의 «높이»다
   const shown = _rotatedSize(viewport);
@@ -391,7 +465,7 @@ async function _fitToWidth() {
 async function _fitToHeight() {
   if (!pdfState.pdfDoc) return;
   const page = await pdfState.pdfDoc.getPage(pdfState.currentPage || 1);
-  const viewport = page.getViewport({ scale: 1.0 });
+  const viewport = pdfViewport(page, 1.0);
   const container = document.getElementById("pdf-canvas-container");
   // 패딩 여유분 20px. 90°/270°로 돌려 놓았으면 보이는 높이는 쪽의 «너비»다
   const shown = _rotatedSize(viewport);
@@ -619,6 +693,8 @@ function initPdfRenderer() {
   if (rotateCwBtn) rotateCwBtn.addEventListener("click", _rotateCW);
   const rotateCcwBtn = document.getElementById("pdf-rotate-ccw");
   if (rotateCcwBtn) rotateCcwBtn.addEventListener("click", _rotateCCW);
+  const rotateSaveBtn = document.getElementById("pdf-rotate-save");
+  if (rotateSaveBtn) rotateSaveBtn.addEventListener("click", _saveRotation);
 
   // 다권본 권 변경 이벤트
   document.getElementById("pdf-part-select").addEventListener("change", (e) => {

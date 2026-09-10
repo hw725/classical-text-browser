@@ -71,7 +71,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 
 ## 백엔드 모듈 구조 (src/app/)
 server.py는 FastAPI 앱 생성 + 라우터 마운트 + 미들웨어만 담당하는 조립 파일.
-실제 API 엔드포인트 219개가 9개 라우터 모듈에 분산 (2026-09-07 기준 실측):
+실제 API 엔드포인트 221개가 9개 라우터 모듈에 분산 (2026-09-10 기준 실측):
 
 ```
 src/app/
@@ -80,7 +80,7 @@ src/app/
 ├── __main__.py          ← CLI 진입점 (python -m app serve)
 └── routers/
     ├── library.py       ← 서고/설정/백업/휴지통 + 스키마 검증 + 연결 설정·앱 업데이트·엔진 추가 설치·OAuth 프록시·Ollama 로그인·모델 골라 받기 (29 라우트)
-    ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 + 텍스트레이어 진단·가져오기·입히기 + 권 추가 + 경계 규칙 + 찍은 자리·규칙 제안 (43 라우트)
+    ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 + 텍스트레이어 진단·가져오기·입히기 + 권 추가·회전 + 경계 규칙 + 찍은 자리·규칙 제안 (45 라우트)
     ├── composition.py   ← 편성 — 내용 트리·경계 색인·넣기·옮기기·지우기 + 제안·목차·적용·자동 트리·신호 도출·LLM 표지 묻기 + 규칙 미리 보기·말로 규칙 넣기 + 쪼개기·리셋 (16 라우트)
     ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티/관계·태그 (22 라우트)
     ├── llm_ocr.py       ← LLM 상태·분석·초안 + OCR 엔진·실행·권단위 일괄·백업 되돌리기·판독 지침·LLM 교정 패스 (24 라우트)
@@ -149,6 +149,7 @@ src/app/
 | **PDF는 `resolve_part_pdf(doc_path, part_id)`로 연다**. `glob("*.pdf")[0]` 금지 | glob은 순서를 보장하지 않고 part_id도 안 본다. 다권본에서 엉뚱한 권을 읽는다(D-069) |
 | **`fitz.open()`은 `with`로** | 예외 경로에서 핸들이 남으면 Windows가 그 PDF를 잠근다 |
 | **기존 PDF에 덧쓸 때는 `page.wrap_contents()` 먼저** | 원본이 남긴 좌표 변환에 끌려 들어간다(D-068) |
+| **쪽 이미지는 `load_page_image_from_pdf`(또는 `rotate_page_image`)로 — `get_pixmap` 직접 호출 금지** | 권에 저장된 회전(`parts[].rotation`, D-123)을 그 함수가 얹는다. 직접 렌더하면 OCR·화면·내보내기 중 그곳만 돌리기 전 좌표계가 된다. L2·L3의 `rotation` 도장이 지금 회전과 다르면 파이프라인이 거부한다 |
 | **L2 bbox를 쓸 때 배율은 L2의 `image_width`로 구한다**. 2.0 하드코딩 금지 | 스캔 PDF는 내장 이미지 해상도로 렌더하므로 쪽마다 배율이 다르다. 기록이 없는 옛 파일만 뷰포트×2.0(D-087) |
 | **화면에 넣는 파일명·OCR 원문은 이스케이프** | 드롭한 파일명이 문헌 제목이 되어 `innerHTML`로 들어간다(D-069) |
 | **로컬 서비스는 `127.0.0.1`로 부른다**. `localhost` 금지 | Windows는 `localhost`를 IPv6(::1)부터 시도한다. IPv4에만 뜬 서비스(Ollama)면 제한 시간을 다 쓰고서야 IPv4로 넘어가 **호출마다 2초**를 버린다(실측 2.11s vs 0.04s, D-109) |

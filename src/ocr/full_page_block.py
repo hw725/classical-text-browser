@@ -72,6 +72,7 @@ def build_full_page_layout(
     *,
     writing_direction: str = "horizontal_ltr",
     render_scale: float = DEFAULT_RENDER_SCALE,
+    rotation: int = 0,
 ) -> dict:
     """페이지 전면 블록 하나를 가진 L3 레이아웃 dict를 만든다.
 
@@ -92,6 +93,9 @@ def build_full_page_layout(
     터지는 형태였다. bbox는 스키마가 `number`라 실수도 되지만, 같은 좌표계를
     쓰는 값이므로 함께 정수로 맞춘다.
     """
+    # 권에 회전이 저장돼 있으면(D-123) 이미지는 돌린 것이라 90°·270°에서 폭·높이가 바뀐다
+    if int(rotation or 0) % 180 == 90:
+        page_width_pt, page_height_pt = page_height_pt, page_width_pt
     image_width = round(page_width_pt * render_scale)
     image_height = round(page_height_pt * render_scale)
     return {
@@ -170,6 +174,8 @@ def ensure_full_page_block(
     finally:
         doc.close()
 
+    from core.document import part_rotation
+
     layout = build_full_page_layout(
         width_pt,
         height_pt,
@@ -177,6 +183,7 @@ def ensure_full_page_block(
         page_number,
         writing_direction=writing_direction,
         render_scale=render_scale,
+        rotation=part_rotation(doc_path, part_id),
     )
     save_page_layout(doc_path, part_id, page_number, layout)
     logger.info(

@@ -140,6 +140,20 @@ class OcrPipeline:
         layout = self._load_layout(doc_id, part_id, page_number)
         if layout is None:
             return PreparedPage(error=f"L3 레이아웃을 찾을 수 없습니다: page {page_number}")
+        # 회전이 바뀐 뒤의 옛 레이아웃은 크기만 맞춰 늘이면 엉뚱한 데를 자른다(D-123, Codex 지적).
+        # 도장이 없는 옛 파일은 0으로 본다 — 회전을 저장한 적 없는 문헌은 그대로 돈다.
+        from core.document import part_rotation
+
+        current_rotation = part_rotation(Path(self.library_root) / "documents" / doc_id, part_id)
+        layout_rotation = int(layout.get("rotation") or 0)
+        if layout_rotation != current_rotation:
+            return PreparedPage(
+                error=(
+                    f"레이아웃이 다른 회전({layout_rotation}°)에서 만들어졌습니다 "
+                    f"(지금 {current_rotation}°): page {page_number}\n"
+                    "→ 해결: 레이아웃을 다시 잡거나(자동 감지·전면 블록) 지운 뒤 OCR하세요."
+                )
+            )
 
         blocks = layout.get("blocks", [])
         total_blocks = len(blocks)
@@ -155,7 +169,14 @@ class OcrPipeline:
         # 우선 개별 이미지 파일을 탐색하고, 없으면 PDF에서 추출한다.
         image_path = get_page_image_path(self.library_root, doc_id, part_id, page_number)
         if image_path is not None:
-            page_image = load_page_image(image_path)
+            # 이미지 파일도 권의 회전을 따른다(D-123) — PDF 경로는 load_page_image_from_pdf가 돌린다
+            from core.document import part_rotation
+            from ocr.image_utils import rotate_page_image
+
+            page_image = rotate_page_image(
+                load_page_image(image_path),
+                part_rotation(Path(self.library_root) / "documents" / doc_id, part_id),
+            )
         else:
             # PDF에서 페이지 추출 시도
             # part_id를 반드시 넘긴다 — 없으면 다권본에서 첫 권을 읽는다.
@@ -572,15 +593,28 @@ class OcrPipeline:
         # 전제로 기록하지 않았는데, 스캔 해상도에 맞춰 렌더하면서 쪽마다 달라졌다.
         if image_size:
             data["image_width"], data["image_height"] = int(image_size[0]), int(image_size[1])
+        # 어느 회전의 이미지였는지도 적는다(D-123) — 작업이 시작할 때의 값이 아니라 저장 시점의
+        # manifest를 읽지만, 회전 저장은 사람이 화면에서 하는 일이라 OCR 도중에 바뀌는 일은
+        # 드물다. 바뀌었다면 화면이 «다시 OCR»을 요구한다
+        from core.document import part_rotation
+
+        data["rotation"] = part_rotation(Path(self.library_root) / "documents" / doc_id, part_id)
 
         if merge_with_existing and output_path.exists():
             with open(output_path, "r", encoding="utf-8") as f:
                 existing_data = json.load(f)
 
             existing_results = existing_data.get("ocr_results", [])
+            # 회전이 다른 옛 결과는 환산으로 못 맞춘다(90°는 축이 바뀐다) — 섞지 않고 버린다(D-123)
+            if int(existing_data.get("rotation") or 0) != data["rotation"]:
+                logger.info(
+                    f"기존 L2는 다른 회전({existing_data.get('rotation') or 0}°)의 것 — "
+                    f"섞지 않고 새 결과만 남긴다: page {page_number}"
+                )
+                existing_results = []
             # 옛 결과가 다른 크기의 이미지 위에서 만들어졸 수 있다(예: 배율 2.0 시절).
             # 그대로 섞으면 한 파일 안에 두 좌표계가 공존한다. 새 크기로 환산한다.
-            if image_size:
+            if image_size and existing_results:
                 old_size = self._existing_image_size(existing_data, doc_id, part_id, page_number)
                 if old_size and tuple(old_size) != (int(image_size[0]), int(image_size[1])):
                     sx = image_size[0] / old_size[0]

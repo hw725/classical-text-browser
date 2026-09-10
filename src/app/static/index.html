@@ -1210,12 +1210,19 @@
                   id="pdf-rotation-label"
                   class="pdf-toolbar-label"
                 ></span>
+                <!-- 임시 회전을 이 권에 저장(D-123) — 돌린 각도가 있을 때만 보인다 -->
+                <button
+                  id="pdf-rotate-save"
+                  class="pdf-btn"
+                  hidden
+                  title="이 회전을 이 권에 저장합니다. 저장하면 OCR·레이아웃·앵커가 모두 돌린 이미지를 기준으로 하므로, 이미 있는 OCR 결과는 다시 돌려야 합니다"
+                >저장</button>
                 <div class="pdf-toolbar-divider"></div>
                 <!-- 읽기 보조선 -->
                 <button
                   id="pdf-reader-line-btn"
                   class="pdf-btn"
-                  title="읽기 보조선 (R)"
+                  title="읽기 보조선 (R) — 누를 때마다 가로선 → 세로선 → 끔"
                   aria-label="읽기 보조선"
                 >
                   <!-- 읽기 보조선 — 본문 행 위에 강조선이 놓인 모양 (기존 ━ 문자 교체) -->

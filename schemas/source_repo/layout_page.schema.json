@@ -26,6 +26,12 @@
       "description": "원본 이미지 높이 (px).",
       "default": null
     },
+    "rotation": {
+      "type": "integer",
+      "enum": [0, 90, 180, 270],
+      "default": 0,
+      "description": "이 좌표계를 만든 권의 회전(D-123). manifest.parts[].rotation과 다르면 낡은 좌표계다 — 크기만으로는 180°나 정사각형의 90°를 못 가른다."
+    },
     "analysis_method": {
       "type": ["string", "null"],
       "description": "분석 방법. 예: llm, manual, hybrid",

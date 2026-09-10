@@ -137,27 +137,28 @@ function _syncOverlaySize() {
 function _canvasCoords(e) {
   const overlay = document.getElementById("layout-overlay");
   const rect = overlay.getBoundingClientRect();
-  const scaleX = overlay.width / rect.width;
-  const scaleY = overlay.height / rect.height;
-  let x = (e.clientX - rect.left) * scaleX;
-  let y = (e.clientY - rect.top) * scaleY;
-
-  // CSS 회전 보정: getBoundingClientRect()는 회전 후 AABB(축 정렬 바운딩 박스)를
-  // 반환하므로, 90°/180°/270°에서 좌표를 역회전해야 캔버스 내부 좌표가 된다.
-  if (typeof pdfState !== "undefined" && pdfState.rotation) {
-    const deg = pdfState.rotation;
-    const cw = overlay.width;
-    const ch = overlay.height;
-    if (deg === 90) {
-      [x, y] = [y, cw - x];
-    } else if (deg === 180) {
-      [x, y] = [cw - x, ch - y];
-    } else if (deg === 270) {
-      [x, y] = [ch - y, x];
-    }
+  // 임시(CSS) 회전만 되돌린다 — 저장 회전(D-123)은 PDF.js가 그려서 캔버스 좌표가 곧 돌린 이미지 좌표다.
+  // getBoundingClientRect()는 돌린 뒤의 AABB라 90°·270°에서는 표시 폭·높이가 서로 바뀐다. 전에는
+  // AABB 폭·높이로 먼저 배율을 곱한 뒤 축을 바꿔 비정사각형에서 틀렸다(Codex 실측: 200×400의
+  // (50,100)이 (100,50)으로 돌아왔다). 먼저 표시 좌표에서 되돌리고, 그 뒤에 캔버스 배율을 곱한다.
+  const deg = (typeof pdfState !== "undefined" && pdfState.rotation) || 0;
+  const px = e.clientX - rect.left;
+  const py = e.clientY - rect.top;
+  const dw = deg % 180 === 90 ? rect.height : rect.width; // 돌리기 전 표시 폭
+  const dh = deg % 180 === 90 ? rect.width : rect.height;
+  let lx = px;
+  let ly = py;
+  if (deg === 90) {
+    lx = py;
+    ly = dh - px;
+  } else if (deg === 180) {
+    lx = dw - px;
+    ly = dh - py;
+  } else if (deg === 270) {
+    lx = dw - py;
+    ly = px;
   }
-
-  return { x, y };
+  return { x: lx * (overlay.width / dw), y: ly * (overlay.height / dh) };
 }
 
 
@@ -1078,7 +1079,7 @@ async function loadPageLayout(docId, partId, pageNum) {
     if (typeof pdfState !== "undefined" && pdfState.pdfDoc) {
       try {
         const pdfPage = await pdfState.pdfDoc.getPage(pageNum);
-        const vp = pdfPage.getViewport({ scale: 1.0 });
+        const vp = pdfViewport(pdfPage, 1.0); // 저장 회전 포함(D-123)
         vpWidth = Math.round(vp.width);
         vpHeight = Math.round(vp.height);
       } catch (_) { /* 무시 */ }
@@ -1114,7 +1115,7 @@ async function loadPageLayout(docId, partId, pageNum) {
     if (typeof pdfState !== "undefined" && pdfState.pdfDoc) {
       try {
         const pdfPage = await pdfState.pdfDoc.getPage(pageNum);
-        const vp = pdfPage.getViewport({ scale: 1.0 });
+        const vp = pdfViewport(pdfPage, 1.0); // 저장 회전 포함(D-123)
         layoutState.imageWidth = Math.round(vp.width);
         layoutState.imageHeight = Math.round(vp.height);
         layoutState.viewportWidth = layoutState.imageWidth;
@@ -1200,7 +1201,7 @@ async function _saveLayout() {
   if (!imgW && pdfState.pdfDoc) {
     try {
       const page = await pdfState.pdfDoc.getPage(pageNum);
-      const vp = page.getViewport({ scale: 1.0 });
+      const vp = pdfViewport(page, 1.0); // 저장 회전 포함(D-123)
       imgW = Math.round(vp.width);
       imgH = Math.round(vp.height);
     } catch (_) { /* 무시 */ }
@@ -1384,7 +1385,7 @@ async function _getPageImage(pageNum) {
   const pn = pageNum || viewerState.pageNum;
 
   const page = await pdfState.pdfDoc.getPage(pn);
-  const vp = page.getViewport({ scale: 1.0 });
+  const vp = pdfViewport(page, 1.0); // 저장 회전 포함(D-123)
 
   // 오프스크린 캔버스에 scale=1.0으로 렌더링
   const offCanvas = document.createElement("canvas");
@@ -2024,7 +2025,7 @@ async function _runAutoDetectServer(engineId) {
     //   예: 595×842px) 기준으로 좌표를 해석한다.
     //   변환하지 않으면 블록이 원본/PDF 비율만큼 거대하게 그려진다.
     const pdfPage = await pdfState.pdfDoc.getPage(viewerState.pageNum);
-    const vp = pdfPage.getViewport({ scale: 1.0 });
+    const vp = pdfViewport(pdfPage, 1.0); // 저장 회전 포함(D-123)
     const scaleX = vp.width / data.image_width;
     const scaleY = vp.height / data.image_height;
 
@@ -2134,7 +2135,7 @@ async function _runAutoDetectAllServer(engineId) {
         // 좌표 변환: 원본 이미지 → PDF 좌표계 (scale=1.0)
         // _runAutoDetectServer()와 동일한 이유로 변환 필요.
         const pdfPage = await pdfState.pdfDoc.getPage(pageNum);
-        const vp = pdfPage.getViewport({ scale: 1.0 });
+        const vp = pdfViewport(pdfPage, 1.0); // 저장 회전 포함(D-123)
         const sx = vp.width / data.image_width;
         const sy = vp.height / data.image_height;
         const imgW = Math.round(vp.width);

@@ -32,10 +32,12 @@ from core.document import (
     import_hwp_text_to_document,
     list_pages,
     match_hwp_text_to_layout_blocks,
+    part_rotation,
     save_bibliography,
     save_page_corrections,
     save_page_layout,
     save_page_text,
+    set_part_rotation,
     write_json_atomic,
 )
 from core.library import (
@@ -142,6 +144,64 @@ class CorrectionsSaveRequest(BaseModel):
     part_id: str | None = None
     corrected_text: str | None = None  # 자유편집 모드에서 편집된 전문
     corrections: list[CorrectionItem] = []
+
+
+class PartRotationRequest(BaseModel):
+    """권의 회전을 저장하는 요청 (D-123). 시계 방향 0·90·180·270."""
+
+    rotation: int
+
+
+def _rotation_effect(doc_path: Path, part_id: str) -> dict:
+    """회전을 바꾸면 좌표계가 어긋나는 결과가 몇 쪽인가. 출력: {"l2_pages", "l3_pages", "pages"}.
+
+    pages는 L2·L3 쪽의 합집합이다 — 화면은 «다시 OCR해야 할 쪽 N»으로 묻는다(Codex 지적).
+    지우지 않는다.
+    """
+    l2 = {p.name for p in (doc_path / "L2_ocr").glob(f"{part_id}_page_*.json")}
+    l3 = {p.name for p in (doc_path / "L3_layout").glob(f"{part_id}_page_*.json")}
+    return {"l2_pages": len(l2), "l3_pages": len(l3), "pages": len(l2 | l3)}
+
+
+@router.get("/api/documents/{doc_id}/parts/{part_id}/rotation")
+async def api_get_part_rotation(doc_id: str, part_id: str):
+    """권의 저장된 회전과, 바꾸면 다시 만들어야 할 결과의 쪽 수 (D-123).
+
+    출력: {"rotation": 0|90|180|270, "effect": {"l2_pages", "l3_pages", "pages"}}.
+    화면은 저장하기 **전에** 이것으로 확인창의 숫자를 만든다.
+    """
+    if get_library_path() is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+    doc_path = require_repo_path("documents", doc_id)
+    if not doc_path.exists():
+        return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
+    return {
+        "rotation": part_rotation(doc_path, part_id),
+        "effect": _rotation_effect(doc_path, part_id),
+    }
+
+
+@router.put("/api/documents/{doc_id}/parts/{part_id}/rotation")
+async def api_set_part_rotation(doc_id: str, part_id: str, body: PartRotationRequest):
+    """권의 회전을 저장한다 (D-123). 옆으로 스캔된 책을 세우는 것은 화면 설정이 아니라 권의 속성이다.
+
+    저장 뒤로 OCR·레이아웃 감지·썸네일·내보내기가 모두 돌린 이미지를 쓴다. 이미 있는 L2·L3는
+    **지우지 않는다** — 좌표계가 어긋난 것은 파이프라인·낡음 판정이 거부하고, 사람이 다시 돌린다.
+    출력: {"rotation", "effect"}.
+    """
+    if get_library_path() is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+    doc_path = require_repo_path("documents", doc_id)
+    if not doc_path.exists():
+        return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
+    try:
+        part = set_part_rotation(doc_path, part_id, body.rotation)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+    git_commit_document(doc_path, f"chore: 권 회전 {part_id} → {body.rotation}° (D-123)")
+    return {"rotation": part["rotation"], "effect": _rotation_effect(doc_path, part_id)}
 
 
 class BibliographySaveRequest(BaseModel):

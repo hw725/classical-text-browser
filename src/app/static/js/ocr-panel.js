@@ -1013,7 +1013,7 @@ async function _ensureLayoutSaved(docId, partId, pageNum) {
   if (!imgW && typeof pdfState !== "undefined" && pdfState.pdfDoc) {
     try {
       const page = await pdfState.pdfDoc.getPage(pageNum);
-      const vp = page.getViewport({ scale: 1.0 });
+      const vp = pdfViewport(page, 1.0); // 저장 회전 포함(D-123)
       imgW = Math.round(vp.width);
       imgH = Math.round(vp.height);
     } catch (_) {

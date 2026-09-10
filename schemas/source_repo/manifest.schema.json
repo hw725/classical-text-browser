@@ -43,6 +43,12 @@
             "type": "string",
             "description": "L1_source/ 기준 상대 경로. 예: L1_source/蒙求1.pdf"
           },
+          "rotation": {
+            "type": "integer",
+            "enum": [0, 90, 180, 270],
+            "default": 0,
+            "description": "쪽을 바로 세우려면 시계 방향으로 몇 도 돌려야 하는가(D-123). 옆으로 스캔된 책. OCR·화면·좌표가 모두 돌린 이미지를 기준으로 한다."
+          },
           "page_count": {
             "type": ["integer", "null"],
             "description": "이 파일의 페이지 수. 모를 경우 null.",
