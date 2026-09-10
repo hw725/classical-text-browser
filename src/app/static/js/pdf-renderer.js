@@ -260,7 +260,7 @@ async function _suggestRotation() {
     if (dry.error) throw new Error(dry.error);
     if (
       !confirm(
-        `${dry.pages}쪽을 훑어봅니다 — 비전 모델 ${dry.calls}번(글의 종류) + PaddleOCR ${dry.ocr_calls || 0}번(180°·좌우 판정, CPU면 쪽당 20초쯤).\n계속할까요?`,
+        `${dry.pages}쪽을 훑어봅니다 — 비전 모델 ${dry.calls}번(글의 종류) + PaddleOCR ${dry.ocr_calls || 0}번(180°·좌우 판정, 쪽당 30초쯤).\n계속할까요?`,
       )
     )
       return;
