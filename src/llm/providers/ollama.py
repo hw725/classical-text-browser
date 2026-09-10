@@ -501,6 +501,11 @@ class OllamaProvider(BaseLlmProvider):
                 selected_model,
             )
             payload["think"] = True
+            # 사고 예산은 답변 예산에 더한다(D-083). 여기서 더하지 않으면 긴 입력(권 전문 3,900자,
+            # D-125 실측 2026-09-10)에서 사고가 4096을 다 써 response가 비고, 폴백으로 돌아온
+            # thinking(영문 추론)이 «답»이 된다 — 다시 부른 보람이 없다.
+            _t, budget = thinking_options({"think": True})
+            payload["options"] = {**payload["options"], "num_predict": max_tokens + budget}
             data = await self._generate(payload)
         elapsed = time.monotonic() - t0
 

@@ -704,6 +704,12 @@ async def test_json_call_retries_with_thinking_when_model_writes_prose(monkeypat
     r = await p.call("행들", response_format="json", model="glm-5.3:cloud", think=False)
     assert len(posts) == 2 and posts[0]["think"] is False and posts[1]["think"] is True
     assert "談草" in r.text
+    # 다시 부를 때는 사고 예산을 답변 예산에 더한다 — 안 더하면 사고가 상한을 다 써 response가 빈다
+    # (권 전문 3,900자 실측 2026-09-10, D-125)
+    from llm.providers.base import DEFAULT_THINKING_BUDGET
+
+    assert posts[0]["options"]["num_predict"] == 4096
+    assert posts[1]["options"]["num_predict"] == 4096 + DEFAULT_THINKING_BUDGET
 
     # 답이 JSON이면 다시 부르지 않는다
     posts.clear()

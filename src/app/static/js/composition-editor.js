@@ -112,6 +112,8 @@ function _bindCompEvents() {
   }
   const llmRef = document.getElementById("comp-llm-ref-open");
   if (llmRef) llmRef.addEventListener("click", _openReferenceBox);
+  const optStructInit = document.getElementById("comp-llm-opt-structure");
+  if (optStructInit) optStructInit.addEventListener("change", _updateLlmStructureNote);
   const llmScope = document.getElementById("comp-llm-scope");
   if (llmScope) llmScope.addEventListener("change", _updateLlmScopeNote);
   const llmOverlay = document.getElementById("comp-llm-overlay");
@@ -890,11 +892,14 @@ function _openLlmModal() {
   if (optPat) optPat.checked = !!(d && d.stage && d.stage.level === 0); // 못 찾은 책이면 표지 묻기가 기본
   const optWords = document.getElementById("comp-llm-opt-words");
   if (optWords) optWords.checked = false;
+  const optStruct = document.getElementById("comp-llm-opt-structure");
+  if (optStruct) optStruct.checked = false;
   const status = document.getElementById("comp-llm-status");
   if (status) status.textContent = "";
   _updateLlmRefNote();
   overlay.style.display = "";
   _updateLlmScopeNote();
+  _updateLlmStructureNote();
 }
 
 /** 지금 화면의 해제 텍스트. 세 선택지가 다 이것을 보낸다(저장은 「참고·억제」 칸에서 한다). */
@@ -960,6 +965,7 @@ async function _runLlmModal() {
   const wantToc = !!document.getElementById("comp-llm-opt-toc")?.checked;
   const wantWords = !!document.getElementById("comp-llm-opt-words")?.checked;
   const wantPat = !!document.getElementById("comp-llm-opt-patterns")?.checked;
+  const wantStruct = !!document.getElementById("comp-llm-opt-structure")?.checked;
   const status = document.getElementById("comp-llm-status");
   const run = document.getElementById("comp-llm-run");
   const say = (t) => {
@@ -981,7 +987,7 @@ async function _runLlmModal() {
     signalState.touched = true;
   }
   if (mark) mark.hidden = !wantToc;
-  if (!wantToc && !wantWords && !wantPat) {
+  if (!wantToc && !wantWords && !wantPat && !wantStruct) {
     say("고른 것이 없습니다.");
     return;
   }
@@ -1003,10 +1009,16 @@ async function _runLlmModal() {
       await _detectToc(true);
       done.push("목차 구조화");
     }
+    if (wantStruct) {
+      // 권 전문(텍스트)을 보낸다 — 이 선택지만 «조각»이 아니라 전문이다. 크기는 창에 미리 보였다
+      say("권 전문을 보내는 중… (묶음마다 한 번씩 부릅니다)");
+      await _askLlmStructure();
+      done.push("구조");
+    }
     _closeLlmModal();
     const out = document.getElementById("comp-llm-pattern-out");
-    if (out && !wantPat) out.textContent = `LLM: ${done.join(" · ")} — ②에서 확인하고 「후보 보기」`;
-    if (wantToc) await _proposeBoundaries();
+    if (out && !wantPat && !wantStruct) out.textContent = `LLM: ${done.join(" · ")} — ②에서 확인하고 「후보 보기」`;
+    if (wantToc || wantStruct) await _proposeBoundaries();
     else _refreshApplyState();
   } finally {
     if (run) run.disabled = false;
@@ -1063,6 +1075,103 @@ async function _askLlmPatterns() {
   } catch (e) {
     if (out) out.textContent = `실패: ${e.message}`;
   }
+}
+
+/** «구조를 통째로 묻기»가 보낼 크기(행·글자·호출 수)를 미리 보인다 — 실행 게이트는 도구 층에(전역 규칙 11). */
+async function _updateLlmStructureNote() {
+  const note = document.getElementById("comp-llm-opt-structure-note");
+  if (!note || !viewerState.docId || !viewerState.partId) return;
+  note.textContent = "크기를 재는 중…";
+  try {
+    const res = await fetch(`/api/documents/${encodeURIComponent(viewerState.docId)}/segmentation/structure/llm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ part_id: viewerState.partId, dry_run: true }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+    note.textContent = `권 전문 ${d.lines}행 · ${Number(d.chars).toLocaleString()}자 · 호출 ${d.calls}번`;
+  } catch (e) {
+    note.textContent = `크기 못 잼: ${e.message}`;
+  }
+}
+
+/**
+ * «구조를 통째로 묻기» (D-125): 권의 확정본 전문을 행 번호와 함께 보내 «새 글이 시작하는 행»을 받는다.
+ * 모델은 위치를 만들지 않고 고르기만 한다 — 서버가 실제 행에 대조한 것만 온다. 답은 proposeState.llm에
+ * 두고, _proposeBoundaries가 규칙 후보와 합쳐 ③에 세운다. 저장은 「적용」이 한다.
+ */
+async function _askLlmStructure() {
+  const out = document.getElementById("comp-llm-pattern-out");
+  const docId = viewerState.docId, partId = viewerState.partId;
+  const llmSel = typeof getLlmModelSelection === "function" ? getLlmModelSelection("comp-llm-model-select") : {};
+  if (out) out.textContent = "권 전문을 모델에 보내는 중…";
+  try {
+    const res = await fetch(`/api/documents/${encodeURIComponent(docId)}/segmentation/structure/llm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        part_id: partId,
+        force_provider: llmSel.force_provider || null,
+        force_model: llmSel.force_model || null,
+        reference_text: _llmReferenceText(),
+      }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+    if (docId !== viewerState.docId || partId !== viewerState.partId) return; // 그 사이 다른 책으로 갔다
+    const props = d.proposals || [];
+    proposeState.llm = props.length ? { docId, partId, proposals: props, meta: d } : null;
+    if (out) {
+      const sent = `보낸 ${d.sent_lines}행·${Number(d.sent_chars || 0).toLocaleString()}자·${d.calls}번`;
+      const fixed = d.title_fixed ? ` · 제목을 행 글자로 바꾼 것 ${d.title_fixed}` : "";
+      const dropped = d.dropped ? ` · 실제 행이 아니라 버린 것 ${d.dropped}` : "";
+      out.textContent = props.length
+        ? `모델(${d.model || "?"})이 가리킨 ${d.said}자리 중 ${props.length}개가 실제 행과 맞아 ③에 «LLM 구조»로 섰습니다 (${sent}${fixed}${dropped})` +
+          (d.error ? ` — 일부 실패: ${d.error}` : "")
+        : d.error
+          ? `LLM 실패: ${d.error} — 「모델」에서 다른 모델을 골라 다시 물으세요 (실측: 답 대신 영문 추론을 써 내려가는 모델이 있습니다)`
+          : `모델(${d.model || "?"})이 가리킨 ${d.said}자리 중 실제 행과 맞는 것이 없습니다 (${sent})`;
+    }
+  } catch (e) {
+    if (out) out.textContent = `실패: ${e.message}`;
+  }
+}
+
+/** 이 후보를 모델이 «글의 시작»으로 가리켰는가 (D-125). */
+function _isLlmProposal(p) {
+  return (p.reasons || []).includes("llm:structure");
+}
+
+/**
+ * 모델의 답을 규칙 후보와 합친다 (D-125). 입력: propose 응답·문헌·권. 출력: 없음(data를 고친다).
+ * 같은 자리면 그 후보에 근거만 보태고(둘이 가리키면 확신도 0.8), 새 자리면 후보로 더한다.
+ * 사람이 억제한 자리는 모델이 가리켜도 되살리지 않는다 — 억제는 사람의 결정이다.
+ */
+function _mergeLlmProposals(data, docId, partId) {
+  const llm = proposeState.llm;
+  if (!llm || llm.docId !== docId || llm.partId !== partId || !llm.proposals.length) return;
+  const byKey = new Map(data.proposals.map((p) => [_propKey(p), p]));
+  let added = 0, joined = 0;
+  for (const p of llm.proposals) {
+    const k = _propKey(p);
+    const cur = byKey.get(k);
+    if (cur) {
+      if (!cur.reasons.includes("llm:structure")) cur.reasons.push("llm:structure");
+      if (!cur.suppressed) {
+        cur.accepted = true;
+        cur.confidence = Math.max(cur.confidence || 0, 0.8);
+      }
+      joined++;
+    } else {
+      const copy = { ...p, reasons: [...p.reasons] };
+      data.proposals.push(copy);
+      byKey.set(k, copy);
+      added++;
+    }
+  }
+  data.proposals.sort((a, b) => a.page - b.page || a.line_index - b.line_index || (a.char_offset || 0) - (b.char_offset || 0));
+  data.stats.llm = { added, joined };
 }
 
 /** 서버가 센 행 + 사람이 더한 행. 렌더·규칙 조립이 같은 목록을 본다. */
@@ -1394,6 +1503,7 @@ const proposeState = {
   levels: new Map(), // 자리 키 → 사람이 바꾼 깊이
   roles: new Map(), // 자리 키 → 사람이 바꾼 역할
   toc: null, // {pages, entries} — 목차 감지로 확인한 것. null이면 서버가 규칙으로 자동
+  llm: null, // {docId, partId, proposals, meta} — «구조를 통째로 묻기»의 답(D-125). 규칙 후보와 합쳐 ③에 선다
 };
 const flowState = { loading: false }; // ①이 세는 중인가 — 겹쳐 시작하지 않는다
 
@@ -1652,6 +1762,7 @@ async function _startFlow(force) {
     // 다른 문헌·권이면 전 책의 목차 쪽 번호가 이어지면 안 된다
     const tocInput = document.getElementById("comp-toc-pages");
     if (tocInput && (proposeState.docId !== viewerState.docId || proposeState.partId !== viewerState.partId)) tocInput.value = "";
+    if (proposeState.llm && (proposeState.llm.docId !== viewerState.docId || proposeState.llm.partId !== viewerState.partId)) proposeState.llm = null;
     proposeState.tocRaw = null;
     proposeState.data = null;
     proposeState.baseline = null;
@@ -1739,6 +1850,7 @@ async function _proposeBoundaries(asBaseline) {
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     // 그 사이 다시 눌렀거나 다른 문헌·권으로 갔으면 이 응답은 버린다
     if (seq !== proposeState.seq || docId !== viewerState.docId || partId !== viewerState.partId) return;
+    _mergeLlmProposals(data, docId, partId); // 모델이 가리킨 자리(D-125)는 규칙 후보와 같은 목록에 선다
     const same = proposeState.docId === docId && proposeState.partId === partId;
     const prevKeys = same && proposeState.data ? new Set(proposeState.data.proposals.map(_propKey)) : null;
     const hasToc = !!(data.toc && data.toc.matches && data.toc.matches.length);
@@ -1750,7 +1862,7 @@ async function _proposeBoundaries(asBaseline) {
       if (p.suppressed) continue; // 억제한 자리는 체크에서 빠진다 — 남으면 적용은 되고 화면만 꺼진다(Codex 지적)
       if (prevKeys && prevKeys.has(k)) {
         if (proposeState.checked.has(k)) checked.add(k);
-      } else if (p.accepted && (!hasToc || _isTocProposal(p))) checked.add(k);
+      } else if (p.accepted && (!hasToc || _isTocProposal(p) || _isLlmProposal(p))) checked.add(k);
     }
     const keys = new Set(data.proposals.map(_propKey));
     const keep = (map) => new Map([...map].filter(([k]) => keys.has(k)));
@@ -1781,6 +1893,7 @@ const _REASON_LABELS = {
   volume_repeat: ["卷 되풀이(판심)", "neg"], furniture: ["판심·엽수", "neg"],
   date_wrap: ["행 넘긴 날짜", "pos"], after_short: ["행갈음 시작", "pos"],
   indent_shallow: ["얕은 들여쓰기 → 묶음", ""], indent_deep: ["깊은 들여쓰기 → 조각", ""],
+  "llm:structure": ["LLM 구조", "pos"],
 };
 function _reasonChip(r) {
   let label = r, cls = "";
@@ -1820,7 +1933,8 @@ function _updateStats() {
   const stats = document.getElementById("comp-propose-stats");
   if (!data || !stats) return;
   stats.textContent = `${data.stats.lines}행 · 후보 ${data.proposals.length} · 체크 ${proposeState.checked.size}` +
-    (data.stats.suppressed ? ` · 억제 ${data.stats.suppressed}` : "");
+    (data.stats.suppressed ? ` · 억제 ${data.stats.suppressed}` : "") +
+    (data.stats.llm ? ` · LLM ${data.stats.llm.added + data.stats.llm.joined}` : "");
   // 문턱 아래 후보는 기본으로 숨긴다 — 보이는 목록은 «승인 후보»여야 읽힌다
   const rejected = data.proposals.filter((p) => !p.accepted).length;
   if (rejected) {

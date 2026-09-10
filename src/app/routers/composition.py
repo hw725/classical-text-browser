@@ -141,6 +141,20 @@ class SegmentationSignalsLlmRequest(BaseModel):
     dry_run: bool = False  # True면 모델을 부르지 않고 표본 크기만 돌려준다(보내기 전 알림)
 
 
+class SegmentationStructureLlmRequest(BaseModel):
+    """구조를 통째로 묻기 (D-125) — 권 전문(텍스트)을 보내 «글이 시작하는 행»을 받는다.
+
+    저장하지 않는다.
+    """
+
+    part_id: str
+    force_provider: str | None = None
+    force_model: str | None = None
+    reference_text: str | None = None  # 저장 전 해제 — signals/llm과 같은 이유
+    dry_run: bool = False  # True면 모델을 부르지 않고 «몇 행·몇 자·몇 번»만 돌려준다
+    max_chars: int | None = None  # 묶음 크기(글자). None이면 core.structure_llm.DEFAULT_MAX_CHARS
+
+
 class BoundaryUpdateRequest(BaseModel):
     """단위의 경계를 옮기거나 제목·상태를 바꾼다 (D-090).
 
@@ -687,6 +701,57 @@ async def api_segmentation_signals_llm(doc_id: str, body: SegmentationSignalsLlm
         scope=scope,
     )
     return {"signals": rows, "sample_count": meta.get("sample_lines", 0), **meta}
+
+
+@router.post("/api/documents/{doc_id}/segmentation/structure/llm")
+async def api_segmentation_structure_llm(doc_id: str, body: SegmentationStructureLlmRequest):
+    """구조를 통째로 묻기 (D-125): 권의 확정본 전문을 행 번호와 함께 보내 «새 글이 시작하는 행»을
+    받는다.
+
+    모델은 위치를 만들지 않고 고르기만 한다 — 답은 행 번호이고, 코드가 실제 행인지·제목이 그 행의
+    글자인지 확인해 ③의 후보와 같은 모양으로 돌려준다. 확정본(L4)만 본다(제안·적용이 L4만 읽는다,
+    D-088). 저장하지 않는다 — 화면이 ③에 «LLM 구조» 후보로 세우고, 「적용」이 저장한다.
+    출력: {"proposals": [...], "provider", "model", "error", "calls", "sent_lines", "sent_chars",
+           "said", "dropped", "title_fixed", "reasons", "notes"} — dry_run이면 {"dry_run": True,
+           "lines", "chars", "calls"}.
+    """
+    from app._state import _get_llm_router
+    from core.document import get_document_info
+    from core.segmentation import collect_document_lines, normalize_rules
+    from core.structure_llm import DEFAULT_MAX_CHARS, ask_structure_llm, structure_size
+
+    doc_path, err = _doc(doc_id)
+    if err is not None:
+        return err
+    try:
+        rules = normalize_rules(get_document_info(doc_path).get("segmentation_rules"))
+    except FileNotFoundError:
+        rules = normalize_rules(None)
+    lines, _texts = collect_document_lines(doc_path, body.part_id, None)
+    if not lines:
+        return JSONResponse(
+            {"error": "확정본(L4)이 있는 쪽이 없습니다. 「권 전체 OCR」로 확정본을 먼저 채우세요."},
+            status_code=400,
+        )
+    max_chars = DEFAULT_MAX_CHARS
+    if body.max_chars and body.max_chars > 500:
+        max_chars = int(body.max_chars)
+    if body.dry_run:
+        # 실행 게이트(전역 규칙 11)는 도구 층에 — 보내기 전에 «몇 행·몇 자·몇 번»을 화면이 보인다
+        return {"proposals": [], "dry_run": True, **structure_size(lines, max_chars)}
+    proposals, meta = await ask_structure_llm(
+        lines,
+        _get_llm_router(),
+        body.force_provider,
+        body.force_model,
+        reference_text=(
+            body.reference_text if body.reference_text is not None else rules.get("reference_text")
+        )
+        or "",
+        max_chars=max_chars,
+        max_title_chars=int(rules.get("max_title_chars") or 20),
+    )
+    return {"proposals": proposals, **meta}
 
 
 @router.post("/api/documents/{doc_id}/segmentation/toc")
