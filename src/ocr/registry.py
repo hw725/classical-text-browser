@@ -114,6 +114,7 @@ class OcrEngineRegistry:
         등록 순서 (= 드롭다운 표시 순서, 첫 available이 기본 엔진):
           1. NDL古典籍OCR Full (TrOCR) — 최고 품질, torch+GPU 필요
           2. NDL古典籍OCR-Lite — 고전적(古典籍) 전용, 경량 ONNX
+          2-1. みんなで翻刻OCR — くずし字(초서·변체가나) 특화, 경량 ONNX
           3. NDLOCR-Lite — 근현대 인쇄 자료 범용
           4. LLM Vision OCR — LLM 비전 기반 (느릴 수 있음)
           5. PaddleOCR — Python 3.13에서 미지원, 맨 뒤 배치
@@ -157,6 +158,23 @@ class OcrEngineRegistry:
                 )
         except Exception as e:
             logger.warning(f"NDL古典籍OCR-Lite 등록 실패: {e}")
+
+        # ── 2-1. みんなで翻刻OCR (honkoku-ocr-py — くずし字 특화, 오프라인) ──
+        # 행 검출은 NDL古典籍OCR-Lite와 같은 RTMDet, 인식은 kuzushiji v18(ConvNeXt V2+RoBERTa).
+        # 초서·변체가나에 강하다. 설치: uv sync --extra honkoku (모델 289MB는 첫 사용 때 받는다)
+        # 원본: https://github.com/mkpoli/honkoku-ocr-py (MIT) · 상류 honkoku-ocr-web (CC BY 4.0)
+        try:
+            from .honkoku_engine import HonkokuOcrEngine
+
+            engine = HonkokuOcrEngine()
+            self.register(engine)
+            if not engine.is_available():
+                logger.info(
+                    "みんなで翻刻OCR 등록됨 (honkoku-ocr-py 미설치 — 사용 불가). "
+                    "설치: uv sync --extra honkoku"
+                )
+        except Exception as e:
+            logger.warning(f"みんなで翻刻OCR 등록 실패: {e}")
 
         # ── 3. NDLOCR-Lite (근현대 자료 범용) ──
         # DEIM(레이아웃) + 3단계 PARSeq 캐스케이드(문자 인식). ONNX 기반 오프라인.

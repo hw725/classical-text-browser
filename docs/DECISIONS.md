@@ -6165,3 +6165,45 @@ OCR도 돌린 이미지로 한다. 그러면 회전은 «화면 설정»이 아�
   사용자가 확인창의 «다시 OCR»을 따르는 것이 전제다.
 - OCR 도중 회전을 바꾸면 L2 도장은 저장 시점의 manifest 값이다 — 작업 시작 시점 값을 들고 다니지는 않는다.
 - 텍스트 레이어 가져오기(`text-import/from-text-layer`)는 원본 PDF의 좌표를 읽으므로 회전과 무관하다.
+
+---
+
+## D-124: みんなで翻刻OCR(honkoku-ocr-py)을 엔진으로 — くずし字는 인쇄 판본과 다른 모델이 읽는다
+
+**날짜:** 2026-09-10
+**상태:** 확정
+**관련:** D-043(NDL古典籍OCR-Lite), D-086(쪽 전체 검출 → 블록 배정), D-123(회전한 이미지가 좌표계)
+
+### 왜
+
+사용자 요청. NDL 계열은 인쇄·판본에 강하고, 붓으로 흘려 쓴 くずし字·변체가나 필사본은 橋本雄太의
+「みんなで翻刻OCR」(브라우저판, CC BY 4.0, 본문 plain micro CER 0.075 공표)이 낫다. mkpoli의
+[honkoku-ocr-py](https://github.com/mkpoli/honkoku-ocr-py)(MIT, 0.3.0)가 같은 가중치(kuzushiji v18)를
+Python/onnxruntime으로 옮겨 `OCR().process(image)` 한 줄로 행 좌표(원본 이미지 좌표)·읽기 순서·표기를 준다.
+행 검출기가 NDL古典籍OCR-Lite와 같은 RTMDet-s라 두 엔진의 결과를 행 단위로 맞댈 수 있다.
+
+### 결정
+
+1. `src/ocr/honkoku_engine.py` — `engine_id="honkoku"`, 쪽 단위 인식(`recognize_page`: 검출 → XY-Cut →
+   인식 → `match_lines_to_blocks`)과 블록 크롭 인식. 레이아웃 탐지는 제공하지 않는다(행만 찾고 블록 종류를
+   가르지 않는다 — NDL 엔진의 몫). 등록 순서는 NDL古典籍OCR-Lite 다음, NDLOCR-Lite 앞.
+2. **저장하는 글은 원문 글자뿐이다.** 라이브러리의 `plain`은 태그만 벗겨 후리가나 읽기까지 본문에 잇는다
+   (실측 「化物（ばけもの）」→「化物ばけもの」). `body_text(raw)`가 루비는 밑글자만, 返り点·送り仮名는 버리고,
+   割書는 좌우를 잇고, 縦点은 「ー」로 둔다. Koji 기법 전체는 행의 `koji` 칸에 남긴다(스키마의 행은
+   additionalProperties). 글자 신뢰도는 행 검출 신뢰도로 대신한다(모델이 글자 확률을 내지 않는다).
+3. 설치는 `uv sync --extra honkoku`(honkoku-ocr-py, onnxruntime ≥1.21, onnx). 모델 289MB는 첫 사용 때
+   받아 SHA-256을 대조한다. 장치는 `HONKOKU_OCR_DEVICE`, 없으면 onnxruntime에 CUDA 프로바이더가 있을 때만 cuda.
+
+### 잰 것
+
+.venv에서 실제 모델로 1쪽(1163×1661px, 인쇄 일본어 교재 — くずし字가 아니라 품질은 뜻이 없고 배관만 본다):
+모델 받기 28초, 처리 85.6초(encoder fp32 67초·decode 11초), 행 30개, 좌표는 원본 크기 그대로.
+`tests/test_ocr_honkoku.py`가 대역으로 행 → 블록 배정·본문 추출·좌표 변환·등록 순서를 고정한다.
+
+### 한계
+
+- CPU에서는 한 쪽에 1분 넘게 걸린다(fp16 encoder를 CPU가 fp32로 돌린다). GPU가 없는 PC에서는 권 전체보다
+  쪽 단위로 쓰는 것이 맞다.
+- honkoku-ocr-py의 CER은 미공표(브라우저판과 encoder 정밀도·보간이 달라 «행에 따라 다르다»고 적혀 있다).
+  우리 책으로 재지 않았다 — `scripts/eval_cer.py`로 L4 확정본이 있는 권에서 재면 된다.
+- Codex 교차검증은 생략했다 — 워크스페이스 크레딧 소진(2026-09-10).

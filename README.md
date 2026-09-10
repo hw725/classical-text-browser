@@ -128,6 +128,7 @@ ctb ocr "논문.pdf" --execute
 |---|---|---|---|
 | **NDLOCR-Lite** | `uv sync --extra japanese` | 일본어 문헌(근현대) | 약 170MB |
 | **NDL古典籍OCR-Lite** | `uv sync --extra classical` | 고서(古典籍) | 약 170MB |
+| **みんなで翻刻OCR** (honkoku-ocr-py) | `uv sync --extra honkoku` | くずし字(초서·변체가나) 고문서 | 약 290MB (첫 사용 때 받음) |
 | **NDL古典籍OCR Full** (TrOCR) | 별도 GPU 환경 `.venv-gpu` — [사용자 안내서 §7-A.6-2](docs/user-guide.md) | 고서 최고 품질, GPU 권장 | **약 4.5GB** |
 
 > extra 이름을 용도(`japanese`·`classical`)로 지은 것은, 예전에 세 엔진이
@@ -135,7 +136,9 @@ ctb ocr "논문.pdf" --execute
 > **한글을 못 읽는** 고전적 전용 엔진을 설치하는 일이 있었기 때문입니다.
 > 예전 이름도 그대로 동작합니다.
 >
-> **셋 다 한글을 인식하지 못합니다** — 한글 논문에는 쓰지 마세요.
+> **넷 다 한글을 인식하지 못합니다** — 한글 논문에는 쓰지 마세요.
+> みんなで翻刻OCR은 橋本雄太의 브라우저판(CC BY 4.0)을 mkpoli가 Python으로 옮긴
+> [honkoku-ocr-py](https://github.com/mkpoli/honkoku-ocr-py)(MIT)이며, 같은 가중치(kuzushiji v18)를 씁니다.
 > 세 엔진 모두 NDL이 CC BY 4.0으로 공개한 것입니다
 > ([ndlocr-lite](https://github.com/ndl-lab/ndlocr-lite) ·
 > [ndlkotenocr-lite](https://github.com/ndl-lab/ndlkotenocr-lite) ·

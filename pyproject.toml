@@ -157,6 +157,15 @@ ndlkotenocr = ["classical-text-browser[classical]"]
 ndlkotenocr-full = ["classical-text-browser[classical-gpu]"]
 paddleocr = []
 
+# くずし字 고문서 — みんなで翻刻OCR의 Python 이식(honkoku-ocr-py, MIT; 모델 CC BY 4.0). 모델 약 289MB는
+# 첫 사용 때 받는다(HONKOKU_OCR_MODELS로 위치 지정). 행 검출은 NDL古典籍OCR-Lite와 같은 RTMDet이라
+# classical과 onnxruntime을 공유한다. 한글 미지원.
+# 원본: https://github.com/mkpoli/honkoku-ocr-py · 상류: https://github.com/yuta1984/honkoku-ocr-web
+honkoku = [
+    "honkoku-ocr-py>=0.3.0",
+    "onnxruntime>=1.21.0",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",
