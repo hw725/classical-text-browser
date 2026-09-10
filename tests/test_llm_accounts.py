@@ -722,3 +722,33 @@ async def test_json_call_retries_with_thinking_when_model_writes_prose(monkeypat
     monkeypatch.setattr(httpx, "AsyncClient", _ClientOk)
     r = await p.call("행들", response_format="json", model="gemma4:cloud", think=False)
     assert len(posts) == 1 and '"ok"' in r.text
+
+
+@pytest.mark.asyncio
+async def test_list_models_marks_retired_cloud_models(monkeypatch):
+    """/api/tags에 남은 은퇴 클라우드 모델은 레지스트리에 매니페스트가 없다(404) — retired.
+    로컬 모델은 묻지 않고, 네트워크가 없어 모르면(None) 은퇴라고 하지 않는다."""
+    from llm import ollama_catalog
+    from llm.config import LlmConfig
+    from llm.providers.ollama import OllamaProvider
+
+    asked: list[str] = []
+
+    def fake_exists(name, timeout=3.0):
+        asked.append(name)
+        return {"qwen3-vl:235b-cloud": False, "kimi-k3:cloud": True, "glm-5.3:cloud": None}[name]
+
+    monkeypatch.setattr(ollama_catalog, "model_manifest_exists", fake_exists)
+    p = OllamaProvider(LlmConfig())
+    models = [
+        {"name": "qwen3-vl:235b-cloud", "vision": True},
+        {"name": "kimi-k3:cloud", "vision": True},
+        {"name": "glm-5.3:cloud", "vision": False},
+        {"name": "gemma4:e4b", "vision": True},
+    ]
+    await p._mark_retired(models)
+    assert sorted(asked) == ["glm-5.3:cloud", "kimi-k3:cloud", "qwen3-vl:235b-cloud"]
+    assert [m.get("retired") for m in models] == [True, False, False, None]
+    is_cloud = ollama_catalog.is_cloud_model
+    assert is_cloud("qwen3-vl:235b-cloud") and is_cloud("gemma4:cloud")
+    assert not is_cloud("gemma4:e4b") and not is_cloud("glm-ocr:latest")

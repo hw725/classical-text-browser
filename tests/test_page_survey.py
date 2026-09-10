@@ -34,6 +34,21 @@ def test_mixed_page_is_flagged_not_assigned():
 
     assert is_mixed(["kunten", "hangul"]) and not is_mixed(["kunten"])
     assert not is_mixed(["kunten", "blank"])
+    # 한 엔진이 함께 읽는 짝은 섞임이 아니다 — 한글 논문(활자+한글)·훈점본(판본+훈점)
+    from core.page_survey import primary_content
+
+    for pair, rep in (
+        (["modern_print", "hangul"], "hangul"),
+        (["classical_print", "kunten"], "kunten"),
+        (["kunten", "handwriting"], "kunten"),
+    ):
+        assert not is_mixed(pair) and primary_content(pair) == rep
+    assert is_mixed(["modern_print", "handwriting"])
+    assert primary_content(["modern_print", "handwriting"]) is None
+    assert is_mixed(["kunten", "hangul", "classical_print"])
+    # 같은 답 둘은 하나
+    assert primary_content(["classical_print", "classical_print"]) == "classical_print"
+    assert primary_content(["blank"]) == "blank" and primary_content([]) is None
     assert text_contents(["blank", "hangul"]) == ["hangul"]
 
 
@@ -246,3 +261,36 @@ def test_route_dry_run_and_survey_with_fake_vision(client, tmp_path, monkeypatch
     assert got["rotation"] == 0 and got["ranges"] == [{"from": 2, "to": 3, "rotation": 90}]
     body = json.loads(r.text)
     assert body["rotation"] == 0
+
+
+def test_route_streams_progress(client, tmp_path, monkeypatch):  # noqa: F811
+    """stream=True면 SSE — start, 쪽마다 page, 마지막 complete(결과 전체). 진행 막대가 읽는다."""
+    import json as _json
+
+    from app import _state
+    from core import env_doctor
+
+    monkeypatch.setattr(env_doctor, "_GPU_RUNTIME", True)
+    _lib, part_id = _setup(client, tmp_path)
+
+    class FakeVision:
+        async def call_with_image(self, prompt, image, **kwargs):
+            class R:
+                text = '{"orientation": "upright", "contents": ["classical_print"]}'
+                provider, model = "fake", "v-1"
+
+            return R()
+
+    monkeypatch.setattr(_state, "_llm_router", FakeVision())
+    url = f"/api/documents/d1/parts/{part_id}/rotation/suggest"
+    with client.stream("POST", url, json={"stream": True, "pages": [1, 2]}) as r:
+        assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
+        events = [_json.loads(ln[6:]) for ln in r.iter_lines() if ln.startswith("data: ")]
+    assert [e["type"] for e in events] == ["start", "page", "page", "complete"]
+    assert events[0]["total"] == 2
+    assert events[1]["page"] == 1 and events[1]["content"] == "classical_print"
+    assert events[1]["label"]
+    assert events[-1]["checked"] == 2 and events[-1]["model"] == "v-1" and "engines" in events[-1]
+    # stream을 켜지 않으면 전처럼 JSON 하나
+    d = client.post(url, json={"pages": [1, 2]}).json()
+    assert d["checked"] == 2 and "rotation" in d

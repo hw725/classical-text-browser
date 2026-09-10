@@ -999,6 +999,27 @@ class PageSurveyRequest(BaseModel):
     force_provider: str | None = None
     force_model: str | None = None
     dry_run: bool = False  # True면 모델을 부르지 않고 «몇 쪽·호출 몇 번»만
+    stream: bool = False  # True면 SSE로 쪽마다 진행을 보낸다(화면 진행 막대, 2026-09-11)
+
+
+def _survey_progress(progress, row: dict, done: int, total: int, labels: dict) -> None:
+    """훑어보기 스트림의 쪽 이벤트 — 쪽 하나가 끝났다. progress가 None이면 아무것도 안 한다."""
+    if progress is None:
+        return
+    content = row.get("content")
+    progress(
+        {
+            "type": "page",
+            "index": done - 1,
+            "total": total,
+            "page": row.get("page"),
+            "content": content,
+            "label": ("섞임" if row.get("mixed") else labels.get(content or "", content or "?")),
+            "orientation": row.get("orientation"),
+            "engine": row.get("engine"),
+            "mixed": bool(row.get("mixed")),
+        }
+    )
 
 
 @router.post("/api/documents/{doc_id}/parts/{part_id}/rotation/suggest")
@@ -1026,6 +1047,7 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
         orientation_by_ocr_scores,
         orientation_by_projection,
         parse_survey,
+        primary_content,
         recommend_engine,
         sideways_target,
         target_rotation,
@@ -1069,169 +1091,215 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
             "ocr_calls": 2 * len(targets),
         }
 
-    try:
-        _pipeline, registry = _get_ocr_pipeline()
-        available = {e["engine_id"] for e in registry.list_engines() if e.get("available")}
-        names = {
-            e["engine_id"]: e.get("display_name") or e["engine_id"] for e in registry.list_engines()
-        }
-    except Exception:  # noqa: BLE001 — 엔진 목록을 못 읽어도 방향 판정은 된다
-        available, names = set(), {}
-
-    # 방향의 마지막 판정은 OCR 점수 비교(D-126 덧붙임) — 설치된 PaddleOCR(워커 포함)로.
-    # 없으면 추정으로
-    flip_engine = None
-    try:
-        _pipeline2, registry2 = _get_ocr_pipeline()
-        cand = registry2.get_engine("paddleocr")
-        if cand is not None and cand.is_available():
-            flip_engine = cand
-    except Exception:  # noqa: BLE001 — 없으면 투영·추정으로만 간다
-        flip_engine = None
-
-    router_llm = _get_llm_router()
-    kwargs: dict = {
-        "image_mime": "image/jpeg",
-        "system": SURVEY_SYSTEM_PROMPT,
-        "response_format": "json",
-        "purpose": "vision",
-        # 200이면 kimi-k3:cloud가 사고에 다 써 잘린다(실측 2026-09-10) — 답은 짧지만 예산은 넉넉히
-        "max_tokens": 800,
-        "think": False,
-    }
-    if body.force_provider:
-        kwargs["force_provider"] = body.force_provider
-    if body.force_model:
-        kwargs["force_model"] = body.force_model
-    per_page: list[dict] = []
-    errors: list[str] = []
-    provider = model = None
-    unknown = 0
-    loop = asyncio.get_event_loop()
-    for page in targets:
-        current = page_rotation(doc_dir, part_id, page)
-        image = await loop.run_in_executor(None, _load_page_image, doc_id, page, part_id)
-        row = {
-            "page": page,
-            "current": current,
-            "orientation": None,
-            "target": None,
-            "guess": False,  # 누운 쪽의 목표는 추정(90인지 270인지) — 화면이 미리보기로 확인받는다
-            "heuristic": None,
-            "contents": [],
-            "content": None,
-            "engine": None,
-            "mixed": False,
-        }
-        if not image:
-            errors.append(f"{page}쪽 이미지 없음")
-            per_page.append(row)
-            unknown += 1
-            continue
+    async def _run(progress=None):
+        """훑어보기 본체. progress(dict)를 주면 쪽 하나가 끝날 때마다 부른다(스트림용)."""
         try:
-            resp = await router_llm.call_with_image(SURVEY_PROMPT, image, **kwargs)
-        except Exception as e:  # noqa: BLE001 — 한 쪽이 실패해도 나머지는 본다
-            errors.append(f"{page}쪽: {type(e).__name__}: {str(e)[:80]}")
-            per_page.append(row)
-            unknown += 1
-            continue
-        provider = getattr(resp, "provider", None) or provider
-        model = getattr(resp, "model", None) or model
-        orientation, contents = parse_survey(getattr(resp, "text", "") or "")
-        # 방향은 투영(코드)이 먼저 — 모델은 세로쓰기 한문의 방향을 자주 틀린다(D-126 실측). 투영이
-        # 모름일 때만 모델의 답을 쓴다. 누운 쪽의 90/270은 투영으로 못 가리므로 «추정»으로 표시한다.
-        heur, ratio = orientation_by_projection(image, body.writing_direction)
-        row["heuristic"] = {"orientation": heur, "ratio": round(ratio, 2)}
-        # 투영이 «섰다/누웠다»를 가르면 후보는 둘 — 선 쪽은 0°·180°, 누운 쪽은 +90°·+270°.
-        # OCR 점수로 그중 읽히는 쪽을 고른다(180°와 90/270을 이것으로 가린다). OCR이 없거나
-        # 모름이면 추정.
-        candidates = (0, 180) if heur == "upright" else (90, 270) if heur == "sideways" else ()
-        delta = None
-        if candidates and flip_engine is not None:
-            delta, scores = await loop.run_in_executor(
-                None,
-                lambda img=image, c=candidates: orientation_by_ocr_scores(
-                    img, flip_engine.recognize, c, body.writing_direction
-                ),
-            )
-            row["heuristic"]["ocr_scores"] = {str(k): round(v, 1) for k, v in scores.items()}
-        if delta is not None:
-            row["orientation"] = (
-                heur
-                if delta in (0, 90, 270) and heur == "sideways"
-                else ("upright" if delta == 0 else "upside_down" if delta == 180 else "sideways")
-            )
-            row["target"] = (current + delta) % 360
-        elif heur == "upright":
-            row["orientation"], row["target"] = "upright", current
-        elif heur == "sideways":
-            row["orientation"], row["target"], row["guess"] = (
-                "sideways",
-                sideways_target(current),
-                True,
-            )
-        else:
-            row["orientation"] = orientation
-            row["target"] = target_rotation(current, orientation)
-        row["contents"] = contents
-        kinds = text_contents(contents)
-        row["content"] = (
-            kinds[0] if len(kinds) == 1 else ("blank" if contents == ["blank"] else None)
-        )
-        # 한 쪽에 종류가 둘 이상(한글+훈점) — 쪽 단위 엔진으로는 못 푼다. 엔진을 고르지 않고
-        # 따로 알린다
-        row["mixed"] = is_mixed(contents)
-        row["engine"] = None if row["mixed"] else recommend_engine(row["content"], available)
-        if orientation is None and not contents:
-            unknown += 1
-        per_page.append(row)
+            _pipeline, registry = _get_ocr_pipeline()
+            available = {e["engine_id"] for e in registry.list_engines() if e.get("available")}
+            names = {
+                e["engine_id"]: e.get("display_name") or e["engine_id"]
+                for e in registry.list_engines()
+            }
+        except Exception:  # noqa: BLE001 — 엔진 목록을 못 읽어도 방향 판정은 된다
+            available, names = set(), {}
 
-    rotation = group_rotation_ranges(per_page)
-    guessed = {row["page"] for row in per_page if row.get("guess")}
-    for r in rotation:
-        r["current_rotation"] = page_rotation(doc_dir, part_id, r["from"])
-        r["guess"] = any(n in guessed for n in range(r["from"], r["to"] + 1))
-        # 이 구간을 바꾸면 다시 돌려야 할 결과 수 — 도장이 목표와 다른 쪽만
-        cnt = 0
-        for layer in ("L2_ocr", "L3_layout"):
-            for n in range(r["from"], r["to"] + 1):
-                f = doc_dir / layer / f"{part_id}_page_{n:03d}.json"
-                if f.exists():
-                    try:
-                        stamp = int(
-                            (json.loads(f.read_text(encoding="utf-8"))).get("rotation") or 0
-                        )
-                    except (OSError, ValueError):
-                        stamp = -1
-                    if stamp != r["rotation"]:
-                        cnt += 1
-                        break
-        r["effect"] = cnt
-    engines = group_engine_ranges(per_page)
-    for r in engines:
-        r["display_name"] = names.get(r["engine"], r["engine"])
-        r["label"] = CONTENT_LABELS.get(r.get("content") or "", r.get("content") or "")
-    mixed = [
-        {
-            "page": row["page"],
-            "contents": text_contents(row["contents"]),
-            "label": " + ".join(CONTENT_LABELS.get(c, c) for c in text_contents(row["contents"])),
+        # 방향의 마지막 판정은 OCR 점수 비교(D-126 덧붙임) — 설치된 PaddleOCR(워커 포함)로.
+        # 없으면 추정으로
+        flip_engine = None
+        try:
+            _pipeline2, registry2 = _get_ocr_pipeline()
+            cand = registry2.get_engine("paddleocr")
+            if cand is not None and cand.is_available():
+                flip_engine = cand
+        except Exception:  # noqa: BLE001 — 없으면 투영·추정으로만 간다
+            flip_engine = None
+
+        router_llm = _get_llm_router()
+        kwargs: dict = {
+            "image_mime": "image/jpeg",
+            "system": SURVEY_SYSTEM_PROMPT,
+            "response_format": "json",
+            "purpose": "vision",
+            # 200이면 kimi-k3:cloud가 사고에 다 써 잘린다(실측 2026-09-10) — 답은 짧지만
+            # 예산은 넉넉히
+            "max_tokens": 800,
+            "think": False,
         }
-        for row in per_page
-        if row.get("mixed")
-    ]
-    return {
-        "checked": len(targets),
-        "calls": len(targets),
-        "unknown": unknown,
-        "rotation": rotation,
-        "engines": engines,
-        "mixed": mixed,
-        "per_page": per_page,
-        "provider": provider,
-        "model": model,
-        "error": " / ".join(errors)[:600] if errors else None,
-    }
+        if body.force_provider:
+            kwargs["force_provider"] = body.force_provider
+        if body.force_model:
+            kwargs["force_model"] = body.force_model
+        per_page: list[dict] = []
+        errors: list[str] = []
+        provider = model = None
+        unknown = 0
+        loop = asyncio.get_event_loop()
+        for page in targets:
+            current = page_rotation(doc_dir, part_id, page)
+            image = await loop.run_in_executor(None, _load_page_image, doc_id, page, part_id)
+            row = {
+                "page": page,
+                "current": current,
+                "orientation": None,
+                "target": None,
+                # 누운 쪽의 목표는 추정(90인지 270인지) — 화면이 미리보기로 확인받는다
+                "guess": False,
+                "heuristic": None,
+                "contents": [],
+                "content": None,
+                "engine": None,
+                "mixed": False,
+            }
+            if not image:
+                errors.append(f"{page}쪽 이미지 없음")
+                per_page.append(row)
+                _survey_progress(progress, row, len(per_page), len(targets), CONTENT_LABELS)
+                unknown += 1
+                continue
+            try:
+                resp = await router_llm.call_with_image(SURVEY_PROMPT, image, **kwargs)
+            except Exception as e:  # noqa: BLE001 — 한 쪽이 실패해도 나머지는 본다
+                errors.append(f"{page}쪽: {type(e).__name__}: {str(e)[:80]}")
+                per_page.append(row)
+                _survey_progress(progress, row, len(per_page), len(targets), CONTENT_LABELS)
+                unknown += 1
+                continue
+            provider = getattr(resp, "provider", None) or provider
+            model = getattr(resp, "model", None) or model
+            orientation, contents = parse_survey(getattr(resp, "text", "") or "")
+            # 방향은 투영(코드)이 먼저 — 모델은 세로쓰기 한문의 방향을 자주 틀린다(D-126 실측).
+            # 투영이 모름일 때만 모델의 답을 쓴다. 누운 쪽의 90/270은 투영으로 못 가리므로
+            # «추정»으로 표시한다.
+            heur, ratio = orientation_by_projection(image, body.writing_direction)
+            row["heuristic"] = {"orientation": heur, "ratio": round(ratio, 2)}
+            # 투영이 «섰다/누웠다»를 가르면 후보는 둘 — 선 쪽은 0°·180°, 누운 쪽은 +90°·+270°.
+            # OCR 점수로 그중 읽히는 쪽을 고른다(180°와 90/270을 이것으로 가린다). OCR이 없거나
+            # 모름이면 추정.
+            candidates = (0, 180) if heur == "upright" else (90, 270) if heur == "sideways" else ()
+            delta = None
+            if candidates and flip_engine is not None:
+                delta, scores = await loop.run_in_executor(
+                    None,
+                    lambda img=image, c=candidates: orientation_by_ocr_scores(
+                        img, flip_engine.recognize, c, body.writing_direction
+                    ),
+                )
+                row["heuristic"]["ocr_scores"] = {str(k): round(v, 1) for k, v in scores.items()}
+            if delta is not None:
+                row["orientation"] = (
+                    heur
+                    if delta in (0, 90, 270) and heur == "sideways"
+                    else (
+                        "upright" if delta == 0 else "upside_down" if delta == 180 else "sideways"
+                    )
+                )
+                row["target"] = (current + delta) % 360
+            elif heur == "upright":
+                row["orientation"], row["target"] = "upright", current
+            elif heur == "sideways":
+                row["orientation"], row["target"], row["guess"] = (
+                    "sideways",
+                    sideways_target(current),
+                    True,
+                )
+            else:
+                row["orientation"] = orientation
+                row["target"] = target_rotation(current, orientation)
+            row["contents"] = contents
+            # 대표 종류 — 하나면 그것, «활자+한글»·«판본+훈점»처럼 한 엔진이 읽는 짝이면 짝의 대표
+            row["content"] = primary_content(contents)
+            # 한 쪽에 종류가 둘 이상이고 짝도 아니면(한글+훈점) — 쪽 단위 엔진으로는 못 푼다. 엔진을
+            # 고르지 않고 따로 알린다
+            row["mixed"] = is_mixed(contents)
+            row["engine"] = None if row["mixed"] else recommend_engine(row["content"], available)
+            if orientation is None and not contents:
+                unknown += 1
+            per_page.append(row)
+            _survey_progress(progress, row, len(per_page), len(targets), CONTENT_LABELS)
+
+        rotation = group_rotation_ranges(per_page)
+        guessed = {row["page"] for row in per_page if row.get("guess")}
+        for r in rotation:
+            r["current_rotation"] = page_rotation(doc_dir, part_id, r["from"])
+            r["guess"] = any(n in guessed for n in range(r["from"], r["to"] + 1))
+            # 이 구간을 바꾸면 다시 돌려야 할 결과 수 — 도장이 목표와 다른 쪽만
+            cnt = 0
+            for layer in ("L2_ocr", "L3_layout"):
+                for n in range(r["from"], r["to"] + 1):
+                    f = doc_dir / layer / f"{part_id}_page_{n:03d}.json"
+                    if f.exists():
+                        try:
+                            stamp = int(
+                                (json.loads(f.read_text(encoding="utf-8"))).get("rotation") or 0
+                            )
+                        except (OSError, ValueError):
+                            stamp = -1
+                        if stamp != r["rotation"]:
+                            cnt += 1
+                            break
+            r["effect"] = cnt
+        engines = group_engine_ranges(per_page)
+        for r in engines:
+            r["display_name"] = names.get(r["engine"], r["engine"])
+            r["label"] = CONTENT_LABELS.get(r.get("content") or "", r.get("content") or "")
+        mixed = [
+            {
+                "page": row["page"],
+                "contents": text_contents(row["contents"]),
+                "label": " + ".join(
+                    CONTENT_LABELS.get(c, c) for c in text_contents(row["contents"])
+                ),
+            }
+            for row in per_page
+            if row.get("mixed")
+        ]
+        return {
+            "checked": len(targets),
+            "calls": len(targets),
+            "unknown": unknown,
+            "rotation": rotation,
+            "engines": engines,
+            "mixed": mixed,
+            "per_page": per_page,
+            "provider": provider,
+            "model": model,
+            "error": " / ".join(errors)[:600] if errors else None,
+        }
+
+    if not body.stream:
+        return await _run()
+
+    # 진행률(사용자 요청 2026-09-11): 쪽마다 몇 초씩 걸리는 일을 «돌아가는지» 보이지 않고
+    # 기다리게 하면 안 된다. 「권 전체 OCR」과 같은 SSE —
+    # data: {"type": "start"|"page"|"complete"|"error"}.
+    queue: asyncio.Queue = asyncio.Queue()
+
+    async def _worker():
+        try:
+            result = await _run(queue.put_nowait)
+            await queue.put({"type": "complete", **result})
+        except Exception as e:  # noqa: BLE001 — 스트림에서는 예외도 이벤트로 보낸다
+            await queue.put({"type": "error", "error": str(e)[:300]})
+
+    async def _events():
+        task = asyncio.create_task(_worker())
+        head = {"type": "start", "total": len(targets)}
+        yield f"data: {json.dumps(head, ensure_ascii=False)}\n\n"
+        try:
+            while True:
+                data = await queue.get()
+                yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+                if data.get("type") in ("complete", "error"):
+                    break
+        finally:
+            if not task.done():
+                task.cancel()
+
+    return StreamingResponse(
+        _events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/api/ocr/engines")
@@ -2384,7 +2452,6 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
         권 전체 기준으로 다시 만들어진다.
     """
     import asyncio
-    import json as _json
 
     library_path = get_library_path()
     if library_path is None:
@@ -2788,7 +2855,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
         try:
             while True:
                 data = await progress_queue.get()
-                yield f"data: {_json.dumps(data, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
                 if data.get("type") in ("complete", "error"):
                     break
         finally:

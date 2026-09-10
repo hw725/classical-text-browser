@@ -236,6 +236,28 @@ class OllamaProvider(BaseLlmProvider):
         )
         return default
 
+    async def _mark_retired(self, models: list[dict]) -> None:
+        """클라우드 모델에 `retired` 표시를 붙인다(제자리 수정).
+
+        왜: `/api/tags`는 은퇴한 클라우드 모델도 그대로 올려 두어 화면에 «●사용 가능»으로 보였고,
+        고르면 쪽마다 410이 났다(훑어보기 벤치마크 2026-09-11 — qwen3-vl:235b·gemma3:27b).
+        레지스트리에 매니페스트가 없으면(404) 은퇴다. 확인은 동시에 하고 프로세스가 기억한다.
+        오프라인이면 표시하지 않는다(None) — 모르는 것을 은퇴라고 하면 안 된다.
+        """
+        import asyncio as _aio
+
+        from ..ollama_catalog import is_cloud_model, model_manifest_exists
+
+        cloud = [m for m in models if is_cloud_model(m.get("name", ""))]
+        if not cloud:
+            return
+        found = await _aio.gather(
+            *(_aio.to_thread(model_manifest_exists, m["name"]) for m in cloud),
+            return_exceptions=True,
+        )
+        for m, ok in zip(cloud, found):
+            m["retired"] = ok is False
+
     async def _is_model_alive(self, model: str) -> bool:
         """이 모델이 실제로 응답하는지 확인한다.
 
@@ -379,6 +401,7 @@ class OllamaProvider(BaseLlmProvider):
             }
             for m, flag in zip(entries, flags)
         ]
+        await self._mark_retired(models)
         self._models_cache = models
         self._shared_set("models", models)
         return models

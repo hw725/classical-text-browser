@@ -252,6 +252,10 @@ function _surveyPagesInput() {
  * 왜 모달인가: prompt/confirm 사슬에는 모델을 고를 자리가 없어 늘 «자동»으로 갔다(2026-09-10 사용자 지적).
  * 범위를 고칠 때마다 dry_run으로 «몇 쪽·호출 몇 번»을 상태 줄에 보인다 — 보내기 전에 크기를 안다.
  */
+// 훑어보기 기본 모델 — 벤치마크(2026-09-11, 표본 10쪽): 종류 정답 kimi-k3 7/10·gemma4 5/10·minimax-m3 5/10,
+// 쪽당 1.5초로 gemma4(1.3초)와 같다. 앱 전체 기본(gemma4:cloud, D-114)과는 별개다.
+const SURVEY_DEFAULT_MODEL = "ollama:kimi-k3:cloud";
+
 function _openSurveyModal(post) {
   const overlay = document.getElementById("survey-overlay");
   const status = document.getElementById("survey-status");
@@ -284,7 +288,8 @@ function _openSurveyModal(post) {
       }
     };
     const done = (val) => {
-      overlay.style.display = "none";
+      // 실행이면 창을 닫지 않는다 — 진행 막대를 이 창에 보이고 끝나면 _surveySetRunning(false)가 닫는다
+      if (!val) overlay.style.display = "none";
       overlay.removeEventListener("click", onOverlay);
       pagesEl?.removeEventListener("input", refresh);
       resolve(val);
@@ -305,6 +310,12 @@ function _openSurveyModal(post) {
     };
     overlay.addEventListener("click", onOverlay);
     pagesEl?.addEventListener("input", refresh);
+    // 기본 모델은 kimi-k3:cloud. 목록에 없거나 은퇴(disabled)면 «자동». 이 화면에서 한 번 고른 뒤에는 그것을 지킨다
+    const sel = document.getElementById("survey-model-select");
+    if (sel && !sel.dataset.picked) {
+      if ([...sel.options].some((o) => o.value === SURVEY_DEFAULT_MODEL && !o.disabled)) sel.value = SURVEY_DEFAULT_MODEL;
+      sel.addEventListener("change", () => { sel.dataset.picked = "1"; }, { once: true });
+    }
     // 도구 모음의 쪽 범위 칸에 적어 둔 것이 있으면 그대로 가져온다(잘못 적혀 있으면 비운다)
     if (pagesEl) {
       let pre = null;
@@ -321,6 +332,73 @@ function _openSurveyModal(post) {
   });
 }
 
+/** 훑어보기 창을 «도는 중» 상태로 — 입력을 잠그고 진행 막대를 보인다. 끄면 창을 닫는다. */
+function _surveySetRunning(on) {
+  for (const id of ["survey-pages", "survey-model-select", "survey-run"]) {
+    const el = document.getElementById(id);
+    if (el) el.disabled = on;
+  }
+  const prog = document.getElementById("survey-progress");
+  if (prog) prog.hidden = !on;
+  if (!on) {
+    const overlay = document.getElementById("survey-overlay");
+    if (overlay) overlay.style.display = "none";
+  }
+}
+
+function _surveyProgress(done, total, text) {
+  const bar = document.getElementById("survey-progress-bar");
+  const txt = document.getElementById("survey-progress-text");
+  if (bar) {
+    bar.max = total || 1;
+    bar.value = done;
+  }
+  if (txt) txt.textContent = text;
+}
+
+/**
+ * 훑어보기를 SSE로 돌린다 — «권 전체 OCR」과 같은 형식(data: {"type": start|page|complete|error}).
+ * 입력: url, body(stream은 여기서 켠다), onEvent(start·page 이벤트). 출력: complete 이벤트(결과 전체).
+ * 스트림이 완료 없이 끊기면(서버 재시작·네트워크) 실패로 올린다 — 조용히 «다 된 것»처럼 보이면 안 된다.
+ */
+async function _postSurveyStream(url, body, onEvent) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...body, stream: true }),
+  });
+  if (!res.ok || !res.body) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result = null;
+  while (true) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    buffer += decoder.decode(chunk.value, { stream: true });
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() || "";
+    for (const part of parts) {
+      const line = part.split("\n").find((l) => l.startsWith("data: "));
+      if (!line) continue;
+      let evt;
+      try {
+        evt = JSON.parse(line.slice(6));
+      } catch (_) {
+        continue;
+      }
+      if (evt.type === "complete") result = evt;
+      else if (evt.type === "error") throw new Error(evt.error || "훑어보기 실패");
+      else onEvent(evt);
+    }
+  }
+  if (!result) throw new Error("훑어보기가 완료 없이 끊겼습니다 — 서버가 재시작됐거나 연결이 끊겼습니다");
+  return result;
+}
+
 async function _suggestRotation() {
   const docId = pdfState.currentDocId;
   const partId = pdfState.currentPartId;
@@ -334,8 +412,19 @@ async function _suggestRotation() {
     if (!picked) return;
     const { pages, llmSel } = picked;
     const body = { pages, force_provider: llmSel.force_provider || null, force_model: llmSel.force_model || null };
-    showToast(`${pages ? `${pages[0]}~${pages[1]}쪽` : "권 전체"}을 훑어보는 중… (쪽마다 몇 초)`, "info");
-    const d = await (await post({ ...body, dry_run: false })).json();
+    // 창은 열어 둔 채 진행 막대를 보인다 — 쪽마다 몇 초라 «돌아가는지» 보여야 한다(사용자 요청 2026-09-11)
+    _surveySetRunning(true);
+    _surveyProgress(0, 1, "시작하는 중…");
+    let d;
+    try {
+      d = await _postSurveyStream(url, body, (evt) => {
+        if (evt.type === "start") _surveyProgress(0, evt.total, `${evt.total}쪽 — 첫 쪽을 보는 중…`);
+        else if (evt.type === "page")
+          _surveyProgress(evt.index + 1, evt.total, `${evt.index + 1}/${evt.total}쪽 — ${evt.page}쪽 ${evt.label || ""}${evt.engine ? ` → ${evt.engine}` : ""}`);
+      });
+    } finally {
+      _surveySetRunning(false);
+    }
     const rot = d.rotation || [];
     const eng = d.engines || [];
     if (d.error && !rot.length && !eng.length) throw new Error(d.error);

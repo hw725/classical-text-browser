@@ -233,9 +233,36 @@ def text_contents(contents: list[str]) -> list[str]:
     return [c for c in contents if c != "blank"]
 
 
+# 종류가 둘이어도 **한 엔진이 함께 읽는 짝** → 엔진을 고를 때의 대표 종류(D-126 덧붙임 6).
+# 한글 논문은 늘 «활자+한글»이라 둘이면 무조건 섞였다고 하면 매 쪽 «영역별로 읽으세요»가 떴다
+# (벤치마크 2026-09-11) — LLM 비전이 둘을 한 번에 읽는다. 훈점본은 «판본+훈점»이 정상이고
+# みんなで翻刻이 그 둘을 함께 읽는다. 한글+훈점은 여전히 섞임(사용자 지정 2026-09-10).
+COMPATIBLE: tuple[tuple[frozenset[str], str], ...] = (
+    (frozenset({"modern_print", "hangul"}), "hangul"),
+    (frozenset({"classical_print", "kunten"}), "kunten"),
+    (frozenset({"handwriting", "kunten"}), "kunten"),
+)
+
+
+def primary_content(contents: list[str]) -> Optional[str]:
+    """엔진을 고를 대표 종류.
+
+    하나면 그것, 백지만이면 "blank", 짝이 맞으면 짝의 대표, 아니면 None(섞임).
+    """
+    kinds = set(text_contents(contents))
+    if not kinds:
+        return "blank" if "blank" in contents else None
+    if len(kinds) == 1:
+        return next(iter(kinds))
+    for pair, rep in COMPATIBLE:
+        if kinds <= pair:
+            return rep
+    return None
+
+
 def is_mixed(contents: list[str]) -> bool:
-    """한 쪽에 글의 종류가 둘 이상인가 — 쪽 단위 엔진 하나로는 풀 수 없다."""
-    return len(text_contents(contents)) >= 2
+    """글의 종류가 둘 이상이고 한 엔진이 함께 읽는 짝도 아닌가 — 쪽 단위 엔진 하나로는 못 푼다."""
+    return len(set(text_contents(contents))) >= 2 and primary_content(contents) is None
 
 
 def recommend_engine(content: Optional[str], available: set[str]) -> Optional[str]:

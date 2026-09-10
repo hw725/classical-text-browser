@@ -183,6 +183,12 @@ if (Have "ollama") {
     } else {
         Say "  Ollama가 떠 있지 않아 건너뜁니다. 앱을 켠 뒤 설정에서 받을 수 있습니다." "Yellow"
     }
+    # 「훑어보기」(D-126)의 기본 모델은 kimi-k3:cloud — 종류 판정 벤치마크 1위(2026-09-11). 없으면 앱이 «자동»으로 내려간다.
+    if ($models -and -not ($models -match "kimi-k3:cloud")) {
+        Say "[5-1] 훑어보기 기본 모델 등록 (kimi-k3:cloud — 클라우드, 몇 초)…" "White"
+        & ollama pull kimi-k3:cloud
+        if ($LASTEXITCODE -ne 0) { Say "  지금 등록하지 못했습니다. 훑어보기는 다른 비전 모델(자동)로 돕니다." "Yellow" }
+    }
 }
 
 # ── 마무리 ───────────────────────────────────────────────────

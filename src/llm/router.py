@@ -524,12 +524,16 @@ class LlmRouter:
                             cost = "subscription"
                         else:
                             cost = m.get("cost", "paid")
+                        # 은퇴한 클라우드 모델은 «○ (은퇴)»로 보이고 고를 수 없다 — 목록에 있어도
+                        # 부르면 410이다(2026-09-11).
+                        retired = bool(m.get("retired"))
                         models.append(
                             {
                                 "provider": provider.provider_id,
                                 "model": m["name"],
-                                "available": True,
-                                "display": f"{provider.display_name} — {m['name']}",
+                                "available": not retired,
+                                "display": f"{provider.display_name} — {m['name']}"
+                                + (" (은퇴한 모델 — 부르면 410)" if retired else ""),
                                 "cost": cost,
                                 "vision": m.get("vision", False),
                             }

@@ -43,7 +43,7 @@ BUILTIN: list[tuple[str, str, float, str]] = [
     ("gemma4:cloud", "cloud", 0.0, "Google Gemma 4 — 기본. 로그인만 있으면 바로 씁니다"),
     ("qwen3.5:cloud", "cloud", 0.0, "Alibaba Qwen 3.5 397B"),
     ("kimi-k2.6:cloud", "cloud", 0.0, "Moonshot Kimi K2.6"),
-    ("kimi-k3:cloud", "cloud", 0.0, "Moonshot Kimi K3"),
+    ("kimi-k3:cloud", "cloud", 0.0, "Moonshot Kimi K3 — 「훑어보기」 기본(종류 판정 벤치마크 1위)"),
     ("minimax-m3:cloud", "cloud", 0.0, "MiniMax M3"),
     ("glm-5.3-flash:cloud", "cloud", 0.0, "Zhipu GLM 5.3 Flash"),
     ("glm-5.3:cloud", "cloud", 0.0, "Zhipu GLM 5.3 — 텍스트용(비전 아님: 편성·번역·주석에)"),
@@ -81,6 +81,43 @@ def cloud_tag_exists(repo: str, timeout: float = 3.0) -> bool | None:
     except Exception:  # noqa: BLE001 — 오프라인
         ok = None
     _tag_ok[repo] = ok
+    return ok
+
+
+_MANIFEST = "https://registry.ollama.ai/v2/library/{repo}/manifests/{tag}"
+_manifest_ok: dict[str, bool | None] = {}  # "repo:tag" → 매니페스트가 있는가(None = 확인 못 함)
+
+
+def is_cloud_model(name: str) -> bool:
+    """Ollama 클라우드 모델 이름인가 — 태그가 cloud로 끝난다(gemma4:cloud·qwen3-vl:235b-cloud)."""
+    _, _, tag = (name or "").partition(":")
+    return tag == "cloud" or tag.endswith("-cloud")
+
+
+def model_manifest_exists(name: str, timeout: float = 3.0) -> bool | None:
+    """`repo:tag` 매니페스트가 레지스트리에 있는가. **은퇴한 클라우드 모델은 404다.**
+
+    실측 2026-09-11: qwen3-vl:235b-cloud·gemma3:27b-cloud → 404, kimi-k3:cloud·gemma4:cloud·
+    minimax-m3:cloud → 200(각 0.2~0.4초). `/api/tags`는 은퇴한 모델도 그대로 올려 두므로 목록만
+    보면 «●사용 가능»으로 보이고, 고르면 쪽마다 410이 난다(훑어보기 벤치마크). 출력: True/False,
+    네트워크가 없으면 None — None이면 은퇴 표시를 하지 않는다. 프로세스 캐시.
+    """
+    if name in _manifest_ok:
+        return _manifest_ok[name]
+    repo, _, tag = name.partition(":")
+    req = urllib.request.Request(
+        _MANIFEST.format(repo=repo, tag=tag or "latest"),
+        method="HEAD",
+        headers={"User-Agent": "ctb-catalog"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout):
+            ok: bool | None = True
+    except urllib.error.HTTPError as e:
+        ok = False if e.code == 404 else None
+    except Exception:  # noqa: BLE001 — 오프라인
+        ok = None
+    _manifest_ok[name] = ok
     return ok
 
 

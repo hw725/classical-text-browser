@@ -139,6 +139,11 @@ if command -v ollama >/dev/null 2>&1; then
         echo "  없습니다. 등록합니다 (클라우드 모델 — 내려받는 파일 없음, 몇 초)…"
         ollama pull gemma4:cloud || echo "  지금 등록하지 못했습니다. 앱 설정 ▸ LLM 연결 ▸ Ollama의 「모델 받기」에서 고를 수 있습니다."
         echo "  쓰려면 앱 설정 ▸ LLM 연결 ▸ Ollama의 「로그인」. 로그인 없이 쓰려면 같은 자리 「모델 받기」에서 내 PC용 모델을 고르세요."
+    fi
+    # 「훑어보기」(D-126)의 기본 모델은 kimi-k3:cloud — 종류 판정 벤치마크 1위(2026-09-11). 없으면 앱이 «자동»으로 내려간다.
+    if ollama list >/dev/null 2>&1 && ! ollama list 2>/dev/null | grep -q "kimi-k3:cloud"; then
+        echo "[5-1] 훑어보기 기본 모델 등록 (kimi-k3:cloud — 클라우드, 몇 초)…"
+        ollama pull kimi-k3:cloud || echo "  지금 등록하지 못했습니다. 훑어보기는 다른 비전 모델(자동)로 돕니다."
     else
         echo "  Ollama가 떠 있지 않아 건너뜁니다."
     fi
