@@ -954,11 +954,11 @@ async def api_ollama_catalog():
 
     사람이 골라서 받는다 — 로그인하지 않을 PC는 로컬 모델이 필요하고, 그 반대도 있다.
     """
+    # 프로바이더가 실제 쓰는 주소로 본다 — 기본 주소만 보면 다른 포트·원격 서버의 설치 목록과
+    # 어긋난다
+    from app._state import _get_llm_router
     from core.env_settings import detect_ollama
     from llm.ollama_catalog import catalog
-
-    # 프로바이더가 실제 쓰는 주소로 본다 — 기본 주소만 보면 다른 포트·원격 서버의 설치 목록과 어긋난다
-    from app._state import _get_llm_router
 
     try:
         base_url = _get_llm_router()._get_provider("ollama")._url

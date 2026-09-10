@@ -176,7 +176,7 @@ docker compose up -d --build
 |---|---|
 | [**사용자 안내서**](docs/user-guide.md) | 설치부터 산출물까지 **단계별 사용법** |
 | [기능 소개](docs/features.md) | 이 프로그램이 무엇을 할 수 있나 |
-| [릴리스 노트](docs/releases/v1.3.0.md) | 판마다 무엇이 바뀌었나 (v1.3.0 최신) |
+| [릴리스 노트](docs/releases/v1.4.0.md) | 판마다 무엇이 바뀌었나 (v1.4.0 최신) |
 
 ### 고치는 사람
 

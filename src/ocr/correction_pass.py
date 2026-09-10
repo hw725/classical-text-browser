@@ -44,7 +44,7 @@ WEAK_BLOCK_TYPES = ("annotation", "marginal_note")
 # 한글을 인식하지 못하는 엔진 (routers/llm_ocr.py의 HANGUL_INCAPABLE_ENGINES와 같은 목록).
 # 라우터에서 import하면 순환이 되므로 여기 한 번 더 둔다 — 두 곳이 어긋나면
 # tests/test_correction_pass.py가 잡는다.
-HANGUL_INCAPABLE_ENGINES = ("ndlocr", "ndlkotenocr", "ndlkotenocr-full")
+HANGUL_INCAPABLE_ENGINES = ("ndlocr", "ndlkotenocr", "ndlkotenocr-full", "honkoku")
 
 # 1단계 자동 수용 기준: 앵커와의 글자 일치율(exact+variant)이 이 이상이고 [?]가 없으면
 # 사람 검토 없이 받아들인다. 그 아래면 2단계 또는 사람으로 올라간다.

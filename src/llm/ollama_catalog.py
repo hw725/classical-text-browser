@@ -66,7 +66,8 @@ _tag_ok: dict[str, bool | None] = {}  # repo → :cloud 태그가 있는가(None
 
 def cloud_tag_exists(repo: str, timeout: float = 3.0) -> bool | None:
     """레지스트리에 `<repo>:cloud` 매니페스트가 있는가. 검색 페이지에 있어도 태그가 없는 것이 있다
-    (실측 2026-09-06: mistral-large-3 — 404). 출력: True/False, 네트워크가 없으면 None. 프로세스 캐시."""
+    (실측 2026-09-06: mistral-large-3 — 404). 출력: True/False, 네트워크가 없으면 None.
+    프로세스 캐시."""
     if repo in _tag_ok:
         return _tag_ok[repo]
     req = urllib.request.Request(

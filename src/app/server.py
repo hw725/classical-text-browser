@@ -11,11 +11,13 @@ D-001: 이 플랫폼의 주 인터페이스는 GUI이며, CLI는 보조 도구�
     routers/documents.py     — 문헌 CRUD/페이지/교정/서지/파서·권 추가·회전·경계·찍기 (45 라우트)
     routers/annotation.py    — L7 주석·사전형·인용마크 + AI보조 (34 라우트)
     routers/reading.py       — L5 표점·현토 + L6 번역 + 비고 + AI보조 (24 라우트)
-    routers/composition.py   — 편성: 내용 트리·경계·제안·목차·자동 트리·신호 도출·LLM 표지 묻기·규칙 미리 보기·말로 규칙 넣기·쪼개기·리셋 (16 라우트)
+    routers/composition.py   — 편성: 내용 트리·경계·제안·목차·자동 트리·신호 도출·LLM 표지 묻기·
+                               규칙 미리 보기·말로 규칙 넣기·쪼개기·리셋 (16 라우트)
     routers/interpretations.py — 해석 CRUD·레이어·의존·엔티티·관계·태그 (22 라우트)
     routers/llm_ocr.py       — LLM 상태·분석 + OCR 실행·일괄·되돌리기·교정 패스 (24 라우트)
     routers/alignment.py     — 이체자 사전/정렬/일괄교정/문헌별 승인 (20 라우트)
-    routers/library.py       — 서고·설정·백업·휴지통·검증·연결·업데이트·엔진·로그인·모델 후보 (29 라우트)
+    routers/library.py       — 서고·설정·백업·휴지통·검증·연결·업데이트·엔진·로그인·모델 후보
+                               (29 라우트)
     routers/version.py       — Git 그래프/되돌리기/스냅샷/가져오기 (7 라우트)
 
     공유 상태 및 헬퍼는 app/_state.py에 집약.
@@ -58,7 +60,7 @@ from app.routers import (  # noqa: E402,F401
 #
 # 왜 pyproject.toml을 직접 읽는가: **버전을 적는 곳은 하나여야 한다.**
 # 여러 곳에 적으면 릴리스 때 일부만 고쳐져 화면이 옛 버전을 말하게 된다.
-# 설치된 배포판의 메타데이터(dist-info)는 «실행 중인 인터프리터»의 것이라, GPU PC(.venv-gpu로 뜸)에서는
+# 설치된 배포판의 메타데이터(dist-info)는 «실행 중인 인터프리터»의 것이라, GPU PC(.venv-gpu)에서는
 # uv sync가 갱신하는 .venv와 어긋나 화면 아래에 옛 판(1.2.1)이 남았다(2026-09-06 보고).
 # core.updater.current_version()이 pyproject → dist-info 순으로 읽는 정본이다.
 def _app_version() -> str:

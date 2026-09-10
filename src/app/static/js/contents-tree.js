@@ -92,7 +92,7 @@ function _renderContentsTree(container) {
   if (!data || data.total_units === 0) {
     const ph = document.createElement("div");
     ph.className = "placeholder";
-    ph.textContent = "단위(권·기사)가 없습니다. 위의 «경계 넣기»로 첫 경계를 놓거나, 「자동 트리」·편성 인덱스의 「경계 제안」을 쓰세요.";
+    ph.textContent = "단위(권·기사)가 없습니다. 위의 «경계 넣기»로 첫 경계를 놓거나, 「자동 트리」·편성 인덱스(①②③ → 「적용」)를 쓰세요.";
     container.appendChild(ph);
     return;
   }
@@ -1008,7 +1008,7 @@ async function _autoTree() {
   }
   const n = contentsState.data?.total_units || 0;
   // 확정본(L4)만 읽는다는 말을 여기서 한다 — OCR만 돌린 쪽은 규칙이 보지 못한다.
-  const how = "확정본(L4)이 있는 쪽에서 이 책의 규약(목차 → 기호·내려쓰기 → 날짜·어휘)으로 개요를 세웁니다 (규칙만, LLM 안 씀).\n신호 설정이 아직 없으면 전문에서 찾아 문헌 설정에 저장합니다 (편성 인덱스 「경계 제안」에서 고칠 수 있음).";
+  const how = "확정본(L4)이 있는 쪽에서 이 책의 규약(목차 → 시각 신호 → 텍스트 패턴)으로 개요를 세웁니다 (규칙만, LLM 안 씀).\n신호 설정이 아직 없으면 전문에서 찾아 문헌 설정에 저장합니다 (편성 인덱스 ②에서 고칠 수 있음).";
   const msg = n ? `이 권의 단위 ${n}개를 지우고 개요를 다시 세웁니다.\n${how} 계속할까요?` : `${how} 계속할까요?`;
   if (!confirm(msg)) return;
   // 이 단추는 LLM을 부르지 않는다(D-117 ③-B). 배지 없는 단추가 모델을 부르면 «표시 없는 것은
@@ -1033,7 +1033,7 @@ async function _autoTree() {
     if (d.pages_total && d.pages_with_text < d.pages_total) {
       showToast(
         `확정본(L4)이 있는 쪽은 ${d.pages_with_text}/${d.pages_total}쪽입니다. 나머지 쪽은 규칙이 읽지 못했습니다. ` +
-          "교정 인덱스의 「OCR 채우기」로 확정본을 만든 뒤 다시 세우세요.",
+          "교정 인덱스에서 그 쪽들을 열면 확정본이 채워집니다 — 그 뒤 다시 세우세요.",
         "warning",
       );
     }

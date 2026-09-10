@@ -15,7 +15,7 @@
     (태그 포함)은 행의 koji 칸에 남긴다. 좌표는 원본 이미지 좌표(EXIF 보정 뒤)라 그대로 L2 bbox다.
 
 지원 언어: 일본어 고문서(くずし字)·한문. 한글은 인식하지 못한다.
-모델: v18 (~289MB) — 첫 사용 때 자동으로 받고 SHA-256을 대조한다(HONKOKU_OCR_MODELS로 위치 지정).
+모델: v18 (약 290MB) — 첫 사용 때 자동으로 받고 SHA-256을 대조한다(HONKOKU_OCR_MODELS로 위치 지정).
 의존성 (선택 설치): uv sync --extra honkoku → honkoku-ocr-py, onnxruntime, onnx.
 
 원본: https://github.com/mkpoli/honkoku-ocr-py (MIT)

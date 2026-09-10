@@ -43,7 +43,6 @@ function initOcrPanel() {
   const runAllBtn = document.getElementById("ocr-run-all");
   const runSelectedBtn = document.getElementById("ocr-run-selected");
   const deleteOcrBtn = document.getElementById("ocr-delete-page");
-  const fillOcrBtn = document.getElementById("corr-fill-ocr");
 
   if (runAllBtn) {
     runAllBtn.addEventListener("click", () => _runOcr(null));
@@ -59,9 +58,6 @@ function initOcrPanel() {
     deleteOcrBtn.addEventListener("click", _deleteCurrentPageOcr);
     deleteOcrBtn.textContent = "선택 OCR 삭제";
     deleteOcrBtn.title = "선택한 OCR 1건 삭제 (block_id 강제 매칭)";
-  }
-  if (fillOcrBtn) {
-    fillOcrBtn.addEventListener("click", _fillFromOcr);
   }
 
   // LLM 교정 패스 (D-082)
@@ -166,7 +162,7 @@ function _populateEngineSelect() {
   const engineHints = {
     "ndlkotenocr": "쪽 전체에서 행을 찾은 뒤 선택한 블록에 배정. 블록 크기 무관. 고전적 전용.",
     "ndlkotenocr-full": "쪽 전체에서 행을 찾은 뒤 선택한 블록에 배정 (TrOCR 인식). 고전적 전용.",
-    "honkoku": "쪽 전체에서 행을 찾은 뒤 선택한 블록에 배정. くずし字(초서·변체가나) 고문서용. 첫 사용 때 모델 289MB를 받습니다.",
+    "honkoku": "쪽 전체에서 행을 찾은 뒤 선택한 블록에 배정. くずし字(초서·변체가나) 고문서용. 첫 사용 때 모델 약 290MB를 받습니다.",
     "ndlocr": "쪽 전체에서 행을 찾은 뒤 선택한 블록에 배정. 근현대 인쇄물용.",
     "llm_vision": "블록 크기 무관. 좁은 영역도 정확. 네트워크 필요.",
     "paddleocr": "블록 크기 무관. 좁은 영역도 정확. 현대문에 최적.",

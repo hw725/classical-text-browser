@@ -334,6 +334,16 @@ def stale_screenshots(root: Path = ROOT) -> tuple[str | None, list[dict]]:
             )
             continue
         date = _git_date(root, image)
+        # 다시 찍었는데 화면이 그대로라 바이트가 같으면 git 날짜는 옛날 그대로다 — 작업 사본의
+        # 수정 시각이 더 새로우면 그것을 «찍은 날»로 본다(2026-09-10, ug_wizard_3.png 실측)
+        try:
+            import datetime as _dt
+
+            mtime = _dt.date.fromtimestamp((root / image).stat().st_mtime).isoformat()
+            if date is None or mtime > date:
+                date = mtime
+        except OSError:
+            pass
         if date and ui_date and date < ui_date:
             stale.append(
                 {"image": image, "image_date": date, "docs": sorted(docs), "missing": False}

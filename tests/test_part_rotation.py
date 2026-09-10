@@ -184,7 +184,7 @@ class TestExport:
                     "layout_block_id": "b1",
                     "lines": [
                         {"text": "甲乙", "bbox": [370, 10, 390, 50]},
-                        # 표시 공간의 왼쪽 아래 — 쪽 공간에서는 y가 커서 잘림이 있으면 여기서 드러난다
+                        # 표시 공간의 왼쪽 아래 — 쪽 공간에서는 y가 커서 잘림이 여기서 드러난다
                         {"text": "丙丁", "bbox": [10, 150, 30, 190]},
                     ],
                 }
@@ -208,3 +208,18 @@ class TestExport:
             assert low.x0 < 40 and low.y0 > 60, low  # 표시 공간 왼쪽 아래에 그대로
             ratio = _ink_check(page, [{"bbox": words[1][:4]}])
             assert ratio is not None and ratio > 1.5, ratio
+
+
+class TestRotationEffect:
+    def test_effect_counts_only_stamps_that_differ_from_target(self, tmp_path):
+        """입력: 90° 도장 L2 하나, 0° L3 하나. 출력: target 90이면 1쪽, 0이면 1쪽, 없으면 2쪽."""
+        from src.app.routers.documents import _rotation_effect
+
+        doc = tmp_path / "d"
+        (doc / "L2_ocr").mkdir(parents=True)
+        (doc / "L3_layout").mkdir()
+        (doc / "L2_ocr" / "v1_page_001.json").write_text('{"rotation": 90}', encoding="utf-8")
+        (doc / "L3_layout" / "v1_page_002.json").write_text("{}", encoding="utf-8")
+        assert _rotation_effect(doc, "v1")["pages"] == 2
+        assert _rotation_effect(doc, "v1", 90)["pages"] == 1  # L3(0°)만 어긋난다
+        assert _rotation_effect(doc, "v1", 0)["pages"] == 1  # L2(90°)만 어긋난다

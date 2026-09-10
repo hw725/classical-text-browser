@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -22,7 +23,10 @@ logger = logging.getLogger(__name__)
 
 # ── 설정 경로 ──────────────────────────────────
 
-CONFIG_DIR = Path.home() / ".classical-text-browser"
+# CTB_CONFIG_DIR: 검증·시험용 서버가 사용자의 설정(최근 서고 목록 → «마지막 서고 자동 선택»)을
+# 건드리지 않게 다른 폴더를 쓰게 한다. 2026-09-10 실측: 복사본 서고로 띄운 검증 서버가 최근 목록 맨
+# 위에 올라가, 사용자가 아이콘으로 켠 앱이 며칠 동안 임시 복사본을 열고 있었다.
+CONFIG_DIR = Path(os.environ.get("CTB_CONFIG_DIR") or (Path.home() / ".classical-text-browser"))
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 # 최근 서고 목록 최대 개수

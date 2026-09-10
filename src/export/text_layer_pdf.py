@@ -253,7 +253,7 @@ def _embed_page(
     # 회전된 쪽(D-123 저장 회전 또는 원본 /Rotate): 글자는 «표시 공간»에서 계산한 자리에 서야 읽는
     # 방향이 맞고 검색 형광도 그 자리에 뜬다. 그런데 PyMuPDF의 삽입 좌표는 돌리기 전 쪽 공간이다.
     # 그래서 점은 derotation_matrix로 옮기고, 글자는 그 점 둘레로 회전 부분의 역행렬만큼 돌린다
-    # (TextWriter는 morph=(고정점, 행렬)만 받으므로 줄마다 writer 하나). insert_text 경로는 rotate=로
+    # (TextWriter는 morph=(고정점, 행렬)만 받으므로 줄마다 writer 하나). insert_text는 rotate=로
     # 세운다. 부호는 tests/test_part_rotation.py가 실제 PDF에서 잰다(~M이 맞았고 M은 거꾸로 섰다).
     derot = page.derotation_matrix
     rotated = page.rotation % 360 != 0

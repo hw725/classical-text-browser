@@ -190,7 +190,6 @@ async function _loadCompositionData() {
     _renderUnits();
     return;
   }
-  _updatePageIndicator(pageNum);
 
   // 단위는 **원본 저장소**의 것이다(D-097). 이 패널만 해석 저장소에 묻고 있어서, 해석 저장소를
   // 고르지 않으면 조회조차 하지 않았고 목록이 늘 비어 「쪼개기」가 영영 꺼져 있었다
@@ -224,15 +223,6 @@ async function _loadCompositionData() {
   _renderCurrentBoundaries();
   // 편성 흐름은 스스로 시작한다 — 다른 문헌·권으로 바뀌었으면 다시 센다(같으면 아무 일도 없다)
   if (compState.active) _startFlow();
-}
-
-/**
- * 페이지 표시기를 업데이트한다.
- */
-function _updatePageIndicator(pageNum) {
-  const el = document.getElementById("comp-page-indicator");
-  // 범위 입력 옆에 「p.20」만 떠 있으면 그게 시작인지 지금인지 알 수 없다 — 말로 적는다
-  if (el) el.textContent = `지금 ${pageNum}쪽`;
 }
 
 /**
@@ -275,7 +265,7 @@ function _renderUnits() {
   if (compState.units.length === 0) {
     container.innerHTML =
       '<div class="placeholder" style="padding:20px; text-align:center; color:var(--text-muted);">' +
-      '아직 단위가 없습니다. 「경계 제안」에서 신호를 골라 적용하거나, 사이드바 「내용」의 «경계 넣기»로 첫 경계를 놓으세요.</div>';
+      '아직 단위가 없습니다. 위 ①②③으로 후보를 골라 「적용」하거나, 사이드바 「내용」의 «경계 넣기»로 첫 경계를 놓으세요.</div>';
     return;
   }
 
@@ -873,12 +863,12 @@ function _renderVerdict() {
 }
 
 /**
- * 「LLM에 묻기」 창 — 편성 탭에서 모델을 부르는 유일한 자리 (D-117).
+ * 「더 묻기…」 창 — 편성 탭에서 「말로 넣기」와 함께 모델을 부르는 자리 (D-117·D-122).
  *
- * 왜 하나인가: LLM 단추가 셋(구조화 스위치·어휘 뽑기·표지 묻기)이면 «무엇이 모델을 부르는가»가
+ * 왜 창 하나인가: LLM 단추가 셋(구조화 스위치·어휘 뽑기·표지 묻기)이면 «무엇이 모델을 부르는가»가
  * 헷갈린다(사용자 지시 2026-09-07). 창에서 셋 중 고르고 「묻기」 한 번으로 돈다.
- * 목차 항목 구조화는 «설정»이라(문헌 설정 toc_llm) 켜 두면 「후보 보기」·「전부 적용」 때마다 쓰고,
- * 나머지 둘은 누를 때 한 번 돈다.
+ * 목차 항목 구조화는 누를 때 목차를 LLM으로 읽어 이번 후보에 쓰고, 문헌 설정 toc_llm에도 남긴다
+ * (서버 auto 라우트가 읽는 값 — 사이드바 「자동 트리」는 규칙만 쓴다). 나머지 둘도 누를 때 한 번 돈다.
  */
 function _openLlmModal() {
   if (!viewerState.docId || !viewerState.partId) {

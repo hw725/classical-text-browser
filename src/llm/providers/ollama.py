@@ -62,7 +62,8 @@ class OllamaProvider(BaseLlmProvider):
     # 용도별 기본 모델
     # 비전: gemma4:cloud (D-114) — 비전 모델이 없는 PC가 처음 받는 것. 내려받는 파일이 없어
     #   몇 초에 끝나지만 ollama.com 로그인이 있어야 돈다. 로그인하지 않을 PC는 화면의
-    #   「모델 받기」에서 로컬 모델을 고른다(llm/ollama_catalog.py). v1.3.0까지는 gemma4:e4b(9.6GB)였다.
+    #   「모델 받기」에서 로컬 모델을 고른다(llm/ollama_catalog.py). v1.3.0까지는 gemma4:e4b
+    #   (9.6GB)였다.
     # 일반 텍스트: gemma4:e4b (로컬, 멀티모달)
     # JSON 구조화 출력(표점/주석): 소형 로컬 모델은 품질이 떨어지므로
     #   클라우드 프록시 모델을 우선 사용한다.

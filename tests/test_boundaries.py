@@ -41,9 +41,7 @@ class TestPositions:
     def test_rematch_anchor_across_line_break(self):
         """입력: 행을 넘는 앵커. 출력: 이동한 자리. 목적: 개행 재배치 보존."""
         old = {1: "甲乙\n丙丁戊己庚辛"}
-        item = B.new_boundary(
-            {"page": 1, "line": 0, "offset": 0}, page_texts=old, l4_commit="old"
-        )
+        item = B.new_boundary({"page": 1, "line": 0, "offset": 0}, page_texts=old, l4_commit="old")
         data = _data(item)
         B.rematch(data, {1: "序\n甲\n乙丙丁戊己庚辛"}, "new")
         assert item["start"] == {"page": 1, "line": 1, "offset": 0}
@@ -595,9 +593,7 @@ class TestWorkIsGone:
             stale = {f"{name}_id", f"scope_{name}"}
             for schema_path in sorted(core_dir.glob("*.json")):
                 found: set[str] = set()
-                self._walk_schema(
-                    _json.loads(schema_path.read_text(encoding="utf-8")), found
-                )
+                self._walk_schema(_json.loads(schema_path.read_text(encoding="utf-8")), found)
                 left = stale & found
                 assert not left, (
                     f"{schema_path.name}이 없앤 엔티티 '{name}'을 아직 가리킨다: {sorted(left)}"
@@ -644,7 +640,9 @@ class TestWorkIsGone:
         units = E.list_entities(interp, "unit")
         assert len(units) == 3
 
-        schema_path = Path(__file__).resolve().parent.parent / "schemas" / "core" / "unit.schema.json"
+        schema_path = (
+            Path(__file__).resolve().parent.parent / "schemas" / "core" / "unit.schema.json"
+        )
         validator = jsonschema.Draft202012Validator(
             _json.loads(schema_path.read_text(encoding="utf-8")),
             format_checker=jsonschema.Draft202012Validator.FORMAT_CHECKER,

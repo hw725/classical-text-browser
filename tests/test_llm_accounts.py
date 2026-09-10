@@ -451,7 +451,7 @@ def test_ollama_url_uses_ipv6_override_even_if_default_is_written(monkeypatch):
 
 
 def test_default_vision_model_is_cloud():
-    """기본 비전 모델은 내려받는 파일이 없는 클라우드 모델이다 — 처음 켠 PC가 9.6GB를 받지 않는다."""
+    """기본 비전 모델은 내려받는 파일이 없는 클라우드 모델이다 — 처음 켠 PC가 9.6GB를 안 받는다."""
     from llm.ollama_catalog import DEFAULT_VISION_MODEL
     from llm.providers.ollama import OllamaProvider
 
@@ -494,7 +494,8 @@ def test_catalog_marks_installed_and_puts_default_first(monkeypatch):
     monkeypatch.setattr(
         oc, "fetch_cloud_vision_names", lambda *a, **k: ["gemma4", "qwen3.5", "brand-new", "no-tag"]
     )
-    # 레지스트리 확인도 가짜로 — «no-tag»는 검색 페이지에 있지만 :cloud 태그가 없는 경우(mistral-large-3 실측)
+    # 레지스트리 확인도 가짜로 — «no-tag»는 검색 페이지에 있지만 :cloud 태그가 없는 경우
+    # (mistral-large-3 실측)
     monkeypatch.setattr(oc, "cloud_tag_exists", lambda repo, timeout=3.0: repo != "no-tag")
     out = oc.catalog({"gemma4:e4b", "glm-ocr:latest", "kimi-k3:cloud"})
     assert "no-tag:cloud" not in {m["name"] for m in out["models"]}, (
@@ -592,7 +593,7 @@ def test_pull_log_strips_terminal_control_sequences():
 
 
 def test_dead_vision_model_is_not_ready():
-    """고른 모델이 응답하지 않았으면(은퇴·로그인 실패) 깔려 있고 로그인돼 있어도 «연결됨»이 아니다."""
+    """고른 모델이 응답하지 않았으면(은퇴·로그인 실패) 깔려 있고 로그인돼 있어도 «연결됨» 아님."""
     e = _entry(
         provider_id="ollama",
         display_name="Ollama",
@@ -627,7 +628,8 @@ async def test_all_dead_leaves_a_mark_for_the_card(monkeypatch):
 
 
 def test_app_version_comes_from_pyproject_not_dist_info(monkeypatch):
-    """화면 아래 버전은 pyproject.toml이 정본이다 — 실행 환경(.venv-gpu)의 dist-info가 낡아도 옛 판이 보이면 안 된다.
+    """화면 아래 버전은 pyproject.toml이 정본이다 — 실행 환경(.venv-gpu)의 dist-info가 낡아도
+    옛 판이 보이면 안 된다.
 
     2026-09-06 보고: .venv-gpu의 편집 가능 설치 메타데이터가 1.2.1에 멈춰 화면에 v1.2.1이 남았다.
     """
@@ -692,7 +694,10 @@ async def test_json_call_retries_with_thinking_when_model_writes_prose(monkeypat
             if json.get("think") is False:
                 body = '{"response": "The user wants me to find the title word...", "done": true}'
             else:
-                body = '{"response": "{\\"title_words\\": [\\"談草\\"]}", "thinking": "…", "done": true}'
+                body = (
+                    '{"response": "{\\"title_words\\": [\\"談草\\"]}", '
+                    '"thinking": "…", "done": true}'
+                )
             return _Resp(200, body)
 
     monkeypatch.setattr(httpx, "AsyncClient", _Client)

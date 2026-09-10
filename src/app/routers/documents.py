@@ -152,19 +152,35 @@ class PartRotationRequest(BaseModel):
     rotation: int
 
 
-def _rotation_effect(doc_path: Path, part_id: str) -> dict:
-    """회전을 바꾸면 좌표계가 어긋나는 결과가 몇 쪽인가. 출력: {"l2_pages", "l3_pages", "pages"}.
+def _rotation_effect(doc_path: Path, part_id: str, target: int | None = None) -> dict:
+    """회전을 target으로 바꾸면 좌표계가 어긋나는 결과가 몇 쪽인가.
 
-    pages는 L2·L3 쪽의 합집합이다 — 화면은 «다시 OCR해야 할 쪽 N»으로 묻는다(Codex 지적).
+    출력: {"l2_pages", "l3_pages", "pages"} — pages는 L2·L3 쪽의 합집합. 화면은 «다시 OCR해야 할
+    쪽 N»으로 묻는다(Codex 지적). target을 주면 **도장이 그 값과 다른 쪽만** 센다 — 90°로 저장했다가
+    되돌리는 경우, 이미 90°에서 만든 결과는 어긋나지 않는데 전부 세면 과하게 경고한다(감사 지적).
     지우지 않는다.
     """
-    l2 = {p.name for p in (doc_path / "L2_ocr").glob(f"{part_id}_page_*.json")}
-    l3 = {p.name for p in (doc_path / "L3_layout").glob(f"{part_id}_page_*.json")}
+
+    def _mismatch(path: Path) -> bool:
+        if target is None:
+            return True
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return True
+        return int(data.get("rotation") or 0) != int(target)
+
+    l2 = {p.name for p in (doc_path / "L2_ocr").glob(f"{part_id}_page_*.json") if _mismatch(p)}
+    l3 = {p.name for p in (doc_path / "L3_layout").glob(f"{part_id}_page_*.json") if _mismatch(p)}
     return {"l2_pages": len(l2), "l3_pages": len(l3), "pages": len(l2 | l3)}
 
 
 @router.get("/api/documents/{doc_id}/parts/{part_id}/rotation")
-async def api_get_part_rotation(doc_id: str, part_id: str):
+async def api_get_part_rotation(
+    doc_id: str,
+    part_id: str,
+    target: int | None = Query(None, description="바꾸려는 회전 — 주면 그 값과 다른 결과만 센다"),
+):
     """권의 저장된 회전과, 바꾸면 다시 만들어야 할 결과의 쪽 수 (D-123).
 
     출력: {"rotation": 0|90|180|270, "effect": {"l2_pages", "l3_pages", "pages"}}.
@@ -177,13 +193,13 @@ async def api_get_part_rotation(doc_id: str, part_id: str):
         return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
     return {
         "rotation": part_rotation(doc_path, part_id),
-        "effect": _rotation_effect(doc_path, part_id),
+        "effect": _rotation_effect(doc_path, part_id, target),
     }
 
 
 @router.put("/api/documents/{doc_id}/parts/{part_id}/rotation")
 async def api_set_part_rotation(doc_id: str, part_id: str, body: PartRotationRequest):
-    """권의 회전을 저장한다 (D-123). 옆으로 스캔된 책을 세우는 것은 화면 설정이 아니라 권의 속성이다.
+    """권의 회전을 저장한다 (D-123). 옆으로 스캔된 책을 세우는 것은 화면이 아니라 권의 속성이다.
 
     저장 뒤로 OCR·레이아웃 감지·썸네일·내보내기가 모두 돌린 이미지를 쓴다. 이미 있는 L2·L3는
     **지우지 않는다** — 좌표계가 어긋난 것은 파이프라인·낡음 판정이 거부하고, 사람이 다시 돌린다.

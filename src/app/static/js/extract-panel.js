@@ -161,7 +161,7 @@ async function _loadExtractEngines() {
   try {
     const res = await fetch("/api/ocr/engines");
     const data = await res.json();
-    const HANGUL_INCAPABLE = ["ndlocr", "ndlkotenocr", "ndlkotenocr-full"];
+    const HANGUL_INCAPABLE = ["ndlocr", "ndlkotenocr", "ndlkotenocr-full", "honkoku"];
 
     select.innerHTML = "";
     let preferred = null;

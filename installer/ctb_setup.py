@@ -34,7 +34,7 @@ from pathlib import Path
 REPO = "hw725/classical-text-browser"
 # 설치 파일이 받는 판. 릴리스 태그의 소스 zip — main.zip이면 «릴리스 안 된 커밋»도 받게 된다.
 ZIP_URL = os.environ.get("CTB_SETUP_ZIP") or (
-    f"https://github.com/{REPO}/archive/refs/tags/v1.3.0.zip"
+    f"https://github.com/{REPO}/archive/refs/tags/v1.4.0.zip"
 )
 DEFAULT_DIR = Path.home() / "ClassicalTextBrowser"
 SHORTCUT_NAME = "고전서지 브라우저.lnk"
@@ -234,7 +234,7 @@ def gui() -> int:
     ttk.Label(frm, text="글자 인식 엔진").pack(anchor="w", pady=(10, 2))
     pick_var = tk.StringVar(value="1")
     for v, t in (
-        ("1", "본체만 — 한글 논문·글자가 든 PDF는 이것으로 다 됩니다 (약 830MB)"),
+        ("1", "본체만 — 한글 논문·글자가 든 PDF는 이것으로 다 됩니다 (약 828MB)"),
         ("2", "+ 고서 엔진 — 한문 고서 스캔 (+170MB)"),
         ("3", "+ 고서·일본어 엔진 — 근현대 일본어 자료까지 (+340MB)"),
         ("4", "+ くずし字 엔진도 — 흘려 쓴 고문서(みんなで翻刻OCR)까지 (+360MB, 모델 290MB 별도)"),

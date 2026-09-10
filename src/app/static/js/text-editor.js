@@ -63,6 +63,34 @@ async function loadPageText(docId, partId, pageNum) {
       return;
     }
 
+    // 확정본이 없거나 비어 있으면 OCR 결과(L2)로 채운다 — 사람이 누를 단추였던 「OCR 채우기」를
+    // 흐름 안으로 넣었다(사용자 요청 2026-09-10). 덮어쓰지 않는다: 글이 있는 확정본은 그대로 둔다.
+    // 글을 다 지우고 저장하면 다음에 열 때 다시 채워진다 — 그것이 «OCR로 되돌리기»다.
+    if ((!data.exists || !String(data.text || "").trim()) && !editorState.autoFilling) {
+      editorState.autoFilling = true;
+      try {
+        const fill = await fetch(
+          `/api/documents/${encodeURIComponent(docId)}/parts/${encodeURIComponent(partId)}/ocr/fill-text?pages=${pageNum}`,
+          { method: "POST" },
+        );
+        const r = fill.ok ? await fill.json() : null;
+        if (r && r.filled > 0) {
+          if (viewerState.docId !== docId || viewerState.partId !== partId || viewerState.pageNum !== pageNum) return;
+          const again = await fetch(url);
+          if (again.ok) {
+            const d2 = await again.json();
+            data.text = d2.text;
+            data.exists = d2.exists;
+            showToast("OCR 결과로 확정본을 채웠습니다.", "info");
+          }
+        }
+      } catch (e) {
+        console.warn("OCR 자동 채우기 실패", e);
+      } finally {
+        editorState.autoFilling = false;
+      }
+    }
+
     const textarea = document.getElementById("text-content");
     textarea.value = data.text;
     editorState.originalText = data.text;

@@ -305,7 +305,7 @@ def _resolve_page_count(doc_path, part: dict) -> int:
 # 학습 데이터에 한글이 없어 한글을 인식하지 못하는 엔진들.
 # 근거는 각 엔진 파일의 docstring이다 (ndlocr_engine.py, ndlkotenocr_engine.py,
 # ndlkotenocr_full_engine.py). 추측이 아니라 문서화된 제약이다.
-HANGUL_INCAPABLE_ENGINES = ("ndlocr", "ndlkotenocr", "ndlkotenocr-full")
+HANGUL_INCAPABLE_ENGINES = ("ndlocr", "ndlkotenocr", "ndlkotenocr-full", "honkoku")
 
 
 def _add_llm_reasoning_kwargs(engine_kwargs: dict, body) -> dict:
@@ -527,7 +527,7 @@ async def api_llm_accounts():
                         for m in await asyncio.wait_for(provider.list_models(), timeout=2.0)
                     }
                     entry["active_model_installed"] = model in installed
-                    # 고르기가 «전부 응답 없음»으로 끝나 기본 이름만 돌려준 경우 — 깔려 있어도 못 쓴다
+                    # 고르기가 «전부 응답 없음»으로 끝나 기본 이름만 돌려준 경우 — 깔려 있어도 못 씀
                     dead = (
                         provider._shared_get("vision_dead")
                         if hasattr(provider, "_shared_get")
@@ -649,8 +649,9 @@ def _account_status(entry: dict) -> tuple[str, str]:
     if model and entry.get("active_model_dead"):
         return (
             "no_model",
-            f"{name}: 비전 모델 {model}이(가) **응답하지 않습니다** — 은퇴했거나 로그인이 필요합니다. "
-            "「로그인」을 확인하거나 「모델 받기」에서 다른 모델을 고르세요. 그때까지 이미지 작업은 "
+            f"{name}: 비전 모델 {model}이(가) **응답하지 않습니다** — 은퇴했거나 로그인이 "
+            "필요합니다. 「로그인」을 확인하거나 「모델 받기」에서 다른 모델을 고르세요. "
+            "그때까지 이미지 작업은 "
             "다음 프로바이더로 넘어갑니다.",
         )
     if model and entry.get("active_model_installed") is False:
@@ -684,7 +685,8 @@ def _account_status(entry: dict) -> tuple[str, str]:
             f"{name}: 서버는 떠 있지만 **로그인돼 있지 않습니다.** "
             "로컬 비전 모델이 없어 클라우드 모델을 골랐는데 로그인 없이는 실패하고, "
             "그러면 다음 프로바이더(유료 API)로 넘어갑니다. "
-            "「로그인」을 누르거나, 로그인하지 않을 PC는 「모델 받기」에서 내 PC용(로컬) 모델을 골라 받으세요.",
+            "「로그인」을 누르거나, 로그인하지 않을 PC는 「모델 받기」에서 내 PC용(로컬) 모델을 "
+            "골라 받으세요.",
         )
 
     if entry["account"]:

@@ -179,7 +179,7 @@ async function _saveRotation() {
   const btn = document.getElementById("pdf-rotate-save");
   if (btn) btn.disabled = true;
   try {
-    const eff = await (await fetch(base)).json();
+    const eff = await (await fetch(`${base}?target=${target}`)).json(); // 목표와 다른 도장만 센다
     const n = eff.effect?.pages || 0;
     if (n) {
       const ok = confirm(
