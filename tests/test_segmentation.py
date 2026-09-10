@@ -1388,6 +1388,35 @@ def _doc_with_two_lines(tmp_path, direction="vertical_rtl"):
     return doc, l0, l1
 
 
+def test_collect_document_lines_skips_pages_without_l4_file(tmp_path, monkeypatch):
+    """확정본 파일이 없는 쪽은 열지 않는다 — 결과는 같고 시간만 준다.
+
+    왜 시험하는가: 196쪽 권에 확정본이 20쪽뿐인데 196쪽을 다 돌며 쪽마다 manifest를 네 번 읽어
+    한 번에 3~6초, 편성 탭이 이것을 여섯 번 되풀이해 «세는 중»이 36초였다(2026-09-10 실측).
+    파일이 없으면 get_page_text가 빈 글을 돌려주어 어차피 버려지므로, 미리 건너뛰어도 행은 같다.
+    """
+    import json
+
+    from core import document as document_mod
+    from core.segmentation import collect_document_lines
+
+    doc, l0, l1 = _doc_with_two_lines(tmp_path)
+    manifest = json.loads((doc / "manifest.json").read_text(encoding="utf-8"))
+    manifest["parts"][0]["page_count"] = 300
+    (doc / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    calls = []
+    real = document_mod.get_corrected_text
+
+    def counting(doc_path, part_id, page):
+        calls.append(page)
+        return real(doc_path, part_id, page)
+
+    monkeypatch.setattr(document_mod, "get_corrected_text", counting)
+    lines, texts = collect_document_lines(doc, "v1")
+    assert calls == [1], f"확정본이 있는 1쪽만 열어야 하는데 {len(calls)}쪽을 열었다"
+    assert [ln.text for ln in lines] == [l0, l1] and list(texts) == [1]
+
+
 def test_interp_cannot_write_a_foreign_documents_boundary(client, tmp_path):
     """해석 저장소를 통해 남의 문헌에 경계를 만들 수 없다 (D-097).
 

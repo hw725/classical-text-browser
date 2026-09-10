@@ -1060,7 +1060,7 @@ def collect_document_lines(
     출력: (행 목록, {쪽: 그 쪽의 전체 텍스트}) — 뒤의 것은 적용 때 char_range를 만들 때 쓴다.
     쪽 목록이 None이면 manifest의 page_count(없으면 L4_text/pages 파일)로 전체를 돈다.
     """
-    from core.document import get_corrected_text, get_document_info
+    from core.document import _text_file_path, get_corrected_text, get_document_info
 
     doc_path = Path(doc_path)
     if pages is None:
@@ -1068,6 +1068,13 @@ def collect_document_lines(
     lines: list[Line] = []
     page_texts: dict[int, str] = {}
     for page in pages:
+        # 확정본 파일이 없는 쪽은 여기서 건너뛴다. get_corrected_text는 쪽마다 manifest를
+        # 네 번 읽고 경로를 세 번 resolve하므로, 196쪽 권에서 확정본 20쪽을 모으는 데
+        # 3~6초가 들었고 편성 탭이 이것을 여섯 번 되풀이해 «세는 중»이 36초였다(2026-09-10 실측).
+        # 파일이 없으면 get_page_text가 빈 글을 돌려주어 어차피 아래 `continue`로 빠진다 —
+        # 결과는 같다.
+        if not _text_file_path(doc_path, part_id, page).exists():
+            continue
         try:
             corrected = get_corrected_text(doc_path, part_id, page)
         except Exception:  # noqa: BLE001 — 텍스트 없는 쪽은 건너뛴다
