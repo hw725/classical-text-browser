@@ -84,6 +84,9 @@ class OcrBatchRequest(BaseModel):
 
     engine_id: str | None = None  # None이면 기본 엔진
     pages: list[int] | None = None  # None이면 전체 쪽
+    # 구간별 엔진 계획(D-126 덧붙임): [{"from", "to", "engine_id"}]. 계획에 든 쪽은 그 엔진으로,
+    # 나머지는 engine_id로 돈다. 훑어보기가 «1~36쪽 NDLOCR, 37~52쪽 みんなで翻刻»처럼 만들어 준다.
+    engine_plan: list[dict] | None = None
     # 이미 L2 결과가 있는 쪽을 건너뛴다. 중단 후 이어서 돌리는 기본 동작이다.
     skip_existing: bool = True
     # 레이아웃을 OCR 이후에 다시 잡은 쪽은 건너뛰지 않고 다시 돌린다.
@@ -1017,6 +1020,7 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
         group_engine_ranges,
         group_rotation_ranges,
         is_mixed,
+        orientation_by_ocr_scores,
         orientation_by_projection,
         parse_survey,
         recommend_engine,
@@ -1051,7 +1055,13 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
     targets = list(range(a, b + 1, stride))
     if body.dry_run:
         # 실행 게이트(전역 규칙 11)는 도구 층에 — 보내기 전에 «몇 쪽·호출 몇 번»을 화면이 보인다
-        return {"dry_run": True, "pages": len(targets), "calls": len(targets)}
+        return {
+            "dry_run": True,
+            "pages": len(targets),
+            "calls": len(targets),
+            # 180°·90/270 판정용 OCR(PaddleOCR) — 쪽마다 후보 둘, CPU에서 후보당 4~6초(실측)
+            "ocr_calls": 2 * len(targets),
+        }
 
     try:
         _pipeline, registry = _get_ocr_pipeline()
@@ -1061,6 +1071,17 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
         }
     except Exception:  # noqa: BLE001 — 엔진 목록을 못 읽어도 방향 판정은 된다
         available, names = set(), {}
+
+    # 방향의 마지막 판정은 OCR 점수 비교(D-126 덧붙임) — 설치된 PaddleOCR(워커 포함)로.
+    # 없으면 추정으로
+    flip_engine = None
+    try:
+        _pipeline2, registry2 = _get_ocr_pipeline()
+        cand = registry2.get_engine("paddleocr")
+        if cand is not None and cand.is_available():
+            flip_engine = cand
+    except Exception:  # noqa: BLE001 — 없으면 투영·추정으로만 간다
+        flip_engine = None
 
     router_llm = _get_llm_router()
     kwargs: dict = {
@@ -1115,7 +1136,27 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
         # 모름일 때만 모델의 답을 쓴다. 누운 쪽의 90/270은 투영으로 못 가리므로 «추정»으로 표시한다.
         heur, ratio = orientation_by_projection(image, body.writing_direction)
         row["heuristic"] = {"orientation": heur, "ratio": round(ratio, 2)}
-        if heur == "upright":
+        # 투영이 «섰다/누웠다»를 가르면 후보는 둘 — 선 쪽은 0°·180°, 누운 쪽은 +90°·+270°.
+        # OCR 점수로 그중 읽히는 쪽을 고른다(180°와 90/270을 이것으로 가린다). OCR이 없거나
+        # 모름이면 추정.
+        candidates = (0, 180) if heur == "upright" else (90, 270) if heur == "sideways" else ()
+        delta = None
+        if candidates and flip_engine is not None:
+            delta, scores = await loop.run_in_executor(
+                None,
+                lambda img=image, c=candidates: orientation_by_ocr_scores(
+                    img, flip_engine.recognize, c, body.writing_direction
+                ),
+            )
+            row["heuristic"]["ocr_scores"] = {str(k): round(v, 1) for k, v in scores.items()}
+        if delta is not None:
+            row["orientation"] = (
+                heur
+                if delta in (0, 90, 270) and heur == "sideways"
+                else ("upright" if delta == 0 else "upside_down" if delta == 180 else "sideways")
+            )
+            row["target"] = (current + delta) % 360
+        elif heur == "upright":
             row["orientation"], row["target"] = "upright", current
         elif heur == "sideways":
             row["orientation"], row["target"], row["guess"] = (
@@ -2412,12 +2453,34 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
     # 고전적 전용 엔진이 잡힌다. 그래서 이 경고가 특히 중요하다.
     warnings: list[str] = []
     effective_engine = body.engine_id or registry.default_engine_id
-    if effective_engine in HANGUL_INCAPABLE_ENGINES:
-        warnings.append(
-            f"'{effective_engine}' 엔진은 한글을 인식하지 못합니다 "
-            "(학습 데이터에 한글이 없습니다). "
-            "→ 한글이 포함된 문헌이면 llm_vision 엔진을 사용하세요."
-        )
+    # 구간별 엔진 계획(D-126 덧붙임) — 모르는 엔진은 기본 엔진으로 내리고 알린다
+    known = {e["engine_id"] for e in registry.list_engines()}
+    plan: list[dict] = []
+    for item in body.engine_plan or []:
+        try:
+            a, b = int(item["from"]), int(item["to"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        eid = str(item.get("engine_id") or "") or None
+        if eid and eid not in known:
+            warnings.append(f"계획의 엔진 '{eid}'은(는) 없어 {a}~{b}쪽은 기본 엔진으로 돕니다.")
+            eid = None
+        if a >= 1 and b >= a:
+            plan.append({"from": a, "to": b, "engine_id": eid or effective_engine})
+
+    def _engine_for(page_number: int) -> str | None:
+        for r in plan:
+            if r["from"] <= page_number <= r["to"]:
+                return r["engine_id"]
+        return body.engine_id
+
+    for eid in {effective_engine, *(r["engine_id"] for r in plan)}:
+        if eid in HANGUL_INCAPABLE_ENGINES:
+            warnings.append(
+                f"'{eid}' 엔진은 한글을 인식하지 못합니다 "
+                "(학습 데이터에 한글이 없습니다). "
+                "→ 한글이 포함된 문헌이면 llm_vision 엔진을 사용하세요."
+            )
 
     progress_queue: asyncio.Queue = asyncio.Queue()
 
@@ -2487,6 +2550,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                 "type": "start",
                 "total": len(targets),
                 "engine_id": effective_engine,
+                "plan": plan,
                 "warnings": warnings,
             }
         )
@@ -2572,7 +2636,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                             doc_id=doc_id,
                             part_id=part_id,
                             page_number=p,
-                            engine_id=body.engine_id,
+                            engine_id=_engine_for(p),  # 계획이 있으면 그 쪽의 엔진(D-126)
                             **engine_kwargs,
                         ),
                     )
@@ -2644,6 +2708,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                             "page": page_number,
                             "index": index,
                             "total": len(targets),
+                            "engine": _engine_for(page_number) or effective_engine,
                             "status": summary.get("status"),
                             "lines": lines,
                             "block_created": block_created,

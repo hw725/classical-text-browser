@@ -147,6 +147,73 @@ def orientation_by_projection(
     return None, ratio
 
 
+def ocr_score(result) -> float:
+    """OCR 결과의 «읽힌 정도» — 글자 수 × 평균 신뢰도(신뢰도가 없으면 글자 수)."""
+    chars = 0
+    confs: list[float] = []
+    for ln in getattr(result, "lines", None) or []:
+        chars += len((getattr(ln, "text", "") or "").strip())
+        for c in getattr(ln, "characters", None) or []:
+            conf = getattr(c, "confidence", None)
+            if conf is not None:
+                confs.append(float(conf))
+    mean = (sum(confs) / len(confs)) if confs else 1.0
+    return chars * mean
+
+
+def orientation_by_ocr_scores(
+    image_bytes: bytes,
+    recognize,
+    candidates: tuple[int, ...],
+    writing_direction: str = "vertical_rtl",
+    crop: float = 0.6,
+    max_side: int = 900,
+) -> tuple[Optional[int], dict[int, float]]:
+    """후보 회전마다 쪽 가운데 조각을 돌려 OCR에 넣고, 가장 잘 읽히는 회전을 고른다.
+
+    입력: 쪽 이미지, recognize(image_bytes, writing_direction=…) → OcrBlockResult,
+          후보 각도(더할 값), 쓰기 방향, 가운데 조각 비율, 긴 변 상한.
+    출력: (고른 각도 | None, {각도: 점수}).
+    왜 되는가: 세로쓰기 한문을 180° 뒤집으면 인식이 무너진다(속몽구 실측 2026-09-10 — 바로 선 조각
+    88자·신뢰도 1.0, 뒤집은 조각 36자·0.4). 누운 쪽의 두 후보(+90·+270) 중 틀린 쪽은 곧 180°라 같은
+    성질로 가려진다. PaddleOCR은 세로쓰기의 0°와 270°를 스스로 바로잡아 그 둘은 못 가르지만, 투영
+    (orientation_by_projection)이 «섰다/누웠다»를 먼저 가르므로 후보를 둘로 줄이면 넷 다 된다.
+    두 점수가 1.3배 안이면 None(모름) — 백지·그림에서 아무거나 고르지 않는다.
+    """
+    try:
+        from io import BytesIO
+
+        from PIL import Image
+
+        from ocr.image_utils import rotate_page_image
+
+        img = Image.open(BytesIO(image_bytes)).convert("RGB")
+        w, h = img.size
+        m = (1 - crop) / 2
+        img = img.crop((int(w * m), int(h * m), int(w * (1 - m)), int(h * (1 - m))))
+        img.thumbnail((max_side, max_side))
+        scores: dict[int, float] = {}
+        for delta in candidates:
+            buf = BytesIO()
+            rotate_page_image(img, int(delta) % 360).save(buf, format="PNG")
+            try:
+                scores[int(delta) % 360] = ocr_score(
+                    recognize(buf.getvalue(), writing_direction=writing_direction)
+                )
+            except Exception:  # noqa: BLE001 — 한 후보가 실패하면 그 후보는 0점
+                scores[int(delta) % 360] = 0.0
+    except Exception:  # noqa: BLE001
+        return None, {}
+    if not scores:
+        return None, {}
+    ordered = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
+    best, top = ordered[0]
+    second = ordered[1][1] if len(ordered) > 1 else 0.0
+    if top <= 0 or top < second * 1.3:
+        return None, scores
+    return best, scores
+
+
 def sideways_target(current: int) -> int:
     """누운 쪽의 목표 회전(추정). 90인지 270인지는 투영으로 알 수 없으니 «원래(0°)로 되돌리기»를
     먼저 제안하고, 권 자체가 0°면 시계 90°를 제안한다 — 화면이 미리보기로 확인받고 반대쪽도

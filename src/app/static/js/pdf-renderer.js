@@ -258,7 +258,12 @@ async function _suggestRotation() {
     const post = (b) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) });
     const dry = await (await post(body)).json();
     if (dry.error) throw new Error(dry.error);
-    if (!confirm(`${dry.pages}쪽을 훑어봅니다 — 비전 모델 호출 ${dry.calls}번. 계속할까요?`)) return;
+    if (
+      !confirm(
+        `${dry.pages}쪽을 훑어봅니다 — 비전 모델 ${dry.calls}번(글의 종류) + PaddleOCR ${dry.ocr_calls || 0}번(180°·좌우 판정, CPU면 쪽당 20초쯤).\n계속할까요?`,
+      )
+    )
+      return;
     showToast(`${dry.pages}쪽을 모델에 보여 주는 중… (쪽마다 몇 초)`, "info");
     const d = await (await post({ ...body, dry_run: false })).json();
     const rot = d.rotation || [];
@@ -268,6 +273,17 @@ async function _suggestRotation() {
     // 1) 회전이 다른 구간 — 그 구간의 첫 쪽을 **제안한 회전으로 미리 보인 채** 확인받는다.
     //    누운 쪽은 90인지 270인지 코드가 못 가리므로(추정), 아니라고 하면 반대쪽을 한 번 더 보인다.
     let applied = 0;
+    // 판정이 확실한 구간(guess 아님)은 한 창에 모아 한 번만 묻는다 — 구간마다 묻는 것은 번거롭다(사용자 지적)
+    const sure = rot.filter((r) => !r.guess);
+    if (sure.length) {
+      const list = sure.map((r) => `  ${r.from}~${r.to}쪽(${r.pages}쪽) → ${r.rotation}° (지금 ${r.current_rotation}°${r.effect ? `, 다시 OCR ${r.effect}쪽` : ""})`).join("\n");
+      if (confirm(`회전이 다른 구간 ${sure.length}개를 찾았습니다:\n${list}\n\n모두 저장할까요? (취소하면 저장하지 않습니다)`)) {
+        for (const r of sure) {
+          await applySavedRotation(docId, partId, r.rotation, [r.from, r.to]);
+          applied++;
+        }
+      }
+    }
     const preview = async (pageNo, target) => {
       if (typeof goToPage === "function" && pdfState.currentPage !== pageNo) {
         goToPage(pageNo);
@@ -277,7 +293,7 @@ async function _suggestRotation() {
       _applyRotation();
       await new Promise((res) => setTimeout(res, 250));
     };
-    for (const r of rot) {
+    for (const r of rot.filter((x) => x.guess)) {
       const candidates = r.guess ? [r.rotation, (r.rotation + 180) % 360] : [r.rotation];
       let chosen = null;
       for (let i = 0; i < candidates.length; i++) {
@@ -297,24 +313,12 @@ async function _suggestRotation() {
       await applySavedRotation(docId, partId, chosen, [r.from, r.to]);
       applied++;
     }
-    // 2) 엔진 추천 — 구간 목록을 보이고, 고른 하나를 「권 전체 OCR」 칸(쪽 범위·엔진·다시)에 넣는다
+    // 2) 엔진 추천 — 구간별 계획으로 「권 전체 OCR」에 넘긴다. 한 번 누르면 쪽마다 계획의 엔진으로 돈다
     const lines = eng.map((r) => `${r.from}~${r.to}쪽(${r.pages}쪽): ${r.label} → ${r.display_name}`);
     let filled = null;
-    for (const r of eng) {
-      const ok = confirm(
-        `엔진 추천:\n${lines.join("\n")}\n\n` +
-          `${r.from}~${r.to}쪽(${r.label})을 ${r.display_name}(으)로 읽도록 교감 탭 「권 전체 OCR」 칸에 넣을까요?\n` +
-          "(넣은 뒤 그 단추를 누르면 돕니다. 취소하면 다음 구간을 묻습니다)",
-      );
-      if (!ok) continue;
-      const pagesEl = document.getElementById("ocr-batch-pages");
-      const engineEl = document.getElementById("ocr-engine-select");
-      const redoEl = document.getElementById("ocr-batch-redo");
-      if (pagesEl) pagesEl.value = `${r.from}-${r.to}`;
-      if (engineEl && [...engineEl.options].some((o) => o.value === r.engine)) engineEl.value = r.engine;
-      if (redoEl) redoEl.checked = true;
-      filled = r;
-      break;
+    if (eng.length && typeof setOcrEnginePlan === "function") {
+      setOcrEnginePlan({ docId, partId, ranges: eng, mixed: d.mixed || [] });
+      filled = eng;
     }
     // 3) 섞인 쪽 — 한글+훈점처럼 종류가 둘 이상이면 쪽 단위 엔진으로는 못 푼다. 영역별 OCR을 안내한다
     const mixed = d.mixed || [];
@@ -328,7 +332,7 @@ async function _suggestRotation() {
     showToast(
       `${d.checked}쪽을 봤습니다 — 회전 구간 ${rot.length}개 제안·${applied}개 저장, 엔진 구간 ${eng.length}개` +
         (mixed.length ? `, 영역별 OCR이 필요한 쪽 ${mixed.length}` : "") +
-        (filled ? ` (${filled.from}~${filled.to}쪽 ${filled.display_name}을 「권 전체 OCR」 칸에 넣음 — 교감 탭에서 누르세요)` : "") +
+        (filled ? ` — 계획 ${lines.length}구간을 「권 전체 OCR」에 넣었습니다. 레이아웃 탭에서 그 단추를 누르면 쪽마다 계획의 엔진으로 돕니다` : "") +
         (d.unknown ? ` · 판단 못 한 쪽 ${d.unknown}` : "") + (d.error ? ` · 일부 실패: ${d.error}` : ""),
       applied || filled ? "success" : "info",
     );

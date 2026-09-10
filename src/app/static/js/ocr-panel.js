@@ -15,6 +15,40 @@
 
 /* ─── 상태 ─────────────────────────────────────── */
 
+/**
+ * 훑어보기가 만든 구간별 엔진 계획 (D-126 덧붙임). {docId, partId, ranges:[{from,to,engine,display_name,label,pages}], mixed:[...]}
+ * 「권 전체 OCR」이 이것을 보내면 서버가 쪽마다 계획의 엔진으로 돈다. 저장하지 않는다 — 화면을 새로 열면 사라진다.
+ */
+let ocrEnginePlan = null;
+
+// eslint-disable-next-line no-unused-vars
+function setOcrEnginePlan(plan) {
+  ocrEnginePlan = plan && plan.ranges && plan.ranges.length ? plan : null;
+  _renderOcrEnginePlan();
+}
+
+/** 「권 전체 OCR」 옆에 계획을 보인다 — 무엇이 어느 엔진으로 돌지 누르기 전에 보여야 한다. */
+function _renderOcrEnginePlan() {
+  const el = document.getElementById("ocr-batch-plan");
+  if (!el) return;
+  const plan = ocrEnginePlan;
+  const here = plan && plan.docId === viewerState.docId && plan.partId === viewerState.partId;
+  if (!here) {
+    el.hidden = true;
+    el.innerHTML = "";
+    return;
+  }
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const rows = plan.ranges.map((r) => `${r.from}~${r.to}쪽 ${esc(r.label || "")} → ${esc(r.display_name || r.engine)}`).join(" · ");
+  const mixed = plan.mixed && plan.mixed.length ? ` · 영역별 OCR이 필요한 쪽 ${plan.mixed.map((m) => m.page).join(",")}(계획에서 뺌)` : "";
+  el.innerHTML =
+    `<label class="text-toolbar-check" title="켜 두면 「권 전체 OCR」이 쪽마다 이 계획의 엔진으로 돕니다. 끄면 위의 엔진 드롭다운 하나로 돕니다">` +
+    `<input id="ocr-batch-use-plan" type="checkbox" checked /> 훑어보기 계획대로</label> ${rows}${esc(mixed)} ` +
+    `<button id="ocr-batch-plan-clear" class="text-btn text-btn-sm" type="button" title="계획을 지웁니다">지우기</button>`;
+  el.hidden = false;
+  document.getElementById("ocr-batch-plan-clear")?.addEventListener("click", () => setOcrEnginePlan(null));
+}
+
 const ocrState = {
   engines: [], // [{engine_id, display_name, available}, ...]
   defaultEngine: null, // 기본 엔진 ID
@@ -699,10 +733,33 @@ async function _runPartOcr() {
       return;
     }
   }
-  const scope = pages ? `${pages.length}쪽(${rawPages})` : `이 권${total ? ` ${total}쪽` : ""} 전체`;
+  // 훑어보기 계획(D-126 덧붙임): 켜져 있으면 계획의 구간만, 쪽마다 계획의 엔진으로. 범위를 손으로 적었으면 그것이 우선
+  const usePlan =
+    !!ocrEnginePlan &&
+    ocrEnginePlan.docId === docId &&
+    ocrEnginePlan.partId === partId &&
+    !!document.getElementById("ocr-batch-use-plan")?.checked;
+  let enginePlan = null;
+  if (usePlan) {
+    enginePlan = ocrEnginePlan.ranges.map((r) => ({ from: r.from, to: r.to, engine_id: r.engine }));
+    if (!pages) {
+      pages = [];
+      for (const r of ocrEnginePlan.ranges) for (let n = r.from; n <= r.to; n++) pages.push(n);
+    }
+  }
+  const scope = usePlan && !rawPages
+    ? `계획의 ${pages.length}쪽`
+    : pages ? `${pages.length}쪽(${rawPages})` : `이 권${total ? ` ${total}쪽` : ""} 전체`;
+  const how = usePlan
+    ? "쪽마다 훑어보기 계획의 엔진으로 OCR합니다:\n" +
+      ocrEnginePlan.ranges.map((r) => `  ${r.from}~${r.to}쪽 → ${r.display_name || r.engine}`).join("\n") + "\n" +
+      (ocrEnginePlan.mixed && ocrEnginePlan.mixed.length
+        ? `  (종류가 섞인 ${ocrEnginePlan.mixed.map((m) => m.page).join(",")}쪽은 계획에서 뺐습니다 — 영역별로 읽으세요)\n`
+        : "")
+    : `${engineId || "기본 엔진"}(으)로 OCR합니다.\n`;
   if (
     !confirm(
-      `${scope}를 ${engineId || "기본 엔진"}(으)로 OCR합니다.\n` +
+      `${scope}를 ${how}` +
         (redo
           ? "이미 결과가 있는 쪽도 다시 읽습니다(덮기 전 백업을 남깁니다).\n"
           : "이미 결과가 있는 쪽은 건너뛰고, ") +
@@ -719,6 +776,7 @@ async function _runPartOcr() {
   const body = {
     engine_id: engineId,
     pages,
+    engine_plan: enginePlan,
     skip_existing: !redo,
     redo_changed_layout: true,
     backup_before_overwrite: true,
@@ -771,7 +829,7 @@ async function _runPartOcr() {
         } else if (evt.type === "page" || evt.type === "skip" || evt.type === "redo") {
           lastSeen = evt;
           const label =
-            evt.type === "skip" ? "건너뜀" : evt.type === "redo" ? "다시" : `${evt.lines || 0}줄`;
+            evt.type === "skip" ? "건너뜀" : evt.type === "redo" ? "다시" : `${evt.lines || 0}줄` + (evt.engine ? ` · ${evt.engine}` : "");
           _showProgress(true, `${evt.index + 1}/${evt.total}쪽 — ${evt.page}쪽 ${label}`, evt.index + 1, evt.total);
         } else if (evt.type === "complete") {
           summary = evt;
@@ -795,6 +853,7 @@ async function _runPartOcr() {
       );
     }
     if (typeof loadOcrResults === "function") loadOcrResults();
+    _renderOcrEnginePlan();
   } catch (e) {
     showToast(`권 전체 OCR 실패: ${e.message}`, "error");
   } finally {

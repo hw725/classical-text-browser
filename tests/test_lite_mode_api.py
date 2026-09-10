@@ -350,6 +350,47 @@ def test_batch_can_redo_when_skip_disabled(batch_ready):
     assert (redo[-1]["processed"], redo[-1]["skipped"]) == (1, 0)
 
 
+def test_batch_follows_engine_plan_per_page(batch_ready, monkeypatch):
+    """구간별 엔진 계획(D-126 덧붙임): 계획에 든 쪽은 그 엔진, 나머지는 engine_id로 돈다."""
+    from app._state import _get_ocr_pipeline
+
+    client, doc_id, part_id = batch_ready
+    pipeline, _registry = _get_ocr_pipeline()
+    seen = []
+    real = pipeline.run_page
+
+    def spy(**kwargs):
+        seen.append((kwargs["page_number"], kwargs.get("engine_id")))
+        return real(**{**kwargs, "engine_id": "dummy"})
+
+    monkeypatch.setattr(pipeline, "run_page", spy)
+    url = f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch"
+    events = _sse_events(
+        client.post(
+            url,
+            json={
+                "engine_id": "dummy",
+                "pages": [1, 2, 3, 4],
+                "engine_plan": [
+                    {"from": 2, "to": 3, "engine_id": "dummy"},
+                    {"from": 4, "to": 4, "engine_id": "no-such-engine"},
+                ],
+                "embed_after": False,
+            },
+        )
+    )
+    assert seen == [(1, "dummy"), (2, "dummy"), (3, "dummy"), (4, "dummy")]
+    start = events[0]
+    assert start["plan"] == [
+        {"from": 2, "to": 3, "engine_id": "dummy"},
+        {"from": 4, "to": 4, "engine_id": "dummy"},  # 모르는 엔진은 기본 엔진으로
+    ]
+    assert any("no-such-engine" in w for w in start["warnings"])
+    pages = [e for e in events if e["type"] == "page"]
+    assert [p["engine"] for p in pages] == ["dummy"] * 4
+    assert events[-1]["processed"] == 4
+
+
 def test_batch_warns_on_hangul_incapable_engine(batch_ready):
     """한글을 인식하지 못하는 엔진을 고르면 시작 시점에 경고해야 한다.
 

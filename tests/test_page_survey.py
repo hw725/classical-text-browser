@@ -77,6 +77,43 @@ def test_projection_tells_upright_from_sideways_by_writing_direction():
     assert sideways_target(90) == 0 and sideways_target(0) == 90
 
 
+def test_ocr_scores_pick_the_readable_candidate():
+    """가짜 OCR: 0°로 돌린 조각만 많이 읽힌다 → 0을 고른다. 점수가 비슷하면 모름."""
+    from core.page_survey import ocr_score, orientation_by_ocr_scores
+
+    class Line:
+        def __init__(self, text, conf):
+            self.text = text
+            self.characters = [type("C", (), {"confidence": conf})() for _ in text]
+
+    class Res:
+        def __init__(self, lines):
+            self.lines = lines
+
+    assert ocr_score(Res([Line("四字", 0.5), Line("二", 1.0)])) == 3 * (0.5 * 4 + 1.0 * 2) / 6
+    calls = []
+
+    def fake(image_bytes, writing_direction="vertical_rtl"):
+        from io import BytesIO
+
+        from PIL import Image
+
+        img = Image.open(BytesIO(image_bytes))
+        calls.append(img.size)
+        upright = img.size[0] < img.size[1]  # 세로로 긴 조각 = 0°/180° 후보 — 첫 호출만 잘 읽힌다
+        n = 60 if (upright and len(calls) == 1) else 20
+        return Res([Line("字" * n, 1.0 if n == 60 else 0.4)])
+
+    best, scores = orientation_by_ocr_scores(_stripes(True, 300, 400), fake, (0, 180))
+    assert best == 0 and scores[0] > scores[180] * 1.3
+
+    def same(image_bytes, writing_direction="vertical_rtl"):
+        return Res([Line("字" * 10, 0.9)])
+
+    assert orientation_by_ocr_scores(_stripes(True), same, (90, 270))[0] is None
+    assert orientation_by_ocr_scores(b"bad", same, (0, 180)) == (None, {})
+
+
 def test_target_rotation_adds_to_current():
     assert target_rotation(90, "upright") == 90
     assert target_rotation(90, "needs_ccw") == 0  # 90 + 270
@@ -133,7 +170,8 @@ def test_route_dry_run_and_survey_with_fake_vision(client, tmp_path, monkeypatch
     _lib, part_id = _setup(client, tmp_path)
     url = f"/api/documents/d1/parts/{part_id}/rotation/suggest"
     r = client.post(url, json={"dry_run": True})
-    assert r.status_code == 200 and r.json() == {"dry_run": True, "pages": 3, "calls": 3}
+    assert r.status_code == 200
+    assert r.json() == {"dry_run": True, "pages": 3, "calls": 3, "ocr_calls": 6}
     r = client.post(url, json={"dry_run": True, "pages": [2, 3]})
     assert r.json()["pages"] == 2
 
