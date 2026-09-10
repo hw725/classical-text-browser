@@ -95,6 +95,58 @@ def test_engine_worker_mode_spawns_child(monkeypatch):
             eng._worker.kill()
 
 
+def test_gpu_worker_is_preferred_and_falls_back_to_cpu(monkeypatch):
+    """GPU판 paddle이 있으면 워커를 지금 파이썬 + torch 차단으로 먼저 띄우고, 안 뜨면 CPU 워커로.
+
+    D-091 덧붙임.
+    """
+    from src.ocr import paddleocr_engine as pe
+
+    monkeypatch.setenv("CTB_PADDLE_PYTHON", "C:/other/.venv/Scripts/python.exe")
+    monkeypatch.delenv("CTB_PADDLE_FORCE_WORKER", raising=False)
+    monkeypatch.delenv("CTB_PADDLE_GPU_WORKER", raising=False)
+    monkeypatch.setattr(pe, "_gpu_paddle_installed", lambda: True)
+    eng = pe.PaddleOcrEngine()
+    assert eng._worker_python == sys.executable and eng._worker_block_torch is True
+    assert eng._worker_fallback == "C:/other/.venv/Scripts/python.exe"
+
+    pings = iter(
+        [
+            {"ok": False, "available": False, "reason": "cudnn 충돌"},
+            {"ok": True, "available": True, "gpu": False, "python": "3.12"},
+        ]
+    )
+    monkeypatch.setattr(eng, "_ping_once", lambda: next(pings))
+    info = eng._worker_ping()
+    assert info["available"] is True and info["gpu_fallback_reason"] == "cudnn 충돌"
+    assert eng._worker_python == "C:/other/.venv/Scripts/python.exe" and not eng._worker_block_torch
+    assert "GPU 워커 실패로 CPU" in eng.get_info()["model_source"]
+
+    # 끄는 스위치와 GPU판이 없는 환경은 예전 그대로(CPU 워커)
+    monkeypatch.setenv("CTB_PADDLE_GPU_WORKER", "0")
+    assert pe.PaddleOcrEngine()._worker_python == "C:/other/.venv/Scripts/python.exe"
+    monkeypatch.delenv("CTB_PADDLE_GPU_WORKER")
+    monkeypatch.setattr(pe, "_gpu_paddle_installed", lambda: False)
+    assert pe.PaddleOcrEngine()._worker_block_torch is False
+
+
+def test_worker_blocks_torch_when_asked(monkeypatch):
+    """CTB_PADDLE_BLOCK_TORCH=1이면 워커 모듈이 뜨는 순간 torch import가 막힌다."""
+    import subprocess
+    from pathlib import Path
+
+    code = (
+        "import sys, os; os.environ['CTB_PADDLE_BLOCK_TORCH']='1';"
+        "import ocr.paddle_worker;"
+        "\ntry:\n import torch\n print('LOADED')\nexcept ImportError:\n print('BLOCKED')"
+    )
+    src = str(Path(__file__).resolve().parents[1] / "src")
+    out = subprocess.run(
+        [sys.executable, "-c", code], cwd=src, capture_output=True, text=True, timeout=120
+    )
+    assert "BLOCKED" in out.stdout, out.stderr[-500:]
+
+
 def test_engine_without_env_is_in_process(monkeypatch):
     monkeypatch.delenv("CTB_PADDLE_PYTHON", raising=False)
     monkeypatch.delenv("CTB_PADDLE_FORCE_WORKER", raising=False)

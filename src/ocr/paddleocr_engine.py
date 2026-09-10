@@ -54,6 +54,20 @@ PADDLE_LANGUAGES = {
 }
 
 
+def _gpu_paddle_installed() -> bool:
+    """지금 파이썬에 paddle GPU판이 깔려 있는가 — 메타데이터만 본다(paddle import는 무겁다)."""
+    try:
+        from importlib.metadata import PackageNotFoundError, version
+
+        try:
+            version("paddlepaddle-gpu")
+            return True
+        except PackageNotFoundError:
+            return False
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _same_python(a: str, b: str) -> bool:
     """두 파이썬 경로가 같은 실행 파일인가 (대소문자·상대 경로 차이 무시)."""
     try:
@@ -114,8 +128,23 @@ class PaddleOcrEngine(BaseOcrEngine):
         worker_py = (os.environ.get("CTB_PADDLE_PYTHON") or "").strip()
         force = os.environ.get("CTB_PADDLE_FORCE_WORKER") == "1"
         self._worker_python: str | None = None
+        # GPU 워커(D-091 덧붙임, 2026-09-10): 충돌은 «한 프로세스에 torch와 paddle을 같이
+        # 올리는 것»이지 GPU를 같이 쓰는 것이 아니다. 지금 파이썬(.venv-gpu)에 paddle GPU판이
+        # 있으면, 워커도 이 파이썬으로 띄우되 워커 안에서 torch import를 막는다(paddlex가 torch를
+        # 끌어오면 cuDNN DLL이 부딪혀 죽는다). 그러면 PaddleOCR도 GPU다 — 실측 조각 하나
+        # 5초 → 0.06초. 안 뜨면 CTB_PADDLE_PYTHON(.venv CPU)으로.
+        self._worker_block_torch = False
+        self._worker_fallback: str | None = None
         if worker_py and (force or not _same_python(worker_py, sys.executable)):
             self._worker_python = worker_py
+            if (
+                os.environ.get("CTB_PADDLE_GPU_WORKER", "1") != "0"
+                and not _same_python(worker_py, sys.executable)
+                and _gpu_paddle_installed()
+            ):
+                self._worker_python = sys.executable
+                self._worker_block_torch = True
+                self._worker_fallback = worker_py
         self._worker = None  # subprocess.Popen
         self._worker_lock = threading.Lock()
         self._worker_info: dict | None = None
@@ -185,6 +214,11 @@ class PaddleOcrEngine(BaseOcrEngine):
             os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
         )
         env["PYTHONIOENCODING"] = "utf-8"
+        if self._worker_block_torch:
+            # 워커가 torch를 못 불러오게(paddle_worker.py 맨 앞)
+            env["CTB_PADDLE_BLOCK_TORCH"] = "1"
+        else:
+            env.pop("CTB_PADDLE_BLOCK_TORCH", None)
         self._worker = subprocess.Popen(
             [self._worker_python, "-m", "ocr.paddle_worker"],
             stdin=subprocess.PIPE,
@@ -219,15 +253,34 @@ class PaddleOcrEngine(BaseOcrEngine):
 
     def _worker_ping(self) -> dict:
         if self._worker_info is None:
-            try:
-                self._worker_info = self._worker_call({"op": "ping"}, timeout=180)
-            except Exception as e:  # noqa: BLE001
-                self._worker_info = {
-                    "ok": False,
-                    "available": False,
-                    "reason": f"워커 시작 실패: {e}",
-                }
+            self._worker_info = self._ping_once()
+            ok = bool(self._worker_info.get("ok") and self._worker_info.get("available"))
+            if not ok and self._worker_fallback:
+                # GPU 워커가 안 뜨면 CPU 워커로 내려간다 — 그 사실을 이유와 함께 남긴다
+                # (화면이 보인다)
+                why = self._worker_info.get("reason") or self._worker_info.get("error") or "?"
+                logger.warning("PaddleOCR GPU 워커 실패 — CPU 워커로 내려갑니다: %s", why)
+                self._worker_stop()
+                self._worker_python = self._worker_fallback
+                self._worker_block_torch = False
+                self._worker_fallback = None
+                self._worker_info = self._ping_once()
+                self._worker_info["gpu_fallback_reason"] = str(why)[:300]
         return self._worker_info
+
+    def _ping_once(self) -> dict:
+        try:
+            return self._worker_call({"op": "ping"}, timeout=180)
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "available": False, "reason": f"워커 시작 실패: {e}"}
+
+    def _worker_stop(self) -> None:
+        proc, self._worker = self._worker, None
+        if proc is not None and proc.poll() is None:
+            try:
+                proc.kill()
+            except OSError:
+                pass
 
     def is_available(self) -> bool:
         """PaddleOCR 패키지 + 현재 런타임 호환성을 확인."""
@@ -737,13 +790,16 @@ class PaddleOcrEngine(BaseOcrEngine):
         """
         info = super().get_info()
         info["lang"] = self._lang
-        info["use_gpu"] = self._use_gpu if not self._worker_python else False
+        wi = self._worker_info or {}
+        info["use_gpu"] = bool(wi.get("gpu")) if self._worker_python else self._use_gpu
         info["supported_languages"] = PADDLE_LANGUAGES
         if self._worker_python:
             info["worker_python"] = self._worker_python
-            wi = self._worker_info or {}
+            where = "GPU" if wi.get("gpu") else "CPU"
             info["model_source"] = (
-                f"별도 프로세스(.venv CPU, Python {wi.get('python', '?')}, "
-                f"paddle {wi.get('paddle', '?')}) — torch와 cuDNN 충돌을 피하기 위해 (D-091)"
+                f"별도 프로세스({where}, Python {wi.get('python', '?')}, "
+                f"paddle {wi.get('paddle', '?')}) — torch와 한 프로세스에 두지 않기 위해 (D-091)"
             )
+            if wi.get("gpu_fallback_reason"):
+                info["model_source"] += f" · GPU 워커 실패로 CPU: {wi['gpu_fallback_reason'][:120]}"
         return info

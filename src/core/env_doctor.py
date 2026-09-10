@@ -127,7 +127,7 @@ def _run_probe_alone(py: Path, root: Path, module: str, timeout: int) -> dict:
         return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
 
-def _run_worker_ping(py: Path, root: Path, timeout: int) -> dict:
+def _run_worker_ping(py: Path, root: Path, timeout: int, block_torch: bool = False) -> dict:
     """PaddleOCR 워커(D-091)를 실제로 띄워 ping 한다 — «워커 순서»로 import되는지 본다.
 
     왜 엔진 조사와 별도인가: 엔진 조사(PROBE_ENGINES)는 registry 등록 순서대로 NDL古典籍
@@ -145,6 +145,11 @@ def _run_worker_ping(py: Path, root: Path, timeout: int) -> dict:
         os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
     )
     env["PYTHONIOENCODING"] = "utf-8"
+    # GPU 워커(D-091 덧붙임): 서버가 .venv-gpu에서 PaddleOCR 워커를 띄울 때와 똑같이 torch를 막는다
+    if block_torch:
+        env["CTB_PADDLE_BLOCK_TORCH"] = "1"
+    else:
+        env.pop("CTB_PADDLE_BLOCK_TORCH", None)
     try:
         proc = subprocess.run(
             [str(py), "-m", "ocr.paddle_worker"],
@@ -166,6 +171,8 @@ def _run_worker_ping(py: Path, root: Path, timeout: int) -> dict:
             "available": bool(resp.get("ok") and resp.get("available")),
             "reason": resp.get("reason") or resp.get("error"),
             "paddle": resp.get("paddle"),
+            # 워커가 실제로 GPU를 잡았는가 — 빠뜨리면 GPU 워커도 «CPU»로 보고된다(2026-09-10 실측)
+            "gpu": bool(resp.get("gpu")),
         }
     except subprocess.TimeoutExpired:
         return {"available": False, "reason": f"{timeout}초 안에 끝나지 않았습니다"}
@@ -214,6 +221,11 @@ def probe_env(root: Path, name: str, timeout: int = 180) -> dict:
     # 주의: 위 루프가 `name`을 덮어쓴다 — result["name"]으로 판정한다.
     if result["name"] == ".venv" and "paddle" in pk.get("packages", {}):
         result["worker"] = _run_worker_ping(py, root, timeout)
+    # .venv-gpu에 torch와 paddle이 둘 다 있으면 서버는 PaddleOCR 워커를 이 환경의 파이썬 +
+    # torch 차단으로 먼저 띄운다(D-091 덧붙임) — 그 워커가 실제로 GPU로 뜨는지 직접 본다.
+    seen = set(pk.get("packages", {})) | set(pk.get("errors", {}))
+    if result["name"] == ".venv-gpu" and {"torch", "paddle"} <= seen:
+        result["gpu_worker"] = _run_worker_ping(py, root, timeout, block_torch=True)
     en = _run_probe(py, root, PROBE_ENGINES, timeout)
     result["engines"] = en.get("engines", [])
     if en.get("errors"):
@@ -365,17 +377,34 @@ def recommend(report: dict) -> list[dict]:
             )
         err = e.get("errors", {})
         if cudnn_conflict(e):
-            recs.append(
-                {
-                    "level": "fix",
-                    "text": f"{tag}: torch와 paddle이 각각 혼자서는 뜨지만 한 프로세스에서는 둘 중 "
-                    "하나가 죽습니다(cuDNN DLL 판이 다름). start_server.bat이 이 환경을 고르면 "
-                    "PaddleOCR은 .venv(CPU)의 파이썬을 자식 프로세스로 띄워 돌립니다(D-091) — "
-                    ".venv가 정상이면 그대로 두면 됩니다. GPU로 PaddleOCR을 돌리려면 torch를 "
-                    "빼야 합니다: `.venv-gpu\\Scripts\\python -m pip uninstall -y torch "
-                    "torchvision`.",
-                }
-            )
+            # 충돌은 «한 프로세스»의 일이다 — 서버는 PaddleOCR을 이 환경의 별도 자식 프로세스(torch
+            # 차단)로 GPU에서 돌린다(D-091 덧붙임). torch를 지우라는 옛 권고는 NDL古典籍 Full을
+            # 죽인다.
+            gw = e.get("gpu_worker") or {}
+            if gw.get("available") and gw.get("gpu"):
+                recs.append(
+                    {
+                        "level": "ok",
+                        "text": f"{tag}: torch와 paddle은 한 프로세스에 같이 못 올리지만"
+                        "(cuDNN DLL 판이 다름), 서버는 PaddleOCR을 이 환경의 별도 자식 "
+                        "프로세스(torch 차단)로 띄워 "
+                        "GPU에서 돌립니다(D-091 덧붙임). 고칠 것 없음.",
+                    }
+                )
+            else:
+                why = (gw.get("reason") or "확인하지 못함")[:160]
+                recs.append(
+                    {
+                        "level": "warn",
+                        "text": f"{tag}: torch와 paddle이 각각 혼자서는 뜨지만 한 프로세스에서는 "
+                        "둘 중 하나가 죽습니다(cuDNN DLL 판이 다름). "
+                        "서버는 PaddleOCR을 이 환경의 자식 "
+                        "프로세스(torch 차단)로 GPU에서 돌리려 하지만 그 워커가 뜨지 "
+                        f"않았습니다 — {why}. "
+                        "그러면 .venv(CPU) 자식 프로세스로 내려가 느립니다. torch는 지우지 마세요"
+                        "(NDL古典籍 Full이 씁니다).",
+                    }
+                )
             continue
         if _torch_breaks_paddleocr(e):
             cause = (err.get("torch") or err.get("paddleocr") or "")[:120]
@@ -542,6 +571,15 @@ def format_report(report: dict, recs: list[dict]) -> str:
                 )
             else:
                 lines.append(f"    ✗ paddle 워커 ping — {(w.get('reason') or '')[:200]}")
+        gw = e.get("gpu_worker")
+        if gw:
+            if gw.get("available"):
+                dev = "GPU" if gw.get("gpu") else "CPU"
+                lines.append(
+                    f"    ✓ paddle GPU 워커 ping (torch 차단, paddle {gw.get('paddle')}, {dev})"
+                )
+            else:
+                lines.append(f"    ✗ paddle GPU 워커 ping — {(gw.get('reason') or '')[:200]}")
         lines.append("")
     lines.append("── 권고 ──")
     if not recs:

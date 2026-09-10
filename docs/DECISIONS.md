@@ -4125,8 +4125,24 @@ Windows `.venv-gpu`에서 torch 2.6.0+cu124와 paddlepaddle-gpu 3.3.1은 각각 
 ### 비용·한계
 
 - 워커 경로의 PaddleOCR은 CPU다. GPU로 PaddleOCR을 돌리려면 그 환경에서 torch를 빼야 한다.
+  → **2026-09-10 덧붙임에서 풀림**: 워커를 `.venv-gpu` 파이썬 + torch 차단으로 띄우면 GPU다. torch를 빼면
+  NDL古典籍 Full이 죽으므로 빼지 않는다(doctor 권고에서도 걷어 냈다).
 - 이미지가 base64로 한 번 오간다 — 블록 크롭 크기에서는 무시할 만하다.
 - Linux는 nvidia-* pip 패키지를 공유하므로 판을 맞출 수 있을지 모르나 실측하지 않았다.
+
+### 덧붙임(2026-09-10) — 워커도 GPU로: 충돌은 «한 프로세스»이지 «GPU»가 아니다
+
+이 결정 뒤 1주일 동안 GPU PC의 PaddleOCR은 .venv(CPU) 워커에서 돌았다. 「GPU에서만」이라고 연 쪽 훑어보기(D-126)의
+180° 판정도 그래서 CPU였고(3쪽 101초), 사용자는 이것을 «GPU로 실행되게 하란 말이야»로 지적했다. 충돌은 torch와 paddle
+GPU판을 **한 프로세스에** 올릴 때만 난다. 워커를 **.venv-gpu 파이썬 그대로** 띄우고 워커 안에서 torch import만 막으면
+(`CTB_PADDLE_BLOCK_TORCH=1` → `sys.modules["torch"] = None`, paddlex는 torch 없이 뜬다) paddle은 GPU로 돈다. 실측:
+속몽구 가운데 조각 하나 CPU 4~6초 → GPU 0.06초(첫 호출 8초), 판정 같음(바로 선 조각 88자·0.96, 뒤집은 조각 36자·0.38).
+그래서 .venv-gpu에 `paddlepaddle-gpu`가 있으면 GPU 워커를 먼저 띄우고, 안 뜨면(ping 실패) 전처럼 `CTB_PADDLE_PYTHON`
+(.venv CPU)로 내려가며 그 이유를 엔진 정보에 적는다. `CTB_PADDLE_GPU_WORKER=0`으로 끈다. torch 없이 paddle만 있는
+.venv-gpu는 원래부터 서버 안에서 GPU였다. 남긴 것: Paddle이 «cuDNN 9.9로 빌드됐는데 9.5가 잡혔다»고 경고한다 — 결과는
+CPU와 같았지만 계속 지켜본다. 2026-09-03에 워커를 .venv-gpu로 띄웠다 죽은 뒤 «torch를 막고 띄우는» 길을 확인하지
+않은 채 CPU로 정했고, 그 사실을 알리지도 않았다.
+
 
 
 ## D-092: TextBlock을 없앤다 — 층위 있는 경계 목록이 단위의 정본이고, 단위의 id는 시작 경계에 붙는다
@@ -6423,8 +6439,9 @@ D-123은 회전을 권 하나에 값 하나로 두었다. 옆으로 스캔된 �
    gpu에서만 지원하는 걸로 해»)대로 서버가 GPU 환경(.venv-gpu, torch가 CUDA를 봄)일 때만 연다 —
    `core.env_doctor.gpu_runtime()`. CPU 환경이면 라우트가 dry_run부터 400으로 막고, 화면은 엔진 목록의
    `gpu_runtime`으로 「훑어보기」 단추를 숨긴다. 쪽 범위 회전 저장과 구간별 엔진 계획(손으로 적는 것)은 CPU에서도 된다.
-   **다만 GPU 서버에서도 PaddleOCR 판정은 CPU 워커(.venv, D-091)에서 돈다** — 실측 3쪽 101초(쪽당 30초쯤). GPU가
-   빠르게 하는 것은 비전 모델·NDL 엔진 쪽이고, 이 관문은 «시간이 오래 걸리는 일을 GPU PC에서만 열어 둔다»는 뜻이다.
+   처음 구현에서는 GPU 서버에서도 PaddleOCR 판정이 CPU 워커(.venv)에서 돌았다(3쪽 101초) — «GPU에서만»이라 해 놓고
+   CPU로 돈 것이다. 사용자 지적 뒤 워커를 GPU로 옮겼다(D-091 덧붙임): 3쪽 20초, 조각 하나 0.06초. 남은 시간은 대부분
+   비전 모델(글의 종류) 호출이다.
 
 실측(화면, 속몽구 복사본): 9~10쪽을 90°로 저장 → 「훑어보기」 3쪽 76초 → 확인창 하나(«9~10쪽 → 0°») → 저장 →
 범위 비워짐 → 계획 «8~10쪽 고서 판본 → 古典籍 Lite» → 드롭다운은 paddleocr인 채 「권 전체 OCR」 → 3쪽이

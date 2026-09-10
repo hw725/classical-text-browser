@@ -26,6 +26,13 @@ import os
 import sys
 import traceback
 
+# GPU 워커(D-091 덧붙임): 부모가 CTB_PADDLE_BLOCK_TORCH=1을 주면 torch import를 막는다.
+# paddlex가 torch를 끌어오면 torch의 cuDNN DLL과 paddle GPU판의 것이 한 프로세스에서 부딪혀
+# WinError 127로 죽는다 — torch가 없으면 paddlex는 그 기능 없이 뜨고, paddle은 GPU로 돈다
+# (2026-09-10 실측). 모든 import보다 먼저.
+if os.environ.get("CTB_PADDLE_BLOCK_TORCH") == "1":
+    sys.modules["torch"] = None  # type: ignore[assignment]
+
 
 def _engine():
     # 워커 안에서는 반드시 in-process 모드로 — 아니면 자식이 또 자식을 띄운다.
@@ -57,6 +64,7 @@ def handle_request(engine, req: dict) -> dict:
                 "python": sys.version.split()[0],
                 "executable": sys.executable,
                 "paddle": paddle_ver,
+                "gpu": bool(getattr(engine, "_use_gpu", False)),
             }
         if op == "recognize":
             image = base64.b64decode(req["image_b64"])

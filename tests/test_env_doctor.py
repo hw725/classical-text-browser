@@ -182,3 +182,59 @@ def test_worker_ping_ok_is_reported():
     recs = recommend(report)
     assert any(r["level"] == "ok" for r in recs)
     assert "✓ paddle 워커 ping" in format_report(report, recs)
+
+
+def _conflict_gpu_env():
+    gpu = _env(
+        ".venv-gpu", "3.12.13", errors={"paddle": "OSError: [WinError 127] … cudnn_cnn64_9.dll"}
+    )
+    gpu["packages"]["torch"] = "2.6.0+cu124"
+    gpu["alone"] = {"paddle": {"ok": True}, "torch": {"ok": True}}
+    return gpu
+
+
+def test_gpu_worker_ok_means_no_torch_uninstall_advice():
+    """D-091 덧붙임: GPU 워커(torch 차단)가 뜨면 «고칠 것 없음» — torch를 지우라고 하지 않는다."""
+    venv = _env(".venv", "3.12.13", engines=PADDLE_OK)
+    venv["worker"] = {"available": True, "reason": None, "paddle": "3.3.1"}
+    gpu = _conflict_gpu_env()
+    gpu["gpu_worker"] = {"available": True, "gpu": True, "paddle": "3.3.1"}
+    report = _report([venv, gpu], gpu=True)
+    recs = recommend(report)
+    texts = [r["text"] for r in recs]
+    assert not any("uninstall" in t for t in texts)
+    assert any(r["level"] == "ok" and "GPU에서 돌립니다" in r["text"] for r in recs)
+    assert "✓ paddle GPU 워커 ping (torch 차단, paddle 3.3.1, GPU)" in format_report(report, recs)
+
+
+def test_gpu_worker_failure_warns_cpu_fallback_and_keeps_torch():
+    venv = _env(".venv", "3.12.13", engines=PADDLE_OK)
+    gpu = _conflict_gpu_env()
+    gpu["gpu_worker"] = {"available": False, "reason": "cudnn 로드 실패"}
+    report = _report([venv, gpu], gpu=True)
+    recs = recommend(report)
+    warn = [r["text"] for r in recs if r["level"] == "warn" and "cuDNN" in r["text"]]
+    assert warn and "cudnn 로드 실패" in warn[0] and "torch는 지우지 마세요" in warn[0]
+    assert not any("uninstall" in r["text"] for r in recs)
+    assert "✗ paddle GPU 워커 ping — cudnn 로드 실패" in format_report(report, recs)
+
+
+def test_worker_ping_carries_gpu_flag(monkeypatch, tmp_path):
+    """워커 응답의 gpu 칸을 doctor가 버리면 GPU 워커도 «CPU»로 보인다 — 옮겨 담는지 본다."""
+    import subprocess
+    from types import SimpleNamespace
+
+    from src.core import env_doctor
+
+    reply = '{"ok": true, "available": true, "paddle": "3.3.1", "gpu": true}'
+    seen = {}
+
+    def fake_run(args, **kwargs):
+        seen["env"] = kwargs.get("env") or {}
+        return SimpleNamespace(stdout=reply + chr(10), stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    (tmp_path / "src").mkdir()
+    got = env_doctor._run_worker_ping(tmp_path / "py.exe", tmp_path, 10, block_torch=True)
+    assert got == {"available": True, "reason": None, "paddle": "3.3.1", "gpu": True}
+    assert seen["env"].get("CTB_PADDLE_BLOCK_TORCH") == "1"
