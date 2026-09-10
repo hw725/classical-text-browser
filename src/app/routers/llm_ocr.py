@@ -143,13 +143,15 @@ class OcrBatchRequest(BaseModel):
 
 
 def _usage_log_path():
-    """LLM 사용 기록 파일 경로를 돌려준다. (UsageTracker와 같은 규칙)"""
-    from pathlib import Path
+    """LLM 사용 기록 파일 경로를 돌려준다.
 
-    library_path = get_library_path()
-    if library_path is not None:
-        return Path(library_path) / "llm_usage_log.jsonl"
-    return Path.home() / ".classical-text-browser" / "llm_usage_log.jsonl"
+    규칙은 `llm.usage_tracker.default_usage_log_path` 하나다 — 여기서 따로
+    적으면 서고가 없을 때(`CTB_CONFIG_DIR`로 띄운 검증 서버) 추적기가 쓰는
+    파일과 배치 전후 줄 수를 세는 파일이 갈라진다.
+    """
+    from llm.usage_tracker import default_usage_log_path
+
+    return default_usage_log_path(get_library_path())
 
 
 def _usage_snapshot() -> int:

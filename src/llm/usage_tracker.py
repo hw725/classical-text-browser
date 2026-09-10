@@ -12,6 +12,7 @@
 """
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -21,24 +22,58 @@ from typing import Optional
 # 동일한 키를 실제 span/log attribute로 승격할 예정이다.
 _OTEL_SCHEMA_URL = "https://opentelemetry.io/schemas/1.30.0"
 
+USAGE_LOG_NAME = "llm_usage_log.jsonl"
+
+
+def default_usage_log_path(library_root=None) -> Path:
+    """사용 기록 파일의 자리를 정하는 **유일한** 규칙.
+
+    입력: 서고 루트(없으면 None).
+    출력: 기록 파일 경로. 서고가 있으면 그 안, 없으면 앱 설정 폴더.
+
+    앱 설정 폴더는 `core/app_config.py`와 같은 규칙으로 고른다 —
+    `CTB_CONFIG_DIR`가 있으면 그곳, 없으면 `~/.classical-text-browser`.
+    왜 환경 변수를 여기서 다시 읽는가: 검증 서버·pytest처럼 사용자의 홈을
+    건드리면 안 되는 프로세스가 스위치 하나로 기록까지 딴 곳에 두게 하려는
+    것이다. 실제로 서고 없이 만든 `LlmConfig()`로 도는 라우터 테스트가 mock
+    응답 2,100여 행을 사용자 홈의 기록에 섞어 넣었다(2026-09-10 확인).
+    `app_config.CONFIG_DIR`를 import하지 않고 매번 읽는 이유는, 그 상수가
+    import 시점에 굳어 conftest가 뒤늦게 바꾼 값을 못 보기 때문이다.
+
+    라우터 쪽(`routers/llm_ocr.py`)의 «지금까지 쌓인 줄 수» 계산도 이 함수를
+    써야 같은 파일을 본다.
+    """
+    if library_root:
+        return Path(library_root) / USAGE_LOG_NAME
+    config_dir = os.environ.get("CTB_CONFIG_DIR")
+    base = Path(config_dir) if config_dir else Path.home() / ".classical-text-browser"
+    return base / USAGE_LOG_NAME
+
 
 class UsageTracker:
     """LLM 사용량 추적. 서고별 llm_usage_log.jsonl에 기록."""
 
-    def __init__(self, config):
+    def __init__(self, config, log_path: Optional[Path] = None):
+        """입력: LlmConfig(서고 루트를 `_library_root`로 가짐)와,
+        시험·도구가 기록 자리를 직접 정하고 싶을 때 주는 `log_path`.
+        `log_path`를 주면 서고·환경 변수보다 우선한다."""
         self.config = config
+        self._injected_path: Optional[Path] = Path(log_path) if log_path else None
         self._log_path: Optional[Path] = None
 
     def _get_log_path(self) -> Path:
-        """로그 파일 경로. 서고 루트가 없으면 홈 디렉토리."""
+        """로그 파일 경로. 서고 루트가 없으면 앱 설정 폴더(`default_usage_log_path`).
+
+        처음 한 번만 자리를 정하고 부모 폴더를 만든다.
+        """
         if self._log_path:
             return self._log_path
 
-        library_root = getattr(self.config, "_library_root", None)
-        if library_root:
-            self._log_path = Path(library_root) / "llm_usage_log.jsonl"
+        if self._injected_path:
+            self._log_path = self._injected_path
         else:
-            self._log_path = Path.home() / ".classical-text-browser" / "llm_usage_log.jsonl"
+            library_root = getattr(self.config, "_library_root", None)
+            self._log_path = default_usage_log_path(library_root)
 
         self._log_path.parent.mkdir(parents=True, exist_ok=True)
         return self._log_path

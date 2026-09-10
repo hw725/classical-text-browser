@@ -151,6 +151,7 @@ uv run python -m pytest
 | **프론트엔드 전체** | 테스트 0개, CI 없음 | jsdom 일회성 하네스. **정식 스모크 테스트는 미결**(D-053) |
 | **「없다」의 증명** | 정적 검사는 «볼 곳»만 좁혀 준다 | 오탐을 사람이 하나씩 걸러야 한다 |
 | **검증 서버가 사용자 설정을 바꾸는 것** | 복사본 서고·다른 포트로 띄워도 `~/.classical-text-browser/config.json`은 하나라, «마지막 서고»가 복사본으로 바뀌어 아이콘으로 켠 앱이 임시 폴더를 연다(2026-09-10 실측, 이틀) | 검증 서버는 **`CTB_CONFIG_DIR=<임시 폴더>`**를 붙여 띄운다(`core/app_config.py`). 끝나면 config.json의 recent_libraries에 임시 경로가 없는지 본다 |
+| **테스트가 사용자 홈에 쓰는 것** | 서고 없이 만든 `LlmConfig()`의 `UsageTracker`는 홈 폴더로 내려간다. 라우터 테스트가 mock 응답을 `~/.classical-text-browser/llm_usage_log.jsonl`에 쌓았는데(2,202행 중 2,127행, 2026-09-10 확인) 테스트는 전부 초록이었다 — 기록이 «어디에» 쌓이는지는 아무 테스트도 보지 않았다 | `tests/conftest.py`가 세션 시작 때 `CTB_CONFIG_DIR`를 pytest 임시 폴더로 돌리고(자식 프로세스까지 물려받는다), `test_usage_log_isolation.py`의 마지막 테스트(`home_leak_check` 마커, conftest가 실행 순서 맨 뒤로 보낸다)가 홈의 기록·설정 파일 크기가 세션 시작과 같은지 잰다. 새 코드가 홈에 쓰는 길을 내면 이 테스트가 빨간불이다 |
 
 ### 특히 — 침묵하는 실패
 
