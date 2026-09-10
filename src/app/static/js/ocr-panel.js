@@ -39,12 +39,13 @@ function _renderOcrEnginePlan() {
     return;
   }
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-  const rows = plan.ranges.map((r) => `${r.from}~${r.to}쪽 ${esc(r.label || "")} → ${esc(r.display_name || r.engine)}`).join(" · ");
-  const mixed = plan.mixed && plan.mixed.length ? ` · 영역별 OCR이 필요한 쪽 ${plan.mixed.map((m) => m.page).join(",")}(계획에서 뺌)` : "";
+  // 구간마다 한 줄 — 한 줄에 이어 붙이면 패널 폭을 넘어 옆으로 잘렸다(2026-09-10 사용자 지적)
+  const rows = plan.ranges.map((r) => `<div class="ocr-plan-row">${r.from}~${r.to}쪽 ${esc(r.label || "")} → ${esc(r.display_name || r.engine)}</div>`).join("");
+  const mixed = plan.mixed && plan.mixed.length ? `<div class="ocr-plan-row">영역별 OCR이 필요한 쪽 ${esc(plan.mixed.map((m) => m.page).join(","))}(계획에서 뺌)</div>` : "";
   el.innerHTML =
     `<label class="text-toolbar-check" title="켜 두면 「권 전체 OCR」이 쪽마다 이 계획의 엔진으로 돕니다. 끄면 위의 엔진 드롭다운 하나로 돕니다">` +
-    `<input id="ocr-batch-use-plan" type="checkbox" checked /> 훑어보기 계획대로</label> ${rows}${esc(mixed)} ` +
-    `<button id="ocr-batch-plan-clear" class="text-btn text-btn-sm" type="button" title="계획을 지웁니다">지우기</button>`;
+    `<input id="ocr-batch-use-plan" type="checkbox" checked /> 훑어보기 계획대로</label> ` +
+    `<button id="ocr-batch-plan-clear" class="text-btn text-btn-sm" type="button" title="계획을 지웁니다">지우기</button>${rows}${mixed}`;
   el.hidden = false;
   document.getElementById("ocr-batch-plan-clear")?.addEventListener("click", () => setOcrEnginePlan(null));
 }

@@ -3809,8 +3809,12 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
 
 .ocr-buttons {
   display: flex;
+  flex-wrap: wrap; /* 훑어보기 계획(#ocr-batch-plan)이 한 줄 통째로 내려오게 — 안 감싸면 옆으로 잘린다(2026-09-10) */
   gap: 6px;
 }
+/* 훑어보기 계획 — 단추 줄 아래 한 줄 전체. 구간마다 한 줄, 긴 이름은 접는다 */
+#ocr-batch-plan { flex: 1 1 100%; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+#ocr-batch-plan .ocr-plan-row { padding-left: 1.2em; }
 
 .ocr-buttons .text-btn {
   flex: 1;
@@ -7884,6 +7888,10 @@ select.prop-level { max-width: 4.6em; }
 .comp-split-dialog { width: 720px; max-height: 82vh; padding: 12px; gap: 8px; }
 /* LLM에 묻기 모달 (D-117) */
 .comp-llm-dialog { width: 560px; max-height: 82vh; padding: 12px; gap: 8px; }
+/* 훑어보기 모달 (D-126) — 범위·모델·횟수 세 줄 */
+.survey-dialog { width: 480px; padding: 12px; gap: 8px; }
+.survey-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.survey-row > input, .survey-row > select { flex: 1; min-width: 0; }
 /* 해제 상태 줄 — 고치는 곳은 「참고·억제」 칸이고 여기서는 보이기만 한다 */
 .comp-llm-ref {
   display: flex;

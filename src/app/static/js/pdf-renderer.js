@@ -235,6 +235,92 @@ async function applySavedRotation(docId, partId, target, pages) {
  * 회전 제안 (D-126): 쪽 썸네일을 비전 모델에 보여 «바로 섰나»만 답받고, 서버가 연속 쪽을 구간으로
  * 묶어 돌려준다. 보내기 전에 «N쪽·호출 K번»을 묻고, 받은 구간은 하나씩 확인받아 저장한다.
  */
+/**
+ * 훑어보기 모달의 쪽 범위 칸을 읽는다. 출력: [from, to] 또는 null(권 전체). 잘못 적었으면 throw.
+ */
+function _surveyPagesInput() {
+  const raw = (document.getElementById("survey-pages")?.value || "").trim();
+  if (!raw) return null;
+  const m = raw.match(/^(\d+)\s*[-~–]\s*(\d+)$/) || raw.match(/^(\d+)$/);
+  if (!m) throw new Error(`쪽 범위를 «37-60»처럼 적으세요: ${raw}`);
+  return [Number(m[1]), Number(m[2] ?? m[1])];
+}
+
+/**
+ * 훑어보기 모달을 열어 «쪽 범위·모델»을 받는다(D-126). 출력: {pages, llmSel} 또는 null(닫음).
+ *
+ * 왜 모달인가: prompt/confirm 사슬에는 모델을 고를 자리가 없어 늘 «자동»으로 갔다(2026-09-10 사용자 지적).
+ * 범위를 고칠 때마다 dry_run으로 «몇 쪽·호출 몇 번»을 상태 줄에 보인다 — 보내기 전에 크기를 안다.
+ */
+function _openSurveyModal(post) {
+  const overlay = document.getElementById("survey-overlay");
+  const status = document.getElementById("survey-status");
+  const pagesEl = document.getElementById("survey-pages");
+  const runBtn = document.getElementById("survey-run");
+  if (!overlay || !runBtn) return Promise.resolve({ pages: null, llmSel: {} }); // 모달이 없으면 옛 흐름(권 전체·자동)
+  return new Promise((resolve) => {
+    let seq = 0;
+    const refresh = async () => {
+      const my = ++seq;
+      let pages;
+      try {
+        pages = _surveyPagesInput();
+      } catch (e) {
+        status.textContent = e.message;
+        runBtn.disabled = true;
+        return;
+      }
+      status.textContent = "세는 중…";
+      runBtn.disabled = true;
+      try {
+        const dry = await (await post({ pages, dry_run: true })).json();
+        if (my !== seq) return; // 그 사이 범위를 또 고쳤다
+        if (dry.error) throw new Error(dry.error);
+        status.textContent = `${dry.pages}쪽 — 비전 모델 ${dry.calls}번(글의 종류) + PaddleOCR ${dry.ocr_calls || 0}번(180°·좌우 판정, GPU). 쪽마다 몇 초.`;
+        runBtn.disabled = !dry.pages;
+      } catch (e) {
+        if (my !== seq) return;
+        status.textContent = `셀 수 없습니다: ${e.message}`;
+      }
+    };
+    const done = (val) => {
+      overlay.style.display = "none";
+      overlay.removeEventListener("click", onOverlay);
+      pagesEl?.removeEventListener("input", refresh);
+      resolve(val);
+    };
+    const onOverlay = (ev) => {
+      if (ev.target === overlay) done(null);
+    };
+    document.getElementById("survey-close").onclick = () => done(null);
+    document.getElementById("survey-cancel").onclick = () => done(null);
+    runBtn.onclick = () => {
+      try {
+        const pages = _surveyPagesInput();
+        const llmSel = typeof getLlmModelSelection === "function" ? getLlmModelSelection("survey-model-select") : {};
+        done({ pages, llmSel });
+      } catch (e) {
+        status.textContent = e.message;
+      }
+    };
+    overlay.addEventListener("click", onOverlay);
+    pagesEl?.addEventListener("input", refresh);
+    // 도구 모음의 쪽 범위 칸에 적어 둔 것이 있으면 그대로 가져온다(잘못 적혀 있으면 비운다)
+    if (pagesEl) {
+      let pre = null;
+      try {
+        pre = _rotatePagesInput();
+      } catch (_) {
+        pre = null;
+      }
+      pagesEl.value = pre ? `${pre[0]}-${pre[1]}` : "";
+    }
+    overlay.style.display = "";
+    pagesEl?.focus();
+    refresh();
+  });
+}
+
 async function _suggestRotation() {
   const docId = pdfState.currentDocId;
   const partId = pdfState.currentPartId;
@@ -243,28 +329,12 @@ async function _suggestRotation() {
   const btn = document.getElementById("pdf-rotate-suggest");
   if (btn) btn.disabled = true;
   try {
-    const rawRange = prompt(
-      "어느 쪽을 훑어볼까요? 비우면 권 전체. «37-60»처럼 범위를 적을 수 있습니다.\n" +
-        "쪽마다 비전 모델을 한 번씩 부릅니다.",
-      "",
-    );
-    if (rawRange === null) return;
-    let pages = null;
-    const m = rawRange.trim().match(/^(\d+)\s*[-~–]\s*(\d+)$/);
-    if (rawRange.trim() && !m) throw new Error(`쪽 범위를 «37-60»처럼 적으세요: ${rawRange}`);
-    if (m) pages = [Number(m[1]), Number(m[2])];
-    const llmSel = typeof getLlmModelSelection === "function" ? getLlmModelSelection() : {};
-    const body = { pages, dry_run: true, force_provider: llmSel.force_provider || null, force_model: llmSel.force_model || null };
     const post = (b) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) });
-    const dry = await (await post(body)).json();
-    if (dry.error) throw new Error(dry.error);
-    if (
-      !confirm(
-        `${dry.pages}쪽을 훑어봅니다 — 비전 모델 ${dry.calls}번(글의 종류) + PaddleOCR ${dry.ocr_calls || 0}번(180°·좌우 판정, GPU).\n계속할까요?`,
-      )
-    )
-      return;
-    showToast(`${dry.pages}쪽을 모델에 보여 주는 중… (쪽마다 몇 초)`, "info");
+    const picked = await _openSurveyModal(post);
+    if (!picked) return;
+    const { pages, llmSel } = picked;
+    const body = { pages, force_provider: llmSel.force_provider || null, force_model: llmSel.force_model || null };
+    showToast(`${pages ? `${pages[0]}~${pages[1]}쪽` : "권 전체"}을 훑어보는 중… (쪽마다 몇 초)`, "info");
     const d = await (await post({ ...body, dry_run: false })).json();
     const rot = d.rotation || [];
     const eng = d.engines || [];
@@ -329,8 +399,9 @@ async function _suggestRotation() {
           "\n\n레이아웃 탭에서 영역을 나눈 뒤, 영역마다 엔진을 골라 「선택 블록 OCR」로 읽으세요.",
       );
     }
+    const who = d.model ? ` (${d.provider ? d.provider + ":" : ""}${d.model})` : "";
     showToast(
-      `${d.checked}쪽을 봤습니다 — 회전 구간 ${rot.length}개 제안·${applied}개 저장, 엔진 구간 ${eng.length}개` +
+      `${d.checked}쪽을 봤습니다${who} — 회전 구간 ${rot.length}개 제안·${applied}개 저장, 엔진 구간 ${eng.length}개` +
         (mixed.length ? `, 영역별 OCR이 필요한 쪽 ${mixed.length}` : "") +
         (filled ? ` — 계획 ${lines.length}구간을 「권 전체 OCR」에 넣었습니다. 레이아웃 탭에서 그 단추를 누르면 쪽마다 계획의 엔진으로 돕니다` : "") +
         (d.unknown ? ` · 판단 못 한 쪽 ${d.unknown}` : "") + (d.error ? ` · 일부 실패: ${d.error}` : ""),
