@@ -145,9 +145,9 @@ def layout_changed_since_ocr(
         return False, ""
 
     # 회전이 바뀌면 블록 구성이 같아도 좌표계가 다르다(D-123). 도장이 없는 옛 파일은 0으로 본다
-    from core.document import part_rotation
+    from core.document import page_rotation
 
-    now = part_rotation(doc_path, part_id)
+    now = page_rotation(doc_path, part_id, page_number)
     for label, data in (("레이아웃", layout_data), ("OCR", ocr_data)):
         was = int(data.get("rotation") or 0)
         if was != now:

@@ -346,8 +346,83 @@ def part_rotation(doc_path: str | Path, part_id: str | None) -> int:
     return 0
 
 
-def set_part_rotation(doc_path: str | Path, part_id: str, rotation: int) -> dict:
+def part_rotation_ranges(doc_path: str | Path, part_id: str | None) -> list[dict]:
+    """권 안에서 회전이 다른 쪽 범위 목록 (D-126). [{"from", "to", "rotation"}] — 없으면 [].
+
+    책 중간에 접은 그림·가로 표처럼 권의 회전과 다른 구간이 있다. 범위는 1부터 세고 양 끝을
+    포함한다.
+    """
+    try:
+        manifest = get_document_info(doc_path)
+    except FileNotFoundError:
+        return []
+    for part in manifest.get("parts") or []:
+        if part_id is None or part.get("part_id") == part_id:
+            out = []
+            for r in part.get("rotation_ranges") or []:
+                try:
+                    a, b, rot = int(r["from"]), int(r["to"]), int(r.get("rotation") or 0)
+                except (KeyError, TypeError, ValueError):
+                    continue
+                if a <= b and rot in ROTATIONS:
+                    out.append({"from": a, "to": b, "rotation": rot})
+            return sorted(out, key=lambda r: r["from"])
+    return []
+
+
+def page_rotation(doc_path: str | Path, part_id: str | None, page_number: int) -> int:
+    """이 쪽의 회전 — 범위(D-126)에 들면 그 값, 아니면 권의 회전(D-123). 출력: 0·90·180·270.
+
+    쪽 이미지를 여는 곳·도장을 찍는 곳·도장을 견주는 곳이 **모두 이것**을 읽어야 한다.
+    part_rotation을 읽으면 범위 구간에서만 좌표계가 어긋난다.
+    """
+    for r in part_rotation_ranges(doc_path, part_id):
+        if r["from"] <= int(page_number) <= r["to"]:
+            return r["rotation"]
+    return part_rotation(doc_path, part_id)
+
+
+def _merge_rotation_ranges(
+    ranges: list[dict], a: int, b: int, rotation: int, base: int
+) -> list[dict]:
+    """[a, b]에 rotation을 놓고 나머지 범위를 잘라 붙인다. 권의 회전과 같은 조각은 없앤다.
+
+    입력: 지금 범위 목록, 새 범위 양 끝(포함), 새 회전, 권의 회전.
+    출력: 정리된 목록(인접·같은 값은 합침).
+    """
+    pieces: list[dict] = []
+    for r in ranges:
+        if r["to"] < a or r["from"] > b:
+            pieces.append(dict(r))
+            continue
+        if r["from"] < a:
+            pieces.append({"from": r["from"], "to": a - 1, "rotation": r["rotation"]})
+        if r["to"] > b:
+            pieces.append({"from": b + 1, "to": r["to"], "rotation": r["rotation"]})
+    if rotation != base:
+        pieces.append({"from": a, "to": b, "rotation": rotation})
+    pieces = [p for p in pieces if p["rotation"] != base]
+    pieces.sort(key=lambda r: r["from"])
+    merged: list[dict] = []
+    for p in pieces:
+        if merged and merged[-1]["rotation"] == p["rotation"] and merged[-1]["to"] + 1 >= p["from"]:
+            merged[-1]["to"] = max(merged[-1]["to"], p["to"])
+        else:
+            merged.append(p)
+    return merged
+
+
+def set_part_rotation(
+    doc_path: str | Path,
+    part_id: str,
+    rotation: int,
+    pages: tuple[int, int] | None = None,
+) -> dict:
     """권의 회전을 manifest에 적는다(스키마 검증 뒤 원자적 쓰기). 출력: 바뀐 part dict.
+
+    pages가 None이면 권 전체의 회전을 바꾸고 쪽 범위는 지운다(«전체»가 곧 새 기준이다).
+    pages=(a, b)면 그 범위만 rotation으로 두고 권의 회전은 그대로다(D-126) — 범위가 권의 회전과
+    같으면 범위 목록에서 빠진다.
 
     왜 지우지 않는가: 회전을 바꾸면 그 권의 L2·L3 좌표계가 어긋나지만, 지우는 것은
     사람이 정한다 — 이 함수는 적기만 하고 라우트가 «다시 OCR해야 할 쪽 수»를 알린다.
@@ -365,7 +440,24 @@ def set_part_rotation(doc_path: str | Path, part_id: str, rotation: int) -> dict
             break
     if target is None:
         raise FileNotFoundError(f"권을 찾을 수 없습니다: {part_id}")
-    target["rotation"] = int(rotation)
+    if pages is None:
+        target["rotation"] = int(rotation)
+        target.pop("rotation_ranges", None)
+    else:
+        a, b = int(pages[0]), int(pages[1])
+        if a < 1 or b < a:
+            raise ValueError(f"쪽 범위가 잘못되었습니다: {a}~{b} (1부터, 끝은 시작 이상)")
+        count = target.get("page_count")
+        if count and b > int(count):
+            raise ValueError(f"쪽 범위가 권을 벗어납니다: {a}~{b} (이 권은 {count}쪽)")
+        base = int(target.get("rotation") or 0)
+        merged = _merge_rotation_ranges(
+            part_rotation_ranges(doc_path, part_id), a, b, int(rotation), base
+        )
+        if merged:
+            target["rotation_ranges"] = merged
+        else:
+            target.pop("rotation_ranges", None)
     schema_path = Path(__file__).resolve().parent.parent.parent / "schemas" / "source_repo"
     schema = json.loads((schema_path / "manifest.schema.json").read_text(encoding="utf-8"))
     jsonschema.validate(manifest, schema)
@@ -529,8 +621,9 @@ def save_page_layout(
     import jsonschema
 
     doc_path = Path(doc_path).resolve()
-    # 이 좌표계가 어느 회전에서 만들어졌는지 도장을 찍는다(D-123). 화면은 권의 회전을 몰라도 된다
-    layout_data["rotation"] = part_rotation(doc_path, part_id)
+    # 이 좌표계가 어느 회전에서 만들어졌는지 도장을 찍는다(D-123·D-126 쪽 범위). 화면은 권의
+    # 회전을 몰라도 된다
+    layout_data["rotation"] = page_rotation(doc_path, part_id, page_num)
     layout_path = _layout_file_path(doc_path, part_id, page_num)
 
     # L3_layout/ 디렉토리가 없으면 생성

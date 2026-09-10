@@ -223,3 +223,89 @@ class TestRotationEffect:
         assert _rotation_effect(doc, "v1")["pages"] == 2
         assert _rotation_effect(doc, "v1", 90)["pages"] == 1  # L3(0°)만 어긋난다
         assert _rotation_effect(doc, "v1", 0)["pages"] == 1  # L2(90°)만 어긋난다
+
+
+class TestPageRanges:
+    """쪽 범위 회전 (D-126) — 권의 회전은 그대로, 범위에 든 쪽만 다른 값."""
+
+    def test_page_rotation_resolves_ranges_then_part(self, tmp_path):
+        from core.document import page_rotation, part_rotation, set_part_rotation
+
+        _lib, doc = _make_doc(tmp_path, rotation=90)
+        manifest = json.loads((doc / "manifest.json").read_text(encoding="utf-8"))
+        manifest["parts"][0]["page_count"] = 10
+        (doc / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        set_part_rotation(doc, "v1", 0, pages=(3, 5))
+        assert part_rotation(doc, "v1") == 90
+        assert [page_rotation(doc, "v1", n) for n in (2, 3, 5, 6)] == [90, 0, 0, 90]
+        # 범위를 겹쳐 덮으면 잘리고, 권의 회전과 같은 값은 목록에서 빠진다
+        set_part_rotation(doc, "v1", 180, pages=(4, 7))
+        m = json.loads((doc / "manifest.json").read_text(encoding="utf-8"))
+        assert m["parts"][0]["rotation_ranges"] == [
+            {"from": 3, "to": 3, "rotation": 0},
+            {"from": 4, "to": 7, "rotation": 180},
+        ]
+        set_part_rotation(doc, "v1", 90, pages=(3, 3))  # 권과 같은 값 → 범위 삭제
+        m = json.loads((doc / "manifest.json").read_text(encoding="utf-8"))
+        assert m["parts"][0]["rotation_ranges"] == [{"from": 4, "to": 7, "rotation": 180}]
+        # 인접한 같은 값은 합쳐진다
+        set_part_rotation(doc, "v1", 180, pages=(8, 9))
+        m = json.loads((doc / "manifest.json").read_text(encoding="utf-8"))
+        assert m["parts"][0]["rotation_ranges"] == [{"from": 4, "to": 9, "rotation": 180}]
+        # 권 전체로 저장하면 범위는 지워진다 — «전체»가 새 기준이다
+        set_part_rotation(doc, "v1", 0)
+        m = json.loads((doc / "manifest.json").read_text(encoding="utf-8"))
+        assert m["parts"][0]["rotation"] == 0 and "rotation_ranges" not in m["parts"][0]
+
+    def test_range_outside_part_is_refused(self, tmp_path):
+        import pytest
+
+        from core.document import set_part_rotation
+
+        _lib, doc = _make_doc(tmp_path)
+        with pytest.raises(ValueError):
+            set_part_rotation(doc, "v1", 90, pages=(0, 1))
+        with pytest.raises(ValueError):
+            set_part_rotation(doc, "v1", 90, pages=(1, 5))  # page_count 1
+
+    def test_image_and_layout_stamp_follow_the_page(self, tmp_path):
+        """범위 안의 쪽은 돌린 이미지·도장, 밖의 쪽은 권의 값 — 두 쪽짜리 PDF로 잰다."""
+        from core.document import save_page_layout, set_part_rotation
+        from ocr.image_utils import load_page_image_from_pdf
+
+        lib, doc = _make_doc(tmp_path)
+        pdf = fitz.open(str(doc / "L1_source" / "v1.pdf"))
+        pdf.new_page(width=100, height=200)
+        pdf.saveIncr()
+        pdf.close()
+        manifest = json.loads((doc / "manifest.json").read_text(encoding="utf-8"))
+        manifest["parts"][0]["page_count"] = 2
+        (doc / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        set_part_rotation(doc, "v1", 90, pages=(2, 2))
+        img1 = load_page_image_from_pdf(str(lib), "d1", 1, scale=1.0, part_id="v1")
+        img2 = load_page_image_from_pdf(str(lib), "d1", 2, scale=1.0, part_id="v1")
+        assert (img1.width, img1.height) == (100, 200)  # 권의 회전 0
+        assert (img2.width, img2.height) == (200, 100)  # 범위의 회전 90
+        layout = {
+            "part_id": "v1",
+            "page_number": 2,
+            "image_width": 200,
+            "image_height": 100,
+            "blocks": [],
+        }
+        save_page_layout(doc, "v1", 2, layout)
+        saved = json.loads((doc / "L3_layout" / "v1_page_002.json").read_text(encoding="utf-8"))
+        assert saved["rotation"] == 90
+
+    def test_effect_counts_only_pages_in_range(self, tmp_path):
+        from src.app.routers.documents import _rotation_effect
+
+        doc = tmp_path / "d"
+        (doc / "L2_ocr").mkdir(parents=True)
+        for n in (1, 2, 3):
+            (doc / "L2_ocr" / f"v1_page_{n:03d}.json").write_text(
+                '{"rotation": 0}', encoding="utf-8"
+            )
+        assert _rotation_effect(doc, "v1", 90)["pages"] == 3
+        assert _rotation_effect(doc, "v1", 90, (2, 3))["pages"] == 2
+        assert _rotation_effect(doc, "v1", 0, (2, 3))["pages"] == 0

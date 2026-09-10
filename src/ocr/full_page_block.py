@@ -174,7 +174,7 @@ def ensure_full_page_block(
     finally:
         doc.close()
 
-    from core.document import part_rotation
+    from core.document import page_rotation
 
     layout = build_full_page_layout(
         width_pt,
@@ -183,7 +183,7 @@ def ensure_full_page_block(
         page_number,
         writing_direction=writing_direction,
         render_scale=render_scale,
-        rotation=part_rotation(doc_path, part_id),
+        rotation=page_rotation(doc_path, part_id, page_number),
     )
     save_page_layout(doc_path, part_id, page_number, layout)
     logger.info(

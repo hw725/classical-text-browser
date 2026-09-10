@@ -54,6 +54,20 @@
             "description": "이 파일의 페이지 수. 모를 경우 null.",
             "minimum": 1,
             "default": null
+          },
+          "rotation_ranges": {
+            "type": "array",
+            "description": "권의 회전과 다른 쪽 범위(D-126). 책 중간의 접은 그림·가로 표. 양 끝 포함, 1부터. 없으면 권의 rotation.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["from", "to", "rotation"],
+              "properties": {
+                "from": { "type": "integer", "minimum": 1 },
+                "to": { "type": "integer", "minimum": 1 },
+                "rotation": { "type": "integer", "enum": [0, 90, 180, 270] }
+              }
+            }
           }
         }
       }

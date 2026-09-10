@@ -384,10 +384,10 @@ def load_page_image_from_pdf(
       OCR을 위해 PDF에서 페이지를 추출해야 한다.
       pymupdf(fitz)를 사용 (없으면 None 반환).
     """
-    from core.document import part_rotation
+    from core.document import page_rotation
 
     doc_path = Path(library_root) / "documents" / doc_id
-    rotation = part_rotation(doc_path, part_id)
+    rotation = page_rotation(doc_path, part_id, page_number)  # 쪽 범위 회전 포함(D-126)
     pdf_path = resolve_part_pdf(doc_path, part_id)
     if pdf_path is None or not pdf_path.exists():
         return None

@@ -1210,6 +1210,15 @@
                   id="pdf-rotation-label"
                   class="pdf-toolbar-label"
                 ></span>
+                <!-- 쪽 범위(D-126) — 책 중간의 접은 그림·가로 표. 비우면 권 전체. 돌린 각도가 있을 때만 보인다 -->
+                <input
+                  id="pdf-rotate-pages"
+                  class="pdf-page-input"
+                  style="width: 64px"
+                  hidden
+                  placeholder="전체"
+                  title="이 회전을 저장할 쪽 범위. 비우면 권 전체, «37-52»면 그 쪽들만(양 끝 포함). 권 전체로 저장하면 쪽 범위는 지워집니다"
+                />
                 <!-- 임시 회전을 이 권에 저장(D-123) — 돌린 각도가 있을 때만 보인다 -->
                 <button
                   id="pdf-rotate-save"
@@ -1217,6 +1226,13 @@
                   hidden
                   title="이 회전을 이 권에 저장합니다. 저장하면 OCR·레이아웃·앵커가 모두 돌린 이미지를 기준으로 하므로, 이미 있는 OCR 결과는 다시 돌려야 합니다"
                 >저장</button>
+                <!-- 회전 제안(D-126) — 쪽 썸네일을 비전 모델에 보여 «바로 섰나»만 답받고 구간으로 묶는다 -->
+                <button
+                  id="pdf-rotate-suggest"
+                  class="pdf-btn"
+                  title="비전 모델이 쪽을 훑어보고 «37~52쪽은 0°»처럼 회전이 다른 구간을 제안합니다. 쪽마다 한 번 부르고, 저장은 구간마다 확인받습니다"
+                  aria-label="회전 제안"
+                >제안<span class="llm-tag">LLM</span></button>
                 <div class="pdf-toolbar-divider"></div>
                 <!-- 읽기 보조선 -->
                 <button
@@ -1532,6 +1548,17 @@
                   >
                     선택 블록 OCR
                   </button>
+                  <!-- D-126: 훈점 구간만 다른 엔진으로 다시 읽는 일 — 쪽 범위와 «이미 된 쪽도 다시» -->
+                  <input
+                    id="ocr-batch-pages"
+                    class="pdf-page-input"
+                    style="width: 72px"
+                    placeholder="쪽: 전체"
+                    title="「권 전체 OCR」이 돌 쪽. 비우면 권 전체, «37-52»나 «3,7,10-12»처럼 적으면 그 쪽만. 위의 엔진 드롭다운이 이 쪽들에 쓰입니다"
+                  />
+                  <label class="text-toolbar-check" title="이미 OCR 결과가 있는 쪽도 다시 읽습니다(덮기 전 백업을 남깁니다). 끄면 결과 없는 쪽만 돕니다">
+                    <input id="ocr-batch-redo" type="checkbox" /> 된 쪽도 다시
+                  </label>
                   <button
                     id="ocr-run-part"
                     class="text-btn"

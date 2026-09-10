@@ -54,7 +54,7 @@ from pathlib import Path
 
 import fitz
 
-from core.document import get_pdf_path, part_rotation
+from core.document import get_pdf_path, page_rotation
 
 logger = logging.getLogger(__name__)
 
@@ -417,14 +417,13 @@ def embed_text_layer(
         # 권에 회전이 저장돼 있으면(D-123) 출력 복사본의 /Rotate를 그만큼 올린다 — 다른 뷰어에서도
         # 연구자가 저장한 방향으로 열리고, 표시 공간이 곧 L2 좌표계(돌린 이미지)가 된다.
         # 원본 L1은 그대로다(다른 경로에 저장한다).
-        saved_rotation = part_rotation(doc_path, part_id)
-
         for page_num in targets:
             if not 1 <= page_num <= total_pages:
                 warnings.append(f"{page_num}쪽은 PDF 범위(1~{total_pages})를 벗어나 건너뜁니다.")
                 continue
 
             page = doc[page_num - 1]
+            saved_rotation = page_rotation(doc_path, part_id, page_num)  # 쪽 범위 회전(D-126)
             if saved_rotation:
                 page.set_rotation((page.rotation + saved_rotation) % 360)
             lines = _load_lines(doc_path, part_id, page_num, source_layer)

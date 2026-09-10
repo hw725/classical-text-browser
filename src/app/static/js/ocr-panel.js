@@ -688,10 +688,25 @@ async function _runPartOcr() {
   const engineSelect = document.getElementById("ocr-engine-select");
   const engineId = engineSelect ? engineSelect.value || null : null;
   const total = viewerState.documentInfo?.parts?.find((p) => p.part_id === partId)?.page_count;
+  // 쪽 범위·다시 돌리기(D-126): 훈점 구간만 다른 엔진으로 다시 읽는 일
+  const rawPages = (document.getElementById("ocr-batch-pages")?.value || "").trim();
+  const redo = !!document.getElementById("ocr-batch-redo")?.checked;
+  let pages = null;
+  if (rawPages) {
+    pages = typeof parsePageRange === "function" ? parsePageRange(rawPages, total || 100000) : null;
+    if (!pages || !pages.length) {
+      showToast(`쪽 범위를 «37-52»나 «3,7,10-12»처럼 적으세요: ${rawPages}`, "warning");
+      return;
+    }
+  }
+  const scope = pages ? `${pages.length}쪽(${rawPages})` : `이 권${total ? ` ${total}쪽` : ""} 전체`;
   if (
     !confirm(
-      `이 권${total ? ` ${total}쪽` : ""} 전체를 OCR합니다.\n` +
-        "이미 결과가 있는 쪽은 건너뛰고, 레이아웃이 없는 쪽은 쪽 전면 1블록으로 돌립니다.\n" +
+      `${scope}를 ${engineId || "기본 엔진"}(으)로 OCR합니다.\n` +
+        (redo
+          ? "이미 결과가 있는 쪽도 다시 읽습니다(덮기 전 백업을 남깁니다).\n"
+          : "이미 결과가 있는 쪽은 건너뛰고, ") +
+        "레이아웃이 없는 쪽은 쪽 전면 1블록으로 돌립니다.\n" +
         "계속할까요?",
     )
   )
@@ -703,7 +718,8 @@ async function _runPartOcr() {
       : { force_provider: null, force_model: null };
   const body = {
     engine_id: engineId,
-    skip_existing: true,
+    pages,
+    skip_existing: !redo,
     redo_changed_layout: true,
     backup_before_overwrite: true,
     auto_full_page_block: true,

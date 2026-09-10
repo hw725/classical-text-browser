@@ -33,6 +33,7 @@ from core.document import (
     list_pages,
     match_hwp_text_to_layout_blocks,
     part_rotation,
+    part_rotation_ranges,
     save_bibliography,
     save_page_corrections,
     save_page_layout,
@@ -147,21 +148,41 @@ class CorrectionsSaveRequest(BaseModel):
 
 
 class PartRotationRequest(BaseModel):
-    """권의 회전을 저장하는 요청 (D-123). 시계 방향 0·90·180·270."""
+    """회전을 저장하는 요청 (D-123·D-126). 시계 방향 0·90·180·270.
+
+    pages가 없으면 권 전체(쪽 범위는 지운다), [from, to]면 그 쪽 범위만(양 끝 포함, 1부터).
+    """
 
     rotation: int
+    pages: list[int] | None = None
 
 
-def _rotation_effect(doc_path: Path, part_id: str, target: int | None = None) -> dict:
+def _rotation_effect(
+    doc_path: Path,
+    part_id: str,
+    target: int | None = None,
+    pages: tuple[int, int] | None = None,
+) -> dict:
     """회전을 target으로 바꾸면 좌표계가 어긋나는 결과가 몇 쪽인가.
 
     출력: {"l2_pages", "l3_pages", "pages"} — pages는 L2·L3 쪽의 합집합. 화면은 «다시 OCR해야 할
     쪽 N»으로 묻는다(Codex 지적). target을 주면 **도장이 그 값과 다른 쪽만** 센다 — 90°로 저장했다가
     되돌리는 경우, 이미 90°에서 만든 결과는 어긋나지 않는데 전부 세면 과하게 경고한다(감사 지적).
-    지우지 않는다.
+    pages=(a, b)면 그 쪽 범위의 결과만 센다(D-126). 지우지 않는다.
     """
 
+    def _in_range(path: Path) -> bool:
+        if pages is None:
+            return True
+        try:
+            n = int(path.stem.rsplit("_", 1)[1])
+        except (IndexError, ValueError):
+            return False
+        return pages[0] <= n <= pages[1]
+
     def _mismatch(path: Path) -> bool:
+        if not _in_range(path):
+            return False
         if target is None:
             return True
         try:
@@ -175,35 +196,54 @@ def _rotation_effect(doc_path: Path, part_id: str, target: int | None = None) ->
     return {"l2_pages": len(l2), "l3_pages": len(l3), "pages": len(l2 | l3)}
 
 
+def _pages_tuple(pages) -> tuple[int, int] | None:
+    """[a, b] → (a, b). 비어 있으면 None. 모양이 틀리면 ValueError."""
+    if not pages:
+        return None
+    if len(pages) != 2:
+        raise ValueError("pages는 [시작, 끝] 둘이어야 합니다")
+    a, b = int(pages[0]), int(pages[1])
+    if a < 1 or b < a:
+        raise ValueError(f"쪽 범위가 잘못되었습니다: {a}~{b}")
+    return a, b
+
+
 @router.get("/api/documents/{doc_id}/parts/{part_id}/rotation")
 async def api_get_part_rotation(
     doc_id: str,
     part_id: str,
     target: int | None = Query(None, description="바꾸려는 회전 — 주면 그 값과 다른 결과만 센다"),
+    from_page: int | None = Query(None, alias="from", description="쪽 범위 시작(D-126)"),
+    to_page: int | None = Query(None, alias="to", description="쪽 범위 끝(포함)"),
 ):
-    """권의 저장된 회전과, 바꾸면 다시 만들어야 할 결과의 쪽 수 (D-123).
+    """권의 저장된 회전·쪽 범위와, 바꾸면 다시 만들어야 할 결과의 쪽 수 (D-123·D-126).
 
-    출력: {"rotation": 0|90|180|270, "effect": {"l2_pages", "l3_pages", "pages"}}.
-    화면은 저장하기 **전에** 이것으로 확인창의 숫자를 만든다.
+    출력: {"rotation", "ranges": [{"from","to","rotation"}],
+          "effect": {"l2_pages","l3_pages","pages"}}.
+    화면은 저장하기 **전에** 이것으로 확인창의 숫자를 만든다. from·to를 주면 그 범위의 결과만 센다.
     """
     if get_library_path() is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
     doc_path = require_repo_path("documents", doc_id)
     if not doc_path.exists():
         return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
+    pages = (from_page, to_page) if from_page and to_page and to_page >= from_page else None
     return {
         "rotation": part_rotation(doc_path, part_id),
-        "effect": _rotation_effect(doc_path, part_id, target),
+        "ranges": part_rotation_ranges(doc_path, part_id),
+        "effect": _rotation_effect(doc_path, part_id, target, pages),
     }
 
 
 @router.put("/api/documents/{doc_id}/parts/{part_id}/rotation")
 async def api_set_part_rotation(doc_id: str, part_id: str, body: PartRotationRequest):
-    """권의 회전을 저장한다 (D-123). 옆으로 스캔된 책을 세우는 것은 화면이 아니라 권의 속성이다.
+    """회전을 저장한다 (D-123·D-126). 옆으로 스캔된 책을 세우는 것은 화면이 아니라 권의 속성이다.
 
-    저장 뒤로 OCR·레이아웃 감지·썸네일·내보내기가 모두 돌린 이미지를 쓴다. 이미 있는 L2·L3는
-    **지우지 않는다** — 좌표계가 어긋난 것은 파이프라인·낡음 판정이 거부하고, 사람이 다시 돌린다.
-    출력: {"rotation", "effect"}.
+    pages 없이 부르면 권 전체(쪽 범위는 지운다), pages=[a, b]면 그 범위만 — 책 중간의 접은 그림·
+    가로 표. 저장 뒤로 OCR·레이아웃 감지·썸네일·내보내기가 모두 그 쪽의 회전으로 돌린 이미지를
+    쓴다. 이미 있는 L2·L3는 **지우지 않는다** — 좌표계가 어긋난 것은 파이프라인·낡음 판정이
+    거부하고, 사람이 다시 돌린다.
+    출력: {"rotation", "ranges", "effect"}.
     """
     if get_library_path() is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
@@ -211,13 +251,19 @@ async def api_set_part_rotation(doc_id: str, part_id: str, body: PartRotationReq
     if not doc_path.exists():
         return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
     try:
-        part = set_part_rotation(doc_path, part_id, body.rotation)
+        pages = _pages_tuple(body.pages)
+        part = set_part_rotation(doc_path, part_id, body.rotation, pages)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except FileNotFoundError as e:
         return JSONResponse({"error": str(e)}, status_code=404)
-    git_commit_document(doc_path, f"chore: 권 회전 {part_id} → {body.rotation}° (D-123)")
-    return {"rotation": part["rotation"], "effect": _rotation_effect(doc_path, part_id)}
+    where = f"{pages[0]}~{pages[1]}쪽" if pages else "권"
+    git_commit_document(doc_path, f"chore: 회전 {part_id} {where} → {body.rotation}° (D-123·D-126)")
+    return {
+        "rotation": int(part.get("rotation") or 0),  # 범위만 적으면 권의 값은 그대로(없으면 0)
+        "ranges": part_rotation_ranges(doc_path, part_id),
+        "effect": _rotation_effect(doc_path, part_id, body.rotation, pages),
+    }
 
 
 class BibliographySaveRequest(BaseModel):

@@ -20,6 +20,7 @@ server.py의 Phase 10-2 (LLM) / Phase 10-1 (OCR) 엔드포인트를 분리한 �
     POST /api/documents/{doc_id}/parts/{part_id}/ocr/batch
 """
 
+import asyncio
 import json
 import logging
 import shutil
@@ -372,10 +373,10 @@ def _load_page_image(doc_id: str, page: int, part_id: str | None = None) -> byte
             for m in matches:
                 if m.suffix.lower() in (".jpg", ".jpeg", ".png", ".tiff", ".tif"):
                     raw = m.read_bytes()
-                    from core.document import part_rotation
+                    from core.document import page_rotation
 
-                    rot = part_rotation(doc_dir, part_id)
-                    if rot:  # 이미지 파일도 권의 회전을 따른다(D-123)
+                    rot = page_rotation(doc_dir, part_id, page)
+                    if rot:  # 이미지 파일도 쪽의 회전을 따른다(D-123·D-126)
                         from io import BytesIO
 
                         from PIL import Image
@@ -406,9 +407,9 @@ def _load_page_image(doc_id: str, page: int, part_id: str | None = None) -> byte
                     pix = doc[page_idx].get_pixmap(matrix=fitz.Matrix(2.0, 2.0))
                     raw = pix.tobytes("png")
                     # 권에 회전이 저장돼 있으면(D-123) 모델도 바로 선 쪽을 봐야 한다
-                    from core.document import part_rotation
+                    from core.document import page_rotation
 
-                    rot = part_rotation(doc_dir, part_id)
+                    rot = page_rotation(doc_dir, part_id, page)
                     if rot:
                         from io import BytesIO
 
@@ -934,12 +935,12 @@ async def api_detect_layout(
 
     image_path = get_page_image_path(str(library_path), doc_id, part_id, page)
     if image_path is not None:
-        from core.document import part_rotation
+        from core.document import page_rotation
         from ocr.image_utils import rotate_page_image
 
         pil_image = rotate_page_image(
             load_page_image(image_path),
-            part_rotation(Path(library_path) / "documents" / doc_id, part_id),
+            page_rotation(Path(library_path) / "documents" / doc_id, part_id, page),
         )
     else:
         # part_id를 넘긴다 — 다권본에서 첫 권을 읽지 않고, 저장된 회전도 그 권의 것을 쓴다(D-123)
@@ -978,6 +979,211 @@ async def api_detect_layout(
         "analysis_method": "auto_detect",
         "engine": engine.engine_id,
         "block_count": len(blocks),
+    }
+
+
+class PageSurveyRequest(BaseModel):
+    """쪽 훑어보기 요청 (D-126). pages=[a, b]면 그 범위, 없으면 권 전체.
+
+    stride는 «몇 쪽마다 하나».
+    """
+
+    pages: list[int] | None = None
+    stride: int = 1
+    writing_direction: str = "vertical_rtl"  # 투영으로 방향을 잴 때의 기준(세로쓰기·가로쓰기)
+    force_provider: str | None = None
+    force_model: str | None = None
+    dry_run: bool = False  # True면 모델을 부르지 않고 «몇 쪽·호출 몇 번»만
+
+
+@router.post("/api/documents/{doc_id}/parts/{part_id}/rotation/suggest")
+async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
+    """쪽 훑어보기 (D-126): 쪽 썸네일을 비전 모델에 보여 «바로 섰나·무슨 글인가»만 답받고,
+    코드가 회전이 다른 구간과 쪽마다 알맞은 OCR 엔진을 제안한다. 저장·실행은 화면이 사람에게 묻는다.
+
+    출력: {"checked", "calls", "unknown",
+           "rotation": [{"from","to","rotation","current_rotation","pages","effect"}],
+           "engines": [{"from","to","engine","display_name","content","label","pages"}],
+           "mixed": [{"page","contents","label"}] — 종류가 둘 이상이라 영역별 OCR이 필요한 쪽,
+           "per_page": [...], "provider", "model", "error"}
+    dry_run이면 {"dry_run": True, "pages", "calls"}.
+    """
+    from app._state import _get_llm_router
+    from core.document import get_document_info, page_rotation
+    from core.page_survey import (
+        CONTENT_LABELS,
+        SURVEY_PROMPT,
+        SURVEY_SYSTEM_PROMPT,
+        group_engine_ranges,
+        group_rotation_ranges,
+        is_mixed,
+        orientation_by_projection,
+        parse_survey,
+        recommend_engine,
+        sideways_target,
+        target_rotation,
+        text_contents,
+    )
+
+    library_path = get_library_path()
+    if library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+    doc_dir = library_path / "documents" / doc_id
+    if not doc_dir.exists():
+        return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
+    info = get_document_info(doc_dir)
+    part = next((x for x in info.get("parts") or [] if x.get("part_id") == part_id), None)
+    if part is None:
+        return JSONResponse({"error": f"권을 찾을 수 없습니다: {part_id}"}, status_code=404)
+    total = int(part.get("page_count") or 0)
+    a, b = 1, total
+    if body.pages:
+        if len(body.pages) != 2 or body.pages[0] < 1 or body.pages[1] < body.pages[0]:
+            return JSONResponse({"error": "pages는 [시작, 끝]이어야 합니다."}, status_code=400)
+        a, b = int(body.pages[0]), int(body.pages[1])
+        if total:
+            b = min(b, total)
+    if not total and not body.pages:
+        return JSONResponse(
+            {"error": "이 권의 쪽 수를 몰라 범위를 적어야 합니다."}, status_code=400
+        )
+    stride = max(1, int(body.stride or 1))
+    targets = list(range(a, b + 1, stride))
+    if body.dry_run:
+        # 실행 게이트(전역 규칙 11)는 도구 층에 — 보내기 전에 «몇 쪽·호출 몇 번»을 화면이 보인다
+        return {"dry_run": True, "pages": len(targets), "calls": len(targets)}
+
+    try:
+        _pipeline, registry = _get_ocr_pipeline()
+        available = {e["engine_id"] for e in registry.list_engines() if e.get("available")}
+        names = {
+            e["engine_id"]: e.get("display_name") or e["engine_id"] for e in registry.list_engines()
+        }
+    except Exception:  # noqa: BLE001 — 엔진 목록을 못 읽어도 방향 판정은 된다
+        available, names = set(), {}
+
+    router_llm = _get_llm_router()
+    kwargs: dict = {
+        "image_mime": "image/jpeg",
+        "system": SURVEY_SYSTEM_PROMPT,
+        "response_format": "json",
+        "purpose": "vision",
+        # 200이면 kimi-k3:cloud가 사고에 다 써 잘린다(실측 2026-09-10) — 답은 짧지만 예산은 넉넉히
+        "max_tokens": 800,
+        "think": False,
+    }
+    if body.force_provider:
+        kwargs["force_provider"] = body.force_provider
+    if body.force_model:
+        kwargs["force_model"] = body.force_model
+    per_page: list[dict] = []
+    errors: list[str] = []
+    provider = model = None
+    unknown = 0
+    loop = asyncio.get_event_loop()
+    for page in targets:
+        current = page_rotation(doc_dir, part_id, page)
+        image = await loop.run_in_executor(None, _load_page_image, doc_id, page, part_id)
+        row = {
+            "page": page,
+            "current": current,
+            "orientation": None,
+            "target": None,
+            "guess": False,  # 누운 쪽의 목표는 추정(90인지 270인지) — 화면이 미리보기로 확인받는다
+            "heuristic": None,
+            "contents": [],
+            "content": None,
+            "engine": None,
+            "mixed": False,
+        }
+        if not image:
+            errors.append(f"{page}쪽 이미지 없음")
+            per_page.append(row)
+            unknown += 1
+            continue
+        try:
+            resp = await router_llm.call_with_image(SURVEY_PROMPT, image, **kwargs)
+        except Exception as e:  # noqa: BLE001 — 한 쪽이 실패해도 나머지는 본다
+            errors.append(f"{page}쪽: {type(e).__name__}: {str(e)[:80]}")
+            per_page.append(row)
+            unknown += 1
+            continue
+        provider = getattr(resp, "provider", None) or provider
+        model = getattr(resp, "model", None) or model
+        orientation, contents = parse_survey(getattr(resp, "text", "") or "")
+        # 방향은 투영(코드)이 먼저 — 모델은 세로쓰기 한문의 방향을 자주 틀린다(D-126 실측). 투영이
+        # 모름일 때만 모델의 답을 쓴다. 누운 쪽의 90/270은 투영으로 못 가리므로 «추정»으로 표시한다.
+        heur, ratio = orientation_by_projection(image, body.writing_direction)
+        row["heuristic"] = {"orientation": heur, "ratio": round(ratio, 2)}
+        if heur == "upright":
+            row["orientation"], row["target"] = "upright", current
+        elif heur == "sideways":
+            row["orientation"], row["target"], row["guess"] = (
+                "sideways",
+                sideways_target(current),
+                True,
+            )
+        else:
+            row["orientation"] = orientation
+            row["target"] = target_rotation(current, orientation)
+        row["contents"] = contents
+        kinds = text_contents(contents)
+        row["content"] = (
+            kinds[0] if len(kinds) == 1 else ("blank" if contents == ["blank"] else None)
+        )
+        # 한 쪽에 종류가 둘 이상(한글+훈점) — 쪽 단위 엔진으로는 못 푼다. 엔진을 고르지 않고
+        # 따로 알린다
+        row["mixed"] = is_mixed(contents)
+        row["engine"] = None if row["mixed"] else recommend_engine(row["content"], available)
+        if orientation is None and not contents:
+            unknown += 1
+        per_page.append(row)
+
+    rotation = group_rotation_ranges(per_page)
+    guessed = {row["page"] for row in per_page if row.get("guess")}
+    for r in rotation:
+        r["current_rotation"] = page_rotation(doc_dir, part_id, r["from"])
+        r["guess"] = any(n in guessed for n in range(r["from"], r["to"] + 1))
+        # 이 구간을 바꾸면 다시 돌려야 할 결과 수 — 도장이 목표와 다른 쪽만
+        cnt = 0
+        for layer in ("L2_ocr", "L3_layout"):
+            for n in range(r["from"], r["to"] + 1):
+                f = doc_dir / layer / f"{part_id}_page_{n:03d}.json"
+                if f.exists():
+                    try:
+                        stamp = int(
+                            (json.loads(f.read_text(encoding="utf-8"))).get("rotation") or 0
+                        )
+                    except (OSError, ValueError):
+                        stamp = -1
+                    if stamp != r["rotation"]:
+                        cnt += 1
+                        break
+        r["effect"] = cnt
+    engines = group_engine_ranges(per_page)
+    for r in engines:
+        r["display_name"] = names.get(r["engine"], r["engine"])
+        r["label"] = CONTENT_LABELS.get(r.get("content") or "", r.get("content") or "")
+    mixed = [
+        {
+            "page": row["page"],
+            "contents": text_contents(row["contents"]),
+            "label": " + ".join(CONTENT_LABELS.get(c, c) for c in text_contents(row["contents"])),
+        }
+        for row in per_page
+        if row.get("mixed")
+    ]
+    return {
+        "checked": len(targets),
+        "calls": len(targets),
+        "unknown": unknown,
+        "rotation": rotation,
+        "engines": engines,
+        "mixed": mixed,
+        "per_page": per_page,
+        "provider": provider,
+        "model": model,
+        "error": " / ".join(errors)[:600] if errors else None,
     }
 
 

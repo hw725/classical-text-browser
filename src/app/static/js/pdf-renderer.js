@@ -43,6 +43,7 @@ const pdfState = {
   currentPartId: null, // 현재 로드된 권 ID
   filterMode: 0,       // 이미지 필터: 0=원본, 1=흑백, 2=고대비, 3=반전
   rotation: 0,         // 임시 회전(CSS transform): 0, 90, 180, 270 — 저장 전까지 화면의 것
+  rotationRanges: [],  // 권의 회전과 다른 쪽 범위 [{from,to,rotation}] (D-126)
   savedRotation: 0,    // 권에 저장된 회전(D-123) — PDF.js가 이 각도로 그려 캔버스 좌표가 곧 돌린 이미지 좌표다
   fitMode: "width",    // 자동 맞춤: "width" | "height" | "none"
 };
@@ -100,8 +101,23 @@ function _applyFilter() {
  */
 // eslint-disable-next-line no-unused-vars
 function pdfViewport(page, scale) {
-  const saved = (typeof pdfState !== "undefined" && pdfState.savedRotation) || 0;
+  // 쪽 범위 회전(D-126): PDF.js page는 자기 쪽 번호를 안다 — 어느 쪽을 그리든 그 쪽의 값을 쓴다
+  const saved = typeof savedRotationFor === "function" ? savedRotationFor(page.pageNumber) : 0;
   return page.getViewport({ scale, rotation: ((page.rotate || 0) + saved) % 360 });
+}
+
+/**
+ * 이 쪽에 저장된 회전 (D-123·D-126). 입력: 쪽 번호. 출력: 0·90·180·270.
+ * 쪽 범위(pdfState.rotationRanges)에 들면 그 값, 아니면 권의 회전(pdfState.savedRotation).
+ */
+// eslint-disable-next-line no-unused-vars
+function savedRotationFor(pageNum) {
+  if (typeof pdfState === "undefined") return 0;
+  const n = Number(pageNum) || pdfState.currentPage || 0;
+  for (const r of pdfState.rotationRanges || []) {
+    if (r.from <= n && n <= r.to) return Number(r.rotation) || 0;
+  }
+  return pdfState.savedRotation || 0;
 }
 
 /**
@@ -154,12 +170,173 @@ function _applyRotation() {
     wrapper.style.margin = "";
   }
 
-  // 회전 각도 라벨 표시 — 저장된 것과 임시 것을 따로 보인다
-  const label = document.getElementById("pdf-rotation-label");
-  const saved = pdfState.savedRotation || 0;
-  if (label) label.textContent = [saved ? `저장 ${saved}°` : "", deg ? `+${deg}°` : ""].filter(Boolean).join(" ");
+  _updateRotationLabel();
   const save = document.getElementById("pdf-rotate-save");
   if (save) save.hidden = deg === 0;
+  const pages = document.getElementById("pdf-rotate-pages");
+  if (pages) pages.hidden = deg === 0;
+}
+
+/** 회전 각도 라벨 — 이 쪽에 저장된 것(쪽 범위면 표시)과 임시 것을 따로 보인다. */
+function _updateRotationLabel() {
+  const label = document.getElementById("pdf-rotation-label");
+  if (!label) return;
+  const deg = pdfState.rotation || 0;
+  const saved = savedRotationFor(pdfState.currentPage);
+  const ranged = (pdfState.rotationRanges || []).some((r) => r.from <= pdfState.currentPage && pdfState.currentPage <= r.to);
+  label.textContent = [saved || ranged ? `저장 ${saved}°${ranged ? "(쪽 범위)" : ""}` : "", deg ? `+${deg}°` : ""]
+    .filter(Boolean).join(" ");
+}
+
+/** 「저장」 옆 쪽 범위 칸을 읽는다. 비어 있으면 null(권 전체). «37-52»·«37~52»·«37» 을 받는다. */
+function _rotatePagesInput() {
+  const el = document.getElementById("pdf-rotate-pages");
+  const raw = (el?.value || "").trim();
+  if (!raw) return null;
+  const m = raw.match(/^(\d+)\s*[-~–]\s*(\d+)$/) || raw.match(/^(\d+)$/);
+  if (!m) throw new Error(`쪽 범위를 «37-52»처럼 적으세요: ${raw}`);
+  const a = Number(m[1]), b = Number(m[2] ?? m[1]);
+  if (a < 1 || b < a || (pdfState.totalPages && b > pdfState.totalPages)) {
+    throw new Error(`쪽 범위가 권을 벗어납니다: ${a}~${b} (이 권은 ${pdfState.totalPages}쪽)`);
+  }
+  return [a, b];
+}
+
+/**
+ * 회전을 서버에 적고 화면 상태를 맞춘다 (D-123·D-126). 입력: 문헌·권·목표 회전·쪽 범위([a,b]|null).
+ * 출력: 서버 응답. 「저장」과 「회전 제안」의 적용이 같은 길을 쓴다 — 저장하는 자리는 하나다.
+ */
+async function applySavedRotation(docId, partId, target, pages) {
+  const base = `/api/documents/${encodeURIComponent(docId)}/parts/${encodeURIComponent(partId)}/rotation`;
+  const res = await fetch(base, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rotation: target, pages: pages || null }),
+  });
+  const d = await res.json();
+  if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+  if (docId !== pdfState.currentDocId || partId !== pdfState.currentPartId) return d; // 다른 권으로 갔다
+  // 문헌 정보 캐시에도 적는다 — 다음에 이 권을 열 때 여기서 읽는다
+  const part = viewerState?.documentInfo?.parts?.find((p) => p.part_id === partId);
+  if (part) {
+    part.rotation = d.rotation;
+    part.rotation_ranges = d.ranges || [];
+  }
+  pdfState.savedRotation = d.rotation;
+  pdfState.rotationRanges = d.ranges || [];
+  pdfState.rotation = 0;
+  _applyRotation(); // 0이어도 불러 CSS transform·margin을 푼다
+  await _autoFit();
+  await _renderPage(pdfState.currentPage);
+  return d;
+}
+
+/**
+ * 회전 제안 (D-126): 쪽 썸네일을 비전 모델에 보여 «바로 섰나»만 답받고, 서버가 연속 쪽을 구간으로
+ * 묶어 돌려준다. 보내기 전에 «N쪽·호출 K번»을 묻고, 받은 구간은 하나씩 확인받아 저장한다.
+ */
+async function _suggestRotation() {
+  const docId = pdfState.currentDocId;
+  const partId = pdfState.currentPartId;
+  if (!docId || !partId) return;
+  const url = `/api/documents/${encodeURIComponent(docId)}/parts/${encodeURIComponent(partId)}/rotation/suggest`;
+  const btn = document.getElementById("pdf-rotate-suggest");
+  if (btn) btn.disabled = true;
+  try {
+    const rawRange = prompt(
+      "어느 쪽을 훑어볼까요? 비우면 권 전체. «37-60»처럼 범위를 적을 수 있습니다.\n" +
+        "쪽마다 비전 모델을 한 번씩 부릅니다.",
+      "",
+    );
+    if (rawRange === null) return;
+    let pages = null;
+    const m = rawRange.trim().match(/^(\d+)\s*[-~–]\s*(\d+)$/);
+    if (rawRange.trim() && !m) throw new Error(`쪽 범위를 «37-60»처럼 적으세요: ${rawRange}`);
+    if (m) pages = [Number(m[1]), Number(m[2])];
+    const llmSel = typeof getLlmModelSelection === "function" ? getLlmModelSelection() : {};
+    const body = { pages, dry_run: true, force_provider: llmSel.force_provider || null, force_model: llmSel.force_model || null };
+    const post = (b) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) });
+    const dry = await (await post(body)).json();
+    if (dry.error) throw new Error(dry.error);
+    if (!confirm(`${dry.pages}쪽을 훑어봅니다 — 비전 모델 호출 ${dry.calls}번. 계속할까요?`)) return;
+    showToast(`${dry.pages}쪽을 모델에 보여 주는 중… (쪽마다 몇 초)`, "info");
+    const d = await (await post({ ...body, dry_run: false })).json();
+    const rot = d.rotation || [];
+    const eng = d.engines || [];
+    if (d.error && !rot.length && !eng.length) throw new Error(d.error);
+    if (docId !== pdfState.currentDocId || partId !== pdfState.currentPartId) return;
+    // 1) 회전이 다른 구간 — 그 구간의 첫 쪽을 **제안한 회전으로 미리 보인 채** 확인받는다.
+    //    누운 쪽은 90인지 270인지 코드가 못 가리므로(추정), 아니라고 하면 반대쪽을 한 번 더 보인다.
+    let applied = 0;
+    const preview = async (pageNo, target) => {
+      if (typeof goToPage === "function" && pdfState.currentPage !== pageNo) {
+        goToPage(pageNo);
+        await new Promise((res) => setTimeout(res, 400));
+      }
+      pdfState.rotation = (target - savedRotationFor(pageNo) + 360) % 360;
+      _applyRotation();
+      await new Promise((res) => setTimeout(res, 250));
+    };
+    for (const r of rot) {
+      const candidates = r.guess ? [r.rotation, (r.rotation + 180) % 360] : [r.rotation];
+      let chosen = null;
+      for (let i = 0; i < candidates.length; i++) {
+        const target = candidates[i];
+        await preview(r.from, target);
+        const ok = confirm(
+          `회전 제안: ${r.from}~${r.to}쪽(${r.pages}쪽)을 ${target}°로 — 화면에 그렇게 보였습니다.\n` +
+            (r.guess ? (i === 0 ? "(누운 쪽은 90°·270° 중 어느 쪽인지 코드가 못 가립니다 — 바로 서 있으면 확인)\n" : "(반대쪽입니다)\n") : "") +
+            (r.effect ? `OCR·레이아웃 결과가 있는 ${r.effect}쪽은 다시 돌려야 합니다.\n` : "") +
+            "이대로 저장할까요?" + (i + 1 < candidates.length ? " (취소하면 반대쪽을 보입니다)" : " (취소하면 이 구간은 건너뜁니다)"),
+        );
+        if (ok) { chosen = target; break; }
+      }
+      pdfState.rotation = 0;
+      _applyRotation();
+      if (chosen == null) continue;
+      await applySavedRotation(docId, partId, chosen, [r.from, r.to]);
+      applied++;
+    }
+    // 2) 엔진 추천 — 구간 목록을 보이고, 고른 하나를 「권 전체 OCR」 칸(쪽 범위·엔진·다시)에 넣는다
+    const lines = eng.map((r) => `${r.from}~${r.to}쪽(${r.pages}쪽): ${r.label} → ${r.display_name}`);
+    let filled = null;
+    for (const r of eng) {
+      const ok = confirm(
+        `엔진 추천:\n${lines.join("\n")}\n\n` +
+          `${r.from}~${r.to}쪽(${r.label})을 ${r.display_name}(으)로 읽도록 교감 탭 「권 전체 OCR」 칸에 넣을까요?\n` +
+          "(넣은 뒤 그 단추를 누르면 돕니다. 취소하면 다음 구간을 묻습니다)",
+      );
+      if (!ok) continue;
+      const pagesEl = document.getElementById("ocr-batch-pages");
+      const engineEl = document.getElementById("ocr-engine-select");
+      const redoEl = document.getElementById("ocr-batch-redo");
+      if (pagesEl) pagesEl.value = `${r.from}-${r.to}`;
+      if (engineEl && [...engineEl.options].some((o) => o.value === r.engine)) engineEl.value = r.engine;
+      if (redoEl) redoEl.checked = true;
+      filled = r;
+      break;
+    }
+    // 3) 섞인 쪽 — 한글+훈점처럼 종류가 둘 이상이면 쪽 단위 엔진으로는 못 푼다. 영역별 OCR을 안내한다
+    const mixed = d.mixed || [];
+    if (mixed.length) {
+      alert(
+        `종류가 섞인 쪽 ${mixed.length}개 — 이 쪽들은 엔진 하나로 읽을 수 없습니다.\n` +
+          mixed.map((m) => `${m.page}쪽: ${m.label}`).join("\n") +
+          "\n\n레이아웃 탭에서 영역을 나눈 뒤, 영역마다 엔진을 골라 「선택 블록 OCR」로 읽으세요.",
+      );
+    }
+    showToast(
+      `${d.checked}쪽을 봤습니다 — 회전 구간 ${rot.length}개 제안·${applied}개 저장, 엔진 구간 ${eng.length}개` +
+        (mixed.length ? `, 영역별 OCR이 필요한 쪽 ${mixed.length}` : "") +
+        (filled ? ` (${filled.from}~${filled.to}쪽 ${filled.display_name}을 「권 전체 OCR」 칸에 넣음 — 교감 탭에서 누르세요)` : "") +
+        (d.unknown ? ` · 판단 못 한 쪽 ${d.unknown}` : "") + (d.error ? ` · 일부 실패: ${d.error}` : ""),
+      applied || filled ? "success" : "info",
+    );
+  } catch (e) {
+    showToast(`회전 제안 실패: ${e.message}`, "error");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 /**
@@ -174,45 +351,36 @@ async function _saveRotation() {
   const partId = pdfState.currentPartId;
   const temp = pdfState.rotation || 0;
   if (!docId || !partId || !temp) return;
-  const target = ((pdfState.savedRotation || 0) + temp) % 360;
   const base = `/api/documents/${encodeURIComponent(docId)}/parts/${encodeURIComponent(partId)}/rotation`;
   const btn = document.getElementById("pdf-rotate-save");
   if (btn) btn.disabled = true;
   try {
-    const eff = await (await fetch(`${base}?target=${target}`)).json(); // 목표와 다른 도장만 센다
+    // 쪽 범위(D-126): 칸이 비어 있으면 권 전체. 범위면 지금 쪽의 저장값에 임시 회전을 더한다
+    const pages = _rotatePagesInput();
+    const target = (savedRotationFor(pdfState.currentPage) + temp) % 360;
+    const where = pages ? `${pages[0]}~${pages[1]}쪽을` : "이 권 전체를";
+    const q = pages ? `?target=${target}&from=${pages[0]}&to=${pages[1]}` : `?target=${target}`;
+    const eff = await (await fetch(base + q)).json(); // 목표와 다른 도장만 센다
     const n = eff.effect?.pages || 0;
     if (n) {
       const ok = confirm(
-        `이 권을 ${target}° 돌려 저장합니다.\n` +
+        `${where} ${target}° 돌려 저장합니다.\n` +
           `OCR·레이아웃 결과가 있는 ${n}쪽은 좌표계가 어긋나므로 다시 돌려야 합니다 ` +
           `(지우지는 않습니다). 계속할까요?`,
       );
       if (!ok) return;
     }
-    const res = await fetch(base, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rotation: target }),
-    });
-    const d = await res.json();
-    if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
-    if (docId !== pdfState.currentDocId || partId !== pdfState.currentPartId) return; // 다른 권으로 갔다
-    // 문헌 정보 캐시에도 적는다 — 다음에 이 권을 열 때 여기서 읽는다
-    const part = viewerState?.documentInfo?.parts?.find((p) => p.part_id === partId);
-    if (part) part.rotation = d.rotation;
-    pdfState.savedRotation = d.rotation;
-    pdfState.rotation = 0;
-    _applyRotation(); // 0이어도 불러 CSS transform·margin을 푼다
-    await _autoFit();
-    await _renderPage(pdfState.currentPage);
+    await applySavedRotation(docId, partId, target, pages);
     showToast(
-      `회전 ${d.rotation}°를 이 권에 저장했습니다` + (n ? ` — ${n}쪽은 다시 OCR해야 합니다` : ""),
+      `회전 ${target}°를 ${where.replace(/을$/, "에")} 저장했습니다` + (n ? ` — ${n}쪽은 다시 OCR해야 합니다` : ""),
       n ? "warning" : "success",
     );
   } catch (e) {
     showToast(`회전 저장 실패: ${e.message}`, "error");
   } finally {
     if (btn) btn.disabled = false;
+    const pagesEl = document.getElementById("pdf-rotate-pages");
+    if (pagesEl && !pdfState.rotation) pagesEl.value = "";
   }
 }
 
@@ -286,6 +454,7 @@ async function loadPdfPage(docId, partId, pageNum) {
     // 권에 저장된 회전(D-123)은 PDF.js가 그린다. 임시 회전은 권을 바꾸면 푼다
     const part = viewerState?.documentInfo?.parts?.find((p) => p.part_id === partId);
     pdfState.savedRotation = Number(part?.rotation) || 0;
+    pdfState.rotationRanges = Array.isArray(part?.rotation_ranges) ? part.rotation_ranges : []; // D-126
     pdfState.rotation = 0;
     _applyRotation();
 
@@ -371,6 +540,7 @@ async function _renderPage(pageNum) {
   }
 
   pdfState.rendering = false;
+  _updateRotationLabel(); // 쪽마다 저장 회전이 다를 수 있다(D-126) — 쪽을 넘기면 라벨도 그 쪽 것으로
 
   // 로딩 인디케이터 숨김
   if (loadingEl) loadingEl.style.display = "none";
@@ -693,6 +863,8 @@ function initPdfRenderer() {
   if (rotateCwBtn) rotateCwBtn.addEventListener("click", _rotateCW);
   const rotateCcwBtn = document.getElementById("pdf-rotate-ccw");
   if (rotateCcwBtn) rotateCcwBtn.addEventListener("click", _rotateCCW);
+  const rotateSuggestBtn = document.getElementById("pdf-rotate-suggest");
+  if (rotateSuggestBtn) rotateSuggestBtn.addEventListener("click", _suggestRotation);
   const rotateSaveBtn = document.getElementById("pdf-rotate-save");
   if (rotateSaveBtn) rotateSaveBtn.addEventListener("click", _saveRotation);
 
