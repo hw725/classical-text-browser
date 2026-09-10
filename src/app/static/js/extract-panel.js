@@ -1060,6 +1060,7 @@ async function _runExtractOcr() {
     const decoder = new TextDecoder();
     let buffer = "";
     let done = null;
+    let lastSeen = null; // 스트림이 «완료» 없이 끊기면 어디서 멈췄는지 말한다(ocr-panel과 같은 이유)
 
     while (true) {
       const chunk = await reader.read();
@@ -1086,6 +1087,7 @@ async function _runExtractOcr() {
           // 보이지 않으면 «건너뛴다더니 왜 도나»가 된다.
           text.textContent = `${evt.page}쪽 다시 — ${evt.reason}`;
         } else if (evt.type === "page" || evt.type === "skip") {
+          lastSeen = evt;
           const pct = Math.round(((evt.index + 1) / evt.total) * 100);
           fill.style.width = `${pct}%`;
           const label = evt.type === "skip" ? "건너뜀" : `${evt.lines || 0}줄`;
@@ -1135,6 +1137,11 @@ async function _runExtractOcr() {
       if (typeof loadPageLayout === "function") {
         loadPageLayout(target.docId, target.partId, viewerState.pageNum);
       }
+    } else {
+      // «완료» 없이 끊겼다 — 서버 재시작·네트워크. 진행 막대만 남기면 «끝난 것»으로 읽힌다
+      const where = lastSeen ? `${lastSeen.index + 1}/${lastSeen.total}쪽(${lastSeen.page}쪽)까지 보고 ` : "";
+      text.textContent = `연결이 끊겨 ${where}멈췄습니다. 다시 실행하면 이어서 돕니다.`;
+      showToast("OCR이 끝나지 않고 서버와 연결이 끊겼습니다. 끝난 쪽은 저장돼 있습니다 — 다시 실행하면 이어서 돕니다.", "warning");
     }
   } catch (e) {
     if (e.name === "AbortError") {

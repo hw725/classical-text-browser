@@ -730,6 +730,10 @@ async function _runPartOcr() {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    // 마지막으로 본 쪽 — 스트림이 «완료» 없이 끊기면(서버 재시작·네트워크) 어디서 멈췄는지 말해야 한다.
+    // 2026-09-10 실측: honkoku 배치가 17쪽에서 서버 재시작(--reload)에 죽었는데 진행 막대만 사라져
+    // «한 바퀴 다 돈 것»처럼 보였고, 사용자는 16쪽뿐인 결과를 두고 다른 엔진으로 다시 돌렸다.
+    let lastSeen = null;
     while (true) {
       const chunk = await reader.read();
       if (chunk.done) break;
@@ -749,6 +753,7 @@ async function _runPartOcr() {
           _showProgress(true, `${evt.total}쪽 처리 예정`, 0, evt.total);
           (evt.warnings || []).forEach((w) => showToast(w, "info"));
         } else if (evt.type === "page" || evt.type === "skip" || evt.type === "redo") {
+          lastSeen = evt;
           const label =
             evt.type === "skip" ? "건너뜀" : evt.type === "redo" ? "다시" : `${evt.lines || 0}줄`;
           _showProgress(true, `${evt.index + 1}/${evt.total}쪽 — ${evt.page}쪽 ${label}`, evt.index + 1, evt.total);
@@ -763,6 +768,14 @@ async function _runPartOcr() {
       showToast(
         `권 전체 OCR 완료 — 처리 ${summary.processed}쪽, 건너뜀 ${summary.skipped}쪽, 실패 ${summary.failed}쪽`,
         summary.failed ? "warning" : "success",
+      );
+    } else {
+      // «완료» 없이 끊겼다 — 끝난 것이 아니다. 어디까지 됐고 어떻게 잇는지 말한다.
+      const where = lastSeen ? `${lastSeen.index + 1}/${lastSeen.total}쪽(${lastSeen.page}쪽)까지 보고 ` : "";
+      showToast(
+        `권 전체 OCR이 끝나지 않고 서버와 연결이 끊겼습니다 — ${where}멈췄습니다. ` +
+          "서버가 다시 떴을 수 있습니다. 끝난 쪽은 저장돼 있으니 같은 엔진으로 다시 누르면 이어서 돕니다.",
+        "warning",
       );
     }
     if (typeof loadOcrResults === "function") loadOcrResults();
