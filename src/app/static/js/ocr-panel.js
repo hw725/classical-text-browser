@@ -161,6 +161,12 @@ async function refreshOcrEngines() {
 
     ocrState.engines = data.engines || [];
     ocrState.defaultEngine = data.default_engine;
+    // 훑어보기(D-126)는 GPU 환경에서만 — 서버가 CPU 환경이면 단추 자체를 숨긴다(사용자 지시 2026-09-10)
+    const suggestBtn = document.getElementById("pdf-rotate-suggest");
+    if (suggestBtn) {
+      suggestBtn.hidden = !data.gpu_runtime;
+      if (!data.gpu_runtime) suggestBtn.title = "쪽 훑어보기는 GPU 환경에서만 됩니다 — 바탕화면 아이콘(start_server.bat)으로 켠 서버에서 쓰세요";
+    }
 
     _populateEngineSelect();
   } catch (e) {

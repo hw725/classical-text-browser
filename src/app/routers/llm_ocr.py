@@ -1013,6 +1013,7 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
     """
     from app._state import _get_llm_router
     from core.document import get_document_info, page_rotation
+    from core.env_doctor import GPU_ONLY_MESSAGE, gpu_runtime
     from core.page_survey import (
         CONTENT_LABELS,
         SURVEY_PROMPT,
@@ -1032,6 +1033,9 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
     library_path = get_library_path()
     if library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+    if not gpu_runtime():
+        # 사용자 지시(2026-09-10): CPU에서 한 시간 걸리는 일을 열어 두지 않는다 — dry_run도 막는다
+        return JSONResponse({"error": GPU_ONLY_MESSAGE, "gpu_only": True}, status_code=400)
     doc_dir = library_path / "documents" / doc_id
     if not doc_dir.exists():
         return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
@@ -1262,9 +1266,13 @@ async def api_ocr_engines():
             },
             status_code=500,
         )
+    from core.env_doctor import gpu_runtime
+
     return {
         "engines": engines,
         "default_engine": registry.default_engine_id,
+        # 훑어보기(D-126)는 GPU 환경에서만 — 화면이 이 값으로 단추를 보이거나 숨긴다
+        "gpu_runtime": gpu_runtime(),
     }
 
 

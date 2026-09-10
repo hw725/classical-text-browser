@@ -223,6 +223,35 @@ def probe_env(root: Path, name: str, timeout: int = 180) -> dict:
     return result
 
 
+_GPU_RUNTIME: Optional[bool] = None
+
+
+def gpu_runtime() -> bool:
+    """**지금 프로세스**가 GPU 환경인가 — torch가 CUDA를 보는가 (D-126 덧붙임).
+
+    `has_nvidia_gpu()`는 «이 PC에 GPU가 있는가»(nvidia-smi)이고, 이것은 «이 서버가 .venv-gpu로
+    떴는가»다. CPU 환경(.venv)에는 torch가 없어 False. 훑어보기처럼 쪽마다 OCR을 두 번 돌리는 일은
+    CPU에서 한 시간이 걸리므로(사용자 지시 2026-09-10) 이 값이 True일 때만 연다. 한 번 재고
+    기억한다 — torch import는 무겁다.
+    """
+    global _GPU_RUNTIME
+    if _GPU_RUNTIME is None:
+        try:
+            import torch
+
+            _GPU_RUNTIME = bool(torch.cuda.is_available())
+        except Exception:  # noqa: BLE001 — torch가 없거나 CUDA를 못 보면 CPU 환경
+            _GPU_RUNTIME = False
+    return _GPU_RUNTIME
+
+
+GPU_ONLY_MESSAGE = (
+    "쪽 훑어보기는 GPU 환경에서만 됩니다 — 쪽마다 OCR을 두 번 돌려 CPU에서는 한 시간이 걸립니다. "
+    "바탕화면 아이콘(start_server.bat)으로 켠 서버는 GPU 환경(.venv-gpu)을 고릅니다. "
+    "지금 서버는 CPU 환경입니다."
+)
+
+
 def has_nvidia_gpu() -> bool:
     exe = shutil.which("nvidia-smi")
     if not exe:

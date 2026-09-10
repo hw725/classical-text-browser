@@ -164,9 +164,23 @@ def test_engine_ranges_group_consecutive_and_skip_blank():
     ]
 
 
+def test_route_is_gpu_only(client, tmp_path, monkeypatch):  # noqa: F811
+    """CPU 환경(torch 없음)에서는 dry_run조차 400 — 쪽마다 OCR 두 번은 CPU에서 한 시간이다."""
+    from core import env_doctor
+
+    _lib, part_id = _setup(client, tmp_path)
+    monkeypatch.setattr(env_doctor, "_GPU_RUNTIME", False)
+    r = client.post(f"/api/documents/d1/parts/{part_id}/rotation/suggest", json={"dry_run": True})
+    assert r.status_code == 400 and r.json()["gpu_only"] is True
+    assert "GPU 환경" in r.json()["error"]
+    assert client.get("/api/ocr/engines").json()["gpu_runtime"] is False
+
+
 def test_route_dry_run_and_survey_with_fake_vision(client, tmp_path, monkeypatch):  # noqa: F811
     from app import _state
+    from core import env_doctor
 
+    monkeypatch.setattr(env_doctor, "_GPU_RUNTIME", True)  # GPU 환경인 척
     _lib, part_id = _setup(client, tmp_path)
     url = f"/api/documents/d1/parts/{part_id}/rotation/suggest"
     r = client.post(url, json={"dry_run": True})
