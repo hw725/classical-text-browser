@@ -6207,3 +6207,10 @@ Python/onnxruntime으로 옮겨 `OCR().process(image)` 한 줄로 행 좌표(원
 - honkoku-ocr-py의 CER은 미공표(브라우저판과 encoder 정밀도·보간이 달라 «행에 따라 다르다»고 적혀 있다).
   우리 책으로 재지 않았다 — `scripts/eval_cer.py`로 L4 확정본이 있는 권에서 재면 된다.
 - Codex 교차검증은 생략했다 — 워크스페이스 크레딧 소진(2026-09-10).
+
+### 설치 선택지 (같은 날 덧붙임)
+
+처음 커밋은 엔진과 문서만 넣고 **설치 길을 빠뜨렸다**(사용자 지적). 설치 자리는 넷이다 — 앱 안 「설치」
+단추(`core/extras.py` KNOWN_EXTRAS, probe는 `honkoku_ocr` — onnxruntime만 보면 고서 엔진을 깐 PC에서
+«깔려 있다»고 잘못 말한다), `install.ps1`·`install.sh`의 4번 선택지(고서·일본어·くずし字 + 모델 미리
+받기 `honkoku-ocr --download`), `CTB-Setup`의 라디오 단추와 `--pick 4`, 안내서 §2의 `uv sync --extra honkoku`.

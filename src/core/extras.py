@@ -41,6 +41,13 @@ KNOWN_EXTRAS: dict[str, dict] = {
         "size": "약 170MB",
         "probe": "onnxruntime",
     },
+    # D-124: probe는 honkoku_ocr — onnxruntime만 보면 고서 엔진을 깐 PC에서 «깔려 있다»고 잘못 본다
+    "honkoku": {
+        "label": "くずし字 엔진 (みんなで翻刻OCR)",
+        "for": "붓으로 흘려 쓴 초서·변체가나 고문서를 읽습니다. 모델 290MB는 첫 사용 때 받습니다.",
+        "size": "약 20MB (+모델 290MB)",
+        "probe": "honkoku_ocr",
+    },
 }
 
 # 이 환경(.venv)에 절대 넣지 않는 것 — torch 계열은 .venv-gpu에(D-078).

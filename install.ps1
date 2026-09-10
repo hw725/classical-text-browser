@@ -112,14 +112,15 @@ Write-Host ""
 Say "    1) 본체만              1~2분, 약 828MB. 한글 논문·글자가 든 PDF는 이것만으로 다 됩니다."
 Say "    2) + 고서 엔진         3~5분, +170MB. 한문 고서(古典籍) 스캔을 읽습니다."
 Say "    3) + 고서·일본어 엔진  5분+, +340MB. 근현대 일본어 자료까지."
+Say "    4) + くずし字 엔진도    5분+, +360MB(+모델 290MB). 붓으로 흘려 쓴 고문서(みんなで翻刻OCR)까지."
 Write-Host ""
 Say "  나중에 바꿔도 됩니다 — 앱 안 설정 ▸ 처음 설정 ▸ 글자 인식의 「설치」 단추."
 Say "  GPU판(4.5GB)은 별도 환경에 깝니다 — 사용자 가이드 7-A.6-2." "DarkGray"
 Write-Host ""
 # 설치 프로그램(CTB-Setup.exe)이 창에서 고른 값을 환경 변수로 넘긴다 — 그때는 묻지 않는다.
 if ($env:CTB_INSTALL_PICK) { $pick = "$env:CTB_INSTALL_PICK".Trim() }
-else { $pick = (Read-Host "  고르세요 [1/2/3] (그냥 Enter = 1)").Trim() }
-if ($pick -and $pick -notin @("1", "2", "3")) {
+else { $pick = (Read-Host "  고르세요 [1/2/3/4] (그냥 Enter = 1)").Trim() }
+if ($pick -and $pick -notin @("1", "2", "3", "4")) {
     Say "  «$pick»은 없는 번호라 본체만 깝니다." "Yellow"
     $pick = "1"
 }
@@ -129,6 +130,7 @@ if ($pick -and $pick -notin @("1", "2", "3")) {
 $extras = @()
 if ($pick -eq "2") { $extras = @("--extra", "classical") }
 elseif ($pick -eq "3") { $extras = @("--extra", "classical", "--extra", "japanese") }
+elseif ($pick -eq "4") { $extras = @("--extra", "classical", "--extra", "japanese", "--extra", "honkoku") }
 
 Write-Host ""
 Say "  받는 중… (진행 표시가 멈춰 보여도 기다리세요)"
@@ -154,6 +156,12 @@ Say "[5/5] 글자 인식 모델 미리 받기 (처음 한 번, 약 240MB, 인터
 uv run python scripts/warmup_paddle.py korean ch
 if ($LASTEXITCODE -ne 0) {
     Say "  모델을 지금 받지 못했습니다. 첫 OCR 때 다시 받습니다 — 그때는 몇 분 걸릴 수 있습니다." "Yellow"
+}
+# くずし字 엔진(D-124)의 모델(약 290MB)도 같은 이유로 여기서 받아 둔다 — 크기와 SHA-256을 대조한다
+if ($pick -eq "4") {
+    Say "[5/5-1] みんなで翻刻OCR 모델 미리 받기 (약 290MB)" "White"
+    uv run honkoku-ocr --download
+    if ($LASTEXITCODE -ne 0) { Say "  지금 받지 못했습니다. 그 엔진을 처음 쓸 때 다시 받습니다." "Yellow" }
 }
 
 # ── 5-1. Ollama 기본 비전 모델 ───────────────────────────────

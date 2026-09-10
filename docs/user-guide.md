@@ -198,10 +198,11 @@ uv sync
 # uv가 알아서 받아 쓰므로 따로 설치할 필요는 없습니다.
 # 3.13은 아직 안 됩니다 — paddlepaddle 휠이 cp312까지만 나와 있습니다.
 
-# (선택) 다른 종류의 문헌을 다룰 때만 추가합니다.
-# 셋 다 일본 국립국회도서관(NDL)이 CC BY 4.0으로 공개한 오프라인 엔진입니다.
+# (선택) 다른 종류의 문헌을 다룰 때만 추가합니다. 전부 오프라인 엔진입니다.
+# 앞 둘은 일본 국립국회도서관(NDL, CC BY 4.0), 셋째는 みんなで翻刻OCR의 Python 이식(MIT, 모델 CC BY 4.0).
 uv sync --extra japanese       # NDLOCR-Lite — 일본어 문헌(근현대), 약 170MB
 uv sync --extra classical      # NDL古典籍OCR-Lite — 고서(古典籍), 약 170MB
+uv sync --extra honkoku        # みんなで翻刻OCR — くずし字(초서·변체가나) 고문서, 약 20MB + 모델 290MB(첫 사용 때)
 # NDL古典籍OCR Full(GPU, 약 4.5GB)은 이 환경이 아니라 별도 환경 .venv-gpu에 깝니다 — 7-A.6-2
 ```
 
@@ -544,6 +545,7 @@ uv run python -m cli add-document /path/to/my-library \
      - **NDL古典籍OCR Full** — 최고 품질, GPU 필요 (별도 환경 — [7-A.6-2](#7-a6-2-gpu로-돌리기--별도-환경-venv-gpu-선택))
      - **NDL古典籍OCR-Lite** — 고전적 전용, CPU OK (설정 ▸ 처음 설정 ▸ 글자 인식 ▸ 「설치」)
      - **NDLOCR-Lite** — 근현대 일본어 자료 (같은 자리에서 「설치」)
+     - **みんなで翻刻OCR** — くずし字(초서·변체가나) 고문서, CPU OK (같은 자리에서 「설치」, 첫 사용 때 모델 290MB)
      - **LLM Vision** — 온라인. 설정 ▸ LLM 연결의 키 또는 ChatGPT 계정 로그인으로 씁니다
      - **PaddleOCR** — 기본 설치에 포함되어 있어 따로 받을 것이 없습니다
    - **언어**: PaddleOCR을 고를 때만 나오는 칸입니다

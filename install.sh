@@ -101,14 +101,16 @@ echo ""
 echo "    1) 본체만              1~2분. 한글 논문·글자가 든 PDF는 이것만으로 다 됩니다."
 echo "    2) + 고서 엔진         3~5분, +170MB. 한문 고서(古典籍) 스캔을 읽습니다."
 echo "    3) + 고서·일본어 엔진  5분+, +340MB. 근현대 일본어 자료까지."
+echo "    4) + くずし字 엔진도    5분+, +360MB(+모델 290MB). 붓으로 흘려 쓴 고문서(みんなで翻刻OCR)까지."
 echo ""
 echo "  나중에 바꿔도 됩니다 — 앱 안 설정 ▸ 처음 설정 ▸ 글자 인식의 「설치」 단추."
 echo ""
-read -r -p "  고르세요 [1/2/3] (그냥 Enter = 1): " pick
+read -r -p "  고르세요 [1/2/3/4] (그냥 Enter = 1): " pick
 extras=()
 case "${pick:-1}" in
     2) extras=(--extra classical) ;;
     3) extras=(--extra classical --extra japanese) ;;
+    4) extras=(--extra classical --extra japanese --extra honkoku) ;;
     1) ;;
     *) echo "  «$pick»은 없는 번호라 본체만 깝니다." ;;
 esac
@@ -120,6 +122,11 @@ uv sync "${extras[@]}"
 echo ""
 echo "[5/5] 글자 인식 모델 미리 받기 (처음 한 번, 약 240MB, 인터넷 필요)"
 uv run python scripts/warmup_paddle.py korean ch || echo "  모델을 지금 받지 못했습니다. 첫 OCR 때 다시 받습니다."
+# くずし字 엔진(D-124)의 모델(약 290MB)도 같은 이유로 여기서 받아 둔다
+if [ "${pick:-1}" = "4" ]; then
+    echo "[5/5-1] みんなで翻刻OCR 모델 미리 받기 (약 290MB)"
+    uv run honkoku-ocr --download || echo "  지금 받지 못했습니다. 그 엔진을 처음 쓸 때 다시 받습니다."
+fi
 
 # ── 5-1. Ollama 기본 비전 모델 ────────────────
 if command -v ollama >/dev/null 2>&1; then

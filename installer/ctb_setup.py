@@ -96,13 +96,21 @@ def run_install_ps1(target: Path, pick: str, say) -> int:
     # 출력은 UTF-8로 받는다 — 콘솔 코드 페이지(cp949) 그대로면 한글이 깨진다.
     ps1 = str(target / "install.ps1").replace("'", "''")
     cmd = [
-        "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
         f"[Console]::OutputEncoding = [Text.Encoding]::UTF8; & '{ps1}'; exit $LASTEXITCODE",
     ]
     say("설치 스크립트 실행 (Python·Git·uv·의존·글자 인식 모델) — 처음이면 5~10분")
     p = subprocess.Popen(
-        cmd, cwd=str(target), env=env, stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        cmd,
+        cwd=str(target),
+        env=env,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     assert p.stdout is not None
@@ -124,7 +132,8 @@ def make_shortcut(target: Path, say) -> Path | None:
     try:
         raw = subprocess.run(
             ["powershell", "-NoProfile", "-Command", "[Environment]::GetFolderPath('Desktop')"],
-            capture_output=True, timeout=30,
+            capture_output=True,
+            timeout=30,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         ).stdout
         # 콘솔 출력은 코드 페이지(cp949) — 「바탕 화면」 같은 한글 경로가 온다
@@ -149,8 +158,11 @@ def make_shortcut(target: Path, say) -> Path | None:
     )
     try:
         subprocess.run(
-            ["powershell", "-NoProfile", "-Command", ps], check=True, capture_output=True,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), timeout=60,
+            ["powershell", "-NoProfile", "-Command", ps],
+            check=True,
+            capture_output=True,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            timeout=60,
         )
         say(f"바탕화면 아이콘: {lnk.name}")
         return lnk
@@ -181,9 +193,7 @@ def install(target: Path, pick: str, say) -> bool:
 
 def launch(target: Path) -> None:
     """start_server.bat을 새 창에서 켠다(자동 업데이트 → 서버 → 브라우저)."""
-    subprocess.Popen(
-        ["cmd", "/c", "start", "", str(target / "start_server.bat")], cwd=str(target)
-    )
+    subprocess.Popen(["cmd", "/c", "start", "", str(target / "start_server.bat")], cwd=str(target))
 
 
 # ── 창 ────────────────────────────────────────────────────────────────
@@ -227,6 +237,7 @@ def gui() -> int:
         ("1", "본체만 — 한글 논문·글자가 든 PDF는 이것으로 다 됩니다 (약 830MB)"),
         ("2", "+ 고서 엔진 — 한문 고서 스캔 (+170MB)"),
         ("3", "+ 고서·일본어 엔진 — 근현대 일본어 자료까지 (+340MB)"),
+        ("4", "+ くずし字 엔진도 — 흘려 쓴 고문서(みんなで翻刻OCR)까지 (+360MB, 모델 290MB 별도)"),
     ):
         ttk.Radiobutton(frm, text=t, value=v, variable=pick_var).pack(anchor="w")
     ttk.Label(frm, text="나중에 앱 안 설정에서 단추로 더할 수 있습니다.", foreground="gray").pack(
@@ -299,9 +310,11 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="고전서지 통합 브라우저 설치")
     ap.add_argument("--auto", action="store_true", help="창 없이 설치(검증용)")
     ap.add_argument("--dir", default=None, help="설치 폴더")
-    ap.add_argument("--pick", default="1", choices=["1", "2", "3"], help="글자 인식 엔진")
+    ap.add_argument("--pick", default="1", choices=["1", "2", "3", "4"], help="글자 인식 엔진")
     ap.add_argument("--no-shortcut", action="store_true", help="(옛 이름) --auto의 기본 동작")
-    ap.add_argument("--shortcut", action="store_true", help="--auto에서도 바탕화면 바로 가기를 만든다")
+    ap.add_argument(
+        "--shortcut", action="store_true", help="--auto에서도 바탕화면 바로 가기를 만든다"
+    )
     a = ap.parse_args(argv)
     if not a.auto:
         return gui()

@@ -20,7 +20,7 @@ def isolated(tmp_path: Path, monkeypatch):
         '[project]\nname = "x"\nversion = "0"\n'
         "[project.optional-dependencies]\n"
         'classical = ["onnxruntime"]\njapanese = ["onnxruntime"]\n'
-        'classical-gpu = ["torch"]\nempty = []\n',
+        'honkoku = ["honkoku-ocr-py"]\nclassical-gpu = ["torch"]\nempty = []\n',
         encoding="utf-8",
     )
     monkeypatch.setattr(extras, "app_root", lambda: tmp_path)
@@ -41,7 +41,12 @@ def test_sync_args_keep_recorded_extras(isolated: Path):
     extras._save_record(["japanese"])
     assert extras.sync_args() == ["uv", "sync", "--extra", "japanese"]
     assert extras.sync_args(["classical"]) == [
-        "uv", "sync", "--extra", "classical", "--extra", "japanese",
+        "uv",
+        "sync",
+        "--extra",
+        "classical",
+        "--extra",
+        "japanese",
     ]
 
 
@@ -61,7 +66,8 @@ def test_status_shape(isolated: Path):
     assert names == list(extras.KNOWN_EXTRAS)
     for e in s["extras"]:
         assert {"label", "for", "size", "installed", "recorded"} <= set(e)
-        assert e["installed"] is True  # probe가 onnxruntime을 «있음»으로 고정
+        # probe가 onnxruntime만 «있음»으로 고정 — honkoku(probe honkoku_ocr)는 없음이어야 한다
+        assert e["installed"] is (e["name"] != "honkoku")
     assert s["job"]["running"] is False
     assert isinstance(s["job"]["log"], list)
 
@@ -73,6 +79,13 @@ def test_probe_is_cached(isolated: Path, monkeypatch):
     extras._probe_cache.clear()
     extras.installed_extras()
     extras.installed_extras()
-    assert calls == ["onnxruntime"]  # 두 extras가 같은 probe → 한 번, 두 번째 호출은 캐시
+    assert calls == ["onnxruntime", "honkoku_ocr"]  # 같은 probe는 한 번, 두 번째 호출은 캐시
     extras.installed_extras(force=True)
-    assert calls == ["onnxruntime", "onnxruntime"]
+    assert calls == ["onnxruntime", "honkoku_ocr", "onnxruntime", "honkoku_ocr"]
+
+
+def test_honkoku_is_offered_with_its_own_probe():
+    """입력: 카탈로그. 출력: honkoku의 probe가 honkoku_ocr. 목적: onnxruntime만 보면 오판한다."""
+    meta = extras.KNOWN_EXTRAS["honkoku"]
+    assert meta["probe"] == "honkoku_ocr"
+    assert "honkoku" not in extras.BLOCKED_EXTRAS
