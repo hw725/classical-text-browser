@@ -529,6 +529,37 @@ def title_similarity(title: str, line: str) -> float:
     return ratio
 
 
+def locate_title(
+    title: str, body_lines: list, limit: int = 3, min_score: float = 0.35
+) -> list[dict]:
+    """대조에 못 든 목차 제목과 «비슷한 본문 행»을 느슨하게 찾는다(순서 무시, D-122 덧붙임).
+
+    입력: 제목, 본문 행(segmentation.Line), 몇 개까지, 최소 점수.
+    출력: [{"page", "line_index", "text", "score"}] 점수 내림차순 limit개.
+    왜: align_toc_to_body는 순서를 지키고 0.6 이상만 받는다. OCR이 제목 글자를 틀렸거나 목차와
+    본문의 순서가 어긋난 항목은 «못 찾음»으로 남는데, 그것을 사람이 찾아 넣도록 후보를 준다.
+    판단은 사람이 한다 — 후보는 자동으로 경계가 되지 않는다.
+    """
+    a = _norm(title)
+    if not a:
+        return []
+    found: list[tuple[float, int, int, str]] = []
+    for ln in body_lines:
+        t = (getattr(ln, "text", "") or "").strip()
+        if not t:
+            continue
+        s = title_similarity(title, t)
+        if len(a) >= 3 and a in _norm(t):
+            s = max(s, 0.8)  # 행 어딘가에 제목이 통째로 들어 있다
+        if s >= min_score:
+            found.append((s, int(ln.page), int(ln.line_index), t[:40]))
+    found.sort(key=lambda x: (-x[0], x[1], x[2]))
+    return [
+        {"page": p, "line_index": li, "text": t, "score": round(s, 3)}
+        for s, p, li, t in found[:limit]
+    ]
+
+
 @dataclass
 class TocMatch:
     entry_index: int

@@ -2272,3 +2272,54 @@ def test_auto_tree_reports_pages_without_l4(client, tmp_path):
     assert r.status_code == 200, r.text
     d = r.json()
     assert d["pages_total"] == 3 and d["pages_with_text"] == 2
+
+
+class TestD122Addendum:
+    """해제 칸을 ①로 합침 · 못 찾은 목차 항목 찾아 넣기 (2026-09-11)."""
+
+    def test_locate_title_loose_and_unordered(self):
+        from core.toc import locate_title
+
+        body = [Line(5, i, t) for i, t in enumerate(BODY_P5)]
+        body += [Line(6, i, t) for i, t in enumerate(BODY_P6)]
+        near = locate_title("論時務疏", body)
+        assert near and (near[0]["page"], near[0]["line_index"]) == (6, 4)
+        assert near[0]["score"] >= 0.9
+        # OCR이 한 글자를 틀렸어도 후보에 든다(느슨한 유사도)
+        near = locate_title("論時務疎", body)
+        assert any((n["page"], n["line_index"]) == (6, 4) for n in near)
+        assert locate_title("不存在題目", body) == []
+        assert locate_title("", body) == []
+
+    def test_squeeze_said_keeps_both_ends(self):
+        from core.rule_talk import squeeze_said
+
+        said = "A" * 5 + "x" * 20000 + "B" * 5
+        out = squeeze_said(said, limit=100)
+        assert out.startswith("A" * 5) and out.endswith("B" * 5)
+        assert "줄임" in out and len(out) < 200
+        assert squeeze_said("짧다") == "짧다"
+
+    def test_propose_unmatched_carries_near(self, client, tmp_path):  # noqa: F811
+        """못 찾은 목차 항목마다 «비슷한 행» 후보(near)가 온다 — 없으면 빈 목록."""
+        from pathlib import Path as _P
+
+        lib, part_id = _setup(client, tmp_path)
+        pages = _P(lib) / "documents" / "d1" / "L4_text" / "pages"
+        (pages / f"{part_id}_page_001.txt").write_text("\n".join(TOC_PAGE), encoding="utf-8")
+        (pages / f"{part_id}_page_002.txt").write_text("\n".join(BODY_P5), encoding="utf-8")
+        (pages / f"{part_id}_page_003.txt").write_text("\n".join(BODY_P6), encoding="utf-8")
+        entries = [
+            {"title": "論時務疏", "level": 2},
+            {"title": "登北漢山記", "level": 2},  # 본문에서는 앞에 온다 — 순서 때문에 하나는 빠진다
+            {"title": "不存在題目", "level": 2},
+        ]
+        d = client.post(
+            "/api/documents/d1/segmentation/propose",
+            json={"part_id": part_id, "use_toc": True, "toc": {"pages": [1], "entries": entries}},
+        ).json()
+        un = {u["title"]: u for u in d["toc"]["unmatched"]}
+        assert "不存在題目" in un and un["不存在題目"]["near"] == []
+        for title, head in (("登北漢山記", "登北漢山"), ("論時務疏", "論時務疏")):
+            if title in un:
+                assert any(n["text"].startswith(head) for n in un[title]["near"]), un[title]

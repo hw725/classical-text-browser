@@ -7518,6 +7518,16 @@ button.mode-tab {
   background: rgba(210, 153, 34, 0.08);
   border-radius: 4px;
 }
+/* 못 찾은 목차 항목 — 제목 칩을 누르면 비슷한 행이 접혀 나온다(D-122 덧붙임) */
+.comp-unmatched-chip {
+  font: inherit; font-size: 11px; padding: 1px 7px; margin: 2px 3px 0 0; border: 1px solid currentColor;
+  border-radius: 10px; background: transparent; color: inherit; cursor: pointer;
+}
+.comp-unmatched-chip.is-open { background: rgba(210, 153, 34, 0.25); }
+.comp-unmatched-chip.is-placed { opacity: 0.55; text-decoration: line-through; }
+.comp-unmatched-cands { margin-top: 4px; display: flex; flex-direction: column; gap: 2px; color: var(--text-primary); }
+.comp-unmatched-cand { display: flex; align-items: center; gap: 6px; }
+.comp-unmatched-cand > .text-btn { margin-left: auto; }
 .prop-badge-toc {
   font-size: 10px;
   padding: 1px 5px;

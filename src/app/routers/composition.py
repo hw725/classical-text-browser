@@ -441,6 +441,7 @@ async def api_segmentation_propose(doc_id: str, body: SegmentationProposeRequest
             align_toc_to_body,
             detect_toc_pages,
             extract_toc_entries_rule,
+            locate_title,
         )
 
         page_lines = {p: t.split("\n") for p, t in page_texts.items()}
@@ -466,7 +467,16 @@ async def api_segmentation_propose(doc_id: str, body: SegmentationProposeRequest
                 "pages": toc_pages,
                 "entries": [e.to_dict() for e in entries],
                 "matches": toc_matches,
-                "unmatched": [entries[i].to_dict() | {"index": i} for i in unmatched],
+                # 못 찾은 항목마다 «비슷한 행» 후보 — 화면이 「여기서 시작」으로 넣게 한다
+                # (D-122 덧붙임)
+                "unmatched": [
+                    entries[i].to_dict()
+                    | {
+                        "index": i,
+                        "near": locate_title(entries[i].title, body_lines),
+                    }
+                    for i in unmatched
+                ],
             }
             lines = body_lines
             for p in toc_pages:

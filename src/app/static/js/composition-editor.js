@@ -110,8 +110,6 @@ function _bindCompEvents() {
     const el = document.getElementById(id);
     if (el) el.addEventListener("click", _closeLlmModal);
   }
-  const llmRef = document.getElementById("comp-llm-ref-open");
-  if (llmRef) llmRef.addEventListener("click", _openReferenceBox);
   const optStructInit = document.getElementById("comp-llm-opt-structure");
   if (optStructInit) optStructInit.addEventListener("change", _updateLlmStructureNote);
   const llmScope = document.getElementById("comp-llm-scope");
@@ -902,38 +900,23 @@ function _openLlmModal() {
   _updateLlmStructureNote();
 }
 
-/** 지금 화면의 해제 텍스트. 세 선택지가 다 이것을 보낸다(저장은 「참고·억제」 칸에서 한다). */
+/** ①의 글(해제·서지 설명 + 아는 것). 세 선택지와 「말로 넣기」가 다 이것을 보낸다. 저장은 「적용」(reference_text). */
 function _llmReferenceText() {
-  return (document.getElementById("comp-rules-reference")?.value || "").trim();
+  return (document.getElementById("comp-llm-say")?.value || "").trim();
 }
 
 /**
- * 모달의 해제 상태 줄을 채운다.
- * 입력: 없음(화면의 해제 칸을 읽는다). 출력: 없음. 목적: 붙어 있는지 여기서 보이게 한다 —
- * 해제 칸이 「자세히 · 고치기 → 참고·억제」 두 겹 안에 있어 모달만 열면 알 수 없었다.
+ * 모달의 참고 상태 줄 — ①의 글이 몇 자인지. 입력: 없음. 출력: 없음.
+ * 해제는 ①의 칸에 있다(D-122 덧붙임 2026-09-11) — 따로 가던 「해제 칸으로」 단추는 없앴다.
  */
 function _updateLlmRefNote() {
   const note = document.getElementById("comp-llm-ref-note");
-  const btn = document.getElementById("comp-llm-ref-open");
   if (!note) return;
   const n = _llmReferenceText().length;
-  note.textContent = n ? `해제 ${n.toLocaleString()}자` : "해제 없음";
+  note.textContent = n ? `①의 글 ${n.toLocaleString()}자를 함께 읽습니다` : "①이 비어 있습니다 — 해제·서지 설명을 붙여 넣으면 더 정확합니다";
   note.title = n
     ? "아래 선택지가 모두 함께 읽습니다. 긴 해제는 권별 서술이 있는 데를 골라 넘깁니다"
-    : "한국고전종합DB 해제 같은 것을 통째로 붙여 넣으면 아래 선택지가 모두 더 정확해집니다";
-  if (btn) btn.textContent = n ? "해제 고치기" : "해제 넣기";
-}
-
-/** 모달을 닫고 해제 칸을 펼쳐 거기로 데려간다. 고치는 곳은 한 군데뿐이다. */
-function _openReferenceBox() {
-  _closeLlmModal();
-  const adv = document.querySelector("#composition-panel .comp-rules-advanced");
-  if (adv) adv.open = true;
-  const ta = document.getElementById("comp-rules-reference");
-  if (ta) {
-    ta.scrollIntoView({ block: "center", behavior: "smooth" });
-    ta.focus();
-  }
+    : "한국고전종합DB 해제 같은 것을 ①에 통째로 붙여 넣으면 아래 선택지가 모두 더 정확해집니다";
 }
 
 /** 표본 범위의 크기(줄·글자)를 보내기 전에 보인다 — 실행 게이트는 도구 층에(전역 규칙 11). */
@@ -1172,6 +1155,120 @@ function _mergeLlmProposals(data, docId, partId) {
   }
   data.proposals.sort((a, b) => a.page - b.page || a.line_index - b.line_index || (a.char_offset || 0) - (b.char_offset || 0));
   data.stats.llm = { added, joined };
+}
+
+/**
+ * 목차에는 있으나 본문에서 대조 못 한 항목(D-122 덧붙임 2026-09-11). 입력: 상자·unmatched 목록. 출력: 없음.
+ * 제목마다 «비슷한 행» 후보(서버 locate_title, 느슨한 유사도·순서 무시)를 접어 두고, 「여기서 시작」을 누르면
+ * 그 자리가 ③의 후보로 선다(체크된 채, «목차·찾아 넣음»). 저장은 여전히 「적용」 — 자동으로 경계가 되지 않는다.
+ */
+function _renderUnmatchedToc(box, un) {
+  box.style.display = un.length ? "" : "none";
+  box.textContent = "";
+  if (!un.length) return;
+  const placed = new Set((proposeState.located?.proposals || []).map((p) => p.toc_index));
+  const head = document.createElement("div");
+  head.textContent = `목차에는 있으나 본문에서 못 찾음 (${un.length}) — 제목을 누르면 비슷한 행을 보입니다:`;
+  box.appendChild(head);
+  const chips = document.createElement("div");
+  for (const u of un) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "comp-unmatched-chip" + (placed.has(u.index) ? " is-placed" : "") + (proposeState.unmatchedOpen === u.index ? " is-open" : "");
+    b.textContent = u.title + (placed.has(u.index) ? " ✓" : "");
+    b.title = placed.has(u.index) ? "③에 넣었습니다 — 다른 자리로 바꾸려면 다시 누르세요" : `비슷한 행 ${(u.near || []).length}개`;
+    b.addEventListener("click", () => {
+      proposeState.unmatchedOpen = proposeState.unmatchedOpen === u.index ? null : u.index;
+      _renderUnmatchedToc(box, un);
+    });
+    chips.appendChild(b);
+  }
+  box.appendChild(chips);
+  const open = un.find((u) => u.index === proposeState.unmatchedOpen);
+  if (!open) return;
+  const cands = document.createElement("div");
+  cands.className = "comp-unmatched-cands";
+  const near = open.near || [];
+  if (!near.length) {
+    const el = document.createElement("div");
+    el.textContent = `「${open.title}」과 비슷한 행이 본문에 없습니다 — OCR이 제목을 다르게 읽었거나 이 권에 없는 글입니다. 사이드바 「경계 넣기」로 직접 넣을 수 있습니다.`;
+    cands.appendChild(el);
+  }
+  for (const c of near) {
+    const row = document.createElement("div");
+    row.className = "comp-unmatched-cand";
+    const where = document.createElement("span");
+    where.className = "prop-goto";
+    where.textContent = `${c.page}쪽 ${c.line_index + 1}행`;
+    where.title = "누르면 그 쪽으로 이동";
+    where.addEventListener("click", () => {
+      if (typeof goToPage === "function") goToPage(c.page);
+    });
+    const txt = document.createElement("span");
+    txt.textContent = `「${c.text}」 ${Math.round(c.score * 100)}%`;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "text-btn text-btn-sm";
+    btn.textContent = "여기서 시작";
+    btn.title = `이 행을 「${open.title}」의 시작으로 ③에 넣습니다(체크된 채). 저장은 「적용」`;
+    btn.addEventListener("click", () => _addLocatedProposal(open, c));
+    row.append(where, txt, btn);
+    cands.appendChild(row);
+  }
+  box.appendChild(cands);
+}
+
+/** 못 찾은 목차 항목 하나를 고른 행에 놓는다. 입력: 항목·후보 행. 출력: 없음(③을 다시 그린다). */
+function _addLocatedProposal(entry, cand) {
+  const docId = viewerState.docId, partId = viewerState.partId;
+  if (!proposeState.located || proposeState.located.docId !== docId || proposeState.located.partId !== partId)
+    proposeState.located = { docId, partId, proposals: [] };
+  const level = entry.level || 2;
+  const mine = {
+    page: cand.page, line_index: cand.line_index, char_offset: 0, title: entry.title, level,
+    role: level <= 1 ? "container" : "article", kind: "", reasons: ["toc:located"], confidence: 0.6,
+    accepted: true, suppressed: false, toc_index: entry.index,
+  };
+  // 같은 항목은 한 자리만 — 전에 넣은 자리는 표지를 떼고(규칙 후보이기도 하면 남긴다) 새 자리로
+  proposeState.located.proposals = proposeState.located.proposals.filter((p) => p.toc_index !== entry.index).concat([mine]);
+  proposeState.unmatchedOpen = null;
+  const data = proposeState.data;
+  if (data) {
+    data.proposals = data.proposals.filter((p) => !(p.toc_index === entry.index && p.reasons.length === 1 && p.reasons[0] === "toc:located"));
+    for (const p of data.proposals) {
+      if (p.toc_index === entry.index) {
+        p.reasons = p.reasons.filter((r) => r !== "toc:located");
+        delete p.toc_index;
+      }
+    }
+    _mergeLocatedProposals(data, docId, partId);
+    proposeState.checked.add(_propKey(mine));
+    _renderProposals();
+    _refreshApplyState();
+  }
+  showToast(`「${entry.title}」을(를) ${cand.page}쪽 ${cand.line_index + 1}행에서 시작하는 후보로 넣었습니다 — 저장은 「적용」`, "success");
+}
+
+/** 사람이 찾아 넣은 목차 자리를 후보 목록에 합친다(다시 세어도 남는다). 입력: propose 응답·문헌·권. */
+function _mergeLocatedProposals(data, docId, partId) {
+  const loc = proposeState.located;
+  if (!loc || loc.docId !== docId || loc.partId !== partId || !loc.proposals.length) return;
+  const byKey = new Map(data.proposals.map((p) => [_propKey(p), p]));
+  for (const p of loc.proposals) {
+    const k = _propKey(p);
+    const cur = byKey.get(k);
+    if (cur) {
+      if (!cur.reasons.includes("toc:located")) cur.reasons.push("toc:located");
+      cur.toc_index = p.toc_index;
+      if (!cur.suppressed) cur.accepted = true;
+      if (!cur.title) cur.title = p.title;
+    } else {
+      const copy = { ...p, reasons: [...p.reasons] };
+      data.proposals.push(copy);
+      byKey.set(k, copy);
+    }
+  }
+  data.proposals.sort((a, b) => a.page - b.page || a.line_index - b.line_index || (a.char_offset || 0) - (b.char_offset || 0));
 }
 
 /** 서버가 센 행 + 사람이 더한 행. 렌더·규칙 조립이 같은 목록을 본다. */
@@ -1504,6 +1601,8 @@ const proposeState = {
   roles: new Map(), // 자리 키 → 사람이 바꾼 역할
   toc: null, // {pages, entries} — 목차 감지로 확인한 것. null이면 서버가 규칙으로 자동
   llm: null, // {docId, partId, proposals, meta} — «구조를 통째로 묻기»의 답(D-125). 규칙 후보와 합쳐 ③에 선다
+  located: null, // {docId, partId, proposals} — 목차에는 있으나 대조 못 한 항목을 사람이 찾아 넣은 자리(D-122 덧붙임)
+  unmatchedOpen: null, // 펼쳐 둔 못 찾은 항목의 index
 };
 const flowState = { loading: false }; // ①이 세는 중인가 — 겹쳐 시작하지 않는다
 
@@ -1580,7 +1679,7 @@ function _rulesFromForm() {
     .map((w) => w.trim())
     .filter(Boolean);
   const maxChars = Number(document.getElementById("comp-rules-maxchars")?.value || 14);
-  const reference = (document.getElementById("comp-rules-reference")?.value || "").trim();
+  const reference = _llmReferenceText(); // ①의 글 — 해제·아는 것이 함께 저장된다
   // 바탕은 초안 규칙(없으면 저장본) — 목록에 없는 스위치·min_confidence·옛 판심 목록을 잃지 않는다.
   // use_date·use_layout(옛 굵은 스위치)은 버린다: 이제 signals가 낱낱이 적히고, 남겨 두면
   // normalize_rules가 그것으로 하위 스위치를 다시 끈다.
@@ -1625,9 +1724,15 @@ function _rulesToForm(rules) {
   const tocUse = document.getElementById("comp-toc-use");
   if (tocUse && rules) tocUse.checked = rules.signals?.toc !== false; // 안 적힌 스위치는 켜진 것
   if (m) m.value = rules?.max_title_chars || 14;
-  const r = document.getElementById("comp-rules-reference");
+  // ①의 글: 저장된 reference_text를 넣는다 — 단 이 문헌에서 사람이 이미 쓰고 있는 글은 덮지 않는다
+  // (규칙을 다시 읽는 일은 「권고대로」·적용 뒤에도 일어난다). 다른 문헌으로 갔으면 그 문헌의 것으로.
+  const r = document.getElementById("comp-llm-say");
   if (r) {
-    r.value = rules?.reference_text || "";
+    const saved = rules?.reference_text || "";
+    const tag = `${viewerState.docId}/${viewerState.partId}`;
+    if (signalState.refTag !== tag || !r.value.trim() || r.value === signalState.lastReference) r.value = saved;
+    signalState.refTag = tag;
+    signalState.lastReference = saved;
     _updateReferenceCount();
     if (!r._countBound) {
       r.addEventListener("input", _updateReferenceCount);
@@ -1644,16 +1749,16 @@ function _rulesToForm(rules) {
  * 프롬프트에 넣을 때만 권별 서술을 골라 8,000자로 간추린다는 것을 여기서 알린다.
  */
 function _updateReferenceCount() {
-  const r = document.getElementById("comp-rules-reference");
-  const out = document.getElementById("comp-rules-reference-count");
+  const r = document.getElementById("comp-llm-say");
+  const out = document.getElementById("comp-say-count");
   if (!r || !out) return;
   const n = r.value.length;
   if (!n) {
     out.textContent = "";
   } else if (n <= 8000) {
-    out.textContent = `${n.toLocaleString()}자 — 그대로 넘깁니다`;
+    out.textContent = `${n.toLocaleString()}자 · 저장은 「적용」`;
   } else {
-    out.textContent = `${n.toLocaleString()}자 — 통째로 저장하고, LLM에는 권별 내용이 있는 데를 골라 8,000자로 간추려 넘깁니다`;
+    out.textContent = `${n.toLocaleString()}자 — 통째로 저장하고, 모델에는 권별 내용이 있는 데를 골라 넘깁니다 · 저장은 「적용」`;
   }
 }
 
@@ -1851,6 +1956,7 @@ async function _proposeBoundaries(asBaseline) {
     // 그 사이 다시 눌렀거나 다른 문헌·권으로 갔으면 이 응답은 버린다
     if (seq !== proposeState.seq || docId !== viewerState.docId || partId !== viewerState.partId) return;
     _mergeLlmProposals(data, docId, partId); // 모델이 가리킨 자리(D-125)는 규칙 후보와 같은 목록에 선다
+    _mergeLocatedProposals(data, docId, partId); // 사람이 찾아 넣은 목차 자리도(D-122 덧붙임)
     const same = proposeState.docId === docId && proposeState.partId === partId;
     const prevKeys = same && proposeState.data ? new Set(proposeState.data.proposals.map(_propKey)) : null;
     const hasToc = !!(data.toc && data.toc.matches && data.toc.matches.length);
@@ -1897,7 +2003,8 @@ const _REASON_LABELS = {
 };
 function _reasonChip(r) {
   let label = r, cls = "";
-  if (r.startsWith("toc:")) { label = `목차 ${r.slice(4)}`; cls = "pos"; }
+  if (r === "toc:located") { label = "목차·찾아 넣음"; cls = "pos"; }
+  else if (r.startsWith("toc:")) { label = `목차 ${r.slice(4)}`; cls = "pos"; }
   else if (r.startsWith("volume:")) { label = `卷 ${r.slice(7)}`; cls = "pos"; }
   else if (r.startsWith("title_word:")) { label = `어휘 ${r.slice(11)}`; cls = "pos"; }
   else if (r.startsWith("head_word:")) { label = `행머리 ${r.slice(10)}`; cls = "pos"; }
@@ -1970,13 +2077,7 @@ function _renderProposals() {
       tocSummary.textContent =
         `${data.toc.pages.join(",")}쪽 · ${n}항목 중 ${m} 대조` +
         (proposeState.tocSource ? ` (${proposeState.tocSource})` : "");
-    if (unmatchedBox) {
-      const un = data.toc.unmatched || [];
-      unmatchedBox.style.display = un.length ? "" : "none";
-      unmatchedBox.textContent = un.length
-        ? `목차에는 있으나 본문에서 못 찾음 (${un.length}): ` + un.map((u) => u.title).join(" · ")
-        : "";
-    }
+    if (unmatchedBox) _renderUnmatchedToc(unmatchedBox, data.toc.unmatched || []);
   } else {
     if (tocSummary && !proposeState.toc) tocSummary.textContent = "없음";
     if (unmatchedBox) unmatchedBox.style.display = "none";
@@ -2096,7 +2197,7 @@ function _renderBatchBar() {
   const n = proposeState.selected.size;
   const count = document.getElementById("comp-sel-count");
   const tools = document.getElementById("comp-batch-tools");
-  if (count) count.textContent = n ? `선택 ${n}` : "행을 눌러 고르면 한꺼번에 바꿉니다";
+  if (count) count.textContent = n ? `고른 행 ${n}개 — 오른쪽 도구가 이 행들에 듭니다` : "행을 누르면 고릅니다(Shift 범위·Ctrl 하나씩) — 고른 행은 한꺼번에 바꿉니다";
   if (tools) tools.hidden = !n;
 }
 
@@ -2270,7 +2371,7 @@ async function _suggestRules() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           part_id: viewerState.partId,
-          reference_text: document.getElementById("comp-rules-reference")?.value ?? null,
+          reference_text: _llmReferenceText() || null,
           force_provider: provider || null,
           force_model: model || null,
         }),
@@ -2445,12 +2546,27 @@ function _renderTalk(talk) {
     if (a.why) el.title = a.why;
   }
   if (un.length) {
-    line(`옮기지 못한 말 ${un.length} — 지금 규칙에는 범위·조건이 없습니다`, "is-unsupported");
+    // 많으면(해제를 붙여 넣은 뒤) 접어 둔다 — 돌려주되 화면을 덮지 않는다
+    const fold = un.length > 3;
+    const holder = fold ? document.createElement("details") : out;
+    if (fold) {
+      const sm = document.createElement("summary");
+      sm.className = "comp-talk-row is-unsupported";
+      sm.textContent = `옮기지 못한 말 ${un.length} — 참고로만 읽었습니다(펼쳐 보기). 지금 규칙에는 범위·조건이 없습니다`;
+      holder.appendChild(sm);
+      out.appendChild(holder);
+    } else {
+      line(`옮기지 못한 말 ${un.length} — 지금 규칙에는 범위·조건이 없습니다`, "is-unsupported");
+    }
     for (const u of un) {
-      const el = line(`「${u.said}」 — ${u.why}`, "is-unsupported");
+      const el = document.createElement("div");
+      el.className = "comp-talk-row is-unsupported";
+      el.textContent = `「${u.said}」 — ${u.why}`;
       el.title = u.why || "";
+      holder.appendChild(el);
     }
   }
+  if (talk.note) line(talk.note, "");
   if (acc.length) line("→ ②에 반영했습니다. ③에서 «바뀐 것»을 보고 「적용」하세요.");
 }
 

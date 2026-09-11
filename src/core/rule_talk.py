@@ -84,7 +84,31 @@ def _field_guide() -> str:
         "이 프로그램의 규칙에는 «범위»도 «조건»도 없습니다. 「어느 권부터」·「무엇이 있을 때만」·"
         "「이 책은 무슨 성격이다」 같은 말은 어떤 칸으로도 옮길 수 없습니다. "
         "unsupported에 그대로 적으십시오.\n"
+        "연구자의 글에는 해제·서지 설명(남이 쓴 책 소개 — 저자 생애·교유·간행 경위)이 붙어 있을 수 "
+        "있습니다. 그것은 참고로만 읽습니다. 규칙으로 옮길 것은 «이 책이 어떻게 나뉘는지»를 말하는 "
+        "문장뿐이고, 옮길 수 없는 것 중에도 나뉨에 대한 말만 unsupported에 적습니다. "
+        "책 소개 문장은 "
+        "unsupported에 넣지 말고 note에 «해제 N문단은 참고로만 읽음»처럼 "
+        "한 줄로 적으십시오.\n"
     )
+
+
+SAID_LIMIT = 12000  # ①의 글이 이보다 길면 양끝을 남기고 가운데를 줄인다
+
+
+def squeeze_said(said: str, limit: int = SAID_LIMIT) -> str:
+    """①의 글이 해제까지 담아 길면(운양집 해제 23,894자) 앞·뒤를 남기고 가운데를 줄인다.
+
+    입력: 사람이 쓴 글 전체. 출력: limit 안의 글(줄였으면 가운데에 «…(가운데 N자 줄임)…»).
+    왜 양끝인가: 사람이 직접 쓴 «나뉘는 방식»은 맨 위(해제 위에 쓴다)나 맨 아래(붙여 넣은 뒤 쓴다)에
+    오기 마련이다. 앞만 남기면 붙여 넣은 뒤에 쓴 문장이 사라진다.
+    """
+    said = said or ""
+    if len(said) <= limit:
+        return said
+    half = limit // 2
+    cut = len(said) - 2 * half
+    return said[:half] + f"\n…(가운데 {cut:,}자 줄임 — 참고 글은 앞뒤만 보냅니다)…\n" + said[-half:]
 
 
 def count_in_text(lines: list[Line], field: str, value: str, rules: Optional[dict] = None) -> int:
@@ -197,6 +221,7 @@ async def rules_from_words(
     if not said:
         meta["error"] = "무엇을 아는지 한 줄 적어 주세요."
         return None, meta
+    said = squeeze_said(said)  # ①에 해제까지 붙여 넣은 경우(D-122 덧붙임 2026-09-11)
     rules = normalize_rules(rules)
     sample = sample_start_lines(lines, rules, limit=sample_limit)
     prompt = (
