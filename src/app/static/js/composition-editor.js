@@ -292,7 +292,7 @@ function _renderUnits() {
       if ((Number(sorted[j].metadata?.level) || 2) <= lv) break;
       n++;
     }
-    if (n > 0 && (u.metadata?.role || "article") !== "container") swallows.set(u.id, n);
+    if (n > 0 && lv > 1) swallows.set(u.id, n); // 1단은 아래를 품는 것이 정상이다
   });
 
   sorted.forEach((tb) => {
@@ -323,12 +323,11 @@ function _renderUnits() {
       "font-size:10px; font-weight:700; color:var(--accent-green, #22c55e); background:rgba(34,197,94,0.1); padding:1px 5px; border-radius:2px;";
     seqBadge.textContent = `#${tb.sequence_index}`;
 
-    // 역할·글자 수 — 무엇을 고르는지 카드에서 바로 보이게
-    const roleName = { container: "묶음", article: "기사", fragment: "조각" };
+    // 깊이·글자 수 — 무엇을 고르는지 카드에서 바로 보이게(역할은 화면에서 물러났다)
     const kindBadge = document.createElement("span");
     kindBadge.style.cssText = "font-size:10px; color:var(--text-muted);";
     const chars = (tb.original_text || "").length;
-    kindBadge.textContent = `${roleName[tb.metadata?.role || "article"] || "기사"} · ${chars.toLocaleString()}자`;
+    kindBadge.textContent = `${Number(tb.metadata?.level) || 2}단 · ${chars.toLocaleString()}자`;
 
     // 출처는 «몇 쪽에 걸쳐 있는가»만 보인다. v1.3부터 단위는 LayoutBlock을 기억하지 않아
     // 그 id는 전부 «?»로 나왔다 — 카드의 절반을 뜻 없는 문자열이 차지하고 있었다(D-092).
@@ -376,7 +375,7 @@ function _renderUnits() {
       warn.title =
         "이 단위의 깊이가 뒤따르는 단위들보다 얕아, 그것들을 통째로 삼키고 있습니다." +
         "\n" +
-        "사이드바 「내용」에서 ⇥로 깊이를 한 단 내리거나, 역할을 «묶음»으로 바꾸세요.";
+        "사이드바 「내용」에서 ⇥로 깊이를 한 단 내리세요(1단이면 아래를 품는 것이 정상입니다).";
       header.insertBefore(warn, statusBadge);
     }
     // 삭제 버튼은 항상 맨 오른쪽에 위치
@@ -403,12 +402,11 @@ function _updateBlockCount() {
   const el = document.getElementById("comp-block-count");
   if (!el) return;
   const tb = compState.selectedTb;
-  const role = { container: "묶음", article: "기사", fragment: "조각" }[tb?.metadata?.role || "article"];
   el.textContent =
     `단위 ${compState.units.length}개` +
     (tb
-      ? ` · 고른 ${role} #${tb.sequence_index} 「${(tb.metadata?.title || "").slice(0, 14)}」 → 「쪼개기」로 그 안을 나눕니다`
-      : " · 사이드바 「내용」에서 기사를 고르면 여기서 그 안을 나눕니다");
+      ? ` · 고른 단위 #${tb.sequence_index} 「${(tb.metadata?.title || "").slice(0, 14)}」 → 「쪼개기」로 그 안을 나눕니다`
+      : " · 사이드바 「내용」에서 단위를 고르면 여기서 그 안을 나눕니다");
 }
 
 /**
@@ -471,9 +469,8 @@ function _selectUnit(tb) {
   if (editor) editor.style.display = "flex";
   const info = document.getElementById("comp-split-info");
   if (info) {
-    const role = { container: "묶음", article: "기사", fragment: "조각" }[tb.metadata?.role || "article"];
     const title = tb.metadata?.title || "";
-    info.textContent = `#${tb.sequence_index} ${role}${title ? " · " + title : ""} · ${(tb.original_text || "").length.toLocaleString()}자`;
+    info.textContent = `#${tb.sequence_index}${title ? " · " + title : ""} · ${Number(tb.metadata?.level) || 2}단 · ${(tb.original_text || "").length.toLocaleString()}자`;
   }
   if (textarea) {
     textarea.value = tb.original_text || "";
@@ -678,7 +675,7 @@ function _updateSplitPreview() {
     preview.style.color = "var(--text-muted)";
   } else {
     // 첫 조각은 원래 기사의 자리에 남는다 — 새로 서는 경계는 둘째 조각부터다
-    preview.textContent = `→ 이 기사 안이 문단 ${nonEmpty.length}개로 나뉩니다 (조각 경계 ${nonEmpty.length - 1}개가 들어갑니다).`;
+    preview.textContent = `→ 이 단위 안이 ${nonEmpty.length}개로 나뉩니다 (한 단 깊은 경계 ${nonEmpty.length - 1}개가 들어갑니다).`;
     preview.style.color = "var(--accent-primary, #3b82f6)";
   }
 }
@@ -1852,18 +1849,18 @@ async function _renderCurrentBoundaries() {
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     const rows = (data.boundaries || []).filter((b) => b.status !== "deprecated");
     compState.currentBoundaries = rows;
-    const roleName = { container: "묶음", article: "기사", fragment: "조각" };
-    const byRole = rows.reduce((a, b) => {
-      const r = b.role || "article";
-      a[r] = (a[r] || 0) + 1;
+    // 깊이별 수 — 역할은 화면에서 물러났다(D-092 덧붙임 2026-09-11)
+    const byLevel = rows.reduce((a, b) => {
+      const lv = Number(b.level) || 2;
+      a[lv] = (a[lv] || 0) + 1;
       return a;
     }, {});
     if (stats) {
       stats.textContent = rows.length
         ? `${rows.length}개 — ` +
-          ["container", "article", "fragment"]
-            .filter((r) => byRole[r])
-            .map((r) => `${roleName[r]} ${byRole[r]}`)
+          Object.keys(byLevel)
+            .sort((x, y) => Number(x) - Number(y))
+            .map((lv) => `${lv}단 ${byLevel[lv]}`)
             .join(" · ")
         : "";
     }
@@ -1878,10 +1875,10 @@ async function _renderCurrentBoundaries() {
       const row = document.createElement("div");
       row.className = "comp-cur-row" + (b.id === selected ? " is-selected" : "");
       row.dataset.unitId = b.id;
-      const role = b.role || "article";
+      const lv = Number(b.level) || 2;
       const title = document.createElement("span");
       title.className = "comp-cur-title";
-      const mark = { container: "▣ ", article: "", fragment: "· " }[role] || "";
+      const mark = lv <= 1 ? "▣ " : lv >= 3 ? "· " : "";
       const stale = b.anchor_status === "stale";
       title.textContent = `${stale ? "⚠ " : ""}${mark}${b.title || "(제목 없음)"}`;
       if (stale) title.classList.add("comp-cur-stale");
@@ -1890,8 +1887,7 @@ async function _renderCurrentBoundaries() {
       const p0 = b.start ? b.start.page : null;
       const p1 = b.end ? b.end.page : null;
       const pages = p0 == null ? "" : p1 && p1 !== p0 ? `${p0}~${p1}쪽` : `${p0}쪽`;
-      meta.textContent = `${roleName[role]}${b.role_estimated ? "(추정)" : ""} · ${b.level}단 · ${pages}`;
-      if (b.role_estimated) meta.classList.add("is-estimated");
+      meta.textContent = `${lv}단 · ${pages}`;
       row.appendChild(title);
       row.appendChild(meta);
       row.title = stale
@@ -2176,9 +2172,7 @@ function _isTocProposal(p) {
   return (p.reasons || []).some((r) => r.startsWith("toc:"));
 }
 
-const _ROLE_NAMES = { container: "묶음", article: "기사", fragment: "조각" };
-
-/** 후보 하나의 (역할, 깊이) — 사람이 바꾼 것이 있으면 그것. */
+/** 후보 하나의 (역할, 깊이) — 사람이 바꾼 깊이가 있으면 그것. 역할은 화면에 없고 서버로 보내는 값일 뿐이다. */
 function _propRoleLevel(p) {
   const k = _propKey(p);
   return {
@@ -2305,12 +2299,12 @@ function _renderProposals() {
     conf.className = `prop-conf ${cls}`;
     conf.textContent = `${Math.round(p.confidence * 100)}%`;
     right.appendChild(conf);
-    // 역할(뜻)과 깊이(구조)는 따로(D-092). 글자로만 보이고, 바꾸는 것은 행을 골라 위 줄에서
+    // 깊이는 글자로만 보이고, 바꾸는 것은 행을 눌러 그 옆 도구에서(역할은 화면에서 물러났다)
     const lvl = document.createElement("span");
     lvl.className = "prop-lvl";
     const rl = _propRoleLevel(p);
-    lvl.textContent = `${_ROLE_NAMES[rl.role] || rl.role} ${rl.level}단`;
-    lvl.title = "역할 · 깊이 — 행을 골라 위 줄에서 바꿉니다";
+    lvl.textContent = `${rl.level}단`;
+    lvl.title = "깊이 — 행을 누르면 그 옆에서 바꿉니다";
     right.appendChild(lvl);
     row.appendChild(cb);
     row.appendChild(body);
@@ -2455,19 +2449,15 @@ function _batchCheck(on) {
   _refreshApplyState();
 }
 
-/** 고른 행의 역할·깊이를 한꺼번에 바꾼다. 비운 칸은 그대로 둔다. */
+/** 고른 행의 깊이를 한꺼번에 바꾼다. */
 function _batchChange() {
-  const role = document.getElementById("comp-batch-role")?.value || "";
   const raw = document.getElementById("comp-batch-level")?.value || "";
   const level = raw ? Math.max(1, Number(raw) || 1) : null;
-  if (!role && level == null) {
-    showToast("바꿀 역할이나 깊이를 고르세요.", "warning");
+  if (level == null) {
+    showToast("바꿀 깊이를 적으세요(1부터).", "warning");
     return;
   }
-  for (const k of proposeState.selected) {
-    if (role) proposeState.roles.set(k, role);
-    if (level != null) proposeState.levels.set(k, level);
-  }
+  for (const k of proposeState.selected) proposeState.levels.set(k, level);
   _renderProposals();
 }
 

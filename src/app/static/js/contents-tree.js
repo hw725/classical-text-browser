@@ -205,25 +205,16 @@ function _renderOutline(root, blocks, container) {
  * 블록 한 줄: [순번] 미리보기 … 쪽 배지들.
  * 줄을 누르면 첫 쪽으로, 배지를 누르면 그 쪽으로 간다. 두 쪽에 걸친 블록은 배지가 둘이다.
  */
-const ROLE_NAME = { container: "묶음", article: "기사", fragment: "조각" };
 const ROLE_MARK = { container: "▣ ", article: "", fragment: "· " };
 
-/** 역할이 비어 있으면 깊이로 추정한다 (옛 데이터 호환 — 서버의 role_for_level과 같은 규칙). */
+/**
+ * 행의 모양(굵게·흐리게·머리표)은 깊이가 정한다 — 1단 묶음꼴, 2단 보통, 3단↑ 조각꼴.
+ * 역할(role)은 화면에서 물러났다(D-092 덧붙임 2026-09-11): 깊이가 구조를 다 정하고 역할이 행동을 바꾸는 데가
+ * 없어 사용자가 «묶음/기사/조각» 개념을 배우지 않게 했다. 파일의 role 값은 읽지 않고 깊이로만 어림한다.
+ */
 function _roleOf(block) {
   const lv = Number(block.level) || 2;
-  return block.role || (lv <= 1 ? "container" : lv === 2 ? "article" : "fragment");
-}
-
-/** 한 행의 역할 표시(클래스·머리표·이름표·설명)를 다시 칠한다. 트리를 다시 그리지 않는다. */
-function _paintRole(row, block, role) {
-  row.classList.remove(`contents-role-${row.dataset.role}`);
-  row.classList.add(`contents-role-${role}`);
-  row.dataset.role = role;
-  block.role = role;
-  block.role_estimated = false; // 사람이 정했다
-  if (row._roleBtn) row._roleBtn.textContent = ROLE_NAME[role];
-  if (row._label) row._label.textContent = _rowLabel(block, role);
-  row.title = _rowTitle(block, role);
+  return lv <= 1 ? "container" : lv === 2 ? "article" : "fragment";
 }
 
 function _rowLabel(block, role) {
@@ -238,7 +229,7 @@ function _rowTitle(block, role) {
   const level = Number(block.level) || 2;
   const stale = block.anchor && block.anchor.status === "stale";
   return (
-    `${seq}${block.preview}  (${block.char_count}자, ${ROLE_NAME[role]} · 깊이 ${level}${block.status ? ", " + block.status : ""})` +
+    `${seq}${block.preview}  (${block.char_count}자 · 깊이 ${level}${block.status ? ", " + block.status : ""})` +
     (stale ? "\n⚠ 확정본이 바뀐 뒤 자리를 못 찾았습니다 — ▲▼로 옮겨 주세요" : "")
   );
 }
@@ -249,7 +240,7 @@ function _createBlockRow(block) {
   row.dataset.blockId = block.id || "";
   row.dataset.pages = (block.pages || []).map((p) => p.page).join(",");
   const level = Number(block.level) || 2;
-  // 깊이는 중첩이 보여 준다. 역할(뜻)은 따로 — container 묶음 / article 기사 / fragment 조각
+  // 깊이가 중첩과 모양을 다 정한다(역할은 화면에서 물러났다)
   const role = _roleOf(block);
   row.classList.add(`contents-role-${role}`);
   row.dataset.role = role;
@@ -311,24 +302,6 @@ function _createBlockRow(block) {
       });
       tools.appendChild(lv);
     }
-    // 역할 바꾸기 — 묶음 → 기사 → 조각 → 묶음. 깊이와 무관하다(3단에 오는 기사도 있다)
-    const rl = document.createElement("button");
-    rl.type = "button";
-    rl.className = "contents-shift-btn";
-    rl.textContent = ROLE_NAME[role];
-    // 파일에 실제 값이 없어 깊이로 어림한 역할은 흐리게 — 사람이 정한 것과 구별되어야 한다.
-    // 단추를 한 번 누르면 그때 실제 값이 저장되므로 표시가 저절로 사라진다.
-    rl.classList.toggle("is-estimated", !!block.role_estimated);
-    rl.title = block.role_estimated
-      ? "역할이 아직 정해지지 않아 깊이로 어림한 것입니다 — 누르면 정해집니다 (묶음/기사/조각)"
-      : "역할 바꾸기 — 묶음(卷·集·編) / 기사(번역·주석 단위) / 조각(기사 안 문단·문답)";
-    rl.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      const order = ["container", "article", "fragment"];
-      _setBoundaryRole(row, block, order[(order.indexOf(_roleOf(block)) + 1) % 3]);
-    });
-    row._roleBtn = rl;
-    tools.appendChild(rl);
     // 지우기 = 앞 단위에 합치기 (앞 단위의 id가 남는다)
     const del = document.createElement("button");
     del.type = "button";
@@ -499,9 +472,6 @@ function _renderInsertForm() {
   form.className = "contents-insert-form";
   const page = Number(viewerState.pageNum) || 1;
   form.innerHTML =
-    `<select title="역할 — 묶음(卷·集·編) / 기사(번역·주석 단위) / 조각(기사 안 문단)" data-k="role">` +
-    `<option value="container">묶음</option><option value="article" selected>기사</option>` +
-    `<option value="fragment">조각</option></select>` +
     `<input type="number" min="1" value="2" title="깊이(중첩 단계, 1부터)" class="contents-insert-num" data-k="level">단` +
     `<input type="text" placeholder="제목(선택)" class="contents-insert-title" data-k="title">` +
     `<button type="button" class="contents-shift-btn contents-insert-btn" disabled title="찍은 자리에서 단위를 나눕니다">넣기</button>` +
@@ -522,7 +492,6 @@ function _renderInsertForm() {
     await _insertBoundary({
       start: { page: Number(v("page")), line: Number(v("line")), offset: Number(v("offset")) },
       level: Math.max(1, Number(v("level")) || 2),
-      role: v("role"),
       title: v("title").trim() || null,
     });
   });
@@ -706,7 +675,6 @@ function _boundaryUrl(boundaryId) {
 }
 
 // 저장 중인 역할 변경 (경계 id → {desired}). 연타하면 마지막 값 하나만 더 보낸다.
-const _rolePending = new Map();
 
 /**
  * 역할을 바꾼다. 화면은 곧바로, 저장은 뒤에서.
@@ -786,10 +754,10 @@ function _applyUnitToEditors(unitId, tries = 0) {
 function _renderUnitLabels() {
   const u = currentUnit();
   const text = u
-    ? `${u.sequence_index != null ? "#" + u.sequence_index + " " : ""}${ROLE_NAME[_roleOf(u)]}${u.title ? " · " + u.title : ""}`
+    ? `${u.sequence_index != null ? "#" + u.sequence_index : ""}${u.title ? " · " + u.title : ""}`
     : "";
   document.querySelectorAll(".unit-pick-label").forEach((el) => {
-    el.textContent = text || "사이드바 「내용」에서 기사를 고르세요";
+    el.textContent = text || "사이드바 「내용」에서 단위를 고르세요";
     el.classList.toggle("is-empty", !text);
     el.title = text ? "사이드바 「내용」에서 다른 단위를 고르면 바뀝니다" : "";
   });
@@ -810,44 +778,6 @@ function currentUnit() {
   return _allUnits().find((b) => b.id === id) || null;
 }
 
-function _setBoundaryRole(row, block, role) {
-  if (!contentsState.interpId) return;
-  _paintRole(row, block, role);
-  _saveRole(block.id, role);
-}
-
-async function _saveRole(boundaryId, role) {
-  const running = _rolePending.get(boundaryId);
-  if (running) {
-    running.desired = role; // 진행 중이면 마지막 값만 남긴다 (연타로 요청이 쌓이지 않게)
-    return;
-  }
-  const state = { desired: role };
-  _rolePending.set(boundaryId, state);
-  try {
-    while (state.desired) {
-      const next = state.desired;
-      state.desired = null;
-      const res = await fetch(
-        `${_boundaryUrl(boundaryId)}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ role: next }),
-        },
-      );
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `HTTP ${res.status}`);
-      }
-    }
-  } catch (e) {
-    showToast(`역할 변경 실패: ${e.message}`, "error");
-    await refreshContentsTree(); // 화면을 서버의 사실로 되돌린다
-  } finally {
-    _rolePending.delete(boundaryId);
-  }
-}
 
 async function _setBoundaryLevel(block, level) {
   if (!viewerState.docId) return;
