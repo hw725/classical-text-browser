@@ -98,15 +98,10 @@ function _bindCompEvents() {
   }
   const checkAll = document.getElementById("comp-check-all");
   if (checkAll) checkAll.addEventListener("change", () => _checkVisible(checkAll.checked));
-  for (const [id, fn] of [
-    ["comp-batch-apply", _batchChange],
-    ["comp-batch-check", () => _batchCheck(true)],
-    ["comp-batch-uncheck", () => _batchCheck(false)],
-    ["comp-batch-suppress", _batchSuppress],
-  ]) {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener("click", fn);
-  }
+  _bindRowTools();
+  // 도구 markup의 원본 — 목록을 다시 쓰다 도구가 지워졌을 때 여기서 다시 만든다(2026-09-11 버그)
+  const holder0 = document.getElementById("comp-batch-holder");
+  if (holder0) proposeState.toolsHtml = holder0.innerHTML;
   // LLM 진입점 — 「말로 넣기」와 「더 묻기」 창. 창에서 무엇을 물을지 고른다
   const llmBtn = document.getElementById("comp-llm-btn");
   if (llmBtn) llmBtn.addEventListener("click", _openLlmModal);
@@ -1943,6 +1938,7 @@ async function _startFlow(force) {
     proposeState.selected = new Set();
     proposeState.anchor = null;
     const list = document.getElementById("comp-propose-list");
+    _parkRowTools(); // 목록을 비우기 전에 도구를 거둔다 — 안 그러면 함께 지워진다
     if (list) list.innerHTML = '<div class="placeholder">전문을 세는 중…</div>';
     const summary = document.getElementById("comp-toc-summary");
     if (summary) summary.textContent = "찾는 중…";
@@ -2071,6 +2067,7 @@ async function _proposeBoundaries(asBaseline) {
     await _startFlow(); // 신호부터 센다 — 끝에서 다시 여기로 온다
     return;
   }
+  _parkRowTools(); // 목록을 비우기 전에 도구를 거둔다
   list.innerHTML = '<div class="placeholder">권 전체 확정본을 읽어 경계를 찾는 중…</div>';
   const docId = viewerState.docId;
   const partId = viewerState.partId;
@@ -2138,6 +2135,7 @@ async function _proposeBoundaries(asBaseline) {
     _renderDiff();
     _refreshApplyState();
   } catch (e) {
+    _parkRowTools();
     list.innerHTML = `<div class="placeholder">${_treeEscHtml ? _treeEscHtml(e.message) : e.message}</div>`;
     _refreshApplyState();
   }
@@ -2351,6 +2349,34 @@ function _selectRow(k, ev) {
   _renderBatchBar();
 }
 
+/** 행 옆 도구의 단추에 손을 단다. 도구를 다시 만들었을 때도 부른다. */
+function _bindRowTools() {
+  for (const [id, fn] of [
+    ["comp-batch-apply", _batchChange],
+    ["comp-batch-check", () => _batchCheck(true)],
+    ["comp-batch-uncheck", () => _batchCheck(false)],
+    ["comp-batch-suppress", _batchSuppress],
+  ]) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("click", fn);
+  }
+}
+
+/**
+ * 도구 요소를 돌려준다 — 없으면(목록을 innerHTML로 다시 쓰다 함께 지워졌으면) 보관함에 원본 markup으로 다시
+ * 만들고 손을 단다. 사용자가 「여기서 시작」·「후보 보기」 뒤에 «도구가 안 뜬다»고 한 버그(2026-09-11)의 안전망.
+ */
+function _ensureRowTools() {
+  let tools = document.getElementById("comp-batch-tools");
+  if (tools) return tools;
+  const holder = document.getElementById("comp-batch-holder");
+  if (!holder || !proposeState.toolsHtml) return null;
+  holder.innerHTML = proposeState.toolsHtml;
+  tools = document.getElementById("comp-batch-tools");
+  _bindRowTools();
+  return tools;
+}
+
 /** 위 줄의 안내 + 도구를 고른 행 옆에 놓는다. 고른 것이 없으면 도구를 거둔다. */
 function _renderBatchBar() {
   const n = proposeState.selected.size;
@@ -2361,7 +2387,7 @@ function _renderBatchBar() {
 
 /** 도구를 목록 밖 보관함으로 되돌린다 — 목록을 다시 그리기 전에(innerHTML이 지우면 단추의 이벤트가 사라진다). */
 function _parkRowTools() {
-  const tools = document.getElementById("comp-batch-tools");
+  const tools = _ensureRowTools();
   const holder = document.getElementById("comp-batch-holder");
   if (tools && holder && tools.parentElement !== holder) holder.appendChild(tools);
   if (tools) tools.hidden = true;
@@ -2372,7 +2398,7 @@ function _parkRowTools() {
  * 왜: «선택»이라는 상태를 배우지 않아도, 누른 자리에서 바로 고칠 수 있어야 한다(사용자 지적 2026-09-11).
  */
 function _placeRowTools() {
-  const tools = document.getElementById("comp-batch-tools");
+  const tools = _ensureRowTools();
   if (!tools) return;
   const n = proposeState.selected.size;
   const cnt = document.getElementById("comp-batch-count");
