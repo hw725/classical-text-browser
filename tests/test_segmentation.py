@@ -2323,3 +2323,30 @@ class TestD122Addendum:
         for title, head in (("登北漢山記", "登北漢山"), ("論時務疏", "論時務疏")):
             if title in un:
                 assert any(n["text"].startswith(head) for n in un[title]["near"]), un[title]
+
+    def test_apply_listed_drops_only_named_ids_and_counts_new(self, client, tmp_path):  # noqa: F811
+        """replace=listed: drop에 든 id만 지우고, dry_run은 «새로 설 수»만 센다(D-122 덧붙임 2)."""
+        url = "/api/documents/d1/segmentation/apply"
+        lib, part_id = _setup(client, tmp_path)
+        data = client.post(
+            "/api/documents/d1/segmentation/propose",
+            json={"part_id": part_id, "rules": {"title_words": ["談草"]}},
+        ).json()
+        keep = ("title", "kind", "start", "end", "level", "role")
+        spans = [{k: v for k, v in s.items() if k in keep} for s in data["spans"]]
+        first = client.post(url, json={"part_id": part_id, "spans": spans}).json()
+        ids = [c["id"] for c in first["created"]]
+        assert first["new"] == len(spans) and len(ids) >= 2
+        # 같은 것을 다시 보내면 새로 서는 것도 지우는 것도 없다
+        body = {"part_id": part_id, "spans": spans, "replace": "listed", "drop": []}
+        d = client.post(url, json=body | {"dry_run": True}).json()
+        assert (d["would_create"], d["existing"], d["removed"]) == (0, len(spans), 0)
+        # 둘째를 지목해 빼면 그것만 지운다 — 지목하지 않은 것은 구간에서 빠져도 남는다
+        body = {"part_id": part_id, "spans": spans[:1], "replace": "listed", "drop": [ids[1]]}
+        d = client.post(url, json=body | {"dry_run": True}).json()
+        assert d["removed"] == 1 and d["would_create"] == 0
+        r = client.post(url, json=body).json()
+        assert r["new"] == 0 and r["removed"] == 1
+        left = client.get(f"/api/documents/d1/boundaries?part_id={part_id}").json()["boundaries"]
+        live = [b["id"] for b in left if b.get("status") not in ("deprecated", "archived")]
+        assert ids[1] not in live and all(i in live for i in ids if i != ids[1])

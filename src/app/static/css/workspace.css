@@ -7425,7 +7425,17 @@ button.mode-tab {
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
   padding: 3px 0; background: var(--bg-primary, #fff); border-bottom: 1px solid var(--border); font-size: 11px;
 }
-#comp-batch-tools { display: inline-flex; align-items: center; gap: 4px; }
+/* 도구는 고른 행 바로 아래 한 줄(D-122 덧붙임 2) — «선택»을 배우지 않아도 «누르면 고칠 수 있다» */
+#comp-batch-tools {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+  padding: 4px 6px 4px 24px; font-size: 11px;
+  background: var(--selected-bg, rgba(60, 120, 200, 0.12)); border-bottom: 1px dashed var(--border);
+  box-shadow: inset 2px 0 0 var(--accent, #4a7bd0);
+}
+#comp-batch-count { font-weight: 600; margin-right: 2px; }
+/* 저장된 경계 행 — 새 후보와 눈으로 갈린다 */
+.comp-propose-row.is-current { background: rgba(45, 106, 79, 0.06); }
+.prop-reason.current { background: rgba(45, 106, 79, 0.15); color: #2d6a4f; }
 .comp-apply-foot { position: sticky; bottom: 0; z-index: 2; background: var(--bg-primary, #fff); padding: 6px 0 2px; border-top: 1px solid var(--border); }
 .comp-propose-row.is-selected { background: var(--selected-bg, rgba(60, 120, 200, 0.12)); box-shadow: inset 2px 0 0 var(--accent, #4a7bd0); }
 .prop-lvl { font-size: 10px; color: var(--text-muted); white-space: nowrap; }

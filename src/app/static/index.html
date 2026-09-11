@@ -2010,7 +2010,7 @@
                     <span class="comp-step-title">후보 고르기</span>
                     <span id="comp-propose-stats" class="comp-propose-stats"></span>
                     <!-- 체크와 행 선택은 다른 상태다(D-122 §3) — 처음 보는 사람은 여기서 안다 -->
-                    <span class="comp-step-hint" title="체크(☑)한 행이 경계가 됩니다. 행을 누르면 파랗게 골라지고(Shift 범위·Ctrl 하나씩), 고른 행은 위 줄의 도구로 한꺼번에 바꿉니다">☑ = 경계가 됨 · 행을 누르면 골라서 한꺼번에 바꿈</span>
+                    <span class="comp-step-hint" title="체크(☑)한 행이 경계가 됩니다 — 저장된 경계는 처음부터 체크돼 있고, 체크를 빼면 「적용」 때 지워집니다. 행을 누르면 그 옆에 도구가 뜨고, Shift 범위·Ctrl 하나씩으로 여러 행을 잡으면 한꺼번에 바꿉니다">☑ = 경계가 됨(저장된 것은 처음부터 ☑) · 행을 누르면 그 옆에 고치는 도구</span>
                   </div>
                   <!-- 저장된 규칙(없으면 권고)으로 센 후보와 견준 «바뀐 것» (D-121 관문) -->
                   <div id="comp-preview-out" class="comp-preview-out" hidden></div>
@@ -2018,7 +2018,10 @@
                   <div class="comp-batch-bar">
                     <label class="comp-sig-opt" title="보이는 후보 전부를 경계로 삼거나 뺍니다"><input id="comp-check-all" type="checkbox" /> 전체 ☑</label>
                     <span id="comp-sel-count" class="comp-propose-stats" title="행을 누르면 고릅니다. Shift로 범위, Ctrl로 하나씩"></span>
+                    <!-- 도구는 누른 행 «옆»에 뜬다(D-122 덧붙임 2) — JS가 고른 행 아래로 옮긴다. 안 고르면 여기(숨김)에 둔다 -->
+                    <span id="comp-batch-holder" hidden>
                     <span id="comp-batch-tools" hidden>
+                      <span id="comp-batch-count"></span>
                       <select id="comp-batch-role" class="prop-level" title="고른 행의 역할">
                         <option value="">역할 그대로</option>
                         <option value="container">묶음</option>
@@ -2031,13 +2034,12 @@
                       <button id="comp-batch-uncheck" class="text-btn text-btn-sm" type="button" title="고른 행을 경계에서 뺍니다(체크 해제)">☐ 경계에서 빼기</button>
                       <button id="comp-batch-suppress" class="text-btn text-btn-sm" type="button" title="고른 행을 표제로 보지 않도록 억제 목록에 넣고 다시 셉니다">억제</button>
                     </span>
+                    </span>
                   </div>
                   <div id="comp-propose-list" class="comp-propose-list">
                     <div class="placeholder">①이 끝나면 후보가 보입니다.</div>
                   </div>
                   <div class="comp-step-foot comp-apply-foot">
-                    <label class="comp-sig-opt" title="체크에 없는 경계는 손으로 넣은 것도 지웁니다. 끄면 전에 제안으로 만든 경계만 정리하고 손으로 넣은 것은 남깁니다">
-                      <input id="comp-apply-replace-all" type="checkbox" /> 손으로 넣은 경계도 정리</label>
                     <div style="flex: 1"></div>
                     <span id="comp-apply-note" class="comp-propose-stats"></span>
                     <button id="comp-propose-apply-btn" class="text-btn text-btn-primary" type="button" title="②의 규칙을 저장하고 체크한 후보로 경계를 세웁니다 (Git으로 되돌릴 수 있음)">적용</button>
@@ -5027,10 +5029,10 @@
     <!-- 앱 모듈 (로드 순서 중요: sidebar-tree가 viewerState를 정의, 나머지가 참조) -->
     <script src="/static/js/toast.js?v=20260222"></script>
     <script src="/static/js/sidebar-tree.js?v=20260223"></script>
-    <script src="/static/js/pdf-renderer.js?v=20260911c"></script>
-    <script src="/static/js/text-editor.js?v=20260911c"></script>
+    <script src="/static/js/pdf-renderer.js?v=20260911d"></script>
+    <script src="/static/js/text-editor.js?v=20260911d"></script>
     <script src="/static/js/koten-layout-detector.js?v=20260221"></script>
-    <script src="/static/js/layout-editor.js?v=20260911c"></script>
+    <script src="/static/js/layout-editor.js?v=20260911d"></script>
     <script src="/static/js/correction-editor.js?v=20260220c"></script>
     <script src="/static/js/bibliography.js?v=20260220c"></script>
     <script src="/static/js/interpretation.js?v=20260224e"></script>
@@ -5038,11 +5040,11 @@
     <script src="/static/js/create-document.js?v=20260717c"></script>
     <script src="/static/js/drag-drop.js?v=20260717a"></script>
     <script src="/static/js/hwp-import.js?v=20260223b"></script>
-    <script src="/static/js/ocr-panel.js?v=20260911c"></script>
+    <script src="/static/js/ocr-panel.js?v=20260911d"></script>
     <script src="/static/js/alignment-view.js?v=20260223"></script>
     <script src="/static/js/variant-manager.js?v=20260221b"></script>
     <script src="/static/js/batch-correction.js?v=20260221"></script>
-    <script src="/static/js/composition-editor.js?v=20260911c"></script>
+    <script src="/static/js/composition-editor.js?v=20260911d"></script>
     <script src="/static/js/punctuation-editor.js?v=20260717a"></script>
     <script src="/static/js/hyeonto-editor.js?v=20260220c"></script>
     <script src="/static/js/translation-editor.js?v=20260220c"></script>
@@ -5055,7 +5057,7 @@
     <script src="/static/js/validation-panel.js?v=20260904a"></script>
     <script src="/static/js/setup-panel.js?v=20260906a"></script>
     <!-- 텍스트 추출 패널 — workspace.js보다 먼저 정의돼야 프로필 적용 시 호출된다 -->
-    <script src="/static/js/extract-panel.js?v=20260911c"></script>
+    <script src="/static/js/extract-panel.js?v=20260911d"></script>
     <script src="/static/js/contents-tree.js?v=20260902b"></script>
     <script src="/static/js/workspace.js?v=20260906a"></script>
   </body>

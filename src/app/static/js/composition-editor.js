@@ -1633,6 +1633,8 @@ const proposeState = {
   llm: null, // {docId, partId, proposals, meta} — «구조를 통째로 묻기»의 답(D-125). 규칙 후보와 합쳐 ③에 선다
   located: null, // {docId, partId, proposals} — 목차에는 있으나 대조 못 한 항목을 사람이 찾아 넣은 자리(D-122 덧붙임)
   unmatchedOpen: null, // 펼쳐 둔 못 찾은 항목의 index
+  lastClicked: null, // 마지막으로 누른 행(자리 키) — 도구가 이 행 아래에 뜬다(D-122 덧붙임 2)
+  baselineKind: "rules", // «바뀐 것»의 기준 — "boundaries"(저장된 경계) 또는 "rules"(저장된 규칙으로 센 후보)
 };
 const flowState = { loading: false }; // ①이 세는 중인가 — 겹쳐 시작하지 않는다
 
@@ -1942,6 +1944,82 @@ function _acceptedMap(data) {
   return m;
 }
 
+/** 저장된 경계 행을 자리 키로 — «바뀐 것»의 기준(D-122 덧붙임 2). */
+function _savedMap(data) {
+  const m = new Map();
+  for (const p of data?.proposals || []) if (p.boundary_id) m.set(_propKey(p), p);
+  return m;
+}
+
+/** 체크된 행을 자리 키로 — 「적용」하면 이것이 경계다. */
+function _checkedMap(data) {
+  const m = new Map();
+  for (const p of data?.proposals || []) {
+    const k = _propKey(p);
+    if (proposeState.checked.has(k)) m.set(k, p);
+  }
+  return m;
+}
+
+/** 저장된 경계 목록이 이 문헌·권의 것인지 확인하고 아니면 읽는다. */
+async function _ensureCurrentBoundaries() {
+  const tag = `${viewerState.docId}/${viewerState.partId}`;
+  if (compState.currentBoundariesTag === tag && Array.isArray(compState.currentBoundaries)) return;
+  await _renderCurrentBoundaries();
+  compState.currentBoundariesTag = tag;
+}
+
+/** 저장된 경계인가(손으로 넣은 것과 구분) — 서버 _is_proposal_boundary와 같은 판정. */
+function _isProposalBoundary(b) {
+  if ((b.metadata || {}).source === "proposal") return true;
+  return (b.kind || "manual") !== "manual";
+}
+
+/**
+ * 저장된 경계를 ③의 행으로 합친다(D-122 덧붙임 2). 입력: propose 응답. 출력: 없음(data를 고친다).
+ * 같은 자리의 후보가 있으면 그 행에 «지금 경계» 표지를 얹고 제목·역할·깊이는 저장된 것으로(사람이 확정한
+ * 것이다). 없으면 행을 더한다. 행 목록(data.lines)에 없는 자리(목차 쪽 등)는 넣지 않는다 — 그런 경계는
+ * 「적용」이 건드리지 않는다(replace="listed"는 지목한 id만 지운다).
+ */
+function _mergeCurrentBoundaries(data) {
+  const rows = (compState.currentBoundaries || []).filter((b) => b.status !== "deprecated" && b.status !== "archived");
+  if (!rows.length) return;
+  const lineKeys = new Set((data.lines || []).map((l) => `${l.page}:${l.line_index}`));
+  const byKey = new Map(data.proposals.map((p) => [_propKey(p), p]));
+  let joined = 0, added = 0;
+  for (const b of rows) {
+    const st = b.start || {};
+    const page = Number(st.page), line = Number(st.line), off = Number(st.offset || 0);
+    if (!lineKeys.has(`${page}:${line}`)) continue;
+    const k = `${page}:${line}:${off}`;
+    const manual = !_isProposalBoundary(b);
+    const cur = byKey.get(k);
+    if (cur) {
+      if (!cur.reasons.includes("current")) cur.reasons.push("current");
+      if (manual && !cur.reasons.includes("manual")) cur.reasons.push("manual");
+      cur.boundary_id = b.id;
+      cur.manual = manual;
+      cur.title = b.title || cur.title;
+      cur.level = b.level || cur.level;
+      cur.role = b.role || cur.role;
+      cur.confidence = 1;
+      cur.accepted = true;
+      joined++;
+    } else {
+      const p = {
+        page, line_index: line, char_offset: off, title: b.title || "", level: b.level || 2,
+        role: b.role || "article", kind: b.kind === "volume" ? "volume" : "", reasons: manual ? ["current", "manual"] : ["current"],
+        confidence: 1, accepted: true, suppressed: false, boundary_id: b.id, manual,
+      };
+      data.proposals.push(p);
+      byKey.set(k, p);
+      added++;
+    }
+  }
+  data.proposals.sort((a, b) => a.page - b.page || a.line_index - b.line_index || (a.char_offset || 0) - (b.char_offset || 0));
+  data.stats.current = { added, joined };
+}
+
 /**
  * ②의 규칙으로 후보를 센다 (D-088). **저장하지 않는다** — propose 라우트는 규칙을 받기만 한다.
  * 입력: asBaseline(이 결과를 «바뀐 것»의 기준으로 삼을 것인가 — 처음·적용 직후). 출력: 없음.
@@ -1987,6 +2065,11 @@ async function _proposeBoundaries(asBaseline) {
     if (seq !== proposeState.seq || docId !== viewerState.docId || partId !== viewerState.partId) return;
     _mergeLlmProposals(data, docId, partId); // 모델이 가리킨 자리(D-125)는 규칙 후보와 같은 목록에 선다
     _mergeLocatedProposals(data, docId, partId); // 사람이 찾아 넣은 목차 자리도(D-122 덧붙임)
+    // 저장된 경계가 ③의 바탕이다(D-122 덧붙임 2) — 닫았다 열어도 사이드바 「내용」과 같은 것을 본다
+    await _ensureCurrentBoundaries();
+    if (seq !== proposeState.seq || docId !== viewerState.docId || partId !== viewerState.partId) return;
+    _mergeCurrentBoundaries(data);
+    const hasSaved = data.proposals.some((p) => p.boundary_id);
     const same = proposeState.docId === docId && proposeState.partId === partId;
     const prevKeys = same && proposeState.data ? new Set(proposeState.data.proposals.map(_propKey)) : null;
     const hasToc = !!(data.toc && data.toc.matches && data.toc.matches.length);
@@ -1998,7 +2081,8 @@ async function _proposeBoundaries(asBaseline) {
       if (p.suppressed) continue; // 억제한 자리는 체크에서 빠진다 — 남으면 적용은 되고 화면만 꺼진다(Codex 지적)
       if (prevKeys && prevKeys.has(k)) {
         if (proposeState.checked.has(k)) checked.add(k);
-      } else if (p.accepted && (!hasToc || _isTocProposal(p) || _isLlmProposal(p))) checked.add(k);
+      } else if (p.boundary_id) checked.add(k); // 저장된 경계는 처음부터 체크 — 아무것도 안 건드리면 아무 일도 없다
+      else if (!hasSaved && p.accepted && (!hasToc || _isTocProposal(p) || _isLlmProposal(p))) checked.add(k);
     }
     const keys = new Set(data.proposals.map(_propKey));
     const keep = (map) => new Map([...map].filter(([k]) => keys.has(k)));
@@ -2010,7 +2094,10 @@ async function _proposeBoundaries(asBaseline) {
     proposeState.levels = same ? keep(proposeState.levels) : new Map();
     proposeState.roles = same ? keep(proposeState.roles) : new Map();
     proposeState.selected = new Set([...proposeState.selected].filter((k) => keys.has(k)));
-    if (asBaseline || !proposeState.baseline || !same) proposeState.baseline = _acceptedMap(data);
+    if (asBaseline || !proposeState.baseline || !same) {
+      proposeState.baseline = hasSaved ? _savedMap(data) : _acceptedMap(data);
+      proposeState.baselineKind = hasSaved ? "boundaries" : "rules";
+    }
     _renderProposals();
     _renderDiff();
     _refreshApplyState();
@@ -2033,7 +2120,9 @@ const _REASON_LABELS = {
 };
 function _reasonChip(r) {
   let label = r, cls = "";
-  if (r === "toc:located") { label = "목차·찾아 넣음"; cls = "pos"; }
+  if (r === "current") { label = "지금 경계"; cls = "current"; }
+  else if (r === "manual") { label = "손으로 넣음"; cls = "current"; }
+  else if (r === "toc:located") { label = "목차·찾아 넣음"; cls = "pos"; }
   else if (r.startsWith("toc:")) { label = `목차 ${r.slice(4)}`; cls = "pos"; }
   else if (r.startsWith("volume:")) { label = `卷 ${r.slice(7)}`; cls = "pos"; }
   else if (r.startsWith("title_word:")) { label = `어휘 ${r.slice(11)}`; cls = "pos"; }
@@ -2069,7 +2158,8 @@ function _updateStats() {
   const data = proposeState.data;
   const stats = document.getElementById("comp-propose-stats");
   if (!data || !stats) return;
-  stats.textContent = `${data.stats.lines}행 · 후보 ${data.proposals.length} · 체크 ${proposeState.checked.size}` +
+  const nCur = data.proposals.filter((p) => p.boundary_id).length;
+  stats.textContent = `${data.stats.lines}행 · ` + (nCur ? `지금 경계 ${nCur} · ` : "") + `후보 ${data.proposals.length} · 체크 ${proposeState.checked.size}` +
     (data.stats.suppressed ? ` · 억제 ${data.stats.suppressed}` : "") +
     (data.stats.llm ? ` · LLM ${data.stats.llm.added + data.stats.llm.joined}` : "");
   // 문턱 아래 후보는 기본으로 숨긴다 — 보이는 목록은 «승인 후보»여야 읽힌다
@@ -2112,6 +2202,7 @@ function _renderProposals() {
     if (tocSummary && !proposeState.toc) tocSummary.textContent = "없음";
     if (unmatchedBox) unmatchedBox.style.display = "none";
   }
+  _parkRowTools(); // 목록을 지우기 전에 도구를 거둔다
   list.innerHTML = "";
   proposeState.visible = [];
   if (!data.proposals.length) {
@@ -2126,7 +2217,7 @@ function _renderProposals() {
     if (!p.accepted && !proposeState.showRejected && !proposeState.checked.has(k)) continue;
     proposeState.visible.push(k);
     const row = document.createElement("div");
-    row.className = "comp-propose-row" + (p.suppressed ? " suppressed" : "") + (proposeState.selected.has(k) ? " is-selected" : "");
+    row.className = "comp-propose-row" + (p.suppressed ? " suppressed" : "") + (proposeState.selected.has(k) ? " is-selected" : "") + (p.boundary_id ? " is-current" : "");
     row.dataset.key = k;
     const cb = document.createElement("input");
     cb.type = "checkbox";
@@ -2140,6 +2231,7 @@ function _renderProposals() {
       _updateCheckAll();
       _refreshApplyState();
     });
+    if (p.boundary_id) cb.title = p.manual ? "저장된 경계(손으로 넣음) — 체크를 빼면 「적용」 때 지웁니다" : "저장된 경계 — 체크를 빼면 「적용」 때 지웁니다";
     const body = document.createElement("div");
     const title = document.createElement("div");
     title.className = "prop-title";
@@ -2202,6 +2294,7 @@ function _renderProposals() {
  */
 function _selectRow(k, ev) {
   const vis = proposeState.visible;
+  proposeState.lastClicked = k;
   if (ev.shiftKey && proposeState.anchor && vis.includes(proposeState.anchor)) {
     const a = vis.indexOf(proposeState.anchor);
     const b = vis.indexOf(k);
@@ -2222,13 +2315,45 @@ function _selectRow(k, ev) {
   _renderBatchBar();
 }
 
-/** 일괄 줄: 고른 수와 도구. 고른 것이 없으면 도구를 감춘다. */
+/** 위 줄의 안내 + 도구를 고른 행 옆에 놓는다. 고른 것이 없으면 도구를 거둔다. */
 function _renderBatchBar() {
   const n = proposeState.selected.size;
   const count = document.getElementById("comp-sel-count");
+  if (count) count.textContent = n ? `고른 행 ${n}개` : "행을 누르면 그 옆에 고치는 도구가 뜹니다(Shift 범위·Ctrl 하나씩)";
+  _placeRowTools();
+}
+
+/** 도구를 목록 밖 보관함으로 되돌린다 — 목록을 다시 그리기 전에(innerHTML이 지우면 단추의 이벤트가 사라진다). */
+function _parkRowTools() {
   const tools = document.getElementById("comp-batch-tools");
-  if (count) count.textContent = n ? `고른 행 ${n}개 — 오른쪽 도구가 이 행들에 듭니다` : "행을 누르면 고릅니다(Shift 범위·Ctrl 하나씩) — 고른 행은 한꺼번에 바꿉니다";
-  if (tools) tools.hidden = !n;
+  const holder = document.getElementById("comp-batch-holder");
+  if (tools && holder && tools.parentElement !== holder) holder.appendChild(tools);
+  if (tools) tools.hidden = true;
+}
+
+/**
+ * 도구를 마지막으로 누른 행 바로 아래에 놓는다(D-122 덧붙임 2). 여러 행을 잡았으면 «N행에:».
+ * 왜: «선택»이라는 상태를 배우지 않아도, 누른 자리에서 바로 고칠 수 있어야 한다(사용자 지적 2026-09-11).
+ */
+function _placeRowTools() {
+  const tools = document.getElementById("comp-batch-tools");
+  if (!tools) return;
+  const n = proposeState.selected.size;
+  const cnt = document.getElementById("comp-batch-count");
+  if (cnt) cnt.textContent = n > 1 ? `고른 ${n}행에:` : "이 행에:";
+  if (!n) {
+    _parkRowTools();
+    return;
+  }
+  let key = proposeState.lastClicked;
+  if (!proposeState.selected.has(key)) key = [...proposeState.selected].pop();
+  const row = [...document.querySelectorAll("#comp-propose-list .comp-propose-row")].find((el) => el.dataset.key === key);
+  if (!row) {
+    _parkRowTools();
+    return;
+  }
+  row.insertAdjacentElement("afterend", tools);
+  tools.hidden = false;
 }
 
 /** 「전체」 체크박스를 보이는 행의 상태에 맞춘다(전부·일부·없음). */
@@ -2314,7 +2439,9 @@ function _renderDiff() {
     out.hidden = true;
     return;
   }
-  const now = _acceptedMap(data);
+  // 저장된 경계가 있으면 «체크한 것 vs 저장된 것»(적용하면 정확히 이것이 일어난다), 없으면 옛 방식(채택 후보 vs 기준)
+  const byBoundaries = proposeState.baselineKind === "boundaries";
+  const now = byBoundaries ? _checkedMap(data) : _acceptedMap(data);
   const base = proposeState.baseline;
   const added = [...now.keys()].filter((k) => !base.has(k));
   const removed = [...base.keys()].filter((k) => !now.has(k));
@@ -2326,8 +2453,12 @@ function _renderDiff() {
   out.textContent = "";
   const head = document.createElement("div");
   head.className = "comp-preview-head";
-  head.textContent = `바뀐 것 — 새로 잡히는 자리 ${added.length} · 빠지는 자리 ${removed.length}`;
-  head.title = "지금 저장된 규칙(없으면 권고)으로 센 채택 후보와 견줍니다. 「적용」하면 이것이 기준이 됩니다";
+  head.textContent = byBoundaries
+    ? `바뀐 것 — 새로 세울 자리 ${added.length} · 지울 자리 ${removed.length}`
+    : `바뀐 것 — 새로 잡히는 자리 ${added.length} · 빠지는 자리 ${removed.length}`;
+  head.title = byBoundaries
+    ? "지금 저장된 경계와 견줍니다. 「적용」하면 정확히 이대로 됩니다"
+    : "지금 저장된 규칙(없으면 권고)으로 센 채택 후보와 견줍니다. 「적용」하면 이것이 기준이 됩니다";
   out.appendChild(head);
   const where = (p) => `${p.page}쪽 ${p.line_index + 1}행`;
   const box = document.createElement("div");
@@ -2370,6 +2501,7 @@ function _refreshApplyState() {
   const stale = _formDigest() !== proposeState.rulesDigest;
   btn.disabled = stale || !proposeState.checked.size;
   if (note) note.textContent = stale ? "규칙이 바뀌었습니다 — 「후보 보기」로 다시 세우세요" : proposeState.checked.size ? "" : "체크한 후보가 없습니다";
+  if (proposeState.baselineKind === "boundaries") _renderDiff(); // 체크가 곧 «바뀐 것»이다
 }
 
 /**
@@ -2646,7 +2778,10 @@ async function _applyProposals() {
       start: { page: lines[s.li].page, line_index: lines[s.li].line_index, char_offset: s.off },
       end });
   });
-  const replace = document.getElementById("comp-apply-replace-all")?.checked ? "all" : "proposal";
+  // ③이 «지금 경계 + 새 후보»이므로 지울 것은 «체크를 뺀 저장된 행»뿐이다(D-122 덧붙임 2). 목록에 없던
+  // 경계(행 목록 밖)는 건드리지 않는다
+  const replace = "listed";
+  const drop = data.proposals.filter((p) => p.boundary_id && !proposeState.checked.has(_propKey(p))).map((p) => p.boundary_id);
   const rules = _rulesFromForm();
   const btn = document.getElementById("comp-propose-apply-btn");
   const url = `/api/documents/${encodeURIComponent(viewerState.docId)}/segmentation/apply`;
@@ -2654,7 +2789,7 @@ async function _applyProposals() {
     fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ part_id: viewerState.partId, spans, pages: data.pages || null, replace, ...extra }),
+      body: JSON.stringify({ part_id: viewerState.partId, spans, pages: data.pages || null, replace, drop, ...extra }),
     });
   if (btn) btn.disabled = true;
   try {
@@ -2664,23 +2799,23 @@ async function _applyProposals() {
     const dry = await dryRes.json().catch(() => ({}));
     if (!dryRes.ok || dry.dry_run !== true) throw new Error(dry.error || `지울 수를 세지 못했습니다 (HTTP ${dryRes.status})`);
     if (dry.removed) {
-      const msg = `경계 ${spans.length}개를 세우고, 지금 경계 중 ${dry.removed}개를 지웁니다` +
-        (replace === "all" ? " (손으로 넣은 것 포함)" : "") + ".\nGit으로 되돌릴 수 있습니다. 계속할까요?";
+      const msg = `새로 ${dry.would_create ?? spans.length}개를 세우고, 지금 경계 중 ${dry.removed}개를 지웁니다.\nGit으로 되돌릴 수 있습니다. 계속할까요?`;
       if (!confirm(msg)) return;
     }
     const res = await post({ rules });
     const result = await res.json();
     if (!res.ok) throw new Error(result.error || `HTTP ${res.status}`);
-    showToast(`경계 ${result.created.length}개 적용` + (result.removed ? ` · ${result.removed}개 정리` : "") +
-      (result.role_changed ? ` · 역할 ${result.role_changed}개 바꿈` : ""), "success");
+    const nNew = result.new ?? result.created.length;
+    showToast((nNew ? `경계 ${nNew}개 새로 세움` : "새로 세운 경계 없음") + (result.removed ? ` · ${result.removed}개 지움` : "") +
+      (result.role_changed ? ` · 역할 ${result.role_changed}개 바꿈` : "") + (result.rules ? " · 규칙 저장" : ""), "success");
     if (result.rules_error) showToast(result.rules_error, "warning");
     else _markRulesSaved(result.rules || rules);
-    // 적용한 규칙·후보가 다음 «바뀐 것»의 기준이 된다
+    // 적용한 것이 다음 «바뀐 것»의 기준이 된다 — 저장된 경계를 다시 읽어 ③을 그 위에 다시 세운다
     proposeState.rulesDigest = _formDigest();
-    proposeState.baseline = _acceptedMap(data);
-    _renderDiff();
     await _loadCompositionData();
     if (typeof refreshContentsTree === "function") refreshContentsTree();
+    compState.currentBoundariesTag = null;
+    await _proposeBoundaries(true);
   } catch (e) {
     showToast(`적용 실패: ${e.message}`, "error");
   } finally {

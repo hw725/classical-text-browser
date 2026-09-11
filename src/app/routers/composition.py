@@ -77,7 +77,11 @@ class SegmentationApplyRequest(BaseModel):
     #   (손으로 넣은 것은 둔다).
     # replace="all": 이 권의 살아 있는 경계를 전부 지우고 새로 세운다(자동 트리).
     # replace="none": 예전처럼 더하기만.
+    # replace="listed": 화면이 지목한 id(drop)만 지운다 — ③이 «지금 경계 + 새 후보»가 된 뒤
+    #   (D-122 덧붙임 2) 체크를 뺀 행이 곧 지울 경계다. 손으로 넣은 것도 지목하면 지운다.
+    #   목록에 없던 경계는 건드리지 않는다.
     replace: str = "proposal"
+    drop: list[str] | None = None  # replace="listed"일 때 지울 경계 id
     # D-122: 편성 탭의 저장 자리는 「적용」 하나다. 규칙을 함께 보내면 경계를 쓴 **뒤에** 저장한다 —
     # 두 요청으로 나누면 경계 적용이 실패했는데 규칙만 저장된 채 남는다(Codex 지적 2026-09-09).
     rules: dict | None = None
@@ -304,42 +308,55 @@ def _is_proposal_boundary(b: dict) -> bool:
     return (b.get("kind") or "manual") != "manual"
 
 
-def _replace_boundaries(data: dict, spans, mode: str) -> int:
+def _span_key(s) -> tuple[int, int, int, int]:
+    """구간의 자리·층위 키 — 경계와 같은 모양(쪽·행·글자·깊이)."""
+    st = s.start or {}
+    return (
+        int(st.get("page", 0)),
+        int(st.get("line_index", 0)),
+        int(st.get("char_offset") or 0),
+        int(s.level) if s.level else (1 if s.kind == "volume" else 2),
+    )
+
+
+def _boundary_key(b: dict) -> tuple[int, int, int, int]:
+    st = b.get("start") or {}
+    return (
+        int(st.get("page", 0)),
+        int(st.get("line", 0)),
+        int(st.get("offset", 0)),
+        int(b.get("level", 2)),
+    )
+
+
+def _live(b: dict) -> bool:
+    return b.get("status") not in ("deprecated", "archived")
+
+
+def _replace_boundaries(data: dict, spans, mode: str, drop_ids=None) -> int:
     """적용 전에 바꿔치기 대상 경계를 지운다. 지운 수를 돌려준다.
 
     proposal — 제안에서 온 경계 중 이번 선택(같은 자리·층위)에 없는 것.
     all — 살아 있는 경계 전부(자동 트리가 다시 세운다).
+    listed — drop_ids에 든 것만(③에서 체크를 뺀 행). 손으로 넣은 것도 지목하면 지운다.
     none — 지우지 않는다(예전 동작).
     """
     if mode == "none":
         return 0
-    keep_keys = set()
-    for s in spans:
-        st = s.start or {}
-        keep_keys.add(
-            (
-                int(st.get("page", 0)),
-                int(st.get("line_index", 0)),
-                int(st.get("char_offset") or 0),
-                int(s.level) if s.level else (1 if s.kind == "volume" else 2),
-            )
-        )
+    keep_keys = {_span_key(s) for s in spans}
+    drop = set(drop_ids or [])
     before = data.get("boundaries") or []
     kept = []
     removed = 0
     for b in before:
-        st = b.get("start") or {}
-        key = (
-            int(st.get("page", 0)),
-            int(st.get("line", 0)),
-            int(st.get("offset", 0)),
-            int(b.get("level", 2)),
-        )
-        live = b.get("status") not in ("deprecated", "archived")
-        if not live or key in keep_keys:
+        if not _live(b) or _boundary_key(b) in keep_keys:
             kept.append(b)
             continue
-        if mode == "all" or (mode == "proposal" and _is_proposal_boundary(b)):
+        if (
+            mode == "all"
+            or (mode == "proposal" and _is_proposal_boundary(b))
+            or (mode == "listed" and b.get("id") in drop)
+        ):
             removed += 1
             continue
         kept.append(b)
@@ -853,17 +870,28 @@ async def api_segmentation_apply(doc_id: str, body: SegmentationApplyRequest):
     if body.dry_run:
         # 확인창의 숫자 — «지금 경계 중 M개를 지운다»는 실제 대상 수여야 한다(Codex 지적).
         data = load_doc_boundaries(doc_path, doc_id, body.part_id)
-        removed = _replace_boundaries(data, body.spans, body.replace)
-        return {"created": [], "would_create": len(body.spans), "removed": removed, "dry_run": True}
+        # 이미 같은 자리·층위에 살아 있는 경계는 «세우는» 것이 아니다 — 확인창은 새로 서는 수만
+        # 말한다
+        live_keys = {_boundary_key(b) for b in data.get("boundaries") or [] if _live(b)}
+        would_create = sum(1 for s in body.spans if _span_key(s) not in live_keys)
+        removed = _replace_boundaries(data, body.spans, body.replace, body.drop)
+        return {
+            "created": [],
+            "would_create": would_create,
+            "existing": len(body.spans) - would_create,
+            "removed": removed,
+            "dry_run": True,
+        }
 
     lines, page_texts = collect_document_lines(doc_path, body.part_id, body.pages)
     keys = [(ln.page, ln.line_index) for ln in lines]
     l4_commit = _document_head(doc_path)
     data = load_doc_boundaries(doc_path, doc_id, body.part_id)
-    removed = _replace_boundaries(data, body.spans, body.replace)
+    removed = _replace_boundaries(data, body.spans, body.replace, body.drop)
     created = []
     errors = []
     role_changed = 0
+    new_count = 0  # 실제로 새로 선 경계(같은 자리를 다시 보낸 것은 세지 않는다)
     for span in body.spans:
         s = span.start or {}
         key = (int(s.get("page", 0)), int(s.get("line_index", 0)))
@@ -892,6 +920,8 @@ async def api_segmentation_apply(doc_id: str, body: SegmentationApplyRequest):
         item["metadata"] = {"source": "proposal"}  # 제안에서 온 경계 — 다음 적용 때 바꿔치기 대상
         try:
             kept = insert_boundary(data, item)  # 같은 자리·층위가 있으면 그것(중복 없음)
+            if kept is item:
+                new_count += 1
             if kept is not item and span.role and kept.get("role") != span.role:
                 # 같은 자리를 다시 적용하며 역할만 바꾼 것 — 끼워 넣기는 옛것을 돌려주므로
                 # 여기서 옮겨 적는다(D-122). 제목은 사람이 고쳤을 수 있어 건드리지 않는다.
@@ -920,12 +950,12 @@ async def api_segmentation_apply(doc_id: str, body: SegmentationApplyRequest):
             status_code=400,
         )
     git = None
-    if created or removed or role_changed:
+    if new_count or removed or role_changed:
         save_doc_boundaries(doc_path, data)
         git = git_commit_boundaries(
             doc_path,
-            f"feat: 경계 제안 적용 — 경계 {len(created)}개, 바꿔치기로 {removed}개 제거 "
-            "(D-088·D-092)",
+            f"feat: 경계 제안 적용 — 새 경계 {new_count}개(구간 {len(created)}), "
+            f"바꿔치기로 {removed}개 제거 (D-088·D-092)",
         )
     # 규칙은 경계를 쓴 **뒤에** 저장한다 — 경계가 실패하면 규칙도 저장되지 않는다(D-122)
     rules_saved = None
@@ -937,6 +967,7 @@ async def api_segmentation_apply(doc_id: str, body: SegmentationApplyRequest):
             rules_error = f"경계는 적용됐지만 규칙 저장에 실패했습니다: {e}"
     return {
         "created": created,
+        "new": new_count,
         "removed": removed,
         "role_changed": role_changed,
         "errors": errors,
