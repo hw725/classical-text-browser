@@ -45,6 +45,7 @@ const compState = {
  */
 // eslint-disable-next-line no-unused-vars
 function initCompositionEditor() {
+  _bindStepFolding();
   _bindCompEvents();
 }
 
@@ -1269,6 +1270,35 @@ function _mergeLocatedProposals(data, docId, partId) {
     }
   }
   data.proposals.sort((a, b) => a.page - b.page || a.line_index - b.line_index || (a.char_offset || 0) - (b.char_offset || 0));
+}
+
+/**
+ * ①②③ 단계 접기(사용자 요청 2026-09-11). 머리를 누르면 접히고, 접힌 것은 이 브라우저가 기억한다(localStorage).
+ * 머리 안의 단추(↻ 등)는 접지 않는다. 처음에는 다 펼쳐져 있다 — 흐름을 처음 보는 사람이 세 단계를 다 봐야 한다.
+ */
+function _bindStepFolding() {
+  const KEY = "ctb.comp.collapsed";
+  let saved = [];
+  try {
+    saved = JSON.parse(localStorage.getItem(KEY) || "[]");
+  } catch (_) {
+    saved = [];
+  }
+  for (const sec of document.querySelectorAll("#comp-propose-panel .comp-step")) {
+    const head = sec.querySelector(".comp-step-head");
+    if (!head) continue;
+    if (saved.includes(sec.id)) sec.classList.add("is-collapsed");
+    head.addEventListener("click", (ev) => {
+      if (ev.target.closest("button, input, select, label, a")) return; // 머리 안의 단추는 제 일을 한다
+      sec.classList.toggle("is-collapsed");
+      const now = [...document.querySelectorAll("#comp-propose-panel .comp-step.is-collapsed")].map((s) => s.id);
+      try {
+        localStorage.setItem(KEY, JSON.stringify(now));
+      } catch (_) {
+        /* 저장 못 해도 접기는 된다 */
+      }
+    });
+  }
 }
 
 /** 서버가 센 행 + 사람이 더한 행. 렌더·규칙 조립이 같은 목록을 본다. */

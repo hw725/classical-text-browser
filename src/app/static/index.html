@@ -1925,7 +1925,8 @@
               <div id="comp-propose-panel" class="comp-flow">
                 <!-- ① 찾은 규약 한 줄(D-117) + 아는 것을 말로(D-121) -->
                 <section class="comp-step" id="comp-step-say">
-                  <div class="comp-step-head">
+                  <div class="comp-step-head" title="누르면 접고 폅니다">
+                    <span class="comp-step-caret" aria-hidden="true">▾</span>
                     <span class="comp-step-num">1</span>
                     <span class="comp-step-title">이 책은 어떻게 나뉘나</span>
                     <span id="comp-signals-summary" class="comp-propose-stats"></span>
@@ -1956,7 +1957,8 @@
                 </section>
                 <!-- ② 이 책의 신호(D-116·D-117): 전문에서 센 규약 후보 + 말로 옮긴 것. 체크한 것이 규칙 -->
                 <section class="comp-step" id="comp-signals">
-                  <div class="comp-step-head">
+                  <div class="comp-step-head" title="누르면 접고 폅니다">
+                    <span class="comp-step-caret" aria-hidden="true">▾</span>
                     <span class="comp-step-num">2</span>
                     <span class="comp-step-title">규칙 고르기</span>
                     <span class="comp-step-hint">체크한 것이 이 책의 규칙</span>
@@ -2002,7 +2004,8 @@
                 </section>
                 <!-- ③ 후보(D-088): 체크 = 경계가 될 것, 행 선택 = 한꺼번에 고칠 것(Shift 범위) -->
                 <section class="comp-step" id="comp-step-list">
-                  <div class="comp-step-head">
+                  <div class="comp-step-head" title="누르면 접고 폅니다">
+                    <span class="comp-step-caret" aria-hidden="true">▾</span>
                     <span class="comp-step-num">3</span>
                     <span class="comp-step-title">후보 고르기</span>
                     <span id="comp-propose-stats" class="comp-propose-stats"></span>
@@ -5024,10 +5027,10 @@
     <!-- 앱 모듈 (로드 순서 중요: sidebar-tree가 viewerState를 정의, 나머지가 참조) -->
     <script src="/static/js/toast.js?v=20260222"></script>
     <script src="/static/js/sidebar-tree.js?v=20260223"></script>
-    <script src="/static/js/pdf-renderer.js?v=20260911b"></script>
-    <script src="/static/js/text-editor.js?v=20260911b"></script>
+    <script src="/static/js/pdf-renderer.js?v=20260911c"></script>
+    <script src="/static/js/text-editor.js?v=20260911c"></script>
     <script src="/static/js/koten-layout-detector.js?v=20260221"></script>
-    <script src="/static/js/layout-editor.js?v=20260911b"></script>
+    <script src="/static/js/layout-editor.js?v=20260911c"></script>
     <script src="/static/js/correction-editor.js?v=20260220c"></script>
     <script src="/static/js/bibliography.js?v=20260220c"></script>
     <script src="/static/js/interpretation.js?v=20260224e"></script>
@@ -5035,11 +5038,11 @@
     <script src="/static/js/create-document.js?v=20260717c"></script>
     <script src="/static/js/drag-drop.js?v=20260717a"></script>
     <script src="/static/js/hwp-import.js?v=20260223b"></script>
-    <script src="/static/js/ocr-panel.js?v=20260911b"></script>
+    <script src="/static/js/ocr-panel.js?v=20260911c"></script>
     <script src="/static/js/alignment-view.js?v=20260223"></script>
     <script src="/static/js/variant-manager.js?v=20260221b"></script>
     <script src="/static/js/batch-correction.js?v=20260221"></script>
-    <script src="/static/js/composition-editor.js?v=20260911b"></script>
+    <script src="/static/js/composition-editor.js?v=20260911c"></script>
     <script src="/static/js/punctuation-editor.js?v=20260717a"></script>
     <script src="/static/js/hyeonto-editor.js?v=20260220c"></script>
     <script src="/static/js/translation-editor.js?v=20260220c"></script>
@@ -5052,7 +5055,7 @@
     <script src="/static/js/validation-panel.js?v=20260904a"></script>
     <script src="/static/js/setup-panel.js?v=20260906a"></script>
     <!-- 텍스트 추출 패널 — workspace.js보다 먼저 정의돼야 프로필 적용 시 호출된다 -->
-    <script src="/static/js/extract-panel.js?v=20260911b"></script>
+    <script src="/static/js/extract-panel.js?v=20260911c"></script>
     <script src="/static/js/contents-tree.js?v=20260902b"></script>
     <script src="/static/js/workspace.js?v=20260906a"></script>
   </body>

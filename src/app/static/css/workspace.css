@@ -7398,6 +7398,14 @@ button.mode-tab {
 .comp-flow { display: flex; flex-direction: column; }
 .comp-step { border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px 6px; margin-top: 6px; font-size: 11px; }
 .comp-step-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+/* 단계 접기(사용자 요청 2026-09-11) — 머리를 누르면 그 단계의 몸이 숨는다. ①의 «찾은 규약» 요약은 머리에 남는다 */
+.comp-step-head { cursor: pointer; user-select: none; }
+.comp-step-caret { font-size: 10px; color: var(--text-muted); width: 10px; flex: none; }
+.comp-step.is-collapsed > :not(.comp-step-head) { display: none; }
+.comp-step.is-collapsed > .comp-step-head { margin-bottom: 0; }
+.comp-step.is-collapsed .comp-step-caret::before { content: '▸'; }
+.comp-step .comp-step-caret::before { content: '▾'; }
+.comp-step-caret { font-size: 0; } .comp-step-caret::before { font-size: 10px; }
 .comp-step-num {
   display: inline-flex; width: 16px; height: 16px; border-radius: 50%; flex: none;
   background: #2d6a4f; color: #fff; font-size: 10px; font-weight: 700;
