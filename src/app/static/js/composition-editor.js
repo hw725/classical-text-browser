@@ -60,7 +60,12 @@ function _bindCompEvents() {
   const splitExecBtn = document.getElementById("comp-split-exec-btn");
   const resetBtn = document.getElementById("comp-reset-btn");
 
-  if (splitBtn) splitBtn.addEventListener("click", _executeSplit);
+  // 패널의 「쪼개기」는 고른 기사의 쪼개기 창을 연다 — 실행은 창 안의 단추가 한다(창이 닫혀 있으면 나눌 글이 없다)
+  if (splitBtn)
+    splitBtn.addEventListener("click", () => {
+      if (compState.selectedTb) _selectUnit(compState.selectedTb);
+      else showToast("사이드바 「내용」이나 아래 목록에서 기사를 먼저 고르세요.", "warning");
+    });
   if (splitExecBtn) splitExecBtn.addEventListener("click", _executeSplit);
   if (splitCancelBtn) splitCancelBtn.addEventListener("click", _cancelSplit);
   const splitClose = document.getElementById("comp-split-close");
@@ -132,10 +137,12 @@ function _bindCompEvents() {
   // 사이드바에서 고른 것을 여기서도 표시한다 — 양쪽이 어긋나 보이면 안 된다
   document.addEventListener("unit-selected", (ev) => {
     const list = document.getElementById("comp-current-list");
-    if (!list) return;
-    list.querySelectorAll(".comp-cur-row").forEach((el) => {
-      el.classList.toggle("is-selected", el.dataset.unitId === ev.detail.id);
-    });
+    if (list)
+      list.querySelectorAll(".comp-cur-row").forEach((el) => {
+        el.classList.toggle("is-selected", el.dataset.unitId === ev.detail.id);
+      });
+    // 「단위 손보기」도 사이드바에서 고른 기사를 잡는다 — 그 «안»을 조각으로 나누는 도구다(사용자 지적 2026-09-11)
+    _pickUnitForTweak(ev.detail.id);
   });
   // textarea 입력 시 쪼개기 미리보기 업데이트
   if (splitTextarea)
@@ -221,6 +228,7 @@ async function _loadCompositionData() {
 
   _renderUnits();
   _updateBlockCount();
+  if (compState.pendingUnitId) _pickUnitForTweak(compState.pendingUnitId); // 탭을 늦게 열어도 사이드바의 선택을 잡는다
   _renderCurrentBoundaries();
   // 편성 흐름은 스스로 시작한다 — 다른 문헌·권으로 바뀌었으면 다시 센다(같으면 아무 일도 없다)
   if (compState.active) _startFlow();
@@ -296,6 +304,7 @@ function _renderUnits() {
     const isSelectedTb = compState.selectedTbId === tb.id;
     const card = document.createElement("div");
     card.className = "comp-tb-card";
+    card.dataset.unitId = tb.id;
     card.style.cssText = `
       border: 1px solid ${isSelectedTb ? "var(--accent-primary, #3b82f6)" : "var(--accent-green, #22c55e)"};
       border-radius: 4px;
@@ -397,9 +406,35 @@ function _renderUnits() {
  */
 function _updateBlockCount() {
   const el = document.getElementById("comp-block-count");
-  if (el) {
-    el.textContent = `단위 ${compState.units.length}개`;
+  if (!el) return;
+  const tb = compState.selectedTb;
+  const role = { container: "묶음", article: "기사", fragment: "조각" }[tb?.metadata?.role || "article"];
+  el.textContent =
+    `단위 ${compState.units.length}개` +
+    (tb
+      ? ` · 고른 ${role} #${tb.sequence_index} 「${(tb.metadata?.title || "").slice(0, 14)}」 → 「쪼개기」로 그 안을 나눕니다`
+      : " · 사이드바 「내용」에서 기사를 고르면 여기서 그 안을 나눕니다");
+}
+
+/**
+ * 사이드바 「내용」에서 고른 단위를 「단위 손보기」의 대상으로 잡는다(창은 열지 않는다 — 「쪼개기」를 누르면 연다).
+ * 입력: 단위 id. 출력: 없음. 단위 목록이 아직 없으면 기억해 두었다가 목록이 오면 잡는다.
+ */
+function _pickUnitForTweak(id) {
+  const tb = (compState.units || []).find((u) => u.id === id);
+  if (!tb) {
+    compState.pendingUnitId = id;
+    return;
   }
+  compState.pendingUnitId = null;
+  compState.selectedTbId = tb.id;
+  compState.selectedTb = tb;
+  const splitBtn = document.getElementById("comp-split-btn");
+  if (splitBtn) splitBtn.disabled = false;
+  _updateBlockCount();
+  document.querySelectorAll("#comp-textblock-list .comp-tb-card").forEach((card) => {
+    card.classList.toggle("is-selected", card.dataset.unitId === tb.id);
+  });
 }
 
 /**
@@ -623,6 +658,7 @@ function _cancelSplit() {
   if (textarea) textarea.value = "";
   if (splitBtn) splitBtn.disabled = true;
   if (preview) preview.textContent = "";
+  _updateBlockCount();
 
   _renderUnits();
 }
@@ -2354,6 +2390,8 @@ function _placeRowTools() {
   }
   row.insertAdjacentElement("afterend", tools);
   tools.hidden = false;
+  // 붙박이 발·머리 줄에 가리지 않게 굴려 보인다(scroll-margin이 그 높이를 안다)
+  tools.scrollIntoView({ block: "nearest" });
 }
 
 /** 「전체」 체크박스를 보이는 행의 상태에 맞춘다(전부·일부·없음). */

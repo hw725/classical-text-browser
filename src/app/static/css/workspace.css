@@ -7433,6 +7433,9 @@ button.mode-tab {
   box-shadow: inset 2px 0 0 var(--accent, #4a7bd0);
 }
 #comp-batch-count { font-weight: 600; margin-right: 2px; }
+/* 붙박이 발(「적용」 줄)이 마지막 행을 덮는다 — 목록 끝에 발 높이만큼 여백을 두고, 도구는 발 위로 굴려 보인다(2026-09-11 실측: 720px 창에서 둘째 행이 발 아래였다) */
+#comp-propose-list { padding-bottom: 44px; }
+#comp-batch-tools { scroll-margin-bottom: 48px; scroll-margin-top: 36px; }
 /* 저장된 경계 행 — 새 후보와 눈으로 갈린다 */
 .comp-propose-row.is-current { background: rgba(45, 106, 79, 0.06); }
 .prop-reason.current { background: rgba(45, 106, 79, 0.15); color: #2d6a4f; }
