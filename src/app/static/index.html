@@ -2944,6 +2944,40 @@
                       placeholder="이 텍스트에서의 특수한 의미 (1-2문장)"
                     ></textarea>
                   </label>
+                  <!-- 범주·범위·해설 (D-019 덧붙임 2026-09-12) — 사용자가 바깥에서 쓰던 사전 프롬프트의 칸 -->
+                  <label
+                    >범주:
+                    <select id="ann-dict-category" title="용어의 성격. 주석 유형(색·필터)은 여기서 정해집니다">
+                      <option value="">(없음)</option>
+                      <option value="Person">인물</option>
+                      <option value="Place">지명</option>
+                      <option value="Event">사건</option>
+                      <option value="Timespan">시간/시기</option>
+                      <option value="Object">물건</option>
+                      <option value="Record">기록/문헌</option>
+                      <option value="ArtWork">예술품</option>
+                      <option value="Food">음식</option>
+                      <option value="Clothing">의복</option>
+                      <option value="Concept">개념/일반명사</option>
+                      <option value="Grammar">문법/기능어</option>
+                    </select>
+                  </label>
+                  <label
+                    >범위:
+                    <select id="ann-dict-scope" title="일반 용법이면 general, 이 글에서만 특별히 쓰였으면 this_text_unit">
+                      <option value="">(없음)</option>
+                      <option value="general">일반 용법</option>
+                      <option value="this_text_unit">이 글에서만</option>
+                    </select>
+                  </label>
+                  <label
+                    >해설:
+                    <textarea
+                      id="ann-dict-sense-note"
+                      rows="2"
+                      placeholder="독음 주의·문법적 구실·이 문맥의 깊은 해석 (학술적 보충)"
+                    ></textarea>
+                  </label>
                   <label
                     >출전 (쉼표 구분):
                     <input
@@ -5023,10 +5057,10 @@
     <!-- 앱 모듈 (로드 순서 중요: sidebar-tree가 viewerState를 정의, 나머지가 참조) -->
     <script src="/static/js/toast.js?v=20260222"></script>
     <script src="/static/js/sidebar-tree.js?v=20260223"></script>
-    <script src="/static/js/pdf-renderer.js?v=20260911g"></script>
-    <script src="/static/js/text-editor.js?v=20260911g"></script>
+    <script src="/static/js/pdf-renderer.js?v=20260912"></script>
+    <script src="/static/js/text-editor.js?v=20260912"></script>
     <script src="/static/js/koten-layout-detector.js?v=20260221"></script>
-    <script src="/static/js/layout-editor.js?v=20260911g"></script>
+    <script src="/static/js/layout-editor.js?v=20260912"></script>
     <script src="/static/js/correction-editor.js?v=20260220c"></script>
     <script src="/static/js/bibliography.js?v=20260220c"></script>
     <script src="/static/js/interpretation.js?v=20260224e"></script>
@@ -5034,11 +5068,11 @@
     <script src="/static/js/create-document.js?v=20260717c"></script>
     <script src="/static/js/drag-drop.js?v=20260717a"></script>
     <script src="/static/js/hwp-import.js?v=20260223b"></script>
-    <script src="/static/js/ocr-panel.js?v=20260911g"></script>
+    <script src="/static/js/ocr-panel.js?v=20260912"></script>
     <script src="/static/js/alignment-view.js?v=20260223"></script>
     <script src="/static/js/variant-manager.js?v=20260221b"></script>
     <script src="/static/js/batch-correction.js?v=20260221"></script>
-    <script src="/static/js/composition-editor.js?v=20260911g"></script>
+    <script src="/static/js/composition-editor.js?v=20260912"></script>
     <script src="/static/js/punctuation-editor.js?v=20260717a"></script>
     <script src="/static/js/hyeonto-editor.js?v=20260220c"></script>
     <script src="/static/js/translation-editor.js?v=20260220c"></script>
@@ -5051,7 +5085,7 @@
     <script src="/static/js/validation-panel.js?v=20260904a"></script>
     <script src="/static/js/setup-panel.js?v=20260906a"></script>
     <!-- 텍스트 추출 패널 — workspace.js보다 먼저 정의돼야 프로필 적용 시 호출된다 -->
-    <script src="/static/js/extract-panel.js?v=20260911g"></script>
+    <script src="/static/js/extract-panel.js?v=20260912"></script>
     <script src="/static/js/contents-tree.js?v=20260902b"></script>
     <script src="/static/js/workspace.js?v=20260906a"></script>
   </body>

@@ -1,28 +1,41 @@
-id: annotation_dict_stage1_v1
-version: "1.0"
-description: "사전형 주석 1단계: 표점된 원문에서 표제어 + 사전적 의미 생성"
+id: annotation_dict_stage1_v2
+version: "2.0"
+description: "사전형 주석 1단계: 표점된 원문에서 표제어 + 사전적 의미 생성 (범주 11종·범위·해설, 2026-09-12)"
 
+# v2 (2026-09-12): 사용자가 쓰던 외부 프롬프트(한문학자 역할·범주 11종·scope·sense_note·«15개 내외»)를
+# 이 파이프라인에 옮겼다. 출력은 XML이 아니라 JSON이다 — 저장 형식(annotation_page v2)이 JSON이고
+# 위치(target)를 글자 인덱스로 받아야 하기 때문이다.
 system: |
-  당신은 한문 고전 텍스트의 사전 편찬 전문가입니다.
-  원문에서 중요한 어휘를 식별하고, 각각에 대해 사전 항목을 작성하세요.
+  당신은 한문 고전의 가치를 현대적 데이터로 바꾸는 전문 한문학자입니다.
+  입력된 한문 원문을 읽고, 독자가 이 글을 이해하는 데 필요한 어휘와 문법 요소를 골라
+  깊이 있는 용어 사전 항목을 작성합니다.
 
-  작성할 사전 항목:
-  - headword: 원문 글자 그대로 (한자). 원문에서 해당 글자를 정확히 추출.
-  - headword_reading: 한국어 독음.
-  - type: person(인물), place(지명), term(용어/관직/제도), allusion(전거/고사/출전) 중 하나.
-  - dictionary_meaning: 일반적/사전적 정의 (2-3문장). 누구인지, 무엇인지 설명.
-  - source_references: 알려진 출전. [{title, section}] 형식.
-  - related_terms: 관련 어휘 (동의어, 유의어, 연관어).
+  고르는 기준:
+  - 글의 규모에 맞추어 15개 내외(짧은 글은 그보다 적게, 긴 글은 조금 더)를 고릅니다.
+  - 인물·지명·사건·시기·물건·문헌·예술품·음식·의복·개념뿐 아니라, 읽기를 좌우하는
+    문법 요소(허사·조사·특수 구문)도 Grammar로 고릅니다. 뜻이 뻔한 之·而·也는 빼되,
+    이 글에서 특별한 구실을 하면 넣습니다.
+  - 확실한 것만 적습니다. 모르면 definition에 "(미상)"이라고 적고 지어내지 않습니다.
+
+  항목마다 적을 것:
+  - target: 원문 글자의 0부터 세는 인덱스(start·end, end 포함). 한 글자면 start == end.
+    원문에 실제로 있는 글자 범위여야 합니다.
+  - category: Person(인물) · Place(지명) · Event(사건) · Timespan(시간/시기) · Object(물건) ·
+    Record(기록/문헌) · ArtWork(예술품) · Food(음식) · Clothing(의복) · Concept(개념/일반명사) ·
+    Grammar(문법/기능어) 중 하나.
+  - headword: 원문 글자 그대로(한자). headword_reading: 한국어 독음.
+  - scope: 일반적 용법이면 "general", 이 글에서만 특별히 쓰였으면 "this_text_unit".
+  - dictionary_meaning: 사전적 정의(2-3문장). 누구인지·무엇인지.
+  - sense_note: 학술적 보충 — 독음 주의, 문법적 구실, 이 문맥에서의 깊은 해석, 이설.
+  - source_references: 알려진 출전 [{title, section}]. related_terms: 관련 어휘.
 
   규칙:
-  1. start/end는 원문 글자의 0-based 인덱스 (inclusive). 한 글자면 start == end.
-  2. 확실한 정보만 기재하세요. 추측이면 dictionary_meaning에 "(미상)" 표시.
-  3. 핵심 어휘만 선별하세요. 일반 한자(之, 而, 也 등)는 제외.
-  4. 반드시 유효한 JSON만 출력하세요. 설명 텍스트를 붙이지 마세요.
+  1. 반드시 유효한 JSON만 출력합니다. 서론·설명을 붙이지 않습니다.
+  2. type은 category에서 코드가 정하므로 적지 않아도 됩니다(적으면 person·place·term·
+     allusion·official_title·book_title·grammar 중 하나).
 
 user_template: |
-  다음 한문 원문에서 사전 항목이 필요한 핵심 어휘를 식별하고,
-  각각에 대해 사전 항목을 작성하세요.
+  다음 한문 원문에서 독자가 이해하는 데 필요한 어휘와 문법 요소를 골라 사전 항목을 작성하세요.
 
   원문: {original_text}
   {existing_section}
@@ -31,7 +44,6 @@ user_template: |
   {{"annotations": [
     {{
       "target": {{"start": 숫자, "end": 숫자}},
-      "type": "person|place|term|allusion",
       "content": {{
         "label": "독음(한자)",
         "description": "간략 설명"
@@ -39,7 +51,10 @@ user_template: |
       "dictionary": {{
         "headword": "한자 표제어",
         "headword_reading": "한국어 독음",
-        "dictionary_meaning": "사전적 의미 (2-3문장)",
+        "category": "Person|Place|Event|Timespan|Object|Record|ArtWork|Food|Clothing|Concept|Grammar",
+        "scope": "general|this_text_unit",
+        "dictionary_meaning": "사전적 정의 (2-3문장)",
+        "sense_note": "학술적 해설 — 독음 주의·문법적 구실·이 문맥의 해석",
         "contextual_meaning": null,
         "source_references": [{{"title": "출전명", "section": "세부위치"}}],
         "related_terms": ["관련어1", "관련어2"],

@@ -272,9 +272,13 @@ def _build_dictionary_section(
                     line = f"- {hw}"
                     if reading:
                         line += f"({reading})"
+                    if dict_entry.get("category"):
+                        line += f" [{dict_entry['category']}]"
                     line += f": {meaning}"
                     if ctx:
                         line += f" / 문맥: {ctx}"
+                    if dict_entry.get("sense_note"):
+                        line += f" / 해설: {dict_entry['sense_note']}"
                     relevant.append(line)
 
         if relevant:

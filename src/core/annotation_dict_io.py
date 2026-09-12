@@ -75,6 +75,9 @@ def export_dictionary(
                     "type": ann.get("type", "note"),
                     "dictionary_meaning": dictionary.get("dictionary_meaning", ""),
                     "contextual_meaning": dictionary.get("contextual_meaning"),
+                    "category": dictionary.get("category"),
+                    "scope": dictionary.get("scope"),
+                    "sense_note": dictionary.get("sense_note"),
                     "source_references": dictionary.get("source_references", []),
                     "related_terms": dictionary.get("related_terms", []),
                     "notes": dictionary.get("notes"),
@@ -238,6 +241,10 @@ def import_dictionary(
                 "headword_reading": entry.get("headword_reading"),
                 "dictionary_meaning": entry.get("dictionary_meaning", ""),
                 "contextual_meaning": None,  # 문맥적 의미는 문서별 고유
+                "category": entry.get("category"),
+                # 남의 글에서만 특별했던 뜻(this_text_unit)은 여기서는 일반 용법으로 가져온다
+                "scope": "general" if entry.get("scope") else None,
+                "sense_note": entry.get("sense_note"),
                 "source_references": entry.get("source_references", []),
                 "related_terms": entry.get("related_terms", []),
                 "notes": f"[{source_doc}에서 가져옴]",

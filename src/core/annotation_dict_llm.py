@@ -9,6 +9,10 @@ Stage 3 (from_both): 원문+번역 종합하여 최종 통합
 Stage 4 (reviewed): 사람이 검토하여 확정 (코드 개입 없음, UI에서 처리)
 
 일괄 생성 모드: 원문+번역이 모두 준비된 경우 Stage 3으로 직행.
+
+v2(2026-09-12, D-019 덧붙임): 항목에 범주(category 11종)·범위(scope)·학술 해설(sense_note)이 붙는다.
+사용자가 바깥에서 쓰던 «전문 한문학자» 프롬프트(15개 내외·범주·scope·sense_note)를 옮긴 것이다.
+주석 type(person·place·term…)은 category에서 코드가 정한다 — 모델에게 같은 것을 두 번 묻지 않는다.
 """
 
 import json
@@ -38,6 +42,66 @@ def _load_prompt(stage: str) -> dict:
     prompt_path = _PROMPT_DIR / f"annotation_dict_{stage}.yaml"
     with open(prompt_path, encoding="utf-8") as f:
         return yaml.safe_load(f)
+
+
+# ──────────────────────────────────────
+# 사전 항목의 범주·범위 (D-019 덧붙임 2026-09-12)
+# ──────────────────────────────────────
+
+CATEGORIES = (
+    "Person",
+    "Place",
+    "Event",
+    "Timespan",
+    "Object",
+    "Record",
+    "ArtWork",
+    "Food",
+    "Clothing",
+    "Concept",
+    "Grammar",
+)
+SCOPES = ("general", "this_text_unit")
+# 범주 → 주석 type(resources/annotation_types.json의 기본 유형). 화면의 색·필터가 type을 본다.
+TYPE_FOR_CATEGORY = {
+    "Person": "person",
+    "Place": "place",
+    "Record": "book_title",
+    "Grammar": "grammar",
+    "Event": "term",
+    "Timespan": "term",
+    "Object": "term",
+    "ArtWork": "term",
+    "Food": "term",
+    "Clothing": "term",
+    "Concept": "term",
+}
+_CATEGORY_ALIASES = {c.lower(): c for c in CATEGORIES} | {"artwork": "ArtWork", "time": "Timespan"}
+
+
+def normalize_dictionary(raw) -> dict | None:
+    """LLM이 준 dictionary를 스키마 모양으로 다듬는다. 입력: dict 또는 None. 출력: dict 또는 None.
+
+    category·scope는 정해진 값만 남기고(대소문자·별칭은 맞춰 준다) 아니면 None — 모델이 지어낸
+    범주가 저장 스키마를 깨지 않게. 옛 항목(v1)은 세 칸이 없으므로 None으로 채운다.
+    """
+    if not isinstance(raw, dict):
+        return None
+    d = dict(raw)
+    cat = d.get("category")
+    d["category"] = _CATEGORY_ALIASES.get(str(cat).strip().lower()) if cat else None
+    scope = str(d.get("scope") or "").strip().lower()
+    d["scope"] = scope if scope in SCOPES else None
+    note = d.get("sense_note")
+    d["sense_note"] = str(note).strip() if note else None
+    return d
+
+
+def type_for(raw_type, category) -> str:
+    """주석 type — 모델이 적었으면 그것, 아니면 범주에서, 그것도 없으면 term."""
+    if raw_type:
+        return str(raw_type)
+    return TYPE_FOR_CATEGORY.get(category or "", "term")
 
 
 # ──────────────────────────────────────
@@ -160,9 +224,9 @@ def _build_annotation_from_raw(
     if end >= text_len:
         end = text_len - 1
 
-    ann_type = raw.get("type", "note")
     content = raw.get("content", {})
-    dictionary = raw.get("dictionary")
+    dictionary = normalize_dictionary(raw.get("dictionary"))
+    ann_type = type_for(raw.get("type"), (dictionary or {}).get("category"))
 
     now = datetime.now(timezone.utc).isoformat()
 

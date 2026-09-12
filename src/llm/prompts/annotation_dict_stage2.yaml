@@ -1,27 +1,29 @@
-id: annotation_dict_stage2_v1
-version: "1.0"
-description: "사전형 주석 2단계: 번역 참조하여 문맥적 의미 보강"
+id: annotation_dict_stage2_v2
+version: "2.0"
+description: "사전형 주석 2단계: 번역 참조하여 문맥적 의미·해설 보강 (범주 11종·범위, 2026-09-12)"
 
 system: |
-  당신은 한문 고전 텍스트의 사전 편찬 전문가입니다.
-  1단계에서 생성된 사전 항목에 번역 텍스트를 참조하여 문맥적 의미를 보강하세요.
+  당신은 한문 고전의 가치를 현대적 데이터로 바꾸는 전문 한문학자입니다.
+  1단계에서 만든 사전 항목에, 번역 텍스트를 참조하여 이 글에서의 뜻을 보강합니다.
 
-  보강할 항목:
-  - contextual_meaning: 이 텍스트에서의 구체적 의미/용법 (1-2문장).
-    번역에서 해당 어휘가 어떻게 풀이되었는지 참고하여 작성.
-  - dictionary_meaning: 필요하면 수정/보완. 번역을 통해 새로 파악된 정보 반영.
-  - source_references: 번역에서 파악된 추가 출전.
-  - related_terms: 번역에서 발견된 추가 관련어.
+  보강할 것:
+  - contextual_meaning: 이 글에서의 구체적 의미·용법(1-2문장). 번역이 그 어휘를 어떻게
+    풀었는지 참고합니다.
+  - sense_note: 독음 주의·문법적 구실·이 문맥에서의 깊은 해석·이설을 학술적으로 보충합니다.
+  - scope: 이 글에서만 특별히 쓰였으면 "this_text_unit"으로 바꿉니다. 일반 용법이면 "general".
+  - dictionary_meaning·source_references·related_terms: 번역으로 새로 파악된 것이 있으면 보완.
+  - category: 잘못 분류된 것이 있으면 바로잡습니다(Person · Place · Event · Timespan · Object ·
+    Record · ArtWork · Food · Clothing · Concept · Grammar).
 
   규칙:
-  1. 기존 항목의 id는 반드시 유지하세요. id가 있으면 그대로 반환.
-  2. 새로 발견된 어휘가 있으면 id 없이 추가하세요.
-  3. type과 target(start/end)은 변경하지 마세요.
-  4. 반드시 유효한 JSON만 출력하세요. 설명 텍스트를 붙이지 마세요.
+  1. 기존 항목의 id는 반드시 유지합니다. id가 있으면 그대로 돌려줍니다.
+  2. 번역에서 새로 드러난 어휘·문법 요소가 있으면 id 없이 추가합니다(글의 규모에 맞게 15개 내외).
+  3. target(start/end)은 바꾸지 않습니다.
+  4. 확실한 것만 적습니다. 반드시 유효한 JSON만 출력하고 설명을 붙이지 않습니다.
 
 user_template: |
-  다음 한문 원문과 번역을 참조하여, 기존 사전 항목의 문맥적 의미를 보강하세요.
-  새로 발견한 어휘가 있으면 추가하세요.
+  다음 한문 원문과 번역을 참조하여, 기존 사전 항목의 문맥적 의미와 해설을 보강하세요.
+  새로 발견한 어휘·문법 요소가 있으면 추가하세요.
 
   원문: {original_text}
   번역: {translation_text}
@@ -34,7 +36,6 @@ user_template: |
     {{
       "id": "기존 ID (새 항목이면 생략)",
       "target": {{"start": 숫자, "end": 숫자}},
-      "type": "person|place|term|allusion",
       "content": {{
         "label": "독음(한자)",
         "description": "간략 설명"
@@ -42,8 +43,11 @@ user_template: |
       "dictionary": {{
         "headword": "한자 표제어",
         "headword_reading": "한국어 독음",
-        "dictionary_meaning": "사전적 의미",
-        "contextual_meaning": "이 문맥에서의 의미",
+        "category": "Person|Place|Event|Timespan|Object|Record|ArtWork|Food|Clothing|Concept|Grammar",
+        "scope": "general|this_text_unit",
+        "dictionary_meaning": "사전적 정의",
+        "sense_note": "학술적 해설",
+        "contextual_meaning": "이 글에서의 의미",
         "source_references": [{{"title": "출전명", "section": "세부위치"}}],
         "related_terms": ["관련어"],
         "notes": null

@@ -2125,6 +2125,12 @@ function _renderDictBadge(ann) {
   return `<span class="ann-dict-badge ann-dict-badge-${stage}">${label}</span>`;
 }
 
+// 사전 항목의 범주 11종(D-019 덧붙임 2026-09-12) — 값은 스키마·서버(CATEGORIES)와 같다
+const _DICT_CATEGORY_LABELS = {
+  Person: "인물", Place: "지명", Event: "사건", Timespan: "시기", Object: "물건", Record: "문헌",
+  ArtWork: "예술품", Food: "음식", Clothing: "의복", Concept: "개념", Grammar: "문법",
+};
+
 function _renderDictExpanded(ann) {
   /* 사전 보기가 확장되었을 때 dictionary 필드를 HTML로 렌더링. */
   if (!_dictViewExpanded) return "";
@@ -2134,6 +2140,9 @@ function _renderDictExpanded(ann) {
   let html = '<div class="ann-dict-detail">';
   html += `<div class="ann-dict-hw">${d.headword || ""}`;
   if (d.headword_reading) html += ` (${d.headword_reading})`;
+  // 범주·범위 (D-019 덧붙임 2026-09-12)
+  if (d.category) html += ` <span class="ann-dict-cat">${_DICT_CATEGORY_LABELS[d.category] || d.category}</span>`;
+  if (d.scope === "this_text_unit") html += ' <span class="ann-dict-scope">이 글에서만</span>';
   html += "</div>";
 
   if (d.dictionary_meaning) {
@@ -2141,6 +2150,9 @@ function _renderDictExpanded(ann) {
   }
   if (d.contextual_meaning) {
     html += `<div class="ann-dict-ctx"><b>문맥적 의미:</b> ${d.contextual_meaning}</div>`;
+  }
+  if (d.sense_note) {
+    html += `<div class="ann-dict-note"><b>해설:</b> ${d.sense_note}</div>`;
   }
 
   if (d.source_references && d.source_references.length > 0) {
@@ -2396,6 +2408,13 @@ function _populateDictEditFields(ann) {
   const ctxMeaning = document.getElementById("ann-dict-ctx-meaning");
   if (ctxMeaning) ctxMeaning.value = d.contextual_meaning || "";
 
+  const cat = document.getElementById("ann-dict-category");
+  if (cat) cat.value = d.category || "";
+  const scope = document.getElementById("ann-dict-scope");
+  if (scope) scope.value = d.scope || "";
+  const senseNote = document.getElementById("ann-dict-sense-note");
+  if (senseNote) senseNote.value = d.sense_note || "";
+
   const refs = document.getElementById("ann-dict-src-refs");
   if (refs)
     refs.value = (d.source_references || []).map((r) => r.title).join(", ");
@@ -2443,11 +2462,17 @@ async function _saveDictFields() {
           .filter(Boolean)
       : [];
 
+  const cat = document.getElementById("ann-dict-category");
+  const scope = document.getElementById("ann-dict-scope");
+  const senseNote = document.getElementById("ann-dict-sense-note");
   const dictionary = {
     headword: hw ? hw.value : "",
     headword_reading: reading ? reading.value || null : null,
     dictionary_meaning: dictMeaning ? dictMeaning.value : "",
     contextual_meaning: ctxMeaning ? ctxMeaning.value || null : null,
+    category: cat && cat.value ? cat.value : null,
+    scope: scope && scope.value ? scope.value : null,
+    sense_note: senseNote && senseNote.value ? senseNote.value : null,
     source_references: sourceRefs,
     related_terms: relatedTerms,
     notes: notes ? notes.value || null : null,

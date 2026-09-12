@@ -537,6 +537,22 @@ L4는 평문 텍스트(.txt)로 블록 경계가 없다. 블록별 대조를 위
 - LLM 1회 호출로 사전 생성 → 원문만/번역만 있는 단계에서 활용 불가로 거부.
 - 참조 사전 자동 적용 → 연구자 통제권 약화로 거부. 수동 확인 채택.
 
+### 덧붙임(2026-09-12) — 범주 11종·범위·해설: 사용자가 바깥에서 쓰던 프롬프트를 옮김
+
+사용자가 Gemini 등에 직접 쓰던 «전문 한문학자» 프롬프트를 주며 사전 파트에 응용하라고 했다. 그 프롬프트가
+이 파이프라인보다 나은 점 넷을 옮겼다. (1) **범주 11종** — Person·Place·Event·Timespan·Object·Record·
+ArtWork·Food·Clothing·Concept·Grammar. 전에는 person·place·term·allusion 넷이었고 문법 요소는
+«일반 한자 제외»로 빠졌다. `dictionary.category`에 저장하고 주석 `type`은 코드가 범주에서 정한다
+(`TYPE_FOR_CATEGORY`: Person→person, Place→place, Record→book_title, Grammar→grammar, 나머지→term) —
+모델에게 같은 것을 두 번 묻지 않는다. (2) **scope** — general / this_text_unit. (3) **sense_note** —
+독음 주의·문법적 구실·문맥의 깊은 해석(학술적 보충). `notes`(연구자 메모)와 다른 칸이다. (4) «글의 규모에
+맞추어 15개 내외»와 «한문학자» 역할 문장. 세 단계 프롬프트(v2)·스키마(세 칸, 옛 파일은 null)·내보내기/
+가져오기·번역 참조 섹션(범주·해설 포함)·편집 폼·카드에 반영했다.
+
+옮기지 않은 것: 그 프롬프트는 표점·사전·번역을 한 번에 XML로 낸다. 여기서는 표점(L5)·번역(L6)·주석(L7)이
+층으로 나뉘어 있고 저장 형식이 JSON이며 위치(target)를 글자 인덱스로 받아야 하므로, 한 호출로 합치지 않고
+JSON을 유지했다. 모델이 지어낸 범주는 `normalize_dictionary`가 null로 내려 스키마를 깨지 않게 한다.
+
 ---
 
 ## D-020: 인용 마크 시스템 (Citation Mark) 아키텍처

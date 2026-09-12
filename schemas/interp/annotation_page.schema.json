@@ -196,6 +196,23 @@
           "type": ["string", "null"],
           "default": null,
           "description": "연구자 메모. 자유 형식."
+        },
+        "category": {
+          "type": ["string", "null"],
+          "enum": ["Person", "Place", "Event", "Timespan", "Object", "Record", "ArtWork", "Food", "Clothing", "Concept", "Grammar", null],
+          "default": null,
+          "description": "용어의 범주(2026-09-12, D-019 덧붙임). 인물·지명·사건·시간/시기·물건·기록/문헌·예술품·음식·의복·개념/일반명사·문법/기능어. 주석 type은 이것에서 코드가 정한다."
+        },
+        "scope": {
+          "type": ["string", "null"],
+          "enum": ["general", "this_text_unit", null],
+          "default": null,
+          "description": "뜻의 범위 — general(일반 용법) / this_text_unit(이 글에서만 특별히 쓰임)."
+        },
+        "sense_note": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "학술적 해설 — 독음 주의·문법적 구실·이 문맥에서의 깊은 해석·이설. LLM이 채우고 사람이 고친다(notes는 연구자 메모)."
         }
       }
     },
