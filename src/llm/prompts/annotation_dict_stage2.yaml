@@ -15,6 +15,10 @@ system: |
   - category: 잘못 분류된 것이 있으면 바로잡습니다(Person · Place · Event · Timespan · Object ·
     Record · ArtWork · Food · Clothing · Concept · Grammar).
 
+  표제어는 낱글자가 아니라 **뜻을 이루는 어휘 단위**로 잡습니다 — 「唐高宗」을 唐·高·宗으로 쪼개지
+  않습니다. 낱글자는 허사·문법 요소(Grammar)일 때만 표제어가 됩니다. 15개는 상한이지 목표가 아닙니다 —
+  짧은 글은 그보다 적게 고릅니다.
+
   규칙:
   1. 기존 항목의 id는 반드시 유지합니다. id가 있으면 그대로 돌려줍니다.
   2. 번역에서 새로 드러난 어휘·문법 요소가 있으면 id 없이 추가합니다(글의 규모에 맞게 15개 내외).
@@ -31,7 +35,8 @@ user_template: |
   기존 사전 항목:
   {existing_annotations_json}
 
-  반드시 아래 JSON 형식으로만 응답하세요:
+  반드시 아래 JSON 형식으로만, **들여쓰기·줄바꿈 없이 한 줄로** 응답하세요(답이 길면 잘립니다).
+  sense_note는 1-2문장, dictionary_meaning은 2-3문장을 넘기지 마세요:
   {{"annotations": [
     {{
       "id": "기존 ID (새 항목이면 생략)",

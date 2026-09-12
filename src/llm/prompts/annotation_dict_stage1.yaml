@@ -29,6 +29,10 @@ system: |
   - sense_note: 학술적 보충 — 독음 주의, 문법적 구실, 이 문맥에서의 깊은 해석, 이설.
   - source_references: 알려진 출전 [{title, section}]. related_terms: 관련 어휘.
 
+  표제어는 낱글자가 아니라 **뜻을 이루는 어휘 단위**로 잡습니다 — 「唐高宗」을 唐·高·宗으로 쪼개지
+  않습니다. 낱글자는 허사·문법 요소(Grammar)일 때만 표제어가 됩니다. 15개는 상한이지 목표가 아닙니다 —
+  짧은 글은 그보다 적게 고릅니다.
+
   규칙:
   1. 반드시 유효한 JSON만 출력합니다. 서론·설명을 붙이지 않습니다.
   2. type은 category에서 코드가 정하므로 적지 않아도 됩니다(적으면 person·place·term·
@@ -40,7 +44,8 @@ user_template: |
   원문: {original_text}
   {existing_section}
 
-  반드시 아래 JSON 형식으로만 응답하세요:
+  반드시 아래 JSON 형식으로만, **들여쓰기·줄바꿈 없이 한 줄로** 응답하세요(답이 길면 잘립니다).
+  sense_note는 1-2문장, dictionary_meaning은 2-3문장을 넘기지 마세요:
   {{"annotations": [
     {{
       "target": {{"start": 숫자, "end": 숫자}},

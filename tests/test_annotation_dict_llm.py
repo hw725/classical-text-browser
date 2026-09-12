@@ -65,6 +65,10 @@ def test_type_comes_from_category_unless_model_said():
     assert type_for(None, "Food") == "term"
     assert type_for(None, None) == "term"
     assert type_for("allusion", "Person") == "allusion"
+    # 모델이 type에 범주 이름을 적어 왔으면(실측) 유형으로 맞춘다 — 화면의 색·필터는 유형을 본다
+    assert type_for("Place", "Place") == "place"
+    assert type_for("Concept", None) == "term"
+    assert type_for("Deity", "Person") == "person"
 
 
 def test_built_annotation_with_new_fields_passes_schema():
@@ -105,3 +109,21 @@ def test_prompts_mention_categories_scope_and_note():
         text = p["system"] + p["user_template"]
         assert "Grammar" in text and "this_text_unit" in text and "sense_note" in text, stage
         assert p["version"].startswith("2"), stage
+
+
+def test_truncated_json_keeps_completed_items():
+    """답이 max_tokens에 잘려 JSON이 닫히지 않아도 완성된 항목은 건진다(2026-09-12 실측 0건)."""
+    from core.annotation_dict_llm import _parse_llm_annotations
+
+    good = (
+        '{"target": {"start": 1, "end": 3}, "dictionary": '
+        '{"headword": "唐高宗", "dictionary_meaning": "황제."}}'
+    )
+    cut = '{"target": {"start": 5, "end": 7}, "dictionary": {"headword": "雍王", "dictionary_mea'
+    text = "```json" + chr(10) + '{"annotations": [' + good + ", " + cut
+    items = _parse_llm_annotations(text)
+    assert len(items) == 1 and items[0]["dictionary"]["headword"] == "唐高宗"
+    # 온전한 답은 전처럼 전부
+    whole = '{"annotations": [' + good + ", " + good + "]}"
+    assert len(_parse_llm_annotations(whole)) == 2
+    assert _parse_llm_annotations("아무 JSON도 없음") == []

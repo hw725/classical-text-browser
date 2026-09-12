@@ -52,6 +52,20 @@ def _looks_like_json(text: str) -> bool:
     return False
 
 
+def _gen_options(max_tokens: int, prompt_chars: int) -> dict:
+    """Ollama 생성 옵션 — num_predict에 더해, 답이 길면 문맥 창(num_ctx)도 함께 올린다.
+
+    왜: Ollama의 기본 num_ctx는 4,096이다. num_predict를 8,192로 주어도 «프롬프트 + 답»이 4,096을
+    넘는 순간 생성이 멈춘다 — 사전형 주석 1단계가 매번 2,883토큰에서 잘렸다(2026-09-12 실측,
+    gemma4:e4b). 문자 수를 토큰 수로 어림한다(한자·한글은 글자당 1토큰 안팎이라 넉넉한 쪽이다).
+    """
+    opts = {"num_predict": max_tokens}
+    need = int(max_tokens) + int(prompt_chars) + 512
+    if need > 4096:
+        opts["num_ctx"] = min(32768, ((need + 2047) // 2048) * 2048)
+    return opts
+
+
 class OllamaProvider(BaseLlmProvider):
     """Ollama 로컬 서버를 통한 LLM 호출. 기본 비전 모델: gemma4:cloud, 텍스트: gemma4:e4b."""
 
@@ -490,8 +504,8 @@ class OllamaProvider(BaseLlmProvider):
             "stream": False,
             # num_predict: Ollama의 최대 출력 토큰 설정.
             # 이 값이 없으면 모델 기본값(128~256)이 적용되어
-            # 표점·주석 등 긴 JSON 응답이 중간에 잘린다.
-            "options": {"num_predict": max_tokens},
+            # 표점·주석 등 긴 JSON 응답이 중간에 잘린다. 답이 길면 num_ctx도 함께(_gen_options).
+            "options": _gen_options(max_tokens, len(prompt) + len(system or "")),
         }
         # think 파라미터는 호출자가 명시했을 때만 전달한다.
         # 왜 기본값을 보내지 않는가:
@@ -590,7 +604,7 @@ class OllamaProvider(BaseLlmProvider):
             "model": selected_model,
             "prompt": prompt,
             "stream": True,
-            "options": {"num_predict": max_tokens},
+            "options": _gen_options(max_tokens, len(prompt) + len(system or "")),
         }
         # think는 명시될 때만 전달 (call()과 동일한 정책).
         if "think" in kwargs and kwargs["think"] is not None:

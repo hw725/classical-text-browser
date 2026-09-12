@@ -62,6 +62,8 @@ CATEGORIES = (
     "Grammar",
 )
 SCOPES = ("general", "this_text_unit")
+# 답변 예산 — 항목 15개 × (정의 2-3문장 + 해설 + 출전)이면 4,096으로는 잘린다(2026-09-12 실측)
+DICT_MAX_TOKENS = 8192
 # 범주 → 주석 type(resources/annotation_types.json의 기본 유형). 화면의 색·필터가 type을 본다.
 TYPE_FOR_CATEGORY = {
     "Person": "person",
@@ -97,11 +99,21 @@ def normalize_dictionary(raw) -> dict | None:
     return d
 
 
+# 기본 주석 유형(resources/annotation_types.json). 모델이 이 밖의 것을 적으면 범주에서 정한다 —
+# 실측(2026-09-12): 기존 항목을 참고로 보여 주자 모델이 type에 "Place"(범주 이름)를 그대로
+# 적어 왔다.
+KNOWN_TYPES = frozenset(
+    {"person", "place", "term", "allusion", "official_title", "book_title", "grammar", "note"}
+)
+
+
 def type_for(raw_type, category) -> str:
-    """주석 type — 모델이 적었으면 그것, 아니면 범주에서, 그것도 없으면 term."""
-    if raw_type:
-        return str(raw_type)
-    return TYPE_FOR_CATEGORY.get(category or "", "term")
+    """주석 type — 아는 유형을 적었으면 그것, 범주 이름을 적었거나 비었으면 범주에서."""
+    t = str(raw_type or "").strip()
+    if t.lower() in KNOWN_TYPES:
+        return t.lower()
+    cat = _CATEGORY_ALIASES.get(t.lower()) or category
+    return TYPE_FOR_CATEGORY.get(cat or "", "term")
 
 
 # ──────────────────────────────────────
@@ -148,7 +160,38 @@ def _parse_llm_annotations(response_text: str) -> list[dict]:
         except json.JSONDecodeError:
             pass
 
-    return []
+    # 답이 max_tokens에 잘렸으면 JSON이 닫히지 않는다 — 완성된 항목만 건진다(2026-09-12 실측:
+    # v2 프롬프트로 답이 길어지자 5,300자에서 잘려 0건이 됐다. 옛 프롬프트는 4,900자에 8건).
+    # 잘린 마지막 항목은 버린다.
+    return _recover_truncated_items(text)
+
+
+def _recover_truncated_items(text: str) -> list[dict]:
+    """`"annotations": [` 뒤의 객체를 하나씩 읽어 완성된 것만 돌려준다.
+
+    입력: 잘렸을 수 있는 응답. 출력: 항목 목록.
+    """
+    i = text.find('"annotations"')
+    j = text.find("[", i) if i >= 0 else -1
+    if j < 0:
+        return []
+    dec = json.JSONDecoder()
+    out: list[dict] = []
+    pos = j + 1
+    n = len(text)
+    while True:
+        while pos < n and text[pos] in " ,\t\r\n":
+            pos += 1
+        if pos >= n or text[pos] != "{":
+            break
+        try:
+            obj, end = dec.raw_decode(text, pos)
+        except json.JSONDecodeError:
+            break  # 여기서부터 잘렸다
+        if isinstance(obj, dict):
+            out.append(obj)
+        pos = end
+    return out
 
 
 # ──────────────────────────────────────
@@ -395,7 +438,7 @@ async def generate_stage1_from_original(
         prompt=user_prompt,
         system=prompt_config["system"],
         purpose="annotation_dict_stage1",
-        max_tokens=4096,
+        max_tokens=DICT_MAX_TOKENS,
         force_provider=force_provider,
         force_model=force_model,
     )
@@ -470,7 +513,7 @@ async def generate_stage2_from_translation(
         prompt=user_prompt,
         system=prompt_config["system"],
         purpose="annotation_dict_stage2",
-        max_tokens=4096,
+        max_tokens=DICT_MAX_TOKENS,
         force_provider=force_provider,
         force_model=force_model,
     )
@@ -556,7 +599,7 @@ async def generate_stage3_from_both(
         prompt=user_prompt,
         system=prompt_config["system"],
         purpose="annotation_dict_stage3",
-        max_tokens=4096,
+        max_tokens=DICT_MAX_TOKENS,
         force_provider=force_provider,
         force_model=force_model,
     )
