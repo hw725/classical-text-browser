@@ -50,6 +50,7 @@ from core.annotation_dict_llm import (
     generate_stage2_from_translation,
     generate_stage3_from_both,
     merge_annotations,
+    type_for,
 )
 from core.annotation_dict_match import (
     list_reference_dicts,
@@ -535,7 +536,11 @@ async def api_get_annotations(
 
 
 @router.get("/api/interpretations/{interp_id}/pages/{page_num}/annotations/summary")
-async def api_annotation_summary(interp_id: str, page_num: int):
+async def api_annotation_summary(
+    interp_id: str,
+    page_num: int,
+    part_id: str = Query("main", description="권 식별자"),
+):
     """주석 상태 요약.
 
     목적: 페이지의 주석 현황을 한눈에 파악.
@@ -545,14 +550,17 @@ async def api_annotation_summary(interp_id: str, page_num: int):
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
     interp_path = require_repo_path("interpretations", interp_id)
-    part_id = "main"
     data = load_annotations(interp_path, part_id, page_num)
     return get_annotation_summary(data)
 
 
 @router.post("/api/interpretations/{interp_id}/pages/{page_num}/annotations/__add/{block_id}")
 async def api_add_annotation(
-    interp_id: str, page_num: int, block_id: str, body: AnnotationAddRequest
+    interp_id: str,
+    page_num: int,
+    block_id: str,
+    body: AnnotationAddRequest,
+    part_id: str = Query("main", description="권 식별자"),
 ):
     """수동 주석 추가.
 
@@ -563,7 +571,6 @@ async def api_add_annotation(
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
     interp_path = require_repo_path("interpretations", interp_id)
-    part_id = "main"
 
     data = load_annotations(interp_path, part_id, page_num)
 
@@ -596,6 +603,7 @@ async def api_update_annotation(
     block_id: str,
     ann_id: str,
     body: AnnotationUpdateRequest,
+    part_id: str = Query("main", description="권 식별자"),
 ):
     """주석 수정."""
     _library_path = get_library_path()
@@ -603,7 +611,6 @@ async def api_update_annotation(
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
     interp_path = require_repo_path("interpretations", interp_id)
-    part_id = "main"
 
     data = load_annotations(interp_path, part_id, page_num)
     updates = {}
@@ -628,6 +635,18 @@ async def api_update_annotation(
     if body.status is not None:
         updates["status"] = body.status
 
+    # 범주가 바뀌면 유형도 따라간다(Codex 교차검증 2026-09-16 ⑧). 유형은 범주에서 정하기로
+    # 했으므로(D-019 덧붙임) dictionary만 바꾸면 화면 색·필터가 옛 유형을 본다. 범주가
+    # 그대로면 사람이 고른 유형(allusion 등)을 건드리지 않는다.
+    if body.dictionary is not None and body.type is None:
+        old_ann = next(
+            (a for a in _get_block_annotations(data, block_id) if a.get("id") == ann_id), None
+        )
+        old_cat = ((old_ann or {}).get("dictionary") or {}).get("category")
+        new_cat = body.dictionary.get("category")
+        if new_cat and new_cat != old_cat:
+            updates["type"] = type_for(None, new_cat)
+
     result = update_ann(data, block_id, ann_id, updates)
     if result is None:
         return JSONResponse({"error": f"주석 '{ann_id}'를 찾을 수 없습니다."}, status_code=404)
@@ -644,14 +663,19 @@ async def api_update_annotation(
 
 
 @router.delete("/api/interpretations/{interp_id}/pages/{page_num}/annotations/{block_id}/{ann_id}")
-async def api_delete_annotation(interp_id: str, page_num: int, block_id: str, ann_id: str):
+async def api_delete_annotation(
+    interp_id: str,
+    page_num: int,
+    block_id: str,
+    ann_id: str,
+    part_id: str = Query("main", description="권 식별자"),
+):
     """주석 삭제."""
     _library_path = get_library_path()
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
     interp_path = require_repo_path("interpretations", interp_id)
-    part_id = "main"
 
     data = load_annotations(interp_path, part_id, page_num)
     removed = remove_ann(data, block_id, ann_id)
@@ -672,6 +696,7 @@ async def api_commit_annotation(
     block_id: str,
     ann_id: str,
     body: AnnotationCommitRequest,
+    part_id: str = Query("main", description="권 식별자"),
 ):
     """주석 Draft 개별 확정.
 
@@ -682,7 +707,6 @@ async def api_commit_annotation(
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
     interp_path = require_repo_path("interpretations", interp_id)
-    part_id = "main"
 
     data = load_annotations(interp_path, part_id, page_num)
     result = commit_annotation_draft(data, block_id, ann_id, body.modifications)
@@ -702,7 +726,11 @@ async def api_commit_annotation(
 
 
 @router.post("/api/interpretations/{interp_id}/pages/{page_num}/annotations/commit-all")
-async def api_commit_all_annotations(interp_id: str, page_num: int):
+async def api_commit_all_annotations(
+    interp_id: str,
+    page_num: int,
+    part_id: str = Query("main", description="권 식별자"),
+):
     """주석 Draft 일괄 확정.
 
     목적: 페이지의 모든 draft 주석을 한번에 accepted로 변경.
@@ -712,7 +740,6 @@ async def api_commit_all_annotations(interp_id: str, page_num: int):
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
     interp_path = require_repo_path("interpretations", interp_id)
-    part_id = "main"
 
     data = load_annotations(interp_path, part_id, page_num)
     count = commit_all_drafts(data)
@@ -819,6 +846,7 @@ async def api_dict_generate_stage1(
     page_num: int,
     request: Request,
     body: DictStageRequest | None = None,
+    part_id: str = Query("main", description="권 식별자"),
 ):
     """1단계 사전 생성: 원문에서 사전 항목 추출.
 
@@ -842,11 +870,11 @@ async def api_dict_generate_stage1(
         force_provider = body.force_provider if body else None
         force_model = body.force_model if body else None
 
-        block_id = _resolve_stage_block_id(request, body, interp_path, page_num, "main")
+        block_id = _resolve_stage_block_id(request, body, interp_path, page_num, part_id)
 
-        ann_data = load_annotations(interp_path, "main", page_num)
+        ann_data = load_annotations(interp_path, part_id, page_num)
         existing_annotations = _get_block_annotations(ann_data, block_id)
-        original_text = _load_original_block_text(interp_path, page_num, block_id, "main")
+        original_text = _load_original_block_text(interp_path, page_num, block_id, part_id)
 
         generated = await generate_stage1_from_original(
             original_text=original_text,
@@ -860,7 +888,7 @@ async def api_dict_generate_stage1(
         # 기존 주석(수동 태깅 등)과 병합하여 저장한다 — 아까 읽은 ann_data가 아니라
         # **지금** 파일 위에. LLM을 기다리는 동안 들어온 수동 주석을 지키기 위해서다.
         _merge_generated_into_page(
-            interp_path, "main", page_num, block_id, generated, "from_original"
+            interp_path, part_id, page_num, block_id, generated, "from_original"
         )
 
         return {
@@ -882,6 +910,7 @@ async def api_dict_generate_stage2(
     page_num: int,
     request: Request,
     body: DictStageRequest | None = None,
+    part_id: str = Query("main", description="권 식별자"),
 ):
     """2단계 사전 생성: 번역으로 보강.
 
@@ -905,12 +934,12 @@ async def api_dict_generate_stage2(
         force_provider = body.force_provider if body else None
         force_model = body.force_model if body else None
 
-        block_id = _resolve_stage_block_id(request, body, interp_path, page_num, "main")
+        block_id = _resolve_stage_block_id(request, body, interp_path, page_num, part_id)
 
-        ann_data = load_annotations(interp_path, "main", page_num)
+        ann_data = load_annotations(interp_path, part_id, page_num)
         existing_annotations = _get_block_annotations(ann_data, block_id)
-        original_text = _load_original_block_text(interp_path, page_num, block_id, "main")
-        translation_text = _load_translation_block_text(interp_path, page_num, block_id, "main")
+        original_text = _load_original_block_text(interp_path, page_num, block_id, part_id)
+        translation_text = _load_translation_block_text(interp_path, page_num, block_id, part_id)
 
         generated = await generate_stage2_from_translation(
             original_text=original_text,
@@ -924,7 +953,7 @@ async def api_dict_generate_stage2(
         )
 
         merged = _merge_generated_into_page(
-            interp_path, "main", page_num, block_id, generated, "from_translation"
+            interp_path, part_id, page_num, block_id, generated, "from_translation"
         )
 
         return {
@@ -946,6 +975,7 @@ async def api_dict_generate_stage3(
     page_num: int,
     request: Request,
     body: DictStageRequest | None = None,
+    part_id: str = Query("main", description="권 식별자"),
 ):
     """3단계 사전 생성: 원문+번역 최종 통합.
 
@@ -969,12 +999,12 @@ async def api_dict_generate_stage3(
         force_provider = body.force_provider if body else None
         force_model = body.force_model if body else None
 
-        block_id = _resolve_stage_block_id(request, body, interp_path, page_num, "main")
+        block_id = _resolve_stage_block_id(request, body, interp_path, page_num, part_id)
 
-        ann_data = load_annotations(interp_path, "main", page_num)
+        ann_data = load_annotations(interp_path, part_id, page_num)
         existing_annotations = _get_block_annotations(ann_data, block_id)
-        original_text = _load_original_block_text(interp_path, page_num, block_id, "main")
-        translation_text = _load_translation_block_text(interp_path, page_num, block_id, "main")
+        original_text = _load_original_block_text(interp_path, page_num, block_id, part_id)
+        translation_text = _load_translation_block_text(interp_path, page_num, block_id, part_id)
 
         generated = await generate_stage3_from_both(
             original_text=original_text,
@@ -988,7 +1018,7 @@ async def api_dict_generate_stage3(
         )
 
         merged = _merge_generated_into_page(
-            interp_path, "main", page_num, block_id, generated, "from_both"
+            interp_path, part_id, page_num, block_id, generated, "from_both"
         )
 
         return {
@@ -1010,13 +1040,18 @@ async def api_add_annotation_legacy_path(
     page_num: int,
     block_id: str,
     body: AnnotationAddRequest,
+    part_id: str = Query("main", description="권 식별자"),
 ):
     """Legacy add route kept after static routes to avoid path shadowing."""
-    return await api_add_annotation(interp_id, page_num, block_id, body)
+    return await api_add_annotation(interp_id, page_num, block_id, body, part_id=part_id)
 
 
 @router.post("/api/interpretations/{interp_id}/annotations/generate-batch")
-async def api_dict_generate_batch(interp_id: str, body: DictBatchRequest | None = None):
+async def api_dict_generate_batch(
+    interp_id: str,
+    body: DictBatchRequest | None = None,
+    part_id: str = Query("main", description="권 식별자"),
+):
     """일괄 사전 생성 (Stage 3 직행).
 
     목적: 완성된 원문+번역 쌍에서 모든 페이지의 사전을 한번에 생성한다.
@@ -1055,7 +1090,7 @@ async def api_dict_generate_batch(interp_id: str, body: DictBatchRequest | None 
             pages_from_l4: set[int] = set()
             text_dir = interp_path / "L4_text" / "main_text"
             if text_dir.exists():
-                for f in text_dir.glob("main_page_*_text.json"):
+                for f in text_dir.glob(f"{part_id}_page_*_text.json"):
                     try:
                         pages_from_l4.add(int(f.stem.split("_page_")[1].split("_")[0]))
                     except Exception:
@@ -1064,7 +1099,7 @@ async def api_dict_generate_batch(interp_id: str, body: DictBatchRequest | None 
             pages_from_l6: set[int] = set()
             tr_dir = interp_path / "L6_translation" / "main_text"
             if tr_dir.exists():
-                for f in tr_dir.glob("main_page_*_translation.json"):
+                for f in tr_dir.glob(f"{part_id}_page_*_translation.json"):
                     try:
                         pages_from_l6.add(int(f.stem.split("_page_")[1].split("_")[0]))
                     except Exception:
@@ -1082,8 +1117,8 @@ async def api_dict_generate_batch(interp_id: str, body: DictBatchRequest | None 
 
         for page_num in pages:
             try:
-                ann_data = load_annotations(interp_path, "main", page_num)
-                block_ids = _load_page_block_ids(interp_path, page_num, "main")
+                ann_data = load_annotations(interp_path, part_id, page_num)
+                block_ids = _load_page_block_ids(interp_path, page_num, part_id)
                 if not block_ids:
                     total_results["errors"].append(
                         {"page": page_num, "error": "L4 블록이 없습니다."}
@@ -1096,10 +1131,10 @@ async def api_dict_generate_batch(interp_id: str, body: DictBatchRequest | None 
                 for block_id in block_ids:
                     try:
                         original_text = _load_original_block_text(
-                            interp_path, page_num, block_id, "main"
+                            interp_path, page_num, block_id, part_id
                         )
                         translation_text = _load_translation_block_text(
-                            interp_path, page_num, block_id, "main"
+                            interp_path, page_num, block_id, part_id
                         )
                         existing_annotations = _get_block_annotations(ann_data, block_id)
 
@@ -1123,14 +1158,14 @@ async def api_dict_generate_batch(interp_id: str, body: DictBatchRequest | None 
                             }
                         )
 
-                fresh = load_annotations(interp_path, "main", page_num)
+                fresh = load_annotations(interp_path, part_id, page_num)
                 for block_id, generated in page_results.items():
                     merged = merge_annotations(
                         _get_block_annotations(fresh, block_id), generated, "from_both"
                     )
                     _set_block_annotations(fresh, block_id, merged)
                     total_results["total_annotations"] += len(merged)
-                save_annotations(interp_path, "main", page_num, fresh)
+                save_annotations(interp_path, part_id, page_num, fresh)
 
                 total_results["pages_processed"] += 1
             except Exception as e:
@@ -1331,7 +1366,11 @@ async def api_match_reference_dicts(interp_id: str, body: RefDictMatchRequest):
 
 
 @router.get("/api/interpretations/{interp_id}/pages/{page_num}/annotations/translation-changed")
-async def api_check_translation_changed(interp_id: str, page_num: int):
+async def api_check_translation_changed(
+    interp_id: str,
+    page_num: int,
+    part_id: str = Query("main", description="권 식별자"),
+):
     """번역 변경 감지.
 
     목적: 주석의 translation_snapshot과 현재 번역을 비교하여 변경 여부를 반환한다.
@@ -1344,7 +1383,6 @@ async def api_check_translation_changed(interp_id: str, page_num: int):
     if not interp_path.exists():
         return JSONResponse({"error": f"해석 '{interp_id}'를 찾을 수 없습니다."}, status_code=404)
 
-    part_id = "main"
     ann_data = load_annotations(interp_path, part_id, page_num)
 
     from core.translation import load_translations
@@ -1813,6 +1851,7 @@ async def api_batch_save_annotations(
     page_num: int,
     block_id: str,
     body: AnnotationBatchSaveRequest,
+    part_id: str = Query("main", description="권 식별자"),
 ):
     """주석 일괄 저장. N건을 1 POST로 처리.
 
@@ -1830,7 +1869,6 @@ async def api_batch_save_annotations(
             status_code=404,
         )
 
-    part_id = "main"
     data = load_annotations(interp_path, part_id, page_num)
 
     saved = 0

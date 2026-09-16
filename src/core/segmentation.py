@@ -1158,15 +1158,22 @@ def span_to_text_and_refs(
     page_texts: dict[int, str],
     document_id: str,
     part_id: str,
+    line_pos: Optional[dict[tuple[int, int], int]] = None,
 ) -> tuple[str, list[dict]]:
-    """구간 하나를 단위의 original_text와 source_refs(쪽별 char_range)로 바꾼다."""
+    """구간 하나를 단위의 original_text와 source_refs(쪽별 char_range)로 바꾼다.
+
+    line_pos — (쪽, 행) → 행 번호 사전. 호출부가 권 전체를 돌 때(boundaries.compute_units) 한 번
+    만들어 넘긴다 — 여기서 매번 만들면 단위마다 O(N)이라 행마다 경계가 서면 O(N²)이다(⑨).
+    없으면 이 구간을 위해 한 번 만든다(단발 호출·시험).
+    """
     s, e = span["start"], span["end"]
     s_off = int(s.get("char_offset") or 0)
     e_end = e.get("char_end")
     e_end = int(e_end) if e_end is not None else None
-    keys = [(ln.page, ln.line_index) for ln in lines]
-    i0 = keys.index((s["page"], s["line_index"]))
-    i1 = keys.index((e["page"], e["line_index"]))
+    if line_pos is None:
+        line_pos = {(ln.page, ln.line_index): i for i, ln in enumerate(lines)}
+    i0 = line_pos[(s["page"], s["line_index"])]
+    i1 = line_pos[(e["page"], e["line_index"])]
     chunk = lines[i0 : i1 + 1]
     texts = [ln.text for ln in chunk]
     # 끝을 먼저 자르고 시작을 자른다 — 같은 행 안의 구간(시작·끝이 한 행)도 맞는다

@@ -380,7 +380,7 @@ async function _loadBlockAnnotations(blockId) {
 
   try {
     const resp = await fetch(
-      `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations`,
+      `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations${_annPartQuery()}`,
     );
     if (!resp.ok) {
       annState.annotations = [];
@@ -435,7 +435,8 @@ function _renderSourceText() {
     container.textContent = "(텍스트 없음)";
     return;
   }
-  const n = text.length;
+  const chars = _annChars(text); // 좌표는 코드포인트 — text[i]·text.length를 쓰면 안 된다
+  const n = chars.length;
 
   // ── 표점 before/after 버퍼 구성 ──
   // 왜: 원문 글자 사이에 표점 기호(。？！ 등)를 삽입하여
@@ -484,7 +485,7 @@ function _renderSourceText() {
       let j = i;
       let buf = "";
       while (j < n && charAnnIds[j] === annId) {
-        buf += beforeBuf[j] + text[j] + afterBuf[j];
+        buf += beforeBuf[j] + chars[j] + afterBuf[j];
         j++;
       }
       span.textContent = buf;
@@ -498,7 +499,7 @@ function _renderSourceText() {
       let j = i;
       let buf = "";
       while (j < n && !charColors[j]) {
-        buf += beforeBuf[j] + text[j] + afterBuf[j];
+        buf += beforeBuf[j] + chars[j] + afterBuf[j];
         j++;
       }
       span.textContent = buf;
@@ -529,13 +530,13 @@ function _getAnnotationTooltip(annId) {
  *   표점을 포함한 "표시 위치"이다.
  *   서버는 순수 원문(original_text)의 오프셋을 사용하므로 변환이 필요하다.
  *
- * @param {number} displayOffset - 표점 포함 표시 위치
+ * @param {number} displayOffset - 표점 포함 표시 위치 (코드포인트 단위 — Array.from으로 센 값)
  * @param {string} originalText - 순수 원문 텍스트
  * @param {Array} punctMarks - 표점 marks 배열
  * @returns {number} 원문 기준 글자 인덱스
  */
 function _annDisplayOffsetToOriginal(displayOffset, originalText, punctMarks) {
-  const n = originalText.length;
+  const n = _annCpLength(originalText);
   if (n === 0) return 0;
 
   // 표점 before/after 버퍼 구성 (렌더링과 동일한 로직)
@@ -553,13 +554,13 @@ function _annDisplayOffsetToOriginal(displayOffset, originalText, punctMarks) {
   // 표시 문자열을 순차 스캔하며 원문 인덱스 매핑
   let displayPos = 0;
   for (let i = 0; i < n; i++) {
-    displayPos += beforeBuf[i].length;
+    displayPos += _annCpLength(beforeBuf[i]);
     if (displayPos > displayOffset) return i;
 
     displayPos += 1; // 원문 글자 1자
     if (displayPos > displayOffset) return i;
 
-    displayPos += afterBuf[i].length;
+    displayPos += _annCpLength(afterBuf[i]);
     if (displayPos > displayOffset) return i;
   }
 
@@ -598,31 +599,19 @@ function _onTextSelection() {
   const preRange = document.createRange();
   preRange.selectNodeContents(container);
   preRange.setEnd(range.startContainer, range.startOffset);
-  const displayStart = preRange.toString().length;
 
   const fullRange = document.createRange();
   fullRange.selectNodeContents(container);
   fullRange.setEnd(range.endContainer, range.endOffset);
-  const displayEnd = fullRange.toString().length - 1;
 
-  if (displayStart > displayEnd || displayEnd < 0) return;
-
-  // 표시 오프셋 → 원문 오프셋 변환 (표점 기호를 제외한 위치)
-  const startIdx = _annDisplayOffsetToOriginal(
-    displayStart,
+  const picked = _annDisplayRangeToOriginal(
+    preRange.toString(),
+    fullRange.toString(),
     text,
     annState.punctMarks,
   );
-  const endIdx = _annDisplayOffsetToOriginal(
-    displayEnd,
-    text,
-    annState.punctMarks,
-  );
-
-  if (startIdx < 0 || endIdx < 0 || startIdx > endIdx) return;
-
-  // 실제 원문 텍스트 추출 (prompt에 표시용)
-  const actualText = text.slice(startIdx, endIdx + 1);
+  if (!picked) return;
+  const { startIdx, endIdx, actualText } = picked;
 
   const typeId = prompt(
     `"${actualText}"에 주석을 추가합니다.\n유형을 입력하세요 (person/place/term/allusion/official_title/book_title/grammar/note):`,
@@ -640,6 +629,22 @@ function _onTextSelection() {
   selection.removeAllRanges();
 }
 
+/**
+ * DOM Range가 준 «선택 앞까지의 표시 문자열»·«선택 끝까지의 표시 문자열» → 원문 코드포인트 범위.
+ * 표시 문자열도 Array.from으로 세어 서버와 같은 자(코드포인트)를 쓴다(③).
+ * @returns {{startIdx:number, endIdx:number, actualText:string}|null}
+ */
+function _annDisplayRangeToOriginal(preText, fullText, text, punctMarks) {
+  const displayStart = _annCpLength(preText);
+  const displayEnd = _annCpLength(fullText) - 1;
+  if (displayStart > displayEnd || displayEnd < 0) return null;
+  const startIdx = _annDisplayOffsetToOriginal(displayStart, text, punctMarks);
+  const endIdx = _annDisplayOffsetToOriginal(displayEnd, text, punctMarks);
+  if (startIdx < 0 || endIdx < 0 || startIdx > endIdx) return null;
+  const actualText = _annChars(text).slice(startIdx, endIdx + 1).join("");
+  return { startIdx, endIdx, actualText };
+}
+
 async function _addManualAnnotation(start, end, typeId, label, description) {
   const vs = typeof viewerState !== "undefined" ? viewerState : null;
   const is = typeof interpState !== "undefined" ? interpState : null;
@@ -650,7 +655,7 @@ async function _addManualAnnotation(start, end, typeId, label, description) {
 
   try {
     const resp = await fetch(
-      `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/${blockId}`,
+      `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/${blockId}${_annPartQuery()}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -680,7 +685,7 @@ async function _addManualAnnotation(start, end, typeId, label, description) {
 function _punctuateSlice(start, end) {
   const text = annState.originalText;
   if (!text) return "";
-  const slice = text.slice(start, end + 1);
+  const slice = _annChars(text).slice(start, end + 1);
   const len = slice.length;
   const beforeBuf = new Array(len).fill("");
   const afterBuf = new Array(len).fill("");
@@ -704,7 +709,8 @@ function _punctuateSlice(start, end) {
 
 function _composePunctuatedTextForAi(originalText, punctMarks) {
   if (!originalText) return "";
-  const n = originalText.length;
+  const chars = _annChars(originalText);
+  const n = chars.length;
   if (n === 0) return "";
 
   const beforeBuf = new Array(n).fill("");
@@ -720,7 +726,7 @@ function _composePunctuatedTextForAi(originalText, punctMarks) {
 
   let out = "";
   for (let i = 0; i < n; i++) {
-    out += beforeBuf[i] + originalText[i] + afterBuf[i];
+    out += beforeBuf[i] + chars[i] + afterBuf[i];
   }
   return out;
 }
@@ -738,13 +744,14 @@ function _composePunctuatedTextForAi(originalText, punctMarks) {
  * @returns {Array<{origStart, origEnd, text, punctMarks, punctuatedText}>}
  */
 function _splitIntoSentences(originalText, punctMarks) {
-  if (!originalText || originalText.length === 0) return [];
+  if (!originalText) return [];
+  const chars = _annChars(originalText); // 좌표는 코드포인트(③)
   if (!Array.isArray(punctMarks) || punctMarks.length === 0) {
     // 표점이 없으면 분할 불가 → 전체를 하나의 "문장"으로
     return [
       {
         origStart: 0,
-        origEnd: originalText.length - 1,
+        origEnd: chars.length - 1,
         text: originalText,
         punctMarks: [],
         punctuatedText: originalText,
@@ -762,7 +769,7 @@ function _splitIntoSentences(originalText, punctMarks) {
     for (const ch of mark.after) {
       if (sentenceEndChars.has(ch)) {
         const end = mark.target?.end ?? mark.target?.start ?? 0;
-        if (end >= 0 && end < originalText.length) {
+        if (end >= 0 && end < chars.length) {
           endPositions.push(end);
         }
         break;
@@ -775,7 +782,7 @@ function _splitIntoSentences(originalText, punctMarks) {
     return [
       {
         origStart: 0,
-        origEnd: originalText.length - 1,
+        origEnd: chars.length - 1,
         text: originalText,
         punctMarks: punctMarks,
         punctuatedText: _composePunctuatedTextForAi(originalText, punctMarks),
@@ -792,7 +799,7 @@ function _splitIntoSentences(originalText, punctMarks) {
 
   for (const endPos of uniqueEnds) {
     if (endPos < start) continue;
-    const sentText = originalText.slice(start, endPos + 1);
+    const sentText = chars.slice(start, endPos + 1).join("");
     if (sentText.length === 0) continue;
 
     // 이 문장 범위에 해당하는 punctMarks → 로컬 인덱스로 변환
@@ -819,9 +826,9 @@ function _splitIntoSentences(originalText, punctMarks) {
   }
 
   // 마지막 문장 끝 이후 남은 텍스트 (종결 부호 없이 끝나는 경우)
-  if (start < originalText.length) {
-    const sentText = originalText.slice(start);
-    const lastEnd = originalText.length - 1;
+  if (start < chars.length) {
+    const sentText = chars.slice(start).join("");
+    const lastEnd = chars.length - 1;
     const localMarks = [];
     for (const mark of punctMarks) {
       const mStart = mark.target?.start ?? 0;
@@ -835,7 +842,7 @@ function _splitIntoSentences(originalText, punctMarks) {
     }
     sentences.push({
       origStart: start,
-      origEnd: originalText.length - 1,
+      origEnd: chars.length - 1,
       text: sentText,
       punctMarks: localMarks,
       punctuatedText: _composePunctuatedTextForAi(sentText, localMarks),
@@ -1002,7 +1009,7 @@ async function _saveEditedAnnotation() {
 
   try {
     const resp = await fetch(
-      `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/${blockId}/${annId}`,
+      `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/${blockId}/${annId}${_annPartQuery()}`,
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -1035,7 +1042,7 @@ async function _acceptAnnotation() {
 
   try {
     const resp = await fetch(
-      `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/${blockId}/${annId}/commit`,
+      `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/${blockId}/${annId}/commit${_annPartQuery()}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1069,7 +1076,7 @@ async function _deleteAnnotation() {
 
   try {
     const resp = await fetch(
-      `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/${blockId}/${annId}`,
+      `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/${blockId}/${annId}${_annPartQuery()}`,
       { method: "DELETE" },
     );
 
@@ -1317,11 +1324,11 @@ async function _aiTagAll() {
     // ── 인덱스 보정 완료된 결과 → batch payload 구성 ──
     const batchPayload = [];
     for (const r of deduped) {
-      if (r.start < 0 || r.end < r.start || r.end >= text.length) continue;
+      if (r.start < 0 || r.end < r.start || r.end >= _annCpLength(text)) continue;
 
       const labelText =
         _normalizeAiTagText(r.label || r.text || "") ||
-        text.slice(r.start, r.end + 1);
+        _annChars(text).slice(r.start, r.end + 1).join("");
 
       batchPayload.push({
         target: { start: r.start, end: r.end },
@@ -1339,7 +1346,7 @@ async function _aiTagAll() {
     let savedCount = 0;
     try {
       const batchResp = await fetch(
-        `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/${blockId}/batch`,
+        `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/${blockId}/batch${_annPartQuery()}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1358,7 +1365,7 @@ async function _aiTagAll() {
       for (const payload of batchPayload) {
         try {
           const saveResp = await fetch(
-            `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/${blockId}`,
+            `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/${blockId}${_annPartQuery()}`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -1405,7 +1412,7 @@ async function _commitAllDrafts() {
 
   try {
     const resp = await fetch(
-      `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/commit-all`,
+      `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/commit-all${_annPartQuery()}`,
       { method: "POST" },
     );
 
@@ -1691,6 +1698,36 @@ function _escHtml(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/* ── 글자 세기: 코드포인트 단위 ──
+ * 왜: 서버(Python)는 len()으로 코드포인트를 세고 JS의 .length·[i]·.slice는 UTF-16 단위다.
+ * 확장 한자(𠀀, U+20000 같은 CJK 확장 B)는 JS에서 두 단위라, 원문에 하나만 앞서 있어도
+ * 그 뒤 주석이 한 칸 어긋나고 서로게이트 반쪽이 화면에 찍힌다(Codex 교차검증 2026-09-16 ③).
+ * 주석 좌표(target.start/end)는 **코드포인트**가 정본이다 — 화면 쪽이 맞춘다. */
+function _annChars(text) {
+  return Array.from(text || "");
+}
+
+function _annCpLength(text) {
+  return _annChars(text).length;
+}
+
+/** 문자열 안 UTF-16 위치(indexOf 결과) → 코드포인트 위치. */
+function _annCpIndex(str, utf16Index) {
+  return _annCpLength(str.slice(0, utf16Index));
+}
+
+/** 코드포인트 위치 → 그 문자열 안 UTF-16 위치(indexOf의 fromIndex·힌트로 쓸 때). */
+function _annUtf16Index(str, cpIndex) {
+  return _annChars(str).slice(0, cpIndex).join("").length;
+}
+
+/** 주석 API에 붙이는 권 쿼리 — 뷰어가 연 권을 그대로 쓴다. 서버가 «main»으로 박아 두어
+ * 다권본의 둘째 권 주석이 첫째 권 파일에 들어가던 일(④)의 화면 쪽 짝이다. */
+function _annPartQuery() {
+  const vs = typeof viewerState !== "undefined" ? viewerState : null;
+  return `?part_id=${encodeURIComponent((vs && vs.partId) || "main")}`;
+}
+
 /* ────────────────────────────────────
    전체 리셋: 현재 페이지의 모든 주석 삭제
    ──────────────────────────────────── */
@@ -1739,7 +1776,7 @@ async function _resetAllAnnotations() {
   for (const annId of ids) {
     try {
       const resp = await fetch(
-        `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/${blockId}/${annId}`,
+        `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/${blockId}/${annId}${_annPartQuery()}`,
         { method: "DELETE" },
       );
       if (resp.ok || resp.status === 204) {
@@ -1808,12 +1845,15 @@ function _toAiIndex(value, fallback) {
 }
 
 function _buildAiRangeIndexMap(text) {
+  // 색인은 전부 코드포인트(③). strippedText 안을 indexOf로 찾은 UTF-16 위치는
+  // _annCpIndex로 되돌려야 strippedToOriginal에 넣을 수 있다.
+  const chars = _annChars(text);
   const strippedChars = [];
   const strippedToOriginal = [];
-  const originalToStripped = new Array(text.length).fill(-1);
+  const originalToStripped = new Array(chars.length).fill(-1);
 
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
+  for (let i = 0; i < chars.length; i++) {
+    const ch = chars[i];
     if (_AI_RANGE_IGNORABLE_CHAR_RE.test(ch)) continue;
     originalToStripped[i] = strippedChars.length;
     strippedToOriginal.push(i);
@@ -1876,13 +1916,13 @@ function _clampAiRange(range, n) {
 
 function _scoreAiRangeCandidate(range, queryText, originalText) {
   if (!range || !queryText || !originalText) return 0;
-  const slice = originalText.slice(range.start, range.end + 1);
+  const slice = _annChars(originalText).slice(range.start, range.end + 1).join("");
   const left = _stripAiIgnorableChars(slice);
   const right = _stripAiIgnorableChars(queryText);
   if (!left || !right) return 0;
   if (left === right) return 3;
   if (left.includes(right) || right.includes(left)) return 2;
-  if (left[0] === right[0]) return 1;
+  if (_annChars(left)[0] === _annChars(right)[0]) return 1;
   return 0;
 }
 
@@ -1902,30 +1942,31 @@ function _extractLabelHanjaForAi(label) {
 }
 
 function _resolveAiRangeByQuery(queryText, candidateRanges, originalText) {
-  const n = originalText.length;
+  const n = _annCpLength(originalText);
   const normalizedText = _normalizeAiTagText(queryText || "");
   if (!normalizedText) return null;
 
   for (const range of candidateRanges) {
-    const currentSlice = originalText.slice(range.start, range.end + 1);
+    const currentSlice = _annChars(originalText).slice(range.start, range.end + 1).join("");
     const localIndex = currentSlice.indexOf(normalizedText);
     if (localIndex !== -1) {
-      const fixedStart = range.start + localIndex;
+      const fixedStart = range.start + _annCpIndex(currentSlice, localIndex);
       return {
         start: fixedStart,
-        end: Math.min(n - 1, fixedStart + normalizedText.length - 1),
+        end: Math.min(n - 1, fixedStart + _annCpLength(normalizedText) - 1),
       };
     }
   }
 
   let bestDirect = null;
   for (const range of candidateRanges) {
-    const foundStart = _findNearestOccurrence(
+    const foundUtf16 = _findNearestOccurrence(
       originalText,
       normalizedText,
-      range.start,
+      _annUtf16Index(originalText, range.start),
     );
-    if (foundStart === -1) continue;
+    if (foundUtf16 === -1) continue;
+    const foundStart = _annCpIndex(originalText, foundUtf16);
     const dist = Math.abs(foundStart - range.start);
     if (!bestDirect || dist < bestDirect.dist) {
       bestDirect = { start: foundStart, dist };
@@ -1934,7 +1975,7 @@ function _resolveAiRangeByQuery(queryText, candidateRanges, originalText) {
   if (bestDirect) {
     return {
       start: bestDirect.start,
-      end: Math.min(n - 1, bestDirect.start + normalizedText.length - 1),
+      end: Math.min(n - 1, bestDirect.start + _annCpLength(normalizedText) - 1),
     };
   }
 
@@ -1946,12 +1987,13 @@ function _resolveAiRangeByQuery(queryText, candidateRanges, originalText) {
     for (const range of candidateRanges) {
       const strippedHintRaw = sourceMap.originalToStripped[range.start];
       const hintIndex = strippedHintRaw >= 0 ? strippedHintRaw : 0;
-      const strippedMatchStart = _findNearestOccurrence(
+      const strippedMatchUtf16 = _findNearestOccurrence(
         sourceMap.strippedText,
         strippedNeedle,
-        hintIndex,
+        _annUtf16Index(sourceMap.strippedText, hintIndex),
       );
-      if (strippedMatchStart === -1) continue;
+      if (strippedMatchUtf16 === -1) continue;
+      const strippedMatchStart = _annCpIndex(sourceMap.strippedText, strippedMatchUtf16);
       const dist = Math.abs(strippedMatchStart - hintIndex);
       if (!bestStripped || dist < bestStripped.dist) {
         bestStripped = { start: strippedMatchStart, dist };
@@ -1962,7 +2004,7 @@ function _resolveAiRangeByQuery(queryText, candidateRanges, originalText) {
       const mappedStart = sourceMap.strippedToOriginal[bestStripped.start];
       const mappedEnd =
         sourceMap.strippedToOriginal[
-          bestStripped.start + strippedNeedle.length - 1
+          bestStripped.start + _annCpLength(strippedNeedle) - 1
         ];
       if (Number.isInteger(mappedStart) && Number.isInteger(mappedEnd)) {
         return { start: mappedStart, end: mappedEnd };
@@ -1978,7 +2020,7 @@ function _resolveAiAnnotationRangeWithPunctuation(
   originalText,
   punctMarks = [],
 ) {
-  const n = originalText.length;
+  const n = _annCpLength(originalText);
   if (n === 0) return null;
 
   const target = ann && typeof ann === "object" ? ann.target || {} : {};
@@ -2122,7 +2164,9 @@ function _renderDictBadge(ann) {
     reviewed: "검토완료",
   };
   const label = labels[stage] || stage;
-  return `<span class="ann-dict-badge ann-dict-badge-${stage}">${label}</span>`;
+  // current_stage도 파일에서 온 값 — 클래스 이름에는 안전한 글자만, 글자는 이스케이프
+  const safeStage = String(stage).replace(/[^a-z_]/gi, "");
+  return `<span class="ann-dict-badge ann-dict-badge-${safeStage}">${_escHtml(label)}</span>`;
 }
 
 // 사전 항목의 범주 11종(D-019 덧붙임 2026-09-12) — 값은 스키마·서버(CATEGORIES)와 같다
@@ -2137,33 +2181,35 @@ function _renderDictExpanded(ann) {
   const d = ann.dictionary;
   if (!d) return '<div class="ann-dict-empty">사전 항목 없음</div>';
 
+  // 표제어·뜻·해설·출전은 LLM 답이나 가져온 파일에서 온 «남이 만든 문자열»이다 — innerHTML에
+  // 넣기 전에 전부 이스케이프한다(⑤). 카드 본문(_renderAnnList)과 같은 규칙.
   let html = '<div class="ann-dict-detail">';
-  html += `<div class="ann-dict-hw">${d.headword || ""}`;
-  if (d.headword_reading) html += ` (${d.headword_reading})`;
+  html += `<div class="ann-dict-hw">${_escHtml(d.headword || "")}`;
+  if (d.headword_reading) html += ` (${_escHtml(d.headword_reading)})`;
   // 범주·범위 (D-019 덧붙임 2026-09-12)
-  if (d.category) html += ` <span class="ann-dict-cat">${_DICT_CATEGORY_LABELS[d.category] || d.category}</span>`;
+  if (d.category) html += ` <span class="ann-dict-cat">${_escHtml(_DICT_CATEGORY_LABELS[d.category] || d.category)}</span>`;
   if (d.scope === "this_text_unit") html += ' <span class="ann-dict-scope">이 글에서만</span>';
   html += "</div>";
 
   if (d.dictionary_meaning) {
-    html += `<div class="ann-dict-meaning"><b>사전적 의미:</b> ${d.dictionary_meaning}</div>`;
+    html += `<div class="ann-dict-meaning"><b>사전적 의미:</b> ${_escHtml(d.dictionary_meaning)}</div>`;
   }
   if (d.contextual_meaning) {
-    html += `<div class="ann-dict-ctx"><b>문맥적 의미:</b> ${d.contextual_meaning}</div>`;
+    html += `<div class="ann-dict-ctx"><b>문맥적 의미:</b> ${_escHtml(d.contextual_meaning)}</div>`;
   }
   if (d.sense_note) {
-    html += `<div class="ann-dict-note"><b>해설:</b> ${d.sense_note}</div>`;
+    html += `<div class="ann-dict-note"><b>해설:</b> ${_escHtml(d.sense_note)}</div>`;
   }
 
   if (d.source_references && d.source_references.length > 0) {
     const refs = d.source_references
-      .map((r) => r.title + (r.section ? ` ${r.section}` : ""))
+      .map((r) => _escHtml(r.title || "") + (r.section ? ` ${_escHtml(r.section)}` : ""))
       .join(", ");
     html += `<div class="ann-dict-refs"><b>출전:</b> ${refs}</div>`;
   }
 
   if (d.related_terms && d.related_terms.length > 0) {
-    html += `<div class="ann-dict-related"><b>관련어:</b> ${d.related_terms.join(", ")}</div>`;
+    html += `<div class="ann-dict-related"><b>관련어:</b> ${d.related_terms.map((t) => _escHtml(t)).join(", ")}</div>`;
   }
 
   html += "</div>";
@@ -2201,7 +2247,7 @@ async function _generateDictStage(stageNum) {
     if (llmSel.force_model) reqBody.force_model = llmSel.force_model;
 
     const resp = await fetch(
-      `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/generate-stage${stageNum}`,
+      `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/generate-stage${stageNum}${_annPartQuery()}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2216,7 +2262,22 @@ async function _generateDictStage(stageNum) {
 
     const result = await resp.json();
     const count = (result.annotations || []).length;
-    _showSaveStatus(`${stageNum}단계 완료: ${count}개 항목`);
+    // 서버가 «어떻게 읽었는지»를 함께 준다(⑦) — 잘린 답에서 건진 것·기형 항목을 버린 것은
+    // 완료가 아니라 부분 완료다. 0건도 «정상 0건»과 «답을 읽지 못함»이 다르다.
+    const diag = result.diagnostics || null;
+    const rejected = diag ? diag.rejected_items || 0 : 0;
+    const partial = diag && (diag.parse_status !== "ok" || rejected > 0);
+    if (partial) {
+      const why = [];
+      if (diag.parse_status === "recovered") why.push("답이 잘려 완성된 항목만 건짐");
+      if (diag.parse_status === "no_json") why.push("답에서 JSON을 읽지 못함");
+      if (rejected > 0) why.push(`기형 항목 ${rejected}개 버림`);
+      const msg = `${stageNum}단계 부분 완료: ${count}개 항목 (${why.join(", ")})`;
+      _showSaveStatus(msg);
+      showToast(msg, "warning");
+    } else {
+      _showSaveStatus(`${stageNum}단계 완료: ${count}개 항목`);
+    }
 
     await _loadBlockAnnotations(blockId);
     _renderSourceText();
@@ -2261,7 +2322,7 @@ async function _generateDictBatch() {
     if (llmSel.force_model) reqBody.force_model = llmSel.force_model;
 
     const resp = await fetch(
-      `/api/interpretations/${interpId}/annotations/generate-batch`,
+      `/api/interpretations/${interpId}/annotations/generate-batch${_annPartQuery()}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2480,7 +2541,7 @@ async function _saveDictFields() {
 
   try {
     const resp = await fetch(
-      `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/${blockId}/${annId}`,
+      `/api/interpretations/${interpId}/pages/${vs.pageNum}/annotations/${blockId}/${annId}${_annPartQuery()}`,
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -2492,8 +2553,15 @@ async function _saveDictFields() {
       _showSaveStatus("사전 필드 저장 완료");
       await _loadBlockAnnotations(blockId);
       _renderAnnList();
+    } else {
+      // 4xx/5xx — 저장되지 않았음을 알린다(⑩). 폼은 다시 읽지 않아 편집 내용이 그대로 남는다.
+      const err = await resp.json().catch(() => ({}));
+      const msg = `사전 필드 저장 실패 (${resp.status}): ${err.error || "서버 오류"}`;
+      _showSaveStatus(msg);
+      showToast(msg, "error");
     }
   } catch (e) {
     console.error("사전 필드 저장 실패:", e);
+    showToast(`사전 필드 저장 실패: ${e.message}`, "error");
   }
 }

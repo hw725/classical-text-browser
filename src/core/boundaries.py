@@ -283,21 +283,41 @@ def unit_end(bounds: list[dict], i: int) -> Optional[dict]:
     return None
 
 
-def _span_for(
-    lines, keys: list[tuple[int, int]], start: dict, end: Optional[dict]
-) -> Optional[dict]:
+class LineIndex:
+    """(쪽, 행) → 행 번호 색인. 권마다 **한 번** 만들어 모든 구간 계산이 나눠 쓴다.
+
+    왜(Codex 교차검증 2026-09-16 ⑨): 전에는 경계마다 `keys.index()`(선형 탐색)를 서너 번 불러
+    행 N·단위 B에 O(B·N)이었다 — 행마다 경계가 서는 일기류에서는 O(N²). 사전 하나로 O(1)이 된다.
+    """
+
+    def __init__(self, lines):
+        self.keys: list[tuple[int, int]] = [(ln.page, ln.line_index) for ln in lines]
+        self.pos: dict[tuple[int, int], int] = {k: i for i, k in enumerate(self.keys)}
+        # 쪽 → 그 쪽의 마지막 행 번호(stale 끝 경계를 «그 쪽 앞까지»로 자를 때)
+        self.last_of_page: dict[int, int] = {}
+        for i, (page, _li) in enumerate(self.keys):
+            self.last_of_page[page] = i
+
+    def get(self, page, line_index) -> Optional[int]:
+        return self.pos.get((int(page), int(line_index)))
+
+    def last_before_page(self, page: int, floor: int) -> int:
+        """page보다 앞 쪽들의 마지막 행 번호. 없으면 floor."""
+        return max((i for p, i in self.last_of_page.items() if p < page), default=floor)
+
+
+def _span_for(lines, index: LineIndex, start: dict, end: Optional[dict]) -> Optional[dict]:
     """경계 start/end(exclusive) → span_to_text_and_refs()가 받는 구간. 시작 행이 없으면 None."""
-    s_key = (int(start["page"]), int(start["line"]))
-    if s_key not in keys:
+    keys = index.keys
+    s_i = index.get(start["page"], start["line"])
+    if s_i is None:
         return None
-    s_i = keys.index(s_key)
     s_off = int(start.get("offset", 0))
     if end is None:
         e_i, e_end = len(lines) - 1, None
     else:
-        e_key = (int(end["page"]), int(end["line"]))
-        if e_key in keys:
-            e_i = keys.index(e_key)
+        e_i = index.get(end["page"], end["line"])
+        if e_i is not None:
             e_off = int(end.get("offset", 0))
             if e_off > 0:
                 e_end = e_off
@@ -305,10 +325,7 @@ def _span_for(
                 e_i, e_end = e_i - 1, None
         else:
             # 끝 경계의 행이 사라졌다(stale) — 그 쪽 앞까지로 본다
-            e_i = max(
-                s_i,
-                max((k for k, key in enumerate(keys) if key[0] < int(end["page"])), default=s_i),
-            )
+            e_i = max(s_i, index.last_before_page(int(end["page"]), s_i))
             e_end = None
     if e_i < s_i or (e_i == s_i and e_end is not None and e_end <= s_off):
         # 빈 단위(같은 자리에 두 경계). 텍스트 없음.
@@ -336,13 +353,13 @@ def compute_units(
     from core.segmentation import span_to_text_and_refs
 
     bounds = [b for b in sorted(data.get("boundaries") or [], key=sort_key)]
-    keys = [(ln.page, ln.line_index) for ln in lines]
+    index = LineIndex(lines)  # 권마다 한 번 — 경계마다 다시 만들면 O(N²)(⑨)
     doc_id, part_id = data["document_id"], data["part_id"]
     units: list[dict] = []
     for i, b in enumerate(bounds):
         if not _live(b):
             continue
-        span = _span_for(lines, keys, b["start"], unit_end(bounds, i))
+        span = _span_for(lines, index, b["start"], unit_end(bounds, i))
         if span is None:
             text, refs = (
                 "",
@@ -358,7 +375,9 @@ def compute_units(
                 ],
             )
         else:
-            text, refs = span_to_text_and_refs(span, lines, page_texts, doc_id, part_id)
+            text, refs = span_to_text_and_refs(
+                span, lines, page_texts, doc_id, part_id, line_pos=index.pos
+            )
         seq = len(units)  # 권 안의 차례. 전에는 Work마다 따로 셌다(B-004)
         anchor = {
             "kind": b.get("kind") or "manual",

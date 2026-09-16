@@ -159,6 +159,9 @@ src/app/
 | **로컬 서비스는 `127.0.0.1`로 부른다**. `localhost` 금지 | Windows는 `localhost`를 IPv6(::1)부터 시도한다. IPv4에만 뜬 서비스(Ollama)면 제한 시간을 다 쓰고서야 IPv4로 넘어가 **호출마다 2초**를 버린다(실측 2.11s vs 0.04s, D-109) |
 | **검증용 서버는 `CTB_CONFIG_DIR=<임시 폴더>`로 띄운다** | 설정 파일(`~/.classical-text-browser/config.json`)은 하나라, 복사본 서고로 띄운 서버가 «마지막 서고»를 덮어 아이콘으로 켠 앱이 임시 폴더를 열었다(2026-09-10). LLM 사용 기록도 서고가 없으면 같은 폴더로 간다(`usage_tracker.default_usage_log_path`) — pytest는 `tests/conftest.py`가 이 변수를 임시 폴더로 돌리고, 세션 맨 뒤 테스트가 홈 파일 크기가 변하지 않았는지 잰다. 서고 없이 `LlmConfig()`로 도는 라우터 테스트가 mock 응답 2,127행을 홈 기록에 섞었다(2026-09-10 확인) |
 | **`.bat` 파일은 ASCII만** (주석도 영어) | `chcp 65001`의 cmd가 다중바이트 줄에서 위치를 잘못 세어 뒤쪽 줄 중간부터 읽는다. 새 콘솔에서만 재현(maintenance §1.6) |
+| **LLM을 기다린 뒤 저장하는 라우트는 파일을 다시 읽어 그 위에 병합한다** | 아까 읽은 데이터를 저장하면 기다리는 동안 들어온 수동 주석이 오류 없이 사라진다(D-127). 해석 저장소 L5~L7 저장도 `write_json_atomic()`이다 |
+| **LLM 답의 항목 목록은 `core.llm_json_items.parse_llm_items()`로 꺼낸다** | 기형 항목(null·문자열) 거부·잘린 답 복구·`status`(ok·recovered·no_json)를 한 곳에서. 기능마다 파서를 복제하면 한쪽만 고쳐진다(D-127) |
+| **주석 좌표는 코드포인트. 화면 JS는 `_annChars()`(Array.from)로 센다** — `.length`·`[i]`·`.slice` 금지 | 확장 한자(CJK 확장 B)는 UTF-16에서 두 단위라 그 뒤 주석이 한 칸 어긋난다(D-127). 주석 API는 `?part_id=`를 받는다 — `"main"` 고정 금지 |
 
 ## 코딩 규칙
 - 이 프로젝트의 사용자는 비개발자 인문학 연구자다

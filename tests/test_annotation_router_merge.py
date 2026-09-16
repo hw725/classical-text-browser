@@ -32,9 +32,11 @@ def _fake_request() -> Request:
     )
 
 
-@pytest.fixture
-def interp(tmp_path, monkeypatch):
-    """서고·해석 저장소를 임시 폴더로 돌린 라우터 이름 공간."""
+def make_interp(tmp_path, monkeypatch):
+    """서고·해석 저장소를 임시 폴더로 돌린 라우터 이름 공간.
+
+    다른 시험 모듈(part_and_type)도 이것으로 자기 픽스처를 만든다.
+    """
     lib = tmp_path / "lib"
     interp_path = lib / "interpretations" / "interp1"
     interp_path.mkdir(parents=True)
@@ -43,6 +45,11 @@ def interp(tmp_path, monkeypatch):
     monkeypatch.setattr(R, "_get_llm_router", lambda: object())
     monkeypatch.setattr(R, "git_commit_interpretation", lambda *a, **k: None)
     return interp_path
+
+
+@pytest.fixture
+def interp(tmp_path, monkeypatch):
+    return make_interp(tmp_path, monkeypatch)
 
 
 def _put_l4(interp_path, part_id: str, page: int, block_id: str, text: str = TEXT) -> None:
@@ -140,7 +147,9 @@ def test_stage1_keeps_manual_annotation_added_during_llm_wait(interp, monkeypatc
     )
 
     resp = asyncio.run(
-        R.api_dict_generate_stage1("interp1", 1, _fake_request(), R.DictStageRequest(block_id="b1"))
+        R.api_dict_generate_stage1(
+            "interp1", 1, _fake_request(), R.DictStageRequest(block_id="b1"), part_id="main"
+        )
     )
     assert isinstance(resp, dict), getattr(resp, "body", resp)
 
@@ -159,7 +168,9 @@ def test_stage2_keeps_manual_annotation_added_during_llm_wait(interp, monkeypatc
     )
 
     resp = asyncio.run(
-        R.api_dict_generate_stage2("interp1", 1, _fake_request(), R.DictStageRequest(block_id="b1"))
+        R.api_dict_generate_stage2(
+            "interp1", 1, _fake_request(), R.DictStageRequest(block_id="b1"), part_id="main"
+        )
     )
     assert isinstance(resp, dict), getattr(resp, "body", resp)
     labels = _labels(interp, "main", 1, "b1")
@@ -175,7 +186,9 @@ def test_stage3_keeps_manual_annotation_added_during_llm_wait(interp, monkeypatc
     )
 
     resp = asyncio.run(
-        R.api_dict_generate_stage3("interp1", 1, _fake_request(), R.DictStageRequest(block_id="b1"))
+        R.api_dict_generate_stage3(
+            "interp1", 1, _fake_request(), R.DictStageRequest(block_id="b1"), part_id="main"
+        )
     )
     assert isinstance(resp, dict), getattr(resp, "body", resp)
     labels = _labels(interp, "main", 1, "b1")
@@ -191,7 +204,9 @@ def test_batch_keeps_manual_annotation_added_during_llm_wait(interp, monkeypatch
         R, "generate_stage3_from_both", _interleaving_generator(interp, "from_both")
     )
 
-    resp = asyncio.run(R.api_dict_generate_batch("interp1", R.DictBatchRequest(pages=[1])))
+    resp = asyncio.run(
+        R.api_dict_generate_batch("interp1", R.DictBatchRequest(pages=[1]), part_id="main")
+    )
     assert isinstance(resp, dict), getattr(resp, "body", resp)
     assert resp["errors"] == []
     labels = _labels(interp, "main", 1, "b1")
@@ -208,6 +223,8 @@ def test_stage_result_is_merged_not_duplicated(interp, monkeypatch):
 
     monkeypatch.setattr(R, "generate_stage1_from_original", fake)
     asyncio.run(
-        R.api_dict_generate_stage1("interp1", 1, _fake_request(), R.DictStageRequest(block_id="b1"))
+        R.api_dict_generate_stage1(
+            "interp1", 1, _fake_request(), R.DictStageRequest(block_id="b1"), part_id="main"
+        )
     )
     assert _labels(interp, "main", 1, "b1") == ["丙丁"]

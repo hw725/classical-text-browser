@@ -4,7 +4,6 @@ LlmRouter를 통해 한문 원문의 인물·지명·용어·전거를 자동 �
 Draft 상태로 저장하여 연구자가 검토/수정 후 확정하는 흐름.
 """
 
-import json
 from datetime import datetime
 from pathlib import Path
 
@@ -13,6 +12,7 @@ import yaml
 from core.annotation import (
     _gen_annotation_id,
 )
+from core.llm_json_items import parse_llm_items
 from llm.draft import LlmDraft
 from llm.router import LlmRouter
 
@@ -25,45 +25,13 @@ def _load_prompt() -> dict:
 
 
 def _parse_llm_annotations(response_text: str) -> list[dict]:
-    """LLM 응답에서 주석 JSON 배열을 파싱한다.
+    """LLM 응답에서 주석 항목 목록을 꺼낸다 — 공통 파서(core.llm_json_items)의 얇은 껍질.
 
-    왜 이렇게 하는가:
-        LLM이 JSON 외에 설명 텍스트를 붙일 수 있으므로,
-        ```json ... ``` 블록이나 { ... } 패턴을 추출한다.
+    왜 공통 파서인가(Codex 교차검증 2026-09-16 ⑪): 사전형 주석 파서와 따로 있던 시절, 잘린 답에
+    사전형은 완성 항목을 건지고 이쪽은 0건이었다. 울타리 벗기기·{…} 추출·잘린 답 복구·기형 항목
+    거부를 한 곳에서 하고, 기능마다 다른 것은 항목 하나의 검증뿐이다.
     """
-    text = response_text.strip()
-
-    # ```json ... ``` 블록 추출
-    if "```" in text:
-        start = text.find("```")
-        # ```json 또는 ``` 다음의 내용
-        content_start = text.find("\n", start)
-        end = text.find("```", content_start)
-        if content_start != -1 and end != -1:
-            text = text[content_start:end].strip()
-
-    # JSON 객체 추출 시도
-    try:
-        parsed = json.loads(text)
-        if isinstance(parsed, dict) and "annotations" in parsed:
-            return parsed["annotations"]
-        if isinstance(parsed, list):
-            return parsed
-    except json.JSONDecodeError:
-        pass
-
-    # { 부터 마지막 } 까지 추출 재시도
-    first_brace = text.find("{")
-    last_brace = text.rfind("}")
-    if first_brace != -1 and last_brace != -1:
-        try:
-            parsed = json.loads(text[first_brace : last_brace + 1])
-            if isinstance(parsed, dict) and "annotations" in parsed:
-                return parsed["annotations"]
-        except json.JSONDecodeError:
-            pass
-
-    return []
+    return parse_llm_items(response_text).items
 
 
 async def generate_annotation_drafts(

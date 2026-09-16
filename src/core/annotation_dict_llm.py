@@ -22,6 +22,7 @@ from pathlib import Path
 import yaml
 
 from core.annotation import _gen_annotation_id
+from core.llm_json_items import parse_llm_items
 from llm.draft import LlmDraft
 from llm.router import LlmRouter
 
@@ -121,77 +122,53 @@ def type_for(raw_type, category) -> str:
 # ──────────────────────────────────────
 
 
+class GeneratedAnnotations(list):
+    """생성 결과 목록 — list 그대로 쓰되 «어떻게 읽었는지»(diagnostics)를 붙인다.
+
+    왜 list 하위형인가: 라우터·시험·병합이 이 결과를 list로 다룬다. 반환형을 바꾸면 그 전부가
+    깨지므로, list인 채로 진단만 얹는다. 라우터는 `getattr(result, "diagnostics", None)`으로 읽어
+    응답에 실고, 화면이 «완료»와 «부분 완료(잘린 답·거부 항목)»를 가른다(⑦).
+    """
+
+    def __init__(self, items=(), diagnostics: dict | None = None):
+        super().__init__(items)
+        self.diagnostics = dict(diagnostics or {})
+
+
 def _parse_llm_annotations(response_text: str) -> list[dict]:
-    """LLM 응답에서 주석 JSON 배열을 파싱한다.
+    """LLM 응답에서 주석 항목 목록만 꺼낸다(진단 없이). 공통 파서(core.llm_json_items)의 얇은 껍질.
 
-    왜 이렇게 하는가:
-        LLM이 JSON 외에 설명 텍스트를 붙일 수 있으므로,
-        ```json ... ``` 블록이나 { ... } 패턴을 추출한다.
-        annotation_llm.py와 동일한 파싱 로직 재사용.
+    진단까지 필요한 자리(생성 단계 셋)는 `parse_llm_items()`를 직접 쓴다.
     """
-    text = response_text.strip()
-
-    # ```json ... ``` 블록 추출
-    if "```" in text:
-        start = text.find("```")
-        content_start = text.find("\n", start)
-        end = text.find("```", content_start)
-        if content_start != -1 and end != -1:
-            text = text[content_start:end].strip()
-
-    # JSON 파싱 시도
-    try:
-        parsed = json.loads(text)
-        if isinstance(parsed, dict) and "annotations" in parsed:
-            return parsed["annotations"]
-        if isinstance(parsed, list):
-            return parsed
-    except json.JSONDecodeError:
-        pass
-
-    # { 부터 마지막 } 까지 추출 재시도
-    first_brace = text.find("{")
-    last_brace = text.rfind("}")
-    if first_brace != -1 and last_brace != -1:
-        try:
-            parsed = json.loads(text[first_brace : last_brace + 1])
-            if isinstance(parsed, dict) and "annotations" in parsed:
-                return parsed["annotations"]
-        except json.JSONDecodeError:
-            pass
-
-    # 답이 max_tokens에 잘렸으면 JSON이 닫히지 않는다 — 완성된 항목만 건진다(2026-09-12 실측:
-    # v2 프롬프트로 답이 길어지자 5,300자에서 잘려 0건이 됐다. 옛 프롬프트는 4,900자에 8건).
-    # 잘린 마지막 항목은 버린다.
-    return _recover_truncated_items(text)
+    return parse_llm_items(response_text).items
 
 
-def _recover_truncated_items(text: str) -> list[dict]:
-    """`"annotations": [` 뒤의 객체를 하나씩 읽어 완성된 것만 돌려준다.
+def _as_index(value) -> int | None:
+    """좌표 값을 int로. int(bool 제외)·숫자 문자열만 받고 아니면 None.
 
-    입력: 잘렸을 수 있는 응답. 출력: 항목 목록.
+    기형 항목은 예외 대신 None으로 — 그 항목만 버린다(⑥).
     """
-    i = text.find('"annotations"')
-    j = text.find("[", i) if i >= 0 else -1
-    if j < 0:
-        return []
-    dec = json.JSONDecoder()
-    out: list[dict] = []
-    pos = j + 1
-    n = len(text)
-    while True:
-        while pos < n and text[pos] in " ,\t\r\n":
-            pos += 1
-        if pos >= n or text[pos] != "{":
-            break
-        try:
-            obj, end = dec.raw_decode(text, pos)
-        except json.JSONDecodeError:
-            break  # 여기서부터 잘렸다
-        if isinstance(obj, dict):
-            out.append(obj)
-        pos = end
-    return out
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str) and value.strip().lstrip("-").isdigit():
+        return int(value.strip())
+    return None
+
+
+def _diagnostics(parsed, built: list, skipped: int = 0) -> dict:
+    """생성 단계의 진단 — 파서 상태 + 좌표 검증에서 버린 항목 수(⑦).
+
+    입력: parsed — parse_llm_items() 결과. built — _build_annotation_from_raw()를 통과한 항목.
+          skipped — 모델이 deleted로 표시해 뺀 수(거부가 아니라 의도된 것).
+    """
+    d = parsed.diagnostics()
+    d["rejected_items"] += max(len(parsed.items) - len(built) - skipped, 0)
+    d["kept_items"] = len(built)
+    return d
 
 
 # ──────────────────────────────────────
@@ -251,23 +228,33 @@ def _build_annotation_from_raw(
         translation_text — 번역 스냅샷.
         existing_id — 기존 주석의 id (매칭된 경우).
     출력: annotation dict. 범위 무효시 None.
-    """
-    target = raw.get("target", {})
-    start = target.get("start", 0)
-    end = target.get("end", start)
 
-    # 범위 검증: 음수이거나 순서 역전이면 정규화
-    if start < 0:
-        start = 0
+    기형 항목은 예외 대신 None — 항목 하나가 정상 항목 전부를 500으로 끌고 가면 안 된다(⑥).
+    raw가 dict가 아니거나, target이 dict가 아니거나, 좌표가 정수(또는 숫자 문자열)가 아니면 None.
+    """
+    if not isinstance(raw, dict):
+        return None
+    target = raw.get("target")
+    if not isinstance(target, dict):
+        return None
+    start = _as_index(target.get("start", 0))
+    end = _as_index(target.get("end", start))
+    if start is None or end is None:
+        return None
+
+    # 범위 정규화: 순서가 뒤집혔으면 바꾸고, 음수는 0으로. 순서: 뒤집기 → 자르기 —
+    # 전에는 자르기 → 뒤집기여서 (0, -1)이 (-1, 0)이 되어 음수가 저장됐다.
     if end < start:
         start, end = end, start
+    start = max(start, 0)
+    end = max(end, start)
     # 원문 길이 초과시 무시
     if start >= text_len:
         return None
     if end >= text_len:
         end = text_len - 1
 
-    content = raw.get("content", {})
+    content = raw.get("content") if isinstance(raw.get("content"), dict) else {}
     dictionary = normalize_dictionary(raw.get("dictionary"))
     ann_type = type_for(raw.get("type"), (dictionary or {}).get("category"))
 
@@ -364,9 +351,15 @@ def merge_annotations(
                     target_ann["generation_history"].extend(llm_ann["generation_history"])
                 continue
 
-            # dictionary 필드 업데이트
+            # dictionary 필드 업데이트 — 범주가 바뀌면 type도 따라간다(⑧). type은 범주에서
+            # 정하기로 했으므로(D-019 덧붙임) dictionary만 갈아 끼우면 화면 색·필터가 옛 유형을
+            # 본다.
             if llm_ann.get("dictionary"):
+                old_cat = (target_ann.get("dictionary") or {}).get("category")
                 target_ann["dictionary"] = llm_ann["dictionary"]
+                new_cat = llm_ann["dictionary"].get("category")
+                if new_cat and new_cat != old_cat and llm_ann.get("type"):
+                    target_ann["type"] = llm_ann["type"]
 
             # content 업데이트 (LLM이 보강한 label/description)
             if llm_ann.get("content"):
@@ -443,7 +436,8 @@ async def generate_stage1_from_original(
         force_model=force_model,
     )
 
-    raw_annotations = _parse_llm_annotations(response.text)
+    parsed = parse_llm_items(response.text)
+    raw_annotations = parsed.items
 
     draft = LlmDraft(
         purpose="annotation_dict_stage1",
@@ -470,7 +464,7 @@ async def generate_stage1_from_original(
         if ann:
             results.append(ann)
 
-    return results
+    return GeneratedAnnotations(results, _diagnostics(parsed, results))
 
 
 # ──────────────────────────────────────
@@ -522,7 +516,8 @@ async def generate_stage2_from_translation(
         force_model=force_model,
     )
 
-    raw_annotations = _parse_llm_annotations(response.text)
+    parsed = parse_llm_items(response.text)
+    raw_annotations = parsed.items
 
     draft = LlmDraft(
         purpose="annotation_dict_stage2",
@@ -553,9 +548,12 @@ async def generate_stage2_from_translation(
             results.append(ann)
 
     # 기존 주석과 병합
+    diag = _diagnostics(parsed, results)
     if not merge:
-        return results
-    return merge_annotations(existing_annotations, results, "from_translation")
+        return GeneratedAnnotations(results, diag)
+    return GeneratedAnnotations(
+        merge_annotations(existing_annotations, results, "from_translation"), diag
+    )
 
 
 # ──────────────────────────────────────
@@ -612,7 +610,8 @@ async def generate_stage3_from_both(
         force_model=force_model,
     )
 
-    raw_annotations = _parse_llm_annotations(response.text)
+    parsed = parse_llm_items(response.text)
+    raw_annotations = parsed.items
 
     draft = LlmDraft(
         purpose="annotation_dict_stage3",
@@ -626,9 +625,11 @@ async def generate_stage3_from_both(
 
     text_len = len(original_text)
     results = []
+    deleted = 0
     for raw in raw_annotations:
-        # "deleted": true인 항목은 건너뜀
-        if raw.get("deleted"):
+        # "deleted": true인 항목은 건너뜀 — 모델이 «지워라»고 표시한 것이라 거부가 아니다
+        if isinstance(raw, dict) and raw.get("deleted"):
+            deleted += 1
             continue
 
         existing_id = raw.get("id")
@@ -646,8 +647,9 @@ async def generate_stage3_from_both(
             results.append(ann)
 
     # 일괄 생성 모드 (기존 항목이 없을 때)는 결과를 그대로 반환
+    diag = _diagnostics(parsed, results, skipped=deleted)
     if not existing_annotations or not merge:
-        return results
+        return GeneratedAnnotations(results, diag)
 
     # 기존 항목이 있으면 병합
-    return merge_annotations(existing_annotations, results, "from_both")
+    return GeneratedAnnotations(merge_annotations(existing_annotations, results, "from_both"), diag)
