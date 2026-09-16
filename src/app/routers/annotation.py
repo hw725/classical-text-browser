@@ -425,6 +425,38 @@ def _set_block_annotations(data: dict, block_id: str, annotations: list[dict]) -
     data.setdefault("blocks", []).append({"block_id": block_id, "annotations": annotations})
 
 
+def _merge_generated_into_page(
+    interp_path: Path,
+    part_id: str,
+    page_num: int,
+    block_id: str,
+    generated: list[dict],
+    stage: str,
+) -> list[dict]:
+    """LLM 결과를 **지금** 파일 상태 위에 병합해 저장한다. LLM을 기다린 뒤에 부른다.
+
+    입력: generated — 병합 전 LLM 항목(L7 형식). stage — from_original·from_translation·from_both.
+    출력: 그 블록의 병합된 주석 목록(저장된 것과 같다).
+
+    왜 다시 읽는가(Codex 교차검증 2026-09-16 ①):
+        생성 라우트는 쪽 파일을 읽고 → LLM을 수 초~수십 초 기다리고 → 저장한다. 기다리는 동안
+        사람이 같은 쪽에 넣은 주석은 «아까 읽은» 데이터에 없으므로, 그것을 저장하면 조용히
+        사라진다. 저장 직전에 파일을 다시 읽어 지금 목록 위에 병합하면 잃지 않는다.
+
+    잠금은 두지 않는다 — 두 안을 견줬다:
+        (가) 쪽 파일마다 asyncio.Lock. (나) 다시 읽기만.
+        라우트는 전부 `async def`이고 이 함수 안에 `await`가 없어, 단일 이벤트 루프에서는
+        «다시 읽기 → 병합 → 저장» 사이에 다른 요청이 끼어들 수 없다. 그래서 (나)로 충분하고
+        더 단순하다. 이 함수 안에 await를 넣게 되면 그때 (가)로 올린다.
+    """
+    fresh = load_annotations(interp_path, part_id, page_num)
+    current = _get_block_annotations(fresh, block_id)
+    merged = merge_annotations(current, generated, stage)
+    _set_block_annotations(fresh, block_id, merged)
+    save_annotations(interp_path, part_id, page_num, fresh)
+    return merged
+
+
 def _resolve_stage_block_id(
     request: Request,
     body: DictStageRequest | None,
@@ -825,18 +857,18 @@ async def api_dict_generate_stage1(
             force_model=force_model,
         )
 
-        # 기존 주석(수동 태깅 등)과 병합하여 저장한다.
-        # 왜: generate_stage1은 LLM 결과만 반환하므로,
-        # 병합 없이 교체하면 기존 태깅이 사라진다.
-        merged = merge_annotations(existing_annotations, generated, "from_original")
-        _set_block_annotations(ann_data, block_id, merged)
-        save_annotations(interp_path, "main", page_num, ann_data)
+        # 기존 주석(수동 태깅 등)과 병합하여 저장한다 — 아까 읽은 ann_data가 아니라
+        # **지금** 파일 위에. LLM을 기다리는 동안 들어온 수동 주석을 지키기 위해서다.
+        _merge_generated_into_page(
+            interp_path, "main", page_num, block_id, generated, "from_original"
+        )
 
         return {
             "page_number": page_num,
             "block_id": block_id,
             "stage": "from_original",
             "annotations": generated,
+            "diagnostics": getattr(generated, "diagnostics", None),
         }
     except FileNotFoundError as e:
         return JSONResponse({"error": str(e)}, status_code=404)
@@ -888,16 +920,19 @@ async def api_dict_generate_stage2(
             existing_annotations=existing_annotations,
             force_provider=force_provider,
             force_model=force_model,
+            merge=False,  # 병합은 «지금» 파일 위에 — 아래 헬퍼가 한다
         )
 
-        _set_block_annotations(ann_data, block_id, generated)
-        save_annotations(interp_path, "main", page_num, ann_data)
+        merged = _merge_generated_into_page(
+            interp_path, "main", page_num, block_id, generated, "from_translation"
+        )
 
         return {
             "page_number": page_num,
             "block_id": block_id,
             "stage": "from_translation",
-            "annotations": generated,
+            "annotations": merged,
+            "diagnostics": getattr(generated, "diagnostics", None),
         }
     except FileNotFoundError as e:
         return JSONResponse({"error": str(e)}, status_code=404)
@@ -949,16 +984,19 @@ async def api_dict_generate_stage3(
             existing_annotations=existing_annotations,
             force_provider=force_provider,
             force_model=force_model,
+            merge=False,  # 병합은 «지금» 파일 위에 — 아래 헬퍼가 한다
         )
 
-        _set_block_annotations(ann_data, block_id, generated)
-        save_annotations(interp_path, "main", page_num, ann_data)
+        merged = _merge_generated_into_page(
+            interp_path, "main", page_num, block_id, generated, "from_both"
+        )
 
         return {
             "page_number": page_num,
             "block_id": block_id,
             "stage": "from_both",
-            "annotations": generated,
+            "annotations": merged,
+            "diagnostics": getattr(generated, "diagnostics", None),
         }
     except FileNotFoundError as e:
         return JSONResponse({"error": str(e)}, status_code=404)
@@ -1052,6 +1090,9 @@ async def api_dict_generate_batch(interp_id: str, body: DictBatchRequest | None 
                     )
                     continue
 
+                # 블록마다 LLM을 기다린 뒤 **한 번에** 저장한다. 저장은 아까 읽은 ann_data가
+                # 아니라 지금 파일 위에 병합한다 — 기다리는 동안 들어온 수동 주석을 지킨다(①).
+                page_results: dict[str, list[dict]] = {}
                 for block_id in block_ids:
                     try:
                         original_text = _load_original_block_text(
@@ -1070,10 +1111,9 @@ async def api_dict_generate_batch(interp_id: str, body: DictBatchRequest | None 
                             existing_annotations=existing_annotations,
                             force_provider=force_provider,
                             force_model=force_model,
+                            merge=False,
                         )
-
-                        _set_block_annotations(ann_data, block_id, generated)
-                        total_results["total_annotations"] += len(generated)
+                        page_results[block_id] = generated
                     except Exception as block_error:
                         total_results["errors"].append(
                             {
@@ -1083,7 +1123,14 @@ async def api_dict_generate_batch(interp_id: str, body: DictBatchRequest | None 
                             }
                         )
 
-                save_annotations(interp_path, "main", page_num, ann_data)
+                fresh = load_annotations(interp_path, "main", page_num)
+                for block_id, generated in page_results.items():
+                    merged = merge_annotations(
+                        _get_block_annotations(fresh, block_id), generated, "from_both"
+                    )
+                    _set_block_annotations(fresh, block_id, merged)
+                    total_results["total_annotations"] += len(merged)
+                save_annotations(interp_path, "main", page_num, fresh)
 
                 total_results["pages_processed"] += 1
             except Exception as e:

@@ -41,6 +41,11 @@ path.write_text(json.dumps(data))      # ❌ 절대 금지
 다섯 모듈(`document`·`entity`·`interpretation`·`library`·`snapshot`)의 `_write_json`이
 전부 이 하나를 부른다. **새 모듈에서 또 복제하지 말 것.**
 
+해석 저장소의 L5·L6·L7 저장 함수 넷(`punctuation.save_punctuation`·`hyeonto.save_hyeonto`·
+`translation.save_translations`·`annotation.save_annotations`)도 같은 저장기를 쓴다 — 2026-09-16까지
+`write_text`로 바로 덮어썼다(Codex 교차검증에서 잡힘). `tests/test_interp_layers_atomic_write.py`가
+넷 모두 «갈아 끼우는 순간 죽어도 예전 파일이 남는지»를 본다.
+
 ### 1.2 PDF는 `resolve_part_pdf(doc_path, part_id)`로 연다 (D-069)
 
 ```python

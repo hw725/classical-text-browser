@@ -486,6 +486,7 @@ async def generate_stage2_from_translation(
     existing_annotations: list[dict],
     force_provider: str | None = None,
     force_model: str | None = None,
+    merge: bool = True,
 ) -> list[dict]:
     """Stage 2: 번역을 참조하여 기존 주석의 문맥적 의미를 보강한다.
 
@@ -499,6 +500,9 @@ async def generate_stage2_from_translation(
             **반드시 router.call()로 전달해야 한다** — 예전에는 라우터 객체에
             속성으로 대입했는데 그런 속성이 없어 조용히 무시됐다(D-069).
         existing_annotations — 1단계 결과 (기존 주석 목록).
+        merge — True면 existing_annotations 위에 병합한 목록을, False면 LLM 항목만 돌려준다.
+            라우터는 False로 받아 **지금 파일 상태** 위에 병합한다 — LLM을 기다리는 동안 들어온
+            수동 주석을 지키기 위해(Codex 교차검증 2026-09-16 ①).
     출력: 보강된 annotation 항목 리스트. 기존 항목과 병합하여 사용.
     """
     prompt_config = _load_prompt("stage2")
@@ -549,6 +553,8 @@ async def generate_stage2_from_translation(
             results.append(ann)
 
     # 기존 주석과 병합
+    if not merge:
+        return results
     return merge_annotations(existing_annotations, results, "from_translation")
 
 
@@ -565,6 +571,7 @@ async def generate_stage3_from_both(
     existing_annotations: list[dict] | None = None,
     force_provider: str | None = None,
     force_model: str | None = None,
+    merge: bool = True,
 ) -> list[dict]:
     """Stage 3: 원문+번역을 종합하여 최종 통합한다.
 
@@ -582,6 +589,7 @@ async def generate_stage3_from_both(
             **반드시 router.call()로 전달해야 한다** — 예전에는 라우터 객체에
             속성으로 대입했는데 그런 속성이 없어 조용히 무시됐다(D-069).
         existing_annotations — 이전 단계 결과. None이면 일괄 생성 모드.
+        merge — False면 병합하지 않고 LLM 항목만 돌려준다(라우터가 지금 파일 위에 병합한다, ①).
     출력: 최종 통합된 annotation 항목 리스트.
     """
     if existing_annotations is None:
@@ -638,7 +646,7 @@ async def generate_stage3_from_both(
             results.append(ann)
 
     # 일괄 생성 모드 (기존 항목이 없을 때)는 결과를 그대로 반환
-    if not existing_annotations:
+    if not existing_annotations or not merge:
         return results
 
     # 기존 항목이 있으면 병합

@@ -16,6 +16,8 @@ from pathlib import Path
 
 from jsonschema import validate
 
+from core.document import write_json_atomic
+
 # ──────────────────────────────────────
 # 스키마 로드 (모듈 레벨 캐시)
 # ──────────────────────────────────────
@@ -162,10 +164,10 @@ def save_annotations(
 
     interp_path = Path(interp_path).resolve()
     file_path = _annotation_file_path(interp_path, part_id, page_num)
-    file_path.parent.mkdir(parents=True, exist_ok=True)
-
-    text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
-    file_path.write_text(text, encoding="utf-8")
+    # D-069: write_text()는 먼저 0바이트로 자르고 쓴다 — 도중에 죽으면 연구자의 파일이
+    # 빈 파일이 된다.
+    # 임시 파일에 다 쓰고 갈아 끼우는 공통 저장기 하나만 쓴다(docs/maintenance.md 1.1).
+    write_json_atomic(file_path, data)
 
     return file_path
 
