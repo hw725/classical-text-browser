@@ -243,9 +243,9 @@ async function _loadTranslationData() {
 
       // 표점 + 현토 + 번역을 병렬 로드 (block_id는 접두사 없이)
       const [punctRes, htRes, transRes] = await Promise.all([
-        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation?block_id=${apiBlockId}`),
-        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/hyeonto?block_id=${apiBlockId}`),
-        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/translation`),
+        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation?block_id=${apiBlockId}${interpPartQuery("&")}`),
+        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/hyeonto?block_id=${apiBlockId}${interpPartQuery("&")}`),
+        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/translation${interpPartQuery()}`),
       ]);
 
       transState.punctMarks = punctRes.ok ? (await punctRes.json()).marks || [] : [];
@@ -257,9 +257,9 @@ async function _loadTranslationData() {
       // 교정 텍스트 API를 사용하여 해당 블록의 교정된 텍스트를 가져온다.
       const [textRes, punctRes, htRes, transRes] = await Promise.all([
         fetch(`/api/documents/${viewerState.docId}/pages/${viewerState.pageNum}/corrected-text?part_id=${viewerState.partId}`),
-        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation?block_id=${apiBlockId}`),
-        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/hyeonto?block_id=${apiBlockId}`),
-        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/translation`),
+        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation?block_id=${apiBlockId}${interpPartQuery("&")}`),
+        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/hyeonto?block_id=${apiBlockId}${interpPartQuery("&")}`),
+        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/translation${interpPartQuery()}`),
       ]);
 
       // 교정된 텍스트에서 해당 블록의 텍스트를 추출
@@ -585,7 +585,7 @@ async function _addManualTranslation(sent, translationText) {
 
   try {
     const res = await fetch(
-      `/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/translation`,
+      `/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/translation${interpPartQuery()}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -630,7 +630,7 @@ async function _acceptTranslation(trId) {
 
   try {
     const res = await fetch(
-      `/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/translation/${trId}/commit`,
+      `/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/translation/${trId}/commit${interpPartQuery()}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -657,7 +657,7 @@ async function _deleteTranslation(trId) {
 
   try {
     const res = await fetch(
-      `/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/translation/${trId}`,
+      `/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/translation/${trId}${interpPartQuery()}`,
       { method: "DELETE" }
     );
 
@@ -714,7 +714,7 @@ async function _aiTranslateSingle(sentIdx) {
     // 기존 번역 업데이트 또는 새로 추가
     if (existing) {
       const res = await fetch(
-        `/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/translation/${existing.id}`,
+        `/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/translation/${existing.id}${interpPartQuery()}`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -826,7 +826,7 @@ async function _saveAllTranslations() {
   for (const tr of transState.translations) {
     try {
       const res = await fetch(
-        `/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/translation/${tr.id}`,
+        `/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/translation/${tr.id}${interpPartQuery()}`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -885,7 +885,7 @@ async function _resetAllTranslations() {
   for (const trId of ids) {
     try {
       const res = await fetch(
-        `/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/translation/${trId}`,
+        `/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/translation/${trId}${interpPartQuery()}`,
         { method: "DELETE" }
       );
       if (res.ok || res.status === 204) {

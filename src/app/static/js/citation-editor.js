@@ -421,7 +421,7 @@ async function _loadCitePunctuation(blockId) {
 
   try {
     const resp = await fetch(
-      `/api/interpretations/${is.interpId}/pages/${vs.pageNum}/punctuation?block_id=${apiBlockId}`
+      `/api/interpretations/${is.interpId}/pages/${vs.pageNum}/punctuation?block_id=${apiBlockId}${interpPartQuery("&")}`
     );
     if (resp.ok) {
       const data = await resp.json();

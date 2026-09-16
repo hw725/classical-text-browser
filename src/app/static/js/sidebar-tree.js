@@ -45,6 +45,16 @@ function _treeEscHtml(str) {
    ────────────────────────── */
 
 // eslint-disable-next-line no-unused-vars
+/**
+ * 해석 API(L5·L6·L7)에 붙이는 권 쿼리 — 뷰어가 연 권을 그대로 쓴다.
+ * 왜: 서버가 권을 «main»으로 박아 두어 다권본 둘째 권의 표점·현토·번역이 첫째 권 파일에
+ * 들어갔다(D-127). sep는 URL에 이미 ?가 있으면 "&".
+ */
+function interpPartQuery(sep = "?") {
+  const pid = (typeof viewerState !== "undefined" && viewerState.partId) || "main";
+  return `${sep}part_id=${encodeURIComponent(pid)}`;
+}
+
 const viewerState = {
   docId: null,         // 현재 선택된 문헌 ID
   partId: null,        // 현재 선택된 권 ID

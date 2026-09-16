@@ -6631,7 +6631,10 @@ D-123은 회전을 권 하나에 값 하나로 두었다. 옆으로 스캔된 �
 4. **주석 API는 권(`part_id`)을 쿼리로 받는다** (④). 조회만 받고 추가·수정·생성은 `"main"`을 박아 두어
    다권본의 둘째 권 주석이 첫째 권 파일에 들어갔다. 화면은 `_annPartQuery()`로 뷰어가 연 권을 모든 주석
    호출에 붙인다. 함수를 직접 부르는 시험은 `part_id="main"`을 명시해야 한다 — FastAPI의 `Query(...)` 기본값은
-   요청 때 해석된다. **L5·L6 라우터(reading.py)도 같은 고정이 있다** — 이번 범위 밖, 같은 방식으로 풀 것.
+   요청 때 해석된다. L5·L6 라우터(reading.py)의 같은 고정 15곳도 같은 날 같은 방식으로 풀었다 —
+   공용 도우미 `interpPartQuery(sep)`(sidebar-tree.js, viewerState 옆)를 표점·현토·번역·인용 편집기의
+   L5·L6 호출 22곳이 붙인다. 시험은 `tests/test_reading_router_part.py`(본문에 `part_id = "main"`이
+   다시 생기면 잡는 잠금 포함).
 
 5. **LLM 답의 항목 목록은 공통 파서 하나로 꺼낸다** (⑥·⑦·⑪). `core/llm_json_items.parse_llm_items()` —
    울타리 벗기기·`{…}` 추출·잘린 답 복구·**기형 항목(null·문자열) 거부**를 한 곳에서 하고, `status`

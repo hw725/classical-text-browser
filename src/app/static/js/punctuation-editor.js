@@ -344,7 +344,7 @@ async function _loadPunctuationData() {
       // 표점 로드 (block_id는 단위 ID)
       const punctBlockId = unitId;
       const punctRes = await fetch(
-        `/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation?block_id=${punctBlockId}`
+        `/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation?block_id=${punctBlockId}${interpPartQuery("&")}`
       );
       if (punctRes.ok) {
         const punctData = await punctRes.json();
@@ -357,7 +357,7 @@ async function _loadPunctuationData() {
       // 기존 LayoutBlock 기반 (하위 호환)
       const [textRes, punctRes] = await Promise.all([
         fetch(`/api/documents/${viewerState.docId}/pages/${viewerState.pageNum}/corrected-text?part_id=${viewerState.partId}`),
-        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation?block_id=${punctState.blockId}`),
+        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation?block_id=${punctState.blockId}${interpPartQuery("&")}`),
       ]);
 
       // 교정된 텍스트에서 해당 블록의 텍스트를 추출
@@ -809,7 +809,7 @@ async function _savePunctuation() {
       : punctState.blockId;
 
     const res = await fetch(
-      `/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation`,
+      `/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation${interpPartQuery()}`,
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },

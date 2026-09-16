@@ -286,8 +286,8 @@ async function _loadHyeontoData() {
       // 현토 + 표점 로드 (block_id는 단위 ID, 접두사 없이)
       const apiBlockId = unitId;
       const [htRes, punctRes] = await Promise.all([
-        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/hyeonto?block_id=${apiBlockId}`),
-        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation?block_id=${apiBlockId}`),
+        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/hyeonto?block_id=${apiBlockId}${interpPartQuery("&")}`),
+        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation?block_id=${apiBlockId}${interpPartQuery("&")}`),
       ]);
 
       hyeontoState.annotations = htRes.ok ? (await htRes.json()).annotations || [] : [];
@@ -298,8 +298,8 @@ async function _loadHyeontoData() {
       // 교정 텍스트 API를 사용하여 해당 블록의 교정된 텍스트를 가져온다.
       const [textRes, htRes, punctRes] = await Promise.all([
         fetch(`/api/documents/${viewerState.docId}/pages/${viewerState.pageNum}/corrected-text?part_id=${viewerState.partId}`),
-        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/hyeonto?block_id=${hyeontoState.blockId}`),
-        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation?block_id=${hyeontoState.blockId}`),
+        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/hyeonto?block_id=${hyeontoState.blockId}${interpPartQuery("&")}`),
+        fetch(`/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/punctuation?block_id=${hyeontoState.blockId}${interpPartQuery("&")}`),
       ]);
 
       // 교정된 텍스트에서 해당 블록의 텍스트를 추출
@@ -646,7 +646,7 @@ async function _saveHyeonto() {
 
   try {
     const res = await fetch(
-      `/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/hyeonto`,
+      `/api/interpretations/${interpState.interpId}/pages/${viewerState.pageNum}/hyeonto${interpPartQuery()}`,
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },

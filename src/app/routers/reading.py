@@ -187,7 +187,12 @@ async def api_punctuation_presets():
 
 
 @router.get("/api/interpretations/{interp_id}/pages/{page_num}/punctuation")
-async def api_get_punctuation(interp_id: str, page_num: int, block_id: str = Query(...)):
+async def api_get_punctuation(
+    interp_id: str,
+    page_num: int,
+    block_id: str = Query(...),
+    part_id: str = Query("main", description="권 식별자"),
+):
     """표점 조회.
 
     목적: 특정 블록의 L5 표점 데이터를 반환한다.
@@ -203,14 +208,17 @@ async def api_get_punctuation(interp_id: str, page_num: int, block_id: str = Que
             status_code=404,
         )
 
-    # part_id는 문헌에서 자동 추론 (현재는 "main" 기본값)
-    part_id = "main"
     data = load_punctuation(interp_path, part_id, page_num, block_id)
     return data
 
 
 @router.put("/api/interpretations/{interp_id}/pages/{page_num}/punctuation")
-async def api_save_punctuation(interp_id: str, page_num: int, body: PunctuationSaveRequest):
+async def api_save_punctuation(
+    interp_id: str,
+    page_num: int,
+    body: PunctuationSaveRequest,
+    part_id: str = Query("main", description="권 식별자"),
+):
     """표점 저장 (전체 덮어쓰기).
 
     목적: 블록의 표점 데이터를 저장한다. 스키마 검증 후 파일 기록.
@@ -226,7 +234,6 @@ async def api_save_punctuation(interp_id: str, page_num: int, body: PunctuationS
             status_code=404,
         )
 
-    part_id = "main"
     data = {"block_id": body.block_id, "marks": body.marks}
 
     try:
@@ -242,14 +249,19 @@ async def api_save_punctuation(interp_id: str, page_num: int, body: PunctuationS
 
 
 @router.post("/api/interpretations/{interp_id}/pages/{page_num}/punctuation/{block_id}/marks")
-async def api_add_mark(interp_id: str, page_num: int, block_id: str, body: MarkAddRequest):
+async def api_add_mark(
+    interp_id: str,
+    page_num: int,
+    block_id: str,
+    body: MarkAddRequest,
+    part_id: str = Query("main", description="권 식별자"),
+):
     """개별 표점 추가."""
     _library_path = get_library_path()
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
     interp_path = require_repo_path("interpretations", interp_id)
-    part_id = "main"
 
     data = load_punctuation(interp_path, part_id, page_num, block_id)
     mark = {"target": body.target, "before": body.before, "after": body.after}
@@ -265,14 +277,19 @@ async def api_add_mark(interp_id: str, page_num: int, block_id: str, body: MarkA
 @router.delete(
     "/api/interpretations/{interp_id}/pages/{page_num}/punctuation/{block_id}/marks/{mark_id}"
 )
-async def api_delete_mark(interp_id: str, page_num: int, block_id: str, mark_id: str):
+async def api_delete_mark(
+    interp_id: str,
+    page_num: int,
+    block_id: str,
+    mark_id: str,
+    part_id: str = Query("main", description="권 식별자"),
+):
     """개별 표점 삭제."""
     _library_path = get_library_path()
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
     interp_path = require_repo_path("interpretations", interp_id)
-    part_id = "main"
 
     data = load_punctuation(interp_path, part_id, page_num, block_id)
     removed = remove_mark(data, mark_id)
@@ -285,7 +302,12 @@ async def api_delete_mark(interp_id: str, page_num: int, block_id: str, mark_id:
 
 
 @router.get("/api/interpretations/{interp_id}/pages/{page_num}/punctuation/{block_id}/preview")
-async def api_punctuation_preview(interp_id: str, page_num: int, block_id: str):
+async def api_punctuation_preview(
+    interp_id: str,
+    page_num: int,
+    block_id: str,
+    part_id: str = Query("main", description="권 식별자"),
+):
     """합성 텍스트 미리보기.
 
     L4 원문에 표점을 적용한 결과 + 문장 분리를 반환.
@@ -295,7 +317,6 @@ async def api_punctuation_preview(interp_id: str, page_num: int, block_id: str):
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
     interp_path = require_repo_path("interpretations", interp_id)
-    part_id = "main"
 
     # 표점 로드
     punct_data = load_punctuation(interp_path, part_id, page_num, block_id)
@@ -322,7 +343,12 @@ async def api_punctuation_preview(interp_id: str, page_num: int, block_id: str):
 
 
 @router.get("/api/interpretations/{interp_id}/pages/{page_num}/hyeonto")
-async def api_get_hyeonto(interp_id: str, page_num: int, block_id: str = Query(...)):
+async def api_get_hyeonto(
+    interp_id: str,
+    page_num: int,
+    block_id: str = Query(...),
+    part_id: str = Query("main", description="권 식별자"),
+):
     """현토 조회."""
     _library_path = get_library_path()
     if _library_path is None:
@@ -335,13 +361,17 @@ async def api_get_hyeonto(interp_id: str, page_num: int, block_id: str = Query(.
             status_code=404,
         )
 
-    part_id = "main"
     data = load_hyeonto(interp_path, part_id, page_num, block_id)
     return data
 
 
 @router.put("/api/interpretations/{interp_id}/pages/{page_num}/hyeonto")
-async def api_save_hyeonto(interp_id: str, page_num: int, body: HyeontoSaveRequest):
+async def api_save_hyeonto(
+    interp_id: str,
+    page_num: int,
+    body: HyeontoSaveRequest,
+    part_id: str = Query("main", description="권 식별자"),
+):
     """현토 저장 (전체 덮어쓰기)."""
     _library_path = get_library_path()
     if _library_path is None:
@@ -354,7 +384,6 @@ async def api_save_hyeonto(interp_id: str, page_num: int, body: HyeontoSaveReque
             status_code=404,
         )
 
-    part_id = "main"
     data = {"block_id": body.block_id, "annotations": body.annotations}
 
     try:
@@ -374,6 +403,7 @@ async def api_add_annotation(
     page_num: int,
     block_id: str,
     body: AnnotationAddRequest,
+    part_id: str = Query("main", description="권 식별자"),
 ):
     """개별 현토 추가."""
     _library_path = get_library_path()
@@ -381,7 +411,6 @@ async def api_add_annotation(
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
     interp_path = require_repo_path("interpretations", interp_id)
-    part_id = "main"
 
     data = load_hyeonto(interp_path, part_id, page_num, block_id)
     annotation = {
@@ -402,14 +431,19 @@ async def api_add_annotation(
 @router.delete(
     "/api/interpretations/{interp_id}/pages/{page_num}/hyeonto/{block_id}/annotations/{ann_id}"
 )
-async def api_delete_annotation(interp_id: str, page_num: int, block_id: str, ann_id: str):
+async def api_delete_annotation(
+    interp_id: str,
+    page_num: int,
+    block_id: str,
+    ann_id: str,
+    part_id: str = Query("main", description="권 식별자"),
+):
     """개별 현토 삭제."""
     _library_path = get_library_path()
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
     interp_path = require_repo_path("interpretations", interp_id)
-    part_id = "main"
 
     data = load_hyeonto(interp_path, part_id, page_num, block_id)
     removed = remove_annotation(data, ann_id)
@@ -422,7 +456,12 @@ async def api_delete_annotation(interp_id: str, page_num: int, block_id: str, an
 
 
 @router.get("/api/interpretations/{interp_id}/pages/{page_num}/hyeonto/{block_id}/preview")
-async def api_hyeonto_preview(interp_id: str, page_num: int, block_id: str):
+async def api_hyeonto_preview(
+    interp_id: str,
+    page_num: int,
+    block_id: str,
+    part_id: str = Query("main", description="권 식별자"),
+):
     """현토 합성 텍스트 미리보기.
 
     표점이 있으면 함께 적용한 결과를 반환.
@@ -432,7 +471,6 @@ async def api_hyeonto_preview(interp_id: str, page_num: int, block_id: str):
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
     interp_path = require_repo_path("interpretations", interp_id)
-    part_id = "main"
 
     # L4 원문 로드
     layer_result = get_layer_content(interp_path, "L5_reading", "main_text", part_id, page_num)
@@ -487,7 +525,9 @@ async def api_get_translations(
 
 
 @router.get("/api/interpretations/{interp_id}/pages/{page_num}/translation/status")
-async def api_translation_status(interp_id: str, page_num: int):
+async def api_translation_status(
+    interp_id: str, page_num: int, part_id: str = Query("main", description="권 식별자")
+):
     """번역 상태 요약.
 
     목적: 페이지의 번역 진행 상황을 한눈에 파악.
@@ -497,13 +537,17 @@ async def api_translation_status(interp_id: str, page_num: int):
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
     interp_path = require_repo_path("interpretations", interp_id)
-    part_id = "main"
     data = load_translations(interp_path, part_id, page_num)
     return get_translation_status(data)
 
 
 @router.post("/api/interpretations/{interp_id}/pages/{page_num}/translation")
-async def api_add_translation(interp_id: str, page_num: int, body: TranslationAddRequest):
+async def api_add_translation(
+    interp_id: str,
+    page_num: int,
+    body: TranslationAddRequest,
+    part_id: str = Query("main", description="권 식별자"),
+):
     """수동 번역 입력.
 
     목적: 사용자가 직접 번역을 입력한다. translator.type = "human", status = "accepted".
@@ -513,7 +557,6 @@ async def api_add_translation(interp_id: str, page_num: int, body: TranslationAd
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
     interp_path = require_repo_path("interpretations", interp_id)
-    part_id = "main"
 
     data = load_translations(interp_path, part_id, page_num)
 
@@ -543,7 +586,11 @@ async def api_add_translation(interp_id: str, page_num: int, body: TranslationAd
 
 @router.put("/api/interpretations/{interp_id}/pages/{page_num}/translation/{translation_id}")
 async def api_update_translation(
-    interp_id: str, page_num: int, translation_id: str, body: TranslationUpdateRequest
+    interp_id: str,
+    page_num: int,
+    translation_id: str,
+    body: TranslationUpdateRequest,
+    part_id: str = Query("main", description="권 식별자"),
 ):
     """번역 수정."""
     _library_path = get_library_path()
@@ -551,7 +598,6 @@ async def api_update_translation(
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
     interp_path = require_repo_path("interpretations", interp_id)
-    part_id = "main"
 
     data = load_translations(interp_path, part_id, page_num)
     updates = {}
@@ -582,7 +628,11 @@ async def api_update_translation(
     "/api/interpretations/{interp_id}/pages/{page_num}/translation/{translation_id}/commit"
 )
 async def api_commit_translation(
-    interp_id: str, page_num: int, translation_id: str, body: TranslationCommitRequest
+    interp_id: str,
+    page_num: int,
+    translation_id: str,
+    body: TranslationCommitRequest,
+    part_id: str = Query("main", description="권 식별자"),
 ):
     """Draft 확정.
 
@@ -593,7 +643,6 @@ async def api_commit_translation(
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
     interp_path = require_repo_path("interpretations", interp_id)
-    part_id = "main"
 
     data = load_translations(interp_path, part_id, page_num)
     result = commit_translation_draft(data, translation_id, body.modifications)
@@ -616,14 +665,18 @@ async def api_commit_translation(
 
 
 @router.delete("/api/interpretations/{interp_id}/pages/{page_num}/translation/{translation_id}")
-async def api_delete_translation(interp_id: str, page_num: int, translation_id: str):
+async def api_delete_translation(
+    interp_id: str,
+    page_num: int,
+    translation_id: str,
+    part_id: str = Query("main", description="권 식별자"),
+):
     """번역 삭제."""
     _library_path = get_library_path()
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
 
     interp_path = require_repo_path("interpretations", interp_id)
-    part_id = "main"
 
     data = load_translations(interp_path, part_id, page_num)
     removed = remove_translation(data, translation_id)
