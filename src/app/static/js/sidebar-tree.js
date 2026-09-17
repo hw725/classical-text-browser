@@ -117,6 +117,9 @@ function _createDocumentNode(doc) {
     <button class="tree-addpart-btn" title="이 문헌에 권 추가 (PDF)">＋</button>
     <button class="tree-delete-btn" title="문헌 삭제 (휴지통 이동)">×</button>
   `;
+  // 긴 제목은 말줄임되므로 전체를 툴팁으로 보인다.
+  // 속성은 DOM으로 넣는다 — _treeEscHtml은 따옴표를 이스케이프하지 않는다
+  header.querySelector(".tree-label").title = doc.title || "";
 
   const children = document.createElement("div");
   children.className = "tree-children";

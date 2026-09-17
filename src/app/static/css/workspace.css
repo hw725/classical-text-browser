@@ -846,6 +846,17 @@ body.resizing-row {
   padding-left: 12px;
 }
 
+/* 제목은 줄어들 수 있어야 한다 — flex 항목의 min-width 기본값은 auto라
+   nowrap인 긴 제목(논문 파일명 55자)이 줄지 않고 뒤의 id 배지·＋·× 단추를
+   헤더 밖으로 밀어냈고, 헤더가 overflow: hidden이라 삭제 단추가 잘려 누를 수 없었다(2026-09-17).
+   전체 제목은 title 툴팁으로 본다 */
+.tree-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .tree-badge {
   color: var(--text-secondary);
   font-size: 11px;
