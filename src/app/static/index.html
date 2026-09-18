@@ -3421,14 +3421,14 @@
                      1단계에서 떨어진 블록은 2단계로 올라가고, 그래도 남은 블록은
                      OCR 패널의 「검토할 쪽」 목록에 선다. -->
                 <label
-                  class="extract-label"
+                  class="extract-field"
                   for="extract-llm-correction"
                 >
                   <span>LLM 교정</span>
                   <select id="extract-llm-correction">
                     <option value="off" selected>끔</option>
-                    <option value="selected">선별만 (신뢰도 낮은 블록·협주·한글)</option>
-                    <option value="all">전체 (비용 큼)</option>
+                    <option value="selected">선별만 (신뢰도 낮은 블록·협주·한글 — 블록마다 1~2회)</option>
+                    <option value="all">전체 (모든 블록 1~2회 — 비용 큼)</option>
                   </select>
                 </label>
 
@@ -5081,7 +5081,7 @@
     <script src="/static/js/pdf-renderer.js?v=20260912"></script>
     <script src="/static/js/text-editor.js?v=20260912"></script>
     <script src="/static/js/koten-layout-detector.js?v=20260221"></script>
-    <script src="/static/js/layout-editor.js?v=20260912"></script>
+    <script src="/static/js/layout-editor.js?v=20260918"></script>
     <script src="/static/js/correction-editor.js?v=20260220c"></script>
     <script src="/static/js/bibliography.js?v=20260220c"></script>
     <script src="/static/js/interpretation.js?v=20260224e"></script>

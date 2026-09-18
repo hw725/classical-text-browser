@@ -1273,6 +1273,9 @@ function activateLayoutMode() {
   // 현재 페이지의 레이아웃 로드
   if (viewerState.docId && viewerState.partId && viewerState.pageNum) {
     loadPageLayout(viewerState.docId, viewerState.partId, viewerState.pageNum);
+    // OCR 결과와 교정 초안도 함께 — 쪽을 옮길 때만 읽으면(onPageChanged) 지금 쪽에서
+    // 레이아웃 모드를 켠 사람은 「검토할 쪽」이 가리킨 초안을 보지 못한다(2026-09-18).
+    if (typeof loadOcrResults === "function") loadOcrResults();
   }
 }
 

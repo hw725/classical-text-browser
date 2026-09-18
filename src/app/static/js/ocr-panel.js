@@ -544,7 +544,10 @@ async function loadOcrResults() {
   const partId = viewerState.partId;
   const pageNum = viewerState.pageNum;
 
-  if (!docId || !partId || !pageNum) return;
+  if (!docId || !partId || !pageNum) {
+    _loadCorrectionDraft(); // 문헌 선택이 풀리면 초안 목록도 비운다(그 함수가 clear까지 한다)
+    return;
+  }
 
   try {
     const resp = await fetch(
@@ -552,10 +555,11 @@ async function loadOcrResults() {
       { cache: "no-store" },
     );
     if (!resp.ok) {
-      // 404 = OCR 결과 없음 (정상)
+      // 404 = OCR 결과 없음 (정상). 초안 목록도 지운다 — OCR을 지운 뒤 옛 초안이 남아 보이면 안 된다
       ocrState.lastResults = null;
       const preview = document.getElementById("ocr-results-preview");
       if (preview) preview.style.display = "none";
+      _loadCorrectionDraft();
       return;
     }
 
@@ -587,21 +591,37 @@ async function loadOcrResults() {
 async function _loadCorrectionDraft() {
   const list = document.getElementById("ocr-correction-list");
   if (!list || typeof viewerState === "undefined") return;
+  const clear = () => {
+    list.innerHTML = "";
+    list.style.display = "none";
+  };
   const { docId, partId, pageNum } = viewerState;
-  if (!docId || !partId || !pageNum) return;
+  if (!docId || !partId || !pageNum) {
+    clear();
+    return;
+  }
+  // 「검토할 쪽」 상자는 권 단위다 — 다른 권·문헌으로 옮겼으면 옛 목록을 감춘다
+  const box = document.getElementById("ocr-correction-review");
+  if (box && box.style.display !== "none" && (box.dataset.docId !== docId || box.dataset.partId !== partId)) {
+    box.style.display = "none";
+  }
   try {
     const res = await fetch(
       `/api/documents/${docId}/parts/${partId}/pages/${pageNum}/ocr/correction-candidates`,
+      { cache: "no-store" },
     );
+    // 늦게 온 응답이 새 쪽을 덮지 않게 (text-editor.js와 같은 규칙) — 다른 쪽의 초안이
+    // 지금 쪽 자리에 그려지면 「적용」이 화면과 다른 글자를 L4에 넣는다
+    if (viewerState.docId !== docId || viewerState.partId !== partId || viewerState.pageNum !== pageNum) return;
     if (!res.ok) {
-      list.innerHTML = "";
-      list.style.display = "none";
+      clear();
       return;
     }
     const data = await res.json();
-    _renderCorrectionDraft(data.draft || { blocks: [] });
+    _renderCorrectionDraft(data.draft || { blocks: [] }, { stale: !!data.stale });
   } catch (e) {
     console.warn("교정 초안 로드 실패:", e);
+    clear();
   }
 }
 
@@ -616,22 +636,42 @@ async function _toggleReviewPages() {
     box.style.display = "none";
     return;
   }
+  await _fetchAndRenderReviewPages();
+}
+
+/** 검토 목록을 읽어 그린다. 성공했을 때만 상자를 바꾼다 — 실패로 열린 상자가 사라지지 않게. */
+async function _fetchAndRenderReviewPages() {
+  const box = document.getElementById("ocr-correction-review");
+  if (!box || typeof viewerState === "undefined") return;
   const { docId, partId } = viewerState;
   if (!docId || !partId) {
     showToast("문헌과 권을 먼저 선택하세요.", "warning");
     return;
   }
   try {
-    const res = await fetch(`/api/documents/${docId}/parts/${partId}/ocr/correction-review`);
+    const res = await fetch(`/api/documents/${docId}/parts/${partId}/ocr/correction-review`, {
+      cache: "no-store",
+    });
     const data = await res.json();
+    // 권을 빠르게 옮기면 옛 권의 목록이 늦게 도착한다 — 지금 권의 것만 그린다
+    if (viewerState.docId !== docId || viewerState.partId !== partId) return;
     if (!res.ok) {
       showToast(data.error || "검토 목록을 읽지 못했습니다.", "error");
       return;
     }
     _renderReviewPages(data);
+    box.dataset.docId = docId;
+    box.dataset.partId = partId;
   } catch (e) {
     showToast(`검토 목록 실패: ${e.message}`, "error");
   }
+}
+
+/** 「검토할 쪽」 상자가 열려 있으면 다시 읽는다(적용 뒤 셈이 바뀐다). */
+async function _refreshReviewPagesIfOpen() {
+  const box = document.getElementById("ocr-correction-review");
+  if (!box || box.style.display === "none") return;
+  await _fetchAndRenderReviewPages();
 }
 
 function _renderReviewPages(data) {
@@ -641,9 +681,10 @@ function _renderReviewPages(data) {
   box.style.display = "";
   const pages = data.pages || [];
   const head = document.createElement("div");
-  head.className = "ocr-result-block-id";
+  head.className = "ocr-correction-head";
   head.textContent = pages.length
-    ? `검토할 쪽 ${pages.length} · 블록 ${data.total_pending || 0}` +
+    ? `검토할 쪽 ${pages.length} · 볼 것 ${data.total_pending || 0}` +
+      (data.total_accepted ? ` · 자동 수용(적용 필요) ${data.total_accepted}` : "") +
       (data.total_errors ? ` · 오류 ${data.total_errors}` : "")
     : "사람이 볼 교정 초안이 남은 쪽이 없습니다.";
   box.appendChild(head);
@@ -654,11 +695,16 @@ function _renderReviewPages(data) {
     row.title = "이 쪽으로 이동";
     const label = document.createElement("span");
     label.className = "ocr-result-text";
-    label.textContent =
-      `${p.page}쪽 — 볼 것 ${p.pending}` +
-      (p.accepted ? ` · 자동 수용 ${p.accepted}` : "") +
-      (p.applied ? ` · 적용됨 ${p.applied}` : "") +
-      (p.errors ? ` · 오류 ${p.errors}` : "");
+    label.textContent = p.corrupt
+      ? `${p.page}쪽 — 초안 파일이 깨짐 (다시 교정하면 새로 만들어집니다)`
+      : p.stale
+        ? `${p.page}쪽 — 초안이 OCR을 다시 돌리기 전의 것 (볼 것 ${p.pending}) — 다시 교정하세요`
+        : `${p.page}쪽 — 볼 것 ${p.pending}` +
+        (p.conflicts ? ` (적용 뒤 답이 바뀐 것 ${p.conflicts})` : "") +
+        (p.accepted ? ` · 자동 수용 ${p.accepted} (적용 필요)` : "") +
+        (p.applied ? ` · 적용됨 ${p.applied}` : "") +
+        (p.errors ? ` · 오류 ${p.errors}` : "");
+    label.title = `${label.textContent} — 누르면 이 쪽으로 이동`;
     row.appendChild(label);
     row.addEventListener("click", () => {
       if (typeof goToPage === "function") goToPage(p.page);
@@ -1122,7 +1168,7 @@ async function _runCorrection(mode, blockIds) {
  * 교정 초안을 블록별로 보여 준다: 이유 · 앵커(엔진) → 교정본 · 일치율 · [적용].
  * 자동 수용 기준을 넘은 블록은 표시만 다르고, 적용은 사람이 누른다.
  */
-function _renderCorrectionDraft(draft) {
+function _renderCorrectionDraft(draft, { stale = false } = {}) {
   const list = document.getElementById("ocr-correction-list");
   if (!list) return;
   const blocks = draft.blocks || [];
@@ -1131,21 +1177,35 @@ function _renderCorrectionDraft(draft) {
   if (!blocks.length) return;
 
   const head = document.createElement("div");
-  head.className = "ocr-result-block-id";
+  head.className = "ocr-correction-head" + (stale ? " is-warning" : "");
   const applied = new Set(draft.applied_blocks || []);
-  head.textContent = "LLM 교정 초안 — L2는 그대로, 적용한 블록만 L4에 들어갑니다";
+  head.textContent = stale
+    ? "이 초안은 OCR을 다시 돌리기 전의 것입니다 — 적용할 수 없습니다. 「LLM 교정(선별)」을 다시 누르세요"
+    : "LLM 교정 초안 — L2는 그대로, 적용한 블록만 L4에 들어갑니다";
   list.appendChild(head);
+  if (draft.stage2_error) {
+    const warn = document.createElement("div");
+    warn.className = "ocr-correction-head is-warning";
+    warn.textContent = `2단계(정밀 판독)가 실패해 1단계 결과만 남았습니다: ${draft.stage2_error}`;
+    list.appendChild(warn);
+  }
 
   for (const b of blocks) {
     const row = document.createElement("div");
     row.className = "ocr-result-item";
     row.title = (b.reasons || []).join(", ");
-    const isApplied = applied.has(b.block_id);
+    // 적용됐어도 그 뒤 다시 읽어 답이 달라졌으면(충돌) 사람이 다시 본다
+    const isConflict = applied.has(b.block_id) && b.applied_text != null && b.applied_text !== b.corrected_text;
+    const isApplied = applied.has(b.block_id) && !isConflict;
     const stageLabel = b.stage === "precise" ? "2단계" : "1단계";
 
     const id = document.createElement("span");
     id.className = "ocr-result-block-id";
-    id.textContent = `${b.block_id} · ${stageLabel} · ${(b.reasons || []).join(", ")}`;
+    id.textContent =
+      `${b.block_id} · ${stageLabel}${b.stage2_error ? "(2단계 실패)" : ""} · ${(b.reasons || []).join(", ")}`;
+    id.title = b.stage2_error
+      ? `2단계(정밀 판독) 실패 — 1단계 답만 남았습니다: ${b.stage2_error}`
+      : id.textContent;
 
     const text = document.createElement("span");
     text.className = "ocr-result-text";
@@ -1153,11 +1213,11 @@ function _renderCorrectionDraft(draft) {
       text.textContent = `실패: ${b.error}`;
     } else if (b.stage1 && b.stage1.corrected_text !== b.corrected_text) {
       // 두 단계의 답이 다르다 — 둘을 나란히 보여 사람이 고른다(D-082)
-      text.textContent =
-        `${b.anchor_text || "(비어있음)"} → 1단계 ${b.stage1.corrected_text || "(비어있음)"}` +
-        ` / 2단계 ${b.corrected_text || "(비어있음)"}`;
+      text.append(`${b.anchor_text || "(비어있음)"} → 1단계 ${b.stage1.corrected_text || "(비어있음)"} / 2단계 `);
+      text.appendChild(_correctedTextNode(b));
     } else {
-      text.textContent = `${b.anchor_text || "(비어있음)"} → ${b.corrected_text || "(비어있음)"}`;
+      text.append(`${b.anchor_text || "(비어있음)"} → `);
+      text.appendChild(_correctedTextNode(b));
     }
 
     const stat = document.createElement("span");
@@ -1167,26 +1227,32 @@ function _renderCorrectionDraft(draft) {
     const pct = Math.round(
       (b.accept_basis === "stages" ? b.stages_agreement || 0 : b.agreement || 0) * 100,
     );
+    const marks =
+      (b.uncertain_count ? ` [?]${b.uncertain_count}` : "") +
+      (b.illegible_count ? ` □${b.illegible_count}` : "");
     stat.textContent = b.error
       ? "—"
       : isApplied
         ? "적용됨"
-        : `${pct}%${b.uncertain_count ? ` [?]${b.uncertain_count}` : ""}`;
+        : `${pct}%${marks}${isConflict ? " 충돌" : ""}`;
+    const basisWord = b.accept_basis === "stages" ? "1단계와 2단계의 답" : "엔진 결과와 교정본";
     stat.title = isApplied
       ? "이미 L4에 들어간 블록"
-      : b.accepted
-        ? b.accept_basis === "stages"
-          ? "1단계와 2단계의 답이 일치 — 자동 수용 기준 통과"
-          : "앵커와 일치율이 높고 불확실 표시가 없음 — 자동 수용 기준 통과"
-        : b.accept_basis === "stages"
-          ? "1단계와 2단계의 답이 다름 — 사람이 고른다"
-          : "사람 확인 필요";
+      : isConflict
+        ? `L4에 들어간 글자(${b.applied_text})와 최신 답이 다르다 — 다시 골라야 한다`
+        : b.accepted
+          ? `${basisWord}이 일치하고 불확실·판독불가 글자가 없음 — 자동 수용 기준 통과`
+          : (b.accept_basis === "stages" ? b.stages_agreement || 0 : b.agreement || 0) < 0.9
+            ? `${basisWord}의 일치율 ${pct}% — 사람이 고른다`
+            : b.uncertain_count || b.illegible_count
+              ? `${basisWord}은 일치하지만 불확실(${b.uncertain_count || 0})·판독불가(${b.illegible_count || 0}) 글자가 있음 — 사람이 본다`
+              : "자동 수용 기준 미달 — 사람이 본다";
 
     row.appendChild(id);
     row.appendChild(text);
     row.appendChild(stat);
 
-    if (!b.error && b.corrected_text && !isApplied) {
+    if (!b.error && b.corrected_text && !isApplied && !stale) {
       const apply = document.createElement("button");
       apply.className = "text-btn text-btn-sm";
       apply.textContent = "적용";
@@ -1201,9 +1267,77 @@ function _renderCorrectionDraft(draft) {
   }
 }
 
+/**
+ * 교정본을 글자 단위로 만든다 — 신뢰도 0.9 미만([?])과 □(판독 불가)인 글자에 표시를 붙여
+ * «어느 글자가 불확실한가»가 사람에게 닿게 한다. 글자 신뢰도는 초안의 lines[].characters에
+ * 있고, 없으면(옛 초안·비어 있음) 평문으로 낸다. 전부 textContent라 이스케이프 걱정이 없다.
+ */
+function _correctedTextNode(b) {
+  const frag = document.createDocumentFragment();
+  const lines = Array.isArray(b.lines) ? b.lines : [];
+  const hasChars = lines.some((ln) => Array.isArray(ln.characters) && ln.characters.length);
+  if (!b.corrected_text) {
+    frag.append("(비어있음)");
+    return frag;
+  }
+  if (!hasChars) {
+    frag.append(b.corrected_text);
+    return frag;
+  }
+  // 엔진은 characters를 만들 때 공백을 건너뛰고(llm_ocr_engine) 줄 텍스트는 공백을 보존한다.
+  // 그래서 줄 텍스트를 글자 단위로 훑되 공백은 그대로 두고, 비공백 글자만 characters와
+  // 짝지어 강조한다. 둘의 개수가 어긋나면(옛 초안·손본 파일) 평문으로 낸다 — 화면의 글자열이
+  // L4에 들어갈 corrected_text와 달라지면 안 된다.
+  const built = document.createDocumentFragment();
+  for (let i = 0; i < lines.length; i++) {
+    const ln = lines[i];
+    if (i > 0) built.append("\n");
+    const text = Array.from(ln.text || "");
+    const chars = Array.isArray(ln.characters) ? ln.characters : [];
+    const nonSpace = text.filter((c) => c.trim() !== "");
+    if (!chars.length || chars.length !== nonSpace.length) {
+      if (chars.length) {
+        frag.append(b.corrected_text);
+        return frag;
+      }
+      built.append(ln.text || "");
+      continue;
+    }
+    let k = 0;
+    for (const c of text) {
+      if (c.trim() === "") {
+        built.append(c);
+        continue;
+      }
+      const ch = chars[k++];
+      const conf = typeof ch.confidence === "number" ? ch.confidence : 1;
+      if (c === "□" || conf < 0.9) {
+        const mark = document.createElement("mark");
+        mark.className = "ocr-uncertain-char";
+        mark.textContent = c;
+        mark.title = c === "□" ? "판독 불가(□)" : `불확실 글자 [?] — 신뢰도 ${conf.toFixed(2)}`;
+        built.appendChild(mark);
+      } else {
+        built.append(c);
+      }
+    }
+  }
+  frag.appendChild(built);
+  return frag;
+}
+
 async function _applyCorrection(blockIds) {
   if (typeof viewerState === "undefined") return;
   const { docId, partId, pageNum } = viewerState;
+  // 편집기에 저장 안 한 수정이 있으면 적용하지 않는다 — 적용은 파일의 L4를 바꾸는데,
+  // 그 뒤 편집기를 저장하면 textarea 전문이 파일을 덮어 방금 적용한 교정이 지워진다
+  if (typeof editorState !== "undefined" && editorState.isDirty) {
+    showToast(
+      "교정 편집기에 저장하지 않은 수정이 있습니다. 먼저 저장(또는 되돌리기)한 뒤 적용하세요 — 지금 적용하면 저장할 때 교정이 지워집니다.",
+      "warning",
+    );
+    return;
+  }
   try {
     const res = await fetch(
       `/api/documents/${docId}/parts/${partId}/pages/${pageNum}/ocr/correct/apply`,
@@ -1228,8 +1362,13 @@ async function _applyCorrection(blockIds) {
       showToast(`교정본을 L4에 적용했습니다: ${(data.applied_blocks || []).join(", ")}`, "success");
     }
     _loadCorrectionDraft();
-    // 교정 탭이 열려 있으면 L4도 다시 읽는다
-    if (typeof loadPageText === "function") loadPageText(docId, partId, pageNum);
+    _refreshReviewPagesIfOpen();
+    // 교정 편집기가 화면에 있고 저장 안 한 수정이 없을 때만 L4를 다시 읽는다 —
+    // loadPageText는 묻지 않고 textarea를 덮어쓴다(text-editor.js)
+    const editor = document.getElementById("text-editor");
+    if (typeof loadPageText === "function" && editor && editor.offsetParent !== null) {
+      loadPageText(docId, partId, pageNum);
+    }
   } catch (e) {
     showToast(`적용 실패: ${e.message}`, "error");
   }
@@ -1240,9 +1379,12 @@ function _hasSelectedBlock() {
 }
 
 function _updateSelectedBlockButton() {
+  const needsBlock = ocrState.running || !_hasSelectedBlock();
   const btn = document.getElementById("ocr-run-selected");
-  if (!btn) return;
-  btn.disabled = ocrState.running || !_hasSelectedBlock();
+  if (btn) btn.disabled = needsBlock;
+  // 「정밀 판독(선택)」도 같은 조건 — HTML에서 disabled로 태어나므로 여기서 풀어 줘야 한다
+  const preciseBtn = document.getElementById("ocr-llm-precise");
+  if (preciseBtn) preciseBtn.disabled = needsBlock;
   _updateDeleteButtonState();
 }
 

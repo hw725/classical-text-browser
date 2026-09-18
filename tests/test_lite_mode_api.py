@@ -1634,3 +1634,157 @@ def test_backup_can_be_turned_off(batch_ready):
         )
     ov = client.get(f"/api/documents/{doc_id}/parts/{part_id}/ocr/overview").json()
     assert ov["pages"][0]["has_backup"] is False
+
+
+
+# ─── LLM 교정 사다리를 켠 일괄 실행 (D-082 이음, 2026-09-18) ─────────────────
+# 회계(corrected_blocks·pending_blocks·review_pages)·자동 수용 L4 반영·mark_applied·
+# 검토 라우트를 가짜 llm_vision 엔진으로 본다. 2026-09-18 교차검증이 잡은 NameError
+# (draft_status가 _run_batch 스코프에 없음)는 이 테스트가 없어서 통과했다.
+
+
+class _FakeVisionEngine(_DummyEngine):
+    """앵커를 받아 정해진 답을 돌려주는 가짜 LLM Vision 엔진."""
+
+    engine_id = "llm_vision"
+    display_name = "시험용 비전"
+
+    def __init__(self, reply):
+        self.reply = reply
+        self.calls = []
+
+    def recognize(
+        self, image_bytes, writing_direction="vertical_rtl", language="classical_chinese", **kwargs
+    ):
+        from ocr.base import OcrBlockResult, OcrCharResult, OcrLineResult
+
+        self.calls.append(kwargs)
+        text = self.reply(kwargs)
+        return OcrBlockResult(
+            lines=[OcrLineResult(text=text, characters=[OcrCharResult(char=c, confidence=0.95) for c in text])],
+            engine_id=self.engine_id,
+            language=language,
+            writing_direction=writing_direction,
+        )
+
+
+def _batch_with_correction(client, doc_id, part_id, pages, mode="ladder"):
+    r = client.post(
+        f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch",
+        json={"engine_id": "dummy", "pages": pages, "llm_correction": "all",
+              "llm_correction_mode": mode, "embed_after": False},
+    )
+    assert r.status_code == 200, r.text
+    return _sse_events(r)
+
+
+def test_batch_ladder_accepts_and_fills_l4(batch_ready):
+    """모델이 엔진과 같은 답 → 1단계 자동 수용 → L4 반영·mark_applied·검토할 쪽 없음."""
+    client, doc_id, part_id = batch_ready
+    from app._state import _get_ocr_pipeline
+
+    _p, registry = _get_ocr_pipeline()
+    vision = _FakeVisionEngine(lambda kw: (kw.get("anchor_text") or "").split("\n")[0])
+    registry.register(vision)
+    try:
+        events = _batch_with_correction(client, doc_id, part_id, [1])
+    finally:
+        registry._engines.pop("llm_vision", None) if hasattr(registry, "_engines") else None
+    page = next(e for e in events if e["type"] == "page")
+    done = next(e for e in events if e["type"] == "complete")
+    # 더미 엔진은 줄 2개를 한 블록으로 내고, 앵커는 두 줄이다 — 가짜 비전은 첫 줄만 돌려주므로
+    # 일치율이 0.9 아래 → 1단계 불합격 → 2단계(think=True) → 두 단계 같은 답 → 수용
+    thinks = [c.get("think") for c in vision.calls]
+    assert thinks == [False, True], thinks
+    assert page["corrected_blocks"] == 1 and page["pending_blocks"] == 0
+    assert done["review_pages"] == []
+    assert not [w for w in done["warnings"] if "교정을 건너뜁니다" in w], done["warnings"]
+    r = client.get(f"/api/documents/{doc_id}/parts/{part_id}/ocr/correction-review")
+    assert r.status_code == 200 and r.json()["pages"] == []
+    r = client.get(f"/api/documents/{doc_id}/parts/{part_id}/pages/1/ocr/correction-candidates")
+    draft = r.json()["draft"]
+    assert draft["applied_blocks"] and draft["run_mode"] == "ladder" and r.json()["stale"] is False
+
+
+def test_batch_ladder_reports_pending_pages(batch_ready):
+    """두 단계가 다른 답 → 사람 검토 → review_pages·검토 라우트에 선다. 적용하면 빠진다."""
+    client, doc_id, part_id = batch_ready
+    from app._state import _get_ocr_pipeline
+
+    _p, registry = _get_ocr_pipeline()
+    n = {"i": 0}
+
+    def reply(kw):
+        n["i"] += 1
+        return "甲乙丙丁" if not kw.get("think") else "甲乙丙戊"
+
+    vision = _FakeVisionEngine(reply)
+    registry.register(vision)
+    try:
+        events = _batch_with_correction(client, doc_id, part_id, [2])
+    finally:
+        registry._engines.pop("llm_vision", None) if hasattr(registry, "_engines") else None
+    page = next(e for e in events if e["type"] == "page")
+    done = next(e for e in events if e["type"] == "complete")
+    assert page["pending_blocks"] == 1 and page["corrected_blocks"] == 0
+    assert done["review_pages"] == [2]
+    r = client.get(f"/api/documents/{doc_id}/parts/{part_id}/ocr/correction-review")
+    body = r.json()
+    assert [p["page"] for p in body["pages"]] == [2] and body["total_pending"] == 1
+    blk = body["pages"][0]
+    assert blk["pending"] == 1 and blk["accepted"] == 0
+    # 사람이 적용 → 목록에서 빠진다
+    r = client.get(f"/api/documents/{doc_id}/parts/{part_id}/pages/2/ocr/correction-candidates")
+    bid = r.json()["draft"]["blocks"][0]["block_id"]
+    assert r.json()["draft"]["blocks"][0]["stage1"]["corrected_text"] == "甲乙丙丁"
+    r = client.post(f"/api/documents/{doc_id}/parts/{part_id}/pages/2/ocr/correct/apply", json={"block_ids": [bid]})
+    assert r.status_code == 200 and r.json()["applied_blocks"] == [bid]
+    assert client.get(f"/api/documents/{doc_id}/parts/{part_id}/ocr/correction-review").json()["pages"] == []
+
+
+def test_batch_rejects_bad_correction_mode(batch_ready):
+    client, doc_id, part_id = batch_ready
+    r = client.post(
+        f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch",
+        json={"engine_id": "dummy", "pages": [1], "llm_correction": "all", "llm_correction_mode": "turbo"},
+    )
+    assert r.status_code == 400 and "ladder" in r.json()["error"]
+
+
+def test_stale_draft_apply_is_409(batch_ready):
+    """OCR을 다시 돌린 뒤의 초안은 적용할 수 없다(409)."""
+    client, doc_id, part_id = batch_ready
+    from app._state import _get_ocr_pipeline
+
+    _p, registry = _get_ocr_pipeline()
+    vision = _FakeVisionEngine(lambda kw: "甲乙" if not kw.get("think") else "甲丙")
+    registry.register(vision)
+    try:
+        _batch_with_correction(client, doc_id, part_id, [3])
+    finally:
+        registry._engines.pop("llm_vision", None) if hasattr(registry, "_engines") else None
+    r = client.get(f"/api/documents/{doc_id}/parts/{part_id}/pages/3/ocr/correction-candidates")
+    assert r.json()["stale"] is False
+    bid = r.json()["draft"]["blocks"][0]["block_id"]
+    # 같은 내용으로 다시 써도(더미 엔진은 결정적) 앵커가 그대로면 낡지 않는다
+    r2 = client.post(f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch",
+                     json={"engine_id": "dummy", "pages": [3], "skip_existing": False, "embed_after": False})
+    assert r2.status_code == 200
+    r = client.get(f"/api/documents/{doc_id}/parts/{part_id}/pages/3/ocr/correction-candidates")
+    assert r.json()["draft"] is not None and r.json()["stale"] is False
+    # L2의 앵커 글자를 바꾼다(다른 엔진으로 다시 읽은 셈) → 낡음 → 적용 409, 목록에 stale
+    import json as _json
+    from pathlib import Path as _Path
+
+    from app._state import get_library_path
+
+    l2_path = _Path(get_library_path()) / "documents" / doc_id / "L2_ocr" / f"{part_id}_page_003.json"
+    l2 = _json.loads(l2_path.read_text(encoding="utf-8"))
+    l2["ocr_results"][0]["lines"][0]["text"] = "완전히 다른 글자"
+    l2_path.write_text(_json.dumps(l2, ensure_ascii=False), encoding="utf-8")
+    r = client.get(f"/api/documents/{doc_id}/parts/{part_id}/pages/3/ocr/correction-candidates")
+    assert r.json()["stale"] is True
+    r = client.post(f"/api/documents/{doc_id}/parts/{part_id}/pages/3/ocr/correct/apply", json={"block_ids": [bid]})
+    assert r.status_code == 409 and "오래됐" in r.json()["error"]
+    body = client.get(f"/api/documents/{doc_id}/parts/{part_id}/ocr/correction-review").json()
+    assert [p.get("stale") for p in body["pages"] if p["page"] == 3] == [True]

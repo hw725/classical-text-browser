@@ -84,6 +84,8 @@ def _library(tmp_path):
         json.dumps(
             {
                 "mode": "fast",
+                # 지문이 없는 초안은 낡은 것으로 본다(2026-09-18) — 지금 L2의 지문을 넣는다
+                "l2_fingerprint": __import__("ocr.correction_pass", fromlist=["x"]).l2_fingerprint(doc, "v1", 3),
                 "blocks": [{"block_id": "b1", "corrected_text": "甲乙戊己", "accepted": True}],
             }
         ),

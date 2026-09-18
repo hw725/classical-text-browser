@@ -471,7 +471,7 @@ class TestLadderJoints:
         cands = select_candidates(_l2(), LAYOUT)
         d = run_correction(pipeline, engine, doc, "doc1", "v1", 1, cands, mode="fast")
         assert rejected_block_ids(d) == ["b3"]  # b2는 자동 수용
-        assert draft_status(d) == {"pending": 1, "accepted": 1, "applied": 0, "errors": 0, "blocks": 2}
+        assert draft_status(d) == {"pending": 1, "accepted": 1, "applied": 0, "errors": 0, "conflicts": 0, "blocks": 2}
 
         mark_applied(doc, "v1", 1, ["b2"])
         st = draft_status(load_draft(doc, "v1", 1))
@@ -532,3 +532,239 @@ class TestLadderRoute:
         )
         assert all(b["stage"] == "fast" for b in draft["blocks"])
         assert len(engine.calls) == 2
+
+
+class TestLadderJointsMore:
+    """2026-09-18 자기 점검에서 잡은 둘: 정밀 판독을 거듭해도 1단계 답이 남는다,
+    자동 수용됐는데 L4에 안 들어간 쪽도 검토 목록에 선다."""
+
+    def test_repeated_precise_keeps_stage1(self, library):
+        root, doc = library
+        engine = _EchoLlmEngine({"孔明卧龍": "孔明臥龍"})
+        pipeline = _pipeline(root, engine)
+        b3 = [c for c in select_candidates(_l2(), LAYOUT) if c.block_id == "b3"]
+        run_correction(pipeline, engine, doc, "doc1", "v1", 1, b3, mode="fast")
+        engine.reply_by_block["孔明卧龍"] = "孔明臥竜"
+        run_correction(pipeline, engine, doc, "doc1", "v1", 1, b3, mode="precise")
+        engine.reply_by_block["孔明卧龍"] = "孔明臥龍"
+        d3 = run_correction(pipeline, engine, doc, "doc1", "v1", 1, b3, mode="precise")
+        e = d3["blocks"][0]
+        assert e["stage1"]["corrected_text"] == "孔明臥龍"  # 첫 1단계 답이 그대로
+        assert e["accept_basis"] == "stages" and e["accepted"] is True
+
+    def test_accepted_unapplied_page_is_listed(self, library):
+        root, doc = library
+        engine = _EchoLlmEngine({"裴楷清通": "裴楷清通", "孔明卧龍": "孔明卧龍"})
+        pipeline = _pipeline(root, engine)
+        d = run_correction(pipeline, engine, doc, "doc1", "v1", 1, select_candidates(_l2(), LAYOUT), mode="fast")
+        assert all(b["accepted"] for b in d["blocks"])
+        pages = list_review_pages(doc, "v1")
+        assert pages and pages[0]["accepted"] == 2 and pages[0]["pending"] == 0
+        mark_applied(doc, "v1", 1, ["b2", "b3"])
+        assert list_review_pages(doc, "v1") == []
+
+
+
+# ─── 교차검증(2026-09-18) 지적에 대한 회귀 테스트 ─────────────────────
+from ocr.correction_pass import (  # noqa: E402
+    discard_draft,
+    draft_is_stale,
+    l2_fingerprint,
+    needs_human,
+)
+
+
+class _FlakyEngine(_EchoLlmEngine):
+    """think=True(2단계) 호출에서만 터지는 엔진 — 2단계 실패 시 1단계 초안 보존을 본다."""
+
+    def recognize(self, image_bytes, writing_direction="vertical_rtl", language="classical_chinese", **kwargs):
+        if kwargs.get("think"):
+            raise RuntimeError("2단계 모델이 죽었다")
+        return super().recognize(image_bytes, writing_direction, language, **kwargs)
+
+
+class _EmptyEngine(_EchoLlmEngine):
+    """빈 답을 내는 엔진."""
+
+    def recognize(self, image_bytes, writing_direction="vertical_rtl", language="classical_chinese", **kwargs):
+        self.calls.append(kwargs)
+        return OcrBlockResult(lines=[], engine_id=self.engine_id, language=language, writing_direction=writing_direction)
+
+
+class TestCrossReviewFixes:
+    def test_stage1_rejects_illegible(self):
+        # □가 섞이면 1단계도 자동 수용하지 않는다 — 2단계와 같은 잣대
+        r = evaluate_block("孔明臥龍", [{"text": "孔明□龍", "characters": [
+            {"char": "孔", "confidence": 0.95}, {"char": "明", "confidence": 0.95},
+            {"char": "□", "confidence": 0.1}, {"char": "龍", "confidence": 0.95}]}])
+        assert r["illegible_count"] == 1 and r["accepted"] is False
+
+    def test_empty_answer_is_counted_as_error(self, library):
+        root, doc = library
+        engine = _EmptyEngine({})
+        pipeline = _pipeline(root, engine)
+        cands = select_candidates(_l2(), LAYOUT)
+        d = run_correction(pipeline, engine, doc, "doc1", "v1", 1, cands, mode="fast")
+        st = draft_status(d)
+        assert st["errors"] == 2 and st["pending"] == 0 and st["accepted"] == 0
+        assert st["pending"] + st["accepted"] + st["errors"] + st["applied"] == st["blocks"]
+        assert needs_human(st)
+        assert [p["page"] for p in list_review_pages(doc, "v1")] == [1]
+
+    def test_stale_draft_detected_and_refused(self, library):
+        root, doc = library
+        engine = _EchoLlmEngine({"孔明卧龍": "孔明臥龍"})
+        pipeline = _pipeline(root, engine)
+        b3 = [c for c in select_candidates(_l2(), LAYOUT) if c.block_id == "b3"]
+        d = run_correction(pipeline, engine, doc, "doc1", "v1", 1, b3, mode="fast")
+        assert d["l2_fingerprint"] == l2_fingerprint(doc, "v1", 1)
+        assert draft_is_stale(doc, "v1", 1, d) is False
+        # OCR을 다시 돌린 셈 — L2가 바뀐다
+        l2 = _l2()
+        l2["ocr_results"][2]["lines"][0]["text"] = "孔明臥龍"
+        (doc / "L2_ocr" / "v1_page_001.json").write_text(json.dumps(l2), encoding="utf-8")
+        assert draft_is_stale(doc, "v1", 1, load_draft(doc, "v1", 1)) is True
+        pages = list_review_pages(doc, "v1")
+        assert pages and pages[0]["stale"] is True  # 감추지 않고 «낡음»으로 올린다
+        from ocr.correction_pass import StaleDraftError
+
+        with pytest.raises(StaleDraftError):
+            apply_draft(doc, "v1", 1, ["b3"])  # 적용 거부
+        # 새 실행은 낡은 초안 위에 병합하지 않는다
+        b2 = [c for c in select_candidates(_l2(), LAYOUT) if c.block_id == "b2"]
+        d2 = run_correction(pipeline, engine, doc, "doc1", "v1", 1, b2, mode="fast")
+        assert [b["block_id"] for b in d2["blocks"]] == ["b2"]
+        assert draft_is_stale(doc, "v1", 1, d2) is False
+
+    def test_fresh_with_no_candidates_discards_old_draft(self, library):
+        root, doc = library
+        engine = _EchoLlmEngine({})
+        pipeline = _pipeline(root, engine)
+        run_correction(pipeline, engine, doc, "doc1", "v1", 1, select_candidates(_l2(), LAYOUT), mode="fast")
+        assert draft_path(doc, "v1", 1).exists()
+        d = run_correction(pipeline, engine, doc, "doc1", "v1", 1, [], mode="fast", fresh=True)
+        assert d["blocks"] == [] and not draft_path(doc, "v1", 1).exists()
+        assert discard_draft(doc, "v1", 1) is False
+
+    def test_corrupt_draft_is_listed_not_hidden(self, library):
+        root, doc = library
+        p = draft_path(doc, "v1", 1)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("{not json", encoding="utf-8")
+        pages = list_review_pages(doc, "v1")
+        assert pages == [{"page": 1, "mode": None, "corrupt": True, "pending": 0, "accepted": 0,
+                          "applied": 0, "errors": 1, "conflicts": 0, "blocks": 0}]
+        # 깨진 L2는 낡음(409)이 아니라 다른 오류로 구분된다
+        assert not issubclass(json.JSONDecodeError, __import__("ocr.correction_pass", fromlist=["x"]).StaleDraftError)
+
+    def test_review_pages_sort_numerically(self, library):
+        root, doc = library
+        for n in (1000, 999, 7):
+            p = draft_path(doc, "v1", n)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps({"blocks": [{"block_id": "x", "corrected_text": "甲"}]}), encoding="utf-8")
+        assert [p["page"] for p in list_review_pages(doc, "v1")] == [7, 999, 1000]
+
+    def test_conflict_after_reapplying_precise(self, library):
+        root, doc = library
+        engine = _EchoLlmEngine({"孔明卧龍": "孔明臥龍"})
+        pipeline = _pipeline(root, engine)
+        b3 = [c for c in select_candidates(_l2(), LAYOUT) if c.block_id == "b3"]
+        run_correction(pipeline, engine, doc, "doc1", "v1", 1, b3, mode="fast")
+        apply_draft(doc, "v1", 1, ["b3"])
+        d = load_draft(doc, "v1", 1)
+        assert d["blocks"][0]["applied_text"] == "孔明臥龍"
+        assert draft_status(d)["applied"] == 1 and draft_status(d)["pending"] == 0
+        # 적용 뒤 다시 읽었더니 답이 다르다 → 충돌 → 사람이 다시 본다
+        engine.reply_by_block["孔明卧龍"] = "孔明臥竜"
+        d2 = run_correction(pipeline, engine, doc, "doc1", "v1", 1, b3, mode="precise")
+        st = draft_status(d2)
+        assert st["conflicts"] == 1 and st["pending"] == 1 and st["applied"] == 0
+        assert list_review_pages(doc, "v1")[0]["conflicts"] == 1
+        # 충돌을 사람이 새 답으로 해소한다 → L4의 옛 적용문이 새 답으로 바뀌고 충돌이 풀린다
+        r = apply_draft(doc, "v1", 1, ["b3"])
+        assert r["applied_blocks"] == ["b3"] and r["not_found_blocks"] == []
+        from core.document import get_page_text
+
+        assert "孔明臥竜" in get_page_text(doc, "v1", 1)["text"]
+        assert draft_status(load_draft(doc, "v1", 1))["conflicts"] == 0
+
+    def test_conflict_apply_reports_not_found_when_old_text_gone(self, library):
+        root, doc = library
+        engine = _EchoLlmEngine({"孔明卧龍": "孔明臥龍"})
+        pipeline = _pipeline(root, engine)
+        b3 = [c for c in select_candidates(_l2(), LAYOUT) if c.block_id == "b3"]
+        run_correction(pipeline, engine, doc, "doc1", "v1", 1, b3, mode="fast")
+        apply_draft(doc, "v1", 1, ["b3"])
+        engine.reply_by_block["孔明卧龍"] = "孔明臥竜"
+        run_correction(pipeline, engine, doc, "doc1", "v1", 1, b3, mode="precise")
+        # 사람이 L4를 손으로 고쳐 옛 적용문이 사라졌다 → «전에 적용했다»로 성공 처리하면 안 된다
+        from core.document import save_page_text
+
+        save_page_text(doc, "v1", 1, "王戎簡要\n\n裴楷清通\n\n손으로 고침")
+        r = apply_draft(doc, "v1", 1, ["b3"])
+        assert r["applied_blocks"] == [] and r["not_found_blocks"] == ["b3"]
+
+    def test_stage2_error_block_is_not_reescalated(self):
+        d = {"applied_blocks": [], "blocks": [
+            {"block_id": "x", "corrected_text": "甲", "accepted": False, "stage2_error": "죽음"},
+            {"block_id": "y", "corrected_text": "乙", "accepted": False}]}
+        assert rejected_block_ids(d) == ["y"]
+
+    def test_draft_without_fingerprint_is_stale(self, library):
+        root, doc = library
+        assert draft_is_stale(doc, "v1", 1, {"blocks": []}) is True
+        assert draft_is_stale(doc, "v1", 1, None) is False
+
+    def test_fingerprint_ignores_non_anchor_fields(self, library):
+        root, doc = library
+        before = l2_fingerprint(doc, "v1", 1)
+        l2 = _l2()
+        l2["rotation"] = 90  # 앵커와 무관한 필드
+        (doc / "L2_ocr" / "v1_page_001.json").write_text(json.dumps(l2), encoding="utf-8")
+        assert l2_fingerprint(doc, "v1", 1) == before
+
+    def test_error_block_is_not_escalated(self):
+        d = {"applied_blocks": [], "blocks": [
+            {"block_id": "e", "error": "x"}, {"block_id": "p", "corrected_text": "甲", "accepted": False},
+            {"block_id": "a", "corrected_text": "乙", "accepted": True}, {"corrected_text": "無"}]}
+        assert rejected_block_ids(d) == ["p"]
+        assert merge_draft({"blocks": [{"v": 1}], "applied_blocks": []}, {"blocks": [{"block_id": "p"}]})["blocks"] == [{"block_id": "p"}]
+
+    def test_run_mode_is_recorded(self, library):
+        root, doc = library
+        engine = _EchoLlmEngine({})
+        pipeline = _pipeline(root, engine)
+        d = run_correction(pipeline, engine, doc, "doc1", "v1", 1, select_candidates(_l2(), LAYOUT), mode="fast", run_mode="ladder")
+        assert d["run_mode"] == "ladder" and d["mode"] == "fast"
+
+
+class TestLadderRouteMore:
+    def test_ladder_with_user_block_ids(self, library):
+        root, doc = library
+        from app.routers import llm_ocr as router_mod
+
+        engine = _EchoLlmEngine({"王戎簡要": "王戎簡要"})
+        pipeline = _pipeline(root, engine)
+        # b1은 기계적 선별에 안 걸리는 블록 — 사람이 지정하면 사다리를 탄다
+        d = router_mod._run_page_correction(doc, "doc1", "v1", 1, pipeline, pipeline.registry, block_ids=["b1"])
+        assert [b["block_id"] for b in d["blocks"]] == ["b1"]
+        assert d["blocks"][0]["reasons"] == ["user"] and d["blocks"][0]["accepted"] is True
+        assert d["run_mode"] == "ladder"
+
+    def test_stage2_failure_keeps_stage1_draft(self, library):
+        root, doc = library
+        from app.routers import llm_ocr as router_mod
+
+        engine = _FlakyEngine({"裴楷清通": "裴楷清通", "孔明卧龍": "孔明臥龍"})
+        pipeline = _pipeline(root, engine)
+        d = router_mod._run_page_correction(doc, "doc1", "v1", 1, pipeline, pipeline.registry, mode="ladder")
+        by_id = {b["block_id"]: b for b in d["blocks"]}
+        # 블록 단위 오류는 run_correction이 삼키고 항목에 적는다 — 1단계 답은 그대로 남는다
+        assert set(by_id) == {"b2", "b3"} and by_id["b3"]["stage"] == "fast"
+        assert by_id["b3"]["corrected_text"] == "孔明臥龍" and by_id["b3"]["accepted"] is False
+        assert "2단계 모델이 죽었다" in by_id["b3"]["stage2_error"]
+        assert draft_status(d)["pending"] == 1  # 사람에게 간다
+        on_disk = load_draft(doc, "v1", 1)
+        assert {b["block_id"] for b in on_disk["blocks"]} == {"b2", "b3"}
+        assert [p["page"] for p in list_review_pages(doc, "v1")] == [1]

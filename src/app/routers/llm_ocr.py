@@ -127,16 +127,17 @@ class OcrBatchRequest(BaseModel):
     force_provider: str | None = None
     force_model: str | None = None
     paddle_lang: str | None = None
-    # 추론 제어 (llm_vision 전용, D-083). 일괄 OCR의 기본은 사고 끔이다 —
-    # 사고는 D-082의 2단계(정밀 판독)에서만 켠다.
+    # 추론 제어 (llm_vision 전용, D-083). 일괄 OCR 자체의 기본은 사고 끔이다.
+    # 단, 아래 llm_correction을 켜면 사다리의 2단계(정밀 판독)가 그 안에서 사고를 켠다.
     llm_think: bool | str | None = None
     llm_thinking_budget: int | None = None
-    # LLM 교정 패스 (D-082 1단계). "off" | "selected"(기계적 선별) | "all"(전량).
+    # LLM 교정 사다리 (D-082). "off" | "selected"(기계적 선별) | "all"(전량).
     #
-    # 왜 기본이 off인가: 엔진 OCR은 무료·빠름인데 LLM 교정은 쪽당 수십 초에 비용이
-    # 든다. 켜는 것은 사용자의 선택이어야 한다. "selected"는 신뢰도가 낮은 블록·
-    # 협주·한글 미지원 엔진의 결과만 다시 본다. 결과는 L4 초안이고 자동 수용 기준을
-    # 넘은 블록만 L4에 들어간다(나머지는 엔진 결과 그대로).
+    # 왜 기본이 off인가: 엔진 OCR은 무료·빠름인데 LLM 교정은 블록마다 1~2회(2단계는
+    # 사고 켬) 호출이 나간다. 켜는 것은 사용자의 선택이어야 한다. "selected"는 신뢰도가
+    # 낮은 블록·협주·한글 미지원 엔진의 결과만 다시 본다. 결과는 L4 초안이고 자동 수용
+    # 기준을 넘은 블록만 L4에 들어간다(나머지는 엔진 결과 그대로). 남은 블록은
+    # 완료 이벤트의 review_pages와 「검토할 쪽」에 선다.
     llm_correction: str = "off"
     # "ladder"(1단계 → 떨어진 블록만 2단계, 기본) | "fast"(1단계만) | "precise"(2단계만).
     llm_correction_mode: str = "ladder"
@@ -1457,7 +1458,7 @@ def _run_page_correction(
     *,
     block_ids: list[str] | None = None,
     select_all: bool = False,
-    mode: str = "fast",
+    mode: str = "ladder",
     confidence_threshold: float | None = None,
     force_provider: str | None = None,
     force_model: str | None = None,
@@ -1505,21 +1506,24 @@ def _run_page_correction(
     engine = registry.get_engine("llm_vision")
     bundle, hint_pairs = _correction_dicts(doc_path)
 
-    prev_text = next_text = None
-    if mode in ("precise", "ladder"):
-        # 행초용 문맥: 앞뒤 쪽의 확정본 (없으면 None)
-        for delta, setter in ((-1, "prev"), (1, "next")):
-            try:
-                info = get_page_text(doc_path, part_id, page_number + delta)
-                text = info.get("text") or None
-            except Exception:  # noqa: BLE001
+    neighbours: dict = {}
+
+    def _neighbour_text() -> tuple[str | None, str | None]:
+        # 행초용 문맥: 앞뒤 쪽의 확정본 (없으면 None). 2단계가 실제로 돌 때만 읽는다 —
+        # 사다리의 1단계는 쓰지 않으므로 쪽마다 L4 두 번 읽기가 헛돈다.
+        if "prev" not in neighbours:
+            for delta, key in ((-1, "prev"), (1, "next")):
                 text = None
-            if setter == "prev":
-                prev_text = text
-            else:
-                next_text = text
+                if page_number + delta >= 1:
+                    try:
+                        text = get_page_text(doc_path, part_id, page_number + delta).get("text") or None
+                    except Exception:  # noqa: BLE001
+                        text = None
+                neighbours[key] = text
+        return neighbours["prev"], neighbours["next"]
 
     def _run(stage_mode: str, cands, *, fresh_run: bool) -> dict:
+        prev_text, next_text = _neighbour_text() if stage_mode == "precise" else (None, None)
         return run_correction(
             pipeline,
             engine,
@@ -1529,6 +1533,7 @@ def _run_page_correction(
             page_number,
             cands,
             mode=stage_mode,
+            run_mode=mode,
             llm_kwargs=llm_kwargs_for_mode(
                 stage_mode,
                 thinking_budget=thinking_budget,
@@ -1563,7 +1568,20 @@ def _run_page_correction(
         )
         for bid in escalate
     ]
-    return _run("precise", stage2, fresh_run=False)
+    try:
+        return _run("precise", stage2, fresh_run=False)
+    except Exception as e:  # noqa: BLE001 — 2단계가 터져도 저장된 1단계 초안은 살아 있다
+        logger.warning(f"{page_number}쪽 2단계(정밀 판독) 실패 — 1단계 초안으로 돌려준다: {e}")
+        draft["stage2_error"] = str(e)
+        # 응답에만 두면 쪽을 다시 열 때 사라진다 — 초안 파일에도 적어 화면이 «2단계 빠짐»을 보인다
+        try:
+            from core.document import write_json_atomic
+            from ocr.correction_pass import draft_path
+
+            write_json_atomic(draft_path(doc_path, part_id, page_number), draft)
+        except Exception as e2:  # noqa: BLE001 — 기록 실패로 1단계 결과까지 잃지 않는다
+            logger.warning(f"{page_number}쪽 2단계 실패 기록을 초안에 쓰지 못했습니다: {e2}")
+        return draft
 
 
 @router.get("/api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr/correction-candidates")
@@ -1581,6 +1599,7 @@ async def api_correction_candidates(
     from core.document import get_page_layout
     from ocr.correction_pass import (
         DEFAULT_CONFIDENCE_THRESHOLD,
+        draft_is_stale,
         load_draft,
         select_candidates,
     )
@@ -1603,10 +1622,13 @@ async def api_correction_candidates(
         document_language=_document_language(doc_path),
         select_all=select_all,
     )
+    draft = load_draft(doc_path, part_id, page_number)
     return {
         "engine": l2_page.get("ocr_engine"),
         "candidates": [c.to_dict() for c in candidates],
-        "draft": load_draft(doc_path, part_id, page_number),
+        "draft": draft,
+        # L2가 바뀐 뒤의 초안이면 True — 화면은 「적용」을 감추고 다시 교정하라고 알린다
+        "stale": draft_is_stale(doc_path, part_id, page_number, draft),
     }
 
 
@@ -1661,7 +1683,9 @@ async def api_correction_review(doc_id: str, part_id: str):
 
     목적: 일괄 OCR에 LLM 교정을 켜고 나면 자동 수용 블록은 L4에 들어가지만 떨어진 블록은
           초안 파일에만 남는다. 어느 쪽을 열어야 하는지 이 목록이 답한다.
-    출력: {"pages": [{page, pending, accepted, applied, errors, mode}], "total_pending": n}
+    출력: {"pages": [{page, pending, accepted, applied, errors, conflicts, mode, corrupt?}],
+           "total_pending": n, "total_accepted": n, "total_errors": n}
+    accepted는 «자동 수용됐는데 아직 L4에 안 들어간 것»이다(사람이 「적용」을 눌러야 한다).
     """
     from ocr.correction_pass import list_review_pages
 
@@ -1670,6 +1694,7 @@ async def api_correction_review(doc_id: str, part_id: str):
     return {
         "pages": pages,
         "total_pending": sum(p["pending"] for p in pages),
+        "total_accepted": sum(p["accepted"] for p in pages),
         "total_errors": sum(p["errors"] for p in pages),
     }
 
@@ -1679,13 +1704,16 @@ async def api_apply_correction(
     doc_id: str, part_id: str, page_number: int, body: CorrectionApplyRequest
 ):
     """교정 초안을 L4에 쓴다. block_ids가 없으면 자동 수용된 블록만 (D-082)."""
-    from ocr.correction_pass import apply_draft
+    from ocr.correction_pass import StaleDraftError, apply_draft
 
     doc_path = require_repo_path("documents", doc_id)
     try:
         return apply_draft(doc_path, part_id, page_number, body.block_ids)
     except FileNotFoundError as e:
         return JSONResponse({"error": str(e)}, status_code=404)
+    except StaleDraftError as e:
+        # 낡은 초안(OCR을 다시 돌린 뒤) — 충돌. 깨진 JSON의 ValueError는 아래 500으로 간다
+        return JSONResponse({"error": str(e)}, status_code=409)
     except Exception as e:  # noqa: BLE001
         return JSONResponse({"error": f"초안 적용 실패: {e}"}, status_code=500)
 
@@ -2691,7 +2719,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
         import json as _json
 
         from core.document import get_corrected_text
-        from ocr.correction_pass import compose_page_text, draft_status
+        from ocr.correction_pass import compose_page_text
 
         try:
             l4 = (get_corrected_text(dp, pid, page).get("corrected_text") or "").strip()
@@ -2715,6 +2743,14 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
         total_lines = 0
         # LLM 교정 뒤 사람이 볼 블록이 남은 쪽 — 완료 이벤트로 알려 «어딜 열어야 하나»에 답한다
         review_pages: list[int] = []
+        # 이 함수 스코프에 직접 import한다 — 중첩 함수(_l4_is_hand_edited) 안의 import는
+        # 여기서 보이지 않는다(2026-09-18 교차검증이 잡은 NameError).
+        from ocr.correction_pass import (
+            draft_is_stale,
+            draft_status,
+            load_draft,
+            needs_human,
+        )
 
         # 이번 배치에서 쓴 LLM 사용량만 집계하려고 시작 지점을 기억한다.
         usage_start = _usage_snapshot()
@@ -2846,13 +2882,14 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                                     fresh=True,
                                 ),
                             )
-                            _st = draft_status(correction_draft)
-                            corrected_blocks = _st["accepted"]
-                            pending_blocks = _st["pending"] + _st["errors"]
-                            if pending_blocks:
-                                review_pages.append(page_number)
                         except Exception as e:  # noqa: BLE001 — 교정 실패로 OCR 결과를 버리지 않는다
                             warnings.append(f"{page_number}쪽 LLM 교정을 건너뜁니다: {e}")
+                            # 1단계 초안은 저장된 뒤일 수 있다 — 디스크에서 다시 읽어 회계에 넣는다.
+                            # (지금 L2의 것일 때만. 옛 초안이면 버린다)
+                            on_disk = load_draft(doc_path, part_id, page_number)
+                            # 지문이 지금 L2와 같은 초안만 — 지문 없는 옛 초안은 draft_is_stale이 낡음으로 본다
+                            if on_disk and not draft_is_stale(doc_path, part_id, page_number, on_disk):
+                                correction_draft = on_disk
 
                     # 3) OCR 텍스트를 교정 텍스트(L4)에도 넣는다.
                     #
@@ -2894,6 +2931,21 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                                 "→ 교정 탭이 비어 보이면 해당 쪽에서 "
                                 "「OCR 채우기」를 눌러 주세요."
                             )
+                    # 3.5) 교정 회계 — L4 반영(mark_applied)까지 끝난 뒤 디스크의 초안으로 센다.
+                    #      try 밖이다: 여기 버그가 «교정 실패»로 위장되면 안 된다.
+                    if correction_draft:
+                        final_draft = load_draft(doc_path, part_id, page_number) or correction_draft
+                        if final_draft.get("stage2_error"):
+                            warnings.append(
+                                f"{page_number}쪽 2단계(정밀 판독)가 실패해 1단계 결과만 남았습니다: "
+                                f"{final_draft['stage2_error']}"
+                            )
+                        _st = draft_status(final_draft)
+                        # 자동 수용 = 이번에 L4에 들어간 것 + (keep_l4 등으로) 아직 안 들어간 것
+                        corrected_blocks = _st["accepted"] + _st["applied"]
+                        pending_blocks = _st["pending"] + _st["errors"]
+                        if needs_human(_st):
+                            review_pages.append(page_number)
                     await progress_queue.put(
                         {
                             "type": "page",

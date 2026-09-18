@@ -154,7 +154,7 @@ def _reference_text(doc_path: Path, part_id: str, page: int) -> Optional[str]:
 
 def evaluate_page(doc_path: Path, part_id: str, page: int, variant_dict=None) -> PageCer:
     """한 쪽의 L2(및 초안) CER을 잰다."""
-    from ocr.correction_pass import block_text, compose_page_text, load_draft
+    from ocr.correction_pass import block_text, compose_page_text, draft_is_stale, load_draft
 
     l2 = _read_json(doc_path / "L2_ocr" / f"{part_id}_page_{page:03d}.json")
     ref = _reference_text(doc_path, part_id, page)
@@ -169,6 +169,8 @@ def evaluate_page(doc_path: Path, part_id: str, page: int, variant_dict=None) ->
     result = PageCer(page, engine, ref_chars, compute_cer(l2_text, ref, variant_dict))
 
     draft = load_draft(doc_path, part_id, page)
+    if draft and draft_is_stale(doc_path, part_id, page, draft):
+        draft = None  # L2가 바뀐 뒤의 초안 — 새 L2와 섞어 재면 통계가 거짓이 된다
     if draft:
         # 자동 수용된 블록만 넣은 텍스트 — 일괄 OCR이 실제로 L4에 쓰는 것과 같은 규칙
         draft_text = compose_page_text(l2, draft)

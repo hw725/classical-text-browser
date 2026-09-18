@@ -272,9 +272,21 @@ function _updateExtractCost() {
   }
   const engineId = select && select.value;
   const usesLlm = engineId === "llm_vision";
-  costEl.textContent = usesLlm
+  // LLM 교정 사다리를 켜면 엔진과 별개로 호출이 더 나간다 — 블록마다 1단계 1회,
+  // 떨어지면 2단계(추론 켬) 1회 더. 켜 놓고 «호출 없음»이라 적으면 거짓이다.
+  const corr = document.getElementById("extract-llm-correction");
+  const corrOn = corr && corr.value && corr.value !== "off";
+  let text = usesLlm
     ? `${count}쪽 → LLM 호출 ${count}회`
-    : `${count}쪽 (오프라인 엔진 — LLM 호출 없음)`;
+    : corrOn
+      ? `${count}쪽 (인식은 오프라인 엔진)`
+      : `${count}쪽 (오프라인 엔진 — LLM 호출 없음)`;
+  if (corrOn) {
+    text += corr.value === "all"
+      ? " + LLM 교정: 모든 블록 1~2회 (2단계는 추론 켬)"
+      : " + LLM 교정: 선별 블록마다 1~2회 (2단계는 추론 켬)";
+  }
+  costEl.textContent = text;
 }
 
 /**
@@ -1283,6 +1295,9 @@ function initExtractPanel() {
   // 강제 재실행을 켜고 끄면 «몇 쪽이 도는가»가 달라진다. 그 자리에서 바꾼다.
   const force = document.getElementById("extract-force-redo");
   if (force) force.addEventListener("change", _refreshExtractPending);
+  // LLM 교정을 켜고 끄면 비용 줄이 바뀐다 — 켜 놓고 «호출 없음»으로 남으면 안 된다
+  const corr = document.getElementById("extract-llm-correction");
+  if (corr) corr.addEventListener("change", _updateExtractCost);
 
   // 사용자가 직접 접었으면 다음부터 자동으로 펼치지 않는다.
   const overview = document.getElementById("extract-overview");

@@ -909,6 +909,27 @@ body.resizing-row {
   display: inline-block;
 }
 
+/* 교정 초안에서 불확실([?])·판독 불가(□) 글자 — 개수만이 아니라 자리가 보여야 한다(D-082 3단계) */
+.ocr-uncertain-char {
+  background: rgba(239, 68, 68, 0.18); /* 다크·라이트 어느 테마에서도 배경 위에 얹힌다 */
+  color: var(--color-danger);
+  border-bottom: 1px dotted currentColor;
+  padding: 0 1px;
+}
+
+/* 교정 초안·검토 목록의 머리글 — .ocr-result-block-id의 140px·한 줄 제한을 쓰면
+   «적용할 수 없습니다 — 다시 누르세요» 같은 행동 지시가 잘려 나간다 */
+.ocr-correction-head {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: normal;
+  line-height: 1.4;
+  padding: 2px 0 4px;
+}
+.ocr-correction-head.is-warning {
+  color: var(--color-danger);
+}
+
 /* 편성 모드 단위 삭제 버튼 */
 .comp-tb-delete-btn {
   display: inline-block;

@@ -122,7 +122,7 @@ src/app/
 | 모듈 | 하는 일 |
 |---|---|
 | `src/ocr/ocr_prompt.py` | LLM OCR 프롬프트를 다섯 조각(정책·문헌 지침·블록 종류·자형 주의·앵커)으로 **조립**. `[?]`·`□`를 글자 신뢰도로 변환. 도메인 목록을 코드에 하드코딩하지 않는다 |
-| `src/ocr/correction_pass.py` | 승급 사다리 1·2단계와 이음(2026-09-18). 기계적 선별 → 앵커 있는 LLM 교정(사고 끔) → 떨어진 블록만 정밀 판독(문맥 확대·사고 켬, 판정은 **두 단계의 일치**). 초안은 쪽마다 하나이고 **블록 단위로 병합**된다(`merge_draft`). **L2는 건드리지 않고** L4 초안만 만든다. `list_review_pages`가 사람이 볼 쪽을 센다(라우트 `correction-review`, 화면 「검토할 쪽」) |
+| `src/ocr/correction_pass.py` | 승급 사다리 1·2단계와 이음(2026-09-18). 기계적 선별 → 앵커 있는 LLM 교정(사고 끔) → 떨어진 블록만 정밀 판독(문맥 확대·사고 켬, 판정은 **두 단계의 일치**). 초안은 쪽마다 하나이고 **블록 단위로 병합**되며 L2 지문(`l2_fingerprint`)을 품어 OCR을 다시 돌리면 낡은 것으로 판정된다(`draft_is_stale`). 승급 조립(1단계 → 떨어진 블록만 2단계)은 `llm_ocr._run_page_correction`이 한다. **L2는 건드리지 않고** L4 초안만 만든다. `list_review_pages`가 사람이 볼 쪽을 센다(라우트 `correction-review`, 화면 「검토할 쪽」). 일괄 경로는 `tests/test_lite_mode_api.py`의 가짜 비전 엔진으로 잰다 |
 | `src/ocr/eval_cer.py` · `scripts/eval_cer.py` | L4 확정본을 정답으로 L2·초안의 CER. 프롬프트를 바꿨으면 이것으로 잰다 |
 | `src/core/variant_sources.py` · `scripts/build_variant_dicts.py` | 이체자 사전 원자료(OpenCC·Unihan·cjkvi) 파서와 생성. 파일마다 `_tier`·`_source` |
 | `src/ocr/line_block_match.py` | 쪽 단위 엔진(NDL 셋)이 쪽 전체에서 찾은 행을 LayoutBlock에 배정. **블록 밖 행은 버린다.** 그래서 파이프라인이 커버리지 조건 없이 언제나 쪽 전체에 돌린다(D-086) |
