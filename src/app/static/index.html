@@ -1559,6 +1559,10 @@
                   <label class="text-toolbar-check" title="이미 OCR 결과가 있는 쪽도 다시 읽습니다(덮기 전 백업을 남깁니다). 끄면 결과 없는 쪽만 돕니다">
                     <input id="ocr-batch-redo" type="checkbox" /> 된 쪽도 다시
                   </label>
+                  <!-- 돌아간 쪽 세우기(D-126 덧붙임 2026-09-18) — OCR 직전에 코드만으로 누운 쪽을 찾아 구간으로 묻고 저장한 뒤 OCR. LLM 없음 -->
+                  <label class="text-toolbar-check" title="OCR 직전에 옆으로 누운 쪽을 찾아(모델 없이 코드가 잼) 구간으로 보이고, 확인하면 그 쪽 범위의 회전을 저장한 뒤 OCR합니다. 한 PDF에 세로 본문과 가로로 돌린 쪽이 섞여 있을 때 켜 두세요">
+                    <input id="ocr-batch-orient" type="checkbox" checked /> 돌아간 쪽은 세워서
+                  </label>
                   <!-- 훑어보기 계획(D-126 덧붙임) — 구간별 엔진. JS가 채운다 -->
                   <div id="ocr-batch-plan" class="ocr-engine-note" hidden></div>
                   <button

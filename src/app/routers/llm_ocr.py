@@ -1000,6 +1000,15 @@ class PageSurveyRequest(BaseModel):
     force_model: str | None = None
     dry_run: bool = False  # True면 모델을 부르지 않고 «몇 쪽·호출 몇 번»만
     stream: bool = False  # True면 SSE로 쪽마다 진행을 보낸다(화면 진행 막대, 2026-09-11)
+    # «돌아간 쪽은 세워서»(D-126 덧붙임 2026-09-18): 방향만 — 비전 모델을 부르지 않고 GPU 게이트도
+    # 지나지 않는다. 투영으로 누운 쪽만 찾고, GPU면 PaddleOCR 점수로 90/270을 가르고, CPU면 추정
+    # (guess)으로 두어 화면이 미리보기로 묻는다. 바로 선 쪽의 180° 검사는 하지 않는다 — 그것까지
+    # 하면 쪽마다 OCR 둘이라 CPU에서 한 시간이다. 「권 전체 OCR」이 실행 직전에 이것으로 부른다
+    orientation_only: bool = False
+
+
+# 방향만 잴 때 진행 표시에 찍는 말 — 종류 라벨이 없으니 방향을 보인다
+_ORIENT_LABELS = {"upright": "바로 섬", "sideways": "누움", "upside_down": "뒤집힘"}
 
 
 def _survey_progress(progress, row: dict, done: int, total: int, labels: dict) -> None:
@@ -1007,6 +1016,12 @@ def _survey_progress(progress, row: dict, done: int, total: int, labels: dict) -
     if progress is None:
         return
     content = row.get("content")
+    if row.get("mixed"):
+        label = "섞임"
+    elif content:
+        label = labels.get(content, content)
+    else:
+        label = _ORIENT_LABELS.get(row.get("orientation") or "", "?")
     progress(
         {
             "type": "page",
@@ -1014,7 +1029,7 @@ def _survey_progress(progress, row: dict, done: int, total: int, labels: dict) -
             "total": total,
             "page": row.get("page"),
             "content": content,
-            "label": ("섞임" if row.get("mixed") else labels.get(content or "", content or "?")),
+            "label": label,
             "orientation": row.get("orientation"),
             "engine": row.get("engine"),
             "mixed": bool(row.get("mixed")),
@@ -1028,11 +1043,15 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
     코드가 회전이 다른 구간과 쪽마다 알맞은 OCR 엔진을 제안한다. 저장·실행은 화면이 사람에게 묻는다.
 
     출력: {"checked", "calls", "unknown",
-           "rotation": [{"from","to","rotation","current_rotation","pages","effect"}],
+           "rotation": [{"from","to","rotation","current_rotation","pages","effect","guess"}],
            "engines": [{"from","to","engine","display_name","content","label","pages"}],
            "mixed": [{"page","contents","label"}] — 종류가 둘 이상이라 영역별 OCR이 필요한 쪽,
            "per_page": [...], "provider", "model", "error"}
-    dry_run이면 {"dry_run": True, "pages", "calls"}.
+    dry_run이면 {"dry_run": True, "pages", "calls", "ocr_calls"(상한)}.
+
+    orientation_only=True면(«돌아간 쪽은 세워서», 2026-09-18) 비전 모델을 부르지 않고 방향만 잰다 —
+    GPU 게이트를 지나지 않고, "calls": 0·"engines": []·"mixed": []이며, 누운 쪽만 "rotation"에 오른다.
+    GPU이고 PaddleOCR이 있을 때만 90/270을 점수로 가르고 아니면 "guess": True(화면이 미리보기로 묻는다).
     """
     from app._state import _get_llm_router
     from core.document import get_document_info, page_rotation
@@ -1057,8 +1076,9 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
     library_path = get_library_path()
     if library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
-    if not gpu_runtime():
-        # 사용자 지시(2026-09-10): CPU에서 한 시간 걸리는 일을 열어 두지 않는다 — dry_run도 막는다
+    if not body.orientation_only and not gpu_runtime():
+        # 사용자 지시(2026-09-10): CPU에서 한 시간 걸리는 일을 열어 두지 않는다 — dry_run도 막는다.
+        # 방향만(orientation_only)은 투영뿐이라 CPU에서도 즉시 끝나므로 연다 — OCR 점수는 GPU에서만 잰다
         return JSONResponse({"error": GPU_ONLY_MESSAGE, "gpu_only": True}, status_code=400)
     doc_dir = library_path / "documents" / doc_id
     if not doc_dir.exists():
@@ -1067,7 +1087,9 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
     part = next((x for x in info.get("parts") or [] if x.get("part_id") == part_id), None)
     if part is None:
         return JSONResponse({"error": f"권을 찾을 수 없습니다: {part_id}"}, status_code=404)
-    total = int(part.get("page_count") or 0)
+    # manifest에 page_count가 없는 문헌(add_document로 만든 것)은 PDF를 열어 센다 — 배치 라우트와 같은
+    # 이유. 화면에는 쪽이 보이는데 «쪽 수를 몰라»로 400이 났다(2026-09-18 E2E 실측)
+    total = _resolve_page_count(doc_dir, part)
     a, b = 1, total
     if body.pages:
         if len(body.pages) != 2 or body.pages[0] < 1 or body.pages[1] < body.pages[0]:
@@ -1086,8 +1108,9 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
         return {
             "dry_run": True,
             "pages": len(targets),
-            "calls": len(targets),
-            # 180°·90/270 판정용 OCR(PaddleOCR) — 쪽마다 후보 둘, CPU에서 후보당 4~6초(실측)
+            "calls": 0 if body.orientation_only else len(targets),
+            # 180°·90/270 판정용 OCR(PaddleOCR) — 쪽마다 후보 둘, CPU에서 후보당 4~6초(실측).
+            # 방향만이면 누운 쪽에서만 재므로 미리 셀 수 없다 — 상한만 적는다
             "ocr_calls": 2 * len(targets),
         }
 
@@ -1114,7 +1137,9 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
         except Exception:  # noqa: BLE001 — 없으면 투영·추정으로만 간다
             flip_engine = None
 
-        router_llm = _get_llm_router()
+        # 방향만이면 모델을 부르지 않는다. (라우터 객체 자체는 위의 엔진 목록 초기화가 llm_vision 엔진에
+        # 붙이느라 생길 수 있다 — 호출은 없다. Codex 지적 2026-09-18)
+        router_llm = None if body.orientation_only else _get_llm_router()
         kwargs: dict = {
             "image_mime": "image/jpeg",
             "system": SURVEY_SYSTEM_PROMPT,
@@ -1156,17 +1181,20 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
                 _survey_progress(progress, row, len(per_page), len(targets), CONTENT_LABELS)
                 unknown += 1
                 continue
-            try:
-                resp = await router_llm.call_with_image(SURVEY_PROMPT, image, **kwargs)
-            except Exception as e:  # noqa: BLE001 — 한 쪽이 실패해도 나머지는 본다
-                errors.append(f"{page}쪽: {type(e).__name__}: {str(e)[:80]}")
-                per_page.append(row)
-                _survey_progress(progress, row, len(per_page), len(targets), CONTENT_LABELS)
-                unknown += 1
-                continue
-            provider = getattr(resp, "provider", None) or provider
-            model = getattr(resp, "model", None) or model
-            orientation, contents = parse_survey(getattr(resp, "text", "") or "")
+            orientation: str | None = None
+            contents: list[str] = []
+            if router_llm is not None:
+                try:
+                    resp = await router_llm.call_with_image(SURVEY_PROMPT, image, **kwargs)
+                except Exception as e:  # noqa: BLE001 — 한 쪽이 실패해도 나머지는 본다
+                    errors.append(f"{page}쪽: {type(e).__name__}: {str(e)[:80]}")
+                    per_page.append(row)
+                    _survey_progress(progress, row, len(per_page), len(targets), CONTENT_LABELS)
+                    unknown += 1
+                    continue
+                provider = getattr(resp, "provider", None) or provider
+                model = getattr(resp, "model", None) or model
+                orientation, contents = parse_survey(getattr(resp, "text", "") or "")
             # 방향은 투영(코드)이 먼저 — 모델은 세로쓰기 한문의 방향을 자주 틀린다(D-126 실측).
             # 투영이 모름일 때만 모델의 답을 쓴다. 누운 쪽의 90/270은 투영으로 못 가리므로
             # «추정»으로 표시한다.
@@ -1175,9 +1203,18 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
             # 투영이 «섰다/누웠다»를 가르면 후보는 둘 — 선 쪽은 0°·180°, 누운 쪽은 +90°·+270°.
             # OCR 점수로 그중 읽히는 쪽을 고른다(180°와 90/270을 이것으로 가린다). OCR이 없거나
             # 모름이면 추정.
-            candidates = (0, 180) if heur == "upright" else (90, 270) if heur == "sideways" else ()
+            if body.orientation_only:
+                # «세우기»만 — 누운 쪽의 90/270만 가른다. 선 쪽의 180° 검사는 하지 않고(쪽마다 OCR 둘은
+                # CPU에서 한 시간), 점수도 GPU에서만 잰다. CPU면 추정으로 남겨 화면이 미리보기로 묻는다
+                candidates = (90, 270) if heur == "sideways" else ()
+                score_it = bool(candidates) and flip_engine is not None and gpu_runtime()
+            else:
+                candidates = (
+                    (0, 180) if heur == "upright" else (90, 270) if heur == "sideways" else ()
+                )
+                score_it = bool(candidates) and flip_engine is not None
             delta = None
-            if candidates and flip_engine is not None:
+            if score_it:
                 delta, scores = await loop.run_in_executor(
                     None,
                     lambda img=image, c=candidates: orientation_by_ocr_scores(
@@ -1212,7 +1249,11 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
             # 고르지 않고 따로 알린다
             row["mixed"] = is_mixed(contents)
             row["engine"] = None if row["mixed"] else recommend_engine(row["content"], available)
-            if orientation is None and not contents:
+            if body.orientation_only:
+                # 방향만 — 투영이 모름(백지·그림·표)이면 판단 못 한 쪽
+                if row["target"] is None:
+                    unknown += 1
+            elif orientation is None and not contents:
                 unknown += 1
             per_page.append(row)
             _survey_progress(progress, row, len(per_page), len(targets), CONTENT_LABELS)
@@ -1238,7 +1279,8 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
                             cnt += 1
                             break
             r["effect"] = cnt
-        engines = group_engine_ranges(per_page)
+        # 방향만이면 종류를 안 봤으니 엔진 구간도 없다
+        engines = [] if body.orientation_only else group_engine_ranges(per_page)
         for r in engines:
             r["display_name"] = names.get(r["engine"], r["engine"])
             r["label"] = CONTENT_LABELS.get(r.get("content") or "", r.get("content") or "")
@@ -1255,7 +1297,7 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
         ]
         return {
             "checked": len(targets),
-            "calls": len(targets),
+            "calls": 0 if body.orientation_only else len(targets),
             "unknown": unknown,
             "rotation": rotation,
             "engines": engines,

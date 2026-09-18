@@ -148,17 +148,34 @@ def ensure_full_page_block(
 
     doc_path = Path(doc_path).resolve()
 
-    # 이미 블록이 있으면 그대로 둔다.
+    from core.document import page_rotation
+
+    current_rotation = page_rotation(doc_path, part_id, page_number)
+
+    # 이미 블록이 있으면 그대로 둔다 — 단, **전면 블록 하나뿐인 레이아웃**이 다른 회전에서 만들어졌으면
+    # 지금 회전으로 치수만 다시 잰다(D-126 덧붙임 2026-09-18). 회전을 저장한 뒤 「권 전체 OCR」이 그 쪽을
+    # 다시 돌 때, 옛 전면 블록을 두면 파이프라인이 «다른 회전의 레이아웃»이라 거부하고 사람이 손으로
+    # 지워야 했다. 전면 블록은 «쪽 전체»라는 뜻이라 돌려도 뜻이 같다 — 폭·높이·bbox·도장만 바꾸고
+    # 블록의 나머지 속성(쓰기 방향·종류·skip 등 사람이 고쳤을 수 있는 것)과 analysis_method는 그대로
+    # 옮긴다(Codex 지적 2026-09-18: 형태로만 판별하므로 사람이 만진 전면 블록도 여기 걸린다). 블록이
+    # 여럿이거나 전면이 아닌 레이아웃은 그대로 두고 파이프라인이 거부하게 둔다(D-123).
     try:
         existing = get_page_layout(doc_path, part_id, page_number)
     except (FileNotFoundError, OSError):
         existing = None
+    keep_block: dict | None = None
     if existing and existing.get("blocks"):
-        return {
-            "created": False,
-            "reason": "이미 레이아웃 블록이 있습니다.",
-            "block_count": len(existing["blocks"]),
-        }
+        stale_full = (
+            is_full_page_layout(existing)
+            and int(existing.get("rotation") or 0) != int(current_rotation)
+        )
+        if not stale_full:
+            return {
+                "created": False,
+                "reason": "이미 레이아웃 블록이 있습니다.",
+                "block_count": len(existing["blocks"]),
+            }
+        keep_block = dict(existing["blocks"][0])
 
     # PDF에서 페이지 크기를 읽는다. page.rect는 72 DPI(1x) 기준이다.
     pdf_path = get_pdf_path(doc_path, part_id)
@@ -174,8 +191,6 @@ def ensure_full_page_block(
     finally:
         doc.close()
 
-    from core.document import page_rotation
-
     layout = build_full_page_layout(
         width_pt,
         height_pt,
@@ -183,8 +198,15 @@ def ensure_full_page_block(
         page_number,
         writing_direction=writing_direction,
         render_scale=render_scale,
-        rotation=page_rotation(doc_path, part_id, page_number),
+        rotation=current_rotation,
     )
+    if keep_block is not None and existing is not None:
+        # 회전만 바뀐 전면 블록 — 기하(bbox)와 도장만 새것, 나머지 속성은 옛 블록의 것
+        fresh = layout["blocks"][0]
+        keep_block["bbox"] = fresh["bbox"]
+        layout["blocks"] = [keep_block]
+        if existing.get("analysis_method") is not None:
+            layout["analysis_method"] = existing["analysis_method"]
     save_page_layout(doc_path, part_id, page_number, layout)
     logger.info(
         f"전면 레이아웃 블록 생성: {doc_path.name}/{part_id}/page_{page_number:03d} "

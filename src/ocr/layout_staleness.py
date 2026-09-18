@@ -139,8 +139,7 @@ def layout_changed_since_ocr(
 
     layout_data = read_page_json(l3)
     ocr_data = read_page_json(l2)
-    if layout_data is None or ocr_data is None:
-        # 레이아웃이 없으면 전면 블록이 새로 생길 것이고,
+    if ocr_data is None:
         # OCR 결과가 없으면 애초에 건너뛸 쪽이 아니다.
         return False, ""
 
@@ -148,6 +147,13 @@ def layout_changed_since_ocr(
     from core.document import page_rotation
 
     now = page_rotation(doc_path, part_id, page_number)
+    if layout_data is None:
+        # 레이아웃이 없으면 전면 블록이 새로 생길 것이다 — 다만 L2의 도장이 지금 회전과 다르면 그 L2는
+        # 옛 좌표계라 «이미 결과가 있다»로 건너뛰면 안 된다(Codex 지적 2026-09-18)
+        was = int(ocr_data.get("rotation") or 0)
+        if was != now:
+            return True, f"OCR이 다른 회전({was}°)에서 만들어졌습니다 (지금 {now}°)."
+        return False, ""
     for label, data in (("레이아웃", layout_data), ("OCR", ocr_data)):
         was = int(data.get("rotation") or 0)
         if was != now:

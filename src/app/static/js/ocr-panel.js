@@ -732,6 +732,13 @@ async function _runPartOcr() {
   // 쪽 범위·다시 돌리기(D-126): 훈점 구간만 다른 엔진으로 다시 읽는 일
   const rawPages = (document.getElementById("ocr-batch-pages")?.value || "").trim();
   const redo = !!document.getElementById("ocr-batch-redo")?.checked;
+  // 돌아간 쪽 세우기(D-126 덧붙임 2026-09-18): OCR 직전에 누운 쪽을 찾아 묻고 저장한다. 모델 없음
+  const orientChecked = !!document.getElementById("ocr-batch-orient")?.checked;
+  // «없는 함수를 삼키는» typeof 가드(D-063)로 두지 않는다 — 켜 두었는데 조용히 안 돌면 문서와 다르다
+  if (orientChecked && typeof autoOrientForOcr !== "function") {
+    showToast("방향 잡기 코드(pdf-renderer.js)를 불러오지 못했습니다 — 회전 없이 OCR합니다", "warning");
+  }
+  const orient = orientChecked && typeof autoOrientForOcr === "function";
   let pages = null;
   if (rawPages) {
     pages = typeof parsePageRange === "function" ? parsePageRange(rawPages, total || 100000) : null;
@@ -771,10 +778,39 @@ async function _runPartOcr() {
           ? "이미 결과가 있는 쪽도 다시 읽습니다(덮기 전 백업을 남깁니다).\n"
           : "이미 결과가 있는 쪽은 건너뛰고, ") +
         "레이아웃이 없는 쪽은 쪽 전면 1블록으로 돌립니다.\n" +
+        (orient ? "먼저 옆으로 누운 쪽을 찾아 구간으로 보이고, 확인하면 회전을 저장한 뒤 OCR합니다.\n" : "") +
         "계속할까요?",
     )
   )
     return;
+
+  // 0) 돌아간 쪽 세우기 — 확인·저장은 뷰어 쪽(_confirmRotationRanges)이 묻는다. 취소해도 OCR은 잇는다.
+  //    쪽 범위는 [최소, 최대]로 넘긴다 — 라우트가 구간 하나만 받고, 회전은 권의 속성이라 사이 쪽에 저장돼도 옳다
+  if (orient) {
+    _disableButtons(true);
+    _showProgress(true, "돌아간 쪽을 찾는 중…", 0, 0);
+    try {
+      const span = pages && pages.length ? [Math.min(...pages), Math.max(...pages)] : null;
+      const r = await autoOrientForOcr(docId, partId, span, (evt) => {
+        if (evt.type === "start") _showProgress(true, `${evt.total}쪽의 방향을 재는 중…`, 0, evt.total);
+        else if (evt.type === "page") _showProgress(true, `${evt.index + 1}/${evt.total}쪽 — ${evt.page}쪽 ${evt.label || ""}`, evt.index + 1, evt.total);
+      });
+      if (r.found) {
+        showToast(
+          `누운 구간 ${r.found}개 중 ${r.applied}개의 회전을 저장했습니다` + (r.applied ? " — 그 쪽은 새 회전으로 OCR합니다" : "") +
+            (r.unknown ? ` · 판단 못 한 쪽 ${r.unknown}` : ""),
+          r.applied ? "success" : "info",
+        );
+      } else if (r.error) {
+        showToast(`방향 재기 일부 실패(OCR은 그대로 진행): ${r.error}`, "warning");
+      }
+    } catch (e) {
+      showToast(`방향 재기 실패 — 회전 없이 OCR을 진행합니다: ${e.message}`, "warning");
+    } finally {
+      _showProgress(false);
+      _disableButtons(false);
+    }
+  }
 
   const llmSel =
     typeof getLlmModelSelection === "function"

@@ -215,10 +215,12 @@ def orientation_by_ocr_scores(
 
 
 def sideways_target(current: int) -> int:
-    """누운 쪽의 목표 회전(추정). 90인지 270인지는 투영으로 알 수 없으니 «원래(0°)로 되돌리기»를
-    먼저 제안하고, 권 자체가 0°면 시계 90°를 제안한다 — 화면이 미리보기로 확인받고 반대쪽도
-    묻는다."""
-    return 0 if int(current) % 360 != 0 else 90
+    """누운 쪽의 목표 회전(추정). 누웠다는 것은 지금 회전에서 ±90°라는 뜻이라 후보는 둘 —
+    current+90과 current+270. 어느 쪽인지 투영으로 알 수 없으니 «원래(0°)로 되돌리기»가 후보에 들면
+    그것을 먼저 제안하고(권이 90°·270°일 때), 아니면 90°를 제안한다 — 화면이 미리보기로 확인받고
+    반대쪽(+180°)도 묻는다. 권이 180°일 때 0°를 제안하면 후보 둘(0°·180°)이 모두 여전히 누운 것이다
+    (Codex 지적 2026-09-18)."""
+    return 0 if int(current) % 360 in (90, 270) else 90
 
 
 def target_rotation(current: int, orientation: Optional[str]) -> Optional[int]:

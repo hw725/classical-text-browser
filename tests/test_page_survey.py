@@ -90,6 +90,8 @@ def test_projection_tells_upright_from_sideways_by_writing_direction():
     assert orientation_by_projection(buf.getvalue())[0] is None
     assert orientation_by_projection(b"not an image")[0] is None
     assert sideways_target(90) == 0 and sideways_target(0) == 90
+    # 권이 180°면 0°를 제안하면 안 된다(후보 0°·180° 둘 다 여전히 누움) — ±90°인 90°를 제안한다
+    assert sideways_target(180) == 90 and sideways_target(270) == 0
 
 
 def test_ocr_scores_pick_the_readable_candidate():
@@ -294,3 +296,161 @@ def test_route_streams_progress(client, tmp_path, monkeypatch):  # noqa: F811
     # stream을 켜지 않으면 전처럼 JSON 하나
     d = client.post(url, json={"pages": [1, 2]}).json()
     assert d["checked"] == 2 and "rotation" in d
+
+
+# ── «돌아간 쪽은 세워서»(D-126 덧붙임 2026-09-18) — orientation_only ─────────────────────
+
+
+class _NoVision:
+    """방향만 잴 때 비전 모델을 부르면 안 된다 — 부르면 곧 실패."""
+
+    async def call_with_image(self, prompt, image, **kwargs):
+        raise AssertionError("orientation_only인데 비전 모델을 불렀다")
+
+
+class _FakePaddle:
+    """가짜 PaddleOCR — 후보마다 recognize가 불린 횟수를 센다. 첫 후보(90°)만 많이 읽힌다."""
+
+    engine_id = "paddleocr"
+
+    def __init__(self):
+        self.calls = 0
+
+    def is_available(self):
+        return True
+
+    def recognize(self, image_bytes, writing_direction="vertical_rtl"):
+        self.calls += 1
+
+        class Line:
+            def __init__(self, text, conf):
+                self.text = text
+                self.characters = [type("C", (), {"confidence": conf})() for _ in text]
+
+        n = 60 if self.calls % 2 == 1 else 20
+        return type("R", (), {"lines": [Line("字" * n, 1.0 if n == 60 else 0.4)]})()
+
+
+class _FakeRegistry:
+    def __init__(self, paddle):
+        self._paddle = paddle
+
+    def list_engines(self):
+        return []
+
+    def get_engine(self, engine_id):
+        return self._paddle if engine_id == "paddleocr" else None
+
+
+def _patch_pages(monkeypatch):
+    """1·3쪽은 세로 줄(바로 섬), 2쪽은 가로 줄(누움)."""
+    from app.routers import llm_ocr
+
+    monkeypatch.setattr(
+        llm_ocr,
+        "_load_page_image",
+        lambda doc_id, page, part_id=None: _stripes(vertical=(page != 2)),
+    )
+
+
+def test_orientation_only_runs_on_cpu_without_model(client, tmp_path, monkeypatch):  # noqa: F811
+    """CPU 환경 + 비전 모델 없음: 투영만으로 누운 쪽을 찾고 추정(guess)으로 돌려준다. OCR 점수는 재지 않는다."""
+    from app import _state
+    from app.routers import llm_ocr
+    from core import env_doctor
+
+    _lib, part_id = _setup(client, tmp_path)
+    monkeypatch.setattr(env_doctor, "_GPU_RUNTIME", False)
+    monkeypatch.setattr(_state, "_llm_router", _NoVision())
+    paddle = _FakePaddle()
+    monkeypatch.setattr(llm_ocr, "_get_ocr_pipeline", lambda: (None, _FakeRegistry(paddle)))
+    _patch_pages(monkeypatch)
+    url = f"/api/documents/d1/parts/{part_id}/rotation/suggest"
+
+    # GPU 게이트를 지나지 않는다 — dry_run도 호출 0
+    r = client.post(url, json={"dry_run": True, "orientation_only": True})
+    assert r.status_code == 200 and r.json()["calls"] == 0
+    # 같은 환경에서 방향만이 아니면 여전히 막힌다
+    assert client.post(url, json={"dry_run": True}).status_code == 400
+
+    r = client.post(url, json={"orientation_only": True})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["calls"] == 0 and d["model"] is None and d["engines"] == [] and d["mixed"] == []
+    assert d["unknown"] == 0
+    assert d["rotation"] == [
+        {
+            "from": 2,
+            "to": 2,
+            "rotation": 90,
+            "pages": 1,
+            "current_rotation": 0,
+            "effect": 0,
+            "guess": True,  # CPU라 90/270을 못 가려 추정 — 화면이 미리보기로 묻는다
+        }
+    ]
+    assert paddle.calls == 0
+    assert [p["orientation"] for p in d["per_page"]] == ["upright", "sideways", "upright"]
+
+
+def test_orientation_only_scores_sideways_pages_on_gpu(client, tmp_path, monkeypatch):  # noqa: F811
+    """GPU 환경: 누운 쪽에서만 PaddleOCR 점수(후보 둘)를 재어 90/270을 확정한다. 선 쪽은 180° 검사를 하지 않는다."""
+    import json as _json
+
+    from app import _state
+    from app.routers import llm_ocr
+    from core import env_doctor
+
+    _lib, part_id = _setup(client, tmp_path)
+    monkeypatch.setattr(env_doctor, "_GPU_RUNTIME", True)
+    monkeypatch.setattr(_state, "_llm_router", _NoVision())
+    paddle = _FakePaddle()
+    monkeypatch.setattr(llm_ocr, "_get_ocr_pipeline", lambda: (None, _FakeRegistry(paddle)))
+    _patch_pages(monkeypatch)
+    url = f"/api/documents/d1/parts/{part_id}/rotation/suggest"
+
+    with client.stream("POST", url, json={"orientation_only": True, "stream": True}) as r:
+        assert r.status_code == 200
+        events = [_json.loads(ln[6:]) for ln in r.iter_lines() if ln.startswith("data: ")]
+    assert [e["type"] for e in events] == ["start", "page", "page", "page", "complete"]
+    # 종류 라벨이 없으니 진행 표시는 방향을 보인다
+    assert [e["label"] for e in events[1:4]] == ["바로 섬", "누움", "바로 섬"]
+    d = events[-1]
+    assert paddle.calls == 2  # 누운 2쪽에서만 후보 둘 — 선 쪽 1·3은 재지 않는다
+    assert d["rotation"] == [
+        {
+            "from": 2,
+            "to": 2,
+            "rotation": 90,
+            "pages": 1,
+            "current_rotation": 0,
+            "effect": 0,
+            "guess": False,
+        }
+    ]
+    assert d["per_page"][1]["heuristic"]["ocr_scores"].keys() == {"90", "270"}
+
+
+def test_orientation_only_counts_pages_from_pdf_when_manifest_lacks_page_count(
+    client, tmp_path, monkeypatch
+):  # noqa: F811
+    """add_document로 만든 문헌은 manifest에 page_count가 없다 — PDF를 열어 센다(E2E 실측 2026-09-18: «쪽 수를 몰라» 400)."""
+    import json as _json
+    from pathlib import Path
+
+    from app import _state
+    from core import env_doctor
+
+    lib, part_id = _setup(client, tmp_path)
+    monkeypatch.setattr(env_doctor, "_GPU_RUNTIME", False)
+    monkeypatch.setattr(_state, "_llm_router", _NoVision())
+    _patch_pages(monkeypatch)
+    mf = Path(lib) / "documents" / "d1" / "manifest.json"
+    data = _json.loads(mf.read_text(encoding="utf-8"))
+    for p in data["parts"]:
+        p["page_count"] = None
+    mf.write_text(_json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    r = client.post(f"/api/documents/d1/parts/{part_id}/rotation/suggest", json={"orientation_only": True})
+    assert r.status_code == 200, r.text
+    assert r.json()["checked"] == 3

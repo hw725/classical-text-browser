@@ -399,6 +399,95 @@ async function _postSurveyStream(url, body, onEvent) {
   return result;
 }
 
+/**
+ * 훑어보기가 낸 «회전이 다른 구간»을 사람에게 묻고 저장한다. 입력: docId, partId, rot(라우트의 rotation 목록).
+ * 출력: 저장한 구간 수.
+ *
+ * 판정이 확실한 구간(guess 아님)은 한 창에 모아 한 번만 묻는다 — 구간마다 묻는 것은 번거롭다(사용자 지적).
+ * 누운 쪽은 90인지 270인지 코드가 못 가리므로(추정) 그 구간의 첫 쪽을 **제안한 회전으로 미리 보인 채**
+ * 확인받고, 아니라고 하면 반대쪽을 한 번 더 보인다. 「훑어보기」와 「권 전체 OCR」의 «돌아간 쪽은 세워서»가
+ * 같이 쓴다 — 묻는 말이 두 곳에서 달라지면 사람은 다른 기능으로 여긴다.
+ */
+/**
+ * 지금 화면이 이 권을 보고 있는가 — 미리보기(goToPage)는 viewerState의 권으로 가고 CSS 회전은 pdfState의
+ * 쪽에 걸리므로 **둘 다** 이 권이어야 한다. 문헌을 바꾼 직후에는 viewerState가 먼저 바뀌고 pdfState는 PDF
+ * 로드 뒤에 바뀐다(Codex 지적 2026-09-18) — 그 틈에 다른 문헌을 미리 보며 이 문헌의 회전을 저장하면 안 된다.
+ */
+function _viewingPart(docId, partId) {
+  const pdfOk = docId === pdfState.currentDocId && partId === pdfState.currentPartId;
+  const vs = typeof viewerState !== "undefined" ? viewerState : null;
+  const viewOk = !vs || (vs.docId === docId && vs.partId === partId);
+  return pdfOk && viewOk;
+}
+
+async function _confirmRotationRanges(docId, partId, rot) {
+  let applied = 0;
+  const sure = (rot || []).filter((r) => !r.guess);
+  if (sure.length) {
+    const list = sure.map((r) => `  ${r.from}~${r.to}쪽(${r.pages}쪽) → ${r.rotation}° (지금 ${r.current_rotation}°${r.effect ? `, 다시 OCR ${r.effect}쪽` : ""})`).join("\n");
+    if (confirm(`회전이 다른 구간 ${sure.length}개를 찾았습니다:\n${list}\n\n모두 저장할까요? (취소하면 저장하지 않습니다)`)) {
+      for (const r of sure) {
+        await applySavedRotation(docId, partId, r.rotation, [r.from, r.to]);
+        applied++;
+      }
+    }
+  }
+  const preview = async (pageNo, target) => {
+    if (typeof goToPage === "function" && pdfState.currentPage !== pageNo) {
+      goToPage(pageNo);
+      await new Promise((res) => setTimeout(res, 400));
+    }
+    pdfState.rotation = (target - savedRotationFor(pageNo) + 360) % 360;
+    _applyRotation();
+    await new Promise((res) => setTimeout(res, 250));
+  };
+  for (const r of (rot || []).filter((x) => x.guess)) {
+    // 미리보기는 이 권을 보고 있을 때만 — 그 사이 다른 문헌으로 갔으면 이 구간은 건너뛴다(저장하지 않는다)
+    if (!_viewingPart(docId, partId)) continue;
+    const candidates = [r.rotation, (r.rotation + 180) % 360];
+    let chosen = null;
+    for (let i = 0; i < candidates.length; i++) {
+      const target = candidates[i];
+      if (!_viewingPart(docId, partId)) { chosen = null; break; }
+      await preview(r.from, target);
+      const ok = confirm(
+        `회전 제안: ${r.from}~${r.to}쪽(${r.pages}쪽)을 ${target}°로 — 화면에 그렇게 보였습니다.\n` +
+          (i === 0 ? "(누운 쪽은 90°·270° 중 어느 쪽인지 코드가 못 가렸습니다 — 바로 서 있으면 확인)\n" : "(반대쪽입니다)\n") +
+          (r.effect ? `OCR·레이아웃 결과가 있는 ${r.effect}쪽은 다시 돌려야 합니다.\n` : "") +
+          "이대로 저장할까요?" + (i + 1 < candidates.length ? " (취소하면 반대쪽을 보입니다)" : " (취소하면 이 구간은 건너뜁니다)"),
+      );
+      if (ok) { chosen = target; break; }
+    }
+    pdfState.rotation = 0;
+    _applyRotation();
+    if (chosen == null) continue;
+    await applySavedRotation(docId, partId, chosen, [r.from, r.to]);
+    applied++;
+  }
+  return applied;
+}
+
+/**
+ * «돌아간 쪽은 세워서»(D-126 덧붙임 2026-09-18) — 「권 전체 OCR」이 실행 직전에 부른다.
+ * 입력: docId, partId, pages([a, b] 또는 null=권 전체), onProgress(evt)(진행 막대용, 없어도 됨).
+ * 출력: {checked, found, applied, unknown, error}. 사람이 취소한 구간은 저장하지 않고 OCR은 그대로 잇는다.
+ *
+ * 훑어보기 라우트를 orientation_only로 부른다 — 비전 모델 없음, GPU 게이트 없음. 투영으로 누운 쪽을 찾고,
+ * GPU면 PaddleOCR 점수로 90/270이 확정되어 한 창에서 끝나며, CPU면 추정이라 미리보기로 묻는다.
+ * 저장은 훑어보기와 같은 길(_confirmRotationRanges → PUT rotation)이라 «저장은 사람이 누른다»가 지켜진다.
+ */
+async function autoOrientForOcr(docId, partId, pages, onProgress) {
+  const url = `/api/documents/${encodeURIComponent(docId)}/parts/${encodeURIComponent(partId)}/rotation/suggest`;
+  const body = { pages: pages || null, orientation_only: true };
+  const d = await _postSurveyStream(url, body, onProgress || (() => {}));
+  const rot = d.rotation || [];
+  if (d.error && !rot.length) return { checked: d.checked || 0, found: 0, applied: 0, unknown: d.unknown || 0, error: d.error };
+  // 미리보기는 지금 보고 있는 권에서만 된다 — 다른 권으로 옮겼으면 확실한 구간만 창으로 묻고 추정은
+  // 건너뛴다(_confirmRotationRanges가 구간마다 다시 확인한다)
+  const applied = await _confirmRotationRanges(docId, partId, _viewingPart(docId, partId) ? rot : rot.filter((r) => !r.guess));
+  return { checked: d.checked || 0, found: rot.length, applied, unknown: d.unknown || 0, error: d.error || null };
+}
+
 async function _suggestRotation() {
   const docId = pdfState.currentDocId;
   const partId = pdfState.currentPartId;
@@ -429,49 +518,8 @@ async function _suggestRotation() {
     const eng = d.engines || [];
     if (d.error && !rot.length && !eng.length) throw new Error(d.error);
     if (docId !== pdfState.currentDocId || partId !== pdfState.currentPartId) return;
-    // 1) 회전이 다른 구간 — 그 구간의 첫 쪽을 **제안한 회전으로 미리 보인 채** 확인받는다.
-    //    누운 쪽은 90인지 270인지 코드가 못 가리므로(추정), 아니라고 하면 반대쪽을 한 번 더 보인다.
-    let applied = 0;
-    // 판정이 확실한 구간(guess 아님)은 한 창에 모아 한 번만 묻는다 — 구간마다 묻는 것은 번거롭다(사용자 지적)
-    const sure = rot.filter((r) => !r.guess);
-    if (sure.length) {
-      const list = sure.map((r) => `  ${r.from}~${r.to}쪽(${r.pages}쪽) → ${r.rotation}° (지금 ${r.current_rotation}°${r.effect ? `, 다시 OCR ${r.effect}쪽` : ""})`).join("\n");
-      if (confirm(`회전이 다른 구간 ${sure.length}개를 찾았습니다:\n${list}\n\n모두 저장할까요? (취소하면 저장하지 않습니다)`)) {
-        for (const r of sure) {
-          await applySavedRotation(docId, partId, r.rotation, [r.from, r.to]);
-          applied++;
-        }
-      }
-    }
-    const preview = async (pageNo, target) => {
-      if (typeof goToPage === "function" && pdfState.currentPage !== pageNo) {
-        goToPage(pageNo);
-        await new Promise((res) => setTimeout(res, 400));
-      }
-      pdfState.rotation = (target - savedRotationFor(pageNo) + 360) % 360;
-      _applyRotation();
-      await new Promise((res) => setTimeout(res, 250));
-    };
-    for (const r of rot.filter((x) => x.guess)) {
-      const candidates = r.guess ? [r.rotation, (r.rotation + 180) % 360] : [r.rotation];
-      let chosen = null;
-      for (let i = 0; i < candidates.length; i++) {
-        const target = candidates[i];
-        await preview(r.from, target);
-        const ok = confirm(
-          `회전 제안: ${r.from}~${r.to}쪽(${r.pages}쪽)을 ${target}°로 — 화면에 그렇게 보였습니다.\n` +
-            (r.guess ? (i === 0 ? "(누운 쪽은 90°·270° 중 어느 쪽인지 코드가 못 가립니다 — 바로 서 있으면 확인)\n" : "(반대쪽입니다)\n") : "") +
-            (r.effect ? `OCR·레이아웃 결과가 있는 ${r.effect}쪽은 다시 돌려야 합니다.\n` : "") +
-            "이대로 저장할까요?" + (i + 1 < candidates.length ? " (취소하면 반대쪽을 보입니다)" : " (취소하면 이 구간은 건너뜁니다)"),
-        );
-        if (ok) { chosen = target; break; }
-      }
-      pdfState.rotation = 0;
-      _applyRotation();
-      if (chosen == null) continue;
-      await applySavedRotation(docId, partId, chosen, [r.from, r.to]);
-      applied++;
-    }
+    // 1) 회전이 다른 구간 — 확실한 것은 한 창에, 추정은 미리보기로 (autoOrientForOcr와 같은 길)
+    const applied = await _confirmRotationRanges(docId, partId, rot);
     // 2) 엔진 추천 — 구간별 계획으로 「권 전체 OCR」에 넘긴다. 한 번 누르면 쪽마다 계획의 엔진으로 돈다
     const lines = eng.map((r) => `${r.from}~${r.to}쪽(${r.pages}쪽): ${r.label} → ${r.display_name}`);
     let filled = null;
