@@ -3626,6 +3626,18 @@ Flash 모델이 프롬프트에 적힌 인명 `長尾欽彌`를 무시하고 `�
 추출 패널의 「LLM 교정」을 화면에서 뺐다. `ocr/correction_pass.py`와 `/ocr/correct`
 라우트, `ocr-panel.js` 처리기는 그대로다. 되살리는 순서는 ③ → ④ → ①·②.
 
+**덧붙임 (2026-09-18) — 이음을 넣고 되살렸다.** ③ 초안은 블록 단위로 병합한다
+(`merge_draft`; `applied_blocks`는 합집합). ④ 쪽을 열 때 초안을 다시 읽고(`_loadCorrectionDraft`),
+`GET …/ocr/correction-review`가 사람이 볼 초안이 남은 쪽을 센다(`list_review_pages`) —
+화면 「검토할 쪽」, 일괄 완료 메시지의 `review_pages`. 일괄이 자동 수용 블록을 L4에
+넣으면 `mark_applied`로 초안에 적는다. ① `mode="ladder"`(기본): 1단계를 돌리고
+`rejected_block_ids`(결과는 있는데 수용도 적용도 안 된 블록)만 2단계로 올린다. 일괄은
+`llm_correction_mode` 기본이 `ladder`이고 L2를 새로 만든 쪽은 옛 초안을 버린다(`fresh=True`).
+② 2단계 판정은 1단계 답이 있으면 **두 단계의 일치**(`_judge_stage2`, `accept_basis="stages"`,
+같은 잣대 `text_agreement` ≥ 0.9·`[?]` 없음)이고 1단계 답은 `stage1`에 남아 화면이 두 답을
+나란히 보인다. 1단계 답 없이 곧장 정밀 판독을 누르면 앵커 기준(`accept_basis="anchor"`).
+⑤ 표본 감사는 아직 없다 — 「전체」 모드가 대신한다.
+
 **관련**: [D-055](#d-055-추출-모드--작업-모드-분리--텍스트-레이어-산출물) 배치
 OCR에 붙는다. [D-065](#d-065-되돌리기의-자리--새-ocr이-더-나쁠-때-하나) 교정
 전 백업 규칙을 따른다. [D-083](#d-083) 2단계의 사고 예산 회계.

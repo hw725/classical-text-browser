@@ -72,7 +72,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 
 ## 백엔드 모듈 구조 (src/app/)
 server.py는 FastAPI 앱 생성 + 라우터 마운트 + 미들웨어만 담당하는 조립 파일.
-실제 API 엔드포인트 223개가 9개 라우터 모듈에 분산 (2026-09-10 기준 실측):
+실제 API 엔드포인트 224개가 9개 라우터 모듈에 분산 (2026-09-18 기준 실측):
 
 ```
 src/app/
@@ -84,7 +84,7 @@ src/app/
     ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 + 텍스트레이어 진단·가져오기·입히기 + 권 추가·회전 + 경계 규칙 + 찍은 자리·규칙 제안 (45 라우트)
     ├── composition.py   ← 편성 — 내용 트리·경계 색인·넣기·옮기기·지우기 + 제안·목차·적용·자동 트리·신호 도출·LLM 표지 묻기·구조 통째로 묻기 + 규칙 미리 보기·말로 규칙 넣기 + 쪼개기·리셋 (17 라우트)
     ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티/관계·태그 (22 라우트)
-    ├── llm_ocr.py       ← LLM 상태·분석·초안 + OCR 엔진·실행·권단위 일괄·백업 되돌리기·판독 지침·LLM 교정 패스·쪽 훑어보기 (25 라우트)
+    ├── llm_ocr.py       ← LLM 상태·분석·초안 + OCR 엔진·실행·권단위 일괄·백업 되돌리기·판독 지침·LLM 교정 패스·쪽 훑어보기 (26 라우트)
     ├── alignment.py     ← 이체자 사전/정렬/일괄교정/문헌별 승인 (20 라우트)
     ├── reading.py       ← L5 표점·현토 + L6 번역 + 비고 + AI보조 (24 라우트)
     ├── annotation.py    ← L7 주석·사전형·인용마크 + AI보조 (34 라우트)
@@ -122,7 +122,7 @@ src/app/
 | 모듈 | 하는 일 |
 |---|---|
 | `src/ocr/ocr_prompt.py` | LLM OCR 프롬프트를 다섯 조각(정책·문헌 지침·블록 종류·자형 주의·앵커)으로 **조립**. `[?]`·`□`를 글자 신뢰도로 변환. 도메인 목록을 코드에 하드코딩하지 않는다 |
-| `src/ocr/correction_pass.py` | 승급 사다리 1·2단계. 기계적 선별 → 앵커 있는 LLM 교정(사고 끔) → 정밀 판독(문맥 확대·사고 켬). **L2는 건드리지 않고** L4 초안만 만든다 |
+| `src/ocr/correction_pass.py` | 승급 사다리 1·2단계와 이음(2026-09-18). 기계적 선별 → 앵커 있는 LLM 교정(사고 끔) → 떨어진 블록만 정밀 판독(문맥 확대·사고 켬, 판정은 **두 단계의 일치**). 초안은 쪽마다 하나이고 **블록 단위로 병합**된다(`merge_draft`). **L2는 건드리지 않고** L4 초안만 만든다. `list_review_pages`가 사람이 볼 쪽을 센다(라우트 `correction-review`, 화면 「검토할 쪽」) |
 | `src/ocr/eval_cer.py` · `scripts/eval_cer.py` | L4 확정본을 정답으로 L2·초안의 CER. 프롬프트를 바꿨으면 이것으로 잰다 |
 | `src/core/variant_sources.py` · `scripts/build_variant_dicts.py` | 이체자 사전 원자료(OpenCC·Unihan·cjkvi) 파서와 생성. 파일마다 `_tier`·`_source` |
 | `src/ocr/line_block_match.py` | 쪽 단위 엔진(NDL 셋)이 쪽 전체에서 찾은 행을 LayoutBlock에 배정. **블록 밖 행은 버린다.** 그래서 파이프라인이 커버리지 조건 없이 언제나 쪽 전체에 돌린다(D-086) |

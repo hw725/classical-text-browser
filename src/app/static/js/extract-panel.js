@@ -1117,6 +1117,10 @@ async function _runExtractOcr() {
       if (done.embedded) {
         parts.push(`PDF ${done.embedded.embedded_pages}쪽에 텍스트 입힘`);
       }
+      // LLM 교정을 켰을 때 사람이 볼 블록이 남은 쪽 — OCR 패널 「검토할 쪽」이 같은 목록을 연다
+      if (done.review_pages && done.review_pages.length) {
+        parts.push(`LLM 교정 검토할 쪽 ${done.review_pages.length} (OCR 패널 「검토할 쪽」)`);
+      }
       text.textContent = parts.join(" · ");
       showToast(parts.join(" · "), "success");
       _showUsage(done.usage);

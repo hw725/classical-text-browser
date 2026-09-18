@@ -98,7 +98,9 @@ function initOcrPanel() {
   // LLM 교정 패스 (D-082)
   const correctBtn = document.getElementById("ocr-llm-correct");
   const preciseBtn = document.getElementById("ocr-llm-precise");
-  if (correctBtn) correctBtn.addEventListener("click", () => _runCorrection("fast", null));
+  const reviewBtn = document.getElementById("ocr-correction-review-btn");
+  // 「LLM 교정(선별)」은 사다리다 — 1단계를 돌리고 떨어진 블록만 2단계로 올린다.
+  if (correctBtn) correctBtn.addEventListener("click", () => _runCorrection("ladder", null));
   if (preciseBtn) {
     preciseBtn.addEventListener("click", () => {
       if (typeof layoutState !== "undefined" && layoutState.selectedBlockId) {
@@ -106,6 +108,7 @@ function initOcrPanel() {
       }
     });
   }
+  if (reviewBtn) reviewBtn.addEventListener("click", () => _toggleReviewPages());
 
   // OCR 결과 세로쓰기 토글
   const ocrVertBtn = document.getElementById("ocr-vertical-btn");
@@ -572,6 +575,96 @@ async function loadOcrResults() {
   } catch (e) {
     console.warn("OCR 결과 로드 실패:", e);
   }
+  // 교정 초안은 실행 직후에만 그려지고 쪽을 옮기면 사라졌다(2026-09-17 확인).
+  // 사람 단계(D-082 3단계)가 서려면 저장된 초안을 쪽마다 다시 보여야 한다.
+  _loadCorrectionDraft();
+}
+
+/**
+ * 저장된 교정 초안을 읽어 그린다. 없으면 목록을 감춘다.
+ * correction-candidates GET은 LLM을 부르지 않는다 — 초안 파일과 선별 결과만 돌려준다.
+ */
+async function _loadCorrectionDraft() {
+  const list = document.getElementById("ocr-correction-list");
+  if (!list || typeof viewerState === "undefined") return;
+  const { docId, partId, pageNum } = viewerState;
+  if (!docId || !partId || !pageNum) return;
+  try {
+    const res = await fetch(
+      `/api/documents/${docId}/parts/${partId}/pages/${pageNum}/ocr/correction-candidates`,
+    );
+    if (!res.ok) {
+      list.innerHTML = "";
+      list.style.display = "none";
+      return;
+    }
+    const data = await res.json();
+    _renderCorrectionDraft(data.draft || { blocks: [] });
+  } catch (e) {
+    console.warn("교정 초안 로드 실패:", e);
+  }
+}
+
+/**
+ * 「검토할 쪽」 — 이 권에서 사람이 볼 초안이 남은 쪽 목록을 펼치거나 접는다.
+ * 쪽을 누르면 그 쪽으로 간다(goToPage). 일괄 OCR 뒤 «어딜 열어야 하나»에 답하는 자리다.
+ */
+async function _toggleReviewPages() {
+  const box = document.getElementById("ocr-correction-review");
+  if (!box || typeof viewerState === "undefined") return;
+  if (box.style.display !== "none") {
+    box.style.display = "none";
+    return;
+  }
+  const { docId, partId } = viewerState;
+  if (!docId || !partId) {
+    showToast("문헌과 권을 먼저 선택하세요.", "warning");
+    return;
+  }
+  try {
+    const res = await fetch(`/api/documents/${docId}/parts/${partId}/ocr/correction-review`);
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error || "검토 목록을 읽지 못했습니다.", "error");
+      return;
+    }
+    _renderReviewPages(data);
+  } catch (e) {
+    showToast(`검토 목록 실패: ${e.message}`, "error");
+  }
+}
+
+function _renderReviewPages(data) {
+  const box = document.getElementById("ocr-correction-review");
+  if (!box) return;
+  box.innerHTML = "";
+  box.style.display = "";
+  const pages = data.pages || [];
+  const head = document.createElement("div");
+  head.className = "ocr-result-block-id";
+  head.textContent = pages.length
+    ? `검토할 쪽 ${pages.length} · 블록 ${data.total_pending || 0}` +
+      (data.total_errors ? ` · 오류 ${data.total_errors}` : "")
+    : "사람이 볼 교정 초안이 남은 쪽이 없습니다.";
+  box.appendChild(head);
+  for (const p of pages) {
+    const row = document.createElement("div");
+    row.className = "ocr-result-item";
+    row.style.cursor = "pointer";
+    row.title = "이 쪽으로 이동";
+    const label = document.createElement("span");
+    label.className = "ocr-result-text";
+    label.textContent =
+      `${p.page}쪽 — 볼 것 ${p.pending}` +
+      (p.accepted ? ` · 자동 수용 ${p.accepted}` : "") +
+      (p.applied ? ` · 적용됨 ${p.applied}` : "") +
+      (p.errors ? ` · 오류 ${p.errors}` : "");
+    row.appendChild(label);
+    row.addEventListener("click", () => {
+      if (typeof goToPage === "function") goToPage(p.page);
+    });
+    box.appendChild(row);
+  }
 }
 
 /* ─── 교정 모드: OCR 결과로 채우기 ─────────────── */
@@ -948,9 +1041,11 @@ function _disableButtons(disabled) {
 /**
  * LLM 교정 패스를 실행하고 초안을 표시한다. L2는 바뀌지 않는다.
  *
- * mode "fast"   : 기계적으로 선별된 블록(신뢰도 낮음·협주·한글 미지원 엔진)만, 사고 끔.
- * mode "precise": 지정 블록을 앞뒤 문맥과 함께, 사고를 켜서(예산 분리) 다시 읽는다.
- *                 행초·흘림체처럼 자형만으로 안 풀리는 곳에 쓴다.
+ * mode "ladder" : 기계적으로 선별된 블록(신뢰도 낮음·협주·한글 미지원 엔진)을 1단계(사고 끔)로
+ *                 읽고, 자동 수용을 못 받은 블록만 2단계(앞뒤 문맥·사고 켬)로 올린다.
+ * mode "fast"   : 1단계만.
+ * mode "precise": 지정 블록을 곧장 2단계로. 행초·흘림체처럼 자형만으로 안 풀리는 곳에 쓴다.
+ * 초안은 블록 단위로 병합되므로 앞서 본 다른 블록의 결과는 남는다.
  */
 async function _runCorrection(mode, blockIds) {
   if (ocrState.running) return;
@@ -974,7 +1069,9 @@ async function _runCorrection(mode, blockIds) {
   _disableButtons(true);
   _showProgress(
     true,
-    mode === "precise" ? "정밀 판독 중 (추론 켬)..." : "LLM 교정 중 (선별 블록)...",
+    mode === "precise"
+      ? "정밀 판독 중 (추론 켬)..."
+      : "LLM 교정 중 (선별 블록 → 떨어진 블록은 정밀 판독)...",
     0,
     0,
   );
@@ -993,8 +1090,12 @@ async function _runCorrection(mode, blockIds) {
       return;
     }
     _renderCorrectionDraft(data);
+    const applied = new Set(data.applied_blocks || []);
     const n = (data.blocks || []).length;
-    const accepted = (data.blocks || []).filter((b) => b.accepted).length;
+    const accepted = (data.blocks || []).filter((b) => b.accepted && !applied.has(b.block_id)).length;
+    const pending = (data.blocks || []).filter(
+      (b) => !b.error && b.corrected_text && !b.accepted && !applied.has(b.block_id),
+    ).length;
     if (n === 0) {
       showToast(
         blockIds
@@ -1003,7 +1104,10 @@ async function _runCorrection(mode, blockIds) {
         "info",
       );
     } else {
-      showToast(`LLM 교정 초안: ${n}블록 중 ${accepted}블록 자동 수용 기준 통과`, "success");
+      showToast(
+        `LLM 교정 초안: ${n}블록 — 자동 수용 ${accepted} · 사람이 볼 것 ${pending}`,
+        pending ? "info" : "success",
+      );
     }
   } catch (e) {
     showToast(`LLM 교정 실패: ${e.message}`, "error");
@@ -1028,39 +1132,61 @@ function _renderCorrectionDraft(draft) {
 
   const head = document.createElement("div");
   head.className = "ocr-result-block-id";
-  head.textContent = `LLM 교정 초안 (${draft.mode === "precise" ? "정밀 판독" : "교정"}) — L2는 그대로, 적용한 블록만 L4에 들어갑니다`;
+  const applied = new Set(draft.applied_blocks || []);
+  head.textContent = "LLM 교정 초안 — L2는 그대로, 적용한 블록만 L4에 들어갑니다";
   list.appendChild(head);
 
   for (const b of blocks) {
     const row = document.createElement("div");
     row.className = "ocr-result-item";
     row.title = (b.reasons || []).join(", ");
+    const isApplied = applied.has(b.block_id);
+    const stageLabel = b.stage === "precise" ? "2단계" : "1단계";
 
     const id = document.createElement("span");
     id.className = "ocr-result-block-id";
-    id.textContent = `${b.block_id} · ${(b.reasons || []).join(", ")}`;
+    id.textContent = `${b.block_id} · ${stageLabel} · ${(b.reasons || []).join(", ")}`;
 
     const text = document.createElement("span");
     text.className = "ocr-result-text";
     if (b.error) {
       text.textContent = `실패: ${b.error}`;
+    } else if (b.stage1 && b.stage1.corrected_text !== b.corrected_text) {
+      // 두 단계의 답이 다르다 — 둘을 나란히 보여 사람이 고른다(D-082)
+      text.textContent =
+        `${b.anchor_text || "(비어있음)"} → 1단계 ${b.stage1.corrected_text || "(비어있음)"}` +
+        ` / 2단계 ${b.corrected_text || "(비어있음)"}`;
     } else {
       text.textContent = `${b.anchor_text || "(비어있음)"} → ${b.corrected_text || "(비어있음)"}`;
     }
 
     const stat = document.createElement("span");
     stat.className =
-      "ocr-result-confidence " + (b.accepted ? "conf-high" : b.error ? "conf-low" : "conf-mid");
+      "ocr-result-confidence " +
+      (isApplied || b.accepted ? "conf-high" : b.error ? "conf-low" : "conf-mid");
+    const pct = Math.round(
+      (b.accept_basis === "stages" ? b.stages_agreement || 0 : b.agreement || 0) * 100,
+    );
     stat.textContent = b.error
       ? "—"
-      : `${Math.round((b.agreement || 0) * 100)}%${b.uncertain_count ? ` [?]${b.uncertain_count}` : ""}`;
-    stat.title = b.accepted ? "앵커와 일치율이 높고 불확실 표시가 없음 — 자동 수용 기준 통과" : "사람 확인 필요";
+      : isApplied
+        ? "적용됨"
+        : `${pct}%${b.uncertain_count ? ` [?]${b.uncertain_count}` : ""}`;
+    stat.title = isApplied
+      ? "이미 L4에 들어간 블록"
+      : b.accepted
+        ? b.accept_basis === "stages"
+          ? "1단계와 2단계의 답이 일치 — 자동 수용 기준 통과"
+          : "앵커와 일치율이 높고 불확실 표시가 없음 — 자동 수용 기준 통과"
+        : b.accept_basis === "stages"
+          ? "1단계와 2단계의 답이 다름 — 사람이 고른다"
+          : "사람 확인 필요";
 
     row.appendChild(id);
     row.appendChild(text);
     row.appendChild(stat);
 
-    if (!b.error && b.corrected_text) {
+    if (!b.error && b.corrected_text && !isApplied) {
       const apply = document.createElement("button");
       apply.className = "text-btn text-btn-sm";
       apply.textContent = "적용";
@@ -1101,6 +1227,9 @@ async function _applyCorrection(blockIds) {
     } else {
       showToast(`교정본을 L4에 적용했습니다: ${(data.applied_blocks || []).join(", ")}`, "success");
     }
+    _loadCorrectionDraft();
+    // 교정 탭이 열려 있으면 L4도 다시 읽는다
+    if (typeof loadPageText === "function") loadPageText(docId, partId, pageNum);
   } catch (e) {
     showToast(`적용 실패: ${e.message}`, "error");
   }

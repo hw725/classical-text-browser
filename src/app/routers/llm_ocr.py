@@ -138,8 +138,8 @@ class OcrBatchRequest(BaseModel):
     # 협주·한글 미지원 엔진의 결과만 다시 본다. 결과는 L4 초안이고 자동 수용 기준을
     # 넘은 블록만 L4에 들어간다(나머지는 엔진 결과 그대로).
     llm_correction: str = "off"
-    # "fast"(사고 끔) | "precise"(사고 켬·문맥 확대). 일괄에서는 fast가 기본이다.
-    llm_correction_mode: str = "fast"
+    # "ladder"(1단계 → 떨어진 블록만 2단계, 기본) | "fast"(1단계만) | "precise"(2단계만).
+    llm_correction_mode: str = "ladder"
 
 
 def _usage_log_path():
@@ -1394,8 +1394,9 @@ class CorrectionRunRequest(BaseModel):
     # 다시 볼 블록. None이면 기계적 선별(select_all이면 전량).
     block_ids: list[str] | None = None
     select_all: bool = False
-    # "fast"(1단계, 사고 끔) | "precise"(2단계, 사고 켬·앞뒤 문맥 확대 — 행초용)
-    mode: str = "fast"
+    # "ladder"(1단계 → 떨어진 블록만 2단계, D-082의 사다리) |
+    # "fast"(1단계만, 사고 끔) | "precise"(2단계만, 사고 켬·앞뒤 문맥 확대 — 행초용)
+    mode: str = "ladder"
     confidence_threshold: float | None = None
     force_provider: str | None = None
     force_model: str | None = None
@@ -1461,15 +1462,21 @@ def _run_page_correction(
     force_provider: str | None = None,
     force_model: str | None = None,
     thinking_budget: int | None = None,
+    fresh: bool = False,
 ) -> dict:
     """한 쪽의 교정 패스를 끝까지 돈다 — 선별 → LLM → 초안 저장. 동기 함수(executor용).
 
-    출력: 초안 dict (candidates가 없으면 blocks가 빈 초안).
+    mode="ladder"면 1단계(fast)를 돌린 뒤 자동 수용을 못 받은 블록만 2단계(precise)로
+    올린다(D-082의 «각 단계는 앞 단계의 수용 기준을 통과하지 못한 항목만 받는다»).
+    fresh=True면 기존 초안을 버린다 — 일괄 OCR이 L2를 새로 만든 직후.
+    출력: 초안 dict (candidates가 없으면 blocks가 빈 초안). 기존 초안과 블록 단위로 병합된다.
     """
     from core.document import get_page_layout, get_page_text
     from ocr.correction_pass import (
         DEFAULT_CONFIDENCE_THRESHOLD,
+        Candidate,
         llm_kwargs_for_mode,
+        rejected_block_ids,
         run_correction,
         select_candidates,
     )
@@ -1499,7 +1506,7 @@ def _run_page_correction(
     bundle, hint_pairs = _correction_dicts(doc_path)
 
     prev_text = next_text = None
-    if mode == "precise":
+    if mode in ("precise", "ladder"):
         # 행초용 문맥: 앞뒤 쪽의 확정본 (없으면 None)
         for delta, setter in ((-1, "prev"), (1, "next")):
             try:
@@ -1512,26 +1519,51 @@ def _run_page_correction(
             else:
                 next_text = text
 
-    return run_correction(
-        pipeline,
-        engine,
-        doc_path,
-        doc_id,
-        part_id,
-        page_number,
-        candidates,
-        mode=mode,
-        llm_kwargs=llm_kwargs_for_mode(
-            mode,
-            thinking_budget=thinking_budget,
-            force_provider=force_provider,
-            force_model=force_model,
-        ),
-        variant_dict=bundle,
-        variant_hint_pairs=hint_pairs,
-        prev_page_text=prev_text,
-        next_page_text=next_text,
-    )
+    def _run(stage_mode: str, cands, *, fresh_run: bool) -> dict:
+        return run_correction(
+            pipeline,
+            engine,
+            doc_path,
+            doc_id,
+            part_id,
+            page_number,
+            cands,
+            mode=stage_mode,
+            llm_kwargs=llm_kwargs_for_mode(
+                stage_mode,
+                thinking_budget=thinking_budget,
+                force_provider=force_provider,
+                force_model=force_model,
+            ),
+            variant_dict=bundle,
+            variant_hint_pairs=hint_pairs,
+            prev_page_text=prev_text,
+            next_page_text=next_text,
+            fresh=fresh_run,
+        )
+
+    if mode != "ladder":
+        return _run(mode, candidates, fresh_run=fresh)
+
+    # 사다리: 1단계 전부 → 떨어진 블록만 2단계. 2단계 실행은 1단계 초안 위에 병합되므로
+    # 1단계 답이 stage1로 남고, 판정은 두 단계의 일치로 바뀐다(_judge_stage2).
+    draft = _run("fast", candidates, fresh_run=fresh)
+    this_run = {c.block_id for c in candidates}
+    escalate = [bid for bid in rejected_block_ids(draft) if bid in this_run]
+    if not escalate:
+        return draft
+    by_id = {c.block_id: c for c in candidates}
+    stage2 = [
+        Candidate(
+            block_id=bid,
+            reasons=list(by_id[bid].reasons) + ["stage1_rejected"],
+            avg_confidence=by_id[bid].avg_confidence,
+            block_type=by_id[bid].block_type,
+            anchor_text=by_id[bid].anchor_text,
+        )
+        for bid in escalate
+    ]
+    return _run("precise", stage2, fresh_run=False)
 
 
 @router.get("/api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr/correction-candidates")
@@ -1584,14 +1616,16 @@ async def api_run_correction(
 ):
     """LLM 교정 패스를 실행하고 초안을 저장한다 (D-082 1·2단계). L2는 바뀌지 않는다.
 
+    mode="ladder"  — 1단계를 돌리고 자동 수용을 못 받은 블록만 2단계로 올린다(기본).
     mode="fast"    — 앵커 있는 교정, 사고 끔.
     mode="precise" — 앞뒤 문맥 확대 + 사고 켬(예산 분리, D-083). 행초·흘림체용.
-    출력: 초안 dict. 블록마다 anchor_text·corrected_text·agreement·accepted·pairs.
+    출력: 초안 dict(기존 초안과 블록 단위로 병합). 블록마다 anchor_text·corrected_text·
+          agreement·accepted·accept_basis·pairs, 2단계면 stage1·stages_agreement.
     """
     import asyncio
 
-    if body.mode not in ("fast", "precise"):
-        return JSONResponse({"error": "mode는 fast 또는 precise입니다."}, status_code=400)
+    if body.mode not in ("ladder", "fast", "precise"):
+        return JSONResponse({"error": "mode는 ladder·fast·precise 중 하나입니다."}, status_code=400)
     doc_path = require_repo_path("documents", doc_id)
     pipeline, registry = _get_ocr_pipeline()
     try:
@@ -1619,6 +1653,25 @@ async def api_run_correction(
     except Exception as e:  # noqa: BLE001
         return JSONResponse({"error": f"LLM 교정 실패: {e}"}, status_code=500)
     return draft
+
+
+@router.get("/api/documents/{doc_id}/parts/{part_id}/ocr/correction-review")
+async def api_correction_review(doc_id: str, part_id: str):
+    """한 권에서 사람이 볼 교정 초안이 남은 쪽 목록 (D-082 3단계의 입구).
+
+    목적: 일괄 OCR에 LLM 교정을 켜고 나면 자동 수용 블록은 L4에 들어가지만 떨어진 블록은
+          초안 파일에만 남는다. 어느 쪽을 열어야 하는지 이 목록이 답한다.
+    출력: {"pages": [{page, pending, accepted, applied, errors, mode}], "total_pending": n}
+    """
+    from ocr.correction_pass import list_review_pages
+
+    doc_path = require_repo_path("documents", doc_id)
+    pages = list_review_pages(doc_path, part_id)
+    return {
+        "pages": pages,
+        "total_pending": sum(p["pending"] for p in pages),
+        "total_errors": sum(p["errors"] for p in pages),
+    }
 
 
 @router.post("/api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr/correct/apply")
@@ -2545,11 +2598,11 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
             },
             status_code=400,
         )
-    if body.llm_correction_mode not in ("fast", "precise"):
+    if body.llm_correction_mode not in ("ladder", "fast", "precise"):
         return JSONResponse(
             {
                 "error": f"llm_correction_mode 값이 잘못되었습니다: {body.llm_correction_mode!r} "
-                "→ fast | precise"
+                "→ ladder | fast | precise"
             },
             status_code=400,
         )
@@ -2638,7 +2691,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
         import json as _json
 
         from core.document import get_corrected_text
-        from ocr.correction_pass import compose_page_text
+        from ocr.correction_pass import compose_page_text, draft_status
 
         try:
             l4 = (get_corrected_text(dp, pid, page).get("corrected_text") or "").strip()
@@ -2660,6 +2713,8 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
         loop = asyncio.get_event_loop()
         processed = skipped = failed = redone = 0
         total_lines = 0
+        # LLM 교정 뒤 사람이 볼 블록이 남은 쪽 — 완료 이벤트로 알려 «어딜 열어야 하나»에 답한다
+        review_pages: list[int] = []
 
         # 이번 배치에서 쓴 LLM 사용량만 집계하려고 시작 지점을 기억한다.
         usage_start = _usage_snapshot()
@@ -2765,11 +2820,13 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                     total_lines += lines
                     processed += 1
 
-                    # 2.5) LLM 교정 패스 (D-082 1단계). 기본 off. "selected"면 신뢰도가
+                    # 2.5) LLM 교정 패스 (D-082 사다리). 기본 off. "selected"면 신뢰도가
                     #      낮은 블록·협주·한글 미지원 엔진 결과만, "all"이면 전량을
                     #      LLM Vision으로 다시 읽어 초안을 만든다. L2는 그대로다.
+                    #      L2를 방금 새로 만들었으므로 옛 초안은 버린다(fresh=True).
                     correction_draft = None
                     corrected_blocks = 0
+                    pending_blocks = 0
                     if body.llm_correction != "off" and results:
                         try:
                             correction_draft = await loop.run_in_executor(
@@ -2786,11 +2843,14 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                                     force_provider=body.force_provider,
                                     force_model=body.force_model,
                                     thinking_budget=body.llm_thinking_budget,
+                                    fresh=True,
                                 ),
                             )
-                            corrected_blocks = sum(
-                                1 for b in correction_draft.get("blocks", []) if b.get("accepted")
-                            )
+                            _st = draft_status(correction_draft)
+                            corrected_blocks = _st["accepted"]
+                            pending_blocks = _st["pending"] + _st["errors"]
+                            if pending_blocks:
+                                review_pages.append(page_number)
                         except Exception as e:  # noqa: BLE001 — 교정 실패로 OCR 결과를 버리지 않는다
                             warnings.append(f"{page_number}쪽 LLM 교정을 건너뜁니다: {e}")
 
@@ -2803,7 +2863,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                     if body.fill_text_layer and lines and not keep_l4:
                         try:
                             from core.document import save_page_text
-                            from ocr.correction_pass import compose_page_text
+                            from ocr.correction_pass import compose_page_text, mark_applied
 
                             text = compose_page_text({"ocr_results": results}, correction_draft)
                             await loop.run_in_executor(
@@ -2812,6 +2872,19 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                                     doc_path, part_id, p, t
                                 ),
                             )
+                            # 자동 수용 블록이 L4에 들어갔음을 초안에 적는다 — 안 적으면
+                            # 검토 목록이 그 블록을 «수용됐는데 안 적용됨»으로 다시 센다.
+                            if correction_draft:
+                                mark_applied(
+                                    doc_path,
+                                    part_id,
+                                    page_number,
+                                    [
+                                        b["block_id"]
+                                        for b in correction_draft.get("blocks", [])
+                                        if b.get("accepted") and not b.get("error")
+                                    ],
+                                )
                         except Exception as e:  # noqa: BLE001
                             # L4 저장 실패로 OCR 결과까지 버리지 않는다.
                             # 다만 교정 탭이 비어 보일 것이므로 사유를 남긴다.
@@ -2832,6 +2905,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                             "lines": lines,
                             "block_created": block_created,
                             "corrected_blocks": corrected_blocks,
+                            "pending_blocks": pending_blocks,
                             "errors": summary.get("errors") or [],
                         }
                     )
@@ -2883,6 +2957,8 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                     "warnings": warnings,
                     "embedded": embed_summary,
                     "usage": _usage_since(usage_start),
+                    # LLM 교정을 켰을 때만 의미 있다. 사람 단계(D-082 3단계)의 입구.
+                    "review_pages": review_pages,
                 }
             )
         except asyncio.CancelledError:

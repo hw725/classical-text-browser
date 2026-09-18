@@ -360,3 +360,175 @@ class TestApplyPreservesPriorWork:
         assert draft["blocks"] == []
         assert not draft_path(doc, "v1", 1).exists()
         assert engine.calls == []
+
+
+# ─── 사다리의 «이음» (2026-09-18) ─────────────────────────────────────
+# 무엇을 고정하는가:
+#   - 초안은 블록 단위로 병합된다: 정밀 판독을 블록 하나에 돌려도 다른 블록 결과가 남는다
+#   - 2단계 판정은 1단계 답이 있으면 «두 단계의 일치»다(앵커가 아니라)
+#   - 검토 목록(list_review_pages)은 사람이 볼 블록이 남은 쪽만 센다
+#   - mark_applied는 applied_blocks를 누적한다
+
+from ocr.correction_pass import (  # noqa: E402
+    Candidate,
+    draft_status,
+    list_review_pages,
+    load_draft,
+    mark_applied,
+    merge_draft,
+    rejected_block_ids,
+    text_agreement,
+)
+
+
+def _pipeline(root, engine):
+    registry = OcrEngineRegistry()
+    registry.register(engine)
+    return OcrPipeline(registry, library_root=str(root))
+
+
+class TestLadderJoints:
+    def test_precise_merges_onto_fast_draft(self, library):
+        root, doc = library
+        engine = _EchoLlmEngine({"裴楷清通": "裴楷淸通", "孔明卧龍": "孔明臥龍"})
+        pipeline = _pipeline(root, engine)
+        cands = select_candidates(_l2(), LAYOUT)
+        assert {c.block_id for c in cands} == {"b2", "b3"}
+
+        run_correction(pipeline, engine, doc, "doc1", "v1", 1, cands, mode="fast")
+        apply_draft(doc, "v1", 1, ["b2"])  # 사람이 하나 적용해 둔 상태
+
+        # 블록 하나에만 정밀 판독 — 예전 구현은 여기서 b2와 applied_blocks가 사라졌다
+        b3 = [c for c in cands if c.block_id == "b3"]
+        draft = run_correction(pipeline, engine, doc, "doc1", "v1", 1, b3, mode="precise")
+        by_id = {b["block_id"]: b for b in draft["blocks"]}
+        assert set(by_id) == {"b2", "b3"}
+        assert by_id["b2"]["stage"] == "fast"
+        assert by_id["b3"]["stage"] == "precise"
+        assert draft["applied_blocks"] == ["b2"]
+        # 파일에도 같은 것이 남았다
+        on_disk = load_draft(doc, "v1", 1)
+        assert {b["block_id"] for b in on_disk["blocks"]} == {"b2", "b3"}
+
+    def test_stage2_is_judged_by_stage_agreement(self, library):
+        root, doc = library
+        # 1단계: 卧→臥 한 글자 바꿈(앵커와 75%라 불합격). 2단계도 같은 답 → 두 단계 일치 → 수용
+        engine = _EchoLlmEngine({"孔明卧龍": "孔明臥龍"})
+        pipeline = _pipeline(root, engine)
+        b3 = [c for c in select_candidates(_l2(), LAYOUT) if c.block_id == "b3"]
+        d1 = run_correction(pipeline, engine, doc, "doc1", "v1", 1, b3, mode="fast")
+        assert d1["blocks"][0]["accepted"] is False
+        assert d1["blocks"][0]["accept_basis"] == "anchor"
+
+        d2 = run_correction(pipeline, engine, doc, "doc1", "v1", 1, b3, mode="precise")
+        e = d2["blocks"][0]
+        assert e["accept_basis"] == "stages"
+        assert e["stage1"]["corrected_text"] == "孔明臥龍"
+        assert e["stages_agreement"] == 1.0
+        assert e["accepted"] is True  # 앵커와는 75%지만 두 단계가 같다
+
+    def test_stage2_disagreement_goes_to_human(self, library):
+        root, doc = library
+        engine = _EchoLlmEngine({"孔明卧龍": "孔明臥龍"})
+        pipeline = _pipeline(root, engine)
+        b3 = [c for c in select_candidates(_l2(), LAYOUT) if c.block_id == "b3"]
+        run_correction(pipeline, engine, doc, "doc1", "v1", 1, b3, mode="fast")
+        # 2단계는 다른 답을 낸다
+        engine.reply_by_block["孔明卧龍"] = "孔明臥竜"
+        d2 = run_correction(pipeline, engine, doc, "doc1", "v1", 1, b3, mode="precise")
+        e = d2["blocks"][0]
+        assert e["accepted"] is False
+        assert e["stage1"]["corrected_text"] == "孔明臥龍" and e["corrected_text"] == "孔明臥竜"
+        assert 0 < e["stages_agreement"] < 1
+        # 사람이 볼 목록에 선다
+        assert draft_status(d2)["pending"] == 1
+        assert [p["page"] for p in list_review_pages(doc, "v1")] == [1]
+
+    def test_precise_without_stage1_uses_anchor(self, library):
+        root, doc = library
+        engine = _EchoLlmEngine({"裴楷清通": "裴楷清通"})
+        pipeline = _pipeline(root, engine)
+        b2 = [c for c in select_candidates(_l2(), LAYOUT) if c.block_id == "b2"]
+        d = run_correction(pipeline, engine, doc, "doc1", "v1", 1, b2, mode="precise")
+        assert d["blocks"][0]["accept_basis"] == "anchor"
+        assert d["blocks"][0]["accepted"] is True
+        assert "stage1" not in d["blocks"][0]
+
+    def test_fresh_discards_old_draft(self, library):
+        root, doc = library
+        engine = _EchoLlmEngine({})
+        pipeline = _pipeline(root, engine)
+        cands = select_candidates(_l2(), LAYOUT)
+        run_correction(pipeline, engine, doc, "doc1", "v1", 1, cands, mode="fast")
+        b2 = [c for c in cands if c.block_id == "b2"]
+        d = run_correction(pipeline, engine, doc, "doc1", "v1", 1, b2, mode="fast", fresh=True)
+        assert [b["block_id"] for b in d["blocks"]] == ["b2"]
+
+    def test_rejected_and_review_accounting(self, library):
+        root, doc = library
+        engine = _EchoLlmEngine({"裴楷清通": "裴楷清通", "孔明卧龍": "孔明臥龍"})
+        pipeline = _pipeline(root, engine)
+        cands = select_candidates(_l2(), LAYOUT)
+        d = run_correction(pipeline, engine, doc, "doc1", "v1", 1, cands, mode="fast")
+        assert rejected_block_ids(d) == ["b3"]  # b2는 자동 수용
+        assert draft_status(d) == {"pending": 1, "accepted": 1, "applied": 0, "errors": 0, "blocks": 2}
+
+        mark_applied(doc, "v1", 1, ["b2"])
+        st = draft_status(load_draft(doc, "v1", 1))
+        assert st["accepted"] == 0 and st["applied"] == 1 and st["pending"] == 1
+        pages = list_review_pages(doc, "v1")
+        assert pages and pages[0]["page"] == 1 and pages[0]["pending"] == 1
+
+        mark_applied(doc, "v1", 1, ["b3"])
+        assert list_review_pages(doc, "v1") == []  # 남은 것이 없으면 목록에서 빠진다
+        assert rejected_block_ids(load_draft(doc, "v1", 1)) == []
+
+    def test_merge_and_agreement_helpers(self):
+        old = {"mode": "fast", "applied_blocks": ["a"], "blocks": [{"block_id": "a"}, {"block_id": "b", "v": 1}]}
+        new = {"mode": "precise", "blocks": [{"block_id": "b", "v": 2}, {"block_id": "c"}]}
+        m = merge_draft(old, new)
+        assert [b["block_id"] for b in m["blocks"]] == ["a", "b", "c"]
+        assert next(b for b in m["blocks"] if b["block_id"] == "b")["v"] == 2
+        assert m["applied_blocks"] == ["a"] and m["mode"] == "precise"
+        assert merge_draft(None, new) is new
+        assert text_agreement("孔明臥龍", "孔明臥龍") == 1.0
+        assert text_agreement("", "") == 0.0
+        assert text_agreement("孔明臥龍", "孔明臥竜") == 0.75
+        assert Candidate("x").to_dict()["block_id"] == "x"
+
+
+class TestLadderRoute:
+    """라우터의 mode="ladder": 1단계 전부 → 떨어진 블록만 2단계 (D-082의 «이음» ①)."""
+
+    def test_ladder_escalates_only_rejected(self, library, monkeypatch):
+        root, doc = library
+        from app.routers import llm_ocr as router_mod
+
+        engine = _EchoLlmEngine({"裴楷清通": "裴楷清通", "孔明卧龍": "孔明臥龍"})
+        pipeline = _pipeline(root, engine)
+        registry = pipeline.registry
+        draft = router_mod._run_page_correction(
+            doc, "doc1", "v1", 1, pipeline, registry, mode="ladder"
+        )
+        by_id = {b["block_id"]: b for b in draft["blocks"]}
+        # b2는 1단계에서 수용 → 1단계에 머문다. b3만 2단계로 올라갔다
+        assert by_id["b2"]["stage"] == "fast" and by_id["b2"]["accepted"] is True
+        assert by_id["b3"]["stage"] == "precise"
+        assert "stage1_rejected" in by_id["b3"]["reasons"]
+        assert by_id["b3"]["accept_basis"] == "stages"
+        assert by_id["b3"]["accepted"] is True  # 두 단계가 같은 답(臥)
+        # 엔진 호출: 1단계 둘(사고 끔) + 2단계 하나(사고 켬)
+        thinks = [c.get("think") for c in engine.calls]
+        assert thinks == [False, False, True]
+
+    def test_ladder_stops_when_all_accepted(self, library):
+        root, doc = library
+        from app.routers import llm_ocr as router_mod
+
+        engine = _EchoLlmEngine({"裴楷清通": "裴楷清通", "孔明卧龍": "孔明卧龍"})
+        pipeline = _pipeline(root, engine)
+        draft = router_mod._run_page_correction(
+            doc, "doc1", "v1", 1, pipeline, pipeline.registry, mode="ladder"
+        )
+        assert all(b["stage"] == "fast" for b in draft["blocks"])
+        assert len(engine.calls) == 2

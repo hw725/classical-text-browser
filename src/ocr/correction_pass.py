@@ -6,11 +6,18 @@
     2단계  LLM 정밀 판독: + 앞뒤 문맥, 사고 켬·예산 분리     ← 이 모듈 (mode="precise")
     3단계  사람
 
-이 모듈이 하는 일 세 가지:
+이 모듈이 하는 일:
     1. select_candidates()  — 어느 블록을 다시 볼지 **기계적으로** 고른다. LLM을 부르지 않는다.
     2. run_correction()     — 고른 블록을 LLM Vision으로 다시 읽는다. L2는 건드리지 않고
                               초안(draft)으로 저장한다. 앵커(L2 텍스트)와의 정렬 결과를 함께 준다.
     3. apply_draft()        — 사람이(또는 자동 수용 기준이) 받아들인 블록만 L4에 쓴다.
+    4. rejected_block_ids() · list_review_pages() — 사다리의 «이음». 1단계에서 떨어진
+       블록을 2단계로 올릴 목록과, 일괄 실행 뒤 사람이 볼 쪽 목록을 준다.
+
+초안은 쪽마다 파일 하나이고 **블록 단위로 병합된다** (2026-09-18). 정밀 판독을 블록 하나에
+돌려도 같은 쪽의 다른 블록 결과는 남는다. 한 블록에 1단계 결과가 있는 채로 2단계를 돌리면
+1단계 답을 `stage1`에 보관하고, 2단계의 수용 기준은 앵커가 아니라 **두 단계의 일치**다
+(D-082 표의 2단계 «1·2단계 일치»). 두 답이 다르면 둘 다 사람에게 보인다.
 
 왜 L2를 덮지 않는가:
     L2는 엔진이 본 것의 기록이다. 교정본이 더 나쁠 수 있고(D-065), 그때 돌아갈 곳이
@@ -279,6 +286,158 @@ def evaluate_block(
     }
 
 
+def text_agreement(a: str, b: str, variant_dict=None) -> float:
+    """두 텍스트의 글자 일치율 (exact+variant ÷ 긴 쪽 길이). 둘 다 비면 0.
+
+    1단계와 2단계의 답을 견주는 데 쓴다 — evaluate_block이 앵커와 교정본을 견주는 것과
+    같은 잣대라, «앵커와 90% 일치»와 «두 단계가 90% 일치»가 같은 뜻이 된다.
+    """
+    from core.alignment import MatchType, align_texts
+
+    a = (a or "").replace("\n", "")
+    b = (b or "").replace("\n", "")
+    if not a and not b:
+        return 0.0
+    pairs = align_texts(a, b, variant_dict=variant_dict)
+    ok = sum(1 for p in pairs if p.match_type in (MatchType.EXACT, MatchType.VARIANT))
+    return round(ok / max(len(a), len(b), 1), 4)
+
+
+def _judge_stage2(entry: dict, stage1: Optional[dict], variant_dict=None) -> None:
+    """2단계 결과의 수용 판정 (제자리에서 entry를 고친다).
+
+    1단계 답이 있으면 D-082 표대로 **두 단계의 일치**로 판정한다 — 앵커(엔진 결과)와의
+    일치는 참고값으로만 남긴다. 사고를 켜고 문맥을 넓혀 읽은 답이 사고 없이 읽은 답과
+    같으면 그 글자는 이미지가 그렇게 생긴 것이고, 다르면 사람이 둘을 보고 골라야 한다.
+    1단계 답이 없으면(사람이 곧장 정밀 판독을 눌렀다) 앵커 기준을 그대로 쓴다.
+    """
+    if entry.get("error") or not stage1 or not stage1.get("corrected_text"):
+        entry["accept_basis"] = "anchor"
+        return
+    entry["stage1"] = {
+        "corrected_text": stage1.get("corrected_text", ""),
+        "agreement": stage1.get("agreement"),
+        "uncertain_count": stage1.get("uncertain_count"),
+    }
+    agree = text_agreement(stage1.get("corrected_text", ""), entry.get("corrected_text", ""), variant_dict)
+    entry["stages_agreement"] = agree
+    entry["accept_basis"] = "stages"
+    entry["accepted"] = (
+        agree >= DEFAULT_ACCEPT_AGREEMENT
+        and not entry.get("uncertain_count")
+        and not entry.get("illegible_count")
+        and bool(entry.get("corrected_text"))
+    )
+
+
+def merge_draft(existing: Optional[dict], fresh: dict) -> dict:
+    """새 실행 결과(fresh)를 기존 초안(existing) 위에 **블록 단위로** 얹는다.
+
+    왜: 예전에는 실행마다 초안 파일을 통째로 다시 썼다. 1단계로 블록 둘을 본 뒤 블록
+    하나에 정밀 판독을 돌리면 나머지 블록의 결과가 사라졌고, «적용한 블록» 기록도 함께
+    없어졌다(2026-09-17 재현). 같은 block_id는 새 결과로 바꾸고, 없는 블록은 그대로 둔다.
+    출력: 병합된 초안. mode는 마지막 실행의 것, applied_blocks는 합집합.
+    """
+    if not existing:
+        return fresh
+    by_id = {b.get("block_id"): b for b in existing.get("blocks", [])}
+    order = [b.get("block_id") for b in existing.get("blocks", [])]
+    for b in fresh.get("blocks", []):
+        bid = b.get("block_id")
+        if bid not in by_id:
+            order.append(bid)
+        by_id[bid] = b
+    merged = dict(fresh)
+    merged["blocks"] = [by_id[bid] for bid in order]
+    merged["applied_blocks"] = sorted(
+        set(existing.get("applied_blocks") or []) | set(fresh.get("applied_blocks") or [])
+    )
+    return merged
+
+
+def rejected_block_ids(draft: dict) -> list[str]:
+    """사다리에서 다음 단계로 올릴 블록 — 결과는 있는데 자동 수용을 못 받은 것.
+
+    오류가 난 블록은 올리지 않는다(같은 오류를 비싼 단계에서 되풀이한다). 이미 적용된
+    블록도 올리지 않는다(사람이 이미 골랐다).
+    """
+    applied = set(draft.get("applied_blocks") or [])
+    out = []
+    for b in draft.get("blocks", []):
+        if b.get("error") or b.get("accepted") or b.get("block_id") in applied:
+            continue
+        out.append(b["block_id"])
+    return out
+
+
+def draft_status(draft: Optional[dict]) -> dict:
+    """초안 한 장의 셈: 사람이 볼 것(pending)·자동 수용(accepted)·적용됨(applied)·오류.
+
+    «pending»이 사람 단계(3단계)의 입구다 — 결과는 있는데 자동 수용도 적용도 안 된 블록.
+    """
+    if not draft:
+        return {"pending": 0, "accepted": 0, "applied": 0, "errors": 0, "blocks": 0}
+    applied = set(draft.get("applied_blocks") or [])
+    pending = accepted = errors = 0
+    for b in draft.get("blocks", []):
+        bid = b.get("block_id")
+        if b.get("error"):
+            errors += 1
+        elif bid in applied:
+            continue
+        elif b.get("accepted"):
+            accepted += 1
+        elif b.get("corrected_text"):
+            pending += 1
+    return {
+        "pending": pending,
+        "accepted": accepted,
+        "applied": len(applied),
+        "errors": errors,
+        "blocks": len(draft.get("blocks", [])),
+    }
+
+
+def list_review_pages(doc_path: Path, part_id: str) -> list[dict]:
+    """한 권에서 사람이 볼 초안이 있는 쪽 목록 (쪽 번호 순).
+
+    일괄 실행이 끝난 뒤 «어느 쪽을 열어야 하나»에 답한다. 초안 파일을 하나씩 읽어
+    pending·errors가 있는 쪽만 돌려준다. 파일이 깨졌으면 그 쪽은 건너뛴다(load_draft가
+    경고를 남긴다).
+    출력: [{"page": n, "pending": p, "accepted": a, "applied": d, "errors": e, "mode": m}]
+    """
+    drafts_dir = Path(doc_path) / "L4_text" / DRAFT_DIRNAME
+    if not drafts_dir.exists():
+        return []
+    out = []
+    prefix = f"{part_id}_page_"
+    for path in sorted(drafts_dir.glob(f"{prefix}*.json")):
+        try:
+            page = int(path.stem[len(prefix) :])
+        except ValueError:
+            continue
+        draft = load_draft(doc_path, part_id, page)
+        st = draft_status(draft)
+        if st["pending"] or st["errors"]:
+            out.append({"page": page, "mode": (draft or {}).get("mode"), **st})
+    return out
+
+
+def mark_applied(doc_path: Path, part_id: str, page_number: int, block_ids: list[str]) -> None:
+    """초안의 applied_blocks에 블록을 더해 저장한다.
+
+    일괄 OCR이 compose_page_text로 자동 수용 블록을 L4에 넣을 때 부른다 — 적지 않으면
+    검토 목록이 이미 들어간 블록을 «자동 수용됐는데 안 적용됨»으로 다시 센다.
+    """
+    draft = load_draft(doc_path, part_id, page_number)
+    if not draft or not block_ids:
+        return
+    from core.document import write_json_atomic
+
+    draft["applied_blocks"] = sorted(set(draft.get("applied_blocks") or []) | set(block_ids))
+    write_json_atomic(draft_path(doc_path, part_id, page_number), draft)
+
+
 def run_correction(
     pipeline,
     engine,
@@ -295,6 +454,7 @@ def run_correction(
     prev_page_text: Optional[str] = None,
     next_page_text: Optional[str] = None,
     save: bool = True,
+    fresh: bool = False,
 ) -> dict:
     """후보 블록들을 LLM으로 다시 읽어 초안을 만든다. L2는 건드리지 않는다.
 
@@ -306,9 +466,13 @@ def run_correction(
       llm_kwargs— llm_kwargs_for_mode() 결과.
       variant_dict / variant_hint_pairs — 정렬 사전과 프롬프트 자형 주의 목록 (D-080·D-081).
       prev/next_page_text — precise 모드의 앞뒤 쪽 확정본.
-    출력: 초안 dict — {doc_id, part_id, page, mode, engine, created_at,
-                       blocks: [{block_id, reasons, anchor_text, corrected_text, agreement,
-                                 uncertain_count, accepted, lines, pairs, error?}]}
+      fresh     — True면 기존 초안을 버리고 새로 시작한다. 일괄 OCR이 L2를 새로 만든 직후에
+                  쓴다 — 옛 초안의 앵커는 새 L2와 맞지 않는다.
+    출력: 초안 dict(기존 초안과 **블록 단위로 병합**된 것) —
+          {doc_id, part_id, page, mode, engine, created_at, applied_blocks,
+           blocks: [{block_id, stage, reasons, anchor_text, corrected_text, agreement,
+                     uncertain_count, accepted, accept_basis, lines, pairs,
+                     stage1?, stages_agreement?, error?}]}
     """
     draft = {
         "doc_id": doc_id,
@@ -319,10 +483,12 @@ def run_correction(
         "created_at": datetime.now(timezone.utc).isoformat(),
         "blocks": [],
     }
+    existing = None if fresh else load_draft(doc_path, part_id, page_number)
     if not candidates:
         # 다시 볼 블록이 없으면 이미지도 열지 않고 초안 파일도 만들지 않는다.
         # 빈 초안이 남으면 eval_cer가 «교정 초안이 있는 쪽»으로 세어 통계가 부푼다.
-        return draft
+        return merge_draft(existing, draft)
+    prior_by_id = {b.get("block_id"): b for b in (existing or {}).get("blocks", [])}
 
     l2_path = Path(doc_path) / "L2_ocr" / f"{part_id}_page_{page_number:03d}.json"
     l2_page = json.loads(l2_path.read_text(encoding="utf-8")) if l2_path.exists() else {}
@@ -336,6 +502,7 @@ def run_correction(
         block = blocks_by_id.get(cand.block_id)
         entry = {
             "block_id": cand.block_id,
+            "stage": mode,
             "reasons": cand.reasons,
             "anchor_text": cand.anchor_text,
         }
@@ -362,16 +529,23 @@ def run_correction(
             lines = ocr_dict.get("lines") or []
             entry.update(evaluate_block(cand.anchor_text, lines, variant_dict))
             entry["lines"] = lines
+            entry["accept_basis"] = "anchor"
+            if mode == "precise":
+                # 같은 블록에 1단계 답이 있으면 2단계 판정은 «두 단계의 일치»다.
+                prior = prior_by_id.get(cand.block_id)
+                stage1 = prior if prior and prior.get("stage", "fast") == "fast" else None
+                _judge_stage2(entry, stage1, variant_dict)
         except Exception as e:  # noqa: BLE001 — 한 블록 실패로 쪽 전체를 버리지 않는다
             entry["error"] = str(e)
             entry["accepted"] = False
         draft["blocks"].append(entry)
 
+    merged = merge_draft(existing, draft)
     if save:
         from core.document import write_json_atomic
 
-        write_json_atomic(draft_path(doc_path, part_id, page_number), draft)
-    return draft
+        write_json_atomic(draft_path(doc_path, part_id, page_number), merged)
+    return merged
 
 
 def compose_page_text(l2_page: dict, draft: Optional[dict], block_ids: Optional[set] = None) -> str:
