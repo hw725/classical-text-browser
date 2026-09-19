@@ -768,3 +768,68 @@ class TestLadderRouteMore:
         on_disk = load_draft(doc, "v1", 1)
         assert {b["block_id"] for b in on_disk["blocks"]} == {"b2", "b3"}
         assert [p["page"] for p in list_review_pages(doc, "v1")] == [1]
+
+
+
+class TestConcurrency:
+    """일괄(교정 실행)과 사람(적용)이 같은 쪽을 동시에 만질 때 기록이 유실되지 않는다(쪽 잠금)."""
+
+    def test_apply_during_correction_is_not_lost(self, library):
+        import threading
+        import time
+
+        root, doc = library
+
+        class _SlowEngine(_EchoLlmEngine):
+            def recognize(self, image_bytes, writing_direction="vertical_rtl", language="classical_chinese", **kwargs):
+                time.sleep(0.6)  # LLM을 기다리는 동안 사람이 「적용」을 누른다
+                return super().recognize(image_bytes, writing_direction, language, **kwargs)
+
+        engine = _SlowEngine({"裴楷清通": "裴楷清通", "孔明卧龍": "孔明臥龍"})
+        pipeline = _pipeline(root, engine)
+        cands = select_candidates(_l2(), LAYOUT)
+        run_correction(pipeline, engine, doc, "doc1", "v1", 1, cands, mode="fast")  # 1단계 둘
+
+        b3 = [c for c in cands if c.block_id == "b3"]
+        t = threading.Thread(
+            target=run_correction, args=(pipeline, engine, doc, "doc1", "v1", 1, b3), kwargs={"mode": "precise"}
+        )
+        t.start()
+        time.sleep(0.2)
+        apply_draft(doc, "v1", 1, ["b2"])  # 정밀 판독이 LLM을 기다리는 동안
+        t.join(timeout=10)
+        assert not t.is_alive()
+
+        d = load_draft(doc, "v1", 1)
+        by_id = {b["block_id"]: b for b in d["blocks"]}
+        assert d["applied_blocks"] == ["b2"]  # 예전 구현은 여기서 사라졌다
+        assert by_id["b2"].get("applied_text") == "裴楷清通"
+        assert by_id["b3"]["stage"] == "precise"
+
+    def test_parallel_applies_both_recorded(self, library):
+        import threading
+
+        root, doc = library
+        engine = _EchoLlmEngine({"裴楷清通": "裴楷淸通", "孔明卧龍": "孔明臥龍"})
+        pipeline = _pipeline(root, engine)
+        run_correction(pipeline, engine, doc, "doc1", "v1", 1, select_candidates(_l2(), LAYOUT), mode="fast")
+        errors = []
+
+        def go(bid):
+            try:
+                apply_draft(doc, "v1", 1, [bid])
+            except Exception as e:  # noqa: BLE001
+                errors.append(e)
+
+        ts = [threading.Thread(target=go, args=(b,)) for b in ("b2", "b3") for _ in range(3)]
+        for x in ts:
+            x.start()
+        for x in ts:
+            x.join(timeout=10)
+        assert not errors
+        d = load_draft(doc, "v1", 1)
+        assert d["applied_blocks"] == ["b2", "b3"]
+        from core.document import get_page_text
+
+        text = get_page_text(doc, "v1", 1)["text"]
+        assert "裴楷淸通" in text and "孔明臥龍" in text

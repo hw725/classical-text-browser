@@ -1704,11 +1704,18 @@ async def api_apply_correction(
     doc_id: str, part_id: str, page_number: int, body: CorrectionApplyRequest
 ):
     """교정 초안을 L4에 쓴다. block_ids가 없으면 자동 수용된 블록만 (D-082)."""
+    import asyncio
+
     from ocr.correction_pass import StaleDraftError, apply_draft
 
     doc_path = require_repo_path("documents", doc_id)
     try:
-        return apply_draft(doc_path, part_id, page_number, body.block_ids)
+        # executor에서 돌린다 — 일괄이 같은 쪽의 잠금을 쥐고 있으면 여기서 기다리는데,
+        # 이벤트 루프 스레드에서 기다리면 서버 전체가 멈춘다
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, lambda: apply_draft(doc_path, part_id, page_number, body.block_ids)
+        )
     except FileNotFoundError as e:
         return JSONResponse({"error": str(e)}, status_code=404)
     except StaleDraftError as e:
@@ -2900,28 +2907,34 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                     if body.fill_text_layer and lines and not keep_l4:
                         try:
                             from core.document import save_page_text
-                            from ocr.correction_pass import compose_page_text, mark_applied
-
-                            text = compose_page_text({"ocr_results": results}, correction_draft)
-                            await loop.run_in_executor(
-                                None,
-                                lambda p=page_number, t=text: save_page_text(
-                                    doc_path, part_id, p, t
-                                ),
+                            from ocr.correction_pass import (
+                                compose_page_text,
+                                draft_lock,
+                                mark_applied,
                             )
-                            # 자동 수용 블록이 L4에 들어갔음을 초안에 적는다 — 안 적으면
-                            # 검토 목록이 그 블록을 «수용됐는데 안 적용됨»으로 다시 센다.
-                            if correction_draft:
-                                mark_applied(
-                                    doc_path,
-                                    part_id,
-                                    page_number,
-                                    [
-                                        b["block_id"]
-                                        for b in correction_draft.get("blocks", [])
-                                        if b.get("accepted") and not b.get("error")
-                                    ],
-                                )
+
+                            def _fill_l4(p=page_number, res=results, cd=correction_draft):
+                                # L4 쓰기와 «적용됨» 기록을 쪽 잠금 안에서 한 번에 — 그 사이에
+                                # 사람이 같은 쪽에 「적용」을 누르면 한쪽이 다른 쪽을 덮는다.
+                                # executor 스레드에서 잡아야 라우트(다른 스레드)가 실제로 기다린다.
+                                with draft_lock(doc_path, part_id, p):
+                                    text = compose_page_text({"ocr_results": res}, cd)
+                                    save_page_text(doc_path, part_id, p, text)
+                                    # 자동 수용 블록이 L4에 들어갔음을 초안에 적는다 — 안 적으면
+                                    # 검토 목록이 그 블록을 «수용됐는데 안 적용됨»으로 다시 센다.
+                                    if cd:
+                                        mark_applied(
+                                            doc_path,
+                                            part_id,
+                                            p,
+                                            [
+                                                b["block_id"]
+                                                for b in cd.get("blocks", [])
+                                                if b.get("accepted") and not b.get("error")
+                                            ],
+                                        )
+
+                            await loop.run_in_executor(None, _fill_l4)
                         except Exception as e:  # noqa: BLE001
                             # L4 저장 실패로 OCR 결과까지 버리지 않는다.
                             # 다만 교정 탭이 비어 보일 것이므로 사유를 남긴다.

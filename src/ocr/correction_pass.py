@@ -33,12 +33,34 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+# ─── 쪽 단위 잠금 ─────────────────────────────────────────────────
+# 초안 파일은 여러 곳이 «읽고 → 고치고 → 쓴다»: run_correction(병합 저장)·apply_draft·
+# mark_applied·discard_draft, 그리고 일괄 OCR의 L4 채우기. write_json_atomic은 쓰기만
+# 원자적이라, 일괄이 도는 중에 사람이 같은 쪽에 「적용」을 누르면 한쪽의 기록이 다른 쪽에
+# 덮여 사라졌다(2026-09-18 교차검증 사각지대). 쪽마다 RLock 하나로 그 구간을 묶는다.
+# 서버는 한 프로세스이고(일괄은 executor 스레드, 적용 라우트도 executor로 보낸다) 스레드
+# 잠금이면 충분하다 — CLI(ctb ocr)는 교정 패스를 부르지 않는다.
+_DRAFT_LOCKS: dict[str, threading.RLock] = {}
+_DRAFT_LOCKS_GUARD = threading.Lock()
+
+
+@contextmanager
+def draft_lock(doc_path: Path, part_id: str, page_number: int):
+    """이 쪽의 초안(과 그 쪽 L4 채우기)을 고치는 동안 잡는 잠금. 같은 스레드에서는 겹쳐 잡아도 된다."""
+    key = str(draft_path(doc_path, part_id, page_number).resolve())
+    with _DRAFT_LOCKS_GUARD:
+        lock = _DRAFT_LOCKS.setdefault(key, threading.RLock())
+    with lock:
+        yield
 
 # ─── 선별 기준 (기계적, LLM 없음) ────────────────────────────────
 
@@ -480,14 +502,15 @@ def discard_draft(doc_path: Path, part_id: str, page_number: int) -> bool:
     L2 백업(D-065)과 L4 커밋이지 초안이 아니다.
     """
     p = draft_path(doc_path, part_id, page_number)
-    if not p.exists():
-        return False
-    try:
-        p.unlink()
-    except OSError as e:  # Windows에서 열려 있는 파일 — 교정 실행 전체를 터뜨릴 일은 아니다
-        logger.warning(f"낡은 교정 초안을 지우지 못했습니다(다음 실행이 덮어씁니다): {p} — {e}")
-        return False
-    return True
+    with draft_lock(doc_path, part_id, page_number):
+        if not p.exists():
+            return False
+        try:
+            p.unlink()
+        except OSError as e:  # Windows에서 열려 있는 파일 — 교정 실행 전체를 터뜨릴 일은 아니다
+            logger.warning(f"낡은 교정 초안을 지우지 못했습니다(다음 실행이 덮어씁니다): {p} — {e}")
+            return False
+        return True
 
 
 def list_review_pages(doc_path: Path, part_id: str) -> list[dict]:
@@ -539,18 +562,21 @@ def mark_applied(doc_path: Path, part_id: str, page_number: int, block_ids: list
     일괄 OCR이 compose_page_text로 자동 수용 블록을 L4에 넣을 때 부른다 — 적지 않으면
     검토 목록이 이미 들어간 블록을 «자동 수용됐는데 안 적용됨»으로 다시 센다.
     """
-    draft = load_draft(doc_path, part_id, page_number)
-    if not draft or not block_ids:
+    if not block_ids:
         return
     from core.document import write_json_atomic
 
-    wanted = set(block_ids)
-    for b in draft.get("blocks", []):
-        if b.get("block_id") in wanted:
-            # 그때 들어간 글자를 적어 둔다 — 뒤에 다시 읽어 답이 달라지면 draft_status가 충돌로 센다
-            b["applied_text"] = b.get("corrected_text")
-    draft["applied_blocks"] = sorted(set(draft.get("applied_blocks") or []) | wanted)
-    write_json_atomic(draft_path(doc_path, part_id, page_number), draft)
+    with draft_lock(doc_path, part_id, page_number):
+        draft = load_draft(doc_path, part_id, page_number)
+        if not draft:
+            return
+        wanted = set(block_ids)
+        for b in draft.get("blocks", []):
+            if b.get("block_id") in wanted:
+                # 그때 들어간 글자를 적어 둔다 — 뒤에 다시 읽어 답이 달라지면 draft_status가 충돌로 센다
+                b["applied_text"] = b.get("corrected_text")
+        draft["applied_blocks"] = sorted(set(draft.get("applied_blocks") or []) | wanted)
+        write_json_atomic(draft_path(doc_path, part_id, page_number), draft)
 
 
 def run_correction(
@@ -684,10 +710,17 @@ def run_correction(
             entry["accepted"] = False
         draft["blocks"].append(entry)
 
-    merged = merge_draft(existing, draft)
-    if save:
-        from core.document import write_json_atomic
+    if not save:
+        return merge_draft(existing, draft)
+    from core.document import write_json_atomic
 
+    with draft_lock(doc_path, part_id, page_number):
+        # LLM을 기다리는 동안 사람이 「적용」을 눌렀을 수 있다 — 아까 읽은 existing이 아니라
+        # 지금 파일 위에 병합한다(D-127과 같은 규칙: 기다린 뒤 저장하는 곳은 다시 읽는다)
+        now = None if fresh else load_draft(doc_path, part_id, page_number)
+        if now is not None and draft_is_stale(doc_path, part_id, page_number, now):
+            now = None
+        merged = merge_draft(now, draft)
         write_json_atomic(draft_path(doc_path, part_id, page_number), merged)
     return merged
 
@@ -716,6 +749,14 @@ def compose_page_text(l2_page: dict, draft: Optional[dict], block_ids: Optional[
 
 
 def apply_draft(
+    doc_path: Path, part_id: str, page_number: int, block_ids: Optional[list[str]]
+) -> dict:
+    """초안의 블록을 L4에 적용한다 — 쪽 잠금 안에서(_apply_draft_locked 참조)."""
+    with draft_lock(doc_path, part_id, page_number):
+        return _apply_draft_locked(doc_path, part_id, page_number, block_ids)
+
+
+def _apply_draft_locked(
     doc_path: Path, part_id: str, page_number: int, block_ids: Optional[list[str]]
 ) -> dict:
     """초안의 블록을 **현재 L4 위에** 적용한다. block_ids가 None이면 accepted 블록만.
