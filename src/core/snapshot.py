@@ -141,10 +141,17 @@ def build_snapshot(
     doc_path = library_path / "documents" / doc_id
     interp_path = library_path / "interpretations" / interp_id
 
+    from .corpus_version import corpus_snapshot
+
     return {
         "schema_version": "1.0",
         "export_timestamp": datetime.now(timezone.utc).isoformat(),
         "platform_version": PLATFORM_VERSION,
+        # 데이터 버전 각인 (D-128 1항). schema_version은 «스키마» 판이고 이것은
+        # «데이터» 판이다 — 스키마가 그대로여도 원문 교정 한 글자로 결과가 달라진다.
+        "corpus_version": corpus_snapshot(
+            library_path, document_ids=[doc_id], interpretation_ids=[interp_id]
+        ),
         # D-099 후속: 옛 이름은 "work"였다. Work 엔티티를 없앤 뒤로 «엔티티 Work»와 헷갈려서
         # 이름을 바꿨다 — 이 절은 엔티티가 아니라 «이 스냅샷이 어느 문헌·해석의 것인가»다.
         "source_info": _serialize_source_info(doc_path, interp_path),

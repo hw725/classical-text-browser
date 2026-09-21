@@ -52,6 +52,19 @@ Deletion is not allowed.
 Instead: - status: draft - status: active - status: deprecated - status:
 archived
 
+## 2.5 Identity Continuity (D-128 2항)
+
+승격·병합으로 새 id가 생기면 **구 id → 신 id 매핑을 남긴다.** 남기지 않으면 그
+id를 인용한 과거 참조 — 논문 각주, 다른 해석 저장소, 이미 내보낸 사전 — 가
+조용히 끊긴다. 2.4가 파일을 살려 두는 것과 별개의 문제다: 파일이 남아 있어도
+「지금은 무엇을 봐야 하는가」를 알 수 없으면 참조는 끊긴 것이다.
+
+- 장부는 `core_entities/id_map.json` 하나다(`core/entity_id_map.py`).
+- 고리 둘: `superseded_by`(병합 — 조회가 따라간다) · `promoted_to`(Tag → Concept
+  승격 — 따라가지 않는다. Tag는 승격 뒤에도 제 id로 살아 있다).
+- 병합은 관계를 새 id로 고쳐 쓰지 않는다. 「그때 이 관계는 A를 가리켰다」는
+  사실이 사라지기 때문이다 — 해석은 읽을 때 `resolve_id()`로 이루어진다.
+
 ------------------------------------------------------------------------
 
 # 3. Folder Structure
@@ -65,6 +78,7 @@ repository:
 
 {interp_id}/
 └── core_entities/
+    ├── id_map.json              (구 ID → 신 ID 장부 — D-128 2항)
     ├── tags/{uuid}.json
     ├── concepts/{uuid}.json
     ├── agents/{uuid}.json

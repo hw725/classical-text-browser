@@ -125,6 +125,12 @@ def _validate_entity(entity_type: str, data: dict) -> None:
         # _meta 등 내부 필드는 검증에서 제외
         validate_data = {k: v for k, v in data.items() if not k.startswith("_")}
         jsonschema.validate(instance=validate_data, schema=schema)
+        if entity_type == "relation":
+            # JSON 스키마로는 적을 수 없는 규칙 — 조절형이 어디에 붙을 수 있는가
+            # (D-128 12항). 값의 «모양»이 아니라 «뜻»의 검사라 코드에 둔다.
+            from .relation_polarity import validate_relation_semantics
+
+            validate_relation_semantics(validate_data)
     else:
         logger.warning(
             "스키마 파일이 없어 '%s' 엔티티 검증을 건너뜁니다: %s",
@@ -161,6 +167,35 @@ def _get_source_head_commit(doc_path: Path) -> str:
 # ──────────────────────────
 # 공개 API 함수
 # ──────────────────────────
+#
+# 질의 표면은 좁게 유지한다 (D-128 3항).
+#
+# 왜: 참고한 커넥톰 데이터베이스는 노드 17,087·엣지 46,700 규모를 «뉴런을 받는다»와
+# «인접을 받는다» 둘로만 노출한다. 임의 순회를 열어주지 않는 것이 핵심이다 —
+# 스키마가 아무리 커져도 사용처가 터지지 않는다. 이 모듈의 읽기 문은 셋뿐이다:
+#
+#     get_entity()            — id 하나
+#     list_entities()         — 종류 하나 + 동등 비교 필터
+#     list_entities_for_page() — 쪽 하나에 걸린 것
+#
+# **여기에 그래프 순회 함수를 더하지 않는다.** 관계를 따라가는 일이 필요하면
+# 목록을 받아 거르는 «순수 함수»로 만든다 — core/relation_polarity.py의
+# strong_edges()가 그 모양이다. 저장소를 인자로 받지 않으므로 구조상 순회를
+# 할 수 없고, 그래서 스키마가 커져도 이 파일이 커지지 않는다.
+#
+# 이것은 «접근 경로»의 규약이고 «저장 내용»의 규약이 아니다. 서술어 축에서
+# 같은 일을 하는 것은 core-schema-v1.3.md §6.1 Predicate Rules 이며, 둘은
+# 다른 축이라 서로를 대신하지 못한다.
+#
+# 검사: tests/test_d128.py::TestQuerySurfaceStaysNarrow
+QUERY_SURFACE = ("get_entity", "list_entities", "list_entities_for_page")
+
+# list_entities 가 받는 필터 키. 여기 없는 키를 라우터가 넘기기 시작하면
+# 질의가 넓어지고 있다는 신호다 — 늘릴 때는 D-128 3항을 다시 읽는다.
+#
+# scope_document 만 동등 비교가 아니다 — 범위는 «주소»라서 전역(null) 개념이
+# 모든 문헌 주소에 걸린다(D-128 6항, core/concept_scope.py).
+LIST_FILTER_KEYS = ("status", "block_id", "scope_document")
 
 
 # ──────────────────────────
@@ -631,13 +666,31 @@ def get_entity(
     dir_path = _entity_dir_path(interp_path, entity_type)
     file_path = dir_path / f"{entity_id}.json"
 
+    # 옛 id로 물어봐도 «지금 무엇이 됐는지»를 알려준다 (D-128 2항). 병합으로 생긴
+    # 새 id를 장부에 남기지 않으면, 그 id를 인용한 과거 참조가 조용히 끊긴다.
+    from .entity_id_map import resolve_id
+
     if not file_path.exists():
+        moved = resolve_id(interp_path, entity_type, entity_id)
+        if moved["superseded"]:
+            raise FileNotFoundError(
+                f"{entity_type} 엔티티 {entity_id}는 {moved['id']}로 대체되었습니다.\n"
+                f"→ 거쳐온 자리: {' → '.join(moved['chain'])}\n"
+                "→ 해결: 새 ID로 조회하세요."
+            )
         raise FileNotFoundError(
             f"{entity_type} 엔티티를 찾을 수 없습니다: {entity_id}\n"
             "→ 해결: 엔티티 ID와 유형을 확인하세요."
         )
 
-    return json.loads(file_path.read_text(encoding="utf-8"))
+    data = json.loads(file_path.read_text(encoding="utf-8"))
+
+    # 파일이 남아 있어도(삭제 금지 규약, operation-rules 2.4) 대체됐을 수 있다.
+    # 저장된 기록은 고치지 않고 «지금 어디를 보라»만 덧붙인다 — 읽기 전용 안내다.
+    moved = resolve_id(interp_path, entity_type, entity_id)
+    if moved["superseded"]:
+        return {**data, "superseded_by": moved["id"], "supersede_chain": moved["chain"]}
+    return data
 
 
 def update_entity(
@@ -748,6 +801,18 @@ def list_entities(
             continue
 
     # 필터 적용
+    #
+    # scope_document 는 다른 키와 다루는 법이 다르다 (D-128 6항). 동등 비교로
+    # 걸러 버리면 전역 개념(scope_document 없음)이 목록에서 사라지는데, 전역은
+    # «모든 문헌 주소에 걸리는 것»이라 그러면 안 된다. 범위는 순위 가중치가
+    # 아니라 주소이므로, 넣고 빼기만 하고 정렬은 하지 않는다.
+    scope_value = None
+    has_scope_filter = False
+    if filters and "scope_document" in filters:
+        filters = dict(filters)
+        scope_value = filters.pop("scope_document")
+        has_scope_filter = True
+
     if filters:
         filtered = []
         for entity in entities:
@@ -760,7 +825,61 @@ def list_entities(
                 filtered.append(entity)
         entities = filtered
 
-    return entities
+    if has_scope_filter:
+        from .concept_scope import scoped
+
+        entities = scoped(entities, scope_value)
+
+    return _annotate_superseded(interp_path, entity_type, entities)
+
+
+def _annotate_superseded(interp_path: Path, entity_type: str, entities: list[dict]) -> list[dict]:
+    """목록의 각 엔티티에 «지금은 무엇을 보라»를 덧붙인다 (D-128 2항).
+
+    입력: interp_path — 해석 저장소. entity_type — 종류. entities — 목록.
+    출력: 같은 길이의 목록. 대체된 것에만 superseded_by·supersede_chain 이 붙는다.
+
+    왜 get_entity 만으로는 모자랐는가: 화면의 엔티티 «목록»은 list_entities 로
+    그리는데 거기에는 장부가 반영되지 않아, 이미 합쳐진 개념에 「합치기」 단추가
+    그대로 남고 «→ 새 ID» 표시도 뜨지 않았다(2026-09-21 브라우저 검증에서 발견).
+    상태가 deprecated 인 것과 «합쳐졌다»는 것은 다른 사실이라 상태로는 대신할 수 없다.
+
+    왜 여기서 장부를 한 번만 읽는가: 엔티티마다 resolve_id 를 부르면 목록 하나에
+    파일을 N번 읽는다. 장부는 파일 하나이므로 미리 펼쳐 두고 각자 따라가게 한다.
+    """
+    if not entities:
+        return entities
+
+    from .entity_id_map import FOLLOWED_RELATIONS, load_id_map
+
+    lookup: dict[str, str] = {}
+    for e in load_id_map(interp_path)["entries"]:
+        if e.get("entity_type") != entity_type:
+            continue
+        if e.get("relation") not in FOLLOWED_RELATIONS:
+            continue
+        old_id, new_id = e.get("old_id"), e.get("new_id")
+        if old_id and new_id:
+            lookup[old_id] = new_id
+    if not lookup:
+        return entities
+
+    out = []
+    for entity in entities:
+        entity_id = entity.get("id")
+        if entity_id not in lookup:
+            out.append(entity)
+            continue
+        chain, seen, current = [entity_id], {entity_id}, entity_id
+        while current in lookup:
+            nxt = lookup[current]
+            if nxt in seen:
+                break
+            chain.append(nxt)
+            seen.add(nxt)
+            current = nxt
+        out.append({**entity, "superseded_by": current, "supersede_chain": chain})
+    return out
 
 
 def list_entities_for_page(
@@ -864,6 +983,8 @@ def promote_tag_to_concept(
     label: str | None = None,
     scope_document: str | None = None,
     description: str | None = None,
+    *,
+    require_weight: bool = False,
 ) -> dict:
     """Tag를 Concept으로 승격한다 (Promotion Flow).
 
@@ -895,13 +1016,43 @@ def promote_tag_to_concept(
             f"Tag(id={tag_id})에 surface가 없고, label 인수도 지정되지 않았습니다."
         )
 
+    # 승격의 저울 — 출처 «개수»가 아니라 «무게»로 잰다 (D-128 8항).
+    #
+    # 왜 여기서 재는가: 승격은 한 Tag를 누르는 동작이지만, 그 표면형을 가리키는
+    # 출처는 서고 곳곳에 흩어져 있다. 그것을 모아 무게로 달아야 「약한 출처가
+    # 여럿이라 올린다」는 잘못된 승격을 막을 수 있다.
+    #
+    # 왜 모을 때 문헌으로 거르지 않는가: 넓게 모아서 좁게 내보낸다 (9항).
+    # 출처는 어디서든 오고, 만들어진 Concept은 scope_document 하나를 갖는다.
+    from .promotion import evaluate_promotion, gather_sources
+
+    sources = gather_sources(interp_path, effective_label, document_id=scope_document)
+    verdict = evaluate_promotion(sources)
+
+    if require_weight and not verdict["eligible"]:
+        raise ValueError(
+            f"가중 기여도가 승격 임계에 못 미칩니다: {verdict['reason']}\n"
+            "→ 해결: 출처를 더 확보하거나, require_weight=False로 연구자 판단으로 승격하세요."
+        )
+
     # Concept 생성
+    #
+    # 승격은 출처를 줄이는 단계가 아니다 (10항). Tag는 하나도 지우거나 합치지 않고
+    # 그대로 남으며, 여기서는 «무게가 어떻게 배치돼 있는가»만 기록한다.
     concept_data = {
         "id": str(uuid.uuid4()),
         "label": effective_label,
         "scope_document": scope_document,
         "description": description,
-        "concept_features": None,
+        "concept_features": {
+            "promotion": {
+                "eligible": verdict["eligible"],
+                "reason": verdict["reason"],
+                "metrics": verdict["metrics"],
+                "thresholds": verdict["thresholds"],
+                "source_unit_ids": [s.get("unit_id") for s in sources],
+            }
+        },
         "status": "draft",
         "metadata": {
             "promoted_from_tag_id": tag_id,
@@ -909,7 +1060,96 @@ def promote_tag_to_concept(
     }
 
     result = create_entity(interp_path, "concept", concept_data)
-    return {**result, "concept": concept_data}
+
+    # 승격 장부 (D-128 2항). Tag는 그대로 남지만 «무엇이 됐는가»를 적어 두지 않으면
+    # 그 Tag id를 인용한 과거 기록이 Concept과 이어지지 않는다.
+    from .entity_id_map import record_mapping
+
+    record_mapping(
+        interp_path,
+        entity_type="tag",
+        old_id=tag_id,
+        new_id=concept_data["id"],
+        relation="promoted_to",
+        note=f"승격: {effective_label}",
+    )
+
+    return {**result, "concept": concept_data, "promotion": verdict}
+
+
+def merge_concepts(
+    interp_path: str | Path,
+    source_ids: list[str],
+    target_id: str,
+    *,
+    note: str | None = None,
+) -> dict:
+    """Concept 여럿을 하나로 합친다 — 구 ID를 죽이지 않는다 (D-128 2항).
+
+    목적: 같은 것을 가리키던 Concept 둘 이상을 하나로 모은다.
+    입력:
+        interp_path — 해석 저장소 경로.
+        source_ids — 흡수되는 Concept id 목록.
+        target_id — 남는 Concept id.
+        note — 사유.
+    출력: {"status": "merged", "target_id": ..., "merged": [...], "skipped": [...]}
+
+    왜 파일을 지우지 않는가:
+        ① operation-rules 2.4 — 엔티티는 삭제하지 않고 상태만 전이한다.
+        ② D-128 2항 — 지우면 그 id를 인용한 과거 참조가 조용히 끊긴다. 대신
+           `core_entities/id_map.json`에 구 → 신 매핑을 남기고, 흡수된 쪽은
+           `deprecated`로 내린다. 옛 id로 조회하면 get_entity가 새 id를 알려준다.
+
+    왜 Relation을 새 id로 고쳐 쓰지 않는가:
+        고쳐 쓰면 「그때 이 관계는 A를 가리켰다」는 사실이 사라진다. 커넥톰이
+        릴리스 노트로 매핑만 남기고 과거 논문을 고치지 않는 것과 같은 이유다.
+        해석은 읽을 때 장부로 이루어진다 — resolve_id()가 그 자리다.
+    """
+    from .entity_id_map import record_mapping, resolve_id
+
+    interp_path = Path(interp_path).resolve()
+
+    if target_id in source_ids:
+        raise ValueError(
+            "합쳐지는 대상과 남는 대상이 같습니다.\n→ 해결: target_id를 source_ids에서 빼세요."
+        )
+
+    # 목표가 실재하는지 먼저 확인한다 — 없는 곳으로 보내면 장부가 거짓이 된다.
+    get_entity(interp_path, "concept", target_id)
+
+    merged: list[str] = []
+    skipped: list[dict] = []
+    for old_id in source_ids:
+        try:
+            existing = get_entity(interp_path, "concept", old_id)
+        except FileNotFoundError as e:
+            skipped.append({"id": old_id, "reason": str(e)})
+            continue
+
+        # 상태를 내린다. 이미 archived면 전이가 불가능하므로 장부만 적는다 —
+        # 장부가 본체이고 상태는 화면 표시이기 때문이다.
+        current = existing.get("status", "draft")
+        if "deprecated" in VALID_STATUS_TRANSITIONS.get(current, []):
+            update_entity(interp_path, "concept", old_id, {"status": "deprecated"})
+
+        record_mapping(
+            interp_path,
+            entity_type="concept",
+            old_id=old_id,
+            new_id=target_id,
+            relation="superseded_by",
+            note=note,
+        )
+        merged.append(old_id)
+
+    return {
+        "status": "merged",
+        "target_id": target_id,
+        "merged": merged,
+        "skipped": skipped,
+        # 되짚기 확인용 — 합친 직후 옛 id가 정말 새 id로 풀리는지 여기서 답한다.
+        "resolved": {old: resolve_id(interp_path, "concept", old)["id"] for old in merged},
+    }
 
 
 def create_unit_from_source(

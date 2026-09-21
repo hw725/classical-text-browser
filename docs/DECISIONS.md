@@ -6770,14 +6770,22 @@ OCR을 진행할 수 있을까?» 답은 이미 있었다(쪽 범위 회전 + �
 
 ## D-128: 커넥톰 리포지토리에서 가져올 것 셋 — 버전은 출력에, 매핑은 내부에, 질의는 좁게
 
-**날짜**: 2026-09-20 (4·5항 구현 2026-09-21)
-**상태**: 확정(방침) · **4·5항 구현됨(이 저장소 밖)** · 1~3·6·8~13항 미구현
+**날짜**: 2026-09-20 (4·5항 구현 2026-09-21 · 1~3·6~13항 구현 2026-09-21)
+**상태**: 확정(방침) · **1~13항 전부 구현됨**
 
 > **4·5항 구현 위치는 이 저장소가 아니라 `jt725/scripts/graph_two_stage.py` 다.** 이 저장소는
 > 로컬 단일 사용자 도구라 neuPrint 의존성을 싣지 않기로 했고(위 배경), 커넥톰 대조가 필요한
 > 실험은 개인 환경의 볼트에서 한다. 여기 들어오는 것은 **규칙이지 코드가 아니다** —
 > `Relation` 에 `weight` 를 두고 순회에서 임계로 거른다는 계약이 그것이고, 그 계약이
 > 실제로 작동한다는 증거가 아래 실측이다.
+
+> **1~3·6~13항은 이 저장소에 구현됐다**(2026-09-21). 이쪽도 `neuprint-python`·API·토큰은
+> 들어오지 않았고 그 측정에서 나온 규칙만 왔다. 항별 판정·근거 파일은 이 항 끝의
+> 「구현 기록」을 본다. 4항이 말한 `Relation.weight` 자리는 11항(부호)과 **함께** 생겼다 —
+> 무게와 부호는 따로 둘 수 없다는 것이 11항의 관찰이기 때문이다.
+>
+> 7항은 「설계 근거로 쓰지 않는다」는 **금지**라서 만들 기능이 없다. 대신 그 금지가
+> 지켜지는지를 재는 시험을 두었다 — 금지도 이행 여부를 물을 수 있어야 한다.
 
 **배경**: 커넥톰 리포지토리(neuPrint / male-cns:v1.0)의 데이터 운영 규약을 이 저장소의
 Unit·Tag·Concept·Agent·Relation 층에 접목할 수 있는지 살폈다. 결론부터 — **규약 셋은 가져오고
@@ -7017,3 +7025,69 @@ ROI는 세 번 쟀다. ① 60씨앗 `fetch_adjacencies` ② 전수 `roiInfo` 무
 데이터 버전의 필수 인자화(1번의 이유), 원격 API 의존(이 저장소는 로컬에서 완결되어야 한다).
 생물학 쪽에서 비유로만 남는 것도 명시해 둔다 — 스파이킹 동역학, 가소성, 신경조절은 «계속 돌아가는
 물리계»의 성질이라 문서 저장소에 옮길 대응물이 없다.
+
+### 구현 기록 (2026-09-21)
+
+`neuprint-python`·API·토큰은 **들어오지 않았다.** 가져온 것은 그 측정에서 나온 규칙뿐이다.
+시험은 `tests/test_d128.py` 38건.
+
+| 항 | 판정 | 어디에 |
+|---|---|---|
+| 1 데이터 버전은 출력에 각인 | 구현 | `src/core/corpus_version.py` · 붙는 자리 다섯: 교환 스냅샷(`core/snapshot.py::build_snapshot`), 사전 내보내기(`core/annotation_dict_io.py::export_dictionary`), 인용 내보내기(`routers/annotation.py` citation-marks/export), 경계 CSV(`routers/composition.py` boundaries/export.csv), 텍스트레이어 PDF 메타데이터(`export/text_layer_pdf.py`) |
+| 2 구 ID를 죽이지 않는다 | 구현 | `src/core/entity_id_map.py`(장부) · `core/entity.py::merge_concepts` · `get_entity`가 옛 id를 새 id로 안내 |
+| 3 질의 API는 좁게 | 이미 충족 + 못 박음 | 읽기 문은 셋뿐이었다(`get_entity`·`list_entities`·`list_entities_for_page`) — 순회 엔드포인트가 없다. `core/entity.py::QUERY_SURFACE`로 규약을 적고 시험으로 고정 |
+| 8 승격은 개수가 아니라 무게 | 구현(저울이고 잠금장치가 아니다) | `src/core/promotion.py` · `promote_tag_to_concept`이 `evaluate_promotion`을 거친다. **판정은 기록하되 막지 않는다** — 무게가 모자라도 연구자가 누르면 승격되고 `concept_features.promotion`에 `eligible: false`가 남는다. 막으려면 `require_weight=True`. 표만 보면 잠긴 줄 알기 쉬워 적어 둔다 |
+| 9 넓게 모아 좁게 내보낸다 | 구현 | `promotion.gather_sources`는 문헌으로 거르지 않고, Concept은 `scope_document` 하나를 갖는다. 적용 **범위**는 `SCOPE_BLIND_COLLECTION_NOTE` |
+| 10 깔때기가 아니다 | 구현 | 승격이 Tag를 지우거나 합치지 않음을 시험으로 고정하고, 줄어든 «수» 대신 무게 배치를 `concept_features.promotion`에 적는다 |
+| 11 부호는 강한 엣지에서 중요 | 구현 | `relation.schema.json`에 `weight`·`polarity`를 함께 두고, `core/relation_polarity.py`의 `strong_edges`·`unsigned_strong_relations`. 임계는 상수가 아니라 `suggest_strong_threshold`가 분포에서 정한다 |
+| 12 조절은 따로 있는 종류 | 구현 | `relation.schema.json`의 `mode: modulate` + `object_type: relation`. 연합 층 밖을 가리키면 `validate_relation_semantics`가 거부한다 |
+| 13 부호를 이진으로 강제하지 않는다 | 구현 | `polarity` enum 넷(support·refute·context_dependent·undetermined). 적히지 않은 것을 지지로 읽지 않는다(`polarity_of`) |
+| 6 출력 구획은 벽에 가깝다 | 구현 | `src/core/concept_scope.py` — 범위는 순위 가중치가 아니라 **주소**다. 다른 문헌의 개념은 순위가 낮아지는 것이 아니라 목록에 들어오지 않고, 전역(null)은 모든 주소에 걸린다. `list_entities`의 `scope_document` 필터와 목록 라우트의 `?scope=`. **이것이 입력 쪽으로 번지지 않는 것**을 `test_collection_side_is_not_walled`가 지킨다 |
+| 7 파트너 수·집중도는 근거가 아니다 | 구현(금지의 이행) | 구현할 기능이 아니라 **판정에 들어가지 못하게 하는 일**이다. `promotion.METRICS_NOT_USED_FOR_VERDICT`에 이름을 적고, 잡음 출처를 500개 더해도 판정이 흔들리지 않는지·집중도만 다른 두 묶음이 같은 판정을 받는지를 `TestPartnerCountIsNotEvidence`가 잰다 |
+| 4·5 | 이 저장소 밖 | 위키 순회 쪽(`jt725/scripts/graph_two_stage.py`). 4항이 계약으로 적어 둔 `Relation.weight` 자리는 11항과 **함께** 생겼다 — 무게만 있고 부호가 없으면 반대 방향이 몰린 강한 꼬리를 지지와 똑같이 세게 되기 때문이다 |
+
+**구현하며 드러난 것 셋**
+
+1. **CSV의 머리말 줄은 산출물을 깬다.** 경계 CSV에 코퍼스 해시를 주석 한 줄로 얹었더니
+   열 이름이 둘째 줄로 밀려 `test_segmentation.py`가 바로 걸렸다. 이 파일에는 이미
+   `l4_commit`이라는 «행별 출처» 열이 있어 그 옆에 `코퍼스` 열로 붙였다. 각인은 «파일에
+   남기는 것»이 목적이지 «맨 위에 두는 것»이 목적이 아니다.
+
+2. **승격 무게는 확정본(L4)이 있어야 잰다.** 무게 도출이 「그 단위가 이 개념을 몇 번
+   건드렸는가」이므로, L4가 없는 저장소에서는 값이 Tag 수로 떨어진다 — 그것이 곧 8항이
+   막으려는 «개수로 세기»다. 떨어진 값이 잡음 바닥(1~2) 아래라 **열리지 않고 닫히는** 쪽이라는
+   것을 시험으로 고정했다(`test_without_confirmed_text_it_fails_closed`).
+
+3. **장부는 Relation이 아니라 별도 테이블이어야 했다.** `Relation`에 `supersedes` 서술어를
+   두는 쪽을 먼저 봤으나 셋이 걸렸다 — ① `/entities/relation` 목록이 화면에 그대로 뜨므로
+   내부 장부가 연구자가 보는 관계 목록을 오염시킨다(2항은 «보이지 않는 장부»라고 못 박았다)
+   ② `subject_type` enum이 `agent|concept` 둘뿐이라 Tag 승격을 담지 못한다 ③ 옛 id를 물을
+   때마다 `relations/*.json`을 전수 훑어야 한다. 그래서 `core_entities/id_map.json` 하나다.
+
+4. **새 필드를 더하자 «화면이 그것을 지우는» 자리가 생겼다.** `entity-manager.js`의
+   `_collectFormData`가 Concept을 저장할 때 `concept_features: null`·`metadata: null`을
+   무조건 보내고 있었다. 예전에는 둘 다 늘 비어 있어서 무해했는데, 8항의 승격 근거가
+   `concept_features.promotion`에 들어가는 순간 **연구자가 설명 한 줄만 고쳐도 그 기록이
+   통째로 사라지는** 길이 됐다. 예외도 경고도 없다. 저장 계층에 필드를 더할 때는
+   **그 필드를 쓰지 않는 기존 화면 코드가 무엇을 보내는지** 함께 봐야 한다
+   (`tests/test_entity_manager_js.py`가 이 자리를 지킨다).
+
+5. **규약이 코드에만 있으면 쓰이지 않는다.** 처음에는 `merge_concepts`를 코어 함수로만
+   두었다. 그런데 병합할 길이 화면에 없으면 장부는 영영 비어 있고, 2항은 「구현했다」고
+   적혀 있지만 실제로는 아무 일도 하지 않는다. 라우트(`entities/concepts/merge`)와
+   목록의 「합치기」 단추까지 가야 규약이 데이터가 된다.
+
+6. **목록은 장부를 보지 않았다 — 브라우저로 눌러 봐야 드러났다.** `get_entity`만
+   `id_map`을 읽고 `list_entities`는 읽지 않아서, 화면 «목록»에서는 이미 합쳐진 개념에
+   「합치기」 단추가 그대로 남고 «→ 새 ID» 표시도 뜨지 않았다. 시험 47건이 전부 초록이었고
+   `get_entity` 경로만 재고 있었기 때문이다. **한 규칙을 여러 읽기 문이 나눠 쓰면, 시험이
+   그중 하나만 재는 한 나머지는 조용히 빠진다.**
+
+**Codex 교차검증은 두 번 다 결론을 내지 못했다**(2026-09-21). 1차는 내 프롬프트의
+「모지바케가 보이면 멈추라」가 너무 넓어 PowerShell 오류 출력이 깨진 것을 보고 중단했고
+(74,059 토큰), 프롬프트를 소스 파일로 한정해 다시 돌린 2차는 **크레딧 소진**으로 끊겼다
+(73,507 토큰). 중단 직전 「승격 가중치의 대체 계산」과 「병합 후 엔티티 저장 경로」를 의심
+지점으로 지목했으나 확인은 못 했다 — **그 둘은 이쪽에서 직접 재어 둘 다 안전함을 확인했고
+시험으로 고정했다**(`TestInjectedKeysNeverReachDisk`·`TestWeightReadingIsRobust`).
+즉 **이 변경에는 외부 눈의 판정이 없다.** 작성자와 검증자가 같다는 뜻이므로, 다음에 이
+코드를 만지는 사람은 그 전제로 읽는다.

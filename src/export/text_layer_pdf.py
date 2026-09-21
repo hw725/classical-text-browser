@@ -462,12 +462,28 @@ def embed_text_layer(
         # 왜: 나중에 이 PDF만 보고도 텍스트가 OCR 산출물인지,
         #     좌표가 근사인지 판별할 수 있어야 한다.
         precision = "line-positioned" if approximated == 0 else "page-approximated"
+
+        # 데이터 버전 각인 (D-128 1항). PDF는 파일 하나로 떠돌아다니므로 서고를
+        # 떠난 뒤에도 「어느 시점 텍스트인가」가 파일 안에 있어야 한다. keywords에
+        # 넣는 이유는 producer가 이미 다른 사실을 지고 있어서다.
+        from core.corpus_version import corpus_snapshot
+
+        _snapshot = corpus_snapshot(doc_path.parent.parent, document_ids=[doc_path.name])
         doc.set_metadata(
             {
                 **(doc.metadata or {}),
                 "producer": (
                     f"classical-text-browser text-layer embed "
                     f"(source={source_layer}, precision={precision})"
+                ),
+                "keywords": " ".join(
+                    filter(
+                        None,
+                        [
+                            (doc.metadata or {}).get("keywords") or "",
+                            _snapshot["corpus_hash"],
+                        ],
+                    )
                 ),
             }
         )

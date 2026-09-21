@@ -20,6 +20,7 @@ from core.entity import (
     get_entity,
     list_entities,
     list_entities_for_page,
+    merge_concepts,
     promote_tag_to_concept,
     update_entity,
 )
@@ -111,6 +112,17 @@ class PromoteTagRequest(BaseModel):
     label: str | None = None
     scope_document: str | None = None
     description: str | None = None
+
+
+class MergeConceptsRequest(BaseModel):
+    """Concept 병합 요청 (D-128 2항).
+
+    source_ids — 흡수되는 개념들. target_id — 남는 개념. note — 사유.
+    """
+
+    source_ids: list[str]
+    target_id: str
+    note: str | None = None
 
 
 class CompositionSourceRef(BaseModel):
@@ -506,8 +518,21 @@ async def api_list_entities(
     block_id: str | None = Query(None, description="단위 ID 필터"),
     page: int | None = Query(None, description="페이지 번호 필터 (source_ref.page)"),
     document_id: str | None = Query(None, description="문헌 ID 필터 (source_ref.document_id)"),
+    scope: str | None = Query(
+        None,
+        description=(
+            "Concept 범위 주소 (scope_document). 그 문헌의 개념 + 전역 개념만 돌려준다 "
+            "— 다른 문헌의 개념은 순위가 낮아지는 것이 아니라 아예 나오지 않는다 (D-128 6항)."
+        ),
+    ),
 ):
-    """특정 유형의 엔티티 목록을 반환한다."""
+    """특정 유형의 엔티티 목록을 반환한다.
+
+    `scope`는 다른 필터와 성격이 다르다 (D-128 6항). 동등 비교가 아니라 «주소»이므로
+    전역 개념(scope_document 없음)은 어느 문헌을 물어도 함께 나오고, 다른 문헌의
+    개념은 나오지 않는다. 이것은 **내보내는 쪽** 규칙이다 — 승격 출처를 모으는 쪽은
+    구획으로 막지 않는다(core/promotion.py::gather_sources).
+    """
     _library_path = get_library_path()
     if _library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
@@ -524,6 +549,9 @@ async def api_list_entities(
         filters["status"] = status
     if block_id:
         filters["block_id"] = block_id
+    if scope is not None:
+        # 빈 문자열은 «전역만»이라는 뜻이다 — None(필터 없음)과 구분해야 한다.
+        filters["scope_document"] = scope or None
 
     try:
         entities = list_entities(interp_path, entity_type, filters or None)
@@ -801,6 +829,61 @@ async def api_promote_tag(
     commit_msg = f"feat: Tag → Concept 승격 — {label}"
     result["git"] = git_commit_interpretation(interp_path, commit_msg)
 
+    return result
+
+
+@router.post("/api/interpretations/{interp_id}/entities/concepts/merge")
+async def api_merge_concepts(interp_id: str, body: MergeConceptsRequest):
+    """Concept 여럿을 하나로 합친다 — 구 ID는 장부에 남는다 (D-128 2항).
+
+    목적: 같은 것을 가리키던 개념 둘 이상을 하나로 모은다.
+    입력: body — {source_ids: [...], target_id: "...", note: "..."}.
+    출력: {status, target_id, merged, skipped, resolved, git}.
+
+    무엇을 지우지 않는가: 흡수된 개념의 파일은 그대로 남고 상태만 deprecated로
+    내려간다(operation-rules 2.4). 구 → 신 매핑은 core_entities/id_map.json에
+    적히므로, 그 옛 id를 인용한 과거 참조는 끊기지 않고 새 id로 안내된다.
+
+    왜 화면에서 부를 수 있어야 하는가: 장부는 병합이 일어날 때만 쌓인다.
+    병합을 코어 함수로만 둘 수 있다고 보았으나, 그러면 연구자가 실제로 병합할
+    길이 없어 장부가 영영 비어 있게 된다 — 규약이 코드에만 있고 쓰이지 않는 것과
+    같다.
+    """
+    _library_path = get_library_path()
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = require_repo_path("interpretations", interp_id)
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
+            status_code=404,
+        )
+
+    if not body.source_ids:
+        return JSONResponse(
+            {"error": "합칠 개념이 없습니다.\n→ 해결: source_ids에 하나 이상 지정하세요."},
+            status_code=400,
+        )
+
+    try:
+        result = merge_concepts(
+            interp_path,
+            body.source_ids,
+            body.target_id,
+            note=body.note,
+        )
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": f"Concept 병합 실패: {e}"}, status_code=400)
+
+    commit_msg = (
+        f"feat: Concept 병합 — {len(result['merged'])}건 → {body.target_id[:8]} (D-128 2항)"
+    )
+    result["git"] = git_commit_interpretation(interp_path, commit_msg)
     return result
 
 
