@@ -83,7 +83,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 
 ## 백엔드 모듈 구조 (src/app/)
 server.py는 FastAPI 앱 생성 + 라우터 마운트 + 미들웨어만 담당하는 조립 파일.
-실제 API 엔드포인트 225개가 9개 라우터 모듈에 분산 (2026-09-18 기준 실측):
+실제 API 엔드포인트 226개가 9개 라우터 모듈에 분산 (2026-09-18 기준 실측):
 
 ```
 src/app/
@@ -94,7 +94,7 @@ src/app/
     ├── library.py       ← 서고/설정/백업/휴지통 + 스키마 검증 + 연결 설정·앱 업데이트·엔진 추가 설치·OAuth 프록시·Ollama 로그인·모델 골라 받기 (29 라우트)
     ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 + 텍스트레이어 진단·가져오기·입히기 + 권 추가·회전 + 경계 규칙 + 찍은 자리·규칙 제안 (45 라우트)
     ├── composition.py   ← 편성 — 내용 트리·경계 색인·넣기·옮기기·지우기 + 제안·목차·적용·자동 트리·신호 도출·LLM 표지 묻기·구조 통째로 묻기 + 규칙 미리 보기·말로 규칙 넣기 + 쪼개기·리셋 (17 라우트)
-    ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티/관계·태그 + 개념 병합 (23 라우트)
+    ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티/관계·태그 + 개념 병합·커넥톰 대조 (24 라우트)
     ├── llm_ocr.py       ← LLM 상태·분석·초안 + OCR 엔진·실행·권단위 일괄·백업 되돌리기·판독 지침·LLM 교정 패스·판독 계획 (26 라우트)
     ├── alignment.py     ← 이체자 사전/정렬/일괄교정/문헌별 승인 (20 라우트)
     ├── reading.py       ← L5 표점·현토 + L6 번역 + 비고 + AI보조 (24 라우트)
@@ -168,6 +168,7 @@ src/app/
 | `src/core/entity_id_map.py` | **구 ID를 죽이지 않는다**(2항). `core_entities/id_map.json` 하나에 구 → 신 매핑을 쌓는다. 고리 둘 — `superseded_by`(병합, 조회가 따라간다)·`promoted_to`(승격, 따라가지 않는다: Tag는 그대로 산다). `get_entity`가 옛 id에 「지금은 무엇을 보라」를 붙인다. **Relation의 서술어로 두지 않은 이유**는 셋이다: `/entities/relation` 목록이 화면에 그대로 떠서 내부 장부가 섞이고, `subject_type` enum에 tag가 없으며, 옛 id를 물을 때마다 전수 훑기가 된다 |
 | `src/core/promotion.py` | **승격은 개수가 아니라 무게로**(8·9·10항). 무게 1~2는 잡음 바닥이라 세지 않되 **지우지 않는다**. 출처 수집은 문헌으로 **거르지 않고**(넓게 모은다) Concept은 `scope_document` 하나를 갖는다(좁게 내보낸다) — 이 비대칭은 **연합 구조에만** 해당하고 편성·OCR에는 적용하지 않는다(`SCOPE_BLIND_COLLECTION_NOTE`). 무게는 「그 단위의 L4에 표면형이 몇 번 나오는가 × 신뢰도」다. **L4를 못 찾으면 «재지 못한 것»(`measured=False`)으로 두고 무게 0** — Tag 수로 대신하지 않는다. 한때 대신하게 두었더니 한 단위에 Tag 셋만 붙어도 임계를 넘어 8항이 막으려던 「개수로 세기」가 복원됐다(2026-09-21 독립 검증). 「확정본은 있는데 표면형이 안 나온다」는 **정상적인 0**이라 사유 문구가 다르다. 저울이지 잠금장치가 아니다(`require_weight=True`로만 막는다) |
 | `src/core/concept_scope.py` | **Concept의 범위는 «주소»다 — 순위 가중치가 아니다**(6항). 다른 문헌의 개념은 순위가 낮아지는 것이 아니라 **목록에 들어오지 않고**, 전역(null)은 모든 문헌 주소에 걸린다. 질의는 `?scope=`(`list_entities`의 `scope_document` 필터). **거르기만 하고 정렬하지 않는다** — 정렬하는 순간 「범위가 순위를 만든다」가 되어 6항이 버린 쪽으로 간다. **이것은 내보내는 쪽 규칙이다**(`OUTPUT_SIDE_ONLY_NOTE`) — 모으는 쪽(`gather_sources`)에 옮기면 연합이 일어나지 않는다 |
+| `src/core/connectome.py` | **서고의 관계 분포를 연합 구조와 나란히 놓는다**(D-128 후속). 규약대로 만든 뒤 남는 물음 — 「그래서 이 서고가 그런 모양인가」 — 에 답한다. **판정하지 않는다**: 점수를 매기면 그 숫자를 올리는 것이 목표가 되고, 커넥톰은 참고 좌표이지 목표가 아니다. 두 층 — **기록된 기준값 대조는 의존성이 없어 배포본에서도 돌고**, 살아 있는 재측정(`measure_reference`)만 extra `connectome` + neuPrint 토큰 뒤에 있다. **`install.ps1`의 어느 선택지에도 그 extra가 없다**(시험이 지킨다). 라우트는 `connectome-comparison?live=`, 게이트 모양은 판독 계획이 CPU에서 400을 주는 것과 같다 |
 | `src/core/relation_polarity.py` | **부호는 이진이 아니고, 강한 엣지에서 가장 중요하다**(11·12·13항). `polarity` 넷(지지·반박·맥락의존·불명) — 적히지 않은 것을 지지로 읽지 않는다. `mode: modulate`는 내용을 주장하지 않고 **다른 관계의 무게를 바꾸는** 관계이고 연합 층(concept·relation)에만 붙는다. 강연결 임계는 상수가 아니라 `suggest_strong_threshold`가 분포에서 정한다. `unsigned_strong_relations`가 「부호 없는 강연결」을 짚는다 |
 
 **질의 표면은 좁게 유지한다**(3항). 읽기 문은 `entity.py`의 셋뿐이고(`QUERY_SURFACE`)
