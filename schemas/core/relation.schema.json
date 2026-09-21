@@ -36,7 +36,7 @@
     "object_type": {
       "type": ["string", "null"],
       "description": "목적어 엔티티의 유형. object_id가 null이면 null.",
-      "enum": ["agent", "concept", "block", null],
+      "enum": ["agent", "concept", "block", "relation", null],
       "default": null
     },
     "object_value": {
@@ -58,6 +58,24 @@
       "description": "관계 신뢰도. 0.0 ~ 1.0.",
       "minimum": 0.0,
       "maximum": 1.0,
+      "default": null
+    },
+    "weight": {
+      "type": ["number", "null"],
+      "description": "관계의 무게 (D-128 4·11항). 신뢰도(confidence)와 다른 축이다 — 신뢰도는 «이 관계가 참인가»이고 무게는 «얼마나 굵은가»다. 약한 관계도 지우지 않고 무게를 붙여 두었다가 순회할 때 임계로 거른다. 병합은 되돌릴 수 없고 임계는 되돌릴 수 있다.",
+      "minimum": 0,
+      "default": null
+    },
+    "polarity": {
+      "type": ["string", "null"],
+      "description": "관계의 부호 (D-128 11·13항). 지지/반박 이진이 아니다 — 초파리 커넥톰에서 글루탐산성 입력이 계통에 따라 11~12%인데 그 극성이 실제로 맥락 의존이라, 둘로 몰아넣으면 그만큼을 잘못 분류하게 된다. null은 «아직 정하지 않음»이며 support 로 읽어서는 안 된다(core/relation_polarity.py::polarity_of).",
+      "enum": ["support", "refute", "context_dependent", "undetermined", null],
+      "default": null
+    },
+    "mode": {
+      "type": ["string", "null"],
+      "description": "관계의 종류 (D-128 12항). assert = 내용을 주장한다(지지·반박). modulate = 내용을 주장하지 않고 «다른 관계의 무게를 바꾼다» — 출처 신뢰도, 「이 판정은 폐기됨」 같은 것들이다. 조절 입력은 연합 층에만 유의미하게 존재했으므로(KCg-m 12.5%, 다른 계통 0%대) object_type 은 concept 또는 relation 이어야 한다 — 검사는 core/relation_polarity.py::validate_relation_semantics.",
+      "enum": ["assert", "modulate", null],
       "default": null
     },
     "extractor": {
