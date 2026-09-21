@@ -814,3 +814,77 @@ class TestLedgerIsVisibleInLists:
         _concept(interp_path, "혼자")
         listed = list_entities(interp_path, "concept")
         assert all("superseded_by" not in c for c in listed)
+
+
+class TestInjectedKeysNeverReachDisk:
+    """조회가 덧붙인 `superseded_by`가 저장으로 돌아가지 않는가.
+
+    왜 위험한가: `get_entity`·`list_entities`가 «지금 어디를 보라»를 덧붙이는데,
+    concept·relation 스키마는 `additionalProperties: false`다. 읽은 것을 그대로
+    저장하는 경로가 하나라도 있으면 그 순간 검증이 터지거나, 더 나쁘게는 장부가
+    아니라 엔티티 파일에 대체 정보가 눌러앉아 장부와 두 벌이 된다.
+
+    (2026-09-21 Codex 교차검증이 「병합 후 엔티티 저장 경로」를 의심 지점으로
+    지목했으나 크레딧이 끊겨 확인하지 못했다. 그 자리를 여기서 직접 잰다.)
+    """
+
+    def test_update_after_merge_does_not_persist_the_annotation(self, tmp_path):
+        from core.entity import update_entity
+
+        _, _, interp_path = _make_library(tmp_path)
+        old_id = _concept(interp_path, "王戎")
+        new_id = _concept(interp_path, "王戎(정리)")
+        merge_concepts(interp_path, [old_id], new_id)
+
+        # 조회에는 붙는다.
+        assert get_entity(interp_path, "concept", old_id)["superseded_by"] == new_id
+
+        # 그 뒤 상태를 한 번 더 옮겨도 파일에는 들어가지 않는다.
+        update_entity(interp_path, "concept", old_id, {"status": "archived"})
+        raw = json.loads(
+            (interp_path / "core_entities" / "concepts" / f"{old_id}.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert "superseded_by" not in raw
+        assert "supersede_chain" not in raw
+        assert raw["status"] == "archived"
+
+    def test_remerging_an_already_merged_concept_keeps_the_ledger_truthful(self, tmp_path):
+        """이미 합쳐진 개념을 또 합쳐도 장부가 거짓이 되지 않는다."""
+        _, _, interp_path = _make_library(tmp_path)
+        a, b, c = (_concept(interp_path, f"개념{i}") for i in "ABC")
+        merge_concepts(interp_path, [a], b)
+        # a 는 이미 deprecated 이므로 상태 전이는 일어나지 않고 장부만 갱신된다.
+        result = merge_concepts(interp_path, [a], c, note="다시 합침")
+        assert result["merged"] == [a]
+        assert resolve_id(interp_path, "concept", a)["id"] == c
+        # 같은 (종류, 옛 id, 고리) 는 한 줄로 갱신된다 — 두 갈래가 생기지 않는다.
+        rows = [
+            e
+            for e in load_id_map(interp_path)["entries"]
+            if e["old_id"] == a and e["relation"] == "superseded_by"
+        ]
+        assert len(rows) == 1 and rows[0]["new_id"] == c
+
+
+class TestWeightReadingIsRobust:
+    """무게를 읽다가 이상한 값을 만나도 «열리지» 않는다.
+
+    승격은 무게가 커질수록 열리므로, 읽기 실패가 큰 값으로 떨어지면 안 된다.
+    """
+
+    def test_nan_and_negative_fail_closed(self):
+        from core.promotion import source_weight
+
+        assert source_weight({"weight": float("nan")}) == 0.0
+        assert source_weight({"weight": -10}) == 0.0
+        assert source_weight({"weight": "숫자가 아님"}) == 0.0
+        assert source_weight({}) == 0.0
+
+    def test_boolean_weight_stays_in_the_noise_floor(self):
+        """`True`가 무게로 들어와도 1.0이라 잡음 바닥 아래다."""
+        from core.promotion import source_weight
+
+        assert source_weight({"weight": True}) == 1.0
+        assert evaluate_promotion([{"weight": True} for _ in range(50)])["eligible"] is False

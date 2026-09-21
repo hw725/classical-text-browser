@@ -7012,7 +7012,7 @@ ROI는 세 번 쟀다. ① 60씨앗 `fetch_adjacencies` ② 전수 `roiInfo` 무
 | 1 데이터 버전은 출력에 각인 | 구현 | `src/core/corpus_version.py` · 붙는 자리 다섯: 교환 스냅샷(`core/snapshot.py::build_snapshot`), 사전 내보내기(`core/annotation_dict_io.py::export_dictionary`), 인용 내보내기(`routers/annotation.py` citation-marks/export), 경계 CSV(`routers/composition.py` boundaries/export.csv), 텍스트레이어 PDF 메타데이터(`export/text_layer_pdf.py`) |
 | 2 구 ID를 죽이지 않는다 | 구현 | `src/core/entity_id_map.py`(장부) · `core/entity.py::merge_concepts` · `get_entity`가 옛 id를 새 id로 안내 |
 | 3 질의 API는 좁게 | 이미 충족 + 못 박음 | 읽기 문은 셋뿐이었다(`get_entity`·`list_entities`·`list_entities_for_page`) — 순회 엔드포인트가 없다. `core/entity.py::QUERY_SURFACE`로 규약을 적고 시험으로 고정 |
-| 8 승격은 개수가 아니라 무게 | 구현 | `src/core/promotion.py` · `promote_tag_to_concept`이 `evaluate_promotion`을 거친다 |
+| 8 승격은 개수가 아니라 무게 | 구현(저울이고 잠금장치가 아니다) | `src/core/promotion.py` · `promote_tag_to_concept`이 `evaluate_promotion`을 거친다. **판정은 기록하되 막지 않는다** — 무게가 모자라도 연구자가 누르면 승격되고 `concept_features.promotion`에 `eligible: false`가 남는다. 막으려면 `require_weight=True`. 표만 보면 잠긴 줄 알기 쉬워 적어 둔다 |
 | 9 넓게 모아 좁게 내보낸다 | 구현 | `promotion.gather_sources`는 문헌으로 거르지 않고, Concept은 `scope_document` 하나를 갖는다. 적용 **범위**는 `SCOPE_BLIND_COLLECTION_NOTE` |
 | 10 깔때기가 아니다 | 구현 | 승격이 Tag를 지우거나 합치지 않음을 시험으로 고정하고, 줄어든 «수» 대신 무게 배치를 `concept_features.promotion`에 적는다 |
 | 11 부호는 강한 엣지에서 중요 | 구현 | `relation.schema.json`에 `weight`·`polarity`를 함께 두고, `core/relation_polarity.py`의 `strong_edges`·`unsigned_strong_relations`. 임계는 상수가 아니라 `suggest_strong_threshold`가 분포에서 정한다 |
@@ -7052,3 +7052,18 @@ ROI는 세 번 쟀다. ① 60씨앗 `fetch_adjacencies` ② 전수 `roiInfo` 무
    두었다. 그런데 병합할 길이 화면에 없으면 장부는 영영 비어 있고, 2항은 「구현했다」고
    적혀 있지만 실제로는 아무 일도 하지 않는다. 라우트(`entities/concepts/merge`)와
    목록의 「합치기」 단추까지 가야 규약이 데이터가 된다.
+
+6. **목록은 장부를 보지 않았다 — 브라우저로 눌러 봐야 드러났다.** `get_entity`만
+   `id_map`을 읽고 `list_entities`는 읽지 않아서, 화면 «목록»에서는 이미 합쳐진 개념에
+   「합치기」 단추가 그대로 남고 «→ 새 ID» 표시도 뜨지 않았다. 시험 47건이 전부 초록이었고
+   `get_entity` 경로만 재고 있었기 때문이다. **한 규칙을 여러 읽기 문이 나눠 쓰면, 시험이
+   그중 하나만 재는 한 나머지는 조용히 빠진다.**
+
+**Codex 교차검증은 두 번 다 결론을 내지 못했다**(2026-09-21). 1차는 내 프롬프트의
+「모지바케가 보이면 멈추라」가 너무 넓어 PowerShell 오류 출력이 깨진 것을 보고 중단했고
+(74,059 토큰), 프롬프트를 소스 파일로 한정해 다시 돌린 2차는 **크레딧 소진**으로 끊겼다
+(73,507 토큰). 중단 직전 「승격 가중치의 대체 계산」과 「병합 후 엔티티 저장 경로」를 의심
+지점으로 지목했으나 확인은 못 했다 — **그 둘은 이쪽에서 직접 재어 둘 다 안전함을 확인했고
+시험으로 고정했다**(`TestInjectedKeysNeverReachDisk`·`TestWeightReadingIsRobust`).
+즉 **이 변경에는 외부 눈의 판정이 없다.** 작성자와 검증자가 같다는 뜻이므로, 다음에 이
+코드를 만지는 사람은 그 전제로 읽는다.
