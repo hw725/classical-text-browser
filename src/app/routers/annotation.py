@@ -1751,10 +1751,24 @@ async def api_export_citations(
         include_translation=body.include_translation,
         export_options=body.export_options,
     )
+
+    # 인용은 논문에 그대로 옮겨지는 산출물이다 — 데이터 버전을 각인한다 (D-128 1항).
+    # 머리에 한 줄로 붙이는 이유: 연구자가 붙여넣는 텍스트 안에 남아야 나중에
+    # 「이 인용이 어느 시점 교정본에서 나왔는가」를 되짚을 수 있다.
+    from core.corpus_version import corpus_snapshot, stamp_comment
+
+    snapshot = corpus_snapshot(
+        _library_path,
+        document_ids=[doc_id] if doc_id else [],
+        interpretation_ids=[interp_id],
+    )
+    stamped_text = (stamp_comment(snapshot) + "\n\n" + citations_text) if citations_text else ""
     return {
-        "citations": citations_text,
+        "citations": stamped_text,
+        "citations_body": citations_text,
         "count": len(contexts),
         "skipped": skipped,
+        "corpus_version": snapshot,
     }
 
 

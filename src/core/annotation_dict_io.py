@@ -102,7 +102,7 @@ def export_dictionary(
     # 동일 headword 항목 통합 (같은 표제어가 여러 페이지에 나올 수 있음)
     entries = _deduplicate_entries(entries)
 
-    return {
+    result = {
         "schema_version": "1.0",
         "export_type": "dictionary",
         "export_timestamp": datetime.now(timezone.utc).isoformat(),
@@ -117,6 +117,21 @@ def export_dictionary(
             "by_type": by_type,
         },
     }
+
+    # 데이터 버전은 «출력»에 각인한다 (D-128 1항). 사용자는 아무것도 입력하지 않고,
+    # 내보낸 사전을 논문에 쓴 뒤에도 「어느 시점의 서고에서 나왔는가」를 지목할 수 있다.
+    # 해석 저장소 경로가 …/{서고}/interpretations/{id} 이므로 두 단계 위가 서고 루트다.
+    from .corpus_version import corpus_snapshot, stamp
+
+    stamp(
+        result,
+        corpus_snapshot(
+            interp_path.parent.parent,
+            document_ids=[doc_id] if doc_id else [],
+            interpretation_ids=[interp_id] if interp_id else [],
+        ),
+    )
+    return result
 
 
 def save_export(

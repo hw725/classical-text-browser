@@ -1161,6 +1161,18 @@ async def api_export_boundaries_csv(doc_id: str, part_id: str | None = Query(Non
     rows = _boundary_rows(doc_path, doc_id, part_id)
     buf = _io.StringIO()
     w = csv.writer(buf)
+
+    # 데이터 버전 각인 (D-128 1항). 경계 CSV는 연구자 DB로 들어가 논문 표가 되므로,
+    # 「어느 시점 확정본의 경계인가」가 파일 안에 남아야 한다.
+    #
+    # 왜 머리말 줄이 아니라 «열»인가: 처음에는 맨 위에 주석 한 줄을 얹었는데, 그러면
+    # 머리줄이 둘째 줄로 밀려 이 CSV를 읽는 쪽이 전부 깨진다(실측 — test_segmentation.py의
+    # 열 이름 검사가 바로 걸렸다). 이 파일에는 이미 `l4_commit`이라는 «행별 출처» 열
+    # 관례가 있으므로 그 옆에 붙인다. 정렬·필터를 해도 출처가 행을 따라간다.
+    from core.corpus_version import corpus_snapshot
+
+    _snapshot = corpus_snapshot(doc_path.parent.parent, document_ids=[doc_id])
+    _stamp = _snapshot["corpus_hash"] + ("" if _snapshot["reproducible"] else " (미커밋)")
     w.writerow(
         [
             "기사id",
@@ -1178,6 +1190,7 @@ async def api_export_boundaries_csv(doc_id: str, part_id: str | None = Query(Non
             "신뢰도",
             "근거",
             "l4_commit",
+            "코퍼스",
         ]
     )
     for r in rows:
@@ -1199,6 +1212,7 @@ async def api_export_boundaries_csv(doc_id: str, part_id: str | None = Query(Non
                 r.get("confidence") if r.get("confidence") is not None else "",
                 " ".join(r.get("reasons") or []),
                 (r.get("l4_commit") or "")[:12],
+                _stamp,
             ]
         )
     data = ("﻿" + buf.getvalue()).encode("utf-8")
