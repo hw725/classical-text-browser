@@ -120,11 +120,15 @@ GPU 스택은 `.venv`에 설치하지 않는다 — 별도 환경 `.venv-gpu`가
    | `honkoku_engine` | `recognize`·`recognize_page`(가짜 OCR 주입 — 변환 코드는 실행된다) |
    | `llm_ocr_engine` | `recognize`·`_recognize_async`(가짜 router) |
    | `line_detector` | `detect_lines`·`_get_detector` |
-   | **`ndlkotenocr_engine`·`ndlkotenocr_full_engine`** | **`is_available()`뿐 — 인식 코드가 한 줄도 안 돈다** |
+   | `ndlkotenocr_engine`·`ndlkotenocr_full_engine` | `_process_detections`·`_match_lines_to_blocks`(2026-09-21에 `tests/test_ocr_kotenocr_contract.py`로 메웠다 — 그 전에는 `is_available()`뿐이었다) |
 
-   즉 사각지대는 «더미 엔진 일반»이 아니라 **古典籍 Lite·Full 둘**이다. 나머지는 모델이
-   가짜여도 엔진 자신의 변환 코드가 실행되므로 API 변경은 잡힌다. 배치·파이프라인 경로가
-   `DummyOcrEngine`을 쓰는 것은 그대로다(뼈대만 잰다).
+   **주장에는 그것을 지키는 시험 이름을 붙인다.** 산문으로 «여기가 사각지대»라고 적으면 코드가
+   바뀌어도 문장만 남는다(이 표도 그래서 두 달 동안 엉뚱한 곳을 가리켰다). 위 표가 거짓이 되면
+   그 줄에 적힌 시험이 깨지도록 두는 것이 목표다.
+
+   **아직 시험이 지키지 않는 것:** 실제 모델(RTMDet·PARSeq·TrOCR·PaddleOCR 가중치)의 인식
+   품질. 엔진을 올린 뒤 **실제 이미지로 1쪽**과 `scripts/eval_cer.py`가 그 자리다. 배치·파이프라인
+   경로가 `DummyOcrEngine`을 쓰는 것도 그대로다(뼈대만 잰다).
 4. 스키마·저장 형식이 바뀌면 `docs/DECISIONS.md`에 마이그레이션 경로를 남긴다.
    기존 서고를 열 수 없게 되는 변경은 **되돌릴 수 없다.**
 
@@ -143,7 +147,7 @@ GPU 스택은 `.venv`에 설치하지 않는다 — 별도 환경 `.venv-gpu`가
   (`npx -y openai-oauth`, 포트 10531–10540 스캔, Bearer 토큰 `oauth-proxy` 하드코딩)와
   SikuRoBERTa 표점 Docker(punctuation-service/.env 존재 시)를 자동 기동.
 - 프론트(static/)가 약 4.2만 줄 — index.html 약 4.9천 줄 단일 파일, workspace.css 약 7.9천 줄,
-  JS 32개. 테스트 78파일 — 그중 화면 JS를 node로 돌리는 것 2(`tests/test_annotation_editor_js.py`,
+  JS 32개. 테스트 79파일 — 그중 화면 JS를 node로 돌리는 것 2(`tests/test_annotation_editor_js.py`,
   2026-09-16 Codex 교차검증 반영 때 처음 · `tests/test_entity_manager_js.py`, D-128), **CI 없음.**
   (2026-09-06 재실측. 2026-07-26 v1.2.0 감사 때 직전 대비 프론트가 줄어든 것은
   D-069에서 죽은 코드 약 1,000줄을 걷어냈기 때문이다.)

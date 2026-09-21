@@ -73,11 +73,15 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
    | `honkoku_engine` | `recognize`·`recognize_page`(가짜 OCR 주입 — 변환 코드는 실행된다) |
    | `llm_ocr_engine` | `recognize`·`_recognize_async`(가짜 router) |
    | `line_detector` | `detect_lines`·`_get_detector` |
-   | **`ndlkotenocr_engine`·`ndlkotenocr_full_engine`** | **`is_available()`뿐 — 인식 코드가 한 줄도 안 돈다** |
+   | `ndlkotenocr_engine`·`ndlkotenocr_full_engine` | `_process_detections`·`_match_lines_to_blocks`(2026-09-21에 `tests/test_ocr_kotenocr_contract.py`로 메웠다 — 그 전에는 `is_available()`뿐이었다) |
 
-   즉 사각지대는 «더미 엔진 일반»이 아니라 **古典籍 Lite·Full 둘**이다. 나머지는 모델이
-   가짜여도 엔진 자신의 변환 코드가 실행되므로 API 변경은 잡힌다. 배치·파이프라인 경로가
-   `DummyOcrEngine`을 쓰는 것은 그대로다(뼈대만 잰다).
+   **주장에는 그것을 지키는 시험 이름을 붙인다.** 산문으로 «여기가 사각지대»라고 적으면 코드가
+   바뀌어도 문장만 남는다(이 표도 그래서 두 달 동안 엉뚱한 곳을 가리켰다). 위 표가 거짓이 되면
+   그 줄에 적힌 시험이 깨지도록 두는 것이 목표다.
+
+   **아직 시험이 지키지 않는 것:** 실제 모델(RTMDet·PARSeq·TrOCR·PaddleOCR 가중치)의 인식
+   품질. 엔진을 올린 뒤 **실제 이미지로 1쪽**과 `scripts/eval_cer.py`가 그 자리다. 배치·파이프라인
+   경로가 `DummyOcrEngine`을 쓰는 것도 그대로다(뼈대만 잰다).
 4. 스키마·저장 형식이 바뀌면 `docs/DECISIONS.md`에 마이그레이션 경로를 남긴다.
    기존 서고를 열 수 없게 되는 변경은 **되돌릴 수 없다.**
 
