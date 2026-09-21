@@ -2345,6 +2345,19 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
   border-top: 1px solid var(--border);
 }
 
+/* 엔티티 편집기의 읽기 전용 설명 상자 (D-128) —
+   승격 판정 근거, 「이 개념은 합쳐졌다」 표시, 조절 관계의 제약 안내. */
+.entity-promo-note {
+  margin: 6px 0 10px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted, #666);
+  background: var(--bg-subtle, #f6f6f6);
+  border-left: 3px solid var(--border);
+  border-radius: 3px;
+}
+
 /* =========================================
    Phase 6: 교정 편집기 (Correction Editor)
    ========================================= */

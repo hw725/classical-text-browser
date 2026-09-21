@@ -222,14 +222,21 @@ function _renderEntityList() {
     const truncLabel = label.length > 50 ? label.substring(0, 50) + "..." : label;
     const shortId = (item.id || "").substring(0, 8);
     const isTag = item._entityType === "tag";
+    const isConcept = item._entityType === "concept";
+    // 이미 다른 개념으로 합쳐진 것은 다시 합치지 않는다 — get_entity 가 붙여 주는 표시(D-128 2항).
+    const merged = isConcept && item.superseded_by
+      ? `<span class="entity-list-id" title="${_escHtml(item.superseded_by)} 로 합쳐짐">→ ${_escHtml(String(item.superseded_by).substring(0, 8))}</span>`
+      : "";
 
     return `<div class="entity-list-item" data-entity-type="${item._entityType}" data-entity-id="${item.id}">
       <span class="entity-type-badge ${info.cssClass}">${info.label}</span>
       <span class="entity-list-label" title="${_escHtml(label)}">${_escHtml(truncLabel)}</span>
       <span class="entity-status-badge status-${item.status || "draft"}">${item.status || "draft"}</span>
       <span class="entity-list-id">${shortId}</span>
+      ${merged}
       <span class="entity-list-actions">
         ${isTag ? `<button class="entity-promote-btn" data-tag-id="${item.id}" title="Concept으로 승격">승격</button>` : ""}
+        ${isConcept && !item.superseded_by ? `<button class="entity-merge-btn" data-concept-id="${item.id}" title="다른 개념으로 합치기 (구 ID는 장부에 남는다)">합치기</button>` : ""}
       </span>
     </div>`;
   }).join("");
@@ -237,8 +244,9 @@ function _renderEntityList() {
   // 클릭 이벤트: 편집 다이얼로그
   container.querySelectorAll(".entity-list-item").forEach((el) => {
     el.addEventListener("click", (e) => {
-      // 승격 버튼 클릭은 별도 처리
+      // 승격·합치기 버튼 클릭은 별도 처리
       if (e.target.classList.contains("entity-promote-btn")) return;
+      if (e.target.classList.contains("entity-merge-btn")) return;
       const type = el.dataset.entityType;
       const id = el.dataset.entityId;
       _openEntityEditDialog(type, id);
@@ -250,6 +258,14 @@ function _renderEntityList() {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       _promoteTag(btn.dataset.tagId);
+    });
+  });
+
+  // 합치기 버튼 이벤트 (D-128 2항)
+  container.querySelectorAll(".entity-merge-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      _openMergeDialog(btn.dataset.conceptId);
     });
   });
 }
@@ -394,8 +410,21 @@ function _buildFormFields(entityType, existing) {
         <select id="ef-status" class="bib-select" style="width:100%;">${statusOptions}</select>
       `;
 
-    case "concept":
+    case "concept": {
+      // 승격 때 잰 가중 기여도를 그대로 보여준다 (D-128 8항). 「왜 이 개념이
+      // 올라왔는가」를 나중에 되짚을 수 있어야 하므로 읽기 전용으로 둔다.
+      const promo = existing && existing.concept_features && existing.concept_features.promotion;
+      const promoBox = promo
+        ? `<div class="entity-promo-note">승격 판정: <b>${promo.eligible ? "충족" : "미충족"}</b> — ${_escHtml(promo.reason || "")}<br>
+             실질 무게 ${promo.metrics ? promo.metrics.effective_weight : "?"} · 출처 ${promo.metrics ? promo.metrics.source_count : "?"}개
+             (출처 «수»는 판정에 쓰지 않는다 — D-128 7·8항)</div>`
+        : "";
+      const supersededBox = existing && existing.superseded_by
+        ? `<div class="entity-promo-note">이 개념은 <b>${_escHtml(existing.superseded_by)}</b> 로 합쳐졌다. 옛 ID는 장부에 남아 계속 조회된다 (D-128 2항).</div>`
+        : "";
       return `
+        ${supersededBox}
+        ${promoBox}
         <label class="bib-edit-label">라벨 (label)</label>
         <input id="ef-label" type="text" class="bib-input" value="${val("label")}" placeholder="예: 王戎" />
         <label class="bib-edit-label">유효 범위 문헌 ID (scope_document, 비우면 전역)</label>
@@ -405,6 +434,7 @@ function _buildFormFields(entityType, existing) {
         <label class="bib-edit-label">상태 (status)</label>
         <select id="ef-status" class="bib-select" style="width:100%;">${statusOptions}</select>
       `;
+    }
 
     case "agent":
       return `
@@ -437,11 +467,28 @@ function _buildFormFields(entityType, existing) {
           <option value="agent" ${existing && existing.object_type === "agent" ? "selected" : ""}>agent</option>
           <option value="concept" ${existing && existing.object_type === "concept" ? "selected" : ""}>concept</option>
           <option value="block" ${existing && existing.object_type === "block" ? "selected" : ""}>block</option>
+          <option value="relation" ${existing && existing.object_type === "relation" ? "selected" : ""}>relation (조절 대상)</option>
         </select>
         <label class="bib-edit-label">자유 텍스트 목적어 (object_value, 선택)</label>
         <input id="ef-object-value" type="text" class="bib-input" value="${val("object_value")}" placeholder="예: 瑯邪臨沂" />
         <label class="bib-edit-label">신뢰도 (confidence): <span id="ef-conf-val">${existing ? (existing.confidence ?? 0.8) : 0.8}</span></label>
         <input id="ef-confidence" type="range" min="0" max="1" step="0.05" value="${existing ? (existing.confidence ?? 0.8) : 0.8}" class="corr-slider" />
+        <label class="bib-edit-label">무게 (weight, 비우면 미지정)</label>
+        <input id="ef-weight" type="number" min="0" step="0.5" class="bib-input" value="${val("weight")}" placeholder="굵기 — 신뢰도와 다른 축이다" />
+        <label class="bib-edit-label">부호 (polarity)</label>
+        <select id="ef-polarity" class="bib-select" style="width:100%;">
+          <option value="">미지정 (지지로 읽지 않는다)</option>
+          <option value="support" ${existing && existing.polarity === "support" ? "selected" : ""}>지지 (support)</option>
+          <option value="refute" ${existing && existing.polarity === "refute" ? "selected" : ""}>반박 (refute)</option>
+          <option value="context_dependent" ${existing && existing.polarity === "context_dependent" ? "selected" : ""}>맥락 의존 (context_dependent)</option>
+          <option value="undetermined" ${existing && existing.polarity === "undetermined" ? "selected" : ""}>불명 (undetermined)</option>
+        </select>
+        <label class="bib-edit-label">종류 (mode)</label>
+        <select id="ef-mode" class="bib-select" style="width:100%;">
+          <option value="">주장 (assert — 기본)</option>
+          <option value="modulate" ${existing && existing.mode === "modulate" ? "selected" : ""}>조절 (modulate — 다른 관계의 무게를 바꾼다)</option>
+        </select>
+        <div class="entity-promo-note">조절(modulate)은 내용을 주장하지 않으므로 지지·반박 부호를 붙일 수 없고, 목적어가 concept 또는 relation 이어야 한다 (D-128 12항).</div>
         <label class="bib-edit-label">추출 주체 (extractor)</label>
         <input id="ef-extractor" type="text" class="bib-input" value="${val("extractor")}" placeholder="manual / llm" />
         <label class="bib-edit-label">상태 (status)</label>
@@ -583,13 +630,18 @@ function _collectFormData(entityType) {
     case "concept": {
       const label = _val("ef-label");
       if (!label) return null;
+      // 편집이 승격 기록을 지우면 안 된다. concept_features.promotion 에는
+      // 「왜 이 개념이 올라왔는가」(가중 기여도, D-128 8항)가 들어 있고,
+      // metadata 에는 promoted_from_tag_id 가 있다. 예전에는 둘 다 null 로
+      // 덮어써서, 연구자가 설명 한 줄을 고치면 그 기록이 통째로 사라졌다.
+      const prev = entityState.editingEntity || {};
       return {
         label,
         scope_document: _val("ef-scope-doc") || null,
         description: _val("ef-description") || null,
-        concept_features: null,
+        concept_features: prev.concept_features ?? null,
         status: _val("ef-status") || "draft",
-        metadata: null,
+        metadata: prev.metadata ?? null,
       };
     }
 
@@ -617,11 +669,16 @@ function _collectFormData(entityType) {
         object_id: _val("ef-object-id") || null,
         object_type: _val("ef-object-type") || null,
         object_value: _val("ef-object-value") || null,
-        evidence_blocks: null,
+        evidence_blocks: (entityState.editingEntity || {}).evidence_blocks ?? null,
         confidence: _numVal("ef-confidence"),
+        // 무게와 부호는 함께 저장한다 (D-128 11항). 빈 칸은 «미지정»이고,
+        // 미지정을 지지로 읽지 않는 것은 서버 쪽 polarity_of() 가 지킨다.
+        weight: _numVal("ef-weight"),
+        polarity: _val("ef-polarity") || null,
+        mode: _val("ef-mode") || null,
         extractor: _val("ef-extractor") || "manual",
         status: _val("ef-status") || "draft",
-        metadata: null,
+        metadata: (entityState.editingEntity || {}).metadata ?? null,
       };
     }
 
@@ -633,6 +690,10 @@ function _collectFormData(entityType) {
 
 function _closeEntityDialog() {
   document.getElementById("entity-dialog-overlay").style.display = "none";
+  // 합치기 다이얼로그가 숨겨 둔 공용 저장 단추를 되돌린다 — 되돌리지 않으면
+  // 다음에 엔티티를 편집할 때 저장 단추가 사라진 채로 열린다.
+  const saveBtn = document.getElementById("entity-dialog-save");
+  if (saveBtn) saveBtn.style.display = "";
   entityState.editingEntity = null;
   entityState.editingType = null;
 }
@@ -795,6 +856,89 @@ async function _promoteTag(tagId) {
   } catch (err) {
     showToast(`승격 실패: ${err.message}`, 'error');
   }
+}
+
+
+/**
+ * Concept 합치기 다이얼로그를 연다 (D-128 2항).
+ *
+ * 입력: sourceId — 흡수되는 개념의 id.
+ * 출력: 없음 (성공하면 목록을 다시 읽는다).
+ *
+ * 왜 «지우기»가 아니라 «합치기»인가: 개념을 지우면 그 id를 인용한 과거 참조 —
+ * 논문 각주, 이미 내보낸 사전 — 가 조용히 끊긴다. 합치기는 옛 개념을 그대로 두고
+ * 상태만 deprecated 로 내린 뒤 「이제 무엇을 보라」를 장부에 적는다. 옛 id로
+ * 조회하면 서버가 새 id를 알려준다.
+ */
+function _openMergeDialog(sourceId) {
+  if (!interpState || !interpState.interpId) return;
+
+  const concepts = (entityState.entities || {}).concepts || [];
+  const source = concepts.find((c) => c.id === sourceId);
+  // 자기 자신과 이미 합쳐진 것은 대상이 될 수 없다.
+  const targets = concepts.filter((c) => c.id !== sourceId && !c.superseded_by);
+  if (targets.length === 0) {
+    showToast("합칠 대상 개념이 없습니다. 먼저 남길 개념을 만드세요.", "error");
+    return;
+  }
+
+  const overlay = document.getElementById("entity-dialog-overlay");
+  const form = document.getElementById("entity-dialog-form");
+  const title = document.getElementById("entity-dialog-title");
+  if (!overlay || !form || !title) return;
+
+  // 이 다이얼로그는 «저장»이 아니라 «합치기»다 — 공용 저장 단추를 숨기고
+  // 폼 안에 전용 단추를 둔다. _closeEntityDialog 가 다시 보이게 되돌린다.
+  entityState.editingEntity = null;
+  entityState.editingType = null;
+  const saveBtn = document.getElementById("entity-dialog-save");
+  if (saveBtn) saveBtn.style.display = "none";
+  const statusEl = document.getElementById("entity-dialog-status");
+  if (statusEl) statusEl.textContent = "";
+
+  title.textContent = "개념 합치기";
+  form.innerHTML = `
+    <div class="entity-promo-note">
+      <b>${_escHtml((source && source.label) || sourceId)}</b> 를 다른 개념으로 합칩니다.<br>
+      이 개념의 파일은 지워지지 않고 상태만 «deprecated» 가 되며, 옛 ID는 장부에
+      남아 계속 조회됩니다 (D-128 2항).
+    </div>
+    <label class="bib-edit-label">남길 개념 (target)</label>
+    <select id="ef-merge-target" class="bib-select" style="width:100%;">
+      ${targets.map((c) => `<option value="${_escHtml(c.id)}">${_escHtml(c.label || c.id)} (${_escHtml(String(c.id).substring(0, 8))})</option>`).join("")}
+    </select>
+    <label class="bib-edit-label">사유 (note, 선택)</label>
+    <input id="ef-merge-note" type="text" class="bib-input" placeholder="예: 같은 인물" />
+    <div class="bib-edit-actions">
+      <button id="ef-merge-run" type="button">합치기</button>
+    </div>
+  `;
+  overlay.style.display = "";
+
+  document.getElementById("ef-merge-run").addEventListener("click", async () => {
+    const targetId = document.getElementById("ef-merge-target").value;
+    const note = document.getElementById("ef-merge-note").value || null;
+    try {
+      const resp = await fetch(
+        `/api/interpretations/${interpState.interpId}/entities/concepts/merge`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ source_ids: [sourceId], target_id: targetId, note }),
+        }
+      );
+      const result = await resp.json().catch(() => ({}));
+      if (!resp.ok || result.error) {
+        showToast(result.error || `합치기 실패: 서버 오류 (${resp.status})`, "error");
+        return;
+      }
+      _closeEntityDialog();
+      showToast(`합쳤습니다 — 옛 ID는 장부에 남습니다 (${result.merged.length}건)`, "success");
+      _loadEntitiesForCurrentPage();
+    } catch (err) {
+      showToast(`합치기 실패: ${err.message}`, "error");
+    }
+  });
 }
 
 
