@@ -30,6 +30,19 @@
     잡힌 Tag의 최대 신뢰도」다. 시냅스 수와 같은 뜻의 양 — 「이 출처가 이 개념을
     몇 번 건드렸는가」 — 을 지금 가진 데이터로 셀 수 있는 유일한 방법이다.
     `metadata.weight`가 적혀 있으면 도출을 건너뛰고 그 값을 쓴다(사람·도구가 직접 잰 값).
+
+**잴 수 없을 때는 «세지» 않는다** (2026-09-21, 독립 검증에서 잡힌 결함):
+    처음에는 확정본이 없으면 `Tag 수`로 떨어지게 두었다. 그런데 그것이 바로 8항이
+    막으려던 «개수로 세기»다 — 한 단위에 같은 표면형 Tag가 셋 붙으면 무게 3.0이
+    되어 임계를 그대로 넘었다. 한 단위에 같은 말이 여러 번 잡히는 것은 예외가 아니라
+    이 도구의 정상 사용이고, 확정본이 **있어도** 표면형이 문자 그대로 일치하지 않으면
+    (이체자·신자체 — 이 저장소가 사전 계층을 따로 둔 이유) 같은 자리로 떨어졌다.
+
+    지금은 «재지 못했다»와 «재 봤더니 0이다»를 나눈다.
+      - 단위의 확정본을 못 찾았다 → `measured=False`, 무게 0. **승격 근거가 되지 않는다.**
+      - 확정본은 있는데 표면형이 안 나온다 → `measured=True`, 무게 0. (정상적인 0이다)
+    판정 사유도 둘을 다르게 말한다 — 연구자가 「확정본을 먼저 채우라」는 답을 받아야
+    하기 때문이다.
 """
 
 import logging
@@ -118,6 +131,9 @@ def promotion_metrics(
     있어야 한다. 판정만 돌려주면 연구자는 임계를 손볼 근거를 못 본다.
     """
     weights = sorted((source_weight(s) for s in sources), reverse=True)
+    # 「재지 못한」 출처는 따로 센다 — 무게 0인 것과 겉보기가 같아서, 세어 두지 않으면
+    # 연구자가 「약해서 안 올라간다」와 「아직 못 쟀다」를 구분할 수 없다.
+    unmeasured = sum(1 for s in sources if s.get("measured") is False)
     total = sum(weights)
     effective = [w for w in weights if w > noise_ceiling]
     # 상위 10% — 출처가 적으면 최소 하나는 본다(0개를 보면 언제나 0%가 된다).
@@ -131,6 +147,7 @@ def promotion_metrics(
         "noise_share": round((total - sum(effective)) / total, 4) if total else 0.0,
         "top_weight": round(weights[0], 4) if weights else 0.0,
         "top10_share": round(top10 / total, 4) if total else 0.0,
+        "unmeasured_count": unmeasured,
     }
 
 
@@ -163,10 +180,21 @@ def evaluate_promotion(
         )
     elif metrics["source_count"] == 0:
         reason = "출처가 없습니다."
-    elif metrics["effective_count"] == 0:
+    elif metrics["unmeasured_count"] == metrics["source_count"]:
         reason = (
-            f"출처 {metrics['source_count']}개가 모두 잡음 바닥(무게 {noise_ceiling} 이하)입니다. "
-            "출처 «수»가 아니라 «무게»로 재기 때문에, 약한 출처가 여럿이어도 승격되지 않습니다."
+            f"출처 {metrics['source_count']}개 모두 확정본(L4)이 없어 무게를 재지 못했습니다. "
+            "Tag 개수로는 승격하지 않습니다 — 「권 전체 OCR」로 확정본을 채운 뒤 다시 보세요."
+        )
+    elif metrics["effective_count"] == 0:
+        measured_note = (
+            f" (그중 {metrics['unmeasured_count']}개는 확정본이 없어 재지 못했습니다)"
+            if metrics["unmeasured_count"]
+            else ""
+        )
+        reason = (
+            f"출처 {metrics['source_count']}개가 모두 잡음 바닥(무게 {noise_ceiling} 이하)입니다"
+            f"{measured_note}. 출처 «수»가 아니라 «무게»로 재기 때문에, 약한 출처가 "
+            "여럿이어도 승격되지 않습니다."
         )
     else:
         reason = (
@@ -196,14 +224,20 @@ def gather_sources(
         surface — 표면 문자열 (예: 王戎).
         document_id — **거르는 값이 아니다.** 모은 출처에 「어느 문헌의 것인가」를
             적어 돌려줄 때 쓰는 기본값이며, 이 값과 다른 문헌의 출처도 그대로 모은다.
-    출력: [{"unit_id", "document_id", "tag_ids", "occurrences", "confidence", "weight"}, ...]
+    출력: [{"unit_id", "document_id", "tag_ids", "occurrences", "confidence",
+             "weight", "measured"}, ...]
+        `measured`가 False면 **그 단위의 확정본을 찾지 못해 무게를 재지 못한 것**이다.
+        무게는 0이 되고 승격 근거가 되지 않는다 — Tag 개수로 대신하지 않는다.
 
     왜 거르지 않는가: 수집을 구획으로 막으면 연합이 일어나지 않는다. 연합 구조의
     수렴은 62.1%로 열려 있고, 그것이 「출처는 어디서든 오고 합성된 개념은 한 영역에
     속한다」는 모양이다. 적용 범위는 SCOPE_BLIND_COLLECTION_NOTE 참조.
 
-    무게 도출: 그 단위의 원문에 표면형이 나온 횟수 × 그 단위에서 잡힌 Tag의 최대
+    무게 도출: 그 단위의 확정본에 표면형이 나온 횟수 × 그 단위에서 잡힌 Tag의 최대
     신뢰도. Tag에 `metadata.weight`가 적혀 있으면 그 값이 이긴다.
+
+    **확정본을 못 찾으면 Tag 수로 대신하지 않는다** — 그것이 8항이 막으려는 「개수로
+    세기」다. 그런 출처는 `measured=False`에 무게 0으로 두어 승격 근거에서 빠진다.
     """
     from .entity import _unit_view, list_entities
 
@@ -226,6 +260,7 @@ def gather_sources(
                 "occurrences": 0,
                 "confidence": None,
                 "weight": None,
+                "measured": False,
             },
         )
         bucket["tag_ids"].append(tag.get("id"))
@@ -235,13 +270,26 @@ def gather_sources(
         explicit = (tag.get("metadata") or {}).get("weight")
         if explicit is not None:
             # 명시값이 여럿이면 가장 큰 것 — 누군가 이미 잰 값을 깎지 않는다.
-            bucket["weight"] = max(bucket["weight"] or 0.0, float(explicit))
+            # 숫자가 아니면 «적히지 않은 것»으로 본다: 여기서 예외를 던지면 Tag 하나의
+            # metadata 오타가 승격 전체를 영어 traceback으로 떨어뜨린다.
+            try:
+                bucket["weight"] = max(bucket["weight"] or 0.0, float(explicit))
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Tag %s의 metadata.weight를 숫자로 읽지 못했습니다(%r). 도출값을 씁니다.",
+                    tag.get("id"),
+                    explicit,
+                )
 
     for unit_id, bucket in by_unit.items():
         unit = units.get(unit_id) or {}
         text = unit.get("original_text") or ""
-        # 같은 단위 안에서 몇 번 건드렸는가. 원문을 못 찾으면 Tag 수로 대신한다.
-        bucket["occurrences"] = text.count(surface) or len(bucket["tag_ids"])
+        # 같은 단위 안에서 몇 번 건드렸는가.
+        #
+        # 확정본이 없으면 **재지 못한 것**이다 — Tag 수로 대신하지 않는다(8항).
+        # 명시 무게가 적혀 있으면 그것은 사람이 이미 잰 값이므로 잰 것으로 본다.
+        bucket["measured"] = bool(text) or bucket["weight"] is not None
+        bucket["occurrences"] = text.count(surface) if text else 0
         src_doc = ((unit.get("source_ref") or {}) or {}).get("document_id")
         if src_doc:
             bucket["document_id"] = src_doc

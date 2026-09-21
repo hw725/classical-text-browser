@@ -148,13 +148,41 @@ class HonkokuOcrEngine(BaseOcrEngine):
             )
         return out
 
+    @staticmethod
+    def _model_setup_error() -> type[BaseException]:
+        """`honkoku_ocr.ModelSetupError`를 가져온다. 패키지가 없으면 «결코 맞지 않는» 대역.
+
+        출력: except 절에 쓸 예외 클래스.
+
+        왜 이렇게 하는가: 예전에는 `_process`가 이 예외를 잡으려고 `honkoku_ocr`을
+        **무조건** import했다. 그래서 패키지가 없는 환경에서는 — 시험이 가짜 OCR을
+        `self._ocr`에 직접 넣어 두었는데도 — 인식 경로가 `ModuleNotFoundError`로
+        통째로 죽었다. `tests/test_ocr_honkoku.py`는 머리말에 「모델 없이 계약만
+        잰다」고 적어 두고도 실제로는 그러지 못했고, 그 실패가 오래 「원래 깨져
+        있는 것」처럼 보였다(2026-09-21 실측 — 워크트리 `.venv`에 honkoku·onnxruntime
+        미설치, main `.venv`에는 있어서 두 환경이 다른 답을 냈다).
+
+        잡을 예외가 존재하지 않으면 **잡지 않으면 될 뿐**이다. 패키지가 정말
+        필요한 자리(`_get_ocr`)는 이미 `is_available()`로 막고 한국어로 안내한다.
+        """
+        try:
+            from honkoku_ocr import ModelSetupError
+
+            return ModelSetupError
+        except ImportError:
+            # 어떤 예외도 이 클래스의 인스턴스가 아니므로 except 절이 그냥 비켜 간다.
+            class _NeverRaised(Exception):
+                pass
+
+            return _NeverRaised
+
     def _process(self, image: Image.Image, boxes=None):
         """honkoku OCR을 돌린다. 실패는 OcrEngineError로 바꾼다."""
-        from honkoku_ocr import ModelSetupError
+        model_setup_error = self._model_setup_error()
 
         try:
             return self._get_ocr().process(image, boxes)
-        except ModelSetupError as e:
+        except model_setup_error as e:
             raise OcrEngineUnavailableError(f"みんなで翻刻OCR 모델 오류: {e}") from e
         except Exception as e:  # noqa: BLE001 — 엔진 내부 예외를 한 종류로 모은다
             raise OcrEngineError(f"みんなで翻刻OCR 인식 실패: {e}") from e

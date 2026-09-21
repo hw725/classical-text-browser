@@ -850,17 +850,9 @@ def _annotate_superseded(interp_path: Path, entity_type: str, entities: list[dic
     if not entities:
         return entities
 
-    from .entity_id_map import FOLLOWED_RELATIONS, load_id_map
+    from .entity_id_map import follow_chain, supersede_lookup
 
-    lookup: dict[str, str] = {}
-    for e in load_id_map(interp_path)["entries"]:
-        if e.get("entity_type") != entity_type:
-            continue
-        if e.get("relation") not in FOLLOWED_RELATIONS:
-            continue
-        old_id, new_id = e.get("old_id"), e.get("new_id")
-        if old_id and new_id:
-            lookup[old_id] = new_id
+    lookup = supersede_lookup(interp_path, entity_type)
     if not lookup:
         return entities
 
@@ -870,15 +862,10 @@ def _annotate_superseded(interp_path: Path, entity_type: str, entities: list[dic
         if entity_id not in lookup:
             out.append(entity)
             continue
-        chain, seen, current = [entity_id], {entity_id}, entity_id
-        while current in lookup:
-            nxt = lookup[current]
-            if nxt in seen:
-                break
-            chain.append(nxt)
-            seen.add(nxt)
-            current = nxt
-        out.append({**entity, "superseded_by": current, "supersede_chain": chain})
+        moved = follow_chain(lookup, entity_id, entity_type=entity_type)
+        out.append(
+            {**entity, "superseded_by": moved["id"], "supersede_chain": moved["chain"]}
+        )
     return out
 
 
@@ -1115,11 +1102,29 @@ def merge_concepts(
         )
 
     # 목표가 실재하는지 먼저 확인한다 — 없는 곳으로 보내면 장부가 거짓이 된다.
-    get_entity(interp_path, "concept", target_id)
+    target = get_entity(interp_path, "concept", target_id)
+
+    # **이미 대체된 것을 목표로 삼지 않는다.**
+    #
+    # 왜: B → A 로 합친 뒤 A → B 를 부르면 장부에 순환이 서고, 그 순간 «대체되지
+    # 않은» 개념이 하나도 남지 않는다. 조회는 순환을 끊어 멎지는 않지만(follow_chain의
+    # seen) 정본이 사라져 화면에서 되돌릴 길이 없어진다 — 삭제 금지 규약 때문에
+    # 장부 항목을 지우는 길도 없다. 화면은 대상 목록에서 대체된 것을 빼 두었지만,
+    # 라우트를 직접 부르거나 목록이 낡은 탭에서는 그대로 뚫린다.
+    # 장부가 본체이므로 방어도 장부 쪽에 있어야 한다.
+    if target.get("superseded_by"):
+        raise ValueError(
+            f"목표 개념({target_id})은 이미 {target['superseded_by']}로 합쳐졌습니다.\n"
+            "→ 왜: 합쳐진 것을 다시 목표로 삼으면 장부에 순환이 생겨 «지금 무엇을 보라»를 "
+            "답할 수 없게 됩니다.\n"
+            "→ 해결: 마지막으로 남은 개념을 목표로 지정하세요."
+        )
 
     merged: list[str] = []
     skipped: list[dict] = []
-    for old_id in source_ids:
+    # 같은 id를 두 번 주면 장부에는 한 줄만 남는데 결과는 두 건으로 세어져
+    # 화면이 「2건 합쳤습니다」로 거짓말한다. 순서는 지키고 중복만 없앤다.
+    for old_id in dict.fromkeys(source_ids):
         try:
             existing = get_entity(interp_path, "concept", old_id)
         except FileNotFoundError as e:
