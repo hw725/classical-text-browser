@@ -72,7 +72,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 
 ## 백엔드 모듈 구조 (src/app/)
 server.py는 FastAPI 앱 생성 + 라우터 마운트 + 미들웨어만 담당하는 조립 파일.
-실제 API 엔드포인트 224개가 9개 라우터 모듈에 분산 (2026-09-18 기준 실측):
+실제 API 엔드포인트 225개가 9개 라우터 모듈에 분산 (2026-09-18 기준 실측):
 
 ```
 src/app/
@@ -83,7 +83,7 @@ src/app/
     ├── library.py       ← 서고/설정/백업/휴지통 + 스키마 검증 + 연결 설정·앱 업데이트·엔진 추가 설치·OAuth 프록시·Ollama 로그인·모델 골라 받기 (29 라우트)
     ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 + 텍스트레이어 진단·가져오기·입히기 + 권 추가·회전 + 경계 규칙 + 찍은 자리·규칙 제안 (45 라우트)
     ├── composition.py   ← 편성 — 내용 트리·경계 색인·넣기·옮기기·지우기 + 제안·목차·적용·자동 트리·신호 도출·LLM 표지 묻기·구조 통째로 묻기 + 규칙 미리 보기·말로 규칙 넣기 + 쪼개기·리셋 (17 라우트)
-    ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티/관계·태그 (22 라우트)
+    ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티/관계·태그 + 개념 병합 (23 라우트)
     ├── llm_ocr.py       ← LLM 상태·분석·초안 + OCR 엔진·실행·권단위 일괄·백업 되돌리기·판독 지침·LLM 교정 패스·판독 계획 (26 라우트)
     ├── alignment.py     ← 이체자 사전/정렬/일괄교정/문헌별 승인 (20 라우트)
     ├── reading.py       ← L5 표점·현토 + L6 번역 + 비고 + AI보조 (24 라우트)
@@ -156,11 +156,21 @@ src/app/
 | `src/core/corpus_version.py` | **데이터 버전을 «출력»에 각인한다**(D-128 1항). 산출물에 기여한 저장소들의 HEAD를 접어 `ctb-corpus:…` 해시로 만들고, 내보내기 다섯 자리가 자동으로 찍는다 — 교환 스냅샷·사전 내보내기·인용 내보내기·경계 CSV(`코퍼스` 열)·텍스트레이어 PDF(keywords). **사용자는 아무것도 입력하지 않는다.** 시각·앱 판은 해시에 넣지 않는다(같은 데이터 → 같은 해시). 커밋되지 않은 편집이 있으면 `reproducible: false`로 알린다. `core-schema-v1.3`은 **스키마** 판이고 이것은 **데이터** 판이다 |
 | `src/core/entity_id_map.py` | **구 ID를 죽이지 않는다**(2항). `core_entities/id_map.json` 하나에 구 → 신 매핑을 쌓는다. 고리 둘 — `superseded_by`(병합, 조회가 따라간다)·`promoted_to`(승격, 따라가지 않는다: Tag는 그대로 산다). `get_entity`가 옛 id에 「지금은 무엇을 보라」를 붙인다. **Relation의 서술어로 두지 않은 이유**는 셋이다: `/entities/relation` 목록이 화면에 그대로 떠서 내부 장부가 섞이고, `subject_type` enum에 tag가 없으며, 옛 id를 물을 때마다 전수 훑기가 된다 |
 | `src/core/promotion.py` | **승격은 개수가 아니라 무게로**(8·9·10항). 무게 1~2는 잡음 바닥이라 세지 않되 **지우지 않는다**. 출처 수집은 문헌으로 **거르지 않고**(넓게 모은다) Concept은 `scope_document` 하나를 갖는다(좁게 내보낸다) — 이 비대칭은 **연합 구조에만** 해당하고 편성·OCR에는 적용하지 않는다(`SCOPE_BLIND_COLLECTION_NOTE`). 무게는 「그 단위의 L4에 표면형이 몇 번 나오는가 × 신뢰도」라 **L4가 없으면 Tag 수로 떨어진다** — 그때는 바닥 아래라 자동 승격이 닫힌다. 저울이지 잠금장치가 아니다(`require_weight=True`로만 막는다) |
+| `src/core/concept_scope.py` | **Concept의 범위는 «주소»다 — 순위 가중치가 아니다**(6항). 다른 문헌의 개념은 순위가 낮아지는 것이 아니라 **목록에 들어오지 않고**, 전역(null)은 모든 문헌 주소에 걸린다. 질의는 `?scope=`(`list_entities`의 `scope_document` 필터). **거르기만 하고 정렬하지 않는다** — 정렬하는 순간 「범위가 순위를 만든다」가 되어 6항이 버린 쪽으로 간다. **이것은 내보내는 쪽 규칙이다**(`OUTPUT_SIDE_ONLY_NOTE`) — 모으는 쪽(`gather_sources`)에 옮기면 연합이 일어나지 않는다 |
 | `src/core/relation_polarity.py` | **부호는 이진이 아니고, 강한 엣지에서 가장 중요하다**(11·12·13항). `polarity` 넷(지지·반박·맥락의존·불명) — 적히지 않은 것을 지지로 읽지 않는다. `mode: modulate`는 내용을 주장하지 않고 **다른 관계의 무게를 바꾸는** 관계이고 연합 층(concept·relation)에만 붙는다. 강연결 임계는 상수가 아니라 `suggest_strong_threshold`가 분포에서 정한다. `unsigned_strong_relations`가 「부호 없는 강연결」을 짚는다 |
 
 **질의 표면은 좁게 유지한다**(3항). 읽기 문은 `entity.py`의 셋뿐이고(`QUERY_SURFACE`)
 임의 순회를 여는 함수·엔드포인트가 없다. 관계를 따라가는 일이 생기면 **목록을 받아 거르는
 순수 함수**로 만든다 — 저장소 경로를 안 받으므로 구조상 순회가 불가능하다.
+
+**파트너 수·집중도는 판정에 넣지 않는다**(7항). 계통마다 6배·2.4배씩 달라 설계 근거가 되지
+못하는 값이다. `promotion_metrics()`는 재서 **보여주기만** 하고 `evaluate_promotion()`의 판정에는
+실질 무게 하나만 들어간다 — 이름은 `METRICS_NOT_USED_FOR_VERDICT`에 적혀 있다.
+
+**저장 계층에 필드를 더할 때는 그 필드를 모르는 화면 코드가 무엇을 보내는지 함께 본다.**
+`entity-manager.js::_collectFormData`가 Concept 저장에 `concept_features: null`을 무조건
+보내고 있었고, 승격 근거가 거기 들어가는 순간 **설명 한 줄만 고쳐도 기록이 사라지는** 길이
+됐다(D-128 구현 기록 4). 예외도 경고도 나지 않는다.
 
 ## 파일 다루기 — 되풀이하지 말 것
 

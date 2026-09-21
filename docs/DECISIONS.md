@@ -6770,8 +6770,8 @@ OCR을 진행할 수 있을까?» 답은 이미 있었다(쪽 범위 회전 + �
 
 ## D-128: 커넥톰 리포지토리에서 가져올 것 셋 — 버전은 출력에, 매핑은 내부에, 질의는 좁게
 
-**날짜**: 2026-09-20 (4·5항 구현 2026-09-21 · 1~3·8~13항 구현 2026-09-21)
-**상태**: 확정(방침) · **1~5·8~13항 구현됨** · 6·7항 미구현
+**날짜**: 2026-09-20 (4·5항 구현 2026-09-21 · 1~3·6~13항 구현 2026-09-21)
+**상태**: 확정(방침) · **1~13항 전부 구현됨**
 
 > **4·5항 구현 위치는 이 저장소가 아니라 `jt725/scripts/graph_two_stage.py` 다.** 이 저장소는
 > 로컬 단일 사용자 도구라 neuPrint 의존성을 싣지 않기로 했고(위 배경), 커넥톰 대조가 필요한
@@ -6779,13 +6779,13 @@ OCR을 진행할 수 있을까?» 답은 이미 있었다(쪽 범위 회전 + �
 > `Relation` 에 `weight` 를 두고 순회에서 임계로 거른다는 계약이 그것이고, 그 계약이
 > 실제로 작동한다는 증거가 아래 실측이다.
 
-> **1~3·8~13항은 이 저장소에 구현됐다**(2026-09-21). 이쪽도 `neuprint-python`·API·토큰은
+> **1~3·6~13항은 이 저장소에 구현됐다**(2026-09-21). 이쪽도 `neuprint-python`·API·토큰은
 > 들어오지 않았고 그 측정에서 나온 규칙만 왔다. 항별 판정·근거 파일은 이 항 끝의
 > 「구현 기록」을 본다. 4항이 말한 `Relation.weight` 자리는 11항(부호)과 **함께** 생겼다 —
 > 무게와 부호는 따로 둘 수 없다는 것이 11항의 관찰이기 때문이다.
 >
-> 6·7항은 아직이다. 6항(출력 구획을 주소로)은 범위 규칙이라 편성·서고 층의 설계가
-> 함께 움직여야 하고, 7항은 「설계 근거로 쓰지 않는다」는 금지라 구현할 것이 없다.
+> 7항은 「설계 근거로 쓰지 않는다」는 **금지**라서 만들 기능이 없다. 대신 그 금지가
+> 지켜지는지를 재는 시험을 두었다 — 금지도 이행 여부를 물을 수 있어야 한다.
 
 **배경**: 커넥톰 리포지토리(neuPrint / male-cns:v1.0)의 데이터 운영 규약을 이 저장소의
 Unit·Tag·Concept·Agent·Relation 층에 접목할 수 있는지 살폈다. 결론부터 — **규약 셋은 가져오고
@@ -7018,7 +7018,9 @@ ROI는 세 번 쟀다. ① 60씨앗 `fetch_adjacencies` ② 전수 `roiInfo` 무
 | 11 부호는 강한 엣지에서 중요 | 구현 | `relation.schema.json`에 `weight`·`polarity`를 함께 두고, `core/relation_polarity.py`의 `strong_edges`·`unsigned_strong_relations`. 임계는 상수가 아니라 `suggest_strong_threshold`가 분포에서 정한다 |
 | 12 조절은 따로 있는 종류 | 구현 | `relation.schema.json`의 `mode: modulate` + `object_type: relation`. 연합 층 밖을 가리키면 `validate_relation_semantics`가 거부한다 |
 | 13 부호를 이진으로 강제하지 않는다 | 구현 | `polarity` enum 넷(support·refute·context_dependent·undetermined). 적히지 않은 것을 지지로 읽지 않는다(`polarity_of`) |
-| 4~7 | 미구현(범위 밖) | 위키 순회 쪽. 이 저장소의 Relation에 `weight` 자리는 11항과 함께 생겼으므로, 5항의 2단 순회가 나중에 그것을 쓸 수 있다 |
+| 6 출력 구획은 벽에 가깝다 | 구현 | `src/core/concept_scope.py` — 범위는 순위 가중치가 아니라 **주소**다. 다른 문헌의 개념은 순위가 낮아지는 것이 아니라 목록에 들어오지 않고, 전역(null)은 모든 주소에 걸린다. `list_entities`의 `scope_document` 필터와 목록 라우트의 `?scope=`. **이것이 입력 쪽으로 번지지 않는 것**을 `test_collection_side_is_not_walled`가 지킨다 |
+| 7 파트너 수·집중도는 근거가 아니다 | 구현(금지의 이행) | 구현할 기능이 아니라 **판정에 들어가지 못하게 하는 일**이다. `promotion.METRICS_NOT_USED_FOR_VERDICT`에 이름을 적고, 잡음 출처를 500개 더해도 판정이 흔들리지 않는지·집중도만 다른 두 묶음이 같은 판정을 받는지를 `TestPartnerCountIsNotEvidence`가 잰다 |
+| 4·5 | 이 저장소 밖 | 위키 순회 쪽(`jt725/scripts/graph_two_stage.py`). 4항이 계약으로 적어 둔 `Relation.weight` 자리는 11항과 **함께** 생겼다 — 무게만 있고 부호가 없으면 반대 방향이 몰린 강한 꼬리를 지지와 똑같이 세게 되기 때문이다 |
 
 **구현하며 드러난 것 셋**
 
@@ -7037,3 +7039,16 @@ ROI는 세 번 쟀다. ① 60씨앗 `fetch_adjacencies` ② 전수 `roiInfo` 무
    내부 장부가 연구자가 보는 관계 목록을 오염시킨다(2항은 «보이지 않는 장부»라고 못 박았다)
    ② `subject_type` enum이 `agent|concept` 둘뿐이라 Tag 승격을 담지 못한다 ③ 옛 id를 물을
    때마다 `relations/*.json`을 전수 훑어야 한다. 그래서 `core_entities/id_map.json` 하나다.
+
+4. **새 필드를 더하자 «화면이 그것을 지우는» 자리가 생겼다.** `entity-manager.js`의
+   `_collectFormData`가 Concept을 저장할 때 `concept_features: null`·`metadata: null`을
+   무조건 보내고 있었다. 예전에는 둘 다 늘 비어 있어서 무해했는데, 8항의 승격 근거가
+   `concept_features.promotion`에 들어가는 순간 **연구자가 설명 한 줄만 고쳐도 그 기록이
+   통째로 사라지는** 길이 됐다. 예외도 경고도 없다. 저장 계층에 필드를 더할 때는
+   **그 필드를 쓰지 않는 기존 화면 코드가 무엇을 보내는지** 함께 봐야 한다
+   (`tests/test_entity_manager_js.py`가 이 자리를 지킨다).
+
+5. **규약이 코드에만 있으면 쓰이지 않는다.** 처음에는 `merge_concepts`를 코어 함수로만
+   두었다. 그런데 병합할 길이 화면에 없으면 장부는 영영 비어 있고, 2항은 「구현했다」고
+   적혀 있지만 실제로는 아무 일도 하지 않는다. 라우트(`entities/concepts/merge`)와
+   목록의 「합치기」 단추까지 가야 규약이 데이터가 된다.

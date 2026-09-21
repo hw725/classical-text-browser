@@ -84,6 +84,20 @@ Concept_features: - Fully optional. - No predefined required flags. -
 Absence of feature means "unspecified". - May be extended without schema
 migration.
 
+> **D-128 6항 — `scope_document`는 «주소»다 (2026-09-21)**: 조회할 때 다른 문헌의
+> 개념은 **순위가 낮아지는 것이 아니라 목록에 들어오지 않는다.** 전역(null)은
+> 모든 문헌 주소에 걸린다. 연합·감각 계통에서 출력 무게의 83.2%·87.2%가 자기
+> 구획에 머물렀다는 전수 측정이 근거다 — 구획은 사전확률이 아니라 벽에 가깝다.
+> 구현은 `core/concept_scope.py`, 질의는 `?scope=` (`core/entity.py::list_entities`).
+>
+> **이것은 내보내는 쪽 규칙이다.** 승격 출처를 모으는 쪽은 구획으로 막지 않는다
+> (9항, `core/promotion.py::gather_sources`). 둘을 같은 규칙으로 합치면 연합이
+> 일어나지 않거나 개념이 문헌 사이로 새어 나간다.
+>
+> **`concept_features.promotion`은 편집으로 지우지 않는다.** 승격 판정 근거가
+> 거기 산다 — 저장 경로가 이 필드를 `null`로 덮으면 「왜 올라왔는가」가 조용히
+> 사라진다(실제로 화면에서 그런 일이 있었다. `tests/test_entity_manager_js.py`).
+
 ------------------------------------------------------------------------
 
 # 5. Agent
