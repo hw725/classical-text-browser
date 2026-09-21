@@ -832,6 +832,71 @@ async def api_promote_tag(
     return result
 
 
+@router.get("/api/interpretations/{interp_id}/connectome-comparison")
+async def api_connectome_comparison(
+    interp_id: str,
+    live: bool = Query(
+        False,
+        description=(
+            "기준값을 neuPrint에 직접 물어 새로 뽑는다. "
+            "neuprint-python(extra `connectome`)과 토큰이 있어야 하고, "
+            "배포본에는 둘 다 없으므로 400으로 답한다."
+        ),
+    ),
+):
+    """이 해석 저장소의 관계 분포를 커넥톰 연합 구조와 나란히 놓는다 (D-128 후속).
+
+    목적: D-128의 규약대로 만들고 나면 「그래서 이 서고가 그런 모양인가」가 남는다.
+          관계를 수천 개 쌓았는데 전부 무게 1이고 부호가 없다면, 규약은 지켰지만
+          그 규약이 가정한 구조는 아직 생기지 않은 것이다.
+    출력: {"reference": {...}, "library": {...}, "rows": [...], "notes": [...], "live": bool}
+
+    **판정하지 않는다.** 「연합 구조와 82% 닮았다」 같은 점수를 내놓으면 그 숫자를
+    올리는 것이 목표가 된다 — 커넥톰은 참고 좌표이지 목표가 아니다. 숫자를 나란히
+    보여 주고 해석은 연구자가 한다.
+
+    `live=false`(기본)는 **의존성이 없다** — 기록된 기준값(D-128, 2026-09-21 재측정
+    확인)으로 대조하므로 배포본에서도 돈다. `live=true`만 게이트 뒤에 있다.
+    """
+    _library_path = get_library_path()
+    if _library_path is None:
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+
+    interp_path = require_repo_path("interpretations", interp_id)
+    if not interp_path.exists():
+        return JSONResponse(
+            {"error": f"해석 저장소를 찾을 수 없습니다: {interp_id}"},
+            status_code=404,
+        )
+
+    from core.connectome import compare, is_live_available, measure_reference
+
+    reference = None
+    if live:
+        ok, reason = is_live_available()
+        if not ok:
+            # 판독 계획이 CPU 환경에서 하는 것과 같은 모양 — 400에 «왜»를 담는다.
+            return JSONResponse(
+                {"error": reason, "live_only": True},
+                status_code=400,
+            )
+        try:
+            reference = measure_reference()
+        except Exception as e:  # noqa: BLE001 — 네트워크·질의 실패를 한국어로 바꾼다
+            return JSONResponse(
+                {
+                    "error": f"커넥톰 재측정에 실패했습니다: {e}\n"
+                    "→ 해결: 네트워크와 토큰을 확인하세요. 읽기 전용 질의입니다."
+                },
+                status_code=502,
+            )
+
+    relations = list_entities(interp_path, "relation")
+    result = compare(relations, reference=reference)
+    result["live"] = bool(reference)
+    return result
+
+
 @router.post("/api/interpretations/{interp_id}/entities/concepts/merge")
 async def api_merge_concepts(interp_id: str, body: MergeConceptsRequest):
     """Concept 여럿을 하나로 합친다 — 구 ID는 장부에 남는다 (D-128 2항).

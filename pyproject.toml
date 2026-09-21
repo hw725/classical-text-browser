@@ -166,6 +166,26 @@ honkoku = [
     "onnxruntime>=1.21.0",
 ]
 
+# 커넥톰 재측정 (D-128 후속) — **설치 파일의 선택지에 없다.**
+#
+# 왜 extra인가: D-128의 규약은 커넥톰 실측에서 나왔고, 그 기준값이 낡았는지
+# 다시 재려면 neuPrint에 직접 물어야 한다. 그런데 이 도구는 설치 파일로 배포되는
+# 로컬 단일 사용자 도구다 — 받는 사람에게는 토큰이 없어 기능이 죽고, 원격 API
+# 의존은 「이 저장소는 로컬에서 완결되어야 한다」는 D-128의 결정에 어긋난다.
+#
+# 그래서 기능을 둘로 나눴다(`src/core/connectome.py`):
+#   - 기록된 기준값과의 대조 — 의존성 없음. 배포본에서도 돈다.
+#   - 살아 있는 재측정 — 이 extra + 토큰이 있어야 한다.
+#
+# **`install.ps1`의 $pick 1~4 어느 가지에도 이 이름을 넣지 않는다.** 넣는 순간
+# 처음 까는 사람이 4.5GB 옆에 이것까지 받게 되고, 받아도 토큰이 없어 쓸 수 없다.
+# 검사: tests/test_connectome.py::test_installer_never_offers_connectome
+#
+# 쓰려면: uv sync --extra connectome
+connectome = [
+    "neuprint-python>=0.6",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",
