@@ -888,3 +888,80 @@ class TestWeightReadingIsRobust:
 
         assert source_weight({"weight": True}) == 1.0
         assert evaluate_promotion([{"weight": True} for _ in range(50)])["eligible"] is False
+
+
+class TestEveryReadDoorSeesTheLedger:
+    """**읽기 문 전수**로 장부를 본다 (2026-09-21, 두 세션의 사각지대).
+
+    왜 이 모양인가: 2항을 `get_entity`로만 재고 통과라고 적었는데, 같은 규칙을
+    나눠 쓰는 `list_entities`가 장부를 안 봐서 화면 목록에서 합쳐진 개념이
+    티가 나지 않았다. 시험 47건이 전부 초록이었다 — 아무도 그 문을 재지 않았다.
+
+    문을 하나씩 재는 시험은 **넷째 문이 생기면 또 조용히 빠진다.** 그래서
+    `QUERY_SURFACE`(3항이 못 박아 둔 읽기 문 목록)를 돌면서 전부 확인하고,
+    「이 문은 픽스처로 못 닿았다」는 이유로 넘어가지 않는다 — 넘어가면
+    헛통과가 되어 처음 그 결함을 놓친 것과 같은 일이 된다.
+
+    문마다 검증 방식이 둘이다:
+      - **직접**: 그 문으로 읽어 `superseded_by`가 붙는지 본다.
+      - **위임**: 그 문이 스스로 파일을 읽지 않고 다른 문을 거치는 경우,
+        실제로 거치는지를 확인한다. 거치면 주석은 자동으로 따라온다.
+    """
+
+    #: 위임으로 검증하는 문과, 무엇에 위임해야 하는가.
+    DELEGATING_DOORS = {"list_entities_for_page": "list_entities"}
+
+    def test_query_surface_is_fully_covered(self):
+        """모든 읽기 문이 «직접» 또는 «위임» 중 하나로 덮여 있어야 한다.
+
+        읽기 문을 늘리면 여기서 먼저 깨진다 — 늘린 사람이 장부를 봐야 하는지
+        판단하고 이 시험에 자리를 만들게 하는 것이 목적이다.
+        """
+        direct = {"get_entity", "list_entities"}
+        covered = direct | set(self.DELEGATING_DOORS)
+        assert covered == set(entity_mod.QUERY_SURFACE), (
+            "읽기 문이 늘었는데 장부 시험이 따라가지 않았다. "
+            "direct 에 더하거나 DELEGATING_DOORS 에 위임 대상을 적어라 (D-128 2항)."
+        )
+
+    def test_direct_doors_mark_the_merged_concept(self, tmp_path):
+        """직접 읽는 문 둘은 합쳐진 개념에 표시를 붙인다."""
+        _, _, interp_path = _make_library(tmp_path)
+        old_id = _concept(interp_path, "王戎")
+        new_id = _concept(interp_path, "王戎(정리)")
+        merge_concepts(interp_path, [old_id], new_id)
+
+        assert get_entity(interp_path, "concept", old_id)["superseded_by"] == new_id
+
+        listed = next(
+            c for c in list_entities(interp_path, "concept") if c["id"] == old_id
+        )
+        assert listed["superseded_by"] == new_id
+
+    def test_page_door_delegates_instead_of_reading_files_itself(self, tmp_path, monkeypatch):
+        """쪽 조회는 스스로 파일을 읽지 않고 `list_entities`를 거친다.
+
+        왜 직접 재지 않는가: 쪽 조회가 개념을 돌려주려면 단위·태그·관계가
+        얽힌 상태가 필요해서, 픽스처로 닿지 못하면 «못 찾았으니 넘어감»이 되어
+        헛통과한다. 대신 **파일을 자기가 읽지 않는다**는 구조를 확인한다 —
+        `list_entities`를 거치는 한 장부 주석은 자동으로 따라온다.
+        """
+        _, _, interp_path = _make_library(tmp_path)
+        _concept(interp_path, "王戎")
+
+        seen: list[str] = []
+        original = entity_mod.list_entities
+
+        def _spy(path, entity_type, filters=None):
+            seen.append(entity_type)
+            return original(path, entity_type, filters)
+
+        monkeypatch.setattr(entity_mod, "list_entities", _spy)
+        entity_mod.list_entities_for_page(interp_path, "test_doc", 1)
+
+        # 장부가 붙어야 하는 종류를 전부 그 문으로 읽었는가.
+        for entity_type in ("concept", "agent", "relation", "tag"):
+            assert entity_type in seen, (
+                f"쪽 조회가 '{entity_type}'을 list_entities 를 거치지 않고 읽는다 — "
+                "그러면 장부 주석이 빠진다 (D-128 2항)."
+            )
