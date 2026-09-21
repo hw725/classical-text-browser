@@ -6770,8 +6770,12 @@ OCR을 진행할 수 있을까?» 답은 이미 있었다(쪽 범위 회전 + �
 
 ## D-128: 커넥톰 리포지토리에서 가져올 것 셋 — 버전은 출력에, 매핑은 내부에, 질의는 좁게
 
-**날짜**: 2026-09-20
-**상태**: 확정(방침) · 미구현
+**날짜**: 2026-09-20 (1~3·8~13항 구현 2026-09-21)
+**상태**: 확정(방침) · **1~3·8~13항 구현됨(이 저장소)** · 4~7항 미구현
+
+> 4~7항은 위키 순회 쪽 규약이라 이 저장소의 스키마에 대응물이 없다. 4항은 jt725
+> CLAUDE.md에 반영됐고, 5항(2단 순회)은 다른 저장소에서 별도로 구현된다.
+> 무엇이 어디까지 됐는지는 이 항 끝의 「구현 기록」을 본다.
 
 **배경**: 커넥톰 리포지토리(neuPrint / male-cns:v1.0)의 데이터 운영 규약을 이 저장소의
 Unit·Tag·Concept·Agent·Relation 층에 접목할 수 있는지 살폈다. 결론부터 — **규약 셋은 가져오고
@@ -6948,3 +6952,39 @@ ROI는 세 번 쟀다. ① 60씨앗 `fetch_adjacencies` ② 전수 `roiInfo` 무
 데이터 버전의 필수 인자화(1번의 이유), 원격 API 의존(이 저장소는 로컬에서 완결되어야 한다).
 생물학 쪽에서 비유로만 남는 것도 명시해 둔다 — 스파이킹 동역학, 가소성, 신경조절은 «계속 돌아가는
 물리계»의 성질이라 문서 저장소에 옮길 대응물이 없다.
+
+### 구현 기록 (2026-09-21)
+
+`neuprint-python`·API·토큰은 **들어오지 않았다.** 가져온 것은 그 측정에서 나온 규칙뿐이다.
+시험은 `tests/test_d128.py` 38건.
+
+| 항 | 판정 | 어디에 |
+|---|---|---|
+| 1 데이터 버전은 출력에 각인 | 구현 | `src/core/corpus_version.py` · 붙는 자리 다섯: 교환 스냅샷(`core/snapshot.py::build_snapshot`), 사전 내보내기(`core/annotation_dict_io.py::export_dictionary`), 인용 내보내기(`routers/annotation.py` citation-marks/export), 경계 CSV(`routers/composition.py` boundaries/export.csv), 텍스트레이어 PDF 메타데이터(`export/text_layer_pdf.py`) |
+| 2 구 ID를 죽이지 않는다 | 구현 | `src/core/entity_id_map.py`(장부) · `core/entity.py::merge_concepts` · `get_entity`가 옛 id를 새 id로 안내 |
+| 3 질의 API는 좁게 | 이미 충족 + 못 박음 | 읽기 문은 셋뿐이었다(`get_entity`·`list_entities`·`list_entities_for_page`) — 순회 엔드포인트가 없다. `core/entity.py::QUERY_SURFACE`로 규약을 적고 시험으로 고정 |
+| 8 승격은 개수가 아니라 무게 | 구현 | `src/core/promotion.py` · `promote_tag_to_concept`이 `evaluate_promotion`을 거친다 |
+| 9 넓게 모아 좁게 내보낸다 | 구현 | `promotion.gather_sources`는 문헌으로 거르지 않고, Concept은 `scope_document` 하나를 갖는다. 적용 **범위**는 `SCOPE_BLIND_COLLECTION_NOTE` |
+| 10 깔때기가 아니다 | 구현 | 승격이 Tag를 지우거나 합치지 않음을 시험으로 고정하고, 줄어든 «수» 대신 무게 배치를 `concept_features.promotion`에 적는다 |
+| 11 부호는 강한 엣지에서 중요 | 구현 | `relation.schema.json`에 `weight`·`polarity`를 함께 두고, `core/relation_polarity.py`의 `strong_edges`·`unsigned_strong_relations`. 임계는 상수가 아니라 `suggest_strong_threshold`가 분포에서 정한다 |
+| 12 조절은 따로 있는 종류 | 구현 | `relation.schema.json`의 `mode: modulate` + `object_type: relation`. 연합 층 밖을 가리키면 `validate_relation_semantics`가 거부한다 |
+| 13 부호를 이진으로 강제하지 않는다 | 구현 | `polarity` enum 넷(support·refute·context_dependent·undetermined). 적히지 않은 것을 지지로 읽지 않는다(`polarity_of`) |
+| 4~7 | 미구현(범위 밖) | 위키 순회 쪽. 이 저장소의 Relation에 `weight` 자리는 11항과 함께 생겼으므로, 5항의 2단 순회가 나중에 그것을 쓸 수 있다 |
+
+**구현하며 드러난 것 셋**
+
+1. **CSV의 머리말 줄은 산출물을 깬다.** 경계 CSV에 코퍼스 해시를 주석 한 줄로 얹었더니
+   열 이름이 둘째 줄로 밀려 `test_segmentation.py`가 바로 걸렸다. 이 파일에는 이미
+   `l4_commit`이라는 «행별 출처» 열이 있어 그 옆에 `코퍼스` 열로 붙였다. 각인은 «파일에
+   남기는 것»이 목적이지 «맨 위에 두는 것»이 목적이 아니다.
+
+2. **승격 무게는 확정본(L4)이 있어야 잰다.** 무게 도출이 「그 단위가 이 개념을 몇 번
+   건드렸는가」이므로, L4가 없는 저장소에서는 값이 Tag 수로 떨어진다 — 그것이 곧 8항이
+   막으려는 «개수로 세기»다. 떨어진 값이 잡음 바닥(1~2) 아래라 **열리지 않고 닫히는** 쪽이라는
+   것을 시험으로 고정했다(`test_without_confirmed_text_it_fails_closed`).
+
+3. **장부는 Relation이 아니라 별도 테이블이어야 했다.** `Relation`에 `supersedes` 서술어를
+   두는 쪽을 먼저 봤으나 셋이 걸렸다 — ① `/entities/relation` 목록이 화면에 그대로 뜨므로
+   내부 장부가 연구자가 보는 관계 목록을 오염시킨다(2항은 «보이지 않는 장부»라고 못 박았다)
+   ② `subject_type` enum이 `agent|concept` 둘뿐이라 Tag 승격을 담지 못한다 ③ 옛 id를 물을
+   때마다 `relations/*.json`을 전수 훑어야 한다. 그래서 `core_entities/id_map.json` 하나다.
