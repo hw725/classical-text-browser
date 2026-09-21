@@ -432,15 +432,50 @@ async def ask_structure_llm(
     return out, meta
 
 
+def derive_toc_threshold(
+    picks: list, tolerance: int = 0, min_picks: int = 5, fallback: float = 0.8
+) -> tuple[float, dict]:
+    """문턱을 **이 책의 답에서** 뽑는다 — 상수로 박지 않는다. 출력: (문턱, 어떻게 정했는지).
+
+    입력: match_toc_entries_jev의 picks(각각 prob과 sim을 갖는다), 허용할 오답 수,
+          문턱을 뽑기에 충분한 최소 답 수, 그만큼 없을 때 쓸 값.
+
+    **정답표 없이 잴 수 있는 신호를 쓴다**: 고른 행에서 제목이 실제로 시작하는가(`sim`).
+    코드가 공짜로 확인할 수 있고, 모델의 자기 신고가 아니다. 확률 높은 것부터 내려가다
+    자기 검증이 tolerance번을 넘겨 깨지는 자리 **직전**에서 자른다.
+
+    왜 분위수가 아닌가: 백분위는 분포와 무관하게 늘 같은 비율을 자르므로 대부분이 맞는 책에서는
+    맞는 자리까지 잘라 낸다(D-128 11항 구현자와 합의, 2026-09-21).
+    왜 상수가 아닌가: 운양집 1책에서 0.8이 들었던 것은 0.8이 특별해서가 아니라 0.94와 0.77 사이가
+    비어 있었고 0.8이 그 빈 구간에 떨어졌기 때문이다. 절벽의 자리는 책마다 다르다.
+
+    답이 min_picks보다 적으면 절벽을 말할 근거가 없으므로 fallback을 쓴다.
+    """
+    rows = sorted(
+        ((float(p.get("prob") or 0), float(p.get("sim") or 0)) for p in picks), reverse=True
+    )
+    if len(rows) < min_picks:
+        return fallback, {"how": "fallback", "picks": len(rows), "value": fallback}
+    bad = 0
+    for i, (prob, sim) in enumerate(rows):
+        if sim < 0.85:  # 제목이 그 행에서 시작하지 않는다 — 자기 검증 실패
+            bad += 1
+            if bad > tolerance:
+                value = rows[i - 1][0] if i else 1.0
+                return value, {"how": "cliff", "picks": len(rows), "cut_at": i, "value": value}
+    return rows[-1][0], {"how": "all_pass", "picks": len(rows), "value": rows[-1][0]}
+
+
 def toc_picks_to_proposals(picks: list, entries: list, min_prob: float = 0.8) -> list[dict]:
     """목차 대조(고르기)의 답을 ③의 후보로. 입력: match_toc_entries_jev의 picks, 항목 목록, 문턱.
 
     출력: 후보 목록(Proposal.to_dict와 같은 모양). 층위는 **목차 항목의 층위**를 그대로 쓴다 —
     총목이 말하는 것은 권·集(층위 1~2)이고, 그 아래 낱글은 본문 판정이 맡는다.
 
-    문턱을 두는 까닭: 운양집 1책 실측(2026-09-21)에서 확률 0.8 이상으로 고른 14건은 제목이 그
-    행에서 실제로 시작했고(불일치 0), 0.8 미만 11건 중 8건이 엉뚱한 행이었다. 문턱 아래를
-    **버리는 것이 아니라** 후보로 세우지 않을 뿐이고, 화면이 «상위 몇 개»로 더 보일 수 있다.
+    문턱을 두는 까닭: 운양집 1책 실측(2026-09-21)에서 높은 확률로 고른 14건은 제목이 그 행에서
+    실제로 시작했고(불일치 0), 그 아래 11건 중 8건이 엉뚱한 행이었다. 문턱 아래를 **버리는 것이
+    아니라** 후보로 세우지 않을 뿐이고, 화면이 «상위 몇 개»로 더 보일 수 있다.
+    **min_prob은 상수가 아니라 `derive_toc_threshold()`가 이 책의 답에서 뽑은 값이 기본**이다.
     """
     out: list[dict] = []
     seen: set[tuple[int, int]] = set()

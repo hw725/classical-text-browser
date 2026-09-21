@@ -356,3 +356,43 @@ def test_screen_tells_when_the_two_paths_disagree(tmp_path):
     assert "많이 다릅니다" in got["farText"] and got["farFlag"] is True
     assert "대체로 같습니다" in got["closeText"] and got["closeFlag"] is False
     assert got["hiddenWithoutModel"] is True  # 모델을 돌리지 않았으면 줄 자체가 없다
+
+
+def test_threshold_is_derived_from_this_book_not_a_constant():
+    """문턱은 이 책의 답에서 뽑는다 — 자기 검증이 깨지는 직전에서 자른다.
+
+    자기 검증은 «고른 행에서 제목이 실제로 시작하는가»이고 코드가 공짜로 확인한다.
+
+    운양집 1책 실측(2026-09-21)을 줄여 옮긴 모양이다: 0.94 위는 전부 맞고 0.77부터 틀리기
+    시작했다. 상수 0.8이 들었던 것은 그 사이가 비어 있었기 때문이지 0.8이 특별해서가 아니다.
+    """
+    from core.structure_llm import derive_toc_threshold
+
+    picks = [
+        {"prob": 0.99, "sim": 1.0},
+        {"prob": 0.97, "sim": 1.0},
+        {"prob": 0.96, "sim": 1.0},
+        {"prob": 0.94, "sim": 1.0},
+        {"prob": 0.77, "sim": 0.2},  # 여기서 자기 검증이 깨진다
+        {"prob": 0.70, "sim": 0.1},
+    ]
+    value, how = derive_toc_threshold(picks)
+    assert value == 0.94 and how["how"] == "cliff" and how["cut_at"] == 4
+    # 오답을 하나 허용하면 그 아래까지 내려간다
+    assert derive_toc_threshold(picks, tolerance=1)[0] == 0.77
+
+
+def test_threshold_falls_back_when_there_is_too_little_to_go_on():
+    """답이 적으면 절벽을 말할 근거가 없다 — 그럴 때만 상수를 쓴다."""
+    from core.structure_llm import derive_toc_threshold
+
+    value, how = derive_toc_threshold([{"prob": 0.9, "sim": 1.0}], fallback=0.8)
+    assert value == 0.8 and how["how"] == "fallback"
+
+
+def test_threshold_keeps_everything_when_nothing_fails_the_self_check():
+    from core.structure_llm import derive_toc_threshold
+
+    picks = [{"prob": 0.9 - i / 100, "sim": 1.0} for i in range(6)]
+    value, how = derive_toc_threshold(picks)
+    assert how["how"] == "all_pass" and value == picks[-1]["prob"]
