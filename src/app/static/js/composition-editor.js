@@ -921,12 +921,15 @@ function _openLlmModal() {
   if (optWords) optWords.checked = false;
   const optStruct = document.getElementById("comp-llm-opt-structure");
   if (optStruct) optStruct.checked = false;
+  const optJudge = document.getElementById("comp-llm-opt-judge");
+  if (optJudge) optJudge.checked = false;
   const status = document.getElementById("comp-llm-status");
   if (status) status.textContent = "";
   _updateLlmRefNote();
   overlay.style.display = "";
   _updateLlmScopeNote();
   _updateLlmStructureNote();
+  _updateLlmJudgeNote();
 }
 
 /** ①의 글(해제·서지 설명 + 아는 것). 세 선택지와 「말로 넣기」가 다 이것을 보낸다. 저장은 「적용」(reference_text). */
@@ -978,6 +981,7 @@ async function _runLlmModal() {
   const wantWords = !!document.getElementById("comp-llm-opt-words")?.checked;
   const wantPat = !!document.getElementById("comp-llm-opt-patterns")?.checked;
   const wantStruct = !!document.getElementById("comp-llm-opt-structure")?.checked;
+  const wantJudge = !!document.getElementById("comp-llm-opt-judge")?.checked;
   const status = document.getElementById("comp-llm-status");
   const run = document.getElementById("comp-llm-run");
   const say = (t) => {
@@ -999,7 +1003,7 @@ async function _runLlmModal() {
     signalState.touched = true;
   }
   if (mark) mark.hidden = !wantToc;
-  if (!wantToc && !wantWords && !wantPat && !wantStruct) {
+  if (!wantToc && !wantWords && !wantPat && !wantStruct && !wantJudge) {
     say("고른 것이 없습니다.");
     return;
   }
@@ -1027,10 +1031,16 @@ async function _runLlmModal() {
       await _askLlmStructure();
       done.push("구조");
     }
+    if (wantJudge) {
+      // 행마다 한 번씩 «여기서 시작하는가»를 묻는다. 목차가 있으면 그 항목도 본문 행에 붙인다
+      say("행마다 판정 모델에 묻는 중… (총목이 있으면 목차 항목도 함께)");
+      await _askJudgeStructure();
+      done.push("판정");
+    }
     _closeLlmModal();
     const out = document.getElementById("comp-llm-pattern-out");
-    if (out && !wantPat && !wantStruct) out.textContent = `LLM: ${done.join(" · ")} — ②에서 확인하고 「후보 보기」`;
-    if (wantToc || wantStruct) await _proposeBoundaries();
+    if (out && !wantPat && !wantStruct && !wantJudge) out.textContent = `LLM: ${done.join(" · ")} — ②에서 확인하고 「후보 보기」`;
+    if (wantToc || wantStruct || wantJudge) await _proposeBoundaries();
     else _refreshApplyState();
   } finally {
     if (run) run.disabled = false;
@@ -1109,6 +1119,68 @@ async function _updateLlmStructureNote() {
 }
 
 /**
+ * 판정 모델이 보낼 양과 값을 미리 보인다 — 실행 게이트는 도구 층에(전역 규칙 11).
+ * 생성 모델 쪽(_updateLlmStructureNote)과 달리 질문 수와 예상 비용까지 보인다: 행마다 한 번씩 묻고
+ * 목차 항목마다 또 한 번 묻기 때문에 «몇 번 부르는가»가 사람이 판단할 값이다.
+ */
+async function _updateLlmJudgeNote() {
+  const note = document.getElementById("comp-llm-opt-judge-note");
+  if (!note || !viewerState.docId || !viewerState.partId) return;
+  note.textContent = "크기를 재는 중…";
+  try {
+    const res = await fetch(`/api/documents/${encodeURIComponent(viewerState.docId)}/segmentation/structure/llm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ part_id: viewerState.partId, engine: "jev", dry_run: true }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+    const toc = d.toc_entries ? ` · 목차 ${d.toc_entries}항목` : "";
+    note.textContent = `${d.lines}행 · 질문 ${d.questions}개 · 호출 ${d.calls}번${toc} · 약 $${d.cost_usd_est}`;
+  } catch (e) {
+    note.textContent = `크기 못 잼: ${e.message}`;
+  }
+}
+
+/**
+ * 판정 모델로 «글이 시작하는 행»을 고른다. 총목이 있으면 목차 항목을 본문 행에 붙이고(층위 1~2),
+ * 본문 판정은 그 아래 층으로 내려온다 — 서버가 그렇게 맞춰 돌려준다.
+ * 답은 proposeState.llm에 두어 규칙 후보와 합친다(«구조를 통째로 묻기»와 같은 길).
+ * **규칙이 낸 후보를 거르지 않는다** — 문집에서 규칙 후보로 거르면 규칙의 눈을 그대로 물려받는다
+ * (2026-09-21 실측: 운양집에서 재현 0.88 → 0.18).
+ */
+async function _askJudgeStructure() {
+  const out = document.getElementById("comp-llm-pattern-out");
+  const docId = viewerState.docId, partId = viewerState.partId;
+  if (out) out.textContent = "행마다 판정 모델에 묻는 중…";
+  try {
+    const res = await fetch(`/api/documents/${encodeURIComponent(docId)}/segmentation/structure/llm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ part_id: partId, engine: "jev" }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+    if (docId !== viewerState.docId || partId !== viewerState.partId) return; // 그 사이 다른 책으로 갔다
+    const props = d.proposals || [];
+    proposeState.llm = props.length ? { docId, partId, proposals: props, meta: d } : null;
+    proposeState.topN = null; // 새 답이면 «전부 보기»부터 — 앞 책의 개수를 물려받지 않는다
+    if (out) {
+      const toc = d.toc && d.toc.entries
+        ? ` · 목차 ${d.toc.entries}항목 중 ${d.toc.above_threshold || 0}개를 본문에 붙임`
+        : "";
+      const cost = d.usage ? ` · $${d.usage.cost_usd}` : "";
+      out.textContent = props.length
+        ? `판정 모델이 ${props.length}자리를 ③에 세웠습니다 (질문 ${d.questions}개·호출 ${d.calls}번${cost}${toc})` +
+          (d.error ? ` — 일부 실패: ${d.error}` : "")
+        : `판정 모델이 고른 자리가 없습니다${d.error ? ` — ${d.error}` : ""}`;
+    }
+  } catch (e) {
+    if (out) out.textContent = `실패: ${e.message}`;
+  }
+}
+
+/**
  * «구조를 통째로 묻기» (D-125): 권의 확정본 전문을 행 번호와 함께 보내 «새 글이 시작하는 행»을 받는다.
  * 모델은 위치를 만들지 않고 고르기만 한다 — 서버가 실제 행에 대조한 것만 온다. 답은 proposeState.llm에
  * 두고, _proposeBoundaries가 규칙 후보와 합쳐 ③에 세운다. 저장은 「적용」이 한다.
@@ -1152,7 +1224,8 @@ async function _askLlmStructure() {
 
 /** 이 후보를 모델이 «글의 시작»으로 가리켰는가 (D-125). */
 function _isLlmProposal(p) {
-  return (p.reasons || []).includes("llm:structure");
+  const rs = p.reasons || [];
+  return rs.includes("llm:structure") || rs.includes("jev:structure") || rs.includes("toc:jev");
 }
 
 /**
@@ -1659,6 +1732,7 @@ const proposeState = {
   roles: new Map(), // 자리 키 → 사람이 바꾼 역할
   toc: null, // {pages, entries} — 목차 감지로 확인한 것. null이면 서버가 규칙으로 자동
   llm: null, // {docId, partId, proposals, meta} — «구조를 통째로 묻기»의 답(D-125). 규칙 후보와 합쳐 ③에 선다
+  topN: null, // 모델 후보를 몇 개까지 볼지(null = 전부). 확률 내림차순으로 자른다 — 문턱이 아니라 개수다
   located: null, // {docId, partId, proposals} — 목차에는 있으나 대조 못 한 항목을 사람이 찾아 넣은 자리(D-122 덧붙임)
   unmatchedOpen: null, // 펼쳐 둔 못 찾은 항목의 index
   lastClicked: null, // 마지막으로 누른 행(자리 키) — 도구가 이 행 아래에 뜬다(D-122 덧붙임 2)
@@ -2147,12 +2221,15 @@ const _REASON_LABELS = {
   date_wrap: ["행 넘긴 날짜", "pos"], after_short: ["행갈음 시작", "pos"],
   indent_shallow: ["얕은 들여쓰기 → 묶음", ""], indent_deep: ["깊은 들여쓰기 → 조각", ""],
   "llm:structure": ["LLM 구조", "pos"],
+  "jev:structure": ["판정 모델", "pos"],
+  "toc:jev": ["목차·판정 모델", "pos"],
 };
 function _reasonChip(r) {
   let label = r, cls = "";
   if (r === "current") { label = "지금 경계"; cls = "current"; }
   else if (r === "manual") { label = "손으로 넣음"; cls = "current"; }
   else if (r === "toc:located") { label = "목차·찾아 넣음"; cls = "pos"; }
+  else if (r === "toc:jev") { label = "목차·판정 모델"; cls = "pos"; }
   else if (r.startsWith("toc:")) { label = `목차 ${r.slice(4)}`; cls = "pos"; }
   else if (r.startsWith("volume:")) { label = `卷 ${r.slice(7)}`; cls = "pos"; }
   else if (r.startsWith("title_word:")) { label = `어휘 ${r.slice(11)}`; cls = "pos"; }
@@ -2210,6 +2287,77 @@ function _updateStats() {
  * ③ 후보 목록. 체크 = 경계가 될 것, 행 선택(Shift 범위·Ctrl 하나씩) = 한꺼번에 고칠 것.
  * 행마다 있던 역할 select·깊이 input·「억제」 단추는 없앴다 — 몇백 개를 하나씩 만지지 않는다(D-122).
  */
+/** 모델이 확률을 준 후보만 확률 내림차순으로. 출력: [키] — «상위 몇 개»가 이 순서로 자른다. */
+function _modelRanked(proposals) {
+  return proposals
+    .filter((p) => typeof p.prob === "number")
+    .slice()
+    .sort((a, b) => b.prob - a.prob)
+    .map((p) => _propKey(p));
+}
+
+/**
+ * 「모델 후보 상위 N개」 손잡이 — 확률을 문턱이 아니라 **개수**로 자른다.
+ * 왜 개수인가: 사람에게 0.7은 뜻이 없고, 좋은 문턱은 책마다 다르다(실측 2026-09-21).
+ * 자른 것은 목록에서 빠지고 체크도 풀린다 — 「적용」이 저장하는 것은 체크된 것뿐이다.
+ */
+function _renderTopNBar(ranked) {
+  const bar = document.getElementById("comp-topn-bar");
+  const slider = document.getElementById("comp-topn");
+  const note = document.getElementById("comp-topn-note");
+  if (!bar || !slider) return;
+  bar.hidden = ranked.length === 0;
+  if (!ranked.length) return;
+  slider.max = String(ranked.length);
+  if (proposeState.topN === null || proposeState.topN > ranked.length) proposeState.topN = ranked.length;
+  slider.value = String(proposeState.topN);
+  if (note) {
+    const cut = ranked.length - proposeState.topN;
+    const lowest = proposeState.topN ? proposeState.data.proposals.find((p) => _propKey(p) === ranked[proposeState.topN - 1]) : null;
+    note.textContent =
+      `${proposeState.topN} / ${ranked.length}개` +
+      (lowest ? ` · 가장 낮은 확률 ${lowest.prob}` : "") +
+      (cut ? ` · 가린 것 ${cut}개(버린 것이 아닙니다)` : "");
+  }
+  if (!slider.dataset.bound) {
+    slider.dataset.bound = "1";
+    slider.addEventListener("input", () => {
+      proposeState.topN = Number(slider.value);
+      _renderProposals();
+      _refreshApplyState();
+    });
+  }
+}
+
+/**
+ * ①의 어긋남 한 줄 — 규칙과 판정 모델이 얼마나 다른가. **정답 없이 재는 값이다.**
+ * 밀도비가 크면 «둘 중 하나가 못 보고 있다»는 뜻이지만 **어느 쪽인지는 말해 주지 않는다**
+ * (운양집에서는 규칙이 못 본 것이었지만, 그것은 정답을 봤기 때문에 아는 것이다).
+ * 그래서 아무것도 자동으로 바꾸지 않고 사람이 표본을 볼 자리만 알린다.
+ * 경계값(2배·80%)은 책 둘에서 나온 임시값이다.
+ */
+function _renderDivergence(proposals) {
+  const box = document.getElementById("comp-divergence");
+  if (!box) return;
+  const model = proposals.filter((p) => typeof p.prob === "number" && p.prob >= 0.7);
+  if (!model.length) {
+    box.hidden = true;
+    return;
+  }
+  const rule = proposals.filter((p) => p.accepted && !_isLlmProposal(p));
+  const modelKeys = new Set(model.map((p) => _propKey(p)));
+  const agreed = rule.filter((p) => modelKeys.has(_propKey(p))).length;
+  const ratio = rule.length ? model.length / rule.length : Infinity;
+  const pct = rule.length ? Math.round((agreed / rule.length) * 100) : 0;
+  const far = rule.length === 0 || ratio >= 2 || pct < 80;
+  box.hidden = false;
+  box.classList.toggle("is-far", far);
+  const ratioText = rule.length ? `${ratio.toFixed(1)}배` : "규칙 후보 없음";
+  box.textContent = far
+    ? `규칙이 찾은 자리 ${rule.length} · 모델이 찾은 자리 ${model.length} — 두 길이 많이 다릅니다(${ratioText}, 합의 ${pct}%). 표본 몇 쪽을 먼저 보세요.`
+    : `규칙이 찾은 자리 ${rule.length} · 모델이 찾은 자리 ${model.length} — 두 길이 대체로 같습니다(${ratioText}, 합의 ${pct}%).`;
+}
+
 function _renderProposals() {
   const data = proposeState.data;
   const list = document.getElementById("comp-propose-list");
@@ -2231,6 +2379,12 @@ function _renderProposals() {
     if (unmatchedBox) unmatchedBox.style.display = "none";
   }
   _parkRowTools(); // 목록을 지우기 전에 도구를 거둔다
+  const ranked = _modelRanked(data.proposals);
+  _renderTopNBar(ranked);
+  _renderDivergence(data.proposals);
+  // 상위 N 밖의 모델 후보는 가리고 체크도 푼다 — 「적용」이 저장하는 것은 체크된 것뿐이다
+  const hidden = new Set(ranked.slice(proposeState.topN === null ? ranked.length : proposeState.topN));
+  for (const k of hidden) proposeState.checked.delete(k);
   list.innerHTML = "";
   proposeState.visible = [];
   if (!data.proposals.length) {
@@ -2242,6 +2396,7 @@ function _renderProposals() {
   }
   for (const p of data.proposals) {
     const k = _propKey(p);
+    if (hidden.has(k)) continue; // 손잡이가 가린 모델 후보
     if (!p.accepted && !proposeState.showRejected && !proposeState.checked.has(k)) continue;
     proposeState.visible.push(k);
     const row = document.createElement("div");

@@ -668,3 +668,96 @@ def align_toc_to_body(
         else:
             unmatched.append(i)
     return matches, unmatched
+
+
+# ── 목차 대조를 «고르기»로 (실험, 2026-09-21) ────────────────────────────────
+# 지금의 align_toc_to_body는 순서를 지키는 동적 계획법이다. 운양집 1책에서 102항목 중
+# 9개만 본문에 붙었다(D-089 후속 과제). 실패의 성격이 둘로 갈린다 —
+#   ① 목차 제목이 본문에 아예 없는 것(60항목): 어떤 방법으로도 붙일 수 없고, «없다»가 정답이다.
+#   ② 본문에 있는데 못 붙인 것: 글자가 조금 다르거나 순서 제약에 걸린 것이다.
+# ②는 «후보 몇 개 중 고르기»이고, ①은 «고르지 않기»다. 판정 모델의 choice 질문이 바로 그
+# 모양이라(선택지에 «없음»을 반드시 둔다), 코드가 후보를 만들고 모델은 고르기만 하게 할 수 있다.
+# 실험이다 — 저장하지 않고, 지금 경로를 대체하지도 않는다.
+
+TOC_NONE = "none_of_these"
+
+
+def toc_candidates(title: str, body_lines: list, top_k: int = 6) -> list:
+    """목차 항목 하나에 대한 본문 후보 행. 입력: 제목, 행 목록, 몇 개까지.
+
+    출력: [(행, 유사도)] — 유사도 내림차순 top_k개. **유사도가 낮아도 자른 만큼 채운다.**
+    왜 낮은 것도 넣는가: 본문에 없는 항목(운양집 1책 102항목 중 60)에는 «닮은 것이 없는 후보»만
+    놓이게 되고, 그때 모델이 «없음»을 고르는지가 이 실험이 재려는 것이다. 후보를 닮은 것만으로
+    채우면 그 시험 자체가 없어진다.
+    """
+    scored = [(ln, title_similarity(title, ln.text)) for ln in body_lines]
+    scored.sort(key=lambda t: t[1], reverse=True)
+    return scored[:top_k]
+
+
+def toc_match_question(title: str, cands: list) -> dict:
+    """목차 항목 하나를 묻는 choice 질문. 입력: 제목, [(행, 유사도)]. 출력: questions의 값.
+
+    질문 id는 모델에 가지 않으므로(TypeSafe 문서) 지시문이 제목을 스스로 담는다. 선택지는
+    행 번호이고, «없음»을 반드시 둔다 — 없는 것을 고르게 하면 지어내기를 강요하는 셈이다.
+    """
+    criteria = {
+        f"p{ln.page}-L{ln.line_index}": (ln.text.strip()[:40] or "(빈 행)") for ln, _ in cands
+    }
+    criteria[TOC_NONE] = "후보 가운데 이 항목의 글이 시작하는 행이 없다"
+    return {
+        "type": "choice",
+        "instructions": (
+            f"목차 항목 「{title}」의 글이 본문에서 시작하는 행은 어느 것입니까? "
+            "선택지의 설명은 그 행의 글자입니다. 항목의 제목이 그 행에서 시작해야 합니다. "
+            "본문 도중에 같은 글자가 스쳐 지나가는 행은 답이 아닙니다."
+        ),
+        "criteria": criteria,
+    }
+
+
+def match_toc_entries_jev(entries: list, body_lines: list, client, top_k: int = 6) -> dict:
+    """목차 항목을 본문 행에 «고르기»로 붙인다. 입력: 항목 목록, 본문 행, JevClient, 후보 수.
+
+    출력: {"picks": [{"entry", "title", "page", "line_index", "text", "prob", "top_sim"}],
+           "none": [{"entry", "title", "top_sim"}], "failed": [...], "usage": {...}}
+    항목마다 한 번 부른다(후보가 항목마다 달라 한 state에 묶을 수 없다). 저장하지 않는다.
+    """
+    picks, none, failed = [], [], []
+    for i, e in enumerate(entries):
+        title = getattr(e, "title", "") or ""
+        if len(_norm(title)) < 2:
+            # 1자 제목은 본문 어디에나 있어 대조가 성립하지 않는다(title_similarity의 전제와 같다)
+            none.append({"entry": i, "title": title, "top_sim": 0.0, "why": "제목이 너무 짧다"})
+            continue
+        cands = toc_candidates(title, body_lines, top_k)
+        state_rows = "\n".join(
+            f"p{ln.page}-L{ln.line_index}\t{ln.text.strip()}" for ln, _ in cands
+        )
+        state = f"목차 항목: {title}\n\n본문 후보 행:\n{state_rows}"
+        try:
+            answers = client.ask(state, {"where": toc_match_question(title, cands)})
+        except Exception as exc:  # noqa: BLE001 — 한 항목이 죽어도 나머지는 잰다
+            failed.append({"entry": i, "title": title, "error": f"{type(exc).__name__}: {exc}"})
+            continue
+        ans = answers.get("where") if isinstance(answers, dict) else None
+        pick = ans.get("choice") if isinstance(ans, dict) else None
+        probs = ans.get("probabilities") if isinstance(ans, dict) else {}
+        prob = probs.get(pick) if isinstance(probs, dict) else None
+        top_sim = round(cands[0][1], 3) if cands else 0.0
+        by_id = {f"p{ln.page}-L{ln.line_index}": ln for ln, _ in cands}
+        if pick in by_id:
+            ln = by_id[pick]
+            picks.append({
+                "entry": i, "title": title, "page": ln.page, "line_index": ln.line_index,
+                "text": ln.text.strip()[:40], "prob": round(float(prob or 0), 3),
+                "sim": round(title_similarity(title, ln.text), 3), "top_sim": top_sim,
+            })
+        else:
+            # 모델이 정해 둔 선택지가 아닌 것을 말하면 코드가 «없음»으로 되돌린다
+            none.append({"entry": i, "title": title, "top_sim": top_sim,
+                         "prob": round(float(prob or 0), 3)})
+    out = {"picks": picks, "none": none, "failed": failed}
+    if hasattr(client, "usage"):
+        out["usage"] = client.usage()
+    return out

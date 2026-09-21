@@ -149,3 +149,84 @@ def test_route_returns_validated_proposals(client, tmp_path, monkeypatch):  # no
     # 자리는 ③가 그대로 쓰는 모양이다 — 적용 요청의 spans로 바로 들어간다
     for p in d["proposals"]:
         assert set(p) >= {"page", "line_index", "char_offset", "title", "level", "role", "reasons"}
+
+
+# ── 같은 라우트의 판정 모델 길(engine="jev") ────────────────────────────────
+def test_route_jev_dry_run_counts_questions_and_cost(client, tmp_path):  # noqa: F811
+    """보내기 전에 «몇 행·몇 질문·몇 번·얼마»를 돌려준다 — 실행 게이트는 도구 층에(전역 규칙 11)."""
+    _lib, part_id = _setup(client, tmp_path)
+    r = client.post(
+        "/api/documents/d1/segmentation/structure/llm",
+        json={"part_id": part_id, "engine": "jev", "dry_run": True},
+    )
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["engine"] == "jev" and d["dry_run"] is True
+    assert d["questions"] == d["lines"] and d["calls"] >= 1 and d["cost_usd_est"] > 0
+    assert d["proposals"] == []
+
+
+def test_route_jev_returns_proposals_and_never_calls_the_generative_router(
+    client, tmp_path, monkeypatch  # noqa: F811
+):
+    """판정 모델 길은 LlmRouter를 거치지 않는다 — 라우터의 계약은 «프롬프트 → 글»이다."""
+    import llm.jev as jev
+    from app import _state
+
+    _lib, part_id = _setup(client, tmp_path)
+    router = _FakeRouter('{"starts": []}')
+    monkeypatch.setattr(_state, "_llm_router", router)
+
+    class FakeClient:
+        model = "fake-jev"
+        has_key = True
+
+        def __init__(self, **kwargs):
+            self.calls = 0
+
+        def gate(self, planned):
+            return None
+
+        def ask(self, state, questions):
+            self.calls += 1
+            # 첫 행만 «시작»이라고 답한다 — 나머지는 본문
+            return {
+                qid: {"type": "noul", "noul": 0.95 if qid.endswith("-L0") else 0.1}
+                for qid in questions
+            }
+
+        def usage(self):
+            return {"calls": self.calls, "cost_usd": 0.0}
+
+    monkeypatch.setattr(jev, "JevClient", FakeClient)
+    r = client.post(
+        "/api/documents/d1/segmentation/structure/llm",
+        json={"part_id": part_id, "engine": "jev"},
+    )
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["engine"] == "jev" and d["proposals"]
+    assert {p["line_index"] for p in d["proposals"]} == {0}
+    assert all(p["reasons"] == ["jev:structure"] for p in d["proposals"])
+    assert router.calls == []  # 생성 모델은 한 번도 부르지 않았다
+
+
+def test_route_jev_says_so_when_there_is_no_key(client, tmp_path, monkeypatch):  # noqa: F811
+    """키가 없으면 한 건도 쏘지 않고 한국어로 원인과 해결책을 돌려준다."""
+    import llm.jev as jev
+
+    _lib, part_id = _setup(client, tmp_path)
+
+    class NoKey:
+        has_key = False
+
+        def __init__(self, **kwargs):
+            pass
+
+    monkeypatch.setattr(jev, "JevClient", NoKey)
+    r = client.post(
+        "/api/documents/d1/segmentation/structure/llm",
+        json={"part_id": part_id, "engine": "jev"},
+    )
+    assert r.status_code == 400
+    assert "TYPESAFE_API_KEY" in r.json()["error"]
