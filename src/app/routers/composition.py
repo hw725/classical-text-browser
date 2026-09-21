@@ -157,6 +157,11 @@ class SegmentationStructureLlmRequest(BaseModel):
     reference_text: str | None = None  # 저장 전 해제 — signals/llm과 같은 이유
     dry_run: bool = False  # True면 모델을 부르지 않고 «몇 행·몇 자·몇 번»만 돌려준다
     max_chars: int | None = None  # 묶음 크기(글자). None이면 core.structure_llm.DEFAULT_MAX_CHARS
+    # "llm" = 생성 모델에게 행 번호를 묻는다(D-125). "jev" = 판정 모델이 행마다 고른다.
+    # 라우트를 늘리지 않는 까닭: 라우트 수가 문서·기계 검사(D-079)에 걸려 있다.
+    engine: str = "llm"
+    match_toc: bool = True  # engine="jev"일 때 총목 항목도 본문 행에 «고르기»로 붙인다(층위 1~2)
+    toc_min_prob: float = 0.8  # 목차 대조를 후보로 세울 확률 문턱(운양집 실측: 0.8에서 불일치 0)
 
 
 class BoundaryUpdateRequest(BaseModel):
@@ -730,6 +735,98 @@ async def api_segmentation_signals_llm(doc_id: str, body: SegmentationSignalsLlm
     return {"signals": rows, "sample_count": meta.get("sample_lines", 0), **meta}
 
 
+def _structure_jev(doc_path, body, lines, rules, max_chars: int):
+    """판정 모델(Jev)로 «글이 시작하는 행»을 고르고, 총목이 있으면 그 항목도 본문에 붙인다.
+
+    입력: 문헌 경로, 요청, 확정본 행, 규칙, 묶음 글자 수. 출력: 라우트 응답 dict.
+
+    두 층을 나눠 채운다 — **총목이 답하는 것은 권·集(층위 1~2), 본문 판정이 답하는 것은 그 안의
+    낱글**이다(2026-09-21 실측: 운양집 1책 총목 102항목 중 개별 작품은 하나도 없었다). 그래서
+    목차 대조를 먼저 하고, 본문 후보의 층위를 그 아래로 내린다.
+    저장하지 않는다 — 화면이 ③에 세우고 「적용」이 저장한다.
+    """
+    from core.segmentation import signal_on
+    from core.structure_llm import (
+        ask_structure_jev,
+        jev_structure_size,
+        nest_under_toc,
+        toc_picks_to_proposals,
+    )
+    from core.toc import detect_toc_pages, extract_toc_entries_rule, match_toc_entries_jev
+
+    # 총목 찾기는 규칙 그대로다(잘 듣는다) — 판정 모델은 «그 항목이 본문 어느 행인가»만 맡는다
+    page_lines: dict[int, list[str]] = {}
+    for ln in lines:
+        page_lines.setdefault(ln.page, []).append(ln.text)
+    toc_pages: list[int] = []
+    entries: list = []
+    if body.match_toc and signal_on(rules, "toc"):
+        toc_pages = detect_toc_pages(page_lines, rules["max_title_chars"])
+        if toc_pages:
+            entries = extract_toc_entries_rule(page_lines, toc_pages)
+    body_lines = [ln for ln in lines if ln.page not in set(toc_pages)]
+    size = jev_structure_size(body_lines, max_chars)
+    toc_calls = sum(1 for e in entries if len(str(getattr(e, "title", "") or "")) >= 2)
+    planned = size["calls"] + toc_calls
+    # 입력만 청구된다($0.042/M). CJK 한 글자를 1~1.5토큰으로 어림한다 — 실측은 호출 뒤 usage로.
+    est = (size["chars"] + size["questions"] * 120 + toc_calls * 400) / 1_000_000 * 0.042
+    if body.dry_run:
+        # 실행 게이트(전역 규칙 11)는 도구 층에 — 보내기 전에 «몇 행·몇 번·얼마»를 화면이 보인다
+        return {
+            "proposals": [],
+            "dry_run": True,
+            "engine": "jev",
+            "lines": size["lines"],
+            "chars": size["chars"],
+            "calls": planned,
+            "questions": size["questions"] + toc_calls,
+            "toc_entries": len(entries),
+            "cost_usd_est": round(est, 4),
+        }
+
+    from llm.jev import JevClient, JevGateExceeded
+
+    client = JevClient(max_calls=planned + 5)
+    if not client.has_key:
+        return JSONResponse(
+            {
+                "error": "판정 모델(TypeSafe) 키를 찾지 못했습니다. "
+                "TYPESAFE_API_KEY 환경변수나 ~/.claude/data/triage/.env에 키를 두세요."
+            },
+            status_code=400,
+        )
+    try:
+        client.gate(planned)
+    except JevGateExceeded as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+    toc_props: list[dict] = []
+    toc_meta: dict = {"entries": len(entries), "picked": 0, "none": 0, "failed": 0}
+    if entries:
+        res = match_toc_entries_jev(entries, body_lines, client)
+        toc_props = toc_picks_to_proposals(res["picks"], entries, float(body.toc_min_prob))
+        toc_meta = {
+            "entries": len(entries),
+            "picked": len(res["picks"]),
+            "above_threshold": len(toc_props),
+            "none": len(res["none"]),
+            "failed": len(res["failed"]),
+            "min_prob": float(body.toc_min_prob),
+        }
+    props, meta = ask_structure_jev(
+        body_lines,
+        client,
+        max_chars=max_chars,
+        max_title_chars=int(rules.get("max_title_chars") or 20),
+    )
+    props = nest_under_toc(toc_props, props)
+    proposals = sorted(toc_props + props, key=lambda p: (p["page"], p["line_index"]))
+    meta["toc"] = toc_meta
+    meta["engine"] = "jev"
+    meta["usage"] = client.usage()
+    return {"proposals": proposals, **meta}
+
+
 @router.post("/api/documents/{doc_id}/segmentation/structure/llm")
 async def api_segmentation_structure_llm(doc_id: str, body: SegmentationStructureLlmRequest):
     """구조를 통째로 묻기 (D-125): 권의 확정본 전문을 행 번호와 함께 보내 «새 글이 시작하는 행»을
@@ -763,6 +860,8 @@ async def api_segmentation_structure_llm(doc_id: str, body: SegmentationStructur
     max_chars = DEFAULT_MAX_CHARS
     if body.max_chars and body.max_chars > 500:
         max_chars = int(body.max_chars)
+    if body.engine == "jev":
+        return _structure_jev(doc_path, body, lines, rules, max_chars)
     if body.dry_run:
         # 실행 게이트(전역 규칙 11)는 도구 층에 — 보내기 전에 «몇 행·몇 자·몇 번»을 화면이 보인다
         return {"proposals": [], "dry_run": True, **structure_size(lines, max_chars)}

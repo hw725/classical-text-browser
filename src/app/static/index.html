@@ -1955,6 +1955,10 @@
                   <div id="comp-verdict" class="comp-verdict">
                     <span id="comp-verdict-text">전문을 세는 중…</span>
                   </div>
+                  <!-- 두 길(규칙·판정 모델)이 얼마나 어긋나는가 — 판정 모델을 돌린 뒤에만 선다.
+                       **판정이 아니라 모름의 표시다**: 어느 쪽이 틀렸는지는 이 값이 말해 주지 않으므로
+                       아무것도 자동으로 바꾸지 않고, 사람이 표본을 볼 자리를 고르게만 한다. -->
+                  <div id="comp-divergence" class="comp-divergence" hidden></div>
                   <!-- 해제·서지 설명도 이 칸에 붙여 넣는다 — 따로 두던 해제 칸을 없앴다(D-122 덧붙임 2026-09-11).
                        「말로 넣기」는 규칙 문장만 옮기고 나머지는 참고로 읽으며, 「더 묻기…」도 이 글을 읽는다.
                        저장은 「적용」이 규칙과 함께 한다(reference_text). -->
@@ -2034,6 +2038,14 @@
                   <!-- 저장된 규칙(없으면 권고)으로 센 후보와 견준 «바뀐 것» (D-121 관문) -->
                   <div id="comp-preview-out" class="comp-preview-out" hidden></div>
                   <div id="comp-toc-unmatched" class="comp-toc-unmatched" style="display: none"></div>
+                  <!-- 모델 후보를 «몇 개까지 볼지» — 문턱(0.7 같은 숫자)은 사람에게 뜻이 없고 책마다
+                       다르다(천진담초는 조합 0.6, 운양집은 단독 0.7~0.8이 좋았다). 그래서 개수로 묻고
+                       코드가 확률 내림차순으로 자른다. 규칙 후보는 이 손잡이와 무관하게 늘 보인다. -->
+                  <div id="comp-topn-bar" class="comp-topn-bar" hidden>
+                    <label for="comp-topn">모델 후보 상위</label>
+                    <input id="comp-topn" type="range" min="0" max="100" value="100" />
+                    <span id="comp-topn-note" class="comp-propose-stats"></span>
+                  </div>
                   <div class="comp-batch-bar">
                     <label class="comp-sig-opt" title="보이는 후보 전부를 경계로 삼거나 뺍니다"><input id="comp-check-all" type="checkbox" /> 전체 ☑</label>
                     <span id="comp-sel-count" class="comp-propose-stats" title="행을 누르면 고릅니다. Shift로 범위, Ctrl로 하나씩"></span>
@@ -4021,6 +4033,14 @@
             <input id="comp-llm-opt-structure" type="checkbox" />
             <span title="권의 확정본 전문을 행 번호와 함께 보내 «새 글이 시작하는 행·제목·깊이»를 받습니다. 모델은 행 번호를 고르기만 하고, 실제 행과 맞는 답만 ③에 «LLM 구조» 후보로 섭니다 — 표지가 제각각인 문집·잡록에 맞습니다"><b>구조를 통째로 묻기</b>
               <span id="comp-llm-opt-structure-note" class="comp-llm-opt-note"></span></span>
+          </label>
+          <!-- 판정 모델(TypeSafe Jev) — 글을 만들지 않고 «예·아니오 확률»과 «고르기»만 돌려준다.
+               코드가 행과 후보를 정해서 묻고 모델은 고르기만 하므로 지어낼 자리가 형식에 없다.
+               총목이 있으면 그 항목을 본문 행에 붙이고(층위 1~2), 본문 판정은 그 아래 층이 된다. -->
+          <label class="comp-llm-opt">
+            <input id="comp-llm-opt-judge" type="checkbox" />
+            <span title="행마다 «여기서 새 글이 시작하는가»를 확률로 받고, 총목이 있으면 목차 항목이 본문 어느 행인지도 고르게 합니다. 모델이 글을 만들지 않으므로 없는 자리를 지어낼 수 없습니다. 실측(2026-09-21): 문집에서 규칙이 못 찾던 자리를 찾고, 확률 0.8 이상은 오답이 없었습니다"><b>판정 모델로 고르기</b>
+              <span id="comp-llm-opt-judge-note" class="comp-llm-opt-note"></span></span>
           </label>
           <div id="comp-llm-status" class="comp-split-note"></div>
           <div class="corr-dialog-actions">

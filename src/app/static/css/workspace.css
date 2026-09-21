@@ -8122,3 +8122,32 @@ select.prop-level { max-width: 4.6em; }
 .wizard-status.ok, .wizard-row.ok { border-left: 3px solid var(--success, #6ee7a0); }
 .wizard-status.todo, .wizard-row.todo { border-left: 3px solid var(--warning, #f0b429); }
 .wizard-row span { font-size: 11px; color: var(--text-muted); text-align: right; }
+
+/* 두 길의 어긋남 한 줄 (판정 모델을 돌린 뒤에만 선다) — 판정이 아니라 «모름»의 표시다.
+   많이 다를 때만 색을 준다. 늘 색을 주면 경고가 배경이 되어 아무도 안 본다 */
+.comp-divergence {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 4px 8px;
+  margin: 4px 0;
+  border-left: 2px solid var(--border-color, #d0d0d0);
+  border-radius: 0; /* 한쪽 테두리에는 둥근 모서리를 주지 않는다 */
+}
+.comp-divergence.is-far {
+  color: var(--text-primary);
+  border-left-color: var(--accent-primary, #3b82f6);
+}
+
+/* 「모델 후보 상위 N개」 손잡이 — 문턱이 아니라 개수로 묻는다 */
+.comp-topn-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 4px 0;
+}
+.comp-topn-bar input[type="range"] {
+  flex: 1;
+  max-width: 220px;
+}
