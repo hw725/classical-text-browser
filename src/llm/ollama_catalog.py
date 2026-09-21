@@ -43,7 +43,7 @@ BUILTIN: list[tuple[str, str, float, str]] = [
     ("gemma4:cloud", "cloud", 0.0, "Google Gemma 4 — 기본. 로그인만 있으면 바로 씁니다"),
     ("qwen3.5:cloud", "cloud", 0.0, "Alibaba Qwen 3.5 397B"),
     ("kimi-k2.6:cloud", "cloud", 0.0, "Moonshot Kimi K2.6"),
-    ("kimi-k3:cloud", "cloud", 0.0, "Moonshot Kimi K3 — 「훑어보기」 기본(종류 판정 벤치마크 1위)"),
+    ("kimi-k3:cloud", "cloud", 0.0, "Moonshot Kimi K3 — 「판독 계획」 기본(종류 판정 벤치마크 1위)"),
     ("minimax-m3:cloud", "cloud", 0.0, "MiniMax M3"),
     ("glm-5.3-flash:cloud", "cloud", 0.0, "Zhipu GLM 5.3 Flash"),
     ("glm-5.3:cloud", "cloud", 0.0, "Zhipu GLM 5.3 — 텍스트용(비전 아님: 편성·번역·주석에)"),
@@ -99,7 +99,7 @@ def model_manifest_exists(name: str, timeout: float = 3.0) -> bool | None:
 
     실측 2026-09-11: qwen3-vl:235b-cloud·gemma3:27b-cloud → 404, kimi-k3:cloud·gemma4:cloud·
     minimax-m3:cloud → 200(각 0.2~0.4초). `/api/tags`는 은퇴한 모델도 그대로 올려 두므로 목록만
-    보면 «●사용 가능»으로 보이고, 고르면 쪽마다 410이 난다(훑어보기 벤치마크). 출력: True/False,
+    보면 «●사용 가능»으로 보이고, 고르면 쪽마다 410이 난다(판독 계획 벤치마크). 출력: True/False,
     네트워크가 없으면 None — None이면 은퇴 표시를 하지 않는다. 프로세스 캐시.
     """
     if name in _manifest_ok:

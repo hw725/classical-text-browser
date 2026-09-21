@@ -1230,9 +1230,9 @@
                 <button
                   id="pdf-rotate-suggest"
                   class="pdf-btn"
-                  title="쪽을 훑어봅니다 — 회전이 다른 구간(«37~52쪽은 0°», 코드가 잼)과 쪽마다 알맞은 OCR 엔진(비전 모델이 글의 종류를 봄)을 제안합니다. 쪽마다 모델을 한 번 부르고, 저장은 구간마다 미리 보이며 확인받습니다"
-                  aria-label="훑어보기"
-                >훑어보기<span class="llm-tag">LLM</span></button>
+                  title="쪽을 미리 훑어 판독 계획을 세웁니다 — 회전이 다른 구간(«37~52쪽은 0°», 코드가 잼)과 쪽마다 알맞은 OCR 엔진(비전 모델이 글의 종류를 봄)을 제안합니다. 쪽마다 모델을 한 번 부르고, 저장은 구간마다 미리 보이며 확인받습니다"
+                  aria-label="판독 계획"
+                >판독 계획<span class="llm-tag">LLM</span></button>
                 <div class="pdf-toolbar-divider"></div>
                 <!-- 읽기 보조선 -->
                 <button
@@ -1563,7 +1563,7 @@
                   <label class="text-toolbar-check" title="OCR 직전에 옆으로 누운 쪽을 찾아(모델 없이 코드가 잼) 구간으로 보이고, 확인하면 그 쪽 범위의 회전을 저장한 뒤 OCR합니다. 한 PDF에 세로 본문과 가로로 돌린 쪽이 섞여 있을 때 켜 두세요">
                     <input id="ocr-batch-orient" type="checkbox" checked /> 돌아간 쪽은 세워서
                   </label>
-                  <!-- 훑어보기 계획(D-126 덧붙임) — 구간별 엔진. JS가 채운다 -->
+                  <!-- 판독 계획(D-126 덧붙임) — 구간별 엔진. JS가 채운다 -->
                   <div id="ocr-batch-plan" class="ocr-engine-note" hidden></div>
                   <button
                     id="ocr-run-part"
@@ -4031,12 +4031,12 @@
         </div>
       </div>
 
-      <!-- 훑어보기 모달(D-126) — 쪽 범위·비전 모델·호출 횟수를 한 창에서 정한다. prompt/confirm 사슬은
+      <!-- 판독 계획 모달(D-126) — 쪽 범위·비전 모델·호출 횟수를 한 창에서 정한다. prompt/confirm 사슬은
            모델을 고를 자리가 없었다(2026-09-10 사용자 지적). 방향은 코드+PaddleOCR이 재고, 모델은 글의 종류만 본다. -->
       <div class="corr-dialog-overlay" id="survey-overlay" style="display: none">
         <div class="corr-dialog survey-dialog">
           <div class="bib-dialog-header">
-            <span class="bib-dialog-title">훑어보기 <span class="llm-tag">LLM</span></span>
+            <span class="bib-dialog-title">판독 계획 <span class="llm-tag">LLM</span></span>
             <div style="flex: 1"></div>
             <button class="bib-dialog-close" id="survey-close" title="닫기">&times;</button>
           </div>
@@ -4061,7 +4061,7 @@
           <div class="corr-dialog-actions">
             <div style="flex: 1"></div>
             <button id="survey-cancel" class="text-btn">닫기</button>
-            <button id="survey-run" class="text-btn text-btn-primary">훑어보기</button>
+            <button id="survey-run" class="text-btn text-btn-primary">계획 세우기</button>
           </div>
         </div>
       </div>

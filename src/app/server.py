@@ -15,7 +15,7 @@ D-001: 이 플랫폼의 주 인터페이스는 GUI이며, CLI는 보조 도구�
                                구조 통째로 묻기·규칙 미리 보기·말로 규칙 넣기·쪼개기·리셋
                                (17 라우트)
     routers/interpretations.py — 해석 CRUD·레이어·의존·엔티티·관계·태그 (22 라우트)
-    routers/llm_ocr.py       — LLM 상태·분석 + OCR 실행·일괄·되돌리기·교정 패스·쪽 훑어보기
+    routers/llm_ocr.py       — LLM 상태·분석 + OCR 실행·일괄·되돌리기·교정 패스·판독 계획
                                (26 라우트)
     routers/alignment.py     — 이체자 사전/정렬/일괄교정/문헌별 승인 (20 라우트)
     routers/library.py       — 서고·설정·백업·휴지통·검증·연결·업데이트·엔진·로그인·모델 후보

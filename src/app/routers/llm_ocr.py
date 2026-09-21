@@ -85,7 +85,7 @@ class OcrBatchRequest(BaseModel):
     engine_id: str | None = None  # None이면 기본 엔진
     pages: list[int] | None = None  # None이면 전체 쪽
     # 구간별 엔진 계획(D-126 덧붙임): [{"from", "to", "engine_id"}]. 계획에 든 쪽은 그 엔진으로,
-    # 나머지는 engine_id로 돈다. 훑어보기가 «1~36쪽 NDLOCR, 37~52쪽 みんなで翻刻»처럼 만들어 준다.
+    # 나머지는 engine_id로 돈다. 판독 계획이 «1~36쪽 NDLOCR, 37~52쪽 みんなで翻刻»처럼 만들어 준다.
     engine_plan: list[dict] | None = None
     # 이미 L2 결과가 있는 쪽을 건너뛴다. 중단 후 이어서 돌리는 기본 동작이다.
     skip_existing: bool = True
@@ -989,7 +989,7 @@ async def api_detect_layout(
 
 
 class PageSurveyRequest(BaseModel):
-    """쪽 훑어보기 요청 (D-126). pages=[a, b]면 그 범위, 없으면 권 전체.
+    """판독 계획 요청 (D-126). pages=[a, b]면 그 범위, 없으면 권 전체.
 
     stride는 «몇 쪽마다 하나».
     """
@@ -1013,7 +1013,7 @@ _ORIENT_LABELS = {"upright": "바로 섬", "sideways": "누움", "upside_down": 
 
 
 def _survey_progress(progress, row: dict, done: int, total: int, labels: dict) -> None:
-    """훑어보기 스트림의 쪽 이벤트 — 쪽 하나가 끝났다. progress가 None이면 아무것도 안 한다."""
+    """판독 계획 스트림의 쪽 이벤트 — 쪽 하나가 끝났다. progress가 None이면 아무것도 안 한다."""
     if progress is None:
         return
     content = row.get("content")
@@ -1040,7 +1040,7 @@ def _survey_progress(progress, row: dict, done: int, total: int, labels: dict) -
 
 @router.post("/api/documents/{doc_id}/parts/{part_id}/rotation/suggest")
 async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
-    """쪽 훑어보기 (D-126): 쪽 썸네일을 비전 모델에 보여 «바로 섰나·무슨 글인가»만 답받고,
+    """판독 계획 (D-126): 쪽 썸네일을 비전 모델에 보여 «바로 섰나·무슨 글인가»만 답받고,
     코드가 회전이 다른 구간과 쪽마다 알맞은 OCR 엔진을 제안한다. 저장·실행은 화면이 사람에게 묻는다.
 
     출력: {"checked", "calls", "unknown",
@@ -1116,7 +1116,7 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
         }
 
     async def _run(progress=None):
-        """훑어보기 본체. progress(dict)를 주면 쪽 하나가 끝날 때마다 부른다(스트림용)."""
+        """판독 계획 본체. progress(dict)를 주면 쪽 하나가 끝날 때마다 부른다(스트림용)."""
         try:
             _pipeline, registry = _get_ocr_pipeline()
             available = {e["engine_id"] for e in registry.list_engines() if e.get("available")}
@@ -1384,7 +1384,7 @@ async def api_ocr_engines():
     return {
         "engines": engines,
         "default_engine": registry.default_engine_id,
-        # 훑어보기(D-126)는 GPU 환경에서만 — 화면이 이 값으로 단추를 보이거나 숨긴다
+        # 판독 계획(D-126)은 GPU 환경에서만 — 화면이 이 값으로 단추를 보이거나 숨긴다
         "gpu_runtime": gpu_runtime(),
     }
 

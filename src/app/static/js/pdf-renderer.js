@@ -236,7 +236,7 @@ async function applySavedRotation(docId, partId, target, pages) {
  * 묶어 돌려준다. 보내기 전에 «N쪽·호출 K번»을 묻고, 받은 구간은 하나씩 확인받아 저장한다.
  */
 /**
- * 훑어보기 모달의 쪽 범위 칸을 읽는다. 출력: [from, to] 또는 null(권 전체). 잘못 적었으면 throw.
+ * 판독 계획 모달의 쪽 범위 칸을 읽는다. 출력: [from, to] 또는 null(권 전체). 잘못 적었으면 throw.
  */
 function _surveyPagesInput() {
   const raw = (document.getElementById("survey-pages")?.value || "").trim();
@@ -247,12 +247,12 @@ function _surveyPagesInput() {
 }
 
 /**
- * 훑어보기 모달을 열어 «쪽 범위·모델»을 받는다(D-126). 출력: {pages, llmSel} 또는 null(닫음).
+ * 판독 계획 모달을 열어 «쪽 범위·모델»을 받는다(D-126). 출력: {pages, llmSel} 또는 null(닫음).
  *
  * 왜 모달인가: prompt/confirm 사슬에는 모델을 고를 자리가 없어 늘 «자동»으로 갔다(2026-09-10 사용자 지적).
  * 범위를 고칠 때마다 dry_run으로 «몇 쪽·호출 몇 번»을 상태 줄에 보인다 — 보내기 전에 크기를 안다.
  */
-// 훑어보기 기본 모델 — 벤치마크(2026-09-11, 표본 10쪽): 종류 정답 kimi-k3 7/10·gemma4 5/10·minimax-m3 5/10,
+// 판독 계획 기본 모델 — 벤치마크(2026-09-11, 표본 10쪽): 종류 정답 kimi-k3 7/10·gemma4 5/10·minimax-m3 5/10,
 // 쪽당 1.5초로 gemma4(1.3초)와 같다. 앱 전체 기본(gemma4:cloud, D-114)과는 별개다.
 const SURVEY_DEFAULT_MODEL = "ollama:kimi-k3:cloud";
 
@@ -332,7 +332,7 @@ function _openSurveyModal(post) {
   });
 }
 
-/** 훑어보기 창을 «도는 중» 상태로 — 입력을 잠그고 진행 막대를 보인다. 끄면 창을 닫는다. */
+/** 판독 계획 창을 «도는 중» 상태로 — 입력을 잠그고 진행 막대를 보인다. 끄면 창을 닫는다. */
 function _surveySetRunning(on) {
   for (const id of ["survey-pages", "survey-model-select", "survey-run"]) {
     const el = document.getElementById(id);
@@ -357,7 +357,7 @@ function _surveyProgress(done, total, text) {
 }
 
 /**
- * 훑어보기를 SSE로 돌린다 — «권 전체 OCR」과 같은 형식(data: {"type": start|page|complete|error}).
+ * 판독 계획을 SSE로 돌린다 — «권 전체 OCR」과 같은 형식(data: {"type": start|page|complete|error}).
  * 입력: url, body(stream은 여기서 켠다), onEvent(start·page 이벤트). 출력: complete 이벤트(결과 전체).
  * 스트림이 완료 없이 끊기면(서버 재시작·네트워크) 실패로 올린다 — 조용히 «다 된 것»처럼 보이면 안 된다.
  */
@@ -391,21 +391,21 @@ async function _postSurveyStream(url, body, onEvent) {
         continue;
       }
       if (evt.type === "complete") result = evt;
-      else if (evt.type === "error") throw new Error(evt.error || "훑어보기 실패");
+      else if (evt.type === "error") throw new Error(evt.error || "판독 계획 실패");
       else onEvent(evt);
     }
   }
-  if (!result) throw new Error("훑어보기가 완료 없이 끊겼습니다 — 서버가 재시작됐거나 연결이 끊겼습니다");
+  if (!result) throw new Error("판독 계획이 완료 없이 끊겼습니다 — 서버가 재시작됐거나 연결이 끊겼습니다");
   return result;
 }
 
 /**
- * 훑어보기가 낸 «회전이 다른 구간»을 사람에게 묻고 저장한다. 입력: docId, partId, rot(라우트의 rotation 목록).
+ * 판독 계획이 낸 «회전이 다른 구간»을 사람에게 묻고 저장한다. 입력: docId, partId, rot(라우트의 rotation 목록).
  * 출력: 저장한 구간 수.
  *
  * 판정이 확실한 구간(guess 아님)은 한 창에 모아 한 번만 묻는다 — 구간마다 묻는 것은 번거롭다(사용자 지적).
  * 누운 쪽은 90인지 270인지 코드가 못 가리므로(추정) 그 구간의 첫 쪽을 **제안한 회전으로 미리 보인 채**
- * 확인받고, 아니라고 하면 반대쪽을 한 번 더 보인다. 「훑어보기」와 「권 전체 OCR」의 «돌아간 쪽은 세워서»가
+ * 확인받고, 아니라고 하면 반대쪽을 한 번 더 보인다. 「판독 계획」과 「권 전체 OCR」의 «돌아간 쪽은 세워서»가
  * 같이 쓴다 — 묻는 말이 두 곳에서 달라지면 사람은 다른 기능으로 여긴다.
  */
 /**
@@ -472,9 +472,9 @@ async function _confirmRotationRanges(docId, partId, rot) {
  * 입력: docId, partId, pages([a, b] 또는 null=권 전체), onProgress(evt)(진행 막대용, 없어도 됨).
  * 출력: {checked, found, applied, unknown, error}. 사람이 취소한 구간은 저장하지 않고 OCR은 그대로 잇는다.
  *
- * 훑어보기 라우트를 orientation_only로 부른다 — 비전 모델 없음, GPU 게이트 없음. 투영으로 누운 쪽을 찾고,
+ * 판독 계획 라우트를 orientation_only로 부른다 — 비전 모델 없음, GPU 게이트 없음. 투영으로 누운 쪽을 찾고,
  * GPU면 PaddleOCR 점수로 90/270이 확정되어 한 창에서 끝나며, CPU면 추정이라 미리보기로 묻는다.
- * 저장은 훑어보기와 같은 길(_confirmRotationRanges → PUT rotation)이라 «저장은 사람이 누른다»가 지켜진다.
+ * 저장은 판독 계획과 같은 길(_confirmRotationRanges → PUT rotation)이라 «저장은 사람이 누른다»가 지켜진다.
  */
 async function autoOrientForOcr(docId, partId, pages, onProgress) {
   const url = `/api/documents/${encodeURIComponent(docId)}/parts/${encodeURIComponent(partId)}/rotation/suggest`;
