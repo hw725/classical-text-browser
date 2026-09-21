@@ -192,7 +192,10 @@ QUERY_SURFACE = ("get_entity", "list_entities", "list_entities_for_page")
 
 # list_entities 가 받는 필터 키. 여기 없는 키를 라우터가 넘기기 시작하면
 # 질의가 넓어지고 있다는 신호다 — 늘릴 때는 D-128 3항을 다시 읽는다.
-LIST_FILTER_KEYS = ("status", "block_id")
+#
+# scope_document 만 동등 비교가 아니다 — 범위는 «주소»라서 전역(null) 개념이
+# 모든 문헌 주소에 걸린다(D-128 6항, core/concept_scope.py).
+LIST_FILTER_KEYS = ("status", "block_id", "scope_document")
 
 
 # ──────────────────────────
@@ -798,6 +801,18 @@ def list_entities(
             continue
 
     # 필터 적용
+    #
+    # scope_document 는 다른 키와 다루는 법이 다르다 (D-128 6항). 동등 비교로
+    # 걸러 버리면 전역 개념(scope_document 없음)이 목록에서 사라지는데, 전역은
+    # «모든 문헌 주소에 걸리는 것»이라 그러면 안 된다. 범위는 순위 가중치가
+    # 아니라 주소이므로, 넣고 빼기만 하고 정렬은 하지 않는다.
+    scope_value = None
+    has_scope_filter = False
+    if filters and "scope_document" in filters:
+        filters = dict(filters)
+        scope_value = filters.pop("scope_document")
+        has_scope_filter = True
+
     if filters:
         filtered = []
         for entity in entities:
@@ -809,6 +824,11 @@ def list_entities(
             if match:
                 filtered.append(entity)
         entities = filtered
+
+    if has_scope_filter:
+        from .concept_scope import scoped
+
+        entities = scoped(entities, scope_value)
 
     return entities
 

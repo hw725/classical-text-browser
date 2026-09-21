@@ -45,6 +45,21 @@ NOISE_WEIGHT_CEILING: float = 2.0
 # 출처가 최소 하나는 있어야 한다」는 뜻이다 — 바닥이 2이므로 3이 그 바로 위다.
 DEFAULT_MIN_EFFECTIVE_WEIGHT: float = 3.0
 
+# 판정에 **들어가지 못하는** 수치 (D-128 7항).
+#
+# 파트너 수와 집중도는 계통마다 너무 달라서 설계 근거가 되지 못한다 — 전수
+# 기준으로 출력 파트너 수가 45~282로 6배, 상위 3 집중도가 13.1~31.9%로 2.4배
+# 차이났다. 「커넥톰은 이렇다」고 말할 수 있는 값이 아니다.
+#
+# 그래서 promotion_metrics()는 이 값들을 **재서 보여주기만** 하고,
+# evaluate_promotion()의 판정에는 effective_weight 하나만 들어간다. 사람이
+# 화면에서 「왜 승격되지 않는가」를 이해하는 데는 필요하지만, 임계로 쓰면
+# 그 순간 계통 편차를 설계에 박아 넣는 것이 된다.
+#
+# 검사: tests/test_d128.py::TestPartnerCountIsNotEvidence — 잡음 출처를 500개
+# 더해도 판정이 흔들리지 않는지 잰다.
+METRICS_NOT_USED_FOR_VERDICT = ("source_count", "effective_count", "top10_share", "noise_share")
+
 # 9항이 어디까지인가를 코드 옆에 적어 둔다. 주석이 아니라 상수인 이유는,
 # 이 규칙을 다른 곳에 퍼뜨리려는 사람이 검색으로 여기 닿게 하기 위해서다.
 SCOPE_BLIND_COLLECTION_NOTE = (
