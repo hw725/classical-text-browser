@@ -19,6 +19,7 @@ import pytest
 from ocr.ndlkotenocr_engine import NdlkotenOcrEngine
 from ocr.ndlkotenocr_full_engine import NdlkotenOcrFullEngine
 
+
 # 클래스 이름표는 **저장소에 실린 설정에서 읽는다.** 손으로 베껴 적으면 업스트림이 이름을 바꿀 때
 # 시험만 옛 이름을 붙들고 초록으로 남는다(`ndl_parser`가 `classes.index('block_ad')`로 찾으므로
 # 이름 하나만 달라도 실제 경로는 죽는다 — 처음 이 시험을 손으로 적었다가 여기서 걸렸다).
@@ -101,7 +102,7 @@ class TestDetectionsBecomeLines:
         """입력: 탐지 둘. 출력: 행 둘 — 글자는 인식기가 준 것, bbox는 탐지 상자."""
         eng = _engine(cls, ["甲乙", "丙丁"])
         dets = [
-            {"box": [300, 50, 340, 250], "confidence": 0.9},  # 오른쪽 행(세로쓰기 먼저)
+            {"box": [300, 50, 340, 250], "confidence": 0.9},
             {"box": [200, 50, 240, 250], "confidence": 0.8},
         ]
         lines = eng._process_detections(_page(), dets)
@@ -109,9 +110,29 @@ class TestDetectionsBecomeLines:
         assert len(lines) == 2
         assert {tuple(ln["bbox"]) for ln in lines} == {(300, 50, 340, 250), (200, 50, 240, 250)}
         assert all(isinstance(ln["text"], str) for ln in lines)
-        assert [ln["order"] for ln in lines] == sorted(ln["order"] for ln in lines)
         # Lite는 행마다 한 번(PARSeq), Full은 배치라 한 번(TrOCR) — 헛돌지 않는지만 본다
         assert 1 <= _recognizer_calls(eng) <= 2
+
+    def test_lines_come_back_right_to_left(self, cls):
+        """세로쓰기는 **오른쪽 행이 먼저**다 — 탐지를 왼쪽부터 주어도 결과는 오른쪽부터.
+
+        **깨뜨려 본 기록(2026-09-21).** 처음에는 «order가 오름차순인가»로 적었는데, 그 주장은
+        정렬을 통째로 빼도 초록이었다 — 자기 자신과 비교하는 공허한 단언이었다. 탐지를
+        **왼쪽부터** 넣는 지금 모양으로 바꾸고 다시 깨뜨려 보니 이렇게 갈렸다:
+
+        - `lines_with_text.sort(key=order)`를 빼면 → **여전히 초록**. 이 줄은 이 경로에서
+          아무 일도 하지 않는다(XY-Cut이 이미 순서대로 내놓는다).
+        - `eval_xml(root)`(XY-Cut)을 빼면 → **빨간불**. 읽기 순서를 실제로 정하는 것은 여기다.
+
+        즉 이 시험이 지키는 것은 «정렬 한 줄»이 아니라 «XY-Cut을 거친다»이다.
+        """
+        eng = _engine(cls, ["甲", "乙"])
+        dets = [
+            {"box": [100, 50, 140, 250], "confidence": 0.8},  # 왼쪽 행을 먼저 준다
+            {"box": [300, 50, 340, 250], "confidence": 0.9},  # 오른쪽 행
+        ]
+        lines = eng._process_detections(_page(), dets)
+        assert [ln["bbox"][0] for ln in lines] == [300, 100]
 
     def test_a_detection_outside_the_page_is_skipped_not_crashed(self, cls):
         """쪽 밖 상자는 크롭이 비어 건너뛴다 — 예외로 터지면 한 쪽이 통째로 죽는다."""
