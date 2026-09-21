@@ -777,3 +777,40 @@ class TestMergeIsReachableFromTheApp:
         from app.routers.interpretations import api_list_entities
 
         assert "scope" in inspect.signature(api_list_entities).parameters
+
+
+class TestLedgerIsVisibleInLists:
+    """목록에도 장부가 반영되는가 (2026-09-21 브라우저 검증에서 찾은 결함).
+
+    `get_entity`만 장부를 보고 `list_entities`는 보지 않았다. 그래서 화면의 엔티티
+    «목록»에서는 이미 합쳐진 개념에 「합치기」 단추가 그대로 남고 «→ 새 ID» 표시도
+    뜨지 않았다. 상태가 deprecated 인 것과 «합쳐졌다»는 것은 다른 사실이라
+    상태로는 대신할 수 없다.
+    """
+
+    def test_list_shows_superseded_by(self, tmp_path):
+        _, _, interp_path = _make_library(tmp_path)
+        old_id = _concept(interp_path, "王戎")
+        new_id = _concept(interp_path, "王戎(정리)")
+        merge_concepts(interp_path, [old_id], new_id)
+
+        by_id = {c["id"]: c for c in list_entities(interp_path, "concept")}
+        assert by_id[old_id]["superseded_by"] == new_id
+        assert by_id[old_id]["supersede_chain"] == [old_id, new_id]
+        # 남은 쪽에는 붙지 않는다 — 대체된 것에만 붙는다.
+        assert "superseded_by" not in by_id[new_id]
+
+    def test_list_follows_a_chain(self, tmp_path):
+        _, _, interp_path = _make_library(tmp_path)
+        a, b, c = (_concept(interp_path, f"개념{i}") for i in "ABC")
+        merge_concepts(interp_path, [a], b)
+        merge_concepts(interp_path, [b], c)
+        by_id = {x["id"]: x for x in list_entities(interp_path, "concept")}
+        assert by_id[a]["superseded_by"] == c
+
+    def test_empty_ledger_costs_nothing(self, tmp_path):
+        """장부가 비면 목록을 손대지 않는다 — 없는 파일을 엔티티마다 읽지 않는다."""
+        _, _, interp_path = _make_library(tmp_path)
+        _concept(interp_path, "혼자")
+        listed = list_entities(interp_path, "concept")
+        assert all("superseded_by" not in c for c in listed)

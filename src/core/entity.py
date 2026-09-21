@@ -830,7 +830,56 @@ def list_entities(
 
         entities = scoped(entities, scope_value)
 
-    return entities
+    return _annotate_superseded(interp_path, entity_type, entities)
+
+
+def _annotate_superseded(interp_path: Path, entity_type: str, entities: list[dict]) -> list[dict]:
+    """목록의 각 엔티티에 «지금은 무엇을 보라»를 덧붙인다 (D-128 2항).
+
+    입력: interp_path — 해석 저장소. entity_type — 종류. entities — 목록.
+    출력: 같은 길이의 목록. 대체된 것에만 superseded_by·supersede_chain 이 붙는다.
+
+    왜 get_entity 만으로는 모자랐는가: 화면의 엔티티 «목록»은 list_entities 로
+    그리는데 거기에는 장부가 반영되지 않아, 이미 합쳐진 개념에 「합치기」 단추가
+    그대로 남고 «→ 새 ID» 표시도 뜨지 않았다(2026-09-21 브라우저 검증에서 발견).
+    상태가 deprecated 인 것과 «합쳐졌다»는 것은 다른 사실이라 상태로는 대신할 수 없다.
+
+    왜 여기서 장부를 한 번만 읽는가: 엔티티마다 resolve_id 를 부르면 목록 하나에
+    파일을 N번 읽는다. 장부는 파일 하나이므로 미리 펼쳐 두고 각자 따라가게 한다.
+    """
+    if not entities:
+        return entities
+
+    from .entity_id_map import FOLLOWED_RELATIONS, load_id_map
+
+    lookup: dict[str, str] = {}
+    for e in load_id_map(interp_path)["entries"]:
+        if e.get("entity_type") != entity_type:
+            continue
+        if e.get("relation") not in FOLLOWED_RELATIONS:
+            continue
+        old_id, new_id = e.get("old_id"), e.get("new_id")
+        if old_id and new_id:
+            lookup[old_id] = new_id
+    if not lookup:
+        return entities
+
+    out = []
+    for entity in entities:
+        entity_id = entity.get("id")
+        if entity_id not in lookup:
+            out.append(entity)
+            continue
+        chain, seen, current = [entity_id], {entity_id}, entity_id
+        while current in lookup:
+            nxt = lookup[current]
+            if nxt in seen:
+                break
+            chain.append(nxt)
+            seen.add(nxt)
+            current = nxt
+        out.append({**entity, "superseded_by": current, "supersede_chain": chain})
+    return out
 
 
 def list_entities_for_page(

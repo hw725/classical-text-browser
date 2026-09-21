@@ -3380,6 +3380,23 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
   background: #16a34a;
 }
 
+/* 「합치기」 — 승격과 같은 자리에 서므로 모양을 맞추고 색만 다르게 한다 (D-128 2항).
+   초록(승격 = 올린다)과 구분되는 회색조 — 합치기는 «올리는» 일이 아니다. */
+.entity-merge-btn {
+  font-size: 10px;
+  padding: 0 4px;
+  background: #64748b;
+  color: #fff;
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.entity-merge-btn:hover {
+  background: #475569;
+}
+
 /* --- LLM 검토 영역 --- */
 .llm-review-section {
   border-bottom: 1px solid var(--border);
