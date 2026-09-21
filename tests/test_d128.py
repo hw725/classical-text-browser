@@ -644,3 +644,136 @@ class TestModulationIsFirstClass:
         breakdown = polarity_breakdown(relations)
         assert breakdown["support"] == 0.8
         assert breakdown["modulate"] == 0.2
+
+
+# ──────────────────────────────────────
+# 6항 — 출력 구획은 벽에 가깝다 (범위는 주소다)
+# ──────────────────────────────────────
+
+
+class TestScopeIsAnAddress:
+    def test_other_document_concept_is_excluded_not_ranked_down(self, tmp_path):
+        """다른 문헌의 개념은 순위가 낮아지는 것이 아니라 «아예 나오지 않는다»."""
+        _, _, interp_path = _make_library(tmp_path)
+        mine = {"id": str(uuid.uuid4()), "label": "王戎", "scope_document": "doc_a",
+                "status": "draft"}
+        theirs = {"id": str(uuid.uuid4()), "label": "王戎", "scope_document": "doc_b",
+                  "status": "draft"}
+        everywhere = {"id": str(uuid.uuid4()), "label": "王戎", "scope_document": None,
+                      "status": "draft"}
+        for c in (mine, theirs, everywhere):
+            create_entity(interp_path, "concept", c)
+
+        got = {c["id"] for c in list_entities(
+            interp_path, "concept", {"scope_document": "doc_a"}
+        )}
+        assert mine["id"] in got
+        assert everywhere["id"] in got  # 전역은 모든 주소에 걸린다
+        assert theirs["id"] not in got  # 다른 주소다
+
+    def test_global_only_query_excludes_scoped(self, tmp_path):
+        """전역만 물으면 문헌 범위를 가진 개념은 주소가 다르다."""
+        _, _, interp_path = _make_library(tmp_path)
+        scoped_c = {"id": str(uuid.uuid4()), "label": "가", "scope_document": "doc_a",
+                    "status": "draft"}
+        global_c = {"id": str(uuid.uuid4()), "label": "나", "scope_document": None,
+                    "status": "draft"}
+        for c in (scoped_c, global_c):
+            create_entity(interp_path, "concept", c)
+        got = {c["id"] for c in list_entities(interp_path, "concept", {"scope_document": None})}
+        assert got == {global_c["id"]}
+
+    def test_scope_does_not_sort(self):
+        """거르기만 하고 정렬하지 않는다 — 정렬하면 «순위 가중치»가 된다."""
+        from core.concept_scope import scoped
+
+        items = [
+            {"id": "1", "scope_document": None},
+            {"id": "2", "scope_document": "doc_a"},
+            {"id": "3", "scope_document": None},
+        ]
+        assert [c["id"] for c in scoped(items, "doc_a")] == ["1", "2", "3"]
+
+    def test_collection_side_is_not_walled(self, tmp_path):
+        """**입력 쪽에는 벽을 세우지 않는다** — 6항은 출력 쪽 규칙이다 (9항).
+
+        수집을 구획으로 막으면 연합 자체가 일어나지 않는다. 이 시험이 깨지면
+        누군가 6항을 gather_sources 에까지 밀어 넣은 것이다.
+        """
+        _, _, interp_path = _make_library(tmp_path)
+        for _ in range(3):
+            create_entity(
+                interp_path,
+                "tag",
+                {
+                    "id": str(uuid.uuid4()),
+                    "block_id": str(uuid.uuid4()),
+                    "surface": "王戎",
+                    "core_category": "person",
+                    "status": "draft",
+                },
+            )
+        assert len(gather_sources(interp_path, "王戎", document_id="아무_문헌")) == 3
+
+    def test_rule_side_is_written_down(self):
+        from core.concept_scope import OUTPUT_SIDE_ONLY_NOTE
+
+        assert "모으는 쪽" in OUTPUT_SIDE_ONLY_NOTE
+
+
+# ──────────────────────────────────────
+# 7항 — 파트너 수·집중도는 설계 근거가 아니다
+# ──────────────────────────────────────
+
+
+class TestPartnerCountIsNotEvidence:
+    def test_verdict_is_invariant_to_noise_partners(self):
+        """잡음 출처를 500개 더해도 판정이 흔들리지 않는다.
+
+        파트너 수는 계통마다 45~282로 6배 차이났다 — 설계 근거로 쓸 수 없는
+        값이다. 판정에 들어가면 그 편차가 그대로 임계가 된다.
+        """
+        real = [{"weight": 9}]
+        assert evaluate_promotion(real)["eligible"] is True
+        noisy = real + [{"weight": 1} for _ in range(500)]
+        assert evaluate_promotion(noisy)["eligible"] is True
+
+        weak = [{"weight": 1}]
+        assert evaluate_promotion(weak)["eligible"] is False
+        assert evaluate_promotion(weak * 500)["eligible"] is False
+
+    def test_concentration_is_reported_not_decided_on(self):
+        """집중도는 «보여주는 값»이지 «판정하는 값»이 아니다."""
+        from core.promotion import METRICS_NOT_USED_FOR_VERDICT
+
+        # 집중도만 다르고 실질 무게가 같은 두 묶음은 같은 판정을 받아야 한다.
+        concentrated = [{"weight": 12}]
+        spread = [{"weight": 4}, {"weight": 4}, {"weight": 4}]
+        a, b = evaluate_promotion(concentrated), evaluate_promotion(spread)
+        assert a["eligible"] == b["eligible"] is True
+        assert a["metrics"]["top10_share"] != b["metrics"]["top10_share"]
+        # 판정에 쓰지 않기로 한 수치가 이름으로 적혀 있다.
+        assert "source_count" in METRICS_NOT_USED_FOR_VERDICT
+        assert "top10_share" in METRICS_NOT_USED_FOR_VERDICT
+
+
+# ──────────────────────────────────────
+# 화면에서 부를 수 있는가 (한계 보완)
+# ──────────────────────────────────────
+
+
+class TestMergeIsReachableFromTheApp:
+    def test_merge_route_exists(self):
+        """병합 라우트가 실제로 붙어 있는지 — 장부는 병합이 일어나야 쌓인다."""
+        from app.routers.interpretations import router
+
+        paths = {r.path for r in router.routes}
+        assert "/api/interpretations/{interp_id}/entities/concepts/merge" in paths
+
+    def test_scope_query_param_exists(self):
+        """목록 라우트가 scope 를 받는지 (6항의 주소 질의)."""
+        import inspect
+
+        from app.routers.interpretations import api_list_entities
+
+        assert "scope" in inspect.signature(api_list_entities).parameters
