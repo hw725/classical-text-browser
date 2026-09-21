@@ -161,7 +161,10 @@ class SegmentationStructureLlmRequest(BaseModel):
     # 라우트를 늘리지 않는 까닭: 라우트 수가 문서·기계 검사(D-079)에 걸려 있다.
     engine: str = "llm"
     match_toc: bool = True  # engine="jev"일 때 총목 항목도 본문 행에 «고르기»로 붙인다(층위 1~2)
-    toc_min_prob: float = 0.8  # 목차 대조를 후보로 세울 확률 문턱(운양집 실측: 0.8에서 불일치 0)
+    # 목차 대조를 후보로 세울 확률 문턱. **None이면 이 책의 답에서 뽑는다**(derive_toc_threshold) —
+    # 좋은 문턱의 자리는 책마다 다르고, 상수는 우연히 맞는 자리에 떨어진 것일 뿐이다.
+    # 숫자를 주면 그 값으로 고정한다(비교 측정·재현용).
+    toc_min_prob: float | None = None
 
 
 class BoundaryUpdateRequest(BaseModel):
@@ -748,6 +751,7 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
     from core.segmentation import signal_on
     from core.structure_llm import (
         ask_structure_jev,
+        derive_toc_threshold,
         jev_structure_size,
         nest_under_toc,
         toc_picks_to_proposals,
@@ -804,14 +808,19 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
     toc_meta: dict = {"entries": len(entries), "picked": 0, "none": 0, "failed": 0}
     if entries:
         res = match_toc_entries_jev(entries, body_lines, client)
-        toc_props = toc_picks_to_proposals(res["picks"], entries, float(body.toc_min_prob))
+        if body.toc_min_prob is None:
+            min_prob, how = derive_toc_threshold(res["picks"])
+        else:
+            min_prob, how = float(body.toc_min_prob), {"how": "given", "value": body.toc_min_prob}
+        toc_props = toc_picks_to_proposals(res["picks"], entries, min_prob)
         toc_meta = {
             "entries": len(entries),
             "picked": len(res["picks"]),
             "above_threshold": len(toc_props),
             "none": len(res["none"]),
             "failed": len(res["failed"]),
-            "min_prob": float(body.toc_min_prob),
+            "min_prob": round(min_prob, 3),
+            "threshold_from": how,
         }
     props, meta = ask_structure_jev(
         body_lines,
