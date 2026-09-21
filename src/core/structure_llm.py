@@ -432,6 +432,11 @@ async def ask_structure_llm(
     return out, meta
 
 
+# 고른 행에서 제목이 실제로 시작하는가 — 코드가 공짜로 확인하는 관문(모델의 자기 신고가 아니다).
+# 운양집 1책 실측에서 이 값을 넘긴 고름은 전부 제목이 그 행의 첫머리였다.
+SELF_CHECK_MIN = 0.85
+
+
 def derive_toc_threshold(
     picks: list, tolerance: int = 0, min_picks: int = 5, fallback: float = 0.8
 ) -> tuple[float, dict]:
@@ -458,7 +463,7 @@ def derive_toc_threshold(
         return fallback, {"how": "fallback", "picks": len(rows), "value": fallback}
     bad = 0
     for i, (prob, sim) in enumerate(rows):
-        if sim < 0.85:  # 제목이 그 행에서 시작하지 않는다 — 자기 검증 실패
+        if sim < SELF_CHECK_MIN:  # 제목이 그 행에서 시작하지 않는다 — 자기 검증 실패
             bad += 1
             if bad > tolerance:
                 value = rows[i - 1][0] if i else 1.0
@@ -480,6 +485,14 @@ def toc_picks_to_proposals(picks: list, entries: list, min_prob: float = 0.8) ->
     out: list[dict] = []
     seen: set[tuple[int, int]] = set()
     for p in picks:
+        # 자기 검증은 확률과 **다른 관문**이다. 확률은 «얼마나 확신하는가»이고 이것은
+        # «애초에 그 행이 맞는가»인데, 코드가 공짜로 확인할 수 있다(제목이 그 행에서 시작하는가).
+        # 확률 문턱만 두면 답이 적어 문턱이 상수로 물러설 때 **자기 검증에 실패한 답이 그대로
+        # 들어온다**(2026-09-21 반대 배치 실측: 답 4개에서 오답 하나가 통과했다).
+        # 한계: 「續昇平館集」이 「昇平館集」 행을 고른 것처럼 접두 관계는 여기서 떨어진다 —
+        # 그런 자리는 규칙·본문 판정 후보로 사람에게 남는다.
+        if float(p.get("sim") or 0) < SELF_CHECK_MIN:
+            continue
         if float(p.get("prob") or 0) < min_prob:
             continue
         key = (int(p["page"]), int(p["line_index"]))

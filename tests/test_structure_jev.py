@@ -154,9 +154,11 @@ def test_toc_picks_become_proposals_above_the_threshold_only():
     from core.structure_llm import TOC_JEV_REASON, toc_picks_to_proposals
 
     entries = [_Entry("擊磬集", level=2), _Entry("第一卷", level=1)]
+    # sim은 «고른 행에서 제목이 시작하는가»(match_toc_entries_jev가 늘 싣는다). 픽스처가
+    # 이것을 빠뜨리면 실제 답과 다른 모양이 되어, 시험은 초록인데 코드는 다른 일을 한다.
     picks = [
-        {"entry": 0, "title": "擊磬集", "page": 14, "line_index": 7, "prob": 0.97},
-        {"entry": 1, "title": "第一卷", "page": 14, "line_index": 2, "prob": 0.55},
+        {"entry": 0, "title": "擊磬集", "page": 14, "line_index": 7, "prob": 0.97, "sim": 1.0},
+        {"entry": 1, "title": "第一卷", "page": 14, "line_index": 2, "prob": 0.55, "sim": 1.0},
     ]
     out = toc_picks_to_proposals(picks, entries, min_prob=0.8)
     assert [(p["page"], p["line_index"], p["level"]) for p in out] == [(14, 7, 2)]
@@ -172,8 +174,8 @@ def test_toc_picks_keep_one_place_when_the_same_title_is_listed_twice():
 
     entries = [_Entry("松屋雜詠"), _Entry("松屋雜詠")]
     picks = [
-        {"entry": 0, "title": "松屋雜詠", "page": 41, "line_index": 35, "prob": 0.92},
-        {"entry": 1, "title": "松屋雜詠", "page": 41, "line_index": 35, "prob": 0.9},
+        {"entry": 0, "title": "松屋雜詠", "page": 41, "line_index": 35, "prob": 0.92, "sim": 1.0},
+        {"entry": 1, "title": "松屋雜詠", "page": 41, "line_index": 35, "prob": 0.9, "sim": 1.0},
     ]
     assert len(toc_picks_to_proposals(picks, entries, 0.8)) == 1
 
@@ -396,3 +398,76 @@ def test_threshold_keeps_everything_when_nothing_fails_the_self_check():
     picks = [{"prob": 0.9 - i / 100, "sim": 1.0} for i in range(6)]
     value, how = derive_toc_threshold(picks)
     assert how["how"] == "all_pass" and value == picks[-1]["prob"]
+
+
+# ── 반대 배치 — «그 성질이 성립하는 유일한 배치»를 고른 것은 아닌가 ────────────
+# 2026-09-21 D-128 구현 세션의 지적: 픽스처가 우연히 성질이 성립하는 배치만 고르고
+# 독스트링이 그것을 코드의 성질이라고 적으면, 시험은 초록인데 주장은 거짓이다.
+# 그래서 «도출이 상수보다 나은 이유»가 실제로 걸리는 배치들을 함께 잰다.
+def test_threshold_finds_a_low_cliff_where_the_constant_keeps_nothing():
+    """절벽이 0.55에 있는 책 — 고정 0.8은 **하나도 못 건진다**. 도출이 필요한 진짜 이유다."""
+    from core.structure_llm import derive_toc_threshold, toc_picks_to_proposals
+
+    picks = [
+        {"prob": p, "sim": s, "page": i, "line_index": 0, "title": "가", "entry": 0}
+        for i, (p, s) in enumerate(
+            [(0.72, 1.0), (0.68, 1.0), (0.61, 1.0), (0.58, 1.0), (0.55, 1.0), (0.41, 0.1)]
+        )
+    ]
+
+    class _E:
+        level = 2
+
+    value, how = derive_toc_threshold(picks)
+    assert value == 0.55 and how["how"] == "cliff"
+    assert len(toc_picks_to_proposals(picks, [_E()] * 6, value)) == 5
+    assert len(toc_picks_to_proposals(picks, [_E()] * 6, 0.8)) == 0  # 상수였으면 전멸
+
+
+def test_nothing_is_kept_when_even_the_best_answer_fails_its_own_check():
+    """가장 확신한 답부터 엉뚱한 행이면 아무것도 세우지 않는다 — 확률이 높다고 믿지 않는다."""
+    from core.structure_llm import derive_toc_threshold
+
+    picks = [{"prob": 0.99, "sim": 0.1}] + [{"prob": 0.9 - i / 100, "sim": 1.0} for i in range(6)]
+    value, _how = derive_toc_threshold(picks)
+    assert value == 1.0  # 1.0 이상인 확률은 없으므로 채택 0
+
+
+def test_self_check_gate_holds_even_when_the_threshold_falls_back():
+    """답이 적어 문턱이 상수로 물러서도 **자기 검증에 실패한 답은 들이지 않는다**.
+
+    이 구멍이 실제로 있었다(2026-09-21): 답 4개 배치에서 fallback 0.8이 엉뚱한 행 하나를
+    그대로 통과시켰다. 확률과 자기 검증은 다른 관문이다.
+    """
+    from core.structure_llm import derive_toc_threshold, toc_picks_to_proposals
+
+    picks = [
+        {"prob": 0.95, "sim": 1.0, "page": 1, "line_index": 0, "title": "가", "entry": 0},
+        {"prob": 0.90, "sim": 0.1, "page": 2, "line_index": 0, "title": "나", "entry": 0},  # 엉뚱
+        {"prob": 0.88, "sim": 1.0, "page": 3, "line_index": 0, "title": "다", "entry": 0},
+        {"prob": 0.80, "sim": 1.0, "page": 4, "line_index": 0, "title": "라", "entry": 0},
+    ]
+
+    class _E:
+        level = 2
+
+    value, how = derive_toc_threshold(picks)
+    assert how["how"] == "fallback"  # 넷뿐이라 절벽을 말할 근거가 없다
+    got = toc_picks_to_proposals(picks, [_E()] * 4, value)
+    assert [p["page"] for p in got] == [1, 3, 4]  # 엉뚱한 2쪽은 문턱을 넘어도 빠진다
+
+
+def test_a_pick_without_a_self_check_value_is_not_stood_up():
+    """`sim`이 없는 답은 «검증할 수 없는 답»이므로 세우지 않는다.
+
+    실제 경로(`match_toc_entries_jev`)는 늘 `sim`을 싣는다. 다른 생산자가 빠뜨리면 조용히
+    통과시키는 대신 조용히 빠지는데, **둘 중에는 뒤가 낫다** — 검증 못 한 자리를 경계 후보로
+    세우면 사람이 «코드가 확인한 것»으로 읽는다. 이 시험은 그 선택을 못 박아 둔다.
+    """
+    from core.structure_llm import toc_picks_to_proposals
+
+    class _E:
+        level = 2
+
+    picks = [{"entry": 0, "title": "가", "page": 1, "line_index": 0, "prob": 0.99}]
+    assert toc_picks_to_proposals(picks, [_E()], 0.5) == []
