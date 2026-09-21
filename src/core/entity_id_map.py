@@ -72,13 +72,19 @@ def load_id_map(interp_path: str | Path) -> dict:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
-        # 장부가 깨졌다고 해서 서고를 못 열게 하면 안 된다. 빈 장부로 계속 가되
-        # 로그를 남긴다 — 조용히 덮어쓰면 매핑이 영영 사라진다.
-        logger.warning("id_map.json을 읽지 못했습니다(%s). 빈 장부로 진행합니다: %s", path, e)
-        return {"schema_version": ID_MAP_SCHEMA_VERSION, "entries": []}
+        # 장부가 깨졌다고 해서 서고를 못 열게 하면 안 된다 — 읽기는 빈 장부로 잇는다.
+        # 다만 **그 사실을 값으로 남긴다**(`unreadable`). 로그만 남기면 두 가지가
+        # 조용히 일어난다: ① 합쳐진 개념의 표시가 전부 사라지고 ② 다음 병합이
+        # record_mapping()으로 이 파일을 새로 써서 **남아 있던 매핑을 영영 지운다.**
+        logger.warning("id_map.json을 읽지 못했습니다(%s). 빈 장부로 읽습니다: %s", path, e)
+        return {"schema_version": ID_MAP_SCHEMA_VERSION, "entries": [], "unreadable": str(e)}
     if not isinstance(data, dict) or not isinstance(data.get("entries"), list):
-        logger.warning("id_map.json의 모양이 예상과 다릅니다(%s). 빈 장부로 진행합니다.", path)
-        return {"schema_version": ID_MAP_SCHEMA_VERSION, "entries": []}
+        logger.warning("id_map.json의 모양이 예상과 다릅니다(%s). 빈 장부로 읽습니다.", path)
+        return {
+            "schema_version": ID_MAP_SCHEMA_VERSION,
+            "entries": [],
+            "unreadable": "entries 목록이 없습니다",
+        }
     return data
 
 
@@ -110,6 +116,15 @@ def record_mapping(
             "→ 해결: 병합 대상과 목표가 다른 엔티티인지 확인하세요."
         )
     data = load_id_map(interp_path)
+    if data.get("unreadable"):
+        # 여기서 쓰면 읽지 못한 옛 매핑을 통째로 날린다. 2항의 존재 이유가
+        # 「구 ID를 죽이지 않는다」인데 그 파일을 죽이는 셈이다.
+        raise OSError(
+            f"장부(id_map.json)를 읽을 수 없어 새 매핑을 적지 않았습니다: {data['unreadable']}\n"
+            f"→ 파일: {id_map_path(interp_path)}\n"
+            "→ 왜: 지금 쓰면 읽지 못한 옛 매핑이 영영 사라집니다. "
+            "→ 해결: 그 파일을 git 이력에서 되살리거나 손으로 고친 뒤 다시 시도하세요."
+        )
     entry = {
         "entity_type": entity_type,
         "old_id": old_id,
@@ -137,6 +152,63 @@ def record_mapping(
     return entry
 
 
+def supersede_lookup(interp_path: str | Path, entity_type: str) -> dict[str, str]:
+    """장부를 **한 번 읽어** «옛 id → 신 id» 표로 펼친다.
+
+    입력: interp_path — 해석 저장소 경로. entity_type — 엔티티 종류.
+    출력: {옛 id: 신 id}. 따라가는 고리(FOLLOWED_RELATIONS)만 담는다.
+
+    왜 따로 있는가: 목록 하나를 훑으면서 엔티티마다 장부 파일을 다시 읽으면
+    N번 읽게 된다. 펼친 표를 한 번 만들어 돌려 쓰라고 꺼내 둔 것이다.
+    """
+    lookup: dict[str, str] = {}
+    for e in load_id_map(interp_path)["entries"]:
+        if e.get("entity_type") != entity_type:
+            continue
+        if e.get("relation") not in FOLLOWED_RELATIONS:
+            continue
+        old_id, new_id = e.get("old_id"), e.get("new_id")
+        if old_id and new_id:
+            lookup[old_id] = new_id
+    return lookup
+
+
+def follow_chain(
+    lookup: dict[str, str],
+    entity_id: str,
+    *,
+    entity_type: str = "",
+) -> dict:
+    """펼친 표를 따라 «지금 무엇이 됐는가»까지 간다. **고리 따라가기의 정본이다.**
+
+    입력: lookup — supersede_lookup() 결과. entity_id — 출발 id.
+        entity_type — 로그에만 쓴다.
+    출력: {"id": 최종 id, "chain": [거쳐온 id...], "superseded": bool}
+
+    왜 이 함수 하나여야 하는가: 같은 규칙을 두 곳에서 각각 구현했더니 이미
+    갈라져 있었다 — 한쪽은 순환을 만나면 경고를 남기고 다른 쪽은 조용히
+    멈췄다. 규칙이 바뀌면 한 곳만 고쳐지는 자리가 그렇게 생긴다
+    (D-127의 「기능마다 파서를 복제하면 한쪽만 고쳐진다」와 같은 교훈).
+
+    순환(잘못 적힌 장부)은 거기서 멈추고 그때까지를 돌려준다 — 무한 반복으로
+    서버가 멎는 것보다 낫다.
+    """
+    chain = [entity_id]
+    seen = {entity_id}
+    current = entity_id
+    while current in lookup:
+        nxt = lookup[current]
+        if nxt in seen:
+            logger.warning(
+                "id_map에 순환이 있습니다: %s (종류 %s). 거기서 멈춥니다.", chain, entity_type
+            )
+            break
+        chain.append(nxt)
+        seen.add(nxt)
+        current = nxt
+    return {"id": current, "chain": chain, "superseded": current != entity_id}
+
+
 def resolve_id(
     interp_path: str | Path,
     entity_type: str,
@@ -155,31 +227,8 @@ def resolve_id(
     고리가 한 바퀴 도는 경우(잘못 적힌 장부)에는 멈추고 거기까지를 돌려준다 —
     무한 반복으로 서버가 멎는 것보다 낫다.
     """
-    lookup: dict[str, str] = {}
-    for e in load_id_map(interp_path)["entries"]:
-        if e.get("entity_type") != entity_type:
-            continue
-        if e.get("relation") not in FOLLOWED_RELATIONS:
-            continue
-        old, new = e.get("old_id"), e.get("new_id")
-        if old and new:
-            lookup[old] = new
-
-    chain = [entity_id]
-    seen = {entity_id}
-    current = entity_id
-    while current in lookup:
-        nxt = lookup[current]
-        if nxt in seen:
-            logger.warning(
-                "id_map에 순환이 있습니다: %s (종류 %s). 거기서 멈춥니다.", chain, entity_type
-            )
-            break
-        chain.append(nxt)
-        seen.add(nxt)
-        current = nxt
-
-    return {"id": current, "chain": chain, "superseded": current != entity_id}
+    lookup = supersede_lookup(interp_path, entity_type)
+    return follow_chain(lookup, entity_id, entity_type=entity_type)
 
 
 def successors(interp_path: str | Path, entity_type: str, entity_id: str) -> list[dict]:
