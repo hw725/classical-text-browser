@@ -214,8 +214,24 @@ def test_route_dry_run_and_survey_with_fake_vision(client, tmp_path, monkeypatch
         ]
     )
 
+    class _FakeProvider:
+        """비전을 지원하는 프로바이더 하나 — `llm_vision` 엔진이 이것만 본다."""
+
+        supports_image = True
+
     class FakeVision:
         calls = []
+        # LlmRouter 가 가진 것 중 OCR 엔진이 실제로 읽는 칸.
+        #
+        # 왜 필요한가: `llm_ocr_engine.is_available()` 이 `router.providers` 를 훑어
+        # 비전 지원 프로바이더가 있는지 본다. 이 칸이 없으면 AttributeError 가 나고
+        # 레지스트리가 그 엔진을 «사용 불가»로 떨어뜨린다(예외가 아니라 조용한 제외다).
+        # 그러면 「훈점(kunten) → 엔진」 대응의 마지막 후보인 llm_vision 까지 사라져,
+        # **honkoku·ndlkotenocr 같은 선택 extra 가 설치된 환경에서만** 이 시험이
+        # 통과하게 된다. 실제로 그랬다 — main 체크아웃 `.venv` 에서는 통과하고
+        # 워크트리 `.venv`(onnxruntime 없음)에서는 실패해, 두 세션이 각각 「기존
+        # 실패」와 「동시 실행 경합」으로 오진했다(2026-09-21).
+        providers = (_FakeProvider(),)
 
         async def call_with_image(self, prompt, image, **kwargs):
             self.calls.append(kwargs)
