@@ -63,10 +63,21 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 1. `uv lock --upgrade-package <이름>` — **전체 갱신은 하지 않는다.** 한꺼번에 올리면
    무엇이 깼는지 가릴 수 없다.
 2. `uv run python -m pytest`
-3. **실제 이미지로 OCR 1쪽.** 자동 테스트의 사각지대가 여기다 —
-   `test_ocr_paddle.py::test_recognize_real`이 PaddleOCR `recognize()`를 실제로
-   부르지만(설치 시에만), **검출(`line_detector`)은 순수 함수만 검증하고
-   배치·파이프라인 경로는 더미 엔진을 쓴다.** 엔진 API가 바뀌어도 초록으로 통과한다.
+3. **실제 이미지로 OCR 1쪽.** 어디가 사각지대인지는 **재서 안다**(2026-09-21 실측 — 시험이
+   도는 동안 `sys.monitoring`으로 엔진 파일의 함수 진입을 기록했다). 실행되는 것과 아닌 것:
+
+   | 엔진 | 시험에서 실행되는 것 |
+   |---|---|
+   | `paddleocr_engine` | `recognize`(설치 시 실모델 1회, 단 `assert`는 engine_id뿐) |
+   | `ndlocr_engine` | `recognize_page`·`_cascade_recognize`·`_process_detections` |
+   | `honkoku_engine` | `recognize`·`recognize_page`(가짜 OCR 주입 — 변환 코드는 실행된다) |
+   | `llm_ocr_engine` | `recognize`·`_recognize_async`(가짜 router) |
+   | `line_detector` | `detect_lines`·`_get_detector` |
+   | **`ndlkotenocr_engine`·`ndlkotenocr_full_engine`** | **`is_available()`뿐 — 인식 코드가 한 줄도 안 돈다** |
+
+   즉 사각지대는 «더미 엔진 일반»이 아니라 **古典籍 Lite·Full 둘**이다. 나머지는 모델이
+   가짜여도 엔진 자신의 변환 코드가 실행되므로 API 변경은 잡힌다. 배치·파이프라인 경로가
+   `DummyOcrEngine`을 쓰는 것은 그대로다(뼈대만 잰다).
 4. 스키마·저장 형식이 바뀌면 `docs/DECISIONS.md`에 마이그레이션 경로를 남긴다.
    기존 서고를 열 수 없게 되는 변경은 **되돌릴 수 없다.**
 
