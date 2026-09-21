@@ -382,28 +382,97 @@ class TestPromotionWeighsNotCounts:
         assert evaluate_promotion([by_unit[thick], by_unit[thick]])["eligible"] is True
 
     def test_without_confirmed_text_it_fails_closed(self, tmp_path):
-        """확정본이 없으면 무게를 잴 수 없다 — 그때는 «승격하지 않는» 쪽으로 닫힌다.
+        """확정본이 없으면 **재지 못한 것**이다 — Tag 수로 대신하지 않는다.
 
-        왜 이것을 못 박는가: 텍스트가 없으면 도출이 Tag 수로 떨어지는데, 그것이
-        곧 «개수로 세기»다(8항이 막으려는 것). 떨어진 값이 잡음 바닥 아래라서
-        열리지 않고 닫힌다는 것이 안전한 쪽이고, 그 성질을 여기 고정한다.
+        이 시험은 한 번 **헛통과했다.** 예전에는 Tag 30개를 서로 다른 단위 30개에
+        하나씩 흩어 놓고 「닫힌다」를 확인했는데, 그 배치에서만 무게가 1.0으로
+        바닥에 깔렸다. 코드는 확정본이 없으면 `Tag 수`로 떨어지고 있었으므로
+        **같은 단위에 Tag 셋을 붙이면 무게 3.0으로 임계를 그대로 넘었다** —
+        8항이 막으려던 「개수로 세기」가 복원되는 자리였다(2026-09-21 독립 검증).
+
+        그래서 지금은 **개수가 위력을 발휘할 수 있는 배치**로 잰다. 한 단위에
+        몰아 주는 쪽과 흩뿌리는 쪽 둘 다 닫혀야 한다.
         """
         _, _, interp_path = _make_library(tmp_path)
-        for _ in range(30):
-            create_entity(
-                interp_path,
-                "tag",
-                {
-                    "id": str(uuid.uuid4()),
-                    "block_id": str(uuid.uuid4()),
-                    "surface": "王戎",
-                    "core_category": "person",
-                    "confidence": 1.0,
-                    "status": "draft",
-                },
-            )
+
+        def _tags(unit_ids):
+            for unit_id in unit_ids:
+                create_entity(
+                    interp_path,
+                    "tag",
+                    {
+                        "id": str(uuid.uuid4()),
+                        "block_id": unit_id,
+                        "surface": "王戎",
+                        "core_category": "person",
+                        "confidence": 1.0,
+                        "status": "draft",
+                    },
+                )
+
+        # ① 한 단위에 Tag 다섯 — 개수로 세면 5.0이라 임계를 넘는다.
+        crowded = str(uuid.uuid4())
+        _tags([crowded] * 5)
         sources = gather_sources(interp_path, "王戎")
-        assert len(sources) == 30
+        assert len(sources) == 1
+        assert sources[0]["measured"] is False, "확정본이 없으면 «재지 못함»이어야 한다"
+        assert sources[0]["occurrences"] == 0
+        verdict = evaluate_promotion(sources)
+        assert verdict["eligible"] is False
+        assert "재지 못했습니다" in verdict["reason"], verdict["reason"]
+
+        # ② 흩뿌린 쪽도 닫힌다.
+        _tags([str(uuid.uuid4()) for _ in range(30)])
+        spread = gather_sources(interp_path, "王戎")
+        assert len(spread) == 31
+        assert evaluate_promotion(spread)["eligible"] is False
+
+    def test_measured_zero_differs_from_unmeasured(self, tmp_path, monkeypatch):
+        """확정본은 있는데 표면형이 안 나오는 것은 «정상적인 0»이다.
+
+        둘을 같은 말로 답하면 연구자가 「확정본을 채우라」는 답을 못 받는다.
+        """
+        _, _, interp_path = _make_library(tmp_path)
+        unit_id = str(uuid.uuid4())
+        create_entity(
+            interp_path,
+            "tag",
+            {
+                "id": str(uuid.uuid4()),
+                "block_id": unit_id,
+                "surface": "王戎",
+                "core_category": "person",
+                "status": "draft",
+            },
+        )
+        monkeypatch.setattr(
+            entity_mod,
+            "_unit_view",
+            lambda _p: [{"id": unit_id, "original_text": "다른 글자만 있는 확정본"}],
+        )
+        sources = gather_sources(interp_path, "王戎")
+        assert sources[0]["measured"] is True
+        assert sources[0]["occurrences"] == 0
+        verdict = evaluate_promotion(sources)
+        assert verdict["eligible"] is False
+        assert "재지 못했습니다" not in verdict["reason"], verdict["reason"]
+
+    def test_unparsable_explicit_weight_does_not_crash(self, tmp_path):
+        """Tag의 metadata.weight 오타가 승격 전체를 떨어뜨리면 안 된다."""
+        _, _, interp_path = _make_library(tmp_path)
+        create_entity(
+            interp_path,
+            "tag",
+            {
+                "id": str(uuid.uuid4()),
+                "block_id": str(uuid.uuid4()),
+                "surface": "王戎",
+                "core_category": "person",
+                "status": "draft",
+                "metadata": {"weight": "high"},
+            },
+        )
+        sources = gather_sources(interp_path, "王戎")  # 예외 없이 지나가야 한다
         assert evaluate_promotion(sources)["eligible"] is False
 
 
@@ -965,3 +1034,135 @@ class TestEveryReadDoorSeesTheLedger:
                 f"쪽 조회가 '{entity_type}'을 list_entities 를 거치지 않고 읽는다 — "
                 "그러면 장부 주석이 빠진다 (D-128 2항)."
             )
+
+
+class TestChainFollowingHasOneImplementation:
+    """고리 따라가기가 한 곳에만 있는가 (D-128 2항의 구조 위생).
+
+    처음에는 `resolve_id`와 `_annotate_superseded`가 같은 규칙을 각각 구현했다.
+    그래서 이미 갈라져 있었다 — 한쪽은 순환을 만나면 경고를 남기고 다른 쪽은
+    조용히 멈췄다. 이 저장소가 D-127에서 「기능마다 파서를 복제하면 한쪽만
+    고쳐진다」고 적어 둔 것과 같은 자리다.
+
+    지금은 `entity_id_map.follow_chain` 하나가 정본이다. 이 시험은 두 경로가
+    **모든 경우에 같은 답**을 내는지 잰다 — 누군가 한쪽만 고치면 깨진다.
+    """
+
+    def _both_paths(self, interp_path, entity_id: str):
+        """같은 id를 두 경로로 읽어 (단건 조회, 목록) 결과를 돌려준다."""
+        single = resolve_id(interp_path, "concept", entity_id)
+        listed = next(
+            (c for c in list_entities(interp_path, "concept") if c["id"] == entity_id), None
+        )
+        return single, listed
+
+    def test_straight_chain_agrees(self, tmp_path):
+        _, _, interp_path = _make_library(tmp_path)
+        a, b, c = (_concept(interp_path, f"개념{i}") for i in "ABC")
+        merge_concepts(interp_path, [a], b)
+        merge_concepts(interp_path, [b], c)
+
+        single, listed = self._both_paths(interp_path, a)
+        assert single["id"] == listed["superseded_by"] == c
+        assert single["chain"] == listed["supersede_chain"] == [a, b, c]
+
+    def test_cycle_agrees(self, tmp_path):
+        """장부가 잘못 적혀 순환이 생겨도 두 경로가 같은 자리에서 멈춘다."""
+        _, _, interp_path = _make_library(tmp_path)
+        a = _concept(interp_path, "A")
+        b = _concept(interp_path, "B")
+        record_mapping(interp_path, entity_type="concept", old_id=a, new_id=b)
+        record_mapping(interp_path, entity_type="concept", old_id=b, new_id=a)
+
+        single, listed = self._both_paths(interp_path, a)
+        assert single["id"] == listed["superseded_by"]
+        assert single["chain"] == listed["supersede_chain"]
+
+    def test_no_ledger_agrees(self, tmp_path):
+        """장부가 비면 둘 다 «대체되지 않았다»로 답한다."""
+        _, _, interp_path = _make_library(tmp_path)
+        a = _concept(interp_path, "혼자")
+        single, listed = self._both_paths(interp_path, a)
+        assert single["superseded"] is False
+        assert "superseded_by" not in listed
+
+    def test_only_one_module_walks_the_chain(self):
+        """`while current in lookup` 이 정본 한 곳에만 있어야 한다.
+
+        복제가 다시 생기면 여기서 걸린다 — 갈라짐은 갈라진 뒤에는 잘 안 보인다.
+        """
+        import inspect
+        from pathlib import Path as _Path
+
+        from core import entity_id_map
+
+        core_dir = _Path(inspect.getfile(entity_id_map)).parent
+        walkers = [
+            f.name
+            for f in core_dir.glob("*.py")
+            if "while current in lookup" in f.read_text(encoding="utf-8")
+        ]
+        assert walkers == ["entity_id_map.py"], (
+            f"고리 따라가기가 여러 곳에 있다: {walkers}. "
+            "entity_id_map.follow_chain 을 쓰도록 모으라 (D-128 2항)."
+        )
+
+
+class TestLedgerCannotBeCorrupted:
+    """장부가 거짓이 되는 두 경로를 막는다 (2026-09-21 독립 검증 ②·④).
+
+    2항의 존재 이유는 「구 ID를 죽이지 않는다」인데, 아래 둘은 장부 자체를
+    쓸모없게 만든다 — 하나는 정본을 없애고 하나는 파일을 날린다.
+    """
+
+    def test_merging_into_an_already_merged_target_is_refused(self, tmp_path):
+        """B→A 뒤 A→B를 허용하면 «대체되지 않은» 개념이 하나도 남지 않는다.
+
+        조회는 순환을 끊어 멎지는 않지만, 정본이 사라지면 화면에서 되돌릴 길이
+        없다 — 삭제 금지 규약 때문에 장부 항목을 지우는 길도 없기 때문이다.
+        """
+        _, _, interp_path = _make_library(tmp_path)
+        a = _concept(interp_path, "A")
+        b = _concept(interp_path, "B")
+        merge_concepts(interp_path, [b], a)  # B → A
+
+        with pytest.raises(ValueError, match="이미"):
+            merge_concepts(interp_path, [a], b)  # A → B 는 순환이다
+
+        # 정본이 남아 있다 — A 는 여전히 «대체되지 않은» 개념이다.
+        listed = {c["id"]: c for c in list_entities(interp_path, "concept")}
+        assert "superseded_by" not in listed[a]
+        assert listed[b]["superseded_by"] == a
+
+    def test_duplicate_source_ids_are_counted_once(self, tmp_path):
+        """같은 id를 두 번 줘도 «2건 합쳤다»고 말하지 않는다."""
+        _, _, interp_path = _make_library(tmp_path)
+        a = _concept(interp_path, "A")
+        b = _concept(interp_path, "B")
+        result = merge_concepts(interp_path, [a, a], b)
+        assert result["merged"] == [a]
+
+    def test_broken_ledger_is_not_overwritten(self, tmp_path):
+        """읽지 못한 장부 위에 새로 쓰지 않는다 — 쓰면 옛 매핑이 영영 사라진다.
+
+        읽기는 빈 장부로 이어 가되(서고는 열려야 한다) **쓰기는 막는다.**
+        이 방어가 없으면 장부가 한 번 깨진 뒤의 첫 병합이 파일을 새로 써서
+        그때까지의 모든 구 ID → 신 ID 매핑을 지운다.
+        """
+        _, _, interp_path = _make_library(tmp_path)
+        a = _concept(interp_path, "A")
+        b = _concept(interp_path, "B")
+        merge_concepts(interp_path, [a], b)
+
+        path = interp_path / "core_entities" / "id_map.json"
+        good = path.read_text(encoding="utf-8")
+        path.write_text("{ 이건 JSON 이 아니다", encoding="utf-8")
+
+        c = _concept(interp_path, "C")
+        with pytest.raises(OSError, match="장부"):
+            merge_concepts(interp_path, [c], b)
+
+        # 파일은 손대지 않은 그대로다 — 되살릴 수 있다.
+        assert path.read_text(encoding="utf-8") == "{ 이건 JSON 이 아니다"
+        path.write_text(good, encoding="utf-8")
+        assert resolve_id(interp_path, "concept", a)["id"] == b
