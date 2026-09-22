@@ -17,7 +17,7 @@ D-125(구조 통째로 묻기)는 생성 모델에게 «행 번호만 가리켜�
 |---|---|
 | `src/llm/jev.py` | 전송 계층. 키 해결(TYPESAFE_API_KEY → JEV_API_KEY → OPENROUTER_API_KEY → `~/.claude/data/triage/.env`, **이름 순서로**)·호출 상한 게이트·토큰과 비용 셈·429/529 백오프. `LlmRouter`에 넣지 않았다 — 라우터의 계약은 «프롬프트 → 글»이고 Jev에는 글이 없다 |
 | `core/structure_llm.ask_structure_jev` | 행마다 noul 질문 하나(«이 행에서 새 글이 시작하는가»). 묶음·행 번호·후보 검증은 D-125의 것을 그대로 쓴다. 확률은 `meta["nouls"]`로 남겨 **다시 부르지 않고 문턱만 바꿔** 잰다 |
-| `scripts/eval_structure_starts.py` | 두 책(`--book cheonjin|unyang01`)을 같은 자로 재는 측정기. 규칙·Jev·조합을 한 표에 놓는다 |
+| `scripts/eval_boundary_judge.py` | 측정기 하나 — `starts`(두 책을 같은 자로: 규칙·Jev·조합)와 `toc`(목차 대조를 고르기로). 처음에는 파일 둘이었고 한쪽이 다른 쪽을 import했다(2026-09-21 합침) |
 | `tests/test_structure_jev.py` | 가짜 클라이언트로 재는 9건(실호출 없음) |
 
 ## 어떻게 쟀나
@@ -129,7 +129,7 @@ D-125(구조 통째로 묻기)는 생성 모델에게 «행 번호만 가리켜�
 자기검증)로 판정했다. ②의 판정자는 접두 관계에 약하다(「續昇平館集」이 「昇平館集」 행을 고른
 것을 일치로 세지 않았지만, 반대 방향의 실수는 놓칠 수 있다).
 
-측정기는 `scripts/eval_toc_match.py`, 함수는 `core/toc.py::match_toc_entries_jev`다.
+측정기는 `scripts/eval_boundary_judge.py toc`, 함수는 `core/toc.py::match_toc_entries_jev`다.
 
 ## 한계
 

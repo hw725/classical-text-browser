@@ -471,3 +471,54 @@ def test_a_pick_without_a_self_check_value_is_not_stood_up():
 
     picks = [{"entry": 0, "title": "가", "page": 1, "line_index": 0, "prob": 0.99}]
     assert toc_picks_to_proposals(picks, [_E()], 0.5) == []
+
+
+def test_screen_keeps_rule_places_when_the_model_answers(tmp_path):
+    """**모델의 답은 규칙 후보를 거르지 않는다 — 합집합이다.**
+
+    이 설계의 핵심 결정(D-129 1항)이고, 측정이 강제한 것이다: 천진담초에서는 «규칙 ∩ 모델»이
+    가장 좋았지만 운양집에서 같은 구성은 규칙의 재현을 그대로 물려받아 0.880 → 0.176으로
+    무너졌다. 규칙 후보로 거르면 **규칙이 못 보는 책에서는 모델도 함께 눈이 먼다.**
+
+    **깨뜨려 본 기록(2026-09-22).** 합쳐지는 자리는 `_mergeLlmProposals` 하나인데 그때까지
+    시험이 없었다 — D-129를 적으며 「이 주장을 무엇이 지키는가」를 묻다가 드러났다. 지금
+    이 시험은 이렇게 갈린다:
+
+    - 합치기를 «교집합»으로 바꾸면(모델이 가리키지 않은 규칙 후보를 버림) → **빨간불**
+    - 합치기를 «모델 답으로 갈아 끼우기»로 바꾸면 → **빨간불**
+    - 억제한 자리를 되살리게 하면 → **빨간불**
+    """
+    from tests.js_harness import run_js
+
+    setup = """
+      const proposeState = { llm: { docId: "d1", partId: "vol1", proposals: [
+        { page: 1, line_index: 0, char_offset: 0, reasons: ["jev:structure"], confidence: 0.6 },
+        { page: 2, line_index: 0, char_offset: 0, reasons: ["jev:structure"], confidence: 0.6 },
+        { page: 3, line_index: 0, char_offset: 0, reasons: ["jev:structure"], confidence: 0.6 },
+      ] } };
+    """
+    body = """
+      const data = { stats: {}, proposals: [
+        { page: 1, line_index: 0, char_offset: 0, reasons: ["date"], confidence: 0.5, accepted: true },
+        { page: 1, line_index: 5, char_offset: 0, reasons: ["date"], confidence: 0.5, accepted: true },
+        { page: 3, line_index: 0, char_offset: 0, reasons: ["date"], confidence: 0.5, suppressed: true },
+      ] };
+      _mergeLlmProposals(data, "d1", "vol1");
+      const at = (k) => data.proposals.find((p) => _propKey(p) === k);
+      console.log(JSON.stringify({
+        keys: data.proposals.map(_propKey),
+        ruleOnly: at("1:5:0") ? at("1:5:0").reasons : null,
+        both: at("1:0:0") ? at("1:0:0").reasons : null,
+        suppressedAccepted: at("3:0:0") ? !!at("3:0:0").accepted : null,
+        stats: data.stats.llm,
+      }));
+    """
+    got = run_js(tmp_path, "composition-editor.js", ["_mergeLlmProposals", "_propKey"], setup, body)
+    # 규칙만 가리킨 자리(1:5)가 살아 있다 — 모델이 거르지 않는다
+    assert got["keys"] == ["1:0:0", "1:5:0", "2:0:0", "3:0:0"]
+    assert got["ruleOnly"] == ["date"]
+    # 둘이 가리킨 자리는 근거만 보탠다(규칙 근거를 지우지 않는다)
+    assert got["both"] == ["date", "llm:structure"]
+    # 사람이 억제한 자리는 모델이 가리켜도 되살아나지 않는다
+    assert got["suppressedAccepted"] is False
+    assert got["stats"] == {"added": 1, "joined": 2}
