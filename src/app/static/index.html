@@ -2025,7 +2025,7 @@
                     <!-- 두 단추가 같은 모델을 쓴다 — 창 안에 두면 「말로 넣기」만 쓰는 사람은 못 본다(2026-09-09) -->
                     <label class="comp-llm-model">모델
                       <select id="comp-llm-model-select" class="props-select llm-model-select"
-                        title="「말로 넣기」와 「더 묻기…」가 함께 씁니다. «자동»은 사용 가능한 프로바이더 순서(Ollama → Gemini …)로 넘어갑니다"></select>
+                        title="「말로 넣기」와 「더 묻기…」의 글 쓰는 선택지들이 함께 씁니다. «자동»은 사용 가능한 프로바이더 순서(Ollama → Gemini …)로 넘어갑니다. 「판정 모델로 고르기」는 예외입니다 — 그것은 글을 만들지 않는 전용 모델(TypeSafe Jev)을 쓰므로 이 고름과 무관합니다"></select>
                     </label>
                     <span id="comp-say-count" class="comp-rules-count"></span>
                     <span id="comp-llm-pattern-out" class="comp-rules-suggest-out"></span>
@@ -4039,7 +4039,7 @@
                총목이 있으면 그 항목을 본문 행에 붙이고(층위 1~2), 본문 판정은 그 아래 층이 된다. -->
           <label class="comp-llm-opt">
             <input id="comp-llm-opt-judge" type="checkbox" />
-            <span title="행마다 «여기서 새 글이 시작하는가»를 확률로 받고, 총목이 있으면 목차 항목이 본문 어느 행인지도 고르게 합니다. 모델이 글을 만들지 않으므로 없는 자리를 지어낼 수 없습니다. 실측(2026-09-21): 문집에서 규칙이 못 찾던 자리를 찾고, 확률 0.8 이상은 오답이 없었습니다"><b>판정 모델로 고르기</b>
+            <span title="행마다 «여기서 새 글이 시작하는가»를 확률로 받고, 총목이 있으면 목차 항목이 본문 어느 행인지도 고르게 합니다. 모델이 글을 만들지 않으므로 없는 자리를 지어낼 수 없습니다. 위 «모델» 고름은 여기에 쓰이지 않습니다 — 판정 전용 모델을 따로 부릅니다. 실측(2026-09-21): 문집에서 규칙이 못 찾던 자리를 찾고, 확률 0.8 이상은 오답이 없었습니다"><b>판정 모델로 고르기</b> <span class="llm-tag">판정</span>
               <span id="comp-llm-opt-judge-note" class="comp-llm-opt-note"></span></span>
           </label>
           <div id="comp-llm-status" class="comp-split-note"></div>

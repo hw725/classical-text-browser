@@ -289,6 +289,10 @@ def test_screen_asks_the_judge_engine_and_keeps_the_answer(tmp_path):
     got = run_js(tmp_path, "composition-editor.js", ["_askJudgeStructure"], setup, body)
     assert got["body"]["engine"] == "jev" and got["body"]["part_id"] == "vol1"
     assert "structure/llm" in got["url"]  # 라우트를 늘리지 않았다 — 같은 자리에 engine만 더했다
+    # **모달의 «모델» 고름을 보내지 않는다.** Jev는 생성 모델이 아니라 그 드롭다운의 대상이
+    # 아니다(D-129 «버린 것»). 보내면 서버가 무시하고, 사용자는 고른 모델이 돈 줄 안다 —
+    # 화면 툴팁도 그래서 「이 고름과 무관하다」로 적어 두었다(2026-09-22).
+    assert "force_provider" not in got["body"] and "force_model" not in got["body"]
     assert got["kept"] == 1
     assert "목차 3항목 중 2개" in got["said"] and "$0.001" in got["said"]
 
