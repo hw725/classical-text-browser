@@ -223,7 +223,7 @@ class ResetCompositionRequest(BaseModel):
 def _doc(doc_id: str):
     """(문헌 경로, 오류 응답). 서고·문헌이 없으면 두 번째가 응답이다."""
     if get_library_path() is None:
-        return None, JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return None, JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
     doc_path = require_repo_path("documents", doc_id)
     if not doc_path.exists():
         return None, JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)

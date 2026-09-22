@@ -223,7 +223,7 @@ async def api_get_part_rotation(
     화면은 저장하기 **전에** 이것으로 확인창의 숫자를 만든다. from·to를 주면 그 범위의 결과만 센다.
     """
     if get_library_path() is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
     doc_path = require_repo_path("documents", doc_id)
     if not doc_path.exists():
         return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
@@ -246,7 +246,7 @@ async def api_set_part_rotation(doc_id: str, part_id: str, body: PartRotationReq
     출력: {"rotation", "ranges", "effect"}.
     """
     if get_library_path() is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
     doc_path = require_repo_path("documents", doc_id)
     if not doc_path.exists():
         return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
@@ -437,7 +437,7 @@ async def api_documents():
     """서고의 문헌 목록을 반환한다."""
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
     return list_documents(_library_path)
 
 
@@ -451,7 +451,7 @@ async def api_delete_document(doc_id: str):
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
     try:
         result = trash_document(_library_path, doc_id)
         return result
@@ -494,7 +494,7 @@ async def api_preview_from_url(body: PreviewFromUrlRequest):
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     import parsers as _parsers_mod  # noqa: F401
     from parsers.base import detect_parser_from_url, get_parser, get_supported_sources
@@ -576,7 +576,7 @@ async def api_create_from_url(body: CreateFromUrlRequest):
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     url = body.url.strip()
     doc_id = body.doc_id.strip()
@@ -654,7 +654,7 @@ async def api_diagnose_document(doc_id: str):
 
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     # require_repo_path가 doc_id 형식(경로 트래버설)까지 검증한다
     doc_path = require_repo_path("documents", doc_id)
@@ -783,7 +783,7 @@ async def api_create_from_files(
 
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     if not files:
         return JSONResponse(
@@ -845,9 +845,20 @@ async def api_create_from_files(
         image_paths: list[Path] = []
         # (저장명, 원본 라벨, tmp 경로) — 저장명은 ASCII로 안전하게, 라벨은 원본 stem
         pdf_inputs: list[tuple[str, str, Path]] = []
-        # 이미지 묶음 PDF는 항상 <doc_id>.pdf로 저장될 예정이라 미리 예약.
-        # 사용자가 같은 이름의 PDF를 첨부하면 충돌로 거절된다.
-        seen_pdf_storage_names: set[str] = {f"{doc_id}.pdf"}
+        # 이미지 묶음 PDF는 <doc_id>.pdf로 저장된다(아래 images_pdf) — 그 이름을 예약한다.
+        # **이미지가 실제로 있을 때만** 예약한다. 한때 무조건 예약해서, PDF 한 장만
+        # 올리고 doc_id를 비우면(= 끌어다 놓기의 기본 경로) 서버가 그 파일 이름으로
+        # doc_id를 만들어 **자기 자신과 충돌**했다 — `report.pdf` → doc_id=`report`
+        # → 예약 `report.pdf` → 올린 PDF도 `report.pdf` → 400 「같은 이름의 PDF가
+        # 두 번 포함되었습니다」(2026-09-22 실측). 한글 이름은 저장명이
+        # `doc_YYYYMMDD_pdf1.pdf`로 바뀌어 안 걸려서, 고서 이름만 쓰는 동안
+        # 드러나지 않았다. 안내문도 원인과 무관해 사용자가 스스로 풀 수 없었다.
+        _will_bundle_images = any(
+            Path(u.filename or "").suffix.lower() in image_suffixes for u in files
+        )
+        seen_pdf_storage_names: set[str] = (
+            {f"{doc_id}.pdf"} if _will_bundle_images else set()
+        )
         pdf_idx = 0  # PDF별 영문 인덱스 (한국어 등 비ASCII 파일명 회피용)
 
         for idx, upload in enumerate(files):
@@ -1232,7 +1243,7 @@ async def api_import_hwp(
 
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     if not doc_id or not doc_id.strip():
         return JSONResponse({"error": "doc_id가 비어있습니다."}, status_code=400)
@@ -1333,7 +1344,7 @@ async def api_match_hwp_to_blocks(doc_id: str, body: MatchHwpToBlocksRequest):
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     try:
         result = match_hwp_text_to_layout_blocks(
@@ -1625,7 +1636,7 @@ async def api_align_preview(body: AlignPreviewRequest):
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = require_repo_path("documents", body.doc_id)
     if not doc_path.exists():
@@ -1693,7 +1704,7 @@ async def api_pdf_apply(body: PdfApplyRequest, background_tasks: BackgroundTasks
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = require_repo_path("documents", body.doc_id)
     if not doc_path.exists():
@@ -1854,7 +1865,7 @@ async def api_add_parts(
     """
     library_path = get_library_path()
     if library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = require_repo_path("documents", doc_id)
     manifest_path = doc_path / "manifest.json"
@@ -1979,7 +1990,7 @@ async def api_document(doc_id: str):
     """특정 문헌의 정보를 반환한다 (manifest + pages)."""
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = require_repo_path("documents", doc_id)
     try:
@@ -2005,7 +2016,7 @@ async def api_document_pdf(doc_id: str, part_id: str):
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = require_repo_path("documents", doc_id)
     try:
@@ -2035,7 +2046,7 @@ async def api_page_text(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = require_repo_path("documents", doc_id)
     if not doc_path.exists():
@@ -2069,7 +2080,7 @@ async def api_save_page_text(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = require_repo_path("documents", doc_id)
     if not doc_path.exists():
@@ -2111,7 +2122,7 @@ async def api_page_layout(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = require_repo_path("documents", doc_id)
     if not doc_path.exists():
@@ -2145,7 +2156,7 @@ async def api_save_page_layout(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = require_repo_path("documents", doc_id)
     if not doc_path.exists():
@@ -2207,7 +2218,7 @@ async def api_page_corrections(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = require_repo_path("documents", doc_id)
     if not doc_path.exists():
@@ -2242,7 +2253,7 @@ async def api_save_page_corrections(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = require_repo_path("documents", doc_id)
     if not doc_path.exists():
@@ -2390,7 +2401,7 @@ async def api_suggest_segmentation_rules(doc_id: str, body: SegmentationRulesSug
 
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
     doc_path = require_repo_path("documents", doc_id)
     if not doc_path.exists():
         return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
@@ -2429,7 +2440,7 @@ async def api_corrected_text(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = require_repo_path("documents", doc_id)
     if not doc_path.exists():
@@ -2467,7 +2478,7 @@ async def api_position_at(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = require_repo_path("documents", doc_id)
     if not doc_path.exists():
@@ -2508,7 +2519,7 @@ async def api_git_log(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = require_repo_path("documents", doc_id)
     if not doc_path.exists():
@@ -2534,7 +2545,7 @@ async def api_git_diff(doc_id: str, commit_hash: str):
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = require_repo_path("documents", doc_id)
     if not doc_path.exists():
@@ -2563,7 +2574,7 @@ async def api_bibliography(doc_id: str):
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = require_repo_path("documents", doc_id)
     if not doc_path.exists():
@@ -2601,7 +2612,7 @@ async def api_document_bib_from_url(doc_id: str, body: DocumentBibFromUrlRequest
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = require_repo_path("documents", doc_id)
     if not doc_path.exists():
@@ -2672,7 +2683,7 @@ async def api_save_bibliography(doc_id: str, body: BibliographySaveRequest):
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = require_repo_path("documents", doc_id)
     if not doc_path.exists():

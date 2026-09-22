@@ -311,7 +311,7 @@ async def api_run_alignment(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = require_repo_path("documents", doc_id)
     if not doc_path.exists():

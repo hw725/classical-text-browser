@@ -63,7 +63,7 @@ def test_quick_start_creates_then_reuses(isolated_app):
     client, fake_home = isolated_app
 
     # 서고 미설정 상태 확인
-    assert client.get("/api/library").status_code == 500
+    assert client.get("/api/library").status_code == 409
 
     r1 = client.post("/api/library/quick-start")
     assert r1.status_code == 200
@@ -159,3 +159,63 @@ def test_create_from_files_explicit_doc_id_unchanged(isolated_app, tmp_path):
             files=[("files", ("any.pdf", fp, "application/pdf"))],
         )
     assert r_bad.status_code == 400
+
+
+def test_single_ascii_named_pdf_is_accepted(isolated_app, tmp_path):
+    """영문 이름 PDF **한 장**을 끌어다 놓아도 받아들여야 한다.
+
+    2026-09-22까지 400으로 거절됐다. 원인:
+
+        create-from-files 는 이미지 묶음 PDF 를 `<doc_id>.pdf` 로 저장하려고
+        그 이름을 미리 예약했는데(`seen_pdf_storage_names`), **이미지가 없어도**
+        예약했다. `doc_id` 를 비워 보내면 서버가 **첫 파일 이름**에서 만들므로
+        `report.pdf` → doc_id=`report` → 예약 `report.pdf` → 올린 PDF 저장명도
+        `report.pdf` → 자기 자신과 충돌 → 「같은 이름의 PDF가 두 번 포함되었습니다」.
+
+    왜 여태 안 드러났나: 이 파일의 다른 시험은 전부 **한글 이름**(`舊注蒙求.pdf`)을
+    쓴다. 한글이면 저장명이 `doc_YYYYMMDD_pdf1.pdf` 로 바뀌어 충돌하지 않는다.
+    고서 이름만 다루는 동안 드래그 앤 드롭의 기본 경로가 깨진 채로 있었다.
+
+    안내문이 「파일 이름을 다르게 하거나 한 번만 선택하세요」라 원인과도 무관해,
+    사용자가 스스로 풀 수 없는 종류였다.
+    """
+    client, _ = isolated_app
+    assert client.post("/api/library/quick-start").status_code == 200
+
+    pdf = _make_test_pdf(tmp_path / "report.pdf")
+    with open(pdf, "rb") as fp:
+        r = client.post(
+            "/api/documents/create-from-files",
+            files=[("files", ("report.pdf", fp, "application/pdf"))],
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["document_id"] == "report"
+
+
+def test_image_bundle_still_reserves_its_name(isolated_app, tmp_path):
+    """이미지가 함께 오면 `<doc_id>.pdf` 예약은 그대로 살아 있어야 한다.
+
+    위 수정이 예약 자체를 없앤 것이 아님을 못박는다 — 이미지 묶음이 만들어질
+    때는 그 이름이 실제로 쓰이므로, 같은 이름의 PDF 가 함께 오면 여전히 거절해야
+    한다. 「고쳤더니 원래 막던 것까지 통과」를 막는 시험이다.
+    """
+    from PIL import Image
+
+    img = tmp_path / "scan.png"
+    Image.new("RGB", (40, 60), "white").save(img)
+    pdf = _make_test_pdf(tmp_path / "mydoc.pdf")
+
+    client, _ = isolated_app
+    assert client.post("/api/library/quick-start").status_code == 200
+
+    with open(img, "rb") as f1, open(pdf, "rb") as f2:
+        r = client.post(
+            "/api/documents/create-from-files",
+            data={"doc_id": "mydoc"},
+            files=[
+                ("files", ("scan.png", f1, "image/png")),
+                ("files", ("mydoc.pdf", f2, "application/pdf")),
+            ],
+        )
+    assert r.status_code == 400
+    assert "두 번 포함" in r.json()["error"]

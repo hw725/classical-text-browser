@@ -192,7 +192,8 @@ class TestEnginesApi:
 
         monkeypatch.setattr(mod, "get_library_path", lambda: None)
         r = client.get("/api/ocr/engines")
-        assert r.status_code == 500
+        # 409 — 서고가 없는 것은 처음 켠 사람의 정상 상태다(500 은 서버 잘못이라는 뜻).
+        assert r.status_code == 409
         assert r.json()["error"] == "서고가 설정되지 않았습니다."
 
     def test_init_failure_reports_cause(self, client, monkeypatch, tmp_path):

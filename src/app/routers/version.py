@@ -22,6 +22,7 @@ import json
 import logging
 import shutil
 import subprocess
+import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
@@ -89,7 +90,7 @@ async def api_git_graph(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
     manifest_path = interp_path / "manifest.json"
@@ -251,7 +252,7 @@ async def api_export_json(interp_id: str):
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
     manifest_path = interp_path / "manifest.json"
@@ -280,11 +281,26 @@ async def api_export_json(interp_id: str):
     date_str = datetime.now().strftime("%Y%m%d")
     filename = f"{title}_{date_str}.json"
 
-    content = json.dumps(snapshot, ensure_ascii=False, indent=2).encode("utf-8")
+    # HTTP 헤더는 **latin-1**로 인코딩된다(starlette `init_headers`). 제목을 그대로
+    # 넣으면 한글·한자에서 `UnicodeEncodeError: 'latin-1' codec can't encode` 로
+    # **500이 난다** — 이 저장소의 문헌은 제목이 거의 다 한글이라 이 내보내기는
+    # 사실상 늘 실패했다(2026-09-22 실측: 「E2E 표본」에서 재현).
+    #
+    # RFC 5987: ASCII 로 줄인 `filename=` 을 두어 옛 브라우저를 지키고,
+    # 실제 이름은 `filename*=UTF-8''<percent-encoded>` 로 준다. 요즘 브라우저는
+    # 뒤쪽을 쓰므로 한글 파일명이 그대로 내려온다.
+    ascii_fallback = filename.encode("ascii", "ignore").decode("ascii").strip() or (
+        f"interpretation_{date_str}.json"
+    )
+    quoted = urllib.parse.quote(filename, safe="")
     return StreamingResponse(
-        io.BytesIO(content),
+        io.BytesIO(json.dumps(snapshot, ensure_ascii=False, indent=2).encode("utf-8")),
         media_type="application/json",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{ascii_fallback}"; filename*=UTF-8\'\'{quoted}'
+            )
+        },
     )
 
 
@@ -302,7 +318,7 @@ async def api_import_json(request: Request):
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     try:
         body = await request.body()
@@ -357,7 +373,7 @@ async def api_import_interpretation_folder(files: list[UploadFile] = File(...)):
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     if not files:
         return JSONResponse(

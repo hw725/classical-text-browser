@@ -54,11 +54,14 @@ def require_repo_path(repo_type: str, repo_id) -> Path:
           repo_id — 문헌/해석 저장소 ID (형식 검증됨).
     출력: <서고>/<repo_type>/<repo_id> 경로 (존재 여부는 검사하지 않음 —
           존재 검사와 404 응답은 호출부의 책임이다).
-    예외: RepoPathError — 서고 미설정(500), 유형/ID 형식 위반(400).
+    예외: RepoPathError — 서고 미설정(409), 유형/ID 형식 위반(400).
+          409 인 이유: 서고가 없는 것은 처음 켠 사람의 **정상 상태**다
+          (PDF 를 떨어뜨리면 quick-start 가 자동으로 만든다). 500 으로 답하면
+          처음 화면의 콘솔이 늘 빨갛고 그 속에서 진짜 오류가 묻힌다.
           ID 검증이 경로 탈출(../)을 원천 차단한다.
     """
     if _library_path is None:
-        raise RepoPathError("서고가 설정되지 않았습니다.", 500)
+        raise RepoPathError("서고가 설정되지 않았습니다.", 409)
     if repo_type not in ("documents", "interpretations"):
         raise RepoPathError(f"알 수 없는 저장소 유형입니다: {repo_type}", 400)
     rid = str(repo_id or "")

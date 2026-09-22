@@ -512,7 +512,7 @@ async def api_get_annotations(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
@@ -547,7 +547,7 @@ async def api_annotation_summary(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
     data = load_annotations(interp_path, part_id, page_num)
@@ -568,7 +568,7 @@ async def api_add_annotation(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
 
@@ -608,7 +608,7 @@ async def api_update_annotation(
     """주석 수정."""
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
 
@@ -673,7 +673,7 @@ async def api_delete_annotation(
     """주석 삭제."""
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
 
@@ -704,7 +704,7 @@ async def api_commit_annotation(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
 
@@ -737,7 +737,7 @@ async def api_commit_all_annotations(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
 
@@ -778,7 +778,7 @@ async def api_add_annotation_type(body: CustomTypeRequest):
     """사용자 정의 주석 유형 추가."""
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     try:
         type_def = {"id": body.id, "label": body.label, "color": body.color, "icon": body.icon}
@@ -797,7 +797,7 @@ async def api_delete_annotation_type(type_id: str):
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     if type_id in PROTECTED_TYPE_IDS:
         return JSONResponse(
@@ -820,7 +820,7 @@ async def api_restore_annotation_type(type_id: str):
     """숨긴 프리셋 유형을 복원한다."""
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     restored = restore_preset_type(_library_path, type_id)
     if not restored:
@@ -855,7 +855,7 @@ async def api_dict_generate_stage1(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
@@ -919,7 +919,7 @@ async def api_dict_generate_stage2(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
@@ -984,7 +984,7 @@ async def api_dict_generate_stage3(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
@@ -1059,7 +1059,7 @@ async def api_dict_generate_batch(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
@@ -1192,7 +1192,7 @@ async def api_export_dictionary(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
@@ -1233,7 +1233,7 @@ async def api_save_export(interp_id: str):
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
@@ -1268,7 +1268,7 @@ async def api_import_dictionary(interp_id: str, body: DictImportRequest):
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
@@ -1295,7 +1295,7 @@ async def api_list_reference_dicts(interp_id: str):
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
@@ -1313,7 +1313,7 @@ async def api_register_reference_dict(interp_id: str, body: RefDictRegisterReque
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
@@ -1328,7 +1328,7 @@ async def api_remove_reference_dict(interp_id: str, filename: str):
     """참조 사전 삭제."""
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
     removed = remove_reference_dict(interp_path, filename)
@@ -1351,7 +1351,7 @@ async def api_match_reference_dicts(interp_id: str, body: RefDictMatchRequest):
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
@@ -1377,7 +1377,7 @@ async def api_check_translation_changed(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
@@ -1415,7 +1415,7 @@ async def api_get_citation_marks(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
@@ -1443,7 +1443,7 @@ async def api_add_citation_mark(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
@@ -1499,7 +1499,7 @@ async def api_update_citation_mark(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
@@ -1559,7 +1559,7 @@ async def api_delete_citation_mark(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
@@ -1604,7 +1604,7 @@ async def api_list_all_citation_marks(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
@@ -1632,7 +1632,7 @@ async def api_resolve_citation_mark(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
@@ -1694,7 +1694,7 @@ async def api_export_citations(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():
@@ -1874,7 +1874,7 @@ async def api_batch_save_annotations(
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     interp_path = require_repo_path("interpretations", interp_id)
     if not interp_path.exists():

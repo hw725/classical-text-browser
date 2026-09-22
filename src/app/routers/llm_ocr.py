@@ -748,7 +748,7 @@ async def api_analyze_layout(
     """
     library_path = get_library_path()
     if library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     from core.layout_analyzer import analyze_page_layout
 
@@ -788,7 +788,7 @@ async def api_compare_layout(
     """여러 모델로 레이아웃 분석 비교."""
     library_path = get_library_path()
     if library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     from core.layout_analyzer import compare_layout_analysis
 
@@ -899,7 +899,7 @@ async def api_detect_layout(
     """
     library_path = get_library_path()
     if library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     # 1. 레이아웃 감지 엔진 가져오기
     _pipeline, registry = _get_ocr_pipeline()
@@ -1076,7 +1076,7 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
 
     library_path = get_library_path()
     if library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
     if not body.orientation_only and not gpu_runtime():
         # 사용자 지시(2026-09-10): CPU에서 한 시간 걸리는 일을 열어 두지 않는다 — dry_run도 막는다.
         # 방향만(orientation_only)은 투영뿐이라 CPU에서도 즉시 끝나므로 연다 — OCR 점수는 GPU에서만 잰다
@@ -1359,7 +1359,7 @@ async def api_ocr_engines():
     """
     library_path = get_library_path()
     if library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     try:
         _pipeline, registry = _get_ocr_pipeline()
@@ -1810,7 +1810,7 @@ async def api_run_ocr(
     """
     library_path = get_library_path()
     if library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = library_path / "documents" / doc_id
     if not doc_path.exists():
@@ -1875,7 +1875,7 @@ async def api_run_ocr_stream(
 
     library_path = get_library_path()
     if library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = library_path / "documents" / doc_id
     if not doc_path.exists():
@@ -1968,7 +1968,7 @@ async def api_get_ocr_result(
     """
     library_path = get_library_path()
     if library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     import json as _json
 
@@ -2007,7 +2007,7 @@ async def api_delete_ocr_result(
     """특정 페이지의 OCR 결과(L2)를 휴지통으로 이동한다."""
     library_path = get_library_path()
     if library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = library_path / "documents" / doc_id
     if not doc_path.exists():
@@ -2069,7 +2069,7 @@ async def api_delete_ocr_block_result(
     """
     library_path = get_library_path()
     if library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = library_path / "documents" / doc_id
     if not doc_path.exists():
@@ -2175,7 +2175,7 @@ async def api_rerun_ocr_block(
     """
     library_path = get_library_path()
     if library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = library_path / "documents" / doc_id
     if not doc_path.exists():
@@ -2250,7 +2250,7 @@ async def api_ocr_pending(doc_id: str, part_id: str):
     """
     library_path = get_library_path()
     if library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = library_path / "documents" / doc_id
     if not (doc_path / "manifest.json").exists():
@@ -2317,7 +2317,7 @@ async def api_restore_ocr(
     """
     library_path = get_library_path()
     if library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = library_path / "documents" / doc_id
     if not (doc_path / "manifest.json").exists():
@@ -2369,7 +2369,7 @@ async def api_fill_text_from_ocr(
     """
     library_path = get_library_path()
     if library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = library_path / "documents" / doc_id
     if not (doc_path / "manifest.json").exists():
@@ -2459,7 +2459,7 @@ async def api_ocr_overview(doc_id: str, part_id: str, preview_chars: int = 70):
     """
     library_path = get_library_path()
     if library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = library_path / "documents" / doc_id
     if not (doc_path / "manifest.json").exists():
@@ -2585,7 +2585,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
 
     library_path = get_library_path()
     if library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     doc_path = library_path / "documents" / doc_id
     if not (doc_path / "manifest.json").exists():

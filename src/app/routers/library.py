@@ -143,7 +143,7 @@ async def api_library():
     if _library_path is None:
         return JSONResponse(
             {"error": "서고가 설정되지 않았습니다."},
-            status_code=500,
+            status_code=409,
         )
     try:
         return get_library_info(_library_path)
@@ -295,7 +295,7 @@ async def api_git_health():
     if _library_path is None:
         return JSONResponse(
             {"error": "서고가 설정되지 않았습니다."},
-            status_code=500,
+            status_code=409,
         )
 
     contaminated = check_git_health(_library_path)
@@ -418,7 +418,7 @@ async def api_backup_library():
     if _library_path is None:
         return JSONResponse(
             {"error": "서고가 설정되지 않았습니다."},
-            status_code=500,
+            status_code=409,
         )
 
     bp = get_backup_path()
@@ -686,7 +686,7 @@ async def api_trash():
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
     return list_trash(_library_path)
 
 
@@ -702,7 +702,7 @@ async def api_restore_from_trash(trash_type: str, trash_name: str):
     """
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
     if trash_type not in ("documents", "interpretations"):
         return JSONResponse(
@@ -738,7 +738,7 @@ async def api_validate_repos(doc_id: str, interpretation_id: str | None = Query(
 
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
     doc_path = _resolve_repo_path("documents", doc_id)
     if doc_path is None or not doc_path.exists():
         return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
@@ -777,7 +777,7 @@ async def api_get_llm_keys():
 
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
     return read_status(_library_path)
 
 
@@ -793,7 +793,7 @@ async def api_set_llm_keys(body: LlmKeysRequest):
 
     _library_path = get_library_path()
     if _library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=500)
+        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if not updates:
         return JSONResponse({"error": "저장할 값이 없습니다."}, status_code=400)
