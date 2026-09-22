@@ -287,9 +287,9 @@ async function _loadTranslationData() {
     );
 
     transState.isDirty = false;
-    _renderSourceText();
+    _renderTransSourceText();
     _renderTransCards();
-    _renderStatusSummary();
+    _renderTransStatusSummary();
   } catch (e) {
     console.error("번역 데이터 로드 실패:", e);
   }
@@ -402,7 +402,7 @@ function _renderPunctuatedSentence(sent) {
    원문 미리보기
    ────────────────────────── */
 
-function _renderSourceText() {
+function _renderTransSourceText() {
   const el = document.getElementById("trans-source-text");
   if (!el) return;
 
@@ -547,7 +547,7 @@ function _findTranslation(sent) {
    상태 요약
    ────────────────────────── */
 
-function _renderStatusSummary() {
+function _renderTransStatusSummary() {
   const el = document.getElementById("trans-status-summary");
   if (!el) return;
 
@@ -606,7 +606,7 @@ async function _addManualTranslation(sent, translationText) {
       const result = await res.json();
       transState.translations.push(result);
       _renderTransCards();
-      _renderStatusSummary();
+      _renderTransStatusSummary();
     } else {
       const err = await res.json();
       showToast(`번역 추가 실패: ${err.error || "알 수 없는 오류"}`, 'error');
@@ -644,7 +644,7 @@ async function _acceptTranslation(trId) {
       const idx = transState.translations.findIndex((t) => t.id === trId);
       if (idx >= 0) transState.translations[idx] = result;
       _renderTransCards();
-      _renderStatusSummary();
+      _renderTransStatusSummary();
     }
   } catch (e) {
     showToast(`확정 실패: ${e.message}`, 'error');
@@ -664,7 +664,7 @@ async function _deleteTranslation(trId) {
     if (res.ok || res.status === 204) {
       transState.translations = transState.translations.filter((t) => t.id !== trId);
       _renderTransCards();
-      _renderStatusSummary();
+      _renderTransStatusSummary();
     }
   } catch (e) {
     showToast(`삭제 실패: ${e.message}`, 'error');
@@ -730,7 +730,7 @@ async function _aiTranslateSingle(sentIdx) {
     }
 
     _renderTransCards();
-    _renderStatusSummary();
+    _renderTransStatusSummary();
   } catch (e) {
     showToast(`AI 번역 실패: ${e.message}`, 'error');
   } finally {
@@ -902,7 +902,7 @@ async function _resetAllTranslations() {
   transState.translations = [];
   transState.isDirty = false;
   _renderTransCards();
-  _renderStatusSummary();
+  _renderTransStatusSummary();
 
   if (fail > 0) {
     showToast(`번역 리셋 완료: 성공 ${success}건, 실패 ${fail}건`, 'error');

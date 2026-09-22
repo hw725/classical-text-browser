@@ -323,7 +323,7 @@ async function _loadHyeontoData() {
 
     hyeontoState.isDirty = false;
     _renderHyeontoCharArea();
-    _renderAnnList();
+    _renderHyeontoAnnList();
     _renderHyeontoPreview();
   } catch (e) {
     console.error("현토 데이터 로드 실패:", e);
@@ -510,7 +510,7 @@ function _insertAnnotation() {
   hyeontoState.selectionRange = null;
 
   _renderHyeontoCharArea();
-  _renderAnnList();
+  _renderHyeontoAnnList();
   _renderHyeontoPreview();
 }
 
@@ -523,7 +523,7 @@ function _removeAnnotation(annId) {
   hyeontoState.annotations = hyeontoState.annotations.filter((a) => a.id !== annId);
   hyeontoState.isDirty = true;
   _renderHyeontoCharArea();
-  _renderAnnList();
+  _renderHyeontoAnnList();
   _renderHyeontoPreview();
 }
 
@@ -532,7 +532,7 @@ function _clearHyeonto() {
   hyeontoState.annotations = [];
   hyeontoState.isDirty = true;
   _renderHyeontoCharArea();
-  _renderAnnList();
+  _renderHyeontoAnnList();
   _renderHyeontoPreview();
 }
 
@@ -541,7 +541,7 @@ function _clearHyeonto() {
    현토 목록 렌더링
    ────────────────────────── */
 
-function _renderAnnList() {
+function _renderHyeontoAnnList() {
   const list = document.getElementById("hyeonto-ann-list");
   const count = document.getElementById("hyeonto-ann-count");
   if (!list) return;

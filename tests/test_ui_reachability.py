@@ -295,13 +295,15 @@ class TestGlobalNamesDoNotShadow:
     """
 
     #: 2026-09-22 실측. 고칠 때는 이 목록에서 지운다(B-009).
+    #: `_render*` 셋은 같은 날 풀었다 — 현토·번역 탭이 자기 화면이 아니라 주석 탭 요소를
+    #: 그리고 있었고(실측: `#trans-source-text` 0자 / 숨은 `#ann-source-text` 1,656자,
+    #: `#hyeonto-ann-list` 0자인데 `hyeontoState.annotations` 는 3건), 지는 쪽 이름을
+    #: `_renderHyeontoAnnList`·`_renderTransSourceText`·`_renderTransStatusSummary` 로 바꿨다.
+    #: 남은 이스케이프 셋은 **아직 무엇이 어긋나는지 재지 않았다** — 재기 전에는 고치지 않는다.
     KNOWN = {
         "_escAttr",
         "_escHtml",
         "_escapeHtml",
-        "_renderAnnList",
-        "_renderSourceText",
-        "_renderStatusSummary",
     }
 
     def test_no_new_shadowing(self):
