@@ -17,7 +17,62 @@
 - 관련 우려(같은 대화에서): 속음청사급(18권 3,018쪽) 대규모 문헌을 ctb가 감당하는지
   1권 파일럿 실측 필요 — 적재·편집·git 커밋 응답속도
 
-## B-008 해석 패널이 어느 모드에서도 열리지 않는다 (2026-09-22 실측)
+## B-009 화면 JS 의 전역 함수 이름이 여섯 겹친다 (2026-09-22 실측)
+
+화면 JS 는 classic script 라 최상위 `function` 이 전부 전역이다. 두 파일이 같은 이름을
+선언하면 **뒤에 적재된 쪽이 이기고**, 앞쪽 파일의 호출까지 남의 구현으로 돈다.
+예외도 경고도 나지 않는다. 지금 여섯이 겹쳐 있고 **여섯 다 구현이 다르다.**
+
+| 이름 | 선언한 파일(적재 순) | 이기는 쪽 |
+|---|---|---|
+| `_escapeHtml` | correction-editor · bibliography · hwp-import · alignment-view · git-graph | git-graph |
+| `_escHtml` | entity-manager · variant-manager · batch-correction · annotation-editor | annotation-editor |
+| `_escAttr` | variant-manager · annotation-editor | annotation-editor |
+| `_renderAnnList` | hyeonto-editor · annotation-editor | annotation-editor |
+| `_renderSourceText` | translation-editor · annotation-editor | annotation-editor |
+| `_renderStatusSummary` | translation-editor · annotation-editor | annotation-editor |
+
+**어떻게 드러났나:** `_updateSaveStatus` 가 `text-editor.js`(교정 탭)와
+`interpretation.js`(죽은 해석 패널) 둘에 있었고 뒤인 interpretation 이 이겨,
+**교정 탭에서 저장해도 상태 표시가 안 바뀌고 있었다.** B-008 철거로 그 정의가
+사라져 함께 고쳐졌고, 그 자리를 세다가 나머지 여섯을 찾았다.
+
+**이미 고친 것 하나 — 이스케이프.** 이기던 `annotation-editor.js::_escHtml` 이
+**큰따옴표를 막지 않았다.** `entity-manager.js` 가 Concept 라벨을 `title="…"` 속성에
+넣는 자리(entity-manager.js:215)가 따옴표로 속성을 벗어날 수 있었다 — D-069 가
+경고한 「화면에 넣는 것은 이스케이프」의 바로 그 자리다. 이기는 판을 엄격하게
+만들어 모든 호출부가 함께 안전해지게 했다(적재 순서를 node 로 재현해 확인:
+`x" onmouseover="bad()` → `x&quot; onmouseover=&quot;bad()`).
+
+**남은 것은 `_render*` 셋이고, 「흉한 것」이 아니다.** 건드리는 요소가 서로 완전히
+다르다 — 적재 순서는 hyeonto(5118) → translation(5119) → **annotation(5120)** 이라
+주석 편집기 판이 이긴다.
+
+| 함수 | 이기는 annotation 판이 건드리는 것 | 지던 판이 건드리던 것 |
+|---|---|---|
+| `_renderAnnList` | `ann-list` · `ann-type-filter` | **`hyeonto-ann-list` · `hyeonto-ann-count`** |
+| `_renderSourceText` | `ann-source-text` | **`trans-source-text`** |
+| `_renderStatusSummary` | `ann-status-summary` | **`trans-status-summary`** |
+
+**id 가 하나도 겹치지 않는다.** 그러니 현토 탭이 `_renderAnnList()` 를 부르면
+주석 탭의 목록을 그리고 `#hyeonto-ann-list` 는 영영 갱신되지 않는다. 번역 탭도
+같아서 **원문 칸(`#trans-source-text`)과 상태 요약이 죽어 있다.**
+
+- 아직 **읽어서 낸 판정이다.** 요소가 disjoint 라 안 어긋날 방법이 없어 보이지만,
+  오늘 이 저장소에서 「읽어서 살아 있다고 판정한 길」이 실제로는 500 이었던 일이
+  있었다(B-008 의 「＋ 경계 넣기」). 누를 자리는 정해졌다 — **번역 탭의 원문 칸과
+  상태 요약, 현토 탭의 주석 목록·개수.**
+- 고치는 방향은 `_escHtml` 과 다르다. 이스케이프는 「이기는 판을 가장 엄격하게」로
+  한 줄이면 됐지만, 여기는 **구현이 서로 다른 화면을 그리므로 합칠 수 없다.**
+  지는 쪽 셋의 이름을 바꾼다(`_renderHyeontoAnnList`·`_renderTransSourceText`·
+  `_renderTransStatusSummary`). 부르는 자리까지 열댓 줄이다.
+- `_escapeHtml` 다섯은 세 구현이고 전부 텍스트 자리로 보이지만, 그것도 재 보지 않았다.
+- 기계가 지키는 것: `tests/test_ui_reachability.py::TestGlobalNamesDoNotShadow` 가
+  **늘지 않는 것**을 지키고(`KNOWN` 목록), 고치면 `test_known_list_is_not_stale` 가
+  「목록에서 지워라」고 알려 준다. `TestEscapeHelpersAreStrict` 는 이스케이프 헬퍼가
+  느슨해지는 것을 막는다.
+
+## B-008 해석 패널이 어느 모드에서도 열리지 않는다 (2026-09-22 실측 → **같은 날 철거로 닫음**)
 
 `#interp-panel`은 `_switchMode("interpretation")`만 여는데 `data-mode="interpretation"`
 탭이 `index.html`에 없다. 그래서 그 안의 도구 바 단추 둘(「단위 만들기」·「LLM에게 요청」)과
@@ -67,44 +122,69 @@
   단추가 실재하는지 본다. id 를 세는 검사로는 이 버그가 안 잡힌다(단추도 배선도
   멀쩡했다 — 죽은 것은 조상이다).
 
-**남은 것은 철거다.** `#interp-panel` 과 그 안의 D-096 이전 통합 편집기(「해석 (L5~L7)」
-+ 층별 서브탭), 그리고 `activateInterpretationMode`·`deactivateInterpretationMode`·
-`interpState.active`·`_updateToolbarButtons` 의 죽은 조건과 「단위 만들기」·
-「LLM에게 요청」·공용 「저장」.
+**철거했다 (2026-09-22, 사용자 지시).** 「손으로 경계 만드는 길이 필요함. 옛 통합
+편집기와 죽은 조건 걷어내.」
 
-- 옛 통합 편집기와 죽은 조건은 **지금 걷어내도 된다.** 「LLM에게 요청」은 그 편집기에
-  딸린 것이고, 공용 「저장」도 그 패널의 것이다.
-- **「단위 만들기」만 따로 판단한다.** 이것은 죽은 v1.2 잔재가 **아니다** — 누르면
-  `entities/unit/from-source` → `create_entity("unit")` → `entity.py:607` 이
-  `_create_boundary_from_unit` 으로 보내 원본 저장소의 `boundaries/{part}.json` 에
-  **경계를 쓴다**(D-092·D-097). 하는 일은 지금 규약대로다.
+**이것은 `e84d800` 이 시작한 일을 끝낸 것이다** — 앞의 「사고 삭제」 판정을 고친다.
+그 커밋은 탭을 지우면서 `_switchMode` 머리에 `// Interpretation mode tab is removed
+from UI. Fallback to view if called externally.` 를 **함께** 넣었다. 의도된 제거였고
+코드에 스스로 적어 두었다. 커밋 메시지와 DECISIONS 에만 안 적혔을 뿐이다. 실패한
+것은 «지웠다»가 아니라 «절반만 지웠다»였다 — 패널과 그 안의 것들을 남겨 두어
+의존 추적의 쓰는 쪽과 스냅샷 내보내기가 일곱 달 닿을 수 없었다.
 
-  **그런데 폼이 v1.2 모양이다**(`entity-manager.js::_openUnitCreator`). 묻는 것이
-  원본 문헌(읽기 전용)·**쪽**·LayoutBlock ID·원문 텍스트·`sequence_index` 인데,
-  경계는 (쪽, **행**)·깊이·제목·앵커 글자다 — **행을 묻지 않는다.** 그리고 사람에게
-  「L4 텍스트에서 블록에 해당하는 부분을 붙여넣으세요」라고 한다.
+걷어낸 것:
 
-  편성에는 같은 일을 더 잘하는 길이 이미 둘 있다 — 「여기서 시작」(D-122 덧붙임,
-  행 단위이고 붙여넣기가 없다)과 `position_at_point`(D-094, 이미지에서 찍은 점을
-  (행·글자)로). 폼을 그대로 옮기면 **경계를 만드는 길이 둘이 되는데 그중 하나는
-  행을 못 고르고**, 「저장 자리는 «적용» 하나」라는 D-122 와도 어긋난다(이 단추는
-  누르는 즉시 쓴다).
+| 어디 | 무엇 |
+|---|---|
+| `index.html` | `#interp-panel` 106줄 · `#llm-dialog-overlay` 66줄 |
+| `interpretation.js` | `_loadLayerContent`·`_saveLayerContent`·`_updateSaveStatus`·`_updateFileInfo` 108줄 · `activate/deactivateInterpretationMode` · `interpState` 의 `active`·`currentLayer`·`currentSubType`·`isDirty` |
+| `workspace.js` | `_switchMode` 의 해석 가지 둘 · 머리의 폴백 · `interpState.active` 블록 · `interpPanel` 변수 |
+| `entity-manager.js` | 「단위 만들기」 118줄(`_openUnitCreator`·`_saveUnitFromSource`) · LLM 스텁 · `_updateToolbarButtons` |
+| `workspace.css` | `.interp-subtab*`·`.interp-subtype-bar`·`.interp-panel`·`.interp-content` 100줄 |
 
-  그래서 **진짜 물음은 「어디에 둘까」가 아니라 「편성 밖에서 손으로 경계를 만드는
-  길이 따로 필요한가」**다.
-    - 필요 없다 → 폼과 단추를 걷고 `from-source` 라우트는 남긴다(API 로는 쓸 데가 있다).
-    - 필요하다 → 폼을 **경계 모양**으로 새로 짠다(쪽·**행**을 고르고 텍스트는 코드가
-      L4 에서 가져온다). 자리는 편성 탭 ③ 옆 — 내용 트리는 **읽는 곳**이지 만드는
-      곳이 아니다(D-096 에서 트리가 받은 역할은 «지금 단위»를 정하는 것뿐이다).
-- 철거하면 `test_ui_reachability.py::test_the_dead_panel_is_still_dead` 가 빨간불이
-  난다. **그것이 신호다** — 그때 이 항목을 다시 읽고 닫는다.
-- 함께 볼 것: `activateInterpretationMode`·`deactivateInterpretationMode`·`_acknowledgeChanges`·
-  `_updateBase`(interpretation.js), `_updateToolbarButtons`(entity-manager.js),
-  `workspace.js:1842`(스냅샷 export 배선), contents-tree.js 38행의 「네 자리」 주석.
-- 같이 나온 것(같은 실측): `entity.py:153 _get_source_head_commit`이 `interpretation.py:232`와
-  **본문이 같은 중복 정의**이고 시험에서 안 돈다(Phase 8부터) · `entity.auto_create_units_from_text`는
-  부르는 곳이 없다 · `entity.create_unit_from_source`는 라우트(`interpretations.py:676`)가
-  부르는데 시험이 한 번도 안 들어간다. 셋 다 D-128과 무관하다.
+**LLM 스텁 창도 함께 걷었다.** `#llm-dialog-overlay` 는 입력 넷과 「요청」 단추에
+**배선이 하나도 없어 닫기만 되는 창**이었고(2026-09-22 확인), 그것을 여는 단추가
+죽은 패널 안이었다. 해석 저장소에서 LLM 을 부르는 길은 각 편집기의 「AI 보조」다.
+
+**라우트 `entities/unit/from-source` 는 남겼다** — `create_entity("unit")` 이
+`_create_boundary_from_unit` 으로 보내 지금 규약대로 경계를 쓴다(entity.py:607).
+
+### 손으로 경계 만드는 길 — 남겼고, 그 전에 **고쳐야 했다**
+
+사용자가 필요하다고 한 능력은 사이드바 「내용」의 **「＋ 경계 넣기」**가 맡는다.
+찍어서 (행·글자)를 얻고(D-094), 안 되면 「숫자로 적기」로 쪽·행·자를 주며, 제목과
+본문은 코드가 확정본에서 가져온다. 저장은 `POST /api/documents/{doc}/boundaries`(D-097).
+
+**그런데 눌러 보니 500 이었다.** 세션 둘이 각각 코드를 읽고 「살아 있음」으로 판정한
+길이다 — `data-panel="explorer"` 도 `panelSections` 도 조건 없는 렌더도 다 맞았는데,
+**닿는 것과 도는 것이 또 달랐다.** `anchor_bbox` 의 `list(idx["boxes"][k])` 에서
+`TypeError: 'NoneType' object is not iterable`. 그 문헌은 행 상자가 전부 None 이었다
+(1쪽 27/27 · 2쪽 34/34 · 3쪽 35/35) — LLM 비전 판독은 글자만 주고 좌표를 주지 않는다.
+즉 **좌표 없는 문헌에서는 손으로 경계를 넣는 길이 통째로 막혀 있었다.** 여러 쪽
+CPU 환경에 LLM 비전을 권하고 있으니(B-005) 드문 자료가 아니다.
+
+고쳤다 — 좌표가 없으면 `None` 을 돌려준다. 그 함수 독스트링의 「틀린 좌표보다 안
+보여 주는 게 낫다」와 같은 자리이고, `boundary_bbox` 가 이미 None 을 받아 처리하며
+스키마도 bbox 없이 저장한다. **경계는 (쪽, 행)이고 좌표는 점선을 그리기 위한
+캐시일 뿐이다.** 시험 4건(`TestAnchorWithoutCoordinates`)을 붙였고, 고침을 되돌리면
+정확히 그 TypeError 로 셋이 빨강이 된다.
+
+**만약 이것을 안 고친 채 철거했다면**, 사용자가 「필요하다」고 한 능력이 화면에는
+있는데 누르면 500 이 나는 상태가 됐을 것이다. B-008 에 적어 둔 순서(«자리를 정한
+뒤에 걷어낸다»)가 지킨 것은 «옮기기»뿐이 아니었다 — **대신할 길이 실제로 도는지
+재는 것**까지였다.
+
+### 확인한 방법
+
+모드 탭 10 개와 액티비티 패널 8 개를 headless Chrome 으로 차례로 눌러 **콘솔 오류
+0**, 지운 id 여섯이 DOM 에 없음, 「＋ 경계 넣기」로 경계가 실제로 늘어남(1 → 2).
+시험은 `test_ui_reachability.py` 의 `test_the_dead_panel_is_gone`(되살아나면 빨강)과
+`test_the_hand_made_boundary_path_still_exists`(행 칸·라우트가 사라지면 빨강)가 지킨다.
+
+**함께 나온 것(같은 실측, D-128 과 무관):** `entity.py:153 _get_source_head_commit`
+이 `interpretation.py:232` 와 본문이 같은 중복 정의이고 시험에서 안 돈다 ·
+`entity.auto_create_units_from_text` 는 부르는 곳이 없다 ·
+`entity.create_unit_from_source` 는 라우트가 부르는데 시험이 한 번도 안 들어간다.
 
 ## B-003 저장 파일의 `block_id` → `unit_id` (2026-09-03, D-093에서 남김)
 

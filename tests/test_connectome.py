@@ -210,11 +210,25 @@ class TestReachableFromTheScreen:
         assert "entity-connectome-btn" in self._js()
 
     def _render_body(self) -> str:
-        """`_renderConnectome` 의 본문만 잘라 온다."""
+        """`_renderConnectome` 의 본문만 잘라 온다.
+
+        끝을 «다음 함수 이름»으로 잡지 않는다. 한때 `_openLlmRequestDialog` 를
+        표지로 썼는데 2026-09-22에 그 함수를 걷어내면서(B-008) 이 시험이
+        `ValueError: substring not found` 로 깨졌다 — **시험이 남의 수명에 매달려
+        있었다.** 이제 중괄호를 세어 함수가 끝나는 자리를 스스로 찾는다.
+        """
         js = self._js()
         start = js.index("function _renderConnectome")
-        end = js.index("function _openLlmRequestDialog", start)
-        return js[start:end]
+        i = js.index("{", start)
+        depth = 0
+        for j in range(i, len(js)):
+            if js[j] == "{":
+                depth += 1
+            elif js[j] == "}":
+                depth -= 1
+                if depth == 0:
+                    return js[start : j + 1]
+        raise AssertionError("_renderConnectome 의 닫는 중괄호를 찾지 못했다")
 
     def test_the_screen_shows_the_server_table_it_does_not_build_one(self):
         """표의 항목 이름과 값은 **서버가 준 것**을 쓴다.

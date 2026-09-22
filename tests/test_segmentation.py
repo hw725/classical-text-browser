@@ -1132,6 +1132,109 @@ def test_boundary_bbox_from_l2_when_line_counts_match(tmp_path):
     assert anchor_bbox(doc, "v1", 1, 1) is None  # 빈 행에는 앵커가 없다
 
 
+class TestAnchorWithoutCoordinates:
+    """좌표가 없는 문헌에서도 «경계를 손으로 넣는 길»이 막히지 않아야 한다.
+
+    2026-09-22 실측: 내용 트리의 「경계 넣기」로 넣으면 `POST /boundaries` 가 500 이었다.
+    `anchor_bbox` 의 `list(idx["boxes"][k])` 에서 `TypeError: 'NoneType' object is not
+    iterable`. 그 문헌(논문 스캔, LLM 비전 판독)은 **행 상자가 전부 None** 이었다 —
+    1쪽 27/27 · 2쪽 34/34 · 3쪽 35/35.
+
+    왜 이것이 흔한 경우인가: LLM 비전은 글자만 돌려주고 좌표를 주지 않는다. 여러 쪽을
+    읽는 CPU 환경에는 그쪽을 권하고 있다(백로그 B-005). 즉 «드문 자료»가 아니다.
+
+    무엇을 고정하는가: 좌표가 없으면 `anchor_bbox` 는 **None 을 돌려주고 터지지 않는다.**
+    경계는 (쪽, 행)이고 좌표는 점선을 그리기 위한 캐시일 뿐이므로, 좌표가 없다고 경계를
+    만들지 못할 이유가 없다.
+    """
+
+    def _doc(self, tmp_path, *, with_boxes: bool):
+        import json
+
+        doc = tmp_path / "documents" / "d"
+        (doc / "L4_text" / "pages").mkdir(parents=True)
+        (doc / "L2_ocr").mkdir()
+        (doc / "manifest.json").write_text(
+            json.dumps({"document_id": "d", "parts": [{"part_id": "v1"}]}), encoding="utf-8"
+        )
+        (doc / "L4_text" / "pages" / "v1_page_001.txt").write_text(
+            "머리글\n\n첫째 줄\n둘째 줄", encoding="utf-8"
+        )
+        # LLM 비전 판독은 글자만 준다 — bbox 키가 아예 없다.
+        lines = [{"text": "머리글"}, {"text": "첫째 줄"}, {"text": "둘째 줄"}]
+        if with_boxes:
+            for i, ln in enumerate(lines):
+                ln["bbox"] = [900 - i * 100, 100, 940 - i * 100, 500]
+        l2 = {
+            "part_id": "v1",
+            "page_number": 1,
+            "image_width": 1000,
+            "image_height": 1500,
+            "ocr_results": [{"layout_block_id": "b", "lines": lines}],
+        }
+        (doc / "L2_ocr" / "v1_page_001.json").write_text(json.dumps(l2), encoding="utf-8")
+        return doc
+
+    def test_missing_boxes_give_none_not_a_crash(self, tmp_path):
+        """좌표 없는 행에 앵커를 물으면 None — TypeError 가 아니다."""
+        from src.core.segmentation import anchor_bbox
+
+        doc = self._doc(tmp_path, with_boxes=False)
+        assert anchor_bbox(doc, "v1", 1, 2) is None
+
+    def test_boundary_bbox_also_gives_none(self, tmp_path):
+        """`boundary_bbox` 도 None 을 돌려준다 — 라우트가 이것을 그대로 저장한다."""
+        from src.core.segmentation import boundary_bbox
+
+        doc = self._doc(tmp_path, with_boxes=False)
+        got = boundary_bbox(
+            doc, "v1", {"page": 1, "line": 2, "offset": 0}, {"page": 1, "line": 2}
+        )
+        assert got is None
+
+    def test_a_boundary_can_still_be_made_without_coordinates(self, tmp_path):
+        """좌표가 없어도 경계는 만들어진다 — 제목은 코드가 L4 행에서 가져온다.
+
+        이것이 이 시험 묶음의 핵심이다. 앵커가 None 인 것 자체는 «그림을 못 그린다»일
+        뿐이고, 사람이 손으로 정한 (쪽, 행)은 그대로 남아야 한다.
+        """
+        from src.core.boundaries import new_boundary
+        from src.core.segmentation import boundary_bbox, collect_document_lines
+
+        doc = self._doc(tmp_path, with_boxes=False)
+        lines, page_texts = collect_document_lines(doc, "v1", None)
+        keys = [(ln.page, ln.line_index) for ln in lines]
+        assert (1, 2) in keys, "확정본에 그 행이 있어야 한다"
+
+        start = {"page": 1, "line": 2, "offset": 0}
+        item = new_boundary(
+            start=start,
+            level=2,
+            role=None,
+            title=None,
+            kind="manual",
+            status="draft",
+            page_texts=page_texts,
+            l4_commit="x" * 7,
+        )
+        item["bbox"] = boundary_bbox(doc, "v1", start, start)
+        assert item["bbox"] is None
+        assert item["start"] == start
+        # 제목을 안 줬으면 라우트가 L4 행에서 채운다 — 같은 규칙을 여기서도 확인한다.
+        text_at = lines[keys.index((1, 2))].text
+        assert text_at.strip() == "첫째 줄"
+
+    def test_coordinates_still_work_when_present(self, tmp_path):
+        """고친 것이 «있는 좌표»를 잃게 하지 않았는지 — 반대쪽도 함께 잰다."""
+        from src.core.segmentation import anchor_bbox
+
+        doc = self._doc(tmp_path, with_boxes=True)
+        got = anchor_bbox(doc, "v1", 1, 2)
+        assert got is not None
+        assert got["bbox"] == [800, 100, 840, 500]
+        assert got["image_width"] == 1000
+
+
 class TestCheonjinFalsePositives:
     """천진담초 208쪽 실측(2026-09-03)에서 나온 오탐 유형을 고정한다 — D-088 «남은 것»."""
 
