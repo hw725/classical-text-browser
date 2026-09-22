@@ -341,3 +341,62 @@ v6 계열은 축소 크기(64~1280)·후처리를 바꿔도 97줄 그대로였�
 
 - 전제: 되돌릴 수 없는 판(서고 형식 변경)은 자동으로 받지 않는다 — 동의를 받는다.
 - 함께 볼 것: B-004(exe)·Git 없는 업데이트 경로. 자동 적용은 그 경로가 있어야 zip 사용자도 받는다.
+
+## B-010 D-128 8항 — 승격 무게에 남은 구멍 셋 (2026-09-22, Codex 교차검증)
+
+이 저장소 **최초로 끝까지 돌아간 Codex 리뷰**의 결과다(59,672 토큰 · 3분 15초 · 소진 없음).
+앞선 다섯 번은 전부 예산 소진으로 보고서 없이 죽었다(76,075 · 115,431 · 140,812 · 74,059 ·
+73,507). 완주한 조건은 **범위를 좁힌 것**이다 — 질문 하나, 읽을 파일 못박기,
+`docs/DECISIONS.md`(500KB) 열기 금지 명시, 그리고 **「결함마다 실패하는 시험을 먼저 쓰라」**를
+프롬프트 맨 앞에 둔 것. 마지막 항목이 핵심이다: 보고서는 죽을 때 같이 죽지만 디스크의 시험은
+남는다.
+
+Codex 는 confirmed 7건을 냈고, **재판정에서 셋만 실재·도달 가능으로 남았다.**
+실패하는 시험은 `tests/test_codex_review.py` 에 8건 있다(전부 빨강 확인).
+
+### 고쳐야 할 것 셋
+
+1. **`label` 로 남의 표면형 무게를 빌린다 — 가장 심각.**
+   `entity.py::promote_tag_to_concept` 이 `effective_label = label or tag["surface"]` 로 정하고
+   `gather_sources(effective_label)` 를 부른다. **승격 대상은 `y` 인데 무게는 `x` 에서 잰다.**
+   `require_weight=True` 를 걸어도 우회된다. 라우터가 `label=body.label` 을 그대로 넘기므로
+   화면에서 닿는다(`routers/interpretations.py:815`).
+   시험: `test_renamed_concept_borrows_other_surface_weight`
+
+2. **`metadata.weight` 의 무한대.** `float("inf")` 도 `"1e309"` 도 통과해 무게가 inf 가 되고
+   임계를 무조건 넘는다. `metadata` 는 `additionalProperties: true` 라 제한이 없고,
+   `json.loads` 는 `Infinity` 를 그대로 싣는다. 저장된 데이터에서 도달 가능하다.
+   시험: `test_nonfinite_metadata_weight_promotes_without_confirmed_text`
+
+3. **판정 전 반올림(Minor).** `effective_weight` 를 `round(..., 4)` 한 뒤 임계와 비교하므로
+   `2.99996` 이 `3.0` 으로 올라 통과한다. 크기는 4e-5.
+   시험: `test_rounding_promotes_weight_below_threshold`
+
+### 실재하나 지금은 도달 불가 — 시험을 남길지 판단 필요
+
+- `measured=False` 인 출처가 무게를 기여한다: `promotion_metrics` 가 미측정을 **세기만 하고**
+  합산에서 빼지 않는다. 다만 `gather_sources` 가 `measured = bool(text) or weight is not None`
+  이라 미측정이면 무게가 항상 0 이다. 손으로 만든 dict 를 직접 넘길 때만 난다 — API 계약 문제.
+- 같은 단위 중복 합산: `gather_sources` 가 `block_id` 로 묶으므로 수집 경로에서는 안 난다.
+- `confidence=inf`: tag 스키마에 `maximum: 1.0` 이 있고 `create_entity` 가 검증한다.
+
+### 결함이 아닌 것
+
+- **부적격인데 Concept 이 생성된다** — 문서화된 설계다(「저울이지 잠금장치가 아니다」).
+  `require_weight=True` 로 막는다. 표에 「구현」으로만 적으면 잠긴 줄 오해하므로 D-128
+  구현 기록에 그 한 줄이 이미 들어가 있다.
+
+### Codex 가 기각한 가설 하나 — 기록해 둘 값이 있다
+
+가장 의심했던 **이체자·정규화 불일치**(`國/国`, NFC/NFD, 공백, 전각/반각)를 각각 실행해 보고
+**rejected** 했다. 전부 출현 0 · `measured=True` · 부적격이다. 다만 짚어 둔 것이 있다 —
+**「실제 부재로 인한 0」과 구별되지 않는다.** 결함은 아니지만 연구자가 「왜 안 올라가나」를
+되짚을 단서가 없다.
+
+### 남은 정리
+
+- `tests/test_codex_review.py` 8건은 지금 전부 빨강이다. 고치기 전에 **그 종류를 전수로**
+  세는 편이 낫다 — 하나 고치고 또 하나 나오는 것을 오늘 이미 겪었다.
+- 시험 파일이 늘었으므로 `AGENTS.md` 의 테스트 파일 수를 함께 고쳐야 D-079 드리프트 검사를
+  통과한다.
+- 8항 코드의 작성자는 D-128 스키마 세션이다.
