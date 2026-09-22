@@ -2964,105 +2964,13 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
   margin-left: auto;
 }
 
-/* --- 층별 서브탭 --- */
-
-.interp-subtab-bar {
-  height: 28px;
-  display: flex;
-  align-items: stretch;
-  background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-  padding: 0 8px;
-  gap: 2px;
-}
-
-.interp-subtab {
-  padding: 0 12px;
-  display: flex;
-  align-items: center;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  white-space: nowrap;
-  transition:
-    color 0.15s,
-    border-color 0.15s;
-  user-select: none;
-}
-
-.interp-subtab:hover {
-  color: var(--text-primary);
-}
-
-.interp-subtab.active {
-  color: #22c55e;
-  border-bottom-color: #22c55e;
-}
-
-/* --- main_text / annotation 토글 --- */
-
-.interp-subtype-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 4px 12px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.interp-radio-label {
-  font-size: 11px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.interp-radio-label input[type="radio"] {
-  accent-color: #22c55e;
-}
-
-/* L5 종류(표점/현토) 선택 바 */
-/* --- 해석 도구 바 --- */
-
-.interp-toolbar {
-  height: 32px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 8px;
-  background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-/* --- 해석 패널 레이아웃 --- */
-
-.interp-panel {
-  overflow-y: auto;
-}
-
-.interp-content {
-  flex: 1;
-  padding: 12px;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  border: none;
-  resize: none;
-  font-family: var(--font-mono);
-  font-size: 14px;
-  line-height: 1.6;
-  outline: none;
-}
-
-.interp-content:focus {
-  box-shadow: inset 0 0 0 1px #22c55e;
-}
+/* === 옛 해석(L5~L7) 통합 편집기 — 걷어냈다 (2026-09-22, B-008) ===
+   층별 서브탭(.interp-subtab*) · main_text/annotation 토글(.interp-subtype-bar) ·
+   패널 레이아웃(.interp-panel) · 편집 영역(.interp-content) 스타일이 여기 있었다.
+   그 마크업과 JS 를 함께 걷었으므로 걸리는 요소가 하나도 없다.
+   아래 「비교 모드 — 제거됨」과 같은 성질의 자리다. L5~L7 은 다섯 편집기가
+   각자 스타일을 갖는다(.punct-* · .hyeonto-* · .trans-* · .ann-* · .cite-*).
+   === */
 
 /* === 비교 모드 — 제거됨 ===
    해석 저장소/커밋을 좌우로 놓고 비교하던 화면의 스타일이 여기 있었다.
@@ -7083,7 +6991,6 @@ details[open] > .punct-section-summary::before {
 .props-select:focus-visible,
 .bib-input:focus-visible,
 .bib-textarea:focus-visible,
-.interp-content:focus-visible,
 .settings-remote-input:focus-visible,
 .trans-card-textarea:focus-visible,
 .notes-textarea:focus-visible,

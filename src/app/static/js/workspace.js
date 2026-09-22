@@ -1604,16 +1604,14 @@ async function _discardEmptyInterpretations(docId) {
  *   우측 패널과 오버레이만 교체한다.
  */
 function _switchMode(mode) {
-  // Interpretation mode tab is removed from UI. Fallback to view if called externally.
-  if (mode === "interpretation") {
-    mode = "view";
-  }
+  // 「해석(비교)」 모드는 2026-02-24 `e84d800` 이 탭을 지우며 사라졌고, 그때 남긴
+  // 폴백을 2026-09-22 에 패널·함수와 함께 걷어냈다(B-008). 밖에서 이 이름으로
+  // 불릴 일이 없다 — 부르던 곳이 그 탭뿐이었다. L5~L7 은 다섯 모드가 나눠 맡는다.
 
   const editorRight = document.getElementById("editor-right");
   const layoutPanel = document.getElementById("layout-props-panel");
   const correctionPanel = document.getElementById("correction-panel");
   const compositionPanel = document.getElementById("composition-panel");
-  const interpPanel = document.getElementById("interp-panel");
   const punctPanel = document.getElementById("punct-panel");
   const hyeontoPanel = document.getElementById("hyeonto-panel");
   const transPanel = document.getElementById("trans-panel");
@@ -1635,11 +1633,6 @@ function _switchMode(mode) {
     if (typeof deactivateCompositionMode === "function")
       deactivateCompositionMode();
     if (compositionPanel) compositionPanel.style.display = "none";
-  }
-  if (currentMode === "interpretation") {
-    if (typeof deactivateInterpretationMode === "function")
-      deactivateInterpretationMode();
-    if (interpPanel) interpPanel.style.display = "none";
   }
   if (currentMode === "punctuation") {
     if (typeof deactivatePunctuationMode === "function")
@@ -1674,7 +1667,6 @@ function _switchMode(mode) {
   if (layoutPanel) layoutPanel.style.display = "none";
   if (correctionPanel) correctionPanel.style.display = "none";
   if (compositionPanel) compositionPanel.style.display = "none";
-  if (interpPanel) interpPanel.style.display = "none";
   if (punctPanel) punctPanel.style.display = "none";
   if (hyeontoPanel) hyeontoPanel.style.display = "none";
   if (transPanel) transPanel.style.display = "none";
@@ -1698,11 +1690,6 @@ function _switchMode(mode) {
     if (compositionPanel) compositionPanel.style.display = "";
     if (typeof activateCompositionMode === "function")
       activateCompositionMode();
-  } else if (mode === "interpretation") {
-    // 우측: 해석 뷰어 패널 표시
-    if (interpPanel) interpPanel.style.display = "";
-    if (typeof activateInterpretationMode === "function")
-      activateInterpretationMode();
   } else if (mode === "punctuation") {
     // 우측: 표점 편집기 패널 표시
     if (punctPanel) punctPanel.style.display = "";
@@ -2037,16 +2024,9 @@ function onPageChanged(opts) {
     _loadInterpretationList();
   }
 
-  // 7. 해석 층 내용 (활성 시)
-  if (
-    typeof interpState !== "undefined" &&
-    interpState.active &&
-    interpState.interpId
-  ) {
-    if (typeof _loadLayerContent === "function") {
-      _loadLayerContent();
-    }
-  }
+  // 7. 옛 «해석 층 내용» 채우기를 걷어냈다(2026-09-22, B-008) — 조건이
+  //    `interpState.active` 였고 그것은 참이 되는 길이 없었다. L5~L7 은 다섯
+  //    편집기가 각자 자기 모드에서 읽는다(D-096).
 
   // 8. OCR 결과 (레이아웃 모드 활성 시)
   if (

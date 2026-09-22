@@ -1695,7 +1695,18 @@ function _escAttr(s) {
 
 /** HTML 이스케이프 (텍스트 콘텐츠용) */
 function _escHtml(s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  // 큰따옴표까지 막는다. 이 이름은 네 파일이 각각 선언하는데(entity-manager ·
+  // variant-manager · batch-correction · 이 파일) **적재 순서상 이 판이 전역에서
+  // 이긴다** — 그래서 이 판이 느슨하면 남의 호출까지 느슨해진다. 실제로 여기에
+  // `"` 처리가 없어서, `entity-manager.js` 가 Concept 라벨을 `title="…"` 속성에
+  // 넣는 자리가 따옴표로 속성을 벗어날 수 있었다(2026-09-22 실측, D-069 가 경고한
+  // 바로 그 종류다). 겹친 이름 자체는 B-009 로 남겼다 — 이름을 고치는 것은 아홉
+  // 파일을 건드리는 일이라 따로 한다.
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 /* ── 글자 세기: 코드포인트 단위 ──

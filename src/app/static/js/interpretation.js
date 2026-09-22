@@ -21,13 +21,12 @@
 
 // eslint-disable-next-line no-unused-vars
 const interpState = {
-  active: false, // 해석 모드 활성화 여부
+  // `active`·`currentLayer`·`currentSubType`·`isDirty` 를 걷어냈다(2026-09-22, B-008).
+  // 넷 다 옛 통합 편집기의 것이었고, `active` 는 **참이 되는 길이 없었다** —
+  // 그것을 켜는 `activateInterpretationMode` 를 부르는 것이 지운 「비교」 탭뿐이었다.
   interpId: null, // 선택된 해석 저장소 ID
   interpInfo: null, // manifest 캐시
   depStatus: null, // 의존 변경 확인 결과
-  currentLayer: "L5_reading", // 현재 층
-  currentSubType: "main_text", // main_text | annotation
-  isDirty: false, // 편집 변경 여부
   interpretations: [], // 전체 목록 캐시
 };
 
@@ -63,58 +62,10 @@ function initInterpretation() {
   if (createSaveBtn)
     createSaveBtn.addEventListener("click", _createInterpretation);
 
-  // 층별 서브탭
-  document.querySelectorAll(".interp-subtab").forEach((tab) => {
-    tab.addEventListener("click", () => {
-      const layer = tab.dataset.layer;
-      if (layer === interpState.currentLayer) return;
-
-      document
-        .querySelectorAll(".interp-subtab")
-        .forEach((t) => t.classList.remove("active"));
-      tab.classList.add("active");
-      interpState.currentLayer = layer;
-
-      // L7_annotation은 sub_type 토글 숨김
-      const subtypeBar = document.getElementById("interp-subtype-bar");
-      if (subtypeBar) {
-        subtypeBar.style.display = layer === "L7_annotation" ? "none" : "";
-      }
-
-      _loadLayerContent();
-    });
-  });
-
-  // main_text / annotation 라디오
-  document.querySelectorAll('input[name="interp-subtype"]').forEach((radio) => {
-    radio.addEventListener("change", () => {
-      interpState.currentSubType = radio.value;
-      _loadLayerContent();
-    });
-  });
-
-  // 「L5 종류(표점/현토)」 라디오를 뺐다 (D-069) — 고른 값을 읽는 곳이
-  // 「비교 모드」뿐이었고 그 기능은 마크업이 사라져 실행되지 않았다.
-  // 눌러도 아무 일도 일어나지 않는 버튼이었다.
-
-  // 저장 버튼
-  const saveBtn = document.getElementById("interp-save");
-  if (saveBtn) saveBtn.addEventListener("click", _saveLayerContent);
-
-  // Ctrl+S 단축키 (해석 패널 안에서만)
-  const content = document.getElementById("interp-content");
-  if (content) {
-    content.addEventListener("keydown", (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-        e.preventDefault();
-        _saveLayerContent();
-      }
-    });
-    content.addEventListener("input", () => {
-      interpState.isDirty = true;
-      _updateSaveStatus("modified");
-    });
-  }
+  // 층별 서브탭·저장 단추·Ctrl+S 배선을 걷어냈다(2026-09-22, B-008). 붙을 자리
+  // (`.interp-subtab`·`#interp-save`·`#interp-content`)가 죽은 해석 패널 안에 있었고
+  // 그 패널은 어느 모드에서도 열리지 않았다. 「L5 종류」 라디오를 D-069 에서 빼며
+  // 남긴 주석도 같은 자리라 함께 지웠다.
 
   // 의존 배너 버튼 (배너는 「의존 추적」 사이드바 안에 있다 — B-008)
   const depAck = document.getElementById("interp-dep-ack");
@@ -201,41 +152,19 @@ async function _importInterpretationFolder() {
 }
 
 /* ──────────────────────────
-   모드 활성화 / 비활성화
+   모드 활성화 / 비활성화 — 걷어냈다 (2026-09-22, B-008)
+   ──────────────────────────
+
+   `activateInterpretationMode`·`deactivateInterpretationMode` 가 여기 있었다.
+   부르는 곳이 `_switchMode("interpretation")` 하나였고, 그 모드로 가는 탭을
+   2026-02-24 `e84d800` 이 지웠다 — 같은 커밋이 `_switchMode` 에 「Interpretation
+   mode tab is removed from UI」 폴백까지 넣었으니 **의도된 제거**였다. 그래서
+   `interpState.active` 는 참이 되는 길이 없었다.
+
+   두 함수가 하던 일 중 살아 있어야 하는 것 — 「해석 저장소」·「내용」 사이드바를
+   여는 것 — 은 `_loadInterpretationList()` 가 문헌이 열릴 때 한다. 숨기는 쪽은
+   필요 없다: 그 섹션들은 액티비티 바가 여닫는다(`panelSections.explorer`).
    ────────────────────────── */
-
-/**
- * 해석 모드를 활성화한다.
- * workspace.js의 _switchMode()에서 호출된다.
- */
-// eslint-disable-next-line no-unused-vars
-function activateInterpretationMode() {
-  interpState.active = true;
-
-  // 사이드바 해석 섹션 표시 (내용 트리도 함께 — D-085)
-  const section = document.getElementById("interp-section");
-  if (section) section.style.display = "";
-  if (typeof setContentsSectionVisible === "function") setContentsSectionVisible(true);
-
-  // 해석 저장소 목록 로드
-  _loadInterpretationList();
-}
-
-/**
- * 해석 모드를 비활성화한다.
- */
-// eslint-disable-next-line no-unused-vars
-function deactivateInterpretationMode() {
-  interpState.active = false;
-
-  // 사이드바 해석 섹션 숨김 (내용 트리도 함께)
-  const section = document.getElementById("interp-section");
-  if (section) section.style.display = "none";
-  if (typeof setContentsSectionVisible === "function") setContentsSectionVisible(false);
-
-  // 의존 배너 숨김
-  _hideDepBanner();
-}
 
 /* ──────────────────────────
    해석 저장소 목록
@@ -443,9 +372,6 @@ async function _selectInterpretation(interpId) {
   // Phase 12-1: Git 그래프에 현재 해석 저장소 ID 전달
   if (typeof setGitGraphInterpId === "function") setGitGraphInterpId(interpId);
 
-  // 내용 로드 (viewerState에 페이지가 있으면)
-  _loadLayerContent();
-
   // 사이드바 「내용」 트리 (D-085)
   if (typeof refreshContentsTree === "function") refreshContentsTree();
 }
@@ -598,112 +524,22 @@ function _renderDepPanel(dep) {
 }
 
 /* ──────────────────────────
-   층 내용 로드 / 저장
+   층 내용 로드 / 저장 · UI 유틸리티 — 걷어냈다 (2026-09-22, B-008)
+   ──────────────────────────
+
+   `_loadLayerContent`·`_saveLayerContent`·`_updateSaveStatus`·`_updateFileInfo`
+   가 여기 있었다. 넷 다 옛 «해석 (L5~L7)» 통합 편집기의 것이다 — 붙잡던 DOM
+   (`#interp-content`·`#interp-save`·`#interp-save-status`·`#interp-file-info`)이
+   전부 그 패널 안에 있었고, 그 패널은 2026-02-24 `e84d800` 이 「비교」 탭을
+   지운 뒤로 어느 모드에서도 열리지 않았다.
+
+   지금 L5~L7 을 읽고 쓰는 것은 다섯 편집기가 각자 한다(D-096) —
+   punctuation-editor.js · hyeonto-editor.js · translation-editor.js ·
+   annotation-editor.js · citation-editor.js. 각자 자기 패널과 모드 탭이 있다.
+
+   아래 「비교 모드 — 제거됨」과 같은 성질의 자리다. 그때는 마크업만 사라져
+   코드가 남았고, 이번에는 마크업과 코드를 함께 걷었다.
    ────────────────────────── */
-
-async function _loadLayerContent() {
-  if (!interpState.interpId || !viewerState.partId || !viewerState.pageNum) {
-    _updateFileInfo("");
-    return;
-  }
-
-  const { interpId, currentLayer, currentSubType } = interpState;
-  const { partId, pageNum } = viewerState;
-
-  const url = `/api/interpretations/${interpId}/layers/${currentLayer}/${currentSubType}/pages/${pageNum}?part_id=${partId}`;
-
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("층 내용 API 오류");
-    const data = await res.json();
-
-    const content = document.getElementById("interp-content");
-    if (content) {
-      // L6은 텍스트, L5/L7은 JSON → 텍스트로 표시
-      if (typeof data.content === "string") {
-        content.value = data.content;
-      } else if (
-        typeof data.content === "object" &&
-        data.content !== null &&
-        Object.keys(data.content).length > 0
-      ) {
-        content.value = JSON.stringify(data.content, null, 2);
-      } else {
-        content.value = "";
-      }
-    }
-
-    interpState.isDirty = false;
-    _updateSaveStatus(data.exists ? "saved" : "new");
-    _updateFileInfo(data.file_path || "");
-  } catch (err) {
-    console.error("층 내용 로드 실패:", err);
-    _updateSaveStatus("error");
-  }
-}
-
-async function _saveLayerContent() {
-  if (!interpState.interpId || !viewerState.partId || !viewerState.pageNum)
-    return;
-
-  const { interpId, currentLayer, currentSubType } = interpState;
-  const { partId, pageNum } = viewerState;
-
-  const content = document.getElementById("interp-content");
-  if (!content) return;
-
-  _updateSaveStatus("saving");
-
-  const url = `/api/interpretations/${interpId}/layers/${currentLayer}/${currentSubType}/pages/${pageNum}`;
-
-  try {
-    const res = await fetch(url, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        content: content.value,
-        part_id: partId,
-      }),
-    });
-    if (!res.ok) throw new Error("저장 API 오류");
-    const result = await res.json();
-    console.log("저장 완료:", result);
-
-    interpState.isDirty = false;
-    _updateSaveStatus("saved");
-    _updateFileInfo(result.file_path || "");
-  } catch (err) {
-    console.error("층 내용 저장 실패:", err);
-    _updateSaveStatus("error");
-  }
-}
-
-/* ──────────────────────────
-   UI 유틸리티
-   ────────────────────────── */
-
-function _updateSaveStatus(status) {
-  const el = document.getElementById("interp-save-status");
-  if (!el) return;
-
-  const map = {
-    saved: { text: "저장됨", cls: "status-saved" },
-    new: { text: "새 파일", cls: "status-new" },
-    modified: { text: "수정됨", cls: "status-modified" },
-    saving: { text: "저장 중...", cls: "status-saving" },
-    error: { text: "오류", cls: "status-error" },
-    empty: { text: "", cls: "" },
-  };
-
-  const info = map[status] || map["empty"];
-  el.textContent = info.text;
-  el.className = `text-save-status ${info.cls}`;
-}
-
-function _updateFileInfo(filePath) {
-  const el = document.getElementById("interp-file-info");
-  if (el) el.textContent = filePath;
-}
 
 /* ──────────────────────────
    생성 다이얼로그

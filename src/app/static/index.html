@@ -2182,112 +2182,12 @@
           </div>
 
           <!-- 우측 패널: 해석 (interpretation 모드에서만 표시) -->
-          <div
-            class="editor-panel editor-right interp-panel"
-            id="interp-panel"
-            style="display: none"
-          >
-            <div class="panel-label">해석 (L5~L7)</div>
-
-            <!-- 층별 서브탭 -->
-            <div class="interp-subtab-bar">
-              <div
-                class="interp-subtab active"
-                data-layer="L5_reading"
-              >
-                구두점 (L5)
-              </div>
-              <div
-                class="interp-subtab"
-                data-layer="L6_translation"
-              >
-                번역 (L6)
-              </div>
-              <div
-                class="interp-subtab"
-                data-layer="L7_annotation"
-              >
-                주석 (L7)
-              </div>
-            </div>
-
-            <!-- main_text / annotation 토글 -->
-            <div
-              class="interp-subtype-bar"
-              id="interp-subtype-bar"
-            >
-              <label class="interp-radio-label">
-                <input
-                  type="radio"
-                  name="interp-subtype"
-                  value="main_text"
-                  checked
-                />
-                main_text
-              </label>
-              <label class="interp-radio-label">
-                <input
-                  type="radio"
-                  name="interp-subtype"
-                  value="annotation"
-                />
-                annotation
-              </label>
-            </div>
-
-            <!-- 여기 있던 「L5 종류: ○표점 ○현토」 라디오를 뺐다 (D-069).
-                 고른 값을 읽는 곳이 「비교 모드」뿐이었는데, 그 기능은 마크업이
-                 사라져 오래전부터 실행되지 않았다. 즉 **눌러도 아무 일도
-                 일어나지 않는 버튼**이 남아 있었다. 표점·현토는 상단 작업 탭
-                 「표점」·「현토」로 각각 들어간다. 되살릴 일이 생기면 값을
-                 읽는 쪽을 먼저 만들고 이 라디오를 다시 넣는다. -->
-
-            <!-- 도구 바 -->
-            <div class="interp-toolbar">
-              <span
-                class="text-toolbar-info"
-                id="interp-file-info"
-              ></span>
-              <div class="text-toolbar-spacer"></div>
-              <button
-                id="entity-create-textblock-btn"
-                class="text-btn"
-                title="이 본문 블록 첫머리에 경계를 놓아 단위를 만듭니다"
-                style="display: none"
-              >
-                단위 만들기
-              </button>
-              <button
-                id="entity-llm-request-btn"
-                class="text-btn"
-                title="LLM에게 요청"
-                style="display: none"
-              >
-                LLM에게 요청
-              </button>
-              <div class="text-toolbar-divider"></div>
-              <button
-                id="interp-save"
-                class="text-btn text-btn-primary"
-                title="저장 (Ctrl+S)"
-              >
-                저장
-              </button>
-              <span
-                id="interp-save-status"
-                class="text-save-status"
-              ></span>
-            </div>
-
-            <!-- 편집 영역 (일반 모드) -->
-            <textarea
-              id="interp-content"
-              class="text-content interp-content"
-              placeholder="해석 저장소 파일 내용"
-              spellcheck="false"
-            ></textarea>
-
-          </div>
+          <!-- 옛 «해석 (L5~L7)» 통합 편집기가 여기 있었다. 2026-02-24 `e84d800` 이
+               「비교」 탭을 지우면서 `_switchMode` 에 폴백을 넣었으므로 의도된 제거였는데,
+               패널과 그 안의 것들이 남아 일곱 달 동안 닿을 수 없었다(B-008). 2026-09-22에
+               의존 경고·「확인」·「기반 업데이트」는 「의존 추적」 사이드바로, 스냅샷
+               내보내기는 「JSON 가져오기」 옆으로 옮긴 뒤 이 패널을 걷어냈다.
+               지금 L5~L7 은 표점·현토·번역·주석·인용 다섯이 각자 패널로 한다(D-096). -->
 
           <!-- 우측 패널: 이체자 사전 관리 (variant 모드) -->
           <div
@@ -4313,72 +4213,9 @@
       </div>
 
       <!-- Phase 8: LLM 요청 다이얼로그 오버레이 -->
-      <div
-        class="bib-dialog-overlay"
-        id="llm-dialog-overlay"
-        style="display: none"
-      >
-        <div
-          class="bib-dialog"
-          id="llm-dialog"
-          style="width: 480px"
-        >
-          <div class="bib-dialog-header">
-            <span class="bib-dialog-title">LLM에게 요청</span>
-            <button
-              class="bib-dialog-close"
-              id="llm-dialog-close"
-              title="닫기"
-            >
-              &times;
-            </button>
-          </div>
-          <div class="bib-dialog-body bib-edit-form">
-            <label class="bib-edit-label">요청 유형</label>
-            <select
-              id="llm-request-type"
-              class="bib-select"
-              style="width: 100%"
-            >
-              <option value="tag_extraction">Tag 추출 (인명·지명·관직)</option>
-              <option value="translation_draft">번역 초안</option>
-              <option value="relation_extraction">관계 추출</option>
-              <option value="agent_identification">인물 식별</option>
-            </select>
-            <label class="bib-edit-label">대상</label>
-            <select
-              id="llm-target"
-              class="bib-select"
-              style="width: 100%"
-            >
-              <option value="current_page">현재 페이지 전체</option>
-              <option value="selected_block">선택된 단위</option>
-            </select>
-            <label class="bib-edit-label">추가 지시사항 (선택)</label>
-            <textarea
-              id="llm-instructions"
-              class="bib-textarea"
-              rows="3"
-              placeholder="예: 六朝 인물에 집중하세요"
-            ></textarea>
-            <div class="bib-edit-actions">
-              <span
-                id="llm-status"
-                class="text-save-status"
-                style="color: var(--text-secondary)"
-                >LLM 연동은 아직 준비 중입니다</span
-              >
-              <button
-                id="llm-request-btn"
-                class="bib-btn bib-btn-primary"
-                disabled
-              >
-                요청
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <!-- 옛 「LLM에게 요청」 스텁 다이얼로그가 여기 있었다. 입력 넷과 「요청」
+           단추에 배선이 하나도 없어 **닫기만 되는 창**이었고(2026-09-22 확인),
+           그것을 여는 단추는 죽은 해석 패널 안에 있었다. 함께 걷어냈다(B-008). -->
 
       <!-- Phase 10: 새 문헌 생성 다이얼로그 오버레이 -->
       <div

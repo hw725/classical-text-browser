@@ -82,17 +82,10 @@ function initEntityManager() {
     createBtn.addEventListener("click", _showEntityTypeChooser);
   }
 
-  // "단위 만들기" 버튼
-  const tbBtn = document.getElementById("entity-create-textblock-btn");
-  if (tbBtn) {
-    tbBtn.addEventListener("click", _openUnitCreator);
-  }
-
-  // "LLM에게 요청" 버튼
-  const llmBtn = document.getElementById("entity-llm-request-btn");
-  if (llmBtn) {
-    llmBtn.addEventListener("click", _openLlmRequestDialog);
-  }
+  // 「단위 만들기」·「LLM에게 요청」 배선을 걷어냈다(2026-09-22, B-008). 둘 다
+  // 죽은 해석 패널 안의 단추였다. 손으로 경계를 만드는 길은 사이드바 「내용」의
+  // 「＋ 경계 넣기」가 더 낫게 한다 — 찍어서 (행·글자)를 얻고(D-094), 본문은
+  // 코드가 확정본에서 가져온다. 옛 폼은 쪽만 묻고 사람에게 붙여넣으라 했다.
 
   // "커넥톰 대조" 버튼 (D-128 후속)
   const connBtn = document.getElementById("entity-connectome-btn");
@@ -114,20 +107,6 @@ function initEntityManager() {
   if (dialogClose) dialogClose.addEventListener("click", _closeEntityDialog);
   if (dialogCancel) dialogCancel.addEventListener("click", _closeEntityDialog);
   if (dialogSave) dialogSave.addEventListener("click", _saveEntity);
-
-  // LLM 다이얼로그 닫기
-  const llmOverlay = document.getElementById("llm-dialog-overlay");
-  const llmClose = document.getElementById("llm-dialog-close");
-  if (llmOverlay) {
-    llmOverlay.addEventListener("click", (e) => {
-      if (e.target === llmOverlay) llmOverlay.style.display = "none";
-    });
-  }
-  if (llmClose) {
-    llmClose.addEventListener("click", () => {
-      document.getElementById("llm-dialog-overlay").style.display = "none";
-    });
-  }
 }
 
 
@@ -149,9 +128,6 @@ function _loadEntitiesForCurrentPage() {
     _renderEmptyList("문헌을 먼저 선택하세요");
     return;
   }
-
-  // 해석 모드 버튼 표시
-  _updateToolbarButtons();
 
   if (entityState.pageFilter && viewerState.pageNum) {
     // 페이지별 엔티티 조회
@@ -705,123 +681,26 @@ function _closeEntityDialog() {
 }
 
 
+
+
 /* ──────────────────────────
-   단위 생성 (source_ref 자동)
+   단위 생성 (source_ref 자동) — 걷어냈다 (2026-09-22, B-008)
+   ──────────────────────────
+
+   `_openUnitCreator`·`_saveUnitFromSource` 가 여기 있었다. 폼이 v1.2 모양이라
+   **쪽만 묻고 행을 묻지 않았고**, 본문은 사람에게 「L4 텍스트에서 블록에 해당하는
+   부분을 붙여넣으세요」라고 했다. `sequence_index`·`layout_block_id` 도 경계
+   모델이 쓰지 않는 칸이다.
+
+   손으로 경계를 만드는 길은 사이드바 「내용」의 **「＋ 경계 넣기」**가 맡는다 —
+   원본 이미지를 찍어 (행·글자)를 얻고(D-094), 안 되면 「숫자로 적기」로 쪽·행·자를
+   주며, 제목과 본문은 코드가 확정본에서 가져온다. 저장은
+   `POST /api/documents/{doc}/boundaries`(D-097)다.
+
+   라우트 `entities/unit/from-source` 는 **남긴다** — `create_entity("unit")` 이
+   `_create_boundary_from_unit` 으로 보내 지금 규약대로 경계를 쓰므로, API 로는
+   살아 있는 길이다(entity.py:607).
    ────────────────────────── */
-
-/**
- * "단위 만들기" 전용 다이얼로그를 연다.
- * source_ref 필드가 현재 문서/페이지 정보로 자동 채워진다.
- */
-async function _openUnitCreator() {
-  if (!interpState || !interpState.interpId || !viewerState || !viewerState.docId) {
-    showToast("해석 저장소와 문헌을 먼저 선택하세요.", 'warning');
-    return;
-  }
-
-  entityState.editingEntity = null;
-  entityState.editingType = "unit";
-
-  const form = document.getElementById("entity-dialog-form");
-  const title = document.getElementById("entity-dialog-title");
-  title.textContent = "단위 만들기 (출처 자동 채움)";
-
-  form.innerHTML = `
-    <label class="bib-edit-label">원본 문헌</label>
-    <input type="text" class="bib-input" value="${viewerState.docId}" readonly />
-    <label class="bib-edit-label">페이지</label>
-    <input type="text" class="bib-input" value="${viewerState.pageNum || 1}" readonly />
-    <label class="bib-edit-label">LayoutBlock ID (선택)</label>
-    <input id="ef-tb-layout-block" type="text" class="bib-input" placeholder="예: p01_b01 (없으면 비움)" />
-    <label class="bib-edit-label">원문 텍스트 (original_text)</label>
-    <textarea id="ef-tb-original-text" class="bib-textarea" rows="3" placeholder="L4 텍스트에서 블록에 해당하는 부분을 붙여넣으세요"></textarea>
-    <label class="bib-edit-label">순서 인덱스 (sequence_index, 0-based)</label>
-    <input id="ef-tb-seq-index" type="number" class="bib-input" value="0" min="0" />
-  `;
-
-  // 저장 버튼 동작을 단위 전용으로 교체
-  const saveBtn = document.getElementById("entity-dialog-save");
-  // 기존 리스너 제거를 위해 교체
-  const newSaveBtn = saveBtn.cloneNode(true);
-  saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
-  newSaveBtn.addEventListener("click", _saveUnitFromSource);
-
-  document.getElementById("entity-dialog-status").textContent = "";
-  document.getElementById("entity-dialog-overlay").style.display = "";
-}
-
-
-/**
- * 단위 from source 저장 처리.
- */
-async function _saveUnitFromSource() {
-  const statusEl = document.getElementById("entity-dialog-status");
-
-  const originalText = (document.getElementById("ef-tb-original-text") || {}).value?.trim();
-  const seqIndex = parseInt((document.getElementById("ef-tb-seq-index") || {}).value, 10);
-  const layoutBlockId = (document.getElementById("ef-tb-layout-block") || {}).value?.trim() || null;
-
-  if (!originalText) {
-    statusEl.textContent = "원문 텍스트를 입력하세요";
-    statusEl.style.color = "#ef4444";
-    return;
-  }
-
-  statusEl.textContent = "저장 중...";
-  statusEl.style.color = "#3b82f6";
-
-  try {
-    const resp = await fetch(
-      `/api/interpretations/${interpState.interpId}/entities/unit/from-source`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          document_id: viewerState.docId,
-          part_id: viewerState.partId || "vol1",
-          page_num: viewerState.pageNum || 1,
-          layout_block_id: layoutBlockId,
-          original_text: originalText,
-            sequence_index: isNaN(seqIndex) ? 0 : seqIndex,
-        }),
-      }
-    );
-    if (!resp.ok) {
-      const errBody = await resp.json().catch(() => ({}));
-      statusEl.textContent = errBody.error || `서버 오류 (${resp.status})`;
-      statusEl.style.color = "#ef4444";
-      return;
-    }
-    const result = await resp.json();
-
-    if (result.error) {
-      statusEl.textContent = result.error;
-      statusEl.style.color = "#ef4444";
-      return;
-    }
-
-    _closeEntityDialog();
-    // 저장 버튼 원복
-    _restoreSaveButton();
-    _loadEntitiesForCurrentPage();
-  } catch (err) {
-    statusEl.textContent = `저장 실패: ${err.message}`;
-    statusEl.style.color = "#ef4444";
-  }
-}
-
-
-/**
- * 단위 다이얼로그에서 교체된 저장 버튼을 원래 핸들러로 복원한다.
- */
-function _restoreSaveButton() {
-  const saveBtn = document.getElementById("entity-dialog-save");
-  if (saveBtn) {
-    const newBtn = saveBtn.cloneNode(true);
-    saveBtn.parentNode.replaceChild(newBtn, saveBtn);
-    newBtn.addEventListener("click", _saveEntity);
-  }
-}
 
 
 /* ──────────────────────────
@@ -1092,12 +971,15 @@ async function _renderConnectome(live) {
 
 
 /* ──────────────────────────
-   LLM 협업 (UI 스텁)
-   ────────────────────────── */
+   LLM 협업 — 걷어냈다 (2026-09-22, B-008)
+   ──────────────────────────
 
-function _openLlmRequestDialog() {
-  document.getElementById("llm-dialog-overlay").style.display = "";
-}
+   `_openLlmRequestDialog` 는 창을 여는 한 줄이었고, 그 창(`#llm-dialog-overlay`)은
+   **입력 넷과 「요청」 단추에 배선이 하나도 없는 스텁**이었다 — 닫기만 됐다.
+   그것을 여는 단추마저 죽은 해석 패널 안에 있었다. 셋을 함께 지웠다.
+
+   해석 저장소에서 LLM 을 부르는 길은 각 편집기의 「AI 보조」가 맡는다.
+   ────────────────────────── */
 
 
 /**
@@ -1198,20 +1080,13 @@ async function _handleLlmReviewAction(action, entityType, entityId) {
 
 
 /* ──────────────────────────
-   도구 바 버튼 표시/숨김
+   도구 바 버튼 표시/숨김 — 걷어냈다 (2026-09-22, B-008)
+   ──────────────────────────
+
+   `_updateToolbarButtons()` 가 여닫던 단추 둘이 죽은 해석 패널과 함께 사라졌고,
+   조건(`interpState.active`)은 애초에 참이 되는 길이 없었다. 「커넥톰 대조」는
+   살아 있는 엔티티 사이드바에 있어 여닫을 필요가 없다.
    ────────────────────────── */
-
-function _updateToolbarButtons() {
-  const tbBtn = document.getElementById("entity-create-textblock-btn");
-  const llmBtn = document.getElementById("entity-llm-request-btn");
-
-  const show = interpState && interpState.active && interpState.interpId;
-  if (tbBtn) tbBtn.style.display = show ? "" : "none";
-  if (llmBtn) llmBtn.style.display = show ? "" : "none";
-  // 「커넥톰 대조」는 여기서 다루지 않는다 — 이 둘이 사는 `#interp-panel` 은
-  // 어느 모드에서도 열리지 않고(2026-09-22 실측), `interpState.active` 가 참이
-  // 되는 길도 없다. 그 단추는 살아 있는 엔티티 사이드바에 두고 항상 보인다.
-}
 
 
 /* ──────────────────────────

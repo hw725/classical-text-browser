@@ -1353,7 +1353,18 @@ def anchor_bbox(
         k = _match_line_by_text(raw[line_index], idx.get("texts") or [])
         if k is None:
             return None
-    box = list(idx["boxes"][k])
+    # 행을 찾았어도 **그 행의 좌표가 없을 수 있다.** L2 가 LLM 비전 판독이면
+    # 글자만 있고 상자가 없어 항목이 None 으로 채워진다(2026-09-22 실측: 논문
+    # 스캔 한 권에서 1쪽 27/27 · 2쪽 34/34 · 3쪽 35/35 전부 None). 막지 않으면
+    # `list(None)` 이 TypeError 로 터져 **경계를 손으로 넣는 길이 500** 이 된다.
+    #
+    # None 을 돌려주는 것이 이 함수의 방침이다 — 위 독스트링의 「틀린 좌표보다
+    # 안 보여 주는 게 낫다」와 같은 자리다. 경계는 (쪽, 행)이고 좌표는 점선을
+    # 그리기 위한 캐시일 뿐이라, 없어도 경계는 만들어져야 한다.
+    raw_box = idx["boxes"][k] if 0 <= k < len(idx["boxes"]) else None
+    if raw_box is None:
+        return None
+    box = list(raw_box)
     n = max(1, len(raw[line_index]))
     cut_start = bool(offset and offset > 0)
     cut_end = offset_end is not None and offset_end < n
