@@ -505,13 +505,21 @@ def biblio_volumes(spec: dict) -> dict[str, set[str]]:
     본문 글자와 무관하므로, «이 책에 있을 수 있는가»에 다른 근거로 답한다.
 
     그룹 열이 「시(詩)○격경집(擊磬集) 갑인년…」 꼴이라 한자 묶음(2자 이상)을 전부 꺼낸다.
+    **기사명 열도 함께 본다** — 그룹만 보면 集 이름만 잡혀 「書牘」·「附記」처럼 갈래로 실린
+    항목이 «서지에 없음»으로 떨어진다(2026-09-22 실측: 그룹만 41건 → 두 열 36건).
     """
     out: dict[str, set[str]] = {}
     with spec["biblio"].open(encoding="utf-8-sig", newline="") as fh:
         for row in csv.DictReader(fh):
-            for han in re.findall(r"[\u4e00-\u9fff]{2,}", row.get("그룹") or ""):
-                out.setdefault(han, set()).add(row.get("권") or "")
+            for col in ("그룹", "기사명"):
+                for han in re.findall(r"[\u4e00-\u9fff]{2,}", row.get(col) or ""):
+                    out.setdefault(han, set()).add(row.get("권") or "")
     return out
+
+
+# 작품이 아니라 «구조»를 가리키는 총목 항목 — 서지에 이름이 없는 것이 정상이고, 이 책에 없는
+# 권의 표제라 «없음»이 정답이다. 사각지대 계산에서 뺀다.
+STRUCT_TITLE = re.compile(r"(第.{1,4}卷|^卷.{1,4}$|總目|目錄|^附錄)")
 
 
 def biblio_report(entries, result: dict, spec: dict) -> None:
@@ -544,8 +552,13 @@ def biblio_report(entries, result: dict, spec: dict) -> None:
     print(f"{'':<6}" + "".join(f"{c:>10}" for c in cols))
     for ans in ("고름", "없음"):
         print(f"{ans:<6}" + "".join(f"{len(cells.get((ans, c), [])):>10}" for c in cols))
-    missed = cells.get(("없음", "이 책"), [])
-    print(f"\n서지가 «이 책»이라는데 «없음»이라 한 것: {len(missed)}건  ← 놓침의 독립 증거")
+    # 卷 표제는 «없음»이 정답이므로 놓침이 아니다. 부분 문자열 대조가 「第六卷詩三百十三首」를
+    # 「三首」 하나로 «이 책»에 넣은 적이 있다 — 대조기의 헛것이지 모델의 놓침이 아니었다.
+    raw = cells.get(("없음", "이 책"), [])
+    missed = [t for t in raw if not STRUCT_TITLE.search(t)]
+    struct = len(raw) - len(missed)
+    print(f"\n서지가 «이 책»이라는데 «없음»이라 한 것: {len(missed)}건  ← 놓침의 독립 증거"
+          + (f"  (구조 표제 {struct}건은 뺐다 — «없음»이 정답이다)" if struct else ""))
     for t in missed[:10]:
         print(f"    「{t[:24]}」")
     odd = cells.get(("고름", "다른 권"), [])
@@ -553,6 +566,17 @@ def biblio_report(entries, result: dict, spec: dict) -> None:
           "  (갈래 이름은 여러 권에 걸친다 — 참고만)")
     for t in odd[:10]:
         print(f"    「{t[:24]}」")
+
+    # **유효 범위를 함께 찍는다.** 서지가 아무 말도 하지 않는 항목에서는 놓침이 숨을 수 있다.
+    # 「놓침 0건」은 신호가 말을 한 범위 안에서만 서는 주장이다(커넥톰 세션 권고, 2026-09-22).
+    unknown = [t for t in cells.get(("없음", "서지에 없음"), []) if not STRUCT_TITLE.search(t)]
+    asked = sum(len(v) for v in cells.values())
+    print(f"\n사각지대 — 작품처럼 보이는데 서지에 이름이 없고 «없음»: {len(unknown)}건"
+          f" / 물은 것 {asked} ({len(unknown) / asked:.1%})")
+    print(f"  → 「놓침 0건」이 서는 범위는 {asked - len(unknown)}건"
+          f" ({1 - len(unknown) / asked:.1%})이고, 나머지는 신호가 말하지 않는다.")
+    for t in unknown[:12]:
+        print(f"    「{t[:24]}」{'  ← 2자 이하(총목 판독 조각 의심)' if len(t) <= 2 else ''}")
 
 
 def cmd_biblio(args) -> int:
