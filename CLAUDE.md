@@ -158,7 +158,7 @@ src/app/
 - **사전은 지식이고 정책은 문헌의 것**: `strict`만 동치, `loose`·`script`는 힌트. 승인은 `documents/{doc_id}/variant_approvals.json`에만.
 - **Ollama 기본 비전 모델은 클라우드(`gemma4:cloud`)다**(D-114). 로컬 기본을 두면 처음 켠 PC가 9.6GB를 받기만 한다. 클라우드 기본은 목록에 있어도 `_pick_vision_model`이 한 번 불러 보고(로그인 없음·은퇴면 실패) 로컬 후보로 내려간다.
 - **Ollama 텍스트 호출은 답이 길면 문맥 창도 올린다**(`providers/ollama.py::_gen_options`, 2026-09-12). 기본 num_ctx 4,096이라 num_predict를 크게 줘도 «프롬프트 + 답»이 4,096을 넘는 순간 잘린다 — 사전형 주석이 매번 2,883토큰에서 끊겼다. 긴 JSON을 받는 호출은 잘린 답에서 완성된 항목만 건지는 파서도 둔다(`annotation_dict_llm._recover_truncated_items`).
-- **사고(thinking)는 전역 스위치가 아니다**: 기본 끔(D-074). 정밀 판독과 사용자가 명시한 호출만 켠다. thinking 필드를 본문으로 쓰는 폴백은 어디에도 없다.
+- **사고(thinking)는 전역 스위치가 아니다**: 기본 끔(D-074). 정밀 판독과 사용자가 명시한 호출만 켠다. **다만 Ollama 프로바이더에는 폴백이 있다** — `response`가 비고 `thinking`만 찼을 때 그것을 본문으로 쓴다(`providers/ollama.py` 텍스트·스트리밍·비전 셋). 사고에 num_predict를 다 쓴 reasoning 모델의 방어책이고, 비전 경로는 `allow_thinking_fallback=False`로 끌 수 있다. 다른 세 프로바이더에는 없다. 한때 이 줄이 「폴백은 어디에도 없다」로 적혀 있었다(Codex 지적 2026-09-22 — 문서를 믿은 호출자가 사고문을 결과로 받는다).
 
 ## 코어 스키마 모듈 (D-128, 2026-09-21)
 

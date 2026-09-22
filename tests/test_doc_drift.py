@@ -333,3 +333,104 @@ def test_cjk_contract_is_clean():
     assert not bad, "CJK 텍스트 계약 위반:\n" + "\n".join(
         ln.replace(str(_ROOT) + "\\", "") for ln in bad[:12]
     )
+
+
+def test_doctor_registers_src_before_importing_core():
+    """`scripts/doctor.py` 가 **경로를 먼저 등록하고** core 를 import 하는가.
+
+    docstring 이 「어느 파이썬으로 실행해도 된다」고 약속하고, `doctor.bat` 도
+    가상환경이 둘 다 없으면 시스템 파이썬으로 부른다 — 설치가 중간에 깨진 사람이
+    진단을 부르는 바로 그 상황이다. 그 순서가 뒤집히면 그 사람은 진단 보고서 대신
+    ModuleNotFoundError 를 받는다(Codex 지적 2026-09-22).
+
+    문자열이 있는지가 아니라 **순서**를 본다 — 둘 다 있어도 순서가 틀리면 못 돈다.
+    """
+    import ast
+
+    src = (_ROOT / "scripts" / "doctor.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+
+    insert_line = None
+    core_import_line = None
+    for node in ast.walk(tree):
+        if (
+            insert_line is None
+            and isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "insert"
+            and isinstance(node.func.value, ast.Attribute)
+            and node.func.value.attr == "path"
+        ):
+            insert_line = node.lineno
+        if (
+            core_import_line is None
+            and isinstance(node, ast.ImportFrom)
+            and (node.module or "").startswith("core")
+        ):
+            core_import_line = node.lineno
+
+    assert insert_line is not None, "doctor.py 가 sys.path 에 src 를 등록하지 않는다"
+    assert core_import_line is not None, "doctor.py 가 core 를 import 하지 않는다"
+    assert insert_line < core_import_line, (
+        "doctor.py: sys.path.insert(%d행)가 core import(%d행)보다 **뒤**다.\n"
+        "  가상환경 밖의 파이썬으로 부르면 ModuleNotFoundError 가 난다 —\n"
+        "  doctor.bat 이 그렇게 부르는 길이 있다." % (insert_line, core_import_line)
+    )
+
+
+def test_installer_launch_rebuilds_path():
+    """설치본의 「지금 실행」이 **PATH 를 다시 만들어** 넘기는가.
+
+    `install.ps1` 은 uv 를 깔고 자기 창의 PATH 를 갱신하지만 그것은 자식 프로세스다.
+    설치본이 낡은 환경 그대로 `start_server.bat` 을 띄우면, bat 이 맨 앞에서
+    `uv --version` 을 보고 없다며 「install.bat 을 먼저 실행하세요」로 끝난다 —
+    **uv 가 없던 PC 의 사람이 설치에 성공하고도 첫 실행에서 막힌다**
+    (Codex 지적 2026-09-22). 이 판이 겨냥한 바로 그 사람이다.
+
+    `launch()` 안에서 `env=` 로 넘기는지까지 본다 — 함수만 있고 안 쓰면 소용없다.
+    """
+    import ast
+
+    src = (_ROOT / "installer" / "ctb_setup.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    launch = next(
+        (n for n in ast.walk(tree)
+         if isinstance(n, ast.FunctionDef) and n.name == "launch"),
+        None,
+    )
+    assert launch is not None, "ctb_setup.py 에 launch() 가 없다"
+
+    body = ast.dump(launch)
+    assert "fresh_path" in body, (
+        "launch() 가 PATH 를 다시 만들지 않는다 — 방금 깐 uv 를 못 찾는다"
+    )
+    popen = next(
+        (n for n in ast.walk(launch)
+         if isinstance(n, ast.Call)
+         and isinstance(n.func, ast.Attribute)
+         and n.func.attr == "Popen"),
+        None,
+    )
+    assert popen is not None, "launch() 가 프로세스를 띄우지 않는다"
+    assert any(kw.arg == "env" for kw in popen.keywords), (
+        "launch() 의 Popen 이 env= 를 넘기지 않는다 — 다시 만든 PATH 가 쓰이지 않는다"
+    )
+
+
+def test_download_reads_rfc5987_filename():
+    """화면이 내려받기 이름으로 **`filename*=` 를 먼저** 읽는가.
+
+    HTTP 헤더는 latin-1 이라 한글 제목은 RFC 5987 로만 실어 보낼 수 있고, 서버는
+    ASCII 대체 이름과 함께 둘을 보낸다. 화면이 `filename=` 만 읽으면 **서버를 고쳐도
+    사람이 받는 이름은 그대로 비어 있다** — 500 은 없어졌는데 한글 이름은 안 돌아온다
+    (Codex 지적 2026-09-22). 고친 자리가 화면까지 닿는지 보지 않은 자리였다.
+    """
+    src = (_ROOT / "src" / "app" / "static" / "js" / "workspace.js").read_text(
+        encoding="utf-8"
+    )
+    assert "filename\\*=UTF-8''" in src or "filename\\*=" in src, (
+        "workspace.js 가 filename*= 를 읽지 않는다 — 한글 파일명이 화면에서 사라진다"
+    )
+    assert "decodeURIComponent" in src, (
+        "filename*= 를 찾아도 percent-decode 하지 않으면 %EC%B2%9C… 가 파일 이름이 된다"
+    )

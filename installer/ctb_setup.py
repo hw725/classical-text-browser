@@ -191,9 +191,56 @@ def install(target: Path, pick: str, say) -> bool:
         return False
 
 
+def fresh_path() -> str:
+    """레지스트리에서 PATH를 다시 읽어 만든다 — 이 프로세스의 환경은 낡았다.
+
+    입력 없음. 출력은 PATH 문자열.
+
+    **왜 필요한가.** install.ps1은 uv를 깔고 자기 창의 PATH를 갱신하지만, 그것은
+    **자식 프로세스**다. 이 EXE는 그 갱신을 보지 못한 채로 start_server.bat을 띄우고,
+    bat은 맨 앞에서 `uv --version`을 보고 없으면 「install.bat을 먼저 실행하세요」로
+    끝난다 — uv가 없던 PC의 사람이 설치에 성공하고도 첫 실행에서 막힌다
+    (Codex 지적 2026-09-22). install.ps1의 Refresh-Path와 같은 셈법이다.
+    """
+    import winreg
+
+    parts = []
+    home = os.environ.get("USERPROFILE", "")
+    if home:
+        # uv·rustup이 기본으로 놓는 자리. 레지스트리 반영이 늦어도 여기는 확실하다.
+        parts += [str(Path(home) / ".local" / "bin"), str(Path(home) / ".cargo" / "bin")]
+    parts.append(r"C:\Program Files\Git\cmd")
+    for root, key in (
+        (winreg.HKEY_CURRENT_USER, r"Environment"),
+        (winreg.HKEY_LOCAL_MACHINE,
+         r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"),
+    ):
+        try:
+            with winreg.OpenKey(root, key) as k:
+                value, _ = winreg.QueryValueEx(k, "Path")
+        except OSError:
+            # 레지스트리를 못 읽어도 설치를 멈출 일은 아니다 — 지금 PATH로 이어간다.
+            continue
+        parts.append(str(value))
+    parts.append(os.environ.get("PATH", ""))
+    return ";".join(p for p in parts if p)
+
+
 def launch(target: Path) -> None:
-    """start_server.bat을 새 창에서 켠다(자동 업데이트 → 서버 → 브라우저)."""
-    subprocess.Popen(["cmd", "/c", "start", "", str(target / "start_server.bat")], cwd=str(target))
+    """start_server.bat을 새 창에서 켠다(자동 업데이트 → 서버 → 브라우저).
+
+    입력은 설치한 폴더. 출력 없음.
+
+    PATH는 fresh_path()로 다시 만들어 넘긴다 — 방금 깐 uv가 이 프로세스의 낡은
+    환경에는 없기 때문이다.
+    """
+    env = dict(os.environ)
+    env["PATH"] = fresh_path()
+    subprocess.Popen(
+        ["cmd", "/c", "start", "", str(target / "start_server.bat")],
+        cwd=str(target),
+        env=env,
+    )
 
 
 # ── 창 ────────────────────────────────────────────────────────────────

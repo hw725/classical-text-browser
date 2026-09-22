@@ -3,6 +3,12 @@
 
 set -e
 
+# 부른 자리가 어디든 이 스크립트가 있는 폴더에서 돈다. 아래에서 `uv sync` 와
+# `scripts/warmup_paddle.py` 를 상대 경로로 부르기 때문이다 — install.ps1 은
+# Set-Location $PSScriptRoot 로 같은 일을 하는데 이쪽만 빠져 있었다
+# (Codex 지적 2026-09-22).
+cd "$(dirname "$0")"
+
 echo ""
 echo "============================================"
 echo "  고전서지 통합 브라우저 — 설치"
