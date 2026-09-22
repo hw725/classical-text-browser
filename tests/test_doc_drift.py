@@ -209,13 +209,72 @@ def test_shipped_entrypoints_harden_the_console(name):
 
     이 시험은 claude-skills가 없어도 돈다. 그래서 바닥이다.
     """
+    import ast
+
     source = (_ROOT / name).read_text(encoding="utf-8")
-    hardened = "force_utf8_console" in source or "reconfigure(encoding=" in source
-    assert hardened, (
+    tree = ast.parse(source)
+
+    def _hardens(node) -> list[int]:
+        return [
+            n.lineno
+            for n in ast.walk(node)
+            if isinstance(n, ast.Call)
+            and (
+                (isinstance(n.func, ast.Name) and n.func.id == "force_utf8_console")
+                or (isinstance(n.func, ast.Attribute) and n.func.attr == "reconfigure")
+            )
+        ]
+
+    assert _hardens(tree), (
         f"{name}: 콘솔 고정을 부르지 않는다 — 진입점 맨 앞에서 "
         "`from core.console import force_utf8_console` 를 부른다"
         "(홀로 도는 exe는 같은 처리를 직접 품는다)."
     )
+
+    # **부르는 것만으로는 부족하다 — 먼저 불러야 한다.**
+    # `installer/ctb_setup.py` 는 2026-09-22까지 고정을 `parse_args()`·`gui()` **뒤**에
+    # 두고 있었다. 그래서 `--auto` 경로에서만 실행됐고 `--help` 와 GUI 는 고정 없이
+    # 돌았다. 그때는 그 앞에서 찍는 cp949 불가 문자가 없어 안 죽었지만, help 문구에
+    # «—» 하나만 들어가면 사용자 콘솔에서 `--help` 가 죽는다.
+    # 「문자열이 있다」만 보는 시험은 이것을 구조적으로 볼 수 없다 — 닿는다 ≠ 돈다.
+    #
+    # 보는 범위는 **진입 함수의 몸통 안**이다. 파일 전체로 보면 앞쪽에 정의된 헬퍼의
+    # `print` 에 걸려 거짓이 난다 — 줄 순서는 실행 순서가 아니다(이 시험을 처음 쓸 때
+    # 실제로 `src/cli/__main__.py` 를 그렇게 잘못 잡았다).
+    entry_names = {
+        n.func.id
+        for blk in tree.body
+        if isinstance(blk, ast.If)
+        for n in ast.walk(blk)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+    }
+    entries = [
+        n for n in tree.body
+        if isinstance(n, ast.FunctionDef) and n.name in entry_names
+    ]
+    if not entries:
+        return  # `if __name__` 블록이 함수를 안 부르면 순서를 말할 수 없다
+
+    for fn in entries:
+        h = _hardens(fn)
+        if not h:
+            continue  # 모듈 최상위에서 고정하는 모양 — 언제나 먼저다
+        outputs = [
+            n.lineno
+            for n in ast.walk(fn)
+            if isinstance(n, ast.Call)
+            and (
+                (isinstance(n.func, ast.Name) and n.func.id in ("print", "input"))
+                or (isinstance(n.func, ast.Attribute)
+                    and n.func.attr in ("parse_args", "print_help", "error"))
+            )
+        ]
+        if outputs:
+            assert min(h) < min(outputs), (
+                f"{name}: 콘솔 고정(L{min(h)})이 «{fn.name}» 안의 첫 출력·인자 파싱"
+                f"(L{min(outputs)})보다 **뒤**에 있다 — 그 앞 경로는 고정 없이 돈다. "
+                "진입 함수 맨 앞으로 옮긴다."
+            )
 
 
 def _canonical_checker() -> Path | None:

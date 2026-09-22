@@ -307,6 +307,17 @@ def gui() -> int:
 
 
 def main(argv=None) -> int:
+    # 콘솔 고정은 **맨 앞**이다 — argparse 도, gui() 도 이 뒤에 온다.
+    # 한때 `parse_args()`·`gui()` **뒤**에 있어서 `--auto` 경로에서만 실행됐다
+    # (2026-09-22 실측). 그때는 그 앞에서 찍는 cp949 불가 문자가 없어 안 죽었지만,
+    # help 문구에 «—» 하나만 들어가면 `--help` 가 사용자 콘솔에서 죽는다.
+    # 창 없는 exe 는 stdout 이 None 이라 그때는 건너뛴다.
+    if sys.stdout is not None:
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
     ap = argparse.ArgumentParser(description="고전서지 통합 브라우저 설치")
     ap.add_argument("--auto", action="store_true", help="창 없이 설치(검증용)")
     ap.add_argument("--dir", default=None, help="설치 폴더")
@@ -319,12 +330,6 @@ def main(argv=None) -> int:
     if not a.auto:
         return gui()
 
-    # 콘솔은 cp949일 수 있다 — «—» 같은 글자에서 죽지 않게 UTF-8로 고정(창 없는 exe는 stdout이 없다)
-    if sys.stdout is not None:
-        try:
-            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-        except (AttributeError, ValueError):
-            pass
     last = {"pct": -1}
 
     def say(text, replace=False):
