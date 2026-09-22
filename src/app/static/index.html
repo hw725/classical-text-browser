@@ -355,6 +355,13 @@
                   JSON 가져오기
                 </button>
                 <button
+                  id="snapshot-export-btn"
+                  class="section-action-btn"
+                  title="지금 해석 저장소를 JSON 스냅샷으로 내보내기"
+                >
+                  JSON 내보내기
+                </button>
+                <button
                   id="interp-import-folder-btn"
                   class="section-action-btn"
                   title="기존 해석 저장소 폴더 가져오기 (manifest.json 포함)"
@@ -774,6 +781,46 @@
             style="display: none"
           >
             <div class="section-header">의존 추적</div>
+            <!-- 의존 경고 배너 (2026-09-22, B-008 — 죽은 해석 패널에서 옮겨 왔다).
+                 여기 두는 까닭: 「어느 파일이 바뀌었나」를 그리는 자리가 이 아래
+                 (`dep-file-list`)이므로, 보는 것과 누르는 것이 한 자리에 모인다.
+                 옛 자리에 있던 `diff` 단추는 걷어냈다 — 하던 일이 «이 사이드바를
+                 대신 눌러 주는 것»뿐이라 여기서는 제자리걸음이 된다. -->
+            <div
+              id="interp-dep-banner"
+              class="interp-dep-banner"
+              style="display: none"
+            >
+              <span class="interp-dep-icon">
+                <!-- 경고 아이콘을 toast.js와 같은 SVG로 통일 (기존 ⚠ 엔티티) -->
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              </span>
+              <span
+                id="interp-dep-msg"
+                class="interp-dep-msg"
+                >원본이 변경되었습니다</span
+              >
+              <div class="interp-dep-actions">
+                <button
+                  id="interp-dep-ack"
+                  class="text-btn"
+                  title="변경 인지 — 바뀐 것을 보았다고 표시합니다"
+                >
+                  확인
+                </button>
+                <button
+                  id="interp-dep-update"
+                  class="text-btn text-btn-primary"
+                  title="기반 업데이트 — 이 해석의 기준 커밋을 지금 원본으로 옮깁니다"
+                >
+                  기반 업데이트
+                </button>
+              </div>
+            </div>
             <div
               id="dep-status-summary"
               class="dep-status-summary"
@@ -2140,61 +2187,7 @@
             id="interp-panel"
             style="display: none"
           >
-            <div class="panel-label">
-              해석 (L5~L7)
-              <button
-                id="snapshot-export-btn"
-                class="section-action-btn"
-                title="JSON 스냅샷 내보내기"
-                style="margin-left: auto"
-              >
-                내보내기
-              </button>
-            </div>
-
-            <!-- 의존 경고 배너 -->
-            <div
-              id="interp-dep-banner"
-              class="interp-dep-banner"
-              style="display: none"
-            >
-              <span class="interp-dep-icon">
-                <!-- 경고 아이콘을 toast.js와 같은 SVG로 통일 (기존 ⚠ 엔티티) -->
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                  <line x1="12" y1="9" x2="12" y2="13"/>
-                  <line x1="12" y1="17" x2="12.01" y2="17"/>
-                </svg>
-              </span>
-              <span
-                id="interp-dep-msg"
-                class="interp-dep-msg"
-                >원본이 변경되었습니다</span
-              >
-              <div class="interp-dep-actions">
-                <button
-                  id="interp-dep-diff"
-                  class="text-btn"
-                  title="변경 파일 보기"
-                >
-                  diff
-                </button>
-                <button
-                  id="interp-dep-ack"
-                  class="text-btn"
-                  title="변경 인지"
-                >
-                  확인
-                </button>
-                <button
-                  id="interp-dep-update"
-                  class="text-btn text-btn-primary"
-                  title="기반 업데이트"
-                >
-                  기반 업데이트
-                </button>
-              </div>
-            </div>
+            <div class="panel-label">해석 (L5~L7)</div>
 
             <!-- 층별 서브탭 -->
             <div class="interp-subtab-bar">
