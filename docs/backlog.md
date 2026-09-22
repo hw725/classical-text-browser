@@ -27,11 +27,40 @@
 - 어떻게 알았나: 커넥톰 대조 단추를 그 도구 바에 붙였다가 headless Chrome 으로 눌러 보니
   보이지 않았고, 조상을 거슬러 올라가 패널이 `display:none`인 것을 찾았다. 모드 탭 열을
   전부 눌러 봐도 `active`는 끝까지 false 였다.
-- 왜 지금 안 고치나: 해석 편집기가 다섯(표점·현토·번역·주석·인용)으로 갈라지면서(D-096)
-  이 패널이 남은 자리인지, 아니면 탭이 실수로 빠진 것인지가 **설계 질문**이다. 전자면
-  패널과 죽은 코드를 걷어내는 일이고, 후자면 탭을 되살리는 일이라 방향이 정반대다.
-- 함께 볼 것: `activateInterpretationMode`·`deactivateInterpretationMode`(interpretation.js),
-  `_updateToolbarButtons`(entity-manager.js), contents-tree.js 38행의 「네 자리」 주석.
+
+**탭은 사고로 지워졌다 — 그러나 되살리면 안 된다** (2026-09-22, 다른 세션이 이력을 캐고
+이쪽에서 다시 확인했다).
+
+- 탭 이름은 「비교」였다. `ce9743a`(2026-02-14, Phase 7)가 넣었고 `e84d800`(2026-02-24)이
+  지웠다. 그 커밋 제목은 **「비교 탭 L6/L7 수정」**이고 본문에도 탭을 없앴다는 말이 없다 —
+  고치겠다고 한 것의 **입구를 같은 커밋에서 지웠다.** 대신 들어온 탭도 없다(diff 확인).
+  D-096(2026-09)보다 일곱 달 앞이라 「다섯으로 갈라지며 남은 자리」가 아니다.
+- 그런데 그 패널의 본체는 **D-096 이전의 통합 편집기**(「해석 (L5~L7)」 + 층별 서브탭)다.
+  지금은 다섯이 각자 패널(`punct-panel`·`hyeonto-panel`·`trans-panel`·`ann-panel`·
+  `cite-panel`)과 모드 탭을 갖고 있으므로, 탭을 되살리면 **대체된 옛 편집기가 함께 돌아온다.**
+
+**무엇이 실제로 빠지는가** — 「단추 셋이 안 보인다」보다 좁기도 하고 넓기도 하다.
+
+| | 상태 | 어디에 |
+|---|---|---|
+| 의존 **정보**(어느 파일이 바뀌었나) | **살아 있다** | 액티비티 바 「의존 추적」 → `#dep-sidebar-section`(`dep-status-summary`·`dep-file-list`) |
+| 의존 **경고**(「원본이 변경되었습니다」) | 죽었다 | `interp-dep-banner` |
+| `diff` · **변경 인지** · **기반 업데이트** | 죽었다 | `interp-dep-diff`·`interp-dep-ack`·`interp-dep-update` |
+| 스냅샷 **가져오기** | **살아 있다** | `snapshot-import-btn`(`#interp-section`) |
+| 스냅샷 **내보내기** | 죽었다 | `snapshot-export-btn` |
+| 「단위 만들기」·「LLM에게 요청」·공용 「저장」 | 죽었다 | `interp-toolbar` |
+
+즉 **상태를 바꾸는 두 동작**(`dependency/acknowledge`·`dependency/update-base`)에 화면에서
+닿을 길이 없다. 읽는 쪽은 사이드바가 대신하고 있어 여태 티가 나지 않았다. 스냅샷은
+**가져오기만 살고 내보내기가 죽은 비대칭**이다.
+
+- 왜 지금 안 고치나: **저 셋을 어디로 옮길지는 사람이 정할 일**이다. 의존 경고는 다섯
+  편집기가 공유하는 자리(또는 살아 있는 「의존 추적」 사이드바 안)가, 스냅샷 내보내기는
+  버전 탭이나 서고 메뉴가 후보다. 옮길 자리를 정한 **뒤에** 패널과 죽은 코드를 걷어낸다 —
+  순서를 뒤집으면 기능이 사라진다.
+- 함께 볼 것: `activateInterpretationMode`·`deactivateInterpretationMode`·`_acknowledgeChanges`·
+  `_updateBase`(interpretation.js), `_updateToolbarButtons`(entity-manager.js),
+  `workspace.js:1842`(스냅샷 export 배선), contents-tree.js 38행의 「네 자리」 주석.
 - 같이 나온 것(같은 실측): `entity.py:153 _get_source_head_commit`이 `interpretation.py:232`와
   **본문이 같은 중복 정의**이고 시험에서 안 돈다(Phase 8부터) · `entity.auto_create_units_from_text`는
   부르는 곳이 없다 · `entity.create_unit_from_source`는 라우트(`interpretations.py:676`)가
