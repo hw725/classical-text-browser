@@ -4,8 +4,9 @@
 두 측정기를 한 파일에 둔 까닭: 같은 책 설정(`BOOKS`)·같은 본문 적재(`load_lines`)·같은 유사도를
 쓰는데 파일이 둘이라 한쪽이 다른 쪽을 import하고 있었다. 하나로 두면 책을 더할 때 한 곳만 고친다.
 
-    starts — 규칙(D-116)과 판정 모델을 같은 자로 견준다(«이 행에서 새 글이 시작하는가»).
-    toc    — 목차 대조를 «고르기»로 바꿔 지금의 정렬과 견준다.
+    starts  — 규칙(D-116)과 판정 모델을 같은 자로 견준다(«이 행에서 새 글이 시작하는가»).
+    toc     — 목차 대조를 «고르기»로 바꿔 지금의 정렬과 견준다.
+    control — 그 대조군. 제목 A를 묻되 후보는 다른 항목 B의 것을 준다(D-129).
 
 정답 자리 맞춤(starts):
     CSV의 «행»은 4차 확정본 기준이 아니다(그 전 판독이나 앵커 규약을 따른다). 그대로 쓰면 모델이
@@ -18,12 +19,21 @@
     2개뿐이다(2026-09-21 확인). 그래서 점수 대신 **정답 없이 검증되는 성질**을 잰다:
     ① 본문에 없는 항목에 «없음»을 고르는가(지어내기 저항) ② 고른 행에서 제목이 실제로 시작하는가.
 
+    **그 둘만으로는 부족하다.** ①②가 모두 같은 `title_similarity`를 쓰고, 항목 분류(`PRESENT`)와
+    자기검증(`SELF_CHECK_MIN`)이 값까지 0.85로 같다 — 독립 검산인 줄 알았던 두 열이 같은 자를
+    두 번 대고 있다. 그래서 `control`이 무작위 기준선을 세운다: 남의 후보를 주면 정답은 거의
+    언제나 «없음»이므로, 모델이 «읽고 고르는지» 아니면 «유사도 1위를 기계적으로 집는지»가 갈린다.
+    **천장을 먼저 잰다** — 빌린 창에 그 제목의 진짜 행이 우연히 든 쌍은 «없음»이 정답이 아니므로
+    분모에서 뺀다. 「제대로 읽으면 100%」를 잣대로 쓰면 도달 불가능한 값을 실패로 읽게 된다.
+
 쓰는 법:
     uv run python scripts/eval_boundary_judge.py starts --book cheonjin
     uv run python scripts/eval_boundary_judge.py starts --book unyang01 --run --save nouls.json
     uv run python scripts/eval_boundary_judge.py starts --book unyang01 --score nouls.json
     uv run python scripts/eval_boundary_judge.py toc --run --save toc.json
     uv run python scripts/eval_boundary_judge.py toc --score toc.json
+    uv run python scripts/eval_boundary_judge.py control --run --save ctrl.json --real toc.json
+    uv run python scripts/eval_boundary_judge.py control --score ctrl.json --real toc.json
 
 본문과 정답 CSV는 **읽기만** 한다. `--run`이 없으면 한 건도 보내지 않는다(전역 규칙 11).
 """
@@ -35,6 +45,7 @@ import collections
 import csv
 import json
 import pathlib
+import random
 import re
 import sys
 
@@ -44,11 +55,14 @@ sys.path.insert(0, str(ROOT / "src"))
 from core.segmentation import Line, normalize_rules, propose_boundaries  # noqa: E402
 from core.structure_llm import ask_structure_jev, jev_structure_size  # noqa: E402
 from core.toc import (  # noqa: E402
+    TOC_NONE,
     align_toc_to_body,
     detect_toc_pages,
     extract_toc_entries_rule,
     match_toc_entries_jev,
+    title_similarity,
     toc_candidates,
+    toc_match_question,
 )
 
 UNYANG = pathlib.Path(r"C:\Users\junto\Downloads\운양")
@@ -80,6 +94,8 @@ BOOKS: dict[str, dict] = {
 
 ABSENT = 0.5  # (toc) 본문 최고 유사도가 이보다 낮으면 «본문에 없는 항목»으로 본다
 PRESENT = 0.85  # (toc) 이보다 높으면 «본문에 있는 항목»
+# 자기검증과 같은 값을 쓴다 — 코드가 같은 자를 두 번 대고 있다는 것을 숨기지 않는다.
+SELF_CHECK_MIN = 0.85  # (control) 빌린 창에 진짜 행이 든 쌍을 가르는 문턱
 
 
 # ── 공통 ────────────────────────────────────────────────────────────────────
@@ -365,6 +381,112 @@ def cmd_toc(args) -> int:
     return 0
 
 
+# ── 대조군: 제목 A를 묻되 후보는 B의 것으로 준다 ────────────────────────────
+def control_pairs(entries, body, top_k: int, seed: int = 20260922):
+    """짝바꿈(derangement)으로 «남의 후보»를 배정한다. 출력: [(i, 제목, 빌린 후보, plant)].
+
+    plant = 빌린 창 안에서 이 제목의 최고 유사도. **«없음»의 천장을 이것으로 잰다** —
+    A의 진짜 행이 우연히 B의 창에 들어 있으면 «없음»이 정답이 아니므로 분모에서 빼야 한다.
+    「제대로 읽으면 100%」를 잣대로 쓰면 도달 불가능한 값을 실패로 읽게 된다.
+    """
+    asked = [(i, str(getattr(e, "title", "") or "")) for i, e in enumerate(entries)]
+    asked = [(i, t) for i, t in asked if len(t) >= 2]
+    cands = {i: toc_candidates(t, body, top_k) for i, t in asked}
+    idx = [i for i, _ in asked]
+    rng = random.Random(seed)
+    for _ in range(1000):
+        shuffled = idx[:]
+        rng.shuffle(shuffled)
+        if all(a != b for a, b in zip(idx, shuffled)):
+            break
+    else:
+        raise RuntimeError("짝바꿈에 실패했다")
+    partner = dict(zip(idx, shuffled))
+    out = []
+    for i, title in asked:
+        borrowed = cands[partner[i]]
+        plant = max((title_similarity(title, ln.text) for ln, _ in borrowed), default=0.0)
+        out.append((i, title, borrowed, plant))
+    return out
+
+
+def control_report(rows: list[dict], real: dict | None = None) -> None:
+    """대조군 결과를 읽는다 — 천장을 먼저 세우고 그 위에서 판별력을 본다."""
+    ok = [r for r in rows if "error" not in r]
+    planted = [r for r in ok if r["plant"] >= SELF_CHECK_MIN]
+    ceiling = 1 - len(planted) / len(ok) if ok else 0.0
+    clean = [r for r in ok if r["plant"] < SELF_CHECK_MIN]
+    clean_none = [r for r in clean if r["choice"] == TOC_NONE]
+    print(f"\n대조군 {len(ok)}쌍 · 빌린 창에 진짜 행이 든 쌍 {len(planted)}")
+    print(f"  달성 가능한 최대 «없음» = {ceiling:.1%}")
+    got = sum(1 for r in ok if r["choice"] == TOC_NONE)
+    print(f"  «없음» {got}/{len(ok)} = {got / len(ok):.1%}"
+          f" · 천장 쌍 제외 {len(clean_none)}/{len(clean)} = {len(clean_none) / len(clean):.1%}")
+    if real:
+        asked = len(real["picks"]) + sum(1 for n in real["none"] if "why" not in n)
+        base = sum(1 for n in real["none"] if "why" not in n) / asked
+        obs = len(clean_none) / len(clean)
+        print(f"  실제 조건 {base:.1%} → 대조군 {obs:.1%} (판별력 {obs - base:+.1%}p)")
+        print("  기계적으로 유사도 1위를 집는 중이라면 둘이 비슷해야 한다.")
+    leaked = [r for r in clean
+              if r["choice"] != TOC_NONE and r["sim"] >= SELF_CHECK_MIN and r["prob"] >= 0.8]
+    print(f"  자기검증(≥{SELF_CHECK_MIN})과 확률(≥0.8)을 둘 다 통과한 헛것: {len(leaked)}건")
+    for r in sorted(planted, key=lambda r: -r["prob"])[:5]:
+        print(f"    [천장 쌍] 「{r['title'][:14]}」 → {r['picked_text'][:20] or '«없음»'}"
+              f" (확률 {r['prob']})")
+
+
+def cmd_control(args) -> int:
+    entries, body, _toc_pages, _matches, _unmatched = prepare(args.book)
+    pairs = control_pairs(entries, body, args.top_k)
+    real = json.loads(args.real.read_text(encoding="utf-8")) if args.real else None
+    if args.score:
+        control_report(json.loads(args.score.read_text(encoding="utf-8"))["rows"], real)
+        return 0
+    print(f"[{args.book}] 대조군 {len(pairs)}쌍 · 호출 {len(pairs)}회 · 예상 $0.002~$0.003")
+    if not args.run:
+        print("보내지 않았습니다. 실제로 부르려면 --run.")
+        return 0
+
+    from llm.jev import JevClient  # noqa: PLC0415
+
+    client = JevClient(max_calls=args.max_calls)
+    if not client.has_key:
+        print("TYPESAFE_API_KEY를 찾지 못했습니다.")
+        return 1
+    client.gate(len(pairs))
+    rows: list[dict] = []
+    for i, title, borrowed, plant in pairs:
+        state = f"목차 항목: {title}\n\n본문 후보 행:\n" + "\n".join(
+            f"p{ln.page}-L{ln.line_index}\t{ln.text.strip()}" for ln, _ in borrowed
+        )
+        try:
+            answers = client.ask(state, {"where": toc_match_question(title, borrowed)})
+        except Exception as exc:  # noqa: BLE001 — 한 쌍이 죽어도 나머지는 잰다
+            rows.append({"entry": i, "title": title, "error": f"{type(exc).__name__}: {exc}"})
+            continue
+        ans = answers.get("where") if isinstance(answers, dict) else None
+        pick = ans.get("choice") if isinstance(ans, dict) else None
+        probs = ans.get("probabilities") if isinstance(ans, dict) else {}
+        by_id = {f"p{ln.page}-L{ln.line_index}": ln for ln, _ in borrowed}
+        text = by_id[pick].text.strip()[:24] if pick in by_id else ""
+        rows.append({
+            "entry": i, "title": title, "choice": pick,
+            "prob": round(float((probs or {}).get(pick) or 0), 3),
+            "plant": round(plant, 3), "picked_text": text,
+            "sim": round(title_similarity(title, text), 3) if text else 0.0,
+        })
+    print(f"\n{client.usage()}")
+    if args.save:
+        args.save.write_text(
+            json.dumps({"rows": rows, "usage": client.usage()}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        print("결과를 남겼습니다:", args.save)
+    control_report(rows, real)
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="경계 판정을 잰다 — starts(글 시작 행)·toc(목차 대조)")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -389,6 +511,16 @@ def main() -> int:
     t.add_argument("--save", type=pathlib.Path)
     t.add_argument("--score", type=pathlib.Path, help="남긴 결과로 다시 잰다(호출 없음)")
     t.set_defaults(func=cmd_toc)
+
+    c = sub.add_parser("control", help="대조군 — 제목 A를 묻되 후보는 B의 것으로 준다")
+    c.add_argument("--book", choices=sorted(BOOKS), default="unyang01")
+    c.add_argument("--top-k", type=int, default=6)
+    c.add_argument("--max-calls", type=int, default=140)
+    c.add_argument("--run", action="store_true")
+    c.add_argument("--save", type=pathlib.Path)
+    c.add_argument("--score", type=pathlib.Path, help="남긴 결과로 다시 읽는다(호출 없음)")
+    c.add_argument("--real", type=pathlib.Path, help="실제 조건 결과(toc --save) — 판별력 비교용")
+    c.set_defaults(func=cmd_control)
 
     args = ap.parse_args()
     return args.func(args)
