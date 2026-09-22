@@ -268,8 +268,8 @@ function _renderAlignmentTable(pairs) {
     const label = _matchTypeLabel(pair.match_type) + _variantHintSuffix(pair.variant_hint);
 
     html += `<div class="${cls}" data-pair-idx="${idx}">`;
-    html += `  <span class="ag-col ag-char">${_escapeHtml(ocrChar)}</span>`;
-    html += `  <span class="ag-col ag-char">${_escapeHtml(refChar)}</span>`;
+    html += `  <span class="ag-col ag-char">${_escapeHtmlAlignment(ocrChar)}</span>`;
+    html += `  <span class="ag-col ag-char">${_escapeHtmlAlignment(refChar)}</span>`;
     html += `  <span class="ag-col ag-status">${icon} ${label}</span>`;
     html += "</div>";
   });
@@ -589,7 +589,7 @@ function _variantHintLabel(hint) {
 
 function _variantHintSuffix(hint) {
   if (!hint) return "";
-  return ` <span class="align-hint" title="${_escapeHtml(_variantHintLabel(hint))}">· 사전 힌트</span>`;
+  return ` <span class="align-hint" title="${_escapeHtmlAlignment(_variantHintLabel(hint))}">· 사전 힌트</span>`;
 }
 
 /* ──────────────────────────
@@ -630,9 +630,11 @@ function _matchTypeLabel(type) {
   }
 }
 
-function _escapeHtml(str) {
+function _escapeHtmlAlignment(str) {
+  // 글자 자리 전용 — 브라우저가 텍스트로 넣고 다시 읽어 escape 한다(속성에는 쓰지 않는다).
+  // 옛 이름 `_escapeHtmlAlignment` 은 다섯 파일이 선언했고 구현이 모두 같았다(B-009 실측).
   const div = document.createElement("div");
-  div.textContent = str;
+  div.textContent = str === null || str === undefined ? "" : str;
   return div.innerHTML;
 }
 
@@ -640,7 +642,7 @@ function _showAlignmentPlaceholder(msg) {
   const statsBar = document.getElementById("alignment-stats-bar");
   // msg에는 서버 오류 메시지가 그대로 실려 오기도 한다 — <가 섞이면
   // 태그로 읽혀 안내문이 사라지므로 넣기 직전에 이스케이프한다.
-  if (statsBar) statsBar.innerHTML = `<div class="placeholder">${_escapeHtml(msg)}</div>`;
+  if (statsBar) statsBar.innerHTML = `<div class="placeholder">${_escapeHtmlAlignment(msg)}</div>`;
   const table = document.getElementById("alignment-table");
   if (table) table.innerHTML = "";
 }

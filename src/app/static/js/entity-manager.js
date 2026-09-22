@@ -207,12 +207,12 @@ function _renderEntityList() {
     const isConcept = item._entityType === "concept";
     // 이미 다른 개념으로 합쳐진 것은 다시 합치지 않는다 — get_entity 가 붙여 주는 표시(D-128 2항).
     const merged = isConcept && item.superseded_by
-      ? `<span class="entity-list-id" title="${_escHtml(item.superseded_by)} 로 합쳐짐">→ ${_escHtml(String(item.superseded_by).substring(0, 8))}</span>`
+      ? `<span class="entity-list-id" title="${_escHtmlEntity(item.superseded_by)} 로 합쳐짐">→ ${_escHtmlEntity(String(item.superseded_by).substring(0, 8))}</span>`
       : "";
 
     return `<div class="entity-list-item" data-entity-type="${item._entityType}" data-entity-id="${item.id}">
       <span class="entity-type-badge ${info.cssClass}">${info.label}</span>
-      <span class="entity-list-label" title="${_escHtml(label)}">${_escHtml(truncLabel)}</span>
+      <span class="entity-list-label" title="${_escHtmlEntity(label)}">${_escHtmlEntity(truncLabel)}</span>
       <span class="entity-status-badge status-${item.status || "draft"}">${item.status || "draft"}</span>
       <span class="entity-list-id">${shortId}</span>
       ${merged}
@@ -282,7 +282,7 @@ function _getFilteredEntities() {
 function _renderEmptyList(msg) {
   const container = document.getElementById("entity-list");
   if (container) {
-    container.innerHTML = `<div class="placeholder">${_escHtml(msg)}</div>`;
+    container.innerHTML = `<div class="placeholder">${_escHtmlEntity(msg)}</div>`;
   }
 }
 
@@ -368,7 +368,7 @@ function _openEntityEditDialog(entityType, entityId) {
  * 엔티티 유형에 맞는 폼 필드 HTML을 생성한다.
  */
 function _buildFormFields(entityType, existing) {
-  const val = (field) => existing ? _escHtml(existing[field] || "") : "";
+  const val = (field) => existing ? _escHtmlEntity(existing[field] || "") : "";
   const statusOptions = _buildStatusOptions(existing ? existing.status : "draft");
 
   switch (entityType) {
@@ -397,12 +397,12 @@ function _buildFormFields(entityType, existing) {
       // 올라왔는가」를 나중에 되짚을 수 있어야 하므로 읽기 전용으로 둔다.
       const promo = existing && existing.concept_features && existing.concept_features.promotion;
       const promoBox = promo
-        ? `<div class="entity-promo-note">승격 판정: <b>${promo.eligible ? "충족" : "미충족"}</b> — ${_escHtml(promo.reason || "")}<br>
+        ? `<div class="entity-promo-note">승격 판정: <b>${promo.eligible ? "충족" : "미충족"}</b> — ${_escHtmlEntity(promo.reason || "")}<br>
              실질 무게 ${promo.metrics ? promo.metrics.effective_weight : "?"} · 출처 ${promo.metrics ? promo.metrics.source_count : "?"}개
              (출처 «수»는 판정에 쓰지 않는다 — D-128 7·8항)</div>`
         : "";
       const supersededBox = existing && existing.superseded_by
-        ? `<div class="entity-promo-note">이 개념은 <b>${_escHtml(existing.superseded_by)}</b> 로 합쳐졌다. 옛 ID는 장부에 남아 계속 조회된다 (D-128 2항).</div>`
+        ? `<div class="entity-promo-note">이 개념은 <b>${_escHtmlEntity(existing.superseded_by)}</b> 로 합쳐졌다. 옛 ID는 장부에 남아 계속 조회된다 (D-128 2항).</div>`
         : "";
       return `
         ${supersededBox}
@@ -784,13 +784,13 @@ function _openMergeDialog(sourceId) {
   title.textContent = "개념 합치기";
   form.innerHTML = `
     <div class="entity-promo-note">
-      <b>${_escHtml((source && source.label) || sourceId)}</b> 를 다른 개념으로 합칩니다.<br>
+      <b>${_escHtmlEntity((source && source.label) || sourceId)}</b> 를 다른 개념으로 합칩니다.<br>
       이 개념의 파일은 지워지지 않고 상태만 «deprecated» 가 되며, 옛 ID는 장부에
       남아 계속 조회됩니다 (D-128 2항).
     </div>
     <label class="bib-edit-label">남길 개념 (target)</label>
     <select id="ef-merge-target" class="bib-select" style="width:100%;">
-      ${targets.map((c) => `<option value="${_escHtml(c.id)}">${_escHtml(c.label || c.id)} (${_escHtml(String(c.id).substring(0, 8))})</option>`).join("")}
+      ${targets.map((c) => `<option value="${_escHtmlEntity(c.id)}">${_escHtmlEntity(c.label || c.id)} (${_escHtmlEntity(String(c.id).substring(0, 8))})</option>`).join("")}
     </select>
     <label class="bib-edit-label">사유 (note, 선택)</label>
     <input id="ef-merge-note" type="text" class="bib-input" placeholder="예: 같은 인물" />
@@ -888,7 +888,7 @@ async function _renderConnectome(live) {
     );
     data = await resp.json().catch(() => ({}));
   } catch (err) {
-    form.innerHTML = `<div class="entity-promo-note">대조하지 못했습니다: ${_escHtml(err.message)}</div>`;
+    form.innerHTML = `<div class="entity-promo-note">대조하지 못했습니다: ${_escHtmlEntity(err.message)}</div>`;
     return;
   }
 
@@ -898,7 +898,7 @@ async function _renderConnectome(live) {
       ? '<div class="bib-edit-actions"><button id="ef-conn-recorded" type="button">기록된 기준값으로 보기</button></div>'
       : "";
     form.innerHTML =
-      `<div class="entity-promo-note" style="white-space:pre-wrap;">${_escHtml(data.error || `서버 오류 (${resp.status})`)}</div>` +
+      `<div class="entity-promo-note" style="white-space:pre-wrap;">${_escHtmlEntity(data.error || `서버 오류 (${resp.status})`)}</div>` +
       back;
     const b = document.getElementById("ef-conn-recorded");
     if (b) b.addEventListener("click", () => _renderConnectome(false));
@@ -919,14 +919,14 @@ async function _renderConnectome(live) {
   form.innerHTML = `
     <div class="entity-promo-note">
       이 저장소의 관계 <b>${lib.count || 0}</b>건을 커넥톰 연합 구조
-      (<b>${_escHtml(ref.lineage || "")}</b>, ${_escHtml(ref.source || "")})와
+      (<b>${_escHtmlEntity(ref.lineage || "")}</b>, ${_escHtmlEntity(ref.source || "")})와
       나란히 놓습니다. <b>점수를 매기지 않습니다</b> — 커넥톰은 참고 좌표이지
       목표가 아닙니다.
     </div>
     ${
       notes.length
         ? `<ul class="entity-promo-note" style="margin:8px 0;padding-left:18px;">${notes
-            .map((n) => `<li>${_escHtml(n)}</li>`)
+            .map((n) => `<li>${_escHtmlEntity(n)}</li>`)
             .join("")}</ul>`
         : ""
     }
@@ -938,7 +938,7 @@ async function _renderConnectome(live) {
         ${rows
           .map(
             (r) => `<tr>
-              <td>${_escHtml(r.label)}</td>
+              <td>${_escHtmlEntity(r.label)}</td>
               <td>${fmt(r.library)}</td>
               <td>${fmt(r.reference)}${r.reference_live ? ' <span title="이 줄은 방금 neuPrint 에 물어 새로 쟀습니다">◆</span>' : ""}</td>
               <td>${gap(r.gap)}</td>
@@ -1016,7 +1016,7 @@ function _renderLlmDraftReview() {
     const label = d[info.displayField] || d.id?.substring(0, 8) || "—";
     return `<div class="llm-review-item" data-entity-type="${d._entityType}" data-entity-id="${d.id}">
       <span class="entity-type-badge ${info.cssClass}">${info.label}</span>
-      <span class="entity-list-label">${_escHtml(label)}</span>
+      <span class="entity-list-label">${_escHtmlEntity(label)}</span>
       <span class="llm-review-actions">
         <button class="llm-approve-btn" data-action="approve">승인</button>
         <button class="llm-edit-btn" data-action="edit">수정</button>
@@ -1093,8 +1093,11 @@ async function _handleLlmReviewAction(action, entityType, entityId) {
    유틸리티
    ────────────────────────── */
 
-function _escHtml(str) {
-  if (!str) return "";
+function _escHtmlEntity(str) {
+  // & < > " 를 막는다. 속성 자리에 들어갈 수 있으므로 큰따옴표까지 막는다(D-069).
+  // 옛 이름은 `_escHtmlEntity` 이었는데 네 파일이 같은 이름을 선언해 **적재 순서로 한 판이
+  // 전역을 이기고 있었다**(B-009). 이 파일은 이제 제 것을 쓴다.
+  if (str === null || str === undefined) return "";
   return String(str)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")

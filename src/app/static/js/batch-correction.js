@@ -128,13 +128,13 @@ function _renderPreviewResult(data) {
 
   if (data.total_matches === 0) {
     resultDiv.innerHTML = `<div class="placeholder">
-      "${_escHtml(data.original_char)}" → 매칭 결과 없음 (이미 교정되었거나 해당 글자가 없습니다)
+      "${_escHtmlBatch(data.original_char)}" → 매칭 결과 없음 (이미 교정되었거나 해당 글자가 없습니다)
     </div>`;
     return;
   }
 
   let html = `<div class="batch-summary">
-    <strong>"${_escHtml(data.original_char)}" → "${_escHtml(data.corrected_char)}"</strong>
+    <strong>"${_escHtmlBatch(data.original_char)}" → "${_escHtmlBatch(data.corrected_char)}"</strong>
     — ${data.total_matches}건 (${data.pages.length}페이지)
   </div>`;
 
@@ -150,9 +150,9 @@ function _renderPreviewResult(data) {
     for (const pos of previewPositions) {
       const ctx = pos.context;
       // 대상 글자를 하이라이트
-      const highlighted = _escHtml(ctx).replace(
-        _escHtml(data.original_char),
-        `<mark>${_escHtml(data.original_char)}</mark>`
+      const highlighted = _escHtmlBatch(ctx).replace(
+        _escHtmlBatch(data.original_char),
+        `<mark>${_escHtmlBatch(data.original_char)}</mark>`
       );
       html += `<span class="batch-context">…${highlighted}…</span> `;
     }
@@ -244,8 +244,14 @@ async function _batchExecute() {
    유틸리티
    ────────────────────────── */
 
-function _escHtml(str) {
-  const div = document.createElement("div");
-  div.textContent = str;
-  return div.innerHTML;
+function _escHtmlBatch(str) {
+  // & < > " 를 막는다. 속성 자리에 들어갈 수 있으므로 큰따옴표까지 막는다(D-069).
+  // 옛 이름은 `_escHtmlBatch` 이었는데 네 파일이 같은 이름을 선언해 **적재 순서로 한 판이
+  // 전역을 이기고 있었다**(B-009). 이 파일은 이제 제 것을 쓴다.
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }

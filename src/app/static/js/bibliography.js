@@ -223,7 +223,7 @@ function _formatPansik(info) {
     } else if (value === null || value === undefined || value === "") {
       display = '<span class="bib-empty">[미입력]</span>';
     } else {
-      display = _escapeHtml(String(value));
+      display = _escapeHtmlBibliography(String(value));
     }
 
     html += `
@@ -368,7 +368,7 @@ function _openFetchDialog() {
     // 그것을 태그로 읽어 드롭다운이 통째로 깨진다. 넣기 직전에 이스케이프한다.
     // (id는 value="…" 속성 안이므로 따옴표까지 막는 _escAttr를 쓴다.)
     parserSelect.innerHTML = _parsers
-      .map((p) => `<option value="${_bibEscAttr(p.id)}">${_escapeHtml(p.name)}</option>`)
+      .map((p) => `<option value="${_bibEscAttr(p.id)}">${_escapeHtmlBibliography(p.name)}</option>`)
       .join("");
   }
 
@@ -449,8 +449,8 @@ async function _executeSearch() {
       .map(
         (r, i) => `
         <div class="bib-result-item" data-index="${i}">
-          <div class="bib-result-title">${_escapeHtml(r.title || "(제목 없음)")}</div>
-          <div class="bib-result-summary">${_escapeHtml(r.summary || "")}</div>
+          <div class="bib-result-title">${_escapeHtmlBibliography(r.title || "(제목 없음)")}</div>
+          <div class="bib-result-summary">${_escapeHtmlBibliography(r.summary || "")}</div>
         </div>
       `
       )
@@ -463,7 +463,7 @@ async function _executeSearch() {
       });
     });
   } catch (err) {
-    resultsContainer.innerHTML = `<div class="bib-error">${_escapeHtml(err.message)}</div>`;
+    resultsContainer.innerHTML = `<div class="bib-error">${_escapeHtmlBibliography(err.message)}</div>`;
   }
 }
 
@@ -644,9 +644,9 @@ async function _saveEditedBibliography() {
 
 function _formatCreator(creator) {
   if (!creator) return '<span class="bib-empty">[미입력]</span>';
-  let text = _escapeHtml(creator.name || "");
-  if (creator.name_reading) text += ` (${_escapeHtml(creator.name_reading)})`;
-  if (creator.period) text += ` — ${_escapeHtml(creator.period)}`;
+  let text = _escapeHtmlBibliography(creator.name || "");
+  if (creator.name_reading) text += ` (${_escapeHtmlBibliography(creator.name_reading)})`;
+  if (creator.period) text += ` — ${_escapeHtmlBibliography(creator.period)}`;
   return text || '<span class="bib-empty">[미입력]</span>';
 }
 
@@ -656,8 +656,8 @@ function _formatContributors(contributors) {
   }
   return contributors
     .map((c) => {
-      let text = _escapeHtml(c.name || "");
-      if (c.role) text += ` (${_escapeHtml(c.role)})`;
+      let text = _escapeHtmlBibliography(c.name || "");
+      if (c.role) text += ` (${_escapeHtmlBibliography(c.role)})`;
       return text;
     })
     .join(", ");
@@ -665,36 +665,38 @@ function _formatContributors(contributors) {
 
 function _formatArray(arr) {
   if (!arr || arr.length === 0) return '<span class="bib-empty">[미입력]</span>';
-  return arr.map((s) => _escapeHtml(s)).join(", ");
+  return arr.map((s) => _escapeHtmlBibliography(s)).join(", ");
 }
 
 function _formatClassification(cls) {
   if (!cls || typeof cls !== "object") return '<span class="bib-empty">[미입력]</span>';
   return Object.entries(cls)
-    .map(([k, v]) => `${_escapeHtml(k)}: ${_escapeHtml(v)}`)
+    .map(([k, v]) => `${_escapeHtmlBibliography(k)}: ${_escapeHtmlBibliography(v)}`)
     .join(", ");
 }
 
 function _formatRepository(repo) {
   if (!repo) return '<span class="bib-empty">[미입력]</span>';
-  let text = _escapeHtml(repo.name || "");
-  if (repo.name_ko) text += ` (${_escapeHtml(repo.name_ko)})`;
-  if (repo.call_number) text += ` — ${_escapeHtml(repo.call_number)}`;
+  let text = _escapeHtmlBibliography(repo.name || "");
+  if (repo.name_ko) text += ` (${_escapeHtmlBibliography(repo.name_ko)})`;
+  if (repo.call_number) text += ` — ${_escapeHtmlBibliography(repo.call_number)}`;
   return text || '<span class="bib-empty">[미입력]</span>';
 }
 
 function _formatDigitalSource(ds) {
   if (!ds) return '<span class="bib-empty">[미입력]</span>';
-  let text = _escapeHtml(ds.platform || "");
+  let text = _escapeHtmlBibliography(ds.platform || "");
   if (ds.source_url) {
-    text += ` <a href="${_escapeHtml(ds.source_url)}" target="_blank" class="bib-link">열기</a>`;
+    text += ` <a href="${_escapeHtmlBibliography(ds.source_url)}" target="_blank" class="bib-link">열기</a>`;
   }
   return text || '<span class="bib-empty">[미입력]</span>';
 }
 
-function _escapeHtml(str) {
+function _escapeHtmlBibliography(str) {
+  // 글자 자리 전용 — 브라우저가 텍스트로 넣고 다시 읽어 escape 한다(속성에는 쓰지 않는다).
+  // 옛 이름 `_escapeHtmlBibliography` 은 다섯 파일이 선언했고 구현이 모두 같았다(B-009 실측).
   const div = document.createElement("div");
-  div.textContent = str;
+  div.textContent = str === null || str === undefined ? "" : str;
   return div.innerHTML;
 }
 

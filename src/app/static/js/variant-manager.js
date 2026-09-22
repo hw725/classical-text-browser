@@ -309,7 +309,7 @@ function _showImportDialog() {
   const dialog = document.createElement("div");
   dialog.className = "vm-dialog";
   dialog.innerHTML = `
-    <h3 style="margin:0 0 8px">이체자 가져오기 — ${_escHtml(name)}</h3>
+    <h3 style="margin:0 0 8px">이체자 가져오기 — ${_escHtmlVariant(name)}</h3>
     <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">
       지원 형식: CSV, TSV, 텍스트, JSON. 한 줄에 3개 이상이면 모든 조합 등록.
     </div>
@@ -467,7 +467,7 @@ function _renderVariantTable() {
 
   if (displayList.length === 0) {
     tableBody.innerHTML = `<tr><td colspan="3" style="text-align:center;color:var(--text-secondary);padding:20px">${
-      query ? `"${_escHtml(query)}" 검색 결과 없음` : "등록된 이체자가 없습니다"
+      query ? `"${_escHtmlVariant(query)}" 검색 결과 없음` : "등록된 이체자가 없습니다"
     }</td></tr>`;
     return;
   }
@@ -475,10 +475,10 @@ function _renderVariantTable() {
   let html = "";
   for (const p of displayList) {
     html += `<tr>
-      <td style="font-size:18px;text-align:center;width:50px">${_escHtml(p.charA)}</td>
-      <td style="font-size:18px;text-align:center;width:50px">${_escHtml(p.charB)}</td>
+      <td style="font-size:18px;text-align:center;width:50px">${_escHtmlVariant(p.charA)}</td>
+      <td style="font-size:18px;text-align:center;width:50px">${_escHtmlVariant(p.charB)}</td>
       <td style="text-align:center;width:40px">
-        <button class="vm-delete-btn" data-a="${_escAttr(p.charA)}" data-b="${_escAttr(p.charB)}" title="삭제">&times;</button>
+        <button class="vm-delete-btn" data-a="${_escAttrVariant(p.charA)}" data-b="${_escAttrVariant(p.charB)}" title="삭제">&times;</button>
       </td>
     </tr>`;
   }
@@ -501,12 +501,27 @@ function _bindClick(id, handler) {
   if (el) el.addEventListener("click", handler);
 }
 
-function _escHtml(str) {
-  const div = document.createElement("div");
-  div.textContent = str;
-  return div.innerHTML;
+function _escHtmlVariant(str) {
+  // & < > " 를 막는다. 속성 자리에 들어갈 수 있으므로 큰따옴표까지 막는다(D-069).
+  // 옛 이름은 `_escHtmlVariant` 이었는데 네 파일이 같은 이름을 선언해 **적재 순서로 한 판이
+  // 전역을 이기고 있었다**(B-009). 이 파일은 이제 제 것을 쓴다.
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
-function _escAttr(str) {
-  return str.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+function _escAttrVariant(str) {
+  // 속성 자리 — 작은따옴표까지 막는다. 옛 이름 `_escAttrVariant` 은 annotation-editor 판에
+  // 가려 이 파일의 느슨한 구현이 돌지 않고 있었다(B-009). 가림을 없애면서 같은
+  // 수준으로 올린다 — 이름만 바꾸면 `'` 와 `>` 가 뚫린다.
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }

@@ -148,8 +148,8 @@ async function _previewHwpFile(file, statusEl) {
     // 제목·형식은 «업로드한 문서 안»에서 뽑아낸 값이다 — 문서를 만든 쪽이
     // 정한 문자열이므로 innerHTML에 날것으로 넣으면 안 된다.
     metaEl.innerHTML = [
-      `<b>제목:</b> ${_escapeHtml(meta.title || "(없음)")}`,
-      `<b>형식:</b> ${_escapeHtml(meta.format || "?")}`,
+      `<b>제목:</b> ${_escapeHtmlHwpImport(meta.title || "(없음)")}`,
+      `<b>형식:</b> ${_escapeHtmlHwpImport(meta.format || "?")}`,
       `<b>섹션 수:</b> ${data.sections_count || 0}`,
       `<b>전체 길이:</b> ${(data.full_text_length || 0).toLocaleString()}자`,
     ].join(" &nbsp;|&nbsp; ");
@@ -871,9 +871,9 @@ async function _executeAlignPreview() {
       tr.innerHTML = `
         <td style="padding: 4px 6px; border-bottom: 1px solid var(--color-border)">${a.page_num}</td>
         <td style="padding: 4px 6px; border-bottom: 1px solid var(--color-border); color: #888; font-size: 11px"
-            title="${_escapeHtml(a.ocr_preview || "")}">${_escapeHtml(ocrSnip)}${ocrSnip.length < (a.ocr_preview || "").length ? "…" : ""}</td>
+            title="${_escapeHtmlHwpImport(a.ocr_preview || "")}">${_escapeHtmlHwpImport(ocrSnip)}${ocrSnip.length < (a.ocr_preview || "").length ? "…" : ""}</td>
         <td style="padding: 4px 6px; border-bottom: 1px solid var(--color-border); font-size: 11px"
-            title="${_escapeHtml(a.matched_text || "")}">${_escapeHtml(matchSnip)}${matchSnip.length < (a.matched_text || "").length ? "…" : ""}</td>
+            title="${_escapeHtmlHwpImport(a.matched_text || "")}">${_escapeHtmlHwpImport(matchSnip)}${matchSnip.length < (a.matched_text || "").length ? "…" : ""}</td>
         <td style="padding: 4px 6px; border-bottom: 1px solid var(--color-border); text-align: center">
           <span style="color: ${confColor}; font-weight: bold">${confPct}%</span>
         </td>
@@ -896,9 +896,11 @@ async function _executeAlignPreview() {
 
 
 /** HTML 특수 문자를 이스케이프한다. */
-function _escapeHtml(text) {
+function _escapeHtmlHwpImport(str) {
+  // 글자 자리 전용 — 브라우저가 텍스트로 넣고 다시 읽어 escape 한다(속성에는 쓰지 않는다).
+  // 옛 이름 `_escapeHtmlHwpImport` 은 다섯 파일이 선언했고 구현이 모두 같았다(B-009 실측).
   const div = document.createElement("div");
-  div.textContent = text;
+  div.textContent = str === null || str === undefined ? "" : str;
   return div.innerHTML;
 }
 

@@ -299,12 +299,12 @@ class TestGlobalNamesDoNotShadow:
     #: 그리고 있었고(실측: `#trans-source-text` 0자 / 숨은 `#ann-source-text` 1,656자,
     #: `#hyeonto-ann-list` 0자인데 `hyeontoState.annotations` 는 3건), 지는 쪽 이름을
     #: `_renderHyeontoAnnList`·`_renderTransSourceText`·`_renderTransStatusSummary` 로 바꿨다.
-    #: 남은 이스케이프 셋은 **아직 무엇이 어긋나는지 재지 않았다** — 재기 전에는 고치지 않는다.
-    KNOWN = {
-        "_escAttr",
-        "_escHtml",
-        "_escapeHtml",
-    }
+    #: 이스케이프 셋도 같은 날 풀었다. **재고 나서 고쳤다**(node 로 각 구현을 돌려 무엇을
+    #: 막는지 봤다): `_escapeHtml` 다섯은 구현이 모두 같았고(DOM 방식), `_escHtml` 은
+    #: variant-manager·batch-correction 이 `"` 를 안 막았으며 `_escAttr` 은 variant-manager 가
+    #: `'`·`>` 를 안 막았다 — 둘 다 annotation-editor 의 엄격한 판에 가려 **우연히** 안전했다.
+    #: 그래서 이름만 떼지 않고 **지는 판을 같은 수준으로 올려서** 뗐다. 이름만 바꿨으면 회귀다.
+    KNOWN: set[str] = set()
 
     def test_no_new_shadowing(self):
         """새로 겹치는 이름이 생기지 않는다."""
@@ -366,11 +366,14 @@ class TestEscapeHelpersAreStrict:
     @pytest.mark.parametrize(
         ("fname", "fileno"),
         [
-            ("_escHtml", "entity-manager"),
+            # 이름은 B-009 에서 파일마다 갈랐다(가림 제거). 갈라 놓고도 **전부** 엄격해야
+            # 한다 — 한 파일만 느슨해지면 그 화면에서 속성이 뚫린다.
+            ("_escHtmlEntity", "entity-manager"),
             ("_escHtml", "annotation-editor"),
-            ("_escHtml", "batch-correction"),
+            ("_escHtmlBatch", "batch-correction"),
+            ("_escHtmlVariant", "variant-manager"),
             ("_escAttr", "annotation-editor"),
-            ("_escAttr", "variant-manager"),
+            ("_escAttrVariant", "variant-manager"),
         ],
     )
     def test_quotes_are_escaped(self, fname, fileno):
@@ -379,6 +382,13 @@ class TestEscapeHelpersAreStrict:
             f"{fileno}.js::{fname} 가 큰따옴표를 막지 않는다 — "
             "속성 안에 들어가면 따옴표로 속성을 벗어난다"
         )
+        # **속성 전용 헬퍼는 작은따옴표까지** 막아야 한다. `title='…'` 로 적는 자리가
+        # 있으면 `"` 만 막아서는 뚫린다. 2026-09-22 에 이 단언이 없어서, variant-manager
+        # 판에서 `'` 를 도로 빼도 초록이었다(깨뜨려 보고 찾았다).
+        if fname.startswith("_escAttr"):
+            assert "'/g" in body or "textContent" in body, (
+                f"{fileno}.js::{fname} 는 속성 헬퍼인데 작은따옴표를 막지 않는다"
+            )
 
     def test_the_winner_is_strict(self):
         """실제로 **이기는 판**이 엄격한지 — 적재 순서로 판정한다."""

@@ -658,7 +658,7 @@ function _createBlockSection(segment, segIdx) {
   header.innerHTML = `
     <span class="corr-block-toggle">▶</span>
     <span class="corr-block-color" style="background:${color}"></span>
-    <span class="corr-block-label">${_escapeHtml(segment.label)}</span>
+    <span class="corr-block-label">${_escapeHtmlCorrection(segment.label)}</span>
     <span class="corr-block-id">seg_${segIdx}</span>
   `;
 
@@ -988,11 +988,11 @@ function _renderCorrList() {
     const item = document.createElement("div");
     item.className = "corr-list-item";
     item.innerHTML = `
-      <span class="corr-list-type ${typeCls}">${typeInfo.label || _escapeHtml(corr.type)}</span>
-      <span class="corr-list-text">${_escapeHtml(corr.original_ocr)}</span>
+      <span class="corr-list-type ${typeCls}">${typeInfo.label || _escapeHtmlCorrection(corr.type)}</span>
+      <span class="corr-list-text">${_escapeHtmlCorrection(corr.original_ocr)}</span>
       <span class="corr-list-arrow">→</span>
-      <span class="corr-list-text">${_escapeHtml(corr.corrected)}</span>
-      <span class="corr-list-note">${_escapeHtml(corr.note || "")}</span>
+      <span class="corr-list-text">${_escapeHtmlCorrection(corr.corrected)}</span>
+      <span class="corr-list-note">${_escapeHtmlCorrection(corr.note || "")}</span>
     `;
 
     // 클릭 시 해당 글자로 스크롤 + 하이라이트
@@ -1279,9 +1279,9 @@ async function _loadGitLog(docId) {
         card.innerHTML = `
           <div class="milestone-header">
             <span class="milestone-hash">${c.short_hash}</span>
-            <span class="milestone-badge">${_escapeHtml(squashedLabel)}</span>
+            <span class="milestone-badge">${_escapeHtmlCorrection(squashedLabel)}</span>
           </div>
-          <div class="milestone-summary">${_escapeHtml(c.summary)}</div>
+          <div class="milestone-summary">${_escapeHtmlCorrection(c.summary)}</div>
           <div class="milestone-date">push: ${pushDateStr}</div>
         `;
 
@@ -1302,7 +1302,7 @@ async function _loadGitLog(docId) {
 
         item.innerHTML = `
           <span class="git-commit-hash">${c.short_hash}</span>
-          <span class="git-commit-msg">${_escapeHtml(c.message)}</span>
+          <span class="git-commit-msg">${_escapeHtmlCorrection(c.message)}</span>
           <span class="git-commit-date">${dateStr}</span>
         `;
 
@@ -1390,7 +1390,7 @@ async function _loadGitDiff(docId, commitHash, message) {
  */
 function _colorizeDiff(text) {
   if (!text) return "";
-  return _escapeHtml(text)
+  return _escapeHtmlCorrection(text)
     .split("\n")
     .map((line) => {
       if (line.startsWith("+")) {
@@ -1409,9 +1409,11 @@ function _colorizeDiff(text) {
    유틸리티
    ────────────────────────── */
 
-function _escapeHtml(text) {
+function _escapeHtmlCorrection(str) {
+  // 글자 자리 전용 — 브라우저가 텍스트로 넣고 다시 읽어 escape 한다(속성에는 쓰지 않는다).
+  // 옛 이름 `_escapeHtmlCorrection` 은 다섯 파일이 선언했고 구현이 모두 같았다(B-009 실측).
   const div = document.createElement("div");
-  div.textContent = text;
+  div.textContent = str === null || str === undefined ? "" : str;
   return div.innerHTML;
 }
 
