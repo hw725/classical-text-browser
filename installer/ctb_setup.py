@@ -217,11 +217,17 @@ def fresh_path() -> str:
     ):
         try:
             with winreg.OpenKey(root, key) as k:
-                value, _ = winreg.QueryValueEx(k, "Path")
+                value, kind = winreg.QueryValueEx(k, "Path")
         except OSError:
             # 레지스트리를 못 읽어도 설치를 멈출 일은 아니다 — 지금 PATH로 이어간다.
             continue
-        parts.append(str(value))
+        value = str(value)
+        # HKLM의 Path는 REG_EXPAND_SZ다(실측). 그 값에는 %SystemRoot%\system32처럼
+        # 변수가 그대로 들어 있고, QueryValueEx는 **풀어 주지 않는다** — 그대로
+        # 넘기면 그 항목이 죽은 경로가 된다(Codex 지적 2026-09-23).
+        if kind == winreg.REG_EXPAND_SZ:
+            value = os.path.expandvars(value)
+        parts.append(value)
     parts.append(os.environ.get("PATH", ""))
     return ";".join(p for p in parts if p)
 

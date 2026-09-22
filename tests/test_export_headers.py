@@ -125,17 +125,29 @@ def test_all_download_headers_are_latin1_safe():
     """
     import subprocess
 
-    out = subprocess.run(
+    res = subprocess.run(
         # 만드는 쪽만 본다 — JS 는 헤더를 **읽는** 쪽이라 대상이 아니다.
-        # 사전 키 꼴로 찾는다: docstring·주석의 언급은 헤더를 만들지 않는데,
-        # 그것까지 세면 주석 한 줄에도 시험이 빨개지고 다음 사람은 원인을 안 보고
-        # 숫자만 올린다.
-        ["git", "grep", "-c", '"Content-Disposition":', "--", "src/app/routers"],
+        # 사전 키 꼴과 대입 꼴 둘 다 찾는다: docstring·주석의 언급은 헤더를
+        # 만들지 않는데 그것까지 세면 주석 한 줄에도 빨개지고, 다음 사람은 원인을
+        # 안 보고 숫자만 올린다.
+        [
+            "git", "grep", "-c", "-E",
+            # `"Content-Disposition":` (사전) 또는 `["Content-Disposition"] =` (대입)
+            r'["\']Content-Disposition["\']\s*(:|\])',
+            "--", "src/app/routers",
+        ],
         cwd=_ROOT, capture_output=True, text=True, check=False,
-    ).stdout.strip().splitlines()
+    )
+    # `git grep -c` 는 찾은 것이 없으면 1, 오류면 2 이상이다. **오류를 통과시키지
+    # 않는다** — 저장소를 못 읽어 빈손으로 끝나도 초록이던 자리였다
+    # (Codex 지적 2026-09-23).
+    assert res.returncode in (0, 1), (
+        "git grep 이 실패했다(%d) — 이 관문은 검색이 되는 동안에만 뜻이 있다:\n%s"
+        % (res.returncode, (res.stderr or "")[:300])
+    )
 
     counts: dict[str, int] = {}
-    for line in out:
+    for line in res.stdout.strip().splitlines():
         if not line.strip():
             continue
         path, n = line.rsplit(":", 1)
@@ -147,17 +159,18 @@ def test_all_download_headers_are_latin1_safe():
         "src/app/routers/composition.py": 1,
         "src/app/routers/alignment.py": 1,
     }
-    grown = sorted(
-        "%s: %d곳 (알던 것 %d곳)" % (p, n, known.get(p, 0))
-        for p, n in counts.items()
-        if n != known.get(p, 0)
-    )
-    assert not grown, (
-        "내려받기 헤더를 만드는 자리가 달라졌다:\n  " + "\n  ".join(grown) + "\n\n"
-        "  헤더는 latin-1 이다. 한글이 들어갈 수 있으면 RFC 5987"
+    # **같은지**를 본다. 늘어난 것만 보면 «검사 대상이 사라진 것»을 놓친다 —
+    # counts 가 비어도 초록이던 자리였다.
+    assert counts == known, (
+        "내려받기 헤더를 만드는 자리가 달라졌다:\n"
+        "  지금 : %s\n  알던 것: %s\n\n"
+        % (dict(sorted(counts.items())), dict(sorted(known.items())))
+        + "  헤더는 latin-1 이다. 한글이 들어갈 수 있으면 RFC 5987"
         "(`filename*=UTF-8''<percent-encoded>`)로 준다 — 안 그러면 500 이 난다.\n"
         "  그리고 **화면이 filename*= 를 읽는지**까지 본다 — 서버만 고치면\n"
-        "  사람이 받는 이름은 그대로 비어 있다."
+        "  사람이 받는 이름은 그대로 비어 있다.\n"
+        "  줄어든 것도 걸린다: 헤더 만드는 법을 바꿔 검사 대상이 사라지면\n"
+        "  이 관문이 지키는 것이 없어진다."
     )
 
 
@@ -215,6 +228,79 @@ def test_screen_turns_rfc5987_header_into_a_korean_filename():
         f"사람이 받는 이름에 한글 제목이 없다: {got!r}\n"
         "  화면이 filename*=UTF-8''… 를 읽어 percent-decode 해야 한다."
     )
+
+
+@pytest.mark.parametrize(
+    "what, header, interp_id, want",
+    [
+        (
+            "확장 이름이 우연히 기본값과 같아도 버리지 않는다",
+            "attachment; filename=\"fallback.json\"; filename*=UTF-8''unyang_interp.json",
+            "unyang_interp",
+            "unyang_interp.json",
+        ),
+        (
+            "따옴표 안의 세미콜론은 파일 이름의 일부다",
+            'attachment; filename="notes;draft.json"',
+            "x",
+            "notes;draft.json",
+        ),
+        (
+            "한글 정상 경로",
+            "attachment; filename=\"interpretation_20260923.json\"; "
+            "filename*=UTF-8''%EC%B2%9C%EC%A7%84%EB%8B%B4%EC%B4%88_20260923.json",
+            "x",
+            "천진담초_20260923.json",
+        ),
+        (
+            "깨진 퍼센트 인코딩이면 ASCII 이름으로 내려간다",
+            "attachment; filename=\"safe.json\"; filename*=UTF-8''%E0%A4%A",
+            "x",
+            "safe.json",
+        ),
+    ],
+)
+def test_screen_filename_parsing_edge_cases(what, header, interp_id, want):
+    """화면 파싱의 **반례들**. 셋은 교차검토가 들고 온 것이고 한 번씩 틀렸던 자리다.
+
+    - 디코딩 성공을 「이름 값」으로 판정하면 첫 사례에서 멀쩡한 이름을 버린다.
+    - `[^";]+` 로 ASCII 이름을 읽으면 둘째 사례의 세미콜론이 잘린다(내가 만든 회귀였다).
+
+    반례를 고치고 버리면 다음에 같은 자리가 무너져도 아무도 모른다.
+    """
+    import json
+    import shutil
+    import subprocess
+    import tempfile
+
+    if shutil.which("node") is None:
+        pytest.skip("node 가 없다 — 화면 JS 를 돌릴 수 없다")
+
+    src = (_ROOT / "src/app/static/js/workspace.js").read_text(encoding="utf-8")
+    start = src.index("const ext = disposition.match(/filename")
+    end = src.index("// Blob → 다운로드 트리거", start)
+    snippet = src[start:end].strip()
+
+    code = (
+        "const disposition = process.argv[2];\n"
+        "const interpId = process.argv[3];\n"
+        "let filename = `${interpId}.json`;\n"
+        + snippet
+        + "\nconsole.log(JSON.stringify({ filename }));\n"
+    )
+    with tempfile.NamedTemporaryFile(
+        "w", suffix=".js", delete=False, encoding="utf-8", newline=""
+    ) as f:
+        f.write(code)
+        path = f.name
+
+    r = subprocess.run(
+        ["node", path, header, interp_id],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+    )
+    assert r.returncode == 0, f"화면 파싱 조각이 돌지 않는다: {r.stderr[:300]}"
+    got = json.loads(r.stdout.strip())["filename"]
+    assert got == want, f"{what}: {got!r} (바라는 것 {want!r})"
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q", "--no-header"]))

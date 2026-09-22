@@ -1856,16 +1856,24 @@ function initSnapshotButtons() {
         const disposition = res.headers.get("Content-Disposition") || "";
         let filename = `${interpId}.json`;
         const ext = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+        // **디코딩 성공을 «이름 값»으로 판정하지 않는다.** 확장 이름이 우연히
+        // 기본값과 같으면 멀쩡히 읽고도 ASCII 로 되돌아간다(Codex 지적 2026-09-23).
+        let decoded = false;
         if (ext) {
           try {
             filename = decodeURIComponent(ext[1].trim());
+            decoded = true;
           } catch (_) {
             // 망가진 퍼센트 인코딩 — 아래 ASCII 이름으로 내려간다
           }
         }
-        if (!ext || filename === `${interpId}.json`) {
-          const match = disposition.match(/filename="?([^";]+)"?/);
-          if (match) filename = match[1].trim();
+        if (!decoded) {
+          // 따옴표로 감싼 값이 먼저다 — 그 안의 «;» 는 파일 이름의 일부다
+          // (`filename="notes;draft.json"`). 감싸지 않은 값에서만 «;» 가 끝이다.
+          const quoted = disposition.match(/filename="([^"]*)"/i);
+          const bare = disposition.match(/filename=([^;]+)/i);
+          if (quoted) filename = quoted[1].trim();
+          else if (bare) filename = bare[1].trim();
         }
 
         // Blob → 다운로드 트리거

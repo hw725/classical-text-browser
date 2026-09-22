@@ -377,6 +377,33 @@ def test_doctor_registers_src_before_importing_core():
         "  doctor.bat 이 그렇게 부르는 길이 있다." % (insert_line, core_import_line)
     )
 
+    # **그리고 콘솔 고정은 여전히 첫 출력보다 앞이어야 한다**(E3).
+    # 경로 등록을 앞으로 옮기면서 고정이 뒤로 밀릴 수 있는데, 순서 검사 하나만으로는
+    # 그것을 못 본다 — 둘 다 만족해야 맞다(Codex 지적 2026-09-23).
+    harden_line = None
+    first_output = None
+    for node in ast.walk(tree):
+        if (
+            harden_line is None
+            and isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "force_utf8_console"
+        ):
+            harden_line = node.lineno
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "print"
+            and (first_output is None or node.lineno < first_output)
+        ):
+            first_output = node.lineno
+
+    assert harden_line is not None, "doctor.py 가 force_utf8_console() 을 부르지 않는다"
+    assert first_output is None or harden_line < first_output, (
+        "doctor.py: 콘솔 고정(%s행)이 첫 print(%s행)보다 뒤다 — cp949 콘솔에서 죽는다"
+        % (harden_line, first_output)
+    )
+
 
 def test_installer_launch_rebuilds_path():
     """설치본의 「지금 실행」이 **PATH 를 다시 만들어** 넘기는가.
