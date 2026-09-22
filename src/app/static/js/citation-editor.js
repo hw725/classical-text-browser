@@ -1396,7 +1396,15 @@ async function _resetAllCiteMarks() {
 
 function _esc(str) {
   if (!str) return "";
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  // 큰따옴표까지 막는다. 지금은 텍스트 자리에만 쓰이지만, **한 배선 거리**에서
+  // 속성 자리가 된다 — 2026-09-22에 `entity-manager` 가 Concept 라벨을
+  // `title="…"` 에 넣는 자리가 정확히 그 모양으로 뚫려 있었다(B-009).
+  // 느슨한 판을 남겨 두면 그때 가서 «왜 여기만 다르지»를 다시 판다.
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 
