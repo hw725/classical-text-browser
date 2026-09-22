@@ -79,7 +79,7 @@ def test_hand_made_layout_is_left_alone_after_rotation(tmp_path):
 def test_rebuilt_full_page_block_keeps_block_attributes(tmp_path):
     """사람이 만진 전면 블록의 속성은 회전이 바뀌어도 살아남는다.
 
-    쓰기 방향·종류·skip·analysis_method 를 말한다(Codex 지적 2026-09-18).
+    쓰기 방향·종류·skip·analysis_method를 말한다(Codex 지적 2026-09-18).
     새것으로 바뀌는 것은 기하(bbox·폭·높이·도장)뿐이다.
     """
     from core.document import save_page_layout, set_part_rotation

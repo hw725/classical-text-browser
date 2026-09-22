@@ -372,7 +372,7 @@ def _patch_pages(monkeypatch):
 def test_orientation_only_runs_on_cpu_without_model(client, tmp_path, monkeypatch):  # noqa: F811
     """CPU 환경에 비전 모델도 없을 때 — 방향만 추정으로 돌려준다.
 
-    투영만으로 누운 쪽을 찾아 guess 로 표시하고, OCR 점수는 재지 않는다.
+    투영만으로 누운 쪽을 찾아 guess로 표시하고, OCR 점수는 재지 않는다.
     """
     from app import _state
     from app.routers import llm_ocr
@@ -454,14 +454,14 @@ def test_orientation_only_scores_sideways_pages_on_gpu(client, tmp_path, monkeyp
 
 
 def test_orientation_only_counts_pages_from_pdf_when_manifest_lacks_page_count(
-    client,  # noqa: F811 — 위에서 import 한 fixture 를 그대로 받는다
+    client,  # noqa: F811 — 위에서 import 한 fixture를 그대로 받는다
     tmp_path,
     monkeypatch,
 ):
-    """manifest 에 page_count 가 없으면 PDF 를 열어 센다.
+    """manifest에 page_count가 없으면 PDF를 열어 센다.
 
-    add_document 로 만든 문헌이 그렇다. E2E 실측(2026-09-18)에서
-    «쪽 수를 몰라» 400 이 났던 자리다.
+    add_document로 만든 문헌이 그렇다. E2E 실측(2026-09-18)에서
+    «쪽 수를 몰라» 400이 났던 자리다.
     """
     import json as _json
     from pathlib import Path

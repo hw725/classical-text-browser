@@ -138,11 +138,11 @@ def test_all_download_headers_are_latin1_safe():
         ],
         cwd=_ROOT, capture_output=True, text=True, check=False,
     )
-    # `git grep -c` 는 찾은 것이 없으면 1, 오류면 2 이상이다. **오류를 통과시키지
+    # `git grep -c`는 찾은 것이 없으면 1, 오류면 2 이상이다. **오류를 통과시키지
     # 않는다** — 저장소를 못 읽어 빈손으로 끝나도 초록이던 자리였다
     # (Codex 지적 2026-09-23).
     assert res.returncode in (0, 1), (
-        "git grep 이 실패했다(%d) — 이 관문은 검색이 되는 동안에만 뜻이 있다:\n%s"
+        "git grep이 실패했다(%d) — 이 관문은 검색이 되는 동안에만 뜻이 있다:\n%s"
         % (res.returncode, (res.stderr or "")[:300])
     )
 
@@ -160,13 +160,13 @@ def test_all_download_headers_are_latin1_safe():
         "src/app/routers/alignment.py": 1,
     }
     # **같은지**를 본다. 늘어난 것만 보면 «검사 대상이 사라진 것»을 놓친다 —
-    # counts 가 비어도 초록이던 자리였다.
+    # counts가 비어도 초록이던 자리였다.
     assert counts == known, (
         "내려받기 헤더를 만드는 자리가 달라졌다:\n"
         "  지금 : %s\n  알던 것: %s\n\n"
         % (dict(sorted(counts.items())), dict(sorted(known.items())))
-        + "  헤더는 latin-1 이다. 한글이 들어갈 수 있으면 RFC 5987"
-        "(`filename*=UTF-8''<percent-encoded>`)로 준다 — 안 그러면 500 이 난다.\n"
+        + "  헤더는 latin-1이다. 한글이 들어갈 수 있으면 RFC 5987"
+        "(`filename*=UTF-8''<percent-encoded>`)로 준다 — 안 그러면 500이 난다.\n"
         "  그리고 **화면이 filename*= 를 읽는지**까지 본다 — 서버만 고치면\n"
         "  사람이 받는 이름은 그대로 비어 있다.\n"
         "  줄어든 것도 걸린다: 헤더 만드는 법을 바꿔 검사 대상이 사라지면\n"
@@ -177,11 +177,11 @@ def test_all_download_headers_are_latin1_safe():
 def test_screen_turns_rfc5987_header_into_a_korean_filename():
     """화면이 그 헤더로 만들어 내는 **파일 이름**에 한글 제목이 들어가는가.
 
-    위 시험들은 서버가 보내는 헤더만 본다. 서버를 RFC 5987 로 고쳐도 화면이
-    `filename=` 만 읽으면 사람이 받는 이름은 `interpretation_….json` 그대로다 —
-    500 은 없어졌는데 약속한 것은 안 돌아온다(Codex 지적 2026-09-22).
+    위 시험들은 서버가 보내는 헤더만 본다. 서버를 RFC 5987로 고쳐도 화면이
+    `filename=`만 읽으면 사람이 받는 이름은 `interpretation_….json` 그대로다 —
+    500은 없어졌는데 약속한 것은 안 돌아온다(Codex 지적 2026-09-22).
 
-    **파싱 조각을 `workspace.js` 에서 떼어 node 로 실제 돌린다.** 베껴 적으면
+    **파싱 조각을 `workspace.js`에서 떼어 node로 실제 돌린다.** 베껴 적으면
     화면이 망가져도 이 시험은 자기 사본을 보고 초록으로 남는다.
     """
     import json
@@ -191,14 +191,14 @@ def test_screen_turns_rfc5987_header_into_a_korean_filename():
     import urllib.parse
 
     if shutil.which("node") is None:
-        pytest.skip("node 가 없다 — 화면 JS 를 돌릴 수 없다")
+        pytest.skip("node가 없다 — 화면 JS를 돌릴 수 없다")
 
     title, date = "천진담초", "20260922"
     header = (
         f'attachment; filename="interpretation_{date}.json"; '
         "filename*=UTF-8''" + urllib.parse.quote(f"{title}_{date}.json", safe="")
     )
-    header.encode("latin-1")  # 헤더는 latin-1 이다 — 여기서 터지면 서버가 500 이다
+    header.encode("latin-1")  # 헤더는 latin-1이다 — 여기서 터지면 서버가 500이다
 
     src = (_ROOT / "src/app/static/js/workspace.js").read_text(encoding="utf-8")
     start = src.index("const ext = disposition.match(/filename")
@@ -264,7 +264,7 @@ def test_screen_filename_parsing_edge_cases(what, header, interp_id, want):
     """화면 파싱의 **반례들**. 셋은 교차검토가 들고 온 것이고 한 번씩 틀렸던 자리다.
 
     - 디코딩 성공을 「이름 값」으로 판정하면 첫 사례에서 멀쩡한 이름을 버린다.
-    - `[^";]+` 로 ASCII 이름을 읽으면 둘째 사례의 세미콜론이 잘린다(내가 만든 회귀였다).
+    - `[^";]+`로 ASCII 이름을 읽으면 둘째 사례의 세미콜론이 잘린다(내가 만든 회귀였다).
 
     반례를 고치고 버리면 다음에 같은 자리가 무너져도 아무도 모른다.
     """
@@ -274,7 +274,7 @@ def test_screen_filename_parsing_edge_cases(what, header, interp_id, want):
     import tempfile
 
     if shutil.which("node") is None:
-        pytest.skip("node 가 없다 — 화면 JS 를 돌릴 수 없다")
+        pytest.skip("node가 없다 — 화면 JS를 돌릴 수 없다")
 
     src = (_ROOT / "src/app/static/js/workspace.js").read_text(encoding="utf-8")
     start = src.index("const ext = disposition.match(/filename")

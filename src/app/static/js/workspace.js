@@ -1848,16 +1848,16 @@ function initSnapshotButtons() {
 
         // 서버가 보낸 파일명 추출 (Content-Disposition 헤더)
         //
-        // **filename*= 를 먼저 본다.** HTTP 헤더는 latin-1 이라 한글 제목은
+        // **filename*= 를 먼저 본다.** HTTP 헤더는 latin-1이라 한글 제목은
         // RFC 5987 로만 실어 보낼 수 있고, 서버는 두 이름을 함께 보낸다 —
         // `filename="_20260922.json"; filename*=UTF-8''%EC%B2%9C...`.
         // ASCII 쪽만 읽으면 서버를 고쳐도 사람이 받는 이름은 그대로 비어 있다
-        // (Codex 지적 2026-09-22 — 500 은 없어졌는데 한글 이름은 안 돌아왔다).
+        // (Codex 지적 2026-09-22 — 500은 없어졌는데 한글 이름은 안 돌아왔다).
         const disposition = res.headers.get("Content-Disposition") || "";
         let filename = `${interpId}.json`;
         const ext = disposition.match(/filename\*=UTF-8''([^;]+)/i);
         // **디코딩 성공을 «이름 값»으로 판정하지 않는다.** 확장 이름이 우연히
-        // 기본값과 같으면 멀쩡히 읽고도 ASCII 로 되돌아간다(Codex 지적 2026-09-23).
+        // 기본값과 같으면 멀쩡히 읽고도 ASCII로 되돌아간다(Codex 지적 2026-09-23).
         let decoded = false;
         if (ext) {
           try {
