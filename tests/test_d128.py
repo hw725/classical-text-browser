@@ -379,7 +379,13 @@ class TestPromotionWeighsNotCounts:
         assert by_unit[thin]["occurrences"] == 1
         assert evaluate_promotion(list(by_unit.values()))["eligible"] is False
         # 두껍게 언급한 출처가 하나만 더 있으면 넘는다 — 개수가 아니라 무게가 움직인다.
-        assert evaluate_promotion([by_unit[thick], by_unit[thick]])["eligible"] is True
+        #
+        # **같은 단위를 두 번 넘기지 않는다**(2026-09-22, B-010). 예전에는 그렇게 적었는데,
+        # 그것은 «두 출처»가 아니라 Codex 교차검증이 잡은 중복 합산 결함 자체였다 —
+        # promotion_metrics 가 이제 단위당 하나로 접으므로 그 표기는 성립하지 않는다.
+        # 시험이 말하려던 것은 «서로 다른 두꺼운 출처 둘»이므로 그렇게 적는다.
+        another_thick = dict(by_unit[thick], unit_id="u-thick-2")
+        assert evaluate_promotion([by_unit[thick], another_thick])["eligible"] is True
 
     def test_without_confirmed_text_it_fails_closed(self, tmp_path):
         """확정본이 없으면 **재지 못한 것**이다 — Tag 수로 대신하지 않는다.

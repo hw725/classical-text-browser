@@ -46,6 +46,7 @@
 """
 
 import logging
+import math
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -84,6 +85,28 @@ SCOPE_BLIND_COLLECTION_NOTE = (
 )
 
 
+def _finite(value: float, where=None) -> float:
+    """무게를 0 이상의 **유한한** 실수로 가둔다 (2026-09-22, Codex 교차검증 B-010).
+
+    왜 유한성까지 보나: `metadata.weight` 는 자유 형식이라 제한이 없고
+    (`tag.schema.json` 의 metadata 는 `additionalProperties: true`),
+    `json.loads` 는 `Infinity` 를 그대로 싣는다. 문자열 `"1e309"` 도 `float()` 로
+    inf 가 된다. inf 가 한 번 들어오면 **어떤 임계도 무조건 넘는다** — 8항이
+    막으려던 「약한 근거로 승격」의 가장 값싼 우회로다.
+
+    NaN 도 여기서 0 으로 떨어뜨린다. NaN 은 어떤 비교에도 False 라 조용히
+    «부적격»이 되지만, 그것은 «재 봤더니 0» 이 아니라 «값이 깨졌다» 이므로
+    같은 자리에서 한 번 경고로 드러내는 편이 낫다.
+    """
+    if not math.isfinite(value):
+        logger.warning(
+            "출처의 무게가 유한하지 않습니다(%r). 0 으로 봅니다%s.",
+            value,
+            f" — 단위 {where}" if where else "",
+        )
+        return 0.0
+    return max(0.0, value)
+
 def source_weight(source: dict) -> float:
     """출처 하나의 무게를 읽는다.
 
@@ -95,7 +118,7 @@ def source_weight(source: dict) -> float:
     """
     if source.get("weight") is not None:
         try:
-            return max(0.0, float(source["weight"]))
+            return _finite(float(source["weight"]), source.get("unit_id"))
         except (TypeError, ValueError):
             logger.warning("출처의 weight를 숫자로 읽지 못했습니다: %r", source.get("weight"))
     occurrences = source.get("occurrences") or 0
@@ -103,7 +126,7 @@ def source_weight(source: dict) -> float:
     if confidence is None:
         confidence = 1.0
     try:
-        return max(0.0, float(occurrences) * float(confidence))
+        return _finite(float(occurrences) * float(confidence), source.get("unit_id"))
     except (TypeError, ValueError):
         return 0.0
 
@@ -130,19 +153,47 @@ def promotion_metrics(
     왜 판정과 나누는가: 화면에 「왜 승격되지 않는가」를 보여주려면 수치가 따로
     있어야 한다. 판정만 돌려주면 연구자는 임계를 손볼 근거를 못 본다.
     """
-    weights = sorted((source_weight(s) for s in sources), reverse=True)
+    # 계약을 **여기서** 강제한다 (2026-09-22, Codex 교차검증 B-010).
+    #
+    # `gather_sources` 는 이미 단위별로 묶고 미측정에 무게 0 을 주므로 정상 경로로는
+    # 아래 둘이 나지 않는다. 그러나 이 함수는 공개 API 이고 손으로 만든 목록도 받는다 —
+    # 계약이 수집기 쪽에만 있으면 **다음 호출자가 조용히 깬다.** 시험이 그 둘을
+    # 직접 호출로 재현했다.
+    #   ① 같은 단위가 두 번 들어오면 무게가 두 배가 된다 → 단위당 하나로 접는다.
+    #   ② `measured=False` 인 출처는 «재지 못한 것»이라 승격 근거가 아니다(8항)
+    #      → 세기만 하고 합산에서 뺀다. 세는 것은 「약해서 안 올라간다」와
+    #      「아직 못 쟀다」를 연구자가 구분해야 하기 때문이다.
+    by_unit: dict = {}
+    anonymous: list = []
+    for s in sources:
+        if s.get("measured") is False:
+            continue
+        w = source_weight(s)
+        key = s.get("unit_id")
+        if key is None:
+            anonymous.append(w)
+            continue
+        by_unit[key] = max(by_unit.get(key, 0.0), w)
+    weights = sorted(list(by_unit.values()) + anonymous, reverse=True)
     # 「재지 못한」 출처는 따로 센다 — 무게 0인 것과 겉보기가 같아서, 세어 두지 않으면
     # 연구자가 「약해서 안 올라간다」와 「아직 못 쟀다」를 구분할 수 없다.
     unmeasured = sum(1 for s in sources if s.get("measured") is False)
+    # 「출처 N개가 모두 확정본이 없다」를 말하려면 분모가 **입력 개수**여야 한다.
+    # weights 는 위에서 미측정을 뺐으므로 여기서 따로 센다.
+    input_count = len(sources)
     total = sum(weights)
     effective = [w for w in weights if w > noise_ceiling]
     # 상위 10% — 출처가 적으면 최소 하나는 본다(0개를 보면 언제나 0%가 된다).
     top_n = max(1, int(len(weights) * 0.1)) if weights else 0
     top10 = sum(weights[:top_n])
     return {
-        "source_count": len(weights),
+        "source_count": input_count,
         "total_weight": round(total, 4),
+        # 화면용은 반올림하되 **판정은 반올림 전 값**으로 한다 — 아래 exact 참조.
         "effective_weight": round(sum(effective), 4),
+        # 판정 전용. round(2.99996, 4) 가 3.0 이 되어 임계 3.0 을 통과하던 것을 막는다
+        # (2026-09-22, Codex 교차검증 B-010). 화면 수치와 판정 근거를 갈라 둔다.
+        "effective_weight_exact": sum(effective),
         "effective_count": len(effective),
         "noise_share": round((total - sum(effective)) / total, 4) if total else 0.0,
         "top_weight": round(weights[0], 4) if weights else 0.0,
@@ -172,7 +223,7 @@ def evaluate_promotion(
     함께 적힌다(`concept_features.promotion`) — 나중에 왜 올렸는지 되짚을 수 있다.
     """
     metrics = promotion_metrics(sources, noise_ceiling=noise_ceiling)
-    eligible = metrics["effective_weight"] >= min_effective_weight
+    eligible = metrics["effective_weight_exact"] >= min_effective_weight
     if eligible:
         reason = (
             f"실질 무게 {metrics['effective_weight']}"
@@ -273,7 +324,10 @@ def gather_sources(
             # 숫자가 아니면 «적히지 않은 것»으로 본다: 여기서 예외를 던지면 Tag 하나의
             # metadata 오타가 승격 전체를 영어 traceback으로 떨어뜨린다.
             try:
-                bucket["weight"] = max(bucket["weight"] or 0.0, float(explicit))
+                # 유한하지 않은 값은 «적히지 않은 것»으로 본다. 여기서 걸러야
+                # `measured` 가 inf 때문에 참으로 서는 일이 없다(B-010).
+                bucket["weight"] = max(bucket["weight"] or 0.0,
+                                       _finite(float(explicit), unit_id))
             except (TypeError, ValueError):
                 logger.warning(
                     "Tag %s의 metadata.weight를 숫자로 읽지 못했습니다(%r). 도출값을 씁니다.",

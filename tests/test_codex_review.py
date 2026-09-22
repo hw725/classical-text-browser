@@ -26,8 +26,17 @@ def test_unmeasured_source_can_supply_promotion_weight():
     assert verdict["eligible"] is False, verdict
 
 
-def test_default_promotion_creates_concept_with_ineligible_zero_weight(monkeypatch, tmp_path):
-    """입력 L4 없음, weight 없음, require_weight 생략 -> eligible=False인데 Concept 생성 호출."""
+def test_ineligible_promotion_is_recorded_not_blocked(monkeypatch, tmp_path):
+    """부적격이어도 승격은 되고, 그 판정이 Concept 에 적힌다 — 저울이지 잠금장치가 아니다.
+
+    Codex 교차검증(2026-09-22)이 이것을 결함으로 올렸으나 **결함이 아니다.**
+    `evaluate_promotion` 의 독스트링이 의도를 밝히고 있다 — 연구자가 명시적으로
+    승격을 누르면 그대로 승격되고, 다만 판정과 수치가 함께 적혀 나중에 되짚을 수
+    있다. 막으려면 `require_weight=True` 를 준다.
+
+    시험을 뒤집어 둔 이유: 이 동작을 «고쳐야 할 것»으로 다시 올리는 일이 되풀이되지
+    않게, 의도를 코드 옆에 고정한다. 판정이 **기록되지 않으면** 그때는 진짜 결함이다.
+    """
     tag = {"id": "t1", "surface": "x", "block_id": "u1"}
     monkeypatch.setattr(entity, "get_entity", lambda *args: tag)
     monkeypatch.setattr(entity, "list_entities", lambda *args: [tag])
@@ -35,18 +44,19 @@ def test_default_promotion_creates_concept_with_ineligible_zero_weight(monkeypat
     created = []
 
     def capture_create(*args):
-        """입력 생성 인수를 기록하고 빈 저장 결과를 반환하여 실제 파일 쓰기를 피한다."""
+        """생성 인수를 기록하고 빈 결과를 돌려 실제 파일 쓰기를 피한다."""
         created.append(args[-1])
         return {}
 
     monkeypatch.setattr(entity, "create_entity", capture_create)
     monkeypatch.setattr(entity_id_map, "record_mapping", lambda *args, **kwargs: None)
-    try:
-        entity.promote_tag_to_concept(tmp_path, "t1")
-    except ValueError:
-        pass
-    assert not created, created
 
+    entity.promote_tag_to_concept(tmp_path, "t1")
+
+    assert created, "부적격이라고 승격을 막으면 안 된다 — 저울이지 잠금장치가 아니다"
+    verdict = created[-1]["concept_features"]["promotion"]
+    assert verdict["eligible"] is False, verdict
+    assert verdict["reason"], "왜 부적격인지가 Concept 에 남아야 한다"
 
 def test_infinite_confidence_turns_one_occurrence_into_infinite_weight(monkeypatch, tmp_path):
     """입력 L4의 x 1회, confidence=inf, 명시 무게 없음 -> weight=inf, eligible=True."""

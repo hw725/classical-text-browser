@@ -1013,7 +1013,22 @@ def promote_tag_to_concept(
     # 출처는 어디서든 오고, 만들어진 Concept은 scope_document 하나를 갖는다.
     from .promotion import evaluate_promotion, gather_sources
 
-    sources = gather_sources(interp_path, effective_label, document_id=scope_document)
+    # **무게는 승격 대상 Tag 자신의 표면형에서 잰다.** 라벨이 아니다.
+    #
+    # 왜 갈라야 하나 (2026-09-22, Codex 교차검증 B-010): `label` 은 Concept 이
+    # 화면에 어떻게 보일지를 정하는 값이고 호출자가 자유롭게 준다(라우터가
+    # `label=body.label` 을 그대로 넘긴다). 그것으로 출처를 모으면 **승격 대상은
+    # `y` 인데 무게는 `x` 에서 재게 된다** — 다른 낱말의 증거로 승격이 열리고,
+    # `require_weight=True` 를 걸어도 그대로 우회된다. 8항이 막으려던 것이
+    # 「약한 근거로 승격」인데, 이 길은 아예 **남의 근거**를 쓴다.
+    #
+    # 표면형이 없는 Tag 는 애초에 승격 근거가 없다 — 라벨로 대신하지 않는다.
+    evidence_surface = tag.get("surface") or ""
+    sources = (
+        gather_sources(interp_path, evidence_surface, document_id=scope_document)
+        if evidence_surface
+        else []
+    )
     verdict = evaluate_promotion(sources)
 
     if require_weight and not verdict["eligible"]:

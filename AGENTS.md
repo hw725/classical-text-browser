@@ -147,7 +147,7 @@ GPU 스택은 `.venv`에 설치하지 않는다 — 별도 환경 `.venv-gpu`가
   (`npx -y openai-oauth`, 포트 10531–10540 스캔, Bearer 토큰 `oauth-proxy` 하드코딩)와
   SikuRoBERTa 표점 Docker(punctuation-service/.env 존재 시)를 자동 기동.
 - 프론트(static/)가 약 4.2만 줄 — index.html 약 4.9천 줄 단일 파일, workspace.css 약 7.9천 줄,
-  JS 32개. 테스트 80파일 — 그중 화면 JS를 node로 돌리는 것 2(`tests/test_annotation_editor_js.py`,
+  JS 32개. 테스트 81파일 — 그중 화면 JS를 node로 돌리는 것 2(`tests/test_annotation_editor_js.py`,
   2026-09-16 Codex 교차검증 반영 때 처음 · `tests/test_entity_manager_js.py`, D-128), **CI 없음.**
   화면 «마크업»을 읽는 것도 둘이다 — `tests/test_ui_reachability.py`(조작 단추에 사람이
   닿을 수 있는가, B-008)와 `tests/test_connectome.py`(화면이 그 라우트를 부르는가).
