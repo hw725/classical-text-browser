@@ -507,13 +507,21 @@ def biblio_volumes(spec: dict) -> dict[str, set[str]]:
     그룹 열이 「시(詩)○격경집(擊磬集) 갑인년…」 꼴이라 한자 묶음(2자 이상)을 전부 꺼낸다.
     **기사명 열도 함께 본다** — 그룹만 보면 集 이름만 잡혀 「書牘」·「附記」처럼 갈래로 실린
     항목이 «서지에 없음»으로 떨어진다(2026-09-22 실측: 그룹만 41건 → 두 열 36건).
+
+    어느 열이 덮었는지도 남긴다. **덮개를 넓히면 새로 덮인 부분은 원래 덮여 있던 부분보다
+    품질이 낮다** — 넓히는 방법이 곧 대조 조건을 느슨하게 하는 것이기 때문이다(커넥톰 세션,
+    2026-09-22). 기사명은 이름이 2,000개가 넘어 「三首」 같은 조각이 우연히 걸린다. 그래서
+    판정이 **기사명으로만** 덮인 것은 그룹으로 덮인 것보다 **약한 증거**이고, 보고가 그것을
+    구별해 말한다. 층을 안 적으면 다음 사람은 손 확인 없이 믿는다.
     """
-    out: dict[str, set[str]] = {}
+    out: dict[str, dict] = {}
     with spec["biblio"].open(encoding="utf-8-sig", newline="") as fh:
         for row in csv.DictReader(fh):
             for col in ("그룹", "기사명"):
                 for han in re.findall(r"[\u4e00-\u9fff]{2,}", row.get(col) or ""):
-                    out.setdefault(han, set()).add(row.get("권") or "")
+                    cell = out.setdefault(han, {"vols": set(), "cols": set()})
+                    cell["vols"].add(row.get("권") or "")
+                    cell["cols"].add(col)
     return out
 
 
@@ -534,18 +542,29 @@ def biblio_report(entries, result: dict, spec: dict) -> None:
     picked = {p["entry"] for p in result["picks"]}
     said_none = {n["entry"] for n in result["none"] if "why" not in n}
 
-    def where(title: str) -> str:
-        hits = {v for han, vols in table.items() if han in title for v in vols}
+    def where(title: str) -> tuple[str, str]:
+        """출력: (판정, 덮은 층). 층은 «그룹»(엄격)·«기사명»(느슨)·«둘 다»."""
+        cols: set[str] = set()
+        hits: set[str] = set()
+        for han, cell in table.items():
+            if han in title:
+                hits |= cell["vols"]
+                cols |= cell["cols"]
         if not hits:
-            return "서지에 없음"
-        return "이 책" if hits & here else "다른 권"
+            return "서지에 없음", "-"
+        layer = "둘 다" if len(cols) > 1 else next(iter(cols))
+        return ("이 책" if hits & here else "다른 권"), layer
 
     cells: dict[tuple[str, str], list[str]] = {}
+    layers: dict[tuple[str, str], int] = {}
     for i, e in enumerate(entries):
         if i not in picked and i not in said_none:
             continue
         title = str(getattr(e, "title", "") or "")
-        cells.setdefault(("고름" if i in picked else "없음", where(title)), []).append(title)
+        verdict, layer = where(title)
+        cells.setdefault(("고름" if i in picked else "없음", verdict), []).append(title)
+        layers.setdefault((verdict, layer), 0)
+        layers[(verdict, layer)] += 1
 
     cols = ("이 책", "다른 권", "서지에 없음")
     print(f"\n서지 이름 {len(table)}개 · 이 책의 권 {sorted(here)}")
@@ -577,6 +596,18 @@ def biblio_report(entries, result: dict, spec: dict) -> None:
           f" ({1 - len(unknown) / asked:.1%})이고, 나머지는 신호가 말하지 않는다.")
     for t in unknown[:12]:
         print(f"    「{t[:24]}」{'  ← 2자 이하(총목 판독 조각 의심)' if len(t) <= 2 else ''}")
+
+    # 어느 층이 덮었나 — 기사명으로만 덮인 판정은 약한 증거다(위 독스트링).
+    print("\n덮은 층 (그룹=엄격 · 기사명=느슨, 이름 2,000개라 조각이 우연히 걸린다)")
+    for (verdict, layer), n in sorted(layers.items()):
+        if layer == "-":
+            continue
+        mark = "  ← 약한 증거" if layer == "기사명" else ""
+        print(f"    {verdict:<8} {layer:<6} {n:>3}건{mark}")
+    # 잔여를 자동으로 더 메우려는 유혹에 대한 경고 — 반례가 이 코퍼스 안에 있다.
+    print("\n남은 것을 편집 거리로 메우지 않는다: 「昇平館集」과 「續昇平館集」은 거리가 작고")
+    print("  **서로 다른 작품**이다. 이 코퍼스에서 한 글자는 의미를 나르므로(續·附·又·并)")
+    print("  편집 거리는 판독 오류와 별개 작품을 구별하지 못한다 — 사람이 원본을 본다.")
 
 
 def cmd_biblio(args) -> int:
