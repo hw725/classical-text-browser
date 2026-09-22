@@ -17,6 +17,7 @@
 """
 
 import importlib.util
+import subprocess
 import sys
 from pathlib import Path
 
@@ -177,8 +178,10 @@ def test_installer_zip_tag_matches_pyproject():
 # 배포되는 진입점이 cp949 콘솔에서 죽지 않는가
 # ─────────────────────────────────────────────────────────────
 
-# 남의 PC에서 도는 것만. 개발용 `scripts/*.py`는 이 PC에서만 돌고,
-# 이 PC는 사용자 환경변수 `PYTHONUTF8=1`이 박혀 있어 해당이 없다.
+# 남의 PC에서 도는 것. `scripts/*.py`는 여기 없지만 **예외가 아니다** —
+# `test_cjk_contract_is_clean`이 `scripts/` 전체를 본다. 한때 「개발용이라 해당
+# 없음」으로 빼 두었다가, 그 안에 `doctor.py`가 있는 것을 놓쳤다(2026-09-22):
+# `doctor.bat`이 부르는 것이라 **환경이 깨졌을 때 사용자가 누르는** 자리다.
 _SHIPPED_ENTRYPOINTS = (
     "installer/ctb_setup.py",    # CTB-Setup.exe — 표준 라이브러리만이라 같은 처리를 직접 품는다
     "scripts/warmup_paddle.py",  # install.ps1 [5/5] · install.sh 5단계
@@ -187,52 +190,86 @@ _SHIPPED_ENTRYPOINTS = (
 )
 
 
-def _cp949_unsafe_print_lines(source: str) -> list[int]:
-    """`print(...)`에 cp949로 인코딩되지 않는 글자 리터럴이 있는 줄 번호."""
-    import ast
-
-    lines: list[int] = []
-    for node in ast.walk(ast.parse(source)):
-        if not (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "print"
-        ):
-            continue
-        for part in ast.walk(node):
-            if isinstance(part, ast.Constant) and isinstance(part.value, str):
-                try:
-                    part.value.encode("cp949")
-                except UnicodeEncodeError:
-                    lines.append(node.lineno)
-    return sorted(set(lines))
-
-
 @pytest.mark.parametrize("name", _SHIPPED_ENTRYPOINTS)
-def test_shipped_entrypoints_survive_cp949_console(name):
-    """배포되는 진입점은 콘솔을 UTF-8로 고정하거나, cp949 밖 글자를 찍지 않아야 한다.
+def test_shipped_entrypoints_harden_the_console(name):
+    """배포 진입점은 콘솔을 UTF-8로 고정해야 한다 — **의존성 없는 바닥.**
 
-    왜 기계가 봐야 하는가: 한국어 Windows 콘솔의 기본은 **cp949**다. 한글은 cp949에
-    있지만 `—`·`«»`·`→`·`✓`는 **없어서**, 그런 글자를 `print`하면
-    `UnicodeEncodeError`로 프로그램이 즉사한다.
+    왜 필요한가: 한국어 Windows 콘솔의 기본은 cp949다. 한글은 cp949에 있지만
+    `—`·`«»`·`✓`는 **없어서**, 그런 글자를 `print`하면 `UnicodeEncodeError`로
+    프로그램이 즉사한다.
 
     이 개발 PC는 사용자 환경변수 `PYTHONUTF8=1`이 박혀 있어 **겪지 않는다.**
-    받는 사람의 PC에는 없다 — 그래서 「내 PC에서 잘 돌았다」가 증거가 못 되는
-    드문 자리다. 시험이 대신 본다.
+    받는 사람의 PC에는 없다 — 「내 PC에서 잘 돌았다」가 증거가 못 되는 자리다.
 
-    같은 교훈을 세 번 배웠고 그때마다 겪은 파일만 고쳤다(2026-07-26 `ctb --help`,
-    2026-09-06 창 없는 exe). 2026-09-22에 전수로 재니 설치 5단계의
-    `warmup_paddle.py`와 서버 진입점 `app/__main__.py`가 그대로였다 —
-    앞의 것은 **모델을 못 받았다는 설명을 찍으려다** 죽어, 설명이 가장 필요한
-    순간에 파이썬 트레이스백이 떴다. 정의는 `src/core/console.py` 한 곳에 있다.
+    여기서는 **탐지하지 않고 구조만 본다**(고정을 부르는가). 탐지는
+    `test_cjk_contract_is_clean`이 정본 판정기로 한다. 판정을 두 곳에 두면
+    반드시 어긋난다 — claude-skills에서 자체 탐지기를 만들었다가 `fitz.open()`·
+    `path.open("rb")`·지역 함수 `read_text()`를 위반으로 읽어 거짓 5건을 냈다
+    (2026-09-22).
+
+    이 시험은 claude-skills가 없어도 돈다. 그래서 바닥이다.
     """
     source = (_ROOT / name).read_text(encoding="utf-8")
     hardened = "force_utf8_console" in source or "reconfigure(encoding=" in source
-    if hardened:
-        return
-    bad = _cp949_unsafe_print_lines(source)
-    assert not bad, (
-        f"{name}: cp949 콘솔에서 죽는 print가 {len(bad)}건 있는데 "
-        f"콘솔 고정을 부르지 않는다 (줄 {bad[:5]}) — "
-        "`from core.console import force_utf8_console` 를 진입점 맨 앞에서 부른다."
+    assert hardened, (
+        f"{name}: 콘솔 고정을 부르지 않는다 — 진입점 맨 앞에서 "
+        "`from core.console import force_utf8_console` 를 부른다"
+        "(홀로 도는 exe는 같은 처리를 직접 품는다)."
+    )
+
+
+def _canonical_checker() -> Path | None:
+    """CJK 텍스트 계약의 **정본 판정기**를 찾는다 — 없으면 None.
+
+    두 저장소는 `head-repo/hw725/` 아래 나란히 산다(head-repo CLAUDE.md 구조 지도).
+    워크트리에서 돌 때도 찾도록 부모를 거슬러 올라가며 본다.
+    """
+    for base in [_ROOT, *_ROOT.parents]:
+        cand = base / "hw725" / "claude-skills" / "scripts" / "check_cjk_text_contract.py"
+        if cand.exists():
+            return cand
+        cand = base.parent / "claude-skills" / "scripts" / "check_cjk_text_contract.py"
+        if cand.exists():
+            return cand
+    return None
+
+
+def test_cjk_contract_is_clean():
+    r"""`src/`·`scripts/`·`installer/`가 CJK 텍스트 계약을 지키는가.
+
+    조항의 정의와 판정은 이 저장소에 없다 — 정본은
+    `hw725/claude-skills`의 `skills/hanmun-research-assistant/SKILL.md`(본문)와
+    `scripts/check_cjk_text_contract.py`(AST 판정기)다. 여기서는 **불러 쓴다.**
+
+    | 조항 | 무엇 |
+    |---|---|
+    | E1 | 내장 `open()` 텍스트 모드에 `encoding=` 의무 |
+    | E2 | `Path.read_text()`·`write_text()`에 `encoding=` 의무 |
+    | E3 | 한글·한자를 출력하는 진입점은 stdout/stderr를 UTF-8로 고정 |
+    | R1 | CJK 문자클래스는 `regex`의 `\p{Han}`·`\p{Hangul}`로 (stdlib `re` 금지) |
+
+    2026-09-22에 처음 돌렸을 때 16건이 나왔다. 그중 **셋은 배포되는 것**이었다 —
+    `src/core/updater.py`·`src/ocr/paddle_worker.py`·`scripts/doctor.py`. 특히
+    `doctor.py`는 `doctor.bat`이 부르는 것이라 **환경이 깨졌을 때 사용자가 누르는**
+    자리인데, 세 파일 모두 `«`·`»`·`—`·`✓`를 품고 있어 cp949 콘솔에서 죽었다.
+
+    `src/ocr/ndlocr/`는 뺀다 — 국립국회도서관(NDL)에서 벤더링한 상류 원본이다
+    (`LICENCE`, CC-BY-4.0). 전역 규칙 §8: 상류 원문은 손대지 않는다. 무엇을
+    빼는지 보이도록 `--exclude`를 **호출 자리에** 적는다.
+    """
+    checker = _canonical_checker()
+    if checker is None:
+        pytest.skip(
+            "CJK 계약 정본 판정기를 찾지 못했다 — hw725/claude-skills가 옆에 있어야 한다. "
+            "배포본에는 없는 것이 정상이고, 그때는 위의 바닥 시험만 돈다."
+        )
+    res = subprocess.run(
+        [sys.executable, str(checker),
+         str(_ROOT / "src"), str(_ROOT / "scripts"), str(_ROOT / "installer"),
+         "--exclude", "*/ndlocr/*"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+    )
+    bad = [ln for ln in res.stdout.splitlines() if ln[:2] in ("E1", "E2", "E3", "R1")]
+    assert not bad, "CJK 텍스트 계약 위반:\n" + "\n".join(
+        ln.replace(str(_ROOT) + "\\", "") for ln in bad[:12]
     )

@@ -26,6 +26,13 @@ import os
 import sys
 import traceback
 
+
+# CJK Text Contract E3 — 한국어 Windows 콘솔은 cp949 라 «—»·«✓» 를 print 하면
+# UnicodeEncodeError 로 즉사한다. 이 PC 는 PYTHONUTF8=1 이 박혀 있어 겪지 않는다.
+from core.console import force_utf8_console
+
+force_utf8_console()
+
 # GPU 워커(D-091 덧붙임): 부모가 CTB_PADDLE_BLOCK_TORCH=1을 주면 torch import를 막는다.
 # paddlex가 torch를 끌어오면 torch의 cuDNN DLL과 paddle GPU판의 것이 한 프로세스에서 부딪혀
 # WinError 127로 죽는다 — torch가 없으면 paddlex는 그 기능 없이 뜨고, paddle은 GPU로 돈다

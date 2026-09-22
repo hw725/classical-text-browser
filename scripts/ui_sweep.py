@@ -21,6 +21,17 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
+
+# CJK Text Contract E3 — 한국어 Windows 콘솔은 cp949 라 «—»·«✓» 를 print 하면
+# UnicodeEncodeError 로 즉사한다. 이 PC 는 PYTHONUTF8=1 이 박혀 있어 겪지 않는다.
+# 정의는 src/core/console.py 에 있으나, 이 파일은 src 를 경로에 올리지 않으므로
+# 네 줄을 품는다.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError, OSError):
+        pass
+
 PORT = sys.argv[1] if len(sys.argv) > 1 else "8179"
 OUT = Path(__file__).resolve().parents[1] / "logs"
 OUT.mkdir(exist_ok=True)

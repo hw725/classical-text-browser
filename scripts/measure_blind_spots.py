@@ -37,6 +37,13 @@ import json
 import sys
 from pathlib import Path
 
+
+# CJK Text Contract E3 — 한국어 Windows 콘솔은 cp949 라 «—»·«✓» 를 print 하면
+# UnicodeEncodeError 로 즉사한다. 이 PC 는 PYTHONUTF8=1 이 박혀 있어 겪지 않는다.
+from core.console import force_utf8_console
+
+force_utf8_console()
+
 REPO = Path(__file__).resolve().parent.parent
 SRC = REPO / "src"
 
