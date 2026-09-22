@@ -62,6 +62,49 @@ RECORDED_REFERENCE: dict = {
 }
 
 
+# ──────────────────────────────────────
+# 측정 규약 — 정본(jt725/scripts/cns_structure_stats.py)과 같은 값을 한 곳에 둔다
+# ──────────────────────────────────────
+#
+# 왜 상수로 꺼내는가: 한때 이 분류가 질의문 안에 흩어져 있었고, 정본과 달라진 것을
+# 아무도 몰랐다(2026-09-22 실측까지). 한 곳에 두면 시험이 대조할 수 있다.
+
+#: 강연결 절단. D-128에 적힌 임의값이며 정본의 `STRONG_CUT`과 같아야 한다.
+STRONG_CUT = 5
+
+#: 신경전달물질 → 부호. 글루탐산은 **억제에 합산하지 않는다**(모호로 따로 둔다).
+NT_CLASSES = {
+    "support": ("acetylcholine",),
+    "refute": ("gaba", "histamine"),
+    "ambiguous": ("glutamate",),
+    "modulate": ("dopamine", "octopamine", "serotonin"),
+}
+
+#: `measure_reference`가 **실제로 다시 재는** 칸. 나머지는 기록된 값 그대로다 —
+#: 그 사실을 화면이 말할 수 있어야 대조가 거짓말을 하지 않는다.
+LIVE_FIELDS = ("polarity", "polarity_strong")
+
+#: 부호 구성 질의. 정본(`jt725/scripts/cns_structure_stats.py::polarity_table`)과
+#: **같은 자**여야 한다. 상수로 꺼낸 이유는 시험이 «주석이 아니라 질의»를 보게
+#: 하려는 것이다 — 주석에 「정본과 같아야 한다」고 적어 두었지만 네 군데가 달랐고
+#: 아무도 몰랐다(2026-09-22 실측).
+#:
+#: 자리마다 이유가 있다:
+#:   `consensusNt`      합의값. 기계 예측값(`predictedNt`)을 쓰면 조절 비중이
+#:                      12.5% → 65.2%가 된다(실측).
+#:   `coalesce(…,'unclear')`  모르는 것도 분모에 센다. 버리면 「아는 것들 사이의
+#:                      비율」이 되어 기록된 값과 잣대가 어긋난다.
+#:   `=~`               전체 일치. 접두 대조는 `KCg-m*` 변종까지 끌어온다.
+#:   `IS NOT NULL`      무게 없는 엣지를 뺀다.
+POLARITY_QUERY = (
+    "MATCH (a:Neuron)-[w:ConnectsTo]->(b:Neuron) WHERE b.type =~ '{lineage}' "
+    "AND w.weight IS NOT NULL "
+    "RETURN coalesce(a.consensusNt,'unclear') AS nt, "
+    "sum(w.weight) AS wsum, "
+    "sum(CASE WHEN w.weight>={strong_cut} THEN w.weight ELSE 0 END) AS sw"
+)
+
+
 def is_live_available() -> tuple[bool, str]:
     """살아 있는 재측정을 할 수 있는가.
 
@@ -91,7 +134,17 @@ def is_live_available() -> tuple[bool, str]:
 
 
 def _token_present() -> bool:
-    """토큰이 있는지만 본다 — **값은 읽지도 돌려주지도 않는다.**"""
+    """토큰이 **있는지만** 본다 — 값을 돌려주지 않는다.
+
+    「읽지도 않는다」고는 쓰지 않는다: 빈 값과 있는 값을 가르려면 `=` 뒤를 읽어
+    비었는지 봐야 한다. 실제로 읽으므로 그렇게 적으면 독스트링이 코드보다 많이
+    주장하는 것이 된다(2026-09-22 고침). 지켜야 하는 것은 **값이 밖으로 나가지
+    않는다**이고, 그것은 사유 문구에 값이 섞이지 않는지로 시험한다.
+
+    `_token_from_file`과 같은 줄을 각자 파싱한다 — 한쪽만 고치면 「있다고 했는데
+    값이 빈 문자열」이 되고, 그때 실패는 게이트가 아니라 neuPrint 인증에서 나므로
+    사유가 엉뚱해진다. 둘이 어긋나는지는 `test_presence_and_value_agree`가 잡는다.
+    """
     if os.environ.get(NEUPRINT_TOKEN_ENV):
         return True
     if not NEUPRINT_TOKEN_FILE.exists():
@@ -178,11 +231,30 @@ def compare(relations: list[dict], reference: dict | None = None) -> dict:
     reference = reference or RECORDED_REFERENCE
     profile = library_profile(relations)
 
+    # 어느 줄의 기준값이 «방금 잰 것»인지. `measure_reference`는 부호 구성만 다시
+    # 재므로, 살아 있는 대조에서도 위 두 줄은 기록된 값이다. 줄마다 말해 주지
+    # 않으면 「다시 재기」를 누른 사람이 다섯 줄 전부 새 값이라고 여긴다.
+    live_fields = set(reference.get("live_fields") or ())
+    source_of = {
+        "noise_share": "noise_share",
+        "top10_share": "top10_share",
+        "refute": "polarity",
+        "modulate": "polarity",
+        "refute_strong": "polarity_strong",
+    }
+
     def _row(key: str, label: str, lib, ref):
         gap = None
         if isinstance(lib, (int, float)) and isinstance(ref, (int, float)):
             gap = round(lib - ref, 4)
-        return {"key": key, "label": label, "library": lib, "reference": ref, "gap": gap}
+        return {
+            "key": key,
+            "label": label,
+            "library": lib,
+            "reference": ref,
+            "gap": gap,
+            "reference_live": source_of.get(key) in live_fields,
+        }
 
     pol = profile["polarity"] or {}
     rows = [
@@ -243,32 +315,53 @@ def measure_reference(lineage: str = REFERENCE_LINEAGE) -> dict:
     token = os.environ.get(NEUPRINT_TOKEN_ENV) or _token_from_file()
     client = Client("neuprint.janelia.org", dataset=NEUPRINT_DATASET, token=token)
 
-    # 측정 규약은 jt725/scripts/cns_structure_stats.py와 같아야 한다 — 전수이고,
-    # 구획화는 primary ROI로 제한하며, 글루탐산은 억제에 합산하지 않는다.
-    # 그 스크립트가 정본이므로 여기서는 부호 구성만 다시 뽑는다(대조에 쓰는 값이다).
+    # 측정 규약은 jt725/scripts/cns_structure_stats.py와 **글자까지** 같아야 한다.
+    # 그 스크립트가 정본이고, 여기서 다시 뽑는 것은 부호 구성뿐이다.
+    #
+    # 한때 이 질의가 정본과 네 군데 달랐다(2026-09-22 실측에서 드러났다):
+    #   ① `predictedNt`(기계 예측)를 썼다 — 정본은 `consensusNt`(합의값)다.
+    #      이것 하나로 조절 비중이 12.5% → 65.2%가 됐다.
+    #   ② `w.weight IS NOT NULL`이 없었다.
+    #   ③ `STARTS WITH`로 계통을 골랐다 — 정본의 `=~`는 **전체 일치**라
+    #      `KCg-m`만 잡는데 접두 대조는 `KCg-m*` 변종까지 끌어온다.
+    #   ④ nt가 null인 행을 버려 **분모가 달랐다** — 정본은 `unclear`로 세어 분모에 넣는다.
+    #      버리면 「아는 것들 사이의 비율」이 되어 기록된 값과 잣대가 어긋난다.
+    #
+    # 주석으로 「같아야 한다」고 적어 두는 것으로는 지켜지지 않았다. 그래서 규약을
+    # 상수(`NT_CLASSES`·`STRONG_CUT`)로 꺼내고 시험이 질의문을 검사한다.
     from datetime import date
 
-    query = f"""
-    MATCH (a:Neuron)-[w:ConnectsTo]->(b:Neuron)
-    WHERE b.type STARTS WITH '{lineage}'
-    RETURN a.predictedNt AS nt, sum(w.weight) AS total
-    """
+    query = POLARITY_QUERY.format(lineage=lineage, strong_cut=STRONG_CUT)
     df = client.fetch_custom(query)
-    by_nt = {str(r.nt): float(r.total) for r in df.itertuples() if r.nt}
+    by_nt = {str(r.nt): float(r.wsum) for r in df.itertuples()}
+    by_nt_strong = {str(r.nt): float(r.sw) for r in df.itertuples()}
     grand = sum(by_nt.values()) or 1.0
+    grand_strong = sum(by_nt_strong.values()) or 1.0
 
     def _share(*names: str) -> float:
         return round(sum(by_nt.get(n, 0.0) for n in names) / grand, 4)
 
+    def _share_strong(*names: str) -> float:
+        return round(sum(by_nt_strong.get(n, 0.0) for n in names) / grand_strong, 4)
+
+    # **다시 잰 것만 «직접 질의»라고 말한다.** 한때 `{**RECORDED_REFERENCE, "source":
+    # "직접 질의"}`로 돌려주어, 실제로는 기록된 값인 `noise_share`·`top10_share`에까지
+    # 「방금 쟀다」는 이름표가 붙었다. 대조의 다섯 줄 중 셋이 거짓이 되는 자리였다.
+    # 그 둘은 무게 «분포»에서 나오는 값이라 이 질의(부호 집계)로는 뽑을 수 없다.
     return {
         **RECORDED_REFERENCE,
         "measured_at": date.today().isoformat(),
-        "source": f"neuPrint {NEUPRINT_DATASET} 직접 질의",
+        "source": f"neuPrint {NEUPRINT_DATASET} 직접 질의 (부호 구성만)",
+        "live_fields": list(LIVE_FIELDS),
         "polarity": {
-            "support": _share("acetylcholine"),
-            "refute": _share("gaba", "histamine"),
-            "ambiguous": _share("glutamate"),
-            "modulate": _share("dopamine", "octopamine", "serotonin"),
+            "support": _share(*NT_CLASSES["support"]),
+            "refute": _share(*NT_CLASSES["refute"]),
+            "ambiguous": _share(*NT_CLASSES["ambiguous"]),
+            "modulate": _share(*NT_CLASSES["modulate"]),
+        },
+        "polarity_strong": {
+            "support": _share_strong(*NT_CLASSES["support"]),
+            "refute": _share_strong(*NT_CLASSES["refute"]),
         },
     }
 

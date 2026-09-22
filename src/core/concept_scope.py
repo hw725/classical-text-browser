@@ -74,34 +74,9 @@ def scoped(concepts: list[dict], document_id: str | None) -> list[dict]:
     return [c for c in concepts if in_scope(c, document_id)]
 
 
-def address_of(concept: dict) -> tuple[str | None, str]:
-    """개념의 주소를 (범위, 라벨)로 돌려준다.
-
-    입력: concept — Concept dict.
-    출력: (scope_document 또는 None, label).
-
-    왜 필요한가: 같은 라벨이 문헌마다 다른 개념일 수 있다. 「王戎」이 문헌 A와
-    B에서 같은 인물이라는 보장은 어디에도 없다 — 그 판단은 연구자의 것이고,
-    같다고 판단했으면 전역으로 올리거나 병합(D-128 2항)한다.
-    """
-    scope = concept.get("scope_document")
-    return (scope if scope not in (None, "") else None, concept.get("label", ""))
-
-
-def resolve_by_label(
-    concepts: list[dict],
-    label: str,
-    document_id: str | None = None,
-) -> list[dict]:
-    """라벨로 개념을 찾되 주소 밖은 보지 않는다.
-
-    입력: concepts — Concept 목록. label — 찾는 라벨. document_id — 문헌 범위.
-    출력: 주소에 걸리면서 라벨이 같은 개념 목록. 문헌 범위의 것을 앞에 둔다.
-
-    왜 문헌 범위의 것이 앞인가: 이것은 «범위가 순위를 만든다»가 아니라 **같은
-    주소 안에서 더 구체적인 것이 먼저**라는 뜻이다. 범위 밖의 개념은 애초에
-    목록에 없다 — 걸러진 뒤의 순서 이야기다.
-    """
-    hits = [c for c in scoped(concepts, document_id) if c.get("label") == label]
-    # 문헌 범위(구체) → 전역(일반) 순. 안정 정렬이라 같은 층 안의 순서는 그대로다.
-    return sorted(hits, key=lambda c: 0 if c.get("scope_document") else 1)
+# 한때 `address_of`(주소를 튜플로)와 `resolve_by_label`(라벨로 찾기)이 여기 있었으나
+# 부르는 곳이 한 번도 생기지 않아 걷어냈다(2026-09-22 실측). `resolve_by_label`은
+# **범위로 정렬**하고 있었다 — 이 모듈의 계약을 어기는 예외를 독스트링의 변론과 함께
+# 죽은 코드로 두면, 다음 사람이 그 변론을 읽지 않고 배선한다. 「같은 라벨이 문헌마다
+# 다른 개념일 수 있다」는 문제는 여전히 참이다. 필요해지면 6항을 다시 열고 결정으로
+# 남긴 뒤 만든다.
