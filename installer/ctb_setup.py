@@ -34,7 +34,7 @@ from pathlib import Path
 REPO = "hw725/classical-text-browser"
 # 설치 파일이 받는 판. 릴리스 태그의 소스 zip — main.zip이면 «릴리스 안 된 커밋»도 받게 된다.
 ZIP_URL = os.environ.get("CTB_SETUP_ZIP") or (
-    f"https://github.com/{REPO}/archive/refs/tags/v1.4.0.zip"
+    f"https://github.com/{REPO}/archive/refs/tags/v1.4.1.zip"
 )
 DEFAULT_DIR = Path.home() / "ClassicalTextBrowser"
 SHORTCUT_NAME = "고전서지 브라우저.lnk"

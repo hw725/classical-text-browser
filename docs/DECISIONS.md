@@ -7467,3 +7467,42 @@ D-128 11항에서 `Relation`의 두 축이 갈라졌다 — `weight`는 «관계
 
 **재측정은 호출 없이 된다.** `scripts/eval_boundary_judge.py starts|toc --score`가 저장해 둔 확률
 파일로 위 숫자를 다시 뽑는다 — 외부 호출 0건 · 비용 0.
+
+## D-130: cp949 콘솔에서 죽는 자리를 한 곳에서 막는다 (2026-09-22)
+
+**무엇이 일어났나.** v1.4.0을 실제로 깔아 `doctor.py`를 돌리니 죽었다 —
+`UnicodeEncodeError: 'cp949' codec can't encode character '\u2014'`.
+`doctor.bat`은 **환경이 이상할 때 사용자가 누르는 것**이라, 설명이 가장 필요한
+순간에 파이썬 트레이스백이 뜬다.
+
+**왜 아무도 몰랐나.** 이 PC는 사용자 환경변수 `PYTHONUTF8=1`이 레지스트리에
+박혀 있어 **겪지 않는다.** 받는 사람 PC에는 없다. 「내 PC에서 잘 돌았다」가
+증거가 못 되는 드문 자리다. 전체 시험 1,571건도 초록이었다 — 시험은 자기
+프로세스 안에서 돌고, 그 프로세스는 UTF-8이다.
+
+**무엇을 했나.** 정의를 `src/core/console.py` 한 곳에 모으고, 배포되는 진입점이
+그것을 부르게 했다. 홀로 도는 exe(`installer/ctb_setup.py`)만 예외로 같은 처리를
+직접 품는다 — 표준 라이브러리만으로 돌아야 해서 이 저장소를 import할 수 없다.
+
+**규약의 정본은 이 저장소에 없다.** `hw725/claude-skills`의
+`skills/hanmun-research-assistant/SKILL.md`(본문)와 `scripts/check_cjk_text_contract.py`
+(AST 판정기)가 정본이고, 조항은 E1(파일 I/O 인코딩)·E2(`Path.read_text`/`write_text`)·
+E3(콘솔 고정)·R1(CJK 정규식)이다. 여기서는 **불러 쓴다** —
+`tests/test_doc_drift.py::test_cjk_contract_is_clean`. 판정을 두 곳에 두면 반드시
+어긋난다(실제로 자체 탐지기를 만들었다가 `fitz.open()`·`path.open("rb")`·지역 함수
+`read_text()`를 위반으로 읽어 거짓 5건을 냈다).
+
+`src/ocr/ndlocr/`는 뺀다 — 국립국회도서관 CC-BY-4.0 벤더링 원본이다.
+**무엇을 빼는지 호출 자리에 적는다**(`--exclude '*/ndlocr/*'`). 조용히 빼면
+그것이 다음 사각지대가 된다.
+
+**부르는 것만으로는 부족하다 — 먼저 불러야 한다.** `ctb_setup.py`는 고정을
+`parse_args()`·`gui()` **뒤**에 두고 있어 `--auto` 경로에서만 실행됐다. 사용자가
+exe를 더블클릭하는 GUI 경로는 고정 없이 돌았다. 시험도 「`reconfigure` 문자열이
+있는가」만 보아 이것을 구조적으로 볼 수 없었다 — **닿는다 ≠ 돈다.** 이제 진입
+함수 안에서 고정이 첫 출력·인자 파싱보다 앞인지 본다.
+
+**남긴 빚.** `ruff` 위반 66건(62건이 긴 한글 주석 줄). v1.4.0 이후 86커밋 동안
+**ruff를 부르는 자동 관문이 없어** 조용히 쌓였다(릴리스 체크리스트 2단계에만 손으로
+적혀 있었다). 포매터로도 안 고쳐지고 동작에 영향이 없어, 기준선을 박아 늘지만
+못하게 했다(`tests/test_lint_does_not_grow.py`). 갚으면 기준선을 내린다.

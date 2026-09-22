@@ -159,6 +159,7 @@ def test_installer_zip_tag_matches_pyproject():
     그 확인은 릴리스 절차의 몫이다.
     """
     import re
+
     import tomllib
 
     version = tomllib.loads(
