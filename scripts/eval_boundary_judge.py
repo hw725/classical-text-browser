@@ -7,6 +7,7 @@
     starts  — 규칙(D-116)과 판정 모델을 같은 자로 견준다(«이 행에서 새 글이 시작하는가»).
     toc     — 목차 대조를 «고르기»로 바꿔 지금의 정렬과 견준다.
     control — 그 대조군. 제목 A를 묻되 후보는 다른 항목 B의 것을 준다(D-129).
+    biblio  — 독립 검산. 서지의 «권»으로 «없음»이 옳았는지 본다(유사도를 타지 않는다).
 
 정답 자리 맞춤(starts):
     CSV의 «행»은 4차 확정본 기준이 아니다(그 전 판독이나 앵커 규약을 따른다). 그대로 쓰면 모델이
@@ -26,6 +27,10 @@
     **천장을 먼저 잰다** — 빌린 창에 그 제목의 진짜 행이 우연히 든 쌍은 «없음»이 정답이 아니므로
     분모에서 뺀다. 「제대로 읽으면 100%」를 잣대로 쓰면 도달 불가능한 값을 실패로 읽게 된다.
 
+    **대조군도 «놓침»은 못 잰다**(지어내기만 잰다). 그 자리를 `biblio`가 맡는다 — ITKC 서지의
+    «권» 열은 본문 글자와 무관하므로, «이 책에 있을 수 있는 항목인데 «없음»이라 했는가»를
+    유사도를 한 번도 쓰지 않고 답한다. 이것이 세 측정 가운데 **유일하게 독립인 신호**다.
+
 쓰는 법:
     uv run python scripts/eval_boundary_judge.py starts --book cheonjin
     uv run python scripts/eval_boundary_judge.py starts --book unyang01 --run --save nouls.json
@@ -34,6 +39,7 @@
     uv run python scripts/eval_boundary_judge.py toc --score toc.json
     uv run python scripts/eval_boundary_judge.py control --run --save ctrl.json --real toc.json
     uv run python scripts/eval_boundary_judge.py control --score ctrl.json --real toc.json
+    uv run python scripts/eval_boundary_judge.py biblio --score toc.json
 
 본문과 정답 CSV는 **읽기만** 한다. `--run`이 없으면 한 건도 보내지 않는다(전역 규칙 11).
 """
@@ -89,6 +95,9 @@ BOOKS: dict[str, dict] = {
         "book": "운양집_01",
         "first": 14,
         "last": 87,
+        # 유사도를 타지 않는 독립 신호 — ITKC 서지의 «권» 열. 본문 글자와 무관하다.
+        "biblio": UNYANG / "db/unyangjip_works.csv",
+        "volumes": ("권1", "권2"),  # 이 책이 담은 권
     },
 }
 
@@ -487,6 +496,75 @@ def cmd_control(args) -> int:
     return 0
 
 
+# ── 독립 검산: 서지의 «권»으로 «없음»이 옳았는지 본다 ──────────────────────
+def biblio_volumes(spec: dict) -> dict[str, set[str]]:
+    """서지에서 «한자 이름 → 그것이 속한 권» 표를 만든다. 유사도를 쓰지 않는다.
+
+    왜 독립인가: `bucket()`·자기검증·후보 생성이 전부 `title_similarity`를 쓴다. 그 셋으로
+    서로를 검산하면 같은 자를 세 번 대는 것이다. 서지의 «권» 열은 ITKC 메타데이터라
+    본문 글자와 무관하므로, «이 책에 있을 수 있는가»에 다른 근거로 답한다.
+
+    그룹 열이 「시(詩)○격경집(擊磬集) 갑인년…」 꼴이라 한자 묶음(2자 이상)을 전부 꺼낸다.
+    """
+    out: dict[str, set[str]] = {}
+    with spec["biblio"].open(encoding="utf-8-sig", newline="") as fh:
+        for row in csv.DictReader(fh):
+            for han in re.findall(r"[\u4e00-\u9fff]{2,}", row.get("그룹") or ""):
+                out.setdefault(han, set()).add(row.get("권") or "")
+    return out
+
+
+def biblio_report(entries, result: dict, spec: dict) -> None:
+    """모델의 답 × 서지를 2×3으로 놓는다. 호출 0건.
+
+    한계를 먼저 적는다: 이름 대조가 **부분 문자열**이라 「行狀」·「追悼文」처럼 여러 권에
+    걸치는 갈래 이름은 엉뚱한 권에 붙을 수 있다. 그래서 이 표는 «놓침이 있는가»(왼쪽
+    아래 칸)를 보는 데 쓰고, «헛것»(오른쪽 위)은 그대로 판정하지 않는다.
+    """
+    table = biblio_volumes(spec)
+    here = set(spec["volumes"])
+    picked = {p["entry"] for p in result["picks"]}
+    said_none = {n["entry"] for n in result["none"] if "why" not in n}
+
+    def where(title: str) -> str:
+        hits = {v for han, vols in table.items() if han in title for v in vols}
+        if not hits:
+            return "서지에 없음"
+        return "이 책" if hits & here else "다른 권"
+
+    cells: dict[tuple[str, str], list[str]] = {}
+    for i, e in enumerate(entries):
+        if i not in picked and i not in said_none:
+            continue
+        title = str(getattr(e, "title", "") or "")
+        cells.setdefault(("고름" if i in picked else "없음", where(title)), []).append(title)
+
+    cols = ("이 책", "다른 권", "서지에 없음")
+    print(f"\n서지 이름 {len(table)}개 · 이 책의 권 {sorted(here)}")
+    print(f"{'':<6}" + "".join(f"{c:>10}" for c in cols))
+    for ans in ("고름", "없음"):
+        print(f"{ans:<6}" + "".join(f"{len(cells.get((ans, c), [])):>10}" for c in cols))
+    missed = cells.get(("없음", "이 책"), [])
+    print(f"\n서지가 «이 책»이라는데 «없음»이라 한 것: {len(missed)}건  ← 놓침의 독립 증거")
+    for t in missed[:10]:
+        print(f"    「{t[:24]}」")
+    odd = cells.get(("고름", "다른 권"), [])
+    print(f"서지가 «다른 권»이라는데 고른 것: {len(odd)}건"
+          "  (갈래 이름은 여러 권에 걸친다 — 참고만)")
+    for t in odd[:10]:
+        print(f"    「{t[:24]}」")
+
+
+def cmd_biblio(args) -> int:
+    spec = BOOKS[args.book]
+    if not spec.get("biblio"):
+        print(f"[{args.book}] 서지 표가 없습니다.")
+        return 1
+    entries, _body, _tp, _m, _u = prepare(args.book)
+    biblio_report(entries, json.loads(args.score.read_text(encoding="utf-8")), spec)
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="경계 판정을 잰다 — starts(글 시작 행)·toc(목차 대조)")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -521,6 +599,11 @@ def main() -> int:
     c.add_argument("--score", type=pathlib.Path, help="남긴 결과로 다시 읽는다(호출 없음)")
     c.add_argument("--real", type=pathlib.Path, help="실제 조건 결과(toc --save) — 판별력 비교용")
     c.set_defaults(func=cmd_control)
+
+    b = sub.add_parser("biblio", help="독립 검산 — 서지의 «권»으로 «없음»이 옳았는지 본다")
+    b.add_argument("--book", choices=sorted(BOOKS), default="unyang01")
+    b.add_argument("--score", type=pathlib.Path, required=True, help="toc --save 로 남긴 결과")
+    b.set_defaults(func=cmd_biblio)
 
     args = ap.parse_args()
     return args.func(args)
