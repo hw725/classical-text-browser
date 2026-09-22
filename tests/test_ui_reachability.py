@@ -374,6 +374,7 @@ class TestEscapeHelpersAreStrict:
             ("_escHtmlVariant", "variant-manager"),
             ("_escAttr", "annotation-editor"),
             ("_escAttrVariant", "variant-manager"),
+            ("_esc", "citation-editor"),
         ],
     )
     def test_quotes_are_escaped(self, fname, fileno):
