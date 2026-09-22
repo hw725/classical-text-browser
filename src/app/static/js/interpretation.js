@@ -116,10 +116,7 @@ function initInterpretation() {
     });
   }
 
-  // 의존 배너 버튼
-  const depDiff = document.getElementById("interp-dep-diff");
-  if (depDiff) depDiff.addEventListener("click", _showDepInPanel);
-
+  // 의존 배너 버튼 (배너는 「의존 추적」 사이드바 안에 있다 — B-008)
   const depAck = document.getElementById("interp-dep-ack");
   if (depAck) depAck.addEventListener("click", _acknowledgeChanges);
 
@@ -505,11 +502,10 @@ function _hideDepBanner() {
    의존 배너 액션
    ────────────────────────── */
 
-function _showDepInPanel() {
-  // 액티비티 바의 "의존 추적" 버튼을 클릭하여 사이드바 패널을 전환
-  const depBtn = document.querySelector('.activity-btn[data-panel="dependency"]');
-  if (depBtn) depBtn.click();
-}
+// 한때 `_showDepInPanel`(배너의 `diff` 단추)이 여기 있었다. 하던 일은 액티비티
+// 바의 「의존 추적」을 대신 눌러 주는 것뿐이었는데, 2026-09-22에 배너 자체를 그
+// 사이드바 안으로 옮기면서(B-008) 제자리걸음이 되어 걷어냈다. 바뀐 파일 목록은
+// 배너 바로 아래 `dep-file-list`에 그려진다.
 
 async function _acknowledgeChanges() {
   if (!interpState.interpId) return;

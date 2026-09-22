@@ -2928,11 +2928,15 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
 
 /* --- 의존 경고 배너 --- */
 
+/* 의존 경고 배너 — 2026-09-22부터 「의존 추적」 사이드바 안에 산다(B-008).
+   가로 폭이 편집기 패널보다 훨씬 좁으므로 줄을 접는다: 접지 않으면 「기반
+   업데이트」가 잘려 **누를 수 없는 단추**가 된다(사이드바 기본 폭에서 실측). */
 .interp-dep-banner {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: 6px 8px;
+  padding: 8px 12px;
   background: rgba(245, 158, 11, 0.15);
   border-bottom: 1px solid rgba(245, 158, 11, 0.3);
   flex-shrink: 0;
@@ -2947,13 +2951,17 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
 .interp-dep-msg {
   font-size: 12px;
   color: #f59e0b;
-  flex: 1;
+  /* 아이콘 옆에서 남는 폭을 다 쓰되, 줄이 모자라면 단추 줄이 아래로 접힌다. */
+  flex: 1 1 60%;
+  min-width: 0;
 }
 
 .interp-dep-actions {
   display: flex;
   gap: 4px;
   flex-shrink: 0;
+  /* 접혔을 때 오른쪽에 붙는다 — 목록과 왼쪽 정렬이 겹쳐 보이지 않게. */
+  margin-left: auto;
 }
 
 /* --- 층별 서브탭 --- */
