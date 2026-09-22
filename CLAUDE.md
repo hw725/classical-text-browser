@@ -63,8 +63,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 1. `uv lock --upgrade-package <이름>` — **전체 갱신은 하지 않는다.** 한꺼번에 올리면
    무엇이 깼는지 가릴 수 없다.
 2. `uv run python -m pytest`
-3. **실제 이미지로 OCR 1쪽.** 어디가 사각지대인지는 **재서 안다**(2026-09-21 실측 — 시험이
-   도는 동안 `sys.monitoring`으로 엔진 파일의 함수 진입을 기록했다). 실행되는 것과 아닌 것:
+3. **실제 이미지로 OCR 1쪽.** 어디가 사각지대인지는 **재서 안다** — `uv run python scripts/measure_blind_spots.py <파일…>`이 시험이 도는 동안 `sys.monitoring`으로 **함수 진입**을 기록해 「초록인데 한 줄도 안 도는 자리」를 짚는다(줄 커버리지와 다르다: import 돼서 `def` 줄이 실행된 것을 실행으로 세지 않는다). 아래는 2026-09-21 실측이다:
 
    | 엔진 | 시험에서 실행되는 것 |
    |---|---|
