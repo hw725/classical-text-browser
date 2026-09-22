@@ -16,6 +16,13 @@ if _src_dir not in sys.path:
 
 
 def main():
+    # 안내문에 «—»가 들어 있어 cp949 콘솔에서는 그대로 죽는다. `start_server.bat`이
+    # 이것을 `--reload`로 띄우므로, 코드가 바뀔 때마다 찍히는 «[자동 재적재]» 줄이
+    # 받는 사람 PC에서 첫 재적재에 터졌다(2026-09-22 전수 측정). core/console.py 참조.
+    from core.console import force_utf8_console
+
+    force_utf8_console()
+
     parser = argparse.ArgumentParser(
         prog="classical-text-browser",
         description="고전 텍스트 서고 웹 서버",

@@ -19,6 +19,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 
 def main() -> int:
+    # 설치 5단계가 이 스크립트를 돌린다. 모델을 **못 받았을 때** 찍는 안내문에
+    # «—»가 들어 있어, cp949 콘솔(받는 사람 PC의 기본)에서는 설명 대신 파이썬
+    # 트레이스백이 떴다 — 설명이 가장 필요한 순간이다(2026-09-22). core/console.py 참조.
+    from core.console import force_utf8_console
+
+    force_utf8_console()
+
     langs = sys.argv[1:] or ["korean", "ch"]
     os.environ.setdefault("CTB_PADDLE_DEVICE", "cpu")
     try:

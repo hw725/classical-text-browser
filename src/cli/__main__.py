@@ -357,7 +357,11 @@ def cmd_embed_folder(args):
 
 
 def _force_utf8_output() -> None:
-    """표준 출력을 UTF-8로 맞춘다.
+    """표준 출력을 UTF-8로 맞춘다 — 정의는 `core.console`에 있다.
+
+    2026-09-22에 이 처리를 **한 곳**으로 모았다. 같은 교훈을 세 번 배우고도
+    그때마다 겪은 파일만 고쳐, 설치 스크립트와 서버 진입점이 그대로 남아 있었다.
+    이 함수는 부르는 자리를 바꾸지 않으려고 남겨 둔 얇은 껍질이다.
 
     왜 필요한가:
         한국어 Windows의 콘솔 기본 인코딩은 cp949다. 이 CLI의 안내문에는
@@ -369,12 +373,9 @@ def _force_utf8_output() -> None:
         일부 터미널)에서도 안내가 «죽는» 대신 «일부 글자가 ?로 보이는» 쪽으로
         끝나게 하기 위함이다. 안내문을 못 읽는 것보다 낫다.
     """
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
-        except (AttributeError, ValueError, OSError):
-            # 재설정을 지원하지 않는 스트림이면 그대로 둔다.
-            pass
+    from core.console import force_utf8_console
+
+    force_utf8_console()
 
 
 def main():

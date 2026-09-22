@@ -112,12 +112,127 @@ def test_batch_files_are_ascii(name):
     assert not bad, f"{name}에 비ASCII 줄이 있습니다 (cmd 파싱 오류 원인): {bad[:3]}"
 
 
-def test_install_ps1_has_bom_and_crlf():
-    """install.ps1은 UTF-8 BOM + CRLF여야 한다.
+def _tracked_ps1() -> list[str]:
+    """추적되는 `.ps1` 전부 — 파일 하나가 아니라 **종류**를 덮는다.
 
-    BOM이 없으면 PowerShell 5.1이 ANSI로 읽어 한글이 깨진다.
+    2026-09-22에 `install.ps1`만 검사하고 있어서, 같은 규칙이 필요한
+    `scripts/build_installer.ps1`이 **한글 150바이트에 BOM 없이 LF**로 남아 있었다.
+    새 `.ps1`이 생겨도 자동으로 걸리도록 목록을 git에서 받는다.
     """
-    raw = (_ROOT / "install.ps1").read_bytes()
-    assert raw.startswith(b"\xef\xbb\xbf"), "install.ps1에 UTF-8 BOM이 없다"
-    assert b"\r\n" in raw, "install.ps1 줄바꿈은 CRLF여야 한다"
-    assert b"\n" not in raw.replace(b"\r\n", b""), "LF만 있는 줄이 섞여 있다"
+    import subprocess
+
+    out = subprocess.run(
+        ["git", "ls-files", "*.ps1"],
+        cwd=_ROOT, capture_output=True, text=True, check=False,
+    ).stdout.split()
+    assert out, "추적되는 .ps1을 찾지 못했다"
+    return out
+
+
+@pytest.mark.parametrize("name", _tracked_ps1())
+def test_ps1_files_have_bom_and_crlf(name):
+    """`.ps1`은 UTF-8 BOM + CRLF여야 한다 — 한 파일이 아니라 전부.
+
+    BOM이 없으면 PowerShell 5.1이 ANSI로 읽어 **한글이 깨진다.** 깨진 채로도
+    스크립트는 돌기 때문에(구문이 아니라 글자만 깨진다) 눈으로 보기 전에는 모른다 —
+    그래서 바이트로 막는다. `.gitattributes`도 `*.ps1 text eol=crlf`로 못박는다.
+    """
+    raw = (_ROOT / name).read_bytes()
+    assert raw.startswith(b"\xef\xbb\xbf"), f"{name}에 UTF-8 BOM이 없다"
+    assert b"\r\n" in raw, f"{name} 줄바꿈은 CRLF여야 한다"
+    assert b"\n" not in raw.replace(b"\r\n", b""), f"{name}에 LF만 있는 줄이 섞여 있다"
+
+
+def test_installer_zip_tag_matches_pyproject():
+    """설치 파일이 받는 판이 `pyproject.toml`의 판과 같아야 한다.
+
+    왜 기계가 봐야 하는가: `installer/ctb_setup.py`의 `ZIP_URL`은 릴리스 태그를
+    **손으로 박아 둔다**(`docs/maintenance.md` 9-1이 그 단계를 적어 두었다).
+    잊으면 `CTB-Setup.exe`가 **조용히 옛 판을 내려받는다** — 받는 사람은 새 판을
+    깐 줄 안다. 이 저장소는 같은 모양에 이미 한 번 물렸다: `.venv-gpu`의
+    메타데이터가 1.2.1에 멈춰 화면이 옛 판을 표시했고, Codex·문서 에이전트·
+    pytest 1,017건을 전부 통과한 뒤에 사람 눈에 띄었다.
+
+    여기서 **태그가 원격에 실제로 있는지는 보지 않는다** — 판을 올린 뒤 태그를
+    밀기 전 사이에는 없는 것이 정상이고, 시험이 네트워크에 매달리면 안 된다.
+    그 확인은 릴리스 절차의 몫이다.
+    """
+    import re
+    import tomllib
+
+    version = tomllib.loads(
+        (_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    )["project"]["version"]
+    setup = (_ROOT / "installer" / "ctb_setup.py").read_text(encoding="utf-8")
+    m = re.search(r"archive/refs/tags/v([\d.]+)\.zip", setup)
+    assert m, "ctb_setup.py에서 ZIP_URL의 태그를 찾지 못했다"
+    assert m.group(1) == version, (
+        f"설치 파일이 받는 판 v{m.group(1)} 이 pyproject {version} 과 다르다 — "
+        "판을 올렸으면 installer/ctb_setup.py의 ZIP_URL도 함께 고친다"
+        "(docs/maintenance.md 9-1)."
+    )
+
+
+# ─────────────────────────────────────────────────────────────
+# 배포되는 진입점이 cp949 콘솔에서 죽지 않는가
+# ─────────────────────────────────────────────────────────────
+
+# 남의 PC에서 도는 것만. 개발용 `scripts/*.py`는 이 PC에서만 돌고,
+# 이 PC는 사용자 환경변수 `PYTHONUTF8=1`이 박혀 있어 해당이 없다.
+_SHIPPED_ENTRYPOINTS = (
+    "installer/ctb_setup.py",    # CTB-Setup.exe — 표준 라이브러리만이라 같은 처리를 직접 품는다
+    "scripts/warmup_paddle.py",  # install.ps1 [5/5] · install.sh 5단계
+    "src/cli/__main__.py",       # `ctb` 명령
+    "src/app/__main__.py",       # start_server.bat 이 `-m app serve --reload`로 띄운다
+)
+
+
+def _cp949_unsafe_print_lines(source: str) -> list[int]:
+    """`print(...)`에 cp949로 인코딩되지 않는 글자 리터럴이 있는 줄 번호."""
+    import ast
+
+    lines: list[int] = []
+    for node in ast.walk(ast.parse(source)):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "print"
+        ):
+            continue
+        for part in ast.walk(node):
+            if isinstance(part, ast.Constant) and isinstance(part.value, str):
+                try:
+                    part.value.encode("cp949")
+                except UnicodeEncodeError:
+                    lines.append(node.lineno)
+    return sorted(set(lines))
+
+
+@pytest.mark.parametrize("name", _SHIPPED_ENTRYPOINTS)
+def test_shipped_entrypoints_survive_cp949_console(name):
+    """배포되는 진입점은 콘솔을 UTF-8로 고정하거나, cp949 밖 글자를 찍지 않아야 한다.
+
+    왜 기계가 봐야 하는가: 한국어 Windows 콘솔의 기본은 **cp949**다. 한글은 cp949에
+    있지만 `—`·`«»`·`→`·`✓`는 **없어서**, 그런 글자를 `print`하면
+    `UnicodeEncodeError`로 프로그램이 즉사한다.
+
+    이 개발 PC는 사용자 환경변수 `PYTHONUTF8=1`이 박혀 있어 **겪지 않는다.**
+    받는 사람의 PC에는 없다 — 그래서 「내 PC에서 잘 돌았다」가 증거가 못 되는
+    드문 자리다. 시험이 대신 본다.
+
+    같은 교훈을 세 번 배웠고 그때마다 겪은 파일만 고쳤다(2026-07-26 `ctb --help`,
+    2026-09-06 창 없는 exe). 2026-09-22에 전수로 재니 설치 5단계의
+    `warmup_paddle.py`와 서버 진입점 `app/__main__.py`가 그대로였다 —
+    앞의 것은 **모델을 못 받았다는 설명을 찍으려다** 죽어, 설명이 가장 필요한
+    순간에 파이썬 트레이스백이 떴다. 정의는 `src/core/console.py` 한 곳에 있다.
+    """
+    source = (_ROOT / name).read_text(encoding="utf-8")
+    hardened = "force_utf8_console" in source or "reconfigure(encoding=" in source
+    if hardened:
+        return
+    bad = _cp949_unsafe_print_lines(source)
+    assert not bad, (
+        f"{name}: cp949 콘솔에서 죽는 print가 {len(bad)}건 있는데 "
+        f"콘솔 고정을 부르지 않는다 (줄 {bad[:5]}) — "
+        "`from core.console import force_utf8_console` 를 진입점 맨 앞에서 부른다."
+    )

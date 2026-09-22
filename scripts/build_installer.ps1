@@ -1,4 +1,4 @@
-# CTB-Setup.exe 빌드 — installer/ctb_setup.py를 PyInstaller로 한 파일 exe로.
+﻿# CTB-Setup.exe 빌드 — installer/ctb_setup.py를 PyInstaller로 한 파일 exe로.
 #
 # 쓰는 법:  powershell -ExecutionPolicy Bypass -File scripts/build_installer.ps1
 # 결과:     dist/CTB-Setup.exe  (약 10MB, 표준 라이브러리 + tkinter만)
