@@ -55,12 +55,16 @@ _DRAFT_LOCKS_GUARD = threading.Lock()
 
 @contextmanager
 def draft_lock(doc_path: Path, part_id: str, page_number: int):
-    """이 쪽의 초안(과 그 쪽 L4 채우기)을 고치는 동안 잡는 잠금. 같은 스레드에서는 겹쳐 잡아도 된다."""
+    """이 쪽의 초안(과 그 쪽 L4 채우기)을 고치는 동안 잡는 잠금.
+
+    같은 스레드에서는 겹쳐 잡아도 된다.
+    """
     key = str(draft_path(doc_path, part_id, page_number).resolve())
     with _DRAFT_LOCKS_GUARD:
         lock = _DRAFT_LOCKS.setdefault(key, threading.RLock())
     with lock:
         yield
+
 
 # ─── 선별 기준 (기계적, LLM 없음) ────────────────────────────────
 
@@ -348,7 +352,9 @@ def _judge_stage2(entry: dict, stage1: Optional[dict], variant_dict=None) -> Non
         "agreement": stage1.get("agreement"),
         "uncertain_count": stage1.get("uncertain_count"),
     }
-    agree = text_agreement(stage1.get("corrected_text", ""), entry.get("corrected_text", ""), variant_dict)
+    agree = text_agreement(
+        stage1.get("corrected_text", ""), entry.get("corrected_text", ""), variant_dict
+    )
     entry["stages_agreement"] = agree
     entry["accept_basis"] = "stages"
     entry["accepted"] = (
@@ -427,7 +433,9 @@ def draft_status(draft: Optional[dict]) -> dict:
         if b.get("error"):
             errors += 1
         elif bid in applied:
-            if b.get("applied_text") is not None and b.get("applied_text") != b.get("corrected_text"):
+            if b.get("applied_text") is not None and b.get("applied_text") != b.get(
+                "corrected_text"
+            ):
                 conflicts += 1
                 pending += 1
             else:
@@ -472,7 +480,10 @@ def l2_fingerprint(doc_path: Path, part_id: str, page_number: int) -> Optional[s
     raw = p.read_bytes()
     try:
         page = json.loads(raw)
-        key = [[str(r.get("layout_block_id") or ""), block_text(r)] for r in page.get("ocr_results") or []]
+        key = [
+            [str(r.get("layout_block_id") or ""), block_text(r)]
+            for r in page.get("ocr_results") or []
+        ]
         return hashlib.sha1(json.dumps(key, ensure_ascii=False).encode("utf-8")).hexdigest()
     except ValueError:
         return hashlib.sha1(raw).hexdigest()
@@ -540,9 +551,12 @@ def list_review_pages(doc_path: Path, part_id: str) -> list[dict]:
         try:
             draft = json.loads(path.read_text(encoding="utf-8"))  # 찾은 파일을 그대로 읽는다
         except (OSError, ValueError) as e:
-            # 깨진 파일은 숨기지 않고 «깨짐»으로 올린다 — 사람이 봐야 할 쪽이 조용히 사라지면 안 된다
+            # 깨진 파일은 숨기지 않고 «깨짐»으로 올린다 —
+            # 사람이 봐야 할 쪽이 조용히 사라지면 안 된다
             logger.warning(f"교정 초안을 읽지 못했습니다: {path} — {e}")
-            out.append({"page": page, "mode": None, "corrupt": True, **draft_status(None), "errors": 1})
+            out.append(
+                {"page": page, "mode": None, "corrupt": True, **draft_status(None), "errors": 1}
+            )
             continue
         st = draft_status(draft)
         # accepted는 «자동 수용됐는데 아직 L4에 안 들어간 것»이다 — 일괄이 사람이 고친
@@ -573,7 +587,8 @@ def mark_applied(doc_path: Path, part_id: str, page_number: int, block_ids: list
         wanted = set(block_ids)
         for b in draft.get("blocks", []):
             if b.get("block_id") in wanted:
-                # 그때 들어간 글자를 적어 둔다 — 뒤에 다시 읽어 답이 달라지면 draft_status가 충돌로 센다
+                # 그때 들어간 글자를 적어 둔다 — 뒤에 다시 읽어 답이 달라지면
+                # draft_status가 충돌로 센다
                 b["applied_text"] = b.get("corrected_text")
         draft["applied_blocks"] = sorted(set(draft.get("applied_blocks") or []) | wanted)
         write_json_atomic(draft_path(doc_path, part_id, page_number), draft)
@@ -641,10 +656,13 @@ def run_correction(
         # 다시 볼 블록이 없으면 이미지도 열지 않고 초안 파일도 만들지 않는다.
         # 빈 초안이 남으면 eval_cer가 «교정 초안이 있는 쪽»으로 세어 통계가 부푼다.
         if fresh:
-            # 새로 시작인데 볼 것이 없다 — 디스크의 옛 초안이 남으면 화면·검토 목록·CER이 그것을 쓴다
+            # 새로 시작인데 볼 것이 없다 — 디스크의 옛 초안이 남으면
+            # 화면·검토 목록·CER이 그것을 쓴다
             discard_draft(doc_path, part_id, page_number)
         return merge_draft(existing, draft)
-    prior_by_id = {b["block_id"]: b for b in (existing or {}).get("blocks", []) if b.get("block_id")}
+    prior_by_id = {
+        b["block_id"]: b for b in (existing or {}).get("blocks", []) if b.get("block_id")
+    }
 
     l2_path = Path(doc_path) / "L2_ocr" / f"{part_id}_page_{page_number:03d}.json"
     l2_page = json.loads(l2_path.read_text(encoding="utf-8")) if l2_path.exists() else {}
@@ -835,7 +853,8 @@ def _apply_draft_locked(
             elif corrected and corrected in text:
                 applied.append(bid)  # 이미 그 글자가 들어가 있다
             else:
-                # «전에 적용했다»는 기록만으로 성공이라 하지 않는다 — L4에서 자리를 못 찾으면 못 찾은 것
+                # «전에 적용했다»는 기록만으로 성공이라 하지 않는다 —
+                # L4에서 자리를 못 찾으면 못 찾은 것
                 not_found.append(bid)
 
     save_page_text(doc_path, part_id, page_number, text)

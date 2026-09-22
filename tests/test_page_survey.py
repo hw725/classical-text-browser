@@ -370,7 +370,10 @@ def _patch_pages(monkeypatch):
 
 
 def test_orientation_only_runs_on_cpu_without_model(client, tmp_path, monkeypatch):  # noqa: F811
-    """CPU 환경 + 비전 모델 없음: 투영만으로 누운 쪽을 찾고 추정(guess)으로 돌려준다. OCR 점수는 재지 않는다."""
+    """CPU 환경에 비전 모델도 없을 때 — 방향만 추정으로 돌려준다.
+
+    투영만으로 누운 쪽을 찾아 guess 로 표시하고, OCR 점수는 재지 않는다.
+    """
     from app import _state
     from app.routers import llm_ocr
     from core import env_doctor
@@ -410,7 +413,10 @@ def test_orientation_only_runs_on_cpu_without_model(client, tmp_path, monkeypatc
 
 
 def test_orientation_only_scores_sideways_pages_on_gpu(client, tmp_path, monkeypatch):  # noqa: F811
-    """GPU 환경: 누운 쪽에서만 PaddleOCR 점수(후보 둘)를 재어 90/270을 확정한다. 선 쪽은 180° 검사를 하지 않는다."""
+    """GPU 환경 — 누운 쪽만 점수를 재어 90/270을 확정한다.
+
+    PaddleOCR 점수를 후보 둘에 대해 재고, 선 쪽에는 180° 검사를 하지 않는다.
+    """
     import json as _json
 
     from app import _state
@@ -448,9 +454,15 @@ def test_orientation_only_scores_sideways_pages_on_gpu(client, tmp_path, monkeyp
 
 
 def test_orientation_only_counts_pages_from_pdf_when_manifest_lacks_page_count(
-    client, tmp_path, monkeypatch
-):  # noqa: F811
-    """add_document로 만든 문헌은 manifest에 page_count가 없다 — PDF를 열어 센다(E2E 실측 2026-09-18: «쪽 수를 몰라» 400)."""
+    client,  # noqa: F811 — 위에서 import 한 fixture 를 그대로 받는다
+    tmp_path,
+    monkeypatch,
+):
+    """manifest 에 page_count 가 없으면 PDF 를 열어 센다.
+
+    add_document 로 만든 문헌이 그렇다. E2E 실측(2026-09-18)에서
+    «쪽 수를 몰라» 400 이 났던 자리다.
+    """
     import json as _json
     from pathlib import Path
 
@@ -467,6 +479,8 @@ def test_orientation_only_counts_pages_from_pdf_when_manifest_lacks_page_count(
         p["page_count"] = None
     mf.write_text(_json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
-    r = client.post(f"/api/documents/d1/parts/{part_id}/rotation/suggest", json={"orientation_only": True})
+    r = client.post(
+        f"/api/documents/d1/parts/{part_id}/rotation/suggest", json={"orientation_only": True}
+    )
     assert r.status_code == 200, r.text
     assert r.json()["checked"] == 3

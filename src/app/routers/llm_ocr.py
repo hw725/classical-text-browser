@@ -1051,8 +1051,9 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
     dry_run이면 {"dry_run": True, "pages", "calls", "ocr_calls"(상한)}.
 
     orientation_only=True면(«돌아간 쪽은 세워서», 2026-09-18) 비전 모델을 부르지 않고 방향만 잰다 —
-    GPU 게이트를 지나지 않고, "calls": 0·"engines": []·"mixed": []이며, 누운 쪽만 "rotation"에 오른다.
-    GPU이고 PaddleOCR이 있을 때만 90/270을 점수로 가르고 아니면 "guess": True(화면이 미리보기로 묻는다).
+    GPU 게이트를 지나지 않고, "calls": 0·"engines": []·"mixed": []이며,
+    누운 쪽만 "rotation"에 오른다. GPU이고 PaddleOCR이 있을 때만 90/270을
+    점수로 가르고, 아니면 "guess": True(화면이 미리보기로 묻는다).
     """
     from app._state import _get_llm_router
     from core.document import get_document_info, page_rotation
@@ -1079,7 +1080,8 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
     if not body.orientation_only and not gpu_runtime():
         # 사용자 지시(2026-09-10): CPU에서 한 시간 걸리는 일을 열어 두지 않는다 — dry_run도 막는다.
-        # 방향만(orientation_only)은 투영뿐이라 CPU에서도 즉시 끝나므로 연다 — OCR 점수는 GPU에서만 잰다
+        # 방향만(orientation_only)은 투영뿐이라 CPU에서도 즉시 끝나므로 연다 —
+        # OCR 점수는 GPU에서만 잰다
         return JSONResponse({"error": GPU_ONLY_MESSAGE, "gpu_only": True}, status_code=400)
     doc_dir = library_path / "documents" / doc_id
     if not doc_dir.exists():
@@ -1088,8 +1090,9 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
     part = next((x for x in info.get("parts") or [] if x.get("part_id") == part_id), None)
     if part is None:
         return JSONResponse({"error": f"권을 찾을 수 없습니다: {part_id}"}, status_code=404)
-    # manifest에 page_count가 없는 문헌(add_document로 만든 것)은 PDF를 열어 센다 — 배치 라우트와 같은
-    # 이유. 화면에는 쪽이 보이는데 «쪽 수를 몰라»로 400이 났다(2026-09-18 E2E 실측)
+    # manifest에 page_count가 없는 문헌(add_document로 만든 것)은 PDF를 열어 센다 —
+    # 배치 라우트와 같은 이유. 화면에는 쪽이 보이는데 «쪽 수를 몰라»로 400이 났다
+    # (2026-09-18 E2E 실측)
     total = _resolve_page_count(doc_dir, part)
     a, b = 1, total
     if body.pages:
@@ -1138,8 +1141,9 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
         except Exception:  # noqa: BLE001 — 없으면 투영·추정으로만 간다
             flip_engine = None
 
-        # 방향만이면 모델을 부르지 않는다. (라우터 객체 자체는 위의 엔진 목록 초기화가 llm_vision 엔진에
-        # 붙이느라 생길 수 있다 — 호출은 없다. Codex 지적 2026-09-18)
+        # 방향만이면 모델을 부르지 않는다. (라우터 객체 자체는 위의 엔진 목록
+        # 초기화가 llm_vision 엔진에 붙이느라 생길 수 있다 — 호출은 없다.
+        # Codex 지적 2026-09-18)
         router_llm = None if body.orientation_only else _get_llm_router()
         kwargs: dict = {
             "image_mime": "image/jpeg",
@@ -1205,8 +1209,9 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
             # OCR 점수로 그중 읽히는 쪽을 고른다(180°와 90/270을 이것으로 가린다). OCR이 없거나
             # 모름이면 추정.
             if body.orientation_only:
-                # «세우기»만 — 누운 쪽의 90/270만 가른다. 선 쪽의 180° 검사는 하지 않고(쪽마다 OCR 둘은
-                # CPU에서 한 시간), 점수도 GPU에서만 잰다. CPU면 추정으로 남겨 화면이 미리보기로 묻는다
+                # «세우기»만 — 누운 쪽의 90/270만 가른다. 선 쪽의 180° 검사는
+                # 하지 않고(쪽마다 OCR 둘은 CPU에서 한 시간), 점수도 GPU에서만
+                # 잰다. CPU면 추정으로 남겨 화면이 미리보기로 묻는다
                 candidates = (90, 270) if heur == "sideways" else ()
                 score_it = bool(candidates) and flip_engine is not None and gpu_runtime()
             else:
@@ -1516,7 +1521,10 @@ def _run_page_correction(
                 text = None
                 if page_number + delta >= 1:
                     try:
-                        text = get_page_text(doc_path, part_id, page_number + delta).get("text") or None
+                        text = (
+                            get_page_text(doc_path, part_id, page_number + delta).get("text")
+                            or None
+                        )
                     except Exception:  # noqa: BLE001
                         text = None
                 neighbours[key] = text
@@ -2894,8 +2902,11 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                             # 1단계 초안은 저장된 뒤일 수 있다 — 디스크에서 다시 읽어 회계에 넣는다.
                             # (지금 L2의 것일 때만. 옛 초안이면 버린다)
                             on_disk = load_draft(doc_path, part_id, page_number)
-                            # 지문이 지금 L2와 같은 초안만 — 지문 없는 옛 초안은 draft_is_stale이 낡음으로 본다
-                            if on_disk and not draft_is_stale(doc_path, part_id, page_number, on_disk):
+                            # 지문이 지금 L2와 같은 초안만 — 지문 없는 옛 초안은 draft_is_stale이
+                            # 낡음으로 본다
+                            if on_disk and not draft_is_stale(
+                                doc_path, part_id, page_number, on_disk
+                            ):
                                 correction_draft = on_disk
 
                     # 3) OCR 텍스트를 교정 텍스트(L4)에도 넣는다.
@@ -2950,7 +2961,8 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                         final_draft = load_draft(doc_path, part_id, page_number) or correction_draft
                         if final_draft.get("stage2_error"):
                             warnings.append(
-                                f"{page_number}쪽 2단계(정밀 판독)가 실패해 1단계 결과만 남았습니다: "
+                                f"{page_number}쪽 2단계(정밀 판독)가 실패해 "
+                                "1단계 결과만 남았습니다: "
                                 f"{final_draft['stage2_error']}"
                             )
                         _st = draft_status(final_draft)

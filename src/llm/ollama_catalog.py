@@ -43,7 +43,12 @@ BUILTIN: list[tuple[str, str, float, str]] = [
     ("gemma4:cloud", "cloud", 0.0, "Google Gemma 4 — 기본. 로그인만 있으면 바로 씁니다"),
     ("qwen3.5:cloud", "cloud", 0.0, "Alibaba Qwen 3.5 397B"),
     ("kimi-k2.6:cloud", "cloud", 0.0, "Moonshot Kimi K2.6"),
-    ("kimi-k3:cloud", "cloud", 0.0, "Moonshot Kimi K3 — 「판독 계획」 기본(종류 판정 벤치마크 1위)"),
+    (
+        "kimi-k3:cloud",
+        "cloud",
+        0.0,
+        "Moonshot Kimi K3 — 「판독 계획」 기본(종류 판정 벤치마크 1위)",
+    ),
     ("minimax-m3:cloud", "cloud", 0.0, "MiniMax M3"),
     ("glm-5.3-flash:cloud", "cloud", 0.0, "Zhipu GLM 5.3 Flash"),
     ("glm-5.3:cloud", "cloud", 0.0, "Zhipu GLM 5.3 — 텍스트용(비전 아님: 편성·번역·주석에)"),

@@ -71,12 +71,17 @@ def test_hand_made_layout_is_left_alone_after_rotation(tmp_path):
     set_part_rotation(doc_path, "vol1", 90, None)
     info = ensure_full_page_block(doc_path, "vol1", 1)
     assert info["created"] is False and info["block_count"] == 2
-    assert int(_layout(doc_path).get("rotation") or 0) == 0  # 손댄 것 없음 — 파이프라인이 거부하고 사람이 판단
+    assert (
+        int(_layout(doc_path).get("rotation") or 0) == 0
+    )  # 손댄 것 없음 — 파이프라인이 거부하고 사람이 판단
 
 
 def test_rebuilt_full_page_block_keeps_block_attributes(tmp_path):
-    """사람이 만진 전면 블록(쓰기 방향·종류·skip·analysis_method)은 회전이 바뀌어도 속성을 잃지 않는다
-    (Codex 지적 2026-09-18) — 기하(bbox·폭·높이·도장)만 새것."""
+    """사람이 만진 전면 블록의 속성은 회전이 바뀌어도 살아남는다.
+
+    쓰기 방향·종류·skip·analysis_method 를 말한다(Codex 지적 2026-09-18).
+    새것으로 바뀌는 것은 기하(bbox·폭·높이·도장)뿐이다.
+    """
     from core.document import save_page_layout, set_part_rotation
     from ocr.full_page_block import ensure_full_page_block
 
@@ -96,7 +101,11 @@ def test_rebuilt_full_page_block_keeps_block_attributes(tmp_path):
     assert after["rotation"] == 270 and (after["image_width"], after["image_height"]) == (h, w)
     b = after["blocks"][0]
     assert b["bbox"] == [0, 0, h, w]
-    assert b["writing_direction"] == "vertical_rtl" and b["block_type"] == "annotation" and b["skip"] is True
+    assert (
+        b["writing_direction"] == "vertical_rtl"
+        and b["block_type"] == "annotation"
+        and b["skip"] is True
+    )
     assert after["analysis_method"] == "manual"
 
 

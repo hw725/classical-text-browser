@@ -1,10 +1,9 @@
 """승격 임계가 실측 무게를 벗어나는 경로의 재현 시험."""
 
-from core.promotion import evaluate_promotion
 import pytest
-from core import entity
-from core import entity_id_map
-from core.promotion import gather_sources
+
+from core import entity, entity_id_map
+from core.promotion import evaluate_promotion, gather_sources
 
 
 def test_rounding_promotes_weight_below_threshold():

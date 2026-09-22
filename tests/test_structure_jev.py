@@ -39,9 +39,7 @@ class FakeJev:
         self.seen.append((state, list(questions)))
         if len(self.seen) - 1 == self.fail_on:
             raise JevCallFailed("jev_http_error", status=500)
-        return {
-            qid: {"type": "noul", "noul": self.scores.get(qid, 0.0)} for qid in questions
-        }
+        return {qid: {"type": "noul", "noul": self.scores.get(qid, 0.0)} for qid in questions}
 
     def usage(self) -> dict:
         return {"calls": len(self.seen)}
@@ -516,7 +514,9 @@ def test_screen_keeps_rule_places_when_the_model_answers(tmp_path):
         suppressedAccepted: at("3:0:0") ? !!at("3:0:0").accepted : null,
         stats: data.stats.llm,
       }));
-    """
+    """  # noqa: E501 — 화면 JS 에 넘기는 제안 목록을 그대로 적은 문자열이라
+    #                   줄을 바꾸면 검사 대상 자체가 바뀐다. ruff 는 여러 줄
+    #                   문자열의 진단을 닫는 줄로 옮겨 보므로 여기서 면제된다
     got = run_js(tmp_path, "composition-editor.js", ["_mergeLlmProposals", "_propKey"], setup, body)
     # 규칙만 가리킨 자리(1:5)가 살아 있다 — 모델이 거르지 않는다
     assert got["keys"] == ["1:0:0", "1:5:0", "2:0:0", "3:0:0"]

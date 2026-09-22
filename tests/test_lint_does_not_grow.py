@@ -19,16 +19,31 @@
 「검사를 몇 번이나 돌렸는데 왜 이제 나오느냐」의 답이 이것이다: 그 검사들 중
 어느 것도 ruff가 아니었다.
 
-## 왜 「전부 고쳐라」가 아니라 「늘리지 마라」인가
+## 기준선은 비어 있다 — 2026-09-22 에 66건을 다 갚았다
 
-66건 중 **62건이 `E501`(줄 길이)이고 전부 긴 한글 주석·docstring 줄**이다.
-포매터로도 안 고쳐진다(2026-09-22 실험: `ruff format` 뒤에도 그대로 남았다) —
-한글 주석을 손으로 접어야 하고, 그 파일들은 다른 세션이 작업 중이다.
-제품 동작에는 영향이 없다.
+처음에는 기준선을 박아 «늘어나는 것만» 막을 셈이었다. 같은 날 다 고쳐서
+지금은 비어 있고, 빈 기준선은 **어느 파일이든 0** 을 뜻한다.
 
-그래서 기준선을 박아 **새로 늘어나는 것만** 막는다.
-(`test_cjk_text_contract.py`의 R1 기준선과 같은 방식이다.)
-빚을 갚으면 이 표의 숫자를 내린다 — 내리는 것은 자유이고, 올리는 것만 막는다.
+고친 방법은 한 가지가 아니었다. 무엇이 긴 줄인지 보고 갈랐다:
+
+| 무엇 | 어떻게 |
+|---|---|
+| 코드 줄 | `ruff format` |
+| 주석·docstring | 폭에 맞춰 접는다 |
+| 코드 안의 긴 문자열 | 암시적 이어붙이기로 나눈다(값은 그대로) |
+| **시험이 비교하는 문자열** | 손대지 않고 파일 머리에서 규칙을 끈다 |
+
+마지막 줄이 요점이다. `tests/test_structure_jev.py` 의 긴 줄은 화면 JS 에 넘기는
+제안 목록을 그대로 적은 것이라 **줄을 바꾸면 검사 대상 자체가 바뀐다**.
+`test_annotation_editor_js.py`·`test_entity_manager_js.py` 가 같은 이유로 이미
+`# ruff: noqa: E501` 을 쓰고 있었다 — 선례를 따랐다.
+
+접는 일에도 함정이 둘 있었다(둘 다 2026-09-22 실측):
+
+* ruff 는 글자 수가 아니라 **표시 폭**으로 잰다. 한자·한글은 2칸이다.
+  `len()` 으로 세면 66자짜리 줄을 「이미 짧다」로 보고 한 줄도 접지 못한다.
+* **여러 줄 문자열 안의 줄에는 `# noqa` 를 붙일 수 없다.** 그 자리에서는 주석이
+  아니라 문자열의 내용이 되어, 검사는 그대로 걸리고 문자열만 더러워진다.
 """
 
 from __future__ import annotations
@@ -42,24 +57,10 @@ import pytest
 
 _ROOT = Path(__file__).resolve().parent.parent
 
-# 2026-09-22 기준선. **내려도 되고 올리면 안 된다.**
-# 여기 없는 파일은 0이어야 한다 — 새 파일이 위반을 들고 들어오는 것을 막는다.
-_BASELINE: dict[str, int] = {
-    "tests/test_correction_pass.py": 17,
-    "src/app/routers/llm_ocr.py": 11,
-    "src/ocr/correction_pass.py": 10,
-    "tests/test_lite_mode_api.py": 7,
-    "tests/test_page_survey.py": 5,
-    "tests/test_structure_jev.py": 3,
-    "tests/test_full_page_block_rotation.py": 3,
-    "src/ocr/full_page_block.py": 2,
-    "tests/test_eval_cer.py": 1,
-    "tests/test_codex_review.py": 1,
-    "src/ocr/layout_staleness.py": 1,
-    "src/llm/ollama_catalog.py": 1,
-    "src/core/page_survey.py": 1,
-    "src/app/server.py": 1,
-}
+# 기준선. **내려도 되고 올리면 안 된다.**
+# 2026-09-22 에 66건을 다 갚아 비었다 — 비어 있으면 「어느 파일이든 0」이다.
+# 갚지 못할 빚이 생기면 그 파일만 여기 적고, 갚는 대로 다시 뺀다.
+_BASELINE: dict[str, int] = {}
 
 
 def _counts() -> Counter:

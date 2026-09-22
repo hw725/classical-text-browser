@@ -148,8 +148,9 @@ def layout_changed_since_ocr(
 
     now = page_rotation(doc_path, part_id, page_number)
     if layout_data is None:
-        # 레이아웃이 없으면 전면 블록이 새로 생길 것이다 — 다만 L2의 도장이 지금 회전과 다르면 그 L2는
-        # 옛 좌표계라 «이미 결과가 있다»로 건너뛰면 안 된다(Codex 지적 2026-09-18)
+        # 레이아웃이 없으면 전면 블록이 새로 생길 것이다 — 다만 L2의 도장이
+        # 지금 회전과 다르면 그 L2는 옛 좌표계라 «이미 결과가 있다»로
+        # 건너뛰면 안 된다(Codex 지적 2026-09-18)
         was = int(ocr_data.get("rotation") or 0)
         if was != now:
             return True, f"OCR이 다른 회전({was}°)에서 만들어졌습니다 (지금 {now}°)."

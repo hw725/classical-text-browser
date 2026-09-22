@@ -1636,7 +1636,6 @@ def test_backup_can_be_turned_off(batch_ready):
     assert ov["pages"][0]["has_backup"] is False
 
 
-
 # ─── LLM 교정 사다리를 켠 일괄 실행 (D-082 이음, 2026-09-18) ─────────────────
 # 회계(corrected_blocks·pending_blocks·review_pages)·자동 수용 L4 반영·mark_applied·
 # 검토 라우트를 가짜 llm_vision 엔진으로 본다. 2026-09-18 교차검증이 잡은 NameError
@@ -1661,7 +1660,11 @@ class _FakeVisionEngine(_DummyEngine):
         self.calls.append(kwargs)
         text = self.reply(kwargs)
         return OcrBlockResult(
-            lines=[OcrLineResult(text=text, characters=[OcrCharResult(char=c, confidence=0.95) for c in text])],
+            lines=[
+                OcrLineResult(
+                    text=text, characters=[OcrCharResult(char=c, confidence=0.95) for c in text]
+                )
+            ],
             engine_id=self.engine_id,
             language=language,
             writing_direction=writing_direction,
@@ -1671,8 +1674,13 @@ class _FakeVisionEngine(_DummyEngine):
 def _batch_with_correction(client, doc_id, part_id, pages, mode="ladder"):
     r = client.post(
         f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch",
-        json={"engine_id": "dummy", "pages": pages, "llm_correction": "all",
-              "llm_correction_mode": mode, "embed_after": False},
+        json={
+            "engine_id": "dummy",
+            "pages": pages,
+            "llm_correction": "all",
+            "llm_correction_mode": mode,
+            "embed_after": False,
+        },
     )
     assert r.status_code == 200, r.text
     return _sse_events(r)
@@ -1737,16 +1745,27 @@ def test_batch_ladder_reports_pending_pages(batch_ready):
     r = client.get(f"/api/documents/{doc_id}/parts/{part_id}/pages/2/ocr/correction-candidates")
     bid = r.json()["draft"]["blocks"][0]["block_id"]
     assert r.json()["draft"]["blocks"][0]["stage1"]["corrected_text"] == "甲乙丙丁"
-    r = client.post(f"/api/documents/{doc_id}/parts/{part_id}/pages/2/ocr/correct/apply", json={"block_ids": [bid]})
+    r = client.post(
+        f"/api/documents/{doc_id}/parts/{part_id}/pages/2/ocr/correct/apply",
+        json={"block_ids": [bid]},
+    )
     assert r.status_code == 200 and r.json()["applied_blocks"] == [bid]
-    assert client.get(f"/api/documents/{doc_id}/parts/{part_id}/ocr/correction-review").json()["pages"] == []
+    assert (
+        client.get(f"/api/documents/{doc_id}/parts/{part_id}/ocr/correction-review").json()["pages"]
+        == []
+    )
 
 
 def test_batch_rejects_bad_correction_mode(batch_ready):
     client, doc_id, part_id = batch_ready
     r = client.post(
         f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch",
-        json={"engine_id": "dummy", "pages": [1], "llm_correction": "all", "llm_correction_mode": "turbo"},
+        json={
+            "engine_id": "dummy",
+            "pages": [1],
+            "llm_correction": "all",
+            "llm_correction_mode": "turbo",
+        },
     )
     assert r.status_code == 400 and "ladder" in r.json()["error"]
 
@@ -1767,8 +1786,10 @@ def test_stale_draft_apply_is_409(batch_ready):
     assert r.json()["stale"] is False
     bid = r.json()["draft"]["blocks"][0]["block_id"]
     # 같은 내용으로 다시 써도(더미 엔진은 결정적) 앵커가 그대로면 낡지 않는다
-    r2 = client.post(f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch",
-                     json={"engine_id": "dummy", "pages": [3], "skip_existing": False, "embed_after": False})
+    r2 = client.post(
+        f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch",
+        json={"engine_id": "dummy", "pages": [3], "skip_existing": False, "embed_after": False},
+    )
     assert r2.status_code == 200
     r = client.get(f"/api/documents/{doc_id}/parts/{part_id}/pages/3/ocr/correction-candidates")
     assert r.json()["draft"] is not None and r.json()["stale"] is False
@@ -1778,13 +1799,18 @@ def test_stale_draft_apply_is_409(batch_ready):
 
     from app._state import get_library_path
 
-    l2_path = _Path(get_library_path()) / "documents" / doc_id / "L2_ocr" / f"{part_id}_page_003.json"
+    l2_path = (
+        _Path(get_library_path()) / "documents" / doc_id / "L2_ocr" / f"{part_id}_page_003.json"
+    )
     l2 = _json.loads(l2_path.read_text(encoding="utf-8"))
     l2["ocr_results"][0]["lines"][0]["text"] = "완전히 다른 글자"
     l2_path.write_text(_json.dumps(l2, ensure_ascii=False), encoding="utf-8")
     r = client.get(f"/api/documents/{doc_id}/parts/{part_id}/pages/3/ocr/correction-candidates")
     assert r.json()["stale"] is True
-    r = client.post(f"/api/documents/{doc_id}/parts/{part_id}/pages/3/ocr/correct/apply", json={"block_ids": [bid]})
+    r = client.post(
+        f"/api/documents/{doc_id}/parts/{part_id}/pages/3/ocr/correct/apply",
+        json={"block_ids": [bid]},
+    )
     assert r.status_code == 409 and "오래됐" in r.json()["error"]
     body = client.get(f"/api/documents/{doc_id}/parts/{part_id}/ocr/correction-review").json()
     assert [p.get("stale") for p in body["pages"] if p["page"] == 3] == [True]

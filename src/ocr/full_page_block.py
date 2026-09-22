@@ -152,9 +152,11 @@ def ensure_full_page_block(
 
     current_rotation = page_rotation(doc_path, part_id, page_number)
 
-    # 이미 블록이 있으면 그대로 둔다 — 단, **전면 블록 하나뿐인 레이아웃**이 다른 회전에서 만들어졌으면
-    # 지금 회전으로 치수만 다시 잰다(D-126 덧붙임 2026-09-18). 회전을 저장한 뒤 「권 전체 OCR」이 그 쪽을
-    # 다시 돌 때, 옛 전면 블록을 두면 파이프라인이 «다른 회전의 레이아웃»이라 거부하고 사람이 손으로
+    # 이미 블록이 있으면 그대로 둔다 — 단, **전면 블록 하나뿐인 레이아웃**이
+    # 다른 회전에서 만들어졌으면 지금 회전으로 치수만 다시 잰다
+    # (D-126 덧붙임 2026-09-18). 회전을 저장한 뒤 「권 전체 OCR」이 그 쪽을
+    # 다시 돌 때, 옛 전면 블록을 두면 파이프라인이 «다른 회전의 레이아웃»이라
+    # 거부하고 사람이 손으로
     # 지워야 했다. 전면 블록은 «쪽 전체»라는 뜻이라 돌려도 뜻이 같다 — 폭·높이·bbox·도장만 바꾸고
     # 블록의 나머지 속성(쓰기 방향·종류·skip 등 사람이 고쳤을 수 있는 것)과 analysis_method는 그대로
     # 옮긴다(Codex 지적 2026-09-18: 형태로만 판별하므로 사람이 만진 전면 블록도 여기 걸린다). 블록이
@@ -165,9 +167,8 @@ def ensure_full_page_block(
         existing = None
     keep_block: dict | None = None
     if existing and existing.get("blocks"):
-        stale_full = (
-            is_full_page_layout(existing)
-            and int(existing.get("rotation") or 0) != int(current_rotation)
+        stale_full = is_full_page_layout(existing) and int(existing.get("rotation") or 0) != int(
+            current_rotation
         )
         if not stale_full:
             return {
