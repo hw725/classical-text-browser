@@ -54,10 +54,29 @@
 닿을 길이 없다. 읽는 쪽은 사이드바가 대신하고 있어 여태 티가 나지 않았다. 스냅샷은
 **가져오기만 살고 내보내기가 죽은 비대칭**이다.
 
-- 왜 지금 안 고치나: **저 셋을 어디로 옮길지는 사람이 정할 일**이다. 의존 경고는 다섯
-  편집기가 공유하는 자리(또는 살아 있는 「의존 추적」 사이드바 안)가, 스냅샷 내보내기는
-  버전 탭이나 서고 메뉴가 후보다. 옮길 자리를 정한 **뒤에** 패널과 죽은 코드를 걷어낸다 —
-  순서를 뒤집으면 기능이 사라진다.
+**이사는 끝났다 (2026-09-22, `46190ee`).** 사용자가 자리를 정해 주었다.
+
+- 의존 경고와 「확인」·「기반 업데이트」 → **「의존 추적」 사이드바 안**. 「어느 파일이
+  바뀌었나」를 그리는 자리(`dep-file-list`) 바로 위라 보는 것과 누르는 것이 모인다.
+  `diff` 단추는 걷어냈다 — 하던 일이 그 사이드바를 대신 눌러 주는 것뿐이라
+  제자리걸음이 된다. 좁은 폭에서 「기반 업데이트」가 잘리지 않게 CSS 가 줄을 접는다.
+- 스냅샷 **내보내기** → 「JSON 가져오기」 바로 옆. 받을 수는 있는데 내보낼 수가 없던
+  비대칭이 사라졌다.
+- `tests/test_ui_reachability.py`(11건)가 **「닿을 수 있는가」를 기계로 지킨다** —
+  조작 단추가 든 사이드바 섹션이 `panelSections` 에 실려 있고 그 이름의 액티비티
+  단추가 실재하는지 본다. id 를 세는 검사로는 이 버그가 안 잡힌다(단추도 배선도
+  멀쩡했다 — 죽은 것은 조상이다).
+
+**남은 것은 철거다.** `#interp-panel` 과 그 안의 D-096 이전 통합 편집기(「해석 (L5~L7)」
++ 층별 서브탭), 그리고 `activateInterpretationMode`·`deactivateInterpretationMode`·
+`interpState.active`·`_updateToolbarButtons` 의 죽은 조건과 「단위 만들기」·
+「LLM에게 요청」·공용 「저장」.
+
+- 왜 아직 안 하나: **「단위 만들기」를 어디에 둘지가 남았다.** 나머지 둘은 옛 편집기에
+  딸린 것이라 함께 사라져도 되지만, 단위 만들기는 편성과 맞물린다(D-092·D-098) —
+  편성 탭에 두는 것이 맞는지, 아니면 내용 트리에서 부르는 것이 맞는지 정해야 한다.
+- 철거하면 `test_ui_reachability.py::test_the_dead_panel_is_still_dead` 가 빨간불이
+  난다. **그것이 신호다** — 그때 이 항목을 다시 읽고 닫는다.
 - 함께 볼 것: `activateInterpretationMode`·`deactivateInterpretationMode`·`_acknowledgeChanges`·
   `_updateBase`(interpretation.js), `_updateToolbarButtons`(entity-manager.js),
   `workspace.js:1842`(스냅샷 export 배선), contents-tree.js 38행의 「네 자리」 주석.
