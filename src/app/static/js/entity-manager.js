@@ -94,6 +94,12 @@ function initEntityManager() {
     llmBtn.addEventListener("click", _openLlmRequestDialog);
   }
 
+  // "커넥톰 대조" 버튼 (D-128 후속)
+  const connBtn = document.getElementById("entity-connectome-btn");
+  if (connBtn) {
+    connBtn.addEventListener("click", _openConnectomeDialog);
+  }
+
   // 다이얼로그 닫기/취소
   const dialogOverlay = document.getElementById("entity-dialog-overlay");
   const dialogClose = document.getElementById("entity-dialog-close");
@@ -942,6 +948,149 @@ function _openMergeDialog(sourceId) {
 }
 
 
+/**
+ * 커넥톰 대조를 열어 «나란히» 보여 준다 (D-128 후속).
+ *
+ * 입력: 없음 (지금 해석 저장소를 쓴다).
+ * 출력: 없음 (다이얼로그를 띄운다).
+ *
+ * 왜 점수가 없는가: 「연합 구조와 82% 닮았다」 같은 숫자를 띄우면 그 숫자를
+ * 올리는 것이 목표가 된다. 커넥톰은 참고 좌표이지 목표가 아니다 — 차이만
+ * 보여 주고 해석은 연구자가 한다. 그래서 이 화면에는 총점이 없고, 눈에
+ * 들어와야 하는 것은 표가 아니라 «짚어 주는 말»(notes)이다.
+ *
+ * 왜 「기준값 다시 재기」가 400을 그대로 보여 주는가: 그 사유 문구는 배포본에서
+ * 「이건 애초에 없는 기능이다」를 연구자에게 설명하기 위해 쓴 것이다. 토스트로
+ * 줄여 버리면 줄바꿈으로 적은 «왜·해결»이 사라진다.
+ */
+function _openConnectomeDialog() {
+  if (!interpState || !interpState.interpId) {
+    showToast("해석 저장소를 먼저 선택하세요", "error");
+    return;
+  }
+
+  const overlay = document.getElementById("entity-dialog-overlay");
+  const form = document.getElementById("entity-dialog-form");
+  const title = document.getElementById("entity-dialog-title");
+  if (!overlay || !form || !title) return;
+
+  // 읽기만 하는 화면이다 — 공용 저장 단추를 숨긴다.
+  // _closeEntityDialog 가 다시 보이게 되돌린다.
+  entityState.editingEntity = null;
+  entityState.editingType = null;
+  const saveBtn = document.getElementById("entity-dialog-save");
+  if (saveBtn) saveBtn.style.display = "none";
+  const statusEl = document.getElementById("entity-dialog-status");
+  if (statusEl) statusEl.textContent = "";
+
+  title.textContent = "커넥톰 대조";
+  form.innerHTML = '<div class="entity-promo-note">재는 중…</div>';
+  overlay.style.display = "";
+
+  _renderConnectome(false);
+}
+
+
+/**
+ * 대조 결과를 받아 그린다.
+ *
+ * 입력: live — true 면 기준값을 neuPrint 에 직접 물어 새로 뽑는다.
+ * 출력: 없음.
+ */
+async function _renderConnectome(live) {
+  const form = document.getElementById("entity-dialog-form");
+  if (!form) return;
+
+  let data;
+  let resp;
+  try {
+    resp = await fetch(
+      `/api/interpretations/${interpState.interpId}/connectome-comparison?live=${live ? "true" : "false"}`
+    );
+    data = await resp.json().catch(() => ({}));
+  } catch (err) {
+    form.innerHTML = `<div class="entity-promo-note">대조하지 못했습니다: ${_escHtml(err.message)}</div>`;
+    return;
+  }
+
+  if (!resp.ok || data.error) {
+    // 400 의 사유는 줄바꿈으로 «왜·해결»을 적은 글이다 — 그대로 보여 준다.
+    const back = live
+      ? '<div class="bib-edit-actions"><button id="ef-conn-recorded" type="button">기록된 기준값으로 보기</button></div>'
+      : "";
+    form.innerHTML =
+      `<div class="entity-promo-note" style="white-space:pre-wrap;">${_escHtml(data.error || `서버 오류 (${resp.status})`)}</div>` +
+      back;
+    const b = document.getElementById("ef-conn-recorded");
+    if (b) b.addEventListener("click", () => _renderConnectome(false));
+    return;
+  }
+
+  const lib = data.library || {};
+  const ref = data.reference || {};
+  const rows = data.rows || [];
+  const notes = data.notes || [];
+
+  const fmt = (v) => (typeof v === "number" ? `${(v * 100).toFixed(1)}%` : "—");
+  const gap = (v) =>
+    typeof v === "number"
+      ? `${v > 0 ? "+" : ""}${(v * 100).toFixed(1)}%p`
+      : "—";
+
+  form.innerHTML = `
+    <div class="entity-promo-note">
+      이 저장소의 관계 <b>${lib.count || 0}</b>건을 커넥톰 연합 구조
+      (<b>${_escHtml(ref.lineage || "")}</b>, ${_escHtml(ref.source || "")})와
+      나란히 놓습니다. <b>점수를 매기지 않습니다</b> — 커넥톰은 참고 좌표이지
+      목표가 아닙니다.
+    </div>
+    ${
+      notes.length
+        ? `<ul class="entity-promo-note" style="margin:8px 0;padding-left:18px;">${notes
+            .map((n) => `<li>${_escHtml(n)}</li>`)
+            .join("")}</ul>`
+        : ""
+    }
+    <table class="bib-table" style="width:100%;margin-top:8px;">
+      <thead>
+        <tr><th>항목</th><th>이 저장소</th><th>커넥톰</th><th>차이</th></tr>
+      </thead>
+      <tbody>
+        ${rows
+          .map(
+            (r) => `<tr>
+              <td>${_escHtml(r.label)}</td>
+              <td>${fmt(r.library)}</td>
+              <td>${fmt(r.reference)}${r.reference_live ? ' <span title="이 줄은 방금 neuPrint 에 물어 새로 쟀습니다">◆</span>' : ""}</td>
+              <td>${gap(r.gap)}</td>
+            </tr>`
+          )
+          .join("")}
+      </tbody>
+    </table>
+    ${
+      data.live
+        ? '<div class="entity-promo-note" style="margin-top:6px;">◆ 표시한 줄만 방금 다시 쟀습니다. 나머지는 기록된 기준값입니다 — 무게 분포는 부호 질의로 뽑을 수 없습니다.</div>'
+        : ""
+    }
+    <div class="bib-edit-actions">
+      <button id="ef-conn-live" type="button" title="neuPrint 에 직접 물어 기준값을 새로 뽑습니다 — 배포본에는 없는 기능입니다">
+        기준값 다시 재기
+      </button>
+    </div>
+  `;
+
+  const liveBtn = document.getElementById("ef-conn-live");
+  if (liveBtn) {
+    liveBtn.addEventListener("click", () => {
+      liveBtn.disabled = true;
+      liveBtn.textContent = "재는 중…";
+      _renderConnectome(true);
+    });
+  }
+}
+
+
 /* ──────────────────────────
    LLM 협업 (UI 스텁)
    ────────────────────────── */
@@ -1059,6 +1208,9 @@ function _updateToolbarButtons() {
   const show = interpState && interpState.active && interpState.interpId;
   if (tbBtn) tbBtn.style.display = show ? "" : "none";
   if (llmBtn) llmBtn.style.display = show ? "" : "none";
+  // 「커넥톰 대조」는 여기서 다루지 않는다 — 이 둘이 사는 `#interp-panel` 은
+  // 어느 모드에서도 열리지 않고(2026-09-22 실측), `interpState.active` 가 참이
+  // 되는 길도 없다. 그 단추는 살아 있는 엔티티 사이드바에 두고 항상 보인다.
 }
 
 

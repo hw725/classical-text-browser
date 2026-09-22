@@ -17,6 +17,26 @@
 - 관련 우려(같은 대화에서): 속음청사급(18권 3,018쪽) 대규모 문헌을 ctb가 감당하는지
   1권 파일럿 실측 필요 — 적재·편집·git 커밋 응답속도
 
+## B-008 해석 패널이 어느 모드에서도 열리지 않는다 (2026-09-22 실측)
+
+`#interp-panel`은 `_switchMode("interpretation")`만 여는데 `data-mode="interpretation"`
+탭이 `index.html`에 없다. 그래서 그 안의 도구 바 단추 둘(「단위 만들기」·「LLM에게 요청」)과
+공용 「저장」(`interp-save`)이 **보이지 않는다.** `interpState.active`도 참이 되는 길이 없어
+`_updateToolbarButtons()`의 조건이 항상 거짓이다.
+
+- 어떻게 알았나: 커넥톰 대조 단추를 그 도구 바에 붙였다가 headless Chrome 으로 눌러 보니
+  보이지 않았고, 조상을 거슬러 올라가 패널이 `display:none`인 것을 찾았다. 모드 탭 열을
+  전부 눌러 봐도 `active`는 끝까지 false 였다.
+- 왜 지금 안 고치나: 해석 편집기가 다섯(표점·현토·번역·주석·인용)으로 갈라지면서(D-096)
+  이 패널이 남은 자리인지, 아니면 탭이 실수로 빠진 것인지가 **설계 질문**이다. 전자면
+  패널과 죽은 코드를 걷어내는 일이고, 후자면 탭을 되살리는 일이라 방향이 정반대다.
+- 함께 볼 것: `activateInterpretationMode`·`deactivateInterpretationMode`(interpretation.js),
+  `_updateToolbarButtons`(entity-manager.js), contents-tree.js 38행의 「네 자리」 주석.
+- 같이 나온 것(같은 실측): `entity.py:153 _get_source_head_commit`이 `interpretation.py:232`와
+  **본문이 같은 중복 정의**이고 시험에서 안 돈다(Phase 8부터) · `entity.auto_create_units_from_text`는
+  부르는 곳이 없다 · `entity.create_unit_from_source`는 라우트(`interpretations.py:676`)가
+  부르는데 시험이 한 번도 안 들어간다. 셋 다 D-128과 무관하다.
+
 ## B-003 저장 파일의 `block_id` → `unit_id` (2026-09-03, D-093에서 남김)
 
 D-093이 이름을 `unit`으로 바꿨지만 **저장 파일이 단위를 가리키는 필드는 `block_id` 그대로**다.

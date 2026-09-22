@@ -231,17 +231,9 @@ def resolve_id(
     return follow_chain(lookup, entity_id, entity_type=entity_type)
 
 
-def successors(interp_path: str | Path, entity_type: str, entity_id: str) -> list[dict]:
-    """이 id에서 **나간** 기록을 모은다(대체·승격 둘 다).
-
-    입력: entity_type, entity_id.
-    출력: 장부 항목 목록. Tag가 무엇으로 승격됐는지 물을 때 쓴다.
-    """
-    return [
-        e
-        for e in load_id_map(interp_path)["entries"]
-        if e.get("entity_type") == entity_type and e.get("old_id") == entity_id
-    ]
+# 한때 `successors`(이 id에서 나간 기록)가 여기 있었으나 부르는 곳이 생기지 않아
+# 걷어냈다(2026-09-22 실측). 3항이 「질의 표면은 좁게」인 모듈이다 — 쓰이지 않는
+# 조회 함수는 표면만 넓힌다. 필요해지면 `load_id_map`에서 한 줄로 거르면 된다.
 
 
 def predecessors(interp_path: str | Path, entity_type: str, entity_id: str) -> list[dict]:
