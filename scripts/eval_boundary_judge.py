@@ -246,6 +246,14 @@ def starts_report(lines: list[Line], nouls: list, truth: set, gray: set = frozen
 
 
 def cmd_starts(args) -> int:
+    from core.structure_llm import JEV_ACCEPT_AT  # noqa: PLC0415
+
+    # --threshold는 2026-09-27부터 «후보 하한»(reject_at)이다. 예전 뜻(채택 문턱)으로 0.9를 주면
+    # 상한 0.85와 뒤집혀 호출 뒤에야 ValueError가 난다 — 부르기 전에 멈춘다
+    if not args.threshold < JEV_ACCEPT_AT:
+        print(f"--threshold는 후보 하한이라 {JEV_ACCEPT_AT}(accept 상한)보다 "
+              f"작아야 합니다: {args.threshold}")
+        return 2
     spec = BOOKS[args.book]
     lines = load_lines(spec["text_dir"], spec["first"], spec["last"])
     if not lines:
@@ -281,7 +289,7 @@ def cmd_starts(args) -> int:
     client.gate(size["calls"])
     props, meta = ask_structure_jev(
         lines, client, max_chars=args.max_chars,
-        questions_per_call=args.questions, threshold=args.threshold,
+        questions_per_call=args.questions, reject_at=args.threshold,
     )
     print(f"\n호출 {meta['calls']}회 · 질문 {meta['questions']}개 · {client.usage()}")
     if meta.get("error"):
@@ -637,7 +645,9 @@ def main() -> int:
     s.add_argument("--max-chars", type=int, default=3000, help="한 묶음(state)의 글자 수")
     s.add_argument("--questions", type=int, default=100, help="한 번에 보낼 질문 수")
     s.add_argument("--max-calls", type=int, default=40, help="호출 상한 — 넘으면 거부한다")
-    s.add_argument("--threshold", type=float, default=0.5)
+    s.add_argument("--threshold", type=float, default=0.5,
+                   help="후보 하한(reject_at) — 이 값 이하는 후보가 아니다. "
+                        "0.85(JEV_ACCEPT_AT)보다 작아야 한다. 2026-09-27 전에는 채택 문턱이었다")
     s.add_argument("--run", action="store_true", help="실제로 부른다")
     s.add_argument("--save", type=pathlib.Path, help="확률을 JSON으로 남긴다")
     s.add_argument("--score", type=pathlib.Path, help="남긴 JSON으로 다시 잰다(호출 없음)")

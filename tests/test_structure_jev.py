@@ -2,7 +2,8 @@
 
 실제 호출은 하지 않는다(돈이 들고, 답이 바뀌면 테스트가 흔들린다). 여기서 지키는 것은 셋이다.
 ① 코드가 행을 정해서 묻는다 — 모델이 행을 지어낼 자리가 형식에 없다.
-② 문턱 아래 답은 후보가 되지 않는다.
+② 세 대역(Jev 1차 거름망) — 확신한 답만 미리 체크하고, 애매한 답은 체크 해제로 싣고,
+   확신 거절만 뺀다.
 ③ 한 묶음이 죽어도 나머지 묶음의 답은 살아남는다.
 """
 
@@ -64,14 +65,77 @@ def test_asks_about_every_line_and_keeps_the_ids():
     assert "jev" in props[0]["why"]
 
 
-def test_threshold_decides_and_scores_are_kept_for_rescoring():
-    """문턱 아래는 후보가 아니지만 확률은 meta에 남는다 — 다시 부르지 않고 문턱만 바꿔 재려고."""
+def test_bands_decide_and_scores_are_kept_for_rescoring():
+    """세 대역(Jev 1차 거름망): accept는 미리 체크, escalate는 **후보로 싣되 체크 해제**, reject는
+    후보가 아니다. 확률은 전부 meta에 남는다 — 다시 부르지 않고 임계만 바꿔 재려고.
+
+    예전에는 문턱(0.5) 하나라 0.55와 0.9가 똑같이 미리 체크됐고, 문턱 아래는 화면에 아예 없었다.
+    """
     lines = _lines(3)
     scores = {line_id(lines[0]): 0.9, line_id(lines[1]): 0.55, line_id(lines[2]): 0.1}
-    props, meta = ask_structure_jev(lines, FakeJev(scores), max_chars=10_000, threshold=0.8)
-    assert [p["line_index"] for p in props] == [0]
+    props, meta = ask_structure_jev(lines, FakeJev(scores), max_chars=10_000)
+    got = {p["line_index"]: (p["band"], p["accepted"], p["prob"]) for p in props}
+    assert got == {0: ("accept", True, 0.9), 1: ("escalate", False, 0.55)}  # 2(0.1)는 후보 아님
     assert meta["nouls"] == [[1, 0, 0.9], [1, 1, 0.55], [1, 2, 0.1]]
-    assert meta["threshold"] == 0.8
+    assert meta["bands"] == {"accept": 1, "escalate": 1, "reject": 1}
+    assert (meta["reject_at"], meta["accept_at"]) == (0.5, 0.85)
+
+
+def test_band_edges_belong_to_the_confident_bands():
+    """임계값 자체는 확신 대역이다(계약 표의 «이상»·«이하»).
+
+    llm_pipeline `jev_sieve.band()`와 같은 규칙이다.
+    """
+    from core.structure_llm import JEV_ACCEPT_AT, JEV_REJECT_AT, jev_band
+
+    assert jev_band(JEV_ACCEPT_AT) == "accept"
+    assert jev_band(JEV_REJECT_AT) == "reject"
+    assert jev_band(0.85, accept_at=0.85, reject_at=0.15) == "accept"
+    assert jev_band(0.15, accept_at=0.85, reject_at=0.15) == "reject"
+    assert jev_band(0.1500001, accept_at=0.85, reject_at=0.15) == "escalate"
+    assert jev_band(0.8499999, accept_at=0.85, reject_at=0.15) == "escalate"
+    # 답하지 못한 것은 대역이 없다 — 대역이 있는 척하지 않는다
+    for bad in (None, True, "0.9", float("nan")):
+        assert jev_band(bad) == "none"
+    with pytest.raises(ValueError):
+        jev_band(0.5, accept_at=0.3, reject_at=0.6)
+
+
+def test_edge_values_on_the_real_path():
+    """경계값이 실제 경로(ask_structure_jev)에서도 같은 쪽으로 간다.
+
+    함수만 맞고 호출부가 `>`를 쓰는 일을 막는다.
+    """
+    lines = _lines(2)
+    scores = {line_id(lines[0]): 0.85, line_id(lines[1]): 0.5}
+    props, meta = ask_structure_jev(lines, FakeJev(scores), max_chars=10_000)
+    assert [(p["line_index"], p["band"], p["accepted"]) for p in props] == [(0, "accept", True)]
+    assert meta["bands"]["reject"] == 1
+
+
+def test_band_is_decided_before_rounding():
+    """대역은 반올림 전 확률로 정한다 — nouls의 4자리 값으로 다시 판정하면 뒤집힌다.
+
+    Codex 최종 리뷰(2026-09-27)가 찾은 자리: 0.84996은 escalate인데 0.85로 반올림돼 미리 체크됐고,
+    0.50004는 escalate인데 0.5로 반올림돼 «문턱 아래» 토글로 갔다. 대역 셈과 후보도 어긋났다.
+    """
+    lines = _lines(2)
+    scores = {line_id(lines[0]): 0.84996, line_id(lines[1]): 0.50004}
+    props, meta = ask_structure_jev(lines, FakeJev(scores), max_chars=10_000)
+    got = [(p["line_index"], p["band"], p["accepted"], p["prob"]) for p in props]
+    assert got == [(0, "escalate", False, 0.85), (1, "escalate", False, 0.5)]
+    assert meta["bands"] == {"accept": 0, "escalate": 2, "reject": 0}
+
+
+def test_non_finite_answers_are_not_answers():
+    """NaN·무한은 «답하지 못함»이다 — 대역 셈을 깨거나 응답 JSON에 NaN을 싣지 않는다."""
+    lines = _lines(3)
+    scores = {line_id(lines[0]): float("nan"), line_id(lines[1]): float("inf"),
+              line_id(lines[2]): 0.9}
+    props, meta = ask_structure_jev(lines, FakeJev(scores), max_chars=10_000)
+    assert [p["line_index"] for p in props] == [2]
+    assert meta["nouls"] == [[1, 2, 0.9]]
+    assert sum(meta["bands"].values()) == 1
 
 
 def test_one_failed_call_does_not_lose_the_others():
@@ -143,11 +207,12 @@ class _Entry:
         self.level = level
 
 
-def test_toc_picks_become_proposals_above_the_threshold_only():
-    """확률 문턱 아래는 후보로 세우지 않는다(버리는 것이 아니라 세우지 않는 것).
+def test_toc_picks_below_the_threshold_stand_unchecked():
+    """문턱 아래이면서 자기 검증을 통과한 답은 **체크 해제 후보(escalate)**로 선다.
 
     운양집 실측(2026-09-21): 0.8 이상 14건은 제목이 그 행에서 실제로 시작했고 불일치가 0,
-    0.8 미만 11건 중 8건이 엉뚱한 행이었다.
+    0.8 미만 11건 중 8건이 엉뚱한 행이었다 — 그 8건은 자기 검증이 떨어뜨린다. 예전에는 문턱 아래를
+    응답에 싣지 않았는데 docstring은 «버리지 않는다»고 적고 있었다(2026-09-27 감사).
     """
     from core.structure_llm import TOC_JEV_REASON, toc_picks_to_proposals
 
@@ -159,11 +224,29 @@ def test_toc_picks_become_proposals_above_the_threshold_only():
         {"entry": 1, "title": "第一卷", "page": 14, "line_index": 2, "prob": 0.55, "sim": 1.0},
     ]
     out = toc_picks_to_proposals(picks, entries, min_prob=0.8)
-    assert [(p["page"], p["line_index"], p["level"]) for p in out] == [(14, 7, 2)]
-    assert out[0]["reasons"] == [TOC_JEV_REASON] and out[0]["confidence"] == 0.97
+    got = [(p["page"], p["line_index"], p["level"], p["band"], p["accepted"]) for p in out]
+    assert got == [(14, 2, 1, "escalate", False), (14, 7, 2, "accept", True)]
+    assert out[1]["reasons"] == [TOC_JEV_REASON] and out[1]["confidence"] == 0.97
 
     both = toc_picks_to_proposals(picks, entries, min_prob=0.5)
-    assert [p["level"] for both_p in [both] for p in both_p] == [1, 2]  # 목차 항목의 층위 그대로
+    assert [p["level"] for p in both] == [1, 2]  # 목차 항목의 층위 그대로
+    assert all(p["accepted"] for p in both)
+
+
+def test_a_repeated_toc_title_keeps_the_confident_band():
+    """같은 자리를 두 항목이 가리키면 accept 쪽이 남는다.
+
+    먼저 온 escalate가 확신한 자리를 체크 해제로 만들면 안 된다.
+    """
+    from core.structure_llm import toc_picks_to_proposals
+
+    entries = [_Entry("松屋雜詠"), _Entry("松屋雜詠")]
+    picks = [
+        {"entry": 0, "title": "松屋雜詠", "page": 41, "line_index": 35, "prob": 0.6, "sim": 1.0},
+        {"entry": 1, "title": "松屋雜詠", "page": 41, "line_index": 35, "prob": 0.95, "sim": 1.0},
+    ]
+    out = toc_picks_to_proposals(picks, entries, 0.8)
+    assert [(p["band"], p["accepted"], p["prob"]) for p in out] == [("accept", True, 0.95)]
 
 
 def test_toc_picks_keep_one_place_when_the_same_title_is_listed_twice():
@@ -284,7 +367,8 @@ def test_screen_asks_the_judge_engine_and_keeps_the_answer(tmp_path):
         said: out.textContent,
       }));
     """
-    got = run_js(tmp_path, "composition-editor.js", ["_askJudgeStructure"], setup, body)
+    names = ["_askJudgeStructure", "_renderTocUnplaced"]
+    got = run_js(tmp_path, "composition-editor.js", names, setup, body)
     assert got["body"]["engine"] == "jev" and got["body"]["part_id"] == "vol1"
     assert "structure/llm" in got["url"]  # 라우트를 늘리지 않았다 — 같은 자리에 engine만 더했다
     # **모달의 «모델» 고름을 보내지 않는다.** Jev는 생성 모델이 아니라 그 드롭다운의 대상이
@@ -422,8 +506,14 @@ def test_threshold_finds_a_low_cliff_where_the_constant_keeps_nothing():
 
     value, how = derive_toc_threshold(picks)
     assert value == 0.55 and how["how"] == "cliff"
-    assert len(toc_picks_to_proposals(picks, [_E()] * 6, value)) == 5
-    assert len(toc_picks_to_proposals(picks, [_E()] * 6, 0.8)) == 0  # 상수였으면 전멸
+
+    def checked(props):
+        return sum(1 for p in props if p["accepted"])
+
+    assert checked(toc_picks_to_proposals(picks, [_E()] * 6, value)) == 5
+    # 상수였으면 미리 체크가 전멸한다 — 다만 이제 다섯은 체크 해제로 남는다(버리지 않는다)
+    const = toc_picks_to_proposals(picks, [_E()] * 6, 0.8)
+    assert checked(const) == 0 and len(const) == 5
 
 
 def test_nothing_is_kept_when_even_the_best_answer_fails_its_own_check():
@@ -456,7 +546,8 @@ def test_self_check_gate_holds_even_when_the_threshold_falls_back():
     value, how = derive_toc_threshold(picks)
     assert how["how"] == "fallback"  # 넷뿐이라 절벽을 말할 근거가 없다
     got = toc_picks_to_proposals(picks, [_E()] * 4, value)
-    assert [p["page"] for p in got] == [1, 3, 4]  # 엉뚱한 2쪽은 문턱을 넘어도 빠진다
+    assert [p["page"] for p in got] == [1, 3, 4]  # 엉뚱한 2쪽은 문턱을 넘어도 빠진다(reject)
+    assert all(p["accepted"] for p in got)
 
 
 def test_a_pick_without_a_self_check_value_is_not_stood_up():
@@ -526,3 +617,143 @@ def test_screen_keeps_rule_places_when_the_model_answers(tmp_path):
     # 사람이 억제한 자리는 모델이 가리켜도 되살아나지 않는다
     assert got["suppressedAccepted"] is False
     assert got["stats"] == {"added": 1, "joined": 2}
+
+
+# ── 라우트: 세 대역이 응답에 실리는가 (Jev 1차 거름망, 2026-09-27) ─────────────────
+def test_route_carries_escalate_and_unplaced_toc_titles(monkeypatch):
+    """escalate 후보가 응답 후보 목록에 실리고, 목차 «없음» 답은 제목 목록으로 실린다.
+
+    예전 응답은 문턱 아래 목차 답과 «없음» 답을 **개수만** 실었다 — 화면이 볼 방법이 없었다.
+    층을 세우는 것은 확신한 목차 자리뿐이다(escalate 목차 자리로 본문 층위를 내리지 않는다).
+    """
+    import core.toc as toc_mod
+    import llm.jev as jev_mod
+    from app.routers.composition import SegmentationStructureLlmRequest, _structure_jev
+    from core.segmentation import normalize_rules
+
+    toc_page = [Line(page=1, line_index=i, text=t) for i, t in enumerate(["目錄", "甲集", "乙集"])]
+    body = [Line(page=2, line_index=i, text=f"본문{i}" * 3) for i in range(4)]
+    body_scores = {line_id(body[1]): 0.9, line_id(body[2]): 0.6, line_id(body[3]): 0.2}
+
+    class FakeClient:
+        model = "fake-jev"
+        has_key = True
+
+        def __init__(self, *a, **k):
+            pass
+
+        def gate(self, n):
+            return None
+
+        def ask(self, state, questions):
+            return {q: {"type": "noul", "noul": body_scores.get(q, 0.0)} for q in questions}
+
+        def usage(self):
+            return {"calls": 1, "cost_usd": 0.0}
+
+    monkeypatch.setattr(jev_mod, "JevClient", FakeClient)
+    monkeypatch.setattr(toc_mod, "detect_toc_pages", lambda pages, *a, **k: [1])
+    # 乙集을 층위 2로 둔다 — escalate 목차 자리로 층을 세우면 그 아래 본문이 3단이 되어 드러난다
+    # (둘 다 층위 1이면 어느 쪽으로 세워도 2단이라 이 시험이 아무것도 지키지 못했다)
+    entries = [_Entry("甲集", 1), _Entry("乙集", 2), _Entry("丙集", 1)]
+    monkeypatch.setattr(toc_mod, "extract_toc_entries_rule", lambda pages, tp: entries)
+    res = {
+        "picks": [
+            {"entry": 0, "title": "甲集", "page": 2, "line_index": 0, "prob": 0.97, "sim": 1.0},
+            {"entry": 1, "title": "乙集", "page": 2, "line_index": 2, "prob": 0.6, "sim": 1.0},
+        ],
+        "none": [{"entry": 2, "title": "丙集", "top_sim": 0.3, "prob": 0.9}],
+        "failed": [],
+    }
+    monkeypatch.setattr(toc_mod, "match_toc_entries_jev", lambda *a, **k: res)
+
+    req = SegmentationStructureLlmRequest(part_id="vol1", engine="jev", toc_min_prob=0.8)
+    out = _structure_jev(None, req, toc_page + body, normalize_rules(None), 10_000)
+
+    by = {(p["line_index"], tuple(p["reasons"])): p for p in out["proposals"]}
+    toc_acc = by[(0, ("toc:jev",))]
+    toc_esc = by[(2, ("toc:jev",))]
+    assert (toc_acc["band"], toc_acc["accepted"]) == ("accept", True)
+    assert (toc_esc["band"], toc_esc["accepted"]) == ("escalate", False)
+    body_acc = by[(1, ("jev:structure",))]
+    body_esc = by[(2, ("jev:structure",))]
+    assert (body_acc["band"], body_acc["accepted"]) == ("accept", True)
+    assert (body_esc["band"], body_esc["accepted"]) == ("escalate", False)
+    assert (3, ("jev:structure",)) not in by  # 0.2는 확신 거절 — 후보가 아니다
+    # 층: 확신한 목차(층위 1) 아래로만 내려간다. escalate 목차 자리(2행)는 층을 세우지 않는다
+    assert body_acc["level"] == 2 and body_esc["level"] == 2
+    # 기존 응답 필드는 그대로, 새 필드는 덧붙임
+    assert out["toc"]["above_threshold"] == 1 and out["toc"]["escalated"] == 1
+    assert out["toc"]["none"] == 1
+    assert [u["title"] for u in out["toc"]["unplaced"]] == ["丙集"]
+    assert out["bands"] == {"accept": 1, "escalate": 1, "reject": 2}
+
+
+# ── 화면: 애매한 자리는 체크되지 않고, 합쳐도 채택으로 끌어올려지지 않는다 ───────────
+def test_screen_does_not_promote_an_escalated_place(tmp_path):
+    """규칙이 버린(accepted=false) 자리를 모델의 애매한 답이 채택으로 끌어올리면 안 된다.
+
+    `_mergeLlmProposals`는 같은 자리면 `accepted = true`로 올린다 — 확신한 답에만 그래야 한다.
+    """
+    from tests.js_harness import run_js
+
+    setup = """
+      const proposeState = { llm: { docId: "d1", partId: "vol1", proposals: [
+        { page: 1, line_index: 0, char_offset: 0, reasons: ["jev:structure"],
+          band: "escalate", prob: 0.6, accepted: false },
+        { page: 1, line_index: 1, char_offset: 0, reasons: ["jev:structure"],
+          band: "accept", prob: 0.9, accepted: true },
+        { page: 2, line_index: 0, char_offset: 0, reasons: ["jev:structure"],
+          band: "escalate", prob: 0.7, accepted: false },
+      ] } };
+    """
+    body = """
+      const data = { stats: {}, proposals: [
+        { page: 1, line_index: 0, char_offset: 0, reasons: ["date"], confidence: 0.3, accepted: false },
+        { page: 1, line_index: 1, char_offset: 0, reasons: ["date"], confidence: 0.3, accepted: false },
+      ] };
+      _mergeLlmProposals(data, "d1", "vol1");
+      const at = (k) => data.proposals.find((p) => _propKey(p) === k);
+      console.log(JSON.stringify({
+        escJoined: [at("1:0:0").accepted, _isEscalated(at("1:0:0"))],
+        accJoined: [at("1:1:0").accepted, _isEscalated(at("1:1:0"))],
+        escAdded: [at("2:0:0").accepted, _isEscalated(at("2:0:0"))],
+        ruleOnly: _isEscalated({ accepted: false, reasons: ["date"] }),
+      }));
+    """  # noqa: E501 — 화면 JS에 넘기는 제안 목록을 그대로 적은 문자열
+    names = ["_mergeLlmProposals", "_propKey", "_isEscalated"]
+    got = run_js(tmp_path, "composition-editor.js", names, setup, body)
+    assert got["escJoined"] == [False, True]  # 애매한 답은 근거만 보태고 체크 해제로 남는다
+    assert got["accJoined"] == [True, False]  # 확신한 답은 예전처럼 채택으로 올린다
+    assert got["escAdded"] == [False, True]
+    assert got["ruleOnly"] is False  # 규칙의 문턱 아래는 «애매»가 아니다 — 다른 토글에 선다
+
+
+def test_screen_lists_toc_titles_without_a_place(tmp_path):
+    """«없음» 답은 제목 목록으로 보인다 — 개수만 말하면 버린 것과 같다.
+
+    글자는 textContent로만 넣는다(D-069).
+    """
+    from tests.js_harness import run_js
+
+    setup = """
+      function el(tag) {
+        return { tag, className: "", textContent: "", children: [],
+                 appendChild(c) { this.children.push(c); }, remove() { this.gone = true; } };
+      }
+      const document = { createElement: el };
+      let inserted = null;
+      const parent = { querySelector: () => inserted };
+      const out = { parentNode: parent, insertAdjacentElement: (_w, b) => { inserted = b; } };
+    """
+    body = """
+      _renderTocUnplaced(out, [{ title: "<b>丙集</b>", top_sim: 0.3 },
+                               { title: "丁集", top_sim: 0 }]);
+      const box = inserted;
+      console.log(JSON.stringify({ cls: box.className, summary: box.children[0].textContent,
+                                   list: box.children[1].textContent }));
+    """
+    got = run_js(tmp_path, "composition-editor.js", ["_renderTocUnplaced"], setup, body)
+    assert got["cls"] == "comp-toc-unplaced"
+    assert "2개" in got["summary"]
+    assert got["list"] == "<b>丙集</b> (가장 비슷한 행 0.3) · 丁集"

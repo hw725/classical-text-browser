@@ -20,6 +20,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from typing import Optional
 
@@ -45,6 +46,44 @@ CONFIDENCE = 0.6  # 화면의 «중간»(≥0.5) — 모델의 자신감은 믿�
 ROLES = ("container", "article", "fragment")
 DEFAULT_MAX_CHARS = 7000  # 묶음 하나의 글자 수 — 로컬 모델의 문맥(8k 토큰)에도 들어가는 크기
 _LINE_ID = re.compile(r"p(\d+)-L(\d+)")
+
+# ── Jev 1차 거름망 (claude-skills docs/JEV-SIEVE.md, D-129 적용 기록) ─────────────────
+# Jev의 확률은 정확도가 아니라 «분포가 한쪽으로 몰린 정도»다. 문턱 하나로 자르면 0.55와 0.98이
+# 똑같이 미리 체크되고, 문턱 바로 아래 답은 화면에 아예 안 나온다. 그래서 세 대역으로 나눈다:
+#   accept   (p ≥ JEV_ACCEPT_AT) — 후보로 세우고 미리 체크한다
+#   escalate (그 사이)            — 후보로 세우되 체크하지 않는다. 버리지도 확정하지도 않고
+#                                   편성 화면의 사람(상위 판정자)이 고른다
+#   reject   (p ≤ JEV_REJECT_AT) — 후보로 세우지 않고 meta.nouls에만 남긴다
+# 임계값 자체는 확신 대역에 속한다(계약 표의 «이상»·«이하»).
+#
+# 값의 근거(2026-09-27, 2026-09-21 저장 측정으로 다시 잼 — 호출 0건):
+#   천진담초 2,266행·정답 36 / 운양집 1책 2,313행·정답 142.
+#   (0.15, 0.85)이면 escalate가 360건·1,299건이라 화면이 넘친다. 0.15~0.5 구간 약 1,250건 중
+#   정답은 2건뿐이라, 하한을 0.5로 올려도 escalate의 정답은 6→6·52→50이고 볼 건수는 1/5이 된다.
+#   상한 0.85는 계약의 다른 사용처와 같은 값이고, 두 책 모두 0.85 이상에서 정밀 0.86·0.57이다
+#   (운양집은 정답 CSV의 «모름» 582행이 섞여 낮게 나온다). 책이 늘면 다시 잰다.
+JEV_ACCEPT_AT = 0.85
+JEV_REJECT_AT = 0.5
+
+
+def jev_band(
+    p: Optional[float], accept_at: float = JEV_ACCEPT_AT, reject_at: float = JEV_REJECT_AT
+) -> str:
+    """확률을 대역(accept·escalate·reject·none)으로 옮긴다. 입력: 확률(없으면 None), 두 임계.
+
+    llm_pipeline `llm_runtime/jev_sieve.band()`의 «예일 확률이 높을수록 accept» 쪽만 옮겨 둔 것이다
+    — 배포 단위가 달라 의존성으로 들이지 않는다. 규칙은 같다: 임계값 자체는 확신 대역,
+    Jev가 답하지 못했으면(수가 아님) «none» — 대역이 있는 척하지 않는다.
+    """
+    if not reject_at < accept_at:
+        raise ValueError("reject_at < accept_at 이어야 합니다")
+    if p is None or isinstance(p, bool) or not isinstance(p, (int, float)) or not math.isfinite(p):
+        return "none"
+    if p >= accept_at:
+        return "accept"
+    if p <= reject_at:
+        return "reject"
+    return "escalate"
 
 
 def line_id(ln: Line) -> str:
@@ -252,18 +291,23 @@ def ask_structure_jev(
     client,
     max_chars: int = DEFAULT_MAX_CHARS,
     questions_per_call: int = JEV_QUESTIONS_PER_CALL,
-    threshold: float = 0.5,
+    accept_at: float = JEV_ACCEPT_AT,
+    reject_at: float = JEV_REJECT_AT,
     max_title_chars: int = 20,
 ) -> tuple[list[dict], dict]:
     """전문을 묶음으로 나눠 **행마다** «새 글이 시작하는가»를 Jev에 묻는다.
 
-    입력: 행 목록, JevClient, 묶음 글자 수, 한 번에 보낼 질문 수, 채택 문턱(noul ≥ threshold),
+    입력: 행 목록, JevClient, 묶음 글자 수, 한 번에 보낼 질문 수, 두 임계(`jev_band`),
           제목 최대 글자.
     출력: (후보 목록 — ask_structure_llm과 같은 모양, meta). meta에는 provider·model·calls·
           questions·sent_lines·sent_chars·said·dropped·error와 함께 **nouls**(행마다의 확률,
-          [page, line_index, noul])를 담는다 — 문턱을 바꿔 다시 재려면 이 목록만 있으면 된다.
+          [page, line_index, noul])와 **bands**(대역별 건수)를 담는다 — 임계를 바꿔 다시 재려면
+          nouls만 있으면 된다.
 
-    확신도는 고정 0.6이다(D-125와 같다). Jev의 확률은 후보의 `why`에 적어 사람이 보게만 한다 —
+    후보는 accept와 escalate 둘이다. 후보마다 `band`를 싣고, **accept만 `accepted: True`**다 —
+    화면은 accepted인 것만 미리 체크하므로 escalate는 체크 해제로 선다. reject는 후보가 아니다.
+
+    확신도는 고정 0.6이다(D-125와 같다). Jev의 확률은 `prob`·`why`에 따로 싣는다 —
     화면의 «확신도»는 규칙 후보와 견주는 값이라 다른 척도를 섞으면 안 된다.
     """
     meta: dict = {
@@ -280,8 +324,11 @@ def ask_structure_jev(
         "reasons": {},
         "notes": [],
         "nouls": [],
-        "threshold": threshold,
+        "accept_at": accept_at,
+        "reject_at": reject_at,
+        "bands": {"accept": 0, "escalate": 0, "reject": 0},
     }
+    jev_band(None, accept_at, reject_at)  # 임계가 뒤집혔으면 부르기 전에 멈춘다
     chunks = chunk_lines(lines, max_chars)
     if not chunks:
         meta["error"] = "확정본(L4)에 글이 있는 행이 없습니다."
@@ -289,6 +336,10 @@ def ask_structure_jev(
 
     errors: list[str] = []
     items: list[dict] = []
+    # 대역은 **반올림 전 확률로 한 번만** 정한다. nouls에 남기는 4자리 값으로 다시 판정하면
+    # 0.84996(escalate)이 0.85(accept)로 미리 체크되고 0.50004(escalate)가 0.5(reject)로 뒤집힌다
+    # (Codex 최종 리뷰 2026-09-27)
+    band_at: dict[tuple[int, int], str] = {}
     for i, chunk in enumerate(chunks):
         state = render_chunk(chunk)
         meta["sent_lines"] += len(chunk)
@@ -308,7 +359,10 @@ def ask_structure_jev(
                 if p is None:
                     continue
                 meta["nouls"].append([ln.page, ln.line_index, round(p, 4)])
-                if p >= threshold:
+                b = jev_band(p, accept_at, reject_at)
+                meta["bands"][b] += 1
+                band_at[(ln.page, ln.line_index)] = b
+                if b != "reject":  # escalate도 후보다 — 버리지 않고 사람에게 넘긴다
                     items.append(
                         {
                             "line": line_id(ln),
@@ -324,7 +378,9 @@ def ask_structure_jev(
     # 확신도(confidence)와는 다른 칸이다: 확신도는 규칙 후보와 견주는 값이고 이것은 모델의 확률이다.
     by_pos = {(int(pg), int(li)): v for pg, li, v in meta["nouls"]}
     for prop in out:
-        prop["prob"] = by_pos.get((prop["page"], prop["line_index"]))
+        prop["prob"] = by_pos.get((prop["page"], prop["line_index"]))  # 보이기용(반올림)
+        prop["band"] = band_at.get((prop["page"], prop["line_index"]), "none")
+        prop["accepted"] = prop["band"] == "accept"  # 화면의 미리 체크는 accept만
     meta.update(stats)
     if hasattr(client, "usage"):
         meta["usage"] = client.usage()
@@ -334,11 +390,15 @@ def ask_structure_jev(
 
 
 def _jev_noul(answer) -> Optional[float]:
-    """llm.jev.noul을 core에서 쓰기 위한 얇은 감싸기 — core가 llm을 import하지 않게 한다."""
+    """llm.jev.noul을 core에서 쓰기 위한 얇은 감싸기 — core가 llm을 import하지 않게 한다.
+
+    NaN·무한은 «답하지 못함»(None)이다. 파이썬 json은 NaN 리터럴을 받아들이므로 응답에 섞여
+    들어올 수 있고, 그대로 두면 대역 셈(none 칸 없음)과 응답 JSON이 함께 깨진다.
+    """
     if not isinstance(answer, dict):
         return None
     v = answer.get("noul")
-    if isinstance(v, bool) or not isinstance(v, (int, float)):
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
         return None
     return float(v)
 
@@ -477,13 +537,19 @@ def toc_picks_to_proposals(picks: list, entries: list, min_prob: float = 0.8) ->
     출력: 후보 목록(Proposal.to_dict와 같은 모양). 층위는 **목차 항목의 층위**를 그대로 쓴다 —
     총목이 말하는 것은 권·集(층위 1~2)이고, 그 아래 낱글은 본문 판정이 맡는다.
 
+    세 대역(Jev 1차 거름망, D-129 적용 기록 2026-09-27):
+      accept   — 자기 검증 통과 + 확률 ≥ min_prob. 후보로 세우고 미리 체크(`accepted: True`)
+      escalate — 자기 검증 통과 + 확률 < min_prob. 후보로 세우되 체크하지 않는다(`accepted: False`)
+      reject   — 자기 검증 실패(sim < SELF_CHECK_MIN)이거나 sim이 없음. 후보가 아니다
+    «없음» 답은 자리가 없어 후보가 될 수 없다 — 라우트가 제목 목록으로 따로 싣는다.
+
     문턱을 두는 까닭: 운양집 1책 실측(2026-09-21)에서 높은 확률로 고른 14건은 제목이 그 행에서
-    실제로 시작했고(불일치 0), 그 아래 11건 중 8건이 엉뚱한 행이었다. 문턱 아래를 **버리는 것이
-    아니라** 후보로 세우지 않을 뿐이고, 화면이 «상위 몇 개»로 더 보일 수 있다.
+    실제로 시작했고(불일치 0), 그 아래 11건 중 8건이 엉뚱한 행이었다 — 그 8건은 자기 검증이 이미
+    떨어뜨린다. 문턱 아래이면서 자기 검증을 통과한 답(같은 측정에서 3건)을 예전에는 응답에 싣지
+    않았다. 지금은 체크 해제 후보로 싣는다.
     **min_prob은 상수가 아니라 `derive_toc_threshold()`가 이 책의 답에서 뽑은 값이 기본**이다.
     """
-    out: list[dict] = []
-    seen: set[tuple[int, int]] = set()
+    by_key: dict[tuple[int, int], dict] = {}
     for p in picks:
         # 자기 검증은 확률과 **다른 관문**이다. 확률은 «얼마나 확신하는가»이고 이것은
         # «애초에 그 행이 맞는가»인데, 코드가 공짜로 확인할 수 있다(제목이 그 행에서 시작하는가).
@@ -493,12 +559,13 @@ def toc_picks_to_proposals(picks: list, entries: list, min_prob: float = 0.8) ->
         # 그런 자리는 규칙·본문 판정 후보로 사람에게 남는다.
         if float(p.get("sim") or 0) < SELF_CHECK_MIN:
             continue
-        if float(p.get("prob") or 0) < min_prob:
-            continue
+        band = "accept" if float(p.get("prob") or 0) >= min_prob else "escalate"
         key = (int(p["page"]), int(p["line_index"]))
-        if key in seen:
-            continue  # 총목이 같은 集을 권1·권2 양쪽에 적는다 — 자리는 하나다
-        seen.add(key)
+        prev = by_key.get(key)
+        # 총목이 같은 集을 권1·권2 양쪽에 적는다 — 자리는 하나다. 한쪽이 accept면 accept로 남긴다
+        # (먼저 온 escalate가 뒤의 accept를 가리면 확신 있는 자리가 체크 해제로 선다)
+        if prev is not None and not (prev["band"] == "escalate" and band == "accept"):
+            continue
         i = int(p.get("entry", -1))
         level = 2
         if 0 <= i < len(entries):
@@ -506,26 +573,25 @@ def toc_picks_to_proposals(picks: list, entries: list, min_prob: float = 0.8) ->
                 level = max(1, min(9, int(getattr(entries[i], "level", 2) or 2)))
             except (TypeError, ValueError):
                 level = 2
-        out.append(
-            {
-                "page": key[0],
-                "line_index": key[1],
-                "char_offset": 0,
-                "title": str(p.get("title") or "")[:40],
-                "level": level,
-                "role": "container",
-                "date": {},
-                "kind": "",
-                "place": "",
-                "confidence": round(float(p.get("prob") or 0), 3),
-                "prob": round(float(p.get("prob") or 0), 3),
-                "reasons": [TOC_JEV_REASON],
-                "suppressed": False,
-                "accepted": True,
-                "why": f"목차 항목을 본문에서 고름(확률 {p.get('prob')})",
-            }
-        )
-    out.sort(key=lambda p: (p["page"], p["line_index"]))
+        by_key[key] = {
+            "page": key[0],
+            "line_index": key[1],
+            "char_offset": 0,
+            "title": str(p.get("title") or "")[:40],
+            "level": level,
+            "role": "container",
+            "date": {},
+            "kind": "",
+            "place": "",
+            "confidence": round(float(p.get("prob") or 0), 3),
+            "prob": round(float(p.get("prob") or 0), 3),
+            "reasons": [TOC_JEV_REASON],
+            "suppressed": False,
+            "accepted": band == "accept",
+            "band": band,
+            "why": f"목차 항목을 본문에서 고름(확률 {p.get('prob')})",
+        }
+    out = sorted(by_key.values(), key=lambda p: (p["page"], p["line_index"]))
     return out
 
 

@@ -813,14 +813,29 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
         else:
             min_prob, how = float(body.toc_min_prob), {"how": "given", "value": body.toc_min_prob}
         toc_props = toc_picks_to_proposals(res["picks"], entries, min_prob)
+        n_accept = sum(1 for p in toc_props if p.get("band") == "accept")
         toc_meta = {
             "entries": len(entries),
             "picked": len(res["picks"]),
-            "above_threshold": len(toc_props),
+            # 옛 이름을 지키되 뜻은 «미리 체크되는 것» — 화면 문구가 이 값을 쓴다
+            "above_threshold": n_accept,
+            "escalated": len(toc_props) - n_accept,
             "none": len(res["none"]),
             "failed": len(res["failed"]),
             "min_prob": round(min_prob, 3),
             "threshold_from": how,
+            # «없음» 답은 자리가 없어 ③의 후보가 될 수 없다. 개수만 남기면 버리는 것과 같으므로
+            # 제목을 실어 사람이 보고 손으로 넣게 한다(Jev 1차 거름망 — 가운데는 버리지 않는다).
+            # Jev가 답하지 못한 항목(failed)은 대역이 없으므로 여기 섞지 않는다
+            "unplaced": [
+                {
+                    "entry": n.get("entry"),
+                    "title": str(n.get("title") or "")[:40],
+                    "top_sim": n.get("top_sim"),
+                    "why": n.get("why") or "판정 모델이 «없음»을 골랐다",
+                }
+                for n in res["none"]
+            ],
         }
     props, meta = ask_structure_jev(
         body_lines,
@@ -828,7 +843,9 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
         max_chars=max_chars,
         max_title_chars=int(rules.get("max_title_chars") or 20),
     )
-    props = nest_under_toc(toc_props, props)
+    # 층을 세우는 것은 확신한 목차 자리뿐이다 — 체크 해제로 선 escalate 자리로 층위를 내리면
+    # 사람이 고르지 않은 경계가 본문 후보의 깊이를 정한다
+    props = nest_under_toc([t for t in toc_props if t.get("band") == "accept"], props)
     proposals = sorted(toc_props + props, key=lambda p: (p["page"], p["line_index"]))
     meta["toc"] = toc_meta
     meta["engine"] = "jev"

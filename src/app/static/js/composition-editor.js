@@ -1170,14 +1170,49 @@ async function _askJudgeStructure() {
         ? ` · 목차 ${d.toc.entries}항목 중 ${d.toc.above_threshold || 0}개를 본문에 붙임`
         : "";
       const cost = d.usage ? ` · $${d.usage.cost_usd}` : "";
+      // 확신한 자리와 애매한 자리를 나눠 말한다 — 애매한 쪽은 체크하지 않은 채 «애매한 후보 보기» 뒤에 선다
+      const nEsc = props.filter((p) => p.band === "escalate").length;
+      const split = nEsc ? ` — 확신 ${props.length - nEsc} · 애매 ${nEsc}(체크 안 함)` : "";
       out.textContent = props.length
-        ? `판정 모델이 ${props.length}자리를 ③에 세웠습니다 (질문 ${d.questions}개·호출 ${d.calls}번${cost}${toc})` +
+        ? `판정 모델이 ${props.length}자리를 ③에 세웠습니다${split} (질문 ${d.questions}개·호출 ${d.calls}번${cost}${toc})` +
           (d.error ? ` — 일부 실패: ${d.error}` : "")
         : `판정 모델이 고른 자리가 없습니다${d.error ? ` — ${d.error}` : ""}`;
+      _renderTocUnplaced(out, (d.toc && d.toc.unplaced) || []);
     }
   } catch (e) {
     if (out) out.textContent = `실패: ${e.message}`;
   }
+}
+
+/**
+ * 판정 모델이 «없음»을 고른 목차 항목을 제목 목록으로 보인다 (Jev 1차 거름망, 2026-09-27).
+ * 입력: 결과 줄 요소, [{title, top_sim, why}]. 출력: 없음(그 요소 뒤에 접힌 목록을 둔다).
+ * 자리가 없어 ③의 후보가 될 수 없지만, 개수만 말하면 버린 것과 같다 — 제목을 보고 본문에 실제로
+ * 있는 것이면 「목차에는 있으나 본문에서 못 찾음」의 찾기나 ＋ 경계 넣기로 사람이 넣는다.
+ * 제목은 OCR 글자이므로 textContent로만 넣는다(D-069).
+ */
+function _renderTocUnplaced(out, unplaced) {
+  const parent = out.parentNode;
+  if (!parent) return;
+  let box = parent.querySelector(":scope > .comp-toc-unplaced");
+  if (!unplaced.length) {
+    if (box) box.remove();
+    return;
+  }
+  if (!box) {
+    box = document.createElement("details");
+    box.className = "comp-toc-unplaced";
+    out.insertAdjacentElement("afterend", box);
+  }
+  box.textContent = "";
+  const sum = document.createElement("summary");
+  sum.textContent = `판정 모델이 자리를 고르지 못한 목차 항목 ${unplaced.length}개 — 본문에 있으면 손으로 넣으세요`;
+  box.appendChild(sum);
+  const list = document.createElement("div");
+  list.textContent = unplaced
+    .map((u) => u.title + (typeof u.top_sim === "number" && u.top_sim > 0 ? ` (가장 비슷한 행 ${u.top_sim})` : ""))
+    .join(" · ");
+  box.appendChild(list);
 }
 
 /**
@@ -1229,6 +1264,15 @@ function _isLlmProposal(p) {
 }
 
 /**
+ * 판정 모델이 확신하지 못한 자리인가 — Jev 1차 거름망의 가운데 대역(claude-skills docs/JEV-SIEVE.md).
+ * 서버가 후보마다 `band`를 싣는다. 이 자리는 버리지도 확정하지도 않는다: 체크 해제로 서고 사람이 고른다.
+ * 규칙 후보와 같은 자리여서 합쳐졌어도 그 후보가 규칙으로 채택됐으면(accepted) 애매하지 않다.
+ */
+function _isEscalated(p) {
+  return p.band === "escalate" && !p.accepted;
+}
+
+/**
  * 모델의 답을 규칙 후보와 합친다 (D-125). 입력: propose 응답·문헌·권. 출력: 없음(data를 고친다).
  * 같은 자리면 그 후보에 근거만 보태고(둘이 가리키면 확신도 0.8), 새 자리면 후보로 더한다.
  * 사람이 억제한 자리는 모델이 가리켜도 되살리지 않는다 — 억제는 사람의 결정이다.
@@ -1243,7 +1287,14 @@ function _mergeLlmProposals(data, docId, partId) {
     const cur = byKey.get(k);
     if (cur) {
       if (!cur.reasons.includes("llm:structure")) cur.reasons.push("llm:structure");
-      if (!cur.suppressed) {
+      // 모델이 확신하지 못한 자리(escalate)는 근거만 보탠다 — 규칙이 버린 후보를 모델의 애매한 답이
+      // 채택으로 끌어올리면, 가운데 대역을 확정하지 않는다는 거름망 계약이 여기서 깨진다
+      if (p.band === "escalate") {
+        if (!cur.accepted && !cur.band) {
+          cur.band = "escalate";
+          cur.prob = p.prob;
+        }
+      } else if (!cur.suppressed) {
         cur.accepted = true;
         cur.confidence = Math.max(cur.confidence || 0, 0.8);
       }
@@ -1728,6 +1779,7 @@ const proposeState = {
   anchor: null, // Shift 범위의 시작(자리 키)
   visible: [], // 지금 그려진 자리 키(표시 순서) — Shift 범위는 이 순서를 따른다
   showRejected: false, // 문턱 아래 후보도 보이는가
+  showEscalate: false, // 판정 모델의 애매한 대역(escalate) 후보도 보이는가 — 체크 해제로 선다
   levels: new Map(), // 자리 키 → 사람이 바꾼 깊이
   roles: new Map(), // 자리 키 → 사람이 바꾼 역할
   toc: null, // {pages, entries} — 목차 감지로 확인한 것. null이면 서버가 규칙으로 자동
@@ -2267,8 +2319,24 @@ function _updateStats() {
   stats.textContent = `${data.stats.lines}행 · ` + (nCur ? `지금 경계 ${nCur} · ` : "") + `후보 ${data.proposals.length} · 체크 ${proposeState.checked.size}` +
     (data.stats.suppressed ? ` · 억제 ${data.stats.suppressed}` : "") +
     (data.stats.llm ? ` · LLM ${data.stats.llm.added + data.stats.llm.joined}` : "");
+  // 판정 모델의 애매한 대역(Jev 1차 거름망) — 버리지도 확정하지도 않은 자리. 체크 해제로 서고,
+  // 고르는 일은 사람이 한다. 문턱 아래(규칙 후보)와 섞지 않는다: 이쪽은 «모델이 반쯤 가리킨 자리»다
+  const escalated = data.proposals.filter(_isEscalated).length;
+  if (escalated) {
+    const eg = document.createElement("button");
+    eg.type = "button";
+    eg.className = "text-btn";
+    eg.style.cssText = "font-size:11px; margin-left:6px;";
+    eg.textContent = proposeState.showEscalate ? `애매한 후보 ${escalated}개 숨기기` : `애매한 후보 ${escalated}개 보기`;
+    eg.title = "판정 모델의 확률이 가운데(확신하지 못한) 자리 — 체크하지 않은 채로 보입니다";
+    eg.addEventListener("click", () => {
+      proposeState.showEscalate = !proposeState.showEscalate;
+      _renderProposals();
+    });
+    stats.appendChild(eg);
+  }
   // 문턱 아래 후보는 기본으로 숨긴다 — 보이는 목록은 «승인 후보»여야 읽힌다
-  const rejected = data.proposals.filter((p) => !p.accepted).length;
+  const rejected = data.proposals.filter((p) => !p.accepted && !_isEscalated(p)).length;
   if (rejected) {
     const tg = document.createElement("button");
     tg.type = "button";
@@ -2339,7 +2407,9 @@ function _renderTopNBar(ranked) {
 function _renderDivergence(proposals) {
   const box = document.getElementById("comp-divergence");
   if (!box) return;
-  const model = proposals.filter((p) => typeof p.prob === "number" && p.prob >= 0.7);
+  // 모델이 «찾은» 자리는 확신 대역(accept)이다. band가 없는 옛 응답만 예전 기준(0.7)으로 센다
+  const model = proposals.filter((p) => typeof p.prob === "number" &&
+    (p.band ? p.band === "accept" : p.prob >= 0.7));
   if (!model.length) {
     box.hidden = true;
     return;
@@ -2397,7 +2467,8 @@ function _renderProposals() {
   for (const p of data.proposals) {
     const k = _propKey(p);
     if (hidden.has(k)) continue; // 손잡이가 가린 모델 후보
-    if (!p.accepted && !proposeState.showRejected && !proposeState.checked.has(k)) continue;
+    if (!p.accepted && !proposeState.checked.has(k) &&
+        !(_isEscalated(p) ? proposeState.showEscalate : proposeState.showRejected)) continue;
     proposeState.visible.push(k);
     const row = document.createElement("div");
     row.className = "comp-propose-row" + (p.suppressed ? " suppressed" : "") + (proposeState.selected.has(k) ? " is-selected" : "") + (p.boundary_id ? " is-current" : "");
@@ -2424,6 +2495,13 @@ function _renderProposals() {
       badge.className = "prop-badge-toc";
       badge.textContent = p.kind === "volume" ? "목차·권" : "목차";
       title.appendChild(badge);
+    }
+    if (_isEscalated(p)) {
+      const eb = document.createElement("span");
+      eb.className = "prop-badge-escalate";
+      eb.textContent = typeof p.prob === "number" ? `애매 ${p.prob.toFixed(2)}` : "애매";
+      eb.title = "판정 모델이 확신하지 못한 자리 — 맞으면 체크하세요";
+      title.appendChild(eb);
     }
     const meta = document.createElement("div");
     meta.className = "prop-meta";

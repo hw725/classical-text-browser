@@ -7538,6 +7538,17 @@ button.mode-tab {
   color: #2b6cb0;
   margin-left: 4px;
 }
+/* 판정 모델의 애매한 대역(Jev 1차 거름망) — 체크 해제로 선 자리. 확신한 후보와 한눈에 갈리게 */
+.prop-badge-escalate {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: rgba(210, 153, 34, 0.18);
+  color: #8a6d00;
+  margin-left: 4px;
+}
+.comp-toc-unplaced { margin-top: 4px; font-size: 11px; color: var(--text-muted); }
+.comp-toc-unplaced > div { margin-top: 2px; color: var(--text-primary); line-height: 1.6; }
 
 /* 경계 색인 옮기기 단추 (D-090) */
 /* 행 도구는 마우스를 올렸을 때만. opacity만 0으로 두면 여섯 단추가 90px쯤을 계속 차지해
