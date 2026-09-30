@@ -7933,6 +7933,9 @@ select.prop-level { max-width: 4.6em; }
 .wo-unsupported ul { margin: 2px 0 0 16px; padding: 0; }
 .wo-json > summary { font-size: 11.5px; color: var(--text-secondary); cursor: pointer; }
 .wo-json textarea { min-height: 160px; font-family: var(--font-mono); font-size: 11.5px; }
+.wo-json textarea.wo-said { min-height: 90px; width: 100%; box-sizing: border-box; font-family: inherit; font-size: 12px; }
+#wo-template-ext { width: auto; flex: 0 0 auto; }
+.wo-template-preview { max-height: 240px; overflow: auto; white-space: pre-wrap; font-size: 11.5px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; margin: 4px 0 0; }
 #wo-status[data-kind="error"] { color: #c0392b; }
 #wo-status[data-kind="warning"] { color: #b9770e; }
 /* 해제 상태 줄 — 고치는 곳은 「참고·억제」 칸이고 여기서는 보이기만 한다 */

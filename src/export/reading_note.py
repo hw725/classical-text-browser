@@ -3,8 +3,9 @@
 노트는 저장하지 않는다. 언제나 지금의 층에서 새로 만든다:
     장·문서 항목 = 편성 경계(단위), 원문 = 지금 L4(교정 탭에서 고친 것이 그대로 반영),
     국역 = L6 번역 항목, 어휘·문법 = L7 사전형 주석, 해제·서지·요점·문서 정보·검토 = L7 비고 주석.
-형식이 바뀌면(강독마다 노트 모양이 다를 수 있다) 이 파일의 render_* 만 고치면 된다 — 데이터를
-옮길 일이 없다. assemble_notes가 만드는 dict는 **그리기 위한 보기**이지 저장 형식이 아니다.
+render_wiki·render_markdown은 기본 모양이다. 수업·스터디마다 모양이 다르면 코드를 고치지 않고
+«틀»을 준다(export/note_template.py — 예시 노트를 LLM이 틀로 바꾸고, 코드가 층으로 채운다).
+assemble_notes가 만드는 dict는 **그리기 위한 보기**이지 저장 형식이 아니다.
 """
 
 from __future__ import annotations
@@ -45,7 +46,7 @@ def assemble_notes(library: str | Path, doc_id: str, part_id: str, interp_id: st
     """층에서 장별 노트 보기를 만든다. 번역·주석이 하나라도 있는 장만.
 
     출력: [{"title", "chapter", "bibliography", "intro", "notes", "points",
-            "sections": [{"heading", "level", "meta",
+            "sections": [{"heading", "level", "page", "meta",
                           "segments": [{"label", "text", "ko", "terms", "check", "changed"}]}]}].
     원문은 **지금 L4**에서 자른다. 번역 당시 원문(source_text)과 다르면 changed=True — 교정한 뒤
     국역을 다시 봐야 하는 자리다.
@@ -138,6 +139,7 @@ def assemble_notes(library: str | Path, doc_id: str, part_id: str, interp_id: st
                 {
                     "heading": md.get("title") or "",
                     "level": min(5, level + 1),
+                    "page": int(u["source_ref"]["page"]),  # 틀이 쪽을 따로 쓰고 싶을 때
                     "meta": meta,
                     "segments": segments,
                 }

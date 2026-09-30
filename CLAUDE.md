@@ -86,7 +86,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 
 ## 백엔드 모듈 구조 (src/app/)
 server.py는 FastAPI 앱 생성 + 라우터 마운트 + 미들웨어만 담당하는 조립 파일.
-실제 API 엔드포인트 228개가 9개 라우터 모듈에 분산 (2026-09-30 기준 실측):
+실제 API 엔드포인트 230개가 9개 라우터 모듈에 분산 (2026-09-30 기준 실측):
 
 ```
 src/app/
@@ -95,10 +95,10 @@ src/app/
 ├── __main__.py          ← CLI 진입점 (python -m app serve)
 └── routers/
     ├── library.py       ← 서고/설정/백업/휴지통 + 스키마 검증 + 연결 설정·앱 업데이트·엔진 추가 설치·OAuth 프록시·Ollama 로그인·모델 골라 받기 (29 라우트)
-    ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 + 텍스트레이어 진단·가져오기·입히기 + 권 추가·회전 + 경계 규칙 + 찍은 자리·규칙 제안 + 강독 노트 들이기·장별 내보내기 (47 라우트)
+    ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 + 텍스트레이어 진단·가져오기·입히기 + 권 추가·회전 + 경계 규칙 + 찍은 자리·규칙 제안 + 강독 노트 들이기·장별 내보내기·틀로 내보내기 (48 라우트)
     ├── composition.py   ← 편성 — 내용 트리·경계 색인·넣기·옮기기·지우기 + 제안·목차·적용·자동 트리·신호 도출·LLM 표지 묻기·구조 통째로 묻기 + 규칙 미리 보기·말로 규칙 넣기 + 쪼개기·리셋 (17 라우트)
     ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티/관계·태그 + 개념 병합·커넥톰 대조 (24 라우트)
-    ├── llm_ocr.py       ← LLM 상태 + OCR 엔진·실행·권단위 일괄·백업 되돌리기·판독 지침·LLM 교정 패스·판독 계획·말로 작업 지시 (26 라우트)
+    ├── llm_ocr.py       ← LLM 상태 + OCR 엔진·실행·권단위 일괄·백업 되돌리기·판독 지침·LLM 교정 패스·판독 계획·말로 작업 지시·노트 틀 (27 라우트)
     ├── alignment.py     ← 이체자 사전/정렬/일괄교정/문헌별 승인 (20 라우트)
     ├── reading.py       ← L5 표점·현토 + L6 번역 + 비고 + AI보조 (24 라우트)
     ├── annotation.py    ← L7 주석·사전형·인용마크 + AI보조 (34 라우트)
@@ -170,7 +170,7 @@ src/app/
 | `src/core/read_plan.py` | **작업 계획**(권마다 `read_plan/{권}.json`, 원본 저장소, `schemas/source_repo/read_plan.schema.json`) — 쪽 구간별 회전·엔진·쓰기 방향·건너뛰기, 장(PDF 쪽·제목·층위), 쪽 이름표(«교재 면 = PDF − 4»), 판독 지침. `plan_from_words`는 말을 칸으로 옮기고 **옮기지 못한 말을 돌려준다**(rule_talk와 같은 규약). 저장하지 않는다 |
 | `src/ocr/read_book.py` | 계획 적용 — 회전은 `set_part_rotation(pages=…)`(D-126)로, 지침은 `ocr_guidance`로. 화면은 적용 뒤 기존 «권 전체 OCR»에 `engine_plan`(+`writing_direction`, D-131에서 추가)을 넘긴다. CLI(`ctb read`)만 `read_pages`로 직접 돈다 |
 | `src/core/reading_ingest.py` | **LLM 강독 결과를 기존 층에 나눠 담는다 — 새 저장 스키마를 만들지 않는다**(사용자 지시 2026-09-30). 교정 → L4, 장·항목 → 편성 경계, 구획 국역 → L6, 어휘·문법 → L7 사전형 주석, 해제·요점·문서 정보·검토 → L7 비고. 사람이 고친 L4는 덮지 않는다(마지막 커밋이 들이기 **이고** 작업 파일이 그 커밋과 같고 교정 기록이 비어 있을 때만 덮는다 — 편집기 저장은 커밋하지 않고 교정 탭은 corrections만 커밋한다). 다시 들이면 draft_id `reading-import`**이고 status draft**인 항목만 바꾸며(번역·주석을 사람이 고치면 `core.translation`·`core.annotation`이 draft_id를 뗀다), 경계는 이 답이 다룬 쪽 가까이에서 제목으로 다시 찾아 옮기고(id 유지) 사람 번역·주석이 가리키는 경계는 지우지 않는다(Codex·문서 교차 확인 2026-09-30). 답의 모양은 `check_answer`가 본다(저장 형식이 아니라 답 형식) |
-| `src/export/text_export.py` · `src/export/reading_note.py` | 장별 원문(잡음 줄 빼기·세로 열 잇기·«PDF p.N · 교재 N면»)과 **층에서 조립하는 강독 노트**(저장하지 않는다 — 형식이 바뀌면 render_*만 고친다) |
+| `src/export/text_export.py` · `src/export/reading_note.py` | 장별 원문(잡음 줄 빼기·세로 열 잇기·«PDF p.N · 교재 N면»)과 **층에서 조립하는 강독 노트**(저장하지 않는다). 기본 모양은 render_*, **다른 모양은 «틀»**(`src/export/note_template.py` — 예시 노트를 LLM이 Jinja2 샌드박스 틀로 바꾸고 코드가 층으로 채운다, 틀도 저장하지 않는다). 수업 메모 같은 줄은 새 칸 없이 «문서 정보»에 |
 | `reading._translation_input` | 번역 탭 AI 번역이 그 단위의 L7 사전형 주석 중 원문에 나오는 표제어를 «확정 용어 풀이»로 싣는다. 번역 규칙은 사용자가 CCTI에 쓰던 지침을 옮긴 것 |
 
 ## 코어 스키마 모듈 (D-128, 2026-09-21)

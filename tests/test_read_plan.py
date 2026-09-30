@@ -521,3 +521,123 @@ def test_note_filenames_keep_chapters_apart():
     from src.export.reading_note import note_filename
 
     assert note_filename(1, "A-B", "wiki") != note_filename(2, "A B", "wiki")
+
+
+# ── 노트 틀(D-131 보완, 2026-09-30) — 모양은 틀이, 내용은 층이 ─────────────────
+
+TPL = (
+    "# {{ note.title }}\n"
+    "{% for s in note.sections %}## {{ s.heading }} (PDF {{ s.page }})\n"
+    "{% for g in s.segments %}{{ loop.index }}. {{ g.text }}\n   → {{ g.ko }}\n"
+    "{% for t in g.terms %}   - {{ t.term }}({{ t.reading }}): {{ t.gloss }}\n{% endfor %}"
+    "{% endfor %}{% endfor %}"
+)
+
+
+class TestNoteTemplate:
+    def test_fields_match_sample(self):
+        """틀 도움말(FIELDS)의 이름이 실제 노트 보기에 있다 — 없는 이름을 모델에 가르치지 않게."""
+        import re as _re
+
+        from src.export.note_template import FIELDS, SAMPLE_NOTE
+
+        seg = SAMPLE_NOTE["sections"][0]["segments"][0]
+        scopes = {
+            "note": SAMPLE_NOTE,
+            "s": SAMPLE_NOTE["sections"][0],
+            "g": seg,
+            "t": seg["terms"][0],
+        }
+        for scope, key in _re.findall(r"\b(note|s|g|t)\.(\w+)", FIELDS):
+            assert key in scopes[scope], f"{scope}.{key}"
+
+    def test_render_and_sandbox(self):
+        from src.export.note_template import SAMPLE_NOTE, check_template, render_with_template
+
+        out = render_with_template(SAMPLE_NOTE, TPL)
+        assert "## 一、證明方ノ件 (증명 방식의 건) (PDF 46)" in out
+        assert "1. 本年六月勅令第三十九號ヲ以テ\n   → 올해 6월 칙령 제39호로써" in out
+        assert "   - 以テ(もって): ~로써" in out
+        assert check_template(TPL) == []
+        # 틀은 사용자가 준 글이다 — 파이썬 내부로 나가는 길은 막힌다
+        with pytest.raises(ValueError):
+            render_with_template(SAMPLE_NOTE, "{{ ''.__class__.__mro__[1].__subclasses__() }}")
+        with pytest.raises(ValueError):
+            render_with_template(SAMPLE_NOTE, "{% for s in note.sections %}")  # 짝 없는 for
+        # 예시 글을 그대로 베낀 «틀»은 층의 내용을 쓰지 않는다 — 걸러 알린다
+        assert check_template("= 제목 =\n원문 그대로 베낌\n")
+
+    def test_template_from_example_strips_fence_and_previews(self):
+        import asyncio
+
+        from src.export.note_template import template_from_example
+
+        class TextRouter:
+            async def call(self, prompt, **kwargs):
+                self.prompt = prompt
+                return SimpleNamespace(text="```jinja\n" + TPL + "```", provider="fake", model="m")
+
+        router = TextRouter()
+        res = asyncio.run(template_from_example("= 예시 =\n○① 원문\n국역", router))
+        assert res["template"].startswith("# {{ note.title }}") and "```" not in res["template"]
+        assert res["problems"] == [] and "本年六月勅令" in res["preview"]
+        assert "g.ko" in router.prompt  # 쓸 수 있는 이름을 모델에 준다
+        assert asyncio.run(template_from_example("  ", router))["error"]
+
+
+def test_export_notes_with_template(client, tmp_path, monkeypatch):
+    """예시 → 틀(저장하지 않음) → 그 틀로 zip. 내용은 층에서 온다."""
+    lib, part = _setup(client, tmp_path)
+    doc = lib / "documents" / "d1"
+    (doc / "L4_text" / "pages").mkdir(parents=True, exist_ok=True)
+    r = client.put("/api/documents/d1/read-plan", json={"plan": PLAN, "part_id": part})
+    assert r.status_code == 200, r.text
+    answer = dict(
+        NOTE,
+        chapter="壹. 民事慣習回答彙集",
+        corrections=[
+            {"page": 3, "text": "民事慣習回答彙集\n一、證明方ノ件\n本年六月勅令第三\n十九號ヲ以テ"}
+        ],
+    )
+    answer["sections"][0]["page"] = 3
+    r = client.post("/api/documents/d1/reading-notes", json={"note": answer, "part_id": part})
+    assert r.status_code == 200, r.text
+
+    # 틀 도움말의 본보기(SAMPLE_NOTE)는 실제로 조립되는 보기와 같은 칸을 가진다
+    from export.note_template import SAMPLE_NOTE
+    from export.reading_note import assemble_notes
+
+    (real,) = assemble_notes(lib, "d1", part, "d1_reading")
+    assert set(real) >= set(SAMPLE_NOTE) - {"notes", "bibliography", "intro", "points"}
+    assert set(real["sections"][0]) == set(SAMPLE_NOTE["sections"][0])
+    assert set(real["sections"][0]["segments"][0]) == set(SAMPLE_NOTE["sections"][0]["segments"][0])
+
+    import app.routers.llm_ocr as mod
+
+    class TextRouter:
+        async def call(self, prompt, **kwargs):
+            return SimpleNamespace(text=TPL, provider="fake", model="m")
+
+    monkeypatch.setattr(mod, "_get_llm_router", lambda: TextRouter())
+    before = sorted(p.name for p in doc.iterdir())
+    r = client.post("/api/documents/d1/note-template/from-example", json={"example": "= 예시 ="})
+    assert r.status_code == 200, r.text
+    tpl = r.json()["template"]
+    assert sorted(p.name for p in doc.iterdir()) == before  # 틀은 저장하지 않는다
+
+    r = client.post(
+        "/api/documents/d1/export/notes", json={"template": tpl, "part_id": part, "ext": "md"}
+    )
+    assert r.status_code == 200, r.text
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    (name,) = z.namelist()
+    assert name.startswith("강독_01_") and name.endswith(".md")
+    body = z.read(name).decode("utf-8")
+    assert "   → 올해 6월 칙령 제39호로" in body and "本年六月勅令第三十九號ヲ以テ" in body
+    bad = client.post(
+        "/api/documents/d1/export/notes", json={"template": "{% for %}", "part_id": part}
+    )
+    assert bad.status_code == 400 and "틀" in bad.json()["error"]
+    assert client.post(
+        "/api/documents/d1/export/notes", json={"template": tpl, "part_id": part, "ext": "../x"}
+    ).status_code == 400

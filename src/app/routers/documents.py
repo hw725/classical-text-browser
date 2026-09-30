@@ -3332,47 +3332,104 @@ async def api_export_text(
     강독_<순번>_<장>.<형식>(국역·어휘 노트 — 경계·L6·L7에서 조립).
     언제나 지금 층에서 새로 만든다 — 교정·번역·주석 탭에서 고친 것이 그대로 반영된다.
     """
-    import io
-    import zipfile
-
-    from fastapi.responses import Response
-
-    from core.reading_ingest import default_interp_id
-    from export.reading_note import assemble_notes, note_filename, render_markdown, render_wiki
+    from export.reading_note import note_filename, render_markdown, render_wiki
     from export.text_export import export_document
-    from ocr.read_book import check_part_id
 
     if format not in ("md", "wiki"):
         return JSONResponse({"error": "format은 md 또는 wiki입니다."}, status_code=400)
     doc_path = require_repo_path("documents", doc_id)
-    try:
-        check_part_id(part_id)
-        notes = assemble_notes(
-            get_library_path(), doc_id, part_id, interp_id or default_interp_id(doc_id)
-        )
-    except ValueError as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
+    notes = _notes_or_error(doc_id, part_id, interp_id)
+    if isinstance(notes, JSONResponse):
+        return notes
     files, _stats = export_document(doc_path, part_id, fmt=format, keep_lines=keep_lines)
     for order, n in enumerate(notes, 1):
         body = render_wiki(n) if format == "wiki" else render_markdown(n)
         files[note_filename(order, n["chapter"], format)] = body
+    return _zip_response(files, f"{doc_id}_{part_id}_{format}.zip", f"{doc_id}_{format}.zip")
+
+
+def _notes_or_error(doc_id: str, part_id: str, interp_id: str | None):
+    """층에서 노트 보기를 조립한다. 잘못된 권·해석 저장소면 400 응답을 돌려준다."""
+    from core.reading_ingest import default_interp_id
+    from export.reading_note import assemble_notes
+    from ocr.read_book import check_part_id
+
+    try:
+        check_part_id(part_id)
+        return assemble_notes(
+            get_library_path(), doc_id, part_id, interp_id or default_interp_id(doc_id)
+        )
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+def _zip_response(files: dict[str, str], zip_name: str, fallback: str):
+    """{파일 이름: 글}을 zip 하나로 내려준다."""
+    import io
+    import urllib.parse
+    import zipfile
+
+    from fastapi.responses import Response
+
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         for name, text in files.items():
             z.writestr(name, text)
     # part_id는 질의로 들어와 한글일 수 있다 — 헤더는 latin-1이라 RFC 5987로 준다(version.py 꼴)
-    import urllib.parse
-
-    _zip_name = f"{doc_id}_{part_id}_{format}.zip"
     # ASCII 대체 이름은 영숫자·_·-·.만 — 따옴표·세미콜론이 헤더 경계를 깨지 않게
-    _zip_ascii = re.sub(r"[^A-Za-z0-9_.\-]", "", _zip_name) or f"{doc_id}_{format}.zip"
-    _zip_quoted = urllib.parse.quote(_zip_name, safe="")
+    ascii_name = re.sub(r"[^A-Za-z0-9_.\-]", "", zip_name) or fallback
+    quoted = urllib.parse.quote(zip_name, safe="")
     return Response(
         buf.getvalue(),
         media_type="application/zip",
         headers={
             "Content-Disposition": (
-                f"attachment; filename=\"{_zip_ascii}\"; filename*=UTF-8''{_zip_quoted}"
+                f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quoted}"
             )
         },
     )
+
+
+class NotesExportRequest(BaseModel):
+    """틀로 강독 노트 내려받기 요청 본문."""
+
+    template: str
+    part_id: str = "vol1"
+    interp_id: str | None = None  # 없으면 <문헌 id>_reading
+    ext: str = "txt"  # 결과 파일 확장자(wiki·md·txt·html 등) — 틀이 무엇을 만드는지는 틀이 정한다
+
+
+@router.post("/api/documents/{doc_id}/export/notes")
+async def api_export_notes_with_template(doc_id: str, body: NotesExportRequest):
+    """사용자가 준 틀로 장별 강독 노트를 만들어 zip으로 내려준다(D-131 보완).
+
+    틀은 저장하지 않는다. 노트의 원문·번역·주석은 언제나 지금 층(L4·경계·L6·L7)에서 온다 —
+    틀은 모양만 정한다. 틀 만들기는 POST .../note-template/from-example.
+    """
+    from export.note_template import render_with_template
+    from export.reading_note import note_filename
+
+    require_repo_path("documents", doc_id)
+    ext = body.ext.strip(".").lower()
+    if not re.fullmatch(r"[a-z0-9]{1,8}", ext):
+        return JSONResponse(
+            {"error": "ext는 영문 소문자·숫자 1~8자입니다(예: wiki, md, txt)."}, status_code=400
+        )
+    notes = _notes_or_error(doc_id, body.part_id, body.interp_id)
+    if isinstance(notes, JSONResponse):
+        return notes
+    if not notes:
+        return JSONResponse(
+            {
+                "error": "이 해석 저장소에 강독 노트가 없습니다.\n"
+                "→ 해결: 먼저 ③에서 강독 결과를 들이세요."
+            },
+            status_code=400,
+        )
+    files: dict[str, str] = {}
+    try:
+        for order, n in enumerate(notes, 1):
+            files[note_filename(order, n["chapter"], ext)] = render_with_template(n, body.template)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return _zip_response(files, f"{doc_id}_{body.part_id}_notes.zip", f"{doc_id}_notes.zip")

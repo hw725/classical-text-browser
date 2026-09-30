@@ -8,6 +8,7 @@ server.py의 Phase 10-2 (LLM) / Phase 10-1 (OCR) 엔드포인트를 분리한 �
     GET  /api/llm/usage
     POST /api/ocr/detect-layout/{doc_id}/{page}
     GET/PUT /api/documents/{doc_id}/read-plan · POST .../read-plan/from-words  (D-131 작업 계획)
+    POST /api/documents/{doc_id}/note-template/from-example  (D-131 노트 틀 — 예시 → 틀)
     GET  /api/ocr/engines
     POST /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr
     POST /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr/stream
@@ -3032,6 +3033,36 @@ async def api_read_plan_from_words(doc_id: str, body: ReadPlanWordsRequest):
             {"error": meta.get("error") or "계획을 만들지 못했습니다."}, status_code=400
         )
     return {"plan": plan, **{k: meta[k] for k in ("unsupported", "note", "provider", "model")}}
+
+
+class NoteTemplateExampleRequest(BaseModel):
+    """노트 예시 → 틀 요청 본문."""
+
+    example: str
+    force_provider: str | None = None
+    force_model: str | None = None
+
+
+@router.post("/api/documents/{doc_id}/note-template/from-example")
+async def api_note_template_from_example(doc_id: str, body: NoteTemplateExampleRequest):
+    """연구자가 붙여 넣은 노트 예시를 «틀»로 바꾼다. **저장하지 않는다.**
+
+    출력: {"template", "problems", "preview", "provider", "model"} 또는 {"error"}.
+    모델은 자리만 표시하고, 노트의 원문·번역·주석은 내보낼 때 코드가 층에서 채운다
+    (export/note_template.py). preview는 본보기 노트를 그 틀로 채운 글이다.
+    """
+    from export.note_template import template_from_example
+
+    require_repo_path("documents", doc_id)
+    res = await template_from_example(
+        body.example,
+        _get_llm_router(),
+        force_provider=body.force_provider,
+        force_model=body.force_model,
+    )
+    if res.get("error"):
+        return JSONResponse({"error": res["error"]}, status_code=400)
+    return res
 
 
 @router.put("/api/documents/{doc_id}/read-plan")

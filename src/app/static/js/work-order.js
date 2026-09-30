@@ -10,7 +10,8 @@
  * 한 흐름(①②③):
  *   ① 말로 적기 → 「계획으로 옮기기」 (LLM 한 번, 저장하지 않음)
  *   ② 계획 확인 → 「적용」 (회전·판독 지침·장 목록 저장) → «권 전체 OCR»에 계획이 걸린다
- *   ③ 결과 — LLM(Claude Code 세션 등)이 돌려준 강독 JSON을 「들이기」(교정은 L4로), 장별 「내려받기」
+ *   ③ 결과 — LLM(Claude Code 세션 등)이 돌려준 강독 JSON을 「들이기」(교정은 L4로), 장별 「내려받기」.
+ *      원하는 노트 모양이 따로 있으면 예시를 붙여 «틀»로 바꾸고 그 틀로 내려받는다(모양만 LLM, 내용은 층)
  *
  * OCR 실행 자체는 기존 «권 전체 OCR»이 한다(진행 표시·중단·백업·L4 보호가 거기 있다).
  */
@@ -260,6 +261,102 @@ function _woDownload(format) {
     `/api/documents/${encodeURIComponent(t.docId)}/export/text?part_id=${encodeURIComponent(t.partId)}&format=${format}&keep_lines=${keep}`;
 }
 
+/**
+ * ③ 틀 — 노트 모양은 수업·스터디마다 달라진다. 코드에 모양을 박지 않고, 연구자가 붙여 넣은 예시를
+ * LLM이 틀로 바꾸면(모양만), 내려받을 때 서버가 층(L4·경계·L6·L7)으로 채운다(export/note_template.py).
+ * 틀은 저장하지 않는다 — 파일로 받아 두었다가 다시 불러온다.
+ */
+function _woSetTemplate(template, preview, problems) {
+  workOrderState.template = template || null;
+  const pre = document.getElementById("wo-template-preview");
+  const box = document.getElementById("wo-template-problems");
+  if (pre) {
+    // textContent — 예시·미리보기에 든 글자를 HTML로 해석하지 않는다
+    pre.textContent = preview || "";
+    pre.style.display = preview ? "" : "none";
+  }
+  if (box) {
+    box.innerHTML = problems && problems.length
+      ? `<b>틀 점검</b><ul>${problems.map((p) => `<li>${_woEsc(p)}</li>`).join("")}</ul>`
+      : "";
+    box.style.display = problems && problems.length ? "" : "none";
+  }
+  for (const id of ["wo-template-save", "wo-dl-template"]) {
+    const b = document.getElementById(id);
+    if (b) b.disabled = !workOrderState.template;
+  }
+}
+
+async function _woMakeTemplate() {
+  const t = _woTarget();
+  if (!t) return;
+  const example = (document.getElementById("wo-example")?.value || "").trim();
+  if (!example) {
+    _woStatus("원하는 노트 예시를 먼저 붙여 넣으세요.", "warning");
+    return;
+  }
+  const llmSel = typeof getLlmModelSelection === "function" ? getLlmModelSelection("wo-model-select") : {};
+  const btn = document.getElementById("wo-make-template");
+  if (btn) btn.disabled = true;
+  _woStatus("예시를 틀로 바꾸는 중…");
+  try {
+    const res = await fetch(`/api/documents/${encodeURIComponent(t.docId)}/note-template/from-example`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ example, force_provider: llmSel.force_provider, force_model: llmSel.force_model }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    _woSetTemplate(data.template, data.preview, data.problems);
+    _woStatus(
+      data.problems && data.problems.length
+        ? "틀을 만들었지만 점검에 걸린 것이 있습니다 — 아래를 보고 예시를 고쳐 다시 만드세요."
+        : `틀을 만들었습니다(${data.provider || "?"} ${data.model || ""}). 아래는 본보기 항목을 이 틀로 채운 모습입니다.`,
+      data.problems && data.problems.length ? "warning" : "success",
+    );
+  } catch (e) {
+    _woStatus(`틀을 만들지 못했습니다: ${e.message}`, "error");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function _woSaveTemplate() {
+  if (!workOrderState.template) return;
+  const blob = new Blob([workOrderState.template], { type: "text/plain;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "강독노트_틀.j2";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+async function _woDownloadWithTemplate() {
+  const t = _woTarget();
+  if (!t || !workOrderState.template) return;
+  const ext = document.getElementById("wo-template-ext")?.value || "txt";
+  try {
+    const res = await fetch(`/api/documents/${encodeURIComponent(t.docId)}/export/notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ template: workOrderState.template, part_id: t.partId, ext }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `HTTP ${res.status}`);
+    }
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${t.docId}_${t.partId}_notes.zip`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    _woStatus("틀로 만든 강독 노트를 내려받았습니다.", "success");
+  } catch (e) {
+    _woStatus(`내려받지 못했습니다: ${e.message}`, "error");
+  }
+}
+
 function openWorkOrder() {
   const overlay = document.getElementById("work-order-overlay");
   if (!overlay || !_woTarget()) return;
@@ -289,4 +386,15 @@ function initWorkOrder() {
   });
   document.getElementById("wo-dl-wiki")?.addEventListener("click", () => _woDownload("wiki"));
   document.getElementById("wo-dl-md")?.addEventListener("click", () => _woDownload("md"));
+  document.getElementById("wo-make-template")?.addEventListener("click", _woMakeTemplate);
+  document.getElementById("wo-template-save")?.addEventListener("click", _woSaveTemplate);
+  document.getElementById("wo-dl-template")?.addEventListener("click", _woDownloadWithTemplate);
+  document.getElementById("wo-template-file")?.addEventListener("change", async (ev) => {
+    const f = ev.target.files && ev.target.files[0];
+    ev.target.value = "";
+    if (!f) return;
+    // 불러온 틀은 서버가 내려받을 때 점검한다(문법 오류면 그때 한국어로 알린다)
+    _woSetTemplate(await f.text(), "", []);
+    _woStatus(`틀을 불러왔습니다: ${f.name}`, "success");
+  });
 }

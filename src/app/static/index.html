@@ -4033,6 +4033,29 @@
             <button id="wo-dl-wiki" class="text-btn">위키 내려받기</button>
             <button id="wo-dl-md" class="text-btn">마크다운 내려받기</button>
           </div>
+          <details class="wo-json" id="wo-template-box">
+            <summary>원하는 노트 모양으로 내려받기 (틀)</summary>
+            <div class="wo-dim">수업·스터디마다 노트 모양이 다르면, 원하는 노트 한 편(한 항목이면 충분)을 붙여 넣고 「틀 만들기」를 누르세요.
+              LLM은 모양만 읽어 틀로 바꾸고, 원문·국역·어휘는 내려받을 때 서고의 층에서 채웁니다. 만든 틀은 파일로 받아 두었다가 다시 불러올 수 있습니다.</div>
+            <textarea id="wo-example" class="comp-split-textarea wo-said" spellcheck="false"
+              placeholder="예: = 제목 = … == 원문 강독 == … '''○①''' 원문 … 국역 … 어휘 …"></textarea>
+            <div class="wo-row">
+              <button id="wo-make-template" class="text-btn text-btn-primary">틀 만들기</button>
+              <label class="text-btn" title="전에 받아 둔 틀 파일(.j2·.txt)">
+                틀 불러오기<input id="wo-template-file" type="file" accept=".j2,.txt,.jinja,text/plain" hidden />
+              </label>
+              <button id="wo-template-save" class="text-btn" disabled>틀 받기</button>
+              <div style="flex: 1"></div>
+              <select id="wo-template-ext" class="props-select" title="만들 파일의 확장자">
+                <option value="wiki">.wiki</option>
+                <option value="md">.md</option>
+                <option value="txt">.txt</option>
+              </select>
+              <button id="wo-dl-template" class="text-btn" disabled>이 틀로 내려받기</button>
+            </div>
+            <div id="wo-template-problems" class="wo-unsupported" style="display: none"></div>
+            <pre id="wo-template-preview" class="wo-template-preview" style="display: none"></pre>
+          </details>
           <div id="wo-status" class="comp-split-note"></div>
           <div class="corr-dialog-actions">
             <div style="flex: 1"></div>
@@ -5009,7 +5032,7 @@
     <script src="/static/js/composition-editor.js?v=20260912"></script>
     <script src="/static/js/punctuation-editor.js?v=20260717a"></script>
     <script src="/static/js/hyeonto-editor.js?v=20260220c"></script>
-    <script src="/static/js/translation-editor.js?v=20260930"></script>
+    <script src="/static/js/translation-editor.js?v=20260930b"></script>
     <script src="/static/js/annotation-editor.js?v=20260717a"></script>
     <script src="/static/js/cite-format-manager.js?v=20260224"></script>
     <script src="/static/js/citation-editor.js?v=20260224b"></script>

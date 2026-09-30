@@ -241,7 +241,27 @@ def cmd_read(args) -> int:
                 f"{fmt}: {target} — 장 {stats['chapters']} · 쪽 {stats['pages']} · "
                 f"뺀 잡음 줄 {stats['noise_lines']} · 강독 노트 {len(notes)}"
             )
-    if not (args.said or args.plan or args.note or args.export):
+    # 5) 틀로 강독 노트만 — 모양은 틀이, 내용은 층이 정한다(export/note_template.py)
+    if args.template:
+        from export.note_template import render_with_template
+        from export.reading_note import assemble_notes, note_filename
+
+        tpl_path = Path(args.template)
+        template = tpl_path.read_text(encoding="utf-8")
+        ext = args.template_ext or "txt"
+        target = Path(args.output or (Path.cwd() / f"{doc_id}_export")).resolve() / "notes"
+        target.mkdir(parents=True, exist_ok=True)
+        notes = assemble_notes(library, doc_id, args.part, interp_id)
+        try:
+            for order, n in enumerate(notes, 1):
+                (target / note_filename(order, n["chapter"], ext)).write_text(
+                    render_with_template(n, template), encoding="utf-8", newline="\n"
+                )
+        except ValueError as e:
+            print(f"오류: {e}", file=sys.stderr)
+            return 1
+        print(f"틀({tpl_path.name}): {target} — 강독 노트 {len(notes)}")
+    if not (args.said or args.plan or args.note or args.export or args.template):
         plan = load_plan(doc_path, args.part)
         print(
             json.dumps(plan, ensure_ascii=False, indent=2)
@@ -287,4 +307,8 @@ def add_parser(subparsers, default_library: str) -> None:
         "--keep-lines", action="store_true", help="원문 줄바꿈을 그대로 둔다(열 잇기 끔)"
     )
     p.add_argument("--author", help="미디어위키 노트의 작성자 표기")
+    p.add_argument(
+        "--template", help="강독 노트 틀 파일(Jinja2 — 화면 ③ 「틀 받기」로 받은 것). notes/에 낸다"
+    )
+    p.add_argument("--template-ext", help="틀로 만든 파일의 확장자(기본 txt)")
     p.set_defaults(func=lambda a: sys.exit(cmd_read(a)))
