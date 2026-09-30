@@ -215,20 +215,28 @@ async function applySavedRotation(docId, partId, target, pages) {
   });
   const d = await res.json();
   if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
-  if (docId !== pdfState.currentDocId || partId !== pdfState.currentPartId) return d; // 다른 권으로 갔다
+  await syncSavedRotation(docId, partId, d.rotation, d.ranges || []);
+  return d;
+}
+
+/**
+ * 서버에 이미 저장된 회전을 화면 상태에 맞춘다. 입력: 문헌·권·권의 회전·쪽 범위 회전 목록.
+ * 「저장」·「회전 제안」·「말로 작업 지시」의 적용(D-131)이 모두 이 길로 화면을 고친다.
+ */
+async function syncSavedRotation(docId, partId, rotation, ranges) {
+  if (docId !== pdfState.currentDocId || partId !== pdfState.currentPartId) return; // 다른 권으로 갔다
   // 문헌 정보 캐시에도 적는다 — 다음에 이 권을 열 때 여기서 읽는다
   const part = viewerState?.documentInfo?.parts?.find((p) => p.part_id === partId);
   if (part) {
-    part.rotation = d.rotation;
-    part.rotation_ranges = d.ranges || [];
+    part.rotation = rotation;
+    part.rotation_ranges = ranges;
   }
-  pdfState.savedRotation = d.rotation;
-  pdfState.rotationRanges = d.ranges || [];
+  pdfState.savedRotation = rotation;
+  pdfState.rotationRanges = ranges;
   pdfState.rotation = 0;
   _applyRotation(); // 0이어도 불러 CSS transform·margin을 푼다
   await _autoFit();
   await _renderPage(pdfState.currentPage);
-  return d;
 }
 
 /**

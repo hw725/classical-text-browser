@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "read_plan.schema.json",
+  "title": "작업 계획 (D-131)",
+  "description": "책 한 권을 어느 쪽을 어떻게 읽을지 적은 데이터. 쪽 번호는 PDF 쪽(1부터). core/read_plan.py가 정리한 뒤의 모양이다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "title",
+    "guidance",
+    "ranges",
+    "chapters"
+  ],
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "guidance": {
+      "type": "string",
+      "description": "LLM 엔진에게 줄 판독 지침. manifest.ocr_guidance로 들어간다"
+    },
+    "ranges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "pages"
+        ],
+        "properties": {
+          "pages": {
+            "type": "string",
+            "pattern": "^[0-9,\\-]+$"
+          },
+          "skip": {
+            "type": "boolean"
+          },
+          "rotation": {
+            "enum": [
+              0,
+              90,
+              180,
+              270
+            ]
+          },
+          "engine": {
+            "type": "string"
+          },
+          "writing": {
+            "enum": [
+              "vertical_rtl",
+              "horizontal_ltr"
+            ]
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "chapters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "page",
+          "title",
+          "level"
+        ],
+        "properties": {
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "level": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 6
+          }
+        }
+      }
+    },
+    "page_labels": {
+      "type": "array",
+      "description": "쪽 이름표 — PDF 쪽과 다른 쪽 번호 체계(손글씨 교재 면 등). offset 규칙 또는 낱쪽 label",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "pages",
+          "name"
+        ],
+        "properties": {
+          "pages": {
+            "type": "string",
+            "pattern": "^[0-9,\\-]+$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "offset": {
+            "type": "integer"
+          },
+          "label": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

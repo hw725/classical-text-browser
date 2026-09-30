@@ -8,6 +8,7 @@ server.py에서 분리된 문헌 CRUD, 텍스트/레이아웃/교정/서지정�
 
 import json
 import logging
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, Query, UploadFile
@@ -856,9 +857,7 @@ async def api_create_from_files(
         _will_bundle_images = any(
             Path(u.filename or "").suffix.lower() in image_suffixes for u in files
         )
-        seen_pdf_storage_names: set[str] = (
-            {f"{doc_id}.pdf"} if _will_bundle_images else set()
-        )
+        seen_pdf_storage_names: set[str] = {f"{doc_id}.pdf"} if _will_bundle_images else set()
         pdf_idx = 0  # PDF별 영문 인덱스 (한국어 등 비ASCII 파일명 회피용)
 
         for idx, upload in enumerate(files):
@@ -3271,3 +3270,109 @@ def _embedded_download_name(doc_path: Path, doc_id: str, part_id: str) -> str:
     except (FileNotFoundError, OSError, KeyError):
         pass
     return f"{doc_id}_{part_id}_text.pdf"
+
+
+# ===========================================================================
+#  강독 노트 되들이기 · 장별 문서 내보내기 (D-131)
+# ===========================================================================
+
+
+class ReadingNoteRequest(BaseModel):
+    """LLM이 돌려준 강독 결과 한 벌 — 저장 형식이 아니라 답 형식이다(core/reading_ingest.py)."""
+
+    note: dict
+    part_id: str = "vol1"
+    interp_id: str | None = None  # 없으면 <문헌 id>_reading
+    model: str = "LLM"
+
+
+@router.post("/api/documents/{doc_id}/reading-notes")
+async def api_import_reading_note(doc_id: str, body: ReadingNoteRequest):
+    """강독 결과를 기존 층에 나눠 담는다 — 교정은 L4, 문서 항목은 편성 경계, 국역은 L6,
+    어휘·문법은 L7 사전형 주석, 해제·요점은 L7 비고.
+
+    출력: {"corrected", "kept"(사람이 고쳐 둔 L4 쪽), "boundaries_added", "boundaries_removed",
+           "boundaries_kept"(사람 번역·주석이 가리켜 남긴 경계), "unplaced_sections",
+           "unplaced_segments", "approx_segments", "translations", "annotations",
+           "relabeled_pages", "interp_id"}.
+    사람이 고친 확정본·번역·주석은 덮지 않는다 — 번역·주석은 사람이 고치면 초안 표식이 떨어져
+    재들이기가 건드리지 않는다(core/reading_ingest.py 머리말).
+    """
+    from core.reading_ingest import ingest_answer
+
+    require_repo_path("documents", doc_id)
+    library = get_library_path()
+    try:
+        return ingest_answer(
+            library, doc_id, body.part_id, body.note, interp_id=body.interp_id, model=body.model
+        )
+    except ValueError as e:
+        return JSONResponse(
+            {
+                "error": f"{e}\n→ chapter와 "
+                "sections[{heading, segments[{text, ko, terms}]}]가 있어야 합니다."
+            },
+            status_code=400,
+        )
+
+
+@router.get("/api/documents/{doc_id}/export/text")
+async def api_export_text(
+    doc_id: str,
+    part_id: str = Query("vol1"),
+    format: str = Query("wiki", description="md 또는 wiki"),
+    keep_lines: bool = Query(False, description="원문 줄바꿈 유지(세로 열 잇기 끔)"),
+    interp_id: str | None = Query(
+        None, description="강독 노트를 읽을 해석 저장소(없으면 <문헌>_reading)"
+    ),
+):
+    """확정본(L4)과 해석 층(L6·L7)으로 장별 문서를 만들어 zip으로 내려준다.
+
+    zip 안: 장마다 01.<형식>…·index·all(원문, 쪽 표시는 «PDF p.N · 교재 N면»),
+    강독_<순번>_<장>.<형식>(국역·어휘 노트 — 경계·L6·L7에서 조립).
+    언제나 지금 층에서 새로 만든다 — 교정·번역·주석 탭에서 고친 것이 그대로 반영된다.
+    """
+    import io
+    import zipfile
+
+    from fastapi.responses import Response
+
+    from core.reading_ingest import default_interp_id
+    from export.reading_note import assemble_notes, note_filename, render_markdown, render_wiki
+    from export.text_export import export_document
+    from ocr.read_book import check_part_id
+
+    if format not in ("md", "wiki"):
+        return JSONResponse({"error": "format은 md 또는 wiki입니다."}, status_code=400)
+    doc_path = require_repo_path("documents", doc_id)
+    try:
+        check_part_id(part_id)
+        notes = assemble_notes(
+            get_library_path(), doc_id, part_id, interp_id or default_interp_id(doc_id)
+        )
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    files, _stats = export_document(doc_path, part_id, fmt=format, keep_lines=keep_lines)
+    for order, n in enumerate(notes, 1):
+        body = render_wiki(n) if format == "wiki" else render_markdown(n)
+        files[note_filename(order, n["chapter"], format)] = body
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for name, text in files.items():
+            z.writestr(name, text)
+    # part_id는 질의로 들어와 한글일 수 있다 — 헤더는 latin-1이라 RFC 5987로 준다(version.py 꼴)
+    import urllib.parse
+
+    _zip_name = f"{doc_id}_{part_id}_{format}.zip"
+    # ASCII 대체 이름은 영숫자·_·-·.만 — 따옴표·세미콜론이 헤더 경계를 깨지 않게
+    _zip_ascii = re.sub(r"[^A-Za-z0-9_.\-]", "", _zip_name) or f"{doc_id}_{format}.zip"
+    _zip_quoted = urllib.parse.quote(_zip_name, safe="")
+    return Response(
+        buf.getvalue(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": (
+                f"attachment; filename=\"{_zip_ascii}\"; filename*=UTF-8''{_zip_quoted}"
+            )
+        },
+    )

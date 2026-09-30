@@ -12,9 +12,9 @@
 > |---|---|
 > | 6 · 11 · 13 | 추출 모드와 화면 구조 — 전면 개작. 13번은 새로 만든 것 |
 > | 1 · 5 · 9 · 10 | 텍스트 레이어 PDF 산출, 쪽 전면 1블록, 부분 재-OCR, 되돌리기 |
-> | 2 · 8 | 라우트 226개 · JS 모듈 32개 · API 캐시 금지 미들웨어 |
+> | 2 · 8 | 라우트 228개 · JS 모듈 33개 · API 캐시 금지 미들웨어 |
 > | 4 | LLM 사용량을 화면에 표시(D-056), LLM Vision OCR을 소비자로 추가 |
-> | 3 · 7 · 12 | **v1.3.0에서 바뀜** — 코어 엔티티가 6종으로(경계 목록 추가 D-092, Work 삭제 D-099), 경계 목록은 **원본 저장소**에 산다(D-097). 스키마 19개, L7 주석 4단계는 그대로 |
+> | 3 · 7 · 12 | **v1.3.0에서 바뀜** — 코어 엔티티가 6종으로(경계 목록 추가 D-092, Work 삭제 D-099), 경계 목록은 **원본 저장소**에 산다(D-097). 스키마 20개(v1.5.0에서 작업 계획 추가 — 강독 결과는 새 스키마 없이 기존 층에, D-131), L7 주석 4단계는 그대로 |
 >
 > 그림과 코드가 어긋나면 **코드가 기준**이다.
 
@@ -114,7 +114,7 @@ flowchart TB
 
 ## 2. 전체 시스템 아키텍처
 
-프론트엔드(32개 JS 모듈) · 백엔드(FastAPI + 9 라우터, 라우트 226개) ·
+프론트엔드(33개 JS 모듈) · 백엔드(FastAPI + 9 라우터, 라우트 228개) ·
 처리 엔진(OCR 5종 + LLM 5단 + 산출·검출 보조) · Git 저장소 · 외부 서비스.
 
 **여기서 읽어야 할 것**: 화면과 서버 사이에는 REST API 하나뿐이고 빌드 도구도
@@ -183,7 +183,7 @@ flowchart TB
         SRV["server.py<br/>앱 생성 + 라우터 마운트 + 캐시 금지 (152줄)"]
         ST["_state.py<br/>공유 상태 · 헬퍼 · LLM/OCR 캐시"]
         MW["미들웨어<br/>API 응답에 Cache-Control no-store<br/>정적 파일에는 no-cache + ETag (D-066)"]
-        subgraph ROUTERS["9개 도메인 라우터 (라우트 226개)"]
+        subgraph ROUTERS["9개 도메인 라우터 (라우트 228개)"]
             direction LR
             R1["library <b>29</b>"]
             R2["documents <b>45</b>"]
@@ -574,12 +574,12 @@ flowchart TB
 
 ## 7. 스키마 간 참조 관계도
 
-19개 스키마(원본 7 + 해석 5 + 코어 6 + 교환 1)의 연결 구조.
+20개 스키마(원본 8 + 해석 5 + 코어 6 + 교환 1)의 연결 구조.
 화살표는 참조 방향: A → B = 「A가 B를 참조」.
 
 ```mermaid
 flowchart TB
-    subgraph SRC_SCHEMA["원본 저장소 스키마 (7개)"]
+    subgraph SRC_SCHEMA["원본 저장소 스키마 (8개)"]
         direction TB
         S_MAN["<b>manifest</b><br/><i>document_id, parts, completeness_status</i>"]
         S_BIB["<b>bibliography</b><br/><i>서지정보, raw_metadata, _mapping_info</i>"]
@@ -588,6 +588,7 @@ flowchart TB
         S_COR["<b>corrections</b><br/><i>Correction · type, original_ocr, corrected</i>"]
         S_IMP["<b>interp_manifest</b><br/><i>interpretation_id, source_document_id</i>"]
         S_DEP["<b>dependency</b><br/><i>source.base_commit, tracked_files, status</i>"]
+        S_PLAN["<b>read_plan</b><br/><i>작업 계획 · 쪽 구간별 회전·엔진·쓰기, 장 (D-131)</i>"]
     end
 
     subgraph INT_SCHEMA["해석 저장소 스키마 (5개)"]
@@ -619,6 +620,7 @@ flowchart TB
     S_COR --> S_LAY
     S_IMP --> S_MAN
     S_DEP --> S_MAN
+    S_PLAN -->|"rotation_ranges·ocr_guidance로 적용"| S_MAN
     I_PUN --> S_LAY
     I_HYE --> S_LAY
     I_TRA --> S_LAY
@@ -666,7 +668,7 @@ flowchart TB
         MAIN["__main__.py<br/>CLI 진입점"]
         SRV["<b>server.py</b><br/>FastAPI 앱 생성 · 라우터 마운트 · 캐시 금지 (152줄)"]
         STATE["<b>_state.py</b><br/>공유 상태, 헬퍼 · LLM 캐시, 토큰 계산"]
-        subgraph ROUTERS["routers/ -- 9개 도메인 · 라우트 226개"]
+        subgraph ROUTERS["routers/ -- 9개 도메인 · 라우트 228개"]
             direction LR
             R1["library <b>29</b>"]
             R2["documents <b>45</b>"]
@@ -701,7 +703,6 @@ flowchart TB
         CM11["git_graph"]
         CM12["snapshot / snapshot_validator"]
         CM13["backup"]
-        CM14["layout_analyzer"]
     end
 
     subgraph LLM_MOD["src/llm/ -- LLM 통합"]
@@ -1184,6 +1185,46 @@ flowchart TB
   검색은 되지만 형광이 엉뚱한 데 뜬다
 - 앱 안의 PDF 뷰어는 텍스트 레이어를 그리지 않는다.
   Ctrl+F는 내보낸 파일을 외부 뷰어에서 열 때 동작한다
+
+---
+
+## 14. 말로 작업 지시 — 복잡한 스캔본 한 권의 경로 (D-131, v1.5.0)
+
+돌아간 펼침·필사본·가로쓰기·한글 번역이 섞인 사진본이 한 권에 있을 때. 사람은 말로 적고, LLM은
+정해진 칸으로 옮기며, 코드가 확인하고, 결과는 **새 저장 형식 없이** 기존 층으로 돌아온다.
+
+```mermaid
+flowchart TB
+    SAID["① 연구자의 말<br/>«5~69쪽은 누운 펼침, 활자 세로쓰기…»"]
+    PLAN["작업 계획 read_plan/{권}.json<br/>구간별 회전·엔진·쓰기 · 장 · 쪽 이름표 · 판독 지침"]
+    SAID -->|"read-plan/from-words<br/>(LLM, 저장 안 함, 못 옮긴 말은 돌려줌)"| PLAN
+    AGENT["계획 JSON을 직접 쓰는 사람·에이전트"] --> PLAN
+    PLAN -->|"PUT read-plan (적용)"| MAN["manifest<br/>rotation_ranges · ocr_guidance"]
+    PLAN -->|"engine_plan (+writing_direction)"| BATCH["권 전체 OCR (ocr/batch)<br/>CLI: ctb read --execute"]
+    MAN --> BATCH
+    BATCH --> L2["L2 OCR 결과"] --> L4["L4 확정본"]
+    L4 -->|"쪽 이미지 + 확정본"| LLM["LLM 강독 (Claude Code 세션 등)<br/>교정 · 항목 · 구획 국역 · 어휘/문법"]
+    LLM -->|"답 한 벌 → reading-notes (ingest)"| SPLIT{{"기존 층에 나눠 담기<br/>core/reading_ingest.py"}}
+    SPLIT -->|"corrections"| L4
+    SPLIT -->|"장·문서 항목"| BND["편성 경계 (원본 저장소)"]
+    SPLIT -->|"구획 국역"| L6["L6 번역 (해석 저장소)"]
+    SPLIT -->|"어휘·문법 / 해제·요점"| L7["L7 사전형 주석 · 비고"]
+    L4 --> OUT["export/text · ctb read --export<br/>장별 원문 md·wiki «PDF p.N · 교재 N면»"]
+    BND --> NOTE["강독 노트 (저장 안 함, 매번 조립)<br/>export/reading_note.assemble_notes"]
+    L4 --> NOTE
+    L6 --> NOTE
+    L7 --> NOTE
+    L7 -->|"확정 용어 풀이"| TR["번역 탭 AI 번역<br/>(용어 풀이를 따르게)"]
+```
+
+| 모듈 | 하는 일 |
+|---|---|
+| `core/read_plan.py` | 계획 확인(`validate_plan` — 틀린 칸은 버리고 이유를 돌려준다)·말 → 계획(`plan_from_words`)·쪽 이름표 |
+| `ocr/read_book.py` | 계획 적용(`apply_plan`)·CLI 경로의 쪽 읽기(`read_pages`, L2가 체크포인트) |
+| `core/reading_ingest.py` | LLM 답을 L4·경계·L6·L7에 나눠 담는다. 사람이 고친 것은 두고, 다시 들이면 앞서 들인 것만 바꾼다 |
+| `export/text_export.py` | 장별 원문 — 잡음 줄 빼기, 세로 열 잇기, 쪽 표시 |
+| `export/reading_note.py` | 층에서 강독 노트 조립 + 미디어위키·마크다운 렌더 |
+| `static/js/work-order.js` | 화면 「말로 지시」 — ① 말 ② 계획 확인·적용 ③ 들이기·내려받기 |
 
 ---
 

@@ -1287,6 +1287,13 @@
                   title="쪽을 미리 훑어 판독 계획을 세웁니다 — 회전이 다른 구간(«37~52쪽은 0°», 코드가 잼)과 쪽마다 알맞은 OCR 엔진(비전 모델이 글의 종류를 봄)을 제안합니다. 쪽마다 모델을 한 번 부르고, 저장은 구간마다 미리 보이며 확인받습니다"
                   aria-label="판독 계획"
                 >판독 계획<span class="llm-tag">LLM</span></button>
+                <!-- 말로 작업 지시(D-131) — 복잡한 책을 말 → 계획 → 적용 → OCR → 결과 되들이기 → 내려받기로 -->
+                <button
+                  id="work-order-btn"
+                  class="pdf-btn"
+                  title="이 책에 대해 아는 것을 말로 적으면(«5~69쪽은 누운 2쪽 펼침, 활자 세로쓰기») LLM이 쪽 구간별 회전·엔진·쓰기 방향과 장 목록으로 옮깁니다. 확인하고 적용한 뒤 「권 전체 OCR」로 돌리고, LLM이 돌려준 교정·번역을 들여 장별 위키·마크다운으로 내려받습니다"
+                  aria-label="말로 작업 지시"
+                >말로 지시<span class="llm-tag">LLM</span></button>
                 <div class="pdf-toolbar-divider"></div>
                 <!-- 읽기 보조선 -->
                 <button
@@ -3986,6 +3993,54 @@
         </div>
       </div>
 
+      <!-- 말로 작업 지시 모달(D-131) — ①말 → ②계획 확인·적용 → ③결과 되들이기·내려받기. 한 창에 한 흐름. -->
+      <div class="corr-dialog-overlay" id="work-order-overlay" style="display: none">
+        <div class="corr-dialog work-order-dialog">
+          <div class="bib-dialog-header">
+            <span class="bib-dialog-title">말로 작업 지시 <span class="llm-tag">LLM</span></span>
+            <div style="flex: 1"></div>
+            <button class="bib-dialog-close" id="wo-close" title="닫기">&times;</button>
+          </div>
+          <div class="wo-step"><b>① 이 책에 대해 아는 것을 말로 적으세요</b></div>
+          <textarea id="wo-said" class="comp-split-textarea wo-said" spellcheck="false"
+            placeholder="예: 1·3쪽은 표지와 목차, 2·4쪽은 백지. 5~69쪽은 시계 방향으로 90° 누운 2쪽 펼침이고 근대 활자 세로쓰기(가타카나 문어문). 80~97쪽은 초서 필사본. 120~132쪽은 가로쓰기. 133~154쪽은 일본어 편지에 세로쓰기 한글 번역이 붙어 있다. 장은 5쪽 壹. 民事慣習回答彙集, 34쪽 貳. …"></textarea>
+          <div class="wo-row">
+            <label>모델
+              <select id="wo-model-select" class="props-select llm-model-select"
+                title="말을 계획으로 옮길 모델. «자동»은 사용 가능한 프로바이더 순서에서 처음 되는 것"></select>
+            </label>
+            <div style="flex: 1"></div>
+            <button id="wo-from-words" class="text-btn text-btn-primary">계획으로 옮기기</button>
+          </div>
+          <div class="wo-step"><b>② 계획을 확인하고 적용하세요</b> — 적용하면 회전·판독 지침·장 목록이 저장되고, 「권 전체 OCR」이 이 계획대로 돕니다</div>
+          <div id="wo-plan" class="wo-plan"></div>
+          <details class="wo-json">
+            <summary>계획 JSON 직접 고치기</summary>
+            <textarea id="wo-plan-json" class="comp-split-textarea" spellcheck="false"></textarea>
+          </details>
+          <div class="wo-row">
+            <div style="flex: 1"></div>
+            <button id="wo-apply" class="text-btn text-btn-primary">적용</button>
+          </div>
+          <div class="wo-step"><b>③ 결과</b> — LLM(Claude Code 등)이 돌려준 강독 JSON(교정·국역·어휘)을 들이고, 장별 문서로 내려받으세요</div>
+          <div class="wo-row">
+            <label class="text-btn" title="LLM이 돌려준 강독 결과 JSON. 새 저장 형식 없이 기존 층에 나눠 담습니다 — 교정은 확정본(L4), 문서 항목은 편성 경계, 국역은 번역(L6), 어휘·문법은 사전형 주석(L7). 사람이 고친 것은 덮지 않습니다">
+              강독 JSON 들이기<input id="wo-note-file" type="file" accept=".json,application/json" hidden />
+            </label>
+            <div style="flex: 1"></div>
+            <label class="text-toolbar-check" title="끄면 세로 열을 문단으로 잇고, 켜면 원문 줄바꿈을 그대로 둡니다">
+              <input id="wo-keep-lines" type="checkbox" /> 원문 줄 유지</label>
+            <button id="wo-dl-wiki" class="text-btn">위키 내려받기</button>
+            <button id="wo-dl-md" class="text-btn">마크다운 내려받기</button>
+          </div>
+          <div id="wo-status" class="comp-split-note"></div>
+          <div class="corr-dialog-actions">
+            <div style="flex: 1"></div>
+            <button id="wo-cancel" class="text-btn">닫기</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Phase 6: 교정 다이얼로그 오버레이 -->
       <!-- 쪼개기 모달 — 기사 «안»을 문단으로 나눈다. 별도 기사를 만들지 않는다:
            그것은 사이드바 「경계 넣기」의 몫이다(한 곳에서만 되게 해야 헷갈리지 않는다). -->
@@ -4935,7 +4990,7 @@
     <!-- 앱 모듈 (로드 순서 중요: sidebar-tree가 viewerState를 정의, 나머지가 참조) -->
     <script src="/static/js/toast.js?v=20260222"></script>
     <script src="/static/js/sidebar-tree.js?v=20260918"></script>
-    <script src="/static/js/pdf-renderer.js?v=20260912"></script>
+    <script src="/static/js/pdf-renderer.js?v=20260930"></script>
     <script src="/static/js/text-editor.js?v=20260912"></script>
     <script src="/static/js/koten-layout-detector.js?v=20260221"></script>
     <script src="/static/js/layout-editor.js?v=20260918"></script>
@@ -4946,14 +5001,15 @@
     <script src="/static/js/create-document.js?v=20260717c"></script>
     <script src="/static/js/drag-drop.js?v=20260717a"></script>
     <script src="/static/js/hwp-import.js?v=20260223b"></script>
-    <script src="/static/js/ocr-panel.js?v=20260918"></script>
+    <script src="/static/js/ocr-panel.js?v=20260930"></script>
+    <script src="/static/js/work-order.js?v=20260930"></script>
     <script src="/static/js/alignment-view.js?v=20260223"></script>
     <script src="/static/js/variant-manager.js?v=20260221b"></script>
     <script src="/static/js/batch-correction.js?v=20260221"></script>
     <script src="/static/js/composition-editor.js?v=20260912"></script>
     <script src="/static/js/punctuation-editor.js?v=20260717a"></script>
     <script src="/static/js/hyeonto-editor.js?v=20260220c"></script>
-    <script src="/static/js/translation-editor.js?v=20260220c"></script>
+    <script src="/static/js/translation-editor.js?v=20260930"></script>
     <script src="/static/js/annotation-editor.js?v=20260717a"></script>
     <script src="/static/js/cite-format-manager.js?v=20260224"></script>
     <script src="/static/js/citation-editor.js?v=20260224b"></script>

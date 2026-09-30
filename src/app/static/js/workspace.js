@@ -51,6 +51,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (typeof initCreateDocument === "function") _safeInit("CreateDocument", initCreateDocument);
   // Phase 10-1: OCR 패널 초기화
   if (typeof initOcrPanel === "function") _safeInit("OcrPanel", initOcrPanel);
+  // 말로 작업 지시(D-131)
+  if (typeof initWorkOrder === "function") _safeInit("WorkOrder", initWorkOrder);
   // Phase 10-3: 대조 뷰 초기화
   if (typeof initAlignmentView === "function") _safeInit("AlignmentView", initAlignmentView);
   // 편성 에디터 초기화 (LayoutBlock → 단위)

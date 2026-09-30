@@ -1,7 +1,7 @@
 # 전체 스키마 개요도
 
-> 2026-03-14 작성 · **2026-09-04 확인: 19개**
-> (원본 7 + 해석 5 + 코어 6 + 교환 1). v1.3.0에서 코어가 바뀌었다 —
+> 2026-03-14 작성 · **2026-09-30 확인: 20개**
+> (원본 8 + 해석 5 + 코어 6 + 교환 1 — v1.5.0에서 작업 계획 `read_plan` 추가, D-131). v1.3.0에서 코어가 바뀌었다 —
 > 경계 목록이 더해지고(D-092) Work가 빠졌으며(D-099), 경계 파일은 해석 저장소가 아니라
 > **원본 저장소**에 산다(D-097). 교환 형식은 정본이 스키마 하나가 되었다(D-100).
 
@@ -40,7 +40,8 @@ schemas/
 │   ├── layout_page.schema.json      L3 레이아웃
 │   ├── corrections.schema.json      L4 교정 기록
 │   ├── interp_manifest.schema.json  해석 저장소 매니페스트
-│   └── dependency.schema.json       저장소 간 의존 추적
+│   ├── dependency.schema.json       저장소 간 의존 추적
+│   └── read_plan.schema.json        작업 계획 — 구간별 회전·엔진·쓰기, 장, 쪽 이름표 (D-131)
 │
 ├── interp/               ─ 해석 저장소 (L5-L7)
 │   ├── punctuation_page.schema.json L5 표점 (句讀)

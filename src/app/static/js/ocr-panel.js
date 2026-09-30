@@ -894,7 +894,13 @@ async function _runPartOcr() {
     !!document.getElementById("ocr-batch-use-plan")?.checked;
   let enginePlan = null;
   if (usePlan) {
-    enginePlan = ocrEnginePlan.ranges.map((r) => ({ from: r.from, to: r.to, engine_id: r.engine }));
+    // writing: 말로 작업 지시(D-131)의 계획은 구간마다 쓰기 방향이 다르다(세로·가로가 섞인 책)
+    enginePlan = ocrEnginePlan.ranges.map((r) => ({
+      from: r.from,
+      to: r.to,
+      engine_id: r.engine,
+      ...(r.writing ? { writing_direction: r.writing } : {}),
+    }));
     if (!pages) {
       pages = [];
       for (const r of ocrEnginePlan.ranges) for (let n = r.from; n <= r.to; n++) pages.push(n);

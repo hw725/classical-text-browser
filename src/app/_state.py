@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 _library_path: Path | None = None
 _llm_router = None
-_llm_drafts: dict = {}
 _ocr_registry = None
 _ocr_pipeline = None
 _llm_result_cache: dict[str, tuple[float, dict]] = {}
@@ -90,11 +89,6 @@ def set_library_path(path: Path | None):
     _ocr_registry = None  # 서고 전환 시 OCR 파이프라인도 리셋
     _ocr_pipeline = None  # (library_root가 달라지므로 재생성 필요)
     _llm_result_cache.clear()
-
-
-def get_llm_drafts() -> dict:
-    """LLM 초안 저장소를 반환한다 (메모리 — 서버 재시작 시 소멸)."""
-    return _llm_drafts
 
 
 def configure_library(library_path: str | Path):
@@ -321,16 +315,27 @@ _LLM_PROMPTS = {
     },
     "translation": {
         "system": (
-            "당신은 고전 한문 번역 전문가입니다.\n"
+            # 규칙 1~5는 사용자가 CCTI 번역에 쓰던 지침을 옮긴 것이다(D-131). 한문뿐 아니라
+            # 일본어 문어문·候文에도 쓰이므로 «고전 문헌»으로 넓혔다.
+            "당신은 고전 문헌(한문·일본어 문어문·候文)을 한국어로 옮기는 번역 도우미입니다.\n"
             "주어진 문장을 한국어로 번역하세요.\n"
             "규칙:\n"
-            "1. 원문의 뜻을 정확하게 전달하되, 자연스러운 한국어로 번역합니다.\n"
-            "2. 고유명사(인명, 지명)는 한자를 병기합니다. 예: 왕융(王戎)\n"
-            "3. 반드시 순수 JSON만 출력하세요.\n"
+            "1. [확정 용어 풀이]가 함께 오면 그것은 이 문장을 올바르게 해석하기 위해 검토·확정된 "
+            "기준이다. 인물·지명·사건·시기·물건·기록·개념은 그 정의대로 옮기고, 문법(Grammar) 항목"
+            "(문형·허사·조동사)은 그 해석 원칙을 우선 적용한다 — 특히 의도·희망·전언, 완료 여부, "
+            "반문·판단에 관한 문형은 풀이를 그대로 반영한다.\n"
+            "2. 고전에 익숙하지 않은 대학생·일반 학습자도 이해할 수 있는 "
+            "평이한 현대 한국어로 쓴다.\n"
+            "3. 필요하면 문장을 나누되, 원문에 없는 뜻을 임의로 더하지 않는다.\n"
+            "4. 이두(한국어 조사·어미의 한자 표기)는 한국어 조사·어미로 옮긴다.\n"
+            "5. 고유명사(인명, 지명)는 한자를 병기합니다. 예: 왕융(王戎)\n"
+            "6. 용어 풀이 목록은 번역하지 말고 [원문]만 번역한다. "
+            "[검토 전 용어 풀이]는 참고일 뿐이다.\n"
+            "7. 반드시 순수 JSON만 출력하세요.\n"
             "출력 형식:\n"
             '{"translation": "번역문", "notes": "번역 참고사항(선택)"}'
         ),
-        "user": "다음 고전 한문을 한국어로 번역하세요:\n\n{text}",
+        "user": "다음 고전 문헌을 한국어로 번역하세요:\n\n{text}",
     },
     "annotation": {
         "system": (

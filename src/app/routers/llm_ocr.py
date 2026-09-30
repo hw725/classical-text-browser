@@ -6,10 +6,8 @@ server.py의 Phase 10-2 (LLM) / Phase 10-1 (OCR) 엔드포인트를 분리한 �
     GET  /api/llm/status
     GET  /api/llm/models
     GET  /api/llm/usage
-    POST /api/llm/analyze-layout/{doc_id}/{page}
-    POST /api/llm/compare-layout/{doc_id}/{page}
-    POST /api/llm/drafts/{draft_id}/review
     POST /api/ocr/detect-layout/{doc_id}/{page}
+    GET/PUT /api/documents/{doc_id}/read-plan · POST .../read-plan/from-words  (D-131 작업 계획)
     GET  /api/ocr/engines
     POST /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr
     POST /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr/stream
@@ -35,7 +33,6 @@ from app._state import (
     _get_llm_router,
     _get_ocr_pipeline,
     get_library_path,
-    get_llm_drafts,
     require_repo_path,
 )
 
@@ -46,21 +43,6 @@ logger = logging.getLogger(__name__)
 # ===========================================================================
 #  Pydantic 요청 모델
 # ===========================================================================
-
-
-class DraftReviewRequest(BaseModel):
-    """Draft 검토 요청 본문."""
-
-    action: str  # "accept" | "modify" | "reject"
-    quality_rating: int | None = None
-    quality_notes: str | None = None
-    modifications: str | None = None
-
-
-class CompareLayoutRequest(BaseModel):
-    """레이아웃 비교 요청 본문."""
-
-    targets: list[str] | None = None
 
 
 class OcrRunRequest(BaseModel):
@@ -730,132 +712,6 @@ async def api_llm_usage():
     """이번 달 사용량 요약."""
     router_inst = _get_llm_router()
     return router_inst.usage_tracker.get_monthly_summary()
-
-
-@router.post("/api/llm/analyze-layout/{doc_id}/{page}")
-async def api_analyze_layout(
-    doc_id: str,
-    page: int,
-    part_id: str | None = Query(None, description="권 식별자. 다권본에서는 반드시 넘길 것"),
-    force_provider: str | None = Query(None),
-    force_model: str | None = Query(None),
-):
-    """페이지 이미지를 LLM으로 레이아웃 분석. Draft 반환.
-
-    왜 별도 엔드포인트인가:
-        기존 layout-editor의 수동 블록 편집과 독립적으로,
-        LLM이 제안하는 블록을 Draft로 관리한다.
-    """
-    library_path = get_library_path()
-    if library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
-
-    from core.layout_analyzer import analyze_page_layout
-
-    router_inst = _get_llm_router()
-
-    # 페이지 이미지 로드
-    page_image = _load_page_image(doc_id, page, part_id)
-    if not page_image:
-        return JSONResponse(
-            {"error": f"페이지 이미지 없음: {doc_id} page {page}"},
-            status_code=404,
-        )
-
-    try:
-        draft = await analyze_page_layout(
-            router_inst,
-            page_image,
-            force_provider=force_provider,
-            force_model=force_model,
-        )
-    except Exception as e:
-        return JSONResponse({"error": f"레이아웃 분석 실패: {e}"}, status_code=500)
-
-    # Draft 저장
-    drafts = get_llm_drafts()
-    drafts[draft.draft_id] = draft
-    return draft.to_dict()
-
-
-@router.post("/api/llm/compare-layout/{doc_id}/{page}")
-async def api_compare_layout(
-    doc_id: str,
-    page: int,
-    body: CompareLayoutRequest,
-    part_id: str | None = Query(None, description="권 식별자. 다권본에서는 반드시 넘길 것"),
-):
-    """여러 모델로 레이아웃 분석 비교."""
-    library_path = get_library_path()
-    if library_path is None:
-        return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
-
-    from core.layout_analyzer import compare_layout_analysis
-
-    router_inst = _get_llm_router()
-
-    page_image = _load_page_image(doc_id, page, part_id)
-    if not page_image:
-        return JSONResponse(
-            {"error": f"페이지 이미지 없음: {doc_id} page {page}"},
-            status_code=404,
-        )
-
-    # targets 파싱: ["ollama", "gemini:gemini-2.5-flash"]
-    parsed_targets = None
-    if body.targets:
-        parsed_targets = []
-        for t in body.targets:
-            if ":" in t:
-                parts = t.split(":", 1)
-                parsed_targets.append((parts[0], parts[1]))
-            else:
-                parsed_targets.append(t)
-
-    try:
-        draft_list = await compare_layout_analysis(
-            router_inst,
-            page_image,
-            targets=parsed_targets,
-        )
-    except Exception as e:
-        return JSONResponse({"error": f"레이아웃 비교 실패: {e}"}, status_code=500)
-
-    # Draft들 저장
-    drafts = get_llm_drafts()
-    for d in draft_list:
-        drafts[d.draft_id] = d
-
-    return [d.to_dict() for d in draft_list]
-
-
-@router.post("/api/llm/drafts/{draft_id}/review")
-async def api_review_draft(draft_id: str, body: DraftReviewRequest):
-    """Draft를 검토 (accept/modify/reject)."""
-    drafts = get_llm_drafts()
-    draft = drafts.get(draft_id)
-    if not draft:
-        return JSONResponse({"error": f"Draft 없음: {draft_id}"}, status_code=404)
-
-    if body.action == "accept":
-        draft.accept(
-            quality_rating=body.quality_rating,
-            notes=body.quality_notes or "",
-        )
-    elif body.action == "modify":
-        draft.modify(
-            modifications=body.modifications or "",
-            quality_rating=body.quality_rating,
-        )
-    elif body.action == "reject":
-        draft.reject(reason=body.quality_notes or "")
-    else:
-        return JSONResponse(
-            {"error": f"알 수 없는 action: {body.action}"},
-            status_code=400,
-        )
-
-    return draft.to_dict()
 
 
 # ===========================================================================
@@ -2680,14 +2536,28 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
         if eid and eid not in known:
             warnings.append(f"계획의 엔진 '{eid}'은(는) 없어 {a}~{b}쪽은 기본 엔진으로 돕니다.")
             eid = None
+        # 구간별 쓰기 방향(D-131): 작업 계획은 한 권 안에 세로쓰기·가로쓰기 구간을 섞어 둔다.
+        # 없으면 요청 전체의 writing_direction을 쓴다.
+        wd = item.get("writing_direction")
+        if wd not in ("vertical_rtl", "horizontal_ltr"):
+            wd = None
         if a >= 1 and b >= a:
-            plan.append({"from": a, "to": b, "engine_id": eid or effective_engine})
+            item_out = {"from": a, "to": b, "engine_id": eid or effective_engine}
+            if wd:  # 준 경우에만 — 응답의 계획 모양을 예전과 같게 둔다
+                item_out["writing_direction"] = wd
+            plan.append(item_out)
 
     def _engine_for(page_number: int) -> str | None:
         for r in plan:
             if r["from"] <= page_number <= r["to"]:
                 return r["engine_id"]
         return body.engine_id
+
+    def _writing_for(page_number: int) -> str:
+        for r in plan:
+            if r["from"] <= page_number <= r["to"] and r.get("writing_direction"):
+                return r["writing_direction"]
+        return body.writing_direction
 
     for eid in {effective_engine, *(r["engine_id"] for r in plan)}:
         if eid in HANGUL_INCAPABLE_ENGINES:
@@ -2849,7 +2719,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                                 doc_path,
                                 part_id,
                                 p,
-                                writing_direction=body.writing_direction,
+                                writing_direction=_writing_for(p),
                             ),
                         )
                         block_created = bool(info.get("created"))
@@ -3062,3 +2932,138 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ===========================================================================
+#  작업 계획 — 말로 지시하고, 확인하고, 적용한다 (D-131)
+# ===========================================================================
+
+
+class ReadPlanWordsRequest(BaseModel):
+    """말 → 작업 계획 초안 요청 본문."""
+
+    said: str
+    part_id: str = "vol1"
+    # 지금 계획을 고치는 말이면 그 계획(없으면 저장된 계획을 쓴다)
+    base_plan: dict | None = None
+    force_provider: str | None = None
+    force_model: str | None = None
+
+
+class ReadPlanApplyRequest(BaseModel):
+    """작업 계획 적용 요청 본문."""
+
+    plan: dict
+    part_id: str = "vol1"
+
+
+def _installed_engine_ids() -> list[str]:
+    """지금 쓸 수 있는 OCR 엔진 id 목록 — 계획을 만들 때 모델에게 보이고, 적용할 때 거른다."""
+    try:
+        _pipeline, registry = _get_ocr_pipeline()
+        return [e["engine_id"] for e in registry.list_engines() if e.get("available")]
+    except Exception:  # noqa: BLE001 — 엔진 목록을 못 얻어도 계획은 만들 수 있다
+        return []
+
+
+@router.get("/api/documents/{doc_id}/read-plan")
+async def api_get_read_plan(doc_id: str, part_id: str = Query("vol1")):
+    """저장된 작업 계획과 권의 쪽 수·설치된 엔진. 출력: {plan|None, problems, page_count, engines}.
+
+    저장된 계획도 **확인을 거쳐** 돌려준다 — 손으로 쓴 계획 파일이 화면에 그대로 들어가지 않게
+    (확인에서 걸린 칸은 빠지고 problems로 알린다).
+    """
+    from core.read_plan import validate_plan
+    from ocr.read_book import check_part_id, load_plan, page_count_of
+
+    doc_path = require_repo_path("documents", doc_id)
+    try:
+        check_part_id(part_id)
+        count = page_count_of(doc_path, part_id)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": f"권의 PDF를 열 수 없습니다: {e}"}, status_code=404)
+    raw = load_plan(doc_path, part_id)
+    plan, problems = None, []
+    if raw is not None:
+        try:
+            plan, problems = validate_plan(raw, count)
+        except Exception as e:  # noqa: BLE001 — 깨진 계획은 없는 것으로 보고 알린다
+            problems = [{"where": "read_plan", "why": f"저장된 계획을 읽을 수 없습니다: {e}"}]
+    return {
+        "plan": plan,
+        "problems": problems,
+        "page_count": count,
+        "engines": _installed_engine_ids(),
+    }
+
+
+@router.post("/api/documents/{doc_id}/read-plan/from-words")
+async def api_read_plan_from_words(doc_id: str, body: ReadPlanWordsRequest):
+    """연구자가 말한 것을 작업 계획 초안으로 옮긴다. **저장하지 않는다.**
+
+    출력: {"plan", "unsupported": [{said, why}], "note", "provider", "model"} 또는 {"error"}.
+    옮기지 못한 말은 unsupported로 반드시 돌려준다(rule_talk와 같은 규약) — 화면이 그대로 보인다.
+    """
+    from core.read_plan import plan_from_words
+    from ocr.read_book import check_part_id, load_plan, page_count_of
+
+    doc_path = require_repo_path("documents", doc_id)
+    try:
+        check_part_id(body.part_id)
+        count = page_count_of(doc_path, body.part_id)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": f"권의 PDF를 열 수 없습니다: {e}"}, status_code=404)
+    base = body.base_plan if body.base_plan is not None else load_plan(doc_path, body.part_id)
+    plan, meta = await plan_from_words(
+        body.said,
+        count,
+        _installed_engine_ids(),
+        _get_llm_router(),
+        base_plan=base,
+        force_provider=body.force_provider,
+        force_model=body.force_model,
+    )
+    if plan is None:
+        return JSONResponse(
+            {"error": meta.get("error") or "계획을 만들지 못했습니다."}, status_code=400
+        )
+    return {"plan": plan, **{k: meta[k] for k in ("unsupported", "note", "provider", "model")}}
+
+
+@router.put("/api/documents/{doc_id}/read-plan")
+async def api_apply_read_plan(doc_id: str, body: ReadPlanApplyRequest):
+    """작업 계획을 문헌에 적용한다 — 회전 구간·판독 지침·장 목록을 저장한다. OCR은 돌리지 않는다.
+
+    출력: {"plan", "problems", "pages", "skipped", "engine_plan", "rotation_ranges"}.
+    화면은 이어서 «권 전체 OCR»(ocr/batch)에 pages·engine_plan을 넘겨 돌린다 — 진행 표시·중단·
+    백업·L4 보호가 이미 거기 있으므로 같은 일을 두 번 구현하지 않는다.
+    """
+    from ocr.read_book import apply_plan
+
+    doc_path = require_repo_path("documents", doc_id)
+    try:
+        result = apply_plan(doc_path, body.part_id, body.plan)
+    except Exception as e:  # noqa: BLE001 — 스키마·쪽 범위 오류를 한국어로 돌려준다
+        return JSONResponse({"error": f"계획을 적용하지 못했습니다: {e}"}, status_code=400)
+    installed = set(_installed_engine_ids())
+    missing = (
+        sorted({r["engine_id"] for r in result["engine_plan"]} - installed) if installed else []
+    )
+    if missing:
+        result["problems"].append(
+            {
+                "where": "engine",
+                "why": f"설치되지 않은 엔진: {', '.join(missing)} — 그 구간은 기본 엔진으로 돕니다",
+            }
+        )
+    try:
+        from core.document import git_commit_document
+
+        git_commit_document(doc_path, "작업 계획 적용")
+    except Exception:  # noqa: BLE001 — 커밋 실패는 적용을 되돌리지 않는다
+        pass
+    return result

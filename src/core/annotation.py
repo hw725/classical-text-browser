@@ -251,6 +251,15 @@ def update_annotation(data: dict, block_id: str, annotation_id: str, updates: di
         if ann["id"] == annotation_id:
             for key, value in updates.items():
                 ann[key] = value
+            # 사람이 내용·사전 풀이를 고치면 더 이상 그 LLM 초안이 아니다 — 초안 id를 뗀다.
+            # 강독 결과 재들이기(D-131)는 초안 id가 붙은 항목만 바꾸므로 고친 주석이 지켜진다.
+            # 요청이 annotator를 직접 주면(LLM 단계 생성) 그 값을 존중한다.
+            if (
+                {"content", "dictionary", "target"} & set(updates)
+                and "annotator" not in updates
+                and isinstance(ann.get("annotator"), dict)
+            ):
+                ann["annotator"]["draft_id"] = None
             return ann
     return None
 

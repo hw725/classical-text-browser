@@ -574,6 +574,11 @@ def main():
     p_ocr.add_argument("--sleep", type=float, default=None, help="쪽 사이 대기 시간(초, 기본 0)")
     p_ocr.set_defaults(func=cmd_ocr)
 
+    # ── read: 작업 계획대로 책 한 권 (D-131) ──
+    from cli.read_book import add_parser as _add_read_parser
+
+    _add_read_parser(subparsers, str(_default_workspace()))
+
     p_models = subparsers.add_parser(
         "models", help="지금 쓸 수 있는 LLM 비전 모델을 번호와 함께 보여 준다"
     )

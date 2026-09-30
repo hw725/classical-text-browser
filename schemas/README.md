@@ -15,6 +15,7 @@
 | `ocr_page.schema.json` | L2 OCR 결과 — OcrResult 정의 | v7 섹션 5.2 |
 | `corrections.schema.json` | L4 교정 기록 (6종 교정 유형) | v7 섹션 5.4 |
 | `dependency.schema.json` | 해석→원본 저장소 의존 추적 | v7 섹션 4.2 |
+| `read_plan.schema.json` | 작업 계획 — 쪽 구간별 회전·엔진·쓰기 방향·건너뛰기, 장, 쪽 이름표, 판독 지침(권마다 `read_plan/{권}.json`) | D-131 |
 
 ### core/ — 코어 스키마 (해석 저장소)
 

@@ -156,6 +156,60 @@ class AiTranslationRequest(BaseModel):
     text: str  # 번역할 원문 텍스트
     force_provider: str | None = None
     force_model: str | None = None
+    # 확정 용어 풀이를 찾을 자리(D-131) — 주면 그 단위의 L7 사전형 주석을 프롬프트에 싣는다.
+    # 없으면 예전처럼 원문만 보낸다.
+    interp_id: str | None = None
+    part_id: str | None = None
+    page: int | None = None
+    block_id: str | None = None
+
+
+def _translation_input(body: AiTranslationRequest) -> str:
+    """번역에 보낼 글 — 확정 용어 풀이가 있으면 원문 앞에 붙인다(D-131).
+
+    왜: 번역이 용어 풀이와 따로 놀면 같은 말이 노트 안에서 두 뜻으로 옮겨진다. 사용자가 쓰던 번역
+    지침(«검토된 용어사전을 근거로, 그 정의와 문형 해석을 우선»)을 앱의 번역에도 적용한다.
+    원문에 나오는 표제어만 싣는다 — 단위 전체의 주석을 다 실으면 모델이 없는 말을 끌어온다.
+    """
+    if not (body.interp_id and body.block_id and body.page):
+        return body.text
+    try:
+        from core.annotation import load_annotations
+
+        interp_path = require_repo_path("interpretations", body.interp_id)
+        data = load_annotations(interp_path, body.part_id or "main", int(body.page))
+    except Exception:  # noqa: BLE001 — 용어 풀이를 못 읽어도 번역은 된다
+        return body.text
+    # 확정(reviewed·accepted)과 검토 전(draft)을 나눈다 — 사용자 지침은 «검토 완료된 용어사전»을
+    # 우선하라는 것이다. 초안까지 «확정»이라 부르면 검토 전 풀이가 번역을 끌고 간다(Codex 지적).
+    confirmed, drafts = [], []
+    for blk in data.get("blocks") or []:
+        if blk.get("block_id") != body.block_id:
+            continue
+        for a in blk.get("annotations") or []:
+            d = a.get("dictionary") or {}
+            head = d.get("headword")
+            if not head or head not in body.text:
+                continue
+            reading = f"({d['headword_reading']})" if d.get("headword_reading") else ""
+            cat = f" [{d['category']}]" if d.get("category") else ""
+            meaning = d.get("contextual_meaning") or d.get("dictionary_meaning") or ""
+            row = f"- {head}{reading}{cat}: {meaning}"
+            (confirmed if a.get("status") in ("reviewed", "accepted") else drafts).append(row)
+    if not (confirmed or drafts):
+        return body.text
+    parts = []
+    if confirmed:
+        parts.append(
+            "[확정 용어 풀이 — 번역은 이 풀이를 우선 따를 것]\n"
+            + "\n".join(dict.fromkeys(confirmed))
+        )
+    if drafts:
+        parts.append(
+            "[검토 전 용어 풀이 — 참고만 할 것, 원문과 맞지 않으면 따르지 말 것]\n"
+            + "\n".join(dict.fromkeys(drafts))
+        )
+    return "\n\n".join(parts) + "\n\n[원문]\n" + body.text
 
 
 # ───────────────────────────────────────────────────
@@ -1053,7 +1107,7 @@ async def api_llm_translation(body: AiTranslationRequest):
     try:
         result = await _call_llm_text(
             "translation",
-            body.text,
+            _translation_input(body),
             force_provider=body.force_provider,
             force_model=body.force_model,
         )
@@ -1165,7 +1219,7 @@ async def api_llm_translation_stream(body: AiTranslationRequest):
     async def _run_llm():
         await _call_llm_text_stream(
             "translation",
-            body.text,
+            _translation_input(body),
             queue,
             force_provider=body.force_provider,
             force_model=body.force_model,

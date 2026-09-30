@@ -695,6 +695,13 @@ async function _aiTranslateSingle(sentIdx) {
       : { force_provider: null, force_model: null };
 
     const reqBody = { text: sent.text };
+    // 확정 용어 풀이(L7 사전형 주석)를 서버가 찾아 프롬프트에 싣도록 자리를 알린다(D-131)
+    if (interpState?.interpId && transState.blockId) {
+      reqBody.interp_id = interpState.interpId;
+      reqBody.part_id = viewerState.partId || "main";
+      reqBody.page = viewerState.pageNum;
+      reqBody.block_id = _transApiBlockId();
+    }
     if (llmSel.force_provider) reqBody.force_provider = llmSel.force_provider;
     if (llmSel.force_model) reqBody.force_model = llmSel.force_model;
 

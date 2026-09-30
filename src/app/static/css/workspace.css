@@ -7917,6 +7917,24 @@ select.prop-level { max-width: 4.6em; }
 .survey-row > input, .survey-row > select { flex: 1; min-width: 0; }
 .survey-progress { display: flex; align-items: center; gap: 8px; font-size: 11.5px; }
 .survey-progress > progress { flex: 1; height: 10px; }
+/* 말로 작업 지시 모달 (D-131) — ①②③ 한 흐름 */
+.work-order-dialog { width: 760px; max-height: 88vh; overflow-y: auto; padding: 12px; gap: 8px; }
+.wo-step { font-size: 12.5px; margin-top: 6px; color: var(--text-primary); }
+.wo-said { min-height: 96px; }
+.wo-row { display: flex; align-items: center; gap: 8px; font-size: 12px; flex-wrap: wrap; }
+.wo-row > label > select { min-width: 280px; margin-left: 6px; }
+.wo-plan { font-size: 12px; max-height: 32vh; overflow-y: auto; }
+.wo-table { width: 100%; border-collapse: collapse; }
+.wo-table th, .wo-table td { border: 1px solid var(--border); padding: 2px 6px; text-align: left; }
+.wo-table th { background: var(--bg-secondary); color: var(--text-secondary); font-weight: normal; }
+.wo-chapters { margin: 2px 0 4px 18px; padding: 0; }
+.wo-dim { color: var(--text-muted); font-size: 11.5px; }
+.wo-unsupported { border: 1px solid var(--accent); border-radius: 4px; padding: 4px 8px; margin-bottom: 6px; }
+.wo-unsupported ul { margin: 2px 0 0 16px; padding: 0; }
+.wo-json > summary { font-size: 11.5px; color: var(--text-secondary); cursor: pointer; }
+.wo-json textarea { min-height: 160px; font-family: var(--font-mono); font-size: 11.5px; }
+#wo-status[data-kind="error"] { color: #c0392b; }
+#wo-status[data-kind="warning"] { color: #b9770e; }
 /* 해제 상태 줄 — 고치는 곳은 「참고·억제」 칸이고 여기서는 보이기만 한다 */
 .comp-llm-ref {
   display: flex;

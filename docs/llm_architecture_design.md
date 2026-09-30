@@ -76,7 +76,7 @@ src/
       openai_provider.py    ← 4순위: OpenAI API
       anthropic_provider.py ← 5순위: Claude API
     prompts/
-      layout_analysis.yaml       ← L3 레이아웃 분석
+      layout_analysis.yaml       ← L3 레이아웃 분석 (v1.5.0에서 삭제 — 화면이 부르지 않았다, D-131)
       punctuation.yaml           ← L5 표점
       translation.yaml           ← L6 번역
       annotation.yaml            ← L7 주석

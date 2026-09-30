@@ -8,7 +8,6 @@ Phase 10-2: LLM 4단 폴백 아키텍처 검증.
   - LlmDraft: Draft → accept/modify/reject 워크플로우
   - UsageTracker: JSONL 기록, 월별 요약
   - LlmRouter: 폴백, 강제 선택, 모델 목록, 상태 조회
-  - layout_analyzer: JSON 파싱 헬퍼
 """
 
 import json
@@ -491,51 +490,3 @@ class TestLlmRouter:
         assert len(models) >= 1
         assert models[0]["provider"] == "mock_p"
         assert models[0]["available"] is True
-
-
-# ─── layout_analyzer JSON 파싱 테스트 ────────────────────────
-
-
-class TestLayoutAnalyzerParsing:
-    """레이아웃 분석 헬퍼 함수 테스트."""
-
-    def test_parse_clean_json(self):
-        """정상 JSON 파싱."""
-        from core.layout_analyzer import _parse_llm_json
-
-        text = '{"blocks": [{"block_type": "main_text"}]}'
-        result = _parse_llm_json(text)
-        assert "blocks" in result
-        assert result["blocks"][0]["block_type"] == "main_text"
-
-    def test_parse_code_block_wrapped(self):
-        """```json ... ``` 감싸진 JSON 파싱."""
-        from core.layout_analyzer import _parse_llm_json
-
-        text = '```json\n{"blocks": [], "page_description": "테스트"}\n```'
-        result = _parse_llm_json(text)
-        assert result["page_description"] == "테스트"
-
-    def test_parse_code_block_no_lang(self):
-        """``` ... ``` (언어 표시 없음) 파싱."""
-        from core.layout_analyzer import _parse_llm_json
-
-        text = '```\n{"blocks": []}\n```'
-        result = _parse_llm_json(text)
-        assert result["blocks"] == []
-
-    def test_parse_invalid_json(self):
-        """잘못된 JSON은 JSONDecodeError."""
-        from core.layout_analyzer import _parse_llm_json
-
-        with pytest.raises(json.JSONDecodeError):
-            _parse_llm_json("이것은 JSON이 아닙니다")
-
-    def test_load_prompt(self):
-        """레이아웃 분석 프롬프트가 로드된다."""
-        from core.layout_analyzer import _load_prompt
-
-        prompt = _load_prompt()
-        assert "system" in prompt
-        assert "prompt_template" in prompt
-        assert "bbox_ratio" in prompt["prompt_template"]

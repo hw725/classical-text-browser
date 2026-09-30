@@ -51,6 +51,10 @@ ctb ocr "논문.pdf" --execute
 원본은 하나의 정본으로 남습니다. 편성까지는 원본 저장소의 일이라
 문헌만 고르면 되고, 해석 저장소는 표점 인덱스부터 씁니다(v1.3).
 
+회전된 펼침·필사본·가로쓰기가 뒤섞인 책은 뷰어의 **「말로 지시」**로 — 책에 대해 아는 것을 말로 적으면
+쪽 구간별 회전·엔진·장 목록이 되고, LLM이 만든 교정·국역·어휘를 기존 층에 들여 장별 미디어위키·마크다운
+강독 노트로 내려받습니다(v1.5, D-131).
+
 → [사용자 안내서](docs/user-guide.md) · [기능 소개](docs/features.md)
 
 ---
@@ -176,7 +180,7 @@ docker compose up -d --build
 |---|---|
 | [**사용자 안내서**](docs/user-guide.md) | 설치부터 산출물까지 **단계별 사용법** |
 | [기능 소개](docs/features.md) | 이 프로그램이 무엇을 할 수 있나 |
-| [릴리스 노트](docs/releases/v1.4.1.md) | 판마다 무엇이 바뀌었나 (v1.4.1 최신) |
+| [릴리스 노트](docs/releases/v1.5.0.md) | 판마다 무엇이 바뀌었나 (v1.5.0 최신) |
 
 ### 고치는 사람
 
@@ -193,7 +197,7 @@ docker compose up -d --build
 | 문서 | 무엇이 있나 |
 |---|---|
 | [core-schema-v1.3.md](docs/core-schema-v1.3.md) · [operation-rules-v1.0.md](docs/operation-rules-v1.0.md) | 코어 엔티티 모델과 운영 규약 |
-| [schemas/README.md](schemas/README.md) · [스키마 개요](docs/schema-overview.md) | JSON 스키마 19개 |
+| [schemas/README.md](schemas/README.md) · [스키마 개요](docs/schema-overview.md) | JSON 스키마 20개 |
 | [llm_architecture_design.md](docs/llm_architecture_design.md) | LLM 5단 폴백 설계 |
 | [세션 기록](docs/sessions/session_navigator.md) · [회고](docs/retrospective/README.md) | 만들면서 무엇을 배웠나 |
 

@@ -117,6 +117,7 @@ def test_all_download_headers_are_latin1_safe():
       `version.py`      제목 → **RFC 5987** (2026-09-22 수정)
       `composition.py`  `doc_id` → `^[a-z][a-z0-9_]{0,63}$` (ASCII 보장)
       `alignment.py`    사전 이름 → 파일명에서 오고 실제 사전은 ASCII 이름뿐
+      `documents.py`    장별 내보내기 zip — `part_id`가 질의로 오므로 **RFC 5987** (2026-09-30)
 
     **파일 집합이 아니라 자리 수로 센다.** 집합으로 세면 이미 허용된 파일 **안에**
     한글을 그대로 넣는 새 헤더를 더해도 집합이 그대로라 통과한다 —
@@ -131,12 +132,19 @@ def test_all_download_headers_are_latin1_safe():
         # 만들지 않는데 그것까지 세면 주석 한 줄에도 빨개지고, 다음 사람은 원인을
         # 안 보고 숫자만 올린다.
         [
-            "git", "grep", "-c", "-E",
+            "git",
+            "grep",
+            "-c",
+            "-E",
             # `"Content-Disposition":` (사전) 또는 `["Content-Disposition"] =` (대입)
             r'["\']Content-Disposition["\']\s*(:|\])',
-            "--", "src/app/routers",
+            "--",
+            "src/app/routers",
         ],
-        cwd=_ROOT, capture_output=True, text=True, check=False,
+        cwd=_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     # `git grep -c`는 찾은 것이 없으면 1, 오류면 2 이상이다. **오류를 통과시키지
     # 않는다** — 저장소를 못 읽어 빈손으로 끝나도 초록이던 자리였다
@@ -158,6 +166,7 @@ def test_all_download_headers_are_latin1_safe():
         "src/app/routers/version.py": 1,
         "src/app/routers/composition.py": 1,
         "src/app/routers/alignment.py": 1,
+        "src/app/routers/documents.py": 1,  # 장별 원문·강독 노트 zip — RFC 5987 (D-131)
     }
     # **같은지**를 본다. 늘어난 것만 보면 «검사 대상이 사라진 것»을 놓친다 —
     # counts가 비어도 초록이던 자리였다.
@@ -220,7 +229,11 @@ def test_screen_turns_rfc5987_header_into_a_korean_filename():
 
     r = subprocess.run(
         ["node", path, header],
-        capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
     )
     assert r.returncode == 0, f"화면 파싱 조각이 돌지 않는다: {r.stderr[:300]}"
     got = json.loads(r.stdout.strip())["filename"]
@@ -247,7 +260,7 @@ def test_screen_turns_rfc5987_header_into_a_korean_filename():
         ),
         (
             "한글 정상 경로",
-            "attachment; filename=\"interpretation_20260923.json\"; "
+            'attachment; filename="interpretation_20260923.json"; '
             "filename*=UTF-8''%EC%B2%9C%EC%A7%84%EB%8B%B4%EC%B4%88_20260923.json",
             "x",
             "천진담초_20260923.json",
@@ -296,11 +309,16 @@ def test_screen_filename_parsing_edge_cases(what, header, interp_id, want):
 
     r = subprocess.run(
         ["node", path, header, interp_id],
-        capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
     )
     assert r.returncode == 0, f"화면 파싱 조각이 돌지 않는다: {r.stderr[:300]}"
     got = json.loads(r.stdout.strip())["filename"]
     assert got == want, f"{what}: {got!r} (바라는 것 {want!r})"
+
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q", "--no-header"]))

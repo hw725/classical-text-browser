@@ -154,6 +154,10 @@ def update_translation(data: dict, translation_id: str, updates: dict) -> dict |
         if tr["id"] == translation_id:
             for key, value in updates.items():
                 tr[key] = value
+            # 사람이 번역문을 고치면 더 이상 그 LLM 초안이 아니다 — 초안 id를 뗀다.
+            # 강독 결과 재들이기(D-131)는 초안 id가 붙은 항목만 바꾸므로 고친 번역이 지켜진다.
+            if "translation" in updates and isinstance(tr.get("translator"), dict):
+                tr["translator"]["draft_id"] = None
             return tr
     return None
 
