@@ -282,8 +282,19 @@ async function _loadTranslationData() {
     }
 
     // 문장 분리 (클라이언트 사이드)
+    // 이미 저장된 번역의 범위도 경계로 쓴다 — 강독 결과 들이기(D-131)는 표점 없이 구획 단위로
+    // 번역을 넣으므로, 표점으로만 나누면 짝을 못 찾아 있는 번역이 모두 «미번역»으로 보였다
+    // (2026-09-30 스크린샷 갱신 중 발견).
+    const bid = _transApiBlockId();
+    const cuts = [];
+    for (const tr of transState.translations) {
+      const src = tr.source || {};
+      if (src.block_id !== bid || !Number.isInteger(src.start) || !Number.isInteger(src.end)) continue;
+      if (src.start > 0) cuts.push(src.start - 1);
+      cuts.push(src.end);
+    }
     transState.sentences = _splitSentencesClient(
-      transState.originalText, transState.punctMarks
+      transState.originalText, transState.punctMarks, cuts
     );
 
     transState.isDirty = false;
@@ -303,12 +314,16 @@ async function _loadTranslationData() {
 /**
  * 서버의 split_sentences와 동일한 알고리즘.
  * 표점의 after에 。？！이 있으면 그 위치에서 문장을 나눈다.
+ * extraEnds — 그 밖에 문장이 끝나는 자리(이미 저장된 번역의 경계). 표점이 없는 단위에서도
+ * 들인 번역과 문장 카드가 같은 범위가 되게 한다.
  */
-function _splitSentencesClient(text, marks) {
+function _splitSentencesClient(text, marks, extraEnds = []) {
   if (!text) return [];
 
   const enders = new Set(["。", "？", "！"]);
-  const enderPositions = new Set();
+  const enderPositions = new Set(
+    extraEnds.filter((i) => Number.isInteger(i) && i >= 0 && i < text.length),
+  );
 
   for (const mark of marks) {
     const after = mark.after || "";
