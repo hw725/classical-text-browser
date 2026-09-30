@@ -362,9 +362,19 @@ def doc_units(doc_path: str | Path, document_id: str, part_id: str | None = None
         # 읽기만 하고 두면 파일에는 남아 「검증 결과」가 계속 어긋남으로 짚는다.
         dirty = bool(data.pop("_dropped", 0))
         if page_texts and head and any(b.get("l4_commit") != head for b in data["boundaries"]):
-            dirty = rematch(data, page_texts, head) > 0 or dirty
+            # 재대조(D-092 결정 4)는 하되, **도장(l4_commit)만 바뀐 것은 파일에 쓰지 않는다.**
+            # head는 원본 저장소 전체의 HEAD라 L4와 무관한 커밋(경계·회전·작업 계획)에도 바뀐다.
+            # 그때마다 모든 경계의 도장만 새 해시로 고쳐 저장하면, 화면을 열기만 해도 경계
+            # 파일이 «수정됨»으로 남았다(lecture_2026 273개 null → 해시, 2026-09-30 실측).
+            # 도장을 굳히지 않아도 결과는 같다 — 다음 읽기에서 앵커 글자로 같은 자리를 다시 찾는다.
+            before = _without_stamps(data["boundaries"])
+            rematch(data, page_texts, head)
+            dirty = _without_stamps(data["boundaries"]) != before or dirty
         if dirty:
             save_doc_boundaries(doc_path, data)
+            # 읽기 경로의 쓰기는 사람이 누른 것이 아니다 — 커밋까지 남겨 작업 트리를 더럽히지
+            # 않는다(그 파일만 담는다: 사람이 저장만 해 둔 다른 파일을 끌어들이지 않게).
+            _commit_rematched(doc_path, pid)
         # 시작 행 좌표(bbox)가 없는 경계 — 옛 파일이거나 만들 때 L2와 안 맞았던 것 — 는 지금
         # 다시 잰다. 이것이 없으면 트리를 눌러도 PDF에 시작 행 점선이 안 보인다(2026-09-06 지적).
         # 파일에는 쓰지 않는다: 읽기 경로에서 원본 저장소를 바꾸지 않고, 잰 값이 None이면
@@ -372,6 +382,40 @@ def doc_units(doc_path: str | Path, document_id: str, part_id: str | None = None
         built = compute_units(data, lines, page_texts)
         units.extend(_fill_missing_bbox(doc_path, pid, data, built))
     return units
+
+
+def _without_stamps(boundaries: list[dict]) -> str:
+    """경계 목록에서 l4_commit 도장만 뺀 비교용 문자열.
+
+    입력: 경계 dict 목록. 출력: 정렬된 JSON 문자열.
+    왜: 재대조가 «자리·앵커·상태»를 바꿨는지만 보고 싶다 — 도장은 HEAD를 따라 늘 바뀐다.
+    """
+    import json
+
+    return json.dumps(
+        [{k: v for k, v in b.items() if k != "l4_commit"} for b in boundaries],
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
+def _commit_rematched(doc_path: Path, part_id: str) -> None:
+    """재대조로 바뀐 경계 파일 하나를 원본 저장소에 커밋한다. 실패해도 읽기는 잇는다."""
+    from core.boundaries import doc_boundaries_file
+    from core.document import git_commit_document
+
+    try:
+        import git as _git
+
+        rel = doc_boundaries_file(doc_path, part_id).relative_to(doc_path).as_posix()
+        # 그 파일이 HEAD와 같으면 커밋하지 않는다 — 다른 파일이 더러울 때 빈 커밋이 나지 않게
+        if not _git.Repo(doc_path).git.status("--porcelain", "--", rel).strip():
+            return
+        git_commit_document(
+            doc_path, f"편성: L4가 바뀌어 경계 자리를 다시 찾음 ({part_id})", add_paths=[rel]
+        )
+    except Exception as ex:  # noqa: BLE001 — 커밋을 못 해도 단위 목록은 나와야 한다
+        logger.warning("재대조 결과를 커밋하지 못했습니다 (%s/%s): %s", doc_path.name, part_id, ex)
 
 
 def _fill_missing_bbox(doc_path: Path, part_id: str, data: dict, units: list[dict]) -> list[dict]:

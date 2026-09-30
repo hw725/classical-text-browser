@@ -27,6 +27,52 @@ const editorState = {
   isDirty: false,    // 수정 여부
 };
 
+/* 쪽마다 진행 중인 «OCR로 확정본 채우기» 요청. 교정 편집기와 이 편집기가 같은 쪽을
+   동시에 채우려 해도 요청은 한 번만 나간다. 키는 "문헌/권/쪽". */
+const _fillInFlight = new Map();
+
+/**
+ * 확정본(L4)이 비어 있는 쪽을 OCR 결과(L2)로 채운다 — **교정 탭에서만** 부른다.
+ *
+ * 입력: docId, partId, pageNum. 출력: Promise<boolean> — 실제로 채웠으면 true.
+ *
+ * 왜 교정 탭에서만인가: 이 자동 채우기는 교정 인덱스의 「OCR 채우기」 단추를 흐름에
+ *   넣은 것이다(사용자 요청 2026-09-10, user-guide «교정 인덱스는 … 저절로 채웁니다»).
+ *   그런데 채우는 코드가 모든 모드의 쪽 열기(loadPageText)에 붙어 있어, 열람·추출
+ *   모드에서 쪽을 넘기기만 해도 서고에 L4 파일이 생겼다(2026-09-30 실측 — 누르지 않은
+ *   쓰기). 교정 탭은 사람이 «확정본을 다루겠다»고 고른 자리라 거기서만 쓴다.
+ * 덮어쓰지 않는다: 서버가 글이 있는 확정본은 건너뛴다(overwrite 기본 False).
+ */
+// eslint-disable-next-line no-unused-vars
+function fillEmptyPageText(docId, partId, pageNum) {
+  const key = `${docId}/${partId}/${pageNum}`;
+  if (_fillInFlight.has(key)) return _fillInFlight.get(key);
+  const job = (async () => {
+    try {
+      const res = await fetch(
+        `/api/documents/${encodeURIComponent(docId)}/parts/${encodeURIComponent(partId)}/ocr/fill-text?pages=${pageNum}`,
+        { method: "POST" },
+      );
+      const r = res.ok ? await res.json() : null;
+      const filled = Boolean(r && r.filled > 0);
+      if (filled) showToast("OCR 결과로 확정본을 채웠습니다.", "info");
+      return filled;
+    } catch (e) {
+      console.warn("OCR 자동 채우기 실패", e);
+      return false;
+    } finally {
+      _fillInFlight.delete(key);
+    }
+  })();
+  _fillInFlight.set(key, job);
+  return job;
+}
+
+/** 지금 교정 탭인가 — workspace.js의 currentMode(없으면 아니라고 본다). */
+function _inCorrectionMode() {
+  return typeof currentMode !== "undefined" && currentMode === "correction";
+}
+
 
 /**
  * 페이지 텍스트를 API에서 로드하여 에디터에 표시한다.
@@ -66,28 +112,16 @@ async function loadPageText(docId, partId, pageNum) {
     // 확정본이 없거나 비어 있으면 OCR 결과(L2)로 채운다 — 사람이 누를 단추였던 「OCR 채우기」를
     // 흐름 안으로 넣었다(사용자 요청 2026-09-10). 덮어쓰지 않는다: 글이 있는 확정본은 그대로 둔다.
     // 글을 다 지우고 저장하면 다음에 열 때 다시 채워진다 — 그것이 «OCR로 되돌리기»다.
-    if ((!data.exists || !String(data.text || "").trim()) && !editorState.autoFilling) {
-      editorState.autoFilling = true;
-      try {
-        const fill = await fetch(
-          `/api/documents/${encodeURIComponent(docId)}/parts/${encodeURIComponent(partId)}/ocr/fill-text?pages=${pageNum}`,
-          { method: "POST" },
-        );
-        const r = fill.ok ? await fill.json() : null;
-        if (r && r.filled > 0) {
-          if (viewerState.docId !== docId || viewerState.partId !== partId || viewerState.pageNum !== pageNum) return;
-          const again = await fetch(url);
-          if (again.ok) {
-            const d2 = await again.json();
-            data.text = d2.text;
-            data.exists = d2.exists;
-            showToast("OCR 결과로 확정본을 채웠습니다.", "info");
-          }
+    // **교정 탭에서만** — 다른 모드에서 쪽을 열기만 해도 쓰던 것을 막는다(fillEmptyPageText 참고).
+    if ((!data.exists || !String(data.text || "").trim()) && _inCorrectionMode()) {
+      if (await fillEmptyPageText(docId, partId, pageNum)) {
+        if (viewerState.docId !== docId || viewerState.partId !== partId || viewerState.pageNum !== pageNum) return;
+        const again = await fetch(url);
+        if (again.ok) {
+          const d2 = await again.json();
+          data.text = d2.text;
+          data.exists = d2.exists;
         }
-      } catch (e) {
-        console.warn("OCR 자동 채우기 실패", e);
-      } finally {
-        editorState.autoFilling = false;
       }
     }
 

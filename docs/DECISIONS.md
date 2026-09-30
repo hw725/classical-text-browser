@@ -4315,6 +4315,9 @@ TextBlock이 지금 하는 일을 갈라 보면: ① 단위의 id(관계·태그
 - `core/entity.py`: `text_block` 조회·생성·갱신이 경계 목록을 읽고 쓴다. 옛 호출자(apply·from-source·
   자동 편성)가 만들던 TextBlock dict는 첫 출처의 쪽·`char_range[0]`으로 경계가 된다. `source_refs`를
   바꾸는 갱신은 «옮기기»다. 보기를 읽을 때 L4 커밋이 다르면 `anchor_text`로 재대조한다.
+  (2026-09-30 보탬) 재대조 결과 `l4_commit` 값만 달라졌으면 파일에 쓰지 않는다 — 다음에 읽어도 같은 자리를
+  찾는다. 위치·앵커·상태가 실제로 바뀔 때만 저장하고 그 파일 하나만 원본 저장소에 커밋한다. 전에는 L4와
+  무관한 커밋에도 모든 경계를 다시 써서, 화면을 열기만 해도 작업 트리가 더러워졌다(경계 273개).
 - API: `POST …/boundaries`(넣기 = 쪼개기), `DELETE …/boundaries/{id}`(지우기 = 앞 단위에 합치기,
   가리키던 태그는 `dangling_tags`로 알림), `PUT …/boundaries/{id}`(start·level·title; end는 «다음 경계
   옮기기»로 해석). `text_block/split`은 조각 텍스트로 자리를 찾아 경계를 넣고 원본 id를 첫 조각에 남긴다.

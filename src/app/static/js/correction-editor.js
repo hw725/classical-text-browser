@@ -335,6 +335,24 @@ async function loadPageCorrections(docId, partId, pageNum) {
       return;
     }
 
+    // 확정본이 비어 있으면 OCR 결과로 채운 뒤 다시 읽는다(교정 탭에서만 — text-editor.js
+    // fillEmptyPageText). 교정 탭에 들어올 때는 쪽이 바뀌지 않아 loadPageText가 돌지 않으므로
+    // 여기서도 채운다. 같은 쪽을 두 곳이 동시에 채워도 요청은 한 번이다.
+    if (
+      !String(textData.text || "").trim() &&
+      typeof fillEmptyPageText === "function" &&
+      typeof _inCorrectionMode === "function" &&
+      _inCorrectionMode() &&
+      (await fillEmptyPageText(docId, partId, pageNum))
+    ) {
+      const again = await fetch(
+        `/api/documents/${docId}/pages/${pageNum}/text?part_id=${partId}`,
+        { cache: "no-store" },
+      );
+      if (again.ok) textData.text = (await again.json()).text;
+      if (viewerState.docId !== docId || viewerState.partId !== partId || viewerState.pageNum !== pageNum) return;
+    }
+
     correctionState.pageText = textData.text || "";
 
     if (layoutRes.ok) {

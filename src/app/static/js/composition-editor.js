@@ -207,10 +207,14 @@ async function _loadCompositionData() {
     const data = res.ok ? await res.json() : null;
     for (const row of (data && data.boundaries) || []) {
       if (row.unit_status === "deprecated" || row.unit_status === "archived") continue;
-      // 경계 색인의 평평한 칸을 카드가 기대하는 모양으로 옮긴다
+      // 경계 색인의 평평한 칸을 카드가 기대하는 모양으로 옮긴다.
+      // 번호는 서버의 sequence_index(권 안의 차례, 0부터) 하나로 센다 — 사이드바 트리와
+      // 표점·현토·번역·주석·인용 편집기가 모두 그것을 «#N»으로 쓴다. 전에는 여기만
+      // 색인의 order+1(1부터)을 써서 같은 단위가 트리 #267, 「단위 손보기」 #268로 갈렸다
+      // (lecture_2026 愛蓮説, 2026-09-30). order는 정렬용이지 이름표가 아니다.
       compState.units.push({
         id: row.id,
-        sequence_index: row.order != null ? row.order + 1 : row.sequence_index,
+        sequence_index: row.sequence_index != null ? row.sequence_index : row.order,
         original_text: row.original_text || "",
         source_refs: row.source_refs || [],
         status: row.unit_status || row.status || "draft",

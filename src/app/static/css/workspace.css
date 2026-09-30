@@ -992,13 +992,23 @@ body.resizing-row {
 }
 
 .pdf-toolbar {
-  height: 32px;
+  /* 좁은 폭에서는 다음 줄로 감싼다 — 다른 도구 줄(.comp-toolbar·.cite-toolbar)과 같은 관례.
+     높이를 32px로 못박고 감싸지 않으면 항목이 눌려 «저장 90°(쪽 범위)» 글자가 옆 단추
+     「판독 계획」 위로 넘쳐 겹쳤다(1600px, 2026-09-30). */
+  min-height: 32px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
-  padding: 0 8px;
+  padding: 3px 8px;
   background: var(--bg-tertiary);
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+/* 항목은 줄어들지 않는다 — 줄어들면 nowrap 글자가 상자 밖으로 넘쳐 옆 항목과 겹친다.
+   자리가 모자라면 위의 flex-wrap이 통째로 다음 줄로 보낸다. */
+.pdf-toolbar > * {
   flex-shrink: 0;
 }
 
