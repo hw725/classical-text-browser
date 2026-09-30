@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 PLAN_DIR = "read_plan"
-LEGACY_PLAN_FILE = "read_plan.json"  # v1.5.0 개발 중 한때 쓰던 자리(권 구분 없음) — 읽기만 한다
+LEGACY_PLAN_FILE = "read_plan.json"  # v1.4.2 개발 중 한때 쓰던 자리(권 구분 없음) — 읽기만 한다
 _PART_RE = re.compile(r"^[A-Za-z0-9_\-]{1,64}$")
 
 
