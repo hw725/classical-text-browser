@@ -338,7 +338,7 @@ def _load_page_image(doc_id: str, page: int, part_id: str | None = None) -> byte
         base64 인코딩 시 14MB+ → Ollama 클라우드 프록시가 타임아웃/거부.
         LLM 비전 모델은 내부적으로 리사이즈하므로 2000px이면 충분하다.
     """
-    from ocr.image_utils import resize_for_llm, resolve_part_pdf
+    from ocr.image_utils import resize_for_llm
 
     library_path = get_library_path()
     if library_path is None:
@@ -377,43 +377,30 @@ def _load_page_image(doc_id: str, page: int, part_id: str | None = None) -> byte
                         raw = buf.getvalue()
                     return resize_for_llm(raw, max_long_side=2000)
 
-    # 2. PDF에서 페이지 추출 (pymupdf/fitz 사용)
-    pdf_path = resolve_part_pdf(doc_dir, part_id)
-    if pdf_path is not None and pdf_path.exists():
-        try:
-            import fitz  # pymupdf
-        except ImportError:
-            return None  # pymupdf가 없으면 건너뜀
+    # 2. PDF에서 페이지 추출 — 정본 함수 load_page_image_from_pdf로(CLAUDE.md 「파일 다루기」).
+    # 그 함수가 resolve_part_pdf·fitz `with`·page_rotation(권 회전 D-123 + 쪽 범위 회전 D-126)을
+    # 한 곳에서 처리한다. 여기서 get_pixmap을 직접 부르면 회전 규칙이 바뀔 때 이 자리만 남는다.
+    # scale=2.0(144 DPI)은 예전 직접 렌더와 같은 값이다 — None(스캔 원해상도)으로 두면
+    # LLM에 가는 이미지가 달라진다. 어차피 resize_for_llm이 긴 변 2000px로 줄인다.
+    # 같은 결과임은 tests/test_llm_ocr_page_image.py가 예전 구현과 바이트로 견준다.
+    # 예전 구현은 이 단계 전체(회전 읽기 포함)를 try로 감싸 None을 돌려줬다 — 호출자가 None을
+    # «이미지 없음»으로 다루므로 그 계약은 지키되, 조용히 삼키지 않도록 경고는 남긴다.
+    from io import BytesIO
 
-        # with를 쓰는 이유: 렌더 도중 예외가 나도 파일 핸들이 닫힌다.
-        # Windows에서 핸들이 남으면 그 PDF가 잠겨 문헌 삭제·이동이 부분 실패한다.
-        try:
-            with fitz.open(str(pdf_path)) as doc:
-                # page는 1-indexed (API 경로), fitz는 0-indexed
-                page_idx = page - 1
-                if 0 <= page_idx < len(doc):
-                    # scale=2.0 → 144 DPI (기본 72 DPI × 2)
-                    pix = doc[page_idx].get_pixmap(matrix=fitz.Matrix(2.0, 2.0))
-                    raw = pix.tobytes("png")
-                    # 권에 회전이 저장돼 있으면(D-123) 모델도 바로 선 쪽을 봐야 한다
-                    from core.document import page_rotation
+    from ocr.image_utils import load_page_image_from_pdf
 
-                    rot = page_rotation(doc_dir, part_id, page)
-                    if rot:
-                        from io import BytesIO
-
-                        from PIL import Image
-
-                        from ocr.image_utils import rotate_page_image
-
-                        buf = BytesIO()
-                        rotate_page_image(Image.open(BytesIO(raw)), rot).save(buf, format="PNG")
-                        raw = buf.getvalue()
-                    return resize_for_llm(raw, max_long_side=2000)
-        except Exception:
+    try:
+        img = load_page_image_from_pdf(
+            str(library_path), doc_id, page, scale=2.0, part_id=part_id
+        )
+        if img is None:
             return None
-
-    return None
+        buf = BytesIO()
+        img.save(buf, format="PNG")
+        return resize_for_llm(buf.getvalue(), max_long_side=2000)
+    except Exception as e:  # noqa: BLE001 — 예전 계약: 실패는 None
+        logger.warning("쪽 이미지 렌더 실패 (%s %s p%s): %s", doc_id, part_id, page, e)
+        return None
 
 
 # ===========================================================================
@@ -1996,11 +1983,11 @@ async def api_delete_ocr_block_result(
     deleted_item = ocr_results.pop(index)
     data["ocr_results"] = ocr_results
 
+    from core.document import write_json_atomic
+
     try:
-        ocr_path.write_text(
-            _json.dumps(data, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        # 원자적 저장(D-069) — L2 OCR 결과는 다시 만들려면 OCR을 또 돌려야 한다.
+        write_json_atomic(ocr_path, data)
     except Exception as e:
         return JSONResponse({"error": f"OCR 파일 저장 실패: {e}"}, status_code=500)
 

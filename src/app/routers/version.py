@@ -31,6 +31,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app._state import _resolve_repo_path, get_library_path, require_repo_path
+from core.document import write_json_atomic
 from core.git_graph import (
     get_commit_file_content,
     get_commit_file_list,
@@ -514,10 +515,7 @@ async def api_import_interpretation_folder(files: list[UploadFile] = File(...)):
 
         # manifest는 파싱 성공본으로 최종 저장 (손상 업로드 방지)
         target_manifest = target_interp_path / "manifest.json"
-        target_manifest.write_text(
-            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        write_json_atomic(target_manifest, manifest)  # 원자적 저장(D-069)
 
         # dependency.json이 없는 구버전/부분 폴더를 위해 최소값 생성
         dependency_path = target_interp_path / "dependency.json"
@@ -534,10 +532,7 @@ async def api_import_interpretation_folder(files: list[UploadFile] = File(...)):
                 "last_checked": datetime.now(timezone.utc).isoformat(),
                 "dependency_status": "current",
             }
-            dependency_path.write_text(
-                json.dumps(fallback_dependency, ensure_ascii=False, indent=2) + "\n",
-                encoding="utf-8",
-            )
+            write_json_atomic(dependency_path, fallback_dependency)
 
         # .gitignore 자동 보강
         gitignore_path = target_interp_path / ".gitignore"
@@ -639,9 +634,7 @@ def _register_interp_in_library(
                     "path": f"interpretations/{interp_id}",
                 }
             )
-            manifest_path.write_text(
-                json.dumps(lib_manifest, ensure_ascii=False, indent=2) + "\n",
-                encoding="utf-8",
-            )
+            # 서고 manifest — 빈 파일이 되면 서고가 통째로 안 열린다(D-069)
+            write_json_atomic(manifest_path, lib_manifest)
     except Exception:
         pass

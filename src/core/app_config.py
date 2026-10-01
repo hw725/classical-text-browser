@@ -56,11 +56,13 @@ def save_app_config(config: dict) -> None:
 
     입력: config — 전체 설정 dict.
     """
+    # 함수 안에서 가져오는 이유: core.document는 GitPython을 읽는다. 앱 설정은 서버 기동
+    # 맨 앞에서 읽히므로 모듈 import 비용을 늘리지 않는다.
+    from core.document import write_json_atomic
+
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    CONFIG_FILE.write_text(
-        json.dumps(config, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    # 원자적 저장(D-069) — 설정이 빈 파일이 되면 «최근 서고»가 사라져 앱이 서고 없이 뜬다.
+    write_json_atomic(CONFIG_FILE, config)
 
 
 # ── 최근 서고 관리 ──────────────────────────────

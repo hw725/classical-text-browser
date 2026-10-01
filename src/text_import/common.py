@@ -10,11 +10,12 @@ HWP와 PDF 가져오기가 공유하는 L4 저장, 사이드카 데이터 관리
 
 from __future__ import annotations
 
-import json
 import logging
 import unicodedata
 from collections import Counter, defaultdict
 from pathlib import Path
+
+from core.document import write_json_atomic
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,9 @@ def save_punctuation_sidecar(
         "punctuation_marks": punctuation_marks,
         "hyeonto_annotations": hyeonto_annotations,
     }
-    file_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    # 원자적 저장(D-069) — 도중에 죽어도 예전 사이드카가 남는다. 형식은 예전과 같고
+    # 끝 줄바꿈 하나·LF만 달라진다(읽는 쪽은 json.loads라 영향 없음).
+    write_json_atomic(file_path, data)
     logger.info(
         "사이드카 저장: %s (표점 %d, 현토 %d)",
         file_path.name,
@@ -124,7 +127,7 @@ def save_formatting_sidecar(
             for t in taidu_marks
         ],
     }
-    file_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_json_atomic(file_path, data)  # 원자적 저장(D-069)
     logger.info("서식 사이드카 저장: %s (대두 %d)", file_path.name, len(taidu_marks))
     return file_path
 
