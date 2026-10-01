@@ -79,6 +79,21 @@ def _pytest_counts(out: str) -> dict[str, int]:
     return counts
 
 
+def _step_ok(name: str, code: int | str, counts: dict[str, int] | None) -> bool:
+    """단계 통과 판정. 입력: 단계 이름, 종료 코드, pytest 건수(pytest 단계만).
+
+    pytest 단계는 종료 코드 0만으로 통과가 아니다 — «passed가 1건 이상»이어야 한다.
+    수집만 하고 끝나거나(`--collect-only`) 전부 skipped여도 pytest는 0으로 끝나기 때문이다
+    (Codex 교차 리뷰 2026-10-01). 그 실행의 영수증이 «통과»로 남으면 시험이 돌지 않은 것을
+    증거로 삼게 된다.
+    """
+    if code != 0:
+        return False
+    if counts is not None:
+        return counts.get("passed", 0) > 0 and not counts.get("failed") and not counts.get("errors")
+    return True
+
+
 def _ruff_count(out: str) -> int | None:
     if "All checks passed" in out:
         return 0
@@ -117,6 +132,9 @@ def main() -> int:
     results: list[dict] = []
     with tempfile.TemporaryDirectory(prefix="ctb-receipt-cfg-") as cfg:
         env = dict(os.environ, CTB_CONFIG_DIR=cfg, PYTHONUTF8="1")
+        # 부모 셸의 PYTEST_ADDOPTS(예: --collect-only, -k)가 들어오면 영수증이 «무엇을
+        # 돌렸는가»를 거짓으로 적는다. 영수증의 명령은 위 목록 그대로여야 한다.
+        env.pop("PYTEST_ADDOPTS", None)
         for name, cmd in steps:
             print(f"[receipt] {name} …", flush=True)
             code, out, sec = _run(cmd, env)
@@ -127,7 +145,7 @@ def main() -> int:
                 entry["violations"] = _ruff_count(out)
             elif name == "doc_drift":
                 entry["mismatches"] = _drift_count(out)
-            entry["ok"] = code == 0
+            entry["ok"] = _step_ok(name, code, entry.get("counts"))
             if not entry["ok"]:
                 # 실패 원인을 영수증만 보고 짚을 수 있게 출력 꼬리를 남긴다.
                 entry["tail"] = out.splitlines()[-30:]

@@ -93,8 +93,21 @@ def test_load_page_image_matches_old_render(tmp_path, monkeypatch, page, expecte
     assert new is not None
     assert new == old
     # 크기도 회전을 따른다: 120×200pt × 2.0 → 240×400, 90·270이면 가로로 눕는다
-    w, h = Image.open(BytesIO(new)).size
+    img = Image.open(BytesIO(new)).convert("L")
+    w, h = img.size
     assert (w > h) == (expected_rot in (90, 270))
+    # 방향은 예전 구현과 견주는 것만으로는 못 지킨다 — 둘이 같은 rotate_page_image를 쓰므로
+    # 그 함수의 부호가 뒤집혀도 바이트는 같다(Codex 교차 리뷰 2026-10-01). 그래서 검은 네모
+    # (쪽 왼쪽 위, 렌더 좌표 중심 (35, 25))가 **시계 방향** 회전 뒤 있어야 할 자리를 따로 잰다.
+    W, H = 240, 400
+    x, y = 35, 25
+    where = {0: (x, y), 90: (H - 1 - y, x), 180: (W - 1 - x, H - 1 - y), 270: (y, W - 1 - x)}
+    wx, wy = where[expected_rot]
+    assert img.getpixel((wx, wy)) < 80, f"{expected_rot}°: 검은 네모가 ({wx},{wy})에 없다"
+    # 반대 방향(반시계)이었다면 올 자리는 비어 있어야 한다
+    if expected_rot in (90, 270):
+        ox, oy = where[360 - expected_rot]
+        assert img.getpixel((ox, oy)) > 100  # 검은 네모가 아니다(회색 띠 127은 허용)
 
 
 def test_load_page_image_missing_page_is_none(tmp_path, monkeypatch):

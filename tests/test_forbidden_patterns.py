@@ -11,12 +11,15 @@ CLAUDE.md·`docs/maintenance.md` 1장의 규칙은 산문으로만 있었다. �
 기준선에 예외를 다시 적는 것도 `test_baseline_stays_empty`가 막는다. 정말 예외가
 필요하면 기준선이 아니라 `_ALLOWED`(정본 함수가 사는 파일)에 이유와 함께 적는다.
 
-## 무엇을 보나 — 기계로 판정할 수 있는 넷만
+## 무엇을 보나 — 기계로 판정할 수 있는 다섯만
 
 키 — 규칙(CLAUDE.md 표) — AST 판정:
 
 - `write_text_json` — JSON 저장은 `write_json_atomic()`
-  — `.write_text(...)` 인자 안에 `.dumps(...)` 호출
+  — `.write_text(...)` 인자 안에 `dumps(...)` 호출, 또는 같은 함수에서 `dumps` 결과를
+  대입받은 이름을 넘김(`text = json.dumps(d); p.write_text(text)`)
+- `json_dump_open` — 같은 규칙. `with open(p, "w") as f` / `p.open("w")`로 연 핸들에
+  `json.dump(d, f)`. `os.fdopen(mkstemp…)` → `os.replace`(원자적 쓰기의 다른 꼴)는 보지 않는다
 - `get_pixmap` — 쪽 이미지는 `load_page_image_from_pdf`로
   — `.get_pixmap(...)` 호출, 허용 파일 밖
 - `glob_pdf` — PDF는 `resolve_part_pdf()`로
@@ -32,6 +35,12 @@ CLAUDE.md·`docs/maintenance.md` 1장의 규칙은 산문으로만 있었다. �
 - `glob_pdf`: `src/ocr/image_utils.py`(`resolve_part_pdf` — manifest를 못 읽을 때의
   이름 정렬 물러섬). `rglob`은 보지 않는다 — `cli/embed_folder.py`는 문헌이 아니라
   «PDF가 든 폴더»를 훑는 진입점이라 권(part) 개념이 없다.
+- `json_dump_open`: `src/ocr/ndlocr/ndl_parser.py`(NDL 원본을 그대로 들여온 파일,
+  `json_to_file`은 부르는 곳이 없다).
+
+**탐지 범위의 한계**(«0건»은 이 꼴들이 없다는 뜻이지 규칙 준수의 증명이 아니다):
+다른 함수에서 만든 문자열을 넘기는 경우, `open` 핸들을 변수로 돌려 쓰는 경우,
+변수에 담은 glob 패턴은 놓친다. `src/`만 훑는다(scripts·tests는 서고 파일을 쓰지 않는다).
 
 **보지 않는 것**(판정이 산문 판단에 기대는 것): `fitz.open()`의 `with`,
 `wrap_contents()` 선행, bbox 배율 2.0, innerHTML 이스케이프, `.bat` ASCII(이건
@@ -50,7 +59,13 @@ CLAUDE.md·`docs/maintenance.md` 1장의 규칙은 산문으로만 있었다. �
 - `get_pixmap` 1건(`llm_ocr._load_page_image`) → `ocr.image_utils.load_page_image_from_pdf(
   scale=2.0)`. 예전 구현도 `page_rotation`을 얹고 있었으므로 결과는 같아야 하고,
   `tests/test_llm_ocr_page_image.py`가 예전 구현을 떠 두고 권 회전 90 + 범위 회전 180·270·0
-  쪽에서 **최종 JPEG 바이트**를 견준다.
+  쪽에서 **최종 JPEG 바이트**를 견주고, 검은 네모가 시계 방향 회전 뒤 있어야 할 자리를
+  따로 잰다(둘이 같은 `rotate_page_image`를 쓰므로 바이트 비교만으로는 방향을 못 지킨다).
+- 같은 날 Codex 교차 리뷰가 탐지기의 빈틈(두 줄 꼴·`from json import dumps`·
+  `open("w")`+`json.dump`)을 짚었다. 넓히자 7건이 더 나와 함께 갚았다:
+  `src/core/annotation_dict_io.py`·`annotation_dict_match.py`·`annotation_types.py`·
+  `citation_mark.py` 각 1, `src/core/interpretation.py` 2(해석 저장소 파일 쓰기),
+  `src/ocr/pipeline.py` 1(L2 OCR 결과 저장, `json_dump_open`).
 
 ## 빨간불 확인 (maintenance §3 «빨간불만 증거»)
 
@@ -78,6 +93,9 @@ _SRC = _ROOT / "src"
 _ALLOWED: dict[str, frozenset[str]] = {
     "get_pixmap": frozenset({"src/ocr/image_utils.py", "src/export/text_layer_pdf.py"}),
     "glob_pdf": frozenset({"src/ocr/image_utils.py"}),
+    # NDL 원본(CC BY 4.0)을 그대로 들여온 파일. json_to_file은 이 저장소에서 부르는 곳이 없고,
+    # 상류 원문을 고치면 동기화 diff만 커진다 — 서고 파일을 쓰는 경로가 아니다.
+    "json_dump_open": frozenset({"src/ocr/ndlocr/ndl_parser.py"}),
 }
 
 # 기준선. **비어 있어야 한다**(2026-10-01에 10건을 모두 갚았다). (키, 파일) → 건수.
@@ -104,6 +122,59 @@ def _docstring_ids(tree: ast.AST) -> set[int]:
     return ids
 
 
+def _call_name(node: ast.AST) -> str | None:
+    """호출의 함수 이름 — `json.dumps`→"dumps", `from json import dumps`의 `dumps`→"dumps"."""
+    if isinstance(node, ast.Call):
+        if isinstance(node.func, ast.Attribute):
+            return node.func.attr
+        if isinstance(node.func, ast.Name):
+            return node.func.id
+    return None
+
+
+def _has_dumps(expr: ast.AST) -> bool:
+    return any(_call_name(sub) == "dumps" for sub in ast.walk(expr))
+
+
+def _dumps_names(scope: ast.AST) -> set[str]:
+    """이 범위(함수·모듈)에서 `.dumps(...)`가 든 식을 대입받은 이름들.
+
+    `text = json.dumps(d) + "\\n"` 다음 줄의 `p.write_text(text)`를 잡기 위해서다 —
+    한 줄 판정만 하면 이 두 줄짜리 꼴이 통째로 빠진다(Codex 교차 리뷰 2026-10-01, 실제로
+    src/core 다섯 곳이 이 꼴이었다).
+    """
+    names: set[str] = set()
+    for node in ast.walk(scope):
+        if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None:
+            if _has_dumps(node.value):
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                names.update(t.id for t in targets if isinstance(t, ast.Name))
+    return names
+
+
+def _open_for_write_names(scope: ast.AST) -> set[str]:
+    """`with open(p, "w") as f` / `with p.open("w") as f`의 f — 0바이트로 자른 뒤 쓰는 핸들.
+
+    `os.fdopen(fd, "w")`(mkstemp 임시 파일 → os.replace)은 원자적 쓰기의 한 꼴이라 넣지 않는다.
+    """
+    names: set[str] = set()
+    for node in ast.walk(scope):
+        if not isinstance(node, (ast.With, ast.AsyncWith)):
+            continue
+        for item in node.items:
+            call = item.context_expr
+            if _call_name(call) != "open" or not isinstance(item.optional_vars, ast.Name):
+                continue
+            consts = [*call.args, *(k.value for k in call.keywords if k.arg == "mode")]
+            if any(
+                isinstance(a, ast.Constant) and isinstance(a.value, str) and "w" in a.value
+                and len(a.value) <= 3
+                for a in consts
+            ):
+                names.add(item.optional_vars.id)
+    return names
+
+
 def _find_violations(source: str, rel: str) -> list[tuple[str, int]]:
     """한 파일의 소스에서 (키, 행) 목록을 돌려준다.
 
@@ -113,31 +184,51 @@ def _find_violations(source: str, rel: str) -> list[tuple[str, int]]:
     tree = ast.parse(source)
     skip = _docstring_ids(tree)
     found: list[tuple[str, int]] = []
+    seen: set[int] = set()  # 중첩 함수가 바깥 범위와 겹쳐 두 번 세지 않게
+
+    # 범위(모듈·함수)마다 «dumps를 담은 이름»과 «쓰기로 연 핸들»을 모아 판정한다.
+    funcs = (ast.FunctionDef, ast.AsyncFunctionDef)
+    scopes = [tree, *(n for n in ast.walk(tree) if isinstance(n, funcs))]
+    for scope in scopes:
+        dumped = _dumps_names(scope)
+        handles = _open_for_write_names(scope)
+        for node in ast.walk(scope):
+            if not isinstance(node, ast.Call) or id(node) in seen:
+                continue
+            name = _call_name(node)
+            args = [*node.args, *(k.value for k in node.keywords)]
+            if name == "write_text" and isinstance(node.func, ast.Attribute):
+                # 인자에 dumps 호출이 있거나 dumps 결과를 담은 이름을 넘기면
+                # «JSON을 write_text로»다.
+                if any(
+                    _has_dumps(a) or (isinstance(a, ast.Name) and a.id in dumped) for a in args
+                ):
+                    seen.add(id(node))
+                    found.append(("write_text_json", node.lineno))
+            elif name == "dump" and rel not in _ALLOWED["json_dump_open"]:
+                # json.dump(data, f) — f가 open(..., "w")로 연 핸들이면 write_text와 같은 위험.
+                fp = node.args[1] if len(node.args) > 1 else next(
+                    (k.value for k in node.keywords if k.arg == "fp"), None
+                )
+                if isinstance(fp, ast.Name) and fp.id in handles:
+                    seen.add(id(node))
+                    found.append(("json_dump_open", node.lineno))
+
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
             attr = node.func.attr
-            if attr == "write_text":
-                # 인자 어디에든 .dumps(...) 가 있으면 «JSON을 write_text로»다.
-                for arg in [*node.args, *(k.value for k in node.keywords)]:
-                    if any(
-                        isinstance(sub, ast.Call)
-                        and isinstance(sub.func, ast.Attribute)
-                        and sub.func.attr == "dumps"
-                        for sub in ast.walk(arg)
-                    ):
-                        found.append(("write_text_json", node.lineno))
-                        break
-            elif attr == "get_pixmap" and rel not in _ALLOWED["get_pixmap"]:
+            if attr == "get_pixmap" and rel not in _ALLOWED["get_pixmap"]:
                 found.append(("get_pixmap", node.lineno))
-            elif (
-                attr == "glob"
-                and rel not in _ALLOWED["glob_pdf"]
-                and node.args
-                and isinstance(node.args[0], ast.Constant)
-                and isinstance(node.args[0].value, str)
-                and _PDF_GLOB.match(node.args[0].value)
-            ):
-                found.append(("glob_pdf", node.lineno))
+            elif attr == "glob" and rel not in _ALLOWED["glob_pdf"]:
+                pattern = node.args[0] if node.args else next(
+                    (k.value for k in node.keywords if k.arg == "pattern"), None
+                )
+                if (
+                    isinstance(pattern, ast.Constant)
+                    and isinstance(pattern.value, str)
+                    and _PDF_GLOB.match(pattern.value)
+                ):
+                    found.append(("glob_pdf", node.lineno))
         elif (
             isinstance(node, ast.Constant)
             and isinstance(node.value, str)
@@ -177,6 +268,7 @@ def test_no_forbidden_patterns():
         "CLAUDE.md 「파일 다루기」 금지 패턴이 있다:\n  "
         + "\n  ".join(grown)
         + "\n\n  write_text_json → core.document.write_json_atomic()"
+        "\n  json_dump_open  → core.document.write_json_atomic()"
         "\n  get_pixmap      → ocr.image_utils.load_page_image_from_pdf()"
         "\n  glob_pdf        → ocr.image_utils.resolve_part_pdf()"
         "\n  localhost_url   → 127.0.0.1"
@@ -207,6 +299,32 @@ _CASES = [
     ('p.write_text(json.dumps(d), encoding="utf-8")', "src/x.py", ["write_text_json"]),
     ('p.write_text(text=json.dumps(d))', "src/x.py", ["write_text_json"]),
     ('p.write_text("plain")', "src/x.py", []),
+    # 두 줄 꼴·이름 import 꼴(Codex 교차 리뷰 2026-10-01 — 그 전 탐지기는 셋 다 놓쳤다)
+    (
+        'def f(p, d):\n    s = json.dumps(d) + "\\n"\n    p.write_text(s)\n',
+        "src/x.py",
+        ["write_text_json"],
+    ),
+    ("from json import dumps\np.write_text(dumps(d))", "src/x.py", ["write_text_json"]),
+    ('def f(p):\n    s = "plain"\n    p.write_text(s)\n', "src/x.py", []),
+    (
+        'def f(p, d):\n    with open(p, "w", encoding="utf-8") as fh:\n        json.dump(d, fh)\n',
+        "src/x.py",
+        ["json_dump_open"],
+    ),
+    (
+        'def f(p, d):\n    with p.open("w") as fh:\n        json.dump(d, fp=fh)\n',
+        "src/x.py",
+        ["json_dump_open"],
+    ),
+    # mkstemp → os.fdopen → os.replace 는 원자적 쓰기의 한 꼴이다(core/alignment.py)
+    (
+        'def f(fd, d):\n    with os.fdopen(fd, "w") as fh:\n        json.dump(d, fh)\n',
+        "src/x.py",
+        [],
+    ),
+    ('def f(p, d):\n    with open(p) as fh:\n        x = json.load(fh)\n', "src/x.py", []),
+    ('pdf = d.glob(pattern="*.pdf")', "src/x.py", ["glob_pdf"]),
     ("pix = page.get_pixmap()", "src/x.py", ["get_pixmap"]),
     ("pix = page.get_pixmap()", "src/ocr/image_utils.py", []),
     ('pdf = d.glob("*.PDF")[0]', "src/x.py", ["glob_pdf"]),
