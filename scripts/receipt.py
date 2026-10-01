@@ -132,9 +132,11 @@ def main() -> int:
                 # 실패 원인을 영수증만 보고 짚을 수 있게 출력 꼬리를 남긴다.
                 entry["tail"] = out.splitlines()[-30:]
             results.append(entry)
-            print(f"[receipt] {name}: exit={code} {sec}s "
-                  f"{entry.get('counts') or entry.get('violations') or entry.get('mismatches')}",
-                  flush=True)
+            # `or`로 이으면 0건(ruff 위반 0)이 거짓으로 읽혀 None이 찍힌다 — 키로 고른다.
+            summary = next(
+                (entry[k] for k in ("counts", "violations", "mismatches") if k in entry), None
+            )
+            print(f"[receipt] {name}: exit={code} {sec}s {summary}", flush=True)
 
     ok = all(r["ok"] for r in results)
     receipt = {
