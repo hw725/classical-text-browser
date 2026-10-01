@@ -8,7 +8,7 @@
     1. fast_tests        — `pytest -m "not slow"` (빠른 계층, slow 마커는 pyproject에 등록)
     2. ruff              — `ruff check src/ tests/`
     3. doc_drift         — `scripts/check_doc_drift.py`
-    4. forbidden_patterns — `tests/test_forbidden_patterns.py` (CLAUDE.md 금지 패턴 래칫)
+    4. forbidden_patterns — `tests/test_forbidden_patterns.py` (CLAUDE.md 금지 패턴, 위반 0)
 
 결과: `logs/receipts/<UTC>_verify.json` 에 {git_rev, git_dirty, 단계별 exit·수·초}.
 하나라도 실패하면 종료 코드 1.

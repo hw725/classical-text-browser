@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
-"""CLAUDE.md 「파일 다루기」 표의 금지 패턴이 **늘지 않는가** — 산문 규칙을 시험으로.
+"""CLAUDE.md 「파일 다루기」 표의 금지 패턴이 **하나도 없는가** — 산문 규칙을 시험으로.
 
 ## 왜 이 시험이 필요한가
 
 CLAUDE.md·`docs/maintenance.md` 1장의 규칙은 산문으로만 있었다. 그래서 규칙을 적은
 뒤에도 그 규칙을 어긴 코드가 남아 있었다(2026-10-01 감사 — `write_text(json.dumps)`
 셋, 허용 밖 `get_pixmap` 하나). 아무 검사도 그 자리를 부르지 않았기 때문이다.
-`test_lint_does_not_grow.py`와 같은 **래칫**이다: 지금 있는 위반은 기준선에 적고,
-**새 위반이 생기면 빨간불**, 갚았는데 기준선을 안 내리면 그것도 빨간불.
+처음에는 `test_lint_does_not_grow.py`와 같은 **래칫**(기준선 10건)으로 들였고, 같은 날
+10건을 모두 갚아 **기준선을 비웠다** — 이제 위반이 하나라도 생기면 빨간불이고,
+기준선에 예외를 다시 적는 것도 `test_baseline_stays_empty`가 막는다. 정말 예외가
+필요하면 기준선이 아니라 `_ALLOWED`(정본 함수가 사는 파일)에 이유와 함께 적는다.
 
 ## 무엇을 보나 — 기계로 판정할 수 있는 넷만
 
@@ -35,24 +37,27 @@ CLAUDE.md·`docs/maintenance.md` 1장의 규칙은 산문으로만 있었다. �
 `wrap_contents()` 선행, bbox 배율 2.0, innerHTML 이스케이프, `.bat` ASCII(이건
 `test_doc_drift.py`가 본다). 이 넷 중 하나라도 기계 판정을 얻으면 여기에 키를 더한다.
 
-## 기준선 — 2026-10-01, 고치지 않고 적었다(수정은 사람이 정한다)
+## 갚은 기록 — 2026-10-01 기준선 10건 → 0건
 
-- `write_text_json`: `src/text_import/common.py` 2(86·127행), `src/cli/read_book.py` 1(95행)
-  — 감사가 짚은 셋. 그리고 **감사의 grep이 놓친 여섯**(호출이 여러 줄이라 한 줄 grep에
-  `write_text`와 `json.dumps`가 함께 안 걸렸다): `src/app/routers/llm_ocr.py` 1(2000행,
-  `ocr_results` 저장), `src/app/routers/version.py` 3(517·537·642행, 가져오기 manifest·
-  의존 파일), `src/core/app_config.py` 1(60행, 앱 설정), `src/core/backup.py` 1(116행,
-  백업 메타). AST로 처음 돌렸을 때 이 여섯이 빨간불로 나왔다.
-- `get_pixmap`: `src/app/routers/llm_ocr.py` 1(396행 — `Matrix(2.0)`로 직접 렌더, 회전 미반영)
+- `write_text_json` 9건 → `core.document.write_json_atomic()`: `src/text_import/common.py` 2
+  (표점·서식 사이드카), `src/cli/read_book.py` 1(계획 초안), `src/app/routers/llm_ocr.py` 1
+  (`ocr_results` 저장), `src/app/routers/version.py` 3(가져오기 manifest·의존 파일·서고
+  manifest), `src/core/app_config.py` 1(앱 설정), `src/core/backup.py` 1(백업 메타).
+  셋은 감사의 grep이 짚었고 여섯은 놓쳤다(호출이 여러 줄이라 한 줄 grep에 `write_text`와
+  `json.dumps`가 함께 안 걸렸다 — AST가 처음 잡았다). 형식은 `indent=2`·`ensure_ascii=False`
+  그대로이고, 끝 줄바꿈이 없던 넷에 줄바꿈 하나가 붙고 Windows에서 CRLF였던 것이 LF가 된다.
+  읽는 쪽은 모두 `json.loads`다.
+- `get_pixmap` 1건(`llm_ocr._load_page_image`) → `ocr.image_utils.load_page_image_from_pdf(
+  scale=2.0)`. 예전 구현도 `page_rotation`을 얹고 있었으므로 결과는 같아야 하고,
+  `tests/test_llm_ocr_page_image.py`가 예전 구현을 떠 두고 권 회전 90 + 범위 회전 180·270·0
+  쪽에서 **최종 JPEG 바이트**를 견준다.
 
-## 빨간불 확인 (maintenance §3 «빨간불만 증거», 2026-10-01)
+## 빨간불 확인 (maintenance §3 «빨간불만 증거»)
 
-기준선에서 `("get_pixmap", "src/app/routers/llm_ocr.py")` 한 줄을 지우고 돌리자
-`test_forbidden_patterns_do_not_grow`가 «get_pixmap: src/app/routers/llm_ocr.py:
-1건 (기준선 0)»으로 **실패했다**(1 failed, 13 passed). 원복하니 14 passed. 탐지기
+래칫 시절(2026-10-01): 기준선에서 `("get_pixmap", "src/app/routers/llm_ocr.py")` 한 줄을
+지우자 «get_pixmap: src/app/routers/llm_ocr.py: 1건 (기준선 0)»으로 **실패했다**. 탐지기
 자체는 `test_detector_catches_and_ignores`가 양·음 표본으로 지킨다 — `_find_violations`의
-`write_text` 분기를 끄자 그 양성 표본 둘과 `test_baseline_is_not_stale`이 빨개졌다
-(3 failed). 원복 후 초록.
+`write_text` 분기를 끄자 그 양성 표본 둘이 빨개졌다.
 """
 
 from __future__ import annotations
@@ -75,18 +80,9 @@ _ALLOWED: dict[str, frozenset[str]] = {
     "glob_pdf": frozenset({"src/ocr/image_utils.py"}),
 }
 
-# 기준선. **내려도 되고 올리면 안 된다.** (키, 파일) → 건수.
-# 갚으면 그 줄을 지운다 — 안 지우면 test_baseline_is_not_stale 이 빨간불이다.
-_BASELINE: dict[tuple[str, str], int] = {
-    ("write_text_json", "src/text_import/common.py"): 2,
-    ("write_text_json", "src/cli/read_book.py"): 1,
-    # 아래 다섯 파일은 감사(grep 한 줄)가 놓친 것 — 호출이 여러 줄이라 AST가 처음 잡았다.
-    ("write_text_json", "src/app/routers/llm_ocr.py"): 1,
-    ("write_text_json", "src/app/routers/version.py"): 3,
-    ("write_text_json", "src/core/app_config.py"): 1,
-    ("write_text_json", "src/core/backup.py"): 1,
-    ("get_pixmap", "src/app/routers/llm_ocr.py"): 1,
-}
+# 기준선. **비어 있어야 한다**(2026-10-01에 10건을 모두 갚았다). (키, 파일) → 건수.
+# 여기에 줄을 더하면 test_baseline_stays_empty 가 빨간불이다 — 예외는 _ALLOWED 로.
+_BASELINE: dict[tuple[str, str], int] = {}
 
 _LOCALHOST_URL = re.compile(r"(?i)\b(?:https?|wss?)://localhost\b")
 _PDF_GLOB = re.compile(r"(?i)^\*\.pdf$")
@@ -168,8 +164,8 @@ def _scan() -> tuple[Counter, dict[tuple[str, str], list[int]]]:
     return counts, lines
 
 
-def test_forbidden_patterns_do_not_grow():
-    """(키, 파일)마다 위반이 기준선을 넘지 않아야 한다 — 넘으면 이번 변경이 만든 것."""
+def test_no_forbidden_patterns():
+    """src/ 어디에도 금지 패턴이 없어야 한다(기준선이 비었으므로 위반 0을 뜻한다)."""
     counts, lines = _scan()
     grown = [
         f"{key}: {rel}:{','.join(map(str, lines[(key, rel)]))} "
@@ -178,7 +174,7 @@ def test_forbidden_patterns_do_not_grow():
         if n > _BASELINE.get((key, rel), 0)
     ]
     assert not grown, (
-        "CLAUDE.md 「파일 다루기」 금지 패턴이 늘었다:\n  "
+        "CLAUDE.md 「파일 다루기」 금지 패턴이 있다:\n  "
         + "\n  ".join(grown)
         + "\n\n  write_text_json → core.document.write_json_atomic()"
         "\n  get_pixmap      → ocr.image_utils.load_page_image_from_pdf()"
@@ -187,15 +183,23 @@ def test_forbidden_patterns_do_not_grow():
     )
 
 
-def test_baseline_is_not_stale():
-    """갚았으면 기준선도 내린다 — 안 내리면 그만큼 다시 쌓일 수 있다."""
-    counts, _ = _scan()
-    stale = [
-        f"{key}: {rel} 기준선 {n} → 실제 {counts.get((key, rel), 0)}"
-        for (key, rel), n in sorted(_BASELINE.items())
-        if counts.get((key, rel), 0) < n
-    ]
-    assert not stale, "기준선이 실제보다 높다 — 고친 만큼 내린다:\n  " + "\n  ".join(stale)
+def test_baseline_stays_empty():
+    """기준선에 예외를 다시 적어 빨간불을 끄는 길을 막는다 — 위반 0이 계약이다."""
+    assert not _BASELINE, (
+        "금지 패턴 기준선은 비어 있어야 한다(2026-10-01 10건 상환). 위반은 고치고, "
+        "정본 함수 자체라면 _ALLOWED 에 이유와 함께 적는다:\n  "
+        + "\n  ".join(f"{k}: {r} {n}" for (k, r), n in sorted(_BASELINE.items()))
+    )
+
+
+def test_scanner_sees_src():
+    """훑기가 실제로 파일을 읽는가 — src/ 경로가 바뀌어 0개를 훑으면 «위반 0»은 거짓 초록이다."""
+    n = sum(1 for p in _SRC.rglob("*.py") if "__pycache__" not in p.parts)
+    assert n > 100, f"src/ 아래 .py가 {n}개뿐 — 훑는 경로가 맞는지 본다"
+    # 정본 함수 자리가 있어야 _ALLOWED 가 가리키는 대상이 실재한다
+    for rels in _ALLOWED.values():
+        for rel in rels:
+            assert (_ROOT / rel).is_file(), f"_ALLOWED 의 {rel} 이 없다"
 
 
 _CASES = [
