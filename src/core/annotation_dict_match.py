@@ -15,6 +15,8 @@
 import json
 from pathlib import Path
 
+from core.document import write_json_atomic
+
 # ──────────────────────────────────────
 # 참조 사전 저장소 관리
 # ──────────────────────────────────────
@@ -94,8 +96,7 @@ def register_reference_dict(
 
     file_path = ref_dir / filename
 
-    text = json.dumps(dictionary_data, ensure_ascii=False, indent=2) + "\n"
-    file_path.write_text(text, encoding="utf-8")
+    write_json_atomic(file_path, dictionary_data)  # 원자적 저장(D-069)
 
     return file_path
 

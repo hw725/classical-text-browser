@@ -21,6 +21,8 @@ from pathlib import Path
 
 import git
 
+from core.document import write_json_atomic
+
 logger = logging.getLogger(__name__)
 
 # 백업 메타데이터 파일 이름
@@ -113,10 +115,7 @@ def backup_library(
             "duration_sec": round(duration, 2),
             "exclude_git": exclude_git,
         }
-        (backup_path / _BACKUP_META).write_text(
-            json.dumps(meta, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        write_json_atomic(backup_path / _BACKUP_META, meta)  # 원자적 저장(D-069)
 
         result.update(
             {

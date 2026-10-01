@@ -12,6 +12,8 @@ book_title, grammar, note)을 제공하고,
 import json
 from pathlib import Path
 
+from core.document import write_json_atomic
+
 # ──────────────────────────────────────
 # 기본 프리셋 경로
 # ──────────────────────────────────────
@@ -54,8 +56,7 @@ def _save_work_data(work_path: str | Path, work_data: dict):
     """서고별 설정 파일을 저장한다."""
     custom_path = _work_types_path(work_path)
     custom_path.parent.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(work_data, ensure_ascii=False, indent=2) + "\n"
-    custom_path.write_text(text, encoding="utf-8")
+    write_json_atomic(custom_path, work_data)  # 원자적 저장(D-069)
 
 
 # ──────────────────────────────────────

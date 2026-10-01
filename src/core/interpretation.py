@@ -29,6 +29,7 @@ from pathlib import Path
 
 import git
 
+from core.document import write_json_atomic
 from core.repo_id import REPO_ID_PATTERN
 
 # 해석 저장소 ID 패턴 — 단일 진실원은 core/repo_id.py (기존 이름은 하위 호환 별칭)
@@ -771,16 +772,16 @@ def save_layer_content(
     # 디렉토리 생성
     file_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if file_path.suffix == ".json":
-        if isinstance(content, dict):
-            text = json.dumps(content, ensure_ascii=False, indent=2) + "\n"
-        else:
-            text = str(content)
+    if file_path.suffix == ".json" and isinstance(content, dict):
+        # 원자적 저장(D-069) — 해석 저장소 L5~L7 JSON이 빈 파일로 남지 않게.
+        write_json_atomic(file_path, content)
     else:
-        # 텍스트 파일: CRLF → LF 정규화
-        text = str(content).replace("\r\n", "\n")
-
-    file_path.write_text(text, encoding="utf-8")
+        if file_path.suffix == ".json":
+            text = str(content)
+        else:
+            # 텍스트 파일: CRLF → LF 정규화
+            text = str(content).replace("\r\n", "\n")
+        file_path.write_text(text, encoding="utf-8")
 
     relative_path = file_path.relative_to(interp_path).as_posix()
     return {
@@ -978,8 +979,7 @@ def save_page_notes(
         "part_id": part_id,
         "entries": entries,
     }
-    text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
-    file_path.write_text(text, encoding="utf-8")
+    write_json_atomic(file_path, data)  # 원자적 저장(D-069)
 
     relative_path = file_path.relative_to(interp_path).as_posix()
     return {

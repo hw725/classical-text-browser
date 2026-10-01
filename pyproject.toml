@@ -191,6 +191,7 @@ connectome = [
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=1.3.0",
+    "pytest-timeout>=2.4.0",
     "ruff>=0.5.0",
 ]
 
@@ -213,6 +214,14 @@ select = ["E", "F", "I", "W"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# 빠른 계층: `uv run python -m pytest -m "not slow"`. slow = 한 건 20초 이상(2026-10-01 --durations 실측:
+# test_embed_folder_resume 5건 57~62초, test_lite_mode_api 2건 28·32초).
+markers = [
+    "slow: 한 건 20초 이상 — 빠른 계층(-m \"not slow\")에서 빠진다",
+]
+# pytest-timeout: 멈춘 시험이 무한 대기하지 않게. slow 아닌 시험의 최장이 약 15초(+setup 5초)라
+# 120초면 6배 여유다. slow 시험(최장 62초)도 이 안에 든다.
+timeout = 120
 
 # ── PyTorch CUDA 인덱스 설정 ──
 # torch/torchvision은 CUDA 빌드를 PyTorch 전용 인덱스에서 가져온다.

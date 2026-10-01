@@ -92,7 +92,10 @@ def cmd_read(args) -> int:
             print(f"계획을 만들지 못했습니다: {meta.get('error')}")
             return 1
         out = Path(args.plan or f"{doc_id}_plan.json")
-        out.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
+        from core.document import write_json_atomic
+
+        # 원자적 저장(D-069) — 사용자가 손으로 고칠 계획 파일이라 반쯤 쓴 채 남으면 안 된다.
+        write_json_atomic(out, plan)
         print(f"계획 초안을 저장했습니다: {out}  (모델 {meta.get('provider')}:{meta.get('model')})")
         for u in meta["unsupported"]:
             print(f"  옮기지 못한 말 — {u['said']}: {u['why']}")

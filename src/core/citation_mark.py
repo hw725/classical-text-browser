@@ -21,6 +21,8 @@ from pathlib import Path
 
 from jsonschema import validate
 
+from core.document import write_json_atomic
+
 # ──────────────────────────────────────
 # 스키마 로드 (모듈 레벨 캐시)
 # ──────────────────────────────────────
@@ -105,8 +107,7 @@ def save_citation_marks(
     file_path = _citation_mark_file_path(interp_path, part_id, page_num)
     file_path.parent.mkdir(parents=True, exist_ok=True)
 
-    text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
-    file_path.write_text(text, encoding="utf-8")
+    write_json_atomic(file_path, data)  # 원자적 저장(D-069)
 
     return file_path
 
