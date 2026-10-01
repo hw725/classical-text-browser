@@ -21,6 +21,9 @@ import pytest
 
 from cli.embed_folder import PaperTask, _process_one
 
+# 다섯 시험이 각 약 57~62초(2026-10-01 `--durations` 실측, 합 약 293초) — 빠른 계층에서 뺀다.
+pytestmark = pytest.mark.slow
+
 
 class FakePipeline:
     """run_page()가 불린 쪽을 기록하고 최소한의 L2를 쓴다.

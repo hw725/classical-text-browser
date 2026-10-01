@@ -391,6 +391,8 @@ def test_batch_follows_engine_plan_per_page(batch_ready, monkeypatch):
     assert events[-1]["processed"] == 4
 
 
+# 약 28초(2026-10-01 `--durations` 실측) — 빠른 계층에서 뺀다.
+@pytest.mark.slow
 def test_batch_warns_on_hangul_incapable_engine(batch_ready):
     """한글을 인식하지 못하는 엔진을 고르면 시작 시점에 경고해야 한다.
 
@@ -487,6 +489,8 @@ def test_batch_embeds_pdf_automatically(batch_ready):
     assert r.json()["size_bytes"] > 0
 
 
+# 약 32초(2026-10-01 `--durations` 실측) — 빠른 계층에서 뺀다.
+@pytest.mark.slow
 def test_embedded_download_keeps_original_filename(isolated_app):
     """내려받는 텍스트 레이어 PDF는 원본 파일 이름을 그대로 물려받아야 한다.
 
