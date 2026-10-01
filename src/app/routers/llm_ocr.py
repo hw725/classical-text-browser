@@ -384,7 +384,10 @@ def _load_page_image(doc_id: str, page: int, part_id: str | None = None) -> byte
     # LLM에 가는 이미지가 달라진다. 어차피 resize_for_llm이 긴 변 2000px로 줄인다.
     # 같은 결과임은 tests/test_llm_ocr_page_image.py가 예전 구현과 바이트로 견준다.
     # 예전 구현은 이 단계 전체(회전 읽기 포함)를 try로 감싸 None을 돌려줬다 — 호출자가 None을
-    # «이미지 없음»으로 다루므로 그 계약은 지키되, 조용히 삼키지 않도록 경고는 남긴다.
+    # «이미지 없음»으로 다루므로 그 계약은 지킨다. 경고가 남는 것은 정본 함수 **밖으로** 나온
+    # 예외(manifest를 못 읽어 page_rotation이 던지는 경우 등)뿐이다. PDF 열기·렌더 실패는
+    # load_page_image_from_pdf가 안에서 None으로 삼키므로 여기서는 «없는 쪽»과 구별되지 않는다
+    # (Codex 교차 리뷰 2026-10-01 지적 — 정본 함수의 관측성은 별도 과제).
     from io import BytesIO
 
     from ocr.image_utils import load_page_image_from_pdf

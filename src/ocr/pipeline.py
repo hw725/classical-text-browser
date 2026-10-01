@@ -655,8 +655,11 @@ class OcrPipeline:
 
             data["ocr_results"] = merged_results
 
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        # 원자적 저장(D-069) — open("w")는 먼저 0바이트로 자른다. L2 OCR 결과가 빈 파일로
+        # 남으면 그 쪽은 OCR을 다시 돌려야 한다. 함수 안 import는 ocr → core 의존을 늦게 맺으려고.
+        from core.document import write_json_atomic
+
+        write_json_atomic(Path(output_path), data)
 
         logger.info(f"L2 OCR 결과 저장: {output_path}")
         return str(output_path)

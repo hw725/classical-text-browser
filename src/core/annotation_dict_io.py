@@ -7,11 +7,11 @@
 가져오기 전략: headword 기반 매칭 → 병합(source_references/related_terms 합집합).
 """
 
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 
 from core.annotation import _gen_annotation_id, load_annotations, save_annotations
+from core.document import write_json_atomic
 
 # ──────────────────────────────────────
 # 내보내기 (Export)
@@ -149,8 +149,7 @@ def save_export(
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     file_path = exports_dir / f"dictionary_{timestamp}.json"
 
-    text = json.dumps(dictionary_data, ensure_ascii=False, indent=2) + "\n"
-    file_path.write_text(text, encoding="utf-8")
+    write_json_atomic(file_path, dictionary_data)  # 원자적 저장(D-069)
 
     return file_path
 
