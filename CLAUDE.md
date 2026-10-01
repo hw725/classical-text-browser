@@ -248,6 +248,15 @@ src/app/
 - 테스트를 작성했으면 실행해서 통과하는지 확인하라.
 - 「될 것 같다」로 끝내지 말고, 실제로 동작하는 것을 보여줘라.
 
+## 에이전트 작업 계약 (2026-10-01)
+1. **추측하지 말고 원본 코드를 읽는다.** 이 문서의 표·요약은 위치를 좁혀 줄 뿐 근거가 아니다(기능 맵은 추후).
+2. **완료 보고에는 영수증을 붙인다** — `uv run python scripts/receipt.py`가 빠른 계층 pytest(`-m "not slow"`)·ruff·
+   `check_doc_drift`·금지 패턴(`tests/test_forbidden_patterns.py`)을 돌려 `logs/receipts/<UTC>_verify.json`을 쓴다.
+   그 경로와 단계별 요약을 보고에 옮긴다. 영수증 없는 «완료»는 완료가 아니다.
+3. **판정자가 없는 작업은 제안만 한다** — 판독 확정(L4)·이체자 승인·편성 경계 확정·시각 품질은 사람이 정한다.
+4. **산문 규칙이 시험으로 옮겨지면 산문을 줄인다.** 위 「파일 다루기」 표의 네 줄(write_json_atomic·
+   get_pixmap·glob pdf·localhost)은 `tests/test_forbidden_patterns.py`가 지킨다 — 새 규칙도 시험이 먼저다.
+
 ## Git 커밋 규칙
 형식: <타입>: <설명>
 타입: feat / fix / data / docs / refactor / test
