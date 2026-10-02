@@ -36,6 +36,7 @@ function _renderOcrEnginePlan() {
   if (!here) {
     el.hidden = true;
     el.innerHTML = "";
+    _syncOrientWithPlan();
     return;
   }
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -48,6 +49,34 @@ function _renderOcrEnginePlan() {
     `<button id="ocr-batch-plan-clear" class="text-btn text-btn-sm" type="button" title="계획을 지웁니다">지우기</button>${rows}${mixed}`;
   el.hidden = false;
   document.getElementById("ocr-batch-plan-clear")?.addEventListener("click", () => setOcrEnginePlan(null));
+  document.getElementById("ocr-batch-use-plan")?.addEventListener("change", _syncOrientWithPlan);
+  _syncOrientWithPlan();
+}
+
+/**
+ * «작업 계획대로»가 켜져 있으면 «돌아간 쪽은 세워서»를 잠근다 (2026-10-02 사용자 지적).
+ *
+ * 왜 이렇게 하는가:
+ *   두 가지가 같은 일(쪽마다 회전 정하기)을 따로 한다. 계획은 ① 자동 스캔으로 방향을 재고
+ *   사람이 ③에서 확인해 「적용」으로 회전을 저장했다. 그 뒤 «세워서»가 OCR 직전에 또 재면
+ *   ⓐ 같은 일을 두 번 묻고 ⓑ 계획이 **가로쓰기 구간**으로 정한 쪽은 글줄이 가로라 투영이
+ *   «누웠다»로 보아 90° 회전을 제안한다 — 계획과 정면으로 부딪친다. ⓒ 쪽 범위를 [최소, 최대]로
+ *   넘기므로 계획이 건너뛰기로 한 쪽까지 잰다. 그래서 계획이 걸려 있는 동안은 회전을 계획에 맡긴다.
+ */
+function _syncOrientWithPlan() {
+  const orient = document.getElementById("ocr-batch-orient");
+  if (!orient) return;
+  const planOn = !!document.getElementById("ocr-batch-use-plan")?.checked && !!ocrEnginePlan &&
+    ocrEnginePlan.docId === viewerState.docId && ocrEnginePlan.partId === viewerState.partId;
+  orient.disabled = planOn;
+  const label = orient.closest("label");
+  if (label) {
+    if (label.dataset.titleOrig == null) label.dataset.titleOrig = label.title || "";
+    label.title = planOn
+      ? "작업 계획이 회전을 이미 정했습니다(「말로 지시」 ③ 적용). 계획대로 돌 때는 다시 재지 않습니다."
+      : label.dataset.titleOrig;
+    label.style.opacity = planOn ? "0.5" : "";
+  }
 }
 
 const ocrState = {
@@ -874,7 +903,7 @@ async function _runPartOcr() {
   if (orientChecked && typeof autoOrientForOcr !== "function") {
     showToast("방향 잡기 코드(pdf-renderer.js)를 불러오지 못했습니다 — 회전 없이 OCR합니다", "warning");
   }
-  const orient = orientChecked && typeof autoOrientForOcr === "function";
+  let orient = orientChecked && typeof autoOrientForOcr === "function";
   let pages = null;
   if (rawPages) {
     pages = typeof parsePageRange === "function" ? parsePageRange(rawPages, total || 100000) : null;
@@ -890,6 +919,10 @@ async function _runPartOcr() {
     ocrEnginePlan.partId === partId &&
     !!document.getElementById("ocr-batch-use-plan")?.checked;
   let enginePlan = null;
+  // 계획대로 돌면 회전은 계획이 정했다 — «돌아간 쪽은 세워서»로 다시 재지 않는다(_syncOrientWithPlan 참고).
+  // 체크 상자를 잠가 두지만, 잠그기 전에 켜 둔 값이 남아 있을 수 있어 여기서도 막는다.
+  const orientSkippedForPlan = usePlan && orient;
+  if (usePlan) orient = false;
   if (usePlan) {
     // writing: 말로 작업 지시(D-131)의 계획은 구간마다 쓰기 방향이 다르다(세로·가로가 섞인 책)
     enginePlan = ocrEnginePlan.ranges.map((r) => ({
@@ -921,6 +954,7 @@ async function _runPartOcr() {
           : "이미 결과가 있는 쪽은 건너뛰고, ") +
         "레이아웃이 없는 쪽은 쪽 전면 1블록으로 돌립니다.\n" +
         (orient ? "먼저 옆으로 누운 쪽을 찾아 구간으로 보이고, 확인하면 회전을 저장한 뒤 OCR합니다.\n" : "") +
+        (orientSkippedForPlan ? "회전은 작업 계획에 저장된 대로 씁니다(«돌아간 쪽은 세워서»는 건너뜁니다).\n" : "") +
         "계속할까요?",
     )
   )

@@ -132,9 +132,31 @@ async function loadPageText(docId, partId, pageNum) {
 
     // 파일 정보 표시 (파일명만)
     const fileName = data.file_path.split("/").pop();
-    document.getElementById("text-file-info").textContent = fileName;
+    const info = document.getElementById("text-file-info");
+    info.textContent = fileName;
+    info.title = "";
 
     _updateSaveStatus(data.exists ? "saved" : "new");
+
+    // 이 편집기는 «교정을 얹기 전» 확정본을 보여 준다. 교정 탭에서 고친 쪽이면 그렇다고 알린다
+    // (2026-10-02 — 교정한 글이 여기서 교정 전 글로 보여 «되돌아갔다»로 읽혔다).
+    try {
+      const cr = await fetch(
+        `/api/documents/${docId}/pages/${pageNum}/corrections?part_id=${partId}`,
+      );
+      if (cr.ok && viewerState.docId === docId && viewerState.partId === partId && viewerState.pageNum === pageNum) {
+        const cd = await cr.json();
+        const n = (cd.corrections || []).length;
+        if (n > 0 || cd.corrected_text != null) {
+          info.textContent = `${fileName} · 교정 전 글 (교정 ${n}건은 교정 탭에)`;
+          info.title =
+            "여기 보이는 것은 교정을 얹기 전의 확정본입니다. 교정한 글은 교정 탭에서 보이고, " +
+            "번역·표점·내보내기는 교정한 글을 씁니다. 여기서 고쳐 저장해도 교정은 새 글 위로 옮겨 남습니다.";
+        }
+      }
+    } catch (_e) {
+      // 알림만 못 띄울 뿐 편집에는 지장이 없다
+    }
   } catch (err) {
     console.error("텍스트 로드 실패:", err);
     _updateSaveStatus("error");
@@ -215,9 +237,49 @@ function _updateSaveStatus(status) {
  */
 // eslint-disable-next-line no-unused-vars
 function checkUnsavedChanges() {
-  if (!editorState.isDirty) return true;
-  return confirm("수정된 내용이 저장되지 않았습니다.\n저장하지 않고 이동하시겠습니까?");
+  const pending = _unsavedEditorNames();
+  if (pending.length === 0) return true;
+  const ok = confirm(
+    `저장하지 않은 수정이 있습니다: ${pending.join(", ")}\n저장하지 않고 이동하시겠습니까?`,
+  );
+  if (ok) {
+    // 버리기로 했다 — 표시를 내린다. 안 내리면 쪽을 옮길 때마다 같은 것을 또 묻고, 교정 탭에
+    // 돌아왔을 때 다른 쪽의 편집을 이 쪽 것으로 착각한다
+    if (typeof correctionState !== "undefined") correctionState.isDirty = false;
+    if (typeof layoutState !== "undefined") layoutState.isDirty = false;
+  }
+  return ok;
 }
+
+/**
+ * 저장하지 않은 편집이 남은 편집기의 이름 목록.
+ *
+ * 왜 이렇게 하는가 (2026-10-02):
+ *   예전에는 열람 탭 텍스트 편집기만 보았다. 교정·표점·현토·레이아웃 편집기는 쪽을 옮기면
+ *   새 쪽을 불러오면서 저장 안 한 편집을 **경고 없이** 버렸다 — «고쳤는데 되돌아갔다»의
+ *   또 다른 길이다. 편집기마다 isDirty를 따로 갖고 있으므로 여기서 모두 본다.
+ *   (각 편집기는 다른 파일에 있다. 파일이 안 읽혔으면 typeof로 건너뛴다.)
+ */
+function _unsavedEditorNames(closing = false) {
+  // 쪽을 옮길 때 실제로 버려지는 것만 묻는다. 교정·레이아웃은 쪽에 매인 편집이라 버려진다 —
+  // 탭이 꺼져 있어도 다시 켤 때 새 쪽을 불러 덮는다. 표점·현토는 단위(unit) 단위라 쪽을 옮겨도
+  // 버려지지 않는다 — 물으면 거짓 경보가 된다(2026-10-02 검토 지적). 창을 닫을 때(closing)는
+  // 무엇이든 사라지므로 모두 본다.
+  const names = [];
+  if (editorState.isDirty) names.push("텍스트");
+  if (typeof correctionState !== "undefined" && correctionState.isDirty) names.push("교정");
+  if (typeof layoutState !== "undefined" && layoutState.isDirty) names.push("레이아웃");
+  if (closing && typeof punctState !== "undefined" && punctState.isDirty) names.push("표점");
+  if (closing && typeof hyeontoState !== "undefined" && hyeontoState.isDirty) names.push("현토");
+  return names;
+}
+
+// 창·탭을 닫거나 새로 고칠 때도 같은 것을 묻는다(브라우저가 제 문구로 묻는다).
+window.addEventListener("beforeunload", (e) => {
+  if (_unsavedEditorNames(true).length === 0) return;
+  e.preventDefault();
+  e.returnValue = "";
+});
 
 
 /**

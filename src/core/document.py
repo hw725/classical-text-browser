@@ -17,6 +17,7 @@ platform-v7.md 섹션 10.1의 구조를 따른다:
 
 import difflib
 import json
+import logging
 import os
 import re
 import shutil
@@ -532,14 +533,211 @@ def save_page_text(
 
     # LF 줄바꿈으로 통일 (Windows CRLF → LF)
     normalized_text = text.replace("\r\n", "\n")
-    text_path.write_text(normalized_text, encoding="utf-8")
+    old_text = text_path.read_text(encoding="utf-8") if text_path.exists() else None
+
+    # 이 쪽에 교정 기록이 있으면 새 글 위로 옮겨 붙인다 (D-133, 2026-10-02 사고).
+    # 확정본을 다시 쓰는 길(OCR 채우기·텍스트레이어 가져오기·LLM 교정 적용·일괄 교정·
+    # 열람 탭 저장)은 모두 이 함수를 지나는데, 예전에는 교정 파일을 그대로 두었다.
+    # 교정은 «옛 글의 몇 번째 글자»를 가리키므로 글이 바뀌면 조용히 안 먹거나,
+    # 저장된 교정본(corrected_text)이 새 글을 통째로 가렸다.
+    #
+    # **글을 쓰기 전에** 계산한다. 교정 파일이 깨져 있으면 옮기지 못한 채로 알리고 글은 쓴다 —
+    # 쓰고 나서 실패하면 글만 바뀌고 교정은 옛 자리에 남은 채 일괄 작업이 권 중간에 멈춘다
+    # (2026-10-02 검토 지적).
+    plan = None
+    rebase_error = None
+    if old_text is not None and old_text != normalized_text:
+        try:
+            plan = _plan_corrections_rebase(doc_path, part_id, page_num, old_text, normalized_text)
+        except Exception as e:  # noqa: BLE001 — 교정 파일 문제로 확정본 쓰기를 막지 않는다
+            rebase_error = f"{type(e).__name__}: {e}"
+            logging.getLogger(__name__).warning(
+                "교정 기록을 새 글 위로 옮기지 못했습니다(%s %s쪽): %s", part_id, page_num, e
+            )
+
+    # newline="" — Windows에서 write_text가 LF를 CRLF로 바꿔 쓰지 않게 한다
+    with open(text_path, "w", encoding="utf-8", newline="") as f:
+        f.write(normalized_text)
+
+    rebased = None
+    if plan is not None:
+        try:
+            save_page_corrections(doc_path, part_id, page_num, plan["data"])
+            rebased = plan["summary"]
+        except Exception as e:  # noqa: BLE001
+            rebase_error = f"{type(e).__name__}: {e}"
+            logging.getLogger(__name__).warning("옮긴 교정 기록을 쓰지 못했습니다: %s", e)
 
     relative_path = text_path.relative_to(doc_path).as_posix()
-    return {
+    result = {
         "status": "saved",
         "file_path": relative_path,
         "size": len(normalized_text.encode("utf-8")),
     }
+    if rebased:
+        result["corrections_rebased"] = rebased
+    if rebase_error:
+        result["corrections_rebase_error"] = rebase_error
+    return result
+
+
+def _hunks(a: str, b: str) -> list[tuple[int, int, str]]:
+    """diff(a → b)의 바뀐 구간들. 출력: [(a 시작, a 끝, b의 글)] — a 좌표, 겹치지 않고 순서대로."""
+    sm = difflib.SequenceMatcher(None, a, b, autojunk=False)
+    return [(i1, i2, b[j1:j2]) for tag, i1, i2, j1, j2 in sm.get_opcodes() if tag != "equal"]
+
+
+def _hunks_conflict(x: tuple, y: tuple) -> bool:
+    """두 구간(옛 글 좌표)이 같은 자리를 건드리는가.
+
+    범위끼리 겹치거나, 같은 자리에 둘 다 넣거나, 한쪽이 넣은 자리가 다른 쪽 범위 **안**이면 겹친다.
+    넣은 자리가 범위의 경계(앞·뒤)이면 겹치지 않는다 — 이웃한 고침은 둘 다 산다.
+    """
+    (a1, b1), (a2, b2) = x[:2], y[:2]
+    if a1 == b1 and a2 == b2:
+        return a1 == a2
+    if a1 == b1:
+        return a2 < a1 < b2
+    if a2 == b2:
+        return a1 < a2 < b1
+    return max(a1, a2) < min(b1, b2)
+
+
+def _three_way(base: str, human: str, machine: str) -> str:
+    """옛 글(base)에서 사람 판(human)과 기계 판(machine)을 합친다 — 글자 단위 3-way 병합.
+
+    출력: 합친 글(새 교정본).
+    규칙:
+        - 한쪽만 고친 자리는 그 고침을 쓴다(사람이 안 건드린 자리의 기계 고침이 들어온다).
+        - 둘이 같은 자리를 건드렸으면 그 자리 묶음 전체를 **사람 판**으로 쓴다 — 사람이 그 안에서
+          손대지 않은 옛 글자도 사람 판에 있는 그대로 남는다(예전 구현은 넓힌 범위를 사람이 바꾼
+          조각으로만 채워 그 글자를 지웠다, 2026-10-02 검토 지적).
+        - 둘이 똑같이 고쳤으면 한 번만 쓴다(같은 글자를 둘 다 넣으면 두 번 들어가던 것).
+        - 같은 자리에 **서로 다른 글을 넣기만** 했으면 겹친 것이 아니다 — 둘 다 넣는다. 기계 글이
+          앞, 사람 글이 뒤다(사람이 넣은 글은 뒤따르는 원문 글자에 붙는다). 예: 기계가 쪽 맨 앞에
+          «序» 줄을 더하고 사람이 첫 글자 앞에 «文化甲戌»을 넣었으면 «序\\n文化甲戌春…».
+        - 옛 글이 **비어 있으면** 사람 판이 통째로 이긴다 — 빈 쪽을 사람이 옮겨 적은 뒤 OCR이 채우면
+          두 글이 겹쳐 붙으면 안 된다.
+    """
+    if not base:
+        return human if human else machine
+    hs = [(a, b, r, "h") for a, b, r in _hunks(base, human)]
+    ms = [(a, b, r, "m") for a, b, r in _hunks(base, machine)]
+    allh = sorted(hs + ms, key=lambda t: (t[0], t[1]))
+    out: list[str] = []
+    pos = 0
+    i = 0
+    while i < len(allh):
+        cluster = [allh[i]]
+        lo, hi = allh[i][0], allh[i][1]
+        j = i + 1
+        while j < len(allh) and any(_hunks_conflict(allh[j], c) for c in cluster):
+            cluster.append(allh[j])
+            lo, hi = min(lo, allh[j][0]), max(hi, allh[j][1])
+            j += 1
+        out.append(base[pos:lo])
+
+        def version(src: str, lo=lo, hi=hi, cluster=cluster) -> str:
+            seg, p = [], lo
+            for a, b, r, s in cluster:
+                if s != src:
+                    continue
+                seg.append(base[p:a])
+                seg.append(r)
+                p = b
+            seg.append(base[p:hi])
+            return "".join(seg)
+
+        srcs = {c[3] for c in cluster}
+        if srcs == {"m"}:
+            out.append(version("m"))
+        elif srcs == {"h"}:
+            out.append(version("h"))
+        else:
+            hv, mv = version("h"), version("m")
+            if hv == mv:
+                out.append(hv)  # 같은 고침 — 한 번만
+            elif all(c[0] == c[1] for c in cluster):
+                out.append(mv + hv)  # 같은 자리에 넣기만 했다 — 둘 다(기계 앞, 사람 뒤)
+            else:
+                out.append(hv)  # 겹치면 사람 판
+        pos = hi
+        i = j
+    out.append(base[pos:])
+    return "".join(out)
+
+
+def _plan_corrections_rebase(
+    doc_path: Path, part_id: str, page_num: int, old_base: str, new_base: str
+) -> dict | None:
+    """확정본이 옛 글 → 새 글로 바뀔 때, 사람 교정을 새 글 위로 옮긴 교정 파일 내용을
+    만든다(쓰지 않는다).
+
+    출력: {"data": 새 교정 파일 내용, "summary": {kept, history}} 또는 None(옮길 것이 없다).
+
+    방법: 사람이 본 교정본(저장된 corrected_text, 없으면 교정 적용) = 사람 판,
+    새 확정본 = 기계 판으로 `_three_way` 병합 → 새 교정본. 교정 목록은
+    diff(새 확정본 → 새 교정본)로 다시 만들고, 옛 교정의 유형·비고는 **자리와
+    교정문이 맞는** 옛 항목에서 옮겨 온다(교정문만 보면 지우기 «»가 모두 첫
+    항목의 유형을 물려받는다).
+    옛 글에 맞지 않는 항목(일괄 교정의 «이미 본문에 반영함» 기록, 낡은 항목)은
+    지우지 않고 **기록으로** 남긴다 — char_index를 비워 다시 적용되지 않게 한다
+    (새 글의 엉뚱한 자리에 우연히 맞아 두 번 적용되는 것을 막는다).
+    블록·행 좌표 교정(옛 형식)은 자리를 옮길 수 없어 그대로 둔다.
+    """
+    corr_path = _corrections_file_path(doc_path, part_id, page_num)
+    if not corr_path.exists():
+        return None
+    data = json.loads(corr_path.read_text(encoding="utf-8"))
+    corrections = data.get("corrections") or []
+    stored = data.get("corrected_text")
+    flat = [c for c in corrections if c.get("block_id") is None and c.get("line") is None]
+    others = [c for c in corrections if not (c.get("block_id") is None and c.get("line") is None)]
+    if not flat and stored is None:
+        return None
+
+    def applies(c: dict) -> bool:
+        i, o = c.get("char_index"), c.get("original_ocr") or ""
+        return i is not None and old_base[i : i + len(o)] == o
+
+    live = [c for c in flat if applies(c)]
+    history = [{**c, "char_index": None} for c in flat if not applies(c)]
+
+    human = stored if stored is not None else _apply_corrections_to_text(old_base, live)
+    new_human = _three_way(old_base, human, new_base)
+
+    # 옛 자리 → 새 자리 (메타데이터를 옮길 짝 찾기용)
+    base_ops = difflib.SequenceMatcher(None, old_base, new_base, autojunk=False).get_opcodes()
+
+    def moved(pos: int) -> int:
+        for tag, i1, i2, j1, j2 in base_ops:
+            if i1 <= pos < i2 or (pos == i2 == i1):
+                return j1 + (pos - i1 if tag == "equal" else 0)
+        return len(new_base) if pos >= len(old_base) else pos
+
+    auto = _diff_to_corrections(new_base, new_human, page_num)
+    used: set[int] = set()
+    merged = []
+    for a in auto:
+        match = None
+        for k, c in enumerate(live):
+            if k in used or (c.get("corrected") or "") != a["corrected"]:
+                continue
+            if abs(moved(c["char_index"]) - a["char_index"]) <= 2:
+                match = k
+                break
+        if match is not None:
+            used.add(match)
+            merged.append(
+                {**live[match], "char_index": a["char_index"], "original_ocr": a["original_ocr"]}
+            )
+        else:
+            merged.append(a)
+
+    data = {k: v for k, v in data.items() if not k.startswith("_")}
+    data["corrections"] = merged + history + others
+    data["corrected_text"] = new_human if stored is not None else None
+    return {"data": data, "summary": {"kept": len(merged), "history": len(history)}}
 
 
 def _layout_file_path(doc_path: Path, part_id: str, page_num: int) -> Path:
@@ -2463,10 +2661,6 @@ def apply_batch_corrections(
         if not text:
             continue
 
-        # 기존 교정 로드(기록에 덧붙이려고)
-        corr_result = get_page_corrections(doc_path, part_id, page_num)
-        corrections = corr_result.get("corrections", [])
-
         # 텍스트에서 original_char 검색 → 본문을 바꾸고 기록 항목을 만든다
         new_corrs = []
         for i, ch in enumerate(text):
@@ -2488,14 +2682,19 @@ def apply_batch_corrections(
         if not new_corrs:
             continue
 
-        # 본문부터 고친다 — 이것이 화면에 보이는 것이다
+        # 본문부터 고친다 — 이것이 화면에 보이는 것이다.
+        # save_page_text가 이 쪽의 사람 교정을 새 본문 위로 옮겨 저장한다(_rebase_page_corrections).
         save_page_text(doc_path, part_id, page_num, text.replace(original_char, corrected_char))
 
-        # 기존 교정에 추가하여 저장
-        corrections.extend(new_corrs)
+        # 기록을 덧붙인다. 위에서 읽어 둔 목록이 아니라 **옮겨 붙인 뒤의 파일**을 다시 읽는다 —
+        # 옛 목록으로 쓰면 방금 옮긴 교정과 자유 편집 교정본(corrected_text)을 지운다(2026-10-02).
+        # 덧붙이는 항목은 «무엇을 고쳤나»의 기록이다. 본문이 이미 바뀌어 원문 글자가
+        # 그 자리에 없으므로 교정 적용 때는 건너뛰어진다(두 번 바꾸지 않는다).
+        fresh = get_page_corrections(doc_path, part_id, page_num)
         save_data = {
             "part_id": part_id,
-            "corrections": corrections,
+            "corrections": (fresh.get("corrections") or []) + new_corrs,
+            "corrected_text": fresh.get("corrected_text"),
         }
         save_page_corrections(doc_path, part_id, page_num, save_data)
 

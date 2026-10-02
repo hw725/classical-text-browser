@@ -725,13 +725,15 @@ def _load_lines(
     l4 — 사람이 교정한 텍스트. 좌표가 없으므로 전부 None이다.
     """
     if source_layer == "l4":
-        from core.document import get_page_text
+        # 교정 탭의 교정(자유 편집 포함)까지 적용한 글을 싣는다. 확정본 파일만 읽으면
+        # 교정 전 글이 PDF에 들어간다(2026-10-02 — 교정본을 고른 사람이 받는 것이 아니다).
+        from core.document import get_corrected_text
 
         try:
-            data = get_page_text(doc_path, part_id, page_num)
+            data = get_corrected_text(doc_path, part_id, page_num)
         except (FileNotFoundError, OSError):
             return []
-        text = (data or {}).get("text") or ""
+        text = (data or {}).get("corrected_text") or ""
         return [(ln.strip(), None) for ln in text.splitlines() if ln.strip()]
 
     l2 = _read_json(_l2_path(doc_path, part_id, page_num))

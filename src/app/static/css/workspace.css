@@ -2507,6 +2507,14 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
   font-weight: 600;
 }
 
+/* 지운 자리 표시 — 자유 편집이 지운 글자. 클릭하면 그 교정을 열어 되돌릴 수 있다 */
+.corr-char.corr-deleted {
+  opacity: 0.45;
+  font-weight: 400;
+  font-size: 0.8em;
+  text-decoration: line-through;
+}
+
 .corr-char.corr-ocr-error {
   text-decoration: underline solid #ef4444 2px;
   text-underline-offset: 3px;

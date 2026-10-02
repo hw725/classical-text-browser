@@ -31,6 +31,7 @@ const correctionState = {
   editingCorrIdx: -1, // 편집 중인 교정 인덱스 (-1이면 새 교정)
   pageText: "", // 현재 페이지 텍스트 원본
   isDirty: false, // 수정 여부
+  editSeq: 0, // 글자 교정 편집 횟수 — 저장하는 사이에 고친 것이 있는지 가린다(저장 뒤 다시 읽기가 덮지 않게)
   verticalView: false, // 세로쓰기 표시 모드
   saving: false, // 저장 요청 진행 여부
 
@@ -266,6 +267,16 @@ function _initCorrToolbarEvents() {
 function activateCorrectionMode() {
   correctionState.active = true;
 
+  // 저장 안 한 교정이 같은 쪽에 있으면 다시 불러 덮지 않는다(2026-10-02) — 다른 탭에 갔다 오기만
+  // 해도 새로 읽어 고친 것이 사라졌다. (쪽을 옮길 때는 checkUnsavedChanges가 먼저 묻고, 버리기로
+  // 하면 isDirty를 내린다 — 그래서 여기서 다른 쪽의 미저장 편집을 만날 일은 없다.)
+  const key = `${viewerState.docId}|${viewerState.partId}|${viewerState.pageNum}`;
+  if (correctionState.isDirty && correctionState.loadedKey === key) {
+    _renderCorrectionView();
+    _renderCorrList();
+    return;
+  }
+
   // 현재 페이지의 교정 데이터 로드
   if (viewerState.docId && viewerState.partId && viewerState.pageNum) {
     loadPageCorrections(
@@ -386,6 +397,7 @@ async function loadPageCorrections(docId, partId, pageNum) {
     }
 
     correctionState.isDirty = false;
+    correctionState.loadedKey = `${docId}|${partId}|${pageNum}`; // 이 상태가 어느 쪽의 것인가
     correctionState.selectedCharInfo = null;
     correctionState.editingCorrIdx = -1;
 
@@ -480,13 +492,24 @@ function _renderCorrectionView() {
  */
 function _toggleEditMode() {
   if (correctionState.editMode === "char") {
-    // 글자 교정 → 자유 편집: 현재 corrections를 적용한 텍스트를 textarea에 표시
-    correctionState.correctedText = _applyCorrectionsLocally(
-      correctionState.pageText, correctionState.corrections
-    );
+    // 글자 교정 → 자유 편집.
+    // 글자 교정에서 저장 안 한 고침이 있으면 그 목록으로 글을 만들고, 없으면 서버가
+    // 저장해 둔 교정본(corrected_text)을 그대로 쓴다 — 서버의 글과 화면의 글이 같아야 한다.
+    if (correctionState.isDirty) {
+      correctionState.correctedText = _applyCorrectionsLocally(
+        correctionState.pageText, correctionState.corrections
+      );
+    }
     correctionState.editMode = "freetext";
   } else {
-    // 자유 편집 → 글자 교정: 그대로 전환 (corrections는 저장 시 서버에서 diff)
+    // 자유 편집 → 글자 교정.
+    // 저장 안 한 자유 편집은 아직 교정 목록이 아니다(목록은 저장할 때 서버가 만든다).
+    // 그대로 넘어가면 글자 교정 화면에 안 보이고, 돌아올 때 옛 목록으로 덮여 사라진다
+    // (2026-10-02 사고). 그래서 먼저 저장하게 한다.
+    if (correctionState.isDirty) {
+      showToast("저장하지 않은 자유 편집이 있습니다. 먼저 저장(Ctrl+S)한 뒤 글자 교정으로 넘어가세요.", "warning");
+      return;
+    }
     correctionState.editMode = "char";
   }
 
@@ -731,10 +754,68 @@ function _createBlockSection(segment, segIdx) {
  *                    줄바꿈은 <br>로, 마커 텍스트([本文] 등)는 건너뛴다.
  */
 function _renderCharsIntoElement(parent, text, globalStartIdx, blockType) {
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
+  // 교정이 덮는 범위를 먼저 표로 만든다.
+  //
+  // 왜 이렇게 하는가 (2026-10-02 사고):
+  //   예전에는 «교정의 첫 글자 자리에서 그 글자 하나만 바꿔 그리기»만 했다.
+  //   자유 편집이 만드는 교정은 넣기(원문 ""), 지우기(교정 ""), 여러 글자·줄바꿈을
+  //   한꺼번에 바꾸기다. 그래서 넣기는 원문 글자를 가리고, 지우기는 아무것도
+  //   지우지 않고, 여러 글자 바꾸기는 둘째 글자부터 원문이 그대로 남았다 —
+  //   저장은 됐는데 화면은 «교정 전으로 되돌아간» 것처럼 보였다.
+  //   이제 원문 범위 [char_index, char_index + 원문 길이)를 통째로 교정문으로
+  //   바꿔 그리고, 넣기는 그 자리 앞에 끼워 그린다.
+  const flat = _flatCorrectionLayout(globalStartIdx, text.length);
+
+  // 교정문(줄바꿈 포함)을 그리는 span. 지우기는 빈 칸으로 사라지게 하지 않고
+  // 지운 원문을 흐린 취소선으로 남겨(줄바꿈은 ↵) 클릭해 되돌릴 수 있게 한다.
+  const appendCorrSpan = (corrIdx, globalIdx) => {
+    const corr = correctionState.corrections[corrIdx];
+    const typeInfo = CORRECTION_TYPES[corr.type] || {};
+    const span = document.createElement("span");
+    span.className = "corr-char corrected";
+    if (typeInfo.cssClass) span.classList.add(typeInfo.cssClass);
+    span.dataset.idx = globalIdx;
+    span.dataset.corrIdx = corrIdx;
+    if (blockType) span.dataset.blockType = blockType;
+    const shown = corr.corrected || "";
+    if (shown === "") {
+      span.classList.add("corr-deleted");
+      span.textContent = (corr.original_ocr || "").replace(/\n/g, "↵");
+    } else {
+      shown.split("\n").forEach((piece, k) => {
+        if (k > 0) span.appendChild(document.createElement("br"));
+        span.appendChild(document.createTextNode(piece));
+      });
+    }
+    const typeLabel = typeInfo.label || corr.type;
+    const show = (s) => (s === "" ? "(없음)" : s.replace(/\n/g, "↵"));
+    span.title = `${show(corr.original_ocr || "")} → ${show(shown)} (${typeLabel})`;
+    if (corr.note) span.title += `\n${corr.note}`;
+    span.addEventListener("click", () => {
+      _onCharClick(span, globalIdx, corr.original_ocr || "", blockType, corrIdx);
+    });
+    parent.appendChild(span);
+  };
+
+  for (let i = 0; i <= text.length; i++) {
     const globalIdx = globalStartIdx + i;
 
+    // 이 자리 앞에 넣은 글
+    for (const corrIdx of flat.inserts.get(globalIdx) || []) {
+      appendCorrSpan(corrIdx, globalIdx);
+    }
+    if (i === text.length) break;
+
+    // 이 자리에서 시작하는 바꾸기·지우기 → 범위를 통째로 건너뛴다
+    const rangeCorr = flat.starts.get(globalIdx);
+    if (rangeCorr != null) {
+      appendCorrSpan(rangeCorr, globalIdx);
+      const len = (correctionState.corrections[rangeCorr].original_ocr || "").length;
+      i += len - 1;
+      continue;
+    }
+
+    const ch = text[i];
     if (ch === "\n") {
       parent.appendChild(document.createElement("br"));
       continue;
@@ -747,26 +828,9 @@ function _renderCharsIntoElement(parent, text, globalStartIdx, blockType) {
     span.dataset.idx = globalIdx;
     if (blockType) span.dataset.blockType = blockType;
 
-    // 이 위치에 교정이 있는지 확인
-    const corrIdx = _findCorrectionAtIndex(globalIdx);
-    if (corrIdx >= 0) {
-      const corr = correctionState.corrections[corrIdx];
-      const typeInfo = CORRECTION_TYPES[corr.type] || {};
-      span.classList.add("corrected", typeInfo.cssClass || "");
-      span.dataset.corrIdx = corrIdx;
-      // 교정된 글자를 표시 (corrected 값이 있으면 그것으로)
-      if (corr.corrected && corr.corrected !== corr.original_ocr) {
-        span.textContent = corr.corrected;
-      }
-      // 툴팁: 원래 글자 → 교정 글자 (유형)
-      const typeLabel = typeInfo.label || corr.type;
-      span.title = `${corr.original_ocr} → ${corr.corrected} (${typeLabel})`;
-      if (corr.note) span.title += `\n${corr.note}`;
-    }
-
     // 클릭 이벤트: 교정 다이얼로그 열기
     span.addEventListener("click", () => {
-      _onCharClick(span, globalIdx, ch, blockType, corrIdx);
+      _onCharClick(span, globalIdx, ch, blockType, -1);
     });
 
     parent.appendChild(span);
@@ -774,16 +838,41 @@ function _renderCharsIntoElement(parent, text, globalStartIdx, blockType) {
 }
 
 /**
- * 전체 텍스트 인덱스에 해당하는 교정 항목을 찾는다.
- * 반환: corrections 배열 내의 인덱스. 없으면 -1.
+ * 한 구간(segment)에 걸리는 평면 교정(block_id·line 없음)을 «시작 자리 → 교정»으로 정리한다.
  *
- * 왜 이렇게 하는가: char_index 필드가 전체 텍스트 내의 위치를 나타내므로,
- *                    현재 글자 위치와 대조하여 교정 여부를 판단한다.
+ * 입력: startIdx — 구간 시작의 전체 텍스트 인덱스, length — 구간 길이.
+ * 출력: {starts: Map(시작 자리 → 교정 인덱스), inserts: Map(자리 → [교정 인덱스…])}
+ *
+ * 왜 이렇게 하는가:
+ *   원문 글자가 있는 교정(바꾸기·지우기)은 그 범위를 덮고, 원문이 빈 교정(넣기)은
+ *   자리만 차지한다. 원문이 실제로 그 자리 글자와 맞지 않는 교정(원문이 바뀌어 낡은 것)은
+ *   그리지 않는다 — 서버(_apply_corrections_to_text)도 그런 교정은 적용하지 않으므로
+ *   화면이 서버와 같은 결과를 보여 준다.
+ *   넣기는 구간 끝 자리에도 온다. 구간은 [本文]·[注釈] 표지에서만 갈리므로 앞 구간의 끝과 뒤 구간의
+ *   시작은 같은 자리가 아니다(사이에 표지가 있다) — 끝 자리 넣기는 늘 이 구간의 것이다.
+ *   범위가 구간 밖(표지 너머)까지 걸친 교정은 한 구간에 다 그릴 수 없어 그리지 않는다
+ *   (그리면 뒤 구간이 같은 글자를 한 번 더 그린다). 교정 목록에는 그대로 보인다.
  */
-function _findCorrectionAtIndex(globalIdx) {
-  return correctionState.corrections.findIndex(
-    (c) => c.char_index === globalIdx,
-  );
+function _flatCorrectionLayout(startIdx, length) {
+  const starts = new Map();
+  const inserts = new Map();
+  const text = correctionState.pageText || "";
+  const endIdx = startIdx + length;
+  correctionState.corrections.forEach((c, idx) => {
+    if (c.block_id != null || c.line != null || c.char_index == null) return;
+    const at = c.char_index;
+    const orig = c.original_ocr || "";
+    if (orig === "") {
+      if (at < startIdx || at > endIdx) return;
+      if (!inserts.has(at)) inserts.set(at, []);
+      inserts.get(at).push(idx);
+      return;
+    }
+    if (at < startIdx || at >= endIdx || at + orig.length > endIdx) return;
+    if (text.substring(at, at + orig.length) !== orig) return;
+    if (!starts.has(at)) starts.set(at, idx);
+  });
+  return { starts, inserts };
 }
 
 /* ──────────────────────────
@@ -954,6 +1043,7 @@ function _saveCorrFromDialog() {
   }
 
   correctionState.isDirty = true;
+  correctionState.editSeq += 1;
   _updateCorrSaveStatus("modified");
   _updateCorrCount();
 
@@ -972,6 +1062,7 @@ function _deleteCorrFromDialog() {
 
   correctionState.corrections.splice(correctionState.editingCorrIdx, 1);
   correctionState.isDirty = true;
+  correctionState.editSeq += 1;
   _updateCorrSaveStatus("modified");
   _updateCorrCount();
 
@@ -1084,6 +1175,7 @@ async function _saveCorrections() {
   if (correctionState.saving) return;
 
   correctionState.saving = true;
+  const seqAtSave = correctionState.editSeq; // 이 저장 뒤에 고친 것이 있는지 가린다
 
   _updateCorrSaveStatus("saving");
 
@@ -1124,8 +1216,71 @@ async function _saveCorrections() {
     }
 
     const result = await res.json();
-    correctionState.isDirty = false;
-    _updateCorrSaveStatus("saved");
+
+    // 저장한 것을 서버에서 다시 읽어 화면 상태를 맞춘다.
+    //
+    // 왜 이렇게 하는가 (2026-10-02 사고):
+    //   자유 편집으로 저장하면 교정 목록은 **서버가** diff로 만든다. 예전에는 화면의
+    //   correctionState.corrections가 저장 전 목록으로 남아 있어서,
+    //   「글자 교정」으로 넘어가면 옛 목록이 그려지고(교정 전으로 되돌아간 것처럼 보임),
+    //   다시 「자유 편집」으로 오면 그 옛 목록으로 글을 만들어 textarea에 넣었다.
+    //   그 상태로 한 번 더 저장하면 고친 내용이 **실제로** 지워졌다.
+    //   응답이 늦게 와서 그 사이 쪽을 옮겼으면 덮지 않는다 — 다시 읽는 **앞뒤 모두**에서 본다.
+    //   저장하는 사이에 글자 교정을 더 고쳤으면(editSeq가 바뀜) 그 목록을 덮지 않는다.
+    const samePage = () =>
+      viewerState.docId === docId && viewerState.partId === partId && viewerState.pageNum === pageNum;
+    if (!samePage()) {
+      // 그 사이 다른 쪽으로 갔다 — 저장은 됐다. 지금 쪽의 상태(편집 중일 수 있다)는 건드리지 않는다
+      if (result.git && result.git.committed) _loadGitLog(docId);
+      return;
+    }
+    let typedDuringSave = correctionState.editSeq !== seqAtSave;
+    if (!typedDuringSave) {
+      try {
+        const again = await fetch(url, { cache: "no-store" });
+        if (again.ok && !samePage()) {
+          if (result.git && result.git.committed) _loadGitLog(docId);
+          return;
+        }
+        if (again.ok && correctionState.editSeq === seqAtSave) {
+          const fresh = await again.json();
+          correctionState.corrections = fresh.corrections || [];
+          if (fresh.corrected_text != null) {
+            correctionState.correctedText = fresh.corrected_text;
+          } else {
+            correctionState.correctedText = _applyCorrectionsLocally(
+              correctionState.pageText, correctionState.corrections,
+            );
+          }
+          // 자유 편집 중이면 textarea는 다시 그리지 않는다(커서·스크롤을 잃지 않게).
+          // 사용자가 저장 직후 이어 친 글이 있을 수 있으므로 값도 건드리지 않는다.
+          if (correctionState.editMode === "freetext") {
+            const ta = document.getElementById("corr-freetext-editor");
+            if (ta && ta.value.replace(/\r\n/g, "\n") !== payload.corrected_text) {
+              correctionState.correctedText = ta.value;
+              typedDuringSave = true;
+            }
+          } else {
+            _renderCorrectionView();
+          }
+          _renderCorrList();
+          _updateCorrCount();
+        } else if (correctionState.editSeq !== seqAtSave) {
+          typedDuringSave = true;
+        }
+      } catch (syncErr) {
+        console.warn("교정 저장 뒤 다시 읽기 실패:", syncErr);
+      }
+    }
+
+    if (typedDuringSave) {
+      // 저장하는 사이에 더 고친 글이 있다 — «저장됨»이라고 말하지 않는다
+      correctionState.isDirty = true;
+      _updateCorrSaveStatus("modified");
+    } else {
+      correctionState.isDirty = false;
+      _updateCorrSaveStatus("saved");
+    }
 
     // Git 이력 새로고침
     if (result.git && result.git.committed) {
