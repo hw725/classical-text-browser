@@ -364,6 +364,8 @@ async function _loadSettings() {
 
     // LLM 연결 상태 (프로바이더마다 도달·인증을 따로 본다)
     _loadLlmAccounts();
+    // 판정 모델(D-134) — 라우터 밖이라 따로 그린다(setup-panel.js)
+    if (typeof _loadDecisionModels === "function") _loadDecisionModels();
   } catch (e) {
     console.warn("설정 로드 실패:", e);
   }
@@ -2168,6 +2170,25 @@ function _fillLlmSelect(select, models) {
     // 준비되기 전에 누르면 오류만 보이고 왜 그런지 알 수 없다. 누르기 전에
     // 알려 주는 것이 `/api/llm/punctuation/external/health`의 목적이다.
     _annotateExternalPunctStatus(opt);
+  }
+
+  // 판정 모델(D-134) — 자동 스캔의 «무슨 글인가»를 확률로 답하는 모델. 생성 모델 목록(/api/llm/models)에
+  // 들지 않으므로 여기서 붙인다. 값 `decider:decider-27b`는 force_provider="decider"로 라우트에 간다.
+  if (extra && extra.includes("vision-decider")) {
+    const opt = document.createElement("option");
+    opt.value = "decider:decider-27b";
+    opt.textContent = "… 판정 모델 — Perplexity Decider [유료·빠름]";
+    select.appendChild(opt);
+    fetch("/api/settings/decision-models")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const m = (d?.models || []).find((x) => x.id === "perplexity");
+        const ok = !!m?.has_key;
+        opt.textContent = `${ok ? "●" : "○"} 판정 모델 — Perplexity Decider [유료·빠름]${ok ? "" : " (설정 → 판정 모델에서 키)"}`;
+        opt.disabled = !ok;
+        if (!ok && select.value === opt.value) select.value = "auto";
+      })
+      .catch(() => {});
   }
 
   if (previous && Array.from(select.options).some((o) => o.value === previous)) {

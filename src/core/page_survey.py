@@ -58,6 +58,80 @@ CONTENT_LABELS = {
 }
 
 
+# ── 판정 모델(Perplexity Decider)로 물을 때 (D-134) ──
+#
+# 생성형 비전 LLM에는 자유 JSON을 받아 파서가 «정해진 값이 아니면 버린다». 판정 모델은 처음부터
+# 정해진 선택지의 확률만 돌려주므로 그 규칙을 형식이 지킨다. 내용은 **여러 개일 수 있으므로**
+# (한글+훈점) 고르기 하나가 아니라 종류마다 예/아니오(noul)를 따로 묻는다 — 질문끼리는 서로의 답을
+# 보지 않고 병렬로 평가된다(공식 문서). 방향은 하나만 맞으므로 고르기(choice)다.
+DECIDER_STATE = (
+    "스캔된 책의 한 쪽 이미지입니다. "
+    "동아시아 고서(한문·일본어·한글)와 근현대 인쇄물이 섞인 책입니다."
+)
+DECIDER_CONTENT_QUESTIONS: dict[str, str] = {
+    "modern_print": "이 쪽에 근현대 활자 인쇄(명조·고딕 등 기계 인쇄 글꼴)로 된 글이 있는가?",
+    "classical_print": "이 쪽에 목판본이나 옛 활자본으로 찍은 한문 고서 판본의 글이 있는가?",
+    "handwriting": "이 쪽에 붓이나 펜으로 손으로 쓴 글(해서·행서·초서 필사)이 있는가?",
+    "kunten": "이 쪽의 한문 글자 옆에 훈점·오쿠리가나·가에리텐 같은 작은 읽기 표시가 달려 있는가?",
+    "hangul": "이 쪽에 한글이 있는가?",
+    "blank": "이 쪽에 글자가 전혀 없는가(백지이거나 그림·무늬만 있는가)?",
+}
+DECIDER_ORIENTATION_CRITERIA = {
+    "upright": "글자가 읽는 방향으로 바로 서 있다",
+    "needs_cw": "쪽을 시계 방향으로 90° 돌려야 글자가 선다",
+    "needs_ccw": "쪽을 반시계 방향으로 90° 돌려야 글자가 선다",
+    "upside_down": "쪽이 거꾸로(180°) 놓여 있다",
+}
+# 내용 종류를 «있다»로 받는 확률 문턱. 0.5는 «아니오보다 예가 낫다»일 뿐이다 — 우리 책으로 잰 값이
+# 아니다(scripts/eval_decider_survey.py로 다시 정한다). 재기 전까지 답은 «제안»이고
+# 사람이 계획 표에서 본다
+DECIDER_CONTENT_THRESHOLD = 0.5
+
+
+def decider_questions() -> dict:
+    """판정 모델에 보낼 질문들. 출력: {질문 id: {type, instructions, criteria?}}."""
+    q: dict = {
+        "orientation": {
+            "type": "choice",
+            "instructions": "이 쪽의 글자들이 어떻게 놓여 있는가?",
+            "criteria": dict(DECIDER_ORIENTATION_CRITERIA),
+        }
+    }
+    for kind, text in DECIDER_CONTENT_QUESTIONS.items():
+        q[f"has_{kind}"] = {"type": "noul", "instructions": text}
+    return q
+
+
+def parse_decider_answers(
+    answers, threshold: float = DECIDER_CONTENT_THRESHOLD
+) -> tuple[Optional[str], list[str], dict]:
+    """판정 모델의 답 → (방향, 내용 목록, 확률들). 형이 아닌 답은 버린다.
+
+    출력의 확률들({"orientation": {...}, "contents": {종류: p}})은 계획 표·측정 스크립트가 쓴다 —
+    문턱 하나로 접어 버리면 «아슬아슬했다»는 정보가 사라진다.
+    백지가 «있다»면 다른 종류는 지운다(백지인데 활자가 있다는 답은 모순이고, 백지 판정이 더 싸다).
+    """
+    from llm.jev import choice, noul
+
+    if not hasattr(answers, "get"):
+        return None, [], {}
+    ans_o = answers.get("orientation")
+    o, _p = choice(ans_o, ORIENTATIONS)
+    probs_o = ans_o.get("probabilities") if isinstance(ans_o, dict) else None
+    probs: dict = {"orientation": probs_o if isinstance(probs_o, dict) else {}, "contents": {}}
+    contents: list[str] = []
+    for kind in DECIDER_CONTENT_QUESTIONS:
+        p = noul(answers.get(f"has_{kind}"))
+        if p is None:
+            continue
+        probs["contents"][kind] = round(p, 3)
+        if p >= threshold:
+            contents.append(kind)
+    if "blank" in contents:
+        contents = ["blank"]
+    return o, [c for c in CONTENTS if c in contents], probs
+
+
 def parse_survey(text: str) -> tuple[Optional[str], list[str]]:
     """모델 답 → (방향, 내용 목록). 정해진 값이 아니면 방향은 None, 내용은 빠진다.
 

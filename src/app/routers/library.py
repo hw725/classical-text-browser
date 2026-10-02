@@ -764,6 +764,80 @@ class LlmKeysRequest(BaseModel):
     openai: str | None = None
     gemini: str | None = None
     ollama_url: str | None = None
+    perplexity: str | None = None  # 판정 모델 — Perplexity Decisions (D-134)
+    typesafe: str | None = None  # 판정 모델 — TypeSafe Jev (D-134)
+
+
+@router.get("/api/settings/decision-models")
+async def api_decision_models(check: bool = Query(False)):
+    """판정 모델(D-134)의 연결 상태 — 설정 화면 «판정 모델» 칸이 그린다.
+
+    판정 모델은 LLM 라우터에 들지 않아(계약이 «프롬프트 → 글»이 아니다) `/api/llm/accounts`에
+    나오지 않는다. 그래서 따로 둔다. 키 값은 돌려주지 않는다 — «있는가»와 어디서 왔는가만.
+    check=true면 실제로 한 번 부른다(질문 하나, 입력 수십 토큰 — $0.000002 남짓). 키가 맞는지는
+    불러 봐야 안다: 형식만 맞고 결제가 안 된 키가 흔하다.
+    출력: {"models": [{id, display_name, role, has_key, env_name, signup_url, steps,
+                       status, detail?}]}
+    """
+    from core.env_settings import MANAGED_KEYS
+    from llm.decider import DeciderClient
+    from llm.jev import JevCallFailed, JevClient
+
+    library_path = get_library_path()
+    specs = [
+        {
+            "id": "perplexity",
+            "cls": DeciderClient,
+            "display_name": "Perplexity Decider (decider-27b)",
+            "role": "이미지 판정 — 「말로 지시」 ① 자동 스캔의 «무슨 글인가»"
+            "(종류 판정 모델에서 고른다)",
+            # 주소는 공식 문서(docs.perplexity.ai, 2026-10-02)의 «Generate API Keys» 링크 그대로
+            "signup_url": "https://console.perplexity.ai/project/keys",
+            "steps": [
+                "Perplexity API 콘솔(아래 주소)에 로그인합니다",
+                "프로젝트를 만들고 결제 수단을 등록합니다"
+                "(로그인만으로는 프로젝트가 생기지 않습니다)",
+                "API Keys에서 키를 만듭니다 — 키 전체는 만들 때 한 번만 보이니 바로 복사하세요",
+                "아래 칸에 붙여 넣고 «저장» → «연결 확인»",
+            ],
+        },
+        {
+            "id": "typesafe",
+            "cls": JevClient,
+            "display_name": "TypeSafe Jev",
+            "role": "텍스트 판정 — 편성 «더 묻기…»의 판정 모델(구조·목차 대조)",
+            "signup_url": "https://docs.typesafe.ai",
+            "steps": [
+                "TypeSafe에 가입하고 콘솔에서 API 키를 만듭니다",
+                "키를 아래 칸에 붙여 넣고 «저장» → «연결 확인»",
+            ],
+        },
+    ]
+    out = []
+    for s in specs:
+        client = s["cls"](library_root=library_path, max_calls=1, retries=0, timeout=20.0)
+        row = {k: v for k, v in s.items() if k != "cls"}
+        row["has_key"] = client.has_key
+        row["env_name"] = MANAGED_KEYS[s["id"]]
+        row["status"] = "needs_key" if not client.has_key else "unchecked"
+        if check and client.has_key:
+            probe = {"ok": {"type": "noul", "instructions": "이 글은 인사말인가?"}}
+            try:
+                await asyncio.to_thread(
+                    client.ask, "안녕하세요.", probe, purpose="connection_check"
+                )
+                row["status"] = "ready"
+            except JevCallFailed as e:
+                row["status"] = "error"
+                hint = {
+                    401: "키가 틀렸거나 지워졌습니다",
+                    402: "결제 수단이 없거나 잔액이 없습니다",
+                    403: "이 키로는 판정 API를 쓸 수 없습니다",
+                    429: "요청 한도를 넘었습니다",
+                }
+                row["detail"] = hint.get(e.status or 0) or f"{e} {e.status or ''}".strip()
+        out.append(row)
+    return {"models": out}
 
 
 @router.get("/api/settings/llm-keys")

@@ -911,13 +911,16 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
     from core.env_doctor import GPU_ONLY_MESSAGE, gpu_runtime
     from core.page_survey import (
         CONTENT_LABELS,
+        DECIDER_STATE,
         SURVEY_PROMPT,
         SURVEY_SYSTEM_PROMPT,
+        decider_questions,
         group_engine_ranges,
         group_rotation_ranges,
         is_mixed,
         orientation_by_ocr_scores,
         orientation_by_projection,
+        parse_decider_answers,
         parse_survey,
         primary_content,
         recommend_engine,
@@ -958,6 +961,22 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
         )
     stride = max(1, int(body.stride or 1))
     targets = list(range(a, b + 1, stride))
+    # 판정 모델로 종류를 물을 것인가(D-134) — 방향만이면 모델을 부르지 않으니 상관없다
+    use_decider = (
+        (body.force_provider or "").strip().lower() == "decider" and not body.orientation_only
+    )
+    if use_decider and not body.dry_run:
+        from llm.decider import DeciderClient
+
+        if not DeciderClient(library_root=library_path, max_calls=0).has_key:
+            return JSONResponse(
+                {
+                    "error": "판정 모델(Perplexity) 키가 없습니다. 설정 → «판정 모델»에서 "
+                    "Perplexity API 키를 넣거나, 종류 판정 모델을 다른 것으로 고르세요.",
+                    "needs_key": "perplexity",
+                },
+                status_code=400,
+            )
     if body.dry_run:
         # 실행 게이트(전역 규칙 11)는 도구 층에 — 보내기 전에 «몇 쪽·호출 몇 번»을 화면이 보인다
         return {
@@ -967,6 +986,13 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
             # 180°·90/270 판정용 OCR(PaddleOCR) — 쪽마다 후보 둘, CPU에서 후보당 4~6초(실측).
             # 방향만이면 누운 쪽에서만 재므로 미리 셀 수 없다 — 상한만 적는다
             "ocr_calls": 2 * len(targets),
+            # 판정 모델이면 어림 비용 — 쪽 이미지 ≈ 2MP ≈ 2,000토큰 + 질문 ≈ 400토큰,
+            # $0.04/M(문서 단가, 실측 아님)
+            **(
+                {"engine": "decider", "cost_usd_est": round(len(targets) * 2400 * 0.04 / 1e6, 5)}
+                if use_decider
+                else {}
+            ),
         }
 
     async def _run(progress=None):
@@ -995,7 +1021,16 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
         # 방향만이면 모델을 부르지 않는다. (라우터 객체 자체는 위의 엔진 목록
         # 초기화가 llm_vision 엔진에 붙이느라 생길 수 있다 — 호출은 없다.
         # Codex 지적 2026-09-18)
-        router_llm = None if body.orientation_only else _get_llm_router()
+        # 판정 모델(D-134): 화면에서 «판정 모델 — Perplexity Decider»를 고르면
+        # force_provider가 "decider"로 온다. 생성형 비전 LLM 대신 정해진 질문의 확률만
+        # 받는다(라우터를 거치지 않는다 — 라우터의 계약은 «프롬프트 → 글»이다).
+        # 키는 라우트 앞에서 이미 확인했다
+        decider = None
+        if use_decider:
+            from llm.decider import DeciderClient
+
+            decider = DeciderClient(library_root=library_path, max_calls=len(targets) + 5)
+        router_llm = None if (body.orientation_only or use_decider) else _get_llm_router()
         kwargs: dict = {
             "image_mime": "image/jpeg",
             "system": SURVEY_SYSTEM_PROMPT,
@@ -1039,7 +1074,32 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
                 continue
             orientation: str | None = None
             contents: list[str] = []
-            if router_llm is not None:
+            if decider is not None:
+                try:
+                    answers = await loop.run_in_executor(
+                        None,
+                        lambda img=image: decider.ask(
+                            DECIDER_STATE,
+                            decider_questions(),
+                            images=[(img, "image/jpeg")],
+                            purpose="page_survey",
+                        ),
+                    )
+                except Exception as e:  # noqa: BLE001 — 한 쪽이 실패해도 나머지는 본다
+                    status = getattr(e, "status", None)
+                    errors.append(
+                        f"{page}쪽: 판정 모델 {status or type(e).__name__}: "
+                        f"{str(getattr(e, 'detail', '') or e)[:80]}"
+                    )
+                    per_page.append(row)
+                    _survey_progress(progress, row, len(per_page), len(targets), CONTENT_LABELS)
+                    unknown += 1
+                    continue
+                provider, model = decider.PROVIDER, decider.model
+                orientation, contents, probs = parse_decider_answers(answers)
+                # 확률을 실어 둔다 — 문턱 하나로 접으면 «아슬아슬했다»가 사라진다(측정·검토용)
+                row["decider"] = probs
+            elif router_llm is not None:
                 try:
                     resp = await router_llm.call_with_image(SURVEY_PROMPT, image, **kwargs)
                 except Exception as e:  # noqa: BLE001 — 한 쪽이 실패해도 나머지는 본다
@@ -1183,6 +1243,8 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
             "per_page": per_page,
             "provider": provider,
             "model": model,
+            # 판정 모델이면 실제로 쓴 호출·토큰·비용(usage 기준) — 어림이 아니라 잰 값
+            **({"decider_usage": decider.usage()} if decider is not None else {}),
             "error": " / ".join(errors)[:600] if errors else None,
         }
 

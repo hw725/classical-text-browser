@@ -790,12 +790,15 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
 
     from llm.jev import JevClient, JevGateExceeded
 
-    client = JevClient(max_calls=planned + 5)
+    # 서고를 넘긴다 — 설정 화면 «판정 모델»에서 넣은 키(서고 .env)를 찾고, 사용 기록도 서고에 남긴다
+    client = JevClient(max_calls=planned + 5, library_root=get_library_path())
     if not client.has_key:
         return JSONResponse(
             {
-                "error": "판정 모델(TypeSafe) 키를 찾지 못했습니다. "
-                "TYPESAFE_API_KEY 환경변수나 ~/.claude/data/triage/.env에 키를 두세요."
+                "error": "판정 모델(TypeSafe) 키를 찾지 못했습니다. 설정 → «판정 모델»에서 "
+                "TypeSafe 키를 넣으세요(TYPESAFE_API_KEY 환경변수나 ~/.claude/data/triage/.env도 "
+                "읽습니다).",
+                "needs_key": "typesafe",
             },
             status_code=400,
         )

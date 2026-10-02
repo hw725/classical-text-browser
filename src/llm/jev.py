@@ -22,10 +22,16 @@
       들이기 전에 반드시 재야 한다.
 
 키:
-    TYPESAFE_API_KEY → JEV_API_KEY → OPENROUTER_API_KEY 순으로 환경변수를 보고, 없으면 공용 키
-    파일(`~/.claude/data/triage/.env`)을 **전부 읽은 뒤 같은 이름 순서로** 고른다. 파일에 적힌
-    줄 순서가 우선순위를 뒤집으면 안 된다(llm_pipeline 2026-09-21 실측 사고: OpenRouter 키가
-    위에 있어 직결 호출이 401이었다). 값은 어디에도 출력하지 않는다.
+    TYPESAFE_API_KEY → JEV_API_KEY → OPENROUTER_API_KEY 순으로 환경변수를 보고, 없으면
+    **서고 `.env`**(설정 화면 «판정 모델»에서 넣은 키, D-134)와 프로젝트 `.env`를 보고, 그래도
+    없으면 공용 키 파일(`~/.claude/data/triage/.env`)을 **전부 읽은 뒤 같은 이름 순서로** 고른다.
+    파일에 적힌 줄 순서가 우선순위를 뒤집으면 안 된다(llm_pipeline 2026-09-21 실측 사고:
+    OpenRouter 키가 위에 있어 직결 호출이 401이었다). 값은 어디에도 출력하지 않는다.
+
+판정 모델 공통 계약 (D-134):
+    같은 «state + 형이 정해진 질문 → 확률 붙은 답» 계약을 쓰는 다른 업체(Perplexity Decisions —
+    이미지를 받는다)는 `llm/decider.py`가 이 클래스를 물려받아 주소·모델·이미지 싣는 법만 바꾼다.
+    호출 상한·백오프·토큰/비용 세기·사용 기록은 여기 한 곳에 있다.
 """
 
 from __future__ import annotations
@@ -63,22 +69,64 @@ class JevCallFailed(RuntimeError):
         self.detail = detail
 
 
-def resolve_key(
-    env_file: Optional[pathlib.Path] = None, names: Sequence[str] = KEY_NAMES
-) -> Optional[str]:
-    """API 키를 찾는다. 입력: 키 파일 경로(없으면 기본), 볼 이름들. 출력: 키 또는 None.
+def _key_from_app_env(names: Sequence[str], library_root: Optional[pathlib.Path]) -> Optional[str]:
+    """서고 `.env`·프로젝트 `.env`(LlmConfig와 같은 규칙 — 서고가 이긴다)에서 이름 순서로 찾는다.
 
-    환경변수를 이름 순서로 보고, 없으면 파일을 **전부 읽은 뒤** 같은 이름 순서로 고른다.
-    줄 끝 주석(` # …`)과 따옴표를 떼고, 공백뿐인 값은 «없음»으로 본다 — 그대로 두면
-    `Bearer  ` 같은 헤더가 나간다.
+    설정 화면에서 넣은 키가 여기 있다(D-134). 전에는 Jev가 이 파일을 보지 않아,
+    화면에서 키를 넣을 길이 생겨도 Jev는 «키 없음»이었을 것이다.
     """
+    try:
+        from llm.config import LlmConfig
+    except ImportError:  # 패키지 밖에서 단독으로 쓸 때
+        return None
+    cache = LlmConfig(library_root=library_root)._env_cache
+    for name in names:
+        v = (cache.get(name) or "").split(" #", 1)[0].strip()
+        if v:
+            return v
+    return None
+
+
+def resolve_key(
+    env_file: Optional[pathlib.Path] = None,
+    names: Sequence[str] = KEY_NAMES,
+    library_root: Optional[pathlib.Path] = None,
+    fallback_file: bool = True,
+) -> Optional[str]:
+    """API 키를 찾는다. 입력: 키 파일 경로(없으면 기본), 볼 이름들, 서고 루트,
+    fallback_file(False면 공용 키 파일을 보지 않는다 — Jev 전용 개인 파일이라
+    다른 업체에는 안 쓴다).
+    출력: 키 또는 None.
+
+    순서: 환경변수 → 서고·프로젝트 `.env` → 공용 키 파일. 파일은 **전부 읽은 뒤** 같은 이름
+    순서로 고른다. 줄 끝 주석(` # …`)과 따옴표를 떼고, 공백뿐인 값은 «없음»으로 본다 —
+    그대로 두면 `Bearer  ` 같은 헤더가 나간다.
+    """
+    # **이름이 먼저다** — 이름마다 환경변수 → 서고·프로젝트 .env → 공용 키 파일 순으로
+    # 본 뒤 다음 이름으로 간다. 출처를 먼저 돌면 .env의 OPENROUTER_API_KEY가 키 파일의
+    # TYPESAFE_API_KEY를 이겨 직결 주소로 남의 키가 나간다(2026-09-21 401 사고의 재현 —
+    # 2026-10-02 검토 지적).
+    file_found = _read_key_file(env_file, fallback_file)
     for name in names:
         v = os.environ.get(name)
         if v and v.strip():
             return v.strip()
+        if env_file is None:
+            v = _key_from_app_env((name,), library_root)
+            if v:
+                return v
+        if name in file_found:
+            return file_found[name]
+    return None
+
+
+def _read_key_file(env_file: Optional[pathlib.Path], fallback_file: bool) -> dict[str, str]:
+    """키 파일을 **전부 읽어** {이름: 값}. 줄 순서는 우선순위가 아니다(이름 순서가 정한다)."""
+    if env_file is None and not fallback_file:
+        return {}
     path = env_file or KEY_ENV_FILE
     if not path.exists():
-        return None
+        return {}
     found: dict[str, str] = {}
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         line = line.strip().lstrip("﻿")
@@ -90,10 +138,7 @@ def resolve_key(
         v = v.split(" #", 1)[0].strip().strip('"').strip("'").strip()
         if v:
             found.setdefault(k.strip(), v)
-    for name in names:
-        if name in found:
-            return found[name]
-    return None
+    return found
 
 
 def noul(answer: Any) -> Optional[float]:
@@ -140,8 +185,21 @@ class JevClient:
     """state + questions → answers. 호출 수·토큰·비용을 스스로 센다.
 
     입력(생성자): api_key(없으면 resolve_key), url(JEV_BASE_URL로도 덮는다), model,
-    max_calls(상한 — 넘으면 네트워크 전에 거부), timeout, retries(429·529에만).
+    max_calls(상한 — 넘으면 네트워크 전에 거부), timeout, retries(429·529에만),
+    library_root(키를 찾을 서고 — 설정 화면이 넣은 키, 그리고 사용 기록을 남길 자리).
+
+    다른 업체로 물려받을 때 바꾸는 것(클래스 속성): PROVIDER·DEFAULT_URL·DEFAULT_MODEL·
+    URL_ENV·KEY_NAMES·KEY_FALLBACK_FILE·INPUT_USD_PER_M·ACCEPTS_IMAGES, 그리고 `_body`.
     """
+
+    PROVIDER = "typesafe"
+    DEFAULT_URL = TYPESAFE_URL
+    DEFAULT_MODEL = TYPESAFE_MODEL
+    URL_ENV = "JEV_BASE_URL"
+    KEY_NAMES: tuple[str, ...] = KEY_NAMES
+    KEY_FALLBACK_FILE = True
+    INPUT_USD_PER_M = INPUT_USD_PER_M
+    ACCEPTS_IMAGES = False  # Jev는 텍스트만 받는다(공식 문서) — 이미지를 주면 보내기 전에 거부
 
     def __init__(
         self,
@@ -153,10 +211,18 @@ class JevClient:
         timeout: float = 120.0,
         retries: int = 3,
         opener: Callable[..., Any] = urllib.request.urlopen,
+        library_root: Optional[pathlib.Path] = None,
     ) -> None:
-        self._key = (api_key if api_key is not None else resolve_key() or "").strip()
-        self._url = url or os.environ.get("JEV_BASE_URL") or TYPESAFE_URL
-        self.model = model or TYPESAFE_MODEL
+        self._library_root = pathlib.Path(library_root) if library_root else None
+        if api_key is None:
+            api_key = resolve_key(
+                names=self.KEY_NAMES,
+                library_root=self._library_root,
+                fallback_file=self.KEY_FALLBACK_FILE,
+            )
+        self._key = (api_key or "").strip()
+        self._url = url or os.environ.get(self.URL_ENV) or self.DEFAULT_URL
+        self.model = model or self.DEFAULT_MODEL
         self._max_calls = max_calls
         self._timeout = timeout
         self._retries = max(0, int(retries))
@@ -180,20 +246,42 @@ class JevClient:
                 f"max_calls를 올리거나 보낼 양을 줄이세요."
             )
 
-    def ask(self, state: str, questions: Mapping[str, Any]) -> Mapping[str, Any]:
-        """한 번 부른다. 입력: state(관찰한 것), questions({id: {type, instructions, …}}).
+    def _body(
+        self, state: Any, questions: Mapping[str, Any], images: Sequence[tuple[bytes, str]]
+    ) -> dict:
+        """요청 본문. Jev: {state, model, questions}.
+
+        이미지를 싣는 법은 업체마다 달라 물려받아 바꾼다.
+        """
+        return {"state": state, "model": self.model, "questions": dict(questions)}
+
+    def ask(
+        self,
+        state: Any,
+        questions: Mapping[str, Any],
+        *,
+        images: Sequence[tuple[bytes, str]] = (),
+        purpose: str = "decision",
+    ) -> Mapping[str, Any]:
+        """한 번 부른다. 입력: state(관찰한 것), questions({id: {type, instructions, …}}),
+        images([(바이트, mime)] — 이미지를 받는 업체만), purpose(사용 기록에 남길 용도).
         출력: answers({id: 답}). 실패는 JevCallFailed, 상한 초과는 JevGateExceeded.
 
         429(한도)·529(과부하)만 지수 백오프로 다시 시도한다 — 400(질문이 잘못됨)은
-        다시 보내도 같은 답이라 바로 올린다.
+        다시 보내도 같은 답이라 바로 올린다. 429에 Retry-After가 있으면 그만큼 기다린다.
         """
         if not self._key:
             raise JevCallFailed("jev_no_key")
+        if images and not self.ACCEPTS_IMAGES:
+            # Jev에 base64를 넣으면 오류 없이 «글자로» 읽어 엉뚱한 답이 온다(2026-10-02 실측) —
+            # 보내기 전에 막는다
+            raise JevCallFailed("images_not_supported")
         if self.calls_made >= self._max_calls:
             raise JevGateExceeded(f"상한 {self._max_calls}회에 이미 도달했습니다.")
-        body = {"state": state, "model": self.model, "questions": dict(questions)}
+        body = self._body(state, questions, images)
         data = json.dumps(body, ensure_ascii=False).encode("utf-8")
         delay = 1.0
+        started = time.monotonic()
         for attempt in range(self._retries + 1):
             req = urllib.request.Request(
                 self._url,
@@ -216,8 +304,17 @@ class JevClient:
                 except Exception:  # noqa: BLE001
                     detail = ""
                 if exc.code in (429, 529) and attempt < self._retries:
-                    logger.warning("Jev %s — %.1f초 뒤 다시 시도합니다", exc.code, delay)
-                    time.sleep(delay)
+                    wait = delay
+                    retry_after = (exc.headers or {}).get("Retry-After") if exc.headers else None
+                    try:
+                        if retry_after is not None:
+                            wait = min(60.0, max(wait, float(retry_after)))
+                    except (TypeError, ValueError):
+                        pass
+                    logger.warning(
+                        "%s %s — %.1f초 뒤 다시 시도합니다", self.PROVIDER, exc.code, wait
+                    )
+                    time.sleep(wait)
                     delay *= 2
                     continue
                 raise JevCallFailed("jev_http_error", status=exc.code, detail=detail) from exc
@@ -229,24 +326,57 @@ class JevClient:
                 raise JevCallFailed("jev_transport_error") from exc
 
         usage = payload.get("usage") if isinstance(payload, Mapping) else None
+        seen_in = seen_out = 0
+        call_cost = 0.0
         if isinstance(usage, Mapping):
             seen_in = _int(usage.get("input_tokens")) or _int(usage.get("prompt_tokens"))
+            seen_out = _int(usage.get("output_tokens"))
             self.input_tokens_total += seen_in
-            self.output_tokens_total += _int(usage.get("output_tokens"))
+            self.output_tokens_total += seen_out
             reported = usage.get("cost")
             if isinstance(reported, (int, float)) and not isinstance(reported, bool):
-                self.cost_total += float(reported)  # 게이트웨이가 준 값이 정본이다
+                call_cost = float(reported)  # 게이트웨이가 준 값이 정본이다
             else:
-                self.cost_total += seen_in * INPUT_USD_PER_M / 1_000_000
+                call_cost = seen_in * self.INPUT_USD_PER_M / 1_000_000
                 if not seen_in:
                     self.uncosted_calls += 1
+            self.cost_total += call_cost
         else:
             self.uncosted_calls += 1
+        self._log_usage(seen_in, seen_out, call_cost, time.monotonic() - started, purpose)
 
         answers = payload.get("answers") if isinstance(payload, Mapping) else None
         if not isinstance(answers, Mapping):
             raise JevCallFailed("jev_invalid_response")
         return answers
+
+    def _log_usage(
+        self, tokens_in: int, tokens_out: int, cost: float, elapsed: float, purpose: str
+    ) -> None:
+        """서고의 LLM 사용 기록(llm_usage_log.jsonl)에 한 줄 — 생성 모델과 같은 파일·같은 모양.
+
+        전에는 판정 모델 호출이 어디에도 남지 않아 «이번 달 얼마 썼나»에서 빠졌다(D-134).
+        기록 실패는 호출을 실패시키지 않는다.
+        """
+        try:
+            from llm.config import LlmConfig
+            from llm.providers.base import LlmResponse
+            from llm.usage_tracker import UsageTracker
+
+            UsageTracker(LlmConfig(library_root=self._library_root)).log(
+                LlmResponse(
+                    text="",
+                    provider=self.PROVIDER,
+                    model=self.model,
+                    tokens_in=tokens_in,
+                    tokens_out=tokens_out,
+                    cost_usd=cost,
+                    elapsed_sec=round(elapsed, 3),
+                ),
+                purpose=purpose,
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.debug("판정 모델 사용 기록 실패: %s", e)
 
     def usage(self) -> dict:
         """지금까지 쓴 것. 출력: calls·questions·input_tokens·output_tokens·cost_usd·uncosted."""

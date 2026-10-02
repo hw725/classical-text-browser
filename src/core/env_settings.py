@@ -28,6 +28,9 @@ MANAGED_KEYS: dict[str, str] = {
     "openai": "OPENAI_API_KEY",
     "gemini": "GOOGLE_API_KEY",
     "ollama_url": "OLLAMA_URL",
+    # 판정 모델(D-134) — 글을 만들지 않고 확률 붙은 판정만 돌려주는 모델. LLM 라우터 밖에서 쓴다
+    "perplexity": "PERPLEXITY_API_KEY",  # Perplexity Decisions(이미지 판정 — 자동 스캔의 종류)
+    "typesafe": "TYPESAFE_API_KEY",  # TypeSafe Jev(텍스트 판정 — 편성의 구조 묻기)
 }
 
 _LINE_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$")

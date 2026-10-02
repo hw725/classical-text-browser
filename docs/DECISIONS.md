@@ -8038,3 +8038,76 @@ probe로 둘을 잡았다: 넓힌 범위 안에서 **사람이 손대지 않은 
 | 글자 교정도 자리가 밀리면 따라가고 유형·비고가 남는다 | `test_char_corrections_follow_shifted_text` |
 | 일괄 교정이 자유 편집 교정본을 지우지 않는다 | `test_batch_correction_keeps_freetext_result` |
 | 저장 뒤 동기화·미저장 전환 막기·쪽 이동 경고·계획 잠금 | 시험 없음 — headless Chrome으로 확인(2026-10-02, 복사본 서고) |
+
+## D-134: 이미지를 받는 판정 모델(Perplexity Decider)을 들이고, 판정 모델 키를 화면에서 넣는다 (2026-10-02)
+
+**배경.** 사용자: «비전+결정 모델 도입을 하긴 해야겠어. 일반 LLM은 너무 느려. 어차피 새로 가입해야 하니 제일 좋은
+모델로 추천해줘. … 신규 사용자가 gui로 계정정보 넣을 수 있도록 하는 것까지 절대 잊지 말고.»
+자동 스캔(D-132)의 «무슨 글인가»는 생성형 비전 LLM(kimi-k3:cloud)에 자유 JSON을 받아 왔다 — 쪽당 1.5초, 표본 10쪽 정답
+7/10. 판정 모델(D-129)은 Jev 하나였고 **텍스트 전용**이라 이 자리에 못 썼다.
+
+### 후보 (2026-10-02, 업체 문서 기준 — 정확도는 업체 벤치마크이고 우리 책으로 잰 값이 아니다)
+
+| | Perplexity decider-27b | Cloudflare Clef 27B / Clef-flash 9B | Jev |
+|---|---|---|---|
+| 이미지 | 받는다(state 배열, 한 장 ≈ 2MP) | 받는다(최대 4장, 장당 16MP) | 안 받는다 |
+| 업체 벤치마크 종합 | 85.7% | 추론에서 Jev보다 낮다(GPQA 48 대 78) | 84.5% |
+| 문맥 | 262K | 64K | 32K |
+| 입력 100만 토큰당 | $0.04(출력 무료) | $0.24 / $0.09 | $0.042 |
+| 계정 정보 | API 키 하나 | 계정 ID + API 토큰(권한 둘) | 키 |
+
+**채택: Perplexity decider-27b.** 정확도·값·문맥이 가장 낫고, 계정 정보가 키 하나라 «처음 쓰는 사람이 화면에서 넣는다»가
+가장 쉽다. Clef는 빠르지만(중앙값 0.2초) 추론이 약하고 계정 정보가 둘이다. **어느 업체도 CJK·고서 이미지 정확도를 밝히지
+않는다**(Jev만 «CJK는 낮다»고 밝힌다). 그래서 기본 모델로 올리지 않고 선택지로 둔다 — 재고 나서 올린다.
+
+### 채택한 것
+
+**1. 클라이언트는 한 벌을 물려받는다.** `llm/decider.py::DeciderClient(JevClient)`. 상한(게이트)·백오프·토큰/비용 세기는
+`jev.py` 한 곳에 두고, 주소·모델 id·이미지 싣는 법(`_body`)만 바꾼다. 둘로 복제하면 한쪽만 고쳐진다(Jev 클라이언트가 이미
+llm_pipeline과 두 벌이라 생긴 일 — 메모리 typesafe-jev-limits). 같이 넣은 것: 429의 `Retry-After`를 따르기, 판정 모델 호출도
+**서고 LLM 사용 기록**에 남기기(전에는 Jev 호출이 어디에도 안 남아 «이번 달 얼마»에서 빠졌다), **Jev에 이미지를 주면 보내기 전에
+거부**(Jev는 base64를 글자로 읽어 오류 없이 엉뚱한 답을 낸다 — 2026-10-02 실측).
+
+**2. 큰 이미지는 보내기 전에 줄인다**(`fit_image`). 한 장 32×32 타일 2,048개를 넘으면 오류가 바로 오지 않고 1분 뒤 504가 온다(문서).
+쪽마다 1분을 버리지 않게 한다.
+
+**3. 종류는 «종류마다 예/아니오», 방향은 «고르기».** 한 쪽에 종류가 둘일 수 있어(한글+훈점) 고르기 하나로 물으면 하나만 답한다.
+noul은 서로의 답을 보지 않고 병렬로 평가된다. 백지가 «있다»면 나머지를 지운다(모순이고 백지 판정이 더 싸다). 문턱 0.5는
+«아니오보다 예가 낫다»일 뿐 **잰 값이 아니다** — 확률을 `per_page[].decider`에 그대로 실어 접지 않는다.
+측정은 `scripts/eval_decider_survey.py`(`--run` 없이는 보내지 않고 `--max-pages` 기본 60).
+방향은 지금처럼 **투영(코드)이 먼저**이고 모델 답은 투영이 모름일 때만 쓴다 — 그대로다.
+
+**4. 판정 모델 키를 화면에서 넣는다.** 설정 ▸ **판정 모델** 칸(Perplexity·TypeSafe). 판정 모델은 LLM 라우터에 들지 않아
+(계약이 «프롬프트 → 글»이 아니다, D-129) «LLM 연결» 목록에 나오지 않으므로 따로 둔다. 키는 기존 키 저장 길(D-102 —
+서고 `.env`, 값은 돌려주지 않고 끝 네 글자만)에 `perplexity`·`typesafe`를 더했다. **Jev도 이제 서고 `.env`를 읽는다** —
+전에는 앱 밖의 개인 파일(`~/.claude/data/triage/.env`)과 환경변수만 봐서, 화면에 칸을 만들어도 Jev는 «키 없음»이었을 것이다.
+Decider는 그 개인 파일을 보지 않는다(남의 키를 쓰지 않게). 「연결 확인」은 질문 하나를 실제로 보낸다 — 형식만 맞고 결제가
+안 된 키가 흔해서 불러 봐야 안다. 상태 라우트 `GET /api/settings/decision-models`(library 라우터, 라우트 1개 늘었다).
+
+**5. 자동 스캔의 «종류 판정 모델»에 «판정 모델 — Perplexity Decider»를 붙인다**(`data-extra-options="vision-decider"`,
+값 `decider:decider-27b` → `force_provider="decider"`). 키가 없으면 선택지가 꺼지고, 라우트는 보내기 전에 «설정 ▸ 판정 모델»을
+알려 준다. dry_run이면 어림 비용(쪽당 2,400토큰, 문서 단가)을 보인다. 결과에 실제 쓴 토큰·비용(`decider_usage`)이 찍힌다.
+
+### 하지 않은 것
+
+- **기본 모델을 바꾸지 않았다.** 우리 책으로 재기 전이다(전역 규칙 11 — 측정은 사람이 비용을 보고 승인한다).
+- **GPU 게이트를 풀지 않았다.** 종류 판정 자체는 원격이라 GPU가 필요 없지만, 같은 경로의 180° 점수(PaddleOCR)가 CPU에서 한 시간이다.
+  «CPU에서도 판정 모델로 종류만»은 따로 정할 일이다.
+- Jev를 Decider로 갈아 끼우지 않았다(Decider는 문맥이 8배라 편성의 구조 묻기에도 쓸 수 있다 — 같은 자로 재고 정한다).
+
+### 시험
+
+| 주장 | 시험 |
+|---|---|
+| 문서 계약대로 보낸다(주소·Bearer·모델·이미지 자리·최상위 칸) | `tests/test_decision_models.py::test_decider_request_matches_documented_contract`·`test_decider_image_is_real_base64` |
+| 큰 이미지는 타일 상한 안으로 | `test_big_image_is_shrunk_below_tile_limit` |
+| 서고 `.env` 키를 둘 다 읽고, 환경변수가 이긴다 / Decider는 개인 파일을 안 본다 | `test_keys_come_from_library_env`·`test_decider_does_not_read_jev_personal_key_file` |
+| 키는 **이름 순서가 먼저**(서고 .env의 OPENROUTER 키가 키 파일의 TYPESAFE 키를 이기지 않는다) | `test_key_name_order_beats_source_order` |
+| Jev에 이미지 → 보내기 전 거부 | `test_jev_refuses_images_before_sending` |
+| Retry-After | `test_retry_after_is_honoured` |
+| 사용 기록 | `test_decision_calls_are_logged_to_library_usage` |
+| 답 해석(문턱·백지·형 아닌 답) | `test_parse_decider_answers_threshold_and_blank` |
+| 설정 라우트·키 저장(값 비노출) | `test_settings_route_lists_models_and_saves_keys` |
+| 자동 스캔이 판정 모델로 돈다(키 없음 400·dry_run 비용·확률 실림) | `test_survey_with_decider_uses_probabilities` |
+| 화면 배선(선택지·설정 칸) | `test_scan_select_offers_decider_option` — 배선만 본다. 눌러서 도는지는 headless로 확인 |
+| 실제 정확도 | **없음** — 키가 생기면 `scripts/eval_decider_survey.py`로 잰다 |

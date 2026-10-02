@@ -19,7 +19,117 @@ const PROVIDER_KEY_HELP = {
   anthropic: { label: "Anthropic API 키", placeholder: "sk-ant-…" },
   openai: { label: "OpenAI API 키", placeholder: "sk-…" },
   gemini: { label: "Google(Gemini) API 키", placeholder: "AIza…" },
+  // 판정 모델(D-134) — 아래 _loadDecisionModels가 같은 키 줄을 쓴다
+  perplexity: { label: "Perplexity API 키", placeholder: "pplx-…" },
+  typesafe: { label: "TypeSafe API 키", placeholder: "키" },
 };
+
+const _DECISION_STATUS_LABEL = {
+  ready: "연결됨",
+  needs_key: "키 필요",
+  unchecked: "키 있음 — 확인 전",
+  error: "연결 실패",
+};
+
+/**
+ * 설정 «판정 모델» 칸 (D-134).
+ * 입력: check — true면 서버가 실제로 한 번 불러 키가 맞는지 본다(질문 하나).
+ *
+ * 왜 따로인가: 판정 모델은 LLM 라우터에 들지 않아 위의 «LLM 연결» 목록에 나오지 않는다.
+ * 그래서 전에는 키를 넣을 화면이 아예 없었다 — 처음 쓰는 사람은 Jev를 쓸 길이 없었다.
+ */
+let _decisionModelsGen = 0;
+
+async function _loadDecisionModels(check = false) {
+  const box = document.getElementById("settings-decision-models");
+  if (!box) return;
+  // 늦게 온 응답이 새 것을 덮지 않게(설정 열기·키 저장 이벤트가 겹치면 두 번 그린다), 그리고 사람이
+  // 칸에 키를 치는 중이면 다시 그리지 않는다 — 다시 그리면 친 글이 옛 칸과 함께 사라진다
+  // (2026-10-02 headless 실측: 넣은 키가 저장되지 않고 «키를 입력하세요»만 떴다)
+  const gen = ++_decisionModelsGen;
+  const typing = () =>
+    [...box.querySelectorAll("input.settings-key-input")].some((i) => i.value.trim());
+  const btn = document.getElementById("btn-check-decision-models");
+  if (check && btn) {
+    btn.disabled = true;
+    btn.textContent = "확인 중…";
+  }
+  try {
+    const [res, kr] = await Promise.all([
+      fetch(`/api/settings/decision-models${check ? "?check=true" : ""}`),
+      fetch("/api/settings/llm-keys"),
+    ]);
+    if (!res.ok) {
+      box.innerHTML = '<div class="placeholder">판정 모델 상태를 확인하지 못했습니다.</div>';
+      return;
+    }
+    const models = (await res.json()).models || [];
+    const keyState = kr.ok ? (await kr.json()).keys || {} : {};
+    if (gen !== _decisionModelsGen) return; // 더 새 요청이 있다
+    if (!check && typing()) return; // 치는 중 — 지우지 않는다
+    box.innerHTML = "";
+    for (const m of models) {
+      const row = document.createElement("div");
+      row.className = `settings-llm-row llm-${m.status === "ready" ? "ready" : "needs_key"}`;
+      const head = document.createElement("div");
+      head.className = "settings-llm-head";
+      const name = document.createElement("span");
+      name.className = "settings-llm-name";
+      name.textContent = m.display_name;
+      const badge = document.createElement("span");
+      badge.className = `settings-llm-badge llm-badge-${m.status === "ready" ? "ready" : "needs_key"}`;
+      badge.textContent = _DECISION_STATUS_LABEL[m.status] || m.status;
+      const billing = document.createElement("span");
+      billing.className = "settings-llm-billing";
+      billing.textContent = "종량 과금";
+      head.append(name, badge, billing);
+      row.appendChild(head);
+
+      const note = document.createElement("div");
+      note.className = "settings-llm-note";
+      note.textContent = m.role + (m.detail ? ` — ${m.detail}` : "");
+      row.appendChild(note);
+
+      // 가입 안내는 키가 없거나 연결이 실패했을 때만 — 키가 있으면 «연결 확인»만 남긴다
+      if ((m.status === "needs_key" || m.status === "error") && (m.steps || []).length) {
+        const steps = document.createElement("ol");
+        steps.className = "settings-llm-steps";
+        for (const s of m.steps) {
+          const li = document.createElement("li");
+          li.textContent = s;
+          steps.appendChild(li);
+        }
+        if (m.signup_url) {
+          const li = document.createElement("li");
+          const a = document.createElement("a");
+          a.href = m.signup_url;
+          a.target = "_blank";
+          a.rel = "noopener";
+          a.textContent = m.signup_url;
+          a.style.wordBreak = "break-all"; // 좁은 설정 패널에서 주소가 옆으로 잘리지 않게
+          li.append("주소: ", a);
+          steps.appendChild(li);
+        }
+        row.appendChild(steps);
+      }
+      row.appendChild(_llmKeyRow(m.id, keyState));
+      box.appendChild(row);
+    }
+  } catch (e) {
+    box.innerHTML = `<div class="placeholder">판정 모델 상태를 확인하지 못했습니다: ${String(e.message || e).replace(/[<>&]/g, "")}</div>`;
+  } finally {
+    if (check && btn) {
+      btn.disabled = false;
+      btn.textContent = "연결 확인";
+    }
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("btn-check-decision-models")?.addEventListener("click", () => _loadDecisionModels(true));
+});
+// 키를 저장·삭제하면(_saveLlmKeys) 이 칸도 다시 그린다
+document.addEventListener("llm-accounts-changed", () => _loadDecisionModels(false));
 
 /**
  * 프로바이더 카드에 붙는 키 입력 줄.
