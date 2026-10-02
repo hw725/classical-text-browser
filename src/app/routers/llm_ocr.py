@@ -853,6 +853,10 @@ class PageSurveyRequest(BaseModel):
     # (guess)으로 두어 화면이 미리보기로 묻는다. 바로 선 쪽의 180° 검사는 하지 않는다 — 그것까지
     # 하면 쪽마다 OCR 둘이라 CPU에서 한 시간이다. 「권 전체 OCR」이 실행 직전에 이것으로 부른다
     orientation_only: bool = False
+    # 「말로 지시」의 자동 스캔(2026-10-02): 결과를 작업 계획(read_plan)으로도 돌려준다.
+    # base_plan이 있으면 그 위에 측정값을 얹는다(건너뜀 쪽·측정 안 한 쪽은 그대로). 저장 안 함
+    as_plan: bool = False
+    base_plan: dict | None = None
 
 
 # 방향만 잴 때 진행 표시에 찍는 말 — 종류 라벨이 없으니 방향을 보인다
@@ -1148,7 +1152,28 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
             for row in per_page
             if row.get("mixed")
         ]
+        plan_out: dict = {}
+        if body.as_plan:
+            # 측정값을 계획 칸으로 바로 넣는다 — 글로 풀어 LLM이 다시 옮기게 하지 않는다
+            # (core.read_plan.plan_from_survey 머리말)
+            from core.read_plan import default_engine_for, plan_from_survey
+
+            for row in per_page:
+                if row.get("content"):
+                    row["label"] = CONTENT_LABELS.get(row["content"], row["content"])
+            try:
+                plan, marks = plan_from_survey(
+                    per_page,
+                    total or b,
+                    base_plan=body.base_plan,
+                    writing=body.writing_direction,
+                    fallback_engine=default_engine_for(body.writing_direction, available),
+                )
+                plan_out = {"plan": plan, "plan_marks": marks}
+            except Exception as e:  # noqa: BLE001 — 계획을 못 만들어도 측정 결과는 돌려준다
+                plan_out = {"plan": None, "plan_error": f"계획으로 옮기지 못했습니다: {e}"}
         return {
+            **plan_out,
             "checked": len(targets),
             "calls": 0 if body.orientation_only else len(targets),
             "unknown": unknown,

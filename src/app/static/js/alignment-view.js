@@ -63,14 +63,19 @@ function _initSubtabEvents() {
       const corrListSection = document.getElementById("corr-list-section");
       const alignmentView = document.getElementById("alignment-view");
       const batchView = document.getElementById("batch-correction-view");
+      const exportView = document.getElementById("corr-export-view");
 
       // 모든 뷰 숨기기
       if (corrTextArea) corrTextArea.style.display = "none";
       if (corrListSection) corrListSection.style.display = "none";
       if (alignmentView) alignmentView.style.display = "none";
       if (batchView) batchView.style.display = "none";
+      if (exportView) exportView.style.display = "none";
 
-      if (view === "alignment") {
+      if (view === "export") {
+        // 들이기·내보내기(export-view.js) — 권 전체가 대상이라 쪽을 다시 그리지 않는다
+        if (exportView) exportView.style.display = "";
+      } else if (view === "alignment") {
         if (alignmentView) alignmentView.style.display = "";
         _runAlignment();
       } else if (view === "batch") {

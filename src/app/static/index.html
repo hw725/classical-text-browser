@@ -1280,18 +1280,12 @@
                   hidden
                   title="이 회전을 이 권에 저장합니다. 저장하면 OCR·레이아웃·앵커가 모두 돌린 이미지를 기준으로 하므로, 이미 있는 OCR 결과는 다시 돌려야 합니다"
                 >저장</button>
-                <!-- 회전 제안(D-126) — 쪽 썸네일을 비전 모델에 보여 «바로 섰나»만 답받고 구간으로 묶는다 -->
-                <button
-                  id="pdf-rotate-suggest"
-                  class="pdf-btn"
-                  title="쪽을 미리 훑어 판독 계획을 세웁니다 — 회전이 다른 구간(«37~52쪽은 0°», 코드가 잼)과 쪽마다 알맞은 OCR 엔진(비전 모델이 글의 종류를 봄)을 제안합니다. 쪽마다 모델을 한 번 부르고, 저장은 구간마다 미리 보이며 확인받습니다"
-                  aria-label="판독 계획"
-                >판독 계획<span class="llm-tag">LLM</span></button>
-                <!-- 말로 작업 지시(D-131) — 복잡한 책을 말 → 계획 → 적용 → OCR → 결과 되들이기 → 내려받기로 -->
+                <!-- 말로 작업 지시(D-131) — 자동 스캔(옛 「판독 계획」, D-126) + 말 → 계획 → 적용 → OCR.
+                     두 입구가 같은 계획 칸을 덮어쓰던 것을 한 창으로 합쳤다(2026-10-02) -->
                 <button
                   id="work-order-btn"
                   class="pdf-btn"
-                  title="이 책에 대해 아는 것을 말로 적으면(«5~69쪽은 누운 2쪽 펼침, 활자 세로쓰기») LLM이 쪽 구간별 회전·엔진·쓰기 방향과 장 목록으로 옮깁니다. 확인하고 적용한 뒤 「권 전체 OCR」로 돌리고, LLM이 돌려준 교정·번역을 들여 장별 위키·마크다운으로 내려받습니다"
+                  title="쪽을 자동으로 훑어 회전·OCR 엔진을 재고(스캔), 이 책에 대해 아는 것을 말로 덧붙이면(«5~69쪽은 누운 2쪽 펼침, 활자 세로쓰기») 쪽 구간별 작업 계획이 됩니다. 확인하고 적용한 뒤 「권 전체 OCR」로 돌립니다"
                   aria-label="말로 작업 지시"
                 >말로 지시<span class="llm-tag">LLM</span></button>
                 <div class="pdf-toolbar-divider"></div>
@@ -1624,7 +1618,7 @@
                   <label class="text-toolbar-check" title="OCR 직전에 옆으로 누운 쪽을 찾아(모델 없이 코드가 잼) 구간으로 보이고, 확인하면 그 쪽 범위의 회전을 저장한 뒤 OCR합니다. 한 PDF에 세로 본문과 가로로 돌린 쪽이 섞여 있을 때 켜 두세요">
                     <input id="ocr-batch-orient" type="checkbox" checked /> 돌아간 쪽은 세워서
                   </label>
-                  <!-- 판독 계획(D-126 덧붙임) — 구간별 엔진. JS가 채운다 -->
+                  <!-- 작업 계획(「말로 지시」의 스캔·말, D-126·D-131·D-132) — 구간별 엔진. JS가 채운다 -->
                   <div id="ocr-batch-plan" class="ocr-engine-note" hidden></div>
                   <button
                     id="ocr-run-part"
@@ -1866,6 +1860,13 @@
               >
                 대조
               </div>
+              <div
+                class="corr-subtab"
+                data-view="export"
+                title="권 전체 — 텍스트로 내려받기, LLM 결과 들이기, 노트 틀"
+              >
+                들이기·내보내기
+              </div>
             </div>
 
             <!-- 교정 텍스트 표시 영역 (글자 단위 span) -->
@@ -1934,6 +1935,67 @@
                   찾을 글자와 교정 글자를 입력하고 [미리보기]를 누르세요
                 </div>
               </div>
+            </div>
+
+            <!-- 들이기·내보내기 뷰 (2026-10-02, 옛 「말로 작업 지시」 ③) — 권 전체가 대상이다.
+                 OCR·교정이 끝난 뒤의 일이라 계획 창이 아니라 확정본(L4)을 다루는 이 탭에 둔다.
+                 «강독»은 한 예시였을 뿐이라 화면 말에서 뺐다: 논문 한 편을 줄바꿈만 지워 마크다운으로
+                 받는 것도, LLM 결과를 층에 나눠 들이는 것도 같은 자리다. -->
+            <div
+              id="corr-export-view"
+              class="corr-export-view"
+              style="display: none"
+            >
+              <div class="wo-step"><b>텍스트로 내려받기</b> — 확정본(L4)에서 PDF 판면 때문에 생긴 줄바꿈만 지우고 문단으로 잇습니다. 쪽마다 되풀이되는 머리글·쪽 번호는 뺍니다</div>
+              <div class="wo-row">
+                <select id="cx-format" class="props-select" title="파일 형식">
+                  <option value="md">마크다운 (.md)</option>
+                  <option value="wiki">미디어위키 (.wiki)</option>
+                </select>
+                <label class="text-toolbar-check" title="끄면 판면 줄바꿈을 지워 문단으로 잇고, 켜면 원문 줄바꿈을 그대로 둡니다">
+                  <input id="cx-keep-lines" type="checkbox" /> 원문 줄 유지</label>
+                <div style="flex: 1"></div>
+                <button id="cx-dl-one" class="text-btn text-btn-primary" title="전문을 파일 하나로 — 논문 한 편처럼 장이 없을 때">한 파일로</button>
+                <button id="cx-dl-zip" class="text-btn" title="작업 계획의 장마다 한 파일 + 목차·전문(zip). 들인 LLM 결과가 있으면 노트도 함께">장별로 (zip)</button>
+              </div>
+              <div class="wo-dim">줄을 잇는 방식: 세로쓰기는 그대로 붙이고, 가로쓰기는 빈칸 하나를 둡니다(한자·가나끼리 만나면 붙임, 영어 «con-»은 하이픈을 떼고 붙임).
+                문단 끝과 들여쓰기는 OCR 결과의 줄 좌표로 가릅니다 — 확정본의 줄 수가 OCR 결과와 다른 쪽은 글자 수로 어림합니다.</div>
+
+              <div class="wo-step"><b>LLM 결과 들이기</b> — 앱 밖의 LLM(Claude Code 등)이 돌려준 JSON(교정·번역·어휘)을 기존 층에 나눠 담습니다</div>
+              <div class="wo-row">
+                <label class="text-btn" title="새 저장 형식 없이 기존 층에 나눠 담습니다 — 교정은 확정본(L4), 항목은 편성 경계, 번역은 L6, 어휘·문법은 사전형 주석(L7). 사람이 고친 것은 덮지 않습니다">
+                  JSON 들이기<input id="cx-note-file" type="file" accept=".json,application/json" hidden />
+                </label>
+              </div>
+
+              <details class="wo-json" id="cx-template-box">
+                <summary>원하는 노트 모양으로 내려받기 (틀)</summary>
+                <div class="wo-dim">노트 모양이 따로 있으면 원하는 노트 한 편(한 항목이면 충분)을 붙여 넣고 「틀 만들기」를 누르세요.
+                  LLM은 모양만 읽어 틀로 바꾸고, 원문·번역·어휘는 내려받을 때 서고의 층에서 채웁니다. 만든 틀은 파일로 받아 두었다가 다시 불러올 수 있습니다.</div>
+                <textarea id="cx-example" class="comp-split-textarea wo-said" spellcheck="false"
+                  placeholder="예: = 제목 = … == 원문 == … '''○①''' 원문 … 번역 … 어휘 …"></textarea>
+                <div class="wo-row">
+                  <label>모델
+                    <select id="cx-model-select" class="props-select llm-model-select"
+                      title="예시를 틀로 바꿀 모델. «자동»은 사용 가능한 프로바이더 순서에서 처음 되는 것"></select>
+                  </label>
+                  <button id="cx-make-template" class="text-btn text-btn-primary">틀 만들기</button>
+                  <label class="text-btn" title="전에 받아 둔 틀 파일(.j2·.txt)">
+                    틀 불러오기<input id="cx-template-file" type="file" accept=".j2,.txt,.jinja,text/plain" hidden />
+                  </label>
+                  <button id="cx-template-save" class="text-btn" disabled>틀 받기</button>
+                  <div style="flex: 1"></div>
+                  <select id="cx-template-ext" class="props-select" title="만들 파일의 확장자">
+                    <option value="wiki">.wiki</option>
+                    <option value="md">.md</option>
+                    <option value="txt">.txt</option>
+                  </select>
+                  <button id="cx-dl-template" class="text-btn" disabled>이 틀로 내려받기</button>
+                </div>
+                <div id="cx-template-problems" class="wo-unsupported" style="display: none"></div>
+                <pre id="cx-template-preview" class="wo-template-preview" style="display: none"></pre>
+              </details>
+              <div id="cx-status" class="comp-split-note"></div>
             </div>
 
             <!-- 대조 뷰 (Phase 10-3, 대조 탭에서만 표시) -->
@@ -3468,6 +3530,18 @@
                   download
                 >만든 PDF 내려받기</a>
               </div>
+
+              <!-- 5) 텍스트 — PDF 판면 줄바꿈만 지운 전문(2026-10-02). 쪽 번호·머리글은 빼고 문단으로 잇는다.
+                   형식·장별·원문 줄 유지는 교정 탭 「들이기·내보내기」에서 고른다 -->
+              <div class="extract-section">
+                <div class="extract-section-title">3. 텍스트로 내려받기</div>
+                <button
+                  type="button"
+                  class="extract-run-btn extract-secondary"
+                  id="extract-text-md-btn"
+                  title="확정본(L4) 전문에서 PDF 판면 때문에 생긴 줄바꿈만 지우고 마크다운 한 파일로 받습니다. 다른 형식·장별 파일은 교정 탭 「들이기·내보내기」에서"
+                >마크다운 내려받기</button>
+              </div>
             </div>
 
             <!-- 기본 placeholder (문헌 미선택 시) -->
@@ -3958,42 +4032,9 @@
         </div>
       </div>
 
-      <!-- 판독 계획 모달(D-126) — 쪽 범위·비전 모델·호출 횟수를 한 창에서 정한다. prompt/confirm 사슬은
-           모델을 고를 자리가 없었다(2026-09-10 사용자 지적). 방향은 코드+PaddleOCR이 재고, 모델은 글의 종류만 본다. -->
-      <div class="corr-dialog-overlay" id="survey-overlay" style="display: none">
-        <div class="corr-dialog survey-dialog">
-          <div class="bib-dialog-header">
-            <span class="bib-dialog-title">판독 계획 <span class="llm-tag">LLM</span></span>
-            <div style="flex: 1"></div>
-            <button class="bib-dialog-close" id="survey-close" title="닫기">&times;</button>
-          </div>
-          <div class="comp-split-note">
-            쪽마다 글줄의 방향은 코드와 PaddleOCR이 재고(GPU), 비전 모델은 «무슨 글인가»만 답합니다.
-            회전이 다른 구간과 쪽마다 알맞은 OCR 엔진을 제안합니다.
-          </div>
-          <label class="survey-row">쪽 범위
-            <input id="survey-pages" class="props-input" type="text" placeholder="비우면 권 전체 · 37-60"
-              title="«37-60»처럼 적으면 그 쪽만 봅니다. 의심되는 구간만 적으면 빠릅니다" />
-          </label>
-          <label class="survey-row">모델
-            <select id="survey-model-select" class="props-select llm-model-select" data-vision-only
-              title="글의 종류를 판정할 비전 모델. «자동»은 사용 가능한 프로바이더 순서(Ollama → …)에서 처음 되는 것"></select>
-          </label>
-          <div id="survey-status" class="comp-split-note"></div>
-          <!-- 진행 막대 — 쪽마다 몇 초씩 걸리므로 «어디까지 왔나»를 보인다(2026-09-11) -->
-          <div id="survey-progress" class="survey-progress" hidden>
-            <progress id="survey-progress-bar" max="1" value="0"></progress>
-            <span id="survey-progress-text"></span>
-          </div>
-          <div class="corr-dialog-actions">
-            <div style="flex: 1"></div>
-            <button id="survey-cancel" class="text-btn">닫기</button>
-            <button id="survey-run" class="text-btn text-btn-primary">계획 세우기</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 말로 작업 지시 모달(D-131) — ①말 → ②계획 확인·적용 → ③결과 되들이기·내려받기. 한 창에 한 흐름. -->
+      <!-- 작업 계획 모달(D-131 + D-126 합침, 2026-10-02) — ①스캔 → ②말 → ③계획 확인·적용. 한 창에 한 흐름.
+           옛 「판독 계획」 창은 여기 ①(자동 스캔)이 되었다. 스캔은 계획 칸으로 바로 들어가고(코드가 잰
+           값을 LLM이 다시 옮기지 않게), 말은 그 위를 고친다. 결과 들이기·내려받기는 교정 탭으로 옮겼다. -->
       <div class="corr-dialog-overlay" id="work-order-overlay" style="display: none">
         <div class="corr-dialog work-order-dialog">
           <div class="bib-dialog-header">
@@ -4001,61 +4042,52 @@
             <div style="flex: 1"></div>
             <button class="bib-dialog-close" id="wo-close" title="닫기">&times;</button>
           </div>
-          <div class="wo-step"><b>① 이 책에 대해 아는 것을 말로 적으세요</b></div>
+          <div class="wo-step"><b>① 자동 스캔</b> — 쪽을 훑어 회전과 OCR 엔진을 잽니다. 결과는 ③의 계획에 바로 들어갑니다</div>
+          <div class="wo-row">
+            <label>쪽 범위
+              <input id="wo-scan-pages" class="props-input wo-scan-pages" type="text" placeholder="비우면 권 전체 · 37-60"
+                title="«37-60»처럼 적으면 그 쪽만 봅니다. 의심되는 구간만 적으면 빠릅니다" autocomplete="off" />
+            </label>
+            <label title="글줄의 방향을 잴 때의 기준이고, 엔진을 고르지 못한 쪽의 쓰기 방향이 됩니다">쓰기
+              <select id="wo-scan-writing" class="props-select">
+                <option value="vertical_rtl">세로</option>
+                <option value="horizontal_ltr">가로</option>
+              </select>
+            </label>
+            <label id="wo-scan-model-row">종류 판정 모델
+              <select id="wo-scan-model-select" class="props-select llm-model-select" data-vision-only
+                title="쪽마다 «무슨 글인가»(활자·판본·손글씨·훈점·한글·백지)를 답할 비전 모델 — 그 답으로 엔진을 고릅니다"></select>
+            </label>
+            <div style="flex: 1"></div>
+            <button id="wo-scan" class="text-btn text-btn-primary">스캔</button>
+          </div>
+          <div id="wo-scan-note" class="wo-dim"></div>
+          <div id="wo-scan-progress" class="survey-progress" hidden>
+            <progress id="wo-scan-progress-bar" max="1" value="0"></progress>
+            <span id="wo-scan-progress-text"></span>
+          </div>
+          <div class="wo-step"><b>② 이 책에 대해 아는 것을 말로 덧붙이세요</b> — 스캔이 모르는 것(장 목록·쪽 이름표·판독 지침)이나 스캔이 틀린 구간만 적으면 됩니다</div>
           <textarea id="wo-said" class="comp-split-textarea wo-said" spellcheck="false"
-            placeholder="예: 1·3쪽은 표지와 목차, 2·4쪽은 백지. 5~69쪽은 시계 방향으로 90° 누운 2쪽 펼침이고 근대 활자 세로쓰기(가타카나 문어문). 80~97쪽은 초서 필사본. 120~132쪽은 가로쓰기. 133~154쪽은 일본어 편지에 세로쓰기 한글 번역이 붙어 있다. 장은 5쪽 壹. 民事慣習回答彙集, 34쪽 貳. …"></textarea>
+            placeholder="예: 1·3쪽은 표지와 목차, 2·4쪽은 백지. 80~97쪽은 초서 필사본. 120~132쪽은 가로쓰기. 교재 면은 PDF 쪽 − 4. 장은 5쪽 壹. 民事慣習回答彙集, 34쪽 貳. …"></textarea>
           <div class="wo-row">
             <label>모델
               <select id="wo-model-select" class="props-select llm-model-select"
                 title="말을 계획으로 옮길 모델. «자동»은 사용 가능한 프로바이더 순서에서 처음 되는 것"></select>
             </label>
             <div style="flex: 1"></div>
-            <button id="wo-from-words" class="text-btn text-btn-primary">계획으로 옮기기</button>
+            <button id="wo-from-words" class="text-btn text-btn-primary">계획에 덧붙이기</button>
           </div>
-          <div class="wo-step"><b>② 계획을 확인하고 적용하세요</b> — 적용하면 회전·판독 지침·장 목록이 저장되고, 「권 전체 OCR」이 이 계획대로 돕니다</div>
+          <div class="wo-step"><b>③ 계획을 확인하고 적용하세요</b> — 적용하면 회전·판독 지침·장 목록이 저장되고, 「권 전체 OCR」이 이 계획대로 돕니다</div>
           <div id="wo-plan" class="wo-plan"></div>
           <details class="wo-json">
             <summary>계획 JSON 직접 고치기</summary>
             <textarea id="wo-plan-json" class="comp-split-textarea" spellcheck="false"></textarea>
           </details>
           <div class="wo-row">
+            <div class="wo-dim">OCR이 끝난 뒤 LLM 결과 들이기와 텍스트·노트 내려받기는 교정 탭 「들이기·내보내기」에 있습니다.</div>
             <div style="flex: 1"></div>
             <button id="wo-apply" class="text-btn text-btn-primary">적용</button>
           </div>
-          <div class="wo-step"><b>③ 결과</b> — LLM(Claude Code 등)이 돌려준 강독 JSON(교정·국역·어휘)을 들이고, 장별 문서로 내려받으세요</div>
-          <div class="wo-row">
-            <label class="text-btn" title="LLM이 돌려준 강독 결과 JSON. 새 저장 형식 없이 기존 층에 나눠 담습니다 — 교정은 확정본(L4), 문서 항목은 편성 경계, 국역은 번역(L6), 어휘·문법은 사전형 주석(L7). 사람이 고친 것은 덮지 않습니다">
-              강독 JSON 들이기<input id="wo-note-file" type="file" accept=".json,application/json" hidden />
-            </label>
-            <div style="flex: 1"></div>
-            <label class="text-toolbar-check" title="끄면 세로 열을 문단으로 잇고, 켜면 원문 줄바꿈을 그대로 둡니다">
-              <input id="wo-keep-lines" type="checkbox" /> 원문 줄 유지</label>
-            <button id="wo-dl-wiki" class="text-btn">위키 내려받기</button>
-            <button id="wo-dl-md" class="text-btn">마크다운 내려받기</button>
-          </div>
-          <details class="wo-json" id="wo-template-box">
-            <summary>원하는 노트 모양으로 내려받기 (틀)</summary>
-            <div class="wo-dim">수업·스터디마다 노트 모양이 다르면, 원하는 노트 한 편(한 항목이면 충분)을 붙여 넣고 「틀 만들기」를 누르세요.
-              LLM은 모양만 읽어 틀로 바꾸고, 원문·국역·어휘는 내려받을 때 서고의 층에서 채웁니다. 만든 틀은 파일로 받아 두었다가 다시 불러올 수 있습니다.</div>
-            <textarea id="wo-example" class="comp-split-textarea wo-said" spellcheck="false"
-              placeholder="예: = 제목 = … == 원문 강독 == … '''○①''' 원문 … 국역 … 어휘 …"></textarea>
-            <div class="wo-row">
-              <button id="wo-make-template" class="text-btn text-btn-primary">틀 만들기</button>
-              <label class="text-btn" title="전에 받아 둔 틀 파일(.j2·.txt)">
-                틀 불러오기<input id="wo-template-file" type="file" accept=".j2,.txt,.jinja,text/plain" hidden />
-              </label>
-              <button id="wo-template-save" class="text-btn" disabled>틀 받기</button>
-              <div style="flex: 1"></div>
-              <select id="wo-template-ext" class="props-select" title="만들 파일의 확장자">
-                <option value="wiki">.wiki</option>
-                <option value="md">.md</option>
-                <option value="txt">.txt</option>
-              </select>
-              <button id="wo-dl-template" class="text-btn" disabled>이 틀로 내려받기</button>
-            </div>
-            <div id="wo-template-problems" class="wo-unsupported" style="display: none"></div>
-            <pre id="wo-template-preview" class="wo-template-preview" style="display: none"></pre>
-          </details>
           <div id="wo-status" class="comp-split-note"></div>
           <div class="corr-dialog-actions">
             <div style="flex: 1"></div>
@@ -5013,7 +5045,7 @@
     <!-- 앱 모듈 (로드 순서 중요: sidebar-tree가 viewerState를 정의, 나머지가 참조) -->
     <script src="/static/js/toast.js?v=20260222"></script>
     <script src="/static/js/sidebar-tree.js?v=20260918"></script>
-    <script src="/static/js/pdf-renderer.js?v=20260930"></script>
+    <script src="/static/js/pdf-renderer.js?v=20261002"></script>
     <script src="/static/js/text-editor.js?v=20260930c"></script>
     <script src="/static/js/koten-layout-detector.js?v=20260221"></script>
     <script src="/static/js/layout-editor.js?v=20260918"></script>
@@ -5024,9 +5056,10 @@
     <script src="/static/js/create-document.js?v=20260717c"></script>
     <script src="/static/js/drag-drop.js?v=20260717a"></script>
     <script src="/static/js/hwp-import.js?v=20260223b"></script>
-    <script src="/static/js/ocr-panel.js?v=20260930"></script>
-    <script src="/static/js/work-order.js?v=20260930"></script>
-    <script src="/static/js/alignment-view.js?v=20260223"></script>
+    <script src="/static/js/ocr-panel.js?v=20261002"></script>
+    <script src="/static/js/work-order.js?v=20261002"></script>
+    <script src="/static/js/export-view.js?v=20261002"></script>
+    <script src="/static/js/alignment-view.js?v=20261002"></script>
     <script src="/static/js/variant-manager.js?v=20260221b"></script>
     <script src="/static/js/batch-correction.js?v=20260221"></script>
     <script src="/static/js/composition-editor.js?v=20260930c"></script>
@@ -5044,6 +5077,6 @@
     <!-- 텍스트 추출 패널 — workspace.js보다 먼저 정의돼야 프로필 적용 시 호출된다 -->
     <script src="/static/js/extract-panel.js?v=20260918"></script>
     <script src="/static/js/contents-tree.js?v=20260902b"></script>
-    <script src="/static/js/workspace.js?v=20260906a"></script>
+    <script src="/static/js/workspace.js?v=20261002"></script>
   </body>
 </html>

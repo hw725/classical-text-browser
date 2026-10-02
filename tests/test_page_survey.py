@@ -1,6 +1,7 @@
 """D-126 — 판독 계획: 모델은 정해진 답만 하고, 코드가 구간을 묶고 설치된 엔진만 권한다."""
 
 import json
+from pathlib import Path
 
 from core.page_survey import (
     group_engine_ranges,
@@ -279,6 +280,56 @@ def test_route_dry_run_and_survey_with_fake_vision(client, tmp_path, monkeypatch
     assert got["rotation"] == 0 and got["ranges"] == [{"from": 2, "to": 3, "rotation": 90}]
     body = json.loads(r.text)
     assert body["rotation"] == 0
+
+
+def test_route_as_plan_puts_measurements_into_plan(client, tmp_path, monkeypatch):  # noqa: F811
+    """「말로 지시」의 자동 스캔(2026-10-02): as_plan이면 측정을 작업 계획 칸으로 바로 돌려준다.
+    사람이 건너뜀으로 둔 쪽은 그대로, 섞인 쪽은 표시만 하고 엔진을 고르지 않는다. 저장 안 함."""
+    from app import _state
+    from core import env_doctor
+
+    monkeypatch.setattr(env_doctor, "_GPU_RUNTIME", True)
+    lib, part_id = _setup(client, tmp_path)
+    # 건너뜀으로 둔 1쪽도 스캔은 잰다(계획에 넣을 때 사람이 정한 것을 지킬 뿐) — 답은 쪽마다 하나
+    answers = iter(
+        [
+            '{"orientation": "upright", "contents": ["modern_print"]}',
+            '{"orientation": "needs_cw", "contents": ["kunten"]}',
+            '{"orientation": "needs_cw", "contents": ["kunten", "hangul"]}',
+        ]
+    )
+
+    class _FakeProvider:
+        supports_image = True
+
+    class FakeVision:
+        providers = (_FakeProvider(),)
+
+        async def call_with_image(self, prompt, image, **kwargs):
+            class R:
+                text, provider, model = next(answers), "fake", "v-1"
+
+            return R()
+
+    monkeypatch.setattr(_state, "_llm_router", FakeVision())
+    base = {
+        "title": "책",
+        "guidance": "",
+        "ranges": [{"pages": "1", "skip": True, "note": "표지"}],
+        "chapters": [{"page": 2, "title": "一", "level": 1}],
+    }
+    url = f"/api/documents/d1/parts/{part_id}/rotation/suggest"
+    r = client.post(url, json={"pages": [1, 3], "as_plan": True, "base_plan": base})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    plan, marks = d["plan"], d["plan_marks"]
+    assert plan["ranges"][0] == {"pages": "1", "skip": True, "note": "표지"}  # 사람이 정한 건너뜀
+    assert plan["chapters"] == base["chapters"]
+    two = next(x for x in plan["ranges"] if x["pages"] == "2")
+    assert two["rotation"] == 90 and two["note"].startswith("스캔: 측정 90°")
+    assert marks["mixed_pages"] == [3] and marks["guess_pages"] == []
+    # 저장하지 않는다 — 계획 파일이 생기지 않는다
+    assert not list((Path(lib) / "documents" / "d1").glob("read_plan/*.json"))
 
 
 def test_route_streams_progress(client, tmp_path, monkeypatch):  # noqa: F811

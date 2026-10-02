@@ -240,132 +240,28 @@ async function syncSavedRotation(docId, partId, rotation, ranges) {
 }
 
 /**
- * 회전 제안 (D-126): 쪽 썸네일을 비전 모델에 보여 «바로 섰나»만 답받고, 서버가 연속 쪽을 구간으로
- * 묶어 돌려준다. 보내기 전에 «N쪽·호출 K번»을 묻고, 받은 구간은 하나씩 확인받아 저장한다.
- */
-/**
- * 판독 계획 모달의 쪽 범위 칸을 읽는다. 출력: [from, to] 또는 null(권 전체). 잘못 적었으면 throw.
- */
-function _surveyPagesInput() {
-  const raw = (document.getElementById("survey-pages")?.value || "").trim();
-  if (!raw) return null;
-  const m = raw.match(/^(\d+)\s*[-~–]\s*(\d+)$/) || raw.match(/^(\d+)$/);
-  if (!m) throw new Error(`쪽 범위를 «37-60»처럼 적으세요: ${raw}`);
-  return [Number(m[1]), Number(m[2] ?? m[1])];
-}
-
-/**
- * 판독 계획 모달을 열어 «쪽 범위·모델»을 받는다(D-126). 출력: {pages, llmSel} 또는 null(닫음).
+ * 쪽 하나를 «이 회전으로 돌리면 이렇게 보인다»는 작은 그림으로 그린다(2026-10-02, 「말로 지시」 계획 표).
+ * 입력: canvas, docId·partId(지금 열린 권이어야 한다), 쪽, 회전(저장 회전과 같은 뜻 — 바로 세우려면
+ * 시계 방향으로 몇 도), 긴 변 픽셀. 출력: true(그림) 또는 false(이 권이 열려 있지 않음).
  *
- * 왜 모달인가: prompt/confirm 사슬에는 모델을 고를 자리가 없어 늘 «자동»으로 갔다(2026-09-10 사용자 지적).
- * 범위를 고칠 때마다 dry_run으로 «몇 쪽·호출 몇 번»을 상태 줄에 보인다 — 보내기 전에 크기를 안다.
+ * 왜 뷰어를 돌리지 않고 따로 그리는가: 계획 창이 화면을 덮고 있어 뷰어를 돌려 봐야 보이지 않는다.
+ * 저장 회전과 같은 식(page.rotate + 회전)으로 뷰포트를 만든다 — _viewportFor와 같은 좌표계다.
  */
-// 판독 계획 기본 모델 — 벤치마크(2026-09-11, 표본 10쪽): 종류 정답 kimi-k3 7/10·gemma4 5/10·minimax-m3 5/10,
-// 쪽당 1.5초로 gemma4(1.3초)와 같다. 앱 전체 기본(gemma4:cloud, D-114)과는 별개다.
-const SURVEY_DEFAULT_MODEL = "ollama:kimi-k3:cloud";
-
-function _openSurveyModal(post) {
-  const overlay = document.getElementById("survey-overlay");
-  const status = document.getElementById("survey-status");
-  const pagesEl = document.getElementById("survey-pages");
-  const runBtn = document.getElementById("survey-run");
-  if (!overlay || !runBtn) return Promise.resolve({ pages: null, llmSel: {} }); // 모달이 없으면 옛 흐름(권 전체·자동)
-  return new Promise((resolve) => {
-    let seq = 0;
-    const refresh = async () => {
-      const my = ++seq;
-      let pages;
-      try {
-        pages = _surveyPagesInput();
-      } catch (e) {
-        status.textContent = e.message;
-        runBtn.disabled = true;
-        return;
-      }
-      status.textContent = "세는 중…";
-      runBtn.disabled = true;
-      try {
-        const dry = await (await post({ pages, dry_run: true })).json();
-        if (my !== seq) return; // 그 사이 범위를 또 고쳤다
-        if (dry.error) throw new Error(dry.error);
-        status.textContent = `${dry.pages}쪽 — 비전 모델 ${dry.calls}번(글의 종류) + PaddleOCR ${dry.ocr_calls || 0}번(180°·좌우 판정, GPU). 쪽마다 몇 초.`;
-        runBtn.disabled = !dry.pages;
-      } catch (e) {
-        if (my !== seq) return;
-        status.textContent = `셀 수 없습니다: ${e.message}`;
-      }
-    };
-    const done = (val) => {
-      // 실행이면 창을 닫지 않는다 — 진행 막대를 이 창에 보이고 끝나면 _surveySetRunning(false)가 닫는다
-      if (!val) overlay.style.display = "none";
-      overlay.removeEventListener("click", onOverlay);
-      pagesEl?.removeEventListener("input", refresh);
-      resolve(val);
-    };
-    const onOverlay = (ev) => {
-      if (ev.target === overlay) done(null);
-    };
-    document.getElementById("survey-close").onclick = () => done(null);
-    document.getElementById("survey-cancel").onclick = () => done(null);
-    runBtn.onclick = () => {
-      try {
-        const pages = _surveyPagesInput();
-        const llmSel = typeof getLlmModelSelection === "function" ? getLlmModelSelection("survey-model-select") : {};
-        done({ pages, llmSel });
-      } catch (e) {
-        status.textContent = e.message;
-      }
-    };
-    overlay.addEventListener("click", onOverlay);
-    pagesEl?.addEventListener("input", refresh);
-    // 기본 모델은 kimi-k3:cloud. 목록에 없거나 은퇴(disabled)면 «자동». 이 화면에서 한 번 고른 뒤에는 그것을 지킨다
-    const sel = document.getElementById("survey-model-select");
-    if (sel && !sel.dataset.picked) {
-      if ([...sel.options].some((o) => o.value === SURVEY_DEFAULT_MODEL && !o.disabled)) sel.value = SURVEY_DEFAULT_MODEL;
-      sel.addEventListener("change", () => { sel.dataset.picked = "1"; }, { once: true });
-    }
-    // 도구 모음의 쪽 범위 칸에 적어 둔 것이 있으면 그대로 가져온다(잘못 적혀 있으면 비운다)
-    if (pagesEl) {
-      let pre = null;
-      try {
-        pre = _rotatePagesInput();
-      } catch (_) {
-        pre = null;
-      }
-      pagesEl.value = pre ? `${pre[0]}-${pre[1]}` : "";
-    }
-    overlay.style.display = "";
-    pagesEl?.focus();
-    refresh();
-  });
-}
-
-/** 판독 계획 창을 «도는 중» 상태로 — 입력을 잠그고 진행 막대를 보인다. 끄면 창을 닫는다. */
-function _surveySetRunning(on) {
-  for (const id of ["survey-pages", "survey-model-select", "survey-run"]) {
-    const el = document.getElementById(id);
-    if (el) el.disabled = on;
-  }
-  const prog = document.getElementById("survey-progress");
-  if (prog) prog.hidden = !on;
-  if (!on) {
-    const overlay = document.getElementById("survey-overlay");
-    if (overlay) overlay.style.display = "none";
-  }
-}
-
-function _surveyProgress(done, total, text) {
-  const bar = document.getElementById("survey-progress-bar");
-  const txt = document.getElementById("survey-progress-text");
-  if (bar) {
-    bar.max = total || 1;
-    bar.value = done;
-  }
-  if (txt) txt.textContent = text;
+// eslint-disable-next-line no-unused-vars
+async function renderPageThumb(canvas, docId, partId, pageNo, rotation, maxSide = 240) {
+  if (!pdfState.pdfDoc || docId !== pdfState.currentDocId || partId !== pdfState.currentPartId) return false;
+  const page = await pdfState.pdfDoc.getPage(pageNo);
+  const rot = ((page.rotate || 0) + (Number(rotation) || 0)) % 360;
+  const base = page.getViewport({ scale: 1, rotation: rot });
+  const vp = page.getViewport({ scale: maxSide / Math.max(base.width, base.height), rotation: rot });
+  canvas.width = Math.round(vp.width);
+  canvas.height = Math.round(vp.height);
+  await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
+  return true;
 }
 
 /**
- * 판독 계획을 SSE로 돌린다 — «권 전체 OCR」과 같은 형식(data: {"type": start|page|complete|error}).
+ * 자동 스캔(쪽 측정, D-126)을 SSE로 돌린다 — «권 전체 OCR」과 같은 형식(data: {"type": start|page|complete|error}).
  * 입력: url, body(stream은 여기서 켠다), onEvent(start·page 이벤트). 출력: complete 이벤트(결과 전체).
  * 스트림이 완료 없이 끊기면(서버 재시작·네트워크) 실패로 올린다 — 조용히 «다 된 것»처럼 보이면 안 된다.
  */
@@ -399,22 +295,22 @@ async function _postSurveyStream(url, body, onEvent) {
         continue;
       }
       if (evt.type === "complete") result = evt;
-      else if (evt.type === "error") throw new Error(evt.error || "판독 계획 실패");
+      else if (evt.type === "error") throw new Error(evt.error || "자동 스캔 실패");
       else onEvent(evt);
     }
   }
-  if (!result) throw new Error("판독 계획이 완료 없이 끊겼습니다 — 서버가 재시작됐거나 연결이 끊겼습니다");
+  if (!result) throw new Error("자동 스캔이 완료 없이 끊겼습니다 — 서버가 재시작됐거나 연결이 끊겼습니다");
   return result;
 }
 
 /**
- * 판독 계획이 낸 «회전이 다른 구간»을 사람에게 묻고 저장한다. 입력: docId, partId, rot(라우트의 rotation 목록).
+ * 쪽 측정이 낸 «회전이 다른 구간»을 사람에게 묻고 저장한다. 입력: docId, partId, rot(라우트의 rotation 목록).
  * 출력: 저장한 구간 수.
  *
  * 판정이 확실한 구간(guess 아님)은 한 창에 모아 한 번만 묻는다 — 구간마다 묻는 것은 번거롭다(사용자 지적).
  * 누운 쪽은 90인지 270인지 코드가 못 가리므로(추정) 그 구간의 첫 쪽을 **제안한 회전으로 미리 보인 채**
- * 확인받고, 아니라고 하면 반대쪽을 한 번 더 보인다. 「판독 계획」과 「권 전체 OCR」의 «돌아간 쪽은 세워서»가
- * 같이 쓴다 — 묻는 말이 두 곳에서 달라지면 사람은 다른 기능으로 여긴다.
+ * 확인받고, 아니라고 하면 반대쪽을 한 번 더 보인다. 「권 전체 OCR」의 «돌아간 쪽은 세워서»가 쓴다.
+ * (「말로 지시」의 자동 스캔은 이 창을 쓰지 않는다 — 계획 표의 「보기」·「반대로」로 확인하고 「적용」이 저장한다)
  */
 /**
  * 지금 화면이 이 권을 보고 있는가 — 미리보기(goToPage)는 viewerState의 권으로 가고 CSS 회전은 pdfState의
@@ -480,9 +376,9 @@ async function _confirmRotationRanges(docId, partId, rot) {
  * 입력: docId, partId, pages([a, b] 또는 null=권 전체), onProgress(evt)(진행 막대용, 없어도 됨).
  * 출력: {checked, found, applied, unknown, error}. 사람이 취소한 구간은 저장하지 않고 OCR은 그대로 잇는다.
  *
- * 판독 계획 라우트를 orientation_only로 부른다 — 비전 모델 없음, GPU 게이트 없음. 투영으로 누운 쪽을 찾고,
+ * 쪽 측정 라우트(rotation/suggest)를 orientation_only로 부른다 — 비전 모델 없음, GPU 게이트 없음. 투영으로 누운 쪽을 찾고,
  * GPU면 PaddleOCR 점수로 90/270이 확정되어 한 창에서 끝나며, CPU면 추정이라 미리보기로 묻는다.
- * 저장은 판독 계획과 같은 길(_confirmRotationRanges → PUT rotation)이라 «저장은 사람이 누른다»가 지켜진다.
+ * 저장은 회전 저장 단추와 같은 길(_confirmRotationRanges → PUT rotation)이라 «저장은 사람이 누른다»가 지켜진다.
  */
 async function autoOrientForOcr(docId, partId, pages, onProgress) {
   const url = `/api/documents/${encodeURIComponent(docId)}/parts/${encodeURIComponent(partId)}/rotation/suggest`;
@@ -494,69 +390,6 @@ async function autoOrientForOcr(docId, partId, pages, onProgress) {
   // 건너뛴다(_confirmRotationRanges가 구간마다 다시 확인한다)
   const applied = await _confirmRotationRanges(docId, partId, _viewingPart(docId, partId) ? rot : rot.filter((r) => !r.guess));
   return { checked: d.checked || 0, found: rot.length, applied, unknown: d.unknown || 0, error: d.error || null };
-}
-
-async function _suggestRotation() {
-  const docId = pdfState.currentDocId;
-  const partId = pdfState.currentPartId;
-  if (!docId || !partId) return;
-  const url = `/api/documents/${encodeURIComponent(docId)}/parts/${encodeURIComponent(partId)}/rotation/suggest`;
-  const btn = document.getElementById("pdf-rotate-suggest");
-  if (btn) btn.disabled = true;
-  try {
-    const post = (b) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) });
-    const picked = await _openSurveyModal(post);
-    if (!picked) return;
-    const { pages, llmSel } = picked;
-    const body = { pages, force_provider: llmSel.force_provider || null, force_model: llmSel.force_model || null };
-    // 창은 열어 둔 채 진행 막대를 보인다 — 쪽마다 몇 초라 «돌아가는지» 보여야 한다(사용자 요청 2026-09-11)
-    _surveySetRunning(true);
-    _surveyProgress(0, 1, "시작하는 중…");
-    let d;
-    try {
-      d = await _postSurveyStream(url, body, (evt) => {
-        if (evt.type === "start") _surveyProgress(0, evt.total, `${evt.total}쪽 — 첫 쪽을 보는 중…`);
-        else if (evt.type === "page")
-          _surveyProgress(evt.index + 1, evt.total, `${evt.index + 1}/${evt.total}쪽 — ${evt.page}쪽 ${evt.label || ""}${evt.engine ? ` → ${evt.engine}` : ""}`);
-      });
-    } finally {
-      _surveySetRunning(false);
-    }
-    const rot = d.rotation || [];
-    const eng = d.engines || [];
-    if (d.error && !rot.length && !eng.length) throw new Error(d.error);
-    if (docId !== pdfState.currentDocId || partId !== pdfState.currentPartId) return;
-    // 1) 회전이 다른 구간 — 확실한 것은 한 창에, 추정은 미리보기로 (autoOrientForOcr와 같은 길)
-    const applied = await _confirmRotationRanges(docId, partId, rot);
-    // 2) 엔진 추천 — 구간별 계획으로 「권 전체 OCR」에 넘긴다. 한 번 누르면 쪽마다 계획의 엔진으로 돈다
-    const lines = eng.map((r) => `${r.from}~${r.to}쪽(${r.pages}쪽): ${r.label} → ${r.display_name}`);
-    let filled = null;
-    if (eng.length && typeof setOcrEnginePlan === "function") {
-      setOcrEnginePlan({ docId, partId, ranges: eng, mixed: d.mixed || [] });
-      filled = eng;
-    }
-    // 3) 섞인 쪽 — 한글+훈점처럼 종류가 둘 이상이면 쪽 단위 엔진으로는 못 푼다. 영역별 OCR을 안내한다
-    const mixed = d.mixed || [];
-    if (mixed.length) {
-      alert(
-        `종류가 섞인 쪽 ${mixed.length}개 — 이 쪽들은 엔진 하나로 읽을 수 없습니다.\n` +
-          mixed.map((m) => `${m.page}쪽: ${m.label}`).join("\n") +
-          "\n\n레이아웃 탭에서 영역을 나눈 뒤, 영역마다 엔진을 골라 「선택 블록 OCR」로 읽으세요.",
-      );
-    }
-    const who = d.model ? ` (${d.provider ? d.provider + ":" : ""}${d.model})` : "";
-    showToast(
-      `${d.checked}쪽을 봤습니다${who} — 회전 구간 ${rot.length}개 제안·${applied}개 저장, 엔진 구간 ${eng.length}개` +
-        (mixed.length ? `, 영역별 OCR이 필요한 쪽 ${mixed.length}` : "") +
-        (filled ? ` — 계획 ${lines.length}구간을 「권 전체 OCR」에 넣었습니다. 레이아웃 탭에서 그 단추를 누르면 쪽마다 계획의 엔진으로 돕니다` : "") +
-        (d.unknown ? ` · 판단 못 한 쪽 ${d.unknown}` : "") + (d.error ? ` · 일부 실패: ${d.error}` : ""),
-      applied || filled ? "success" : "info",
-    );
-  } catch (e) {
-    showToast(`회전 제안 실패: ${e.message}`, "error");
-  } finally {
-    if (btn) btn.disabled = false;
-  }
 }
 
 /**
@@ -1083,8 +916,6 @@ function initPdfRenderer() {
   if (rotateCwBtn) rotateCwBtn.addEventListener("click", _rotateCW);
   const rotateCcwBtn = document.getElementById("pdf-rotate-ccw");
   if (rotateCcwBtn) rotateCcwBtn.addEventListener("click", _rotateCCW);
-  const rotateSuggestBtn = document.getElementById("pdf-rotate-suggest");
-  if (rotateSuggestBtn) rotateSuggestBtn.addEventListener("click", _suggestRotation);
   const rotateSaveBtn = document.getElementById("pdf-rotate-save");
   if (rotateSaveBtn) rotateSaveBtn.addEventListener("click", _saveRotation);
 

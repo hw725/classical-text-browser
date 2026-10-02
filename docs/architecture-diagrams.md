@@ -12,7 +12,7 @@
 > |---|---|
 > | 6 · 11 · 13 | 추출 모드와 화면 구조 — 전면 개작. 13번은 새로 만든 것 |
 > | 1 · 5 · 9 · 10 | 텍스트 레이어 PDF 산출, 쪽 전면 1블록, 부분 재-OCR, 되돌리기 |
-> | 2 · 8 | 라우트 230개 · JS 모듈 33개 · API 캐시 금지 미들웨어 |
+> | 2 · 8 | 라우트 230개 · JS 모듈 34개 · API 캐시 금지 미들웨어 |
 > | 4 | LLM 사용량을 화면에 표시(D-056), LLM Vision OCR을 소비자로 추가 |
 > | 3 · 7 · 12 | **v1.3.0에서 바뀜** — 코어 엔티티가 6종으로(경계 목록 추가 D-092, Work 삭제 D-099), 경계 목록은 **원본 저장소**에 산다(D-097). 스키마 20개(v1.4.2에서 작업 계획 추가 — 강독 결과는 새 스키마 없이 기존 층에, D-131), L7 주석 4단계는 그대로 |
 >
@@ -114,7 +114,7 @@ flowchart TB
 
 ## 2. 전체 시스템 아키텍처
 
-프론트엔드(33개 JS 모듈) · 백엔드(FastAPI + 9 라우터, 라우트 230개) ·
+프론트엔드(34개 JS 모듈) · 백엔드(FastAPI + 9 라우터, 라우트 230개) ·
 처리 엔진(OCR 5종 + LLM 5단 + 산출·검출 보조) · Git 저장소 · 외부 서비스.
 
 **여기서 읽어야 할 것**: 화면과 서버 사이에는 REST API 하나뿐이고 빌드 도구도
@@ -1193,24 +1193,29 @@ flowchart TB
 돌아간 펼침·필사본·가로쓰기·한글 번역이 섞인 사진본이 한 권에 있을 때. 사람은 말로 적고, LLM은
 정해진 칸으로 옮기며, 코드가 확인하고, 결과는 **새 저장 형식 없이** 기존 층으로 돌아온다.
 
+화면은 둘이다(D-132): 계획 창 「말로 지시」(① 자동 스캔 ② 말 ③ 계획 확인·적용)와, OCR이 끝난 뒤의
+교정 탭 «들이기·내보내기»(아래 그림의 reading-notes·export/text).
+
 ```mermaid
 flowchart TB
-    SAID["① 연구자의 말<br/>«5~69쪽은 누운 펼침, 활자 세로쓰기…»"]
+    SCAN["① 자동 스캔 (D-126 측정)<br/>회전 · 글의 종류 → 엔진"]
+    SAID["② 연구자의 말<br/>«장은 5쪽 壹. …, 80~97쪽은 초서»"]
     PLAN["작업 계획 read_plan/{권}.json<br/>구간별 회전·엔진·쓰기 · 장 · 쪽 이름표 · 판독 지침"]
-    SAID -->|"read-plan/from-words<br/>(LLM, 저장 안 함, 못 옮긴 말은 돌려줌)"| PLAN
+    SCAN -->|"rotation/suggest as_plan<br/>(값으로 바로, 저장 안 함)"| PLAN
+    SAID -->|"read-plan/from-words<br/>(LLM, base_plan 위에, 못 옮긴 말은 돌려줌)"| PLAN
     AGENT["계획 JSON을 직접 쓰는 사람·에이전트"] --> PLAN
     PLAN -->|"PUT read-plan (적용)"| MAN["manifest<br/>rotation_ranges · ocr_guidance"]
     PLAN -->|"engine_plan (+writing_direction)"| BATCH["권 전체 OCR (ocr/batch)<br/>CLI: ctb read --execute"]
     MAN --> BATCH
     BATCH --> L2["L2 OCR 결과"] --> L4["L4 확정본"]
-    L4 -->|"쪽 이미지 + 확정본"| LLM["LLM 강독 (Claude Code 세션 등)<br/>교정 · 항목 · 구획 국역 · 어휘/문법"]
+    L4 -->|"쪽 이미지 + 확정본"| LLM["앱 밖의 LLM (Claude Code 세션 등)<br/>교정 · 항목 · 구획 번역 · 어휘/문법"]
     LLM -->|"답 한 벌 → reading-notes (ingest)"| SPLIT{{"기존 층에 나눠 담기<br/>core/reading_ingest.py"}}
     SPLIT -->|"corrections"| L4
     SPLIT -->|"장·문서 항목"| BND["편성 경계 (원본 저장소)"]
     SPLIT -->|"구획 국역"| L6["L6 번역 (해석 저장소)"]
     SPLIT -->|"어휘·문법 / 해제·요점"| L7["L7 사전형 주석 · 비고"]
-    L4 --> OUT["export/text · ctb read --export<br/>장별 원문 md·wiki «PDF p.N · 교재 N면»"]
-    BND --> NOTE["강독 노트 (저장 안 함, 매번 조립)<br/>export/reading_note.assemble_notes"]
+    L4 --> OUT["export/text · ctb read --export<br/>판면 줄바꿈만 지운 원문 md·wiki<br/>한 파일(single) 또는 장별 «PDF p.N · 교재 N면»"]
+    BND --> NOTE["노트 (저장 안 함, 매번 조립)<br/>export/reading_note.assemble_notes"]
     L4 --> NOTE
     L6 --> NOTE
     L7 --> NOTE
@@ -1222,9 +1227,11 @@ flowchart TB
 | `core/read_plan.py` | 계획 확인(`validate_plan` — 틀린 칸은 버리고 이유를 돌려준다)·말 → 계획(`plan_from_words`)·쪽 이름표 |
 | `ocr/read_book.py` | 계획 적용(`apply_plan`)·CLI 경로의 쪽 읽기(`read_pages`, L2가 체크포인트) |
 | `core/reading_ingest.py` | LLM 답을 L4·경계·L6·L7에 나눠 담는다. 사람이 고친 것은 두고, 다시 들이면 앞서 들인 것만 바꾼다 |
-| `export/text_export.py` | 장별 원문 — 잡음 줄 빼기, 세로 열 잇기, 쪽 표시 |
-| `export/reading_note.py` | 층에서 강독 노트 조립 + 미디어위키·마크다운 렌더 |
-| `static/js/work-order.js` | 화면 「말로 지시」 — ① 말 ② 계획 확인·적용 ③ 들이기·내려받기 |
+| `export/text_export.py` | 장별 원문 — 잡음 줄·되풀이 머리글 빼기, 판면 줄바꿈만 지우기(세로는 붙임, 가로 한글은 같은 문헌 근거로 꺾인 어절을 붙임, L2 줄 좌표로 문단 끝·들여쓰기), 쪽을 넘는 문단 잇기, 쪽 표시 |
+| `export/reading_note.py` | 층에서 노트 조립 + 미디어위키·마크다운 렌더 |
+| `core/read_plan.py::plan_from_survey` | 자동 스캔(쪽 측정, D-126)의 결과를 계획 칸으로 바로 — 사람이 정한 건너뜀·측정 안 한 쪽은 그대로 (D-132) |
+| `static/js/work-order.js` | 화면 「말로 지시」 — ① 자동 스캔 ② 말 ③ 계획 확인·적용 (D-132) |
+| `static/js/export-view.js` | 교정 탭 «들이기·내보내기» — 텍스트 내려받기·LLM 결과 들이기·노트 틀 (D-132) |
 
 ---
 

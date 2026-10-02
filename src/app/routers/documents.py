@@ -3321,15 +3321,21 @@ async def api_export_text(
     doc_id: str,
     part_id: str = Query("vol1"),
     format: str = Query("wiki", description="md 또는 wiki"),
-    keep_lines: bool = Query(False, description="원문 줄바꿈 유지(세로 열 잇기 끔)"),
+    keep_lines: bool = Query(False, description="원문 줄바꿈 유지(줄 잇기 끔)"),
     interp_id: str | None = Query(
-        None, description="강독 노트를 읽을 해석 저장소(없으면 <문헌>_reading)"
+        None, description="노트를 읽을 해석 저장소(없으면 <문헌>_reading)"
+    ),
+    single: bool = Query(
+        False, description="true면 zip 대신 전문 한 파일(all.<형식>)만 — 장이 없는 논문 한 편 등"
     ),
 ):
     """확정본(L4)과 해석 층(L6·L7)으로 장별 문서를 만들어 zip으로 내려준다.
 
     zip 안: 장마다 01.<형식>…·index·all(원문, 쪽 표시는 «PDF p.N · 교재 N면»),
-    강독_<순번>_<장>.<형식>(국역·어휘 노트 — 경계·L6·L7에서 조립).
+    노트_<순번>_<장>.<형식>(번역·어휘 노트 — 경계·L6·L7에서 조립, 들인 결과가 있을 때만).
+    single=true면 원문 전문 한 파일만 내려준다(노트는 넣지 않는다).
+    PDF 판면 때문에 생긴 줄바꿈만 지운다 — 쓰기 방향은 쪽마다 계획·OCR 결과에서 읽는다
+    (export/text_export.py 머리말).
     언제나 지금 층에서 새로 만든다 — 교정·번역·주석 탭에서 고친 것이 그대로 반영된다.
     """
     from export.reading_note import note_filename, render_markdown, render_wiki
@@ -3338,6 +3344,29 @@ async def api_export_text(
     if format not in ("md", "wiki"):
         return JSONResponse({"error": "format은 md 또는 wiki입니다."}, status_code=400)
     doc_path = require_repo_path("documents", doc_id)
+    if single:
+        from ocr.read_book import check_part_id
+
+        try:
+            check_part_id(part_id)
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        files, _stats = export_document(doc_path, part_id, fmt=format, keep_lines=keep_lines)
+        if _stats["pages"] == 0:
+            return JSONResponse(
+                {
+                    "error": "이 권에는 확정본(L4)이 아직 없습니다.\n"
+                    "→ 해결: 먼저 OCR을 돌리세요(「권 전체 OCR」이 확정본을 채웁니다)."
+                },
+                status_code=400,
+            )
+        resp = _file_response(
+            files[f"all.{format}"], f"{doc_id}_{part_id}.{format}", f"{doc_id}.{format}"
+        )
+        # 뺀 줄은 조용히 버리지 않는다 — 화면이 «머리글 N줄·잡음 M줄을 뺐습니다»로 알린다
+        resp.headers["X-CTB-Running-Lines"] = str(_stats.get("running_lines", 0))
+        resp.headers["X-CTB-Noise-Lines"] = str(_stats.get("noise_lines", 0))
+        return resp
     notes = _notes_or_error(doc_id, part_id, interp_id)
     if isinstance(notes, JSONResponse):
         return notes
@@ -3366,22 +3395,34 @@ def _notes_or_error(doc_id: str, part_id: str, interp_id: str | None):
 def _zip_response(files: dict[str, str], zip_name: str, fallback: str):
     """{파일 이름: 글}을 zip 하나로 내려준다."""
     import io
-    import urllib.parse
     import zipfile
-
-    from fastapi.responses import Response
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         for name, text in files.items():
             z.writestr(name, text)
-    # part_id는 질의로 들어와 한글일 수 있다 — 헤더는 latin-1이라 RFC 5987로 준다(version.py 꼴)
-    # ASCII 대체 이름은 영숫자·_·-·.만 — 따옴표·세미콜론이 헤더 경계를 깨지 않게
-    ascii_name = re.sub(r"[^A-Za-z0-9_.\-]", "", zip_name) or fallback
-    quoted = urllib.parse.quote(zip_name, safe="")
+    return _attachment(buf.getvalue(), "application/zip", zip_name, fallback)
+
+
+def _file_response(text: str, name: str, fallback: str):
+    """글 하나를 파일로 내려준다(UTF-8)."""
+    media = "text/markdown" if name.endswith(".md") else "text/plain"
+    return _attachment(text.encode("utf-8"), f"{media}; charset=utf-8", name, fallback)
+
+
+def _attachment(data: bytes, media_type: str, name: str, fallback: str):
+    """내려받기 응답. part_id는 질의로 들어와 한글일 수 있다 — 헤더는 latin-1이라 RFC 5987로
+    준다(version.py 꼴). ASCII 대체 이름은 영숫자·_·-·.만 — 따옴표·세미콜론이 헤더 경계를
+    깨지 않게."""
+    import urllib.parse
+
+    from fastapi.responses import Response
+
+    ascii_name = re.sub(r"[^A-Za-z0-9_.\-]", "", name) or fallback
+    quoted = urllib.parse.quote(name, safe="")
     return Response(
-        buf.getvalue(),
-        media_type="application/zip",
+        data,
+        media_type=media_type,
         headers={
             "Content-Disposition": (
                 f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quoted}"
@@ -3421,8 +3462,8 @@ async def api_export_notes_with_template(doc_id: str, body: NotesExportRequest):
     if not notes:
         return JSONResponse(
             {
-                "error": "이 해석 저장소에 강독 노트가 없습니다.\n"
-                "→ 해결: 먼저 ③에서 강독 결과를 들이세요."
+                "error": "이 해석 저장소에 노트가 없습니다.\n"
+                "→ 해결: 먼저 교정 탭 「들이기·내보내기」에서 LLM 결과 JSON을 들이세요."
             },
             status_code=400,
         )

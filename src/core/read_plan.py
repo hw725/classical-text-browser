@@ -339,6 +339,184 @@ def rotation_runs(settings: dict[int, dict]) -> list[tuple[int, int, int]]:
     return runs
 
 
+def default_engine_for(writing: str, available: list[str] | set[str]) -> str:
+    """측정이 엔진을 고르지 못한 쪽에 쓸 엔진. 입력: 쓰기 방향, 설치된 엔진. 출력: 엔진 id.
+
+    가로쓰기는 현대 활자(한글 포함)를 읽는 PaddleOCR, 세로쓰기는 근대 활자 NDLOCR이 먼저다.
+    둘 다 없으면 설치된 것 중 계획에 적을 수 있는 첫 엔진, 그것도 없으면 NDLOCR(계획 확인이
+    «설치되지 않은 엔진»으로 알린다 — 조용히 다른 엔진으로 바꾸지 않는다).
+    """
+    order = (
+        ("paddleocr", "ndlocr")
+        if str(writing).startswith("horizontal")
+        else ("ndlocr", "paddleocr")
+    )
+    for e in order:
+        if e in available:
+            return e
+    for e in KNOWN_ENGINES:
+        if e in available:
+            return e
+    return "ndlocr"
+
+
+def plan_from_survey(
+    per_page: list[dict],
+    page_count: int,
+    base_plan: Optional[dict] = None,
+    writing: str = "vertical_rtl",
+    fallback_engine: str = "ndlocr",
+) -> tuple[dict, dict]:
+    """자동 스캔(판독 계획 측정, D-126)의 쪽별 결과를 작업 계획으로 바꾼다. 저장하지 않는다.
+
+    입력: 측정 라우트의 per_page([{page, current, target, guess, engine, content, mixed}]),
+          책의 쪽 수, 이어서 고칠 기존 계획(선택), 쓰기 방향, 측정이 엔진을 못 고른 쪽의 엔진.
+    출력: (계획, {"guess_pages": [쪽], "mixed_pages": [쪽], "measured_pages": [쪽],
+                 "problems": [...]}).
+
+    왜 글이 아니라 계획으로 바로 넣는가: 측정값(회전·엔진)은 코드가 잰 숫자다. 문장으로 풀어
+    «말로 적으세요» 칸에 넣으면 LLM이 다시 칸으로 옮기며 쪽 번호를 밀 수 있다 — 지어낼 수 없던
+    값이 지어낼 수 있는 값이 된다. 그래서 측정은 계획으로 직접 들어가고, 말은 그 위를 고친다
+    (plan_from_words의 base_plan).
+
+    규칙:
+      - 기존 계획에서 **건너뜀**(skip)으로 둔 쪽은 건드리지 않는다 — 사람이 정한 것이다.
+      - 측정한 쪽: 회전은 측정값(target)이 있으면 그것, 엔진은 측정이 골랐으면 그것.
+        못 잰 칸은 기존 계획의 값, 그것도 없으면 지금 회전·fallback_engine(메모 «못 잼 — 기본값»).
+      - 백지·종류가 섞인 쪽은 건너뜀(기존 계획에 설정이 있으면 그 설정을 지킨다).
+      - 스캔 범위 밖의 쪽은 기존 계획 그대로.
+      - 메모(note)에 출처를 적는다 — «측정»·«추정»(누운 쪽의 90/270은 코드가 못 가린다).
+    """
+    base_clean: dict = {"title": "", "guidance": "", "ranges": [], "chapters": []}
+    problems: list[dict] = []
+    if base_plan:
+        base_clean, problems = validate_plan(base_plan, page_count)
+    settings = page_settings(base_clean, page_count)
+    notes: dict[int, str] = {}
+    for r in base_clean.get("ranges") or []:
+        if r.get("note"):
+            for p in parse_pages(r["pages"], page_count):
+                notes[p] = r["note"]
+    guess_pages: list[int] = []
+    mixed_pages: list[int] = []
+    measured: list[int] = []
+    for i, row in enumerate(per_page):
+        # 측정 행 하나가 이상해도 나머지는 계획에 넣는다 — 이상한 행은 problems로 알린다
+        # (Codex 지적 2026-10-02: 한 행의 ValueError가 정상 측정까지 통째로 버렸다)
+        where = f"per_page[{i}]"
+        if not isinstance(row, dict):
+            problems.append({"where": where, "why": "측정 행이 {…} 모양이 아닙니다"})
+            continue
+        p = row.get("page")
+        if isinstance(p, bool) or not isinstance(p, int) or not 1 <= p <= page_count:
+            problems.append({"where": where, "why": f"쪽 번호가 잘못되었습니다: {p!r}"})
+            continue
+        target = row.get("target")
+        current = _strict_int(row.get("current") if row.get("current") is not None else 0)
+        if (target is not None and _strict_int(target) is None) or current is None:
+            problems.append(
+                {"where": f"{p}쪽", "why": "측정한 회전 값이 정수가 아닙니다 — 건너뜁니다"}
+            )
+            continue
+        prev = settings.get(p)
+        if prev and prev.get("skip"):
+            continue
+        blank = row.get("content") == "blank" and not row.get("mixed")
+        if prev is not None and (blank or row.get("mixed")):
+            # 사람이 설정을 적은 쪽은 모델의 «백지»·«섞임»으로 회전·엔진을 안 바꾼다 — 메모만
+            if row.get("mixed"):
+                mixed_pages.append(p)
+            notes[p] = (
+                "스캔: " + ("백지로 보임" if blank else "종류 섞임") + " — 적어 둔 설정을 지킴"
+            )
+            measured.append(p)
+            continue
+        if blank:
+            # 백지는 돌릴 것이 없다
+            settings[p] = {"skip": True}
+            notes[p] = "스캔: 백지"
+            measured.append(p)
+            continue
+        s = dict(
+            prev
+            or {
+                "rotation": current % 360,
+                "engine": fallback_engine,
+                "writing": writing,
+            }
+        )
+        said: list[str] = []
+        if target is not None:
+            s["rotation"] = _strict_int(target) % 360
+            if row.get("guess"):
+                said.append(f"추정 {s['rotation']}°")
+                guess_pages.append(p)
+            else:
+                said.append(f"측정 {s['rotation']}°")
+        if row.get("engine"):
+            s["engine"] = row["engine"]
+            said.append(str(row.get("label") or row.get("content") or "종류 측정"))
+        if row.get("mixed"):
+            # 엔진 하나로 읽을 수 없는 쪽 — 계획에서 뺀다(«권 전체 OCR»이 엉뚱한 엔진으로 읽지
+            # 않게). 화면은 «영역별 OCR이 필요한 쪽 (계획에서 뺌)»으로 알린다. 사람이 설정을 적은
+            # 쪽은 위에서 이미 지켰다
+            mixed_pages.append(p)
+            settings[p] = {"skip": True}
+            notes[p] = "스캔: 종류 섞임 — 레이아웃에서 영역을 나눠 영역별 OCR"
+            measured.append(p)
+            continue
+        if said:
+            measured.append(p)
+            notes[p] = "스캔: " + " · ".join(said)
+        elif prev is None:
+            # 스캔은 했지만 아무것도 못 잰 쪽(투영이 «모름»·모델 실패) — 기본값으로 채웠다는 것을
+            # 메모로 밝힌다. 메모가 없으면 잰 쪽과 구별되지 않는다
+            notes[p] = "스캔: 못 잼 — 기본값"
+        settings[p] = s
+    # 같은 설정·메모가 이어지는 쪽을 구간으로 묶는다
+    ranges: list[dict] = []
+    run: Optional[tuple] = None
+    run_pages: list[int] = []
+
+    def _flush():
+        if run is None:
+            return
+        skip, rot, eng, wr, note = run
+        item: dict = {"pages": pages_spec(run_pages)}
+        if skip:
+            item["skip"] = True
+        else:
+            item.update({"rotation": rot, "engine": eng, "writing": wr})
+        if note:
+            item["note"] = note
+        ranges.append(item)
+
+    for p in sorted(settings):
+        s = settings[p]
+        key = (
+            bool(s.get("skip")),
+            s.get("rotation"),
+            s.get("engine"),
+            s.get("writing"),
+            notes.get(p, ""),
+        )
+        if run == key and run_pages and run_pages[-1] == p - 1:
+            run_pages.append(p)
+            continue
+        _flush()
+        run, run_pages = key, [p]
+    _flush()
+    plan = dict(base_clean)
+    plan["ranges"] = ranges
+    plan, more = validate_plan(plan, page_count)
+    return plan, {
+        "guess_pages": guess_pages,
+        "mixed_pages": mixed_pages,
+        "measured_pages": measured,
+        "problems": problems + more,
+    }
+
+
 SYSTEM_PROMPT = (
     "당신은 스캔본 OCR 도구의 «말 옮김이»입니다. 연구자가 책에 대해 말한 것을 이 프로그램의 "
     "작업 계획 칸으로 옮깁니다. 규칙: (1) 주어진 칸 이름과 값만 씁니다. (2) 어떤 칸으로도 옮길 수 "
@@ -400,7 +578,11 @@ async def plan_from_words(
         return None, meta
     prompt = _field_guide(page_count, available)
     if base_plan:
-        prompt += "\n지금 계획(이것을 고칩니다 — 말하지 않은 부분은 그대로 둡니다):\n"
+        prompt += (
+            "\n지금 계획(이것을 고칩니다 — 말하지 않은 부분은 그대로 둡니다. "
+            "메모가 «스캔:»으로 시작하는 구간은 코드가 이미지에서 잰 값이니, 연구자가 그 쪽을 "
+            "말하지 않았으면 회전·엔진·메모를 바꾸지 않습니다):\n"
+        )
         prompt += json.dumps(base_plan, ensure_ascii=False)
     prompt += (
         "\n\n연구자가 한 말:\n"

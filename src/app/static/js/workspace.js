@@ -53,6 +53,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (typeof initOcrPanel === "function") _safeInit("OcrPanel", initOcrPanel);
   // 말로 작업 지시(D-131)
   if (typeof initWorkOrder === "function") _safeInit("WorkOrder", initWorkOrder);
+  // 교정 탭 「들이기·내보내기」(옛 말로 작업 지시 ③, 2026-10-02)
+  if (typeof initExportView === "function") _safeInit("ExportView", initExportView);
   // Phase 10-3: 대조 뷰 초기화
   if (typeof initAlignmentView === "function") _safeInit("AlignmentView", initAlignmentView);
   // 편성 에디터 초기화 (LayoutBlock → 단위)

@@ -155,7 +155,7 @@ class TestExport:
         )
         assert [c.title for c in chapters] == ["앞붙이", "貳. 臨時財産整理局事務要綱"]
         assert chapters[0].pages[-1] == (2, ["앞 장 끝"])
-        assert stats == {"noise_lines": 1, "anchored": 1}
+        assert stats == {"noise_lines": 1, "running_lines": 0, "anchored": 1}
 
     def test_render_formats(self):
         chapters, _ = build_chapters({1: "가\n나"}, [{"page": 1, "title": "壹", "level": 1}])
@@ -398,11 +398,16 @@ def test_answer_goes_into_existing_layers_and_note_is_reassembled(client, tmp_pa
     z = zipfile.ZipFile(io.BytesIO(r.content))
     names = set(z.namelist())
     assert {"index.wiki", "all.wiki"} <= names
-    note = z.read(next(n for n in names if n.startswith("강독_"))).decode("utf-8")
+    note = z.read(next(n for n in names if n.startswith("노트_"))).decode("utf-8")
     assert "! 국역 (펼치기)" in note and "올해 6월 칙령 제39호로" in note
     assert "* '''以テ'''(もって) — ~로써" in note and "== 해제 ==" in note
     assert "本年六月勅令第三十九號ヲ以テ" in note  # 원문은 지금 L4에서, 열 끊김 없이
     assert client.get(f"/api/documents/d1/export/text?part_id={part}&format=pdf").status_code == 400
+    # 전문 한 파일(논문 한 편처럼 장이 없을 때) — zip이 아니라 마크다운 하나, 노트는 넣지 않는다
+    r = client.get(f"/api/documents/d1/export/text?part_id={part}&format=md&single=true")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/markdown")
+    body = r.content.decode("utf-8")
+    assert "本年六月勅令第三十九號ヲ以テ" in body and "국역" not in body
 
 
 # ── 리뷰 반영(Codex·문서 교차 확인 2026-09-30) ─────────────────
@@ -631,7 +636,7 @@ def test_export_notes_with_template(client, tmp_path, monkeypatch):
     assert r.status_code == 200, r.text
     z = zipfile.ZipFile(io.BytesIO(r.content))
     (name,) = z.namelist()
-    assert name.startswith("강독_01_") and name.endswith(".md")
+    assert name.startswith("노트_01_") and name.endswith(".md")
     body = z.read(name).decode("utf-8")
     assert "   → 올해 6월 칙령 제39호로" in body and "本年六月勅令第三十九號ヲ以テ" in body
     bad = client.post(

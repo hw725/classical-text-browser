@@ -252,4 +252,4 @@ def note_slug(chapter: str) -> str:
 def note_filename(order: int, chapter: str, ext: str) -> str:
     """노트 파일 이름 — 장 순번을 앞에 붙인다. 제목만 쓰면 «A-B»와 «A B»가 같은 이름이 되어
     한 장이 다른 장을 덮는다(Codex 지적 2026-09-30)."""
-    return f"강독_{order:02d}_{note_slug(chapter)}.{ext}"
+    return f"노트_{order:02d}_{note_slug(chapter)}.{ext}"

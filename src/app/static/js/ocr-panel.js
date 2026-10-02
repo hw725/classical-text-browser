@@ -16,7 +16,7 @@
 /* ─── 상태 ─────────────────────────────────────── */
 
 /**
- * 판독 계획이 만든 구간별 엔진 계획 (D-126 덧붙임). {docId, partId, ranges:[{from,to,engine,display_name,label,pages}], mixed:[...]}
+ * 작업 계획(「말로 지시」의 스캔·말, D-126·D-131)이 만든 구간별 엔진 계획. {docId, partId, ranges:[{from,to,engine,display_name,label,pages}], mixed:[...]}
  * 「권 전체 OCR」이 이것을 보내면 서버가 쪽마다 계획의 엔진으로 돈다. 저장하지 않는다 — 화면을 새로 열면 사라진다.
  */
 let ocrEnginePlan = null;
@@ -44,7 +44,7 @@ function _renderOcrEnginePlan() {
   const mixed = plan.mixed && plan.mixed.length ? `<div class="ocr-plan-row">영역별 OCR이 필요한 쪽 ${esc(plan.mixed.map((m) => m.page).join(","))}(계획에서 뺌)</div>` : "";
   el.innerHTML =
     `<label class="text-toolbar-check" title="켜 두면 「권 전체 OCR」이 쪽마다 이 계획의 엔진으로 돕니다. 끄면 위의 엔진 드롭다운 하나로 돕니다">` +
-    `<input id="ocr-batch-use-plan" type="checkbox" checked /> 판독 계획대로</label> ` +
+    `<input id="ocr-batch-use-plan" type="checkbox" checked /> 작업 계획대로</label> ` +
     `<button id="ocr-batch-plan-clear" class="text-btn text-btn-sm" type="button" title="계획을 지웁니다">지우기</button>${rows}${mixed}`;
   el.hidden = false;
   document.getElementById("ocr-batch-plan-clear")?.addEventListener("click", () => setOcrEnginePlan(null));
@@ -165,12 +165,9 @@ async function refreshOcrEngines() {
 
     ocrState.engines = data.engines || [];
     ocrState.defaultEngine = data.default_engine;
-    // 판독 계획(D-126)은 GPU 환경에서만 — 서버가 CPU 환경이면 단추 자체를 숨긴다(사용자 지시 2026-09-10)
-    const suggestBtn = document.getElementById("pdf-rotate-suggest");
-    if (suggestBtn) {
-      suggestBtn.hidden = !data.gpu_runtime;
-      if (!data.gpu_runtime) suggestBtn.title = "판독 계획은 GPU 환경에서만 됩니다 — 바탕화면 아이콘(start_server.bat)으로 켠 서버에서 쓰세요";
-    }
+    // 종류 판정(비전 모델 → 엔진 고르기, D-126)은 GPU 환경에서만(사용자 지시 2026-09-10).
+    // 「말로 지시」의 자동 스캔이 이 값을 보고 CPU면 «방향만»으로 돈다
+    ocrState.gpuRuntime = !!data.gpu_runtime;
 
     _populateEngineSelect();
   } catch (e) {
@@ -886,7 +883,7 @@ async function _runPartOcr() {
       return;
     }
   }
-  // 판독 계획(D-126 덧붙임): 켜져 있으면 계획의 구간만, 쪽마다 계획의 엔진으로. 범위를 손으로 적었으면 그것이 우선
+  // 작업 계획(D-126·D-131): 켜져 있으면 계획의 구간만, 쪽마다 계획의 엔진으로. 범위를 손으로 적었으면 그것이 우선
   const usePlan =
     !!ocrEnginePlan &&
     ocrEnginePlan.docId === docId &&
@@ -910,7 +907,7 @@ async function _runPartOcr() {
     ? `계획의 ${pages.length}쪽`
     : pages ? `${pages.length}쪽(${rawPages})` : `이 권${total ? ` ${total}쪽` : ""} 전체`;
   const how = usePlan
-    ? "쪽마다 판독 계획의 엔진으로 OCR합니다:\n" +
+    ? "쪽마다 작업 계획의 엔진으로 OCR합니다:\n" +
       ocrEnginePlan.ranges.map((r) => `  ${r.from}~${r.to}쪽 → ${r.display_name || r.engine}`).join("\n") + "\n" +
       (ocrEnginePlan.mixed && ocrEnginePlan.mixed.length
         ? `  (종류가 섞인 ${ocrEnginePlan.mixed.map((m) => m.page).join(",")}쪽은 계획에서 뺐습니다 — 영역별로 읽으세요)\n`
