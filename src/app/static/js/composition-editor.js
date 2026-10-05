@@ -1145,7 +1145,12 @@ async function _updateLlmJudgeNote() {
       : "";
     // 누가 답할지(D-136 — 기본은 OpenRouter decider, 키가 없으면 Jev)
     const judge = d.judge ? ` · ${_judgeName(d.judge)}` : "";
-    note.textContent = `${d.lines}행 · 질문 ${d.questions}개 · 호출 ${d.calls}번${toc} · 약 $${d.cost_usd_est}${judge}`;
+    // 키가 없으면 누르기 전에 말한다 — 실행은 400으로 거절된다(2026-10-06 설치 검증)
+    const noKey =
+      d.has_key === false || d.needs_key
+        ? " — 키 없음: 설정 → «판정 모델»에서 OpenRouter 키(또는 TypeSafe 키)를 넣어야 돕니다"
+        : "";
+    note.textContent = `${d.lines}행 · 질문 ${d.questions}개 · 호출 ${d.calls}번${toc} · 약 $${d.cost_usd_est}${judge}${noKey}`;
   } catch (e) {
     note.textContent = `크기 못 잼: ${e.message}`;
   }

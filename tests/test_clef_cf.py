@@ -348,6 +348,12 @@ def test_survey_with_clef_uses_probabilities(client, tmp_path, monkeypatch):  # 
     from core import env_doctor
 
     monkeypatch.setattr(env_doctor, "_GPU_RUNTIME", True)
+    import app.routers.llm_ocr as llm_ocr
+
+    async def _no_probe(force_provider):  # 미리 세기가 진짜 Ollama에 닿지 않게
+        return {"checked": False, "ready": []}
+
+    monkeypatch.setattr(llm_ocr, "_vision_readiness", _no_probe)
     _lib, part_id = _setup(client, tmp_path)
     url = f"/api/documents/d1/parts/{part_id}/rotation/suggest"
 

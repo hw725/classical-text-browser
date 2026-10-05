@@ -168,26 +168,18 @@ if ($pick -eq "4") {
 # Ollama가 깔려 있는데 이미지를 읽는 모델이 하나도 없으면 앱이 이미지 작업을 다음 프로바이더로
 # 넘긴다(대개 유료). 기본 모델은 클라우드(gemma4:cloud)다 — 내려받는 파일이 없어 몇 초에 끝나고,
 # 쓸 때 ollama.com 로그인이 필요하다(D-114). 내 PC에서 도는 모델은 앱 안 「모델 받기」에서 고른다.
+#
+# `ollama` 명령을 여기서 직접 부르지 않는다 — Ollama가 꺼져 있으면 `ollama list`가 Ollama 앱을
+# 띄우고 그 앱이 출력 파이프를 붙잡아 설치가 끝없이 멈췄다(2026-10-06). 목록은 HTTP API(3초 제한)로,
+# 등록은 시간 제한이 있는 별도 프로세스로 — scripts/install_ollama_step.ps1. 이 단계가 실패해도
+# 설치는 끝낸다.
 if (Have "ollama") {
     Write-Host ""
     Say "[5-1] Ollama 기본 비전 모델 확인 (gemma4:cloud)" "White"
-    $models = ""
-    try { $ErrorActionPreference = "Continue"; $models = (& ollama list 2>$null | Out-String) } catch { $models = "" } finally { $ErrorActionPreference = "Stop" }
-    if ($models -match "gemma4:cloud") {
-        Say "  이미 있습니다." "Green"
-    } elseif ($models) {
-        Say "  없습니다. 등록합니다 (클라우드 모델 — 내려받는 파일 없음, 몇 초)…"
-        & ollama pull gemma4:cloud
-        if ($LASTEXITCODE -ne 0) { Say "  지금 등록하지 못했습니다. 앱 설정 ▸ LLM 연결 ▸ Ollama의 「모델 받기」에서 고를 수 있습니다." "Yellow" }
-        else { Say "  쓰려면 앱 설정 ▸ LLM 연결 ▸ Ollama의 「로그인」. 로그인 없이 쓰려면 같은 자리 「모델 받기」에서 내 PC용 모델을 고르세요." "DarkGray" }
-    } else {
-        Say "  Ollama가 떠 있지 않아 건너뜁니다. 앱을 켠 뒤 설정에서 받을 수 있습니다." "Yellow"
-    }
-    # 「판독 계획」(D-126)의 기본 모델은 kimi-k3:cloud — 종류 판정 벤치마크 1위(2026-09-11). 없으면 앱이 «자동»으로 내려간다.
-    if ($models -and -not ($models -match "kimi-k3:cloud")) {
-        Say "[5-1] 판독 계획 기본 모델 등록 (kimi-k3:cloud — 클라우드, 몇 초)…" "White"
-        & ollama pull kimi-k3:cloud
-        if ($LASTEXITCODE -ne 0) { Say "  지금 등록하지 못했습니다. 판독 계획은 다른 비전 모델(자동)로 돕니다." "Yellow" }
+    try {
+        & (Join-Path $PSScriptRoot "scripts\install_ollama_step.ps1")
+    } catch {
+        Say "  확인하지 못했습니다 — 앱을 켠 뒤 설정 ▸ LLM 연결 ▸ Ollama에서 받을 수 있습니다." "Yellow"
     }
 }
 

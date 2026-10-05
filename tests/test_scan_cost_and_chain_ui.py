@@ -61,6 +61,14 @@ def _no_ambient_keys(monkeypatch, tmp_path):
     monkeypatch.setattr(jev, "KEY_ENV_FILE", tmp_path / "no-personal-key-file.env")
     monkeypatch.setattr(jev, "_key_from_app_env", lambda names, root: None)
     monkeypatch.setattr(jev.time, "sleep", lambda s: None)  # 백오프를 기다리지 않는다
+    # 미리 세기의 비전 가용성 확인이 이 PC의 진짜 Ollama에 닿지 않게
+    # (그 안내는 tests/test_no_key_notices.py가 잰다)
+    import app.routers.llm_ocr as llm_ocr
+
+    async def _no_probe(force_provider):
+        return {"checked": False, "ready": []}
+
+    monkeypatch.setattr(llm_ocr, "_vision_readiness", _no_probe)
 
 
 def _keys(monkeypatch, *, cf: bool, orr: bool):
@@ -94,7 +102,9 @@ def test_dry_run_clef_chain_both_keys(client, tmp_path, monkeypatch):  # noqa: F
     d = _dry(client, part_id, force_provider="clef", force_model="clef")
     assert d["engine"] == "clef" and d["cost_usd_est"] > 0
     steps = [(s["step"], s["has_key"]) for s in d["chain"]]
-    assert steps == [("cloudflare", True), ("openrouter", True), ("vision", True)]
+    # 사슬 끝(Ollama)에는 키가 없다 — None, 닿는지는 reachable(여기서는 못 잼 → None)
+    assert steps == [("cloudflare", True), ("openrouter", True), ("vision", None)]
+    assert d["chain"][2]["reachable"] is None
     assert d["chain"][0]["paid"] is False and d["chain"][1]["paid"] is True
     # 전부 유료로 넘어갈 때의 최대 — 쪽 수 × 쪽당 어림
     assert d["cost_usd_max"] == pytest.approx(3 * d["chain"][1]["usd_per_page_est"], rel=1e-6)

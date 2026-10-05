@@ -984,12 +984,55 @@ def _clef_chain(library_path) -> list[dict]:
         {
             "step": "vision",
             "label": "기본 비전 모델",
-            # 화면이 고를 수 있는지는 여기서 재지 않는다(Ollama 로그인 등) — 사슬 끝이라 늘 적는다
-            "has_key": True,
+            # Ollama에는 키라는 것이 없다 — «키 있음»(True)으로 적으면 닿지 않는 PC에서도 사슬 끝이
+            # 있는 것처럼 읽혔다(2026-10-06 설치 검증). 닿는지는 라우트가 `reachable`로 따로 싣는다
+            # (`_vision_readiness` — 이 함수는 네트워크를 쓰지 않는다).
+            # 로그인·모델 유무는 재지 않는다
+            "has_key": None,
+            "reachable": None,
             "paid": False,
             "model": ":".join(SURVEY_FALLBACK_MODEL),
         },
     ]
+
+
+# 미리 세기가 비전 프로바이더의 가용성을 기다리는 최대 시간(초). 넘으면 «못 잼»(None)이다 —
+# «없다»고 말하지 않는다. 라우터 캐시(성공 60초·실패 30초)가 있어 다시 셀 때는 거의 즉시다
+_VISION_PROBE_TIMEOUT = 5.0
+
+
+async def _vision_readiness(force_provider: str | None) -> dict:
+    """지금 닿는 비전 프로바이더 — 미리 세기가 «쓸 수 있는 비전 모델 없음»을 보내기 전에 말하게.
+
+    입력: 화면이 고른 프로바이더(없으면 자동 — 라우터의 비전 프로바이더 전부).
+    출력: {"checked": bool, "ready": [provider_id…]} — checked가 False면 시간 안에 못 쟀다(모름).
+
+    실제 스캔과 같은 판정을 쓴다 — 라우터 `call_with_image`도 `is_available`(자동이면 캐시판)로
+    거른다. 닿는 것과 «그 모델이 깔렸고 로그인됐다»는 다르다: 그것까지는 재지 않는다
+    (2026-10-06 설치 검증 — 키도 Ollama도 없는 PC에서 «비전 모델 3번 … 쪽마다 몇 초»라고만 했다).
+    """
+    from app._state import _get_llm_router
+
+    try:
+        router = _get_llm_router()
+        provs = [p for p in router.providers if getattr(p, "supports_image", False)]
+    except Exception:  # noqa: BLE001 — 라우터를 못 만들면 모른다
+        return {"checked": False, "ready": []}
+    if force_provider:
+        provs = [p for p in provs if p.provider_id == force_provider]
+    check = getattr(router, "is_available_cached", None)
+
+    async def _one(p):
+        return await (check(p) if check else p.is_available())
+
+    try:
+        oks = await asyncio.wait_for(
+            asyncio.gather(*(_one(p) for p in provs), return_exceptions=True),
+            timeout=_VISION_PROBE_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        return {"checked": False, "ready": []}
+    return {"checked": True, "ready": [p.provider_id for p, ok in zip(provs, oks) if ok is True]}
 
 
 @router.post("/api/documents/{doc_id}/parts/{part_id}/rotation/suggest")
@@ -1002,7 +1045,9 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
            "engines": [{"from","to","engine","display_name","content","label","pages"}],
            "mixed": [{"page","contents","label"}] — 종류가 둘 이상이라 영역별 OCR이 필요한 쪽,
            "per_page": [...], "provider", "model", "error"}
-    dry_run이면 {"dry_run": True, "pages", "calls", "ocr_calls"(상한)}.
+    dry_run이면 {"dry_run": True, "pages", "calls", "ocr_calls"(상한)} — 판정 모델이면 engine·비용·
+    needs_key(clef는 chain, 그 끝 단계의 reachable), 생성형 비전 모델이면
+    vision_checked·vision_ready·no_vision(닿는 비전 프로바이더가 없음, `_vision_readiness`).
 
     orientation_only=True면(«돌아간 쪽은 세워서», 2026-09-18) 비전 모델을 부르지 않고 방향만 잰다 —
     GPU 게이트를 지나지 않고, "calls": 0·"engines": []·"mixed": []이며,
@@ -1108,6 +1153,11 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
                 # 없어 전부 OpenRouter로 갈 때)을 준다. OpenRouter 키가 없으면 유료 단계가
                 # 없다(넘치면 비전 모델)
                 chain = _clef_chain(library_path)
+                # 사슬 끝(기본 비전 모델)이 지금 닿는가 — 못 재면 None
+                vis = next(s for s in chain if s["step"] == "vision")
+                vr = await _vision_readiness(SURVEY_FALLBACK_MODEL[0])
+                fb_provider = SURVEY_FALLBACK_MODEL[0]
+                vis["reachable"] = (fb_provider in vr["ready"]) if vr["checked"] else None
                 out["chain"] = chain
                 paid = next(s for s in chain if s["step"] == "openrouter")
                 out["cost_usd_max"] = (
@@ -1120,6 +1170,14 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
             if not has_any:
                 # 실제 스캔이면 400으로 거절할 상태 — 미리 세기에서 먼저 알린다
                 out["needs_key"] = _DECISION_PROVIDERS[decider_kind]["key_id"]
+        elif not body.orientation_only:
+            # 생성형 비전 모델로 종류를 묻는다 — 닿는 비전 프로바이더가 하나도 없으면
+            # 쪽마다 실패한다. 보내기 전에 말한다(2026-10-06 설치 검증)
+            vr = await _vision_readiness((body.force_provider or "").strip() or None)
+            out["vision_checked"] = vr["checked"]
+            out["vision_ready"] = vr["ready"]
+            if vr["checked"] and not vr["ready"]:
+                out["no_vision"] = True
         return out
 
     async def _run(progress=None):

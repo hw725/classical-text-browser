@@ -5589,6 +5589,29 @@ OCR 스택(약 830MB)을 exe에 넣으면 판마다 그 크기를 다시 받아�
 - 클라우드 기본을 «불러 보는» 확인은 왕복 한 번(최대 20초)이다. 설정 화면은 1.5초만 기다리고
   뒤에서 마저 고른다(기존 «확인 중» 길).
 
+### 후속(2026-10-06) — 설치 5-1이 Ollama가 꺼져 있으면 영원히 멈추던 것
+
+**무엇이 있었나.** 릴리스 직전 설치 검증에서 CTB-Setup이 `[5-1] Ollama 기본 비전 모델 확인`에서 28분 동안 멈춰 강제 종료됐다.
+`install.ps1`의 `(& ollama list 2>$null | Out-String)` — Ollama가 깔려 있으나 꺼져 있으면 `ollama list`가 Ollama 앱
+(`ollama app.exe --hide`)을 스스로 띄우고, 그 앱이 출력 파이프를 물려받아 닫지 않아 EOF가 오지 않는다(원인은 프로세스 나무·기록에서
+추론, 신뢰도 보통). 가짜 `ollama.cmd`(남는 자식이 파이프를 붙잡는 것)로 옛 줄을 떼어 돌리면 그 자식의 수명(30초)만큼 정확히 기다렸다.
+v1.4.2 사용자도 같은 조건이면 겪는다.
+
+**결정.** 5-1단계를 `scripts/install_ollama_step.ps1`로 떼고 `ollama list`를 쓰지 않는다.
+- 모델 목록은 HTTP `GET /api/tags`(3초 제한, `OLLAMA_HOST`가 있으면 그 주소)로 읽고, 닿지 않으면 «Ollama가 꺼져 있다 — 나중에 켜면
+  된다»로 넘어간다. 앱을 깨우지 않는다.
+- `ollama pull`은 시간 제한(기본 180초, `CTB_OLLAMA_PULL_TIMEOUT`)이 있는 별도 프로세스이고 **핸들을 물려주지 않는 셸 실행**
+  (UseShellExecute, 숨긴 창)이다. 출력을 파일로 돌리는 `Start-Process -Redirect…`도 상속 가능한 핸들 전부를 물려줘, 손자가 이 창의
+  파이프를 붙잡아 똑같이 기다렸다(재현 31초). 시간이 넘으면 `taskkill /T`로 나무째 끝낸다. 대가로 등록 진행 글은 보이지 않는다.
+- `install.sh`도 같은 방향 — `curl --max-time 3 …/api/tags`, 등록은 `timeout 180`(없으면 그대로). 옛 판의 «kimi가 이미 있으면
+  「떠 있지 않아 건너뜁니다」를 찍던» 분기 오류도 함께 고쳤다.
+
+| 지키는 시험 (`tests/test_install_ollama_probe.py` 10건 — 소스 되돌리면 6 실패) | |
+|---|---|
+| `ollama list`가 설치 스크립트 셋에 다시 생기지 않는다 / install.ps1은 `ollama`를 직접 부르지 않는다 | `test_no_ollama_list_in_installers` · `test_install_ps1_does_not_call_ollama_directly` |
+| 목록은 시간 제한 있는 HTTP, 등록은 핸들 안 물려주는 시작 / .ps1 BOM | `test_step_reads_tags_over_http_with_timeout` · `test_install_sh_reads_tags_with_timeout` · `test_ps1_is_utf8_with_bom` |
+| (Windows) 꺼짐은 명령을 부르지 않고 바로 넘어감 · 켜짐에서 남는 자식(40초)을 기다리지 않음 | `test_step_skips_quickly_when_ollama_is_off` · `test_step_pull_does_not_wait_for_lingering_children` |
+
 ## D-115: 날짜는 열·면·쪽 경계를 넘어 읽는다 — 그리고 규칙은 확정본이 있는 쪽만 본다는 것을 화면이 말한다
 
 **날짜:** 2026-09-06
@@ -8314,6 +8337,22 @@ clef 비활성·창 열면 kimi-k3 / OpenRouter만 — 활성·기본 clef / Clo
 | 429 재시도·413 축소 재전송은 상한을 쓰지 않는다 | `test_429_retry_does_not_eat_the_cap` · `test_clef_413_shrink_resend_is_one_ask` |
 | 측정 스크립트 키 오송 | `test_eval_openrouter_client_never_uses_perplexity_key` · `test_eval_openrouter_client_is_openrouter_clef` · `test_scripts_do_not_hand_foreign_urls_to_vendor_clients` |
 
+### 후속(2026-10-06) — 키도 비전 모델도 없는 PC에서 미리 세기가 사실을 말한다
+
+설치 검증(새 PC 흉내 — 키 없음, Ollama 닿지 않음)에서 자동 스캔의 미리 세기가 두 가지를 숨겼다.
+- **«자동»·비전 모델 항목** — 닿는 비전 프로바이더가 하나도 없어도 «비전 모델 3번 … 쪽마다 몇 초»라고만 했다(누르면 쪽마다 실패).
+  이제 dry_run이 `_vision_readiness`로 라우터의 가용성 확인(`is_available_cached`, 실제 스캔이 거르는 것과 같은 판정)을 5초 안에
+  재어 `vision_checked`·`vision_ready`를 싣고, 없으면 `no_vision`. 화면은 «쓸 수 있는 비전 모델이 없습니다»·«고른 비전 모델(…)이
+  닿지 않습니다»로 말한다. 시간 안에 못 재면 «모름»이라 말하지 않는다. 닿는 것과 «그 모델이 깔렸고 로그인됐다»는 다르다 — 그것은 재지 않는다.
+- **clef 사슬의 끝(기본 비전 모델)** — Ollama가 닿지 않아도 `has_key: true`였다. Ollama에는 키가 없으므로 `has_key`는 `None`,
+  닿는지는 `reachable`(True/False, 못 재면 None)로 따로 싣고 화면은 «지금 닿지 않음 — Ollama를 켜야 이 단계가 돕니다»를 붙인다.
+
+| 지키는 시험 (`tests/test_no_key_notices.py` 13건 중 b·c 9건 — 소스 되돌리면 a·b·c 합쳐 9 실패, headless 키 없음·Ollama 닿지 않음에서 확인) | |
+|---|---|
+| 닿는 비전 프로바이더 없음 / 고른 것만 잰다 / 방향만이면 재지 않는다 | `test_b_auto_with_no_vision_provider_says_so` · `test_b_forced_provider_checks_only_that_one` · `test_b_orientation_only_does_not_probe` |
+| 화면 안내 | `test_b_scan_note_says_no_vision_model` · `test_b_scan_note_unchanged_when_vision_ready` |
+| 사슬 끝은 «키 있음»이 아니다 · 닿는가 | `test_c_clef_chain_vision_step_is_not_claimed_as_keyed` · `test_c_clef_chain_vision_step_reachable` · `test_c_scan_note_says_last_step_unreachable` · `test_c_scan_note_reachable_has_no_warning` |
+
 ## D-136: 편성 본문 경계 판정의 기본을 OpenRouter 경유 Perplexity decider로 — Jev는 폴백과 목차 대조 (2026-10-05)
 
 **배경.** 사용자 결정(2026-10-05): 편성 «판정 모델로 고르기»의 본문 판정(`structure_llm.ask_structure_jev`, D-129)을 TypeSafe Jev에서
@@ -8474,6 +8513,13 @@ Codex 리뷰가 남긴 실패 시험 5건(`tests/test_codex_review_judge.py`, �
 | 로컬 거절은 상한을 쓰지 않는다 / 게이트는 남은 예산 | `test_local_body_rejection_does_not_spend_ask_cap` · `test_gate_checks_remaining_budget` |
 | 비용 모름 ≠ $0 | `test_screen_distinguishes_missing_cost_from_zero` |
 | 확률은 상태에 보존(화면 표시 없음이 설계) | `test_scan_keeps_judge_probabilities_in_state` |
+
+### 후속(2026-10-06) — 키가 없으면 미리 보기가 먼저 말한다
+
+설치 검증(키 없는 PC)에서 «판정 모델로 고르기» 미리 보기가 «13행 · 질문 13개 · 호출 1번 · 약 $0.000069 · TypeSafe Jev»로만 말했고,
+누르면 400(«판정 모델 키를 찾지 못했습니다»)이었다. dry_run 응답에 `has_key`(본문 판정자 키 유무)와, 없으면 실제 실행의 400과 같은
+`needs_key: "openrouter"`를 싣고, 화면(`_updateLlmJudgeNote`)이 크기 뒤에 «키 없음: 설정 → «판정 모델»에서 OpenRouter 키(또는
+TypeSafe 키)를 넣어야 돕니다»를 붙인다. 시험 `tests/test_no_key_notices.py`의 `test_a_*` 4건(되돌리면 3 실패).
 
 ## D-137: 애매한 후보 2차 판정은 «붙여 넣기» 길로 — 앱은 외부 모델을 부르지 않는다 (2026-10-05)
 

@@ -354,7 +354,10 @@ function _woDryNote(dry, sel) {
   if (dry.engine === "clef" && Array.isArray(dry.chain)) {
     const st = Object.fromEntries(dry.chain.map((s) => [s.step, s]));
     const free = st.cloudflare?.free_pages_per_day ? `하루 ≈${st.cloudflare.free_pages_per_day}쪽 어림` : "하루 몫";
-    const vis = st.vision?.model ? `기본 비전 모델(${st.vision.model})` : "기본 비전 모델";
+    // 사슬 끝이 지금 닿지 않으면 그렇다고 붙인다(reachable false — 못 쟀으면 null이라 말하지 않는다)
+    const visOff = st.vision?.reachable === false ? "지금 닿지 않음 — Ollama를 켜야 이 단계가 돕니다" : "";
+    const visIn = [st.vision?.model, visOff].filter(Boolean).join(", ");
+    const vis = visIn ? `기본 비전 모델(${visIn})` : "기본 비전 모델";
     const max = _woUsd(dry.cost_usd_max);
     let chain;
     if (st.cloudflare?.has_key && st.openrouter?.has_key)
@@ -369,6 +372,11 @@ function _woDryNote(dry, sel) {
     return `${head}판정 모델 ${name} ${dry.calls}번(유료) — 어림 ${_woUsd(dry.cost_usd_max ?? dry.cost_usd_est)}. 그리고 ${ocr}.`;
   }
   const who = sel?.force_provider ? `, ${sel.force_provider}${sel.force_model ? ":" + sel.force_model : ""}` : "";
+  // 닿는 비전 프로바이더가 하나도 없으면(서버 `_vision_readiness`) 그대로 스캔하면 쪽마다 실패한다
+  if (dry.no_vision) {
+    const which = sel?.force_provider ? `고른 비전 모델(${sel.force_provider})이 닿지 않습니다` : "쓸 수 있는 비전 모델이 없습니다(닿는 곳 없음)";
+    return `${head}${which} — 설정 → «LLM 연결»에서 Ollama를 켜거나 키를 넣거나, 키가 있으면 종류 판정 모델을 판정 모델(clef 등)로 고르세요. 이대로 스캔하면 쪽마다 실패로 남습니다.`;
+  }
   return `${head}비전 모델 ${dry.calls}번(글의 종류${who}) + ${ocr}. 쪽마다 몇 초.`;
 }
 

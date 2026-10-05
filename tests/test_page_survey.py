@@ -199,11 +199,24 @@ def test_route_dry_run_and_survey_with_fake_vision(client, tmp_path, monkeypatch
     from core import env_doctor
 
     monkeypatch.setattr(env_doctor, "_GPU_RUNTIME", True)  # GPU 환경인 척
+    import app.routers.llm_ocr as llm_ocr
+
+    async def _probe(force_provider):  # 진짜 Ollama에 닿지 않게(가용성 안내는 test_no_key_notices)
+        return {"checked": True, "ready": ["ollama"]}
+
+    monkeypatch.setattr(llm_ocr, "_vision_readiness", _probe)
     _lib, part_id = _setup(client, tmp_path)
     url = f"/api/documents/d1/parts/{part_id}/rotation/suggest"
     r = client.post(url, json={"dry_run": True})
     assert r.status_code == 200
-    assert r.json() == {"dry_run": True, "pages": 3, "calls": 3, "ocr_calls": 6}
+    assert r.json() == {
+        "dry_run": True,
+        "pages": 3,
+        "calls": 3,
+        "ocr_calls": 6,
+        "vision_checked": True,
+        "vision_ready": ["ollama"],
+    }
     r = client.post(url, json={"dry_run": True, "pages": [2, 3]})
     assert r.json()["pages"] == 2
 

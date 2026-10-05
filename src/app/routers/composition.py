@@ -819,9 +819,14 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
         + toc_calls * 400 / 1_000_000 * jev.INPUT_USD_PER_M
     )
     if body.dry_run:
-        # 실행 게이트(전역 규칙 11)는 도구 층에 — 보내기 전에 «몇 행·몇 번·얼마»를 화면이 보인다
+        # 실행 게이트(전역 규칙 11)는 도구 층에 — 보내기 전에 «몇 행·몇 번·얼마»를 화면이 보인다.
+        # 키가 없으면 그것도 여기서 말한다 — 실제 실행은 아래에서 400으로 거절된다(2026-10-06
+        # 설치 검증: 키 없는 PC의 미리 보기가 크기·값만 말하고, 누르면 400이었다)
+        no_key = {} if body_judge.has_key else {"needs_key": "openrouter"}
         return {
             "proposals": [],
+            "has_key": bool(body_judge.has_key),
+            **no_key,
             "dry_run": True,
             "engine": "jev",
             "lines": size["lines"],

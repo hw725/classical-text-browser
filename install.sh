@@ -139,20 +139,49 @@ if command -v ollama >/dev/null 2>&1; then
     echo ""
     # 기본은 클라우드 모델 — 내려받는 파일이 없고(몇 초) ollama.com 로그인이 있어야 돈다(D-114).
     echo "[5-1] Ollama 기본 비전 모델 확인 (gemma4:cloud)"
-    if ollama list 2>/dev/null | grep -q "gemma4:cloud"; then
-        echo "  이미 있습니다."
-    elif ollama list >/dev/null 2>&1; then
-        echo "  없습니다. 등록합니다 (클라우드 모델 — 내려받는 파일 없음, 몇 초)…"
-        ollama pull gemma4:cloud || echo "  지금 등록하지 못했습니다. 앱 설정 ▸ LLM 연결 ▸ Ollama의 「모델 받기」에서 고를 수 있습니다."
-        echo "  쓰려면 앱 설정 ▸ LLM 연결 ▸ Ollama의 「로그인」. 로그인 없이 쓰려면 같은 자리 「모델 받기」에서 내 PC용 모델을 고르세요."
+    # 모델 목록은 `ollama list`가 아니라 HTTP API(/api/tags, 3초 제한)로 읽는다 — 서버가 꺼져 있으면
+    # `ollama list`가 Ollama 앱을 스스로 띄우고, 그 앱이 출력 파이프를 붙잡아 설치가 끝없이
+    # 멈췄다(Windows 2026-10-06 실측, macOS 앱도 같은 «앱 띄우기»가 있다). 꺼져 있으면 넘어간다.
+    ollama_base="${OLLAMA_HOST:-127.0.0.1:11434}"
+    case "$ollama_base" in http://*|https://*) ;; *) ollama_base="http://$ollama_base" ;; esac
+    ollama_base="${ollama_base%/}"
+    ollama_base="$(printf '%s' "$ollama_base" | sed 's#://0\.0\.0\.0#://127.0.0.1#')"
+    case "${ollama_base#*://}" in *:*) ;; *) ollama_base="$ollama_base:11434" ;; esac
+    ollama_tags=""
+    if command -v curl >/dev/null 2>&1; then
+        ollama_tags="$(curl -s --max-time 3 "$ollama_base/api/tags" 2>/dev/null || true)"
     fi
-    # 「판독 계획」(D-126)의 기본 모델은 kimi-k3:cloud — 종류 판정 벤치마크 1위(2026-09-11). 없으면 앱이 «자동»으로 내려간다.
-    if ollama list >/dev/null 2>&1 && ! ollama list 2>/dev/null | grep -q "kimi-k3:cloud"; then
-        echo "[5-1] 판독 계획 기본 모델 등록 (kimi-k3:cloud — 클라우드, 몇 초)…"
-        ollama pull kimi-k3:cloud || echo "  지금 등록하지 못했습니다. 판독 계획은 다른 비전 모델(자동)로 돕니다."
-    else
-        echo "  Ollama가 떠 있지 않아 건너뜁니다."
-    fi
+    # 등록(ollama pull)은 시간 제한을 둔다 — timeout 명령이 없는 macOS에서는 그대로 돈다(서버가 떠
+    # 있음을 위에서 확인했으므로 앱을 띄우지 않는다)
+    ollama_pull() {
+        if command -v timeout >/dev/null 2>&1; then
+            timeout 180 ollama pull "$1" </dev/null
+        else
+            ollama pull "$1" </dev/null
+        fi
+    }
+    case "$ollama_tags" in
+        *'"models"'*)
+            if printf '%s' "$ollama_tags" | grep -q '"gemma4:cloud"'; then
+                echo "  이미 있습니다."
+            else
+                echo "  없습니다. 등록합니다 (클라우드 모델 — 내려받는 파일 없음, 몇 초)…"
+                if ollama_pull gemma4:cloud; then
+                    echo "  쓰려면 앱 설정 ▸ LLM 연결 ▸ Ollama의 「로그인」. 로그인 없이 쓰려면 같은 자리 「모델 받기」에서 내 PC용 모델을 고르세요."
+                else
+                    echo "  지금 등록하지 못했습니다. 앱 설정 ▸ LLM 연결 ▸ Ollama의 「모델 받기」에서 고를 수 있습니다."
+                fi
+            fi
+            # 「판독 계획」(D-126)의 기본 모델은 kimi-k3:cloud — 종류 판정 벤치마크 1위(2026-09-11). 없으면 앱이 «자동»으로 내려간다.
+            if ! printf '%s' "$ollama_tags" | grep -q '"kimi-k3:cloud"'; then
+                echo "[5-1] 판독 계획 기본 모델 등록 (kimi-k3:cloud — 클라우드, 몇 초)…"
+                ollama_pull kimi-k3:cloud || echo "  지금 등록하지 못했습니다. 판독 계획은 다른 비전 모델(자동)로 돕니다."
+            fi
+            ;;
+        *)
+            echo "  Ollama가 꺼져 있습니다(또는 curl이 없습니다) — 나중에 켜면 됩니다. 켠 뒤 앱 설정 ▸ LLM 연결 ▸ Ollama에서 모델을 받을 수 있습니다."
+            ;;
+    esac
 fi
 
 # ── 완료 ───────────────────────────────────
