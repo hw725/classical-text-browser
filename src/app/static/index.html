@@ -2187,6 +2187,18 @@
                   <!-- 저장된 규칙(없으면 권고)으로 센 후보와 견준 «바뀐 것» (D-121 관문) -->
                   <div id="comp-preview-out" class="comp-preview-out" hidden></div>
                   <div id="comp-toc-unmatched" class="comp-toc-unmatched" style="display: none"></div>
+                  <!-- 애매한 후보 2차 판정(D-137): 앱은 모델을 부르지 않는다. 「애매한 후보 내보내기」로 복사한 글을
+                       채팅 LLM에 붙여 넣고, 그 답을 여기 붙인다. 결과는 체크 제안뿐 — 저장은 「적용」 -->
+                  <div id="comp-escalate-panel" class="comp-escalate-panel" hidden>
+                    <div class="comp-escalate-note">채팅 LLM의 답(JSON — 앞뒤 설명·```가 섞여도 됩니다)을 붙여 넣으세요. «예»는 체크되고 «아니오»는 체크 없이 표시됩니다. 저장은 「적용」을 눌러야 됩니다.</div>
+                    <textarea id="comp-escalate-answer" rows="5" placeholder='{"answers":[{"id":"p8-L3","start":"yes","conf":0.9}, ...]}'></textarea>
+                    <div class="comp-escalate-actions">
+                      <button type="button" id="comp-escalate-import-btn" class="text-btn">들이기</button>
+                      <button type="button" id="comp-escalate-load-btn" class="text-btn" title="Claude 세션이 scripts/escalate_review.py로 들인 판정을 불러옵니다">저장된 판정 불러오기</button>
+                      <button type="button" id="comp-escalate-close-btn" class="text-btn">닫기</button>
+                      <span id="comp-escalate-out" class="comp-propose-stats"></span>
+                    </div>
+                  </div>
                   <!-- 모델 후보를 «몇 개까지 볼지» — 문턱(0.7 같은 숫자)은 사람에게 뜻이 없고 책마다
                        다르다(천진담초는 조합 0.6, 운양집은 단독 0.7~0.8이 좋았다). 그래서 개수로 묻고
                        코드가 확률 내림차순으로 자른다. 규칙 후보는 이 손잡이와 무관하게 늘 보인다. -->

@@ -167,6 +167,25 @@ class SegmentationStructureLlmRequest(BaseModel):
     toc_min_prob: float | None = None
 
 
+class EscalateExportRequest(BaseModel):
+    """애매한 후보 내보내기 (D-137) — 붙여 넣을 글을 만든다. 모델을 부르지 않는다."""
+
+    part_id: str
+    # 화면이 지금 보고 있는 애매한 후보 자리 [{page, line_index}]. None이면 서고 메모(판정 실행 때
+    # 적어 둔 것)를 쓴다. 화면이 보내는 것을 우선하는 까닭: 규칙 후보와 합쳐진 뒤의 목록이 사람이
+    # 실제로 보는 «애매한 후보»다.
+    candidates: list[dict] | None = None
+    chunk_size: int = 100
+    book_type: str | None = None  # "diary"·"collection"·None(둘 다 힌트)
+
+
+class EscalateImportRequest(BaseModel):
+    """판정 들이기 (D-137) — 채팅 LLM의 답을 붙여 넣는다. 경계는 저장하지 않는다."""
+
+    part_id: str
+    answer_text: str
+
+
 class BoundaryUpdateRequest(BaseModel):
     """단위의 경계를 옮기거나 제목·상태를 바꾼다 (D-090).
 
@@ -874,6 +893,7 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
     # 사람이 고르지 않은 경계가 본문 후보의 깊이를 정한다
     props = nest_under_toc([t for t in toc_props if t.get("band") == "accept"], props)
     proposals = sorted(toc_props + props, key=lambda p: (p["page"], p["line_index"]))
+    _remember_escalate(doc_path, body.part_id, lines, proposals)
     meta["toc"] = toc_meta
     meta["engine"] = "jev"  # 요청 값 그대로(«판정 모델» 길) — 실제로 답한 모델은 answered_by
     # 사용량은 두 클라이언트를 합친다 — 목차와 폴백 호출은 Jev 쪽에 쌓인다
@@ -888,6 +908,127 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
         for c in ([body_judge] + ([jev] if jev is not body_judge else []))
     }
     return {"proposals": proposals, **meta}
+
+
+def _remember_escalate(doc_path, part_id: str, lines, proposals: list[dict]) -> None:
+    """판정 실행 직후 애매한 후보(escalate)를 서고 메모에 적는다 (D-137).
+
+    왜: 서버 없이 도는 Claude 세션(`scripts/escalate_review.py`)이 «화면이 방금 세운 애매한 후보»를
+    알 길이 이것뿐이다. 경계가 아니라 메모이고 문헌 저장소 밖(서고 루트)에 둔다. 실패해도 판정
+    응답은 그대로 돌려준다 — 메모는 덤이다.
+    """
+    library_root = get_library_path()
+    if doc_path is None or library_root is None:
+        return
+    try:
+        from core.escalate_review import save_candidates
+
+        esc = [p for p in proposals if p.get("band") == "escalate"]
+        save_candidates(
+            library_root,
+            doc_path.name,
+            part_id,
+            lines,
+            [(p["page"], p["line_index"]) for p in esc],
+            source="judge",
+            probs={f"p{p['page']}-L{p['line_index']}": p.get("prob") for p in esc},
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning("애매한 후보 메모를 적지 못했습니다", exc_info=True)
+
+
+def _escalate_lines(doc_path, part_id: str):
+    """2차 판정이 문맥으로 쓰는 확정본 행. 목차 쪽도 빼지 않는다 — 목차 escalate 후보도 있다."""
+    from core.segmentation import collect_document_lines
+
+    lines, _texts = collect_document_lines(doc_path, part_id, None)
+    return lines
+
+
+@router.post("/api/documents/{doc_id}/segmentation/escalate/export")
+async def api_escalate_export(doc_id: str, body: EscalateExportRequest):
+    """애매한 후보 내보내기 (D-137): 지시문 + 후보 JSON 줄을 ≤100개씩 글 덩어리로 돌려준다.
+
+    **모델을 부르지 않는다** — 사람이 덩어리를 채팅 LLM에 붙여 넣는다. 확률은 싣지 않는다.
+    출력: {"chunks": [{"label": "1/3", "ids", "text"}], "count", "skipped", "chunk_size"}.
+    """
+    from core.escalate_review import export_chunks, save_candidates
+
+    doc_path, err = _doc(doc_id)
+    if err is not None:
+        return err
+    lines = _escalate_lines(doc_path, body.part_id)
+    library_root = get_library_path()
+    try:
+        if body.candidates is not None:
+            # 화면이 보는 목록으로 메모를 갈아 둔다 — 들이기가 이 목록에 대조한다
+            positions = [(c.get("page"), c.get("line_index")) for c in body.candidates]
+            store = save_candidates(
+                library_root, doc_id, body.part_id, lines, positions, source="screen",
+                chunk_size=body.chunk_size,
+            )
+            out = export_chunks(lines, [c["id"] for c in store["candidates"]], store["chunk_size"],
+                                body.book_type)
+        else:
+            from core.escalate_review import export_from_store
+
+            out = export_from_store(library_root, doc_id, body.part_id, lines, body.chunk_size,
+                                    body.book_type)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    if not out["count"]:
+        return JSONResponse(
+            {
+                "error": "내보낼 애매한 후보가 없습니다. "
+                "「애매한 후보 보기」에 후보가 있는지 확인하세요."
+            },
+            status_code=400,
+        )
+    return out
+
+
+@router.post("/api/documents/{doc_id}/segmentation/escalate/import")
+async def api_escalate_import(doc_id: str, body: EscalateImportRequest):
+    """판정 들이기 (D-137): 붙여 넣은 답을 내보낸 후보에 대조한다 — **체크 제안만** 돌려준다.
+
+    없는 id는 거부, 빠진 id는 누락, 모양이 틀린 항목은 건너뛴다. 모델이 행을 더할 수 없다.
+    경계는 저장하지 않는다(「적용」만 저장한다). 받아들인 판정은 서고 메모에 더해 «저장된 판정
+    불러오기»와 CLI가 같은 것을 보게 한다.
+    """
+    from core.escalate_review import import_answers
+
+    doc_path, err = _doc(doc_id)
+    if err is not None:
+        return err
+    try:
+        return import_answers(get_library_path(), doc_id, body.part_id, body.answer_text)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@router.get("/api/documents/{doc_id}/segmentation/escalate")
+async def api_escalate_state(doc_id: str, part_id: str = Query(...)):
+    """서고 메모의 애매한 후보와 들인 2차 판정 (D-137). Claude 세션이 CLI로 들인 판정을 화면이
+    불러올 때 쓴다.
+
+    출력: {"candidates": [{id, text}], "verdicts": {id: {start, conf}}, "updated"}."""
+    from core.escalate_review import load_store
+
+    doc_path, err = _doc(doc_id)
+    if err is not None:
+        return err
+    store = load_store(get_library_path(), doc_id, part_id)
+    return {
+        "candidates": [
+            {"id": c["id"], "text": c.get("text")} for c in store.get("candidates") or []
+        ],
+        "verdicts": {
+            cid: {"start": v.get("start"), "conf": v.get("conf")}
+            for cid, v in (store.get("verdicts") or {}).items()
+        },
+        "updated": store.get("updated"),
+        "source": store.get("source"),
+    }
 
 
 @router.post("/api/documents/{doc_id}/segmentation/structure/llm")

@@ -7566,6 +7566,20 @@ button.mode-tab {
   margin-left: 4px;
 }
 .comp-toc-unplaced { margin-top: 4px; font-size: 11px; color: var(--text-muted); }
+/* 애매한 후보 2차 판정(D-137) — 제안 표시. 색만으로 가르지 않게 글자(예·아니오)를 함께 쓴다 */
+.prop-badge-second {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  margin-left: 4px;
+  border: 1px solid currentColor;
+}
+.prop-badge-second.is-yes { color: #2f7d32; }
+.prop-badge-second.is-no { color: var(--text-muted); }
+.comp-escalate-panel { margin: 4px 0 6px; padding: 6px; border: 1px dashed var(--border, #ccc); border-radius: 4px; font-size: 11px; }
+.comp-escalate-panel textarea { width: 100%; box-sizing: border-box; font-family: "Sarasa Fixed K", monospace; font-size: 11px; }
+.comp-escalate-note { color: var(--text-muted); margin-bottom: 4px; }
+.comp-escalate-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
 .comp-toc-unplaced > div { margin-top: 2px; color: var(--text-primary); line-height: 1.6; }
 
 /* 경계 색인 옮기기 단추 (D-090) */

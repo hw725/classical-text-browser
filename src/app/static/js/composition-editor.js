@@ -1807,6 +1807,8 @@ const proposeState = {
   unmatchedOpen: null, // 펼쳐 둔 못 찾은 항목의 index
   lastClicked: null, // 마지막으로 누른 행(자리 키) — 도구가 이 행 아래에 뜬다(D-122 덧붙임 2)
   baselineKind: "rules", // «바뀐 것»의 기준 — "boundaries"(저장된 경계) 또는 "rules"(저장된 규칙으로 센 후보)
+  escExport: null, // {key, chunks:[{label, text}], next} — 애매한 후보 내보내기의 덩어리와 다음에 복사할 차례(D-137)
+  hideSecondNo: false, // 2차 판정이 «아니오»라 한 애매한 후보를 가리는가
 };
 const flowState = { loading: false }; // ①이 세는 중인가 — 겹쳐 시작하지 않는다
 
@@ -2352,6 +2354,38 @@ function _updateStats() {
       _renderProposals();
     });
     stats.appendChild(eg);
+    // 2차 판정(D-137) — 앱은 모델을 부르지 않는다. 글을 복사해 사람이 고른 채팅 LLM에 붙인다
+    const ex = document.createElement("button");
+    ex.type = "button";
+    ex.className = "text-btn";
+    ex.style.cssText = "font-size:11px; margin-left:6px;";
+    const st = proposeState.escExport;
+    ex.textContent = st && st.chunks.length > 1
+      ? `애매한 후보 내보내기 ${st.next + 1}/${st.chunks.length}`
+      : "애매한 후보 내보내기";
+    ex.title = "지시문과 후보를 클립보드에 복사합니다 — 채팅 LLM(Claude·ChatGPT 등)에 붙여 넣고 답을 「판정 들이기」에 붙이세요. 100개씩 나눕니다.";
+    ex.addEventListener("click", _exportEscalate);
+    stats.appendChild(ex);
+    const im = document.createElement("button");
+    im.type = "button";
+    im.className = "text-btn";
+    im.style.cssText = "font-size:11px; margin-left:6px;";
+    im.textContent = "판정 들이기";
+    im.addEventListener("click", () => _toggleEscalateImport(true));
+    stats.appendChild(im);
+    const nNo = data.proposals.filter((p) => _isEscalated(p) && p.second === "no").length;
+    if (nNo) {
+      const hn = document.createElement("button");
+      hn.type = "button";
+      hn.className = "text-btn";
+      hn.style.cssText = "font-size:11px; margin-left:6px;";
+      hn.textContent = proposeState.hideSecondNo ? `2차 아니오 ${nNo}개 보기` : `2차 아니오 ${nNo}개 숨기기`;
+      hn.addEventListener("click", () => {
+        proposeState.hideSecondNo = !proposeState.hideSecondNo;
+        _renderProposals();
+      });
+      stats.appendChild(hn);
+    }
   }
   // 문턱 아래 후보는 기본으로 숨긴다 — 보이는 목록은 «승인 후보»여야 읽힌다
   const rejected = data.proposals.filter((p) => !p.accepted && !_isEscalated(p)).length;
@@ -2446,6 +2480,150 @@ function _renderDivergence(proposals) {
     : `규칙이 찾은 자리 ${rule.length} · 모델이 찾은 자리 ${model.length} — 두 길이 대체로 같습니다(${ratioText}, 합의 ${pct}%).`;
 }
 
+/**
+ * 애매한 후보 내보내기 (D-137). 지시문 + 후보(앞 4행·뒤 2행 문맥, 확률 없음)를 100개씩 글 덩어리로 받아
+ * 한 번 누를 때마다 다음 덩어리를 클립보드에 복사한다(단추에 «1/3»). **앱은 모델을 부르지 않는다** —
+ * 사람이 고른 채팅 LLM에 붙여 넣는다. 목록이 바뀌면(다시 판정·체크 변화와 무관, 애매한 자리 자체가 바뀌면)
+ * 처음부터 다시 받는다.
+ */
+async function _exportEscalate(ev) {
+  if (ev) ev.stopPropagation();
+  const data = proposeState.data;
+  if (!data) return;
+  const esc = data.proposals.filter(_isEscalated);
+  const key = `${viewerState.docId}|${viewerState.partId}|` + esc.map((p) => _propKey(p)).join(",");
+  const out = document.getElementById("comp-escalate-out");
+  let st = proposeState.escExport;
+  try {
+    if (!st || st.key !== key) {
+      const res = await fetch(`/api/documents/${encodeURIComponent(viewerState.docId)}/segmentation/escalate/export`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          part_id: viewerState.partId,
+          candidates: esc.map((p) => ({ page: p.page, line_index: p.line_index })),
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+      st = proposeState.escExport = { key, chunks: d.chunks, next: 0 };
+    }
+    const chunk = st.chunks[st.next];
+    let copied = true;
+    try {
+      await navigator.clipboard.writeText(chunk.text);
+    } catch (_e) {
+      copied = false; // 클립보드 권한이 없으면 붙여 넣기 칸에 글을 띄워 손으로 복사하게 한다
+    }
+    _toggleEscalateImport(true);
+    if (!copied) {
+      const ta = document.getElementById("comp-escalate-answer");
+      if (ta) { ta.value = chunk.text; ta.select(); }
+    }
+    if (out) out.textContent = copied
+      ? `묶음 ${chunk.label} 복사됨(후보 ${chunk.ids.length}개) — 채팅 LLM에 붙여 넣고, 답을 위 칸에 붙인 뒤 「들이기」`
+      : `클립보드를 쓸 수 없어 묶음 ${chunk.label}을 칸에 띄웠습니다 — Ctrl+C로 복사한 뒤 칸을 비우고 답을 붙이세요`;
+    st.next = (st.next + 1) % st.chunks.length;
+    _updateStats();
+  } catch (e) {
+    if (out) { _toggleEscalateImport(true); out.textContent = `내보내기 실패: ${e.message}`; }
+  }
+}
+
+/** 붙여 넣기 칸을 연다/닫는다. 단추는 한 번만 묶는다. */
+function _toggleEscalateImport(open) {
+  const panel = document.getElementById("comp-escalate-panel");
+  if (!panel) return;
+  panel.hidden = !open;
+  if (panel.dataset.bound) return;
+  panel.dataset.bound = "1";
+  document.getElementById("comp-escalate-import-btn")?.addEventListener("click", _importEscalate);
+  document.getElementById("comp-escalate-load-btn")?.addEventListener("click", _loadSavedEscalate);
+  document.getElementById("comp-escalate-close-btn")?.addEventListener("click", () => _toggleEscalateImport(false));
+}
+
+/**
+ * 판정 들이기 (D-137). 서버가 답을 내보낸 후보에 대조한다(없는 id 거부·빠진 id 누락·모양 틀림 건너뜀).
+ * 결과는 **체크 제안**뿐이다: «예» → 체크(대역은 그대로 escalate, «2차: 예» 표시), «아니오» → 체크 해제 +
+ * «2차: 아니오» 표시. 저장은 「적용」.
+ */
+async function _importEscalate() {
+  const out = document.getElementById("comp-escalate-out");
+  const ta = document.getElementById("comp-escalate-answer");
+  const text = ta ? ta.value : "";
+  if (!text.trim()) { if (out) out.textContent = "답을 먼저 붙여 넣으세요"; return; }
+  try {
+    const res = await fetch(`/api/documents/${encodeURIComponent(viewerState.docId)}/segmentation/escalate/import`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ part_id: viewerState.partId, answer_text: text }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+    const applied = _applySecondVerdicts(d.verdicts || {});
+    const c = d.counts || {};
+    if (out) {
+      out.textContent = `예 ${c.yes || 0} · 아니오 ${c.no || 0} · 누락 ${c.missing || 0} · 거부 ${c.rejected || 0}` +
+        (c.malformed ? ` · 모양 틀림 ${c.malformed}` : "") +
+        (d.parse_status === "no_json" ? " — 답에서 JSON을 찾지 못했습니다" : "") +
+        (applied.absent ? ` · 지금 목록에 없는 자리 ${applied.absent}` : "") +
+        (d.remaining ? ` · 아직 답 없는 후보 ${d.remaining}` : "");
+      out.title = [
+        d.unknown_ids?.length ? `거부한 id: ${d.unknown_ids.slice(0, 30).join(", ")}` : "",
+        d.missing_ids?.length ? `누락 id: ${d.missing_ids.slice(0, 30).join(", ")}` : "",
+      ].filter(Boolean).join("\n");
+    }
+    if (ta && (c.yes || c.no)) ta.value = "";
+  } catch (e) {
+    if (out) out.textContent = `들이기 실패: ${e.message}`;
+  }
+}
+
+/** Claude 세션이 CLI로 들인 판정(서고 메모)을 불러와 같은 체크 제안으로 세운다. */
+async function _loadSavedEscalate() {
+  const out = document.getElementById("comp-escalate-out");
+  try {
+    const res = await fetch(`/api/documents/${encodeURIComponent(viewerState.docId)}/segmentation/escalate?part_id=${encodeURIComponent(viewerState.partId)}`);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+    const v = d.verdicts || {};
+    const applied = _applySecondVerdicts(v);
+    if (out) out.textContent = Object.keys(v).length
+      ? `저장된 판정 ${Object.keys(v).length}개 — 예 ${applied.yes} · 아니오 ${applied.no}` +
+        (applied.absent ? ` · 지금 목록에 없는 자리 ${applied.absent}` : "")
+      : "저장된 판정이 없습니다";
+  } catch (e) {
+    if (out) out.textContent = `불러오기 실패: ${e.message}`;
+  }
+}
+
+/**
+ * 2차 판정을 지금 ③의 애매한 후보에 얹는다. 입력: {id: {start, conf}}. 출력: {yes, no, absent}.
+ * 애매한 후보(_isEscalated)에만 얹는다 — 확신 후보·규칙 후보의 체크를 2차 답이 바꾸지 않는다.
+ */
+function _applySecondVerdicts(verdicts) {
+  const data = proposeState.data;
+  const r = { yes: 0, no: 0, absent: 0 };
+  if (!data) return r;
+  const byId = new Map();
+  for (const p of data.proposals) {
+    if (_isEscalated(p) && !(p.char_offset > 0)) byId.set(`p${p.page}-L${p.line_index}`, p);
+  }
+  for (const [id, v] of Object.entries(verdicts)) {
+    const p = byId.get(id);
+    if (!p) { r.absent++; continue; }
+    p.second = v.start === "yes" ? "yes" : "no";
+    p.secondConf = typeof v.conf === "number" ? v.conf : null;
+    const k = _propKey(p);
+    if (p.second === "yes") { proposeState.checked.add(k); r.yes++; }
+    else { proposeState.checked.delete(k); r.no++; }
+  }
+  if (r.yes || r.no) proposeState.showEscalate = true; // 제안을 얹었으면 보이게 한다
+  _renderProposals();
+  _refreshApplyState();
+  return r;
+}
+
 function _renderProposals() {
   const data = proposeState.data;
   const list = document.getElementById("comp-propose-list");
@@ -2487,6 +2665,8 @@ function _renderProposals() {
     if (hidden.has(k)) continue; // 손잡이가 가린 모델 후보
     if (!p.accepted && !proposeState.checked.has(k) &&
         !(_isEscalated(p) ? proposeState.showEscalate : proposeState.showRejected)) continue;
+    // 2차 판정이 «아니오»라 한 자리는 손잡이로 가린다 — 체크된 것(사람이 다시 고른 것)은 가리지 않는다
+    if (proposeState.hideSecondNo && _isEscalated(p) && p.second === "no" && !proposeState.checked.has(k)) continue;
     proposeState.visible.push(k);
     const row = document.createElement("div");
     row.className = "comp-propose-row" + (p.suppressed ? " suppressed" : "") + (proposeState.selected.has(k) ? " is-selected" : "") + (p.boundary_id ? " is-current" : "");
@@ -2520,6 +2700,14 @@ function _renderProposals() {
       eb.textContent = typeof p.prob === "number" ? `애매 ${p.prob.toFixed(2)}` : "애매";
       eb.title = "판정 모델이 확신하지 못한 자리 — 맞으면 체크하세요";
       title.appendChild(eb);
+      if (p.second) {
+        const sb = document.createElement("span");
+        sb.className = `prop-badge-second ${p.second === "yes" ? "is-yes" : "is-no"}`;
+        sb.textContent = p.second === "yes" ? "2차: 예" : "2차: 아니오";
+        sb.title = "붙여 넣은 2차 판정의 제안입니다 — 저장은 「적용」을 눌러야 됩니다" +
+          (typeof p.secondConf === "number" ? ` (확신 ${p.secondConf})` : "");
+        title.appendChild(sb);
+      }
     }
     const meta = document.createElement("div");
     meta.className = "prop-meta";

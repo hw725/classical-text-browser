@@ -8263,3 +8263,58 @@ meta에 `answered_by`(`업체:모델` → 호출 수)·`fallback_calls`·`fallba
 
 라우트를 부르는 기존 시험(`test_structure_llm.py`·`test_structure_jev.py`)은 OpenRouter 클라이언트를 키 없는 가짜로 바꿨다 —
 이 PC는 개인 키 파일에 실제 OpenRouter 키가 있어 막지 않으면 시험이 실제로 부른다.
+
+## D-137: 애매한 후보 2차 판정은 «붙여 넣기» 길로 — 앱은 외부 모델을 부르지 않는다 (2026-10-05)
+
+**배경.** 사용자 결정(2026-10-05). 본문 판정(D-129·D-136)의 escalate 대역은 체크 해제로 서서 사람이 하나씩 고른다.
+decider 문턱(0.95/0.35)에서 그 수는 천진담초 131행·운양집 1책 424행이다(D-136 표). 사람이 볼 목록을 줄이는 2차 판정이 필요했다.
+
+**측정(2026-10-05, 사용자 세션).** 같은 지시문(아래 1)으로 Claude에게 후보와 앞뒤 문맥을 주고 물었다:
+참 시작 50 중 **48을 지키며** 사람이 볼 목록을 **555 → 74**(87% 감소)로 줄였다. 같은 재현(참 시작 유지 수)을 decider 확률만으로
+자르면 **133**이 남는다. 이것은 Claude의 상한 측정이다 — 다른 채팅 LLM으로는 재지 않았다. Ollama `glm`·`kimi`는 사고(thinking)를 켜면
+너무 느려 **끝까지 재지 못했다**(값 없음).
+
+### 채택한 것
+
+**1. 앱은 이 기능에서 외부 모델을 부르지 않는다.** 내보내기(`core/escalate_review.export_chunks`)는 «지시문 + 후보 JSON 줄
+`{id, before ≤4행, text, after ≤2행}`»인 글 덩어리를 ≤100개씩 만들 뿐이다(화면은 클립보드에 복사, 단추에 «1/3»). 이유:
+- 다른 사용자는 각자 쓰는 채팅 LLM(Claude·ChatGPT·Gemini…)에 복사·붙여 넣기로 쓴다 — 키·모델·비용·게이트를 하나 더 들이지 않는다.
+- 이 PC는 Claude Code/Desktop 세션이 같은 일을 한다(`scripts/escalate_review.py`, CLAUDE.md «Claude 세션에서»). 측정이 Claude였다.
+- 외부 모델은 사용자가 그 실행에 이름을 댈 때만, 그 한 번만 쓴다 — 기본값이 아니다.
+
+지시문은 측정한 것을 사람에게 보이는 부분만 한국어로 옮겼다: 새 글(기사·시·일기의 한 날·산문 한 편)이 text 행에서 **시작**하는가,
+«yes»는 그 행이 새 글의 첫 행(표제·제목)일 때만, «no»는 이어지는 본문·글 안의 행·되풀이 머리글·글 안의 주석, 문맥 행을 쓸 것,
+책 종류 힌트(일기: 날짜로 시작하는 표제 행, 문집: 제목 행 — 모르면 둘 다), 답은 JSON만 `{"answers":[{"id","start":"yes"|"no","conf"}]}`로
+모든 id에. **JSON 계약의 키·값은 영어 그대로** — 어느 모델이 답해도 한 파서로 읽어야 한다. **확률은 싣지 않는다** — 판정 모델의
+숫자를 보이면 그것에 기대어 답한다.
+
+**2. 들이기는 대조만 한다 — 모델이 행을 더할 수 없다.** `parse_answers`가 울타리·설명 문장을 건너뛰고 답 객체를 모두 찾는다(덩어리 여럿의
+답을 이어 붙여도 읽힌다; 못 찾으면 공통 파서 `parse_llm_items`로 잘린 답을 건진다). 후보에 없는 id는 **거부**, 빠진 id는 **누락**
+(답이 닿은 덩어리 안에서만 센다 — 1/3만 붙였을 때 2/3·3/3을 누락으로 세면 «모델이 200개를 빠뜨렸다»로 읽힌다), start가 yes/no가
+아니거나 id가 없는 항목은 **모양 틀림**으로 건너뛴다. 되풀이는 먼저 온 답을 쓴다.
+
+**3. 결과는 체크 제안뿐이다.** «예» → 체크(대역은 escalate 그대로, «2차: 예»), «아니오» → 체크 해제 + «2차: 아니오»(「2차 아니오 N개
+숨기기」로 가림). 애매한 후보에만 얹는다 — 확신 후보·규칙 후보의 체크는 바꾸지 않는다. **경계 저장은 지금처럼 「적용」뿐**이다
+(D-125·D-129의 «판정자가 없는 작업은 제안만»).
+
+**4. 메모는 서고 루트에 — 문헌 저장소 밖.** `<서고>/.escalate_review/<문헌>/<권>.json`에 후보 목록과 들인 판정을 둔다. 서버 없이 도는 CLI가
+«화면이 방금 세운 애매한 후보»를 알 길이 이것뿐이라서다. 판정 실행(`composition._remember_escalate`)과 화면 내보내기가 적고, CLI와
+화면 「저장된 판정 불러오기」(`GET segmentation/escalate`)가 읽는다. 문헌 폴더에 두지 않은 이유: 다음 교정 커밋의 `git add -A`가 이
+메모를 끌고 들어간다. 확정본이 바뀌어 행 글자가 달라진 자리의 옛 판정은 버린다(다른 글에 대한 답이다). 라우트 셋이 늘었다(편성 17 → 20,
+전체 234).
+
+### 하지 않은 것
+
+- 앱 안에서 2차 판정 모델을 부르는 길(OpenRouter·Ollama 등). 비용·게이트·키가 또 늘고, 측정된 것은 Claude뿐이다.
+- 2차 판정의 conf로 자르기 — 숫자는 기록·표시만 한다(D-129와 같은 태도).
+- 목차 대조의 escalate도 같은 목록에 섞여 나간다(질문이 같다 — «이 행에서 새 글이 시작하는가»). 따로 재지는 않았다.
+
+| 지키는 시험 (`tests/test_escalate_review.py`, 네트워크 없음) | |
+|---|---|
+| 문맥 앞 4·뒤 2행(빈 행 건너뜀, 쪽 넘김), 확률 칸 없음 | `test_items_carry_context_but_never_probabilities` |
+| ≤100개 덩어리·«1/3» 표지·JSON 계약·책 종류 힌트 | `test_export_splits_into_chunks_of_at_most_100_and_states_the_contract` |
+| 울타리·설명 섞인 답, 없는 id 거부, 모양 틀림, 되풀이, conf 범위 | `test_import_reads_fenced_json_with_prose_and_validates_ids` |
+| 누락은 답이 닿은 덩어리 안에서만, 덩어리 답 이어 붙이기 | `test_missing_counts_only_the_chunks_the_answer_touched` |
+| 라우트 왕복이 경계 파일을 바꾸지 않음, 메모는 문헌 밖 | `test_route_round_trip_suggests_only_and_saves_no_boundary` · `test_import_without_candidates_explains_what_to_do` |
+| 판정 실행이 escalate를 메모에 적음 | `test_judge_run_remembers_escalate_candidates` |
+| CLI 내보내기 → 판정 → 들이기 → 화면 불러오기 | `test_cli_round_trip` |

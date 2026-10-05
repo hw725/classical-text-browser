@@ -86,7 +86,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 
 ## 백엔드 모듈 구조 (src/app/)
 server.py는 FastAPI 앱 생성 + 라우터 마운트 + 미들웨어만 담당하는 조립 파일.
-실제 API 엔드포인트 231개가 9개 라우터 모듈에 분산 (2026-10-02 기준 실측):
+실제 API 엔드포인트 234개가 9개 라우터 모듈에 분산 (2026-10-05 기준 실측):
 
 ```
 src/app/
@@ -96,7 +96,7 @@ src/app/
 └── routers/
     ├── library.py       ← 서고/설정/백업/휴지통 + 스키마 검증 + 연결 설정·앱 업데이트·엔진 추가 설치·OAuth 프록시·Ollama 로그인·모델 골라 받기·판정 모델 상태 (30 라우트)
     ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 + 텍스트레이어 진단·가져오기·입히기 + 권 추가·회전 + 경계 규칙 + 찍은 자리·규칙 제안 + 강독 노트 들이기·장별 내보내기·틀로 내보내기 (48 라우트)
-    ├── composition.py   ← 편성 — 내용 트리·경계 색인·넣기·옮기기·지우기 + 제안·목차·적용·자동 트리·신호 도출·LLM 표지 묻기·구조 통째로 묻기 + 규칙 미리 보기·말로 규칙 넣기 + 쪼개기·리셋 (17 라우트)
+    ├── composition.py   ← 편성 — 내용 트리·경계 색인·넣기·옮기기·지우기 + 제안·목차·적용·자동 트리·신호 도출·LLM 표지 묻기·구조 통째로 묻기·애매한 후보 2차 판정(내보내기·들이기·불러오기) + 규칙 미리 보기·말로 규칙 넣기 + 쪼개기·리셋 (20 라우트)
     ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티/관계·태그 + 개념 병합·커넥톰 대조 (24 라우트)
     ├── llm_ocr.py       ← LLM 상태 + OCR 엔진·실행·권단위 일괄·백업 되돌리기·판독 지침·LLM 교정 패스·판독 계획·말로 작업 지시·노트 틀 (27 라우트)
     ├── alignment.py     ← 이체자 사전/정렬/일괄교정/문헌별 승인 (20 라우트)
@@ -147,6 +147,7 @@ src/app/
 | `src/llm/jev.py` · `structure_llm.ask_structure_jev` · `toc.match_toc_entries_jev` | **판정 모델로 고르기**(**D-129** — 본문 판정의 기본은 2026-10-05부터 OpenRouter decider, 아래 줄·**D-136**. 이 줄의 Jev 서술은 목차 대조와 폴백에 그대로 맞다 · 논거는 `docs/design-boundary-judge.md`, 실측은 `docs/sessions/session_jev_structure.md`). 글을 만들지 않고 «예·아니오 확률»과 «고르기»만 돌려주는 모델이라 **지어낼 자리가 형식에 없다** — 행은 코드가 정해서 묻고 후보도 코드가 만든다. `LlmRouter`에 넣지 않았다(라우터의 계약은 «프롬프트 → 글»). 라우트는 늘리지 않고 `segmentation/structure/llm`에 `engine="jev"`를 받는다. **총목이 답하는 것은 권·集(층위 1~2), 본문 판정이 답하는 것은 그 안의 낱글**이라 `nest_under_toc`이 본문 후보를 목차 경계 아래 층으로 내린다. **규칙 후보를 거르지 않는다** — 문집에서 규칙으로 거르면 규칙의 눈을 물려받아 재현 0.88 → 0.18로 떨어졌다. 목차 대조의 문턱은 상수가 아니라 `derive_toc_threshold()`가 «자기 검증(제목이 그 행에서 시작하는가)이 깨지는 직전»으로 이 책에서 뽑는다(답이 5개 미만일 때만 0.8로 물러선다). 확률은 후보의 `prob`에 실어 화면의 «상위 몇 개» 손잡이가 쓰고, 확신도 칸(규칙과 견주는 값)과는 섞지 않는다. **답은 1차 거름망이다**(2026-09-27, claude-skills `docs/JEV-SIEVE.md`) — 후보마다 `band`: 본문은 ≥0.85 accept(미리 체크)·0.5~0.85 escalate(**체크 해제 후보**, 「애매한 후보 보기」)·≤0.5 reject(후보 아님), 목차는 절벽 이상 accept·절벽 아래 escalate·자기 검증 실패 reject, «없음» 답은 `toc.unplaced` 제목 목록. 합칠 때 escalate는 채택으로 올리지 않고, 층은 accept 목차로만 세운다(`structure_llm.jev_band`). **텍스트 전용이고 CJK 정확도가 낮다고 벤더 문서가 밝힌다** — 비전 자리(판독 계획)에는 못 쓴다. 입력만 청구($0.042/M): 권 전문 판정 $0.024, 목차 102항목 $0.002 |
 | `src/llm/decider.py` · `page_survey.decider_questions`·`parse_decider_answers` | **이미지를 받는 판정 모델 — Perplexity Decisions `decider-27b`**(D-134). `JevClient`를 물려받아 주소(`/v1/decisions`, 끝 `/` 금지)·모델 id·**이미지는 state 배열 안 data URL**만 바꾼다 — 상한·백오프(429 Retry-After)·토큰/비용·**서고 사용 기록**은 `jev.py` 한 곳. 한 장 32×32 타일 2,048개를 넘기면 1분 뒤 504라 `fit_image`가 보내기 전에 줄인다. 자동 스캔에서 «종류 판정 모델»을 «판정 모델 — Perplexity Decider»(`force_provider="decider"`)로 고르면 방향은 choice, 종류는 **종류마다 noul**(한 쪽에 둘 이상일 수 있다)로 묻고 확률을 `per_page[].decider`에 싣는다. 종류 문턱 0.5는 **잰 값이 아니다** — `scripts/eval_decider_survey.py`(`--run` 없이는 안 보낸다)로 정한다. 기본 모델은 그대로 kimi-k3. **키는 화면에서**: 설정 ▸ 판정 모델(`/api/settings/decision-models`, `?check=true`면 질문 하나로 연결 확인) — `PERPLEXITY_API_KEY`·`TYPESAFE_API_KEY`가 `env_settings.MANAGED_KEYS`로 서고 `.env`에. Jev도 이제 서고 `.env`를 읽는다(전에는 앱 밖 개인 파일만 — 화면으로 넣을 길이 없었다). Decider는 그 개인 파일을 보지 않는다. Jev에 이미지를 주면 보내기 전에 거부한다(base64를 글자로 읽는다, 2026-10-02 실측). 시험 `tests/test_decision_models.py` |
 | `src/llm/openrouter_decider.py` · `structure_llm.JUDGE_THRESHOLDS` | **편성 본문 경계 판정의 기본 — OpenRouter 경유 Perplexity decider**(**D-136**, 사용자 결정 2026-10-05). `OpenRouterDecisionClient(JevClient)`: `https://openrouter.ai/api/alpha/decisions`·`perplexity/pplx-decider-v1-27b`, 본문·응답은 System One 그대로(usage.cost가 정본). **키 이름은 `OPENROUTER_API_KEY` 하나** — Jev의 KEY_NAMES(TypeSafe 먼저)를 물려받으면 TypeSafe 키가 OpenRouter로 나간다. 환경변수 → 서고 `.env`(설정 ▸ 판정 모델, `MANAGED_KEYS["openrouter"]`) → 개인 키 파일. 라우트는 키가 있으면 decider가 주, Jev가 **실패한 호출만** 대신 답하는 폴백(`ask_structure_jev(fallback=)`), 없으면 Jev가 주. **문턱은 답한 모델의 것** — decider 0.95/0.35, Jev 0.85/0.5(저장 측정에서 accept 정밀 ≥ Jev·reject 손실 ≤ Jev로 고름). meta `answered_by`·`fallback_calls`·`fallback_lines`·`thresholds`, 후보 `judge`. **목차 대조는 Jev 그대로**(decider로 잰 적 없음, Jev 키 없으면 `toc.skipped`). 근거 표지 `jev:structure`·요청 `engine:"jev"`는 이름 유지. **이 PC는 개인 키 파일에 실제 OpenRouter 키가 있다 — 라우트를 부르는 시험은 이 클라이언트를 가짜로 바꿔야 한다.** 시험 `tests/test_openrouter_decider.py` |
+| `src/core/escalate_review.py` · `scripts/escalate_review.py` | **애매한 후보 2차 판정**(**D-137**, 사용자 결정 2026-10-05). 본문 판정의 escalate 대역을 «지시문 + 후보 JSON 줄 `{id, before ≤4행, text, after ≤2행}`»(확률 없음)으로 ≤100개씩 글 덩어리로 내보내고, 채팅 LLM의 답 `{"answers":[{id, start: yes/no, conf}]}`을 붙여 넣으면 대조한다 — 없는 id 거부·빠진 id 누락(답이 닿은 덩어리 안에서만)·모양 틀림 건너뜀. **앱은 여기서 외부 모델을 부르지 않는다.** 결과는 체크 제안뿐(«예» 체크·«2차: 예», «아니오» 체크 해제·«2차: 아니오», 가릴 수 있음) — 저장은 「적용」. 후보·들인 판정은 `<서고>/.escalate_review/<문헌>/<권>.json`(문헌 git 밖)에 메모 — 판정 실행(`_remember_escalate`)과 화면 내보내기가 적고, CLI·「저장된 판정 불러오기」가 읽는다. 라우트 `segmentation/escalate/export`·`/import`·`GET segmentation/escalate`. 시험 `tests/test_escalate_review.py` |
 | `src/llm/clef_cf.py` | **이미지 판정의 기본 — Cloudflare Workers AI `@cf/cloudflare/clef`**(D-135, 사용자 결정 2026-10-04). Decider처럼 `JevClient`를 물려받되 주소는 계정 id로 만들고, 이미지는 **최상위 `images`**(data URL, 최대 4장·장당 16MP/4MiB·합계 8MiB·본문 13MiB — `fit_image_clef`가 보내기 전에 맞춘다. **이것은 서버 한도이고 문맥은 65,536토큰이다** — 16MP 근처 쪽이 «예상 208,453토큰»으로 413을 받아 2026-10-04 평가 24장 중 12장을 잃었다. 그래서 기본 2MP(`DEFAULT_IMAGE_PIXELS`)로 보내고, 문맥 초과 413이면 오류문의 예상 토큰 수에 비례해 줄여 1회 다시 보낸다). **자동 스캔의 clef는 사슬이다 — Cloudflare clef(무료) → OpenRouter clef(`openrouter_decider.OpenRouterClefClient`, 유료 크레딧, 이미지는 state 배열 image_url·300KB·재인코딩 없음) → 기본 비전 모델(kimi-k3)**. 실패한 쪽부터 다음 단계로 넘기고 `fallback`에 경로를 싣는다(Jev는 이미지를 못 읽어 사슬에 없다, D-135 후속). **질문이 여럿이면 Workers AI가 state를 자른다** — 긴 글 + 여러 질문 자리에는 쓰지 않는다(D-135 후속), 응답 `{"result":…, "success":…}`는 `_unwrap`이 벗긴다(안 벗기면 0토큰으로 기록된다). `force_provider="clef"`. 키 `CLOUDFLARE_API_TOKEN`·`CLOUDFLARE_ACCOUNT_ID`(MANAGED_KEYS `cloudflare`·`cloudflare_account`) — 환경변수 → 서고 `.env` → **Windows 사용자 환경변수**(레지스트리, 먼저 뜬 서버용), 둘 다 있어야 «키 있음». **기본은 화면이 고른다** — `decision-models`의 `default_image_provider`를 «종류 판정 모델»이 처음 채울 때 한 번 쓴다. 서버의 force_provider 없음은 여전히 kimi-k3(이 PC는 키가 환경변수에 있어 서버 기본을 바꾸면 시험이 실제로 부를 수 있다). 문턱 0.5는 잰 값이 아니다 — `scripts/eval_clef_survey.py`(사람 라벨 없는 24장, `--run` 없이는 안 보낸다). 시험 `tests/test_clef_cf.py` |
 | `src/core/rule_preview.py` | **규칙을 바꾸면 무엇이 달라지는지 미리 잰다**(D-121). 규칙 둘로 제안을 각각 세어 «후보 615 → 608 · 빠지는 자리 8»과 그 자리 목록을 돌려준다. 저장하지 않는다. 사람·통계·LLM이 내놓는 변경이 모두 이 관문을 지나게 하는 것이 목적이다. 목록은 «늘고 준 것»으로, 스위치는 «듣는 값»으로 견준다(안 적힌 스위치는 켜진 것이라 「None → False」로 말하면 안 된다) |
 | `src/core/page_format.py` | **판식을 좌표에서 읽는다**(D-120). 열 사이가 유난히 벌어진 자리를 판심으로 보고, 행마다 `body`·`pansim`·`margin` 라벨을 붙인다. **판심이 쪽의 절반 이상에서 잡히고 좌우 열 수가 일정한 책에서만** 판정하고, 아니면 아무것도 빼지 않는다. 두주는 «본문 열의 0.25배보다 작고 윗변에서 시작하지도 않는» 행 — 0.6배로 자르면 내려쓴 별행 표제가 함께 빠진다. 발견기는 `body`만 센다. 浩齋에서 잰 «반엽 10행»이 KORMARC 300▼b의 「10行20字」와 같다. `compare_with_catalog`가 서지의 `printing_info`와 맞대어 한 줄로 답한다 — 좌표만으로는 접은 자리를 확정할 수 없다는 한계를 목록이 메운다 |
@@ -162,6 +163,20 @@ src/app/
 - **Ollama 기본 비전 모델은 클라우드(`gemma4:cloud`)다**(D-114). 로컬 기본을 두면 처음 켠 PC가 9.6GB를 받기만 한다. 클라우드 기본은 목록에 있어도 `_pick_vision_model`이 한 번 불러 보고(로그인 없음·은퇴면 실패) 로컬 후보로 내려간다.
 - **Ollama 텍스트 호출은 답이 길면 문맥 창도 올린다**(`providers/ollama.py::_gen_options`, 2026-09-12). 기본 num_ctx 4,096이라 num_predict를 크게 줘도 «프롬프트 + 답»이 4,096을 넘는 순간 잘린다 — 사전형 주석이 매번 2,883토큰에서 끊겼다. 긴 JSON을 받는 호출은 잘린 답에서 완성된 항목만 건지는 파서도 둔다(`annotation_dict_llm._recover_truncated_items`).
 - **사고(thinking)는 전역 스위치가 아니다**: 기본 끔(D-074). 정밀 판독과 사용자가 명시한 호출만 켠다. **다만 Ollama 프로바이더에는 폴백이 있다** — `response`가 비고 `thinking`만 찼을 때 그것을 본문으로 쓴다(`providers/ollama.py` 텍스트·스트리밍·비전 셋). 사고에 num_predict를 다 쓴 reasoning 모델의 방어책이고, 비전 경로는 `allow_thinking_fallback=False`로 끌 수 있다. 다른 세 프로바이더에는 없다. 한때 이 줄이 「폴백은 어디에도 없다」로 적혀 있었다(Codex 지적 2026-09-22 — 문서를 믿은 호출자가 사고문을 결과로 받는다).
+
+### Claude 세션에서 — «애매한 후보 판정해 줘» (D-137)
+
+사용자가 편성 화면에서 「판정 모델로 고르기」를 돌린 뒤(또는 「애매한 후보 내보내기」를 한 번 누른 뒤) 이렇게 말하면:
+
+1. `uv run python scripts/escalate_review.py export --doc <문헌> --part <권> --out <scratchpad>/esc.txt`
+   (`--library` 생략 시 앱이 마지막으로 연 서고. 일기면 `--book-type diary`, 문집이면 `collection`)
+2. esc.txt의 **지시문 그대로** 세션이 직접 판정해 `{"answers":[{"id":…,"start":"yes"|"no","conf":…}, …]}`를
+   `answers.json`에 쓴다 — 모든 id에 답한다. 확률을 찾아보거나 규칙을 바꾸지 않는다.
+3. `uv run python scripts/escalate_review.py import --doc <문헌> --part <권> --in answers.json` — 예·아니오·누락·거부 수를 사용자에게 옮긴다.
+4. 사용자에게: 화면 「판정 들이기 ▸ 저장된 판정 불러오기」로 체크 제안을 보고 「적용」. **경계는 세션이 저장하지 않는다.**
+
+**외부 모델(API·Ollama·codex 등)을 부르지 않는다.** 사용자가 그 실행에 쓸 모델을 명시적으로 이름 대면
+그 한 번만 쓰고, 기본값으로 삼지 않는다.
 
 ## 말로 작업 지시 모듈 (D-131, 2026-09-30)
 
