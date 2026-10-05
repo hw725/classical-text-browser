@@ -783,7 +783,8 @@ async def api_decision_models(check: bool = Query(False)):
                        status, detail?}],
            "clef_available": bool,   # Cloudflare 키 또는 OpenRouter 키 — 화면 clef 옵션의 활성
            "clef_via": "cloudflare" | "openrouter" | None,
-           "default_image_provider": "clef" | None}
+           "default_image_provider": "clef" | None,
+           "jev_via": "typesafe" | "openrouter" | None}   # Jev가 가는 길(D-136 후속)
     """
     from core.env_settings import MANAGED_KEYS
     from llm.clef_cf import ClefClient
@@ -848,7 +849,8 @@ async def api_decision_models(check: bool = Query(False)):
             "cls": JevClient,
             "display_name": "TypeSafe Jev",
             "role": "텍스트 판정 — 편성 «판정 모델로 고르기»의 목차 대조, 그리고 본문 판정의 "
-            "폴백(OpenRouter 키가 없거나 호출이 실패하면)",
+            "폴백(OpenRouter 키가 없거나 호출이 실패하면). 이 칸은 TypeSafe 키만 봅니다 — "
+            "TypeSafe 키가 없어도 OpenRouter 키가 있으면 같은 Jev를 OpenRouter 경유로 부릅니다",
             "signup_url": "https://docs.typesafe.ai",
             "steps": [
                 "TypeSafe에 가입하고 콘솔에서 API 키를 만듭니다",
@@ -893,11 +895,24 @@ async def api_decision_models(check: bool = Query(False)):
     clef_via = (
         "cloudflare" if has.get("cloudflare") else "openrouter" if has.get("openrouter") else None
     )
+    # Jev를 어느 길로 부르는가(D-136 후속, 2026-10-05) — 편성 라우트의 `make_jev_client`와 같은
+    # 조건을 여기 한 곳에서 낸다: TypeSafe 키 → 직결, 없고 OpenRouter 키 → OpenRouter 경유.
+    # TypeSafe 칸의 has_key는 TypeSafe 키만 본다(전에는 OpenRouter 키로도 «키 있음»이 되고
+    # 「연결 확인」이 그 키를 TypeSafe 주소로 보냈다). 그래서 «OpenRouter 키로 Jev를 부른다»는
+    # 이 값과 TypeSafe 칸의 안내 한 줄로 알린다.
+    jev_via = (
+        "typesafe" if has.get("typesafe") else "openrouter" if has.get("openrouter") else None
+    )
+    if jev_via == "openrouter":
+        for r in out:
+            if r["id"] == "typesafe":
+                r["role"] += " — 지금은 TypeSafe 키가 없어 OpenRouter 키로 Jev를 부릅니다"
     return {
         "models": out,
         "clef_available": clef_via is not None,
         "clef_via": clef_via,  # 사슬이 어디서 시작하는가 — 화면 라벨용
         "default_image_provider": "clef" if clef_via else None,
+        "jev_via": jev_via,  # 편성 목차 대조·폴백의 Jev가 가는 길
     }
 
 

@@ -8286,18 +8286,19 @@ meta에 `answered_by`(`업체:모델` → 호출 수)·`fallback_calls`·`fallba
 - 하한 0.35는 «Jev와 같이 5개 잃음»의 끝이다. 운양집 정답 중 decider 확률이 0.33·0.364인 자리가 있어 **여유가 얇다** — 0.3이면
   4개만 잃고 escalate가 153·500행으로 는다. 화면 부담을 줄이는 쪽을 골랐고, 책이 늘면 다시 잰다.
 - 대가: escalate(체크 해제 후보)가 Jev의 약 2배다. 천진담초는 decider 확률이 낮은 정답이 없어(최저 0.81) reject 손실이 0이다.
-- **폴백(Jev)이 답한 호출에는 Jev 문턱(0.85/0.5)을 그대로 댄다**(`judge_thresholds(client)` — 클라이언트의 `PROVIDER`로 고른다).
+- **폴백(Jev)이 답한 호출에는 Jev 문턱(0.85/0.5)을 그대로 댄다**(`judge_thresholds(client)` — 클라이언트의 `PROVIDER`로 고른다. 후속에서 «모델이 먼저»로 고쳤다 — OpenRouter 경유 Jev).
 
 **4. 목차 대조(`toc.match_toc_entries_jev`)는 Jev에 남긴다 — decider로 잰 적이 없다.** 저장 측정은 «글이 시작하는 행»(starts)만
 했다. 목차 대조의 문턱은 `derive_toc_threshold`가 Jev 확률의 «자기 검증이 깨지는 직전»으로 뽑는 것이라 모델을 바꾸면 그 절벽
-모양부터 다시 봐야 한다. Jev 키가 없으면 목차 대조는 건너뛰고 `toc.skipped`로 알린다(본문 판정은 decider로 돈다).
+모양부터 다시 봐야 한다. Jev 키가 없으면 목차 대조는 건너뛰고 `toc.skipped`로 알린다(본문 판정은 decider로 돈다). 후속(아래): OpenRouter 키만 있어도
+목차 대조는 OpenRouter 경유 Jev로 돈다.
 
 ### 하지 않은 것
 
 - 실제 호출로 다시 재지 않았다(저장 파일만). 문턱 표는 두 책뿐이고, 운양집 정답 CSV에는 «모름» 행이 많아 정밀이 낮게 나온다(D-129).
 - OpenRouter 단가는 재지 않았다 — `usage.cost`가 오면 그 값을, 없으면 Perplexity 직결 단가 $0.04/M로 어림한다.
 - 기존 Jev 클라이언트의 `KEY_NAMES`에 `OPENROUTER_API_KEY`가 세 번째로 들어 있는 것(Jev 쪽에서 남의 키를 빌릴 수 있는 길)은
-  이 결정의 범위 밖이라 그대로 두었다.
+  이 결정의 범위 밖이라 그대로 두었다. **→ 후속(2026-10-05)에서 고침** — 아래 «후속».
 
 | 지키는 시험 (`tests/test_openrouter_decider.py`, 네트워크 없음) | |
 |---|---|
@@ -8309,6 +8310,67 @@ meta에 `answered_by`(`업체:모델` → 호출 수)·`fallback_calls`·`fallba
 
 라우트를 부르는 기존 시험(`test_structure_llm.py`·`test_structure_jev.py`)은 OpenRouter 클라이언트를 키 없는 가짜로 바꿨다 —
 이 PC는 개인 키 파일에 실제 OpenRouter 키가 있어 막지 않으면 시험이 실제로 부른다.
+
+### 후속(2026-10-05) — 어떤 키도 남의 주소로 나가지 않는다: OpenRouter 키만 있으면 Jev도 OpenRouter 경유로
+
+**결함.** `llm/jev.py`의 `KEY_NAMES = ("TYPESAFE_API_KEY", "JEV_API_KEY", "OPENROUTER_API_KEY")`. OpenRouter 키만 있는 사람은
+`JevClient.has_key`가 참이 되어 ① 편성 목차 대조 ② decider가 실패한 호출의 폴백이 **OpenRouter 키를
+`https://api.typesafe.ai/v1/systemone`으로** 보냈다(401). ③ 설정 «판정 모델»의 TypeSafe 칸도 «키 있음»으로 보였고
+「연결 확인」이 같은 키를 TypeSafe로 보냈다. 위 «하지 않은 것»이 범위 밖으로 남긴 자리다.
+
+**사용자 결정(2026-10-05).** OpenRouter 키만 있으면 Jev를 OpenRouter 경유로 부른다 — 주소 `https://openrouter.ai/api/alpha/decisions`,
+모델 `~typesafe/jev-latest`. llm_pipeline 정본(`llm_runtime/jev_decisions.py` `PROVIDERS["openrouter"]`)이 이미 쓰는 길이고 계약
+(본문 `{model, state, questions}`·응답 `{answers, usage}`·키 `OPENROUTER_API_KEY` 하나·`usage.cost` 정본)을 그대로 맞췄다.
+
+**바꾼 것.**
+
+1. `JevClient.KEY_NAMES = ("TYPESAFE_API_KEY", "JEV_API_KEY")` — TypeSafe 키는 TypeSafe로만, OpenRouter 키는 OpenRouter로만.
+2. `openrouter_decider.OpenRouterJevClient(OpenRouterDecisionClient)` — 모델만 `~typesafe/jev-latest`, 단가 어림 $0.042/M(Jev와 같다,
+   `usage.cost`가 오면 그 값), 텍스트 전용(이미지는 보내기 전에 거부), `JUDGE_FAMILY = "jev"`.
+3. `jev.make_jev_client(library_root, max_calls, …)` — TypeSafe 키가 있으면 직결 `JevClient`, 없고 OpenRouter 키가 있으면
+   `OpenRouterJevClient`, 둘 다 없으면 키 없는 `JevClient`. 둘 다 있으면 직결이 먼저다(측정한 기본 길이고, OpenRouter 크레딧을 본문
+   decider 몫으로 남긴다). 클래스는 부를 때 모듈에서 찾는다(시험이 가짜로 바꿔 끼운다).
+4. **`JevClient(`를 만들던 곳(src 전수, scripts·tests 제외)** — `app/routers/composition.py::_structure_jev`(목차 대조·폴백) →
+   `make_jev_client`로 바꿨다. `app/routers/library.py::api_decision_models`의 TypeSafe 칸은 **의도적으로 직결 `JevClient` 그대로** —
+   그 칸은 «TypeSafe 키가 있는가·TypeSafe 주소로 되는가»를 묻는 자리라 경유 클라이언트로 바꾸면 3번 결함이 거꾸로 돌아온다.
+   그 밖에 src에서 `JevClient`를 직접 만드는 곳은 없다(`decider.py`·`clef_cf.py`·`openrouter_decider.py`는 물려받기만).
+   `scripts/eval_boundary_judge.py`의 `JevClient(...)` 셋은 범위 밖이라 그대로 — KEY_NAMES가 바뀌어 이제 TypeSafe 키 없이는
+   «키 없음»으로 멈춘다(전처럼 OpenRouter 키를 TypeSafe로 보내지 않는다).
+5. **문턱은 모델의 것** — `structure_llm.judge_thresholds`가 업체(`PROVIDER`)보다 먼저 `JUDGE_FAMILY == "jev"`나 모델 이름
+   `~typesafe/…`를 본다. OpenRouter 경유 Jev는 PROVIDER가 decider와 같은 «openrouter»라 업체로만 가르면 decider 문턱(0.95/0.35)을
+   받는다. 목차 대조의 `derive_toc_threshold`는 같은 Jev 확률이라 그대로.
+6. 표지 — 판정 표지는 `openrouter:~typesafe/jev-latest`(answered_by·thresholds·usage_by·후보 `judge`). 목차 후보에도 `judge`를,
+   `toc.judge`·dry-run `toc_judge`를 더했다. 화면 `_judgeName`은 `openrouter:~typesafe/`를 decider보다 먼저 가려
+   «TypeSafe Jev (OpenRouter 경유)»로 읽고, 결과 줄·크기 안내가 목차 대조를 맡은 Jev를 괄호로 밝힌다.
+7. 설정 «판정 모델» — TypeSafe 칸 has_key는 TypeSafe 키만. 응답에 `jev_via: "typesafe" | "openrouter" | None`(편성 라우트와 같은
+   조건을 한 곳에서), OpenRouter로 부를 때는 TypeSafe 칸 안내(role) 끝에 «지금은 TypeSafe 키가 없어 OpenRouter 키로 Jev를 부릅니다».
+   「연결 확인」은 has_key가 거짓인 칸을 부르지 않으므로 OpenRouter 키가 TypeSafe 주소로 나갈 길이 없다.
+8. 400 안내(«키는 제 주소로만 갑니다 …»)와 `toc.skipped`(«직결 또는 OpenRouter 경유 … 둘 다 없어»)를 새 동작에 맞췄다.
+   OpenRouter 키 하나로 decider와 폴백 Jev가 둘 다 OpenRouter로 가는 것은 괜찮다(모델이 다르다 — 사용자 결정 4항).
+
+**시험** — `tests/test_jev_via_openrouter.py` 21건(네트워크 없음). 실제 키 차단은 `test_clef_availability.py`와 같다(환경변수·
+Windows 사용자 환경변수·개인 키 파일·프로젝트 .env를 막고 서고 .env만). 더해 **모든 판정 클라이언트의 기본 opener를 가짜로**
+(`JevClient.__init__.__kwdefaults__["opener"]`) 끼워 실제로 나간 요청의 URL과 Bearer 키를 잡는다 — 막지 못한 길이 있어도 밖으로
+나가지 않는다.
+
+| 키 | 본문 판정 | 폴백 | 목차 대조 Jev | 설정 TypeSafe has_key · jev_via |
+|---|---|---|---|---|
+| 없음 | 400(요청 0건) | — | — | 거짓 · None |
+| TypeSafe만 | `JevClient` → typesafe 주소·TS 키 | 없음 | `JevClient` → typesafe·TS 키 | 참 · typesafe |
+| OpenRouter만 | decider → openrouter·OR 키 | `OpenRouterJevClient` | `OpenRouterJevClient` → openrouter·OR 키, **typesafe 주소 0건** | 거짓 · openrouter |
+| 둘 다 | decider → openrouter·OR 키 | `JevClient`(직결) | `JevClient` → typesafe·TS 키 | 참 · typesafe |
+
+모든 경우에 «typesafe 주소에는 TS 키만, openrouter 주소에는 OR 키만»을 요청마다 단언한다(`Wire.assert_keys_stay_home`).
+OpenRouter만 + decider 402 → OpenRouter 경유 Jev가 대신 답하고 0.9가 **accept**(Jev 문턱, decider 문턱이면 escalate)
+(`test_decider_failure_falls_back_to_openrouter_jev_with_jev_thresholds`). 「연결 확인」(check=true)도 같은 단언.
+**고치기 전으로 되돌리면**(KEY_NAMES에 OPENROUTER 복귀 + composition·library·structure_llm·화면을 HEAD로, 새 클래스·함수만 남김)
+21건 중 13건이 실패한다. 기존 시험 `test_structure_llm.py::test_route_jev_says_so_when_there_is_no_key`는 OpenRouter 경유 Jev도
+키 없는 가짜로 막도록 한 줄 더했다(안 막으면 이 PC의 개인 키 파일로 실제 호출이 나간다).
+
+**실제 호출 1회(사용자 승인, 2026-10-05).** 이 PC의 OPENROUTER_API_KEY(개인 키 파일)로 `OpenRouterJevClient`에 질문 하나(noul,
+«이 글은 인사말인가?» / state «안녕하세요.»): HTTP 200, 응답 모델 `typesafe/jev-1.13-20260917`, usage `input_tokens 281 ·
+output_tokens 20 · cost $0.0000118`, 답 `{"noul": 0.98}`(확률 하나, System One 모양 그대로). 입력은 수십 자였지만 청구 토큰은
+281이다 — 게이트웨이·모델 쪽 고정 몫이 있다는 뜻이고(추정), 사전 어림 «$0.00001 미만»을 조금 넘었다.
 
 ## D-137: 애매한 후보 2차 판정은 «붙여 넣기» 길로 — 앱은 외부 모델을 부르지 않는다 (2026-10-05)
 

@@ -1139,7 +1139,10 @@ async function _updateLlmJudgeNote() {
     });
     const d = await res.json();
     if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
-    const toc = d.toc_entries ? ` · 목차 ${d.toc_entries}항목` : "";
+    // 목차 대조를 맡을 Jev가 직결인지 OpenRouter 경유인지(D-136 후속)
+    const toc = d.toc_entries
+      ? ` · 목차 ${d.toc_entries}항목${d.toc_judge ? `(${_judgeName(d.toc_judge)})` : ""}`
+      : "";
     // 누가 답할지(D-136 — 기본은 OpenRouter decider, 키가 없으면 Jev)
     const judge = d.judge ? ` · ${_judgeName(d.judge)}` : "";
     note.textContent = `${d.lines}행 · 질문 ${d.questions}개 · 호출 ${d.calls}번${toc} · 약 $${d.cost_usd_est}${judge}`;
@@ -1156,7 +1159,10 @@ async function _updateLlmJudgeNote() {
  * (2026-09-21 실측: 운양집에서 재현 0.88 → 0.18).
  */
 function _judgeName(label) {
-  // «업체:모델» → 사람이 읽는 이름. 모르는 것은 그대로 보인다
+  // «업체:모델» → 사람이 읽는 이름. 모르는 것은 그대로 보인다.
+  // OpenRouter 경유 Jev(«openrouter:~typesafe/jev-latest»)를 decider보다 먼저 가린다 —
+  // 업체 이름만 보면 decider로 읽힌다(D-136 후속, 2026-10-05)
+  if (String(label).startsWith("openrouter:~typesafe/")) return "TypeSafe Jev (OpenRouter 경유)";
   if (String(label).startsWith("openrouter:")) return "Perplexity decider";
   if (String(label).startsWith("typesafe:")) return "TypeSafe Jev";
   return String(label);
@@ -1180,7 +1186,8 @@ async function _askJudgeStructure() {
     proposeState.topN = null; // 새 답이면 «전부 보기»부터 — 앞 책의 개수를 물려받지 않는다
     if (out) {
       const toc = d.toc && d.toc.entries
-        ? ` · 목차 ${d.toc.entries}항목 중 ${d.toc.above_threshold || 0}개를 본문에 붙임`
+        ? ` · 목차 ${d.toc.entries}항목 중 ${d.toc.above_threshold || 0}개를 본문에 붙임` +
+          (d.toc.judge ? `(${_judgeName(d.toc.judge)})` : "")
         : "";
       const cost = d.usage ? ` · $${d.usage.cost_usd}` : "";
       // 답한 모델 — 폴백(Jev)이 섞였으면 몇 번이었는지도 밝힌다. 문턱이 모델마다 달라서다(D-136)

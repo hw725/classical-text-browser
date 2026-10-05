@@ -28,6 +28,7 @@
 
 from __future__ import annotations
 
+from llm.jev import INPUT_USD_PER_M as JEV_INPUT_USD_PER_M
 from llm.jev import JevClient
 
 OPENROUTER_DECISIONS_URL = "https://openrouter.ai/api/alpha/decisions"
@@ -49,6 +50,32 @@ class OpenRouterDecisionClient(JevClient):
     KEY_FALLBACK_FILE = True  # 개인 키 파일에 OPENROUTER_API_KEY가 있다(Jev와 같은 마지막 출처)
     INPUT_USD_PER_M = OPENROUTER_DECIDER_USD_PER_M
     ACCEPTS_IMAGES = False  # 측정하지 않은 길 — 보내기 전에 거부한다
+
+
+OPENROUTER_JEV_MODEL = "~typesafe/jev-latest"
+
+
+class OpenRouterJevClient(OpenRouterDecisionClient):
+    """OpenRouter로 부르는 TypeSafe Jev — TypeSafe 키 없이 OpenRouter 키만 있을 때 (D-136 후속).
+
+    사용자 결정(2026-10-05): OpenRouter 키만 있으면 Jev를 OpenRouter 경유로 부른다. 전에는
+    JevClient가 OPENROUTER_API_KEY를 이름 목록 끝에 두어, 그 키를 **TypeSafe 주소로** 보내 401을
+    받았다(목차 대조·decider 실패 시 폴백·설정 «연결 확인» 셋 다).
+
+    계약은 llm_pipeline 정본(`llm_runtime/jev_decisions.py` PROVIDERS["openrouter"])과 같다 —
+    주소 `/api/alpha/decisions`, 모델 `~typesafe/jev-latest`, 본문·응답은 직결과 같은
+    {model, state, questions} → {answers, usage}, 키는 OPENROUTER_API_KEY 하나. 비용은
+    usage.cost가 정본이고, 없으면 직결과 같은 Jev 입력 단가($0.042/M)로 어림한다(모델이 같다).
+
+    **문턱은 Jev의 것이다**(0.85/0.5) — PROVIDER가 «openrouter»라 decider 문턱(0.95/0.35)을 받지
+    않게 `JUDGE_FAMILY = "jev"`를 단다(`structure_llm.judge_thresholds`가 이것을 먼저 본다).
+    텍스트 전용 — 이미지는 보내기 전에 거부한다(Jev는 base64를 글자로 읽는다, 2026-10-02 실측).
+    """
+
+    DEFAULT_MODEL = OPENROUTER_JEV_MODEL
+    INPUT_USD_PER_M = JEV_INPUT_USD_PER_M  # $0.042/M — usage.cost가 없을 때만 쓴다
+    ACCEPTS_IMAGES = False
+    JUDGE_FAMILY = "jev"
 
 
 OPENROUTER_CLEF_MODEL = "cloudflare/clef"

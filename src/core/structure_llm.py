@@ -84,7 +84,8 @@ JEV_REJECT_AT = 0.5
 DECIDER_ACCEPT_AT = 0.95
 DECIDER_REJECT_AT = 0.35
 
-# 답한 모델(클라이언트의 PROVIDER) → (accept_at, reject_at).
+# 답한 모델(클라이언트의 PROVIDER) → (accept_at, reject_at). 단 OpenRouter 경유 Jev는 업체가
+# «openrouter»여도 Jev 값이다 — judge_thresholds가 모델을 먼저 본다(D-136 후속).
 # 폴백으로 Jev가 답한 묶음은 Jev 값을 쓴다
 # — 한 문턱을 두 모델에 같이 대면 위 표처럼 정밀이 갈린다.
 JUDGE_THRESHOLDS: dict[str, tuple[float, float]] = {
@@ -96,7 +97,15 @@ JUDGE_THRESHOLDS: dict[str, tuple[float, float]] = {
 def judge_thresholds(client) -> tuple[float, float]:
     """클라이언트가 어느 모델인지 보고 대역 문턱을 돌려준다. 입력: 판정 클라이언트.
     출력: (accept_at, reject_at). 모르는 업체(가짜 클라이언트 포함)는 Jev 값 — 잰 적 있는 유일한
-    기본이라서다."""
+    기본이라서다.
+
+    **업체보다 모델이 먼저다**(D-136 후속, 2026-10-05): OpenRouter 경유 Jev(`OpenRouterJevClient`)는
+    PROVIDER가 decider와 같은 «openrouter»라 업체로만 가르면 decider 문턱(0.95/0.35)을 받는다.
+    모델이 Jev면(`JUDGE_FAMILY == "jev"` 또는 모델 이름 `~typesafe/…`) 어느 길로 왔든
+    Jev 문턱이다."""
+    model = str(getattr(client, "model", "") or "")
+    if getattr(client, "JUDGE_FAMILY", None) == "jev" or model.startswith("~typesafe/"):
+        return (JEV_ACCEPT_AT, JEV_REJECT_AT)
     return JUDGE_THRESHOLDS.get(getattr(client, "PROVIDER", ""), (JEV_ACCEPT_AT, JEV_REJECT_AT))
 
 

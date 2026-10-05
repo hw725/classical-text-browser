@@ -247,6 +247,9 @@ def test_route_jev_says_so_when_there_is_no_key(client, tmp_path, monkeypatch): 
 
     monkeypatch.setattr(jev, "JevClient", NoKey)
     monkeypatch.setattr(or_mod, "OpenRouterDecisionClient", _NoKeyDecider)
+    # OpenRouter 키만 있으면 Jev도 OpenRouter 경유로 간다(D-136 후속) — 그 길도 키 없음으로 막는다.
+    # 막지 않으면 이 PC의 개인 키 파일 키로 실제 호출이 나간다
+    monkeypatch.setattr(or_mod, "OpenRouterJevClient", _NoKeyDecider)
     r = client.post(
         "/api/documents/d1/segmentation/structure/llm",
         json={"part_id": part_id, "engine": "jev"},

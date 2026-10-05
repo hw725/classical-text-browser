@@ -793,18 +793,22 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
     toc_calls = sum(1 for e in entries if len(str(getattr(e, "title", "") or "")) >= 2)
     planned = size["calls"] + toc_calls
 
-    from llm.jev import JevClient, JevGateExceeded
+    from llm.jev import JevGateExceeded, make_jev_client
     from llm.openrouter_decider import OpenRouterDecisionClient
 
     # 본문 판정의 기본은 OpenRouter 경유 Perplexity decider다(D-136 — 저장 측정에서 F1이 Jev보다
     # 높았다). 키가 없으면 Jev가 주 판정자, 있으면 Jev는 «실패한 호출만» 대신 묻는 폴백이다.
     # 목차 대조(match_toc_entries_jev)는 Jev 그대로 — decider로 잰 적이 없다(D-136).
+    # Jev는 `make_jev_client`가 고른다(D-136 후속, 2026-10-05): TypeSafe 키가 있으면 직결,
+    # 없고 OpenRouter 키만 있으면 같은 Jev를 OpenRouter 경유로 — 전에는 OpenRouter 키를
+    # TypeSafe 주소로 보내 401이었다. OpenRouter 키 하나로 decider와 Jev가 둘 다 OpenRouter로
+    # 가는 것은 괜찮다(모델이 다르고, 문턱도 모델마다 따로 — judge_thresholds).
     # 둘 다 서고를 넘긴다 — 설정 «판정 모델»에서 넣은 키(서고 .env)를 찾고
     # 사용 기록도 서고에 남긴다.
     # 상한: Jev는 목차 + (폴백이 본문 전부를 떠맡는 최악) 만큼을 받아야 게이트에 걸리지 않는다.
     library_root = get_library_path()
     decider = OpenRouterDecisionClient(max_calls=size["calls"] + 5, library_root=library_root)
-    jev = JevClient(max_calls=planned + 5, library_root=library_root)
+    jev = make_jev_client(max_calls=planned + 5, library_root=library_root)
     body_judge, fallback = (decider, jev) if decider.has_key else (jev, None)
     if fallback is not None and not fallback.has_key:
         fallback = None  # 폴백 키가 없으면 실패한 호출은 그대로 실패로 남긴다
@@ -827,14 +831,19 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
             "toc_entries": len(entries),
             "cost_usd_est": round(est, 6),  # 4자리면 작은 권이 $0.0으로 보인다
             "judge": judge_label(body_judge),
+            # 목차 대조를 맡을 Jev — 직결(typesafe:…)인지
+            # OpenRouter 경유(openrouter:~typesafe/…)인지
+            "toc_judge": judge_label(jev) if jev.has_key else None,
         }
 
     if not body_judge.has_key:
         return JSONResponse(
             {
                 "error": "판정 모델 키를 찾지 못했습니다. 설정 → «판정 모델»에서 OpenRouter 키"
-                "(기본 — Perplexity decider)나 TypeSafe 키(Jev)를 넣으세요(OPENROUTER_API_KEY·"
-                "TYPESAFE_API_KEY 환경변수나 ~/.claude/data/triage/.env도 읽습니다).",
+                "(기본 — 본문은 Perplexity decider, 목차 대조는 OpenRouter 경유 Jev)나 "
+                "TypeSafe 키(Jev 직결)를 넣으세요. 키는 제 주소로만 갑니다 — OpenRouter 키는 "
+                "OpenRouter로, TypeSafe 키는 TypeSafe로(OPENROUTER_API_KEY·TYPESAFE_API_KEY "
+                "환경변수, 서고·프로젝트 .env, ~/.claude/data/triage/.env도 읽습니다).",
                 "needs_key": "openrouter",
             },
             status_code=400,
@@ -849,17 +858,26 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
     toc_props: list[dict] = []
     toc_meta: dict = {"entries": len(entries), "picked": 0, "none": 0, "failed": 0}
     if entries and not jev.has_key:
-        # 목차 대조는 Jev만 한다(D-136) — 키가 없으면 본문 판정만 하고 그렇다고 알린다
-        toc_meta["skipped"] = "목차 대조는 TypeSafe Jev로만 합니다 — Jev 키가 없어 건너뛰었습니다."
+        # 목차 대조는 Jev만 한다(D-136) — 키가 없으면 본문 판정만 하고 그렇다고 알린다.
+        # make_jev_client 뒤로는 OpenRouter 키만 있어도 Jev가 있으므로 실제로는 거의 오지 않는다
+        toc_meta["skipped"] = (
+            "목차 대조는 TypeSafe Jev(직결 또는 OpenRouter 경유)로만 합니다 — TypeSafe 키도 "
+            "OpenRouter 키도 없어 건너뛰었습니다."
+        )
     if entries and jev.has_key:
         res = match_toc_entries_jev(entries, body_lines, jev)
         if body.toc_min_prob is None:
+            # 같은 Jev 모델이면 길(직결·OpenRouter)이 달라도 확률 모양이 같다고 본다
+            # — 문턱 도출 그대로
             min_prob, how = derive_toc_threshold(res["picks"])
         else:
             min_prob, how = float(body.toc_min_prob), {"how": "given", "value": body.toc_min_prob}
         toc_props = toc_picks_to_proposals(res["picks"], entries, min_prob)
+        for t in toc_props:
+            t["judge"] = judge_label(jev)  # 본문 후보처럼 «누가 답했나» — 직결인지 경유인지 보인다
         n_accept = sum(1 for p in toc_props if p.get("band") == "accept")
         toc_meta = {
+            "judge": judge_label(jev),
             "entries": len(entries),
             "picked": len(res["picks"]),
             # 옛 이름을 지키되 뜻은 «미리 체크되는 것» — 화면 문구가 이 값을 쓴다

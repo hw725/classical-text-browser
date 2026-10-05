@@ -22,11 +22,16 @@
       들이기 전에 반드시 재야 한다.
 
 키:
-    TYPESAFE_API_KEY → JEV_API_KEY → OPENROUTER_API_KEY 순으로 환경변수를 보고, 없으면
-    **서고 `.env`**(설정 화면 «판정 모델»에서 넣은 키, D-134)와 프로젝트 `.env`를 보고, 그래도
-    없으면 공용 키 파일(`~/.claude/data/triage/.env`)을 **전부 읽은 뒤 같은 이름 순서로** 고른다.
-    파일에 적힌 줄 순서가 우선순위를 뒤집으면 안 된다(llm_pipeline 2026-09-21 실측 사고:
-    OpenRouter 키가 위에 있어 직결 호출이 401이었다). 값은 어디에도 출력하지 않는다.
+    TYPESAFE_API_KEY → JEV_API_KEY 순으로, 이름마다 환경변수 → **서고 `.env`**(설정 화면
+    «판정 모델»에서 넣은 키, D-134) → 프로젝트 `.env` → 공용 키 파일(`~/.claude/data/triage/.env`,
+    **전부 읽은 뒤 같은 이름 순서로**)을 본다. 파일에 적힌 줄 순서가 우선순위를 뒤집으면 안 된다
+    (llm_pipeline 2026-09-21 실측 사고: OpenRouter 키가 위에 있어 직결 호출이 401이었다).
+    값은 어디에도 출력하지 않는다.
+
+    **OPENROUTER_API_KEY는 여기서 보지 않는다**(D-136 후속, 2026-10-05). 전에는 이름 목록 끝에
+    있어 OpenRouter 키만 있는 사람의 Jev가 그 키를 TypeSafe 주소로 보내 401을 받았다. 이제
+    «어떤 키도 남의 주소로 나가지 않는다» — OpenRouter 키만 있으면 `make_jev_client`가
+    같은 Jev를 OpenRouter 경유(`openrouter_decider.OpenRouterJevClient`)로 부른다.
 
 판정 모델 공통 계약 (D-134):
     같은 «state + 형이 정해진 질문 → 확률 붙은 답» 계약을 쓰는 다른 업체(Perplexity Decisions —
@@ -53,7 +58,8 @@ TYPESAFE_MODEL = "jev-latest"
 INPUT_USD_PER_M = 0.042  # 입력만 청구된다 — 출력분은 청구서에 없다(2026-09-21)
 
 KEY_ENV_FILE = pathlib.Path.home() / ".claude" / "data" / "triage" / ".env"
-KEY_NAMES = ("TYPESAFE_API_KEY", "JEV_API_KEY", "OPENROUTER_API_KEY")
+# TypeSafe 직결 주소로 보내도 되는 키만. OPENROUTER_API_KEY를 넣지 않는다(위 «키» 참고).
+KEY_NAMES = ("TYPESAFE_API_KEY", "JEV_API_KEY")
 
 
 class JevGateExceeded(RuntimeError):
@@ -405,3 +411,34 @@ class JevClient:
             "cost_usd": round(self.cost_total, 6),
             "uncosted_calls": self.uncosted_calls,
         }
+
+
+def make_jev_client(
+    *, library_root: Optional[pathlib.Path] = None, max_calls: int = 60, **kwargs: Any
+) -> JevClient:
+    """Jev를 부를 클라이언트를 고른다 — **키마다 제 주소로만** (D-136 후속, 2026-10-05).
+
+    입력: library_root(키를 찾을 서고), max_calls(호출 상한), 나머지는 클라이언트 생성자에 그대로
+          (timeout·retries·opener 등).
+    출력: 셋 중 하나.
+      - TypeSafe 키(TYPESAFE_API_KEY·JEV_API_KEY)가 있으면 → `JevClient`(TypeSafe 직결)
+      - 없고 OpenRouter 키가 있으면 → `OpenRouterJevClient`(같은 Jev를 OpenRouter 경유로,
+        `~typesafe/jev-latest`)
+      - 둘 다 없으면 → 키 없는 `JevClient`(has_key False — 호출하면 jev_no_key)
+
+    왜 이렇게 고르는가: 사용자 결정(2026-10-05) «OpenRouter 키만 있으면 Jev를 OpenRouter 경유로
+    부른다». 둘 다 있으면 직결이 먼저인 까닭은 그것이 측정한 기본 길이고(D-129), OpenRouter 크레딧을
+    본문 decider 몫으로 남기기 위해서다.
+
+    클래스는 **부를 때** 모듈에서 찾는다 — 시험이 `llm.jev.JevClient`·
+    `llm.openrouter_decider.OpenRouterJevClient`를 가짜로 바꿔 끼울 수 있게.
+    """
+    direct = JevClient(library_root=library_root, max_calls=max_calls, **kwargs)
+    if direct.has_key:
+        return direct
+    from llm import openrouter_decider  # 순환 import 피함(그 모듈이 이 모듈을 물려받는다)
+
+    via = openrouter_decider.OpenRouterJevClient(
+        library_root=library_root, max_calls=max_calls, **kwargs
+    )
+    return via if via.has_key else direct
