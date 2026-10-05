@@ -1791,7 +1791,6 @@ const proposeState = {
   seq: 0, // 요청 세대 — 늦게 온 옛 응답·다른 문헌의 응답은 버린다(Codex 지적)
   rulesDigest: null, // 이 후보를 셀 때 **실제로 보낸** 입력(규칙 + 목차 쪽)의 JSON — 지금 ②와 다르면 낡은 것
   tocRaw: null, // 목차 쪽 칸의 값(목차를 찾을 때의 것) — 바뀌면 다시 찾는다
-  baseline: null, // Map(자리 키 → 후보) — 저장된 규칙(없으면 권고)으로 센 채택 후보. «바뀐 것»의 기준
   checked: new Set(), // 경계가 될 후보(자리 키)
   selected: new Set(), // 한꺼번에 고칠 후보(자리 키) — 체크와 다른 상태다
   anchor: null, // Shift 범위의 시작(자리 키)
@@ -1806,7 +1805,6 @@ const proposeState = {
   located: null, // {docId, partId, proposals} — 목차에는 있으나 대조 못 한 항목을 사람이 찾아 넣은 자리(D-122 덧붙임)
   unmatchedOpen: null, // 펼쳐 둔 못 찾은 항목의 index
   lastClicked: null, // 마지막으로 누른 행(자리 키) — 도구가 이 행 아래에 뜬다(D-122 덧붙임 2)
-  baselineKind: "rules", // «바뀐 것»의 기준 — "boundaries"(저장된 경계) 또는 "rules"(저장된 규칙으로 센 후보)
   escExport: null, // {key, chunks:[{label, text}], next} — 애매한 후보 내보내기의 덩어리와 다음에 복사할 차례(D-137)
   hideSecondNo: false, // 2차 판정이 «아니오»라 한 애매한 후보를 가리는가
 };
@@ -2075,7 +2073,6 @@ async function _startFlow(force) {
     if (proposeState.llm && (proposeState.llm.docId !== viewerState.docId || proposeState.llm.partId !== viewerState.partId)) proposeState.llm = null;
     proposeState.tocRaw = null;
     proposeState.data = null;
-    proposeState.baseline = null;
     proposeState.toc = null;
     proposeState.selected = new Set();
     proposeState.anchor = null;
@@ -2089,7 +2086,7 @@ async function _startFlow(force) {
     // 둘이 같은 규칙(detect_toc_pages·extract_toc_entries_rule)을 쓰므로 어긋나지 않는다.
     await Promise.all([_loadSignals(), _detectToc(false)]);
     if (!_signalsCurrent()) return;
-    await _proposeBoundaries(true);
+    await _proposeBoundaries();
   } finally {
     flowState.loading = false;
   }
@@ -2111,29 +2108,6 @@ function _propKey(p) {
   return `${p.page}:${p.line_index}:${p.char_offset || 0}`;
 }
 
-/** 채택된 후보를 자리 키로. 입력: propose 응답. 출력: Map. 목적: «바뀐 것»을 자리로 견준다. */
-function _acceptedMap(data) {
-  const m = new Map();
-  for (const p of data?.proposals || []) if (p.accepted) m.set(_propKey(p), p);
-  return m;
-}
-
-/** 저장된 경계 행을 자리 키로 — «바뀐 것»의 기준(D-122 덧붙임 2). */
-function _savedMap(data) {
-  const m = new Map();
-  for (const p of data?.proposals || []) if (p.boundary_id) m.set(_propKey(p), p);
-  return m;
-}
-
-/** 체크된 행을 자리 키로 — 「적용」하면 이것이 경계다. */
-function _checkedMap(data) {
-  const m = new Map();
-  for (const p of data?.proposals || []) {
-    const k = _propKey(p);
-    if (proposeState.checked.has(k)) m.set(k, p);
-  }
-  return m;
-}
 
 /** 저장된 경계 목록이 이 문헌·권의 것인지 확인하고 아니면 읽는다. */
 async function _ensureCurrentBoundaries() {
@@ -2196,9 +2170,9 @@ function _mergeCurrentBoundaries(data) {
 
 /**
  * ②의 규칙으로 후보를 센다 (D-088). **저장하지 않는다** — propose 라우트는 규칙을 받기만 한다.
- * 입력: asBaseline(이 결과를 «바뀐 것»의 기준으로 삼을 것인가 — 처음·적용 직후). 출력: 없음.
+ * 입력: 없음(화면 상태). 출력: 없음.
  */
-async function _proposeBoundaries(asBaseline) {
+async function _proposeBoundaries() {
   if (!viewerState.docId || !viewerState.partId) {
     showToast("사이드바에서 문헌과 권을 먼저 고르세요.", "warning");
     return;
@@ -2269,10 +2243,9 @@ async function _proposeBoundaries(asBaseline) {
     proposeState.levels = same ? keep(proposeState.levels) : new Map();
     proposeState.roles = same ? keep(proposeState.roles) : new Map();
     proposeState.selected = new Set([...proposeState.selected].filter((k) => keys.has(k)));
-    if (asBaseline || !proposeState.baseline || !same) {
-      proposeState.baseline = hasSaved ? _savedMap(data) : _acceptedMap(data);
-      proposeState.baselineKind = hasSaved ? "boundaries" : "rules";
-    }
+    // «바뀐 것»의 기준은 따로 들고 있지 않는다 — 늘 «지금 저장된 경계»(compState.currentBoundaries)와
+    // 체크를 `_planApply`로 견준다(2026-10-05: 저장된 경계가 없을 때 accept 후보를 세던 옛 기준이
+    // 「적용」과 어긋났다)
     _renderProposals();
     _renderDiff();
     _refreshApplyState();
@@ -2921,23 +2894,94 @@ async function _batchSuppress() {
 }
 
 /**
- * «바뀐 것» (D-121 관문): 저장된 규칙(없으면 권고)으로 센 채택 후보와 지금 후보를 자리로 견준다.
- * 수만 같고 자리가 바뀐 것도 잡힌다 — 「후보 615 → 608」만으로는 모자란다(Codex 지적).
+ * 「적용」이 쓸 것을 한 곳에서 계산한다 — «바뀐 것»과 「적용」의 요청이 **같은 함수**를 쓴다.
+ *
+ * 왜 하나로 묶는가: 예전 «바뀐 것»은 저장된 경계가 없을 때 «판정의 확신 후보(accept)»를 셌고,
+ * 「적용」은 «체크된 후보»를 저장했다. 애매한 후보를 「판정 들이기」나 손으로 체크하면 화면은
+ * «새로 잡히는 자리 27»인데 실제로는 45개가 서는 일이 생겼다(2026-10-05 headless 확인). 체크
+ * 상태가 곧 트리다(D-121) — 그러니 미리 보기도 체크에서만 나와야 하고, 두 곳이 따로 계산하면
+ * 언젠가 다시 어긋난다.
+ *
+ * 숫자는 서버와 같은 식으로 센다(composition.py `_span_key`·`_boundary_key`·`_replace_boundaries`):
+ *  - 새로 세움 = 구간 중 «같은 자리·같은 깊이»에 살아 있는 경계가 없는 것(서버 insert_boundary가
+ *    같은 자리·깊이면 옛것을 돌려주므로 새로 서지 않는다). 깊이만 바꾼 행은 새 경계로 선다 — 서버가
+ *    실제로 그렇게 쓰기 때문에 미리 보기도 그렇게 말한다.
+ *  - 지움 = 체크를 뺀 저장된 행(drop) 중 살아 있고 구간과 같은 자리·깊이가 아닌 것.
+ *  - 체크 앞에 글이 남으면 「(앞부분)」 구간 하나가 더 선다 — 그것도 쓰이므로 센다.
+ * 가림(2차 아니오 숨기기·문턱 아래 숨기기)은 화면 표시일 뿐이라 여기에 들어오지 않는다.
+ *
+ * 입력: data(propose 응답 + 합친 행), checked(Set 자리 키), boundaries(지금 저장된 경계 배열).
+ * 출력: {spans, drop, added:[{page,line_index,title}], removed:[{page,line_index,title}]} — 후보가
+ *       하나도 체크되지 않았으면 spans가 빈 배열(「적용」은 막힌다).
+ */
+function _planApply(data, checked, boundaries) {
+  const empty = { spans: [], drop: [], added: [], removed: [] };
+  if (!data || !Array.isArray(data.lines) || !data.lines.length) return empty;
+  const lines = data.lines;
+  const keyOf = (l) => `${l.page}:${l.line_index}`;
+  const pos = new Map(lines.map((l, i) => [keyOf(l), i]));
+  const byKey = new Map((data.proposals || []).map((p) => [_propKey(p), p]));
+  const picked = [...checked].map((k) => byKey.get(k)).filter(Boolean);
+  // 경계 = (행, 행 안 글자 오프셋). 다음 경계가 행 중간이면 이 구간은 같은 행의 그 글자 앞에서 끝난다 (D-090 2단계)
+  const starts = picked
+    .map((p) => ({ li: pos.get(keyOf(p)), off: p.char_offset || 0, p }))
+    .filter((s) => s.li != null)
+    .sort((a, b) => a.li - b.li || a.off - b.off);
+  const spans = [];
+  if (starts.length) {
+    const endBefore = (next) =>
+      next.off > 0
+        ? { page: lines[next.li].page, line_index: lines[next.li].line_index, char_end: next.off }
+        : { page: lines[next.li - 1].page, line_index: lines[next.li - 1].line_index, char_end: null };
+    if (starts[0].li > 0 || starts[0].off > 0) {
+      spans.push({ title: lines[0].text.trim().slice(0, 20) || "(앞부분)", kind: "front", level: 2, role: "article",
+        start: { page: lines[0].page, line_index: lines[0].line_index, char_offset: 0 },
+        end: endBefore(starts[0]) });
+    }
+    starts.forEach((s, k) => {
+      const end = k + 1 < starts.length
+        ? endBefore(starts[k + 1])
+        : { page: lines[lines.length - 1].page, line_index: lines[lines.length - 1].line_index, char_end: null };
+      const rl = _propRoleLevel(s.p);
+      spans.push({ title: s.p.title, kind: s.p.kind || "", level: rl.level, role: rl.role,
+        start: { page: lines[s.li].page, line_index: lines[s.li].line_index, char_offset: s.off },
+        end });
+    });
+  }
+  // ③이 «지금 경계 + 새 후보»이므로 지울 것은 «체크를 뺀 저장된 행»뿐이다(D-122 덧붙임 2). 목록에 없던
+  // 경계(행 목록 밖)는 건드리지 않는다
+  const drop = (data.proposals || []).filter((p) => p.boundary_id && !checked.has(_propKey(p))).map((p) => p.boundary_id);
+  // 서버와 같은 4칸 키(쪽·행·글자·깊이). 깊이가 없으면 卷은 1, 나머지는 2(_span_key)
+  const spanKey = (s) => `${s.start.page}:${s.start.line_index}:${s.start.char_offset || 0}:${Number(s.level) || (s.kind === "volume" ? 1 : 2)}`;
+  const bKey = (b) => {
+    const st = b.start || {};
+    return `${Number(st.page) || 0}:${Number(st.line) || 0}:${Number(st.offset) || 0}:${Number(b.level) || 2}`;
+  };
+  const live = (boundaries || []).filter((b) => b.status !== "deprecated" && b.status !== "archived");
+  const liveKeys = new Set(live.map(bKey));
+  const spanKeys = new Set(spans.map(spanKey));
+  const dropSet = new Set(drop);
+  const added = spans.filter((s) => !liveKeys.has(spanKey(s)))
+    .map((s) => ({ page: s.start.page, line_index: s.start.line_index, title: s.title || "" }));
+  const removed = live.filter((b) => dropSet.has(b.id) && !spanKeys.has(bKey(b)))
+    .map((b) => ({ page: Number(b.start?.page) || 0, line_index: Number(b.start?.line) || 0, title: b.title || "" }));
+  return { spans, drop, added, removed };
+}
+
+/**
+ * «바뀐 것» (D-121 관문): 「적용」하면 정확히 무엇이 서고 무엇이 지워지는지. `_planApply`가 계산한 것을
+ * 그대로 그린다 — 미리 보기와 저장이 다른 식을 쓰면 다시 어긋난다(2026-10-05).
+ * 체크가 바뀔 때마다(손·판정 들이기·저장된 판정 불러오기·상위 N 손잡이) `_refreshApplyState`가 부른다.
  */
 function _renderDiff() {
   const out = document.getElementById("comp-preview-out");
   const data = proposeState.data;
   if (!out) return;
-  if (!data || !proposeState.baseline) {
+  if (!data) {
     out.hidden = true;
     return;
   }
-  // 저장된 경계가 있으면 «체크한 것 vs 저장된 것»(적용하면 정확히 이것이 일어난다), 없으면 옛 방식(채택 후보 vs 기준)
-  const byBoundaries = proposeState.baselineKind === "boundaries";
-  const now = byBoundaries ? _checkedMap(data) : _acceptedMap(data);
-  const base = proposeState.baseline;
-  const added = [...now.keys()].filter((k) => !base.has(k));
-  const removed = [...base.keys()].filter((k) => !now.has(k));
+  const { added, removed } = _planApply(data, proposeState.checked, compState.currentBoundaries);
   if (!added.length && !removed.length) {
     out.hidden = true;
     return;
@@ -2946,23 +2990,19 @@ function _renderDiff() {
   out.textContent = "";
   const head = document.createElement("div");
   head.className = "comp-preview-head";
-  head.textContent = byBoundaries
-    ? `바뀐 것 — 새로 세울 자리 ${added.length} · 지울 자리 ${removed.length}`
-    : `바뀐 것 — 새로 잡히는 자리 ${added.length} · 빠지는 자리 ${removed.length}`;
-  head.title = byBoundaries
-    ? "지금 저장된 경계와 견줍니다. 「적용」하면 정확히 이대로 됩니다"
-    : "지금 저장된 규칙(없으면 권고)으로 센 채택 후보와 견줍니다. 「적용」하면 이것이 기준이 됩니다";
+  head.textContent = `바뀐 것 — 새로 세울 자리 ${added.length} · 지울 자리 ${removed.length}`;
+  head.dataset.added = String(added.length); // 검증 스크립트가 글자 대신 읽는 값
+  head.dataset.removed = String(removed.length);
+  head.title = "지금 저장된 경계와 견줍니다. 체크한 것이 그대로 경계가 되므로 「적용」하면 정확히 이대로 됩니다";
   out.appendChild(head);
-  const where = (p) => `${p.page}쪽 ${p.line_index + 1}행`;
   const box = document.createElement("div");
   box.className = "comp-preview-list";
-  const show = (keys, src, sign) => {
-    const sorted = keys.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-    for (const k of sorted.slice(0, 12)) {
-      const p = src.get(k);
+  const show = (items, sign) => {
+    const sorted = items.slice().sort((a, b) => a.page - b.page || a.line_index - b.line_index);
+    for (const p of sorted.slice(0, 12)) {
       const line = document.createElement("div");
       line.className = "comp-preview-row";
-      line.textContent = `${sign} ${where(p)}  ${(p.title || "").slice(0, 30)}`;
+      line.textContent = `${sign} ${p.page}쪽 ${p.line_index + 1}행  ${(p.title || "").slice(0, 30)}`;
       box.appendChild(line);
     }
     if (sorted.length > 12) {
@@ -2972,8 +3012,8 @@ function _renderDiff() {
       box.appendChild(more);
     }
   };
-  show(added, now, "+");
-  show(removed, base, "−");
+  show(added, "+");
+  show(removed, "−");
   out.appendChild(box);
 }
 
@@ -2994,7 +3034,7 @@ function _refreshApplyState() {
   const stale = _formDigest() !== proposeState.rulesDigest;
   btn.disabled = stale || !proposeState.checked.size;
   if (note) note.textContent = stale ? "규칙이 바뀌었습니다 — 「후보 보기」로 다시 세우세요" : proposeState.checked.size ? "" : "체크한 후보가 없습니다";
-  if (proposeState.baselineKind === "boundaries") _renderDiff(); // 체크가 곧 «바뀐 것»이다
+  _renderDiff(); // 체크가 곧 «바뀐 것»이다 — 저장된 경계가 있든 없든(2026-10-05)
 }
 
 /**
@@ -3238,43 +3278,13 @@ async function _applyProposals() {
     _refreshApplyState();
     return;
   }
-  const byKey = new Map(data.proposals.map((p) => [_propKey(p), p]));
-  const picked = [...proposeState.checked].map((k) => byKey.get(k)).filter(Boolean);
-  if (!picked.length) {
+  // «바뀐 것»과 같은 함수로 계산한다 — 미리 보기와 저장이 갈라지지 않게(2026-10-05)
+  const { spans, drop } = _planApply(data, proposeState.checked, compState.currentBoundaries);
+  if (!spans.length) {
     showToast("체크한 후보가 없습니다.", "warning");
     return;
   }
-  const lines = data.lines;
-  const keyOf = (l) => `${l.page}:${l.line_index}`;
-  const pos = new Map(lines.map((l, i) => [keyOf(l), i]));
-  // 경계 = (행, 행 안 글자 오프셋). 다음 경계가 행 중간이면 이 구간은 같은 행의 그 글자 앞에서 끝난다 (D-090 2단계)
-  const starts = picked
-    .map((p) => ({ li: pos.get(keyOf(p)), off: p.char_offset || 0, p }))
-    .filter((s) => s.li != null)
-    .sort((a, b) => a.li - b.li || a.off - b.off);
-  const endBefore = (next) =>
-    next.off > 0
-      ? { page: lines[next.li].page, line_index: lines[next.li].line_index, char_end: next.off }
-      : { page: lines[next.li - 1].page, line_index: lines[next.li - 1].line_index, char_end: null };
-  const spans = [];
-  if (starts[0].li > 0 || starts[0].off > 0) {
-    spans.push({ title: lines[0].text.trim().slice(0, 20) || "(앞부분)", kind: "front", level: 2, role: "article",
-      start: { page: lines[0].page, line_index: lines[0].line_index, char_offset: 0 },
-      end: endBefore(starts[0]) });
-  }
-  starts.forEach((s, k) => {
-    const end = k + 1 < starts.length
-      ? endBefore(starts[k + 1])
-      : { page: lines[lines.length - 1].page, line_index: lines[lines.length - 1].line_index, char_end: null };
-    const rl = _propRoleLevel(s.p);
-    spans.push({ title: s.p.title, kind: s.p.kind || "", level: rl.level, role: rl.role,
-      start: { page: lines[s.li].page, line_index: lines[s.li].line_index, char_offset: s.off },
-      end });
-  });
-  // ③이 «지금 경계 + 새 후보»이므로 지울 것은 «체크를 뺀 저장된 행»뿐이다(D-122 덧붙임 2). 목록에 없던
-  // 경계(행 목록 밖)는 건드리지 않는다
   const replace = "listed";
-  const drop = data.proposals.filter((p) => p.boundary_id && !proposeState.checked.has(_propKey(p))).map((p) => p.boundary_id);
   const rules = _rulesFromForm();
   const btn = document.getElementById("comp-propose-apply-btn");
   const url = `/api/documents/${encodeURIComponent(viewerState.docId)}/segmentation/apply`;
@@ -3308,7 +3318,7 @@ async function _applyProposals() {
     await _loadCompositionData();
     if (typeof refreshContentsTree === "function") refreshContentsTree();
     compState.currentBoundariesTag = null;
-    await _proposeBoundaries(true);
+    await _proposeBoundaries();
   } catch (e) {
     showToast(`적용 실패: ${e.message}`, "error");
   } finally {

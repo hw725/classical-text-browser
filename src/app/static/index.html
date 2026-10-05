@@ -2184,7 +2184,7 @@
                     <!-- 체크와 행 선택은 다른 상태다(D-122 §3) — 처음 보는 사람은 여기서 안다 -->
                     <span class="comp-step-hint" title="체크(☑)한 행이 경계가 됩니다 — 저장된 경계는 처음부터 체크돼 있고, 체크를 빼면 「적용」 때 지워집니다. 행을 누르면 그 옆에 도구가 뜨고, Shift 범위·Ctrl 하나씩으로 여러 행을 잡으면 한꺼번에 바꿉니다">☑ = 경계가 됨(저장된 것은 처음부터 ☑) · 행을 누르면 그 옆에 고치는 도구</span>
                   </div>
-                  <!-- 저장된 규칙(없으면 권고)으로 센 후보와 견준 «바뀐 것» (D-121 관문) -->
+                  <!-- «바뀐 것» (D-121 관문): 「적용」이 쓸 것(체크한 행) vs 지금 저장된 경계 — _planApply 하나로 센다 -->
                   <div id="comp-preview-out" class="comp-preview-out" hidden></div>
                   <div id="comp-toc-unmatched" class="comp-toc-unmatched" style="display: none"></div>
                   <!-- 애매한 후보 2차 판정(D-137): 앱은 모델을 부르지 않는다. 「애매한 후보 내보내기」로 복사한 글을
