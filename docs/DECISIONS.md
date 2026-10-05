@@ -8115,10 +8115,10 @@ Decider는 그 개인 파일을 보지 않는다(남의 키를 쓰지 않게). �
 
 ### 하지 않은 것
 
-- **기본 모델을 바꾸지 않았다.** 우리 책으로 재기 전이다(전역 규칙 11 — 측정은 사람이 비용을 보고 승인한다).
+- **기본 모델을 바꾸지 않았다.** 우리 책으로 재기 전이다(전역 규칙 11 — 측정은 사람이 비용을 보고 승인한다). **→ D-135에서 바뀜**(키가 있으면 이미지 판정 기본이 clef).
 - **GPU 게이트를 풀지 않았다.** 종류 판정 자체는 원격이라 GPU가 필요 없지만, 같은 경로의 180° 점수(PaddleOCR)가 CPU에서 한 시간이다.
   «CPU에서도 판정 모델로 종류만»은 따로 정할 일이다.
-- Jev를 Decider로 갈아 끼우지 않았다(Decider는 문맥이 8배라 편성의 구조 묻기에도 쓸 수 있다 — 같은 자로 재고 정한다).
+- Jev를 Decider로 갈아 끼우지 않았다(Decider는 문맥이 8배라 편성의 구조 묻기에도 쓸 수 있다 — 같은 자로 재고 정한다). **→ D-136에서 바뀜**(본문 판정 기본이 OpenRouter 경유 decider, Jev는 폴백·목차 대조).
 
 ### 시험
 
@@ -8172,7 +8172,7 @@ Decider의 `fit_image`(타일 1,900개 ≈ 2MP)보다 넉넉하다 — 자동 �
 `default_image_provider: "clef"`(Cloudflare 키가 있을 때)를 주고, 「말로 지시」 ① 자동 스캔의 «종류 판정 모델»이 **처음 채울
 때 한 번** 그것을 고른다. 서버 기본을 바꾸지 않은 이유: 이 PC는 Windows 환경변수에 키가 있어, 서버가 «키 있으면 clef»로
 돌면 force_provider 없이 이 라우트를 부르는 시험이 **실제 Cloudflare를 부를** 길이 생긴다. 사람이 다른 것을 고른 뒤 목록을
-다시 채울 때(키 저장 이벤트)는 그 선택을 지킨다.
+다시 채울 때(키 저장 이벤트)는 그 선택을 지킨다. (2026-10-05 후속: OpenRouter 키만 있어도 — `clef_available`, 아래 «후속»)
 
 **5. 질문·파서는 공용.** `page_survey.decider_questions`·`parse_decider_answers`를 그대로 쓴다 — 판정 모델 공통 계약이다.
 종류 문턱 0.5는 **여전히 잰 값이 아니다**(`DECIDER_CONTENT_THRESHOLD`). 응답의 `per_page[].decider`(확률)와 `decider_usage`
@@ -8290,8 +8290,9 @@ meta에 `answered_by`(`업체:모델` → 호출 수)·`fallback_calls`·`fallba
 
 **4. 목차 대조(`toc.match_toc_entries_jev`)는 Jev에 남긴다 — decider로 잰 적이 없다.** 저장 측정은 «글이 시작하는 행»(starts)만
 했다. 목차 대조의 문턱은 `derive_toc_threshold`가 Jev 확률의 «자기 검증이 깨지는 직전»으로 뽑는 것이라 모델을 바꾸면 그 절벽
-모양부터 다시 봐야 한다. Jev 키가 없으면 목차 대조는 건너뛰고 `toc.skipped`로 알린다(본문 판정은 decider로 돈다). 후속(아래): OpenRouter 키만 있어도
-목차 대조는 OpenRouter 경유 Jev로 돈다.
+모양부터 다시 봐야 한다. 이 결정 당시에는 Jev 키가 없으면 목차 대조는 건너뛰고 `toc.skipped`로 알렸다(본문 판정은 decider로 돈다).
+**후속(아래)으로 바뀜**: OpenRouter 키만 있어도 목차 대조는 OpenRouter 경유 Jev로 돈다. `toc.skipped`는 TypeSafe 키도 OpenRouter 키도
+없을 때만 남는데, 그때는 본문 판정도 키가 없어 400이므로 실제로는 거의 오지 않는다.
 
 ### 하지 않은 것
 

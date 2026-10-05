@@ -188,7 +188,7 @@ flowchart TB
             R1["library <b>30</b>"]
             R2["documents <b>48</b>"]
             R3["interpretations <b>24</b>"]
-            R9["composition <b>17</b>"]
+            R9["composition <b>20</b>"]
             R4["llm_ocr <b>27</b>"]
             R5["alignment <b>20</b>"]
             R6["reading <b>24</b>"]
@@ -235,6 +235,7 @@ flowchart TB
         EXT_PUNCT["punctuation-service<br/>(SikuRoBERTa)"]
         EXT_GIT["GitHub · GitLab<br/>(백업/동기화)"]
         EXT_BIB["NDL · KORCIS<br/>(서지 API)"]
+        EXT_JUDGE["판정 모델 -- LlmRouter 밖 (llm/jev.py 계열)<br/>OpenRouter: decider · clef · Jev 경유<br/>Cloudflare clef · TypeSafe Jev · Perplexity Decider"]
     end
 
     ENGINE -.-> EXT
@@ -262,6 +263,7 @@ flowchart TB
 - **앱**: 관계, 의미, 경고, UI → 만들어야 할 것
 - **원격 호스팅**: 백업, 동기화 → 교체 가능
 - **오프라인 퍼스트**: 핵심 작업(교정, 열람, 커밋)은 인터넷 없이 완전히 동작
+- **판정 모델은 LlmRouter 밖**: 확률만 답하는 판정 모델(이미지 clef·Decider, 본문 decider, 목차·폴백 Jev)은 «프롬프트 → 글» 계약이 아니라 `llm/jev.py`의 `JevClient`를 물려받은 클라이언트가 직접 부른다(D-129·D-134～D-136). 키는 제 업체 주소로만 간다 — OpenRouter 키 하나면 decider·clef·Jev(경유)가 다 된다
 
 ---
 
@@ -673,7 +675,7 @@ flowchart TB
             R1["library <b>30</b>"]
             R2["documents <b>48</b>"]
             R3["interpretations <b>24</b>"]
-            R9["composition <b>17</b>"]
+            R9["composition <b>20</b>"]
             R4["llm_ocr <b>27</b>"]
             R5["alignment <b>20</b>"]
             R6["reading <b>24</b>"]

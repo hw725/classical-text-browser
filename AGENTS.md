@@ -47,7 +47,7 @@ OCR, 교정, 번역, 주석 작업을 모두 수행한다.
 
 ## 백엔드 모듈 구조 (src/app/)
 server.py는 FastAPI 앱 생성 + 라우터 마운트만 담당하는 조립 파일.
-실제 API 엔드포인트는 9개 라우터 모듈에 분산 (2026-09-06 기준 실측):
+실제 API 엔드포인트는 9개 라우터 모듈에 분산 (2026-10-05 기준 실측):
 
 ```
 src/app/
@@ -164,8 +164,8 @@ GPU 스택은 `.venv`에 설치하지 않는다 — 별도 환경 `.venv-gpu`가
 - "서버 시작" = 최대 3개 프로세스: start_server.bat가 uvicorn 외에 OpenAI OAuth 프록시
   (`npx -y openai-oauth`, 포트 10531–10540 스캔, Bearer 토큰 `oauth-proxy` 하드코딩)와
   SikuRoBERTa 표점 Docker(punctuation-service/.env 존재 시)를 자동 기동.
-- 프론트(static/)가 약 4.2만 줄 — index.html 약 4.9천 줄 단일 파일, workspace.css 약 7.9천 줄,
-  JS 34개. 테스트 97파일 — 그중 화면 JS를 node로 돌리는 것(`tests/js_harness.py`)은
+- 프론트(static/)가 약 4.7만 줄 — index.html 약 5.1천 줄 단일 파일, workspace.css 약 8.2천 줄,
+  JS 34개(약 3.3만 줄). 테스트 97파일 — 그중 화면 JS를 node로 돌리는 것(`tests/js_harness.py`)은
   `tests/test_annotation_editor_js.py`(2026-09-16 Codex 교차검증 반영 때 처음)·
   `tests/test_entity_manager_js.py`(D-128)·`tests/test_structure_jev.py`·
   `tests/test_read_path_writes.py`(화면을 열기만 해도 쓰던 것, 2026-09-30)·
@@ -173,7 +173,7 @@ GPU 스택은 `.venv`에 설치하지 않는다 — 별도 환경 `.venv-gpu`가
   `tests/test_composition_apply_plan_js.py`(편성 ③ «바뀐 것»과 「적용」이 다른 집합을 세던 것, 2026-10-05), **CI 없음.**
   화면 «마크업»을 읽는 것도 둘이다 — `tests/test_ui_reachability.py`(조작 단추에 사람이
   닿을 수 있는가, B-008)와 `tests/test_connectome.py`(화면이 그 라우트를 부르는가).
-  (2026-09-06 재실측. 2026-07-26 v1.2.0 감사 때 직전 대비 프론트가 줄어든 것은
+  (2026-10-05 재실측. 2026-07-26 v1.2.0 감사 때 직전 대비 프론트가 줄어든 것은
   D-069에서 죽은 코드 약 1,000줄을 걷어냈기 때문이다.)
 
 ### 안다고 착각하기 쉬운 지점

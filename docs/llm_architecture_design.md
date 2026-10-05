@@ -8,6 +8,10 @@
 > 표본 행 ≤ 80줄이 기본이고 앞뒤 행·6쪽 통째·권 전체까지 넓힐 수 있으며, 답은 정해진 종류로만 받고 코드가 세어 확인) —
 > 셋 다 텍스트만 넘기고 JSON을 강제하며 사고는 끈다(D-083). 사고를 끌 수 없는 모델(glm-5.3:cloud)이
 > 추론을 본문에 쓰면 Ollama 프로바이더가 사고를 켜 한 번 더 부른다(D-118).
+> **예외 — 판정 모델은 이 라우터 밖이다**(D-129·D-134～D-136). 글이 아니라 «예·아니오·고르기» 확률만 돌려주는
+> 모델(TypeSafe Jev·Perplexity Decider·Cloudflare clef·OpenRouter 경유 decider/clef/Jev)은 «프롬프트 → 글» 계약이
+> 아니라서 `src/llm/jev.py`의 `JevClient`와 그것을 물려받은 클라이언트(`decider.py`·`clef_cf.py`·`openrouter_decider.py`)가
+> 직접 부른다. 키는 그 클라이언트마다 제 이름으로만 찾고, 사용 기록은 같은 `llm_usage_log.jsonl`에 남긴다.
 
 ---
 
@@ -938,6 +942,7 @@ docs/llm_architecture_design.md — 이 문서를 읽어. LLM 호출 아키텍�
 
 모든 LLM 호출은 src/llm/router.py를 통해야 한다.
 provider를 직접 호출하지 않는다.
+(예외: 판정 모델은 라우터 밖 `src/llm/jev.py` 계열 클라이언트가 부른다 — D-129·D-134～D-136, 이 문서 머리말.)
 
 ## 작업 순서
 

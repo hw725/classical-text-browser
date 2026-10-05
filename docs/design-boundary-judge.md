@@ -3,6 +3,10 @@
 판정 모델(Jev)이 낸 «이 행에서 글이 시작하는가»를 편성 탭에 어떻게 들이는가에 대한 설계다.
 실측 근거는 `docs/sessions/session_jev_structure.md`.
 
+> **2026-10-05 D-136: 본문 판정의 기본은 OpenRouter 경유 Perplexity decider이고, Jev는 폴백(decider가 실패한
+> 호출만)과 목차 대조다.** 아래 비용·문턱(accept 0.85 / reject 0.5)은 **Jev 기준**이다 — decider는 0.95/0.35
+> (`structure_llm.JUDGE_THRESHOLDS`). TypeSafe 키가 없으면 Jev도 OpenRouter 경유로 부른다(D-136 후속).
+
 > **이 설계는 2026-09-22에 `D-129`로 확정됐다.** 결정문은 `docs/DECISIONS.md`의 D-129이고,
 > 채택한 것·버린 것·주장마다 그것을 지키는 시험 이름이 거기 있다. 이 문서는 **그 결정에
 > 이르기까지의 논거**로 남긴다 — 무엇을 재서 그렇게 정했는지가 여기 있다.
