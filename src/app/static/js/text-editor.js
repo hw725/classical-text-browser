@@ -194,6 +194,12 @@ async function _saveCurrentText() {
     editorState.originalText = text;
     editorState.isDirty = false;
     _updateSaveStatus("saved");
+    // 확정본을 고쳤으니 서버가 이 쪽의 사람 교정을 새 글로 옮겼다 — 옮김·못 옮김을 알린다(D-133)
+    try {
+      if (typeof notifyCorrectionsRebase === "function") notifyCorrectionsRebase(await res.json());
+    } catch (_) {
+      /* 응답 본문이 JSON이 아니어도 저장은 끝났다 */
+    }
   } catch (err) {
     console.error("텍스트 저장 실패:", err);
     _updateSaveStatus("error");

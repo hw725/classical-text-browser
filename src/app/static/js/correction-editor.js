@@ -586,16 +586,28 @@ function _renderFreetextView(container) {
 function _applyCorrectionsLocally(original, corrections) {
   if (!corrections || corrections.length === 0) return original;
 
-  // block_id=null, line=null인 평면 교정만 처리 (자유편집 대상)
-  const flatCorrs = corrections.filter(
-    c => c.block_id == null && c.line == null && c.char_index != null
-  );
+  // block_id=null, line=null인 평면 교정만 처리 (자유편집 대상). 목록 자리(pos)를 함께 든다.
+  const flatCorrs = corrections
+    .map((c, pos) => ({ c, pos }))
+    .filter(({ c }) => c.block_id == null && c.line == null && c.char_index != null);
 
-  // char_index 역순 정렬 (뒤에서부터 치환해야 인덱스가 밀리지 않음)
-  flatCorrs.sort((a, b) => (b.char_index || 0) - (a.char_index || 0));
+  // char_index 역순 정렬 (뒤에서부터 치환해야 인덱스가 밀리지 않음).
+  // 같은 자리는 글자 교정 보기(_renderCharsIntoElement)가 그리는 것과 같게 (2026-10-05 검토 지적):
+  //   넣기는 «그 자리 글자 앞», 바꾸기는 «그 자리 글자»라 둘 다 먹는다 → 바꾸기를 먼저 한다
+  //   (넣기를 먼저 하면 넣은 글이 그 자리에 와서 바꾸기가 원문 확인에 실패해 빠졌다).
+  //   넣기 여럿은 목록 순서대로 보이게 뒤의 것부터, 바꾸기 여럿은 앞의 것이 이기게 앞의 것부터.
+  //   서버 _apply_corrections_to_text와 같은 순서다.
+  const isRange = (c) => ((c.original_ocr || "") !== "" ? 1 : 0);
+  flatCorrs.sort((x, y) => {
+    const d = (y.c.char_index || 0) - (x.c.char_index || 0);
+    if (d !== 0) return d;
+    const r = isRange(y.c) - isRange(x.c);
+    if (r !== 0) return r;
+    return isRange(x.c) ? x.pos - y.pos : y.pos - x.pos;
+  });
 
   let text = original;
-  for (const c of flatCorrs) {
+  for (const { c } of flatCorrs) {
     const idx = c.char_index;
     const orig = c.original_ocr || "";
     const repl = c.corrected || "";

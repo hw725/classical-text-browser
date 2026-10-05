@@ -221,6 +221,7 @@ async function _batchExecute() {
     showToast(
       `일괄 교정 완료 — 교정: ${data.total_corrected}건, 대상 페이지: ${data.pages_affected}개`,
       'success');
+    if (typeof notifyCorrectionsRebase === 'function') notifyCorrectionsRebase(data); // D-133 교정 옮김 알림
 
     // 보고 있는 쪽의 본문을 다시 읽는다 — 확정본이 바뀌었는데 편집기가 옛 글을 들고 있으면
     // 다음 저장이 일괄 교정을 되돌린다

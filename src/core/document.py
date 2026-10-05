@@ -576,9 +576,35 @@ def save_page_text(
     }
     if rebased:
         result["corrections_rebased"] = rebased
+        # 새 글과 맞춰 보지 못해 기록으로 옮긴 사람 교정이 있으면 따로 알린다 — 화면은 이것을
+        # 경고로 띄운다(notifyCorrectionsRebase). 조용히 옮기면 사람은 교정이 사라졌다고 여긴다.
+        if rebased.get("unmerged"):
+            result["corrections_unmerged"] = {
+                "count": rebased["unmerged"],
+                "similarity": rebased.get("similarity"),
+            }
     if rebase_error:
         result["corrections_rebase_error"] = rebase_error
     return result
+
+
+def rebase_notice(page: int, save_result: dict) -> dict | None:
+    """save_page_text 응답에서 사람에게 알릴 «교정 옮김» 소식만 꺼낸다(여러 쪽을 쓰는 길용).
+
+    출력: {"page", "rebased"?, "unmerged"?, "error"?} 또는 None(알릴 것 없음).
+    왜: 일괄 교정·텍스트레이어 가져오기처럼 쪽마다 save_page_text를 부르는 길은 쪽별 응답을 버렸다.
+    그러면 화면이 «교정을 옮겼다/못 옮겼다»를 알릴 수 없다 — 사람이 모르면 고친 것이 닿지 않는다.
+    화면은 응답의 `corrections_notices` 목록을 notifyCorrectionsRebase로 띄운다.
+    """
+    out: dict = {"page": page}
+    reb = save_result.get("corrections_rebased")
+    if reb and (reb.get("kept") or reb.get("history")):
+        out["rebased"] = reb
+    if save_result.get("corrections_unmerged"):
+        out["unmerged"] = save_result["corrections_unmerged"]
+    if save_result.get("corrections_rebase_error"):
+        out["error"] = save_result["corrections_rebase_error"]
+    return out if len(out) > 1 else None
 
 
 def _hunks(a: str, b: str) -> list[tuple[int, int, str]]:
@@ -588,22 +614,79 @@ def _hunks(a: str, b: str) -> list[tuple[int, int, str]]:
 
 
 def _hunks_conflict(x: tuple, y: tuple) -> bool:
-    """두 구간(옛 글 좌표)이 같은 자리를 건드리는가.
+    """두 구간(옛 글 좌표)이 같은 자리를 건드리는가. 입력: (시작, 끝, 새 글, …) 둘.
 
     범위끼리 겹치거나, 같은 자리에 둘 다 넣거나, 한쪽이 넣은 자리가 다른 쪽 범위 **안**이면 겹친다.
-    넣은 자리가 범위의 경계(앞·뒤)이면 겹치지 않는다 — 이웃한 고침은 둘 다 산다.
+    넣은 자리가 **바꾸기** 범위의 경계(앞·뒤)이면 겹치지 않는다 — 이웃한 고침은 둘 다 산다.
+    넣은 자리가 **지우기** 범위의 경계이면 겹친다(2026-10-05 검토 지적). 넣은 글은 이웃 글자에
+    붙어 뜻을 갖는데, 그 이웃이 지워졌으면 어디에 붙일지 알 수 없다. 예전에는 옛 `…\\nIJKL` 끝에
+    사람이 넣은 `M`이, 기계가 `ABCD`로 줄인 글의 끝에 붙어 `ABCDM`이 됐다(IJKL 줄의 M이 ABCD 줄로).
+    바꾸기는 그 자리에 새 글이 있어 붙을 이웃이 남는다.
     """
     (a1, b1), (a2, b2) = x[:2], y[:2]
     if a1 == b1 and a2 == b2:
         return a1 == a2
     if a1 == b1:
+        if len(y) > 2 and y[2] == "":
+            return a2 <= a1 <= b2
         return a2 < a1 < b2
     if a2 == b2:
+        if len(x) > 2 and x[2] == "":
+            return a1 <= a2 <= b1
         return a1 < a2 < b1
     return max(a1, a2) < min(b1, b2)
 
 
+# ── 사람 판이 이기지 않는 두 경우 (2026-10-05 검토 지적) ──
+#
+# «겹치면 사람 판»은 사람이 고친 만큼을 지키려는 규칙이다. 그런데 옛 글과 새 글이 거의 다르면
+# 겹친 묶음이 쪽 전체가 되어, 한 글자 고침을 지키려고 **옛 글 전체를 되살렸다**(옛 `ABCDEFGH`,
+# 사람 `ABXDEFGH`, 새 OCR `PQRSTUVW` → `ABXDEFGH`). 확정본 파일은 새 OCR인데 교정본이 옛 글로
+# 되돌려, 열람 탭과 교정 탭·내보내기가 다른 글을 보였고 새 OCR은 아무 말 없이 버려졌다.
+# 그런 자리에서는 병합하지 않는다 — 새 글을 쓰고, 사람 교정은 **기록**(char_index 없는 교정 항목,
+# D-133의 «기록»과 같은 보존 수단)으로 옮기고, 응답의 `corrections_unmerged`로 알린다.
+#
+# (1) 쪽 단위 — 옛 글과 새 글이 «같은 글의 두 판»으로 맞춰지지 않으면 자리 좌표가 뜻이 없다.
+#     잣대: 공통 글자 수(SequenceMatcher 일치 블록 합) / 짧은 쪽 길이. 짧은 쪽으로 나누는 것은
+#     기계가 글을 늘리거나 줄이기만 한 경우(뒤에 줄이 붙음·잘린 꼬리 제거)를
+#     «다른 글»로 보지 않기 위해서다.
+#     값 0.35의 근거(2026-10-05 실측, 실제 서고 doc_2026 읽기 전용):
+#     같은 책의 **서로 다른 쪽** 342쌍
+#     (앞 600자)이 p95 0.13·최대 0.33. 그 위로 여유를 두었다. 같은 쪽을 배치가 바뀐 채 다시 OCR한
+#     30쌍은 0.09~0.53이었다 — 그중 0.35 미만은 기록으로, 그 이상은 아래 (2)가 묶음마다 거른다.
+# (2) 묶음 단위 — 겹친 묶음에서 사람 판을 쓰면 기계가 그 묶음에서 바꾼 것을 버린다. 버리는 양이
+#     사람이 바꾼 양의 2배+2글자를 넘으면 사람 판을 쓰지 않는다(그 묶음의 사람 고침은 기록으로).
+#     위 30쌍에 한 글자 고침을 심어 보니(150회) 옛 판의 병합이 새 글에 없는 옛 글을 8~672자
+#     되살렸다(줄 순서가 바뀐 쪽에서 같은 줄이 두 번 나온다). D-133의 겹침 예(사람 2자·기계 3자,
+#     `AbCdE`/`AXYZE`)와 «같은 자리를 서로 다르게 읽음»(2자·2자)은 사람 판으로 남는다.
+#     2배+2는 «기계가 사람 고침 둘레를 몇 글자 더 읽어 바꾼 것»까지는 사람 판이 덮는 여유다.
+_UNMERGE_SIMILARITY = 0.35
+_HUMAN_WINS_FACTOR = 2
+_HUMAN_WINS_SLACK = 2
+
+
+def _alignment_similarity(a: str, b: str) -> float:
+    """두 글이 같은 글의 두 판으로 맞춰지는 정도. 출력: 공통 글자 수 / 짧은 쪽 길이(0~1)."""
+    if not a or not b:
+        return 0.0
+    sm = difflib.SequenceMatcher(None, a, b, autojunk=False)
+    common = sum(m.size for m in sm.get_matching_blocks())
+    return common / min(len(a), len(b))
+
+
+def _hunk_size(h: tuple) -> int:
+    """구간이 바꾼 글자 수 — 지운 것과 넣은 것 중 큰 쪽."""
+    return max(h[1] - h[0], len(h[2]))
+
+
 def _three_way(base: str, human: str, machine: str) -> str:
+    """`_three_way_detail`의 합친 글만. 규칙은 그 함수에."""
+    return _three_way_detail(base, human, machine)[0]
+
+
+def _three_way_detail(
+    base: str, human: str, machine: str
+) -> tuple[str, list[tuple[int, int, str]], float]:
     """옛 글(base)에서 사람 판(human)과 기계 판(machine)을 합친다 — 글자 단위 3-way 병합.
 
     출력: 합친 글(새 교정본).
@@ -618,10 +701,25 @@ def _three_way(base: str, human: str, machine: str) -> str:
           «序» 줄을 더하고 사람이 첫 글자 앞에 «文化甲戌»을 넣었으면 «序\\n文化甲戌春…».
         - 옛 글이 **비어 있으면** 사람 판이 통째로 이긴다 — 빈 쪽을 사람이 옮겨 적은 뒤 OCR이 채우면
           두 글이 겹쳐 붙으면 안 된다.
+        - 같은 자리 넣기에서 한쪽이 다른 쪽의 **앞 조각이나 뒤 조각**이면 긴 쪽 하나만 넣는다
+          (사람 `之`·기계 `之也` → `之也`, 예전에는 `之也之`). «둘 다 넣는다»의 뜻이 합집합이므로,
+          짧은 쪽이 긴 쪽에 그대로 들어 있으면 긴 쪽이 합집합이다. 사람 판을 고르지 않는 것은
+          넣기끼리는 서로를 지우지 않기 때문이다(겹친 바꾸기와 다르다). 가운데 조각은 따로 넣은
+          글일 수 있어 두지 않는다.
+        - 옛 글과 새 글이 맞춰지지 않거나, 겹친 묶음에서 사람 판이 기계 고침을 너무 많이 버리면
+          병합하지 않는다 — 위 «사람 판이 이기지 않는 두 경우» 참조.
+
+    출력: (합친 글, 병합하지 못한 사람 구간 [(옛 시작, 옛 끝, 사람 글)], 쪽 맞춤 정도).
     """
     if not base:
-        return human if human else machine
+        return (human if human else machine), [], 1.0
     hs = [(a, b, r, "h") for a, b, r in _hunks(base, human)]
+    if not hs:
+        return machine, [], 1.0
+    similarity = _alignment_similarity(base, machine)
+    if similarity < _UNMERGE_SIMILARITY:
+        return machine, [(a, b, r) for a, b, r, _ in hs], similarity
+    dropped: list[tuple[int, int, str]] = []
     ms = [(a, b, r, "m") for a, b, r in _hunks(base, machine)]
     allh = sorted(hs + ms, key=lambda t: (t[0], t[1]))
     out: list[str] = []
@@ -658,13 +756,28 @@ def _three_way(base: str, human: str, machine: str) -> str:
             if hv == mv:
                 out.append(hv)  # 같은 고침 — 한 번만
             elif all(c[0] == c[1] for c in cluster):
-                out.append(mv + hv)  # 같은 자리에 넣기만 했다 — 둘 다(기계 앞, 사람 뒤)
+                # 같은 자리에 넣기만 했다 — 둘 다(기계 앞, 사람 뒤).
+                # 한쪽이 다른 쪽의 앞·뒤 조각이면 긴 쪽만
+                if mv.startswith(hv) or mv.endswith(hv):
+                    out.append(mv)
+                elif hv.startswith(mv) or hv.endswith(mv):
+                    out.append(hv)
+                else:
+                    out.append(mv + hv)
             else:
-                out.append(hv)  # 겹치면 사람 판
+                h_size = sum(_hunk_size(c) for c in cluster if c[3] == "h")
+                m_size = sum(_hunk_size(c) for c in cluster if c[3] == "m")
+                if m_size <= _HUMAN_WINS_FACTOR * h_size + _HUMAN_WINS_SLACK:
+                    out.append(hv)  # 겹치면 사람 판
+                else:
+                    # 사람 판이 기계가 새로 읽은 글을 너무 많이 버린다
+                    # — 기계 판, 사람 고침은 기록으로
+                    out.append(mv)
+                    dropped.extend((c[0], c[1], c[2]) for c in cluster if c[3] == "h")
         pos = hi
         i = j
     out.append(base[pos:])
-    return "".join(out)
+    return "".join(out), dropped, similarity
 
 
 def _plan_corrections_rebase(
@@ -704,7 +817,48 @@ def _plan_corrections_rebase(
     history = [{**c, "char_index": None} for c in flat if not applies(c)]
 
     human = stored if stored is not None else _apply_corrections_to_text(old_base, live)
-    new_human = _three_way(old_base, human, new_base)
+    new_human, dropped, similarity = _three_way_detail(old_base, human, new_base)
+
+    # 병합하지 못한 사람 구간 → 기록(char_index 없음). 지우지도, 새 글에 억지로 붙이지도 않는다.
+    # 같은 구간을 가리키는 옛 항목이 있으면 그 유형·비고·교정자를 그대로 옮기고, 비고 앞에
+    # «언제·왜·옛 글 어디였나»를 붙인다 — 확정본이 바뀌어 옛 글은 사라지므로
+    # 앞뒤 글자가 유일한 자리 단서다.
+    dropped_live: set[int] = set()
+    unmerged: list[dict] = []
+    today = datetime.now().date().isoformat()
+    for a, b, r in dropped:
+        orig = old_base[a:b]
+        k = next(
+            (
+                k
+                for k, c in enumerate(live)
+                if k not in dropped_live
+                and c["char_index"] == a
+                and (c.get("original_ocr") or "") == orig
+                and (c.get("corrected") or "") == r
+            ),
+            None,
+        )
+        if k is not None:
+            dropped_live.add(k)
+            src = live[k]
+        else:
+            src = {
+                "page": page_num, "block_id": None, "line": None, "type": "ocr_error",
+                "original_ocr": orig, "corrected": r, "corrected_by": "human",
+                "confidence": None, "note": None,
+            }  # fmt: skip
+
+        def ctx(s: str) -> str:
+            return s.replace("\n", "↵")
+
+        why = (
+            f"[{today}] 확정본이 다시 쓰일 때 새 글에서 같은 자리를 찾지 못해 기록으로 옮김 — "
+            f"옛 확정본 {a}번째 글자, 앞뒤 «{ctx(old_base[max(0, a - 6) : a])}|"
+            f"{ctx(orig)}|{ctx(old_base[b : b + 6])}»"
+        )
+        note = f"{why} / {src['note']}" if src.get("note") else why
+        unmerged.append({**src, "char_index": None, "note": note})
 
     # 옛 자리 → 새 자리 (메타데이터를 옮길 짝 찾기용)
     base_ops = difflib.SequenceMatcher(None, old_base, new_base, autojunk=False).get_opcodes()
@@ -716,7 +870,7 @@ def _plan_corrections_rebase(
         return len(new_base) if pos >= len(old_base) else pos
 
     auto = _diff_to_corrections(new_base, new_human, page_num)
-    used: set[int] = set()
+    used: set[int] = set(dropped_live)  # 기록으로 간 항목은 새 자리의 짝이 될 수 없다
     merged = []
     for a in auto:
         match = None
@@ -735,9 +889,14 @@ def _plan_corrections_rebase(
             merged.append(a)
 
     data = {k: v for k, v in data.items() if not k.startswith("_")}
-    data["corrections"] = merged + history + others
-    data["corrected_text"] = new_human if stored is not None else None
-    return {"data": data, "summary": {"kept": len(merged), "history": len(history)}}
+    data["corrections"] = merged + history + unmerged + others
+    # 사람 고침이 하나도 새 글에 남지 않았으면 교정본을 따로 들고 있을 까닭이 없다(새 확정본과 같다)
+    data["corrected_text"] = new_human if stored is not None and new_human != new_base else None
+    summary = {"kept": len(merged), "history": len(history) + len(unmerged)}
+    if unmerged:
+        summary["unmerged"] = len(unmerged)
+        summary["similarity"] = round(similarity, 2)
+    return {"data": data, "summary": summary}
 
 
 def _layout_file_path(doc_path: Path, part_id: str, page_num: int) -> Path:
@@ -1101,12 +1260,27 @@ def _apply_corrections_to_text(
     lines = text.split("\n")
 
     # 교정을 역순으로 적용 (뒤에서부터 치환해야 인덱스가 밀리지 않음)
-    # line + char_index 기준으로 정렬 후 역순
-    sorted_corrs = sorted(
-        corrections,
-        key=lambda c: (c.get("line") or 0, c.get("char_index") or 0),
-        reverse=True,
-    )
+    # line + char_index 기준으로 정렬 후 역순.
+    #
+    # 같은 자리의 순서 (2026-10-05 검토 지적): 넣기(원문 "")는 «그 자리 글자 앞»에 들어가고
+    # 바꾸기는 «그 자리 글자»를 바꾼다 — 둘 다 옛 글 좌표라 둘 다 먹어야 한다. 예전에는
+    # [넣기, 바꾸기] 순서면 넣기를 먼저 해 그 자리에 넣은 글이 와서 바꾸기가 원문 확인에 실패해
+    # 건너뛰어졌다(ABCDEF → ABXCDEF). 화면(글자 교정 보기 _renderCharsIntoElement)은 둘 다 그려
+    # ABXYDEF였다. 화면이 맞다 — 그래서 뒤에서부터 적용할 때 같은 자리는 바꾸기를 먼저 한다.
+    # 같은 자리 넣기 여럿은 화면처럼 목록 순서대로 보이게 뒤의 것부터 넣고, 같은 자리 바꾸기
+    # 여럿은 화면처럼 앞의 것이 이기게 앞의 것부터 한다.
+    # 화면의 글 만들기(_applyCorrectionsLocally)도 같다.
+    def _order(item: tuple[int, dict]) -> tuple:
+        pos, c = item
+        is_range = 1 if (c.get("original_ocr") or "") else 0
+        return (
+            c.get("line") or 0,
+            c.get("char_index") or 0,
+            is_range,
+            -pos if is_range else pos,
+        )
+
+    sorted_corrs = [c for _, c in sorted(enumerate(corrections), key=_order, reverse=True)]
 
     for corr in sorted_corrs:
         line_num = corr.get("line")
@@ -2652,6 +2826,7 @@ def apply_batch_corrections(
     """
     doc_path = Path(doc_path).resolve()
     total = 0
+    notices: list[dict] = []  # 쪽마다 «교정 옮김» 소식 — 화면이 알린다(rebase_notice)
     details = []
 
     for page_num in range(page_start, page_end + 1):
@@ -2684,7 +2859,12 @@ def apply_batch_corrections(
 
         # 본문부터 고친다 — 이것이 화면에 보이는 것이다.
         # save_page_text가 이 쪽의 사람 교정을 새 본문 위로 옮겨 저장한다(_rebase_page_corrections).
-        save_page_text(doc_path, part_id, page_num, text.replace(original_char, corrected_char))
+        saved = save_page_text(
+            doc_path, part_id, page_num, text.replace(original_char, corrected_char)
+        )
+        notice = rebase_notice(page_num, saved)
+        if notice:
+            notices.append(notice)
 
         # 기록을 덧붙인다. 위에서 읽어 둔 목록이 아니라 **옮겨 붙인 뒤의 파일**을 다시 읽는다 —
         # 옛 목록으로 쓰면 방금 옮긴 교정과 자유 편집 교정본(corrected_text)을 지운다(2026-10-02).
@@ -2705,4 +2885,5 @@ def apply_batch_corrections(
         "total_corrected": total,
         "pages_affected": len(details),
         "details": details,
+        "corrections_notices": notices,
     }

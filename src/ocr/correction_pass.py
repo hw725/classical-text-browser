@@ -857,9 +857,14 @@ def _apply_draft_locked(
                 # L4에서 자리를 못 찾으면 못 찾은 것
                 not_found.append(bid)
 
-    save_page_text(doc_path, part_id, page_number, text)
+    saved = save_page_text(doc_path, part_id, page_number, text)
     for bid in applied:
         entries[bid]["applied_text"] = entries[bid].get("corrected_text")
     draft["applied_blocks"] = sorted(already | set(applied))
     write_json_atomic(draft_path(doc_path, part_id, page_number), draft)
-    return {"applied_blocks": applied, "not_found_blocks": not_found, "text_length": len(text)}
+    out = {"applied_blocks": applied, "not_found_blocks": not_found, "text_length": len(text)}
+    # 확정본을 다시 썼으므로 사람 교정을 옮긴 소식(D-133)을 그대로 실어 보낸다 — 화면이 알린다
+    for k in ("corrections_rebased", "corrections_unmerged", "corrections_rebase_error"):
+        if saved.get(k):
+            out[k] = saved[k]
+    return out

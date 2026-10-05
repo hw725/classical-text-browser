@@ -35,6 +35,7 @@ from core.document import (
     match_hwp_text_to_layout_blocks,
     part_rotation,
     part_rotation_ranges,
+    rebase_notice,
     save_bibliography,
     save_page_corrections,
     save_page_layout,
@@ -3066,6 +3067,7 @@ def api_import_from_text_layer(doc_id: str, part_id: str, body: TextLayerImportR
     wanted = set(body.pages) if body.pages is not None else None
 
     imported = skipped = empty = 0
+    notices: list[dict] = []  # 쪽마다 «교정 옮김» 소식 — 화면이 알린다(D-133)
     chars = 0
     warnings: list[str] = []
 
@@ -3085,7 +3087,9 @@ def api_import_from_text_layer(doc_id: str, part_id: str, body: TextLayerImportR
                 skipped += 1
                 continue
 
-        save_page_text(doc_path, part_id, page_num, text)
+        notice = rebase_notice(page_num, save_page_text(doc_path, part_id, page_num, text))
+        if notice:
+            notices.append(notice)
         imported += 1
         chars += len(text)
 
@@ -3108,6 +3112,7 @@ def api_import_from_text_layer(doc_id: str, part_id: str, body: TextLayerImportR
         "total": len(pages) if wanted is None else len(wanted),
         "chars": chars,
         "warnings": warnings,
+        "corrections_notices": notices,
     }
 
 

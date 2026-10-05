@@ -1199,6 +1199,7 @@ async function _importExtractText() {
       }
     }
     (data.warnings || []).forEach((w) => showToast(w, "info"));
+    if (typeof notifyCorrectionsRebase === 'function') notifyCorrectionsRebase(data); // D-133 교정 옮김 알림
   } catch (e) {
     showToast(`가져오기 중 오류: ${e.message}`, "error");
   }

@@ -1501,6 +1501,7 @@ function initTextLayerImport() {
           `${data.imported}쪽을 가져왔습니다 (OCR 없이 원본 활자 그대로).`,
           "success"
         );
+        if (typeof notifyCorrectionsRebase === 'function') notifyCorrectionsRebase(data); // D-133 교정 옮김 알림
         // 지금 보고 있는 쪽의 텍스트를 다시 읽어 화면에 반영한다.
         if (typeof loadPageText === "function") {
           loadPageText(docId, partId, viewerState.pageNum);
@@ -2617,6 +2618,92 @@ function notifyLlmTruncation(data, label) {
   return true;
 }
 window.notifyLlmTruncation = notifyLlmTruncation;
+
+
+/**
+ * 확정본을 다시 쓴 응답에서 «사람 교정을 옮겼다/못 옮겼다»를 읽어 토스트로 알린다 (D-133, 2026-10-05).
+ *
+ * 왜 필요한가:
+ *   확정본(L4)을 다시 쓰는 길(열람 탭 저장·OCR 패널 저장·LLM 교정 적용·일괄 교정·텍스트레이어
+ *   가져오기)은 서버가 그 쪽의 사람 교정을 새 글 위로 옮겨 붙인다. 새 글이 옛 글과 많이 달라
+ *   옮기지 못한 교정은 교정 목록의 «기록»(자리 없는 항목)으로 남는데, 화면이 이 소식을 읽지 않으면
+ *   사람은 교정이 사라졌다고 여긴다 — 사람이 모르면 고친 것이 닿지 않는다.
+ *
+ * 읽는 모양 두 가지:
+ *   한 쪽 응답 — corrections_rebased {kept, history, unmerged?} · corrections_unmerged {count} ·
+ *                corrections_rebase_error (문자열)
+ *   여러 쪽 응답 — corrections_notices: [{page, rebased?, unmerged?, error?}]
+ *
+ * @param {object} data 서버 응답
+ * @returns {boolean} 무엇이든 알렸는가
+ */
+function notifyCorrectionsRebase(data) {
+  if (!data || typeof showToast !== "function") return false;
+  let shown = false;
+  const notices = Array.isArray(data.corrections_notices) ? data.corrections_notices : null;
+  if (notices) {
+    const pagesOf = (key) => notices.filter((n) => n && n[key]).map((n) => n.page);
+    const errPages = pagesOf("error");
+    const unPages = pagesOf("unmerged");
+    const keptPages = notices
+      .filter((n) => n && n.rebased && n.rebased.kept && !n.unmerged && !n.error)
+      .map((n) => n.page);
+    if (errPages.length) {
+      showToast(
+        `${errPages.join("·")}쪽: 교정 기록 파일을 읽지 못해 사람 교정을 새 글로 옮기지 못했습니다 — ` +
+          `교정 탭에서 그 쪽을 확인하세요.`,
+        "error",
+        12000,
+      );
+      shown = true;
+    }
+    if (unPages.length) {
+      const n = notices.reduce((s, x) => s + ((x && x.unmerged && x.unmerged.count) || 0), 0);
+      showToast(
+        `${unPages.join("·")}쪽: 새 글이 옛 글과 많이 달라 사람 교정 ${n}건을 새 글에 옮기지 못했습니다 — ` +
+          `지우지 않고 교정 목록에 «기록»으로 남겼습니다. 교정 탭에서 확인해 다시 고쳐 주세요.`,
+        "warning",
+        12000,
+      );
+      shown = true;
+    }
+    if (keptPages.length) {
+      showToast(
+        `${keptPages.join("·")}쪽: 사람 교정을 새 글 위로 옮겨 붙였습니다.`,
+        "info",
+        6000,
+      );
+      shown = true;
+    }
+    return shown;
+  }
+  if (data.corrections_rebase_error) {
+    showToast(
+      `교정 기록 파일을 읽지 못해 사람 교정을 새 글로 옮기지 못했습니다(${data.corrections_rebase_error}) — ` +
+        `교정 탭에서 이 쪽을 확인하세요.`,
+      "error",
+      12000,
+    );
+    return true;
+  }
+  const un = data.corrections_unmerged;
+  if (un && un.count) {
+    showToast(
+      `새 글이 옛 글과 많이 달라 사람 교정 ${un.count}건을 새 글에 옮기지 못했습니다 — ` +
+        `지우지 않고 교정 목록에 «기록»으로 남겼습니다. 교정 탭에서 확인해 다시 고쳐 주세요.`,
+      "warning",
+      12000,
+    );
+    return true;
+  }
+  const reb = data.corrections_rebased;
+  if (reb && reb.kept) {
+    showToast(`이 쪽의 사람 교정 ${reb.kept}건을 새 글 위로 옮겨 붙였습니다.`, "info", 6000);
+    return true;
+  }
+  return false;
+}
+window.notifyCorrectionsRebase = notifyCorrectionsRebase;
 
 
 /**

@@ -801,6 +801,12 @@ async function _fillFromOcr() {
       const errBody = await saveResp.text();
       throw new Error(errBody || `HTTP ${saveResp.status}`);
     }
+    // 확정본을 OCR 글로 다시 썼다 — 사람 교정을 옮겼는지·못 옮겼는지 알린다(D-133)
+    try {
+      if (typeof notifyCorrectionsRebase === "function") notifyCorrectionsRebase(await saveResp.json());
+    } catch (_) {
+      /* 응답 본문이 JSON이 아니어도 저장은 끝났다 */
+    }
   } catch (e) {
     showToast(`OCR 텍스트 저장 실패: ${e.message}`, 'error');
     return;
@@ -1398,6 +1404,7 @@ async function _applyCorrection(blockIds) {
     } else {
       showToast(`교정본을 L4에 적용했습니다: ${(data.applied_blocks || []).join(", ")}`, "success");
     }
+    if (typeof notifyCorrectionsRebase === "function") notifyCorrectionsRebase(data); // D-133
     _loadCorrectionDraft();
     _refreshReviewPagesIfOpen();
     // 교정 편집기가 화면에 있고 저장 안 한 수정이 없을 때만 L4를 다시 읽는다 —
