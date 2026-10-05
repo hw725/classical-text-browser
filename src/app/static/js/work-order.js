@@ -319,17 +319,74 @@ function _woScanProgress(on, done = 0, total = 1, text = "") {
 }
 
 /**
+ * 종류 판정 모델 고름 → {force_provider, force_model}. **미리 세기와 실제 스캔이 이 함수 하나로 만든다**
+ * — 전에는 미리 세기가 모델을 보내지 않아(2026-10-05 리뷰 143) 서버가 판정 모델의 비용 어림을 내지
+ * 않았고, 화면은 고른 것과 다른 «비전 모델 N번»을 말했다. CPU면 종류를 묻지 않으므로 빈 고름.
+ */
+function _woScanModelSel(gpu) {
+  return gpu && typeof getLlmModelSelection === "function" ? getLlmModelSelection("wo-scan-model-select") : {};
+}
+
+/** 달러 어림을 짧게 — 0.576 → «$0.58», 0.00576 → «$0.0058», 0 → «$0». */
+function _woUsd(x) {
+  const v = Number(x) || 0;
+  if (v <= 0) return "$0";
+  if (v < 0.0001) return "$0.0001 미만";
+  if (v >= 0.1) return `$${v.toFixed(2)}`;
+  return `$${Number(v.toPrecision(2))}`;
+}
+
+/** needs_key(설정 «판정 모델»의 칸 id) → 어디서 무슨 키를 넣는가. */
+function _woKeyHint(needsKey) {
+  const which = { cloudflare: "Cloudflare 또는 OpenRouter", perplexity: "Perplexity", openrouter: "OpenRouter" }[needsKey] || "";
+  return `설정 → «판정 모델»에서 ${which ? which + " " : ""}키를 넣거나, 종류 판정 모델을 다른 것으로 고르세요`;
+}
+
+/**
+ * 미리 세기(dry_run) 응답 → 안내 한 줄. 판정 모델이면 «얼마»까지, clef면 사슬을 말한다 —
+ * Cloudflare 무료 몫 → OpenRouter 유료 → 기본 비전 모델(서버 `_clef_chain`). 어림은 서버가 준 값이다
+ * (쪽당 2,400토큰 × 업체 단가, 실측 아님). sel은 고른 모델(비전 모델일 때 이름을 보인다).
+ */
+function _woDryNote(dry, sel) {
+  const head = `${dry.pages}쪽 — `;
+  const ocr = `PaddleOCR 최대 ${dry.ocr_calls || 0}번(방향 판정, GPU)`;
+  if (dry.needs_key) return `${head}종류 판정 모델의 키가 없습니다 — ${_woKeyHint(dry.needs_key)}.`;
+  if (dry.engine === "clef" && Array.isArray(dry.chain)) {
+    const st = Object.fromEntries(dry.chain.map((s) => [s.step, s]));
+    const free = st.cloudflare?.free_pages_per_day ? `하루 ≈${st.cloudflare.free_pages_per_day}쪽 어림` : "하루 몫";
+    const vis = st.vision?.model ? `기본 비전 모델(${st.vision.model})` : "기본 비전 모델";
+    const max = _woUsd(dry.cost_usd_max);
+    let chain;
+    if (st.cloudflare?.has_key && st.openrouter?.has_key)
+      chain = `Cloudflare 무료 몫 먼저(${free}), 넘치거나 실패하면 OpenRouter 유료 — 최대 어림 ${max}(전부 유료로 넘어갈 때), 그래도 실패하면 ${vis}`;
+    else if (st.openrouter?.has_key)
+      chain = `OpenRouter 유료(Cloudflare 키가 없어 첫 쪽부터) — 최대 어림 ${max}, 실패하면 ${vis}`;
+    else chain = `Cloudflare 무료 몫(${free}) — 넘치거나 실패하면 OpenRouter 키가 없어 ${vis}로(유료 호출 없음)`;
+    return `${head}판정 모델 clef ${dry.calls}번: ${chain}. 그리고 ${ocr}.`;
+  }
+  if (dry.engine) {
+    const name = dry.engine === "decider" ? "Perplexity Decider" : dry.engine;
+    return `${head}판정 모델 ${name} ${dry.calls}번(유료) — 어림 ${_woUsd(dry.cost_usd_max ?? dry.cost_usd_est)}. 그리고 ${ocr}.`;
+  }
+  const who = sel?.force_provider ? `, ${sel.force_provider}${sel.force_model ? ":" + sel.force_model : ""}` : "";
+  return `${head}비전 모델 ${dry.calls}번(글의 종류${who}) + ${ocr}. 쪽마다 몇 초.`;
+}
+
+/**
  * 스캔 칸의 안내 — 이 환경에서 무엇을 재는가를 누르기 전에 밝힌다. GPU면 «방향 + 종류(엔진)»,
  * CPU면 «방향만»(종류 판정은 쪽마다 비전 모델 + PaddleOCR이라 CPU에서 한 시간, 사용자 지시 2026-09-10).
- * GPU면 dry_run으로 «몇 쪽·호출 몇 번»도 센다(실행 게이트는 도구 층에 — 전역 규칙 11).
+ * GPU면 dry_run으로 «몇 쪽·호출 몇 번·얼마»도 센다(실행 게이트는 도구 층에 — 전역 규칙 11).
+ * 모델 고름은 실제 스캔과 같은 `_woScanModelSel`로 보낸다.
  */
 let _woScanSeq = 0;
 async function _woRefreshScanNote() {
   const note = document.getElementById("wo-scan-note");
   const modelRow = document.getElementById("wo-scan-model-row");
+  const keyBtn = document.getElementById("wo-open-keys");
   const gpu = typeof ocrState !== "undefined" && !!ocrState.gpuRuntime;
   if (modelRow) modelRow.hidden = !gpu;
   if (!note) return;
+  if (keyBtn) keyBtn.hidden = true;
   if (!gpu) {
     note.textContent =
       "이 서버는 CPU 환경이라 방향만 잽니다(누운 쪽 찾기, 모델 호출 없음). 글의 종류로 엔진까지 고르려면 바탕화면 아이콘(GPU 환경)으로 켠 서버에서 스캔하세요.";
@@ -345,20 +402,97 @@ async function _woRefreshScanNote() {
     note.textContent = e.message;
     return;
   }
+  const sel = _woScanModelSel(gpu);
   note.textContent = "세는 중…";
   try {
     const res = await fetch(_woScanUrl(t), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pages, dry_run: true }),
+      body: JSON.stringify({
+        pages,
+        dry_run: true,
+        force_provider: sel.force_provider || null,
+        force_model: sel.force_model || null,
+      }),
     });
     const dry = await res.json();
-    if (my !== _woScanSeq) return; // 그 사이 범위를 또 고쳤다
+    if (my !== _woScanSeq) return; // 그 사이 범위·모델을 또 고쳤다
     if (dry.error) throw new Error(dry.error);
-    note.textContent = `${dry.pages}쪽 — 비전 모델 ${dry.calls}번(글의 종류) + PaddleOCR 최대 ${dry.ocr_calls || 0}번(방향 판정, GPU). 쪽마다 몇 초.`;
+    note.textContent = _woDryNote(dry, sel);
+    if (keyBtn && dry.needs_key) keyBtn.hidden = false;
   } catch (e) {
     if (my === _woScanSeq) note.textContent = `셀 수 없습니다: ${e.message}`;
   }
+}
+
+/** 사슬이 넘어간 자리 → «3쪽부터 OpenRouter clef로(Cloudflare 429: …)». 넘어간 쪽은 다음 단계가 답했다. */
+function _woFallbackText(steps) {
+  if (!Array.isArray(steps) || !steps.length) return "";
+  const names = { cloudflare: "Cloudflare clef", openrouter: "OpenRouter clef" };
+  return steps
+    .map((s) => {
+      const to = s.to === "vision" ? `기본 비전 모델${s.model ? `(${s.model})` : ""}` : names[s.to] || s.to;
+      return `${s.page}쪽부터 ${to}로(${names[s.from] || s.from} ${s.why || ""})`;
+    })
+    .join(", ");
+}
+
+/**
+ * 판정 모델이 실제로 쓴 것(decider_usage, 서버가 usage로 잰 값) → 짧은 한 줄. 유료 몫(OpenRouter·
+ * Perplexity)은 청구 금액으로, Cloudflare 몫은 명목값으로 따로 말한다(무료 몫 안이면 청구되지 않는다).
+ */
+function _woUsageText(u) {
+  if (!u) return "";
+  const by = Array.isArray(u.by_provider) && u.by_provider.length ? u.by_provider : [u];
+  let paid = 0;
+  let cf = 0;
+  let hasPaid = false;
+  let hasCf = false;
+  for (const x of by) {
+    if (x.provider === "cloudflare") {
+      hasCf = true;
+      cf += Number(x.cost_usd) || 0;
+    } else {
+      hasPaid = true;
+      paid += Number(x.cost_usd) || 0;
+    }
+  }
+  return (
+    `판정 모델 호출 ${u.calls ?? "?"}번` +
+    (hasPaid ? ` · 유료 청구 ${_woUsd(paid)}` : "") +
+    (hasCf ? ` · Cloudflare 몫 명목 ${_woUsd(cf)}(무료 몫 안이면 청구 없음)` : "")
+  );
+}
+
+/**
+ * 스캔 결과 → 상태 줄 {text, kind}. **넘어감은 실패가 아니다** — 서버의 fallback_steps는 «넘어감»으로,
+ * failures(답을 못 받은 쪽·호출 상한으로 멈춤)만 «일부 실패»와 경고로 보인다. failures 칸이 없는 옛
+ * 응답이면 error를 실패로 읽는다.
+ */
+function _woScanSummary(d, gpu, marks) {
+  const m = marks || {};
+  const who = d.model ? ` (${d.provider ? d.provider + ":" : ""}${d.model})` : "";
+  const failures = Array.isArray(d.failures) ? d.failures : d.error ? [d.error] : [];
+  const fb = _woFallbackText(d.fallback_steps);
+  const usage = _woUsageText(d.decider_usage);
+  const text =
+    `${d.checked}쪽을 봤습니다${who} — 회전이 다른 구간 ${(d.rotation || []).length}개` +
+    (gpu ? `, 엔진 구간 ${(d.engines || []).length}개` : " (방향만)") +
+    ((m.guess_pages || []).length ? ` · «추정» ${m.guess_pages.length}쪽은 「보기」로 확인하세요` : "") +
+    (d.unknown ? ` · 판단 못 한 쪽 ${d.unknown}` : "") +
+    (fb ? ` · 넘어감: ${fb}` : "") +
+    (usage ? ` · ${usage}` : "") +
+    (failures.length ? ` · 일부 실패: ${failures.join(" / ")}` : "") +
+    ". 계획에 들어갔습니다 — 아직 저장하지 않았습니다.";
+  return { text, kind: failures.length ? "warning" : "success" };
+}
+
+/** 설정 «판정 모델» 칸으로 — 키가 없어 스캔·미리 세기가 막혔을 때. */
+function _woOpenKeySettings() {
+  const overlay = document.getElementById("work-order-overlay");
+  if (overlay) overlay.style.display = "none";
+  document.querySelector('.activity-btn[data-panel="settings"]')?.click();
+  setTimeout(() => document.getElementById("settings-decision-models")?.scrollIntoView({ block: "center" }), 300);
 }
 
 function _woScanUrl(t) {
@@ -380,8 +514,10 @@ async function _woScan() {
   }
   const gen = workOrderState.gen; // 이 계획을 바탕으로 스캔한다 — 그 사이 계획이 바뀌면 응답을 버린다
   const gpu = typeof ocrState !== "undefined" && !!ocrState.gpuRuntime;
-  const llmSel = gpu && typeof getLlmModelSelection === "function" ? getLlmModelSelection("wo-scan-model-select") : {};
+  const llmSel = _woScanModelSel(gpu); // 미리 세기와 같은 고름
   const btn = document.getElementById("wo-scan");
+  const keyBtn = document.getElementById("wo-open-keys");
+  if (keyBtn) keyBtn.hidden = true;
   if (btn) btn.disabled = true;
   _woScanProgress(true, 0, 1, "시작하는 중…");
   _woStatus(gpu ? "쪽을 훑는 중 — 방향과 글의 종류…" : "쪽을 훑는 중 — 방향만…");
@@ -416,18 +552,11 @@ async function _woScan() {
       (marks.problems || []).map((p) => ({ said: p.where, why: p.why })),
       "앞 계획에서 뺀 칸 — 확인에 걸린 칸은 쓰지 않습니다.",
     );
-    const who = d.model ? ` (${d.provider ? d.provider + ":" : ""}${d.model})` : "";
-    _woStatus(
-      `${d.checked}쪽을 봤습니다${who} — 회전이 다른 구간 ${(d.rotation || []).length}개` +
-        (gpu ? `, 엔진 구간 ${(d.engines || []).length}개` : " (방향만)") +
-        ((marks.guess_pages || []).length ? ` · «추정» ${marks.guess_pages.length}쪽은 「보기」로 확인하세요` : "") +
-        (d.unknown ? ` · 판단 못 한 쪽 ${d.unknown}` : "") +
-        (d.error ? ` · 일부 실패: ${d.error}` : "") +
-        ". 계획에 들어갔습니다 — 아직 저장하지 않았습니다.",
-      d.error ? "warning" : "success",
-    );
+    const sum = _woScanSummary(d, gpu, marks);
+    _woStatus(sum.text, sum.kind);
   } catch (e) {
     _woStatus(`스캔하지 못했습니다: ${e.message}`, "error");
+    if (keyBtn && e.needsKey) keyBtn.hidden = false; // 키가 없어 거절됐다 — 설정으로 가는 단추
   } finally {
     _woScanProgress(false);
     if (btn) btn.disabled = false;
@@ -570,6 +699,9 @@ function initWorkOrder() {
   });
   document.getElementById("wo-scan")?.addEventListener("click", _woScan);
   document.getElementById("wo-scan-pages")?.addEventListener("input", _woRefreshScanNote);
+  // 모델을 바꾸면 «얼마»도 바뀐다 — clef(사슬)·Decider(유료)·비전 모델(구독)
+  document.getElementById("wo-scan-model-select")?.addEventListener("change", _woRefreshScanNote);
+  document.getElementById("wo-open-keys")?.addEventListener("click", _woOpenKeySettings);
   document.getElementById("wo-from-words")?.addEventListener("click", _woFromWords);
   document.getElementById("wo-apply")?.addEventListener("click", _woApply);
   // JSON 칸을 손으로 고치면 계획이 바뀐 것이다 — 도는 중인 스캔·말 응답이 그것을 덮지 않게 세대를 올린다

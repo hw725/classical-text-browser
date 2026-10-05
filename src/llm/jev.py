@@ -230,6 +230,18 @@ class JevClient:
         self._timeout = timeout
         self._retries = max(0, int(retries))
         self._opener = opener
+        # 두 숫자를 따로 센다(2026-10-05 리뷰 143):
+        #   asks_made  — 논리 호출(ask 한 번 = 질문 묶음 하나).
+        #                **상한(max_calls)은 이것을 센다.**
+        #   calls_made — 실제로 나간 HTTP 요청(429·529 백오프, clef 413 축소 재전송 포함).
+        #                사용 보고용.
+        # 왜 나누는가: 호출자는 상한을 «보낼 묶음 수 + 여유»로 잡는다(gate(planned)도 묶음
+        # 수와 견준다). 그런데 ask가 HTTP 요청을 세어 상한과 견주면, 거부된 요청(429·413 —
+        # 청구되지 않는다)이 상한을 갉는다. 자동 스캔에서 Cloudflare 413 재전송이 쌓이면 쪽
+        # 수의 절반쯤에서 상한이 차고, 남은 쪽이 유료 OpenRouter로 밀려났다. 재전송은 묻기
+        # 하나 안에서 retries(+413 1회)로 이미 묶여 있으므로 HTTP 요청의 최대는
+        # max_calls × (retries+1) × 2로 여전히 유한하다.
+        self.asks_made = 0
         self.calls_made = 0
         self.questions_asked = 0
         self.input_tokens_total = 0
@@ -291,6 +303,8 @@ class JevClient:
 
         429(한도)·529(과부하)만 지수 백오프로 다시 시도한다 — 400(질문이 잘못됨)은
         다시 보내도 같은 답이라 바로 올린다. 429에 Retry-After가 있으면 그만큼 기다린다.
+
+        상한은 **묻기 횟수**(asks_made)로 센다 — 다시 보내기는 같은 묻기다(__init__ 주석).
         """
         if not self._key:
             raise JevCallFailed("jev_no_key")
@@ -298,8 +312,23 @@ class JevClient:
             # Jev에 base64를 넣으면 오류 없이 «글자로» 읽어 엉뚱한 답이 온다(2026-10-02 실측) —
             # 보내기 전에 막는다
             raise JevCallFailed("images_not_supported")
-        if self.calls_made >= self._max_calls:
+        if self.asks_made >= self._max_calls:
             raise JevGateExceeded(f"상한 {self._max_calls}회에 이미 도달했습니다.")
+        self.asks_made += 1
+        return self._send(state, questions, images, purpose)
+
+    def _send(
+        self,
+        state: Any,
+        questions: Mapping[str, Any],
+        images: Sequence[tuple[bytes, str]],
+        purpose: str,
+    ) -> Mapping[str, Any]:
+        """묻기 하나를 HTTP로 보낸다(백오프 포함). 상한 검사는 ask가 이미 했다.
+
+        물려받는 업체가 «같은 묻기를 고쳐 다시 보내기»(clef 413 축소)를 여기에 얹는다 —
+        ask를 두 번 부르면 묻기 두 번으로 세어진다.
+        """
         body = self._body(state, questions, images)
         data = json.dumps(body, ensure_ascii=False).encode("utf-8")
         delay = 1.0
@@ -402,9 +431,11 @@ class JevClient:
             logger.debug("판정 모델 사용 기록 실패: %s", e)
 
     def usage(self) -> dict:
-        """지금까지 쓴 것. 출력: calls·questions·input_tokens·output_tokens·cost_usd·uncosted."""
+        """지금까지 쓴 것. 출력: calls(HTTP 요청, 재전송 포함)·asks(묻기 — 상한이 세는 것)·
+        questions·input_tokens·output_tokens·cost_usd·uncosted_calls."""
         return {
             "calls": self.calls_made,
+            "asks": self.asks_made,
             "questions": self.questions_asked,
             "input_tokens": self.input_tokens_total,
             "output_tokens": self.output_tokens_total,

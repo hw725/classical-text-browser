@@ -273,7 +273,10 @@ async function _postSurveyStream(url, body, onEvent) {
   });
   if (!res.ok || !res.body) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `HTTP ${res.status}`);
+    const e = new Error(err.error || `HTTP ${res.status}`);
+    // 판정 모델 키가 없어 거절됐으면(400 needs_key) 그 칸 id를 실어 둔다 — 화면이 설정 «판정 모델»로 안내한다
+    if (err.needs_key) e.needsKey = err.needs_key;
+    throw e;
   }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();

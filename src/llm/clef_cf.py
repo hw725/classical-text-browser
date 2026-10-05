@@ -179,8 +179,18 @@ class ClefClient(JevClient):
             raise JevCallFailed("clef_no_account")
         if len(images) > MAX_IMAGES:
             raise JevCallFailed("clef_too_many_images", detail=f"{len(images)} > {MAX_IMAGES}")
+        return super().ask(state, questions, images=images, purpose=purpose)
+
+    def _send(self, state, questions, images, purpose):
+        """JevClient._send에 «문맥 초과 413이면 이미지를 줄여 1회 다시 보내기»를 얹는다.
+
+        ask가 아니라 여기에 두는 까닭: 다시 보내기는 **같은 묻기**라 호출 상한(asks_made)을 쓰지
+        않아야 한다. 전에는 ask 안에서 super().ask를 두 번 불러 묻기 둘로 세었고, 자동 스캔에서
+        413이 쌓이면 상한(쪽 수 + 5)이 절반쯤에서 차 남은 쪽이 유료 OpenRouter로 넘어갔다
+        (2026-10-05 리뷰 143). HTTP 요청 수(calls_made)에는 그대로 둘 다 남는다.
+        """
         try:
-            return super().ask(state, questions, images=images, purpose=purpose)
+            return super()._send(state, questions, images, purpose)
         except JevCallFailed as e:
             # 문맥 초과(413, 오류문에 «(예상) exceeded … (한도)»)이고 이미지가 있으면
             # 한 번만 줄여 다시 보낸다.
@@ -190,7 +200,7 @@ class ClefClient(JevClient):
                 raise
             est, limit = int(m.group(1)), int(m.group(2))
             self.image_pixels = max(200_000, int(self.image_pixels * (limit * 0.85) / est))
-            return super().ask(state, questions, images=images, purpose=purpose)
+            return super()._send(state, questions, images, purpose)
 
     def _body(
         self, state: Any, questions: Mapping[str, Any], images: Sequence[tuple[bytes, str]]

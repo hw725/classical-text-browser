@@ -279,7 +279,7 @@ def _summary(rows: list[dict]) -> dict:
     return out
 
 
-OPENROUTER_URL = "https://openrouter.ai/api/alpha/decisions"
+# 주소는 클라이언트 클래스가 정한다(OpenRouterClefClient) — 여기서 url을 넘기지 않는다
 OPENROUTER_ENGINES = {
     "or-clef": "cloudflare/clef",
     "or-decider": "perplexity/pplx-decider-v1-27b",
@@ -287,19 +287,32 @@ OPENROUTER_ENGINES = {
 
 
 def _openrouter_client(engine: str, library: Path, max_calls: int):
-    """OpenRouter 판정 클라이언트. DeciderClient와 이미지 형식(state 배열의 image_url)이 같아
-    주소·모델·키만 바꾼다. 키는 OPENROUTER_API_KEY(환경변수 → 서고 .env → 공용 키 파일)."""
-    from llm.decider import DeciderClient
-    from llm.jev import resolve_key
+    """OpenRouter 판정 클라이언트 — 앱의 사슬 2단계와 같은 `OpenRouterClefClient`.
 
-    key = resolve_key(names=("OPENROUTER_API_KEY",), library_root=library, fallback_file=True)
-    return DeciderClient(
-        api_key=key,
-        url=OPENROUTER_URL,
-        model=OPENROUTER_ENGINES[engine],
-        library_root=library,
-        max_calls=max_calls,
+    키는 OPENROUTER_API_KEY 하나(환경변수 → 서고 .env → 프로젝트 .env → 공용 키 파일)이고 주소는
+    클래스가 정한다. 이미지는 state 배열의 image_url로, 2MP·300KB로 맞추고 다시 인코딩하지 않는다.
+    or-decider도 같은 클래스에 모델 id만 바꾼다(이미지 싣는 법이 OpenRouter에서 같다).
+
+    **키가 없으면 바로 끝낸다.** 전에는 DeciderClient(api_key=None, url=OpenRouter)를 만들어,
+    DeciderClient가 스스로 PERPLEXITY_API_KEY를 찾아 openrouter.ai로 보냈다(사용 기록 provider도
+    perplexity로 잘못 남았다 — 2026-10-05 리뷰 143 실측). 업체 클라이언트에 남의 url을 넘기지 않는다
+    (`tests/test_scan_cost_and_chain_ui.py`가 scripts/ 전체를 본다).
+    """
+    from llm.openrouter_decider import OPENROUTER_DECIDER_USD_PER_M, OpenRouterClefClient
+
+    c = OpenRouterClefClient(
+        model=OPENROUTER_ENGINES[engine], library_root=library, max_calls=max_calls
     )
+    if engine == "or-decider":
+        # cost가 응답에 없을 때만 쓰는 어림 단가 — decider의 것으로
+        c.INPUT_USD_PER_M = OPENROUTER_DECIDER_USD_PER_M
+    if not c.has_key:
+        print(
+            "OPENROUTER_API_KEY가 없습니다 — 설정 → 판정 모델에서 OpenRouter 키를 넣으세요. "
+            "끝냅니다."
+        )
+        raise SystemExit(2)
+    return c
 
 
 def _vision_asker(library: Path):
@@ -409,23 +422,8 @@ def main() -> int:
         print(f"이미지 없음(빠짐): {', '.join(missing)} — 휴지통을 비웠으면 GOLD를 고치세요")
     if args.engine in OPENROUTER_ENGINES:
         live = _openrouter_client(args.engine, library, max(calls, 1))
-        if args.engine == "or-clef":
-            # OpenRouter를 거쳐도 뒤는 Cloudflare다 — ClefClient와 같은 2MP·300KB로 맞춘다
-            # (DeciderClient의 fit_image는 바이트를 이만큼 줄이지 않는다). 그리고 DeciderClient가
-            # 보내기 전에 품질 88로 다시 인코딩해 300KB가 ≈470KB로 되돌아가 413이 났다(2026-10-05
-            # 실측) — 이 경로에서는 다시 줄이지 않게 한다
-            import llm.decider as _decider
-
-            _decider.fit_image = lambda data, mime="image/jpeg": (data, mime)
-            from llm.clef_cf import DEFAULT_IMAGE_BYTES, DEFAULT_IMAGE_PIXELS, fit_image_clef
-
-            for k in list(images):
-                images[k] = fit_image_clef(
-                    images[k],
-                    "image/jpeg",
-                    max_bytes=DEFAULT_IMAGE_BYTES,
-                    max_pixels=DEFAULT_IMAGE_PIXELS,
-                )[0]
+        # 이미지는 OpenRouterClefClient._body가 ClefClient와 같은 2MP·300KB로 맞추고 다시 인코딩하지
+        # 않는다(DeciderClient식 재인코딩은 300KB를 ≈470KB로 되돌려 413을 냈다, 2026-10-05 실측)
         print(f"엔진: OpenRouter {OPENROUTER_ENGINES[args.engine]} (선불 크레딧)")
     else:
         live = ClefClient(library_root=library, max_calls=max(calls, 1))

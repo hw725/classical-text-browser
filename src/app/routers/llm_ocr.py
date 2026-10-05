@@ -929,9 +929,10 @@ def _openrouter_clef(library_path, max_calls: int):
 
 def _merge_usage(usages: list[dict]) -> dict:
     """클라이언트 여럿(Cloudflare clef·OpenRouter clef)의 사용량을 합친다 — 숫자 칸은 더하고
-    나머지는 첫 값. by_provider에 클라이언트별 원본을 남긴다."""
+    나머지는 첫 값. by_provider에 클라이언트별 원본을 남긴다(각 항목의 provider로 업체를 가린다 —
+    화면은 Cloudflare 몫(무료 몫 안이면 명목값)과 유료 몫을 따로 말한다)."""
     if len(usages) == 1:
-        return usages[0]
+        return {**usages[0], "by_provider": usages}
     out: dict = {}
     for u in usages:
         for k, v in u.items():
@@ -939,8 +940,56 @@ def _merge_usage(usages: list[dict]) -> dict:
                 out[k] = round(out.get(k, 0) + v, 6)
             else:
                 out.setdefault(k, v)
+    out["provider"] = "+".join(str(u.get("provider")) for u in usages)
     out["by_provider"] = usages
     return out
+
+
+# 미리 세기의 어림(실측 아님): 쪽 이미지 ≈ 2MP ≈ 2,000토큰 + 질문 ≈ 400토큰
+# (decider 문서 기준). OpenRouter clef의 실제 청구는 쪽당 ≈1,850토큰
+# (openrouter_decider 머리말) — 2,400은 위로 잡은 값이다
+_DRY_TOKENS_PER_PAGE = 2400
+# Cloudflare 무료 몫(하루 10,000 neurons)으로 clef를 몇 쪽 부르나 — 사용자 결정 기록의
+# «하루 ≈250쪽»(clef_cf·openrouter_decider 머리말). 잰 값이 아니라 어림이다
+_CLEF_FREE_PAGES_PER_DAY_EST = 250
+
+
+def _clef_chain(library_path) -> list[dict]:
+    """자동 스캔 clef 사슬의 단계별 키 유무 — 미리 세기(dry_run)가
+    «무엇이 무료이고 어디서부터 유료인가»를 보내기 전에 말하게 한다. 네트워크를 쓰지 않는다.
+
+    출력: [{step, label, has_key, paid, …}] — cloudflare(무료 몫) → openrouter(유료) →
+    vision(사슬 끝, Ollama 구독 — 추가 요금 없음). 실제 사슬(`_decision_client`·`_run`)과
+    같은 조건으로 키를 본다.
+    """
+    from core.page_survey import SURVEY_FALLBACK_MODEL
+    from llm.clef_cf import ClefClient
+    from llm.openrouter_decider import OPENROUTER_CLEF_USD_PER_M
+
+    return [
+        {
+            "step": "cloudflare",
+            "label": "Cloudflare clef",
+            "has_key": ClefClient(library_root=library_path, max_calls=0).has_key,
+            "paid": False,
+            "free_pages_per_day": _CLEF_FREE_PAGES_PER_DAY_EST,
+        },
+        {
+            "step": "openrouter",
+            "label": "OpenRouter clef",
+            "has_key": _openrouter_clef(library_path, 0) is not None,
+            "paid": True,
+            "usd_per_page_est": round(_DRY_TOKENS_PER_PAGE * OPENROUTER_CLEF_USD_PER_M / 1e6, 6),
+        },
+        {
+            "step": "vision",
+            "label": "기본 비전 모델",
+            # 화면이 고를 수 있는지는 여기서 재지 않는다(Ollama 로그인 등) — 사슬 끝이라 늘 적는다
+            "has_key": True,
+            "paid": False,
+            "model": ":".join(SURVEY_FALLBACK_MODEL),
+        },
+    ]
 
 
 @router.post("/api/documents/{doc_id}/parts/{part_id}/rotation/suggest")
@@ -983,6 +1032,7 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
         target_rotation,
         text_contents,
     )
+    from llm.jev import JevGateExceeded
 
     library_path = get_library_path()
     if library_path is None:
@@ -1034,28 +1084,43 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
                 status_code=400,
             )
     if body.dry_run:
-        # 실행 게이트(전역 규칙 11)는 도구 층에 — 보내기 전에 «몇 쪽·호출 몇 번»을 화면이 보인다
-        return {
+        # 실행 게이트(전역 규칙 11)는 도구 층에 — 보내기 전에 «몇 쪽·호출 몇 번·얼마»를
+        # 화면이 보인다. 화면은 실제 스캔과 같은 force_provider·force_model을 보내야 이 값이
+        # 나온다(2026-10-05 — 전에는 {pages, dry_run}만 보내 판정 모델의 비용 어림이 한 번도
+        # 화면에 닿지 않았다)
+        out: dict = {
             "dry_run": True,
             "pages": len(targets),
             "calls": 0 if body.orientation_only else len(targets),
             # 180°·90/270 판정용 OCR(PaddleOCR) — 쪽마다 후보 둘, CPU에서 후보당 4~6초(실측).
             # 방향만이면 누운 쪽에서만 재므로 미리 셀 수 없다 — 상한만 적는다
             "ocr_calls": 2 * len(targets),
-            # 판정 모델이면 어림 비용 — 쪽 이미지 ≈ 2MP ≈ 2,000토큰 + 질문 ≈ 400토큰(decider 문서
-            # 기준, clef의 이미지 토큰 수는 문서에 없다 — 같은 값으로 어림), 업체 단가(실측 아님)
-            **(
-                {
-                    "engine": decider_kind,
-                    "cost_usd_est": round(
-                        len(targets) * 2400 * _DECISION_PROVIDERS[decider_kind]["usd_per_m"] / 1e6,
-                        5,
-                    ),
-                }
-                if use_decider
-                else {}
-            ),
         }
+        if use_decider:
+            # 어림 비용 — 쪽당 _DRY_TOKENS_PER_PAGE토큰 × 업체 단가(실측 아님). cost_usd_est는 옛 칸
+            # 그대로(명목값 — Cloudflare 무료 몫 안이어도 단가로 환산한 값)
+            n = len(targets)
+            usd_m = _DECISION_PROVIDERS[decider_kind]["usd_per_m"]
+            out["engine"] = decider_kind
+            out["cost_usd_est"] = round(n * _DRY_TOKENS_PER_PAGE * usd_m / 1e6, 5)
+            if decider_kind == "clef":
+                # clef는 사슬이다 — 단계마다 키가 있는가와 «최대 유료 어림»(무료 몫이 하나도
+                # 없어 전부 OpenRouter로 갈 때)을 준다. OpenRouter 키가 없으면 유료 단계가
+                # 없다(넘치면 비전 모델)
+                chain = _clef_chain(library_path)
+                out["chain"] = chain
+                paid = next(s for s in chain if s["step"] == "openrouter")
+                out["cost_usd_max"] = (
+                    round(n * paid["usd_per_page_est"], 6) if paid["has_key"] else 0.0
+                )
+                has_any = any(s["has_key"] for s in chain if s["step"] != "vision")
+            else:
+                out["cost_usd_max"] = out["cost_usd_est"]
+                has_any = _decision_client(decider_kind, library_path, 0).has_key
+            if not has_any:
+                # 실제 스캔이면 400으로 거절할 상태 — 미리 세기에서 먼저 알린다
+                out["needs_key"] = _DECISION_PROVIDERS[decider_kind]["key_id"]
+        return out
 
     async def _run(progress=None):
         """판독 계획 본체. progress(dict)를 주면 쪽 하나가 끝날 때마다 부른다(스트림용)."""
@@ -1112,7 +1177,19 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
         if body.force_model:
             kwargs["force_model"] = body.force_model
         per_page: list[dict] = []
+        # errors는 옛 `error` 문자열(소비처: 기존 시험·옛 화면) — 실패와 넘어감을 다 담는다.
+        # 화면은 둘을 나눠 읽는다(2026-10-05): failures = 답을 못 받은 쪽·멈춤,
+        # fallback_steps = 사슬이 다음 단계로 넘어간 자리(그 쪽은 다음 단계가 답했다 —
+        # 실패가 아니다)
         errors: list[str] = []
+        failures: list[str] = []
+        fallback_steps: list[dict] = []
+        capped_at_page: int | None = None  # 호출 상한에 닿아 모델 호출을 멈춘 쪽
+
+        def _fail(msg: str) -> None:
+            errors.append(msg)
+            failures.append(msg)
+
         provider = model = None
         unknown = 0
         loop = asyncio.get_event_loop()
@@ -1133,7 +1210,7 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
                 "mixed": False,
             }
             if not image:
-                errors.append(f"{page}쪽 이미지 없음")
+                _fail(f"{page}쪽 이미지 없음")
                 per_page.append(row)
                 _survey_progress(progress, row, len(per_page), len(targets), CONTENT_LABELS)
                 unknown += 1
@@ -1158,6 +1235,19 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
                             ),
                         )
                         break
+                    except JevGateExceeded as e:
+                        # 호출 상한은 «더 쏘지 말라»다. 실패로 보고 폴백 업체(유료
+                        # OpenRouter)나 비전 모델로 넘기면 상한의 뜻이 무너진다 — 모델
+                        # 호출을 여기서 멈추고, 이 쪽과 남은 쪽은 코드(투영·PaddleOCR)로
+                        # 방향만 잰다. 상한은 쪽 수 + 5라 정상 흐름에서는 닿지 않는다
+                        # (재전송은 상한을 쓰지 않는다 — jev.JevClient.asks_made)
+                        _fail(
+                            f"{page}쪽부터: 판정 모델 호출 상한에 닿아 더 묻지 않았습니다({e}) — "
+                            "남은 쪽은 모델 없이 방향만 쟀습니다"
+                        )
+                        capped_at_page = page
+                        decider = router_llm = None
+                        break
                     except Exception as e:  # noqa: BLE001 — 한 쪽이 실패해도 나머지는 본다
                         status = getattr(e, "status", None)
                         detail = str(getattr(e, "detail", "") or e)[:80]
@@ -1171,11 +1261,19 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
                                 errors.append(
                                     f"{page}쪽: Cloudflare clef {why} — 이 쪽부터 OpenRouter clef로"
                                 )
+                                fallback_steps.append(
+                                    {"page": page, "from": "cloudflare", "to": "openrouter",
+                                     "why": why}
+                                )
                                 decider, clef_via_openrouter, clef_switched = orc, True, True
                                 decision_clients.append(orc)
                                 continue
                         errors.append(
                             f"{page}쪽: clef({decider.PROVIDER}) {why} — 이 쪽부터 기본 비전 모델로"
+                        )
+                        fallback_steps.append(
+                            {"page": page, "from": decider.PROVIDER, "to": "vision",
+                             "model": ":".join(SURVEY_FALLBACK_MODEL), "why": why}
                         )
                         decider = None
                         clef_fallback = True
@@ -1185,7 +1283,7 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
                         # 라우터 기본(gemma4:cloud)으로 간다
                         kwargs["force_provider"], kwargs["force_model"] = SURVEY_FALLBACK_MODEL
                 if fail_why is not None:
-                    errors.append(f"{page}쪽: 판정 모델 {fail_why}")
+                    _fail(f"{page}쪽: 판정 모델 {fail_why}")
                     per_page.append(row)
                     _survey_progress(progress, row, len(per_page), len(targets), CONTENT_LABELS)
                     unknown += 1
@@ -1199,7 +1297,7 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
                 try:
                     resp = await router_llm.call_with_image(SURVEY_PROMPT, image, **kwargs)
                 except Exception as e:  # noqa: BLE001 — 한 쪽이 실패해도 나머지는 본다
-                    errors.append(f"{page}쪽: {type(e).__name__}: {str(e)[:80]}")
+                    _fail(f"{page}쪽: {type(e).__name__}: {str(e)[:80]}")
                     per_page.append(row)
                     _survey_progress(progress, row, len(per_page), len(targets), CONTENT_LABELS)
                     unknown += 1
@@ -1339,13 +1437,20 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
             "per_page": per_page,
             "provider": provider,
             "model": model,
-            # 판정 모델이면 실제로 쓴 호출·토큰·비용(usage 기준) — 어림이 아니라 잰 값
-            **({"decider_usage": _merge_usage([c.usage() for c in decision_clients])}
+            # 판정 모델이면 실제로 쓴 호출·토큰·비용(usage 기준) — 어림이 아니라 잰 값.
+            # 업체를 붙여 둔다 — 화면이 Cloudflare 몫(무료 몫 안이면 명목값)과 유료 몫을 가른다
+            **({"decider_usage": _merge_usage(
+                [{**c.usage(), "provider": c.PROVIDER} for c in decision_clients])}
                if decision_clients else {}),
-            # 사슬 어디까지 갔는가(화면이 «폴백»으로 알린다)
+            # 사슬 어디까지 갔는가 — 화면(work-order.js `_woScanSummary`)이 fallback_steps로
+            # «3쪽부터 OpenRouter clef로»를 실패와 따로 알린다
             **({"fallback": ("cloudflare→openrouter→vision" if clef_switched
                              else "clef→vision")} if clef_fallback
                else {"fallback": "cloudflare→openrouter"} if clef_switched else {}),
+            "fallback_steps": fallback_steps,
+            "failures": failures,
+            **({"capped_at_page": capped_at_page} if capped_at_page is not None else {}),
+            # 옛 칸 — 실패와 넘어감을 다 담은 한 줄(기존 소비처가 읽는다)
             "error": " / ".join(errors)[:600] if errors else None,
         }
 
