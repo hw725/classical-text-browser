@@ -22,6 +22,8 @@ const PROVIDER_KEY_HELP = {
   // 판정 모델(D-134) — 아래 _loadDecisionModels가 같은 키 줄을 쓴다
   perplexity: { label: "Perplexity API 키", placeholder: "pplx-…" },
   typesafe: { label: "TypeSafe API 키", placeholder: "키" },
+  // D-136 — 편성 본문 판정의 기본(Perplexity decider를 OpenRouter로 부른다)
+  openrouter: { label: "OpenRouter API 키", placeholder: "sk-or-…" },
   // D-135 — 주소에 계정 id가 들어가 칸이 둘이다(아래 _loadDecisionModels가 extra_keys로 붙인다)
   cloudflare: { label: "Cloudflare API 토큰", placeholder: "Workers AI 권한 토큰" },
   cloudflare_account: { label: "Cloudflare 계정 id(Account ID)", placeholder: "32자리 계정 id" },

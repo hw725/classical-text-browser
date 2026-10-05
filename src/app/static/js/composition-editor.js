@@ -1140,7 +1140,9 @@ async function _updateLlmJudgeNote() {
     const d = await res.json();
     if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
     const toc = d.toc_entries ? ` · 목차 ${d.toc_entries}항목` : "";
-    note.textContent = `${d.lines}행 · 질문 ${d.questions}개 · 호출 ${d.calls}번${toc} · 약 $${d.cost_usd_est}`;
+    // 누가 답할지(D-136 — 기본은 OpenRouter decider, 키가 없으면 Jev)
+    const judge = d.judge ? ` · ${_judgeName(d.judge)}` : "";
+    note.textContent = `${d.lines}행 · 질문 ${d.questions}개 · 호출 ${d.calls}번${toc} · 약 $${d.cost_usd_est}${judge}`;
   } catch (e) {
     note.textContent = `크기 못 잼: ${e.message}`;
   }
@@ -1153,6 +1155,13 @@ async function _updateLlmJudgeNote() {
  * **규칙이 낸 후보를 거르지 않는다** — 문집에서 규칙 후보로 거르면 규칙의 눈을 그대로 물려받는다
  * (2026-09-21 실측: 운양집에서 재현 0.88 → 0.18).
  */
+function _judgeName(label) {
+  // «업체:모델» → 사람이 읽는 이름. 모르는 것은 그대로 보인다
+  if (String(label).startsWith("openrouter:")) return "Perplexity decider";
+  if (String(label).startsWith("typesafe:")) return "TypeSafe Jev";
+  return String(label);
+}
+
 async function _askJudgeStructure() {
   const out = document.getElementById("comp-llm-pattern-out");
   const docId = viewerState.docId, partId = viewerState.partId;
@@ -1174,12 +1183,17 @@ async function _askJudgeStructure() {
         ? ` · 목차 ${d.toc.entries}항목 중 ${d.toc.above_threshold || 0}개를 본문에 붙임`
         : "";
       const cost = d.usage ? ` · $${d.usage.cost_usd}` : "";
+      // 답한 모델 — 폴백(Jev)이 섞였으면 몇 번이었는지도 밝힌다. 문턱이 모델마다 달라서다(D-136)
+      const who = Object.keys(d.answered_by || {}).map(_judgeName).join("·");
+      const fb = d.fallback_calls ? ` · 폴백 ${d.fallback_calls}번` : "";
+      const whoNote = who ? ` · ${who}${fb}` : "";
+      const tocSkip = d.toc && d.toc.skipped ? ` — ${d.toc.skipped}` : "";
       // 확신한 자리와 애매한 자리를 나눠 말한다 — 애매한 쪽은 체크하지 않은 채 «애매한 후보 보기» 뒤에 선다
       const nEsc = props.filter((p) => p.band === "escalate").length;
       const split = nEsc ? ` — 확신 ${props.length - nEsc} · 애매 ${nEsc}(체크 안 함)` : "";
       out.textContent = props.length
-        ? `판정 모델이 ${props.length}자리를 ③에 세웠습니다${split} (질문 ${d.questions}개·호출 ${d.calls}번${cost}${toc})` +
-          (d.error ? ` — 일부 실패: ${d.error}` : "")
+        ? `판정 모델이 ${props.length}자리를 ③에 세웠습니다${split} (질문 ${d.questions}개·호출 ${d.calls}번${cost}${toc}${whoNote})` +
+          (d.error ? ` — 일부 실패: ${d.error}` : "") + tocSkip
         : `판정 모델이 고른 자리가 없습니다${d.error ? ` — ${d.error}` : ""}`;
       _renderTocUnplaced(out, (d.toc && d.toc.unplaced) || []);
     }

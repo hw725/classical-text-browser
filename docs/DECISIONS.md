@@ -8188,6 +8188,7 @@ Decider의 `fit_image`(타일 1,900개 ≈ 2MP)보다 넉넉하다 — 자동 �
 - **교체 기준**(사용자 2026-10-05 «정확하고 빨라야 교체»): clef의 종류 정확도가 kimi-k3 이상이고 **동시에** 쪽당 시간이 짧아야 과금(Workers Paid)을 검토한다. 기준선은 `eval_clef_survey.py --engine vision`(같은 24장·같은 2MP·자동 스캔과 같은 프롬프트·파서).
 - **바이트도 문맥을 먹는다(2026-10-05)**: 24장이 모두 ≈1.96MP였는데 JPEG 252~304KB는 전부 답하고 434~531KB는 전부 413. 실제 청구는 쪽당 ≈1,850토큰이다 — 서버의 문맥 사전 검사가 이미지를 바이트로 어림한다. `DEFAULT_IMAGE_BYTES = 300KB`로 맞춘다(같은 쪽 300KB·200KB 모두 통과 실측). 따라서 무료량은 **하루 ≈250쪽**, 과금해도 1,000쪽 ≈ $0.44.
 - **같은 24장 비교(2MP·300KB, 2026-10-05)**: kimi-k3 종류 21/24(종류별 126/129)·방향 18/24·1.99초 / clef(OpenRouter) 20/24(123/129)·15/24·**1.39초** / Perplexity decider(OpenRouter) 19/24(123/129)·13/24·1.50초. 교체 기준(정확도 이상 **그리고** 더 빠름)은 충족하지 못했으나(1장 차이, 표본상 우연 범위) **사용자 결정으로 clef 기본·kimi 폴백 유지**. OpenRouter 판정 API는 이미지를 `state` 배열의 `image_url`로만 받는다(최상위 `images`는 무시 — 색 시험). DeciderClient는 보내기 전에 다시 인코딩해 300KB가 ≈470KB로 되돌아가므로 OpenRouter clef 평가에서는 그 재인코딩을 끈다(`eval_clef_survey.py --engine or-clef`).
+- **clef 사슬(2026-10-05 사용자 결정 — «무료량으로 커버하기엔 한계, 소진 시 OpenRouter로»)**: 자동 스캔의 clef는 **Cloudflare clef(무료) → OpenRouter clef(유료 크레딧, `OpenRouterClefClient`) → 기본 비전 모델(kimi-k3)**. 한 단계가 실패하면 같은 쪽을 다음 단계로 다시 묻고 뒤 쪽도 그 단계부터 쓴다. Cloudflare 키가 없고 OpenRouter 키만 있으면 2단계부터 시작한다(그때는 폴백 표시 없음). 결과 `fallback`: `cloudflare→openrouter` · `cloudflare→openrouter→vision` · `clef→vision`, `decider_usage`는 쓴 클라이언트를 합치고 `by_provider`에 각각을 남긴다. 폴백을 다른 판정 모델(decider)로 두지 않은 이유 — 같은 24장에서 decider는 kimi보다 종류 19 대 21·방향 13 대 18로 낮고 0.5초 빠를 뿐이다. 시험: `test_openrouter_clef_body_puts_image_in_state_array` · `test_survey_chain_cloudflare_to_openrouter` · `test_survey_chain_falls_through_to_vision`. 시험은 이 PC의 개인 키 파일에 진짜 OpenRouter 키가 있으므로 `_openrouter_clef`를 가짜로 바꾼다.
 - **시험이 진짜 Ollama를 부르고 있었다**: 폴백 시험이 `llm_ocr._get_llm_router`만 바꿨는데 라우트는 함수 안에서 `app._state`에서 가져와 진짜 라우터가 불렸다(결과 모델이 gemma4로 나와 드러났다). `app._state._get_llm_router`를 바꾸도록 고쳤다. Jev로 넘기지 않는 이유 — Jev는 텍스트 전용이고 이미지를 base64 글자로 읽는다(2026-10-02 실측). Decider(`force_provider="decider"`)는 예전처럼 실패한 쪽만 «못 잼».
 - **알려진 함정**(head-repo `docs/clef-vs-jev-20261003/`): Workers AI는 **질문이 여럿이면 state를 자른다** — 같은 글에 질문 1개는 입력 3,317토큰·인젝션 0.95, 질문 2개는 2,509토큰·0.17. 자동 스캔은 state가 짧은 고정문(`DECIDER_STATE`)이라 걸리지 않지만, 긴 글을 여러 질문과 함께 보내는 자리에 clef를 쓰면 안 된다.
 
@@ -8195,3 +8196,70 @@ Decider의 `fit_image`(타일 1,900개 ≈ 2MP)보다 넉넉하다 — 자동 �
 |---|---|
 | 기본 2MP / 문맥 초과 413 축소 1회 재시도 / 이미지 없는 413은 재시도 안 함 | `test_default_image_cap_is_two_megapixels` · `test_context_overflow_413_shrinks_and_retries_once` · `test_413_without_images_is_not_retried` |
 | clef 실패 → 기본 비전 모델로 폴백, `"clef"`를 라우터에 넘기지 않음 | `test_survey_falls_back_to_vision_llm_when_clef_fails` |
+
+## D-136: 편성 본문 경계 판정의 기본을 OpenRouter 경유 Perplexity decider로 — Jev는 폴백과 목차 대조 (2026-10-05)
+
+**배경.** 사용자 결정(2026-10-05): 편성 «판정 모델로 고르기»의 본문 판정(`structure_llm.ask_structure_jev`, D-129)을 TypeSafe Jev에서
+**OpenRouter로 부르는 Perplexity decider**(`perplexity/pplx-decider-v1-27b`, `https://openrouter.ai/api/alpha/decisions`)로 바꾼다.
+근거는 같은 정답·같은 질문으로 저장해 둔 행별 확률(head-repo `docs/clef-vs-jev-20261003/scripts_or/{decider,jev}/ctb_*.json`,
+`eval_boundary_judge --save` 형식)이다 — 정답 대조 F1 천진담초 decider 0.846 대 Jev 0.818, 운양집 1책 0.814 대 0.743(사용자 전달
+수치. 아래 문턱 표는 같은 파일을 이 결정에서 다시 계산한 것이다).
+
+### 채택한 것
+
+**1. `llm/openrouter_decider.py::OpenRouterDecisionClient(JevClient)`.** 주소·모델·키 이름만 바꾼다(본문 `{model, state, questions}`,
+응답 `{answers, usage{input_tokens, cost}}` — 감싸기 없음, cost는 게이트웨이 값이 정본). **`KEY_NAMES = ("OPENROUTER_API_KEY",)`** —
+`JevClient.KEY_NAMES`는 `TYPESAFE_API_KEY`가 맨 앞이라 그대로 물려받으면 TypeSafe 키가 OpenRouter로 나간다(2026-09-21 401 사고의
+거울상). 찾는 순서는 Jev와 같다: 환경변수 → 서고·프로젝트 `.env` → 개인 키 파일 `~/.claude/data/triage/.env`. Perplexity 직결
+`DeciderClient`(D-134)를 쓰지 않은 이유: 측정이 OpenRouter 경유였고 주소·모델 id·키가 모두 다르다 — 잰 길로 부른다. 이미지는
+측정하지 않은 길이라 보내기 전에 거부한다. 설정 ▸ 판정 모델에 «Perplexity decider (OpenRouter 경유)» 칸(`MANAGED_KEYS["openrouter"]`)을 더했다.
+
+**2. 기본과 폴백.** 라우트(`composition._structure_jev`)는 OpenRouter 키가 있으면 decider를 주 판정자, Jev를 폴백으로 둔다.
+`ask_structure_jev(..., fallback=)`는 **주 모델 호출이 실패한 그 호출만** 폴백에 다시 묻는다 — 다음 호출은 다시 주 모델부터다
+(한 번의 429·5xx로 권 전체가 Jev로 넘어가지 않게). 실패는 `logger.warning`과 `meta.notes`에 남고, 폴백이 답했으면 `error`가
+아니다. OpenRouter 키가 없으면 Jev가 주 판정자(폴백 없음), 둘 다 없으면 400(`needs_key: "openrouter"`).
+meta에 `answered_by`(`업체:모델` → 호출 수)·`fallback_calls`·`fallback_lines`([쪽, 행] — 폴백이 답한 행)·`thresholds`(모델별 문턱)를,
+후보에 `judge`(그 행을 판정한 모델)를 싣는다. `nouls`의 모양([쪽, 행, 확률])은 그대로 둔다 — `eval_boundary_judge --score`가
+읽는다. 대신 문턱이 모델마다 달라 섞인 nouls를 한 문턱으로 다시 재면 틀린다는 것을 `fallback_lines`로 가린다.
+사용량은 두 클라이언트를 합친 `usage`와 모델별 `usage_by`. 근거 표지(`jev:structure`·`toc:jev`)와 요청의 `engine: "jev"`는
+**이름을 바꾸지 않았다** — 저장된 경계와 화면이 그 문자열을 읽는다. 뜻은 «판정 모델 길»이다.
+
+**3. 문턱을 모델마다 — `structure_llm.JUDGE_THRESHOLDS`.** Jev의 0.85/0.5를 decider에 대면 accept 정밀이 천진담초 0.745·운양집
+0.680으로 떨어진다(decider는 Jev보다 확률이 위로 몰린다). 같은 저장 파일에서 다시 골랐다(호출 0건 — `load_truth`·`score`를
+`eval_boundary_judge`에서 그대로 가져와 계산. 정답 36·145자리, «모르는 자리» 7·469행은 세지 않는다).
+기준(사용자 지시): **accept 정밀은 Jev(0.85)보다 낮지 않게, reject로 잃는 정답은 Jev(0.5)보다 많지 않게.**
+
+| | accept 정밀(천진·운양) | accept 맞음 | escalate 행수 | escalate 안 정답 | reject로 잃은 정답 |
+|---|---|---|---|---|---|
+| Jev 0.85 / 0.5 | 0.833 · 0.786 | 30 · 88 | 69 · 217 | 6 · 52 | 0 · 5 |
+| **decider 0.95 / 0.35** | **0.923 · 0.797** | 24 · 102 | 131 · 424 | 12 · 38 | **0 · 5** |
+| (decider 0.94 상한) | 0.824 · 0.792 | 28 · 114 | | | |
+| (decider 0.38 하한) | | | | | 0 · 6 |
+
+- 상한 0.95는 기준을 지키는 가장 낮은 값이다(0.94면 천진담초 0.824 < 0.833). 0.97이면 정밀 1.0·0.87이지만 accept가 16·69로 준다.
+- 하한 0.35는 «Jev와 같이 5개 잃음»의 끝이다. 운양집 정답 중 decider 확률이 0.33·0.364인 자리가 있어 **여유가 얇다** — 0.3이면
+  4개만 잃고 escalate가 153·500행으로 는다. 화면 부담을 줄이는 쪽을 골랐고, 책이 늘면 다시 잰다.
+- 대가: escalate(체크 해제 후보)가 Jev의 약 2배다. 천진담초는 decider 확률이 낮은 정답이 없어(최저 0.81) reject 손실이 0이다.
+- **폴백(Jev)이 답한 호출에는 Jev 문턱(0.85/0.5)을 그대로 댄다**(`judge_thresholds(client)` — 클라이언트의 `PROVIDER`로 고른다).
+
+**4. 목차 대조(`toc.match_toc_entries_jev`)는 Jev에 남긴다 — decider로 잰 적이 없다.** 저장 측정은 «글이 시작하는 행»(starts)만
+했다. 목차 대조의 문턱은 `derive_toc_threshold`가 Jev 확률의 «자기 검증이 깨지는 직전»으로 뽑는 것이라 모델을 바꾸면 그 절벽
+모양부터 다시 봐야 한다. Jev 키가 없으면 목차 대조는 건너뛰고 `toc.skipped`로 알린다(본문 판정은 decider로 돈다).
+
+### 하지 않은 것
+
+- 실제 호출로 다시 재지 않았다(저장 파일만). 문턱 표는 두 책뿐이고, 운양집 정답 CSV에는 «모름» 행이 많아 정밀이 낮게 나온다(D-129).
+- OpenRouter 단가는 재지 않았다 — `usage.cost`가 오면 그 값을, 없으면 Perplexity 직결 단가 $0.04/M로 어림한다.
+- 기존 Jev 클라이언트의 `KEY_NAMES`에 `OPENROUTER_API_KEY`가 세 번째로 들어 있는 것(Jev 쪽에서 남의 키를 빌릴 수 있는 길)은
+  이 결정의 범위 밖이라 그대로 두었다.
+
+| 지키는 시험 (`tests/test_openrouter_decider.py`, 네트워크 없음) | |
+|---|---|
+| TypeSafe 키만 있으면 OpenRouter는 «키 없음», 둘 다 있어도 헤더에는 OpenRouter 키만 | `test_typesafe_key_is_never_sent_to_openrouter` · `test_openrouter_key_comes_from_the_personal_file_and_only_it_is_sent` |
+| 기본 주소·모델·본문 모양·cost | `test_default_endpoint_and_model_are_the_measured_ones` |
+| 실패한 호출만 Jev로, 누가 답했는지·Jev 문턱 / 폴백 없으면 오류 / 호출마다 다시 주 모델부터 | `test_failed_call_falls_back_to_jev_and_records_who_answered` · `test_without_fallback_a_failed_call_stays_an_error` · `test_fallback_is_per_call_not_sticky` |
+| 모델별 문턱(0.95/0.35 대 0.85/0.5) | `test_thresholds_follow_the_model_that_answered` |
+| 라우트: 기본 decider / 실패 시 Jev / 키 없으면 Jev / dry-run이 판정자를 알림 | `test_route_defaults_to_the_decider` · `test_route_falls_back_to_jev_when_the_decider_fails` · `test_route_uses_jev_when_there_is_no_openrouter_key` · `test_dry_run_names_the_judge` |
+
+라우트를 부르는 기존 시험(`test_structure_llm.py`·`test_structure_jev.py`)은 OpenRouter 클라이언트를 키 없는 가짜로 바꿨다 —
+이 PC는 개인 키 파일에 실제 OpenRouter 키가 있어 막지 않으면 시험이 실제로 부른다.

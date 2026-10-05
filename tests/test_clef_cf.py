@@ -371,6 +371,89 @@ def test_survey_with_clef_uses_probabilities(client, tmp_path, monkeypatch):  # 
     assert d["per_page"][0]["decider"]["contents"]["classical_print"] == 0.88
 
 
+def test_openrouter_clef_body_puts_image_in_state_array():
+    # OpenRouter는 이미지를 state 배열의 image_url로만 받는다
+    # (최상위 images는 무시 — 2026-10-05 색 시험).
+    # 키는 OPENROUTER_API_KEY만 — TypeSafe 키를 OpenRouter로 보내지 않는다
+    from llm.openrouter_decider import OpenRouterClefClient
+
+    assert OpenRouterClefClient.KEY_NAMES == ("OPENROUTER_API_KEY",)
+    c = OpenRouterClefClient(api_key="or-test", max_calls=0)
+    body = c._body(
+        "한 쪽",
+        {"q": {"type": "noul", "instructions": "?"}},
+        [(_img(1400, 1400, fmt="PNG", noise=True), "image/png")],
+    )
+    assert body["model"] == "cloudflare/clef" and "images" not in body
+    text, part = body["state"]
+    assert text == "한 쪽" and part["type"] == "image_url"
+    raw = base64.b64decode(part["image_url"]["url"].split(",", 1)[1])
+    assert len(raw) <= clef.DEFAULT_IMAGE_BYTES  # 다시 인코딩해 커지지 않는다
+
+
+def _survey_chain_setup(client, tmp_path, monkeypatch, or_ask):  # noqa: F811 — fixture를 받아 넘긴다
+    """Cloudflare clef는 실패, OpenRouter clef는 or_ask로 답하는 자동 스캔 준비."""
+    import app._state as app_state
+    import app.routers.llm_ocr as llm_ocr
+    from core import env_doctor
+    from llm.openrouter_decider import OpenRouterClefClient
+
+    monkeypatch.setattr(env_doctor, "_GPU_RUNTIME", True)
+    _lib, part_id = _setup(client, tmp_path)
+
+    def quota(self, *a, **k):
+        raise JevCallFailed("jev_http_error", status=429, detail="daily free allocation")
+
+    monkeypatch.setattr(clef.ClefClient, "has_key", property(lambda self: True))
+    monkeypatch.setattr(clef.ClefClient, "ask", quota)
+    monkeypatch.setattr(OpenRouterClefClient, "ask", or_ask)
+    fake = OpenRouterClefClient(api_key="or-test", max_calls=10)
+    monkeypatch.setattr(llm_ocr, "_openrouter_clef", lambda *a, **k: fake)
+    seen: dict = {}
+
+    class FakeRouter:
+        async def call_with_image(self, prompt, image, **kw):
+            seen["router"] = kw
+            from types import SimpleNamespace
+
+            return SimpleNamespace(
+                text='{"orientation": "upright", "contents": []}',
+                provider="ollama",
+                model="kimi-k3:cloud",
+            )
+
+    monkeypatch.setattr(app_state, "_get_llm_router", lambda: FakeRouter())
+    url = f"/api/documents/d1/parts/{part_id}/rotation/suggest"
+    return url, seen
+
+
+def test_survey_chain_cloudflare_to_openrouter(client, tmp_path, monkeypatch):  # noqa: F811
+    # Cloudflare 무료량이 바닥나면 같은 쪽을 OpenRouter clef로 다시 묻고 뒤 쪽도 그쪽을 쓴다
+    def or_ok(self, state, questions, *, images=(), purpose=""):
+        return {
+            "orientation": {"choice": "upright", "probabilities": {"upright": 0.9}},
+            "has_classical_print": {"noul": 0.8},
+        }
+
+    url, seen = _survey_chain_setup(client, tmp_path, monkeypatch, or_ok)
+    d = client.post(url, json={"force_provider": "clef", "force_model": "clef"}).json()
+    assert d["fallback"] == "cloudflare→openrouter"
+    assert d["provider"] == "openrouter" and d["model"] == "cloudflare/clef"
+    assert "router" not in seen  # 비전 모델까지 가지 않았다
+    assert "OpenRouter clef로" in (d["error"] or "")
+
+
+def test_survey_chain_falls_through_to_vision(client, tmp_path, monkeypatch):  # noqa: F811
+    # OpenRouter도 실패하면(크레딧 소진 등) 기본 비전 모델로
+    def or_fail(self, *a, **k):
+        raise JevCallFailed("jev_http_error", status=402, detail="insufficient credits")
+
+    url, seen = _survey_chain_setup(client, tmp_path, monkeypatch, or_fail)
+    d = client.post(url, json={"force_provider": "clef", "force_model": "clef"}).json()
+    assert d["fallback"] == "cloudflare→openrouter→vision"
+    assert d["provider"] == "ollama" and "router" in seen
+
+
 def test_survey_falls_back_to_vision_llm_when_clef_fails(client, tmp_path, monkeypatch):  # noqa: F811
     # 무료량 소진 등으로 clef가 실패하면 그 쪽부터 기본 비전 모델로 넘긴다(2026-10-05 사용자 지시).
     # Jev는 이미지를 못 읽으므로 폴백은 비전 LLM이다
@@ -399,6 +482,8 @@ def test_survey_falls_back_to_vision_llm_when_clef_fails(client, tmp_path, monke
 
     monkeypatch.setattr(clef.ClefClient, "has_key", property(lambda self: True))
     monkeypatch.setattr(clef.ClefClient, "ask", quota)
+    # 이 PC의 개인 키 파일에는 진짜 OpenRouter 키가 있다 — 사슬 2단계를 끄고 이 시험은 3단계만 본다
+    monkeypatch.setattr(llm_ocr, "_openrouter_clef", lambda *a, **k: None)
     # 자동 스캔 라우트는 함수 안에서 `from app._state import _get_llm_router`로 가져온다 —
     # llm_ocr의 이름만 바꾸면 진짜 라우터가 진짜 Ollama를 부른다
     # (2026-10-05 이 시험이 그렇게 새고 있었다)
@@ -417,4 +502,4 @@ def test_survey_falls_back_to_vision_llm_when_clef_fails(client, tmp_path, monke
     from core.page_survey import SURVEY_FALLBACK_MODEL
 
     assert (seen["force_provider"], seen["force_model"]) == SURVEY_FALLBACK_MODEL
-    assert "기본 비전 모델로 넘긴다" in (d["error"] or "")
+    assert "이 쪽부터 기본 비전 모델로" in (d["error"] or "")

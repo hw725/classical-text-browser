@@ -905,10 +905,40 @@ def _decision_client(kind: str, library_path, max_calls: int):
     if kind == "clef":
         from llm.clef_cf import ClefClient
 
-        return ClefClient(library_root=library_path, max_calls=max_calls)
+        c = ClefClient(library_root=library_path, max_calls=max_calls)
+        if not c.has_key:
+            # Cloudflare 키가 없고 OpenRouter 키만 있으면 사슬의 2단계(OpenRouter clef)부터 시작한다
+            orc = _openrouter_clef(library_path, max_calls)
+            if orc is not None:
+                return orc
+        return c
     from llm.decider import DeciderClient
 
     return DeciderClient(library_root=library_path, max_calls=max_calls)
+
+
+def _openrouter_clef(library_path, max_calls: int):
+    """이미지 판정 사슬의 2단계 — OpenRouter로 부르는 clef. OpenRouter 키가 없으면 None."""
+    from llm.openrouter_decider import OpenRouterClefClient
+
+    c = OpenRouterClefClient(library_root=library_path, max_calls=max_calls)
+    return c if c.has_key else None
+
+
+def _merge_usage(usages: list[dict]) -> dict:
+    """클라이언트 여럿(Cloudflare clef·OpenRouter clef)의 사용량을 합친다 — 숫자 칸은 더하고
+    나머지는 첫 값. by_provider에 클라이언트별 원본을 남긴다."""
+    if len(usages) == 1:
+        return usages[0]
+    out: dict = {}
+    for u in usages:
+        for k, v in u.items():
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                out[k] = round(out.get(k, 0) + v, 6)
+            else:
+                out.setdefault(k, v)
+    out["by_provider"] = usages
+    return out
 
 
 @router.post("/api/documents/{doc_id}/parts/{part_id}/rotation/suggest")
@@ -1058,8 +1088,12 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
         decider = None
         if use_decider:
             decider = _decision_client(decider_kind, library_path, len(targets) + 5)
-        decision_client = decider  # 폴백으로 decider가 None이 돼도 사용량은 보고한다
-        clef_fallback = False
+        # 폴백으로 decider가 바뀌거나 None이 돼도 쓴 클라이언트 모두의 사용량을 보고한다
+        decision_clients = [decider] if decider is not None else []
+        clef_fallback = False  # 사슬 끝(기본 비전 모델)까지 갔는가
+        # OpenRouter clef 단계에 있는가(Cloudflare 키가 없어 처음부터 그 단계일 수도 있다)
+        clef_via_openrouter = getattr(decider, "PROVIDER", "") == "openrouter"
+        clef_switched = False  # 실제로 Cloudflare → OpenRouter로 넘겼는가(결과의 fallback 표시용)
         router_llm = None if (body.orientation_only or use_decider) else _get_llm_router()
         kwargs: dict = {
             "image_mime": "image/jpeg",
@@ -1105,40 +1139,56 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
             orientation: str | None = None
             contents: list[str] = []
             if decider is not None:
-                try:
-                    answers = await loop.run_in_executor(
-                        None,
-                        lambda img=image: decider.ask(
-                            DECIDER_STATE,
-                            decider_questions(),
-                            images=[(img, "image/jpeg")],
-                            purpose="page_survey",
-                        ),
-                    )
-                except Exception as e:  # noqa: BLE001 — 한 쪽이 실패해도 나머지는 본다
-                    status = getattr(e, "status", None)
-                    why = f"{status or type(e).__name__}: {str(getattr(e, 'detail', '') or e)[:80]}"
-                    if decider_kind != "clef":
-                        errors.append(f"{page}쪽: 판정 모델 {why}")
-                        per_page.append(row)
-                        _survey_progress(progress, row, len(per_page), len(targets), CONTENT_LABELS)
-                        unknown += 1
-                        continue
-                    # Cloudflare clef가 실패하면(무료 10,000뉴런/일 소진 등) 이 쪽부터
-                    # 기본 비전 모델로 넘긴다(2026-10-05 사용자 지시 «무료량을 넘으면 폴백»).
-                    # Jev는 이미지를 읽지 못하므로(텍스트 전용, base64를 글자로 읽는다 —
-                    # 2026-10-02 실측) 폴백은 Jev가 아니라 비전 LLM이다
-                    errors.append(
-                        f"{page}쪽: Cloudflare clef {why} — 이 쪽부터 기본 비전 모델로 넘긴다"
-                    )
-                    decider = None
-                    clef_fallback = True
-                    router_llm = _get_llm_router()
-                    # "clef"는 라우터의 프로바이더가 아니다 — 화면의 종류 판정 기본 모델로
-                    # 바꿔 보낸다(page_survey.SURVEY_FALLBACK_MODEL). 지정하지 않으면
-                    # 라우터 기본(gemma4:cloud)으로 간다
-                    kwargs["force_provider"], kwargs["force_model"] = SURVEY_FALLBACK_MODEL
-                else:
+                # clef 사슬(2026-10-05 사용자 결정): Cloudflare clef(무료, 하루 ≈250쪽) →
+                # OpenRouter clef(유료 크레딧, 쪽당 ≈$0.0004) → 기본 비전 모델. 한 단계가 실패하면
+                # 그 쪽을 다음 단계로 다시 묻고, 뒤의 쪽도 그 단계부터 쓴다. Jev는 이미지를 읽지
+                # 못하므로(텍스트 전용, base64를 글자로 읽는다 — 2026-10-02 실측) 사슬에 없다
+                answers, fail_why = None, None
+                while decider is not None:
+                    try:
+                        answers = await loop.run_in_executor(
+                            None,
+                            lambda img=image, c=decider: c.ask(
+                                DECIDER_STATE,
+                                decider_questions(),
+                                images=[(img, "image/jpeg")],
+                                purpose="page_survey",
+                            ),
+                        )
+                        break
+                    except Exception as e:  # noqa: BLE001 — 한 쪽이 실패해도 나머지는 본다
+                        status = getattr(e, "status", None)
+                        detail = str(getattr(e, "detail", "") or e)[:80]
+                        why = f"{status or type(e).__name__}: {detail}"
+                        if decider_kind != "clef":
+                            fail_why = why
+                            break
+                        if not clef_via_openrouter:
+                            orc = _openrouter_clef(library_path, len(targets) + 5)
+                            if orc is not None:
+                                errors.append(
+                                    f"{page}쪽: Cloudflare clef {why} — 이 쪽부터 OpenRouter clef로"
+                                )
+                                decider, clef_via_openrouter, clef_switched = orc, True, True
+                                decision_clients.append(orc)
+                                continue
+                        errors.append(
+                            f"{page}쪽: clef({decider.PROVIDER}) {why} — 이 쪽부터 기본 비전 모델로"
+                        )
+                        decider = None
+                        clef_fallback = True
+                        router_llm = _get_llm_router()
+                        # "clef"는 라우터의 프로바이더가 아니다 — 화면의 종류 판정 기본 모델로
+                        # 바꿔 보낸다(page_survey.SURVEY_FALLBACK_MODEL). 지정하지 않으면
+                        # 라우터 기본(gemma4:cloud)으로 간다
+                        kwargs["force_provider"], kwargs["force_model"] = SURVEY_FALLBACK_MODEL
+                if fail_why is not None:
+                    errors.append(f"{page}쪽: 판정 모델 {fail_why}")
+                    per_page.append(row)
+                    _survey_progress(progress, row, len(per_page), len(targets), CONTENT_LABELS)
+                    unknown += 1
+                    continue
+                if answers is not None:
                     provider, model = decider.PROVIDER, decider.model
                     orientation, contents, probs = parse_decider_answers(answers)
                     # 확률을 실어 둔다 — 문턱 하나로 접으면 «아슬아슬했다»가 사라진다(측정·검토용)
@@ -1288,9 +1338,12 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
             "provider": provider,
             "model": model,
             # 판정 모델이면 실제로 쓴 호출·토큰·비용(usage 기준) — 어림이 아니라 잰 값
-            **({"decider_usage": decision_client.usage()} if decision_client is not None else {}),
-            # clef가 실패해 중간부터 기본 비전 모델로 넘겼는가(화면이 «폴백»으로 알린다)
-            **({"fallback": "clef→vision"} if clef_fallback else {}),
+            **({"decider_usage": _merge_usage([c.usage() for c in decision_clients])}
+               if decision_clients else {}),
+            # 사슬 어디까지 갔는가(화면이 «폴백»으로 알린다)
+            **({"fallback": ("cloudflare→openrouter→vision" if clef_switched
+                             else "clef→vision")} if clef_fallback
+               else {"fallback": "cloudflare→openrouter"} if clef_switched else {}),
             "error": " / ".join(errors)[:600] if errors else None,
         }
 

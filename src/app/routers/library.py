@@ -766,6 +766,7 @@ class LlmKeysRequest(BaseModel):
     ollama_url: str | None = None
     perplexity: str | None = None  # 판정 모델 — Perplexity Decisions (D-134)
     typesafe: str | None = None  # 판정 모델 — TypeSafe Jev (D-134)
+    openrouter: str | None = None  # 판정 모델 — OpenRouter 경유 Perplexity decider (D-136)
     cloudflare: str | None = None  # 판정 모델 — Cloudflare clef 토큰 (D-135)
     cloudflare_account: str | None = None  # 같은 것의 계정 id(주소에 들어간다)
 
@@ -785,6 +786,7 @@ async def api_decision_models(check: bool = Query(False)):
     from llm.clef_cf import ClefClient
     from llm.decider import DeciderClient
     from llm.jev import JevCallFailed, JevClient
+    from llm.openrouter_decider import OpenRouterDecisionClient
 
     library_path = get_library_path()
     specs = [
@@ -823,10 +825,24 @@ async def api_decision_models(check: bool = Query(False)):
             ],
         },
         {
+            # 본문 경계 판정의 기본(D-136) — 키가 없으면 Jev가 대신 맡는다
+            "id": "openrouter",
+            "cls": OpenRouterDecisionClient,
+            "display_name": "Perplexity decider (OpenRouter 경유)",
+            "role": "텍스트 판정 — 편성 «판정 모델로 고르기»의 본문 판정(기본)",
+            "signup_url": "https://openrouter.ai/settings/keys",
+            "steps": [
+                "OpenRouter에 로그인하고 크레딧을 충전합니다",
+                "Settings ▸ API Keys에서 키를 만듭니다",
+                "아래 칸에 붙여 넣고 «저장» → «연결 확인»",
+            ],
+        },
+        {
             "id": "typesafe",
             "cls": JevClient,
             "display_name": "TypeSafe Jev",
-            "role": "텍스트 판정 — 편성 «더 묻기…»의 판정 모델(구조·목차 대조)",
+            "role": "텍스트 판정 — 편성 «판정 모델로 고르기»의 목차 대조, 그리고 본문 판정의 "
+            "폴백(OpenRouter 키가 없거나 호출이 실패하면)",
             "signup_url": "https://docs.typesafe.ai",
             "steps": [
                 "TypeSafe에 가입하고 콘솔에서 API 키를 만듭니다",

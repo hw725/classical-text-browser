@@ -367,7 +367,7 @@ def test_screen_asks_the_judge_engine_and_keeps_the_answer(tmp_path):
         said: out.textContent,
       }));
     """
-    names = ["_askJudgeStructure", "_renderTocUnplaced"]
+    names = ["_askJudgeStructure", "_renderTocUnplaced", "_judgeName"]
     got = run_js(tmp_path, "composition-editor.js", names, setup, body)
     assert got["body"]["engine"] == "jev" and got["body"]["part_id"] == "vol1"
     assert "structure/llm" in got["url"]  # 라우트를 늘리지 않았다 — 같은 자리에 engine만 더했다
@@ -636,6 +636,8 @@ def test_route_carries_escalate_and_unplaced_toc_titles(monkeypatch):
     body_scores = {line_id(body[1]): 0.9, line_id(body[2]): 0.6, line_id(body[3]): 0.2}
 
     class FakeClient:
+        PROVIDER = "typesafe"
+        INPUT_USD_PER_M = 0.042
         model = "fake-jev"
         has_key = True
 
@@ -651,7 +653,16 @@ def test_route_carries_escalate_and_unplaced_toc_titles(monkeypatch):
         def usage(self):
             return {"calls": 1, "cost_usd": 0.0}
 
+    class NoKeyDecider(FakeClient):
+        # 이 PC에는 개인 키 파일에 실제 OpenRouter 키가 있다 — 가짜로 막지 않으면 시험이 돈을 쓴다.
+        # 키가 없으면 Jev가 주 판정자가 되므로 이 시험은 Jev 문턱(0.85/0.5)을 그대로 잰다(D-136)
+        PROVIDER = "openrouter"
+        has_key = False
+
+    import llm.openrouter_decider as or_mod
+
     monkeypatch.setattr(jev_mod, "JevClient", FakeClient)
+    monkeypatch.setattr(or_mod, "OpenRouterDecisionClient", NoKeyDecider)
     monkeypatch.setattr(toc_mod, "detect_toc_pages", lambda pages, *a, **k: [1])
     # 乙集을 층위 2로 둔다 — escalate 목차 자리로 층을 세우면 그 아래 본문이 3단이 되어 드러난다
     # (둘 다 층위 1이면 어느 쪽으로 세워도 2단이라 이 시험이 아무것도 지키지 못했다)

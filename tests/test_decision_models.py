@@ -242,7 +242,7 @@ def test_settings_route_lists_models_and_saves_keys(client, tmp_path):  # noqa: 
     r = client.get("/api/settings/decision-models")
     assert r.status_code == 200
     models = {m["id"]: m for m in r.json()["models"]}
-    assert set(models) == {"cloudflare", "perplexity", "typesafe"}
+    assert set(models) == {"cloudflare", "perplexity", "openrouter", "typesafe"}
     assert r.json()["default_image_provider"] is None  # 키가 없으면 기본은 그대로(생성 비전 LLM)
     assert models["perplexity"]["signup_url"] == "https://console.perplexity.ai/project/keys"
     r = client.post("/api/settings/llm-keys", json={"perplexity": "pplx-abcdWXYZ"})

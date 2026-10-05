@@ -20,12 +20,15 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import re
 from typing import Optional
 
 from core.segmentation import Line
 from core.toc import lenient_json, reference_excerpt
+
+logger = logging.getLogger(__name__)
 
 STRUCTURE_SYSTEM_PROMPT = (
     "당신은 한문 고서의 편집자입니다. 행 번호가 붙은 전문을 읽고, "
@@ -64,6 +67,42 @@ _LINE_ID = re.compile(r"p(\d+)-L(\d+)")
 #   (운양집은 정답 CSV의 «모름» 582행이 섞여 낮게 나온다). 책이 늘면 다시 잰다.
 JEV_ACCEPT_AT = 0.85
 JEV_REJECT_AT = 0.5
+
+# ── 본문 판정의 기본: OpenRouter 경유 Perplexity decider (D-136, 사용자 결정 2026-10-05) ──
+# 모델마다 확률의 «몰림»이 달라 Jev의 문턱을 그대로 쓰면 안 된다 — decider는 0.85 이상에
+# 오답이 훨씬 많다(천진담초 정밀 0.745, 운양집 1책 0.680). 같은 저장 측정에서 다시 골랐다
+# (head-repo docs/clef-vs-jev-20261003/scripts_or/decider/ctb_*.json, 호출 0건):
+#   기준 = «accept 정밀은 Jev(0.85)보다 낮지 않게, reject로 잃는 정답은 Jev(0.5)보다 많지 않게».
+#   Jev 0.85/0.5:     accept 정밀 0.833·0.786 · reject로 잃은 정답 0·5 · escalate 69·217행
+#   decider 0.95/0.35: accept 정밀 0.923·0.797 · reject로 잃은 정답 0·5 · escalate 131·424행
+#   (천진담초·운양집 1책 순. 정답 36·145자리, «모르는 자리» 제외 — eval_boundary_judge의 score)
+#   상한: 0.94면 천진담초 정밀 0.824로 Jev 아래라 0.95가 기준을 지키는 가장 낮은 값이다.
+#   하한: 운양집 정답 중 decider 확률이 0.33·0.364인 자리가 있어 0.35는 «5개 잃음»(Jev와 같음)의
+#   끝이다 — 0.38이면 6개. 여유가 얇다는 뜻이고, 책이 늘면 다시 잰다.
+#   대가: escalate(사람이 볼 체크 해제 후보)가 Jev의 약 2배다. 대신 escalate 안의 정답도 12·38로
+#   Jev(6·52)와 비슷하거나 많아, 사람이 보면 건지는 자리가 있다.
+DECIDER_ACCEPT_AT = 0.95
+DECIDER_REJECT_AT = 0.35
+
+# 답한 모델(클라이언트의 PROVIDER) → (accept_at, reject_at).
+# 폴백으로 Jev가 답한 묶음은 Jev 값을 쓴다
+# — 한 문턱을 두 모델에 같이 대면 위 표처럼 정밀이 갈린다.
+JUDGE_THRESHOLDS: dict[str, tuple[float, float]] = {
+    "typesafe": (JEV_ACCEPT_AT, JEV_REJECT_AT),
+    "openrouter": (DECIDER_ACCEPT_AT, DECIDER_REJECT_AT),
+}
+
+
+def judge_thresholds(client) -> tuple[float, float]:
+    """클라이언트가 어느 모델인지 보고 대역 문턱을 돌려준다. 입력: 판정 클라이언트.
+    출력: (accept_at, reject_at). 모르는 업체(가짜 클라이언트 포함)는 Jev 값 — 잰 적 있는 유일한
+    기본이라서다."""
+    return JUDGE_THRESHOLDS.get(getattr(client, "PROVIDER", ""), (JEV_ACCEPT_AT, JEV_REJECT_AT))
+
+
+def judge_label(client) -> str:
+    """meta·후보에 남길 «누가 답했나» — `업체:모델`."""
+    return f"{getattr(client, 'PROVIDER', '?')}:{getattr(client, 'model', None)}"
 
 
 def jev_band(
@@ -291,18 +330,23 @@ def ask_structure_jev(
     client,
     max_chars: int = DEFAULT_MAX_CHARS,
     questions_per_call: int = JEV_QUESTIONS_PER_CALL,
-    accept_at: float = JEV_ACCEPT_AT,
-    reject_at: float = JEV_REJECT_AT,
+    accept_at: Optional[float] = None,
+    reject_at: Optional[float] = None,
     max_title_chars: int = 20,
+    fallback=None,
 ) -> tuple[list[dict], dict]:
-    """전문을 묶음으로 나눠 **행마다** «새 글이 시작하는가»를 Jev에 묻는다.
+    """전문을 묶음으로 나눠 **행마다** «새 글이 시작하는가»를 판정 모델에 묻는다.
 
-    입력: 행 목록, JevClient, 묶음 글자 수, 한 번에 보낼 질문 수, 두 임계(`jev_band`),
-          제목 최대 글자.
+    입력: 행 목록, 판정 클라이언트(JevClient 계열 — 기본은 OpenRouter decider, D-136),
+          묶음 글자 수, 한 번에 보낼 질문 수, 두 임계(`jev_band` — None이면 `judge_thresholds`가
+          그 클라이언트의 값을 고른다), 제목 최대 글자, fallback(주 클라이언트 호출이 실패한
+          **그 호출만** 대신 물을 클라이언트 — 보통 Jev. 그 답에는 fallback 자신의 문턱을 댄다).
     출력: (후보 목록 — ask_structure_llm과 같은 모양, meta). meta에는 provider·model·calls·
           questions·sent_lines·sent_chars·said·dropped·error와 함께 **nouls**(행마다의 확률,
           [page, line_index, noul])와 **bands**(대역별 건수)를 담는다 — 임계를 바꿔 다시 재려면
-          nouls만 있으면 된다.
+          nouls만 있으면 된다. 폴백이 답한 행은 **fallback_lines**([page, line_index])에 따로
+          적는다 — 모델마다 문턱이 달라 nouls만으로 다시 재면 섞인다. **answered_by**는
+          `업체:모델` → 호출 수, **thresholds**는 `업체:모델` → [accept_at, reject_at].
 
     후보는 accept와 escalate 둘이다. 후보마다 `band`를 싣고, **accept만 `accepted: True`**다 —
     화면은 accepted인 것만 미리 체크하므로 escalate는 체크 해제로 선다. reject는 후보가 아니다.
@@ -310,9 +354,21 @@ def ask_structure_jev(
     확신도는 고정 0.6이다(D-125와 같다). Jev의 확률은 `prob`·`why`에 따로 싣는다 —
     화면의 «확신도»는 규칙 후보와 견주는 값이라 다른 척도를 섞으면 안 된다.
     """
+    if accept_at is None or reject_at is None:
+        d_acc, d_rej = judge_thresholds(client)
+        accept_at = d_acc if accept_at is None else accept_at
+        reject_at = d_rej if reject_at is None else reject_at
+    primary_label = judge_label(client)
+    fb_label = judge_label(fallback) if fallback is not None else None
+    fb_acc, fb_rej = judge_thresholds(fallback) if fallback is not None else (0.0, 0.0)
     meta: dict = {
-        "provider": "typesafe",
+        "provider": getattr(client, "PROVIDER", "typesafe"),
         "model": getattr(client, "model", None),
+        "answered_by": {},
+        "fallback": fb_label,
+        "fallback_calls": 0,
+        "fallback_lines": [],
+        "thresholds": {primary_label: [accept_at, reject_at]},
         "error": None,
         "calls": 0,
         "questions": 0,
@@ -340,6 +396,7 @@ def ask_structure_jev(
     # 0.84996(escalate)이 0.85(accept)로 미리 체크되고 0.50004(escalate)가 0.5(reject)로 뒤집힌다
     # (Codex 최종 리뷰 2026-09-27)
     band_at: dict[tuple[int, int], str] = {}
+    judged_by: dict[tuple[int, int], str] = {}  # 행 → 답한 모델(폴백이 섞이면 행마다 다르다)
     for i, chunk in enumerate(chunks):
         state = render_chunk(chunk)
         meta["sent_lines"] += len(chunk)
@@ -349,27 +406,50 @@ def ask_structure_jev(
             questions = {line_id(ln): jev_question(ln) for ln in batch}
             meta["calls"] += 1
             meta["questions"] += len(questions)
+            # 이 호출에 답한 모델과 그 모델의 문턱. 폴백이 답하면 폴백의 문턱을 댄다(D-136) —
+            # decider용 0.95를 Jev 확률에 대면 Jev의 확신 답이 전부 escalate로 내려간다
+            label, acc, rej = primary_label, accept_at, reject_at
             try:
                 answers = client.ask(state, questions)
             except Exception as e:  # noqa: BLE001 — 한 묶음이 죽어도 나머지는 살린다
-                errors.append(f"{i + 1}번째 묶음: {type(e).__name__}: {e}")
-                continue
+                head = f"{i + 1}번째 묶음: {type(e).__name__}: {e}"
+                if fallback is None:
+                    errors.append(head)
+                    continue
+                # 주 모델이 실패한 «이 호출만» 폴백에 묻는다 — 다음 호출은 다시 주 모델부터
+                logger.warning(
+                    "판정 모델 %s 실패 → %s로 다시 묻습니다: %s", primary_label, fb_label, e
+                )
+                meta["notes"].append(f"{head} → {fb_label}가 대신 답함")
+                try:
+                    answers = fallback.ask(state, questions)
+                except Exception as e2:  # noqa: BLE001
+                    errors.append(f"{head} / 폴백 {fb_label}: {type(e2).__name__}: {e2}")
+                    continue
+                label, acc, rej = fb_label, fb_acc, fb_rej
+                meta["fallback_calls"] += 1
+                meta["thresholds"].setdefault(fb_label, [fb_acc, fb_rej])
+            meta["answered_by"][label] = meta["answered_by"].get(label, 0) + 1
             for ln in batch:
                 p = _jev_noul(answers.get(line_id(ln)))
                 if p is None:
                     continue
                 meta["nouls"].append([ln.page, ln.line_index, round(p, 4)])
-                b = jev_band(p, accept_at, reject_at)
+                if label != primary_label:
+                    meta["fallback_lines"].append([ln.page, ln.line_index])
+                b = jev_band(p, acc, rej)
                 meta["bands"][b] += 1
                 band_at[(ln.page, ln.line_index)] = b
+                judged_by[(ln.page, ln.line_index)] = label
                 if b != "reject":  # escalate도 후보다 — 버리지 않고 사람에게 넘긴다
                     items.append(
                         {
                             "line": line_id(ln),
-                            "title": "",  # Jev는 제목을 만들지 않는다 — 코드가 행 글자로 채운다
+                            # 판정 모델은 제목을 만들지 않는다 — 코드가 행 글자로 채운다
+                            "title": "",
                             "level": 2,
                             "role": "article",
-                            "why": f"jev noul {p:.2f}",
+                            "why": f"{label} noul {p:.2f}",
                         }
                     )
     meta["said"] = len(items)
@@ -381,6 +461,7 @@ def ask_structure_jev(
         prop["prob"] = by_pos.get((prop["page"], prop["line_index"]))  # 보이기용(반올림)
         prop["band"] = band_at.get((prop["page"], prop["line_index"]), "none")
         prop["accepted"] = prop["band"] == "accept"  # 화면의 미리 체크는 accept만
+        prop["judge"] = judged_by.get((prop["page"], prop["line_index"]))
     meta.update(stats)
     if hasattr(client, "usage"):
         meta["usage"] = client.usage()

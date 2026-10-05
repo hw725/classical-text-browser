@@ -166,11 +166,24 @@ def test_route_jev_dry_run_counts_questions_and_cost(client, tmp_path):  # noqa:
     assert d["proposals"] == []
 
 
+class _NoKeyDecider:
+    """키 없는 OpenRouter decider 대역 — 라우트가 Jev를 주 판정자로 고르게 한다(D-136)."""
+
+    PROVIDER = "openrouter"
+    INPUT_USD_PER_M = 0.04
+    model = "perplexity/pplx-decider-v1-27b"
+    has_key = False
+
+    def __init__(self, **kwargs):
+        pass
+
+
 def test_route_jev_returns_proposals_and_never_calls_the_generative_router(
     client, tmp_path, monkeypatch  # noqa: F811
 ):
     """판정 모델 길은 LlmRouter를 거치지 않는다 — 라우터의 계약은 «프롬프트 → 글»이다."""
     import llm.jev as jev
+    import llm.openrouter_decider as or_mod
     from app import _state
 
     _lib, part_id = _setup(client, tmp_path)
@@ -178,6 +191,8 @@ def test_route_jev_returns_proposals_and_never_calls_the_generative_router(
     monkeypatch.setattr(_state, "_llm_router", router)
 
     class FakeClient:
+        PROVIDER = "typesafe"
+        INPUT_USD_PER_M = 0.042
         model = "fake-jev"
         has_key = True
 
@@ -199,6 +214,9 @@ def test_route_jev_returns_proposals_and_never_calls_the_generative_router(
             return {"calls": self.calls, "cost_usd": 0.0}
 
     monkeypatch.setattr(jev, "JevClient", FakeClient)
+    # 본문 판정의 기본은 OpenRouter decider다(D-136). 이 PC에는 실제 키가 개인 파일에 있으므로
+    # 키 없는 가짜로 막아 Jev 길을 잰다 — 막지 않으면 시험이 실제로 부른다
+    monkeypatch.setattr(or_mod, "OpenRouterDecisionClient", _NoKeyDecider)
     r = client.post(
         "/api/documents/d1/segmentation/structure/llm",
         json={"part_id": part_id, "engine": "jev"},
@@ -214,19 +232,24 @@ def test_route_jev_returns_proposals_and_never_calls_the_generative_router(
 def test_route_jev_says_so_when_there_is_no_key(client, tmp_path, monkeypatch):  # noqa: F811
     """키가 없으면 한 건도 쏘지 않고 한국어로 원인과 해결책을 돌려준다."""
     import llm.jev as jev
+    import llm.openrouter_decider as or_mod
 
     _lib, part_id = _setup(client, tmp_path)
 
     class NoKey:
+        PROVIDER = "typesafe"
+        INPUT_USD_PER_M = 0.042
+        model = "jev-latest"
         has_key = False
 
         def __init__(self, **kwargs):
             pass
 
     monkeypatch.setattr(jev, "JevClient", NoKey)
+    monkeypatch.setattr(or_mod, "OpenRouterDecisionClient", _NoKeyDecider)
     r = client.post(
         "/api/documents/d1/segmentation/structure/llm",
         json={"part_id": part_id, "engine": "jev"},
     )
     assert r.status_code == 400
-    assert "TYPESAFE_API_KEY" in r.json()["error"]
+    assert "TYPESAFE_API_KEY" in r.json()["error"] and "OPENROUTER_API_KEY" in r.json()["error"]

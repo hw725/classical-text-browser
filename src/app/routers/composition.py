@@ -753,6 +753,7 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
         ask_structure_jev,
         derive_toc_threshold,
         jev_structure_size,
+        judge_label,
         nest_under_toc,
         toc_picks_to_proposals,
     )
@@ -772,8 +773,28 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
     size = jev_structure_size(body_lines, max_chars)
     toc_calls = sum(1 for e in entries if len(str(getattr(e, "title", "") or "")) >= 2)
     planned = size["calls"] + toc_calls
-    # 입력만 청구된다($0.042/M). CJK 한 글자를 1~1.5토큰으로 어림한다 — 실측은 호출 뒤 usage로.
-    est = (size["chars"] + size["questions"] * 120 + toc_calls * 400) / 1_000_000 * 0.042
+
+    from llm.jev import JevClient, JevGateExceeded
+    from llm.openrouter_decider import OpenRouterDecisionClient
+
+    # 본문 판정의 기본은 OpenRouter 경유 Perplexity decider다(D-136 — 저장 측정에서 F1이 Jev보다
+    # 높았다). 키가 없으면 Jev가 주 판정자, 있으면 Jev는 «실패한 호출만» 대신 묻는 폴백이다.
+    # 목차 대조(match_toc_entries_jev)는 Jev 그대로 — decider로 잰 적이 없다(D-136).
+    # 둘 다 서고를 넘긴다 — 설정 «판정 모델»에서 넣은 키(서고 .env)를 찾고
+    # 사용 기록도 서고에 남긴다.
+    # 상한: Jev는 목차 + (폴백이 본문 전부를 떠맡는 최악) 만큼을 받아야 게이트에 걸리지 않는다.
+    library_root = get_library_path()
+    decider = OpenRouterDecisionClient(max_calls=size["calls"] + 5, library_root=library_root)
+    jev = JevClient(max_calls=planned + 5, library_root=library_root)
+    body_judge, fallback = (decider, jev) if decider.has_key else (jev, None)
+    if fallback is not None and not fallback.has_key:
+        fallback = None  # 폴백 키가 없으면 실패한 호출은 그대로 실패로 남긴다
+    # 입력만 청구된다(Jev $0.042/M, decider는 게이트웨이 cost — 어림은 $0.04/M). CJK 한 글자를
+    # 1~1.5토큰으로 어림한다 — 실측은 호출 뒤 usage로.
+    est = (
+        (size["chars"] + size["questions"] * 120) / 1_000_000 * body_judge.INPUT_USD_PER_M
+        + toc_calls * 400 / 1_000_000 * jev.INPUT_USD_PER_M
+    )
     if body.dry_run:
         # 실행 게이트(전역 규칙 11)는 도구 층에 — 보내기 전에 «몇 행·몇 번·얼마»를 화면이 보인다
         return {
@@ -785,32 +806,34 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
             "calls": planned,
             "questions": size["questions"] + toc_calls,
             "toc_entries": len(entries),
-            "cost_usd_est": round(est, 4),
+            "cost_usd_est": round(est, 6),  # 4자리면 작은 권이 $0.0으로 보인다
+            "judge": judge_label(body_judge),
         }
 
-    from llm.jev import JevClient, JevGateExceeded
-
-    # 서고를 넘긴다 — 설정 화면 «판정 모델»에서 넣은 키(서고 .env)를 찾고, 사용 기록도 서고에 남긴다
-    client = JevClient(max_calls=planned + 5, library_root=get_library_path())
-    if not client.has_key:
+    if not body_judge.has_key:
         return JSONResponse(
             {
-                "error": "판정 모델(TypeSafe) 키를 찾지 못했습니다. 설정 → «판정 모델»에서 "
-                "TypeSafe 키를 넣으세요(TYPESAFE_API_KEY 환경변수나 ~/.claude/data/triage/.env도 "
-                "읽습니다).",
-                "needs_key": "typesafe",
+                "error": "판정 모델 키를 찾지 못했습니다. 설정 → «판정 모델»에서 OpenRouter 키"
+                "(기본 — Perplexity decider)나 TypeSafe 키(Jev)를 넣으세요(OPENROUTER_API_KEY·"
+                "TYPESAFE_API_KEY 환경변수나 ~/.claude/data/triage/.env도 읽습니다).",
+                "needs_key": "openrouter",
             },
             status_code=400,
         )
     try:
-        client.gate(planned)
+        body_judge.gate(size["calls"])
+        if jev.has_key:
+            jev.gate(toc_calls + (size["calls"] if body_judge is jev or fallback else 0))
     except JevGateExceeded as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
     toc_props: list[dict] = []
     toc_meta: dict = {"entries": len(entries), "picked": 0, "none": 0, "failed": 0}
-    if entries:
-        res = match_toc_entries_jev(entries, body_lines, client)
+    if entries and not jev.has_key:
+        # 목차 대조는 Jev만 한다(D-136) — 키가 없으면 본문 판정만 하고 그렇다고 알린다
+        toc_meta["skipped"] = "목차 대조는 TypeSafe Jev로만 합니다 — Jev 키가 없어 건너뛰었습니다."
+    if entries and jev.has_key:
+        res = match_toc_entries_jev(entries, body_lines, jev)
         if body.toc_min_prob is None:
             min_prob, how = derive_toc_threshold(res["picks"])
         else:
@@ -842,17 +865,28 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
         }
     props, meta = ask_structure_jev(
         body_lines,
-        client,
+        body_judge,
         max_chars=max_chars,
         max_title_chars=int(rules.get("max_title_chars") or 20),
+        fallback=fallback,  # 문턱은 답한 모델마다 judge_thresholds가 고른다
     )
     # 층을 세우는 것은 확신한 목차 자리뿐이다 — 체크 해제로 선 escalate 자리로 층위를 내리면
     # 사람이 고르지 않은 경계가 본문 후보의 깊이를 정한다
     props = nest_under_toc([t for t in toc_props if t.get("band") == "accept"], props)
     proposals = sorted(toc_props + props, key=lambda p: (p["page"], p["line_index"]))
     meta["toc"] = toc_meta
-    meta["engine"] = "jev"
-    meta["usage"] = client.usage()
+    meta["engine"] = "jev"  # 요청 값 그대로(«판정 모델» 길) — 실제로 답한 모델은 answered_by
+    # 사용량은 두 클라이언트를 합친다 — 목차와 폴백 호출은 Jev 쪽에 쌓인다
+    usages = [body_judge.usage()] + ([jev.usage()] if jev is not body_judge else [])
+    meta["usage"] = {
+        k: (round(sum(u.get(k, 0) for u in usages), 6) if k == "cost_usd" else
+            sum(u.get(k, 0) for u in usages))
+        for k in usages[0]
+    }
+    meta["usage_by"] = {
+        judge_label(c): c.usage()
+        for c in ([body_judge] + ([jev] if jev is not body_judge else []))
+    }
     return {"proposals": proposals, **meta}
 
 
