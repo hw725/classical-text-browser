@@ -780,7 +780,10 @@ async def api_decision_models(check: bool = Query(False)):
     check=true면 실제로 한 번 부른다(질문 하나, 입력 수십 토큰 — $0.000002 남짓). 키가 맞는지는
     불러 봐야 안다: 형식만 맞고 결제가 안 된 키가 흔하다.
     출력: {"models": [{id, display_name, role, has_key, env_name, signup_url, steps,
-                       status, detail?}]}
+                       status, detail?}],
+           "clef_available": bool,   # Cloudflare 키 또는 OpenRouter 키 — 화면 clef 옵션의 활성
+           "clef_via": "cloudflare" | "openrouter" | None,
+           "default_image_provider": "clef" | None}
     """
     from core.env_settings import MANAGED_KEYS
     from llm.clef_cf import ClefClient
@@ -796,7 +799,8 @@ async def api_decision_models(check: bool = Query(False)):
             "cls": ClefClient,
             "display_name": "Cloudflare clef (Workers AI)",
             "role": "이미지 판정 — 「말로 지시」 ① 자동 스캔의 «무슨 글인가»"
-            "(키가 있으면 종류 판정 모델의 기본)",
+            "(이 키나 OpenRouter 키가 있으면 종류 판정 모델의 기본. 둘 다 있으면 "
+            "이쪽(무료 몫)이 먼저 돌고 실패한 쪽만 OpenRouter로 넘어간다)",
             "signup_url": "https://dash.cloudflare.com/profile/api-tokens",
             "steps": [
                 "Cloudflare 대시보드에 로그인합니다",
@@ -829,7 +833,9 @@ async def api_decision_models(check: bool = Query(False)):
             "id": "openrouter",
             "cls": OpenRouterDecisionClient,
             "display_name": "Perplexity decider (OpenRouter 경유)",
-            "role": "텍스트 판정 — 편성 «판정 모델로 고르기»의 본문 판정(기본)",
+            "role": "텍스트 판정 — 편성 «판정 모델로 고르기»의 본문 판정(기본). "
+            "이미지 판정에도 쓴다 — 자동 스캔의 clef를 OpenRouter로 부른다"
+            "(Cloudflare 키가 없으면 처음부터, 있으면 Cloudflare가 실패한 쪽만. 유료 크레딧)",
             "signup_url": "https://openrouter.ai/settings/keys",
             "steps": [
                 "OpenRouter에 로그인하고 크레딧을 충전합니다",
@@ -874,9 +880,25 @@ async def api_decision_models(check: bool = Query(False)):
                 }
                 row["detail"] = hint.get(e.status or 0) or f"{e} {e.status or ''}".strip()
         out.append(row)
-    # 화면이 «종류 판정 모델»에서 처음 고를 것(D-135) — 위에서 이미 만든 상태를 그대로 쓴다
-    cf = next(r for r in out if r["id"] == "cloudflare")
-    return {"models": out, "default_image_provider": "clef" if cf["has_key"] else None}
+    # 화면이 «종류 판정 모델»에서 clef를 고를 수 있는가·처음 고를 것(D-135 후속, 2026-10-05).
+    # clef는 사슬이다 — Cloudflare clef → OpenRouter clef → 기본 비전 모델. 자동 스캔 라우트
+    # (`llm_ocr._decision_client`)는 Cloudflare 키가 없고 OpenRouter 키만 있으면 OpenRouter clef부터
+    # 시작한다. 그런데 화면이 Cloudflare 키만 보고 clef를 막아, OpenRouter 키만 있는 사람은 clef를
+    # 고를 수 없었다. 조건을 **여기 한 곳에서** 계산해 `clef_available`로 내주고
+    # 화면은 그것만 쓴다 —
+    # 화면과 서버가 따로 계산하면 다시 어긋난다. OpenRouter 칸(OpenRouterDecisionClient)과
+    # OpenRouterClefClient는 같은 KEY_NAMES(`OPENROUTER_API_KEY` 하나)를 쓰므로 has_key가 같다
+    # (`tests/test_clef_availability.py`가 라우트의 판정과 이 값이 같은지 본다).
+    has = {r["id"]: bool(r["has_key"]) for r in out}
+    clef_via = (
+        "cloudflare" if has.get("cloudflare") else "openrouter" if has.get("openrouter") else None
+    )
+    return {
+        "models": out,
+        "clef_available": clef_via is not None,
+        "clef_via": clef_via,  # 사슬이 어디서 시작하는가 — 화면 라벨용
+        "default_image_provider": "clef" if clef_via else None,
+    }
 
 
 @router.get("/api/settings/llm-keys")

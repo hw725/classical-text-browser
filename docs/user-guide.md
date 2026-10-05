@@ -1722,10 +1722,15 @@ Perplexity 키 받기: 콘솔에 로그인 → **프로젝트를 만들고 결�
 
 **Cloudflare clef(D-135).** 설정 ▸ 판정 모델에 Cloudflare 토큰과 계정 ID를 넣으면(또는 Windows 사용자
 환경변수 `CLOUDFLARE_API_TOKEN`·`CLOUDFLARE_ACCOUNT_ID`가 있으면) «종류 판정 모델»의 기본이
-**판정 모델 — Cloudflare clef**가 됩니다. 하루 10,000 뉴런까지 무료입니다(쪽 이미지는 2MP로 줄여 보냅니다).
+**판정 모델 — clef [Cloudflare 무료 몫 → OpenRouter 유료·빠름]**이 됩니다. 하루 10,000 뉴런까지 무료입니다(쪽 이미지는 2MP로 줄여 보냅니다).
 무료량을 다 썼거나 호출이 실패하면 **그 쪽부터 OpenRouter의 clef(유료 크레딧, 1,000쪽에 약 $0.44)로**,
 그것도 안 되면 **기본 비전 모델로** 자동으로 넘어가고 결과에 «폴백»이 표시됩니다. OpenRouter 키(`OPENROUTER_API_KEY`)가
 없으면 Cloudflare 다음 바로 기본 비전 모델로 갑니다. 재는 법: `uv run python scripts/eval_clef_survey.py`(`--run` 없이는 보내지 않습니다).
+
+**OpenRouter 키만 있어도 clef를 씁니다.** Cloudflare 토큰이 없고 설정 ▸ 판정 모델에 OpenRouter 키만 넣었다면
+«종류 판정 모델»에 **판정 모델 — clef [OpenRouter 경유·유료·빠름]**이 켜지고 기본으로 골라집니다. 이때는 무료 몫 없이
+처음부터 OpenRouter 크레딧으로 판정합니다(1,000쪽에 약 $0.44). 두 키가 다 없으면 clef는 흐리게(고를 수 없게) 보이고
+기본은 kimi-k3입니다. 「말로 지시」 창을 열어도 미리 골라 둔 clef는 그대로이고, 사람이 다른 모델을 고르면 그것을 지킵니다.
 
 ### 8.3 ChatGPT 계정으로 (OpenAI OAuth)
 

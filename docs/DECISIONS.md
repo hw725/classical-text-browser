@@ -8222,6 +8222,27 @@ Decider의 `fit_image`(타일 1,900개 ≈ 2MP)보다 넉넉하다 — 자동 �
 | 기본 2MP / 문맥 초과 413 축소 1회 재시도 / 이미지 없는 413은 재시도 안 함 | `test_default_image_cap_is_two_megapixels` · `test_context_overflow_413_shrinks_and_retries_once` · `test_413_without_images_is_not_retried` |
 | clef 실패 → 기본 비전 모델로 폴백, `"clef"`를 라우터에 넘기지 않음 | `test_survey_falls_back_to_vision_llm_when_clef_fails` |
 
+**후속 — OpenRouter 키만 있어도 화면에서 clef를 고른다(2026-10-05).** 자동 스캔 라우트(`llm_ocr._decision_client`)는 위
+«clef 사슬»대로 Cloudflare 키가 없고 OpenRouter 키만 있으면 OpenRouter clef부터 시작하는데, 설정 라우트의
+`default_image_provider`와 화면(workspace.js)의 clef 옵션 활성은 **Cloudflare 칸의 `has_key`만** 보았다. 그래서 OpenRouter
+키만 있는 사람은 clef를 고를 수 없고 kimi-k3로만 판정됐다 — 서버와 화면이 같은 조건을 두 곳에서 따로 계산한 탓이다.
+고친 것: `/api/settings/decision-models`가 **한 곳에서** `clef_available`(Cloudflare 키 또는 OpenRouter 키)·`clef_via`
+(`cloudflare`·`openrouter`·없음, 사슬이 시작하는 곳)를 계산해 내주고 `default_image_provider`도 그것으로 정한다. 화면은
+`clef_available`만 보고, 라벨은 `clef_via`로 «Cloudflare 무료 몫 → OpenRouter» 또는 «OpenRouter 경유·유료»를 말한다. 키가
+둘 다 없으면 전처럼 흐린 옵션 + 기본은 자동(창을 열면 kimi-k3). 자동 스캔의 키 없음 400 안내도 «Cloudflare 또는 OpenRouter»를
+말한다(`needs_key`는 그대로 `cloudflare`). 키 이름 구조(`OpenRouterClefClient.KEY_NAMES = ("OPENROUTER_API_KEY",)`)는
+건드리지 않았다 — TypeSafe 키가 OpenRouter로 나가는 길은 여전히 없다. **같이 드러난 것**: headless로 실제 화면을 눌러 보니
+키 조합 넷 모두 「말로 지시」 창을 열면 `openWorkOrder`의 kimi-k3 기본이 미리 고른 clef를 덮어썼다 — D-135의 «키가 있으면
+clef가 기본»이 화면에서 한 번도 살아남지 못하고 있었다(Ollama 목록에 kimi-k3:cloud가 있는 PC에서). 목록이 clef를 미리
+골랐으면(`clefDefaulted`) 창을 열어도 지킨다. 다시 잰 값(가짜 키·외부 호출 차단, Ollama 목록에 kimi-k3 주입): 키 없음 —
+clef 비활성·창 열면 kimi-k3 / OpenRouter만 — 활성·기본 clef / Cloudflare만 — 활성·기본 clef / 둘 다 — 활성·기본 clef.
+
+| 지키는 시험 | |
+|---|---|
+| 키 조합 넷에서 `clef_available`·`clef_via`·`default_image_provider`가 맞고 자동 스캔 라우트의 판정과 같다 | `test_clef_availability_matches_survey_route` |
+| 이 PC의 진짜 키(환경변수·레지스트리·개인 키 파일·프로젝트 .env)가 막혔다 — 거짓 초록 방지 | `test_ambient_keys_are_blocked` |
+| 키 없음 400 안내가 OpenRouter도 말한다 / 화면이 `clef_available`을 쓰고 창 열기가 clef를 덮지 않는다 | `test_survey_without_any_clef_key_says_both_keys` · `test_screen_uses_server_clef_available` |
+
 ## D-136: 편성 본문 경계 판정의 기본을 OpenRouter 경유 Perplexity decider로 — Jev는 폴백과 목차 대조 (2026-10-05)
 
 **배경.** 사용자 결정(2026-10-05): 편성 «판정 모델로 고르기»의 본문 판정(`structure_llm.ask_structure_jev`, D-129)을 TypeSafe Jev에서

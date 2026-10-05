@@ -71,7 +71,13 @@ def _no_ambient_cloudflare(monkeypatch, tmp_path):
     """이 PC의 Cloudflare 키(환경변수·Windows 사용자 환경변수·프로젝트 .env)를 섞지 않는다."""
     import llm.jev as jev
 
-    for k in ("CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_CLEF_URL"):
+    # OPENROUTER_API_KEY도 — clef 사슬의 2단계라 그 키만 있어도 «clef 키 있음»이 된다(D-135 후속)
+    for k in (
+        "CLOUDFLARE_API_TOKEN",
+        "CLOUDFLARE_ACCOUNT_ID",
+        "CLOUDFLARE_CLEF_URL",
+        "OPENROUTER_API_KEY",
+    ):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setattr(clef, "_win_user_env", lambda name: None)
     monkeypatch.setattr(jev, "KEY_ENV_FILE", tmp_path / "no-personal-key-file.env")

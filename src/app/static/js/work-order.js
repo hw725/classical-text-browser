@@ -542,9 +542,13 @@ function openWorkOrder() {
   if (!overlay || !_woTarget()) return;
   overlay.style.display = "";
   // 종류 판정 기본 모델은 kimi-k3:cloud. 목록에 없거나 은퇴(disabled)면 «자동». 한 번 고른 뒤에는 그것을 지킨다
+  // 단 clef 키(Cloudflare 또는 OpenRouter)가 있어 목록이 clef를 미리 골랐으면(D-135, workspace.js의
+  // `clefDefaulted`) 그것을 지킨다 — 한때 창을 열 때마다 kimi로 덮어 «키가 있으면 clef»가 화면에서
+  // 한 번도 살아남지 못했다(2026-10-05 headless 실측: 네 경우 모두 창을 열면 kimi).
   const sel = document.getElementById("wo-scan-model-select");
   if (sel && !sel.dataset.picked) {
-    if ([...sel.options].some((o) => o.value === WO_SCAN_DEFAULT_MODEL && !o.disabled)) sel.value = WO_SCAN_DEFAULT_MODEL;
+    const keepClef = sel.dataset.clefDefaulted && sel.value === "clef:clef";
+    if (!keepClef && [...sel.options].some((o) => o.value === WO_SCAN_DEFAULT_MODEL && !o.disabled)) sel.value = WO_SCAN_DEFAULT_MODEL;
     sel.addEventListener("change", () => { sel.dataset.picked = "1"; }, { once: true });
   }
   _woLoad();

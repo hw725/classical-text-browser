@@ -893,7 +893,9 @@ def _survey_progress(progress, row: dict, done: int, total: int, labels: dict) -
 # key_id는 설정 «판정 모델»의 칸 id(needs_key로 화면에 돌려준다), usd_per_m은 문서 단가(실측 아님)
 _DECISION_PROVIDERS: dict[str, dict] = {
     "decider": {"label": "Perplexity", "key_id": "perplexity", "usd_per_m": 0.04},
-    "clef": {"label": "Cloudflare", "key_id": "cloudflare", "usd_per_m": 0.24},
+    # clef는 Cloudflare 키 또는 OpenRouter 키 중 하나면 돈다(사슬, `_decision_client`)
+    # — 안내문도 둘을 말한다
+    "clef": {"label": "Cloudflare 또는 OpenRouter", "key_id": "cloudflare", "usd_per_m": 0.24},
 }
 
 

@@ -2177,10 +2177,30 @@ function _fillLlmSelect(select, models) {
   // D-135: Cloudflare clef(`clef:clef` → force_provider="clef")가 먼저 서고, 키(토큰+계정 id)가 있으면
   // **처음 채울 때 한 번** 미리 고른다(사용자 결정 2026-10-04). 사람이 다른 것을 고른 뒤 다시 채울 때는
   // 그 선택을 지킨다 — 키 저장 이벤트로 목록을 다시 채울 때마다 기본으로 되돌리면 고른 것이 사라진다.
+  // D-135 후속(2026-10-05): clef는 사슬(Cloudflare clef → OpenRouter clef → 기본 비전 모델)이라
+  // Cloudflare 키가 없어도 OpenRouter 키만 있으면 돈다. 고를 수 있는가는 **서버가 한 곳에서 계산한
+  // `clef_available`**만 본다 — 여기서 키 조건을 다시 짜면 서버의 사슬과 또 어긋난다
+  // (한때 Cloudflare 칸의 has_key만 보아 OpenRouter 키만 있는 사람이 clef를 못 골랐다).
   if (extra && extra.includes("vision-decider")) {
     const specs = [
-      { id: "cloudflare", value: "clef:clef", label: "판정 모델 — Cloudflare clef [무료 몫·빠름]" },
-      { id: "perplexity", value: "decider:decider-27b", label: "판정 모델 — Perplexity Decider [유료·빠름]" },
+      {
+        id: "cloudflare",
+        value: "clef:clef",
+        label: "판정 모델 — clef [Cloudflare 무료 몫 → OpenRouter 유료·빠름]",
+        missing: " (설정 → 판정 모델에서 Cloudflare 또는 OpenRouter 키)",
+        available: (d) => !!d?.clef_available,
+        label_for: (d) =>
+          d?.clef_via === "openrouter"
+            ? "판정 모델 — clef [OpenRouter 경유·유료·빠름]"
+            : "판정 모델 — clef [Cloudflare 무료 몫 → OpenRouter 유료·빠름]",
+      },
+      {
+        id: "perplexity",
+        value: "decider:decider-27b",
+        label: "판정 모델 — Perplexity Decider [유료·빠름]",
+        missing: " (설정 → 판정 모델에서 키)",
+        available: (d) => !!(d?.models || []).find((x) => x.id === "perplexity")?.has_key,
+      },
     ];
     const opts = {};
     for (const s of specs) {
@@ -2195,9 +2215,9 @@ function _fillLlmSelect(select, models) {
       .then((d) => {
         for (const s of specs) {
           const opt = opts[s.id];
-          const m = (d?.models || []).find((x) => x.id === s.id);
-          const ok = !!m?.has_key;
-          opt.textContent = `${ok ? "●" : "○"} ${s.label}${ok ? "" : " (설정 → 판정 모델에서 키)"}`;
+          const ok = s.available(d);
+          const label = s.label_for ? s.label_for(d) : s.label;
+          opt.textContent = `${ok ? "●" : "○"} ${label}${ok ? "" : s.missing}`;
           opt.disabled = !ok;
           if (!ok && select.value === opt.value) select.value = "auto";
         }
