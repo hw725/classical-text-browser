@@ -380,13 +380,22 @@ def test_survey_falls_back_to_vision_llm_when_clef_fails(client, tmp_path, monke
 
     monkeypatch.setattr(clef.ClefClient, "has_key", property(lambda self: True))
     monkeypatch.setattr(clef.ClefClient, "ask", quota)
+    # 자동 스캔 라우트는 함수 안에서 `from app._state import _get_llm_router`로 가져온다 —
+    # llm_ocr의 이름만 바꾸면 진짜 라우터가 진짜 Ollama를 부른다
+    # (2026-10-05 이 시험이 그렇게 새고 있었다)
+    import app._state as app_state
+
+    monkeypatch.setattr(app_state, "_get_llm_router", lambda: FakeRouter())
     monkeypatch.setattr(llm_ocr, "_get_llm_router", lambda: FakeRouter())
     r = client.post(url, json={"force_provider": "clef", "force_model": "clef"})
     assert r.status_code == 200, r.text
     d = r.json()
     assert d["fallback"] == "clef→vision"
     # 비전 모델이 답했다(시험 쪽은 흰 바탕이라 내용은 코드의 백지 판정이 덮을 수 있다)
-    assert d["provider"] == "ollama" and d["model"] != "clef"  # 앱 기본 비전 모델(D-114)
+    assert d["provider"] == "ollama" and d["model"] == "kimi-k3:cloud"  # 가짜 라우터의 답
     assert "decider" not in d["per_page"][0]
-    assert "force_provider" not in seen  # "clef"를 라우터에 넘기지 않는다
+    # "clef"를 라우터에 넘기지 않고 화면의 종류 판정 기본 모델로 바꿔 보낸다
+    from core.page_survey import SURVEY_FALLBACK_MODEL
+
+    assert (seen["force_provider"], seen["force_model"]) == SURVEY_FALLBACK_MODEL
     assert "기본 비전 모델로 넘긴다" in (d["error"] or "")

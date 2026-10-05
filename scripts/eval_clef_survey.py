@@ -279,6 +279,48 @@ def _summary(rows: list[dict]) -> dict:
     return out
 
 
+def _vision_asker(library: Path):
+    """기준선: 자동 스캔이 비전 모델에 묻는 것과 같은 프롬프트·옵션·파서로 한 장을 판정한다.
+
+    입력: 서고 경로. 출력: 함수(jpeg 바이트 → (방향, 종류 목록, "provider:model")).
+    왜 같은 2MP로 줄이는가: clef(ClefClient)가 2MP로 줄여 보내므로,
+    해상도 차이가 비교에 섞이지 않게 한다.
+    """
+    import asyncio
+
+    from core.page_survey import (
+        SURVEY_FALLBACK_MODEL,
+        SURVEY_PROMPT,
+        SURVEY_SYSTEM_PROMPT,
+        parse_survey,
+    )
+    from llm.clef_cf import DEFAULT_IMAGE_PIXELS, fit_image_clef
+    from llm.config import LlmConfig
+    from llm.router import LlmRouter
+
+    router = LlmRouter(LlmConfig(library_root=library))
+    provider, model = SURVEY_FALLBACK_MODEL
+    kwargs = {
+        "image_mime": "image/jpeg",
+        "system": SURVEY_SYSTEM_PROMPT,
+        "response_format": "json",
+        "purpose": "vision",
+        "max_tokens": 800,  # llm_ocr의 자동 스캔과 같다(200이면 kimi가 사고에 다 써 잘린다)
+        "think": False,
+        "force_provider": provider,
+        "force_model": model,
+    }
+
+    def ask(jpeg: bytes):
+        img, _mime = fit_image_clef(jpeg, "image/jpeg", max_pixels=DEFAULT_IMAGE_PIXELS)
+        resp = asyncio.run(router.call_with_image(SURVEY_PROMPT, img, **kwargs))
+        o, contents = parse_survey(getattr(resp, "text", "") or "")
+        who = f"{getattr(resp, 'provider', provider)}:{getattr(resp, 'model', model)}"
+        return o, contents, who
+
+    return ask
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--library", help="서고 경로(없으면 설정 파일의 첫 서고)")
@@ -286,6 +328,13 @@ def main() -> int:
     ap.add_argument("--max-calls", type=int, default=24)
     ap.add_argument("--out", help="결과 JSONL(기본 logs/eval_clef/<UTC>.jsonl)")
     ap.add_argument("--resume", action="store_true", help="--out에 이미 있는 항목은 건너뛴다")
+    ap.add_argument(
+        "--engine",
+        choices=("clef", "vision"),
+        default="clef",
+        help="clef = Cloudflare 판정 모델, vision = 화면의 종류 판정 기본 비전 모델"
+        "(page_survey.SURVEY_FALLBACK_MODEL) — 같은 그림·같은 2MP로 견주는 기준선",
+    )
     args = ap.parse_args()
 
     from core.page_survey import DECIDER_STATE, decider_questions, parse_decider_answers
@@ -334,16 +383,23 @@ def main() -> int:
     if missing:
         print(f"이미지 없음(빠짐): {', '.join(missing)} — 휴지통을 비웠으면 GOLD를 고치세요")
     live = ClefClient(library_root=library, max_calls=max(calls, 1))
-    print(f"Cloudflare 키(토큰+계정 id): {'있음' if live.has_key else '없음'}")
+    vision = args.engine == "vision"
+    if vision:
+        from core.page_survey import SURVEY_FALLBACK_MODEL
+
+        print(f"엔진: 비전 모델 {':'.join(SURVEY_FALLBACK_MODEL)} (Ollama 구독 — 추가 요금 없음)")
+    else:
+        print(f"Cloudflare 키(토큰+계정 id): {'있음' if live.has_key else '없음'}")
     if not args.run:
         print("보내지 않았습니다 — 실제로 재려면 --run")
         return 0
     if calls > args.max_calls:
         print(f"거부: 호출 {calls}회가 상한 {args.max_calls}회를 넘습니다(--max-calls).")
         return 2
-    if not live.has_key:
+    if not vision and not live.has_key:
         print("Cloudflare 키가 없습니다 — 설정 → 판정 모델, 또는 Windows 사용자 환경변수.")
         return 2
+    ask_vision = _vision_asker(library) if vision else None
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out = Path(args.out) if args.out else ROOT / "logs" / "eval_clef" / f"{stamp}.jsonl"
@@ -357,7 +413,8 @@ def main() -> int:
                 continue
             if not row.get("error"):
                 done.add(row["id"])
-    live.gate(sum(1 for i in images if i not in done))
+    if not vision:
+        live.gate(sum(1 for i in images if i not in done))
     with out.open("a", encoding="utf-8", newline="\n") as f:
         for it in items:
             if it["id"] not in images or it["id"] in done:
@@ -373,6 +430,29 @@ def main() -> int:
                 "confidence": it["confidence"],
             }
             t0 = time.monotonic()
+            if vision:
+                try:
+                    o, contents, who = ask_vision(images[it["id"]])
+                    row["latency_s"] = round(time.monotonic() - t0, 3)
+                    row.update(
+                        {
+                            "pred_orientation": o,
+                            "pred_contents": contents,
+                            "pred_contents_raw": contents,
+                            "engine": who,
+                        }
+                    )
+                except Exception as e:  # noqa: BLE001 — 한 장이 실패해도 나머지는 잰다
+                    row["latency_s"] = round(time.monotonic() - t0, 3)
+                    row["error"] = f"{type(e).__name__} {e}"[:300]
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+                f.flush()
+                print(
+                    f"{it['id']}: 방향 {row.get('pred_orientation')} "
+                    f"(정답 {row['truth_orientation']}) 종류 {row.get('pred_contents')} "
+                    f"{row.get('error', '')}"
+                )
+                continue
             try:
                 ans = live.ask(
                     DECIDER_STATE,
@@ -411,7 +491,12 @@ def main() -> int:
             continue
     # 이어 받기로 같은 항목이 두 번(실패 → 성공) 있으면 뒤의 것만 센다
     rows = list({r["id"]: r for r in rows if "id" in r}.values())
-    summary = {"jsonl": str(out), "usage": live.usage(), **_summary(rows)}
+    summary = {
+        "jsonl": str(out),
+        "engine": args.engine,
+        **({} if vision else {"usage": live.usage()}),
+        **_summary(rows),
+    }
     summ_path = out.with_suffix(".summary.json")
     summ_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(summary, ensure_ascii=False, indent=2))

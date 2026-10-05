@@ -34,6 +34,10 @@ SURVEY_SYSTEM_PROMPT = (
     "확실하지 않으면 unknown."
 )
 SURVEY_PROMPT = "이 쪽의 방향과, 이 쪽에 있는 글의 종류를 모두 판정하십시오. JSON으로만 답하십시오."
+# 판정 모델(clef)이 실패했을 때 넘길 비전 모델 — 화면의 종류 판정 기본값과 같게 둔다
+# (work-order.js WO_SCAN_DEFAULT_MODEL, 2026-09-11 벤치마크 kimi 7/10·gemma4 5/10).
+# 자동 스캔의 폴백(llm_ocr)과 비교 측정(scripts/eval_clef_survey.py --engine vision)이 함께 쓴다
+SURVEY_FALLBACK_MODEL = ("ollama", "kimi-k3:cloud")
 
 ORIENTATIONS = ("upright", "needs_cw", "needs_ccw", "upside_down")
 CONTENTS = ("modern_print", "classical_print", "handwriting", "kunten", "hangul", "blank")

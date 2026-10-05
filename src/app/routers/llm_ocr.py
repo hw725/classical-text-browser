@@ -934,6 +934,7 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
     from core.page_survey import (
         CONTENT_LABELS,
         DECIDER_STATE,
+        SURVEY_FALLBACK_MODEL,
         SURVEY_PROMPT,
         SURVEY_SYSTEM_PROMPT,
         decider_questions,
@@ -1133,8 +1134,10 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
                     decider = None
                     clef_fallback = True
                     router_llm = _get_llm_router()
-                    kwargs.pop("force_provider", None)  # "clef"는 라우터의 프로바이더가 아니다
-                    kwargs.pop("force_model", None)
+                    # "clef"는 라우터의 프로바이더가 아니다 — 화면의 종류 판정 기본 모델로
+                    # 바꿔 보낸다(page_survey.SURVEY_FALLBACK_MODEL). 지정하지 않으면
+                    # 라우터 기본(gemma4:cloud)으로 간다
+                    kwargs["force_provider"], kwargs["force_model"] = SURVEY_FALLBACK_MODEL
                 else:
                     provider, model = decider.PROVIDER, decider.model
                     orientation, contents, probs = parse_decider_answers(answers)
