@@ -32,6 +32,7 @@ force_utf8_console()
 
 from core.escalate_review import (  # noqa: E402
     CHUNK_SIZE,
+    check_path_id,
     export_from_store,
     import_answers,
     store_path,
@@ -72,6 +73,14 @@ def main(argv: list[str] | None = None) -> int:
             )
     a = ap.parse_args(argv)
     lib = _library(a.library)
+    try:
+        # «--doc ..»이면 documents/..(= 서고 자체)가 «있는 폴더»로 통과하고
+        # 메모가 서고 밖으로 빠졌다
+        check_path_id(a.doc, "문헌")
+        check_path_id(a.part, "권")
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        return 1
     doc_path = lib / "documents" / a.doc
     if not doc_path.is_dir():
         print(f"문헌을 찾을 수 없습니다: {doc_path}", file=sys.stderr)
@@ -96,7 +105,11 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"예 {c['yes']} · 아니오 {c['no']} · 누락 {c['missing']} · 거부 {c['rejected']}"
         f" · 모양 틀림 {c['malformed']} · 아직 답 없음 {res['remaining']}"
+        + (f" · 다시 판정 {res['rejudged']}" if res.get("rejudged") else "")
+        + (f"(뒤집힘 {res['flipped']})" if res.get("flipped") else "")
     )
+    for w in res.get("warnings") or []:
+        print("경고: " + w)
     if res["unknown_ids"]:
         print("거부한 id(후보에 없음): " + ", ".join(res["unknown_ids"][:20]))
     if res["missing_ids"]:

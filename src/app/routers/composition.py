@@ -970,11 +970,15 @@ async def api_escalate_export(doc_id: str, body: EscalateExportRequest):
     **모델을 부르지 않는다** — 사람이 덩어리를 채팅 LLM에 붙여 넣는다. 확률은 싣지 않는다.
     출력: {"chunks": [{"label": "1/3", "ids", "text"}], "count", "skipped", "chunk_size"}.
     """
-    from core.escalate_review import export_chunks, save_candidates
+    from core.escalate_review import check_path_id, export_chunks, save_candidates
 
     doc_path, err = _doc(doc_id)
     if err is not None:
         return err
+    try:
+        check_path_id(body.part_id, "권")  # 메모 자리가 서고 밖으로 빠지지 않게(«..»·경로 구분자)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
     lines = _escalate_lines(doc_path, body.part_id)
     library_root = get_library_path()
     try:
@@ -985,8 +989,9 @@ async def api_escalate_export(doc_id: str, body: EscalateExportRequest):
                 library_root, doc_id, body.part_id, lines, positions, source="screen",
                 chunk_size=body.chunk_size,
             )
+            # 문헌·권을 넘겨 묶음마다 표지를 싣는다 — 들이기가 다른 권의 답을 가려낸다
             out = export_chunks(lines, [c["id"] for c in store["candidates"]], store["chunk_size"],
-                                body.book_type)
+                                body.book_type, doc_id, body.part_id)
         else:
             from core.escalate_review import export_from_store
 
@@ -1012,6 +1017,8 @@ async def api_escalate_import(doc_id: str, body: EscalateImportRequest):
     없는 id는 거부, 빠진 id는 누락, 모양이 틀린 항목은 건너뛴다. 모델이 행을 더할 수 없다.
     경계는 저장하지 않는다(「적용」만 저장한다). 받아들인 판정은 서고 메모에 더해 «저장된 판정
     불러오기»와 CLI가 같은 것을 보게 한다.
+    400으로 거부하는 것: 후보 없음·너무 긴 글·내보낸 글을 그대로 붙인 것·다른 문헌·권의 묶음 표지
+    (`core.escalate_review.import_answers`).
     """
     from core.escalate_review import import_answers
 
@@ -1029,21 +1036,22 @@ async def api_escalate_state(doc_id: str, part_id: str = Query(...)):
     """서고 메모의 애매한 후보와 들인 2차 판정 (D-137). Claude 세션이 CLI로 들인 판정을 화면이
     불러올 때 쓴다.
 
-    출력: {"candidates": [{id, text}], "verdicts": {id: {start, conf}}, "updated"}."""
-    from core.escalate_review import load_store
+    출력: {"candidates": [{id, text}], "verdicts": {id: {start, conf}}, "updated"}.
+    verdicts는 **지금 후보 목록에 있는 자리**의 것만 — 메모는 목록 밖의 옛 판정도 품는다."""
+    from core.escalate_review import current_verdicts, load_store
 
     doc_path, err = _doc(doc_id)
     if err is not None:
         return err
-    store = load_store(get_library_path(), doc_id, part_id)
+    try:
+        store = load_store(get_library_path(), doc_id, part_id)
+    except ValueError as e:  # 권 id가 폴더 이름 하나가 아니다(«..»·경로 구분자)
+        return JSONResponse({"error": str(e)}, status_code=400)
     return {
         "candidates": [
             {"id": c["id"], "text": c.get("text")} for c in store.get("candidates") or []
         ],
-        "verdicts": {
-            cid: {"start": v.get("start"), "conf": v.get("conf")}
-            for cid, v in (store.get("verdicts") or {}).items()
-        },
+        "verdicts": current_verdicts(store),
         "updated": store.get("updated"),
         "source": store.get("source"),
     }

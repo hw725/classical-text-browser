@@ -2501,8 +2501,8 @@ async function _exportEscalate(ev) {
       if (ta) { ta.value = chunk.text; ta.select(); }
     }
     if (out) out.textContent = copied
-      ? `묶음 ${chunk.label} 복사됨(후보 ${chunk.ids.length}개) — 채팅 LLM에 붙여 넣고, 답을 위 칸에 붙인 뒤 「들이기」`
-      : `클립보드를 쓸 수 없어 묶음 ${chunk.label}을 칸에 띄웠습니다 — Ctrl+C로 복사한 뒤 칸을 비우고 답을 붙이세요`;
+      ? `묶음 ${chunk.label} 복사됨(후보 ${chunk.ids.length}개${chunk.tag ? ` · 표지 ${chunk.tag}` : ""}) — 채팅 LLM에 붙여 넣고, 답을 위 칸에 붙인 뒤 「들이기」`
+      : `클립보드를 쓸 수 없어 묶음 ${chunk.label}을 칸에 띄웠습니다 — Ctrl+C로 복사해 채팅 LLM에 붙인 뒤, 칸을 비우고 LLM의 답(표지 ${chunk.tag || "없음"})만 붙이세요. 이 글을 그대로 들이면 거부됩니다`;
     st.next = (st.next + 1) % st.chunks.length;
     _updateStats();
   } catch (e) {
@@ -2543,11 +2543,13 @@ async function _importEscalate() {
     const applied = _applySecondVerdicts(d.verdicts || {});
     const c = d.counts || {};
     if (out) {
-      out.textContent = `예 ${c.yes || 0} · 아니오 ${c.no || 0} · 누락 ${c.missing || 0} · 거부 ${c.rejected || 0}` +
+      out.textContent = `${_secondYesText(c.yes || 0, applied)} · 아니오 ${c.no || 0} · 누락 ${c.missing || 0} · 거부 ${c.rejected || 0}` +
         (c.malformed ? ` · 모양 틀림 ${c.malformed}` : "") +
+        (d.rejudged ? ` · 다시 판정 ${d.rejudged}` + (d.flipped ? `(뒤집힘 ${d.flipped})` : "") : "") +
         (d.parse_status === "no_json" ? " — 답에서 JSON을 찾지 못했습니다" : "") +
         (applied.absent ? ` · 지금 목록에 없는 자리 ${applied.absent}` : "") +
-        (d.remaining ? ` · 아직 답 없는 후보 ${d.remaining}` : "");
+        (d.remaining ? ` · 아직 답 없는 후보 ${d.remaining}` : "") +
+        (d.warnings?.length ? ` — 경고: ${d.warnings.join(" / ")}` : "");
       out.title = [
         d.unknown_ids?.length ? `거부한 id: ${d.unknown_ids.slice(0, 30).join(", ")}` : "",
         d.missing_ids?.length ? `누락 id: ${d.missing_ids.slice(0, 30).join(", ")}` : "",
@@ -2569,7 +2571,7 @@ async function _loadSavedEscalate() {
     const v = d.verdicts || {};
     const applied = _applySecondVerdicts(v);
     if (out) out.textContent = Object.keys(v).length
-      ? `저장된 판정 ${Object.keys(v).length}개 — 예 ${applied.yes} · 아니오 ${applied.no}` +
+      ? `저장된 판정 ${Object.keys(v).length}개 — ${_secondYesText(applied.yes, applied)} · 아니오 ${applied.no}` +
         (applied.absent ? ` · 지금 목록에 없는 자리 ${applied.absent}` : "")
       : "저장된 판정이 없습니다";
   } catch (e) {
@@ -2578,30 +2580,47 @@ async function _loadSavedEscalate() {
 }
 
 /**
- * 2차 판정을 지금 ③의 애매한 후보에 얹는다. 입력: {id: {start, conf}}. 출력: {yes, no, absent}.
+ * 2차 판정을 지금 ③의 애매한 후보에 얹는다. 입력: {id: {start, conf}}.
+ * 출력: {yes, no, absent, checked, hidden} — yes는 «예» 답을 얹은 자리 수, checked는 그 가운데 **그린 뒤에도
+ * 실제로 체크된** 수, hidden은 「상위 N」 손잡이가 가려 체크가 풀린 수.
+ * 왜 따로 세는가: _renderProposals가 손잡이 밖 후보의 체크를 푼다. 예전에는 «예 N»만 말해 사람이 N개가
+ * 체크된 줄 알았는데 실제 체크는 그보다 적었다(「적용」은 체크된 것만 저장한다).
  * 애매한 후보(_isEscalated)에만 얹는다 — 확신 후보·규칙 후보의 체크를 2차 답이 바꾸지 않는다.
  */
 function _applySecondVerdicts(verdicts) {
   const data = proposeState.data;
-  const r = { yes: 0, no: 0, absent: 0 };
+  const r = { yes: 0, no: 0, absent: 0, checked: 0, hidden: 0 };
   if (!data) return r;
   const byId = new Map();
   for (const p of data.proposals) {
     if (_isEscalated(p) && !(p.char_offset > 0)) byId.set(`p${p.page}-L${p.line_index}`, p);
   }
+  const yesKeys = [];
   for (const [id, v] of Object.entries(verdicts)) {
     const p = byId.get(id);
     if (!p) { r.absent++; continue; }
     p.second = v.start === "yes" ? "yes" : "no";
     p.secondConf = typeof v.conf === "number" ? v.conf : null;
     const k = _propKey(p);
-    if (p.second === "yes") { proposeState.checked.add(k); r.yes++; }
+    if (p.second === "yes") { proposeState.checked.add(k); r.yes++; yesKeys.push(k); }
     else { proposeState.checked.delete(k); r.no++; }
   }
   if (r.yes || r.no) proposeState.showEscalate = true; // 제안을 얹었으면 보이게 한다
   _renderProposals();
   _refreshApplyState();
+  for (const k of yesKeys) {
+    if (proposeState.checked.has(k)) r.checked++;
+    else r.hidden++; // 그리면서 손잡이가 체크를 풀었다
+  }
   return r;
+}
+
+/** «예» 결과 조각 — 답의 «예» 수와 실제로 체크된 수를 함께. 입력: 답의 예 수, _applySecondVerdicts 결과. */
+function _secondYesText(nYes, applied) {
+  if (!nYes) return "예 0";
+  if (applied.checked === nYes) return `예 ${nYes}(체크 ${applied.checked})`;
+  return `예 ${nYes}(체크 ${applied.checked}` +
+    (applied.hidden ? ` · 「상위 N」에 가려 체크 안 됨 ${applied.hidden}` : "") + ")";
 }
 
 function _renderProposals() {
