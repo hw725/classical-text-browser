@@ -660,11 +660,15 @@ async function refreshCorrectionReviewBar(pageNum) {
     next.onclick = async () => {
       // 다음 쪽도 L4가 비어 있을 수 있다. 이동 전에 채운다.
       try {
-        await fetch(
+        const res = await fetch(
           `/api/documents/${target.docId}/parts/${target.partId}` +
             `/ocr/fill-text?pages=${target_.page}`,
           { method: "POST" }
         );
+        // 채우며 사람 교정을 옮겼거나 못 옮겼으면 알린다(D-133)
+        if (res.ok && typeof notifyCorrectionsRebase === "function") {
+          notifyCorrectionsRebase(await res.json());
+        }
       } catch (e) {
         // 채우지 못해도 이동은 막지 않는다.
       }
@@ -933,11 +937,15 @@ async function _openPageInTab(pageNumber, mode) {
     const target = _extractTarget();
     if (target) {
       try {
-        await fetch(
+        const res = await fetch(
           `/api/documents/${target.docId}/parts/${target.partId}` +
             `/ocr/fill-text?pages=${pageNumber}`,
           { method: "POST" }
         );
+        // 채우며 사람 교정을 옮겼거나 못 옮겼으면 알린다(D-133)
+        if (res.ok && typeof notifyCorrectionsRebase === "function") {
+          notifyCorrectionsRebase(await res.json());
+        }
       } catch (e) {
         // 채우지 못해도 탭 이동 자체는 막지 않는다.
       }
@@ -1137,6 +1145,8 @@ async function _runExtractOcr() {
       showToast(parts.join(" · "), "success");
       _showUsage(done.usage);
       (done.warnings || []).forEach((w) => showToast(w, "info"));
+      // 확정본을 새 OCR로 다시 쓴 쪽의 사람 교정 소식(D-133)
+      if (typeof notifyCorrectionsRebase === "function") notifyCorrectionsRebase(done);
       await _refreshExtractExport();
       await _refreshExtractPending();
       await _refreshExtractOverview();

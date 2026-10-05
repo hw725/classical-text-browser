@@ -272,9 +272,16 @@ def _written_by_import(doc_path: Path, part_id: str, page: int) -> bool:
     return True
 
 
-def apply_corrections(doc_path: Path, part_id: str, corrections: list[dict]) -> tuple[list, list]:
-    """교정문을 L4에 쓴다. 출력: (쓴 쪽, 사람이 고친 L4라 둔 쪽)."""
-    from core.document import save_page_text
+def apply_corrections(
+    doc_path: Path, part_id: str, corrections: list[dict], notices: Optional[list] = None
+) -> tuple[list, list]:
+    """교정문을 L4에 쓴다. 출력: (쓴 쪽, 사람이 고친 L4라 둔 쪽).
+
+    notices — 목록을 주면 쓴 쪽마다 «사람 교정을 옮겼다/못 옮겼다» 소식(D-133)을 덧붙인다.
+    save_page_text가 이 쪽의 교정 기록을 새 글로 옮기는데, 그 응답을 버리면 교정이 «기록»으로
+    가도 사람이 모른다. 반환 모양(튜플)은 그대로 두어 다른 호출부를 깨지 않는다.
+    """
+    from core.document import rebase_notice, save_page_text
     from ocr.read_book import l4_is_hand_edited
 
     written, kept = [], []
@@ -285,7 +292,10 @@ def apply_corrections(doc_path: Path, part_id: str, corrections: list[dict]) -> 
         ):
             kept.append(page)
             continue
-        save_page_text(doc_path, part_id, page, str(c["text"]).rstrip() + "\n")
+        saved = save_page_text(doc_path, part_id, page, str(c["text"]).rstrip() + "\n")
+        notice = rebase_notice(page, saved)
+        if notice and notices is not None:
+            notices.append(notice)
         written.append(page)
     return written, kept
 
@@ -642,7 +652,8 @@ def ingest_answer(
 
     출력: {"corrected", "kept", "boundaries_added", "boundaries_removed", "boundaries_kept",
            "unplaced_sections", "unplaced_segments", "approx_segments", "translations",
-           "annotations", "relabeled_pages", "interp_id"}.
+           "annotations", "relabeled_pages", "interp_id",
+           "corrections_notices"(L4를 다시 쓴 쪽의 교정 옮김 소식, D-133)}.
     순서: 모양·id 확인(쓰기 전) → L4 교정 → 경계 → 사람 참조 없는 옛 경계 지우기 → 커밋 →
     해석 저장소(기반을 지금 원본으로) → 옛 초안 치우기(모든 쪽) → L6·L7 → 커밋.
     L4·경계를 먼저 끝내야 해석 저장소가 곧바로 «원본이 바뀜»이 되지 않는다.
@@ -668,7 +679,8 @@ def ingest_answer(
     chapter = ans["chapter"].strip()
 
     # 1) L4 교정
-    written, kept = apply_corrections(doc_path, part_id, ans.get("corrections") or [])
+    notices: list[dict] = []  # 교정 옮김 소식(D-133) — 화면이 notifyCorrectionsRebase로 알린다
+    written, kept = apply_corrections(doc_path, part_id, ans.get("corrections") or [], notices)
     if written:
         git_commit_document(doc_path, f"{COMMIT_PREFIX}: {chapter} — 교정 {len(written)}쪽")
 
@@ -810,6 +822,7 @@ def ingest_answer(
         "annotations": n_ann,
         "relabeled_pages": relabeled,
         "interp_id": interp_id,
+        "corrections_notices": notices,
     }
 
 

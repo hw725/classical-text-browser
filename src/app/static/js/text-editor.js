@@ -56,6 +56,8 @@ function fillEmptyPageText(docId, partId, pageNum) {
       const r = res.ok ? await res.json() : null;
       const filled = Boolean(r && r.filled > 0);
       if (filled) showToast("OCR 결과로 확정본을 채웠습니다.", "info");
+      // 확정본을 다시 썼으면 서버가 이 쪽의 사람 교정을 새 글로 옮겼다 — 옮김·못 옮김을 알린다(D-133)
+      if (r && typeof notifyCorrectionsRebase === "function") notifyCorrectionsRebase(r);
       return filled;
     } catch (e) {
       console.warn("OCR 자동 채우기 실패", e);

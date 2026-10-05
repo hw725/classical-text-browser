@@ -8064,6 +8064,47 @@ probe로 둘을 잡았다: 넓힌 범위 안에서 **사람이 손대지 않은 
 | 일괄 교정이 자유 편집 교정본을 지우지 않는다 | `test_batch_correction_keeps_freetext_result` |
 | 저장 뒤 동기화·미저장 전환 막기·쪽 이동 경고·계획 잠금 | 시험 없음 — headless Chrome으로 확인(2026-10-02, 복사본 서고) |
 
+### 후속(2026-10-05) — 병합의 경계와 «옮겼다/못 옮겼다» 알림 (6206fc0)
+
+**결함.** 검토 탐침이 «겹친 자리는 사람이 이긴다»의 가장자리 넷을 잡았다. ① OCR을 다시 돌려 쪽 글이 통째로 바뀌었는데
+사람이 한 글자를 고쳐 두었으면, 겹친 묶음이 쪽 전체라 사람 판이 옛 글 전체를 되살렸다(열람 탭은 새 글, 교정 탭·내보내기는
+옛 글). ② 기계가 지운 범위의 끝에 사람이 넣은 글이 엉뚱한 줄 뒤에 붙었다. ③ 같은 자리에 사람 `之`, 기계 `之也`를 넣으면
+`之也之`가 됐다. ④ 같은 자리의 넣기·바꾸기를 [넣기, 바꾸기] 순서로 두면 서버는 바꾸기를 건너뛰고 화면은 둘 다 그렸다.
+
+**바꾼 것.**
+
+1. **쪽 단위로 맞춰 볼 수 없으면 병합하지 않는다.** 맞춤 정도(공통 글자 수 / 짧은 쪽 길이)가 **0.35 미만**이면 사람 교정을
+   지우지 않고 교정 목록의 «기록»(자리 없는 항목)으로 옮기고 새 글을 쓴다(`_UNMERGE_SIMILARITY`). 근거는 실제 서고(doc_2026,
+   읽기 전용) 실측 — 같은 책의 **서로 다른 쪽 342쌍**(앞 600자)이 p95 0.13·최대 0.33. 같은 쪽을 배치가 바뀐 채 다시 OCR한
+   30쌍은 0.09～0.53이었다.
+2. **묶음 단위 «2배+2» 규칙.** 겹친 묶음에서 사람 판을 쓰면 버리는 기계 고침이 사람이 바꾼 양의 2배+2글자를 넘을 때는 사람 판을
+   쓰지 않는다(그 묶음의 사람 고침은 기록으로, `_HUMAN_WINS_FACTOR`·`_HUMAN_WINS_SLACK`). 위 30쌍에 한 글자 고침을 심어 본
+   **150회**에서 옛 판 병합이 새 글에 없는 옛 글을 8～672자 되살렸다. D-133의 겹침 예(사람 2자·기계 3자)와 «같은 자리를 서로
+   다르게 읽음»(2자·2자)은 사람 판으로 남는다.
+3. **지운 범위 경계의 넣기는 충돌**로 본다(바꾸기 범위의 경계는 전처럼 이웃한 고침으로 둘 다 산다).
+4. **같은 자리 넣기가 앞뒤 조각이면 긴 쪽 하나**만 넣는다(`之`/`之也` → `之也`).
+5. **같은 자리 넣기·바꾸기 순서를 서버(`_apply_corrections_to_text`)와 화면(글자 교정 보기)이 같게** 적용한다.
+6. **알림.** `save_page_text`의 응답 `corrections_rebased`·`corrections_unmerged`·`corrections_rebase_error`를 여러 쪽 길은
+   `rebase_notice(page, result)`로 모아 `corrections_notices`로 돌려주고, 화면은 `workspace.js::notifyCorrectionsRebase`가 두 모양
+   모두를 토스트로 띄운다(옮김 info, 못 옮김 warning, 교정 파일 오류 error). 6206fc0이 단 길: 열람 탭 저장·OCR 패널 저장·LLM 교정
+   적용·일괄 교정·텍스트레이어 가져오기.
+
+**알림이 없던 길(2026-10-06).** 쪽별 응답을 버리던 길 다섯에 같은 소식을 달았다 — 확정본 채우기(`/ocr/fill-text`, 화면
+`fillEmptyPageText`·추출 패널의 「다음 미확인 쪽」·「대조」), 권 전체 OCR의 L4 채우기(`/ocr/batch` 마지막 `complete` 이벤트 —
+「말로 지시」 작업 계획의 OCR도 이 길이다; 화면 `_runPartOcr`·`_runExtractOcr`), 강독 결과 들이기(`reading_ingest.apply_corrections`의
+`notices` 인자 → `ingest_answer` 응답, 화면 `_cxImportNote`), 기존 문헌에 HWP 가져오기(`import_hwp_text_to_document` 응답, 화면
+`_executeHwpImport`). 화면이 없는 CLI 작업 계획 OCR(`ocr.read_book.read_pages`)은 반환값 `corrections_notices`에 싣고 `ctb read`가
+찍는다. HWP로 **새 문헌**을 만드는 길(`create_document_from_hwp`)은 옮길 교정이 없어 달지 않았다. headless Chrome(복사본 서고,
+외부 연결 차단)에서 교정 탭을 눌러 빈 확정본이 채워질 때 «7쪽: 사람 교정을 새 글 위로 옮겨 붙였습니다.» 토스트가 뜨는 것을 봤다.
+
+| 지키는 시험 (`tests/test_correction_rebase_edges.py` 30건 — 6206fc0의 18건 + 알림 길 12건) | |
+|---|---|
+| 통째로 바뀐 쪽은 옛 글을 되살리지 않고 기록으로 / 작은 재OCR은 병합 | `test_whole_page_reocr_does_not_resurrect_old_text` · `test_whole_page_reocr_moves_freetext_correction_to_history` · `test_small_reocr_still_merges` |
+| 지운 범위 경계 넣기는 충돌 / 앞뒤 조각은 긴 쪽 / 서버·화면 순서 일치 | `test_insert_at_deletion_boundary_conflicts` · `test_same_spot_insert_prefix_not_duplicated` · `test_server_apply_order_matches_screen` |
+| 알림 도우미·일괄 교정 쪽별 소식 | `test_notify_helper_shows_toasts` · `test_batch_correction_reports_rebase_per_page` |
+| 알림 없던 길 — 서버 응답 | `test_fill_text_route_reports_rebase` · `test_batch_ocr_complete_event_carries_notices` · `test_read_pages_cli_reports_rebase` · `test_reading_notes_route_reports_rebase` · `test_hwp_import_reports_rebase` |
+| 알림 없던 길 — 화면 호출부 | `test_fill_empty_page_text_notifies` · `test_screen_callers_pass_response_to_notify`(6곳) |
+
 ## D-134: 이미지를 받는 판정 모델(Perplexity Decider)을 들이고, 판정 모델 키를 화면에서 넣는다 (2026-10-02)
 
 **배경.** 사용자: «비전+결정 모델 도입을 하긴 해야겠어. 일반 LLM은 너무 느려. 어차피 새로 가입해야 하니 제일 좋은
@@ -8242,6 +8283,36 @@ clef 비활성·창 열면 kimi-k3 / OpenRouter만 — 활성·기본 clef / Clo
 | 키 조합 넷에서 `clef_available`·`clef_via`·`default_image_provider`가 맞고 자동 스캔 라우트의 판정과 같다 | `test_clef_availability_matches_survey_route` |
 | 이 PC의 진짜 키(환경변수·레지스트리·개인 키 파일·프로젝트 .env)가 막혔다 — 거짓 초록 방지 | `test_ambient_keys_are_blocked` |
 | 키 없음 400 안내가 OpenRouter도 말한다 / 화면이 `clef_available`을 쓰고 창 열기가 clef를 덮지 않는다 | `test_survey_without_any_clef_key_says_both_keys` · `test_screen_uses_server_clef_available` |
+
+### 후속(2026-10-05) — 미리 세기가 사슬·비용을 말하고, 넘어감과 실패를 나누고, 상한은 묻기 수로 (960a729)
+
+**결함(리뷰 143).** 자동 스캔의 미리 세기(dry run)가 판정 모델의 사슬과 유료 몫을 말하지 않았고, 결과는 «다음 단계로 넘어감»과
+«답을 못 받음»을 한 목록에 섞어 화면이 폴백을 실패처럼 보였다. 호출 상한은 HTTP 요청 수(`calls_made`)로 세어, Cloudflare의
+문맥 초과 413 축소 재전송·429 백오프가 쌓이면 상한(쪽 수 + 5)이 절반쯤에서 차고 남은 쪽이 유료 OpenRouter로 밀려났다.
+측정 스크립트 `eval_clef_survey.py`는 `DeciderClient(api_key=None, url=OpenRouter)`를 만들어 DeciderClient가 스스로 찾은
+`PERPLEXITY_API_KEY`를 openrouter.ai로 보냈다(사용 기록 업체도 perplexity로 잘못 남았다).
+
+**바꾼 것.**
+
+1. **미리 세기가 고른 모델을 보내고** 응답에 `chain`(사슬 단계별 키 유무)·`cost_usd_max`(유료 단계가 첫 쪽부터 다 맡을 때의 상한)를
+   싣는다. 화면(work-order.js)이 사슬과 비용을 그린다. 키가 없으면 `needs_key`를 싣고 화면이 설정 단추를 보인다 — 스트리밍
+   응답에서도 이 값이 남는다.
+2. **결과에 `fallback_steps`와 `failures`를 따로.** `fallback_steps`는 사슬이 다음 단계로 넘어간 자리(그 쪽은 다음 단계가 답했다),
+   `failures`는 답을 못 받은 쪽·멈춤이다. 화면 요약은 넘어감을 경고로 보이지 않는다. 옛 서버의 오류만 있는 응답도 여전히 경고한다.
+3. **호출 상한은 묻기 수(`asks_made`)로 센다.** 같은 묻기를 고쳐 다시 보내는 것(clef 413 축소)은 `JevClient._send`에 얹어 묻기
+   하나로 센다. HTTP 요청 수(`calls_made`)는 사용 보고용으로 따로 남는다(`usage()`의 `calls`·`asks`).
+4. **상한에 닿으면 폴백 업체로 넘기지 않는다.** 상한은 «더 쏘지 말라»라서, 실패로 보고 유료 OpenRouter나 비전 모델로 넘기면 뜻이
+   무너진다 — 그 쪽부터 모델 호출을 멈추고 방향만 잰다.
+5. **`eval_clef_survey.py`는 앱 사슬 2단계와 같은 `OpenRouterClefClient`**를 쓰고, 키가 없으면 바로 끝낸다. 업체 클라이언트에 남의
+   url을 넘기지 않는다(시험이 scripts/ 전체를 본다).
+
+| 지키는 시험 (`tests/test_scan_cost_and_chain_ui.py` 17건 — 되돌리면 17 실패, headless 12/12) | |
+|---|---|
+| 미리 세기의 사슬·비용·키 조합 넷 | `test_dry_run_clef_chain_both_keys` · `test_dry_run_clef_openrouter_only_is_paid_from_first_page` · `test_dry_run_clef_cloudflare_only_has_no_paid_step` · `test_dry_run_clef_without_keys_says_needs_key` |
+| 넘어감과 실패를 나눔 / 상한에 닿으면 유료 폴백 대신 멈춤 | `test_result_separates_fallback_from_failures` · `test_gate_exceeded_stops_instead_of_paid_fallback` |
+| 화면 — 모델 선택 전송·사슬 비용·요약·needs_key 유지 | `test_js_dry_run_sends_model_selection_and_shows_chain_cost` · `test_js_dry_note_openrouter_only_and_no_key` · `test_js_summary_shows_fallback_not_as_failure` · `test_js_summary_failures_still_warn` · `test_js_summary_old_server_error_only_still_warns` · `test_post_survey_stream_keeps_needs_key` |
+| 429 재시도·413 축소 재전송은 상한을 쓰지 않는다 | `test_429_retry_does_not_eat_the_cap` · `test_clef_413_shrink_resend_is_one_ask` |
+| 측정 스크립트 키 오송 | `test_eval_openrouter_client_never_uses_perplexity_key` · `test_eval_openrouter_client_is_openrouter_clef` · `test_scripts_do_not_hand_foreign_urls_to_vendor_clients` |
 
 ## D-136: 편성 본문 경계 판정의 기본을 OpenRouter 경유 Perplexity decider로 — Jev는 폴백과 목차 대조 (2026-10-05)
 
@@ -8427,3 +8498,30 @@ decider 문턱(0.95/0.35)에서 그 수는 천진담초 131행·운양집 1책 4
 | 라우트 왕복이 경계 파일을 바꾸지 않음, 메모는 문헌 밖 | `test_route_round_trip_suggests_only_and_saves_no_boundary` · `test_import_without_candidates_explains_what_to_do` |
 | 판정 실행이 escalate를 메모에 적음 | `test_judge_run_remembers_escalate_candidates` |
 | CLI 내보내기 → 판정 → 들이기 → 화면 불러오기 | `test_cli_round_trip` |
+
+### 후속(2026-10-05) — 판정 들이기를 단단하게 (9173673)
+
+**결함.** 들이기는 붙여 넣은 글을 믿었다. 지시문의 예시 id가 실제 후보와 겹칠 수 있었고, 내보낸 글을 그대로 다시 붙이면 예시
+답이 판정으로 들어갔다. 다른 권의 답을 붙여도 id 모양이 같으면 받았다. 깊게 중첩된 글은 파서를 `RecursionError`로 죽였고 길이
+상한이 없었다. `--doc`·`--part`에 `..`을 주면 서고 밖에 메모를 썼다. 화면 목록을 좁혀 내보내면 목록 밖의 들인 판정이 지워졌고,
+결과 줄은 «상위 N»에 가려 체크되지 않은 후보까지 체크로 셌다.
+
+**바꾼 것.**
+
+1. 지시문 예시 id는 **쪽 0(`p0-L0`)** — 후보가 될 수 없다. **내보낸 글을 그대로 붙이면**(머리 «[애매한 후보 2차 판정 —») 거부한다.
+2. 묶음 머리에 **문헌·권 표지 `esc-xxxxxx-N`**(문헌·권의 짧은 지문 + 묶음 번호)을 싣고, 다른 문헌·권의 표지가 붙은 답은 거부한다.
+   표지 없는 답은 받되 거부가 절반을 넘으면 경고한다.
+3. 깊은 중첩의 `RecursionError`를 잡고 **길이 상한 2,000,000자** — 라우트는 500이 아니라 400으로 답한다.
+4. **경로 이탈 거부** — 문헌·권 id는 폴더 이름 하나만(`check_path_id`), CLI와 라우트 모두. 거부할 때 서고 밖에 아무것도 쓰지 않는다.
+5. **목록 밖 판정 보존** — 좁힌 목록으로 내보내도 확정본의 행·글이 같은 들인 판정은 지우지 않는다(글이 바뀐 자리만 버린다).
+   화면에는 지금 후보의 것만 준다(`current_verdicts`). 같은 id에 다시 답하면 «다시 판정 N»(뒤집힌 수 포함)으로 알린다.
+6. **결과 줄 체크 수** — 실제로 체크된 수와 «상위 N»에 가려 체크되지 않은 수를 따로 센다.
+
+| 지키는 시험 (`tests/test_escalate_review_hardening.py` 20건 — HEAD 소스로 되돌리면 20 실패, headless 12/12) | |
+|---|---|
+| 예시 id `p0-L0` / 내보낸 글·지시문 되울림 거부(라우트 400) | `test_example_id_in_instructions_can_never_be_a_candidate` · `test_pasting_the_exported_chunk_back_is_refused` · `test_answer_that_echoes_instructions_is_refused` · `test_route_refuses_self_paste_with_400` |
+| 문헌·권 표지 / 다른 권 거부 / 표지 없음 경고 | `test_chunks_carry_a_short_batch_tag_and_the_doc_and_part` · `test_answer_with_another_volumes_tag_is_refused` · `test_untagged_answer_is_accepted_but_warns_when_most_ids_are_rejected` |
+| 깊은 중첩·거대 붙여 넣기 | `test_deeply_nested_paste_does_not_crash_the_parser` · `test_route_answers_400_not_500_for_deep_or_huge_paste` |
+| 경로 이탈 거부(저장 경로·CLI·라우트) | `test_store_path_refuses_ids_that_leave_the_library` · `test_cli_refuses_parent_doc_and_writes_nothing_outside` · `test_routes_refuse_parent_part_id` |
+| 목록 밖 판정 보존 / 다시 판정 수 / 지금 후보의 판정만 | `test_export_with_a_narrower_list_keeps_verdicts_outside_it` · `test_reanswering_the_same_id_is_reported_as_rejudged` · `test_get_route_returns_only_current_candidates_verdicts` |
+| 결과 줄 체크 수 | 화면 — headless로 확인(9173673) |

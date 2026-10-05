@@ -1068,6 +1068,8 @@ async function _runPartOcr() {
         `권 전체 OCR 완료 — 처리 ${summary.processed}쪽, 건너뜀 ${summary.skipped}쪽, 실패 ${summary.failed}쪽`,
         summary.failed ? "warning" : "success",
       );
+      // 확정본을 새 OCR로 다시 쓴 쪽의 사람 교정 소식(D-133) — 작업 계획(work-order.js)의 OCR도 이 길
+      if (typeof notifyCorrectionsRebase === "function") notifyCorrectionsRebase(summary);
     } else {
       // «완료» 없이 끊겼다 — 끝난 것이 아니다. 어디까지 됐고 어떻게 잇는지 말한다.
       const where = lastSeen ? `${lastSeen.index + 1}/${lastSeen.total}쪽(${lastSeen.page}쪽)까지 보고 ` : "";

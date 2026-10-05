@@ -1969,6 +1969,7 @@ def import_hwp_text_to_document(
             "pages_saved": int,
             "text_pages": [{page_num, part_id, text_length, has_punct, has_hyeonto}],
             "cleaned_stats": {had_punctuation, had_hyeonto, punct_count, hyeonto_count},
+            "corrections_notices": [{page, rebased?, unmerged?, error?}],
         }
 
     처리 흐름:
@@ -2043,6 +2044,9 @@ def import_hwp_text_to_document(
     total_hyeonto_count = 0
     had_punctuation = False
     had_hyeonto = False
+    # 기존 문헌이라 쪽마다 사람 교정이 있을 수 있다 — save_page_text가 옮긴 소식을
+    # 모아 돌려준다(D-133)
+    notices: list[dict] = []
 
     for mapping in page_mapping:
         section_idx = mapping["section_index"]
@@ -2062,7 +2066,11 @@ def import_hwp_text_to_document(
         )
 
         # L4 텍스트 저장
-        save_page_text(doc_path, part_id, page_num, result.clean_text)
+        notice = rebase_notice(
+            page_num, save_page_text(doc_path, part_id, page_num, result.clean_text)
+        )
+        if notice:
+            notices.append(notice)
 
         # 서식 메타데이터(대두) 저장
         if result.taidu_marks:
@@ -2145,6 +2153,8 @@ def import_hwp_text_to_document(
             "punct_count": total_punct_count,
             "hyeonto_count": total_hyeonto_count,
         },
+        # 사람 교정을 새 글로 옮긴·못 옮긴 쪽(D-133) — 화면 HWP 가져오기가 알린다
+        "corrections_notices": notices,
     }
 
 

@@ -121,6 +121,8 @@ async function _cxImportNote(file) {
         (missed ? ` · 자리를 못 찾은 항목·구획 ${missed}개 — 확정본과 답의 원문이 다릅니다` : ""),
       data.kept.length || missed ? "warning" : "success",
     );
+    // L4 교정을 쓴 쪽의 사람 교정 소식(D-133) — 옮기지 못한 교정은 «기록»으로 갔다
+    if (typeof notifyCorrectionsRebase === "function") notifyCorrectionsRebase(data);
   } catch (e) {
     _cxStatus(`들이지 못했습니다: ${e.message}`, "error");
   }

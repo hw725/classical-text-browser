@@ -606,6 +606,8 @@ async function _executeHwpImport() {
       `완료: ${mode} — ${data.pages_saved}페이지` +
       (stats.punct_count ? `, 표점 ${stats.punct_count}개 분리` : "") +
       (stats.hyeonto_count ? `, 현토 ${stats.hyeonto_count}개 분리` : "");
+    // 기존 문헌에 넣었으면 쪽마다 사람 교정을 새 글로 옮겼다 — 옮김·못 옮김을 알린다(D-133)
+    if (typeof notifyCorrectionsRebase === "function") notifyCorrectionsRebase(data);
 
     if (typeof _loadDocumentList === "function") {
       _loadDocumentList();

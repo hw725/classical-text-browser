@@ -171,10 +171,13 @@ def read_pages(
     입력: OcrPipeline, 문헌 id·경로, 권, 돌릴 쪽, engine_plan(apply_plan의 것), 쪽마다 부를 콜백,
           redo(True면 L2가 있어도 다시),
           engine_kwargs(force_provider·force_model — llm_vision 구간에만).
-    출력: {"done", "resumed", "failed": [{"page", "error"}], "kept_l4": [쪽]}.
+    출력: {"done", "resumed", "failed": [{"page", "error"}], "kept_l4": [쪽],
+           "corrections_notices": [{page, rebased?, unmerged?, error?}]}.
+    corrections_notices — 확정본을 새 OCR로 다시 쓴 쪽에서 사람 교정을 옮겼거나 못 옮긴 소식(D-133).
+    화면이 없는 길이라 반환값에 싣고 CLI가 찍는다(버리면 교정이 «기록»으로 가도 아무도 모른다).
     계획에 없는 쪽은 돌리지 않는다(무엇으로 읽을지 모르는 쪽을 추측하지 않는다).
     """
-    from core.document import save_page_text
+    from core.document import rebase_notice, save_page_text
     from ocr.correction_pass import compose_page_text
     from ocr.full_page_block import ensure_full_page_block
     from ocr.layout_staleness import has_ocr_result
@@ -184,7 +187,7 @@ def read_pages(
     for r in engine_plan:
         for p in range(r["from"], r["to"] + 1):
             by_page[p] = r
-    stats = {"done": 0, "resumed": 0, "failed": [], "kept_l4": []}
+    stats = {"done": 0, "resumed": 0, "failed": [], "kept_l4": [], "corrections_notices": []}
     for i, page in enumerate(pages, 1):
         r = by_page.get(page)
         if r is None:
@@ -213,7 +216,9 @@ def read_pages(
                 stats["kept_l4"].append(page)
             else:
                 text = compose_page_text({"ocr_results": summary.get("ocr_results") or []}, None)
-                save_page_text(doc_path, part_id, page, text)
+                notice = rebase_notice(page, save_page_text(doc_path, part_id, page, text))
+                if notice:
+                    stats["corrections_notices"].append(notice)
             stats["done"] += 1
         except Exception as e:  # noqa: BLE001 — 한 쪽이 실패해도 나머지는 돈다. 실패는 모아 알린다
             stats["failed"].append({"page": page, "error": f"{type(e).__name__}: {e}"})

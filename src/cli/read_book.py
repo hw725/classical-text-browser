@@ -159,6 +159,20 @@ def cmd_read(args) -> int:
                 print(f"  실패 {f['page']}쪽 — {f['error']}")
             if stats["kept_l4"]:
                 print(f"  사람이 고친 확정본이라 두었습니다: {stats['kept_l4']}")
+            # 확정본을 새 OCR로 다시 쓴 쪽의 사람 교정 소식(D-133) — 화면 토스트 대신 찍는다
+            for n in stats.get("corrections_notices") or []:
+                page = n["page"]
+                if n.get("error"):
+                    print(f"  {page}쪽: 교정 기록을 읽지 못해 옮기지 못했습니다 — {n['error']}")
+                elif n.get("unmerged"):
+                    count = n["unmerged"].get("count", 0)
+                    print(
+                        f"  {page}쪽: 새 글이 옛 글과 많이 달라 사람 교정 {count}건을 "
+                        "«기록»으로 옮겼습니다 — 교정 탭에서 확인"
+                    )
+                elif (n.get("rebased") or {}).get("kept"):
+                    kept = n["rebased"]["kept"]
+                    print(f"  {page}쪽: 사람 교정 {kept}건을 새 글 위로 옮겼습니다")
             try:
                 from core.document import git_commit_document
 

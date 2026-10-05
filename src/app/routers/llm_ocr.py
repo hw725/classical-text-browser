@@ -2503,7 +2503,8 @@ async def api_fill_text_from_ocr(
         doc_id, part_id.
         overwrite — 이미 있는 L4를 덮어쓸지(기본 False).
         pages — "3" 또는 "3,7,12". 비우면 이 권 전체.
-    출력: {"filled": 12, "skipped": 3, "empty": 0, "total": 15}
+    출력: {"filled": 12, "skipped": 3, "empty": 0, "total": 15,
+           "corrections_notices": [{page, rebased?, unmerged?, error?}]}  ← 교정 옮김 소식(D-133)
 
     왜 필요한가:
         교정 탭은 L4를 읽는다. 그런데 배치 OCR이 L4를 채우기 전에 돌린 문헌은
@@ -2523,7 +2524,7 @@ async def api_fill_text_from_ocr(
     if not (doc_path / "manifest.json").exists():
         return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
 
-    from core.document import get_document_info, get_page_text, save_page_text
+    from core.document import get_document_info, get_page_text, rebase_notice, save_page_text
     from ocr.layout_staleness import ocr_path, read_page_json
 
     manifest = get_document_info(doc_path)
@@ -2542,6 +2543,9 @@ async def api_fill_text_from_ocr(
         targets = [p for p in targets if p in wanted]
 
     filled = skipped = empty = 0
+    # 쪽마다 «사람 교정을 새 글로 옮겼다/못 옮겼다» 소식(D-133) — 화면이
+    # notifyCorrectionsRebase로 알린다. 버리면 교정이 «기록»으로 옮겨져도 사람이 모른다.
+    notices: list[dict] = []
 
     for page_number in targets:
         data = read_page_json(ocr_path(doc_path, part_id, page_number))
@@ -2562,7 +2566,9 @@ async def api_fill_text_from_ocr(
                 skipped += 1
                 continue
 
-        save_page_text(doc_path, part_id, page_number, text)
+        notice = rebase_notice(page_number, save_page_text(doc_path, part_id, page_number, text))
+        if notice:
+            notices.append(notice)
         filled += 1
 
     return {
@@ -2571,6 +2577,7 @@ async def api_fill_text_from_ocr(
         "empty": empty,
         "total": len(targets),
         "page_count": page_count,
+        "corrections_notices": notices,
     }
 
 
@@ -2912,6 +2919,9 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
         total_lines = 0
         # LLM 교정 뒤 사람이 볼 블록이 남은 쪽 — 완료 이벤트로 알려 «어딜 열어야 하나»에 답한다
         review_pages: list[int] = []
+        # L4를 채운 쪽마다 «사람 교정을 옮겼다/못 옮겼다» 소식(D-133) — 완료 이벤트에 실어
+        # 화면이 notifyCorrectionsRebase로 알린다. 작업 계획 OCR(work-order.js)도 이 길을 탄다.
+        corrections_notices: list[dict] = []
         # 이 함수 스코프에 직접 import한다 — 중첩 함수(_l4_is_hand_edited) 안의 import는
         # 여기서 보이지 않는다(2026-09-18 교차검증이 잡은 NameError).
         from ocr.correction_pass import (
@@ -3071,7 +3081,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                     # 교정 초안이 있으면 자동 수용된 블록은 교정본으로 바꿔 넣는다.
                     if body.fill_text_layer and lines and not keep_l4:
                         try:
-                            from core.document import save_page_text
+                            from core.document import rebase_notice, save_page_text
                             from ocr.correction_pass import (
                                 compose_page_text,
                                 draft_lock,
@@ -3082,9 +3092,10 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                                 # L4 쓰기와 «적용됨» 기록을 쪽 잠금 안에서 한 번에 — 그 사이에
                                 # 사람이 같은 쪽에 「적용」을 누르면 한쪽이 다른 쪽을 덮는다.
                                 # executor 스레드에서 잡아야 라우트(다른 스레드)가 실제로 기다린다.
+                                # 출력: 교정 옮김 소식(없으면 None).
                                 with draft_lock(doc_path, part_id, p):
                                     text = compose_page_text({"ocr_results": res}, cd)
-                                    save_page_text(doc_path, part_id, p, text)
+                                    saved = save_page_text(doc_path, part_id, p, text)
                                     # 자동 수용 블록이 L4에 들어갔음을 초안에 적는다 — 안 적으면
                                     # 검토 목록이 그 블록을 «수용됐는데 안 적용됨»으로 다시 센다.
                                     if cd:
@@ -3098,8 +3109,11 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                                                 if b.get("accepted") and not b.get("error")
                                             ],
                                         )
+                                return rebase_notice(p, saved)
 
-                            await loop.run_in_executor(None, _fill_l4)
+                            notice = await loop.run_in_executor(None, _fill_l4)
+                            if notice:
+                                corrections_notices.append(notice)
                         except Exception as e:  # noqa: BLE001
                             # L4 저장 실패로 OCR 결과까지 버리지 않는다.
                             # 다만 교정 탭이 비어 보일 것이므로 사유를 남긴다.
@@ -3190,6 +3204,8 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                     "usage": _usage_since(usage_start),
                     # LLM 교정을 켰을 때만 의미 있다. 사람 단계(D-082 3단계)의 입구.
                     "review_pages": review_pages,
+                    # 확정본을 새 OCR로 다시 쓴 쪽의 교정 옮김 소식(D-133)
+                    "corrections_notices": corrections_notices,
                 }
             )
         except asyncio.CancelledError:
