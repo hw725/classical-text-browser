@@ -22,6 +22,9 @@ const PROVIDER_KEY_HELP = {
   // 판정 모델(D-134) — 아래 _loadDecisionModels가 같은 키 줄을 쓴다
   perplexity: { label: "Perplexity API 키", placeholder: "pplx-…" },
   typesafe: { label: "TypeSafe API 키", placeholder: "키" },
+  // D-135 — 주소에 계정 id가 들어가 칸이 둘이다(아래 _loadDecisionModels가 extra_keys로 붙인다)
+  cloudflare: { label: "Cloudflare API 토큰", placeholder: "Workers AI 권한 토큰" },
+  cloudflare_account: { label: "Cloudflare 계정 id(Account ID)", placeholder: "32자리 계정 id" },
 };
 
 const _DECISION_STATUS_LABEL = {
@@ -113,6 +116,7 @@ async function _loadDecisionModels(check = false) {
         row.appendChild(steps);
       }
       row.appendChild(_llmKeyRow(m.id, keyState));
+      for (const extraId of m.extra_keys || []) row.appendChild(_llmKeyRow(extraId, keyState));
       box.appendChild(row);
     }
   } catch (e) {

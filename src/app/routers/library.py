@@ -766,6 +766,8 @@ class LlmKeysRequest(BaseModel):
     ollama_url: str | None = None
     perplexity: str | None = None  # 판정 모델 — Perplexity Decisions (D-134)
     typesafe: str | None = None  # 판정 모델 — TypeSafe Jev (D-134)
+    cloudflare: str | None = None  # 판정 모델 — Cloudflare clef 토큰 (D-135)
+    cloudflare_account: str | None = None  # 같은 것의 계정 id(주소에 들어간다)
 
 
 @router.get("/api/settings/decision-models")
@@ -780,11 +782,30 @@ async def api_decision_models(check: bool = Query(False)):
                        status, detail?}]}
     """
     from core.env_settings import MANAGED_KEYS
+    from llm.clef_cf import ClefClient
     from llm.decider import DeciderClient
     from llm.jev import JevCallFailed, JevClient
 
     library_path = get_library_path()
     specs = [
+        {
+            # 이미지 판정의 기본(D-135) — 키(토큰+계정 id)가 있으면 화면이 미리 고른다
+            "id": "cloudflare",
+            "cls": ClefClient,
+            "display_name": "Cloudflare clef (Workers AI)",
+            "role": "이미지 판정 — 「말로 지시」 ① 자동 스캔의 «무슨 글인가»"
+            "(키가 있으면 종류 판정 모델의 기본)",
+            "signup_url": "https://dash.cloudflare.com/profile/api-tokens",
+            "steps": [
+                "Cloudflare 대시보드에 로그인합니다",
+                "My Profile ▸ API Tokens에서 «Workers AI» 권한이 있는 토큰을 만듭니다",
+                "대시보드 오른쪽의 Account ID를 복사합니다",
+                "아래 두 칸(토큰·계정 id)에 붙여 넣고 «저장» → «연결 확인» — "
+                "Windows 사용자 환경변수 CLOUDFLARE_API_TOKEN·CLOUDFLARE_ACCOUNT_ID에 "
+                "있으면 그것도 읽습니다",
+            ],
+            "extra_keys": ["cloudflare_account"],
+        },
         {
             "id": "perplexity",
             "cls": DeciderClient,
@@ -837,7 +858,9 @@ async def api_decision_models(check: bool = Query(False)):
                 }
                 row["detail"] = hint.get(e.status or 0) or f"{e} {e.status or ''}".strip()
         out.append(row)
-    return {"models": out}
+    # 화면이 «종류 판정 모델»에서 처음 고를 것(D-135) — 위에서 이미 만든 상태를 그대로 쓴다
+    cf = next(r for r in out if r["id"] == "cloudflare")
+    return {"models": out, "default_image_provider": "clef" if cf["has_key"] else None}
 
 
 @router.get("/api/settings/llm-keys")

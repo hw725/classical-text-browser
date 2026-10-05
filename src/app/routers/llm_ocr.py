@@ -889,6 +889,28 @@ def _survey_progress(progress, row: dict, done: int, total: int, labels: dict) -
     )
 
 
+# 이미지 판정 모델(force_provider 값 → 업체). D-134 decider, D-135 clef.
+# key_id는 설정 «판정 모델»의 칸 id(needs_key로 화면에 돌려준다), usd_per_m은 문서 단가(실측 아님)
+_DECISION_PROVIDERS: dict[str, dict] = {
+    "decider": {"label": "Perplexity", "key_id": "perplexity", "usd_per_m": 0.04},
+    "clef": {"label": "Cloudflare", "key_id": "cloudflare", "usd_per_m": 0.24},
+}
+
+
+def _decision_client(kind: str, library_path, max_calls: int):
+    """force_provider 값 → 판정 모델 클라이언트.
+
+    모듈은 고를 때만 읽는다(라우트 기동을 무겁게 하지 않게).
+    """
+    if kind == "clef":
+        from llm.clef_cf import ClefClient
+
+        return ClefClient(library_root=library_path, max_calls=max_calls)
+    from llm.decider import DeciderClient
+
+    return DeciderClient(library_root=library_path, max_calls=max_calls)
+
+
 @router.post("/api/documents/{doc_id}/parts/{part_id}/rotation/suggest")
 async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
     """판독 계획 (D-126): 쪽 썸네일을 비전 모델에 보여 «바로 섰나·무슨 글인가»만 답받고,
@@ -961,19 +983,20 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
         )
     stride = max(1, int(body.stride or 1))
     targets = list(range(a, b + 1, stride))
-    # 판정 모델로 종류를 물을 것인가(D-134) — 방향만이면 모델을 부르지 않으니 상관없다
-    use_decider = (
-        (body.force_provider or "").strip().lower() == "decider" and not body.orientation_only
-    )
+    # 판정 모델로 종류를 물을 것인가(D-134·D-135) — 방향만이면 모델을 부르지 않으니 상관없다.
+    # "decider" = Perplexity decider-27b, "clef" = Cloudflare clef. 둘 다 같은 질문·같은 파서를 쓴다
+    # (page_survey.decider_questions — 판정 모델 공통 계약이라 업체마다 질문을 따로 두지 않는다)
+    _fp = (body.force_provider or "").strip().lower()
+    decider_kind = _fp if _fp in _DECISION_PROVIDERS and not body.orientation_only else None
+    use_decider = decider_kind is not None
     if use_decider and not body.dry_run:
-        from llm.decider import DeciderClient
-
-        if not DeciderClient(library_root=library_path, max_calls=0).has_key:
+        if not _decision_client(decider_kind, library_path, 0).has_key:
+            spec = _DECISION_PROVIDERS[decider_kind]
             return JSONResponse(
                 {
-                    "error": "판정 모델(Perplexity) 키가 없습니다. 설정 → «판정 모델»에서 "
-                    "Perplexity API 키를 넣거나, 종류 판정 모델을 다른 것으로 고르세요.",
-                    "needs_key": "perplexity",
+                    "error": f"판정 모델({spec['label']}) 키가 없습니다. 설정 → «판정 모델»에서 "
+                    f"{spec['label']} 키를 넣거나, 종류 판정 모델을 다른 것으로 고르세요.",
+                    "needs_key": spec["key_id"],
                 },
                 status_code=400,
             )
@@ -986,10 +1009,16 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
             # 180°·90/270 판정용 OCR(PaddleOCR) — 쪽마다 후보 둘, CPU에서 후보당 4~6초(실측).
             # 방향만이면 누운 쪽에서만 재므로 미리 셀 수 없다 — 상한만 적는다
             "ocr_calls": 2 * len(targets),
-            # 판정 모델이면 어림 비용 — 쪽 이미지 ≈ 2MP ≈ 2,000토큰 + 질문 ≈ 400토큰,
-            # $0.04/M(문서 단가, 실측 아님)
+            # 판정 모델이면 어림 비용 — 쪽 이미지 ≈ 2MP ≈ 2,000토큰 + 질문 ≈ 400토큰(decider 문서
+            # 기준, clef의 이미지 토큰 수는 문서에 없다 — 같은 값으로 어림), 업체 단가(실측 아님)
             **(
-                {"engine": "decider", "cost_usd_est": round(len(targets) * 2400 * 0.04 / 1e6, 5)}
+                {
+                    "engine": decider_kind,
+                    "cost_usd_est": round(
+                        len(targets) * 2400 * _DECISION_PROVIDERS[decider_kind]["usd_per_m"] / 1e6,
+                        5,
+                    ),
+                }
                 if use_decider
                 else {}
             ),
@@ -1021,15 +1050,15 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
         # 방향만이면 모델을 부르지 않는다. (라우터 객체 자체는 위의 엔진 목록
         # 초기화가 llm_vision 엔진에 붙이느라 생길 수 있다 — 호출은 없다.
         # Codex 지적 2026-09-18)
-        # 판정 모델(D-134): 화면에서 «판정 모델 — Perplexity Decider»를 고르면
-        # force_provider가 "decider"로 온다. 생성형 비전 LLM 대신 정해진 질문의 확률만
+        # 판정 모델(D-134·D-135): 화면에서 «판정 모델 — Cloudflare clef»나 «… Perplexity Decider»를
+        # 고르면 force_provider가 "clef"·"decider"로 온다. 생성형 비전 LLM 대신 정해진 질문의 확률만
         # 받는다(라우터를 거치지 않는다 — 라우터의 계약은 «프롬프트 → 글»이다).
         # 키는 라우트 앞에서 이미 확인했다
         decider = None
         if use_decider:
-            from llm.decider import DeciderClient
-
-            decider = DeciderClient(library_root=library_path, max_calls=len(targets) + 5)
+            decider = _decision_client(decider_kind, library_path, len(targets) + 5)
+        decision_client = decider  # 폴백으로 decider가 None이 돼도 사용량은 보고한다
+        clef_fallback = False
         router_llm = None if (body.orientation_only or use_decider) else _get_llm_router()
         kwargs: dict = {
             "image_mime": "image/jpeg",
@@ -1087,19 +1116,31 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
                     )
                 except Exception as e:  # noqa: BLE001 — 한 쪽이 실패해도 나머지는 본다
                     status = getattr(e, "status", None)
+                    why = f"{status or type(e).__name__}: {str(getattr(e, 'detail', '') or e)[:80]}"
+                    if decider_kind != "clef":
+                        errors.append(f"{page}쪽: 판정 모델 {why}")
+                        per_page.append(row)
+                        _survey_progress(progress, row, len(per_page), len(targets), CONTENT_LABELS)
+                        unknown += 1
+                        continue
+                    # Cloudflare clef가 실패하면(무료 10,000뉴런/일 소진 등) 이 쪽부터
+                    # 기본 비전 모델로 넘긴다(2026-10-05 사용자 지시 «무료량을 넘으면 폴백»).
+                    # Jev는 이미지를 읽지 못하므로(텍스트 전용, base64를 글자로 읽는다 —
+                    # 2026-10-02 실측) 폴백은 Jev가 아니라 비전 LLM이다
                     errors.append(
-                        f"{page}쪽: 판정 모델 {status or type(e).__name__}: "
-                        f"{str(getattr(e, 'detail', '') or e)[:80]}"
+                        f"{page}쪽: Cloudflare clef {why} — 이 쪽부터 기본 비전 모델로 넘긴다"
                     )
-                    per_page.append(row)
-                    _survey_progress(progress, row, len(per_page), len(targets), CONTENT_LABELS)
-                    unknown += 1
-                    continue
-                provider, model = decider.PROVIDER, decider.model
-                orientation, contents, probs = parse_decider_answers(answers)
-                # 확률을 실어 둔다 — 문턱 하나로 접으면 «아슬아슬했다»가 사라진다(측정·검토용)
-                row["decider"] = probs
-            elif router_llm is not None:
+                    decider = None
+                    clef_fallback = True
+                    router_llm = _get_llm_router()
+                    kwargs.pop("force_provider", None)  # "clef"는 라우터의 프로바이더가 아니다
+                    kwargs.pop("force_model", None)
+                else:
+                    provider, model = decider.PROVIDER, decider.model
+                    orientation, contents, probs = parse_decider_answers(answers)
+                    # 확률을 실어 둔다 — 문턱 하나로 접으면 «아슬아슬했다»가 사라진다(측정·검토용)
+                    row["decider"] = probs
+            if decider is None and router_llm is not None:
                 try:
                     resp = await router_llm.call_with_image(SURVEY_PROMPT, image, **kwargs)
                 except Exception as e:  # noqa: BLE001 — 한 쪽이 실패해도 나머지는 본다
@@ -1244,7 +1285,9 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
             "provider": provider,
             "model": model,
             # 판정 모델이면 실제로 쓴 호출·토큰·비용(usage 기준) — 어림이 아니라 잰 값
-            **({"decider_usage": decider.usage()} if decider is not None else {}),
+            **({"decider_usage": decision_client.usage()} if decision_client is not None else {}),
+            # clef가 실패해 중간부터 기본 비전 모델로 넘겼는가(화면이 «폴백»으로 알린다)
+            **({"fallback": "clef→vision"} if clef_fallback else {}),
             "error": " / ".join(errors)[:600] if errors else None,
         }
 

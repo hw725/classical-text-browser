@@ -2174,19 +2174,37 @@ function _fillLlmSelect(select, models) {
 
   // 판정 모델(D-134) — 자동 스캔의 «무슨 글인가»를 확률로 답하는 모델. 생성 모델 목록(/api/llm/models)에
   // 들지 않으므로 여기서 붙인다. 값 `decider:decider-27b`는 force_provider="decider"로 라우트에 간다.
+  // D-135: Cloudflare clef(`clef:clef` → force_provider="clef")가 먼저 서고, 키(토큰+계정 id)가 있으면
+  // **처음 채울 때 한 번** 미리 고른다(사용자 결정 2026-10-04). 사람이 다른 것을 고른 뒤 다시 채울 때는
+  // 그 선택을 지킨다 — 키 저장 이벤트로 목록을 다시 채울 때마다 기본으로 되돌리면 고른 것이 사라진다.
   if (extra && extra.includes("vision-decider")) {
-    const opt = document.createElement("option");
-    opt.value = "decider:decider-27b";
-    opt.textContent = "… 판정 모델 — Perplexity Decider [유료·빠름]";
-    select.appendChild(opt);
+    const specs = [
+      { id: "cloudflare", value: "clef:clef", label: "판정 모델 — Cloudflare clef [무료 몫·빠름]" },
+      { id: "perplexity", value: "decider:decider-27b", label: "판정 모델 — Perplexity Decider [유료·빠름]" },
+    ];
+    const opts = {};
+    for (const s of specs) {
+      const opt = document.createElement("option");
+      opt.value = s.value;
+      opt.textContent = `… ${s.label}`;
+      select.appendChild(opt);
+      opts[s.id] = opt;
+    }
     fetch("/api/settings/decision-models")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        const m = (d?.models || []).find((x) => x.id === "perplexity");
-        const ok = !!m?.has_key;
-        opt.textContent = `${ok ? "●" : "○"} 판정 모델 — Perplexity Decider [유료·빠름]${ok ? "" : " (설정 → 판정 모델에서 키)"}`;
-        opt.disabled = !ok;
-        if (!ok && select.value === opt.value) select.value = "auto";
+        for (const s of specs) {
+          const opt = opts[s.id];
+          const m = (d?.models || []).find((x) => x.id === s.id);
+          const ok = !!m?.has_key;
+          opt.textContent = `${ok ? "●" : "○"} ${s.label}${ok ? "" : " (설정 → 판정 모델에서 키)"}`;
+          opt.disabled = !ok;
+          if (!ok && select.value === opt.value) select.value = "auto";
+        }
+        if (d?.default_image_provider === "clef" && !select.dataset.clefDefaulted) {
+          select.dataset.clefDefaulted = "1";
+          if (!previous || previous === "auto") select.value = "clef:clef";
+        }
       })
       .catch(() => {});
   }

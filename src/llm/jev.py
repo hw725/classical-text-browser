@@ -189,7 +189,8 @@ class JevClient:
     library_root(키를 찾을 서고 — 설정 화면이 넣은 키, 그리고 사용 기록을 남길 자리).
 
     다른 업체로 물려받을 때 바꾸는 것(클래스 속성): PROVIDER·DEFAULT_URL·DEFAULT_MODEL·
-    URL_ENV·KEY_NAMES·KEY_FALLBACK_FILE·INPUT_USD_PER_M·ACCEPTS_IMAGES, 그리고 `_body`.
+    URL_ENV·KEY_NAMES·KEY_FALLBACK_FILE·INPUT_USD_PER_M·ACCEPTS_IMAGES, 그리고 `_body`
+    (필요하면 `_resolve_key`·`_unwrap`도 — Cloudflare clef, D-135).
     """
 
     PROVIDER = "typesafe"
@@ -215,11 +216,7 @@ class JevClient:
     ) -> None:
         self._library_root = pathlib.Path(library_root) if library_root else None
         if api_key is None:
-            api_key = resolve_key(
-                names=self.KEY_NAMES,
-                library_root=self._library_root,
-                fallback_file=self.KEY_FALLBACK_FILE,
-            )
+            api_key = self._resolve_key()
         self._key = (api_key or "").strip()
         self._url = url or os.environ.get(self.URL_ENV) or self.DEFAULT_URL
         self.model = model or self.DEFAULT_MODEL
@@ -233,6 +230,25 @@ class JevClient:
         self.output_tokens_total = 0
         self.cost_total = 0.0
         self.uncosted_calls = 0  # 비용을 셀 근거(usage)가 없던 호출 — 0이 «공짜»인지 구분한다
+
+    def _resolve_key(self) -> Optional[str]:
+        """키를 찾는다 — 물려받는 업체가 출처를 더할 수 있게 메서드로 둔다.
+
+        Cloudflare(clef_cf.py)는 여기에 «Windows 사용자 환경변수»를 더한다: 키를 거기 넣은 뒤
+        이미 떠 있던 서버 프로세스는 os.environ에 그 값이 없기 때문이다.
+        """
+        return resolve_key(
+            names=self.KEY_NAMES,
+            library_root=self._library_root,
+            fallback_file=self.KEY_FALLBACK_FILE,
+        )
+
+    def _unwrap(self, payload: Any) -> Any:
+        """응답 본문 → {answers, usage} 모양. Jev·Decider는 그대로다.
+
+        Cloudflare는 {"result": {...}, "success": true}로 한 겹 싸서 준다 — 물려받아 벗긴다.
+        """
+        return payload
 
     @property
     def has_key(self) -> bool:
@@ -325,6 +341,7 @@ class JevClient:
                     continue
                 raise JevCallFailed("jev_transport_error") from exc
 
+        payload = self._unwrap(payload)
         usage = payload.get("usage") if isinstance(payload, Mapping) else None
         seen_in = seen_out = 0
         call_cost = 0.0

@@ -58,10 +58,21 @@ def _no_ambient_keys(monkeypatch, tmp_path):
     프로젝트 루트 .env에 PERPLEXITY_API_KEY를 두면 «키 없음» 시험이 깨지고, 자동 스캔 시험은 진짜로
     부를 뻔했다(2026-10-02 검토 지적). 서고 .env만 읽게 바꿔 둔다.
     """
+    import llm.clef_cf as clef
     import llm.jev as jev
 
-    for k in ("PERPLEXITY_API_KEY", "TYPESAFE_API_KEY", "JEV_API_KEY", "OPENROUTER_API_KEY"):
+    for k in (
+        "PERPLEXITY_API_KEY",
+        "TYPESAFE_API_KEY",
+        "JEV_API_KEY",
+        "OPENROUTER_API_KEY",
+        "CLOUDFLARE_API_TOKEN",
+        "CLOUDFLARE_ACCOUNT_ID",
+        "CLOUDFLARE_CLEF_URL",
+    ):
         monkeypatch.delenv(k, raising=False)
+    # 이 PC는 Cloudflare 키가 Windows 사용자 환경변수에 있다(D-135) — 레지스트리도 막는다
+    monkeypatch.setattr(clef, "_win_user_env", lambda name: None)
     monkeypatch.setattr(jev, "KEY_ENV_FILE", tmp_path / "no-personal-key-file.env")
 
     def library_only(names, library_root):
@@ -231,7 +242,8 @@ def test_settings_route_lists_models_and_saves_keys(client, tmp_path):  # noqa: 
     r = client.get("/api/settings/decision-models")
     assert r.status_code == 200
     models = {m["id"]: m for m in r.json()["models"]}
-    assert set(models) == {"perplexity", "typesafe"}
+    assert set(models) == {"cloudflare", "perplexity", "typesafe"}
+    assert r.json()["default_image_provider"] is None  # 키가 없으면 기본은 그대로(생성 비전 LLM)
     assert models["perplexity"]["signup_url"] == "https://console.perplexity.ai/project/keys"
     r = client.post("/api/settings/llm-keys", json={"perplexity": "pplx-abcdWXYZ"})
     assert r.status_code == 200, r.text
@@ -287,6 +299,7 @@ def test_scan_select_offers_decider_option():
     assert 'id="settings-decision-models"' in html
     ws = (root / "js" / "workspace.js").read_text(encoding="utf-8")
     assert '"decider:decider-27b"' in ws
+    assert '"clef:clef"' in ws and "default_image_provider" in ws  # D-135 — 키가 있으면 기본
     sp = (root / "js" / "setup-panel.js").read_text(encoding="utf-8")
     assert "perplexity:" in sp and "/api/settings/decision-models" in sp
 

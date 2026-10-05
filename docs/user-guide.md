@@ -1703,6 +1703,12 @@ Perplexity 키 받기: 콘솔에 로그인 → **프로젝트를 만들고 결�
 > 없습니다. 그래서 자동 스캔의 기본 모델은 그대로 두었고, 판정 모델의 답도 다른 모델처럼 **계획 표에서
 > 사람이 확인한 뒤** 「적용」합니다. 재는 법: `uv run python scripts/eval_decider_survey.py --help`.
 
+**Cloudflare clef(D-135).** 설정 ▸ 판정 모델에 Cloudflare 토큰과 계정 ID를 넣으면(또는 Windows 사용자
+환경변수 `CLOUDFLARE_API_TOKEN`·`CLOUDFLARE_ACCOUNT_ID`가 있으면) «종류 판정 모델»의 기본이
+**판정 모델 — Cloudflare clef**가 됩니다. 하루 10,000 뉴런까지 무료입니다(쪽 이미지는 2MP로 줄여 보냅니다).
+무료량을 다 썼거나 호출이 실패하면 **그 쪽부터 기본 비전 모델로 자동으로 넘어가고** 결과에 «폴백»이
+표시됩니다. 재는 법: `uv run python scripts/eval_clef_survey.py`(`--run` 없이는 보내지 않습니다).
+
 ### 8.3 ChatGPT 계정으로 (OpenAI OAuth)
 
 ChatGPT 구독이 있으면 키 없이 씁니다(구독 한도를 소모합니다). **Node.js**가 있어야 합니다

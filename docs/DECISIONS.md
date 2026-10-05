@@ -8111,3 +8111,83 @@ Decider는 그 개인 파일을 보지 않는다(남의 키를 쓰지 않게). �
 | 자동 스캔이 판정 모델로 돈다(키 없음 400·dry_run 비용·확률 실림) | `test_survey_with_decider_uses_probabilities` |
 | 화면 배선(선택지·설정 칸) | `test_scan_select_offers_decider_option` — 배선만 본다. 눌러서 도는지는 headless로 확인 |
 | 실제 정확도 | **없음** — 키가 생기면 `scripts/eval_decider_survey.py`로 잰다 |
+
+## D-135: 이미지 판정의 기본을 Cloudflare clef로 — Decider는 선택지로 남긴다 (2026-10-04)
+
+**배경.** 사용자 결정(2026-10-04): 자동 스캔의 이미지 판정 자리(D-134에서 Perplexity `decider-27b`)에 Cloudflare Workers AI
+`@cf/cloudflare/clef`(27B, System One 판정 모델, 이미지를 받는다)를 쓰고, **Cloudflare 키가 있으면 그것을 기본으로** 한다.
+Cloudflare 토큰·계정 id는 이 PC의 Windows 사용자 환경변수(`CLOUDFLARE_API_TOKEN`·`CLOUDFLARE_ACCOUNT_ID`)에 이미 있다.
+
+**D-134와 어긋나는 점 — 먼저 적어 둔다.** D-134는 Clef를 «추론이 약하고(업체 벤치마크 GPQA 48 대 78) 계정 정보가 둘»이라
+기본에서 뺐다. 그 사실은 바뀌지 않았다. 바뀐 것은 (1) 무료 몫(하루 10,000 neurons ≈ clef 입력 약 458K 토큰 — 사용자 전달 문서
+요약, 실측 아님)이 있어 이 PC에서는 사실상 공짜이고, (2) 계정 정보 두 개는 이미 환경변수에 있으며, (3) **두 업체 모두 고서
+이미지 정확도를 재지 않았다** — 어느 쪽을 기본으로 둬도 «잰 값 없이 기본»이라는 처지는 같다. 그래서 기본을 사용자 결정대로
+옮기고, 정확도는 `scripts/eval_clef_survey.py`로 잰 뒤에 다시 본다. 단가만 보면 clef($0.24/M)가 Decider($0.04/M)의 6배다 —
+무료 몫을 넘기면 Decider가 싸다.
+
+### 채택한 것
+
+**1. `llm/clef_cf.py::ClefClient(JevClient)`** — D-134처럼 한 벌을 물려받는다. 바뀐 것: 주소는 계정 id로 만든다
+(`…/accounts/{id}/ai/run/@cf/cloudflare/clef`), 본문은 `{model:"clef", state, questions, images:[data URL]}` — 이미지는 Decider와
+달리 **state 안이 아니라 최상위 `images`**다. 응답은 `{"result": {...}, "success": true}`로 싸여 오므로 벗긴다 — 안 벗기면
+usage가 안 보여 **0토큰(«공짜»)으로 기록**된다. 이를 위해 `JevClient`에 갈고리 둘을 냈다: `_resolve_key()`(키 출처를 더함)·
+`_unwrap()`(응답 벗기기). Jev·Decider의 동작은 그대로다.
+
+**2. 이미지 상한은 보내기 전에 지킨다**(`fit_image_clef`). 최대 4장(넘으면 거부 — 호출 수를 쓰지 않는다), 장당 16MP·디코드
+4MiB(넘으면 줄인다), 합계 8MiB(장수로 몫을 나눠 줄인다), 본문 13MiB(넘으면 거부). PNG·JPEG·WebP 밖의 형식은 JPEG로.
+Decider의 `fit_image`(타일 1,900개 ≈ 2MP)보다 넉넉하다 — 자동 스캔은 어차피 긴 변 2000px로 보낸다(`_load_page_image`).
+
+**3. 키**: `CLOUDFLARE_API_TOKEN`·`CLOUDFLARE_ACCOUNT_ID`를 `env_settings.MANAGED_KEYS`(`cloudflare`·`cloudflare_account`)에
+넣어 설정 ▸ 판정 모델에서 두 칸으로 넣는다(`extra_keys`). 찾는 순서는 환경변수 → 서고·프로젝트 `.env` → **Windows 사용자
+환경변수(HKCU\Environment)**. 마지막 것은 레지스트리를 직접 읽는다 — 키를 넣기 **전에** 뜬 서버는 `os.environ`에 그 값이 없다.
+토큰과 계정 id가 **둘 다** 있어야 «키 있음»이다(하나만 있으면 주소를 만들 수 없다). Jev의 개인 키 파일은 보지 않는다.
+
+**4. 기본은 화면이 고른다 — 서버의 뜻은 바꾸지 않는다.** 라우트(`rotation/suggest`)는 `force_provider="clef"`면 clef,
+`"decider"`면 Decider, 없으면 전처럼 생성 비전 LLM(kimi-k3)이다. `/api/settings/decision-models`가
+`default_image_provider: "clef"`(Cloudflare 키가 있을 때)를 주고, 「말로 지시」 ① 자동 스캔의 «종류 판정 모델»이 **처음 채울
+때 한 번** 그것을 고른다. 서버 기본을 바꾸지 않은 이유: 이 PC는 Windows 환경변수에 키가 있어, 서버가 «키 있으면 clef»로
+돌면 force_provider 없이 이 라우트를 부르는 시험이 **실제 Cloudflare를 부를** 길이 생긴다. 사람이 다른 것을 고른 뒤 목록을
+다시 채울 때(키 저장 이벤트)는 그 선택을 지킨다.
+
+**5. 질문·파서는 공용.** `page_survey.decider_questions`·`parse_decider_answers`를 그대로 쓴다 — 판정 모델 공통 계약이다.
+종류 문턱 0.5는 **여전히 잰 값이 아니다**(`DECIDER_CONTENT_THRESHOLD`). 응답의 `per_page[].decider`(확률)와 `decider_usage`
+이름도 그대로 둔다 — 업체 이름이 아니라 «판정 모델의 답» 칸이다.
+
+### 재는 법 — 사람 라벨 없이 만든 정답지 (`scripts/eval_clef_survey.py`)
+
+- **방향**: 바로 선 것을 확인한 쪽 8개를 코드가 90/180/270°로 돌린 사본을 만든다 — 정답이 구성으로 정해진다. 쪽마다 원본
+  1장 + 돌린 사본 2장(각을 돌아가며) = 24장, 호출 24회.
+- **종류**: 책 단위로 종류가 알려진 문헌의 쪽만 — 舊注蒙求攷異提要(내각문고, 목판)·KOL000000571(목판)·浩齋辰巳日錄(D-126
+  벤치마크의 «석인본»)·天津談草(규장각, 필사) 두 쪽·한글 학술 논문 세 편. 대부분 서고 **휴지통**(`.trash/documents`)에 있다.
+  애매한 종류(내각문고본의 훈점, 규장각 이미지에 얹힌 한글·활자 표시)는 «재지 않음»으로 둔다. **한계**: «이 쪽이 바로 섰다»·
+  «이 종류가 보인다»는 Claude가 축소판을 보고 확인한 것이지 사람이 확인한 것이 아니다. 훈점·백지 양성 표본이 없다. 8쪽으로는
+  문턱을 정하지 않는다.
+- `--run` 없이는 보내지 않는다(쪽을 그리고 본문을 만들어 상한만 검사). 계획(2026-10-04 dry-run): 이미지 24장·호출 24회·어림
+  입력 71,190토큰(**가정**: MP당 1,000토큰 + 질문 400 — clef의 이미지 토큰 수는 문서에 없다), 명목 $0.017, 하루 무료 몫의 16%.
+  결과는 `logs/eval_clef/<UTC>.jsonl`(한 장씩 바로 쓴다 — `--resume`으로 잇는다)과 `.summary.json`(방향 정확도·각별, 종류마다
+  정확도·정밀도·재현율, 지연 중앙값·p90).
+
+### 시험이 지키는 것 (`tests/test_clef_cf.py`, 네트워크 없음)
+
+| 주장 | 시험 |
+|---|---|
+| 주소·Bearer·본문 모양(`images` 최상위·state는 글 그대로)·응답 벗기기·usage가 셈에 들어감 | `test_body_shape_url_and_unwrap` |
+| 이미지 없으면 `images` 칸 없음 / `success:false`는 실패 | `test_no_images_field_without_images` · `test_success_false_is_failure` |
+| 5장 이상은 보내기 전에 거부 | `test_more_than_four_images_refused_before_sending` |
+| 16MP·4MiB·형식 / 합계 8MiB·본문 13MiB | `test_fit_image_limits` · `test_total_image_bytes_shared_across_images` |
+| 키 순서(환경변수 > 서고 .env > Windows 사용자 환경변수), 토큰만으로는 «키 없음» | `test_key_resolution_order` · `test_token_without_account_is_not_a_key` |
+| 사용 기록에 cloudflare·clef로 남는다 | `test_clef_is_logged_as_cloudflare` |
+| 설정이 키 있을 때 기본 clef를 알린다 / 자동 스캔이 clef 확률로 돈다(키 없음 400·dry_run 비용) | `test_settings_default_image_provider_is_clef_with_keys` · `test_survey_with_clef_uses_probabilities` |
+| 실제 정확도 | **부분** — 아래 «후속» |
+
+**후속(2026-10-05).**
+
+- **첫 평가 결과**(`eval_clef_survey.py --run`, 2026-10-04·05 두 번): 24장 중 **12장이 413**(code 5021, «예상 입력+출력 208,453토큰 > 문맥 65,536»). `MAX_IMAGE_PIXELS`(16MP)는 서버가 *받는* 한도였고 모델 문맥과는 별개였다. 답한 12장은 종류 쪽 단위 9/12(종류별 57/60)·방향 8/12, 두 날 결과가 완전히 같았다(재현성). 정답은 사람 라벨이 아니다(방향은 돌려 만든 것, 종류는 책 단위 출처 + 축소판 확인).
+- **문맥을 지킨다**: 기본 `DEFAULT_IMAGE_PIXELS = 2MP`로 줄여 보내고, 그래도 문맥 초과 413이면 오류문의 예상 토큰 수에 비례해 픽셀 상한을 줄여 **1회** 다시 보낸다(`ClefClient.ask`). 이미지가 없는 413은 다시 보내지 않는다.
+- **폴백**(사용자 지시 «clef 무료량을 넘으면 폴백»): 자동 스캔에서 clef 호출이 실패하면 **그 쪽부터 기본 비전 모델(라우터)로** 넘기고 결과에 `fallback: "clef→vision"`을 싣는다. Jev로 넘기지 않는 이유 — Jev는 텍스트 전용이고 이미지를 base64 글자로 읽는다(2026-10-02 실측). Decider(`force_provider="decider"`)는 예전처럼 실패한 쪽만 «못 잼».
+- **알려진 함정**(head-repo `docs/clef-vs-jev-20261003/`): Workers AI는 **질문이 여럿이면 state를 자른다** — 같은 글에 질문 1개는 입력 3,317토큰·인젝션 0.95, 질문 2개는 2,509토큰·0.17. 자동 스캔은 state가 짧은 고정문(`DECIDER_STATE`)이라 걸리지 않지만, 긴 글을 여러 질문과 함께 보내는 자리에 clef를 쓰면 안 된다.
+
+| 지키는 시험 | |
+|---|---|
+| 기본 2MP / 문맥 초과 413 축소 1회 재시도 / 이미지 없는 413은 재시도 안 함 | `test_default_image_cap_is_two_megapixels` · `test_context_overflow_413_shrinks_and_retries_once` · `test_413_without_images_is_not_retried` |
+| clef 실패 → 기본 비전 모델로 폴백, `"clef"`를 라우터에 넘기지 않음 | `test_survey_falls_back_to_vision_llm_when_clef_fails` |

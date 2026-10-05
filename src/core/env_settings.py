@@ -31,6 +31,10 @@ MANAGED_KEYS: dict[str, str] = {
     # 판정 모델(D-134) — 글을 만들지 않고 확률 붙은 판정만 돌려주는 모델. LLM 라우터 밖에서 쓴다
     "perplexity": "PERPLEXITY_API_KEY",  # Perplexity Decisions(이미지 판정 — 자동 스캔의 종류)
     "typesafe": "TYPESAFE_API_KEY",  # TypeSafe Jev(텍스트 판정 — 편성의 구조 묻기)
+    # Cloudflare Workers AI clef(이미지 판정 — 자동 스캔의 종류, 키가 있으면 기본, D-135).
+    # 주소에 계정 id가 들어가 값이 둘이다. 없으면 Windows 사용자 환경변수도 본다(llm/clef_cf.py)
+    "cloudflare": "CLOUDFLARE_API_TOKEN",
+    "cloudflare_account": "CLOUDFLARE_ACCOUNT_ID",
 }
 
 _LINE_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$")
