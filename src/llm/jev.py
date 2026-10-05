@@ -61,6 +61,34 @@ KEY_ENV_FILE = pathlib.Path.home() / ".claude" / "data" / "triage" / ".env"
 # TypeSafe 직결 주소로 보내도 되는 키만. OPENROUTER_API_KEY를 넣지 않는다(위 «키» 참고).
 KEY_NAMES = ("TYPESAFE_API_KEY", "JEV_API_KEY")
 
+# 이 저장소가 아는 판정 업체의 호스트(PROVIDER → 그 업체 호스트). 주소 재정의(URL_ENV)가
+# **다른 업체**의 호스트를 가리키면 키를 싣지 않고 거부한다 — TypeSafe 키가 OpenRouter로,
+# OpenRouter 키가 Perplexity로 나가는 길을 막는다(Codex 리뷰 2026-10-06). 같은 업체 주소와
+# 모르는 호스트(자체 게이트웨이·Cloudflare AI Gateway 등)는 지금처럼 허용한다.
+# llm_pipeline 정본 `jev_decisions.py`의 «JEV_BASE_URL 은 직결 공급자에만 듣는다»와 같은 방침.
+# 앞에 점이 없는 값은 그 호스트와 그 하위 도메인을 뜻한다. Cloudflare는 API 호스트만 —
+# `gateway.ai.cloudflare.com`(AI Gateway)은 자체 게이트웨이로 본다.
+VENDOR_HOSTS: dict[str, tuple[str, ...]] = {
+    "typesafe": ("typesafe.ai",),
+    "openrouter": ("openrouter.ai",),
+    "perplexity": ("perplexity.ai",),
+    "cloudflare": ("api.cloudflare.com",),
+}
+
+
+def vendor_of_url(url: str) -> Optional[str]:
+    """주소의 호스트가 아는 판정 업체면 그 PROVIDER, 아니면 None(자체 게이트웨이 등)."""
+    from urllib.parse import urlsplit
+
+    try:
+        host = (urlsplit(url).hostname or "").lower().rstrip(".")
+    except ValueError:
+        return None
+    for provider, hosts in VENDOR_HOSTS.items():
+        if any(host == h or host.endswith("." + h) for h in hosts):
+            return provider
+    return None
+
 
 class JevGateExceeded(RuntimeError):
     """호출 상한을 넘었다 — 한 건도 쏘지 않고 거부한다(전역 규칙 11: 게이트는 도구 층에)."""
@@ -224,7 +252,20 @@ class JevClient:
         if api_key is None:
             api_key = self._resolve_key()
         self._key = (api_key or "").strip()
-        self._url = url or os.environ.get(self.URL_ENV) or self.DEFAULT_URL
+        env_url = None if url else (os.environ.get(self.URL_ENV) or "").strip() or None
+        self._url = url or env_url or self.DEFAULT_URL
+        # 주소가 **다른 판정 업체**를 가리키면 이 클래스의 키를 거기 보내지 않는다(VENDOR_HOSTS).
+        # 생성은 막지 않는다(설정 화면의 키 유무 조회가 깨지지 않게) — ask가 보내기 전에 거부한다.
+        self._url_refusal: Optional[str] = None
+        other = vendor_of_url(self._url) if self._url else None
+        if other is not None and other != self.PROVIDER:
+            source = f"환경변수 {self.URL_ENV}" if env_url else "주소 인자(url)"
+            self._url_refusal = (
+                f"{source}가 다른 판정 업체({other})의 주소를 가리킵니다 — {self.PROVIDER} 키를 "
+                f"그 주소로 보내지 않습니다. {self.URL_ENV}를 지우거나 {self.PROVIDER} 주소·"
+                f"자체 게이트웨이로 바꾸세요."
+            )
+            logger.warning("%s", self._url_refusal)
         self.model = model or self.DEFAULT_MODEL
         self._max_calls = max_calls
         self._timeout = timeout
@@ -242,6 +283,9 @@ class JevClient:
         # 하나 안에서 retries(+413 1회)로 이미 묶여 있으므로 HTTP 요청의 최대는
         # max_calls × (retries+1) × 2로 여전히 유한하다.
         self.asks_made = 0
+        # 이번 묻기를 asks_made에 이미 셌는가 — _send가 **실제로 보내기 직전에** 센다.
+        # 본문 크기 초과처럼 보내기 전에 거절된 묻기는 상한을 쓰지 않는다(Codex 리뷰 2026-10-06).
+        self._ask_counted = False
         self.calls_made = 0
         self.questions_asked = 0
         self.input_tokens_total = 0
@@ -273,10 +317,17 @@ class JevClient:
         return bool(self._key)
 
     def gate(self, planned: int) -> None:
-        """보내기 전에 부른다. 상한을 넘으면 한 건도 쏘지 않는다."""
-        if planned > self._max_calls:
+        """보내기 전에 부른다. **남은** 예산(상한 − 이미 쓴 묻기)을 넘으면 한 건도 쏘지 않는다.
+
+        전에는 상한 전체와 견주어, 이미 몇 번 물은 클라이언트도 게이트를 통과한 뒤 중간에
+        JevGateExceeded로 멈췄다(Codex 리뷰 2026-10-06). 지금 호출부는 모두 새 클라이언트에서
+        부르므로(asks_made 0) 그쪽 동작은 같다.
+        """
+        remaining = self._max_calls - self.asks_made
+        if planned > remaining:
             raise JevGateExceeded(
-                f"호출 {planned}회가 상한 {self._max_calls}회를 넘습니다 — 실행을 거부합니다. "
+                f"호출 {planned}회가 남은 예산 {max(remaining, 0)}회(상한 {self._max_calls}회 중 "
+                f"{self.asks_made}회 사용)를 넘습니다 — 실행을 거부합니다. "
                 f"max_calls를 올리거나 보낼 양을 줄이세요."
             )
 
@@ -305,16 +356,19 @@ class JevClient:
         다시 보내도 같은 답이라 바로 올린다. 429에 Retry-After가 있으면 그만큼 기다린다.
 
         상한은 **묻기 횟수**(asks_made)로 센다 — 다시 보내기는 같은 묻기다(__init__ 주석).
+        세는 때는 실제로 보내기 직전이다(_send) — 보내기 전 로컬 검증에서 거절되면 세지 않는다.
         """
         if not self._key:
             raise JevCallFailed("jev_no_key")
+        if self._url_refusal:
+            raise JevCallFailed("url_points_to_other_vendor", detail=self._url_refusal)
         if images and not self.ACCEPTS_IMAGES:
             # Jev에 base64를 넣으면 오류 없이 «글자로» 읽어 엉뚱한 답이 온다(2026-10-02 실측) —
             # 보내기 전에 막는다
             raise JevCallFailed("images_not_supported")
         if self.asks_made >= self._max_calls:
             raise JevGateExceeded(f"상한 {self._max_calls}회에 이미 도달했습니다.")
-        self.asks_made += 1
+        self._ask_counted = False
         return self._send(state, questions, images, purpose)
 
     def _send(
@@ -331,6 +385,11 @@ class JevClient:
         """
         body = self._body(state, questions, images)
         data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+        # 본문을 다 만들었다 — 여기서부터는 실제로 보낸다. 묻기 하나에 한 번만 센다
+        # (clef 413 축소 재전송은 같은 묻기라 _ask_counted가 이미 True다).
+        if not self._ask_counted:
+            self.asks_made += 1
+            self._ask_counted = True
         delay = 1.0
         started = time.monotonic()
         for attempt in range(self._retries + 1):

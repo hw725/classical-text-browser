@@ -440,27 +440,40 @@ function _woFallbackText(steps) {
 /**
  * 판정 모델이 실제로 쓴 것(decider_usage, 서버가 usage로 잰 값) → 짧은 한 줄. 유료 몫(OpenRouter·
  * Perplexity)은 청구 금액으로, Cloudflare 몫은 명목값으로 따로 말한다(무료 몫 안이면 청구되지 않는다).
+ * 비용을 셀 근거가 없던 호출(uncosted_calls)이 있으면 «$0»이 아니라 «비용 모름 N회»로 말한다.
  */
 function _woUsageText(u) {
   if (!u) return "";
   const by = Array.isArray(u.by_provider) && u.by_provider.length ? u.by_provider : [u];
   let paid = 0;
   let cf = 0;
+  let paidUnknown = 0;
+  let cfUnknown = 0;
   let hasPaid = false;
   let hasCf = false;
   for (const x of by) {
+    // uncosted_calls: 응답에 usage가 없어 비용을 셀 근거가 없던 호출(jev.py). 0달러와 섞지 않는다
+    const unknown = Number(x.uncosted_calls) || 0;
     if (x.provider === "cloudflare") {
       hasCf = true;
       cf += Number(x.cost_usd) || 0;
+      cfUnknown += unknown;
     } else {
       hasPaid = true;
       paid += Number(x.cost_usd) || 0;
+      paidUnknown += unknown;
     }
   }
+  // 비용 모름이 섞이면 잰 몫을 «청구액»처럼 확정해 쓰지 않는다(Codex 리뷰 2026-10-06) —
+  // usage 없는 유료 응답이 «유료 청구 $0»으로 보였다
+  const amount = (usd, unknown) => {
+    if (!unknown) return _woUsd(usd);
+    return usd > 0 ? `${_woUsd(usd)} 이상(비용 모름 ${unknown}회 포함)` : `모름(비용 모름 ${unknown}회)`;
+  };
   return (
     `판정 모델 호출 ${u.calls ?? "?"}번` +
-    (hasPaid ? ` · 유료 청구 ${_woUsd(paid)}` : "") +
-    (hasCf ? ` · Cloudflare 몫 명목 ${_woUsd(cf)}(무료 몫 안이면 청구 없음)` : "")
+    (hasPaid ? ` · 유료 청구 ${amount(paid, paidUnknown)}` : "") +
+    (hasCf ? ` · Cloudflare 몫 명목 ${amount(cf, cfUnknown)}(무료 몫 안이면 청구 없음)` : "")
   );
 }
 

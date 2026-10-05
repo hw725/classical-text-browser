@@ -8444,6 +8444,37 @@ OpenRouter만 + decider 402 → OpenRouter 경유 Jev가 대신 답하고 0.9가
 output_tokens 20 · cost $0.0000118`, 답 `{"noul": 0.98}`(확률 하나, System One 모양 그대로). 입력은 수십 자였지만 청구 토큰은
 281이다 — 게이트웨이·모델 쪽 고정 몫이 있다는 뜻이고(추정), 사전 어림 «$0.00001 미만»을 조금 넘었다.
 
+### 후속(2026-10-06) — Codex 리뷰 반영: 4건 수용·1건 거절
+
+Codex 리뷰가 남긴 실패 시험 5건(`tests/test_codex_review_judge.py`, 키·소켓·레지스트리·개인 키 파일 차단 fixture)을 판정했다.
+
+**수용 4건.**
+1. (Minor) **주소 재정의가 다른 판정 업체를 가리키면 키를 싣지 않는다.** `JEV_BASE_URL=https://openrouter.ai/…`이면 TypeSafe 키가
+   OpenRouter로 나갔다. `jev.VENDOR_HOSTS`(typesafe.ai·openrouter.ai·perplexity.ai·api.cloudflare.com)로 주소의 업체를 가려, 클래스의
+   PROVIDER와 다르면 `ask`가 보내기 전에 `url_points_to_other_vendor`(detail에 어느 변수가 어디를 가리키는지)로 거부한다. 규칙은
+   `JevClient.__init__` 한 곳이라 하위 클래스 다섯(OpenRouter decider·OpenRouter Jev·OpenRouter clef·Decider·Cloudflare clef)이 제
+   `URL_ENV`로 같은 규칙을 받는다. 같은 업체 주소와 모르는 호스트(자체 게이트웨이, `gateway.ai.cloudflare.com`)는 그대로 허용한다 —
+   llm_pipeline 정본의 «JEV_BASE_URL 은 직결 공급자에만 듣는다»와 같은 방침. 생성은 막지 않는다(키 유무 조회가 깨지지 않게).
+2. **보내기 전 로컬 거절은 상한을 쓰지 않는다.** clef 본문 13MiB 초과처럼 `_body`에서 거절된 묻기도 `asks_made`를 올려, 상한 1회
+   클라이언트는 다음 정상 요청을 못 보냈다. 이제 `_send`가 본문을 다 만든 뒤 **실제로 보내기 직전에** 센다(413 축소 재전송은 여전히
+   묻기 하나).
+3. **`gate(n)`은 남은 예산과 견준다**(상한 − 이미 쓴 묻기). 호출부(`composition._structure_jev`·`eval_boundary_judge.py`·
+   `eval_clef_survey.py`)는 모두 새 클라이언트에서 부르므로 동작이 같다.
+4. **비용 모름을 0달러로 보이지 않는다.** 서버의 `decider_usage`(와 `by_provider[]`)에는 이미 `uncosted_calls`가 실려 있었으나
+   화면(`work-order.js::_woUsageText`)이 읽지 않아 usage 없는 유료 응답이 «유료 청구 $0»으로 보였다. 이제 «유료 청구 모름(비용 모름
+   N회)» 또는 «$X 이상(비용 모름 N회 포함)»으로 말한다(Cloudflare 명목값도 같다).
+
+**거절 1건** — «쪽별 decider 확률이 화면에 안 보인다». 확률을 `per_page[].decider`에 싣는 것은 측정·검토용이고(`llm_ocr.py`
+«확률을 실어 둔다 — … 측정·검토용», D-134), 화면은 문턱으로 접은 종류만 보이는 것이 설계다. 시험은 «확률이 상태(row.decider)에
+그대로 남는다»를 고정하도록 바꿨다(`test_scan_keeps_judge_probabilities_in_state`).
+
+| 지키는 시험 (`tests/test_codex_review_judge.py` 11건 — 소스만 되돌리면 10 실패, headless 14/14) | |
+|---|---|
+| 다른 업체 주소로 키를 보내지 않는다 — Jev / 하위 클래스 6종(같은 업체·게이트웨이는 허용) | `test_vendor_url_override_must_not_receive_typesafe_key` · `test_every_judge_url_env_refuses_other_vendor` |
+| 로컬 거절은 상한을 쓰지 않는다 / 게이트는 남은 예산 | `test_local_body_rejection_does_not_spend_ask_cap` · `test_gate_checks_remaining_budget` |
+| 비용 모름 ≠ $0 | `test_screen_distinguishes_missing_cost_from_zero` |
+| 확률은 상태에 보존(화면 표시 없음이 설계) | `test_scan_keeps_judge_probabilities_in_state` |
+
 ## D-137: 애매한 후보 2차 판정은 «붙여 넣기» 길로 — 앱은 외부 모델을 부르지 않는다 (2026-10-05)
 
 **배경.** 사용자 결정(2026-10-05). 본문 판정(D-129·D-136)의 escalate 대역은 체크 해제로 서서 사람이 하나씩 고른다.
