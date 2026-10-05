@@ -56,6 +56,10 @@ MAX_BODY_BYTES = 13 * 1024 * 1024  # JSON 본문 전체
 # 종류·방향 판정에는 고해상도가 필요 없으므로 기본은 2MP로 줄여 보내고, 그래도 문맥 초과 413이 오면
 # 오류문의 예상 토큰 수에 비례해 한 번 더 줄여 1회 다시 보낸다(ClefClient.ask).
 DEFAULT_IMAGE_PIXELS = 2_000_000
+# 픽셀만으로는 부족했다(2026-10-05): 24장이 모두 ≈1.96MP였는데 JPEG 252~304KB는 전부 답하고
+# 434~531KB는 전부 413(예상 13.9만~17.8만 토큰)이었다. 실제 청구는 쪽당 ≈920토큰 — 서버의 문맥
+# 사전 검사가 이미지를 바이트 크기로 어림한다. 그래서 바이트도 성공한 범위 안(300KB)으로 맞춘다
+DEFAULT_IMAGE_BYTES = 300 * 1024
 CLEF_CONTEXT_TOKENS = 65_536
 _CTX_RE = re.compile(r"\((\d+)\) exceeded this model context window limit \((\d+)\)")
 _MIME_OK = {"image/png", "image/jpeg", "image/webp"}
@@ -198,7 +202,7 @@ class ClefClient(JevClient):
         """
         body: dict = {"model": self.model, "state": state, "questions": dict(questions)}
         if images:
-            share = min(MAX_IMAGE_BYTES, MAX_TOTAL_IMAGE_BYTES // len(images))
+            share = min(DEFAULT_IMAGE_BYTES, MAX_TOTAL_IMAGE_BYTES // len(images))
             urls = []
             for raw, mime in images:
                 data, m = fit_image_clef(

@@ -144,6 +144,25 @@ def test_default_image_cap_is_two_megapixels(tmp_path):
     assert px <= clef.DEFAULT_IMAGE_PIXELS
 
 
+def test_default_image_bytes_cap_300kb(tmp_path):
+    # 2MP여도 JPEG가 크면(빽빽한 글·종이 질감) 서버가 바이트로 어림해 413을 낸다(2026-10-05) —
+    # 성공한 범위(≤304KB) 안인 300KB로 맞춰 보낸다
+    cap: list = []
+    c = ClefClient(
+        api_key="t",
+        account_id="a",
+        library_root=tmp_path,
+        opener=_cf_opener(cap, {"q": {"type": "noul", "noul": 0.5}}),
+    )
+    c.ask(
+        "s",
+        {"q": {"type": "noul", "instructions": "?"}},
+        images=[(_img(1400, 1400, fmt="PNG", noise=True), "image/png")],
+    )
+    url = json.loads(cap[0].data)["images"][0]
+    assert len(base64.b64decode(url.split(",", 1)[1])) <= clef.DEFAULT_IMAGE_BYTES
+
+
 def test_context_overflow_413_shrinks_and_retries_once(tmp_path):
     import urllib.error
 

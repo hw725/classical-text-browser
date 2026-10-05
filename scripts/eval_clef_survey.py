@@ -279,6 +279,29 @@ def _summary(rows: list[dict]) -> dict:
     return out
 
 
+OPENROUTER_URL = "https://openrouter.ai/api/alpha/decisions"
+OPENROUTER_ENGINES = {
+    "or-clef": "cloudflare/clef",
+    "or-decider": "perplexity/pplx-decider-v1-27b",
+}
+
+
+def _openrouter_client(engine: str, library: Path, max_calls: int):
+    """OpenRouter 판정 클라이언트. DeciderClient와 이미지 형식(state 배열의 image_url)이 같아
+    주소·모델·키만 바꾼다. 키는 OPENROUTER_API_KEY(환경변수 → 서고 .env → 공용 키 파일)."""
+    from llm.decider import DeciderClient
+    from llm.jev import resolve_key
+
+    key = resolve_key(names=("OPENROUTER_API_KEY",), library_root=library, fallback_file=True)
+    return DeciderClient(
+        api_key=key,
+        url=OPENROUTER_URL,
+        model=OPENROUTER_ENGINES[engine],
+        library_root=library,
+        max_calls=max_calls,
+    )
+
+
 def _vision_asker(library: Path):
     """기준선: 자동 스캔이 비전 모델에 묻는 것과 같은 프롬프트·옵션·파서로 한 장을 판정한다.
 
@@ -330,10 +353,12 @@ def main() -> int:
     ap.add_argument("--resume", action="store_true", help="--out에 이미 있는 항목은 건너뛴다")
     ap.add_argument(
         "--engine",
-        choices=("clef", "vision"),
+        choices=("clef", "vision", *OPENROUTER_ENGINES),
         default="clef",
         help="clef = Cloudflare 판정 모델, vision = 화면의 종류 판정 기본 비전 모델"
-        "(page_survey.SURVEY_FALLBACK_MODEL) — 같은 그림·같은 2MP로 견주는 기준선",
+        "(page_survey.SURVEY_FALLBACK_MODEL) — 같은 그림·같은 2MP로 견주는 기준선, "
+        "or-clef·or-decider = OpenRouter를 거친 clef·Perplexity decider(이미지는 state 배열의 "
+        "image_url — 2026-10-05 색 시험으로 확인, 최상위 images는 무시된다)",
     )
     args = ap.parse_args()
 
@@ -382,14 +407,35 @@ def main() -> int:
     print("본문 상한(13MiB)·이미지 상한 검사: 통과")
     if missing:
         print(f"이미지 없음(빠짐): {', '.join(missing)} — 휴지통을 비웠으면 GOLD를 고치세요")
-    live = ClefClient(library_root=library, max_calls=max(calls, 1))
+    if args.engine in OPENROUTER_ENGINES:
+        live = _openrouter_client(args.engine, library, max(calls, 1))
+        if args.engine == "or-clef":
+            # OpenRouter를 거쳐도 뒤는 Cloudflare다 — ClefClient와 같은 2MP·300KB로 맞춘다
+            # (DeciderClient의 fit_image는 바이트를 이만큼 줄이지 않는다). 그리고 DeciderClient가
+            # 보내기 전에 품질 88로 다시 인코딩해 300KB가 ≈470KB로 되돌아가 413이 났다(2026-10-05
+            # 실측) — 이 경로에서는 다시 줄이지 않게 한다
+            import llm.decider as _decider
+
+            _decider.fit_image = lambda data, mime="image/jpeg": (data, mime)
+            from llm.clef_cf import DEFAULT_IMAGE_BYTES, DEFAULT_IMAGE_PIXELS, fit_image_clef
+
+            for k in list(images):
+                images[k] = fit_image_clef(
+                    images[k],
+                    "image/jpeg",
+                    max_bytes=DEFAULT_IMAGE_BYTES,
+                    max_pixels=DEFAULT_IMAGE_PIXELS,
+                )[0]
+        print(f"엔진: OpenRouter {OPENROUTER_ENGINES[args.engine]} (선불 크레딧)")
+    else:
+        live = ClefClient(library_root=library, max_calls=max(calls, 1))
     vision = args.engine == "vision"
     if vision:
         from core.page_survey import SURVEY_FALLBACK_MODEL
 
         print(f"엔진: 비전 모델 {':'.join(SURVEY_FALLBACK_MODEL)} (Ollama 구독 — 추가 요금 없음)")
     else:
-        print(f"Cloudflare 키(토큰+계정 id): {'있음' if live.has_key else '없음'}")
+        print(f"키: {'있음' if live.has_key else '없음'}")
     if not args.run:
         print("보내지 않았습니다 — 실제로 재려면 --run")
         return 0
@@ -397,7 +443,10 @@ def main() -> int:
         print(f"거부: 호출 {calls}회가 상한 {args.max_calls}회를 넘습니다(--max-calls).")
         return 2
     if not vision and not live.has_key:
-        print("Cloudflare 키가 없습니다 — 설정 → 판정 모델, 또는 Windows 사용자 환경변수.")
+        print(
+            "키가 없습니다 — Cloudflare는 설정 → 판정 모델·Windows 사용자 환경변수, "
+            "OpenRouter는 OPENROUTER_API_KEY."
+        )
         return 2
     ask_vision = _vision_asker(library) if vision else None
 
