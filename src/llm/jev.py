@@ -247,8 +247,16 @@ class JevClient:
         retries: int = 3,
         opener: Callable[..., Any] = urllib.request.urlopen,
         library_root: Optional[pathlib.Path] = None,
+        fallback: bool = True,
     ) -> None:
         self._library_root = pathlib.Path(library_root) if library_root else None
+        # 직결이 HTTP로 거절되면 같은 Jev를 OpenRouter 경유로(2026-10-06 사용자: «typesafe jev
+        # 안 되면 바로 openrouter로 폴백»). TypeSafe 크레딧이 바닥나 402가 나면, 두 키를 다 넣은
+        # 사람의 목차 대조·decider 폴백이 전부 실패했다(make_jev_client는 시작할 때만 고른다).
+        # 넘어간 뒤로는 그 클라이언트로만 묻는다 — 묻기마다 402를 다시 받지 않게.
+        self._fallback = fallback
+        self._via: Optional["JevClient"] = None
+        self.fell_back: Optional[str] = None
         if api_key is None:
             api_key = self._resolve_key()
         self._key = (api_key or "").strip()
@@ -368,8 +376,53 @@ class JevClient:
             raise JevCallFailed("images_not_supported")
         if self.asks_made >= self._max_calls:
             raise JevGateExceeded(f"상한 {self._max_calls}회에 이미 도달했습니다.")
+        if self._via is not None:
+            return self._ask_via(state, questions, images, purpose)
         self._ask_counted = False
-        return self._send(state, questions, images, purpose)
+        try:
+            return self._send(state, questions, images, purpose)
+        except JevCallFailed as exc:
+            if not self._switch_to_openrouter(exc):
+                raise
+            # 거절된 묻기는 청구되지 않았고, 다시 묻는 것은 같은 묻기다 — 상한에 두 번 세지 않는다.
+            if self._ask_counted:
+                self.asks_made -= 1
+            return self._ask_via(state, questions, images, purpose)
+
+    def _switch_to_openrouter(self, exc: "JevCallFailed") -> bool:
+        """TypeSafe 직결(기본 주소)이 HTTP로 거절됐고 OpenRouter 키가 있으면 넘어간다."""
+        if not (self._fallback and exc.status is not None and self.PROVIDER == "typesafe"
+                and self._url == TYPESAFE_URL):
+            return False
+        from llm import openrouter_decider  # 순환 import 피함(make_jev_client와 같은 이유)
+
+        via = openrouter_decider.OpenRouterJevClient(
+            library_root=self._library_root, max_calls=self._max_calls, timeout=self._timeout,
+            retries=self._retries, opener=self._opener,
+        )
+        if not via.has_key:
+            return False
+        self._via = via
+        self.fell_back = f"openrouter(typesafe {exc.status})"
+        # «누가 답했나»(structure_llm.judge_label)가 이 둘을 읽는다 — 넘어간 뒤의 답은
+        # openrouter:~typesafe/jev-latest로 남아야 한다. 문턱은 Jev 것 그대로(JUDGE_FAMILY).
+        self.PROVIDER = via.PROVIDER
+        self.model = via.model
+        self.JUDGE_FAMILY = "jev"
+        logger.warning("Jev 직결 %s — 이후 OpenRouter %s 로 부릅니다", exc.status, via.model)
+        return True
+
+    def _ask_via(
+        self, state: Any, questions: Mapping[str, Any],
+        images: Sequence[tuple[bytes, str]], purpose: str,
+    ) -> Mapping[str, Any]:
+        # 상한은 이 클라이언트의 것 하나다 — 묻기 수를 맞춰 넘기고 돌려받는다.
+        via = self._via
+        via.asks_made = self.asks_made
+        try:
+            return via.ask(state, questions, images=images, purpose=purpose)
+        finally:
+            self.asks_made = via.asks_made
 
     def _send(
         self,
@@ -491,15 +544,18 @@ class JevClient:
 
     def usage(self) -> dict:
         """지금까지 쓴 것. 출력: calls(HTTP 요청, 재전송 포함)·asks(묻기 — 상한이 세는 것)·
-        questions·input_tokens·output_tokens·cost_usd·uncosted_calls."""
+        questions·input_tokens·output_tokens·cost_usd·uncosted_calls·via_openrouter
+        (직결이 거절돼 OpenRouter로 넘어갔으면 1 — 그 뒤의 사용량은 여기 합쳐진다)."""
+        via = self._via
         return {
-            "calls": self.calls_made,
+            "calls": self.calls_made + (via.calls_made if via else 0),
             "asks": self.asks_made,
-            "questions": self.questions_asked,
-            "input_tokens": self.input_tokens_total,
-            "output_tokens": self.output_tokens_total,
-            "cost_usd": round(self.cost_total, 6),
-            "uncosted_calls": self.uncosted_calls,
+            "questions": self.questions_asked + (via.questions_asked if via else 0),
+            "input_tokens": self.input_tokens_total + (via.input_tokens_total if via else 0),
+            "output_tokens": self.output_tokens_total + (via.output_tokens_total if via else 0),
+            "cost_usd": round(self.cost_total + (via.cost_total if via else 0.0), 6),
+            "uncosted_calls": self.uncosted_calls + (via.uncosted_calls if via else 0),
+            "via_openrouter": 1 if via else 0,
         }
 
 

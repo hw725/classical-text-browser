@@ -416,3 +416,59 @@ def test_or_module_exports_used_by_route():
     """라우트·시험이 가짜로 바꿔 끼우는 이름이 모듈에 있다(make_jev_client가 부를 때 찾는다)."""
     assert or_mod.OpenRouterJevClient is OpenRouterJevClient
     assert jev_mod.JevClient is JevClient
+
+
+# ── ④ 직결이 거절되면 OpenRouter로 넘어간다 (2026-10-06 TypeSafe 402 크레딧 소진) ──────────
+_Q = {"q": {"type": "noul", "instructions": "?"}}
+
+
+def test_direct_refusal_moves_to_openrouter_and_stays(tmp_path, wire):
+    """두 키가 다 있을 때 직결 402 → 같은 묻기를 OpenRouter 경유로, 그 뒤로는 바로 OpenRouter."""
+    wire.fail_models = {"jev-latest"}  # 직결 모델 이름만 402 — OpenRouter 이름(~typesafe/…)은 통과
+    c = make_jev_client(library_root=_lib(tmp_path, _COMBOS["both"]), max_calls=3)
+    assert type(c) is JevClient, "고르는 규칙(①)은 그대로 — 넘어가는 것은 묻는 도중이다"
+    assert c.ask("s", _Q)["q"]["noul"] == 0.9
+    c.ask("s", _Q)
+    assert [(s["url"], s["model"]) for s in wire.seen] == [
+        (TYPESAFE_URL, "jev-latest"),
+        (OPENROUTER_DECISIONS_URL, OPENROUTER_JEV_MODEL),
+        (OPENROUTER_DECISIONS_URL, OPENROUTER_JEV_MODEL),
+    ]
+    wire.assert_keys_stay_home()
+    assert c.fell_back == "openrouter(typesafe 402)"
+    assert (c.PROVIDER, c.model) == ("openrouter", OPENROUTER_JEV_MODEL), "«누가 답했나»가 실제 길"
+    u = c.usage()
+    assert u["asks"] == 2, "거절된 묻기를 상한에 두 번 세지 않는다"
+    assert u["via_openrouter"] == 1 and u["cost_usd"] > 0
+
+
+def test_fallback_keeps_one_budget(tmp_path, wire):
+    """넘어간 뒤에도 상한은 하나다 — OpenRouter 쪽이 새 예산을 갖지 않는다."""
+    wire.fail_models = {"jev-latest"}
+    c = make_jev_client(library_root=_lib(tmp_path, _COMBOS["both"]), max_calls=2)
+    c.ask("s", _Q)
+    c.ask("s", _Q)
+    with pytest.raises(jev_mod.JevGateExceeded):
+        c.ask("s", _Q)
+
+
+def test_no_fallback_without_openrouter_key_or_when_disabled(tmp_path, wire):
+    wire.fail_models = {"jev-latest"}
+    c = make_jev_client(library_root=_lib(tmp_path, _COMBOS["typesafe_only"]), max_calls=3)
+    with pytest.raises(JevCallFailed) as ei:
+        c.ask("s", _Q)
+    assert ei.value.status == 402 and len(wire.seen) == 1 and c.fell_back is None
+    off = JevClient(library_root=_lib(tmp_path, _COMBOS["both"]), max_calls=3, fallback=False)
+    with pytest.raises(JevCallFailed):
+        off.ask("s", _Q)
+    assert len(wire.seen) == 2
+
+
+def test_openrouter_clients_do_not_chain_further(tmp_path, wire):
+    """OpenRouter decider·Jev 자신이 거절되면 그대로 실패 — 폴백은 TypeSafe 직결에만 있다."""
+    wire.fail_models = {OPENROUTER_DECIDER_MODEL, OPENROUTER_JEV_MODEL}
+    for cls in (OpenRouterDecisionClient, OpenRouterJevClient):
+        c = cls(library_root=_lib(tmp_path, _COMBOS["both"]), max_calls=3)
+        with pytest.raises(JevCallFailed):
+            c.ask("s", _Q)
+    assert len(wire.seen) == 2

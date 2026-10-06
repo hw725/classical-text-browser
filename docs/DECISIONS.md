@@ -8521,6 +8521,25 @@ Codex 리뷰가 남긴 실패 시험 5건(`tests/test_codex_review_judge.py`, �
 `needs_key: "openrouter"`를 싣고, 화면(`_updateLlmJudgeNote`)이 크기 뒤에 «키 없음: 설정 → «판정 모델»에서 OpenRouter 키(또는
 TypeSafe 키)를 넣어야 돕니다»를 붙인다. 시험 `tests/test_no_key_notices.py`의 `test_a_*` 4건(되돌리면 3 실패).
 
+### 후속(2026-10-06) — 직결이 거절되면 묻는 도중에 OpenRouter로 넘어간다
+
+TypeSafe 크레딧이 바닥나 직결이 402(`billing_error`)를 돌려주었다. `make_jev_client`는 **시작할 때 키로만** 고르므로,
+두 키를 다 넣은 사람의 목차 대조와 decider 폴백 Jev가 같은 모델이 OpenRouter에 있는데도 전부 실패했다. 사용자 지시(같은 날,
+yoon 정렬에서): «typesafe jev 안 되면 바로 openrouter로 폴백».
+
+- `JevClient`(`PROVIDER == "typesafe"`, 기본 주소)가 HTTP로 거절되면 그 자리에서 `OpenRouterJevClient`를 만들어 **같은 묻기**를
+  다시 보내고, 그 뒤 묻기는 그 클라이언트로만 보낸다(묻기마다 402를 다시 받지 않게). 429·529 백오프는 종전대로 먼저 돈다.
+- 고르는 규칙(위 후속 «어떤 키도 남의 주소로»)은 그대로다 — 넘어가는 클라이언트는 OPENROUTER_API_KEY만 OpenRouter 주소로 보낸다.
+  OpenRouter 키가 없으면 종전처럼 실패한다. `JEV_BASE_URL`로 자체 게이트웨이를 가리켰거나 `fallback=False`면 넘어가지 않는다.
+  OpenRouter decider·Jev 자신이 거절되면 더 잇지 않는다.
+- **상한은 하나다** — 거절된 묻기는 청구되지 않았으므로 `asks_made`에 두 번 세지 않고, OpenRouter 쪽이 새 예산을 갖지 않게 묻기 수를
+  맞춰 넘긴다. `usage()`는 둘을 합치고 `via_openrouter`(0·1)를 싣는다.
+- «누가 답했나»(`judge_label`)가 읽는 `PROVIDER`·`model`은 넘어간 뒤 `openrouter`·`~typesafe/jev-latest`가 된다. 문턱은 Jev의
+  것 그대로(`JUDGE_FAMILY = "jev"`).
+
+같은 날 llm_pipeline 정본(`llm_runtime/jev_decisions.py`·`bookmark_pipeline/jev_triage.py`)과 dansa-research `jev_client.py`에도
+같은 규칙을 넣었다. 시험 `tests/test_jev_via_openrouter.py` ④ 4건.
+
 ## D-137: 애매한 후보 2차 판정은 «붙여 넣기» 길로 — 앱은 외부 모델을 부르지 않는다 (2026-10-05)
 
 **배경.** 사용자 결정(2026-10-05). 본문 판정(D-129·D-136)의 escalate 대역은 체크 해제로 서서 사람이 하나씩 고른다.
