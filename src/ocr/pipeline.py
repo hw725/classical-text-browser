@@ -603,8 +603,15 @@ class OcrPipeline:
 
         script_records: dict[str, dict] = {}
         if applies(result.engine_id):
+            # 이 문헌이 승인한 쌍(D-080 결정 3, 예: 為↔爲)이면 보류 글자도 바꾼다 — 문헌 안에서만
+            from core.alignment import load_document_approvals
+
+            approved = load_document_approvals(
+                Path(self.library_root) / "documents" / doc_id
+            ).is_variant
             for i, item in enumerate(result.ocr_results):
-                script_records[item.get("layout_block_id") or f"#{i}"] = normalize_block(item)
+                bid = item.get("layout_block_id") or f"#{i}"
+                script_records[bid] = normalize_block(item, approved)
 
         data = result.to_dict()
         # 좌표계 기록 (D-087): bbox는 이 크기의 이미지 픽셀이다. 예전에는 배율 2.0을

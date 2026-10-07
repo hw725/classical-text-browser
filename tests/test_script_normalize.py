@@ -19,6 +19,8 @@ from src.ocr import script_normalize as sn
 from src.ocr.pipeline import OcrPageResult, OcrPipeline
 from src.ocr.registry import OcrEngineRegistry
 
+WEI = ("為", "爲")  # 대만 상용자라 보류지만 한국 고문헌은 爲 — 문헌 승인으로만 바꾼다
+
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = json.loads(
     (ROOT / "schemas" / "source_repo" / "ocr_page.schema.json").read_text(encoding="utf-8")
@@ -109,3 +111,64 @@ def test_partial_rerun_keeps_records_of_untouched_blocks(tmp_path):
     jsonschema.validate(data, SCHEMA)
     assert set(data["ocr_config"]["script_normalize"]["blocks"]) == {"b1"}
     assert [x["lines"][0]["text"] for x in data["ocr_results"]] == ["學", "傳"]
+
+
+def test_approved_pair_converts_only_in_that_document():
+    b = block("為學")
+    rec = sn.normalize_block(b, approved=lambda a, c: (a, c) == WEI)
+    assert b["lines"][0]["text"] == "爲學"
+    assert rec["changed"] == [[0, 0, "為", "爲", "approved"]]
+    assert rec["ambiguous"] == []
+    sn.revert_block(b, rec)
+    assert b["lines"][0]["text"] == "為學"
+    b2 = block("為")
+    assert sn.normalize_block(b2)["ambiguous"] == [[0, 0, "為", ["爲"]]]  # 승인 없으면 그대로
+    assert b2["lines"][0]["text"] == "為"
+
+
+def _approve(tmp_path, a, c):
+    from core.alignment import load_document_approvals, save_document_approvals
+
+    doc = tmp_path / "documents" / "doc001"
+    vd = load_document_approvals(doc)
+    vd.add_pair(a, c)
+    save_document_approvals(doc, vd)
+
+
+def test_pipeline_reads_document_approvals(tmp_path):
+    pl = _pipeline(tmp_path)
+    _approve(tmp_path, *WEI)
+    r = OcrPageResult(doc_id="doc001", part_id="vol1", page_number=1, engine_id="ndlkotenocr-full",
+                      ocr_results=[block("為学", "b1")])
+    pl._save_ocr_result("doc001", "vol1", 1, r)
+    data = _saved(tmp_path)
+    assert data["ocr_results"][0]["lines"][0]["text"] == "爲學"
+    jsonschema.validate(data, SCHEMA)
+
+
+def test_apply_script_on_existing_l2(tmp_path):
+    from scripts.apply_script_approvals import run
+
+    pl = _pipeline(tmp_path)
+    r = OcrPageResult(doc_id="doc001", part_id="vol1", page_number=1, engine_id="ndlkotenocr",
+                      ocr_results=[block("為之為", "b1")])
+    pl._save_ocr_result("doc001", "vol1", 1, r)  # 승인 전 OCR — 為 는 보류
+    l2 = tmp_path / "documents" / "doc001" / "L2_ocr" / "vol1_page_001.json"
+    # 사람이 셋째 글자를 이미 고쳤다 — 건드리면 안 된다
+    data = json.loads(l2.read_text(encoding="utf-8"))
+    data["ocr_results"][0]["lines"][0]["text"] = "為之何"
+    l2.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    _approve(tmp_path, *WEI)
+    before = l2.read_text(encoding="utf-8")
+    t = run(tmp_path, "doc001", None, do_apply=False)
+    assert t["chars"] == 1 and l2.read_text(encoding="utf-8") == before  # 미리보기는 쓰지 않는다
+    t = run(tmp_path, "doc001", None, do_apply=True)
+    data = _saved(tmp_path)
+    assert data["ocr_results"][0]["lines"][0]["text"] == "爲之何"
+    rec = data["ocr_config"]["script_normalize"]["blocks"]["b1"]
+    assert rec["changed"] == [[0, 0, "為", "爲", "approved"]]
+    assert rec["ambiguous"] == [[0, 2, "為", ["爲"]]]  # 사람이 고친 자리는 보류로 남는다
+    jsonschema.validate(data, SCHEMA)
+    from src.ocr import page_backup
+
+    assert page_backup.has_backup(tmp_path / "documents" / "doc001", "vol1", 1)
