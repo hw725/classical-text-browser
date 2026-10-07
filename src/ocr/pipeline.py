@@ -489,6 +489,12 @@ class OcrPipeline:
         """
         ocr_dict = self._process_block(engine, page_image, block, **engine_kwargs)
         ocr_dict["layout_block_id"] = block.get("block_id", "unknown")
+        # 교정 패스도 확정본(정자)과 대조하므로 같은 정자화를 거친다(D-138). 이 경로는 L2 에 바로
+        # 저장하지 않아 기록을 남길 자리가 없다 — 바꾼 글자는 교정 화면의 대조에서 드러난다.
+        from .script_normalize import applies, normalize_block
+
+        if applies(getattr(engine, "engine_id", None)):
+            normalize_block(ocr_dict)
         return ocr_dict
 
     def _process_block(
@@ -590,6 +596,16 @@ class OcrPipeline:
 
         output_path = l2_dir / filename
 
+        # 엔진 인공물 신자체 → 정자(D-138).
+        # 페이지 단위·블록별 두 경로가 모두 여기를 지나므로 한 곳에서 한다.
+        # result.ocr_results 를 제자리에서 바꾸므로 호출자(API 응답)도 바뀐 글자를 본다.
+        from .script_normalize import applies, normalize_block, summary
+
+        script_records: dict[str, dict] = {}
+        if applies(result.engine_id):
+            for i, item in enumerate(result.ocr_results):
+                script_records[item.get("layout_block_id") or f"#{i}"] = normalize_block(item)
+
         data = result.to_dict()
         # 좌표계 기록 (D-087): bbox는 이 크기의 이미지 픽셀이다. 예전에는 배율 2.0을
         # 전제로 기록하지 않았는데, 스캔 해상도에 맞춰 렌더하면서 쪽마다 달라졌다.
@@ -635,6 +651,7 @@ class OcrPipeline:
                 for item in incoming_results
                 if item.get("layout_block_id")
             }
+            incoming_by_id_all = set(incoming_by_id)
 
             merged_results = []
             for old_item in existing_results:
@@ -654,6 +671,21 @@ class OcrPipeline:
                     merged_ids.add(block_id)
 
             data["ocr_results"] = merged_results
+
+            # 다시 인식하지 않은 블록의 정자화 기록은 이어받는다
+            # (다시 인식한 블록은 새 기록으로 갈아 끼운다)
+            old_cfg = existing_data.get("ocr_config") or {}
+            old_blocks = (old_cfg.get("script_normalize") or {}).get("blocks") or {}
+            kept_ids = {m.get("layout_block_id") for m in merged_results} - set(incoming_by_id_all)
+            for bid, rec in old_blocks.items():
+                if bid in kept_ids and bid not in script_records:
+                    script_records[bid] = rec
+
+        if any(r["changed"] or r["ambiguous"] for r in script_records.values()):
+            data["ocr_config"] = {
+                **(data.get("ocr_config") or {}),
+                "script_normalize": summary(script_records),
+            }
 
         # 원자적 저장(D-069) — open("w")는 먼저 0바이트로 자른다. L2 OCR 결과가 빈 파일로
         # 남으면 그 쪽은 OCR을 다시 돌려야 한다. 함수 안 import는 ocr → core 의존을 늦게 맺으려고.
