@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""CLAUDE.md 「파일 다루기」 표의 금지 패턴이 **하나도 없는가** — 산문 규칙을 시험으로.
+"""AGENTS.md 「파일 다루기」 표의 금지 패턴이 **하나도 없는가** — 산문 규칙을 시험으로.
 
 ## 왜 이 시험이 필요한가
 
@@ -265,7 +265,7 @@ def test_no_forbidden_patterns():
         if n > _BASELINE.get((key, rel), 0)
     ]
     assert not grown, (
-        "CLAUDE.md 「파일 다루기」 금지 패턴이 있다:\n  "
+        "AGENTS.md 「파일 다루기」 금지 패턴이 있다:\n  "
         + "\n  ".join(grown)
         + "\n\n  write_text_json → core.document.write_json_atomic()"
         "\n  json_dump_open  → core.document.write_json_atomic()"

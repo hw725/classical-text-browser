@@ -3,7 +3,7 @@
 
 Codex 교차 리뷰(2026-10-01)가 짚은 자리: 예전 판정은 `종료 코드 == 0`뿐이라, 부모 셸의
 `PYTEST_ADDOPTS=--collect-only`나 전부 skipped인 실행도 «통과» 영수증이 됐다. 영수증은
-완료 보고의 증거이므로(CLAUDE.md «에이전트 작업 계약» 2항) 그 거짓 초록을 여기서 막는다.
+완료 보고의 증거이므로(AGENTS.md «에이전트 작업 계약» 2항) 그 거짓 초록을 여기서 막는다.
 """
 
 from __future__ import annotations

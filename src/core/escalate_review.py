@@ -236,7 +236,7 @@ def _answer_objects(text: str) -> tuple[list, str]:
 
     덩어리 셋의 답을 한 칸에 이어 붙여도 읽히게 하려고 객체를 여러 개 찾는다(울타리·설명 문장은
     건너뛴다). 하나도 없으면 공통 파서(`parse_llm_items`)로 넘겨 잘린 답에서 완성된 항목만 건진다
-    — 기능마다 복구 파서를 따로 두지 않는다(CLAUDE.md «파일 다루기»).
+    — 기능마다 복구 파서를 따로 두지 않는다(AGENTS.md «파일 다루기»).
     """
     dec = json.JSONDecoder()
     found: list = []

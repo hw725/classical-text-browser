@@ -377,7 +377,7 @@ def _load_page_image(doc_id: str, page: int, part_id: str | None = None) -> byte
                         raw = buf.getvalue()
                     return resize_for_llm(raw, max_long_side=2000)
 
-    # 2. PDF에서 페이지 추출 — 정본 함수 load_page_image_from_pdf로(CLAUDE.md 「파일 다루기」).
+    # 2. PDF에서 페이지 추출 — 정본 함수 load_page_image_from_pdf로(AGENTS.md 「파일 다루기」).
     # 그 함수가 resolve_part_pdf·fitz `with`·page_rotation(권 회전 D-123 + 쪽 범위 회전 D-126)을
     # 한 곳에서 처리한다. 여기서 get_pixmap을 직접 부르면 회전 규칙이 바뀔 때 이 자리만 남는다.
     # scale=2.0(144 DPI)은 예전 직접 렌더와 같은 값이다 — None(스캔 원해상도)으로 두면
