@@ -26,7 +26,7 @@ D-001: 이 플랫폼의 주 인터페이스는 GUI이며, CLI는 보조 도구�
     공유 상태 및 헬퍼는 app/_state.py에 집약.
 
     이 수치는 scripts/check_doc_drift.py가 검사한다(D-079). 라우트를 늘리거나 줄이면
-    여기와 CLAUDE.md·AGENTS.md를 함께 고쳐야 pytest가 통과한다.
+    여기와 AGENTS.md(지침 정본 — CLAUDE.md는 가져오기 포인터)를 함께 고쳐야 pytest가 통과한다.
 """
 
 import os
