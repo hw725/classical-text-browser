@@ -49,6 +49,35 @@
     "*.sh",
     "pyproject.toml"
   ],
+  "sweep": {
+    "required": false,
+    "scope": [
+      "*.bat",
+      "*.css",
+      "*.html",
+      "*.js",
+      "*.ps1",
+      "*.py",
+      "*.sh",
+      "pyproject.toml",
+      "*.md",
+      "*.txt",
+      "*.json",
+      "*.toml",
+      "*.yml",
+      "*.yaml"
+    ],
+    "exclude": [
+      {
+        "glob": "build/**",
+        "why": "빌드 생성물(설치 파일 xref 등) — 원본은 installer/·scripts/ 에 있고 그쪽을 전수한다"
+      },
+      {
+        "glob": "logs/**",
+        "why": "실행 기록 — 코드·문서에 대한 주장이 아니라 판정 대상이 아니다"
+      }
+    ]
+  },
   "conditions": [
     {
       "id": "C-001",
@@ -80,9 +109,9 @@
     }
   ],
   "approved": {
-    "hash": "9b6f4368f3e3aa93a480ff577973c4c2ba882f2e05233e3a93a2aaf616a57843",
-    "request": "A-cde95d49",
-    "ts": "2026-10-10T23:19:54",
+    "hash": "6d3899428df66efe961e314d867ed0cc603365702a7f2f316d4d712204e5a400",
+    "request": "A-b2139329",
+    "ts": "2026-10-11T00:13:23",
     "guards": {
       "tests/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "tests/conftest.py": "d9a37e7da3f63eed15da0a4bb70fcf8cad8e8a0b98ba245a8eaae64ae3b945ac",
