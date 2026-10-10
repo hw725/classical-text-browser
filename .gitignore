@@ -101,3 +101,6 @@ resources/variant_chars_cjkvi_*.json
 PRIVATE_TODO.md
 # zip 설치를 git 사본으로 바꾼 표시(core/updater.py)
 .ctb-from-zip
+
+# 포괄 하네스 v2 — 영수증·승인 사본·시험 실행 결과(harness.contract.json 은 추적한다)
+.harness/
