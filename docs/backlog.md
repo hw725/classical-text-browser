@@ -141,3 +141,6 @@ escalate 정답 6건 중 5건이 0.8~0.85, 운양집은 50건이 0.5~0.85에 고
 | B-033 | 장서각·KOSTMA·규장각 서지가 스키마에 막힘 | subject 목록·classification 객체(2026-10-11) — 같은 시험 |
 | B-034 | 이미지 묶음 쪽 순서 p1,p10,p2 | 자연 정렬(2026-10-11) — 같은 시험 |
 | B-035 | 시험이 재지 못하는 자리 | 외부 연결 차단(`tests/conftest.py`, 표지 `network`)·NDL 시험 slow·편성 «말로 넣기» 시험 가짜 라우터·각 시험 단언 강화(2026-10-11). 남은 것은 B-036 |
+| B-037 | 스냅샷 가져오기가 `../`로 서고 밖에 쓸 수 있음(2차 전수 S-20261011-185238) | `core.snapshot.unsafe_snapshot_paths` — 문헌·해석 id·L3 part·L4 file_name·경계 part·작업 계획 권·`_source_path`·엔티티 종류·id를 검증이 422로 막고, 들이기 함수가 한 번 더 막고 쓰는 자리마다 서고 안인지 본다. 긴 원래 id가 새 id 64자를 넘던 것도 자름(2026-10-11) — `test_snapshot_paths_that_escape_the_library_are_refused` 등 |
+| B-038 | 폴더 배치 OCR이 중단 뒤 이어 하지 못함(같은 편이 다른 id) | 문헌 id를 원본 경로의 해시로(`embed_folder._safe_doc_id(path)`), 작업 공간 정리가 `startswith(doc_id)`로 다른 편의 해석 저장소까지 지우던 것도 고침(2026-10-11) — `test_embed_folder_doc_id_is_stable_per_file` |
+| B-039 | PaddleOCR 워커에 시간 제한 없음(엔진 목록 무한 대기) | `_worker_call`이 timeout을 실제로 지키고, 넘으면 그 워커를 끄고 실패로 돌려줌(2026-10-11) — `test_paddle_worker_call_honours_its_timeout` |

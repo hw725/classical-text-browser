@@ -8676,3 +8676,38 @@ decider 문턱(0.95/0.35)에서 그 수는 천진담초 131행·운양집 1책 4
 - 교정 패스(`recognize_block`)는 문헌 id를 받지 않아 승인 변환을 하지 않는다(1:1 변환만).
 - 시험 3건 추가(승인 문헌에서만 변환·되돌리기, 파이프라인의 승인 읽기, 기존 L2 반영의 미리보기 무쓰기·사람 수정 자리
   건너뛰기·백업). 합계 10건.
+
+## D-139: 편성 본문 경계 판정을 다시 Jev 주로 — Perplexity decider v1.1은 폴백 (2026-10-11)
+
+**배경.** D-136이 본문 판정의 주로 둔 `perplexity/pplx-decider-v1-27b`의 OpenRouter 엔드포인트가 사라졌다(호출 시 404
+«No endpoints found»). 10/8에 올라온 v1.1(`pplx-decider-v1.1-27b`)을 같은 정답으로 다시 쟀다(head-repo
+`docs/clef-vs-jev-20261003/README.md` «재측정 (2026-10-11)», 재채점 `scripts/ctb_band_select.py`·`ctb_hi_thresholds.py`, 호출 0건).
+
+- decider는 **질문마다 state를 다시 과금한다**(같은 3,000자 state에 질문 10개면 ≈10배). ctb는 요청 하나에 질문 약 80개를
+  묶으므로 책 1권에 Jev 0.56M 토큰($0.024) 대 decider 9.37M 토큰(v1 $0.39 → v1.1 $0.19).
+- v1.1은 확률이 위로 쏠려 D-136의 0.95/0.35로는 헛것이 는다(천진담초 accept 정밀 0.766). D-136과 같은 기준
+  («accept 정밀은 Jev(0.85)보다 낮지 않게, reject로 잃는 정답은 Jev(0.5)보다 많지 않게»)으로 다시 고르면 **0.997/0.69**
+  — 같은 계산이 폐기된 v1에서 0.95/0.36을 재현한다. 0.997은 경계값이다(0.996이면 천진담초 정밀이 Jev 아래).
+
+| 대역 | accept 정밀 천진 / 운양 | 잃은 정답 | 넘기는 행 | 책당 |
+|---|---|---|---|---|
+| Jev 0.85/0.5 | 0.917 / 0.786 | 0 / 5 | 73 / 326 | $0.024 |
+| v1 0.95/0.36 (폐기) | 0.962 / 0.797 | 0 / 5 | 131 / 563 | $0.39 |
+| v1.1 0.997/0.69 | 0.957 / 0.838 | 0 / 4 | 58 / 506 | $0.19 |
+
+**결정(사용자, 2026-10-11).** 비용 대비 차이가 미미하므로 싼 쪽을 주로 둔다 — **본문·목차 모두 Jev가 주**, OpenRouter 키가
+있으면 decider v1.1이 **Jev가 실패한 호출만** 대신 답한다. 폴백이 답한 묶음은 0.997/0.69, Jev가 답한 묶음은 0.85/0.5
+(문턱은 답한 모델의 것 — `judge_thresholds`, D-136 그대로).
+
+**구현.**
+- `composition.py::_structure_jev`: `body_judge = jev`, `fallback = decider if decider.has_key`. 게이트는 Jev에 목차 + 본문,
+  폴백에 본문 전부(최악). OpenRouter 키 하나면 `make_jev_client`가 OpenRouter 경유 Jev를 주므로 주는 늘 Jev다.
+- 사용량 합계가 «주 + Jev»만 세고 있어, decider가 폴백이 되자 그 비용이 `usage`·`usage_by`에서 빠질 자리였다 —
+  주·목차·폴백을 같은 객체는 한 번만 세어 합친다.
+- `openrouter_decider.OPENROUTER_DECIDER_MODEL = "perplexity/pplx-decider-v1.1-27b"`,
+  `structure_llm.DECIDER_ACCEPT_AT/REJECT_AT = 0.997/0.69`.
+- 시험: `tests/test_openrouter_decider.py`(폴백 방향·문턱·라우트 기본 Jev·Jev 실패 시 decider·dry_run 판정자),
+  `tests/test_jev_via_openrouter.py`(키 조합별 주·폴백·목차 판정자, Jev 실패 시 decider 문턱).
+- 화면 문구(편성 「더 묻기…」 설명·설정 «판정 모델»의 OpenRouter 칸 역할)와 user-guide·module-map·CHECKPOINTS를 고쳤다.
+
+**되돌릴 수 없는 것 없음** — 저장 형식은 그대로다. 판정 결과(후보)는 저장되지 않고 사람이 「적용」한 경계만 남는다.

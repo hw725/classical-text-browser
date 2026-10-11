@@ -1109,7 +1109,7 @@ async function _updateLlmJudgeNote() {
     const toc = d.toc_entries
       ? ` · 목차 ${d.toc_entries}항목${d.toc_judge ? `(${_judgeName(d.toc_judge)})` : ""}`
       : "";
-    // 누가 답할지(D-136 — 기본은 OpenRouter decider, 키가 없으면 Jev)
+    // 누가 답할지(D-139 — 본문은 Jev, decider는 Jev가 실패한 호출만)
     const judge = d.judge ? ` · ${_judgeName(d.judge)}` : "";
     // 키가 없으면 누르기 전에 말한다 — 실행은 400으로 거절된다(2026-10-06 설치 검증)
     const noKey =

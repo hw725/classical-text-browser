@@ -54,6 +54,31 @@ PADDLE_LANGUAGES = {
 }
 
 
+def _readline_within(proc, timeout: float) -> Optional[str]:
+    """자식의 stdout에서 한 줄을 timeout초 안에 읽는다. 입력: Popen, 초. 출력: 줄(EOF면 "")
+    또는 시간이 넘으면 None. 읽기 중 예외는 그대로 다시 던진다.
+
+    왜 스레드인가: Windows에서는 파이프에 select를 쓸 수 없다. 시간이 넘어 남은 읽기 스레드는
+    호출자가 자식을 끄면 EOF를 받고 끝난다(daemon이라 프로세스 종료도 막지 않는다).
+    """
+    box: dict = {}
+
+    def _read() -> None:
+        try:
+            box["line"] = proc.stdout.readline()
+        except Exception as e:  # noqa: BLE001 — 호출자 스레드에서 다시 던진다
+            box["error"] = e
+
+    t = threading.Thread(target=_read, name="paddle-worker-read", daemon=True)
+    t.start()
+    t.join(timeout)
+    if t.is_alive():
+        return None
+    if "error" in box:
+        raise box["error"]
+    return box.get("line", "")
+
+
 def _gpu_paddle_installed() -> bool:
     """지금 파이썬에 paddle GPU판이 깔려 있는가 — 메타데이터만 본다(paddle import는 무겁다)."""
     try:
@@ -232,14 +257,29 @@ class PaddleOcrEngine(BaseOcrEngine):
         return self._worker
 
     def _worker_call(self, req: dict, timeout: float = 600.0) -> dict:
-        """요청 하나를 보내고 응답을 받는다. 자식이 죽었으면 한 번 다시 띄운다."""
+        """요청 하나를 보내고 응답을 받는다. 자식이 죽었으면 한 번 다시 띄운다.
+
+        입력: 요청 dict, 응답을 기다릴 최대 초. 출력: 워커의 응답 dict.
+        **timeout은 실제로 지킨다**(2026-10-11 전수 검토 — 전에는 인자만 받고 `readline()`이
+        끝없이 기다려, 워커가 멈추면 엔진 목록·OCR 요청이 영영 돌아오지 않았다).
+        Windows 파이프는 select로 기다릴 수 없어 읽기를 따로 띄운 스레드에서 하고 그 스레드를
+        timeout만큼만 기다린다. 넘으면 멈춘 워커를 끄고(이 객체가 띄운 자식뿐이다) 다시 띄우지
+        않고 실패로 돌려준다 — 다시 띄우면 같은 시간을 한 번 더 기다리게 된다.
+        """
         with self._worker_lock:
             for attempt in (1, 2):
                 proc = self._worker_start()
                 try:
                     proc.stdin.write(json.dumps(req, ensure_ascii=False) + "\n")
                     proc.stdin.flush()
-                    line = proc.stdout.readline()
+                    line = _readline_within(proc, timeout)
+                    if line is None:
+                        self._worker_stop()
+                        raise OcrEngineError(
+                            f"PaddleOCR 워커({self._worker_python})가 {timeout:g}초 안에 "
+                            "답하지 않아 껐습니다. 다음 요청에서 새로 띄웁니다 — "
+                            "계속되면 doctor.bat으로 환경을 확인하세요."
+                        )
                     if not line:
                         raise BrokenPipeError("워커가 응답 없이 종료")
                     return json.loads(line)

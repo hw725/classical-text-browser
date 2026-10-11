@@ -171,7 +171,7 @@ class _NoKeyDecider:
 
     PROVIDER = "openrouter"
     INPUT_USD_PER_M = 0.04
-    model = "perplexity/pplx-decider-v1-27b"
+    model = "perplexity/pplx-decider-v1.1-27b"
     has_key = False
 
     def __init__(self, **kwargs):

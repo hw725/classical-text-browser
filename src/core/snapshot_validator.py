@@ -12,6 +12,8 @@ Phase 12-3: 스냅샷 데이터의 구조적 무결성을 검증한다.
     2. 버전 호환성
     3. block_id 참조 무결성 (L5~L7 → L3 LayoutBlock id 또는 편성 단위 id) — 스키마로 적을 수 없는 것
     4. annotation_types 참조 무결성 — 같은 이유
+    5. 경로로 쓰일 이름(문헌 id·file_name·part_id·_source_path·엔티티 id 등)이 서고 밖을
+       가리키지 않는가 — `core.snapshot.unsafe_snapshot_paths` (2026-10-11 전수 검토)
 
 왜 스키마와 손 규칙을 나누는가: 「어떤 칸이 있어야 하는가」는 스키마 하나가 정하고
 (구현·문서·검증이 갈라지지 않게), 「이 id가 저기 있는가」처럼 스키마가 말할 수 없는 것만
@@ -35,7 +37,7 @@ def validate_snapshot(data: dict) -> tuple[list[str], list[str]]:
         errors — import를 차단하는 심각한 문제 목록.
         warnings — import는 가능하지만 주의가 필요한 사항 목록.
     """
-    from core.snapshot import exchange_validator, normalize_snapshot
+    from core.snapshot import exchange_validator, normalize_snapshot, unsafe_snapshot_paths
 
     errors: list[str] = []
     warnings: list[str] = []
@@ -56,6 +58,9 @@ def validate_snapshot(data: dict) -> tuple[list[str], list[str]]:
         where = "/".join(str(p) for p in err.absolute_path) or "(최상위)"
         hint = _MESSAGE_HINTS.get(where)  # 절 자체가 통째로 어긋난 때만 사람 말로 바꾼다
         errors.append(f"{where}: {hint or err.message}")
+
+    # 경로로 쓰일 값이 서고 밖을 가리키면 들이지 않는다 — 스키마로는 «../ 금지»를 다 적을 수 없다
+    errors.extend(unsafe_snapshot_paths(data))
 
     if "interpretation" not in data:
         warnings.append("interpretation 섹션 없음: 해석 데이터 미포함")

@@ -927,11 +927,12 @@ uv run python scripts/eval_cer.py --library ~/서고 --doc doc001 --part vol1 --
      보입니다). 「더 묻기…」 창 맨 위에 «①의 글 N자를 함께 읽습니다»가 뜹니다. 따로 두던 해제 칸은 없앴습니다.
    - **판정 모델로 고르기** — 같은 「더 묻기…」 창의 또 다른 항목입니다. 글을 만들지 않고 **판정만**
      돌려주는 모델에게 행마다 «여기서 새 글이 시작합니까»를 묻고 0～1 확률을 받습니다. 본문 판정은
-     **Perplexity decider**(OpenRouter로 부릅니다)가 기본이고, OpenRouter 키가 없거나 그 호출이 실패하면
-     그 호출만 **TypeSafe Jev**가 대신 답합니다(TypeSafe 키가 없으면 같은 Jev를 OpenRouter 키로 부르고
-     «TypeSafe Jev (OpenRouter 경유)»로 표시됩니다. 결과 줄에 «Perplexity decider·TypeSafe Jev · 폴백 N번»으로
-     누가 답했는지 뜹니다). 모델마다 확률의 쏠림이 달라 «미리 체크»하는 문턱도 다릅니다 — decider는
-     0.95 이상, Jev는 0.85 이상이고, 그 아래(decider 0.35·Jev 0.5 초과)는 체크하지 않은 «애매한 후보»입니다.
+     **TypeSafe Jev**가 맡고(TypeSafe 키가 없으면 같은 Jev를 OpenRouter 키로 부르고 «TypeSafe Jev (OpenRouter
+     경유)»로 표시됩니다), Jev 호출이 실패하면 그 호출만 **Perplexity decider**(OpenRouter로 부릅니다)가 대신
+     답합니다. 결과 줄에 «TypeSafe Jev·Perplexity decider · 폴백 N번»으로 누가 답했는지 뜹니다. decider는 정밀이
+     조금 높지만 책 1권에 Jev의 약 8배 비용이라 폴백으로 둡니다(2026-10-11 재측정). 모델마다 확률의 쏠림이 달라
+     «미리 체크»하는 문턱도 다릅니다 — Jev는 0.85 이상, decider는 0.997 이상이고, 그 아래(Jev 0.5·decider 0.69
+     초과)는 체크하지 않은 «애매한 후보»입니다.
      총목이 있으면 **목차 항목이 본문 어느 행인지**도 후보 몇 개 중에서 고르게 합니다(«없음»도 선택지에
      있어 본문에 없는 항목은 붙이지 않습니다). 목차가 답하는 것은 권·集(층위 1~2)이고 본문 판정이 답하는
      것은 그 안의 낱글이라, 본문 후보는 목차 경계 **아래 층**으로 내려갑니다. 체크하면 선택지 옆에
@@ -939,8 +940,8 @@ uv run python scripts/eval_cer.py --library ~/서고 --doc doc001 --part vol1 --
      **«목차·판정 모델»** 표지를 달고 서고, **규칙 후보를 거르지 않습니다** — 규칙으로 걸러 내면 규칙이
      못 보는 책에서 함께 눈이 멉니다(실측: 문집에서 찾는 비율 0.88 → 0.18). 쓰려면 OpenRouter 키나
      TypeSafe 키 중 하나가 필요합니다 — **설정 ▸ 판정 모델**에서 넣습니다(8.2-1). **OpenRouter 키 하나면
-     본문 판정·목차 대조·폴백이 다 됩니다**: 목차 대조는 decider로 아직 재지 않아 Jev가 맡는데, TypeSafe 키가
-     있으면 직결로, 없으면 같은 Jev를 OpenRouter 경유로 부릅니다. 둘 다 없으면 그렇게 알립니다. 한문·한국어는 이 모델이 스스로 «정확도가 낮다»고 밝히는 언어이니
+     본문 판정·목차 대조·폴백이 다 됩니다**: 본문과 목차 대조는 Jev가 맡는데, TypeSafe 키가
+     있으면 직결로, 없으면 같은 Jev를 OpenRouter 경유로 부릅니다. 폴백 decider는 OpenRouter 키가 있을 때만 붙습니다. 둘 다 없으면 그렇게 알립니다. 한문·한국어는 이 모델이 스스로 «정확도가 낮다»고 밝히는 언어이니
      **답을 그대로 믿지 말고 ③에서 골라** 쓰세요.
    - **애매한 후보 2차 판정** — 애매한 후보가 수백 개면 하나씩 고르기 어렵습니다. ③ 머리의
      **「애매한 후보 내보내기」**를 누르면 지시문과 후보(그 행 + 앞 4행·뒤 2행, 확률은 빼고)가 **클립보드에
@@ -1727,7 +1728,7 @@ Gemini·OpenAI가 대신 처리합니다. 화면에는 아무 표시도 남지 �
 |---|---|---|
 | **Cloudflare clef**(Workers AI, **이미지를 봅니다**) | 「말로 지시」 ① 자동 스캔의 «무슨 글인가» — **이미지 판정의 기본**(하루 무료 몫). **토큰과 계정 ID 둘 다** 넣어야 «키 있음» | https://dash.cloudflare.com/profile/api-tokens |
 | **Perplexity Decider**(decider-27b, **이미지를 봅니다**) | 같은 자리 — **종류 판정 모델**에서 «판정 모델 — Perplexity Decider»를 고릅니다 | https://console.perplexity.ai/project/keys |
-| **OpenRouter**(칸 이름 «Perplexity decider (OpenRouter 경유)») | 편성 「더 묻기…」의 «판정 모델로 고르기» — **본문 판정의 기본**(Perplexity decider). 이 키 하나로 **이미지 판정의 clef**(유료 크레딧 — Cloudflare 키가 없으면 처음부터, 있으면 Cloudflare가 실패한 쪽만)와, TypeSafe 키가 없을 때 **Jev(OpenRouter 경유)**까지 부릅니다 | https://openrouter.ai/settings/keys |
+| **OpenRouter**(칸 이름 «Perplexity decider (OpenRouter 경유)») | 편성 「더 묻기…」의 «판정 모델로 고르기» — Jev가 실패한 호출을 대신 답하는 **폴백**(Perplexity decider). 이 키 하나로 **이미지 판정의 clef**(유료 크레딧 — Cloudflare 키가 없으면 처음부터, 있으면 Cloudflare가 실패한 쪽만)와, TypeSafe 키가 없을 때 **Jev(OpenRouter 경유)**까지 부릅니다 | https://openrouter.ai/settings/keys |
 | TypeSafe Jev(텍스트만) | 같은 자리의 **목차 대조**, 그리고 OpenRouter 키가 없거나 호출이 실패했을 때의 본문 판정. **이 키가 없으면 OpenRouter 키로 같은 Jev를 대신 부릅니다**(이 칸은 «키 없음»으로 남고 안내 끝에 그렇게 적힙니다) | https://docs.typesafe.ai |
 
 키는 제 업체 주소로만 갑니다 — OpenRouter 키가 TypeSafe나 Perplexity 주소로 나가지 않습니다.

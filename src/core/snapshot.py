@@ -60,6 +60,111 @@ def normalize_snapshot(data: dict) -> dict:
     return out
 
 
+# ──────────────────────────────────────
+# Import 경로 검사 — 스냅샷의 이름이 서고 밖을 가리키지 못하게
+# ──────────────────────────────────────
+
+# 한 칸 이름(파일·폴더 하나)에 들어가면 안 되는 글자. 경로 구분자·드라이브 콜론·Windows 금지 문자.
+_BAD_NAME_CHARS = set('/\\:*?"<>|\0')
+# 새 문헌 id = 원래 id + «_» + 14자리 시각. 저장소 id는 64자까지라 원래 id는 49자로 자른다.
+_IMPORT_ID_BASE_MAX = 64 - 15
+
+
+def _is_safe_name(name) -> bool:
+    """파일·폴더 이름 «한 칸»으로 써도 되는가. 입력: 스냅샷의 값. 출력: 참이면 안전.
+
+    왜: 스냅샷은 남이 만든 파일일 수 있다. `../` 하나로 서고 밖에 파일을 쓸 수 있으면 안 된다
+    (2026-10-11 전수 검토 — 폴더 가져오기 라우트에는 이 검사가 있었고 JSON 가져오기에는 없었다).
+    점으로 시작하는 이름(`.git` 등)도 막는다 — 숨김 메타데이터를 덮어쓰지 않게.
+    """
+    return (
+        isinstance(name, str)
+        and bool(name)
+        and not name.startswith(".")
+        and not (set(name) & _BAD_NAME_CHARS)
+        and name.strip() == name
+    )
+
+
+def _is_safe_relpath(rel) -> bool:
+    """`_source_path`처럼 여러 칸짜리 상대 경로가 해석 저장소 안에 머무는가."""
+    if not isinstance(rel, str) or not rel or "\\" in rel:
+        return False
+    parts = rel.split("/")
+    return all(_is_safe_name(p) for p in parts)
+
+
+def unsafe_snapshot_paths(data: dict) -> list[str]:
+    """스냅샷 안에서 파일 경로로 쓰일 값 중 안전하지 않은 것을 사람 말로 돌려준다.
+
+    입력: 스냅샷 dict(옛 이름도 받는다). 출력: 문제 목록 — 비어 있으면 들여도 된다.
+    검사하는 자리(가져오기가 경로로 쓰는 값 전부): 문헌·해석 id, L3 쪽의 part_id,
+    L4 쪽의 file_name, 편성 경계의 part_id, 작업 계획의 권 열쇠, L5~L7의 `_source_path`,
+    코어 엔티티의 종류 이름과 id.
+    """
+    data = normalize_snapshot(data)
+    src = source_info(data)
+    problems: list[str] = []
+
+    from core.repo_id import REPO_ID_RULE_TEXT, is_valid_repo_id
+
+    for key in ("document_id", "interpretation_id"):
+        if key in src and not is_valid_repo_id(str(src.get(key) or "")):
+            problems.append(
+                f"source_info.{key} '{src.get(key)}'가 저장소 id 규칙"
+                f"({REPO_ID_RULE_TEXT})에 맞지 않습니다"
+            )
+
+    o_layers = (data.get("original") or {}).get("layers") or {}
+    for i, page in enumerate((o_layers.get("L3_layout") or {}).get("pages") or []):
+        if not _is_safe_name(str(page.get("part_id", "vol1"))):
+            problems.append(
+                f"L3 {i}번째 쪽의 part_id '{page.get('part_id')}'를 파일 이름으로 쓸 수 없습니다"
+            )
+        if not isinstance(page.get("page_number", 0), int):
+            problems.append(f"L3 {i}번째 쪽의 page_number가 정수가 아닙니다")
+    for i, page in enumerate((o_layers.get("L4_text") or {}).get("pages") or []):
+        if not _is_safe_name(page.get("file_name", "page.txt")):
+            problems.append(
+                f"L4 {i}번째 쪽의 file_name '{page.get('file_name')}'를 "
+                "파일 이름으로 쓸 수 없습니다"
+            )
+    for part in (o_layers.get("boundaries") or {}).get("parts") or []:
+        pid = part.get("part_id")
+        if pid and not _is_safe_name(pid):
+            problems.append(f"편성 경계의 part_id '{pid}'를 파일 이름으로 쓸 수 없습니다")
+    for pid in ((o_layers.get("read_plan") or {}).get("parts") or {}):
+        if not _is_safe_name(pid):
+            problems.append(f"작업 계획의 권 '{pid}'를 파일 이름으로 쓸 수 없습니다")
+
+    interp = data.get("interpretation") or {}
+    i_layers = interp.get("layers") or {}
+    for layer_key in ("L5_punctuation", "L5_hyeonto", "L6_translation", "L7_annotation"):
+        for item in i_layers.get(layer_key) or []:
+            sp = item.get("_source_path") if isinstance(item, dict) else None
+            if sp is not None and not _is_safe_relpath(sp):
+                problems.append(
+                    f"{layer_key}의 _source_path '{sp}'가 해석 저장소 밖을 가리키거나 "
+                    "쓸 수 없는 이름입니다"
+                )
+    for etype, items in (interp.get("core_entities") or {}).items():
+        if not _is_safe_name(etype):
+            problems.append(f"코어 엔티티 종류 '{etype}'를 폴더 이름으로 쓸 수 없습니다")
+        for item in items or []:
+            eid = str(item.get("id", "unknown")) if isinstance(item, dict) else ""
+            if not _is_safe_name(eid):
+                problems.append(f"코어 엔티티 id '{eid}'를 파일 이름으로 쓸 수 없습니다")
+    return problems
+
+
+def _inside(base: Path, target: Path) -> Path:
+    """target이 base 안에 있는지 마지막으로 한 번 더 본다(이름 검사를 피한 길이 있어도 막도록)."""
+    resolved = target.resolve()
+    if not resolved.is_relative_to(base.resolve()):
+        raise ValueError(f"스냅샷의 경로가 저장소 밖을 가리킵니다: {target}")
+    return target
+
+
 def _schemas_dir() -> Path:
     return Path(__file__).resolve().parent.parent.parent / "schemas"
 
@@ -449,17 +554,22 @@ def create_work_from_snapshot(
     """
     library_path = Path(library_path).resolve()
     data = normalize_snapshot(data)
+    # 아무것도 만들기 전에 막는다 — 라우트는 validate_snapshot에서 같은 검사로 422를 낸다.
+    # 여기서 한 번 더 보는 것은 라우트를 거치지 않는 호출도 서고 밖에 쓰지 못하게 하려는 것이다
+    problems = unsafe_snapshot_paths(data)
+    if problems:
+        raise ValueError("스냅샷의 경로가 안전하지 않아 들이지 않았습니다: " + "; ".join(problems))
     src_info = source_info(data)
     original = data.get("original", {})
     interpretation = data.get("interpretation", {})
     warnings = []
 
-    # 새 ID 생성 (원본 ID에 타임스탬프 접미사)
-    base_doc_id = src_info.get("document_id", "imported")
+    # 새 ID 생성 (원본 ID에 타임스탬프 접미사). 저장소 id는 64자까지라 원래 id를 잘라 맞춘다
+    base_doc_id = (src_info.get("document_id") or "imported")[:_IMPORT_ID_BASE_MAX]
     timestamp_suffix = datetime.now().strftime("%Y%m%d%H%M%S")
     new_doc_id = f"{base_doc_id}_{timestamp_suffix}"
 
-    base_interp_id = src_info.get("interpretation_id", "imported_interp")
+    base_interp_id = (src_info.get("interpretation_id") or "imported_interp")[:_IMPORT_ID_BASE_MAX]
     new_interp_id = f"{base_interp_id}_{timestamp_suffix}"
 
     doc_path = library_path / "documents" / new_doc_id
@@ -542,7 +652,7 @@ def _write_original_layers(
             part_id = page_data.get("part_id", "vol1")
             page_num = page_data.get("page_number", 0)
             fname = f"{part_id}_page_{page_num:03d}.json"
-            _write_json(l3_dir / fname, page_data)
+            _write_json(_inside(doc_path, l3_dir / fname), page_data)
 
     # L4: 텍스트 + 교정
     l4 = layers.get("L4_text", {})
@@ -556,13 +666,13 @@ def _write_original_layers(
             fname = page_data.get("file_name", "page.txt")
             text = page_data.get("text", "")
             # newline="" — Path.write_text는 Windows에서 CRLF로 쓴다(B-021)
-            with open(pages_dir / fname, "w", encoding="utf-8", newline="") as f:
+            with open(_inside(doc_path, pages_dir / fname), "w", encoding="utf-8", newline="") as f:
                 f.write(text)
 
             corr = page_data.get("corrections")
             if corr:
                 corr_name = Path(fname).stem + "_corrections.json"
-                _write_json(corrections_dir / corr_name, corr)
+                _write_json(_inside(doc_path, corrections_dir / corr_name), corr)
 
     # 편성 경계 — 문헌 id는 새 id로 고쳐 적는다(경계 목록 스키마의 document_id)
     for part in (layers.get("boundaries") or {}).get("parts") or []:
@@ -571,13 +681,15 @@ def _write_original_layers(
             continue
         b_dir = doc_path / "boundaries"
         b_dir.mkdir(exist_ok=True)
-        _write_json(b_dir / f"{part_id}.json", dict(part, document_id=doc_path.name))
+        _write_json(
+            _inside(doc_path, b_dir / f"{part_id}.json"), dict(part, document_id=doc_path.name)
+        )
 
     # 작업 계획
     for part_id, plan in ((layers.get("read_plan") or {}).get("parts") or {}).items():
         p_dir = doc_path / "read_plan"
         p_dir.mkdir(exist_ok=True)
-        _write_json(p_dir / f"{part_id}.json", plan)
+        _write_json(_inside(doc_path, p_dir / f"{part_id}.json"), plan)
 
     # 문헌별 이체자 승인
     if isinstance(layers.get("variant_approvals"), dict):
@@ -621,7 +733,7 @@ def _write_interpretation_layers(
         for item in layer_data:
             source_path = item.pop("_source_path", None)
             if source_path:
-                target = interp_path / source_path
+                target = _inside(interp_path, interp_path / source_path)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 _write_json(target, item)
             else:
@@ -631,11 +743,11 @@ def _write_interpretation_layers(
     # 코어 엔티티
     entities = interpretation.get("core_entities", {})
     for entity_type, items in entities.items():
-        entity_dir = interp_path / "core_entities" / entity_type
+        entity_dir = _inside(interp_path, interp_path / "core_entities" / entity_type)
         entity_dir.mkdir(parents=True, exist_ok=True)
         for item in items:
             entity_id = item.get("id", "unknown")
-            _write_json(entity_dir / f"{entity_id}.json", item)
+            _write_json(_inside(interp_path, entity_dir / f"{entity_id}.json"), item)
 
 
 # ──────────────────────────────────────

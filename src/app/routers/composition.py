@@ -796,8 +796,11 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
     from llm.jev import JevGateExceeded, make_jev_client
     from llm.openrouter_decider import OpenRouterDecisionClient
 
-    # 본문 판정의 기본은 OpenRouter 경유 Perplexity decider다(D-136 — 저장 측정에서 F1이 Jev보다
-    # 높았다). 키가 없으면 Jev가 주 판정자, 있으면 Jev는 «실패한 호출만» 대신 묻는 폴백이다.
+    # 본문 판정의 주는 Jev, OpenRouter 경유 Perplexity decider v1.1은 «실패한 호출만» 대신 묻는
+    # 폴백이다(D-139, 사용자 결정 2026-10-11). D-136에서는 decider(v1)가 주였으나
+    # v1이 OpenRouter에서 폐기됐고(404), v1.1은 질문마다 state를 다시 과금해
+    # 책 1권에 Jev의 약 8배($0.19 대 $0.024)인데 기준을 지키는 대역(0.997/0.69)에서
+    # 정밀 차이가 미미했다 — 비용 대비 싼 쪽을 주로 둔다.
     # 목차 대조(match_toc_entries_jev)는 Jev 그대로 — decider로 잰 적이 없다(D-136).
     # Jev는 `make_jev_client`가 고른다(D-136 후속, 2026-10-05): TypeSafe 키가 있으면 직결,
     # 없고 OpenRouter 키만 있으면 같은 Jev를 OpenRouter 경유로 — 전에는 OpenRouter 키를
@@ -809,9 +812,11 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
     library_root = get_library_path()
     decider = OpenRouterDecisionClient(max_calls=size["calls"] + 5, library_root=library_root)
     jev = make_jev_client(max_calls=planned + 5, library_root=library_root)
-    body_judge, fallback = (decider, jev) if decider.has_key else (jev, None)
-    if fallback is not None and not fallback.has_key:
-        fallback = None  # 폴백 키가 없으면 실패한 호출은 그대로 실패로 남긴다
+    # Jev 키가 없고 OpenRouter 키만 있어도 make_jev_client가 OpenRouter 경유 Jev를
+    # 주므로 주는 늘 Jev다.
+    # Jev가 키를 못 찾았으면 decider도 못 찾은 것이다(OpenRouter 키 하나면 Jev도 생긴다).
+    body_judge = jev
+    fallback = decider if decider.has_key else None  # 폴백 키가 없으면 실패한 호출은 실패로 남긴다
     # 입력만 청구된다(Jev $0.042/M, decider는 게이트웨이 cost — 어림은 $0.04/M). CJK 한 글자를
     # 1~1.5토큰으로 어림한다 — 실측은 호출 뒤 usage로.
     est = (
@@ -845,7 +850,8 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
         return JSONResponse(
             {
                 "error": "판정 모델 키를 찾지 못했습니다. 설정 → «판정 모델»에서 OpenRouter 키"
-                "(기본 — 본문은 Perplexity decider, 목차 대조는 OpenRouter 경유 Jev)나 "
+                "(Jev를 OpenRouter 경유로 부르고, 실패한 호출은 Perplexity decider가 "
+                "대신 답한다)나 "
                 "TypeSafe 키(Jev 직결)를 넣으세요. 키는 제 주소로만 갑니다 — OpenRouter 키는 "
                 "OpenRouter로, TypeSafe 키는 TypeSafe로(OPENROUTER_API_KEY·TYPESAFE_API_KEY "
                 "환경변수, 서고·프로젝트 .env, ~/.claude/data/triage/.env도 읽습니다).",
@@ -854,9 +860,9 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
             status_code=400,
         )
     try:
-        body_judge.gate(size["calls"])
-        if jev.has_key:
-            jev.gate(toc_calls + (size["calls"] if body_judge is jev or fallback else 0))
+        jev.gate(toc_calls + size["calls"])
+        if fallback is not None:
+            fallback.gate(size["calls"])  # 최악은 폴백이 본문 전부를 떠맡는 것
     except JevGateExceeded as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
@@ -919,17 +925,20 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
     _remember_escalate(doc_path, body.part_id, lines, proposals)
     meta["toc"] = toc_meta
     meta["engine"] = "jev"  # 요청 값 그대로(«판정 모델» 길) — 실제로 답한 모델은 answered_by
-    # 사용량은 두 클라이언트를 합친다 — 목차와 폴백 호출은 Jev 쪽에 쌓인다
-    usages = [body_judge.usage()] + ([jev.usage()] if jev is not body_judge else [])
+    # 사용량은 주·목차(Jev)·폴백(decider)을 합친다 — 같은 클라이언트는 한 번만 센다.
+    # D-139 전에는 폴백이 Jev라 «주 + Jev»만 셌다; decider가 폴백이 된 뒤로는
+    # 그 비용이 빠졌을 것이다
+    judges = []
+    for c in (body_judge, jev, fallback):
+        if c is not None and all(c is not seen for seen in judges):
+            judges.append(c)
+    usages = [c.usage() for c in judges]
     meta["usage"] = {
         k: (round(sum(u.get(k, 0) for u in usages), 6) if k == "cost_usd" else
             sum(u.get(k, 0) for u in usages))
         for k in usages[0]
     }
-    meta["usage_by"] = {
-        judge_label(c): c.usage()
-        for c in ([body_judge] + ([jev] if jev is not body_judge else []))
-    }
+    meta["usage_by"] = {judge_label(c): u for c, u in zip(judges, usages)}
     return {"proposals": proposals, **meta}
 
 

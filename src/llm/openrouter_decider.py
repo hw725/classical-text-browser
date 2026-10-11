@@ -1,4 +1,9 @@
-"""OpenRouter로 부르는 Perplexity decider — 편성 «글이 시작하는 행» 판정의 기본 (D-136).
+"""OpenRouter로 부르는 Perplexity decider — 편성 «글이 시작하는 행» 판정의 폴백 (D-136·D-139).
+
+2026-10-11(D-139): v1(`pplx-decider-v1-27b`)이 OpenRouter에서 폐기(404 «No endpoints found»)되어
+v1.1(`pplx-decider-v1.1-27b`)로 바꾸고, 주 판정자는 Jev로 되돌렸다 —
+이것은 Jev가 실패한 호출만 대신 답한다.
+아래 «왜 있는가»는 D-136 당시(v1을 주로 쓰던 때)의 근거다.
 
 왜 있는가:
     편성 「더 묻기…」의 판정 모델(D-129)은 TypeSafe Jev였다. 같은 저장 측정(천진담초·운양집 1책
@@ -9,7 +14,7 @@
 
 왜 `llm/decider.py`(Perplexity 직결)를 쓰지 않는가:
     측정은 OpenRouter 경유였다. 주소·모델 id·키가 모두 다르다 — 직결은 `decider-27b`를
-    `api.perplexity.ai`에 PERPLEXITY_API_KEY로, 이것은 `perplexity/pplx-decider-v1-27b`를
+    `api.perplexity.ai`에 PERPLEXITY_API_KEY로, 이것은 `perplexity/pplx-decider-v1.1-27b`를
     OpenRouter에 OPENROUTER_API_KEY로 보낸다. 잰 길과 같은 길로 부른다.
 
 무엇을 아는가:
@@ -32,7 +37,7 @@ from llm.jev import INPUT_USD_PER_M as JEV_INPUT_USD_PER_M
 from llm.jev import JevClient
 
 OPENROUTER_DECISIONS_URL = "https://openrouter.ai/api/alpha/decisions"
-OPENROUTER_DECIDER_MODEL = "perplexity/pplx-decider-v1-27b"
+OPENROUTER_DECIDER_MODEL = "perplexity/pplx-decider-v1.1-27b"
 # 게이트웨이가 usage.cost를 주면 그 값을 쓴다. 이것은 cost가 빠졌을 때의 어림뿐이다 —
 # Perplexity 직결 단가($0.04/M, D-134)를 빌렸고 OpenRouter 단가로 잰 값이 아니다.
 OPENROUTER_DECIDER_USD_PER_M = 0.04

@@ -291,13 +291,24 @@ def describe_llm_target(
     raise ValueError("쓸 수 있는 LLM이 없습니다 — 키·프록시·Ollama를 확인하세요")
 
 
-def _safe_doc_id(index: int) -> str:
-    """작업 서고에서 쓸 문헌 ID를 만든다.
+def _safe_doc_id(source: Path) -> str:
+    """작업 서고에서 쓸 문헌 ID를 원본 파일 경로로 만든다.
 
-    파일명이 한글·한자라 그대로 쓸 수 없으므로(ID 규칙은 ASCII 소문자다)
-    일련번호를 쓴다. 원본 이름은 문헌 제목과 part label에 남는다.
+    입력: 원본 PDF 경로. 출력: `embed_<12자리 16진>`.
+
+    파일명이 한글·한자라 그대로 쓸 수 없으므로(ID 규칙은 ASCII 소문자다) 경로의 해시를 쓴다.
+    원본 이름은 문헌 제목과 part label에 남는다.
+
+    왜 경로인가(2026-10-11 전수 검토): 전에는 «지금 시각 + 순번»으로 만들어, 중단 뒤 다시 돌리면
+    같은 편이 다른 id를 받았다. `_process_one`의 이어 하기(이미 있는 문헌의 OCR 쪽 건너뛰기)가
+    한 번도 맞지 않았고, 시각을 10만으로 나눈 나머지라 드물게 다른 편의 id와 겹칠 수도 있었다.
+    같은 파일이면 늘 같은 id가 나와야 이어 할 수 있다. 대소문자는 Windows 경로처럼 무시한다.
     """
-    return f"embed_{index:04d}"
+    import hashlib
+    import os
+
+    key = os.path.normcase(str(Path(source).resolve()))
+    return "embed_" + hashlib.sha1(key.encode("utf-8")).hexdigest()[:12]
 
 
 def _process_one(
@@ -438,7 +449,10 @@ def _process_one(
             interp_dir = library_path / "interpretations"
             if interp_dir.exists():
                 for interp in interp_dir.iterdir():
-                    if interp.is_dir() and interp.name.startswith(doc_id):
+                    # «doc_id로 시작»만 보면 embed_0001이 embed_00010의 해석 저장소까지 지웠다
+                    if interp.is_dir() and (
+                        interp.name == doc_id or interp.name.startswith(doc_id + "_")
+                    ):
                         interp_ok, interp_why = _force_rmtree(interp)
                         if not interp_ok:
                             ok, why = False, f"해석 저장소: {interp_why}"
@@ -572,7 +586,7 @@ def embed_folder(
 
     for idx, task in enumerate(remaining, 1):
         progress(f"\n[{idx}/{len(remaining)}] {task.path.name} ({task.pages}쪽)")
-        doc_id = _safe_doc_id(int(time.time() * 10) % 100000 + idx)
+        doc_id = _safe_doc_id(task.path)  # 같은 파일 = 같은 id — 중단 뒤 이어 하기
         record = _process_one(
             task,
             library_path,

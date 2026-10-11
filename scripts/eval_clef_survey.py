@@ -282,7 +282,7 @@ def _summary(rows: list[dict]) -> dict:
 # 주소는 클라이언트 클래스가 정한다(OpenRouterClefClient) — 여기서 url을 넘기지 않는다
 OPENROUTER_ENGINES = {
     "or-clef": "cloudflare/clef",
-    "or-decider": "perplexity/pplx-decider-v1-27b",
+    "or-decider": "perplexity/pplx-decider-v1.1-27b",
 }
 
 

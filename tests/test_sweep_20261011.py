@@ -890,3 +890,138 @@ def test_css_variables_used_are_defined():
                 used.setdefault(m.group(1), set()).add(f.name)
     missing = {k: sorted(v) for k, v in used.items() if k not in defined}
     assert missing == {}, missing
+
+
+# ── 2차 전수(S-20261011-185238)가 찾은 셋 — 스냅샷 경로·폴더 배치 이어 하기·Paddle 워커 시간 제한 ──
+def _evil_snapshot(field: str) -> dict:
+    """한 자리에만 `../`를 넣은 스냅샷. field가 어느 자리인지 고른다."""
+    esc = "../../escaped"
+    data = {
+        "schema_version": "1.0",
+        "source_info": {"title": "t", "document_id": "doc", "interpretation_id": "interp"},
+        "original": {"layers": {}},
+        "interpretation": {"layers": {}},
+    }
+    o, i = data["original"]["layers"], data["interpretation"]["layers"]
+    if field == "document_id":
+        data["source_info"]["document_id"] = esc
+    elif field == "l3_part":
+        o["L3_layout"] = {"type": "inline", "pages": [{"part_id": esc, "page_number": 1, "blocks": []}]}
+    elif field == "l4_file":
+        o["L4_text"] = {"type": "inline", "pages": [{"file_name": "../../escaped.txt", "text": "x"}]}
+    elif field == "boundary_part":
+        o["boundaries"] = {"type": "inline", "parts": [{"part_id": esc, "boundaries": []}]}
+    elif field == "read_plan":
+        o["read_plan"] = {"type": "inline", "parts": {esc: {}}}
+    elif field == "source_path":
+        i["L5_punctuation"] = [{"_source_path": "../../escaped.json", "block_id": "b"}]
+    elif field == "entity_type":
+        data["interpretation"]["core_entities"] = {esc: [{"id": "e1"}]}
+    elif field == "entity_id":
+        data["interpretation"]["core_entities"] = {"concept": [{"id": esc}]}
+    return data
+
+
+_EVIL_FIELDS = ["document_id", "l3_part", "l4_file", "boundary_part", "read_plan", "source_path", "entity_type", "entity_id"]
+
+
+@pytest.mark.parametrize("field", _EVIL_FIELDS)
+def test_snapshot_paths_that_escape_the_library_are_refused(tmp_path, field):
+    """스냅샷의 이름에 `../`가 있으면 검증이 막고(라우트는 422), 들이기 함수도 아무것도 쓰지 않는다.
+    전에는 `_source_path`·file_name·part·엔티티 id·document_id를 검사 없이 경로로 썼다 — 폴더 가져오기에만 검사가 있었다."""
+    from core.snapshot import create_work_from_snapshot
+    from core.snapshot_validator import validate_snapshot
+
+    lib = tmp_path / "a" / "b" / "lib"
+    lib.mkdir(parents=True)
+    data = _evil_snapshot(field)
+    errors, _ = validate_snapshot(data)
+    assert errors, f"{field}: 검증이 막지 않았다"
+    with pytest.raises(ValueError):
+        create_work_from_snapshot(lib, data)
+    escaped = [p for p in tmp_path.rglob("*escaped*")]
+    assert escaped == [], escaped
+    assert not (lib / "documents").exists() or not any((lib / "documents").iterdir())
+
+
+def test_snapshot_with_ordinary_names_still_imports(tmp_path):
+    """검사가 정상 스냅샷까지 막지 않는다 — 평범한 이름(vol1·page 파일·엔티티 id)은 그대로 들어간다."""
+    from core.snapshot import create_work_from_snapshot
+    from core.snapshot_validator import validate_snapshot
+
+    data = {
+        "schema_version": "1.0",
+        "source_info": {"title": "t", "document_id": "doc" + "x" * 60, "interpretation_id": "interp"},
+        "original": {"layers": {"L4_text": {"type": "inline", "pages": [{"file_name": "vol1_page_001.txt", "text": "x"}]}}},
+        "interpretation": {"layers": {}, "core_entities": {"concept": [{"id": "c_1"}]}},
+    }
+    errors, _ = validate_snapshot(data)
+    assert errors == [], errors
+    lib = tmp_path / "lib"
+    lib.mkdir()
+    out = create_work_from_snapshot(lib, data)
+    from core.repo_id import is_valid_repo_id
+
+    # 원래 id가 길어도 새 id(+ 시각 15자)가 저장소 id 규칙(64자)을 넘지 않는다
+    assert is_valid_repo_id(out["doc_id"]), out["doc_id"]
+    assert (lib / "documents" / out["doc_id"] / "L4_text" / "pages" / "vol1_page_001.txt").exists()
+
+
+def test_embed_folder_doc_id_is_stable_per_file(tmp_path):
+    """폴더 배치 OCR의 문헌 id는 원본 파일로 정해진다 — 중단 뒤 다시 돌리면 같은 편이 같은 id라 이어 한다.
+    전에는 «시각 + 순번»이라 다시 돌릴 때마다 처음부터 했다(이어 하기 코드가 한 번도 맞지 않았다)."""
+    import inspect
+
+    from cli import embed_folder as ef
+    from core.repo_id import is_valid_repo_id
+
+    a, b = tmp_path / "가.pdf", tmp_path / "나.pdf"
+    ida, ida2, idb = ef._safe_doc_id(a), ef._safe_doc_id(a), ef._safe_doc_id(b)
+    assert ida == ida2 and ida != idb
+    assert is_valid_repo_id(ida) and is_valid_repo_id(idb)
+    loop = inspect.getsource(ef.embed_folder)
+    assert "_safe_doc_id(task.path)" in loop and "time.time() * 10" not in loop
+
+
+def test_paddle_worker_call_honours_its_timeout():
+    """워커가 답하지 않으면 timeout초 뒤 실패로 돌아온다 — 전에는 timeout을 받기만 하고 끝없이 기다렸다."""
+    import subprocess
+    import sys
+    import threading
+
+    from ocr.base import OcrEngineError
+    from ocr.paddleocr_engine import PaddleOcrEngine
+
+    stuck = subprocess.Popen(
+        [sys.executable, "-c", "import sys, time; sys.stdin.readline(); time.sleep(60)"],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        text=True, encoding="utf-8",
+    )
+    eng = PaddleOcrEngine.__new__(PaddleOcrEngine)
+    eng._worker_lock = threading.Lock()
+    eng._worker = stuck
+    eng._worker_python = sys.executable
+    box: dict = {}
+
+    def call():
+        try:
+            box["out"] = eng._worker_call({"op": "ping"}, timeout=1)
+        except Exception as e:  # noqa: BLE001
+            box["err"] = e
+
+    t = threading.Thread(target=call, daemon=True)
+    try:
+        t.start()
+        t.join(15)
+        assert not t.is_alive(), "timeout=1인데 15초가 지나도 돌아오지 않았다"
+        assert isinstance(box.get("err"), OcrEngineError), box
+        try:  # kill() 직후의 poll()은 아직 None일 수 있다 — 끝나기를 잠깐 기다린다
+            stuck.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            pytest.fail("멈춘 워커를 끄지 않았다(60초 sleep 중인 채로 남았다)")
+    finally:
+        if stuck.poll() is None:
+            stuck.kill()
+        w = getattr(eng, "_worker", None)
+        if w is not None and w is not stuck and w.poll() is None:
+            w.kill()

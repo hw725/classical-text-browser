@@ -766,7 +766,8 @@ class LlmKeysRequest(BaseModel):
     ollama_url: str | None = None
     perplexity: str | None = None  # 판정 모델 — Perplexity Decisions (D-134)
     typesafe: str | None = None  # 판정 모델 — TypeSafe Jev (D-134)
-    openrouter: str | None = None  # 판정 모델 — OpenRouter 경유 Perplexity decider (D-136)
+    # 판정 모델 — OpenRouter 경유 Jev·Perplexity decider (D-136·D-139)
+    openrouter: str | None = None
     cloudflare: str | None = None  # 판정 모델 — Cloudflare clef 토큰 (D-135)
     cloudflare_account: str | None = None  # 같은 것의 계정 id(주소에 들어간다)
 
@@ -830,11 +831,13 @@ async def api_decision_models(check: bool = Query(False)):
             ],
         },
         {
-            # 본문 경계 판정의 기본(D-136) — 키가 없으면 Jev가 대신 맡는다
+            # 본문 경계 판정의 폴백(D-139) — 주는 Jev, 이 키만 있으면 Jev도 OpenRouter 경유로 부른다
             "id": "openrouter",
             "cls": OpenRouterDecisionClient,
             "display_name": "Perplexity decider (OpenRouter 경유)",
-            "role": "텍스트 판정 — 편성 «판정 모델로 고르기»의 본문 판정(기본). "
+            "role": "텍스트 판정 — 편성 «판정 모델로 고르기»에서 Jev가 실패한 호출을 "
+            "대신 판정(폴백). "
+            "TypeSafe 키가 없으면 이 키로 Jev도 OpenRouter 경유로 부른다. "
             "이미지 판정에도 쓴다 — 자동 스캔의 clef를 OpenRouter로 부른다"
             "(Cloudflare 키가 없으면 처음부터, 있으면 Cloudflare가 실패한 쪽만. 유료 크레딧)",
             "signup_url": "https://openrouter.ai/settings/keys",

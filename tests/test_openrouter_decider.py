@@ -1,11 +1,11 @@
-"""본문 경계 판정의 기본 — OpenRouter 경유 Perplexity decider (D-136). 가짜로만 잰다.
+"""본문 경계 판정의 폴백 — OpenRouter 경유 Perplexity decider v1.1 (D-136·D-139). 가짜로만 잰다.
 
 실제 호출은 하지 않는다. 이 PC에는 개인 키 파일(~/.claude/data/triage/.env)에 실제 키가 있으므로
 네트워크에 닿을 수 있는 자리는 전부 가짜 opener·가짜 클라이언트로 막는다. 지키는 것은 넷이다.
 ① TypeSafe 키가 OpenRouter 주소로 나가지 않는다(키 이름 격리).
 ② 기본 주소·모델이 측정한 그 길이다.
-③ 주 모델 호출이 실패하면 «그 호출만» Jev가 대신 답하고, 누가 답했는지 meta에 남는다.
-④ 문턱은 답한 모델의 것을 쓴다 — decider 0.95/0.35, Jev 0.85/0.5.
+③ 주 모델(Jev) 호출이 실패하면 «그 호출만» decider가 대신 답하고, 누가 답했는지 meta에 남는다.
+④ 문턱은 답한 모델의 것을 쓴다 — decider v1.1 0.997/0.69, Jev 0.85/0.5.
 """
 
 from __future__ import annotations
@@ -20,8 +20,6 @@ from core.segmentation import Line
 from core.structure_llm import (
     DECIDER_ACCEPT_AT,
     DECIDER_REJECT_AT,
-    JEV_ACCEPT_AT,
-    JEV_REJECT_AT,
     ask_structure_jev,
     judge_thresholds,
     line_id,
@@ -105,7 +103,7 @@ def test_default_endpoint_and_model_are_the_measured_ones(isolated_keys):
     req = seen[0]
     assert req.full_url == OPENROUTER_DECISIONS_URL == "https://openrouter.ai/api/alpha/decisions"
     body = json.loads(req.data.decode("utf-8"))
-    assert body["model"] == OPENROUTER_DECIDER_MODEL == "perplexity/pplx-decider-v1-27b"
+    assert body["model"] == OPENROUTER_DECIDER_MODEL == "perplexity/pplx-decider-v1.1-27b"
     assert set(body) == {"model", "state", "questions"}  # System One과 같은 본문, 감싸기 없음
     assert answers["q"]["noul"] == 0.97
     # 게이트웨이가 준 cost가 정본이다
@@ -143,29 +141,33 @@ def _lines(n: int = 4) -> list[Line]:
     return [Line(page=1, line_index=i, text=f"글자{i}" * 3) for i in range(n)]
 
 
-def test_failed_call_falls_back_to_jev_and_records_who_answered():
-    lines = _lines(4)
-    scores = {line_id(lines[0]): 0.9, line_id(lines[1]): 0.6, line_id(lines[2]): 0.3}
-    primary = _Fake("openrouter", OPENROUTER_DECIDER_MODEL, scores, fail=True)
-    jev = _Fake("typesafe", "jev-latest", scores)
-    props, meta = ask_structure_jev(lines, primary, max_chars=10_000, fallback=jev)
+DECIDER_LABEL = f"openrouter:{OPENROUTER_DECIDER_MODEL}"
 
-    assert primary.calls == 1 and jev.calls == 1
+
+def test_failed_call_falls_back_to_the_decider_and_records_who_answered():
+    lines = _lines(4)
+    scores = {line_id(lines[0]): 0.998, line_id(lines[1]): 0.9, line_id(lines[2]): 0.6}
+    primary = _Fake("typesafe", "jev-latest", scores, fail=True)
+    decider = _Fake("openrouter", OPENROUTER_DECIDER_MODEL, scores)
+    props, meta = ask_structure_jev(lines, primary, max_chars=10_000, fallback=decider)
+
+    assert primary.calls == 1 and decider.calls == 1
     assert meta["error"] is None  # 폴백이 답했으면 실패가 아니다 — 메모에만 남는다
     assert meta["fallback_calls"] == 1
-    assert meta["answered_by"] == {"typesafe:jev-latest": 1}
+    assert meta["answered_by"] == {DECIDER_LABEL: 1}
     assert meta["fallback_lines"] == [[1, 0], [1, 1], [1, 2], [1, 3]]
-    assert any("typesafe:jev-latest" in n for n in meta["notes"])
-    # Jev가 답했으니 Jev 문턱: 0.9 → accept(decider 문턱이었다면 escalate)
+    assert any(DECIDER_LABEL in n for n in meta["notes"])
+    # decider가 답했으니 decider 문턱: 0.9 → escalate(Jev 문턱이었다면 accept),
+    # 0.6 → reject(Jev 문턱이었다면 escalate)
     band = {p["line_index"]: p["band"] for p in props}
     assert band == {0: "accept", 1: "escalate"}
-    assert all(p["judge"] == "typesafe:jev-latest" for p in props)
-    assert meta["thresholds"]["typesafe:jev-latest"] == [JEV_ACCEPT_AT, JEV_REJECT_AT]
+    assert all(p["judge"] == DECIDER_LABEL for p in props)
+    assert meta["thresholds"][DECIDER_LABEL] == [DECIDER_ACCEPT_AT, DECIDER_REJECT_AT]
 
 
 def test_without_fallback_a_failed_call_stays_an_error():
     lines = _lines(2)
-    primary = _Fake("openrouter", OPENROUTER_DECIDER_MODEL, {}, fail=True)
+    primary = _Fake("typesafe", "jev-latest", {}, fail=True)
     props, meta = ask_structure_jev(lines, primary, max_chars=10_000)
     assert props == [] and meta["error"] and meta["answered_by"] == {}
 
@@ -181,39 +183,38 @@ def test_fallback_is_per_call_not_sticky():
                 raise JevCallFailed("jev_http_error", status=500)
             return super().ask(state, questions)
 
-    primary = Flaky("openrouter", OPENROUTER_DECIDER_MODEL, {})
-    jev = _Fake("typesafe", "jev-latest", {})
+    primary = Flaky("typesafe", "jev-latest", {})
+    decider = _Fake("openrouter", OPENROUTER_DECIDER_MODEL, {})
     _props, meta = ask_structure_jev(
-        lines, primary, max_chars=10_000, questions_per_call=2, fallback=jev
+        lines, primary, max_chars=10_000, questions_per_call=2, fallback=decider
     )
-    assert meta["answered_by"] == {
-        "typesafe:jev-latest": 1,
-        f"openrouter:{OPENROUTER_DECIDER_MODEL}": 1,
-    }
+    assert meta["answered_by"] == {"typesafe:jev-latest": 1, DECIDER_LABEL: 1}
     assert meta["fallback_lines"] == [[1, 0], [1, 1]]
 
 
 # ── ④ 모델별 문턱 ──────────────────────────────────────────────────────────
 def test_thresholds_follow_the_model_that_answered():
-    assert judge_thresholds(OpenRouterDecisionClient(api_key="x")) == (0.95, 0.35)
+    assert judge_thresholds(OpenRouterDecisionClient(api_key="x")) == (0.997, 0.69)
     assert judge_thresholds(JevClient(api_key="x")) == (0.85, 0.5)
-    assert (DECIDER_ACCEPT_AT, DECIDER_REJECT_AT) == (0.95, 0.35)
+    assert (DECIDER_ACCEPT_AT, DECIDER_REJECT_AT) == (0.997, 0.69)
 
     lines = _lines(5)
-    ps = [0.96, 0.95, 0.9, 0.36, 0.35]
+    ps = [0.998, 0.997, 0.9, 0.7, 0.69]
     scores = {line_id(ln): p for ln, p in zip(lines, ps)}
     props, meta = ask_structure_jev(
         lines, _Fake("openrouter", OPENROUTER_DECIDER_MODEL, scores), max_chars=10_000
     )
     band = {p["line_index"]: p["band"] for p in props}
-    # 0.9는 Jev였다면 accept이지만 decider에서는 escalate, 0.36은 Jev였다면 reject
+    # 0.9는 Jev였다면 accept이지만 decider에서는 escalate, 0.69는 Jev였다면 escalate
     assert band == {0: "accept", 1: "accept", 2: "escalate", 3: "escalate"}
     assert meta["bands"] == {"accept": 2, "escalate": 2, "reject": 1}
-    assert meta["accept_at"] == 0.95 and meta["reject_at"] == 0.35
+    assert meta["accept_at"] == 0.997 and meta["reject_at"] == 0.69
 
 
-# ── 라우트: 기본은 decider, 키가 없으면 Jev, 목차는 Jev ─────────────────────
-def _route_fakes(monkeypatch, *, decider_key: bool, decider_fails: bool = False):
+# ── 라우트: 주는 Jev, decider는 실패한 호출만, 목차는 Jev (D-139) ─────────────
+def _route_fakes(
+    monkeypatch, *, decider_key: bool, decider_fails: bool = False, jev_fails: bool = False
+):
     import core.toc as toc_mod
     import llm.openrouter_decider as or_mod
 
@@ -249,7 +250,7 @@ def _route_fakes(monkeypatch, *, decider_key: bool, decider_fails: bool = False)
         "OpenRouterDecisionClient",
         factory("openrouter", OPENROUTER_DECIDER_MODEL, decider_key, decider_fails),
     )
-    monkeypatch.setattr(jev_mod, "JevClient", factory("typesafe", "jev-latest", True, False))
+    monkeypatch.setattr(jev_mod, "JevClient", factory("typesafe", "jev-latest", True, jev_fails))
     monkeypatch.setattr(toc_mod, "detect_toc_pages", lambda pages, *a, **k: [])
     return made
 
@@ -263,21 +264,23 @@ def _call_route():
     return _structure_jev(None, req, body, normalize_rules(None), 10_000)
 
 
-def test_route_defaults_to_the_decider(monkeypatch):
+def test_route_defaults_to_jev_even_with_an_openrouter_key(monkeypatch):
     _route_fakes(monkeypatch, decider_key=True)
     out = _call_route()
-    assert out["provider"] == "openrouter" and out["model"] == OPENROUTER_DECIDER_MODEL
-    assert out["answered_by"] == {f"openrouter:{OPENROUTER_DECIDER_MODEL}": 1}
-    # 0.9는 decider 문턱에서 escalate — 체크 해제로 선다
-    assert {p["band"] for p in out["proposals"]} == {"escalate"}
-    assert set(out["usage_by"]) == {f"openrouter:{OPENROUTER_DECIDER_MODEL}", "typesafe:jev-latest"}
-
-
-def test_route_falls_back_to_jev_when_the_decider_fails(monkeypatch):
-    _route_fakes(monkeypatch, decider_key=True, decider_fails=True)
-    out = _call_route()
-    assert out["fallback_calls"] == 1 and out["answered_by"] == {"typesafe:jev-latest": 1}
+    assert out["provider"] == "typesafe" and out["model"] == "jev-latest"
+    assert out["answered_by"] == {"typesafe:jev-latest": 1}
     assert {p["band"] for p in out["proposals"]} == {"accept"}  # Jev 문턱으로 0.9는 accept
+    # 폴백(decider)도 사용량에 잡힌다 — 안 불렸어도 자리는 있다
+    assert set(out["usage_by"]) == {"typesafe:jev-latest", DECIDER_LABEL}
+
+
+def test_route_falls_back_to_the_decider_when_jev_fails(monkeypatch):
+    _route_fakes(monkeypatch, decider_key=True, jev_fails=True)
+    out = _call_route()
+    assert out["fallback_calls"] == 1 and out["answered_by"] == {DECIDER_LABEL: 1}
+    # decider 문턱(0.997/0.69)으로 0.9는 escalate — 체크 해제로 선다
+    assert {p["band"] for p in out["proposals"]} == {"escalate"}
+    assert out["usage_by"][DECIDER_LABEL]["calls"] == 1
 
 
 def test_route_uses_jev_when_there_is_no_openrouter_key(monkeypatch):
@@ -295,4 +298,4 @@ def test_dry_run_names_the_judge(monkeypatch):
     req = SegmentationStructureLlmRequest(part_id="vol1", engine="jev", dry_run=True)
     body = [Line(page=2, line_index=0, text="본문" * 3)]
     out = _structure_jev(None, req, body, normalize_rules(None), 10_000)
-    assert out["dry_run"] and out["judge"] == f"openrouter:{OPENROUTER_DECIDER_MODEL}"
+    assert out["dry_run"] and out["judge"] == "typesafe:jev-latest"

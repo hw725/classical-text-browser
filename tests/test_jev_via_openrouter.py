@@ -11,7 +11,7 @@
     폴백이 어느 클래스·주소·키로 가는가. **가짜 opener가 실제로 나간 요청의 URL과 Authorization을
     잡아** «OpenRouter 키가 typesafe 주소로 가지 않는다»·«TypeSafe 키가 openrouter 주소로 가지
     않는다»를 직접 단언한다.
-  ② OpenRouter 경유 Jev의 답은 Jev 문턱(0.85/0.5)으로 판정된다 — decider 문턱(0.95/0.35)이 아니다.
+  ② OpenRouter 경유 Jev의 답은 Jev 문턱(0.85/0.5)으로 판정된다 — decider 문턱(0.997/0.69)이 아니다.
   ③ 설정 «판정 모델»: TypeSafe 칸의 has_key는 TypeSafe 키만 보고, `jev_via`가 길을 알린다.
     「연결 확인」이 OpenRouter 키를 TypeSafe 주소로 보내지 않는다.
 
@@ -245,7 +245,7 @@ def test_openrouter_jev_gets_jev_thresholds(tmp_path, wire):
     from core.structure_llm import ask_structure_jev, judge_thresholds
 
     assert judge_thresholds(OpenRouterJevClient(api_key="x")) == (0.85, 0.5)
-    assert judge_thresholds(OpenRouterDecisionClient(api_key="x")) == (0.95, 0.35)
+    assert judge_thresholds(OpenRouterDecisionClient(api_key="x")) == (0.997, 0.69)
     lines = [Line(page=1, line_index=i, text=f"글자{i}" * 3) for i in range(2)]
     wire.noul = 0.9  # Jev 문턱이면 accept, decider 문턱이었다면 escalate
     props, meta = ask_structure_jev(
@@ -293,8 +293,9 @@ TS_JEV_LABEL = "typesafe:jev-latest"
     "combo,body_label,fallback,toc_label",
     [
         ("typesafe_only", TS_JEV_LABEL, None, TS_JEV_LABEL),
-        ("openrouter_only", DECIDER_LABEL, OR_JEV_LABEL, OR_JEV_LABEL),
-        ("both", DECIDER_LABEL, TS_JEV_LABEL, TS_JEV_LABEL),
+        # D-139: 주는 늘 Jev, OpenRouter 키가 있으면 decider v1.1이 폴백
+        ("openrouter_only", OR_JEV_LABEL, DECIDER_LABEL, OR_JEV_LABEL),
+        ("both", TS_JEV_LABEL, DECIDER_LABEL, TS_JEV_LABEL),
     ],
 )
 def test_route_sends_each_key_only_to_its_own_address(
@@ -339,23 +340,23 @@ def test_route_dry_run_names_the_toc_judge(tmp_path, monkeypatch, wire):
     req = SegmentationStructureLlmRequest(part_id="vol1", engine="jev", dry_run=True)
     out = _structure_jev(None, req, [Line(page=2, line_index=0, text="본문" * 3)],
                          normalize_rules(None), 10_000)
-    assert out["judge"] == DECIDER_LABEL and out["toc_judge"] == OR_JEV_LABEL
+    assert out["judge"] == OR_JEV_LABEL and out["toc_judge"] == OR_JEV_LABEL
     assert wire.seen == []
 
 
-def test_decider_failure_falls_back_to_openrouter_jev_with_jev_thresholds(
+def test_jev_failure_falls_back_to_the_decider_with_decider_thresholds(
     tmp_path, monkeypatch, wire
 ):
-    """OpenRouter 키만 — decider가 402면 같은 키로 OpenRouter 경유 Jev가 대신 답하고, 그 답은
-    Jev 문턱으로 판정된다(0.9 → accept. decider 문턱이었다면 escalate)."""
-    wire.fail_models = {OPENROUTER_DECIDER_MODEL}
+    """OpenRouter 키만 — OpenRouter 경유 Jev가 402면 같은 키로 decider v1.1이 대신 답하고, 그 답은
+    decider 문턱으로 판정된다(0.9 → escalate. Jev 문턱이었다면 accept) — D-139."""
+    wire.fail_models = {OPENROUTER_JEV_MODEL}
     wire.noul = 0.9
     out = _run_route(monkeypatch, _lib(tmp_path, _COMBOS["openrouter_only"]))
-    assert out["fallback_calls"] == 1 and out["answered_by"] == {OR_JEV_LABEL: 1}
-    assert out["thresholds"][OR_JEV_LABEL] == [0.85, 0.5]
+    assert out["fallback_calls"] == 1 and out["answered_by"] == {DECIDER_LABEL: 1}
+    assert out["thresholds"][DECIDER_LABEL] == [0.997, 0.69]
     body_props = [p for p in out["proposals"] if p["reasons"] == ["jev:structure"]]
-    assert body_props and {p["band"] for p in body_props} == {"accept"}
-    assert all(p["judge"] == OR_JEV_LABEL for p in body_props)
+    assert body_props and {p["band"] for p in body_props} == {"escalate"}
+    assert all(p["judge"] == DECIDER_LABEL for p in body_props)
     wire.assert_keys_stay_home()
     assert not any(s["url"].startswith(TYPESAFE_URL) for s in wire.seen)
 

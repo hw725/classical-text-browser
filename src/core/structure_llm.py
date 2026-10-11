@@ -68,21 +68,22 @@ _LINE_ID = re.compile(r"p(\d+)-L(\d+)")
 JEV_ACCEPT_AT = 0.85
 JEV_REJECT_AT = 0.5
 
-# ── 본문 판정의 기본: OpenRouter 경유 Perplexity decider (D-136, 사용자 결정 2026-10-05) ──
-# 모델마다 확률의 «몰림»이 달라 Jev의 문턱을 그대로 쓰면 안 된다 — decider는 0.85 이상에
-# 오답이 훨씬 많다(천진담초 정밀 0.745, 운양집 1책 0.680). 같은 저장 측정에서 다시 골랐다
-# (head-repo docs/clef-vs-jev-20261003/scripts_or/decider/ctb_*.json, 호출 0건):
+# ── 본문 판정의 폴백: OpenRouter 경유 Perplexity decider v1.1 (D-139, 사용자 결정 2026-10-11) ──
+# 주 판정자는 Jev이고 decider는 Jev가 실패한 호출만 대신 답한다.
+# 폴백이 답한 묶음에만 이 문턱을 쓴다.
+# 모델마다 확률의 «몰림»이 달라 Jev의 문턱을 그대로 쓰면 안 된다 — v1.1은 v1보다도 위로 쏠려
+# 같은 0.95면 헛것이 는다(천진담초 accept 정밀 0.766). 현재 정답 CSV로 다시 골랐다(호출 0건,
+# head-repo docs/clef-vs-jev-20261003/README.md «재측정 (2026-10-11)»,
+# `scripts/ctb_band_select.py`):
 #   기준 = «accept 정밀은 Jev(0.85)보다 낮지 않게, reject로 잃는 정답은 Jev(0.5)보다 많지 않게».
-#   Jev 0.85/0.5:     accept 정밀 0.833·0.786 · reject로 잃은 정답 0·5 · escalate 69·217행
-#   decider 0.95/0.35: accept 정밀 0.923·0.797 · reject로 잃은 정답 0·5 · escalate 131·424행
-#   (천진담초·운양집 1책 순. 정답 36·145자리, «모르는 자리» 제외 — eval_boundary_judge의 score)
-#   상한: 0.94면 천진담초 정밀 0.824로 Jev 아래라 0.95가 기준을 지키는 가장 낮은 값이다.
-#   하한: 운양집 정답 중 decider 확률이 0.33·0.364인 자리가 있어 0.35는 «5개 잃음»(Jev와 같음)의
-#   끝이다 — 0.38이면 6개. 여유가 얇다는 뜻이고, 책이 늘면 다시 잰다.
-#   대가: escalate(사람이 볼 체크 해제 후보)가 Jev의 약 2배다. 대신 escalate 안의 정답도 12·38로
-#   Jev(6·52)와 비슷하거나 많아, 사람이 보면 건지는 자리가 있다.
-DECIDER_ACCEPT_AT = 0.95
-DECIDER_REJECT_AT = 0.35
+#   같은 계산이 폐기된 v1에서 D-136의 0.95/0.36을 재현한다.
+#   Jev 0.85/0.5:        accept 정밀 0.917·0.786 · 잃은 정답 0·5 · 넘기는 행 73·326
+#   v1.1 0.997/0.69:     accept 정밀 0.957·0.838 · 잃은 정답 0·4 · 넘기는 행 58·506
+#   (천진담초·운양집 1책 순, «모르는 자리» 제외 — eval_boundary_judge의 score)
+#   0.997은 경계값이다 — 0.996이면 천진담초 정밀이 Jev 아래로 내려간다. 책이 늘면 다시 잰다.
+#   v1(D-136)의 0.95/0.35는 폐기된 모델의 값이라 지웠다.
+DECIDER_ACCEPT_AT = 0.997
+DECIDER_REJECT_AT = 0.69
 
 # 답한 모델(클라이언트의 PROVIDER) → (accept_at, reject_at). 단 OpenRouter 경유 Jev는 업체가
 # «openrouter»여도 Jev 값이다 — judge_thresholds가 모델을 먼저 본다(D-136 후속).
