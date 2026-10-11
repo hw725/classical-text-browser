@@ -22,3 +22,9 @@
 | 폴더 | 무엇 | 무엇이 대체했나 |
 |---|---|---|
 | `2026-04-15_local-diagrams/` | Mermaid를 못 그리는 뷰어를 위해 HTML/CSS로 다시 그린 사본 3종(아키텍처 다이어그램·기획서·사용자 안내서) | `docs/`의 현행 정본. 다이어그램은 2026-07-26에 13종으로 갱신됐고(D-055~D-070 반영), 이 사본은 2026-03-14 상태에서 멈춰 있었다 |
+| `2026-05-08_llm-architecture/` | Phase 10-2 LLM 설계서(`llm_architecture_design.md`) — 함수 이름·프로바이더 파일명·폴백 순서가 지금 코드와 다르다 | `AGENTS.md`의 LLM 모듈 표, `DECISIONS.md` D-010·D-047·D-114·D-134~D-136 |
+| `2026-05-19_retrospective/` | D-001~D-050 범위 회고 뷰(타임라인·결정·세션·패턴·하네스 권고·뷰어) — 처음부터 동결 문서였다 | `CHECKPOINTS.md`(결정 전체의 현재 결론), `DECISIONS.md` |
+| `2026-09-04_cognitive-debt-audit/` | 3차 인지 부채 감사(퀴즈 포함 HTML). 핫스팟 표가 AGENTS.md와 갈라져 있었다 | `AGENTS.md`의 «인지 부채 지도», `docs/backlog.md` |
+| `2026-09-22_sessions/` | Phase 10~12 세션 지시문, explain-diff, 실측 기록(`session_jev_structure.md` 등) 19편. «진행 현황» 문서(`session_navigator.md`)는 결정 번호가 어긋난 채 멈춰 있었다 | 결정은 `DECISIONS.md`·`CHECKPOINTS.md`, 실측 근거는 이 폴더를 그대로 가리킨다 |
+
+2026-10-11 정리: 위 넷을 옮기면서 그 문서를 가리키던 현행 문서의 링크만 고쳤다. 옮긴 문서 **안의** 상대 링크(예: `../DECISIONS.md`)는 아카이브 규칙대로 고치지 않았으므로 일부는 깨져 있다. git 무시 대상이던 `docs/local-diagrams/`(2026-07-26 사본)는 휴지통으로 보냈다.

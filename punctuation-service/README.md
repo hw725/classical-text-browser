@@ -242,7 +242,7 @@ Google Drive 링크에서 `.ckpt`를 받는다. 두 버전 중 v2.5 (SikuRoBERTa
 - 기본 URL이 아닌 곳에 서비스를 띄웠다면 본체 재시작 시 `EXTERNAL_PUNCT_URL`이
   환경에 있는지 확인.
 
-## 검증 상태 (2026-05-08 시점)
+## 검증 상태 (2026-05-08 시점, Docker 항목은 2026-07-26 실측)
 
 - ✅ Docker 빌드 성공 — **공식 베이스**(`pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime`)에서
   실측 확인(2026-07-26): torch 2.6.0+cu124 · CUDA 사용가능 True · RTX 3070 Ti 인식 ·
@@ -268,6 +268,7 @@ punctuation-service/
     ├── __init__.py
     ├── __main__.py         ← `python -m punctuation_service`
     ├── api.py              ← FastAPI app
+    ├── attribution.py      ← 모델 출처·라이선스 표기
     ├── engine.py           ← Mock + SikuRoBERTa 엔진
     └── sikurroberta.py     ← Lightning 의존성 없는 추론 어댑터
 ```

@@ -46,11 +46,11 @@ Smallest structural unit (sentence / clause / segment).
 > they are a read-only view computed from the boundary list in
 > `documents/{doc}/boundaries/{part}.json` (D-092; moved from the
 > interpretation store to the document store in D-097), and the schema file is
-> `unit.schema.json`. See CLAUDE.md "용어 규칙" for the distinction between
+> `unit.schema.json`. See AGENTS.md «용어 규칙» for the distinction between
 > LayoutBlock, OcrResult, and unit.
 
 Fields: - id - sequence_index - original_text -
-normalized_text (optional) - source_ref - source_refs - notes - metadata
+normalized_text (optional) - source_ref - source_refs - notes - status - metadata
 
 > **D-098/D-099**: `work_id` was dropped and the Work entity itself removed.
 > A collection holding several works is expressed by level-1 «container»
@@ -64,7 +64,7 @@ Provisional extraction layer (LLM or automatic tools).
 
 Fields: - id - block_id - surface - core_category (person \| place \|
 book \| office \| object \| concept \| event \| other) - confidence -
-extractor - metadata
+extractor - status - metadata
 
 Tags are optional and may or may not be promoted.
 
@@ -78,7 +78,7 @@ No enforced ontology. No mandatory semantic classification.
 
 Fields: - id - label - scope_document (nullable; was `scope_work` until
 D-099 removed the Work entity) - description (optional scholarly note) -
-concept_features (JSON, optional) - metadata
+concept_features (JSON, optional) - status - metadata
 
 Concept_features: - Fully optional. - No predefined required flags. -
 Absence of feature means "unspecified". - May be extended without schema
@@ -105,7 +105,7 @@ migration.
 Concrete historical or narrative actor.
 
 Fields: - id - name - period (optional) - biography_note (optional) -
-metadata
+status - metadata
 
 ------------------------------------------------------------------------
 
@@ -118,7 +118,7 @@ predicate - object_id (nullable) - object_type (agent \| concept \|
 block \| relation \| null) - object_value (free text, nullable) -
 evidence_blocks (array of block_ids) - confidence (optional) - weight
 (optional) - polarity (optional) - mode (optional) - extractor
-(optional) - metadata
+(optional) - status - metadata
 
 > **D-128 11·12·13항 (2026-09-21)**: `weight`·`polarity`·`mode` 셋이 늘었다.
 > 전부 선택이고 기본은 null이라 기존 관계 파일은 그대로 읽힌다.

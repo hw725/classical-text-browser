@@ -7,11 +7,11 @@
 
 본 프로젝트는 이미 강한 **프로세스 관측 가능성**(process observability)을 갖추고 있다.
 
-- 결정 카드 50개([`DECISIONS.md`](DECISIONS.md))
-- 세션 카드 14개([`sessions/`](sessions/))의 4단 구조
+- 결정 카드([`DECISIONS.md`](DECISIONS.md))와 그 요약 [`CHECKPOINTS.md`](CHECKPOINTS.md)
+- 세션 기록([`_archive/2026-09-22_sessions/`](_archive/2026-09-22_sessions/))
 - 릴리스 노트의 재실행 가능한 검증 명령([`releases/v1.1.4.md`](releases/v1.1.4.md))
 - 「검증 결과」 패널 — 서고 파일이 제 스키마를 지키는지 언제든 확인(D-101)
-- `CLAUDE.md`라는 단일 진실 원천
+- 규칙 정본 `AGENTS.md` 하나(`CLAUDE.md`는 그것을 불러오는 포인터)
 
 그러나 **런타임 관측 가능성**(runtime observability)은 부분적이다.
 
@@ -156,7 +156,7 @@ jq 'select(.provider=="openai") | .tokens_in' llm_usage_log.jsonl
 
 4. `start_server.bat`에 Jaeger Docker 자동 기동 추가 (이미 [D-048](DECISIONS.md#d-048) SikuRoBERTa, [D-049](DECISIONS.md#d-049) OAuth 자동 기동 패턴이 있어 동일 방식 적용 가능).
 
-5. `docs/user-guide.md`의 "9. 문제 해결" 절에 "Jaeger UI에서 트레이스 확인하기" 단락 추가.
+5. `docs/user-guide.md`의 「10. 자주 묻는 질문」에 "Jaeger UI에서 트레이스 확인하기" 단락 추가.
 
 **비-목표**:
 - 유료 SaaS(Datadog·Honeycomb 등) 도입. 이 프로젝트는 비상업적 라이선스(PolyForm Noncommercial)이며 외부 SaaS 비용은 어울리지 않는다.
@@ -175,5 +175,5 @@ jq 'select(.provider=="openai") | .tokens_in' llm_usage_log.jsonl
 - OTel GenAI Semantic Conventions: https://opentelemetry.io/docs/specs/semconv/gen-ai/
 - OTel Logs Data Model: https://opentelemetry.io/docs/specs/otel/logs/data-model/
 - Walking Labs 강의 11: https://walkinglabs.github.io/learn-harness-engineering/ko/lectures/lecture-11-why-observability-belongs-inside-the-harness/
-- 본 프로젝트의 패턴 회고: [`retrospective/04_patterns.md`](retrospective/04_patterns.md)
-- 하네스 권고와의 관계: [`retrospective/05_harness.md`](retrospective/05_harness.md) (H5 검증 코드화·H8 회고 가능한 오류와 직접 결합)
+- 본 프로젝트의 패턴 회고: [`_archive/2026-05-19_retrospective/04_patterns.md`](_archive/2026-05-19_retrospective/04_patterns.md)
+- 하네스 권고와의 관계: [`_archive/2026-05-19_retrospective/05_harness.md`](_archive/2026-05-19_retrospective/05_harness.md) (H5 검증 코드화·H8 회고 가능한 오류와 직접 결합)

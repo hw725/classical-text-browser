@@ -4,7 +4,7 @@
 > 무엇을 깨뜨리지 않을지에 대한 문서다.
 > 대상: 이 코드를 손대는 사람(사람이든 에이전트든).
 > 설계 근거는 [DECISIONS.md](DECISIONS.md), 사용법은 [user-guide.md](user-guide.md).
-> 최종 확인: 2026-09-04 (v1.3.0)
+> 최종 확인: 2026-10-11 (v1.4.3) · 결정의 지금 결론은 [CHECKPOINTS.md](CHECKPOINTS.md)
 
 ---
 
@@ -350,7 +350,7 @@ src/
 ├── hwp/          # HWP/HWPX 처리 (hwp-hwpx-parser)
 ├── text_import/  # 텍스트 가져오기 (HWP 표점분리 + PDF 참조텍스트)
 ├── llm/          # LLM 라우터 + 프로바이더
-├── ocr/          # OCR 엔진 (NDL古典籍OCR Full/Lite + NDLOCR + LLM 비전 + PaddleOCR)
+├── ocr/          # OCR 엔진 (NDL古典籍OCR Full/Lite + みんなで翻刻OCR + NDLOCR + LLM 비전 + PaddleOCR)
 │              #  + line_detector: 인식 없이 줄 위치만 찾는다 (텍스트 레이어 배치용)
 ├── export/       # 연구 산출물 내보내기 (텍스트 레이어 PDF — 검색되는 PDF)
 ├── parsers/      # 서지정보 파서 (NDL, 국립공문서관, KORCIS, KOSTMA, 장서각, 규장각 + 범용 LLM)
@@ -368,8 +368,9 @@ schemas/
 
 | 문서 | 언제 보나 |
 |---|---|
-| [DECISIONS.md](DECISIONS.md) | 왜 이렇게 되어 있는지 — **고치기 전에 반드시** |
+| [CHECKPOINTS.md](CHECKPOINTS.md) | 결정마다 지금 결론·되돌릴 수 없는 것·사고 난 자리 — **고치기 전에 반드시** |
+| [DECISIONS.md](DECISIONS.md) | 결정의 근거 원문 — 체크포인트가 가리키는 D 번호를 찾아 읽는다 |
 | [architecture-diagrams.md](architecture-diagrams.md) | 전체 그림이 필요할 때 |
 | [../AGENTS.md](../AGENTS.md) | 인지 부채 지도 — 어디가 위험한지 |
-| [../CLAUDE.md](../CLAUDE.md) | 작업 규칙 요약 — 의존성 결합 지점·파일 다루기 표는 그쪽이 더 자세하다 |
+| [../AGENTS.md](../AGENTS.md) | 규칙 정본 — 의존성 결합 지점·파일 다루기 표 (`../CLAUDE.md`는 이것을 불러오는 포인터) |
 | [core-schema-v1.3.md](core-schema-v1.3.md) · [operation-rules-v1.0.md](operation-rules-v1.0.md) | 스키마를 건드릴 때 |

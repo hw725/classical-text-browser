@@ -14,7 +14,7 @@
 | **L8** | 연결 | 엔티티 간 관계, 외부 DB 연동 | `relation` (코어) |
 | **L7** | 주석 | 주석(v2 사전형), 인용 마크, 인물/지명 태깅 | `annotation_page` v2, `citation_mark_page` (해석) / `tag`, `concept`, `agent` (코어) |
 | **L6** | 번역 | 현대어 번역문 | `translation_page` (해석) |
-| **L5** | 표점/현토 | 구두점(句讀) 부여, 한국어 현토(懸吐) | `punctuation_page`, `hyeonto_page` (해석) / `unit`, `work` (코어) |
+| **L5** | 표점/현토 | 구두점(句讀) 부여, 한국어 현토(懸吐) | `punctuation_page`, `hyeonto_page` (해석) / `unit` (코어) |
 | | **경계** | **해석 저장소 ↑ dependency.json ↓ 원본 저장소** | |
 | **L4** | 사람 수정 | OCR 교정, 확정 텍스트 | `corrections` (원본) |
 | **L3** | 레이아웃 | 페이지 영역 분할, 읽기 순서 지정 | `layout_page` (원본) |
@@ -22,7 +22,7 @@
 | **L1** | 원본 | PDF/이미지 원본 파일 (수정 금지) | `manifest`, `bibliography` (원본) |
 
 **범례:**
-- 원본 저장소 스키마 (7개)
+- 원본 저장소 스키마 (8개)
 - 해석 저장소 스키마 (5개)
 - 코어 스키마 엔티티 (6개)
 - 교환 형식 (1개)
@@ -51,7 +51,7 @@ schemas/
 │   └── citation_mark_page.schema.json L7 인용 마크
 │
 ├── core/                 ─ 코어 스키마 엔티티 (L5-L8)
-│   ├── work.schema.json              작품
+│   ├── boundaries.schema.json       편성 경계 목록 — 데이터는 원본 저장소 documents/{doc}/boundaries/ (D-097)
 │   ├── unit.schema.json             글 단위
 │   ├── tag.schema.json               표면 태그
 │   ├── concept.schema.json           승격된 의미 엔티티
@@ -105,7 +105,7 @@ schemas/
 | `tag`.block_id | `unit`.id | ──▶ (이름은 v1.2의 것 — D-093·B-003) |
 | `concept`.scope_document | `manifest`.document_id | ──▶ (선택. v1.2의 `scope_work`는 D-099에서 옮김) |
 | `relation`.subject_id | `agent`.id \| `concept`.id | ──▶ |
-| `relation`.object_id | `agent`.id \| `concept`.id \| `unit`.id | ──▶ |
+| `relation`.object_id | `agent`.id \| `concept`.id \| `unit`.id \| `relation`.id | ──▶ |
 | `relation`.evidence_blocks[] | `unit`.id | ──▶ |
 
 ### 코어 → 원본 역참조
@@ -116,7 +116,7 @@ schemas/
 
 ---
 
-## 4. 원본 저장소 스키마 (7개)
+## 4. 원본 저장소 스키마 (8개)
 
 ### manifest
 
@@ -214,7 +214,21 @@ L4 교정 기록. OCR 오류, 이체자, 판본 이문 등 유형별 교정.
 |------|------|------|
 | **\*source** | object | {document_id, base_commit} |
 | **\*tracked_files[]** | array | {path, hash_at_base, status} |
-| **\*dependency_status** | enum | synced → stale → acknowledged |
+| **\*dependency_status** | enum | current \| outdated \| partially_acknowledged \| acknowledged |
+
+### read_plan
+
+> `source_repo/read_plan.schema.json` — 권마다 `read_plan/{권}.json` (D-131)
+
+작업 계획. 어느 쪽을 어떻게 읽을지 적는다(쪽 번호는 PDF 쪽).
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| **\*title** | string | 계획 이름 |
+| **\*guidance** | string | 판독 지침 — `manifest.ocr_guidance`로 들어간다 |
+| **\*ranges[]** | array | {pages, skip, rotation, engine, writing, note} 쪽 구간별 |
+| **\*chapters[]** | array | {page, title, level} 장 |
+| page_labels[] | array? | {pages, name, offset, label} 쪽 이름표 |
 
 ---
 
@@ -394,7 +408,7 @@ Agent/Concept/단위 간 관계. predicate는 구조적 동사만.
 | **\*subject_type** | enum | agent \| concept |
 | **\*predicate** | string | 구조적 동사 (snake_case) |
 | object_id | uuid? | 목적어 ID |
-| object_type | enum? | agent \| concept \| block \| null |
+| object_type | enum? | agent \| concept \| block \| relation \| null |
 | object_value | string? | 자유 텍스트 (object_id 없을 때) |
 | evidence_blocks[] | uuid[]? | 근거 단위 ID 배열 |
 
@@ -442,4 +456,4 @@ Agent/Concept/단위 간 관계. predicate는 구조적 동사만.
 
 ---
 
-> 생성: 2026-03-14 · schemas/ 디렉토리 기준 · 19개 스키마 (원본 7 + 해석 5 + 코어 6 + 교환 1)
+> 생성: 2026-03-14 · schemas/ 디렉토리 기준 · 20개 스키마 (원본 8 + 해석 5 + 코어 6 + 교환 1)

@@ -14,15 +14,16 @@
 | `layout_page.schema.json` | L3 레이아웃 분석 — LayoutBlock 정의 | DECISIONS D-002 |
 | `ocr_page.schema.json` | L2 OCR 결과 — OcrResult 정의 | v7 섹션 5.2 |
 | `corrections.schema.json` | L4 교정 기록 (6종 교정 유형) | v7 섹션 5.4 |
+| `interp_manifest.schema.json` | 해석 저장소 매니페스트(파일은 해석 저장소에 산다) | v7 섹션 4 |
 | `dependency.schema.json` | 해석→원본 저장소 의존 추적 | v7 섹션 4.2 |
 | `read_plan.schema.json` | 작업 계획 — 쪽 구간별 회전·엔진·쓰기 방향·건너뛰기, 장, 쪽 이름표, 판독 지침(권마다 `read_plan/{권}.json`) | D-131 |
 
-### core/ — 코어 스키마 (해석 저장소)
+### core/ — 코어 스키마 (해석 저장소 — 경계 목록만 원본 저장소)
 
 | 스키마 | 설명 | 근거 |
 |--------|------|------|
 | `unit.schema.json` | 해석용 글 단위 (source_ref 포함). v1.2까지 이름은 `text_block` | core-schema-v1.3 섹션 2, D-005, D-093 |
-| `boundaries.schema.json` | 권 하나의 글 단위 경계 목록 — **단위의 정본**(시작 위치·id·층위). 단위는 이 목록에서 만든 읽기 보기 | D-092 |
+| `boundaries.schema.json` | 권 하나의 글 단위 경계 목록 — **단위의 정본**(시작 위치·id·층위). 단위는 이 목록에서 만든 읽기 보기. 데이터는 **원본 저장소** `documents/{doc}/boundaries/{part}.json`에 산다 | D-092, D-097 |
 | `tag.schema.json` | 표면 주석 (LLM/자동 추출) | core-schema-v1.3 섹션 3 |
 | `concept.schema.json` | 승격된 의미 엔티티 | core-schema-v1.3 섹션 4 |
 | `agent.schema.json` | 역사적/서사적 행위자 | core-schema-v1.3 섹션 5 |
@@ -73,12 +74,15 @@ L4 사람 교정 ─────── corrections.schema.json
   │  교정 유형: ocr_error, variant_reading, variant_char,
   │             decoding_error, uncertain, layout_correction
   │
+  ▼
+편성 경계 목록 ─────── boundaries.schema.json (원본 저장소, D-097)
+  │
   ═══ 저장소 경계 ═══
   │
   ▼
 단위(unit) ─────────── unit.schema.json
-  │  source_ref로 원본(L4) 추적
-  │  해석 저장소의 시작점
+  │  저장하지 않는 읽기 보기 — 경계 목록 + L4에서 만든다 (D-092)
+  │  source_ref로 원본 추적
   │
   ├─→ Tag ───────────── tag.schema.json
   │     LLM/자동 추출, 승격 가능

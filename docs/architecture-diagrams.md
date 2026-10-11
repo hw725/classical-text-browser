@@ -3,8 +3,8 @@
 > **2026-07-26 기준 — v1.2.0(D-055 ~ D-069)에 맞춰 갱신.** Mermaid 문법으로 작성.
 > GitHub, VSCode (Mermaid 확장), [Mermaid Live Editor](https://mermaid.live)에서 렌더링 가능.
 >
-> **구성**: 13개 다이어그램 — 데이터 모델·스키마(1·3·7), 시스템·모듈(2·8),
-> 처리 엔진(4·5), 워크플로우(6·12·13), 저장소·의존(9·10), 화면(11)
+> **구성**: 14개 다이어그램 — 데이터 모델·스키마(1·3·7), 시스템·모듈(2·8),
+> 처리 엔진(4·5), 워크플로우(6·12·13·14), 저장소·의존(9·10), 화면(11)
 >
 > **이번 판에서 손댄 곳**
 >
@@ -145,7 +145,7 @@ flowchart TB
             CE["correction-editor.js<br/>L4 교정 대조"]
             TXE["text-editor.js<br/>L4 텍스트 편집"]
             BC["batch-correction.js<br/>일괄 이체자 교정"]
-            COMP["composition-editor.js<br/>LayoutBlock을 단위로"]
+            COMP["composition-editor.js<br/>편성 — 권별 경계 목록"]
         end
         subgraph FE_EXT["추출 모드 전용 (v1.2.0)"]
             EXP["extract-panel.js<br/>진단 · 권 일괄 OCR · 쪽별 검수 · PDF 산출"]
@@ -180,7 +180,7 @@ flowchart TB
 
     subgraph BE["백엔드 (Python · FastAPI)"]
         direction TB
-        SRV["server.py<br/>앱 생성 + 라우터 마운트 + 캐시 금지 (152줄)"]
+        SRV["server.py<br/>앱 생성 + 라우터 마운트 + 캐시 금지"]
         ST["_state.py<br/>공유 상태 · 헬퍼 · LLM/OCR 캐시"]
         MW["미들웨어<br/>API 응답에 Cache-Control no-store<br/>정적 파일에는 no-cache + ETag (D-066)"]
         subgraph ROUTERS["9개 도메인 라우터 (라우트 234개)"]
@@ -204,6 +204,7 @@ flowchart TB
         subgraph OCR_ENG["OCR 엔진 (registry.py)"]
             O1["NDL古典籍OCR Full (TrOCR)"]
             O2["NDL古典籍OCR-Lite (ONNX)"]
+            O6["みんなで翻刻OCR (honkoku)"]
             O3["NDLOCR-Lite"]
             O4["LLM Vision OCR"]
             O5["PaddleOCR"]
@@ -269,7 +270,7 @@ flowchart TB
 
 ## 3. 코어 스키마 엔티티 관계 (ER Diagram)
 
-해석 저장소 내부의 6개 엔티티 모델. core-schema-v1.3 기준.
+코어 엔티티 6종(코어 5 + 경계 목록). 경계 목록만 원본 저장소에 산다(D-097). core-schema-v1.3 기준.
 모든 엔티티는 `draft → active → deprecated → archived` 상태 전이를 따른다 (삭제 금지).
 
 ```mermaid
@@ -427,6 +428,7 @@ flowchart LR
         direction TB
         E1["<b>1.</b> NDL古典籍OCR Full<br/><i>TrOCR · RTMDet · GPU 권장</i>"]
         E2["<b>2.</b> NDL古典籍OCR-Lite<br/><i>ONNX 경량 · CPU 가능</i>"]
+        E6["<b>2-1.</b> みんなで翻刻OCR<br/><i>くずし字 · ONNX · 오프라인 (D-124)</i>"]
         E3["<b>3.</b> NDLOCR-Lite<br/><i>현대/인쇄 · ParseQ · DEIM</i>"]
         E4["<b>4.</b> LLM Vision OCR<br/><i>LLM 비전 모델 활용</i>"]
         E5["<b>5.</b> PaddleOCR<br/><i>다국어 · 멀티라인</i>"]
@@ -510,7 +512,7 @@ flowchart TB
         C2["<b>2. 레이아웃 (L3)</b><br/>본문 · 주석 · 판심제 영역 나누기<br/>자동감지 또는 손으로 · 읽기 순서 지정"]
         C3["<b>3. OCR (L2)</b><br/>엔진 선택 · LayoutBlock별 인식"]
         C4["<b>4. 교정 (L4)</b><br/>OCR 대조 · 이체자 확인 · 확정"]
-        C5["<b>5. 편성</b><br/>LayoutBlock을 단위로 · source_ref 추적"]
+        C5["<b>5. 편성</b><br/>권별 경계 목록 · 단위는 그 읽기 보기"]
         C6["<b>6. 해석 (L5-L7)</b><br/>표점 · 현토 · 번역 · 주석 · 인용마크<br/><i>저장소 경계를 넘는다</i>"]
         C1 --> C2 --> C3 --> C4 --> C5 --> C6
     end
@@ -629,7 +631,6 @@ flowchart TB
     I_ANN --> S_LAY
     I_CIT --> S_LAY
     I_TRA <-->|"annotation_context"| I_ANN
-    C_TB --> C_WOR
     C_TAG --> C_TB
     C_TAG -.->|"승격"| C_CON
     C_REL --> C_AGE
@@ -668,7 +669,7 @@ flowchart TB
     subgraph APP["src/app/ -- API 레이어"]
         direction TB
         MAIN["__main__.py<br/>CLI 진입점"]
-        SRV["<b>server.py</b><br/>FastAPI 앱 생성 · 라우터 마운트 · 캐시 금지 (152줄)"]
+        SRV["<b>server.py</b><br/>FastAPI 앱 생성 · 라우터 마운트 · 캐시 금지"]
         STATE["<b>_state.py</b><br/>공유 상태, 헬퍼 · LLM 캐시, 토큰 계산"]
         subgraph ROUTERS["routers/ -- 9개 도메인 · 라우트 234개"]
             direction LR
@@ -798,6 +799,7 @@ flowchart TB
         SR_L3["L3_layout/<br/>layout_page JSON"]
         SR_L4["L4_text/<br/>corrections JSON · 교정 텍스트"]
         SR_BIB["bibliography.json"]
+        SR_BND["boundaries/{part}.json<br/>편성 경계 목록 (D-097)"]
         SR_EXP["<b>exports/</b> (v1.2.0)<br/>텍스트 레이어 PDF -- 밖으로 내보내는 산출물"]
         SR_BAK["<b>.page_backup/</b> (v1.2.0)<br/>덮어쓰기 직전 L2 + L4 한 벌<br/><i>로컬 되돌리기 · Git 이력과 무관 · 한 세대만</i>"]
         SR_GIT["Git 이력: commit, diff, log"]
@@ -814,7 +816,7 @@ flowchart TB
         IA_L5["L5/<br/>punctuation, hyeonto"]
         IA_L6["L6/<br/>translation"]
         IA_L7["L7/<br/>annotation, citation"]
-        IA_CORE["core/ -- 경계 목록, 단위(unit), Tag, Concept, Agent, Relation"]
+        IA_CORE["core/ -- Tag, Concept, Agent, Relation<br/><i>단위는 원본의 경계 목록에서 만든 읽기 보기</i>"]
     end
 
     subgraph INTERP_B["해석 B (LLM draft, Git repo)"]
@@ -925,7 +927,7 @@ flowchart LR
 ## 11. 프론트엔드 UI 구조
 
 VSCode 스타일 화면. 왼쪽(액티비티 바 + 사이드바) · 가운데(원본 뷰어) ·
-오른쪽(작업 패널), 그리고 그 위에 상단 작업 탭 10개.
+오른쪽(작업 패널), 그리고 맨 오른쪽 세로 «인덱스»(작업 탭) 10개.
 
 **여기서 읽어야 할 것**: v1.2.0에서 **하단 패널이 사라졌다.** 거기 있던
 Git 이력 · 검증 · 의존 추적 · 엔티티 · 비고는 모두 왼쪽 액티비티 바의
@@ -935,7 +937,7 @@ Git 이력 · 검증 · 의존 추적 · 엔티티 · 비고는 모두 왼쪽 �
 
 ```mermaid
 flowchart TB
-    subgraph TABS["상단 작업 탭 -- 모두 10개"]
+    subgraph TABS["오른쪽 세로 인덱스(작업 탭) -- 모두 10개"]
         direction LR
         T_KEEP["<b>추출 모드에도 남는 셋</b><br/>열람 · 레이아웃 · 교정<br/><i>원본을 보고, 드물게 영역을 나누고, 결과를 손본다</i>"]
         T_HIDE["<b>추출 모드에서 숨는 일곱</b><br/>편성 · 표점 · 현토 · 번역 · 주석 · 인용 · 이체자"]
@@ -1179,7 +1181,7 @@ flowchart TB
 **이 경로가 지키는 약속:**
 - 원본은 읽기만 한다 — `L1_source/`는 어떤 단계에서도 수정되지 않는다
 - 만든 것은 믿지 않고 잰다 — 산출물을 다시 열어 글자 크기 · 덮개 · 잉크 밀도를 확인한다
-- 되돌릴 수 있다 — 저장할 때마다 직전 한 벌을 남기므로 되돌리기는 언제나 「방금 저장한 것 취소」다
+- 되돌릴 수 있다 — OCR을 다시 돌리기 직전 한 벌을 남기므로 «새 OCR이 더 나쁠 때» 되돌린다(D-065)
 - 중단할 수 있다 — 끝난 쪽은 건너뛰므로 권 전체 OCR을 언제 멈춰도 이어서 돌아간다
 
 **알려진 한계** (v1.2.0 릴리스 노트와 같음):
@@ -1253,7 +1255,7 @@ flowchart TB
 | **오프라인 퍼스트** | 핵심 작업(교정, 열람, 커밋)은 인터넷 없이 동작 |
 | **작업 모드는 표시만 바꾼다** | 추출 모드는 탭·패널을 숨길 뿐, 저장 형식과 데이터는 교감 모드와 같다 (D-055) |
 | **산출물은 다시 열어 잰다** | 만든 PDF를 앱이 열어 글자 크기·덮개·잉크 밀도를 확인한다 (D-068) |
-| **덮어쓰기 전에 한 벌 남긴다** | 되돌리기는 언제나 「방금 저장한 것 취소」. 세대는 하나만 (D-065) |
+| **OCR 재실행 전에 한 벌 남긴다** | 되돌리기는 «새 OCR이 더 나쁠 때» 하나. 교정 저장에는 두지 않고, 세대는 하나만 (D-065) |
 | **JSON은 원자적으로 저장** | 임시 파일에 다 쓴 뒤 갈아 끼운다. 중간에 죽어도 빈 파일이 남지 않는다 (D-069) |
 
 ---

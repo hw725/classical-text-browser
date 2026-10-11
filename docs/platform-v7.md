@@ -8,8 +8,9 @@
 >
 > v1.3.0까지 더해진 것 중 이 기획서에 없는 것: **편성**(글 단위의 경계 목록 —
 > D-092·D-097), **추출 모드**(작업 프로필),
-> **텍스트 레이어 PDF 산출**(`exports/`). 둘 다 8층 모델을 바꾸지 않고
-> 표시 방식과 출구를 더한 것이라 기획서는 그대로 유효하다(D-055·D-067).
+> **텍스트 레이어 PDF 산출**(`exports/`). 셋 다 8층 모델을 바꾸지 않는다 — 편성은 단위의
+> 정본을 원본 저장소의 경계 목록으로 옮긴 것이고, 뒤의 둘은 표시 방식과 출구를 더한 것이라
+> 기획서는 그대로 유효하다(D-055·D-067).
 
 ---
 
@@ -1160,7 +1161,6 @@ NDL에서:     title ✓, creator ✓, edition_type ✗, reading ✓
 
 ```
 src/llm/prompts/                    # YAML 기반 프롬프트 (구현)
-  ├─ layout_analysis.yaml           # L3 레이아웃 분석
   ├─ punctuation.yaml               # L5 표점 자동 생성
   ├─ translation.yaml               # L6 번역 생성
   ├─ annotation.yaml                # L7 주석 자동 태깅
@@ -1257,12 +1257,13 @@ flowchart TB
 | | `corrections.schema.json` | — | L4 교정 기록 |
 | | `dependency.schema.json` | — | 해석→원본 의존 추적 |
 | | `interp_manifest.schema.json` | — | 해석 저장소 매니페스트 |
+| | `read_plan.schema.json` | — | 작업 계획 (D-131) |
 | `interp/` | `punctuation_page.schema.json` | v1 | L5 표점(句讀) |
 | | `hyeonto_page.schema.json` | v1 | L5 현토(懸吐) |
 | | `translation_page.schema.json` | **v1.1** | L6 번역 + `annotation_context` |
 | | `annotation_page.schema.json` | **v2** | L7 주석 + 사전형(DictionaryEntry) + 4단계 이력 |
 | | `citation_mark_page.schema.json` | v1 | L7 인용 마크 |
-| `core/` | `work.schema.json` | — | 코어: 작품 |
+| `core/` | `boundaries.schema.json` | — | 코어: 경계 목록 — 데이터는 원본 저장소에 (D-092·D-097) |
 | | `unit.schema.json` | — | 코어: 단위(unit) |
 | | `tag.schema.json` | — | 코어: Tag |
 | | `concept.schema.json` | — | 코어: Concept |
@@ -1406,6 +1407,7 @@ library/
   "schema_version": "1.0",
   "export_timestamp": "2026-09-04T10:00:00+00:00",
   "platform_version": "1.1.4",
+  "corpus_version": { "corpus_hash": "ctb-corpus:0123…", "reproducible": true },
 
   "source_info": {
     "document_id": "monggu",

@@ -17,11 +17,15 @@ OCR, 교정, 번역, 주석 작업을 모두 수행한다.
 - docs/platform-v7.md — 8층 모델, Git 저장소, 전체 아키텍처
 - docs/core-schema-v1.3.md — 해석 저장소의 엔티티 모델
 - docs/operation-rules-v1.0.md — 코어 스키마 운영 규약
-- docs/DECISIONS.md — 설계 결정 기록 (반드시 읽을 것)
+- **docs/CHECKPOINTS.md — 결정의 지금 결론·되돌릴 수 없는 것·사고 난 자리 (반드시 읽을 것).**
+  DECISIONS.md를 처음부터 읽지 말고 이것을 읽은 뒤 건드리는 자리의 D 번호만 원문에서 찾는다
+- docs/DECISIONS.md — 설계 결정 기록 원문(근거)
+- docs/module-map.md — 모듈마다 무엇을 하고 무엇을 지키는가(이 파일에서 옮긴 표)
+- docs/backlog.md — 알려진 결함·미결 과제
 - docs/maintenance.md — **유지보수 정본.** 되돌릴 수 없는 것, 파일 다루는 규칙,
   자동 테스트가 못 잡는 자리, 릴리스 절차. 아래 요약들의 원본이다
 - docs/observability-roadmap.md — 관측 가능성(OpenTelemetry) 점진적 도입 로드맵
-- docs/retrospective/ — 회고용 뷰 (원본 무수정). 결정·세션·패턴·하네스 권고 + 인터랙티브 뷰어
+- docs/_archive/ — 옛 설계서·세션 기록·회고(D-050까지)·인지 부채 감사 HTML. 현행이 아니다
 
 ## 기술 스택
 - 백엔드: Python + FastAPI
@@ -120,51 +124,11 @@ src/app/
 - **API 응답에는 `Cache-Control: no-store`가 미들웨어에서 자동으로 붙는다**(D-066).
   호출부에 `cache: "no-store"`를 다시 적지 않아도 된다.
 
-## 추출 모드 관련 모듈 (v1.2.0에서 추가)
+## 모듈 지도 — 표는 `docs/module-map.md`
 
-논문 스캔본 경로에만 쓰이는 것들. 고서 흐름은 이 모듈들을 타지 않는다.
-
-| 모듈 | 하는 일 |
-|---|---|
-| `src/ocr/full_page_block.py` | 레이아웃이 없는 쪽에 「쪽 전면 1블록」 L3를 만든다 |
-| `src/ocr/layout_staleness.py` | 레이아웃을 고친 쪽을 찾아 다시 돌릴 대상을 고른다 |
-| `src/ocr/page_backup.py` | OCR 재실행 **직전** 상태를 로컬 JSON으로 백업(D-065) |
-| `src/ocr/line_detector.py` | 좌표를 주지 않는 엔진을 위해 줄 위치를 검출 |
-| `src/export/text_layer_pdf.py` | 보이지 않는 텍스트를 얹은 PDF를 만들고 **결과를 다시 재서 검사**(D-068) |
-| `src/cli/embed_folder.py` · `src/cli/__main__.py` | `ctb ocr` 한 줄 진입점. 실행 전에 «도는 모델»을 한 줄 찍는다(`describe_llm_target`) |
-| `scripts/warmup_paddle.py` | 설치 마지막 단계에서 PaddleOCR 모델(약 240MB)을 미리 받는다. `is_available()`은 paddle을 import하지 않고(메타데이터만) 첫 OCR 때 `_get_ocr()`이 읽는다 — import가 서버 기동·엔진 목록을 붙들었다(2026-09-06) |
-| `installer/ctb_setup.py` · `scripts/build_installer.ps1` | Windows 설치 파일 `CTB-Setup.exe`(D-113). 표준 라이브러리만 — 릴리스 태그 zip을 받아 풀고 `install.ps1`(`CTB_INSTALL_PICK`)을 돌리고 바탕화면 바로 가기. `--auto --dir --pick`으로 창 없이 검증 — **`--auto`는 바로 가기를 만들지 않는다**(`--shortcut`으로 켠다; 격리 HOME 검증이 실제 바탕화면에 임시 폴더 아이콘을 남겼다, 2026-09-06). 빌드는 uvx pyinstaller(앱 .venv에 넣지 않는다) |
-| `src/llm/ollama_catalog.py` | Ollama 비전 모델 후보(D-114). 기본은 `gemma4:cloud`(내려받는 파일 없음, 로그인 필요) — 로그인하지 않을 PC는 화면 「모델 받기」에서 로컬 후보를 고른다. 내장 목록(크기는 레지스트리 매니페스트 실측) + ollama.com 검색 페이지의 클라우드 목록(1시간 캐시). `install.ps1`·`install.sh` 5-1도 같은 기본을 등록한다 |
-| `src/cli/models.py` · `src/cli/config.py` | `ctb models`(번호 목록)·`--model`(번호·이름 일부·`provider:model`) · `ctb config`(기본값 `~/.classical-text-browser/cli.json`, 명령줄 > 저장값 > 내장) |
-
-## OCR 품질 모듈 (D-080~D-084, 2026-09-02)
-
-| 모듈 | 하는 일 |
-|---|---|
-| `src/ocr/ocr_prompt.py` | LLM OCR 프롬프트를 다섯 조각(정책·문헌 지침·블록 종류·자형 주의·앵커)으로 **조립**. `[?]`·`□`를 글자 신뢰도로 변환. 도메인 목록을 코드에 하드코딩하지 않는다 |
-| `src/ocr/correction_pass.py` | 승급 사다리 1·2단계와 이음(2026-09-18). 기계적 선별 → 앵커 있는 LLM 교정(사고 끔) → 떨어진 블록만 정밀 판독(문맥 확대·사고 켬, 판정은 **두 단계의 일치**). 초안은 쪽마다 하나이고 **블록 단위로 병합**되며 L2 지문(`l2_fingerprint`)을 품어 OCR을 다시 돌리면 낡은 것으로 판정된다(`draft_is_stale`). 승급 조립(1단계 → 떨어진 블록만 2단계)은 `llm_ocr._run_page_correction`이 한다. **L2는 건드리지 않고** L4 초안만 만든다. `list_review_pages`가 사람이 볼 쪽을 센다(라우트 `correction-review`, 화면 「검토할 쪽」). 일괄 경로는 `tests/test_lite_mode_api.py`의 가짜 비전 엔진으로 잰다 |
-| `src/ocr/script_normalize.py` · `scripts/build_shinjitai_table.py` | **엔진 인공물 신자체 → 정자**(D-138). `ndlkotenocr`·`ndlkotenocr-full` 출력에서만, `resources/jp_shinjitai_seiji.json`의 1:1 확정 글자만 바꾸고 갈리는 글자(弁·芸·余·台·欠·内…)는 보류 표시. 기록은 L2 `ocr_config.script_normalize`(스키마 변경 없음), `revert_block`으로 되돌림. 보류 글자(為 등)는 그 문헌이 승인한 쌍이면 바꾸고(D-080 결정 3), 이미 OCR 한 쪽은 `scripts/apply_script_approvals.py`(미리보기 기본·`--apply` 시 백업 후 L2만). D-080 결정 1의 좁은 예외 — 다른 엔진·L4 본문은 그대로. 시험 `tests/test_script_normalize.py` |
-| `src/ocr/eval_cer.py` · `scripts/eval_cer.py` | L4 확정본을 정답으로 L2·초안의 CER. 프롬프트를 바꿨으면 이것으로 잰다 |
-| `src/core/variant_sources.py` · `scripts/build_variant_dicts.py` | 이체자 사전 원자료(OpenCC·Unihan·cjkvi) 파서와 생성. 파일마다 `_tier`·`_source` |
-| `src/ocr/line_block_match.py` | 쪽 단위 엔진(NDL 셋)이 쪽 전체에서 찾은 행을 LayoutBlock에 배정. **블록 밖 행은 버린다.** 그래서 파이프라인이 커버리지 조건 없이 언제나 쪽 전체에 돌린다(D-086) |
-| `src/core/segmentation.py` | 글 단위 경계 제안(D-088). 날짜 문법·사슬·형식·문장 표지(以·故·而 앞의 어휘)·두주성 날짜 감점은 코드, 표제 어휘·억제 목록은 `manifest.segmentation_rules`. 제안은 저장하지 않고 승인한 구간만 단위가 된다. 천진담초 실측 재현 36/36·채택 42(손 규칙)·43(도출 규칙, D-116). **날짜는 열·면·쪽 경계를 넘어 읽는다**(D-115): 「○三十\|日」·앞 열 끝의 ○·행갈음 월초(`after_short`). **규칙은 확정본(L4)만 본다** — 「권 전체 OCR」이 L4를 채우고(`fill_text_layer`), 자동 트리는 L4 없는 쪽 수를 화면에 알린다 |
-| `src/core/rule_talk.py` | **사람이 말한 것을 규칙 변경으로 옮긴다**(D-121 두 번째 입구). 모델은 정해진 칸 이름과 연산만 쓰고, 아는 칸이 아니면 코드가 되돌린다. **옮기지 못한 말은 반드시 돌려준다** — 범위·조건은 지금 규칙으로 표현할 수 없고, 비슷한 칸으로 바꿔치기하면 사람은 말했다고 여기는데 시스템은 다른 일을 한다. 어휘는 전문에서 몇 번 나오는지 세어 함께 준다(0번이면 이 책의 말이 아니다). 해제도 같은 ① 칸에 붙여 넣는다(2026-09-11 — 따로 두던 해제 칸을 없앴다): 나뉨을 말한 문장만 옮기고 소개 글은 참고로 읽으며, 12,000자를 넘으면 양끝을 남기고 가운데를 줄인다(`squeeze_said`). 저장하지 않는다 — 화면 ①「말로 넣기」(D-122)가 ②의 체크로 옮기고, ③이 «바뀐 것»을 자리로 견준다 |
-| `src/core/page_survey.py` | **판독 계획**(D-126). 방향은 **코드**가 잰다 — 잉크 투영의 자기상관으로 «섰다/누웠다»(속몽구 40판정 전부 정답), 그다음 PaddleOCR 점수 비교(쪽 가운데 조각을 후보 각도로 돌려 «글자 수 × 신뢰도»)로 180°와 90/270까지(비전 모델은 반반, PaddleOCR 문서 방향 모델은 세로쓰기에 무용 — 투영이 모름일 때만 모델 답). 비전 모델에는 «무슨 글인가»(활자·판본·손글씨·훈점·한글·백지, 목록)만 답받고, 코드가 «지금 회전과 다른 쪽»을 구간으로 묶어 회전을 제안하고, 종류를 **설치된 엔진**에 대응시켜 «구간별 엔진 계획»으로 만든다 — 「권 전체 OCR」이 `engine_plan`을 받아 쪽마다 계획의 엔진으로 돈다. 대응은 (활자 → NDLOCR, 판본 → 古典籍 Lite, 손글씨 → 古典籍 Full, 훈점 → みんなで翻刻, 한글 → LLM 비전; 없으면 다음 후보). 한 쪽에 종류가 둘 이상(한글+훈점)이면 엔진을 고르지 않고 «영역을 나눠 영역별로 OCR»하라고 따로 돌려준다 — 단 한 엔진이 함께 읽는 짝(`COMPATIBLE`: 활자+한글, 판본+훈점)은 섞임이 아니다. 화면 기본 모델은 kimi-k3:cloud(벤치마크 2026-09-11, 앱 전체 기본과 별개) — 단 Cloudflare·OpenRouter 키가 있으면 clef(아래 `clef_cf.py` 줄, D-135). 저장·실행은 사람이 누른다 — 라우트는 llm_ocr의 `rotation/suggest`, 화면은 **「말로 지시」 창의 ① 자동 스캔**(2026-10-02, D-132 — 옛 「판독 계획」 단추는 같은 계획 칸을 「말로 지시」와 서로 덮어써 합쳤다). 확인은 confirm 창이 아니라 계획 표의 「보기」(구간 첫 쪽을 그 회전으로 그림, `renderPageThumb`)·「반대로」(+180°)이고 저장은 「적용」 하나다. 백지·종류가 섞인 쪽은 건너뜀, 못 잰 쪽은 메모 «못 잼 — 기본값». `as_plan`이면 결과를 **작업 계획 칸으로 바로** 돌려준다(`read_plan.plan_from_survey` — 잰 값을 글로 풀어 LLM이 다시 옮기게 하지 않는다). 종류 판정은 **GPU 환경(.venv-gpu)에서만** 연다(`env_doctor.gpu_runtime()`; CPU면 400 — 화면은 CPU에서 `orientation_only`로 «방향만» 스캔한다). **같은 라우트의 `orientation_only`**(2026-09-18)는 방향만 — 모델 없음·GPU 게이트 없음, 누운 쪽에서만, GPU이고 PaddleOCR이 있을 때만 점수(아니면 `guess`), 선 쪽의 180° 검사 없음. 「권 전체 OCR」의 «돌아간 쪽은 세워서»(기본 켬)가 실행 직전에 이것으로 구간을 묻고 저장한 뒤 OCR을 잇는다. 그때 옛 **전면 블록**은 `ensure_full_page_block`이 지금 회전으로 치수만 다시 잰다(블록 속성·analysis_method는 옛것, 블록 여럿인 레이아웃은 그대로 거부) |
-| `src/core/structure_llm.py` | **권 전문을 보여 «글이 시작하는 행»을 통째로 묻는다**(D-125). 규칙이 못 잡는 책(문집·잡록)을 위한 길이다. 행마다 `p8-L3` 번호를 붙여 텍스트만 보내고(좌표·이미지 없음), **모델은 위치를 만들지 않고 고르기만** 한다 — 답은 행 번호·제목·깊이·역할이고, 코드가 실제 행인지·제목이 그 행의 글자인지 대조해 ③의 후보와 같은 모양으로 돌려준다(아닌 제목은 행 글자로 바꾸고, 없는 행은 버린다). 확신도는 고정 0.6, 규칙 후보와 같은 자리면 근거만 보탠다. 전문은 쪽 경계에서 7,000자 묶음으로 나눠 묶음마다 한 번 부른다. 저장하지 않는다 — 「더 묻기…」 네 번째 선택지가 부르고 ③에 «LLM 구조»로 서며 「적용」이 저장한다 |
-| `src/llm/jev.py` · `structure_llm.ask_structure_jev` · `toc.match_toc_entries_jev` | **판정 모델로 고르기**(**D-129** — 본문 판정의 기본은 2026-10-05부터 OpenRouter decider, 아래 줄·**D-136**. 이 줄의 Jev 서술은 목차 대조와 폴백에 그대로 맞다 · 논거는 `docs/design-boundary-judge.md`, 실측은 `docs/sessions/session_jev_structure.md`). 글을 만들지 않고 «예·아니오 확률»과 «고르기»만 돌려주는 모델이라 **지어낼 자리가 형식에 없다** — 행은 코드가 정해서 묻고 후보도 코드가 만든다. `LlmRouter`에 넣지 않았다(라우터의 계약은 «프롬프트 → 글»). 라우트는 늘리지 않고 `segmentation/structure/llm`에 `engine="jev"`를 받는다. **총목이 답하는 것은 권·集(층위 1~2), 본문 판정이 답하는 것은 그 안의 낱글**이라 `nest_under_toc`이 본문 후보를 목차 경계 아래 층으로 내린다. **규칙 후보를 거르지 않는다** — 문집에서 규칙으로 거르면 규칙의 눈을 물려받아 재현 0.88 → 0.18로 떨어졌다. 목차 대조의 문턱은 상수가 아니라 `derive_toc_threshold()`가 «자기 검증(제목이 그 행에서 시작하는가)이 깨지는 직전»으로 이 책에서 뽑는다(답이 5개 미만일 때만 0.8로 물러선다). 확률은 후보의 `prob`에 실어 화면의 «상위 몇 개» 손잡이가 쓰고, 확신도 칸(규칙과 견주는 값)과는 섞지 않는다. **답은 1차 거름망이다**(2026-09-27, claude-skills `docs/JEV-SIEVE.md`) — 후보마다 `band`: 본문은 ≥0.85 accept(미리 체크)·0.5~0.85 escalate(**체크 해제 후보**, 「애매한 후보 보기」)·≤0.5 reject(후보 아님), 목차는 절벽 이상 accept·절벽 아래 escalate·자기 검증 실패 reject, «없음» 답은 `toc.unplaced` 제목 목록. 합칠 때 escalate는 채택으로 올리지 않고, 층은 accept 목차로만 세운다(`structure_llm.jev_band`). **텍스트 전용이고 CJK 정확도가 낮다고 벤더 문서가 밝힌다** — 비전 자리(판독 계획)에는 못 쓴다. 입력만 청구($0.042/M): 권 전문 판정 $0.024, 목차 102항목 $0.002. **Jev 클라이언트는 `make_jev_client`로 만든다**(D-136 후속, 2026-10-05) — TypeSafe 키(`TYPESAFE_API_KEY`·`JEV_API_KEY`)가 있으면 직결, 없고 OpenRouter 키만 있으면 같은 Jev를 OpenRouter 경유(`openrouter_decider.OpenRouterJevClient`, `~typesafe/jev-latest`, 문턱은 Jev의 것 — `judge_thresholds`가 업체보다 모델을 먼저 본다). **`JevClient.KEY_NAMES`에 OpenRouter 키는 없다** — 어떤 키도 남의 주소로 나가지 않는다. **직결이 HTTP로 거절되면(402 크레딧 소진 등) 묻는 도중에 `OpenRouterJevClient`로 넘어가고 이후 그쪽으로만 묻는다**(D-136 후속 2026-10-06 — OpenRouter 키가 있을 때만, 상한은 하나, `usage().via_openrouter`, 넘어간 뒤 `judge_label`은 `openrouter:~typesafe/jev-latest`). 시험 `tests/test_jev_via_openrouter.py` |
-| `src/llm/decider.py` · `page_survey.decider_questions`·`parse_decider_answers` | **이미지를 받는 판정 모델 — Perplexity Decisions `decider-27b`**(D-134). `JevClient`를 물려받아 주소(`/v1/decisions`, 끝 `/` 금지)·모델 id·**이미지는 state 배열 안 data URL**만 바꾼다 — 상한·백오프(429 Retry-After)·토큰/비용·**서고 사용 기록**은 `jev.py` 한 곳. 한 장 32×32 타일 2,048개를 넘기면 1분 뒤 504라 `fit_image`가 보내기 전에 줄인다. 자동 스캔에서 «종류 판정 모델»을 «판정 모델 — Perplexity Decider»(`force_provider="decider"`)로 고르면 방향은 choice, 종류는 **종류마다 noul**(한 쪽에 둘 이상일 수 있다)로 묻고 확률을 `per_page[].decider`에 싣는다. 종류 문턱 0.5는 **잰 값이 아니다** — `scripts/eval_decider_survey.py`(`--run` 없이는 안 보낸다)로 정한다. 기본 모델은 그대로 kimi-k3. **키는 화면에서**: 설정 ▸ 판정 모델(`/api/settings/decision-models`, `?check=true`면 질문 하나로 연결 확인) — `PERPLEXITY_API_KEY`·`TYPESAFE_API_KEY`가 `env_settings.MANAGED_KEYS`로 서고 `.env`에. Jev도 이제 서고 `.env`를 읽는다(전에는 앱 밖 개인 파일만 — 화면으로 넣을 길이 없었다). Decider는 그 개인 파일을 보지 않는다. Jev에 이미지를 주면 보내기 전에 거부한다(base64를 글자로 읽는다, 2026-10-02 실측). 시험 `tests/test_decision_models.py` |
-| `src/llm/openrouter_decider.py` · `structure_llm.JUDGE_THRESHOLDS` | **편성 본문 경계 판정의 기본 — OpenRouter 경유 Perplexity decider**(**D-136**, 사용자 결정 2026-10-05). `OpenRouterDecisionClient(JevClient)`: `https://openrouter.ai/api/alpha/decisions`·`perplexity/pplx-decider-v1-27b`, 본문·응답은 System One 그대로(usage.cost가 정본). **키 이름은 `OPENROUTER_API_KEY` 하나** — Jev의 KEY_NAMES(TypeSafe 키)를 물려받으면 TypeSafe 키가 OpenRouter로 나간다. 이름마다 환경변수 → 서고 `.env`(설정 ▸ 판정 모델, `MANAGED_KEYS["openrouter"]`) → 프로젝트 `.env` → 개인 키 파일. 라우트는 키가 있으면 decider가 주, Jev가 **실패한 호출만** 대신 답하는 폴백(`ask_structure_jev(fallback=)`), 없으면 Jev가 주. 그 Jev는 `make_jev_client`가 고른다 — OpenRouter 키만 있으면 폴백·목차 대조 Jev도 OpenRouter 경유(`OpenRouterJevClient`, 표지 `openrouter:~typesafe/jev-latest`, 화면 «TypeSafe Jev (OpenRouter 경유)»). 설정 응답의 `jev_via`가 그 길을 알리고 TypeSafe 칸 has_key는 TypeSafe 키만 본다(D-136 후속). **문턱은 답한 모델의 것** — decider 0.95/0.35, Jev 0.85/0.5(저장 측정에서 accept 정밀 ≥ Jev·reject 손실 ≤ Jev로 고름). meta `answered_by`·`fallback_calls`·`fallback_lines`·`thresholds`, 후보 `judge`. **목차 대조는 Jev 그대로**(decider로 잰 적 없음, TypeSafe 키도 OpenRouter 키도 없을 때만 `toc.skipped`). 근거 표지 `jev:structure`·요청 `engine:"jev"`는 이름 유지. **이 PC는 개인 키 파일에 실제 OpenRouter 키가 있다 — 라우트를 부르는 시험은 이 클라이언트를 가짜로 바꿔야 한다.** 시험 `tests/test_openrouter_decider.py` |
-| `src/core/escalate_review.py` · `scripts/escalate_review.py` | **애매한 후보 2차 판정**(**D-137**, 사용자 결정 2026-10-05). 본문 판정의 escalate 대역을 «지시문 + 후보 JSON 줄 `{id, before ≤4행, text, after ≤2행}`»(확률 없음)으로 ≤100개씩 글 덩어리로 내보내고, 채팅 LLM의 답 `{"answers":[{id, start: yes/no, conf}]}`을 붙여 넣으면 대조한다 — 없는 id 거부·빠진 id 누락(답이 닿은 덩어리 안에서만)·모양 틀림 건너뜀. 들이기는 내보낸 글을 그대로 붙인 것(머리 «[애매한 후보 2차 판정 —»)·다른 문헌·권의 묶음 표지(`esc-<지문>-N`)·200만 자 넘는 글을 400으로 거부하고, 표지 없는 답은 받되 거부가 절반을 넘으면 경고한다. 지시문 예시 id는 쪽 0(`p0-L0`)이라 후보가 될 수 없다. 메모는 목록 밖의 들인 판정도 남기고(글이 바뀐 자리만 버림) 화면에는 지금 후보의 것만 준다(`current_verdicts`), 다시 답하면 «다시 판정 N». 문헌·권 id는 폴더 이름 하나만(`check_path_id`). 시험 `tests/test_escalate_review_hardening.py`. **앱은 여기서 외부 모델을 부르지 않는다.** 결과는 체크 제안뿐(«예» 체크·«2차: 예», «아니오» 체크 해제·«2차: 아니오», 가릴 수 있음) — 저장은 「적용」. 후보·들인 판정은 `<서고>/.escalate_review/<문헌>/<권>.json`(문헌 git 밖)에 메모 — 판정 실행(`_remember_escalate`)과 화면 내보내기가 적고, CLI·「저장된 판정 불러오기」가 읽는다. 라우트 `segmentation/escalate/export`·`/import`·`GET segmentation/escalate`. 시험 `tests/test_escalate_review.py` |
-| `src/llm/clef_cf.py` | **이미지 판정의 기본 — Cloudflare Workers AI `@cf/cloudflare/clef`**(D-135, 사용자 결정 2026-10-04). Decider처럼 `JevClient`를 물려받되 주소는 계정 id로 만들고, 이미지는 **최상위 `images`**(data URL, 최대 4장·장당 16MP/4MiB·합계 8MiB·본문 13MiB — `fit_image_clef`가 보내기 전에 맞춘다. **이것은 서버 한도이고 문맥은 65,536토큰이다** — 16MP 근처 쪽이 «예상 208,453토큰»으로 413을 받아 2026-10-04 평가 24장 중 12장을 잃었다. 그래서 기본 2MP(`DEFAULT_IMAGE_PIXELS`)로 보내고, 문맥 초과 413이면 오류문의 예상 토큰 수에 비례해 줄여 1회 다시 보낸다). **자동 스캔의 clef는 사슬이다 — Cloudflare clef(무료) → OpenRouter clef(`openrouter_decider.OpenRouterClefClient`, 유료 크레딧, 이미지는 state 배열 image_url·300KB·재인코딩 없음) → 기본 비전 모델(kimi-k3)**. 실패한 쪽부터 다음 단계로 넘기고 `fallback`에 경로 요약을 싣는다(Jev는 이미지를 못 읽어 사슬에 없다, D-135 후속). **화면은 «넘어감»과 «실패»를 따로 읽는다**(960a729) — `fallback_steps`(사슬이 다음 단계로 넘어간 쪽, 그 쪽은 다음 단계가 답했다)는 경고가 아니고 `failures`(답을 못 받은 쪽·멈춤)만 경고다. 미리 세기는 `chain`·`cost_usd_max`·`needs_key`를 낸다. **호출 상한은 묻기 수(`JevClient.asks_made`)로 센다** — 429 백오프·413 축소 재전송(`_send`)은 같은 묻기라 상한을 쓰지 않고 HTTP 요청 수(`calls_made`)에만 남는다. 상한에 닿으면 실패로 보고 유료 단계·비전 모델로 넘기지 **않고** 모델 호출을 멈춘다(시험 `tests/test_scan_cost_and_chain_ui.py`). **질문이 여럿이면 Workers AI가 state를 자른다** — 긴 글 + 여러 질문 자리에는 쓰지 않는다(D-135 후속), 응답 `{"result":…, "success":…}`는 `_unwrap`이 벗긴다(안 벗기면 0토큰으로 기록된다). `force_provider="clef"`. 키 `CLOUDFLARE_API_TOKEN`·`CLOUDFLARE_ACCOUNT_ID`(MANAGED_KEYS `cloudflare`·`cloudflare_account`) — 환경변수 → 서고 `.env` → **Windows 사용자 환경변수**(레지스트리, 먼저 뜬 서버용), 둘 다 있어야 «키 있음». **기본은 화면이 고른다** — `decision-models`의 `default_image_provider`를 «종류 판정 모델»이 처음 채울 때 한 번 쓰고, 「말로 지시」 창을 열 때의 kimi 기본은 그것을 덮지 않는다. **clef를 고를 수 있는가는 서버가 한 곳에서 `clef_available`(Cloudflare 키 또는 OpenRouter 키 — 라우트의 사슬과 같은 조건)로 내고 화면은 그것만 본다**(2026-10-05 — 화면이 Cloudflare 키만 보아 OpenRouter 키만 있는 사람이 clef를 못 골랐다, 시험 `tests/test_clef_availability.py`). 서버의 force_provider 없음은 여전히 kimi-k3(이 PC는 키가 환경변수에 있어 서버 기본을 바꾸면 시험이 실제로 부를 수 있다). 문턱 0.5는 잰 값이 아니다 — `scripts/eval_clef_survey.py`(사람 라벨 없는 24장, `--run` 없이는 안 보낸다). 시험 `tests/test_clef_cf.py` |
-| `src/core/rule_preview.py` | **규칙을 바꾸면 무엇이 달라지는지 미리 잰다**(D-121). 규칙 둘로 제안을 각각 세어 «후보 615 → 608 · 빠지는 자리 8»과 그 자리 목록을 돌려준다. 저장하지 않는다. 사람·통계·LLM이 내놓는 변경이 모두 이 관문을 지나게 하는 것이 목적이다. 목록은 «늘고 준 것»으로, 스위치는 «듣는 값»으로 견준다(안 적힌 스위치는 켜진 것이라 「None → False」로 말하면 안 된다) |
-| `src/core/page_format.py` | **판식을 좌표에서 읽는다**(D-120). 열 사이가 유난히 벌어진 자리를 판심으로 보고, 행마다 `body`·`pansim`·`margin` 라벨을 붙인다. **판심이 쪽의 절반 이상에서 잡히고 좌우 열 수가 일정한 책에서만** 판정하고, 아니면 아무것도 빼지 않는다. 두주는 «본문 열의 0.25배보다 작고 윗변에서 시작하지도 않는» 행 — 0.6배로 자르면 내려쓴 별행 표제가 함께 빠진다. 발견기는 `body`만 센다. 浩齋에서 잰 «반엽 10행»이 KORMARC 300▼b의 「10行20字」와 같다. `compare_with_catalog`가 서지의 `printing_info`와 맞대어 한 줄로 답한다 — 좌표만으로는 접은 자리를 확정할 수 없다는 한계를 목록이 메운다 |
-| `src/core/boundaries.py` | **글 단위의 정본**(D-092). 파일은 **원본 저장소**에 산다 — `documents/{doc}/boundaries/{part}.json`(D-097). 권마다 경계 목록 하나 — 항목은 시작 위치·id·깊이(level, 제한 없음)·역할(role: container·article·fragment — **2026-09-11부터 화면에서 물러났다.** 깊이로 어림한 값만 저장되고 아무 동작도 바꾸지 않는다)·제목·상태·앵커 글자. 끝은 저장하지 않고 같은 층위 이상의 다음 경계가 정한다. 본문은 L4에서 잘라 오고, L4 커밋이 바뀌면 앵커 글자로 재대조(`rematch`). `entity.py`의 `unit`은 이 목록의 읽기 보기다(D-093 — 옛 이름 `text_block`) |
-| `src/core/rule_induction.py` | **경계 규약을 전문에서 층계로 찾는다**(D-116·D-117·D-119). 코드에 «신호 종류»는 없다 — 발견기 하나가 «자리(행 첫머리·행 끝·기호 뒤) × 접은 문자열(수사→N·干支→G/Z, 1~4자)»의 되풀이를 세어 횟수·편중(기대 대비 3배↑)·간격·밀도·연속·판심으로 고르고, 찾은 뒤에야 문법으로 판정한다(날짜면 `signals.date`, 기호 뒤 날짜면 `mark`, 卷 이름이면 `volume`, 접은 글자 든 꼴은 `head/tail_templates`, 아니면 `head_words/title_words`, 기호는 `symbols`). 행들이 대부분 같은 글이면 판권·두주로 보고 권고하지 않는다. 층계: 1단 목차(대조 80%↑면 멈춤) → 2단 시각 → 3단 텍스트(1위의 60%↑, 최대 6) → 4단 LLM(`extract_start_patterns_llm` — 표본만, 답은 정해진 종류, 코드가 세어 확인) → 사람. 결과는 `segmentation_rules` 데이터. 편성 탭 ①이 답 한 줄(`stage`)로 보이고(D-122), 규칙이 빈 문헌의 자동 트리는 먼저 이것을 돌려 저장한다. 네 책 눈가림 재현(천진담초 36/36·36/42) |
-| `src/core/segmentation.py` (B-002 부분) | `position_at_point` — 원본 이미지에서 찍은 점을 확정본의 (행·글자)로 (D-094). `anchor_bbox`의 역이고, L4 행(빈 행 포함)과 L2 행(비어 있지 않은 행)의 대응이 어긋나면 `None` |
-| `src/core/segmentation.py` (D-095) | `volume_head` — 행 **끝**이 卷 이름이면 卷頭(묶음). 신자체는 정자로. `extract_title_words_llm` — 해제 + 본문 짧은 행 표본에서 표제 어휘 후보(표본에 없는 말은 버린다, 저장하지 않는다) |
-| `src/core/toc.py` (해제) | `reference_excerpt` — 긴 해제에서 권별 서술을 골라 간추린다. 앞에서 자르면 안 된다: 해제는 «생애 → 교유 → 권별 내용» 순이라 필요한 데가 뒤에 있다(운양집 해제 23,894자, 권별은 43% 지점부터) |
-| `src/core/toc.py` | 목차 판별·추출·본문 대조(D-089). NDL 신자체(巻·総)는 정자로 맞춘 뒤 본다. 첫 쪽만 문턱 0.7, 이어지는 쪽은 짧은 행 비율로. LLM은 항목 구조화에만(쪽마다 따로, 텍스트 입력, JSON 강제, 사고 끔). 본문 대조는 순서 지키는 정렬, 1~2자 제목은 엄격 대조 |
-| `src/llm/providers/base.py::thinking_options` | 사고 예산을 답변 예산에 **더하는** 공통 해석. 비전 경로 4종과 Gemini 텍스트 경로가 이것을 따른다(JSON 호출은 사고 미지정 = 끔) |
+모듈마다 «무엇을 하고 무엇을 지키는가» 표(추출 모드·OCR 품질·판정 모델·말로 작업 지시·코어 스키마)는
+**`docs/module-map.md`**로 옮겼다(2026-10-11 — 매 세션 자동으로 읽히는 이 파일을 줄이려고). 그 모듈을
+고칠 때 그 표를 읽는다. 결정의 지금 결론은 **`docs/CHECKPOINTS.md`**. 아래는 모듈을 가로지르는 규칙이라 여기 둔다.
 
 - **사전은 지식이고 정책은 문헌의 것**: `strict`만 동치, `loose`·`script`는 힌트. 승인은 `documents/{doc_id}/variant_approvals.json`에만.
 - **Ollama 기본 비전 모델은 클라우드(`gemma4:cloud`)다**(D-114). 로컬 기본을 두면 처음 켠 PC가 9.6GB를 받기만 한다. 클라우드 기본은 목록에 있어도 `_pick_vision_model`이 한 번 불러 보고(로그인 없음·은퇴면 실패) 로컬 후보로 내려간다.
@@ -187,35 +151,7 @@ src/app/
 **외부 모델(API·Ollama·codex 등)을 부르지 않는다.** 사용자가 그 실행에 쓸 모델을 명시적으로 이름 대면
 그 한 번만 쓰고, 기본값으로 삼지 않는다.
 
-## 말로 작업 지시 모듈 (D-131, 2026-09-30)
-
-복잡한 스캔본 한 권을 «스캔·말 → 작업 계획 → 확인 → OCR → LLM 결과 되들이기 → 장별 내보내기»로.
-흐름도는 `docs/architecture-diagrams.md` 14절, 사용법은 user-guide 5.0-2·5.0-3.
-**화면은 둘로 나뉜다**(2026-10-02): 계획 창(`work-order.js` — ① 자동 스캔 ② 말 ③ 계획 확인·적용)과
-교정 탭 «들이기·내보내기» 서브탭(`export-view.js` — 텍스트 내려받기·LLM 결과 들이기·노트 틀).
-화면 말에서 «강독»을 뺐다 — 강독 노트는 한 예시였고, 논문을 줄바꿈만 지워 마크다운으로 받는 쓰임이 더 흔하다.
-
-| 모듈 | 하는 일 |
-|---|---|
-| `src/core/read_plan.py` | **작업 계획**(권마다 `read_plan/{권}.json`, 원본 저장소, `schemas/source_repo/read_plan.schema.json`) — 쪽 구간별 회전·엔진·쓰기 방향·건너뛰기, 장(PDF 쪽·제목·층위), 쪽 이름표(«교재 면 = PDF − 4»), 판독 지침. `plan_from_words`는 말을 칸으로 옮기고 **옮기지 못한 말을 돌려준다**(rule_talk와 같은 규약). 저장하지 않는다 |
-| `src/ocr/read_book.py` | 계획 적용 — 회전은 `set_part_rotation(pages=…)`(D-126)로, 지침은 `ocr_guidance`로. 화면은 적용 뒤 기존 «권 전체 OCR»에 `engine_plan`(+`writing_direction`, D-131에서 추가)을 넘긴다. CLI(`ctb read`)만 `read_pages`로 직접 돈다 |
-| `src/core/reading_ingest.py` | **LLM 강독 결과를 기존 층에 나눠 담는다 — 새 저장 스키마를 만들지 않는다**(사용자 지시 2026-09-30). 교정 → L4, 장·항목 → 편성 경계, 구획 국역 → L6, 어휘·문법 → L7 사전형 주석, 해제·요점·문서 정보·검토 → L7 비고. 사람이 고친 L4는 덮지 않는다(마지막 커밋이 들이기 **이고** 작업 파일이 그 커밋과 같고 교정 기록이 비어 있을 때만 덮는다 — 편집기 저장은 커밋하지 않고 교정 탭은 corrections만 커밋한다). 다시 들이면 draft_id `reading-import`**이고 status draft**인 항목만 바꾸며(번역·주석을 사람이 고치면 `core.translation`·`core.annotation`이 draft_id를 뗀다), 경계는 이 답이 다룬 쪽 가까이에서 제목으로 다시 찾아 옮기고(id 유지) 사람 번역·주석이 가리키는 경계는 지우지 않는다(Codex·문서 교차 확인 2026-09-30). 답의 모양은 `check_answer`가 본다(저장 형식이 아니라 답 형식) |
-| `src/export/text_export.py` · `src/export/reading_note.py` | 장별 원문(잡음 줄·되풀이 머리글 빼기·**판면 줄바꿈만 지우기** — 세로는 붙이고 가로는 빈칸(한글 없는 한문·일본어 줄끼리는 한자·가나가 만나면 붙임), 한글 가로쓰기는 `WordEvidence`가 같은 문헌의 줄 가운데 어절을 근거로 «어절 한가운데서 꺾인 줄»을 붙인다, 문단 끝·들여쓰기는 L2 줄 좌표(`line_geometry`, 줄 수가 같을 때만), 쪽을 넘는 문단은 잇고 쪽 표시를 글 안에·«PDF p.N · 교재 N면»; `export/text?single=true`면 전문 한 파일)과 **층에서 조립하는 강독 노트**(저장하지 않는다). 기본 모양은 render_*, **다른 모양은 «틀»**(`src/export/note_template.py` — 예시 노트를 LLM이 Jinja2 샌드박스 틀로 바꾸고 코드가 층으로 채운다, 틀도 저장하지 않는다). 수업 메모 같은 줄은 새 칸 없이 «문서 정보»에 |
-| `reading._translation_input` | 번역 탭 AI 번역이 그 단위의 L7 사전형 주석 중 원문에 나오는 표제어를 «확정 용어 풀이»로 싣는다. 번역 규칙은 사용자가 CCTI에 쓰던 지침을 옮긴 것 |
-
-## 코어 스키마 모듈 (D-128, 2026-09-21)
-
-커넥톰(neuPrint) 측정에서 가져온 규약을 Unit·Tag·Concept·Agent·Relation 층에 얹은 것들.
-**`neuprint-python`·API·토큰은 이 저장소에 없다** — 가져온 것은 그 측정에서 나온 규칙뿐이다.
-
-| 모듈 | 하는 일 |
-|---|---|
-| `src/core/corpus_version.py` | **데이터 버전을 «출력»에 각인한다**(D-128 1항). 산출물에 기여한 저장소들의 HEAD를 접어 `ctb-corpus:…` 해시로 만들고, 내보내기 다섯 자리가 자동으로 찍는다 — 교환 스냅샷·사전 내보내기·인용 내보내기·경계 CSV(`코퍼스` 열)·텍스트레이어 PDF(keywords). **사용자는 아무것도 입력하지 않는다.** 시각·앱 판은 해시에 넣지 않는다(같은 데이터 → 같은 해시). 커밋되지 않은 편집이 있으면 `reproducible: false`로 알린다. `core-schema-v1.3`은 **스키마** 판이고 이것은 **데이터** 판이다 |
-| `src/core/entity_id_map.py` | **구 ID를 죽이지 않는다**(2항). `core_entities/id_map.json` 하나에 구 → 신 매핑을 쌓는다. 고리 둘 — `superseded_by`(병합, 조회가 따라간다)·`promoted_to`(승격, 따라가지 않는다: Tag는 그대로 산다). `get_entity`가 옛 id에 「지금은 무엇을 보라」를 붙인다. **Relation의 서술어로 두지 않은 이유**는 셋이다: `/entities/relation` 목록이 화면에 그대로 떠서 내부 장부가 섞이고, `subject_type` enum에 tag가 없으며, 옛 id를 물을 때마다 전수 훑기가 된다 |
-| `src/core/promotion.py` | **승격은 개수가 아니라 무게로**(8·9·10항). 무게 1~2는 잡음 바닥이라 세지 않되 **지우지 않는다**. 출처 수집은 문헌으로 **거르지 않고**(넓게 모은다) Concept은 `scope_document` 하나를 갖는다(좁게 내보낸다) — 이 비대칭은 **연합 구조에만** 해당하고 편성·OCR에는 적용하지 않는다(`SCOPE_BLIND_COLLECTION_NOTE`). 무게는 「그 단위의 L4에 표면형이 몇 번 나오는가 × 신뢰도」다. **L4를 못 찾으면 «재지 못한 것»(`measured=False`)으로 두고 무게 0** — Tag 수로 대신하지 않는다. 한때 대신하게 두었더니 한 단위에 Tag 셋만 붙어도 임계를 넘어 8항이 막으려던 「개수로 세기」가 복원됐다(2026-09-21 독립 검증). 「확정본은 있는데 표면형이 안 나온다」는 **정상적인 0**이라 사유 문구가 다르다. 저울이지 잠금장치가 아니다(`require_weight=True`로만 막는다) |
-| `src/core/concept_scope.py` | **Concept의 범위는 «주소»다 — 순위 가중치가 아니다**(6항). 다른 문헌의 개념은 순위가 낮아지는 것이 아니라 **목록에 들어오지 않고**, 전역(null)은 모든 문헌 주소에 걸린다. 질의는 `?scope=`(`list_entities`의 `scope_document` 필터). **거르기만 하고 정렬하지 않는다** — 정렬하는 순간 「범위가 순위를 만든다」가 되어 6항이 버린 쪽으로 간다. **이것은 내보내는 쪽 규칙이다**(`OUTPUT_SIDE_ONLY_NOTE`) — 모으는 쪽(`gather_sources`)에 옮기면 연합이 일어나지 않는다 |
-| `src/core/connectome.py` | **서고의 관계 분포를 연합 구조와 나란히 놓는다**(D-128 후속). 규약대로 만든 뒤 남는 물음 — 「그래서 이 서고가 그런 모양인가」 — 에 답한다. **판정하지 않는다**: 점수를 매기면 그 숫자를 올리는 것이 목표가 되고, 커넥톰은 참고 좌표이지 목표가 아니다. 두 층 — **기록된 기준값 대조는 의존성이 없어 배포본에서도 돌고**, 살아 있는 재측정(`measure_reference`)만 extra `connectome` + neuPrint 토큰 뒤에 있다. **`install.ps1`의 어느 선택지에도 그 extra가 없다**(시험이 지킨다). 라우트는 `connectome-comparison?live=`이고 **화면은 엔티티 패널의 「커넥톰 대조」**다(해석 도구 바에 두었다가 옮겼다 — 그 패널은 어느 모드에서도 열리지 않는다, B-008). 게이트 모양은 판독 계획이 CPU에서 400을 주는 것과 같다. **질의 규약은 정본(`jt725/scripts/cns_structure_stats.py`)과 같아야 하고 시험이 지킨다** — `consensusNt`(합의값, 예측값이 아니다)·`unclear`도 분모·`=~` 전체 일치. 한때 넷이 달라 조절 비중이 12.5% → 65.2%로 나왔다. 다시 재는 칸은 부호 둘뿐이라 화면이 ◆로 밝힌다 |
-| `src/core/relation_polarity.py` | **부호는 이진이 아니고, 강한 엣지에서 가장 중요하다**(11·12·13항). `polarity` 넷(지지·반박·맥락의존·불명) — 적히지 않은 것을 지지로 읽지 않는다. `mode: modulate`는 내용을 주장하지 않고 **다른 관계의 무게를 바꾸는** 관계이고 연합 층(concept·relation)에만 붙는다. 강연결 임계는 상수가 아니라 `suggest_strong_threshold`가 분포에서 정한다. `unsigned_strong_relations`가 「부호 없는 강연결」을 짚는다 |
+### 코어 스키마 규약 (D-128)
 
 **질의 표면은 좁게 유지한다**(3항). 읽기 문은 `entity.py`의 셋뿐이고(`QUERY_SURFACE`)
 임의 순회를 여는 함수·엔드포인트가 없다. 관계를 따라가는 일이 생기면 **목록을 받아 거르는
@@ -294,10 +230,9 @@ src/app/
 
 ## 인지 부채 지도
 
-> 2026-07-04 최초 감사 · 2026-09-04 3차 감사(v1.3.0). AI 작성 코드와 사용자 이해의 간극 요약.
-> 상세·퀴즈: docs/cognitive-debt-audit.html — **9절이 v1.3.0에서 «검증이 없어서 몰랐던 것» 넷을 적는다**
-> (비고 패널이 죽어 있었다 · 시험 픽스처가 스키마를 어기고 있었다 · 교환 형식이 두 벌이었다 ·
-> 스냅샷의 앱 판이 멈춰 있었다). 넷 다 예외를 던지지 않았다.
+> 2026-07-04 최초 감사 · 2026-09-04 3차 감사(v1.3.0) · 2026-10-11 전수 검토로 정리. AI 작성 코드와 사용자 이해의 간극 요약.
+> 3차 감사 HTML(퀴즈 포함)은 `docs/_archive/2026-09-04_cognitive-debt-audit/`. 2026-10-11 전수 검토가 찾은
+> 동작 결함은 `docs/backlog.md` B-012~ — **시험이 초록인데 틀린 자리**가 대부분이다.
 
 ### 실제 하는 일 (문서에 없는 층위)
 - "서버 시작" = 최대 3개 프로세스: start_server.bat가 uvicorn 외에 OpenAI OAuth 프록시
@@ -316,12 +251,9 @@ src/app/
   D-069에서 죽은 코드 약 1,000줄을 걷어냈기 때문이다.)
 
 ### 안다고 착각하기 쉬운 지점
-1. ~~`src/app/_state.py`에 `_parse_llm_json`이 **두 번 정의**~~ → **해소됨(ee8db13)**, 아래
-   "인지부채 해소 반영" 참조. 현재는 단일 정의다.
-2. ~~LLM 응답이 잘리면 조용히 부분 결과 반환~~ → **해소됨(56000f8·b91f3ef)**: `_truncated`
-   플래그가 UI 경고로 노출된다. 아래 "인지부채 해소 반영" 참조.
-3. LLM 결과 캐시(TTL 600초·최대 256건, `_state.py:360`) — 같은 텍스트 재요청 시 10분간
-   옛 결과가 돌아올 수 있음.
+3. LLM 결과 캐시(TTL 600초·최대 256건, `_state.py`의 `_llm_result_cache`) — 같은 텍스트 재요청 시 10분간
+   옛 결과가 돌아올 수 있음. (1·2번 — `_parse_llm_json` 이중 정의와 잘린 답의 조용한 부분 반환 — 은
+   2026-07-07 해소돼 지웠다: ee8db13·56000f8. 번호는 다른 문서가 가리키므로 그대로 둔다.)
 4. "가져오기" 버튼의 "준비중"은 UI만 봉인(D-037). hwp-import.js 약 1천 줄과 백엔드
    엔드포인트(`/api/documents/import-hwp` 등)는 살아 있음 — 재구현하지 말고 복원할 것.
    **단 D-055 이후 이 버튼은 프로필에 따라 동작이 갈린다**: 「추출」 모드에서는
@@ -353,7 +285,7 @@ src/app/
    L3의 `block_id` 집합을 비교한다. 스키마에 타임스탬프가 없어서 이 방식을 쓴다
    (`layout_page`·`ocr_page` 둘 다 `additionalProperties: false`). 판정이 애매하면
    «안 바뀌었다»로 둔다 — 오판하면 쪽마다 LLM 호출이 다시 나가기 때문이다.
-5. 서지 파서 5종(`src/parsers/` korcis 1,807줄·archives_jp·kyujanggak·kostma·ndl)은 외부
+5. 서지 파서(`src/parsers/` korcis·archives_jp·kyujanggak·kostma·jsg·ndl)는 외부
    사이트 HTML 구조 의존 — 사이트 개편 시 침묵 파손. 테스트가 실제 네트워크를 안 타면 못 잡음.
 6. `llm_usage_log.jsonl`은 서고 루트에, 서고 미설정 시 `~/.classical-text-browser/`에 기록 —
    예산(MONTHLY_BUDGET_USD) 추적이 서고별로 분산됨.
@@ -361,18 +293,10 @@ src/app/
 ### 인지 부채 핫스팟 (위험 순)
 | 순위 | 경로 | 위험 |
 |---|---|---|
-| 1 | `src/app/_state.py` (922줄) | 전역 상태+프롬프트+캐시+JSON 파서 응집, 중복 정의 잠복 |
-| 2 | `src/app/static/` 프론트 모놀리스 | 테스트 0·CI 없음, index.html 4,826줄 수정 회귀 감지 불가. D-055·D-067·D-069의 화면 검증은 매번 **jsdom 일회성 하네스**로 했고 **그 하네스들은 저장소에 없다** — 정식 프론트 스모크 테스트는 여전히 미결(D-053 착수 조건). 이 부채 때문에 D-069의 죽은 코드 1,000줄이 오래 살아남았다 |
+| 1 | `src/app/_state.py` (약 930줄) | 전역 상태+프롬프트+캐시+JSON 파서 응집 |
+| 2 | `src/app/static/` 프론트 모놀리스 | CI 없음. 화면 JS를 node로 돌리는 시험은 위 «실제 하는 일»의 몇 파일뿐이고 index.html(약 5.1천 줄) 대부분은 시험 밖이다 — 정식 프론트 스모크 테스트는 미결(D-053 착수 조건). 2026-10-11 전수 검토의 동작 결함(B-012·B-016·B-018·B-019 등) 다수가 여기서 나왔다 |
 | 3 | `start_server.bat` | 암묵 부수효과 3종(프록시·Docker·포트 스캔), 실패 시 원인 추적 곤란 |
-| 4 | `src/parsers/` 5종 | 외부 사이트 의존 침묵 파손 |
-| 5 | ~~**비교 모드 백엔드 잔재**~~ | v1.3.0에서 정리됨 — `l5_compare`·`get_l5_compare*`는 코드에 없다(2026-09-06 grep 0건). D-069에서 프론트 880줄을 걷어낸 뒤 남았던 백엔드 라우트 |
+| 4 | `src/parsers/` | 외부 사이트 의존 침묵 파손. 시험 픽스처가 실제 응답에 없는 키를 넣어 결함을 가린 사례가 있다(KORCIS 판식정보) |
 | 6 | 봉인된 「외부 파일 → 새 문헌」 가져오기 | 존재를 모르면 중복 재구현, 알면 진입점 복원만으로 재개(D-037). 백엔드는 살아 있고 `_openHwpImportDialog()` 호출자가 0건일 뿐이다. **추출 모드의 「텍스트 바로 가져오기」(`/text-import/from-text-layer`)와 혼동하지 말 것** — 그쪽은 정상 동작하는 별개 경로다 |
 | 7 | **합성 입력만으로 검증하는 습관** | D-068이 여기서 났다 — 시험용 PDF를 PyMuPDF로 만들어 써서, 실제 스캔본에만 있는 좌표 변환을 자동 테스트가 영영 만나지 못했다. 파일 형식·외부 엔진을 다루는 코드는 **실물로 한 번 돌려야** 한다 |
 | 8 | **강독 결과 JSON을 저장 형식으로 오해하기** (D-131) | `core/reading_ingest.py`가 받는 JSON은 **LLM 답 형식**이지 저장 스키마가 아니다 — 들이면 L4·편성 경계·L6·L7로 흩어지고 노트는 매번 층에서 조립한다. 노트 형식이 바뀌면 `export/reading_note.render_*`만 고친다. «노트를 파일로 두자»는 새 스키마는 사용자가 한 번 거절했다(2026-09-30). 장 목록은 두 곳에 있다: 원문 내보내기는 `read_plan/{권}.json`의 chapters, 강독 노트는 층위 1 경계. 들이기는 답의 chapter 제목이 계획의 장 제목과 **같을 때만** 계획의 쪽을 빌려 장 경계를 세우고(다르면 답의 가장 앞 쪽), 계획의 chapters는 고치지 않는다 — 제목을 다르게 적은 답은 두 장 목록을 어긋나게 한다 |
-
-## ✅ 인지부채 해소 반영 (2026-07-07)
-
-> 위 "인지 부채 지도"의 일부 항목이 실제 코드 수정으로 해소되었다. 아래는 문제 → 해소, 커밋해시.
-
-- `_state.py`의 `_parse_llm_json` 이중 정의(앞 정의가 `# type: ignore[no-redef]` 뒤 정의에 shadow되던 호출 불가 죽은 코드) → 앞 정의 제거, AST로 단일 정의 확인. 커밋 `ee8db13`. (위 "안다고 착각하기 쉬운 지점" 1번 → 해소됨. 단, 지도 본문의 행번호 775·906은 수정 이전 스냅샷 기준.)
-- 잘린 LLM 응답 복구 시 `_truncated` 플래그로 조용한 부분 결과 누락 방지 → 플래그 도입. 커밋 `56000f8`. (위 "안다고 착각하기 쉬운 지점" 2번의 조용한 부분 반환 위험 완화.)

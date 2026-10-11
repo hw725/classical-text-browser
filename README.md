@@ -186,11 +186,12 @@ docker compose up -d --build
 
 | 문서 | 무엇이 있나 |
 |---|---|
-| [**유지보수 안내**](docs/maintenance.md) | **고치기 전에 볼 것** — 되돌릴 수 없는 것, 되풀이하지 말 것, 테스트 사각지대 |
-| [DECISIONS.md](docs/DECISIONS.md) | 설계 결정 근거 (D-001~D-130) |
-| [아키텍처 다이어그램](docs/architecture-diagrams.md) | 전체 그림 (Mermaid 13종) |
+| [**체크포인트**](docs/CHECKPOINTS.md) | **먼저 읽을 것** — 결정 136개(D-001~D-138)의 지금 결론·되돌릴 수 없는 것·실제로 사고 난 자리 |
+| [**유지보수 안내**](docs/maintenance.md) | **고치기 전에 볼 것** — 파일 다루는 규칙, 테스트 사각지대, 릴리스 절차 |
+| [DECISIONS.md](docs/DECISIONS.md) | 설계 결정 근거 원문 (D-001~D-138) — 체크포인트의 근거 |
+| [아키텍처 다이어그램](docs/architecture-diagrams.md) | 전체 그림 (Mermaid 14종) |
 | [platform-v7.md](docs/platform-v7.md) | 8층 모델·이중 저장소 설계 |
-| [AGENTS.md](AGENTS.md) · [인지 부채 감사](docs/cognitive-debt-audit.html) | 어디가 위험한가 |
+| [AGENTS.md](AGENTS.md) · [backlog.md](docs/backlog.md) | 어디가 위험한가 · 알려진 결함 |
 
 ### 자료 구조
 
@@ -198,8 +199,7 @@ docker compose up -d --build
 |---|---|
 | [core-schema-v1.3.md](docs/core-schema-v1.3.md) · [operation-rules-v1.0.md](docs/operation-rules-v1.0.md) | 코어 엔티티 모델과 운영 규약 |
 | [schemas/README.md](schemas/README.md) · [스키마 개요](docs/schema-overview.md) | JSON 스키마 20개 |
-| [llm_architecture_design.md](docs/llm_architecture_design.md) | LLM 5단 폴백 설계 |
-| [세션 기록](docs/sessions/session_navigator.md) · [회고](docs/retrospective/README.md) | 만들면서 무엇을 배웠나 |
+| [문서 아카이브](docs/_archive/README.md) | 옛 설계서·세션 기록·회고 — 현행이 아니다 |
 
 ---
 
