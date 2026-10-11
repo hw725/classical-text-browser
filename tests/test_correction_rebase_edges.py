@@ -465,7 +465,10 @@ def test_hwp_import_reports_rebase(tmp_path, monkeypatch):
 
 
 def test_fill_empty_page_text_notifies(tmp_path):
-    """교정 탭이 빈 확정본을 채울 때(fillEmptyPageText) 응답의 소식을 띄운다."""
+    """교정 탭이 빈 확정본을 채울 때(fillEmptyPageText) 응답의 소식을 알림 도우미에 넘긴다.
+
+    토스트 자체는 이 파일의 알림 도우미 시험들이 따로 잰다 — 여기서는 «넘겼는가»만 본다.
+    """
     setup = (
         "globalThis._fillInFlight = new Map();\n"
         "globalThis.toasts = [];\nglobalThis.showToast = (m, t) => toasts.push({m, t});\n"

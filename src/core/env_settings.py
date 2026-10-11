@@ -30,8 +30,9 @@ MANAGED_KEYS: dict[str, str] = {
     "ollama_url": "OLLAMA_URL",
     # 판정 모델(D-134) — 글을 만들지 않고 확률 붙은 판정만 돌려주는 모델. LLM 라우터 밖에서 쓴다
     "perplexity": "PERPLEXITY_API_KEY",  # Perplexity Decisions(이미지 판정 — 자동 스캔의 종류)
-    "typesafe": "TYPESAFE_API_KEY",  # TypeSafe Jev(텍스트 판정 — 목차 대조, 본문 판정의 폴백)
-    # OpenRouter 경유 Perplexity decider(텍스트 판정 — 편성 본문 판정의 기본, D-136)
+    "typesafe": "TYPESAFE_API_KEY",  # TypeSafe Jev(텍스트 판정 — 편성 본문·목차 판정의 주, D-139)
+    # OpenRouter — Perplexity decider v1.1(본문 판정에서 Jev가 실패한 호출만, D-139)·TypeSafe 키가
+    # 없을 때의 OpenRouter 경유 Jev·이미지 판정 clef
     "openrouter": "OPENROUTER_API_KEY",
     # Cloudflare Workers AI clef(이미지 판정 — 자동 스캔의 종류, 키가 있으면 기본, D-135).
     # 주소에 계정 id가 들어가 값이 둘이다. 없으면 Windows 사용자 환경변수도 본다(llm/clef_cf.py)
@@ -50,10 +51,52 @@ def _read_lines(path: Path) -> list[str]:
     if not path.exists():
         return []
     try:
-        return path.read_text(encoding="utf-8-sig").splitlines()
-    except (OSError, UnicodeDecodeError) as e:
+        return _read_lines_for_write(path)  # UTF-8 → cp949 순으로 — 쓰기와 같은 판독
+    except (OSError, ValueError) as e:
         logger.warning(".env를 읽지 못했습니다 (%s): %s", path, e)
         return []
+
+
+def _looks_korean(text: str) -> bool:
+    """ASCII 밖 글자가 모두 한글·한자·전각 문장부호인가. cp949 판독을 믿어도 되는지 가린다."""
+    for ch in text:
+        if ord(ch) < 128:
+            continue
+        o = ord(ch)
+        if not (0xAC00 <= o <= 0xD7A3 or 0x3130 <= o <= 0x318F or 0x4E00 <= o <= 0x9FFF
+                or 0x3000 <= o <= 0x303F or 0xFF00 <= o <= 0xFFEF or 0x2000 <= o <= 0x206F
+                or 0x1100 <= o <= 0x11FF or 0xF900 <= o <= 0xFAFF):
+            return False
+    return True
+
+
+def _read_lines_for_write(path: Path) -> list[str]:
+    """고쳐 쓰기 전에 읽는다 — 못 읽으면 **쓰지 않는다**. 입력: .env 경로. 출력: 줄 목록.
+
+    왜 _read_lines와 따로인가(2026-10-11 전수): 읽기용은 못 읽으면 빈 목록을 돌려준다. 쓰기가
+    그것을 받으면 관리 키만 적은 파일로 갈아 끼워, 사람이 적어 둔 모델 고정·예산 같은 다른 줄이
+    통째로 사라졌다. 한글 주석이 든 cp949 .env(메모장이 «ANSI»로 저장한 것)가 바로 그 경우라,
+    cp949로 한 번 더 읽어 보고(다시 쓸 때는 UTF-8) 그것도 안 되면 ValueError로 멈춘다.
+    cp949로 «읽히기만» 하는 다른 8비트 파일(라틴 문자 등)을 cp949로 오해해 다시 쓰면 글자가 바뀐다 —
+    그래서 cp949 판독은 ASCII 밖 글자가 한글·한자일 때만 받는다(2026-10-11 재확인).
+    """
+    if not path.exists():
+        return []
+    raw = path.read_bytes()  # OSError는 그대로 올린다 — 라우트가 알린다
+    try:
+        return raw.decode("utf-8-sig").splitlines()
+    except UnicodeDecodeError:
+        pass
+    try:
+        text = raw.decode("cp949")
+    except UnicodeDecodeError:
+        text = None
+    if text is not None and _looks_korean(text):
+        return text.splitlines()
+    raise ValueError(
+        f"{path}를 읽지 못해 고치지 않았습니다(UTF-8도 한글 cp949도 아님).\n"
+        "→ 해결: 그 파일을 메모장에서 열어 «UTF-8»로 다시 저장한 뒤 다시 시도하세요."
+    )
 
 
 def _parse(lines: list[str]) -> dict[str, str]:
@@ -99,7 +142,7 @@ def write_values(library_root: str | Path, updates: dict[str, str | None]) -> di
     사라지면 안 된다. 아는 열쇠만 갈아 끼우고 나머지는 손대지 않는다.
     """
     p = env_path(library_root)
-    lines = _read_lines(p)
+    lines = _read_lines_for_write(p)
     wanted = {MANAGED_KEYS[k]: (v or "").strip() for k, v in updates.items() if k in MANAGED_KEYS}
     # 값 속 개행은 다른 줄(=다른 키)이 된다 — 키 하나 저장으로 설정을 덮어쓰게 할 수 없다.
     for k, v in wanted.items():
@@ -126,7 +169,7 @@ def write_values(library_root: str | Path, updates: dict[str, str | None]) -> di
 
     body = "\n".join(out).rstrip("\n") + "\n"
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(".env.tmp")
+    tmp = p.with_name(p.name + ".tmp")  # with_suffix는 점 파일에서 «.env.env.tmp»가 됐다
     tmp.write_text(body, encoding="utf-8", newline="\n")
     tmp.replace(p)  # 원자적 교체 — 도중에 죽어도 반쪽 파일이 남지 않는다
     logger.info(".env 갱신: %s (%s)", p, ", ".join(sorted(wanted)))  # 값은 남기지 않는다

@@ -1,4 +1,10 @@
-"""pytest 전역 설정 — 테스트가 사용자의 홈 폴더에 쓰지 않게 격리한다.
+"""pytest 전역 설정 — 테스트를 사용자의 홈·바깥 네트워크·전역 서고 경로에서 격리한다.
+
+세 가지를 한다(아래 «왜 있는가»는 첫째의 사연):
+    1. 앱 설정 폴더(`CTB_CONFIG_DIR`)를 임시 폴더로 — 홈의 기록·최근 서고 목록에 쓰지 않게.
+    2. 표지(`network`) 없는 시험의 바깥 연결을 막는다 — 루프백이어도 바깥으로 넘겨 부르는 데몬
+       (Ollama 11434·OAuth 프록시 10531~10540)은 막는다(2026-10-11).
+    3. 시험마다 전역 서고 경로(`app._state`)를 되돌린다 — 앞 시험의 서고가 뒤 시험에 새지 않게.
 
 왜 있는가:
     서고 없이 만든 `LlmConfig()`로 도는 라우터 테스트는 `UsageTracker`가
@@ -67,6 +73,16 @@ def pytest_configure(config: pytest.Config) -> None:
     )
 
 
+# 루프백이어도 막는 포트 — 바깥으로 넘겨 부르는 로컬 데몬이다(2026-10-11 2차 전수).
+#   11434: Ollama — `:cloud` 모델을 ollama.com으로 넘겨 부른다(구독 한도 소모)
+#   10531~10540: OpenAI OAuth 프록시(start_server.bat이 띄움) — OpenAI로 넘겨 부른다
+RELAYING_LOCAL_PORTS = frozenset({11434, *range(10531, 10541)})
+
+
+def _is_relaying_local_daemon(address) -> bool:
+    return isinstance(address, tuple) and len(address) >= 2 and address[1] in RELAYING_LOCAL_PORTS
+
+
 def _is_loopback(address) -> bool:
     """소켓 주소가 이 PC 안(127.0.0.1·::1·localhost)이거나 AF_UNIX 경로인가."""
     if not isinstance(address, tuple):  # AF_UNIX 경로 등
@@ -81,6 +97,27 @@ def _is_loopback(address) -> bool:
 
 
 @pytest.fixture(autouse=True)
+def _restore_library_path():
+    """시험이 바꾼 전역 서고 경로(`app._state`)를 시험 뒤에 되돌린다.
+
+    왜: 여러 픽스처(`client` — test_sweep·test_read_plan·test_parsers 등)가 quick-start로
+    서고를 만들고 그 경로를 되돌리지 않아, 뒤 시험이 앞 시험의 임시 서고를 보고 돌았다
+    (2026-10-11 전수). 픽스처마다
+    고치면 새 픽스처에서 또 빠지므로 여기 한 곳에서 지킨다. 바뀐 때만 되돌린다 — 되돌리기는 라우터·
+    파이프라인 캐시를 비우므로, 경로를 건드리지 않은 시험의 캐시는 그대로 둔다.
+    """
+    try:
+        from app import _state
+    except Exception:  # noqa: BLE001 — 앱을 import하지 않는 시험 환경
+        yield
+        return
+    saved = _state.get_library_path()
+    yield
+    if _state.get_library_path() != saved:
+        _state.set_library_path(saved)
+
+
+@pytest.fixture(autouse=True)
 def _block_external_network(request, monkeypatch):
     """`network` 표지가 없는 시험은 바깥으로 나가는 소켓 연결을 막는다.
 
@@ -91,23 +128,33 @@ def _block_external_network(request, monkeypatch):
     길을 막아야 그런 시험이 빨간불로 드러난다.
 
     로컬(127.0.0.1·::1)은 막지 않는다 — 시험이 띄운 서버·워커와 말하는 길이다.
+    **단 Ollama·OAuth 프록시 포트는 로컬이어도 막는다**(RELAYING_LOCAL_PORTS) — 그 데몬이 바깥으로
+    넘겨 부르므로, 열어 두면 «외부 연결이 조용히 되는 길»이 그대로 남는다(2026-10-11 2차 전수:
+    llm_vision 강제 시험과 계정 라우트 시험이 PC에 Ollama가 떠 있으면 클라우드 모델까지 닿았다).
     """
     if request.node.get_closest_marker(NETWORK_MARK):
         return
+    import errno
+
     original_connect = socket.socket.connect
     original_connect_ex = socket.socket.connect_ex
 
+    def _blocked(address) -> bool:
+        return not _is_loopback(address) or _is_relaying_local_daemon(address)
+
     def guarded_connect(self, address):
-        if not _is_loopback(address):
+        if _blocked(address):
             raise ConnectionRefusedError(
-                f"{NETWORK_BLOCKED_MESSAGE}: {address!r} — 실제 사이트·API를 쓰는 시험이면 "
-                f"@pytest.mark.{NETWORK_MARK}(그리고 slow)를 붙이고, 아니면 가짜로 바꾸세요."
+                f"{NETWORK_BLOCKED_MESSAGE}: {address!r} — 실제 사이트·API(또는 로컬 Ollama·OAuth "
+                f"프록시)를 쓰는 시험이면 @pytest.mark.{NETWORK_MARK}(그리고 slow)를 붙이고, "
+                "아니면 가짜로 바꾸세요."
             )
         return original_connect(self, address)
 
     def guarded_connect_ex(self, address):
-        if not _is_loopback(address):
-            return 111  # ECONNREFUSED — connect_ex는 예외 대신 오류 번호를 돌려준다
+        if _blocked(address):
+            # connect_ex는 예외 대신 오류 번호를 돌려준다(OS마다 값이 다르다 — 111은 리눅스 값)
+            return errno.ECONNREFUSED
         return original_connect_ex(self, address)
 
     monkeypatch.setattr(socket.socket, "connect", guarded_connect)

@@ -22,6 +22,21 @@ const annState = {
 };
 
 /**
+ * 지금 고른 해석 저장소 id. 없으면 null — 요청을 보내지 않게.
+ * 입력: quiet(불러오기처럼 조용히 멈출 자리면 true). 출력: id 또는 null.
+ *
+ * 왜(2026-10-11 전수): 예전에는 «default»라는 없는 저장소 주소로 요청해 404를 받고 조용히 빈
+ * 목록을 그렸다. 저장·생성 같은 동작은 왜 안 되는지 알려야 한다.
+ */
+function _annInterpId(quiet) {
+  const id = typeof interpState !== "undefined" && interpState ? interpState.interpId : null;
+  if (!id && !quiet && typeof showToast === "function") {
+    showToast("해석 저장소를 먼저 고르세요 — 사이드바 «해석 저장소»에서 고르거나 새로 만듭니다.", "warning");
+  }
+  return id || null;
+}
+
+/**
  * API용 block_id 반환 — "unit:" 접두사 제거.
  * 표점·번역·주석 모두 서버에는 접두사 없이 저장해야
  * block_id 매칭이 일치한다.
@@ -70,7 +85,7 @@ function initAnnotationEditor() {
   const editCancel = document.getElementById("ann-edit-cancel-btn");
   if (editCancel) editCancel.addEventListener("click", _closeEditPanel);
 
-  // 리셋 버튼: 현재 페이지의 모든 주석 삭제
+  // 리셋 버튼: 지금 단위(블록)의 모든 주석 삭제
   const resetBtn = document.getElementById("ann-reset-btn");
   if (resetBtn) resetBtn.addEventListener("click", _resetAllAnnotations);
 
@@ -374,7 +389,8 @@ async function _loadBlockAnnotations(blockId) {
   const is = typeof interpState !== "undefined" ? interpState : null;
   if (!vs || !vs.pageNum) return;
 
-  const interpId = (is && is.interpId) || "default";
+  const interpId = _annInterpId(true);
+  if (!interpId) return;
   // API에 전달할 block_id: "unit:" 접두사 제거
   const apiBlockId = blockId.startsWith("unit:") ? blockId.slice(5) : blockId;
 
@@ -650,7 +666,8 @@ async function _addManualAnnotation(start, end, typeId, label, description) {
   const is = typeof interpState !== "undefined" ? interpState : null;
   if (!vs || !vs.pageNum) return;
 
-  const interpId = (is && is.interpId) || "default";
+  const interpId = _annInterpId(false);
+  if (!interpId) return;
   const blockId = _annApiBlockId();
 
   try {
@@ -899,7 +916,7 @@ function _renderAnnList() {
     // 태그로 읽어 카드가 깨지거나 스크립트가 실행된다 — 넣기 직전에 이스케이프한다.
     card.innerHTML = `
       <div class="ann-card-header">
-        <span class="ann-card-type" style="color:${typeInfo.color}">${typeInfo.icon} ${typeInfo.label}</span>
+        <span class="ann-card-type" style="color:${_escAttr(typeInfo.color)}">${_escHtml(typeInfo.icon)} ${_escHtml(typeInfo.label)}</span>
         <span class="ann-card-range">"${_escHtml(sourceText)}" [${ann.target.start}–${ann.target.end}]</span>
         ${_renderDictBadge(ann)}
         <span class="ann-card-status ${statusClass}">${_escHtml(ann.status)}</span>
@@ -981,7 +998,8 @@ async function _saveEditedAnnotation() {
   const is = typeof interpState !== "undefined" ? interpState : null;
   if (!vs || !vs.pageNum) return;
 
-  const interpId = (is && is.interpId) || "default";
+  const interpId = _annInterpId(false);
+  if (!interpId) return;
   const blockId = _annApiBlockId();
   const annId = annState.selectedAnnId;
 
@@ -1036,7 +1054,8 @@ async function _acceptAnnotation() {
   const is = typeof interpState !== "undefined" ? interpState : null;
   if (!vs || !vs.pageNum) return;
 
-  const interpId = (is && is.interpId) || "default";
+  const interpId = _annInterpId(false);
+  if (!interpId) return;
   const blockId = _annApiBlockId();
   const annId = annState.selectedAnnId;
 
@@ -1070,7 +1089,8 @@ async function _deleteAnnotation() {
   const is = typeof interpState !== "undefined" ? interpState : null;
   if (!vs || !vs.pageNum) return;
 
-  const interpId = (is && is.interpId) || "default";
+  const interpId = _annInterpId(false);
+  if (!interpId) return;
   const blockId = _annApiBlockId();
   const annId = annState.selectedAnnId;
 
@@ -1120,7 +1140,8 @@ async function _aiTagAll() {
   const is = typeof interpState !== "undefined" ? interpState : null;
   if (!vs || !vs.pageNum) return;
 
-  const interpId = (is && is.interpId) || "default";
+  const interpId = _annInterpId(false);
+  if (!interpId) return;
   const blockId = _annApiBlockId();
   if (!blockId) {
     showToast("블록을 먼저 선택하세요.", "warning");
@@ -1219,7 +1240,7 @@ async function _aiTagAll() {
 
             const globalStart = resolved.start + sentence.origStart;
             const globalEnd = resolved.end + sentence.origStart;
-            if (globalStart < 0 || globalEnd >= text.length) continue;
+            if (globalStart < 0 || globalEnd >= _annCpLength(text)) continue;
 
             allResolved.push({
               start: globalStart,
@@ -1294,7 +1315,7 @@ async function _aiTagAll() {
           annState.punctMarks,
         );
         if (!resolved) continue;
-        if (resolved.start < 0 || resolved.end >= text.length) continue;
+        if (resolved.start < 0 || resolved.end >= _annCpLength(text)) continue;
         allResolved.push({
           start: resolved.start,
           end: resolved.end,
@@ -1408,7 +1429,8 @@ async function _commitAllDrafts() {
   const is = typeof interpState !== "undefined" ? interpState : null;
   if (!vs || !vs.pageNum) return;
 
-  const interpId = (is && is.interpId) || "default";
+  const interpId = _annInterpId(false);
+  if (!interpId) return;
 
   try {
     const resp = await fetch(
@@ -1695,18 +1717,17 @@ function _escAttr(s) {
 
 /** HTML 이스케이프 (텍스트 콘텐츠용) */
 function _escHtml(s) {
-  // 큰따옴표까지 막는다. 이 이름은 네 파일이 각각 선언하는데(entity-manager ·
-  // variant-manager · batch-correction · 이 파일) **적재 순서상 이 판이 전역에서
-  // 이긴다** — 그래서 이 판이 느슨하면 남의 호출까지 느슨해진다. 실제로 여기에
-  // `"` 처리가 없어서, `entity-manager.js` 가 Concept 라벨을 `title="…"` 속성에
-  // 넣는 자리가 따옴표로 속성을 벗어날 수 있었다(2026-09-22 실측, D-069 가 경고한
-  // 바로 그 종류다). 겹친 이름 자체는 B-009 로 남겼다 — 이름을 고치는 것은 아홉
-  // 파일을 건드리는 일이라 따로 한다.
+  // 큰·작은따옴표까지 막는다. 이 이름은 예전에 네 파일이 각각 선언해(entity-manager ·
+  // variant-manager · batch-correction · 이 파일) 적재 순서상 이 판이 전역을 이겼고, 이 판에
+  // `"` 처리가 없어 `entity-manager.js`의 Concept 라벨이 `title="…"` 속성을 벗어날 수 있었다
+  // (2026-09-22 실측, D-069가 경고한 종류). 겹친 이름은 B-009에서 파일마다 제 이름으로 갈라
+  // 닫았다 — 지금 `_escHtml`은 이 파일 하나뿐이다(주석·번역 편집기가 이것을 빌려 쓴다).
   return String(s)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 /* ── 글자 세기: 코드포인트 단위 ──
@@ -1740,7 +1761,7 @@ function _annPartQuery() {
 }
 
 /* ────────────────────────────────────
-   전체 리셋: 현재 페이지의 모든 주석 삭제
+   전체 리셋: 지금 단위(블록)의 모든 주석 삭제
    ──────────────────────────────────── */
 
 /**
@@ -1758,7 +1779,8 @@ async function _resetAllAnnotations() {
     return;
   }
 
-  const interpId = (is && is.interpId) || "default";
+  const interpId = _annInterpId(false);
+  if (!interpId) return;
   const blockId = _annApiBlockId();
 
   if (!blockId) {
@@ -2234,7 +2256,8 @@ async function _generateDictStage(stageNum) {
   const is = typeof interpState !== "undefined" ? interpState : null;
   if (!vs || !vs.pageNum) return;
 
-  const interpId = (is && is.interpId) || "default";
+  const interpId = _annInterpId(false);
+  if (!interpId) return;
   const blockId = _annApiBlockId();
   if (!blockId) {
     showToast("블록을 먼저 선택하세요.", "warning");
@@ -2307,7 +2330,8 @@ async function _generateDictStage(stageNum) {
 
 async function _generateDictBatch() {
   const is = typeof interpState !== "undefined" ? interpState : null;
-  const interpId = (is && is.interpId) || "default";
+  const interpId = _annInterpId(false);
+  if (!interpId) return;
 
   if (
     !confirm(
@@ -2373,7 +2397,8 @@ async function _generateDictBatch() {
 
 async function _exportDictionary() {
   const is = typeof interpState !== "undefined" ? interpState : null;
-  const interpId = (is && is.interpId) || "default";
+  const interpId = _annInterpId(false);
+  if (!interpId) return;
 
   try {
     const resp = await fetch(
@@ -2404,7 +2429,8 @@ async function _exportDictionary() {
 
 async function _importDictionary() {
   const is = typeof interpState !== "undefined" ? interpState : null;
-  const interpId = (is && is.interpId) || "default";
+  const interpId = _annInterpId(false);
+  if (!interpId) return;
 
   // 파일 선택
   const input = document.createElement("input");
@@ -2506,7 +2532,8 @@ async function _saveDictFields() {
   const is = typeof interpState !== "undefined" ? interpState : null;
   if (!vs || !vs.pageNum) return;
 
-  const interpId = (is && is.interpId) || "default";
+  const interpId = _annInterpId(false);
+  if (!interpId) return;
   const blockId = _annApiBlockId();
   const annId = annState.selectedAnnId;
 
@@ -2518,12 +2545,25 @@ async function _saveDictFields() {
   const related = document.getElementById("ann-dict-related");
   const notes = document.getElementById("ann-dict-notes");
 
+  // 서버 update_annotation은 dictionary를 통째로 바꾼다. 폼은 출전의 «제목»만 보여 주므로 예전에는
+  // 한 번 저장하면 source_references의 section·url과 폼에 없는 사전 칸이 모두 사라졌다(2026-10-11
+  // 2차 전수). 편집 전 사전을 바탕에 깔고, 출전은 제목이 같은 옛 항목을 그대로 살린다.
+  const prevAnn = (annState.annotations || []).find((a) => a.id === annId) || {};
+  const prevDict = prevAnn.dictionary || {};
+  // 같은 책의 다른 대목(section·url만 다름)이 여럿일 수 있다 — 제목마다 옛 항목을 순서대로
+  // 줄 세워 하나씩 꺼낸다. 제목 하나에 항목 하나만 두면 마지막 대목이 앞 대목을 덮었다(2026-10-11 Codex 리뷰).
+  const prevRefs = new Map();
+  for (const r of prevDict.source_references || []) {
+    if (!prevRefs.has(r.title)) prevRefs.set(r.title, []);
+    prevRefs.get(r.title).push(r);
+  }
   const sourceRefs =
     refs && refs.value
       ? refs.value
           .split(",")
-          .map((s) => ({ title: s.trim() }))
-          .filter((r) => r.title)
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .map((title) => (prevRefs.get(title) || []).shift() || { title })
       : [];
 
   const relatedTerms =
@@ -2538,6 +2578,7 @@ async function _saveDictFields() {
   const scope = document.getElementById("ann-dict-scope");
   const senseNote = document.getElementById("ann-dict-sense-note");
   const dictionary = {
+    ...prevDict, // 폼에 없는 칸은 편집 전 값 그대로
     headword: hw ? hw.value : "",
     headword_reading: reading ? reading.value || null : null,
     dictionary_meaning: dictMeaning ? dictMeaning.value : "",

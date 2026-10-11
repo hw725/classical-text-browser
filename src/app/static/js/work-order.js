@@ -63,7 +63,7 @@ function _woKey(t) {
 }
 
 function _woEsc(s) {
-  return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
 
 function _woTarget() {
@@ -380,13 +380,14 @@ function _woDryNote(dry, sel) {
   return `${head}비전 모델 ${dry.calls}번(글의 종류${who}) + ${ocr}. 쪽마다 몇 초.`;
 }
 
+// 스캔 안내를 새로 그린 차례 — 늦게 온 답이 새 안내를 덮지 않게 _woRefreshScanNote가 센다
+let _woScanSeq = 0;
 /**
  * 스캔 칸의 안내 — 이 환경에서 무엇을 재는가를 누르기 전에 밝힌다. GPU면 «방향 + 종류(엔진)»,
  * CPU면 «방향만»(종류 판정은 쪽마다 비전 모델 + PaddleOCR이라 CPU에서 한 시간, 사용자 지시 2026-09-10).
  * GPU면 dry_run으로 «몇 쪽·호출 몇 번·얼마»도 센다(실행 게이트는 도구 층에 — 전역 규칙 11).
  * 모델 고름은 실제 스캔과 같은 `_woScanModelSel`로 보낸다.
  */
-let _woScanSeq = 0;
 async function _woRefreshScanNote() {
   const note = document.getElementById("wo-scan-note");
   const modelRow = document.getElementById("wo-scan-model-row");

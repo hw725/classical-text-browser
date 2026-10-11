@@ -72,7 +72,7 @@ class OpenRouterJevClient(OpenRouterDecisionClient):
     {model, state, questions} → {answers, usage}, 키는 OPENROUTER_API_KEY 하나. 비용은
     usage.cost가 정본이고, 없으면 직결과 같은 Jev 입력 단가($0.042/M)로 어림한다(모델이 같다).
 
-    **문턱은 Jev의 것이다**(0.85/0.5) — PROVIDER가 «openrouter»라 decider 문턱(0.95/0.35)을 받지
+    **문턱은 Jev의 것이다**(0.85/0.5) — PROVIDER가 «openrouter»라 decider 문턱(0.997/0.69)을 받지
     않게 `JUDGE_FAMILY = "jev"`를 단다(`structure_llm.judge_thresholds`가 이것을 먼저 본다).
     텍스트 전용 — 이미지는 보내기 전에 거부한다(Jev는 base64를 글자로 읽는다, 2026-10-02 실측).
     """

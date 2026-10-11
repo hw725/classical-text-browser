@@ -299,3 +299,7 @@ def test_dry_run_names_the_judge(monkeypatch):
     body = [Line(page=2, line_index=0, text="본문" * 3)]
     out = _structure_jev(None, req, body, normalize_rules(None), 10_000)
     assert out["dry_run"] and out["judge"] == "typesafe:jev-latest"
+    # 폴백이 본문을 모두 떠맡을 때의 최대를 따로 알린다 — decider는 질문마다 글을 다시 세어 과금한다
+    assert out["fallback_judge"] == DECIDER_LABEL
+    fb_max = out["fallback_cost_usd_max"]
+    assert fb_max is not None and fb_max >= out["cost_usd_est"]

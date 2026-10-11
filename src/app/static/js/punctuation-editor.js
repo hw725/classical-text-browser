@@ -48,7 +48,7 @@ function initPunctuationEditor() {
 
 /**
  * 표점 프리셋을 로드한다.
- * 정적 JSON 파일에서 프리셋 목록을 읽어온다.
+ * 서버(/api/punctuation-presets — resources/punctuation_presets.json)에서 읽고, 못 읽으면 아래 내장 목록을 쓴다.
  */
 async function _loadPresets() {
   try {
@@ -84,15 +84,15 @@ function _defaultPresets() {
     { id: "period", label: "마침표", category: "fullwidth", before: null, after: "。" },
     { id: "comma", label: "쉼표", category: "fullwidth", before: null, after: "，" },
     { id: "enumeration", label: "나열점", category: "fullwidth", before: null, after: "、" },
-    { id: "semicolon", label: "쌍점", category: "fullwidth", before: null, after: "；" },
-    { id: "colon", label: "고리점", category: "fullwidth", before: null, after: "：" },
+    { id: "semicolon", label: "쌍반점", category: "fullwidth", before: null, after: "；" },
+    { id: "colon", label: "쌍점", category: "fullwidth", before: null, after: "：" },
     { id: "question", label: "물음표", category: "fullwidth", before: null, after: "？" },
     { id: "exclamation", label: "느낌표", category: "fullwidth", before: null, after: "！" },
     // 반각
     { id: "period_hw", label: "마침표(반각)", category: "halfwidth", before: null, after: "." },
     { id: "comma_hw", label: "쉼표(반각)", category: "halfwidth", before: null, after: "," },
-    { id: "semicolon_hw", label: "쌍점(반각)", category: "halfwidth", before: null, after: ";" },
-    { id: "colon_hw", label: "고리점(반각)", category: "halfwidth", before: null, after: ":" },
+    { id: "semicolon_hw", label: "쌍반점(반각)", category: "halfwidth", before: null, after: ";" },
+    { id: "colon_hw", label: "쌍점(반각)", category: "halfwidth", before: null, after: ":" },
     { id: "question_hw", label: "물음표(반각)", category: "halfwidth", before: null, after: "?" },
     { id: "exclamation_hw", label: "느낌표(반각)", category: "halfwidth", before: null, after: "!" },
     // 감싸기
@@ -400,6 +400,11 @@ async function _loadPunctuationData() {
    렌더링 — 글자 영역
    ────────────────────────── */
 
+/** 글자 배열(코드포인트 단위). 표점 target.start·end가 이 자다. */
+function _puChars(text) {
+  return Array.from(text || "");
+}
+
 /**
  * 원문 글자를 글자 단위로 렌더링한다.
  *
@@ -417,8 +422,10 @@ function _renderCharArea() {
     return;
   }
 
-  const text = punctState.originalText;
-  const n = text.length;
+  // 글자 좌표는 코드포인트다(서버 파이썬 str과 같다) — `.length`·`[i]`(UTF-16)로 세면 확장 한자 뒤의
+  // 표점이 한 칸씩 어긋났다(2026-10-11 2차 전수, D-127·B-016과 같은 종류)
+  const chars = _puChars(punctState.originalText);
+  const n = chars.length;
 
   // 각 위치의 before/after 표점을 미리 계산
   const beforeMarks = new Array(n).fill(null);
@@ -438,20 +445,20 @@ function _renderCharArea() {
   let html = '<div class="punct-chars">';
 
   for (let i = 0; i < n; i++) {
-    const ch = text[i];
+    const ch = chars[i];
 
     // before 표점 표시
     if (beforeMarks[i]) {
-      html += `<span class="punct-mark punct-mark-before" data-mark-id="${beforeMarks[i].markId}" title="클릭하여 삭제">${beforeMarks[i].text}</span>`;
+      html += `<span class="punct-mark punct-mark-before" data-mark-id="${_escHtml(beforeMarks[i].markId)}" title="클릭하여 삭제">${_escHtml(beforeMarks[i].text)}</span>`;
     }
 
     // 글자 span (선택 가능)
     const selectedClass = _isCharInSelection(i) ? " punct-char-selected" : "";
-    html += `<span class="punct-char${selectedClass}" data-idx="${i}">${ch}</span>`;
+    html += `<span class="punct-char${selectedClass}" data-idx="${i}">${_escHtml(ch)}</span>`;
 
     // after 표점 표시
     if (afterMarks[i]) {
-      html += `<span class="punct-mark punct-mark-after" data-mark-id="${afterMarks[i].markId}" title="클릭하여 삭제">${afterMarks[i].text}</span>`;
+      html += `<span class="punct-mark punct-mark-after" data-mark-id="${_escHtml(afterMarks[i].markId)}" title="클릭하여 삭제">${_escHtml(afterMarks[i].text)}</span>`;
     }
 
     // 삽입 슬롯 (글자 사이, 마지막 글자 뒤에도)
@@ -722,21 +729,22 @@ function _renderMarksList() {
   }
 
   let html = "";
+  const cs = _puChars(punctState.originalText); // 코드포인트 — 표점 좌표와 같은 자
   for (const mark of punctState.marks) {
     const s = mark.target?.start ?? "?";
     const e = mark.target?.end ?? s;
     const charRange = s === e
-      ? punctState.originalText[s] || `[${s}]`
-      : `${punctState.originalText[s] || ""}…${punctState.originalText[e] || ""} [${s}-${e}]`;
+      ? cs[s] || `[${s}]`
+      : `${cs[s] || ""}…${cs[e] || ""} [${s}-${e}]`;
 
     const display = [];
     if (mark.before) display.push(`앞:${mark.before}`);
     if (mark.after) display.push(`뒤:${mark.after}`);
 
     html += `<div class="punct-mark-item">
-      <span class="punct-mark-char">${charRange}</span>
-      <span class="punct-mark-info">${display.join(" ")}</span>
-      <button class="punct-mark-del" data-mark-id="${mark.id}" title="삭제">&times;</button>
+      <span class="punct-mark-char">${_escHtml(charRange)}</span>
+      <span class="punct-mark-info">${_escHtml(display.join(" "))}</span>
+      <button class="punct-mark-del" data-mark-id="${_escHtml(mark.id)}" title="삭제">&times;</button>
     </div>`;
   }
   list.innerHTML = html;
@@ -766,7 +774,8 @@ function _renderPreview() {
     return;
   }
 
-  const n = text.length;
+  const chars = _puChars(text); // 코드포인트 — 표점 좌표와 같은 자
+  const n = chars.length;
   const beforeBuf = new Array(n).fill("");
   const afterBuf = new Array(n).fill("");
 
@@ -780,7 +789,7 @@ function _renderPreview() {
 
   let result = "";
   for (let i = 0; i < n; i++) {
-    result += beforeBuf[i] + text[i] + afterBuf[i];
+    result += beforeBuf[i] + chars[i] + afterBuf[i];
   }
 
   previewEl.textContent = result;
@@ -854,7 +863,7 @@ async function _requestAiPunctuation() {
   const sel = punctState.selectionRange;
   const hasSelection = sel && sel.start !== sel.end;
   const selLo = hasSelection ? Math.min(sel.start, sel.end) : 0;
-  const selHi = hasSelection ? Math.max(sel.start, sel.end) : punctState.originalText.length - 1;
+  const selHi = hasSelection ? Math.max(sel.start, sel.end) : _puChars(punctState.originalText).length - 1;
 
   const scopeLabel = hasSelection
     ? `선택 영역(${selLo}~${selHi})만`
@@ -880,19 +889,20 @@ async function _requestAiPunctuation() {
       : { force_provider: null, force_model: null };
 
     // 대상 영역 추출 (선택 범위 또는 전체)
-    const rawText = punctState.originalText;
-    const targetText = hasSelection
-      ? rawText.substring(selLo, selHi + 1)
-      : rawText;
+    // 코드포인트 배열로 자른다 — 서버가 돌려주는 위치(공백 뺀 글의 파이썬 str 자리)와 같은 자
+    const rawChars = _puChars(punctState.originalText);
+    const targetChars = hasSelection
+      ? rawChars.slice(selLo, selHi + 1)
+      : rawChars;
 
     // 대상 영역에서 공백을 제거하여 LLM에 전달.
     // cleanToTarget: 공백 제거 인덱스 → targetText 내 인덱스 매핑.
     let cleanText = "";
     const cleanToTarget = [];
-    for (let i = 0; i < targetText.length; i++) {
-      if (!/\s/.test(targetText[i])) {
+    for (let i = 0; i < targetChars.length; i++) {
+      if (!/\s/.test(targetChars[i])) {
         cleanToTarget.push(i);
-        cleanText += targetText[i];
+        cleanText += targetChars[i];
       }
     }
 
@@ -957,7 +967,7 @@ async function _requestAiPunctuation() {
         clearInterval(timer);
       }
     } else {
-      // SSE 스트리밍으로 LLM 표점 요청 (실패 시 기존 엔드포인트 폴백)
+      // SSE 스트리밍으로 LLM 표점 요청 (스트림이 열리기 전에 실패할 때만 기존 엔드포인트로 — fetchWithSSE)
       data = await fetchWithSSE(
         "/api/llm/punctuation/stream",
         reqBody,
@@ -981,7 +991,7 @@ async function _requestAiPunctuation() {
     // AI가 반환한 marks를 적용
     // LLM 인덱스(공백 제거 기준) → targetText 인덱스 → 원문 인덱스로 복원.
     if (data.marks && Array.isArray(data.marks)) {
-      const cn = cleanText.length;
+      const cn = cleanToTarget.length; // 공백 뺀 글의 코드포인트 수
       const totalReceived = data.marks.length;
       let skipped = 0;
       const newMarks = [];

@@ -29,6 +29,11 @@ logger = logging.getLogger(__name__)
 _BACKUP_META = "_backup_meta.json"
 
 
+def _is_our_backup(path: Path) -> bool:
+    """이 앱이 만든 백업 폴더인가. 입력: 폴더. 출력: _backup_meta.json이 있으면 True."""
+    return (path / _BACKUP_META).is_file()
+
+
 def backup_library(
     library_path: str | Path,
     backup_path: str | Path,
@@ -80,20 +85,41 @@ def backup_library(
         return ignored
 
     try:
-        # 기존 백업이 있으면 _prev로 이동 (안전)
-        if backup_path.exists():
+        # 사용자가 고른 폴더가 «우리가 만든 백업»이 아니면 그 안을 건드리지 않고 하위 폴더에 쓴다.
+        # 예전에는 고른 폴더를 통째로 «이름_prev»로 옮기고 두 번째 백업 때 rmtree로 지웠다 — 구글
+        # 드라이브 폴더처럼 다른 파일이 든 폴더를 고르면 그 파일들이 두 번째 백업에서 사라졌다
+        # (2026-10-11 전수). 우리 백업인지는 _backup_meta.json으로 가린다.
+        if backup_path.exists() and any(backup_path.iterdir()) and not _is_our_backup(backup_path):
+            backup_path = backup_path / f"{library_path.name}_ctb_backup"
+            result["backup_path"] = str(backup_path)
+            logger.info("고른 폴더에 다른 파일이 있어 하위 폴더에 백업합니다: %s", backup_path)
+
+        if backup_path.exists() and any(backup_path.iterdir()):
+            if not _is_our_backup(backup_path):
+                result["error"] = (
+                    f"백업 자리 {backup_path}에 이 앱이 만들지 않은 파일이 있어 쓰지 않았습니다.\n"
+                    "→ 해결: 빈 폴더를 고르거나 그 폴더를 비운 뒤 다시 백업하세요."
+                )
+                return result
+            # 기존 백업은 _prev로 이동 (안전). _prev도 우리 백업일 때만 지운다
             prev_path = backup_path.with_name(backup_path.name + "_prev")
             if prev_path.exists():
+                if not _is_our_backup(prev_path):
+                    result["error"] = (
+                        f"{prev_path}가 이 앱이 만든 백업이 아니라 지우지 않았습니다.\n"
+                        "→ 해결: 그 폴더를 옮기거나 이름을 바꾼 뒤 다시 백업하세요."
+                    )
+                    return result
                 shutil.rmtree(prev_path)
             backup_path.rename(prev_path)
             logger.info("이전 백업을 %s로 이동", prev_path)
 
-        # 복사 실행
+        # 복사 실행 — 빈 폴더가 이미 있으면 그 안에 채운다(사용자가 만든 빈 폴더를 지우지 않는다)
         shutil.copytree(
             library_path,
             backup_path,
             ignore=_ignore_git,
-            dirs_exist_ok=False,
+            dirs_exist_ok=backup_path.exists(),
         )
 
         # 파일 개수와 총 크기 계산
@@ -218,14 +244,20 @@ def restore_from_backup(
     return result
 
 
-def get_backup_info(backup_path: str | Path) -> dict | None:
+def get_backup_info(backup_path: str | Path, library_name: str | None = None) -> dict | None:
     """백업 메타데이터를 읽어 반환한다.
 
-    입력: backup_path — 백업 폴더 경로.
+    입력: backup_path — 설정에 적힌 백업 폴더 경로.
+          library_name — 서고 폴더 이름. 주면 고른 폴더에 다른 파일이 있어 백업이
+          `<서고 이름>_ctb_backup` 하위 폴더에 쓰인 경우(backup_library)도 찾는다.
     출력: {source, timestamp, file_count, total_size, ...} 또는 None.
     """
     backup_path = Path(backup_path).resolve()
     meta_file = backup_path / _BACKUP_META
+    if not meta_file.exists() and library_name:
+        # 하위 폴더 백업을 못 읽으면 설정 화면의 «마지막 백업» 줄이 백업 직후
+        # 사라졌다(2026-10-11 재확인)
+        meta_file = backup_path / f"{library_name}_ctb_backup" / _BACKUP_META
 
     if not meta_file.exists():
         return None

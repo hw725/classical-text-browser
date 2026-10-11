@@ -545,7 +545,9 @@ def main() -> int:
         **_summary(rows),
     }
     summ_path = out.with_suffix(".summary.json")
-    summ_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    from core.document import write_json_atomic  # 원자적 저장 — 앱의 JSON 저장 규칙과 같게(D-069)
+
+    write_json_atomic(summ_path, summary)
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     print(f"저장: {out} · {summ_path}")
     return 0

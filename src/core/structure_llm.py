@@ -87,7 +87,7 @@ DECIDER_REJECT_AT = 0.69
 
 # 답한 모델(클라이언트의 PROVIDER) → (accept_at, reject_at). 단 OpenRouter 경유 Jev는 업체가
 # «openrouter»여도 Jev 값이다 — judge_thresholds가 모델을 먼저 본다(D-136 후속).
-# 폴백으로 Jev가 답한 묶음은 Jev 값을 쓴다
+# 폴백(decider)이 답한 묶음은 decider 값을, Jev가 답한 묶음은 Jev 값을 쓴다(D-139)
 # — 한 문턱을 두 모델에 같이 대면 위 표처럼 정밀이 갈린다.
 JUDGE_THRESHOLDS: dict[str, tuple[float, float]] = {
     "typesafe": (JEV_ACCEPT_AT, JEV_REJECT_AT),
@@ -101,7 +101,7 @@ def judge_thresholds(client) -> tuple[float, float]:
     기본이라서다.
 
     **업체보다 모델이 먼저다**(D-136 후속, 2026-10-05): OpenRouter 경유 Jev(`OpenRouterJevClient`)는
-    PROVIDER가 decider와 같은 «openrouter»라 업체로만 가르면 decider 문턱(0.95/0.35)을 받는다.
+    PROVIDER가 decider와 같은 «openrouter»라 업체로만 가르면 decider 문턱(0.997/0.69)을 받는다.
     모델이 Jev면(`JUDGE_FAMILY == "jev"` 또는 모델 이름 `~typesafe/…`) 어느 길로 왔든
     Jev 문턱이다."""
     model = str(getattr(client, "model", "") or "")
@@ -347,10 +347,11 @@ def ask_structure_jev(
 ) -> tuple[list[dict], dict]:
     """전문을 묶음으로 나눠 **행마다** «새 글이 시작하는가»를 판정 모델에 묻는다.
 
-    입력: 행 목록, 판정 클라이언트(JevClient 계열 — 기본은 OpenRouter decider, D-136),
+    입력: 행 목록, 판정 클라이언트(JevClient 계열 — 라우트의 주는 Jev, D-139),
           묶음 글자 수, 한 번에 보낼 질문 수, 두 임계(`jev_band` — None이면 `judge_thresholds`가
           그 클라이언트의 값을 고른다), 제목 최대 글자, fallback(주 클라이언트 호출이 실패한
-          **그 호출만** 대신 물을 클라이언트 — 보통 Jev. 그 답에는 fallback 자신의 문턱을 댄다).
+          **그 호출만** 대신 물을 클라이언트 — 라우트에서는 OpenRouter decider v1.1(D-139).
+          그 답에는 fallback 자신의 문턱을 댄다).
     출력: (후보 목록 — ask_structure_llm과 같은 모양, meta). meta에는 provider·model·calls·
           questions·sent_lines·sent_chars·said·dropped·error와 함께 **nouls**(행마다의 확률,
           [page, line_index, noul])와 **bands**(대역별 건수)를 담는다 — 임계를 바꿔 다시 재려면
@@ -416,8 +417,9 @@ def ask_structure_jev(
             questions = {line_id(ln): jev_question(ln) for ln in batch}
             meta["calls"] += 1
             meta["questions"] += len(questions)
-            # 이 호출에 답한 모델과 그 모델의 문턱. 폴백이 답하면 폴백의 문턱을 댄다(D-136) —
-            # decider용 0.95를 Jev 확률에 대면 Jev의 확신 답이 전부 escalate로 내려간다
+            # 이 호출에 답한 모델과 그 모델의 문턱. 폴백이 답하면 폴백의 문턱을 댄다(D-136·D-139) —
+            # Jev의 0.85를 decider 확률에 대면 decider의 애매한 답이 accept로 올라가고, 거꾸로
+            # decider의 0.997을 Jev에 대면 Jev의 확신 답이 전부 escalate로 내려간다
             label, acc, rej = primary_label, accept_at, reject_at
             try:
                 answers = client.ask(state, questions)

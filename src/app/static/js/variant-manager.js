@@ -527,19 +527,20 @@ function _bindClick(id, handler) {
 }
 
 function _escHtmlVariant(str) {
-  // & < > " 를 막는다. 속성 자리에 들어갈 수 있으므로 큰따옴표까지 막는다(D-069).
-  // 옛 이름은 `_escHtmlVariant` 이었는데 네 파일이 같은 이름을 선언해 **적재 순서로 한 판이
+  // & < > " ' 를 막는다. 속성 자리에 들어갈 수 있으므로 따옴표까지 막는다(D-069).
+  // 옛 이름은 `_escHtml` 이었는데 네 파일이 같은 이름을 선언해 **적재 순서로 한 판이
   // 전역을 이기고 있었다**(B-009). 이 파일은 이제 제 것을 쓴다.
   if (str === null || str === undefined) return "";
   return String(str)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function _escAttrVariant(str) {
-  // 속성 자리 — 작은따옴표까지 막는다. 옛 이름 `_escAttrVariant` 은 annotation-editor 판에
+  // 속성 자리 — 작은따옴표까지 막는다. 옛 이름 `_escAttr` 은 annotation-editor 판에
   // 가려 이 파일의 느슨한 구현이 돌지 않고 있었다(B-009). 가림을 없애면서 같은
   // 수준으로 올린다 — 이름만 바꾸면 `'` 와 `>` 가 뚫린다.
   if (str === null || str === undefined) return "";

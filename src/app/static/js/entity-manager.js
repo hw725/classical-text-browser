@@ -116,7 +116,7 @@ function initEntityManager() {
 
 /**
  * 현재 페이지의 엔티티를 로드한다.
- * workspace.js의 하단 패널 탭 전환에서 호출된다.
+ * 사이드바 엔티티 칸이 열릴 때·«현재 페이지만» 체크·저장·삭제 뒤에 부른다(하단 패널은 v1.2.0에서 없앴다).
  */
 // eslint-disable-next-line no-unused-vars
 function _loadEntitiesForCurrentPage() {
@@ -201,7 +201,7 @@ function _renderEntityList() {
   container.innerHTML = allItems.map((item) => {
     const info = ENTITY_TYPE_INFO[item._entityType] || {};
     const label = item[info.displayField] || item.id || "—";
-    const truncLabel = label.length > 50 ? label.substring(0, 50) + "..." : label;
+    const truncLabel = Array.from(label).length > 50 ? Array.from(label).slice(0, 50).join("") + "..." : label;
     const shortId = (item.id || "").substring(0, 8);
     const isTag = item._entityType === "tag";
     const isConcept = item._entityType === "concept";
@@ -605,7 +605,9 @@ function _collectFormData(entityType) {
         confidence: _numVal("ef-confidence"),
         extractor: _val("ef-extractor") || "manual",
         status: _val("ef-status") || "draft",
-        metadata: null,
+        // 서버 update_entity는 얕은 병합이라 null을 보내면 기존 metadata가 지워진다 — 폼에 없는
+        // 칸은 편집 전 값을 그대로 싣는다(Concept·Relation과 같게, 2026-10-11 2차 전수)
+        metadata: (entityState.editingEntity || {}).metadata ?? null,
       };
     }
 
@@ -635,7 +637,7 @@ function _collectFormData(entityType) {
         period: _val("ef-period") || null,
         biography_note: _val("ef-biography-note") || null,
         status: _val("ef-status") || "draft",
-        metadata: null,
+        metadata: (entityState.editingEntity || {}).metadata ?? null, // tag 분기와 같은 까닭
       };
     }
 
@@ -1094,13 +1096,14 @@ async function _handleLlmReviewAction(action, entityType, entityId) {
    ────────────────────────── */
 
 function _escHtmlEntity(str) {
-  // & < > " 를 막는다. 속성 자리에 들어갈 수 있으므로 큰따옴표까지 막는다(D-069).
-  // 옛 이름은 `_escHtmlEntity` 이었는데 네 파일이 같은 이름을 선언해 **적재 순서로 한 판이
+  // & < > " ' 를 막는다. 속성 자리에 들어갈 수 있으므로 따옴표까지 막는다(D-069).
+  // 옛 이름은 `_escHtml` 이었는데 네 파일이 같은 이름을 선언해 **적재 순서로 한 판이
   // 전역을 이기고 있었다**(B-009). 이 파일은 이제 제 것을 쓴다.
   if (str === null || str === undefined) return "";
   return String(str)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }

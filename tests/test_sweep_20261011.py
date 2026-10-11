@@ -1,5 +1,5 @@
 # ruff: noqa: E501 — 한글 docstring·JS 스텁 줄은 쪼개면 읽기 어렵다
-"""2026-10-11 전수 검토가 찾은 결함의 회귀 시험 (backlog B-012~B-035).
+"""2026-10-11 전수 검토가 찾은 결함의 회귀 시험 (backlog B-012~B-077 — 1차 B-012~B-035, 2차·보충 B-037~B-077).
 
 왜 한 파일인가:
     전수 검토(442파일)에서 나온 결함을 «고치기 전에 빨간불»로 먼저 세우고, 고친 뒤 초록이 되는
@@ -15,6 +15,11 @@
       이미지 묶음 순서(B-034), 외부 텍스트 쪽 대조(B-032)
     - 화면 JS: 인용 좌표·권(B-016), 번역 일괄 집계·참조 사전(B-018), 권 전체 OCR 모델(B-019),
       시작 행 옮기기(B-025), 사전 활성화(B-026)
+    - 2차·보충(B-037~B-077): 스냅샷 경로 안전·엔티티 id, 백업·.env·휴지통 데이터 손실(B-049~B-051),
+      zip 업데이트 보호(B-052), 이스케이프 종류 전체(B-041), 편집기 코드포인트(B-042), 늦은 응답이
+      다른 쪽에 그려지는 경쟁, 설명이 주인 함수에서 떨어진 자리
+    - 릴리스 리뷰(B-078): reset --hard 전 추적 밖 파일 남기기, 옛 zip 백업의 staged·한글 경로,
+      늦은 비고 응답, 같은 책 다른 대목 출전
 """
 
 from __future__ import annotations
@@ -567,7 +572,7 @@ function getLlmModelSelection() { return {force_provider: null, force_model: nul
 function _transApiBlockId() { return "u1"; }
 function _renderTransCards() {}
 function _renderTransStatusSummary() {}
-async function _addManualTranslation() {}
+async function _addManualTranslation() { return true; } // 저장 성공(2026-10-11부터 참·거짓을 돌려준다)
 const document = {querySelectorAll: () => [], getElementById: () => null};
 let FAIL = true;
 async function fetchWithSSE(url, body) {
@@ -678,6 +683,16 @@ def test_b035_tests_cannot_reach_external_hosts():
 
     with pytest.raises(ConnectionRefusedError, match="외부 네트워크 차단"):
         socket.create_connection(("203.0.113.7", 443), timeout=1)
+
+
+@pytest.mark.parametrize("port", [11434, 10531, 10540])
+def test_local_daemons_that_relay_outside_are_blocked_too(port):
+    """루프백이어도 Ollama(11434)·OAuth 프록시(10531~10540)는 막는다 — 그 데몬이 바깥(ollama.com·OpenAI)으로
+    넘겨 부른다. 예전에는 루프백을 통째로 열어 두어, PC에 Ollama가 떠 있으면 시험이 클라우드 모델까지 닿았다."""
+    import socket
+
+    with pytest.raises(ConnectionRefusedError, match="외부 네트워크 차단"):
+        socket.create_connection(("127.0.0.1", port), timeout=1)
 
 
 # ── 파서·가져오기의 남은 어긋남 ─────────────────────────────────────────────────
@@ -879,7 +894,8 @@ def test_b029_known_unescaped_sites_are_escaped():
 def test_css_variables_used_are_defined():
     """화면이 쓰는 CSS 변수(폴백 없는 var(--x))는 어딘가에 정의돼 있다 — 없으면 그 선언은 조용히 무시된다."""
     static = ROOT / "src" / "app" / "static"
-    files = [*static.rglob("*.css"), *static.rglob("*.js"), *static.rglob("*.html")]
+    # 함께 실은 제3자 라이브러리(static/vendor, D-140)는 우리 화면 코드가 아니라 뺀다
+    files = [f for f in [*static.rglob("*.css"), *static.rglob("*.js"), *static.rglob("*.html")] if "vendor" not in f.parts]
     defined, used = set(), {}
     for f in files:
         s = f.read_text(encoding="utf-8", errors="replace")
@@ -890,6 +906,612 @@ def test_css_variables_used_are_defined():
                 used.setdefault(m.group(1), set()).add(f.name)
     missing = {k: sorted(v) for k, v in used.items() if k not in defined}
     assert missing == {}, missing
+
+
+# ── 2차 전수(S-20261011-185238): 화면 JS ──────────────────────────────────────────────────────
+_DOM_STUB = """
+// textContent → innerHTML: 브라우저처럼 &, <, > 만 바꾸고 따옴표는 그대로 둔다
+globalThis.document = { createElement() {
+  let t = ""; return { set textContent(v) { t = String(v); },
+    get innerHTML() { return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); } }; } };
+"""
+
+
+def _escape_helpers() -> list[tuple[str, str]]:
+    """화면 JS의 최상위 이스케이프 함수 전부 — (파일, 이름). 손으로 적은 목록이면 새 함수가 빠진다."""
+    out = []
+    for f in sorted(STATIC_JS.glob("*.js")):
+        for m in re.finditer(r"^function\s+(_?[A-Za-z]*[Ee]sc[A-Za-z]*)\s*\(", f.read_text(encoding="utf-8"), re.M):
+            if "scalat" not in m.group(1):  # 애매한 후보(escalate) 함수는 이스케이프가 아니다
+                out.append((f.name, m.group(1)))
+    return out
+
+
+@pytest.mark.parametrize(("js_file", "fn"), _escape_helpers())
+def test_every_escape_helper_blocks_both_quotes(tmp_path, js_file, fn):
+    """이스케이프 함수는 어느 것이든 큰·작은따옴표까지 막는다 — 속성 자리(title="${…}")에 쓰여도 안전하게.
+    전에는 textContent 방식 아홉 개가 따옴표를 그대로 두었고, 그중 다섯이 문헌·권 제목(끌어다 놓은 파일 이름)·
+    에셋 id·외부 서지의 source_url을 속성에 넣었다(create-document 450·693, contents-tree 112·141, bibliography 690)."""
+    out = run_js(tmp_path, js_file, [fn], _DOM_STUB, f'console.log(JSON.stringify({{v: {fn}(`a"b\'c<d>&`)}}));')
+    v = out["v"]
+    assert '"' not in v and "'" not in v, f"{js_file}::{fn} → {v!r}"
+    assert "<" not in v and ">" not in v
+
+
+# 확장 한자(CJK 확장 B, U+20000)는 UTF-16에서 두 단위다 — 그 뒤의 좌표가 코드포인트로 맞는지 본다.
+# 서버(파이썬 str)는 코드포인트로 센다: "𠀀天地"에서 天은 1번.
+_ASTRAL = "\U00020000天地"
+_EL_STUB = """
+const _els = {}; globalThis.document = { getElementById(id) { return (_els[id] = _els[id] || { textContent: "", innerHTML: "", style: {} }); } };
+"""
+
+
+def test_hyeonto_preview_counts_code_points(tmp_path):
+    """현토 미리보기 — 1번 글자(天) 뒤 현토가 天 뒤에 붙는다. 전에는 UTF-16으로 세어 𠀀의 뒤쪽 반에 붙었다."""
+    out = run_js(tmp_path, "hyeonto-editor.js", ["_htChars", "_renderHyeontoPreview"], _EL_STUB + f"""
+globalThis.hyeontoState = {{ originalText: {json.dumps(_ASTRAL)}, punctMarks: [],
+  annotations: [{{ target: {{ start: 1, end: 1 }}, position: "after", text: "은" }}] }};""",
+        '_renderHyeontoPreview(); console.log(JSON.stringify({v: _els["hyeonto-preview"].textContent}));')
+    assert out["v"] == "\U00020000天은地"
+
+
+def test_translation_sentence_split_counts_code_points(tmp_path):
+    """번역 문장 나누기 — 표점 。이 天(1번) 뒤면 첫 문장은 «𠀀天», 범위 0~1. 서버 split_sentences와 같은 자."""
+    out = run_js(tmp_path, "translation-editor.js", ["_trChars", "_splitSentencesClient"], "",
+        f'console.log(JSON.stringify(_splitSentencesClient({json.dumps(_ASTRAL)}, [{{target: {{start: 1, end: 1}}, after: "。"}}])));')
+    assert out == [{"start": 0, "end": 1, "text": "\U00020000天"}, {"start": 2, "end": 2, "text": "地"}]
+
+
+def test_correction_local_apply_counts_code_points(tmp_path):
+    """교정 미리 적용 — char_index 1(天)을 人으로. 서버 _apply_corrections_to_text와 같은 결과여야 한다."""
+    from core.document import _apply_corrections_to_text
+
+    corr = [{"char_index": 1, "original_ocr": "天", "corrected": "人", "block_id": None, "line": None}]
+    out = run_js(tmp_path, "correction-editor.js", ["_corrChars", "_applyCorrectionsLocally"], "",
+        f"console.log(JSON.stringify({{v: _applyCorrectionsLocally({json.dumps(_ASTRAL)}, {json.dumps(corr)})}}));")
+    assert out["v"] == "\U00020000人地"
+    assert _apply_corrections_to_text(_ASTRAL, corr) == out["v"]
+
+
+def test_punctuation_preview_counts_code_points(tmp_path):
+    """표점 미리보기 — 天(1번) 뒤 。가 天 뒤에 붙는다."""
+    out = run_js(tmp_path, "punctuation-editor.js", ["_puChars", "_renderPreview"], _EL_STUB + f"""
+globalThis.punctState = {{ originalText: {json.dumps(_ASTRAL)}, marks: [{{ target: {{ start: 1, end: 1 }}, after: "。" }}] }};""",
+        '_renderPreview(); console.log(JSON.stringify({v: _els["punct-preview"].textContent}));')
+    assert out["v"] == "\U00020000天。地"
+
+
+@pytest.mark.parametrize(("etype", "fields"), [
+    ("tag", {"ef-surface": "王戎", "ef-block-id": "u1", "ef-core-category": "person", "ef-status": "draft"}),
+    ("agent", {"ef-name": "王戎", "ef-status": "draft"}),
+])
+def test_entity_edit_keeps_metadata(tmp_path, etype, fields):
+    """Tag·Agent를 고쳐 저장해도 기존 metadata가 남는다 — 서버는 얕은 병합이라 null을 보내면 지워졌다."""
+    setup = (
+        "globalThis.__fields = " + json.dumps(fields, ensure_ascii=False) + ";\n"
+        "globalThis.document = { getElementById: (id) => (id in globalThis.__fields ? { value: globalThis.__fields[id] } : null) };\n"
+        "globalThis.entityState = { editingEntity: { id: 'e1', metadata: { promoted_to: 'c9' } } };\n"
+    )
+    out = run_js(tmp_path, "entity-manager.js", ["_collectFormData"], setup,
+                 f"console.log(JSON.stringify({{b: _collectFormData({etype!r})}}));")
+    assert out["b"]["metadata"] == {"promoted_to": "c9"}
+
+
+def test_notes_pending_save_goes_to_the_page_it_was_written_on(tmp_path):
+    """비고를 3쪽에 쓰고 2초 안에 4쪽으로 옮기면 그 비고는 3쪽에 저장되고, 4쪽 파일은 덮이지 않는다."""
+    setup = """
+const calls = [];
+globalThis.fetch = async (url, opt) => { calls.push({ url, method: (opt && opt.method) || "GET", body: opt && opt.body });
+  return { ok: true, json: async () => ({ entries: [] }) }; };
+const _el = () => ({ innerHTML: "", textContent: "" });
+globalThis.document = { getElementById: () => _el() };
+globalThis.interpState = { interpId: "i1" };
+globalThis.viewerState = { partId: "vol1", pageNum: 3 };
+globalThis.notesState = { entries: [], loaded: true, saveTimer: null, pendingTarget: null, saving: false };
+globalThis._renderNotes = () => {};
+"""
+    body = """
+notesState.entries = [{ text: "3쪽 비고" }];
+_scheduleSave();
+viewerState.pageNum = 4;             // 2초가 지나기 전에 쪽을 옮긴다
+await loadPageNotes();
+await new Promise((r) => setTimeout(r, 2200)); // 옛 타이머가 남아 있었다면 여기서 터진다
+console.log(JSON.stringify(calls.map((c) => [c.method, c.url, c.body || null])));
+"""
+    out = run_js(tmp_path, "notes-panel.js", ["_notesInterpId", "_notesTarget", "_notesStillOn", "_flushNotesSave", "_saveNotes", "_scheduleSave", "loadPageNotes"], setup, body)
+    puts = [c for c in out if c[0] == "PUT"]
+    assert len(puts) == 1 and "/pages/3/" in puts[0][1] and "3쪽 비고" in puts[0][2], out
+    assert not any(c[0] == "PUT" and "/pages/4/" in c[1] for c in out), out
+
+
+def test_new_layout_block_id_never_repeats_a_remaining_one(tmp_path):
+    """b01·b02·b03에서 b01을 지우고 새로 그리면 b04 — 전에는 «개수 + 1» = b03이라 남은 것과 겹쳤다."""
+    out = run_js(tmp_path, "layout-editor.js", ["_nextLayoutBlockId"], "",
+                 'console.log(JSON.stringify({v: _nextLayoutBlockId(7, [{block_id: "p07_b02"}, {block_id: "p07_b03"}]), e: _nextLayoutBlockId(7, [])}));')
+    assert out == {"v": "p07_b04", "e": "p07_b01"}
+    src = (STATIC_JS / "layout-editor.js").read_text(encoding="utf-8")
+    assert "layoutState.blocks.length + 1" not in src
+
+
+def test_dictionary_save_keeps_source_section_and_url(tmp_path):
+    """사전 필드를 저장해도 출전의 section·url과 폼에 없는 사전 칸이 남는다 — 전에는 {title}만 다시 만들어 보냈다."""
+    prev = {"headword": "王戎", "dictionary_meaning": "옛 뜻", "generated_by": "llm",
+            "source_references": [{"title": "世說新語", "section": "德行", "url": "https://x/1"}]}
+    fields = {"ann-dict-headword": "王戎", "ann-dict-meaning": "새 뜻", "ann-dict-src-refs": "世說新語, 晉書"}
+    setup = (
+        "let sent = null;\n"
+        "globalThis.fetch = async (url, opt) => { sent = JSON.parse(opt.body); return { ok: true, json: async () => ({}) }; };\n"
+        "const F = " + json.dumps(fields, ensure_ascii=False) + ";\n"
+        "globalThis.document = { getElementById: (id) => (id in F ? { value: F[id] } : null) };\n"
+        "globalThis.viewerState = { pageNum: 1 }; globalThis.interpState = { interpId: 'i1' };\n"
+        "globalThis.annState = { selectedAnnId: 'a1', annotations: [{ id: 'a1', dictionary: " + json.dumps(prev, ensure_ascii=False) + " }] };\n"
+        "globalThis._annApiBlockId = () => 'u1'; globalThis._annPartQuery = () => '';\n"
+        "globalThis._showSaveStatus = () => {}; globalThis._loadBlockAnnotations = async () => {}; globalThis._renderAnnList = () => {};\n"
+    )
+    out = run_js(tmp_path, "annotation-editor.js", ["_saveDictFields"], setup, "await _saveDictFields(); console.log(JSON.stringify(sent));")
+    d = out["dictionary"]
+    assert d["dictionary_meaning"] == "새 뜻" and d["generated_by"] == "llm"
+    assert d["source_references"] == [{"title": "世說新語", "section": "德行", "url": "https://x/1"}, {"title": "晉書"}]
+
+
+_STATIC = ROOT / "src" / "app" / "static"
+
+
+def test_every_used_animation_has_keyframes():
+    """CSS·화면이 쓰는 animation 이름에는 @keyframes가 있다 — progress-pulse가 없어 진행 막대가 멈춰 있었다."""
+    text = "\n".join(p.read_text(encoding="utf-8") for p in [*_STATIC.rglob("*.css"), *_STATIC.rglob("*.js"), _STATIC / "index.html"] if "vendor" not in p.parts)
+    defined = set(re.findall(r"@keyframes\s+([\w-]+)", text))
+    keywords = {"none", "infinite", "linear", "ease", "ease-in", "ease-out", "ease-in-out", "alternate", "forwards",
+                "backwards", "both", "normal", "reverse", "running", "paused", "step-end", "step-start",
+                "alternate-reverse", "var", "cubic-bezier", "steps"}
+    used = set()
+    for m in re.finditer(r"animation(?:-name)?\s*:\s*([^;\"'}]+)", text):
+        used |= {t for t in re.split(r"[\s,]+", m.group(1)) if re.fullmatch(r"[a-zA-Z][\w-]*", t) and t not in keywords}
+    assert used - defined == set()
+
+
+def test_elements_shown_with_empty_display_are_not_hidden_by_the_stylesheet():
+    """JS가 style.display=""로 켜는 요소를 스타일시트가 display:none으로 숨기면 영영 안 보인다
+    (인용 «원문이 마크 이후 변경되었습니다» 경고). index.html의 id 요소 + getElementById 경로를 전부 본다."""
+    css = re.sub(r"/\*.*?\*/", "", "\n".join(p.read_text(encoding="utf-8") for p in _STATIC.rglob("*.css") if "vendor" not in p.parts), flags=re.S)
+    hidden_cls, hidden_id = set(), set()
+    for m in re.finditer(r"([^{}]+)\{([^}]*)\}", css):
+        if re.search(r"display\s*:\s*none", m.group(2)):
+            for sel in (s.strip() for s in m.group(1).split(",")):
+                if re.fullmatch(r"\.[\w-]+", sel):
+                    hidden_cls.add(sel[1:])
+                elif re.fullmatch(r"#[\w-]+", sel):
+                    hidden_id.add(sel[1:])
+    html = (_STATIC / "index.html").read_text(encoding="utf-8")
+    classes = {}
+    for m in re.finditer(r"<[a-zA-Z][^>]*\bid=\"([\w-]+)\"[^>]*>", html):
+        c = re.search(r"\bclass=\"([^\"]*)\"", m.group(0))
+        classes[m.group(1)] = c.group(1).split() if c else []
+    bad = []
+    for f in STATIC_JS.glob("*.js"):
+        src = f.read_text(encoding="utf-8")
+        for m in re.finditer(r"(?:const|let|var)\s+(\w+)\s*=\s*document\.getElementById\(\s*[\"']([\w-]+)[\"']\s*\)", src):
+            var, eid = m.groups()
+            if re.search(rf"\b{re.escape(var)}\.style\.display\s*=\s*[^;\n]*[\"'][\"']", src[m.end(): m.end() + 4000]):
+                if eid in hidden_id or any(c in hidden_cls for c in classes.get(eid, [])):
+                    bad.append(f"{f.name}: #{eid}")
+    assert bad == [], bad
+
+
+def test_ctrl_s_saves_text_only_when_this_editor_is_shown_and_dirty(tmp_path):
+    """Ctrl+S가 숨은 텍스트 편집기의 옛 글로 확정본을 덮지 않는다 — 보이고 수정된 때만 저장."""
+    setup = """
+let saves = 0, keydown = null;
+const ta = { value: "", offsetParent: null, addEventListener() {}, dispatchEvent() {} };
+globalThis.document = {
+  getElementById: (id) => (id === "text-content" ? ta : { addEventListener() {} }),
+  addEventListener: (ev, fn) => { if (ev === "keydown") keydown = fn; },
+};
+globalThis.viewerState = { docId: "d1" };
+globalThis.editorState = { isDirty: false, originalText: "" };
+globalThis._saveCurrentText = () => { saves++; };
+globalThis._updateSaveStatus = () => {}; globalThis._insertAtCursor = () => {};
+"""
+    body = """
+initTextEditor();
+const press = () => keydown({ ctrlKey: true, key: "s", preventDefault() {} });
+press();                                   // 숨음·수정 없음
+editorState.isDirty = true; press();       // 숨음·수정 있음 (다른 탭에서 Ctrl+S)
+ta.offsetParent = {}; editorState.isDirty = false; press(); // 보임·수정 없음
+editorState.isDirty = true; press();       // 보임·수정 있음 → 저장
+console.log(JSON.stringify({ saves }));
+"""
+    out = run_js(tmp_path, "text-editor.js", ["initTextEditor"], setup, body)
+    assert out["saves"] == 1
+
+
+# ── 1차 전수에서 넘어온 데이터 손실 셋 ─────────────────────────────────────────────────────────
+def _tiny_library(root: Path) -> Path:
+    lib = root / "lib"
+    (lib / "documents").mkdir(parents=True)
+    (lib / "library_manifest.json").write_text("{}", encoding="utf-8")
+    return lib
+
+
+def test_backup_never_moves_or_deletes_a_folder_it_did_not_make(tmp_path):
+    """다른 파일이 든 폴더(구글 드라이브 등)를 백업 자리로 골라도 그 파일은 옮겨지거나 지워지지 않는다.
+    전에는 첫 백업이 폴더를 통째로 «_prev»로 옮기고 두 번째 백업이 rmtree로 지웠다."""
+    from core.backup import backup_library
+
+    lib = _tiny_library(tmp_path)
+    drive = tmp_path / "drive"
+    drive.mkdir()
+    (drive / "논문.hwp").write_text("소중한 파일", encoding="utf-8")
+    r1 = backup_library(lib, drive)
+    r2 = backup_library(lib, drive)
+    assert r1["success"] and r2["success"], (r1, r2)
+    assert (drive / "논문.hwp").read_text(encoding="utf-8") == "소중한 파일"
+    assert not (tmp_path / "drive_prev").exists()
+    assert Path(r2["backup_path"]).parent == drive
+    assert (Path(r2["backup_path"]) / "library_manifest.json").exists()
+
+
+def test_backup_rotates_its_own_previous_backup(tmp_path):
+    """빈 폴더나 이 앱이 만든 백업 자리는 예전처럼 그 자리에 쓰고, 옛 백업은 _prev로 돌린다."""
+    from core.backup import backup_library
+
+    lib = _tiny_library(tmp_path)
+    target = tmp_path / "bk"
+    target.mkdir()
+    assert backup_library(lib, target)["backup_path"] == str(target.resolve())
+    assert backup_library(lib, target)["success"]
+    assert (tmp_path / "bk_prev" / "_backup_meta.json").exists()
+
+
+def test_env_write_keeps_other_lines_of_a_cp949_file(tmp_path):
+    """메모장이 cp949로 저장한 .env에 키 하나를 넣어도 다른 줄(예산·모델 고정·한글 주석)이 남는다."""
+    from core.env_settings import MANAGED_KEYS, env_path, write_values
+
+    p = env_path(tmp_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes("# 한글 주석\nMONTHLY_BUDGET_USD=5\nCTB_PIN_MODEL=x\n".encode("cp949"))
+    provider = next(iter(MANAGED_KEYS))
+    write_values(tmp_path, {provider: "sk-test-1234"})
+    text = p.read_text(encoding="utf-8")
+    assert "MONTHLY_BUDGET_USD=5" in text and "CTB_PIN_MODEL=x" in text and "# 한글 주석" in text
+    assert f"{MANAGED_KEYS[provider]}=sk-test-1234" in text
+
+
+def test_env_write_refuses_an_unreadable_file(tmp_path):
+    """UTF-8도 cp949도 아닌 .env는 고치지 않는다 — 원래 바이트가 그대로 남는다."""
+    from core.env_settings import MANAGED_KEYS, env_path, write_values
+
+    p = env_path(tmp_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    junk = b"BUDGET=5\n\xff\xfe\xfa\n"
+    p.write_bytes(junk)
+    with pytest.raises(ValueError):
+        write_values(tmp_path, {next(iter(MANAGED_KEYS)): "sk-x"})
+    assert p.read_bytes() == junk
+
+
+def test_trash_move_never_falls_back_to_copy_and_delete(tmp_path, monkeypatch):
+    """잠긴 폴더를 휴지통으로 못 옮기면 원본을 그대로 두고 실패를 알린다 — 전에는 shutil.move가
+    «복사 → 원본 지우기»로 넘어가, 원본 지우기가 도중에 멈추면 완전한 사본을 지우고 원본 조각만 옮겼다."""
+    import core.library as libmod
+
+    lib = _tiny_library(tmp_path)
+    doc = lib / "documents" / "doc1"
+    (doc / "L4_text").mkdir(parents=True)
+    (doc / "L4_text" / "p1.txt").write_text("본문", encoding="utf-8")
+
+    def locked(src, dst):
+        raise PermissionError("잠김")
+
+    monkeypatch.setattr(libmod.os, "rename", locked)
+    monkeypatch.setattr(libmod.time, "sleep", lambda s: None)
+    with pytest.raises(PermissionError):
+        libmod._move_to_trash(lib, "documents", "doc1")
+    assert (doc / "L4_text" / "p1.txt").read_text(encoding="utf-8") == "본문"
+    trash = lib / ".trash" / "documents"
+    assert not trash.exists() or not any(trash.iterdir())
+
+
+def test_zip_copy_does_not_overwrite_files_edited_after_conversion(tmp_path):
+    """zip 사본을 git 사본으로 바꾼 뒤 사용자가 고친 파일이 있으면 «받기»가 reset --hard로 덮지 않는다.
+    바꾼 그대로면(zip 시점 파일) 예전처럼 원격에 맞춘다."""
+    import shutil as _sh
+    import subprocess as _sp
+
+    from core import updater
+
+    if _sh.which("git") is None:
+        pytest.skip("git이 없다")
+
+    def g(args, cwd):
+        _sp.run(["git", *args], cwd=str(cwd), capture_output=True, check=True)
+
+    origin = tmp_path / "origin"
+    origin.mkdir()
+    for a in (["init", "-q"], ["symbolic-ref", "HEAD", "refs/heads/main"],
+              ["config", "user.email", "t@example.com"], ["config", "user.name", "t"]):
+        g(a, origin)
+    (origin / "app.py").write_text("v1\n", encoding="utf-8")
+    g(["add", "."], origin)
+    g(["commit", "-q", "-m", "first"], origin)
+    z = tmp_path / "zip"
+    z.mkdir()
+    (z / "app.py").write_text("v1\n", encoding="utf-8")
+    (origin / "app.py").write_text("v2\n", encoding="utf-8")
+    g(["commit", "-q", "-am", "second"], origin)
+
+    assert updater.ensure_git_checkout(z, remote=str(origin))["ok"]
+    assert updater.zip_user_changes(z) == []          # 바꾼 그대로 — 원격에 맞춰도 된다
+    (z / "app.py").write_text("사용자가 고친 줄\n", encoding="utf-8")
+    assert updater.zip_user_changes(z) == ["app.py"]  # 그 뒤 고쳤다 — 덮으면 안 된다
+
+
+def test_hwp_taidu_pos_points_at_the_raised_character():
+    """대두 공백 뒤 글자의 clean_text 자리가 pos다 — 예전에는 늘 0이라 대두가 모두 첫 글자에 붙어 저장됐다."""
+    from hwp.text_cleaner import clean_hwp_text
+
+    r = clean_hwp_text("天地之道\n  王命以下\n事", strip_punct=True, strip_hyeonto=True)
+    assert r.clean_text == "天地之道王命以下事"
+    assert [t["pos"] for t in r.taidu_marks] == [4]
+    assert r.clean_text[r.taidu_marks[0]["pos"]] == "王"
+
+
+@pytest.mark.parametrize("server_ok", [True, False])
+def test_reset_corrections_in_free_edit_really_empties_and_reports_failure(tmp_path, server_ok):
+    """자유 편집 모드의 «모두 삭제»는 원문을 보낸다(지금 글을 보내면 서버가 같은 교정을 다시 만든다).
+    저장이 실패하면 실패를 알린다 — 예전 _saveCorrections는 실패를 삼켜 리셋의 알림이 닿지 않았다."""
+    setup = f"""
+const sent = []; const toasts = [];
+const SERVER_OK = {str(server_ok).lower()};
+globalThis.fetch = async (url, opt) => {{ if (opt && opt.method === "PUT") sent.push(JSON.parse(opt.body));
+  return {{ ok: SERVER_OK, json: async () => ({{ corrections: [], git: null }}) }}; }};
+globalThis.AbortController = class {{ constructor() {{ this.signal = null; }} abort() {{}} }};
+globalThis.confirm = () => true;
+globalThis.showToast = (m, k) => toasts.push(k || "info");
+const ta = {{ value: "고친 글" }};
+globalThis.document = {{ getElementById: (id) => (id === "corr-freetext-editor" ? ta : null) }};
+globalThis.viewerState = {{ docId: "d", partId: "vol1", pageNum: 1 }};
+globalThis.correctionState = {{ editMode: "freetext", pageText: "원문", correctedText: "고친 글",
+  corrections: [{{ char_index: 0, original_ocr: "원", corrected: "고친" }}], editSeq: 0, saving: false }};
+for (const f of ["_updateCorrSaveStatus", "_renderCorrectionView", "_renderCorrList", "_updateCorrCount", "_loadGitLog"]) globalThis[f] = () => {{}};
+"""
+    out = run_js(tmp_path, "correction-editor.js", ["_corrChars", "_applyCorrectionsLocally", "_saveCorrections", "_resetAllCorrections"],
+                 setup, "await _resetAllCorrections(); console.log(JSON.stringify({ sent, toasts }));")
+    assert out["sent"] and out["sent"][0]["corrected_text"] == "원문"
+    assert ("error" in out["toasts"]) is (not server_ok)
+
+
+def test_manifest_has_one_entry_per_id_after_trash_and_recreate(tmp_path):
+    """휴지통으로 보내면 매니페스트 목록에서 빠지고, 같은 id를 다시 등록해도 항목은 하나다."""
+    from core.document import _update_library_manifest
+    from core.library import trash_document
+
+    lib = _tiny_library(tmp_path)
+    (lib / "documents" / "doc1").mkdir()
+    _update_library_manifest(lib, "doc1", "첫판")
+    trash_document(lib, "doc1")
+    m = json.loads((lib / "library_manifest.json").read_text(encoding="utf-8"))
+    assert [d["document_id"] for d in m["documents"]] == []
+    _update_library_manifest(lib, "doc1", "다시 만든 판")
+    _update_library_manifest(lib, "doc1", "또 다시")
+    m = json.loads((lib / "library_manifest.json").read_text(encoding="utf-8"))
+    assert [(d["document_id"], d["title"]) for d in m["documents"]] == [("doc1", "또 다시")]
+
+
+def test_bibliography_manual_edit_can_clear_a_field(tmp_path):
+    """서지 수동 편집에서 칸을 비우면 지워진다(null) — 예전에는 «값 || 옛 값»이라 지울 수 없었다."""
+    setup = """
+const F = { "bib-edit-notes": { value: "  " }, "bib-edit-series": { value: "새 총서" } };
+globalThis.document = { getElementById: (id) => F[id] || null };
+"""
+    out = run_js(tmp_path, "bibliography.js", ["_bibEditOr"], setup,
+                 'console.log(JSON.stringify({n: _bibEditOr("bib-edit-notes", "옛 메모"), s: _bibEditOr("bib-edit-series", "옛"), m: _bibEditOr("bib-edit-missing", "옛 값")}));')
+    assert out == {"n": None, "s": "새 총서", "m": "옛 값"}
+    src = (STATIC_JS / "bibliography.js").read_text(encoding="utf-8")
+    assert '_getEditField("bib-edit-notes") || bib.notes' not in src
+
+
+def test_hwp_leading_punctuation_is_marked_before_the_first_char():
+    """첫 원문 글자 앞에 온 표점은 «0번 앞»으로 적힌다 — «0번 뒤»와 구별된다."""
+    from hwp.text_cleaner import clean_hwp_text
+
+    marks = clean_hwp_text("「天地」").punctuation_marks
+    assert marks[0] == {"pos": 0, "mark": "「", "original_mark": "「", "position": "before"}
+    assert "position" not in marks[1] and marks[1]["pos"] == 1
+
+
+def test_index_html_has_no_literal_unicode_escapes():
+    """HTML은 \\u201c 같은 JS 탈출을 해석하지 않는다 — 라벨에 백슬래시가 그대로 찍혔다(인용 «원문을 “”로 감싸기»)."""
+    html = (_STATIC / "index.html").read_text(encoding="utf-8")
+    outside_scripts = re.sub(r"<script\b.*?</script>", "", html, flags=re.S | re.I)
+    assert re.findall(r"\\u[0-9a-fA-F]{4}", outside_scripts) == []
+
+
+def test_screen_libraries_are_served_locally_with_browser_mime_types(client):
+    """PDF.js·d3·onnxruntime-web을 CDN이 아니라 static/vendor에서 내보낸다 — 인터넷 없는 첫 실행에서
+    PDF가 뜨지 않았다. 모듈(.mjs)·wasm은 브라우저가 MIME을 따지므로 형식까지 본다(Windows는 .mjs가 text/plain이었다)."""
+    html = (_STATIC / "index.html").read_text(encoding="utf-8")
+    remote = re.findall(r"<script[^>]*\bsrc=\"(https?://[^\"]+)\"", html) + re.findall(r"<link[^>]*\bhref=\"(https?://[^\"]+)\"", html)
+    assert remote == [], remote
+    for js in ("pdf-renderer.js", "koten-layout-detector.js"):
+        assert not re.search(r"https?://(cdn|cdnjs|unpkg|d3js)", (STATIC_JS / js).read_text(encoding="utf-8")), js
+    want = {
+        "vendor/pdfjs/pdf.min.js": "javascript", "vendor/pdfjs/pdf.worker.min.js": "javascript",
+        "vendor/d3/d3.min.js": "javascript", "vendor/onnxruntime-web/ort.min.js": "javascript",
+        "vendor/onnxruntime-web/ort-wasm-simd-threaded.mjs": "javascript",
+        "vendor/onnxruntime-web/ort-wasm-simd-threaded.wasm": "application/wasm",
+    }
+    for path, kind in want.items():
+        r = client.get("/static/" + path)
+        assert r.status_code == 200, path
+        assert kind in r.headers["content-type"], (path, r.headers["content-type"])
+    for lic in ("pdfjs", "d3", "onnxruntime-web"):
+        assert (_STATIC / "vendor" / lic / "LICENSE").is_file(), lic
+
+
+@pytest.mark.parametrize("case", ["error_event", "no_complete", "not_sse"])
+def test_fetch_with_sse_falls_back_only_before_the_stream_opens(tmp_path, case):
+    """스트림이 열린 뒤 실패하면 폴백 URL로 같은 LLM 호출을 다시 보내지 않고 서버 오류 문구를 그대로 올린다.
+    스트림이 열리기 전(SSE가 아닌 응답)에만 폴백한다. 예전에는 둘 다 폴백해 유료 모델이면 비용이 두 번 나갔다."""
+    setup = f"""
+const CASE = {json.dumps(case)};
+const calls = [];
+const enc = new TextEncoder();
+function sse(events) {{
+  const chunks = events.map((e) => enc.encode("data: " + JSON.stringify(e) + "\\n\\n"));
+  let i = 0;
+  return {{ getReader: () => ({{ read: async () => (i < chunks.length ? {{ done: false, value: chunks[i++] }} : {{ done: true }}) }}) }};
+}}
+globalThis.fetch = async (url) => {{
+  calls.push(url);
+  if (url === "/fallback") return {{ ok: true, json: async () => ({{ via: "fallback" }}) }};
+  if (CASE === "not_sse") return {{ ok: false, status: 404, headers: {{ get: () => "application/json" }} }};
+  const events = CASE === "error_event" ? [{{ type: "progress" }}, {{ type: "error", error: "모델 한도 초과" }}] : [{{ type: "progress" }}];
+  return {{ ok: true, headers: {{ get: () => "text/event-stream" }}, body: sse(events) }};
+}};
+"""
+    body = """
+let out, err = null;
+try { out = await fetchWithSSE("/stream", {}, null, "/fallback"); } catch (e) { err = e.message; }
+console.log(JSON.stringify({ calls, out: out || null, err }));
+"""
+    r = run_js(tmp_path, "workspace.js", ["fetchWithSSE"], setup, body)
+    if case == "not_sse":
+        assert r["calls"] == ["/stream", "/fallback"] and r["out"] == {"via": "fallback"}
+    else:
+        assert r["calls"] == ["/stream"], r
+        assert r["err"] and ("모델 한도 초과" in r["err"] if case == "error_event" else "결과 없이" in r["err"])
+
+
+def test_page_ocr_result_is_not_drawn_on_another_page(tmp_path):
+    """쪽 OCR 도중 다른 쪽으로 옮기면 끝난 결과를 지금 쪽 패널에 그리지 않는다(저장은 옛 쪽에 됐다)."""
+    setup = """
+const drawn = [];
+globalThis.viewerState = { docId: "d", partId: "vol1", pageNum: 3 };
+globalThis.ocrState = { running: false };
+globalThis.layoutState = { blocks: [] };
+globalThis.document = { getElementById: () => null };
+globalThis.showToast = () => {};
+globalThis._showProgress = () => {}; globalThis._disableButtons = () => {};
+globalThis.getLlmModelSelection = () => ({});
+globalThis._runOcrWithStreaming = async () => { viewerState.pageNum = 4; return { page: 3 }; };
+globalThis.fetch = async () => ({ ok: true, json: async () => ({ page: 3 }) });
+globalThis._displayResults = (r) => drawn.push(r);
+"""
+    out = run_js(tmp_path, "ocr-panel.js", ["_runOcr"], setup, "await _runOcr(null); console.log(JSON.stringify({ drawn }));")
+    assert out["drawn"] == []
+
+
+def test_part_ocr_direction_follows_the_profile():
+    """권 전체 OCR의 전면 블록 방향이 세로 고정이 아니라 프로필을 따른다(레이아웃 편집기와 같은 규칙)."""
+    src = (STATIC_JS / "ocr-panel.js").read_text(encoding="utf-8")
+    assert 'writing_direction: "vertical_rtl",' not in src
+    assert 'workspaceProfile === "extract" ? "horizontal_ltr" : "vertical_rtl"' in src
+
+
+@pytest.mark.parametrize(("js_file", "fn", "quiet"), [
+    ("citation-editor.js", "_loadCiteMarks", True),
+    ("citation-editor.js", "_deleteCiteMark", False),
+    ("annotation-editor.js", "_loadBlockAnnotations", True),
+    ("annotation-editor.js", "_deleteAnnotation", False),
+])
+def test_no_request_to_a_default_interpretation_when_none_is_chosen(tmp_path, js_file, fn, quiet):
+    """해석 저장소를 고르지 않았으면 «default»라는 없는 저장소로 요청하지 않는다. 동작(삭제 등)은 그 까닭을 알린다."""
+    setup = """
+const calls = []; const toasts = [];
+globalThis.fetch = async (url) => { calls.push(url); return { ok: false, status: 404, json: async () => ({}) }; };
+globalThis.showToast = (m) => toasts.push(m);
+globalThis.confirm = () => true;
+globalThis.viewerState = { docId: "d", partId: "vol1", pageNum: 1 };
+globalThis.interpState = { interpId: null };
+globalThis.annState = { selectedAnnId: "a1", annotations: [] }; globalThis.citeState = { marks: [], selectedMarkId: "c1" };
+globalThis.document = { getElementById: () => null, querySelectorAll: () => [] };
+globalThis.interpPartQuery = () => ""; globalThis._annPartQuery = () => ""; globalThis._annApiBlockId = () => "u1";
+"""
+    out = run_js(tmp_path, js_file, [fn], setup,
+                 f'try {{ await {fn}("c1"); }} catch (e) {{}} console.log(JSON.stringify({{ calls, toasts }}));')
+    assert not any("/interpretations/default/" in c for c in out["calls"]), out["calls"]
+    assert (out["toasts"] == []) is quiet, out["toasts"]
+
+
+def test_snapshot_entities_without_id_do_not_overwrite_each_other(tmp_path):
+    """id 없는 엔티티 둘을 들이면 파일 둘이 생긴다 — 예전에는 둘 다 unknown.json에 써져 하나만 남았다."""
+    from core.snapshot import create_work_from_snapshot
+
+    lib = tmp_path / "lib"
+    lib.mkdir()
+    data = {
+        "schema_version": "1.0",
+        "source_info": {"title": "t", "document_id": "doc", "interpretation_id": "interp"},
+        "original": {"layers": {}},
+        "interpretation": {"layers": {}, "core_entities": {"concept": [{"label": "甲"}, {"label": "乙"}]}},
+    }
+    out = create_work_from_snapshot(lib, data)
+    files = list((lib / "interpretations" / out["interp_id"] / "core_entities" / "concept").glob("*.json"))
+    labels = sorted(json.loads(f.read_text(encoding="utf-8"))["label"] for f in files)
+    assert labels == ["乙", "甲"] and not any(f.stem == "unknown" for f in files)
+    assert sum("새 id" in w for w in out["warnings"]) == 2
+
+
+def test_layout_reset_reports_a_failed_save(tmp_path):
+    """레이아웃 «모두 삭제»의 저장이 실패하면 알린다 — 예전 _saveLayout은 실패를 삼켜 알림이 닿지 않았다."""
+    setup = """
+const toasts = [];
+globalThis.viewerState = { docId: "d", partId: "vol1", pageNum: 1 };
+globalThis.layoutState = { blocks: [{ block_id: "p01_b01" }], imageWidth: 100, imageHeight: 100 };
+globalThis.pdfState = {};
+globalThis.confirm = () => true;
+globalThis.showToast = (m, k) => toasts.push(k);
+globalThis.fetch = async () => ({ ok: false, json: async () => ({ error: "디스크 가득" }) });
+for (const f of ["_updateLayoutSaveStatus", "_redrawOverlay", "_updatePropsForm", "_updateBlockList"]) globalThis[f] = () => {};
+"""
+    out = run_js(tmp_path, "layout-editor.js", ["_saveLayout", "_resetAllBlocks"], setup,
+                 "await _resetAllBlocks(); console.log(JSON.stringify({ toasts }));")
+    assert "error" in out["toasts"]
+
+
+def test_no_docstring_is_separated_from_its_function():
+    """설명이 주인 함수에서 떨어지지 않았는가 — 떨어지면 읽는 사람이 엉뚱한 함수의 설명으로 읽는다.
+    잡는 꼴 둘: JS «함수 설명 뒤에 또 설명», Python «첫 문장 뒤의 설명 문자열». 설명과 함수 사이에 변수가
+    끼인 꼴은 그 설명이 변수의 것인지 함수의 것인지 기계로 가르지 못해(변수 설명이 정상인 자리가 있다)
+    읽어서 고쳤다(work-order). 다른 함수 설명이 걸린 꼴도 같다(composition-editor).
+    2026-10-11 전수·보충에서 원래 일곱, 새로 넣은 도우미가 만든 다섯을 고쳤다."""
+    bad = []
+    for f in STATIC_JS.glob("*.js"):
+        lines = f.read_text(encoding="utf-8").splitlines()
+        nb = [i for i, ln in enumerate(lines) if ln.strip()]  # 빈 줄을 뺀 줄 번호
+        for k, i in enumerate(nb[:-1]):
+            if lines[i].strip() != "*/" or not lines[nb[k + 1]].startswith("/**"):
+                continue
+            # 앞 블록이 어디서 열렸나 — 절 머리말(/* ─)이나 파일 머리말(첫 줄)이면 정상이다
+            opener = next(j for j in range(i, -1, -1) if lines[j].lstrip().startswith("/*"))
+            if lines[opener].startswith("/**") and opener > 0:
+                bad.append(f"{f.name}:{nb[k + 1] + 1} 설명 뒤에 또 설명")
+    # Python: 함수·클래스 본문의 첫 문장이 설명이 아닌데 바로 뒤(다음 def 전 세 줄 안)에 설명 꼴 문자열이
+    # 있으면 그 문자열은 __doc__가 아니라 버려지는 식이다(composition.py·rule_induction.py, 2026-10-11 보충)
+    for f in (Path("src")).rglob("*.py"):
+        lines = f.read_text(encoding="utf-8").splitlines()
+        for i, ln in enumerate(lines):
+            if not (re.match(r"\s*(async def|def|class) ", ln) and ln.rstrip().endswith(":")):
+                continue
+            body = [j for j in range(i + 1, min(i + 6, len(lines))) if lines[j].strip()]
+            if not body or lines[body[0]].strip().startswith(('"""', 'r"""')):
+                continue
+            ind = len(lines[body[0]]) - len(lines[body[0]].lstrip())
+            for j in body[1:4]:
+                if re.match(r"\s*(async def|def|class|@)", lines[j]):
+                    break
+                if lines[j].strip().startswith('"""') and len(lines[j]) - len(lines[j].lstrip()) == ind:
+                    bad.append(f"{f.as_posix()}:{j + 1} 첫 문장 뒤의 설명 문자열")
+                    break
+    assert bad == [], bad
+
+
+def test_toast_escape_blocks_quotes():
+    """toast.js의 escapeHtml은 즉시 실행 함수 안에 있어 위 시험이 잡지 못한다 — 같은 규칙을 소스로 본다."""
+    src = (STATIC_JS / "toast.js").read_text(encoding="utf-8")
+    m = re.search(r"function escapeHtml\(text\)\s*\{(.*?)\n  \}", src, re.S)
+    assert m and '"/g' in m.group(1) and "'/g" in m.group(1), "toast.js escapeHtml이 따옴표를 막지 않는다"
 
 
 # ── 2차 전수(S-20261011-185238)가 찾은 셋 — 스냅샷 경로·폴더 배치 이어 하기·Paddle 워커 시간 제한 ──
@@ -982,6 +1604,14 @@ def test_embed_folder_doc_id_is_stable_per_file(tmp_path):
     loop = inspect.getsource(ef.embed_folder)
     assert "_safe_doc_id(task.path)" in loop and "time.time() * 10" not in loop
 
+    # 같은 자리에 다른 스캔을 덮어 두면 다른 id — 옛 OCR을 이어 쓰지 않는다
+    real = tmp_path / "논문.pdf"
+    real.write_bytes(b"%PDF-1 first scan")
+    first = ef._safe_doc_id(real)
+    assert ef._safe_doc_id(real) == first
+    real.write_bytes(b"%PDF-1 a different, longer scan")
+    assert ef._safe_doc_id(real) != first
+
 
 def test_paddle_worker_call_honours_its_timeout():
     """워커가 답하지 않으면 timeout초 뒤 실패로 돌아온다 — 전에는 timeout을 받기만 하고 끝없이 기다렸다."""
@@ -1025,3 +1655,594 @@ def test_paddle_worker_call_honours_its_timeout():
         w = getattr(eng, "_worker", None)
         if w is not None and w is not stuck and w.poll() is None:
             w.kill()
+
+
+# ── 보충 재확인(바뀐 80파일, 2026-10-11 밤) — B-067~ ─────────────────────────────────────
+
+
+def test_pick_from_correction_char_without_corrected_text(tmp_path):
+    """B-067: 교정본이 빈 문자열일 때 «찍기» 미리보기가 원문으로 보인다. 전에는 정의되지 않은 `raw`로 ReferenceError."""
+    setup = """
+const form = { querySelector: (s) => (globalThis._f[s] = globalThis._f[s] || { value: "", textContent: "" }) };
+globalThis._f = {};
+globalThis.contentsState = { picking: true, pickForm: form };
+globalThis.correctionState = { pageText: "甲乙\\n丙丁", correctedText: "", corrections: [] };
+globalThis.viewerState = { pageNum: 1 };
+globalThis._drawAnchorCanvas = () => {}; globalThis._markPicked = () => {};
+"""
+    out = run_js(tmp_path, "contents-tree.js", ["pickBoundaryFromCorrectionChar"], setup,
+                 'const ok = pickBoundaryFromCorrectionChar(3); console.log(JSON.stringify({ ok, hint: _f[".contents-pick-hint"].textContent }));')
+    assert out["ok"] is True
+    assert "丙" in out["hint"], out
+
+
+def test_backup_info_finds_the_subfolder_backup(tmp_path):
+    """B-067: 고른 폴더에 다른 파일이 있어 하위 폴더에 백업하면 설정 화면의 «마지막 백업»도 그것을 읽는다."""
+    from core.backup import backup_library, get_backup_info
+
+    lib = _tiny_library(tmp_path)
+    drive = tmp_path / "drive"
+    drive.mkdir()
+    (drive / "other.txt").write_text("x", encoding="utf-8")
+    assert backup_library(lib, drive)["success"]
+    assert get_backup_info(drive) is None  # 고른 폴더 자체에는 메타가 없다
+    info = get_backup_info(drive, lib.name)
+    assert info is not None and info.get("timestamp")
+
+
+def test_interpretation_with_entities_or_citations_is_not_empty(tmp_path):
+    """B-067: 엔티티·인용 표시·쪽 비고만 있는 해석 저장소도 «비었다»가 아니다 — 추출 모드 정리가 휴지통에 보내지 않는다."""
+    from app.routers.interpretations import _interpretation_content_files
+
+    for sub in ("core_entities/tags/t1.json", "citation_marks/vol1_page_001_citation_marks.json", "_notes/vol1/page_001.json"):
+        root = tmp_path / sub.split("/")[0]
+        f = root / sub
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("{}", encoding="utf-8")
+        assert _interpretation_content_files(root), sub
+
+
+def test_trash_restore_retries_and_puts_the_item_back_in_the_manifest(tmp_path, monkeypatch):
+    """B-068: 휴지통에서 되돌리면 library_manifest.json에 다시 적고, 잠겨 있으면 몇 번 다시 해 본 뒤 휴지통에 그대로 둔 채 알린다."""
+    import json as _json
+
+    import core.library as libmod
+
+    lib = _tiny_library(tmp_path)
+    doc = lib / "documents" / "doc1"
+    doc.mkdir()
+    (doc / "manifest.json").write_text(_json.dumps({"document_id": "doc1", "title": "제목"}), encoding="utf-8")
+    (lib / "library_manifest.json").write_text(_json.dumps({"documents": [{"document_id": "doc1", "title": "제목"}]}), encoding="utf-8")
+    name = libmod.trash_document(lib, "doc1")["trash_name"]
+    assert _json.loads((lib / "library_manifest.json").read_text(encoding="utf-8"))["documents"] == []
+
+    tries = []
+    real_rename = libmod.os.rename
+
+    def locked(src, dst):
+        tries.append(1)
+        raise PermissionError("잠김")
+
+    monkeypatch.setattr(libmod.time, "sleep", lambda s: None)
+    monkeypatch.setattr(libmod.os, "rename", locked)
+    with pytest.raises(PermissionError):
+        libmod.restore_from_trash(lib, "documents", name)
+    assert len(tries) > 1, "한 번만 해 보고 포기했다"
+    assert (lib / ".trash" / "documents" / name).exists()
+
+    monkeypatch.setattr(libmod.os, "rename", real_rename)
+    assert libmod.restore_from_trash(lib, "documents", name) == "doc1"
+    docs = _json.loads((lib / "library_manifest.json").read_text(encoding="utf-8"))["documents"]
+    assert [d["document_id"] for d in docs] == ["doc1"] and docs[0]["title"] == "제목"
+
+
+def test_trash_routes_report_a_locked_folder_as_409_once(client, monkeypatch, tmp_path):
+    """B-068: 잠긴 폴더의 휴지통 보내기·되돌리기는 500이 아니라 409, 안내는 한 번만 실린다."""
+    import app.routers.documents as docs_r
+    import app.routers.interpretations as interp_r
+    import app.routers.library as lib_r
+
+    for mod in (docs_r, interp_r, lib_r):  # «서고 없음» 409로 먼저 빠지지 않게
+        monkeypatch.setattr(mod, "get_library_path", lambda: tmp_path)
+
+    msg = "'x'을(를) 휴지통으로 옮기지 못했습니다 — …\n→ 해결: 닫고 다시"
+
+    def boom(*a, **k):
+        raise PermissionError(msg)
+
+    monkeypatch.setattr(interp_r, "trash_interpretation", boom)
+    monkeypatch.setattr(docs_r, "trash_document", boom)
+    monkeypatch.setattr(lib_r, "restore_from_trash", boom)
+    r1 = client.delete("/api/interpretations/x")
+    r2 = client.delete("/api/documents/x")
+    r3 = client.post("/api/trash/documents/20260101T000000_x/restore")
+    for r in (r1, r2, r3):
+        assert r.status_code == 409, (r.status_code, r.text)
+        assert r.json()["error"].count("해결") == 1
+
+
+def test_correction_reset_rolls_back_when_the_save_fails(tmp_path):
+    """B-069: 리셋 저장이 실패하면 상태·편집 칸을 리셋 전으로 되돌린다 — 화면은 옛 교정인데 상태는 비어 다음 저장이 지우던 것."""
+    setup = """
+const ta = { value: "고친 글" };
+globalThis.document = { getElementById: (id) => (id === "corr-freetext-editor" ? ta : null) };
+globalThis.viewerState = { docId: "d", partId: "v", pageNum: 1 };
+globalThis.correctionState = { corrections: [{ id: 1 }], correctedText: "고친 글", pageText: "원문", isDirty: false };
+globalThis.confirm = () => true; const toasts = []; globalThis.showToast = (m) => toasts.push(m);
+globalThis._saveCorrections = async () => false;
+globalThis._renderCorrectionView = () => {}; globalThis._renderCorrList = () => {}; globalThis._updateCorrCount = () => {};
+"""
+    out = run_js(tmp_path, "correction-editor.js", ["_resetAllCorrections"], setup,
+                 "await _resetAllCorrections(); console.log(JSON.stringify({ n: correctionState.corrections.length, t: correctionState.correctedText, ta: ta.value, toasts }));")
+    assert out["n"] == 1 and out["t"] == "고친 글" and out["ta"] == "고친 글", out
+    assert out["toasts"], "실패를 알리지 않았다"
+
+
+def test_split_and_delete_report_partial_failure(tmp_path):
+    """B-069: 서버가 207(일부 실패)을 주면 쪼개기·단위 삭제가 «완료»라 하지 않고 오류를 알린다."""
+    setup = """
+const toasts = []; const status = [];
+globalThis.showToast = (m, kind) => toasts.push(kind + ":" + m);
+globalThis._updateCompStatus = (m) => status.push(m);
+globalThis.viewerState = { docId: "d", partId: "v" };
+globalThis.compState = { selectedTb: { id: "u1" }, selectedTbId: "u1", units: [] };
+globalThis.document = { getElementById: () => ({ value: "가\\n===\\n나\\n===\\n다" }) };
+globalThis._parseSplitPieces = (v) => v.split("===");
+globalThis._cancelSplit = () => {}; globalThis._loadCompositionData = async () => {};
+globalThis.refreshContentsTree = async () => {}; globalThis.confirm = () => true;
+globalThis.fetch = async () => ({ ok: true, status: 207, json: async () => ({ created_count: 1, errors: ["조각 2: 못 찾음"] }) });
+"""
+    out = run_js(tmp_path, "composition-editor.js", ["_executeSplit", "_deleteUnit"], setup,
+                 "await _executeSplit(); await _deleteUnit({ id: 'u1', sequence_index: 1, original_text: '가' }); console.log(JSON.stringify({ toasts, status }));")
+    assert any("일부 실패" in t and "조각 2" in t for t in out["toasts"]), out
+    assert not any("쪼개기 완료" in s for s in out["status"])
+    assert any(t.startswith("error:삭제 실패") for t in out["toasts"]), out
+    assert not any("삭제 완료" in s for s in out["status"]), out
+
+
+def test_annotation_card_type_is_escaped():
+    """B-069: 주석 카드의 유형 아이콘·이름·색(사용자 정의 유형 포함)이 이스케이프된다."""
+    src = (STATIC_JS / "annotation-editor.js").read_text(encoding="utf-8")
+    assert "${typeInfo.icon} ${typeInfo.label}" not in src
+    assert 'style="color:${_escAttr(typeInfo.color)}">${_escHtml(typeInfo.icon)} ${_escHtml(typeInfo.label)}' in src
+
+
+def test_pdf_load_failure_keeps_the_canvas(tmp_path):
+    """B-070: PDF를 못 열면 안내만 얹고 캔버스는 숨긴다 — 전에는 컨테이너를 통째로 바꿔 다른 문헌의 PDF도 그려지지 않았다."""
+    src = (STATIC_JS / "pdf-renderer.js").read_text(encoding="utf-8")
+    assert "container.innerHTML =" not in src.split("async function loadPdfPage(")[1].split("\n}\n")[0]
+    setup = """
+const kids = []; const wrapper = { hidden: false };
+const container = { appendChild: (n) => kids.push(n) };
+globalThis.document = {
+  getElementById: (id) => id === "pdf-canvas-container" ? container : id === "pdf-canvas-wrapper" ? wrapper
+    : (id === "pdf-load-failed" ? kids.find((k) => k.id === id) || null : null),
+  createElement: () => ({ style: {}, hidden: false }),
+};
+"""
+    out = run_js(tmp_path, "pdf-renderer.js", ["_showPdfLoadFailed"], setup,
+                 "_showPdfLoadFailed(true); const a = [wrapper.hidden, kids.length]; _showPdfLoadFailed(false); console.log(JSON.stringify({ a, b: [wrapper.hidden, kids[0].hidden, kids.length] }));")
+    assert out["a"] == [True, 1] and out["b"] == [False, True, 1], out
+
+
+def test_notes_save_waits_for_the_running_save(tmp_path):
+    """B-070: 비고 저장이 도는 중에 다음 저장이 오면 기다렸다가 저장한다 — 전에는 그냥 돌아가 편집이 사라졌다."""
+    setup = """
+const puts = []; let release;
+globalThis.fetch = (url, opt) => { puts.push(JSON.parse(opt.body).entries.map((e) => e.text).join());
+  return puts.length === 1 ? new Promise((r) => { release = () => r({ ok: true }); }) : Promise.resolve({ ok: true }); };
+globalThis.document = { getElementById: () => null };
+globalThis.notesState = { saving: false, savingPromise: null, entries: [] };
+"""
+    out = run_js(tmp_path, "notes-panel.js", ["_saveNotes"], setup, """
+const first = _saveNotes({ interpId: "i", partId: "v", pageNum: 1, entries: [{ text: "가" }] });
+const second = _saveNotes({ interpId: "i", partId: "v", pageNum: 2, entries: [{ text: "나" }] });
+await new Promise((r) => setTimeout(r, 10)); release(); await first; await second;
+console.log(JSON.stringify({ puts }));""")
+    assert out["puts"] == ["가", "나"], out
+
+
+def test_screen_text_matches_behaviour():
+    """B-071: 화면 문구·입력칸이 실제 동작과 맞는다 — URL 모드 ID 자동, 확장 한자 한 글자, 위 바 쪽 번호, 해시 복원 프로필, 내보내기 단추 글자."""
+    html = (STATIC_JS.parent / "index.html").read_text(encoding="utf-8")
+    assert 'id="batch-original-char" maxlength' not in html and 'id="batch-corrected-char" maxlength' not in html
+    assert "Array.from(originalChar).length !== 1" in (STATIC_JS / "batch-correction.js").read_text(encoding="utf-8")
+    assert "_previewData.suggested_doc_id" in (STATIC_JS / "create-document.js").read_text(encoding="utf-8")
+    ws = (STATIC_JS / "workspace.js").read_text(encoding="utf-8")
+    on_page = ws.split("function onPageChanged(")[1].split("\n}\n")[0]
+    assert "updateModeBarContext()" in on_page
+    restore = ws.split("async function _restoreFromHash(")[1].split("\n}\n")[0]
+    assert "applyProfileForDocument(target.docId)" in restore
+    assert 'exportBtn.textContent = "JSON 내보내기"' in ws
+
+
+def test_zip_copy_with_an_old_mark_keeps_differing_files(tmp_path, monkeypatch):
+    """B-072: 지문 없는 옛 zip 표시면 덮기 전에 원격과 다른 파일을 설정 폴더에 남긴다 — 전에는 «고친 것 없음»으로 읽고 덮었다."""
+    import subprocess as _sp
+
+    import core.app_config as cfg
+    import core.updater as up
+
+    root = tmp_path / "app"
+    root.mkdir()
+    env = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+    import os as _os
+
+    e = {**_os.environ, **env}
+    _sp.run(["git", "init", "-q"], cwd=root, check=True, env=e)
+    (root / "a.txt").write_text("원래", encoding="utf-8")
+    _sp.run(["git", "add", "a.txt"], cwd=root, check=True, env=e)
+    _sp.run(["git", "commit", "-qm", "x"], cwd=root, check=True, env=e)
+    (root / "a.txt").write_text("손으로 고침", encoding="utf-8")
+    (root / up.ZIP_MARK).write_text("converted from zip\n", encoding="utf-8")
+    assert up.zip_user_changes(root) is None
+    monkeypatch.setattr(cfg, "CONFIG_DIR", tmp_path / "cfg")
+    kept = up._keep_zip_files(root)
+    assert kept is not None and (kept / "a.txt").read_text(encoding="utf-8") == "손으로 고침"
+    src = Path(up.__file__).read_text(encoding="utf-8")
+    assert "elif changed is None:" in src and "_keep_zip_files()" in src
+
+
+def test_llm_cost_and_ollama_retry_window():
+    """B-072: 쓸 수 없는 ChatGPT 계정도 «구독»(무료 아님, D-056), Ollama가 사고를 켜 다시 부를 때 문맥 창도 다시 잰다."""
+    router = (Path("src") / "llm" / "router.py").read_text(encoding="utf-8")
+    assert '"free" if provider.provider_id in ("ollama", "openai_oauth")' not in router
+    oll = (Path("src") / "llm" / "providers" / "ollama.py").read_text(encoding="utf-8")
+    assert "_gen_options(max_tokens + budget" in oll
+
+
+def test_bibliography_source_link_is_http_only(tmp_path):
+    """B-073: 서지의 원본 주소는 http(s)만 링크가 된다. 판식 값은 이스케이프한다."""
+    out = run_js(tmp_path, "bibliography.js", ["_formatDigitalSource", "_escapeHtmlBibliography"], _DOM_STUB,
+                 'console.log(JSON.stringify({ bad: _formatDigitalSource({ platform: "p", source_url: "javascript:alert(1)" }), good: _formatDigitalSource({ platform: "p", source_url: "https://x.org/a" }) }));')
+    assert "<a " not in out["bad"] and "javascript:alert(1)" in out["bad"]
+    assert 'href="https://x.org/a"' in out["good"]
+    src = (STATIC_JS / "bibliography.js").read_text(encoding="utf-8")
+    pansik = src.split("function _formatPansik(")[1].split("\n}\n")[0]
+    assert "_escapeHtmlBibliography(String(v))" in pansik and "<br>원문:" in pansik
+
+
+def test_server_autodetect_asks_and_ignores_a_moved_page(tmp_path):
+    """B-074: 서버 엔진 자동 감지도 기존 블록을 덮기 전에 묻고, 감지 중 쪽을 옮기면 결과를 버린다. 0건이면 기존 블록을 그대로 둔다."""
+    base = """
+globalThis.viewerState = { docId: "d", partId: "v", pageNum: 1 };
+globalThis.layoutState = { blocks: [{ block_id: "p01_b01" }], isDirty: false };
+globalThis.document = { getElementById: () => null };
+globalThis.showToast = () => {}; const st = []; globalThis._setAutodetectStatus = (m) => st.push(m);
+globalThis.pdfState = { pdfDoc: { getPage: async () => ({}) } }; globalThis.pdfViewport = () => ({ width: 100, height: 100 });
+globalThis._redrawOverlay = () => {}; globalThis._updateBlockList = () => {}; globalThis._saveLayout = async () => true;
+globalThis.performance = { now: () => 0 };
+"""
+    moved = base + """globalThis.confirm = () => true;
+globalThis.fetch = async () => { viewerState.pageNum = 2; return { ok: true, json: async () => ({ blocks: [{ bbox: [0,0,1,1] }], image_width: 100, image_height: 100, block_count: 1 }) }; };"""
+    out = run_js(tmp_path, "layout-editor.js", ["_runAutoDetectServer", "_layoutStillOn", "_confirmReplaceBlocks"], moved,
+                 "await _runAutoDetectServer('ndlocr'); console.log(JSON.stringify({ ids: layoutState.blocks.map((b) => b.block_id), st }));")
+    assert out["ids"] == ["p01_b01"], out
+    declined = base + """let asked = 0; globalThis.confirm = () => { asked++; return false; };
+globalThis.fetch = async () => ({ ok: true, json: async () => ({ blocks: [{ bbox: [0,0,1,1] }], image_width: 100, image_height: 100, block_count: 1 }) });"""
+    (tmp_path / "b").mkdir()
+    out = run_js(tmp_path / "b", "layout-editor.js", ["_runAutoDetectServer", "_layoutStillOn", "_confirmReplaceBlocks"], declined,
+                 "await _runAutoDetectServer('ndlocr'); console.log(JSON.stringify({ ids: layoutState.blocks.map((b) => b.block_id), asked }));")
+    assert out == {"ids": ["p01_b01"], "asked": 1}, out
+    empty = base + """globalThis.confirm = () => true;
+globalThis.fetch = async () => ({ ok: true, json: async () => ({ blocks: [], image_width: 100, image_height: 100, block_count: 0 }) });"""
+    (tmp_path / "c").mkdir()
+    out = run_js(tmp_path / "c", "layout-editor.js", ["_runAutoDetectServer", "_layoutStillOn", "_confirmReplaceBlocks"], empty,
+                 "await _runAutoDetectServer('ndlocr'); console.log(JSON.stringify({ ids: layoutState.blocks.map((b) => b.block_id), dirty: layoutState.isDirty }));")
+    assert out == {"ids": ["p01_b01"], "dirty": False}, out
+
+
+def test_llm_correction_draft_is_not_drawn_on_another_page(tmp_path):
+    """B-074: LLM 교정 도중 쪽을 옮기면 옛 쪽 초안을 지금 쪽에 그리지 않는다(「적용」이 지금 쪽으로 가던 것)."""
+    setup = """
+const drawn = [];
+globalThis.viewerState = { docId: "d", partId: "v", pageNum: 3 };
+globalThis.document = { getElementById: () => null, querySelectorAll: () => [] };
+globalThis.showToast = () => {}; globalThis.getLlmModelSelection = () => ({});
+globalThis.fetch = async () => { viewerState.pageNum = 4; return { ok: true, json: async () => ({ blocks: [] }) }; };
+globalThis._renderCorrectionDraft = (d) => drawn.push(d);
+globalThis._showProgress = () => {}; globalThis._disableButtons = () => {}; globalThis.ocrState = {};
+"""
+    out = run_js(tmp_path, "ocr-panel.js", ["_runCorrection"], setup, "await _runCorrection('low', null); console.log(JSON.stringify({ drawn }));")
+    assert out["drawn"] == []
+
+
+def test_ai_translation_reports_a_failed_save(tmp_path):
+    """B-075: AI 번역을 받고 저장(PUT·추가)이 실패하면 false — 일괄 번역이 «실패 0건»으로 보고하던 것."""
+    setup = """
+globalThis.transState = { sentences: [{ start: 0, end: 1, text: "甲" }], translations: [], blockId: "u1" };
+globalThis.interpState = { interpId: "i" }; globalThis.viewerState = { docId: "d", partId: "v", pageNum: 1 };
+globalThis.document = { querySelectorAll: () => [] }; globalThis.confirm = () => true;
+const toasts = []; globalThis.showToast = (m) => toasts.push(m);
+globalThis.fetchWithSSE = async () => ({ translation: "번역" });
+globalThis._findTranslation = () => null; globalThis.interpPartQuery = () => ""; globalThis._transApiBlockId = () => "u1";
+globalThis._renderTransCards = () => {}; globalThis._renderTransStatusSummary = () => {};
+globalThis.fetch = async () => ({ ok: false, status: 500, json: async () => ({ error: "디스크" }) });
+"""
+    out = run_js(tmp_path, "translation-editor.js", ["_aiTranslateSingle", "_addManualTranslation"], setup,
+                 "const r = await _aiTranslateSingle(0); console.log(JSON.stringify({ r, toasts }));")
+    assert out["r"] is False and any("디스크" in t for t in out["toasts"]), out
+
+
+def test_dict_layer_json_save_returns_its_size(tmp_path):
+    """B-075: 해석 층에 dict JSON을 저장하면 크기를 돌려준다 — 전에는 UnboundLocalError로 라우트가 400, git 커밋을 건너뛰었다."""
+    from core.interpretation import save_layer_content
+
+    out = save_layer_content(tmp_path, "L7_annotation", "", "vol1", 1, {"blocks": []})
+    assert out["status"] == "saved" and out["size"] > 0
+
+
+def test_snapshot_entity_with_empty_id_gets_a_new_id_instead_of_422():
+    """B-075: id가 빈 엔티티는 경로 검사에 걸리지 않는다 — 들일 때 새 UUID를 붙인다(B-063과 같은 길)."""
+    from core.snapshot import unsafe_snapshot_paths
+
+    data = {"original": {"layers": {}}, "interpretation": {"core_entities": {"tags": [{"id": ""}, {"label": "x"}]}}}
+    assert not [p for p in unsafe_snapshot_paths(data) if "엔티티 id" in p]
+
+
+def test_env_reader_refuses_non_korean_8bit_and_llm_config_reads_cp949(tmp_path):
+    """B-076: .env를 cp949로 읽는 것은 한글일 때만 — 라틴 문자 8비트 파일을 cp949로 오해해 다시 쓰면 글자가 바뀐다.
+    LLM 설정도 설정 화면과 같은 판독으로 한글 cp949 .env를 읽는다."""
+    from core.env_settings import _read_lines_for_write
+    from llm.config import LlmConfig
+
+    latin = tmp_path / "latin.env"
+    latin.write_bytes("# café\nX=1\n".encode("latin-1"))
+    with pytest.raises(ValueError):
+        _read_lines_for_write(latin)
+    ko = tmp_path / "ko.env"
+    ko.write_bytes("# 주석\nMY_NAME=홍길동\n".encode("cp949"))
+    assert _read_lines_for_write(ko)[1] == "MY_NAME=홍길동"
+    assert LlmConfig._load_dotenv(LlmConfig.__new__(LlmConfig), ko).get("MY_NAME") == "홍길동"
+
+
+def test_small_ui_fixes_are_in_place():
+    """B-076: 지역 이스케이프도 작은따옴표까지, 쪽 수만 세는 PDF 열기는 통째로 받지 않음, 레이아웃 교정 배지 배경, 토스트 줄바꿈."""
+    assert """"'": "&#39;" """.strip() in (STATIC_JS / "ocr-panel.js").read_text(encoding="utf-8")
+    assert "getDocument({ url, disableAutoFetch: true, disableStream: true })" in (STATIC_JS / "sidebar-tree.js").read_text(encoding="utf-8")
+    css = (STATIC_JS.parent / "css" / "workspace.css").read_text(encoding="utf-8")
+    assert ".corr-list-type.type-layout-correction {" in css
+    assert "white-space: pre-line;" in css.split(".toast-message {")[1].split("}")[0]
+
+
+_UTF16_SLICE = re.compile(r"\b(text|raw|meaning|snippet|original\w*|content|label|title|preview\w*|selectedText|source_text_snapshot)\w*\)?\.(slice|substring|substr)\(\s*0\s*,")
+
+
+def test_display_previews_cut_by_code_points():
+    """B-076: 화면에 보이려고 자르는 미리보기도 코드포인트로 자른다 — UTF-16으로 자르면 확장 한자 반쪽이 남는다."""
+    bad = []
+    for f in STATIC_JS.glob("*.js"):
+        for n, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+            # «…Chars(text.substring(0, i))»는 정규식 위치(UTF-16)로 자른 뒤 코드포인트로 세는 올바른 꼴이다
+            if _UTF16_SLICE.search(line) and "Array.from" not in line and "Chars(" not in line:
+                bad.append(f"{f.name}:{n}: {line.strip()[:80]}")
+    assert bad == [], bad
+
+
+# ── B-078: 릴리스 리뷰(Codex, 2026-10-11)가 찾은 것 ─────────────────────────────
+
+
+def _git_repo(path: Path, files: dict[str, str]) -> None:
+    import os as _os
+    import subprocess as _sp
+
+    e = {**_os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+    path.mkdir(parents=True, exist_ok=True)
+    for args in (["init", "-q"], ["symbolic-ref", "HEAD", "refs/heads/main"]):
+        _sp.run(["git", *args], cwd=path, check=True, env=e, capture_output=True)
+    for rel, text in files.items():
+        (path / rel).write_text(text, encoding="utf-8")
+    _sp.run(["git", "add", "."], cwd=path, check=True, env=e, capture_output=True)
+    _sp.run(["git", "commit", "-qm", "x"], cwd=path, check=True, env=e, capture_output=True)
+
+
+def test_reset_hard_keeps_user_files_the_new_version_starts_tracking(tmp_path, monkeypatch):
+    """B-078: zip에서 바꾼 뒤 사용자가 만든 파일을 새 판이 같은 경로로 추적하면, reset --hard 전에
+    update-backup/에 남는다 — 전에는 지문에도 dirty 검사에도 안 걸려 묻지 않고 덮였다."""
+    import shutil as _sh
+    import subprocess as _sp
+
+    import core.app_config as cfg
+    import core.updater as up
+
+    if _sh.which("git") is None:
+        pytest.skip("git이 없다")
+    origin = tmp_path / "origin"
+    _git_repo(origin, {"app.py": "v1\n"})
+    z = tmp_path / "zip"
+    z.mkdir()
+    (z / "app.py").write_text("v1\n", encoding="utf-8")
+    assert up.ensure_git_checkout(z, remote=str(origin))["ok"]
+    (z / "내메모.txt").write_text("사용자가 만든 파일", encoding="utf-8")   # 추적 밖, 한글 경로
+    (origin / "내메모.txt").write_text("새 판의 파일", encoding="utf-8")
+    _sp.run(["git", "add", "."], cwd=origin, check=True, capture_output=True)
+    _sp.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "y"], cwd=origin, check=True, capture_output=True)
+    _sp.run(["git", "fetch", "-q", "origin", "main"], cwd=z, check=True, capture_output=True)
+    monkeypatch.setattr(cfg, "CONFIG_DIR", tmp_path / "cfg")
+    steps: list[dict] = []
+    up._note_kept_collisions(z, steps)
+    assert steps and "update-backup" in steps[0]["output"], steps
+    kept = list((tmp_path / "cfg" / "update-backup").rglob("내메모.txt"))
+    assert len(kept) == 1 and kept[0].read_text(encoding="utf-8") == "사용자가 만든 파일"
+
+
+def test_collision_backup_covers_folder_and_ancestor_shapes(tmp_path, monkeypatch):
+    """B-078 재검토: 새 판의 파일 자리가 지금은 추적 밖 폴더이거나(그 안 파일이 지워진다),
+    새 판 경로의 조상이 지금은 추적 밖 파일이어도(그 파일이 지워진다) 남긴다."""
+    import shutil as _sh
+    import subprocess as _sp
+
+    import core.app_config as cfg
+    import core.updater as up
+
+    if _sh.which("git") is None:
+        pytest.skip("git이 없다")
+    origin = tmp_path / "origin"
+    _git_repo(origin, {"app.py": "v1\n"})
+    z = tmp_path / "zip"
+    z.mkdir()
+    (z / "app.py").write_text("v1\n", encoding="utf-8")
+    assert up.ensure_git_checkout(z, remote=str(origin))["ok"]
+    (z / "notes").mkdir()
+    (z / "notes" / "user.md").write_text("폴더 안 사용자 파일", encoding="utf-8")
+    (z / "docs").write_text("조상 자리의 사용자 파일", encoding="utf-8")
+    (origin / "notes").write_text("새 판의 파일", encoding="utf-8")
+    (origin / "docs").mkdir()
+    (origin / "docs" / "new.md").write_text("새 판", encoding="utf-8")
+    _sp.run(["git", "add", "."], cwd=origin, check=True, capture_output=True)
+    _sp.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "y"], cwd=origin, check=True, capture_output=True)
+    _sp.run(["git", "fetch", "-q", "origin", "main"], cwd=z, check=True, capture_output=True)
+    monkeypatch.setattr(cfg, "CONFIG_DIR", tmp_path / "cfg")
+    ok, kept = up._keep_untracked_collisions(z)
+    assert ok and kept is not None
+    assert (kept / "notes" / "user.md").read_text(encoding="utf-8") == "폴더 안 사용자 파일"
+    assert (kept / "docs").read_text(encoding="utf-8") == "조상 자리의 사용자 파일"
+
+
+def _fake_update_run(monkeypatch, up, *, lookup_ok=True, pull_fails=False):
+    """_apply_update_locked가 부르는 git을 기록만 하는 가짜로 바꾼다. 출력: 부른 순서 목록."""
+    calls: list[str] = []
+
+    def fake_run(args, cwd, timeout):
+        a = list(args)
+        if a[:2] == ["git", "ls-tree"] or a[:2] == ["git", "ls-files"]:
+            calls.append("lookup")
+            return (0, "") if lookup_ok else (128, "fatal: 조회 실패")
+        if a[:3] == ["git", "reset", "--hard"]:
+            calls.append("reset")
+            return 0, ""
+        if a[:2] == ["git", "pull"]:
+            calls.append("pull")
+            return (1, "not possible to fast-forward") if pull_fails else (0, "")
+        if a[:3] == ["git", "rev-parse", "--abbrev-ref"]:
+            return 0, "main"
+        if a[:2] == ["git", "rev-list"]:
+            return 0, "0"
+        calls.append(" ".join(a[:2]))
+        return 0, ""
+
+    monkeypatch.setattr(up, "_run", fake_run)
+    return calls
+
+
+@pytest.mark.parametrize("zip_mark", [True, False])
+def test_collision_lookup_runs_before_each_reset_and_failure_stops_it(tmp_path, monkeypatch, zip_mark):
+    """B-078 재검토: 두 reset --hard 자리(zip 사본 맞추기·pull 실패 뒤 맞추기) 모두 «덮일 파일 확인»이
+    reset보다 먼저 돌고, 그 조회가 실패하면 reset 없이 멈춘다 — 전에는 실패를 «충돌 없음»으로 읽었다."""
+    import core.updater as up
+
+    root = tmp_path / "app"
+    root.mkdir()
+    if zip_mark:
+        (root / up.ZIP_MARK).write_text("{}", encoding="utf-8")
+    calls = _fake_update_run(monkeypatch, up, pull_fails=not zip_mark)
+    r = up._apply_update_locked(root, [], lambda: ["uv", "sync"])
+    assert r["ok"], r
+    assert "reset" in calls and calls.index("lookup") < calls.index("reset"), calls
+
+    if zip_mark:
+        (root / up.ZIP_MARK).write_text("{}", encoding="utf-8")
+    calls = _fake_update_run(monkeypatch, up, lookup_ok=False, pull_fails=not zip_mark)
+    r = up._apply_update_locked(root, [], lambda: ["uv", "sync"])
+    assert not r["ok"] and "reset" not in calls, (r, calls)
+    assert any(s["name"] == "새 판이 덮을 파일 확인" and not s["ok"] for s in r["steps"])
+
+
+def test_update_backups_in_the_same_second_do_not_overwrite_each_other(tmp_path, monkeypatch):
+    """B-078 재검토: 같은 초에 두 번 남겨도 앞 백업이 덮이지 않는다 — 전에는 폴더 이름이 초 단위라 같은 폴더였다."""
+    import datetime as _real_dt
+    import sys as _sys
+    import types as _types
+
+    import core.app_config as cfg
+    import core.updater as up
+
+    monkeypatch.setattr(cfg, "CONFIG_DIR", tmp_path / "cfg")
+    # 시각을 고정한다 — 두 호출이 초 경계를 넘으면 옛 구현(초 단위 이름)도 통과해 버린다
+    fixed = _real_dt.datetime(2026, 10, 11, 23, 59, 59)
+    fake = _types.ModuleType("datetime")
+    fake.datetime = type("FixedDT", (), {"now": staticmethod(lambda: fixed)})
+    monkeypatch.setitem(_sys.modules, "datetime", fake)
+    root = tmp_path / "app"
+    root.mkdir()
+    (root / "a.txt").write_text("A", encoding="utf-8")
+    first = up._copy_to_update_backup(root, ["a.txt"])
+    (root / "a.txt").write_text("B", encoding="utf-8")
+    second = up._copy_to_update_backup(root, ["a.txt"])
+    assert first != second
+    assert (first / "a.txt").read_text(encoding="utf-8") == "A"
+    assert (second / "a.txt").read_text(encoding="utf-8") == "B"
+
+
+def test_old_zip_mark_backup_includes_staged_and_korean_paths(tmp_path, monkeypatch):
+    """B-078: 지문 없는 옛 zip 표시의 백업이 `git add`한 수정과 한글 경로를 빠뜨리지 않는다 —
+    전에는 `git diff --name-only`(index와 비교, 경로 따옴표)라 둘 다 빠졌다."""
+    import os as _os
+    import shutil as _sh
+    import subprocess as _sp
+
+    import core.app_config as cfg
+    import core.updater as up
+
+    if _sh.which("git") is None:
+        pytest.skip("git이 없다")
+    root = tmp_path / "app"
+    _git_repo(root, {"a.txt": "원래", "해제.md": "원래"})
+    (root / "a.txt").write_text("고쳐서 add함", encoding="utf-8")
+    _sp.run(["git", "add", "a.txt"], cwd=root, check=True, env=_os.environ, capture_output=True)
+    (root / "해제.md").write_text("손으로 고침", encoding="utf-8")
+    monkeypatch.setattr(cfg, "CONFIG_DIR", tmp_path / "cfg")
+    kept = up._keep_zip_files(root)
+    assert kept is not None
+    assert (kept / "a.txt").read_text(encoding="utf-8") == "고쳐서 add함"
+    assert (kept / "해제.md").read_text(encoding="utf-8") == "손으로 고침"
+
+
+def test_late_notes_response_is_not_drawn_on_another_page(tmp_path):
+    """B-078: 3쪽 비고 응답이 4쪽으로 옮긴 뒤 늦게 오면 버린다 — 전에는 4쪽에 3쪽 비고를 그렸고,
+    고치면 4쪽 파일에 3쪽 내용이 저장됐다."""
+    setup = """
+const gates = {};
+globalThis.fetch = (url) => new Promise((res) => {
+  const page = /pages\\/(\\d+)\\//.exec(url)[1];
+  const reply = { ok: true, json: async () => ({ entries: [{ text: page + "쪽 비고" }] }) };
+  if (page === "3") gates.p3 = () => res(reply); else res(reply);
+});
+const _el = () => ({ innerHTML: "", textContent: "" });
+globalThis.document = { getElementById: () => _el() };
+globalThis.interpState = { interpId: "i1" };
+globalThis.viewerState = { partId: "vol1", pageNum: 3 };
+globalThis.notesState = { entries: [], loaded: false, saveTimer: null, pendingTarget: null, saving: false };
+globalThis._renderNotes = () => {};
+"""
+    body = """
+const slow = loadPageNotes();                     // 3쪽 — 응답이 늦는다
+await new Promise((r) => setTimeout(r, 10));
+viewerState.pageNum = 4;
+await loadPageNotes();                            // 4쪽 — 바로 온다
+gates.p3(); await slow;                           // 이제야 3쪽 응답
+console.log(JSON.stringify(notesState.entries));
+"""
+    out = run_js(tmp_path, "notes-panel.js", ["_notesInterpId", "_notesTarget", "_notesStillOn", "_flushNotesSave", "_saveNotes", "_scheduleSave", "loadPageNotes"], setup, body)
+    assert out == [{"text": "4쪽 비고"}], out
+
+
+def test_dictionary_save_keeps_every_section_of_the_same_book(tmp_path):
+    """B-078: 같은 책의 다른 대목 둘(section·url만 다름)이 저장 뒤에도 둘 다 남는다 — 전에는 제목 하나에
+    항목 하나라 마지막 대목이 둘로 복제되고 첫 대목이 사라졌다."""
+    prev = {"headword": "王戎", "source_references": [
+        {"title": "世說新語", "section": "德行", "url": "https://x/1"},
+        {"title": "世說新語", "section": "雅量", "url": "https://x/2"}]}
+    fields = {"ann-dict-headword": "王戎", "ann-dict-meaning": "뜻", "ann-dict-src-refs": "世說新語, 世說新語"}
+    setup = (
+        "let sent = null;\n"
+        "globalThis.fetch = async (url, opt) => { sent = JSON.parse(opt.body); return { ok: true, json: async () => ({}) }; };\n"
+        "const F = " + json.dumps(fields, ensure_ascii=False) + ";\n"
+        "globalThis.document = { getElementById: (id) => (id in F ? { value: F[id] } : null) };\n"
+        "globalThis.viewerState = { pageNum: 1 }; globalThis.interpState = { interpId: 'i1' };\n"
+        "globalThis.annState = { selectedAnnId: 'a1', annotations: [{ id: 'a1', dictionary: " + json.dumps(prev, ensure_ascii=False) + " }] };\n"
+        "globalThis._annApiBlockId = () => 'u1'; globalThis._annPartQuery = () => '';\n"
+        "globalThis._showSaveStatus = () => {}; globalThis._loadBlockAnnotations = async () => {}; globalThis._renderAnnList = () => {};\n"
+    )
+    out = run_js(tmp_path, "annotation-editor.js", ["_saveDictFields"], setup, "await _saveDictFields(); console.log(JSON.stringify(sent));")
+    assert out["dictionary"]["source_references"] == prev["source_references"]

@@ -11,7 +11,6 @@
  *
  * 의존성:
  *   - viewerState (sidebar-tree.js) — docId, partId, pageNum
- *   - correctionState (correction-editor.js) — active 상태
  *
  * 왜 이렇게 하는가:
  *   - 교정 작업 시 OCR이 어디서 틀렸는지 한눈에 보여줌
@@ -44,7 +43,7 @@ function initAlignmentView() {
 }
 
 /**
- * 서브탭(교정/일괄/대조) 전환 이벤트를 설정한다.
+ * 서브탭(교정/일괄/대조/내보내기) 전환 이벤트를 설정한다.
  */
 function _initSubtabEvents() {
   const subtabs = document.querySelectorAll(".corr-subtab");
@@ -431,11 +430,14 @@ function _matchTypeLabel(type) {
 }
 
 function _escapeHtmlAlignment(str) {
-  // 글자 자리 전용 — 브라우저가 텍스트로 넣고 다시 읽어 escape 한다(속성에는 쓰지 않는다).
-  // 옛 이름 `_escapeHtmlAlignment` 은 다섯 파일이 선언했고 구현이 모두 같았다(B-009 실측).
+  // 브라우저가 텍스트로 넣고 다시 읽어 escape 한다(&, <, >). 그 뒤 큰·작은따옴표도 바꿔 속성 자리에도 안전하다.
+  // 옛 이름 `_escapeHtml` 은 다섯 파일이 같은 이름으로 선언했고 구현이 모두 같았다(B-009 실측) — 파일마다
+  // 제 이름을 붙였다.
   const div = document.createElement("div");
   div.textContent = str === null || str === undefined ? "" : str;
-  return div.innerHTML;
+  // 속성 자리(title="…")에 쓰여도 안전하게 따옴표까지 바꾼다 — textContent 는 &, <, > 만 바꾼다
+  // (2026-10-11 2차 전수: 문헌·권 제목·에셋 id·외부 source_url 이 속성을 벗어날 수 있었다)
+  return div.innerHTML.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 function _showAlignmentPlaceholder(msg) {

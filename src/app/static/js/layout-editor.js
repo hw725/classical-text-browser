@@ -495,8 +495,7 @@ function _handleDrawEnd(e) {
 
   // 새 블록 생성
   const pageNum = viewerState.pageNum || 1;
-  const blockNum = layoutState.blocks.length + 1;
-  const blockId = `p${String(pageNum).padStart(2, "0")}_b${String(blockNum).padStart(2, "0")}`;
+  const blockId = _nextLayoutBlockId(pageNum, layoutState.blocks);
 
   const newBlock = {
     block_id: blockId,
@@ -803,7 +802,9 @@ function _updatePropsForm() {
 function _layoutEscHtml(str) {
   const div = document.createElement("div");
   div.textContent = str == null ? "" : String(str);
-  return div.innerHTML;
+  // 속성 자리(title="…")에 쓰여도 안전하게 따옴표까지 바꾼다 — textContent 는 &, <, > 만 바꾼다
+  // (2026-10-11 2차 전수: 문헌·권 제목·에셋 id·외부 source_url 이 속성을 벗어날 수 있었다)
+  return div.innerHTML.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 
@@ -1000,7 +1001,9 @@ async function _resetAllBlocks() {
   layoutState.isDirty = true;
 
   try {
-    await _saveLayout();
+    if (!(await _saveLayout())) {
+      showToast("레이아웃 리셋이 저장되지 않았습니다 — 잠시 뒤 다시 시도하세요.", "error");
+    }
     _redrawOverlay();
     _updatePropsForm();
     _updateBlockList();
@@ -1131,6 +1134,22 @@ async function loadPageLayout(docId, partId, pageNum) {
 
 
 /**
+ * 새로 그린 LayoutBlock의 id — 그 쪽에 남은 `bNN` 가운데 가장 큰 번호 + 1.
+ * 입력: 쪽 번호, 지금 블록 목록. 출력: `p{쪽}_b{번호}`.
+ *
+ * 왜 «개수 + 1»이 아닌가(2026-10-11 2차 전수): b01·b02·b03 중 b01을 지우고 새로 그리면 개수+1이
+ * b03이 되어 남은 b03과 겹쳤다. 스키마에 유일성 검사가 없어 선택·삭제·OCR L2 매칭이 섞인다.
+ */
+function _nextLayoutBlockId(pageNum, blocks) {
+  let max = 0;
+  for (const b of blocks || []) {
+    const m = /_b(\d+)$/.exec(String(b.block_id || ""));
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return `p${String(pageNum).padStart(2, "0")}_b${String(max + 1).padStart(2, "0")}`;
+}
+
+/**
  * 블록이 없는 쪽에 「페이지 전면 1블록」을 만들어 저장한다.
  *
  * 입력: docId/partId/pageNum — 대상 쪽. vpWidth/vpHeight — PDF 뷰포트 크기(pt).
@@ -1191,8 +1210,10 @@ async function _autoCreateFullPageBlock(docId, partId, pageNum, vpWidth, vpHeigh
  * 현재 레이아웃을 API에 저장한다.
  */
 async function _saveLayout() {
+  // 출력: 저장됐으면 true, 아니면 false — 부르는 쪽(리셋 등)이 실패를 알 수 있게(2026-10-11 전수).
+  // 예전에는 실패를 안에서 삼켜 리셋의 실패 알림이 닿지 않았다(상태 칸에 «저장 실패»만)
   const { docId, partId, pageNum } = viewerState;
-  if (!docId || !partId || !pageNum) return;
+  if (!docId || !partId || !pageNum) return false;
 
   _updateLayoutSaveStatus("saving");
 
@@ -1245,9 +1266,11 @@ async function _saveLayout() {
     }
     layoutState.isDirty = false;
     _updateLayoutSaveStatus("saved");
+    return true;
   } catch (err) {
     console.error("레이아웃 저장 실패:", err);
     _updateLayoutSaveStatus("error");
+    return false;
   }
 }
 
@@ -1430,6 +1453,25 @@ async function _runAutoDetect() {
   return _runAutoDetectKoten();
 }
 
+function _layoutStillOn(where) {
+  /**
+   * 감지를 시작한 문헌·권·쪽에 아직 있는가. 입력: where — {docId, partId, pageNum}. 출력: bool.
+   * 왜: 모델을 불러오거나 서버가 감지하는 사이 쪽을 옮기면, 옛 쪽 블록이 지금 쪽에 그려지고
+   * 지금 쪽 이름으로 저장됐다(2026-10-11 재확인 — ocr-panel _runOcr와 같은 종류).
+   */
+  return viewerState.docId === where.docId && viewerState.partId === where.partId &&
+    viewerState.pageNum === where.pageNum;
+}
+
+function _confirmReplaceBlocks(count) {
+  /**
+   * 이 쪽에 블록이 있으면 자동 감지 결과로 바꿀지 묻는다. 입력: 새 블록 수. 출력: 바꿔도 되면 true.
+   * 브라우저 감지·서버 감지 둘 다 이 질문을 거친다 — 서버 감지만 묻지 않고 덮었다(2026-10-11 재확인).
+   */
+  if (layoutState.blocks.length === 0) return true;
+  return confirm(`이 쪽의 레이아웃 블록 ${layoutState.blocks.length}개를 자동 감지 결과 ${count}개로 바꿉니다. 계속하시겠습니까?`);
+}
+
 /**
  * KotenLayout 브라우저 자동감지 (기존 코드).
  *
@@ -1438,7 +1480,7 @@ async function _runAutoDetect() {
  *   2. PDF 페이지 이미지 추출
  *   3. 전처리 → 추론 → 후처리
  *   4. Detection[] → LayoutBlock[] 변환
- *   5. 기존 블록에 추가 + 자동 저장
+ *   5. 기존 블록을 새 블록으로 교체(있으면 먼저 묻는다) + 자동 저장
  */
 async function _runAutoDetectKoten() {
   if (!viewerState.docId || viewerState.pageNum == null) {
@@ -1450,6 +1492,7 @@ async function _runAutoDetectKoten() {
   if (btn) btn.disabled = true;
   _setAutodetectStatus("감지 중...");
   const startTime = performance.now();
+  const where = { docId: viewerState.docId, partId: viewerState.partId, pageNum: viewerState.pageNum };
 
   try {
     // 1. 모델 로드
@@ -1478,15 +1521,27 @@ async function _runAutoDetectKoten() {
       return;
     }
 
-    // 5. 기존 블록을 지우고 새 블록으로 교체
+    if (!_layoutStillOn(where)) {
+      _setAutodetectStatus("감지 중 쪽을 옮겨 결과를 버렸습니다 — 그 쪽에서 다시 실행하세요");
+      return;
+    }
+    // 5. 기존 블록을 지우고 새 블록으로 교체 — 이미 블록이 있으면 먼저 묻는다(사람이 그린 블록을
+    //    말없이 덮었다, 2026-10-11 전수. OCR L2와의 어긋남은 layout_staleness가 잡는다)
+    if (!_confirmReplaceBlocks(newBlocks.length)) {
+      _setAutodetectStatus("취소 — 기존 블록을 그대로 둡니다");
+      return;
+    }
     layoutState.blocks = newBlocks;
     layoutState.isDirty = true;
 
     _redrawOverlay();
     _updateBlockList();
 
-    // 자동 저장
-    await _saveLayout();
+    // 자동 저장 — 실패하면 «저장됨»이라 하지 않는다(블록은 화면에 남고 다시 저장할 수 있다)
+    if (!(await _saveLayout())) {
+      _setAutodetectStatus("감지는 됐지만 저장하지 못했습니다 — 「저장」을 다시 누르세요");
+      return;
+    }
 
     const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
     const groupInfo = lineCount !== newBlocks.length
@@ -1551,7 +1606,7 @@ async function _runAutoDetectAllKoten() {
   }
 
   const totalPages = pdfState.pdfDoc.numPages;
-  if (!confirm(`전체 ${totalPages}페이지에 대해 레이아웃 자동감지를 실행합니다.\n계속하시겠습니까?`)) {
+  if (!confirm(`전체 ${totalPages}페이지에 대해 레이아웃 자동감지를 실행합니다.\n이미 있는 쪽의 레이아웃 블록은 감지 결과로 바뀝니다.\n계속하시겠습니까?`)) {
     return;
   }
 
@@ -2000,6 +2055,7 @@ async function _runAutoDetectServer(engineId) {
   if (btn) btn.disabled = true;
   _setAutodetectStatus(`${engineLabel} 감지 중...`);
   const startTime = performance.now();
+  const where = { docId: viewerState.docId, partId: viewerState.partId, pageNum: viewerState.pageNum };
 
   try {
     // 1. 신뢰도 임계값
@@ -2043,20 +2099,32 @@ async function _runAutoDetectServer(engineId) {
       ],
     }));
 
+    // 0건이면 기존 블록을 건드리지 않는다 — 전에는 빈 목록부터 넣어 블록이 화면에서 사라지고
+    // 다음 저장 때 지워졌다. 쪽을 옮겼으면 버리고, 기존 블록이 있으면 묻는다(2026-10-11 재확인)
+    if (blocks.length === 0) {
+      _setAutodetectStatus("감지된 영역 없음 (임계값을 낮춰보세요)");
+      return;
+    }
+    if (!_layoutStillOn(where)) {
+      _setAutodetectStatus("감지 중 쪽을 옮겨 결과를 버렸습니다 — 그 쪽에서 다시 실행하세요");
+      return;
+    }
+    if (!_confirmReplaceBlocks(blocks.length)) {
+      _setAutodetectStatus("취소 — 기존 블록을 그대로 둡니다");
+      return;
+    }
     layoutState.imageWidth = Math.round(vp.width);
     layoutState.imageHeight = Math.round(vp.height);
     layoutState.blocks = blocks;
     layoutState.isDirty = true;
 
-    if (blocks.length === 0) {
-      _setAutodetectStatus("감지된 영역 없음 (임계값을 낮춰보세요)");
-      return;
-    }
-
     // 4. 렌더링 + 저장
     _redrawOverlay();
     _updateBlockList();
-    await _saveLayout();
+    if (!(await _saveLayout())) {
+      _setAutodetectStatus("감지는 됐지만 저장하지 못했습니다 — 「저장」을 다시 누르세요");
+      return;
+    }
 
     const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
     _setAutodetectStatus(
@@ -2096,7 +2164,7 @@ async function _runAutoDetectAllServer(engineId) {
 
   const totalPages = pdfState.pdfDoc.numPages;
   if (!confirm(
-    `${engineLabel}으로 전체 ${totalPages}페이지 레이아웃을 서버에서 감지합니다.\n계속하시겠습니까?`
+    `${engineLabel}으로 전체 ${totalPages}페이지 레이아웃을 서버에서 감지합니다.\n이미 있는 쪽의 레이아웃 블록은 감지 결과로 바뀝니다.\n계속하시겠습니까?`
   )) {
     return;
   }

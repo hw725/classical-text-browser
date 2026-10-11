@@ -14,7 +14,7 @@ platform-v7.md 섹션 10.3의 구조를 따른다:
 
 import json
 import os
-import shutil
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -146,6 +146,7 @@ def trash_document(library_path: str | Path, doc_id: str) -> dict:
 
     Raises:
         FileNotFoundError: 문헌이 존재하지 않을 때.
+        PermissionError: 다른 프로그램이 폴더를 잡고 있어 옮기지 못했을 때(원본은 그대로).
     """
     library_path = Path(library_path).resolve()
     doc_dir = library_path / "documents" / doc_id
@@ -158,6 +159,7 @@ def trash_document(library_path: str | Path, doc_id: str) -> dict:
 
     # 휴지통 폴더 생성 + 이동
     trash_name = _move_to_trash(library_path, "documents", doc_id)
+    _drop_from_manifest(library_path, "documents", "document_id", doc_id)
 
     return {"trash_name": trash_name, "related_interpretations": related}
 
@@ -171,6 +173,7 @@ def trash_interpretation(library_path: str | Path, interp_id: str) -> dict:
 
     Raises:
         FileNotFoundError: 해석 저장소가 존재하지 않을 때.
+        PermissionError: 다른 프로그램이 폴더를 잡고 있어 옮기지 못했을 때(원본은 그대로).
     """
     library_path = Path(library_path).resolve()
     interp_dir = library_path / "interpretations" / interp_id
@@ -181,8 +184,30 @@ def trash_interpretation(library_path: str | Path, interp_id: str) -> dict:
         )
 
     trash_name = _move_to_trash(library_path, "interpretations", interp_id)
+    _drop_from_manifest(library_path, "interpretations", "interpretation_id", interp_id)
 
     return {"trash_name": trash_name}
+
+
+def _drop_from_manifest(library_path: Path, key: str, id_field: str, item_id: str) -> None:
+    """library_manifest.json의 목록에서 그 항목을 뺀다(휴지통으로 보낼 때).
+
+    입력: 서고, 목록 이름(documents·interpretations), id 칸 이름, id.
+    왜: 목록 화면은 폴더를 훑으므로 남아도 보이지 않지만, 같은 id로 다시 만들면 항목이 둘이
+    됐다(2026-10-11 전수). 매니페스트를 못 읽으면 건드리지 않는다 — 휴지통 이동은 이미 끝났다.
+    """
+    manifest_path = library_path / "library_manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    items = manifest.get(key)
+    if not isinstance(items, list):
+        return
+    kept = [it for it in items if not (isinstance(it, dict) and it.get(id_field) == item_id)]
+    if len(kept) != len(items):
+        manifest[key] = kept
+        _write_json(manifest_path, manifest)
 
 
 def list_trash(library_path: str | Path) -> dict:
@@ -224,6 +249,7 @@ def restore_from_trash(library_path: str | Path, trash_type: str, trash_name: st
     Raises:
         FileNotFoundError: 휴지통에 해당 항목이 없을 때.
         FileExistsError: 복원 대상 위치에 이미 같은 ID의 항목이 있을 때.
+        PermissionError: 다른 프로그램이 폴더를 잡고 있어 옮기지 못했을 때(휴지통에 그대로).
     """
     library_path = Path(library_path).resolve()
     trash_path = library_path / ".trash" / trash_type / trash_name
@@ -251,8 +277,51 @@ def restore_from_trash(library_path: str | Path, trash_type: str, trash_name: st
             "→ 해결: 기존 항목을 먼저 삭제하거나 이름을 변경하세요."
         )
 
-    shutil.move(str(trash_path), str(restore_target))
+    # 휴지통으로 보낼 때와 같은 까닭·같은 재시도로 이름 바꾸기만 한다(_move_to_trash 주석 참조) —
+    # 잠금으로 안 되면 «복사 후 지우기»로 넘어가지 않고 그대로 실패를 알린다
+    _close_git_handles(trash_path)
+    _rename_with_retry(
+        trash_path, restore_target, f"'{original_id}'을(를) 휴지통에서 되돌리지", "휴지통에"
+    )
+    _readd_to_manifest(library_path, trash_type, original_id, restore_target)
     return original_id
+
+
+def _readd_to_manifest(library_path: Path, trash_type: str, item_id: str, item_dir: Path) -> None:
+    """복원한 항목을 library_manifest.json 목록에 다시 적는다(휴지통으로 보낼 때 뺐으므로).
+
+    입력: 서고, documents·interpretations, id, 복원된 폴더.
+    왜: 보낼 때 목록에서 빼고(_drop_from_manifest) 되돌릴 때 다시 넣지 않으면 서고 정보(CLI info)와
+    폴더가 어긋났다(2026-10-11 재확인). 제목은 그 항목의 manifest.json에서 읽는다. 매니페스트를
+    못 읽으면 건드리지 않는다 — 복원은 이미 끝났다.
+    """
+    manifest_path = library_path / "library_manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    try:
+        own = json.loads((item_dir / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        own = {}
+    if trash_type == "documents":
+        key, id_field = "documents", "document_id"
+        entry = {"document_id": item_id, "title": own.get("title"), "path": f"documents/{item_id}"}
+    else:
+        key, id_field = "interpretations", "interpretation_id"
+        entry = {
+            "interpretation_id": item_id,
+            "source_document_id": own.get("source_document_id"),
+            "title": own.get("title"),
+            "path": f"interpretations/{item_id}",
+        }
+    items = [
+        it for it in manifest.get(key, [])
+        if not (isinstance(it, dict) and it.get(id_field) == item_id)
+    ]
+    items.append(entry)
+    manifest[key] = items
+    _write_json(manifest_path, manifest)
 
 
 # ──────────────────────────
@@ -265,7 +334,7 @@ def _close_git_handles(repo_path: Path) -> None:
 
     왜 필요한가:
         GitPython의 Repo 객체가 .git/objects/pack 등을 열어두면
-        Windows에서 shutil.move가 PermissionError를 던진다.
+        Windows에서 폴더 이름 바꾸기(os.rename)가 PermissionError를 던진다.
         gc.collect()로 참조가 끊긴 Repo 객체를 정리하고,
         혹시 남아있는 git.cmd 프로세스도 clear_cache()로 닫는다.
     """
@@ -289,8 +358,6 @@ def _move_to_trash(library_path: Path, category: str, item_id: str) -> str:
 
     반환: 휴지통 내 폴더명 (타임스탬프_원래ID).
     """
-    import stat
-
     source = library_path / category / item_id
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
     trash_name = f"{timestamp}_{item_id}"
@@ -303,26 +370,48 @@ def _move_to_trash(library_path: Path, category: str, item_id: str) -> str:
     # Git 핸들 해제 (Windows에서 .git/objects 파일 잠김 방지)
     _close_git_handles(source)
 
-    # 1차 시도: shutil.move (같은 파일시스템이면 빠른 rename)
-    try:
-        shutil.move(str(source), str(dest))
-        return trash_name
-    except PermissionError:
-        # 부분 이동이 발생했을 수 있으므로 dest 정리
-        if dest.exists():
-            shutil.rmtree(str(dest), ignore_errors=True)
-
-    # 2차 시도: 읽기 전용 해제 후 재시도
-    for root, dirs, files in os.walk(str(source)):
-        for f in files:
-            fp = os.path.join(root, f)
-            try:
-                os.chmod(fp, stat.S_IWRITE | stat.S_IREAD)
-            except Exception:
-                pass
-
-    shutil.move(str(source), str(dest))
+    # 이름 바꾸기(os.rename)만 쓴다 — 휴지통은 서고 안이라 같은 디스크다.
+    # 예전에는 shutil.move였다. rename이 잠금으로 실패하면 shutil.move는
+    # «통째로 복사 → 원본 지우기»로 넘어가는데, 원본 지우기가 잠긴 .git 파일에서 도중에 멈추면
+    # 사본은 완전하고 원본은 반쯤 지워진 상태가 된다. 코드는 그 «완전한 사본»을 부분 이동으로
+    # 보고 지웠고, 2차 시도는 남은 원본 조각만 옮겨 문헌 일부가 사라졌다(2026-10-11 전수).
+    # rename은 되거나 안 되거나 둘 중 하나다.
+    _rename_with_retry(source, dest, f"'{item_id}'을(를) 휴지통으로 옮기지", "원본은 그대로")
     return trash_name
+
+
+def _rename_with_retry(source: Path, dest: Path, what: str, where_left: str) -> None:
+    """폴더 이름 바꾸기를 몇 번 다시 해 본다. 끝내 안 되면 원인·해결이 든 PermissionError.
+
+    입력: source·dest, 안내문 앞부분(«'x'을(를) 휴지통으로 옮기지»), 실패 때 남은 자리 설명.
+    왜: Windows에서는 탐색기·동기화 프로그램이 잠깐 파일을 잡아 rename이 실패한다. 읽기 전용
+    파일도 막는다. 휴지통으로 보낼 때·되돌릴 때 같은 방식을 쓴다(되돌리기만 한 번 시도로
+    끝나 500이 나던 것, 2026-10-11 재확인).
+    """
+    import stat
+
+    last_err: OSError | None = None
+    for attempt in range(4):
+        try:
+            os.rename(source, dest)
+            return
+        except OSError as e:
+            last_err = e
+            if attempt == 0:
+                # 읽기 전용 파일이 rename을 막는 경우가 있다 — 풀고 다시
+                for root, _dirs, files in os.walk(str(source)):
+                    for f in files:
+                        try:
+                            os.chmod(os.path.join(root, f), stat.S_IWRITE | stat.S_IREAD)
+                        except OSError:
+                            pass
+            time.sleep(0.3 * (attempt + 1))  # 다른 프로그램이 파일을 놓을 시간을 준다
+    raise PermissionError(
+        f"{what} 못했습니다 — 다른 프로그램이 그 폴더의 파일을 쓰고 있습니다. "
+        f"{where_left} 있습니다.\n"
+        "→ 해결: 그 폴더를 연 탐색기·편집기·동기화 프로그램을 닫고 다시 시도하세요. "
+        f"(원인: {last_err})"
+    )
 
 
 def _find_related_interpretations(library_path: Path, doc_id: str) -> list[str]:

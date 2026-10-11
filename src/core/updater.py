@@ -12,6 +12,8 @@
     코드가 바뀌는 일이 없고, 사용자가 고친 파일이 있으면 받지 않는다.
   - **zip으로 받은 폴더도 새 판을 안다.** `.git`이 없으면 git 사본으로 바꾼다(파일은 그대로,
     HEAD·index만 원격 main) — 그 뒤로는 커밋으로 비교하고 「받기」가 된다(D-112).
+    바꾼 순간의 파일 지문을 표시 파일에 적어 두고, 그 뒤 사용자가 고친 파일이 있으면 zip 사본이라도
+    덮지 않는다(2026-10-11 — 그 전에는 zip 사본의 차이를 모두 «옛 파일»로 보고 덮었다).
 
 되돌릴 수 없는 판: 릴리스 본문에 「되돌릴 수 없는 변화 — 있음」이 있으면 그 사실을 함께
 돌려준다. 화면이 그것을 보여 주고 동의를 받은 뒤에만 받게 하기 위해서다(D-092·D-097처럼
@@ -29,9 +31,9 @@ from pathlib import Path
 
 # CJK Text Contract E3 — 한국어 Windows 콘솔은 cp949 라 «—»·«✓» 를 print 하면
 # UnicodeEncodeError 로 즉사한다. 이 PC 는 PYTHONUTF8=1 이 박혀 있어 겪지 않는다.
+# 고정은 글을 찍는 진입점(auto_update_cli) 맨 앞에서 한다 — 예전에는 import하는 순간 불러,
+# 이 모듈을 쓰는 서버 프로세스의 stdout·stderr까지 다시 열었다(2026-10-11 전수).
 from core.console import force_utf8_console
-
-force_utf8_console()
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +41,9 @@ REPO = "hw725/classical-text-browser"
 RELEASES_URL = f"https://api.github.com/repos/{REPO}/releases/latest"
 REMOTE_URL = f"https://github.com/{REPO}.git"
 _TIMEOUT = 6.0
-# zip 폴더를 git 사본으로 바꾼 뒤 «아직 원격에 맞추지 않았다»는 표시. 있으면 작업 트리의 차이는
-# 사용자 수정이 아니라 zip 시점의 옛 파일이므로, 「받기」가 reset --hard로 맞춘다.
+# zip 폴더를 git 사본으로 바꾼 뒤 «아직 원격에 맞추지 않았다»는 표시(JSON — 바꾼 순간의 파일 지문).
+# 「받기」는 지문과 견줘 그 뒤 사용자가 고친 파일이 없을 때만 reset --hard로 원격에 맞춘다
+# (zip_user_changes). 지문이 없는 옛 표시면 다른 파일을 설정 폴더에 남긴 뒤 맞춘다(_keep_zip_files).
 ZIP_MARK = ".ctb-from-zip"
 
 
@@ -237,7 +240,13 @@ def ensure_git_checkout(
         if code != 0:
             return {"ok": False, "converted": False, "reason": f"{' '.join(args[:2])}: {out[:200]}"}
     try:
-        (root / ZIP_MARK).write_text("converted from zip\n", encoding="utf-8")
+        # 바꾼 순간의 파일 지문을 함께 적는다 — 받기 전에 다시 재서, 그 뒤 사용자가 고친
+        # 파일이 있으면 reset --hard로 덮지 않는다(zip_user_changes)
+        # 원자적 저장(D-069) — 도중에 죽어도 반쪽 파일이 없다
+        from core.document import write_json_atomic
+
+        mark = {"converted_from_zip": True, "files": _tracked_file_hashes(root)}
+        write_json_atomic(root / ZIP_MARK, mark)
     except OSError:
         pass
     return {"ok": True, "converted": True, "reason": ""}
@@ -245,6 +254,142 @@ def ensure_git_checkout(
 
 def from_zip(root: Path | None = None) -> bool:
     return ((root or app_root()) / ZIP_MARK).exists()
+
+
+def _tracked_file_hashes(root: Path) -> dict[str, str]:
+    """추적 파일(지금 index 기준)마다 작업 트리 내용의 해시. 입력: 앱 뿌리. 출력: {경로: sha1}."""
+    import hashlib
+
+    code, out = _run(["git", "ls-files", "-z"], root, 60)
+    if code != 0:
+        return {}
+    hashes = {}
+    for rel in filter(None, out.split("\0")):
+        p = root / rel
+        if p.is_file():
+            hashes[rel] = hashlib.sha1(p.read_bytes()).hexdigest()
+    return hashes
+
+
+def zip_user_changes(root: Path | None = None) -> list[str] | None:
+    """zip에서 바꾼 뒤 사용자가 고치거나 지운 추적 파일. 입력: 앱 뿌리. 출력: 경로 목록,
+    바꿀 때 지문을 적지 않은 옛 표시(2026-10-11 전)면 None(판단할 수 없음 — apply_update가
+    그 경우 다른 파일을 덮기 전에 _keep_zip_files로 남긴다).
+
+    왜(2026-10-11 전수): zip 사본의 «차이»는 zip 시점의 옛 파일이라 가정하고 묻지 않고
+    reset --hard 했다. 그런데 표시는 처음 확인 때 생기고 실제 받기 때까지 남으므로, 그 사이
+    사용자가 고친 파일이 다음 서버 시작 때 조용히 덮였다. 바꾼 순간의 지문과 견준다.
+    """
+    root = root or app_root()
+    try:
+        mark = json.loads((root / ZIP_MARK).read_text(encoding="utf-8"))
+        before = mark["files"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    import hashlib
+
+    # 적어 둔 경로를 그대로 다시 잰다 — 지금 index로 재면 새 판에서 빠진 경로가 «고침»으로 잡힌다
+    out = []
+    for rel, h in before.items():
+        p = root / rel
+        if not p.is_file() or hashlib.sha1(p.read_bytes()).hexdigest() != h:
+            out.append(rel)
+    return sorted(out)
+
+
+def _keep_zip_files(root: Path | None = None) -> Path | None:
+    """원격과 다른 추적 파일을 설정 폴더(update-backup/<시각>/)에 복사해 둔다.
+
+    출력: 남긴 폴더(없으면 None).
+
+    왜: 지문이 없는 옛 zip 표시는 «zip 시점의 옛 파일»과 «그 뒤 사용자가 고친 파일»을 가를 수
+    없다. 묻지 않고 덮으면 고친 것이 사라지고(2026-10-11 재확인 — None을 «고친 것 없음»으로
+    읽었다), 받지 않으면 그 PC는 영영 새 판을 못 받는다. 그래서 덮기 전에 남긴다.
+    """
+    root = root or app_root()
+    # HEAD와 견준다 — `git diff`(인자 없음)는 index와 견주므로 `git add`한 수정이 빠졌다(2026-10-11
+    # Codex 리뷰). -z: 한글 경로가 "\352…"로 따옴표 쳐져 is_file()이 거짓이 되던 것도 막는다.
+    code, out = _run(["git", "diff", "HEAD", "--name-only", "-z"], root, 30)
+    if code != 0:
+        return None
+    return _copy_to_update_backup(root, list(filter(None, out.split("\0"))))
+
+
+def _copy_to_update_backup(root: Path, rels: list[str]) -> Path | None:
+    """앱 폴더의 파일들을 설정 폴더 update-backup/<시각>/에 같은 상대 경로로 복사한다.
+
+    입력: root — 앱 뿌리, rels — 상대 경로 목록(없는 파일은 건너뜀). 출력: 남긴 폴더(없으면 None).
+    """
+    import shutil
+    from datetime import datetime
+
+    from core.app_config import CONFIG_DIR
+
+    rels = [r for r in rels if r.strip() and (root / r).is_file()]
+    if not rels:
+        return None
+    # 이름이 겹치면 뒤에 번호를 붙여 늘 새 폴더에 — 초 단위 이름만 쓰면 같은 초의 두 번째 백업이
+    # 앞 백업의 같은 경로를 덮었다(2026-10-11 Codex 재검토)
+    base = CONFIG_DIR / "update-backup"
+    base.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    n = 0
+    while True:
+        dest = base / (stamp if n == 0 else f"{stamp}-{n}")
+        try:
+            dest.mkdir()
+            break
+        except FileExistsError:
+            n += 1
+    for rel in rels:
+        target = dest / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(root / rel, target)
+    return dest
+
+
+def _keep_untracked_collisions(root: Path, ref: str = "origin/main") -> tuple[bool, Path | None]:
+    """`reset --hard <ref>`가 덮거나 지울 «추적 밖» 파일을 먼저 update-backup/에 남긴다.
+
+    입력: root — 앱 뿌리, ref — 맞출 커밋.
+    출력: (ok, 남긴 폴더 또는 None). ok가 False면 무엇이 덮일지 알 수 없거나 남기지 못한 것이다 —
+    호출부는 reset을 하지 않는다(조회 실패를 «충돌 없음»으로 읽으면 묻지 않고 덮게 된다).
+
+    겹치는 모양 셋: 새 판의 파일 경로에 추적 밖 파일이 있다 / 새 판의 파일 경로가 지금은 추적 밖
+    폴더다(그 안의 파일이 지워진다) / 새 판 경로의 조상이 지금은 추적 밖 파일이다
+    (그 파일이 지워진다).
+
+    왜(2026-10-11 Codex 리뷰): zip 지문은 바꿀 때의 «추적» 파일만 적는다. 그 뒤 사용자가 만든
+    파일을 새 판이 같은 경로로 추적하기 시작하면, 지문 검사에도 working_tree_dirty(추적 밖은
+    세지 않음)에도 걸리지 않고 `reset --hard`가 묻지 않고 덮었다. pull은 이런 파일을 거부하지만
+    reset --hard는 거부하지 않는다. 받기는 막지 않고(그러면 영영 못 받는다) 덮기 전에 남긴다.
+    """
+    try:
+        code, tree = _run(["git", "ls-tree", "-r", "-z", "--name-only", ref], root, 60)
+        if code != 0:
+            return False, None
+        code, idx = _run(["git", "ls-files", "-z"], root, 60)
+        if code != 0:
+            return False, None
+        tracked = set(filter(None, idx.split("\0")))
+        hits: set[str] = set()
+        for rel in filter(None, tree.split("\0")):
+            p = root / rel
+            if p.is_file() and rel not in tracked:
+                hits.add(rel)
+            elif p.is_dir():
+                for f in p.rglob("*"):
+                    r = f.relative_to(root).as_posix()
+                    if f.is_file() and r not in tracked:
+                        hits.add(r)
+            parts = rel.split("/")
+            for i in range(1, len(parts)):
+                anc = "/".join(parts[:i])
+                if anc not in tracked and (root / anc).is_file():
+                    hits.add(anc)
+        return True, _copy_to_update_backup(root, sorted(hits))
+    except (OSError, subprocess.TimeoutExpired):
+        return False, None
 
 
 def zip_differs(root: Path | None = None) -> bool:
@@ -281,8 +426,26 @@ def apply_update() -> dict:
             }
     dirty, detail = working_tree_dirty()
     if dirty and from_zip():
-        # zip 시점의 옛 파일이지 사용자 수정이 아니다 — 원격에 그대로 맞춘다(한 번뿐, 마커 삭제)
-        dirty = False
+        # zip 시점의 옛 파일이면 사용자 수정이 아니다 — 원격에 그대로 맞춘다(한 번뿐, 마커 삭제).
+        # 단 바꾼 뒤 사용자가 고친 파일이 있으면 그것은 덮지 않는다(zip_user_changes)
+        changed = zip_user_changes()
+        if changed:
+            detail = "zip에서 바꾼 뒤 고친 파일:\n" + "\n".join(changed[:50])
+        elif changed is None:
+            # 지문 없는 옛 표시 — 가를 수 없으니 다른 파일을 남기고 맞춘다
+            kept = _keep_zip_files()
+            steps.append({
+                "name": "옛 zip 설치 파일 남기기",
+                "ok": True,
+                "output": (
+                    f"원격과 다른 파일을 {kept}에 남겼습니다"
+                    "(손으로 고친 것이 있었다면 거기서 찾으세요)."
+                    if kept else "남길 파일이 없었습니다."
+                ),
+            })
+            dirty = False
+        else:
+            dirty = False
     if dirty:
         return {
             "ok": False,
@@ -315,6 +478,34 @@ def apply_update() -> dict:
         JOB_LOCK.release()
 
 
+def _note_kept_collisions(root: Path, steps: list[dict]) -> bool:
+    """reset --hard 직전에 덮일 추적 밖 파일을 남기고, 남겼으면 단계 기록에 적는다.
+
+    출력: reset을 해도 되면 True. 무엇이 덮일지 조회하지 못했거나 남기지 못했으면 실패 단계를
+    적고 False — 호출부는 reset 없이 멈춘다.
+    """
+    ok, kept = _keep_untracked_collisions(root)
+    if not ok:
+        steps.append({
+            "name": "새 판이 덮을 파일 확인",
+            "ok": False,
+            "output": (
+                "새 판이 덮을 파일을 확인하거나 남기지 못해 맞추지 않았습니다(git 조회·복사 실패)."
+            ),
+        })
+        return False
+    if kept:
+        steps.append({
+            "name": "새 판이 덮을 파일 남기기",
+            "ok": True,
+            "output": (
+                f"새 판이 같은 경로로 가져오는 파일을 {kept}에 남겼습니다"
+                "(직접 만든 파일이었다면 거기서 찾으세요)."
+            ),
+        })
+    return True
+
+
 def _apply_update_locked(root: Path, steps: list[dict], sync_args) -> dict:
     if from_zip(root):
         # zip에서 바꾼 사본: 파일을 원격 main에 맞추는 것이 곧 «받기»다
@@ -325,6 +516,8 @@ def _apply_update_locked(root: Path, steps: list[dict], sync_args) -> dict:
                 ["git", "reset", "--hard", "origin/main"],
             ),
         ):
+            if args[:2] == ["git", "reset"] and not _note_kept_collisions(root, steps):
+                return {"ok": False, "steps": steps, "hint": f"{name} 앞에서 멈췄습니다."}
             code, out = _run(args, root, 300)
             steps.append({"name": name, "ok": code == 0, "output": out[:4000]})
             if code != 0:
@@ -363,6 +556,8 @@ def _apply_update_locked(root: Path, steps: list[dict], sync_args) -> dict:
                             "덮어쓰면 사라지므로 맞추지 않았습니다. "
                             "먼저 푸시하거나 main으로 옮기세요."
                         )
+                    elif not _note_kept_collisions(root, steps):
+                        return {"ok": False, "steps": steps, "hint": f"{name} 앞에서 멈췄습니다."}
                     else:
                         code, out = _run(["git", "reset", "--hard", "origin/main"], root, 60)
         except (OSError, subprocess.TimeoutExpired) as e:
@@ -395,7 +590,7 @@ def auto_update(timeout: float = _TIMEOUT) -> dict:
     if not is_git_checkout():
         return {"did": False, "why": info.get("note") or "git 사본 아님", "result": None}
     dirty, _ = working_tree_dirty()
-    if dirty and not from_zip():
+    if dirty and (not from_zip() or zip_user_changes()):
         return {"did": False, "why": "고친 파일이 있어 받지 않음", "result": None}
     result = apply_update()
     return {
@@ -410,6 +605,7 @@ def auto_update_cli() -> int:
 
     입력: 없음(환경변수 CTB_NO_AUTO_UPDATE=1이면 건너뛴다). 출력: 종료 코드 0.
     """
+    force_utf8_console()  # 아래 print가 cp949 콘솔에서 죽지 않게 — 무엇보다 먼저
     import os
 
     if os.environ.get("CTB_NO_AUTO_UPDATE"):

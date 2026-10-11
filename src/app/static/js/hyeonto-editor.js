@@ -335,6 +335,11 @@ async function _loadHyeontoData() {
    렌더링 — 글자 영역
    ────────────────────────── */
 
+/** 글자 배열(코드포인트 단위). 입력: 문자열(없으면 빈 배열). 현토 좌표의 단위가 이것이다. */
+function _htChars(text) {
+  return Array.from(text || "");
+}
+
 /**
  * 원문 글자를 글자 단위로 렌더링한다.
  *
@@ -351,8 +356,10 @@ function _renderHyeontoCharArea() {
     return;
   }
 
-  const text = hyeontoState.originalText;
-  const n = text.length;
+  // 글자 좌표는 코드포인트다(서버 core.hyeonto·reading_ingest와 같다). `.length`·`[i]`는 UTF-16이라
+  // 확장 한자(CJK 확장 B) 뒤에서 한 칸씩 어긋났다(2026-10-11 2차 전수, D-127·B-016과 같은 종류)
+  const chars = _htChars(hyeontoState.originalText);
+  const n = chars.length;
 
   // 각 위치별 현토 텍스트를 미리 계산
   const annBefore = new Array(n).fill("");
@@ -376,7 +383,7 @@ function _renderHyeontoCharArea() {
   let html = '<div class="hyeonto-chars">';
 
   for (let i = 0; i < n; i++) {
-    const ch = text[i];
+    const ch = chars[i];
     const hasAnn = annBefore[i] || annAfter[i];
     const selectedClass = _isHtCharInSelection(i) ? " hyeonto-char-selected" : "";
     const annClass = hasAnn ? " hyeonto-char-annotated" : "";
@@ -442,14 +449,13 @@ function _showPopup(charIdx) {
   if (!popup) return;
 
   // 선택된 글자 표시
-  const text = hyeontoState.originalText;
+  const cs = _htChars(hyeontoState.originalText);
   if (hyeontoState.selectionRange) {
     const lo = Math.min(hyeontoState.selectionRange.start, hyeontoState.selectionRange.end);
     const hi = Math.max(hyeontoState.selectionRange.start, hyeontoState.selectionRange.end);
-    const chars = text.substring(lo, hi + 1);
-    if (targetLabel) targetLabel.textContent = chars;
+    if (targetLabel) targetLabel.textContent = cs.slice(lo, hi + 1).join("");
   } else {
-    if (targetLabel) targetLabel.textContent = text[charIdx] || "";
+    if (targetLabel) targetLabel.textContent = cs[charIdx] || "";
   }
 
   popup.style.display = "";
@@ -553,13 +559,13 @@ function _renderHyeontoAnnList() {
     return;
   }
 
-  const text = hyeontoState.originalText;
+  const cs = _htChars(hyeontoState.originalText);
   let html = "";
 
   for (const ann of hyeontoState.annotations) {
     const s = ann.target?.start ?? 0;
     const e = ann.target?.end ?? s;
-    const chars = s === e ? (text[s] || `[${s}]`) : `${text[s] || ""}…${text[e] || ""} [${s}-${e}]`;
+    const chars = s === e ? (cs[s] || `[${s}]`) : `${cs[s] || ""}…${cs[e] || ""} [${s}-${e}]`;
     const posLabel = ann.position === "before" ? "앞" : "뒤";
 
     html += `<div class="hyeonto-ann-item">
@@ -594,7 +600,8 @@ function _renderHyeontoPreview() {
     return;
   }
 
-  const n = text.length;
+  const chars = _htChars(text);  // 코드포인트 — 위 _renderHyeontoCharArea와 같은 까닭
+  const n = chars.length;
   const beforeBuf = new Array(n).fill("");
   const afterBuf = new Array(n).fill("");
 
@@ -621,7 +628,7 @@ function _renderHyeontoPreview() {
 
   let result = "";
   for (let i = 0; i < n; i++) {
-    result += beforeBuf[i] + text[i] + afterBuf[i];
+    result += beforeBuf[i] + chars[i] + afterBuf[i];
   }
 
   previewEl.textContent = result;

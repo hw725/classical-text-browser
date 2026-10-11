@@ -9,7 +9,7 @@ detect_imported_layers 함수의 단위·통합 테스트.
     TestCreateWorkFromSnapshot — Import 기능 (8개)
     TestDetectImportedLayers — 레이어 감지 (3개)
     TestRoundTrip — Export → Import 순환 (2개)
-    TestExchangeSchemaIsTheSingleSourceOfTruth — 교환 스키마 정본(B-005) (5개)
+    TestExchangeSchemaIsTheSingleSourceOfTruth — 교환 스키마 정본(D-100) (5개)
     (편성 경계·작업 계획·사전 왕복은 tests/test_sweep_20261011.py의 B-013 시험)
 """
 
@@ -810,7 +810,7 @@ class TestRoundTrip:
 
 
 class TestExchangeSchemaIsTheSingleSourceOfTruth:
-    """교환 형식의 정본은 `schemas/exchange.schema.json` 하나다 (B-005).
+    """교환 형식의 정본은 `schemas/exchange.schema.json` 하나다 (D-100 — 옛 백로그 B-005).
 
     왜 이 시험이 필요한가: v1.3까지 스키마와 구현이 **다른 모양**이었고(문서는 export_info·
     parts·pages, 구현은 export_timestamp·original·interpretation), 게다가 스키마를 파이썬

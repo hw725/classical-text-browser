@@ -982,11 +982,14 @@ async function _createFromUrl() {
   const statusEl = document.getElementById("create-doc-create-status");
   const createBtn = document.getElementById("create-doc-create-btn");
 
-  const docId = docIdInput ? docIdInput.value.trim() : "";
+  // 칸이 비면 미리보기가 제목에서 만든 후보 id를 쓴다 — 화면은 «비워 두면 자동 생성»이라고 적는데
+  // URL 모드만 «문헌 ID를 입력하세요»로 막았다(2026-10-11 재확인)
+  const docId = (docIdInput ? docIdInput.value.trim() : "") ||
+    ((_previewData && _previewData.suggested_doc_id) || "");
   const title = titleInput ? titleInput.value.trim() : "";
 
   if (!docId) {
-    if (statusEl) statusEl.textContent = "문헌 ID를 입력하세요.";
+    if (statusEl) statusEl.textContent = "문헌 ID를 입력하거나 먼저 「미리보기」를 누르세요.";
     return;
   }
 
@@ -1163,11 +1166,13 @@ function _hideCreateDocProgress() {
  * HTML 이스케이프 (create-document 모듈 전용).
  *
  * 왜 별도 함수인가:
- *   bibliography.js의 _escapeHtml과 동일하지만,
+ *   bibliography.js의 _escapeHtmlBibliography와 같은 일을 하지만,
  *   vanilla JS에서 모듈 스코프가 없으므로 이름 충돌 방지.
  */
 function _cdEscapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str || "";
-  return div.innerHTML;
+  // 속성 자리(title="…")에 쓰여도 안전하게 따옴표까지 바꾼다 — textContent 는 &, <, > 만 바꾼다
+  // (2026-10-11 2차 전수: 문헌·권 제목·에셋 id·외부 source_url 이 속성을 벗어날 수 있었다)
+  return div.innerHTML.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }

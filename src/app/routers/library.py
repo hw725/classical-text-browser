@@ -373,7 +373,8 @@ async def api_get_settings():
 
     bp = get_backup_path()
     info["backup_path"] = bp
-    info["backup_info"] = get_backup_info(bp) if bp else None
+    _lib = get_library_path()
+    info["backup_info"] = get_backup_info(bp, Path(_lib).name if _lib else None) if bp else None
 
     return info
 
@@ -722,6 +723,8 @@ async def api_restore_from_trash(trash_type: str, trash_name: str):
         return JSONResponse({"error": str(e)}, status_code=404)
     except FileExistsError as e:
         return JSONResponse({"error": str(e)}, status_code=409)
+    except PermissionError as e:
+        return JSONResponse({"error": str(e)}, status_code=409)
 
 
 @router.get("/api/documents/{doc_id}/validation")
@@ -851,8 +854,8 @@ async def api_decision_models(check: bool = Query(False)):
             "id": "typesafe",
             "cls": JevClient,
             "display_name": "TypeSafe Jev",
-            "role": "텍스트 판정 — 편성 «판정 모델로 고르기»의 목차 대조, 그리고 본문 판정의 "
-            "폴백(OpenRouter 키가 없거나 호출이 실패하면). 이 칸은 TypeSafe 키만 봅니다 — "
+            "role": "텍스트 판정 — 편성 «판정 모델로 고르기»의 본문 판정과 목차 대조(주 판정자, "
+            "D-139). 이 칸은 TypeSafe 키만 봅니다 — "
             "TypeSafe 키가 없어도 OpenRouter 키가 있으면 같은 Jev를 OpenRouter 경유로 부릅니다",
             "signup_url": "https://docs.typesafe.ai",
             "steps": [
@@ -915,7 +918,7 @@ async def api_decision_models(check: bool = Query(False)):
         "clef_available": clef_via is not None,
         "clef_via": clef_via,  # 사슬이 어디서 시작하는가 — 화면 라벨용
         "default_image_provider": "clef" if clef_via else None,
-        "jev_via": jev_via,  # 편성 목차 대조·폴백의 Jev가 가는 길
+        "jev_via": jev_via,  # 편성 본문·목차 판정(Jev, D-139의 주)이 가는 길 — 직결·OpenRouter 경유
     }
 
 
@@ -1080,7 +1083,10 @@ def _ollama_host() -> str | None:
 
 @router.post("/api/settings/ollama/pull")
 async def api_ollama_pull(body: dict):
-    """비전 모델이 없으면 앱이 `ollama pull`을 대신 돌린다. GET으로 부르면 진행 상태만 준다."""
+    """비전 모델이 없으면 앱이 `ollama pull`을 대신 돌린다.
+
+    model 없이 부르면 진행 상태만 준다(라우트는 POST 하나뿐).
+    """
     import app._state as _st
     from core.ollama_signin import pull, pull_status
 
@@ -1119,7 +1125,7 @@ async def api_ollama_catalog():
         base_url = None
 
     def _build() -> dict:
-        info = detect_ollama(base_url)  # /api/tags — 3초 안에 못 닿으면 빈 목록
+        info = detect_ollama(base_url)  # /api/tags — 2초(detect_ollama 기본) 안에 못 닿으면 빈 목록
         out = catalog(set(info.get("models") or []))
         out["reachable"] = bool(info.get("reachable"))
         return out

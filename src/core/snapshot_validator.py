@@ -8,7 +8,7 @@ Phase 12-3: 스냅샷 데이터의 구조적 무결성을 검증한다.
     분리하여 사용자에게 알려준다.
 
 검증 항목:
-    1. 구조 — `schemas/exchange.schema.json`(교환 형식의 **정본**)으로 검증한다 (B-005)
+    1. 구조 — `schemas/exchange.schema.json`(교환 형식의 **정본**)으로 검증한다 (D-100)
     2. 버전 호환성
     3. block_id 참조 무결성 (L5~L7 → L3 LayoutBlock id 또는 편성 단위 id) — 스키마로 적을 수 없는 것
     4. annotation_types 참조 무결성 — 같은 이유
@@ -98,19 +98,26 @@ def _validate_interpretation(data: dict, warnings: list) -> None:
     # 아는 block_id: L3 LayoutBlock id + 편성 경계(단위) id.
     # v1.3(D-092·D-093)부터 L5~L7의 block_id는 단위 id를 가리킨다(B-003) — L3하고만 견주면
     # 지금 서고의 스냅샷마다 «L3에 없음» 거짓 경고가 쏟아졌다(B-023).
-    l3_block_ids = _extract_l3_block_ids(data) | _extract_unit_ids(data)
+    unit_ids = _extract_unit_ids(data)
+    l3_block_ids = _extract_l3_block_ids(data) | unit_ids
+    # 편성 경계가 없는 옛 스냅샷(v1.4.3 첫 판까지)은 L3하고만 견줄 수 있다 — 그 block_id가 단위 id면
+    # «없음»은 거짓이다. 경고는 그대로 내되 그 사정을 문구에 밝힌다(2026-10-11 재확인).
+    where = (
+        "L3·편성 경계" if unit_ids
+        else "L3(편성 경계가 없는 스냅샷 — 단위 id면 무시해도 됩니다)"
+    )
 
     # L5 표점의 block_id 참조 확인
     for item in layers.get("L5_punctuation", []):
         bid = item.get("block_id")
         if bid and l3_block_ids and bid not in l3_block_ids:
-            warnings.append(f"L5 표점의 block_id '{bid}'가 L3에 없음")
+            warnings.append(f"L5 표점의 block_id '{bid}'가 {where}에 없음")
 
     # L5 현토의 block_id 참조 확인
     for item in layers.get("L5_hyeonto", []):
         bid = item.get("block_id")
         if bid and l3_block_ids and bid not in l3_block_ids:
-            warnings.append(f"L5 현토의 block_id '{bid}'가 L3에 없음")
+            warnings.append(f"L5 현토의 block_id '{bid}'가 {where}에 없음")
 
     # L6 번역의 block_id 참조 확인
     for item in layers.get("L6_translation", []):
@@ -118,7 +125,7 @@ def _validate_interpretation(data: dict, warnings: list) -> None:
         for tr in translations:
             bid = tr.get("source", {}).get("block_id")
             if bid and l3_block_ids and bid not in l3_block_ids:
-                warnings.append(f"L6 번역의 block_id '{bid}'가 L3에 없음")
+                warnings.append(f"L6 번역의 block_id '{bid}'가 {where}에 없음")
 
     # L7 주석의 block_id + type 참조 확인
     defined_types = {t.get("id") for t in data.get("annotation_types", []) if t.get("id")}
@@ -126,7 +133,7 @@ def _validate_interpretation(data: dict, warnings: list) -> None:
         for block in item.get("blocks", []):
             bid = block.get("block_id")
             if bid and l3_block_ids and bid not in l3_block_ids:
-                warnings.append(f"L7 주석의 block_id '{bid}'가 L3에 없음")
+                warnings.append(f"L7 주석의 block_id '{bid}'가 {where}에 없음")
             for ann in block.get("annotations", []):
                 ann_type = ann.get("type")
                 if ann_type and defined_types and ann_type not in defined_types:

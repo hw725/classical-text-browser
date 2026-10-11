@@ -929,8 +929,9 @@ async function _executeBackup() {
     }
 
     const sizeMB = (data.total_size / (1024 * 1024)).toFixed(1);
+    // 고른 폴더에 다른 파일이 있으면 그 아래 하위 폴더에 쓰므로(core.backup) 실제 자리를 보인다
     showToast(
-      `백업 완료: ${data.file_count}개 파일, ${sizeMB} MB (${data.duration_sec}초)`
+      `백업 완료: ${data.file_count}개 파일, ${sizeMB} MB (${data.duration_sec}초)\n${data.backup_path}`
     );
 
     // 백업 정보 새로고침
@@ -1024,10 +1025,10 @@ function _renderRepoList(containerId, repos, repoType) {
       </div>
       <div class="settings-repo-actions" style="display: ${hasRemote ? "flex" : "none"};">
         <button class="text-btn settings-push-btn"
-                data-repo-type="${repoType}" data-repo-id="${repo.id}"
+                data-repo-type="${repoType}" data-repo-id="${_escAttr(repo.id)}"
                 ${hasRemote ? "" : "disabled"}>Push</button>
         <button class="text-btn settings-pull-btn"
-                data-repo-type="${repoType}" data-repo-id="${repo.id}"
+                data-repo-type="${repoType}" data-repo-id="${_escAttr(repo.id)}"
                 ${hasRemote ? "" : "disabled"}>Pull</button>
       </div>
     `;
@@ -1897,7 +1898,7 @@ function initSnapshotButtons() {
         showToast(`내보내기 실패: ${e.message}`, 'error');
       } finally {
         exportBtn.disabled = false;
-        exportBtn.textContent = "내보내기";
+        exportBtn.textContent = "JSON 내보내기"; // index.html의 원래 글자 — 가져오기 단추와 같은 방식
       }
     });
   }
@@ -2009,6 +2010,10 @@ function onPageChanged(opts) {
   const partId = viewerState.partId;
   const pageNum = viewerState.pageNum;
   if (!docId || !partId || !pageNum) return;
+
+  // 0. 위 바의 «문헌 · 권 · 쪽» — 전에는 사이드바에서 쪽을 고를 때(_selectPage)만 갱신해,
+  //    ◀▶·키보드·뒤로 가기로 옮기면 옛 쪽 번호가 남았다(2026-10-11 재확인)
+  if (typeof updateModeBarContext === "function") updateModeBarContext();
 
   // 1. 텍스트 에디터
   if (!opts.skipText && typeof loadPageText === "function") {
@@ -2392,6 +2397,11 @@ async function _restoreFromHash() {
     // 해시 재생성 억제 (이미 해시에서 복원 중)
     _suppressHashUpdate = true;
 
+    // 그 문헌의 작업 프로필(추출·교감)과 추출 패널 — 사이드바에서 고를 때(_selectPage)와 같다.
+    // 전에는 빠져 추출 모드 문헌을 해시 주소로 새로 고치면 교감 화면으로 열렸다(2026-10-11 재확인)
+    if (typeof applyProfileForDocument === "function") applyProfileForDocument(target.docId);
+    if (typeof refreshExtractPanel === "function") refreshExtractPanel(false);
+
     // PDF 로드
     if (typeof loadPdfPage === "function") {
       loadPdfPage(target.docId, target.partId, target.pageNum);
@@ -2433,6 +2443,13 @@ window.addEventListener("popstate", () => {
     viewerState.pageNum === target.pageNum
   )
     return;
+
+  // 다른 문헌으로 가면 해시 복원과 같은 길로 간다 — 쪽만 바꾸면 documentInfo·권 선택기·서지 섹션이
+  // 옛 문헌 것으로 남았다(2026-10-11 전수)
+  if (viewerState.docId !== target.docId) {
+    _restoreFromHash();
+    return;
+  }
 
   viewerState.docId = target.docId;
   viewerState.partId = target.partId;
@@ -2512,10 +2529,15 @@ function renderDocumentList(docs) {
  * @param {string} url        스트리밍 엔드포인트 URL
  * @param {object} body       POST 요청 body (JSON)
  * @param {function} onProgress  progress 이벤트 콜백 ({type, elapsed_sec, tokens, provider})
- * @param {string} fallbackUrl  스트리밍 실패 시 폴백할 기존 엔드포인트 URL
+ * @param {string} fallbackUrl  스트림이 **열리기 전에** 실패하면 부를 기존 엔드포인트 URL(열린 뒤의 실패는
+ *                               다시 부르지 않고 알린다 — 같은 LLM 호출이 두 번 과금됐다, 2026-10-11)
  * @returns {Promise<object>} complete 이벤트의 result 객체
  */
 async function fetchWithSSE(url, body, onProgress, fallbackUrl) {
+  // 폴백은 «스트림이 열리기 전» 실패에만 한다(2026-10-11 전수). 스트림이 열린 뒤에는 서버가 이미
+  // LLM을 불렀을 수 있다 — 예전에는 그때도 폴백 URL로 같은 호출을 한 번 더 보내 유료 모델이면 비용이
+  // 두 번 나갔고, 서버가 보낸 오류 문구는 «파싱 무시»로 삼켜져 사람에게 닿지 않았다.
+  let streamStarted = false;
   try {
     const resp = await fetch(url, {
       method: "POST",
@@ -2527,6 +2549,7 @@ async function fetchWithSSE(url, body, onProgress, fallbackUrl) {
     if (!resp.ok || !resp.headers.get("content-type")?.includes("text/event-stream")) {
       throw new Error(`SSE 응답 아님: ${resp.status}`);
     }
+    streamStarted = true;
 
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
@@ -2546,32 +2569,31 @@ async function fetchWithSSE(url, body, onProgress, fallbackUrl) {
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed.startsWith("data: ")) continue;
+        let data;
         try {
-          const data = JSON.parse(trimmed.slice(6));
-          if (data.type === "progress" && onProgress) {
-            onProgress(data);
-          } else if (data.type === "complete") {
-            result = data.result;
-          } else if (data.type === "error") {
-            throw new Error(data.error || "SSE 에러");
-          }
+          data = JSON.parse(trimmed.slice(6));
         } catch (parseErr) {
-          // JSON 파싱 실패면 에러 이벤트가 아닌 한 무시
-          if (parseErr.message && !parseErr.message.includes("SSE")) {
-            console.warn("[fetchWithSSE] 파싱 무시:", trimmed);
-          } else {
-            throw parseErr;
-          }
+          // 깨진 한 줄은 건너뛴다 — 서버 오류 이벤트와는 따로 다룬다(아래)
+          console.warn("[fetchWithSSE] 파싱 무시:", trimmed);
+          continue;
+        }
+        if (data.type === "progress" && onProgress) {
+          onProgress(data);
+        } else if (data.type === "complete") {
+          result = data.result;
+        } else if (data.type === "error") {
+          // 서버가 보낸 오류 — 그 문구 그대로 올린다(폴백으로 다시 부르지 않는다)
+          throw new Error(data.error || "스트리밍 처리 중 서버 오류");
         }
       }
     }
 
     if (result !== null) return result;
-    throw new Error("SSE complete 이벤트 없이 스트림 종료");
+    throw new Error("스트리밍이 결과 없이 끝났습니다 — 다시 시도하세요");
 
   } catch (err) {
-    console.warn(`[fetchWithSSE] 스트리밍 실패, 폴백 시도: ${err.message}`);
-    if (!fallbackUrl) throw err;
+    if (streamStarted || !fallbackUrl) throw err;
+    console.warn(`[fetchWithSSE] 스트리밍 시작 실패, 폴백 시도: ${err.message}`);
 
     // 폴백: 기존 비스트리밍 엔드포인트 호출
     const resp = await fetch(fallbackUrl, {
@@ -2707,21 +2729,6 @@ window.notifyCorrectionsRebase = notifyCorrectionsRebase;
 
 
 /**
- * 에디터 진행 바 표시/숨김.
- * OCR의 _showProgress()와 동일한 패턴이지만 prefix로 DOM ID를 구분한다.
- *
- * HTML 요소 규칙:
- *   #{prefix}-progress       — 전체 컨테이너
- *   #{prefix}-progress-text  — 텍스트 표시
- *   #{prefix}-progress-fill  — 채움 바
- *
- * @param {string} prefix   DOM ID 접두사 ("punct", "trans", "ann")
- * @param {boolean} show    표시/숨김
- * @param {string} text     진행 상태 텍스트
- * @param {number} current  현재 진행 (선택)
- * @param {number} total    전체 수 (선택, 0이면 불확정)
- */
-/**
  * 화면 아래 상태바의 버전을 서버에서 읽어 채운다.
  *
  * 왜 하드코딩하지 않는가: 버전을 여러 곳에 적으면 릴리스 때 일부만 고쳐져
@@ -2741,6 +2748,21 @@ async function _loadAppVersion() {
   }
 }
 
+/**
+ * 에디터 진행 바 표시/숨김.
+ * OCR의 _showProgress()와 동일한 패턴이지만 prefix로 DOM ID를 구분한다.
+ *
+ * HTML 요소 규칙:
+ *   #{prefix}-progress       — 전체 컨테이너
+ *   #{prefix}-progress-text  — 텍스트 표시
+ *   #{prefix}-progress-fill  — 채움 바
+ *
+ * @param {string} prefix   DOM ID 접두사 ("punct", "trans", "ann")
+ * @param {boolean} show    표시/숨김
+ * @param {string} text     진행 상태 텍스트
+ * @param {number} current  현재 진행 (선택)
+ * @param {number} total    전체 수 (선택, 0이면 불확정)
+ */
 function showEditorProgress(prefix, show, text, current, total) {
   const el = document.getElementById(`${prefix}-progress`);
   const textEl = document.getElementById(`${prefix}-progress-text`);

@@ -22,7 +22,7 @@
 
         논문/<주제>/저자_연도_제목.pdf        ← 텍스트 레이어를 입힌 것 (서지 도구가 가져감)
         논문/_scan_originals/<주제>/…        ← 원본 스캔본
-        <작업서고>/documents/embed_NNNN/      ← OCR 결과 (L2/L3) — 검수용
+        <작업서고>/documents/embed_<12자리>/  ← OCR 결과 (L2/L3) — 검수용(id는 원본 파일에서 정한다)
 
     세 번째를 **남기는 것이 기본이다**. 결과가 이상해 보이면 GUI를 켜서
     이 서고를 열고 쪽별 검수를 하면 된다(D-057). 지워 버리면 볼 것이 없어
@@ -292,7 +292,7 @@ def describe_llm_target(
 
 
 def _safe_doc_id(source: Path) -> str:
-    """작업 서고에서 쓸 문헌 ID를 원본 파일 경로로 만든다.
+    """작업 서고에서 쓸 문헌 ID를 원본 파일 경로·크기·수정 시각으로 만든다.
 
     입력: 원본 PDF 경로. 출력: `embed_<12자리 16진>`.
 
@@ -307,7 +307,15 @@ def _safe_doc_id(source: Path) -> str:
     import hashlib
     import os
 
-    key = os.path.normcase(str(Path(source).resolve()))
+    # 경로만 쓰면 같은 자리에 다른 스캔을 덮어 둔 경우 옛 OCR을 이어 썼다 — 크기·수정 시각을 더해
+    # «같은 파일»일 때만 같은 id가 되게 한다(2026-10-11 전수). 파일이 없으면 경로만 쓴다.
+    src = Path(source)
+    key = os.path.normcase(str(src.resolve()))
+    try:
+        st = src.stat()
+        key += f"|{st.st_size}|{st.st_mtime_ns}"
+    except OSError:
+        pass
     return "embed_" + hashlib.sha1(key.encode("utf-8")).hexdigest()[:12]
 
 
@@ -347,8 +355,8 @@ def _process_one(
     try:
         # 1) 작업 서고에 등록 — 원본은 복사되고 이 시점부터 이력이 남는다.
         #
-        # 이미 있으면 다시 만들지 않는다. 앞선 실행이 이 편의 중간에서
-        # 멈춘 경우다(성공한 편은 서고에서 지워지므로 남아 있지 않다).
+        # 이미 있으면 다시 만들지 않는다. 앞선 실행이 이 편의 중간에서 멈췄거나, 끝난 편을
+        # 작업 공간째 남겨 둔 경우다(keep_workspace가 기본 — 끝난 편은 실행 기록이 먼저 건너뛴다).
         # 다시 만들면 그때까지 돌린 OCR이 통째로 버려진다 — 60쪽짜리
         # 논문이면 LLM 호출 수십 회가 그대로 낭비된다.
         doc_path = library_path / "documents" / doc_id

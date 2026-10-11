@@ -873,9 +873,9 @@ async function _executeAlignPreview() {
       tr.innerHTML = `
         <td style="padding: 4px 6px; border-bottom: 1px solid var(--border)">${a.page_num}</td>
         <td style="padding: 4px 6px; border-bottom: 1px solid var(--border); color: #888; font-size: 11px"
-            title="${_escapeHtmlHwpImport(a.ocr_preview || "").replace(/"/g, "&quot;")}">${_escapeHtmlHwpImport(ocrSnip)}${ocrSnip.length < (a.ocr_preview || "").length ? "…" : ""}</td>
+            title="${_escapeHtmlHwpImport(a.ocr_preview || "")}">${_escapeHtmlHwpImport(ocrSnip)}${ocrSnip.length < (a.ocr_preview || "").length ? "…" : ""}</td>
         <td style="padding: 4px 6px; border-bottom: 1px solid var(--border); font-size: 11px"
-            title="${_escapeHtmlHwpImport(a.matched_text || "").replace(/"/g, "&quot;")}">${_escapeHtmlHwpImport(matchSnip)}${matchSnip.length < (a.matched_text || "").length ? "…" : ""}</td>
+            title="${_escapeHtmlHwpImport(a.matched_text || "")}">${_escapeHtmlHwpImport(matchSnip)}${matchSnip.length < (a.matched_text || "").length ? "…" : ""}</td>
         <td style="padding: 4px 6px; border-bottom: 1px solid var(--border); text-align: center">
           <span style="color: ${confColor}; font-weight: bold">${confPct}%</span>
         </td>
@@ -899,11 +899,14 @@ async function _executeAlignPreview() {
 
 /** HTML 특수 문자를 이스케이프한다. */
 function _escapeHtmlHwpImport(str) {
-  // 글자 자리 전용 — 브라우저가 텍스트로 넣고 다시 읽어 escape 한다(속성에는 쓰지 않는다).
-  // 옛 이름 `_escapeHtmlHwpImport` 은 다섯 파일이 선언했고 구현이 모두 같았다(B-009 실측).
+  // 브라우저가 텍스트로 넣고 다시 읽어 escape 한다(&, <, >). 그 뒤 큰·작은따옴표도 바꿔 속성 자리에도 안전하다.
+  // 옛 이름 `_escapeHtml` 은 다섯 파일이 같은 이름으로 선언했고 구현이 모두 같았다(B-009 실측) — 파일마다
+  // 제 이름을 붙였다.
   const div = document.createElement("div");
   div.textContent = str === null || str === undefined ? "" : str;
-  return div.innerHTML;
+  // 속성 자리(title="…")에 쓰여도 안전하게 따옴표까지 바꾼다 — textContent 는 &, <, > 만 바꾼다
+  // (2026-10-11 2차 전수: 문헌·권 제목·에셋 id·외부 source_url 이 속성을 벗어날 수 있었다)
+  return div.innerHTML.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 

@@ -461,15 +461,8 @@ async def api_delete_document(doc_id: str):
     except FileNotFoundError as e:
         return JSONResponse({"error": str(e)}, status_code=404)
     except PermissionError as e:
-        return JSONResponse(
-            {
-                "error": (
-                    f"파일이 사용 중이라 삭제할 수 없습니다.\n원인: {e}\n"
-                    "→ 해결: 해당 폴더를 사용 중인 프로그램을 닫고 다시 시도하세요."
-                )
-            },
-            status_code=500,
-        )
+        # _move_to_trash가 원인·해결이 든 안내를 만든다 — 다시 감싸면 안내가 두 번 나왔다
+        return JSONResponse({"error": str(e)}, status_code=409)
     except Exception as e:
         return JSONResponse(
             {"error": f"삭제 중 오류가 발생했습니다: {e}"},

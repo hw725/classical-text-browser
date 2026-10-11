@@ -63,10 +63,11 @@ class LlmRouter:
         self.config = config or LlmConfig()
         self.usage_tracker = UsageTracker(self.config)
 
-        # 우선순위 순서 (무료 → 저렴 → 중간 → 최후)
+        # 우선순위 순서 (로컬·구독 → 저렴 → 중간 → 최후).
+        # 구독(OAuth)은 «무료»가 아니라 한도가 있다(D-056)
         self.providers: list[BaseLlmProvider] = [
             OllamaProvider(self.config),  # 1순위: 무료 (로컬 gemma4:e4b)
-            OpenAiOAuthProvider(self.config),  # 2순위: 무료 (ChatGPT OAuth 프록시)
+            OpenAiOAuthProvider(self.config),  # 2순위: 구독 한도 (ChatGPT OAuth 프록시)
             GeminiProvider(self.config),  # 3순위: 저렴 (비전 포함)
             OpenAiProvider(self.config),  # 4순위: 중간 (비전 포함)
             AnthropicProvider(self.config),  # 5순위: 최후 폴백
@@ -496,8 +497,8 @@ class LlmRouter:
     async def get_available_models(self) -> list[dict]:
         """GUI 드롭다운용 모델 목록.
 
-        list_models() 메서드가 있는 프로바이더(Ollama, OpenAI, Gemini)는
-        개별 모델을 각각 표시한다.
+        list_models() 메서드가 있는 프로바이더(아래 EXPANDABLE — Ollama·OpenAI·
+        ChatGPT 계정·Gemini·Anthropic)는 개별 모델을 각각 표시한다.
         """
         models = []
 
@@ -556,8 +557,12 @@ class LlmRouter:
                         "model": getattr(provider, "DEFAULT_MODEL", "auto"),
                         "available": available,
                         "display": provider.display_name,
+                        # 쓸 수 있을 때의 갈래와 같은 규칙 — ChatGPT 계정은 무료가 아니라
+                        # 구독 한도다(D-056). 이 줄만 «free»로 남아 있었다(2026-10-11 재확인)
                         "cost": (
-                            "free" if provider.provider_id in ("ollama", "openai_oauth") else "paid"
+                            "free" if provider.provider_id == "ollama"
+                            else "subscription" if provider.provider_id == "openai_oauth"
+                            else "paid"
                         ),
                         "vision": provider.supports_image,
                     }

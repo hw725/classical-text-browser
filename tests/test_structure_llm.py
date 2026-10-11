@@ -167,7 +167,7 @@ def test_route_jev_dry_run_counts_questions_and_cost(client, tmp_path):  # noqa:
 
 
 class _NoKeyDecider:
-    """키 없는 OpenRouter decider 대역 — 라우트가 Jev를 주 판정자로 고르게 한다(D-136)."""
+    """키 없는 OpenRouter decider 대역 — 폴백이 실제 OpenRouter를 부르지 않게 한다(D-139)."""
 
     PROVIDER = "openrouter"
     INPUT_USD_PER_M = 0.04
@@ -214,8 +214,8 @@ def test_route_jev_returns_proposals_and_never_calls_the_generative_router(
             return {"calls": self.calls, "cost_usd": 0.0}
 
     monkeypatch.setattr(jev, "JevClient", FakeClient)
-    # 본문 판정의 기본은 OpenRouter decider다(D-136). 이 PC에는 실제 키가 개인 파일에 있으므로
-    # 키 없는 가짜로 막아 Jev 길을 잰다 — 막지 않으면 시험이 실제로 부른다
+    # 본문 판정의 주는 Jev이고 decider는 폴백이다(D-139). 이 PC에는 실제 OpenRouter 키가 개인 파일에
+    # 있으므로 폴백을 키 없는 가짜로 막는다 — 막지 않으면 Jev가 실패할 때 시험이 실제로 부른다
     monkeypatch.setattr(or_mod, "OpenRouterDecisionClient", _NoKeyDecider)
     r = client.post(
         "/api/documents/d1/segmentation/structure/llm",

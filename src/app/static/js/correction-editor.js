@@ -72,6 +72,13 @@ const CORRECTION_TYPES = {
     cssClass: "corr-decoding-error",
   },
   uncertain: { label: "불확실", color: "#6b7280", cssClass: "corr-uncertain" },
+  // 스키마 enum의 여섯째. 앱에서 만드는 길은 없지만 들인 교정(스냅샷 등)에 있을 수 있다 —
+  // 없으면 라벨·색 없이 그려졌다(2026-10-11 전수). 다이얼로그 선택지에는 넣지 않는다
+  layout_correction: {
+    label: "레이아웃 교정",
+    color: "#14b8a6",
+    cssClass: "corr-layout-correction",
+  },
 };
 
 /* ──────────────────────────
@@ -571,6 +578,11 @@ function _renderFreetextView(container) {
 }
 
 
+/** 글자 배열(코드포인트 단위). 교정의 char_index·원문 길이를 세는 자다(서버 파이썬 str과 같다). */
+function _corrChars(text) {
+  return Array.from(text || "");
+}
+
 /**
  * 기존 corrections를 텍스트에 적용하여 corrected_text를 생성한다 (클라이언트 측).
  *
@@ -606,19 +618,21 @@ function _applyCorrectionsLocally(original, corrections) {
     return isRange(x.c) ? x.pos - y.pos : y.pos - x.pos;
   });
 
-  let text = original;
+  // 좌표는 코드포인트다 — 서버(파이썬 str)와 같아야 확장 한자 뒤의 교정이 같은 자리에 붙는다
+  // (2026-10-11 2차 전수: 화면은 UTF-16으로 세어 한 칸 어긋난 char_index를 저장했다)
+  let cs = _corrChars(original);
   for (const { c } of flatCorrs) {
     const idx = c.char_index;
     const orig = c.original_ocr || "";
     const repl = c.corrected || "";
-    const end = idx + orig.length;
+    const end = idx + _corrChars(orig).length;
 
     // 원본 글자가 일치하는지 확인 후 치환
-    if (end <= text.length && text.substring(idx, end) === orig) {
-      text = text.substring(0, idx) + repl + text.substring(end);
+    if (end <= cs.length && cs.slice(idx, end).join("") === orig) {
+      cs = [...cs.slice(0, idx), ..._corrChars(repl), ...cs.slice(end)];
     }
   }
-  return text;
+  return cs.join("");
 }
 
 /**
@@ -646,7 +660,7 @@ function _splitTextIntoSegments(text) {
           type: lastType,
           label: lastLabel,
           text: segText,
-          startIdx: lastIdx,
+          startIdx: _corrChars(text.substring(0, lastIdx)).length,
         });
       }
     }
@@ -672,7 +686,7 @@ function _splitTextIntoSegments(text) {
         type: lastType,
         label: lastLabel,
         text: segText,
-        startIdx: lastIdx,
+        startIdx: _corrChars(text.substring(0, lastIdx)).length,
       });
     }
   }
@@ -776,7 +790,8 @@ function _renderCharsIntoElement(parent, text, globalStartIdx, blockType) {
   //   저장은 됐는데 화면은 «교정 전으로 되돌아간» 것처럼 보였다.
   //   이제 원문 범위 [char_index, char_index + 원문 길이)를 통째로 교정문으로
   //   바꿔 그리고, 넣기는 그 자리 앞에 끼워 그린다.
-  const flat = _flatCorrectionLayout(globalStartIdx, text.length);
+  const cs = _corrChars(text); // 코드포인트 — data-idx·char_index가 서버와 같은 자
+  const flat = _flatCorrectionLayout(globalStartIdx, cs.length);
 
   // 교정문(줄바꿈 포함)을 그리는 span. 지우기는 빈 칸으로 사라지게 하지 않고
   // 지운 원문을 흐린 취소선으로 남겨(줄바꿈은 ↵) 클릭해 되돌릴 수 있게 한다.
@@ -809,25 +824,25 @@ function _renderCharsIntoElement(parent, text, globalStartIdx, blockType) {
     parent.appendChild(span);
   };
 
-  for (let i = 0; i <= text.length; i++) {
+  for (let i = 0; i <= cs.length; i++) {
     const globalIdx = globalStartIdx + i;
 
     // 이 자리 앞에 넣은 글
     for (const corrIdx of flat.inserts.get(globalIdx) || []) {
       appendCorrSpan(corrIdx, globalIdx);
     }
-    if (i === text.length) break;
+    if (i === cs.length) break;
 
     // 이 자리에서 시작하는 바꾸기·지우기 → 범위를 통째로 건너뛴다
     const rangeCorr = flat.starts.get(globalIdx);
     if (rangeCorr != null) {
       appendCorrSpan(rangeCorr, globalIdx);
-      const len = (correctionState.corrections[rangeCorr].original_ocr || "").length;
+      const len = _corrChars(correctionState.corrections[rangeCorr].original_ocr || "").length;
       i += len - 1;
       continue;
     }
 
-    const ch = text[i];
+    const ch = cs[i];
     if (ch === "\n") {
       parent.appendChild(document.createElement("br"));
       continue;
@@ -868,7 +883,7 @@ function _renderCharsIntoElement(parent, text, globalStartIdx, blockType) {
 function _flatCorrectionLayout(startIdx, length) {
   const starts = new Map();
   const inserts = new Map();
-  const text = correctionState.pageText || "";
+  const cs = _corrChars(correctionState.pageText || "");
   const endIdx = startIdx + length;
   correctionState.corrections.forEach((c, idx) => {
     if (c.block_id != null || c.line != null || c.char_index == null) return;
@@ -880,8 +895,9 @@ function _flatCorrectionLayout(startIdx, length) {
       inserts.get(at).push(idx);
       return;
     }
-    if (at < startIdx || at >= endIdx || at + orig.length > endIdx) return;
-    if (text.substring(at, at + orig.length) !== orig) return;
+    const olen = _corrChars(orig).length;
+    if (at < startIdx || at >= endIdx || at + olen > endIdx) return;
+    if (cs.slice(at, at + olen).join("") !== orig) return;
     if (!starts.has(at)) starts.set(at, idx);
   });
   return { starts, inserts };
@@ -1182,9 +1198,11 @@ function _applyBlockFilter(value) {
  * API가 자동으로 git commit도 수행한다.
  */
 async function _saveCorrections() {
+  // 출력: 저장됐으면 true, 아니면 false — 부르는 쪽(리셋 등)이 실패를 알 수 있게(2026-10-11 전수).
+  // 예전에는 실패를 안에서 삼키고 아무것도 돌려주지 않아 리셋의 실패 알림이 닿지 않았다
   const { docId, partId, pageNum } = viewerState;
-  if (!docId || !partId || !pageNum) return;
-  if (correctionState.saving) return;
+  if (!docId || !partId || !pageNum) return false;
+  if (correctionState.saving) return false;
 
   correctionState.saving = true;
   const seqAtSave = correctionState.editSeq; // 이 저장 뒤에 고친 것이 있는지 가린다
@@ -1244,15 +1262,15 @@ async function _saveCorrections() {
     if (!samePage()) {
       // 그 사이 다른 쪽으로 갔다 — 저장은 됐다. 지금 쪽의 상태(편집 중일 수 있다)는 건드리지 않는다
       if (result.git && result.git.committed) _loadGitLog(docId);
-      return;
+      return true;
     }
     let typedDuringSave = correctionState.editSeq !== seqAtSave;
     if (!typedDuringSave) {
       try {
-        const again = await fetch(url, { cache: "no-store" });
+        const again = await fetch(url); // no-store는 서버 미들웨어가 붙인다(D-066)
         if (again.ok && !samePage()) {
           if (result.git && result.git.committed) _loadGitLog(docId);
-          return;
+          return true;
         }
         if (again.ok && correctionState.editSeq === seqAtSave) {
           const fresh = await again.json();
@@ -1298,9 +1316,11 @@ async function _saveCorrections() {
     if (result.git && result.git.committed) {
       _loadGitLog(docId);
     }
+    return true;
   } catch (err) {
     console.error("교정 저장 실패:", err);
     _updateCorrSaveStatus("error");
+    return false;
   } finally {
     clearTimeout(timeoutId);
     correctionState.saving = false;
@@ -1335,16 +1355,40 @@ async function _resetAllCorrections() {
     `현재 페이지의 교정 ${correctionState.corrections.length}건을 모두 삭제합니다.\n이 작업은 되돌릴 수 없습니다. 계속하시겠습니까?`
   )) return;
 
-  // 교정 배열을 비우고 서버에 빈 배열로 저장
+  // 교정 배열을 비우고 서버에 빈 배열로 저장.
+  // 자유 편집 모드의 저장은 «지금 글»(corrected_text)을 보내 서버가 diff로 교정을 만든다 — 글을
+  // 원문으로 되돌려 두지 않으면 리셋이 지금 교정을 그대로 다시 저장했다(2026-10-11 전수)
+  // 저장이 실패하면 리셋 전으로 되돌린다 — 되돌리지 않으면 화면은 옛 교정을 보이는데 상태는 비어,
+  // 다음 저장이 교정을 말없이 지웠다(2026-10-11 재확인)
+  const before = {
+    corrections: correctionState.corrections,
+    correctedText: correctionState.correctedText,
+    isDirty: correctionState.isDirty,
+  };
+  const ta = document.getElementById("corr-freetext-editor");
+  const taBefore = ta ? ta.value : null;
+  const rollback = () => {
+    correctionState.corrections = before.corrections;
+    correctionState.correctedText = before.correctedText;
+    correctionState.isDirty = before.isDirty;
+    if (ta) ta.value = taBefore;
+  };
   correctionState.corrections = [];
+  correctionState.correctedText = correctionState.pageText;
+  if (ta) ta.value = correctionState.pageText;
   correctionState.isDirty = true;
 
   try {
-    await _saveCorrections();
+    if (!(await _saveCorrections())) {
+      rollback();
+      showToast("교정 리셋이 저장되지 않았습니다 — 잠시 뒤 다시 시도하세요.", "error");
+      return;
+    }
     _renderCorrectionView();
     _renderCorrList();
     _updateCorrCount();
   } catch (e) {
+    rollback();
     showToast(`교정 리셋 실패: ${e.message}`, 'error');
   }
 }
@@ -1595,11 +1639,14 @@ function _colorizeDiff(text) {
    ────────────────────────── */
 
 function _escapeHtmlCorrection(str) {
-  // 글자 자리 전용 — 브라우저가 텍스트로 넣고 다시 읽어 escape 한다(속성에는 쓰지 않는다).
-  // 옛 이름 `_escapeHtmlCorrection` 은 다섯 파일이 선언했고 구현이 모두 같았다(B-009 실측).
+  // 브라우저가 텍스트로 넣고 다시 읽어 escape 한다(&, <, >). 그 뒤 큰·작은따옴표도 바꿔 속성 자리에도 안전하다.
+  // 옛 이름 `_escapeHtml` 은 다섯 파일이 같은 이름으로 선언했고 구현이 모두 같았다(B-009 실측) — 파일마다
+  // 제 이름을 붙였다.
   const div = document.createElement("div");
   div.textContent = str === null || str === undefined ? "" : str;
-  return div.innerHTML;
+  // 속성 자리(title="…")에 쓰여도 안전하게 따옴표까지 바꾼다 — textContent 는 &, <, > 만 바꾼다
+  // (2026-10-11 2차 전수: 문헌·권 제목·에셋 id·외부 source_url 이 속성을 벗어날 수 있었다)
+  return div.innerHTML.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 function _corrFormatDate(isoStr) {

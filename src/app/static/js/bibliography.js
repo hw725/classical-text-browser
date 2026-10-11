@@ -12,7 +12,7 @@
  *
  * 왜 이렇게 하는가:
  *   - 비개발자 연구자가 서지정보를 한눈에 확인하고,
- *     외부 소스(NDL, 국립공문서관)에서 자동으로 가져올 수 있도록 한다.
+ *     외부 소스(NDL·국립공문서관·KORCIS·규장각·KOSTMA·장서각 — 파서 6종, 그 밖의 주소는 범용 LLM 파서)에서 자동으로 가져올 수 있도록 한다.
  *   - platform-v7.md §7.3의 파서 아키텍처와 GUI가 연결되는 지점.
  */
 
@@ -140,7 +140,7 @@ function _bindEvents() {
 /**
  * 문헌의 서지정보를 로드하여 패널에 표시한다.
  *
- * sidebar-tree.js의 _selectPage()에서 호출된다.
+ * workspace.js의 onPageChanged()에서 문헌이 바뀔 때 부른다.
  */
 // eslint-disable-next-line no-unused-vars
 function loadBibliography(docId) {
@@ -181,17 +181,20 @@ function _renderBibliography(bib) {
   if (!container) return;
 
 /**
- * 판식(版式)을 한 줄로. 입력: printing_info 객체. 출력: 표시 문자열.
+ * 판식(版式)을 한 줄로. 입력: printing_info 객체. 출력: 화면에 넣을 HTML(이스케이프한 것).
  * 목적: 갈라 담은 칸이 있으면 그것을 보이고, 못 읽은 것은 원문 그대로 보인다.
  * 「반엽 10행」은 편성이 좌표에서 잰 값과 맞대어 볼 기준이다(D-120).
+ * 값은 사용자 입력·서지 파서·스냅샷 들이기에서 온다 — 다른 서식 함수처럼 이스케이프한다.
+ * 전에는 그대로 innerHTML에 들어갔고, «원문:» 앞 줄바꿈도 한 줄로 접혔다(2026-10-11 재확인).
  */
 function _formatPansik(info) {
-  if (!info || typeof info !== "object") return "";
+  if (!info || typeof info !== "object") return '<span class="bib-empty">[미입력]</span>';
   const order = ["gwangwak", "gwangwak_size", "gyeseon", "haengja", "ju_haengja", "pangoo", "eomi", "pansimje"];
-  const parts = order.map((k) => info[k]).filter(Boolean);
-  if (!parts.length) return info.summary || "";
+  const parts = order.map((k) => info[k]).filter(Boolean).map((v) => _escapeHtmlBibliography(String(v)));
+  const summary = info.summary ? _escapeHtmlBibliography(String(info.summary)) : "";
+  if (!parts.length) return summary || '<span class="bib-empty">[미입력]</span>';
   let out = parts.join(" · ");
-  if (info.summary) out += `\n원문: ${info.summary}`;
+  if (summary) out += `<br>원문: ${summary}`;
   return out;
 }
 
@@ -239,7 +242,7 @@ function _formatPansik(info) {
     html += `
       <div class="bib-field bib-mapping-info">
         <span class="bib-label">매핑 출처</span>
-        <span class="bib-value">${bib._mapping_info.parser_id || "수동"} (${bib._mapping_info.api_variant || "-"})</span>
+        <span class="bib-value">${_escapeHtmlBibliography(bib._mapping_info.parser_id || "수동")} (${_escapeHtmlBibliography(bib._mapping_info.api_variant || "-")})</span>
       </div>
     `;
   }
@@ -589,30 +592,34 @@ async function _saveEditedBibliography() {
   const title = _getEditField("bib-edit-title");
   const creatorName = _getEditField("bib-edit-creator-name");
 
+  // 칸이 화면에 있으면 비운 것은 «지우기»(null)다. 예전에는 «값 || 옛 값»이라 칸을 비워도
+  // 옛 값이 되살아나 지울 수 없었다(2026-10-11 전수). 칸이 없을 때만 옛 값을 둔다.
+  // 제목은 필수라 비우면 옛 제목을 둔다.
   const updated = {
     ...bib,
     title: title || bib.title,
-    title_reading: _getEditField("bib-edit-title-reading") || bib.title_reading,
+    title_reading: _bibEditOr("bib-edit-title-reading", bib.title_reading),
     creator: creatorName
       ? {
           name: creatorName,
-          name_reading: _getEditField("bib-edit-creator-reading") || bib.creator?.name_reading || null,
-          role: _getEditField("bib-edit-creator-role") || bib.creator?.role || null,
-          period: _getEditField("bib-edit-creator-period") || bib.creator?.period || null,
+          name_reading: _bibEditOr("bib-edit-creator-reading", bib.creator?.name_reading),
+          role: _bibEditOr("bib-edit-creator-role", bib.creator?.role),
+          period: _bibEditOr("bib-edit-creator-period", bib.creator?.period),
         }
-      : bib.creator || null,
-    date_created: _getEditField("bib-edit-date") || bib.date_created,
-    edition_type: _getEditField("bib-edit-edition") || bib.edition_type,
-    physical_description: _getEditField("bib-edit-physical") || bib.physical_description,
+      : document.getElementById("bib-edit-creator-name") ? null : bib.creator || null,
+    date_created: _bibEditOr("bib-edit-date", bib.date_created),
+    edition_type: _bibEditOr("bib-edit-edition", bib.edition_type),
+    physical_description: _bibEditOr("bib-edit-physical", bib.physical_description),
     // 판식은 원문 한 줄만 보낸다 — 서버가 갈라 담는다(파서가 한곳이라 화면과 어긋나지 않는다)
     printing_info: (() => {
+      if (!document.getElementById("bib-edit-pansik")) return bib.printing_info || null;
       const raw = _getEditField("bib-edit-pansik");
-      if (!raw) return bib.printing_info || null;
+      if (!raw) return null;
       return { ...(bib.printing_info || {}), summary: raw };
     })(),
-    material_type: _getEditField("bib-edit-material") || bib.material_type,
-    series_title: _getEditField("bib-edit-series") || bib.series_title,
-    notes: _getEditField("bib-edit-notes") || bib.notes,
+    material_type: _bibEditOr("bib-edit-material", bib.material_type),
+    series_title: _bibEditOr("bib-edit-series", bib.series_title),
+    notes: _bibEditOr("bib-edit-notes", bib.notes),
   };
 
   const statusEl = document.getElementById("bib-edit-status");
@@ -686,27 +693,34 @@ function _formatRepository(repo) {
 function _formatDigitalSource(ds) {
   if (!ds) return '<span class="bib-empty">[미입력]</span>';
   let text = _escapeHtmlBibliography(ds.platform || "");
-  if (ds.source_url) {
-    text += ` <a href="${_escapeHtmlBibliography(ds.source_url)}" target="_blank" class="bib-link">열기</a>`;
+  // http(s)만 링크로 만든다 — 서지는 손 입력·스냅샷 들이기로도 들어와 «javascript:» 같은 주소가
+  // 링크가 될 수 있었다(2026-10-11 재확인). 다른 주소는 글자로만 보인다.
+  if (ds.source_url && /^https?:\/\//i.test(String(ds.source_url))) {
+    text += ` <a href="${_escapeHtmlBibliography(ds.source_url)}" target="_blank" rel="noopener" class="bib-link">열기</a>`;
+  } else if (ds.source_url) {
+    text += ` ${_escapeHtmlBibliography(ds.source_url)}`;
   }
   return text || '<span class="bib-empty">[미입력]</span>';
 }
 
 function _escapeHtmlBibliography(str) {
-  // 글자 자리 전용 — 브라우저가 텍스트로 넣고 다시 읽어 escape 한다(속성에는 쓰지 않는다).
-  // 옛 이름 `_escapeHtmlBibliography` 은 다섯 파일이 선언했고 구현이 모두 같았다(B-009 실측).
+  // 브라우저가 텍스트로 넣고 다시 읽어 escape 한다(&, <, >). 그 뒤 큰·작은따옴표도 바꿔 속성 자리에도 안전하다.
+  // 옛 이름 `_escapeHtml` 은 다섯 파일이 같은 이름으로 선언했고 구현이 모두 같았다(B-009 실측) — 파일마다
+  // 제 이름을 붙였다.
   const div = document.createElement("div");
   div.textContent = str === null || str === undefined ? "" : str;
-  return div.innerHTML;
+  // 속성 자리(title="…")에 쓰여도 안전하게 따옴표까지 바꾼다 — textContent 는 &, <, > 만 바꾼다
+  // (2026-10-11 2차 전수: 문헌·권 제목·에셋 id·외부 source_url 이 속성을 벗어날 수 있었다)
+  return div.innerHTML.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 /**
  * HTML «속성값»용 이스케이프.
  *
- * 왜 _escapeHtml과 따로 두는가:
- *   textContent 경로는 <, >, &만 바꾸고 따옴표는 그대로 둔다. 본문에서는
- *   그래도 괜찮지만 value="…" 안에서는 따옴표 하나로 속성을 빠져나가
- *   onclick 같은 새 속성을 붙일 수 있다. 그래서 따옴표까지 막는다.
+ * 왜 _escapeHtmlBibliography와 따로 두는가:
+ *   옛 판의 글자용 이스케이프(textContent 경로)는 <, >, &만 바꿨다. value="…" 안에서는 따옴표
+ *   하나로 속성을 빠져나가 onclick 같은 새 속성을 붙일 수 있어 이 함수를 따로 뒀다. 지금은 글자용도
+ *   따옴표까지 막지만(2026-10-11), 속성 자리임을 드러내려고 이름을 나눠 둔다.
  *
  * 이름에 bib를 붙인 까닭:
  *   JS 파일들이 모듈이 아니라 <script>로 나란히 읽혀 함수 이름이 «전역 하나»를
@@ -727,6 +741,16 @@ function _bibEscAttr(str) {
 function _setEditField(id, value) {
   const el = document.getElementById(id);
   if (el) el.value = value || "";
+}
+
+/**
+ * 편집 칸 값. 칸이 있으면 그 값(비었으면 null — 지우기), 칸이 없으면 옛 값.
+ * 입력: 요소 id, 옛 값. 출력: 저장할 값.
+ */
+function _bibEditOr(id, oldValue) {
+  const el = document.getElementById(id);
+  if (!el) return oldValue ?? null;
+  return el.value.trim() || null;
 }
 
 function _getEditField(id) {

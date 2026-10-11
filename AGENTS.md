@@ -179,13 +179,13 @@ src/app/
 | **화면에 넣는 파일명·OCR 원문은 이스케이프** | 드롭한 파일명이 문헌 제목이 되어 `innerHTML`로 들어간다(D-069) |
 | **로컬 서비스는 `127.0.0.1`로 부른다**. `localhost` 금지 | Windows는 `localhost`를 IPv6(::1)부터 시도한다. IPv4에만 뜬 서비스(Ollama)면 제한 시간을 다 쓰고서야 IPv4로 넘어가 **호출마다 2초**를 버린다(실측 2.11s vs 0.04s, D-109) |
 | **검증용 서버는 `CTB_CONFIG_DIR=<임시 폴더>`로 띄운다** | 설정 파일(`~/.classical-text-browser/config.json`)은 하나라, 복사본 서고로 띄운 서버가 «마지막 서고»를 덮어 아이콘으로 켠 앱이 임시 폴더를 열었다(2026-09-10). LLM 사용 기록도 서고가 없으면 같은 폴더로 간다(`usage_tracker.default_usage_log_path`) — pytest는 `tests/conftest.py`가 이 변수를 임시 폴더로 돌리고, 세션 맨 뒤 테스트가 홈 파일 크기가 변하지 않았는지 잰다. 서고 없이 `LlmConfig()`로 도는 라우터 테스트가 mock 응답 2,127행을 홈 기록에 섞었다(2026-09-10 확인) |
-| **빠른 시험은 바깥 네트워크에 닿지 않는다** — 실제 사이트·API가 필요한 시험은 `@pytest.mark.network`(그리고 `slow`) | 이 PC에는 실제 LLM 키가 있다. 가짜 라우터를 빠뜨린 시험이 «200 또는 400»을 둘 다 통과로 받으며 매 verify마다 실제 LLM을 불렀다(2026-10-11, 5.2초). `tests/conftest.py`가 표지 없는 시험의 바깥 소켓 연결을 막는다(로컬 127.0.0.1은 허용) |
+| **빠른 시험은 바깥 네트워크에 닿지 않는다** — 실제 사이트·API가 필요한 시험은 `@pytest.mark.network`(그리고 `slow`) | 이 PC에는 실제 LLM 키가 있다. 가짜 라우터를 빠뜨린 시험이 «200 또는 400»을 둘 다 통과로 받으며 매 verify마다 실제 LLM을 불렀다(2026-10-11, 5.2초). `tests/conftest.py`가 표지 없는 시험의 바깥 소켓 연결을 막는다(로컬 127.0.0.1은 허용 — **단 Ollama 11434·OAuth 프록시 10531~10540은 로컬이어도 막는다**, 그 데몬이 바깥으로 넘겨 부르므로. 2026-10-11) |
 | **`.bat` 파일은 ASCII만** (주석도 영어) | `chcp 65001`의 cmd가 다중바이트 줄에서 위치를 잘못 세어 뒤쪽 줄 중간부터 읽는다. 새 콘솔에서만 재현(maintenance §1.6) |
 | **배포되는 진입점은 맨 앞에서 `core.console.force_utf8_console()`** | 한국어 Windows 콘솔은 cp949다. 한글은 있지만 `—`·`«»`·`✓`는 **없어** 그 글자를 `print`하면 즉사한다. 이 PC는 `PYTHONUTF8=1`이 박혀 있어 **겪지 않는다** — 「내 PC에서 잘 돌았다」가 증거가 못 되는 자리다. 셋을 배포한다: `warmup_paddle.py`·`cli/__main__.py`·`app/__main__.py`(+`ctb_setup.py`는 홀로 도는 exe라 직접 품는다). `test_doc_drift.py`가 본다 |
 | **`.ps1`은 UTF-8 BOM + CRLF** | BOM이 없으면 PowerShell 5.1이 ANSI로 읽어 한글이 깨진다. **구문은 멀쩡해 그냥 돈다** — 눈으로 보기 전엔 모른다. `.gitattributes`가 CRLF를, `test_doc_drift.py`가 BOM을 못박는다 |
 | **LLM을 기다린 뒤 저장하는 라우트는 파일을 다시 읽어 그 위에 병합한다** | 아까 읽은 데이터를 저장하면 기다리는 동안 들어온 수동 주석이 오류 없이 사라진다(D-127). 해석 저장소 L5~L7 저장도 `write_json_atomic()`이다 |
 | **LLM 답의 항목 목록은 `core.llm_json_items.parse_llm_items()`로 꺼낸다** | 기형 항목(null·문자열) 거부·잘린 답 복구·`status`(ok·recovered·no_json)를 한 곳에서. 기능마다 파서를 복제하면 한쪽만 고쳐진다(D-127) |
-| **주석 좌표는 코드포인트. 화면 JS는 `_annChars()`(Array.from)로 센다** — `.length`·`[i]`·`.slice` 금지 | 확장 한자(CJK 확장 B)는 UTF-16에서 두 단위라 그 뒤 주석이 한 칸 어긋난다(D-127). 주석 API는 `?part_id=`를 받는다 — `"main"` 고정 금지 |
+| **글자 좌표는 코드포인트(주석·현토·번역·표점·교정·인용 모두). 화면 JS는 편집기마다 둔 도우미(`_annChars`·`_htChars`·`_trChars`·`_puChars`·`_corrChars`, 모두 Array.from)로 센다 — 인용 편집기는 `Array.from`을 직접 쓴다. 화면에 보이려고 자르는 미리보기도 같다** — `.length`·`[i]`·`.slice` 금지 | 확장 한자(CJK 확장 B)는 UTF-16에서 두 단위라 그 뒤 주석이 한 칸 어긋난다(D-127). 주석 API는 `?part_id=`를 받는다 — `"main"` 고정 금지 |
 
 ## 코딩 규칙
 - 이 프로젝트의 사용자는 비개발자 인문학 연구자다
@@ -246,7 +246,8 @@ src/app/
   `tests/test_read_path_writes.py`(화면을 열기만 해도 쓰던 것, 2026-09-30)·
   `tests/test_correction_saves.py`(자유 편집 교정이 글자 교정 보기에 안 보이던 것·확정본을 다시 쓰면 교정이 어긋나던 것, 2026-10-02)·
   `tests/test_composition_apply_plan_js.py`(편성 ③ «바뀐 것»과 「적용」이 다른 집합을 세던 것, 2026-10-05)·
-  `tests/test_sweep_20261011.py`(전수 검토 결함 B-012~B-035의 회귀 — 인용 좌표·번역 집계·시작 행 옮기기·사전 활성화), **CI 없음.**
+  `tests/test_sweep_20261011.py`(2026-10-11 전수 결함 B-012~B-077과 릴리스 리뷰 B-078의 회귀 — 인용·현토·번역 좌표, 번역 집계, 시작 행 옮기기,
+  사전 활성화, 백업·.env·휴지통 데이터 손실, 이스케이프), **CI 없음.**
   화면 «마크업»을 읽는 것도 둘이다 — `tests/test_ui_reachability.py`(조작 단추에 사람이
   닿을 수 있는가, B-008)와 `tests/test_connectome.py`(화면이 그 라우트를 부르는가).
   (2026-10-05 재실측. 2026-07-26 v1.2.0 감사 때 직전 대비 프론트가 줄어든 것은

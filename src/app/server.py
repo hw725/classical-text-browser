@@ -121,6 +121,16 @@ app.include_router(version.router)
 # ── 정적 파일 서빙 ───────────────────────────────
 # 서고 유무와 관계없이 항상 마운트한다.
 
+# MIME 형식을 직접 등록한다. StaticFiles는 파이썬 mimetypes를 쓰고, Windows에서는 그것이
+# 레지스트리를 따라간다 — 이 PC에서 `.mjs`가 text/plain으로 나갔다(2026-10-11 실측). 브라우저는
+# 모듈 스크립트를 text/plain이면 거부하므로 함께 실은 onnxruntime-web(static/vendor)이 깨진다.
+# PC마다 레지스트리가 달라 `.js`도 틀어질 수 있어 셋을 모두 못박는다.
+import mimetypes  # noqa: E402
+
+mimetypes.add_type("text/javascript", ".js")
+mimetypes.add_type("text/javascript", ".mjs")
+mimetypes.add_type("application/wasm", ".wasm")
+
 
 class _NoCacheStaticFiles(StaticFiles):
     """정적 파일에 재검증을 강제하는 StaticFiles.
@@ -196,7 +206,7 @@ if _env_library and Path(_env_library).exists():
 
 
 def configure(library_path: str | Path) -> FastAPI:
-    """서고 경로를 설정하고 정적 파일 마운트를 수행한다.
+    """서고 경로를 설정한다(정적 파일은 모듈을 읽을 때 이미 마운트된다).
 
     목적: 서버 시작 전(또는 런타임에 서고 전환 시) 서고 경로를 지정한다.
     입력: library_path — 서고 디렉토리 경로.

@@ -39,7 +39,7 @@ function _renderOcrEnginePlan() {
     _syncOrientWithPlan();
     return;
   }
-  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   // 구간마다 한 줄 — 한 줄에 이어 붙이면 패널 폭을 넘어 옆으로 잘렸다(2026-09-10 사용자 지적)
   const rows = plan.ranges.map((r) => `<div class="ocr-plan-row">${r.from}~${r.to}쪽 ${esc(r.label || "")} → ${esc(r.display_name || r.engine)}</div>`).join("");
   const mixed = plan.mixed && plan.mixed.length ? `<div class="ocr-plan-row">영역별 OCR이 필요한 쪽 ${esc(plan.mixed.map((m) => m.page).join(","))}(계획에서 뺌)</div>` : "";
@@ -308,7 +308,8 @@ async function _runOcr(blockIds) {
 
   try {
     // OCR 전에 현재 레이아웃을 L3에 저장 (저장되지 않은 블록이 있을 수 있음)
-    // layout-editor.js의 _saveLayout()이 전역이 아니므로 직접 호출
+    // 시작할 때 붙잡은 쪽(docId·partId·pageNum)으로 저장하려고 직접 PUT한다 — layout-editor의
+    // _saveLayout()은 «지금 화면의 쪽»으로 저장한다
     if (
       typeof layoutState !== "undefined" &&
       layoutState.blocks &&
@@ -355,9 +356,16 @@ async function _runOcr(blockIds) {
       // 전체 재조회 실패 시에도 방금 결과는 유지
     }
 
-    ocrState.lastResults = latest;
-
     _showProgress(false);
+    // 도는 동안 다른 쪽으로 옮겼으면 그 쪽 패널에 옛 쪽 결과를 그리지 않는다 — 저장은 옛 쪽에 됐다
+    // (2026-10-11 전수: 늦은 응답 거름이 없어 지금 쪽 패널에 남의 쪽 결과가 떴다)
+    const samePage =
+      viewerState.docId === docId && viewerState.partId === partId && viewerState.pageNum === pageNum;
+    if (!samePage) {
+      showToast(`${pageNum}쪽 OCR이 끝났습니다(저장됨) — 지금은 다른 쪽을 보고 있어 결과를 그리지 않았습니다.`, "info");
+      return;
+    }
+    ocrState.lastResults = latest;
     _displayResults(latest);
   } catch (e) {
     _showProgress(false);
@@ -760,21 +768,6 @@ function _toggleOcrVerticalView() {
   }
 }
 
-/* ─── UI 헬퍼 ──────────────────────────────────── */
-
-/**
- * OCR 진행률을 표시/숨김한다.
- *
- * 왜 이렇게 하는가:
- *   current/total이 0이면 불확정 진행률 (펄스 애니메이션),
- *   양수이면 확정 진행률 (채워지는 바 + 퍼센트 텍스트).
- *
- * 입력:
- *   show — 표시 여부
- *   text — 진행 상태 텍스트 (예: "블록 2/5 처리 중...")
- *   current — 현재 처리 완료 수 (0이면 불확정)
- *   total — 전체 처리 대상 수 (0이면 불확정)
- */
 /**
  * 권(PDF) 전체를 한 번에 OCR한다 — 추출 패널의 일괄 OCR과 같은 엔드포인트.
  *
@@ -907,7 +900,10 @@ async function _runPartOcr() {
     redo_changed_layout: true,
     backup_before_overwrite: true,
     auto_full_page_block: true,
-    writing_direction: "vertical_rtl",
+    // 계획(engine_plan)이 없는 쪽의 전면 블록 방향 — 레이아웃 편집기의 «쪽 전면 1블록»과 같은 규칙.
+    // 예전에는 세로 고정이라 계획 없는 가로쓰기 책(추출 프로필)이 세로 블록으로 잡혔다(2026-10-11 전수)
+    writing_direction:
+      document.body.dataset.workspaceProfile === "extract" ? "horizontal_ltr" : "vertical_rtl",
     fill_text_layer: true,
     llm_correction: "off",
   };
@@ -989,6 +985,21 @@ async function _runPartOcr() {
     _disableButtons(false);
   }
 }
+
+/**
+ * OCR 진행률을 표시/숨김한다.
+ *
+ * 왜 이렇게 하는가:
+ *   current/total이 0이면 불확정 진행률 (펄스 애니메이션),
+ *   양수이면 확정 진행률 (채워지는 바 + 퍼센트 텍스트).
+ *
+ * 입력:
+ *   show — 표시 여부
+ *   text — 진행 상태 텍스트 (예: "블록 2/5 처리 중...")
+ *   current — 현재 처리 완료 수 (0이면 불확정)
+ *   total — 전체 처리 대상 수 (0이면 불확정)
+ */
+/* ─── UI 헬퍼 ──────────────────────────────────── */
 
 function _showProgress(show, text, current, total) {
   const el = document.getElementById("ocr-progress");
@@ -1079,6 +1090,12 @@ async function _runCorrection(mode, blockIds) {
     const data = await res.json();
     if (!res.ok) {
       showToast(data.error || "LLM 교정에 실패했습니다.", "error");
+      return;
+    }
+    // 도는 동안 쪽을 옮겼으면 옛 쪽 초안을 지금 쪽에 그리지 않는다 — 그리면 「적용」이 지금 쪽으로
+    // 갔다(2026-10-11 재확인, _runOcr와 같은 종류)
+    if (!(viewerState.docId === docId && viewerState.partId === partId && viewerState.pageNum === pageNum)) {
+      showToast(`${pageNum}쪽 LLM 교정이 끝났습니다 — 지금은 다른 쪽을 보고 있어 초안을 그리지 않았습니다. 그 쪽에서 다시 여세요.`, "info");
       return;
     }
     _renderCorrectionDraft(data);
@@ -1517,7 +1534,7 @@ async function _deleteCurrentPageOcr() {
     (row.lines || []).map((line) => line.text || "").join(""),
   );
   const shortText =
-    previewText.length > 30 ? `${previewText.slice(0, 30)}…` : previewText;
+    Array.from(previewText).length > 30 ? `${Array.from(previewText).slice(0, 30).join("")}…` : previewText;
 
   const ok = confirm(
     `선택한 OCR 1건을 삭제할까요?\n- OCR 항목: #${idx + 1}\n- block_id: ${blockId}\n- 내용: ${shortText || "(비어있음)"}`,

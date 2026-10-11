@@ -16,7 +16,7 @@ PaddleOCR 외에도 Tesseract, Google Vision, Claude Vision 등
 
 PaddleOCR v3 호환:
   - v2: ocr.ocr() → [[[bbox_4pts, (text, conf)], ...]]
-  - v3: ocr.ocr() → result 객체 (predict 스타일)
+  - v3: ocr.predict() → 이미지마다 결과 객체의 리스트(rec_texts·rec_scores·rec_polys, D-073)
   - 이 엔진은 두 형식을 모두 처리한다.
 """
 
@@ -139,7 +139,7 @@ class PaddleOcrEngine(BaseOcrEngine):
           GPU 없는 사람은 아무것도 지정하지 않아도 예전과 똑같이 동작한다.
           GPU가 있는데도 CPU로 재보고 싶으면 `--paddle-device cpu`로 못 박는다.
 
-        주의: 첫 호출 시 모델 자동 다운로드 (~100MB).
+        주의: 첫 호출 시 모델 자동 다운로드 (약 240MB — scripts/warmup_paddle.py가 미리 받는다).
         """
         if lang is None:
             lang = os.environ.get("CTB_PADDLE_LANG") or "ch"
@@ -507,9 +507,10 @@ class PaddleOcrEngine(BaseOcrEngine):
             if "OneDNN" in err_msg or "onednn" in err_msg.lower():
                 raise OcrEngineError(
                     f"PaddleOCR 모델 초기화 실패 (OneDNN 호환성 문제).\n"
-                    f"Windows + Python 3.13에서 발생할 수 있습니다.\n"
-                    f"해결: Linux/macOS 환경에서 사용하거나, "
-                    f"Python 3.12 이하 + PaddlePaddle 2.6.x를 사용하세요.\n"
+                    f"Windows + PaddlePaddle 3.x에서 OneDNN이 켜져 있으면 납니다 — 이 앱은 "
+                    f"FLAGS_use_mkldnn=0으로 끄는데, 환경 변수로 다시 켜 두었을 수 있습니다.\n"
+                    f"해결: 환경 변수 FLAGS_use_mkldnn을 지우거나 0으로 두고, doctor.bat으로 "
+                    f"어느 환경(.venv·.venv-gpu)이 뜨는지 확인하세요(파이썬은 3.12 이하).\n"
                     f"원본 에러: {e}"
                 )
             raise OcrEngineError(

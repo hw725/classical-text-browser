@@ -209,6 +209,9 @@ async def api_delete_interpretation(interp_id: str):
         return result
     except FileNotFoundError as e:
         return JSONResponse({"error": str(e)}, status_code=404)
+    except PermissionError as e:
+        # 잠금으로 못 옮김 — 원인·해결이 든 안내를 그대로(원본은 그대로 있다)
+        return JSONResponse({"error": str(e)}, status_code=409)
 
 
 @router.get("/api/interpretations/{interp_id}")
@@ -533,7 +536,8 @@ async def api_list_entities(
     `scope`는 다른 필터와 성격이 다르다 (D-128 6항). 동등 비교가 아니라 «주소»이므로
     전역 개념(scope_document 없음)은 어느 문헌을 물어도 함께 나오고, 다른 문헌의
     개념은 나오지 않는다. 이것은 **내보내는 쪽** 규칙이다 — 승격 출처를 모으는 쪽은
-    구획으로 막지 않는다(core/promotion.py::gather_sources).
+    구획으로 막지 않는다(core/promotion.py::gather_sources — 단 지금은 해석 저장소 하나,
+    곧 문헌 하나 범위에서만 모은다. backlog B-040).
     """
     _library_path = get_library_path()
     if _library_path is None:
@@ -977,7 +981,10 @@ def _interpretation_content_files(interp_path) -> list[str]:
     입력: interp_path — 해석 저장소 경로.
     출력: 내용 파일의 상대 경로 목록 (비어 있으면 빈 리스트).
 
-    무엇을 «내용»으로 보는가: L5~L8 층 아래의 파일이다.
+    무엇을 «내용»으로 보는가: L5~L8 층과 core_entities(태그·개념·관계)·citation_marks(인용 표시)·
+    _notes(쪽 비고) 아래의 파일이다. 뒤의 셋은 저장소를 만들 때 생기지 않으므로 파일이 있으면
+    사람이 한 작업이다 — 전에는 L5~L8만 세어 엔티티·인용 작업이 든 저장소도 «비었다»로
+    휴지통에 갔다(2026-10-11 재확인).
     manifest.json·dependency.json·.git·.gitignore는 생성 시 만들어지는
     골격이므로 «작업이 있다»는 근거가 되지 못한다.
     """
@@ -985,7 +992,10 @@ def _interpretation_content_files(interp_path) -> list[str]:
 
     interp_path = _Path(interp_path)
     found: list[str] = []
-    for layer in ("L5_reading", "L6_translation", "L7_annotation", "L8_external"):
+    for layer in (
+        "L5_reading", "L6_translation", "L7_annotation", "L8_external",
+        "core_entities", "citation_marks", "_notes",
+    ):
         layer_dir = interp_path / layer
         if not layer_dir.exists():
             continue
@@ -1058,7 +1068,8 @@ def api_discard_empty_interpretations(doc_id: str):
         "kept": kept,
         "errors": errors,
         "note": (
-            "휴지통으로 옮겼습니다. 되돌리려면 설정 → 휴지통에서 복원하세요."
+            "휴지통으로 옮겼습니다. 되돌리려면 서고 폴더의 .trash/interpretations/ 안의 폴더를 "
+            "interpretations/로 옮기고 앞의 시각 접두사를 지우세요(복원 화면은 아직 없습니다)."
             if discarded
             else "정리할 빈 해석 저장소가 없습니다."
         ),

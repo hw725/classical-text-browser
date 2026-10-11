@@ -202,10 +202,7 @@ function _renderOutline(root, blocks, container) {
   }
 }
 
-/**
- * 블록 한 줄: [순번] 미리보기 … 쪽 배지들.
- * 줄을 누르면 첫 쪽으로, 배지를 누르면 그 쪽으로 간다. 두 쪽에 걸친 블록은 배지가 둘이다.
- */
+// 행 머리표 — 깊이로 어림한 역할마다(_roleOf)
 const ROLE_MARK = { container: "▣ ", article: "", fragment: "· " };
 
 /**
@@ -235,6 +232,10 @@ function _rowTitle(block, role) {
   );
 }
 
+/**
+ * 단위 한 줄: [순번] 미리보기 … 쪽 배지.
+ * 줄을 누르면 첫 쪽으로, 배지를 누르면 그 쪽으로 간다. 배지는 하나다 — 여러 쪽에 걸치면 「14~16쪽」.
+ */
 function _createBlockRow(block) {
   const row = document.createElement("div");
   row.className = "tree-page contents-block";
@@ -554,18 +555,21 @@ function _setPickMode(form, on) {
 function pickBoundaryFromCorrectionChar(globalIdx) {
   if (!contentsState.picking || !contentsState.pickForm) return false;
   if (typeof correctionState === "undefined" || !correctionState.pageText) return false;
-  const raw = correctionState.pageText;
-  const idx = Math.max(0, Math.min(raw.length, Number(globalIdx) || 0));
-  const before = raw.slice(0, idx);
+  // 글자 번호·행 안 자리는 코드포인트다 — 교정 char_index(서버 파이썬 str)와 경계 offset이 같은 자를
+  // 쓴다. UTF-16(.length·slice)으로 세면 확장 한자 뒤에서 한 칸 어긋났다(2026-10-11 2차 전수)
+  const chars = Array.from(correctionState.pageText);
+  const cpLen = (s) => Array.from(String(s ?? "")).length;
+  const idx = Math.max(0, Math.min(chars.length, Number(globalIdx) || 0));
+  const before = chars.slice(0, idx).join("");
   const line = (before.match(/\n/g) || []).length;
-  const lineStart = before.lastIndexOf("\n") + 1;
-  let offset = idx - lineStart;
+  const lineStart = before.lastIndexOf("\n") + 1; // UTF-16 자리 — 아래에서 코드포인트로 센다
+  let offset = cpLen(before.slice(lineStart));
   // 같은 행에서 이 글자보다 앞에 있는 교정의 길이 차이
   for (const c of correctionState.corrections || []) {
     const ci = Number(c.char_index);
     if (!Number.isFinite(ci) || ci >= idx) continue;
-    if ((raw.slice(0, ci).match(/\n/g) || []).length !== line) continue;
-    offset += String(c.corrected ?? "").length - String(c.original_ocr ?? "").length;
+    if ((chars.slice(0, ci).join("").match(/\n/g) || []).length !== line) continue;
+    offset += cpLen(c.corrected) - cpLen(c.original_ocr);
   }
   offset = Math.max(0, offset);
   const form = contentsState.pickForm;
@@ -574,8 +578,9 @@ function pickBoundaryFromCorrectionChar(globalIdx) {
   form.querySelector('[data-k="offset"]').value = String(offset);
   const hint = form.querySelector(".contents-pick-hint");
   if (hint) {
-    const lineText = (correctionState.correctedText || raw).split("\n")[line] || "";
-    hint.textContent = `${line}행 ${offset}자 「${lineText.slice(offset, offset + 8) || "?"}」 (교정 텍스트)`;
+    const lineText = (correctionState.correctedText || correctionState.pageText).split("\n")[line] || "";
+    const shown = Array.from(lineText).slice(offset, offset + 8).join("");
+    hint.textContent = `${line}행 ${offset}자 「${shown || "?"}」 (교정 텍스트)`;
   }
   contentsState.anchorHighlight = null; // 이미지 점선은 이 경로에서 그리지 않는다
   _drawAnchorCanvas();
@@ -675,16 +680,7 @@ function _boundaryUrl(boundaryId) {
   return `/api/documents/${encodeURIComponent(viewerState.docId)}/boundaries/${encodeURIComponent(boundaryId)}${q}`;
 }
 
-// 저장 중인 역할 변경 (경계 id → {desired}). 연타하면 마지막 값 하나만 더 보낸다.
 
-/**
- * 역할을 바꾼다. 화면은 곧바로, 저장은 뒤에서.
- *
- * 왜 이렇게 하는가: 역할은 단위의 끝도 중첩도 바꾸지 않는다. 그런데 저장(경계 파일 쓰기 +
- * git 커밋)과 트리 다시 읽기가 합쳐 1초 넘게 걸린다 — 운양집 1책(경계 90)에서 PUT 0.9초 +
- * 내용 0.3초 실측. 구조가 안 바뀌는 변경까지 서버 왕복을 기다릴 이유가 없어, 그 행만 다시
- * 칠하고 저장은 뒤로 보낸다. 실패하면 트리를 다시 읽어 서버의 사실로 되돌린다.
- */
 /**
  * 「내용」 트리에서 단위을 고른다 — 해석 편집기 다섯의 «지금 단위»가 된다.
  *
@@ -717,7 +713,6 @@ function selectUnit(block) {
   );
 }
 
-/** 지금 고른 단위의 id (없으면 null). 편집기가 목록을 채운 뒤 물어본다. */
 // 해석 편집기 다섯의 «블록 선택». 화면에서는 감춰 두고 트리가 값을 넣는다(D-096).
 const UNIT_SELECT_IDS = [
   "punct-block-select",
@@ -768,6 +763,7 @@ document.addEventListener("unit-selected", (ev) => {
   _applyUnitToEditors(ev.detail.id);
 });
 
+/** 지금 고른 단위의 id (없으면 null). 편집기가 목록을 채운 뒤 물어본다. */
 function currentUnitId() {
   return contentsState.selectedUnitId || null;
 }
@@ -780,6 +776,13 @@ function currentUnit() {
 }
 
 
+/**
+ * 경계의 층위(깊이)를 바꾼다. 입력: block(단위 보기), level(1~). 저장한 뒤 트리를 다시 읽는다.
+ *
+ * 층위는 단위의 중첩을 바꾸므로 화면만 먼저 칠하지 않고 서버의 답을 기다린다(실패하면 알리고
+ * 트리는 그대로). — 이 자리에 붙어 있던 «역할을 바꾼다, 화면은 곧바로·저장은 뒤에서» 설명은
+ * 역할 칸이 화면에서 물러난 뒤(D-092 덧붙임) 남은 옛 함수의 것이었다(2026-10-11 재확인).
+ */
 async function _setBoundaryLevel(block, level) {
   if (!viewerState.docId) return;
   try {
@@ -795,9 +798,6 @@ async function _setBoundaryLevel(block, level) {
   }
 }
 
-/**
- * 경계의 시작 행을 ±1 행 옮긴다 (D-090). 앞 경계의 끝도 함께 조정되고 단위 본문이 다시 이어진다.
- */
 /**
  * 옮기면 어디로 가는지 미리 보여 준다. 「14쪽 3행 「…」 → 14쪽 2행 「…」」.
  *
@@ -838,6 +838,9 @@ async function _shiftPreview(block, delta) {
   }
 }
 
+/**
+ * 경계의 시작 행을 ±1 행 옮긴다 (D-090). 앞 경계의 끝도 함께 조정되고 단위 본문이 다시 이어진다.
+ */
 async function _shiftBoundary(block, delta) {
   // 해석 저장소는 필요 없다 — 경계는 문헌의 것이다(D-097). 예전 조건은 해석 저장소를 고르지
   // 않으면 아무 말 없이 무시했다(B-025)

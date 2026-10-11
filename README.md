@@ -186,9 +186,9 @@ docker compose up -d --build
 
 | 문서 | 무엇이 있나 |
 |---|---|
-| [**체크포인트**](docs/CHECKPOINTS.md) | **먼저 읽을 것** — 결정 136개(D-001~D-138)의 지금 결론·되돌릴 수 없는 것·실제로 사고 난 자리 |
+| [**체크포인트**](docs/CHECKPOINTS.md) | **먼저 읽을 것** — 결정 138개(D-001~D-140)의 지금 결론·되돌릴 수 없는 것·실제로 사고 난 자리 |
 | [**유지보수 안내**](docs/maintenance.md) | **고치기 전에 볼 것** — 파일 다루는 규칙, 테스트 사각지대, 릴리스 절차 |
-| [DECISIONS.md](docs/DECISIONS.md) | 설계 결정 근거 원문 (D-001~D-138) — 체크포인트의 근거 |
+| [DECISIONS.md](docs/DECISIONS.md) | 설계 결정 근거 원문 (D-001~D-140) — 체크포인트의 근거 |
 | [아키텍처 다이어그램](docs/architecture-diagrams.md) | 전체 그림 (Mermaid 14종) |
 | [platform-v7.md](docs/platform-v7.md) | 8층 모델·이중 저장소 설계 |
 | [AGENTS.md](AGENTS.md) · [backlog.md](docs/backlog.md) | 어디가 위험한가 · 알려진 결함 |
@@ -227,6 +227,18 @@ Python + FastAPI · HTML + vanilla JS (빌드 도구 없음) · PDF.js · PyMuPD
 
 - 비상업적 사용·수정·재배포: 자유
 - 상업적 사용: 별도 협의 (LICENSE 파일 하단 연락처)
+
+### 함께 싣는 제3자 라이브러리
+
+인터넷 없이도 화면이 돌도록 아래 라이브러리를 `src/app/static/vendor/`에 함께 싣습니다.
+이것들은 위 PolyForm이 아니라 **각자의 라이선스**를 따르며, 라이선스 파일을 각 폴더에 둡니다
+(판·출처는 `src/app/static/vendor/README.md`).
+
+- PDF.js (pdfjs-dist 3.11.174) — Apache-2.0
+- d3 7.9.0 — ISC
+- onnxruntime-web 1.21.0 — MIT
+
+브라우저 레이아웃 탐지의 모델(.onnx, 약 36MB)은 싣지 않습니다 — 처음 쓸 때 GitHub에서 받으므로 그 한 번은 인터넷이 필요합니다.
 
 ## 외부 모델 출처
 

@@ -133,10 +133,10 @@ class SegmentationWordsRequest(BaseModel):
 
 
 class SegmentationSignalsLlmRequest(BaseModel):
+    """4단 — LLM에 시작 표지의 공통점을 묻는 요청 (D-117). 저장하지 않는다."""
     # 해제는 문헌에 저장되지만, 화면에서 막 붙여 넣고 아직 저장하지 않았을 수 있다 —
     # 모달이 «해제 N자를 함께 보냅니다»라고 적으므로 온 것을 그대로 쓴다(없으면 저장본)
     reference_text: str | None = None
-    """4단 — LLM에 시작 표지의 공통점을 묻는 요청 (D-117). 저장하지 않는다."""
 
     part_id: str
     force_provider: str | None = None
@@ -823,6 +823,17 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
         (size["chars"] + size["questions"] * 120) / 1_000_000 * body_judge.INPUT_USD_PER_M
         + toc_calls * 400 / 1_000_000 * jev.INPUT_USD_PER_M
     )
+    # 폴백(decider)이 본문을 모두 떠맡는 최악의 비용. decider는 질문마다 글(state)을 다시
+    # 세어 과금한다(head-repo docs/clef-vs-jev-20261003 «재측정» — 질문 10개면 ≈10배).
+    # 그래서 «호출당 글자 수 × 호출당 질문 수»로 어림한다. 예전 미리 보기는 이 몫을 빼고
+    # Jev 값만 보였다(2026-10-11 전수).
+    fallback_max = None
+    if fallback is not None:
+        per_call_q = size["questions"] / max(1, size["calls"])
+        fallback_max = (
+            (size["chars"] * max(1.0, per_call_q) + size["questions"] * 120)
+            / 1_000_000 * fallback.INPUT_USD_PER_M
+        )
     if body.dry_run:
         # 실행 게이트(전역 규칙 11)는 도구 층에 — 보내기 전에 «몇 행·몇 번·얼마»를 화면이 보인다.
         # 키가 없으면 그것도 여기서 말한다 — 실제 실행은 아래에서 400으로 거절된다(2026-10-06
@@ -840,6 +851,9 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
             "questions": size["questions"] + toc_calls,
             "toc_entries": len(entries),
             "cost_usd_est": round(est, 6),  # 4자리면 작은 권이 $0.0으로 보인다
+            # 폴백이 본문을 모두 떠맡을 때의 최대(없으면 null) — 화면이 따로 보인다
+            "fallback_cost_usd_max": round(fallback_max, 6) if fallback_max is not None else None,
+            "fallback_judge": judge_label(fallback) if fallback is not None else None,
             "judge": judge_label(body_judge),
             # 목차 대조를 맡을 Jev — 직결(typesafe:…)인지
             # OpenRouter 경유(openrouter:~typesafe/…)인지
@@ -868,14 +882,9 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
 
     toc_props: list[dict] = []
     toc_meta: dict = {"entries": len(entries), "picked": 0, "none": 0, "failed": 0}
-    if entries and not jev.has_key:
-        # 목차 대조는 Jev만 한다(D-136) — 키가 없으면 본문 판정만 하고 그렇다고 알린다.
-        # make_jev_client 뒤로는 OpenRouter 키만 있어도 Jev가 있으므로 실제로는 거의 오지 않는다
-        toc_meta["skipped"] = (
-            "목차 대조는 TypeSafe Jev(직결 또는 OpenRouter 경유)로만 합니다 — TypeSafe 키도 "
-            "OpenRouter 키도 없어 건너뛰었습니다."
-        )
-    if entries and jev.has_key:
+    # 목차 대조는 Jev만 한다(D-136). 본문 판정의 주도 Jev라(D-139) 키가 없으면 위에서 이미 400으로
+    # 돌아갔다 — 그래서 «키 없어 목차만 건너뜀» 갈래는 없앴다(오지 않는 자리였다, 2026-10-11 재확인)
+    if entries:
         res = match_toc_entries_jev(entries, body_lines, jev)
         if body.toc_min_prob is None:
             # 같은 Jev 모델이면 길(직결·OpenRouter)이 달라도 확률 모양이 같다고 본다
@@ -926,8 +935,8 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
     meta["toc"] = toc_meta
     meta["engine"] = "jev"  # 요청 값 그대로(«판정 모델» 길) — 실제로 답한 모델은 answered_by
     # 사용량은 주·목차(Jev)·폴백(decider)을 합친다 — 같은 클라이언트는 한 번만 센다.
-    # D-139 전에는 폴백이 Jev라 «주 + Jev»만 셌다; decider가 폴백이 된 뒤로는
-    # 그 비용이 빠졌을 것이다
+    # D-139 전에는 폴백이 Jev라 «주 + Jev»만 세도 됐다. decider가 폴백이 되자 그 셈이 폴백 비용을
+    # 빼게 되어 셋을 함께 센다(test_route_falls_back_to_the_decider_when_jev_fails가 잰다).
     judges = []
     for c in (body_judge, jev, fallback):
         if c is not None and all(c is not seen for seen in judges):
@@ -1575,8 +1584,8 @@ async def api_contents_tree(doc_id: str):
           그려지고, 단위를 누르면 pages[].page로 가며 해석 편집기 다섯이 그 단위로 맞춰진다(D-096).
     출력: core.entity.doc_contents() 참조.
 
-    왜 Work로 묶지 않는가: Work(저작)는 해석 저장소의 엔티티인데 편성은 문헌의 것이다(D-097).
-    저작이 여럿인 문집은 층위 1의 «묶음» 경계가 나타낸다 — 트리의 층위 그대로다(B-004).
+    왜 Work로 묶지 않는가: Work(저작) 엔티티는 D-099에서 없앴다 — 편성은 문헌의 것이다(D-097).
+    저작이 여럿인 문집은 층위 1의 «묶음» 경계가 나타낸다 — 트리의 층위 그대로다(D-098·D-099).
     """
     doc_path, err = _doc(doc_id)
     if err is not None:

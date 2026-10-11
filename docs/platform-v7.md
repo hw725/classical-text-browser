@@ -1315,6 +1315,11 @@ monggu/                           # = git repository
 │   │   └── corrections.json
 │   └── alignment/                # OCR↔텍스트 정렬
 │       └── vol1_page_001.json
+├── boundaries/                   # 편성 경계 — 단위는 이것에서 만드는 읽기 보기(D-092·D-097)
+│   └── vol1.json
+├── read_plan/                    # 작업 계획(판독 지침·장 목록, D-131)
+│   └── vol1.json
+├── variant_approvals.json        # 이 문헌에서 승인한 이체자(사전은 서고의 것)
 └── user_metadata.json
 ```
 
@@ -1393,7 +1398,7 @@ library/
 
 ### 11.2 교환 형식 스키마
 
-> **정본은 `schemas/exchange.schema.json` 하나다** (B-005, 2026-09-04). 아래는 그 스키마를
+> **정본은 `schemas/exchange.schema.json` 하나다** (D-100 — 옛 백로그 B-005, 2026-09-04. 그 번호는 지금 다른 항목). 아래는 그 스키마를
 > 사람이 읽기 좋게 간추린 것이며, 어긋나면 스키마가 기준이다.
 > `core/snapshot.py::build_snapshot()`이 이 모양으로 쓰고, `snapshot_validator.py`가 이
 > 스키마로 검증하며, `tests/test_snapshot.py`가 «내보낸 것이 스키마를 통과하는가»를 고정한다.
@@ -1407,7 +1412,7 @@ library/
   "schema_version": "1.0",
   "export_timestamp": "2026-09-04T10:00:00+00:00",
   "platform_version": "1.1.4",
-  "corpus_version": { "corpus_hash": "ctb-corpus:0123…", "reproducible": true },
+  "corpus_version": { "corpus_hash": "ctb-corpus:0123abcd", "reproducible": true },
 
   "source_info": {
     "document_id": "monggu",
@@ -1430,26 +1435,35 @@ library/
         "note": "이미지/PDF 파일은 경로 참조만 포함. 바이너리 미포함.",
         "files": [{ "path": "L1_source/vol1.pdf", "name": "vol1.pdf", "size_bytes": 1048576 }]
       },
-      "L3_layout": { "type": "inline", "pages": [{ "page": 1, "blocks": [] }] },
+      "L3_layout": { "type": "inline", "pages": [{ "part_id": "vol1", "page_number": 1, "blocks": [] }] },
       "L4_text": {
         "type": "inline",
         "pages": [
           {
             "file_name": "vol1_page_001.txt",
             "text": "王戎簡要裴楷清通",
-            "corrections": { "page": 1, "edits": [] }
+            "corrections": { "corrections": [] }
           }
         ]
-      }
+      },
+      "boundaries": { "type": "inline", "parts": [{ "document_id": "monggu", "part_id": "vol1", "boundaries": [] }] },
+      "read_plan": { "type": "inline", "parts": { "vol1": { "title": "蒙求 上", "guidance": "", "ranges": [], "chapters": [] } } },
+      "variant_approvals": { "_version": "0.1.0", "variants": { "爲": ["為"] } }
     }
   },
 
   "interpretation": {
     "head_hash": "e5f6...",
     "base_original_hash": "a1b2c3d4...",
-    "dependency": { "source": { "document_id": "monggu", "base_commit": "a1b2c3d4..." } },
+    "dependency": {
+      "interpretation_id": "monggu_interp",
+      "interpreter": { "type": "human", "name": "홍길동" },
+      "source": { "document_id": "monggu", "base_commit": "a1b2c3d4..." },
+      "tracked_files": [],
+      "dependency_status": "current"
+    },
     "layers": {
-      "L5_punctuation": [{ "_source_path": "L5_reading/main_text/..._punctuation.json" }],
+      "L5_punctuation": [{ "_source_path": "L5_reading/main_text/vol1_page_001_blk_b01_punctuation.json" }],
       "L5_hyeonto": [],
       "L6_translation": [],
       "L7_annotation": []
@@ -1467,13 +1481,17 @@ library/
 - **L1 바이너리** — 경로·크기만. 이미지·PDF는 따로 옮긴다.
 - **L2(OCR)** — L4 확정본이 있으면 다시 만들 수 있고, 담으면 스냅샷만 커진다.
 - **git 이력** — 현재 HEAD 상태만. 이력이 필요하면 저장소를 통째로 옮긴다.
-- **단위(unit)** — 편성은 원본 저장소의 경계 목록이다(D-092·D-097). `core_entities`에 없다.
+- **단위(unit) 자체** — 경계 목록에서 만드는 읽기 보기라 저장하지 않는다(D-092·D-097). 경계 목록은 위
+  원본 층의 `boundaries`로 담고, 작업 계획(`read_plan`)·문헌별 이체자 승인(`variant_approvals`)도 함께 담는다
+  (B-013, 2026-10-11 — 그 전에는 셋이 빠져 내보냈다 들이면 편성 경계가 사라졌다).
 
 **내부 작업 형식 ↔ 교환 형식**
 
 - 내보내기: `build_snapshot(서고, 문헌, 해석)` — 두 저장소의 HEAD를 읽어 위 JSON 하나로.
 - 가져오기: `create_work_from_snapshot(서고, data)` — 새 문헌·해석 저장소를 만들고 git init.
   옛 이름(`work`)으로 적힌 스냅샷은 `normalize_snapshot()`이 먼저 지금 이름으로 옮긴다.
+  경로로 쓰일 이름(문헌·해석 id·L4 file_name·L3·경계 part·작업 계획 권·`_source_path`·엔티티 종류·id)이 서고
+  밖을 가리키면 들이지 않는다(`unsafe_snapshot_paths`, B-037). id가 없거나 빈 엔티티는 새 UUID를 붙인다.
 
 ---
 
@@ -1493,7 +1511,8 @@ library/
 
 **M1.2 서지정보 파싱 (파서 아키텍처)** ✓
 - 파서 등록 구조 구현 (registry.json)
-- 구현된 파서: KORCIS, NDL Search, 일본 국립공문서관, **범용 LLM 파서** (D-021)
+- 구현된 파서(당시): KORCIS, NDL Search, 일본 국립공문서관, **범용 LLM 파서** (D-021) — 지금은 규장각·KOSTMA·장서각을
+  더해 6종 + 범용
 - 범용 LLM 파서: markdown.new + LLM으로 모든 URL 지원
 - 에셋 자동 감지 + 다운로드 (PDF/이미지 번들)
 - raw_metadata 보존, _mapping_info 기록
@@ -1561,7 +1580,7 @@ library/
 ### 원본 저장소
 
 1. ~~JSON 스키마 각 필드의 상세 정의~~ → 완료 (jsonschema 검증)
-2. ~~서지정보 파싱 상세~~ → 완료 (4개 파서 + 범용 LLM 파서)
+2. ~~서지정보 파싱 상세~~ → 완료 (당시 4개 파서 + 범용 LLM 파서 — 지금 6종 + 범용)
 3. OCR 엔진 비교 평가 (PaddleOCR vs LLM Vision vs NDLOCR vs NDL古典籍OCR 벤치마크)
 4. git-lfs 설정 상세 (어떤 확장자를 LFS로 관리할지)
 5. block_type 어휘 확장 (문헌 유형별 필요한 type)
@@ -1657,7 +1676,7 @@ library/
 | 20 | 에셋 감지 | 범용 유틸리티 (파서 독립) | 모든 URL에서 PDF/이미지 자동 다운로드 (D-021) |
 | 21 | 서고 관리 | 앱 설정 + GUI 전환 | 런타임 서고 전환, CLI 인자 선택화 (D-022) |
 | 22 | 삭제 정책 | 서고 내 .trash/ 소프트 삭제 | OS 독립적 복원 가능 (D-023) |
-| 23 | 서버 구조 | 도메인별 8개 APIRouter 분할 | LLM 친화적 파일 크기 + 독립 수정 가능 (D-027) |
+| 23 | 서버 구조 | 도메인별 APIRouter 분할(당시 8개, 지금 9개) | LLM 친화적 파일 크기 + 독립 수정 가능 (D-027) |
 
 ## 부록 C: 《蒙求》 워크스루 결과
 

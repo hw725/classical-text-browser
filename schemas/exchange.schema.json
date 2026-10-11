@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "exchange.schema.json",
   "title": "교환 형식 (내보내기/가져오기) — JSON 스냅샷",
-  "description": "내부 작업 형식(다수 파일, git 버전관리)과 별도로, 문헌 하나 + 해석 하나의 현재 HEAD 상태를 단일 JSON으로 담는 교환 형식. 다른 연구자에게 공유하거나 백업·이동할 때 쓴다. 이 스키마는 core/snapshot.py의 build_snapshot() 출력을 그대로 기술하며 **정본이 하나**다 — tests/test_snapshot.py가 내보내기 결과를 이 스키마로 검증하므로 구현이 바뀌면 시험이 깨진다(B-005). L2(OCR)는 담지 않는다: L4 확정본이 있으면 다시 만들 수 있고 스냅샷만 커진다.",
+  "description": "내부 작업 형식(다수 파일, git 버전관리)과 별도로, 문헌 하나 + 해석 하나의 현재 HEAD 상태를 단일 JSON으로 담는 교환 형식. 다른 연구자에게 공유하거나 백업·이동할 때 쓴다. 이 스키마는 core/snapshot.py의 build_snapshot() 출력을 그대로 기술하며 **정본이 하나**다 — tests/test_snapshot.py가 내보내기 결과를 이 스키마로 검증하므로 구현이 바뀌면 시험이 깨진다(D-100). L2(OCR)는 담지 않는다: L4 확정본이 있으면 다시 만들 수 있고 스냅샷만 커진다.",
   "type": "object",
   "required": [
     "schema_version",
@@ -139,7 +139,7 @@
     },
     "original": {
       "type": "object",
-      "description": "원본 저장소(L1·L3·L4). L2(OCR)는 담지 않는다.",
+      "description": "원본 저장소 — L1(경로 참조)·L3·L4·편성 경계·작업 계획·문헌별 이체자 승인(B-013). L2(OCR)는 담지 않는다.",
       "additionalProperties": false,
       "properties": {
         "head_hash": {

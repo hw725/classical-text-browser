@@ -170,15 +170,11 @@ function deactivateCompositionMode() {
    ────────────────────────── */
 
 /**
- * 교정된 텍스트 + 기존 단위를 로드한다.
+ * 이 권의 단위(편성 경계로 만든 읽기 보기)를 원본 저장소의 경계 색인에서 읽어 목록에 그린다.
  *
- * 왜 이렇게 하는가:
- *   편성 화면은 두 영역으로 나뉜다:
- *   (1) 위: 교정된 LayoutBlock 텍스트 (소스)
- *   (2) 아래: 이미 생성된 단위 (결과)
- *
- *   페이지 범위 모드가 켜져 있으면 인접 페이지의 블록도 함께 로드하여
- *   페이지 경계를 넘는 합치기를 지원한다.
+ * 단위는 원본 저장소의 것이다(D-097) — 사이드바 「내용」 트리와 같은 곳(`/boundaries?include_text=1`)을
+ * 본다. 옛 판의 «위: 교정된 LayoutBlock 텍스트 / 아래: 단위, 페이지 범위 합치기»는 D-092에서 단위를
+ * 저장하지 않고 경계로 만들게 되며 없어졌다.
  */
 async function _loadCompositionData() {
   // 편성이 바뀌면 사이드바 「내용」 트리도 따라간다 (D-085)
@@ -303,7 +299,7 @@ function _renderUnits() {
     // 깊이·글자 수 — 무엇을 고르는지 카드에서 바로 보이게(역할은 화면에서 물러났다)
     const kindBadge = document.createElement("span");
     kindBadge.style.cssText = "font-size:10px; color:var(--text-muted);";
-    const chars = (tb.original_text || "").length;
+    const chars = Array.from(tb.original_text || "").length; // 코드포인트 — 확장 한자를 둘로 세지 않는다
     kindBadge.textContent = `${Number(tb.metadata?.level) || 2}단 · ${chars.toLocaleString()}자`;
 
     // 출처는 «몇 쪽에 걸쳐 있는가»만 보인다. v1.3부터 단위는 LayoutBlock을 기억하지 않아
@@ -362,9 +358,9 @@ function _renderUnits() {
     const preview = document.createElement("div");
     preview.style.cssText =
       "font-size:12px; line-height:1.6; white-space:pre-wrap; max-height:60px; overflow:hidden; color:var(--text-primary);";
-    const text = tb.original_text || "";
-    preview.textContent =
-      text.length > 150 ? text.substring(0, 150) + "..." : text;
+    // 코드포인트로 자른다 — UTF-16 substring은 확장 한자의 서로게이트 쌍을 반으로 끊었다
+    const tcs = Array.from(tb.original_text || "");
+    preview.textContent = tcs.length > 150 ? tcs.slice(0, 150).join("") + "..." : tcs.join("");
 
     card.appendChild(header);
     card.appendChild(preview);
@@ -382,7 +378,7 @@ function _updateBlockCount() {
   el.textContent =
     `단위 ${compState.units.length}개` +
     (tb
-      ? ` · 고른 단위 #${tb.sequence_index} 「${(tb.metadata?.title || "").slice(0, 14)}」 → 「쪼개기」로 그 안을 나눕니다`
+      ? ` · 고른 단위 #${tb.sequence_index} 「${Array.from(tb.metadata?.title || "").slice(0, 14).join("")}」 → 「쪼개기」로 그 안을 나눕니다`
       : " · 사이드바 「내용」에서 단위를 고르면 여기서 그 안을 나눕니다");
 }
 
@@ -421,14 +417,14 @@ function _updateCompStatus(text, isError) {
 }
 
 /* ──────────────────────────
-   편성 액션: 자동 편성
+   편성 액션: 쪼개기
    ────────────────────────── */
 
 /**
  * 단위를 선택하고 쪼개기 편집기를 연다.
  *
  * 왜 이렇게 하는가:
- *   크로스 페이지 합치기로 만든 큰 단위를
+ *   경계가 성기게 잡혀 한 단위에 글이 여럿 든 경우,
  *   연구자가 수동으로 단락별로 나눌 수 있어야 한다.
  *   단위 카드를 클릭하면 쪼개기 편집기가 열리고,
  *   텍스트 중간에 === 구분선을 넣어 쪼갤 위치를 지정한다.
@@ -447,7 +443,7 @@ function _selectUnit(tb) {
   const info = document.getElementById("comp-split-info");
   if (info) {
     const title = tb.metadata?.title || "";
-    info.textContent = `#${tb.sequence_index}${title ? " · " + title : ""} · ${Number(tb.metadata?.level) || 2}단 · ${(tb.original_text || "").length.toLocaleString()}자`;
+    info.textContent = `#${tb.sequence_index}${title ? " · " + title : ""} · ${Number(tb.metadata?.level) || 2}단 · ${Array.from(tb.original_text || "").length.toLocaleString()}자`;
   }
   if (textarea) {
     textarea.value = tb.original_text || "";
@@ -482,10 +478,10 @@ async function _deleteUnit(tb) {
   }
 
   // 텍스트 미리보기 (확인 대화상자에 표시)
-  const previewText = (tb.original_text || "").substring(0, 50);
+  const previewText = Array.from(tb.original_text || "").slice(0, 50).join("");
   const displayText =
     previewText +
-    (tb.original_text && tb.original_text.length > 50 ? "..." : "");
+    (Array.from(tb.original_text || "").length > 50 ? "..." : "");
 
   if (
     !confirm(
@@ -508,7 +504,14 @@ async function _deleteUnit(tb) {
       },
     );
 
-    if (res.ok || res.status === 207) {
+    // 207은 «일부 실패»다 — 하나만 보냈으니 그 하나가 실패한 것이다. 전에는 207도 «삭제 완료»로 보였다
+    // (2026-10-11 재확인 — 쪼개기와 같은 종류)
+    const out = res.status === 207 ? await res.json().catch(() => ({})) : null;
+    if (out && (out.errors || []).length) {
+      showToast(`삭제 실패: ${out.errors.join("\n")}`, "error");
+      return;
+    }
+    if (res.ok) {
       _updateCompStatus(`단위 #${tb.sequence_index} 삭제 완료`, false);
 
       // 삭제한 단위가 현재 쪼개기 편집기에 열려 있으면 닫기
@@ -535,7 +538,7 @@ async function _deleteUnit(tb) {
    ────────────────────────── */
 
 /**
- * 현재 페이지의 단위를 모두 deprecated 상태로 전환한다.
+ * 이 권의 단위를 모두 deprecated 상태로 전환한다(쪽 하나가 아니라 권 전체).
  *
  * 왜 이렇게 하는가:
  *   편성을 처음부터 다시 하고 싶을 때, 기존 단위를 삭제하는 대신
@@ -729,11 +732,17 @@ async function _executeSplit() {
         err.error || err.detail || `쪼개기 실패: HTTP ${res.status}`,
       );
     }
-
-    _updateCompStatus(
-      `쪼개기 완료: ${nonEmpty.length}개 단위 생성`,
-      false,
-    );
+    // 207 = 조각 일부를 못 찾았다. res.ok가 참이라 전에는 오류를 버리고 «완료»를 띄웠다.
+    // 첫 조각은 원래 단위가 그대로 이어 가므로 새로 서는 경계는 created_count개다(조각 수 − 1).
+    const out = await res.json().catch(() => ({}));
+    const made = Number(out.created_count ?? 0);
+    if (res.status === 207 || (out.errors && out.errors.length)) {
+      showToast(
+        `쪼개기 일부 실패 — 경계 ${made}개만 넣었습니다:\n${(out.errors || []).join("\n")}`,
+        "warning",
+      );
+    }
+    _updateCompStatus(`쪼개기: 새 경계 ${made}개`, false);
   } catch (e) {
     showToast(`쪼개기 실패:\n${e.message}`, 'error');
     _updateCompStatus("쪼개기 실패", true);
@@ -831,7 +840,7 @@ function _renderVerdict() {
   if (!(d.source || {}).l4_pages) {
     const warn = document.createElement("span");
     warn.className = "comp-verdict-warn";
-    warn.textContent = "확정본(L4)이 없어 후보를 만들 수 없습니다 — 교정 인덱스의 「권 전체 OCR」을 먼저 하세요";
+    warn.textContent = "확정본(L4)이 없어 후보를 만들 수 없습니다 — 레이아웃 탭 오른쪽 «OCR 실행»의 「권 전체 OCR」을 먼저 하세요";
     box.appendChild(warn);
   }
   // 저장된 설정이 이번 권고와 다르면(예: D-116 때 저장한 뒤 층계가 바뀜) 한 번에 권고로 돌아갈 길을 준다
@@ -1116,19 +1125,16 @@ async function _updateLlmJudgeNote() {
       d.has_key === false || d.needs_key
         ? " — 키 없음: 설정 → «판정 모델»에서 OpenRouter 키(또는 TypeSafe 키)를 넣어야 돕니다"
         : "";
-    note.textContent = `${d.lines}행 · 질문 ${d.questions}개 · 호출 ${d.calls}번${toc} · 약 $${d.cost_usd_est}${judge}${noKey}`;
+    // 폴백(decider)이 본문을 모두 떠맡으면 드는 최대 — decider는 질문마다 글을 다시 세어 과금해 훨씬 크다
+    const fb = d.fallback_cost_usd_max != null
+      ? ` (Jev가 실패해 ${_judgeName(d.fallback_judge || "")}가 모두 떠맡으면 최대 약 $${d.fallback_cost_usd_max})`
+      : "";
+    note.textContent = `${d.lines}행 · 질문 ${d.questions}개 · 호출 ${d.calls}번${toc} · 약 $${d.cost_usd_est}${fb}${judge}${noKey}`;
   } catch (e) {
     note.textContent = `크기 못 잼: ${e.message}`;
   }
 }
 
-/**
- * 판정 모델로 «글이 시작하는 행»을 고른다. 총목이 있으면 목차 항목을 본문 행에 붙이고(층위 1~2),
- * 본문 판정은 그 아래 층으로 내려온다 — 서버가 그렇게 맞춰 돌려준다.
- * 답은 proposeState.llm에 두어 규칙 후보와 합친다(«구조를 통째로 묻기»와 같은 길).
- * **규칙이 낸 후보를 거르지 않는다** — 문집에서 규칙 후보로 거르면 규칙의 눈을 그대로 물려받는다
- * (2026-09-21 실측: 운양집에서 재현 0.88 → 0.18).
- */
 function _judgeName(label) {
   // «업체:모델» → 사람이 읽는 이름. 모르는 것은 그대로 보인다.
   // OpenRouter 경유 Jev(«openrouter:~typesafe/jev-latest»)를 decider보다 먼저 가린다 —
@@ -1139,6 +1145,13 @@ function _judgeName(label) {
   return String(label);
 }
 
+/**
+ * 판정 모델로 «글이 시작하는 행»을 고른다. 총목이 있으면 목차 항목을 본문 행에 붙이고(층위 1~2),
+ * 본문 판정은 그 아래 층으로 내려온다 — 서버가 그렇게 맞춰 돌려준다.
+ * 답은 proposeState.llm에 두어 규칙 후보와 합친다(«구조를 통째로 묻기»와 같은 길).
+ * **규칙이 낸 후보를 거르지 않는다** — 문집에서 규칙 후보로 거르면 규칙의 눈을 그대로 물려받는다
+ * (2026-09-21 실측: 운양집에서 재현 0.88 → 0.18).
+ */
 async function _askJudgeStructure() {
   const out = document.getElementById("comp-llm-pattern-out");
   const docId = viewerState.docId, partId = viewerState.partId;
@@ -1161,7 +1174,7 @@ async function _askJudgeStructure() {
           (d.toc.judge ? `(${_judgeName(d.toc.judge)})` : "")
         : "";
       const cost = d.usage ? ` · $${d.usage.cost_usd}` : "";
-      // 답한 모델 — 폴백(Jev)이 섞였으면 몇 번이었는지도 밝힌다. 문턱이 모델마다 달라서다(D-136)
+      // 답한 모델 — 폴백(decider)이 섞였으면 몇 번이었는지도 밝힌다. 문턱이 모델마다 달라서다(D-136·D-139)
       const who = Object.keys(d.answered_by || {}).map(_judgeName).join("·");
       const fb = d.fallback_calls ? ` · 폴백 ${d.fallback_calls}번` : "";
       const whoNote = who ? ` · ${who}${fb}` : "";
@@ -2354,10 +2367,6 @@ function _updateStats() {
   }
 }
 
-/**
- * ③ 후보 목록. 체크 = 경계가 될 것, 행 선택(Shift 범위·Ctrl 하나씩) = 한꺼번에 고칠 것.
- * 행마다 있던 역할 select·깊이 input·「억제」 단추는 없앴다 — 몇백 개를 하나씩 만지지 않는다(D-122).
- */
 /** 모델이 확률을 준 후보만 확률 내림차순으로. 출력: [키] — «상위 몇 개»가 이 순서로 자른다. */
 function _modelRanked(proposals) {
   return proposals
@@ -2594,6 +2603,10 @@ function _secondYesText(nYes, applied) {
     (applied.hidden ? ` · 「상위 N」에 가려 체크 안 됨 ${applied.hidden}` : "") + ")";
 }
 
+/**
+ * ③ 후보 목록. 체크 = 경계가 될 것, 행 선택(Shift 범위·Ctrl 하나씩) = 한꺼번에 고칠 것.
+ * 행마다 있던 역할 select·깊이 input·「억제」 단추는 없앴다 — 몇백 개를 하나씩 만지지 않는다(D-122).
+ */
 function _renderProposals() {
   const data = proposeState.data;
   const list = document.getElementById("comp-propose-list");
@@ -2931,7 +2944,7 @@ function _planApply(data, checked, boundaries) {
         ? { page: lines[next.li].page, line_index: lines[next.li].line_index, char_end: next.off }
         : { page: lines[next.li - 1].page, line_index: lines[next.li - 1].line_index, char_end: null };
     if (starts[0].li > 0 || starts[0].off > 0) {
-      spans.push({ title: lines[0].text.trim().slice(0, 20) || "(앞부분)", kind: "front", level: 2, role: "article",
+      spans.push({ title: Array.from(lines[0].text.trim()).slice(0, 20).join("") || "(앞부분)", kind: "front", level: 2, role: "article",
         start: { page: lines[0].page, line_index: lines[0].line_index, char_offset: 0 },
         end: endBefore(starts[0]) });
     }
@@ -2999,7 +3012,7 @@ function _renderDiff() {
     for (const p of sorted.slice(0, 12)) {
       const line = document.createElement("div");
       line.className = "comp-preview-row";
-      line.textContent = `${sign} ${p.page}쪽 ${p.line_index + 1}행  ${(p.title || "").slice(0, 30)}`;
+      line.textContent = `${sign} ${p.page}쪽 ${p.line_index + 1}행  ${Array.from(p.title || "").slice(0, 30).join("")}`;
       box.appendChild(line);
     }
     if (sorted.length > 12) {

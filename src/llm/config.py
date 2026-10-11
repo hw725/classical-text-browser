@@ -58,15 +58,17 @@ class LlmConfig:
     def _load_dotenv(self, path: Path) -> dict:
         """간단한 .env 파서. python-dotenv 없이 동작.
 
-        인코딩: UTF-8(BOM 허용). Windows 메모장이 남기는 BOM이나 cp949로 저장된
-        파일에서 UnicodeDecodeError로 죽으면 LLM 라우터 초기화가 실패하고, 그
-        라우터를 주입받는 OCR 엔진 목록까지 500이 된다. 못 읽는 글자는 치환하고
-        경고만 남긴다 — API 키는 ASCII라 영향이 없다.
+        인코딩: UTF-8(BOM 허용) → 한글 cp949(설정 화면 core.env_settings와 같은 판독 — 둘이 같은
+        .env를 다르게 읽던 것을 맞췄다, 2026-10-11 재확인) → 그래도 안 되면 못 읽는 글자를 치환하고
+        경고만 남긴다. UnicodeDecodeError로 죽으면 LLM 라우터 초기화가 실패하고, 그 라우터를
+        주입받는 OCR 엔진 목록까지 500이 된다 — API 키는 ASCII라 치환해도 영향이 없다.
         """
         result = {}
         try:
-            text = path.read_text(encoding="utf-8-sig")
-        except UnicodeDecodeError:
+            from core.env_settings import _read_lines_for_write
+
+            text = "\n".join(_read_lines_for_write(path))
+        except (ValueError, ImportError):
             logging.getLogger(__name__).warning(
                 f".env가 UTF-8이 아닙니다: {path} — 못 읽는 글자는 치환합니다. "
                 "UTF-8로 다시 저장하세요."

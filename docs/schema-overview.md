@@ -1,6 +1,6 @@
 # 전체 스키마 개요도
 
-> 2026-03-14 작성 · **2026-09-30 확인: 20개**
+> 2026-03-14 작성 · **2026-09-30 확인: 20개** · 2026-10-11 전수로 해석 참조·manifest enum·교환 형식을 고침
 > (원본 8 + 해석 5 + 코어 6 + 교환 1 — v1.4.2에서 작업 계획 `read_plan` 추가, D-131). v1.3.0에서 코어가 바뀌었다 —
 > 경계 목록이 더해지고(D-092) Work가 빠졌으며(D-099), 경계 파일은 해석 저장소가 아니라
 > **원본 저장소**에 산다(D-097). 교환 형식은 정본이 스키마 하나가 되었다(D-100).
@@ -82,15 +82,18 @@ schemas/
 | `dependency`.source.document_id | `manifest`.document_id | ──▶ |
 | `dependency`.source.base_commit | 원본 저장소 git commit hash | ──▶ |
 
-### 해석 저장소 → 원본 저장소
+### 해석 저장소 → 원본 저장소(편성 단위)
+
+해석 층의 `block_id`는 **단위 id**(= 시작 경계의 id, 원본 저장소 `boundaries/{권}.json`)다 — L3 LayoutBlock id가
+아니다(D-092·D-093, 칸 이름만 v1.2의 것 — B-003).
 
 | 참조 원본 | 참조 대상 | 필드 |
 |-----------|----------|------|
-| `punctuation_page`.block_id | `layout_page`.blocks[].block_id | ──▶ |
-| `hyeonto_page`.block_id | `layout_page`.blocks[].block_id | ──▶ |
-| `translation_page`.source.block_id | `layout_page`.blocks[].block_id | ──▶ |
-| `annotation_page`.blocks[].block_id | `layout_page`.blocks[].block_id | ──▶ |
-| `citation_mark_page`.source.block_id | `layout_page`.blocks[].block_id | ──▶ |
+| `punctuation_page`.block_id | 경계 목록의 경계 id(= `unit`.id) | ──▶ |
+| `hyeonto_page`.block_id | 경계 목록의 경계 id(= `unit`.id) | ──▶ |
+| `translation_page`.source.block_id | 경계 목록의 경계 id(= `unit`.id) | ──▶ |
+| `annotation_page`.blocks[].block_id | 경계 목록의 경계 id(= `unit`.id) | ──▶ |
+| `citation_mark_page`.source.block_id | 경계 목록의 경계 id(= `unit`.id) | ──▶ |
 
 ### 해석 저장소 내부 (L6↔L7)
 
@@ -130,7 +133,7 @@ schemas/
 | **\*title** | string | 원어 표기 |
 | title_ko | string? | 한국어 제목 |
 | **\*parts[]** | array | {part_id, label, file, page_count, rotation?, rotation_ranges?} — rotation은 «바로 세우려면 시계 방향 몇 도»(0·90·180·270, D-123). 없으면 0 |
-| **\*completeness_status** | enum | file_only → text_imported → bibliography_added → ocr_done → layout_analyzed → correcting → correction_done → finalized |
+| **\*completeness_status** | enum | file_only → text_imported → bibliography_added → ocr_done → layout_analyzed → correcting → correction_done → finalized, 그리고 스냅샷에서 들인 문헌의 `imported`(B-014) |
 | segmentation_rules | object? | 편성 규칙(D-088·D-116·D-117) — 신호 스위치 `signals`(`toc`·date·mark·volume·short_line·after_short·indent — 안 적힌 키는 켜진 것, D-122), `title_words`·`head_words`, 시각 신호 `symbols`·`indent_alone`, 꼴 `head_templates`·`tail_templates`(접은 글자 N·G·Z, D-119), 판심 `furniture`, `suppress`, `reference_text`, `toc_llm`, `origin`(빈 값=아직 없음·induced·manual). 프로그램이 전문에서 층계로 찾아 채우고 사람이 고친다 |
 | ocr_guidance | string? | LLM OCR 판독 지침(D-081) |
 
@@ -246,7 +249,7 @@ L5 표점(句讀). 원문 글자 인덱스에 삽입할 구두점 기록. before
 
 | 필드 | 타입 | 설명 |
 |------|------|------|
-| **\*block_id** | string | 대상 블록 (L3/L4) |
+| **\*block_id** | string | 대상 단위 id(편성 경계 — 이름만 block_id, B-003) |
 | **\*marks[]** | Mark[] | 표점 배열 |
 | ↳ id | string | 마크 식별자 |
 | ↳ target | {start, end} | 글자 인덱스 범위 |
@@ -261,7 +264,7 @@ L5 현토(懸吐). 원문 글자에 붙이는 한글 토. position(after/before/
 
 | 필드 | 타입 | 설명 |
 |------|------|------|
-| **\*block_id** | string | 대상 블록 (L3/L4) |
+| **\*block_id** | string | 대상 단위 id(편성 경계 — 이름만 block_id, B-003) |
 | **\*annotations[]** | Annotation[] | 현토 배열 |
 | ↳ id | string | 현토 식별자 |
 | ↳ target | {start, end} | 글자 인덱스 범위 |
@@ -300,7 +303,7 @@ L7 주석 v2. 기존 태깅 + 사전형 주석(DictionaryEntry) + 4단계 누적
 | **\*part_id, page_number** | string, int | 페이지 식별 |
 | schema_version | string | "2.0" (v1 하위호환) |
 | **\*blocks[]** | AnnotatedBlock[] | 블록별 주석 |
-| ↳ block_id | string | 대상 블록 |
+| ↳ block_id | string | 대상 단위 id(편성 경계 — 이름만 block_id, B-003) |
 | ↳ annotations[] | Annotation[] | 주석 배열 |
 | &nbsp;&nbsp;↳ id, target | string, {start, end} | 식별/범위 |
 | &nbsp;&nbsp;↳ **\*type** | string | person, place, term 등 |
@@ -421,7 +424,7 @@ Agent/Concept/단위 간 관계. predicate는 구조적 동사만.
 > `exchange.schema.json`
 
 단일 JSON 스냅샷(문헌 하나 + 해석 하나의 현재 HEAD). 내보내기/가져오기용.
-**교환 형식의 정본은 이 스키마 하나다**(B-005) — `build_snapshot()`이 이 모양으로 쓰고,
+**교환 형식의 정본은 이 스키마 하나다**(D-100 — 옛 백로그 B-005, 그 번호는 지금 다른 항목) — `build_snapshot()`이 이 모양으로 쓰고,
 `snapshot_validator.py`가 이것으로 검증하며, 시험이 내보내기 결과를 이것에 맞춰 본다.
 
 | 필드 | 타입 | 설명 |
@@ -429,14 +432,17 @@ Agent/Concept/단위 간 관계. predicate는 구조적 동사만.
 | **\*schema_version** | string | `"1.0"` |
 | export_timestamp | string? | 내보낸 일시(ISO 8601) |
 | platform_version | string? | 내보낸 앱의 판 |
+| corpus_version | object? | 코퍼스 스냅샷 각인 — 내보낼 때 코드가 찍는 «데이터» 판(`core/corpus_version.py`, D-128 1항). 옛 스냅샷에는 없다 |
 | **\*source_info** | object | 어느 문헌·해석의 것인가(제목·권·서지·해석자). v1.3까지 이름은 `work` |
-| **\*original** | object | 원본 층 — `head_hash` + `layers.L1_source`(경로 참조)·`L3_layout`·`L4_text` |
+| **\*original** | object | 원본 층 — `head_hash` + `layers.L1_source`(경로 참조)·`L3_layout`·`L4_text`·`boundaries`(편성 경계)·`read_plan`(작업 계획)·`variant_approvals`(문헌별 이체자 승인) (B-013) |
 | interpretation | object? | 해석 층 — `head_hash`·`dependency`·`layers.L5~L7`·`core_entities` |
 | variant_characters | object? | 이체자 사전 |
 | annotation_types[] | array? | 주석 유형(기본 + 서고 커스텀) |
 
-담지 않는 것: L1 바이너리(경로만) · L2 OCR(L4에서 다시 만든다) · git 이력 ·
-단위(편성은 원본 저장소의 경계 목록이다 — D-092·D-097).
+담지 않는 것: L1 바이너리(경로만) · L2 OCR(L4에서 다시 만든다) · git 이력 · 단위 자체(경계 목록에서 만드는
+읽기 보기라 저장하지 않는다 — 경계 목록은 원본 층 `boundaries`로 담는다, D-092·D-097).
+들일 때는 경로로 쓰일 이름(문헌·해석 id·L4 file_name·L3·경계 part·작업 계획 권·`_source_path`·엔티티 종류·id)이
+서고 밖을 가리키면 거부한다(B-037). id가 없거나 빈 엔티티는 새 UUID를 붙여 들인다(B-063).
 
 ---
 

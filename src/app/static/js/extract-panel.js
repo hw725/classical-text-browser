@@ -1,5 +1,5 @@
 /**
- * 텍스트 추출 패널 — 「논문」 프로필 전용 (D-055).
+ * 텍스트 추출 패널 — 「추출」 모드 전용 (D-055 — 처음 이름은 «논문» 프로필).
  *
  * 왜 별도 패널인가:
  *   고서 흐름은 «레이아웃 → OCR → 교정»을 페이지마다 반복하는 것을 전제로 한다.
@@ -181,7 +181,7 @@ async function _loadExtractEngines() {
     _updateEngineWarning();
     select.addEventListener("change", _updateEngineWarning);
   } catch (e) {
-    console.warn("[PaperPanel] 엔진 목록을 불러오지 못했습니다:", e);
+    console.warn("[ExtractPanel] 엔진 목록을 불러오지 못했습니다:", e);
   }
 }
 
@@ -357,14 +357,6 @@ async function _refreshExtractExport() {
 }
 
 /**
- * 실행하기 전에 «몇 쪽이 실제로 도는가»를 보여 준다.
- *
- * 왜 필요한가:
- *   OCR 한 쪽마다 LLM 호출이 나간다. 특히 레이아웃을 몇 쪽만 고친 뒤
- *   다시 실행할 때, 전체 300쪽이 다시 도는 것인지 고친 1쪽만 도는 것인지가
- *   버튼을 누르기 전에 보여야 한다.
- */
-/**
  * 지정한 쪽으로 이동한다.
  *
  * 왜 함수로 감싸는가:
@@ -403,6 +395,14 @@ function _extractRunLabel(range) {
   return `지정한 ${range.length}쪽만 OCR 실행`;
 }
 
+/**
+ * 실행하기 전에 «몇 쪽이 실제로 도는가»를 보여 준다.
+ *
+ * 왜 필요한가:
+ *   OCR 한 쪽마다 LLM 호출이 나간다. 특히 레이아웃을 몇 쪽만 고친 뒤
+ *   다시 실행할 때, 전체 300쪽이 다시 도는 것인지 고친 1쪽만 도는 것인지가
+ *   버튼을 누르기 전에 보여야 한다.
+ */
 async function _refreshExtractPending() {
   const box = document.getElementById("extract-pending");
   const target = _extractTarget();
@@ -1184,6 +1184,26 @@ async function _runExtractOcr() {
   }
 }
 
+/**
+ * 만든 PDF의 점검 결과를 내려받기 버튼 옆에 남긴다.
+ *
+ * 입력: 백엔드가 산출물을 다시 열어 재고 돌려준 경고 문자열 목록.
+ *
+ * 왜 토스트가 아닌가: 「글자가 2pt로 들어갔다」는 몇 초 뒤에 사라지면 안 되는
+ * 종류의 소식이다. 산출물을 서지 관리 도구로 넘긴 뒤에 알면 늦는다.
+ */
+function _showEmbedWarnings(warnings) {
+  const box = document.getElementById("extract-embed-warn");
+  if (!box) return;
+  if (!warnings.length) {
+    box.hidden = true;
+    box.textContent = "";
+    return;
+  }
+  box.textContent = `만든 PDF를 다시 열어 확인한 결과:\n${warnings.join("\n")}`;
+  box.hidden = false;
+}
+
 /** born-digital PDF의 텍스트를 L4로 가져온다. */
 async function _importExtractText() {
   const target = _extractTarget();
@@ -1216,26 +1236,6 @@ async function _importExtractText() {
 }
 
 /** 검색되는 PDF를 다시 만든다 (교정 후 갱신용). */
-/**
- * 만든 PDF의 점검 결과를 내려받기 버튼 옆에 남긴다.
- *
- * 입력: 백엔드가 산출물을 다시 열어 재고 돌려준 경고 문자열 목록.
- *
- * 왜 토스트가 아닌가: 「글자가 2pt로 들어갔다」는 몇 초 뒤에 사라지면 안 되는
- * 종류의 소식이다. 산출물을 서지 관리 도구로 넘긴 뒤에 알면 늦는다.
- */
-function _showEmbedWarnings(warnings) {
-  const box = document.getElementById("extract-embed-warn");
-  if (!box) return;
-  if (!warnings.length) {
-    box.hidden = true;
-    box.textContent = "";
-    return;
-  }
-  box.textContent = `만든 PDF를 다시 열어 확인한 결과:\n${warnings.join("\n")}`;
-  box.hidden = false;
-}
-
 async function _embedExtractPdf() {
   const target = _extractTarget();
   if (!target) {

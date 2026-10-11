@@ -47,7 +47,8 @@ def source_info(data: dict) -> dict:
 def normalize_snapshot(data: dict) -> dict:
     """옛 스냅샷을 지금 모양으로 맞춘다 (얕은 사본을 돌려준다).
 
-    왜 필요한가: 교환 형식의 정본은 `schemas/exchange.schema.json` 하나다(B-005). 검증도
+    왜 필요한가: 교환 형식의 정본은 `schemas/exchange.schema.json`
+    하나다(D-100 — 옛 백로그 B-005, 그 번호는 지금 다른 항목). 검증도
     가져오기도 그 스키마를 쓰려면, 옛 이름으로 적힌 파일을 **먼저** 지금 이름으로 옮겨야
     한다 — 스키마에 옛 이름까지 넣으면 정본이 둘이 된다.
 
@@ -151,7 +152,9 @@ def unsafe_snapshot_paths(data: dict) -> list[str]:
         if not _is_safe_name(etype):
             problems.append(f"코어 엔티티 종류 '{etype}'를 폴더 이름으로 쓸 수 없습니다")
         for item in items or []:
-            eid = str(item.get("id", "unknown")) if isinstance(item, dict) else ""
+            if isinstance(item, dict) and not item.get("id"):
+                continue  # id가 없거나 비면 들일 때 새 UUID를 붙인다 — 경로 문제가 아니다
+            eid = str(item.get("id")) if isinstance(item, dict) else ""
             if not _is_safe_name(eid):
                 problems.append(f"코어 엔티티 id '{eid}'를 파일 이름으로 쓸 수 없습니다")
     return problems
@@ -307,7 +310,8 @@ def _serialize_source_info(doc_path: Path, interp_path: Path) -> dict:
 
 
 def _serialize_original(doc_path: Path) -> dict:
-    """원본 저장소(L1~L4)를 직렬화한다."""
+    """원본 저장소를 직렬화한다 — L1 파일 목록(참조)·L3·L4·편성 경계·작업 계획·이체자 승인.
+    L2(OCR)는 담지 않는다."""
     result = {
         "head_hash": _get_head_hash(doc_path),
         "layers": {},
@@ -613,7 +617,10 @@ def _write_original_layers(
     original: dict,
     warnings: list,
 ) -> None:
-    """원본 저장소(L1~L4)를 파일로 복원한다."""
+    """원본 저장소를 파일로 복원한다 — L3·L4·편성 경계·작업 계획·이체자 승인.
+
+    L1은 참조만 담기고 L2는 없다.
+    """
     layers = original.get("layers", {})
 
     # manifest.json
@@ -737,7 +744,7 @@ def _write_interpretation_layers(
                 target.parent.mkdir(parents=True, exist_ok=True)
                 _write_json(target, item)
             else:
-                # _source_path가 없으면 layer_key 기반 기본 경로 사용
+                # _source_path가 없으면 어디에 쓸지 몰라 복원하지 않고 경고로 남긴다
                 warnings.append(f"{layer_key}: _source_path 없음, 복원 스킵")
 
     # 코어 엔티티
@@ -746,7 +753,15 @@ def _write_interpretation_layers(
         entity_dir = _inside(interp_path, interp_path / "core_entities" / entity_type)
         entity_dir.mkdir(parents=True, exist_ok=True)
         for item in items:
-            entity_id = item.get("id", "unknown")
+            entity_id = item.get("id")
+            if not entity_id:
+                # id 없는 엔티티가 모두 unknown.json 하나로 써져 서로 덮였다(2026-10-11 전수) —
+                # 새 UUID를 붙여 저장하고 그렇게 했다고 알린다
+                import uuid
+
+                entity_id = str(uuid.uuid4())
+                item = {**item, "id": entity_id}
+                warnings.append(f"{entity_type}: id 없는 엔티티에 새 id {entity_id}를 붙였습니다")
             _write_json(_inside(interp_path, entity_dir / f"{entity_id}.json"), item)
 
 
@@ -766,6 +781,13 @@ def detect_imported_layers(data: dict) -> list[str]:
         layers.append("L3")
     if orig_layers.get("L4_text", {}).get("pages"):
         layers.append("L4")
+    # 2026-10-11부터 내보내기·들이기 대상(B-013) — «들인 층» 요약에서 빠져 있었다
+    if (orig_layers.get("boundaries") or {}).get("parts"):
+        layers.append("boundaries")
+    if (orig_layers.get("read_plan") or {}).get("parts"):
+        layers.append("read_plan")
+    if orig_layers.get("variant_approvals"):
+        layers.append("variant_approvals")
 
     interp_layers = data.get("interpretation", {}).get("layers", {})
     if interp_layers.get("L5_punctuation"):
@@ -776,6 +798,8 @@ def detect_imported_layers(data: dict) -> list[str]:
         layers.append("L6_translation")
     if interp_layers.get("L7_annotation"):
         layers.append("L7_annotation")
+    if data.get("interpretation", {}).get("core_entities"):
+        layers.append("core_entities")
 
     return layers
 
@@ -890,8 +914,10 @@ def _update_library_manifest(
             "interpretations": [],
         }
 
-    # 문헌 추가
-    docs = manifest.setdefault("documents", [])
+    # 문헌 추가 — 같은 id는 바꿔 끼운다(document._update_library_manifest와 같게)
+    docs = manifest["documents"] = [
+        d for d in manifest.get("documents", []) if d.get("document_id") != doc_id
+    ]
     docs.append(
         {
             "document_id": doc_id,
@@ -901,7 +927,9 @@ def _update_library_manifest(
     )
 
     # 해석 추가
-    interps = manifest.setdefault("interpretations", [])
+    interps = manifest["interpretations"] = [
+        i for i in manifest.get("interpretations", []) if i.get("interpretation_id") != interp_id
+    ]
     interps.append(
         {
             "interpretation_id": interp_id,

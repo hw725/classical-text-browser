@@ -379,7 +379,9 @@ class TestEscapeHelpersAreStrict:
     )
     def test_quotes_are_escaped(self, fname, fileno):
         body = self._impl(fname, fileno)
-        assert '"/g' in body or "textContent" in body, (
+        # textContent → innerHTML 은 <, >, & 만 바꾸고 따옴표는 그대로 둔다 — 그것을
+        # «엄격»으로 받던 예전 단언이 속성 자리 다섯 곳의 구멍을 가렸다(2026-10-11 2차 전수).
+        assert '"/g' in body, (
             f"{fileno}.js::{fname} 가 큰따옴표를 막지 않는다 — "
             "속성 안에 들어가면 따옴표로 속성을 벗어난다"
         )
@@ -387,7 +389,7 @@ class TestEscapeHelpersAreStrict:
         # 있으면 `"` 만 막아서는 뚫린다. 2026-09-22 에 이 단언이 없어서, variant-manager
         # 판에서 `'` 를 도로 빼도 초록이었다(깨뜨려 보고 찾았다).
         if fname.startswith("_escAttr"):
-            assert "'/g" in body or "textContent" in body, (
+            assert "'/g" in body, (
                 f"{fileno}.js::{fname} 는 속성 헬퍼인데 작은따옴표를 막지 않는다"
             )
 
@@ -397,6 +399,6 @@ class TestEscapeHelpersAreStrict:
         assert decl, "_escHtml 선언을 찾지 못했다"
         winner = decl[-1]
         body = self._impl("_escHtml", winner)
-        assert '"/g' in body or "textContent" in body, (
+        assert '"/g' in body, (
             f"전역에서 이기는 _escHtml 은 {winner}.js 의 것인데 큰따옴표를 막지 않는다"
         )

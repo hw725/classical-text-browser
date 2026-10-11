@@ -18,7 +18,9 @@ const notesState = {
   entries: [],         // [{text, created_at, updated_at}, ...]
   loaded: false,       // 현재 페이지의 메모 로드 여부
   saveTimer: null,     // 자동저장 디바운스 타이머
+  pendingTarget: null, // 예약된 저장이 쓸 자리 {interpId, partId, pageNum} — 예약할 때 붙잡는다
   saving: false,       // 저장 중 여부
+  savingPromise: null, // 도는 저장이 끝나면 풀린다 — 다음 저장이 기다린다
 };
 
 
@@ -60,6 +62,10 @@ async function loadPageNotes() {
   const container = document.getElementById("notes-panel-content");
   if (!container) return;
 
+  // 쪽을 옮기기 전에 남은 예약 저장을 «그 쪽»으로 먼저 내보낸다. 예전에는 2초 타이머가 터질 때의
+  // 쪽 번호를 읽어, 쓰고 2초 안에 쪽을 옮기면 옛 쪽 비고가 새 쪽 파일을 덮었다(2026-10-11 2차 전수)
+  await _flushNotesSave();
+
   const list = document.getElementById("notes-list");
   const status = document.getElementById("notes-save-status");
 
@@ -84,6 +90,7 @@ async function loadPageNotes() {
     const resp = await fetch(
       `/api/interpretations/${interpId}/pages/${pageNum}/notes?part_id=${partId}`
     );
+    if (!_notesStillOn(interpId, partId, pageNum)) return;
     if (!resp.ok) {
       notesState.entries = [];
       notesState.loaded = true;
@@ -92,11 +99,15 @@ async function loadPageNotes() {
     }
 
     const data = await resp.json();
+    // 기다리는 동안 쪽(또는 해석 저장소)을 옮겼으면 이 응답은 버린다 — 늦게 온 옛 쪽 비고를
+    // 지금 쪽에 그리면, 사용자가 고칠 때 지금 쪽 파일에 옛 쪽 내용이 저장된다(2026-10-11 Codex 리뷰).
+    if (!_notesStillOn(interpId, partId, pageNum)) return;
     notesState.entries = data.entries || [];
     notesState.loaded = true;
     _renderNotes();
   } catch (e) {
     console.warn("비고 로드 실패:", e);
+    if (!_notesStillOn(interpId, partId, pageNum)) return;
     notesState.entries = [];
     notesState.loaded = true;
     _renderNotes();
@@ -112,16 +123,21 @@ async function loadPageNotes() {
  * 왜 자동저장인가: 연구자가 메모 저장을 잊는 것을 방지.
  *   타이핑이 멈추면 2초 후 자동으로 서버에 전송한다.
  */
-async function _saveNotes() {
-  if (!_notesInterpId()) return;
-  if (notesState.saving) return;
+async function _saveNotes(target) {
+  // target: {interpId, partId, pageNum, entries} — 없으면 지금 화면의 자리·내용
+  const t = target || { ..._notesTarget(), entries: notesState.entries };
+  if (!t.interpId || !t.pageNum) return;
+  // 앞 저장이 도는 중이면 끝나기를 기다렸다가 이어서 저장한다. 전에는 그냥 돌아가, 앞 저장 중에
+  // 예약 저장이 터지거나 쪽을 옮기면(flush) 그 편집이 조용히 사라졌다(2026-10-11 재확인).
+  while (notesState.saving && notesState.savingPromise) {
+    await notesState.savingPromise.catch(() => {});
+  }
 
-  const interpId = _notesInterpId();
-  const partId = viewerState.partId || "main";
-  const pageNum = viewerState.pageNum;
-  if (!pageNum) return;
+  const { interpId, partId, pageNum } = t;
 
   notesState.saving = true;
+  let release;
+  notesState.savingPromise = new Promise((r) => { release = r; });
   const status = document.getElementById("notes-save-status");
   if (status) status.textContent = "저장 중...";
 
@@ -131,7 +147,7 @@ async function _saveNotes() {
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ entries: notesState.entries }),
+        body: JSON.stringify({ entries: t.entries }),
       }
     );
 
@@ -148,6 +164,7 @@ async function _saveNotes() {
     if (status) status.textContent = "저장 실패";
   } finally {
     notesState.saving = false;
+    release();
   }
 }
 
@@ -158,10 +175,40 @@ async function _saveNotes() {
  */
 function _scheduleSave() {
   if (notesState.saveTimer) clearTimeout(notesState.saveTimer);
-  notesState.saveTimer = setTimeout(_saveNotes, 2000);
+  notesState.pendingTarget = _notesTarget(); // 지금 쓰고 있는 쪽 — 타이머가 터질 때의 쪽이 아니다
+  notesState.saveTimer = setTimeout(_flushNotesSave, 2000);
 
   const status = document.getElementById("notes-save-status");
   if (status) status.textContent = "수정됨";
+}
+
+
+/** 지금 화면의 저장 자리. */
+function _notesTarget() {
+  return { interpId: _notesInterpId(), partId: viewerState.partId || "main", pageNum: viewerState.pageNum };
+}
+
+/**
+ * 비고를 읽기 시작한 자리가 아직 지금 화면의 자리인가.
+ * 입력: 읽기 시작할 때의 interpId·partId·pageNum. 출력: 같으면 true.
+ * 왜: 응답이 늦게 오면 그사이 옮긴 쪽에 옛 쪽 비고를 그리게 된다 — 그 상태로 고치면 저장이 지금 쪽 파일로 간다.
+ */
+function _notesStillOn(interpId, partId, pageNum) {
+  const t = _notesTarget();
+  return t.interpId === interpId && t.partId === partId && t.pageNum === pageNum;
+}
+
+/**
+ * 예약된 저장이 있으면 지금 내보낸다(예약할 때 붙잡은 쪽으로). 없으면 아무것도 하지 않는다.
+ * 입력 없음. 출력: Promise(저장이 끝나면 풀린다).
+ */
+async function _flushNotesSave() {
+  if (!notesState.saveTimer) return;
+  clearTimeout(notesState.saveTimer);
+  notesState.saveTimer = null;
+  const target = { ...(notesState.pendingTarget || _notesTarget()), entries: notesState.entries };
+  notesState.pendingTarget = null;
+  await _saveNotes(target);
 }
 
 

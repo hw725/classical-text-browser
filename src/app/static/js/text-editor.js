@@ -337,7 +337,10 @@ function initTextEditor() {
   document.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key === "s") {
       e.preventDefault();
-      if (viewerState.docId) {
+      // 이 편집기가 화면에 있고 저장 안 한 수정이 있을 때만 저장한다. 예전에는 모드·표시 여부와
+      // 상관없이 숨은 textarea 전문을 PUT해, 레이아웃·교정 탭에서 LLM 교정을 「적용」한 뒤 Ctrl+S를
+      // 누르면 방금 적용한 교정이 옛 글로 덮였다(2026-10-11 전수, ocr-panel._applyCorrection 참조)
+      if (viewerState.docId && editorState.isDirty && textarea.offsetParent !== null) {
         _saveCurrentText();
       }
     }

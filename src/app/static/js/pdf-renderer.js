@@ -8,7 +8,7 @@
  *   4. 줌 (확대/축소, Ctrl+스크롤, 창에 맞추기)
  *   5. 다권본: part 선택 시 PDF를 교체 로드
  *
- * 의존성: PDF.js (CDN), sidebar-tree.js (viewerState)
+ * 의존성: PDF.js (static/vendor/pdfjs/, D-140), sidebar-tree.js (viewerState)
  *
  * 왜 이렇게 하는가:
  *   - 연구자가 원본 PDF를 페이지별로 열람하면서 우측 패널에 텍스트를 입력한다.
@@ -19,10 +19,10 @@
    PDF.js 글로벌 설정
    ────────────────────────── */
 
-// PDF.js worker 경로 — CDN에서 로드
+// PDF.js worker 경로 — 앱에 함께 실은 판(static/vendor/pdfjs/, D-140)
 if (typeof pdfjsLib !== "undefined") {
   pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    "/static/vendor/pdfjs/pdf.worker.min.js"; // 앱에 함께 실은 판(오프라인에서도 뜨게)
 }
 
 
@@ -245,7 +245,7 @@ async function syncSavedRotation(docId, partId, rotation, ranges) {
  * 시계 방향으로 몇 도), 긴 변 픽셀. 출력: true(그림) 또는 false(이 권이 열려 있지 않음).
  *
  * 왜 뷰어를 돌리지 않고 따로 그리는가: 계획 창이 화면을 덮고 있어 뷰어를 돌려 봐야 보이지 않는다.
- * 저장 회전과 같은 식(page.rotate + 회전)으로 뷰포트를 만든다 — _viewportFor와 같은 좌표계다.
+ * 저장 회전과 같은 식(page.rotate + 회전)으로 뷰포트를 만든다 — pdfViewport와 같은 좌표계다.
  */
 // eslint-disable-next-line no-unused-vars
 async function renderPageThumb(canvas, docId, partId, pageNo, rotation, maxSide = 240) {
@@ -307,15 +307,6 @@ async function _postSurveyStream(url, body, onEvent) {
 }
 
 /**
- * 쪽 측정이 낸 «회전이 다른 구간»을 사람에게 묻고 저장한다. 입력: docId, partId, rot(라우트의 rotation 목록).
- * 출력: 저장한 구간 수.
- *
- * 판정이 확실한 구간(guess 아님)은 한 창에 모아 한 번만 묻는다 — 구간마다 묻는 것은 번거롭다(사용자 지적).
- * 누운 쪽은 90인지 270인지 코드가 못 가리므로(추정) 그 구간의 첫 쪽을 **제안한 회전으로 미리 보인 채**
- * 확인받고, 아니라고 하면 반대쪽을 한 번 더 보인다. 「권 전체 OCR」의 «돌아간 쪽은 세워서»가 쓴다.
- * (「말로 지시」의 자동 스캔은 이 창을 쓰지 않는다 — 계획 표의 「보기」·「반대로」로 확인하고 「적용」이 저장한다)
- */
-/**
  * 지금 화면이 이 권을 보고 있는가 — 미리보기(goToPage)는 viewerState의 권으로 가고 CSS 회전은 pdfState의
  * 쪽에 걸리므로 **둘 다** 이 권이어야 한다. 문헌을 바꾼 직후에는 viewerState가 먼저 바뀌고 pdfState는 PDF
  * 로드 뒤에 바뀐다(Codex 지적 2026-09-18) — 그 틈에 다른 문헌을 미리 보며 이 문헌의 회전을 저장하면 안 된다.
@@ -327,6 +318,15 @@ function _viewingPart(docId, partId) {
   return pdfOk && viewOk;
 }
 
+/**
+ * 쪽 측정이 낸 «회전이 다른 구간»을 사람에게 묻고 저장한다. 입력: docId, partId, rot(라우트의 rotation 목록).
+ * 출력: 저장한 구간 수.
+ *
+ * 판정이 확실한 구간(guess 아님)은 한 창에 모아 한 번만 묻는다 — 구간마다 묻는 것은 번거롭다(사용자 지적).
+ * 누운 쪽은 90인지 270인지 코드가 못 가리므로(추정) 그 구간의 첫 쪽을 **제안한 회전으로 미리 보인 채**
+ * 확인받고, 아니라고 하면 반대쪽을 한 번 더 보인다. 「권 전체 OCR」의 «돌아간 쪽은 세워서»가 쓴다.
+ * (「말로 지시」의 자동 스캔은 이 창을 쓰지 않는다 — 계획 표의 「보기」·「반대로」로 확인하고 「적용」이 저장한다)
+ */
 async function _confirmRotationRanges(docId, partId, rot) {
   let applied = 0;
   const sure = (rot || []).filter((r) => !r.guess);
@@ -454,6 +454,31 @@ async function _saveRotation() {
  *                    같은 문서면 페이지 이동만 수행한다.
  */
 // eslint-disable-next-line no-unused-vars
+function _showPdfLoadFailed(on) {
+  /**
+   * «PDF를 불러올 수 없습니다» 안내를 켜고 끈다. 입력: on — 켤지.
+   * 캔버스 묶음(#pdf-canvas-wrapper)은 지우지 않고 숨기기만 한다 — 다음 문헌이 그 캔버스에 그린다.
+   */
+  const container = document.getElementById("pdf-canvas-container");
+  if (!container) return;
+  const wrapper = document.getElementById("pdf-canvas-wrapper");
+  let note = document.getElementById("pdf-load-failed");
+  if (on && !note) {
+    note = document.createElement("div");
+    note.id = "pdf-load-failed";
+    note.className = "placeholder";
+    note.style.cssText = "text-align:center;padding:40px 20px;color:#888;";
+    note.innerHTML =
+      '<div style="font-size:24px;margin-bottom:8px;">📄</div>' +
+      "<div>PDF를 불러올 수 없습니다.</div>" +
+      '<div style="font-size:11px;margin-top:4px;color:#aaa;">HWP 전용 문헌이면 우측 텍스트 패널을 확인하세요.</div>';
+    container.appendChild(note);
+  }
+  if (note) note.hidden = !on;
+  if (wrapper) wrapper.hidden = !!on;
+}
+
+
 async function loadPdfPage(docId, partId, pageNum) {
   // placeholder 숨기기, 뷰어 표시
   document.getElementById("pdf-placeholder").style.display = "none";
@@ -480,6 +505,7 @@ async function loadPdfPage(docId, partId, pageNum) {
   }
 
   // 새 PDF 로드 — 순번을 붙여, 더 새 로드가 시작됐으면 이 결과는 버린다.
+  _showPdfLoadFailed(false);
   const url = `/api/documents/${docId}/pdf/${partId}`;
   const mySeq = (pdfState.loadSeq = (pdfState.loadSeq || 0) + 1);
   try {
@@ -531,14 +557,11 @@ async function loadPdfPage(docId, partId, pageNum) {
     if (mySeq !== pdfState.loadSeq) return;
     pdfState.loading = null;
     console.error("PDF 로드 실패:", err);
-    const container = document.getElementById("pdf-canvas-container");
-    // PDF가 없는 문헌 (HWP 전용 등)이면 친절한 메시지 표시
-    container.innerHTML =
-      '<div class="placeholder" style="text-align:center;padding:40px 20px;color:#888;">' +
-      '<div style="font-size:24px;margin-bottom:8px;">📄</div>' +
-      '<div>PDF를 불러올 수 없습니다.</div>' +
-      '<div style="font-size:11px;margin-top:4px;color:#aaa;">HWP 전용 문헌이면 우측 텍스트 패널을 확인하세요.</div>' +
-      '</div>';
+    // PDF가 없는 문헌 (HWP 전용 등)이면 친절한 메시지 표시.
+    // 컨테이너를 통째로 바꾸지 않고 안내문을 따로 얹는다 — 전에는 innerHTML로 캔버스·레이아웃
+    // 오버레이·로딩 표시까지 지워, HWP 전용 문헌을 한 번 열면 새로고침 전까지 다른 문헌의
+    // PDF도 그려지지 않았다(2026-10-11 재확인).
+    _showPdfLoadFailed(true);
     pdfState.pdfDoc = null;
     pdfState.currentDocId = null;
     pdfState.currentPartId = null;

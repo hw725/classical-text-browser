@@ -6,7 +6,7 @@
  *   2. 확인 후 일괄 실행 → corrections.json 업데이트
  *
  * 의존성:
- *   - viewerState (workspace.js) — 현재 문헌/권/페이지 정보
+ *   - viewerState (sidebar-tree.js) — 현재 문헌/권/페이지 정보
  */
 
 /* ──────────────────────────
@@ -72,6 +72,12 @@ async function _batchPreview() {
   }
   if (!correctedChar) {
     showToast("교정 글자를 입력하세요.", 'warning');
+    return;
+  }
+  // 한 글자인지는 코드포인트로 센다 — 입력칸의 maxlength="1"은 UTF-16 단위라 확장 한자(두 단위)를
+  // 넣을 수 없었다(2026-10-11 재확인)
+  if (Array.from(originalChar).length !== 1 || Array.from(correctedChar).length !== 1) {
+    showToast("찾을 글자·교정 글자는 한 글자씩 넣으세요.", 'warning');
     return;
   }
   if (originalChar === correctedChar) {
@@ -246,13 +252,14 @@ async function _batchExecute() {
    ────────────────────────── */
 
 function _escHtmlBatch(str) {
-  // & < > " 를 막는다. 속성 자리에 들어갈 수 있으므로 큰따옴표까지 막는다(D-069).
-  // 옛 이름은 `_escHtmlBatch` 이었는데 네 파일이 같은 이름을 선언해 **적재 순서로 한 판이
+  // & < > " ' 를 막는다. 속성 자리에 들어갈 수 있으므로 따옴표까지 막는다(D-069).
+  // 옛 이름은 `_escHtml` 이었는데 네 파일이 같은 이름을 선언해 **적재 순서로 한 판이
   // 전역을 이기고 있었다**(B-009). 이 파일은 이제 제 것을 쓴다.
   if (str === null || str === undefined) return "";
   return String(str)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }

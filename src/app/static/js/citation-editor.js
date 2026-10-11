@@ -5,7 +5,7 @@
  * 마크된 구절의 원문+표점본+번역+주석을 통합 조회하며,
  * 학술 인용 형식으로 내보내는 편집기.
  *
- * 의존: workspace.js (viewerState), sidebar-tree.js (interpState)
+ * 의존: sidebar-tree.js (viewerState), interpretation.js (interpState)
  */
 
 /* ────────────────────────────────────
@@ -44,6 +44,21 @@ const CITE_FIELD_DEFS = [
  */
 
 const CITE_EXPORT_SETTINGS_KEY = "cite_export_settings";
+
+/**
+ * 지금 고른 해석 저장소 id. 없으면 null — 요청을 보내지 않게.
+ * 입력: quiet(불러오기처럼 조용히 멈출 자리면 true). 출력: id 또는 null.
+ *
+ * 왜(2026-10-11 전수): 예전에는 «default»라는 없는 저장소 주소로 요청해 404를 받고 조용히 빈
+ * 목록을 그렸다. 저장·생성 같은 동작은 왜 안 되는지 알려야 한다.
+ */
+function _citeInterpId(quiet) {
+  const id = typeof interpState !== "undefined" && interpState ? interpState.interpId : null;
+  if (!id && !quiet && typeof showToast === "function") {
+    showToast("해석 저장소를 먼저 고르세요 — 사이드바 «해석 저장소»에서 고르거나 새로 만듭니다.", "warning");
+  }
+  return id || null;
+}
 
 /** localStorage에서 내보내기 설정 로드. 없으면 한국 학술 형식 기본값. */
 function _loadCiteExportSettings() {
@@ -340,7 +355,7 @@ async function _loadCiteBlockText(blockId) {
     // ── 단위 모드: 최신 교정 텍스트를 우선 사용 ──
     //
     // 왜 이렇게 하는가:
-      //   서버가 L4에서 잘라 주므로 교감·교정이 곧바로 반영된다(D-092).
+    //   서버가 L4에서 잘라 주므로 교감·교정이 곧바로 반영된다(D-092).
     if (!is || !is.interpId) { citeState.originalText = ""; return; }
     const apiBlockId = blockId.slice(5);
     let tbData = null;
@@ -353,18 +368,18 @@ async function _loadCiteBlockText(blockId) {
       if (tbRes.ok) tbData = await tbRes.json();
     } catch { /* 폴백 처리 아래 */ }
 
-      // 본문은 서버가 준 것을 그대로 쓴다.
-      //
-      // 왜 여기서 쪽을 다시 이어 붙이지 않는가: v1.3부터 단위는 본문을 저장하지 않고
-      // **읽을 때 L4에서 잘라 온다**(D-092). 즉 서버의 original_text가 이미 «지금 교정본»이고,
-      // 쪽 중간에서 시작·끝나는 경계도 글자 단위로 반영돼 있다.
-      // 화면이 쪽 전체를 다시 받아 이으면 두 가지가 어긋났다(사용자 지적 2026-09-04):
-      //   ① 둘째 쪽부터 빠졌다 — «texts.length === 0»일 때만 담아 첫 쪽만 들어갔다
-      //      (layout_block_id는 v1.3부터 늘 null이라 블록 매칭이 언제나 실패한다)
-      //   ② 쪽 중간 경계가 무시됐다 — char_range를 보지 않고 쪽 전체를 담았다
-      const correctedText = (tbData && tbData.original_text) || "";
+    // 본문은 서버가 준 것을 그대로 쓴다.
+    //
+    // 왜 여기서 쪽을 다시 이어 붙이지 않는가: v1.3부터 단위는 본문을 저장하지 않고
+    // **읽을 때 L4에서 잘라 온다**(D-092). 즉 서버의 original_text가 이미 «지금 교정본»이고,
+    // 쪽 중간에서 시작·끝나는 경계도 글자 단위로 반영돼 있다.
+    // 화면이 쪽 전체를 다시 받아 이으면 두 가지가 어긋났다(사용자 지적 2026-09-04):
+    //   ① 둘째 쪽부터 빠졌다 — «texts.length === 0»일 때만 담아 첫 쪽만 들어갔다
+    //      (layout_block_id는 v1.3부터 늘 null이라 블록 매칭이 언제나 실패한다)
+    //   ② 쪽 중간 경계가 무시됐다 — char_range를 보지 않고 쪽 전체를 담았다
+    const correctedText = (tbData && tbData.original_text) || "";
 
-      citeState.originalText = correctedText;
+    citeState.originalText = correctedText;
   } else {
     // ── LayoutBlock 모드 (하위 호환) ──
     // 교정 텍스트 API를 사용하여 해당 블록의 교정된 텍스트를 가져온다.
@@ -394,7 +409,8 @@ async function _loadCiteMarks() {
   const is = typeof interpState !== "undefined" ? interpState : null;
   if (!vs || !vs.pageNum) return;
 
-  const interpId = (is && is.interpId) || "default";
+  const interpId = _citeInterpId(true);
+  if (!interpId) return;
 
   try {
     const resp = await fetch(
@@ -547,14 +563,14 @@ function _renderCiteMarkList() {
   for (const m of marks) {
     const selected = m.id === citeState.selectedMarkId ? " cite-card-selected" : "";
     const statusClass = `cite-status-${m.status || "active"}`;
-    const snippet = (m.source_text_snapshot || "").slice(0, 20);
+    const snippet = Array.from(m.source_text_snapshot || "").slice(0, 20).join("");
     const label = m.label || "";
     const tags = (m.tags || []).map(t => `<span class="cite-tag">${_esc(t)}</span>`).join(" ");
     const pageInfo = m.page_number ? `<span class="cite-page-badge">p.${m.page_number}</span>` : "";
 
     html += `<div class="cite-card${selected} ${statusClass}" data-cite-id="${_esc(String(m.id))}">
       <div class="cite-card-header">
-        <span class="cite-card-snippet">${_esc(snippet)}${snippet.length < (m.source_text_snapshot || "").length ? "…" : ""}</span>
+        <span class="cite-card-snippet">${_esc(snippet)}${Array.from(snippet).length < Array.from(m.source_text_snapshot || "").length ? "…" : ""}</span>
         ${pageInfo}
         <input type="checkbox" class="cite-card-check" data-cite-id="${_esc(String(m.id))}" title="내보내기 선택">
       </div>
@@ -591,7 +607,8 @@ async function _selectCiteMark(markId) {
   const is = typeof interpState !== "undefined" ? interpState : null;
   if (!vs || !vs.pageNum) return;
 
-  const interpId = (is && is.interpId) || "default";
+  const interpId = _citeInterpId(true);
+  if (!interpId) return;
 
   // 마크 찾기 (page/all 양쪽에서)
   const mark = citeState.marks.find(m => m.id === markId)
@@ -704,7 +721,7 @@ function _onCiteTextSelection(options = {}) {
 
   citeState.selectionPromptOpen = true;
   const label = prompt(
-    `"${selectedText.slice(0, 30)}${selectedText.length > 30 ? "…" : ""}" 인용 메모:`,
+    `"${Array.from(selectedText).slice(0, 30).join("")}${Array.from(selectedText).length > 30 ? "…" : ""}" 인용 메모:`,
     ""
   );
   if (label === null) {
@@ -822,7 +839,8 @@ async function _addCitationMark(start, end, selectedText, label, tags) {
   const is = typeof interpState !== "undefined" ? interpState : null;
   if (!vs || !vs.pageNum) return;
 
-  const interpId = (is && is.interpId) || "default";
+  const interpId = _citeInterpId(false);
+  if (!interpId) return;
   const blockId = _citeApiBlockId();
 
   try {
@@ -897,7 +915,8 @@ async function _saveCiteEdit() {
   const is = typeof interpState !== "undefined" ? interpState : null;
   if (!vs || !vs.pageNum) return;
 
-  const interpId = (is && is.interpId) || "default";
+  const interpId = _citeInterpId(false);
+  if (!interpId) return;
   const markId = citeState.selectedMarkId;
 
   // 마크 페이지 번호 결정
@@ -963,7 +982,8 @@ async function _deleteCiteMark() {
   const is = typeof interpState !== "undefined" ? interpState : null;
   if (!vs || !vs.pageNum) return;
 
-  const interpId = (is && is.interpId) || "default";
+  const interpId = _citeInterpId(false);
+  if (!interpId) return;
   const markId = citeState.selectedMarkId;
 
   const mark = citeState.marks.find(m => m.id === markId)
@@ -1028,7 +1048,8 @@ async function _toggleCiteViewMode() {
 
 async function _loadAllCiteMarks() {
   const is = typeof interpState !== "undefined" ? interpState : null;
-  const interpId = (is && is.interpId) || "default";
+  const interpId = _citeInterpId(true);
+  if (!interpId) return;
 
   try {
     const resp = await fetch(`/api/interpretations/${interpId}/citation-marks/all${interpPartQuery("?")}`);
@@ -1345,7 +1366,8 @@ async function _resetAllCiteMarks() {
     return;
   }
 
-  const interpId = (is && is.interpId) || "default";
+  const interpId = _citeInterpId(false);
+  if (!interpId) return;
 
   if (citeState.marks.length === 0) {
     showToast("삭제할 인용 마크가 없습니다.", 'warning');
@@ -1404,15 +1426,16 @@ async function _resetAllCiteMarks() {
 
 function _esc(str) {
   if (!str) return "";
-  // 큰따옴표까지 막는다. 지금은 텍스트 자리에만 쓰이지만, **한 배선 거리**에서
-  // 속성 자리가 된다 — 2026-09-22에 `entity-manager` 가 Concept 라벨을
+  // 큰·작은따옴표까지 막는다. 글자 자리와 속성 자리(`data-cite-id="…"`) 둘 다에 쓰인다 —
+  // 느슨한 판은 한 배선 거리에서 뚫린다. 2026-09-22에 `entity-manager` 가 Concept 라벨을
   // `title="…"` 에 넣는 자리가 정확히 그 모양으로 뚫려 있었다(B-009).
   // 느슨한 판을 남겨 두면 그때 가서 «왜 여기만 다르지»를 다시 판다.
   return str
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 

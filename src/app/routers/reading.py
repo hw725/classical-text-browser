@@ -1134,7 +1134,8 @@ async def api_llm_translation(body: AiTranslationRequest):
 #
 # 기존 /api/llm/punctuation, /api/llm/translation을 수정하지 않고
 # /stream 접미사 엔드포인트를 추가한다.
-# 프론트엔드는 먼저 /stream을 시도하고, 실패 시 기존 엔드포인트로 폴백한다.
+# 프론트엔드는 먼저 /stream을 시도하고, 스트림이 열리기 전에 실패할 때만 기존 엔드포인트로 폴백한다
+# (열린 뒤의 실패는 다시 부르지 않는다 — fetchWithSSE, 2026-10-11).
 
 
 @router.post("/api/llm/punctuation/stream")

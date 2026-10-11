@@ -1,6 +1,7 @@
 # 아키텍처 다이어그램
 
-> **2026-07-26 기준 — v1.2.0(D-055 ~ D-069)에 맞춰 갱신.** Mermaid 문법으로 작성.
+> **2026-07-26 v1.2.0(D-055 ~ D-069)에 맞춰 크게 갱신했고, 그 뒤 v1.4.3(D-139, 2026-10-11)까지 그림마다
+> 부분 갱신했다.** 그림 안의 «(v1.2.0)» 표지는 «그 판에서 들어온 것»이라는 뜻이다. Mermaid 문법으로 작성.
 > GitHub, VSCode (Mermaid 확장), [Mermaid Live Editor](https://mermaid.live)에서 렌더링 가능.
 >
 > **구성**: 14개 다이어그램 — 데이터 모델·스키마(1·3·7), 시스템·모듈(2·8),
@@ -115,7 +116,7 @@ flowchart TB
 ## 2. 전체 시스템 아키텍처
 
 프론트엔드(34개 JS 모듈) · 백엔드(FastAPI + 9 라우터, 라우트 234개) ·
-처리 엔진(OCR 5종 + LLM 5단 + 산출·검출 보조) · Git 저장소 · 외부 서비스.
+처리 엔진(OCR 6종 + LLM 5단 + 산출·검출 보조) · Git 저장소 · 외부 서비스.
 
 **여기서 읽어야 할 것**: 화면과 서버 사이에는 REST API 하나뿐이고 빌드 도구도
 프레임워크도 없다. v1.2.0에서 서버가 API 응답에 캐시 금지를 붙여
@@ -323,7 +324,8 @@ flowchart TB
 전체 프로젝트 공용 LLM 연동. `src/llm/router.py`가 단일 진입점.
 자동으로 1순위부터 시도, 실패 시 다음으로 폴백.
 
-**여기서 읽어야 할 것**: 순서는 무료 → 저렴 → 최후 폴백이다.
+**여기서 읽어야 할 것**: 순서는 로컬·구독 → 저렴 → 최후 폴백이다. 구독(OAuth)은 «무료»가 아니라 한도가 있는
+구독이다 — 화면도 그렇게 보인다(D-056).
 v1.2.0에서 달라진 것은 폴백 구조가 아니라 **투명성**이다 —
 어느 모델로 몇 번 불렀고 얼마가 나갔는지가 화면에 표시된다(D-056).
 
@@ -338,7 +340,7 @@ flowchart TB
     end
 
     TIER1_GROUP -->|"실패 시"| TIER2
-    TIER2["<b>2순위: OpenAI OAuth</b><br/>start_server.bat/openai-oauth · 무료 · 비전 포함"]
+    TIER2["<b>2순위: OpenAI OAuth</b><br/>start_server.bat/openai-oauth · 구독 한도(«무료» 아님, D-056) · 비전 포함"]
     TIER2 -->|"실패 시"| TIER3
     TIER3["<b>3순위: Gemini (Google AI)</b><br/>GOOGLE_API_KEY · 저렴 · 비전 포함"]
     TIER3 -->|"실패 시"| TIER4
@@ -346,14 +348,14 @@ flowchart TB
     TIER4 -->|"실패 시"| TIER5
     TIER5["<b>5순위: Anthropic (Claude)</b><br/>ANTHROPIC_API_KEY · 최후 폴백"]
 
-    subgraph CONSUMERS["LLM 소비자 (src/core/)"]
+    subgraph CONSUMERS["LLM 소비자 (src/ 아래 — 따로 적지 않은 것은 core/)"]
         direction LR
-        C1["punctuation_llm.py<br/>L5 표점 초안"]
-        C2["hyeonto.py<br/>L5 현토 초안"]
-        C3["translation_llm.py<br/>L6 번역 초안"]
+        C1["app/_state.py<br/>표점·번역·주석 AI 보조(라우터가 부름)"]
+        C2["structure_llm·toc·rule_induction·rule_talk<br/>편성 판정·목차·규칙"]
+        C3["read_plan.py<br/>판독 계획·자동 스캔"]
         C4["annotation_llm.py<br/>L7 주석 자동생성"]
         C5["annotation_dict_llm.py<br/>L7 사전 생성"]
-        C6["draft.py<br/>범용 LLM 초안"]
+        C6["parsers/generic_llm·text_import/text_separator<br/>서지·원문 분리 보조"]
         C7["ocr/llm_ocr_engine.py<br/>LLM Vision OCR"]
     end
 
@@ -400,7 +402,9 @@ flowchart TB
 
 ## 5. OCR 엔진 파이프라인
 
-5개 OCR 엔진의 레지스트리 기반 자동 선택. LayoutBlock 단위로 이미지 크롭 → 전처리 → 인식 → 후처리.
+6개 OCR 엔진의 레지스트리 기반 자동 선택. 쪽 단위 엔진(NDL 셋·みんなで翻刻)은 **쪽 전체**에 탐지를 돌리고
+행을 LayoutBlock에 배정한다(블록 밖 행은 버린다, D-086 — 블록 크롭 경로는 CER이 5배라 실패 폴백으로만 둔다).
+블록 단위 엔진(PaddleOCR·LLM 비전)은 LayoutBlock bbox로 자른다. 그다음 전처리 → 인식 → 후처리.
 
 **여기서 읽어야 할 것**: 파이프라인의 입구는 언제나 L3 LayoutBlock이다.
 v1.2.0은 그 계약을 바꾸지 않았다 — 대신 입구를 자동으로 채우고(쪽 전면 1블록),
@@ -436,7 +440,7 @@ flowchart LR
 
     subgraph PIPELINE["파이프라인 (pipeline.py)"]
         direction TB
-        P1["이미지 크롭<br/>(LayoutBlock bbox)"]
+        P1["이미지 준비<br/>쪽 단위 엔진: 쪽 전체 탐지 → 행을 LayoutBlock에 배정 (D-086)<br/>블록 단위 엔진: LayoutBlock bbox 크롭"]
         P2["전처리<br/>(BGR/RGB · 리사이즈)"]
         P3["글자 인식<br/>(엔진별 추론)"]
         P4["후처리<br/>(신뢰도 필터 · 좌표 매핑)"]
@@ -625,11 +629,11 @@ flowchart TB
     S_IMP --> S_MAN
     S_DEP --> S_MAN
     S_PLAN -->|"rotation_ranges·ocr_guidance로 적용"| S_MAN
-    I_PUN --> S_LAY
-    I_HYE --> S_LAY
-    I_TRA --> S_LAY
-    I_ANN --> S_LAY
-    I_CIT --> S_LAY
+    I_PUN -->|"block_id = 단위 id"| C_TB
+    I_HYE --> C_TB
+    I_TRA --> C_TB
+    I_ANN --> C_TB
+    I_CIT --> C_TB
     I_TRA <-->|"annotation_context"| I_ANN
     C_TAG --> C_TB
     C_TAG -.->|"승격"| C_CON
@@ -649,7 +653,8 @@ flowchart TB
 **참조 패턴 요약:**
 - 원본 내부: `layout_page/ocr_page` → `manifest`, `ocr_page/corrections` → `layout_page`
 - 저장소 간: `interp_manifest/dependency` → `manifest` (document_id + base_commit)
-- 해석→원본: 모든 해석 스키마 → `layout_page` (block_id로 연결)
+- 해석→단위: 모든 해석 스키마의 `block_id`는 **단위 id**(= 시작 경계의 id, 원본 저장소의 경계 목록)다
+  (D-092·D-093 — 칸 이름만 아직 `block_id`, B-003). L3 LayoutBlock id가 아니다
 - 해석 내부: `translation_page` ↔ `annotation_page` (annotation_context)
 - 코어→원본: `단위(unit).source_ref` → `manifest` (역참조)
 
@@ -744,7 +749,7 @@ flowchart TB
 
     subgraph MISC["기타 모듈"]
         direction TB
-        MI1["src/parsers/<br/>ndl, korcis, archives_jp"]
+        MI1["src/parsers/<br/>ndl, korcis, archives_jp,<br/>kyujanggak, kostma, jsg, generic_llm"]
         MI2["src/hwp/<br/>reader, text_cleaner"]
         MI3["src/text_import/<br/>pdf_extractor, text_separator"]
         MI4["src/cli/<br/>ctb 진입점 · embed_folder<br/>models(모델 고르기) · config(기본값 기억)"]
@@ -902,12 +907,15 @@ flowchart LR
 
     subgraph STATUS["dependency_status 상태"]
         direction TB
-        ST_SYNC["<b>synced</b><br/>일치"]
-        ST_STALE["<b>stale</b><br/>변경 감지"]
-        ST_ACK["<b>acknowledged</b><br/>확인 완료"]
-        ST_SYNC -->|"변경 발생"| ST_STALE
-        ST_STALE -->|"확인"| ST_ACK
-        ST_ACK -->|"다시 synced"| ST_SYNC
+        ST_SYNC["<b>current</b><br/>추적 파일이 모두 그대로"]
+        ST_STALE["<b>outdated</b><br/>바뀐 파일이 있고 아직 확인 안 함"]
+        ST_PART["<b>partially_acknowledged</b><br/>바뀐 파일 일부만 확인"]
+        ST_ACK["<b>acknowledged</b><br/>바뀐 파일을 모두 확인"]
+        ST_SYNC -->|"원본 변경"| ST_STALE
+        ST_STALE -->|"일부 확인"| ST_PART
+        ST_PART -->|"나머지 확인"| ST_ACK
+        ST_STALE -->|"모두 확인"| ST_ACK
+        ST_ACK -->|"기준 커밋 갱신"| ST_SYNC
     end
 
     SRC_DEP ==> BOUNDARY_DEP ==> INT_DEP
@@ -919,6 +927,7 @@ flowchart LR
     style STATUS fill:#eceff1,stroke:#546e7a,stroke-width:2px
     style ST_SYNC fill:#fef3c7,stroke:#b45309,stroke-width:2px
     style ST_STALE fill:#fce4ec,stroke:#c62828
+    style ST_PART fill:#fff8e1,stroke:#f9a825
     style ST_ACK fill:#fff3e0,stroke:#e65100
 ```
 
@@ -1152,7 +1161,7 @@ flowchart TB
     subgraph MAKE_G["검색되는 PDF 만들기 -- export/text_layer_pdf.py"]
         direction TB
         LINE["<b>줄 위치 검출</b><br/>line_detector.py<br/>엔진이 좌표를 안 주면 여기서 자리를 찾는다<br/><i>실패하면 page-approximated로 기록하고 알린다</i>"]
-        CONV["<b>좌표 환산</b><br/>L2의 픽셀 좌표를 PDF 포인트로<br/>배율은 L3의 image_width에서 구한다"]
+        CONV["<b>좌표 환산</b><br/>L2의 픽셀 좌표를 PDF 포인트로<br/>배율은 L2의 image_width에서 구한다 (D-087)"]
         WRAP["<b>원본이 남긴 좌표 변환을 끊는다</b><br/>page.wrap_contents<br/><i>이것을 빠뜨려 0.24배로 박혔다 -- D-068</i>"]
         FONT["<b>폰트를 임베드한다</b><br/>표준 CID 폰트에 없는 한자가 사라지지 않게<br/><i>실측 51종 130자 누락 → 2종 2자 -- D-062</i>"]
         INVIS["<b>보이지 않는 텍스트로 써넣는다</b><br/>render_mode 3 -- 이미지는 그대로 보인다"]
@@ -1184,7 +1193,7 @@ flowchart TB
 - 되돌릴 수 있다 — OCR을 다시 돌리기 직전 한 벌을 남기므로 «새 OCR이 더 나쁠 때» 되돌린다(D-065)
 - 중단할 수 있다 — 끝난 쪽은 건너뛰므로 권 전체 OCR을 언제 멈춰도 이어서 돌아간다
 
-**알려진 한계** (v1.2.0 릴리스 노트와 같음):
+**알려진 한계** (v1.2.0 릴리스 노트와 같음 — 노트는 저장소에서 뺐다: `git show 89bf24c~1:docs/releases/v1.2.0.md`):
 - 줄 위치 검출이 실패한 쪽은 텍스트가 원문 자리가 아닌 곳에 순서대로 놓인다.
   검색은 되지만 형광이 엉뚱한 데 뜬다
 - 앱 안의 PDF 뷰어는 텍스트 레이어를 그리지 않는다.

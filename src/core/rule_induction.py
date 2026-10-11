@@ -247,14 +247,14 @@ def toc_decisive(matched: int, entries: int) -> bool:
 
 
 def _solid(r: dict) -> bool:
-    if r.get("marker") == "repeat_text":
-        return False
     """표지로 볼 만큼 되풀이·고름·밀도·연속성이 맞는가.
 
     내려쓰기 단독은 훨씬 엄격하다 — 네 책 눈가림(2026-09-07)에서 내려쓴 행의 연속 비율이
     0.4~0.5로 전부 «덩어리»(협주·두주·시 본문)였는데 0.5 문턱을 통과해 천진담초 정밀도가
     65/240으로 무너졌다. 제목만 내려쓴 판식이라면 연속은 거의 0이고 밀도도 낮다.
     """
+    if r.get("marker") == "repeat_text":
+        return False
     ok = (
         r["count"] >= _MIN_COUNT
         and r["gap_regularity"] >= _MIN_REGULARITY

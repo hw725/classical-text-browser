@@ -252,7 +252,7 @@ class JevClient:
         self._library_root = pathlib.Path(library_root) if library_root else None
         # 직결이 HTTP로 거절되면 같은 Jev를 OpenRouter 경유로(2026-10-06 사용자: «typesafe jev
         # 안 되면 바로 openrouter로 폴백»). TypeSafe 크레딧이 바닥나 402가 나면, 두 키를 다 넣은
-        # 사람의 목차 대조·decider 폴백이 전부 실패했다(make_jev_client는 시작할 때만 고른다).
+        # 사람의 편성 판정이 전부 실패했다(make_jev_client는 시작할 때만 고른다).
         # 넘어간 뒤로는 그 클라이언트로만 묻는다 — 묻기마다 402를 다시 받지 않게.
         self._fallback = fallback
         self._via: Optional["JevClient"] = None
@@ -574,7 +574,7 @@ def make_jev_client(
 
     왜 이렇게 고르는가: 사용자 결정(2026-10-05) «OpenRouter 키만 있으면 Jev를 OpenRouter 경유로
     부른다». 둘 다 있으면 직결이 먼저인 까닭은 그것이 측정한 기본 길이고(D-129), OpenRouter 크레딧을
-    본문 decider 몫으로 남기기 위해서다.
+    폴백 decider(Jev가 실패한 호출만, D-139)와 이미지 판정 몫으로 남기기 위해서다.
 
     클래스는 **부를 때** 모듈에서 찾는다 — 시험이 `llm.jev.JevClient`·
     `llm.openrouter_decider.OpenRouterJevClient`를 가짜로 바꿔 끼울 수 있게.

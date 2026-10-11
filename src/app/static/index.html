@@ -1036,7 +1036,7 @@
                 <div class="cite-settings-group">
                   <label class="cite-settings-checkbox">
                     <input type="checkbox" id="cfm-opt-wrap-quotes" />
-                    원문을 \u201c\u201d로 감싸기
+                    원문을 “”로 감싸기
                   </label>
                 </div>
                 <div class="cite-settings-group">
@@ -1933,11 +1933,11 @@
                 </div>
                 <div class="batch-row">
                   <label>찾을 글자:</label>
-                  <input type="text" id="batch-original-char" maxlength="1" class="batch-input batch-input-char" placeholder="例: 别">
+                  <input type="text" id="batch-original-char" class="batch-input batch-input-char" placeholder="例: 别">
                 </div>
                 <div class="batch-row">
                   <label>교정 글자:</label>
-                  <input type="text" id="batch-corrected-char" maxlength="1" class="batch-input batch-input-char" placeholder="例: 別">
+                  <input type="text" id="batch-corrected-char" class="batch-input batch-input-char" placeholder="例: 別">
                 </div>
                 <div class="batch-row">
                   <label>유형:</label>
@@ -2121,7 +2121,7 @@
                     <!-- 두 단추가 같은 모델을 쓴다 — 창 안에 두면 「말로 넣기」만 쓰는 사람은 못 본다(2026-09-09) -->
                     <label class="comp-llm-model">모델
                       <select id="comp-llm-model-select" class="props-select llm-model-select"
-                        title="「말로 넣기」와 「더 묻기…」의 글 쓰는 선택지들이 함께 씁니다. «자동»은 사용 가능한 프로바이더 순서(Ollama → Gemini …)로 넘어갑니다. 「판정 모델로 고르기」는 예외입니다 — 그것은 글을 만들지 않는 전용 모델(본문은 Perplexity decider, 목차 대조는 TypeSafe Jev)을 쓰므로 이 고름과 무관합니다"></select>
+                        title="「말로 넣기」와 「더 묻기…」의 글 쓰는 선택지들이 함께 씁니다. «자동»은 사용 가능한 프로바이더 순서(Ollama → Gemini …)로 넘어갑니다. 「판정 모델로 고르기」는 예외입니다 — 그것은 글을 만들지 않는 전용 모델(본문·목차 대조는 TypeSafe Jev, 실패한 호출만 Perplexity decider)을 쓰므로 이 고름과 무관합니다"></select>
                     </label>
                     <span id="comp-say-count" class="comp-rules-count"></span>
                     <span id="comp-llm-pattern-out" class="comp-rules-suggest-out"></span>
@@ -2252,7 +2252,7 @@
                 <button
                   id="comp-reset-btn"
                   class="text-btn text-btn-sm text-btn-danger"
-                  title="이 쪽의 단위를 모두 물립니다 (경계는 deprecated로 남아 되돌릴 수 있음)"
+                  title="이 권의 단위를 모두 물립니다 (경계는 deprecated로 남아 되돌릴 수 있음)"
                 >리셋</button>
               </div>
             <!-- 생성된 단위 목록 -->
@@ -3203,7 +3203,7 @@
                 <div class="cite-settings-group">
                   <label class="cite-settings-checkbox">
                     <input type="checkbox" id="cite-opt-wrap-quotes" />
-                    원문을 \u201c\u201d로 감싸기
+                    원문을 “”로 감싸기
                   </label>
                 </div>
 
@@ -5078,11 +5078,13 @@
       })();
     </script>
 
-    <!-- PDF.js CDN (3.x UMD — 빌드 도구 없는 프로젝트에 적합) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <!-- 화면 라이브러리는 앱에 함께 싣는다(static/vendor/, 판·출처는 그 폴더 README) —
+         CDN에서 불러오면 인터넷 없는 첫 실행에서 PDF가 뜨지 않았다(2026-10-11 전수) -->
+    <!-- PDF.js 3.x UMD — 빌드 도구 없는 프로젝트에 적합 -->
+    <script src="/static/vendor/pdfjs/pdf.min.js"></script>
+    <script src="/static/vendor/d3/d3.min.js"></script>
     <!-- ONNX Runtime Web — 브라우저에서 ONNX 모델 추론 (koten-layout-detector 의존성) -->
-    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/ort.min.js"></script>
+    <script src="/static/vendor/onnxruntime-web/ort.min.js"></script>
 
     <!-- 앱 모듈 (로드 순서 중요: sidebar-tree가 viewerState를 정의, 나머지가 참조) -->
     <script src="/static/js/toast.js?v=20260222"></script>

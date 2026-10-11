@@ -1037,7 +1037,11 @@ def test_toc_api_and_propose_with_toc(client, tmp_path):
 
 
 def test_boundary_index_is_a_view_over_textblocks(client, tmp_path):
-    """경계 색인은 별도 데이터가 아니다 — 단위의 source_refs에서 계산한 보기 (D-090)."""
+    """경계 목록이 정본이고 단위는 그것에서 만드는 보기다(D-092·D-097).
+
+    해석 저장소에 경계·단위 파일을 쓰지 않는다. 이름의 «textblocks»는 D-090 때의 것이다 —
+    시험 이름은 계약 기록이 가리켜 그대로 둔다.
+    """
     lib, part_id = _setup(client, tmp_path)
     rules = {"rules": {"title_words": ["談草", "口談"]}}
     client.put("/api/documents/d1/segmentation-rules", json=rules)
@@ -1861,10 +1865,15 @@ class TestPositionAtPoint:
     def test_horizontal_text_cuts_left_to_right(self, tmp_path):
         from src.core.segmentation import position_at_point
 
-        doc, _, _ = _doc_with_two_lines(tmp_path, direction="horizontal_lr")
-        # 가로쓰기는 x가 글자 번호를 정한다. 상자 폭 900~940의 한가운데
-        hit = position_at_point(doc, "v1", 1, 920, 500)
-        assert hit["line"] == 0 and hit["offset"] == 4
+        doc, _, _ = _doc_with_two_lines(tmp_path, direction="horizontal_ltr")
+        # 가로쓰기는 x가 글자 번호를 정한다. 상자(x 900~940, y 100~900)의 오른쪽 위 점 —
+        # 가로로 읽으면 끝 글자(7), 세로로 읽으면 첫 글자(0)라 두 방향의 답이 갈린다.
+        # 전에는 한가운데(920, 500)를 찍어 어느 방향이든 4가 나와 아무것도 재지 못했고, 방향 값도
+        # 스키마에 없는 «horizontal_lr»였다(startswith 판정이라 우연히 같은 갈래, 2026-10-11 재확인)
+        hit = position_at_point(doc, "v1", 1, 935, 150)
+        assert hit["line"] == 0 and hit["offset"] == 7
+        vertical, _, _ = _doc_with_two_lines(tmp_path / "v", direction="vertical_rtl")
+        assert position_at_point(vertical, "v1", 1, 935, 150)["offset"] == 0
 
     def test_line_count_mismatch_gives_nothing(self, tmp_path):
         from src.core.segmentation import position_at_point
@@ -2444,6 +2453,10 @@ class TestD122Addendum:
         ).json()
         un = {u["title"]: u for u in d["toc"]["unmatched"]}
         assert "不存在題目" in un and un["不存在題目"]["near"] == []
+        # 순서 때문에 둘 중 하나는 반드시 못 찾는다 — 둘 다 찾으면 아래 갈래가
+        # 아무것도 재지 않으므로
+        # 그 전제부터 고정한다(2026-10-11 전수)
+        assert {"登北漢山記", "論時務疏"} & set(un), un
         for title, head in (("登北漢山記", "登北漢山"), ("論時務疏", "論時務疏")):
             if title in un:
                 assert any(n["text"].startswith(head) for n in un[title]["near"]), un[title]

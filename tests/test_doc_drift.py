@@ -122,11 +122,23 @@ def _tracked_ps1() -> list[str]:
     """
     import subprocess
 
-    out = subprocess.run(
-        ["git", "ls-files", "*.ps1"],
-        cwd=_ROOT, capture_output=True, text=True, check=False,
-    ).stdout.split()
-    assert out, "추적되는 .ps1을 찾지 못했다"
+    try:
+        out = subprocess.run(
+            ["git", "ls-files", "*.ps1"],
+            cwd=_ROOT, capture_output=True, text=True, check=False,
+        ).stdout.split()
+    except OSError:
+        out = []
+    if not out:
+        # git이 없거나 git 사본이 아닌 곳(배포 zip). 예전에는 여기서 assert해
+        # **시험을 모으는 단계에서**
+        # 파일 전체가 오류로 끝났다(2026-10-11 전수). 폴더를 훑어 같은 종류를 본다.
+        skip = {".venv", ".venv-gpu", "node_modules", ".git", ".harness"}
+        out = sorted(
+            p.relative_to(_ROOT).as_posix()
+            for p in _ROOT.rglob("*.ps1")
+            if not (set(p.relative_to(_ROOT).parts) & skip)
+        )
     return out
 
 

@@ -8,7 +8,7 @@
 본 프로젝트는 이미 강한 **프로세스 관측 가능성**(process observability)을 갖추고 있다.
 
 - 결정 카드([`DECISIONS.md`](DECISIONS.md))와 그 요약 [`CHECKPOINTS.md`](CHECKPOINTS.md)
-- 세션 기록(`git show 11944f1:docs/_archive/2026-09-22_sessions/`(2026-10-11 저장소에서 뺌))
+- 세션 기록(2026-10-11 저장소에서 뺌 — `git show 11944f1:docs/_archive/2026-09-22_sessions/<파일>`)
 - 릴리스 노트의 재실행 가능한 검증 명령(`git show c03c0b3:docs/releases/v1.1.4.md` — 2026-10-11 저장소에서 뺌)
 - 「검증 결과」 패널 — 서고 파일이 제 스키마를 지키는지 언제든 확인(D-101)
 - 규칙 정본 `AGENTS.md` 하나(`CLAUDE.md`는 그것을 불러오는 포인터)
@@ -49,7 +49,7 @@ OpenTelemetry는 단일 도구가 아니라 **데이터 모델 + SDK + 프로토
 **검증**:
 
 ```powershell
-uv run python -c "from src.llm.usage_tracker import UsageTracker; print('ok')"
+uv run python -c "from llm.usage_tracker import UsageTracker; print('ok')"
 ```
 
 **효과**:

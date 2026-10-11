@@ -65,7 +65,7 @@ def save_punctuation_sidecar(
         doc_path — 문헌 디렉토리
         part_id — 권 식별자
         page_num — 페이지 번호
-        punctuation_marks — [{pos, mark, original_mark}]
+        punctuation_marks — [{pos, mark, original_mark, position?}] (position "before"면 그 글자 앞)
         hyeonto_annotations — [{pos, text, position}]
         raw_text_length — 원본 텍스트 길이
         clean_text_length — 정리 후 텍스트 길이
@@ -113,7 +113,7 @@ def save_formatting_sidecar(
         doc_path — 문헌 디렉토리
         part_id — 권 식별자
         page_num — 페이지 번호
-        taidu_marks — [{pos, raise_chars, note}]
+        taidu_marks — [{pos, raise_chars, note}] (pos는 올려 쓴 첫 글자의 자리)
     출력: 저장된 파일 경로 (데이터가 없으면 None)
     """
     if not taidu_marks:

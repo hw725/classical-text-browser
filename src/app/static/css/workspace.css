@@ -2540,6 +2540,11 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
   text-underline-offset: 3px;
 }
 
+.corr-char.corr-layout-correction {
+  text-decoration: underline solid #14b8a6 2px;
+  text-underline-offset: 3px;
+}
+
 /* --- 세로쓰기 모드 ---
  *
  * .vertical-text-mode: 컨테이너 전체에 세로쓰기 적용
@@ -2744,6 +2749,11 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
 }
 .corr-list-type.type-uncertain {
   background: #6b7280;
+}
+/* 레이아웃 교정 — 글자 밑줄(.corr-char.corr-layout-correction)과 같은 색. 빠져 있어 흰 글씨 배지가
+   라이트 테마에서 보이지 않았다(2026-10-11 재확인) */
+.corr-list-type.type-layout-correction {
+  background: #14b8a6;
 }
 
 .corr-list-text {
@@ -3842,12 +3852,20 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
   animation: none;
 }
 
-/* 불확정 진행률: 좌우로 펄스하는 애니메이션 (대기 중) */
+/* 불확정 진행률: 밝기가 오르내리는 맥박 애니메이션 (대기 중) */
 .ocr-progress-fill.ocr-progress-indeterminate {
   height: 100%;
   background: var(--accent);
   border-radius: 2px;
   animation: progress-pulse 1.5s ease-in-out infinite;
+}
+
+/* 불확정 막대의 맥박. 이 @keyframes가 없어서 막대가 100% 꽉 찬 채 멈춰 «끝난 것»처럼 보였다
+   (OCR·표점·번역·주석 공용, 2026-10-11 2차 전수) */
+@keyframes progress-pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.35; }
+  100% { opacity: 1; }
 }
 
 /* 기본 상태 (클래스 없을 때) = 불확정 */
@@ -5599,7 +5617,8 @@ details[open] > .punct-section-summary::before {
   padding: 4px 8px;
   background: #f59e0b10;
   border-radius: 4px;
-  display: none;
+  /* 숨김은 요소의 인라인 style="display: none"이 맡는다. 여기서 display:none을 두면
+     citation-editor.js가 style.display=""로 켜도 이 규칙이 남아 경고가 영영 안 보였다(2026-10-11) */
 }
 
 /* ── 내보내기 설정 패널 ── */
@@ -7127,6 +7146,8 @@ button.mode-tab {
 .toast-message {
   flex: 1;
   word-break: break-word;
+  /* 여러 호출부가 «\n»으로 줄을 나눠 보낸다 — 없으면 한 줄로 접혔다(2026-10-11 재확인) */
+  white-space: pre-line;
 }
 
 .toast-close {
@@ -7666,7 +7687,7 @@ input.prop-level { width: 3.2em; }
 .contents-kids { margin-left: 14px; border-left: 1px dotted var(--border); padding-left: 4px; }
 .contents-node-toggle { width: 12px; display: inline-block; font-size: 10px; margin-right: 2px; cursor: pointer; }
 
-/* 역할 (D-092): 묶음은 굵게, 조각은 흐리게 — 깊이와 무관 */
+/* 역할 (D-092): 묶음은 굵게, 조각은 흐리게 — 역할은 깊이로 어림한다(contents-tree.js _roleOf) */
 .contents-role-container .contents-preview { font-weight: 600; }
 .contents-role-fragment .contents-preview { color: var(--text-muted); font-size: 11px; }
 .comp-rules-advanced summary { cursor: pointer; font-size: 11px; color: var(--text-muted); }

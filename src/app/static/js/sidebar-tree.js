@@ -35,7 +35,9 @@
 function _treeEscHtml(str) {
   const div = document.createElement("div");
   div.textContent = str == null ? "" : String(str);
-  return div.innerHTML;
+  // 속성 자리(title="…")에 쓰여도 안전하게 따옴표까지 바꾼다 — textContent 는 &, <, > 만 바꾼다
+  // (2026-10-11 2차 전수: 문헌·권 제목·에셋 id·외부 source_url 이 속성을 벗어날 수 있었다)
+  return div.innerHTML.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 
@@ -118,7 +120,7 @@ function _createDocumentNode(doc) {
     <button class="tree-delete-btn" title="문헌 삭제 (휴지통 이동)">×</button>
   `;
   // 긴 제목은 말줄임되므로 전체를 툴팁으로 보인다.
-  // 속성은 DOM으로 넣는다 — _treeEscHtml은 따옴표를 이스케이프하지 않는다
+  // 속성은 DOM으로 넣는다 — 이스케이프보다 확실하다(_treeEscHtml도 2026-10-11부터 따옴표를 막는다)
   header.querySelector(".tree-label").title = doc.title || "";
 
   const children = document.createElement("div");
@@ -356,7 +358,9 @@ async function _getPageCountFromPdf(docId, partId) {
   }
 
   const url = `/api/documents/${docId}/pdf/${partId}`;
-  const loadingTask = pdfjsLib.getDocument(url);
+  // 쪽 수만 알면 된다 — pdf-renderer.js의 loadPdfPage와 같은 까닭으로 통째로 받지 않는다
+  // (기본값이면 79MB짜리 책을 다 받았다, 2026-09-05 실측 / 이 자리는 2026-10-11 재확인)
+  const loadingTask = pdfjsLib.getDocument({ url, disableAutoFetch: true, disableStream: true });
   const pdfDoc = await loadingTask.promise;
   const numPages = pdfDoc.numPages;
   pdfDoc.destroy();

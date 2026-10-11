@@ -22,7 +22,8 @@ const PROVIDER_KEY_HELP = {
   // 판정 모델(D-134) — 아래 _loadDecisionModels가 같은 키 줄을 쓴다
   perplexity: { label: "Perplexity API 키", placeholder: "pplx-…" },
   typesafe: { label: "TypeSafe API 키", placeholder: "키" },
-  // D-136·D-139 — 편성 본문 판정의 폴백(Perplexity decider)과 OpenRouter 경유 Jev를 부른다
+  // D-136·D-139 — TypeSafe 키가 없을 때의 OpenRouter 경유 Jev(편성 판정의 주)와, Jev가 실패한 호출만
+  // 대신 답하는 Perplexity decider v1.1을 부른다
   openrouter: { label: "OpenRouter API 키", placeholder: "sk-or-…" },
   // D-135 — 주소에 계정 id가 들어가 칸이 둘이다(아래 _loadDecisionModels가 extra_keys로 붙인다)
   cloudflare: { label: "Cloudflare API 토큰", placeholder: "Workers AI 권한 토큰" },
@@ -36,6 +37,9 @@ const _DECISION_STATUS_LABEL = {
   error: "연결 실패",
 };
 
+// 그린 차례 — 늦게 온 응답이 새 것을 덮지 않게 _loadDecisionModels가 센다
+let _decisionModelsGen = 0;
+
 /**
  * 설정 «판정 모델» 칸 (D-134).
  * 입력: check — true면 서버가 실제로 한 번 불러 키가 맞는지 본다(질문 하나).
@@ -43,8 +47,6 @@ const _DECISION_STATUS_LABEL = {
  * 왜 따로인가: 판정 모델은 LLM 라우터에 들지 않아 위의 «LLM 연결» 목록에 나오지 않는다.
  * 그래서 전에는 키를 넣을 화면이 아예 없었다 — 처음 쓰는 사람은 Jev를 쓸 길이 없었다.
  */
-let _decisionModelsGen = 0;
-
 async function _loadDecisionModels(check = false) {
   const box = document.getElementById("settings-decision-models");
   if (!box) return;
@@ -139,7 +141,8 @@ document.addEventListener("llm-accounts-changed", () => _loadDecisionModels(fals
 
 /**
  * 프로바이더 카드에 붙는 키 입력 줄.
- * @param {string} providerId — anthropic | openai | gemini
+ * @param {string} providerId — PROVIDER_KEY_HELP의 키(LLM 셋 anthropic·openai·gemini와 판정 모델 키 perplexity·
+ *                              typesafe·openrouter·cloudflare·cloudflare_account)
  * @param {object} keyState — /api/settings/llm-keys 의 keys
  * @returns {HTMLElement}
  */
@@ -452,7 +455,7 @@ async function _checkUpdate() {
     }
     box.appendChild(row);
   } catch (e) {
-    box.innerHTML = `<div class="placeholder">확인 실패: ${e.message}</div>`;
+    box.innerHTML = `<div class="placeholder">확인 실패: ${_wizEsc(e.message)}</div>`; // 오류 문구도 이스케이프(2026-10-11 전수)
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -817,7 +820,10 @@ async function _wizardLlm(body) {
     box.appendChild(row);
     return row;
   };
-  for (const pid of Object.keys(PROVIDER_KEY_HELP)) {
+  // 이 단계는 «번역·주석 초안»용 LLM 키만 받는다 — 판정 모델 키(Perplexity·TypeSafe·OpenRouter·
+  // Cloudflare)는 설정 ▸ 판정 모델에서 넣는다. 전에는 PROVIDER_KEY_HELP 전체를 돌아 그 키들까지
+  // 같은 목록에 보였고, Cloudflare는 « API 키» 꼬리가 없어 이름도 이상했다(2026-10-11 재확인).
+  for (const pid of ["anthropic", "openai", "gemini"]) {
     card(PROVIDER_KEY_HELP[pid].label.replace(" API 키", "")).appendChild(_llmKeyRow(pid, keyState));
   }
   const ollamaCard = card("Ollama (내 컴퓨터, 무료)");

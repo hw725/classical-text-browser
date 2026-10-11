@@ -7,7 +7,7 @@
  * 왜 이렇게 하는가:
  *   원본은 ES 모듈(import/export)이지만, 이 프로젝트는 빌드 도구 없이
  *   일반 <script> 태그로 JS를 로딩한다.
- *   따라서 전역 ort 객체(CDN에서 로드)를 사용하고,
+ *   따라서 전역 ort 객체(index.html이 static/vendor/onnxruntime-web/에서 싣는다, D-140)를 사용하고,
  *   window.KotenLayout으로 API를 노출한다.
  *
  * 의존성: onnxruntime-web (전역 ort 객체)
@@ -20,7 +20,7 @@
   if (typeof ort === "undefined") {
     console.error(
       "koten-layout-detector: onnxruntime-web(ort)이 로드되지 않았습니다. " +
-      "index.html에서 ort.min.js CDN을 먼저 로드하세요."
+      "index.html에서 /static/vendor/onnxruntime-web/ort.min.js를 먼저 로드하세요."
     );
     return;
   }
@@ -127,8 +127,9 @@
    * @returns {Promise<ort.InferenceSession>}
    */
   async function loadModel(modelUrl) {
-    // WASM 파일 경로를 CDN으로 설정
-    ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/";
+    // WASM 파일은 앱에 함께 실은 판에서(static/vendor/onnxruntime-web/). 모델(.onnx)은 저장소에 싣지
+    // 않아 처음 한 번은 받아야 한다(layout-editor의 _loadKotenModel — 받은 뒤에는 오프라인으로 돈다)
+    ort.env.wasm.wasmPaths = "/static/vendor/onnxruntime-web/";
 
     var session = await ort.InferenceSession.create(modelUrl, {
       executionProviders: ["wasm"],

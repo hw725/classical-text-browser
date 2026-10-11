@@ -650,7 +650,9 @@ async function _executeRevert(targetHash, lane) {
 function _escapeHtml(text) {
   const div = document.createElement("div");
   div.textContent = text || "";
-  return div.innerHTML;
+  // 속성 자리(title="…")에 쓰여도 안전하게 따옴표까지 바꾼다 — textContent 는 &, <, > 만 바꾼다
+  // (2026-10-11 2차 전수: 문헌·권 제목·에셋 id·외부 source_url 이 속성을 벗어날 수 있었다)
+  return div.innerHTML.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 function _formatFileSize(bytes) {
@@ -678,7 +680,7 @@ function _gitFormatDate(isoString) {
    6. 초기화 + 탭 전환 + 정렬 토글
    ────────────────────────────────────── */
 
-/** 현재 선택된 해석 저장소 ID (workspace.js에서 설정) */
+/** 현재 선택된 해석 저장소 ID (interpretation.js가 setGitGraphInterpId로 설정) */
 let _gitGraphInterpId = null;
 /** 원본 문헌 ID (git-graph API 응답에서 자동 설정) */
 let _gitGraphDocId = null;
@@ -780,7 +782,7 @@ function _initSortToggle() {
 
 /**
  * 해석 저장소 ID를 설정한다.
- * workspace.js에서 해석 저장소 선택 시 호출.
+ * interpretation.js에서 해석 저장소를 고를 때 부른다.
  */
 function setGitGraphInterpId(interpId) {
   _gitGraphInterpId = interpId;

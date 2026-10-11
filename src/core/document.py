@@ -689,7 +689,6 @@ def _three_way_detail(
 ) -> tuple[str, list[tuple[int, int, str]], float]:
     """옛 글(base)에서 사람 판(human)과 기계 판(machine)을 합친다 — 글자 단위 3-way 병합.
 
-    출력: 합친 글(새 교정본).
     규칙:
         - 한쪽만 고친 자리는 그 고침을 쓴다(사람이 안 건드린 자리의 기계 고침이 들어온다).
         - 둘이 같은 자리를 건드렸으면 그 자리 묶음 전체를 **사람 판**으로 쓴다 — 사람이 그 안에서
@@ -1852,13 +1851,18 @@ def get_git_diff(doc_path: str | Path, commit_hash: str) -> dict:
 
 
 def _update_library_manifest(library_path: Path, doc_id: str, title: str) -> None:
-    """서고 매니페스트에 새 문헌을 추가한다. (내부 유틸리티)"""
+    """서고 매니페스트에 문헌을 적는다 — 같은 id가 있으면 바꿔 끼운다. (내부 유틸리티)"""
     manifest_path = library_path / "library_manifest.json"
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     else:
         manifest = {"documents": []}
 
+    # 같은 id가 이미 있으면(휴지통으로 보낸 뒤 같은 id로 다시 만든 경우) 바꿔 끼운다 —
+    # 덧붙이기만 하면 항목이 둘이 됐다(2026-10-11 전수)
+    manifest["documents"] = [
+        d for d in manifest.get("documents", []) if d.get("document_id") != doc_id
+    ]
     manifest["documents"].append(
         {
             "document_id": doc_id,
@@ -2868,7 +2872,7 @@ def apply_batch_corrections(
             continue
 
         # 본문부터 고친다 — 이것이 화면에 보이는 것이다.
-        # save_page_text가 이 쪽의 사람 교정을 새 본문 위로 옮겨 저장한다(_rebase_page_corrections).
+        # save_page_text가 이 쪽의 사람 교정을 새 본문 위로 옮겨 저장한다(_plan_corrections_rebase).
         saved = save_page_text(
             doc_path, part_id, page_num, text.replace(original_char, corrected_char)
         )

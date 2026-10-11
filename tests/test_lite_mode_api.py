@@ -249,7 +249,9 @@ def batch_ready(isolated_app):
     registry.register(_DummyEngine())
 
     body = _register(client, tmp_path, "scan", "doc_batch", pages=5)
-    return client, body["document_id"], body["parts"][0]["part_id"]
+    yield client, body["document_id"], body["parts"][0]["part_id"]
+    # 등록한 더미를 되돌린다 — 파이프라인은 프로세스 전역이라 남으면 뒤 시험의 엔진 목록이 달라진다
+    registry._engines.pop("dummy", None)
 
 
 def _sse_events(response) -> list[dict]:
@@ -892,18 +894,15 @@ def test_batch_works_when_manifest_page_count_missing(batch_ready):
     assert events[-1]["processed"] == 5
 
 
-def test_page_count_resolved_from_pdf():
+def test_page_count_resolved_from_pdf(tmp_path):
     """쪽 수 해석 함수는 manifest → PDF 순으로 본다."""
-    import tempfile
-    from pathlib import Path
-
     import fitz
 
     from app.routers.llm_ocr import _resolve_page_count
     from core.document import add_document
     from core.library import init_library
 
-    tmp = Path(tempfile.mkdtemp())
+    tmp = tmp_path  # mkdtemp는 지우지 않아 시험마다 임시 폴더가 쌓였다
     lib = tmp / "lib"
     init_library(lib)
 
@@ -1228,17 +1227,25 @@ def test_page_range_with_force_runs_only_those_pages(isolated_app):
     for page in range(1, 6):
         _fake_ocr_done(lib, doc_id, part_id, page, [f"p{page:02d}_b01"])
 
-    # 3쪽만, 그리고 이미 결과가 있어도 다시.
-    # 엔진은 실패해도 상관없다 — 확인할 것은 «어느 쪽을 건드렸나»이다.
-    r = client.post(
-        f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch",
-        json={
-            "engine_id": "llm_vision",
-            "pages": [3],
-            "skip_existing": False,
-            "embed_after": False,
-        },
-    )
+    # 3쪽만, 그리고 이미 결과가 있어도 다시. 확인할 것은 «어느 쪽을 건드렸나»라 더미 엔진으로
+    # 잰다 — 예전에는 진짜 llm_vision을 돌려, PC에 Ollama가 떠 있으면 실제 비전 호출이 나갔다
+    # (2026-10-11 2차 전수)
+    from app._state import _get_ocr_pipeline
+
+    _pipeline, registry = _get_ocr_pipeline()
+    registry.register(_DummyEngine())
+    try:
+        r = client.post(
+            f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch",
+            json={
+                "engine_id": "dummy",
+                "pages": [3],
+                "skip_existing": False,
+                "embed_after": False,
+            },
+        )
+    finally:
+        registry._engines.pop("dummy", None)
     assert r.status_code == 200
     events = [json.loads(line[6:]) for line in r.text.splitlines() if line.startswith("data: ")]
     start = next(e for e in events if e["type"] == "start")
@@ -1796,7 +1803,10 @@ def test_batch_rejects_bad_correction_mode(batch_ready):
 
 
 def test_stale_draft_apply_is_409(batch_ready):
-    """OCR을 다시 돌린 뒤의 초안은 적용할 수 없다(409)."""
+    """L2 앵커(OCR 글자)가 바뀐 뒤의 초안은 적용할 수 없다(409).
+
+    다시 돌려도 앵커가 같으면 낡지 않는다.
+    """
     client, doc_id, part_id = batch_ready
     from app._state import _get_ocr_pipeline
 

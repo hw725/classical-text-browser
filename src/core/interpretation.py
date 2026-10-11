@@ -776,6 +776,10 @@ def save_layer_content(
     if file_path.suffix == ".json" and isinstance(content, dict):
         # 원자적 저장(D-069) — 해석 저장소 L5~L7 JSON이 빈 파일로 남지 않게.
         write_json_atomic(file_path, content)
+        # 크기는 쓴 파일에서 잰다 — 이 갈래에 text가 없어 아래 size 계산이 UnboundLocalError로
+        # 죽었다(파일은 이미 써진 뒤, 라우트는 400 «저장 실패», git 커밋은 건너뜀
+        # — 2026-10-11 재확인)
+        text = file_path.read_text(encoding="utf-8")
     else:
         if file_path.suffix == ".json":
             text = str(content)
@@ -998,16 +1002,17 @@ def _update_library_manifest_interp(
     source_document_id: str,
     title: str | None,
 ) -> None:
-    """서고 매니페스트에 해석 저장소를 추가한다. (내부 유틸리티)"""
+    """서고 매니페스트에 해석 저장소를 적는다 — 같은 id가 있으면 바꿔 끼운다. (내부 유틸리티)"""
     manifest_path = library_path / "library_manifest.json"
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     else:
         manifest = {"documents": [], "interpretations": []}
 
-    if "interpretations" not in manifest:
-        manifest["interpretations"] = []
-
+    # 같은 id가 있으면 바꿔 끼운다 — 덧붙이기만 하면 다시 만든 저장소가 둘로 적혔다(2026-10-11 전수)
+    manifest["interpretations"] = [
+        i for i in manifest.get("interpretations", []) if i.get("interpretation_id") != interp_id
+    ]
     manifest["interpretations"].append(
         {
             "interpretation_id": interp_id,

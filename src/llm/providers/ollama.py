@@ -1,11 +1,12 @@
 """Ollama Provider (1순위).
 
-Ollama 로컬 서버(localhost:11434)를 통한 LLM 호출.
+Ollama 로컬 서버(127.0.0.1:11434)를 통한 LLM 호출.
+(localhost가 아니다 — Windows는 localhost를 IPv6부터 시도해 느리다, D-109)
 기본 비전 모델: gemma4:cloud — 클라우드(내려받는 파일 없음, ollama.com 로그인 필요, D-114)
 기본 텍스트 모델: gemma4:e4b (로컬)
 
 호출 흐름:
-    Python → HTTP POST localhost:11434/api/generate
+    Python → HTTP POST 127.0.0.1:11434/api/generate
           → Ollama → 로컬 모델 실행
           → 결과 반환
 """
@@ -79,9 +80,9 @@ class OllamaProvider(BaseLlmProvider):
     #   「모델 받기」에서 로컬 모델을 고른다(llm/ollama_catalog.py). v1.3.0까지는 gemma4:e4b
     #   (9.6GB)였다.
     # 일반 텍스트: gemma4:e4b (로컬, 멀티모달)
-    # JSON 구조화 출력(표점/주석): 소형 로컬 모델은 품질이 떨어지므로
-    #   클라우드 프록시 모델을 우선 사용한다.
-    #   클라우드 프록시가 없으면 gemma4:e4b로 폴백.
+    # JSON 구조화 출력(표점/주석): 표에는 gemma4:e4b가 적혀 있지만 실제로는 쓰지 않는다 —
+    #   소형 로컬 모델은 품질이 떨어져 라우터가 이 용도에서 Ollama를 건너뛴다(아래
+    #   SKIP_FOR_PURPOSES). 사용자가 Ollama를 직접 고르면 그때만 이 모델로 간다.
     #
     # 왜 표점/주석은 별도 모델인가:
     #   표점(구두점)은 고전 한문의 문맥을 이해해야 정확하고,
@@ -234,7 +235,7 @@ class OllamaProvider(BaseLlmProvider):
                 self._shared_set("vision", candidate)
                 logger.info(
                     f"Ollama 비전 모델 자동 선택: {candidate} "
-                    f"(기본값 {default}이(가) 설치돼 있지 않음)"
+                    f"(기본값 {default}이(가) 없거나 응답하지 않음 — 클라우드면 로그인·은퇴 확인)"
                 )
                 self._shared_set("vision_dead", None)
                 return candidate
@@ -490,11 +491,11 @@ class OllamaProvider(BaseLlmProvider):
 
         reasoning 모델(qwen3.5:*, deepseek-v3.2:*, kimi-k2-thinking:* 등) 처리:
             Ollama는 reasoning 모델의 사고 흐름을 `thinking` 필드로 분리 반환한다.
-            기본값으로 `think=False`를 보내 직접 답변을 유도한다.
-            이렇게 해야 num_predict 토큰이 전부 thinking에 소모되어
-            response가 빈 문자열로 돌아오는 사고를 막을 수 있다.
-            호출자가 `think=True`를 넘기면 reasoning을 활성화하고,
-            response가 비어 있으면 thinking을 폴백 텍스트로 사용한다.
+            `think`는 **호출자가 명시했을 때만** 보낸다 — 기본값을 보내지 않는다
+            (qwen3.5:397b-cloud는 think=False를 받으면 response까지 비워 완전 무응답이 된다).
+            그래서 모델 기본 동작(대개 사고 켬)을 두고, response가 비면 thinking을 폴백
+            텍스트로 쓴다. 예전 설명은 «기본값으로 think=False를 보낸다»고 적어 바로 아래
+            코드와 정반대였다(2026-10-11 전수).
         """
         selected_model = model or self.DEFAULT_MODELS.get(purpose, self.DEFAULT_MODELS["text"])
 
@@ -542,7 +543,12 @@ class OllamaProvider(BaseLlmProvider):
             # D-125 실측 2026-09-10)에서 사고가 4096을 다 써 response가 비고, 폴백으로 돌아온
             # thinking(영문 추론)이 «답»이 된다 — 다시 부른 보람이 없다.
             _t, budget = thinking_options({"think": True})
-            payload["options"] = {**payload["options"], "num_predict": max_tokens + budget}
+            # num_ctx도 함께 다시 잰다 — num_predict만 올리면 «프롬프트 + 답»이 처음 잡은 문맥 창을
+            # 넘어 긴 입력에서 다시 잘린다(_gen_options 머리말, 2026-10-11 재확인)
+            payload["options"] = {
+                **payload["options"],
+                **_gen_options(max_tokens + budget, len(prompt) + len(system or "")),
+            }
             data = await self._generate(payload)
         elapsed = time.monotonic() - t0
 

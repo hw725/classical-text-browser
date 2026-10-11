@@ -11,6 +11,7 @@
  * 의존성:
  *   - sidebar-tree.js (viewerState)
  *   - interpretation.js (interpState)
+ *   - annotation-editor.js (_escHtml — 카드의 원문·번역 이스케이프)
  */
 
 
@@ -311,6 +312,11 @@ async function _loadTranslationData() {
    문장 분리 (클라이언트 사이드)
    ────────────────────────── */
 
+/** 글자 배열(코드포인트 단위). 입력: 문자열. 번역의 source.start·end가 이 단위다. */
+function _trChars(text) {
+  return Array.from(text || "");
+}
+
 /**
  * 서버의 split_sentences와 동일한 알고리즘.
  * 표점의 after에 。？！이 있으면 그 위치에서 문장을 나눈다.
@@ -319,10 +325,13 @@ async function _loadTranslationData() {
  */
 function _splitSentencesClient(text, marks, extraEnds = []) {
   if (!text) return [];
+  // 좌표는 코드포인트다 — 서버 split_sentences(파이썬 str)와 같아야 저장한 번역의 start·end가
+  // 같은 문장을 가리킨다. `.length`·`substring`은 UTF-16이라 확장 한자 뒤에서 어긋났다(2026-10-11)
+  const chars = _trChars(text);
 
   const enders = new Set(["。", "？", "！"]);
   const enderPositions = new Set(
-    extraEnds.filter((i) => Number.isInteger(i) && i >= 0 && i < text.length),
+    extraEnds.filter((i) => Number.isInteger(i) && i >= 0 && i < chars.length),
   );
 
   for (const mark of marks) {
@@ -330,7 +339,7 @@ function _splitSentencesClient(text, marks, extraEnds = []) {
     for (const ch of after) {
       if (enders.has(ch)) {
         const end = mark.target?.end ?? -1;
-        if (end >= 0 && end < text.length) {
+        if (end >= 0 && end < chars.length) {
           enderPositions.add(end);
         }
         break;
@@ -341,15 +350,15 @@ function _splitSentencesClient(text, marks, extraEnds = []) {
   const sentences = [];
   let start = 0;
 
-  for (let i = 0; i < text.length; i++) {
+  for (let i = 0; i < chars.length; i++) {
     if (enderPositions.has(i)) {
-      sentences.push({ start, end: i, text: text.substring(start, i + 1) });
+      sentences.push({ start, end: i, text: chars.slice(start, i + 1).join("") });
       start = i + 1;
     }
   }
 
-  if (start < text.length) {
-    sentences.push({ start, end: text.length - 1, text: text.substring(start) });
+  if (start < chars.length) {
+    sentences.push({ start, end: chars.length - 1, text: chars.slice(start).join("") });
   }
 
   return sentences;
@@ -366,7 +375,8 @@ function _renderPunctuatedSentence(sent) {
   const text = sent.text;
   if (!text) return "";
 
-  const n = text.length;
+  const cs = _trChars(text);  // 코드포인트 — sent.start·end와 같은 단위
+  const n = cs.length;
   const beforeBuf = new Array(n).fill("");
   const afterBuf = new Array(n).fill("");
 
@@ -407,7 +417,7 @@ function _renderPunctuatedSentence(sent) {
 
   let result = "";
   for (let i = 0; i < n; i++) {
-    result += beforeBuf[i] + text[i] + afterBuf[i];
+    result += beforeBuf[i] + cs[i] + afterBuf[i];
   }
   return result;
 }
@@ -427,7 +437,8 @@ function _renderTransSourceText() {
     return;
   }
 
-  const n = text.length;
+  const cs = _trChars(text);  // 코드포인트 — 표점·현토 좌표와 같은 단위
+  const n = cs.length;
   const beforeBuf = new Array(n).fill("");
   const afterBuf = new Array(n).fill("");
 
@@ -454,7 +465,7 @@ function _renderTransSourceText() {
 
   let result = "";
   for (let i = 0; i < n; i++) {
-    result += beforeBuf[i] + text[i] + afterBuf[i];
+    result += beforeBuf[i] + cs[i] + afterBuf[i];
   }
 
   el.textContent = result;
@@ -596,7 +607,8 @@ function _manualInput(sentIdx) {
 }
 
 async function _addManualTranslation(sent, translationText) {
-  if (!interpState.interpId || !viewerState.pageNum) return;
+  // 출력: 저장했으면 true, 아니면 false(까닭은 토스트로 알린다) — AI 번역이 실패를 셀 수 있게
+  if (!interpState.interpId || !viewerState.pageNum) return false;
 
   try {
     const res = await fetch(
@@ -622,12 +634,14 @@ async function _addManualTranslation(sent, translationText) {
       transState.translations.push(result);
       _renderTransCards();
       _renderTransStatusSummary();
-    } else {
-      const err = await res.json();
-      showToast(`번역 추가 실패: ${err.error || "알 수 없는 오류"}`, 'error');
+      return true;
     }
+    const err = await res.json().catch(() => ({}));
+    showToast(`번역 추가 실패: ${err.error || "알 수 없는 오류"}`, 'error');
+    return false;
   } catch (e) {
     showToast(`번역 추가 실패: ${e.message}`, 'error');
+    return false;
   }
 }
 
@@ -727,7 +741,7 @@ async function _aiTranslateSingle(sentIdx) {
     // «참조 사전 → 적용»에서 고른 항목 — 서버가 «참고만» 등급으로 프롬프트에 싣는다(B-018)
     if (transState._refDictContext) reqBody.reference_context = transState._refDictContext;
 
-    // SSE 스트리밍으로 번역 요청 (실패 시 기존 엔드포인트 폴백)
+    // SSE 스트리밍으로 번역 요청 (스트림이 열리기 전에 실패할 때만 기존 엔드포인트로 — fetchWithSSE)
     const data = await fetchWithSSE(
       "/api/llm/translation/stream",
       reqBody,
@@ -750,12 +764,17 @@ async function _aiTranslateSingle(sentIdx) {
           body: JSON.stringify({ translation: translationText }),
         }
       );
-      if (res.ok) {
-        const updated = await res.json();
-        Object.assign(existing, updated);
+      // 저장이 실패하면 false — 전에는 PUT·추가가 실패해도 true를 돌려줘 일괄 번역이 «실패 0건»으로
+      // 보고했다(B-018과 같은 종류, 2026-10-11 재확인)
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showToast(`번역 저장 실패: ${err.error || `HTTP ${res.status}`}`, "error");
+        return false;
       }
-    } else {
-      await _addManualTranslation(sent, translationText);
+      const updated = await res.json();
+      Object.assign(existing, updated);
+    } else if (!(await _addManualTranslation(sent, translationText))) {
+      return false; // 까닭은 _addManualTranslation이 알렸다
     }
 
     _renderTransCards();
@@ -1067,7 +1086,7 @@ function _renderRefDictMatches() {
       <input type="checkbox" data-key="${_transEscHtml(key)}" ${checked}>
       <span class="trans-refdict-hw">${_transEscHtml(m.headword)}${_transEscHtml(reading)}</span>
       <span class="trans-refdict-type">[${_transEscHtml(m.type || "")}]</span>
-      <span class="trans-refdict-meaning">${_transEscHtml(meaning.slice(0, 60))}${meaning.length > 60 ? "…" : ""}</span>
+      <span class="trans-refdict-meaning">${_transEscHtml(Array.from(meaning).slice(0, 60).join(""))}${Array.from(meaning).length > 60 ? "…" : ""}</span>
       <span class="trans-refdict-source">${_transEscHtml(source)}</span>
     `;
 

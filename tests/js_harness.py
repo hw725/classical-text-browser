@@ -34,7 +34,13 @@ def require_node() -> str:
 
 
 # 거의 모든 함수가 기대는 작은 도우미 — 있으면 늘 함께 붙인다(없는 파일이면 건너뛴다).
-ALWAYS_INCLUDE = ["_annChars", "_annCpLength", "_annCpIndex", "_annUtf16Index", "_escHtml"]
+ALWAYS_INCLUDE = [
+    "_annChars", "_annCpLength", "_annCpIndex", "_annUtf16Index", "_escHtml",
+    # 2026-10-11 2차 전수: 편집기마다 둔 코드포인트 도우미(현토·번역·교정·표점)
+    "_htChars", "_trChars", "_corrChars", "_puChars",
+    # 해석 저장소가 없으면 요청하지 않는 도우미(주석·인용)
+    "_annInterpId", "_citeInterpId",
+]
 
 
 def extract_js(source: str, names: list[str]) -> str:

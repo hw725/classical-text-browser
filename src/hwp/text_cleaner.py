@@ -2,7 +2,8 @@
 
 HWP에서 추출한 텍스트에는 표점(구두점), 현토(한글 토씨), 대두(존경 공백)가
 포함되어 있을 수 있다. L4(원문)에는 순수 한자만 저장하고,
-분리된 표점·현토는 L5에 자동 저장한다.
+분리된 표점·현토는 호출자가 L4 옆 사이드카(`L4_text/pages/{part}_page_{NNN}_hwp_clean.json`)에
+적는다. L5로 옮기는 코드는 아직 없다(2026-10-11 전수 — 예전 머리말은 «L5에 자동 저장»이라 적었다).
 
 처리 순서:
   1. 대두(擡頭) 감지 — 줄머리 공백 패턴 분석
@@ -18,7 +19,11 @@ HWP에서 추출한 텍스트에는 표점(구두점), 현토(한글 토씨), �
 
     result = clean_hwp_text("天地之道。忠恕而已矣，")
     # result.clean_text == "天地之道忠恕而已矣"
-    # result.punctuation_marks == [{"pos": 3, "mark": "。"}, {"pos": 8, "mark": "，"}]
+    # result.punctuation_marks == [{"pos": 3, "mark": "。", "original_mark": "。"},
+    #                              {"pos": 8, "mark": "，", "original_mark": "，"}]
+    # 여는 표점은 뒤 글자 앞에 붙는다: clean_hwp_text("「天地」").punctuation_marks ==
+    #   [{"pos": 0, "mark": "「", "original_mark": "「", "position": "before"},
+    #    {"pos": 1, "mark": "」", ...}]
 """
 
 from __future__ import annotations
@@ -68,17 +73,20 @@ _HANGUL_SYLLABLE_END = 0xD7A3
 class CleanResult:
     """텍스트 정리 결과.
 
-    clean_text에서의 pos는 0-indexed이며, clean_text[pos] 글자 **뒤**에 해당한다.
-    예: pos=3이면 clean_text[3] 뒤에 표점·현토가 위치.
+    pos는 clean_text 기준 0부터 센 글자 자리이고, 뜻은 종류마다 다르다(2026-10-11 재확인):
+      - 표점: 기본은 clean_text[pos] 글자 **뒤**. `position: "before"`가 붙은 것
+        (여는 괄호처럼 글 앞에 온 표점)은 clean_text[pos] 글자 **앞**.
+      - 현토: clean_text[pos] 글자 뒤(`position: "after"`).
+      - 대두(擡頭): clean_text[pos] **그 글자 자체**(올려 쓴 첫 글자) — 앞 글자 뒤가 아니다.
     """
 
     clean_text: str  # 순수 원문 (L4 .txt용)
     punctuation_marks: list[dict] = field(default_factory=list)
-    # [{pos, mark, original_mark}] — pos: clean_text 기준 인덱스
+    # [{pos, mark, original_mark, position?}] — position: "before"면 그 글자 앞(없으면 뒤)
     hyeonto_annotations: list[dict] = field(default_factory=list)
     # [{pos, text, position}] — position: "after" (글자 뒤)
     taidu_marks: list[dict] = field(default_factory=list)
-    # [{pos, raise_chars, note}] — pos: clean_text 기준 인덱스
+    # [{pos, raise_chars, note}] — pos: 올려 쓴 첫 글자의 자리
     had_punctuation: bool = False
     had_hyeonto: bool = False
     had_taidu: bool = False
@@ -243,9 +251,14 @@ def clean_hwp_text(
     # 2. 줄바꿈·탭 정규화 — 대두 공백 제거는 여기서 처리
     # 대두 위치의 공백을 먼저 마킹
     taidu_positions = set()
-    for t in taidu_candidates:
+    # 대두 공백 바로 뒤 글자의 원본 자리 → 그 대두 후보 번호. 그 글자가 원문에 들어가는 순간의
+    # clean_text 번호가 대두의 pos다(아래 «원문 글자»에서 적는다)
+    taidu_follow: dict[int, int] = {}
+    taidu_clean_pos: dict[int, int] = {}
+    for k, t in enumerate(taidu_candidates):
         for offset in range(t["raise_chars"]):
             taidu_positions.add(t["raw_pos"] + offset)
+        taidu_follow[t["raw_pos"] + t["raise_chars"]] = k
 
     # 3. 글자별 순회 + 분류
     punctuation_marks: list[dict] = []
@@ -274,14 +287,13 @@ def clean_hwp_text(
             normalized = normalize_punctuation(ch)
 
             # pos: 바로 앞 원문 글자의 인덱스 (= 현재까지의 clean_chars 길이 - 1)
-            pos = len(clean_chars) - 1 if clean_chars else 0
-            punctuation_marks.append(
-                {
-                    "pos": pos,
-                    "mark": normalized,
-                    "original_mark": original_mark,
-                }
-            )
+            # 원문 글자보다 앞에 온 표점(줄머리 「 등)은 «0번 글자 앞»이다 — 예전에는 pos 0만 적어
+            # «0번 글자 뒤»와 구별되지 않았다(2026-10-11 전수)
+            mark = {"pos": len(clean_chars) - 1 if clean_chars else 0,
+                    "mark": normalized, "original_mark": original_mark}
+            if not clean_chars:
+                mark["position"] = "before"
+            punctuation_marks.append(mark)
 
             i += 1
             # 표점 뒤의 공백 세트 제거
@@ -334,6 +346,8 @@ def clean_hwp_text(
 
         # --- 원문 글자 ---
         # 한자 + 기타 유의미한 글자(숫자 등)는 원문으로 포함
+        if i in taidu_follow:
+            taidu_clean_pos[taidu_follow[i]] = len(clean_chars)
         clean_chars.append(ch)
         i += 1
 
@@ -341,16 +355,14 @@ def clean_hwp_text(
     clean_text = "".join(clean_chars)
 
     # 대두 마크를 clean_text 기준 pos로 변환
-    # 대두의 pos = 대두 공백 뒤의 첫 글자가 clean_text에서 몇 번째인지
+    # 대두의 pos = 대두 공백 뒤의 첫 글자가 clean_text에서 몇 번째인지 — 순회하며 적어 둔 값.
+    # 예전에는 늘 0을 두고 «호출자가 매핑할 것»이라 했지만 호출자(document.py·documents.py)는
+    # 그 0을 그대로 _formatting.json에 저장해 대두가 모두 첫 글자에 붙었다(2026-10-11 전수).
     taidu_marks_clean: list[dict] = []
-    for t in taidu_candidates:
-        # clean_text에서 해당 글자의 위치 찾기 (근사값)
-        # 대두 뒤의 한자가 clean_text에서 어디에 있는지 순차 검색
-        # (정확한 매핑은 복잡하므로, 순서 기반으로 추정)
-        # 여기서는 대두 후보를 그대로 반환하고, 호출자가 확인하도록 함
+    for k, t in enumerate(taidu_candidates):
         taidu_marks_clean.append(
             {
-                "pos": 0,  # 호출자가 매핑할 것
+                "pos": taidu_clean_pos.get(k, 0),
                 "raise_chars": t["raise_chars"],
                 "note": f"{t['following_char']} 앞 대두 {t['raise_chars']}자",
                 "raw_pos": t["raw_pos"],
@@ -389,9 +401,12 @@ def reclean_after_edit(
       1. edits를 pos 내림차순으로 정렬 (뒤에서부터 적용)
       2. 각 edit에 따라 clean_text 수정
       3. 표점·현토의 pos를 edit에 따라 시프트
-      4. 삭제된 범위에 걸친 표점·현토는 warnings에 포함
+      4. 삭제된 범위에 걸친 표점·현토는 **경고 없이 버린다**
 
     페이지 경계에는 영향 없음 (페이지 내 텍스트만 변경).
+
+    주의(2026-10-11 전수): 이 함수와 detect_hyeonto는 src 어디에서도 부르지 않는다. 예전 설명은
+    4번을 «warnings에 포함»이라 적었으나 코드는 그런 일을 하지 않는다 — 쓰게 되면 경고부터 만든다.
     """
     # edit를 pos 내림차순으로 정렬 (뒤에서부터 적용 → 앞쪽 pos 불변)
     sorted_edits = sorted(edits, key=lambda e: e["pos"], reverse=True)
