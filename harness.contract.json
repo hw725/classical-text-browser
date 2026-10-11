@@ -95,7 +95,29 @@
         ],
         "count_regex": "(\\d+) passed",
         "timeout": 1800,
-        "traceback_fatal": false
+        "traceback_fatal": false,
+        "reuse": true,
+        "inputs": [
+          "*.py",
+          "*.js",
+          "*.css",
+          "*.html",
+          "*.bat",
+          "*.ps1",
+          "*.sh",
+          "*.json",
+          "*.md",
+          "*.txt",
+          "*.toml",
+          "*.lock",
+          "*.yml",
+          "*.yaml",
+          "*.cfg",
+          "*.ini",
+          "tests/**",
+          "schemas/**",
+          "resources/**"
+        ]
       },
       "guards": [
         "tests/**/*.py"
@@ -109,9 +131,9 @@
     }
   ],
   "approved": {
-    "hash": "6d3899428df66efe961e314d867ed0cc603365702a7f2f316d4d712204e5a400",
-    "request": "A-b2139329",
-    "ts": "2026-10-11T00:13:23",
+    "hash": "11fc3a5fc48d8576a84b7cba2ba7a3753390131a4d4c12366c92e9f36b3c6ea8",
+    "request": "A-198504a4",
+    "ts": "2026-10-11T15:09:42",
     "guards": {
       "tests/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "tests/conftest.py": "d9a37e7da3f63eed15da0a4bb70fcf8cad8e8a0b98ba245a8eaae64ae3b945ac",
