@@ -96,14 +96,6 @@ class TestAlignmentStats:
         assert stats.accuracy == 0.0
         assert stats.total_chars == 0
 
-    def test_perfect_accuracy(self):
-        pairs = [
-            AlignedPair("王", "王", MatchType.EXACT),
-            AlignedPair("裵", "裴", MatchType.VARIANT),
-        ]
-        stats = AlignmentStats.from_pairs(pairs)
-        assert stats.accuracy == 1.0
-
     def test_to_dict(self):
         stats = AlignmentStats(total_chars=10, exact=7, variant=1, mismatch=2)
         d = stats.to_dict()

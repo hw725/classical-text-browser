@@ -116,50 +116,6 @@ def full_test_library(tmp_path):
 
 
 class TestOcrIntegration:
-    def test_full_flow_with_dummy_engine(self, full_test_library):
-        """더미 엔진으로 전체 흐름 검증."""
-        # 1. 레지스트리 + 파이프라인 생성
-        registry = OcrEngineRegistry()
-        registry.register(DummyOcrEngine())
-        pipeline = OcrPipeline(registry, library_root=str(full_test_library))
-
-        # 2. run_page() 실행
-        result = pipeline.run_page("test_doc", "vol1", 1)
-
-        # 3. 기본 검증
-        assert result.processed_blocks == 2
-        assert result.skipped_blocks == 1
-        assert result.errors == []
-        assert result.engine_id == "dummy"
-
-        # 4. L2 JSON 생성 확인
-        l2_path = full_test_library / "documents" / "test_doc" / "L2_ocr" / "vol1_page_001.json"
-        assert l2_path.exists()
-
-        with open(l2_path, encoding="utf-8") as f:
-            data = json.load(f)
-
-        # 5. 스키마 호환성 확인
-        assert data["part_id"] == "vol1"
-        assert data["page_number"] == 1
-        assert len(data["ocr_results"]) == 2
-
-        # 6. layout_block_id가 올바르게 매핑되었는지
-        block_ids = [r["layout_block_id"] for r in data["ocr_results"]]
-        assert "b01" in block_ids
-        assert "b02" in block_ids
-        # skip 블록은 포함 안 됨
-        assert "b03_skip" not in block_ids
-
-        # 7. 각 OcrResult의 구조 검증
-        for ocr_result in data["ocr_results"]:
-            assert "lines" in ocr_result
-            for line in ocr_result["lines"]:
-                assert "text" in line
-                if "characters" in line:
-                    for ch in line["characters"]:
-                        assert "char" in ch
-
     def test_partial_failure(self, full_test_library):
         """일부 블록 실패 시에도 나머지 결과가 저장되는지."""
         registry = OcrEngineRegistry()
@@ -194,28 +150,19 @@ class TestOcrIntegration:
         with open(l2_path, encoding="utf-8") as f:
             data = json.load(f)
 
-        # 스키마 파일이 있으면 jsonschema로 검증
+        # 스키마로 검증한다 — 스키마는 저장소에 늘 있다. 예전에는 «없으면 기본 키만 보고 통과»
+        # 갈래가 있어, 경로가 틀어지면 검증 없이 초록이 됐다(2026-10-12 시험 중복 정리)
+        import jsonschema
+
         schema_path = (
             Path(__file__).parent.parent / "schemas" / "source_repo" / "ocr_page.schema.json"
         )
-        if schema_path.exists():
-            import jsonschema
-
-            with open(schema_path, encoding="utf-8") as f:
-                schema = json.load(f)
-            jsonschema.validate(data, schema)
-        else:
-            # 스키마 없으면 기본 구조만 검증
-            assert "part_id" in data
-            assert "page_number" in data
-            assert "ocr_results" in data
-
-    def test_rerun_single_block(self, full_test_library):
-        """run_block()으로 단일 블록 재실행."""
-        registry = OcrEngineRegistry()
-        registry.register(DummyOcrEngine())
-        pipeline = OcrPipeline(registry, library_root=str(full_test_library))
-
-        result = pipeline.run_block("test_doc", "vol1", 1, "b02")
-        assert result.processed_blocks == 1
-        assert result.ocr_results[0]["layout_block_id"] == "b02"
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        jsonschema.validate(data, schema)
+        # 줄·글자 구조 — 전체 흐름 시험(정리하며 지움)에서 옮긴 단언
+        assert len(data["ocr_results"]) == 2
+        for ocr_result in data["ocr_results"]:
+            for line in ocr_result["lines"]:
+                assert "text" in line
+                for ch in line.get("characters", []):
+                    assert "char" in ch

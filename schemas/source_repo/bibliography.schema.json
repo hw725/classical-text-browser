@@ -374,6 +374,24 @@
       "type": ["string", "null"],
       "description": "자유 메모.",
       "default": null
+    },
+    "contents": {
+      "type": ["array", "null"],
+      "description": "목차 — 기관이 제공하는 목차 항목(제목·쪽). 지금은 KORCIS 목차 팝업에서 온다. D-141(B-079): 매퍼는 2026-04-15부터 이 칸을 실었으나 스키마에 없어 저장이 막혔다.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "page": { "type": ["string", "null"] }
+        },
+        "required": ["title"]
+      },
+      "default": null
+    },
+    "abstracts": {
+      "type": ["string", "null"],
+      "description": "해제 — 기관이 제공하는 해제 글. 지금은 KORCIS 해제 팝업에서 온다(D-141, B-079).",
+      "default": null
     }
   }
 }

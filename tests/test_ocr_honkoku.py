@@ -127,7 +127,11 @@ class TestHonkokuAdapter:
 
         reg = OcrEngineRegistry()
         reg.auto_register()
-        ids = [e["engine_id"] for e in reg.list_engines()]
+        engines = reg.list_engines()
+        # 자동 등록된 항목은 모두 dict이고 빈 id가 없다
+        # — test_ocr_registry::test_auto_register(2026-10-12 정리)에서 옮김
+        assert all(isinstance(e, dict) and e.get("engine_id") for e in engines)
+        ids = [e["engine_id"] for e in engines]
         assert "honkoku" in ids
         assert ids.index("honkoku") < ids.index("ndlocr")  # 고서 엔진 다음, 근현대 엔진 앞
 

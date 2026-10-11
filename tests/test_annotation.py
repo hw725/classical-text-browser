@@ -19,7 +19,6 @@ from src.core.annotation import (
     update_annotation,
 )
 from src.core.annotation_llm import (
-    _parse_llm_annotations,
     commit_all_drafts,
     commit_annotation_draft,
 )
@@ -581,37 +580,3 @@ class TestAnnotationTypes:
 # ──────────────────────────────────────
 # LLM 파서 테스트
 # ──────────────────────────────────────
-
-
-class TestLlmParser:
-    """LLM 응답 파서 테스트."""
-
-    def test_parse_clean_json(self):
-        text = (
-            '{"annotations": [{"target": {"start": 0, "end": 1}, '
-            '"type": "person", "content": {"label": "A", "description": "B"}}]}'
-        )
-        result = _parse_llm_annotations(text)
-        assert len(result) == 1
-        assert result[0]["type"] == "person"
-
-    def test_parse_with_markdown_block(self):
-        text = (
-            '설명 텍스트\n```json\n{"annotations": [{"target": {"start": 0, "end": 1}, '
-            '"type": "place", "content": {"label": "C", "description": "D"}}]}\n```\n끝'
-        )
-        result = _parse_llm_annotations(text)
-        assert len(result) == 1
-        assert result[0]["type"] == "place"
-
-    def test_parse_empty(self):
-        result = _parse_llm_annotations("이 텍스트에는 주석할 것이 없습니다.")
-        assert result == []
-
-    def test_parse_bare_list(self):
-        text = (
-            '[{"target": {"start": 0, "end": 1}, "type": "term", '
-            '"content": {"label": "E", "description": "F"}}]'
-        )
-        result = _parse_llm_annotations(text)
-        assert len(result) == 1

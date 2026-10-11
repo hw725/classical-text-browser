@@ -298,6 +298,10 @@ class BibliographySaveRequest(BaseModel):
     # 밑줄 이름은 비공개 속성이 되므로 외부 이름만 별칭으로 보존한다.
     mapping_info: dict | None = _Field(default=None, alias="_mapping_info")
     notes: str | None = None
+    # 목차·해제(D-141, B-079) — 스키마에 더한 칸. 저장은 기존 서지 위에 병합하므로 여기 없어도
+    # 옛 값은 남지만, 없으면 이 칸을 새로 넣거나 고치거나 비울 수 없다
+    contents: list[dict] | None = None
+    abstracts: str | None = None
 
 
 class DocumentBibFromUrlRequest(BaseModel):

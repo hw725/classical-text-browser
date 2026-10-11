@@ -246,7 +246,7 @@ src/app/
   `tests/test_read_path_writes.py`(화면을 열기만 해도 쓰던 것, 2026-09-30)·
   `tests/test_correction_saves.py`(자유 편집 교정이 글자 교정 보기에 안 보이던 것·확정본을 다시 쓰면 교정이 어긋나던 것, 2026-10-02)·
   `tests/test_composition_apply_plan_js.py`(편성 ③ «바뀐 것»과 「적용」이 다른 집합을 세던 것, 2026-10-05)·
-  `tests/test_sweep_20261011.py`(2026-10-11 전수 결함 B-012~B-077과 릴리스 리뷰 B-078의 회귀 — 인용·현토·번역 좌표, 번역 집계, 시작 행 옮기기,
+  `tests/test_sweep_20261011.py`(2026-10-11 전수 결함 B-012~B-077과 릴리스 리뷰 B-078·시험 정리 B-079의 회귀 — 인용·현토·번역 좌표, 번역 집계, 시작 행 옮기기,
   사전 활성화, 백업·.env·휴지통 데이터 손실, 이스케이프), **CI 없음.**
   화면 «마크업»을 읽는 것도 둘이다 — `tests/test_ui_reachability.py`(조작 단추에 사람이
   닿을 수 있는가, B-008)와 `tests/test_connectome.py`(화면이 그 라우트를 부르는가).

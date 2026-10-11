@@ -116,7 +116,8 @@ class TestOcrPipeline:
         registry.register(DummyOcrEngine())
         pipeline = OcrPipeline(registry, library_root=str(test_library))
 
-        pipeline.run_page("doc001", "vol1", 1)
+        result = pipeline.run_page("doc001", "vol1", 1)
+        assert result.engine_id == "dummy"
 
         # L2 파일이 생성되었는지 확인 (프로젝트 네이밍 컨벤션)
         l2_path = test_library / "documents" / "doc001" / "L2_ocr" / "vol1_page_001.json"
@@ -127,6 +128,9 @@ class TestOcrPipeline:
         assert data["part_id"] == "vol1"
         assert data["page_number"] == 1
         assert len(data["ocr_results"]) == 2
+        # 건너뛴 블록(skip)은 L2에 들어가지 않는다 — 전체 흐름 시험(정리하며 지움)에서 옮긴 단언
+        block_ids = [r["layout_block_id"] for r in data["ocr_results"]]
+        assert block_ids == ["p01_b01", "p01_b02"]
 
     def test_run_page_specific_blocks(self, test_library):
         registry = OcrEngineRegistry()
@@ -192,27 +196,6 @@ class TestOcrPipeline:
         assert "p01_b01" in block_ids
         assert "p01_b02" in block_ids
         assert len(data.get("ocr_results", [])) == 2
-
-    def test_to_dict_schema_format(self, test_library):
-        """to_dict()가 ocr_page.schema.json 형식을 따르는지."""
-        registry = OcrEngineRegistry()
-        registry.register(DummyOcrEngine())
-        pipeline = OcrPipeline(registry, library_root=str(test_library))
-
-        result = pipeline.run_page("doc001", "vol1", 1)
-        d = result.to_dict()
-
-        # 스키마 필수 필드
-        assert "part_id" in d
-        assert "page_number" in d
-        assert "ocr_results" in d
-
-        # ocr_results 내부 구조
-        for ocr_result in d["ocr_results"]:
-            assert "layout_block_id" in ocr_result
-            assert "lines" in ocr_result
-            for line in ocr_result["lines"]:
-                assert "text" in line
 
     def test_to_summary_format(self, test_library):
         """to_summary()가 API 응답 형식을 따르는지."""

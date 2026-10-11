@@ -20,6 +20,7 @@
       다른 쪽에 그려지는 경쟁, 설명이 주인 함수에서 떨어진 자리
     - 릴리스 리뷰(B-078): reset --hard 전 추적 밖 파일 남기기, 옛 zip 백업의 staged·한글 경로,
       늦은 비고 응답, 같은 책 다른 대목 출전
+    - 시험 정리(B-079): KORCIS 서지의 목차·해제 칸이 스키마에 있어 저장된다, 서지 매퍼 출력 키 ⊂ 스키마
 """
 
 from __future__ import annotations
@@ -2246,3 +2247,53 @@ def test_dictionary_save_keeps_every_section_of_the_same_book(tmp_path):
     )
     out = run_js(tmp_path, "annotation-editor.js", ["_saveDictFields"], setup, "await _saveDictFields(); console.log(JSON.stringify(sent));")
     assert out["dictionary"]["source_references"] == prev["source_references"]
+
+
+# ── B-079: 시험 중복 정리(2026-10-12)에서 강화한 시험이 찾은 것 ─────────────────
+
+
+@pytest.mark.parametrize("with_popups", [True, False])
+def test_korcis_bibliography_saves_with_contents_and_abstracts(tmp_path, with_popups):
+    """B-079: KORCIS 서지가 저장된다 — 매퍼는 목차(contents)·해제(abstracts)를 늘 싣는데 스키마에 그 칸이
+    없어(additionalProperties: false) URL 가져오기가 매번 «서지정보 저장 실패»였다(2026-04-15부터)."""
+    from core.document import save_bibliography
+    from parsers.korcis import KorcisMapper
+    from tests.test_korcis import sample_marc_data, sample_marc_with_openapi
+
+    raw = sample_marc_with_openapi.__wrapped__(sample_marc_data.__wrapped__())
+    if with_popups:
+        raw["_contents_info"] = [{"title": "表紙", "page": "0"}, {"title": "海東諸國紀", "page": "1"}]
+        raw["_abstracts_info"] = "『해동제국기』는 …"
+    bib = KorcisMapper().map_to_bibliography(raw)
+    save_bibliography(tmp_path, bib)
+    saved = json.loads((tmp_path / "bibliography.json").read_text(encoding="utf-8"))
+    if with_popups:
+        assert saved["contents"] == [{"title": "表紙", "page": "0"}, {"title": "海東諸國紀", "page": "1"}]
+        assert saved["abstracts"] == "『해동제국기』는 …"
+    else:
+        assert saved["contents"] is None and saved["abstracts"] is None
+
+
+def test_every_mapper_output_key_is_in_the_bibliography_schema():
+    """B-079 같은 종류: 서지 매퍼가 돌려주는 맨 위 키는 모두 스키마에 있다 — 없는 키 하나면 저장이 통째로 막힌다.
+    매퍼 원문에서 map_to_bibliography가 만드는 dict의 키를 읽어 스키마 properties와 견준다.
+
+    못 보는 것(Codex 리뷰 2026-10-12): `bib["x"] = …`·`update()`·`**other`·계산된 키·`dict(...)`, 다른 이름의 도우미가
+    만드는 dict, 하위 폴더 매퍼. 실제 출력은 매퍼별 시험(B-033 셋·B-079 KORCIS)이 스키마로 검증한다."""
+    import ast
+
+    props = set(_schema("source_repo/bibliography.schema.json")["properties"])
+    bad = []
+    for f in sorted((ROOT / "src" / "parsers").glob("*.py")):
+        tree = ast.parse(f.read_text(encoding="utf-8"))
+        for fn in ast.walk(tree):
+            if isinstance(fn, ast.FunctionDef) and fn.name.startswith(("map_to_bibliography", "_map_")):
+                for node in ast.walk(fn):
+                    keys = [k.value for k in node.keys if isinstance(k, ast.Constant) and isinstance(k.value, str)] if isinstance(node, ast.Dict) else []
+                    # 출처 기록(field_sources)의 «creator.name»처럼 점 든 키는 서지 본문 키가 아니라 건너뛴다 —
+                    # dict 통째로가 아니라 그 키만(통째로 빼면 같은 dict의 진짜 잘못된 키까지 놓친다)
+                    if "title" in keys:
+                        for k in keys:
+                            if "." not in k and k not in props:
+                                bad.append(f"{f.name}:{fn.name}:{k}")
+    assert bad == [], bad

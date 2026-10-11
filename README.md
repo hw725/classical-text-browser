@@ -186,9 +186,9 @@ docker compose up -d --build
 
 | 문서 | 무엇이 있나 |
 |---|---|
-| [**체크포인트**](docs/CHECKPOINTS.md) | **먼저 읽을 것** — 결정 138개(D-001~D-140)의 지금 결론·되돌릴 수 없는 것·실제로 사고 난 자리 |
+| [**체크포인트**](docs/CHECKPOINTS.md) | **먼저 읽을 것** — 결정 139개(D-001~D-141)의 지금 결론·되돌릴 수 없는 것·실제로 사고 난 자리 |
 | [**유지보수 안내**](docs/maintenance.md) | **고치기 전에 볼 것** — 파일 다루는 규칙, 테스트 사각지대, 릴리스 절차 |
-| [DECISIONS.md](docs/DECISIONS.md) | 설계 결정 근거 원문 (D-001~D-140) — 체크포인트의 근거 |
+| [DECISIONS.md](docs/DECISIONS.md) | 설계 결정 근거 원문 (D-001~D-141) — 체크포인트의 근거 |
 | [아키텍처 다이어그램](docs/architecture-diagrams.md) | 전체 그림 (Mermaid 14종) |
 | [platform-v7.md](docs/platform-v7.md) | 8층 모델·이중 저장소 설계 |
 | [AGENTS.md](AGENTS.md) · [backlog.md](docs/backlog.md) | 어디가 위험한가 · 알려진 결함 |

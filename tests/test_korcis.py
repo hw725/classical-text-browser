@@ -583,7 +583,12 @@ class TestKorcisMapper:
         assert "title" in info["field_sources"]
 
     def test_schema_compliance(self, sample_marc_with_openapi):
-        """결과가 JSON 직렬화 가능한지 확인."""
+        """결과가 JSON 직렬화 가능하고 bibliography.schema.json을 지키는지 확인.
+
+        이름은 «스키마 준수»인데 예전에는 직렬화만 봤다 — 스키마 검증을 더했다(2026-10-12 강화).
+        """
+        import jsonschema
+
         mapper = KorcisMapper()
         bib = mapper.map_to_bibliography(sample_marc_with_openapi)
 
@@ -592,6 +597,10 @@ class TestKorcisMapper:
         parsed = json.loads(serialized)
         assert parsed["title"] == "蒙求"
         assert parsed["printing_info"]["gwangwak"] == "사주쌍변"
+        from pathlib import Path
+
+        schema_path = Path(__file__).parents[1] / "schemas/source_repo/bibliography.schema.json"
+        jsonschema.validate(parsed, json.loads(schema_path.read_text(encoding="utf-8")))
 
     def test_notes_multiline(self, sample_marc_data):
         """주기사항 여러 개 합침."""

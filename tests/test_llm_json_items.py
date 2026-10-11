@@ -74,6 +74,17 @@ def test_both_annotation_parsers_share_the_recovery():
     a = annotation_dict_llm._parse_llm_annotations(TRUNCATED)
     b = annotation_llm._parse_llm_annotations(TRUNCATED)
     assert a == b == [ITEM]
+    # 실제 껍질 함수의 정상 경로 — test_annotation.py의 TestLlmParser 4건(2026-10-12 정리)에서
+    # 옮긴 단언. 공통 파서를 직접 부르는 위 시험들만으로는 껍질이 type 같은 칸을 지키는지 못 본다
+    tgt = {"start": 0, "end": 1}
+    person = {"target": tgt, "type": "person", "content": {"label": "A", "description": "B"}}
+    place = {"target": tgt, "type": "place", "content": {"label": "C", "description": "D"}}
+    wrap = annotation_llm._parse_llm_annotations
+    assert wrap(json.dumps({"annotations": [person]}, ensure_ascii=False)) == [person]
+    fenced = json.dumps({"annotations": [place]}, ensure_ascii=False)
+    assert wrap("설명\n```json\n" + fenced + "\n```\n끝") == [place]
+    assert wrap("이 텍스트에는 주석할 것이 없습니다.") == []
+    assert wrap(json.dumps([person], ensure_ascii=False)) == [person]
 
 
 # ── ⑥ 항목 좌표 검증 ──

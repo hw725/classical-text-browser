@@ -148,6 +148,7 @@ schemas/
 | 기본 정보 | title, title_reading, alternative_titles, creator ({name, role, period}), contributors[], date_created, edition_type |
 | 분류/형태 | physical_description, subject, classification, material_type |
 | 소장/접근 | repository ({name, country, call_number}), digital_source ({platform, source_url, permanent_uri, system_ids, license}) |
+| 목차·해제 | contents ([{title, page}]), abstracts — 기관이 주는 목차·해제(지금은 KORCIS, D-141) |
 | 파서 투명성 | raw_metadata, _mapping_info |
 
 ### layout_page

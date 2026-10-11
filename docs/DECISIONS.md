@@ -8768,3 +8768,23 @@ decider 문턱(0.95/0.35)에서 그 수는 천진담초 131행·운양집 1책 4
 **시험.** `tests/test_sweep_20261011.py::test_screen_libraries_are_served_locally_with_browser_mime_types`
 (화면이 바깥 CDN을 부르지 않는다·파일과 라이선스가 있다·서버가 브라우저가 받는 MIME으로 내보낸다).
 오프라인에서 실제로 PDF가 뜨는지는 릴리스 전 화면 검증(네트워크를 막은 headless Chrome)에서 잰다.
+
+## D-141: 서지 스키마에 목차·해제 칸을 더한다 — KORCIS 서지가 저장되게 (2026-10-12)
+
+**배경(B-079).** KORCIS 매퍼는 2026-04-15(67aecd7)부터 목차 팝업과 해제 팝업을 읽어 `contents`(목록)·`abstracts`(글)를
+서지에 실었다. 값이 없어도 키는 늘 실린다. 그런데 `bibliography.schema.json`은 `additionalProperties: false`이고 이 두 칸이
+없어, `save_bibliography`의 스키마 검증이 KORCIS 서지를 매번 거부했다(URL 가져오기 → «서지정보 저장 실패», 400). 시험
+`test_korcis.py::test_schema_compliance`는 이름과 달리 JSON 직렬화만 봐서 반년 동안 초록이었다. 2026-10-12 시험 중복
+정리에서 이 시험에 실제 스키마 검증을 더하자 처음 빨개졌다.
+
+**결정(사용자, 2026-10-12 — «스키마에 두 칸 추가»).** 매퍼가 일부러 모은 목차·해제를 버리지 않고 스키마에 담는다.
+`contents`: `[{title, page}]` 또는 null, `abstracts`: 글 또는 null. 수동 저장 모델(`BibliographySaveRequest`)에도 두 칸을
+더했다 — 저장은 기존 서지 위에 병합(`exclude_unset`)하므로 모델에 없어도 옛 값은 남지만, 없으면 이 두 칸을 새로 넣거나
+고치거나 비울 수 없다(`test_bibliography_request_accepts_every_schema_field`가 모델과 스키마의 칸을 맞춰 지킨다).
+
+**되돌릴 수 없는가.** 아니다 — 더하기만 했다. 옛 서지 파일은 두 칸이 없어도 그대로 통과한다.
+화면은 아직 두 칸을 따로 보이지 않는다(저장만 된다).
+
+**시험.** `tests/test_sweep_20261011.py::test_korcis_bibliography_saves_with_contents_and_abstracts`(팝업 있음·없음),
+같은 종류 `test_every_mapper_output_key_is_in_the_bibliography_schema`(서지 파서 7개의 출력 키가 스키마에 있는가 —
+매퍼 원문의 dict 글자에서 읽으므로 `bib["x"] = …`처럼 나중에 붙이는 키는 못 본다).

@@ -331,14 +331,6 @@ def _make_library(tmp_path: Path, doc_id: str = "test_doc", interp_id: str = "te
 class TestBuildSnapshot:
     """build_snapshot() Export 기능 테스트."""
 
-    def test_snapshot_has_schema_version(self, tmp_path):
-        """스냅샷에 schema_version이 포함된다."""
-        from core.snapshot import build_snapshot
-
-        lib, doc_id, interp_id = _make_library(tmp_path)
-        result = build_snapshot(lib, doc_id, interp_id)
-        assert result["schema_version"] == "1.0"
-
     def test_snapshot_has_export_timestamp(self, tmp_path):
         """스냅샷에 export_timestamp가 포함된다."""
         from core.snapshot import build_snapshot
@@ -483,8 +475,13 @@ class TestBuildSnapshot:
 
         lib, doc_id, interp_id = _make_library(tmp_path)
         result = build_snapshot(lib, doc_id, interp_id)
-        assert result["original"]["head_hash"] is not None
-        assert result["interpretation"]["head_hash"] is not None
+        # «None이 아니다»가 아니라 실제 저장소의 HEAD와 같은지 본다(2026-10-12 강화)
+        doc_head = git.Repo(lib / "documents" / doc_id).head.commit.hexsha
+        assert result["original"]["head_hash"] == doc_head
+        assert (
+            result["interpretation"]["head_hash"]
+            == git.Repo(lib / "interpretations" / interp_id).head.commit.hexsha
+        )
 
     def test_json_serializable(self, tmp_path):
         """스냅샷 전체가 JSON 직렬화 가능하다."""

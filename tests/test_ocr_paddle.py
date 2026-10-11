@@ -15,14 +15,11 @@ class TestPaddleOcrEngine:
         assert engine.engine_id == "paddleocr"
         assert engine.requires_network is False
 
-    def test_is_available_check(self):
-        engine = PaddleOcrEngine()
-        # 설치 여부에 따라 True/False — 에러 없이 반환만 확인
-        result = engine.is_available()
-        assert isinstance(result, bool)
-
     def test_split_line_to_chars_vertical(self):
         engine = PaddleOcrEngine()
+        # 설치 여부와 무관하게 정확히 bool을 돌려준다(1·None 아님)
+        # — test_is_available_check(2026-10-12 정리)에서 옮김
+        assert isinstance(engine.is_available(), bool)
         chars = engine._split_line_to_chars(
             text="王戎",
             line_bbox=[10.0, 0.0, 30.0, 100.0],
