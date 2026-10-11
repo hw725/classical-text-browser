@@ -9,7 +9,7 @@
 
 - 결정 카드([`DECISIONS.md`](DECISIONS.md))와 그 요약 [`CHECKPOINTS.md`](CHECKPOINTS.md)
 - 세션 기록(`git show 11944f1:docs/_archive/2026-09-22_sessions/`(2026-10-11 저장소에서 뺌))
-- 릴리스 노트의 재실행 가능한 검증 명령([`releases/v1.1.4.md`](releases/v1.1.4.md))
+- 릴리스 노트의 재실행 가능한 검증 명령(`git show c03c0b3:docs/releases/v1.1.4.md` — 2026-10-11 저장소에서 뺌)
 - 「검증 결과」 패널 — 서고 파일이 제 스키마를 지키는지 언제든 확인(D-101)
 - 규칙 정본 `AGENTS.md` 하나(`CLAUDE.md`는 그것을 불러오는 포인터)
 
