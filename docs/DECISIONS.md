@@ -1720,7 +1720,7 @@ uv run python -c "from src.llm.usage_tracker import _OTEL_SCHEMA_URL; print(_OTE
 
 **관련**:
 - 로드맵 문서: [`observability-roadmap.md`](observability-roadmap.md)
-- 회고에서의 위치: [`_archive/2026-05-19_retrospective/05_harness.md`](_archive/2026-05-19_retrospective/05_harness.md) H5(검증 명령) · H8(회고 가능한 오류)와 결합
+- 회고에서의 위치: `git show 11944f1:docs/_archive/2026-05-19_retrospective/05_harness.md` H5(검증 명령) · H8(회고 가능한 오류)와 결합
 - 강의 11 (Walking Labs): https://walkinglabs.github.io/learn-harness-engineering/ko/lectures/lecture-11-why-observability-belongs-inside-the-harness/
 
 ---
@@ -1762,7 +1762,7 @@ uv run python -c "from src.llm.usage_tracker import _OTEL_SCHEMA_URL; print(_OTE
 브라우저 실측 (서고 미설정 → 드롭 → quick-start → 생성까지 E2E, 2026-07-17).
 
 **관련**: [D-022](#d-022-gui에서-서고library-관리) GUI 서고 관리 위에 얹힘.
-explain-diff: [`_archive/2026-09-22_sessions/session_dragdrop_onboarding.md`](_archive/2026-09-22_sessions/session_dragdrop_onboarding.md)
+explain-diff: `git show 11944f1:docs/_archive/2026-09-22_sessions/session_dragdrop_onboarding.md`
 
 ---
 
@@ -1808,7 +1808,7 @@ D-052(드래그 앤 드롭 온보딩)가 밟는 땅의 위생 문제였다.
 미존재→404 유지, 정상→200; documents·interpretations·reading 라우터 표본).
 
 **관련**: [D-052](#d-052-드래그-앤-드롭-온보딩--경로-설정-없는-첫-시작) ·
-explain-diff: [`_archive/2026-09-22_sessions/session_dragdrop_onboarding.md`](_archive/2026-09-22_sessions/session_dragdrop_onboarding.md)
+explain-diff: `git show 11944f1:docs/_archive/2026-09-22_sessions/session_dragdrop_onboarding.md`
 
 ---
 
@@ -2009,7 +2009,7 @@ DOMContentLoaded 발생) + CSS 계산 8건 실측. 브라우저 실측으로 최
 [D-009](#d-009-ocr-엔진-플러그인-아키텍처) 파이프라인 계약 무손상.
 [D-037](#d-037-hwphwpxpdf-가져오기-기능-일시-비활성화) 봉인 유지.
 [D-054](#d-054-문헌-생성-시-기본-해석-저장소-자동-생성--시작-창-정리) 생성 흐름 무개입.
-explain-diff: [`_archive/2026-09-22_sessions/session_extract_mode.md`](_archive/2026-09-22_sessions/session_extract_mode.md)
+explain-diff: `git show 11944f1:docs/_archive/2026-09-22_sessions/session_extract_mode.md`
 
 ---
 
@@ -7324,7 +7324,7 @@ D-128 후속을 「구현됨」으로 적은 것은 거짓이 아니지만(라�
 **날짜**: 2026-09-21(설계·구현) · **2026-09-22 확정**
 **상태**: 확정 · **구현됨**(미결은 아래 「아직 안 한 것」 — 실서고 화면 검증) · **2026-09-27 Jev 1차 거름망 적용**(아래 「적용 기록」)
 
-> 설계 초안은 `docs/design-boundary-judge.md`, 실측 전문은 `docs/_archive/2026-09-22_sessions/session_jev_structure.md`.
+> 설계 초안은 `docs/design-boundary-judge.md`, 실측 전문은 `git show 11944f1:docs/_archive/2026-09-22_sessions/session_jev_structure.md`.
 > 이 항은 그 초안을 결정으로 받아들인 것이고, **초안에 없던 것을 더하지 않았다** — 더한 것은
 > 「무엇이 그 주장을 지키는가」(맨 아래 표)와 그것을 얻으려다 드러난 구멍 하나뿐이다.
 
@@ -7392,7 +7392,7 @@ D-128 후속을 「구현됨」으로 적은 것은 거짓이 아니지만(라�
 비율 69.9%와 **+30.1%p** 갈리므로, 모델이 유사도 1위를 기계적으로 집는 것이 아니다. 자기검증과
 확률을 **둘 다** 통과한 헛것은 0건이다. 유일하게 «없음»이 아닌 답은 바로 그 천장 쌍이었고
 (「擊磬集」의 진짜 행이 빌린 창에 우연히 들어 있었다) 모델이 그것을 맞게 골랐다.
-전문은 `docs/_archive/2026-09-22_sessions/session_jev_structure.md`의 「대조군」 절.
+전문은 `git show 11944f1:docs/_archive/2026-09-22_sessions/session_jev_structure.md`의 「대조군」 절.
 
 **5. 목차가 답하는 층과 본문 판정이 답하는 층을 나눈다.**
 총목이 답하는 것은 권·集(층위 1~2)이고 본문 판정이 답하는 것은 그 안의 낱글이다. 같은 층에

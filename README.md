@@ -199,7 +199,7 @@ docker compose up -d --build
 |---|---|
 | [core-schema-v1.3.md](docs/core-schema-v1.3.md) · [operation-rules-v1.0.md](docs/operation-rules-v1.0.md) | 코어 엔티티 모델과 운영 규약 |
 | [schemas/README.md](schemas/README.md) · [스키마 개요](docs/schema-overview.md) | JSON 스키마 20개 |
-| [문서 아카이브](docs/_archive/README.md) | 옛 설계서·세션 기록·회고 — 현행이 아니다 |
+| 옛 문서(2026-10-11 저장소에서 뺌) | 옛 설계서·세션 기록·회고 — `git show 11944f1:docs/_archive/README.md`로 목록을 본다 |
 
 ---
 

@@ -1,7 +1,7 @@
 # 설계: 경계 판정을 편성에 붙이는 법 (2026-09-21)
 
 판정 모델(Jev)이 낸 «이 행에서 글이 시작하는가»를 편성 탭에 어떻게 들이는가에 대한 설계다.
-실측 근거는 `docs/_archive/2026-09-22_sessions/session_jev_structure.md`.
+실측 근거는 `git show 11944f1:docs/_archive/2026-09-22_sessions/session_jev_structure.md`.
 
 > **2026-10-05 D-136: 본문 판정의 기본은 OpenRouter 경유 Perplexity decider이고, Jev는 폴백(decider가 실패한
 > 호출만)과 목차 대조다.** 아래 비용·문턱(accept 0.85 / reject 0.5)은 **Jev 기준**이다 — decider는 0.95/0.35

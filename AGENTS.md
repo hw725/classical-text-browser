@@ -25,7 +25,7 @@ OCR, 교정, 번역, 주석 작업을 모두 수행한다.
 - docs/maintenance.md — **유지보수 정본.** 되돌릴 수 없는 것, 파일 다루는 규칙,
   자동 테스트가 못 잡는 자리, 릴리스 절차. 아래 요약들의 원본이다
 - docs/observability-roadmap.md — 관측 가능성(OpenTelemetry) 점진적 도입 로드맵
-- docs/_archive/ — 옛 설계서·세션 기록·회고(D-050까지)·인지 부채 감사 HTML. 현행이 아니다
+- 옛 설계서·세션 기록·회고(D-050까지)·인지 부채 감사 HTML(옛 `docs/_archive/`)은 2026-10-11에 저장소에서 뺐다 — 내용은 `git show 11944f1:docs/_archive/<경로>`로 본다(목록: `git show 11944f1:docs/_archive/README.md`)
 
 ## 기술 스택
 - 백엔드: Python + FastAPI
@@ -232,7 +232,7 @@ src/app/
 ## 인지 부채 지도
 
 > 2026-07-04 최초 감사 · 2026-09-04 3차 감사(v1.3.0) · 2026-10-11 전수 검토로 정리. AI 작성 코드와 사용자 이해의 간극 요약.
-> 3차 감사 HTML(퀴즈 포함)은 `docs/_archive/2026-09-04_cognitive-debt-audit/`. 2026-10-11 전수 검토가 찾은
+> 3차 감사 HTML(퀴즈 포함)은 `git show 11944f1:docs/_archive/2026-09-04_cognitive-debt-audit/cognitive-debt-audit.html`. 2026-10-11 전수 검토가 찾은
 > 동작 결함은 `docs/backlog.md` B-012~ — **시험이 초록인데 틀린 자리**가 대부분이다.
 
 ### 실제 하는 일 (문서에 없는 층위)

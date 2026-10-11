@@ -8,7 +8,7 @@
 본 프로젝트는 이미 강한 **프로세스 관측 가능성**(process observability)을 갖추고 있다.
 
 - 결정 카드([`DECISIONS.md`](DECISIONS.md))와 그 요약 [`CHECKPOINTS.md`](CHECKPOINTS.md)
-- 세션 기록([`_archive/2026-09-22_sessions/`](_archive/2026-09-22_sessions/))
+- 세션 기록(`git show 11944f1:docs/_archive/2026-09-22_sessions/`(2026-10-11 저장소에서 뺌))
 - 릴리스 노트의 재실행 가능한 검증 명령([`releases/v1.1.4.md`](releases/v1.1.4.md))
 - 「검증 결과」 패널 — 서고 파일이 제 스키마를 지키는지 언제든 확인(D-101)
 - 규칙 정본 `AGENTS.md` 하나(`CLAUDE.md`는 그것을 불러오는 포인터)
@@ -175,5 +175,5 @@ jq 'select(.provider=="openai") | .tokens_in' llm_usage_log.jsonl
 - OTel GenAI Semantic Conventions: https://opentelemetry.io/docs/specs/semconv/gen-ai/
 - OTel Logs Data Model: https://opentelemetry.io/docs/specs/otel/logs/data-model/
 - Walking Labs 강의 11: https://walkinglabs.github.io/learn-harness-engineering/ko/lectures/lecture-11-why-observability-belongs-inside-the-harness/
-- 본 프로젝트의 패턴 회고: [`_archive/2026-05-19_retrospective/04_patterns.md`](_archive/2026-05-19_retrospective/04_patterns.md)
-- 하네스 권고와의 관계: [`_archive/2026-05-19_retrospective/05_harness.md`](_archive/2026-05-19_retrospective/05_harness.md) (H5 검증 코드화·H8 회고 가능한 오류와 직접 결합)
+- 본 프로젝트의 패턴 회고: `git show 11944f1:docs/_archive/2026-05-19_retrospective/04_patterns.md`
+- 하네스 권고와의 관계: `git show 11944f1:docs/_archive/2026-05-19_retrospective/05_harness.md` (H5 검증 코드화·H8 회고 가능한 오류와 직접 결합)
