@@ -3,7 +3,8 @@
 
 ## 왜 이 시험이 필요한가
 
-CLAUDE.md·`docs/maintenance.md` 1장의 규칙은 산문으로만 있었다. 그래서 규칙을 적은
+AGENTS.md(2026-10-08까지는 CLAUDE.md)·`docs/maintenance.md` 1장의 규칙은
+산문으로만 있었다. 그래서 규칙을 적은
 뒤에도 그 규칙을 어긴 코드가 남아 있었다(2026-10-01 감사 — `write_text(json.dumps)`
 셋, 허용 밖 `get_pixmap` 하나). 아무 검사도 그 자리를 부르지 않았기 때문이다.
 처음에는 `test_lint_does_not_grow.py`와 같은 **래칫**(기준선 10건)으로 들였고, 같은 날
@@ -13,7 +14,7 @@ CLAUDE.md·`docs/maintenance.md` 1장의 규칙은 산문으로만 있었다. �
 
 ## 무엇을 보나 — 기계로 판정할 수 있는 다섯만
 
-키 — 규칙(CLAUDE.md 표) — AST 판정:
+키 — 규칙(AGENTS.md «파일 다루기» 표) — AST 판정:
 
 - `write_text_json` — JSON 저장은 `write_json_atomic()`
   — `.write_text(...)` 인자 안에 `dumps(...)` 호출, 또는 같은 함수에서 `dumps` 결과를

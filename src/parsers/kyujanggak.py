@@ -320,7 +320,7 @@ class KyujanggakMapper(BaseMapper):
             )
             else None,
             "extent": extent,
-            "subject": raw_data.get("사부분류"),
+            "subject": [raw_data["사부분류"]] if raw_data.get("사부분류") else None,  # 목록(B-033)
             "classification": None,
             "series_title": None,
             "material_type": None,

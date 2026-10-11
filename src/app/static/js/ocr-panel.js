@@ -739,107 +739,6 @@ function _renderReviewPages(data) {
   }
 }
 
-/* ─── 교정 모드: OCR 결과로 채우기 ─────────────── */
-
-async function _fillFromOcr() {
-  if (typeof viewerState === "undefined") return;
-
-  const docId = viewerState.docId;
-  const partId = viewerState.partId;
-  const pageNum = viewerState.pageNum;
-
-  if (!docId || !partId || !pageNum) {
-    showToast("문헌과 페이지를 먼저 선택하세요.", 'warning');
-    return;
-  }
-
-  // OCR 결과는 항상 현재 페이지 기준으로 다시 로드한다.
-  // 왜: 이전 페이지의 ocrState.lastResults가 남아있으면 다른 페이지 텍스트가 저장될 수 있다.
-  let ocrData;
-  try {
-    const resp = await fetch(
-      `/api/documents/${docId}/parts/${partId}/pages/${pageNum}/ocr`,
-      { cache: "no-store" },
-    );
-    if (!resp.ok) {
-      showToast(
-        "이 페이지에 OCR 결과가 없습니다. 레이아웃 모드에서 OCR을 먼저 실행하세요.",
-        'warning');
-      return;
-    }
-    ocrData = await resp.json();
-  } catch (e) {
-    showToast(`OCR 결과 로드 실패: ${e.message}`, 'error');
-    return;
-  }
-
-  // OCR 결과에서 전체 텍스트 추출
-  const ocrResults = ocrData.ocr_results || [];
-  if (ocrResults.length === 0) {
-    showToast("OCR 결과가 비어있습니다.", 'warning');
-    return;
-  }
-
-  // 블록별로 줄 텍스트를 합쳐서 전체 텍스트 생성
-  const fullText = ocrResults
-    .map((block) => {
-      const lines = block.lines || [];
-      return lines.map((l) => l.text).join("\n");
-    })
-    .join("\n\n");
-
-  // 1. 텍스트 API에 저장 (교정 모드에서도 접근 가능하도록)
-  try {
-    const saveUrl = `/api/documents/${docId}/pages/${pageNum}/text?part_id=${partId}`;
-    const saveResp = await fetch(saveUrl, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      cache: "no-store",
-      body: JSON.stringify({ text: fullText }),
-    });
-    if (!saveResp.ok) {
-      const errBody = await saveResp.text();
-      throw new Error(errBody || `HTTP ${saveResp.status}`);
-    }
-    // 확정본을 OCR 글로 다시 썼다 — 사람 교정을 옮겼는지·못 옮겼는지 알린다(D-133)
-    try {
-      if (typeof notifyCorrectionsRebase === "function") notifyCorrectionsRebase(await saveResp.json());
-    } catch (_) {
-      /* 응답 본문이 JSON이 아니어도 저장은 끝났다 */
-    }
-  } catch (e) {
-    showToast(`OCR 텍스트 저장 실패: ${e.message}`, 'error');
-    return;
-  }
-
-  // 2. 열람 모드의 textarea에도 채우기 (열람 모드일 때)
-  const textarea = document.getElementById("text-content");
-  if (textarea) {
-    textarea.value = fullText;
-
-    // OCR 채우기는 이미 서버 저장이 완료된 상태이므로,
-    // 텍스트 에디터 상태도 "저장됨"으로 동기화한다.
-    // 왜: input 이벤트를 발생시키면 editorState.isDirty가 true가 되어
-    //      페이지 이동 시 "저장되지 않았습니다" 경고가 잘못 뜰 수 있다.
-    if (typeof editorState !== "undefined") {
-      editorState.originalText = fullText;
-      editorState.isDirty = false;
-    }
-    if (typeof _updateSaveStatus === "function") {
-      _updateSaveStatus("saved");
-    }
-  }
-
-  // 3. 교정 모드가 활성화되어 있으면 교정 뷰 리프레시
-  if (typeof correctionState !== "undefined" && correctionState.active) {
-    if (typeof loadPageCorrections === "function") {
-      await loadPageCorrections(docId, partId, pageNum);
-    }
-  }
-
-  showToast(`OCR 결과가 텍스트로 저장되었습니다. (${ocrResults.length}개 블록)`, 'success');
-}
-
 /* ─── OCR 결과 세로쓰기 토글 ─────────────────────── */
 
 /**
@@ -994,9 +893,11 @@ async function _runPartOcr() {
     }
   }
 
+  // 쪽 OCR과 같은 선택 칸을 읽는다 — 인자 없이 부르면 언제나 «auto»라 LLM Vision에서 사람이
+  // 고른 모델이 무시되고 폴백 순서로 돌았다(B-019)
   const llmSel =
     typeof getLlmModelSelection === "function"
-      ? getLlmModelSelection()
+      ? getLlmModelSelection("ocr-llm-model-select")
       : { force_provider: null, force_model: null };
   const body = {
     engine_id: engineId,

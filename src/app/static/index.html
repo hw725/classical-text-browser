@@ -380,8 +380,8 @@
             </div>
           </div>
 
-          <!-- 내용 트리 (D-085 1단계): Work → 단위 순서. 블록을 누르면 그 내용이
-               있는 쪽으로 간다. 해석 저장소를 골랐을 때만 채워진다. -->
+          <!-- 내용 트리: 문헌 > 권 > 단위(D-098). 단위를 누르면 그 내용이 있는 쪽으로 간다.
+               편성은 원본 저장소의 것이라 해석 저장소 없이도 선다(D-097). -->
           <div
             class="sidebar-section"
             id="contents-section"
@@ -420,7 +420,7 @@
               class="contents-tree"
             >
               <div class="placeholder">
-                해석 저장소를 선택하면 편성된 내용이 표시됩니다
+                문헌을 고르면 편성된 내용이 표시됩니다
               </div>
             </div>
           </div>
@@ -1072,7 +1072,8 @@
 
       <!-- 메인 영역 -->
       <main class="main-area">
-          <!-- 모드 탭 바: 열람 / 레이아웃 / 교정 / 편성 / 표점 / 현토 / 번역 / 주석 -->
+          <!-- 위쪽 바: ☰·문맥·작업 프로필. 모드 탭(열람·레이아웃·교정·편성·표점·현토·번역·주석…)은
+               오른쪽 세로 줄 .mode-rail로 옮겼다 — 아래 data-profile 설명은 그 탭들에 붙는다 -->
           <!--
             data-profile="collation" 이 붙은 탭은 **한 글자씩 교감(校勘)하는
             작업**이거나 그 뒤에 이어지는 해석 작업이다.
@@ -2059,7 +2060,7 @@
             </div>
           </div>
 
-          <!-- 우측 패널: 편성 에디터 (교정→표점 사이, LayoutBlock → 단위 변환) -->
+          <!-- 우측 패널: 편성 에디터 (교정→표점 사이, 경계 목록 ①②③ — D-092·D-122) -->
           <div
             class="editor-panel editor-right composition-panel"
             id="composition-panel"
@@ -2240,7 +2241,7 @@
               <summary title="단위 하나를 골라 그 «안»을 한 단 깊게 나눕니다">단위 손보기 <small id="comp-block-count"></small></summary>
               <div class="comp-manual-body">
               <!-- 옛 「자동 편성」(쪽의 레이아웃 블록마다 경계 하나)은 D-116에서 없앴다 —
-                   경계는 신호 목록 → 「전부 적용해 새로 세우기」가 세운다 -->
+                   경계는 ① 신호 → ② 규칙 → ③ 후보 체크 → 「적용」이 세운다(D-122) -->
               <div class="comp-manual-tools">
                 <button
                   id="comp-split-btn"
@@ -2310,6 +2311,7 @@
               <button id="vm-btn-create" class="text-btn text-btn-sm" title="빈 사전 생성">새로 만들기</button>
               <button id="vm-btn-copy" class="text-btn text-btn-sm" title="현재 사전 복제">복제</button>
               <button id="vm-btn-delete" class="text-btn text-btn-sm" title="선택한 사전 삭제">삭제</button>
+              <button id="vm-btn-activate" class="text-btn text-btn-sm" title="고른 사전을 대조·일괄 교정에 쓰는 활성 사전으로">활성으로</button>
             </div>
 
             <!-- 도구 바 -->
@@ -4728,9 +4730,8 @@
                   <button
                     id="hwp-import-separate-btn"
                     class="bib-btn bib-btn-primary"
-                    onclick="_executeHwpSeparation()"
                   >
-                    원문/번역 분리 (LLM)
+                    원문/번역 분리
                   </button>
                   <span
                     id="hwp-import-separate-status"
@@ -4783,7 +4784,7 @@
                 <!-- 구조 분석 결과 -->
                 <div
                   id="pdf-structure-info"
-                  style="display: none; background: var(--color-bg-secondary); padding: 8px; border-radius: 4px; margin-bottom: 8px; font-size: 12px"
+                  style="display: none; background: var(--bg-secondary); padding: 8px; border-radius: 4px; margin-bottom: 8px; font-size: 12px"
                 >
                   <div><b>문서 구조:</b> <span id="pdf-structure-type"></span></div>
                   <div><b>원문 특징:</b> <span id="pdf-structure-original"></span></div>
@@ -4815,7 +4816,7 @@
                     id="pdf-import-separate-btn"
                     class="bib-btn bib-btn-primary"
                   >
-                    원문/번역 분리 실행 (LLM)
+                    원문/번역 분리 실행
                   </button>
                   <span
                     id="pdf-import-separate-status"
@@ -4937,13 +4938,13 @@
                   style="display: none; margin-top: 10px"
                 >
                   <label class="bib-edit-label">페이지 매핑 결과</label>
-                  <div style="max-height: 300px; overflow-y: auto; border: 1px solid var(--color-border); border-radius: 4px">
+                  <div style="max-height: 300px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px">
                     <table
                       id="hwp-import-align-table"
                       style="width: 100%; font-size: 12px; border-collapse: collapse"
                     >
                       <thead>
-                        <tr style="background: var(--color-bg-secondary); position: sticky; top: 0">
+                        <tr style="background: var(--bg-secondary); position: sticky; top: 0">
                           <th style="padding: 4px 6px; text-align: left; width: 50px">페이지</th>
                           <th style="padding: 4px 6px; text-align: left; width: 40%">OCR 텍스트</th>
                           <th style="padding: 4px 6px; text-align: left; width: 40%">매칭 텍스트</th>

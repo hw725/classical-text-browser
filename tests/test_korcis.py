@@ -624,23 +624,34 @@ class TestKorcisFetcher:
         assert fetcher.parser_id == "korcis"
         assert "KORCIS" in fetcher.parser_name
 
-    def test_url_extraction_detail(self):
-        """URL에서 vdkvgwkey 추출 가능한지 확인 (실제 호출은 안 함)."""
-        import re
+    # URL 시험은 fetch_by_url을 실제로 부른다(fetch_detail만 가짜). 예전 둘은 시험 안에 같은
+    # 정규식을 다시 적어 돌려 코드가 바뀌어도 늘 통과했다(2026-10-11 전수, B-035).
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://www.nl.go.kr/korcis/search/searchResultDetail.do?vdkvgwkey=302554414",
+            "https://www.nl.go.kr/korcis/search/popup/marcInfo.do?marcKey=302554414",
+            "javascript:fnDetail('302554414')",
+        ],
+    )
+    def test_fetch_by_url_routes_to_the_record_id(self, monkeypatch, url):
+        import asyncio
 
-        url = "https://www.nl.go.kr/korcis/search/searchResultDetail.do?vdkvgwkey=302554414"
-        m = re.search(r"vdkvgwkey=(\d+)", url)
-        assert m is not None
-        assert m.group(1) == "302554414"
+        seen = []
 
-    def test_url_extraction_marc(self):
-        """MARC URL에서 marcKey 추출."""
-        import re
+        async def fake_detail(self, item_id, **kw):
+            seen.append(item_id)
+            return {"vdkvgwkey": item_id}
 
-        url = "https://www.nl.go.kr/korcis/search/popup/marcInfo.do?marcKey=302554414"
-        m = re.search(r"marcKey=(\d+)", url)
-        assert m is not None
-        assert m.group(1) == "302554414"
+        monkeypatch.setattr(KorcisFetcher, "fetch_detail", fake_detail)
+        raw = asyncio.run(KorcisFetcher().fetch_by_url(url))
+        assert seen == ["302554414"] and raw["vdkvgwkey"] == "302554414"
+
+    def test_fetch_by_url_rejects_unknown_url(self):
+        import asyncio
+
+        with pytest.raises(ValueError, match="자료 ID"):
+            asyncio.run(KorcisFetcher().fetch_by_url("https://www.nl.go.kr/korcis/other.do"))
 
 
 # ──────────────────────────────────────

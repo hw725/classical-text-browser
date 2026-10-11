@@ -6,26 +6,27 @@ D-001: 이 플랫폼의 주 인터페이스는 GUI이며, CLI는 보조 도구�
 아키텍처:
     이 파일은 FastAPI 앱 생성과 라우터 마운트, 미들웨어만 담당한다.
     실제 API 엔드포인트 234개가 app/routers/ 패키지의 9개 모듈에 분산된다
-    (2026-09-06 실측):
+    (2026-10-11 실측):
 
     routers/documents.py     — 문헌·교정·서지·파서·권·회전·경계·강독 들이기·내보내기·틀 (48 라우트)
     routers/annotation.py    — L7 주석·사전형·인용마크 + AI보조 (34 라우트)
     routers/reading.py       — L5 표점·현토 + L6 번역 + 비고 + AI보조 (24 라우트)
     routers/composition.py   — 편성: 내용 트리·경계·제안·목차·자동 트리·신호 도출·LLM 표지 묻기·
-                               구조 통째로 묻기·규칙 미리 보기·말로 규칙 넣기·쪼개기·리셋
-                               (17 라우트)
+                               구조 통째로 묻기·애매한 후보 2차 판정·규칙 미리 보기·
+                               말로 규칙 넣기·쪼개기·리셋 (20 라우트)
     routers/interpretations.py — 해석 CRUD·레이어·의존·엔티티·관계·태그·
                                개념 병합·커넥톰 대조 (24 라우트)
     routers/llm_ocr.py       — LLM 상태 + OCR 실행·일괄·되돌리기·교정 패스·판독 계획·작업 계획
-                               (26 라우트)
+                               (27 라우트)
     routers/alignment.py     — 이체자 사전/정렬/일괄교정/문헌별 승인 (20 라우트)
-    routers/library.py       — 서고·설정·백업·휴지통·검증·연결·업데이트·엔진·로그인·모델 후보
-                               (29 라우트)
+    routers/library.py       — 서고·설정·백업·휴지통·검증·연결·업데이트·엔진·로그인·모델 후보·
+                               판정 모델 (30 라우트)
     routers/version.py       — Git 그래프/되돌리기/스냅샷/가져오기 (7 라우트)
 
     공유 상태 및 헬퍼는 app/_state.py에 집약.
 
-    이 수치는 scripts/check_doc_drift.py가 검사한다(D-079). 라우트를 늘리거나 줄이면
+    이 수치는 scripts/check_doc_drift.py가 검사한다
+    (D-079 — 줄을 넘긴 «(N 라우트)»도 본다). 라우트를 늘리거나 줄이면
     여기와 AGENTS.md(지침 정본 — CLAUDE.md는 가져오기 포인터)를 함께 고쳐야 pytest가 통과한다.
 """
 

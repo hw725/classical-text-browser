@@ -1,4 +1,8 @@
-"""논문 lite mode API 테스트 — 텍스트 레이어 진단.
+"""논문 lite mode API 테스트 — 텍스트 레이어 진단·배치 OCR(재개·전면 블록·백업)·LLM 교정 사다리.
+
+(이 파일은 텍스트 레이어 진단에서 시작해 추출 모드 전체로 넓어졌다. 교정 사다리 시험은
+가짜 llm_vision 엔진을 등록하고 끝나면 진짜 것을 되돌린다 — 실제 LLM을 부르지 않는다.
+외부 연결은 tests/conftest.py가 막는다.)
 
 왜 이 테스트가 있는가:
     lite mode의 첫 분기는 "이 PDF에 OCR이 필요한가"다.
@@ -739,23 +743,17 @@ def test_import_from_text_layer_skips_ocr(isolated_app):
     assert result["skipped"] == 0
     assert result["chars"] > 0
 
-    # 실제로 L4에 저장됐는지 확인한다.
-    page = client.get(f"/api/documents/{doc_id}/pages/1/text?part_id={part_id}")
-    if page.status_code != 200:  # 라우트 형태가 다르면 파일로 직접 확인
-        from pathlib import Path
+    # 실제로 L4에 저장됐는지 파일로 확인한다 — 예전에는 라우트가 200이면 본문을 보지 않았다
+    from pathlib import Path
 
-        from app._state import get_library_path
+    from app._state import get_library_path
 
-        text_path = (
-            Path(get_library_path())
-            / "documents"
-            / doc_id
-            / "L4_text"
-            / "pages"
-            / f"{part_id}_page_001.txt"
-        )
-        assert text_path.exists()
-        assert "필사본" in text_path.read_text(encoding="utf-8")
+    text_path = (
+        Path(get_library_path()) / "documents" / doc_id / "L4_text" / "pages"
+        / f"{part_id}_page_001.txt"
+    )
+    assert text_path.exists()
+    assert "필사본" in text_path.read_text(encoding="utf-8")
 
 
 def test_import_does_not_overwrite_corrected_text(isolated_app):
@@ -844,6 +842,21 @@ def test_force_rmtree_reports_failure_honestly(tmp_path):
     ok, why = _force_rmtree(missing)
     # 없는 경로는 지울 것이 없으므로 실패가 아니다.
     assert ok is True, why
+
+    # 지우지 못하면(삭제 함수가 아무것도 지우지 않으면) 실패와 남은 수를 돌려준다
+    # — 이 시험 이름이 주장하는 것
+    import shutil
+
+    stuck = tmp_path / "stuck"
+    (stuck / "sub").mkdir(parents=True)
+    (stuck / "sub" / "a.txt").write_text("x", encoding="utf-8")
+    orig = shutil.rmtree
+    shutil.rmtree = lambda *a, **k: None  # 조용히 아무것도 안 지우는 상황을 흉내 낸다
+    try:
+        ok, why = _force_rmtree(stuck)
+    finally:
+        shutil.rmtree = orig
+    assert ok is False and "1개 파일" in why
 
 
 def test_batch_works_when_manifest_page_count_missing(batch_ready):
@@ -1697,11 +1710,15 @@ def test_batch_ladder_accepts_and_fills_l4(batch_ready):
 
     _p, registry = _get_ocr_pipeline()
     vision = _FakeVisionEngine(lambda kw: (kw.get("anchor_text") or "").split("\n")[0])
+    # 진짜 llm_vision을 덮어쓰므로 끝나면 되돌린다 — pop만 하면 세션 나머지에서 엔진이 사라진다
+    _prev_vision = getattr(registry, "_engines", {}).get("llm_vision")
     registry.register(vision)
     try:
         events = _batch_with_correction(client, doc_id, part_id, [1])
     finally:
-        registry._engines.pop("llm_vision", None) if hasattr(registry, "_engines") else None
+        registry._engines.pop("llm_vision", None)
+        if _prev_vision is not None:
+            registry._engines["llm_vision"] = _prev_vision
     page = next(e for e in events if e["type"] == "page")
     done = next(e for e in events if e["type"] == "complete")
     # 더미 엔진은 줄 2개를 한 블록으로 내고, 앵커는 두 줄이다 — 가짜 비전은 첫 줄만 돌려주므로
@@ -1731,11 +1748,15 @@ def test_batch_ladder_reports_pending_pages(batch_ready):
         return "甲乙丙丁" if not kw.get("think") else "甲乙丙戊"
 
     vision = _FakeVisionEngine(reply)
+    # 진짜 llm_vision을 덮어쓰므로 끝나면 되돌린다 — pop만 하면 세션 나머지에서 엔진이 사라진다
+    _prev_vision = getattr(registry, "_engines", {}).get("llm_vision")
     registry.register(vision)
     try:
         events = _batch_with_correction(client, doc_id, part_id, [2])
     finally:
-        registry._engines.pop("llm_vision", None) if hasattr(registry, "_engines") else None
+        registry._engines.pop("llm_vision", None)
+        if _prev_vision is not None:
+            registry._engines["llm_vision"] = _prev_vision
     page = next(e for e in events if e["type"] == "page")
     done = next(e for e in events if e["type"] == "complete")
     assert page["pending_blocks"] == 1 and page["corrected_blocks"] == 0
@@ -1781,11 +1802,15 @@ def test_stale_draft_apply_is_409(batch_ready):
 
     _p, registry = _get_ocr_pipeline()
     vision = _FakeVisionEngine(lambda kw: "甲乙" if not kw.get("think") else "甲丙")
+    # 진짜 llm_vision을 덮어쓰므로 끝나면 되돌린다 — pop만 하면 세션 나머지에서 엔진이 사라진다
+    _prev_vision = getattr(registry, "_engines", {}).get("llm_vision")
     registry.register(vision)
     try:
         _batch_with_correction(client, doc_id, part_id, [3])
     finally:
-        registry._engines.pop("llm_vision", None) if hasattr(registry, "_engines") else None
+        registry._engines.pop("llm_vision", None)
+        if _prev_vision is not None:
+            registry._engines["llm_vision"] = _prev_vision
     r = client.get(f"/api/documents/{doc_id}/parts/{part_id}/pages/3/ocr/correction-candidates")
     assert r.json()["stale"] is False
     bid = r.json()["draft"]["blocks"][0]["block_id"]

@@ -208,12 +208,16 @@ def test_match_multiple_dicts():
 
 
 def test_match_longer_first():
-    """竹林七賢이 먼저 매칭되어야 한다 (王戎보다 길기 때문에)."""
+    """竹林七賢이 먼저 매칭되어야 한다 (七賢보다 길기 때문에).
+
+    사전에는 짧은 표제어를 먼저 둔다 — 긴 것을 먼저 두면 «긴 것 먼저» 정렬이 빠져도
+    사전 순서만으로 통과했다(2026-10-11 전수, B-035).
+    """
     data = {
         "source": {"document_title": "test"},
         "entries": [
-            {"headword": "竹林七賢", "dictionary_meaning": "일곱 현인"},
             {"headword": "七賢", "dictionary_meaning": "일곱 현인 약칭"},
+            {"headword": "竹林七賢", "dictionary_meaning": "일곱 현인"},
         ],
         "_filename": "test.json",
     }

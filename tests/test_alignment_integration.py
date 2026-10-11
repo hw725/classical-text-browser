@@ -8,7 +8,7 @@ import json
 
 import pytest
 
-from src.core.alignment import (
+from core.alignment import (  # 앱과 같은 이름으로(src.를 붙이면 모듈이 두 벌 올라간다)
     MatchType,
     VariantCharDict,
     align_page,
@@ -167,7 +167,8 @@ class TestAlignmentIntegration:
 
         results = align_page(str(tmp_path), "empty_test", "vol1", 1)
         # 빈 블록은 건너뜀, 페이지 전체만 있어야 함
-        assert any(r.layout_block_id == "*" for r in results)
+        # («*»가 있다는 것만 보면 빈 블록이 들어와도 통과했다)
+        assert [r.layout_block_id for r in results] == ["*"]
 
     def test_without_variant_dict(self, full_test_library):
         """이체자 사전 없이도 기본 동작 (variant 분류만 안 됨)."""

@@ -4,7 +4,11 @@
   "title": "L2 OCR 결과 — 페이지 단위",
   "description": "원본 저장소 2층(OCR 글자해독)의 페이지별 결과. 글자 + 좌표(bbox) + 신뢰도(confidence)를 저장한다. layout_block_id로 어느 LayoutBlock의 결과인지 참조한다. D-003에 따라 이 엔티티를 'OcrResult'라 부른다 ('Block'이 아님).",
   "type": "object",
-  "required": ["part_id", "page_number", "ocr_results"],
+  "required": [
+    "part_id",
+    "page_number",
+    "ocr_results"
+  ],
   "additionalProperties": false,
   "properties": {
     "part_id": {
@@ -28,26 +32,51 @@
     },
     "rotation": {
       "type": "integer",
-      "enum": [0, 90, 180, 270],
+      "enum": [
+        0,
+        90,
+        180,
+        270
+      ],
       "default": 0,
       "description": "이 좌표계를 만든 권의 회전(D-123). manifest.parts[].rotation과 다르면 낡은 좌표계다 — 크기만으로는 180°나 정사각형의 90°를 못 가른다."
     },
     "ocr_engine": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "사용된 OCR 엔진. 예: paddleocr, tesseract, google_vision, claude_vision",
       "default": null
     },
     "ocr_config": {
       "description": "페이지 단위 OCR 기본 설정. 블록별 설정이 없을 때 적용.",
       "oneOf": [
-        { "type": "null" },
+        {
+          "type": "null"
+        },
         {
           "type": "object",
           "additionalProperties": true,
           "properties": {
-            "engine": { "type": ["string", "null"] },
-            "language": { "type": ["string", "null"] },
-            "direction": { "type": ["string", "null"] }
+            "engine": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "language": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "direction": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
           }
         }
       ],
@@ -65,11 +94,16 @@
     "OcrResult": {
       "type": "object",
       "description": "하나의 LayoutBlock(또는 페이지 전체)에서 OCR이 인식한 결과. D-003: 'OcrResult'라 부른다.",
-      "required": ["lines"],
+      "required": [
+        "lines"
+      ],
       "additionalProperties": false,
       "properties": {
         "layout_block_id": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "description": "대응하는 LayoutBlock의 block_id. L3 레이아웃 분석 후에 채워진다. null이면 페이지 전체 OCR 결과(경로 B: L2 먼저 → L3 나중에).",
           "default": null
         },
@@ -85,7 +119,9 @@
     "OcrLine": {
       "type": "object",
       "description": "OCR이 인식한 하나의 행.",
-      "required": ["text"],
+      "required": [
+        "text"
+      ],
       "additionalProperties": false,
       "properties": {
         "text": {
@@ -93,27 +129,44 @@
           "description": "이 행의 인식 텍스트."
         },
         "bbox": {
-          "type": ["array", "null"],
+          "type": [
+            "array",
+            "null"
+          ],
           "description": "행 영역 좌표 [x1, y1, x2, y2].",
-          "items": { "type": "number" },
+          "items": {
+            "type": "number"
+          },
           "minItems": 4,
           "maxItems": 4,
           "default": null
         },
         "characters": {
-          "type": ["array", "null"],
+          "type": [
+            "array",
+            "null"
+          ],
           "description": "글자 단위 인식 결과. 글자 단위 정밀도가 있을 때만.",
           "items": {
             "$ref": "#/$defs/OcrCharacter"
           },
           "default": null
+        },
+        "koji": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "みんなで翻刻 엔진이 남기는 태그 포함 표기(返り点·送り仮名 등 Koji 기법). text는 본문 글자만이고 이것은 대조·검토용이다(D-124). 다른 엔진은 쓰지 않는다."
         }
       }
     },
     "OcrCharacter": {
       "type": "object",
       "description": "OCR이 인식한 개별 글자.",
-      "required": ["char"],
+      "required": [
+        "char"
+      ],
       "additionalProperties": false,
       "properties": {
         "char": {
@@ -123,15 +176,23 @@
           "maxLength": 1
         },
         "bbox": {
-          "type": ["array", "null"],
+          "type": [
+            "array",
+            "null"
+          ],
           "description": "글자 영역 좌표 [x1, y1, x2, y2].",
-          "items": { "type": "number" },
+          "items": {
+            "type": "number"
+          },
           "minItems": 4,
           "maxItems": 4,
           "default": null
         },
         "confidence": {
-          "type": ["number", "null"],
+          "type": [
+            "number",
+            "null"
+          ],
           "description": "인식 신뢰도. 0.0 ~ 1.0.",
           "minimum": 0.0,
           "maximum": 1.0,

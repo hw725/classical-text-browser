@@ -9,14 +9,14 @@
   - 이체자 보정: 이체자 사전으로 동자이형(同字異形) 분류
 
 사용법:
-    from src.core.alignment import align_texts, AlignedPair
+    from core.alignment import align_texts, AlignedPair   # 이 저장소는 src를 경로에 넣는다
 
     pairs = align_texts("王戎簡要裵楷通", "王戎簡要裴楷清通")
     for pair in pairs:
         print(f"{pair.ocr_char} / {pair.ref_char} → {pair.match_type}")
 
 페이지 단위 대조:
-    from src.core.alignment import align_page
+    from core.alignment import align_page
 
     result = align_page(library_root, doc_id, part_id, page_number)
 """
@@ -185,8 +185,9 @@ class VariantCharDict:
     is_variant("裵", "裴") → True
     is_variant("王", "裴") → False
 
-    사전 파일: resources/variant_chars.json
-    사용자가 직접 이체자 쌍을 추가하며 사전을 성장시킨다.
+    사전 파일: 사람이 쌓는 사전은 서고 resources/에 산다(D-104) — 그 경로는
+    library_active_dict_path(서고)로 얻어 dict_path로 넘긴다. 인자 없이 만들면 앱 폴더의
+    resources/variant_chars.json(배포본에는 없다)을 찾으므로 시험·도구용이다(B-020).
     """
 
     def __init__(self, dict_path: Optional[str] = None):
@@ -595,6 +596,34 @@ class TieredVariantDicts:
 
 
 DOCUMENT_APPROVALS_FILE = "variant_approvals.json"
+
+# 서고의 활성 사전 이름을 적어 두는 파일 — routers/alignment.py와 같은 자리(D-104).
+ACTIVE_DICT_MARKER = ".active_variant_dict"
+
+
+def library_active_dict_path(library_path) -> Optional[str]:
+    """서고 resources/의 활성 이체자 사전 경로. 없으면 None.
+
+    입력: 서고 경로(None이면 None). 출력: 사전 파일 경로 또는 None.
+    규칙은 routers/alignment.py `_get_active_dict_name`과 같다 — resources/.active_variant_dict에
+    적힌 이름, 없거나 그 파일이 사라졌으면 사용자 사전 variant_chars.
+
+    왜 여기 두는가: 사람이 쌓는 사전은 서고에 산다(D-104). 인자 없는 `VariantCharDict()`는
+    앱 폴더의 옛 파일(배포본에는 없다)을 읽어, LLM 교정·스냅샷이 이체자 탭에서 쌓은 사전을
+    보지 못했다(B-013·B-020). 라우터끼리는 서로 import하지 않으므로 공용 규칙은 core에 둔다.
+    """
+    if library_path is None:
+        return None
+    res = os.path.join(str(library_path), "resources")
+    name = "variant_chars"
+    marker = os.path.join(res, ACTIVE_DICT_MARKER)
+    if os.path.exists(marker):
+        with open(marker, encoding="utf-8") as f:
+            wanted = f.read().strip()
+        if wanted and os.path.exists(os.path.join(res, f"{wanted}.json")):
+            name = wanted
+    path = os.path.join(res, f"{name}.json")
+    return path if os.path.exists(path) else None
 
 
 def document_approvals_path(doc_path) -> "os.PathLike[str] | str":

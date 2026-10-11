@@ -60,7 +60,7 @@ dependencies = [
     # 설치가 828MB → 약 4.3GB가 된다(paddle 1,077MB + nvidia-* 2,708MB 실측).
     # 그 덩치는 `classical-gpu` extra(+4.5GB)와 맞먹는다. 이 저장소는 GPU 스택을
     # 언제나 선택으로 두어 왔으므로 기본값으로 올리지 않는다.
-    # 바꾸는 절차는 docs/user-guide.md의 「PaddleOCR를 GPU로 돌리기」에 있다.
+    # GPU판은 별도 환경 .venv-gpu가 정본이다(D-078, docs/user-guide.md 7-A.6-2).
     "paddlepaddle>=3.3.1",
     "paddleocr>=3.7.0",
     "setuptools",  # paddle.utils.cpp_extension이 import한다 (3.12에는 기본 포함이 아니다)
@@ -218,6 +218,7 @@ testpaths = ["tests"]
 # test_embed_folder_resume 5건 57~62초, test_lite_mode_api 2건 28·32초).
 markers = [
     "slow: 한 건 20초 이상 — 빠른 계층(-m \"not slow\")에서 빠진다",
+    "network: 외부 네트워크(실제 사이트·API)를 쓴다 — 표지가 없으면 tests/conftest.py가 연결을 막는다",
 ]
 # pytest-timeout: 멈춘 시험이 무한 대기하지 않게. slow 아닌 시험의 최장이 약 15초(+setup 5초)라
 # 120초면 6배 여유다. slow 시험(최장 62초)도 이 안에 든다.

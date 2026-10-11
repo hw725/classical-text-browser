@@ -123,8 +123,11 @@ class TestOcrEngineRegistry:
         """auto_register()가 에러 없이 실행되는지 (PaddleOCR 미설치 환경에서도)."""
         registry = OcrEngineRegistry()
         registry.auto_register()
-        # PaddleOCR 설치 여부에 따라 0개 또는 1개
-        assert isinstance(registry.list_engines(), list)
+        # 설치된 엔진 수는 환경마다 다르다(PaddleOCR·NDL·みんなで翻刻·LLM 비전 등) —
+        # 여기서는 목록이 나오고 각 항목이 엔진 id를 갖는지만 본다
+        engines = registry.list_engines()
+        assert isinstance(engines, list)
+        assert all(isinstance(e, dict) and e.get("engine_id") for e in engines)
 
 
 class BrokenEngine(BaseOcrEngine):

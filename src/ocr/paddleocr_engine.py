@@ -4,15 +4,15 @@
 PaddleOCR 외에도 Tesseract, Google Vision, Claude Vision 등
 어떤 OCR 엔진이든 같은 패턴으로 추가할 수 있다.
 
-설치 방법:
-  uv add --optional paddleocr paddlepaddle paddleocr
+설치:
+  paddleocr·paddlepaddle(CPU판)은 기본 의존성이라 `uv sync`(설치 프로그램)가 함께 넣는다.
+  GPU판은 별도 환경 `.venv-gpu`가 정본이다(D-078, user-guide 7-A.6-2) — 이 앱의 .venv에는
+  넣지 않는다. 환경이 이상하면 `doctor.bat`(scripts/doctor.py)이 판정한다.
 
 주의:
-  - PaddlePaddle 3.x는 Windows에서 OneDNN 관련 호환성 문제가 있을 수 있다.
-  - Python 3.12 이하에서는 PaddlePaddle 2.6.x를 사용하면 안정적이다.
-  - Python 3.13+에서는 PaddlePaddle 3.x만 지원되는데,
-    Windows에서 fused_conv2d OneDNN 에러가 발생할 수 있다.
-  - Linux/macOS에서는 문제없이 동작한다.
+  - Windows + PaddlePaddle 3.x는 OneDNN이 PIR 속성 변환을 못 해 FLAGS_use_mkldnn=0으로 피한다.
+  - requires-python은 <3.13이다(paddlepaddle 휠이 cp312까지, D-059).
+  - torch와 한 프로세스에 두면 cuDNN DLL이 충돌해 자식 프로세스(워커)로 돌린다(D-091).
 
 PaddleOCR v3 호환:
   - v2: ocr.ocr() → [[[bbox_4pts, (text, conf)], ...]]
@@ -346,8 +346,8 @@ class PaddleOcrEngine(BaseOcrEngine):
             self._available = False
             self._unavailable_reason = (
                 f"PaddleOCR을 불러오는 중 오류가 났습니다 ({type(e).__name__}: {e}). "
-                "GPU 환경이면 start_server가 .venv-gpu를 골랐는지, CPU 환경이면 "
-                "`uv sync --extra paddleocr`이 끝났는지 확인하세요."
+                "doctor.bat으로 어느 환경(.venv·.venv-gpu)이 뜨는지와 paddle import를 "
+                "확인하세요. paddleocr는 기본 의존성이라 따로 설치할 extra가 없습니다."
             )
             logger.warning(f"PaddleOCR 사용 불가 처리: {self._unavailable_reason}")
 
@@ -389,8 +389,8 @@ class PaddleOcrEngine(BaseOcrEngine):
             raise OcrEngineUnavailableError(
                 f"PaddleOCR을 현재 환경에서 사용할 수 없습니다.\n"
                 f"사유: {reason or '확인되지 않은 환경 문제'}\n"
-                "설치: uv add --optional paddleocr paddlepaddle paddleocr\n"
-                "참고: paddlepaddle 용량 ~500MB, 첫 실행 시 OCR 모델 ~100MB 추가 다운로드"
+                "확인: doctor.bat(어느 환경이 뜨는지·paddle import·지울 것을 알려 준다)\n"
+                "참고: 첫 실행 때 OCR 모델 약 240MB를 받는다(scripts/warmup_paddle.py)"
             )
 
         try:

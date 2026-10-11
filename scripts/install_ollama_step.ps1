@@ -115,10 +115,11 @@ if ($models -contains "gemma4:cloud") {
     }
 }
 
-# 「판독 계획」(D-126)의 기본 모델은 kimi-k3:cloud — 종류 판정 벤치마크 1위(2026-09-11). 없으면 앱이 «자동»으로 내려간다.
+# 「말로 지시」 ① 자동 스캔(옛 「판독 계획」, D-126·D-132)의 비전 모델 후보 kimi-k3:cloud — 종류 판정
+# 벤치마크 1위(2026-09-11). Cloudflare·OpenRouter 키가 있으면 기본은 clef이고 이것은 사슬의 마지막이다(D-135).
 if (-not ($models -contains "kimi-k3:cloud")) {
-    Say "[5-1] 판독 계획 기본 모델 등록 (kimi-k3:cloud — 클라우드, 몇 초)…" "White"
+    Say "[5-1] 자동 스캔 비전 모델 등록 (kimi-k3:cloud — 클라우드, 몇 초)…" "White"
     $rc = Invoke-OllamaTimed @("pull", "kimi-k3:cloud") $pullTimeout
-    if ($rc -ne 0) { Say "  지금 등록하지 못했습니다. 판독 계획은 다른 비전 모델(자동)로 돕니다." "Yellow" }
+    if ($rc -ne 0) { Say "  지금 등록하지 못했습니다. 자동 스캔은 다른 비전 모델(자동)로 돕니다." "Yellow" }
 }
 exit 0

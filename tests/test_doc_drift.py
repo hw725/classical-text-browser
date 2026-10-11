@@ -50,7 +50,7 @@ def checker():
 
 
 def test_docs_match_code(checker):
-    """대상 문서 4곳의 수치 주장이 전부 실측과 일치해야 한다."""
+    """대상 문서(check_doc_drift.DOC_TARGETS)의 수치 주장이 전부 실측과 일치해야 한다."""
     mismatches = checker.collect_mismatches(_ROOT)
     detail = "\n".join(mm.format() for mm in mismatches)
     assert not mismatches, (
@@ -455,7 +455,7 @@ def test_download_reads_rfc5987_filename():
     src = (_ROOT / "src" / "app" / "static" / "js" / "workspace.js").read_text(
         encoding="utf-8"
     )
-    assert "filename\\*=UTF-8''" in src or "filename\\*=" in src, (
+    assert "filename\\*=" in src, (
         "workspace.js가 filename*= 를 읽지 않는다 — 한글 파일명이 화면에서 사라진다"
     )
     assert "decodeURIComponent" in src, (

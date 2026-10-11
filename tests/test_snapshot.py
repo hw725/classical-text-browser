@@ -4,11 +4,13 @@ Phase 12-3: build_snapshot, create_work_from_snapshot, validate_snapshot,
 detect_imported_layers 함수의 단위·통합 테스트.
 
 테스트 구조:
-    TestBuildSnapshot — Export 기능 (14개)
-    TestValidateSnapshot — Import 전 검증 (10개)
+    TestBuildSnapshot — Export 기능 (15개)
+    TestValidateSnapshot — Import 전 검증 (11개)
     TestCreateWorkFromSnapshot — Import 기능 (8개)
     TestDetectImportedLayers — 레이어 감지 (3개)
     TestRoundTrip — Export → Import 순환 (2개)
+    TestExchangeSchemaIsTheSingleSourceOfTruth — 교환 스키마 정본(B-005) (5개)
+    (편성 경계·작업 계획·사전 왕복은 tests/test_sweep_20261011.py의 B-013 시험)
 """
 
 import json

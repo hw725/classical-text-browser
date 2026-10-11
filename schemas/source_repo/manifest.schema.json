@@ -4,7 +4,12 @@
   "title": "원본 저장소 매니페스트",
   "description": "하나의 문헌(원본 저장소)의 기본 정보를 정의한다. document_id로 문헌을 식별하고, parts[]로 다권본을 지원한다. platform-v7.md 섹션 5.1, 10.1 기반.",
   "type": "object",
-  "required": ["document_id", "title", "parts", "completeness_status"],
+  "required": [
+    "document_id",
+    "title",
+    "parts",
+    "completeness_status"
+  ],
   "additionalProperties": false,
   "properties": {
     "document_id": {
@@ -17,7 +22,10 @@
       "description": "문헌 제목. 원어 표기. 예: 蒙求"
     },
     "title_ko": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "한국어 제목 또는 독음. 예: 몽구",
       "default": null
     },
@@ -27,7 +35,11 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["part_id", "label", "file"],
+        "required": [
+          "part_id",
+          "label",
+          "file"
+        ],
         "additionalProperties": false,
         "properties": {
           "part_id": {
@@ -45,12 +57,20 @@
           },
           "rotation": {
             "type": "integer",
-            "enum": [0, 90, 180, 270],
+            "enum": [
+              0,
+              90,
+              180,
+              270
+            ],
             "default": 0,
             "description": "쪽을 바로 세우려면 시계 방향으로 몇 도 돌려야 하는가(D-123). 옆으로 스캔된 책. OCR·화면·좌표가 모두 돌린 이미지를 기준으로 한다."
           },
           "page_count": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "description": "이 파일의 페이지 수. 모를 경우 null.",
             "minimum": 1,
             "default": null
@@ -61,11 +81,29 @@
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["from", "to", "rotation"],
+              "required": [
+                "from",
+                "to",
+                "rotation"
+              ],
               "properties": {
-                "from": { "type": "integer", "minimum": 1 },
-                "to": { "type": "integer", "minimum": 1 },
-                "rotation": { "type": "integer", "enum": [0, 90, 180, 270] }
+                "from": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "to": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "rotation": {
+                  "type": "integer",
+                  "enum": [
+                    0,
+                    90,
+                    180,
+                    270
+                  ]
+                }
               }
             }
           }
@@ -74,7 +112,7 @@
     },
     "completeness_status": {
       "type": "string",
-      "description": "문헌 디지털화 완성도. platform-v7.md 섹션 5.6 참고.",
+      "description": "문헌 디지털화 완성도. platform-v7.md 섹션 5.6 참고. «imported»는 JSON 스냅샷에서 들인 문헌이다(원본 이미지 없음, core/snapshot.py) — v1.4.3까지 들이기가 이 값을 썼는데 enum에 없어 들인 문헌의 manifest 저장이 막혔다(B-014).",
       "enum": [
         "file_only",
         "text_imported",
@@ -83,64 +121,162 @@
         "layout_analyzed",
         "correcting",
         "correction_done",
-        "finalized"
+        "finalized",
+        "imported"
       ]
     },
     "created_at": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "저장소 생성 일시. ISO 8601 형식.",
       "format": "date-time",
       "default": null
     },
     "notes": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "자유 메모.",
       "default": null
     },
     "segmentation_rules": {
       "description": "글 단위 경계 제안 규칙 (D-088). 표제 어휘·억제 목록처럼 이 문헌에만 해당하는 것을 담는다. 엔진의 문헌 무관 신호(날짜 문법·형식)는 코드에 있다. 없으면 기본값.",
       "oneOf": [
-        { "type": "null" },
+        {
+          "type": "null"
+        },
         {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "use_date": { "type": "boolean" },
-            "use_layout": { "type": "boolean" },
-            "title_words": { "type": "array", "items": { "type": "string" } },
-            "suppress": { "type": "array", "items": { "type": "string" } },
-            "max_title_chars": { "type": "integer", "minimum": 2, "maximum": 60 },
-            "min_confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-            "reference_text": { "type": "string", "maxLength": 100000, "description": "해제·서지 설명 등 참고 텍스트. 통째로 둔다 — 프롬프트에 넣을 때 core.toc.reference_excerpt가 권별 서술을 골라 간추린다(한국문집총간 해제는 2만 자가 넘고 권별 내용이 뒤에 있다)." },
-            "head_words": { "type": "array", "items": { "type": "string" }, "description": "행 첫머리에 편중된 글자·어휘 (D-116). title_words의 행머리판." },
-            "furniture": { "type": "array", "items": { "type": "string" }, "description": "쪽마다 같은 자리에 같은 글로 되풀이되는 짧은 행(판심·엽수). 후보에서 뺀다 (D-116)." },
+            "use_date": {
+              "type": "boolean"
+            },
+            "use_layout": {
+              "type": "boolean"
+            },
+            "title_words": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "suppress": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "max_title_chars": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 60
+            },
+            "min_confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "reference_text": {
+              "type": "string",
+              "maxLength": 100000,
+              "description": "해제·서지 설명 등 참고 텍스트. 통째로 둔다 — 프롬프트에 넣을 때 core.toc.reference_excerpt가 권별 서술을 골라 간추린다(한국문집총간 해제는 2만 자가 넘고 권별 내용이 뒤에 있다)."
+            },
+            "head_words": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "행 첫머리에 편중된 글자·어휘 (D-116). title_words의 행머리판."
+            },
+            "furniture": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "쪽마다 같은 자리에 같은 글로 되풀이되는 짧은 행(판심·엽수). 후보에서 뺀다 (D-116)."
+            },
             "signals": {
               "type": "object",
               "description": "신호 스위치 (D-116). 빠진 키는 켜진 것. toc는 목차 항목(D-122), date·mark·volume은 혼자 후보를 만들고 short_line·after_short·indent는 보조.",
               "additionalProperties": false,
               "properties": {
-                "toc": { "type": "boolean" },
-                "date": { "type": "boolean" },
-                "mark": { "type": "boolean" },
-                "volume": { "type": "boolean" },
-                "short_line": { "type": "boolean" },
-                "after_short": { "type": "boolean" },
-                "indent": { "type": "boolean" }
+                "toc": {
+                  "type": "boolean"
+                },
+                "date": {
+                  "type": "boolean"
+                },
+                "mark": {
+                  "type": "boolean"
+                },
+                "volume": {
+                  "type": "boolean"
+                },
+                "short_line": {
+                  "type": "boolean"
+                },
+                "after_short": {
+                  "type": "boolean"
+                },
+                "indent": {
+                  "type": "boolean"
+                }
               }
             },
-            "toc_llm": { "type": "boolean", "description": "목차가 잡혔을 때 항목 구조화에 LLM을 쓸지. 편성 탭의 「전부 적용해 새로 세우기」가 따른다 — 사이드바 «자동 트리»는 언제나 LLM 없음 (D-117 ③-B)." },
-            "origin": { "type": "string", "enum": ["", "induced", "manual"], "description": "규칙이 어디서 왔나 — induced(프로그램이 전문에서 찾음)·manual(사람이 손봄)·빈 값(아직 없음)." },
-            "symbols": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 1 }, "description": "되풀이되는 기호(○●△ …). 기호 자리마다 후보가 선다 (D-117 시각 신호)." },
-            "indent_alone": { "type": "boolean", "description": "내려쓰기만으로 경계를 세운다 (D-117 시각 신호). bbox가 있는 쪽에서만 효과가 있다." },
-            "head_templates": { "type": "array", "items": { "type": "string" }, "description": "행 첫머리 꼴 — 접은 글자(N=수사·G=天干·Z=地支)가 든 문자열, 예 「N、」 (D-119 발견기)." },
-            "tail_templates": { "type": "array", "items": { "type": "string" }, "description": "행 끝 꼴, 예 「第N」 (D-119 발견기)." }
+            "toc_llm": {
+              "type": "boolean",
+              "description": "목차가 잡혔을 때 항목 구조화에 LLM을 쓸지. 편성 탭의 「전부 적용해 새로 세우기」가 따른다 — 사이드바 «자동 트리»는 언제나 LLM 없음 (D-117 ③-B)."
+            },
+            "origin": {
+              "type": "string",
+              "enum": [
+                "",
+                "induced",
+                "manual"
+              ],
+              "description": "규칙이 어디서 왔나 — induced(프로그램이 전문에서 찾음)·manual(사람이 손봄)·빈 값(아직 없음)."
+            },
+            "symbols": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1
+              },
+              "description": "되풀이되는 기호(○●△ …). 기호 자리마다 후보가 선다 (D-117 시각 신호)."
+            },
+            "indent_alone": {
+              "type": "boolean",
+              "description": "내려쓰기만으로 경계를 세운다 (D-117 시각 신호). bbox가 있는 쪽에서만 효과가 있다."
+            },
+            "head_templates": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "행 첫머리 꼴 — 접은 글자(N=수사·G=天干·Z=地支)가 든 문자열, 예 「N、」 (D-119 발견기)."
+            },
+            "tail_templates": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "행 끝 꼴, 예 「第N」 (D-119 발견기)."
+            }
           }
         }
       ],
       "default": null
     },
     "ocr_guidance": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "LLM OCR 프롬프트에 덧붙일 문헌 판독 지침 (D-081). 시대·문서 종류·핵심 인명·지명·주의할 자형 등 이 문헌에만 해당하는 내용을 연구자가 자유문으로 적는다. 서지에서 자동 생성되는 문장 뒤에 이어 붙는다. 없어도 OCR은 돌아간다.",
       "default": null
     }

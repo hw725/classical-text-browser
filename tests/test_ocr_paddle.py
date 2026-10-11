@@ -1,7 +1,7 @@
 """PaddleOCR 엔진 테스트.
 
 PaddleOCR이 설치되지 않은 환경에서도 기본 테스트가 통과해야 한다.
-실제 인식 테스트는 PaddleOCR 설치 후 수동으로 실행.
+실제 인식 시험은 PaddleOCR이 설치돼 있으면 자동으로 돈다(아래 skipif).
 """
 
 import pytest
@@ -95,7 +95,10 @@ class TestPaddleOcrEngine:
 
 
 class TestPaddleImportFailure:
-    """import paddle이 ImportError가 아닌 예외로 죽어도 «사용 불가»로 끝나야 한다.
+    """패키지 찾기(find_spec)가 ImportError가 아닌 예외로 죽어도 «사용 불가»로 끝나야 한다.
+
+    is_available()은 paddle을 import하지 않고 메타데이터·find_spec만 본다(warmup_paddle 참고) —
+    첫 OCR 때 _get_ocr()의 실제 import 실패는 이 시험이 재지 않는다.
 
     Windows에서 DLL 로드 실패(OSError)가 실제 사례다. 예외가 새어 나가면 엔진 목록
     API 전체가 500이 된다.

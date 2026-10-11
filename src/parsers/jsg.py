@@ -267,7 +267,7 @@ class JsgMapper(BaseMapper):
 
         # date_created: 작성시기에서 [刊年未詳] 등 불명 표기 처리
         date_created = raw_data.get("작성시기")
-        if date_created and "미상" in date_created.lower():
+        if date_created and ("미상" in date_created or "未詳" in date_created):
             date_created = None
 
         bibliography = {
@@ -286,8 +286,12 @@ class JsgMapper(BaseMapper):
             "printing_info": None,
             "publishing": None,
             "extent": extent,
-            "subject": raw_data.get("사부분류"),
-            "classification": raw_data.get("유형분류"),
+            # 스키마: subject는 문자열 목록, classification은 {체계: 값} — 문자열을 그대로 넣으면
+            # 서지 저장이 검증에서 막혔다(B-033)
+            "subject": [raw_data["사부분류"]] if raw_data.get("사부분류") else None,
+            "classification": (
+                {"유형분류": raw_data["유형분류"]} if raw_data.get("유형분류") else None
+            ),
             "series_title": None,
             "material_type": _classify_material_type(raw_data.get("유형분류")),
             "repository": {

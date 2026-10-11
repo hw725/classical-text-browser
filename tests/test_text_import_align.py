@@ -203,7 +203,9 @@ class TestAlignTextToPages:
         assert len(results) == 3
         for r in results:
             assert r["confidence"] >= 0.8
-            assert r["matched_text"]  # 빈 문자열이 아닌지
+        # 쪽마다 그 쪽의 글이어야 한다 — 비어 있지 않다는 것만 보면 경계가 밀려도 통과했다(B-032)
+        expected = [self.PAGE1_TEXT, self.PAGE2_TEXT, self.PAGE3_TEXT]
+        assert [r["matched_text"] for r in results] == expected
 
     def test_nfc_normalization(self):
         """NFC 비정규화 입력도 정상 매칭되어야 한다."""
@@ -236,8 +238,10 @@ class TestAlignTextToPages:
         ]
         results = align_text_to_pages(page_texts, self.FULL_TEXT)
         assert len(results) == 3
-        # 빈 페이지의 matched_text도 비어있지 않아야 (보간됨)
-        assert results[1]["matched_text"] or results[1]["confidence"] == 0.0
+        # 빈 페이지의 matched_text도 보간으로 채워진다
+        # (예전 단언은 «or confidence == 0.0»으로 늘 참이었다)
+        assert results[1]["matched_text"]
+        assert results[1]["confidence"] == 0.0  # 앵커가 없던 쪽은 신뢰도 0으로 알린다
 
     def test_cascade_recovery(self):
         """중간 페이지 실패 시 전후 페이지는 정상이어야 한다."""

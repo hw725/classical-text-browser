@@ -3,8 +3,8 @@
 본 서비스는 여러 엔진을 플러그인 방식으로 지원한다:
 
 - MockEngine: 모델 없이 즉시 응답하는 더미 엔진. 본체 통합 테스트용.
-- SikuRoBERTaEngine: yachagye/korean-classical-chinese-punctuation 기반 실제 추론.
-  Phase 1b에서 구현한다 — 현재는 자리만 잡아둔 상태.
+- SikuRoBERTaEngine: yachagye/korean-classical-chinese-punctuation 기반 실제 추론
+  (아래 클래스 — 모델 가중치는 PUNCT_MODEL_PATH, 표기 출처는 attribution.py).
 
 엔진 선택은 환경변수 PUNCT_ENGINE으로 한다 (mock | sikurroberta).
 모델 가중치 경로는 PUNCT_MODEL_PATH로 지정한다.

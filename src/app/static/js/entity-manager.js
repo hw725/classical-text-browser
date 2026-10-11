@@ -210,15 +210,15 @@ function _renderEntityList() {
       ? `<span class="entity-list-id" title="${_escHtmlEntity(item.superseded_by)} 로 합쳐짐">→ ${_escHtmlEntity(String(item.superseded_by).substring(0, 8))}</span>`
       : "";
 
-    return `<div class="entity-list-item" data-entity-type="${item._entityType}" data-entity-id="${item.id}">
+    return `<div class="entity-list-item" data-entity-type="${_escHtmlEntity(item._entityType)}" data-entity-id="${_escHtmlEntity(item.id)}">
       <span class="entity-type-badge ${info.cssClass}">${info.label}</span>
       <span class="entity-list-label" title="${_escHtmlEntity(label)}">${_escHtmlEntity(truncLabel)}</span>
       <span class="entity-status-badge status-${item.status || "draft"}">${item.status || "draft"}</span>
       <span class="entity-list-id">${shortId}</span>
       ${merged}
       <span class="entity-list-actions">
-        ${isTag ? `<button class="entity-promote-btn" data-tag-id="${item.id}" title="Concept으로 승격">승격</button>` : ""}
-        ${isConcept && !item.superseded_by ? `<button class="entity-merge-btn" data-concept-id="${item.id}" title="다른 개념으로 합치기 (구 ID는 장부에 남는다)">합치기</button>` : ""}
+        ${isTag ? `<button class="entity-promote-btn" data-tag-id="${_escHtmlEntity(item.id)}" title="Concept으로 승격">승격</button>` : ""}
+        ${isConcept && !item.superseded_by ? `<button class="entity-merge-btn" data-concept-id="${_escHtmlEntity(item.id)}" title="다른 개념으로 합치기 (구 ID는 장부에 남는다)">합치기</button>` : ""}
       </span>
     </div>`;
   }).join("");
@@ -410,7 +410,7 @@ function _buildFormFields(entityType, existing) {
         <label class="bib-edit-label">라벨 (label)</label>
         <input id="ef-label" type="text" class="bib-input" value="${val("label")}" placeholder="예: 王戎" />
         <label class="bib-edit-label">유효 범위 문헌 ID (scope_document, 비우면 전역)</label>
-        <input id="ef-scope-doc" type="text" class="bib-input" value="${val("scope_document")}" placeholder="Work UUID (전역이면 비움)" />
+        <input id="ef-scope-doc" type="text" class="bib-input" value="${val("scope_document")}" placeholder="문헌 id (전역이면 비움)" />
         <label class="bib-edit-label">설명 (description)</label>
         <textarea id="ef-description" class="bib-textarea" rows="3" placeholder="학술적 설명">${val("description")}</textarea>
         <label class="bib-edit-label">상태 (status)</label>
@@ -699,7 +699,7 @@ function _closeEntityDialog() {
 
    라우트 `entities/unit/from-source` 는 **남긴다** — `create_entity("unit")` 이
    `_create_boundary_from_unit` 으로 보내 지금 규약대로 경계를 쓰므로, API 로는
-   살아 있는 길이다(entity.py:607).
+   살아 있는 길이다(entity.py `create_entity`의 unit 분기).
    ────────────────────────── */
 
 
@@ -1014,7 +1014,7 @@ function _renderLlmDraftReview() {
   list.innerHTML = drafts.map((d) => {
     const info = ENTITY_TYPE_INFO[d._entityType] || {};
     const label = d[info.displayField] || d.id?.substring(0, 8) || "—";
-    return `<div class="llm-review-item" data-entity-type="${d._entityType}" data-entity-id="${d.id}">
+    return `<div class="llm-review-item" data-entity-type="${_escHtmlEntity(d._entityType)}" data-entity-id="${_escHtmlEntity(d.id)}">
       <span class="entity-type-badge ${info.cssClass}">${info.label}</span>
       <span class="entity-list-label">${_escHtmlEntity(label)}</span>
       <span class="llm-review-actions">

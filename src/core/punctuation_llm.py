@@ -1,7 +1,9 @@
-"""LLM 기반 표점 Draft 생성.
+"""LLM 기반 표점 Draft 생성 — 지금 앱이 부르지 않는 옛 경로.
 
-LlmRouter를 통해 한문 원문에 표점 초안을 생성하고,
-연구자가 검토/수정 후 확정하는 Draft→Review→Commit 패턴.
+지금 앱에서 쓰는 것과 아닌 것(2026-10-11 전수 확인):
+- 화면의 AI 표점은 routers/reading.py의 /api/llm/punctuation(·/stream)이 따로 한다.
+- 이 파일의 generate_punctuation_draft·commit_punctuation_draft는 어디서도 부르지 않는다.
+  _normalize_marks·_parse_llm_json은 시험이 잰다(tests/test_punctuation_hyeonto.py) — 그래서 남긴다.
 """
 
 import json

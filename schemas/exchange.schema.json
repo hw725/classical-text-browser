@@ -39,8 +39,13 @@
           "type": "string",
           "description": "코어 스키마 판. 예: 1.3"
         },
-        "platform_version": {"type": "string"},
-        "exported_at": {"type": "string", "format": "date-time"},
+        "platform_version": {
+          "type": "string"
+        },
+        "exported_at": {
+          "type": "string",
+          "format": "date-time"
+        },
         "reproducible": {
           "type": "boolean",
           "description": "기여 저장소가 전부 git이고 커밋되지 않은 편집이 없으면 true. false이면 이 해시로 산출물을 재현할 수 없다."
@@ -52,9 +57,15 @@
             "type": "object",
             "additionalProperties": true,
             "properties": {
-              "repo": {"type": "string"},
-              "head": {"type": "string"},
-              "dirty": {"type": "boolean"}
+              "repo": {
+                "type": "string"
+              },
+              "head": {
+                "type": "string"
+              },
+              "dirty": {
+                "type": "boolean"
+              }
             }
           }
         }
@@ -229,6 +240,43 @@
                   }
                 }
               }
+            },
+            "boundaries": {
+              "type": "object",
+              "description": "권마다 편성 경계 목록(원본 저장소 documents/{doc}/boundaries/{part}.json, D-092·D-097). v1.4.3까지는 담지 않아 내보냈다 들이면 편성이 통째로 사라졌다(B-013).",
+              "additionalProperties": false,
+              "properties": {
+                "type": {
+                  "const": "inline"
+                },
+                "parts": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "boundaries.schema.json"
+                  }
+                }
+              }
+            },
+            "read_plan": {
+              "type": "object",
+              "description": "권마다 작업 계획(documents/{doc}/read_plan/{part}.json, D-131). 열쇠는 권 id.",
+              "additionalProperties": false,
+              "properties": {
+                "type": {
+                  "const": "inline"
+                },
+                "parts": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "$ref": "read_plan.schema.json"
+                  }
+                }
+              }
+            },
+            "variant_approvals": {
+              "type": "object",
+              "description": "문헌별로 승인한 이체자 쌍(documents/{doc}/variant_approvals.json, D-080 결정 3).",
+              "additionalProperties": true
             }
           }
         }
@@ -315,12 +363,12 @@
     },
     "variant_characters": {
       "type": "object",
-      "description": "이체자 사전(서고의 것, 없으면 앱 기본값).",
+      "description": "서고의 활성 이체자 사전(서고 resources/, D-104). 없으면 앱이 들고 온 기본값. 들일 때는 받는 서고의 사용자 사전에 쌍을 합친다(덮어쓰지 않는다).",
       "additionalProperties": true
     },
     "annotation_types": {
       "type": "array",
-      "description": "주석 유형 목록 = 앱 기본 프리셋 + 서고의 커스텀.",
+      "description": "주석 유형 목록 = 앱 기본 프리셋 + 서고의 커스텀({서고}/annotation_types.json의 custom). 들일 때는 기본 프리셋에도 받는 서고에도 없는 커스텀만 더한다.",
       "items": {
         "type": "object",
         "additionalProperties": true

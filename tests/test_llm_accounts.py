@@ -152,8 +152,13 @@ def test_accounts_route_returns_every_provider(client):
             "note",
         ):
             assert key in p, f"{p['provider_id']}에 {key}가 없다"
-        # «checking»·«unknown»은 Ollama 모델 고르기가 1.5초 안에 못 끝나 뒤로 미룬 상태(D-109)
-        assert p["status"] in ("ready", "needs_signin", "needs_key", "offline", "checking")
+        # «checking»은 Ollama 모델 고르기가 1.5초 안에 못 끝나 뒤로 미룬 상태(D-109).
+        # «no_model»은 Ollama는 떠 있는데 비전 모델이 없거나 답하지 않는 상태
+        # (llm_ocr._account_status)
+        # — 빠뜨리면 그런 PC에서 거짓 실패한다(2026-10-11 전수). «unknown»은 billing 값이다.
+        assert p["status"] in (
+            "ready", "needs_signin", "needs_key", "offline", "checking", "no_model"
+        )
         assert p["billing_model"] in ("metered", "subscription", "free", "unknown")
 
 

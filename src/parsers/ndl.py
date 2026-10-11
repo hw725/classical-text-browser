@@ -123,7 +123,7 @@ class NdlFetcher(BaseFetcher):
             - https://ndlsearch.ndl.go.jp/books/R100000002-I...
               → NDLBibID는 URL 끝 숫자 9자리
             - https://dl.ndl.go.jp/info:ndljp/pid/...
-              → PID 기반 — PID를 검색어로 사용
+              → PID 기반 — IIIF manifest → Bibliographic ID → OpenSearch 순(아래 본문)
             - https://id.ndl.go.jp/bib/...
               → NDLBibID 직접 포함
 
@@ -210,7 +210,7 @@ class NdlFetcher(BaseFetcher):
                 )
             return raw_data
 
-        # 어떤 패턴에도 매칭되지 않으면 URL 자체를 검색어로 시도
+        # 어떤 패턴에도 매칭되지 않으면 오류 — 지원 URL을 알려 준다
         raise ValueError(
             f"NDL URL에서 ID를 추출할 수 없습니다: {url}\n"
             "→ 지원 URL: ndlsearch.ndl.go.jp/books/..., "
@@ -225,21 +225,24 @@ class NdlFetcher(BaseFetcher):
             별도의 상세 조회가 불필요한 경우가 많다.
             하지만 NDLBibID로 정확히 1건을 가져올 때 사용한다.
         """
-        params = {"any": item_id, "cnt": 1}
+        # any= 는 키워드 검색이라 ID가 다른 자료가 1위로 올 수 있다 — 몇 건 받아 NDLBibID가
+        # 같은 레코드만 돌려준다. 예전에는 cnt=1의 첫 건을 대조 없이 돌려줬다(2026-10-11 전수).
+        params = {"any": item_id, "cnt": 10}
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(_NDL_OPENSEARCH_URL, params=params)
             response.raise_for_status()
 
         root = ET.fromstring(response.content)
-        items = root.findall(".//item")
+        for item in root.findall(".//item"):
+            data = _parse_item_xml(item)
+            if str(data.get("dcndl:NDLBibID") or "").strip() == str(item_id).strip():
+                return data
 
-        if not items:
-            raise FileNotFoundError(
-                f"NDL에서 항목을 찾을 수 없습니다: {item_id}\n→ 해결: NDLBibID를 확인하세요."
-            )
-
-        return _parse_item_xml(items[0])
+        raise FileNotFoundError(
+            f"NDL에서 NDLBibID가 {item_id}인 항목을 찾을 수 없습니다.\n"
+            "→ 해결: NDLBibID를 확인하세요(검색 결과에 다른 자료만 있었습니다)."
+        )
 
     async def list_assets(self, raw_data: dict[str, Any]) -> list[dict[str, Any]]:
         """IIIF manifest에서 다운로드 가능한 에셋(이미지) 목록을 조회한다.
@@ -396,6 +399,15 @@ class NdlMapper(BaseMapper):
             "language": None,
             "script": None,
             "physical_description": raw_data.get("dc:extent"),
+            # 발행자·발행지 — _parse_item_xml이 뽑아 두고도 매퍼가 쓰지 않아 서지에 실리지 않았다
+            "publishing": (
+                {
+                    "place": raw_data.get("dcndl:publicationPlace"),
+                    "publisher": raw_data.get("dc:publisher"),
+                }
+                if raw_data.get("dc:publisher") or raw_data.get("dcndl:publicationPlace")
+                else None
+            ),
             "subject": subjects if subjects else None,
             "classification": classification if classification else None,
             "series_title": raw_data.get("dcndl:seriesTitle"),

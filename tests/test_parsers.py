@@ -1,7 +1,8 @@
 """서지정보 파서 테스트.
 
 Phase 5: NDL Search, 국립공문서관 파서 동작 확인.
-네트워크 접근이 필요한 테스트는 실제 API를 호출한다.
+네트워크 접근이 필요한 테스트(TestNdlParser)는 실제 API를 호출한다 — slow·network 표지라
+빠른 계층에서 빠진다.
 """
 
 import sys
@@ -55,8 +56,15 @@ class TestParserRegistry:
         assert len(data["parsers"]) >= 2
 
 
+@pytest.mark.slow
+@pytest.mark.network
 class TestNdlParser:
-    """NDL Search 파서 테스트 (네트워크 필요)."""
+    """NDL Search 파서 테스트 (네트워크 필요).
+
+    왜 slow·network인가(2026-10-11 결정): 실제 NDL API를 부르므로 오프라인·NDL 장애 때
+    코드와 무관하게 빨개진다. 빠른 계층(완료 영수증)에서 빼고, 서지 파서의 침묵 파손은
+    전체 실행(`pytest`)에서 잡는다.
+    """
 
     @pytest.mark.asyncio
     async def test_search_monggu(self):

@@ -1,7 +1,10 @@
-"""LLM 기반 주석 자동 태깅.
+"""LLM 기반 주석 자동 태깅 — 초안 확정 함수와 옛 생성 함수.
 
-LlmRouter를 통해 한문 원문의 인물·지명·용어·전거를 자동 식별하고,
-Draft 상태로 저장하여 연구자가 검토/수정 후 확정하는 흐름.
+지금 앱에서 쓰는 것과 아닌 것(2026-10-11 전수 확인):
+- 쓰인다: commit_annotation_draft·commit_all_drafts(routers/annotation.py의 확정 라우트),
+  _parse_llm_annotations(시험이 잰다).
+- 쓰이지 않는다: generate_annotation_drafts — 화면의 AI 태깅·사전형 주석은 routers/annotation.py가
+  core.annotation_dict_llm으로 따로 한다. 시험이 내부 도우미를 재고 있어 지우지 않고 남긴다.
 """
 
 from datetime import datetime

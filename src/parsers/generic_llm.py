@@ -13,7 +13,6 @@ platform-v7.md §7.3 아키텍처 확장:
 
 지원 사이트 (전용 패턴 등록):
     - kokusho.nijl.ac.jp — 일본국문학연구자료관 (국서종합목록)
-    - kostma.korea.ac.kr — 해외한국학자료센터
     - kostma.aks.ac.kr — 한국학자료센터
     - db.history.go.kr — 국사편찬위원회
     - db.itkc.or.kr — 한국고전번역원
@@ -589,38 +588,24 @@ class GenericLlmFetcher(BaseFetcher):
 
         user_prompt = _USER_PROMPT_TEMPLATE.format(url=url, markdown=markdown)
 
-        errors = []
-        for provider in router.providers:
-            try:
-                if not await provider.is_available():
-                    continue
+        # LlmRouter.call 하나로 부른다(D-010 «라우터가 유일한 진입점»). 예전에는 providers를 직접
+        # 돌며 provider.call을 불러 폴백 순서·가용성 캐시·사용 기록 규칙을 따로 흉내 냈다.
+        # 폴백·사용 기록은 라우터가 하고, JSON은 강제한다(D-083).
+        try:
+            response = await router.call(
+                user_prompt,
+                system=_SYSTEM_PROMPT,
+                response_format="json",
+                max_tokens=4096,
+                purpose="bibliography_extraction",
+            )
+        except Exception as e:  # noqa: BLE001 — 사용자에게 원인과 함께 돌려준다
+            raise ValueError(f"LLM 서지 추출에 실패했습니다: {e}") from e
 
-                response = await provider.call(
-                    user_prompt,
-                    system=_SYSTEM_PROMPT,
-                    response_format="text",
-                    max_tokens=4096,
-                    purpose="bibliography_extraction",
-                )
-                router.usage_tracker.log(response, purpose="bibliography_extraction")
-
-                # JSON 파싱
-                result = self._parse_llm_json(response.text)
-                result["_provider"] = response.provider
-                result["_model"] = response.model
-                return result
-
-            except Exception as e:
-                logger.info(
-                    f"LLM 서지추출 — {provider.provider_id} 실패: {e}, 다음 프로바이더로 시도"
-                )
-                errors.append(f"{provider.provider_id}: {e}")
-                continue
-
-        raise ValueError(
-            "모든 LLM 프로바이더가 서지 추출에 실패했습니다:\n"
-            + "\n".join(f"  - {e}" for e in errors)
-        )
+        result = self._parse_llm_json(response.text)
+        result["_provider"] = response.provider
+        result["_model"] = response.model
+        return result
 
     @staticmethod
     def _parse_llm_json(raw_text: str) -> dict:

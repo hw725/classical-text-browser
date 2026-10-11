@@ -10,7 +10,7 @@ Phase 12-3: 스냅샷 데이터의 구조적 무결성을 검증한다.
 검증 항목:
     1. 구조 — `schemas/exchange.schema.json`(교환 형식의 **정본**)으로 검증한다 (B-005)
     2. 버전 호환성
-    3. block_id 참조 무결성 (L5~L7 → L3 block_id) — 스키마로 적을 수 없는 것
+    3. block_id 참조 무결성 (L5~L7 → L3 LayoutBlock id 또는 편성 단위 id) — 스키마로 적을 수 없는 것
     4. annotation_types 참조 무결성 — 같은 이유
 
 왜 스키마와 손 규칙을 나누는가: 「어떤 칸이 있어야 하는가」는 스키마 하나가 정하고
@@ -90,8 +90,10 @@ def _validate_interpretation(data: dict, warnings: list) -> None:
     interp = data.get("interpretation", {})
     layers = interp.get("layers", {})
 
-    # block_id 수집: L3 레이아웃에서 추출
-    l3_block_ids = _extract_l3_block_ids(data)
+    # 아는 block_id: L3 LayoutBlock id + 편성 경계(단위) id.
+    # v1.3(D-092·D-093)부터 L5~L7의 block_id는 단위 id를 가리킨다(B-003) — L3하고만 견주면
+    # 지금 서고의 스냅샷마다 «L3에 없음» 거짓 경고가 쏟아졌다(B-023).
+    l3_block_ids = _extract_l3_block_ids(data) | _extract_unit_ids(data)
 
     # L5 표점의 block_id 참조 확인
     for item in layers.get("L5_punctuation", []):
@@ -124,6 +126,17 @@ def _validate_interpretation(data: dict, warnings: list) -> None:
                 ann_type = ann.get("type")
                 if ann_type and defined_types and ann_type not in defined_types:
                     warnings.append(f"L7 주석 type '{ann_type}'이 annotation_types에 미정의")
+
+
+def _extract_unit_ids(data: dict) -> set[str]:
+    """스냅샷의 편성 경계(원본 저장소)에서 단위 id(= 시작 경계 id)를 모은다."""
+    ids = set()
+    layers = data.get("original", {}).get("layers", {})
+    for part in (layers.get("boundaries") or {}).get("parts") or []:
+        for b in part.get("boundaries") or []:
+            if b.get("id"):
+                ids.add(b["id"])
+    return ids
 
 
 def _extract_l3_block_ids(data: dict) -> set[str]:

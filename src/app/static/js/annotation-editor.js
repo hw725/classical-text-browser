@@ -1494,7 +1494,7 @@ async function _renderTypeList() {
     if (!resp.ok) throw new Error("API 오류");
     data = await resp.json();
   } catch (e) {
-    body.innerHTML = '<p style="color:var(--error-color)">유형 목록을 불러올 수 없습니다.</p>';
+    body.innerHTML = '<p style="color:var(--color-danger)">유형 목록을 불러올 수 없습니다.</p>';
     return;
   }
 

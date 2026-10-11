@@ -148,6 +148,21 @@ class TestDetectionsBecomeLines:
         eng = _engine(cls, [])
         assert eng._process_detections(_page(), []) == []
 
+    def test_an_empty_recognition_stays_as_an_empty_line(self, cls):
+        """인식기가 빈 글을 준 상자는 **빈 행으로 남는다**(상자·순서 그대로) — «빈 인식 결과».
+
+        왜 버리지 않는가: 탐지된 자리 자체가 사람에게는 «여기 무언가 있었다»는 단서다. 자리 찍기·
+        좌표 대응(position_at_point·anchor_bbox)은 비어 있지 않은 L2 행만 세므로 빈 행이
+        L4 행 대응을 밀지 않는다. 이 규약이 바뀌면(버리게 되면) 이 시험이 알려 준다.
+        """
+        eng = _engine(cls, ["甲", ""])
+        dets = [
+            {"box": [300, 50, 340, 250], "confidence": 0.9},
+            {"box": [200, 50, 240, 250], "confidence": 0.9},
+        ]
+        lines = eng._process_detections(_page(), dets)
+        assert [(ln["text"], ln["bbox"][0]) for ln in lines] == [("甲", 300), ("", 200)]
+
 
 @pytest.mark.parametrize("cls", [NdlkotenOcrEngine, NdlkotenOcrFullEngine])
 class TestLinesAreMatchedToBlocks:

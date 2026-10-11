@@ -36,7 +36,8 @@ const contentsState = {
  * 왜 따로 있는가: 사이드바 섹션은 모두 HTML에서 display:none으로 시작하고 JS가
  * 모드에 따라 켠다. 이 섹션은 처음 만들 때 켜는 코드가 없어 **어디서도 보이지
  * 않았다** (v1.2.3 첫 배포에서 발견). 해석 섹션(interp-section)을 켜고 끄는 네 자리가
- * 이 함수를 같이 부른다 — 내용 트리는 해석 저장소가 있어야 뜨는 것이므로 같은 조건이다.
+ * 이 함수를 같이 부른다. (내용 트리 자체는 해석 저장소 없이도 선다 — D-097. 여기서 따지는
+ * 것은 «사이드바 섹션을 보일 때인가»뿐이다.)
  * 추출 프로필(data-profile="collation" → hidden)에서는 hidden 속성이 우선하므로
  * 여기서 display를 비워도 보이지 않는다.
  */
@@ -838,7 +839,9 @@ async function _shiftPreview(block, delta) {
 }
 
 async function _shiftBoundary(block, delta) {
-  if (!block.anchor || !contentsState.interpId) return;
+  // 해석 저장소는 필요 없다 — 경계는 문헌의 것이다(D-097). 예전 조건은 해석 저장소를 고르지
+  // 않으면 아무 말 없이 무시했다(B-025)
+  if (!block.anchor) return;
   // 옮기기 전에 묻는다.
   //
   // 왜: 이 단추들은 행 오른쪽에 겹쳐 떠 있어(마우스를 올렸을 때만) 스치듯 눌리기 쉽다.
@@ -901,7 +904,7 @@ function _updateExportLink(docId) {
 
 function _markActiveBlock(blockId) {
   document.querySelectorAll(".contents-block.active").forEach((el) => el.classList.remove("active"));
-  const row = document.querySelector(`.contents-block[data-block-id="${blockId}"]`);
+  const row = document.querySelector(`.contents-block[data-block-id="${CSS.escape(String(blockId))}"]`);
   if (row) {
     row.classList.add("active");
     row.scrollIntoView({ block: "nearest" });
@@ -924,14 +927,13 @@ function highlightContentsForPage(pageNum) {
 
 
 /**
- * 「자동 트리」: 편성 탭 「전부 적용해 새로 세우기」의 바로 가기 (D-092 후속, D-116).
+ * 「자동 트리」: 편성 탭에서 규칙 후보를 전부 체크해 「적용」하는 것의 바로 가기 (D-092 후속, D-116).
  * 이 문헌에 저장된 규칙(신호 설정)으로 목차·卷頭·날짜·○권점·어휘를 찾아 개요를 한 번에 세운다.
  * 규칙이 아직 없으면 서버가 확정본 전문에서 먼저 찾아 문헌 설정에 저장한다.
- * 이 권의 기존 경계는 새로 세워진다(Git으로 되돌릴 수 있다). 손으로 고친 것이 많으면 편성 탭의
- * 제안 패널에서 체크해 「골라 적용」하는 쪽이 낫다 — 그쪽은 제안 경계만 바꿔치기한다.
+ * 이 권의 기존 경계는 새로 세워진다(Git으로 되돌릴 수 있다). 손으로 고친 것이 많으면 편성 탭
+ * ③에서 골라 체크하고 「적용」하는 쪽이 낫다 — 그쪽은 지목한 경계만 바꾼다(D-122).
  */
 async function _autoTree() {
-  const interpId = typeof interpState !== "undefined" ? interpState.interpId : null;
   if (!viewerState.docId || !viewerState.partId) {
     showToast("문헌·권이 정해져야 트리를 세울 수 있습니다.", "warning");
     return;
@@ -943,7 +945,7 @@ async function _autoTree() {
   if (!confirm(msg)) return;
   // 이 단추는 LLM을 부르지 않는다(D-117 ③-B). 배지 없는 단추가 모델을 부르면 «표시 없는 것은
   // LLM을 안 쓴다»(D-115)에 예외가 생긴다. 목차 항목 구조화에 모델을 쓰려면 스위치가 보이는
-  // 편성 탭에서 「전부 적용해 새로 세우기」를 누른다. 경계 찾기(층계 1~3단)는 언제나 규칙이다.
+  // 편성 탭 ①「더 묻기…」를 쓴다. 경계 찾기(층계 1~3단)는 언제나 규칙이다.
   const btn = document.getElementById("contents-auto-btn");
   if (btn) { btn.disabled = true; btn.textContent = "세우는 중…"; }
   try {

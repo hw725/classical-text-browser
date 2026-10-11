@@ -42,11 +42,12 @@ if exist ".venv-gpu\Scripts\python.exe" (
         if "!GPU_HAS_TORCH!"=="0" (
             set "APP_PY=.venv-gpu\Scripts\python.exe"
             echo [Env] NVIDIA GPU detected - using .venv-gpu
-            REM torch and paddle ship different cuDNN DLLs and cannot share a process (D-091).
-            REM PaddleOCR therefore runs in a child process using the .venv (CPU) python.
+            REM torch and paddle ship different cuDNN DLLs and cannot share a process - D-091.
+            REM PaddleOCR runs in a child worker: first .venv-gpu python with torch blocked - GPU,
+            REM and only if that fails the .venv python set below - CPU fallback.
             if exist ".venv\Scripts\python.exe" (
                 set "CTB_PADDLE_PYTHON=%CD%\.venv\Scripts\python.exe"
-                echo [Env] PaddleOCR runs in .venv ^(CPU worker^) - torch/paddle cuDNN conflict
+                echo [Env] PaddleOCR runs in a child worker: GPU first, .venv CPU as fallback
             )
         ) else if "!GPU_HAS_PADDLE!"=="0" (
             set "APP_PY=.venv-gpu\Scripts\python.exe"

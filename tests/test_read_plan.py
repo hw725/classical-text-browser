@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import copy
 import io
 import json
 import zipfile
@@ -326,7 +327,7 @@ def test_answer_goes_into_existing_layers_and_note_is_reassembled(client, tmp_pa
     r = client.put("/api/documents/d1/read-plan", json={"plan": PLAN, "part_id": part})
     assert r.status_code == 200, r.text
     answer = dict(
-        NOTE,
+        copy.deepcopy(NOTE),  # 모듈 상수를 고치지 않게(B-035)
         chapter="壹. 民事慣習回答彙集",
         corrections=[
             {
@@ -440,7 +441,7 @@ class TestPlanStrict:
         assert clean["ranges"][0]["pages"] == "4-6"  # 닫힌 범위로 저장 — 쪽 수 없이 읽어도 된다
         assert len(problems) == 2 and "page_labels" not in clean
         with pytest.raises(ValueError):
-            validate_plan({"ranges": 1}, 5) if False else parse_pages("5-")  # 쪽 수 없이 열린 범위
+            parse_pages("5-")  # 쪽 수 없이 열린 범위
 
     def test_later_invalid_offset_removes_label(self):
         from src.core.read_plan import page_label_map
@@ -491,7 +492,7 @@ def test_human_work_survives_reimport(client, tmp_path):
         == 200
     )
     answer = dict(
-        NOTE,
+        copy.deepcopy(NOTE),  # 모듈 상수를 고치지 않게(B-035)
         chapter="壹. 民事慣習回答彙集",
         corrections=[{"page": 3, "text": "民事慣習回答彙集\n本年六月勅令第三十九號ヲ以テ"}],
     )
@@ -598,7 +599,7 @@ def test_export_notes_with_template(client, tmp_path, monkeypatch):
     r = client.put("/api/documents/d1/read-plan", json={"plan": PLAN, "part_id": part})
     assert r.status_code == 200, r.text
     answer = dict(
-        NOTE,
+        copy.deepcopy(NOTE),  # 모듈 상수를 고치지 않게(B-035)
         chapter="壹. 民事慣習回答彙集",
         corrections=[
             {"page": 3, "text": "民事慣習回答彙集\n一、證明方ノ件\n本年六月勅令第三\n十九號ヲ以テ"}

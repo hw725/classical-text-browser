@@ -1,22 +1,15 @@
-"""LLM 4단 폴백 + OCR 엔진 연동 라우터.
+"""LLM 폴백(D-047 다섯 단) + OCR 엔진 연동 라우터 (27 라우트).
 
-server.py의 Phase 10-2 (LLM) / Phase 10-1 (OCR) 엔드포인트를 분리한 파일.
+server.py의 LLM·OCR 엔드포인트를 분리한 파일. 무리별로 적는다 — 정확한 목록은
+`grep -n "@router" src/app/routers/llm_ocr.py`가 정본이고, 라우트 수는 check_doc_drift가 잰다.
 
-포함 라우트:
-    GET  /api/llm/status
-    GET  /api/llm/models
-    GET  /api/llm/usage
-    POST /api/ocr/detect-layout/{doc_id}/{page}
-    GET/PUT /api/documents/{doc_id}/read-plan · POST .../read-plan/from-words  (D-131 작업 계획)
-    POST /api/documents/{doc_id}/note-template/from-example  (D-131 노트 틀 — 예시 → 틀)
-    GET  /api/ocr/engines
-    POST /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr
-    POST /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr/stream
-    GET  /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr
-    DELETE /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr
-    DELETE /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr/{block_id}
-    POST /api/documents/{doc_id}/parts/{part_id}/pages/{page_number}/ocr/{block_id}
-    POST /api/documents/{doc_id}/parts/{part_id}/ocr/batch
+- LLM: 상태·모델 목록·사용량·연결 계정(accounts)
+- OCR 엔진·실행: 엔진 목록, 레이아웃 감지, 쪽 OCR(동기·스트림), L2 읽기·지우기(쪽·블록),
+  블록 다시 읽기, 권 일괄(batch — engine_plan·writing_direction·fill_text_layer·backup)
+- 되돌리기·채우기: 대기 목록(pending), 직전 상태로 되돌리기(restore), L4 채우기(fill-text), 개요
+- 판독 지침(ocr-guidance)·판독 계획(rotation/suggest — 방향·종류, D-126·D-135)
+- LLM 교정 사다리(D-082): 후보·교정·검토할 쪽·적용
+- 작업 계획(read-plan, D-131)·노트 틀(note-template, D-131)
 """
 
 import asyncio
@@ -84,7 +77,7 @@ class OcrBatchRequest(BaseModel):
     # 왜 기본값이 True인가: L2는 Git으로 추적되지 않아 되돌릴 방법이 없다.
     # 모델을 바꿔 다시 돌려 보는 것이 추출 흐름의 일부인데(D-057), 결과가
     # 이전만 못해도 돌아갈 길이 없으면 «다시 돌려 보기»가 위험한 선택이 된다.
-    # 쪽마다 파일 한 벌. 교정 저장도 같은 규칙을 따른다(documents.py).
+    # 쪽마다 파일 한 벌. 백업은 OCR 재실행에만 둔다 — 교정 저장은 git 이력이 지킨다(documents.py).
     backup_before_overwrite: bool = True
     # 레이아웃이 없는 쪽에 페이지 전면 블록을 자동 생성한다.
     # 근현대 단일 컬럼 문헌용. 고서에서는 꺼야 한다.
@@ -344,7 +337,7 @@ def _load_page_image(doc_id: str, page: int, part_id: str | None = None) -> byte
     if library_path is None:
         return None
 
-    doc_dir = library_path / "documents" / doc_id
+    doc_dir = require_repo_path("documents", doc_id)  # id 검증(B-028)
 
     # 1. L1_source에서 이미지 파일 직접 찾기 (JPEG)
     source_dir = doc_dir / "L1_source"
@@ -793,7 +786,7 @@ async def api_detect_layout(
 
         pil_image = rotate_page_image(
             load_page_image(image_path),
-            page_rotation(Path(library_path) / "documents" / doc_id, part_id, page),
+            page_rotation(require_repo_path("documents", doc_id), part_id, page),
         )
     else:
         # part_id를 넘긴다 — 다권본에서 첫 권을 읽지 않고, 저장된 회전도 그 권의 것을 쓴다(D-123)
@@ -1087,7 +1080,7 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
         # 방향만(orientation_only)은 투영뿐이라 CPU에서도 즉시 끝나므로 연다 —
         # OCR 점수는 GPU에서만 잰다
         return JSONResponse({"error": GPU_ONLY_MESSAGE, "gpu_only": True}, status_code=400)
-    doc_dir = library_path / "documents" / doc_id
+    doc_dir = require_repo_path("documents", doc_id)  # id 검증(B-028)
     if not doc_dir.exists():
         return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
     info = get_document_info(doc_dir)
@@ -1636,10 +1629,20 @@ def _correction_dicts(doc_path: Path):
     라우터 간 직접 import는 금지라(CLAUDE.md) alignment 라우터의 묶음 함수를 부르지
     않고 core에서 직접 조립한다.
     """
-    from core.alignment import TieredVariantDicts, VariantCharDict, load_document_approvals
+    from core.alignment import (
+        TieredVariantDicts,
+        VariantCharDict,
+        library_active_dict_path,
+        load_document_approvals,
+    )
 
     approvals = load_document_approvals(doc_path)
-    bundle = TieredVariantDicts([VariantCharDict(), approvals])
+    # 서고의 활성 사전(D-104). 인자 없는 VariantCharDict()는 앱 폴더의 옛 파일을 읽어
+    # 이체자 탭에서 쌓은 사전이 교정에 쓰이지 않았다(B-020).
+    lib_dict = library_active_dict_path(get_library_path())
+    base = VariantCharDict(dict_path=lib_dict) if lib_dict else VariantCharDict.empty()
+    base.tier = "strict"
+    bundle = TieredVariantDicts([base, approvals])
     pairs = []
     seen = set()
     for a, alts in approvals.to_dict().items():
@@ -2018,7 +2021,7 @@ async def api_run_ocr(
     if library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
-    doc_path = library_path / "documents" / doc_id
+    doc_path = require_repo_path("documents", doc_id)  # id 검증(B-028)
     if not doc_path.exists():
         return JSONResponse(
             {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
@@ -2083,7 +2086,7 @@ async def api_run_ocr_stream(
     if library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
-    doc_path = library_path / "documents" / doc_id
+    doc_path = require_repo_path("documents", doc_id)  # id 검증(B-028)
     if not doc_path.exists():
         return JSONResponse(
             {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
@@ -2180,11 +2183,11 @@ async def api_get_ocr_result(
 
     filename = f"{part_id}_page_{page_number:03d}.json"
     legacy_filename = f"page_{page_number:03d}.json"
-    ocr_path = library_path / "documents" / doc_id / "L2_ocr" / filename
+    ocr_path = require_repo_path("documents", doc_id) / "L2_ocr" / filename
 
     # 레거시 파일명 폴백 (part_id 없는 구형 파일 호환)
     if not ocr_path.exists():
-        legacy_path = library_path / "documents" / doc_id / "L2_ocr" / legacy_filename
+        legacy_path = require_repo_path("documents", doc_id) / "L2_ocr" / legacy_filename
         if legacy_path.exists():
             ocr_path = legacy_path
             filename = legacy_filename
@@ -2215,7 +2218,7 @@ async def api_delete_ocr_result(
     if library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
-    doc_path = library_path / "documents" / doc_id
+    doc_path = require_repo_path("documents", doc_id)  # id 검증(B-028)
     if not doc_path.exists():
         return JSONResponse(
             {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
@@ -2277,7 +2280,7 @@ async def api_delete_ocr_block_result(
     if library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
-    doc_path = library_path / "documents" / doc_id
+    doc_path = require_repo_path("documents", doc_id)  # id 검증(B-028)
     if not doc_path.exists():
         return JSONResponse(
             {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
@@ -2383,7 +2386,7 @@ async def api_rerun_ocr_block(
     if library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
-    doc_path = library_path / "documents" / doc_id
+    doc_path = require_repo_path("documents", doc_id)  # id 검증(B-028)
     if not doc_path.exists():
         return JSONResponse(
             {"error": f"문헌을 찾을 수 없습니다: {doc_id}"},
@@ -2458,7 +2461,7 @@ async def api_ocr_pending(doc_id: str, part_id: str):
     if library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
-    doc_path = library_path / "documents" / doc_id
+    doc_path = require_repo_path("documents", doc_id)  # id 검증(B-028)
     if not (doc_path / "manifest.json").exists():
         return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
 
@@ -2514,9 +2517,9 @@ async def api_restore_ocr(
         길이 없었다. 배치가 덮어쓰기 직전에 한 벌 남기므로 그것을 되돌린다.
 
     어디까지 가는가:
-        **방금 저장한 것 하나뿐이다.** OCR이든 교정이든 저장할 때마다
-        직전 상태가 남으므로, 되돌리기는 언제나 그 하나를 취소한다.
-        두 번은 안 된다.
+        **방금 저장한 것 하나뿐이다.** OCR을 다시 돌려 L2를 덮을 때마다
+        직전 상태가 남으므로(교정 저장은 백업을 뜨지 않는다 — git 이력이 지킨다,
+        documents.py), 되돌리기는 언제나 그 하나를 취소한다. 두 번은 안 된다.
 
     되돌린 뒤에도 백업은 남는다 — 지금 것과 자리를 바꾸므로 **두 상태를
     오갈 수 있다.** 어느 쪽이 나은지 비교하다 되돌아올 수 있어야 한다.
@@ -2525,7 +2528,7 @@ async def api_restore_ocr(
     if library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
-    doc_path = library_path / "documents" / doc_id
+    doc_path = require_repo_path("documents", doc_id)  # id 검증(B-028)
     if not (doc_path / "manifest.json").exists():
         return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
 
@@ -2578,7 +2581,7 @@ async def api_fill_text_from_ocr(
     if library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
-    doc_path = library_path / "documents" / doc_id
+    doc_path = require_repo_path("documents", doc_id)  # id 검증(B-028)
     if not (doc_path / "manifest.json").exists():
         return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
 
@@ -2674,7 +2677,7 @@ async def api_ocr_overview(doc_id: str, part_id: str, preview_chars: int = 70):
     if library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
-    doc_path = library_path / "documents" / doc_id
+    doc_path = require_repo_path("documents", doc_id)  # id 검증(B-028)
     if not (doc_path / "manifest.json").exists():
         return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
 
@@ -2800,7 +2803,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
     if library_path is None:
         return JSONResponse({"error": "서고가 설정되지 않았습니다."}, status_code=409)
 
-    doc_path = library_path / "documents" / doc_id
+    doc_path = require_repo_path("documents", doc_id)  # id 검증(B-028)
     if not (doc_path / "manifest.json").exists():
         return JSONResponse({"error": f"문헌을 찾을 수 없습니다: {doc_id}"}, status_code=404)
 

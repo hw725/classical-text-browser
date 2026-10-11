@@ -23,7 +23,9 @@
 
 from __future__ import annotations
 
+import ipaddress
 import os
+import socket
 import tempfile
 from pathlib import Path
 
@@ -36,6 +38,10 @@ HOME_CONFIG_SIZE_KEY = pytest.StashKey[int]()
 
 # 실행 순서를 맨 뒤로 보낼 마커 이름
 LEAK_CHECK_MARK = "home_leak_check"
+
+# 외부 네트워크를 써도 되는 시험의 마커 이름
+NETWORK_MARK = "network"
+NETWORK_BLOCKED_MESSAGE = "시험 중 외부 네트워크 차단"
 
 
 def real_home_config_dir() -> Path:
@@ -55,6 +61,57 @@ def pytest_configure(config: pytest.Config) -> None:
         "markers",
         f"{LEAK_CHECK_MARK}: 세션 맨 뒤에서 돌며 사용자 홈에 새 기록이 없는지 본다",
     )
+    config.addinivalue_line(
+        "markers",
+        f"{NETWORK_MARK}: 외부 네트워크(실제 사이트·API)를 쓰는 시험 — 이 표지가 없으면 막힌다",
+    )
+
+
+def _is_loopback(address) -> bool:
+    """소켓 주소가 이 PC 안(127.0.0.1·::1·localhost)이거나 AF_UNIX 경로인가."""
+    if not isinstance(address, tuple):  # AF_UNIX 경로 등
+        return True
+    host = address[0]
+    if host in ("localhost", ""):
+        return True
+    try:
+        return ipaddress.ip_address(host.split("%", 1)[0]).is_loopback
+    except ValueError:
+        return False  # 이름으로 온 바깥 호스트
+
+
+@pytest.fixture(autouse=True)
+def _block_external_network(request, monkeypatch):
+    """`network` 표지가 없는 시험은 바깥으로 나가는 소켓 연결을 막는다.
+
+    왜: 이 PC에는 실제 OpenRouter·Gemini·Cloudflare 키가 있다. 가짜 라우터를 빠뜨린 시험이
+    «200 또는 400»을 둘 다 통과로 받으며 매 verify마다 실제 LLM을 불렀다(2026-10-11 실측 —
+    편성 «말로 넣기» 시험 둘이 5.2초·3.6초, google.genai 클라이언트 생성, B-035). 키가 없는
+    PC에서는 같은 시험이 다른 길로 초록이 되어 아무도 몰랐다. 외부 연결이 «조용히 되는»
+    길을 막아야 그런 시험이 빨간불로 드러난다.
+
+    로컬(127.0.0.1·::1)은 막지 않는다 — 시험이 띄운 서버·워커와 말하는 길이다.
+    """
+    if request.node.get_closest_marker(NETWORK_MARK):
+        return
+    original_connect = socket.socket.connect
+    original_connect_ex = socket.socket.connect_ex
+
+    def guarded_connect(self, address):
+        if not _is_loopback(address):
+            raise ConnectionRefusedError(
+                f"{NETWORK_BLOCKED_MESSAGE}: {address!r} — 실제 사이트·API를 쓰는 시험이면 "
+                f"@pytest.mark.{NETWORK_MARK}(그리고 slow)를 붙이고, 아니면 가짜로 바꾸세요."
+            )
+        return original_connect(self, address)
+
+    def guarded_connect_ex(self, address):
+        if not _is_loopback(address):
+            return 111  # ECONNREFUSED — connect_ex는 예외 대신 오류 번호를 돌려준다
+        return original_connect_ex(self, address)
+
+    monkeypatch.setattr(socket.socket, "connect", guarded_connect)
+    monkeypatch.setattr(socket.socket, "connect_ex", guarded_connect_ex)
 
 
 def pytest_sessionstart(session: pytest.Session) -> None:

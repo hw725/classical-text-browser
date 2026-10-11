@@ -699,7 +699,8 @@ class TestCrossReviewFixes:
                 "blocks": 0,
             }
         ]
-        # 깨진 L2는 낡음(409)이 아니라 다른 오류로 구분된다
+        # 깨진 JSON 오류는 «낡은 초안»(409) 예외로 분류되지 않는다 — 클래스 관계만 잰다
+        # (깨진 L2를 실제로 넣어 보는 시험은 아니다. 위에서 넣은 것은 깨진 «초안»이다.)
         assert not issubclass(
             json.JSONDecodeError, __import__("ocr.correction_pass", fromlist=["x"]).StaleDraftError
         )

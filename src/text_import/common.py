@@ -39,7 +39,9 @@ def save_text_to_l4(
     pages_dir.mkdir(parents=True, exist_ok=True)
 
     file_path = pages_dir / f"{part_id}_page_{page_num:03d}.txt"
-    file_path.write_text(text, encoding="utf-8")
+    # newline="" — Path.write_text는 Windows에서 CRLF로 쓴다(AGENTS «LF 줄바꿈»)
+    with open(file_path, "w", encoding="utf-8", newline="") as f:
+        f.write(text)
     logger.info("L4 텍스트 저장: %s (%d자)", file_path.name, len(text))
     return file_path
 
@@ -163,7 +165,8 @@ def save_translation_sidecar(
     pages_dir.mkdir(parents=True, exist_ok=True)
 
     file_path = pages_dir / f"{part_id}_page_{page_num:03d}_translation.txt"
-    file_path.write_text(translation_text, encoding="utf-8")
+    with open(file_path, "w", encoding="utf-8", newline="") as f:  # LF 유지
+        f.write(translation_text)
     logger.info("번역 사이드카 저장: %s (%d자)", file_path.name, len(translation_text))
     return file_path
 
@@ -302,8 +305,8 @@ def _nfc(text: str) -> str:
     """유니코드 NFC 정규화.
 
     왜 NFC인가:
-      - 같은 한자가 합성(composed)과 분해(decomposed) 형태로 저장될 수 있다.
-        예: '가' = U+AC00(NFC) vs U+1100+U+1161(NFD)
+      - 같은 글자가 합성(composed)과 분해(decomposed) 형태로 저장될 수 있다(한자 원문에 섞인
+        한글·현토가 대표적이다). 예: '가' = U+AC00(NFC) vs U+1100+U+1161(NFD)
       - OCR 출력과 HWP/PDF 추출본의 인코딩이 다르면 동일 글자도 불일치.
       - NFC는 합성 형태로 통일하되, NFKC와 달리 호환 분해를 하지 않아
         한자의 의미 구분 (예: ﬀ→ff 같은 변환)을 방지한다.
@@ -372,7 +375,7 @@ def _find_anchor_in_index(
         )
 
     # 2차: n-gram 후보 추출
-    # 앵커에서 n-gram을 겹침 없이 추출 (stride = ngram_size // 2 + 1)
+    # 앵커에서 n-gram을 보폭 ngram_size // 2 + 1로 추출 — n-gram 길이보다 보폭이 짧아 서로 겹친다
     stride = max(1, ngram_size // 2 + 1)
     sub_ngrams = []
     for i in range(0, anchor_len - ngram_size + 1, stride):
@@ -617,14 +620,18 @@ def align_text_to_pages(
         successes = [(p, c, a) for p, c, a in anchor_results if p >= 0]
 
         if len(successes) >= 2:
-            # 2개 이상 성공 → 중앙값 위치, 평균 신뢰도
+            # 2개 이상 성공 → 쪽 시작 추정의 중앙값, 평균 신뢰도.
+            # 앵커 위치가 아니라 «앵커 위치 − 쪽 안에서 그 앵커가 놓인 자리»를 쓴다 — 끝·중간
+            # 앵커의 위치를 쪽 위치로 쓰면 쪽마다 끝 글자가 다음 쪽으로 밀렸다(B-032).
             positions = sorted(s[0] for s in successes)
             median_pos = positions[len(positions) // 2]
+            starts = sorted(max(0, p - max(0, page_han.find(a))) for p, _c, a in successes)
             avg_conf = sum(s[1] for s in successes) / len(successes)
             best_anchor = max(successes, key=lambda s: s[1])[2]
             match_positions.append(
                 {
                     "han_pos": median_pos,
+                    "page_start": starts[len(starts) // 2],
                     "confidence": avg_conf,
                     "anchor": best_anchor,
                 }
@@ -636,6 +643,7 @@ def align_text_to_pages(
             match_positions.append(
                 {
                     "han_pos": pos,
+                    "page_start": max(0, pos - max(0, page_han.find(anc))),
                     "confidence": conf * 0.8,
                     "anchor": anc,
                 }
@@ -656,22 +664,25 @@ def align_text_to_pages(
     # 실패한 앵커를 인접 성공 위치 범위 내에서 재탐색
     _recover_failed_matches(match_positions, page_anchors, han_string, NGRAM, ngram_index)
 
-    # ── 5단계: 앵커 위치 → 페이지 경계 계산 ──
-    anchor_text_positions: list[int] = []
+    # ── 5단계: 쪽 시작 추정 → 페이지 경계 ──
+    # 경계는 «다음 쪽이 시작하는 자리»다. 예전에는 이웃 앵커 위치의 중간점을 썼는데, 앵커가
+    # 쪽의 시작이 아니라 중간·끝에서 잡히므로 OCR과 외부 텍스트가 똑같아도 경계가 앞당겨졌다
+    # (실측 2026-10-11: 24자 쪽 3자, 60자 쪽 7자, 쪽 원문과 일치 0/3 — B-032).
+    start_positions: list[int] = []
     for mp in match_positions:
-        if mp["han_pos"] >= 0 and mp["han_pos"] < len(han_to_pos):
-            anchor_text_positions.append(han_to_pos[mp["han_pos"]])
+        hp = mp.get("page_start", mp["han_pos"]) if mp["han_pos"] >= 0 else -1
+        if 0 <= hp < len(han_to_pos):
+            start_positions.append(han_to_pos[hp])
         else:
-            anchor_text_positions.append(-1)
+            start_positions.append(-1)
 
     # 미매칭(-1)을 보간
-    _interpolate_missing(anchor_text_positions, len(imported_text))
+    _interpolate_missing(start_positions, len(imported_text))
 
-    # 앵커 중간점으로 페이지 경계 생성
-    page_boundaries: list[int] = [0]  # 첫 페이지는 항상 0에서 시작
-    for i in range(len(anchor_text_positions) - 1):
-        mid_pt = (anchor_text_positions[i] + anchor_text_positions[i + 1]) // 2
-        page_boundaries.append(mid_pt)
+    page_boundaries: list[int] = [0]  # 첫 페이지는 항상 0에서 시작(앞의 머리글도 첫 쪽에)
+    for i in range(1, len(start_positions)):
+        # 시작 추정이 앞 경계보다 앞서면(오매칭) 앞 경계에 붙여 순서를 지킨다
+        page_boundaries.append(max(page_boundaries[-1], start_positions[i]))
     page_boundaries.append(len(imported_text))  # 마지막 경계 = 텍스트 끝
 
     # ── 6단계: 결과 생성 ──
@@ -766,7 +777,9 @@ def _recover_failed_matches(
                 best_anchor = anc
 
         if best_pos >= 0:
-            # 복구 성공 — 신뢰도에 복구 페널티 적용 (×0.9)
+            # 복구 성공 — 신뢰도에 복구 페널티 적용 (×0.9). 쪽 시작 추정도 같이(B-032)
+            page_han = page_anchors[i].get("page_han", "")
+            mp["page_start"] = max(0, best_pos - max(0, page_han.find(best_anchor)))
             mp["han_pos"] = best_pos
             mp["confidence"] = best_conf * 0.9
             mp["anchor"] = best_anchor

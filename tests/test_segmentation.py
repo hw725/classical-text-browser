@@ -1,4 +1,5 @@
-"""글 경계 제안 테스트 (D-088).
+"""글 경계 제안 테스트 (D-088에서 시작해 D-089~D-122까지 — 목차·경계 목록·글자 단위 앵커·
+자리 찍기·행 넘김 날짜·①②③ 흐름).
 
 무엇을 고정하는가:
   - 날짜 문법: 干支·月·日·是月·是日·初·廿, 한자 수사
@@ -595,18 +596,31 @@ class TestRuleTalk:
         assert all("옮길 수 없습니다" in r["reason"] for r in rejected)
         assert rules["title_words"] == []  # 아무것도 바뀌지 않았다
 
-    def test_words_route_does_not_save(self, client, tmp_path):  # noqa: F811
-        """입력: 말 한 줄. 출력: 200 또는 400. 목적: 어느 쪽이든 문헌 설정은 그대로."""
+    def test_words_route_does_not_save(self, client, tmp_path, monkeypatch):  # noqa: F811
+        """입력: 말 한 줄. 출력: 옮긴 규칙. 목적: 규칙을 돌려주되 문헌 설정은 그대로.
+
+        라우터는 가짜다 — 진짜 라우터를 두면 키가 있는 PC에서 빠른 계층 시험이 실제 LLM을
+        부른다(2026-10-11 실측 5.2초, B-035). 예전에는 «200 또는 400»을 둘 다 통과로 받아
+        모델이 없을 때도 초록이었다.
+        """
         from pathlib import Path as _P
 
+        import app._state as _st
+
+        router = _FakeRouter(
+            '{"changes": [{"field": "title_words", "op": "add", "value": "談草"}]}'
+        )
+        monkeypatch.setattr(_st, "_get_llm_router", lambda: router)
         lib, part_id = _setup(client, tmp_path)
         manifest = _P(lib) / "documents" / "d1" / "manifest.json"
         before = manifest.read_bytes()
         r = client.post(
             "/api/documents/d1/segmentation/rules-from-words",
-            json={"part_id": part_id, "said": "제목은 어떤 말로 끝난다"},
+            json={"part_id": part_id, "said": "제목은 談草로 끝난다"},
         )
-        assert r.status_code in (200, 400)
+        assert r.status_code == 200, r.text
+        assert "談草" in r.json()["rules"]["title_words"]
+        assert len(router.calls) == 1
         assert manifest.read_bytes() == before
 
 
@@ -776,18 +790,25 @@ class TestFlowD122:
         row = next(b for b in rows if b["id"] == first_id)
         assert row["role"] == "container"
 
-    def test_words_route_accepts_screen_rules(self, client, tmp_path):  # noqa: F811
-        """입력: 화면 초안 규칙. 출력: 200 또는 400(모델 없음). 목적: 초안 위에 얹는다."""
+    def test_words_route_accepts_screen_rules(self, client, tmp_path, monkeypatch):  # noqa: F811
+        """입력: 화면 초안 규칙. 출력: 그 위에 얹은 규칙. 목적: 초안 위에 얹는다(가짜 라우터)."""
         from pathlib import Path as _P
 
+        import app._state as _st
+
+        router = _FakeRouter(
+            '{"changes": [{"field": "title_words", "op": "add", "value": "口談"}]}'
+        )
+        monkeypatch.setattr(_st, "_get_llm_router", lambda: router)
         lib, part_id = _setup(client, tmp_path)
         manifest = _P(lib) / "documents" / "d1" / "manifest.json"
         before = manifest.read_bytes()
         r = client.post(
             "/api/documents/d1/segmentation/rules-from-words",
-            json={"part_id": part_id, "said": "목차가 없다", "rules": {"title_words": ["談草"]}},
+            json={"part_id": part_id, "said": "口談도 표제다", "rules": {"title_words": ["談草"]}},
         )
-        assert r.status_code in (200, 400)
+        assert r.status_code == 200, r.text
+        assert set(r.json()["rules"]["title_words"]) >= {"談草", "口談"}
         assert manifest.read_bytes() == before
 
 

@@ -4,9 +4,9 @@
  * 워크플로우:
  *   1. 파일 선택(.hwp/.hwpx/.pdf) → 자동 형식 판별
  *   2-HWP: 미리보기(메타데이터 + 텍스트 + 표점·현토 감지)
- *   2-HWP(선택): 원문/번역 분리(LLM) → 분리 결과 미리보기 + 편집
+ *   2-HWP(선택): 원문/번역 분리(유니코드 문자 유형 규칙, LLM 안 씀) → 분리 결과 미리보기 + 편집
  *   2-PDF: 텍스트 레이어 확인 + 구조 분석(LLM)
- *   3-PDF: 원문/번역 분리(LLM) → 분리 결과 미리보기 + 편집
+ *   3-PDF: 원문/번역 분리(규칙, LLM 안 씀) → 분리 결과 미리보기 + 편집
  *   4: 문헌 ID 입력 + 옵션 → 가져오기 실행
  *
  * 의존: index.html의 #hwp-import-overlay 다이얼로그.
@@ -382,10 +382,10 @@ async function _executeImport() {
 }
 
 
-// ── HWP 원문/번역 분리 (LLM) ────────────────
+// ── HWP 원문/번역 분리 (규칙 — LLM 안 씀) ────────────────
 
 /**
- * HWP 텍스트를 LLM으로 원문/번역/주석으로 분리한다.
+ * HWP 텍스트를 원문/번역으로 분리한다 — 서버(text-import/hwp/separate)가 유니코드 문자 유형 규칙으로 한다(LLM 불필요).
  *
  * 동작:
  *   1. 미리보기에서 추출된 텍스트를 서버로 전송
@@ -871,12 +871,12 @@ async function _executeAlignPreview() {
       const matchSnip = (a.matched_text || "").substring(0, 60);
 
       tr.innerHTML = `
-        <td style="padding: 4px 6px; border-bottom: 1px solid var(--color-border)">${a.page_num}</td>
-        <td style="padding: 4px 6px; border-bottom: 1px solid var(--color-border); color: #888; font-size: 11px"
-            title="${_escapeHtmlHwpImport(a.ocr_preview || "")}">${_escapeHtmlHwpImport(ocrSnip)}${ocrSnip.length < (a.ocr_preview || "").length ? "…" : ""}</td>
-        <td style="padding: 4px 6px; border-bottom: 1px solid var(--color-border); font-size: 11px"
-            title="${_escapeHtmlHwpImport(a.matched_text || "")}">${_escapeHtmlHwpImport(matchSnip)}${matchSnip.length < (a.matched_text || "").length ? "…" : ""}</td>
-        <td style="padding: 4px 6px; border-bottom: 1px solid var(--color-border); text-align: center">
+        <td style="padding: 4px 6px; border-bottom: 1px solid var(--border)">${a.page_num}</td>
+        <td style="padding: 4px 6px; border-bottom: 1px solid var(--border); color: #888; font-size: 11px"
+            title="${_escapeHtmlHwpImport(a.ocr_preview || "").replace(/"/g, "&quot;")}">${_escapeHtmlHwpImport(ocrSnip)}${ocrSnip.length < (a.ocr_preview || "").length ? "…" : ""}</td>
+        <td style="padding: 4px 6px; border-bottom: 1px solid var(--border); font-size: 11px"
+            title="${_escapeHtmlHwpImport(a.matched_text || "").replace(/"/g, "&quot;")}">${_escapeHtmlHwpImport(matchSnip)}${matchSnip.length < (a.matched_text || "").length ? "…" : ""}</td>
+        <td style="padding: 4px 6px; border-bottom: 1px solid var(--border); text-align: center">
           <span style="color: ${confColor}; font-weight: bold">${confPct}%</span>
         </td>
       `;

@@ -7,10 +7,10 @@
  *   - 삽입된 현토는 원문 옆에 시각적으로 표시
  *   - 표점이 있으면 함께 반영된 미리보기
  *
- * 텍스트 로드 우선순위:
- *   1. 단위 모드 → source_refs를 통해 원본 문서의 최신 교정 텍스트
- *   2. 단위 모드 → 폴백: 단위.original_text (편성 시점 스냅샷)
- *   3. LayoutBlock 모드 → /api/documents/.../corrected-text 교정 텍스트
+ * 텍스트 로드:
+ *   1. 단위 모드 → 서버가 준 단위.original_text — v1.3부터 단위는 본문을 저장하지 않고 읽을 때
+ *      L4(교정 적용)에서 잘라 온다(D-092). 화면이 쪽을 다시 잇지 않는다.
+ *   2. LayoutBlock 모드 → /api/documents/.../corrected-text 교정 텍스트
  *
  * 의존성:
  *   - sidebar-tree.js (viewerState)
@@ -262,7 +262,7 @@ async function _loadHyeontoData() {
       const unitId = hyeontoState.blockId.replace("unit:", "");
       let tbData = null;
 
-      // 단위 정보 조회 (source_refs 필요)
+      // 단위 정보 조회 (본문 original_text는 서버가 L4에서 잘라 준다)
       try {
         const tbRes = await fetch(
           `/api/interpretations/${interpState.interpId}/entities/unit/${unitId}`
@@ -385,13 +385,13 @@ function _renderHyeontoCharArea() {
 
     // 현토 표시 (루비 스타일)
     if (annBefore[i]) {
-      html += `<span class="hyeonto-ruby hyeonto-ruby-before">${annBefore[i]}</span>`;
+      html += `<span class="hyeonto-ruby hyeonto-ruby-before">${_escHtml(annBefore[i])}</span>`;
     }
     if (annAfter[i]) {
-      html += `<span class="hyeonto-ruby hyeonto-ruby-after">${annAfter[i]}</span>`;
+      html += `<span class="hyeonto-ruby hyeonto-ruby-after">${_escHtml(annAfter[i])}</span>`;
     }
 
-    html += `<span class="hyeonto-char">${ch}</span>`;
+    html += `<span class="hyeonto-char">${_escHtml(ch)}</span>`;
     html += `</span>`;
   }
 
@@ -563,9 +563,9 @@ function _renderHyeontoAnnList() {
     const posLabel = ann.position === "before" ? "앞" : "뒤";
 
     html += `<div class="hyeonto-ann-item">
-      <span class="hyeonto-ann-char">${chars}</span>
-      <span class="hyeonto-ann-info">${posLabel}: ${ann.text}</span>
-      <button class="hyeonto-ann-del" data-ann-id="${ann.id}" title="삭제">&times;</button>
+      <span class="hyeonto-ann-char">${_escHtml(chars)}</span>
+      <span class="hyeonto-ann-info">${posLabel}: ${_escHtml(ann.text)}</span>
+      <button class="hyeonto-ann-del" data-ann-id="${_escAttr(ann.id)}" title="삭제">&times;</button>
     </div>`;
   }
   list.innerHTML = html;

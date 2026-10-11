@@ -1,7 +1,11 @@
 """JSON 스냅샷 Export/Import 모듈.
 
-Phase 12-3: Work 전체(원본 L1~L4 + 해석 L5~L7 + 메타데이터)를
-단일 JSON으로 직렬화(export)하고 역직렬화(import)한다.
+Phase 12-3: 문헌 하나와 그 해석 저장소(원본 L1 참조·L3·L4·편성 경계·작업 계획·문헌별 승인 +
+해석 L5~L7·코어 엔티티 + 서고의 이체자 사전·주석 유형)를 단일 JSON으로 직렬화(export)하고
+역직렬화(import)한다. L2(OCR)와 원본 이미지는 담지 않는다.
+
+v1.4.3까지는 원본 쪽에 L1·L3·L4만 담아, 내보냈다 들이면 편성 경계(D-097 뒤 원본 저장소의 것)·
+작업 계획·문헌별 승인이 사라졌다. 사전·주석 유형도 서고의 옛 자리를 읽어 빠졌다(B-013).
 
 왜 이렇게 하는가:
     Git 히스토리 없이 현재 HEAD 상태만 스냅샷하면
@@ -128,7 +132,7 @@ def build_snapshot(
     doc_id: str,
     interp_id: str,
 ) -> dict:
-    """Work 전체를 JSON 스냅샷 딕셔너리로 조립한다.
+    """문헌 하나와 그 해석 저장소를 JSON 스냅샷 딕셔너리로 조립한다.
 
     목적: /api/.../export/json 엔드포인트에서 호출.
     입력:
@@ -259,6 +263,33 @@ def _serialize_original(doc_path: Path) -> dict:
         "pages": l4_pages,
     }
 
+    # 편성 경계 — D-097 뒤 글 단위의 정본은 원본 저장소의 경계 목록이다(B-013)
+    b_parts = []
+    b_dir = doc_path / "boundaries"
+    if b_dir.exists():
+        for f in sorted(b_dir.glob("*.json")):
+            data = _read_json(f)
+            if isinstance(data, dict) and data.get("boundaries") is not None:
+                b_parts.append(data)
+    if b_parts:
+        result["layers"]["boundaries"] = {"type": "inline", "parts": b_parts}
+
+    # 작업 계획 — 권마다 read_plan/{part}.json (D-131). 열쇠는 파일 이름(권 id)
+    plans = {}
+    p_dir = doc_path / "read_plan"
+    if p_dir.exists():
+        for f in sorted(p_dir.glob("*.json")):
+            data = _read_json(f)
+            if isinstance(data, dict):
+                plans[f.stem] = data
+    if plans:
+        result["layers"]["read_plan"] = {"type": "inline", "parts": plans}
+
+    # 문헌별 이체자 승인 (D-080 결정 3)
+    approvals = _read_json(doc_path / "variant_approvals.json")
+    if isinstance(approvals, dict):
+        result["layers"]["variant_approvals"] = approvals
+
     return result
 
 
@@ -350,11 +381,16 @@ def _collect_layer_json(
 
 
 def _serialize_variant_chars(library_path: Path) -> dict:
-    """이체자 사전을 직렬화한다."""
-    # 서고 내 variant_chars.json
-    vc_path = library_path / "variant_chars.json"
-    if not vc_path.exists():
-        # 프로젝트 전역 리소스에서 찾기
+    """서고의 활성 이체자 사전을 직렬화한다. 없으면 앱이 들고 온 기본값, 그것도 없으면 빈 dict.
+
+    왜 서고 resources/인가: 사람이 쌓는 사전은 D-104부터 서고에 산다. 예전처럼 서고 루트의
+    variant_chars.json을 찾으면 언제나 없어 앱 폴더의 옛 파일이 실렸다(B-013).
+    """
+    from .alignment import library_active_dict_path
+
+    found = library_active_dict_path(library_path)
+    vc_path = Path(found) if found else None
+    if vc_path is None:
         project_root = Path(__file__).resolve().parent.parent.parent
         vc_path = project_root / "resources" / "variant_chars.json"
 
@@ -364,9 +400,12 @@ def _serialize_variant_chars(library_path: Path) -> dict:
 
 
 def _serialize_annotation_types(library_path: Path) -> list:
-    """주석 유형 목록을 직렬화한다."""
-    # 서고 내 커스텀 타입
-    custom_path = library_path / "annotation_types_custom.json"
+    """주석 유형 목록을 직렬화한다 = 앱 기본 프리셋 + 서고의 커스텀.
+
+    서고의 커스텀은 core/annotation_types.py가 쓰는 {서고}/annotation_types.json의 «custom»이다.
+    예전에는 annotation_types_custom.json을 찾아 커스텀이 한 번도 실리지 않았다(B-013).
+    """
+    custom_path = library_path / "annotation_types.json"
     custom_types = []
     if custom_path.exists():
         data = _read_json(custom_path)
@@ -386,7 +425,7 @@ def _serialize_annotation_types(library_path: Path) -> list:
 
 
 # ──────────────────────────────────────
-# Import: 스냅샷에서 Work 생성
+# Import: 스냅샷에서 문헌 + 해석 저장소 생성
 # ──────────────────────────────────────
 
 
@@ -394,7 +433,9 @@ def create_work_from_snapshot(
     library_path: str | Path,
     data: dict,
 ) -> dict:
-    """스냅샷 데이터로 새 Work(문헌 + 해석 저장소)를 생성한다.
+    """스냅샷 데이터로 새 문헌 + 해석 저장소를 만든다.
+
+    (이름의 «work»는 Work 엔티티(D-099에서 없앰)와 무관한 옛 이름이다 — 라우트가 부르므로 유지.)
 
     목적: /api/.../import/json 엔드포인트에서 호출.
     입력:
@@ -403,8 +444,8 @@ def create_work_from_snapshot(
     출력: {doc_id, interp_id, title, warnings} 결과.
 
     왜 이렇게 하는가:
-        새 Work ID를 발급하여 충돌을 방지한다.
-        같은 스냅샷을 여러 번 import해도 각각 독립된 Work가 된다.
+        새 id(원래 id + 시각)를 발급하여 충돌을 방지한다.
+        같은 스냅샷을 여러 번 들여도 각각 독립된 문헌·해석 저장소가 된다.
     """
     library_path = Path(library_path).resolve()
     data = normalize_snapshot(data)
@@ -433,10 +474,13 @@ def create_work_from_snapshot(
     # 2. 해석 저장소 복원
     _write_interpretation_layers(interp_path, src_info, new_doc_id, interpretation, warnings)
 
-    # 3. 이체자 사전
+    # 3. 이체자 사전 — 받는 서고의 사용자 사전에 쌍을 합친다(덮어쓰지 않는다, B-013)
     variant_chars = data.get("variant_characters", {})
     if variant_chars:
-        _write_json(library_path / "variant_chars.json", variant_chars)
+        _merge_variant_chars(library_path, variant_chars, warnings)
+
+    # 3-1. 주석 유형 — 기본 프리셋에도 받는 서고에도 없는 커스텀만 더한다
+    _merge_annotation_types(library_path, data.get("annotation_types") or [])
 
     # 4. Git 초기 커밋
     _git_init_and_commit(doc_path, "Import: 스냅샷에서 원본 데이터 복원")
@@ -511,12 +555,33 @@ def _write_original_layers(
         for page_data in l4["pages"]:
             fname = page_data.get("file_name", "page.txt")
             text = page_data.get("text", "")
-            (pages_dir / fname).write_text(text, encoding="utf-8")
+            # newline="" — Path.write_text는 Windows에서 CRLF로 쓴다(B-021)
+            with open(pages_dir / fname, "w", encoding="utf-8", newline="") as f:
+                f.write(text)
 
             corr = page_data.get("corrections")
             if corr:
                 corr_name = Path(fname).stem + "_corrections.json"
                 _write_json(corrections_dir / corr_name, corr)
+
+    # 편성 경계 — 문헌 id는 새 id로 고쳐 적는다(경계 목록 스키마의 document_id)
+    for part in (layers.get("boundaries") or {}).get("parts") or []:
+        part_id = part.get("part_id")
+        if not part_id:
+            continue
+        b_dir = doc_path / "boundaries"
+        b_dir.mkdir(exist_ok=True)
+        _write_json(b_dir / f"{part_id}.json", dict(part, document_id=doc_path.name))
+
+    # 작업 계획
+    for part_id, plan in ((layers.get("read_plan") or {}).get("parts") or {}).items():
+        p_dir = doc_path / "read_plan"
+        p_dir.mkdir(exist_ok=True)
+        _write_json(p_dir / f"{part_id}.json", plan)
+
+    # 문헌별 이체자 승인
+    if isinstance(layers.get("variant_approvals"), dict):
+        _write_json(doc_path / "variant_approvals.json", layers["variant_approvals"])
 
 
 def _write_interpretation_layers(
@@ -628,6 +693,51 @@ def _write_json(path: Path, data: dict | list) -> None:
     from .document import write_json_atomic
 
     write_json_atomic(path, data)
+
+
+def _merge_variant_chars(library_path: Path, data: dict, warnings: list) -> None:
+    """스냅샷의 이체자 사전을 받는 서고의 사용자 사전(resources/variant_chars.json)에 합친다.
+
+    왜 합치는가: 받는 서고에도 사람이 쌓은 사전이 있다. 예전처럼 통째로 쓰면 그것이 사라지고,
+    그나마 쓰던 자리(서고 루트)는 아무도 읽지 않는 곳이었다(B-013).
+    """
+    import tempfile
+
+    from .alignment import VariantCharDict
+
+    target = library_path / "resources" / "variant_chars.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as tmp:
+        incoming_path = Path(tmp) / "incoming.json"
+        _write_json(incoming_path, data)
+        try:
+            incoming = VariantCharDict(dict_path=str(incoming_path))
+        except Exception as e:  # noqa: BLE001 — 사전이 깨져도 문헌 들이기는 계속한다
+            warnings.append(f"이체자 사전을 읽지 못해 합치지 않았습니다: {e}")
+            return
+    if target.exists():
+        mine = VariantCharDict(dict_path=str(target))
+    else:
+        mine = VariantCharDict.empty(str(target))
+    for a, alts in incoming.to_dict().items():
+        for b in alts:
+            mine.add_pair(a, b)
+    mine.save(str(target))
+
+
+def _merge_annotation_types(library_path: Path, types: list) -> None:
+    """스냅샷의 주석 유형 중 기본 프리셋에도 받는 서고에도 없는 것을 서고의 커스텀에 더한다."""
+    project_root = Path(__file__).resolve().parent.parent.parent
+    defaults = _read_json(project_root / "resources" / "annotation_types.json") or {}
+    known = {t.get("id") for t in defaults.get("types", []) if isinstance(t, dict)}
+    path = library_path / "annotation_types.json"
+    work = _read_json(path) or {"custom": [], "hidden": []}
+    custom = work.setdefault("custom", [])
+    known |= {t.get("id") for t in custom if isinstance(t, dict)}
+    added = [t for t in types if isinstance(t, dict) and t.get("id") and t["id"] not in known]
+    if added:
+        custom.extend(added)
+        _write_json(path, work)
 
 
 def _get_head_hash(repo_path: Path) -> str | None:

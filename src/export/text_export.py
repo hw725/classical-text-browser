@@ -644,7 +644,7 @@ def export_document(
     """
     from pathlib import Path
 
-    from core.document import get_document_info
+    from core.document import get_corrected_text, get_document_info
     from ocr.read_book import load_plan
 
     doc_path = Path(doc_path)
@@ -655,7 +655,9 @@ def export_document(
             n = int(f.stem.rsplit("_", 1)[1])
         except ValueError:
             continue
-        page_texts[n] = f.read_text(encoding="utf-8")
+        # 교정 탭은 쪽 파일을 그대로 두고 corrections만 쓴다 — 쪽 파일만 읽으면 교정 전 글이
+        # 나간다(B-017). text_layer_pdf._load_lines가 2026-10-02에 고친 것과 같은 길이다.
+        page_texts[n] = get_corrected_text(doc_path, part_id, n)["corrected_text"]
     plan = load_plan(doc_path, part_id) or {}
     title = plan.get("title") or get_document_info(doc_path).get("title") or doc_path.name
     # 줄 좌표(L2) — 문단 끝·시작을 글자 폭 어림보다 정확히 가른다(line_geometry)

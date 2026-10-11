@@ -51,6 +51,7 @@ function initVariantManager() {
   _bindClick("vm-btn-create", _createDict);
   _bindClick("vm-btn-copy", _copyDict);
   _bindClick("vm-btn-delete", _deleteDict);
+  _bindClick("vm-btn-activate", _activateDict);
   _bindClick("vm-btn-add-pair", _addPairDialog);
   _bindClick("vm-btn-import", _showImportDialog);
   _bindClick("vm-btn-export-json", () => _exportDict("json"));
@@ -208,6 +209,30 @@ async function _copyDict() {
     await _loadDictList();
   } catch (err) {
     showToast("복제 오류: " + err.message, 'error');
+  }
+}
+
+/**
+ * 드롭다운에서 고른 사전을 «활성»으로 한다 — 대조·일괄 교정·LLM 교정이 쓰는 사전.
+ * 고르기만 하면 보기·쌍 추가만 그 사전에 가고 «활성»은 그대로였다(B-026).
+ */
+async function _activateDict() {
+  const select = document.getElementById("vm-dict-select");
+  const name = select ? select.value : null;
+  if (!name) return;
+  try {
+    const res = await fetch(`/api/variant-dicts/${encodeURIComponent(name)}/activate`, {
+      method: "PUT",
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showToast(err.error || "활성화 실패", "error");
+      return;
+    }
+    showToast(`사전 '${name}'을(를) 활성으로 바꿨습니다 — 대조·일괄 교정이 이 사전을 씁니다.`, "success");
+    await _loadDictList();
+  } catch (err) {
+    showToast("활성화 오류: " + err.message, "error");
   }
 }
 

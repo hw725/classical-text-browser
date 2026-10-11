@@ -508,7 +508,8 @@ def _find_specialized_file(
         - L6: {pid}_page_{NNN}_translation.json (JSON, .txt 아님)
         - L7: L7_annotation/main_text/{pid}_page_{NNN}_annotation.json (main_text 하위)
 
-        비교 탭 등에서 get_layer_content()를 호출할 때, 기본 경로에 파일이 없으면
+        get_layer_content()를 호출할 때(지금은 reading.py 미리보기가 쓴다),
+        기본 경로에 파일이 없으면
         전문 편집기 경로를 추가로 탐색하여 내용을 찾아준다.
 
     출력: 존재하는 파일 경로 또는 None.
@@ -781,7 +782,9 @@ def save_layer_content(
         else:
             # 텍스트 파일: CRLF → LF 정규화
             text = str(content).replace("\r\n", "\n")
-        file_path.write_text(text, encoding="utf-8")
+        # newline="" — Path.write_text는 Windows에서 \n을 다시 \r\n으로 바꿔 쓴다(B-021).
+        with open(file_path, "w", encoding="utf-8", newline="") as f:
+            f.write(text)
 
     relative_path = file_path.relative_to(interp_path).as_posix()
     return {

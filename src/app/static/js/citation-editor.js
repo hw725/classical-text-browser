@@ -398,7 +398,7 @@ async function _loadCiteMarks() {
 
   try {
     const resp = await fetch(
-      `/api/interpretations/${interpId}/pages/${vs.pageNum}/citation-marks`
+      `/api/interpretations/${interpId}/pages/${vs.pageNum}/citation-marks${interpPartQuery("?")}`
     );
     if (!resp.ok) return;
     const data = await resp.json();
@@ -450,7 +450,10 @@ function _renderCiteSourceText() {
     return;
   }
 
-  const n = text.length;
+  // 좌표는 코드포인트다(D-127) — 확장 한자(UTF-16 두 단위) 뒤에서 서버와 한 칸씩 어긋나지 않게
+  // 글자 배열로 센다(B-016). text.length·text[i]는 UTF-16 단위다.
+  const chars = Array.from(text);
+  const n = chars.length;
 
   // ── 표점 before/after 버퍼 구성 ──
   const beforeBuf = new Array(n).fill("");
@@ -495,7 +498,7 @@ function _renderCiteSourceText() {
 
     if (isHL && (!inHighlight || mid !== currentMarkId)) {
       if (inHighlight) html += "</span>";
-      html += `<span class="cite-highlight" data-cite-id="${mid}">`;
+      html += `<span class="cite-highlight" data-cite-id="${_esc(String(mid))}">`;
       inHighlight = true;
       currentMarkId = mid;
     } else if (!isHL && inHighlight) {
@@ -505,7 +508,7 @@ function _renderCiteSourceText() {
     }
 
     // 표점 before + 원문 글자 + 표점 after (이스케이프 포함)
-    html += _esc(beforeBuf[i]) + _esc(text[i]) + _esc(afterBuf[i]);
+    html += _esc(beforeBuf[i]) + _esc(chars[i]) + _esc(afterBuf[i]);
   }
   if (inHighlight) html += "</span>";
 
@@ -549,11 +552,11 @@ function _renderCiteMarkList() {
     const tags = (m.tags || []).map(t => `<span class="cite-tag">${_esc(t)}</span>`).join(" ");
     const pageInfo = m.page_number ? `<span class="cite-page-badge">p.${m.page_number}</span>` : "";
 
-    html += `<div class="cite-card${selected} ${statusClass}" data-cite-id="${m.id}">
+    html += `<div class="cite-card${selected} ${statusClass}" data-cite-id="${_esc(String(m.id))}">
       <div class="cite-card-header">
         <span class="cite-card-snippet">${_esc(snippet)}${snippet.length < (m.source_text_snapshot || "").length ? "…" : ""}</span>
         ${pageInfo}
-        <input type="checkbox" class="cite-card-check" data-cite-id="${m.id}" title="내보내기 선택">
+        <input type="checkbox" class="cite-card-check" data-cite-id="${_esc(String(m.id))}" title="내보내기 선택">
       </div>
       <div class="cite-card-body">
         ${label ? `<div class="cite-card-label">${_esc(label)}</div>` : ""}
@@ -600,7 +603,7 @@ async function _selectCiteMark(markId) {
   // resolve API 호출
   try {
     const resp = await fetch(
-      `/api/interpretations/${interpId}/pages/${pageNum}/citation-marks/${markId}/resolve`,
+      `/api/interpretations/${interpId}/pages/${pageNum}/citation-marks/${markId}/resolve${interpPartQuery("?")}`,
       { method: "POST" }
     );
     if (!resp.ok) {
@@ -640,7 +643,7 @@ function _renderCiteContext(ctx) {
     if (ctx.translations && ctx.translations.length > 0) {
       transEl.innerHTML = ctx.translations.map(t =>
         `<div class="cite-ctx-trans-item">
-          <span class="cite-ctx-trans-status">[${t.status}]</span>
+          <span class="cite-ctx-trans-status">[${_esc(t.status)}]</span>
           ${_esc(t.translation)}
         </div>`
       ).join("");
@@ -731,7 +734,10 @@ function _onCiteTextSelection(options = {}) {
  * @returns {number} 원문 기준 글자 인덱스
  */
 function _citeDisplayOffsetToOriginal(displayOffset, originalText, punctMarks) {
-  const n = originalText.length;
+  // 표시 오프셋은 DOM Range가 주는 UTF-16 단위이고, 돌려줄 원문 위치는 코드포인트다(D-127).
+  // 원문을 글자 배열로 훑으며 글자마다 UTF-16 길이(1 또는 2)만큼 표시 위치를 민다(B-016).
+  const chars = Array.from(originalText || "");
+  const n = chars.length;
   if (n === 0) return 0;
 
   // 표점 before/after 버퍼 구성 (렌더링과 동일한 로직)
@@ -752,7 +758,7 @@ function _citeDisplayOffsetToOriginal(displayOffset, originalText, punctMarks) {
     displayPos += beforeBuf[i].length;
     if (displayPos > displayOffset) return i;
 
-    displayPos += 1;  // 원문 글자 1자
+    displayPos += chars[i].length;  // 원문 글자 1자 — 확장 한자는 UTF-16 두 단위
     if (displayPos > displayOffset) return i;
 
     displayPos += afterBuf[i].length;
@@ -821,7 +827,7 @@ async function _addCitationMark(start, end, selectedText, label, tags) {
 
   try {
     const resp = await fetch(
-      `/api/interpretations/${interpId}/pages/${vs.pageNum}/citation-marks`,
+      `/api/interpretations/${interpId}/pages/${vs.pageNum}/citation-marks${interpPartQuery("?")}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -927,7 +933,7 @@ async function _saveCiteEdit() {
 
   try {
     const resp = await fetch(
-      `/api/interpretations/${interpId}/pages/${pageNum}/citation-marks/${markId}`,
+      `/api/interpretations/${interpId}/pages/${pageNum}/citation-marks/${markId}${interpPartQuery("?")}`,
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -966,7 +972,7 @@ async function _deleteCiteMark() {
 
   try {
     const resp = await fetch(
-      `/api/interpretations/${interpId}/pages/${pageNum}/citation-marks/${markId}`,
+      `/api/interpretations/${interpId}/pages/${pageNum}/citation-marks/${markId}${interpPartQuery("?")}`,
       { method: "DELETE" }
     );
     if (!resp.ok) {
@@ -1025,7 +1031,7 @@ async function _loadAllCiteMarks() {
   const interpId = (is && is.interpId) || "default";
 
   try {
-    const resp = await fetch(`/api/interpretations/${interpId}/citation-marks/all`);
+    const resp = await fetch(`/api/interpretations/${interpId}/citation-marks/all${interpPartQuery("?")}`);
     if (!resp.ok) return;
     citeState.allMarks = await resp.json();
   } catch (e) {
@@ -1224,7 +1230,9 @@ function _onCiteFieldDragEnd(e) {
 /** DOM에서 현재 필드 순서를 읽어 반환 */
 function _getCiteFieldOrder() {
   const container = document.getElementById("cite-field-order-list");
-  if (!container) return CITE_PRESETS.korean_academic.field_order.slice();
+  // CITE_PRESETS는 cite-format-manager.js로 옮겨 없어진 상수다 — 저장된 설정(없으면 양식
+  // 라이브러리의 첫 양식)에서 읽는다. 예전 줄은 이 요소가 없을 때 ReferenceError였다.
+  if (!container) return (_loadCiteExportSettings().field_order || []).slice();
   return Array.from(container.querySelectorAll(".cite-field-order-item"))
     .map(el => el.dataset.fieldId);
 }
@@ -1266,7 +1274,7 @@ async function _exportSelectedCitations() {
 
   try {
     const resp = await fetch(
-      `/api/interpretations/${interpId}/citation-marks/export`,
+      `/api/interpretations/${interpId}/citation-marks/export${interpPartQuery("?")}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1357,7 +1365,7 @@ async function _resetAllCiteMarks() {
   for (const markId of ids) {
     try {
       const resp = await fetch(
-        `/api/interpretations/${interpId}/pages/${vs.pageNum}/citation-marks/${markId}`,
+        `/api/interpretations/${interpId}/pages/${vs.pageNum}/citation-marks/${markId}${interpPartQuery("?")}`,
         { method: "DELETE" }
       );
       if (resp.ok || resp.status === 204) {

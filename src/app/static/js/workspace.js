@@ -287,7 +287,7 @@ function initActivityBar() {
           viewerState.docId
         ) {
           interpSec.style.display = "";
-          // 내용 트리(D-085)는 해석 섹션과 같은 조건으로 보인다.
+          // 사이드바의 내용 섹션도 함께 켠다(트리 자체는 해석 저장소 없이도 선다 — D-097).
           if (typeof setContentsSectionVisible === "function") setContentsSectionVisible(true);
         }
       } else {
@@ -1010,7 +1010,7 @@ function _renderRepoList(containerId, repos, repoType) {
 
     item.innerHTML = `
       <div class="settings-repo-header">
-        <strong>${repo.id}</strong>
+        <strong>${_escHtml(repo.id)}</strong>
         <button class="text-btn settings-remote-toggle" title="원격 동기화 설정">
           ${hasRemote ? "● 원격 연결됨" : "원격 설정 ▸"}
         </button>
@@ -1018,8 +1018,8 @@ function _renderRepoList(containerId, repos, repoType) {
       <div class="settings-repo-remote" style="display: ${hasRemote ? "flex" : "none"};">
         <input type="text" class="settings-remote-input"
                placeholder="원격 URL (예: https://github.com/...)"
-               value="${repo.remote_url || ""}"
-               data-repo-type="${repoType}" data-repo-id="${repo.id}">
+               value="${_escAttr(repo.remote_url || "")}"
+               data-repo-type="${repoType}" data-repo-id="${_escAttr(repo.id)}">
         <button class="text-btn settings-remote-save" title="원격 URL 저장">저장</button>
       </div>
       <div class="settings-repo-actions" style="display: ${hasRemote ? "flex" : "none"};">
@@ -1126,11 +1126,11 @@ async function _gitSync(repoType, repoId, action) {
  * 현재 활성 모드를 추적한다.
  * "view" — 열람 모드 (기본. PDF + 텍스트 병렬 뷰어)
  * "layout" — 레이아웃 모드 (PDF 위에 LayoutBlock 편집)
- * "correction" — 교정 모드 (Phase 6: 글자 단위 교정 + 블록별 섹션 + Git 연동)
- * "interpretation" — 해석 모드 (Phase 7: 현토/번역/주석 + 의존 추적)
- * "punctuation" — 표점 모드 (Phase 11-1: L5 표점 편집기)
- * "hyeonto" — 현토 모드 (Phase 11-1: L5 현토 편집기)
- * "translation" — 번역 모드 (Phase 11-2: L6 번역 편집기)
+ * "correction" — 교정 모드 (글자 단위 교정 + 블록별 섹션 + Git 연동)
+ * "composition" — 편성 모드 (경계 ①②③, D-122)
+ * "punctuation" — 표점 · "hyeonto" — 현토 · "translation" — 번역
+ * "annotation" — 주석 · "citation" — 인용 · "variant" — 이체자 사전
+ * (옛 "interpretation" 해석 모드는 2026-02-24에 없어졌다 — 아래 _switchMode 주석)
  */
 let currentMode = "view";
 
@@ -1819,17 +1819,17 @@ async function loadLibraryInfo(options) {
 }
 
 /* ──────────────────────────
-   7. 하단 패널 탭 전환 (Phase 7: Git 이력 ↔ 의존 추적)
+   7. 스냅샷 내보내기·가져오기 (옛 «하단 패널 탭 전환» 자리 — 하단 패널은 없어졌다)
    ────────────────────────── */
 
 /**
  * JSON 스냅샷 Export/Import 버튼을 설정한다.
  *
  * 왜 이렇게 하는가:
- *   Phase 12-3에서 현재 해석 작업(Work)을 단일 JSON 파일로
- *   내보내거나, 다른 환경에서 가져온 JSON을 불러올 수 있다.
- *   - Export: 현재 해석 저장소를 JSON 파일로 다운로드
- *   - Import: JSON 파일을 선택하여 새 Work로 생성
+ *   지금 문헌과 해석 저장소를 단일 JSON 파일로 내보내거나, 다른 환경에서 가져온
+ *   JSON을 불러올 수 있다(core/snapshot.py — 편성 경계·작업 계획·승인까지 담는다).
+ *   - Export: 지금 문헌 + 해석 저장소를 JSON 파일로 다운로드
+ *   - Import: JSON 파일을 골라 새 문헌 + 해석 저장소로 만든다(응답의 doc_id·interp_id)
  */
 function initSnapshotButtons() {
   // ─── Export 버튼 ───
@@ -2466,9 +2466,9 @@ function renderDocumentList(docs) {
   container.innerHTML = docs
     .map(
       (doc) => `
-      <div class="tree-item" data-doc-id="${doc.document_id || ""}">
-        ${doc.title || "제목 없음"}
-        <span class="doc-id">${doc.document_id || ""}</span>
+      <div class="tree-item" data-doc-id="${_escAttr(doc.document_id || "")}">
+        ${_escHtml(doc.title || "제목 없음")}
+        <span class="doc-id">${_escHtml(doc.document_id || "")}</span>
       </div>
     `,
     )

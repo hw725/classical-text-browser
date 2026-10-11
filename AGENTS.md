@@ -179,6 +179,7 @@ src/app/
 | **화면에 넣는 파일명·OCR 원문은 이스케이프** | 드롭한 파일명이 문헌 제목이 되어 `innerHTML`로 들어간다(D-069) |
 | **로컬 서비스는 `127.0.0.1`로 부른다**. `localhost` 금지 | Windows는 `localhost`를 IPv6(::1)부터 시도한다. IPv4에만 뜬 서비스(Ollama)면 제한 시간을 다 쓰고서야 IPv4로 넘어가 **호출마다 2초**를 버린다(실측 2.11s vs 0.04s, D-109) |
 | **검증용 서버는 `CTB_CONFIG_DIR=<임시 폴더>`로 띄운다** | 설정 파일(`~/.classical-text-browser/config.json`)은 하나라, 복사본 서고로 띄운 서버가 «마지막 서고»를 덮어 아이콘으로 켠 앱이 임시 폴더를 열었다(2026-09-10). LLM 사용 기록도 서고가 없으면 같은 폴더로 간다(`usage_tracker.default_usage_log_path`) — pytest는 `tests/conftest.py`가 이 변수를 임시 폴더로 돌리고, 세션 맨 뒤 테스트가 홈 파일 크기가 변하지 않았는지 잰다. 서고 없이 `LlmConfig()`로 도는 라우터 테스트가 mock 응답 2,127행을 홈 기록에 섞었다(2026-09-10 확인) |
+| **빠른 시험은 바깥 네트워크에 닿지 않는다** — 실제 사이트·API가 필요한 시험은 `@pytest.mark.network`(그리고 `slow`) | 이 PC에는 실제 LLM 키가 있다. 가짜 라우터를 빠뜨린 시험이 «200 또는 400»을 둘 다 통과로 받으며 매 verify마다 실제 LLM을 불렀다(2026-10-11, 5.2초). `tests/conftest.py`가 표지 없는 시험의 바깥 소켓 연결을 막는다(로컬 127.0.0.1은 허용) |
 | **`.bat` 파일은 ASCII만** (주석도 영어) | `chcp 65001`의 cmd가 다중바이트 줄에서 위치를 잘못 세어 뒤쪽 줄 중간부터 읽는다. 새 콘솔에서만 재현(maintenance §1.6) |
 | **배포되는 진입점은 맨 앞에서 `core.console.force_utf8_console()`** | 한국어 Windows 콘솔은 cp949다. 한글은 있지만 `—`·`«»`·`✓`는 **없어** 그 글자를 `print`하면 즉사한다. 이 PC는 `PYTHONUTF8=1`이 박혀 있어 **겪지 않는다** — 「내 PC에서 잘 돌았다」가 증거가 못 되는 자리다. 셋을 배포한다: `warmup_paddle.py`·`cli/__main__.py`·`app/__main__.py`(+`ctb_setup.py`는 홀로 도는 exe라 직접 품는다). `test_doc_drift.py`가 본다 |
 | **`.ps1`은 UTF-8 BOM + CRLF** | BOM이 없으면 PowerShell 5.1이 ANSI로 읽어 한글이 깨진다. **구문은 멀쩡해 그냥 돈다** — 눈으로 보기 전엔 모른다. `.gitattributes`가 CRLF를, `test_doc_drift.py`가 BOM을 못박는다 |
@@ -239,12 +240,13 @@ src/app/
   (`npx -y openai-oauth`, 포트 10531–10540 스캔, Bearer 토큰 `oauth-proxy` 하드코딩)와
   SikuRoBERTa 표점 Docker(punctuation-service/.env 존재 시)를 자동 기동.
 - 프론트(static/)가 약 4.7만 줄 — index.html 약 5.1천 줄 단일 파일, workspace.css 약 8.2천 줄,
-  JS 34개(약 3.3만 줄). 테스트 104파일 — 그중 화면 JS를 node로 돌리는 것(`tests/js_harness.py`)은
+  JS 34개(약 3.3만 줄). 테스트 105파일 — 그중 화면 JS를 node로 돌리는 것(`tests/js_harness.py`)은
   `tests/test_annotation_editor_js.py`(2026-09-16 Codex 교차검증 반영 때 처음)·
   `tests/test_entity_manager_js.py`(D-128)·`tests/test_structure_jev.py`·
   `tests/test_read_path_writes.py`(화면을 열기만 해도 쓰던 것, 2026-09-30)·
   `tests/test_correction_saves.py`(자유 편집 교정이 글자 교정 보기에 안 보이던 것·확정본을 다시 쓰면 교정이 어긋나던 것, 2026-10-02)·
-  `tests/test_composition_apply_plan_js.py`(편성 ③ «바뀐 것»과 「적용」이 다른 집합을 세던 것, 2026-10-05), **CI 없음.**
+  `tests/test_composition_apply_plan_js.py`(편성 ③ «바뀐 것»과 「적용」이 다른 집합을 세던 것, 2026-10-05)·
+  `tests/test_sweep_20261011.py`(전수 검토 결함 B-012~B-035의 회귀 — 인용 좌표·번역 집계·시작 행 옮기기·사전 활성화), **CI 없음.**
   화면 «마크업»을 읽는 것도 둘이다 — `tests/test_ui_reachability.py`(조작 단추에 사람이
   닿을 수 있는가, B-008)와 `tests/test_connectome.py`(화면이 그 라우트를 부르는가).
   (2026-10-05 재실측. 2026-07-26 v1.2.0 감사 때 직전 대비 프론트가 줄어든 것은

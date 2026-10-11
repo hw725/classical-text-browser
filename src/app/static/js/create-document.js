@@ -316,7 +316,7 @@ async function _previewFromUrl() {
   } catch (err) {
     if (statusEl) {
       statusEl.textContent = err.message;
-      statusEl.style.color = "var(--error)";
+      statusEl.style.color = "var(--color-danger)";
     }
   } finally {
     if (previewBtn) previewBtn.disabled = false;
@@ -557,7 +557,7 @@ function _acceptIncomingLocalFiles(incoming) {
     }
     if (msgs.length > 0) {
       statusEl.textContent = msgs.join(" · ");
-      statusEl.style.color = "var(--error)";
+      statusEl.style.color = "var(--color-danger)";
     }
   }
 
@@ -738,7 +738,7 @@ function _proceedFromLocal() {
   if (_localFiles.length === 0) {
     if (statusEl) {
       statusEl.textContent = "최소 한 개 파일을 추가하세요.";
-      statusEl.style.color = "var(--error)";
+      statusEl.style.color = "var(--color-danger)";
     }
     return;
   }
@@ -836,7 +836,7 @@ async function _createFromFiles() {
     if (statusEl) {
       statusEl.textContent =
         "문헌 ID: 영문 소문자로 시작, 소문자/숫자/밑줄만 가능 (최대 64자). 비워두면 자동 생성됩니다.";
-      statusEl.style.color = "var(--error)";
+      statusEl.style.color = "var(--color-danger)";
     }
     return;
   }
@@ -844,7 +844,7 @@ async function _createFromFiles() {
   if (_localFiles.length === 0) {
     if (statusEl) {
       statusEl.textContent = "선택된 파일이 없습니다. 뒤로 가서 파일을 선택하세요.";
-      statusEl.style.color = "var(--error)";
+      statusEl.style.color = "var(--color-danger)";
     }
     return;
   }
@@ -912,7 +912,7 @@ async function _createFromFiles() {
     _hideCreateDocProgress();
     if (statusEl) {
       statusEl.textContent = err.message;
-      statusEl.style.color = "var(--error)";
+      statusEl.style.color = "var(--color-danger)";
     }
     // 사이드바 갱신 시도 — 부분 성공일 수 있다.
     await _refreshSidebar();
@@ -1058,7 +1058,7 @@ async function _createFromUrl() {
     _hideCreateDocProgress();
     if (statusEl) {
       statusEl.textContent = err.message;
-      statusEl.style.color = "var(--error)";
+      statusEl.style.color = "var(--color-danger)";
     }
     // 에러 시에도 사이드바 갱신 시도
     // 왜: 백엔드가 실패 시 부분 생성물을 롤백하지만(core/document.py),

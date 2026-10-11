@@ -182,3 +182,17 @@ def test_hiding_second_no_does_not_change_preview(tmp_path):
     got = _plan(tmp_path, data, [], body)
     # 체크 2(확신 1 + 2차 예 1) — accept만 세던 옛 식이면 1이었다
     assert got == {"a": 2, "b": 2, "spans": 2}
+
+    # 위 실행은 _planApply가 손잡이를 읽지 않는다는 것만 잰다. «가림은 표시일 뿐»의 나머지 반 —
+    # 표시 루프가 가리면서 체크를 바꾸지 않는가 — 은 그 줄을 직접 본다(2026-10-11 전수, B-035).
+    from tests.js_harness import STATIC_JS
+
+    src = (STATIC_JS / "composition-editor.js").read_text(encoding="utf-8")
+    hide_lines = [ln for ln in src.splitlines() if "proposeState.hideSecondNo &&" in ln]
+    assert hide_lines, "가림 줄을 찾지 못했다"
+    for ln in hide_lines:
+        assert ln.rstrip().endswith("continue;"), ln  # 그리지 않고 넘어갈 뿐
+        assert ".checked.delete" not in ln and ".checked.add" not in ln, ln
+    from tests.js_harness import extract_js
+
+    assert "hideSecondNo" not in extract_js(src, ["_planApply"])

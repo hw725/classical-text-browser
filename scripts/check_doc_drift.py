@@ -238,7 +238,24 @@ def scan_text(text: str, relpath: str, facts: dict) -> list[Mismatch]:
     출력:  어긋난 주장 목록 (없으면 빈 리스트)
     """
     mismatches: list[Mismatch] = []
+    # server.py 머리말처럼 «routers/X.py — 설명…» 다음 줄에 «(N 라우트)»가 오는 표기.
+    # 한 줄 패턴만 보면 이 주장을 영영 검사하지 않아 수치가 틀린 채 남았다(2026-10-11).
+    pending_router: str | None = None
     for lineno, line in enumerate(text.splitlines(), start=1):
+        head = re.search(r"([a-z_][a-z0-9_]*)\.py\b", line)
+        tail = re.search(r"\((\d+)\s*라우트\)", line)
+        if head and not tail:
+            pending_router = head.group(1)
+        elif tail and not head and pending_router:
+            name, claimed = pending_router, int(tail.group(1))
+            actual = facts["routers"].get(name)
+            if actual is not None and actual != claimed:
+                mismatches.append(
+                    Mismatch(relpath, lineno, f"{name}.py 라우트 수", claimed, actual, line)
+                )
+            pending_router = None
+        elif head or not line.strip():
+            pending_router = None
         # 같은 줄에서 이미 매칭된 구간 — 느슨한 패턴이 앞선 매칭을 다시 잡아
         # 같은 주장을 두 번 보고하는 것을 막는다.
         used_spans: list[tuple[int, int]] = []

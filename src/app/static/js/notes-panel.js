@@ -8,7 +8,8 @@
  * 자동저장: 2초 디바운스로 타이핑 중단 후 자동 저장.
  *
  * 의존 전역:
- *   viewerState  (sidebar-tree.js) — docId, partId, pageNum, interpId
+ *   viewerState  (sidebar-tree.js) — docId, partId, pageNum
+ *   interpState  (interpretation.js) — interpId (viewerState에는 그 칸이 없다, 아래 41행)
  */
 
 /* ─── 상태 ─────────────────────────────────────── */

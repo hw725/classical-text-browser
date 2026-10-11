@@ -130,21 +130,38 @@ def test_gpu_worker_is_preferred_and_falls_back_to_cpu(monkeypatch):
     assert pe.PaddleOcrEngine()._worker_block_torch is False
 
 
-def test_worker_blocks_torch_when_asked(monkeypatch):
-    """CTB_PADDLE_BLOCK_TORCH=1이면 워커 모듈이 뜨는 순간 torch import가 막힌다."""
+def test_worker_blocks_torch_when_asked(monkeypatch, tmp_path):
+    """CTB_PADDLE_BLOCK_TORCH=1이면 워커 모듈이 뜨는 순간 torch import가 막힌다.
+
+    가짜 torch 패키지를 경로에 둔다 — 그래야 «막지 않으면 뜬다»(대조)와 «막으면 안 뜬다»를
+    둘 다 잰다. .venv에는 진짜 torch가 없어, 예전 시험은 차단이 없어도 ImportError로
+    BLOCKED가 찍혀 늘 통과했다(2026-10-11 전수, B-035).
+    """
+    import os
     import subprocess
     from pathlib import Path
 
-    code = (
-        "import sys, os; os.environ['CTB_PADDLE_BLOCK_TORCH']='1';"
-        "import ocr.paddle_worker;"
-        "\ntry:\n import torch\n print('LOADED')\nexcept ImportError:\n print('BLOCKED')"
-    )
+    fake = tmp_path / "fakepkgs" / "torch"
+    fake.mkdir(parents=True)
+    (fake / "__init__.py").write_text("FAKE = True\n", encoding="utf-8")
     src = str(Path(__file__).resolve().parents[1] / "src")
-    out = subprocess.run(
-        [sys.executable, "-c", code], cwd=src, capture_output=True, text=True, timeout=120
-    )
-    assert "BLOCKED" in out.stdout, out.stderr[-500:]
+    env = dict(os.environ, PYTHONPATH=str(tmp_path / "fakepkgs"))
+
+    def run(block: bool) -> str:
+        code = (
+            "import sys, os;"
+            + ("os.environ['CTB_PADDLE_BLOCK_TORCH']='1';" if block else "")
+            + "import ocr.paddle_worker;"
+            "\ntry:\n import torch\n print('LOADED')\nexcept ImportError:\n print('BLOCKED')"
+        )
+        out = subprocess.run(
+            [sys.executable, "-c", code], cwd=src, env=env, capture_output=True, text=True,
+            timeout=120,
+        )
+        return out.stdout + out.stderr[-500:]
+
+    assert "LOADED" in run(block=False)  # 대조: 막지 않으면 가짜 torch가 뜬다
+    assert "BLOCKED" in run(block=True)
 
 
 def test_engine_without_env_is_in_process(monkeypatch):

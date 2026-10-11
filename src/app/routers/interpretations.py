@@ -1,8 +1,10 @@
 """해석 저장소(interpretations) API 라우터.
 
-Phase 7 + Phase 8 엔드포인트를 포함한다.
-- Phase 7: 해석 저장소 CRUD, 의존 변경 확인, 층 내용 조회/저장, git 이력/커밋
-- Phase 8: 코어 스키마 엔티티 CRUD, 단위 생성/편성/쪼개기/리셋, Work 자동 생성, Tag 승격
+- 해석 저장소 CRUD, 의존 변경 확인, 층 내용 조회/저장, git 이력/커밋
+- 코어 스키마 엔티티 CRUD(단위·Tag·Concept·Agent·Relation), Tag 승격, 개념 병합(D-128 2항)·
+  커넥톰 대조
+편성(경계 넣기·쪼개기·리셋)은 원본 저장소의 것이라 composition.py에 있다(D-097). Work 엔티티는
+D-099에서 없앴다.
 
 모든 경로에서 서고 경로는 get_library_path()로 참조한다.
 """
@@ -83,7 +85,7 @@ class ManualCommitRequest(BaseModel):
 class EntityCreateRequest(BaseModel):
     """엔티티 생성 요청 본문."""
 
-    entity_type: str  # work, unit, tag, concept, agent, relation
+    entity_type: str  # unit, tag, concept, agent, relation (work는 D-099에서 없앴다)
     data: dict  # 스키마에 맞는 엔티티 데이터
 
 
@@ -454,7 +456,7 @@ async def api_interp_manual_commit(interp_id: str, body: ManualCommitRequest, bg
 async def api_create_entity(interp_id: str, body: EntityCreateRequest):
     """코어 스키마 엔티티를 생성한다.
 
-    목적: Work, 단위, Tag, Concept, Agent, Relation 엔티티를 해석 저장소에 추가한다.
+    목적: 단위·Tag·Concept·Agent·Relation 엔티티를 해석 저장소에 추가한다.
     입력: entity_type + data (JSON 스키마 형식).
     출력: {"status": "created", "entity_type": ..., "id": ..., "file_path": ...}
     """

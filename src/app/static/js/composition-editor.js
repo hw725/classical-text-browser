@@ -1,25 +1,20 @@
 /**
- * 편성 에디터 — LayoutBlock → 단위 변환
+ * 편성 에디터 — 글 경계를 정한다 (D-092 경계 목록 · D-097 원본 저장소의 것 · D-122 ①②③).
  *
  * 기능:
- *   1. 교정된 텍스트를 블록별로 표시 (교정 적용 후)
- *   2. 각 LayoutBlock을 1:1로 단위 자동 생성 ("자동 편성")
- *   3. 여러 LayoutBlock을 합쳐서 하나의 단위 생성 ("합치기")
- *   4. 이미 생성된 단위 목록 표시
- *   5. 크로스 페이지 합치기 (시작~끝 페이지 범위)
+ *   ① 이 책의 신호(규약) 찾기·말로 넣기·더 묻기(LLM 표지·목차·구조·판정 모델)
+ *   ② 규칙 고르기(미리 보기)
+ *   ③ 후보 보기 — 규칙 제안·목차·LLM·지금 경계를 합쳐 체크하고 「적용」 하나로 저장
+ *   + 단위 목록·쪼개기(원본은 남기고 한 단 깊은 조각 경계를 넣는다)·애매한 후보 2차 판정(D-137)
  *
  * 의존성:
  *   - sidebar-tree.js (viewerState)
- *   - interpretation.js (interpState)
+ *   - interpretation.js (interpState — 편성에는 필요 없다, 편집기 다섯이 쓴다)
  *
  * 왜 이렇게 하는가:
- *   교정은 LayoutBlock(물리적 단위) 기반이지만,
- *   표점·현토·번역은 단위(논리적 단위) 기반이다.
- *   이 편성 단계에서 연구자가 LayoutBlock을 단위으로
- *   재편성(합치기·쪼개기)하여 후속 작업의 기본 단위를 정한다.
- *
- *   고전 텍스트에서 문장이 페이지 경계를 넘는 경우가 흔하므로,
- *   페이지 범위(예: 2~5)를 함께 보고 합칠 수 있어야 한다.
+ *   교정은 LayoutBlock(물리적 영역) 기반이지만 표점·현토·번역은 단위(글) 기반이다. 단위는
+ *   경계 목록에서 만든 읽기 보기이고(D-092), 경계는 쪽·열을 넘어 글자 자리에 선다.
+ *   (옛 «LayoutBlock 1:1 자동 편성·합치기»는 D-116에서 없어졌다.)
  */
 
 /* ──────────────────────────
@@ -231,28 +226,6 @@ async function _loadCompositionData() {
   _renderCurrentBoundaries();
   // 편성 흐름은 스스로 시작한다 — 다른 문헌·권으로 바뀌었으면 다시 센다(같으면 아무 일도 없다)
   if (compState.active) _startFlow();
-}
-
-/**
- * 해석 저장소에 수동 git commit을 보낸다 (배치 작업 완료 후).
- *
- * 왜 이렇게 하는가:
- *   쪼개기·리셋 등 여러 API 호출이 필요한 배치 작업에서,
- *   개별 호출마다 git commit하면 10~60초씩 걸린다.
- *   no_commit=true로 변경을 모은 뒤 마지막에 한 번만 commit하면
- *   전체 작업이 1~2초에 끝난다.
- */
-async function _commitBatch(message) {
-  if (!interpState.interpId) return;
-  try {
-    await fetch(`/api/interpretations/${interpState.interpId}/git/commit`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
-    });
-  } catch (e) {
-    console.error("배치 커밋 실패:", e);
-  }
 }
 
 /**
@@ -704,18 +677,11 @@ function _parseSplitPieces(text) {
  * 쪼개기를 실행한다.
  *
  * 처리 순서:
- *   1. 텍스트를 === 구분선으로 파싱
- *   2. 비어 있는 조각 제거
- *   3. 각 조각마다 새 단위 생성 (source_refs는 원본 전체를 상속)
- *   4. 원본 단위를 deprecated 상태로 전환
- *   5. 데이터 새로고침
- *
- * 왜 source_refs를 전체 상속하는가:
- *   쪼개기는 이미 합쳐진 단위를 단락별로 나누는 작업이다.
- *   나눠진 각 조각이 어느 원본 LayoutBlock에서 왔는지
- *   정확한 char_range를 자동 계산하기 어렵다.
- *   전체 source_refs를 상속하되 char_range를 null로 두면
- *   "이 블록들에서 유래했다"는 추적성은 유지된다.
+ *   1. 텍스트를 === 구분선으로 파싱하고 빈 조각을 버린다
+ *   2. 서버(composition/split)가 조각 글로 자리를 찾아 둘째 조각부터 경계를 넣는다
+ *   3. 원본 단위는 첫 조각으로 남고(id 그대로, deprecated 아님) 새 경계는 원본보다 한 단 깊은
+ *      «조각»이다 — 기사가 쪼개지지 않는다(composition.py, v1.3.0까지는 나란한 기사였다)
+ *   4. 데이터 새로고침
  */
 async function _executeSplit() {
   if (!compState.selectedTb || !compState.selectedTbId) {
@@ -1547,7 +1513,7 @@ async function _loadSignals() {
       tocSummary.textContent = `${d.toc.pages.join(",")}쪽 · ${d.toc.entries}항목 중 ${d.toc.matched} 대조` + (d.toc.decisive ? " (규약)" : " (약함)");
     }
   } catch (e) {
-    list.innerHTML = `<div class="placeholder">신호를 세지 못했습니다: ${e.message}</div>`;
+    list.innerHTML = `<div class="placeholder">신호를 세지 못했습니다: ${_escHtml(e.message)}</div>`;
     const text = document.getElementById("comp-verdict-text");
     if (text) text.textContent = `전문을 세지 못했습니다: ${e.message}`;
   }
@@ -2063,7 +2029,7 @@ async function _renderCurrentBoundaries() {
       list.appendChild(row);
     }
   } catch (e) {
-    list.innerHTML = `<div class="placeholder">지금 경계를 읽지 못했습니다: ${e.message}</div>`;
+    list.innerHTML = `<div class="placeholder">지금 경계를 읽지 못했습니다: ${_escHtml(e.message)}</div>`;
   }
 }
 

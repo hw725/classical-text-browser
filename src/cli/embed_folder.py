@@ -112,7 +112,8 @@ def survey_folder(root: Path, skip_dirs: set[str] | None = None) -> tuple[list[P
             continue
         for pdf in sorted(topic_dir.rglob("*.pdf")):
             try:
-                probe = PdfTextExtractor(pdf).probe_text_layer()
+                with PdfTextExtractor(pdf) as extractor:  # 닫아야 Windows가 PDF를 놓아 준다
+                    probe = extractor.probe_text_layer()
             except Exception:  # noqa: BLE001 — 열리지 않는 파일은 대상에서 뺀다
                 continue
             if probe["verdict"] == "born_digital":

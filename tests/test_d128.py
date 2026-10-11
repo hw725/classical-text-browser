@@ -1,7 +1,7 @@
 """D-128 구현 시험 — 커넥톰 리포지토리에서 가져온 규약 아홉 항.
 
-이 저장소의 스키마에 해당하는 항만 다룬다: 1·2·3 + 8·9·10 + 11·12·13.
-4~7항은 위키 순회 쪽이라 여기 없다.
+이 저장소의 스키마에 해당하는 항을 다룬다: 1·2·3·6·7 + 8·9·10 + 11·12·13.
+4·5항은 위키 순회 쪽이라 여기 없다(6항 범위는 주소·7항 파트너 수는 판정 밖 — 아래 두 클래스).
 
     TestCorpusVersionStamp        — 1항: 데이터 버전을 «출력»에 각인
     TestIdMapKeepsOldIds          — 2항: 승격·병합 때 구 ID를 죽이지 않는다
@@ -11,6 +11,10 @@
     TestPromotionIsNotAFunnel     — 10항: 승격은 출처를 줄이는 단계가 아니다
     TestRelationPolarity          — 11·13항: 부호, 그리고 이진 강제 금지
     TestModulationIsFirstClass    — 12항: 조절은 지지·반박과 다른 종류
+    TestScopeIsAnAddress          — 6항: 범위는 순위가 아니라 주소
+    TestPartnerCountIsNotEvidence — 7항: 파트너 수는 판정에 넣지 않는다
+    그 뒤 클래스 일곱(병합 도달·장부 표시·키 비노출·무게 읽기·읽기 문·사슬 단일 구현·장부 보호)은
+    독립 검증(2026-09-21~22)이 찾은 구멍을 막는 회귀 시험이다.
 """
 
 import json
@@ -131,7 +135,7 @@ class TestCorpusVersionStamp:
         a = corpus_snapshot(lib, document_ids=["test_doc"])
         b = corpus_snapshot(lib, document_ids=["test_doc"])
         assert a["corpus_hash"] == b["corpus_hash"]
-        assert a["exported_at"] != b["exported_at"] or True  # 시각은 달라도 무방
+        # 시각은 해시에 넣지 않는다 — 같은 데이터면 내보낸 때가 달라도 해시가 같다(위 단언)
 
     def test_commit_changes_hash(self, tmp_path):
         """원문이 한 커밋 움직이면 해시도 움직인다 — 그래야 «어느 시점»을 가리킨다."""

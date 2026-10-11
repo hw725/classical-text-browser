@@ -4,7 +4,7 @@
  * 기능:
  *   - 문장별 번역 카드 표시 (표점으로 분리된 문장 단위)
  *   - 각 카드에 상태 표시: 미번역 / draft / accepted
- *   - [AI 번역] → 해당 문장 LLM Draft 생성 (향후 연결)
+ *   - [AI 번역] → 해당 문장을 LLM으로 번역해 저장(확정 용어 풀이·참조 사전 문맥을 싣는다, D-131·B-018)
  *   - [수동 입력] → 텍스트 영역 활성화, translator.type = "human"
  *   - 원문 + 표점 + 현토 합성 텍스트 미리보기 (읽기 전용)
  *
@@ -493,13 +493,13 @@ function _renderTransCards() {
 
     html += `<div class="trans-card ${statusClass}" data-sent-idx="${i}">
       <div class="trans-card-header">
-        <span class="trans-card-source">${punctuatedText}</span>
+        <span class="trans-card-source">${_escHtml(punctuatedText)}</span>
         <span class="trans-card-status-badge">${statusLabel}</span>
       </div>`;
 
     if (tr) {
       html += `<div class="trans-card-body">
-        <textarea class="trans-card-textarea" data-tr-id="${tr.id}" rows="2">${tr.translation}</textarea>
+        <textarea class="trans-card-textarea" data-tr-id="${tr.id}" rows="2">${_escHtml(tr.translation)}</textarea>
         <div class="trans-card-actions">
           <span class="trans-card-translator">${translatorLabel}</span>
           <div class="trans-card-btns">`;
@@ -691,13 +691,18 @@ async function _deleteTranslation(trId) {
    AI 번역 (단일 / 전체)
    ────────────────────────── */
 
+/**
+ * 문장 하나를 AI로 번역해 저장한다.
+ * 출력: 저장했으면 true, 실패·취소·문장 없음이면 false — 일괄 번역이 이 값으로 성공·실패를 센다.
+ * (예전에는 오류를 안에서 잡고 아무것도 돌려주지 않아 «실패 0건»으로 늘 보고됐다, B-018)
+ */
 async function _aiTranslateSingle(sentIdx) {
   const sent = transState.sentences[sentIdx];
-  if (!sent) return;
+  if (!sent) return false;
 
   // 이미 번역이 있으면 덮어쓸지 확인
   const existing = _findTranslation(sent);
-  if (existing && !confirm("기존 번역이 있습니다. AI 번역으로 덮어쓰시겠습니까?")) return;
+  if (existing && !confirm("기존 번역이 있습니다. AI 번역으로 덮어쓰시겠습니까?")) return false;
 
   // 버튼 비활성화
   const btns = document.querySelectorAll(".trans-ai-btn");
@@ -719,6 +724,8 @@ async function _aiTranslateSingle(sentIdx) {
     }
     if (llmSel.force_provider) reqBody.force_provider = llmSel.force_provider;
     if (llmSel.force_model) reqBody.force_model = llmSel.force_model;
+    // «참조 사전 → 적용»에서 고른 항목 — 서버가 «참고만» 등급으로 프롬프트에 싣는다(B-018)
+    if (transState._refDictContext) reqBody.reference_context = transState._refDictContext;
 
     // SSE 스트리밍으로 번역 요청 (실패 시 기존 엔드포인트 폴백)
     const data = await fetchWithSSE(
@@ -753,10 +760,13 @@ async function _aiTranslateSingle(sentIdx) {
 
     _renderTransCards();
     _renderTransStatusSummary();
+    return true;
   } catch (e) {
     showToast(`AI 번역 실패: ${e.message}`, 'error');
+    return false;
   } finally {
-    btns.forEach((b) => { b.disabled = false; b.textContent = "AI"; });
+    // 단추 글자는 처음 그린 «AI 번역»으로 되돌린다(예전에는 «AI»로 바뀌었다)
+    btns.forEach((b) => { b.disabled = false; b.textContent = "AI 번역"; });
   }
 }
 
@@ -799,8 +809,9 @@ async function _aiTranslateAll() {
     const results = await Promise.allSettled(
       chunk.map((idx) => _aiTranslateSingle(idx))
     );
+    // _aiTranslateSingle은 실패를 예외가 아니라 false로 알린다 — 값으로 센다(B-018)
     for (const r of results) {
-      if (r.status === "fulfilled") success++;
+      if (r.status === "fulfilled" && r.value === true) success++;
       else fail++;
     }
     // 진행 바 갱신
@@ -819,7 +830,7 @@ async function _aiTranslateAll() {
     showEditorProgress("trans", false);
   }
   if (allBtn) { allBtn.disabled = false; allBtn.textContent = "전체 AI 번역"; }
-  showToast(`AI 번역 완료: 성공 ${success}건, 실패 ${fail}건`, 'success');
+  showToast(`AI 번역 완료: 성공 ${success}건, 실패 ${fail}건`, fail ? 'warning' : 'success');
 }
 
 
@@ -1109,7 +1120,7 @@ function _applyRefDictSelection() {
     lines.push(line);
   }
 
-  // transState에 참조 사전 컨텍스트 저장 (AI 번역 시 사용)
+  // transState에 참조 사전 컨텍스트 저장 — _aiTranslateSingle이 reference_context로 보낸다
   transState._refDictContext = lines.join("\n");
 
   const statusEl = document.getElementById("trans-save-status");

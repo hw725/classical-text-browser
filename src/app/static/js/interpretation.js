@@ -5,14 +5,15 @@
  *   1. 해석 저장소 목록 로드 (사이드바)
  *   2. 해석 저장소 생성 다이얼로그
  *   3. 의존 변경 확인 + 경고 배너
- *   4. 층별(L5/L6/L7) 내용 조회/편집/저장
- *   5. 하단 패널 의존 추적 렌더링
+ *   4. 의존 추적(원본이 바뀌었는가) 확인·인지·기반 갱신
+ *   (층별 내용 조회/편집/저장과 activate/deactivate는 2026-09-22에 걷어냈다 — 이 파일의 «걷어낸 자리» 주석.
+ *    층 편집은 표점·현토·번역·주석·인용 편집기 다섯이 한다.)
  *
  * 의존성: viewerState (sidebar-tree.js), _loadGitLog (correction-editor.js)
  *
  * 왜 이렇게 하는가:
  *   correction-editor.js 패턴을 따라 독립 모듈로 구성한다.
- *   해석 모드에서만 활성화되며, 모드 전환 시 activate/deactivate로 제어한다.
+ *   해석 저장소 목록은 사이드바에 늘 있고, 편집기 다섯이 interpState.interpId를 읽는다.
  */
 
 /* ──────────────────────────
@@ -209,10 +210,10 @@ async function _loadInterpretationList() {
         const typeLabel = item.interpreter?.type || "human";
         const other = _docId && item.source_document_id !== _docId ? " is-other-doc" : "";
         return `
-        <div class="interp-list-item${other}" data-interp-id="${item.interpretation_id}" data-doc-id="${item.source_document_id}">
+        <div class="interp-list-item${other}" data-interp-id="${_escAttr(item.interpretation_id)}" data-doc-id="${_escAttr(item.source_document_id)}">
           <span class="interp-type-badge ${typeClass}">${typeLabel}</span>
-          <span class="interp-list-title">${item.title || item.interpretation_id}</span>
-          <span class="interp-list-source">${item.source_document_id}</span>
+          <span class="interp-list-title">${_escHtml(item.title || item.interpretation_id)}</span>
+          <span class="interp-list-source">${_escHtml(item.source_document_id)}</span>
           <button class="interp-delete-btn" title="해석 저장소 삭제 (휴지통 이동)">×</button>
         </div>
       `;
@@ -515,8 +516,8 @@ function _renderDepPanel(dep) {
       const stClass = `st-${tf.status}`;
       return `
       <div class="dep-file-item">
-        <span class="dep-file-status ${stClass}">${tf.status}</span>
-        <span class="dep-file-path">${tf.path}</span>
+        <span class="dep-file-status ${stClass}">${_escHtml(tf.status)}</span>
+        <span class="dep-file-path">${_escHtml(tf.path)}</span>
       </div>
     `;
     })

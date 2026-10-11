@@ -20,7 +20,6 @@ from starlette.requests import Request
 import app.routers.annotation as R
 from core.annotation import add_annotation, load_annotations, save_annotations
 from core.annotation_dict_llm import _build_annotation_from_raw
-from core.document import write_json_atomic
 from core.translation import save_translations
 
 TEXT = "甲乙丙丁"
@@ -44,7 +43,19 @@ def make_interp(tmp_path, monkeypatch):
     monkeypatch.setattr(R, "require_repo_path", lambda t, i: lib / t / i)
     monkeypatch.setattr(R, "_get_llm_router", lambda: object())
     monkeypatch.setattr(R, "git_commit_interpretation", lambda *a, **k: None)
+    # 원문은 그 쪽의 편성 단위(경계 목록에서 만든 보기)에서 온다 — 라우트의 _load_page_blocks가
+    # list_entities(…, "unit")를 읽는다. _put_l4가 여기에 단위를 넣는다(B-022 뒤 자리).
+    _UNITS[str(interp_path)] = []
+
+    def fake_list_entities(path, kind, *a, **k):
+        return list(_UNITS.get(str(path), [])) if kind == "unit" else []
+
+    monkeypatch.setattr(R, "list_entities", fake_list_entities)
     return interp_path
+
+
+# 픽스처별 단위 목록(해석 저장소 경로 → 단위들)
+_UNITS: dict[str, list[dict]] = {}
 
 
 @pytest.fixture
@@ -53,9 +64,17 @@ def interp(tmp_path, monkeypatch):
 
 
 def _put_l4(interp_path, part_id: str, page: int, block_id: str, text: str = TEXT) -> None:
-    write_json_atomic(
-        interp_path / "L4_text" / "main_text" / f"{part_id}_page_{page:03d}_text.json",
-        {"blocks": [{"block_id": block_id, "text": text}]},
+    """그 쪽에 원문 text를 가진 편성 단위 하나를 둔다(id = block_id).
+
+    예전에는 해석 저장소의 L4_text/main_text/*_text.json에 썼다 — 실제 서고에는 생기지 않는
+    자리라, 라우트가 그곳을 읽던 동안 시험만 통과하고 실제로는 늘 폴백으로 갔다(2026-10-11 B-022).
+    """
+    _UNITS.setdefault(str(interp_path), []).append(
+        {
+            "id": block_id,
+            "original_text": text,
+            "source_ref": {"page": page, "part_id": part_id},
+        }
     )
 
 

@@ -6,11 +6,14 @@ core-schema-v1.3.md 및 operation-rules-v1.0.md에 따른다.
 
     {interp_id}/
     └── core_entities/
-                ├── blocks/{uuid}.json
         ├── tags/{uuid}.json
         ├── concepts/{uuid}.json
         ├── agents/{uuid}.json
-        └── relations/{uuid}.json
+        ├── relations/{uuid}.json
+        └── id_map.json            ← 옛 id 장부(D-128 2항)
+
+    단위(unit)는 파일로 두지 않는다 — 원본 저장소의 경계 목록
+    documents/{doc}/boundaries/{part}.json에서 만든 읽기 보기다(D-092·D-097).
 
 왜 이렇게 하는가:
     - 코어 스키마 엔티티는 해석 작업의 산물이므로 해석 저장소 안에 둔다.
@@ -24,7 +27,6 @@ import logging
 import uuid
 from pathlib import Path
 
-import git
 import jsonschema
 
 logger = logging.getLogger(__name__)
@@ -36,7 +38,8 @@ logger = logging.getLogger(__name__)
 # 엔티티 유형 → 서브디렉터리 이름 매핑
 #
 # unit(단위)만 사정이 다르다: 파일 하나에 단위 하나가 아니라 권마다 경계 목록 하나이고
-# (boundaries/{doc}__{part}.json) 단위는 그 목록에서 계산한 보기다(D-092). 아래 값은
+# (원본 저장소 documents/{doc}/boundaries/{part}.json, D-097) 단위는 그 목록에서 계산한
+# 보기다(D-092). 아래 값은
 # «어느 디렉터리에 사는가»만 알리며, 조회·생성·갱신은 _entity_dir_path에 닿기 전에
 # 경계 목록 쪽으로 갈라진다.
 ENTITY_TYPES: dict[str, str] = {
@@ -56,15 +59,8 @@ VALID_STATUS_TRANSITIONS: dict[str, list[str]] = {
 }
 
 # 엔티티 유형 → JSON 스키마 파일명
-# v1.3까지 쓰던 엔티티 이름. 옛 이름이 사는 자리는 여기 하나뿐이며 v1.4에서 지운다(D-093).
-LEGACY_ENTITY_TYPES: dict[str, str] = {"text_block": "unit"}
-
-
-def normalize_entity_type(entity_type: str) -> str:
-    """옛 엔티티 이름을 지금 이름으로 옮긴다. 입력: 종류 문자열. 출력: 종류 문자열."""
-    return LEGACY_ENTITY_TYPES.get(entity_type, entity_type)
-
-
+# (v1.3까지의 옛 이름 «text_block»을 받아 주던 장치는 D-093이 정한 대로 지웠다 — 2026-10-11.
+#  옛 이름으로 부르면 «알 수 없는 엔티티 유형» 오류가 난다.)
 SCHEMA_FILES: dict[str, str] = {
     "unit": "unit.schema.json",
     "tag": "tag.schema.json",
@@ -151,17 +147,13 @@ def _write_json(path: Path, data: dict) -> None:
 
 
 def _get_source_head_commit(doc_path: Path) -> str:
-    """원본 저장소의 HEAD 커밋 해시를 반환한다.
+    """원본 저장소의 HEAD 커밋(없으면 "no_git"). 정본은 core.interpretation의 같은 이름 함수다.
 
-    왜 이렇게 하는가:
-        단위의 source_ref.commit에 사용된다.
-        원본에 git이 없으면 'no_git'을 반환하여 방어한다.
+    같은 몸통이 두 파일에 복제돼 있었다(2026-10-11 전수) — 한쪽만 고쳐지지 않게 위임한다.
     """
-    try:
-        repo = git.Repo(doc_path)
-        return repo.head.commit.hexsha
-    except (git.InvalidGitRepositoryError, ValueError):
-        return "no_git"
+    from core.interpretation import _get_source_head_commit as _head
+
+    return _head(doc_path)
 
 
 # ──────────────────────────
@@ -202,7 +194,8 @@ LIST_FILTER_KEYS = ("status", "block_id", "scope_document")
 # unit(단위) = 경계 목록의 보기 (D-092·D-093)
 # ──────────────────────────
 #
-# v1.3부터 글 단위의 정본은 core_entities/boundaries/{doc}__{part}.json이다. 이 모듈의
+# v1.3부터 글 단위의 정본은 경계 목록이고, D-097부터 그 자리는 원본 저장소
+# documents/{doc}/boundaries/{part}.json이다(해석 저장소의 옛 자리는 처음 읽을 때 옮긴다). 이 모듈의
 # unit 조회·생성·갱신은 그 목록을 읽고 쓰는 얇은 층이며, blocks/*.json은 만들지
 # 않는다.
 # 옛 저장소(blocks/만 있는)는 처음 읽을 때 한 번 옮긴다(migrate_from_blocks —
@@ -647,7 +640,6 @@ def create_entity(
         - 동일 ID의 엔티티가 이미 있으면 오류를 발생시킨다 (operation-rules 2.1).
     """
     interp_path = Path(interp_path).resolve()
-    entity_type = normalize_entity_type(entity_type)
     if entity_type == "unit":
         _ensure_boundaries(interp_path)
         return _create_boundary_from_unit(interp_path, data)
@@ -698,7 +690,6 @@ def get_entity(
         FileNotFoundError: 엔티티를 찾을 수 없을 때.
     """
     interp_path = Path(interp_path).resolve()
-    entity_type = normalize_entity_type(entity_type)
     if entity_type == "unit":
         hit = next((u for u in _unit_view(interp_path) if u.get("id") == entity_id), None)
         if hit is None:
@@ -760,7 +751,6 @@ def update_entity(
         - id 필드는 변경할 수 없다.
     """
     interp_path = Path(interp_path).resolve()
-    entity_type = normalize_entity_type(entity_type)
     if entity_type == "unit":
         _ensure_boundaries(interp_path)
         return _update_boundary_from_unit(interp_path, entity_id, updates)
@@ -823,12 +813,11 @@ def list_entities(
     출력: 엔티티 딕셔너리의 리스트.
 
     왜 이렇게 하는가:
-        하단 패널에서 유형별 엔티티 목록을 표시할 때 사용한다.
+        엔티티 패널에서 유형별 엔티티 목록을 표시할 때 사용한다.
         필터가 있으면 해당 필드가 일치하는 엔티티만 반환한다.
     """
     interp_path = Path(interp_path).resolve()
     _retire_works(interp_path)  # D-099 — 저장소를 처음 읽을 때 옛 works/를 물린다
-    entity_type = normalize_entity_type(entity_type)
     if entity_type == "unit":
         entities = _unit_view(interp_path)
         if filters:
@@ -920,15 +909,17 @@ def list_entities_for_page(
 ) -> dict:
     """현재 페이지와 관련된 모든 엔티티를 조회한다.
 
-    목적: 하단 패널 "엔티티" 탭에서 현재 페이지에 관련된 엔티티를 표시한다.
+    목적: 엔티티 패널의 «현재 페이지만»에서 현재 페이지에 관련된 엔티티를 표시한다.
     입력:
         interp_path — 해석 저장소 경로.
         document_id — 원본 문헌 ID.
         page_num — 페이지 번호 (1-based).
     출력: {
-        "blocks": [...], "tags": [...], "concepts": [...],
+        "units": [...], "tags": [...], "concepts": [...],
         "agents": [...], "relations": [...]
     }
+    단위의 키는 «units»다 — 화면(entity-manager.js)의 typeMap이 그 이름으로 찾는다.
+    한때 «blocks»로 돌려줘 «현재 페이지만»(기본 켬)에서 단위가 하나도 안 보였다(B-012).
 
     왜 이렇게 하는가:
         - 먼저 source_ref.page가 일치하는 단위를 찾고,
@@ -1000,7 +991,7 @@ def list_entities_for_page(
     # scope_document가 일치해도 포함하지 않는다 — 페이지 필터는 관계로 연결된 것만
 
     return {
-        "blocks": page_blocks,
+        "units": page_blocks,
         "tags": page_tags,
         "concepts": page_concepts,
         "agents": page_agents,
@@ -1228,7 +1219,7 @@ def create_unit_from_source(
 ) -> dict:
     """L4 확정 텍스트에서 단위를 생성한다 (source_ref 자동 채움).
 
-    목적: 연구자가 "단위 만들기" 버튼을 클릭하면,
+    목적: (화면의 «단위 만들기» 단추는 2026-09-22에 걷어냈고 라우트만 남았다) 호출되면,
           현재 문서·페이지·블록 정보에서 source_ref를 자동으로 채워
           단위를 생성한다.
     입력:
@@ -1278,60 +1269,6 @@ def create_unit_from_source(
     result = create_entity(interp_path, "unit", unit_data)
     return {**result, "unit": unit_data}
 
-
-def auto_create_units_from_text(
-    interp_path: str | Path,
-    library_path: str | Path,
-    document_id: str,
-    pages: list[dict],
-) -> list[dict]:
-    """텍스트에서 단위를 직접 생성한다 (시나리오 2: HWP만).
-
-    목적: HWP 파일로 새 문헌을 만든 후, 레이아웃 분석(L3) 없이
-          바로 단위를 생성하여 표점·현토·번역 작업을 시작할 수 있게 한다.
-    입력:
-        interp_path — 해석 저장소 경로.
-        library_path — 서고 루트 경로.
-        document_id — 원본 문헌 ID.
-        pages — [{page_num, text, part_id(선택)}].
-            각 항목은 한 페이지의 텍스트.
-            part_id가 없으면 "vol1" 사용.
-    출력: 생성된 단위 딕셔너리 리스트.
-
-    왜 이렇게 하는가:
-        시나리오 2에서는 PDF/이미지가 없으므로 LayoutBlock도 없다.
-        source_ref.layout_block_id=null로 설정하고,
-        source_ref.page만으로 원본을 추적한다.
-        단위는 저작을 가리키지 않는다(D-099) — 저작 묶음은 층위 1의 «묶음» 경계다.
-    """
-    interp_path = Path(interp_path).resolve()
-    library_path = Path(library_path).resolve()
-
-    created_blocks = []
-
-    for seq_idx, page_info in enumerate(pages):
-        page_num = page_info["page_num"]
-        text = page_info.get("text", "")
-        part_id = page_info.get("part_id", "vol1")
-
-        if not text.strip():
-            continue
-
-        # 단위 생성 — layout_block_id=null (HWP 직접 가져오기)
-        block_result = create_unit_from_source(
-            interp_path=interp_path,
-            library_path=library_path,
-            document_id=document_id,
-            part_id=part_id,
-            page_num=page_num,
-            layout_block_id=None,
-            original_text=text,
-            sequence_index=seq_idx,
-        )
-
-        created_blocks.append(block_result)
-
-    return created_blocks
 
 
 # ──────────────────────────────────────

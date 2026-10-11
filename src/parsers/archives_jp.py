@@ -399,7 +399,7 @@ class ArchivesJpFetcher(BaseFetcher):
         # JPEG → PDF 변환 (fpdf2)
         pdf = FPDF(unit="pt")
         for jpeg_path in jpeg_paths:
-            # 이미지 크기를 PDF 페이지 크기로 설정 (72dpi 기준)
+            # 이미지 크기를 PDF 페이지 크기(pt = 1/72인치)로 — 아래 150dpi 가정으로 환산
             from PIL import Image
 
             with Image.open(jpeg_path) as img:
@@ -596,9 +596,9 @@ def _parse_search_results(html_text: str) -> list[dict[str, Any]]:
                     }
                 )
 
-    except Exception:
-        # HTML 파싱 실패 시 빈 목록 반환
-        pass
+    except Exception as e:  # noqa: BLE001
+        # HTML 파싱 실패 시 빈 목록 반환 — 사이트 개편으로 «0건»이 원인 없이 나오지 않게 남긴다
+        logger.warning("국립공문서관 검색 결과 해석 실패(빈 목록): %s", e)
 
     return results
 
@@ -691,9 +691,9 @@ def _parse_detail_page(html_text: str, source_url: str) -> dict[str, Any]:
             if img_ids:
                 data["img_ids"] = img_ids
 
-    except Exception:
-        # HTML 파싱 실패 시 기본 데이터만 반환
-        pass
+    except Exception as e:  # noqa: BLE001
+        # HTML 파싱 실패 시 기본 데이터만 반환 — 원인을 남긴다
+        logger.warning("국립공문서관 상세 페이지 해석 실패(기본 데이터만): %s — %s", source_url, e)
 
     return data
 
@@ -959,8 +959,8 @@ def _parse_list_photo_page(html_text: str, bid: str) -> list[dict[str, str]]:
         부모 label의 text_content → 라벨 (예: "蒙求1")
 
     왜 이렇게 하는가:
-        국립공문서관은 IIIF를 지원하지 않으므로,
-        다운로드 페이지의 HTML에서 개별 파일 목록을 파싱한다.
+        IIIF가 없는 구형 자료(BID→listPhoto 경로)는 다운로드 페이지의 HTML에서 개별 파일
+        목록을 파싱한다. 신형 자료는 IIIF 경로를 쓴다(이 파일 앞쪽의 img_ids 처리).
     """
     entries: list[dict[str, str]] = []
     try:

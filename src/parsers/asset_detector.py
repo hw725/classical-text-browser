@@ -423,8 +423,9 @@ def _get_file_extension(path: str) -> str:
     쿼리 파라미터를 제거하고 확장자만 반환한다.
     예: "/docs/file.pdf?v=1" → ".pdf"
     """
-    # 쿼리 파라미터 제거
-    clean = path.split("?")[0].split("#")[0]
+    # 쿼리 파라미터 제거, 마지막 경로 조각에서만 찾는다 — 경로 전체에서 마지막 점을 찾으면
+    # «/a.b/c» 같은 폴더 이름의 점을 확장자로 오인해 «.b/c»를 돌려줬다(2026-10-11 전수)
+    clean = path.split("?")[0].split("#")[0].rsplit("/", 1)[-1]
     if "." in clean:
         ext = "." + clean.rsplit(".", 1)[-1].lower()
         # 확장자가 너무 길면(8자 이상) 확장자가 아님
@@ -469,6 +470,11 @@ def _label_from_url(url: str) -> str:
     path = unquote(parsed.path)
     filename = path.split("/")[-1] if "/" in path else path
     return filename or "download"
+
+
+def _natural_key(text: str) -> list:
+    """자연 정렬 열쇠: 숫자 덩어리는 수로, 나머지는 글자로 견준다."""
+    return [(0, int(t), "") if t.isdigit() else (1, 0, t) for t in re.split(r"(\d+)", text)]
 
 
 def _url_to_asset_id(url: str) -> str:
@@ -530,8 +536,9 @@ def _group_images_into_bundles(
         if len(links) >= 2:
             # 번들로 그룹핑
             urls = [url for _, url in links]
-            # URL 순서 정렬 (파일명 기준 자연 정렬)
-            urls.sort(key=lambda u: urlparse(u).path)
+            # URL 순서 정렬 (파일명 기준 자연 정렬 — p2가 p10보다 앞).
+            # 경로 문자열 사전순이면 p1, p10, p2가 되어 PDF 쪽 순서가 말없이 뒤섞였다(B-034).
+            urls.sort(key=lambda u: _natural_key(urlparse(u).path))
 
             # 라벨: 디렉토리 이름
             dir_name = dir_key.split("/")[-1] if "/" in dir_key else dir_key

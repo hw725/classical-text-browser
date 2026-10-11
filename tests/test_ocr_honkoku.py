@@ -92,6 +92,21 @@ class TestHonkokuAdapter:
         assert by_id["p01_b02"]["lines"][0]["text"] == "丁戊"  # 루비 읽기·返り点은 본문이 아니다
         assert by_id["p01_b02"]["lines"][0]["koji"] == "丁（てい）戊＿レ"  # 표기는 따로 남는다
         assert [c["char"] for c in by_id["p01_b02"]["lines"][0]["characters"]] == ["丁", "戊"]
+        # 엔진이 내는 행은 L2 스키마(OcrLine)를 지킨다 — koji 칸도(B-015). 예전에는 이 검증이 없어
+        # 스키마가 koji를 거부하는데도 초록이었다.
+        import json
+        from pathlib import Path
+
+        import jsonschema
+
+        schema_path = (
+            Path(__file__).resolve().parents[1] / "schemas" / "source_repo" / "ocr_page.schema.json"
+        )
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        line_schema = {"$ref": "#/$defs/OcrLine", "$defs": schema["$defs"]}
+        for r in out:
+            for ln in r["lines"]:
+                jsonschema.validate(ln, line_schema)
 
     def test_block_crop_recognize_returns_lines(self):
         """입력: 크롭 이미지. 출력: OcrBlockResult. 목적: 블록 단위 경로도 같은 변환을 쓴다."""

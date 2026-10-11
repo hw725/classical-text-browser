@@ -45,7 +45,8 @@ while [ $TRY -lt $MAX_TRIES ]; do
 done
 
 if [ $TRY -ge $MAX_TRIES ]; then
-    echo "[오류] 포트 ${2:-8000}~$PORT 모두 사용 중입니다."
+    # 루프가 마지막 실패 뒤에도 PORT를 한 번 올린다 — 실제로 시도한 끝은 PORT-1
+    echo "[오류] 포트 ${2:-8000}~$((PORT - 1)) 모두 사용 중입니다."
     exit 1
 fi
 
@@ -93,7 +94,16 @@ echo ""
 echo "종료하려면 Ctrl+C를 누르세요."
 echo ""
 
+# ── 자동 업데이트 (D-112) ────────────────────────
+# 서버를 켜기 전에 새 판(같은 판 번호의 고친 것 포함)이 있으면 받는다. 손으로 고친 파일이
+# 있거나 오프라인이거나 CTB_NO_AUTO_UPDATE=1이면 건너뛴다. zip 설치는 먼저 git 사본으로 바꾼다.
+if [ -z "${CTB_NO_AUTO_UPDATE:-}" ]; then
+    echo "[update] 새 판 확인 중..."
+    uv run python -c "import sys; sys.path.insert(0, 'src'); from core.updater import auto_update_cli; auto_update_cli()" || true
+fi
+
 # ── 브라우저 자동 열기 (2초 후) ────────────────
+# 자동 업데이트 «뒤»에 둔다 — 앞에 두면 업데이트가 2초를 넘길 때 브라우저가 연결 실패 화면을 연다.
 (
     sleep 2
     if command -v open >/dev/null 2>&1; then
@@ -104,14 +114,6 @@ echo ""
         echo "[알림] 브라우저를 열 수 없습니다. 직접 http://127.0.0.1:$PORT 에 접속하세요."
     fi
 ) &
-
-# ── 자동 업데이트 (D-112) ────────────────────────
-# 서버를 켜기 전에 새 판(같은 판 번호의 고친 것 포함)이 있으면 받는다. 손으로 고친 파일이
-# 있거나 오프라인이거나 CTB_NO_AUTO_UPDATE=1이면 건너뛴다. zip 설치는 먼저 git 사본으로 바꾼다.
-if [ -z "${CTB_NO_AUTO_UPDATE:-}" ]; then
-    echo "[update] 새 판 확인 중..."
-    uv run python -c "import sys; sys.path.insert(0, 'src'); from core.updater import auto_update_cli; auto_update_cli()" || true
-fi
 
 # ── 서버 실행 ─────────────────────────────────
 if [ -n "$LIBRARY_PATH" ]; then

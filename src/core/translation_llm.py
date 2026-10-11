@@ -1,6 +1,12 @@
-"""LLM 기반 번역 Draft 생성.
+"""LLM 기반 번역 Draft — 확정 함수와 옛 생성 함수.
 
-LlmRouter를 통해 한문 원문을 한국어로 번역하고,
+지금 앱에서 쓰는 것과 아닌 것(2026-10-11 전수 확인):
+- 쓰인다: commit_translation_draft(routers/reading.py의 확정 라우트).
+- 쓰이지 않는다: generate_translation_drafts — 화면의 AI 번역은 routers/reading.py가
+  _translation_input(확정 용어 풀이·참조 사전 문맥, D-131·B-018)으로 따로 한다. 그래서 이 함수의
+  reference_dict_context도 실리지 않는다. 시험이 내부 도우미를 재고 있어 지우지 않고 남긴다.
+
+(옛 설명) LlmRouter를 통해 한문 원문을 한국어로 번역하고,
 연구자가 검토/수정 후 확정하는 Draft→Review→Commit 패턴.
 
 번역 단위는 문장(표점으로 분리)이며,
@@ -202,6 +208,10 @@ def commit_translation_draft(
             if modifications:
                 for key, value in modifications.items():
                     tr[key] = value
+                # 사람이 번역문을 고쳤으면 더는 LLM 초안이 아니다 — update_translation처럼
+                # draft_id를 뗀다(강독 다시 들이기가 «초안»으로 보고 덮지 않게, D-131)
+                if "translation" in modifications and isinstance(tr.get("translator"), dict):
+                    tr["translator"]["draft_id"] = None
             tr["status"] = "accepted"
             tr["reviewed_at"] = datetime.now().isoformat()
             return tr

@@ -1,6 +1,6 @@
 """LLM 모듈 통합 테스트.
 
-Phase 10-2: LLM 4단 폴백 아키텍처 검증.
+Phase 10-2: LLM 폴백 아키텍처 검증(지금은 다섯 단, D-047).
 외부 API 없이 동작하도록 mock provider를 사용.
 
 테스트 항목:
@@ -303,16 +303,6 @@ class TestLlmRouter:
     실제 provider 대신 MockProvider를 주입.
     """
 
-    def _make_router(self, providers):
-        """MockProvider 목록으로 router를 구성."""
-        with tempfile.TemporaryDirectory() as td:
-            config = LlmConfig(library_root=Path(td))
-
-            from llm.router import LlmRouter
-
-            router = LlmRouter(config)
-            router.providers = providers
-            return router, config
 
     @pytest.mark.asyncio
     async def test_fallback_order(self):

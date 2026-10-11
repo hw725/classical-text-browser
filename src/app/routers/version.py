@@ -307,15 +307,17 @@ async def api_export_json(interp_id: str):
 
 @router.post("/api/import/json")
 async def api_import_json(request: Request):
-    """JSON 스냅샷에서 새 Work(문헌 + 해석 저장소)를 생성한다.
+    """JSON 스냅샷에서 새 문헌 + 해석 저장소를 만든다.
 
     목적: 다른 환경에서 export한 스냅샷을 현재 서고에 import.
     입력: Request body에 JSON 직접 전송 (Content-Type: application/json).
     출력: {status, doc_id, interp_id, title, layers_imported, warnings}.
 
     왜 이렇게 하는가:
-        항상 "새 Work 생성"으로 처리하여 기존 데이터에 영향을 주지 않는다.
-        같은 스냅샷을 여러 번 import해도 각각 독립된 Work가 된다.
+        늘 새 id(원래 id + 시각)로 만들어 기존 데이터에 영향을 주지 않는다.
+        같은 스냅샷을 여러 번 들여도 각각 독립된 문헌·해석 저장소가 된다.
+        (함수 이름 create_work_from_snapshot의 «work»는 Work 엔티티(D-099에서 없앰)와
+        무관한 옛 이름이다.)
     """
     _library_path = get_library_path()
     if _library_path is None:
@@ -343,7 +345,7 @@ async def api_import_json(request: Request):
             status_code=422,
         )
 
-    # 새 Work 생성
+    # 새 문헌 + 해석 저장소 생성
     result = create_work_from_snapshot(_library_path, data)
 
     return {
@@ -367,7 +369,7 @@ async def api_import_interpretation_folder(files: list[UploadFile] = File(...)):
     입력:
         multipart/form-data의 files[] (디렉토리 업로드 결과).
         파일 경로는 filename(webkitRelativePath)로 전달된다.
-        overwrite=true이면 기존 저장소를 .trash로 이동 후 덮어쓴다.
+        같은 id의 저장소가 이미 있으면 파일을 건드리지 않고 등록만 한다(덮어쓰기 없음).
 
     출력:
         {status, interp_id, source_document_id, file_count, skipped_count}.

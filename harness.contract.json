@@ -128,6 +128,37 @@
         "detected": true
       },
       "status": "active"
+    },
+    {
+      "id": "C-002",
+      "text": "2026-10-11 전수 검토가 찾은 동작 결함(backlog B-012~B-035)이 다시 들어오지 않는다",
+      "judge": "deterministic",
+      "check": {
+        "argv": [
+          "uv",
+          "run",
+          "python",
+          "-m",
+          "pytest",
+          "tests/test_sweep_20261011.py",
+          "-q",
+          "-p",
+          "no:cacheprovider"
+        ],
+        "fail_regex": "AssertionError|assert |FAILED",
+        "traceback_fatal": false
+      },
+      "guards": [
+        "tests/test_sweep_20261011.py",
+        "tests/js_harness.py",
+        "tests/conftest.py"
+      ],
+      "origin": {
+        "kind": "review",
+        "date": "2026-10-11",
+        "quote": "전수 검토 S-20261011-075504-7cb805 불일치 107건; 사용자 «권고대로 진행. 1번 2번 전부»"
+      },
+      "status": "active"
     }
   ],
   "approved": {

@@ -84,7 +84,7 @@
       "properties": {
         "block_id": {
           "type": "string",
-          "description": "대상 블록 ID. 예: p01_b01"
+          "description": "대상 단위 id(편성 경계 UUID, D-092·D-093). 필드 이름은 아직 block_id다(B-003). v1.2까지는 LayoutBlock id(예: p01_b01)였다."
         },
         "start": {
           "type": "integer",

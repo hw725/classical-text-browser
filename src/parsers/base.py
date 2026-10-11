@@ -74,7 +74,7 @@ class BaseFetcher(ABC):
 
     왜 이렇게 하는가:
         모든 소스가 이미지 다운로드를 지원하지는 않는다.
-        KORCIS는 메타데이터 전용이고, NDL은 IIIF를 지원하나 아직 미구현.
+        (지금은 KORCIS·NDL 모두 지원한다 — korcis.py·ndl.py의 supports_asset_download.)
         이 플래그로 GUI에서 "문헌 생성" 버튼을 조건부 표시한다.
     """
 
@@ -286,9 +286,11 @@ def detect_parser_from_url(url: str) -> str | None:
             - ndlsearch.ndl.go.jp, dl.ndl.go.jp, id.ndl.go.jp → "ndl"
             - digital.archives.go.jp → "japan_national_archives"
             - nl.go.kr/korcis/ → "korcis"
-        2순위 — 범용 LLM 파서 (등록된 사이트):
+        1순위(이어서) — 한국 기관 전용 파서:
             - jsg.aks.ac.kr → "jsg"
             - kyudb.snu.ac.kr → "kyujanggak"
+            - kostma.korea.ac.kr → "kostma"
+        2순위 — 범용 LLM 파서 (등록된 사이트):
             - kokusho.nijl.ac.jp, kostma.aks.ac.kr,
               db.history.go.kr, db.itkc.or.kr → "generic_llm"
         3순위 — 폴백:

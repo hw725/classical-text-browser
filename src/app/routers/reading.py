@@ -162,6 +162,9 @@ class AiTranslationRequest(BaseModel):
     part_id: str | None = None
     page: int | None = None
     block_id: str | None = None
+    # 번역 탭 «참조 사전 → 적용»이 만든 문맥(다른 문헌에서 들여온 사전의 매칭 항목). 화면이
+    # 적어 두기만 하고 보내지 않아 「적용」이 아무 효과가 없었다(B-018).
+    reference_context: str | None = None
 
 
 def _translation_input(body: AiTranslationRequest) -> str:
@@ -171,15 +174,23 @@ def _translation_input(body: AiTranslationRequest) -> str:
     지침(«검토된 용어사전을 근거로, 그 정의와 문형 해석을 우선»)을 앱의 번역에도 적용한다.
     원문에 나오는 표제어만 싣는다 — 단위 전체의 주석을 다 실으면 모델이 없는 말을 끌어온다.
     """
+    # 참조 사전(다른 문헌의 사전) — 확정 풀이보다 뒤, «참고만» 등급으로 싣는다(B-018).
+    # 길이는 잘라 둔다: 사람이 고른 항목이지만 수백 개를 고르면 원문보다 길어진다.
+    ref = (body.reference_context or "").strip()[:4000]
+    ref_part = (
+        ["[참조 사전 — 다른 문헌의 풀이, 참고만 할 것]\n" + ref.removeprefix("[참고 사전]").strip()]
+        if ref
+        else []
+    )
     if not (body.interp_id and body.block_id and body.page):
-        return body.text
+        return "\n\n".join(ref_part + ["[원문]\n" + body.text]) if ref_part else body.text
     try:
         from core.annotation import load_annotations
 
         interp_path = require_repo_path("interpretations", body.interp_id)
         data = load_annotations(interp_path, body.part_id or "main", int(body.page))
     except Exception:  # noqa: BLE001 — 용어 풀이를 못 읽어도 번역은 된다
-        return body.text
+        data = {}
     # 확정(reviewed·accepted)과 검토 전(draft)을 나눈다 — 사용자 지침은 «검토 완료된 용어사전»을
     # 우선하라는 것이다. 초안까지 «확정»이라 부르면 검토 전 풀이가 번역을 끌고 간다(Codex 지적).
     confirmed, drafts = [], []
@@ -196,7 +207,7 @@ def _translation_input(body: AiTranslationRequest) -> str:
             meaning = d.get("contextual_meaning") or d.get("dictionary_meaning") or ""
             row = f"- {head}{reading}{cat}: {meaning}"
             (confirmed if a.get("status") in ("reviewed", "accepted") else drafts).append(row)
-    if not (confirmed or drafts):
+    if not (confirmed or drafts or ref_part):
         return body.text
     parts = []
     if confirmed:
@@ -209,6 +220,7 @@ def _translation_input(body: AiTranslationRequest) -> str:
             "[검토 전 용어 풀이 — 참고만 할 것, 원문과 맞지 않으면 따르지 말 것]\n"
             + "\n".join(dict.fromkeys(drafts))
         )
+    parts += ref_part
     return "\n\n".join(parts) + "\n\n[원문]\n" + body.text
 
 

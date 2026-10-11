@@ -8,12 +8,13 @@
     (이름은 v1.3에서 TextBlock → 단위(unit)로 바꿨다 — D-093.)
 
 규칙 (D-092 결정):
-    - 권마다 파일 하나: core_entities/boundaries/{document_id}__{part_id}.json
+    - 권마다 파일 하나: 원본 저장소 documents/{doc}/boundaries/{part}.json (D-097 — 그 전에는
+      해석 저장소 core_entities/boundaries/{doc}__{part}.json, 처음 읽을 때 옮긴다)
     - 항목 = «여기서 단위가 시작한다». 끝은 저장하지 않는다 — 같은 층위 이상의 다음 경계 앞까지.
     - 단위의 id는 시작 경계에 붙는다. 합치기 = 뒤 경계 삭제(앞 id가 남는다), 쪼개기 = 경계 삽입
       (새 id는 뒤 단위에), 옮기기 = start만 바꾼다.
-    - 깊이(level)는 제한 없는 중첩이고, 뜻은 역할(role: container·article·fragment)이 갖는다.
-      «기사»가 2단에도 3단에도 오는 책이 있어 숫자에 뜻을 붙이지 않는다.
+    - 깊이(level)는 제한 없는 중첩이다. 역할(role: container·article·fragment)은 깊이로 어림해
+      저장만 하고 2026-09-11부터 화면에서 물러났다 — 아무 동작도 바꾸지 않는다(AGENTS 모듈 지도).
       깊이 n을 손대도 더 얕은 id는 그대로.
     - 본문은 저장하지 않고 L4에서 잘라 온다. L4 커밋이 바뀌면 오프셋이 아니라 anchor_text로
       자리를 다시 찾고, 못 찾으면 anchor_status="stale"로 표시한다

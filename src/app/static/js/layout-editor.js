@@ -7,7 +7,7 @@
  *   3. 사각형 삭제 (Delete 키 또는 버튼)
  *   4. 블록 타입별 색상, reading_order 번호 표시
  *   5. 우측 패널에서 블록 속성 편집
- *   6. 저장 → L3_layout/page_NNN.json (layout_page.schema.json으로 검증)
+ *   6. 저장 → L3_layout/{part_id}_page_{NNN}.json (layout_page.schema.json으로 검증, core/document.py)
  *
  * 의존성: sidebar-tree.js (viewerState), pdf-renderer.js (pdfState)
  *
@@ -1045,6 +1045,7 @@ async function loadPageLayout(docId, partId, pageNum) {
 
   const url = `/api/documents/${docId}/pages/${pageNum}/layout?part_id=${partId}`;
   try {
+    // (D-066 뒤로 API 응답에는 미들웨어가 no-store를 붙인다 — 아래 cache 옵션은 그 전의 겹 방어다.)
     // no-store가 없으면 브라우저가 예전 응답을 그대로 준다.
     // 배치 OCR이 L3 전면 블록을 새로 만들어도 레이아웃 탭에는 «블록이 없던
     // 시절»이 남아 있었다. 교정 탭(loadPageCorrections)은 세 요청 모두

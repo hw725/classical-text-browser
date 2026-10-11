@@ -4,7 +4,7 @@
 1. export_dictionary — 사전 항목 추출 + 중복 표제어 통합
 2. save_export — 파일 저장 + JSON 검증
 3. import_dictionary — 새 항목 가져오기
-4. import merge 전략 — merge / skip_existing / overwrite
+4. import merge 전략 — merge / skip_existing / overwrite(자리 유지·풀이 교체)
 5. 라운드트립 — export → import → re-export 일관성
 """
 
@@ -259,7 +259,7 @@ def test_export():
         assert stats["total_entries"] == 3
         # person: 王戎 2회 + 裴楷 1회 (중복 전), term: 簡要 1회
         # 주의: by_type은 중복 제거 전의 개별 annotation 기준
-        assert stats["by_type"].get("person", 0) >= 2
+        assert stats["by_type"].get("person", 0) == 3
 
         print("  [PASS] export_dictionary")
 
@@ -425,6 +425,33 @@ def test_import_skip():
         assert result["imported"] == 1  # 新項目 import
 
         print("  [PASS] import skip_existing 전략")
+
+
+def test_import_overwrite_keeps_position_and_replaces_meaning():
+    """overwrite: 기존 주석의 자리·id는 그대로, 사전 풀이만 바꾼다(같은 표제어가 둘이 되지 않게)."""
+    from src.core.annotation import load_annotations
+
+    with tempfile.TemporaryDirectory() as tmp:
+        interp = _make_interp(Path(tmp))
+        before = load_annotations(interp, "main", 1)
+        old = next(
+            a for b in before["blocks"] for a in b["annotations"]
+            if (a.get("dictionary") or {}).get("headword") == "王戎"
+        )
+        dict_data = {
+            "source": {"document_title": "외부"},
+            "entries": [{"headword": "王戎", "dictionary_meaning": "덮어쓴 풀이"}],
+        }
+        result = import_dictionary(interp, dict_data, target_page=1, merge_strategy="overwrite")
+        assert result["overwritten"] == 1 and result["imported"] == 0
+        after = load_annotations(interp, "main", 1)
+        same = [
+            a for b in after["blocks"] for a in b["annotations"]
+            if (a.get("dictionary") or {}).get("headword") == "王戎"
+        ]
+        assert len(same) == 1
+        assert same[0]["id"] == old["id"] and same[0]["target"] == old["target"]
+        assert same[0]["dictionary"]["dictionary_meaning"] == "덮어쓴 풀이"
 
 
 # ────────────────────────────────

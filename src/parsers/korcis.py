@@ -152,6 +152,34 @@ class KorcisFetcher(BaseFetcher):
         return _parse_search_results(response.text)
 
     async def fetch_detail(self, item_id: str, **kwargs) -> dict[str, Any]:
+        """상세 서지 = MARC + 목차·해제 + OpenAPI 상세(판식·소장처).
+
+        입력: item_id — vdkvgwkey. 출력: MARC 필드 dict(보강 키 _contents_info·_abstracts_info·
+        _openapi_detail 포함).
+        왜 여기서 다 하는가: 검색에서 고른 항목(fetch-and-map)과 URL로 가져온 항목(fetch_by_url)이
+        같은 서지를 받아야 한다. 예전에는 OpenAPI 상세를 아무 길도 부르지 않아 판식·소장처가 늘
+        비었고(B-031), 목차·해제는 URL 길에서만 붙었다.
+        """
+        data = await self._fetch_marc(item_id)
+        await self._enrich_with_contents(data)
+        await self._enrich_with_openapi(data, item_id)
+        return data
+
+    async def _enrich_with_openapi(self, data: dict[str, Any], rec_key: str) -> None:
+        """OpenAPI 상세(판식·소장처)를 data["_openapi_detail"]에 싣는다. 실패해도 MARC는 그대로.
+
+        2026-10-11 실측: rec_key에 vdkvgwkey를 그대로 주면 된다(302554414 → 蒙求). 판식
+        («左右雙邊 … 半葉10行22字»)은 form_info가 아니라 note_info에 들어 있다.
+        """
+        try:
+            detail = await openapi_detail(rec_key)
+        except Exception as e:  # noqa: BLE001 — 사이트가 안 받아도 서지 수집은 계속한다
+            logger.warning("KORCIS OpenAPI 상세 실패(판식·소장처 없이 진행): %s — %s", rec_key, e)
+            return
+        if detail:
+            data["_openapi_detail"] = detail
+
+    async def _fetch_marc(self, item_id: str) -> dict[str, Any]:
         """MARC 팝업에서 상세 메타데이터를 가져온다.
 
         입력:
@@ -217,25 +245,19 @@ class KorcisFetcher(BaseFetcher):
         m_vdk = re.search(r"vdkvgwkey=(\d+)", url)
         if m_vdk:
             item_id = m_vdk.group(1)
-            # HOLD/LOCAL 타겟이더라도 vdkvgwkey로 BIB MARC를 가져온 뒤 보강한다.
-            data = await self.fetch_detail(item_id)
-            # BIB MARC의 012 필드에서 controlNo 추출 → 목차/해제 보강
-            await self._enrich_with_contents(data)
-            return data
+            # HOLD/LOCAL 타겟이더라도 vdkvgwkey로 BIB MARC를 가져온 뒤 보강한다
+            # (목차·해제·OpenAPI 판식은 fetch_detail이 한다).
+            return await self.fetch_detail(item_id)
 
         # fnDetail('ID') 패턴에서 추출 (혹시 JS 링크를 복사한 경우)
         m = re.search(r"fnDetail\(['\"](\d+)['\"]\)", url)
         if m:
-            data = await self.fetch_detail(m.group(1))
-            await self._enrich_with_contents(data)
-            return data
+            return await self.fetch_detail(m.group(1))
 
         # marcKey 파라미터에서 ID 추출 (MARC 팝업 URL)
         m = re.search(r"marcKey=(\d+)", url)
         if m:
-            data = await self.fetch_detail(m.group(1))
-            await self._enrich_with_contents(data)
-            return data
+            return await self.fetch_detail(m.group(1))
 
         raise ValueError(
             f"KORCIS URL에서 자료 ID를 추출할 수 없습니다: {url}\n"
@@ -576,11 +598,15 @@ class KorcisMapper(BaseMapper):
 
         # printing_info 객체 (판식정보)
         # OpenAPI enrichment로 form_info가 있으면 파싱
+        # 판식은 OpenAPI 상세의 note_info(주기)에 «左右雙邊 … 半葉10行22字»로 오고, form_info는
+        # 대개 권책·크기뿐이다(2026-10-11 실측). 둘을 이어 한 번에 읽는다(B-031).
         printing_info = None
-        openapi_data = raw_data.get("_openapi_detail", {})
-        form_info_text = openapi_data.get("form_info", "")
-        if form_info_text:
-            pansik = parse_pansik_info(form_info_text)
+        openapi_data = raw_data.get("_openapi_detail") or {}
+        pansik_text = _openapi_plain(
+            " ".join(str(openapi_data.get(k) or "") for k in ("form_info", "note_info"))
+        )
+        if pansik_text:
+            pansik = parse_pansik_info(pansik_text)
             if pansik and len(pansik) > 1:  # summary 외에 파싱된 필드가 있으면
                 printing_info = pansik
 
@@ -649,7 +675,9 @@ class KorcisMapper(BaseMapper):
         field_sources = {
             "title": self._field_source("MARC 245 ▼a", "exact"),
             "title_reading": self._field_source(
-                "검색결과 한글 제목", "inferred", "검색 결과 HTML에서 추출"
+                "검색결과 한글 제목",
+                "inferred",
+                "검색 결과 HTML에서만 온다 — URL·상세 조회(fetch-and-map) 길에서는 비어 있다",
             ),
             "creator.name": self._field_source("MARC 245 ▼d / 100 ▼a", "exact"),
             "creator.name_reading": self._field_source("MARC 100 ▼a", "exact"),
@@ -1168,8 +1196,9 @@ def _parse_search_results(html_text: str) -> list[dict[str, Any]]:
                 }
             )
 
-    except Exception:
-        pass
+    except Exception as e:  # noqa: BLE001
+        # 사이트 개편으로 «0건»이 원인 없이 나오지 않게 남긴다
+        logger.warning("KORCIS 검색 결과 해석 실패(빈 목록): %s", e)
 
     return results
 
@@ -1260,8 +1289,8 @@ def _parse_marc_html(html_text: str) -> dict[str, Any]:
         if contributor_list:
             data["700_list"] = contributor_list
 
-    except Exception:
-        pass
+    except Exception as e:  # noqa: BLE001
+        logger.warning("KORCIS MARC 해석 실패(읽은 데까지만): %s", e)
 
     return data
 
@@ -1270,7 +1299,7 @@ def _parse_marc_subfields(content: str) -> dict[str, str]:
     """MARC 서브필드 문자열을 파싱한다.
 
     입력: "▼a蒙求 / ▼d李瀚(後晉) 撰. ▼n1-2"
-    출력: {"a": "蒙求 /", "d": "李瀚(後晉) 撰.", "n": "1-2"}
+    출력: {"a": "蒙求", "d": "李瀚(後晉) 撰", "n": "1-2"}   ← 후행 종결부호(/ . ; ,)는 지운다
 
     왜 이렇게 하는가:
         KORCIS MARC 데이터에서 ▼ (U+25BC) 기호가 서브필드 구분자다.
@@ -1575,6 +1604,13 @@ _PANGOO_PATTERNS = [
     (re.compile(r"小黑口"), "소흑구"),
     (re.compile(r"白口"), "백구"),
 ]
+
+
+def _openapi_plain(text: str) -> str:
+    """OpenAPI 상세 칸의 «[…]» 괄호·<br>·쉼표 나열을 판식 문장으로 편다."""
+    text = re.sub(r"<br\s*/?>", " ", text or "", flags=re.IGNORECASE)
+    text = text.replace("[", " ").replace("]", " ")
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def parse_pansik_info(text: str) -> dict[str, Any]:

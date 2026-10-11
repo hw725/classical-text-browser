@@ -134,7 +134,10 @@ class KostmaFetcher(BaseFetcher):
             book_path = img_infos[0].get("bookPath", "")
 
             # 라벨: "제목 권N" 또는 "bookPath"
-            label = f"{title} 권{int(book_num)}" if title else book_path
+            # bookNum이 숫자가 아닐 수 있다(上·下 등) — int()로 바꾸면 자산 목록 전체가 죽었다
+            num = str(book_num).strip()
+            num = str(int(num)) if num.isdigit() else num
+            label = f"{title} 권{num}" if title else book_path
 
             assets.append(
                 {
@@ -273,7 +276,7 @@ class KostmaMapper(BaseMapper):
             if any([pub_place, publisher, pub_date])
             else None,
             "extent": extent,
-            "subject": raw_data.get("분류"),
+            "subject": [raw_data["분류"]] if raw_data.get("분류") else None,  # 스키마: 목록(B-033)
             "classification": None,
             "series_title": None,
             "material_type": material_type,

@@ -175,7 +175,8 @@ def import_dictionary(
         part_id — 대상 권 식별자.
         target_page — 가져오기 대상 페이지 (위치 없는 항목의 기본 페이지).
         merge_strategy — "merge" (기존 항목과 병합) | "skip_existing" | "overwrite".
-    출력: { imported: N, merged: N, skipped: N }.
+    출력: { imported: N, merged: N, skipped: N, overwritten: N }.
+          overwrite는 기존 주석의 위치를 살리고 사전 풀이만 바꾼다.
 
     왜 이렇게 하는가:
         가져온 사전 항목은 target 위치가 없다 (다른 문서의 위치이므로).
@@ -197,6 +198,7 @@ def import_dictionary(
     imported = 0
     merged = 0
     skipped = 0
+    overwritten = 0
     source_doc = dictionary_data.get("source", {}).get("document_title", "알 수 없음")
 
     for entry in dictionary_data.get("entries", []):
@@ -238,7 +240,19 @@ def import_dictionary(
 
                 merged += 1
                 continue
-            # overwrite: 아래에서 새 항목으로 추가 (기존 항목 제거하지 않음)
+            elif merge_strategy == "overwrite":
+                # 기존 주석의 «사전 풀이»를 가져온 것으로 바꾼다. 위치(target)·id는 그대로 둔다 —
+                # 사람이 원문에 붙여 둔 자리를 잃지 않게. 예전에는 기존 항목을 그대로 두고 위치 없는
+                # 새 항목을 하나 더 만들어 같은 표제어가 둘이 됐다(2026-10-11 전수).
+                existing_dict = existing_headwords[headword].setdefault("dictionary", {})
+                for key in ("headword_reading", "category", "sense_note"):
+                    existing_dict[key] = entry.get(key)
+                existing_dict["dictionary_meaning"] = entry.get("dictionary_meaning", "")
+                existing_dict["source_references"] = list(entry.get("source_references", []))
+                existing_dict["related_terms"] = list(entry.get("related_terms", []))
+                existing_dict["notes"] = f"[{source_doc}에서 가져와 덮어씀]"
+                overwritten += 1
+                continue
 
         # 새 항목 생성 (위치 없음)
         new_ann = {
@@ -287,10 +301,10 @@ def import_dictionary(
         imported += 1
 
     # 저장
-    if imported > 0 or merged > 0:
+    if imported > 0 or merged > 0 or overwritten > 0:
         save_annotations(interp_path, part_id, target_page, existing_data)
 
-    return {"imported": imported, "merged": merged, "skipped": skipped}
+    return {"imported": imported, "merged": merged, "skipped": skipped, "overwritten": overwritten}
 
 
 # ──────────────────────────────────────

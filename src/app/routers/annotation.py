@@ -209,20 +209,77 @@ class AiAnnotationRequest(BaseModel):
     force_model: str | None = None
 
 
-def _l4_text_file(interp_path: Path, page_num: int, part_id: str = "main") -> Path:
-    """L4 원문 파일 경로를 반환한다."""
-    return interp_path / "L4_text" / "main_text" / f"{part_id}_page_{page_num:03d}_text.json"
+def _source_document(interp_path: Path) -> tuple[str | None, str | None]:
+    """해석 저장소가 가리키는 원본 문헌의 (id, 제목). 모르면 (None, None).
+
+    해석 저장소의 메타는 manifest.json(source_document_id)이다. 예전에는 없는 파일
+    interpretation.json을 읽어 사전 내보내기의 문헌 id·제목이 늘 해석 저장소 id였다(B-022).
+    """
+    meta = {}
+    mf = interp_path / "manifest.json"
+    if mf.exists():
+        try:
+            meta = json.loads(mf.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            meta = {}
+    doc_id = meta.get("source_document_id")
+    if not doc_id:
+        return None, None
+    title = None
+    doc_manifest = interp_path.parent.parent / "documents" / doc_id / "manifest.json"
+    if doc_manifest.exists():
+        try:
+            title = json.loads(doc_manifest.read_text(encoding="utf-8")).get("title")
+        except (OSError, ValueError):
+            title = None
+    return doc_id, title
+
+
+def _pages_with_source_text(interp_path: Path, part_id: str) -> list[int]:
+    """원본 문헌의 L4 확정본이 있는 쪽 번호(오름차순).
+
+    L4는 원본 저장소 documents/{doc}/L4_text/pages/{part}_page_NNN.txt에 산다. 예전에는
+    해석 저장소 안의 L4_text/main_text를 찾아 언제나 비어, 일괄 사전 생성이 L6 번역이 있는
+    쪽만 보았다(B-022).
+    """
+    doc_id, _title = _source_document(interp_path)
+    if not doc_id:
+        return []
+    pages_dir = interp_path.parent.parent / "documents" / doc_id / "L4_text" / "pages"
+    out = set()
+    for f in pages_dir.glob(f"{part_id}_page_*.txt"):
+        try:
+            out.add(int(f.stem.rsplit("_", 1)[1]))
+        except ValueError:
+            continue
+    return sorted(out)
 
 
 def _load_page_blocks(interp_path: Path, page_num: int, part_id: str = "main") -> list[dict]:
-    """L4 원문 파일에서 페이지 블록 목록을 로드한다."""
-    text_file = _l4_text_file(interp_path, page_num, part_id)
-    if not text_file.exists():
-        raise FileNotFoundError(f"L4 원문 파일이 없습니다: {text_file.name}")
+    """이 쪽에서 시작하거나 걸친 편성 단위를 [{block_id, original_text}]로 돌려준다.
 
-    with open(text_file, encoding="utf-8") as f:
-        text_data = json.load(f)
-    return text_data.get("blocks", [])
+    단위는 원본 저장소의 경계 목록에서 만든 읽기 보기다(D-092·D-097). L5~L7 파일의 block_id도
+    단위 id라(B-003) 여기서 내는 block_id가 주석 파일과 맞물린다. 예전에는 해석 저장소의
+    없는 L4 파일을 읽어 언제나 FileNotFoundError였다(B-022). 단위가 없으면 같은 예외를 낸다 —
+    부르는 쪽의 폴백(L6 번역의 원문)을 그대로 쓰게.
+    """
+    try:
+        units = list_entities(interp_path, "unit")
+    except Exception:  # noqa: BLE001 — 단위를 못 읽으면 «없음»과 같이 다룬다
+        units = []
+    blocks = []
+    for u in units:
+        refs = u.get("source_refs") or ([u["source_ref"]] if u.get("source_ref") else [])
+        for ref in refs:
+            if not isinstance(ref, dict) or ref.get("page") != page_num:
+                continue
+            if ref.get("part_id") not in (None, part_id):
+                continue
+            blocks.append({"block_id": u.get("id"), "original_text": u.get("original_text") or ""})
+            break
+    if not blocks:
+        raise FileNotFoundError(f"{page_num}쪽에 편성 단위가 없습니다.")
+    return blocks
 
 
 def _load_page_block_ids(interp_path: Path, page_num: int, part_id: str = "main") -> list[str]:
@@ -471,7 +528,7 @@ def _resolve_stage_block_id(
       1) JSON body.block_id
       2) query ?block_id=
       3) 헤더 X-Block-Id
-      4) L4 페이지 첫 번째 블록
+      4) 그 쪽의 첫 편성 단위(_load_page_blocks)
     """
     if body and body.block_id:
         return body.block_id
@@ -684,6 +741,11 @@ async def api_delete_annotation(
         return JSONResponse({"error": f"주석 '{ann_id}'를 찾을 수 없습니다."}, status_code=404)
 
     save_annotations(interp_path, part_id, page_num, data)
+    # 추가·수정처럼 삭제도 이력에 남긴다 — 되돌릴 길이 git뿐이다(B-022)
+    try:
+        git_commit_interpretation(interp_path, f"feat: L7 주석 삭제 — page {page_num}")
+    except Exception:  # noqa: BLE001 — 커밋 실패가 삭제 자체를 되돌리지는 않는다
+        logger.warning("주석 삭제 커밋 실패: %s page %s", interp_id, page_num)
     return Response(status_code=204)
 
 
@@ -1074,8 +1136,7 @@ async def api_dict_generate_batch(
         force_provider = body.force_provider if body else None
         force_model = body.force_model if body else None
 
-        text_dir = interp_path / "L4_text" / "main_text"
-        if (not text_dir.exists()) and (
+        if not _pages_with_source_text(interp_path, part_id) and (
             not (interp_path / "L6_translation" / "main_text").exists()
         ):
             return JSONResponse(
@@ -1087,14 +1148,8 @@ async def api_dict_generate_batch(
         if body and body.pages:
             pages = body.pages
         else:
-            pages_from_l4: set[int] = set()
-            text_dir = interp_path / "L4_text" / "main_text"
-            if text_dir.exists():
-                for f in text_dir.glob(f"{part_id}_page_*_text.json"):
-                    try:
-                        pages_from_l4.add(int(f.stem.split("_page_")[1].split("_")[0]))
-                    except Exception:
-                        continue
+            # L4는 원본 문헌의 것이다(B-022)
+            pages_from_l4: set[int] = set(_pages_with_source_text(interp_path, part_id))
 
             pages_from_l6: set[int] = set()
             tr_dir = interp_path / "L6_translation" / "main_text"
@@ -1198,17 +1253,10 @@ async def api_export_dictionary(
     if not interp_path.exists():
         return JSONResponse({"error": f"해석 '{interp_id}'를 찾을 수 없습니다."}, status_code=404)
 
-    # 문서 정보 가져오기
-    meta_file = interp_path / "interpretation.json"
-    doc_id = interp_id
-    doc_title = interp_id
-    if meta_file.exists():
-        import json as _json
-
-        with open(meta_file, encoding="utf-8") as f:
-            meta = _json.load(f)
-        doc_id = meta.get("document_id", interp_id)
-        doc_title = meta.get("document_title", interp_id)
+    # 원본 문헌의 id·제목 — 해석 저장소 manifest의 source_document_id에서(B-022)
+    src_id, src_title = _source_document(interp_path)
+    doc_id = src_id or interp_id
+    doc_title = src_title or doc_id
 
     page_range = None
     if page_start is not None and page_end is not None:
@@ -1239,17 +1287,10 @@ async def api_save_export(interp_id: str):
     if not interp_path.exists():
         return JSONResponse({"error": f"해석 '{interp_id}'를 찾을 수 없습니다."}, status_code=404)
 
-    # 먼저 전체 내보내기 생성
-    meta_file = interp_path / "interpretation.json"
-    doc_id = interp_id
-    doc_title = interp_id
-    if meta_file.exists():
-        import json as _json
-
-        with open(meta_file, encoding="utf-8") as f:
-            meta = _json.load(f)
-        doc_id = meta.get("document_id", interp_id)
-        doc_title = meta.get("document_title", interp_id)
+    # 원본 문헌의 id·제목 — 해석 저장소 manifest의 source_document_id에서(B-022)
+    src_id, src_title = _source_document(interp_path)
+    doc_id = src_id or interp_id
+    doc_title = src_title or doc_id
 
     dictionary_data = export_dictionary(interp_path, doc_id, doc_title, interp_id)
     saved_path = save_export(interp_path, dictionary_data)

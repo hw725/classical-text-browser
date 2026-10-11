@@ -2442,7 +2442,7 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
   line-height: 2;
   color: var(--text-primary);
   background: var(--bg-primary);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   border-radius: 4px;
   resize: vertical;
   white-space: pre-wrap;
@@ -3222,9 +3222,6 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
   letter-spacing: 0.3px;
 }
 
-.entity-type-badge.type-work {
-  background: #ec4899;
-}
 .entity-type-badge.type-unit {
   background: #3b82f6;
 }
@@ -3505,7 +3502,7 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
 }
 
 .create-doc-local-row:hover {
-  background: var(--bg-hover);
+  background: var(--hover-bg);
 }
 
 .create-doc-local-index {
@@ -3562,7 +3559,7 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
 }
 
 .create-doc-local-row-btn:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: var(--hover-bg);
   color: var(--text-primary);
   border-color: var(--border);
 }
@@ -3573,7 +3570,7 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
 }
 
 .create-doc-local-row-btn.create-doc-local-row-remove:hover {
-  color: var(--error);
+  color: var(--color-danger);
 }
 
 /* 진행 막대 — 너비 전환을 부드럽게 */
@@ -3642,7 +3639,7 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
 }
 
 .create-doc-asset-item:hover {
-  background: var(--bg-hover);
+  background: var(--hover-bg);
 }
 
 .create-doc-asset-all {
@@ -4172,11 +4169,9 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
 
 /* --- 이체자 사전 섹션 ---
    .alignment-variant-section / .alignment-variant-list 규칙은 제거했다.
-   그 클래스를 붙이는 요소가 HTML에도 JS에도 없기 때문이다.
-   (alignment-view.js는 «id»로 alignment-variant-list를 찾는데, 그 id를
-   가진 요소 역시 index.html에 없어 null로 끝난다 — 클래스와는 무관하다.) */
+   그 클래스를 붙이는 요소가 HTML에도 JS에도 없기 때문이다(그 목록을 그리던 함수도 D-069에서 뺐다). */
 
-/* .text-btn-small → .text-btn-sm으로 통합됨 (L1928 참조) */
+/* .text-btn-small → .text-btn-sm으로 통합됨 (.text-btn-sm 규칙 참조) */
 
 /* ──────────────────────────────────────────────────
    Phase 11-1: 표점 편집기 스타일
@@ -4695,7 +4690,7 @@ details[open] > .punct-section-summary::before {
 }
 
 .recent-library-item:hover {
-  background: var(--bg-hover);
+  background: var(--hover-bg);
   color: var(--text-primary);
 }
 
@@ -6468,7 +6463,7 @@ details[open] > .punct-section-summary::before {
   border: none;
   padding: 8px;
   font-size: 13px;
-  font-family: var(--font-body);
+  font-family: var(--font-ui);
   color: var(--text-primary);
   background: var(--bg-primary);
   resize: vertical;
@@ -6495,7 +6490,7 @@ details[open] > .punct-section-summary::before {
   align-items: center;
   gap: 4px;
   padding: 4px 8px;
-  border-bottom: 1px solid var(--border-muted);
+  border-bottom: 1px solid var(--border);
   background: var(--bg-secondary);
   flex-wrap: wrap;
 }
@@ -6570,7 +6565,7 @@ details[open] > .punct-section-summary::before {
 
 /* 사전 편집 패널 */
 .ann-dict-edit-panel {
-  border-top: 1px solid var(--border-muted);
+  border-top: 1px solid var(--border);
   padding-top: 8px;
   margin-top: 8px;
 }
@@ -6593,7 +6588,7 @@ details[open] > .punct-section-summary::before {
 .ann-dict-edit-form textarea {
   font-size: 12px;
   padding: 4px 6px;
-  border: 1px solid var(--border-muted);
+  border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--bg-primary);
   color: var(--text-primary);
@@ -6608,7 +6603,7 @@ details[open] > .punct-section-summary::before {
   align-items: center;
   gap: 4px;
   padding: 4px 8px;
-  border-bottom: 1px solid var(--border-muted);
+  border-bottom: 1px solid var(--border);
   background: var(--bg-secondary);
 }
 
@@ -6619,7 +6614,7 @@ details[open] > .punct-section-summary::before {
 
 .trans-refdict-panel {
   padding: 8px;
-  border-bottom: 1px solid var(--border-muted);
+  border-bottom: 1px solid var(--border);
   max-height: 200px;
   overflow-y: auto;
 }
@@ -6641,7 +6636,7 @@ details[open] > .punct-section-summary::before {
 }
 
 .trans-refdict-item:hover {
-  background: var(--bg-hover);
+  background: var(--hover-bg);
 }
 
 .trans-refdict-item input[type="checkbox"] {
@@ -7372,7 +7367,7 @@ button.mode-tab {
   font-size: 10px;
   line-height: 1.4;
   padding: 0 5px;
-  border: 1px solid var(--border-color, #ccc);
+  border: 1px solid var(--border, #ccc);
   border-radius: 8px;
   background: transparent;
   color: inherit;
@@ -7685,7 +7680,7 @@ input.prop-level { width: 3.2em; }
 .comp-rules-suggest-out { font-size: 10px; color: var(--text-muted); flex-basis: 100%; }
 .comp-rules-cand { font-size: 10px; padding: 1px 5px; border: 1px solid var(--border);
   border-radius: 8px; cursor: pointer; background: transparent; color: inherit; }
-.comp-rules-cand:hover { background: var(--bg-hover, rgba(127,127,127,0.15)); }
+.comp-rules-cand:hover { background: var(--hover-bg, rgba(127,127,127,0.15)); }
 
 /* 이 책의 신호 (D-116): 전문에서 센 규약 후보 — 체크한 것이 규칙이 된다 */
 .comp-verdict { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; padding: 4px 6px; margin: 4px 0 2px;
@@ -7739,7 +7734,7 @@ input.prop-level { width: 3.2em; }
 }
 .comp-sig-more > summary::before { content: "▸ "; }
 .comp-sig-more[open] > summary::before { content: "▾ "; }
-.comp-sig-more > summary:hover { color: var(--text); }
+.comp-sig-more > summary:hover { color: var(--text-primary); }
 
 .comp-sig-dropped { font-size: 10px; color: var(--text-muted); margin-top: 3px; }
 .comp-signals-foot { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
@@ -8148,7 +8143,7 @@ select.prop-level { max-width: 4.6em; }
   color: var(--text-muted);
   padding: 4px 8px;
   margin: 4px 0;
-  border-left: 2px solid var(--border-color, #d0d0d0);
+  border-left: 2px solid var(--border, #d0d0d0);
   border-radius: 0; /* 한쪽 테두리에는 둥근 모서리를 주지 않는다 */
 }
 .comp-divergence.is-far {

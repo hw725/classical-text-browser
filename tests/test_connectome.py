@@ -204,7 +204,7 @@ class TestReachableFromTheScreen:
         )
 
     def test_there_is_a_button_for_it(self):
-        """도구 바에 단추가 있고, 화면 코드가 그 id 를 배선한다."""
+        """엔티티 패널에 «커넥톰 대조» 단추가 있고, 화면 코드가 그 id 를 배선한다(B-008 뒤 자리)."""
         html = (REPO / "src" / "app" / "static" / "index.html").read_text(encoding="utf-8")
         assert 'id="entity-connectome-btn"' in html
         assert "entity-connectome-btn" in self._js()

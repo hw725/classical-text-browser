@@ -32,6 +32,9 @@ import re
 from pathlib import Path
 from typing import Optional
 
+# 저장소 id 규칙은 core.repo_id 하나다 — 따로 적으면 규칙을 바꿀 때 여기만 옛것으로 남는다(B-024).
+from core.repo_id import REPO_ID_PATTERN
+
 IMPORT_TAG = "reading-import"  # L6 translator.draft_id · L7 annotator.draft_id · 경계 reasons 표식
 COMMIT_PREFIX = "강독 결과 반영"
 # 장 단위 비고: (L7 note 주석의 label, 답의 칸). export/reading_note.py도 이것을 쓴다.
@@ -45,7 +48,6 @@ _CATEGORIES = {
     "Person", "Place", "Event", "Timespan", "Object", "Record",
     "ArtWork", "Food", "Clothing", "Concept", "Grammar",
 }  # fmt: skip
-_REPO_ID = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
 
 # ── 답 모양 확인 ─────────────────────────────────────────
@@ -480,7 +482,7 @@ def check_interp_id(library: Path, doc_id: str, interp_id: str) -> Path:
 
     경로 이탈(«../»)과 다른 문헌의 해석 저장소에 쓰는 일을 막는다. 틀리면 ValueError.
     """
-    if not _REPO_ID.match(str(interp_id or "")):
+    if not REPO_ID_PATTERN.match(str(interp_id or "")):
         raise ValueError(
             f"해석 저장소 id가 규칙에 맞지 않습니다: {interp_id!r} (영문 소문자로 시작, 64자)"
         )

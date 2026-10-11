@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 
 import pytest
@@ -371,7 +372,11 @@ def test_fill_text_route_reports_rebase(tmp_path, monkeypatch):
     lib, doc = _lib_doc(tmp_path, "ABCDEFGH")
     _freetext_save(doc, "ABXDEFGH")
     _write_l2(doc, "PQRSTUVW")
+    import app._state as _st
+
     monkeypatch.setattr(llm_ocr, "get_library_path", lambda: lib)
+    # 라우트가 문헌 경로를 require_repo_path(공유 상태의 서고)로 만든다(B-028) — 같은 서고로 놓는다
+    monkeypatch.setattr(_st, "_library_path", lib)
     r = asyncio.run(llm_ocr.api_fill_text_from_ocr("doc", "vol1", overwrite=True, pages="1"))
     assert r["filled"] == 1
     notes = r.get("corrections_notices") or []
@@ -427,7 +432,7 @@ def test_reading_notes_route_reports_rebase(client, tmp_path, monkeypatch):  # n
     assert r.status_code == 200, r.text
     _saver_reporting_unmerged(monkeypatch)
     answer = dict(
-        NOTE, chapter="壹. 民事慣習回答彙集", corrections=[{"page": 3, "text": "民事慣習"}]
+        copy.deepcopy(NOTE), chapter="壹. 民事慣習回答彙集", corrections=[{"page": 3, "text": "民事慣習"}]
     )
     answer["sections"][0]["page"] = 3
     r = client.post("/api/documents/d1/reading-notes", json={"note": answer, "part_id": part})

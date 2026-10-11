@@ -1,11 +1,15 @@
 """CLI 도구 — 고전서지 통합 브라우저.
 
-사용법:
-    python -m cli init-library <path>
-    python -m cli add-document <library_path> --title <제목> --doc-id <id> [--files ...]
-    python -m cli list-documents <library_path>
-
-pip install -e . 후 실행하거나, src/ 디렉토리에서 실행한다.
+사용법(배포본은 `ctb …`, 저장소에서는 `uv run python -m cli …`):
+    init-library <path>                      서고 만들기
+    add-document <library_path> --title … --doc-id … [--files …]
+    list-documents <library_path>
+    embed-folder <folder>                    폴더의 PDF에 텍스트 레이어 입히기
+    ocr <pdf|folder> [--model …]             OCR 한 줄 진입점(실행 전에 «도는 모델»을 찍는다)
+    read <library> <doc> …                   작업 계획대로 읽기(D-131)
+    models                                   쓸 수 있는 모델 번호 목록
+    config [--set …]                         기본값(~/.classical-text-browser/cli.json)
+각 명령의 인자는 `--help`로 본다. 패키지 관리는 uv다(pip 사용 금지 — AGENTS 기술 스택).
 """
 
 import argparse

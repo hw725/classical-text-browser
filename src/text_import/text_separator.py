@@ -180,6 +180,7 @@ class TextSeparator:
                 "당신은 동아시아 고전 문헌 전문가입니다. 한문 원문과 번역/주석의 구조를 분석합니다."
             ),
             purpose="text_structure_analysis",
+            response_format="json",  # JSON은 강제한다(D-083)
             force_provider=force_provider,
             force_model=force_model,
         )
@@ -250,6 +251,7 @@ class TextSeparator:
                 "텍스트에서 한문 원문만 정확하게 추출합니다."
             ),
             purpose="text_separation",
+            response_format="json",  # JSON은 강제한다(D-083)
             force_provider=force_provider,
             force_model=force_model,
         )

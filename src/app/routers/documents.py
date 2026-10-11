@@ -425,7 +425,8 @@ def _probe_part_text_layer(doc_path: Path, part_file: str) -> dict | None:
     try:
         from text_import.pdf_extractor import PdfTextExtractor
 
-        return PdfTextExtractor(path).probe_text_layer()
+        with PdfTextExtractor(path) as extractor:  # Windows가 PDF를 잠그지 않게 닫는다
+            return extractor.probe_text_layer()
     except Exception as e:  # noqa: BLE001
         logger.warning(f"텍스트 레이어 진단 실패 (건너뜀): {path} — {e}")
         return None
@@ -1399,10 +1400,10 @@ async def api_pdf_analyze(file: UploadFile = File(...)):
         tmp_path = Path(tmp.name)
 
     try:
-        extractor = PdfTextExtractor(tmp_path)
-        has_text = extractor.has_text_layer()
-        page_count = extractor.page_count
-        sample_pages = extractor.get_sample_text(max_pages=3)
+        with PdfTextExtractor(tmp_path) as extractor:
+            has_text = extractor.has_text_layer()
+            page_count = extractor.page_count
+            sample_pages = extractor.get_sample_text(max_pages=3)
 
         # 텍스트 레이어가 있으면 LLM으로 구조 분석 시도
         detected_structure = None
@@ -1558,10 +1559,9 @@ async def api_pdf_separate(
     try:
         from text_import.pdf_extractor import PdfTextExtractor
 
-        extractor = PdfTextExtractor(tmp_path)
-        pages = extractor.extract_all_pages()
-        page_count = extractor.page_count
-        extractor.close()
+        with PdfTextExtractor(tmp_path) as extractor:
+            pages = extractor.extract_all_pages()
+            page_count = extractor.page_count
 
         # 페이지별 유니코드 문자 유형 기반 분리
         results = []
@@ -3059,11 +3059,11 @@ def api_import_from_text_layer(doc_id: str, part_id: str, body: TextLayerImportR
     from text_import.pdf_extractor import PdfTextExtractor
 
     try:
-        extractor = PdfTextExtractor(pdf_path)
+        with PdfTextExtractor(pdf_path) as extractor:
+            pages = extractor.extract_all_pages()
     except (FileNotFoundError, ValueError) as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
-    pages = extractor.extract_all_pages()
     wanted = set(body.pages) if body.pages is not None else None
 
     imported = skipped = empty = 0
