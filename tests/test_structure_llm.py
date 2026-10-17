@@ -153,7 +153,10 @@ def test_route_returns_validated_proposals(client, tmp_path, monkeypatch):  # no
 
 # ── 같은 라우트의 판정 모델 길(engine="jev") ────────────────────────────────
 def test_route_jev_dry_run_counts_questions_and_cost(client, tmp_path):  # noqa: F811
-    """보내기 전에 《몇 행·몇 질문·몇 번·얼마》를 돌려준다 — 실행 게이트는 도구 층에(전역 규칙 11)."""
+    """보내기 전에 《몇 행·몇 질문·몇 번·얼마》를 돌려준다.
+
+    실행 게이트는 도구 층에 둔다(전역 규칙 11).
+    """
     _lib, part_id = _setup(client, tmp_path)
     r = client.post(
         "/api/documents/d1/segmentation/structure/llm",
@@ -213,10 +216,16 @@ def test_route_jev_returns_proposals_and_never_calls_the_generative_router(
         def usage(self):
             return {"calls": self.calls, "cost_usd": 0.0}
 
-    monkeypatch.setattr(jev, "JevClient", FakeClient)
-    # 본문 판정의 주는 Jev이고 decider는 폴백이다(D-139). 이 PC에는 실제 OpenRouter 키가 개인 파일에
-    # 있으므로 폴백을 키 없는 가짜로 막는다 — 막지 않으면 Jev가 실패할 때 시험이 실제로 부른다
-    monkeypatch.setattr(or_mod, "OpenRouterDecisionClient", _NoKeyDecider)
+    # 판정은 설정에서 고른 OpenRouter 모델 하나의 클래스로 만든다(D-142) — 텍스트 모델은 가짜로,
+    # 폴백 모델은 키 없는 가짜로 막는다. 이 PC에는 실제 OpenRouter 키가 개인 파일에 있어,
+    # 막지 않으면 텍스트 모델이 실패할 때 시험이 실제로 부른다
+    from llm.decision_models import DEFAULT_TEXT_MODEL
+
+    def factory(*, model, **kwargs):
+        return FakeClient(**kwargs) if model == DEFAULT_TEXT_MODEL else _NoKeyDecider(**kwargs)
+
+    assert jev  # 직결 Jev는 이 길에서 쓰이지 않는다(D-142) — 모듈만 읽어 둔다
+    monkeypatch.setattr(or_mod, "OpenRouterModelClient", factory)
     r = client.post(
         "/api/documents/d1/segmentation/structure/llm",
         json={"part_id": part_id, "engine": "jev"},
@@ -245,14 +254,14 @@ def test_route_jev_says_so_when_there_is_no_key(client, tmp_path, monkeypatch): 
         def __init__(self, **kwargs):
             pass
 
+    # 직결 Jev(TypeSafe)는 키가 있어도 쓰지 않는다(D-142) — 판정은 OpenRouter 모델 하나의 길이다.
+    # 그 길을 키 없음으로 막는다. 막지 않으면 이 PC의 개인 키 파일 키로 실제 호출이 나간다
     monkeypatch.setattr(jev, "JevClient", NoKey)
-    monkeypatch.setattr(or_mod, "OpenRouterDecisionClient", _NoKeyDecider)
-    # OpenRouter 키만 있으면 Jev도 OpenRouter 경유로 간다(D-136 후속) — 그 길도 키 없음으로 막는다.
-    # 막지 않으면 이 PC의 개인 키 파일 키로 실제 호출이 나간다
-    monkeypatch.setattr(or_mod, "OpenRouterJevClient", _NoKeyDecider)
+    monkeypatch.setattr(or_mod, "OpenRouterModelClient", lambda **kw: _NoKeyDecider(**kw))
     r = client.post(
         "/api/documents/d1/segmentation/structure/llm",
         json={"part_id": part_id, "engine": "jev"},
     )
     assert r.status_code == 400
-    assert "TYPESAFE_API_KEY" in r.json()["error"] and "OPENROUTER_API_KEY" in r.json()["error"]
+    assert r.json()["needs_key"] == "openrouter"
+    assert "OPENROUTER_API_KEY" in r.json()["error"] and "jev-1.14" in r.json()["error"]

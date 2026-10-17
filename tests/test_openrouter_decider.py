@@ -6,6 +6,10 @@
 ② 기본 주소·모델이 측정한 그 길이다.
 ③ 주 모델(Jev) 호출이 실패하면 《그 호출만》 decider가 대신 답하고, 누가 답했는지 meta에 남는다.
 ④ 문턱은 답한 모델의 것을 쓴다 — decider v1.1 0.997/0.69, Jev 0.85/0.5.
+
+2026-10-17(D-142): 편성 라우트는 설정에서 고른 OpenRouter 모델(텍스트 typesafe/jev-1.14·폴백
+decider v1.2)로 부른다. 아래 《라우트》 시험은 그 뜻으로 고쳤고, 클라이언트 단의 시험(①②)은
+`OpenRouterDecisionClient`가 남아 있어 그대로 둔다.
 """
 
 from __future__ import annotations
@@ -24,6 +28,7 @@ from core.structure_llm import (
     judge_thresholds,
     line_id,
 )
+from llm.decision_models import DEFAULT_TEXT_FALLBACK_MODEL, DEFAULT_TEXT_MODEL
 from llm.jev import JevCallFailed, JevClient
 from llm.openrouter_decider import (
     OPENROUTER_DECIDER_MODEL,
@@ -211,47 +216,53 @@ def test_thresholds_follow_the_model_that_answered():
     assert meta["accept_at"] == 0.997 and meta["reject_at"] == 0.69
 
 
-# ── 라우트: 주는 Jev, decider는 실패한 호출만, 목차는 Jev (D-139) ─────────────
+# ── 라우트: 주는 텍스트 모델, 폴백 모델은 실패한 호출만, 목차는 텍스트 모델 (D-139·D-142) ─────
+# D-142: 둘 다 설정에서 고른 OpenRouter 모델이고 같은 클래스(`OpenRouterModelClient`)로 만든다 —
+# 가짜도 그 이름 하나에 끼우고 모델 id로 가른다. 기본은 텍스트 typesafe/jev-1.14 · 폴백 decider v1.2
+TEXT_LABEL = f"openrouter:{DEFAULT_TEXT_MODEL}"
+FALLBACK_LABEL = f"openrouter:{DEFAULT_TEXT_FALLBACK_MODEL}"
+
+
 def _route_fakes(
-    monkeypatch, *, decider_key: bool, decider_fails: bool = False, jev_fails: bool = False
+    monkeypatch, *, key: bool = True, jev_fails: bool = False, fallback_model=None
 ):
     import core.toc as toc_mod
+    import llm.decision_models as dm
     import llm.openrouter_decider as or_mod
+    from llm.openrouter_decider import judge_family
 
     made: dict = {}
+    calls: dict = {}
 
-    def factory(provider, model, has_key, fail):
-        class C:
-            PROVIDER = provider
-            INPUT_USD_PER_M = 0.04
-            calls = 0
+    class C:
+        PROVIDER = "openrouter"
+        INPUT_USD_PER_M = 0.04
 
-            def __init__(self, *a, **k):
-                self.model = model
-                self.has_key = has_key
-                made[provider] = self
+        def __init__(self, *, model, **k):
+            self.model = model
+            self.has_key = key
+            self.JUDGE_FAMILY = judge_family(model)
+            made[model] = self
 
-            def gate(self, n):
-                return None
+        def gate(self, n):
+            return None
 
-            def ask(self, state, questions):
-                C.calls += 1
-                if fail:
-                    raise JevCallFailed("jev_http_error", status=402)
-                return {q: {"type": "noul", "noul": 0.9} for q in questions}
+        def ask(self, state, questions):
+            calls[self.model] = calls.get(self.model, 0) + 1
+            if jev_fails and self.model == DEFAULT_TEXT_MODEL:
+                raise JevCallFailed("jev_http_error", status=402)
+            return {q: {"type": "noul", "noul": 0.9} for q in questions}
 
-            def usage(self):
-                return {"calls": C.calls, "cost_usd": 0.0}
+        def usage(self):
+            return {"calls": calls.get(self.model, 0), "cost_usd": 0.0}
 
-        return C
-
-    monkeypatch.setattr(
-        or_mod,
-        "OpenRouterDecisionClient",
-        factory("openrouter", OPENROUTER_DECIDER_MODEL, decider_key, decider_fails),
-    )
-    monkeypatch.setattr(jev_mod, "JevClient", factory("typesafe", "jev-latest", True, jev_fails))
+    monkeypatch.setattr(or_mod, "OpenRouterModelClient", C)
+    if fallback_model is not None:
+        sel = {**dm.DEFAULTS, "text_fallback": fallback_model}
+        monkeypatch.setattr(dm, "load_selection", lambda: dict(sel))
     monkeypatch.setattr(toc_mod, "detect_toc_pages", lambda pages, *a, **k: [])
+    # 직결 Jev는 이 길에서 만들어지면 안 된다 — 만들면 시험이 깨지게 한다
+    monkeypatch.setattr(jev_mod, "JevClient", None)
     return made
 
 
@@ -265,41 +276,44 @@ def _call_route():
 
 
 def test_route_defaults_to_jev_even_with_an_openrouter_key(monkeypatch):
-    _route_fakes(monkeypatch, decider_key=True)
+    """기본 텍스트 모델은 OpenRouter의 typesafe/jev-1.14 — Jev 문턱으로 판정한다."""
+    _route_fakes(monkeypatch)
     out = _call_route()
-    assert out["provider"] == "typesafe" and out["model"] == "jev-latest"
-    assert out["answered_by"] == {"typesafe:jev-latest": 1}
+    assert out["provider"] == "openrouter" and out["model"] == DEFAULT_TEXT_MODEL
+    assert out["answered_by"] == {TEXT_LABEL: 1}
     assert {p["band"] for p in out["proposals"]} == {"accept"}  # Jev 문턱으로 0.9는 accept
-    # 폴백(decider)도 사용량에 잡힌다 — 안 불렸어도 자리는 있다
-    assert set(out["usage_by"]) == {"typesafe:jev-latest", DECIDER_LABEL}
+    # 폴백도 사용량에 잡힌다 — 안 불렸어도 자리는 있다
+    assert set(out["usage_by"]) == {TEXT_LABEL, FALLBACK_LABEL}
 
 
 def test_route_falls_back_to_the_decider_when_jev_fails(monkeypatch):
-    _route_fakes(monkeypatch, decider_key=True, jev_fails=True)
+    _route_fakes(monkeypatch, jev_fails=True)
     out = _call_route()
-    assert out["fallback_calls"] == 1 and out["answered_by"] == {DECIDER_LABEL: 1}
+    assert out["fallback_calls"] == 1 and out["answered_by"] == {FALLBACK_LABEL: 1}
     # decider 문턱(0.997/0.69)으로 0.9는 escalate — 체크 해제로 선다
     assert {p["band"] for p in out["proposals"]} == {"escalate"}
-    assert out["usage_by"][DECIDER_LABEL]["calls"] == 1
+    assert out["usage_by"][FALLBACK_LABEL]["calls"] == 1
 
 
 def test_route_uses_jev_when_there_is_no_openrouter_key(monkeypatch):
-    _route_fakes(monkeypatch, decider_key=False)
+    """폴백 칸을 비우면(《폴백 없음》) 폴백 클라이언트를 만들지 않는다 — 실패한 호출은 실패로."""
+    made = _route_fakes(monkeypatch, fallback_model="")
     out = _call_route()
-    assert out["provider"] == "typesafe" and out["fallback"] is None
-    assert out["answered_by"] == {"typesafe:jev-latest": 1}
+    assert out["provider"] == "openrouter" and out["fallback"] is None
+    assert out["answered_by"] == {TEXT_LABEL: 1}
+    assert set(made) == {DEFAULT_TEXT_MODEL}
 
 
 def test_dry_run_names_the_judge(monkeypatch):
     from app.routers.composition import SegmentationStructureLlmRequest, _structure_jev
     from core.segmentation import normalize_rules
 
-    _route_fakes(monkeypatch, decider_key=True)
+    _route_fakes(monkeypatch)
     req = SegmentationStructureLlmRequest(part_id="vol1", engine="jev", dry_run=True)
     body = [Line(page=2, line_index=0, text="본문" * 3)]
     out = _structure_jev(None, req, body, normalize_rules(None), 10_000)
-    assert out["dry_run"] and out["judge"] == "typesafe:jev-latest"
+    assert out["dry_run"] and out["judge"] == TEXT_LABEL
     # 폴백이 본문을 모두 떠맡을 때의 최대를 따로 알린다 — decider는 질문마다 글을 다시 세어 과금한다
-    assert out["fallback_judge"] == DECIDER_LABEL
+    assert out["fallback_judge"] == FALLBACK_LABEL
     fb_max = out["fallback_cost_usd_max"]
     assert fb_max is not None and fb_max >= out["cost_usd_est"]

@@ -2179,57 +2179,29 @@ function _fillLlmSelect(select, models) {
   }
 
   // 판정 모델(D-134) — 자동 스캔의 《무슨 글인가》를 확률로 답하는 모델. 생성 모델 목록(/api/llm/models)에
-  // 들지 않으므로 여기서 붙인다. 값 `decider:decider-27b`는 force_provider="decider"로 라우트에 간다.
-  // D-135: Cloudflare clef(`clef:clef` → force_provider="clef")가 먼저 서고, 키(토큰+계정 id)가 있으면
-  // **처음 채울 때 한 번** 미리 고른다(사용자 결정 2026-10-04). 사람이 다른 것을 고른 뒤 다시 채울 때는
-  // 그 선택을 지킨다 — 키 저장 이벤트로 목록을 다시 채울 때마다 기본으로 되돌리면 고른 것이 사라진다.
-  // D-135 후속(2026-10-05): clef는 사슬(Cloudflare clef → OpenRouter clef → 기본 비전 모델)이라
-  // Cloudflare 키가 없어도 OpenRouter 키만 있으면 돈다. 고를 수 있는가는 **서버가 한 곳에서 계산한
-  // `clef_available`**만 본다 — 여기서 키 조건을 다시 짜면 서버의 사슬과 또 어긋난다
-  // (한때 Cloudflare 칸의 has_key만 보아 OpenRouter 키만 있는 사람이 clef를 못 골랐다).
+  // 들지 않으므로 여기서 붙인다. (D-135의 clef·Perplexity 직결 두 옵션은 D-142에서 하나로 합쳤다.)
+  // D-142(사용자 결정 2026-10-17): 판정은 OpenRouter 하나로 부르고 모델은 설정 《판정 모델》의
+  // 《이미지 모델》이 정한다(기본 perplexity/pplx-decider-v1.2). 그래서 옵션도 하나다 — 값
+  // `decision:decision`은 force_provider="decision"으로 라우트에 가고, 라우트가 설정의 모델을 쓴다.
+  // 고를 수 있는가·처음 미리 고를 것은 서버가 한 곳에서 낸 `image_available`·
+  // `default_image_provider`만 본다(D-135 후속 — 화면이 키 조건을 다시 짜면 서버와 어긋난다).
+  // 미리 고르기는 **처음 채울 때 한 번** — 사람이 다른 것을 고른 뒤에는 그 선택을 지킨다.
   if (extra && extra.includes("vision-decider")) {
-    const specs = [
-      {
-        id: "cloudflare",
-        value: "clef:clef",
-        label: "판정 모델 — clef [Cloudflare 무료 몫 → OpenRouter 유료·빠름]",
-        missing: " (설정 → 판정 모델에서 Cloudflare 또는 OpenRouter 키)",
-        available: (d) => !!d?.clef_available,
-        label_for: (d) =>
-          d?.clef_via === "openrouter"
-            ? "판정 모델 — clef [OpenRouter 경유·유료·빠름]"
-            : "판정 모델 — clef [Cloudflare 무료 몫 → OpenRouter 유료·빠름]",
-      },
-      {
-        id: "perplexity",
-        value: "decider:decider-27b",
-        label: "판정 모델 — Perplexity Decider [유료·빠름]",
-        missing: " (설정 → 판정 모델에서 키)",
-        available: (d) => !!(d?.models || []).find((x) => x.id === "perplexity")?.has_key,
-      },
-    ];
-    const opts = {};
-    for (const s of specs) {
-      const opt = document.createElement("option");
-      opt.value = s.value;
-      opt.textContent = `… ${s.label}`;
-      select.appendChild(opt);
-      opts[s.id] = opt;
-    }
-    fetch("/api/settings/decision-models")
+    const opt = document.createElement("option");
+    opt.value = DECISION_SCAN_VALUE;
+    opt.textContent = "… 판정 모델 [OpenRouter]";
+    select.appendChild(opt);
+    fetch("/api/settings/decision-models?catalog=false")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        for (const s of specs) {
-          const opt = opts[s.id];
-          const ok = s.available(d);
-          const label = s.label_for ? s.label_for(d) : s.label;
-          opt.textContent = `${ok ? "●" : "○"} ${label}${ok ? "" : s.missing}`;
-          opt.disabled = !ok;
-          if (!ok && select.value === opt.value) select.value = "auto";
-        }
-        if (d?.default_image_provider === "clef" && !select.dataset.clefDefaulted) {
-          select.dataset.clefDefaulted = "1";
-          if (!previous || previous === "auto") select.value = "clef:clef";
+        const ok = !!d?.image_available;
+        const label = `판정 모델 — ${d?.image_model || "OpenRouter"} [OpenRouter·유료·빠름]`;
+        opt.textContent = `${ok ? "●" : "○"} ${label}${ok ? "" : " (설정 → 판정 모델에서 OpenRouter 키)"}`;
+        opt.disabled = !ok;
+        if (!ok && select.value === opt.value) select.value = "auto";
+        if (d?.default_image_provider === "decision" && !select.dataset.decisionDefaulted) {
+          select.dataset.decisionDefaulted = "1";
+          if (!previous || previous === "auto") select.value = DECISION_SCAN_VALUE;
         }
       })
       .catch(() => {});
@@ -2249,6 +2221,9 @@ document.addEventListener("llm-accounts-changed", () => {
 // 창이 다시 활성화되면 목록을 다시 받는다(1분에 한 번까지). 프록시가 새 모델을 얻거나
 // 서버가 갈린 뒤에도 드롭다운은 페이지를 열 때 채운 목록을 들고 있었다 — 《gpt-6-astra가
 // 왜 안 보이나》(2026-09-05). 새로고침 없이 따라오게 한다.
+// 자동 스캔 《종류 판정 모델》의 판정 모델 옵션 값(D-142) — work-order.js도 이 값으로 알아본다
+const DECISION_SCAN_VALUE = "decision:decision";
+
 let _llmSelectsRefreshedAt = Date.now(); // 첫 포커스에 한 번 더 받지 않게
 window.addEventListener("focus", () => {
   const now = Date.now();

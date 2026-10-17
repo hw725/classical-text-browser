@@ -96,7 +96,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 
 ## 백엔드 모듈 구조 (src/app/)
 server.py는 FastAPI 앱 생성 + 라우터 마운트 + 미들웨어만 담당하는 조립 파일.
-실제 API 엔드포인트 234개가 9개 라우터 모듈에 분산 (2026-10-05 기준 실측):
+실제 API 엔드포인트 235개가 9개 라우터 모듈에 분산 (2026-10-17 기준 실측):
 
 ```
 src/app/
@@ -104,7 +104,7 @@ src/app/
 ├── _state.py            ← 공유 상태 + 헬퍼 + LLM 프롬프트/캐시/동적 토큰 계산
 ├── __main__.py          ← CLI 진입점 (python -m app serve)
 └── routers/
-    ├── library.py       ← 서고/설정/백업/휴지통 + 스키마 검증 + 연결 설정·앱 업데이트·엔진 추가 설치·OAuth 프록시·Ollama 로그인·모델 골라 받기·판정 모델 상태 (30 라우트)
+    ├── library.py       ← 서고/설정/백업/휴지통 + 스키마 검증 + 연결 설정·앱 업데이트·엔진 추가 설치·OAuth 프록시·Ollama 로그인·모델 골라 받기·판정 모델 상태·고르기 (31 라우트)
     ├── documents.py     ← 문헌 CRUD/페이지/교정/서지/파서 + 텍스트레이어 진단·가져오기·입히기 + 권 추가·회전 + 경계 규칙 + 찍은 자리·규칙 제안 + 강독 노트 들이기·장별 내보내기·틀로 내보내기 (48 라우트)
     ├── composition.py   ← 편성 — 내용 트리·경계 색인·넣기·옮기기·지우기 + 제안·목차·적용·자동 트리·신호 도출·LLM 표지 묻기·구조 통째로 묻기·애매한 후보 2차 판정(내보내기·들이기·불러오기) + 규칙 미리 보기·말로 규칙 넣기 + 쪼개기·리셋 (20 라우트)
     ├── interpretations.py ← 해석 CRUD/레이어/의존/엔티티/관계·태그 + 개념 병합·커넥톰 대조 (24 라우트)
@@ -240,7 +240,7 @@ src/app/
   (`npx -y openai-oauth`, 포트 10531–10540 스캔, Bearer 토큰 `oauth-proxy` 하드코딩)와
   SikuRoBERTa 표점 Docker(punctuation-service/.env 존재 시)를 자동 기동.
 - 프론트(static/)가 약 4.7만 줄 — index.html 약 5.1천 줄 단일 파일, workspace.css 약 8.2천 줄,
-  JS 34개(약 3.3만 줄). 테스트 105파일 — 그중 화면 JS를 node로 돌리는 것(`tests/js_harness.py`)은
+  JS 34개(약 3.3만 줄). 테스트 106파일 — 그중 화면 JS를 node로 돌리는 것(`tests/js_harness.py`)은
   `tests/test_annotation_editor_js.py`(2026-09-16 Codex 교차검증 반영 때 처음)·
   `tests/test_entity_manager_js.py`(D-128)·`tests/test_structure_jev.py`·
   `tests/test_read_path_writes.py`(화면을 열기만 해도 쓰던 것, 2026-09-30)·

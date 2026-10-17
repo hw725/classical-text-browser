@@ -8148,6 +8148,8 @@ probe로 둘을 잡았다: 넓힌 범위 안에서 **사람이 손대지 않은 
 
 ## D-134: 이미지를 받는 판정 모델(Perplexity Decider)을 들이고, 판정 모델 키를 화면에서 넣는다 (2026-10-02)
 
+> **→ D-142(2026-10-17)에서 바뀜**: 판정 모델은 OpenRouter 하나로 부르고 모델은 설정에서 고른다. Perplexity 직결은 《추가 예정》.
+
 > **일부 바뀜(2026-10-11 정리)**: 판정 모델 키를 화면에서 넣는 것은 그대로다. 《기본 모델은 바꾸지 않는다》는
 > D-135에서 이미지 판정 기본이 clef 사슬로 바뀌었다.
 
@@ -8223,6 +8225,8 @@ Decider는 그 개인 파일을 보지 않는다(남의 키를 쓰지 않게). �
 | 실제 정확도 | **없음** — 키가 생기면 `scripts/eval_decider_survey.py`로 잰다 |
 
 ## D-135: 이미지 판정의 기본을 Cloudflare clef로 — Decider는 선택지로 남긴다 (2026-10-04)
+
+> **→ D-142(2026-10-17)에서 바뀜**: 이미지 판정은 설정에서 고른 모델(기본 decider v1.2) → kimi-k3. Cloudflare 무료 몫 단계와 clef 사슬은 쓰지 않는다(Cloudflare 직결은 《추가 예정》).
 
 **배경.** 사용자 결정(2026-10-04): 자동 스캔의 이미지 판정 자리(D-134에서 Perplexity `decider-27b`)에 Cloudflare Workers AI
 `@cf/cloudflare/clef`(27B, System One 판정 모델, 이미지를 받는다)를 쓰고, **Cloudflare 키가 있으면 그것을 기본으로** 한다.
@@ -8702,6 +8706,8 @@ decider 문턱(0.95/0.35)에서 그 수는 천진담초 131행·운양집 1책 4
 
 ## D-139: 편성 본문 경계 판정을 다시 Jev 주로 — Perplexity decider v1.1은 폴백 (2026-10-11)
 
+> **→ D-142(2026-10-17)에서 바뀜**: 《주·폴백》 구도는 기본값으로 남고(텍스트 jev-1.14·폴백 decider v1.2), TypeSafe 직결과 《직결 → OpenRouter 경유》 선택은 없어졌다. 모델은 설정에서 고른다.
+
 **배경.** D-136이 본문 판정의 주로 둔 `perplexity/pplx-decider-v1-27b`의 OpenRouter 엔드포인트가 사라졌다(호출 시 404
 《No endpoints found》). 10/8에 올라온 v1.1(`pplx-decider-v1.1-27b`)을 같은 정답으로 다시 쟀다(head-repo
 `docs/clef-vs-jev-20261003/README.md` 《재측정 (2026-10-11)》, 재채점 `scripts/ctb_band_select.py`·`ctb_hi_thresholds.py`, 호출 0건).
@@ -8788,3 +8794,57 @@ decider 문턱(0.95/0.35)에서 그 수는 천진담초 131행·운양집 1책 4
 **시험.** `tests/test_sweep_20261011.py::test_korcis_bibliography_saves_with_contents_and_abstracts`(팝업 있음·없음),
 같은 종류 `test_every_mapper_output_key_is_in_the_bibliography_schema`(서지 파서 7개의 출력 키가 스키마에 있는가 —
 매퍼 원문의 dict 글자에서 읽으므로 `bib["x"] = …`처럼 나중에 붙이는 키는 못 본다).
+
+## D-142: 판정 모델은 OpenRouter 목록에서 고른다 — 텍스트 Jev 1.14·이미지 decider v1.2 (2026-10-17)
+
+**배경.** 판정 모델은 쓰는 자리마다 업체·모델이 코드에 박혀 있었다 — 편성 본문 판정은 Jev(TypeSafe 직결 → 없으면
+OpenRouter 경유 `~typesafe/jev-latest`)가 주이고 decider v1.1이 폴백(D-139), 자동 스캔의 이미지 판정은 clef 사슬
+(Cloudflare 무료 → OpenRouter clef → 기본 비전 모델, D-135)이거나 Perplexity 직결 decider-27b(D-134). 설정 ▸ 판정 모델은
+키만 받고 모델은 고를 수 없었다. 업체 넷의 키 조합마다 길이 달라 화면·서버·시험이 그 조합을 따로 셌다.
+
+**결정(사용자, 2026-10-17).** 《https://openrouter.ai/models?output_modalities=decisions 여기서 고를 수 있도록 하고
+기타 플랫폼은 추가 예정으로 기입. 디폴트로 텍스트는 jev 1.14, 이미지는 decider v1.2. 둘 다 오픈라우터에서 고르는 거야.》
+되물어 정한 셋:
+1. **직결 키는 쓰지 않는다** — 서고 `.env`에 TypeSafe·Perplexity·Cloudflare 키가 있어도 판정은 OpenRouter로만.
+   직결 클라이언트 코드(`jev.JevClient`·`decider.DeciderClient`·`clef_cf.ClefClient`)는 지우지 않고 설정 칸에
+   《추가 예정》으로 적는다.
+2. **텍스트 폴백도 고른다**(편성 본문 판정에서 실패한 호출만 — 목차 대조는 폴백하지 않는다) — 칸 셋: 텍스트(기본 `typesafe/jev-1.14`), 텍스트 폴백(기본 `perplexity/pplx-decider-v1.2`,
+   빈 값 = 폴백 없음), 이미지(기본 `perplexity/pplx-decider-v1.2`).
+3. **이미지 판정이 실패하면 기본 비전 모델(kimi-k3)로** — 사슬은 《고른 모델 → 비전 모델》 둘. 호출 상한(JevGateExceeded)은
+   전처럼 넘기지 않고 멈춘다.
+
+**구현.**
+- `src/llm/decision_models.py`(새 모듈): 기본값, 고름 읽기·저장(앱 설정 `config.json`의 `decision_models` — 서고가 아니라
+  앱 하나에), id 모양 검사(`^~?[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._:-]*$` — 화면에서 온 값이 요청 본문·로그에 그대로
+  들어가므로), OpenRouter 목록(`/api/v1/models?output_modalities=decisions`, 키 없이 받음, 한 시간 캐시, 실패하면 앱에 든
+  목록 — 예외 없음. 처음 28개였고 2026-10-18 목록에서 빠진 `perplexity/pplx-decider-v1.1-27b`를 빼 27개), `make_decision_client`.
+- `openrouter_decider.OpenRouterModelClient`: 모델 id를 받는 하나의 클라이언트. 단가·이미지 수용은 목록에서, 이미지는 state
+  배열의 image_url(decider 타일 상한과 300KB 안으로 줄임), 목록이 《텍스트만》이라 하면 보내기 전에 거부, 목록에 없는 모델은
+  막지 않는다. `judge_family(model)`이 문턱 계통을 정한다.
+- 문턱(`structure_llm.judge_thresholds`): Jev 계열 0.85/0.5, decider 계열 0.997/0.69, **잰 적 없는 다른 모델은 Jev 값**.
+  전에는 업체(`PROVIDER == "openrouter"`)로 decider 값을 주었는데, 모델을 고를 수 있게 되면 업체가 계통을 말해 주지 않는다.
+- 라우트: 편성 `_structure_jev`는 고른 텍스트·폴백 모델로, 자동 스캔은 `force_provider="decision"`(옛 값 `clef`·`decider`는
+  같은 길로 받는다 — 열어 둔 화면이 400이 되지 않게). 설정 `GET /api/settings/decision-models`가 OpenRouter 한 줄·
+  `platforms`(OpenRouter + 추가 예정 셋)·`selection`·`catalog`·`image_available`을 내고, **`POST`가 새로 생겼다**(라우트 234 → 235,
+  library 30 → 31). 화면: 설정 칸의 드롭다운 셋(`setup-panel.js::_decisionModelPicker`), 자동 스캔 옵션 하나
+  (`"decision:decision"`, 활성은 서버의 `image_available`만 본다).
+
+**잰 것과 안 잰 것.** Jev 1.14·decider v1.2는 **우리 책으로 재지 않았다** — 문턱은 같은 계통 앞 판(Jev 최신판·decider v1.1)의
+값을 빌렸다. 쪽당 비용 어림은 2,400토큰 × 목록 단가(decider v1.2 $0.02/M → 1,000쪽 약 $0.05)이고 실측이 아니다. 시험은
+모두 가짜 opener·가짜 클라이언트로 돈다. **실제 호출은 2026-10-17에 한 번씩 했다**(사용자 승인, 합계 $0.000034 —
+사용 기록 실측): 목록 주소는 키 없이 27개를 돌려줬고 두 기본 id가 다 있었다. `typesafe/jev-1.14` 텍스트 noul 둘이
+0.5초에 답했고(351토큰 $0.0000147), `perplexity/pplx-decider-v1.2`가 이미지 state 배열을 받아 방향 choice와 noul 여섯에
+2.3초에 답했다(978토큰 $0.0000196) — 형식이 통한다는 확인이지 정확도가 아니다(이미지는 합성 활자 쪽). 첫 시도에
+429가 한 번 나 백오프 뒤 지나갔다. **목록은 jev-1.14의 입력을 《글·이미지》로 적는다** — 옛 Jev가 텍스트 전용이던
+것(D-134)과 다르다. 코드는 목록을 따르므로 jev-1.14를 이미지 칸에 고르면 이미지를 보낸다. 그 판정 품질은 재지 않았다.
+
+**되돌릴 수 없는가.** 아니다. 저장 형식은 앱 설정에 칸 하나를 더했을 뿐이고(없으면 기본값), 서고 파일은 바뀌지 않았다.
+직결을 다시 켜려면 `make_decision_client`에서 플랫폼을 가르면 된다.
+
+**대체.** D-134(Perplexity 직결 decider)·D-135의 clef 사슬·D-139의 《Jev 직결 → OpenRouter 경유》 선택은 이 결정으로 대체된다.
+D-139의 《Jev 주·decider 폴백》 구도와 문턱 값은 기본값으로 남는다.
+
+**시험.** `tests/test_decision_model_selection.py`(새로 — 기본값·저장·검증·목록·클라이언트 계약·문턱 계통·POST 라우트),
+`test_jev_via_openrouter.py`·`test_openrouter_decider.py`·`test_decision_models.py`·`test_clef_availability.py`·`test_clef_cf.py`·
+`test_scan_cost_and_chain_ui.py`·`test_structure_llm.py`·`test_structure_jev.py`의 라우트 시험을 이 뜻으로 고쳤다
+(키 격리 — 다른 업체 키가 OpenRouter로 나가지 않고 TypeSafe 주소로는 요청이 0건 — 는 그대로 잰다).

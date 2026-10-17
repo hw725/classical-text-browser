@@ -326,6 +326,10 @@ def test_clef_is_logged_as_cloudflare(tmp_path):
 
 
 # ── 라우트 ──
+# D-142(사용자 결정 2026-10-17): 자동 스캔의 판정은 설정에서 고른 OpenRouter 이미지 모델로만 부른다.
+# Cloudflare 직결(ClefClient)은 《추가 예정》이라 라우트가 쓰지 않는다 — 아래 라우트 시험은
+# 그 뜻으로 고쳤다(옛 값 force_provider="clef"도 OpenRouter 길로 간다).
+# 위의 ClefClient 단 시험은 클래스가 남아 있어 그대로 둔다.
 
 from tests.test_segmentation import _setup, client  # noqa: E402,F401 — fixture 재사용
 
@@ -338,47 +342,85 @@ def test_settings_default_image_provider_is_clef_with_keys(client, tmp_path):  #
     )
     assert r.status_code == 200, r.text
     assert "cf-tokenABCD" not in r.text  # 값은 돌려주지 않는다
-    d = client.get("/api/settings/decision-models").json()
-    cf = next(m for m in d["models"] if m["id"] == "cloudflare")
-    assert cf["has_key"] is True and cf["extra_keys"] == ["cloudflare_account"]
-    assert d["default_image_provider"] == "clef"
+    d = client.get("/api/settings/decision-models?catalog=false").json()
+    # Cloudflare 키만으로는 판정 모델이 서지 않는다 — 칸도 OpenRouter 하나다
+    assert [m["id"] for m in d["models"]] == ["openrouter"]
+    assert d["default_image_provider"] is None and d["image_available"] is False
+    r = client.post("/api/settings/llm-keys", json={"openrouter": "sk-or-abcd1234"})
+    assert r.status_code == 200, r.text
+    d = client.get("/api/settings/decision-models?catalog=false").json()
+    assert d["default_image_provider"] == "decision" and d["image_available"] is True
 
 
-def test_survey_with_clef_uses_probabilities(client, tmp_path, monkeypatch):  # noqa: F811
+def _survey_url(client, tmp_path, monkeypatch):  # noqa: F811 — fixture를 받아 넘긴다
+    import app.routers.llm_ocr as llm_ocr
     from core import env_doctor
 
     monkeypatch.setattr(env_doctor, "_GPU_RUNTIME", True)
-    import app.routers.llm_ocr as llm_ocr
 
     async def _no_probe(force_provider):  # 미리 세기가 진짜 Ollama에 닿지 않게
         return {"checked": False, "ready": []}
 
     monkeypatch.setattr(llm_ocr, "_vision_readiness", _no_probe)
+    # 직결 clef는 이 길에서 불리면 안 된다
+    monkeypatch.setattr(clef.ClefClient, "has_key", property(lambda self: True))
+    monkeypatch.setattr(clef.ClefClient, "ask", lambda *a, **k: pytest.fail("직결 clef를 불렀다"))
     _lib, part_id = _setup(client, tmp_path)
-    url = f"/api/documents/d1/parts/{part_id}/rotation/suggest"
+    return f"/api/documents/d1/parts/{part_id}/rotation/suggest"
 
+
+def _fake_router(monkeypatch, seen: dict):
+    from types import SimpleNamespace
+
+    import app._state as app_state
+    import app.routers.llm_ocr as llm_ocr
+
+    class FakeRouter:
+        async def call_with_image(self, prompt, image, **kw):
+            seen.update(kw)
+            seen["n"] = seen.get("n", 0) + 1
+            return SimpleNamespace(
+                text='{"orientation": "upright", "contents": ["handwriting"]}',
+                provider="ollama",
+                model="kimi-k3:cloud",
+            )
+
+    # 자동 스캔 라우트는 함수 안에서 `from app._state import _get_llm_router`로 가져온다 —
+    # llm_ocr의 이름만 바꾸면 진짜 라우터가 진짜 Ollama를 부른다(2026-10-05 이렇게 샜다)
+    monkeypatch.setattr(app_state, "_get_llm_router", lambda: FakeRouter())
+    monkeypatch.setattr(llm_ocr, "_get_llm_router", lambda: FakeRouter())
+
+
+def test_survey_with_clef_uses_probabilities(client, tmp_path, monkeypatch):  # noqa: F811
+    """옛 값 "clef"로 와도 설정의 이미지 모델(기본 decider v1.2)을 OpenRouter로 부른다."""
+    from llm.decision_models import DEFAULT_IMAGE_MODEL
+    from llm.openrouter_decider import OpenRouterModelClient
+
+    url = _survey_url(client, tmp_path, monkeypatch)
+    monkeypatch.setattr(OpenRouterModelClient, "has_key", property(lambda self: False))
     r = client.post(url, json={"force_provider": "clef", "force_model": "clef"})
-    assert r.status_code == 400 and r.json()["needs_key"] == "cloudflare"
+    assert r.status_code == 400 and r.json()["needs_key"] == "openrouter"
 
+    monkeypatch.setattr(OpenRouterModelClient, "has_key", property(lambda self: True))
     r = client.post(url, json={"dry_run": True, "force_provider": "clef"})
-    assert r.json()["engine"] == "clef" and r.json()["cost_usd_est"] > 0
+    assert r.json()["engine"] == "decision" and r.json()["cost_usd_est"] > 0
 
     sent: list = []
 
     def fake_ask(self, state, questions, *, images=(), purpose=""):
-        sent.append((len(images), purpose))
+        sent.append((len(images), purpose, self.model))
         return {
             "orientation": {"choice": "upright", "probabilities": {"upright": 0.9}},
             "has_classical_print": {"noul": 0.88},
         }
 
-    monkeypatch.setattr(clef.ClefClient, "has_key", property(lambda self: True))
-    monkeypatch.setattr(clef.ClefClient, "ask", fake_ask)
+    monkeypatch.setattr(OpenRouterModelClient, "ask", fake_ask)
     r = client.post(url, json={"force_provider": "clef", "force_model": "clef"})
     assert r.status_code == 200, r.text
     d = r.json()
-    assert d["provider"] == "cloudflare" and d["model"] == "clef"
-    assert sent and all(n == 1 and p == "page_survey" for n, p in sent)
+    assert d["provider"] == "openrouter" and d["model"] == DEFAULT_IMAGE_MODEL
+    assert sent and all(n == 1 and p == "page_survey" for n, p, _ in sent)
+    assert {m for *_, m in sent} == {DEFAULT_IMAGE_MODEL}
     assert d["per_page"][0]["contents"] == ["classical_print"]
     assert d["per_page"][0]["decider"]["contents"]["classical_print"] == 0.88
 
@@ -403,115 +445,74 @@ def test_openrouter_clef_body_puts_image_in_state_array():
     assert len(raw) <= clef.DEFAULT_IMAGE_BYTES  # 다시 인코딩해 커지지 않는다
 
 
-def _survey_chain_setup(client, tmp_path, monkeypatch, or_ask):  # noqa: F811 — fixture를 받아 넘긴다
-    """Cloudflare clef는 실패, OpenRouter clef는 or_ask로 답하는 자동 스캔 준비."""
-    import app._state as app_state
-    import app.routers.llm_ocr as llm_ocr
-    from core import env_doctor
-    from llm.openrouter_decider import OpenRouterClefClient
-
-    monkeypatch.setattr(env_doctor, "_GPU_RUNTIME", True)
-    _lib, part_id = _setup(client, tmp_path)
-
-    def quota(self, *a, **k):
-        raise JevCallFailed("jev_http_error", status=429, detail="daily free allocation")
-
-    monkeypatch.setattr(clef.ClefClient, "has_key", property(lambda self: True))
-    monkeypatch.setattr(clef.ClefClient, "ask", quota)
-    monkeypatch.setattr(OpenRouterClefClient, "ask", or_ask)
-    fake = OpenRouterClefClient(api_key="or-test", max_calls=10)
-    monkeypatch.setattr(llm_ocr, "_openrouter_clef", lambda *a, **k: fake)
-    seen: dict = {}
-
-    class FakeRouter:
-        async def call_with_image(self, prompt, image, **kw):
-            seen["router"] = kw
-            from types import SimpleNamespace
-
-            return SimpleNamespace(
-                text='{"orientation": "upright", "contents": []}',
-                provider="ollama",
-                model="kimi-k3:cloud",
-            )
-
-    monkeypatch.setattr(app_state, "_get_llm_router", lambda: FakeRouter())
-    url = f"/api/documents/d1/parts/{part_id}/rotation/suggest"
-    return url, seen
-
-
 def test_survey_chain_cloudflare_to_openrouter(client, tmp_path, monkeypatch):  # noqa: F811
-    # Cloudflare 무료량이 바닥나면 같은 쪽을 OpenRouter clef로 다시 묻고 뒤 쪽도 그쪽을 쓴다
-    def or_ok(self, state, questions, *, images=(), purpose=""):
-        return {
-            "orientation": {"choice": "upright", "probabilities": {"upright": 0.9}},
-            "has_classical_print": {"noul": 0.8},
-        }
+    """Cloudflare 키가 있어도 Cloudflare 단계는 없다.
 
-    url, seen = _survey_chain_setup(client, tmp_path, monkeypatch, or_ok)
-    d = client.post(url, json={"force_provider": "clef", "force_model": "clef"}).json()
-    assert d["fallback"] == "cloudflare→openrouter"
-    assert d["provider"] == "openrouter" and d["model"] == "cloudflare/clef"
-    assert "router" not in seen  # 비전 모델까지 가지 않았다
-    assert "OpenRouter clef로" in (d["error"] or "")
+    고른 모델이 실패하면 바로 기본 비전 모델로 간다.
+    """
+    from llm.openrouter_decider import OpenRouterModelClient
+
+    url = _survey_url(client, tmp_path, monkeypatch)
+    monkeypatch.setattr(OpenRouterModelClient, "has_key", property(lambda self: True))
+
+    def or_fail(self, *a, **k):
+        raise JevCallFailed("jev_http_error", status=429, detail="rate limited")
+
+    monkeypatch.setattr(OpenRouterModelClient, "ask", or_fail)
+    seen: dict = {}
+    _fake_router(monkeypatch, seen)
+    d = client.post(url, json={"force_provider": "decision", "force_model": "decision"}).json()
+    assert d["fallback"] == "decision→vision"
+    assert [s["to"] for s in d["fallback_steps"]] == ["vision"]
+    assert "cloudflare" not in json.dumps(d["fallback_steps"])
+    assert d["provider"] == "ollama" and seen.get("n", 0) >= 1
 
 
 def test_survey_chain_falls_through_to_vision(client, tmp_path, monkeypatch):  # noqa: F811
-    # OpenRouter도 실패하면(크레딧 소진 등) 기본 비전 모델로
-    def or_fail(self, *a, **k):
-        raise JevCallFailed("jev_http_error", status=402, detail="insufficient credits")
+    """이미지 모델을 OpenRouter의 cloudflare/clef로 고르면 그 모델 id로 부른다(고른 대로)."""
+    import llm.decision_models as dm
+    from llm.openrouter_decider import OpenRouterModelClient
 
-    url, seen = _survey_chain_setup(client, tmp_path, monkeypatch, or_fail)
-    d = client.post(url, json={"force_provider": "clef", "force_model": "clef"}).json()
-    assert d["fallback"] == "cloudflare→openrouter→vision"
-    assert d["provider"] == "ollama" and "router" in seen
+    url = _survey_url(client, tmp_path, monkeypatch)
+    monkeypatch.setattr(dm, "load_selection", lambda: {**dm.DEFAULTS, "image": "cloudflare/clef"})
+    monkeypatch.setattr(OpenRouterModelClient, "has_key", property(lambda self: True))
+    models: list = []
+
+    def ok(self, state, questions, *, images=(), purpose=""):
+        models.append(self.model)
+        return {"orientation": {"choice": "upright", "probabilities": {"upright": 0.9}}}
+
+    monkeypatch.setattr(OpenRouterModelClient, "ask", ok)
+    seen: dict = {}
+    _fake_router(monkeypatch, seen)
+    d = client.post(url, json={"force_provider": "decision", "force_model": "decision"}).json()
+    assert d["provider"] == "openrouter" and d["model"] == "cloudflare/clef"
+    assert set(models) == {"cloudflare/clef"} and "n" not in seen
+    assert "fallback" not in d
 
 
 def test_survey_falls_back_to_vision_llm_when_clef_fails(client, tmp_path, monkeypatch):  # noqa: F811
-    # 무료량 소진 등으로 clef가 실패하면 그 쪽부터 기본 비전 모델로 넘긴다(2026-10-05 사용자 지시).
-    # Jev는 이미지를 못 읽으므로 폴백은 비전 LLM이다
-    from types import SimpleNamespace
+    # 고른 판정 모델이 실패하면 그 쪽부터 기본 비전 모델로 넘긴다(사용자 결정 2026-10-17 —
+    # 사슬 끝은 D-135와 같다)
+    from core.page_survey import SURVEY_FALLBACK_MODEL
+    from llm.openrouter_decider import OpenRouterModelClient
 
-    import app.routers.llm_ocr as llm_ocr
-    from core import env_doctor
-
-    monkeypatch.setattr(env_doctor, "_GPU_RUNTIME", True)
-    _lib, part_id = _setup(client, tmp_path)
-    url = f"/api/documents/d1/parts/{part_id}/rotation/suggest"
+    url = _survey_url(client, tmp_path, monkeypatch)
+    monkeypatch.setattr(OpenRouterModelClient, "has_key", property(lambda self: True))
 
     def quota(self, *a, **k):
-        raise JevCallFailed("jev_http_error", status=429, detail="daily free allocation")
+        raise JevCallFailed("jev_http_error", status=402, detail="insufficient credits")
 
+    monkeypatch.setattr(OpenRouterModelClient, "ask", quota)
     seen: dict = {}
-
-    class FakeRouter:
-        async def call_with_image(self, prompt, image, **kw):
-            seen.update(kw)
-            return SimpleNamespace(
-                text='{"orientation": "upright", "contents": ["handwriting"]}',
-                provider="ollama",
-                model="kimi-k3:cloud",
-            )
-
-    monkeypatch.setattr(clef.ClefClient, "has_key", property(lambda self: True))
-    monkeypatch.setattr(clef.ClefClient, "ask", quota)
-    # 이 PC의 개인 키 파일에는 진짜 OpenRouter 키가 있다 — 사슬 2단계를 끄고 이 시험은 3단계만 본다
-    monkeypatch.setattr(llm_ocr, "_openrouter_clef", lambda *a, **k: None)
-    # 자동 스캔 라우트는 함수 안에서 `from app._state import _get_llm_router`로 가져온다 —
-    # llm_ocr의 이름만 바꾸면 진짜 라우터가 진짜 Ollama를 부른다
-    # (2026-10-05 이 시험이 그렇게 새고 있었다)
-    import app._state as app_state
-
-    monkeypatch.setattr(app_state, "_get_llm_router", lambda: FakeRouter())
-    monkeypatch.setattr(llm_ocr, "_get_llm_router", lambda: FakeRouter())
-    r = client.post(url, json={"force_provider": "clef", "force_model": "clef"})
+    _fake_router(monkeypatch, seen)
+    r = client.post(url, json={"force_provider": "decision", "force_model": "decision"})
     assert r.status_code == 200, r.text
     d = r.json()
-    assert d["fallback"] == "clef→vision"
+    assert d["fallback"] == "decision→vision"
     # 비전 모델이 답했다(시험 쪽은 흰 바탕이라 내용은 코드의 백지 판정이 덮을 수 있다)
     assert d["provider"] == "ollama" and d["model"] == "kimi-k3:cloud"  # 가짜 라우터의 답
     assert "decider" not in d["per_page"][0]
-    # "clef"를 라우터에 넘기지 않고 화면의 종류 판정 기본 모델로 바꿔 보낸다
-    from core.page_survey import SURVEY_FALLBACK_MODEL
-
+    # "decision"을 라우터에 넘기지 않고 화면의 종류 판정 기본 모델로 바꿔 보낸다
     assert (seen["force_provider"], seen["force_model"]) == SURVEY_FALLBACK_MODEL
     assert "이 쪽부터 기본 비전 모델로" in (d["error"] or "")

@@ -55,8 +55,8 @@ def _png(w: int, h: int) -> bytes:
 def _no_ambient_keys(monkeypatch, tmp_path):
     """이 PC의 키를 시험에 섞지 않는다 — 환경변수·프로젝트 루트 .env·공용 키 파일을 모두 막는다.
 
-    프로젝트 루트 .env에 PERPLEXITY_API_KEY를 두면 《키 없음》 시험이 깨지고, 자동 스캔 시험은 진짜로
-    부를 뻔했다(2026-10-02 검토 지적). 서고 .env만 읽게 바꿔 둔다.
+    프로젝트 루트 .env에 PERPLEXITY_API_KEY를 두면 《키 없음》 시험이 깨지고, 자동 스캔 시험은
+    진짜로 부를 뻔했다(2026-10-02 검토 지적). 서고 .env만 읽게 바꿔 둔다.
     """
     import llm.clef_cf as clef
     import llm.jev as jev
@@ -233,39 +233,49 @@ def test_parse_decider_answers_threshold_and_blank():
 
 
 # ── 화면·라우트 ──
+# D-142(2026-10-17): 설정 칸은 OpenRouter 한 줄 + 모델 셋 고르기, 다른 플랫폼은 《추가 예정》.
+# 자동 스캔의 판정 모델은 설정의 이미지 모델(기본 perplexity/pplx-decider-v1.2)이다.
 
 from tests.test_segmentation import _setup, client  # noqa: E402,F401 — fixture 재사용
 
 
 def test_settings_route_lists_models_and_saves_keys(client, tmp_path):  # noqa: F811
+    from llm.decision_models import DEFAULTS
+
     _setup(client, tmp_path)  # 서고를 하나 세운다 — 키는 그 서고 .env에 쓴다
     r = client.get("/api/settings/decision-models")
     assert r.status_code == 200
-    models = {m["id"]: m for m in r.json()["models"]}
-    assert set(models) == {"cloudflare", "perplexity", "openrouter", "typesafe"}
-    assert r.json()["default_image_provider"] is None  # 키가 없으면 기본은 그대로(생성 비전 LLM)
-    assert models["perplexity"]["signup_url"] == "https://console.perplexity.ai/project/keys"
-    r = client.post("/api/settings/llm-keys", json={"perplexity": "pplx-abcdWXYZ"})
+    d = r.json()
+    assert [m["id"] for m in d["models"]] == ["openrouter"]
+    assert d["models"][0]["signup_url"] == "https://openrouter.ai/settings/keys"
+    assert d["default_image_provider"] is None  # 키가 없으면 기본은 그대로(생성 비전 LLM)
+    assert d["selection"] == DEFAULTS == d["defaults"]
+    # 시험은 바깥 네트워크가 막혀 있다 — 앱에 든 목록으로 물러선다(설정 칸이 비지 않게)
+    assert d["catalog_source"] == "builtin" and len(d["catalog"]) == 27
+    assert {"typesafe/jev-1.14", "perplexity/pplx-decider-v1.2"} <= {m["id"] for m in d["catalog"]}
+    r = client.post("/api/settings/llm-keys", json={"openrouter": "sk-or-abcdWXYZ"})
     assert r.status_code == 200, r.text
-    assert "pplx-abcdWXYZ" not in r.text and r.json()["keys"]["perplexity"]["hint"] == "…WXYZ"
-    models = {m["id"]: m for m in client.get("/api/settings/decision-models").json()["models"]}
-    assert models["perplexity"]["has_key"] is True and models["perplexity"]["status"] == "unchecked"
+    assert "sk-or-abcdWXYZ" not in r.text and r.json()["keys"]["openrouter"]["hint"] == "…WXYZ"
+    d = client.get("/api/settings/decision-models?catalog=false").json()
+    assert d["models"][0]["has_key"] is True and d["models"][0]["status"] == "unchecked"
+    assert d["catalog"] is None and d["default_image_provider"] == "decision"
 
 
 def test_survey_with_decider_uses_probabilities(client, tmp_path, monkeypatch):  # noqa: F811
-    import llm.decider as dec
     from core import env_doctor
+    from llm.decision_models import DEFAULT_IMAGE_MODEL
+    from llm.openrouter_decider import OpenRouterModelClient
 
     monkeypatch.setattr(env_doctor, "_GPU_RUNTIME", True)
     _lib, part_id = _setup(client, tmp_path)
     url = f"/api/documents/d1/parts/{part_id}/rotation/suggest"
 
-    # 키가 없으면 보내기 전에 화면이 할 일을 알려 준다
-    r = client.post(url, json={"force_provider": "decider", "force_model": "decider-27b"})
-    assert r.status_code == 400 and r.json()["needs_key"] == "perplexity"
+    # 키가 없으면 보내기 전에 화면이 할 일을 알려 준다 — 업체는 OpenRouter다
+    r = client.post(url, json={"force_provider": "decision", "force_model": "decision"})
+    assert r.status_code == 400 and r.json()["needs_key"] == "openrouter"
 
-    r = client.post(url, json={"dry_run": True, "force_provider": "decider"})
-    assert r.json()["engine"] == "decider" and r.json()["cost_usd_est"] > 0
+    r = client.post(url, json={"dry_run": True, "force_provider": "decision"})
+    assert r.json()["engine"] == "decision" and r.json()["cost_usd_est"] > 0
 
     sent: list = []
 
@@ -277,12 +287,12 @@ def test_survey_with_decider_uses_probabilities(client, tmp_path, monkeypatch): 
             "has_hangul": {"noul": 0.1},
         }
 
-    monkeypatch.setattr(dec.DeciderClient, "has_key", property(lambda self: True))
-    monkeypatch.setattr(dec.DeciderClient, "ask", fake_ask)
-    r = client.post(url, json={"force_provider": "decider", "force_model": "decider-27b"})
+    monkeypatch.setattr(OpenRouterModelClient, "has_key", property(lambda self: True))
+    monkeypatch.setattr(OpenRouterModelClient, "ask", fake_ask)
+    r = client.post(url, json={"force_provider": "decision", "force_model": "decision"})
     assert r.status_code == 200, r.text
     d = r.json()
-    assert d["provider"] == "perplexity" and d["model"] == "decider-27b"
+    assert d["provider"] == "openrouter" and d["model"] == DEFAULT_IMAGE_MODEL
     assert len(sent) == 3 and all(n == 1 and p == "page_survey" for n, p, _ in sent)
     assert d["per_page"][0]["contents"] == ["modern_print"]
     assert d["per_page"][0]["decider"]["contents"]["modern_print"] == 0.92
@@ -298,10 +308,12 @@ def test_scan_select_offers_decider_option():
     assert 'id="wo-scan-model-select"' in html and 'data-extra-options="vision-decider"' in html
     assert 'id="settings-decision-models"' in html
     ws = (root / "js" / "workspace.js").read_text(encoding="utf-8")
-    assert '"decider:decider-27b"' in ws
-    assert '"clef:clef"' in ws and "default_image_provider" in ws  # D-135 — 키가 있으면 기본
+    assert '"decision:decision"' in ws and "default_image_provider" in ws  # 키가 있으면 기본
+    # 옛 두 옵션(직결 clef·Perplexity)은 돌아오지 않는다 — 직결은 《추가 예정》(D-142)
+    assert '"decider:decider-27b"' not in ws and '"clef:clef"' not in ws
     sp = (root / "js" / "setup-panel.js").read_text(encoding="utf-8")
-    assert "perplexity:" in sp and "/api/settings/decision-models" in sp
+    assert "/api/settings/decision-models" in sp and "_decisionModelPicker" in sp
+    assert 'method: "POST"' in sp and "추가 예정" in sp
 
 
 def test_decider_image_is_real_base64(tmp_path):

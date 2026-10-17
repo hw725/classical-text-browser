@@ -793,30 +793,30 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
     toc_calls = sum(1 for e in entries if len(str(getattr(e, "title", "") or "")) >= 2)
     planned = size["calls"] + toc_calls
 
-    from llm.jev import JevGateExceeded, make_jev_client
-    from llm.openrouter_decider import OpenRouterDecisionClient
+    from llm.decision_models import load_selection, make_decision_client
+    from llm.jev import JevGateExceeded
 
-    # 본문 판정의 주는 Jev, OpenRouter 경유 Perplexity decider v1.1은 《실패한 호출만》 대신 묻는
-    # 폴백이다(D-139, 사용자 결정 2026-10-11). D-136에서는 decider(v1)가 주였으나
-    # v1이 OpenRouter에서 폐기됐고(404), v1.1은 질문마다 state를 다시 과금해
-    # 책 1권에 Jev의 약 8배($0.19 대 $0.024)인데 기준을 지키는 대역(0.997/0.69)에서
-    # 정밀 차이가 미미했다 — 비용 대비 싼 쪽을 주로 둔다.
-    # 목차 대조(match_toc_entries_jev)는 Jev 그대로 — decider로 잰 적이 없다(D-136).
-    # Jev는 `make_jev_client`가 고른다(D-136 후속, 2026-10-05): TypeSafe 키가 있으면 직결,
-    # 없고 OpenRouter 키만 있으면 같은 Jev를 OpenRouter 경유로 — 전에는 OpenRouter 키를
-    # TypeSafe 주소로 보내 401이었다. OpenRouter 키 하나로 decider와 Jev가 둘 다 OpenRouter로
-    # 가는 것은 괜찮다(모델이 다르고, 문턱도 모델마다 따로 — judge_thresholds).
-    # 둘 다 서고를 넘긴다 — 설정 《판정 모델》에서 넣은 키(서고 .env)를 찾고
-    # 사용 기록도 서고에 남긴다.
-    # 상한: Jev는 목차 + (폴백이 본문 전부를 떠맡는 최악) 만큼을 받아야 게이트에 걸리지 않는다.
+    # 판정 모델은 설정 《판정 모델》에서 고른 OpenRouter 모델이다(D-142, 사용자 결정 2026-10-17).
+    # 본문 판정과 목차 대조는 《텍스트 모델》(기본 typesafe/jev-1.14), 텍스트 모델이 실패한
+    # 호출만 《폴백 모델》(기본 perplexity/pplx-decider-v1.2, 비우면 폴백 없음)이 대신 답한다 —
+    # D-139의 《Jev 주 · decider 폴백》 구조를 그대로 두고 모델만 고르게 했다.
+    # TypeSafe 직결 키가 서고 .env에 있어도 쓰지 않는다(직결은 《추가 예정》 — 같은 결정).
+    # 문턱은 답한 모델의 계통마다 judge_thresholds가 고른다(decider 계통은 decider 값).
+    # 둘 다 서고를 넘긴다 — 서고 .env의 OpenRouter 키를 찾고 사용 기록도 서고에 남긴다.
+    # 상한: 텍스트 모델은 목차 + 본문 만큼, 폴백은 본문 전부를 떠맡는 최악만큼.
     library_root = get_library_path()
-    decider = OpenRouterDecisionClient(max_calls=size["calls"] + 5, library_root=library_root)
-    jev = make_jev_client(max_calls=planned + 5, library_root=library_root)
-    # Jev 키가 없고 OpenRouter 키만 있어도 make_jev_client가 OpenRouter 경유 Jev를
-    # 주므로 주는 늘 Jev다.
-    # Jev가 키를 못 찾았으면 decider도 못 찾은 것이다(OpenRouter 키 하나면 Jev도 생긴다).
+    selection = load_selection()
+    jev = make_decision_client(
+        selection["text"], max_calls=planned + 5, library_root=library_root
+    )
     body_judge = jev
-    fallback = decider if decider.has_key else None  # 폴백 키가 없으면 실패한 호출은 실패로 남긴다
+    fallback = None
+    if selection["text_fallback"] and selection["text_fallback"] != selection["text"]:
+        fallback = make_decision_client(
+            selection["text_fallback"], max_calls=size["calls"] + 5, library_root=library_root
+        )
+        if not fallback.has_key:
+            fallback = None  # 같은 키라 텍스트 모델도 없다 — 아래에서 400
     # 입력만 청구된다(Jev $0.042/M, decider는 게이트웨이 cost — 어림은 $0.04/M). CJK 한 글자를
     # 1~1.5토큰으로 어림한다 — 실측은 호출 뒤 usage로.
     est = (
@@ -855,20 +855,17 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
             "fallback_cost_usd_max": round(fallback_max, 6) if fallback_max is not None else None,
             "fallback_judge": judge_label(fallback) if fallback is not None else None,
             "judge": judge_label(body_judge),
-            # 목차 대조를 맡을 Jev — 직결(typesafe:…)인지
-            # OpenRouter 경유(openrouter:~typesafe/…)인지
+            # 목차 대조를 맡을 모델(설정의 텍스트 모델, openrouter:<모델>)
             "toc_judge": judge_label(jev) if jev.has_key else None,
         }
 
     if not body_judge.has_key:
         return JSONResponse(
             {
-                "error": "판정 모델 키를 찾지 못했습니다. 설정 → 《판정 모델》에서 OpenRouter 키"
-                "(Jev를 OpenRouter 경유로 부르고, 실패한 호출은 Perplexity decider가 "
-                "대신 답한다)나 "
-                "TypeSafe 키(Jev 직결)를 넣으세요. 키는 제 주소로만 갑니다 — OpenRouter 키는 "
-                "OpenRouter로, TypeSafe 키는 TypeSafe로(OPENROUTER_API_KEY·TYPESAFE_API_KEY "
-                "환경변수, 서고·프로젝트 .env, ~/.claude/data/triage/.env도 읽습니다).",
+                "error": "판정 모델 키를 찾지 못했습니다. 설정 → 《판정 모델》에서 OpenRouter 키를 "
+                "넣으세요 — 판정은 거기서 고른 OpenRouter 모델(텍스트 "
+                f"{selection['text']})로 부릅니다(OPENROUTER_API_KEY 환경변수, 서고·프로젝트 "
+                ".env, ~/.claude/data/triage/.env도 읽습니다).",
                 "needs_key": "openrouter",
             },
             status_code=400,
@@ -882,8 +879,8 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
 
     toc_props: list[dict] = []
     toc_meta: dict = {"entries": len(entries), "picked": 0, "none": 0, "failed": 0}
-    # 목차 대조는 Jev만 한다(D-136). 본문 판정의 주도 Jev라(D-139) 키가 없으면 위에서 이미 400으로
-    # 돌아갔다 — 그래서 《키 없어 목차만 건너뜀》 갈래는 없앴다(오지 않는 자리였다, 2026-10-11 재확인)
+    # 목차 대조는 텍스트 모델만 한다(D-136·D-142 — 폴백 모델로 잰 적이 없다). 본문 판정의 주도 같은
+    # 모델이라 키가 없으면 위에서 이미 400으로 돌아갔다 — 《키 없어 목차만 건너뜀》 갈래는 없다
     if entries:
         res = match_toc_entries_jev(entries, body_lines, jev)
         if body.toc_min_prob is None:
@@ -894,7 +891,8 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
             min_prob, how = float(body.toc_min_prob), {"how": "given", "value": body.toc_min_prob}
         toc_props = toc_picks_to_proposals(res["picks"], entries, min_prob)
         for t in toc_props:
-            t["judge"] = judge_label(jev)  # 본문 후보처럼 《누가 답했나》 — 직결인지 경유인지 보인다
+            # 본문 후보처럼 《누가 답했나》 — 직결인지 경유인지 보인다
+            t["judge"] = judge_label(jev)
         n_accept = sum(1 for p in toc_props if p.get("band") == "accept")
         toc_meta = {
             "judge": judge_label(jev),
@@ -954,9 +952,9 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
 def _remember_escalate(doc_path, part_id: str, lines, proposals: list[dict]) -> None:
     """판정 실행 직후 애매한 후보(escalate)를 서고 메모에 적는다 (D-137).
 
-    왜: 서버 없이 도는 Claude 세션(`scripts/escalate_review.py`)이 《화면이 방금 세운 애매한 후보》를
-    알 길이 이것뿐이다. 경계가 아니라 메모이고 문헌 저장소 밖(서고 루트)에 둔다. 실패해도 판정
-    응답은 그대로 돌려준다 — 메모는 덤이다.
+    왜: 서버 없이 도는 Claude 세션(`scripts/escalate_review.py`)이 《화면이 방금 세운 애매한
+    후보》를 알 길이 이것뿐이다. 경계가 아니라 메모이고 문헌 저장소 밖(서고 루트)에 둔다. 실패해도
+    판정 응답은 그대로 돌려준다 — 메모는 덤이다.
     """
     library_root = get_library_path()
     if doc_path is None or library_root is None:
@@ -1477,7 +1475,8 @@ async def api_segmentation_auto(doc_id: str, body: SegmentationAutoRequest):
         "toc_pages": toc_pages,
         "toc_meta": toc_meta,
         "llm_toc": bool(use_llm_toc),
-        # 이번에 규칙을 새로 찾았으면 무엇을 켰는지 — 화면 토스트가 《○+날짜·談草로 세웠다》고 말한다
+        # 이번에 규칙을 새로 찾았으면 무엇을 켰는지 —
+        # 화면 토스트가 《○+날짜·談草로 세웠다》고 말한다
         "induced": ([s["id"] for s in induced["signals"] if s["recommended"]] if induced else None),
         "stage": induced["stage"] if induced else None,
         "rules_origin": rules["origin"],

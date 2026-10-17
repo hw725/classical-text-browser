@@ -655,14 +655,19 @@ def test_route_carries_escalate_and_unplaced_toc_titles(monkeypatch):
 
     class NoKeyDecider(FakeClient):
         # 이 PC에는 개인 키 파일에 실제 OpenRouter 키가 있다 — 가짜로 막지 않으면 시험이 돈을 쓴다.
-        # 키가 없으면 Jev가 주 판정자가 되므로 이 시험은 Jev 문턱(0.85/0.5)을 그대로 잰다(D-136)
+        # 폴백이 키 없음이면 텍스트 모델(가짜 Jev)만 답하므로 Jev 문턱(0.85/0.5)을 그대로 잰다
         PROVIDER = "openrouter"
         has_key = False
 
     import llm.openrouter_decider as or_mod
+    from llm.decision_models import DEFAULT_TEXT_MODEL
 
-    monkeypatch.setattr(jev_mod, "JevClient", FakeClient)
-    monkeypatch.setattr(or_mod, "OpenRouterDecisionClient", NoKeyDecider)
+    # 판정은 설정에서 고른 OpenRouter 모델의 클래스 하나로 만든다(D-142)
+    def factory(*, model, **k):
+        return FakeClient(**k) if model == DEFAULT_TEXT_MODEL else NoKeyDecider(**k)
+
+    assert jev_mod  # 직결 Jev는 이 길에서 쓰이지 않는다(D-142)
+    monkeypatch.setattr(or_mod, "OpenRouterModelClient", factory)
     monkeypatch.setattr(toc_mod, "detect_toc_pages", lambda pages, *a, **k: [1])
     # 乙集을 층위 2로 둔다 — escalate 목차 자리로 층을 세우면 그 아래 본문이 3단이 되어 드러난다
     # (둘 다 층위 1이면 어느 쪽으로 세워도 2단이라 이 시험이 아무것도 지키지 못했다)

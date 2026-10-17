@@ -776,150 +776,122 @@ class LlmKeysRequest(BaseModel):
 
 
 @router.get("/api/settings/decision-models")
-async def api_decision_models(check: bool = Query(False)):
-    """판정 모델(D-134)의 연결 상태 — 설정 화면 《판정 모델》 칸이 그린다.
+async def api_decision_models(check: bool = Query(False), catalog: bool = Query(True)):
+    """판정 모델(D-134·D-142)의 고름과 연결 상태 — 설정 화면 《판정 모델》 칸이 그린다.
 
     판정 모델은 LLM 라우터에 들지 않아(계약이 《프롬프트 → 글》이 아니다) `/api/llm/accounts`에
-    나오지 않는다. 그래서 따로 둔다. 키 값은 돌려주지 않는다 — 《있는가》와 어디서 왔는가만.
-    check=true면 실제로 한 번 부른다(질문 하나, 입력 수십 토큰 — $0.000002 남짓). 키가 맞는지는
-    불러 봐야 안다: 형식만 맞고 결제가 안 된 키가 흔하다.
+    나오지 않는다. 그래서 따로 둔다. 키 값은 돌려주지 않는다 — 《있는가》만.
+
+    D-142(사용자 결정 2026-10-17): 판정은 OpenRouter 하나로 부르고, 모델은 OpenRouter decisions
+    목록에서 셋(텍스트·텍스트 폴백·이미지)을 고른다. 다른 플랫폼은 `platforms`에
+    《추가 예정》(status "planned")으로만 싣는다 — 그 키가 서고 .env에 있어도 쓰지 않는다.
+
+    입력: check=true면 고른 텍스트 모델을 실제로 한 번 부른다(질문 하나, 입력 수십 토큰 —
+          $0.000002 남짓). 키가 맞는지는 불러 봐야 안다: 형식만 맞고 크레딧이 없는 키가 흔하다.
+          catalog=false면 OpenRouter 목록을 받지 않는다(드롭다운처럼 고름만 필요한 곳).
     출력: {"models": [{id, display_name, role, has_key, env_name, signup_url, steps,
-                       status, detail?}],
-           "clef_available": bool,   # Cloudflare 키 또는 OpenRouter 키 — 화면 clef 옵션의 활성
-           "clef_via": "cloudflare" | "openrouter" | None,
-           "default_image_provider": "clef" | None,
-           "jev_via": "typesafe" | "openrouter" | None}   # Jev가 가는 길(D-136 후속)
+                       status, detail?}],   # 지금은 OpenRouter 한 줄
+           "platforms": [{id, label, status: "active"|"planned"}],
+           "selection": {text, text_fallback, image}, "defaults": {…},
+           "catalog": [{id, name, inputs, usd_per_m}] | None, "catalog_source": "live"|"builtin",
+           "image_available": bool, "image_model": str,
+           "default_image_provider": "decision" | None}
     """
     from core.env_settings import MANAGED_KEYS
-    from llm.clef_cf import ClefClient
-    from llm.decider import DeciderClient
-    from llm.jev import JevCallFailed, JevClient
-    from llm.openrouter_decider import OpenRouterDecisionClient
+    from llm.decision_models import (
+        DEFAULTS,
+        PLATFORMS,
+        fetch_catalog,
+        load_selection,
+        make_decision_client,
+    )
+    from llm.jev import JevCallFailed
 
     library_path = get_library_path()
-    specs = [
-        {
-            # 이미지 판정의 기본(D-135) — 키(토큰+계정 id)가 있으면 화면이 미리 고른다
-            "id": "cloudflare",
-            "cls": ClefClient,
-            "display_name": "Cloudflare clef (Workers AI)",
-            "role": "이미지 판정 — 「말로 지시」 ① 자동 스캔의 《무슨 글인가》"
-            "(이 키나 OpenRouter 키가 있으면 종류 판정 모델의 기본. 둘 다 있으면 "
-            "이쪽(무료 몫)이 먼저 돌고 실패한 쪽만 OpenRouter로 넘어간다)",
-            "signup_url": "https://dash.cloudflare.com/profile/api-tokens",
-            "steps": [
-                "Cloudflare 대시보드에 로그인합니다",
-                "My Profile ▸ API Tokens에서 《Workers AI》 권한이 있는 토큰을 만듭니다",
-                "대시보드 오른쪽의 Account ID를 복사합니다",
-                "아래 두 칸(토큰·계정 id)에 붙여 넣고 《저장》 → 《연결 확인》 — "
-                "Windows 사용자 환경변수 CLOUDFLARE_API_TOKEN·CLOUDFLARE_ACCOUNT_ID에 "
-                "있으면 그것도 읽습니다",
-            ],
-            "extra_keys": ["cloudflare_account"],
-        },
-        {
-            "id": "perplexity",
-            "cls": DeciderClient,
-            "display_name": "Perplexity Decider (decider-27b)",
-            "role": "이미지 판정 — 「말로 지시」 ① 자동 스캔의 《무슨 글인가》"
-            "(종류 판정 모델에서 고른다)",
-            # 주소는 공식 문서(docs.perplexity.ai, 2026-10-02)의 《Generate API Keys》 링크 그대로
-            "signup_url": "https://console.perplexity.ai/project/keys",
-            "steps": [
-                "Perplexity API 콘솔(아래 주소)에 로그인합니다",
-                "프로젝트를 만들고 결제 수단을 등록합니다"
-                "(로그인만으로는 프로젝트가 생기지 않습니다)",
-                "API Keys에서 키를 만듭니다 — 키 전체는 만들 때 한 번만 보이니 바로 복사하세요",
-                "아래 칸에 붙여 넣고 《저장》 → 《연결 확인》",
-            ],
-        },
-        {
-            # 본문 경계 판정의 폴백(D-139) — 주는 Jev, 이 키만 있으면 Jev도 OpenRouter 경유로 부른다
-            "id": "openrouter",
-            "cls": OpenRouterDecisionClient,
-            "display_name": "Perplexity decider (OpenRouter 경유)",
-            "role": "텍스트 판정 — 편성 《판정 모델로 고르기》에서 Jev가 실패한 호출을 "
-            "대신 판정(폴백). "
-            "TypeSafe 키가 없으면 이 키로 Jev도 OpenRouter 경유로 부른다. "
-            "이미지 판정에도 쓴다 — 자동 스캔의 clef를 OpenRouter로 부른다"
-            "(Cloudflare 키가 없으면 처음부터, 있으면 Cloudflare가 실패한 쪽만. 유료 크레딧)",
-            "signup_url": "https://openrouter.ai/settings/keys",
-            "steps": [
-                "OpenRouter에 로그인하고 크레딧을 충전합니다",
-                "Settings ▸ API Keys에서 키를 만듭니다",
-                "아래 칸에 붙여 넣고 《저장》 → 《연결 확인》",
-            ],
-        },
-        {
-            "id": "typesafe",
-            "cls": JevClient,
-            "display_name": "TypeSafe Jev",
-            "role": "텍스트 판정 — 편성 《판정 모델로 고르기》의 본문 판정과 목차 대조(주 판정자, "
-            "D-139). 이 칸은 TypeSafe 키만 봅니다 — "
-            "TypeSafe 키가 없어도 OpenRouter 키가 있으면 같은 Jev를 OpenRouter 경유로 부릅니다",
-            "signup_url": "https://docs.typesafe.ai",
-            "steps": [
-                "TypeSafe에 가입하고 콘솔에서 API 키를 만듭니다",
-                "키를 아래 칸에 붙여 넣고 《저장》 → 《연결 확인》",
-            ],
-        },
-    ]
-    out = []
-    for s in specs:
-        client = s["cls"](library_root=library_path, max_calls=1, retries=0, timeout=20.0)
-        row = {k: v for k, v in s.items() if k != "cls"}
-        row["has_key"] = client.has_key
-        row["env_name"] = MANAGED_KEYS[s["id"]]
-        row["status"] = "needs_key" if not client.has_key else "unchecked"
-        if check and client.has_key:
-            probe = {"ok": {"type": "noul", "instructions": "이 글은 인사말인가?"}}
-            try:
-                await asyncio.to_thread(
-                    client.ask, "안녕하세요.", probe, purpose="connection_check"
-                )
-                row["status"] = "ready"
-            except JevCallFailed as e:
-                row["status"] = "error"
-                hint = {
-                    401: "키가 틀렸거나 지워졌습니다",
-                    402: "결제 수단이 없거나 잔액이 없습니다",
-                    403: "이 키로는 판정 API를 쓸 수 없습니다",
-                    429: "요청 한도를 넘었습니다",
-                }
-                row["detail"] = hint.get(e.status or 0) or f"{e} {e.status or ''}".strip()
-        out.append(row)
-    # 화면이 《종류 판정 모델》에서 clef를 고를 수 있는가·처음 고를 것(D-135 후속, 2026-10-05).
-    # clef는 사슬이다 — Cloudflare clef → OpenRouter clef → 기본 비전 모델. 자동 스캔 라우트
-    # (`llm_ocr._decision_client`)는 Cloudflare 키가 없고 OpenRouter 키만 있으면 OpenRouter clef부터
-    # 시작한다. 그런데 화면이 Cloudflare 키만 보고 clef를 막아, OpenRouter 키만 있는 사람은 clef를
-    # 고를 수 없었다. 조건을 **여기 한 곳에서** 계산해 `clef_available`로 내주고
-    # 화면은 그것만 쓴다 —
-    # 화면과 서버가 따로 계산하면 다시 어긋난다. OpenRouter 칸(OpenRouterDecisionClient)과
-    # OpenRouterClefClient는 같은 KEY_NAMES(`OPENROUTER_API_KEY` 하나)를 쓰므로 has_key가 같다
-    # (`tests/test_clef_availability.py`가 라우트의 판정과 이 값이 같은지 본다).
-    has = {r["id"]: bool(r["has_key"]) for r in out}
-    clef_via = (
-        "cloudflare" if has.get("cloudflare") else "openrouter" if has.get("openrouter") else None
+    selection = load_selection()
+    client = make_decision_client(
+        selection["text"], library_root=library_path, max_calls=1, retries=0, timeout=20.0
     )
-    # Jev를 어느 길로 부르는가(D-136 후속, 2026-10-05) — 편성 라우트의 `make_jev_client`와 같은
-    # 조건을 여기 한 곳에서 낸다: TypeSafe 키 → 직결, 없고 OpenRouter 키 → OpenRouter 경유.
-    # TypeSafe 칸의 has_key는 TypeSafe 키만 본다(전에는 OpenRouter 키로도 《키 있음》이 되고
-    # 「연결 확인」이 그 키를 TypeSafe 주소로 보냈다). 그래서 《OpenRouter 키로 Jev를 부른다》는
-    # 이 값과 TypeSafe 칸의 안내 한 줄로 알린다.
-    jev_via = (
-        "typesafe" if has.get("typesafe") else "openrouter" if has.get("openrouter") else None
-    )
-    if jev_via == "openrouter":
-        for r in out:
-            if r["id"] == "typesafe":
-                r["role"] += " — 지금은 TypeSafe 키가 없어 OpenRouter 키로 Jev를 부릅니다"
-    return {
-        "models": out,
-        "clef_available": clef_via is not None,
-        "clef_via": clef_via,  # 사슬이 어디서 시작하는가 — 화면 라벨용
-        "default_image_provider": "clef" if clef_via else None,
-        "jev_via": jev_via,  # 편성 본문·목차 판정(Jev, D-139의 주)이 가는 길 — 직결·OpenRouter 경유
+    row = {
+        "id": "openrouter",
+        "display_name": "OpenRouter",
+        "role": "판정 모델 전부 — 편성 「판정 모델로 고르기」(텍스트 모델·폴백 모델)와 "
+        "「말로 지시」 ① 자동 스캔의 《무슨 글인가》(이미지 모델). 모델은 아래에서 고릅니다",
+        "signup_url": "https://openrouter.ai/settings/keys",
+        "steps": [
+            "OpenRouter에 로그인하고 크레딧을 충전합니다",
+            "Settings ▸ API Keys에서 키를 만듭니다",
+            "아래 칸에 붙여 넣고 《저장》 → 《연결 확인》",
+        ],
+        "has_key": client.has_key,
+        "env_name": MANAGED_KEYS["openrouter"],
+        "status": "needs_key" if not client.has_key else "unchecked",
     }
+    if check and client.has_key:
+        probe = {"ok": {"type": "noul", "instructions": "이 글은 인사말인가?"}}
+        try:
+            await asyncio.to_thread(client.ask, "안녕하세요.", probe, purpose="connection_check")
+            row["status"] = "ready"
+        except JevCallFailed as e:
+            row["status"] = "error"
+            hint = {
+                401: "키가 틀렸거나 지워졌습니다",
+                402: "크레딧이 없습니다",
+                403: "이 키로는 판정 API를 쓸 수 없습니다",
+                404: f"고른 텍스트 모델({selection['text']})을 OpenRouter가 찾지 못합니다"
+                " — 목록에서 다른 모델을 고르세요",
+                429: "요청 한도를 넘었습니다",
+            }
+            row["detail"] = hint.get(e.status or 0) or f"{e} {e.status or ''}".strip()
+    out: dict = {
+        "models": [row],
+        "platforms": PLATFORMS,
+        "selection": selection,
+        "defaults": DEFAULTS,
+        "catalog": None,
+        "catalog_source": None,
+        # 자동 스캔 《종류 판정 모델》의 판정 모델 옵션 — 키가 있으면 고를 수 있고 처음 채울 때
+        # 미리 고른다(D-135의 clef 기본 자리를 이어받는다). 조건은 여기 한 곳에서만 낸다 —
+        # 화면이 키 조건을 다시 짜면 서버와 어긋난다
+        "image_available": bool(client.has_key),
+        "image_model": selection["image"],
+        "default_image_provider": "decision" if client.has_key else None,
+    }
+    if catalog:
+        cat = await asyncio.to_thread(fetch_catalog)
+        out["catalog"] = cat["models"]
+        out["catalog_source"] = cat["source"]
+    return out
+
+
+class DecisionModelsRequest(BaseModel):
+    """판정 모델 고름 저장 요청 (D-142). None인 칸은 그대로 둔다.
+
+    text_fallback의 빈 문자열은 《폴백 없음》이다.
+    """
+
+    text: str | None = None
+    text_fallback: str | None = None
+    image: str | None = None
+
+
+@router.post("/api/settings/decision-models")
+async def api_set_decision_models(body: DecisionModelsRequest):
+    """판정 모델 셋(텍스트·텍스트 폴백·이미지)을 앱 설정에 저장한다 (D-142).
+
+    앱 설정(`config.json`)에 둔다 — 비밀이 아니고, 서고를 바꿔도 같은 모델을 쓰게.
+    모델 id는 OpenRouter id 모양만 본다(목록에 없어도 받는다 — 목록보다 새 모델일 수 있다).
+    출력: {"selection": {…}} 또는 400 {"error"}.
+    """
+    from llm.decision_models import save_selection
+
+    try:
+        selection = save_selection(body.model_dump())
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except OSError as e:
+        return JSONResponse({"error": f"설정을 저장하지 못했습니다: {e}"}, status_code=400)
+    return {"selection": selection}
 
 
 @router.get("/api/settings/llm-keys")

@@ -15,6 +15,11 @@
   ③ 설정 《판정 모델》: TypeSafe 칸의 has_key는 TypeSafe 키만 보고, `jev_via`가 길을 알린다.
     「연결 확인」이 OpenRouter 키를 TypeSafe 주소로 보내지 않는다.
 
+2026-10-17(D-142) 덧붙임: 편성 라우트·설정 칸은 이제 설정에서 고른 OpenRouter 모델(텍스트
+`typesafe/jev-1.14`·폴백 `perplexity/pplx-decider-v1.2`)로만 부른다. ①·③의 라우트 시험은 그
+뜻으로 고쳤다 — TypeSafe 키가 있어도 TypeSafe 주소로는 한 건도 나가지 않는다. `make_jev_client`와
+클라이언트 단의 시험(직결 Jev가 OpenRouter 키를 보지 않는다 등)은 그 클래스가 남아 있어 그대로 둔다.
+
 **이 PC에는 진짜 키가 있다** — 환경변수·Windows 사용자 환경변수(Cloudflare)·개인 키 파일
 (`~/.claude/data/triage/.env`)·프로젝트 .env. 아래 fixture가 넷을 모두 막고 서고 .env만 읽게 하며,
 네트워크 대신 가짜 opener를 모든 판정 클라이언트의 기본값으로 끼운다(빠져나간 요청이 있어도 밖으로
@@ -33,6 +38,7 @@ import pytest
 import llm.jev as jev_mod
 import llm.openrouter_decider as or_mod
 from core.segmentation import Line
+from llm.decision_models import DEFAULT_TEXT_FALLBACK_MODEL, DEFAULT_TEXT_MODEL
 from llm.jev import TYPESAFE_URL, JevCallFailed, JevClient, make_jev_client
 from llm.openrouter_decider import (
     OPENROUTER_DECIDER_MODEL,
@@ -284,49 +290,39 @@ def _run_route(monkeypatch, lib: Path):
     return _structure_jev(None, req, toc_page + body, normalize_rules(None), 10_000)
 
 
-DECIDER_LABEL = f"openrouter:{OPENROUTER_DECIDER_MODEL}"
-OR_JEV_LABEL = f"openrouter:{OPENROUTER_JEV_MODEL}"
-TS_JEV_LABEL = "typesafe:jev-latest"
+TEXT_LABEL = f"openrouter:{DEFAULT_TEXT_MODEL}"
+FALLBACK_LABEL = f"openrouter:{DEFAULT_TEXT_FALLBACK_MODEL}"
 
 
-@pytest.mark.parametrize(
-    "combo,body_label,fallback,toc_label",
-    [
-        ("typesafe_only", TS_JEV_LABEL, None, TS_JEV_LABEL),
-        # D-139: 주는 늘 Jev, OpenRouter 키가 있으면 decider v1.1이 폴백
-        ("openrouter_only", OR_JEV_LABEL, DECIDER_LABEL, OR_JEV_LABEL),
-        ("both", TS_JEV_LABEL, DECIDER_LABEL, TS_JEV_LABEL),
-    ],
-)
-def test_route_sends_each_key_only_to_its_own_address(
-    tmp_path, monkeypatch, wire, combo, body_label, fallback, toc_label
-):
+# D-142(사용자 결정 2026-10-17): 판정은 설정에서 고른 OpenRouter 모델로만 부른다. TypeSafe 키가
+# 서고 .env에 있어도 쓰지 않는다 — 그래서 《TypeSafe만》은 키 없음(400, 한 건도 안 나감)이고,
+# 《둘 다》도 OpenRouter 길만 탄다. 어느 경우든 TypeSafe 주소로는 한 건도 나가지 않는다.
+@pytest.mark.parametrize("combo", ["openrouter_only", "both"])
+def test_route_sends_each_key_only_to_its_own_address(tmp_path, monkeypatch, wire, combo):
     out = _run_route(monkeypatch, _lib(tmp_path, _COMBOS[combo]))
     assert isinstance(out, dict), out
-    assert out["answered_by"] == {body_label: 1}
-    assert out["fallback"] == fallback
-    assert out["toc"]["judge"] == toc_label and out["toc"]["picked"] == 2
+    assert out["answered_by"] == {TEXT_LABEL: 1}
+    assert out["fallback"] == FALLBACK_LABEL
+    assert out["toc"]["judge"] == TEXT_LABEL and out["toc"]["picked"] == 2
     assert all(
-        p["judge"] == toc_label for p in out["proposals"] if p["reasons"] == ["toc:jev"]
+        p["judge"] == TEXT_LABEL for p in out["proposals"] if p["reasons"] == ["toc:jev"]
     )
     wire.assert_keys_stay_home()
     toc_reqs = [s for s in wire.seen if s["kind"] == "choice"]  # 목차 대조는 choice
-    assert len(toc_reqs) == 2  # 목차 항목 둘 — 전부 Jev
-    if combo == "openrouter_only":
-        # 이 결함의 핵심: OpenRouter 키만 있을 때 TypeSafe 주소로는 한 건도 나가지 않는다
-        assert not any(s["url"].startswith(TYPESAFE_URL) for s in wire.seen)
-        assert {s["model"] for s in toc_reqs} == {OPENROUTER_JEV_MODEL}
-    else:
-        assert {s["url"] for s in toc_reqs} == {TYPESAFE_URL}
-    if combo == "typesafe_only":
-        assert not any(s["url"].startswith("https://openrouter.ai/") for s in wire.seen)
+    assert len(toc_reqs) == 2  # 목차 항목 둘 — 전부 텍스트 모델
+    assert {s["model"] for s in toc_reqs} == {DEFAULT_TEXT_MODEL}
+    # 직결은 《추가 예정》 — TypeSafe 키가 있어도 TypeSafe 주소로는 한 건도 나가지 않는다
+    assert not any(s["url"].startswith(TYPESAFE_URL) for s in wire.seen)
+    assert {s["url"] for s in wire.seen} == {OPENROUTER_DECISIONS_URL}
 
 
-def test_route_without_any_key_sends_nothing(tmp_path, monkeypatch, wire):
-    out = _run_route(monkeypatch, _lib(tmp_path, {}))
+@pytest.mark.parametrize("combo", ["none", "typesafe_only"])
+def test_route_without_any_key_sends_nothing(tmp_path, monkeypatch, wire, combo):
+    """OpenRouter 키가 없으면(TypeSafe 키만 있어도) 한 건도 쏘지 않고 OpenRouter 키를 말한다."""
+    out = _run_route(monkeypatch, _lib(tmp_path, _COMBOS[combo]))
     assert out.status_code == 400
-    msg = json.loads(out.body)["error"]
-    assert "OPENROUTER_API_KEY" in msg and "TYPESAFE_API_KEY" in msg
+    body = json.loads(out.body)
+    assert "OPENROUTER_API_KEY" in body["error"] and body["needs_key"] == "openrouter"
     assert wire.seen == []
 
 
@@ -340,34 +336,36 @@ def test_route_dry_run_names_the_toc_judge(tmp_path, monkeypatch, wire):
     req = SegmentationStructureLlmRequest(part_id="vol1", engine="jev", dry_run=True)
     out = _structure_jev(None, req, [Line(page=2, line_index=0, text="본문" * 3)],
                          normalize_rules(None), 10_000)
-    assert out["judge"] == OR_JEV_LABEL and out["toc_judge"] == OR_JEV_LABEL
+    assert out["judge"] == TEXT_LABEL and out["toc_judge"] == TEXT_LABEL
+    assert out["fallback_judge"] == FALLBACK_LABEL
     assert wire.seen == []
 
 
 def test_jev_failure_falls_back_to_the_decider_with_decider_thresholds(
     tmp_path, monkeypatch, wire
 ):
-    """OpenRouter 키만 — OpenRouter 경유 Jev가 402면 같은 키로 decider v1.1이 대신 답하고, 그 답은
-    decider 문턱으로 판정된다(0.9 → escalate. Jev 문턱이었다면 accept) — D-139."""
-    wire.fail_models = {OPENROUTER_JEV_MODEL}
+    """텍스트 모델(Jev 1.14)이 402면 같은 키로 폴백 모델(decider v1.2)이 대신 답하고, 그 답은
+    decider 문턱으로 판정된다(0.9 → escalate. Jev 문턱이었다면 accept) — D-139·D-142."""
+    wire.fail_models = {DEFAULT_TEXT_MODEL}
     wire.noul = 0.9
     out = _run_route(monkeypatch, _lib(tmp_path, _COMBOS["openrouter_only"]))
-    assert out["fallback_calls"] == 1 and out["answered_by"] == {DECIDER_LABEL: 1}
-    assert out["thresholds"][DECIDER_LABEL] == [0.997, 0.69]
+    assert out["fallback_calls"] == 1 and out["answered_by"] == {FALLBACK_LABEL: 1}
+    assert out["thresholds"][FALLBACK_LABEL] == [0.997, 0.69]
     body_props = [p for p in out["proposals"] if p["reasons"] == ["jev:structure"]]
     assert body_props and {p["band"] for p in body_props} == {"escalate"}
-    assert all(p["judge"] == DECIDER_LABEL for p in body_props)
+    assert all(p["judge"] == FALLBACK_LABEL for p in body_props)
     wire.assert_keys_stay_home()
     assert not any(s["url"].startswith(TYPESAFE_URL) for s in wire.seen)
 
 
 # ── ③ 설정 《판정 모델》 ─────────────────────────────────────────────────────────
-@pytest.mark.parametrize(
-    "combo,jev_via",
-    [("none", None), ("typesafe_only", "typesafe"), ("openrouter_only", "openrouter"),
-     ("both", "typesafe")],
-)
-def test_settings_typesafe_row_sees_only_typesafe_key(client, wire, combo, jev_via):  # noqa: F811
+@pytest.mark.parametrize("combo", ["none", "typesafe_only", "openrouter_only", "both"])
+def test_settings_typesafe_row_sees_only_typesafe_key(client, wire, combo):  # noqa: F811
+    """설정 칸은 OpenRouter 한 줄이고 TypeSafe는 《추가 예정》이다(D-142).
+
+    「연결 확인」은 고른 텍스트 모델을 OpenRouter로만 부른다 — TypeSafe 키가 있어도
+    TypeSafe 주소로는 한 건도 나가지 않는다.
+    """
     r = client.post("/api/library/quick-start")
     assert r.status_code == 200, r.text
     keys = {"TYPESAFE_API_KEY": "typesafe", "OPENROUTER_API_KEY": "openrouter"}
@@ -376,26 +374,24 @@ def test_settings_typesafe_row_sees_only_typesafe_key(client, wire, combo, jev_v
         r = client.post("/api/settings/llm-keys", json=payload)
         assert r.status_code == 200, r.text
 
-    d = client.get("/api/settings/decision-models").json()
-    models = {m["id"]: m for m in d["models"]}
-    assert models["typesafe"]["has_key"] is ("TYPESAFE_API_KEY" in _COMBOS[combo])
-    assert models["openrouter"]["has_key"] is ("OPENROUTER_API_KEY" in _COMBOS[combo])
-    assert d["jev_via"] == jev_via
-    assert ("OpenRouter 키로 Jev를 부릅니다" in models["typesafe"]["role"]) is (
-        jev_via == "openrouter"
-    )
+    d = client.get("/api/settings/decision-models?catalog=false").json()
+    assert [m["id"] for m in d["models"]] == ["openrouter"]
+    has_or = "OPENROUTER_API_KEY" in _COMBOS[combo]
+    assert d["models"][0]["has_key"] is has_or
+    status = {p["id"]: p["status"] for p in d["platforms"]}
+    assert status == {"openrouter": "active", "typesafe": "planned", "perplexity": "planned",
+                      "cloudflare": "planned"}
     assert wire.seen == []  # check=false는 부르지 않는다
 
-    # 「연결 확인」 — 실제로 나간 요청의 주소·키로 본다
-    d = client.get("/api/settings/decision-models?check=true").json()
-    models = {m["id"]: m for m in d["models"]}
+    # 「연결 확인」 — 실제로 나간 요청의 주소·키·모델로 본다
+    d = client.get("/api/settings/decision-models?check=true&catalog=false").json()
     wire.assert_keys_stay_home()
-    if combo == "openrouter_only":
-        assert models["typesafe"]["status"] == "needs_key"
-        assert not any(s["url"].startswith(TYPESAFE_URL) for s in wire.seen)
-    if combo in ("typesafe_only", "both"):
-        assert models["typesafe"]["status"] == "ready"
-        assert any(s["url"].startswith(TYPESAFE_URL) for s in wire.seen)
+    assert not any(s["url"].startswith(TYPESAFE_URL) for s in wire.seen)
+    if has_or:
+        assert d["models"][0]["status"] == "ready"
+        assert [s["model"] for s in wire.seen] == [DEFAULT_TEXT_MODEL]
+    else:
+        assert d["models"][0]["status"] == "needs_key" and wire.seen == []
 
 
 def test_screen_names_openrouter_jev():
@@ -437,7 +433,9 @@ def test_direct_refusal_moves_to_openrouter_and_stays(tmp_path, wire):
     ]
     wire.assert_keys_stay_home()
     assert c.fell_back == "openrouter(typesafe 402)"
-    assert (c.PROVIDER, c.model) == ("openrouter", OPENROUTER_JEV_MODEL), "《누가 답했나》가 실제 길"
+    assert (c.PROVIDER, c.model) == ("openrouter", OPENROUTER_JEV_MODEL), (
+        "《누가 답했나》가 실제 길"
+    )
     u = c.usage()
     assert u["asks"] == 2, "거절된 묻기를 상한에 두 번 세지 않는다"
     assert u["via_openrouter"] == 1 and u["cost_usd"] > 0

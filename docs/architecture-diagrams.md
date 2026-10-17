@@ -13,7 +13,7 @@
 > |---|---|
 > | 6 · 11 · 13 | 추출 모드와 화면 구조 — 전면 개작. 13번은 새로 만든 것 |
 > | 1 · 5 · 9 · 10 | 텍스트 레이어 PDF 산출, 쪽 전면 1블록, 부분 재-OCR, 되돌리기 |
-> | 2 · 8 | 라우트 234개 · JS 모듈 34개 · API 캐시 금지 미들웨어 |
+> | 2 · 8 | 라우트 235개 · JS 모듈 34개 · API 캐시 금지 미들웨어 |
 > | 4 | LLM 사용량을 화면에 표시(D-056), LLM Vision OCR을 소비자로 추가 |
 > | 3 · 7 · 12 | **v1.3.0에서 바뀜** — 코어 엔티티가 6종으로(경계 목록 추가 D-092, Work 삭제 D-099), 경계 목록은 **원본 저장소**에 산다(D-097). 스키마 20개(v1.4.2에서 작업 계획 추가 — 강독 결과는 새 스키마 없이 기존 층에, D-131), L7 주석 4단계는 그대로 |
 >
@@ -115,7 +115,7 @@ flowchart TB
 
 ## 2. 전체 시스템 아키텍처
 
-프론트엔드(34개 JS 모듈) · 백엔드(FastAPI + 9 라우터, 라우트 234개) ·
+프론트엔드(34개 JS 모듈) · 백엔드(FastAPI + 9 라우터, 라우트 235개) ·
 처리 엔진(OCR 6종 + LLM 5단 + 산출·검출 보조) · Git 저장소 · 외부 서비스.
 
 **여기서 읽어야 할 것**: 화면과 서버 사이에는 REST API 하나뿐이고 빌드 도구도
@@ -184,7 +184,7 @@ flowchart TB
         SRV["server.py<br/>앱 생성 + 라우터 마운트 + 캐시 금지"]
         ST["_state.py<br/>공유 상태 · 헬퍼 · LLM/OCR 캐시"]
         MW["미들웨어<br/>API 응답에 Cache-Control no-store<br/>정적 파일에는 no-cache + ETag (D-066)"]
-        subgraph ROUTERS["9개 도메인 라우터 (라우트 234개)"]
+        subgraph ROUTERS["9개 도메인 라우터 (라우트 235개)"]
             direction LR
             R1["library <b>30</b>"]
             R2["documents <b>48</b>"]
@@ -237,7 +237,7 @@ flowchart TB
         EXT_PUNCT["punctuation-service<br/>(SikuRoBERTa)"]
         EXT_GIT["GitHub · GitLab<br/>(백업/동기화)"]
         EXT_BIB["NDL · KORCIS<br/>(서지 API)"]
-        EXT_JUDGE["판정 모델 -- LlmRouter 밖 (llm/jev.py 계열)<br/>OpenRouter: decider · clef · Jev 경유<br/>Cloudflare clef · TypeSafe Jev · Perplexity Decider"]
+        EXT_JUDGE["판정 모델 -- LlmRouter 밖 (llm/jev.py 계열)<br/>OpenRouter decisions — 설정에서 고른 모델<br/>(직결은 추가 예정)"]
     end
 
     ENGINE -.-> EXT
@@ -265,7 +265,7 @@ flowchart TB
 - **앱**: 관계, 의미, 경고, UI → 만들어야 할 것
 - **원격 호스팅**: 백업, 동기화 → 교체 가능
 - **오프라인 퍼스트**: 핵심 작업(교정, 열람, 커밋)은 인터넷 없이 완전히 동작
-- **판정 모델은 LlmRouter 밖**: 확률만 답하는 판정 모델(이미지 clef·Decider, 본문·목차 Jev, 본문 폴백 decider — D-139)은 《프롬프트 → 글》 계약이 아니라 `llm/jev.py`의 `JevClient`를 물려받은 클라이언트가 직접 부른다(D-129·D-134～D-136). 키는 제 업체 주소로만 간다 — OpenRouter 키 하나면 decider·clef·Jev(경유)가 다 된다
+- **판정 모델은 LlmRouter 밖**: 확률만 답하는 판정 모델(본문·목차 텍스트 모델과 그 폴백, 자동 스캔 이미지 모델 — D-142)은 《프롬프트 → 글》 계약이 아니라 `llm/jev.py`의 `JevClient`를 물려받은 `OpenRouterModelClient`가 직접 부른다(D-129·D-142). 모델은 설정 ▸ 판정 모델에서 OpenRouter 목록으로 고르고, 키는 OpenRouter 하나다. TypeSafe·Perplexity·Cloudflare 직결은 추가 예정
 
 ---
 
@@ -676,7 +676,7 @@ flowchart TB
         MAIN["__main__.py<br/>CLI 진입점"]
         SRV["<b>server.py</b><br/>FastAPI 앱 생성 · 라우터 마운트 · 캐시 금지"]
         STATE["<b>_state.py</b><br/>공유 상태, 헬퍼 · LLM 캐시, 토큰 계산"]
-        subgraph ROUTERS["routers/ -- 9개 도메인 · 라우트 234개"]
+        subgraph ROUTERS["routers/ -- 9개 도메인 · 라우트 235개"]
             direction LR
             R1["library <b>30</b>"]
             R2["documents <b>48</b>"]

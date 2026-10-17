@@ -1,4 +1,8 @@
-"""OpenRouter로 부르는 Perplexity decider — 편성 《글이 시작하는 행》 판정의 폴백 (D-136·D-139).
+"""OpenRouter로 부르는 판정 모델 — 지금은 설정에서 고른 모델(`OpenRouterModelClient`, D-142).
+
+2026-10-17(D-142): 편성·자동 스캔은 이제 설정에서 고른 OpenRouter 모델(아래
+`OpenRouterModelClient`)로만 부른다. 이 파일의 다른 셋(decider v1.1 고정·Jev 경유·clef 경유)은
+옛 경로·평가 스크립트가 쓰는 것으로 남아 있다. 아래는 D-136·D-139 당시의 기록이다.
 
 2026-10-11(D-139): v1(`pplx-decider-v1-27b`)이 OpenRouter에서 폐기(404 《No endpoints found》)되어
 v1.1(`pplx-decider-v1.1-27b`)로 바꾸고, 주 판정자는 Jev로 되돌렸다 —
@@ -122,6 +126,70 @@ class OpenRouterClefClient(OpenRouterDecisionClient):
                 mime or "image/jpeg",
                 max_bytes=DEFAULT_IMAGE_BYTES,
                 max_pixels=DEFAULT_IMAGE_PIXELS,
+            )
+            url = f"data:{m};base64,{base64.b64encode(data).decode('ascii')}"
+            parts.append({"type": "image_url", "image_url": {"url": url}})
+        return {"model": self.model, "state": parts, "questions": dict(questions)}
+
+
+# 고른 모델의 이미지 상한 — clef 길의 2MP·300KB(위 클래스 머리말의 실측)와 decider의 타일 상한
+# (32×32 타일 2,048개, `decider.MAX_TILES` 1,900으로 여유) 중 작은 쪽. 어느 모델이 고르든 넘지 않게
+_MODEL_IMAGE_PIXELS = min(2_000_000, 1900 * 32 * 32)
+# 단가를 목록에서 못 찾을 때의 어림(입력 100만 토큰당 $) — 실제 비용은 응답의 usage.cost다
+_MODEL_USD_PER_M_FALLBACK = 0.04
+
+
+def judge_family(model: str) -> str:
+    """모델 id → 문턱 계통. 입력: OpenRouter 모델 id. 출력: "jev" | "decider" | "unmeasured".
+
+    문턱은 모델마다 저장 측정으로 골랐다(structure_llm.JUDGE_THRESHOLDS 머리말). 같은 계통의
+    새 판(Jev 1.14·decider v1.2)은 **그 계통의 값을 빌린다 — 잰 값이 아니다.** 잰 적 없는 다른
+    업체 모델은 "unmeasured"이고 Jev 값을 쓴다(structure_llm.judge_thresholds)."""
+    m = (model or "").lower()
+    if m.lstrip("~").startswith("typesafe/"):
+        return "jev"
+    if "pplx-decider" in m:
+        return "decider"
+    return "unmeasured"
+
+
+class OpenRouterModelClient(OpenRouterDecisionClient):
+    """설정에서 고른 OpenRouter 판정 모델 (D-142, 사용자 결정 2026-10-17).
+
+    편성(텍스트)과 자동 스캔(이미지)이 모두 이 클라이언트로 부른다 — 모델 id만 다르다.
+    주소·키·본문은 OpenRouter decisions 그대로(`/api/alpha/decisions`, OPENROUTER_API_KEY 하나).
+    인스턴스마다 정하는 것:
+      - INPUT_USD_PER_M: 모델 목록의 단가(미리 세기 어림용 — 실제 비용은 usage.cost)
+      - ACCEPTS_IMAGES: 목록이 《텍스트만》이라 하면 이미지를 보내기 전에 거부한다(모르면 받는다)
+      - JUDGE_FAMILY: 편성 문턱 계통(`judge_family`)
+    이미지는 `state` 배열의 image_url이다 — OpenRouter decisions의 이미지 형식(위 clef 실측).
+    """
+
+    def __init__(self, *, model: str, **kwargs) -> None:
+        from llm.decision_models import accepts_images, model_info
+
+        super().__init__(model=model, **kwargs)
+        info = model_info(model) or {}
+        usd = info.get("usd_per_m")
+        self.INPUT_USD_PER_M = float(usd) if usd is not None else _MODEL_USD_PER_M_FALLBACK
+        self.ACCEPTS_IMAGES = accepts_images(model) is not False
+        self.JUDGE_FAMILY = judge_family(model)
+
+    def _body(self, state, questions, images):
+        """{model, state, questions}. 이미지가 있으면 state를 [글, image_url…] 배열로 바꾼다."""
+        import base64
+
+        from llm.clef_cf import DEFAULT_IMAGE_BYTES, fit_image_clef
+
+        if not images:
+            return {"model": self.model, "state": state, "questions": dict(questions)}
+        parts: list = [state if isinstance(state, str) else str(state)]
+        for raw, mime in images:
+            data, m = fit_image_clef(
+                raw,
+                mime or "image/jpeg",
+                max_bytes=DEFAULT_IMAGE_BYTES,
+                max_pixels=_MODEL_IMAGE_PIXELS,
             )
             url = f"data:{m};base64,{base64.b64encode(data).decode('ascii')}"
             parts.append({"type": "image_url", "image_url": {"url": url}})

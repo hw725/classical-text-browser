@@ -222,3 +222,22 @@ console.log(JSON.stringify({ toasts, statuses }));
     )
     errors = [t for t in out["toasts"] if t[1] == "error"]
     assert errors and "Failed to fetch" in errors[0][0], out
+
+
+def test_ai_range_ignores_both_angle_quote_styles(tmp_path):
+    """《》뿐 아니라 «»도 무시 문자다 — 괄호 일괄 바꿈이 문자 집합의 «»를 《》로 바꿔 빠졌다(2026-10-18 리뷰).
+
+    원문에 «»가 남은 문헌(옛 입력·외부 텍스트)에서 AI 주석 범위가 한 칸씩 어긋난다.
+    """
+    out = run_js(
+        tmp_path,
+        JS,
+        ["_buildAiRangeIndexMap", "_AI_RANGE_IGNORABLE_CHAR_RE"],
+        "",
+        """
+const m = _buildAiRangeIndexMap("«甲»《乙》");
+console.log(JSON.stringify({ stripped: Array.from(m.strippedText), toOriginal: m.strippedToOriginal }));
+""",
+    )
+    assert out["stripped"] == ["甲", "乙"]
+    assert out["toOriginal"] == [1, 4]

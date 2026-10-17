@@ -61,7 +61,8 @@ class OcrBatchRequest(BaseModel):
     engine_id: str | None = None  # None이면 기본 엔진
     pages: list[int] | None = None  # None이면 전체 쪽
     # 구간별 엔진 계획(D-126 덧붙임): [{"from", "to", "engine_id"}]. 계획에 든 쪽은 그 엔진으로,
-    # 나머지는 engine_id로 돈다. 판독 계획이 《1~36쪽 NDLOCR, 37~52쪽 みんなで翻刻》처럼 만들어 준다.
+    # 나머지는 engine_id로 돈다. 판독 계획이 《1~36쪽 NDLOCR,
+    # 37~52쪽 みんなで翻刻》처럼 만들어 준다.
     engine_plan: list[dict] | None = None
     # 이미 L2 결과가 있는 쪽을 건너뛴다. 중단 후 이어서 돌리는 기본 동작이다.
     skip_existing: bool = True
@@ -500,7 +501,8 @@ async def api_llm_accounts():
                         for m in await asyncio.wait_for(provider.list_models(), timeout=2.0)
                     }
                     entry["active_model_installed"] = model in installed
-                    # 고르기가 《전부 응답 없음》으로 끝나 기본 이름만 돌려준 경우 — 깔려 있어도 못 씀
+                    # 고르기가 《전부 응답 없음》으로 끝나 기본 이름만 돌려준 경우 —
+                    # 깔려 있어도 못 씀
                     dead = (
                         provider._shared_get("vision_dead")
                         if hasattr(provider, "_shared_get")
@@ -882,46 +884,31 @@ def _survey_progress(progress, row: dict, done: int, total: int, labels: dict) -
     )
 
 
-# 이미지 판정 모델(force_provider 값 → 업체). D-134 decider, D-135 clef.
-# key_id는 설정 《판정 모델》의 칸 id(needs_key로 화면에 돌려준다), usd_per_m은 문서 단가(실측 아님)
+# 이미지 판정 모델(force_provider 값 → 업체). D-142(2026-10-17): 판정은 설정 《판정 모델》에서 고른
+# OpenRouter 모델(이미지 칸, 기본 perplexity/pplx-decider-v1.2) 하나로 부른다. key_id는 설정 칸
+# id(needs_key로 화면에 돌려준다). 옛 화면 값 "clef"·"decider"(D-134·D-135)도 같은 길로 받는다 —
+# 열어 둔 창·저장된 고름이 400이 되지 않게. 직결(Cloudflare·Perplexity)은 《추가 예정》이라
+# 쓰지 않는다
 _DECISION_PROVIDERS: dict[str, dict] = {
-    "decider": {"label": "Perplexity", "key_id": "perplexity", "usd_per_m": 0.04},
-    # clef는 Cloudflare 키 또는 OpenRouter 키 중 하나면 돈다(사슬, `_decision_client`)
-    # — 안내문도 둘을 말한다
-    "clef": {"label": "Cloudflare 또는 OpenRouter", "key_id": "cloudflare", "usd_per_m": 0.24},
+    "decision": {"label": "OpenRouter", "key_id": "openrouter"},
 }
+_DECISION_ALIASES = {"clef": "decision", "decider": "decision"}
 
 
 def _decision_client(kind: str, library_path, max_calls: int):
-    """force_provider 값 → 판정 모델 클라이언트.
+    """force_provider 값 → 판정 모델 클라이언트(설정의 이미지 모델, OpenRouter).
 
     모듈은 고를 때만 읽는다(라우트 기동을 무겁게 하지 않게).
     """
-    if kind == "clef":
-        from llm.clef_cf import ClefClient
+    from llm.decision_models import load_selection, make_decision_client
 
-        c = ClefClient(library_root=library_path, max_calls=max_calls)
-        if not c.has_key:
-            # Cloudflare 키가 없고 OpenRouter 키만 있으면 사슬의 2단계(OpenRouter clef)부터 시작한다
-            orc = _openrouter_clef(library_path, max_calls)
-            if orc is not None:
-                return orc
-        return c
-    from llm.decider import DeciderClient
-
-    return DeciderClient(library_root=library_path, max_calls=max_calls)
-
-
-def _openrouter_clef(library_path, max_calls: int):
-    """이미지 판정 사슬의 2단계 — OpenRouter로 부르는 clef. OpenRouter 키가 없으면 None."""
-    from llm.openrouter_decider import OpenRouterClefClient
-
-    c = OpenRouterClefClient(library_root=library_path, max_calls=max_calls)
-    return c if c.has_key else None
+    return make_decision_client(
+        load_selection()["image"], library_root=library_path, max_calls=max_calls
+    )
 
 
 def _merge_usage(usages: list[dict]) -> dict:
-    """클라이언트 여럿(Cloudflare clef·OpenRouter clef)의 사용량을 합친다 — 숫자 칸은 더하고
+    """클라이언트 여럿(옛 사슬의 Cloudflare·OpenRouter clef 등)의 사용량을 합친다 — 숫자 칸은 더하고
     나머지는 첫 값. by_provider에 클라이언트별 원본을 남긴다(각 항목의 provider로 업체를 가린다 —
     화면은 Cloudflare 몫(무료 몫 안이면 명목값)과 유료 몫을 따로 말한다)."""
     if len(usages) == 1:
@@ -942,44 +929,34 @@ def _merge_usage(usages: list[dict]) -> dict:
 # (decider 문서 기준). OpenRouter clef의 실제 청구는 쪽당 ≈1,850토큰
 # (openrouter_decider 머리말) — 2,400은 위로 잡은 값이다
 _DRY_TOKENS_PER_PAGE = 2400
-# Cloudflare 무료 몫(하루 10,000 neurons)으로 clef를 몇 쪽 부르나 — 사용자 결정 기록의
-# 《하루 ≈250쪽》(clef_cf·openrouter_decider 머리말). 잰 값이 아니라 어림이다
-_CLEF_FREE_PAGES_PER_DAY_EST = 250
 
 
-def _clef_chain(library_path) -> list[dict]:
-    """자동 스캔 clef 사슬의 단계별 키 유무 — 미리 세기(dry_run)가
-    《무엇이 무료이고 어디서부터 유료인가》를 보내기 전에 말하게 한다. 네트워크를 쓰지 않는다.
+def _decision_chain(library_path) -> list[dict]:
+    """자동 스캔 판정 사슬의 단계별 키 유무 — 미리 세기(dry_run)가
+    《무엇이 유료이고 실패하면 어디로 가는가》를 보내기 전에 말하게 한다. 네트워크를 쓰지 않는다.
 
-    출력: [{step, label, has_key, paid, …}] — cloudflare(무료 몫) → openrouter(유료) →
+    출력: [{step, label, has_key, paid, …}] — openrouter(설정의 이미지 모델, 유료) →
     vision(사슬 끝, Ollama 구독 — 추가 요금 없음). 실제 사슬(`_decision_client`·`_run`)과
-    같은 조건으로 키를 본다.
+    같은 조건으로 키를 본다(D-142 — 전에는 Cloudflare clef 무료 몫이 맨 앞이었다).
     """
     from core.page_survey import SURVEY_FALLBACK_MODEL
-    from llm.clef_cf import ClefClient
-    from llm.openrouter_decider import OPENROUTER_CLEF_USD_PER_M
 
+    c = _decision_client("decision", library_path, 0)
     return [
         {
-            "step": "cloudflare",
-            "label": "Cloudflare clef",
-            "has_key": ClefClient(library_root=library_path, max_calls=0).has_key,
-            "paid": False,
-            "free_pages_per_day": _CLEF_FREE_PAGES_PER_DAY_EST,
-        },
-        {
             "step": "openrouter",
-            "label": "OpenRouter clef",
-            "has_key": _openrouter_clef(library_path, 0) is not None,
+            "label": f"OpenRouter {c.model}",
+            "model": c.model,
+            "has_key": c.has_key,
             "paid": True,
-            "usd_per_page_est": round(_DRY_TOKENS_PER_PAGE * OPENROUTER_CLEF_USD_PER_M / 1e6, 6),
+            "usd_per_page_est": round(_DRY_TOKENS_PER_PAGE * c.INPUT_USD_PER_M / 1e6, 6),
         },
         {
             "step": "vision",
             "label": "기본 비전 모델",
-            # Ollama에는 키라는 것이 없다 — 《키 있음》(True)으로 적으면 닿지 않는 PC에서도 사슬 끝이
-            # 있는 것처럼 읽혔다(2026-10-06 설치 검증). 닿는지는 라우트가 `reachable`로 따로 싣는다
-            # (`_vision_readiness` — 이 함수는 네트워크를 쓰지 않는다).
+            # Ollama에는 키라는 것이 없다 — 《키 있음》(True)으로 적으면 닿지 않는 PC에서도 사슬
+            # 끝이 있는 것처럼 읽혔다(2026-10-06 설치 검증). 닿는지는 라우트가 `reachable`로 따로
+            # 싣는다 (`_vision_readiness` — 이 함수는 네트워크를 쓰지 않는다).
             # 로그인·모델 유무는 재지 않는다
             "has_key": None,
             "reachable": None,
@@ -1042,8 +1019,8 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
     needs_key(clef는 chain, 그 끝 단계의 reachable), 생성형 비전 모델이면
     vision_checked·vision_ready·no_vision(닿는 비전 프로바이더가 없음, `_vision_readiness`).
 
-    orientation_only=True면(《돌아간 쪽은 세워서》, 2026-09-18) 비전 모델을 부르지 않고 방향만 잰다 —
-    GPU 게이트를 지나지 않고, "calls": 0·"engines": []·"mixed": []이며,
+    orientation_only=True면(《돌아간 쪽은 세워서》, 2026-09-18) 비전 모델을 부르지 않고 방향만 잰다
+    — GPU 게이트를 지나지 않고, "calls": 0·"engines": []·"mixed": []이며,
     누운 쪽만 "rotation"에 오른다. GPU이고 PaddleOCR이 있을 때만 90/270을
     점수로 가르고, 아니면 "guess": True(화면이 미리보기로 묻는다).
     """
@@ -1104,10 +1081,11 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
         )
     stride = max(1, int(body.stride or 1))
     targets = list(range(a, b + 1, stride))
-    # 판정 모델로 종류를 물을 것인가(D-134·D-135) — 방향만이면 모델을 부르지 않으니 상관없다.
-    # "decider" = Perplexity decider-27b, "clef" = Cloudflare clef. 둘 다 같은 질문·같은 파서를 쓴다
-    # (page_survey.decider_questions — 판정 모델 공통 계약이라 업체마다 질문을 따로 두지 않는다)
+    # 판정 모델로 종류를 물을 것인가(D-134·D-135·D-142) — 방향만이면 모델을 부르지 않으니 상관없다.
+    # "decision" = 설정에서 고른 OpenRouter 이미지 모델(옛 값 "clef"·"decider"도 같은 길).
+    # 어느 모델이든 같은 질문·같은 파서를 쓴다(page_survey.decider_questions — 판정 모델 공통 계약)
     _fp = (body.force_provider or "").strip().lower()
+    _fp = _DECISION_ALIASES.get(_fp, _fp)
     decider_kind = _fp if _fp in _DECISION_PROVIDERS and not body.orientation_only else None
     use_decider = decider_kind is not None
     if use_decider and not body.dry_run:
@@ -1135,31 +1113,22 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
             "ocr_calls": 2 * len(targets),
         }
         if use_decider:
-            # 어림 비용 — 쪽당 _DRY_TOKENS_PER_PAGE토큰 × 업체 단가(실측 아님). cost_usd_est는 옛 칸
-            # 그대로(명목값 — Cloudflare 무료 몫 안이어도 단가로 환산한 값)
+            # 어림 비용 — 쪽당 _DRY_TOKENS_PER_PAGE토큰 × 고른 모델의 목록 단가(실측 아님).
+            # 사슬(고른 모델 → 기본 비전 모델)의 단계마다 키가 있는가도 준다
             n = len(targets)
-            usd_m = _DECISION_PROVIDERS[decider_kind]["usd_per_m"]
+            chain = _decision_chain(library_path)
+            paid = next(s for s in chain if s["step"] == "openrouter")
+            # 사슬 끝(기본 비전 모델)이 지금 닿는가 — 못 재면 None
+            vis = next(s for s in chain if s["step"] == "vision")
+            vr = await _vision_readiness(SURVEY_FALLBACK_MODEL[0])
+            fb_provider = SURVEY_FALLBACK_MODEL[0]
+            vis["reachable"] = (fb_provider in vr["ready"]) if vr["checked"] else None
             out["engine"] = decider_kind
-            out["cost_usd_est"] = round(n * _DRY_TOKENS_PER_PAGE * usd_m / 1e6, 5)
-            if decider_kind == "clef":
-                # clef는 사슬이다 — 단계마다 키가 있는가와 《최대 유료 어림》(무료 몫이 하나도
-                # 없어 전부 OpenRouter로 갈 때)을 준다. OpenRouter 키가 없으면 유료 단계가
-                # 없다(넘치면 비전 모델)
-                chain = _clef_chain(library_path)
-                # 사슬 끝(기본 비전 모델)이 지금 닿는가 — 못 재면 None
-                vis = next(s for s in chain if s["step"] == "vision")
-                vr = await _vision_readiness(SURVEY_FALLBACK_MODEL[0])
-                fb_provider = SURVEY_FALLBACK_MODEL[0]
-                vis["reachable"] = (fb_provider in vr["ready"]) if vr["checked"] else None
-                out["chain"] = chain
-                paid = next(s for s in chain if s["step"] == "openrouter")
-                out["cost_usd_max"] = (
-                    round(n * paid["usd_per_page_est"], 6) if paid["has_key"] else 0.0
-                )
-                has_any = any(s["has_key"] for s in chain if s["step"] != "vision")
-            else:
-                out["cost_usd_max"] = out["cost_usd_est"]
-                has_any = _decision_client(decider_kind, library_path, 0).has_key
+            out["model"] = paid["model"]
+            out["chain"] = chain
+            out["cost_usd_est"] = round(n * paid["usd_per_page_est"], 6)
+            out["cost_usd_max"] = out["cost_usd_est"]
+            has_any = paid["has_key"]
             if not has_any:
                 # 실제 스캔이면 400으로 거절할 상태 — 미리 세기에서 먼저 알린다
                 out["needs_key"] = _DECISION_PROVIDERS[decider_kind]["key_id"]
@@ -1199,19 +1168,16 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
         # 방향만이면 모델을 부르지 않는다. (라우터 객체 자체는 위의 엔진 목록
         # 초기화가 llm_vision 엔진에 붙이느라 생길 수 있다 — 호출은 없다.
         # Codex 지적 2026-09-18)
-        # 판정 모델(D-134·D-135): 화면에서 《판정 모델 — Cloudflare clef》나 《… Perplexity Decider》를
-        # 고르면 force_provider가 "clef"·"decider"로 온다. 생성형 비전 LLM 대신 정해진 질문의 확률만
+        # 판정 모델(D-134·D-142): 화면에서 《판정 모델 — <설정의 이미지 모델>》을 고르면
+        # force_provider가 "decision"으로 온다. 생성형 비전 LLM 대신 정해진 질문의 확률만
         # 받는다(라우터를 거치지 않는다 — 라우터의 계약은 《프롬프트 → 글》이다).
         # 키는 라우트 앞에서 이미 확인했다
         decider = None
         if use_decider:
             decider = _decision_client(decider_kind, library_path, len(targets) + 5)
-        # 폴백으로 decider가 바뀌거나 None이 돼도 쓴 클라이언트 모두의 사용량을 보고한다
+        # 폴백으로 decider가 None이 돼도 쓴 클라이언트의 사용량을 보고한다
         decision_clients = [decider] if decider is not None else []
-        clef_fallback = False  # 사슬 끝(기본 비전 모델)까지 갔는가
-        # OpenRouter clef 단계에 있는가(Cloudflare 키가 없어 처음부터 그 단계일 수도 있다)
-        clef_via_openrouter = getattr(decider, "PROVIDER", "") == "openrouter"
-        clef_switched = False  # 실제로 Cloudflare → OpenRouter로 넘겼는가(결과의 fallback 표시용)
+        to_vision = False  # 사슬 끝(기본 비전 모델)까지 갔는가
         router_llm = None if (body.orientation_only or use_decider) else _get_llm_router()
         kwargs: dict = {
             "image_mime": "image/jpeg",
@@ -1269,11 +1235,10 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
             orientation: str | None = None
             contents: list[str] = []
             if decider is not None:
-                # clef 사슬(2026-10-05 사용자 결정): Cloudflare clef(무료, 하루 ≈250쪽) →
-                # OpenRouter clef(유료 크레딧, 쪽당 ≈$0.0004) → 기본 비전 모델. 한 단계가 실패하면
-                # 그 쪽을 다음 단계로 다시 묻고, 뒤의 쪽도 그 단계부터 쓴다. Jev는 이미지를 읽지
-                # 못하므로(텍스트 전용, base64를 글자로 읽는다 — 2026-10-02 실측) 사슬에 없다
-                answers, fail_why = None, None
+                # 사슬(D-142, 사용자 결정 2026-10-17): 설정의 OpenRouter 이미지 모델 → 기본 비전
+                # 모델. 고른 모델이 실패하면 그 쪽을 비전 모델로 다시 묻고, 뒤의 쪽도 비전 모델로
+                # 간다(D-135의 Cloudflare clef 무료 몫 단계는 직결이라 뺐다 — 《추가 예정》)
+                answers = None
                 while decider is not None:
                     try:
                         answers = await loop.run_in_executor(
@@ -1303,42 +1268,21 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
                         status = getattr(e, "status", None)
                         detail = str(getattr(e, "detail", "") or e)[:80]
                         why = f"{status or type(e).__name__}: {detail}"
-                        if decider_kind != "clef":
-                            fail_why = why
-                            break
-                        if not clef_via_openrouter:
-                            orc = _openrouter_clef(library_path, len(targets) + 5)
-                            if orc is not None:
-                                errors.append(
-                                    f"{page}쪽: Cloudflare clef {why} — 이 쪽부터 OpenRouter clef로"
-                                )
-                                fallback_steps.append(
-                                    {"page": page, "from": "cloudflare", "to": "openrouter",
-                                     "why": why}
-                                )
-                                decider, clef_via_openrouter, clef_switched = orc, True, True
-                                decision_clients.append(orc)
-                                continue
                         errors.append(
-                            f"{page}쪽: clef({decider.PROVIDER}) {why} — 이 쪽부터 기본 비전 모델로"
+                            f"{page}쪽: 판정 모델({decider.model}) {why}"
+                            " — 이 쪽부터 기본 비전 모델로"
                         )
                         fallback_steps.append(
-                            {"page": page, "from": decider.PROVIDER, "to": "vision",
-                             "model": ":".join(SURVEY_FALLBACK_MODEL), "why": why}
+                            {"page": page, "from": decider.PROVIDER, "from_model": decider.model,
+                             "to": "vision", "model": ":".join(SURVEY_FALLBACK_MODEL), "why": why}
                         )
                         decider = None
-                        clef_fallback = True
+                        to_vision = True
                         router_llm = _get_llm_router()
-                        # "clef"는 라우터의 프로바이더가 아니다 — 화면의 종류 판정 기본 모델로
+                        # "decision"은 라우터의 프로바이더가 아니다 — 화면의 종류 판정 기본 모델로
                         # 바꿔 보낸다(page_survey.SURVEY_FALLBACK_MODEL). 지정하지 않으면
                         # 라우터 기본(gemma4:cloud)으로 간다
                         kwargs["force_provider"], kwargs["force_model"] = SURVEY_FALLBACK_MODEL
-                if fail_why is not None:
-                    _fail(f"{page}쪽: 판정 모델 {fail_why}")
-                    per_page.append(row)
-                    _survey_progress(progress, row, len(per_page), len(targets), CONTENT_LABELS)
-                    unknown += 1
-                    continue
                 if answers is not None:
                     provider, model = decider.PROVIDER, decider.model
                     orientation, contents, probs = parse_decider_answers(answers)
@@ -1405,7 +1349,8 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
                 row["orientation"] = orientation
                 row["target"] = target_rotation(current, orientation)
             row["contents"] = contents
-            # 대표 종류 — 하나면 그것, 《활자+한글》·《판본+훈점》처럼 한 엔진이 읽는 짝이면 짝의 대표
+            # 대표 종류 — 하나면 그것, 《활자+한글》·《판본+훈점》처럼 한 엔진이 읽는
+            # 짝이면 짝의 대표
             row["content"] = primary_content(contents)
             # 한 쪽에 종류가 둘 이상이고 짝도 아니면(한글+훈점) — 쪽 단위 엔진으로는 못 푼다. 엔진을
             # 고르지 않고 따로 알린다
@@ -1494,10 +1439,8 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
                 [{**c.usage(), "provider": c.PROVIDER} for c in decision_clients])}
                if decision_clients else {}),
             # 사슬 어디까지 갔는가 — 화면(work-order.js `_woScanSummary`)이 fallback_steps로
-            # 《3쪽부터 OpenRouter clef로》를 실패와 따로 알린다
-            **({"fallback": ("cloudflare→openrouter→vision" if clef_switched
-                             else "clef→vision")} if clef_fallback
-               else {"fallback": "cloudflare→openrouter"} if clef_switched else {}),
+            # 《3쪽부터 기본 비전 모델로》를 실패와 따로 알린다
+            **({"fallback": "decision→vision"} if to_vision else {}),
             "fallback_steps": fallback_steps,
             "failures": failures,
             **({"capped_at_page": capped_at_page} if capped_at_page is not None else {}),

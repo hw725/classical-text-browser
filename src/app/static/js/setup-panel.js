@@ -70,11 +70,14 @@ async function _loadDecisionModels(check = false) {
       box.innerHTML = '<div class="placeholder">판정 모델 상태를 확인하지 못했습니다.</div>';
       return;
     }
-    const models = (await res.json()).models || [];
+    const data = await res.json();
+    const models = data.models || [];
     const keyState = kr.ok ? (await kr.json()).keys || {} : {};
     if (gen !== _decisionModelsGen) return; // 더 새 요청이 있다
     if (!check && typing()) return; // 치는 중 — 지우지 않는다
     box.innerHTML = "";
+    // D-142: 판정은 OpenRouter 하나 — 모델 셋을 여기서 고른다. 키 줄(아래)보다 먼저 보인다
+    box.appendChild(_decisionModelPicker(data));
     for (const m of models) {
       const row = document.createElement("div");
       row.className = `settings-llm-row llm-${m.status === "ready" ? "ready" : "needs_key"}`;
@@ -123,6 +126,14 @@ async function _loadDecisionModels(check = false) {
       for (const extraId of m.extra_keys || []) row.appendChild(_llmKeyRow(extraId, keyState));
       box.appendChild(row);
     }
+    // 다른 플랫폼은 《추가 예정》으로만 적는다(사용자 결정 2026-10-17) — 키 칸을 두지 않는다
+    const planned = (data.platforms || []).filter((p) => p.status === "planned");
+    if (planned.length) {
+      const note = document.createElement("div");
+      note.className = "settings-llm-note";
+      note.textContent = `추가 예정: ${planned.map((p) => p.label).join(" · ")} — 지금은 판정을 OpenRouter로만 부릅니다(서고 .env에 그 키가 있어도 쓰지 않습니다).`;
+      box.appendChild(note);
+    }
   } catch (e) {
     box.innerHTML = `<div class="placeholder">판정 모델 상태를 확인하지 못했습니다: ${String(e.message || e).replace(/[<>&]/g, "")}</div>`;
   } finally {
@@ -130,6 +141,103 @@ async function _loadDecisionModels(check = false) {
       btn.disabled = false;
       btn.textContent = "연결 확인";
     }
+  }
+}
+
+// 판정 모델 칸 셋(D-142). inputs가 이미지를 받는 모델만 《이미지》 칸에 서고,
+// 폴백 칸은 《폴백 없음》(빈 값)을 고를 수 있다
+const _DECISION_SLOTS = [
+  { slot: "text", label: "텍스트 모델", hint: "편성 「판정 모델로 고르기」의 본문 판정과 목차 대조", image: false, allowNone: false },
+  { slot: "text_fallback", label: "텍스트 폴백 모델", hint: "편성 본문 판정에서 텍스트 모델이 실패한 호출만 대신 답합니다(목차 대조는 폴백하지 않습니다)", image: false, allowNone: true },
+  { slot: "image", label: "이미지 모델", hint: "「말로 지시」 ① 자동 스캔의 《무슨 글인가》 — 실패한 쪽은 기본 비전 모델로 넘어갑니다", image: true, allowNone: false },
+];
+
+/** 단가(입력 100만 토큰당 $) → 짧은 글. 0이면 《무료》, 모르면 빈 글. */
+function _decisionPrice(usd) {
+  if (usd === null || usd === undefined) return "";
+  const v = Number(usd);
+  return v <= 0 ? "무료" : `$${Number(v.toPrecision(3))}/M`;
+}
+
+/**
+ * OpenRouter 판정 모델 셋을 고르는 칸 (D-142).
+ * 입력: /api/settings/decision-models 응답. 출력: 칸 요소.
+ * 고르면 바로 저장한다(POST) — 저장 단추를 따로 두면 고르고 잊은 값이 남는다.
+ * 목록에 없는 저장값(목록보다 새 모델이거나 목록이 바뀐 것)도 옵션으로 세워 사라지지 않게 한다.
+ */
+function _decisionModelPicker(data) {
+  const wrap = document.createElement("div");
+  wrap.className = "settings-llm-row";
+  const head = document.createElement("div");
+  head.className = "settings-llm-head";
+  const name = document.createElement("span");
+  name.className = "settings-llm-name";
+  name.textContent = "판정 모델 고르기 (OpenRouter)";
+  head.appendChild(name);
+  wrap.appendChild(head);
+  const src = document.createElement("div");
+  src.className = "settings-llm-note";
+  const cat = data.catalog || [];
+  src.textContent =
+    data.catalog_source === "live"
+      ? `OpenRouter decisions 목록 ${cat.length}개(지금 받은 것)에서 고릅니다.`
+      : `OpenRouter 목록에 닿지 않아 앱에 든 목록 ${cat.length}개(2026-10-17)를 보입니다.`;
+  wrap.appendChild(src);
+  const sel = data.selection || {};
+  for (const s of _DECISION_SLOTS) {
+    const label = document.createElement("label");
+    label.className = "settings-decision-slot";
+    label.textContent = `${s.label} `;
+    label.title = s.hint;
+    const select = document.createElement("select");
+    select.className = "bib-input";
+    select.dataset.slot = s.slot;
+    select.setAttribute("aria-label", s.label);
+    if (s.allowNone) select.appendChild(new Option("(폴백 없음)", ""));
+    const choices = cat.filter((m) => !s.image || (m.inputs || []).includes("image"));
+    for (const m of choices) {
+      const price = _decisionPrice(m.usd_per_m);
+      const def = data.defaults?.[s.slot] === m.id ? " · 기본" : "";
+      select.appendChild(new Option(`${m.name} — ${m.id}${price ? ` (${price})` : ""}${def}`, m.id));
+    }
+    const current = sel[s.slot] ?? "";
+    if (current && ![...select.options].some((o) => o.value === current)) {
+      // 목록에 있지만 이 칸에서 걸러진 모델(이미지 칸의 텍스트 전용 모델)과 목록에 없는 모델을 가른다
+      const known = cat.some((m) => m.id === current);
+      select.appendChild(new Option(`${current} (${known ? "이미지를 받지 않는 모델" : "목록에 없음"})`, current));
+    }
+    select.value = current;
+    // 저장에 실패하면 이 값으로 되돌린다 — 화면이 서버와 다른 모델을 보이지 않게
+    select.dataset.saved = current;
+    select.addEventListener("change", () => _saveDecisionModel(s.slot, select));
+    label.appendChild(select);
+    const hint = document.createElement("div");
+    hint.className = "settings-llm-note";
+    hint.textContent = s.hint;
+    wrap.append(label, hint);
+  }
+  return wrap;
+}
+
+async function _saveDecisionModel(slot, select) {
+  select.disabled = true;
+  try {
+    const res = await fetch("/api/settings/decision-models", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [slot]: select.value }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    select.dataset.saved = select.value;
+    showToast("판정 모델을 저장했습니다.", "success");
+    // 자동 스캔의 《종류 판정 모델》 옵션 이름이 이미지 모델을 보인다 — 드롭다운도 다시 채운다
+    document.dispatchEvent(new CustomEvent("llm-accounts-changed"));
+  } catch (e) {
+    select.value = select.dataset.saved ?? "";
+    showToast(`판정 모델을 저장하지 못했습니다(앞 값으로 되돌림): ${e.message}`, "error");
+  } finally {
+    select.disabled = false;
   }
 }
 

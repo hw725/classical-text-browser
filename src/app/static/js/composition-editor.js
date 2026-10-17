@@ -1123,11 +1123,11 @@ async function _updateLlmJudgeNote() {
     // 키가 없으면 누르기 전에 말한다 — 실행은 400으로 거절된다(2026-10-06 설치 검증)
     const noKey =
       d.has_key === false || d.needs_key
-        ? " — 키 없음: 설정 → 《판정 모델》에서 OpenRouter 키(또는 TypeSafe 키)를 넣어야 돕니다"
+        ? " — 키 없음: 설정 → 《판정 모델》에서 OpenRouter 키를 넣어야 돕니다"
         : "";
-    // 폴백(decider)이 본문을 모두 떠맡으면 드는 최대 — decider는 질문마다 글을 다시 세어 과금해 훨씬 크다
+    // 폴백 모델이 본문을 모두 떠맡으면 드는 최대 — decider는 질문마다 글을 다시 세어 과금해 훨씬 크다
     const fb = d.fallback_cost_usd_max != null
-      ? ` (Jev가 실패해 ${_judgeName(d.fallback_judge || "")}가 모두 떠맡으면 최대 약 $${d.fallback_cost_usd_max})`
+      ? ` (텍스트 모델이 실패해 ${_judgeName(d.fallback_judge || "")}가 모두 떠맡으면 최대 약 $${d.fallback_cost_usd_max})`
       : "";
     note.textContent = `${d.lines}행 · 질문 ${d.questions}개 · 호출 ${d.calls}번${toc} · 약 $${d.cost_usd_est}${fb}${judge}${noKey}`;
   } catch (e) {
@@ -1140,7 +1140,8 @@ function _judgeName(label) {
   // OpenRouter 경유 Jev(《openrouter:~typesafe/jev-latest》)를 decider보다 먼저 가린다 —
   // 업체 이름만 보면 decider로 읽힌다(D-136 후속, 2026-10-05)
   if (String(label).startsWith("openrouter:~typesafe/")) return "TypeSafe Jev (OpenRouter 경유)";
-  if (String(label).startsWith("openrouter:")) return "Perplexity decider";
+  // D-142: 설정에서 고른 OpenRouter 모델 — 모델 id를 그대로 보인다(어느 모델이든 올 수 있다)
+  if (String(label).startsWith("openrouter:")) return `${String(label).slice("openrouter:".length)} (OpenRouter)`;
   if (String(label).startsWith("typesafe:")) return "TypeSafe Jev";
   return String(label);
 }

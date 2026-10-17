@@ -1,4 +1,6 @@
-"""자동 스캔의 《보내기 전 비용》과 《사슬이 넘어간 것》을 화면까지 잇는다 (2026-10-05 리뷰 143 후속).
+"""자동 스캔의 《보내기 전 비용》과 《사슬이 넘어간 것》을 화면까지 잇는다.
+
+2026-10-05 리뷰 143 후속.
 
 무엇을 고정하는가:
   1. 미리 세기(dry_run)도 실제 스캔과 **같은 모델 선택**(force_provider·force_model)을
@@ -16,6 +18,10 @@
   4. 측정 스크립트가 업체 클라이언트에 남의 주소를 넘기지 않는다 — eval_clef_survey의
      OpenRouter 길은 `OpenRouterClefClient`이고, OpenRouter 키가 없으면 바로 끝난다
      (PERPLEXITY 키를 openrouter.ai로 보내던 결함).
+
+2026-10-17(D-142) 덧붙임: 사슬은 《설정에서 고른 OpenRouter 이미지 모델(기본 decider v1.2) →
+기본 비전 모델》로 바뀌었다(Cloudflare 무료 몫 단계는 직결이라 《추가 예정》). 1·2의 서버 시험은
+그 뜻으로 고쳤고, 화면 JS의 옛 clef 안내 시험은 옛 응답을 읽는 갈래가 남아 있어 그대로 둔다.
 
 외부 호출 없음 — 키는 가짜이고 ask는 모두 바꿔 끼운다.
 """
@@ -96,80 +102,80 @@ def _dry(client, part_id, **extra):  # noqa: F811
 
 
 def test_dry_run_clef_chain_both_keys(client, tmp_path, monkeypatch):  # noqa: F811
+    """D-142: 사슬은 《설정의 OpenRouter 이미지 모델(유료) → 기본 비전 모델》 둘이다."""
+    from llm.decision_models import DEFAULT_IMAGE_MODEL
+
     _gpu(monkeypatch)
     _lib, part_id = _setup(client, tmp_path)
     _keys(monkeypatch, cf=True, orr=True)
-    d = _dry(client, part_id, force_provider="clef", force_model="clef")
-    assert d["engine"] == "clef" and d["cost_usd_est"] > 0
+    d = _dry(client, part_id, force_provider="decision", force_model="decision")
+    assert d["engine"] == "decision" and d["model"] == DEFAULT_IMAGE_MODEL
     steps = [(s["step"], s["has_key"]) for s in d["chain"]]
     # 사슬 끝(Ollama)에는 키가 없다 — None, 닿는지는 reachable(여기서는 못 잼 → None)
-    assert steps == [("cloudflare", True), ("openrouter", True), ("vision", None)]
-    assert d["chain"][2]["reachable"] is None
-    assert d["chain"][0]["paid"] is False and d["chain"][1]["paid"] is True
-    # 전부 유료로 넘어갈 때의 최대 — 쪽 수 × 쪽당 어림
-    assert d["cost_usd_max"] == pytest.approx(3 * d["chain"][1]["usd_per_page_est"], rel=1e-6)
+    assert steps == [("openrouter", True), ("vision", None)]
+    assert d["chain"][1]["reachable"] is None
+    assert d["chain"][0]["paid"] is True and d["chain"][0]["model"] == DEFAULT_IMAGE_MODEL
+    # 쪽당 어림 = 2,400토큰 × 목록 단가(decider v1.2 $0.02/M) — 실측 아님
+    assert d["chain"][0]["usd_per_page_est"] == pytest.approx(2400 * 0.02 / 1e6)
+    assert d["cost_usd_max"] == pytest.approx(3 * d["chain"][0]["usd_per_page_est"], rel=1e-6)
+    assert d["cost_usd_est"] == d["cost_usd_max"] > 0
     assert "needs_key" not in d
 
 
 def test_dry_run_clef_openrouter_only_is_paid_from_first_page(client, tmp_path, monkeypatch):  # noqa: F811
+    """옛 화면 값 "clef"·"decider"도 같은 길(설정의 이미지 모델)로 받는다.
+
+    열어 둔 창이 400이 안 되게.
+    """
     _gpu(monkeypatch)
     _lib, part_id = _setup(client, tmp_path)
     _keys(monkeypatch, cf=False, orr=True)
-    d = _dry(client, part_id, force_provider="clef", force_model="clef")
-    assert [(s["step"], s["has_key"]) for s in d["chain"]][:2] == [
-        ("cloudflare", False),
-        ("openrouter", True),
-    ]
-    assert d["cost_usd_max"] > 0
+    for old in ("clef", "decider"):
+        d = _dry(client, part_id, force_provider=old, force_model=old)
+        assert d["engine"] == "decision"
+        assert [(s["step"], s["has_key"]) for s in d["chain"]][:1] == [("openrouter", True)]
+        assert d["cost_usd_max"] > 0
 
 
 def test_dry_run_clef_cloudflare_only_has_no_paid_step(client, tmp_path, monkeypatch):  # noqa: F811
+    """Cloudflare 키만 있으면 판정 모델은 키 없음이다.
+
+    직결은 《추가 예정》이라 쓰지 않는다(D-142).
+    """
     _gpu(monkeypatch)
     _lib, part_id = _setup(client, tmp_path)
     _keys(monkeypatch, cf=True, orr=False)
-    d = _dry(client, part_id, force_provider="clef", force_model="clef")
-    assert [(s["step"], s["has_key"]) for s in d["chain"]][:2] == [
-        ("cloudflare", True),
-        ("openrouter", False),
-    ]
-    assert d["cost_usd_max"] == 0
+    d = _dry(client, part_id, force_provider="decision", force_model="decision")
+    assert [(s["step"], s["has_key"]) for s in d["chain"]][:1] == [("openrouter", False)]
+    assert d["needs_key"] == "openrouter"
 
 
 def test_dry_run_clef_without_keys_says_needs_key(client, tmp_path, monkeypatch):  # noqa: F811
     _gpu(monkeypatch)
     _lib, part_id = _setup(client, tmp_path)
-    d = _dry(client, part_id, force_provider="clef", force_model="clef")
-    assert d["needs_key"] == "cloudflare"
+    d = _dry(client, part_id, force_provider="decision", force_model="decision")
+    assert d["needs_key"] == "openrouter"
 
 
 # ── 2. 서버 결과: 넘어감 ≠ 실패, 실제 비용 ────────────────────────────
 
 
-def _chain_route(client, tmp_path, monkeypatch, cf_ask, or_ask=None):  # noqa: F811
+def _chain_route(client, tmp_path, monkeypatch, ask):  # noqa: F811
     import app._state as app_state
-    import app.routers.llm_ocr as llm_ocr
-    from llm.openrouter_decider import OpenRouterClefClient
+    from llm.openrouter_decider import OpenRouterModelClient
 
     _gpu(monkeypatch)
     _lib, part_id = _setup(client, tmp_path)
     _keys(monkeypatch, cf=True, orr=True)
-    monkeypatch.setattr(clef.ClefClient, "ask", cf_ask)
-    made: list = []
-    real = llm_ocr._openrouter_clef
-
-    def spy(*a, **k):
-        c = real(*a, **k)
-        made.append(c)
-        return c
-
-    monkeypatch.setattr(llm_ocr, "_openrouter_clef", spy)
-    if or_ask is not None:
-        monkeypatch.setattr(OpenRouterClefClient, "ask", or_ask)
-    seen: dict = {}
+    monkeypatch.setattr(OpenRouterModelClient, "ask", ask)
+    # 직결 clef는 이 길에서 쓰이지 않는다(D-142) — 불리면 시험이 깨지게 한다
+    monkeypatch.setattr(clef.ClefClient, "ask", lambda *a, **k: pytest.fail("직결 clef를 불렀다"))
+    seen: dict = {"router": 0}
 
     class FakeRouter:
         async def call_with_image(self, prompt, image, **kw):
-            seen["router"] = kw
+            seen["router"] += 1
+            seen["router_kw"] = kw
             from types import SimpleNamespace
 
             return SimpleNamespace(
@@ -178,9 +184,11 @@ def _chain_route(client, tmp_path, monkeypatch, cf_ask, or_ask=None):  # noqa: F
 
     monkeypatch.setattr(app_state, "_get_llm_router", lambda: FakeRouter())
     url = f"/api/documents/d1/parts/{part_id}/rotation/suggest"
-    r = client.post(url, json={"pages": [1, 3], "force_provider": "clef", "force_model": "clef"})
+    r = client.post(
+        url, json={"pages": [1, 3], "force_provider": "decision", "force_model": "decision"}
+    )
     assert r.status_code == 200, r.text
-    return r.json(), made, seen
+    return r.json(), seen
 
 
 _OK = {
@@ -190,49 +198,74 @@ _OK = {
 
 
 def test_result_separates_fallback_from_failures(client, tmp_path, monkeypatch):  # noqa: F811
+    """고른 모델이 2쪽에서 실패하면 2쪽부터 기본 비전 모델이 답한다 — 넘어감이지 실패가 아니다."""
+    from llm.decision_models import DEFAULT_IMAGE_MODEL
+
     state = {"n": 0}
 
-    def cf_ask(self, *a, **k):
+    def ask(self, *a, **k):
         state["n"] += 1
-        if state["n"] >= 2:  # 2쪽부터 무료 몫 소진
-            raise JevCallFailed("jev_http_error", status=429, detail="daily free allocation")
-        self.calls_made += 1
-        self.cost_total += 0.0005
-        return _OK
-
-    def or_ask(self, *a, **k):
+        if state["n"] >= 2:  # 2쪽부터 크레딧 바닥
+            raise JevCallFailed("jev_http_error", status=402, detail="insufficient credits")
         self.calls_made += 1
         self.cost_total += 0.0004
         return _OK
 
-    d, _made, seen = _chain_route(client, tmp_path, monkeypatch, cf_ask, or_ask)
-    assert d["fallback"] == "cloudflare→openrouter"
+    d, seen = _chain_route(client, tmp_path, monkeypatch, ask)
+    assert d["fallback"] == "decision→vision"
     assert d["failures"] == []
     steps = d["fallback_steps"]
     assert len(steps) == 1 and steps[0]["page"] == 2
-    assert (steps[0]["from"], steps[0]["to"]) == ("cloudflare", "openrouter")
-    assert "429" in steps[0]["why"]
+    assert (steps[0]["from"], steps[0]["to"]) == ("openrouter", "vision")
+    assert steps[0]["from_model"] == DEFAULT_IMAGE_MODEL and "402" in steps[0]["why"]
     # 옛 소비처: error 문자열에는 그대로 남는다
-    assert "OpenRouter clef로" in (d["error"] or "")
+    assert "기본 비전 모델로" in (d["error"] or "")
+    # 2·3쪽은 비전 모델이 답했다 — 고른 모델로 다시 묻지 않는다(1번 실패 후 그 뒤는 비전 모델)
+    assert seen["router"] == 2 and state["n"] == 2
+    assert (seen["router_kw"]["force_provider"], seen["router_kw"]["force_model"]) == (
+        "ollama", "kimi-k3:cloud",
+    )
     # 실제 쓴 비용 — 업체별로
     by = {u["provider"]: u for u in d["decider_usage"]["by_provider"]}
-    assert set(by) == {"cloudflare", "openrouter"}
-    assert by["openrouter"]["cost_usd"] == pytest.approx(0.0008)
-    assert "router" not in seen
+    assert set(by) == {"openrouter"}
+    assert by["openrouter"]["cost_usd"] == pytest.approx(0.0004)
 
 
 def test_gate_exceeded_stops_instead_of_paid_fallback(client, tmp_path, monkeypatch):  # noqa: F811
-    # 상한은 《더 쏘지 말라》 — 폴백 업체(유료 OpenRouter)나 비전 모델로 계속 쏘면
-    # 상한의 뜻이 무너진다
-    def cf_ask(self, *a, **k):
+    # 상한은 《더 쏘지 말라》 — 비전 모델로 계속 쏘면 상한의 뜻이 무너진다
+    def ask(self, *a, **k):
         raise JevGateExceeded("상한 8회에 이미 도달했습니다.")
 
-    d, made, seen = _chain_route(client, tmp_path, monkeypatch, cf_ask)
-    assert made == []  # OpenRouter clef를 만들지도 않았다
-    assert "router" not in seen
+    d, seen = _chain_route(client, tmp_path, monkeypatch, ask)
+    assert seen["router"] == 0
     assert "fallback" not in d
     assert d["failures"] and "상한" in d["failures"][0]
     assert d["capped_at_page"] == 1
+
+
+def test_js_dry_note_decision_chain(tmp_path):
+    """D-142 미리 세기 안내: 고른 모델 이름·유료·어림·실패하면 기본 비전 모델."""
+    dry = {
+        "dry_run": True,
+        "pages": 1000,
+        "calls": 1000,
+        "ocr_calls": 2000,
+        "engine": "decision",
+        "model": "perplexity/pplx-decider-v1.2",
+        "cost_usd_est": 0.048,
+        "cost_usd_max": 0.048,
+        "chain": [
+            {"step": "openrouter", "label": "OpenRouter perplexity/pplx-decider-v1.2",
+             "model": "perplexity/pplx-decider-v1.2", "has_key": True, "paid": True,
+             "usd_per_page_est": 0.000048},
+            {"step": "vision", "label": "기본 비전 모델", "has_key": None, "reachable": False,
+             "paid": False, "model": "ollama:kimi-k3:cloud"},
+        ],
+    }
+    note = _note(tmp_path, dry)["note"]
+    assert "perplexity/pplx-decider-v1.2" in note and "OpenRouter 유료" in note
+    assert "$0.048" in note and "kimi-k3" in note and "지금 닿지 않음" in note
+    assert "Cloudflare" not in note
 
 
 # ── 3. 화면 JS: 미리 세기 본문·안내 글, 결과 줄 ─────────────────────────

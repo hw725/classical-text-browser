@@ -57,6 +57,8 @@ function _woSetPlan(plan, warnList, heading) {
 // 종류 판정 기본 모델 — 벤치마크(2026-09-11, 표본 10쪽): 종류 정답 kimi-k3 7/10·gemma4 5/10·minimax-m3 5/10,
 // 쪽당 1.5초로 gemma4(1.3초)와 같다. 앱 전체 기본(gemma4:cloud, D-114)과는 별개다.
 const WO_SCAN_DEFAULT_MODEL = "ollama:kimi-k3:cloud";
+// 판정 모델 옵션 값(D-142) — workspace.js의 DECISION_SCAN_VALUE와 같다(이 파일이 먼저 읽혀 따로 둔다)
+const WO_DECISION_VALUE = "decision:decision";
 
 function _woKey(t) {
   return t ? `${t.docId}|${t.partId}` : null;
@@ -338,19 +340,30 @@ function _woUsd(x) {
 
 /** needs_key(설정 《판정 모델》의 칸 id) → 어디서 무슨 키를 넣는가. */
 function _woKeyHint(needsKey) {
-  const which = { cloudflare: "Cloudflare 또는 OpenRouter", perplexity: "Perplexity", openrouter: "OpenRouter" }[needsKey] || "";
+  // 판정은 OpenRouter 하나다(D-142) — 옛 응답의 cloudflare·perplexity도 OpenRouter로 안내한다
+  const which = { cloudflare: "OpenRouter", perplexity: "OpenRouter", openrouter: "OpenRouter" }[needsKey] || "";
   return `설정 → 《판정 모델》에서 ${which ? which + " " : ""}키를 넣거나, 종류 판정 모델을 다른 것으로 고르세요`;
 }
 
 /**
- * 미리 세기(dry_run) 응답 → 안내 한 줄. 판정 모델이면 《얼마》까지, clef면 사슬을 말한다 —
- * Cloudflare 무료 몫 → OpenRouter 유료 → 기본 비전 모델(서버 `_clef_chain`). 어림은 서버가 준 값이다
- * (쪽당 2,400토큰 × 업체 단가, 실측 아님). sel은 고른 모델(비전 모델일 때 이름을 보인다).
+ * 미리 세기(dry_run) 응답 → 안내 한 줄. 판정 모델이면 《얼마》까지와 사슬을 말한다 —
+ * 고른 이미지 모델(OpenRouter 유료) → 기본 비전 모델(서버 `_decision_chain`, D-142). 옛 응답의 clef 사슬
+ * (Cloudflare 무료 몫 단계)을 읽는 갈래도 남겨 둔다. 어림은 서버가 준 값이다
+ * (쪽당 2,400토큰 × 목록 단가, 실측 아님). sel은 고른 모델(비전 모델일 때 이름을 보인다).
  */
 function _woDryNote(dry, sel) {
   const head = `${dry.pages}쪽 — `;
   const ocr = `PaddleOCR 최대 ${dry.ocr_calls || 0}번(방향 판정, GPU)`;
   if (dry.needs_key) return `${head}종류 판정 모델의 키가 없습니다 — ${_woKeyHint(dry.needs_key)}.`;
+  if (dry.engine === "decision" && Array.isArray(dry.chain)) {
+    // 사슬(D-142): 설정의 OpenRouter 이미지 모델(유료) → 실패하면 기본 비전 모델
+    const st = Object.fromEntries(dry.chain.map((s) => [s.step, s]));
+    const visOff = st.vision?.reachable === false ? "지금 닿지 않음 — Ollama를 켜야 이 단계가 돕니다" : "";
+    const visIn = [st.vision?.model, visOff].filter(Boolean).join(", ");
+    const vis = visIn ? `기본 비전 모델(${visIn})` : "기본 비전 모델";
+    const model = dry.model || st.openrouter?.model || "OpenRouter";
+    return `${head}판정 모델 ${model} ${dry.calls}번(OpenRouter 유료) — 어림 ${_woUsd(dry.cost_usd_max ?? dry.cost_usd_est)}, 실패하면 ${vis}. 그리고 ${ocr}.`;
+  }
   if (dry.engine === "clef" && Array.isArray(dry.chain)) {
     const st = Object.fromEntries(dry.chain.map((s) => [s.step, s]));
     const free = st.cloudflare?.free_pages_per_day ? `하루 ≈${st.cloudflare.free_pages_per_day}쪽 어림` : "하루 몫";
@@ -375,7 +388,7 @@ function _woDryNote(dry, sel) {
   // 닿는 비전 프로바이더가 하나도 없으면(서버 `_vision_readiness`) 그대로 스캔하면 쪽마다 실패한다
   if (dry.no_vision) {
     const which = sel?.force_provider ? `고른 비전 모델(${sel.force_provider})이 닿지 않습니다` : "쓸 수 있는 비전 모델이 없습니다(닿는 곳 없음)";
-    return `${head}${which} — 설정 → 《LLM 연결》에서 Ollama를 켜거나 키를 넣거나, 키가 있으면 종류 판정 모델을 판정 모델(clef 등)로 고르세요. 이대로 스캔하면 쪽마다 실패로 남습니다.`;
+    return `${head}${which} — 설정 → 《LLM 연결》에서 Ollama를 켜거나 키를 넣거나, OpenRouter 키가 있으면 종류 판정 모델을 판정 모델(OpenRouter)로 고르세요. 이대로 스캔하면 쪽마다 실패로 남습니다.`;
   }
   return `${head}비전 모델 ${dry.calls}번(글의 종류${who}) + ${ocr}. 쪽마다 몇 초.`;
 }
@@ -441,7 +454,9 @@ function _woFallbackText(steps) {
   return steps
     .map((s) => {
       const to = s.to === "vision" ? `기본 비전 모델${s.model ? `(${s.model})` : ""}` : names[s.to] || s.to;
-      return `${s.page}쪽부터 ${to}로(${names[s.from] || s.from} ${s.why || ""})`;
+      // D-142: 판정 모델에서 넘어갈 때는 모델 이름(from_model)을 싣는다
+      const from = s.from_model || names[s.from] || s.from;
+      return `${s.page}쪽부터 ${to}로(${from} ${s.why || ""})`;
     })
     .join(", ");
 }
@@ -693,13 +708,13 @@ function openWorkOrder() {
   if (!overlay || !_woTarget()) return;
   overlay.style.display = "";
   // 종류 판정 기본 모델은 kimi-k3:cloud. 목록에 없거나 은퇴(disabled)면 《자동》. 한 번 고른 뒤에는 그것을 지킨다
-  // 단 clef 키(Cloudflare 또는 OpenRouter)가 있어 목록이 clef를 미리 골랐으면(D-135, workspace.js의
-  // `clefDefaulted`) 그것을 지킨다 — 한때 창을 열 때마다 kimi로 덮어 《키가 있으면 clef》가 화면에서
-  // 한 번도 살아남지 못했다(2026-10-05 headless 실측: 네 경우 모두 창을 열면 kimi).
+  // 단 OpenRouter 키가 있어 목록이 판정 모델을 미리 골랐으면(D-142, workspace.js의
+  // `decisionDefaulted` — D-135의 clef 자리) 그것을 지킨다 — 한때 창을 열 때마다 kimi로 덮어
+  // 《키가 있으면 판정 모델》이 화면에서 한 번도 살아남지 못했다(2026-10-05 headless 실측).
   const sel = document.getElementById("wo-scan-model-select");
   if (sel && !sel.dataset.picked) {
-    const keepClef = sel.dataset.clefDefaulted && sel.value === "clef:clef";
-    if (!keepClef && [...sel.options].some((o) => o.value === WO_SCAN_DEFAULT_MODEL && !o.disabled)) sel.value = WO_SCAN_DEFAULT_MODEL;
+    const keepDecision = sel.dataset.decisionDefaulted && sel.value === WO_DECISION_VALUE;
+    if (!keepDecision && [...sel.options].some((o) => o.value === WO_SCAN_DEFAULT_MODEL && !o.disabled)) sel.value = WO_SCAN_DEFAULT_MODEL;
     sel.addEventListener("change", () => { sel.dataset.picked = "1"; }, { once: true });
   }
   _woLoad();

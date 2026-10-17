@@ -7,9 +7,9 @@
 
 어떻게 위치를 지키는가:
     행마다 ``p8-L3`` 같은 번호를 붙여 텍스트만 보낸다(좌표·이미지는 보내지 않는다). 답은 그 번호를
-    가리키는 목록이고, 코드가 《실제로 있는 행인가 · 제목이 그 행의 글자인가》를 확인해 후보(Proposal
-    과 같은 모양)로 바꾼다. 후보는 지금 ③에 서는 것과 같은 (쪽·행·글자) 자리이므로, 「적용」이
-    만드는 경계·앵커 글자·점선·재대조가 전부 그대로 된다.
+    가리키는 목록이고, 코드가 《실제로 있는 행인가 · 제목이 그 행의 글자인가》를 확인해
+    후보(Proposal 과 같은 모양)로 바꾼다. 후보는 지금 ③에 서는 것과 같은 (쪽·행·글자) 자리이므로,
+    「적용」이 만드는 경계·앵커 글자·점선·재대조가 전부 그대로 된다.
 
 무엇을 하지 않는가:
     저장하지 않는다(적용은 ③ 한 곳). 글을 고쳐 쓰지 않는다. 행 중간 경계는 만들지 않는다
@@ -105,7 +105,15 @@ def judge_thresholds(client) -> tuple[float, float]:
     모델이 Jev면(`JUDGE_FAMILY == "jev"` 또는 모델 이름 `~typesafe/…`) 어느 길로 왔든
     Jev 문턱이다."""
     model = str(getattr(client, "model", "") or "")
-    if getattr(client, "JUDGE_FAMILY", None) == "jev" or model.startswith("~typesafe/"):
+    family = getattr(client, "JUDGE_FAMILY", None)
+    if family == "jev" or model.startswith("~typesafe/"):
+        return (JEV_ACCEPT_AT, JEV_REJECT_AT)
+    # 설정에서 고른 모델(D-142)은 계통을 스스로 단다 — decider 계통(v1.2 포함)은 decider 값,
+    # 잰 적 없는 다른 업체 모델("unmeasured")은 업체가 openrouter여도 Jev 값이다.
+    # 새 판에 옛 판의 값을 빌리는 것이지 잰 값이 아니다(openrouter_decider.judge_family)
+    if family == "decider":
+        return (DECIDER_ACCEPT_AT, DECIDER_REJECT_AT)
+    if family == "unmeasured":
         return (JEV_ACCEPT_AT, JEV_REJECT_AT)
     return JUDGE_THRESHOLDS.get(getattr(client, "PROVIDER", ""), (JEV_ACCEPT_AT, JEV_REJECT_AT))
 
@@ -120,8 +128,8 @@ def jev_band(
 ) -> str:
     """확률을 대역(accept·escalate·reject·none)으로 옮긴다. 입력: 확률(없으면 None), 두 임계.
 
-    llm_pipeline `llm_runtime/jev_sieve.band()`의 《예일 확률이 높을수록 accept》 쪽만 옮겨 둔 것이다
-    — 배포 단위가 달라 의존성으로 들이지 않는다. 규칙은 같다: 임계값 자체는 확신 대역,
+    llm_pipeline `llm_runtime/jev_sieve.band()`의 《예일 확률이 높을수록 accept》 쪽만 옮겨 둔
+    것이다 — 배포 단위가 달라 의존성으로 들이지 않는다. 규칙은 같다: 임계값 자체는 확신 대역,
     Jev가 답하지 못했으면(수가 아님) 《none》 — 대역이 있는 척하지 않는다.
     """
     if not reject_at < accept_at:
@@ -408,7 +416,12 @@ def ask_structure_jev(
     # (Codex 최종 리뷰 2026-09-27)
     band_at: dict[tuple[int, int], str] = {}
     judged_by: dict[tuple[int, int], str] = {}  # 행 → 답한 모델(폴백이 섞이면 행마다 다르다)
+    from llm.jev import JevGateExceeded
+
+    capped = False  # 호출 상한에 닿으면 남은 묶음도 보내지 않는다
     for i, chunk in enumerate(chunks):
+        if capped:
+            break
         state = render_chunk(chunk)
         meta["sent_lines"] += len(chunk)
         meta["sent_chars"] += sum(len(ln.text) for ln in chunk)
@@ -425,6 +438,11 @@ def ask_structure_jev(
                 answers = client.ask(state, questions)
             except Exception as e:  # noqa: BLE001 — 한 묶음이 죽어도 나머지는 살린다
                 head = f"{i + 1}번째 묶음: {type(e).__name__}: {e}"
+                if isinstance(e, JevGateExceeded):
+                    # 상한은 비용 게이트다 — 폴백(유료)에 다시 묻으면 게이트를 넘는다
+                    errors.append(f"{head} — 호출 상한이라 멈춤(폴백에 넘기지 않음)")
+                    capped = True
+                    break
                 if fallback is None:
                     errors.append(head)
                     continue
