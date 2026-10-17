@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 # unit(단위)만 사정이 다르다: 파일 하나에 단위 하나가 아니라 권마다 경계 목록 하나이고
 # (원본 저장소 documents/{doc}/boundaries/{part}.json, D-097) 단위는 그 목록에서 계산한
 # 보기다(D-092). 아래 값은
-# «어느 디렉터리에 사는가»만 알리며, 조회·생성·갱신은 _entity_dir_path에 닿기 전에
+# 《어느 디렉터리에 사는가》만 알리며, 조회·생성·갱신은 _entity_dir_path에 닿기 전에
 # 경계 목록 쪽으로 갈라진다.
 ENTITY_TYPES: dict[str, str] = {
     "unit": "boundaries",
@@ -59,8 +59,8 @@ VALID_STATUS_TRANSITIONS: dict[str, list[str]] = {
 }
 
 # 엔티티 유형 → JSON 스키마 파일명
-# (v1.3까지의 옛 이름 «text_block»을 받아 주던 장치는 D-093이 정한 대로 지웠다 — 2026-10-11.
-#  옛 이름으로 부르면 «알 수 없는 엔티티 유형» 오류가 난다.)
+# (v1.3까지의 옛 이름 《text_block》을 받아 주던 장치는 D-093이 정한 대로 지웠다 — 2026-10-11.
+#  옛 이름으로 부르면 《알 수 없는 엔티티 유형》 오류가 난다.)
 SCHEMA_FILES: dict[str, str] = {
     "unit": "unit.schema.json",
     "tag": "tag.schema.json",
@@ -123,7 +123,7 @@ def _validate_entity(entity_type: str, data: dict) -> None:
         jsonschema.validate(instance=validate_data, schema=schema)
         if entity_type == "relation":
             # JSON 스키마로는 적을 수 없는 규칙 — 조절형이 어디에 붙을 수 있는가
-            # (D-128 12항). 값의 «모양»이 아니라 «뜻»의 검사라 코드에 둔다.
+            # (D-128 12항). 값의 《모양》이 아니라 《뜻》의 검사라 코드에 둔다.
             from .relation_polarity import validate_relation_semantics
 
             validate_relation_semantics(validate_data)
@@ -162,8 +162,8 @@ def _get_source_head_commit(doc_path: Path) -> str:
 #
 # 질의 표면은 좁게 유지한다 (D-128 3항).
 #
-# 왜: 참고한 커넥톰 데이터베이스는 노드 17,087·엣지 46,700 규모를 «뉴런을 받는다»와
-# «인접을 받는다» 둘로만 노출한다. 임의 순회를 열어주지 않는 것이 핵심이다 —
+# 왜: 참고한 커넥톰 데이터베이스는 노드 17,087·엣지 46,700 규모를 《뉴런을 받는다》와
+# 《인접을 받는다》 둘로만 노출한다. 임의 순회를 열어주지 않는 것이 핵심이다 —
 # 스키마가 아무리 커져도 사용처가 터지지 않는다. 이 모듈의 읽기 문은 셋뿐이다:
 #
 #     get_entity()            — id 하나
@@ -171,11 +171,11 @@ def _get_source_head_commit(doc_path: Path) -> str:
 #     list_entities_for_page() — 쪽 하나에 걸린 것
 #
 # **여기에 그래프 순회 함수를 더하지 않는다.** 관계를 따라가는 일이 필요하면
-# 목록을 받아 거르는 «순수 함수»로 만든다 — core/relation_polarity.py의
+# 목록을 받아 거르는 《순수 함수》로 만든다 — core/relation_polarity.py의
 # strong_edges()가 그 모양이다. 저장소를 인자로 받지 않으므로 구조상 순회를
 # 할 수 없고, 그래서 스키마가 커져도 이 파일이 커지지 않는다.
 #
-# 이것은 «접근 경로»의 규약이고 «저장 내용»의 규약이 아니다. 서술어 축에서
+# 이것은 《접근 경로》의 규약이고 《저장 내용》의 규약이 아니다. 서술어 축에서
 # 같은 일을 하는 것은 core-schema-v1.3.md §6.1 Predicate Rules 이며, 둘은
 # 다른 축이라 서로를 대신하지 못한다.
 #
@@ -185,7 +185,7 @@ QUERY_SURFACE = ("get_entity", "list_entities", "list_entities_for_page")
 # list_entities 가 받는 필터 키. 여기 없는 키를 라우터가 넘기기 시작하면
 # 질의가 넓어지고 있다는 신호다 — 늘릴 때는 D-128 3항을 다시 읽는다.
 #
-# scope_document 만 동등 비교가 아니다 — 범위는 «주소»라서 전역(null) 개념이
+# scope_document 만 동등 비교가 아니다 — 범위는 《주소》라서 전역(null) 개념이
 # 모든 문헌 주소에 걸린다(D-128 6항, core/concept_scope.py).
 LIST_FILTER_KEYS = ("status", "block_id", "scope_document")
 
@@ -262,7 +262,7 @@ def _retire_works(interp_path: Path) -> None:
     왜: Work(저작)는 v1.3까지 단위를 묶는 엔티티였는데, 편성이 문헌으로 내려가고(D-097)
     트리가 문헌 > 권 > 단위가 되면서(D-098) 아무것도 가리키지 않게 되었다. 실제로 만들어진
     Work는 문헌마다 하나씩, 문헌 제목을 그대로 베낀 것뿐이었다 — 문헌 manifest·서지정보가
-    이미 가진 것의 사본이다. 남겨 두면 화면에서 «있는데 아무 일도 안 하는 것»이 된다.
+    이미 가진 것의 사본이다. 남겨 두면 화면에서 《있는데 아무 일도 안 하는 것》이 된다.
 
     지우지 않는 것은 되돌릴 수 있게 하려는 것이다. 해석 저장소는 Git이므로 이름만 바꿔도
     이력이 남고, 나중에 이본 대조를 만들 때 그 안의 제목·저자를 참고할 수 있다.
@@ -358,7 +358,7 @@ def doc_units(doc_path: str | Path, document_id: str, part_id: str | None = None
             # 재대조(D-092 결정 4)는 하되, **도장(l4_commit)만 바뀐 것은 파일에 쓰지 않는다.**
             # head는 원본 저장소 전체의 HEAD라 L4와 무관한 커밋(경계·회전·작업 계획)에도 바뀐다.
             # 그때마다 모든 경계의 도장만 새 해시로 고쳐 저장하면, 화면을 열기만 해도 경계
-            # 파일이 «수정됨»으로 남았다(lecture_2026 273개 null → 해시, 2026-09-30 실측).
+            # 파일이 《수정됨》으로 남았다(lecture_2026 273개 null → 해시, 2026-09-30 실측).
             # 도장을 굳히지 않아도 결과는 같다 — 다음 읽기에서 앵커 글자로 같은 자리를 다시 찾는다.
             before = _without_stamps(data["boundaries"])
             rematch(data, page_texts, head)
@@ -381,7 +381,7 @@ def _without_stamps(boundaries: list[dict]) -> str:
     """경계 목록에서 l4_commit 도장만 뺀 비교용 문자열.
 
     입력: 경계 dict 목록. 출력: 정렬된 JSON 문자열.
-    왜: 재대조가 «자리·앵커·상태»를 바꿨는지만 보고 싶다 — 도장은 HEAD를 따라 늘 바뀐다.
+    왜: 재대조가 《자리·앵커·상태》를 바꿨는지만 보고 싶다 — 도장은 HEAD를 따라 늘 바뀐다.
     """
     import json
 
@@ -497,13 +497,13 @@ def _create_boundary_from_unit(interp_path: Path, data: dict) -> dict:
     if not doc_id:
         raise ValueError("source_refs에 document_id가 없습니다.")
     # 남의 문헌에 쓰지 않는다. 경계는 이제 문헌에 살기 때문에(D-097) 여기서 막지 않으면
-    # 화면이 «앞 문헌의 해석 저장소»를 붙들고 있을 때 그 문헌의 편성이 갈린다 —
+    # 화면이 《앞 문헌의 해석 저장소》를 붙들고 있을 때 그 문헌의 편성이 갈린다 —
     # 실제로 운양집 저장소에 천진담초 경계 42개가 들어갔다(실측 2026-09-04).
     # 옛 저장소는 dependency.json이 없을 수 있다. 그때는 막을 근거가 없으므로 통과시킨다.
     owner = document_of(interp_path)
     if owner and owner != doc_id:
         raise ValueError(
-            f"이 해석 저장소는 «{owner}»의 것입니다 — «{doc_id}»의 경계를 쓸 수 없습니다.\n"
+            f"이 해석 저장소는 《{owner}》의 것입니다 — 《{doc_id}》의 경계를 쓸 수 없습니다.\n"
             "→ 해결: 그 문헌의 해석 저장소를 고르거나 새로 만드세요."
         )
     _lines, page_texts = _part_lines(interp_path, doc_id, part_id)
@@ -518,7 +518,7 @@ def _create_boundary_from_unit(interp_path: Path, data: dict) -> dict:
     item = new_boundary(
         start=pos,
         level=int(anchor.get("level") or meta.get("level") or 2),
-        # 자동 편성은 «레이아웃 블록마다 기사 하나»다 — 뜻이 분명하므로 적어 둔다.
+        # 자동 편성은 《레이아웃 블록마다 기사 하나》다 — 뜻이 분명하므로 적어 둔다.
         # (추정값을 굳히는 것이 아니라, 이 길이 실제로 무엇을 만드는지를 적는 것이다)
         role=meta.get("role") or "article",
         title=meta.get("title") or (data.get("original_text") or "").strip()[:20] or None,
@@ -582,7 +582,7 @@ def _update_boundary_from_unit(interp_path: Path, entity_id: str, updates: dict)
     for k in ("status", "notes"):
         if k in updates:
             fields[k] = updates[k]
-    # 옛 계약: source_refs를 바꾸면 «위치를 옮긴다». 첫 참조의 쪽·char_range[0]이 새 시작이다.
+    # 옛 계약: source_refs를 바꾸면 《위치를 옮긴다》. 첫 참조의 쪽·char_range[0]이 새 시작이다.
     # (끝은 저장하지 않으므로 char_range[1]은 무시한다 — 다음 경계가 정한다.)
     refs = [r for r in (updates.get("source_refs") or []) if r and r.get("page")]
     if refs:
@@ -701,7 +701,7 @@ def get_entity(
     dir_path = _entity_dir_path(interp_path, entity_type)
     file_path = dir_path / f"{entity_id}.json"
 
-    # 옛 id로 물어봐도 «지금 무엇이 됐는지»를 알려준다 (D-128 2항). 병합으로 생긴
+    # 옛 id로 물어봐도 《지금 무엇이 됐는지》를 알려준다 (D-128 2항). 병합으로 생긴
     # 새 id를 장부에 남기지 않으면, 그 id를 인용한 과거 참조가 조용히 끊긴다.
     from .entity_id_map import resolve_id
 
@@ -721,7 +721,7 @@ def get_entity(
     data = json.loads(file_path.read_text(encoding="utf-8"))
 
     # 파일이 남아 있어도(삭제 금지 규약, operation-rules 2.4) 대체됐을 수 있다.
-    # 저장된 기록은 고치지 않고 «지금 어디를 보라»만 덧붙인다 — 읽기 전용 안내다.
+    # 저장된 기록은 고치지 않고 《지금 어디를 보라》만 덧붙인다 — 읽기 전용 안내다.
     moved = resolve_id(interp_path, entity_type, entity_id)
     if moved["superseded"]:
         return {**data, "superseded_by": moved["id"], "supersede_chain": moved["chain"]}
@@ -837,7 +837,7 @@ def list_entities(
     #
     # scope_document 는 다른 키와 다루는 법이 다르다 (D-128 6항). 동등 비교로
     # 걸러 버리면 전역 개념(scope_document 없음)이 목록에서 사라지는데, 전역은
-    # «모든 문헌 주소에 걸리는 것»이라 그러면 안 된다. 범위는 순위 가중치가
+    # 《모든 문헌 주소에 걸리는 것》이라 그러면 안 된다. 범위는 순위 가중치가
     # 아니라 주소이므로, 넣고 빼기만 하고 정렬은 하지 않는다.
     scope_value = None
     has_scope_filter = False
@@ -867,15 +867,15 @@ def list_entities(
 
 
 def _annotate_superseded(interp_path: Path, entity_type: str, entities: list[dict]) -> list[dict]:
-    """목록의 각 엔티티에 «지금은 무엇을 보라»를 덧붙인다 (D-128 2항).
+    """목록의 각 엔티티에 《지금은 무엇을 보라》를 덧붙인다 (D-128 2항).
 
     입력: interp_path — 해석 저장소. entity_type — 종류. entities — 목록.
     출력: 같은 길이의 목록. 대체된 것에만 superseded_by·supersede_chain 이 붙는다.
 
-    왜 get_entity 만으로는 모자랐는가: 화면의 엔티티 «목록»은 list_entities 로
+    왜 get_entity 만으로는 모자랐는가: 화면의 엔티티 《목록》은 list_entities 로
     그리는데 거기에는 장부가 반영되지 않아, 이미 합쳐진 개념에 「합치기」 단추가
-    그대로 남고 «→ 새 ID» 표시도 뜨지 않았다(2026-09-21 브라우저 검증에서 발견).
-    상태가 deprecated 인 것과 «합쳐졌다»는 것은 다른 사실이라 상태로는 대신할 수 없다.
+    그대로 남고 《→ 새 ID》 표시도 뜨지 않았다(2026-09-21 브라우저 검증에서 발견).
+    상태가 deprecated 인 것과 《합쳐졌다》는 것은 다른 사실이라 상태로는 대신할 수 없다.
 
     왜 여기서 장부를 한 번만 읽는가: 엔티티마다 resolve_id 를 부르면 목록 하나에
     파일을 N번 읽는다. 장부는 파일 하나이므로 미리 펼쳐 두고 각자 따라가게 한다.
@@ -909,7 +909,7 @@ def list_entities_for_page(
 ) -> dict:
     """현재 페이지와 관련된 모든 엔티티를 조회한다.
 
-    목적: 엔티티 패널의 «현재 페이지만»에서 현재 페이지에 관련된 엔티티를 표시한다.
+    목적: 엔티티 패널의 《현재 페이지만》에서 현재 페이지에 관련된 엔티티를 표시한다.
     입력:
         interp_path — 해석 저장소 경로.
         document_id — 원본 문헌 ID.
@@ -918,8 +918,8 @@ def list_entities_for_page(
         "units": [...], "tags": [...], "concepts": [...],
         "agents": [...], "relations": [...]
     }
-    단위의 키는 «units»다 — 화면(entity-manager.js)의 typeMap이 그 이름으로 찾는다.
-    한때 «blocks»로 돌려줘 «현재 페이지만»(기본 켬)에서 단위가 하나도 안 보였다(B-012).
+    단위의 키는 《units》다 — 화면(entity-manager.js)의 typeMap이 그 이름으로 찾는다.
+    한때 《blocks》로 돌려줘 《현재 페이지만》(기본 켬)에서 단위가 하나도 안 보였다(B-012).
 
     왜 이렇게 하는가:
         - 먼저 source_ref.page가 일치하는 단위를 찾고,
@@ -1038,7 +1038,7 @@ def promote_tag_to_concept(
             f"Tag(id={tag_id})에 surface가 없고, label 인수도 지정되지 않았습니다."
         )
 
-    # 승격의 저울 — 출처 «개수»가 아니라 «무게»로 잰다 (D-128 8항).
+    # 승격의 저울 — 출처 《개수》가 아니라 《무게》로 잰다 (D-128 8항).
     #
     # 왜 여기서 재는가: 승격은 한 Tag를 누르는 동작이지만, 그 표면형을 가리키는
     # 출처는 서고 곳곳에 흩어져 있다. 그것을 모아 무게로 달아야 「약한 출처가
@@ -1075,7 +1075,7 @@ def promote_tag_to_concept(
     # Concept 생성
     #
     # 승격은 출처를 줄이는 단계가 아니다 (10항). Tag는 하나도 지우거나 합치지 않고
-    # 그대로 남으며, 여기서는 «무게가 어떻게 배치돼 있는가»만 기록한다.
+    # 그대로 남으며, 여기서는 《무게가 어떻게 배치돼 있는가》만 기록한다.
     concept_data = {
         "id": str(uuid.uuid4()),
         "label": effective_label,
@@ -1098,7 +1098,7 @@ def promote_tag_to_concept(
 
     result = create_entity(interp_path, "concept", concept_data)
 
-    # 승격 장부 (D-128 2항). Tag는 그대로 남지만 «무엇이 됐는가»를 적어 두지 않으면
+    # 승격 장부 (D-128 2항). Tag는 그대로 남지만 《무엇이 됐는가》를 적어 두지 않으면
     # 그 Tag id를 인용한 과거 기록이 Concept과 이어지지 않는다.
     from .entity_id_map import record_mapping
 
@@ -1156,8 +1156,8 @@ def merge_concepts(
 
     # **이미 대체된 것을 목표로 삼지 않는다.**
     #
-    # 왜: B → A 로 합친 뒤 A → B 를 부르면 장부에 순환이 서고, 그 순간 «대체되지
-    # 않은» 개념이 하나도 남지 않는다. 조회는 순환을 끊어 멎지는 않지만(follow_chain의
+    # 왜: B → A 로 합친 뒤 A → B 를 부르면 장부에 순환이 서고, 그 순간 《대체되지
+    # 않은》 개념이 하나도 남지 않는다. 조회는 순환을 끊어 멎지는 않지만(follow_chain의
     # seen) 정본이 사라져 화면에서 되돌릴 길이 없어진다 — 삭제 금지 규약 때문에
     # 장부 항목을 지우는 길도 없다. 화면은 대상 목록에서 대체된 것을 빼 두었지만,
     # 라우트를 직접 부르거나 목록이 낡은 탭에서는 그대로 뚫린다.
@@ -1165,7 +1165,7 @@ def merge_concepts(
     if target.get("superseded_by"):
         raise ValueError(
             f"목표 개념({target_id})은 이미 {target['superseded_by']}로 합쳐졌습니다.\n"
-            "→ 왜: 합쳐진 것을 다시 목표로 삼으면 장부에 순환이 생겨 «지금 무엇을 보라»를 "
+            "→ 왜: 합쳐진 것을 다시 목표로 삼으면 장부에 순환이 생겨 《지금 무엇을 보라》를 "
             "답할 수 없게 됩니다.\n"
             "→ 해결: 마지막으로 남은 개념을 목표로 지정하세요."
         )
@@ -1219,7 +1219,7 @@ def create_unit_from_source(
 ) -> dict:
     """L4 확정 텍스트에서 단위를 생성한다 (source_ref 자동 채움).
 
-    목적: (화면의 «단위 만들기» 단추는 2026-09-22에 걷어냈고 라우트만 남았다) 호출되면,
+    목적: (화면의 《단위 만들기》 단추는 2026-09-22에 걷어냈고 라우트만 남았다) 호출되면,
           현재 문서·페이지·블록 정보에서 source_ref를 자동으로 채워
           단위를 생성한다.
     입력:
@@ -1300,7 +1300,7 @@ def doc_contents(doc_path: str | Path, document_id: str, title: str | None = Non
       pages는 source_refs를 쪽 번호로 묶은 것(등장 순서). 두 쪽에 걸친 단위는 둘이다.
 
     왜 저작으로 묶지 않는가: 편성은 문헌의 것이고(D-097), 저작이 여럿인 문집은 층위 1의
-    «묶음(container)» 경계가 나타낸다 — 트리의 층위 그대로다(D-098). Work 엔티티는 D-099에서
+    《묶음(container)》 경계가 나타낸다 — 트리의 층위 그대로다(D-098). Work 엔티티는 D-099에서
     없앴다.
     """
     from core.boundaries import list_doc_parts

@@ -27,7 +27,7 @@ The Work entity was dropped in v1.3. In practice every Work was auto-created
 from the document title, duplicating what the document manifest and
 `bibliography.json` already hold, and after D-097/D-098 nothing referenced it:
 composition lives in the document store and a collection holding several works
-is expressed by level-1 «container» boundaries. Existing `core_entities/works/`
+is expressed by level-1 《container》 boundaries. Existing `core_entities/works/`
 folders are renamed to `works_removed_v1/` (not deleted) the first time the
 store is opened.
 
@@ -46,14 +46,14 @@ Smallest structural unit (sentence / clause / segment).
 > they are a read-only view computed from the boundary list in
 > `documents/{doc}/boundaries/{part}.json` (D-092; moved from the
 > interpretation store to the document store in D-097), and the schema file is
-> `unit.schema.json`. See AGENTS.md «용어 규칙» for the distinction between
+> `unit.schema.json`. See AGENTS.md 《용어 규칙》 for the distinction between
 > LayoutBlock, OcrResult, and unit.
 
 Fields: - id - sequence_index - original_text -
 normalized_text (optional) - source_ref - source_refs - notes - status - metadata
 
 > **D-098/D-099**: `work_id` was dropped and the Work entity itself removed.
-> A collection holding several works is expressed by level-1 «container»
+> A collection holding several works is expressed by level-1 《container》
 > boundaries instead. `sequence_index` now counts within the part.
 
 ------------------------------------------------------------------------
@@ -84,7 +84,7 @@ Concept_features: - Fully optional. - No predefined required flags. -
 Absence of feature means "unspecified". - May be extended without schema
 migration.
 
-> **D-128 6항 — `scope_document`는 «주소»다 (2026-09-21)**: 조회할 때 다른 문헌의
+> **D-128 6항 — `scope_document`는 《주소》다 (2026-09-21)**: 조회할 때 다른 문헌의
 > 개념은 **순위가 낮아지는 것이 아니라 목록에 들어오지 않는다.** 전역(null)은
 > 모든 문헌 주소에 걸린다. 연합·감각 계통에서 출력 무게의 83.2%·87.2%가 자기
 > 구획에 머물렀다는 전수 측정이 근거다 — 구획은 사전확률이 아니라 벽에 가깝다.
@@ -134,7 +134,7 @@ evidence_blocks (array of block_ids) - confidence (optional) - weight
 >   무게를 바꾼다**). 조절형은 연합 층에만 붙으므로 `object_type`이 `concept`
 >   또는 `relation`이어야 하고, 지지·반박 부호를 가질 수 없다. 검사는
 >   `core/relation_polarity.py::validate_relation_semantics` — JSON 스키마로는
->   적을 수 없는 «뜻»의 규칙이라 코드에 둔다.
+>   적을 수 없는 《뜻》의 규칙이라 코드에 둔다.
 >
 > 무게와 부호는 **함께** 저장한다. 부호 없이 「강한 엣지로 주 경로를 잡는」
 > 순회를 만들면, 반대 방향이 가장 밀집한 자리를 지지와 똑같이 세게 된다.
@@ -164,8 +164,8 @@ Examples (not acceptable):
 -   ought_to_sacrifice_life_when_facing_moral_danger
 -   should_be_trustworthy_before_governing_people
 
-> **D-128 3항 — 질의 표면도 좁게 (2026-09-21)**: 위 규칙이 «서술어» 축을 좁게
-> 잡는다면, «접근 경로» 축을 좁게 잡는 것은 `core/entity.py::QUERY_SURFACE`다.
+> **D-128 3항 — 질의 표면도 좁게 (2026-09-21)**: 위 규칙이 《서술어》 축을 좁게
+> 잡는다면, 《접근 경로》 축을 좁게 잡는 것은 `core/entity.py::QUERY_SURFACE`다.
 > 읽기 문은 셋뿐이고(`get_entity` · `list_entities` · `list_entities_for_page`)
 > 임의 순회를 여는 함수·엔드포인트가 없다. 관계를 따라가는 일이 필요하면
 > **목록을 받아 거르는 순수 함수**로 만든다 — 저장소 경로를 인자로 받지 않으므로
@@ -195,7 +195,7 @@ Promotion does not enforce ontology creation.
 > - 저울은 **잠금장치가 아니다.** 연구자가 누르면 승격되고, 판정이 함께 적힐
 >   뿐이다. 무게 미달을 막으려면 `promote_tag_to_concept(..., require_weight=True)`.
 > - **잴 수 없을 때는 세지 않는다**: 무게 도출이 「그 단위의 확정본(L4)에 표면형이
->   몇 번 나오는가」이므로, L4를 못 찾으면 **«재지 못한 것»**(`measured: false`)으로
+>   몇 번 나오는가」이므로, L4를 못 찾으면 **《재지 못한 것》**(`measured: false`)으로
 >   두고 무게 0이 된다. Tag 개수로 대신하지 않는다 — 대신하게 두었더니 한 단위에
 >   같은 표면형 Tag가 셋만 붙어도 임계를 넘어, 8항이 막으려던 「개수로 세기」가
 >   그대로 복원됐다(2026-09-21 독립 검증에서 잡힘).

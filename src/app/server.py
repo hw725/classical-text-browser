@@ -26,7 +26,7 @@ D-001: 이 플랫폼의 주 인터페이스는 GUI이며, CLI는 보조 도구�
     공유 상태 및 헬퍼는 app/_state.py에 집약.
 
     이 수치는 scripts/check_doc_drift.py가 검사한다
-    (D-079 — 줄을 넘긴 «(N 라우트)»도 본다). 라우트를 늘리거나 줄이면
+    (D-079 — 줄을 넘긴 《(N 라우트)》도 본다). 라우트를 늘리거나 줄이면
     여기와 AGENTS.md(지침 정본 — CLAUDE.md는 가져오기 포인터)를 함께 고쳐야 pytest가 통과한다.
 """
 
@@ -64,11 +64,11 @@ from app.routers import (  # noqa: E402,F401
 #
 # 왜 pyproject.toml을 직접 읽는가: **버전을 적는 곳은 하나여야 한다.**
 # 여러 곳에 적으면 릴리스 때 일부만 고쳐져 화면이 옛 버전을 말하게 된다.
-# 설치된 배포판의 메타데이터(dist-info)는 «실행 중인 인터프리터»의 것이라, GPU PC(.venv-gpu)에서는
+# 설치된 배포판의 메타데이터(dist-info)는 《실행 중인 인터프리터》의 것이라, GPU PC(.venv-gpu)에서는
 # uv sync가 갱신하는 .venv와 어긋나 화면 아래에 옛 판(1.2.1)이 남았다(2026-09-06 보고).
 # core.updater.current_version()이 pyproject → dist-info 순으로 읽는 정본이다.
 def _app_version() -> str:
-    """pyproject.toml의 판 번호. 실패하면 «unknown»."""
+    """pyproject.toml의 판 번호. 실패하면 《unknown》."""
     try:
         from core.updater import current_version
 
@@ -143,10 +143,10 @@ class _NoCacheStaticFiles(StaticFiles):
         코드는 고쳐졌는데 화면은 옛 동작 그대로였다.
 
     왜 no-store가 아니라 no-cache인가:
-        no-cache는 «캐시하되 쓸 때마다 서버에 물어보라»는 뜻이다.
+        no-cache는 《캐시하되 쓸 때마다 서버에 물어보라》는 뜻이다.
         ETag가 함께 나가므로 내용이 그대로면 서버가 304를 돌려주어
         본문 전송이 없다. 로컬에서 도는 앱이라 이 왕복은 무시할 수준이고,
-        대신 «고쳤는데 반영이 안 된다»가 원천적으로 사라진다.
+        대신 《고쳤는데 반영이 안 된다》가 원천적으로 사라진다.
     """
 
     async def get_response(self, path: str, scope):
@@ -169,7 +169,7 @@ async def _no_store_api(request, call_next):
         스스로 캐시 기간을 추정한다(heuristic caching).
 
         실제로 그 사고가 있었다: 배치 OCR이 L3 전면 블록을 새로 만들었는데
-        레이아웃 탭에는 «블록이 없던 시절»이 남아 있었다. 교정 탭은 요청마다
+        레이아웃 탭에는 《블록이 없던 시절》이 남아 있었다. 교정 탭은 요청마다
         `cache: "no-store"`를 붙여 두어 바로 반영됐고, 레이아웃만 빠져 있었다.
 
     왜 호출부가 아니라 여기인가:
@@ -182,10 +182,10 @@ async def _no_store_api(request, call_next):
         API 응답은 매번 달라지는 것이 정상이라 재검증할 값이 없다.
 
     빼는 것 하나 — 원본 PDF:
-        `/pdf/{part}`는 «작업 중에 바뀌는 데이터»가 아니라 **원본 파일**이다. 78.9MB짜리
+        `/pdf/{part}`는 《작업 중에 바뀌는 데이터》가 아니라 **원본 파일**이다. 78.9MB짜리
         문헌에 no-store를 붙이면 쪽을 넘길 때마다 조각을 다시 받는다. ETag가 함께 나가므로
-        no-cache(«쓸 때마다 물어보라»)면 바뀌지 않은 동안 304로 끝난다 —
-        «고쳤는데 반영이 안 된다»는 그대로 막으면서 재전송만 없앤다.
+        no-cache(《쓸 때마다 물어보라》)면 바뀌지 않은 동안 304로 끝난다 —
+        《고쳤는데 반영이 안 된다》는 그대로 막으면서 재전송만 없앤다.
     """
     response = await call_next(request)
     path = request.url.path

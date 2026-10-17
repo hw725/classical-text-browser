@@ -222,7 +222,7 @@ class PdfTextExtractor:
 
     def close(self):
         """PDF 리소스를 해제한다."""
-        # «is not None» — 0쪽 Document는 거짓이라 닫히지 않았다
+        # 《is not None》 — 0쪽 Document는 거짓이라 닫히지 않았다
         if getattr(self, "_doc", None) is not None:
             self._doc.close()
 

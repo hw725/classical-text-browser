@@ -54,13 +54,13 @@ function _renderOcrEnginePlan() {
 }
 
 /**
- * «작업 계획대로»가 켜져 있으면 «돌아간 쪽은 세워서»를 잠근다 (2026-10-02 사용자 지적).
+ * 《작업 계획대로》가 켜져 있으면 《돌아간 쪽은 세워서》를 잠근다 (2026-10-02 사용자 지적).
  *
  * 왜 이렇게 하는가:
  *   두 가지가 같은 일(쪽마다 회전 정하기)을 따로 한다. 계획은 ① 자동 스캔으로 방향을 재고
- *   사람이 ③에서 확인해 「적용」으로 회전을 저장했다. 그 뒤 «세워서»가 OCR 직전에 또 재면
+ *   사람이 ③에서 확인해 「적용」으로 회전을 저장했다. 그 뒤 《세워서》가 OCR 직전에 또 재면
  *   ⓐ 같은 일을 두 번 묻고 ⓑ 계획이 **가로쓰기 구간**으로 정한 쪽은 글줄이 가로라 투영이
- *   «누웠다»로 보아 90° 회전을 제안한다 — 계획과 정면으로 부딪친다. ⓒ 쪽 범위를 [최소, 최대]로
+ *   《누웠다》로 보아 90° 회전을 제안한다 — 계획과 정면으로 부딪친다. ⓒ 쪽 범위를 [최소, 최대]로
  *   넘기므로 계획이 건너뛰기로 한 쪽까지 잰다. 그래서 계획이 걸려 있는 동안은 회전을 계획에 맡긴다.
  */
 function _syncOrientWithPlan() {
@@ -156,7 +156,7 @@ function initOcrPanel() {
 
 async function refreshOcrEngines() {
   const select = document.getElementById("ocr-engine-select");
-  // 첫 호출은 PaddleOCR 모듈을 처음 읽느라 수 초가 걸린다. «로딩 중»만 있으면
+  // 첫 호출은 PaddleOCR 모듈을 처음 읽느라 수 초가 걸린다. 《로딩 중》만 있으면
   // 멈춘 것처럼 보이므로 무엇을 기다리는지 적는다.
   if (select && !ocrState.engines.length) {
     select.innerHTML = '<option value="">엔진 확인 중… (첫 실행은 수 초 걸립니다)</option>';
@@ -166,8 +166,8 @@ async function refreshOcrEngines() {
     const resp = await fetch("/api/ocr/engines");
     if (!resp.ok) {
       // 서버가 500을 주는 경우는 둘이다: (1) 서고가 아직 없다, (2) 엔진 등록이나
-      // LLM 라우터 초기화가 예외로 죽었다. 예전에는 둘을 구분하지 않고 «서고를
-      // 선택하면…»만 적어 서고가 있는 사용자를 헷갈리게 했다. 서버가 준 문구를
+      // LLM 라우터 초기화가 예외로 죽었다. 예전에는 둘을 구분하지 않고 《서고를
+      // 선택하면…》만 적어 서고가 있는 사용자를 헷갈리게 했다. 서버가 준 문구를
       // 그대로 보이고, (2)는 토스트로도 알린다. 서고가 정해지면 loadLibraryInfo()가
       // 다시 부른다.
       const err = await resp.json().catch(() => ({}));
@@ -195,7 +195,7 @@ async function refreshOcrEngines() {
     ocrState.engines = data.engines || [];
     ocrState.defaultEngine = data.default_engine;
     // 종류 판정(비전 모델 → 엔진 고르기, D-126)은 GPU 환경에서만(사용자 지시 2026-09-10).
-    // 「말로 지시」의 자동 스캔이 이 값을 보고 CPU면 «방향만»으로 돈다
+    // 「말로 지시」의 자동 스캔이 이 값을 보고 CPU면 《방향만》으로 돈다
     ocrState.gpuRuntime = !!data.gpu_runtime;
 
     _populateEngineSelect();
@@ -261,7 +261,7 @@ function _populateEngineSelect() {
   }
 
   // 사용 불가 엔진의 이유를 드롭다운 아래에 적는다 — 툴팁은 마우스를 올려야 보인다.
-  // 왜: «PaddleOCR (사용 불가)»만 보이면 무엇을 고쳐야 하는지 알 수 없다(파이썬 3.13,
+  // 왜: 《PaddleOCR (사용 불가)》만 보이면 무엇을 고쳐야 하는지 알 수 없다(파이썬 3.13,
   // 옛 .venv-gpu, DLL 실패 …). 자세한 진단은 doctor.bat.
   const note = document.getElementById("ocr-engine-note");
   if (note) {
@@ -309,7 +309,7 @@ async function _runOcr(blockIds) {
   try {
     // OCR 전에 현재 레이아웃을 L3에 저장 (저장되지 않은 블록이 있을 수 있음)
     // 시작할 때 붙잡은 쪽(docId·partId·pageNum)으로 저장하려고 직접 PUT한다 — layout-editor의
-    // _saveLayout()은 «지금 화면의 쪽»으로 저장한다
+    // _saveLayout()은 《지금 화면의 쪽》으로 저장한다
     if (
       typeof layoutState !== "undefined" &&
       layoutState.blocks &&
@@ -661,7 +661,7 @@ async function _loadCorrectionDraft() {
 
 /**
  * 「검토할 쪽」 — 이 권에서 사람이 볼 초안이 남은 쪽 목록을 펼치거나 접는다.
- * 쪽을 누르면 그 쪽으로 간다(goToPage). 일괄 OCR 뒤 «어딜 열어야 하나»에 답하는 자리다.
+ * 쪽을 누르면 그 쪽으로 간다(goToPage). 일괄 OCR 뒤 《어딜 열어야 하나》에 답하는 자리다.
  */
 async function _toggleReviewPages() {
   const box = document.getElementById("ocr-correction-review");
@@ -797,7 +797,7 @@ async function _runPartOcr() {
   const redo = !!document.getElementById("ocr-batch-redo")?.checked;
   // 돌아간 쪽 세우기(D-126 덧붙임 2026-09-18): OCR 직전에 누운 쪽을 찾아 묻고 저장한다. 모델 없음
   const orientChecked = !!document.getElementById("ocr-batch-orient")?.checked;
-  // «없는 함수를 삼키는» typeof 가드(D-063)로 두지 않는다 — 켜 두었는데 조용히 안 돌면 문서와 다르다
+  // 《없는 함수를 삼키는》 typeof 가드(D-063)로 두지 않는다 — 켜 두었는데 조용히 안 돌면 문서와 다르다
   if (orientChecked && typeof autoOrientForOcr !== "function") {
     showToast("방향 잡기 코드(pdf-renderer.js)를 불러오지 못했습니다 — 회전 없이 OCR합니다", "warning");
   }
@@ -806,7 +806,7 @@ async function _runPartOcr() {
   if (rawPages) {
     pages = typeof parsePageRange === "function" ? parsePageRange(rawPages, total || 100000) : null;
     if (!pages || !pages.length) {
-      showToast(`쪽 범위를 «37-52»나 «3,7,10-12»처럼 적으세요: ${rawPages}`, "warning");
+      showToast(`쪽 범위를 《37-52》나 《3,7,10-12》처럼 적으세요: ${rawPages}`, "warning");
       return;
     }
   }
@@ -817,7 +817,7 @@ async function _runPartOcr() {
     ocrEnginePlan.partId === partId &&
     !!document.getElementById("ocr-batch-use-plan")?.checked;
   let enginePlan = null;
-  // 계획대로 돌면 회전은 계획이 정했다 — «돌아간 쪽은 세워서»로 다시 재지 않는다(_syncOrientWithPlan 참고).
+  // 계획대로 돌면 회전은 계획이 정했다 — 《돌아간 쪽은 세워서》로 다시 재지 않는다(_syncOrientWithPlan 참고).
   // 체크 상자를 잠가 두지만, 잠그기 전에 켜 둔 값이 남아 있을 수 있어 여기서도 막는다.
   const orientSkippedForPlan = usePlan && orient;
   if (usePlan) orient = false;
@@ -852,7 +852,7 @@ async function _runPartOcr() {
           : "이미 결과가 있는 쪽은 건너뛰고, ") +
         "레이아웃이 없는 쪽은 쪽 전면 1블록으로 돌립니다.\n" +
         (orient ? "먼저 옆으로 누운 쪽을 찾아 구간으로 보이고, 확인하면 회전을 저장한 뒤 OCR합니다.\n" : "") +
-        (orientSkippedForPlan ? "회전은 작업 계획에 저장된 대로 씁니다(«돌아간 쪽은 세워서»는 건너뜁니다).\n" : "") +
+        (orientSkippedForPlan ? "회전은 작업 계획에 저장된 대로 씁니다(《돌아간 쪽은 세워서》는 건너뜁니다).\n" : "") +
         "계속할까요?",
     )
   )
@@ -886,7 +886,7 @@ async function _runPartOcr() {
     }
   }
 
-  // 쪽 OCR과 같은 선택 칸을 읽는다 — 인자 없이 부르면 언제나 «auto»라 LLM Vision에서 사람이
+  // 쪽 OCR과 같은 선택 칸을 읽는다 — 인자 없이 부르면 언제나 《auto》라 LLM Vision에서 사람이
   // 고른 모델이 무시되고 폴백 순서로 돌았다(B-019)
   const llmSel =
     typeof getLlmModelSelection === "function"
@@ -900,7 +900,7 @@ async function _runPartOcr() {
     redo_changed_layout: true,
     backup_before_overwrite: true,
     auto_full_page_block: true,
-    // 계획(engine_plan)이 없는 쪽의 전면 블록 방향 — 레이아웃 편집기의 «쪽 전면 1블록»과 같은 규칙.
+    // 계획(engine_plan)이 없는 쪽의 전면 블록 방향 — 레이아웃 편집기의 《쪽 전면 1블록》과 같은 규칙.
     // 예전에는 세로 고정이라 계획 없는 가로쓰기 책(추출 프로필)이 세로 블록으로 잡혔다(2026-10-11 전수)
     writing_direction:
       document.body.dataset.workspaceProfile === "extract" ? "horizontal_ltr" : "vertical_rtl",
@@ -926,9 +926,9 @@ async function _runPartOcr() {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
-    // 마지막으로 본 쪽 — 스트림이 «완료» 없이 끊기면(서버 재시작·네트워크) 어디서 멈췄는지 말해야 한다.
+    // 마지막으로 본 쪽 — 스트림이 《완료》 없이 끊기면(서버 재시작·네트워크) 어디서 멈췄는지 말해야 한다.
     // 2026-09-10 실측: honkoku 배치가 17쪽에서 서버 재시작(--reload)에 죽었는데 진행 막대만 사라져
-    // «한 바퀴 다 돈 것»처럼 보였고, 사용자는 16쪽뿐인 결과를 두고 다른 엔진으로 다시 돌렸다.
+    // 《한 바퀴 다 돈 것》처럼 보였고, 사용자는 16쪽뿐인 결과를 두고 다른 엔진으로 다시 돌렸다.
     let lastSeen = null;
     while (true) {
       const chunk = await reader.read();
@@ -968,7 +968,7 @@ async function _runPartOcr() {
       // 확정본을 새 OCR로 다시 쓴 쪽의 사람 교정 소식(D-133) — 작업 계획(work-order.js)의 OCR도 이 길
       if (typeof notifyCorrectionsRebase === "function") notifyCorrectionsRebase(summary);
     } else {
-      // «완료» 없이 끊겼다 — 끝난 것이 아니다. 어디까지 됐고 어떻게 잇는지 말한다.
+      // 《완료》 없이 끊겼다 — 끝난 것이 아니다. 어디까지 됐고 어떻게 잇는지 말한다.
       const where = lastSeen ? `${lastSeen.index + 1}/${lastSeen.total}쪽(${lastSeen.page}쪽)까지 보고 ` : "";
       showToast(
         `권 전체 OCR이 끝나지 않고 서버와 연결이 끊겼습니다 — ${where}멈췄습니다. ` +
@@ -1232,7 +1232,7 @@ function _renderCorrectionDraft(draft, { stale = false } = {}) {
 
 /**
  * 교정본을 글자 단위로 만든다 — 신뢰도 0.9 미만([?])과 □(판독 불가)인 글자에 표시를 붙여
- * «어느 글자가 불확실한가»가 사람에게 닿게 한다. 글자 신뢰도는 초안의 lines[].characters에
+ * 《어느 글자가 불확실한가》가 사람에게 닿게 한다. 글자 신뢰도는 초안의 lines[].characters에
  * 있고, 없으면(옛 초안·비어 있음) 평문으로 낸다. 전부 textContent라 이스케이프 걱정이 없다.
  */
 function _correctedTextNode(b) {

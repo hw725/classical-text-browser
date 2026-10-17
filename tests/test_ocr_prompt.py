@@ -2,7 +2,7 @@
 
 무엇을 고정하는가:
   - 다섯 조각(정책·문헌·블록·자형·앵커)이 있을 때만 자리가 생기고, 없으면 빠진다
-  - 정책 문장은 «보이는 대로·정규화 금지»를 말하고, 자형 목록은 정규화 지시가 아니다
+  - 정책 문장은 《보이는 대로·정규화 금지》를 말하고, 자형 목록은 정규화 지시가 아니다
   - [?]·□ 마커가 글자별 신뢰도로 바뀌고 텍스트에는 남지 않는다
   - LlmOcrEngine이 kwargs의 문맥을 프롬프트에 싣고, 마커를 신뢰도로 옮긴다
   - 파이프라인이 block_type과 문헌 지침을 엔진에 넘긴다
@@ -242,7 +242,7 @@ class TestEngineUsesAssembledPrompt:
         line = result.lines[0]
         assert line.text == "조선 총독부 관보"
         assert [c.char for c in line.characters] == list("조선총독부관보")
-        assert round(line.characters[4].confidence, 1) == 0.5  # «부» 뒤의 [?]
+        assert round(line.characters[4].confidence, 1) == 0.5  # 《부》 뒤의 [?]
 
     def test_line_of_only_markers_is_dropped(self):
         router = _CapturingRouter('{"lines":[{"text":"[?]"},{"text":"甲"}]}')

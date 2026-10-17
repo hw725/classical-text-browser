@@ -85,8 +85,8 @@ def backup_library(
         return ignored
 
     try:
-        # 사용자가 고른 폴더가 «우리가 만든 백업»이 아니면 그 안을 건드리지 않고 하위 폴더에 쓴다.
-        # 예전에는 고른 폴더를 통째로 «이름_prev»로 옮기고 두 번째 백업 때 rmtree로 지웠다 — 구글
+        # 사용자가 고른 폴더가 《우리가 만든 백업》이 아니면 그 안을 건드리지 않고 하위 폴더에 쓴다.
+        # 예전에는 고른 폴더를 통째로 《이름_prev》로 옮기고 두 번째 백업 때 rmtree로 지웠다 — 구글
         # 드라이브 폴더처럼 다른 파일이 든 폴더를 고르면 그 파일들이 두 번째 백업에서 사라졌다
         # (2026-10-11 전수). 우리 백업인지는 _backup_meta.json으로 가린다.
         if backup_path.exists() and any(backup_path.iterdir()) and not _is_our_backup(backup_path):
@@ -255,7 +255,7 @@ def get_backup_info(backup_path: str | Path, library_name: str | None = None) ->
     backup_path = Path(backup_path).resolve()
     meta_file = backup_path / _BACKUP_META
     if not meta_file.exists() and library_name:
-        # 하위 폴더 백업을 못 읽으면 설정 화면의 «마지막 백업» 줄이 백업 직후
+        # 하위 폴더 백업을 못 읽으면 설정 화면의 《마지막 백업》 줄이 백업 직후
         # 사라졌다(2026-10-11 재확인)
         meta_file = backup_path / f"{library_name}_ctb_backup" / _BACKUP_META
 

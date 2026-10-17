@@ -241,7 +241,7 @@ function _renderAlignmentTable(pairs) {
     const refChar = pair.ref_char || "—";
     const icon = _matchTypeIcon(pair.match_type);
     // 불일치인데 넓은 사전·문자 체계 사전에 관계가 있으면 힌트를 덧붙인다 (D-080).
-    // 분류는 그대로 불일치다 — «이 문헌에서 승인할지 보라»는 신호일 뿐이다.
+    // 분류는 그대로 불일치다 — 《이 문헌에서 승인할지 보라》는 신호일 뿐이다.
     const label = _matchTypeLabel(pair.match_type) + _variantHintSuffix(pair.variant_hint);
 
     html += `<div class="${cls}" data-pair-idx="${idx}">`;
@@ -291,7 +291,7 @@ async function _loadVariantDict() {
    대조 뷰 안에 이체자 목록을 그리던 함수인데, 그 자리(`alignment-variant-list`)가
    사라진 지 오래다 — 이체자 사전 관리는 전용 「이체자」 탭(`variant-panel`,
    `vm-*`)으로 옮겨 갔다. 컨테이너가 없으니 첫 줄의 null 가드에서 늘 되돌아갔고,
-   그래서 «아무 일도 안 일어난다»는 것이 눈에 띄지 않았다.
+   그래서 《아무 일도 안 일어난다》는 것이 눈에 띄지 않았다.
    사전 자체는 여전히 `_loadVariantDict()`가 읽어 정렬에 쓴다. */
 
 /**
@@ -326,7 +326,7 @@ function _onAlignmentPairClick(pair) {
   if (pair.match_type === "mismatch") {
     // mismatch → 이 문헌에서만 승인할지, 전역 사전에 등록할지 묻기 (D-080)
     //
-    // 기본은 «이 문헌에서만»이다. 어느 관계까지 같은 글자로 볼지는 문헌마다 다르고,
+    // 기본은 《이 문헌에서만》이다. 어느 관계까지 같은 글자로 볼지는 문헌마다 다르고,
     // A 문헌의 판단이 B 문헌의 판정을 바꾸면 안 된다. 전역 등록은 두 번째 물음이다.
     const hint = pair.variant_hint ? `\n(사전 힌트: ${_variantHintLabel(pair.variant_hint)})` : "";
     const msg =
@@ -368,7 +368,7 @@ async function _approveVariantForDocument(charA, charB) {
       return;
     }
     showToast(`"${charA}" ↔ "${charB}" — 이 문헌에서 이체자로 승인했습니다 (${data.pair_count}쌍).`, "success");
-    // 다시 대조하면 승인한 쌍이 «이체자»로 바뀐다.
+    // 다시 대조하면 승인한 쌍이 《이체자》로 바뀐다.
     _runAlignment();
   } catch (e) {
     showToast(`승인 요청 실패: ${e.message}`, "error");

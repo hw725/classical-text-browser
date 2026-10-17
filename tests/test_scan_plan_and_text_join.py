@@ -3,7 +3,7 @@
 무엇을 고정하는가:
   - 자동 스캔(판독 계획 측정)의 결과는 **글이 아니라 계획 칸으로 바로** 들어간다
     (core.read_plan.plan_from_survey). 사람이 건너뜀으로 둔 쪽·측정하지 않은 쪽은 그대로이고,
-    누운 쪽의 90/270은 «추정»으로 표시된다.
+    누운 쪽의 90/270은 《추정》으로 표시된다.
   - 텍스트 내보내기는 PDF 판면 때문에 생긴 줄바꿈만 지운다. 세로는 그대로 붙이고 가로는 빈칸,
     영어 하이픈 낱말은 붙인다. 쪽을 넘는 문단은 하나로 잇고 쪽 표시를 글 안에 넣는다.
     쪽마다 되풀이되는 머리글은 뺀다.
@@ -94,14 +94,14 @@ def test_scan_orientation_only_uses_fallback_engine_and_writing():
 
 
 def test_scan_mixed_page_is_flagged_and_left_out():
-    """섞인 쪽은 엔진 하나로 못 읽는다 — 계획에서 뺀다(OCR 패널이 «계획에서 뺌»이라 알린다)."""
+    """섞인 쪽은 엔진 하나로 못 읽는다 — 계획에서 뺀다(OCR 패널이 《계획에서 뺌》이라 알린다)."""
     plan, marks = plan_from_survey([_row(1, mixed=True, content="hangul")], 1)
     assert marks["mixed_pages"] == [1]
     assert plan["ranges"][0]["skip"] is True and "영역별 OCR" in plan["ranges"][0]["note"]
 
 
 def test_scan_keeps_human_setting_on_blank_or_mixed_page():
-    """사람이 엔진을 적은 쪽은 모델이 «백지»·«섞임»이라고 해도 건너뜀으로 뒤집지 않는다."""
+    """사람이 엔진을 적은 쪽은 모델이 《백지》·《섞임》이라고 해도 건너뜀으로 뒤집지 않는다."""
     base = {
         "title": "",
         "guidance": "",
@@ -206,13 +206,13 @@ def test_word_evidence_rejoins_broken_korean_words():
     }
     ev = WordEvidence(pages)
     glue = lambda a, b: _glue(a, b, True, ev)  # noqa: E731
-    assert glue("알 수 있", "다. 그런데") == "알 수 있다. 그런데"  # ① «있다»가 줄 가운데에 있다
+    assert glue("알 수 있", "다. 그런데") == "알 수 있다. 그런데"  # ① 《있다》가 줄 가운데에 있다
     assert glue("用語를 그대", "로 쓴다") == "用語를 그대로 쓴다"
     assert glue("이것은 對象", "에다가 둔다") == "이것은 對象에다가 둔다"  # 한자 어근 + 한글 토씨
     assert glue("面에 置", "重했다는 것") == "面에 置重했다는 것"  # 한자 한 글자로 끝남
     assert glue("어떤 作品", "自體의 硏究") == "어떤 作品 自體의 硏究"  # 둘 다 홀로 선 낱말
     assert glue("이렇게", "慣用的인 意味") == "이렇게 慣用的인 意味"  # 한글 다음 한자는 경계
-    assert glue("가 그리고", "끝이다") == "가 그리고 끝이다"  # «그리고»는 홀로 선 어절
+    assert glue("가 그리고", "끝이다") == "가 그리고 끝이다"  # 《그리고》는 홀로 선 어절
     # 한글이 없는 가로쓰기는 근거 없이 한자끼리 붙인다
     assert _glue("本年六月勅令第三", "十九號", True) == "本年六月勅令第三十九號"
 
@@ -268,7 +268,7 @@ def test_no_join_across_missing_page_or_direction_change():
 
 def test_join_decision_never_sees_page_marks():
     """쪽을 넘어 이을 때 빈칸·어절 판정은 쪽 표시가 섞이지 않은 글로 한다 — 표시가 섞이면 앞 줄 끝
-    어절이 «p.2]作品»처럼 되어 문헌 안 근거를 못 찾는다(Codex 지적 2026-10-02)."""
+    어절이 《p.2]作品》처럼 되어 문헌 안 근거를 못 찾는다(Codex 지적 2026-10-02)."""
     seen: list[str] = []
 
     class Spy:

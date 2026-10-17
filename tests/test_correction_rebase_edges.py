@@ -1,18 +1,18 @@
 """확정본을 다시 쓸 때 사람 교정을 옮겨 붙이는 병합(D-133)의 가장자리 — 2026-10-05 검토 지적.
 
 왜 이 시험이 필요한가:
-    D-133은 «겹친 자리는 사람이 이긴다»로 사람 교정을 지켰다. 검토 탐침이 그 규칙의 가장자리 넷을 잡았다.
+    D-133은 《겹친 자리는 사람이 이긴다》로 사람 교정을 지켰다. 검토 탐침이 그 규칙의 가장자리 넷을 잡았다.
 
     1. OCR을 다시 돌려 쪽 글이 통째로 바뀌었는데(옛 `ABCDEFGH` → 새 `PQRSTUVW`) 사람이 한 글자를
-       고쳐 두었으면, 겹친 묶음이 쪽 전체라 «사람 판»이 옛 글 전체를 되살렸다. 열람 탭(새 글)과
+       고쳐 두었으면, 겹친 묶음이 쪽 전체라 《사람 판》이 옛 글 전체를 되살렸다. 열람 탭(새 글)과
        교정 탭·내보내기(옛 글)가 서로 다른 글을 보였고, 새 OCR은 아무 말 없이 버려졌다.
        실제 서고의 재OCR 쌍(배치가 바뀐 쪽)에서는 한 글자 고침이 옛 글 수백 자를 되살렸다.
     2. 기계가 지운 범위의 끝에 사람이 넣은 글이 엉뚱한 줄 뒤에 붙었다(`…IJKL`+`M` → `ABCDM`).
     3. 같은 자리에 사람 `之`, 기계 `之也`를 넣으면 `之也之`가 됐다.
-    4. 같은 자리의 «넣기»와 «바꾸기»를 [넣기, 바꾸기] 순서로 두면 서버는 바꾸기를 건너뛰고,
+    4. 같은 자리의 《넣기》와 《바꾸기》를 [넣기, 바꾸기] 순서로 두면 서버는 바꾸기를 건너뛰고,
        화면(글자 교정 보기)은 둘 다 그렸다 — 보이는 글과 내보내는 글이 달랐다.
 
-    그리고 사람이 모르면 고친 것이 닿지 않는다 — 확정본을 다시 쓰는 화면 경로가 «옮겼다/못 옮겼다»를
+    그리고 사람이 모르면 고친 것이 닿지 않는다 — 확정본을 다시 쓰는 화면 경로가 《옮겼다/못 옮겼다》를
     알리는지도 본다.
 """
 
@@ -42,7 +42,7 @@ def _doc(tmp_path, base: str):
 
 
 def _freetext_save(doc, corrected: str):
-    """교정 탭 «자유 편집 → 저장»과 같은 일."""
+    """교정 탭 《자유 편집 → 저장》과 같은 일."""
     from core.document import get_page_text, save_page_corrections
 
     base = get_page_text(doc, "vol1", 1)["text"]
@@ -137,7 +137,7 @@ def test_moved_line_does_not_duplicate_old_line(tmp_path):
 
 
 def test_small_reocr_still_merges(tmp_path):
-    """새 글이 옛 글과 대부분 같으면(보통의 재OCR) 지금처럼 옮겨 붙인다 — 알림도 «옮겼다»."""
+    """새 글이 옛 글과 대부분 같으면(보통의 재OCR) 지금처럼 옮겨 붙인다 — 알림도 《옮겼다》."""
     from core.document import get_corrected_text, save_page_text
 
     doc = _doc(tmp_path, "天地玄黃宇宙洪荒日月盈昃")
@@ -199,7 +199,7 @@ def test_same_spot_insert_prefix_not_duplicated(human, machine, want):
     assert _three_way("ABCD", human, machine) == want
 
 
-# ── 4. 같은 자리 «넣기»+«바꾸기» — 서버·화면 글 만들기·글자 교정 보기가 같아야 한다 ──
+# ── 4. 같은 자리 《넣기》+《바꾸기》 — 서버·화면 글 만들기·글자 교정 보기가 같아야 한다 ──
 
 INS = {
     "page": 1,
@@ -303,7 +303,7 @@ def test_notify_helper_shows_toasts(tmp_path):
     )
     out = run_js(tmp_path, "workspace.js", ["notifyCorrectionsRebase"], setup, body)
     ts = out["toasts"]
-    assert len(ts) == 5, ts  # 마지막 «저장됨»만 있는 응답은 아무것도 띄우지 않는다
+    assert len(ts) == 5, ts  # 마지막 《저장됨》만 있는 응답은 아무것도 띄우지 않는다
     assert ts[0]["t"] == "info" and "2건" in ts[0]["m"]
     assert ts[1]["t"] == "warning" and "기록" in ts[1]["m"]
     assert ts[2]["t"] == "error"
@@ -315,8 +315,8 @@ def test_notify_helper_shows_toasts(tmp_path):
 #
 # 6206fc0은 열람 탭 저장·OCR 패널 저장·LLM 교정 적용·일괄 교정·텍스트레이어 가져오기에 알림을 달았다.
 # 그런데 확정본 채우기(fill-text)·권 전체 OCR(일괄·작업 계획)·CLI 작업 계획 OCR·강독 결과 들이기·
-# HWP 가져오기는 save_page_text의 쪽별 응답을 버려, 교정이 «기록»으로 옮겨져도 사람이 몰랐다.
-# 앞의 셋은 실제 병합으로, 들이기·일괄 OCR은 «못 옮김»을 돌려주는 저장으로 바꿔 끼워 응답까지 본다.
+# HWP 가져오기는 save_page_text의 쪽별 응답을 버려, 교정이 《기록》으로 옮겨져도 사람이 몰랐다.
+# 앞의 셋은 실제 병합으로, 들이기·일괄 OCR은 《못 옮김》을 돌려주는 저장으로 바꿔 끼워 응답까지 본다.
 
 from tests.test_lite_mode_api import _sse_events, batch_ready, isolated_app  # noqa: E402, F401
 from tests.test_read_plan import NOTE, PLAN, _setup, client  # noqa: E402, F401
@@ -347,7 +347,7 @@ def _write_l2(doc, text: str):
 
 
 def _saver_reporting_unmerged(monkeypatch):
-    """진짜로 저장하되 «교정 2건을 못 옮겼다»를 덧붙여 돌려주는 save_page_text.
+    """진짜로 저장하되 《교정 2건을 못 옮겼다》를 덧붙여 돌려주는 save_page_text.
 
     경로마다 그 소식을 응답까지 싣는지만 본다(병합 자체는 위 시험들이 본다).
     호출부가 함수 안에서 `from core.document import save_page_text`로 부르므로 모듈 속성을 바꾼다.
@@ -364,7 +364,7 @@ def _saver_reporting_unmerged(monkeypatch):
 
 
 def test_fill_text_route_reports_rebase(tmp_path, monkeypatch):
-    """확정본 채우기(OCR 결과 → L4)가 쪽마다 «교정 옮김» 소식을 돌려준다."""
+    """확정본 채우기(OCR 결과 → L4)가 쪽마다 《교정 옮김》 소식을 돌려준다."""
     import asyncio
 
     from app.routers import llm_ocr
@@ -467,7 +467,7 @@ def test_hwp_import_reports_rebase(tmp_path, monkeypatch):
 def test_fill_empty_page_text_notifies(tmp_path):
     """교정 탭이 빈 확정본을 채울 때(fillEmptyPageText) 응답의 소식을 알림 도우미에 넘긴다.
 
-    토스트 자체는 이 파일의 알림 도우미 시험들이 따로 잰다 — 여기서는 «넘겼는가»만 본다.
+    토스트 자체는 이 파일의 알림 도우미 시험들이 따로 잰다 — 여기서는 《넘겼는가》만 본다.
     """
     setup = (
         "globalThis._fillInFlight = new Map();\n"

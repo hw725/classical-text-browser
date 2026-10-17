@@ -81,7 +81,7 @@ def test_built_annotation_with_new_fields_passes_schema():
             "category": "Person",
             "scope": "general",
             "dictionary_meaning": "서진의 관료.",
-            "sense_note": "「戎」은 «융»으로 읽는다.",
+            "sense_note": "「戎」은 《융》으로 읽는다.",
             "contextual_meaning": None,
             "source_references": [{"title": "晉書", "section": "列傳"}],
             "related_terms": ["竹林七賢"],

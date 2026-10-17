@@ -3,7 +3,7 @@
 HWP에서 추출한 텍스트에는 표점(구두점), 현토(한글 토씨), 대두(존경 공백)가
 포함되어 있을 수 있다. L4(원문)에는 순수 한자만 저장하고,
 분리된 표점·현토는 호출자가 L4 옆 사이드카(`L4_text/pages/{part}_page_{NNN}_hwp_clean.json`)에
-적는다. L5로 옮기는 코드는 아직 없다(2026-10-11 전수 — 예전 머리말은 «L5에 자동 저장»이라 적었다).
+적는다. L5로 옮기는 코드는 아직 없다(2026-10-11 전수 — 예전 머리말은 《L5에 자동 저장》이라 적었다).
 
 처리 순서:
   1. 대두(擡頭) 감지 — 줄머리 공백 패턴 분석
@@ -252,7 +252,7 @@ def clean_hwp_text(
     # 대두 위치의 공백을 먼저 마킹
     taidu_positions = set()
     # 대두 공백 바로 뒤 글자의 원본 자리 → 그 대두 후보 번호. 그 글자가 원문에 들어가는 순간의
-    # clean_text 번호가 대두의 pos다(아래 «원문 글자»에서 적는다)
+    # clean_text 번호가 대두의 pos다(아래 《원문 글자》에서 적는다)
     taidu_follow: dict[int, int] = {}
     taidu_clean_pos: dict[int, int] = {}
     for k, t in enumerate(taidu_candidates):
@@ -287,8 +287,8 @@ def clean_hwp_text(
             normalized = normalize_punctuation(ch)
 
             # pos: 바로 앞 원문 글자의 인덱스 (= 현재까지의 clean_chars 길이 - 1)
-            # 원문 글자보다 앞에 온 표점(줄머리 「 등)은 «0번 글자 앞»이다 — 예전에는 pos 0만 적어
-            # «0번 글자 뒤»와 구별되지 않았다(2026-10-11 전수)
+            # 원문 글자보다 앞에 온 표점(줄머리 「 등)은 《0번 글자 앞》이다 — 예전에는 pos 0만 적어
+            # 《0번 글자 뒤》와 구별되지 않았다(2026-10-11 전수)
             mark = {"pos": len(clean_chars) - 1 if clean_chars else 0,
                     "mark": normalized, "original_mark": original_mark}
             if not clean_chars:
@@ -356,7 +356,7 @@ def clean_hwp_text(
 
     # 대두 마크를 clean_text 기준 pos로 변환
     # 대두의 pos = 대두 공백 뒤의 첫 글자가 clean_text에서 몇 번째인지 — 순회하며 적어 둔 값.
-    # 예전에는 늘 0을 두고 «호출자가 매핑할 것»이라 했지만 호출자(document.py·documents.py)는
+    # 예전에는 늘 0을 두고 《호출자가 매핑할 것》이라 했지만 호출자(document.py·documents.py)는
     # 그 0을 그대로 _formatting.json에 저장해 대두가 모두 첫 글자에 붙었다(2026-10-11 전수).
     taidu_marks_clean: list[dict] = []
     for k, t in enumerate(taidu_candidates):
@@ -406,7 +406,7 @@ def reclean_after_edit(
     페이지 경계에는 영향 없음 (페이지 내 텍스트만 변경).
 
     주의(2026-10-11 전수): 이 함수와 detect_hyeonto는 src 어디에서도 부르지 않는다. 예전 설명은
-    4번을 «warnings에 포함»이라 적었으나 코드는 그런 일을 하지 않는다 — 쓰게 되면 경고부터 만든다.
+    4번을 《warnings에 포함》이라 적었으나 코드는 그런 일을 하지 않는다 — 쓰게 되면 경고부터 만든다.
     """
     # edit를 pos 내림차순으로 정렬 (뒤에서부터 적용 → 앞쪽 pos 불변)
     sorted_edits = sorted(edits, key=lambda e: e["pos"], reverse=True)

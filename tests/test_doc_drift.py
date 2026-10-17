@@ -7,7 +7,7 @@
     사람 눈이 아니라 기계가 잡아야 한다.
 
 왜 pytest 에 얹는가:
-    릴리스 절차 1단계가 «pytest 전부 통과»이고, feat/refactor/release 커밋은
+    릴리스 절차 1단계가 《pytest 전부 통과》이고, feat/refactor/release 커밋은
     doc-sync 게이트가 이미 걸려 있다. 별도 게이트를 새로 만들면 게이트가
     늘어나기만 하므로, 기존 관문(pytest)에 편입한다.
 
@@ -61,7 +61,7 @@ def test_docs_match_code(checker):
 def test_scanner_actually_catches_drift(checker):
     """검사기가 틀린 수치를 정말 잡는지 확인한다.
 
-    왜: 이 저장소의 교훈 — 시험은 «그 버그를 실제로 잡는지»까지 봐야 한다
+    왜: 이 저장소의 교훈 — 시험은 《그 버그를 실제로 잡는지》까지 봐야 한다
     (D-073: 3.x 분기가 존재만 하고 실행되지 않았다). 문서가 지금 다 맞으면
     test_docs_match_code 는 검사기가 죽어 있어도 통과한다. 일부러 틀린
     문장을 넣어 검사기가 잡아내는지를 본다.
@@ -208,7 +208,7 @@ def test_shipped_entrypoints_harden_the_console(name):
     """배포 진입점은 콘솔을 UTF-8로 고정해야 한다 — **의존성 없는 바닥.**
 
     왜 필요한가: 한국어 Windows 콘솔의 기본은 cp949다. 한글은 cp949에 있지만
-    `—`·`«»`·`✓`는 **없어서**, 그런 글자를 `print`하면 `UnicodeEncodeError`로
+    `—`·`《》`·`✓`는 **없어서**, 그런 글자를 `print`하면 `UnicodeEncodeError`로
     프로그램이 즉사한다.
 
     이 개발 PC는 사용자 환경변수 `PYTHONUTF8=1`이 박혀 있어 **겪지 않는다.**
@@ -248,7 +248,7 @@ def test_shipped_entrypoints_harden_the_console(name):
     # `installer/ctb_setup.py` 는 2026-09-22까지 고정을 `parse_args()`·`gui()` **뒤**에
     # 두고 있었다. 그래서 `--auto` 경로에서만 실행됐고 `--help` 와 GUI 는 고정 없이
     # 돌았다. 그때는 그 앞에서 찍는 cp949 불가 문자가 없어 안 죽었지만, help 문구에
-    # «—» 하나만 들어가면 사용자 콘솔에서 `--help` 가 죽는다.
+    # 《—》 하나만 들어가면 사용자 콘솔에서 `--help` 가 죽는다.
     # 「문자열이 있다」만 보는 시험은 이것을 구조적으로 볼 수 없다 — 닿는다 ≠ 돈다.
     #
     # 보는 범위는 **진입 함수의 몸통 안**이다. 파일 전체로 보면 앞쪽에 정의된 헬퍼의
@@ -284,7 +284,7 @@ def test_shipped_entrypoints_harden_the_console(name):
         ]
         if outputs:
             assert min(h) < min(outputs), (
-                f"{name}: 콘솔 고정(L{min(h)})이 «{fn.name}» 안의 첫 출력·인자 파싱"
+                f"{name}: 콘솔 고정(L{min(h)})이 《{fn.name}》 안의 첫 출력·인자 파싱"
                 f"(L{min(outputs)})보다 **뒤**에 있다 — 그 앞 경로는 고정 없이 돈다. "
                 "진입 함수 맨 앞으로 옮긴다."
             )
@@ -323,7 +323,7 @@ def test_cjk_contract_is_clean():
     2026-09-22에 처음 돌렸을 때 16건이 나왔다. 그중 **셋은 배포되는 것**이었다 —
     `src/core/updater.py`·`src/ocr/paddle_worker.py`·`scripts/doctor.py`. 특히
     `doctor.py`는 `doctor.bat`이 부르는 것이라 **환경이 깨졌을 때 사용자가 누르는**
-    자리인데, 세 파일 모두 `«`·`»`·`—`·`✓`를 품고 있어 cp949 콘솔에서 죽었다.
+    자리인데, 세 파일 모두 `《`·`》`·`—`·`✓`를 품고 있어 cp949 콘솔에서 죽었다.
 
     `src/ocr/ndlocr/`는 뺀다 — 국립국회도서관(NDL)에서 벤더링한 상류 원본이다
     (`LICENCE`, CC-BY-4.0). 전역 규칙 §8: 상류 원문은 손대지 않는다. 무엇을

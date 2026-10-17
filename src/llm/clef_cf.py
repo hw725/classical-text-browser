@@ -1,11 +1,11 @@
 """Cloudflare Workers AI `@cf/cloudflare/clef` — 이미지를 받는 판정 모델 (D-135).
 
 왜 있는가:
-    자동 스캔의 «무슨 글인가»(활자·판본·손글씨·훈점·한글·백지)를 판정 모델로 묻는 자리는
-    D-134에서 Perplexity `decider-27b`가 처음 맡았다. clef는 같은 계약(«state + 형이 정해진 질문 →
-    확률 붙은 답», 글을 만들지 않는다 — System One 판정 모델, 27B)을 Cloudflare 위에서 주고 이미지를
-    받는다. 무료 몫(하루 10,000 neurons)이 있어 이 PC에서는 이것을 이미지 판정의 기본으로 둔다
-    (사용자 결정 2026-10-04). Decider는 선택지로 남는다.
+    자동 스캔의 《무슨 글인가》(활자·판본·손글씨·훈점·한글·백지)를 판정 모델로 묻는 자리는
+    D-134에서 Perplexity `decider-27b`가 처음 맡았다. clef는 같은 계약(《state + 형이 정해진 질문 →
+    확률 붙은 답》, 글을 만들지 않는다 — System One 판정 모델, 27B)을 Cloudflare 위에서 주고
+    이미지를 받는다. 무료 몫(하루 10,000 neurons)이 있어 이 PC에서는 이것을 이미지 판정의 기본으로
+    둔다 (사용자 결정 2026-10-04). Decider는 선택지로 남는다.
 
 무엇을 아는가 (사용자가 전한 Cloudflare 문서 요약, 2026-10-04 — 실측 아님):
     - `POST https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/cloudflare/clef`,
@@ -17,9 +17,9 @@
     - 입력 토큰만 청구, 100만 토큰당 $0.24. 무료 몫 하루 10,000 neurons ≈ clef 입력 약 458K 토큰.
       비용 칸(cost_usd)은 단가로 환산한 **명목값**이다 — 무료 몫 안에서 돌았는지는 계정 화면이 안다.
     - 이미지 한 장이 몇 토큰인지는 문서에 없다. **한문·고서 이미지 정확도도 문서에 없다** —
-      `scripts/eval_clef_survey.py`로 우리 자료에서 잰다. 재기 전 답은 «제안»이다.
+      `scripts/eval_clef_survey.py`로 우리 자료에서 잰다. 재기 전 답은 《제안》이다.
 
-키: CLOUDFLARE_API_TOKEN·CLOUDFLARE_ACCOUNT_ID — 환경변수 → 서고 `.env`(설정 화면 «판정 모델») →
+키: CLOUDFLARE_API_TOKEN·CLOUDFLARE_ACCOUNT_ID — 환경변수 → 서고 `.env`(설정 화면 《판정 모델》) →
     프로젝트 `.env` → **Windows 사용자 환경변수**(HKCU\\Environment).
     마지막 것은 키를 넣기 전에 떠 있던
     서버가 os.environ에 그 값을 갖지 못하기 때문이다. 값은 어디에도 출력하지 않는다.
@@ -45,16 +45,16 @@ CLEF_INPUT_USD_PER_M = 0.24
 CLEF_KEY_NAMES = ("CLOUDFLARE_API_TOKEN",)
 CLEF_ACCOUNT_NAMES = ("CLOUDFLARE_ACCOUNT_ID",)
 
-# 문서의 상한(사용자 전달 2026-10-04). 이름에 «MAX»가 붙은 것은 넘으면 서버가 거부하는 값이다
+# 문서의 상한(사용자 전달 2026-10-04). 이름에 《MAX》가 붙은 것은 넘으면 서버가 거부하는 값이다
 MAX_IMAGES = 4
 MAX_IMAGE_BYTES = 4 * 1024 * 1024  # 한 장, 디코드(=base64를 풀었을 때) 크기
 MAX_IMAGE_PIXELS = 16_000_000  # 한 장 16MP
 MAX_TOTAL_IMAGE_BYTES = 8 * 1024 * 1024  # 모든 장 합계
 MAX_BODY_BYTES = 13 * 1024 * 1024  # JSON 본문 전체
-# 위 값들은 «서버가 받는» 한도이고 모델의 문맥(65,536토큰)과는 별개다. 2026-10-04 평가에서 16MP 근처
-# 쪽 이미지가 «예상 입력+출력 208,453토큰 > 65,536»으로 413(code 5021)을 받아 24장 중 12장을 잃었다.
-# 종류·방향 판정에는 고해상도가 필요 없으므로 기본은 2MP로 줄여 보내고, 그래도 문맥 초과 413이 오면
-# 오류문의 예상 토큰 수에 비례해 한 번 더 줄여 1회 다시 보낸다(ClefClient.ask).
+# 위 값들은 《서버가 받는》 한도이고 모델의 문맥(65,536토큰)과는 별개다. 2026-10-04 평가에서 16MP
+# 근처 쪽 이미지가 《예상 입력+출력 208,453토큰 > 65,536》으로 413(code 5021)을 받아 24장 중 12장을
+# 잃었다. 종류·방향 판정에는 고해상도가 필요 없으므로 기본은 2MP로 줄여 보내고, 그래도 문맥 초과
+# 413이 오면 오류문의 예상 토큰 수에 비례해 한 번 더 줄여 1회 다시 보낸다(ClefClient.ask).
 DEFAULT_IMAGE_PIXELS = 2_000_000
 # 픽셀만으로는 부족했다(2026-10-05): 24장이 모두 ≈1.96MP였는데 JPEG 252~304KB는 전부 답하고
 # 434~531KB는 전부 413(예상 13.9만~17.8만 토큰)이었다. 실제 청구는 쪽당 ≈920토큰 — 서버의 문맥
@@ -68,7 +68,7 @@ _MIME_OK = {"image/png", "image/jpeg", "image/webp"}
 def _win_user_env(name: str) -> Optional[str]:
     """Windows 사용자 환경변수(HKCU\\Environment)에서 값을 읽는다. Windows가 아니거나 없으면 None.
 
-    왜 레지스트리를 직접 읽는가: 사용자 환경변수는 «그 뒤에 뜬» 프로세스만 물려받는다. 앱 서버를
+    왜 레지스트리를 직접 읽는가: 사용자 환경변수는 《그 뒤에 뜬》 프로세스만 물려받는다. 앱 서버를
     먼저 띄우고 키를 넣으면 os.environ에는 없고 여기에만 있다.
     """
     if sys.platform != "win32":
@@ -170,7 +170,7 @@ class ClefClient(JevClient):
 
     @property
     def has_key(self) -> bool:
-        """토큰과 계정 id가 **둘 다** 있어야 부를 수 있다 — 하나만 있으면 «키 없음»으로 본다."""
+        """토큰과 계정 id가 **둘 다** 있어야 부를 수 있다 — 하나만 있으면 《키 없음》으로 본다."""
         return bool(self._key) and bool(self._url)
 
     def ask(self, state, questions, *, images=(), purpose: str = "decision"):
@@ -182,7 +182,7 @@ class ClefClient(JevClient):
         return super().ask(state, questions, images=images, purpose=purpose)
 
     def _send(self, state, questions, images, purpose):
-        """JevClient._send에 «문맥 초과 413이면 이미지를 줄여 1회 다시 보내기»를 얹는다.
+        """JevClient._send에 《문맥 초과 413이면 이미지를 줄여 1회 다시 보내기》를 얹는다.
 
         ask가 아니라 여기에 두는 까닭: 다시 보내기는 **같은 묻기**라 호출 상한(asks_made)을 쓰지
         않아야 한다. 전에는 ask 안에서 super().ask를 두 번 불러 묻기 둘로 세었고, 자동 스캔에서
@@ -192,7 +192,7 @@ class ClefClient(JevClient):
         try:
             return super()._send(state, questions, images, purpose)
         except JevCallFailed as e:
-            # 문맥 초과(413, 오류문에 «(예상) exceeded … (한도)»)이고 이미지가 있으면
+            # 문맥 초과(413, 오류문에 《(예상) exceeded … (한도)》)이고 이미지가 있으면
             # 한 번만 줄여 다시 보낸다.
             # 이미지 토큰은 픽셀 수에 비례한다고 보고, 한도의 85%에 맞게 픽셀 상한을 줄인다.
             m = _CTX_RE.search(str(getattr(e, "detail", "") or ""))

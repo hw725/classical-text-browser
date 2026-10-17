@@ -145,7 +145,7 @@ async function _previewHwpFile(file, statusEl) {
     // 메타데이터 표시
     const metaEl = document.getElementById("hwp-import-meta");
     const meta = data.metadata || {};
-    // 제목·형식은 «업로드한 문서 안»에서 뽑아낸 값이다 — 문서를 만든 쪽이
+    // 제목·형식은 《업로드한 문서 안》에서 뽑아낸 값이다 — 문서를 만든 쪽이
     // 정한 문자열이므로 innerHTML에 날것으로 넣으면 안 된다.
     metaEl.innerHTML = [
       `<b>제목:</b> ${_escapeHtmlHwpImport(meta.title || "(없음)")}`,

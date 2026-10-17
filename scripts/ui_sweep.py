@@ -8,7 +8,7 @@
 저장·받기·설치·삭제류 단추는 누르지 않는다. 결과 그림은 logs/ui_sweep_*.png.
 오류가 하나라도 있으면 종료 코드 1.
 
-왜 있는가: 2026-09-06 v1.3.0 — diff 리뷰·pytest 1017건을 다 통과한 뒤 화면 아래 «v1.2.1»이 남아
+왜 있는가: 2026-09-06 v1.3.0 — diff 리뷰·pytest 1017건을 다 통과한 뒤 화면 아래 《v1.2.1》이 남아
 있었다. 검증 서버는 uv run(.venv)으로 띄웠는데 아이콘은 .venv-gpu로 뜬다. 바뀐 부분만 보는 리뷰는
 환경 상태와 diff 밖 화면을 못 본다 — 태그 전에 이 훑기를 사용자 실행 경로에서 돈다.
 """
@@ -22,7 +22,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 
-# CJK Text Contract E3 — 한국어 Windows 콘솔은 cp949 라 «—»·«✓» 를 print 하면
+# CJK Text Contract E3 — 한국어 Windows 콘솔은 cp949 라 《—》·《✓》 를 print 하면
 # UnicodeEncodeError 로 즉사한다. 이 PC 는 PYTHONUTF8=1 이 박혀 있어 겪지 않는다.
 # 정의는 src/core/console.py 에 있으나, 이 파일은 src 를 경로에 올리지 않으므로
 # 네 줄을 품는다.
@@ -40,7 +40,7 @@ DANGER = re.compile(
     r"저장|지우기|받기|설치|업데이트|삭제|초기화|리셋|시작|로그인|실행|만들기|가져오기|내보내기|보내기|적용|"
     r"되돌리기|커밋|추가|넣기|옮기기|쪼개기|백업|복원|휴지통|비우기"
 )
-# 설정 패널 안에서 «탭»으로 볼 요소 — 단추 일반은 아니다.
+# 설정 패널 안에서 《탭》으로 볼 요소 — 단추 일반은 아니다.
 TAB_SEL = (
     "#settings-section [role=tab], #settings-section .tab, #settings-section .settings-tab, "
     "#settings-section .tabs button, #settings-section details > summary"

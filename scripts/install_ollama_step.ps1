@@ -7,7 +7,7 @@
 #   Ollama가 깔려 있으나 꺼져 있으면 `ollama list`가 Ollama 앱(`ollama app.exe --hide`)을 스스로
 #   띄운다. 그 앱이 우리 출력 파이프를 물려받아 닫지 않으므로 `(& ollama list | Out-String)`은
 #   EOF를 영원히 기다렸고, install.ps1과 CTB-Setup이 28분 동안 멈춰 있다가 강제 종료됐다.
-#   그래서 모델 목록은 HTTP API(/api/tags, 3초 제한)로 읽고, 꺼져 있으면 «나중에 켜면 된다»로 넘어간다.
+#   그래서 모델 목록은 HTTP API(/api/tags, 3초 제한)로 읽고, 꺼져 있으면 《나중에 켜면 된다》로 넘어간다.
 #   `ollama pull`처럼 명령을 꼭 불러야 하는 자리는 시간 제한이 있는 별도 프로세스로, 핸들을 물려주지
 #   않고 띄운다(Invoke-OllamaTimed) — 손자 프로세스가 남아도 아무것도 기다리지 않는다.
 #
@@ -41,7 +41,7 @@ function Get-OllamaBase {
     return "$($u.Scheme)://$($hostName):$port"
 }
 
-# 모델 이름 목록. 닿지 않으면 $null(빈 목록과 다르다 — 빈 목록은 «켜져 있지만 모델이 없다»).
+# 모델 이름 목록. 닿지 않으면 $null(빈 목록과 다르다 — 빈 목록은 《켜져 있지만 모델이 없다》).
 function Get-OllamaModels([string]$base) {
     try {
         $r = Invoke-RestMethod -Uri "$base/api/tags" -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
@@ -58,7 +58,7 @@ function Get-OllamaModels([string]$base) {
 # `ollama <인자…>`를 시간 제한을 두고 돌린다. 돌려주는 값: 종료 코드, 시간 초과면 -1, 시작조차 못 하면 -2.
 #
 # **핸들을 물려주지 않는 시작(UseShellExecute)이어야 한다.** 출력을 파일로 돌리는 Start-Process
-# (-Redirect…)도 CreateProcess에 «상속 가능한 핸들 전부 물려주기»를 켜므로, 이 창의 출력 파이프가
+# (-Redirect…)도 CreateProcess에 《상속 가능한 핸들 전부 물려주기》를 켜므로, 이 창의 출력 파이프가
 # 손자 프로세스(Ollama 앱 등)에까지 넘어가 CTB-Setup이 그 프로세스가 끝날 때까지 기다린다(2026-10-06
 # 재현: 남는 자식 30초 → 31초 대기). 셸 실행은 핸들을 물려주지 않는다 — 대신 출력은 보이지 않는다
 # (숨긴 창). 시간이 넘으면 프로세스 나무째 끝낸다.

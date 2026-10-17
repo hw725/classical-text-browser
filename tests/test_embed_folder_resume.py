@@ -10,7 +10,7 @@
     경우를 여기서 잡는다.
 
 무엇을 LLM 없이 확인하는가:
-    파이프라인을 가짜로 바꿔 «몇 쪽에 실제로 호출이 나갔는가»를 센다.
+    파이프라인을 가짜로 바꿔 《몇 쪽에 실제로 호출이 나갔는가》를 센다.
     호출 횟수가 곧 비용이므로, 재개가 동작하면 그 수가 줄어야 한다.
 """
 
@@ -157,7 +157,7 @@ def test_resume_does_not_duplicate_document(library, scan_pdf):
 def test_ocr_results_survive_for_later_review(library, scan_pdf):
     """처리가 끝나도 OCR 결과(L2/L3)를 남긴다 — 나중에 GUI로 검수하려면 필요하다.
 
-    지우면 «CLI로 빠르게 돌리고, 이상하면 GUI로 검수한다»는 흐름이 성립하지
+    지우면 《CLI로 빠르게 돌리고, 이상하면 GUI로 검수한다》는 흐름이 성립하지
     않는다. 볼 것이 없어 OCR을 처음부터 다시 돌려야 하고 비용을 두 번 낸다.
     """
     archive = library.parent / "archive"

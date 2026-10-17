@@ -8,16 +8,16 @@
 
 왜 `Relation`의 `supersedes` 서술어가 아니라 별도 테이블인가 — 코드를 읽고 내린 판단:
 
-    ① **Relation은 «해석 내용»이고 이것은 «장부»다.** 라우터의
+    ① **Relation은 《해석 내용》이고 이것은 《장부》다.** 라우터의
        `GET /api/interpretations/{id}/entities/relation`
        (src/app/routers/interpretations.py:501)이 relations/ 아래를 그대로 목록으로
        돌려준다. 장부를 거기 섞으면 연구자가 보는 관계 목록이 내부 기록으로
-       오염된다. D-128 2항은 «사용자에게 보이지 않는 내부 장부»라고 못 박았다.
+       오염된다. D-128 2항은 《사용자에게 보이지 않는 내부 장부》라고 못 박았다.
 
     ② **Tag → Concept 승격을 담을 수 없다.** relation.schema.json의
        `subject_type` enum은 `agent | concept` 둘뿐이다(schemas/core/relation.schema.json).
        승격 기록을 Relation에 넣으려면 해석 축의 스키마를 장부 때문에 넓혀야 하는데,
-       그것은 코어 스키마의 «구조만 담는다»는 전제를 거스른다.
+       그것은 코어 스키마의 《구조만 담는다》는 전제를 거스른다.
 
     ③ **조회가 O(1)이어야 한다.** 옛 id로 물어볼 때마다 relations/*.json을 전부
        열어 훑을 수는 없다. 장부는 파일 하나다.
@@ -37,7 +37,7 @@
       이 고리만 따라간다.
     - `promoted_to` — Tag가 Concept이 됐다. **고리로 따라가지 않는다** — Tag는
       승격 뒤에도 그대로 남아 제 id로 조회되므로(entity.py의 promote_tag_to_concept은
-      Tag를 건드리지 않는다), 이것은 «무엇이 됐는가»를 알려주는 기록이지 대체가 아니다.
+      Tag를 건드리지 않는다), 이것은 《무엇이 됐는가》를 알려주는 기록이지 대체가 아니다.
 """
 
 import logging
@@ -153,7 +153,7 @@ def record_mapping(
 
 
 def supersede_lookup(interp_path: str | Path, entity_type: str) -> dict[str, str]:
-    """장부를 **한 번 읽어** «옛 id → 신 id» 표로 펼친다.
+    """장부를 **한 번 읽어** 《옛 id → 신 id》 표로 펼친다.
 
     입력: interp_path — 해석 저장소 경로. entity_type — 엔티티 종류.
     출력: {옛 id: 신 id}. 따라가는 고리(FOLLOWED_RELATIONS)만 담는다.
@@ -179,7 +179,7 @@ def follow_chain(
     *,
     entity_type: str = "",
 ) -> dict:
-    """펼친 표를 따라 «지금 무엇이 됐는가»까지 간다. **고리 따라가기의 정본이다.**
+    """펼친 표를 따라 《지금 무엇이 됐는가》까지 간다. **고리 따라가기의 정본이다.**
 
     입력: lookup — supersede_lookup() 결과. entity_id — 출발 id.
         entity_type — 로그에만 쓴다.

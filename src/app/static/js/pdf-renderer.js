@@ -188,13 +188,13 @@ function _updateRotationLabel() {
     .filter(Boolean).join(" ");
 }
 
-/** 「저장」 옆 쪽 범위 칸을 읽는다. 비어 있으면 null(권 전체). «37-52»·«37~52»·«37» 을 받는다. */
+/** 「저장」 옆 쪽 범위 칸을 읽는다. 비어 있으면 null(권 전체). 《37-52》·《37~52》·《37》 을 받는다. */
 function _rotatePagesInput() {
   const el = document.getElementById("pdf-rotate-pages");
   const raw = (el?.value || "").trim();
   if (!raw) return null;
   const m = raw.match(/^(\d+)\s*[-~–]\s*(\d+)$/) || raw.match(/^(\d+)$/);
-  if (!m) throw new Error(`쪽 범위를 «37-52»처럼 적으세요: ${raw}`);
+  if (!m) throw new Error(`쪽 범위를 《37-52》처럼 적으세요: ${raw}`);
   const a = Number(m[1]), b = Number(m[2] ?? m[1]);
   if (a < 1 || b < a || (pdfState.totalPages && b > pdfState.totalPages)) {
     throw new Error(`쪽 범위가 권을 벗어납니다: ${a}~${b} (이 권은 ${pdfState.totalPages}쪽)`);
@@ -240,7 +240,7 @@ async function syncSavedRotation(docId, partId, rotation, ranges) {
 }
 
 /**
- * 쪽 하나를 «이 회전으로 돌리면 이렇게 보인다»는 작은 그림으로 그린다(2026-10-02, 「말로 지시」 계획 표).
+ * 쪽 하나를 《이 회전으로 돌리면 이렇게 보인다》는 작은 그림으로 그린다(2026-10-02, 「말로 지시」 계획 표).
  * 입력: canvas, docId·partId(지금 열린 권이어야 한다), 쪽, 회전(저장 회전과 같은 뜻 — 바로 세우려면
  * 시계 방향으로 몇 도), 긴 변 픽셀. 출력: true(그림) 또는 false(이 권이 열려 있지 않음).
  *
@@ -261,9 +261,9 @@ async function renderPageThumb(canvas, docId, partId, pageNo, rotation, maxSide 
 }
 
 /**
- * 자동 스캔(쪽 측정, D-126)을 SSE로 돌린다 — «권 전체 OCR」과 같은 형식(data: {"type": start|page|complete|error}).
+ * 자동 스캔(쪽 측정, D-126)을 SSE로 돌린다 — 《권 전체 OCR」과 같은 형식(data: {"type": start|page|complete|error}).
  * 입력: url, body(stream은 여기서 켠다), onEvent(start·page 이벤트). 출력: complete 이벤트(결과 전체).
- * 스트림이 완료 없이 끊기면(서버 재시작·네트워크) 실패로 올린다 — 조용히 «다 된 것»처럼 보이면 안 된다.
+ * 스트림이 완료 없이 끊기면(서버 재시작·네트워크) 실패로 올린다 — 조용히 《다 된 것》처럼 보이면 안 된다.
  */
 async function _postSurveyStream(url, body, onEvent) {
   const res = await fetch(url, {
@@ -274,7 +274,7 @@ async function _postSurveyStream(url, body, onEvent) {
   if (!res.ok || !res.body) {
     const err = await res.json().catch(() => ({}));
     const e = new Error(err.error || `HTTP ${res.status}`);
-    // 판정 모델 키가 없어 거절됐으면(400 needs_key) 그 칸 id를 실어 둔다 — 화면이 설정 «판정 모델»로 안내한다
+    // 판정 모델 키가 없어 거절됐으면(400 needs_key) 그 칸 id를 실어 둔다 — 화면이 설정 《판정 모델》로 안내한다
     if (err.needs_key) e.needsKey = err.needs_key;
     throw e;
   }
@@ -319,12 +319,12 @@ function _viewingPart(docId, partId) {
 }
 
 /**
- * 쪽 측정이 낸 «회전이 다른 구간»을 사람에게 묻고 저장한다. 입력: docId, partId, rot(라우트의 rotation 목록).
+ * 쪽 측정이 낸 《회전이 다른 구간》을 사람에게 묻고 저장한다. 입력: docId, partId, rot(라우트의 rotation 목록).
  * 출력: 저장한 구간 수.
  *
  * 판정이 확실한 구간(guess 아님)은 한 창에 모아 한 번만 묻는다 — 구간마다 묻는 것은 번거롭다(사용자 지적).
  * 누운 쪽은 90인지 270인지 코드가 못 가리므로(추정) 그 구간의 첫 쪽을 **제안한 회전으로 미리 보인 채**
- * 확인받고, 아니라고 하면 반대쪽을 한 번 더 보인다. 「권 전체 OCR」의 «돌아간 쪽은 세워서»가 쓴다.
+ * 확인받고, 아니라고 하면 반대쪽을 한 번 더 보인다. 「권 전체 OCR」의 《돌아간 쪽은 세워서》가 쓴다.
  * (「말로 지시」의 자동 스캔은 이 창을 쓰지 않는다 — 계획 표의 「보기」·「반대로」로 확인하고 「적용」이 저장한다)
  */
 async function _confirmRotationRanges(docId, partId, rot) {
@@ -375,13 +375,13 @@ async function _confirmRotationRanges(docId, partId, rot) {
 }
 
 /**
- * «돌아간 쪽은 세워서»(D-126 덧붙임 2026-09-18) — 「권 전체 OCR」이 실행 직전에 부른다.
+ * 《돌아간 쪽은 세워서》(D-126 덧붙임 2026-09-18) — 「권 전체 OCR」이 실행 직전에 부른다.
  * 입력: docId, partId, pages([a, b] 또는 null=권 전체), onProgress(evt)(진행 막대용, 없어도 됨).
  * 출력: {checked, found, applied, unknown, error}. 사람이 취소한 구간은 저장하지 않고 OCR은 그대로 잇는다.
  *
  * 쪽 측정 라우트(rotation/suggest)를 orientation_only로 부른다 — 비전 모델 없음, GPU 게이트 없음. 투영으로 누운 쪽을 찾고,
  * GPU면 PaddleOCR 점수로 90/270이 확정되어 한 창에서 끝나며, CPU면 추정이라 미리보기로 묻는다.
- * 저장은 회전 저장 단추와 같은 길(_confirmRotationRanges → PUT rotation)이라 «저장은 사람이 누른다»가 지켜진다.
+ * 저장은 회전 저장 단추와 같은 길(_confirmRotationRanges → PUT rotation)이라 《저장은 사람이 누른다》가 지켜진다.
  */
 async function autoOrientForOcr(docId, partId, pages, onProgress) {
   const url = `/api/documents/${encodeURIComponent(docId)}/parts/${encodeURIComponent(partId)}/rotation/suggest`;
@@ -456,7 +456,7 @@ async function _saveRotation() {
 // eslint-disable-next-line no-unused-vars
 function _showPdfLoadFailed(on) {
   /**
-   * «PDF를 불러올 수 없습니다» 안내를 켜고 끈다. 입력: on — 켤지.
+   * 《PDF를 불러올 수 없습니다》 안내를 켜고 끈다. 입력: on — 켤지.
    * 캔버스 묶음(#pdf-canvas-wrapper)은 지우지 않고 숨기기만 한다 — 다음 문헌이 그 캔버스에 그린다.
    */
   const container = document.getElementById("pdf-canvas-container");
@@ -547,7 +547,7 @@ async function loadPdfPage(docId, partId, pageNum) {
     pageInput.max = pdfState.totalPages;
 
     // 첫 로드 시 사용자가 선택한 맞춤 모드로 자동 맞춤.
-    // 맞춤이 «현재 쪽»을 그리므로 먼저 요청한 쪽으로 놓는다 — 전에는 기본값 1쪽을 한 번
+    // 맞춤이 《현재 쪽》을 그리므로 먼저 요청한 쪽으로 놓는다 — 전에는 기본값 1쪽을 한 번
     // 그린 뒤에야 요청한 쪽을 그려, 무거운 스캔에서는 몇 초 동안 표지가 보였다(2026-09-06).
     pdfState.currentPage = pageNum;
     await _autoFit();
@@ -698,7 +698,7 @@ async function _fitToWidth() {
   const page = await pdfState.pdfDoc.getPage(pdfState.currentPage || 1);
   const viewport = pdfViewport(page, 1.0);
   const container = document.getElementById("pdf-canvas-container");
-  // 패딩과 스크롤바 여유분 20px. 90°/270°로 돌려 놓았으면 보이는 너비는 쪽의 «높이»다
+  // 패딩과 스크롤바 여유분 20px. 90°/270°로 돌려 놓았으면 보이는 너비는 쪽의 《높이》다
   const shown = _rotatedSize(viewport);
   const newScale = (container.clientWidth - 20) / shown.width;
   _setZoom(newScale);
@@ -716,14 +716,14 @@ async function _fitToHeight() {
   const page = await pdfState.pdfDoc.getPage(pdfState.currentPage || 1);
   const viewport = pdfViewport(page, 1.0);
   const container = document.getElementById("pdf-canvas-container");
-  // 패딩 여유분 20px. 90°/270°로 돌려 놓았으면 보이는 높이는 쪽의 «너비»다
+  // 패딩 여유분 20px. 90°/270°로 돌려 놓았으면 보이는 높이는 쪽의 《너비》다
   const shown = _rotatedSize(viewport);
   const newScale = (container.clientHeight - 20) / shown.height;
   _setZoom(newScale);
 }
 
 /**
- * 회전을 감안한 «보이는» 크기. 입력: 뷰포트(scale 1). 출력: {width, height}.
+ * 회전을 감안한 《보이는》 크기. 입력: 뷰포트(scale 1). 출력: {width, height}.
  * 목적: 가로·세로 맞춤이 돌린 뒤의 모양을 재야 한다 — 안 그러면 90°에서 세로 쪽 길이로
  * 가로를 맞춰 화면을 넘친다(사용자 보고 2026-09-09).
  */

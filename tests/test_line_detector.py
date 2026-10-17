@@ -59,7 +59,7 @@ def test_two_column_row_splits_into_cells():
 
 
 def test_reading_order_is_row_then_left_to_right():
-    """읽기 순서는 «행 위→아래, 행 안에서 좌→우»여야 한다.
+    """읽기 순서는 《행 위→아래, 행 안에서 좌→우》여야 한다.
 
     근거: LLM Vision이 같은 쪽의 2단 목차를 Ⅰ → Ⅲ → Ⅱ → Ⅳ 로 읽었다.
     단별로 훑은 것이 아니라 행 단위로 좌우를 오갔다. 매칭도 그래야 맞는다.

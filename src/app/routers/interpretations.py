@@ -533,7 +533,7 @@ async def api_list_entities(
 ):
     """특정 유형의 엔티티 목록을 반환한다.
 
-    `scope`는 다른 필터와 성격이 다르다 (D-128 6항). 동등 비교가 아니라 «주소»이므로
+    `scope`는 다른 필터와 성격이 다르다 (D-128 6항). 동등 비교가 아니라 《주소》이므로
     전역 개념(scope_document 없음)은 어느 문헌을 물어도 함께 나오고, 다른 문헌의
     개념은 나오지 않는다. 이것은 **내보내는 쪽** 규칙이다 — 승격 출처를 모으는 쪽은
     구획으로 막지 않는다(core/promotion.py::gather_sources — 단 지금은 해석 저장소 하나,
@@ -556,7 +556,7 @@ async def api_list_entities(
     if block_id:
         filters["block_id"] = block_id
     if scope is not None:
-        # 빈 문자열은 «전역만»이라는 뜻이다 — None(필터 없음)과 구분해야 한다.
+        # 빈 문자열은 《전역만》이라는 뜻이다 — None(필터 없음)과 구분해야 한다.
         filters["scope_document"] = scope or None
 
     try:
@@ -881,7 +881,7 @@ async def api_connectome_comparison(
     if live:
         ok, reason = is_live_available()
         if not ok:
-            # 판독 계획이 CPU 환경에서 하는 것과 같은 모양 — 400에 «왜»를 담는다.
+            # 판독 계획이 CPU 환경에서 하는 것과 같은 모양 — 400에 《왜》를 담는다.
             return JSONResponse(
                 {"error": reason, "live_only": True},
                 status_code=400,
@@ -965,7 +965,7 @@ async def api_merge_concepts(interp_id: str, body: MergeConceptsRequest):
 #   전제 조건이기 때문이다. 그런데 텍스트만 뽑는 작업(추출 모드)에서는
 #   L5-L7을 아예 쓰지 않으므로 그 저장소가 빈 채로 목록에 쌓인다.
 #
-# 왜 «비었을 때만»인가:
+# 왜 《비었을 때만》인가:
 #   모드 전환은 표시를 바꾸는 일이지 데이터를 지우는 일이 아니다.
 #   실수로 눌렀다고 번역·주석이 사라지면 안 된다. 내용이 하나라도 있으면
 #   건드리지 않고 그 사실을 알린다.
@@ -981,12 +981,12 @@ def _interpretation_content_files(interp_path) -> list[str]:
     입력: interp_path — 해석 저장소 경로.
     출력: 내용 파일의 상대 경로 목록 (비어 있으면 빈 리스트).
 
-    무엇을 «내용»으로 보는가: L5~L8 층과 core_entities(태그·개념·관계)·citation_marks(인용 표시)·
+    무엇을 《내용》으로 보는가: L5~L8 층과 core_entities(태그·개념·관계)·citation_marks(인용 표시)·
     _notes(쪽 비고) 아래의 파일이다. 뒤의 셋은 저장소를 만들 때 생기지 않으므로 파일이 있으면
-    사람이 한 작업이다 — 전에는 L5~L8만 세어 엔티티·인용 작업이 든 저장소도 «비었다»로
+    사람이 한 작업이다 — 전에는 L5~L8만 세어 엔티티·인용 작업이 든 저장소도 《비었다》로
     휴지통에 갔다(2026-10-11 재확인).
     manifest.json·dependency.json·.git·.gitignore는 생성 시 만들어지는
-    골격이므로 «작업이 있다»는 근거가 되지 못한다.
+    골격이므로 《작업이 있다》는 근거가 되지 못한다.
     """
     from pathlib import Path as _Path
 

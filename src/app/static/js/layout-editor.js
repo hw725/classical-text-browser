@@ -165,12 +165,12 @@ function _canvasCoords(e) {
 /**
  * L3 좌표계 → PDF 뷰포트(72 DPI, scale=1.0) 배율을 구한다.
  *
- * 왜 필요한가: L3의 bbox는 «렌더된 페이지 이미지의 픽셀» 좌표다. 그런데
+ * 왜 필요한가: L3의 bbox는 《렌더된 페이지 이미지의 픽셀》 좌표다. 그런데
  * 그 이미지를 몇 배로 렌더했는지는 만든 쪽마다 다르다 — 배치 OCR이 만든
  * 전면 블록은 2배(991px), 사람이 화면에서 그린 블록은 1배(495pt)다.
  * 화면은 언제나 뷰포트 기준이므로, 그리기 전에 이 배율로 환산해야 한다.
  *
- * 예전에는 이 차이를 만나면 bbox를 통째로 고쳐 쓰고 «수정됨»으로 표시했다.
+ * 예전에는 이 차이를 만나면 bbox를 통째로 고쳐 쓰고 《수정됨》으로 표시했다.
  * 그래서 배치 OCR이 만든 쪽을 열 때마다 저장 버튼을 눌러야 했고, 누르기
  * 전에는 블록이 두 배 크기로 그려져 화면 밖으로 나가 보이지 않았다.
  * 데이터를 고치지 않고 **그릴 때만 환산**하면 그 두 문제가 함께 사라진다.
@@ -1050,8 +1050,8 @@ async function loadPageLayout(docId, partId, pageNum) {
   try {
     // (D-066 뒤로 API 응답에는 미들웨어가 no-store를 붙인다 — 아래 cache 옵션은 그 전의 겹 방어다.)
     // no-store가 없으면 브라우저가 예전 응답을 그대로 준다.
-    // 배치 OCR이 L3 전면 블록을 새로 만들어도 레이아웃 탭에는 «블록이 없던
-    // 시절»이 남아 있었다. 교정 탭(loadPageCorrections)은 세 요청 모두
+    // 배치 OCR이 L3 전면 블록을 새로 만들어도 레이아웃 탭에는 《블록이 없던
+    // 시절》이 남아 있었다. 교정 탭(loadPageCorrections)은 세 요청 모두
     // no-store를 붙여 두어 바로 반영됐는데, 여기만 빠져 있었다.
     const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) throw new Error("레이아웃 API 응답 오류");
@@ -1061,7 +1061,7 @@ async function loadPageLayout(docId, partId, pageNum) {
     //
     // 쪽을 빠르게 옮기면 요청이 순서대로 돌아오지 않는다. 3쪽 요청이
     // 5쪽 요청보다 늦게 도착하면 화면에는 5쪽인데 내용은 3쪽이 된다.
-    // «텍스트가 뜨기도 하고 안 뜨기도 한다»의 실체가 이것이었다.
+    // 《텍스트가 뜨기도 하고 안 뜨기도 한다》의 실체가 이것이었다.
     if (
       viewerState.docId !== docId ||
       viewerState.partId !== partId ||
@@ -1137,7 +1137,7 @@ async function loadPageLayout(docId, partId, pageNum) {
  * 새로 그린 LayoutBlock의 id — 그 쪽에 남은 `bNN` 가운데 가장 큰 번호 + 1.
  * 입력: 쪽 번호, 지금 블록 목록. 출력: `p{쪽}_b{번호}`.
  *
- * 왜 «개수 + 1»이 아닌가(2026-10-11 2차 전수): b01·b02·b03 중 b01을 지우고 새로 그리면 개수+1이
+ * 왜 《개수 + 1》이 아닌가(2026-10-11 2차 전수): b01·b02·b03 중 b01을 지우고 새로 그리면 개수+1이
  * b03이 되어 남은 b03과 겹쳤다. 스키마에 유일성 검사가 없어 선택·삭제·OCR L2 매칭이 섞인다.
  */
 function _nextLayoutBlockId(pageNum, blocks) {
@@ -1154,7 +1154,7 @@ function _nextLayoutBlockId(pageNum, blocks) {
  *
  * 입력: docId/partId/pageNum — 대상 쪽. vpWidth/vpHeight — PDF 뷰포트 크기(pt).
  *
- * 왜 여기서 저장까지 하는가: 만들어만 두고 «수정됨»으로 남기면 결국 쪽마다
+ * 왜 여기서 저장까지 하는가: 만들어만 두고 《수정됨》으로 남기면 결국 쪽마다
  * 저장을 눌러야 한다. 그것이 지금 고치려는 불편 그 자체다. 사람이 그린 것을
  * 덮어쓸 위험은 없다 — 블록이 0개일 때만 부른다.
  *
@@ -1211,7 +1211,7 @@ async function _autoCreateFullPageBlock(docId, partId, pageNum, vpWidth, vpHeigh
  */
 async function _saveLayout() {
   // 출력: 저장됐으면 true, 아니면 false — 부르는 쪽(리셋 등)이 실패를 알 수 있게(2026-10-11 전수).
-  // 예전에는 실패를 안에서 삼켜 리셋의 실패 알림이 닿지 않았다(상태 칸에 «저장 실패»만)
+  // 예전에는 실패를 안에서 삼켜 리셋의 실패 알림이 닿지 않았다(상태 칸에 《저장 실패》만)
   const { docId, partId, pageNum } = viewerState;
   if (!docId || !partId || !pageNum) return false;
 
@@ -1537,7 +1537,7 @@ async function _runAutoDetectKoten() {
     _redrawOverlay();
     _updateBlockList();
 
-    // 자동 저장 — 실패하면 «저장됨»이라 하지 않는다(블록은 화면에 남고 다시 저장할 수 있다)
+    // 자동 저장 — 실패하면 《저장됨》이라 하지 않는다(블록은 화면에 남고 다시 저장할 수 있다)
     if (!(await _saveLayout())) {
       _setAutodetectStatus("감지는 됐지만 저장하지 못했습니다 — 「저장」을 다시 누르세요");
       return;

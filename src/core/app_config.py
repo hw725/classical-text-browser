@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 # ── 설정 경로 ──────────────────────────────────
 
-# CTB_CONFIG_DIR: 검증·시험용 서버가 사용자의 설정(최근 서고 목록 → «마지막 서고 자동 선택»)을
+# CTB_CONFIG_DIR: 검증·시험용 서버가 사용자의 설정(최근 서고 목록 → 《마지막 서고 자동 선택》)을
 # 건드리지 않게 다른 폴더를 쓰게 한다. 2026-09-10 실측: 복사본 서고로 띄운 검증 서버가 최근 목록 맨
 # 위에 올라가, 사용자가 아이콘으로 켠 앱이 며칠 동안 임시 복사본을 열고 있었다.
 CONFIG_DIR = Path(os.environ.get("CTB_CONFIG_DIR") or (Path.home() / ".classical-text-browser"))
@@ -61,7 +61,7 @@ def save_app_config(config: dict) -> None:
     from core.document import write_json_atomic
 
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    # 원자적 저장(D-069) — 설정이 빈 파일이 되면 «최근 서고»가 사라져 앱이 서고 없이 뜬다.
+    # 원자적 저장(D-069) — 설정이 빈 파일이 되면 《최근 서고》가 사라져 앱이 서고 없이 뜬다.
     write_json_atomic(CONFIG_FILE, config)
 
 

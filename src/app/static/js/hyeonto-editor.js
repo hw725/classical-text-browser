@@ -112,9 +112,9 @@ function _bindHyeontoEvents() {
 // eslint-disable-next-line no-unused-vars
 async function activateHyeontoMode() {
   hyeontoState.active = true;
-  // await가 «반드시» 필요하다: _populateHyeontoBlockSelect는 서버 응답을 받은
+  // await가 《반드시》 필요하다: _populateHyeontoBlockSelect는 서버 응답을 받은
   // 뒤에야 hyeontoState.blockId를 새 페이지 것으로 바꾼다. 기다리지 않으면
-  // 아래 if가 «이전 페이지의» blockId를 읽어 엉뚱한 현토를 불러온다.
+  // 아래 if가 《이전 페이지의》 blockId를 읽어 엉뚱한 현토를 불러온다.
   await _populateHyeontoBlockSelect();
   if (hyeontoState.blockId) {
     _loadHyeontoData();
@@ -273,10 +273,10 @@ async function _loadHyeontoData() {
       // 본문은 서버가 준 것을 그대로 쓴다.
       //
       // 왜 여기서 쪽을 다시 이어 붙이지 않는가: v1.3부터 단위는 본문을 저장하지 않고
-      // **읽을 때 L4에서 잘라 온다**(D-092). 즉 서버의 original_text가 이미 «지금 교정본»이고,
+      // **읽을 때 L4에서 잘라 온다**(D-092). 즉 서버의 original_text가 이미 《지금 교정본》이고,
       // 쪽 중간에서 시작·끝나는 경계도 글자 단위로 반영돼 있다.
       // 화면이 쪽 전체를 다시 받아 이으면 두 가지가 어긋났다(사용자 지적 2026-09-04):
-      //   ① 둘째 쪽부터 빠졌다 — «texts.length === 0»일 때만 담아 첫 쪽만 들어갔다
+      //   ① 둘째 쪽부터 빠졌다 — 《texts.length === 0》일 때만 담아 첫 쪽만 들어갔다
       //      (layout_block_id는 v1.3부터 늘 null이라 블록 매칭이 언제나 실패한다)
       //   ② 쪽 중간 경계가 무시됐다 — char_range를 보지 않고 쪽 전체를 담았다
       const correctedText = (tbData && tbData.original_text) || "";

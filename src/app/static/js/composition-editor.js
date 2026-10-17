@@ -14,7 +14,7 @@
  * 왜 이렇게 하는가:
  *   교정은 LayoutBlock(물리적 영역) 기반이지만 표점·현토·번역은 단위(글) 기반이다. 단위는
  *   경계 목록에서 만든 읽기 보기이고(D-092), 경계는 쪽·열을 넘어 글자 자리에 선다.
- *   (옛 «LayoutBlock 1:1 자동 편성·합치기»는 D-116에서 없어졌다.)
+ *   (옛 《LayoutBlock 1:1 자동 편성·합치기》는 D-116에서 없어졌다.)
  */
 
 /* ──────────────────────────
@@ -131,7 +131,7 @@ function _bindCompEvents() {
       list.querySelectorAll(".comp-cur-row").forEach((el) => {
         el.classList.toggle("is-selected", el.dataset.unitId === ev.detail.id);
       });
-    // 「단위 손보기」도 사이드바에서 고른 기사를 잡는다 — 그 «안»을 조각으로 나누는 도구다(사용자 지적 2026-09-11)
+    // 「단위 손보기」도 사이드바에서 고른 기사를 잡는다 — 그 《안》을 조각으로 나누는 도구다(사용자 지적 2026-09-11)
     _pickUnitForTweak(ev.detail.id);
   });
   // textarea 입력 시 쪼개기 미리보기 업데이트
@@ -173,7 +173,7 @@ function deactivateCompositionMode() {
  * 이 권의 단위(편성 경계로 만든 읽기 보기)를 원본 저장소의 경계 색인에서 읽어 목록에 그린다.
  *
  * 단위는 원본 저장소의 것이다(D-097) — 사이드바 「내용」 트리와 같은 곳(`/boundaries?include_text=1`)을
- * 본다. 옛 판의 «위: 교정된 LayoutBlock 텍스트 / 아래: 단위, 페이지 범위 합치기»는 D-092에서 단위를
+ * 본다. 옛 판의 《위: 교정된 LayoutBlock 텍스트 / 아래: 단위, 페이지 범위 합치기》는 D-092에서 단위를
  * 저장하지 않고 경계로 만들게 되며 없어졌다.
  */
 async function _loadCompositionData() {
@@ -187,7 +187,7 @@ async function _loadCompositionData() {
 
   // 단위는 **원본 저장소**의 것이다(D-097). 이 패널만 해석 저장소에 묻고 있어서, 해석 저장소를
   // 고르지 않으면 조회조차 하지 않았고 목록이 늘 비어 「쪼개기」가 영영 꺼져 있었다
-  // (浩齋65 실측 2026-09-08: 원본에 단위 581개가 있는데 화면은 «아직 단위가 없습니다»).
+  // (浩齋65 실측 2026-09-08: 원본에 단위 581개가 있는데 화면은 《아직 단위가 없습니다》).
   // 사이드바 「내용」 트리와 같은 곳을 본다.
   compState.units = [];
   try {
@@ -200,7 +200,7 @@ async function _loadCompositionData() {
       if (row.unit_status === "deprecated" || row.unit_status === "archived") continue;
       // 경계 색인의 평평한 칸을 카드가 기대하는 모양으로 옮긴다.
       // 번호는 서버의 sequence_index(권 안의 차례, 0부터) 하나로 센다 — 사이드바 트리와
-      // 표점·현토·번역·주석·인용 편집기가 모두 그것을 «#N»으로 쓴다. 전에는 여기만
+      // 표점·현토·번역·주석·인용 편집기가 모두 그것을 《#N》으로 쓴다. 전에는 여기만
       // 색인의 order+1(1부터)을 써서 같은 단위가 트리 #267, 「단위 손보기」 #268로 갈렸다
       // (lecture_2026 愛蓮説, 2026-09-30). order는 정렬용이지 이름표가 아니다.
       compState.units.push({
@@ -242,7 +242,7 @@ function _renderUnits() {
   if (compState.units.length === 0) {
     container.innerHTML =
       '<div class="placeholder" style="padding:20px; text-align:center; color:var(--text-muted);">' +
-      '아직 단위가 없습니다. 위 ①②③으로 후보를 골라 「적용」하거나, 사이드바 「내용」의 «경계 넣기»로 첫 경계를 놓으세요.</div>';
+      '아직 단위가 없습니다. 위 ①②③으로 후보를 골라 「적용」하거나, 사이드바 「내용」의 《경계 넣기》로 첫 경계를 놓으세요.</div>';
     return;
   }
 
@@ -253,8 +253,8 @@ function _renderUnits() {
   const sorted = [...compState.units].sort(
     (a, b) => (a.sequence_index || 0) - (b.sequence_index || 0),
   );
-  // «기사인데 아래 단위를 품은» 것을 찾는다.
-  // 단위의 끝은 «같은 깊이 이상의 다음 경계»다(D-092). 그래서 깊이가 이웃보다 얕은 기사는
+  // 《기사인데 아래 단위를 품은》 것을 찾는다.
+  // 단위의 끝은 《같은 깊이 이상의 다음 경계》다(D-092). 그래서 깊이가 이웃보다 얕은 기사는
   // 뒤따르는 기사들을 통째로 삼킨다 — 천진담초 실측에서 기사 하나가 30,906자(권 뒤쪽 전부)였다.
   // 논리로는 맞지만 사람이 알아채기 어려우므로 카드에 적어 준다.
   const swallows = new Map();
@@ -302,8 +302,8 @@ function _renderUnits() {
     const chars = Array.from(tb.original_text || "").length; // 코드포인트 — 확장 한자를 둘로 세지 않는다
     kindBadge.textContent = `${Number(tb.metadata?.level) || 2}단 · ${chars.toLocaleString()}자`;
 
-    // 출처는 «몇 쪽에 걸쳐 있는가»만 보인다. v1.3부터 단위는 LayoutBlock을 기억하지 않아
-    // 그 id는 전부 «?»로 나왔다 — 카드의 절반을 뜻 없는 문자열이 차지하고 있었다(D-092).
+    // 출처는 《몇 쪽에 걸쳐 있는가》만 보인다. v1.3부터 단위는 LayoutBlock을 기억하지 않아
+    // 그 id는 전부 《?》로 나왔다 — 카드의 절반을 뜻 없는 문자열이 차지하고 있었다(D-092).
     const sourceInfo = document.createElement("span");
     sourceInfo.style.cssText = "font-size:10px; color:var(--text-muted);";
     const refs = (tb.source_refs || []).length
@@ -504,7 +504,7 @@ async function _deleteUnit(tb) {
       },
     );
 
-    // 207은 «일부 실패»다 — 하나만 보냈으니 그 하나가 실패한 것이다. 전에는 207도 «삭제 완료»로 보였다
+    // 207은 《일부 실패》다 — 하나만 보냈으니 그 하나가 실패한 것이다. 전에는 207도 《삭제 완료》로 보였다
     // (2026-10-11 재확인 — 쪼개기와 같은 종류)
     const out = res.status === 207 ? await res.json().catch(() => ({})) : null;
     if (out && (out.errors || []).length) {
@@ -683,7 +683,7 @@ function _parseSplitPieces(text) {
  *   1. 텍스트를 === 구분선으로 파싱하고 빈 조각을 버린다
  *   2. 서버(composition/split)가 조각 글로 자리를 찾아 둘째 조각부터 경계를 넣는다
  *   3. 원본 단위는 첫 조각으로 남고(id 그대로, deprecated 아님) 새 경계는 원본보다 한 단 깊은
- *      «조각»이다 — 기사가 쪼개지지 않는다(composition.py, v1.3.0까지는 나란한 기사였다)
+ *      《조각》이다 — 기사가 쪼개지지 않는다(composition.py, v1.3.0까지는 나란한 기사였다)
  *   4. 데이터 새로고침
  */
 async function _executeSplit() {
@@ -732,7 +732,7 @@ async function _executeSplit() {
         err.error || err.detail || `쪼개기 실패: HTTP ${res.status}`,
       );
     }
-    // 207 = 조각 일부를 못 찾았다. res.ok가 참이라 전에는 오류를 버리고 «완료»를 띄웠다.
+    // 207 = 조각 일부를 못 찾았다. res.ok가 참이라 전에는 오류를 버리고 《완료》를 띄웠다.
     // 첫 조각은 원래 단위가 그대로 이어 가므로 새로 서는 경계는 created_count개다(조각 수 − 1).
     const out = await res.json().catch(() => ({}));
     const made = Number(out.created_count ?? 0);
@@ -760,7 +760,7 @@ async function _executeSplit() {
 /* ──────────────────────────
    경계 제안 (D-088)
    권 전체 확정본에서 글 단위 경계 후보를 받아 보이고, 승인한 것만 단위으로.
-   합치기·쪼개기를 블록 단위로 반복하는 대신 «어디서 글이 바뀌는가»만 정한다.
+   합치기·쪼개기를 블록 단위로 반복하는 대신 《어디서 글이 바뀌는가》만 정한다.
    ────────────────────────── */
 
 /* ──────────────────────────
@@ -805,11 +805,11 @@ function _signalLabel(id) {
   return id;
 }
 
-// 규칙의 «목록 칸»들 — 행의 toggle이 이 중 하나면 value가 그 칸에 들어간다(D-119)
+// 규칙의 《목록 칸》들 — 행의 toggle이 이 중 하나면 value가 그 칸에 들어간다(D-119)
 const _LIST_TOGGLES = ["title_words", "head_words", "symbols", "head_templates", "tail_templates"];
 
 /**
- * 답 한 줄 (D-117) — 층계가 어디서 멈췄는지. 0단이면 LLM 단추를 내고 «자세히»를 펼친다.
+ * 답 한 줄 (D-117) — 층계가 어디서 멈췄는지. 0단이면 LLM 단추를 내고 《자세히》를 펼친다.
  */
 function _renderVerdict() {
   const box = document.getElementById("comp-verdict");
@@ -840,7 +840,7 @@ function _renderVerdict() {
   if (!(d.source || {}).l4_pages) {
     const warn = document.createElement("span");
     warn.className = "comp-verdict-warn";
-    warn.textContent = "확정본(L4)이 없어 후보를 만들 수 없습니다 — 레이아웃 탭 오른쪽 «OCR 실행»의 「권 전체 OCR」을 먼저 하세요";
+    warn.textContent = "확정본(L4)이 없어 후보를 만들 수 없습니다 — 레이아웃 탭 오른쪽 《OCR 실행》의 「권 전체 OCR」을 먼저 하세요";
     box.appendChild(warn);
   }
   // 저장된 설정이 이번 권고와 다르면(예: D-116 때 저장한 뒤 층계가 바뀜) 한 번에 권고로 돌아갈 길을 준다
@@ -873,7 +873,7 @@ function _renderVerdict() {
 /**
  * 「더 묻기…」 창 — 편성 탭에서 「말로 넣기」와 함께 모델을 부르는 자리 (D-117·D-122).
  *
- * 왜 창 하나인가: LLM 단추가 셋(구조화 스위치·어휘 뽑기·표지 묻기)이면 «무엇이 모델을 부르는가»가
+ * 왜 창 하나인가: LLM 단추가 셋(구조화 스위치·어휘 뽑기·표지 묻기)이면 《무엇이 모델을 부르는가》가
  * 헷갈린다(사용자 지시 2026-09-07). 창에서 셋 중 고르고 「묻기」 한 번으로 돈다.
  * 목차 항목 구조화는 누를 때 목차를 LLM으로 읽어 이번 후보에 쓰고, 문헌 설정 toc_llm에도 남긴다
  * (서버 auto 라우트가 읽는 값 — 사이드바 「자동 트리」는 규칙만 쓴다). 나머지 둘도 누를 때 한 번 돈다.
@@ -1005,13 +1005,13 @@ async function _runLlmModal() {
       done.push("목차 구조화");
     }
     if (wantStruct) {
-      // 권 전문(텍스트)을 보낸다 — 이 선택지만 «조각»이 아니라 전문이다. 크기는 창에 미리 보였다
+      // 권 전문(텍스트)을 보낸다 — 이 선택지만 《조각》이 아니라 전문이다. 크기는 창에 미리 보였다
       say("권 전문을 보내는 중… (묶음마다 한 번씩 부릅니다)");
       await _askLlmStructure();
       done.push("구조");
     }
     if (wantJudge) {
-      // 행마다 한 번씩 «여기서 시작하는가»를 묻는다. 목차가 있으면 그 항목도 본문 행에 붙인다
+      // 행마다 한 번씩 《여기서 시작하는가》를 묻는다. 목차가 있으면 그 항목도 본문 행에 붙인다
       say("행마다 판정 모델에 묻는 중… (총목이 있으면 목차 항목도 함께)");
       await _askJudgeStructure();
       done.push("판정");
@@ -1027,7 +1027,7 @@ async function _runLlmModal() {
 }
 
 /**
- * 4단 (D-117): 통계가 못 찾은 책 — LLM에 «시작 표지의 공통점»을 묻는다. 표본 행만 보내고,
+ * 4단 (D-117): 통계가 못 찾은 책 — LLM에 《시작 표지의 공통점》을 묻는다. 표본 행만 보내고,
  * 답은 정해진 종류로만 받으며, 전문에서 되풀이되는 것만 신호 목록에 들어온다(켤지는 사람이).
  */
 async function _askLlmPatterns() {
@@ -1078,7 +1078,7 @@ async function _askLlmPatterns() {
   }
 }
 
-/** «구조를 통째로 묻기»가 보낼 크기(행·글자·호출 수)를 미리 보인다 — 실행 게이트는 도구 층에(전역 규칙 11). */
+/** 《구조를 통째로 묻기》가 보낼 크기(행·글자·호출 수)를 미리 보인다 — 실행 게이트는 도구 층에(전역 규칙 11). */
 async function _updateLlmStructureNote() {
   const note = document.getElementById("comp-llm-opt-structure-note");
   if (!note || !viewerState.docId || !viewerState.partId) return;
@@ -1100,7 +1100,7 @@ async function _updateLlmStructureNote() {
 /**
  * 판정 모델이 보낼 양과 값을 미리 보인다 — 실행 게이트는 도구 층에(전역 규칙 11).
  * 생성 모델 쪽(_updateLlmStructureNote)과 달리 질문 수와 예상 비용까지 보인다: 행마다 한 번씩 묻고
- * 목차 항목마다 또 한 번 묻기 때문에 «몇 번 부르는가»가 사람이 판단할 값이다.
+ * 목차 항목마다 또 한 번 묻기 때문에 《몇 번 부르는가》가 사람이 판단할 값이다.
  */
 async function _updateLlmJudgeNote() {
   const note = document.getElementById("comp-llm-opt-judge-note");
@@ -1123,7 +1123,7 @@ async function _updateLlmJudgeNote() {
     // 키가 없으면 누르기 전에 말한다 — 실행은 400으로 거절된다(2026-10-06 설치 검증)
     const noKey =
       d.has_key === false || d.needs_key
-        ? " — 키 없음: 설정 → «판정 모델»에서 OpenRouter 키(또는 TypeSafe 키)를 넣어야 돕니다"
+        ? " — 키 없음: 설정 → 《판정 모델》에서 OpenRouter 키(또는 TypeSafe 키)를 넣어야 돕니다"
         : "";
     // 폴백(decider)이 본문을 모두 떠맡으면 드는 최대 — decider는 질문마다 글을 다시 세어 과금해 훨씬 크다
     const fb = d.fallback_cost_usd_max != null
@@ -1136,8 +1136,8 @@ async function _updateLlmJudgeNote() {
 }
 
 function _judgeName(label) {
-  // «업체:모델» → 사람이 읽는 이름. 모르는 것은 그대로 보인다.
-  // OpenRouter 경유 Jev(«openrouter:~typesafe/jev-latest»)를 decider보다 먼저 가린다 —
+  // 《업체:모델》 → 사람이 읽는 이름. 모르는 것은 그대로 보인다.
+  // OpenRouter 경유 Jev(《openrouter:~typesafe/jev-latest》)를 decider보다 먼저 가린다 —
   // 업체 이름만 보면 decider로 읽힌다(D-136 후속, 2026-10-05)
   if (String(label).startsWith("openrouter:~typesafe/")) return "TypeSafe Jev (OpenRouter 경유)";
   if (String(label).startsWith("openrouter:")) return "Perplexity decider";
@@ -1146,9 +1146,9 @@ function _judgeName(label) {
 }
 
 /**
- * 판정 모델로 «글이 시작하는 행»을 고른다. 총목이 있으면 목차 항목을 본문 행에 붙이고(층위 1~2),
+ * 판정 모델로 《글이 시작하는 행》을 고른다. 총목이 있으면 목차 항목을 본문 행에 붙이고(층위 1~2),
  * 본문 판정은 그 아래 층으로 내려온다 — 서버가 그렇게 맞춰 돌려준다.
- * 답은 proposeState.llm에 두어 규칙 후보와 합친다(«구조를 통째로 묻기»와 같은 길).
+ * 답은 proposeState.llm에 두어 규칙 후보와 합친다(《구조를 통째로 묻기》와 같은 길).
  * **규칙이 낸 후보를 거르지 않는다** — 문집에서 규칙 후보로 거르면 규칙의 눈을 그대로 물려받는다
  * (2026-09-21 실측: 운양집에서 재현 0.88 → 0.18).
  */
@@ -1167,7 +1167,7 @@ async function _askJudgeStructure() {
     if (docId !== viewerState.docId || partId !== viewerState.partId) return; // 그 사이 다른 책으로 갔다
     const props = d.proposals || [];
     proposeState.llm = props.length ? { docId, partId, proposals: props, meta: d } : null;
-    proposeState.topN = null; // 새 답이면 «전부 보기»부터 — 앞 책의 개수를 물려받지 않는다
+    proposeState.topN = null; // 새 답이면 《전부 보기》부터 — 앞 책의 개수를 물려받지 않는다
     if (out) {
       const toc = d.toc && d.toc.entries
         ? ` · 목차 ${d.toc.entries}항목 중 ${d.toc.above_threshold || 0}개를 본문에 붙임` +
@@ -1179,7 +1179,7 @@ async function _askJudgeStructure() {
       const fb = d.fallback_calls ? ` · 폴백 ${d.fallback_calls}번` : "";
       const whoNote = who ? ` · ${who}${fb}` : "";
       const tocSkip = d.toc && d.toc.skipped ? ` — ${d.toc.skipped}` : "";
-      // 확신한 자리와 애매한 자리를 나눠 말한다 — 애매한 쪽은 체크하지 않은 채 «애매한 후보 보기» 뒤에 선다
+      // 확신한 자리와 애매한 자리를 나눠 말한다 — 애매한 쪽은 체크하지 않은 채 《애매한 후보 보기》 뒤에 선다
       const nEsc = props.filter((p) => p.band === "escalate").length;
       const split = nEsc ? ` — 확신 ${props.length - nEsc} · 애매 ${nEsc}(체크 안 함)` : "";
       out.textContent = props.length
@@ -1194,7 +1194,7 @@ async function _askJudgeStructure() {
 }
 
 /**
- * 판정 모델이 «없음»을 고른 목차 항목을 제목 목록으로 보인다 (Jev 1차 거름망, 2026-09-27).
+ * 판정 모델이 《없음》을 고른 목차 항목을 제목 목록으로 보인다 (Jev 1차 거름망, 2026-09-27).
  * 입력: 결과 줄 요소, [{title, top_sim, why}]. 출력: 없음(그 요소 뒤에 접힌 목록을 둔다).
  * 자리가 없어 ③의 후보가 될 수 없지만, 개수만 말하면 버린 것과 같다 — 제목을 보고 본문에 실제로
  * 있는 것이면 「목차에는 있으나 본문에서 못 찾음」의 찾기나 ＋ 경계 넣기로 사람이 넣는다.
@@ -1225,7 +1225,7 @@ function _renderTocUnplaced(out, unplaced) {
 }
 
 /**
- * «구조를 통째로 묻기» (D-125): 권의 확정본 전문을 행 번호와 함께 보내 «새 글이 시작하는 행»을 받는다.
+ * 《구조를 통째로 묻기》 (D-125): 권의 확정본 전문을 행 번호와 함께 보내 《새 글이 시작하는 행》을 받는다.
  * 모델은 위치를 만들지 않고 고르기만 한다 — 서버가 실제 행에 대조한 것만 온다. 답은 proposeState.llm에
  * 두고, _proposeBoundaries가 규칙 후보와 합쳐 ③에 세운다. 저장은 「적용」이 한다.
  */
@@ -1255,7 +1255,7 @@ async function _askLlmStructure() {
       const fixed = d.title_fixed ? ` · 제목을 행 글자로 바꾼 것 ${d.title_fixed}` : "";
       const dropped = d.dropped ? ` · 실제 행이 아니라 버린 것 ${d.dropped}` : "";
       out.textContent = props.length
-        ? `모델(${d.model || "?"})이 가리킨 ${d.said}자리 중 ${props.length}개가 실제 행과 맞아 ③에 «LLM 구조»로 섰습니다 (${sent}${fixed}${dropped})` +
+        ? `모델(${d.model || "?"})이 가리킨 ${d.said}자리 중 ${props.length}개가 실제 행과 맞아 ③에 《LLM 구조》로 섰습니다 (${sent}${fixed}${dropped})` +
           (d.error ? ` — 일부 실패: ${d.error}` : "")
         : d.error
           ? `LLM 실패: ${d.error} — 「모델」에서 다른 모델을 골라 다시 물으세요 (실측: 답 대신 영문 추론을 써 내려가는 모델이 있습니다)`
@@ -1266,7 +1266,7 @@ async function _askLlmStructure() {
   }
 }
 
-/** 이 후보를 모델이 «글의 시작»으로 가리켰는가 (D-125). */
+/** 이 후보를 모델이 《글의 시작》으로 가리켰는가 (D-125). */
 function _isLlmProposal(p) {
   const rs = p.reasons || [];
   return rs.includes("llm:structure") || rs.includes("jev:structure") || rs.includes("toc:jev");
@@ -1321,8 +1321,8 @@ function _mergeLlmProposals(data, docId, partId) {
 
 /**
  * 목차에는 있으나 본문에서 대조 못 한 항목(D-122 덧붙임 2026-09-11). 입력: 상자·unmatched 목록. 출력: 없음.
- * 제목마다 «비슷한 행» 후보(서버 locate_title, 느슨한 유사도·순서 무시)를 접어 두고, 「여기서 시작」을 누르면
- * 그 자리가 ③의 후보로 선다(체크된 채, «목차·찾아 넣음»). 저장은 여전히 「적용」 — 자동으로 경계가 되지 않는다.
+ * 제목마다 《비슷한 행》 후보(서버 locate_title, 느슨한 유사도·순서 무시)를 접어 두고, 「여기서 시작」을 누르면
+ * 그 자리가 ③의 후보로 선다(체크된 채, 《목차·찾아 넣음》). 저장은 여전히 「적용」 — 자동으로 경계가 되지 않는다.
  */
 function _renderUnmatchedToc(box, un) {
   box.style.display = un.length ? "" : "none";
@@ -1500,10 +1500,10 @@ async function _loadSignals() {
     signalState.partId = partId;
     const saved = d.saved_rules;
     const ids = new Set(d.signals.map((s) => s.id));
-    // «저장된 설정»은 origin이 있을 때만이 아니다 — D-116 전에 저장한 표제 어휘·스위치도 그렇다
+    // 《저장된 설정》은 origin이 있을 때만이 아니다 — D-116 전에 저장한 표제 어휘·스위치도 그렇다
     // (서버 rules_are_empty와 같은 판정). 없으면 서버가 권고에서 만든 recommended_rules를 따른다 —
     // 주 신호를 하나도 권고하지 못한 표본에서 서버는 주 신호를 기본값(켬)으로 두는데, 화면이
-    // recommended 표시만 보고 다 끄면 「전부 적용」이 «적용할 구간이 없습니다»로 끝난다(Codex 지적).
+    // recommended 표시만 보고 다 끄면 「전부 적용」이 《적용할 구간이 없습니다》로 끝난다(Codex 지적).
     // 서버 rules_are_empty와 같은 판정 — indent_alone만 켠 저장본도 저장본이다(Codex 지적)
     const hasSaved = !!saved && !!(saved.origin || saved.indent_alone || _LIST_TOGGLES.some((t) => saved[t]?.length) || Object.keys(saved.signals || {}).length);
     const base = hasSaved ? saved : d.recommended_rules;
@@ -1536,7 +1536,7 @@ async function _loadSignals() {
  * 규칙(전체) → 화면의 체크 상태·손으로 넣은 행·참고 칸. 입력: 규칙. 출력: 없음.
  *
  * 처음 읽을 때(저장된 규칙 또는 권고)와 「말로 넣기」가 돌려준 규칙이 같은 길을 지난다(D-122).
- * 행은 «칸+값»으로 맞춘다 — 같은 글자라도 어휘(head_words)와 접은 꼴(head_templates)은 다른 규칙이다.
+ * 행은 《칸+값》으로 맞춘다 — 같은 글자라도 어휘(head_words)와 접은 꼴(head_templates)은 다른 규칙이다.
  */
 function _checkFromRules(base) {
   const d = signalState.data;
@@ -1586,7 +1586,7 @@ function _checkFromRules(base) {
   _rulesToForm(base);
 }
 
-/** 저장이 끝났다는 것을 요약 줄이 말하게 한다 — 「적용」 뒤에도 «아직 저장 안 됨»이 남으면 안 된다. */
+/** 저장이 끝났다는 것을 요약 줄이 말하게 한다 — 「적용」 뒤에도 《아직 저장 안 됨》이 남으면 안 된다. */
 function _markRulesSaved(saved) {
   if (signalState.data) signalState.data.saved_rules = saved;
   signalState.draft = saved;
@@ -1603,14 +1603,14 @@ function _renderSignals() {
   const list = document.getElementById("comp-signals-list");
   if (!list) return;
   list.innerHTML = "";
-  // 주 신호(혼자 후보를 만드는 것)를 앞에, 보조를 뒤에 — 점수 순서대로 섞이면 «무엇이 규약인가»가 안 보인다
+  // 주 신호(혼자 후보를 만드는 것)를 앞에, 보조를 뒤에 — 점수 순서대로 섞이면 《무엇이 규약인가》가 안 보인다
   const order = { visual: 0, primary: 1, aux: 2 };
   const rows = _signalRows().sort((a, b) => (order[a.group] ?? 1) - (order[b.group] ?? 1));
   if (!rows.length) {
     list.innerHTML = '<div class="placeholder">되풀이되는 표지를 찾지 못했습니다. 어휘를 직접 더하거나 목차를 쓰세요.</div>';
   }
   const maxScore = Math.max(0.01, ...rows.map((r) => r.score || 0));
-  // 켠 것·손으로 넣은 것·권고된 것만 펼쳐 둔다. 나머지는 «센 근거»이지 규칙이 아니므로 접는다 —
+  // 켠 것·손으로 넣은 것·권고된 것만 펼쳐 둔다. 나머지는 《센 근거》이지 규칙이 아니므로 접는다 —
   // 종류를 없앤 뒤(D-119) 발견기가 스무 줄 넘게 세는 책이 있어 답이 묻혔다(2026-09-08 지적).
   const open = rows.filter((r) => signalState.checked.has(r.id) || r.manual || r.recommended);
   const folded = rows.filter((r) => !open.includes(r));
@@ -1723,7 +1723,7 @@ function _signalRowEl(r, maxScore) {
     rm.addEventListener("click", () => {
       signalState.manual = signalState.manual.filter((m) => m.id !== r.id);
       signalState.checked.delete(r.id);
-      // 목록 밖 스위치 행을 지우면 «저장에서 꺼 둠»도 지운다 — 기본(켬)으로 돌아간다
+      // 목록 밖 스위치 행을 지우면 《저장에서 꺼 둠》도 지운다 — 기본(켬)으로 돌아간다
       if (r.toggle.startsWith("signals.") && signalState.data?.saved_rules?.signals) delete signalState.data.saved_rules.signals[r.id];
       signalState.touched = true;
       _renderSignals();
@@ -1791,13 +1791,13 @@ const proposeState = {
   levels: new Map(), // 자리 키 → 사람이 바꾼 깊이
   roles: new Map(), // 자리 키 → 사람이 바꾼 역할
   toc: null, // {pages, entries} — 목차 감지로 확인한 것. null이면 서버가 규칙으로 자동
-  llm: null, // {docId, partId, proposals, meta} — «구조를 통째로 묻기»의 답(D-125). 규칙 후보와 합쳐 ③에 선다
+  llm: null, // {docId, partId, proposals, meta} — 《구조를 통째로 묻기》의 답(D-125). 규칙 후보와 합쳐 ③에 선다
   topN: null, // 모델 후보를 몇 개까지 볼지(null = 전부). 확률 내림차순으로 자른다 — 문턱이 아니라 개수다
   located: null, // {docId, partId, proposals} — 목차에는 있으나 대조 못 한 항목을 사람이 찾아 넣은 자리(D-122 덧붙임)
   unmatchedOpen: null, // 펼쳐 둔 못 찾은 항목의 index
   lastClicked: null, // 마지막으로 누른 행(자리 키) — 도구가 이 행 아래에 뜬다(D-122 덧붙임 2)
   escExport: null, // {key, chunks:[{label, text}], next} — 애매한 후보 내보내기의 덩어리와 다음에 복사할 차례(D-137)
-  hideSecondNo: false, // 2차 판정이 «아니오»라 한 애매한 후보를 가리는가
+  hideSecondNo: false, // 2차 판정이 《아니오》라 한 애매한 후보를 가리는가
 };
 const flowState = { loading: false }; // ①이 세는 중인가 — 겹쳐 시작하지 않는다
 
@@ -1818,7 +1818,7 @@ async function _detectToc(useLlm) {
   const summary = document.getElementById("comp-toc-summary");
   if (summary) summary.textContent = useLlm ? "목차: LLM이 읽는 중…" : "목차: 규칙으로 찾는 중…";
   proposeState.tocRaw = document.getElementById("comp-toc-pages")?.value || "";
-  // 결과 요약에 «규칙»인지 «LLM»인지 남긴다 — 제안 목록의 「목차 …」 근거가 어디서 왔는지 보이도록
+  // 결과 요약에 《규칙》인지 《LLM》인지 남긴다 — 제안 목록의 「목차 …」 근거가 어디서 왔는지 보이도록
   proposeState.tocSource = useLlm ? "LLM" : "규칙";
   try {
     const llmSel =
@@ -1937,10 +1937,10 @@ function _rulesToForm(rules) {
 }
 
 /**
- * 해제 글자수를 알려 준다. 길면 «골라서 넘긴다»는 것도 함께.
+ * 해제 글자수를 알려 준다. 길면 《골라서 넘긴다》는 것도 함께.
  *
  * 왜 필요한가: 한국고전종합DB 해제는 2만 자가 넘는다(운양집 23,894자 실측). 통째로 붙여
- * 넣는 것이 맞는데, 그러면 «너무 길어서 잘리지 않나»가 걱정된다. 저장은 통째로 하고
+ * 넣는 것이 맞는데, 그러면 《너무 길어서 잘리지 않나》가 걱정된다. 저장은 통째로 하고
  * 프롬프트에 넣을 때만 권별 서술을 골라 8,000자로 간추린다는 것을 여기서 알린다.
  */
 function _updateReferenceCount() {
@@ -1958,11 +1958,11 @@ function _updateReferenceCount() {
 }
 
 /**
- * «지금 경계» — 이미 저장된 경계를 편성 탭에도 띄운다.
+ * 《지금 경계》 — 이미 저장된 경계를 편성 탭에도 띄운다.
  *
  * 왜 필요한가: 편성 탭을 열면 「경계 제안」을 누르기 전까지 화면이 비어 있었다. 저장된 것은
- * 사이드바 「내용」에만 있어서, 양쪽이 어긋나 보이고 «매번 새로 제안해서 적용해야 하나»로
- * 읽혔다(사용자 지적 2026-09-04). 제안은 «새로 훑어 보는 것»이고, 이미 한 일은 여기 있다.
+ * 사이드바 「내용」에만 있어서, 양쪽이 어긋나 보이고 《매번 새로 제안해서 적용해야 하나》로
+ * 읽혔다(사용자 지적 2026-09-04). 제안은 《새로 훑어 보는 것》이고, 이미 한 일은 여기 있다.
  *
  * 사이드바와 같은 것을 가리킨다 — 행을 누르면 같은 단위가 골라지고(unit-selected) 그 쪽으로 간다.
  */
@@ -2002,7 +2002,7 @@ async function _renderCurrentBoundaries() {
     list.innerHTML = "";
     if (!rows.length) {
       list.innerHTML =
-        '<div class="placeholder">아직 경계가 없습니다. 아래 ①②③으로 세우거나, 사이드바 「내용」의 «＋ 경계 넣기»로 첫 경계를 놓으세요.</div>';
+        '<div class="placeholder">아직 경계가 없습니다. 아래 ①②③으로 세우거나, 사이드바 「내용」의 《＋ 경계 넣기》로 첫 경계를 놓으세요.</div>';
       return;
     }
     const selected = typeof currentUnitId === "function" ? currentUnitId() : null;
@@ -2116,7 +2116,7 @@ function _isProposalBoundary(b) {
 
 /**
  * 저장된 경계를 ③의 행으로 합친다(D-122 덧붙임 2). 입력: propose 응답. 출력: 없음(data를 고친다).
- * 같은 자리의 후보가 있으면 그 행에 «지금 경계» 표지를 얹고 제목·역할·깊이는 저장된 것으로(사람이 확정한
+ * 같은 자리의 후보가 있으면 그 행에 《지금 경계》 표지를 얹고 제목·역할·깊이는 저장된 것으로(사람이 확정한
  * 것이다). 없으면 행을 더한다. 행 목록(data.lines)에 없는 자리(목차 쪽 등)는 넣지 않는다 — 그런 경계는
  * 「적용」이 건드리지 않는다(replace="listed"는 지목한 id만 지운다).
  */
@@ -2187,7 +2187,7 @@ async function _proposeBoundaries() {
     if (seq !== proposeState.seq) return;
   }
   const rules = _rulesFromForm();
-  const digest = _formDigest(rules); // «보낸 것»의 지문 — 응답 뒤의 폼이 아니라
+  const digest = _formDigest(rules); // 《보낸 것》의 지문 — 응답 뒤의 폼이 아니라
   try {
     const res = await fetch(`/api/documents/${encodeURIComponent(docId)}/segmentation/propose`, {
       method: "POST",
@@ -2234,7 +2234,7 @@ async function _proposeBoundaries() {
     proposeState.levels = same ? keep(proposeState.levels) : new Map();
     proposeState.roles = same ? keep(proposeState.roles) : new Map();
     proposeState.selected = new Set([...proposeState.selected].filter((k) => keys.has(k)));
-    // «바뀐 것»의 기준은 따로 들고 있지 않는다 — 늘 «지금 저장된 경계»(compState.currentBoundaries)와
+    // 《바뀐 것》의 기준은 따로 들고 있지 않는다 — 늘 《지금 저장된 경계》(compState.currentBoundaries)와
     // 체크를 `_planApply`로 견준다(2026-10-05: 저장된 경계가 없을 때 accept 후보를 세던 옛 기준이
     // 「적용」과 어긋났다)
     _renderProposals();
@@ -2279,7 +2279,7 @@ function _reasonChip(r) {
   return s;
 }
 
-/** 목차 대응이거나 卷 표제 — «목차 항목만» 기본 선택에서 살아남는 것들. */
+/** 목차 대응이거나 卷 표제 — 《목차 항목만》 기본 선택에서 살아남는 것들. */
 function _isTocProposal(p) {
   if (p.kind === "volume") return true; // 卷이 빠지면 트리에 묶음이 없다
   return (p.reasons || []).some((r) => r.startsWith("toc:"));
@@ -2304,7 +2304,7 @@ function _updateStats() {
     (data.stats.suppressed ? ` · 억제 ${data.stats.suppressed}` : "") +
     (data.stats.llm ? ` · LLM ${data.stats.llm.added + data.stats.llm.joined}` : "");
   // 판정 모델의 애매한 대역(Jev 1차 거름망) — 버리지도 확정하지도 않은 자리. 체크 해제로 서고,
-  // 고르는 일은 사람이 한다. 문턱 아래(규칙 후보)와 섞지 않는다: 이쪽은 «모델이 반쯤 가리킨 자리»다
+  // 고르는 일은 사람이 한다. 문턱 아래(규칙 후보)와 섞지 않는다: 이쪽은 《모델이 반쯤 가리킨 자리》다
   const escalated = data.proposals.filter(_isEscalated).length;
   if (escalated) {
     const eg = document.createElement("button");
@@ -2351,7 +2351,7 @@ function _updateStats() {
       stats.appendChild(hn);
     }
   }
-  // 문턱 아래 후보는 기본으로 숨긴다 — 보이는 목록은 «승인 후보»여야 읽힌다
+  // 문턱 아래 후보는 기본으로 숨긴다 — 보이는 목록은 《승인 후보》여야 읽힌다
   const rejected = data.proposals.filter((p) => !p.accepted && !_isEscalated(p)).length;
   if (rejected) {
     const tg = document.createElement("button");
@@ -2367,7 +2367,7 @@ function _updateStats() {
   }
 }
 
-/** 모델이 확률을 준 후보만 확률 내림차순으로. 출력: [키] — «상위 몇 개»가 이 순서로 자른다. */
+/** 모델이 확률을 준 후보만 확률 내림차순으로. 출력: [키] — 《상위 몇 개》가 이 순서로 자른다. */
 function _modelRanked(proposals) {
   return proposals
     .filter((p) => typeof p.prob === "number")
@@ -2411,7 +2411,7 @@ function _renderTopNBar(ranked) {
 
 /**
  * ①의 어긋남 한 줄 — 규칙과 판정 모델이 얼마나 다른가. **정답 없이 재는 값이다.**
- * 밀도비가 크면 «둘 중 하나가 못 보고 있다»는 뜻이지만 **어느 쪽인지는 말해 주지 않는다**
+ * 밀도비가 크면 《둘 중 하나가 못 보고 있다》는 뜻이지만 **어느 쪽인지는 말해 주지 않는다**
  * (운양집에서는 규칙이 못 본 것이었지만, 그것은 정답을 봤기 때문에 아는 것이다).
  * 그래서 아무것도 자동으로 바꾸지 않고 사람이 표본을 볼 자리만 알린다.
  * 경계값(2배·80%)은 책 둘에서 나온 임시값이다.
@@ -2419,7 +2419,7 @@ function _renderTopNBar(ranked) {
 function _renderDivergence(proposals) {
   const box = document.getElementById("comp-divergence");
   if (!box) return;
-  // 모델이 «찾은» 자리는 확신 대역(accept)이다. band가 없는 옛 응답만 예전 기준(0.7)으로 센다
+  // 모델이 《찾은》 자리는 확신 대역(accept)이다. band가 없는 옛 응답만 예전 기준(0.7)으로 센다
   const model = proposals.filter((p) => typeof p.prob === "number" &&
     (p.band ? p.band === "accept" : p.prob >= 0.7));
   if (!model.length) {
@@ -2442,7 +2442,7 @@ function _renderDivergence(proposals) {
 
 /**
  * 애매한 후보 내보내기 (D-137). 지시문 + 후보(앞 4행·뒤 2행 문맥, 확률 없음)를 100개씩 글 덩어리로 받아
- * 한 번 누를 때마다 다음 덩어리를 클립보드에 복사한다(단추에 «1/3»). **앱은 모델을 부르지 않는다** —
+ * 한 번 누를 때마다 다음 덩어리를 클립보드에 복사한다(단추에 《1/3》). **앱은 모델을 부르지 않는다** —
  * 사람이 고른 채팅 LLM에 붙여 넣는다. 목록이 바뀌면(다시 판정·체크 변화와 무관, 애매한 자리 자체가 바뀌면)
  * 처음부터 다시 받는다.
  */
@@ -2504,8 +2504,8 @@ function _toggleEscalateImport(open) {
 
 /**
  * 판정 들이기 (D-137). 서버가 답을 내보낸 후보에 대조한다(없는 id 거부·빠진 id 누락·모양 틀림 건너뜀).
- * 결과는 **체크 제안**뿐이다: «예» → 체크(대역은 그대로 escalate, «2차: 예» 표시), «아니오» → 체크 해제 +
- * «2차: 아니오» 표시. 저장은 「적용」.
+ * 결과는 **체크 제안**뿐이다: 《예》 → 체크(대역은 그대로 escalate, 《2차: 예》 표시), 《아니오》 → 체크 해제 +
+ * 《2차: 아니오》 표시. 저장은 「적용」.
  */
 async function _importEscalate() {
   const out = document.getElementById("comp-escalate-out");
@@ -2561,9 +2561,9 @@ async function _loadSavedEscalate() {
 
 /**
  * 2차 판정을 지금 ③의 애매한 후보에 얹는다. 입력: {id: {start, conf}}.
- * 출력: {yes, no, absent, checked, hidden} — yes는 «예» 답을 얹은 자리 수, checked는 그 가운데 **그린 뒤에도
+ * 출력: {yes, no, absent, checked, hidden} — yes는 《예》 답을 얹은 자리 수, checked는 그 가운데 **그린 뒤에도
  * 실제로 체크된** 수, hidden은 「상위 N」 손잡이가 가려 체크가 풀린 수.
- * 왜 따로 세는가: _renderProposals가 손잡이 밖 후보의 체크를 푼다. 예전에는 «예 N»만 말해 사람이 N개가
+ * 왜 따로 세는가: _renderProposals가 손잡이 밖 후보의 체크를 푼다. 예전에는 《예 N》만 말해 사람이 N개가
  * 체크된 줄 알았는데 실제 체크는 그보다 적었다(「적용」은 체크된 것만 저장한다).
  * 애매한 후보(_isEscalated)에만 얹는다 — 확신 후보·규칙 후보의 체크를 2차 답이 바꾸지 않는다.
  */
@@ -2595,7 +2595,7 @@ function _applySecondVerdicts(verdicts) {
   return r;
 }
 
-/** «예» 결과 조각 — 답의 «예» 수와 실제로 체크된 수를 함께. 입력: 답의 예 수, _applySecondVerdicts 결과. */
+/** 《예》 결과 조각 — 답의 《예》 수와 실제로 체크된 수를 함께. 입력: 답의 예 수, _applySecondVerdicts 결과. */
 function _secondYesText(nYes, applied) {
   if (!nYes) return "예 0";
   if (applied.checked === nYes) return `예 ${nYes}(체크 ${applied.checked})`;
@@ -2648,7 +2648,7 @@ function _renderProposals() {
     if (hidden.has(k)) continue; // 손잡이가 가린 모델 후보
     if (!p.accepted && !proposeState.checked.has(k) &&
         !(_isEscalated(p) ? proposeState.showEscalate : proposeState.showRejected)) continue;
-    // 2차 판정이 «아니오»라 한 자리는 손잡이로 가린다 — 체크된 것(사람이 다시 고른 것)은 가리지 않는다
+    // 2차 판정이 《아니오》라 한 자리는 손잡이로 가린다 — 체크된 것(사람이 다시 고른 것)은 가리지 않는다
     if (proposeState.hideSecondNo && _isEscalated(p) && p.second === "no" && !proposeState.checked.has(k)) continue;
     proposeState.visible.push(k);
     const row = document.createElement("div");
@@ -2780,7 +2780,7 @@ function _bindRowTools() {
 
 /**
  * 도구 요소를 돌려준다 — 없으면(목록을 innerHTML로 다시 쓰다 함께 지워졌으면) 보관함에 원본 markup으로 다시
- * 만들고 손을 단다. 사용자가 「여기서 시작」·「후보 보기」 뒤에 «도구가 안 뜬다»고 한 버그(2026-09-11)의 안전망.
+ * 만들고 손을 단다. 사용자가 「여기서 시작」·「후보 보기」 뒤에 《도구가 안 뜬다》고 한 버그(2026-09-11)의 안전망.
  */
 function _ensureRowTools() {
   let tools = document.getElementById("comp-batch-tools");
@@ -2810,8 +2810,8 @@ function _parkRowTools() {
 }
 
 /**
- * 도구를 마지막으로 누른 행 바로 아래에 놓는다(D-122 덧붙임 2). 여러 행을 잡았으면 «N행에:».
- * 왜: «선택»이라는 상태를 배우지 않아도, 누른 자리에서 바로 고칠 수 있어야 한다(사용자 지적 2026-09-11).
+ * 도구를 마지막으로 누른 행 바로 아래에 놓는다(D-122 덧붙임 2). 여러 행을 잡았으면 《N행에:》.
+ * 왜: 《선택》이라는 상태를 배우지 않아도, 누른 자리에서 바로 고칠 수 있어야 한다(사용자 지적 2026-09-11).
  */
 function _placeRowTools() {
   const tools = _ensureRowTools();
@@ -2904,16 +2904,16 @@ async function _batchSuppress() {
 }
 
 /**
- * 「적용」이 쓸 것을 한 곳에서 계산한다 — «바뀐 것»과 「적용」의 요청이 **같은 함수**를 쓴다.
+ * 「적용」이 쓸 것을 한 곳에서 계산한다 — 《바뀐 것》과 「적용」의 요청이 **같은 함수**를 쓴다.
  *
- * 왜 하나로 묶는가: 예전 «바뀐 것»은 저장된 경계가 없을 때 «판정의 확신 후보(accept)»를 셌고,
- * 「적용」은 «체크된 후보»를 저장했다. 애매한 후보를 「판정 들이기」나 손으로 체크하면 화면은
- * «새로 잡히는 자리 27»인데 실제로는 45개가 서는 일이 생겼다(2026-10-05 headless 확인). 체크
+ * 왜 하나로 묶는가: 예전 《바뀐 것》은 저장된 경계가 없을 때 《판정의 확신 후보(accept)》를 셌고,
+ * 「적용」은 《체크된 후보》를 저장했다. 애매한 후보를 「판정 들이기」나 손으로 체크하면 화면은
+ * 《새로 잡히는 자리 27》인데 실제로는 45개가 서는 일이 생겼다(2026-10-05 headless 확인). 체크
  * 상태가 곧 트리다(D-121) — 그러니 미리 보기도 체크에서만 나와야 하고, 두 곳이 따로 계산하면
  * 언젠가 다시 어긋난다.
  *
  * 숫자는 서버와 같은 식으로 센다(composition.py `_span_key`·`_boundary_key`·`_replace_boundaries`):
- *  - 새로 세움 = 구간 중 «같은 자리·같은 깊이»에 살아 있는 경계가 없는 것(서버 insert_boundary가
+ *  - 새로 세움 = 구간 중 《같은 자리·같은 깊이》에 살아 있는 경계가 없는 것(서버 insert_boundary가
  *    같은 자리·깊이면 옛것을 돌려주므로 새로 서지 않는다). 깊이만 바꾼 행은 새 경계로 선다 — 서버가
  *    실제로 그렇게 쓰기 때문에 미리 보기도 그렇게 말한다.
  *  - 지움 = 체크를 뺀 저장된 행(drop) 중 살아 있고 구간과 같은 자리·깊이가 아닌 것.
@@ -2958,7 +2958,7 @@ function _planApply(data, checked, boundaries) {
         end });
     });
   }
-  // ③이 «지금 경계 + 새 후보»이므로 지울 것은 «체크를 뺀 저장된 행»뿐이다(D-122 덧붙임 2). 목록에 없던
+  // ③이 《지금 경계 + 새 후보》이므로 지울 것은 《체크를 뺀 저장된 행》뿐이다(D-122 덧붙임 2). 목록에 없던
   // 경계(행 목록 밖)는 건드리지 않는다
   const drop = (data.proposals || []).filter((p) => p.boundary_id && !checked.has(_propKey(p))).map((p) => p.boundary_id);
   // 서버와 같은 4칸 키(쪽·행·글자·깊이). 깊이가 없으면 卷은 1, 나머지는 2(_span_key)
@@ -2979,7 +2979,7 @@ function _planApply(data, checked, boundaries) {
 }
 
 /**
- * «바뀐 것» (D-121 관문): 「적용」하면 정확히 무엇이 서고 무엇이 지워지는지. `_planApply`가 계산한 것을
+ * 《바뀐 것》 (D-121 관문): 「적용」하면 정확히 무엇이 서고 무엇이 지워지는지. `_planApply`가 계산한 것을
  * 그대로 그린다 — 미리 보기와 저장이 다른 식을 쓰면 다시 어긋난다(2026-10-05).
  * 체크가 바뀔 때마다(손·판정 들이기·저장된 판정 불러오기·상위 N 손잡이) `_refreshApplyState`가 부른다.
  */
@@ -3029,7 +3029,7 @@ function _renderDiff() {
 
 /**
  * 「적용」 단추의 상태. ②의 칸이 후보를 셀 때와 다르면 후보가 낡은 것이라 막는다 —
- * 사람이 규칙을 고쳐 놓고 옛 후보를 적용하면 «말한 것과 다른 일»이 된다(D-122).
+ * 사람이 규칙을 고쳐 놓고 옛 후보를 적용하면 《말한 것과 다른 일》이 된다(D-122).
  */
 function _refreshApplyState() {
   const btn = document.getElementById("comp-propose-apply-btn");
@@ -3044,7 +3044,7 @@ function _refreshApplyState() {
   const stale = _formDigest() !== proposeState.rulesDigest;
   btn.disabled = stale || !proposeState.checked.size;
   if (note) note.textContent = stale ? "규칙이 바뀌었습니다 — 「후보 보기」로 다시 세우세요" : proposeState.checked.size ? "" : "체크한 후보가 없습니다";
-  _renderDiff(); // 체크가 곧 «바뀐 것»이다 — 저장된 경계가 있든 없든(2026-10-05)
+  _renderDiff(); // 체크가 곧 《바뀐 것》이다 — 저장된 경계가 있든 없든(2026-10-05)
 }
 
 /**
@@ -3137,7 +3137,7 @@ function _renderRuleCandidates(d) {
  * ① 「말로 넣기」 — 연구자가 쓴 문장을 규칙 변경으로 옮긴다 (D-121 두 번째 입구). 저장하지 않는다.
  *
  * 옮긴 것은 ②의 체크 상태·손으로 넣은 행·참고 칸에 바로 들어가고(_checkFromRules) ③이 다시 선다 —
- * «바뀐 것»이 거기서 보인다. 옮기지 못한 말은 반드시 보인다: 비슷한 칸으로 바꿔치기하면 사람은
+ * 《바뀐 것》이 거기서 보인다. 옮기지 못한 말은 반드시 보인다: 비슷한 칸으로 바꿔치기하면 사람은
  * 말했다고 여기는데 시스템은 다른 일을 한다.
  */
 async function _rulesFromWords() {
@@ -3272,7 +3272,7 @@ function _renderTalk(talk) {
     }
   }
   if (talk.note) line(talk.note, "");
-  if (acc.length) line("→ ②에 반영했습니다. ③에서 «바뀐 것»을 보고 「적용」하세요.");
+  if (acc.length) line("→ ②에 반영했습니다. ③에서 《바뀐 것》을 보고 「적용」하세요.");
 }
 
 /**
@@ -3288,7 +3288,7 @@ async function _applyProposals() {
     _refreshApplyState();
     return;
   }
-  // «바뀐 것»과 같은 함수로 계산한다 — 미리 보기와 저장이 갈라지지 않게(2026-10-05)
+  // 《바뀐 것》과 같은 함수로 계산한다 — 미리 보기와 저장이 갈라지지 않게(2026-10-05)
   const { spans, drop } = _planApply(data, proposeState.checked, compState.currentBoundaries);
   if (!spans.length) {
     showToast("체크한 후보가 없습니다.", "warning");
@@ -3306,7 +3306,7 @@ async function _applyProposals() {
     });
   if (btn) btn.disabled = true;
   try {
-    // 무엇을 지우는지 실제 수로 묻는다 — «손으로 넣은 것도»가 아니라 «M개».
+    // 무엇을 지우는지 실제 수로 묻는다 — 《손으로 넣은 것도》가 아니라 《M개》.
     // 세지 못했으면 멈춘다 — 확인 없이 지우는 길이 되면 안 된다(Codex 지적)
     const dryRes = await post({ dry_run: true });
     const dry = await dryRes.json().catch(() => ({}));
@@ -3323,7 +3323,7 @@ async function _applyProposals() {
       (result.role_changed ? ` · 역할 ${result.role_changed}개 바꿈` : "") + (result.rules ? " · 규칙 저장" : ""), "success");
     if (result.rules_error) showToast(result.rules_error, "warning");
     else _markRulesSaved(result.rules || rules);
-    // 적용한 것이 다음 «바뀐 것»의 기준이 된다 — 저장된 경계를 다시 읽어 ③을 그 위에 다시 세운다
+    // 적용한 것이 다음 《바뀐 것》의 기준이 된다 — 저장된 경계를 다시 읽어 ③을 그 위에 다시 세운다
     proposeState.rulesDigest = _formDigest();
     await _loadCompositionData();
     if (typeof refreshContentsTree === "function") refreshContentsTree();

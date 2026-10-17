@@ -265,7 +265,7 @@ def _load_page_blocks(interp_path: Path, page_num: int, part_id: str = "main") -
     """
     try:
         units = list_entities(interp_path, "unit")
-    except Exception:  # noqa: BLE001 — 단위를 못 읽으면 «없음»과 같이 다룬다
+    except Exception:  # noqa: BLE001 — 단위를 못 읽으면 《없음》과 같이 다룬다
         units = []
     blocks = []
     for u in units:
@@ -498,13 +498,13 @@ def _merge_generated_into_page(
 
     왜 다시 읽는가(Codex 교차검증 2026-09-16 ①):
         생성 라우트는 쪽 파일을 읽고 → LLM을 수 초~수십 초 기다리고 → 저장한다. 기다리는 동안
-        사람이 같은 쪽에 넣은 주석은 «아까 읽은» 데이터에 없으므로, 그것을 저장하면 조용히
+        사람이 같은 쪽에 넣은 주석은 《아까 읽은》 데이터에 없으므로, 그것을 저장하면 조용히
         사라진다. 저장 직전에 파일을 다시 읽어 지금 목록 위에 병합하면 잃지 않는다.
 
     잠금은 두지 않는다 — 두 안을 견줬다:
         (가) 쪽 파일마다 asyncio.Lock. (나) 다시 읽기만.
         라우트는 전부 `async def`이고 이 함수 안에 `await`가 없어, 단일 이벤트 루프에서는
-        «다시 읽기 → 병합 → 저장» 사이에 다른 요청이 끼어들 수 없다. 그래서 (나)로 충분하고
+        《다시 읽기 → 병합 → 저장》 사이에 다른 요청이 끼어들 수 없다. 그래서 (나)로 충분하고
         더 단순하다. 이 함수 안에 await를 넣게 되면 그때 (가)로 올린다.
     """
     fresh = load_annotations(interp_path, part_id, page_num)
@@ -927,7 +927,7 @@ async def api_dict_generate_stage1(
         llm_router = _get_llm_router()
         # 사용자가 고른 공급자·모델은 **호출 인자로** 넘긴다.
         # 예전에는 라우터 객체에 속성으로 대입했는데 LlmRouter에는 그런 속성이
-        # 없어 조용히 무시됐다 — 화면에서 «Claude로 돌려라»를 골라도 기본
+        # 없어 조용히 무시됐다 — 화면에서 《Claude로 돌려라》를 골라도 기본
         # 폴백 순서대로 돌았고, 오류도 나지 않아 알 길이 없었다(D-069).
         force_provider = body.force_provider if body else None
         force_model = body.force_model if body else None
@@ -991,7 +991,7 @@ async def api_dict_generate_stage2(
         llm_router = _get_llm_router()
         # 사용자가 고른 공급자·모델은 **호출 인자로** 넘긴다.
         # 예전에는 라우터 객체에 속성으로 대입했는데 LlmRouter에는 그런 속성이
-        # 없어 조용히 무시됐다 — 화면에서 «Claude로 돌려라»를 골라도 기본
+        # 없어 조용히 무시됐다 — 화면에서 《Claude로 돌려라》를 골라도 기본
         # 폴백 순서대로 돌았고, 오류도 나지 않아 알 길이 없었다(D-069).
         force_provider = body.force_provider if body else None
         force_model = body.force_model if body else None
@@ -1011,7 +1011,7 @@ async def api_dict_generate_stage2(
             existing_annotations=existing_annotations,
             force_provider=force_provider,
             force_model=force_model,
-            merge=False,  # 병합은 «지금» 파일 위에 — 아래 헬퍼가 한다
+            merge=False,  # 병합은 《지금》 파일 위에 — 아래 헬퍼가 한다
         )
 
         merged = _merge_generated_into_page(
@@ -1056,7 +1056,7 @@ async def api_dict_generate_stage3(
         llm_router = _get_llm_router()
         # 사용자가 고른 공급자·모델은 **호출 인자로** 넘긴다.
         # 예전에는 라우터 객체에 속성으로 대입했는데 LlmRouter에는 그런 속성이
-        # 없어 조용히 무시됐다 — 화면에서 «Claude로 돌려라»를 골라도 기본
+        # 없어 조용히 무시됐다 — 화면에서 《Claude로 돌려라》를 골라도 기본
         # 폴백 순서대로 돌았고, 오류도 나지 않아 알 길이 없었다(D-069).
         force_provider = body.force_provider if body else None
         force_model = body.force_model if body else None
@@ -1076,7 +1076,7 @@ async def api_dict_generate_stage3(
             existing_annotations=existing_annotations,
             force_provider=force_provider,
             force_model=force_model,
-            merge=False,  # 병합은 «지금» 파일 위에 — 아래 헬퍼가 한다
+            merge=False,  # 병합은 《지금》 파일 위에 — 아래 헬퍼가 한다
         )
 
         merged = _merge_generated_into_page(
@@ -1131,7 +1131,7 @@ async def api_dict_generate_batch(
         llm_router = _get_llm_router()
         # 사용자가 고른 공급자·모델은 **호출 인자로** 넘긴다.
         # 예전에는 라우터 객체에 속성으로 대입했는데 LlmRouter에는 그런 속성이
-        # 없어 조용히 무시됐다 — 화면에서 «Claude로 돌려라»를 골라도 기본
+        # 없어 조용히 무시됐다 — 화면에서 《Claude로 돌려라》를 골라도 기본
         # 폴백 순서대로 돌았고, 오류도 나지 않아 알 길이 없었다(D-069).
         force_provider = body.force_provider if body else None
         force_model = body.force_model if body else None

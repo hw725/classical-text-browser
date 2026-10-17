@@ -213,8 +213,8 @@ async function _copyDict() {
 }
 
 /**
- * 드롭다운에서 고른 사전을 «활성»으로 한다 — 대조·일괄 교정·LLM 교정이 쓰는 사전.
- * 고르기만 하면 보기·쌍 추가만 그 사전에 가고 «활성»은 그대로였다(B-026).
+ * 드롭다운에서 고른 사전을 《활성》으로 한다 — 대조·일괄 교정·LLM 교정이 쓰는 사전.
+ * 고르기만 하면 보기·쌍 추가만 그 사전에 가고 《활성》은 그대로였다(B-026).
  */
 async function _activateDict() {
   const select = document.getElementById("vm-dict-select");

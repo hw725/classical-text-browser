@@ -42,7 +42,7 @@ import zipfile
 from pathlib import Path
 
 
-# CJK Text Contract E3 — 한국어 Windows 콘솔은 cp949 라 «—»·«✓» 를 print 하면
+# CJK Text Contract E3 — 한국어 Windows 콘솔은 cp949 라 《—》·《✓》 를 print 하면
 # UnicodeEncodeError 로 즉사한다. 이 PC 는 PYTHONUTF8=1 이 박혀 있어 겪지 않는다.
 from core.console import force_utf8_console
 
@@ -210,7 +210,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.cjkvi or args.cjkvi_dir:
         build_cjkvi(args.cjkvi_dir)
     print(
-        "완료. 사전은 «이체자 관리» 화면 목록에 층과 함께 나타난다. "
+        "완료. 사전은 《이체자 관리》 화면 목록에 층과 함께 나타난다. "
         "본문은 어느 사전으로도 바뀌지 않는다."
     )
     return 0

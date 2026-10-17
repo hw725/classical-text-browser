@@ -64,7 +64,7 @@ class LlmRouter:
         self.usage_tracker = UsageTracker(self.config)
 
         # 우선순위 순서 (로컬·구독 → 저렴 → 중간 → 최후).
-        # 구독(OAuth)은 «무료»가 아니라 한도가 있다(D-056)
+        # 구독(OAuth)은 《무료》가 아니라 한도가 있다(D-056)
         self.providers: list[BaseLlmProvider] = [
             OllamaProvider(self.config),  # 1순위: 무료 (로컬 gemma4:e4b)
             OpenAiOAuthProvider(self.config),  # 2순위: 구독 한도 (ChatGPT OAuth 프록시)
@@ -148,7 +148,7 @@ class LlmRouter:
                         "Ollama 서버가 3초 안에 응답하지 않았습니다 — `ollama serve`가 떠 있는지, "
                         "모델을 막 받는 중이 아닌지 확인하세요."
                         if force_provider == "ollama"
-                        else "API 키·네트워크를 확인하세요. 모델 선택을 «자동»으로 두면 "
+                        else "API 키·네트워크를 확인하세요. 모델 선택을 《자동》으로 두면 "
                         "다른 프로바이더로 넘어갑니다."
                     )
                 )
@@ -277,7 +277,7 @@ class LlmRouter:
                         "Ollama 서버가 3초 안에 응답하지 않았습니다 — `ollama serve`가 떠 있는지, "
                         "모델을 막 받는 중이 아닌지 확인하세요."
                         if force_provider == "ollama"
-                        else "API 키·네트워크를 확인하세요. 모델 선택을 «자동»으로 두면 "
+                        else "API 키·네트워크를 확인하세요. 모델 선택을 《자동》으로 두면 "
                         "다른 프로바이더로 넘어갑니다."
                     )
                 )
@@ -374,8 +374,8 @@ class LlmRouter:
         """이미지 분석 호출. supports_image인 provider만 시도.
 
         fallback_on_truncation=False 를 주면 출력 잘림(TRUNCATED_MARK)은 다음
-        프로바이더로 넘기지 않고 그대로 올린다 (D-083). 잘림은 «이 프로바이더가
-        못 쓴다»가 아니라 «예산이 모자랐다»이므로, 사고를 끄고 같은 프로바이더에
+        프로바이더로 넘기지 않고 그대로 올린다 (D-083). 잘림은 《이 프로바이더가
+        못 쓴다》가 아니라 《예산이 모자랐다》이므로, 사고를 끄고 같은 프로바이더에
         다시 묻는 것이 맞다. 그냥 넘기면 무료 로컬 모델의 잘림이 곧바로 유료 API
         호출이 된다 — ollama.py가 경고하는 바로 그 비용 누출이다.
         """
@@ -512,7 +512,7 @@ class LlmRouter:
                 try:
                     provider_models = await provider.list_models()
                     for m in provider_models:
-                        # «cloud»가 붙은 Ollama 모델과 ChatGPT 계정 모델은 무료가 아니라
+                        # 《cloud》가 붙은 Ollama 모델과 ChatGPT 계정 모델은 무료가 아니라
                         # 구독 한도다.
                         # 계정 카드와 같은 규칙(billing_for_model)을 쓴다 — 여기만 달랐다(D-056).
                         if provider.provider_id == "ollama":
@@ -525,7 +525,7 @@ class LlmRouter:
                             cost = "subscription"
                         else:
                             cost = m.get("cost", "paid")
-                        # 은퇴한 클라우드 모델은 «○ (은퇴)»로 보이고 고를 수 없다 — 목록에 있어도
+                        # 은퇴한 클라우드 모델은 《○ (은퇴)》로 보이고 고를 수 없다 — 목록에 있어도
                         # 부르면 410이다(2026-09-11).
                         retired = bool(m.get("retired"))
                         models.append(
@@ -558,7 +558,7 @@ class LlmRouter:
                         "available": available,
                         "display": provider.display_name,
                         # 쓸 수 있을 때의 갈래와 같은 규칙 — ChatGPT 계정은 무료가 아니라
-                        # 구독 한도다(D-056). 이 줄만 «free»로 남아 있었다(2026-10-11 재확인)
+                        # 구독 한도다(D-056). 이 줄만 《free》로 남아 있었다(2026-10-11 재확인)
                         "cost": (
                             "free" if provider.provider_id == "ollama"
                             else "subscription" if provider.provider_id == "openai_oauth"

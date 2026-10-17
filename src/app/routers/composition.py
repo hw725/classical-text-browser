@@ -4,15 +4,15 @@
 
 왜 여기에 따로 있는가:
     v1.3.0까지 편성은 해석 저장소의 엔티티였고 경로도 `/api/interpretations/…`였다.
-    그런데 편성이 하는 일은 «이 원문이 어디서 글이 바뀌는가»를 정하는 것이지 해석이 아니다.
+    그런데 편성이 하는 일은 《이 원문이 어디서 글이 바뀌는가》를 정하는 것이지 해석이 아니다.
     한 문헌에 해석 저장소가 여럿이면 저장소마다 같은 편성을 다시 해야 했고, 화면은 문헌을
     고른 뒤 해석 저장소를 또 골라야 편성 탭이 열렸다. 편성을 문헌으로 옮기면 그 둘이 사라진다 —
     문헌 하나만 고르면 편성까지 가고, 그 문헌의 해석 저장소들은 같은 편성을 공유한다.
     표점·현토·번역·주석부터가 해석 저장소의 일이다.
 
 저장 자리: documents/{doc_id}/boundaries/{part_id}.json (core.boundaries)
-커밋 자리: 그 문헌 저장소. 해석 저장소는 dependency.json의 base_commit으로 «어느 편성을
-          보고 해석했는가»를 가리킨다(fork/upstream).
+커밋 자리: 그 문헌 저장소. 해석 저장소는 dependency.json의 base_commit으로 《어느 편성을
+          보고 해석했는가》를 가리킨다(fork/upstream).
 """
 
 import logging
@@ -72,12 +72,12 @@ class SegmentationApplyRequest(BaseModel):
     part_id: str
     spans: list[SegmentationSpan]
     pages: list[int] | None = None  # 제안 때와 같은 범위여야 행 번호가 맞는다
-    # 적용은 누적이 아니다 — «제안 패널의 체크 상태가 곧 트리»(사용자, 2026-09-03).
+    # 적용은 누적이 아니다 — 《제안 패널의 체크 상태가 곧 트리》(사용자, 2026-09-03).
     # replace="proposal": 전에 제안으로 만든 경계 중 이번 선택에 없는 것은 지운다
     #   (손으로 넣은 것은 둔다).
     # replace="all": 이 권의 살아 있는 경계를 전부 지우고 새로 세운다(자동 트리).
     # replace="none": 예전처럼 더하기만.
-    # replace="listed": 화면이 지목한 id(drop)만 지운다 — ③이 «지금 경계 + 새 후보»가 된 뒤
+    # replace="listed": 화면이 지목한 id(drop)만 지운다 — ③이 《지금 경계 + 새 후보》가 된 뒤
     #   (D-122 덧붙임 2) 체크를 뺀 행이 곧 지울 경계다. 손으로 넣은 것도 지목하면 지운다.
     #   목록에 없던 경계는 건드리지 않는다.
     replace: str = "proposal"
@@ -135,7 +135,7 @@ class SegmentationWordsRequest(BaseModel):
 class SegmentationSignalsLlmRequest(BaseModel):
     """4단 — LLM에 시작 표지의 공통점을 묻는 요청 (D-117). 저장하지 않는다."""
     # 해제는 문헌에 저장되지만, 화면에서 막 붙여 넣고 아직 저장하지 않았을 수 있다 —
-    # 모달이 «해제 N자를 함께 보냅니다»라고 적으므로 온 것을 그대로 쓴다(없으면 저장본)
+    # 모달이 《해제 N자를 함께 보냅니다》라고 적으므로 온 것을 그대로 쓴다(없으면 저장본)
     reference_text: str | None = None
 
     part_id: str
@@ -146,7 +146,7 @@ class SegmentationSignalsLlmRequest(BaseModel):
 
 
 class SegmentationStructureLlmRequest(BaseModel):
-    """구조를 통째로 묻기 (D-125) — 권 전문(텍스트)을 보내 «글이 시작하는 행»을 받는다.
+    """구조를 통째로 묻기 (D-125) — 권 전문(텍스트)을 보내 《글이 시작하는 행》을 받는다.
 
     저장하지 않는다.
     """
@@ -155,12 +155,12 @@ class SegmentationStructureLlmRequest(BaseModel):
     force_provider: str | None = None
     force_model: str | None = None
     reference_text: str | None = None  # 저장 전 해제 — signals/llm과 같은 이유
-    dry_run: bool = False  # True면 모델을 부르지 않고 «몇 행·몇 자·몇 번»만 돌려준다
+    dry_run: bool = False  # True면 모델을 부르지 않고 《몇 행·몇 자·몇 번》만 돌려준다
     max_chars: int | None = None  # 묶음 크기(글자). None이면 core.structure_llm.DEFAULT_MAX_CHARS
     # "llm" = 생성 모델에게 행 번호를 묻는다(D-125). "jev" = 판정 모델이 행마다 고른다.
     # 라우트를 늘리지 않는 까닭: 라우트 수가 문서·기계 검사(D-079)에 걸려 있다.
     engine: str = "llm"
-    match_toc: bool = True  # engine="jev"일 때 총목 항목도 본문 행에 «고르기»로 붙인다(층위 1~2)
+    match_toc: bool = True  # engine="jev"일 때 총목 항목도 본문 행에 《고르기》로 붙인다(층위 1~2)
     # 목차 대조를 후보로 세울 확률 문턱. **None이면 이 책의 답에서 뽑는다**(derive_toc_threshold) —
     # 좋은 문턱의 자리는 책마다 다르고, 상수는 우연히 맞는 자리에 떨어진 것일 뿐이다.
     # 숫자를 주면 그 값으로 고정한다(비교 측정·재현용).
@@ -173,7 +173,7 @@ class EscalateExportRequest(BaseModel):
     part_id: str
     # 화면이 지금 보고 있는 애매한 후보 자리 [{page, line_index}]. None이면 서고 메모(판정 실행 때
     # 적어 둔 것)를 쓴다. 화면이 보내는 것을 우선하는 까닭: 규칙 후보와 합쳐진 뒤의 목록이 사람이
-    # 실제로 보는 «애매한 후보»다.
+    # 실제로 보는 《애매한 후보》다.
     candidates: list[dict] | None = None
     chunk_size: int = 100
     book_type: str | None = None  # "diary"·"collection"·None(둘 다 힌트)
@@ -218,8 +218,8 @@ class BoundaryInsertRequest(BaseModel):
 class SplitUnitRequest(BaseModel):
     """단위 쪼개기 요청 본문.
 
-    쪼개기는 언제나 «기사 **안**을 문단으로 나누는» 일이다 — 별도 기사를 만들지 않는다
-    (사용자 명시 2026-09-03). 기사 단위는 경계 제안·«경계 넣기»가 정한다.
+    쪼개기는 언제나 《기사 **안**을 문단으로 나누는》 일이다 — 별도 기사를 만들지 않는다
+    (사용자 명시 2026-09-03). 기사 단위는 경계 제안·《경계 넣기》가 정한다.
     """
 
     original_unit_id: str
@@ -262,7 +262,7 @@ def _document_head(doc_path) -> str | None:
 def _boundary_rows(
     doc_path, document_id: str, part_id: str | None, include_text: bool = False
 ) -> list[dict]:
-    """경계 색인 «보기» (D-090): 단위를 원본 위치 순서로 늘어놓고 행 앵커를 계산한다.
+    """경계 색인 《보기》 (D-090): 단위를 원본 위치 순서로 늘어놓고 행 앵커를 계산한다.
 
     경계는 별도 데이터가 아니다. 위치의 정본은 경계 목록이고, 행 번호·좌표는 여기서
     계산한다. 그래서 합치기·쪼개기·옮기기 어느 경로로 바꿔도 색인이 어긋나지 않는다.
@@ -442,7 +442,7 @@ def _dangling_tags(doc_id: str, unit_id: str) -> list[str]:
 async def api_segmentation_propose(doc_id: str, body: SegmentationProposeRequest):
     """L4 확정 텍스트에서 글 단위 경계 후보를 제안한다 (D-088). 아무것도 저장하지 않는다.
 
-    목적: 일기·담초처럼 글마다 표제가 서는 문헌에서 «어디서 글이 바뀌는가»를 기계가
+    목적: 일기·담초처럼 글마다 표제가 서는 문헌에서 《어디서 글이 바뀌는가》를 기계가
           먼저 찍고, 사용자가 승인한 것만 단위가 된다.
     입력: part_id, pages(None=전체), rules(None=문헌 설정 → 기본값).
     출력: core.segmentation.propose_boundaries() 결과 + "lines"(화면 표시용 행 목록).
@@ -511,7 +511,7 @@ async def api_segmentation_propose(doc_id: str, body: SegmentationProposeRequest
                 "pages": toc_pages,
                 "entries": [e.to_dict() for e in entries],
                 "matches": toc_matches,
-                # 못 찾은 항목마다 «비슷한 행» 후보 — 화면이 「여기서 시작」으로 넣게 한다
+                # 못 찾은 항목마다 《비슷한 행》 후보 — 화면이 「여기서 시작」으로 넣게 한다
                 # (D-122 덧붙임)
                 "unmatched": [
                     entries[i].to_dict()
@@ -590,7 +590,7 @@ async def api_rules_from_words(doc_id: str, body: SegmentationWordsRequest):
 
     **아무것도 저장하지 않는다.** 경계도 만들지 않는다. 모델은 말을 규칙 칸으로 옮기기만 하고,
     옮기지 못한 말은 unsupported로 그대로 돌려준다 — 비슷한 칸으로 조용히 바꿔치기하지 않는다.
-    어휘를 더하라는 말은 전문에서 세어 «몇 번 나오는지»를 함께 준다(0번이면 이 책의 말이 아니다).
+    어휘를 더하라는 말은 전문에서 세어 《몇 번 나오는지》를 함께 준다(0번이면 이 책의 말이 아니다).
 
     입력: part_id, said(사람이 쓴 문장), force_provider·force_model, use_toc·toc_pages.
     출력: {"rules": 바꾼 규칙 또는 null, "talk": 옮김 결과, "preview": 미리 보기 또는 null}.
@@ -643,7 +643,7 @@ async def api_rules_from_words(doc_id: str, body: SegmentationWordsRequest):
 async def api_segmentation_preview(doc_id: str, body: SegmentationPreviewRequest):
     """규칙을 바꾸면 경계가 어떻게 달라지는지 미리 센다 (D-121). **아무것도 저장하지 않는다.**
 
-    목적: 규칙 변경은 사람·통계·LLM 셋 어디서든 온다. 어디서 왔든 «켜면 이렇게 달라집니다»를
+    목적: 규칙 변경은 사람·통계·LLM 셋 어디서든 온다. 어디서 왔든 《켜면 이렇게 달라집니다》를
           먼저 보이고 사람이 정하게 한다 — 이 프로젝트가 LLM의 말을 세어 확인하는 것과 같은 태도다.
     입력: part_id, rules(바꾸려는 규칙 전체), use_toc·toc_pages(제안 때와 같은 조건으로 견주려고).
     출력: core.rule_preview.preview_rule_change() 결과 + "saved_rules".
@@ -712,7 +712,7 @@ def _toc_signal_for(lines, rules, toc_pages: list[int] | None):
 
 @router.post("/api/documents/{doc_id}/segmentation/signals/llm")
 async def api_segmentation_signals_llm(doc_id: str, body: SegmentationSignalsLlmRequest):
-    """층계 4단 (D-117): 통계가 못 찾은 책 — LLM에 «시작 표지의 공통점»을 묻는다. 저장하지 않는다.
+    """층계 4단 (D-117): 통계가 못 찾은 책 — LLM에 《시작 표지의 공통점》을 묻는다. 저장하지 않는다.
 
     모델은 경계를 찍지 않는다. 표본 행(짧은 행·행갈음 뒤·내려쓴 행 ≤ 80줄)만 보고 정해진
     종류(행머리 어휘·행끝 어휘·기호·없음)로 답하고, 코드가 전문에서 세어 되풀이되는 것만
@@ -740,7 +740,7 @@ async def api_segmentation_signals_llm(doc_id: str, body: SegmentationSignalsLlm
 
     scope = body.scope if body.scope in SAMPLE_SCOPES else "starts"
     if body.dry_run:
-        # 실행 게이트(전역 규칙 11)는 도구 층에 — 보내기 전에 «몇 줄·몇 자»를 화면이 보인다
+        # 실행 게이트(전역 규칙 11)는 도구 층에 — 보내기 전에 《몇 줄·몇 자》를 화면이 보인다
         return {"signals": [], "dry_run": True, **sample_size(lines, rules, scope)}
     rows, meta = await extract_start_patterns_llm(
         lines,
@@ -758,7 +758,7 @@ async def api_segmentation_signals_llm(doc_id: str, body: SegmentationSignalsLlm
 
 
 def _structure_jev(doc_path, body, lines, rules, max_chars: int):
-    """판정 모델(Jev)로 «글이 시작하는 행»을 고르고, 총목이 있으면 그 항목도 본문에 붙인다.
+    """판정 모델(Jev)로 《글이 시작하는 행》을 고르고, 총목이 있으면 그 항목도 본문에 붙인다.
 
     입력: 문헌 경로, 요청, 확정본 행, 규칙, 묶음 글자 수. 출력: 라우트 응답 dict.
 
@@ -778,7 +778,7 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
     )
     from core.toc import detect_toc_pages, extract_toc_entries_rule, match_toc_entries_jev
 
-    # 총목 찾기는 규칙 그대로다(잘 듣는다) — 판정 모델은 «그 항목이 본문 어느 행인가»만 맡는다
+    # 총목 찾기는 규칙 그대로다(잘 듣는다) — 판정 모델은 《그 항목이 본문 어느 행인가》만 맡는다
     page_lines: dict[int, list[str]] = {}
     for ln in lines:
         page_lines.setdefault(ln.page, []).append(ln.text)
@@ -796,7 +796,7 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
     from llm.jev import JevGateExceeded, make_jev_client
     from llm.openrouter_decider import OpenRouterDecisionClient
 
-    # 본문 판정의 주는 Jev, OpenRouter 경유 Perplexity decider v1.1은 «실패한 호출만» 대신 묻는
+    # 본문 판정의 주는 Jev, OpenRouter 경유 Perplexity decider v1.1은 《실패한 호출만》 대신 묻는
     # 폴백이다(D-139, 사용자 결정 2026-10-11). D-136에서는 decider(v1)가 주였으나
     # v1이 OpenRouter에서 폐기됐고(404), v1.1은 질문마다 state를 다시 과금해
     # 책 1권에 Jev의 약 8배($0.19 대 $0.024)인데 기준을 지키는 대역(0.997/0.69)에서
@@ -806,7 +806,7 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
     # 없고 OpenRouter 키만 있으면 같은 Jev를 OpenRouter 경유로 — 전에는 OpenRouter 키를
     # TypeSafe 주소로 보내 401이었다. OpenRouter 키 하나로 decider와 Jev가 둘 다 OpenRouter로
     # 가는 것은 괜찮다(모델이 다르고, 문턱도 모델마다 따로 — judge_thresholds).
-    # 둘 다 서고를 넘긴다 — 설정 «판정 모델»에서 넣은 키(서고 .env)를 찾고
+    # 둘 다 서고를 넘긴다 — 설정 《판정 모델》에서 넣은 키(서고 .env)를 찾고
     # 사용 기록도 서고에 남긴다.
     # 상한: Jev는 목차 + (폴백이 본문 전부를 떠맡는 최악) 만큼을 받아야 게이트에 걸리지 않는다.
     library_root = get_library_path()
@@ -824,8 +824,8 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
         + toc_calls * 400 / 1_000_000 * jev.INPUT_USD_PER_M
     )
     # 폴백(decider)이 본문을 모두 떠맡는 최악의 비용. decider는 질문마다 글(state)을 다시
-    # 세어 과금한다(head-repo docs/clef-vs-jev-20261003 «재측정» — 질문 10개면 ≈10배).
-    # 그래서 «호출당 글자 수 × 호출당 질문 수»로 어림한다. 예전 미리 보기는 이 몫을 빼고
+    # 세어 과금한다(head-repo docs/clef-vs-jev-20261003 《재측정》 — 질문 10개면 ≈10배).
+    # 그래서 《호출당 글자 수 × 호출당 질문 수》로 어림한다. 예전 미리 보기는 이 몫을 빼고
     # Jev 값만 보였다(2026-10-11 전수).
     fallback_max = None
     if fallback is not None:
@@ -835,7 +835,7 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
             / 1_000_000 * fallback.INPUT_USD_PER_M
         )
     if body.dry_run:
-        # 실행 게이트(전역 규칙 11)는 도구 층에 — 보내기 전에 «몇 행·몇 번·얼마»를 화면이 보인다.
+        # 실행 게이트(전역 규칙 11)는 도구 층에 — 보내기 전에 《몇 행·몇 번·얼마》를 화면이 보인다.
         # 키가 없으면 그것도 여기서 말한다 — 실제 실행은 아래에서 400으로 거절된다(2026-10-06
         # 설치 검증: 키 없는 PC의 미리 보기가 크기·값만 말하고, 누르면 400이었다)
         no_key = {} if body_judge.has_key else {"needs_key": "openrouter"}
@@ -863,7 +863,7 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
     if not body_judge.has_key:
         return JSONResponse(
             {
-                "error": "판정 모델 키를 찾지 못했습니다. 설정 → «판정 모델»에서 OpenRouter 키"
+                "error": "판정 모델 키를 찾지 못했습니다. 설정 → 《판정 모델》에서 OpenRouter 키"
                 "(Jev를 OpenRouter 경유로 부르고, 실패한 호출은 Perplexity decider가 "
                 "대신 답한다)나 "
                 "TypeSafe 키(Jev 직결)를 넣으세요. 키는 제 주소로만 갑니다 — OpenRouter 키는 "
@@ -883,7 +883,7 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
     toc_props: list[dict] = []
     toc_meta: dict = {"entries": len(entries), "picked": 0, "none": 0, "failed": 0}
     # 목차 대조는 Jev만 한다(D-136). 본문 판정의 주도 Jev라(D-139) 키가 없으면 위에서 이미 400으로
-    # 돌아갔다 — 그래서 «키 없어 목차만 건너뜀» 갈래는 없앴다(오지 않는 자리였다, 2026-10-11 재확인)
+    # 돌아갔다 — 그래서 《키 없어 목차만 건너뜀》 갈래는 없앴다(오지 않는 자리였다, 2026-10-11 재확인)
     if entries:
         res = match_toc_entries_jev(entries, body_lines, jev)
         if body.toc_min_prob is None:
@@ -894,20 +894,20 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
             min_prob, how = float(body.toc_min_prob), {"how": "given", "value": body.toc_min_prob}
         toc_props = toc_picks_to_proposals(res["picks"], entries, min_prob)
         for t in toc_props:
-            t["judge"] = judge_label(jev)  # 본문 후보처럼 «누가 답했나» — 직결인지 경유인지 보인다
+            t["judge"] = judge_label(jev)  # 본문 후보처럼 《누가 답했나》 — 직결인지 경유인지 보인다
         n_accept = sum(1 for p in toc_props if p.get("band") == "accept")
         toc_meta = {
             "judge": judge_label(jev),
             "entries": len(entries),
             "picked": len(res["picks"]),
-            # 옛 이름을 지키되 뜻은 «미리 체크되는 것» — 화면 문구가 이 값을 쓴다
+            # 옛 이름을 지키되 뜻은 《미리 체크되는 것》 — 화면 문구가 이 값을 쓴다
             "above_threshold": n_accept,
             "escalated": len(toc_props) - n_accept,
             "none": len(res["none"]),
             "failed": len(res["failed"]),
             "min_prob": round(min_prob, 3),
             "threshold_from": how,
-            # «없음» 답은 자리가 없어 ③의 후보가 될 수 없다. 개수만 남기면 버리는 것과 같으므로
+            # 《없음》 답은 자리가 없어 ③의 후보가 될 수 없다. 개수만 남기면 버리는 것과 같으므로
             # 제목을 실어 사람이 보고 손으로 넣게 한다(Jev 1차 거름망 — 가운데는 버리지 않는다).
             # Jev가 답하지 못한 항목(failed)은 대역이 없으므로 여기 섞지 않는다
             "unplaced": [
@@ -915,7 +915,7 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
                     "entry": n.get("entry"),
                     "title": str(n.get("title") or "")[:40],
                     "top_sim": n.get("top_sim"),
-                    "why": n.get("why") or "판정 모델이 «없음»을 골랐다",
+                    "why": n.get("why") or "판정 모델이 《없음》을 골랐다",
                 }
                 for n in res["none"]
             ],
@@ -933,9 +933,9 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
     proposals = sorted(toc_props + props, key=lambda p: (p["page"], p["line_index"]))
     _remember_escalate(doc_path, body.part_id, lines, proposals)
     meta["toc"] = toc_meta
-    meta["engine"] = "jev"  # 요청 값 그대로(«판정 모델» 길) — 실제로 답한 모델은 answered_by
+    meta["engine"] = "jev"  # 요청 값 그대로(《판정 모델》 길) — 실제로 답한 모델은 answered_by
     # 사용량은 주·목차(Jev)·폴백(decider)을 합친다 — 같은 클라이언트는 한 번만 센다.
-    # D-139 전에는 폴백이 Jev라 «주 + Jev»만 세도 됐다. decider가 폴백이 되자 그 셈이 폴백 비용을
+    # D-139 전에는 폴백이 Jev라 《주 + Jev》만 세도 됐다. decider가 폴백이 되자 그 셈이 폴백 비용을
     # 빼게 되어 셋을 함께 센다(test_route_falls_back_to_the_decider_when_jev_fails가 잰다).
     judges = []
     for c in (body_judge, jev, fallback):
@@ -954,7 +954,7 @@ def _structure_jev(doc_path, body, lines, rules, max_chars: int):
 def _remember_escalate(doc_path, part_id: str, lines, proposals: list[dict]) -> None:
     """판정 실행 직후 애매한 후보(escalate)를 서고 메모에 적는다 (D-137).
 
-    왜: 서버 없이 도는 Claude 세션(`scripts/escalate_review.py`)이 «화면이 방금 세운 애매한 후보»를
+    왜: 서버 없이 도는 Claude 세션(`scripts/escalate_review.py`)이 《화면이 방금 세운 애매한 후보》를
     알 길이 이것뿐이다. 경계가 아니라 메모이고 문헌 저장소 밖(서고 루트)에 둔다. 실패해도 판정
     응답은 그대로 돌려준다 — 메모는 덤이다.
     """
@@ -999,7 +999,7 @@ async def api_escalate_export(doc_id: str, body: EscalateExportRequest):
     if err is not None:
         return err
     try:
-        check_path_id(body.part_id, "권")  # 메모 자리가 서고 밖으로 빠지지 않게(«..»·경로 구분자)
+        check_path_id(body.part_id, "권")  # 메모 자리가 서고 밖으로 빠지지 않게(《..》·경로 구분자)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     lines = _escalate_lines(doc_path, body.part_id)
@@ -1038,8 +1038,8 @@ async def api_escalate_import(doc_id: str, body: EscalateImportRequest):
     """판정 들이기 (D-137): 붙여 넣은 답을 내보낸 후보에 대조한다 — **체크 제안만** 돌려준다.
 
     없는 id는 거부, 빠진 id는 누락, 모양이 틀린 항목은 건너뛴다. 모델이 행을 더할 수 없다.
-    경계는 저장하지 않는다(「적용」만 저장한다). 받아들인 판정은 서고 메모에 더해 «저장된 판정
-    불러오기»와 CLI가 같은 것을 보게 한다.
+    경계는 저장하지 않는다(「적용」만 저장한다). 받아들인 판정은 서고 메모에 더해 《저장된 판정
+    불러오기》와 CLI가 같은 것을 보게 한다.
     400으로 거부하는 것: 후보 없음·너무 긴 글·내보낸 글을 그대로 붙인 것·다른 문헌·권의 묶음 표지
     (`core.escalate_review.import_answers`).
     """
@@ -1068,7 +1068,7 @@ async def api_escalate_state(doc_id: str, part_id: str = Query(...)):
         return err
     try:
         store = load_store(get_library_path(), doc_id, part_id)
-    except ValueError as e:  # 권 id가 폴더 이름 하나가 아니다(«..»·경로 구분자)
+    except ValueError as e:  # 권 id가 폴더 이름 하나가 아니다(《..》·경로 구분자)
         return JSONResponse({"error": str(e)}, status_code=400)
     return {
         "candidates": [
@@ -1082,12 +1082,12 @@ async def api_escalate_state(doc_id: str, part_id: str = Query(...)):
 
 @router.post("/api/documents/{doc_id}/segmentation/structure/llm")
 async def api_segmentation_structure_llm(doc_id: str, body: SegmentationStructureLlmRequest):
-    """구조를 통째로 묻기 (D-125): 권의 확정본 전문을 행 번호와 함께 보내 «새 글이 시작하는 행»을
+    """구조를 통째로 묻기 (D-125): 권의 확정본 전문을 행 번호와 함께 보내 《새 글이 시작하는 행》을
     받는다.
 
     모델은 위치를 만들지 않고 고르기만 한다 — 답은 행 번호이고, 코드가 실제 행인지·제목이 그 행의
     글자인지 확인해 ③의 후보와 같은 모양으로 돌려준다. 확정본(L4)만 본다(제안·적용이 L4만 읽는다,
-    D-088). 저장하지 않는다 — 화면이 ③에 «LLM 구조» 후보로 세우고, 「적용」이 저장한다.
+    D-088). 저장하지 않는다 — 화면이 ③에 《LLM 구조》 후보로 세우고, 「적용」이 저장한다.
     출력: {"proposals": [...], "provider", "model", "error", "calls", "sent_lines", "sent_chars",
            "said", "dropped", "title_fixed", "reasons", "notes"} — dry_run이면 {"dry_run": True,
            "lines", "chars", "calls"}.
@@ -1116,7 +1116,7 @@ async def api_segmentation_structure_llm(doc_id: str, body: SegmentationStructur
     if body.engine == "jev":
         return _structure_jev(doc_path, body, lines, rules, max_chars)
     if body.dry_run:
-        # 실행 게이트(전역 규칙 11)는 도구 층에 — 보내기 전에 «몇 행·몇 자·몇 번»을 화면이 보인다
+        # 실행 게이트(전역 규칙 11)는 도구 층에 — 보내기 전에 《몇 행·몇 자·몇 번》을 화면이 보인다
         return {"proposals": [], "dry_run": True, **structure_size(lines, max_chars)}
     proposals, meta = await ask_structure_llm(
         lines,
@@ -1202,7 +1202,7 @@ async def api_segmentation_apply(doc_id: str, body: SegmentationApplyRequest):
 
     D-092: 구간 하나 = 경계 하나. 행 목록은 한 번만 읽고, 경계 파일은 한 번만 쓰고, 커밋도 한 번.
     전에는 구간마다 create_entity → 권 전체 확정본을 다시 읽어(208쪽 0.6초) 43구간에 30초가
-    걸렸고, 그 사이에 «내용 새로고침»을 누르면 아직 없는 것으로 보였다(실측 2026-09-03).
+    걸렸고, 그 사이에 《내용 새로고침》을 누르면 아직 없는 것으로 보였다(실측 2026-09-03).
     """
     from core.boundaries import (
         git_commit_boundaries,
@@ -1220,9 +1220,9 @@ async def api_segmentation_apply(doc_id: str, body: SegmentationApplyRequest):
     if not body.spans:
         return JSONResponse({"error": "적용할 구간이 없습니다."}, status_code=400)
     if body.dry_run:
-        # 확인창의 숫자 — «지금 경계 중 M개를 지운다»는 실제 대상 수여야 한다(Codex 지적).
+        # 확인창의 숫자 — 《지금 경계 중 M개를 지운다》는 실제 대상 수여야 한다(Codex 지적).
         data = load_doc_boundaries(doc_path, doc_id, body.part_id)
-        # 이미 같은 자리·층위에 살아 있는 경계는 «세우는» 것이 아니다 — 확인창은 새로 서는 수만
+        # 이미 같은 자리·층위에 살아 있는 경계는 《세우는》 것이 아니다 — 확인창은 새로 서는 수만
         # 말한다
         live_keys = {_boundary_key(b) for b in data.get("boundaries") or [] if _live(b)}
         would_create = sum(1 for s in body.spans if _span_key(s) not in live_keys)
@@ -1284,7 +1284,7 @@ async def api_segmentation_apply(doc_id: str, body: SegmentationApplyRequest):
             )
         except Exception as e:  # noqa: BLE001 — 한 구간의 실패가 나머지를 막지 않는다
             errors.append(f"{span.title}: {e}")
-    # 바꿔치기는 전체 선택이 성립할 때만 저장한다. 일부만 쓰면 «지우기»는 다 되고 «넣기»는
+    # 바꿔치기는 전체 선택이 성립할 때만 저장한다. 일부만 쓰면 《지우기》는 다 되고 《넣기》는
     # 덜 된 채로 남아, 있던 경계만 잃는다(Codex 지적 2026-09-08). 아무것도 쓰지 않고 되돌린다.
     if errors:
         return JSONResponse(
@@ -1447,7 +1447,7 @@ async def api_segmentation_auto(doc_id: str, body: SegmentationAutoRequest):
             not toc_only or p["kind"] == "volume" or any(r.startswith("toc:") for r in p["reasons"])
         )
     ]
-    # 구간은 «다음 선택 경계 앞까지»가 아니라 경계 목록이 알아서 정하므로 시작만 넘기면 된다
+    # 구간은 《다음 선택 경계 앞까지》가 아니라 경계 목록이 알아서 정하므로 시작만 넘기면 된다
     spans = [
         SegmentationSpan(
             title=p["title"],
@@ -1477,7 +1477,7 @@ async def api_segmentation_auto(doc_id: str, body: SegmentationAutoRequest):
         "toc_pages": toc_pages,
         "toc_meta": toc_meta,
         "llm_toc": bool(use_llm_toc),
-        # 이번에 규칙을 새로 찾았으면 무엇을 켰는지 — 화면 토스트가 «○+날짜·談草로 세웠다»고 말한다
+        # 이번에 규칙을 새로 찾았으면 무엇을 켰는지 — 화면 토스트가 《○+날짜·談草로 세웠다》고 말한다
         "induced": ([s["id"] for s in induced["signals"] if s["recommended"]] if induced else None),
         "stage": induced["stage"] if induced else None,
         "rules_origin": rules["origin"],
@@ -1517,9 +1517,9 @@ async def api_export_boundaries_csv(doc_id: str, part_id: str | None = Query(Non
     # 데이터 버전 각인 (D-128 1항). 경계 CSV는 연구자 DB로 들어가 논문 표가 되므로,
     # 「어느 시점 확정본의 경계인가」가 파일 안에 남아야 한다.
     #
-    # 왜 머리말 줄이 아니라 «열»인가: 처음에는 맨 위에 주석 한 줄을 얹었는데, 그러면
+    # 왜 머리말 줄이 아니라 《열》인가: 처음에는 맨 위에 주석 한 줄을 얹었는데, 그러면
     # 머리줄이 둘째 줄로 밀려 이 CSV를 읽는 쪽이 전부 깨진다(실측 — test_segmentation.py의
-    # 열 이름 검사가 바로 걸렸다). 이 파일에는 이미 `l4_commit`이라는 «행별 출처» 열
+    # 열 이름 검사가 바로 걸렸다). 이 파일에는 이미 `l4_commit`이라는 《행별 출처》 열
     # 관례가 있으므로 그 옆에 붙인다. 정렬·필터를 해도 출처가 행을 따라간다.
     from core.corpus_version import corpus_snapshot
 
@@ -1585,7 +1585,7 @@ async def api_contents_tree(doc_id: str):
     출력: core.entity.doc_contents() 참조.
 
     왜 Work로 묶지 않는가: Work(저작) 엔티티는 D-099에서 없앴다 — 편성은 문헌의 것이다(D-097).
-    저작이 여럿인 문집은 층위 1의 «묶음» 경계가 나타낸다 — 트리의 층위 그대로다(D-098·D-099).
+    저작이 여럿인 문집은 층위 1의 《묶음》 경계가 나타낸다 — 트리의 층위 그대로다(D-098·D-099).
     """
     doc_path, err = _doc(doc_id)
     if err is not None:
@@ -1691,7 +1691,7 @@ async def api_update_boundary(
 ):
     """경계를 옮기거나 제목·층위·역할·상태를 바꾼다.
 
-    행 단위. 끝은 저장하지 않으므로 «끝을 옮긴다»는 곧 «다음 경계(같은 층위 이상)를 옮긴다»이다.
+    행 단위. 끝은 저장하지 않으므로 《끝을 옮긴다》는 곧 《다음 경계(같은 층위 이상)를 옮긴다》이다.
     """
     from core.boundaries import (
         find_boundary,
@@ -1762,7 +1762,7 @@ async def api_update_boundary(
             None,
         )
         if nxt is not None:
-            # end는 «이 단위의 마지막 자리»이므로 다음 경계는 그 바로 뒤
+            # end는 《이 단위의 마지막 자리》이므로 다음 경계는 그 바로 뒤
             # (end.offset이 있으면 그 글자)
             if body.end:
                 e = _norm(body.end, nxt["start"])
@@ -1859,8 +1859,8 @@ async def api_split_unit(doc_id: str, body: SplitUnitRequest, bg: BackgroundTask
     """단위를 여러 조각으로 쪼갠다 (백그라운드 git commit).
 
     D-092: 쪼개기 = 원본 단위 **안에** 경계를 더 넣는 것. 원본 id는 첫 조각으로 그대로 남고,
-    둘째 조각부터 새 경계(새 id)가 선다. 새 경계는 원본보다 한 단 깊은 «조각»이라 원본 기사가
-    그것들을 품는다 — 기사 자체는 쪼개지지 않는다. 본문은 저장하지 않으므로 «조각 텍스트»는
+    둘째 조각부터 새 경계(새 id)가 선다. 새 경계는 원본보다 한 단 깊은 《조각》이라 원본 기사가
+    그것들을 품는다 — 기사 자체는 쪼개지지 않는다. 본문은 저장하지 않으므로 《조각 텍스트》는
     자리를 찾는 열쇠일 뿐이다 — 조각의 첫 글자들이 원본 본문에서 나오는 자리에 경계를 놓는다.
     """
     from core.boundaries import (
@@ -1912,7 +1912,7 @@ async def api_split_unit(doc_id: str, body: SplitUnitRequest, bg: BackgroundTask
         key = piece[:6]
         at = text.find(key, cursor) if key else -1
         if at < 0:
-            errors.append(f"조각 {i}: 첫 글자 «{key}»를 원본 본문에서 찾지 못했습니다")
+            errors.append(f"조각 {i}: 첫 글자 《{key}》를 원본 본문에서 찾지 못했습니다")
             continue
         cursor = at + max(1, len(key))
         where = _to_page_abs(at)
@@ -1920,7 +1920,7 @@ async def api_split_unit(doc_id: str, body: SplitUnitRequest, bg: BackgroundTask
             errors.append(f"조각 {i}: 자리를 쪽으로 옮기지 못했습니다")
             continue
         page, abs_off = where
-        # 조각은 원본보다 «한 단 안쪽»이다. 같은 층위로 넣으면 원본과 나란한 별도 기사가 되어
+        # 조각은 원본보다 《한 단 안쪽》이다. 같은 층위로 넣으면 원본과 나란한 별도 기사가 되어
         # 기사가 쪼개져 버린다 — v1.3.0까지 그렇게 동작했다(사용자 지적).
         item = new_boundary(
             start=position_from_char(page_texts, page, abs_off),

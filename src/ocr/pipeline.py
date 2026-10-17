@@ -132,7 +132,7 @@ class OcrPipeline:
               실패하면 error 문자열만 채워진다.
 
         왜 run_page에서 떼어 냈는가 (D-082):
-            LLM 교정 패스는 같은 블록 이미지를 잘라 «다시 읽되 L2에 저장하지 않는다».
+            LLM 교정 패스는 같은 블록 이미지를 잘라 《다시 읽되 L2에 저장하지 않는다》.
             레이아웃 로드·이미지 로드·좌표 보정은 OCR과 완전히 같은 절차라 두 곳에
             두면 한쪽만 고쳐지는 날이 온다(좌표 보정은 D-069류 사고의 단골 자리다).
         """
@@ -620,7 +620,7 @@ class OcrPipeline:
             data["image_width"], data["image_height"] = int(image_size[0]), int(image_size[1])
         # 어느 회전의 이미지였는지도 적는다(D-123) — 작업이 시작할 때의 값이 아니라 저장 시점의
         # manifest를 읽지만, 회전 저장은 사람이 화면에서 하는 일이라 OCR 도중에 바뀌는 일은
-        # 드물다. 바뀌었다면 화면이 «다시 OCR»을 요구한다
+        # 드물다. 바뀌었다면 화면이 《다시 OCR》을 요구한다
         from core.document import page_rotation
 
         data["rotation"] = page_rotation(

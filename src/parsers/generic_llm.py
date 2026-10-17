@@ -588,7 +588,7 @@ class GenericLlmFetcher(BaseFetcher):
 
         user_prompt = _USER_PROMPT_TEMPLATE.format(url=url, markdown=markdown)
 
-        # LlmRouter.call 하나로 부른다(D-010 «라우터가 유일한 진입점»). 예전에는 providers를 직접
+        # LlmRouter.call 하나로 부른다(D-010 《라우터가 유일한 진입점》). 예전에는 providers를 직접
         # 돌며 provider.call을 불러 폴백 순서·가용성 캐시·사용 기록 규칙을 따로 흉내 냈다.
         # 폴백·사용 기록은 라우터가 하고, JSON은 강제한다(D-083).
         try:

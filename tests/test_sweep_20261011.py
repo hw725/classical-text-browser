@@ -2,7 +2,7 @@
 """2026-10-11 전수 검토가 찾은 결함의 회귀 시험 (backlog B-012~B-077 — 1차 B-012~B-035, 2차·보충 B-037~B-077).
 
 왜 한 파일인가:
-    전수 검토(442파일)에서 나온 결함을 «고치기 전에 빨간불»로 먼저 세우고, 고친 뒤 초록이 되는
+    전수 검토(442파일)에서 나온 결함을 《고치기 전에 빨간불》로 먼저 세우고, 고친 뒤 초록이 되는
     것을 한 자리에서 확인하려고 모았다. 시험마다 머리에 backlog 번호를 붙인다 — 그 항목을 닫을
     때 근거가 이 시험이다.
 
@@ -103,11 +103,11 @@ def _setup(client, tmp_path) -> tuple[Path, str]:
     return lib, part_id
 
 
-# ── B-012 엔티티 패널 «현재 페이지만» ────────────────────────────────────────────────
+# ── B-012 엔티티 패널 《현재 페이지만》 ────────────────────────────────────────────────
 
 
 def test_b012_page_entities_return_units_under_the_key_the_screen_reads(tmp_path, monkeypatch):
-    """B-012: 쪽 엔티티 응답은 단위를 «units»에 담는다 — 화면(entity-manager.js)이 그 키를 읽는다."""
+    """B-012: 쪽 엔티티 응답은 단위를 《units》에 담는다 — 화면(entity-manager.js)이 그 키를 읽는다."""
     from core import entity as E
 
     unit = {"id": "u1", "source_ref": {"document_id": "d1", "page": 1}}
@@ -247,7 +247,7 @@ def test_b021_l6_text_layer_is_lf(tmp_path):
 
 
 def test_b023_validator_does_not_flag_unit_ids_as_missing(client, tmp_path):
-    """B-023: L5~L7의 block_id가 단위(경계) id면 «L3에 없음» 경고를 내지 않는다."""
+    """B-023: L5~L7의 block_id가 단위(경계) id면 《L3에 없음》 경고를 내지 않는다."""
     from core.snapshot_validator import validate_snapshot
 
     _lib, _part, ids, snap = _snapshot_with_everything(client, tmp_path)
@@ -524,7 +524,7 @@ def test_b034_image_bundle_uses_natural_order():
 
 
 def test_b030_drift_checker_sees_router_count_on_a_wrapped_line():
-    """server.py 머리말처럼 «(N 라우트)»가 다음 줄로 넘어간 표기도 라우터별 수로 대조한다."""
+    """server.py 머리말처럼 《(N 라우트)》가 다음 줄로 넘어간 표기도 라우터별 수로 대조한다."""
     from tests.test_doc_drift import _load_checker  # 검사기를 한 벌로 불러오는 길(sys.modules 등록)
 
     cdd = _load_checker()
@@ -544,14 +544,14 @@ def test_b016_citation_offsets_count_code_points(tmp_path):
         "citation-editor.js",
         ["_citeDisplayOffsetToOriginal"],
         "",
-        # «𠀀甲»: 화면(Range)의 표시 오프셋 2는 甲 — 코드포인트로는 1
+        # 《𠀀甲》: 화면(Range)의 표시 오프셋 2는 甲 — 코드포인트로는 1
         'console.log(JSON.stringify({i: _citeDisplayOffsetToOriginal(2, "\\u{20000}甲", [])}));',
     )
     assert out["i"] == 1
 
 
 def test_b016_citation_requests_carry_part_id():
-    """B-016: 인용 마크 API 호출은 모두 ?part_id=를 붙인다(다권본에서 «main»으로 새지 않게)."""
+    """B-016: 인용 마크 API 호출은 모두 ?part_id=를 붙인다(다권본에서 《main》으로 새지 않게)."""
     src = (STATIC_JS / "citation-editor.js").read_text(encoding="utf-8")
     urls = re.findall(r"`[^`]*citation-marks[^`]*`", src)
     assert urls
@@ -620,7 +620,7 @@ def test_b018_translation_input_includes_reference_dict():
 
 
 def test_b019_part_ocr_uses_the_selected_llm_model():
-    """B-019: 권 전체 OCR도 쪽 OCR처럼 «ocr-llm-model-select»에서 고른 모델을 보낸다."""
+    """B-019: 권 전체 OCR도 쪽 OCR처럼 《ocr-llm-model-select》에서 고른 모델을 보낸다."""
     src = (STATIC_JS / "ocr-panel.js").read_text(encoding="utf-8")
     body = extract_js(src, ["_runPartOcr"])
     assert 'getLlmModelSelection("ocr-llm-model-select")' in body
@@ -653,7 +653,7 @@ class CustomEvent { constructor(n, o) { this.n = n; this.o = o; } }
 
 
 def test_b026_variant_dictionary_can_be_activated_from_the_screen(tmp_path):
-    """B-026: 이체자 탭에서 고른 사전을 «활성»으로 바꾸는 단추가 있고, 활성화 API를 부른다."""
+    """B-026: 이체자 탭에서 고른 사전을 《활성》으로 바꾸는 단추가 있고, 활성화 API를 부른다."""
     html = (ROOT / "src" / "app" / "static" / "index.html").read_text(encoding="utf-8")
     assert 'id="vm-btn-activate"' in html
     src = (STATIC_JS / "variant-manager.js").read_text(encoding="utf-8")
@@ -718,7 +718,7 @@ class _RecordingRouter:
 
 
 def test_generic_llm_extraction_goes_through_the_router(monkeypatch):
-    """범용 서지 추출은 LlmRouter.call 하나로 부르고 JSON을 강제한다(D-010 «라우터가 유일한 진입점»)."""
+    """범용 서지 추출은 LlmRouter.call 하나로 부르고 JSON을 강제한다(D-010 《라우터가 유일한 진입점》)."""
     from parsers.generic_llm import GenericLlmFetcher
 
     router = _RecordingRouter('{"title": "蒙求"}')
@@ -795,7 +795,7 @@ def test_kostma_assets_survive_a_non_numeric_book_number():
 
 
 def test_pdf_text_extractor_is_always_closed():
-    """PdfTextExtractor는 언제나 with로 연다(AGENTS «fitz.open()은 with로» — Windows가 PDF를 잠근다)."""
+    """PdfTextExtractor는 언제나 with로 연다(AGENTS 《fitz.open()은 with로》 — Windows가 PDF를 잠근다)."""
     import ast
 
     bad = []
@@ -957,7 +957,7 @@ globalThis.hyeontoState = {{ originalText: {json.dumps(_ASTRAL)}, punctMarks: []
 
 
 def test_translation_sentence_split_counts_code_points(tmp_path):
-    """번역 문장 나누기 — 표점 。이 天(1번) 뒤면 첫 문장은 «𠀀天», 범위 0~1. 서버 split_sentences와 같은 자."""
+    """번역 문장 나누기 — 표점 。이 天(1번) 뒤면 첫 문장은 《𠀀天》, 범위 0~1. 서버 split_sentences와 같은 자."""
     out = run_js(tmp_path, "translation-editor.js", ["_trChars", "_splitSentencesClient"], "",
         f'console.log(JSON.stringify(_splitSentencesClient({json.dumps(_ASTRAL)}, [{{target: {{start: 1, end: 1}}, after: "。"}}])));')
     assert out == [{"start": 0, "end": 1, "text": "\U00020000天"}, {"start": 2, "end": 2, "text": "地"}]
@@ -1026,7 +1026,7 @@ console.log(JSON.stringify(calls.map((c) => [c.method, c.url, c.body || null])))
 
 
 def test_new_layout_block_id_never_repeats_a_remaining_one(tmp_path):
-    """b01·b02·b03에서 b01을 지우고 새로 그리면 b04 — 전에는 «개수 + 1» = b03이라 남은 것과 겹쳤다."""
+    """b01·b02·b03에서 b01을 지우고 새로 그리면 b04 — 전에는 《개수 + 1》 = b03이라 남은 것과 겹쳤다."""
     out = run_js(tmp_path, "layout-editor.js", ["_nextLayoutBlockId"], "",
                  'console.log(JSON.stringify({v: _nextLayoutBlockId(7, [{block_id: "p07_b02"}, {block_id: "p07_b03"}]), e: _nextLayoutBlockId(7, [])}));')
     assert out == {"v": "p07_b04", "e": "p07_b01"}
@@ -1073,7 +1073,7 @@ def test_every_used_animation_has_keyframes():
 
 def test_elements_shown_with_empty_display_are_not_hidden_by_the_stylesheet():
     """JS가 style.display=""로 켜는 요소를 스타일시트가 display:none으로 숨기면 영영 안 보인다
-    (인용 «원문이 마크 이후 변경되었습니다» 경고). index.html의 id 요소 + getElementById 경로를 전부 본다."""
+    (인용 《원문이 마크 이후 변경되었습니다》 경고). index.html의 id 요소 + getElementById 경로를 전부 본다."""
     css = re.sub(r"/\*.*?\*/", "", "\n".join(p.read_text(encoding="utf-8") for p in _STATIC.rglob("*.css") if "vendor" not in p.parts), flags=re.S)
     hidden_cls, hidden_id = set(), set()
     for m in re.finditer(r"([^{}]+)\{([^}]*)\}", css):
@@ -1136,7 +1136,7 @@ def _tiny_library(root: Path) -> Path:
 
 def test_backup_never_moves_or_deletes_a_folder_it_did_not_make(tmp_path):
     """다른 파일이 든 폴더(구글 드라이브 등)를 백업 자리로 골라도 그 파일은 옮겨지거나 지워지지 않는다.
-    전에는 첫 백업이 폴더를 통째로 «_prev»로 옮기고 두 번째 백업이 rmtree로 지웠다."""
+    전에는 첫 백업이 폴더를 통째로 《_prev》로 옮기고 두 번째 백업이 rmtree로 지웠다."""
     from core.backup import backup_library
 
     lib = _tiny_library(tmp_path)
@@ -1193,7 +1193,7 @@ def test_env_write_refuses_an_unreadable_file(tmp_path):
 
 def test_trash_move_never_falls_back_to_copy_and_delete(tmp_path, monkeypatch):
     """잠긴 폴더를 휴지통으로 못 옮기면 원본을 그대로 두고 실패를 알린다 — 전에는 shutil.move가
-    «복사 → 원본 지우기»로 넘어가, 원본 지우기가 도중에 멈추면 완전한 사본을 지우고 원본 조각만 옮겼다."""
+    《복사 → 원본 지우기》로 넘어가, 원본 지우기가 도중에 멈추면 완전한 사본을 지우고 원본 조각만 옮겼다."""
     import core.library as libmod
 
     lib = _tiny_library(tmp_path)
@@ -1214,7 +1214,7 @@ def test_trash_move_never_falls_back_to_copy_and_delete(tmp_path, monkeypatch):
 
 
 def test_zip_copy_does_not_overwrite_files_edited_after_conversion(tmp_path):
-    """zip 사본을 git 사본으로 바꾼 뒤 사용자가 고친 파일이 있으면 «받기»가 reset --hard로 덮지 않는다.
+    """zip 사본을 git 사본으로 바꾼 뒤 사용자가 고친 파일이 있으면 《받기》가 reset --hard로 덮지 않는다.
     바꾼 그대로면(zip 시점 파일) 예전처럼 원격에 맞춘다."""
     import shutil as _sh
     import subprocess as _sp
@@ -1259,7 +1259,7 @@ def test_hwp_taidu_pos_points_at_the_raised_character():
 
 @pytest.mark.parametrize("server_ok", [True, False])
 def test_reset_corrections_in_free_edit_really_empties_and_reports_failure(tmp_path, server_ok):
-    """자유 편집 모드의 «모두 삭제»는 원문을 보낸다(지금 글을 보내면 서버가 같은 교정을 다시 만든다).
+    """자유 편집 모드의 《모두 삭제》는 원문을 보낸다(지금 글을 보내면 서버가 같은 교정을 다시 만든다).
     저장이 실패하면 실패를 알린다 — 예전 _saveCorrections는 실패를 삼켜 리셋의 알림이 닿지 않았다."""
     setup = f"""
 const sent = []; const toasts = [];
@@ -1300,7 +1300,7 @@ def test_manifest_has_one_entry_per_id_after_trash_and_recreate(tmp_path):
 
 
 def test_bibliography_manual_edit_can_clear_a_field(tmp_path):
-    """서지 수동 편집에서 칸을 비우면 지워진다(null) — 예전에는 «값 || 옛 값»이라 지울 수 없었다."""
+    """서지 수동 편집에서 칸을 비우면 지워진다(null) — 예전에는 《값 || 옛 값》이라 지울 수 없었다."""
     setup = """
 const F = { "bib-edit-notes": { value: "  " }, "bib-edit-series": { value: "새 총서" } };
 globalThis.document = { getElementById: (id) => F[id] || null };
@@ -1313,7 +1313,7 @@ globalThis.document = { getElementById: (id) => F[id] || null };
 
 
 def test_hwp_leading_punctuation_is_marked_before_the_first_char():
-    """첫 원문 글자 앞에 온 표점은 «0번 앞»으로 적힌다 — «0번 뒤»와 구별된다."""
+    """첫 원문 글자 앞에 온 표점은 《0번 앞》으로 적힌다 — 《0번 뒤》와 구별된다."""
     from hwp.text_cleaner import clean_hwp_text
 
     marks = clean_hwp_text("「天地」").punctuation_marks
@@ -1322,7 +1322,7 @@ def test_hwp_leading_punctuation_is_marked_before_the_first_char():
 
 
 def test_index_html_has_no_literal_unicode_escapes():
-    """HTML은 \\u201c 같은 JS 탈출을 해석하지 않는다 — 라벨에 백슬래시가 그대로 찍혔다(인용 «원문을 “”로 감싸기»)."""
+    """HTML은 \\u201c 같은 JS 탈출을 해석하지 않는다 — 라벨에 백슬래시가 그대로 찍혔다(인용 《원문을 “”로 감싸기》)."""
     html = (_STATIC / "index.html").read_text(encoding="utf-8")
     outside_scripts = re.sub(r"<script\b.*?</script>", "", html, flags=re.S | re.I)
     assert re.findall(r"\\u[0-9a-fA-F]{4}", outside_scripts) == []
@@ -1417,7 +1417,7 @@ def test_part_ocr_direction_follows_the_profile():
     ("annotation-editor.js", "_deleteAnnotation", False),
 ])
 def test_no_request_to_a_default_interpretation_when_none_is_chosen(tmp_path, js_file, fn, quiet):
-    """해석 저장소를 고르지 않았으면 «default»라는 없는 저장소로 요청하지 않는다. 동작(삭제 등)은 그 까닭을 알린다."""
+    """해석 저장소를 고르지 않았으면 《default》라는 없는 저장소로 요청하지 않는다. 동작(삭제 등)은 그 까닭을 알린다."""
     setup = """
 const calls = []; const toasts = [];
 globalThis.fetch = async (url) => { calls.push(url); return { ok: false, status: 404, json: async () => ({}) }; };
@@ -1455,7 +1455,7 @@ def test_snapshot_entities_without_id_do_not_overwrite_each_other(tmp_path):
 
 
 def test_layout_reset_reports_a_failed_save(tmp_path):
-    """레이아웃 «모두 삭제»의 저장이 실패하면 알린다 — 예전 _saveLayout은 실패를 삼켜 알림이 닿지 않았다."""
+    """레이아웃 《모두 삭제》의 저장이 실패하면 알린다 — 예전 _saveLayout은 실패를 삼켜 알림이 닿지 않았다."""
     setup = """
 const toasts = [];
 globalThis.viewerState = { docId: "d", partId: "vol1", pageNum: 1 };
@@ -1473,7 +1473,7 @@ for (const f of ["_updateLayoutSaveStatus", "_redrawOverlay", "_updatePropsForm"
 
 def test_no_docstring_is_separated_from_its_function():
     """설명이 주인 함수에서 떨어지지 않았는가 — 떨어지면 읽는 사람이 엉뚱한 함수의 설명으로 읽는다.
-    잡는 꼴 둘: JS «함수 설명 뒤에 또 설명», Python «첫 문장 뒤의 설명 문자열». 설명과 함수 사이에 변수가
+    잡는 꼴 둘: JS 《함수 설명 뒤에 또 설명》, Python 《첫 문장 뒤의 설명 문자열》. 설명과 함수 사이에 변수가
     끼인 꼴은 그 설명이 변수의 것인지 함수의 것인지 기계로 가르지 못해(변수 설명이 정상인 자리가 있다)
     읽어서 고쳤다(work-order). 다른 함수 설명이 걸린 꼴도 같다(composition-editor).
     2026-10-11 전수·보충에서 원래 일곱, 새로 넣은 도우미가 만든 다섯을 고쳤다."""
@@ -1592,7 +1592,7 @@ def test_snapshot_with_ordinary_names_still_imports(tmp_path):
 
 def test_embed_folder_doc_id_is_stable_per_file(tmp_path):
     """폴더 배치 OCR의 문헌 id는 원본 파일로 정해진다 — 중단 뒤 다시 돌리면 같은 편이 같은 id라 이어 한다.
-    전에는 «시각 + 순번»이라 다시 돌릴 때마다 처음부터 했다(이어 하기 코드가 한 번도 맞지 않았다)."""
+    전에는 《시각 + 순번》이라 다시 돌릴 때마다 처음부터 했다(이어 하기 코드가 한 번도 맞지 않았다)."""
     import inspect
 
     from cli import embed_folder as ef
@@ -1662,7 +1662,7 @@ def test_paddle_worker_call_honours_its_timeout():
 
 
 def test_pick_from_correction_char_without_corrected_text(tmp_path):
-    """B-067: 교정본이 빈 문자열일 때 «찍기» 미리보기가 원문으로 보인다. 전에는 정의되지 않은 `raw`로 ReferenceError."""
+    """B-067: 교정본이 빈 문자열일 때 《찍기》 미리보기가 원문으로 보인다. 전에는 정의되지 않은 `raw`로 ReferenceError."""
     setup = """
 const form = { querySelector: (s) => (globalThis._f[s] = globalThis._f[s] || { value: "", textContent: "" }) };
 globalThis._f = {};
@@ -1678,7 +1678,7 @@ globalThis._drawAnchorCanvas = () => {}; globalThis._markPicked = () => {};
 
 
 def test_backup_info_finds_the_subfolder_backup(tmp_path):
-    """B-067: 고른 폴더에 다른 파일이 있어 하위 폴더에 백업하면 설정 화면의 «마지막 백업»도 그것을 읽는다."""
+    """B-067: 고른 폴더에 다른 파일이 있어 하위 폴더에 백업하면 설정 화면의 《마지막 백업》도 그것을 읽는다."""
     from core.backup import backup_library, get_backup_info
 
     lib = _tiny_library(tmp_path)
@@ -1692,7 +1692,7 @@ def test_backup_info_finds_the_subfolder_backup(tmp_path):
 
 
 def test_interpretation_with_entities_or_citations_is_not_empty(tmp_path):
-    """B-067: 엔티티·인용 표시·쪽 비고만 있는 해석 저장소도 «비었다»가 아니다 — 추출 모드 정리가 휴지통에 보내지 않는다."""
+    """B-067: 엔티티·인용 표시·쪽 비고만 있는 해석 저장소도 《비었다》가 아니다 — 추출 모드 정리가 휴지통에 보내지 않는다."""
     from app.routers.interpretations import _interpretation_content_files
 
     for sub in ("core_entities/tags/t1.json", "citation_marks/vol1_page_001_citation_marks.json", "_notes/vol1/page_001.json"):
@@ -1743,7 +1743,7 @@ def test_trash_routes_report_a_locked_folder_as_409_once(client, monkeypatch, tm
     import app.routers.interpretations as interp_r
     import app.routers.library as lib_r
 
-    for mod in (docs_r, interp_r, lib_r):  # «서고 없음» 409로 먼저 빠지지 않게
+    for mod in (docs_r, interp_r, lib_r):  # 《서고 없음》 409로 먼저 빠지지 않게
         monkeypatch.setattr(mod, "get_library_path", lambda: tmp_path)
 
     msg = "'x'을(를) 휴지통으로 옮기지 못했습니다 — …\n→ 해결: 닫고 다시"
@@ -1780,7 +1780,7 @@ globalThis._renderCorrectionView = () => {}; globalThis._renderCorrList = () => 
 
 
 def test_split_and_delete_report_partial_failure(tmp_path):
-    """B-069: 서버가 207(일부 실패)을 주면 쪼개기·단위 삭제가 «완료»라 하지 않고 오류를 알린다."""
+    """B-069: 서버가 207(일부 실패)을 주면 쪼개기·단위 삭제가 《완료》라 하지 않고 오류를 알린다."""
     setup = """
 const toasts = []; const status = [];
 globalThis.showToast = (m, kind) => toasts.push(kind + ":" + m);
@@ -1858,7 +1858,7 @@ def test_screen_text_matches_behaviour():
 
 
 def test_zip_copy_with_an_old_mark_keeps_differing_files(tmp_path, monkeypatch):
-    """B-072: 지문 없는 옛 zip 표시면 덮기 전에 원격과 다른 파일을 설정 폴더에 남긴다 — 전에는 «고친 것 없음»으로 읽고 덮었다."""
+    """B-072: 지문 없는 옛 zip 표시면 덮기 전에 원격과 다른 파일을 설정 폴더에 남긴다 — 전에는 《고친 것 없음》으로 읽고 덮었다."""
     import subprocess as _sp
 
     import core.app_config as cfg
@@ -1885,7 +1885,7 @@ def test_zip_copy_with_an_old_mark_keeps_differing_files(tmp_path, monkeypatch):
 
 
 def test_llm_cost_and_ollama_retry_window():
-    """B-072: 쓸 수 없는 ChatGPT 계정도 «구독»(무료 아님, D-056), Ollama가 사고를 켜 다시 부를 때 문맥 창도 다시 잰다."""
+    """B-072: 쓸 수 없는 ChatGPT 계정도 《구독》(무료 아님, D-056), Ollama가 사고를 켜 다시 부를 때 문맥 창도 다시 잰다."""
     router = (Path("src") / "llm" / "router.py").read_text(encoding="utf-8")
     assert '"free" if provider.provider_id in ("ollama", "openai_oauth")' not in router
     oll = (Path("src") / "llm" / "providers" / "ollama.py").read_text(encoding="utf-8")
@@ -1949,7 +1949,7 @@ globalThis._showProgress = () => {}; globalThis._disableButtons = () => {}; glob
 
 
 def test_ai_translation_reports_a_failed_save(tmp_path):
-    """B-075: AI 번역을 받고 저장(PUT·추가)이 실패하면 false — 일괄 번역이 «실패 0건»으로 보고하던 것."""
+    """B-075: AI 번역을 받고 저장(PUT·추가)이 실패하면 false — 일괄 번역이 《실패 0건》으로 보고하던 것."""
     setup = """
 globalThis.transState = { sentences: [{ start: 0, end: 1, text: "甲" }], translations: [], blockId: "u1" };
 globalThis.interpState = { interpId: "i" }; globalThis.viewerState = { docId: "d", partId: "v", pageNum: 1 };
@@ -2014,7 +2014,7 @@ def test_display_previews_cut_by_code_points():
     bad = []
     for f in STATIC_JS.glob("*.js"):
         for n, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
-            # «…Chars(text.substring(0, i))»는 정규식 위치(UTF-16)로 자른 뒤 코드포인트로 세는 올바른 꼴이다
+            # 《…Chars(text.substring(0, i))》는 정규식 위치(UTF-16)로 자른 뒤 코드포인트로 세는 올바른 꼴이다
             if _UTF16_SLICE.search(line) and "Array.from" not in line and "Chars(" not in line:
                 bad.append(f"{f.name}:{n}: {line.strip()[:80]}")
     assert bad == [], bad
@@ -2128,8 +2128,8 @@ def _fake_update_run(monkeypatch, up, *, lookup_ok=True, pull_fails=False):
 
 @pytest.mark.parametrize("zip_mark", [True, False])
 def test_collision_lookup_runs_before_each_reset_and_failure_stops_it(tmp_path, monkeypatch, zip_mark):
-    """B-078 재검토: 두 reset --hard 자리(zip 사본 맞추기·pull 실패 뒤 맞추기) 모두 «덮일 파일 확인»이
-    reset보다 먼저 돌고, 그 조회가 실패하면 reset 없이 멈춘다 — 전에는 실패를 «충돌 없음»으로 읽었다."""
+    """B-078 재검토: 두 reset --hard 자리(zip 사본 맞추기·pull 실패 뒤 맞추기) 모두 《덮일 파일 확인》이
+    reset보다 먼저 돌고, 그 조회가 실패하면 reset 없이 멈춘다 — 전에는 실패를 《충돌 없음》으로 읽었다."""
     import core.updater as up
 
     root = tmp_path / "app"
@@ -2255,7 +2255,7 @@ def test_dictionary_save_keeps_every_section_of_the_same_book(tmp_path):
 @pytest.mark.parametrize("with_popups", [True, False])
 def test_korcis_bibliography_saves_with_contents_and_abstracts(tmp_path, with_popups):
     """B-079: KORCIS 서지가 저장된다 — 매퍼는 목차(contents)·해제(abstracts)를 늘 싣는데 스키마에 그 칸이
-    없어(additionalProperties: false) URL 가져오기가 매번 «서지정보 저장 실패»였다(2026-04-15부터)."""
+    없어(additionalProperties: false) URL 가져오기가 매번 《서지정보 저장 실패》였다(2026-04-15부터)."""
     from core.document import save_bibliography
     from parsers.korcis import KorcisMapper
     from tests.test_korcis import sample_marc_data, sample_marc_with_openapi
@@ -2290,7 +2290,7 @@ def test_every_mapper_output_key_is_in_the_bibliography_schema():
             if isinstance(fn, ast.FunctionDef) and fn.name.startswith(("map_to_bibliography", "_map_")):
                 for node in ast.walk(fn):
                     keys = [k.value for k in node.keys if isinstance(k, ast.Constant) and isinstance(k.value, str)] if isinstance(node, ast.Dict) else []
-                    # 출처 기록(field_sources)의 «creator.name»처럼 점 든 키는 서지 본문 키가 아니라 건너뛴다 —
+                    # 출처 기록(field_sources)의 《creator.name》처럼 점 든 키는 서지 본문 키가 아니라 건너뛴다 —
                     # dict 통째로가 아니라 그 키만(통째로 빼면 같은 dict의 진짜 잘못된 키까지 놓친다)
                     if "title" in keys:
                         for k in keys:

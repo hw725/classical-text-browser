@@ -84,9 +84,9 @@ function _bindTransEvents() {
 // eslint-disable-next-line no-unused-vars
 async function activateTranslationMode() {
   transState.active = true;
-  // await가 «반드시» 필요하다: _populateTransBlockSelect는 서버 응답을 받은
+  // await가 《반드시》 필요하다: _populateTransBlockSelect는 서버 응답을 받은
   // 뒤에야 transState.blockId를 새 페이지 것으로 바꾼다. 기다리지 않으면
-  // 아래 if가 «이전 페이지의» blockId를 읽어 엉뚱한 번역을 불러온다.
+  // 아래 if가 《이전 페이지의》 blockId를 읽어 엉뚱한 번역을 불러온다.
   await _populateTransBlockSelect();
   if (transState.blockId) {
     _loadTranslationData();
@@ -232,10 +232,10 @@ async function _loadTranslationData() {
       // 본문은 서버가 준 것을 그대로 쓴다.
       //
       // 왜 여기서 쪽을 다시 이어 붙이지 않는가: v1.3부터 단위는 본문을 저장하지 않고
-      // **읽을 때 L4에서 잘라 온다**(D-092). 즉 서버의 original_text가 이미 «지금 교정본»이고,
+      // **읽을 때 L4에서 잘라 온다**(D-092). 즉 서버의 original_text가 이미 《지금 교정본》이고,
       // 쪽 중간에서 시작·끝나는 경계도 글자 단위로 반영돼 있다.
       // 화면이 쪽 전체를 다시 받아 이으면 두 가지가 어긋났다(사용자 지적 2026-09-04):
-      //   ① 둘째 쪽부터 빠졌다 — «texts.length === 0»일 때만 담아 첫 쪽만 들어갔다
+      //   ① 둘째 쪽부터 빠졌다 — 《texts.length === 0》일 때만 담아 첫 쪽만 들어갔다
       //      (layout_block_id는 v1.3부터 늘 null이라 블록 매칭이 언제나 실패한다)
       //   ② 쪽 중간 경계가 무시됐다 — char_range를 보지 않고 쪽 전체를 담았다
       const correctedText = (tbData && tbData.original_text) || "";
@@ -284,7 +284,7 @@ async function _loadTranslationData() {
 
     // 문장 분리 (클라이언트 사이드)
     // 이미 저장된 번역의 범위도 경계로 쓴다 — 강독 결과 들이기(D-131)는 표점 없이 구획 단위로
-    // 번역을 넣으므로, 표점으로만 나누면 짝을 못 찾아 있는 번역이 모두 «미번역»으로 보였다
+    // 번역을 넣으므로, 표점으로만 나누면 짝을 못 찾아 있는 번역이 모두 《미번역》으로 보였다
     // (2026-09-30 스크린샷 갱신 중 발견).
     const bid = _transApiBlockId();
     const cuts = [];
@@ -708,7 +708,7 @@ async function _deleteTranslation(trId) {
 /**
  * 문장 하나를 AI로 번역해 저장한다.
  * 출력: 저장했으면 true, 실패·취소·문장 없음이면 false — 일괄 번역이 이 값으로 성공·실패를 센다.
- * (예전에는 오류를 안에서 잡고 아무것도 돌려주지 않아 «실패 0건»으로 늘 보고됐다, B-018)
+ * (예전에는 오류를 안에서 잡고 아무것도 돌려주지 않아 《실패 0건》으로 늘 보고됐다, B-018)
  */
 async function _aiTranslateSingle(sentIdx) {
   const sent = transState.sentences[sentIdx];
@@ -738,7 +738,7 @@ async function _aiTranslateSingle(sentIdx) {
     }
     if (llmSel.force_provider) reqBody.force_provider = llmSel.force_provider;
     if (llmSel.force_model) reqBody.force_model = llmSel.force_model;
-    // «참조 사전 → 적용»에서 고른 항목 — 서버가 «참고만» 등급으로 프롬프트에 싣는다(B-018)
+    // 《참조 사전 → 적용》에서 고른 항목 — 서버가 《참고만》 등급으로 프롬프트에 싣는다(B-018)
     if (transState._refDictContext) reqBody.reference_context = transState._refDictContext;
 
     // SSE 스트리밍으로 번역 요청 (스트림이 열리기 전에 실패할 때만 기존 엔드포인트로 — fetchWithSSE)
@@ -764,7 +764,7 @@ async function _aiTranslateSingle(sentIdx) {
           body: JSON.stringify({ translation: translationText }),
         }
       );
-      // 저장이 실패하면 false — 전에는 PUT·추가가 실패해도 true를 돌려줘 일괄 번역이 «실패 0건»으로
+      // 저장이 실패하면 false — 전에는 PUT·추가가 실패해도 true를 돌려줘 일괄 번역이 《실패 0건》으로
       // 보고했다(B-018과 같은 종류, 2026-10-11 재확인)
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -784,7 +784,7 @@ async function _aiTranslateSingle(sentIdx) {
     showToast(`AI 번역 실패: ${e.message}`, 'error');
     return false;
   } finally {
-    // 단추 글자는 처음 그린 «AI 번역»으로 되돌린다(예전에는 «AI»로 바뀌었다)
+    // 단추 글자는 처음 그린 《AI 번역》으로 되돌린다(예전에는 《AI》로 바뀌었다)
     btns.forEach((b) => { b.disabled = false; b.textContent = "AI 번역"; });
   }
 }
@@ -1046,7 +1046,7 @@ async function _loadRefDictMatches() {
  *   참조 사전의 표제어·뜻풀이·출처는 외부에서 가져온 사전 데이터라
  *   <나 &가 섞여 있을 수 있다. innerHTML에 날것으로 넣으면 그 부분이
  *   태그로 해석되어 목록이 깨지거나, 최악의 경우 스크립트가 실행된다.
- *   따옴표까지 바꾸는 이유는 이 값이 data-key="…" «속성 안»에도 들어가기
+ *   따옴표까지 바꾸는 이유는 이 값이 data-key="…" 《속성 안》에도 들어가기
  *   때문이다 — 따옴표 하나면 속성을 빠져나갈 수 있다.
  *
  * 입력: str — 임의의 문자열(null/undefined 허용)

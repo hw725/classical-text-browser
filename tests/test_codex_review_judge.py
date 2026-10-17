@@ -153,8 +153,8 @@ def test_screen_distinguishes_missing_cost_from_zero(tmp_path, isolated):
 def test_scan_keeps_judge_probabilities_in_state(tmp_path, isolated):
     """쪽별 판정 확률은 상태(row.decider)에 그대로 남는다 — 화면 표시는 하지 않는 것이 설계다.
 
-    Codex 리뷰(2026-10-06)는 «확률이 화면에 안 보인다»를 결함으로 냈으나 거절했다: 서버
-    (`llm_ocr.py` «확률을 실어 둔다 — … 측정·검토용»)가 확률을 per_page[].decider에 싣는 것은
+    Codex 리뷰(2026-10-06)는 《확률이 화면에 안 보인다》를 결함으로 냈으나 거절했다: 서버
+    (`llm_ocr.py` 《확률을 실어 둔다 — … 측정·검토용》)가 확률을 per_page[].decider에 싣는 것은
     측정·검토를 위해서이고, 화면은 문턱으로 접은 종류만 보인다(D-134). 이 시험은 그 보존을 고정한다.
     """
     names = ["workOrderState", "WO_UNSUPPORTED_HEADING", "_woScan", "_woTarget",

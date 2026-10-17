@@ -1,7 +1,7 @@
 """zip으로 푼 폴더도 새 판을 알고 받는다 (D-112).
 
 왜: 설치 안내가 zip → install.bat이라 다른 PC의 앱 폴더에는 .git이 없었다. 판 번호가 같으면
-커밋을 비교해야 하는데 비교할 것이 없어 «최신»으로만 보였다(2026-09-06 보고).
+커밋을 비교해야 하는데 비교할 것이 없어 《최신》으로만 보였다(2026-09-06 보고).
 """
 
 import shutil
@@ -54,7 +54,7 @@ def test_zip_folder_becomes_git_checkout_without_touching_files(origin_and_zip):
     assert (zipdir / ".git").exists() and updater.from_zip(zipdir)
     assert (zipdir / "app.py").read_text(encoding="utf-8") == "v1\n"  # 파일은 그대로
     assert (zipdir / ".env").exists()
-    # zip 시점 이후 바뀐 것이 있으니 «받을 것 있음»
+    # zip 시점 이후 바뀐 것이 있으니 《받을 것 있음》
     assert updater.zip_differs(zipdir) is True
     # 두 번 불러도 다시 바꾸지 않는다
     assert updater.ensure_git_checkout(zipdir, remote=str(origin))["converted"] is False

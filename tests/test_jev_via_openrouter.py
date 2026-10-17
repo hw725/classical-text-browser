@@ -9,10 +9,10 @@
 지키는 것:
   ① 키 조합 넷(없음 / TypeSafe만 / OpenRouter만 / 둘 다)마다 편성 라우트의 목차 대조 Jev·본문 판정·
     폴백이 어느 클래스·주소·키로 가는가. **가짜 opener가 실제로 나간 요청의 URL과 Authorization을
-    잡아** «OpenRouter 키가 typesafe 주소로 가지 않는다»·«TypeSafe 키가 openrouter 주소로 가지
-    않는다»를 직접 단언한다.
+    잡아** 《OpenRouter 키가 typesafe 주소로 가지 않는다》·《TypeSafe 키가 openrouter 주소로 가지
+    않는다》를 직접 단언한다.
   ② OpenRouter 경유 Jev의 답은 Jev 문턱(0.85/0.5)으로 판정된다 — decider 문턱(0.997/0.69)이 아니다.
-  ③ 설정 «판정 모델»: TypeSafe 칸의 has_key는 TypeSafe 키만 보고, `jev_via`가 길을 알린다.
+  ③ 설정 《판정 모델》: TypeSafe 칸의 has_key는 TypeSafe 키만 보고, `jev_via`가 길을 알린다.
     「연결 확인」이 OpenRouter 키를 TypeSafe 주소로 보내지 않는다.
 
 **이 PC에는 진짜 키가 있다** — 환경변수·Windows 사용자 환경변수(Cloudflare)·개인 키 파일
@@ -103,7 +103,7 @@ class Wire:
         return _Resp(json.dumps({"answers": answers, "usage": usage}).encode("utf-8"))
 
     def assert_keys_stay_home(self) -> None:
-        """«어떤 키도 남의 주소로 나가지 않는다» — 이 파일이 지키려는 한 줄."""
+        """《어떤 키도 남의 주소로 나가지 않는다》 — 이 파일이 지키려는 한 줄."""
         for s in self.seen:
             if s["url"].startswith(TYPESAFE_URL):
                 assert s["key"] == TS_KEY, f"TypeSafe 주소로 남의 키가 나갔다: {s['model']}"
@@ -173,7 +173,7 @@ def test_ambient_keys_are_blocked(tmp_path, wire):
 
 # ── 직결 Jev는 OpenRouter 키를 보지 않는다 ─────────────────────────────────────
 def test_direct_jev_ignores_openrouter_key(tmp_path, monkeypatch):
-    """OpenRouter 키만 있으면 TypeSafe 직결은 «키 없음» — 환경변수·서고·개인 파일 셋 다."""
+    """OpenRouter 키만 있으면 TypeSafe 직결은 《키 없음》 — 환경변수·서고·개인 파일 셋 다."""
     assert "OPENROUTER_API_KEY" not in JevClient.KEY_NAMES
     assert not JevClient(library_root=_lib(tmp_path, {"OPENROUTER_API_KEY": OR_KEY})).has_key
     monkeypatch.setenv("OPENROUTER_API_KEY", OR_KEY)
@@ -361,7 +361,7 @@ def test_jev_failure_falls_back_to_the_decider_with_decider_thresholds(
     assert not any(s["url"].startswith(TYPESAFE_URL) for s in wire.seen)
 
 
-# ── ③ 설정 «판정 모델» ─────────────────────────────────────────────────────────
+# ── ③ 설정 《판정 모델》 ─────────────────────────────────────────────────────────
 @pytest.mark.parametrize(
     "combo,jev_via",
     [("none", None), ("typesafe_only", "typesafe"), ("openrouter_only", "openrouter"),
@@ -399,7 +399,7 @@ def test_settings_typesafe_row_sees_only_typesafe_key(client, wire, combo, jev_v
 
 
 def test_screen_names_openrouter_jev():
-    """화면의 «누가 답했나»가 OpenRouter 경유 Jev를 decider로 읽지 않는다 — 경유 가지가 먼저다."""
+    """화면의 《누가 답했나》가 OpenRouter 경유 Jev를 decider로 읽지 않는다 — 경유 가지가 먼저다."""
     js = (
         Path(__file__).resolve().parent.parent
         / "src" / "app" / "static" / "js" / "composition-editor.js"
@@ -437,7 +437,7 @@ def test_direct_refusal_moves_to_openrouter_and_stays(tmp_path, wire):
     ]
     wire.assert_keys_stay_home()
     assert c.fell_back == "openrouter(typesafe 402)"
-    assert (c.PROVIDER, c.model) == ("openrouter", OPENROUTER_JEV_MODEL), "«누가 답했나»가 실제 길"
+    assert (c.PROVIDER, c.model) == ("openrouter", OPENROUTER_JEV_MODEL), "《누가 답했나》가 실제 길"
     u = c.usage()
     assert u["asks"] == 2, "거절된 묻기를 상한에 두 번 세지 않는다"
     assert u["via_openrouter"] == 1 and u["cost_usd"] > 0

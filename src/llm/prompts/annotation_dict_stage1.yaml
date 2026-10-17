@@ -2,7 +2,7 @@ id: annotation_dict_stage1_v2
 version: "2.0"
 description: "사전형 주석 1단계: 표점된 원문에서 표제어 + 사전적 의미 생성 (범주 11종·범위·해설, 2026-09-12)"
 
-# v2 (2026-09-12): 사용자가 쓰던 외부 프롬프트(한문학자 역할·범주 11종·scope·sense_note·«15개 내외»)를
+# v2 (2026-09-12): 사용자가 쓰던 외부 프롬프트(한문학자 역할·범주 11종·scope·sense_note·《15개 내외》)를
 # 이 파이프라인에 옮겼다. 출력은 XML이 아니라 JSON이다 — 저장 형식(annotation_page v2)이 JSON이고
 # 위치(target)를 글자 인덱스로 받아야 하기 때문이다.
 system: |

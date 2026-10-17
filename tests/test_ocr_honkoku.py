@@ -1,7 +1,7 @@
 """みんなで翻刻OCR(honkoku-ocr-py) 엔진 어댑터 — 모델 없이 계약만 잰다.
 
 실제 모델(289MB)은 여기서 돌리지 않는다. honkoku의 PageResult 모양을 흉내 낸 대역으로
-«행 → L3 블록 배정», «본문 글자만 저장», «좌표 x,y,w,h → x1,y1,x2,y2»를 고정한다.
+《행 → L3 블록 배정》, 《본문 글자만 저장》, 《좌표 x,y,w,h → x1,y1,x2,y2》를 고정한다.
 """
 
 import importlib.util

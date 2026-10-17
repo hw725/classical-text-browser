@@ -209,7 +209,7 @@ def commit_translation_draft(
                 for key, value in modifications.items():
                     tr[key] = value
                 # 사람이 번역문을 고쳤으면 더는 LLM 초안이 아니다 — update_translation처럼
-                # draft_id를 뗀다(강독 다시 들이기가 «초안»으로 보고 덮지 않게, D-131)
+                # draft_id를 뗀다(강독 다시 들이기가 《초안》으로 보고 덮지 않게, D-131)
                 if "translation" in modifications and isinstance(tr.get("translator"), dict):
                     tr["translator"]["draft_id"] = None
             tr["status"] = "accepted"

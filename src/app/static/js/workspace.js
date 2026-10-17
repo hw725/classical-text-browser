@@ -10,7 +10,7 @@
  *   6. 텍스트 에디터 초기화 (text-editor.js)
  *   7. 교정 편집기 초기화 (correction-editor.js)
  *
- * 참고: 예전의 «하단 패널»(높이 드래그 + 접기/펴기)은 사이드바로 옮겨졌다.
+ * 참고: 예전의 《하단 패널》(높이 드래그 + 접기/펴기)은 사이드바로 옮겨졌다.
  *   관련 DOM(panel-toggle, bottom-panel)이 index.html에서 사라졌으므로
  *   그 코드도 함께 제거했다.
  */
@@ -279,7 +279,7 @@ function initActivityBar() {
         }
         // 해석 저장소는 추출 모드에서 숨긴다(L5~L7을 쓰지 않는다).
         // hidden 속성만으로도 CSS가 막지만, 여기서 style.display를 비우는
-        // 코드가 «보이게 하는 의도»로 읽히므로 조건을 명시해 둔다.
+        // 코드가 《보이게 하는 의도》로 읽히므로 조건을 명시해 둔다.
         if (
           interpSec &&
           !interpSec.hidden &&
@@ -376,7 +376,7 @@ async function _loadSettings() {
  * 왜 별도 절인가:
  *   API 키 방식(.env)은 키만 넣으면 되지만, 구독형(Ollama 클라우드·
  *   OpenAI OAuth)은 터미널 로그인이 필요하고 앱이 대신할 수 없다.
- *   더 나쁜 것은 «서버는 떴는데 로그인은 안 된» 상태다 — 가용해 보이지만
+ *   더 나쁜 것은 《서버는 떴는데 로그인은 안 된》 상태다 — 가용해 보이지만
  *   클라우드 모델 호출이 실패하고 라우터가 조용히 유료 API로 넘어간다.
  *   그 사실이 화면에 보여야 한다(D-056).
  */
@@ -401,7 +401,7 @@ async function _loadLlmAccounts() {
       return;
     }
     const data = await res.json();
-    // 어떤 키가 이미 들어 있는가(값이 아니라 «있는가»만 온다 — D-102)
+    // 어떤 키가 이미 들어 있는가(값이 아니라 《있는가》만 온다 — D-102)
     let keyState = {};
     try {
       const kr = await fetch("/api/settings/llm-keys");
@@ -433,7 +433,7 @@ async function _loadLlmAccounts() {
       badge.textContent = _LLM_STATUS_LABEL[p.status] || p.status;
       head.appendChild(badge);
 
-      // 과금 방식은 늘 보인다. 구독형이 «무료»로 오해되지 않도록.
+      // 과금 방식은 늘 보인다. 구독형이 《무료》로 오해되지 않도록.
       const billing = document.createElement("span");
       billing.className = "settings-llm-billing";
       billing.textContent =
@@ -450,7 +450,7 @@ async function _loadLlmAccounts() {
       note.textContent = (p.note || "").replace(/\*\*/g, "");
       row.appendChild(note);
 
-      // 아직 못 쓰는 프로바이더만 «무엇을 해야 하는가»를 펼쳐 보여 준다.
+      // 아직 못 쓰는 프로바이더만 《무엇을 해야 하는가》를 펼쳐 보여 준다.
       if (p.status !== "ready" && (p.setup_steps || []).length) {
         const steps = document.createElement("ol");
         steps.className = "settings-llm-steps";
@@ -479,7 +479,7 @@ async function _loadLlmAccounts() {
 
       box.appendChild(row);
     }
-    // «확인 중»이 있으면 뒤에서 마저 고른 결과를 몇 초 뒤 다시 받아 온다(최대 3번).
+    // 《확인 중》이 있으면 뒤에서 마저 고른 결과를 몇 초 뒤 다시 받아 온다(최대 3번).
     if (providers.some((p) => p.status === "checking")) {
       _llmAccountsRecheck = (_llmAccountsRecheck || 0) + 1;
       if (_llmAccountsRecheck <= 3) setTimeout(_loadLlmAccounts, 3000);
@@ -521,7 +521,7 @@ function _ollamaPullRow(p) {
   btn.className = "text-btn text-btn-sm";
   btn.textContent = "모델 받기";
   btn.disabled = true;
-  // 단추는 «후보를 읽었고 받기가 돌지 않을 때»만 산다 — 두 응답이 어느 순서로 와도 같다.
+  // 단추는 《후보를 읽었고 받기가 돌지 않을 때》만 산다 — 두 응답이 어느 순서로 와도 같다.
   const state = { ready: false, pulling: false };
   const refreshBtn = () => {
     btn.disabled = !state.ready || state.pulling;
@@ -1192,7 +1192,7 @@ function initRailToggle() {
 
     // 펼 때는 서고 브라우저로 맞춘다.
     //
-    // 왜: 줄을 펴는 행동은 대개 «문헌을 보러 간다»는 뜻이다. 설정은
+    // 왜: 줄을 펴는 행동은 대개 《문헌을 보러 간다》는 뜻이다. 설정은
     // 어쩌다 한 번 쓴다. 접기 직전에 설정을 보고 있었다는 이유로 다시
     // 설정이 열리면 한 번 더 눌러야 한다.
     if (!next) {
@@ -1205,7 +1205,7 @@ function initRailToggle() {
 }
 
 /**
- * 위 바에 «지금 보는 문헌·권·쪽»을 적는다.
+ * 위 바에 《지금 보는 문헌·권·쪽》을 적는다.
  *
  * 왜 필요한가: 모드 탭이 오른쪽 세로 줄로 가면서 위 바가 비었고, 어느 문헌을 보고 있는지는
  * 사이드바의 강조 표시로만 알 수 있었다. 사이드바를 접으면 그마저 사라진다.
@@ -1568,7 +1568,7 @@ function initWorkspaceProfile() {
  *
  * 입력: docId — 문헌 ID.
  *
- * 왜 «비어 있는» 것만인가: 모드 전환은 표시를 바꾸는 일이지 데이터를
+ * 왜 《비어 있는》 것만인가: 모드 전환은 표시를 바꾸는 일이지 데이터를
  * 지우는 일이 아니다. 번역이나 주석이 하나라도 있으면 서버가 지키고
  * 그 사실을 돌려준다. 옮긴 것도 삭제가 아니라 휴지통이라 되돌릴 수 있다.
  */
@@ -1769,7 +1769,7 @@ async function loadLibraryInfo(options) {
     if (typeof initSidebarTree === "function") {
       initSidebarTree(docs);
       // 서고가 정해졌으니 OCR 엔진 목록을 (다시) 불러온다. 화면이 서고보다 먼저
-      // 열리면 첫 호출이 500으로 끝나 드롭다운이 «로딩 중»에 멈춰 있었다.
+      // 열리면 첫 호출이 500으로 끝나 드롭다운이 《로딩 중》에 멈춰 있었다.
       if (typeof refreshOcrEngines === "function") refreshOcrEngines();
       // 내용 트리 새로고침 단추 (D-085). 한 번만 바인딩한다.
       const contentsBtn = document.getElementById("contents-refresh-btn");
@@ -1820,7 +1820,7 @@ async function loadLibraryInfo(options) {
 }
 
 /* ──────────────────────────
-   7. 스냅샷 내보내기·가져오기 (옛 «하단 패널 탭 전환» 자리 — 하단 패널은 없어졌다)
+   7. 스냅샷 내보내기·가져오기 (옛 《하단 패널 탭 전환》 자리 — 하단 패널은 없어졌다)
    ────────────────────────── */
 
 /**
@@ -1864,7 +1864,7 @@ function initSnapshotButtons() {
         const disposition = res.headers.get("Content-Disposition") || "";
         let filename = `${interpId}.json`;
         const ext = disposition.match(/filename\*=UTF-8''([^;]+)/i);
-        // **디코딩 성공을 «이름 값»으로 판정하지 않는다.** 확장 이름이 우연히
+        // **디코딩 성공을 《이름 값》으로 판정하지 않는다.** 확장 이름이 우연히
         // 기본값과 같으면 멀쩡히 읽고도 ASCII로 되돌아간다(Codex 지적 2026-09-23).
         let decoded = false;
         if (ext) {
@@ -1876,8 +1876,8 @@ function initSnapshotButtons() {
           }
         }
         if (!decoded) {
-          // 따옴표로 감싼 값이 먼저다 — 그 안의 «;» 는 파일 이름의 일부다
-          // (`filename="notes;draft.json"`). 감싸지 않은 값에서만 «;» 가 끝이다.
+          // 따옴표로 감싼 값이 먼저다 — 그 안의 《;》 는 파일 이름의 일부다
+          // (`filename="notes;draft.json"`). 감싸지 않은 값에서만 《;》 가 끝이다.
           const quoted = disposition.match(/filename="([^"]*)"/i);
           const bare = disposition.match(/filename=([^;]+)/i);
           if (quoted) filename = quoted[1].trim();
@@ -2011,7 +2011,7 @@ function onPageChanged(opts) {
   const pageNum = viewerState.pageNum;
   if (!docId || !partId || !pageNum) return;
 
-  // 0. 위 바의 «문헌 · 권 · 쪽» — 전에는 사이드바에서 쪽을 고를 때(_selectPage)만 갱신해,
+  // 0. 위 바의 《문헌 · 권 · 쪽》 — 전에는 사이드바에서 쪽을 고를 때(_selectPage)만 갱신해,
   //    ◀▶·키보드·뒤로 가기로 옮기면 옛 쪽 번호가 남았다(2026-10-11 재확인)
   if (typeof updateModeBarContext === "function") updateModeBarContext();
 
@@ -2060,7 +2060,7 @@ function onPageChanged(opts) {
     _loadInterpretationList();
   }
 
-  // 7. 옛 «해석 층 내용» 채우기를 걷어냈다(2026-09-22, B-008) — 조건이
+  // 7. 옛 《해석 층 내용》 채우기를 걷어냈다(2026-09-22, B-008) — 조건이
   //    `interpState.active` 였고 그것은 참이 되는 길이 없었다. L5~L7 은 다섯
   //    편집기가 각자 자기 모드에서 읽는다(D-096).
 
@@ -2178,7 +2178,7 @@ function _fillLlmSelect(select, models) {
     _annotateExternalPunctStatus(opt);
   }
 
-  // 판정 모델(D-134) — 자동 스캔의 «무슨 글인가»를 확률로 답하는 모델. 생성 모델 목록(/api/llm/models)에
+  // 판정 모델(D-134) — 자동 스캔의 《무슨 글인가》를 확률로 답하는 모델. 생성 모델 목록(/api/llm/models)에
   // 들지 않으므로 여기서 붙인다. 값 `decider:decider-27b`는 force_provider="decider"로 라우트에 간다.
   // D-135: Cloudflare clef(`clef:clef` → force_provider="clef")가 먼저 서고, 키(토큰+계정 id)가 있으면
   // **처음 채울 때 한 번** 미리 고른다(사용자 결정 2026-10-04). 사람이 다른 것을 고른 뒤 다시 채울 때는
@@ -2247,8 +2247,8 @@ document.addEventListener("llm-accounts-changed", () => {
 });
 
 // 창이 다시 활성화되면 목록을 다시 받는다(1분에 한 번까지). 프록시가 새 모델을 얻거나
-// 서버가 갈린 뒤에도 드롭다운은 페이지를 열 때 채운 목록을 들고 있었다 — «gpt-6-astra가
-// 왜 안 보이나»(2026-09-05). 새로고침 없이 따라오게 한다.
+// 서버가 갈린 뒤에도 드롭다운은 페이지를 열 때 채운 목록을 들고 있었다 — 《gpt-6-astra가
+// 왜 안 보이나》(2026-09-05). 새로고침 없이 따라오게 한다.
 let _llmSelectsRefreshedAt = Date.now(); // 첫 포커스에 한 번 더 받지 않게
 window.addEventListener("focus", () => {
   const now = Date.now();
@@ -2534,9 +2534,9 @@ function renderDocumentList(docs) {
  * @returns {Promise<object>} complete 이벤트의 result 객체
  */
 async function fetchWithSSE(url, body, onProgress, fallbackUrl) {
-  // 폴백은 «스트림이 열리기 전» 실패에만 한다(2026-10-11 전수). 스트림이 열린 뒤에는 서버가 이미
+  // 폴백은 《스트림이 열리기 전》 실패에만 한다(2026-10-11 전수). 스트림이 열린 뒤에는 서버가 이미
   // LLM을 불렀을 수 있다 — 예전에는 그때도 폴백 URL로 같은 호출을 한 번 더 보내 유료 모델이면 비용이
-  // 두 번 나갔고, 서버가 보낸 오류 문구는 «파싱 무시»로 삼켜져 사람에게 닿지 않았다.
+  // 두 번 나갔고, 서버가 보낸 오류 문구는 《파싱 무시》로 삼켜져 사람에게 닿지 않았다.
   let streamStarted = false;
   try {
     const resp = await fetch(url, {
@@ -2643,12 +2643,12 @@ window.notifyLlmTruncation = notifyLlmTruncation;
 
 
 /**
- * 확정본을 다시 쓴 응답에서 «사람 교정을 옮겼다/못 옮겼다»를 읽어 토스트로 알린다 (D-133, 2026-10-05).
+ * 확정본을 다시 쓴 응답에서 《사람 교정을 옮겼다/못 옮겼다》를 읽어 토스트로 알린다 (D-133, 2026-10-05).
  *
  * 왜 필요한가:
  *   확정본(L4)을 다시 쓰는 길(열람 탭 저장·OCR 패널 저장·LLM 교정 적용·일괄 교정·텍스트레이어
  *   가져오기)은 서버가 그 쪽의 사람 교정을 새 글 위로 옮겨 붙인다. 새 글이 옛 글과 많이 달라
- *   옮기지 못한 교정은 교정 목록의 «기록»(자리 없는 항목)으로 남는데, 화면이 이 소식을 읽지 않으면
+ *   옮기지 못한 교정은 교정 목록의 《기록》(자리 없는 항목)으로 남는데, 화면이 이 소식을 읽지 않으면
  *   사람은 교정이 사라졌다고 여긴다 — 사람이 모르면 고친 것이 닿지 않는다.
  *
  * 읽는 모양 두 가지:
@@ -2683,7 +2683,7 @@ function notifyCorrectionsRebase(data) {
       const n = notices.reduce((s, x) => s + ((x && x.unmerged && x.unmerged.count) || 0), 0);
       showToast(
         `${unPages.join("·")}쪽: 새 글이 옛 글과 많이 달라 사람 교정 ${n}건을 새 글에 옮기지 못했습니다 — ` +
-          `지우지 않고 교정 목록에 «기록»으로 남겼습니다. 교정 탭에서 확인해 다시 고쳐 주세요.`,
+          `지우지 않고 교정 목록에 《기록》으로 남겼습니다. 교정 탭에서 확인해 다시 고쳐 주세요.`,
         "warning",
         12000,
       );
@@ -2712,7 +2712,7 @@ function notifyCorrectionsRebase(data) {
   if (un && un.count) {
     showToast(
       `새 글이 옛 글과 많이 달라 사람 교정 ${un.count}건을 새 글에 옮기지 못했습니다 — ` +
-        `지우지 않고 교정 목록에 «기록»으로 남겼습니다. 교정 탭에서 확인해 다시 고쳐 주세요.`,
+        `지우지 않고 교정 목록에 《기록》으로 남겼습니다. 교정 탭에서 확인해 다시 고쳐 주세요.`,
       "warning",
       12000,
     );

@@ -597,7 +597,7 @@ def _parse_search_results(html_text: str) -> list[dict[str, Any]]:
                 )
 
     except Exception as e:  # noqa: BLE001
-        # HTML 파싱 실패 시 빈 목록 반환 — 사이트 개편으로 «0건»이 원인 없이 나오지 않게 남긴다
+        # HTML 파싱 실패 시 빈 목록 반환 — 사이트 개편으로 《0건》이 원인 없이 나오지 않게 남긴다
         logger.warning("국립공문서관 검색 결과 해석 실패(빈 목록): %s", e)
 
     return results

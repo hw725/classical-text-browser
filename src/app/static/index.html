@@ -569,7 +569,7 @@
             <!-- ====== LLM 연결 ======
                  API 키 방식은 .env에 넣으면 끝이지만, 구독형(Ollama 클라우드·
                  OpenAI OAuth)은 터미널 로그인이 필요하고 앱이 대신할 수 없다.
-                 «서버는 떴는데 로그인은 안 된» 상태가 조용히 유료 API 폴백으로
+                 《서버는 떴는데 로그인은 안 된》 상태가 조용히 유료 API 폴백으로
                  이어진 사고가 있어(D-056), 그 구분을 화면에 드러낸다. -->
             <div
               class="section-header"
@@ -595,7 +595,7 @@
             </div>
 
             <!-- ====== 판정 모델 (D-134) ======
-                 글을 만들지 않고 «정해진 질문의 확률»만 돌려주는 모델. LLM 라우터(위 목록)에
+                 글을 만들지 않고 《정해진 질문의 확률》만 돌려주는 모델. LLM 라우터(위 목록)에
                  들지 않으므로 따로 둔다. 전에는 키를 넣을 화면이 없었다(Jev는 앱 밖 파일만 읽었다). -->
             <div
               class="section-header"
@@ -616,7 +616,7 @@
               <div class="placeholder">로딩 중...</div>
             </div>
             <div class="settings-info-note">
-              글을 쓰지 않고 «예·아니오·고르기»의 확률만 답하는 모델입니다. 빠르고 쌉니다.
+              글을 쓰지 않고 《예·아니오·고르기》의 확률만 답하는 모델입니다. 빠르고 쌉니다.
               없어도 앱은 돌아갑니다 — 그 자리는 위의 일반 LLM이 맡습니다.
             </div>
 
@@ -810,8 +810,8 @@
             <!-- 의존 경고 배너 (2026-09-22, B-008 — 죽은 해석 패널에서 옮겨 왔다).
                  여기 두는 까닭: 「어느 파일이 바뀌었나」를 그리는 자리가 이 아래
                  (`dep-file-list`)이므로, 보는 것과 누르는 것이 한 자리에 모인다.
-                 옛 자리에 있던 `diff` 단추는 걷어냈다 — 하던 일이 «이 사이드바를
-                 대신 눌러 주는 것»뿐이라 여기서는 제자리걸음이 된다. -->
+                 옛 자리에 있던 `diff` 단추는 걷어냈다 — 하던 일이 《이 사이드바를
+                 대신 눌러 주는 것》뿐이라 여기서는 제자리걸음이 된다. -->
             <div
               id="interp-dep-banner"
               class="interp-dep-banner"
@@ -1298,7 +1298,7 @@
                   style="width: 64px"
                   hidden
                   placeholder="전체"
-                  title="이 회전을 저장할 쪽 범위. 비우면 권 전체, «37-52»면 그 쪽들만(양 끝 포함). 권 전체로 저장하면 쪽 범위는 지워집니다"
+                  title="이 회전을 저장할 쪽 범위. 비우면 권 전체, 《37-52》면 그 쪽들만(양 끝 포함). 권 전체로 저장하면 쪽 범위는 지워집니다"
                 />
                 <!-- 임시 회전을 이 권에 저장(D-123) — 돌린 각도가 있을 때만 보인다 -->
                 <button
@@ -1312,7 +1312,7 @@
                 <button
                   id="work-order-btn"
                   class="pdf-btn"
-                  title="쪽을 자동으로 훑어 회전·OCR 엔진을 재고(스캔), 이 책에 대해 아는 것을 말로 덧붙이면(«5~69쪽은 누운 2쪽 펼침, 활자 세로쓰기») 쪽 구간별 작업 계획이 됩니다. 확인하고 적용한 뒤 「권 전체 OCR」로 돌립니다"
+                  title="쪽을 자동으로 훑어 회전·OCR 엔진을 재고(스캔), 이 책에 대해 아는 것을 말로 덧붙이면(《5~69쪽은 누운 2쪽 펼침, 활자 세로쓰기》) 쪽 구간별 작업 계획이 됩니다. 확인하고 적용한 뒤 「권 전체 OCR」로 돌립니다"
                   aria-label="말로 작업 지시"
                 >말로 지시<span class="llm-tag">LLM</span></button>
                 <div class="pdf-toolbar-divider"></div>
@@ -1630,13 +1630,13 @@
                   >
                     선택 블록 OCR
                   </button>
-                  <!-- D-126: 훈점 구간만 다른 엔진으로 다시 읽는 일 — 쪽 범위와 «이미 된 쪽도 다시» -->
+                  <!-- D-126: 훈점 구간만 다른 엔진으로 다시 읽는 일 — 쪽 범위와 《이미 된 쪽도 다시》 -->
                   <input
                     id="ocr-batch-pages"
                     class="pdf-page-input"
                     style="width: 72px"
                     placeholder="쪽: 전체"
-                    title="「권 전체 OCR」이 돌 쪽. 비우면 권 전체, «37-52»나 «3,7,10-12»처럼 적으면 그 쪽만. 위의 엔진 드롭다운이 이 쪽들에 쓰입니다"
+                    title="「권 전체 OCR」이 돌 쪽. 비우면 권 전체, 《37-52》나 《3,7,10-12》처럼 적으면 그 쪽만. 위의 엔진 드롭다운이 이 쪽들에 쓰입니다"
                   />
                   <label class="text-toolbar-check" title="이미 OCR 결과가 있는 쪽도 다시 읽습니다(덮기 전 백업을 남깁니다). 끄면 결과 없는 쪽만 돕니다">
                     <input id="ocr-batch-redo" type="checkbox" /> 된 쪽도 다시
@@ -1966,7 +1966,7 @@
 
             <!-- 들이기·내보내기 뷰 (2026-10-02, 옛 「말로 작업 지시」 ③) — 권 전체가 대상이다.
                  OCR·교정이 끝난 뒤의 일이라 계획 창이 아니라 확정본(L4)을 다루는 이 탭에 둔다.
-                 «강독»은 한 예시였을 뿐이라 화면 말에서 뺐다: 논문 한 편을 줄바꿈만 지워 마크다운으로
+                 《강독》은 한 예시였을 뿐이라 화면 말에서 뺐다: 논문 한 편을 줄바꿈만 지워 마크다운으로
                  받는 것도, LLM 결과를 층에 나눠 들이는 것도 같은 자리다. -->
             <div
               id="corr-export-view"
@@ -1985,7 +1985,7 @@
                 <button id="cx-dl-one" class="text-btn text-btn-primary" title="전문을 파일 하나로 — 논문 한 편처럼 장이 없을 때">한 파일로</button>
                 <button id="cx-dl-zip" class="text-btn" title="작업 계획의 장마다 한 파일 + 목차·전문(zip). 들인 LLM 결과가 있으면 노트도 함께">장별로 (zip)</button>
               </div>
-              <div class="wo-dim">줄을 잇는 방식: 세로쓰기는 그대로 붙이고, 가로쓰기는 빈칸 하나를 둡니다(한자·가나끼리 만나면 붙임, 영어 «con-»은 하이픈을 떼고 붙임).
+              <div class="wo-dim">줄을 잇는 방식: 세로쓰기는 그대로 붙이고, 가로쓰기는 빈칸 하나를 둡니다(한자·가나끼리 만나면 붙임, 영어 《con-》은 하이픈을 떼고 붙임).
                 문단 끝과 들여쓰기는 OCR 결과의 줄 좌표로 가릅니다 — 확정본의 줄 수가 OCR 결과와 다른 쪽은 글자 수로 어림합니다.</div>
 
               <div class="wo-step"><b>LLM 결과 들이기</b> — 앱 밖의 LLM(Claude Code 등)이 돌려준 JSON(교정·번역·어휘)을 기존 층에 나눠 담습니다</div>
@@ -2004,7 +2004,7 @@
                 <div class="wo-row">
                   <label>모델
                     <select id="cx-model-select" class="props-select llm-model-select"
-                      title="예시를 틀로 바꿀 모델. «자동»은 사용 가능한 프로바이더 순서에서 처음 되는 것"></select>
+                      title="예시를 틀로 바꿀 모델. 《자동》은 사용 가능한 프로바이더 순서에서 처음 되는 것"></select>
                   </label>
                   <button id="cx-make-template" class="text-btn text-btn-primary">틀 만들기</button>
                   <label class="text-btn" title="전에 받아 둔 틀 파일(.j2·.txt)">
@@ -2077,7 +2077,7 @@
             <!-- 해석 저장소 드롭다운은 D-097에서 없앴다 — 편성은 원본 저장소의 것이라
                  문헌·권만 있으면 된다. 해석 저장소는 표점 탭부터 쓴다. -->
 
-            <!-- 편성 흐름 (D-122): 위에서 아래로 ①②③. 처음 보는 사람이 «어딜 눌러야 하나»를 묻지 않게
+            <!-- 편성 흐름 (D-122): 위에서 아래로 ①②③. 처음 보는 사람이 《어딜 눌러야 하나》를 묻지 않게
                  단추는 「말로 넣기」·「더 묻기」·「후보 보기」·「적용」 넷뿐이다. 탭을 열면 ①이 스스로 센다
                  (규칙만, LLM 아님). 저장은 ③「적용」 한 곳 — 규칙과 경계를 한 요청으로. -->
             <div class="comp-container">
@@ -2114,14 +2114,14 @@
                        저장은 「적용」이 규칙과 함께 한다(reference_text). -->
                   <textarea id="comp-llm-say" rows="3"
                     placeholder="이 책에 대해 아는 것 — 해제·서지 설명을 붙여 넣고, 어떻게 나뉘는지 한 줄씩. 예) 목차와 제목이 없다. 기사는 ○ 뒤의 날짜로 시작한다 / 제목 행은 ○○로 끝난다"
-                    title="해제(解題)를 통째로 붙여 넣어도 됩니다(2만 자여도). 「말로 넣기」는 «어떻게 나뉘는지»를 말한 문장만 ②의 규칙으로 옮기고 나머지는 참고로 읽습니다. 「더 묻기…」의 선택지도 이 글을 읽습니다. 저장은 「적용」이 규칙과 함께 합니다"></textarea>
+                    title="해제(解題)를 통째로 붙여 넣어도 됩니다(2만 자여도). 「말로 넣기」는 《어떻게 나뉘는지》를 말한 문장만 ②의 규칙으로 옮기고 나머지는 참고로 읽습니다. 「더 묻기…」의 선택지도 이 글을 읽습니다. 저장은 「적용」이 규칙과 함께 합니다"></textarea>
                   <div class="comp-step-foot">
                     <button id="comp-say-btn" class="text-btn text-btn-sm" type="button" title="쓴 것을 규칙 칸으로 옮깁니다. 저장하지 않습니다">말로 넣기 <span class="llm-tag">LLM</span></button>
                     <button id="comp-llm-btn" class="text-btn text-btn-sm" type="button" title="목차 항목 구조화 · 표제 어휘 뽑기 · 시작 표지 묻기">더 묻기… <span class="llm-tag">LLM</span></button>
                     <!-- 두 단추가 같은 모델을 쓴다 — 창 안에 두면 「말로 넣기」만 쓰는 사람은 못 본다(2026-09-09) -->
                     <label class="comp-llm-model">모델
                       <select id="comp-llm-model-select" class="props-select llm-model-select"
-                        title="「말로 넣기」와 「더 묻기…」의 글 쓰는 선택지들이 함께 씁니다. «자동»은 사용 가능한 프로바이더 순서(Ollama → Gemini …)로 넘어갑니다. 「판정 모델로 고르기」는 예외입니다 — 그것은 글을 만들지 않는 전용 모델(본문·목차 대조는 TypeSafe Jev, 실패한 호출만 Perplexity decider)을 쓰므로 이 고름과 무관합니다"></select>
+                        title="「말로 넣기」와 「더 묻기…」의 글 쓰는 선택지들이 함께 씁니다. 《자동》은 사용 가능한 프로바이더 순서(Ollama → Gemini …)로 넘어갑니다. 「판정 모델로 고르기」는 예외입니다 — 그것은 글을 만들지 않는 전용 모델(본문·목차 대조는 TypeSafe Jev, 실패한 호출만 Perplexity decider)을 쓰므로 이 고름과 무관합니다"></select>
                     </label>
                     <span id="comp-say-count" class="comp-rules-count"></span>
                     <span id="comp-llm-pattern-out" class="comp-rules-suggest-out"></span>
@@ -2185,13 +2185,13 @@
                     <!-- 체크와 행 선택은 다른 상태다(D-122 §3) — 처음 보는 사람은 여기서 안다 -->
                     <span class="comp-step-hint" title="체크(☑)한 행이 경계가 됩니다 — 저장된 경계는 처음부터 체크돼 있고, 체크를 빼면 「적용」 때 지워집니다. 행을 누르면 그 옆에 도구가 뜨고, Shift 범위·Ctrl 하나씩으로 여러 행을 잡으면 한꺼번에 바꿉니다">☑ = 경계가 됨(저장된 것은 처음부터 ☑) · 행을 누르면 그 옆에 고치는 도구</span>
                   </div>
-                  <!-- «바뀐 것» (D-121 관문): 「적용」이 쓸 것(체크한 행) vs 지금 저장된 경계 — _planApply 하나로 센다 -->
+                  <!-- 《바뀐 것》 (D-121 관문): 「적용」이 쓸 것(체크한 행) vs 지금 저장된 경계 — _planApply 하나로 센다 -->
                   <div id="comp-preview-out" class="comp-preview-out" hidden></div>
                   <div id="comp-toc-unmatched" class="comp-toc-unmatched" style="display: none"></div>
                   <!-- 애매한 후보 2차 판정(D-137): 앱은 모델을 부르지 않는다. 「애매한 후보 내보내기」로 복사한 글을
                        채팅 LLM에 붙여 넣고, 그 답을 여기 붙인다. 결과는 체크 제안뿐 — 저장은 「적용」 -->
                   <div id="comp-escalate-panel" class="comp-escalate-panel" hidden>
-                    <div class="comp-escalate-note">채팅 LLM의 답(JSON — 앞뒤 설명·```가 섞여도 됩니다)만 붙여 넣으세요. 내보낸 글(지시문·후보)을 그대로 붙이거나 다른 권의 답(묶음 표지 batch가 다름)을 붙이면 들이지 않습니다. «예»는 체크되고 «아니오»는 체크 없이 표시됩니다. 저장은 「적용」을 눌러야 됩니다.</div>
+                    <div class="comp-escalate-note">채팅 LLM의 답(JSON — 앞뒤 설명·```가 섞여도 됩니다)만 붙여 넣으세요. 내보낸 글(지시문·후보)을 그대로 붙이거나 다른 권의 답(묶음 표지 batch가 다름)을 붙이면 들이지 않습니다. 《예》는 체크되고 《아니오》는 체크 없이 표시됩니다. 저장은 「적용」을 눌러야 됩니다.</div>
                     <textarea id="comp-escalate-answer" rows="5" placeholder='{"batch":"esc-…-1","answers":[{"id":"…","start":"yes","conf":0.9}, ...]}'></textarea>
                     <div class="comp-escalate-actions">
                       <button type="button" id="comp-escalate-import-btn" class="text-btn">들이기</button>
@@ -2200,7 +2200,7 @@
                       <span id="comp-escalate-out" class="comp-propose-stats"></span>
                     </div>
                   </div>
-                  <!-- 모델 후보를 «몇 개까지 볼지» — 문턱(0.7 같은 숫자)은 사람에게 뜻이 없고 책마다
+                  <!-- 모델 후보를 《몇 개까지 볼지》 — 문턱(0.7 같은 숫자)은 사람에게 뜻이 없고 책마다
                        다르다(천진담초는 조합 0.6, 운양집은 단독 0.7~0.8이 좋았다). 그래서 개수로 묻고
                        코드가 확률 내림차순으로 자른다. 규칙 후보는 이 손잡이와 무관하게 늘 보인다. -->
                   <div id="comp-topn-bar" class="comp-topn-bar" hidden>
@@ -2211,7 +2211,7 @@
                   <div class="comp-batch-bar">
                     <label class="comp-sig-opt" title="보이는 후보 전부를 경계로 삼거나 뺍니다"><input id="comp-check-all" type="checkbox" /> 전체 ☑</label>
                     <span id="comp-sel-count" class="comp-propose-stats" title="행을 누르면 고릅니다. Shift로 범위, Ctrl로 하나씩"></span>
-                    <!-- 도구는 누른 행 «옆»에 뜬다(D-122 덧붙임 2) — JS가 고른 행 아래로 옮긴다. 안 고르면 여기(숨김)에 둔다 -->
+                    <!-- 도구는 누른 행 《옆》에 뜬다(D-122 덧붙임 2) — JS가 고른 행 아래로 옮긴다. 안 고르면 여기(숨김)에 둔다 -->
                     <span id="comp-batch-holder" hidden>
                     <span id="comp-batch-tools" hidden>
                       <span id="comp-batch-count"></span>
@@ -2234,11 +2234,11 @@
                 </section>
               </div>
             </div>
-          <!-- 손질 도구 — 패널 «맨 아래»에 붙어 위로 펼쳐진다(기본 접힘).
-               여기 있는 것은 «기사 하나 안에서 문단 나누기»와 그 언저리다. 기사 단위 자체는
+          <!-- 손질 도구 — 패널 《맨 아래》에 붙어 위로 펼쳐진다(기본 접힘).
+               여기 있는 것은 《기사 하나 안에서 문단 나누기》와 그 언저리다. 기사 단위 자체는
                경계만 정하면 저절로 정해지므로(D-092), 이 도구는 주 흐름이 아니다. -->
             <details id="comp-manual" class="comp-manual">
-              <summary title="단위 하나를 골라 그 «안»을 한 단 깊게 나눕니다">단위 손보기 <small id="comp-block-count"></small></summary>
+              <summary title="단위 하나를 골라 그 《안》을 한 단 깊게 나눕니다">단위 손보기 <small id="comp-block-count"></small></summary>
               <div class="comp-manual-body">
               <!-- 옛 「자동 편성」(쪽의 레이아웃 블록마다 경계 하나)은 D-116에서 없앴다 —
                    경계는 ① 신호 → ② 규칙 → ③ 후보 체크 → 「적용」이 세운다(D-122) -->
@@ -2247,7 +2247,7 @@
                   id="comp-split-btn"
                   class="text-btn text-btn-sm"
                   disabled
-                  title="고른 단위 «안»을 구분선(===) 자리에서 한 단 깊은 단위로 나눕니다. 나란한 단위는 만들지 않습니다 — 그것은 사이드바 「경계 넣기」의 몫입니다"
+                  title="고른 단위 《안》을 구분선(===) 자리에서 한 단 깊은 단위로 나눕니다. 나란한 단위는 만들지 않습니다 — 그것은 사이드바 「경계 넣기」의 몫입니다"
                 >쪼개기</button>
                 <button
                   id="comp-reset-btn"
@@ -2290,7 +2290,7 @@
           </div>
 
           <!-- 우측 패널: 해석 (interpretation 모드에서만 표시) -->
-          <!-- 옛 «해석 (L5~L7)» 통합 편집기가 여기 있었다. 2026-02-24 `e84d800` 이
+          <!-- 옛 《해석 (L5~L7)》 통합 편집기가 여기 있었다. 2026-02-24 `e84d800` 이
                「비교」 탭을 지우면서 `_switchMode` 에 폴백을 넣었으므로 의도된 제거였는데,
                패널과 그 안의 것들이 남아 일곱 달 동안 닿을 수 없었다(B-008). 2026-09-22에
                의존 경고·「확인」·「기반 업데이트」는 「의존 추적」 사이드바로, 스냅샷
@@ -2362,7 +2362,7 @@
             <!-- 도구 바 -->
             <div class="punct-toolbar">
               <!-- 단위 고르기는 사이드바 「내용」 트리가 한다(D-096). 이 select는 편집기의
-                   기존 «고르면 불러온다» 길을 그대로 쓰려고 남긴 것이고 화면에는 보이지 않는다. -->
+                   기존 《고르면 불러온다》 길을 그대로 쓰려고 남긴 것이고 화면에는 보이지 않는다. -->
               <select id="punct-block-select" class="unit-select-hidden" hidden><option value="">블록 선택</option></select>
               <span class="unit-pick-label is-empty">사이드바 「내용」에서 단위를 고르세요</span>
               <div class="text-toolbar-spacer"></div>
@@ -2472,7 +2472,7 @@
             <!-- 도구 바 -->
             <div class="hyeonto-toolbar">
               <!-- 단위 고르기는 사이드바 「내용」 트리가 한다(D-096). 이 select는 편집기의
-                   기존 «고르면 불러온다» 길을 그대로 쓰려고 남긴 것이고 화면에는 보이지 않는다. -->
+                   기존 《고르면 불러온다》 길을 그대로 쓰려고 남긴 것이고 화면에는 보이지 않는다. -->
               <select id="hyeonto-block-select" class="unit-select-hidden" hidden><option value="">블록 선택</option></select>
               <span class="unit-pick-label is-empty">사이드바 「내용」에서 단위를 고르세요</span>
               <div class="text-toolbar-spacer"></div>
@@ -2585,7 +2585,7 @@
             <!-- 도구 바 -->
             <div class="trans-toolbar">
               <!-- 단위 고르기는 사이드바 「내용」 트리가 한다(D-096). 이 select는 편집기의
-                   기존 «고르면 불러온다» 길을 그대로 쓰려고 남긴 것이고 화면에는 보이지 않는다. -->
+                   기존 《고르면 불러온다》 길을 그대로 쓰려고 남긴 것이고 화면에는 보이지 않는다. -->
               <select id="trans-block-select" class="unit-select-hidden" hidden><option value="">블록 선택</option></select>
               <span class="unit-pick-label is-empty">사이드바 「내용」에서 단위를 고르세요</span>
               <div class="text-toolbar-spacer"></div>
@@ -2728,7 +2728,7 @@
             <!-- 도구 바 -->
             <div class="ann-toolbar">
               <!-- 단위 고르기는 사이드바 「내용」 트리가 한다(D-096). 이 select는 편집기의
-                   기존 «고르면 불러온다» 길을 그대로 쓰려고 남긴 것이고 화면에는 보이지 않는다. -->
+                   기존 《고르면 불러온다》 길을 그대로 쓰려고 남긴 것이고 화면에는 보이지 않는다. -->
               <select id="ann-block-select" class="unit-select-hidden" hidden><option value="">블록 선택</option></select>
               <span class="unit-pick-label is-empty">사이드바 「내용」에서 단위를 고르세요</span>
               <select
@@ -3066,7 +3066,7 @@
             <!-- 도구 바 -->
             <div class="cite-toolbar">
               <!-- 단위 고르기는 사이드바 「내용」 트리가 한다(D-096). 이 select는 편집기의
-                   기존 «고르면 불러온다» 길을 그대로 쓰려고 남긴 것이고 화면에는 보이지 않는다. -->
+                   기존 《고르면 불러온다》 길을 그대로 쓰려고 남긴 것이고 화면에는 보이지 않는다. -->
               <select id="cite-block-select" class="unit-select-hidden" hidden><option value="">블록 선택</option></select>
               <span class="unit-pick-label is-empty">사이드바 「내용」에서 단위를 고르세요</span>
               <div class="text-toolbar-spacer"></div>
@@ -3419,7 +3419,7 @@
                 >
                   <span>쪽 범위</span>
                   <!-- autocomplete="off": 브라우저가 새로고침 때 옛 값을 되살려
-                       «처음 들어왔는데 쪽이 지정돼 있다»가 되는 것을 막는다. -->
+                       《처음 들어왔는데 쪽이 지정돼 있다》가 되는 것을 막는다. -->
                   <input
                     type="text"
                     id="extract-pages-input"
@@ -3428,7 +3428,7 @@
                   />
                 </label>
                 <!-- 레이아웃을 고친 쪽은 자동으로 다시 돈다. 이 체크박스는
-                     그 판정과 무관하게 «전부 다시»를 강제하는 안전장치다.
+                     그 판정과 무관하게 《전부 다시》를 강제하는 안전장치다.
                      쪽마다 LLM 호출이 나가므로 기본은 꺼 둔다. -->
                 <label class="extract-check">
                   <input
@@ -3438,7 +3438,7 @@
                   <span>이미 처리한 쪽도 다시 (비용이 다시 듭니다)</span>
                 </label>
                 <!-- LLM 교정 사다리 (D-082). 기본 끔 — 켜면 쪽마다 LLM 호출이 나간다.
-                     «선별»은 신뢰도가 낮은 블록·협주·한글 미지원 엔진 결과만 다시 본다.
+                     《선별》은 신뢰도가 낮은 블록·협주·한글 미지원 엔진 결과만 다시 본다.
                      1단계에서 떨어진 블록은 2단계로 올라가고, 그래도 남은 블록은
                      OCR 패널의 「검토할 쪽」 목록에 선다. -->
                 <label
@@ -3458,7 +3458,7 @@
                   id="extract-cost"
                 ></div>
 
-                <!-- 버튼을 누르기 전에 «몇 쪽이 실제로 도는가»를 보여 준다.
+                <!-- 버튼을 누르기 전에 《몇 쪽이 실제로 도는가》를 보여 준다.
                      레이아웃을 고친 뒤 다시 실행할 때 전체가 도는 것인지
                      고친 쪽만 도는 것인지가 보여야 안심하고 누른다. -->
                 <div
@@ -3493,7 +3493,7 @@
                 ></div>
 
                 <!-- ====== 쪽별 결과 훑어보기 ======
-                     «12쪽만 다시 돌린다»를 하려면 12쪽이 나쁘다는 것을 먼저
+                     《12쪽만 다시 돌린다》를 하려면 12쪽이 나쁘다는 것을 먼저
                      알아야 한다. 그런데 텍스트를 보는 경로가 쪽 단위뿐이라
                      15쪽이면 15번 눌러 봐야 한다. 여기서 한눈에 보고,
                      이상한 쪽을 누르면 쪽 범위에 그대로 들어간다. -->
@@ -3539,7 +3539,7 @@
                   id="extract-export-status"
                 ></div>
 
-                <!-- PDF를 만들기 전에 «쪽마다 확인이 끝났는가»를 알려 준다.
+                <!-- PDF를 만들기 전에 《쪽마다 확인이 끝났는가》를 알려 준다.
                      산출물이 서지 관리 도구로 넘어가면 되돌리기 어려우므로,
                      확신 없이 내보내지 않도록 여기서 한 번 멈춰 세운다. -->
                 <div
@@ -3671,7 +3671,7 @@
 
           <!-- 모드 탭 (오른쪽 세로 줄) — 왼쪽 아이콘 줄과 짝을 이룬다.
                활성 탭을 다시 누르면 오른쪽 패널이 접힌다(왼쪽 아이콘 줄과 같은 규칙).
-               접혀도 이 줄은 남으므로 «지금 어느 모드인가»를 늘 알 수 있다. -->
+               접혀도 이 줄은 남으므로 《지금 어느 모드인가》를 늘 알 수 있다. -->
           <div class="mode-rail" role="tablist" aria-label="작업 모드">
             <!-- 원본 작업 -->
             <button class="mode-tab active" data-mode="view" role="tab" aria-selected="true">열람</button>
@@ -4009,7 +4009,7 @@
       </div>
 
       <!-- LLM에 묻기 모달 (D-117): 편성 탭에서 모델을 부르는 진입점은 이 창 하나다.
-           LLM 단추가 여럿이면 «무엇이 모델을 부르는가»가 헷갈린다(사용자 지시 2026-09-07). -->
+           LLM 단추가 여럿이면 《무엇이 모델을 부르는가》가 헷갈린다(사용자 지시 2026-09-07). -->
       <div class="corr-dialog-overlay" id="comp-llm-overlay" style="display: none">
         <div class="corr-dialog comp-llm-dialog">
           <div class="bib-dialog-header">
@@ -4036,9 +4036,9 @@
           </label>
           <label class="comp-llm-opt">
             <input id="comp-llm-opt-patterns" type="checkbox" />
-            <span title="표본을 보내 «새 글이 시작하는 행의 공통점»을 정해진 종류(행머리 어휘·행끝 어휘·기호·없음)로 받습니다. 전문에서 넷 이상 되풀이되는 것만 목록에 넣습니다. 규약을 못 찾은 책에서 특히 씁니다"><b>시작 표지 묻기</b>
+            <span title="표본을 보내 《새 글이 시작하는 행의 공통점》을 정해진 종류(행머리 어휘·행끝 어휘·기호·없음)로 받습니다. 전문에서 넷 이상 되풀이되는 것만 목록에 넣습니다. 규약을 못 찾은 책에서 특히 씁니다"><b>시작 표지 묻기</b>
               <span class="comp-llm-scope">표본
-                <select id="comp-llm-scope" class="props-select" style="font-size: 11px" title="넓을수록 많이 보냅니다. 표지가 문맥이 있어야 보이면 «앞뒤 한 행», 행 중간 아무 데나 오면 «쪽 통째», 그래도 안 보이면 «권 전체»(클라우드 모델용 — 로컬 모델은 문맥이 모자랄 수 있음)">
+                <select id="comp-llm-scope" class="props-select" style="font-size: 11px" title="넓을수록 많이 보냅니다. 표지가 문맥이 있어야 보이면 《앞뒤 한 행》, 행 중간 아무 데나 오면 《쪽 통째》, 그래도 안 보이면 《권 전체》(클라우드 모델용 — 로컬 모델은 문맥이 모자랄 수 있음)">
                   <option value="starts">시작 자리 80줄</option>
                   <option value="context">시작 자리 80줄 + 앞뒤 한 행</option>
                   <option value="pages">6쪽 통째</option>
@@ -4048,19 +4048,19 @@
               </span>
             </span>
           </label>
-          <!-- D-125: 규칙이 못 잡는 책(문집·잡록) — 전문을 행 번호와 함께 보내 «새 글이 시작하는 행»을
+          <!-- D-125: 규칙이 못 잡는 책(문집·잡록) — 전문을 행 번호와 함께 보내 《새 글이 시작하는 행》을
                고르게 한다. 모델은 위치를 만들지 않고 고르기만 하므로 이미지-글자 대응이 그대로다. -->
           <label class="comp-llm-opt">
             <input id="comp-llm-opt-structure" type="checkbox" />
-            <span title="권의 확정본 전문을 행 번호와 함께 보내 «새 글이 시작하는 행·제목·깊이»를 받습니다. 모델은 행 번호를 고르기만 하고, 실제 행과 맞는 답만 ③에 «LLM 구조» 후보로 섭니다 — 표지가 제각각인 문집·잡록에 맞습니다"><b>구조를 통째로 묻기</b>
+            <span title="권의 확정본 전문을 행 번호와 함께 보내 《새 글이 시작하는 행·제목·깊이》를 받습니다. 모델은 행 번호를 고르기만 하고, 실제 행과 맞는 답만 ③에 《LLM 구조》 후보로 섭니다 — 표지가 제각각인 문집·잡록에 맞습니다"><b>구조를 통째로 묻기</b>
               <span id="comp-llm-opt-structure-note" class="comp-llm-opt-note"></span></span>
           </label>
-          <!-- 판정 모델(본문 = TypeSafe Jev(직결 또는 OpenRouter 경유), Jev가 실패한 호출만 OpenRouter 경유 Perplexity decider v1.1 / 목차 대조 = Jev, D-136·D-139) — 글을 만들지 않고 «예·아니오 확률»과 «고르기»만 돌려준다.
+          <!-- 판정 모델(본문 = TypeSafe Jev(직결 또는 OpenRouter 경유), Jev가 실패한 호출만 OpenRouter 경유 Perplexity decider v1.1 / 목차 대조 = Jev, D-136·D-139) — 글을 만들지 않고 《예·아니오 확률》과 《고르기》만 돌려준다.
                코드가 행과 후보를 정해서 묻고 모델은 고르기만 하므로 지어낼 자리가 형식에 없다.
                총목이 있으면 그 항목을 본문 행에 붙이고(층위 1~2), 본문 판정은 그 아래 층이 된다. -->
           <label class="comp-llm-opt">
             <input id="comp-llm-opt-judge" type="checkbox" />
-            <span title="행마다 «여기서 새 글이 시작하는가»를 확률로 받고, 총목이 있으면 목차 항목이 본문 어느 행인지도 고르게 합니다. 모델이 글을 만들지 않으므로 없는 자리를 지어낼 수 없습니다. 위 «모델» 고름은 여기에 쓰이지 않습니다 — 판정 전용 모델을 따로 부릅니다 — 본문과 목차 대조는 TypeSafe Jev(TypeSafe 키 또는 OpenRouter 키), Jev가 실패한 호출만 Perplexity decider(OpenRouter 키). decider는 정밀이 조금 높지만 책 1권에 Jev의 약 8배 비용이라 폴백으로 둔다(2026-10-11 재측정)"><b>판정 모델로 고르기</b> <span class="llm-tag">판정</span>
+            <span title="행마다 《여기서 새 글이 시작하는가》를 확률로 받고, 총목이 있으면 목차 항목이 본문 어느 행인지도 고르게 합니다. 모델이 글을 만들지 않으므로 없는 자리를 지어낼 수 없습니다. 위 《모델》 고름은 여기에 쓰이지 않습니다 — 판정 전용 모델을 따로 부릅니다 — 본문과 목차 대조는 TypeSafe Jev(TypeSafe 키 또는 OpenRouter 키), Jev가 실패한 호출만 Perplexity decider(OpenRouter 키). decider는 정밀이 조금 높지만 책 1권에 Jev의 약 8배 비용이라 폴백으로 둔다(2026-10-11 재측정)"><b>판정 모델로 고르기</b> <span class="llm-tag">판정</span>
               <span id="comp-llm-opt-judge-note" class="comp-llm-opt-note"></span></span>
           </label>
           <div id="comp-llm-status" class="comp-split-note"></div>
@@ -4086,7 +4086,7 @@
           <div class="wo-row">
             <label>쪽 범위
               <input id="wo-scan-pages" class="props-input wo-scan-pages" type="text" placeholder="비우면 권 전체 · 37-60"
-                title="«37-60»처럼 적으면 그 쪽만 봅니다. 의심되는 구간만 적으면 빠릅니다" autocomplete="off" />
+                title="《37-60》처럼 적으면 그 쪽만 봅니다. 의심되는 구간만 적으면 빠릅니다" autocomplete="off" />
             </label>
             <label title="글줄의 방향을 잴 때의 기준이고, 엔진을 고르지 못한 쪽의 쓰기 방향이 됩니다">쓰기
               <select id="wo-scan-writing" class="props-select">
@@ -4097,14 +4097,14 @@
             <label id="wo-scan-model-row">종류 판정 모델
               <select id="wo-scan-model-select" class="props-select llm-model-select" data-vision-only
                 data-extra-options="vision-decider"
-                title="쪽마다 «무슨 글인가»(활자·판본·손글씨·훈점·한글·백지)를 답할 비전 모델 — 그 답으로 엔진을 고릅니다"></select>
+                title="쪽마다 《무슨 글인가》(활자·판본·손글씨·훈점·한글·백지)를 답할 비전 모델 — 그 답으로 엔진을 고릅니다"></select>
             </label>
             <div style="flex: 1"></div>
             <button id="wo-scan" class="text-btn text-btn-primary">스캔</button>
           </div>
           <div id="wo-scan-note" class="wo-dim"></div>
           <button id="wo-open-keys" class="text-btn" hidden
-            title="판정 모델 키가 없어 스캔·미리 세기가 막혔습니다 — 설정의 «판정 모델» 칸을 엽니다">설정 «판정 모델» 열기</button>
+            title="판정 모델 키가 없어 스캔·미리 세기가 막혔습니다 — 설정의 《판정 모델》 칸을 엽니다">설정 《판정 모델》 열기</button>
           <div id="wo-scan-progress" class="survey-progress" hidden>
             <progress id="wo-scan-progress-bar" max="1" value="0"></progress>
             <span id="wo-scan-progress-text"></span>
@@ -4115,7 +4115,7 @@
           <div class="wo-row">
             <label>모델
               <select id="wo-model-select" class="props-select llm-model-select"
-                title="말을 계획으로 옮길 모델. «자동»은 사용 가능한 프로바이더 순서에서 처음 되는 것"></select>
+                title="말을 계획으로 옮길 모델. 《자동》은 사용 가능한 프로바이더 순서에서 처음 되는 것"></select>
             </label>
             <div style="flex: 1"></div>
             <button id="wo-from-words" class="text-btn text-btn-primary">계획에 덧붙이기</button>
@@ -4140,7 +4140,7 @@
       </div>
 
       <!-- Phase 6: 교정 다이얼로그 오버레이 -->
-      <!-- 쪼개기 모달 — 기사 «안»을 문단으로 나눈다. 별도 기사를 만들지 않는다:
+      <!-- 쪼개기 모달 — 기사 《안》을 문단으로 나눈다. 별도 기사를 만들지 않는다:
            그것은 사이드바 「경계 넣기」의 몫이다(한 곳에서만 되게 해야 헷갈리지 않는다). -->
       <div
         class="corr-dialog-overlay"
@@ -4157,7 +4157,7 @@
           <div class="comp-split-note">
             이 <b>단위 안</b>을 한 단 깊은 단위로 나눕니다 — 나란한 단위는 만들지 않습니다.
             나눈 것은 이 단위 아래에 들어갑니다.
-            <br />나란한 단위로 나누려면 사이드바 「내용」의 «＋ 경계 넣기»를 쓰세요.
+            <br />나란한 단위로 나누려면 사이드바 「내용」의 《＋ 경계 넣기》를 쓰세요.
           </div>
           <div class="comp-split-note">
             나눌 자리에 빈 줄을 넣고 <code>===</code>를 입력하세요.

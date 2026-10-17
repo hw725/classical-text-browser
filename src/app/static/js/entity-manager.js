@@ -116,7 +116,7 @@ function initEntityManager() {
 
 /**
  * 현재 페이지의 엔티티를 로드한다.
- * 사이드바 엔티티 칸이 열릴 때·«현재 페이지만» 체크·저장·삭제 뒤에 부른다(하단 패널은 v1.2.0에서 없앴다).
+ * 사이드바 엔티티 칸이 열릴 때·《현재 페이지만》 체크·저장·삭제 뒤에 부른다(하단 패널은 v1.2.0에서 없앴다).
  */
 // eslint-disable-next-line no-unused-vars
 function _loadEntitiesForCurrentPage() {
@@ -399,7 +399,7 @@ function _buildFormFields(entityType, existing) {
       const promoBox = promo
         ? `<div class="entity-promo-note">승격 판정: <b>${promo.eligible ? "충족" : "미충족"}</b> — ${_escHtmlEntity(promo.reason || "")}<br>
              실질 무게 ${promo.metrics ? promo.metrics.effective_weight : "?"} · 출처 ${promo.metrics ? promo.metrics.source_count : "?"}개
-             (출처 «수»는 판정에 쓰지 않는다 — D-128 7·8항)</div>`
+             (출처 《수》는 판정에 쓰지 않는다 — D-128 7·8항)</div>`
         : "";
       const supersededBox = existing && existing.superseded_by
         ? `<div class="entity-promo-note">이 개념은 <b>${_escHtmlEntity(existing.superseded_by)}</b> 로 합쳐졌다. 옛 ID는 장부에 남아 계속 조회된다 (D-128 2항).</div>`
@@ -655,7 +655,7 @@ function _collectFormData(entityType) {
         object_value: _val("ef-object-value") || null,
         evidence_blocks: (entityState.editingEntity || {}).evidence_blocks ?? null,
         confidence: _numVal("ef-confidence"),
-        // 무게와 부호는 함께 저장한다 (D-128 11항). 빈 칸은 «미지정»이고,
+        // 무게와 부호는 함께 저장한다 (D-128 11항). 빈 칸은 《미지정》이고,
         // 미지정을 지지로 읽지 않는 것은 서버 쪽 polarity_of() 가 지킨다.
         weight: _numVal("ef-weight"),
         polarity: _val("ef-polarity") || null,
@@ -752,7 +752,7 @@ async function _promoteTag(tagId) {
  * 입력: sourceId — 흡수되는 개념의 id.
  * 출력: 없음 (성공하면 목록을 다시 읽는다).
  *
- * 왜 «지우기»가 아니라 «합치기»인가: 개념을 지우면 그 id를 인용한 과거 참조 —
+ * 왜 《지우기》가 아니라 《합치기》인가: 개념을 지우면 그 id를 인용한 과거 참조 —
  * 논문 각주, 이미 내보낸 사전 — 가 조용히 끊긴다. 합치기는 옛 개념을 그대로 두고
  * 상태만 deprecated 로 내린 뒤 「이제 무엇을 보라」를 장부에 적는다. 옛 id로
  * 조회하면 서버가 새 id를 알려준다.
@@ -774,7 +774,7 @@ function _openMergeDialog(sourceId) {
   const title = document.getElementById("entity-dialog-title");
   if (!overlay || !form || !title) return;
 
-  // 이 다이얼로그는 «저장»이 아니라 «합치기»다 — 공용 저장 단추를 숨기고
+  // 이 다이얼로그는 《저장》이 아니라 《합치기》다 — 공용 저장 단추를 숨기고
   // 폼 안에 전용 단추를 둔다. _closeEntityDialog 가 다시 보이게 되돌린다.
   entityState.editingEntity = null;
   entityState.editingType = null;
@@ -787,7 +787,7 @@ function _openMergeDialog(sourceId) {
   form.innerHTML = `
     <div class="entity-promo-note">
       <b>${_escHtmlEntity((source && source.label) || sourceId)}</b> 를 다른 개념으로 합칩니다.<br>
-      이 개념의 파일은 지워지지 않고 상태만 «deprecated» 가 되며, 옛 ID는 장부에
+      이 개념의 파일은 지워지지 않고 상태만 《deprecated》 가 되며, 옛 ID는 장부에
       남아 계속 조회됩니다 (D-128 2항).
     </div>
     <label class="bib-edit-label">남길 개념 (target)</label>
@@ -830,7 +830,7 @@ function _openMergeDialog(sourceId) {
 
 
 /**
- * 커넥톰 대조를 열어 «나란히» 보여 준다 (D-128 후속).
+ * 커넥톰 대조를 열어 《나란히》 보여 준다 (D-128 후속).
  *
  * 입력: 없음 (지금 해석 저장소를 쓴다).
  * 출력: 없음 (다이얼로그를 띄운다).
@@ -838,11 +838,11 @@ function _openMergeDialog(sourceId) {
  * 왜 점수가 없는가: 「연합 구조와 82% 닮았다」 같은 숫자를 띄우면 그 숫자를
  * 올리는 것이 목표가 된다. 커넥톰은 참고 좌표이지 목표가 아니다 — 차이만
  * 보여 주고 해석은 연구자가 한다. 그래서 이 화면에는 총점이 없고, 눈에
- * 들어와야 하는 것은 표가 아니라 «짚어 주는 말»(notes)이다.
+ * 들어와야 하는 것은 표가 아니라 《짚어 주는 말》(notes)이다.
  *
  * 왜 「기준값 다시 재기」가 400을 그대로 보여 주는가: 그 사유 문구는 배포본에서
  * 「이건 애초에 없는 기능이다」를 연구자에게 설명하기 위해 쓴 것이다. 토스트로
- * 줄여 버리면 줄바꿈으로 적은 «왜·해결»이 사라진다.
+ * 줄여 버리면 줄바꿈으로 적은 《왜·해결》이 사라진다.
  */
 function _openConnectomeDialog() {
   if (!interpState || !interpState.interpId) {
@@ -895,7 +895,7 @@ async function _renderConnectome(live) {
   }
 
   if (!resp.ok || data.error) {
-    // 400 의 사유는 줄바꿈으로 «왜·해결»을 적은 글이다 — 그대로 보여 준다.
+    // 400 의 사유는 줄바꿈으로 《왜·해결》을 적은 글이다 — 그대로 보여 준다.
     const back = live
       ? '<div class="bib-edit-actions"><button id="ef-conn-recorded" type="button">기록된 기준값으로 보기</button></div>'
       : "";

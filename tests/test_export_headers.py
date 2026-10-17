@@ -168,7 +168,7 @@ def test_all_download_headers_are_latin1_safe():
         "src/app/routers/alignment.py": 1,
         "src/app/routers/documents.py": 1,  # 장별 원문·강독 노트 zip — RFC 5987 (D-131)
     }
-    # **같은지**를 본다. 늘어난 것만 보면 «검사 대상이 사라진 것»을 놓친다 —
+    # **같은지**를 본다. 늘어난 것만 보면 《검사 대상이 사라진 것》을 놓친다 —
     # counts가 비어도 초록이던 자리였다.
     assert counts == known, (
         "내려받기 헤더를 만드는 자리가 달라졌다:\n"

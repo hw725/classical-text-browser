@@ -66,7 +66,7 @@ def test_status_shape(isolated: Path):
     assert names == list(extras.KNOWN_EXTRAS)
     for e in s["extras"]:
         assert {"label", "for", "size", "installed", "recorded"} <= set(e)
-        # probe가 onnxruntime만 «있음»으로 고정 — honkoku(probe honkoku_ocr)는 없음이어야 한다
+        # probe가 onnxruntime만 《있음》으로 고정 — honkoku(probe honkoku_ocr)는 없음이어야 한다
         assert e["installed"] is (e["name"] != "honkoku")
     assert s["job"]["running"] is False
     assert isinstance(s["job"]["log"], list)

@@ -1,6 +1,6 @@
 """D-137 후속 — 애매한 후보 2차 판정의 들이기 방어 (2026-10-05 리뷰 지적 6건 중 서버 쪽 5건).
 
-네트워크 없음. 화면 쪽(«예 N»과 실제 체크 수)은 headless 검증으로 따로 본다.
+네트워크 없음. 화면 쪽(《예 N》과 실제 체크 수)은 headless 검증으로 따로 본다.
 새 이름은 모듈 속성으로 꺼낸다(`er.X`) — 옛 코드에서 이 파일을 돌리면 import 단계에서 통째로 죽지
 않고 시험마다 따로 실패해, 무엇이 막혔는지 셀 수 있게.
 """
@@ -166,7 +166,7 @@ def test_cli_refuses_parent_doc_and_writes_nothing_outside(client, tmp_path, cap
     ans = tmp_path / "a.json"
     ans.write_text('{"answers": []}', encoding="utf-8")
     before = sorted(p.name for p in Path(lib).iterdir())
-    # «documents/..»는 서고 자체라 «있는 폴더»로 통과했다 — 이제는 id 검사에서 멈춘다
+    # 《documents/..》는 서고 자체라 《있는 폴더》로 통과했다 — 이제는 id 검사에서 멈춘다
     rc = cli.main(["import", "--library", lib, "--doc", "..", "--part", part_id, "--in", str(ans)])
     assert rc == 1 and "폴더 이름 하나" in capsys.readouterr().err
     rc = cli.main(["export", "--library", lib, "--doc", "d1", "--part", "..",

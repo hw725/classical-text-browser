@@ -777,7 +777,7 @@ def save_layer_content(
         # 원자적 저장(D-069) — 해석 저장소 L5~L7 JSON이 빈 파일로 남지 않게.
         write_json_atomic(file_path, content)
         # 크기는 쓴 파일에서 잰다 — 이 갈래에 text가 없어 아래 size 계산이 UnboundLocalError로
-        # 죽었다(파일은 이미 써진 뒤, 라우트는 400 «저장 실패», git 커밋은 건너뜀
+        # 죽었다(파일은 이미 써진 뒤, 라우트는 400 《저장 실패》, git 커밋은 건너뜀
         # — 2026-10-11 재확인)
         text = file_path.read_text(encoding="utf-8")
     else:

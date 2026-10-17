@@ -74,8 +74,8 @@ class OcrEngineRegistry:
         엔진 하나의 get_info()/is_available()이 예외를 내도 목록 전체가 죽지 않는다.
         왜: 등록 실패는 예외가 아니라 available=False로 나타나야 한다(D-044·D-056).
         실제로 한 엔진의 import 오류(DLL·cv2 배포판 충돌 등)가 /api/ocr/engines를
-        500으로 만들어 드롭다운이 «서고를 선택하면…»에 멈춘 일이 있었다 — 나머지
-        엔진은 멀쩡했는데도. 여기서 잡아 그 엔진만 «사용 불가 + 이유»로 내보낸다.
+        500으로 만들어 드롭다운이 《서고를 선택하면…》에 멈춘 일이 있었다 — 나머지
+        엔진은 멀쩡했는데도. 여기서 잡아 그 엔진만 《사용 불가 + 이유》로 내보낸다.
         """
         infos: list[dict] = []
         for engine_id, engine in self._engines.items():

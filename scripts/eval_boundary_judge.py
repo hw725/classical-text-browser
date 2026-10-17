@@ -1,34 +1,35 @@
 # -*- coding: utf-8 -*-
-"""경계 판정을 재는 자 — «글이 시작하는 행»과 «목차 항목이 본문 어느 행인가» 둘.
+"""경계 판정을 재는 자 — 《글이 시작하는 행》과 《목차 항목이 본문 어느 행인가》 둘.
 
 두 측정기를 한 파일에 둔 까닭: 같은 책 설정(`BOOKS`)·같은 본문 적재(`load_lines`)·같은 유사도를
 쓰는데 파일이 둘이라 한쪽이 다른 쪽을 import하고 있었다. 하나로 두면 책을 더할 때 한 곳만 고친다.
 
-    starts  — 규칙(D-116)과 판정 모델을 같은 자로 견준다(«이 행에서 새 글이 시작하는가»).
-    toc     — 목차 대조를 «고르기»로 바꿔 지금의 정렬과 견준다.
+    starts  — 규칙(D-116)과 판정 모델을 같은 자로 견준다(《이 행에서 새 글이 시작하는가》).
+    toc     — 목차 대조를 《고르기》로 바꿔 지금의 정렬과 견준다.
     control — 그 대조군. 제목 A를 묻되 후보는 다른 항목 B의 것을 준다(D-129).
-    biblio  — 독립 검산. 서지의 «권»으로 «없음»이 옳았는지 본다(유사도를 타지 않는다).
+    biblio  — 독립 검산. 서지의 《권》으로 《없음》이 옳았는지 본다(유사도를 타지 않는다).
 
 정답 자리 맞춤(starts):
-    CSV의 «행»은 4차 확정본 기준이 아니다(그 전 판독이나 앵커 규약을 따른다). 그대로 쓰면 모델이
-    맞혀도 «놓침»으로 세어 측정이 틀어진다. CSV가 적어 둔 글과 같은 행을 ±3행 안에서 찾아 옮기고,
+    CSV의 《행》은 4차 확정본 기준이 아니다(그 전 판독이나 앵커 규약을 따른다). 그대로 쓰면 모델이
+    맞혀도 《놓침》으로 세어 측정이 틀어진다. CSV가 적어 둔 글과 같은 행을 ±3행 안에서 찾아 옮기고,
     못 찾은 행은 정답에서 뺀다 — 다만 그냥 빼면 그 자리를 찾아낸 방법이 벌을 받으므로, 뺀 행
-    둘레를 «모르는 자리»로 묶어 맞음에도 헛것에도 세지 않는다.
+    둘레를 《모르는 자리》로 묶어 맞음에도 헛것에도 세지 않는다.
 
 정답이 없는 측정(toc):
     목차 대조에는 독립 정답표가 없다 — 앵커 CSV(개별 작품)와 총목(集 이름)이 겹치는 항목이
     2개뿐이다(2026-09-21 확인). 그래서 점수 대신 **정답 없이 검증되는 성질**을 잰다:
-    ① 본문에 없는 항목에 «없음»을 고르는가(지어내기 저항) ② 고른 행에서 제목이 실제로 시작하는가.
+    ① 본문에 없는 항목에 《없음》을 고르는가(지어내기 저항) ② 고른 행에서 제목이 실제로 시작하는가.
 
     **그 둘만으로는 부족하다.** ①②가 모두 같은 `title_similarity`를 쓰고, 항목 분류(`PRESENT`)와
     자기검증(`SELF_CHECK_MIN`)이 값까지 0.85로 같다 — 독립 검산인 줄 알았던 두 열이 같은 자를
     두 번 대고 있다. 그래서 `control`이 무작위 기준선을 세운다: 남의 후보를 주면 정답은 거의
-    언제나 «없음»이므로, 모델이 «읽고 고르는지» 아니면 «유사도 1위를 기계적으로 집는지»가 갈린다.
-    **천장을 먼저 잰다** — 빌린 창에 그 제목의 진짜 행이 우연히 든 쌍은 «없음»이 정답이 아니므로
+    언제나 《없음》이므로, 모델이 《읽고 고르는지》 아니면 《유사도 1위를 기계적으로 집는지》가
+    갈린다.
+    **천장을 먼저 잰다** — 빌린 창에 그 제목의 진짜 행이 우연히 든 쌍은 《없음》이 정답이 아니므로
     분모에서 뺀다. 「제대로 읽으면 100%」를 잣대로 쓰면 도달 불가능한 값을 실패로 읽게 된다.
 
-    **대조군도 «놓침»은 못 잰다**(지어내기만 잰다). 그 자리를 `biblio`가 맡는다 — ITKC 서지의
-    «권» 열은 본문 글자와 무관하므로, «이 책에 있을 수 있는 항목인데 «없음»이라 했는가»를
+    **대조군도 《놓침》은 못 잰다**(지어내기만 잰다). 그 자리를 `biblio`가 맡는다 — ITKC 서지의
+    《권》 열은 본문 글자와 무관하므로, 《이 책에 있을 수 있는 항목인데 《없음》이라 했는가》를
     유사도를 한 번도 쓰지 않고 답한다. 이것이 세 측정 가운데 **유일하게 독립인 신호**다.
 
 쓰는 법:
@@ -56,7 +57,7 @@ import re
 import sys
 
 
-# CJK Text Contract E3 — 한국어 Windows 콘솔은 cp949 라 «—»·«✓» 를 print 하면
+# CJK Text Contract E3 — 한국어 Windows 콘솔은 cp949 라 《—》·《✓》 를 print 하면
 # UnicodeEncodeError 로 즉사한다. 이 PC 는 PYTHONUTF8=1 이 박혀 있어 겪지 않는다.
 from core.console import force_utf8_console
 
@@ -81,7 +82,7 @@ from core.toc import (  # noqa: E402
 UNYANG = pathlib.Path(r"C:\Users\junto\Downloads\운양")
 _PAGE = re.compile(r"p(\d+)\.")
 
-# 책마다 «본문은 어디에, 정답은 어디에, 어떤 열이 그 자리의 글인가».
+# 책마다 《본문은 어디에, 정답은 어디에, 어떤 열이 그 자리의 글인가》.
 BOOKS: dict[str, dict] = {
     "cheonjin": {
         "text_dir": UNYANG / "ocr/cheonjindamcho/천진담초_규장각",
@@ -102,14 +103,14 @@ BOOKS: dict[str, dict] = {
         "book": "운양집_01",
         "first": 14,
         "last": 87,
-        # 유사도를 타지 않는 독립 신호 — ITKC 서지의 «권» 열. 본문 글자와 무관하다.
+        # 유사도를 타지 않는 독립 신호 — ITKC 서지의 《권》 열. 본문 글자와 무관하다.
         "biblio": UNYANG / "db/unyangjip_works.csv",
         "volumes": ("권1", "권2"),  # 이 책이 담은 권
     },
 }
 
-ABSENT = 0.5  # (toc) 본문 최고 유사도가 이보다 낮으면 «본문에 없는 항목»으로 본다
-PRESENT = 0.85  # (toc) 이보다 높으면 «본문에 있는 항목»
+ABSENT = 0.5  # (toc) 본문 최고 유사도가 이보다 낮으면 《본문에 없는 항목》으로 본다
+PRESENT = 0.85  # (toc) 이보다 높으면 《본문에 있는 항목》
 # 자기검증과 같은 값을 쓴다 — 코드가 같은 자를 두 번 대고 있다는 것을 숨기지 않는다.
 SELF_CHECK_MIN = 0.85  # (control) 빌린 창에 진짜 행이 든 쌍을 가르는 문턱
 
@@ -149,11 +150,11 @@ def similarity(mark: str, line: str) -> float:
 
 # ── starts: 규칙 대 판정 모델 ───────────────────────────────────────────────
 def load_truth(spec: dict, lines: list[Line], min_sim: float = 0.7) -> tuple[set, set, dict]:
-    """정답 자리·«모르는 자리»·통계. 출력: (확인된 정답, 모르는 자리, 통계).
+    """정답 자리·《모르는 자리》·통계. 출력: (확인된 정답, 모르는 자리, 통계).
 
     자리를 확인하지 못한 정답 행(제목이 본문에 없거나 OCR이 너무 달라 못 찾은 것)도 그 근처에서
     글이 시작하는 것은 사실이다. 그냥 정답에서 빼면 **그 자리를 찾아낸 방법이 헛것을 냈다고
-    벌을 받으므로**, 둘레 ±3행을 «모르는 자리»로 묶어 맞음에도 헛것에도 세지 않는다.
+    벌을 받으므로**, 둘레 ±3행을 《모르는 자리》로 묶어 맞음에도 헛것에도 세지 않는다.
     """
     by = {(ln.page, ln.line_index): ln.text for ln in lines}
     truth: set[tuple[int, int]] = set()
@@ -192,7 +193,7 @@ def load_truth(spec: dict, lines: list[Line], min_sim: float = 0.7) -> tuple[set
 
 
 def score(picked: set, truth: set, gray: set = frozenset()) -> dict:
-    """맞음·헛것·놓침. «모르는 자리»에 떨어진 것은 헛것으로 세지 않고 ignored로 따로 센다."""
+    """맞음·헛것·놓침. 《모르는 자리》에 떨어진 것은 헛것으로 세지 않고 ignored로 따로 센다."""
     ignored = len(picked & gray)
     picked = picked - gray
     hit = len(picked & truth)
@@ -215,7 +216,7 @@ def _row(name: str, picked: set, truth: set, gray: set) -> None:
 
 
 def starts_report(lines: list[Line], nouls: list, truth: set, gray: set = frozenset()) -> None:
-    """규칙·모델·둘의 조합을 한 표에. 조합이 요점이다 — «코드가 후보를 만들고 모델은 고르기만»."""
+    """규칙·모델·둘의 조합을 한 표에. 조합이 요점이다 — 《코드가 후보를 만들고 모델은 고르기만》."""
     by_pos = {(int(p), int(ln)): float(v) for p, ln, v in nouls}
     r = propose_boundaries(lines, normalize_rules(None))
     accepted = {(p["page"], p["line_index"]) for p in r["proposals"] if p.get("accepted")}
@@ -248,7 +249,7 @@ def starts_report(lines: list[Line], nouls: list, truth: set, gray: set = frozen
 def cmd_starts(args) -> int:
     from core.structure_llm import JEV_ACCEPT_AT  # noqa: PLC0415
 
-    # --threshold는 2026-09-27부터 «후보 하한»(reject_at)이다. 예전 뜻(채택 문턱)으로 0.9를 주면
+    # --threshold는 2026-09-27부터 《후보 하한》(reject_at)이다. 예전 뜻(채택 문턱)으로 0.9를 주면
     # 상한 0.85와 뒤집혀 호출 뒤에야 ValueError가 난다 — 부르기 전에 멈춘다
     if not args.threshold < JEV_ACCEPT_AT:
         print(f"--threshold는 후보 하한이라 {JEV_ACCEPT_AT}(accept 상한)보다 "
@@ -306,7 +307,7 @@ def cmd_starts(args) -> int:
     return 0
 
 
-# ── toc: 목차 대조를 «고르기»로 ─────────────────────────────────────────────
+# ── toc: 목차 대조를 《고르기》로 ─────────────────────────────────────────────
 def prepare(book: str = "unyang01"):
     """목차 항목·본문 행·지금 정렬의 결과. 출력: (entries, body, toc_pages, matches, unmatched)."""
     spec = BOOKS[book]
@@ -322,7 +323,7 @@ def prepare(book: str = "unyang01"):
 
 
 def bucket(entries, body) -> dict:
-    """항목을 «본문에 있다/없다/모른다»로 나눈다 — 최고 유사도만으로."""
+    """항목을 《본문에 있다/없다/모른다》로 나눈다 — 최고 유사도만으로."""
     out = {"present": [], "absent": [], "unsure": []}
     for i, e in enumerate(entries):
         cands = toc_candidates(getattr(e, "title", ""), body, 1)
@@ -332,7 +333,7 @@ def bucket(entries, body) -> dict:
 
 
 def toc_report(entries, body, matches, buckets, result) -> None:
-    """지금 정렬과 고르기를 견준다. 점수가 아니라 «어디서 갈리는가»를 보인다."""
+    """지금 정렬과 고르기를 견준다. 점수가 아니라 《어디서 갈리는가》를 보인다."""
     picked = {p["entry"]: p for p in result["picks"]}
     none = {n["entry"] for n in result["none"]}
     aligned = {m.entry_index: m for m in matches}
@@ -344,14 +345,14 @@ def toc_report(entries, body, matches, buckets, result) -> None:
         if not idx:
             continue
         print(
-            f"  {label} {len(idx):>3}개 — 고르기: «없음» {sum(1 for i in idx if i in none)}"
+            f"  {label} {len(idx):>3}개 — 고르기: 《없음》 {sum(1 for i in idx if i in none)}"
             f" · 행 고름 {sum(1 for i in idx if i in picked)}"
             f" · (지금 정렬이 붙인 것 {sum(1 for i in idx if i in aligned)})"
         )
     absent = buckets["absent"]
     if absent:
         wrong = [picked[i] for i in absent if i in picked]
-        print(f"\n지어내기 저항: 본문에 없는 {len(absent)}개 중 «없음» "
+        print(f"\n지어내기 저항: 본문에 없는 {len(absent)}개 중 《없음》 "
               f"{len(absent) - len(wrong)}개 ({(len(absent) - len(wrong)) / len(absent):.0%})")
         for p in wrong[:8]:
             print(f"    골라 버린 것: 「{p['title'][:14]}」 → {p['text'][:20]} (확률 {p['prob']})")
@@ -359,7 +360,7 @@ def toc_report(entries, body, matches, buckets, result) -> None:
     for i in buckets["present"]:
         if i not in picked:
             mark = "정렬도 못 붙임" if i not in aligned else "정렬은 붙임"
-            print(f"    «없음»으로 답함: 「{getattr(entries[i], 'title', '')[:14]}」 ({mark})")
+            print(f"    《없음》으로 답함: 「{getattr(entries[i], 'title', '')[:14]}」 ({mark})")
             continue
         p = picked[i]
         same = "정렬과 같음" if (i in aligned and aligned[i].line_index == p["line_index"]
@@ -407,10 +408,10 @@ def cmd_toc(args) -> int:
 
 # ── 대조군: 제목 A를 묻되 후보는 B의 것으로 준다 ────────────────────────────
 def control_pairs(entries, body, top_k: int, seed: int = 20260922):
-    """짝바꿈(derangement)으로 «남의 후보»를 배정한다. 출력: [(i, 제목, 빌린 후보, plant)].
+    """짝바꿈(derangement)으로 《남의 후보》를 배정한다. 출력: [(i, 제목, 빌린 후보, plant)].
 
-    plant = 빌린 창 안에서 이 제목의 최고 유사도. **«없음»의 천장을 이것으로 잰다** —
-    A의 진짜 행이 우연히 B의 창에 들어 있으면 «없음»이 정답이 아니므로 분모에서 빼야 한다.
+    plant = 빌린 창 안에서 이 제목의 최고 유사도. **《없음》의 천장을 이것으로 잰다** —
+    A의 진짜 행이 우연히 B의 창에 들어 있으면 《없음》이 정답이 아니므로 분모에서 빼야 한다.
     「제대로 읽으면 100%」를 잣대로 쓰면 도달 불가능한 값을 실패로 읽게 된다.
     """
     asked = [(i, str(getattr(e, "title", "") or "")) for i, e in enumerate(entries)]
@@ -442,9 +443,9 @@ def control_report(rows: list[dict], real: dict | None = None) -> None:
     clean = [r for r in ok if r["plant"] < SELF_CHECK_MIN]
     clean_none = [r for r in clean if r["choice"] == TOC_NONE]
     print(f"\n대조군 {len(ok)}쌍 · 빌린 창에 진짜 행이 든 쌍 {len(planted)}")
-    print(f"  달성 가능한 최대 «없음» = {ceiling:.1%}")
+    print(f"  달성 가능한 최대 《없음》 = {ceiling:.1%}")
     got = sum(1 for r in ok if r["choice"] == TOC_NONE)
-    print(f"  «없음» {got}/{len(ok)} = {got / len(ok):.1%}"
+    print(f"  《없음》 {got}/{len(ok)} = {got / len(ok):.1%}"
           f" · 천장 쌍 제외 {len(clean_none)}/{len(clean)} = {len(clean_none) / len(clean):.1%}")
     if real:
         asked = len(real["picks"]) + sum(1 for n in real["none"] if "why" not in n)
@@ -456,7 +457,7 @@ def control_report(rows: list[dict], real: dict | None = None) -> None:
               if r["choice"] != TOC_NONE and r["sim"] >= SELF_CHECK_MIN and r["prob"] >= 0.8]
     print(f"  자기검증(≥{SELF_CHECK_MIN})과 확률(≥0.8)을 둘 다 통과한 헛것: {len(leaked)}건")
     for r in sorted(planted, key=lambda r: -r["prob"])[:5]:
-        print(f"    [천장 쌍] 「{r['title'][:14]}」 → {r['picked_text'][:20] or '«없음»'}"
+        print(f"    [천장 쌍] 「{r['title'][:14]}」 → {r['picked_text'][:20] or '《없음》'}"
               f" (확률 {r['prob']})")
 
 
@@ -511,17 +512,17 @@ def cmd_control(args) -> int:
     return 0
 
 
-# ── 독립 검산: 서지의 «권»으로 «없음»이 옳았는지 본다 ──────────────────────
+# ── 독립 검산: 서지의 《권》으로 《없음》이 옳았는지 본다 ──────────────────────
 def biblio_volumes(spec: dict) -> dict[str, set[str]]:
-    """서지에서 «한자 이름 → 그것이 속한 권» 표를 만든다. 유사도를 쓰지 않는다.
+    """서지에서 《한자 이름 → 그것이 속한 권》 표를 만든다. 유사도를 쓰지 않는다.
 
     왜 독립인가: `bucket()`·자기검증·후보 생성이 전부 `title_similarity`를 쓴다. 그 셋으로
-    서로를 검산하면 같은 자를 세 번 대는 것이다. 서지의 «권» 열은 ITKC 메타데이터라
-    본문 글자와 무관하므로, «이 책에 있을 수 있는가»에 다른 근거로 답한다.
+    서로를 검산하면 같은 자를 세 번 대는 것이다. 서지의 《권》 열은 ITKC 메타데이터라
+    본문 글자와 무관하므로, 《이 책에 있을 수 있는가》에 다른 근거로 답한다.
 
     그룹 열이 「시(詩)○격경집(擊磬集) 갑인년…」 꼴이라 한자 묶음(2자 이상)을 전부 꺼낸다.
     **기사명 열도 함께 본다** — 그룹만 보면 集 이름만 잡혀 「書牘」·「附記」처럼 갈래로 실린
-    항목이 «서지에 없음»으로 떨어진다(2026-09-22 실측: 그룹만 41건 → 두 열 36건).
+    항목이 《서지에 없음》으로 떨어진다(2026-09-22 실측: 그룹만 41건 → 두 열 36건).
 
     어느 열이 덮었는지도 남긴다. **덮개를 넓히면 새로 덮인 부분은 원래 덮여 있던 부분보다
     품질이 낮다** — 넓히는 방법이 곧 대조 조건을 느슨하게 하는 것이기 때문이다(커넥톰 세션,
@@ -540,8 +541,8 @@ def biblio_volumes(spec: dict) -> dict[str, set[str]]:
     return out
 
 
-# 작품이 아니라 «구조»를 가리키는 총목 항목 — 서지에 이름이 없는 것이 정상이고, 이 책에 없는
-# 권의 표제라 «없음»이 정답이다. 사각지대 계산에서 뺀다.
+# 작품이 아니라 《구조》를 가리키는 총목 항목 — 서지에 이름이 없는 것이 정상이고, 이 책에 없는
+# 권의 표제라 《없음》이 정답이다. 사각지대 계산에서 뺀다.
 STRUCT_TITLE = re.compile(r"(第.{1,4}卷|^卷.{1,4}$|總目|目錄|^附錄)")
 
 
@@ -549,8 +550,8 @@ def biblio_report(entries, result: dict, spec: dict) -> None:
     """모델의 답 × 서지를 2×3으로 놓는다. 호출 0건.
 
     한계를 먼저 적는다: 이름 대조가 **부분 문자열**이라 「行狀」·「追悼文」처럼 여러 권에
-    걸치는 갈래 이름은 엉뚱한 권에 붙을 수 있다. 그래서 이 표는 «놓침이 있는가»(왼쪽
-    아래 칸)를 보는 데 쓰고, «헛것»(오른쪽 위)은 그대로 판정하지 않는다.
+    걸치는 갈래 이름은 엉뚱한 권에 붙을 수 있다. 그래서 이 표는 《놓침이 있는가》(왼쪽
+    아래 칸)를 보는 데 쓰고, 《헛것》(오른쪽 위)은 그대로 판정하지 않는다.
     """
     table = biblio_volumes(spec)
     here = set(spec["volumes"])
@@ -558,7 +559,7 @@ def biblio_report(entries, result: dict, spec: dict) -> None:
     said_none = {n["entry"] for n in result["none"] if "why" not in n}
 
     def where(title: str) -> tuple[str, str]:
-        """출력: (판정, 덮은 층). 층은 «그룹»(엄격)·«기사명»(느슨)·«둘 다»."""
+        """출력: (판정, 덮은 층). 층은 《그룹》(엄격)·《기사명》(느슨)·《둘 다》."""
         cols: set[str] = set()
         hits: set[str] = set()
         for han, cell in table.items():
@@ -586,17 +587,17 @@ def biblio_report(entries, result: dict, spec: dict) -> None:
     print(f"{'':<6}" + "".join(f"{c:>10}" for c in cols))
     for ans in ("고름", "없음"):
         print(f"{ans:<6}" + "".join(f"{len(cells.get((ans, c), [])):>10}" for c in cols))
-    # 卷 표제는 «없음»이 정답이므로 놓침이 아니다. 부분 문자열 대조가 「第六卷詩三百十三首」를
-    # 「三首」 하나로 «이 책»에 넣은 적이 있다 — 대조기의 헛것이지 모델의 놓침이 아니었다.
+    # 卷 표제는 《없음》이 정답이므로 놓침이 아니다. 부분 문자열 대조가 「第六卷詩三百十三首」를
+    # 「三首」 하나로 《이 책》에 넣은 적이 있다 — 대조기의 헛것이지 모델의 놓침이 아니었다.
     raw = cells.get(("없음", "이 책"), [])
     missed = [t for t in raw if not STRUCT_TITLE.search(t)]
     struct = len(raw) - len(missed)
-    print(f"\n서지가 «이 책»이라는데 «없음»이라 한 것: {len(missed)}건  ← 놓침의 독립 증거"
-          + (f"  (구조 표제 {struct}건은 뺐다 — «없음»이 정답이다)" if struct else ""))
+    print(f"\n서지가 《이 책》이라는데 《없음》이라 한 것: {len(missed)}건  ← 놓침의 독립 증거"
+          + (f"  (구조 표제 {struct}건은 뺐다 — 《없음》이 정답이다)" if struct else ""))
     for t in missed[:10]:
         print(f"    「{t[:24]}」")
     odd = cells.get(("고름", "다른 권"), [])
-    print(f"서지가 «다른 권»이라는데 고른 것: {len(odd)}건"
+    print(f"서지가 《다른 권》이라는데 고른 것: {len(odd)}건"
           "  (갈래 이름은 여러 권에 걸친다 — 참고만)")
     for t in odd[:10]:
         print(f"    「{t[:24]}」")
@@ -605,7 +606,7 @@ def biblio_report(entries, result: dict, spec: dict) -> None:
     # 「놓침 0건」은 신호가 말을 한 범위 안에서만 서는 주장이다(커넥톰 세션 권고, 2026-09-22).
     unknown = [t for t in cells.get(("없음", "서지에 없음"), []) if not STRUCT_TITLE.search(t)]
     asked = sum(len(v) for v in cells.values())
-    print(f"\n사각지대 — 작품처럼 보이는데 서지에 이름이 없고 «없음»: {len(unknown)}건"
+    print(f"\n사각지대 — 작품처럼 보이는데 서지에 이름이 없고 《없음》: {len(unknown)}건"
           f" / 물은 것 {asked} ({len(unknown) / asked:.1%})")
     print(f"  → 「놓침 0건」이 서는 범위는 {asked - len(unknown)}건"
           f" ({1 - len(unknown) / asked:.1%})이고, 나머지는 신호가 말하지 않는다.")
@@ -672,7 +673,7 @@ def main() -> int:
     c.add_argument("--real", type=pathlib.Path, help="실제 조건 결과(toc --save) — 판별력 비교용")
     c.set_defaults(func=cmd_control)
 
-    b = sub.add_parser("biblio", help="독립 검산 — 서지의 «권»으로 «없음»이 옳았는지 본다")
+    b = sub.add_parser("biblio", help="독립 검산 — 서지의 《권》으로 《없음》이 옳았는지 본다")
     b.add_argument("--book", choices=sorted(BOOKS), default="unyang01")
     b.add_argument("--score", type=pathlib.Path, required=True, help="toc --save 로 남긴 결과")
     b.set_defaults(func=cmd_biblio)

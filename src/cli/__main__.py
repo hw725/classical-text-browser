@@ -5,7 +5,7 @@
     add-document <library_path> --title … --doc-id … [--files …]
     list-documents <library_path>
     embed-folder <folder>                    폴더의 PDF에 텍스트 레이어 입히기
-    ocr <pdf|folder> [--model …]             OCR 한 줄 진입점(실행 전에 «도는 모델»을 찍는다)
+    ocr <pdf|folder> [--model …]             OCR 한 줄 진입점(실행 전에 《도는 모델》을 찍는다)
     read <library> <doc> …                   작업 계획대로 읽기(D-131)
     models                                   쓸 수 있는 모델 번호 목록
     config [--set …]                         기본값(~/.classical-text-browser/cli.json)
@@ -83,7 +83,7 @@ def _default_workspace() -> Path:
 
     왜 홈 아래인가: 논문 파일 옆에 서고를 만들면 논문 폴더가 지저분해지고,
     서지 관리 도구가 그 폴더를 훑을 때 걸린다. 한 곳에 모아 두면 나중에
-    GUI로 열 때도 «어디였더라»를 묻지 않아도 된다.
+    GUI로 열 때도 《어디였더라》를 묻지 않아도 된다.
     """
     return Path.home() / "Documents" / "고전서지서고_추출"
 
@@ -97,10 +97,10 @@ def cmd_ocr(args):
         uv run python -m cli ocr 논문.pdf
 
     왜 따로 두는가:
-        embed-folder는 «주제 폴더로 정리된 수백 편»을 전제로 한다. 폴더 경로와
+        embed-folder는 《주제 폴더로 정리된 수백 편》을 전제로 한다. 폴더 경로와
         --library를 모두 요구하고 기본이 미리보기다. 한 편만 처리하려는
-        사람에게는 그 전제가 전부 장벽이다. «논문 하나 넣고 텍스트 레이어
-        PDF 받기»가 한 줄로 끝나야 한다.
+        사람에게는 그 전제가 전부 장벽이다. 《논문 하나 넣고 텍스트 레이어
+        PDF 받기》가 한 줄로 끝나야 한다.
     """
     import shutil
     import tempfile
@@ -113,7 +113,7 @@ def cmd_ocr(args):
         sys.exit(1)
 
     # 명령줄 > 저장한 기본값(ctb config) > 내장 기본값. 저장한 것을 썼으면 그렇다고 찍는다 —
-    # «왜 이 모델로 돌지»를 화면에서 알 수 있어야 한다.
+    # 《왜 이 모델로 돌지》를 화면에서 알 수 있어야 한다.
     from cli import config as cli_config
 
     saved = cli_config.load()
@@ -128,7 +128,7 @@ def cmd_ocr(args):
         return builtin
 
     engine = pick("engine", args.engine, "llm_vision")
-    # 저장된 model은 llm_vision일 때만 뜻이 있다 — paddleocr로 돌리면서 «model 적용»이라
+    # 저장된 model은 llm_vision일 때만 뜻이 있다 — paddleocr로 돌리면서 《model 적용》이라
     # 찍지 않는다.
     model = (
         pick("model", args.model, None) if engine == "llm_vision" else args.model
@@ -149,8 +149,8 @@ def cmd_ocr(args):
             + "  (바꾸려면 명령줄 옵션, 지우려면 ctb config unset)"
         )
 
-    # --model은 번호(ctb models)·이름 일부·«프로바이더:모델» 어느 것이든 받는다. 해석은
-    # **저장보다 먼저** — --remember가 «1» 같은 번호를 저장하면 다음 실행에서 다른 모델이 된다.
+    # --model은 번호(ctb models)·이름 일부·《프로바이더:모델》 어느 것이든 받는다. 해석은
+    # **저장보다 먼저** — --remember가 《1》 같은 번호를 저장하면 다음 실행에서 다른 모델이 된다.
     library = Path(library_arg).expanduser() if library_arg else _default_workspace()
     force_provider = force_model = None
     if model:
@@ -182,7 +182,7 @@ def cmd_ocr(args):
             given["line_detection"] = False
         elif getattr(args, "line_detection", False):
             given["line_detection"] = True
-        # 저장하기 전에 검증한다 — 오타 엔진·상대 경로가 «다음 실행의 기본값»이 되면 안 된다.
+        # 저장하기 전에 검증한다 — 오타 엔진·상대 경로가 《다음 실행의 기본값》이 되면 안 된다.
         try:
             given = {
                 k: (cli_config.coerce(k, str(v)) if not isinstance(v, bool) else v)
@@ -201,16 +201,16 @@ def cmd_ocr(args):
 
     library.mkdir(parents=True, exist_ok=True)
 
-    # embed_folder는 «주제 폴더/파일» 구조를 훑는다. 파일 하나를 받은 경우
+    # embed_folder는 《주제 폴더/파일》 구조를 훑는다. 파일 하나를 받은 경우
     # 임시로 그 구조를 만들어 준다 — 원본은 복사하지 않고 그대로 쓰기 위해
-    # 원본이 이미 «폴더 안의 파일»이면 그 부모를 쓴다.
+    # 원본이 이미 《폴더 안의 파일》이면 그 부모를 쓴다.
     staging = None
     if source.is_dir():
         root = source
     else:
         staging = Path(tempfile.mkdtemp(prefix="ctb_ocr_"))
         (staging / "기타").mkdir()
-        # 복사가 아니라 링크를 걸면 원본을 아카이브로 «옮기는» 단계에서
+        # 복사가 아니라 링크를 걸면 원본을 아카이브로 《옮기는》 단계에서
         # 원본이 사라진다. 여기서는 복사본을 쓰고, 산출물만 원본 옆에 놓는다.
         shutil.copy2(source, staging / "기타" / source.name)
         root = staging
@@ -238,7 +238,7 @@ def cmd_ocr(args):
 
         if report.aborted:
             # 시작도 못 했다(엔진·모델 준비 실패) — 미리보기든 실행이든 종료 코드 2로 말한다.
-            # 자동화가 «성공»으로 오해하지 않게(Codex 지적 2026-09-06). finally가 정리한다.
+            # 자동화가 《성공》으로 오해하지 않게(Codex 지적 2026-09-06). finally가 정리한다.
             sys.exit(2)
         if not args.execute:
             # 미리보기 안내는 embed_folder가 이미 출력했다. 두 번 찍지 않는다.
@@ -369,12 +369,12 @@ def _force_utf8_output() -> None:
 
     왜 필요한가:
         한국어 Windows의 콘솔 기본 인코딩은 cp949다. 이 CLI의 안내문에는
-        «—»(em dash)와 «»» 같은 글자가 들어 있는데 cp949로는 인코딩되지 않아
+        《—》(em dash)와 《》》 같은 글자가 들어 있는데 cp949로는 인코딩되지 않아
         **`--help`가 UnicodeEncodeError로 죽는다**(실측 2026-07-26).
         도움말조차 볼 수 없으면 CLI를 쓸 수 없다.
 
         errors="replace"를 함께 주는 이유: 재설정이 통하지 않는 환경(파이프,
-        일부 터미널)에서도 안내가 «죽는» 대신 «일부 글자가 ?로 보이는» 쪽으로
+        일부 터미널)에서도 안내가 《죽는》 대신 《일부 글자가 ?로 보이는》 쪽으로
         끝나게 하기 위함이다. 안내문을 못 읽는 것보다 낫다.
     """
     from core.console import force_utf8_console
@@ -550,10 +550,10 @@ def main():
         "--model",
         default=None,
         help=(
-            "llm_vision이 쓸 LLM. «ctb models»의 번호(예: 3), 이름 일부(예: astra), "
-            "또는 «프로바이더:모델». 프로바이더만 적으면 그 기본 모델. "
+            "llm_vision이 쓸 LLM. 《ctb models》의 번호(예: 3), 이름 일부(예: astra), "
+            "또는 《프로바이더:모델》. 프로바이더만 적으면 그 기본 모델. "
             "없으면 폴백 순서(ollama → openai_oauth → gemini → openai → anthropic)에서 "
-            "처음 되는 것 — 어느 쪽이든 실행 전에 «도는 모델»을 한 줄 찍는다."
+            "처음 되는 것 — 어느 쪽이든 실행 전에 《도는 모델》을 한 줄 찍는다."
         ),
     )
     # PaddleOCR 세부 설정. 엔진이 registry에서 인자 없이 생성되므로 환경변수로 넘긴다.

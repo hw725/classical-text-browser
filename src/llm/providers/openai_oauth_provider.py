@@ -61,7 +61,7 @@ class OpenAiOAuthProvider(OpenAiProvider):
     # 프록시에서 발견된 모델 목록을 캐싱 (list_models 용)
     _discovered_models: Optional[list[dict]] = None
 
-    # «없더라»를 기억해 두는 시각. 화면을 열 때마다 2.4초를 다시 내지 않기 위함.
+    # 《없더라》를 기억해 두는 시각. 화면을 열 때마다 2.4초를 다시 내지 않기 위함.
     # 짧게 잡아 프록시를 나중에 띄웠을 때 오래 기다리지 않게 한다.
     _miss_until: float = 0.0
     MISS_TTL_SEC = 30.0
@@ -163,7 +163,7 @@ class OpenAiOAuthProvider(OpenAiProvider):
         # 전체 범위 스캔 — 10개 포트를 **동시에** 훑는다.
         #
         # 왜 직렬로 하면 안 되는가: 프록시가 안 떠 있으면 포트마다 2초씩
-        # 기다려 총 20초가 걸린다. 그동안 설정 화면은 «로딩 중»에 멈춰 있고,
+        # 기다려 총 20초가 걸린다. 그동안 설정 화면은 《로딩 중》에 멈춰 있고,
         # 이 프로바이더 하나 때문에 나머지 넷의 상태도 못 본다.
         # 실측(2026-07-26): 직렬 20.2초 → 동시 2초 남짓.
         import asyncio
@@ -220,9 +220,9 @@ class OpenAiOAuthProvider(OpenAiProvider):
         """ChatGPT 계정(프록시)으로 이미지 분석 — **Responses API**로 보낸다.
 
         왜 chat.completions가 아닌가: openai-oauth 프록시는 chat.completions의 data: URL 이미지를
-        «URL scheme must be http or https, got data:»(500)로 거부한다. 같은 이미지를
+        《URL scheme must be http or https, got data:》(500)로 거부한다. 같은 이미지를
         Responses API의 input_image로 보내면 받는다(2026-09-06 실측). 이 경로가 막혀 있어
-        «gpt는 OAuth로» 쓰는 사용자는 LLM OCR이 전부 실패했다.
+        《gpt는 OAuth로》 쓰는 사용자는 LLM OCR이 전부 실패했다.
         """
         import base64 as _b64
         import time as _time
@@ -258,7 +258,7 @@ class OpenAiOAuthProvider(OpenAiProvider):
         except Exception as e:
             msg = str(e)
             # 이 프록시 판이 모르는 인자는 빼고 한 번 더 — 형식 강제·추론 옵션은 없어도 돈다.
-            # 단, «인자를 거부한» 오류(400)일 때만이다. 로그인 만료(401)·한도(429)·연결 실패에
+            # 단, 《인자를 거부한》 오류(400)일 때만이다. 로그인 만료(401)·한도(429)·연결 실패에
             # 같은 요청을 되풀이하면 한도만 축나고 결과는 같다(Codex 지적 2026-09-06).
             if ("text" in req or "reasoning" in req) and self._is_param_rejection(e):
                 req.pop("text", None)
@@ -300,7 +300,7 @@ class OpenAiOAuthProvider(OpenAiProvider):
 
     @staticmethod
     def _is_param_rejection(exc: Exception) -> bool:
-        """프록시가 «모르는 인자»라고 거부한 오류인가 — 그때만 인자를 빼고 다시 부른다.
+        """프록시가 《모르는 인자》라고 거부한 오류인가 — 그때만 인자를 빼고 다시 부른다.
 
         입력: 예외. 출력: 400 계열이거나 문구가 인자 거부를 말하면 True.
         401(로그인)·403·429(한도)·5xx·연결 오류는 False — 다시 보내도 같다.

@@ -8,7 +8,7 @@
        사라지는 자리가 됐다. 예외도 경고도 나지 않는다 — 조용히 없어진다.
     ② **무게와 부호는 함께 저장해야 한다**(11항). 화면에서 부호를 넣을 길이
        없으면 저장 계층에만 있고 아무도 못 쓰는 필드가 된다. 그리고 부호를
-       비워 둔 것을 «지지»로 바꿔 보내면 13항이 깨진다.
+       비워 둔 것을 《지지》로 바꿔 보내면 13항이 깨진다.
 """
 
 from __future__ import annotations
@@ -21,8 +21,8 @@ JS = "entity-manager.js"
 
 # ── 폼 입력값을 흉내 내는 최소 DOM ──
 #
-# _collectFormData 는 document.getElementById(...).value 만 읽는다. 그래서 «어떤
-# id에 어떤 값이 들어 있는가»만 주면 된다 — DOM 전체를 흉내 내지 않는다.
+# _collectFormData 는 document.getElementById(...).value 만 읽는다. 그래서 《어떤
+# id에 어떤 값이 들어 있는가》만 주면 된다 — DOM 전체를 흉내 내지 않는다.
 FAKE_DOM = r"""
 globalThis.__fields = {};
 globalThis.document = {
@@ -117,7 +117,7 @@ def test_relation_sends_weight_and_polarity_together(tmp_path):
 
 
 def test_blank_polarity_is_not_turned_into_support(tmp_path):
-    """부호를 비워 두면 null 로 간다 — 화면이 «지지»로 바꿔 보내면 13항이 깨진다."""
+    """부호를 비워 두면 null 로 간다 — 화면이 《지지》로 바꿔 보내면 13항이 깨진다."""
     built = _run(
         tmp_path,
         {
@@ -138,7 +138,7 @@ def test_blank_polarity_is_not_turned_into_support(tmp_path):
         None,
     )
     assert built["polarity"] is None
-    assert built["weight"] is None  # 빈 칸은 «미지정»이지 0이 아니다
+    assert built["weight"] is None  # 빈 칸은 《미지정》이지 0이 아니다
 
 
 def test_modulate_mode_is_sent(tmp_path):

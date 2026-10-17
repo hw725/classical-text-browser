@@ -278,7 +278,7 @@ def restore_from_trash(library_path: str | Path, trash_type: str, trash_name: st
         )
 
     # 휴지통으로 보낼 때와 같은 까닭·같은 재시도로 이름 바꾸기만 한다(_move_to_trash 주석 참조) —
-    # 잠금으로 안 되면 «복사 후 지우기»로 넘어가지 않고 그대로 실패를 알린다
+    # 잠금으로 안 되면 《복사 후 지우기》로 넘어가지 않고 그대로 실패를 알린다
     _close_git_handles(trash_path)
     _rename_with_retry(
         trash_path, restore_target, f"'{original_id}'을(를) 휴지통에서 되돌리지", "휴지통에"
@@ -372,8 +372,8 @@ def _move_to_trash(library_path: Path, category: str, item_id: str) -> str:
 
     # 이름 바꾸기(os.rename)만 쓴다 — 휴지통은 서고 안이라 같은 디스크다.
     # 예전에는 shutil.move였다. rename이 잠금으로 실패하면 shutil.move는
-    # «통째로 복사 → 원본 지우기»로 넘어가는데, 원본 지우기가 잠긴 .git 파일에서 도중에 멈추면
-    # 사본은 완전하고 원본은 반쯤 지워진 상태가 된다. 코드는 그 «완전한 사본»을 부분 이동으로
+    # 《통째로 복사 → 원본 지우기》로 넘어가는데, 원본 지우기가 잠긴 .git 파일에서 도중에 멈추면
+    # 사본은 완전하고 원본은 반쯤 지워진 상태가 된다. 코드는 그 《완전한 사본》을 부분 이동으로
     # 보고 지웠고, 2차 시도는 남은 원본 조각만 옮겨 문헌 일부가 사라졌다(2026-10-11 전수).
     # rename은 되거나 안 되거나 둘 중 하나다.
     _rename_with_retry(source, dest, f"'{item_id}'을(를) 휴지통으로 옮기지", "원본은 그대로")
@@ -383,7 +383,7 @@ def _move_to_trash(library_path: Path, category: str, item_id: str) -> str:
 def _rename_with_retry(source: Path, dest: Path, what: str, where_left: str) -> None:
     """폴더 이름 바꾸기를 몇 번 다시 해 본다. 끝내 안 되면 원인·해결이 든 PermissionError.
 
-    입력: source·dest, 안내문 앞부분(«'x'을(를) 휴지통으로 옮기지»), 실패 때 남은 자리 설명.
+    입력: source·dest, 안내문 앞부분(《'x'을(를) 휴지통으로 옮기지》), 실패 때 남은 자리 설명.
     왜: Windows에서는 탐색기·동기화 프로그램이 잠깐 파일을 잡아 rename이 실패한다. 읽기 전용
     파일도 막는다. 휴지통으로 보낼 때·되돌릴 때 같은 방식을 쓴다(되돌리기만 한 번 시도로
     끝나 500이 나던 것, 2026-10-11 재확인).

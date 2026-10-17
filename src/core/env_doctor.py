@@ -53,8 +53,8 @@ except Exception:  # noqa: BLE001
 print(json.dumps(out, ensure_ascii=False))
 """
 
-# 한 패키지만 새 프로세스에서 import한다. torch와 paddle이 둘 다 있을 때 «함께 뜨지 않는»
-# 것(cuDNN DLL 충돌)과 «혼자서도 안 뜨는» 것을 가르기 위해서다.
+# 한 패키지만 새 프로세스에서 import한다. torch와 paddle이 둘 다 있을 때 《함께 뜨지 않는》
+# 것(cuDNN DLL 충돌)과 《혼자서도 안 뜨는》 것을 가르기 위해서다.
 PROBE_ALONE = r"""
 import json, sys, importlib
 name = sys.argv[1] if len(sys.argv) > 1 else "paddle"
@@ -66,7 +66,7 @@ except Exception as e:  # noqa: BLE001
 """
 
 # 엔진 등록은 별도 프로세스에서 한다. 같은 프로세스에서 paddleocr을 두 번 import하면
-# paddlex가 «PDX has already been initialized»를 던져 진짜 원인이 가려진다.
+# paddlex가 《PDX has already been initialized》를 던져 진짜 원인이 가려진다.
 PROBE_ENGINES = r"""
 import json, sys, os
 out = {"engines": [], "errors": {}}
@@ -133,7 +133,7 @@ def _run_probe_alone(py: Path, root: Path, module: str, timeout: int) -> dict:
 
 
 def _run_worker_ping(py: Path, root: Path, timeout: int, block_torch: bool = False) -> dict:
-    """PaddleOCR 워커(D-091)를 실제로 띄워 ping 한다 — «워커 순서»로 import되는지 본다.
+    """PaddleOCR 워커(D-091)를 실제로 띄워 ping 한다 — 《워커 순서》로 import되는지 본다.
 
     왜 엔진 조사와 별도인가: 엔진 조사(PROBE_ENGINES)는 registry 등록 순서대로 NDL古典籍
     Full(torch)을 먼저 import하고 paddle을 나중에 읽는다. 그 순서는 .venv에 GPU torch가
@@ -176,7 +176,7 @@ def _run_worker_ping(py: Path, root: Path, timeout: int, block_torch: bool = Fal
             "available": bool(resp.get("ok") and resp.get("available")),
             "reason": resp.get("reason") or resp.get("error"),
             "paddle": resp.get("paddle"),
-            # 워커가 실제로 GPU를 잡았는가 — 빠뜨리면 GPU 워커도 «CPU»로 보고된다(2026-09-10 실측)
+            # 워커가 실제로 GPU를 잡았는가 — 빠뜨리면 GPU 워커도 《CPU》로 보고된다(2026-09-10 실측)
             "gpu": bool(resp.get("gpu")),
         }
     except subprocess.TimeoutExpired:
@@ -246,8 +246,8 @@ _GPU_RUNTIME: Optional[bool] = None
 def gpu_runtime() -> bool:
     """**지금 프로세스**가 GPU 환경인가 — torch가 CUDA를 보는가 (D-126 덧붙임).
 
-    `has_nvidia_gpu()`는 «이 PC에 GPU가 있는가»(nvidia-smi)이고, 이것은 «이 서버가 .venv-gpu로
-    떴는가»다. CPU 환경(.venv)에는 torch가 없어 False. 판독 계획처럼 쪽마다 OCR을 두 번 돌리는 일은
+    `has_nvidia_gpu()`는 《이 PC에 GPU가 있는가》(nvidia-smi)이고, 이것은 《이 서버가 .venv-gpu로
+    떴는가》다. CPU 환경(.venv)에는 torch가 없어 False. 판독 계획처럼 쪽마다 OCR을 두 번 돌리는 일은
     CPU에서 한 시간이 걸리므로(사용자 지시 2026-09-10) 이 값이 True일 때만 연다. 한 번 재고
     기억한다 — torch import는 무겁다.
     """
@@ -382,7 +382,7 @@ def recommend(report: dict) -> list[dict]:
             )
         err = e.get("errors", {})
         # onnxruntime 셋(みんなで翻刻·NDL古典籍 Lite·NDLOCR)은 GPU판이어야 GPU로 돈다(2026-09-10).
-        # GPU 환경에 CPU판이 남아 있으면 «GPU PC인데 みんなで翻刻이 한 쪽 22초»가 된다.
+        # GPU 환경에 CPU판이 남아 있으면 《GPU PC인데 みんなで翻刻이 한 쪽 22초》가 된다.
         prov = e.get("ort_providers")
         if (
             e.get("name") == ".venv-gpu"
@@ -402,9 +402,9 @@ def recommend(report: dict) -> list[dict]:
                 }
             )
         if cudnn_conflict(e):
-            # 충돌은 «한 프로세스»의 일이다 — 서버는 PaddleOCR을 이 환경의 별도 자식 프로세스(torch
-            # 차단)로 GPU에서 돌린다(D-091 덧붙임). torch를 지우라는 옛 권고는 NDL古典籍 Full을
-            # 죽인다.
+            # 충돌은 《한 프로세스》의 일이다 — 서버는 PaddleOCR을 이 환경의 별도 자식
+            # 프로세스(torch 차단)로 GPU에서 돌린다(D-091 덧붙임). torch를 지우라는 옛 권고는
+            # NDL古典籍 Full을 죽인다.
             gw = e.get("gpu_worker") or {}
             if gw.get("available") and gw.get("gpu"):
                 recs.append(

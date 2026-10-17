@@ -1,7 +1,7 @@
 """전면 블록과 회전(D-126 덧붙임 2026-09-18).
 
 자동으로 만든 전면 블록이 다른 회전에서 만들어졌으면 ensure_full_page_block이 지금 회전으로 다시
-만든다 — 「권 전체 OCR」이 회전을 저장한 쪽을 다시 돌 때 파이프라인이 «다른 회전의 레이아웃»이라
+만든다 — 「권 전체 OCR」이 회전을 저장한 쪽을 다시 돌 때 파이프라인이 《다른 회전의 레이아웃》이라
 거부하지 않게. 사람이 나눈 레이아웃은 그대로 둔다(D-123).
 """
 
@@ -110,8 +110,8 @@ def test_rebuilt_full_page_block_keeps_block_attributes(tmp_path):
 
 
 def test_stale_l2_without_l3_counts_as_changed(tmp_path):
-    """L3가 없고 L2만 있는 쪽: L2의 회전 도장이 지금 회전과 다르면 «바뀜» — 아니면 옛 좌표계의 L2가
-    «이미 결과가 있다»로 건너뛰어진다(Codex 지적 2026-09-18)."""
+    """L3가 없고 L2만 있는 쪽: L2의 회전 도장이 지금 회전과 다르면 《바뀜》 — 아니면 옛 좌표계의
+    L2가 《이미 결과가 있다》로 건너뛰어진다(Codex 지적 2026-09-18)."""
     from core.document import set_part_rotation, write_json_atomic
     from ocr.layout_staleness import layout_changed_since_ocr
 

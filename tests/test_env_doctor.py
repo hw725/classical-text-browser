@@ -153,7 +153,7 @@ def test_cudnn_conflict_between_torch_and_paddle():
 def test_worker_ping_failure_is_fix_even_if_engine_probe_passes():
     """실측 2026-09-03: .venv에 GPU torch가 들어 있어도 엔진 조사(torch 먼저)는 paddleocr ✓.
     그러나 서버의 워커(paddle 먼저)는 shm.dll WinError 127로 죽어 PaddleOCR이 사용 불가였다.
-    워커 ping이 실패하면 «고칠 것»으로, uv sync를 가리켜야 한다."""
+    워커 ping이 실패하면 《고칠 것》으로, uv sync를 가리켜야 한다."""
     venv = _env(".venv", "3.12.13", engines=PADDLE_OK)
     venv["packages"]["torch"] = "2.6.0+cu124"
     venv["worker"] = {
@@ -194,7 +194,7 @@ def _conflict_gpu_env():
 
 
 def test_gpu_worker_ok_means_no_torch_uninstall_advice():
-    """D-091 덧붙임: GPU 워커(torch 차단)가 뜨면 «고칠 것 없음» — torch를 지우라고 하지 않는다."""
+    """D-091 덧붙임: GPU 워커(torch 차단)가 뜨면 《고칠 것 없음》 — torch를 지우라고 하지 않는다."""
     venv = _env(".venv", "3.12.13", engines=PADDLE_OK)
     venv["worker"] = {"available": True, "reason": None, "paddle": "3.3.1"}
     gpu = _conflict_gpu_env()
@@ -220,7 +220,7 @@ def test_gpu_worker_failure_warns_cpu_fallback_and_keeps_torch():
 
 
 def test_worker_ping_carries_gpu_flag(monkeypatch, tmp_path):
-    """워커 응답의 gpu 칸을 doctor가 버리면 GPU 워커도 «CPU»로 보인다 — 옮겨 담는지 본다."""
+    """워커 응답의 gpu 칸을 doctor가 버리면 GPU 워커도 《CPU》로 보인다 — 옮겨 담는지 본다."""
     import subprocess
     from types import SimpleNamespace
 

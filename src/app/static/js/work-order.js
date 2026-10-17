@@ -1,6 +1,6 @@
 /**
  * 말로 작업 지시 (D-131) + 자동 스캔 (D-126, 2026-10-02 합침) — 복잡한 스캔본을
- * «스캔 → 말로 덧붙이기 → 계획 확인 → 적용 → 권 전체 OCR»로.
+ * 《스캔 → 말로 덧붙이기 → 계획 확인 → 적용 → 권 전체 OCR》로.
  *
  * 왜 이 창인가:
  *   돌아간 2쪽 펼침·세로쓰기·필사본·한글 번역이 섞인 사진본이 한 권에 들어 있으면, 쪽마다 회전·엔진·쓰기
@@ -10,7 +10,7 @@
  * 왜 「판독 계획」 단추를 없애고 여기로 합쳤는가 (2026-10-02):
  *   두 입구가 같은 계획 칸(「권 전체 OCR」의 엔진 계획)을 덮어써, 나중에 누른 쪽이 앞의 것을 조용히
  *   지웠다. 이제 계획은 하나이고, 스캔은 그 계획에 **값으로 바로** 들어간다(서버의 plan_from_survey).
- *   스캔 결과를 글로 풀어 «말» 칸에 넣지 않는 이유: 코드가 잰 숫자를 LLM이 다시 칸으로 옮기면 쪽
+ *   스캔 결과를 글로 풀어 《말》 칸에 넣지 않는 이유: 코드가 잰 숫자를 LLM이 다시 칸으로 옮기면 쪽
  *   번호가 밀릴 수 있다 — 지어낼 수 없던 값이 지어낼 수 있는 값이 된다. 말은 그 계획을 base_plan으로
  *   받아 고칠 데만 고친다. 말이 측정과 다르게 바꾼 쪽은 표 위에 짚어 준다.
  *
@@ -18,10 +18,10 @@
  *   ① 자동 스캔(선택) → 계획 표에 바로(저장하지 않음)
  *   ② 말로 덧붙이기 → 「계획에 덧붙이기」(LLM 한 번, 저장하지 않음)
  *   ③ 계획 확인(누운 쪽은 「보기」로 확인, 아니면 「반대로」) → 「적용」(회전·지침·장 저장)
- *      → «권 전체 OCR»에 계획이 걸린다
+ *      → 《권 전체 OCR》에 계획이 걸린다
  *   OCR이 끝난 뒤의 들이기·내려받기는 교정 탭 「들이기·내보내기」(export-view.js)에 있다.
  *
- * OCR 실행 자체는 기존 «권 전체 OCR»이 한다(진행 표시·중단·백업·L4 보호가 거기 있다).
+ * OCR 실행 자체는 기존 《권 전체 OCR》이 한다(진행 표시·중단·백업·L4 보호가 거기 있다).
  */
 
 /* global viewerState, showToast, getLlmModelSelection, setOcrEnginePlan, syncSavedRotation, ocrState,
@@ -83,7 +83,7 @@ function _woStatus(text, kind = "") {
   el.dataset.kind = kind;
 }
 
-/** «1-3,7» → [1,2,3,7]. 계획의 pages는 서버가 닫힌 범위로 정리해 둔다(read_plan.pages_spec). */
+/** 《1-3,7》 → [1,2,3,7]. 계획의 pages는 서버가 닫힌 범위로 정리해 둔다(read_plan.pages_spec). */
 function _woPages(spec) {
   const out = [];
   for (const piece of String(spec || "").split(",")) {
@@ -97,7 +97,7 @@ function _woPages(spec) {
 }
 
 /**
- * 말이 측정과 다르게 바꾼 쪽 — 스캔이 «확실히» 잰 회전(추정 아님)과 지금 계획의 회전이 다른 쪽.
+ * 말이 측정과 다르게 바꾼 쪽 — 스캔이 《확실히》 잰 회전(추정 아님)과 지금 계획의 회전이 다른 쪽.
  * 추정(누운 쪽의 90/270)은 180° 차이까지 같은 것으로 본다(코드가 그 둘을 못 가린다).
  * 출력: [{pages: "5-12", measured, planned}] — 연속 쪽을 묶는다.
  */
@@ -124,7 +124,7 @@ function _woConflicts(plan) {
   return rows.map((r) => ({ ...r, pages: r.from === r.to ? `${r.from}` : `${r.from}-${r.to}` }));
 }
 
-/** ③ 계획을 표로 보인다 — 무엇이 어느 엔진·회전으로 돌지 «적용» 전에 보여야 한다. */
+/** ③ 계획을 표로 보인다 — 무엇이 어느 엔진·회전으로 돌지 《적용》 전에 보여야 한다. */
 const WO_UNSUPPORTED_HEADING =
   "옮기지 못한 말 — 계획에 들어가지 않았습니다. 말을 고쳐 다시 옮기거나, 아래 JSON을 직접 고치세요.";
 
@@ -192,7 +192,7 @@ function _woRenderPlan(plan) {
 
 /**
  * JSON 칸을 손으로 고쳤는데 표가 아직 옛 계획이면, 표를 먼저 JSON에 맞춘다. 출력: 표가 이미 맞았으면 true.
- * 표의 단추는 «표의 몇 번째 줄»을 가리키므로, 고친 JSON에서 구간 순서가 바뀌었으면 엉뚱한 구간을
+ * 표의 단추는 《표의 몇 번째 줄》을 가리키므로, 고친 JSON에서 구간 순서가 바뀌었으면 엉뚱한 구간을
  * 돌리거나 그린다(Codex 지적 2026-10-02). 맞춘 뒤에는 사람이 표를 보고 다시 누르게 false를 돌려준다.
  */
 function _woSyncFromJson() {
@@ -302,7 +302,7 @@ function _woScanPages() {
   const raw = (document.getElementById("wo-scan-pages")?.value || "").trim();
   if (!raw) return null;
   const m = raw.match(/^(\d+)\s*[-~–]\s*(\d+)$/) || raw.match(/^(\d+)$/);
-  if (!m) throw new Error(`쪽 범위를 «37-60»처럼 적으세요: ${raw}`);
+  if (!m) throw new Error(`쪽 범위를 《37-60》처럼 적으세요: ${raw}`);
   return [Number(m[1]), Number(m[2] ?? m[1])];
 }
 
@@ -321,13 +321,13 @@ function _woScanProgress(on, done = 0, total = 1, text = "") {
 /**
  * 종류 판정 모델 고름 → {force_provider, force_model}. **미리 세기와 실제 스캔이 이 함수 하나로 만든다**
  * — 전에는 미리 세기가 모델을 보내지 않아(2026-10-05 리뷰 143) 서버가 판정 모델의 비용 어림을 내지
- * 않았고, 화면은 고른 것과 다른 «비전 모델 N번»을 말했다. CPU면 종류를 묻지 않으므로 빈 고름.
+ * 않았고, 화면은 고른 것과 다른 《비전 모델 N번》을 말했다. CPU면 종류를 묻지 않으므로 빈 고름.
  */
 function _woScanModelSel(gpu) {
   return gpu && typeof getLlmModelSelection === "function" ? getLlmModelSelection("wo-scan-model-select") : {};
 }
 
-/** 달러 어림을 짧게 — 0.576 → «$0.58», 0.00576 → «$0.0058», 0 → «$0». */
+/** 달러 어림을 짧게 — 0.576 → 《$0.58》, 0.00576 → 《$0.0058》, 0 → 《$0》. */
 function _woUsd(x) {
   const v = Number(x) || 0;
   if (v <= 0) return "$0";
@@ -336,14 +336,14 @@ function _woUsd(x) {
   return `$${Number(v.toPrecision(2))}`;
 }
 
-/** needs_key(설정 «판정 모델»의 칸 id) → 어디서 무슨 키를 넣는가. */
+/** needs_key(설정 《판정 모델》의 칸 id) → 어디서 무슨 키를 넣는가. */
 function _woKeyHint(needsKey) {
   const which = { cloudflare: "Cloudflare 또는 OpenRouter", perplexity: "Perplexity", openrouter: "OpenRouter" }[needsKey] || "";
-  return `설정 → «판정 모델»에서 ${which ? which + " " : ""}키를 넣거나, 종류 판정 모델을 다른 것으로 고르세요`;
+  return `설정 → 《판정 모델》에서 ${which ? which + " " : ""}키를 넣거나, 종류 판정 모델을 다른 것으로 고르세요`;
 }
 
 /**
- * 미리 세기(dry_run) 응답 → 안내 한 줄. 판정 모델이면 «얼마»까지, clef면 사슬을 말한다 —
+ * 미리 세기(dry_run) 응답 → 안내 한 줄. 판정 모델이면 《얼마》까지, clef면 사슬을 말한다 —
  * Cloudflare 무료 몫 → OpenRouter 유료 → 기본 비전 모델(서버 `_clef_chain`). 어림은 서버가 준 값이다
  * (쪽당 2,400토큰 × 업체 단가, 실측 아님). sel은 고른 모델(비전 모델일 때 이름을 보인다).
  */
@@ -375,7 +375,7 @@ function _woDryNote(dry, sel) {
   // 닿는 비전 프로바이더가 하나도 없으면(서버 `_vision_readiness`) 그대로 스캔하면 쪽마다 실패한다
   if (dry.no_vision) {
     const which = sel?.force_provider ? `고른 비전 모델(${sel.force_provider})이 닿지 않습니다` : "쓸 수 있는 비전 모델이 없습니다(닿는 곳 없음)";
-    return `${head}${which} — 설정 → «LLM 연결»에서 Ollama를 켜거나 키를 넣거나, 키가 있으면 종류 판정 모델을 판정 모델(clef 등)로 고르세요. 이대로 스캔하면 쪽마다 실패로 남습니다.`;
+    return `${head}${which} — 설정 → 《LLM 연결》에서 Ollama를 켜거나 키를 넣거나, 키가 있으면 종류 판정 모델을 판정 모델(clef 등)로 고르세요. 이대로 스캔하면 쪽마다 실패로 남습니다.`;
   }
   return `${head}비전 모델 ${dry.calls}번(글의 종류${who}) + ${ocr}. 쪽마다 몇 초.`;
 }
@@ -383,9 +383,9 @@ function _woDryNote(dry, sel) {
 // 스캔 안내를 새로 그린 차례 — 늦게 온 답이 새 안내를 덮지 않게 _woRefreshScanNote가 센다
 let _woScanSeq = 0;
 /**
- * 스캔 칸의 안내 — 이 환경에서 무엇을 재는가를 누르기 전에 밝힌다. GPU면 «방향 + 종류(엔진)»,
- * CPU면 «방향만»(종류 판정은 쪽마다 비전 모델 + PaddleOCR이라 CPU에서 한 시간, 사용자 지시 2026-09-10).
- * GPU면 dry_run으로 «몇 쪽·호출 몇 번·얼마»도 센다(실행 게이트는 도구 층에 — 전역 규칙 11).
+ * 스캔 칸의 안내 — 이 환경에서 무엇을 재는가를 누르기 전에 밝힌다. GPU면 《방향 + 종류(엔진)》,
+ * CPU면 《방향만》(종류 판정은 쪽마다 비전 모델 + PaddleOCR이라 CPU에서 한 시간, 사용자 지시 2026-09-10).
+ * GPU면 dry_run으로 《몇 쪽·호출 몇 번·얼마》도 센다(실행 게이트는 도구 층에 — 전역 규칙 11).
  * 모델 고름은 실제 스캔과 같은 `_woScanModelSel`로 보낸다.
  */
 async function _woRefreshScanNote() {
@@ -434,7 +434,7 @@ async function _woRefreshScanNote() {
   }
 }
 
-/** 사슬이 넘어간 자리 → «3쪽부터 OpenRouter clef로(Cloudflare 429: …)». 넘어간 쪽은 다음 단계가 답했다. */
+/** 사슬이 넘어간 자리 → 《3쪽부터 OpenRouter clef로(Cloudflare 429: …)》. 넘어간 쪽은 다음 단계가 답했다. */
 function _woFallbackText(steps) {
   if (!Array.isArray(steps) || !steps.length) return "";
   const names = { cloudflare: "Cloudflare clef", openrouter: "OpenRouter clef" };
@@ -449,7 +449,7 @@ function _woFallbackText(steps) {
 /**
  * 판정 모델이 실제로 쓴 것(decider_usage, 서버가 usage로 잰 값) → 짧은 한 줄. 유료 몫(OpenRouter·
  * Perplexity)은 청구 금액으로, Cloudflare 몫은 명목값으로 따로 말한다(무료 몫 안이면 청구되지 않는다).
- * 비용을 셀 근거가 없던 호출(uncosted_calls)이 있으면 «$0»이 아니라 «비용 모름 N회»로 말한다.
+ * 비용을 셀 근거가 없던 호출(uncosted_calls)이 있으면 《$0》이 아니라 《비용 모름 N회》로 말한다.
  */
 function _woUsageText(u) {
   if (!u) return "";
@@ -473,8 +473,8 @@ function _woUsageText(u) {
       paidUnknown += unknown;
     }
   }
-  // 비용 모름이 섞이면 잰 몫을 «청구액»처럼 확정해 쓰지 않는다(Codex 리뷰 2026-10-06) —
-  // usage 없는 유료 응답이 «유료 청구 $0»으로 보였다
+  // 비용 모름이 섞이면 잰 몫을 《청구액》처럼 확정해 쓰지 않는다(Codex 리뷰 2026-10-06) —
+  // usage 없는 유료 응답이 《유료 청구 $0》으로 보였다
   const amount = (usd, unknown) => {
     if (!unknown) return _woUsd(usd);
     return usd > 0 ? `${_woUsd(usd)} 이상(비용 모름 ${unknown}회 포함)` : `모름(비용 모름 ${unknown}회)`;
@@ -487,8 +487,8 @@ function _woUsageText(u) {
 }
 
 /**
- * 스캔 결과 → 상태 줄 {text, kind}. **넘어감은 실패가 아니다** — 서버의 fallback_steps는 «넘어감»으로,
- * failures(답을 못 받은 쪽·호출 상한으로 멈춤)만 «일부 실패»와 경고로 보인다. failures 칸이 없는 옛
+ * 스캔 결과 → 상태 줄 {text, kind}. **넘어감은 실패가 아니다** — 서버의 fallback_steps는 《넘어감》으로,
+ * failures(답을 못 받은 쪽·호출 상한으로 멈춤)만 《일부 실패》와 경고로 보인다. failures 칸이 없는 옛
  * 응답이면 error를 실패로 읽는다.
  */
 function _woScanSummary(d, gpu, marks) {
@@ -500,7 +500,7 @@ function _woScanSummary(d, gpu, marks) {
   const text =
     `${d.checked}쪽을 봤습니다${who} — 회전이 다른 구간 ${(d.rotation || []).length}개` +
     (gpu ? `, 엔진 구간 ${(d.engines || []).length}개` : " (방향만)") +
-    ((m.guess_pages || []).length ? ` · «추정» ${m.guess_pages.length}쪽은 「보기」로 확인하세요` : "") +
+    ((m.guess_pages || []).length ? ` · 《추정》 ${m.guess_pages.length}쪽은 「보기」로 확인하세요` : "") +
     (d.unknown ? ` · 판단 못 한 쪽 ${d.unknown}` : "") +
     (fb ? ` · 넘어감: ${fb}` : "") +
     (usage ? ` · ${usage}` : "") +
@@ -509,7 +509,7 @@ function _woScanSummary(d, gpu, marks) {
   return { text, kind: failures.length ? "warning" : "success" };
 }
 
-/** 설정 «판정 모델» 칸으로 — 키가 없어 스캔·미리 세기가 막혔을 때. */
+/** 설정 《판정 모델》 칸으로 — 키가 없어 스캔·미리 세기가 막혔을 때. */
 function _woOpenKeySettings() {
   const overlay = document.getElementById("work-order-overlay");
   if (overlay) overlay.style.display = "none";
@@ -591,7 +591,7 @@ async function _woFromWords() {
   if (!t || !_woReady(t)) return;
   const said = (document.getElementById("wo-said")?.value || "").trim();
   if (!said) {
-    _woStatus("책에 대해 아는 것을 한 줄 이상 적으세요. 예: «5~69쪽은 시계 방향으로 누운 2쪽 펼침이고 근대 활자 세로쓰기»", "warning");
+    _woStatus("책에 대해 아는 것을 한 줄 이상 적으세요. 예: 《5~69쪽은 시계 방향으로 누운 2쪽 펼침이고 근대 활자 세로쓰기》", "warning");
     return;
   }
   let base;
@@ -631,7 +631,7 @@ async function _woFromWords() {
   }
 }
 
-/** ③ 적용 — 회전·지침·장 저장 후 «권 전체 OCR»에 계획을 건다. */
+/** ③ 적용 — 회전·지침·장 저장 후 《권 전체 OCR》에 계획을 건다. */
 async function _woApply() {
   const t = _woTarget();
   if (!t || !_woReady(t)) return;
@@ -677,7 +677,7 @@ async function _woApply() {
     }
     _woStatus(
       `적용했습니다 — 돌릴 쪽 ${data.pages.length} · 회전 구간 ${data.rotation_ranges.length}. ` +
-        "OCR 패널의 「권 전체 OCR」을 누르면 이 계획대로 돕니다(«작업 계획대로»가 켜져 있습니다).",
+        "OCR 패널의 「권 전체 OCR」을 누르면 이 계획대로 돕니다(《작업 계획대로》가 켜져 있습니다).",
       "success",
     );
     // 뷰어가 새 회전으로 다시 그리게 한다 — 권의 회전은 그대로이고 쪽 범위만 바뀐다
@@ -692,9 +692,9 @@ function openWorkOrder() {
   const overlay = document.getElementById("work-order-overlay");
   if (!overlay || !_woTarget()) return;
   overlay.style.display = "";
-  // 종류 판정 기본 모델은 kimi-k3:cloud. 목록에 없거나 은퇴(disabled)면 «자동». 한 번 고른 뒤에는 그것을 지킨다
+  // 종류 판정 기본 모델은 kimi-k3:cloud. 목록에 없거나 은퇴(disabled)면 《자동》. 한 번 고른 뒤에는 그것을 지킨다
   // 단 clef 키(Cloudflare 또는 OpenRouter)가 있어 목록이 clef를 미리 골랐으면(D-135, workspace.js의
-  // `clefDefaulted`) 그것을 지킨다 — 한때 창을 열 때마다 kimi로 덮어 «키가 있으면 clef»가 화면에서
+  // `clefDefaulted`) 그것을 지킨다 — 한때 창을 열 때마다 kimi로 덮어 《키가 있으면 clef》가 화면에서
   // 한 번도 살아남지 못했다(2026-10-05 headless 실측: 네 경우 모두 창을 열면 kimi).
   const sel = document.getElementById("wo-scan-model-select");
   if (sel && !sel.dataset.picked) {
@@ -721,7 +721,7 @@ function initWorkOrder() {
   });
   document.getElementById("wo-scan")?.addEventListener("click", _woScan);
   document.getElementById("wo-scan-pages")?.addEventListener("input", _woRefreshScanNote);
-  // 모델을 바꾸면 «얼마»도 바뀐다 — clef(사슬)·Decider(유료)·비전 모델(구독)
+  // 모델을 바꾸면 《얼마》도 바뀐다 — clef(사슬)·Decider(유료)·비전 모델(구독)
   document.getElementById("wo-scan-model-select")?.addEventListener("change", _woRefreshScanNote);
   document.getElementById("wo-open-keys")?.addEventListener("click", _woOpenKeySettings);
   document.getElementById("wo-from-words")?.addEventListener("click", _woFromWords);

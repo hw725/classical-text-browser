@@ -49,13 +49,13 @@ const CITE_EXPORT_SETTINGS_KEY = "cite_export_settings";
  * 지금 고른 해석 저장소 id. 없으면 null — 요청을 보내지 않게.
  * 입력: quiet(불러오기처럼 조용히 멈출 자리면 true). 출력: id 또는 null.
  *
- * 왜(2026-10-11 전수): 예전에는 «default»라는 없는 저장소 주소로 요청해 404를 받고 조용히 빈
+ * 왜(2026-10-11 전수): 예전에는 《default》라는 없는 저장소 주소로 요청해 404를 받고 조용히 빈
  * 목록을 그렸다. 저장·생성 같은 동작은 왜 안 되는지 알려야 한다.
  */
 function _citeInterpId(quiet) {
   const id = typeof interpState !== "undefined" && interpState ? interpState.interpId : null;
   if (!id && !quiet && typeof showToast === "function") {
-    showToast("해석 저장소를 먼저 고르세요 — 사이드바 «해석 저장소»에서 고르거나 새로 만듭니다.", "warning");
+    showToast("해석 저장소를 먼저 고르세요 — 사이드바 《해석 저장소》에서 고르거나 새로 만듭니다.", "warning");
   }
   return id || null;
 }
@@ -371,10 +371,10 @@ async function _loadCiteBlockText(blockId) {
     // 본문은 서버가 준 것을 그대로 쓴다.
     //
     // 왜 여기서 쪽을 다시 이어 붙이지 않는가: v1.3부터 단위는 본문을 저장하지 않고
-    // **읽을 때 L4에서 잘라 온다**(D-092). 즉 서버의 original_text가 이미 «지금 교정본»이고,
+    // **읽을 때 L4에서 잘라 온다**(D-092). 즉 서버의 original_text가 이미 《지금 교정본》이고,
     // 쪽 중간에서 시작·끝나는 경계도 글자 단위로 반영돼 있다.
     // 화면이 쪽 전체를 다시 받아 이으면 두 가지가 어긋났다(사용자 지적 2026-09-04):
-    //   ① 둘째 쪽부터 빠졌다 — «texts.length === 0»일 때만 담아 첫 쪽만 들어갔다
+    //   ① 둘째 쪽부터 빠졌다 — 《texts.length === 0》일 때만 담아 첫 쪽만 들어갔다
     //      (layout_block_id는 v1.3부터 늘 null이라 블록 매칭이 언제나 실패한다)
     //   ② 쪽 중간 경계가 무시됐다 — char_range를 보지 않고 쪽 전체를 담았다
     const correctedText = (tbData && tbData.original_text) || "";
@@ -1429,7 +1429,7 @@ function _esc(str) {
   // 큰·작은따옴표까지 막는다. 글자 자리와 속성 자리(`data-cite-id="…"`) 둘 다에 쓰인다 —
   // 느슨한 판은 한 배선 거리에서 뚫린다. 2026-09-22에 `entity-manager` 가 Concept 라벨을
   // `title="…"` 에 넣는 자리가 정확히 그 모양으로 뚫려 있었다(B-009).
-  // 느슨한 판을 남겨 두면 그때 가서 «왜 여기만 다르지»를 다시 판다.
+  // 느슨한 판을 남겨 두면 그때 가서 《왜 여기만 다르지》를 다시 판다.
   return str
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")

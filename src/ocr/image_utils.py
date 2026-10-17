@@ -256,7 +256,7 @@ def resolve_part_pdf(doc_path: Path, part_id: Optional[str]) -> Optional[Path]:
     source_dir = doc_path / "L1_source"
     if not source_dir.exists():
         return None
-    # 이름 순으로 정렬한다. vol1 → vol2 순서가 되어 «첫 권»이 실제로 첫 권이다.
+    # 이름 순으로 정렬한다. vol1 → vol2 순서가 되어 《첫 권》이 실제로 첫 권이다.
     pdfs = sorted(source_dir.glob("*.pdf"), key=lambda p: p.name)
     if not pdfs:
         return None
@@ -286,7 +286,7 @@ def native_render_scale(page, default: float = DEFAULT_RENDER_SCALE) -> float:
     원본 화소의 절반 이하만 엔진에 간다. 합성 쪽 실측에서 해상도 절반이 CER을
     0.087→0.106으로 올렸다(D-086). 원본 ndlkotenocr-lite는 스캔 파일을 그대로 읽는다.
 
-    왜 이미지를 직접 꺼내지 않고 «그 배율로 렌더»하는가: 회전·자르기·여러 장 합성이
+    왜 이미지를 직접 꺼내지 않고 《그 배율로 렌더》하는가: 회전·자르기·여러 장 합성이
     있는 쪽도 렌더는 좌표계를 그대로 지킨다. 화소 밀도는 넓이의 제곱근으로 재서
     90도 회전에도 같은 값이 나온다. 쪽 넓이의 절반이 안 되는 이미지(삽화·도장)는 무시.
     """
@@ -317,7 +317,7 @@ def native_render_scale(page, default: float = DEFAULT_RENDER_SCALE) -> float:
 def rotate_page_image(img: Image.Image, rotation: int) -> Image.Image:
     """쪽 이미지를 저장된 회전만큼 시계 방향으로 돌린다(D-123). 0이면 그대로.
 
-    부호: 이 프로젝트의 회전은 «바로 세우려면 시계 방향으로 몇 도»다(PDF /Rotate·PDF.js와 같다).
+    부호: 이 프로젝트의 회전은 《바로 세우려면 시계 방향으로 몇 도》다(PDF /Rotate·PDF.js와 같다).
     PIL.rotate는 반시계가 양수라 부호를 뒤집는다. expand=True로 캔버스가 함께 돈다.
     """
     rotation = int(rotation or 0) % 360

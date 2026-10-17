@@ -153,8 +153,8 @@ class PaddleOcrEngine(BaseOcrEngine):
         worker_py = (os.environ.get("CTB_PADDLE_PYTHON") or "").strip()
         force = os.environ.get("CTB_PADDLE_FORCE_WORKER") == "1"
         self._worker_python: str | None = None
-        # GPU 워커(D-091 덧붙임, 2026-09-10): 충돌은 «한 프로세스에 torch와 paddle을 같이
-        # 올리는 것»이지 GPU를 같이 쓰는 것이 아니다. 지금 파이썬(.venv-gpu)에 paddle GPU판이
+        # GPU 워커(D-091 덧붙임, 2026-09-10): 충돌은 《한 프로세스에 torch와 paddle을 같이
+        # 올리는 것》이지 GPU를 같이 쓰는 것이 아니다. 지금 파이썬(.venv-gpu)에 paddle GPU판이
         # 있으면, 워커도 이 파이썬으로 띄우되 워커 안에서 torch import를 막는다(paddlex가 torch를
         # 끌어오면 cuDNN DLL이 부딪혀 죽는다). 그러면 PaddleOCR도 GPU다 — 실측 조각 하나
         # 5초 → 0.06초. 안 뜨면 CTB_PADDLE_PYTHON(.venv CPU)으로.
@@ -634,7 +634,7 @@ class PaddleOcrEngine(BaseOcrEngine):
         # 예전 조건은 `not isinstance(raw_result, list)`였는데, PaddleOCR 3.x의
         # predict()는 **이미지별 결과의 리스트**를 돌려준다. 그래서 v3인데도 이
         # 조건이 거짓이 되어 v2 경로로 흘렀고, v2 파서가 dict를 순회하며 키(str)를
-        # item으로 받아 «구조 이상 — 건너뜀»을 줄마다 찍고 결과가 0줄이 되었다
+        # item으로 받아 《구조 이상 — 건너뜀》을 줄마다 찍고 결과가 0줄이 되었다
         # (실측 2026-08-12, paddleocr 3.7.0: 한 쪽에서 15줄 전부 유실).
         #
         # 리스트면 첫 이미지 결과를 꺼내 보고, rec_texts를 속성이든 키로든

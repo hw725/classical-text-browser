@@ -6,7 +6,7 @@
     추정해 **고친 결과가 화면에 안 나타난다.**
 
     실제로 그 사고가 있었다 — 배치 OCR이 L3 전면 블록을 새로 만들었는데
-    레이아웃 탭에는 «블록이 없던 시절»이 남아 있었다(D-063).
+    레이아웃 탭에는 《블록이 없던 시절》이 남아 있었다(D-063).
     점검해 보니 프론트에서 변하는 데이터를 캐시 지정 없이 읽는 곳이
     47군데였고, 한 곳씩 고치면 새 코드에서 또 빠지므로 서버에서 붙인다.
 """
@@ -39,7 +39,7 @@ def client(tmp_path, monkeypatch):
 def test_api_responses_are_not_cached(client, path):
     """성공이든 실패든 API 응답에는 캐시 금지가 붙는다.
 
-    오류 응답도 캐시되면 «고쳤는데 계속 같은 오류»가 된다.
+    오류 응답도 캐시되면 《고쳤는데 계속 같은 오류》가 된다.
     """
     r = client.get(path)
     assert r.headers.get("cache-control") == "no-store", (
@@ -67,9 +67,9 @@ def test_non_api_pages_are_untouched(client):
 def test_original_pdf_revalidates_instead_of_no_store(client):
     """원본 PDF는 no-store가 아니라 no-cache다 (2026-09-05 성능 실측).
 
-    왜: PDF는 «작업 중에 바뀌는 데이터»가 아니라 원본 파일이다. 78.9MB짜리 문헌에
+    왜: PDF는 《작업 중에 바뀌는 데이터》가 아니라 원본 파일이다. 78.9MB짜리 문헌에
     no-store를 붙이면 쪽을 넘길 때마다 조각을 다시 받는다. ETag가 나가므로 no-cache면
-    바뀌지 않은 동안 304로 끝난다 — «고쳤는데 반영이 안 된다»는 그대로 막힌다.
+    바뀌지 않은 동안 304로 끝난다 — 《고쳤는데 반영이 안 된다》는 그대로 막힌다.
     """
     r = client.get("/api/documents/없는문헌/pdf/vol1")
     cc = r.headers.get("cache-control") or ""

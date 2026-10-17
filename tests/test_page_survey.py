@@ -239,7 +239,7 @@ def test_route_dry_run_and_survey_with_fake_vision(client, tmp_path, monkeypatch
         #
         # 왜 필요한가: `llm_ocr_engine.is_available()` 이 `router.providers` 를 훑어
         # 비전 지원 프로바이더가 있는지 본다. 이 칸이 없으면 AttributeError 가 나고
-        # 레지스트리가 그 엔진을 «사용 불가»로 떨어뜨린다(예외가 아니라 조용한 제외다).
+        # 레지스트리가 그 엔진을 《사용 불가》로 떨어뜨린다(예외가 아니라 조용한 제외다).
         # 그러면 「훈점(kunten) → 엔진」 대응의 마지막 후보인 llm_vision 까지 사라져,
         # **honkoku·ndlkotenocr 같은 선택 extra 가 설치된 환경에서만** 이 시험이
         # 통과하게 된다. 실제로 그랬다 — main 체크아웃 `.venv` 에서는 통과하고
@@ -378,7 +378,7 @@ def test_route_streams_progress(client, tmp_path, monkeypatch):  # noqa: F811
     assert d["checked"] == 2 and "rotation" in d
 
 
-# ── «돌아간 쪽은 세워서»(D-126 덧붙임 2026-09-18) — orientation_only ─────────────────────
+# ── 《돌아간 쪽은 세워서》(D-126 덧붙임 2026-09-18) — orientation_only ─────────────────────
 
 
 class _NoVision:
@@ -525,7 +525,7 @@ def test_orientation_only_counts_pages_from_pdf_when_manifest_lacks_page_count(
     """manifest에 page_count가 없으면 PDF를 열어 센다.
 
     add_document로 만든 문헌이 그렇다. E2E 실측(2026-09-18)에서
-    «쪽 수를 몰라» 400이 났던 자리다.
+    《쪽 수를 몰라》 400이 났던 자리다.
     """
     import json as _json
     from pathlib import Path

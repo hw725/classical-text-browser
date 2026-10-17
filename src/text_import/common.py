@@ -39,7 +39,7 @@ def save_text_to_l4(
     pages_dir.mkdir(parents=True, exist_ok=True)
 
     file_path = pages_dir / f"{part_id}_page_{page_num:03d}.txt"
-    # newline="" — Path.write_text는 Windows에서 CRLF로 쓴다(AGENTS «LF 줄바꿈»)
+    # newline="" — Path.write_text는 Windows에서 CRLF로 쓴다(AGENTS 《LF 줄바꿈》)
     with open(file_path, "w", encoding="utf-8", newline="") as f:
         f.write(text)
     logger.info("L4 텍스트 저장: %s (%d자)", file_path.name, len(text))
@@ -621,7 +621,7 @@ def align_text_to_pages(
 
         if len(successes) >= 2:
             # 2개 이상 성공 → 쪽 시작 추정의 중앙값, 평균 신뢰도.
-            # 앵커 위치가 아니라 «앵커 위치 − 쪽 안에서 그 앵커가 놓인 자리»를 쓴다 — 끝·중간
+            # 앵커 위치가 아니라 《앵커 위치 − 쪽 안에서 그 앵커가 놓인 자리》를 쓴다 — 끝·중간
             # 앵커의 위치를 쪽 위치로 쓰면 쪽마다 끝 글자가 다음 쪽으로 밀렸다(B-032).
             positions = sorted(s[0] for s in successes)
             median_pos = positions[len(positions) // 2]
@@ -665,7 +665,7 @@ def align_text_to_pages(
     _recover_failed_matches(match_positions, page_anchors, han_string, NGRAM, ngram_index)
 
     # ── 5단계: 쪽 시작 추정 → 페이지 경계 ──
-    # 경계는 «다음 쪽이 시작하는 자리»다. 예전에는 이웃 앵커 위치의 중간점을 썼는데, 앵커가
+    # 경계는 《다음 쪽이 시작하는 자리》다. 예전에는 이웃 앵커 위치의 중간점을 썼는데, 앵커가
     # 쪽의 시작이 아니라 중간·끝에서 잡히므로 OCR과 외부 텍스트가 똑같아도 경계가 앞당겨졌다
     # (실측 2026-10-11: 24자 쪽 3자, 60자 쪽 7자, 쪽 원문과 일치 0/3 — B-032).
     start_positions: list[int] = []

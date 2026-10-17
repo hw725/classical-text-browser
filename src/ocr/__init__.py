@@ -12,7 +12,7 @@
   - 기타: BaseOcrEngine을 상속하여 커스텀 엔진 추가 가능
   어느 엔진이 왜 안 뜨는지는 doctor.bat(scripts/doctor.py)이 알려 준다.
 
-사용법(이 저장소는 src를 경로에 넣고 «ocr»로 가져온다):
+사용법(이 저장소는 src를 경로에 넣고 《ocr》로 가져온다):
     from ocr import OcrPipeline, OcrEngineRegistry
 
     registry = OcrEngineRegistry()

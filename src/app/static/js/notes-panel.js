@@ -62,7 +62,7 @@ async function loadPageNotes() {
   const container = document.getElementById("notes-panel-content");
   if (!container) return;
 
-  // 쪽을 옮기기 전에 남은 예약 저장을 «그 쪽»으로 먼저 내보낸다. 예전에는 2초 타이머가 터질 때의
+  // 쪽을 옮기기 전에 남은 예약 저장을 《그 쪽》으로 먼저 내보낸다. 예전에는 2초 타이머가 터질 때의
   // 쪽 번호를 읽어, 쓰고 2초 안에 쪽을 옮기면 옛 쪽 비고가 새 쪽 파일을 덮었다(2026-10-11 2차 전수)
   await _flushNotesSave();
 

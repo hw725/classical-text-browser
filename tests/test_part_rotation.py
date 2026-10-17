@@ -1,6 +1,6 @@
 """권 단위 회전 저장(D-123) — 좌표계 하나를 지키는가.
 
-회전은 «바로 세우려면 시계 방향으로 몇 도»다. 서버(PIL)·화면(PDF.js)·내보내기(/Rotate)가 같은
+회전은 《바로 세우려면 시계 방향으로 몇 도》다. 서버(PIL)·화면(PDF.js)·내보내기(/Rotate)가 같은
 부호를 쓰는지, 옛 좌표계를 조용히 늘여 쓰지 않는지, 저장 라우트가 지우지 않고 알리는지를 잰다.
 """
 
@@ -252,7 +252,7 @@ class TestPageRanges:
         set_part_rotation(doc, "v1", 180, pages=(8, 9))
         m = json.loads((doc / "manifest.json").read_text(encoding="utf-8"))
         assert m["parts"][0]["rotation_ranges"] == [{"from": 4, "to": 9, "rotation": 180}]
-        # 권 전체로 저장하면 범위는 지워진다 — «전체»가 새 기준이다
+        # 권 전체로 저장하면 범위는 지워진다 — 《전체》가 새 기준이다
         set_part_rotation(doc, "v1", 0)
         m = json.loads((doc / "manifest.json").read_text(encoding="utf-8"))
         assert m["parts"][0]["rotation"] == 0 and "rotation_ranges" not in m["parts"][0]

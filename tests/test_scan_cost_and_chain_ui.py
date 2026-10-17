@@ -1,18 +1,18 @@
-"""자동 스캔의 «보내기 전 비용»과 «사슬이 넘어간 것»을 화면까지 잇는다 (2026-10-05 리뷰 143 후속).
+"""자동 스캔의 《보내기 전 비용》과 《사슬이 넘어간 것》을 화면까지 잇는다 (2026-10-05 리뷰 143 후속).
 
 무엇을 고정하는가:
   1. 미리 세기(dry_run)도 실제 스캔과 **같은 모델 선택**(force_provider·force_model)을
      보낸다. 전에는 `{pages, dry_run}`뿐이라 서버가 engine·cost_usd_est를 내지 않았고,
      OpenRouter 키만 있어 유료 clef가 기본인 사람이 1,000쪽을 스캔해도 비용 어림을 못 봤다
      (전역 규칙 11 — 게이트는 도구 층에). 서버는 clef 사슬(Cloudflare 무료 → OpenRouter
-     유료 → 기본 비전 모델)의 단계별 키 유무와 «최대 유료 어림»(`cost_usd_max`)을 준다.
+     유료 → 기본 비전 모델)의 단계별 키 유무와 《최대 유료 어림》(`cost_usd_max`)을 준다.
   2. 결과: 사슬이 넘어간 쪽은 **실패가 아니다** — `fallback_steps`(넘어감)와
      `failures`(실패)를 나누고, 옛 `error` 문자열은 그대로 둔다(기존 소비처). 화면은
-     넘어감을 «3쪽부터 OpenRouter clef로»로, 실제 쓴 비용(decider_usage)을 짧게,
-     needs_key면 설정 «판정 모델»로 가는 안내를 보인다.
+     넘어감을 《3쪽부터 OpenRouter clef로》로, 실제 쓴 비용(decider_usage)을 짧게,
+     needs_key면 설정 《판정 모델》로 가는 안내를 보인다.
   3. 호출 상한은 **논리 호출(ask 한 번)**을 센다 — 429 백오프·clef 413 축소 재전송이
      상한을 갉아 남은 쪽을 유료 OpenRouter로 밀어내지 않는다. 상한에 닿으면
-     (JevGateExceeded) 폴백 업체로 넘기지 않고 모델 호출을 멈춘다(상한은 «더 쏘지 말라»).
+     (JevGateExceeded) 폴백 업체로 넘기지 않고 모델 호출을 멈춘다(상한은 《더 쏘지 말라》).
   4. 측정 스크립트가 업체 클라이언트에 남의 주소를 넘기지 않는다 — eval_clef_survey의
      OpenRouter 길은 `OpenRouterClefClient`이고, OpenRouter 키가 없으면 바로 끝난다
      (PERPLEXITY 키를 openrouter.ai로 보내던 결함).
@@ -222,7 +222,7 @@ def test_result_separates_fallback_from_failures(client, tmp_path, monkeypatch):
 
 
 def test_gate_exceeded_stops_instead_of_paid_fallback(client, tmp_path, monkeypatch):  # noqa: F811
-    # 상한은 «더 쏘지 말라» — 폴백 업체(유료 OpenRouter)나 비전 모델로 계속 쏘면
+    # 상한은 《더 쏘지 말라》 — 폴백 업체(유료 OpenRouter)나 비전 모델로 계속 쏘면
     # 상한의 뜻이 무너진다
     def cf_ask(self, *a, **k):
         raise JevGateExceeded("상한 8회에 이미 도달했습니다.")
@@ -346,7 +346,7 @@ def test_js_dry_note_openrouter_only_and_no_key(tmp_path):
             "chain": chain,
         },
     )
-    # Cloudflare 키가 없으면 첫 쪽부터 유료다 — «무료 몫 먼저»라고 말하면 안 된다
+    # Cloudflare 키가 없으면 첫 쪽부터 유료다 — 《무료 몫 먼저》라고 말하면 안 된다
     assert "Cloudflare 무료" not in out["note"]
     assert "OpenRouter" in out["note"] and "유료" in out["note"] and "$0.0058" in out["note"]
     out = _note(

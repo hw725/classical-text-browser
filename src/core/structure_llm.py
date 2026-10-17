@@ -1,4 +1,4 @@
-"""권 전문을 LLM에 보여 «글이 시작하는 행»을 통째로 묻는다 (D-125).
+"""권 전문을 LLM에 보여 《글이 시작하는 행》을 통째로 묻는다 (D-125).
 
 왜 있는가:
     규칙(D-116~D-119)은 되풀이되는 표지가 있는 책에서 잘 듣는다. 문집·잡록처럼 표제가 제각각인
@@ -7,14 +7,14 @@
 
 어떻게 위치를 지키는가:
     행마다 ``p8-L3`` 같은 번호를 붙여 텍스트만 보낸다(좌표·이미지는 보내지 않는다). 답은 그 번호를
-    가리키는 목록이고, 코드가 «실제로 있는 행인가 · 제목이 그 행의 글자인가»를 확인해 후보(Proposal
+    가리키는 목록이고, 코드가 《실제로 있는 행인가 · 제목이 그 행의 글자인가》를 확인해 후보(Proposal
     과 같은 모양)로 바꾼다. 후보는 지금 ③에 서는 것과 같은 (쪽·행·글자) 자리이므로, 「적용」이
     만드는 경계·앵커 글자·점선·재대조가 전부 그대로 된다.
 
 무엇을 하지 않는가:
     저장하지 않는다(적용은 ③ 한 곳). 글을 고쳐 쓰지 않는다. 행 중간 경계는 만들지 않는다
     (행 첫머리만).
-    모델의 «자신감»은 쓰지 않는다 — 확신도는 고정 0.6(중간)이고, 규칙 후보와 같은 자리면 그 후보에
+    모델의 《자신감》은 쓰지 않는다 — 확신도는 고정 0.6(중간)이고, 규칙 후보와 같은 자리면 그 후보에
     근거만 보탠다.
 """
 
@@ -45,48 +45,48 @@ REASON = "llm:structure"
 # 판정 모델이 고른 자리 — 생성 모델의 것과 구분해야 근거가 섞이지 않는다
 JEV_REASON = "jev:structure"
 TOC_JEV_REASON = "toc:jev"  # 목차 항목을 판정 모델이 본문 행에 붙인 자리(층위 1~2)
-CONFIDENCE = 0.6  # 화면의 «중간»(≥0.5) — 모델의 자신감은 믿지 않는다(D-117과 같은 태도)
+CONFIDENCE = 0.6  # 화면의 《중간》(≥0.5) — 모델의 자신감은 믿지 않는다(D-117과 같은 태도)
 ROLES = ("container", "article", "fragment")
 DEFAULT_MAX_CHARS = 7000  # 묶음 하나의 글자 수 — 로컬 모델의 문맥(8k 토큰)에도 들어가는 크기
 _LINE_ID = re.compile(r"p(\d+)-L(\d+)")
 
 # ── Jev 1차 거름망 (claude-skills docs/JEV-SIEVE.md, D-129 적용 기록) ─────────────────
-# Jev의 확률은 정확도가 아니라 «분포가 한쪽으로 몰린 정도»다. 문턱 하나로 자르면 0.55와 0.98이
+# Jev의 확률은 정확도가 아니라 《분포가 한쪽으로 몰린 정도》다. 문턱 하나로 자르면 0.55와 0.98이
 # 똑같이 미리 체크되고, 문턱 바로 아래 답은 화면에 아예 안 나온다. 그래서 세 대역으로 나눈다:
 #   accept   (p ≥ JEV_ACCEPT_AT) — 후보로 세우고 미리 체크한다
 #   escalate (그 사이)            — 후보로 세우되 체크하지 않는다. 버리지도 확정하지도 않고
 #                                   편성 화면의 사람(상위 판정자)이 고른다
 #   reject   (p ≤ JEV_REJECT_AT) — 후보로 세우지 않고 meta.nouls에만 남긴다
-# 임계값 자체는 확신 대역에 속한다(계약 표의 «이상»·«이하»).
+# 임계값 자체는 확신 대역에 속한다(계약 표의 《이상》·《이하》).
 #
 # 값의 근거(2026-09-27, 2026-09-21 저장 측정으로 다시 잼 — 호출 0건):
 #   천진담초 2,266행·정답 36 / 운양집 1책 2,313행·정답 142.
 #   (0.15, 0.85)이면 escalate가 360건·1,299건이라 화면이 넘친다. 0.15~0.5 구간 약 1,250건 중
 #   정답은 2건뿐이라, 하한을 0.5로 올려도 escalate의 정답은 6→6·52→50이고 볼 건수는 1/5이 된다.
 #   상한 0.85는 계약의 다른 사용처와 같은 값이고, 두 책 모두 0.85 이상에서 정밀 0.86·0.57이다
-#   (운양집은 정답 CSV의 «모름» 582행이 섞여 낮게 나온다). 책이 늘면 다시 잰다.
+#   (운양집은 정답 CSV의 《모름》 582행이 섞여 낮게 나온다). 책이 늘면 다시 잰다.
 JEV_ACCEPT_AT = 0.85
 JEV_REJECT_AT = 0.5
 
 # ── 본문 판정의 폴백: OpenRouter 경유 Perplexity decider v1.1 (D-139, 사용자 결정 2026-10-11) ──
 # 주 판정자는 Jev이고 decider는 Jev가 실패한 호출만 대신 답한다.
 # 폴백이 답한 묶음에만 이 문턱을 쓴다.
-# 모델마다 확률의 «몰림»이 달라 Jev의 문턱을 그대로 쓰면 안 된다 — v1.1은 v1보다도 위로 쏠려
+# 모델마다 확률의 《몰림》이 달라 Jev의 문턱을 그대로 쓰면 안 된다 — v1.1은 v1보다도 위로 쏠려
 # 같은 0.95면 헛것이 는다(천진담초 accept 정밀 0.766). 현재 정답 CSV로 다시 골랐다(호출 0건,
-# head-repo docs/clef-vs-jev-20261003/README.md «재측정 (2026-10-11)»,
+# head-repo docs/clef-vs-jev-20261003/README.md 《재측정 (2026-10-11)》,
 # `scripts/ctb_band_select.py`):
-#   기준 = «accept 정밀은 Jev(0.85)보다 낮지 않게, reject로 잃는 정답은 Jev(0.5)보다 많지 않게».
+#   기준 = 《accept 정밀은 Jev(0.85)보다 낮지 않게, reject로 잃는 정답은 Jev(0.5)보다 많지 않게》.
 #   같은 계산이 폐기된 v1에서 D-136의 0.95/0.36을 재현한다.
 #   Jev 0.85/0.5:        accept 정밀 0.917·0.786 · 잃은 정답 0·5 · 넘기는 행 73·326
 #   v1.1 0.997/0.69:     accept 정밀 0.957·0.838 · 잃은 정답 0·4 · 넘기는 행 58·506
-#   (천진담초·운양집 1책 순, «모르는 자리» 제외 — eval_boundary_judge의 score)
+#   (천진담초·운양집 1책 순, 《모르는 자리》 제외 — eval_boundary_judge의 score)
 #   0.997은 경계값이다 — 0.996이면 천진담초 정밀이 Jev 아래로 내려간다. 책이 늘면 다시 잰다.
 #   v1(D-136)의 0.95/0.35는 폐기된 모델의 값이라 지웠다.
 DECIDER_ACCEPT_AT = 0.997
 DECIDER_REJECT_AT = 0.69
 
 # 답한 모델(클라이언트의 PROVIDER) → (accept_at, reject_at). 단 OpenRouter 경유 Jev는 업체가
-# «openrouter»여도 Jev 값이다 — judge_thresholds가 모델을 먼저 본다(D-136 후속).
+# 《openrouter》여도 Jev 값이다 — judge_thresholds가 모델을 먼저 본다(D-136 후속).
 # 폴백(decider)이 답한 묶음은 decider 값을, Jev가 답한 묶음은 Jev 값을 쓴다(D-139)
 # — 한 문턱을 두 모델에 같이 대면 위 표처럼 정밀이 갈린다.
 JUDGE_THRESHOLDS: dict[str, tuple[float, float]] = {
@@ -101,7 +101,7 @@ def judge_thresholds(client) -> tuple[float, float]:
     기본이라서다.
 
     **업체보다 모델이 먼저다**(D-136 후속, 2026-10-05): OpenRouter 경유 Jev(`OpenRouterJevClient`)는
-    PROVIDER가 decider와 같은 «openrouter»라 업체로만 가르면 decider 문턱(0.997/0.69)을 받는다.
+    PROVIDER가 decider와 같은 《openrouter》라 업체로만 가르면 decider 문턱(0.997/0.69)을 받는다.
     모델이 Jev면(`JUDGE_FAMILY == "jev"` 또는 모델 이름 `~typesafe/…`) 어느 길로 왔든
     Jev 문턱이다."""
     model = str(getattr(client, "model", "") or "")
@@ -111,7 +111,7 @@ def judge_thresholds(client) -> tuple[float, float]:
 
 
 def judge_label(client) -> str:
-    """meta·후보에 남길 «누가 답했나» — `업체:모델`."""
+    """meta·후보에 남길 《누가 답했나》 — `업체:모델`."""
     return f"{getattr(client, 'PROVIDER', '?')}:{getattr(client, 'model', None)}"
 
 
@@ -120,9 +120,9 @@ def jev_band(
 ) -> str:
     """확률을 대역(accept·escalate·reject·none)으로 옮긴다. 입력: 확률(없으면 None), 두 임계.
 
-    llm_pipeline `llm_runtime/jev_sieve.band()`의 «예일 확률이 높을수록 accept» 쪽만 옮겨 둔 것이다
+    llm_pipeline `llm_runtime/jev_sieve.band()`의 《예일 확률이 높을수록 accept》 쪽만 옮겨 둔 것이다
     — 배포 단위가 달라 의존성으로 들이지 않는다. 규칙은 같다: 임계값 자체는 확신 대역,
-    Jev가 답하지 못했으면(수가 아님) «none» — 대역이 있는 척하지 않는다.
+    Jev가 답하지 못했으면(수가 아님) 《none》 — 대역이 있는 척하지 않는다.
     """
     if not reject_at < accept_at:
         raise ValueError("reject_at < accept_at 이어야 합니다")
@@ -136,12 +136,12 @@ def jev_band(
 
 
 def line_id(ln: Line) -> str:
-    """행 번호 — 모델이 가리키고 코드가 되찾는 열쇠. 입력: Line. 출력: «p8-L3»."""
+    """행 번호 — 모델이 가리키고 코드가 되찾는 열쇠. 입력: Line. 출력: 《p8-L3》."""
     return f"p{ln.page}-L{ln.line_index}"
 
 
 def parse_line_id(s: str) -> Optional[tuple[int, int]]:
-    """«p8-L3» → (8, 3). 모델이 앞뒤에 다른 글자를 붙여도 번호만 찾는다. 없으면 None."""
+    """《p8-L3》 → (8, 3). 모델이 앞뒤에 다른 글자를 붙여도 번호만 찾는다. 없으면 None."""
     m = _LINE_ID.search(str(s or ""))
     if not m:
         return None
@@ -177,7 +177,7 @@ def chunk_lines(lines: list[Line], max_chars: int = DEFAULT_MAX_CHARS) -> list[l
 
 
 def structure_size(lines: list[Line], max_chars: int = DEFAULT_MAX_CHARS) -> dict:
-    """보내기 전에 «몇 행·몇 자·몇 번 부르는가»를 센다 — 실행 게이트를 도구 층에(전역 규칙 11)."""
+    """보내기 전에 《몇 행·몇 자·몇 번 부르는가》를 센다 — 실행 게이트를 도구 층에(전역 규칙 11)."""
     chunks = chunk_lines(lines, max_chars)
     return {
         "lines": sum(len(c) for c in chunks),
@@ -187,7 +187,7 @@ def structure_size(lines: list[Line], max_chars: int = DEFAULT_MAX_CHARS) -> dic
 
 
 def render_chunk(chunk: list[Line]) -> str:
-    """묶음을 «번호<TAB>글»로 편다. 쪽이 바뀌면 «— n쪽 —» 머리를 둔다."""
+    """묶음을 《번호<TAB>글》로 편다. 쪽이 바뀌면 《— n쪽 —》 머리를 둔다."""
     out: list[str] = []
     last_page = None
     for ln in chunk:
@@ -274,9 +274,9 @@ def validate_items(
 
 
 # ── Jev(판정 모델) 길 ────────────────────────────────────────────────────────
-# 생성 모델에게는 «행 번호만 가리키라»고 부탁해야 하고, 부탁은 지켜지지 않을 수 있어
+# 생성 모델에게는 《행 번호만 가리키라》고 부탁해야 하고, 부탁은 지켜지지 않을 수 있어
 # validate_items가 뒤에서 거른다(없는 행·중복·지어낸 제목). Jev에게는 부탁할 것이 없다 —
-# 질문이 «이 행에서 새 글이 시작하는가»(noul)이므로 답은 0~1 확률 하나뿐이고, 행은 코드가
+# 질문이 《이 행에서 새 글이 시작하는가》(noul)이므로 답은 0~1 확률 하나뿐이고, 행은 코드가
 # 정해서 묻는다. 지어낼 자리가 형식에 없다(D-117·D-125의 태도를 형식으로 옮긴 것).
 #
 # 한계: Jev는 제목·깊이를 만들지 않는다. 제목은 validate_items가 그 행의 글자로 채우고
@@ -307,7 +307,7 @@ def jev_question(ln: Line) -> dict:
     return {
         "type": "noul",
         "instructions": (
-            f"{JEV_START_INSTRUCTIONS}\n행 «{line_id(ln)}»: 「{ln.text.strip()}」"
+            f"{JEV_START_INSTRUCTIONS}\n행 《{line_id(ln)}》: 「{ln.text.strip()}」"
         ),
         "criteria": dict(JEV_CRITERIA),
     }
@@ -318,7 +318,7 @@ def jev_structure_size(
     max_chars: int = DEFAULT_MAX_CHARS,
     questions_per_call: int = JEV_QUESTIONS_PER_CALL,
 ) -> dict:
-    """보내기 전에 «몇 행·몇 자·몇 번 부르는가»를 센다 — 게이트는 도구 층에(전역 규칙 11).
+    """보내기 전에 《몇 행·몇 자·몇 번 부르는가》를 센다 — 게이트는 도구 층에(전역 규칙 11).
 
     출력: lines·chars·calls·questions. 한 묶음의 행이 questions_per_call보다 많으면 그 묶음은
     **같은 state로 여러 번** 부른다(state가 그만큼 되풀이되어 입력 토큰도 함께 는다).
@@ -345,7 +345,7 @@ def ask_structure_jev(
     max_title_chars: int = 20,
     fallback=None,
 ) -> tuple[list[dict], dict]:
-    """전문을 묶음으로 나눠 **행마다** «새 글이 시작하는가»를 판정 모델에 묻는다.
+    """전문을 묶음으로 나눠 **행마다** 《새 글이 시작하는가》를 판정 모델에 묻는다.
 
     입력: 행 목록, 판정 클라이언트(JevClient 계열 — 라우트의 주는 Jev, D-139),
           묶음 글자 수, 한 번에 보낼 질문 수, 두 임계(`jev_band` — None이면 `judge_thresholds`가
@@ -363,7 +363,7 @@ def ask_structure_jev(
     화면은 accepted인 것만 미리 체크하므로 escalate는 체크 해제로 선다. reject는 후보가 아니다.
 
     확신도는 고정 0.6이다(D-125와 같다). Jev의 확률은 `prob`·`why`에 따로 싣는다 —
-    화면의 «확신도»는 규칙 후보와 견주는 값이라 다른 척도를 섞으면 안 된다.
+    화면의 《확신도》는 규칙 후보와 견주는 값이라 다른 척도를 섞으면 안 된다.
     """
     if accept_at is None or reject_at is None:
         d_acc, d_rej = judge_thresholds(client)
@@ -428,7 +428,7 @@ def ask_structure_jev(
                 if fallback is None:
                     errors.append(head)
                     continue
-                # 주 모델이 실패한 «이 호출만» 폴백에 묻는다 — 다음 호출은 다시 주 모델부터
+                # 주 모델이 실패한 《이 호출만》 폴백에 묻는다 — 다음 호출은 다시 주 모델부터
                 logger.warning(
                     "판정 모델 %s 실패 → %s로 다시 묻습니다: %s", primary_label, fb_label, e
                 )
@@ -466,7 +466,7 @@ def ask_structure_jev(
                     )
     meta["said"] = len(items)
     out, stats = validate_items(lines, items, max_title_chars=max_title_chars, reason=JEV_REASON)
-    # 확률을 후보에 실어 보낸다 — 화면이 «상위 몇 개»로 자르려면 숫자가 후보에 있어야 한다.
+    # 확률을 후보에 실어 보낸다 — 화면이 《상위 몇 개》로 자르려면 숫자가 후보에 있어야 한다.
     # 확신도(confidence)와는 다른 칸이다: 확신도는 규칙 후보와 견주는 값이고 이것은 모델의 확률이다.
     by_pos = {(int(pg), int(li)): v for pg, li, v in meta["nouls"]}
     for prop in out:
@@ -485,7 +485,7 @@ def ask_structure_jev(
 def _jev_noul(answer) -> Optional[float]:
     """llm.jev.noul을 core에서 쓰기 위한 얇은 감싸기 — core가 llm을 import하지 않게 한다.
 
-    NaN·무한은 «답하지 못함»(None)이다. 파이썬 json은 NaN 리터럴을 받아들이므로 응답에 섞여
+    NaN·무한은 《답하지 못함》(None)이다. 파이썬 json은 NaN 리터럴을 받아들이므로 응답에 섞여
     들어올 수 있고, 그대로 두면 대역 셈(none 칸 없음)과 응답 JSON이 함께 깨진다.
     """
     if not isinstance(answer, dict):
@@ -550,7 +550,7 @@ async def ask_structure_llm(
             f"이 권의 전문 중 {i + 1}/{len(chunks)}번째 묶음입니다({pages[0]}~{pages[-1]}쪽). "
             "앞뒤 묶음에서 글이 이어질 수 있으니, 이 묶음 첫 행이 글의 첫머리라고 "
             "단정하지 마십시오.\n"
-            "한 줄은 «행 번호<TAB>글»입니다. 새 글이 시작하는 행을 모두 고르고, 형식은\n"
+            "한 줄은 《행 번호<TAB>글》입니다. 새 글이 시작하는 행을 모두 고르고, 형식은\n"
             '{"starts": [{"line": "p8-L3", "title": "...", "level": 2, "role": "article", '
             '"why": "..."}], "note": "..."}\n\n'
         )
@@ -568,7 +568,7 @@ async def ask_structure_llm(
         text = getattr(response, "text", "") or ""
         data = lenient_json(text)
         if not isinstance(data, dict) or not isinstance(data.get("starts"), list):
-            # 무엇이 왔는지 앞부분을 남긴다 — «형식이 아니다»만으로는 모델을 바꿀지 프롬프트를
+            # 무엇이 왔는지 앞부분을 남긴다 — 《형식이 아니다》만으로는 모델을 바꿀지 프롬프트를
             # 고칠지 모른다
             errors.append(f"{i + 1}번째 묶음: starts 목록이 아닌 답")
             meta.setdefault("raw_failed", []).append(text[:600])
@@ -634,7 +634,7 @@ def toc_picks_to_proposals(picks: list, entries: list, min_prob: float = 0.8) ->
       accept   — 자기 검증 통과 + 확률 ≥ min_prob. 후보로 세우고 미리 체크(`accepted: True`)
       escalate — 자기 검증 통과 + 확률 < min_prob. 후보로 세우되 체크하지 않는다(`accepted: False`)
       reject   — 자기 검증 실패(sim < SELF_CHECK_MIN)이거나 sim이 없음. 후보가 아니다
-    «없음» 답은 자리가 없어 후보가 될 수 없다 — 라우트가 제목 목록으로 따로 싣는다.
+    《없음》 답은 자리가 없어 후보가 될 수 없다 — 라우트가 제목 목록으로 따로 싣는다.
 
     문턱을 두는 까닭: 운양집 1책 실측(2026-09-21)에서 높은 확률로 고른 14건은 제목이 그 행에서
     실제로 시작했고(불일치 0), 그 아래 11건 중 8건이 엉뚱한 행이었다 — 그 8건은 자기 검증이 이미
@@ -644,8 +644,8 @@ def toc_picks_to_proposals(picks: list, entries: list, min_prob: float = 0.8) ->
     """
     by_key: dict[tuple[int, int], dict] = {}
     for p in picks:
-        # 자기 검증은 확률과 **다른 관문**이다. 확률은 «얼마나 확신하는가»이고 이것은
-        # «애초에 그 행이 맞는가»인데, 코드가 공짜로 확인할 수 있다(제목이 그 행에서 시작하는가).
+        # 자기 검증은 확률과 **다른 관문**이다. 확률은 《얼마나 확신하는가》이고 이것은
+        # 《애초에 그 행이 맞는가》인데, 코드가 공짜로 확인할 수 있다(제목이 그 행에서 시작하는가).
         # 확률 문턱만 두면 답이 적어 문턱이 상수로 물러설 때 **자기 검증에 실패한 답이 그대로
         # 들어온다**(2026-09-21 반대 배치 실측: 답 4개에서 오답 하나가 통과했다).
         # 한계: 「續昇平館集」이 「昇平館集」 행을 고른 것처럼 접두 관계는 여기서 떨어진다 —
@@ -692,7 +692,7 @@ def nest_under_toc(toc_props: list[dict], body_props: list[dict]) -> list[dict]:
     """본문 판정의 층위를 목차가 세운 층 **아래**로 내린다. 입력·출력: 후보 목록(body를 고친 사본).
 
     왜: 목차가 답하는 것은 권·集이고 본문 판정이 답하는 것은 그 안의 낱글이다. 둘을 같은 층에
-    두면 트리가 «集과 작품이 형제»인 꼴이 된다. 그래서 각 본문 후보 앞에 선 가장 가까운 목차
+    두면 트리가 《集과 작품이 형제》인 꼴이 된다. 그래서 각 본문 후보 앞에 선 가장 가까운 목차
     후보의 층위 + 1을 준다(최대 9). 목차 후보가 하나도 없으면(일기류) 아무것도 바꾸지 않는다 —
     그 책에서는 본문 판정이 곧 낱글의 층이다.
     """

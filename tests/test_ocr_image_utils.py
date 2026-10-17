@@ -55,7 +55,7 @@ class TestCropBlock:
         result_bytes = crop_block(sample_image, [0.1, 0.2, 0.5, 0.6], padding_px=2)
 
         img = Image.open(io.BytesIO(result_bytes))
-        # 패딩 포함 54x124 — «0보다 크다»만 보면 좌표 계산이 틀려도 통과했다(B-035)
+        # 패딩 포함 54x124 — 《0보다 크다》만 보면 좌표 계산이 틀려도 통과했다(B-035)
         assert (img.width, img.height) == (54, 124)
 
     def test_full_image_crop(self, sample_image):
@@ -94,7 +94,7 @@ class TestPreprocessForOcr:
         """이진화가 정상 동작하는지."""
         result = preprocess_for_ocr(sample_image_bytes, grayscale=True, binarize=True)
         img = Image.open(io.BytesIO(result))
-        # 이진화된 이미지는 mode="1" 또는 "L" — 그리고 «L»이면 값이 흑백 둘뿐이어야 이진화다
+        # 이진화된 이미지는 mode="1" 또는 "L" — 그리고 《L》이면 값이 흑백 둘뿐이어야 이진화다
         assert img.mode in ("1", "L")
         values = {v for v in img.convert("L").getdata()}
         assert values <= {0, 255}, sorted(values)[:10]

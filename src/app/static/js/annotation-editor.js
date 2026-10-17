@@ -25,13 +25,13 @@ const annState = {
  * 지금 고른 해석 저장소 id. 없으면 null — 요청을 보내지 않게.
  * 입력: quiet(불러오기처럼 조용히 멈출 자리면 true). 출력: id 또는 null.
  *
- * 왜(2026-10-11 전수): 예전에는 «default»라는 없는 저장소 주소로 요청해 404를 받고 조용히 빈
+ * 왜(2026-10-11 전수): 예전에는 《default》라는 없는 저장소 주소로 요청해 404를 받고 조용히 빈
  * 목록을 그렸다. 저장·생성 같은 동작은 왜 안 되는지 알려야 한다.
  */
 function _annInterpId(quiet) {
   const id = typeof interpState !== "undefined" && interpState ? interpState.interpId : null;
   if (!id && !quiet && typeof showToast === "function") {
-    showToast("해석 저장소를 먼저 고르세요 — 사이드바 «해석 저장소»에서 고르거나 새로 만듭니다.", "warning");
+    showToast("해석 저장소를 먼저 고르세요 — 사이드바 《해석 저장소》에서 고르거나 새로 만듭니다.", "warning");
   }
   return id || null;
 }
@@ -337,10 +337,10 @@ async function _loadBlockText(blockId) {
       // 본문은 서버가 준 것을 그대로 쓴다.
       //
       // 왜 여기서 쪽을 다시 이어 붙이지 않는가: v1.3부터 단위는 본문을 저장하지 않고
-      // **읽을 때 L4에서 잘라 온다**(D-092). 즉 서버의 original_text가 이미 «지금 교정본»이고,
+      // **읽을 때 L4에서 잘라 온다**(D-092). 즉 서버의 original_text가 이미 《지금 교정본》이고,
       // 쪽 중간에서 시작·끝나는 경계도 글자 단위로 반영돼 있다.
       // 화면이 쪽 전체를 다시 받아 이으면 두 가지가 어긋났다(사용자 지적 2026-09-04):
-      //   ① 둘째 쪽부터 빠졌다 — «texts.length === 0»일 때만 담아 첫 쪽만 들어갔다
+      //   ① 둘째 쪽부터 빠졌다 — 《texts.length === 0》일 때만 담아 첫 쪽만 들어갔다
       //      (layout_block_id는 v1.3부터 늘 null이라 블록 매칭이 언제나 실패한다)
       //   ② 쪽 중간 경계가 무시됐다 — char_range를 보지 않고 쪽 전체를 담았다
       const correctedText = (tbData && tbData.original_text) || "";
@@ -646,7 +646,7 @@ function _onTextSelection() {
 }
 
 /**
- * DOM Range가 준 «선택 앞까지의 표시 문자열»·«선택 끝까지의 표시 문자열» → 원문 코드포인트 범위.
+ * DOM Range가 준 《선택 앞까지의 표시 문자열》·《선택 끝까지의 표시 문자열》 → 원문 코드포인트 범위.
  * 표시 문자열도 Array.from으로 세어 서버와 같은 자(코드포인트)를 쓴다(③).
  * @returns {{startIdx:number, endIdx:number, actualText:string}|null}
  */
@@ -911,7 +911,7 @@ function _renderAnnList() {
           ? "ann-status-draft"
           : "ann-status-reviewed";
 
-    // 원문 조각·주석 라벨·설명은 OCR 결과나 LLM 응답에서 온 «남이 만든 문자열»이다.
+    // 원문 조각·주석 라벨·설명은 OCR 결과나 LLM 응답에서 온 《남이 만든 문자열》이다.
     // 원문에 <나 &가 섞여 있으면(이체자 표기, 교정 메모 등) innerHTML이 그것을
     // 태그로 읽어 카드가 깨지거나 스크립트가 실행된다 — 넣기 직전에 이스케이프한다.
     card.innerHTML = `
@@ -1753,7 +1753,7 @@ function _annUtf16Index(str, cpIndex) {
   return _annChars(str).slice(0, cpIndex).join("").length;
 }
 
-/** 주석 API에 붙이는 권 쿼리 — 뷰어가 연 권을 그대로 쓴다. 서버가 «main»으로 박아 두어
+/** 주석 API에 붙이는 권 쿼리 — 뷰어가 연 권을 그대로 쓴다. 서버가 《main》으로 박아 두어
  * 다권본의 둘째 권 주석이 첫째 권 파일에 들어가던 일(④)의 화면 쪽 짝이다. */
 function _annPartQuery() {
   const vs = typeof viewerState !== "undefined" ? viewerState : null;
@@ -2214,7 +2214,7 @@ function _renderDictExpanded(ann) {
   const d = ann.dictionary;
   if (!d) return '<div class="ann-dict-empty">사전 항목 없음</div>';
 
-  // 표제어·뜻·해설·출전은 LLM 답이나 가져온 파일에서 온 «남이 만든 문자열»이다 — innerHTML에
+  // 표제어·뜻·해설·출전은 LLM 답이나 가져온 파일에서 온 《남이 만든 문자열》이다 — innerHTML에
   // 넣기 전에 전부 이스케이프한다(⑤). 카드 본문(_renderAnnList)과 같은 규칙.
   let html = '<div class="ann-dict-detail">';
   html += `<div class="ann-dict-hw">${_escHtml(d.headword || "")}`;
@@ -2296,8 +2296,8 @@ async function _generateDictStage(stageNum) {
 
     const result = await resp.json();
     const count = (result.annotations || []).length;
-    // 서버가 «어떻게 읽었는지»를 함께 준다(⑦) — 잘린 답에서 건진 것·기형 항목을 버린 것은
-    // 완료가 아니라 부분 완료다. 0건도 «정상 0건»과 «답을 읽지 못함»이 다르다.
+    // 서버가 《어떻게 읽었는지》를 함께 준다(⑦) — 잘린 답에서 건진 것·기형 항목을 버린 것은
+    // 완료가 아니라 부분 완료다. 0건도 《정상 0건》과 《답을 읽지 못함》이 다르다.
     const diag = result.diagnostics || null;
     const rejected = diag ? diag.rejected_items || 0 : 0;
     const partial = diag && (diag.parse_status !== "ok" || rejected > 0);
@@ -2545,7 +2545,7 @@ async function _saveDictFields() {
   const related = document.getElementById("ann-dict-related");
   const notes = document.getElementById("ann-dict-notes");
 
-  // 서버 update_annotation은 dictionary를 통째로 바꾼다. 폼은 출전의 «제목»만 보여 주므로 예전에는
+  // 서버 update_annotation은 dictionary를 통째로 바꾼다. 폼은 출전의 《제목》만 보여 주므로 예전에는
   // 한 번 저장하면 source_references의 section·url과 폼에 없는 사전 칸이 모두 사라졌다(2026-10-11
   // 2차 전수). 편집 전 사전을 바탕에 깔고, 출전은 제목이 같은 옛 항목을 그대로 살린다.
   const prevAnn = (annState.annotations || []).find((a) => a.id === annId) || {};

@@ -77,7 +77,7 @@ class AlignedPair:
     ocr_index: Optional[int] = None
     ref_index: Optional[int] = None
     # 불일치인데 넓은 사전(loose)이나 문자 체계 사전(script)에 관계가 있으면 그 층 이름.
-    # 분류는 그대로 mismatch다 — 동치가 아니라 «승인할지 보라»는 신호다 (D-080).
+    # 분류는 그대로 mismatch다 — 동치가 아니라 《승인할지 보라》는 신호다 (D-080).
     variant_hint: Optional[str] = None
 
     def to_dict(self) -> dict:
@@ -559,9 +559,9 @@ class TieredVariantDicts:
     align_texts()는 그것을 mismatch의 variant_hint로 붙인다.
 
     왜 동치를 strict에 한정하는가:
-        교육부 사전 추출본에는 上→二, 丘→业 같은 통가·차자 수준의 관계가 «이체자»로
-        들어 있다. 이것을 동치로 쓰면 OCR이 丘를 业으로 잘못 읽은 것이 «이체자,
-        정상»으로 분류되어 오독이 숨는다. 넓은 사전은 힌트일 뿐이어야 한다.
+        교육부 사전 추출본에는 上→二, 丘→业 같은 통가·차자 수준의 관계가 《이체자》로
+        들어 있다. 이것을 동치로 쓰면 OCR이 丘를 业으로 잘못 읽은 것이 《이체자,
+        정상》으로 분류되어 오독이 숨는다. 넓은 사전은 힌트일 뿐이어야 한다.
     """
 
     def __init__(self, dicts: Optional[list[VariantCharDict]] = None):
@@ -635,18 +635,21 @@ def load_document_approvals(doc_path) -> VariantCharDict:
     """문헌별로 승인된 이체자 쌍을 strict 사전으로 읽는다. 파일이 없으면 빈 사전.
 
     왜 문헌 단위인가 (D-080 결정 3):
-        어느 관계까지 «같은 글자»로 볼지는 문헌마다 다르다. 15세기 목판본 교정에서
+        어느 관계까지 《같은 글자》로 볼지는 문헌마다 다르다. 15세기 목판본 교정에서
         竝·並은 같은 글자지만 자형 연구 문헌에서는 구별해야 한다. 그래서 승인은
         문헌 안에만 저장되고 전역 사전으로 올라가지 않는다.
     """
     path = document_approvals_path(doc_path)
-    # 파일이 없으면 «없다»가 정상이다 — 경고 없이 빈 사전을 만든다.
+    # 파일이 없으면 《없다》가 정상이다 — 경고 없이 빈 사전을 만든다.
     vd = VariantCharDict(dict_path=path) if os.path.exists(path) else VariantCharDict.empty(path)
     vd.tier = "strict"
     if not vd.source:
         vd.source = {
             "name": "document_approval",
-            "note": "이 문헌에서 연구자가 «같은 글자»로 승인한 쌍. 전역 사전으로 올라가지 않는다.",
+            "note": (
+                "이 문헌에서 연구자가 《같은 글자》로 승인한 쌍. "
+                "전역 사전으로 올라가지 않는다."
+            ),
         }
     return vd
 

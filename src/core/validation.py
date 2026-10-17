@@ -1,15 +1,15 @@
 """서고 파일이 제 스키마를 지키는가 — 「검증 결과」 패널의 알맹이.
 
 무엇을 검사하는가: 문헌 저장소와 (있으면) 해석 저장소의 JSON 파일을 훑어, 파일마다 정해진
-스키마로 검증한다. 어긋난 곳을 «파일 · 위치 · 무엇이 틀렸나»로 돌려준다.
+스키마로 검증한다. 어긋난 곳을 《파일 · 위치 · 무엇이 틀렸나》로 돌려준다.
 
-왜 필요한가: 스키마는 v1.2까지 «적어 두기만 한 것»이었다. 저장하는 쪽 몇 군데만 검증을
+왜 필요한가: 스키마는 v1.2까지 《적어 두기만 한 것》이었다. 저장하는 쪽 몇 군데만 검증을
 불렀고, 나머지는 아무도 보지 않았다 — 실제로 교환 형식 스키마와 구현이 다른 것을 아무도
 몰랐고(D-100), 시험 픽스처가 만들던 데이터가 전부 스키마를 어기고 있었다. 사람이 언제든
 「지금 내 서고가 규칙을 지키는가」를 볼 수 있어야 그런 어긋남이 조용히 쌓이지 않는다.
 
 무엇을 검사하지 않는가: 참조 무결성(이 id가 저기 있는가)은 여기서 보지 않는다. 스키마가
-말할 수 있는 것만 본다 — 그 경계를 흐리면 «검증»이 무엇인지 모호해진다.
+말할 수 있는 것만 본다 — 그 경계를 흐리면 《검증》이 무엇인지 모호해진다.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 # 파일 자리 → 스키마. (라벨, 글롭, 스키마 파일)
 #
 # 글롭은 저장소 뿌리 기준이다. 없는 자리는 그냥 건너뛴다 — 아직 안 만든 층을
-# «어긋남»으로 세면 새 문헌이 늘 빨간불이 된다.
+# 《어긋남》으로 세면 새 문헌이 늘 빨간불이 된다.
 DOC_TARGETS: list[tuple[str, str, str]] = [
     ("문헌 manifest", "manifest.json", "source_repo/manifest.schema.json"),
     ("서지정보", "bibliography.json", "source_repo/bibliography.schema.json"),
@@ -47,13 +47,13 @@ INTERP_TARGETS: list[tuple[str, str, str]] = [
     ("Relation", "core_entities/relations/*.json", "core/relation.schema.json"),
 ]
 
-# 마이그레이션이 «되돌릴 수 있게» 남긴 자리 — 지금 규칙으로 재면 안 된다(D-092·D-097·D-099)
+# 마이그레이션이 《되돌릴 수 있게》 남긴 자리 — 지금 규칙으로 재면 안 된다(D-092·D-097·D-099)
 RETIRED_DIRS = frozenset(
     {"blocks", "blocks_migrated_v1", "boundaries_migrated_v2", "works", "works_removed_v1"}
 )
 
 _SCHEMA_CACHE: dict[str, dict] = {}
-_MAX_ISSUES = 200  # 화면에 실을 최대 개수. 넘으면 «그 밖 N건»으로 줄인다
+_MAX_ISSUES = 200  # 화면에 실을 최대 개수. 넘으면 《그 밖 N건》으로 줄인다
 
 
 def _schemas_dir() -> Path:

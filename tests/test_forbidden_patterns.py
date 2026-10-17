@@ -14,7 +14,7 @@ AGENTS.md(2026-10-08까지는 CLAUDE.md)·`docs/maintenance.md` 1장의 규칙�
 
 ## 무엇을 보나 — 기계로 판정할 수 있는 다섯만
 
-키 — 규칙(AGENTS.md «파일 다루기» 표) — AST 판정:
+키 — 규칙(AGENTS.md 《파일 다루기》 표) — AST 판정:
 
 - `write_text_json` — JSON 저장은 `write_json_atomic()`
   — `.write_text(...)` 인자 안에 `dumps(...)` 호출, 또는 같은 함수에서 `dumps` 결과를
@@ -35,11 +35,11 @@ AGENTS.md(2026-10-08까지는 CLAUDE.md)·`docs/maintenance.md` 1장의 규칙�
   다시 렌더해 잉크 밀도를 잰다. 회전을 얹으면 오히려 틀린다).
 - `glob_pdf`: `src/ocr/image_utils.py`(`resolve_part_pdf` — manifest를 못 읽을 때의
   이름 정렬 물러섬). `rglob`은 보지 않는다 — `cli/embed_folder.py`는 문헌이 아니라
-  «PDF가 든 폴더»를 훑는 진입점이라 권(part) 개념이 없다.
+  《PDF가 든 폴더》를 훑는 진입점이라 권(part) 개념이 없다.
 - `json_dump_open`: `src/ocr/ndlocr/ndl_parser.py`(NDL 원본을 그대로 들여온 파일,
   `json_to_file`은 부르는 곳이 없다).
 
-**탐지 범위의 한계**(«0건»은 이 꼴들이 없다는 뜻이지 규칙 준수의 증명이 아니다):
+**탐지 범위의 한계**(《0건》은 이 꼴들이 없다는 뜻이지 규칙 준수의 증명이 아니다):
 다른 함수에서 만든 문자열을 넘기는 경우, `open` 핸들을 변수로 돌려 쓰는 경우,
 변수에 담은 glob 패턴은 놓친다. `src/`만 훑는다(scripts·tests는 서고 파일을 쓰지 않는다).
 
@@ -68,10 +68,10 @@ AGENTS.md(2026-10-08까지는 CLAUDE.md)·`docs/maintenance.md` 1장의 규칙�
   `citation_mark.py` 각 1, `src/core/interpretation.py` 2(해석 저장소 파일 쓰기),
   `src/ocr/pipeline.py` 1(L2 OCR 결과 저장, `json_dump_open`).
 
-## 빨간불 확인 (maintenance §3 «빨간불만 증거»)
+## 빨간불 확인 (maintenance §3 《빨간불만 증거》)
 
 래칫 시절(2026-10-01): 기준선에서 `("get_pixmap", "src/app/routers/llm_ocr.py")` 한 줄을
-지우자 «get_pixmap: src/app/routers/llm_ocr.py: 1건 (기준선 0)»으로 **실패했다**. 탐지기
+지우자 《get_pixmap: src/app/routers/llm_ocr.py: 1건 (기준선 0)》으로 **실패했다**. 탐지기
 자체는 `test_detector_catches_and_ignores`가 양·음 표본으로 지킨다 — `_find_violations`의
 `write_text` 분기를 끄자 그 양성 표본 둘이 빨개졌다.
 """
@@ -110,7 +110,7 @@ _PDF_GLOB = re.compile(r"(?i)^\*\.pdf$")
 def _docstring_ids(tree: ast.AST) -> set[int]:
     """식 문장으로 홀로 선 문자열(독스트링·설명 문자열)의 노드 id.
 
-    독스트링은 «localhost로 띄우면 IPv6부터…» 같은 **설명**이지 호출이 아니다.
+    독스트링은 《localhost로 띄우면 IPv6부터…》 같은 **설명**이지 호출이 아니다.
     """
     ids: set[int] = set()
     for node in ast.walk(tree):
@@ -187,7 +187,7 @@ def _find_violations(source: str, rel: str) -> list[tuple[str, int]]:
     found: list[tuple[str, int]] = []
     seen: set[int] = set()  # 중첩 함수가 바깥 범위와 겹쳐 두 번 세지 않게
 
-    # 범위(모듈·함수)마다 «dumps를 담은 이름»과 «쓰기로 연 핸들»을 모아 판정한다.
+    # 범위(모듈·함수)마다 《dumps를 담은 이름》과 《쓰기로 연 핸들》을 모아 판정한다.
     funcs = (ast.FunctionDef, ast.AsyncFunctionDef)
     scopes = [tree, *(n for n in ast.walk(tree) if isinstance(n, funcs))]
     for scope in scopes:
@@ -200,7 +200,7 @@ def _find_violations(source: str, rel: str) -> list[tuple[str, int]]:
             args = [*node.args, *(k.value for k in node.keywords)]
             if name == "write_text" and isinstance(node.func, ast.Attribute):
                 # 인자에 dumps 호출이 있거나 dumps 결과를 담은 이름을 넘기면
-                # «JSON을 write_text로»다.
+                # 《JSON을 write_text로》다.
                 if any(
                     _has_dumps(a) or (isinstance(a, ast.Name) and a.id in dumped) for a in args
                 ):
@@ -286,7 +286,7 @@ def test_baseline_stays_empty():
 
 
 def test_scanner_sees_src():
-    """훑기가 실제로 파일을 읽는가 — src/ 경로가 바뀌어 0개를 훑으면 «위반 0»은 거짓 초록이다."""
+    """훑기가 실제로 파일을 읽는가 — src/ 경로가 바뀌어 0개를 훑으면 《위반 0》은 거짓 초록이다."""
     n = sum(1 for p in _SRC.rglob("*.py") if "__pycache__" not in p.parts)
     assert n > 100, f"src/ 아래 .py가 {n}개뿐 — 훑는 경로가 맞는지 본다"
     # 정본 함수 자리가 있어야 _ALLOWED 가 가리키는 대상이 실재한다

@@ -2,8 +2,8 @@
 
 왜 CLI인가:
     브라우저 UI는 논문 한 편씩 다루기에 알맞다. 그러나 수백 편이 모인
-    폴더를 한 번에 처리하려면 «드롭 → 프로필 전환 → OCR → 내려받기 →
-    파일 옮기기»를 편수만큼 반복해야 한다. 그건 사람이 할 일이 아니다.
+    폴더를 한 번에 처리하려면 《드롭 → 프로필 전환 → OCR → 내려받기 →
+    파일 옮기기》를 편수만큼 반복해야 한다. 그건 사람이 할 일이 아니다.
 
 무엇을 하는가 (파일 하나당):
     1. 텍스트 레이어를 진단한다. 이미 있으면 **건드리지 않고 건너뛴다.**
@@ -88,7 +88,7 @@ class BatchReport:
     elapsed_sec: float = 0.0
     failures: list[dict] = field(default_factory=list)
     # 시작도 못 한 이유(엔진·LLM 준비 실패). 비어 있지 않으면 CLI가 종료 코드 2를 낸다 —
-    # 전에는 «도는 모델»을 못 골라도 0으로 끝나 자동화가 성공으로 알았다(Codex 지적 2026-09-06).
+    # 전에는 《도는 모델》을 못 골라도 0으로 끝나 자동화가 성공으로 알았다(Codex 지적 2026-09-06).
     aborted: str = ""
 
 
@@ -151,7 +151,7 @@ def _force_rmtree(path: Path) -> tuple[bool, str]:
 
     # GitPython의 Repo는 `.git/objects/pack/*` 에 파일 핸들을 열어 두고,
     # 이 저장소는 대부분 `git.Repo(path)`를 with 없이 쓴다(core/document.py).
-    # Windows는 열린 파일을 지우지 못하므로 «정리했다»가 조용히 실패한다.
+    # Windows는 열린 파일을 지우지 못하므로 《정리했다》가 조용히 실패한다.
     # 참조가 끊긴 Repo를 지금 회수해 __del__이 핸들을 닫게 한다.
     #
     # 왜 여기서 하는가: 호출부마다 Repo를 들고 있지 않아 close()를 부를 수
@@ -210,7 +210,7 @@ def build_pipeline(library_path: Path):
 
     왜 라우터를 따로 주입하는가:
         `auto_register()`는 LlmOcrEngine을 등록하지만 LLM 라우터는 넣지 않는다.
-        라우터가 없으면 `is_available()`이 False라 «엔진을 사용할 수 없다»는
+        라우터가 없으면 `is_available()`이 False라 《엔진을 사용할 수 없다》는
         오류가 난다. 서버는 `_state._get_ocr_pipeline()`에서 이 주입을 하는데,
         CLI는 그 경로를 타지 않으므로 여기서 같은 일을 해 줘야 한다.
         (이 주입이 없어 CLI로 llm_vision을 쓰면 모든 편이 실패했다.)
@@ -241,7 +241,7 @@ def describe_llm_target(
     출력: 사람이 읽을 한 줄. 지정한 프로바이더가 없거나 지금 안 되면, 또는 쓸 수 있는 LLM이
           하나도 없으면 ValueError — 호출자가 실행을 멈추고 0이 아닌 종료 코드를 낸다.
 
-    왜: 폴백은 조용하다. «무료 로컬로 돈다»고 믿었는데 유료 API가 처리하고 있던 사고가
+    왜: 폴백은 조용하다. 《무료 로컬로 돈다》고 믿었는데 유료 API가 처리하고 있던 사고가
     있었다(D-056). 실행 전에 이름을 찍어 두면 그 사고가 없다.
     """
     import asyncio
@@ -251,7 +251,7 @@ def describe_llm_target(
     router = make_router(library_path)
 
     def _default_model(p) -> str:
-        # Ollama는 «기본 모델»이 설치된 것 가운데서 정해진다 — 그 이름을 실제로 고른다.
+        # Ollama는 《기본 모델》이 설치된 것 가운데서 정해진다 — 그 이름을 실제로 고른다.
         if p.provider_id == "ollama" and hasattr(p, "_pick_vision_model"):
             try:
                 return asyncio.run(p._pick_vision_model())
@@ -299,7 +299,7 @@ def _safe_doc_id(source: Path) -> str:
     파일명이 한글·한자라 그대로 쓸 수 없으므로(ID 규칙은 ASCII 소문자다) 경로의 해시를 쓴다.
     원본 이름은 문헌 제목과 part label에 남는다.
 
-    왜 경로인가(2026-10-11 전수 검토): 전에는 «지금 시각 + 순번»으로 만들어, 중단 뒤 다시 돌리면
+    왜 경로인가(2026-10-11 전수 검토): 전에는 《지금 시각 + 순번》으로 만들어, 중단 뒤 다시 돌리면
     같은 편이 다른 id를 받았다. `_process_one`의 이어 하기(이미 있는 문헌의 OCR 쪽 건너뛰기)가
     한 번도 맞지 않았고, 시각을 10만으로 나눈 나머지라 드물게 다른 편의 id와 겹칠 수도 있었다.
     같은 파일이면 늘 같은 id가 나와야 이어 할 수 있다. 대소문자는 Windows 경로처럼 무시한다.
@@ -308,7 +308,7 @@ def _safe_doc_id(source: Path) -> str:
     import os
 
     # 경로만 쓰면 같은 자리에 다른 스캔을 덮어 둔 경우 옛 OCR을 이어 썼다 — 크기·수정 시각을 더해
-    # «같은 파일»일 때만 같은 id가 되게 한다(2026-10-11 전수). 파일이 없으면 경로만 쓴다.
+    # 《같은 파일》일 때만 같은 id가 되게 한다(2026-10-11 전수). 파일이 없으면 경로만 쓴다.
     src = Path(source)
     key = os.path.normcase(str(src.resolve()))
     try:
@@ -447,7 +447,7 @@ def _process_one(
         # 왜 기본으로 지우지 않는가: 여기에 OCR 결과(L2/L3)가 들어 있다.
         # 지우면 나중에 GUI로 쪽별 검수를 할 수 없고, 결과가 이상해 보여도
         # OCR을 처음부터 다시 돌려야 한다 — 쪽마다 LLM 호출이 다시 나간다.
-        # «CLI로 빠르게 돌리고, 이상하면 GUI로 검수한다»는 흐름이 성립하려면
+        # 《CLI로 빠르게 돌리고, 이상하면 GUI로 검수한다》는 흐름이 성립하려면
         # 결과가 남아 있어야 한다. --drop-workspace 를 준 경우에만 지운다.
         if not keep_workspace and record.get("replaced"):
             ok, why = _force_rmtree(doc_path)
@@ -457,7 +457,7 @@ def _process_one(
             interp_dir = library_path / "interpretations"
             if interp_dir.exists():
                 for interp in interp_dir.iterdir():
-                    # «doc_id로 시작»만 보면 embed_0001이 embed_00010의 해석 저장소까지 지웠다
+                    # 《doc_id로 시작》만 보면 embed_0001이 embed_00010의 해석 저장소까지 지웠다
                     if interp.is_dir() and (
                         interp.name == doc_id or interp.name.startswith(doc_id + "_")
                     ):
@@ -502,7 +502,7 @@ def embed_folder(
         root — 논문 폴더. library_path — 작업 서고(없으면 만든다).
         engine_id — OCR 엔진. None이면 기본 엔진(주의: 한글을 못 읽을 수 있다).
         force_provider·force_model — llm_vision이 쓸 LLM을 고정(`--model provider:model`).
-            없으면 폴백 순서. 어느 쪽이든 실행 전에 «도는 모델»을 한 줄 찍는다.
+            없으면 폴백 순서. 어느 쪽이든 실행 전에 《도는 모델》을 한 줄 찍는다.
         dry_run — True면 계획만 보여 준다.
         limit — 처리할 최대 편수 (시범 실행용).
         max_pages — 이 쪽수를 넘는 문헌은 건너뛴다 (큰 것을 나중으로 미룰 때).

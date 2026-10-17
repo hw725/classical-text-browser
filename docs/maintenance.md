@@ -44,7 +44,7 @@ path.write_text(json.dumps(data))      # ❌ 절대 금지
 해석 저장소의 L5·L6·L7 저장 함수 넷(`punctuation.save_punctuation`·`hyeonto.save_hyeonto`·
 `translation.save_translations`·`annotation.save_annotations`)도 같은 저장기를 쓴다 — 2026-09-16까지
 `write_text`로 바로 덮어썼다(Codex 교차검증에서 잡힘). `tests/test_interp_layers_atomic_write.py`가
-넷 모두 «갈아 끼우는 순간 죽어도 예전 파일이 남는지»를 본다.
+넷 모두 《갈아 끼우는 순간 죽어도 예전 파일이 남는지》를 본다.
 
 ### 1.2 PDF는 `resolve_part_pdf(doc_path, part_id)`로 연다 (D-069)
 
@@ -103,7 +103,7 @@ q 2064 0 0 2893 0 0 cm /I0 Do Q
   test_batch_files_are_ascii`가 바이트로 검사한다.
 - `install.bat`도 ASCII 껍데기가 됐고 한글 안내는 `install.ps1`에 있다. 세 `.bat` 모두 같은 테스트가 검사한다.
 - **서버가 떠 있는 동안 `start_server.bat`을 편집하지 않는다.** cmd는 배치 파일을 실행하면서
-  디스크에서 다시 읽는다. 서버를 끄면 그 cmd가 «편집된» 파일의 엉뚱한 줄(else 분기
+  디스크에서 다시 읽는다. 서버를 끄면 그 cmd가 《편집된》 파일의 엉뚱한 줄(else 분기
   `--library ""`)을 이어서 실행해 유령 서버가 8000에 떴다(2026-09-03 실측). 편집 전에 서버를
   끄고, 끈 뒤 `netstat -ano | findstr :8000`으로 남은 것이 없는지 본다.
 
@@ -144,7 +144,7 @@ uv run python -m pytest
 
 **테스트가 전부 통과해도 안심할 수 없는 자리들이다.** 전부 실제로 사고가 났다.
 
-(여기 «655개»라고 건수를 박아 두었다가 실제 671건과 어긋났다. 건수는 pytest를
+(여기 《655개》라고 건수를 박아 두었다가 실제 671건과 어긋났다. 건수는 pytest를
 실제로 돌려야 알 수 있어 정적 검사로 지킬 수 없으므로, **지킬 수 없는 수치는
 문서에 적지 않는다.**)
 
@@ -155,10 +155,10 @@ uv run python -m pytest
 | **다권본** | 시험 문헌이 대부분 단권이다 | 2권짜리로 **같은 쪽 번호의 결과가 다른지** 확인 |
 | **테스트 픽스처가 만드는 manifest** | 테스트는 `page_count`를 채워 둔 서고만 쓴다. `add_document`로 만든 실제 문헌은 그 칸이 없어 훑어보기 라우트가 400을 냈는데 테스트는 전부 초록이었다(2026-09-18, D-126 덧붙임) | 쪽 수는 `_resolve_page_count`로만 읽고, **실제로 등록한 문헌**으로 headless E2E 한 번 |
 | **프론트엔드 전체** | 화면 JS의 **함수 몇 개**만 node로 돈다 — `tests/js_harness.py`(`run_js`)를 쓰는 시험 파일 6개·26건(2026-10-05 셈, 건수는 위 이유로 참고만: `test_annotation_editor_js`·`test_composition_apply_plan_js`·`test_correction_saves`·`test_entity_manager_js`·`test_read_path_writes`·`test_structure_jev`). 화면을 실제로 눌러 보는 시험·CI는 없다 | headless Chrome으로 복사본 서고를 눌러 본다(D-133·D-135 후속이 그렇게 확인했다). **정식 스모크 테스트는 미결**(D-053) |
-| **이 PC의 실제 키** | 개인 키 파일(`~/.claude/data/triage/.env`)에 진짜 OpenRouter 키가, Windows 사용자 환경변수(레지스트리)에 진짜 Cloudflare 키가 있다(D-135·D-136). 프로젝트 `.env`도 키 출처다. 판정 모델 라우트를 부르는 시험이 그 키를 집으면 **실제로 부르고**, 결과가 초록이어도 «가짜 클라이언트를 탔다»는 보장이 없다(D-136 — 막지 않으면 `test_structure_llm`이 실제 호출을 냈다) | 키 출처를 막는 fixture(환경변수·레지스트리·개인 키 파일·프로젝트 .env를 막고 서고 .env만)와, 막혔음을 단언하는 `test_ambient_keys_are_blocked`(`tests/test_clef_availability.py`·`tests/test_jev_via_openrouter.py`). 뒤쪽은 판정 클라이언트의 기본 opener까지 가짜로 바꿔 나간 URL·키를 잡는다. 판정 모델 라우트를 부르는 새 시험은 이 fixture를 쓴다 |
-| **「없다」의 증명** | 정적 검사는 «볼 곳»만 좁혀 준다 | 오탐을 사람이 하나씩 걸러야 한다 |
-| **검증 서버가 사용자 설정을 바꾸는 것** | 복사본 서고·다른 포트로 띄워도 `~/.classical-text-browser/config.json`은 하나라, «마지막 서고»가 복사본으로 바뀌어 아이콘으로 켠 앱이 임시 폴더를 연다(2026-09-10 실측, 이틀) | 검증 서버는 **`CTB_CONFIG_DIR=<임시 폴더>`**를 붙여 띄운다(`core/app_config.py`). 끝나면 config.json의 recent_libraries에 임시 경로가 없는지 본다 |
-| **테스트가 사용자 홈에 쓰는 것** | 서고 없이 만든 `LlmConfig()`의 `UsageTracker`는 홈 폴더로 내려간다. 라우터 테스트가 mock 응답을 `~/.classical-text-browser/llm_usage_log.jsonl`에 쌓았는데(2,202행 중 2,127행, 2026-09-10 확인) 테스트는 전부 초록이었다 — 기록이 «어디에» 쌓이는지는 아무 테스트도 보지 않았다 | `tests/conftest.py`가 세션 시작 때 `CTB_CONFIG_DIR`를 pytest 임시 폴더로 돌리고(자식 프로세스까지 물려받는다), `test_usage_log_isolation.py`의 마지막 테스트(`home_leak_check` 마커, conftest가 실행 순서 맨 뒤로 보낸다)가 홈의 기록·설정 파일 크기가 세션 시작과 같은지 잰다. 새 코드가 홈에 쓰는 길을 내면 이 테스트가 빨간불이다 |
+| **이 PC의 실제 키** | 개인 키 파일(`~/.claude/data/triage/.env`)에 진짜 OpenRouter 키가, Windows 사용자 환경변수(레지스트리)에 진짜 Cloudflare 키가 있다(D-135·D-136). 프로젝트 `.env`도 키 출처다. 판정 모델 라우트를 부르는 시험이 그 키를 집으면 **실제로 부르고**, 결과가 초록이어도 《가짜 클라이언트를 탔다》는 보장이 없다(D-136 — 막지 않으면 `test_structure_llm`이 실제 호출을 냈다) | 키 출처를 막는 fixture(환경변수·레지스트리·개인 키 파일·프로젝트 .env를 막고 서고 .env만)와, 막혔음을 단언하는 `test_ambient_keys_are_blocked`(`tests/test_clef_availability.py`·`tests/test_jev_via_openrouter.py`). 뒤쪽은 판정 클라이언트의 기본 opener까지 가짜로 바꿔 나간 URL·키를 잡는다. 판정 모델 라우트를 부르는 새 시험은 이 fixture를 쓴다 |
+| **「없다」의 증명** | 정적 검사는 《볼 곳》만 좁혀 준다 | 오탐을 사람이 하나씩 걸러야 한다 |
+| **검증 서버가 사용자 설정을 바꾸는 것** | 복사본 서고·다른 포트로 띄워도 `~/.classical-text-browser/config.json`은 하나라, 《마지막 서고》가 복사본으로 바뀌어 아이콘으로 켠 앱이 임시 폴더를 연다(2026-09-10 실측, 이틀) | 검증 서버는 **`CTB_CONFIG_DIR=<임시 폴더>`**를 붙여 띄운다(`core/app_config.py`). 끝나면 config.json의 recent_libraries에 임시 경로가 없는지 본다 |
+| **테스트가 사용자 홈에 쓰는 것** | 서고 없이 만든 `LlmConfig()`의 `UsageTracker`는 홈 폴더로 내려간다. 라우터 테스트가 mock 응답을 `~/.classical-text-browser/llm_usage_log.jsonl`에 쌓았는데(2,202행 중 2,127행, 2026-09-10 확인) 테스트는 전부 초록이었다 — 기록이 《어디에》 쌓이는지는 아무 테스트도 보지 않았다 | `tests/conftest.py`가 세션 시작 때 `CTB_CONFIG_DIR`를 pytest 임시 폴더로 돌리고(자식 프로세스까지 물려받는다), `test_usage_log_isolation.py`의 마지막 테스트(`home_leak_check` 마커, conftest가 실행 순서 맨 뒤로 보낸다)가 홈의 기록·설정 파일 크기가 세션 시작과 같은지 잰다. 새 코드가 홈에 쓰는 길을 내면 이 테스트가 빨간불이다 |
 
 ### 주장을 지킨다는 시험은 깨뜨려 빨간불을 본 뒤에 적는다 (2026-09-21)
 
@@ -172,10 +172,10 @@ uv run python -m pytest
 - 새로 만든 `tests/test_ocr_kotenocr_contract.py`의 「읽기 순서」 단언도 처음에는 공허했다 —
   정렬을 통째로 빼도 초록이었다.
 
-**초록은 «이 배치에서 이렇다»는 뜻이지 주장을 지킨다는 증거가 아니다. 빨간불만이 증거다.**
+**초록은 《이 배치에서 이렇다》는 뜻이지 주장을 지킨다는 증거가 아니다. 빨간불만이 증거다.**
 한 번만 하면 되고 비용이 거의 없다: 주장을 코드에서 실제로 깨뜨려 그 시험이 빨개지는지 보고,
 무엇을 깨뜨렸을 때 빨개졌는지 시험 독스트링에 적는다. 위 세 번째 사례는 그렇게 해서
-«정렬 한 줄»이 아니라 «XY-Cut을 거친다»가 진짜 지켜지는 것임을 알았다(정렬을 빼면 초록,
+《정렬 한 줄》이 아니라 《XY-Cut을 거친다》가 진짜 지켜지는 것임을 알았다(정렬을 빼면 초록,
 XY-Cut을 빼면 빨강).
 
 ### 무엇이 실제로 실행되는지 재는 법 (2026-09-21)
@@ -203,12 +203,12 @@ XY-Cut을 빼면 빨강).
 - `if (!x) return` — 화면 요소가 사라져도 조용히 넘어간다. 죽은 코드 1,000줄이
   이렇게 살아남았다(D-069).
 - `typeof f === "function"` — 없는 함수를 삼킨다. 버튼이 그냥 안 눌렸다(D-063).
-- `except Exception: pass` — 부분 결과가 «전부»로 반환된다.
+- `except Exception: pass` — 부분 결과가 《전부》로 반환된다.
 - `available=False` — 엔진이 죽어도 다음 것으로 넘어간다.
 
 **null 가드와 폴백은 실패를 침묵으로 바꾼다.** 정말 없어도 되는 것에는 맞고,
-반드시 있어야 하는 것에는 틀리다. 새로 쓸 때 «이게 없으면 화면이 잘못된
-결과를 보여주는가»를 물어보고, 그렇다면 가드 대신 **경고를 남긴다.**
+반드시 있어야 하는 것에는 틀리다. 새로 쓸 때 《이게 없으면 화면이 잘못된
+결과를 보여주는가》를 물어보고, 그렇다면 가드 대신 **경고를 남긴다.**
 
 ### 그래서 넣은 방어
 
@@ -254,12 +254,12 @@ XY-Cut을 빼면 빨강).
    `.venv-gpu\Scripts\python.exe -m app serve --port 8179`로 띄우고
    `uv run --with playwright python scripts/ui_sweep.py 8179`. 버전 표시·패널 전부·콘솔 오류·4xx/5xx·
    처음 설정 마법사를 한 번에 본다(오류가 있으면 종료 코드 1). v1.3.0에서 diff 리뷰와 pytest를 다
-   통과하고도 화면 아래 «v1.2.1»이 남았다 — 검증은 `uv run`(.venv)으로, 실행은 `.venv-gpu`로 해서
+   통과하고도 화면 아래 《v1.2.1》이 남았다 — 검증은 `uv run`(.venv)으로, 실행은 `.venv-gpu`로 해서
    생긴 일이다. 판마다 `uv pip install --python .venv-gpu/Scripts/python.exe --no-deps -e .`로
    GPU 환경 메타데이터도 맞춘다
 5. `docs/DECISIONS.md`에 결정 카드(다음 번호)
 6. `docs/releases/vX.Y.Z.md` — 되돌릴 수 없는 변화는 **맨 위에** 적는다. 표제 문구
-   «되돌릴 수 없는 변화 — 있음»을 바꾸면 앱의 새 판 경고(`core/updater.py`)가 안 뜬다
+   《되돌릴 수 없는 변화 — 있음》을 바꾸면 앱의 새 판 경고(`core/updater.py`)가 안 뜬다
 7. 버전 올리기: **`pyproject.toml` 한 곳뿐이다.** `server.py`와 화면 아래
    상태바는 `core.updater.current_version()`으로 pyproject를 직접 읽는다(`/api/app/version`).
    설치 메타데이터(dist-info)는 실행 환경마다 달라 `.venv-gpu`에서 옛 판이 보였다(2026-09-06).
@@ -282,7 +282,7 @@ XY-Cut을 빼면 빨강).
 ### 태그를 이미 낸 뒤에 옮겨야 할 때
 
 **GitHub 릴리스는 태그에 매달려 있다.** 태그를 지우면 릴리스가 조용히
-**초안(draft)** 으로 떨어지고, 목록에서는 그 전 판이 다시 «Latest»가 된다.
+**초안(draft)** 으로 떨어지고, 목록에서는 그 전 판이 다시 《Latest》가 된다.
 오류도 경고도 없다 — 사람이 릴리스 목록을 봐야 안다.
 
 순서를 지킨다. **릴리스는 언제나 마지막이다.**
@@ -295,7 +295,7 @@ git push origin vX.Y.Z
 gh release edit vX.Y.Z --draft=false   # ← 초안으로 떨어진 것을 게시
 ```
 
-확인은 SHA만 보지 말고 **목록의 «Latest» 표시**까지 본다.
+확인은 SHA만 보지 말고 **목록의 《Latest》 표시**까지 본다.
 
 ```bash
 gh release list --limit 3              # v X.Y.Z 가 Latest 인가

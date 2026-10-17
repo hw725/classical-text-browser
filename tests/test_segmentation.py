@@ -500,14 +500,14 @@ class TestRulePreview:
         assert "그대로" in r["summary"]
 
     def test_a_list_change_says_what_was_added(self):
-        """입력: 어휘 하나 더. 출력: added만. 목적: 목록은 «늘고 준 것»으로 말한다."""
+        """입력: 어휘 하나 더. 출력: added만. 목적: 목록은 《늘고 준 것》으로 말한다."""
         from src.core.rule_preview import preview_rule_change
 
         r = preview_rule_change(self._book(), {"title_words": []}, {"title_words": ["題"]})
         assert r["changes"] == [{"field": "title_words", "added": ["題"], "removed": []}]
 
     def test_unwritten_switch_is_compared_by_its_effect(self):
-        """입력: 안 적힌 스위치 → 끔. 출력: True → False. 목적: «None → False»로 말하지 않는다."""
+        """입력: 안 적힌 스위치 → 끔. 출력: True → False. 목적: 《None → False》로 말하지 않는다."""
         from src.core.rule_preview import preview_rule_change
 
         r = preview_rule_change(self._book(), {}, {"signals": {"date": False}})
@@ -600,7 +600,7 @@ class TestRuleTalk:
         """입력: 말 한 줄. 출력: 옮긴 규칙. 목적: 규칙을 돌려주되 문헌 설정은 그대로.
 
         라우터는 가짜다 — 진짜 라우터를 두면 키가 있는 PC에서 빠른 계층 시험이 실제 LLM을
-        부른다(2026-10-11 실측 5.2초, B-035). 예전에는 «200 또는 400»을 둘 다 통과로 받아
+        부른다(2026-10-11 실측 5.2초, B-035). 예전에는 《200 또는 400》을 둘 다 통과로 받아
         모델이 없을 때도 초록이었다.
         """
         from pathlib import Path as _P
@@ -1039,7 +1039,7 @@ def test_toc_api_and_propose_with_toc(client, tmp_path):
 def test_boundary_index_is_a_view_over_textblocks(client, tmp_path):
     """경계 목록이 정본이고 단위는 그것에서 만드는 보기다(D-092·D-097).
 
-    해석 저장소에 경계·단위 파일을 쓰지 않는다. 이름의 «textblocks»는 D-090 때의 것이다 —
+    해석 저장소에 경계·단위 파일을 쓰지 않는다. 이름의 《textblocks》는 D-090 때의 것이다 —
     시험 이름은 계약 기록이 가리켜 그대로 둔다.
     """
     lib, part_id = _setup(client, tmp_path)
@@ -1158,7 +1158,7 @@ def test_boundary_bbox_from_l2_when_line_counts_match(tmp_path):
 
 
 class TestAnchorWithoutCoordinates:
-    """좌표가 없는 문헌에서도 «경계를 손으로 넣는 길»이 막히지 않아야 한다.
+    """좌표가 없는 문헌에서도 《경계를 손으로 넣는 길》이 막히지 않아야 한다.
 
     2026-09-22 실측: 내용 트리의 「경계 넣기」로 넣으면 `POST /boundaries` 가 500 이었다.
     `anchor_bbox` 의 `list(idx["boxes"][k])` 에서 `TypeError: 'NoneType' object is not
@@ -1166,7 +1166,7 @@ class TestAnchorWithoutCoordinates:
     1쪽 27/27 · 2쪽 34/34 · 3쪽 35/35.
 
     왜 이것이 흔한 경우인가: LLM 비전은 글자만 돌려주고 좌표를 주지 않는다. 여러 쪽을
-    읽는 CPU 환경에는 그쪽을 권하고 있다(백로그 B-005). 즉 «드문 자료»가 아니다.
+    읽는 CPU 환경에는 그쪽을 권하고 있다(백로그 B-005). 즉 《드문 자료》가 아니다.
 
     무엇을 고정하는가: 좌표가 없으면 `anchor_bbox` 는 **None 을 돌려주고 터지지 않는다.**
     경계는 (쪽, 행)이고 좌표는 점선을 그리기 위한 캐시일 뿐이므로, 좌표가 없다고 경계를
@@ -1220,7 +1220,7 @@ class TestAnchorWithoutCoordinates:
     def test_a_boundary_can_still_be_made_without_coordinates(self, tmp_path):
         """좌표가 없어도 경계는 만들어진다 — 제목은 코드가 L4 행에서 가져온다.
 
-        이것이 이 시험 묶음의 핵심이다. 앵커가 None 인 것 자체는 «그림을 못 그린다»일
+        이것이 이 시험 묶음의 핵심이다. 앵커가 None 인 것 자체는 《그림을 못 그린다》일
         뿐이고, 사람이 손으로 정한 (쪽, 행)은 그대로 남아야 한다.
         """
         from src.core.boundaries import new_boundary
@@ -1250,7 +1250,7 @@ class TestAnchorWithoutCoordinates:
         assert text_at.strip() == "첫째 줄"
 
     def test_coordinates_still_work_when_present(self, tmp_path):
-        """고친 것이 «있는 좌표»를 잃게 하지 않았는지 — 반대쪽도 함께 잰다."""
+        """고친 것이 《있는 좌표》를 잃게 하지 않았는지 — 반대쪽도 함께 잰다."""
         from src.core.segmentation import anchor_bbox
 
         doc = self._doc(tmp_path, with_boxes=True)
@@ -1261,7 +1261,7 @@ class TestAnchorWithoutCoordinates:
 
 
 class TestCheonjinFalsePositives:
-    """천진담초 208쪽 실측(2026-09-03)에서 나온 오탐 유형을 고정한다 — D-088 «남은 것»."""
+    """천진담초 208쪽 실측(2026-09-03)에서 나온 오탐 유형을 고정한다 — D-088 《남은 것》."""
 
     def test_marginal_date_note_needs_title_word_when_configured(self):
         """어휘를 정한 문헌에서 날짜만 있는 짧은 행(두주 「廿一日」)은 승인하지 않는다."""
@@ -1308,7 +1308,7 @@ class TestCheonjinFalsePositives:
 
 
 class TestTocUnyangjipLessons:
-    """운양집 중간본 총목 실측(2026-09-03)에서 나온 것들 — D-089 «남은 것»."""
+    """운양집 중간본 총목 실측(2026-09-03)에서 나온 것들 — D-089 《남은 것》."""
 
     SEO_TAIL = [
         "之辭不足見重今頓得其",
@@ -1520,7 +1520,7 @@ def test_collect_document_lines_skips_pages_without_l4_file(tmp_path, monkeypatc
     """확정본 파일이 없는 쪽은 열지 않는다 — 결과는 같고 시간만 준다.
 
     왜 시험하는가: 196쪽 권에 확정본이 20쪽뿐인데 196쪽을 다 돌며 쪽마다 manifest를 네 번 읽어
-    한 번에 3~6초, 편성 탭이 이것을 여섯 번 되풀이해 «세는 중»이 36초였다(2026-09-10 실측).
+    한 번에 3~6초, 편성 탭이 이것을 여섯 번 되풀이해 《세는 중》이 36초였다(2026-09-10 실측).
     파일이 없으면 get_page_text가 빈 글을 돌려주어 어차피 버려지므로, 미리 건너뛰어도 행은 같다.
     """
     import json
@@ -1575,10 +1575,10 @@ def test_interp_cannot_write_a_foreign_documents_boundary(client, tmp_path):
 
 
 def test_role_estimated_marks_boundaries_without_a_role(client, tmp_path):
-    """역할이 없는 옛 경계는 «추정»이라고 알린다 — 파일에 적어 굳히지 않는다.
+    """역할이 없는 옛 경계는 《추정》이라고 알린다 — 파일에 적어 굳히지 않는다.
 
     왜: 추정값을 파일에 넣으면 사람이 정한 것과 구별되지 않고, 나중에 추정 규칙이 좋아져도
-    옛 데이터가 따라오지 않는다. 그래서 저장은 그대로 두고 «어림한 값»이라고 표시만 한다.
+    옛 데이터가 따라오지 않는다. 그래서 저장은 그대로 두고 《어림한 값》이라고 표시만 한다.
     """
     from pathlib import Path as _P
 
@@ -1614,9 +1614,9 @@ def test_role_estimated_marks_boundaries_without_a_role(client, tmp_path):
 
 
 class TestReferenceExcerpt:
-    """긴 해제는 앞을 자르지 말고 «권별 서술»을 골라 간추린다.
+    """긴 해제는 앞을 자르지 말고 《권별 서술》을 골라 간추린다.
 
-    왜 시험하는가: 한국문집총간류 해제는 «생애 → 교유 → 간행과 권별 내용» 순서다. 앞에서
+    왜 시험하는가: 한국문집총간류 해제는 《생애 → 교유 → 간행과 권별 내용》 순서다. 앞에서
     자르면 정확히 쓸모 있는 데(뒤의 권별 서술)만 사라진다. 운양집 해제 실측(2026-09-03)에서
     전체 23,894자 중 권별 서술은 43% 지점에서 시작했고, 옛 방식(앞 4,000자)에는 「권N」이
     **하나도** 들어가지 않았다.
@@ -1679,7 +1679,7 @@ class TestTitleWordSuggest:
     """해제·본문 표본에서 표제 어휘 뽑기 (D-092 남은 것).
 
     왜 시험하는가: LLM이 그럴듯한 한자어를 지어내면 규칙이 오염되고, 그 규칙으로 만든 경계는
-    누구도 되짚지 못한다. «표본에 실제로 있는 말만»이 이 기능의 안전장치다.
+    누구도 되짚지 못한다. 《표본에 실제로 있는 말만》이 이 기능의 안전장치다.
     """
 
     def test_sampler_takes_short_lines_spread_over_the_volume(self):
@@ -1748,7 +1748,7 @@ class TestTitleWordSuggest:
 class TestVolumeHead:
     """卷 표제를 본문에서 직접 잡는다 (D-092 남은 것 — 목차가 없거나 대조가 빗나가도 묶음이 선다).
 
-    왜 «행 끝»인가: 卷頭는 짧은 한 행이고 卷 이름이 그 행을 끝맺는다. 본문 속의 卷은 말이
+    왜 《행 끝》인가: 卷頭는 짧은 한 행이고 卷 이름이 그 행을 끝맺는다. 본문 속의 卷은 말이
     이어진다. 이 구분이 무너지면 「弁諸卷首乎余曰序者所」 같은 본문 행이 묶음이 된다.
     """
 
@@ -1825,7 +1825,7 @@ class TestPositionAtPoint:
 
     왜 시험하는가: 화면이 아니라 서버가 L4 행(빈 행 포함)과 L2 행(비어 있지 않은 행만)의
     대응을 푼다. 이 대응이 어긋나면 엉뚱한 행에 경계가 놓인다 — 자동 테스트가 아니면
-    «한 행 밀림»을 알아보기 어렵다.
+    《한 행 밀림》을 알아보기 어렵다.
     """
 
     def test_point_inside_a_line_gives_line_and_char(self, tmp_path):
@@ -1869,7 +1869,8 @@ class TestPositionAtPoint:
         # 가로쓰기는 x가 글자 번호를 정한다. 상자(x 900~940, y 100~900)의 오른쪽 위 점 —
         # 가로로 읽으면 끝 글자(7), 세로로 읽으면 첫 글자(0)라 두 방향의 답이 갈린다.
         # 전에는 한가운데(920, 500)를 찍어 어느 방향이든 4가 나와 아무것도 재지 못했고, 방향 값도
-        # 스키마에 없는 «horizontal_lr»였다(startswith 판정이라 우연히 같은 갈래, 2026-10-11 재확인)
+        # 스키마에 없는 《horizontal_lr》였다(startswith 판정이라 우연히 같은 갈래,
+        # 2026-10-11 재확인)
         hit = position_at_point(doc, "v1", 1, 935, 150)
         assert hit["line"] == 0 and hit["offset"] == 7
         vertical, _, _ = _doc_with_two_lines(tmp_path / "v", direction="vertical_rtl")
@@ -2074,7 +2075,7 @@ def test_boundary_insert_delete_split_via_api(client, tmp_path):
     lst = client.get(url).json()["boundaries"]
     assert [b["id"] for b in lst] == [a_id, b_id, c_id, d_id]
     assert lst[3]["start"] == {"page": 1, "line": 1, "offset": k9}
-    # 쪼개기는 «기사 안 조각»만 만든다 — 원본보다 한 단 깊고 역할은 조각이다.
+    # 쪼개기는 《기사 안 조각》만 만든다 — 원본보다 한 단 깊고 역할은 조각이다.
     # 같은 층위로 넣으면 원본과 나란한 별도 기사가 되어 기사가 쪼개진다(v1.3.0까지 그랬다).
     # 별도 기사는 사이드바 「경계 넣기」에서만 만든다 — 한 곳에서만 되게 해야 헷갈리지 않는다.
     orig_level = next(b["level"] for b in lst if b["id"] == c_id)
@@ -2093,7 +2094,7 @@ def test_boundary_insert_delete_split_via_api(client, tmp_path):
     assert not list(
         (Path(lib) / "interpretations" / "i1" / "core_entities" / "blocks").glob("*.json")
     )
-    # 8) 역할은 깊이와 따로 바꾼다 — 3단에 그대로 있는 채로 «기사»가 된다
+    # 8) 역할은 깊이와 따로 바꾼다 — 3단에 그대로 있는 채로 《기사》가 된다
     r = client.put(f"{base}/{c_id}", json={"role": "article"})
     assert r.status_code == 200, r.text
     assert r.json()["boundary"]["role"] == "article"
@@ -2242,7 +2243,7 @@ def test_segmentation_auto_builds_tree_in_one_call(client, tmp_path):
 def test_auto_tree_makes_a_container_from_a_volume_heading(client, tmp_path):
     """卷 표제는 목차가 없어도 묶음(container) 경계가 된다 (D-092 남은 것).
 
-    왜 시험하는가: «목차 항목만 기본 선택»이 들어오면서 목차 없는 문헌의 卷이 통째로
+    왜 시험하는가: 《목차 항목만 기본 선택》이 들어오면서 목차 없는 문헌의 卷이 통째로
     빠질 수 있었다. 卷이 빠지면 트리에 묶음이 하나도 없어 개요가 평평해진다.
     """
     from pathlib import Path
@@ -2275,7 +2276,7 @@ def test_boundary_bbox_falls_back_to_text_match_when_counts_differ(tmp_path):
     """교정으로 행이 합쳐져 L4 행 수가 L2와 달라도, 글자로 닮은 L2 행을 찾아 좌표를 준다.
 
     2026-09-06 실측: 자동 트리 문헌에서 L2 11행·L4 10행이라 트리를 눌러도 시작 행 점선이
-    안 보였다. 위치↔텍스트 연동은 핵심 기능이라 «수가 다르면 포기»는 안 된다.
+    안 보였다. 위치↔텍스트 연동은 핵심 기능이라 《수가 다르면 포기》는 안 된다.
     """
     import json
 
@@ -2434,7 +2435,7 @@ class TestD122Addendum:
         assert squeeze_said("짧다") == "짧다"
 
     def test_propose_unmatched_carries_near(self, client, tmp_path):  # noqa: F811
-        """못 찾은 목차 항목마다 «비슷한 행» 후보(near)가 온다 — 없으면 빈 목록."""
+        """못 찾은 목차 항목마다 《비슷한 행》 후보(near)가 온다 — 없으면 빈 목록."""
         from pathlib import Path as _P
 
         lib, part_id = _setup(client, tmp_path)
@@ -2462,7 +2463,10 @@ class TestD122Addendum:
                 assert any(n["text"].startswith(head) for n in un[title]["near"]), un[title]
 
     def test_apply_listed_drops_only_named_ids_and_counts_new(self, client, tmp_path):  # noqa: F811
-        """replace=listed: drop에 든 id만 지우고, dry_run은 «새로 설 수»만 센다(D-122 덧붙임 2)."""
+        """replace=listed: drop에 든 id만 지우고, dry_run은 《새로 설 수》만 센다.
+
+        D-122 덧붙임 2.
+        """
         url = "/api/documents/d1/segmentation/apply"
         lib, part_id = _setup(client, tmp_path)
         data = client.post(

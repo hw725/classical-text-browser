@@ -40,7 +40,7 @@ def default_usage_log_path(library_root=None) -> Path:
     `app_config.CONFIG_DIR`를 import하지 않고 매번 읽는 이유는, 그 상수가
     import 시점에 굳어 conftest가 뒤늦게 바꾼 값을 못 보기 때문이다.
 
-    라우터 쪽(`routers/llm_ocr.py`)의 «지금까지 쌓인 줄 수» 계산도 이 함수를
+    라우터 쪽(`routers/llm_ocr.py`)의 《지금까지 쌓인 줄 수》 계산도 이 함수를
     써야 같은 파일을 본다.
     """
     if library_root:

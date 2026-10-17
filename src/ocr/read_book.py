@@ -5,7 +5,7 @@
 
 흐름:
     1. apply_plan — 계획을 문헌 폴더에 **권마다** 저장(read_plan/{권}.json)하고, 회전 구간을
-       manifest에, 판독 지침을 manifest.ocr_guidance에 적는다. 돌릴 쪽과 «구간별 엔진 계획»을
+       manifest에, 판독 지침을 manifest.ocr_guidance에 적는다. 돌릴 쪽과 《구간별 엔진 계획》을
        돌려준다.
     2. read_pages — 쪽마다 전면 블록(계획의 쓰기 방향) → 계획의 엔진으로 OCR → L4 채우기.
        이미 L2가 있는 쪽은 건너뛴다(L2 자체가 체크포인트 — 끊겨도 이어서 돈다).
@@ -90,7 +90,7 @@ def apply_plan(doc_path: str | Path, part_id: str, plan: dict) -> dict:
     입력: 문헌 경로, 권 id, 계획(validate_plan을 거친 것이 아니어도 된다 — 여기서 다시 확인한다).
     출력: {"plan", "problems", "pages": 돌릴 쪽 목록, "skipped", "engine_plan",
           "rotation_ranges": manifest에 저장된 범위, "rotation_runs": 계획의 구간}.
-    왜 회전을 «범위»로 적는가: 권 전체 회전(D-123)으로는 누운 쪽과 선 쪽이 섞인 책을 표현할 수
+    왜 회전을 《범위》로 적는가: 권 전체 회전(D-123)으로는 누운 쪽과 선 쪽이 섞인 책을 표현할 수
     없다. 쪽 범위 회전(D-126)이 그 자리다. 계획에 없는 쪽의 회전은 건드리지 않는다.
     쓰기는 **확인이 다 끝난 뒤에만** 한다 — 확인 도중에 틀리면 아무것도 바뀌지 않는다.
     """
@@ -134,7 +134,7 @@ def l4_is_hand_edited(doc_path: Path, part_id: str, page: int) -> bool:
     """확정본(L4)이 있고, 지금 L2를 그대로 옮긴 것과 다른가 — 그러면 덮지 않는다.
 
     일괄 OCR 라우트의 같은 판정과 같은 규칙이다(D-115 보강). **OCR을 다시 돌리기 전에** 불러야
-    한다 — 돌린 뒤에는 L2가 바뀌어 옛 자동 L4가 «사람이 고친 것»으로 보인다.
+    한다 — 돌린 뒤에는 L2가 바뀌어 옛 자동 L4가 《사람이 고친 것》으로 보인다.
     """
     from core.document import get_corrected_text
     from ocr.correction_pass import compose_page_text
@@ -174,7 +174,7 @@ def read_pages(
     출력: {"done", "resumed", "failed": [{"page", "error"}], "kept_l4": [쪽],
            "corrections_notices": [{page, rebased?, unmerged?, error?}]}.
     corrections_notices — 확정본을 새 OCR로 다시 쓴 쪽에서 사람 교정을 옮겼거나 못 옮긴 소식(D-133).
-    화면이 없는 길이라 반환값에 싣고 CLI가 찍는다(버리면 교정이 «기록»으로 가도 아무도 모른다).
+    화면이 없는 길이라 반환값에 싣고 CLI가 찍는다(버리면 교정이 《기록》으로 가도 아무도 모른다).
     계획에 없는 쪽은 돌리지 않는다(무엇으로 읽을지 모르는 쪽을 추측하지 않는다).
     """
     from core.document import rebase_notice, save_page_text

@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 # CTB_JS_DIR — 다른 판의 JS(예: 수정 전 커밋의 복사본)로 같은 시험을 돌려
-# «수정 전 실패»를 확인할 때.
+# 《수정 전 실패》를 확인할 때.
 STATIC_JS = Path(
     os.environ.get("CTB_JS_DIR") or Path(__file__).parent.parent / "src" / "app" / "static" / "js"
 )

@@ -1,4 +1,4 @@
-"""LLM이 돌려준 «강독 결과»를 기존 층에 나눠 담는다 (D-131).
+"""LLM이 돌려준 《강독 결과》를 기존 층에 나눠 담는다 (D-131).
 
 왜 새 저장 형식을 만들지 않는가 (2026-09-30 사용자 지시):
     강독할 때마다 노트 형식은 달라질 수 있다. 형식마다 저장 스키마를 만들면 형식이 바뀔 때마다
@@ -9,13 +9,13 @@
         장(章)·문서 항목     → 편성 경계(원본 저장소, D-092·D-097) — 장은 층위 1, 항목은 2~
         원문 구획(○①…)의 국역 → L6 번역 항목(해석 저장소) — 단위 안 글자 범위
         어휘·문법            → L7 사전형 주석(headword·headword_reading·category·dictionary_meaning)
-        해제·서지·요점·문서 정보·검토 메모 → L7 «비고(note)» 주석
+        해제·서지·요점·문서 정보·검토 메모 → L7 《비고(note)》 주석
 
     LLM의 답 모양(아래 check_answer)은 저장 형식이 아니라 **프롬프트의 답 형식**이다 — 다른 LLM
     기능이 JSON 답을 받아 층에 옮기는 것과 같다(D-127 parse_llm_items의 자리).
 
 사람의 작업을 지키는 규칙 (Codex·문서 교차 확인 반영, 2026-09-30):
-    - L4: «들이기가 쓴 L4»여야만 덮는다 — 마지막 커밋이 들이기이고, 작업 파일이 그 커밋과 같고
+    - L4: 《들이기가 쓴 L4》여야만 덮는다 — 마지막 커밋이 들이기이고, 작업 파일이 그 커밋과 같고
       (편집기 저장은 커밋하지 않으므로 커밋 안 된 수정이 곧 사람의 수정이다), 그 쪽의 교정 기록
       (corrections, 교정 탭)이 비어 있을 때. 하나라도 아니면 사람의 것으로 보고 두고 알린다.
     - L6·L7: 이 들이기가 넣었고(draft_id = IMPORT_TAG) 아직 초안(status draft)인 항목만 바꾼다.
@@ -161,7 +161,7 @@ def _ratio(a: str, b: str) -> float:
 def locate(text: str, needle: str, start_at: int = 0) -> Optional[tuple[int, int]]:
     """needle이 text의 어디인가 — 공백·줄바꿈을 무시하고 찾는다. 출력: (시작, 끝 포함) 또는 None.
 
-    순서: ① 통째로 ② 답이 줄 구분으로 넣은 « / »를 빼고 ③ 앞 8자·뒤 8자로 양 끝을 잡되 **그 사이
+    순서: ① 통째로 ② 답이 줄 구분으로 넣은 《 / 》를 빼고 ③ 앞 8자·뒤 8자로 양 끝을 잡되 **그 사이
     전체가 needle과 0.85 이상 같을 때만**(가운데가 전부 다른 글을 물지 않게) ④ 근사(_locate_fuzzy).
     start_at은 원래 text의 위치 — 구획은 순서대로 오므로 앞 구획 뒤에서부터 찾는다.
     """
@@ -233,9 +233,9 @@ def _heading_original(heading: str) -> str:
 
 
 def _needle_pieces(text: str) -> list[str]:
-    """찾을 글의 후보 — 통째로, 그리고 « — »·« / »·« | »로 나눈 조각(4자 이상).
+    """찾을 글의 후보 — 통째로, 그리고 《 — 》·《 / 》·《 | 》로 나눈 조각(4자 이상).
 
-    답은 제목의 여러 줄을 « — »나 « / »로 이어 적곤 한다. 확정본에는 그 기호가 없다.
+    답은 제목의 여러 줄을 《 — 》나 《 / 》로 이어 적곤 한다. 확정본에는 그 기호가 없다.
     """
     out = [text]
     out += [p for p in re.split(r"\s+—\s+|\s/\s|\s\|\s", text) if len(_norm(p)) >= 4]
@@ -246,7 +246,7 @@ def _needle_pieces(text: str) -> list[str]:
 
 
 def _written_by_import(doc_path: Path, part_id: str, page: int) -> bool:
-    """이 쪽 L4가 «들이기가 쓴 그대로»인가 — 그래야 새 답으로 덮어도 사람의 수정을 잃지 않는다.
+    """이 쪽 L4가 《들이기가 쓴 그대로》인가 — 그래야 새 답으로 덮어도 사람의 수정을 잃지 않는다.
 
     셋이 모두 맞아야 참: ① 쪽 파일의 마지막 커밋이 들이기 ② 작업 파일이 그 커밋과 같다(편집기
     저장은 커밋하지 않는다 — 커밋 안 된 수정은 사람의 것) ③ 교정 탭의 교정 기록이 비어 있다
@@ -279,8 +279,8 @@ def apply_corrections(
 ) -> tuple[list, list]:
     """교정문을 L4에 쓴다. 출력: (쓴 쪽, 사람이 고친 L4라 둔 쪽).
 
-    notices — 목록을 주면 쓴 쪽마다 «사람 교정을 옮겼다/못 옮겼다» 소식(D-133)을 덧붙인다.
-    save_page_text가 이 쪽의 교정 기록을 새 글로 옮기는데, 그 응답을 버리면 교정이 «기록»으로
+    notices — 목록을 주면 쓴 쪽마다 《사람 교정을 옮겼다/못 옮겼다》 소식(D-133)을 덧붙인다.
+    save_page_text가 이 쪽의 교정 기록을 새 글로 옮기는데, 그 응답을 버리면 교정이 《기록》으로
     가도 사람이 모른다. 반환 모양(튜플)은 그대로 두어 다른 호출부를 깨지 않는다.
     """
     from core.document import rebase_notice, save_page_text
@@ -436,8 +436,8 @@ def place_boundaries(
         section_ids.append(placed["id"])
         after = hit
     # 지울 후보: 이 답이 다룬 쪽에 있는 옛 들이기 경계 가운데 이번에 쓰이지 않은 것.
-    # 못 찾은 항목(unplaced)과 같은 제목의 경계는 후보에서 뺀다 — «답에서 빠짐»이 아니라 «대조
-    # 실패»일 수 있다(Codex 지적 2026-09-30).
+    # 못 찾은 항목(unplaced)과 같은 제목의 경계는 후보에서 뺀다 — 《답에서 빠짐》이 아니라 《대조
+    # 실패》일 수 있다(Codex 지적 2026-09-30).
     keep_titles = set(unplaced)
     stale = [
         b["id"]
@@ -480,7 +480,7 @@ def default_interp_id(doc_id: str) -> str:
 def check_interp_id(library: Path, doc_id: str, interp_id: str) -> Path:
     """해석 저장소 id가 규칙에 맞고, 이미 있으면 **이 문헌의** 저장소인가. 출력: 저장소 경로.
 
-    경로 이탈(«../»)과 다른 문헌의 해석 저장소에 쓰는 일을 막는다. 틀리면 ValueError.
+    경로 이탈(《../》)과 다른 문헌의 해석 저장소에 쓰는 일을 막는다. 틀리면 ValueError.
     """
     if not REPO_ID_PATTERN.match(str(interp_id or "")):
         raise ValueError(
@@ -509,7 +509,7 @@ def ensure_interpretation(library: Path, doc_id: str, interp_id: str, title: str
         )
     try:
         update_base(library, interp_id)
-    except Exception:  # noqa: BLE001 — 기반 갱신 실패는 들이기를 막지 않는다(화면이 «낡음»으로 알린다)
+    except Exception:  # noqa: BLE001 — 기반 갱신 실패는 들이기를 막지 않는다(화면이 《낡음》으로 알린다)
         pass
     return path
 
@@ -658,7 +658,7 @@ def ingest_answer(
            "corrections_notices"(L4를 다시 쓴 쪽의 교정 옮김 소식, D-133)}.
     순서: 모양·id 확인(쓰기 전) → L4 교정 → 경계 → 사람 참조 없는 옛 경계 지우기 → 커밋 →
     해석 저장소(기반을 지금 원본으로) → 옛 초안 치우기(모든 쪽) → L6·L7 → 커밋.
-    L4·경계를 먼저 끝내야 해석 저장소가 곧바로 «원본이 바뀜»이 되지 않는다.
+    L4·경계를 먼저 끝내야 해석 저장소가 곧바로 《원본이 바뀜》이 되지 않는다.
     """
     from core.annotation import add_annotation, load_annotations, save_annotations
     from core.boundaries import compute_units, load_doc_boundaries
@@ -833,7 +833,7 @@ def _reconcile_hand_pages(
 ) -> list[int]:
     """답이 읽어 온 손글씨 쪽 번호(hand_page)를 계획의 이름표와 견준다. 다르면 낱쪽 이름표를 더한다.
 
-    이름표 이름은 계획의 첫 이름표 이름(없으면 «교재»). 출력: 새로 붙인 쪽 목록.
+    이름표 이름은 계획의 첫 이름표 이름(없으면 《교재》). 출력: 새로 붙인 쪽 목록.
     규칙에 맞추지 않고 **읽은 대로** 둔다 — 쪽 번호가 건너뛰거나 겹친 책이 실제로 있다.
     """
     from core.document import write_json_atomic

@@ -1,13 +1,13 @@
 /**
- * 텍스트 추출 패널 — 「추출」 모드 전용 (D-055 — 처음 이름은 «논문» 프로필).
+ * 텍스트 추출 패널 — 「추출」 모드 전용 (D-055 — 처음 이름은 《논문》 프로필).
  *
  * 왜 별도 패널인가:
- *   고서 흐름은 «레이아웃 → OCR → 교정»을 페이지마다 반복하는 것을 전제로 한다.
+ *   고서 흐름은 《레이아웃 → OCR → 교정》을 페이지마다 반복하는 것을 전제로 한다.
  *   근현대 논문은 판형이 페이지마다 같아 그 반복에 의미가 없다.
  *   진단 → 엔진 → 권 전체 OCR → 산출물을 한자리에 모아 한 번에 끝낸다.
  *
  * 왜 열람 탭 안에 두는가:
- *   새 모드 탭을 만들면 «탭을 줄이려고 시작한 일»이 탭을 늘리는 것으로 끝난다.
+ *   새 모드 탭을 만들면 《탭을 줄이려고 시작한 일》이 탭을 늘리는 것으로 끝난다.
  *   열람은 문헌을 열면 처음 보게 되는 화면이므로 여기가 자연스럽다.
  *
  * 교감 모드에서는 hidden이므로 기존 열람 화면은 아무것도 바뀌지 않는다.
@@ -94,7 +94,7 @@ async function refreshExtractPanel(force) {
   // 다른 문헌으로 옮겼다. 이전 문헌의 쪽 정보를 검수 바가 쓰면 안 된다.
   resetReviewCache();
   // 쪽 범위도 비운다 — 앞 문헌에서 지정한 쪽이 남아 있으면 엉뚱한 쪽이
-  // 대상이 되고, «지정한 5쪽은 이미 처리됐습니다» 같은 안내가 이유 없이 뜬다.
+  // 대상이 되고, 《지정한 5쪽은 이미 처리됐습니다》 같은 안내가 이유 없이 뜬다.
   const pagesInput = document.getElementById("extract-pages-input");
   if (pagesInput) pagesInput.value = "";
 
@@ -190,7 +190,7 @@ async function _loadExtractEngines() {
  *
  * 왜 모델을 보여 주는가:
  *   LLM Vision은 5단 폴백이라 어느 프로바이더가 잡힐지 화면에 드러나지 않는다.
- *   실제로 «무료 로컬로 돌 것»이라 여겼는데 유료 API가 처리하고 있던 일이 있었다.
+ *   실제로 《무료 로컬로 돌 것》이라 여겼는데 유료 API가 처리하고 있던 일이 있었다.
  *   무엇으로 도는지 보이고, 원하면 고를 수 있어야 한다.
  */
 async function _loadExtractModels() {
@@ -212,7 +212,7 @@ async function _loadExtractModels() {
       if (!m.vision || !m.available) continue;
       const opt = document.createElement("option");
       opt.value = `${m.provider}:${m.model}`;
-      // 과금 방식을 이름에 함께 적는다. «free»만 보고 공짜로 오해하면 안 된다.
+      // 과금 방식을 이름에 함께 적는다. 《free》만 보고 공짜로 오해하면 안 된다.
       const billing =
         m.provider === "ollama"
           ? (m.model || "").includes("cloud") ? "구독 한도" : "로컬 무료"
@@ -273,7 +273,7 @@ function _updateExtractCost() {
   const engineId = select && select.value;
   const usesLlm = engineId === "llm_vision";
   // LLM 교정 사다리를 켜면 엔진과 별개로 호출이 더 나간다 — 블록마다 1단계 1회,
-  // 떨어지면 2단계(추론 켬) 1회 더. 켜 놓고 «호출 없음»이라 적으면 거짓이다.
+  // 떨어지면 2단계(추론 켬) 1회 더. 켜 놓고 《호출 없음》이라 적으면 거짓이다.
   const corr = document.getElementById("extract-llm-correction");
   const corrOn = corr && corr.value && corr.value !== "off";
   let text = usesLlm
@@ -294,7 +294,7 @@ function _updateExtractCost() {
  *
  * 왜 금액만으로 부족한가:
  *   구독형(Ollama 클라우드·OpenAI OAuth)은 비용이 0으로 기록된다.
- *   «$0.00»만 띄우면 공짜로 오해하지만 실제로는 계정 한도를 쓰고 있다.
+ *   《$0.00》만 띄우면 공짜로 오해하지만 실제로는 계정 한도를 쓰고 있다.
  *   게다가 두 서비스 모두 남은 한도를 API로 알려 주지 않는다
  *   (실측: 응답 헤더에 rate limit 정보 없음). 그래서 과금 방식에 따라
  *   문구를 달리하고, 한도는 제공자 대시보드에서 보라고 안내한다.
@@ -378,15 +378,15 @@ function _navigateToPage(pageNumber) {
 
 
 function _formatPageList(pages, limit = 8) {
-  /** 쪽 번호 목록을 «1, 2, 3쪽 외»처럼 줄여 적는다. */
+  /** 쪽 번호 목록을 《1, 2, 3쪽 외》처럼 줄여 적는다. */
   const shown = pages.slice(0, limit).join(", ");
   return `${shown}쪽${pages.length > limit ? " 외" : ""}`;
 }
 
 /**
- * 실행 단추의 이름 — 쪽 범위가 걸려 있으면 «전체»라고 쓰지 않는다.
+ * 실행 단추의 이름 — 쪽 범위가 걸려 있으면 《전체》라고 쓰지 않는다.
  *
- * 왜: 범위를 «12-15»로 좁혀 놓고도 단추가 「전체 OCR 실행」이면, 누르는 사람은 권 전체가
+ * 왜: 범위를 《12-15》로 좁혀 놓고도 단추가 「전체 OCR 실행」이면, 누르는 사람은 권 전체가
  * 도는 줄 알고 망설이거나(비용이 걸린 자리다), 반대로 전체가 돈다고 믿고 범위를 잊는다.
  * 단추는 실제로 하는 일을 말해야 한다(2026-09-05 지적).
  */
@@ -396,7 +396,7 @@ function _extractRunLabel(range) {
 }
 
 /**
- * 실행하기 전에 «몇 쪽이 실제로 도는가»를 보여 준다.
+ * 실행하기 전에 《몇 쪽이 실제로 도는가》를 보여 준다.
  *
  * 왜 필요한가:
  *   OCR 한 쪽마다 LLM 호출이 나간다. 특히 레이아웃을 몇 쪽만 고친 뒤
@@ -408,14 +408,14 @@ async function _refreshExtractPending() {
   const target = _extractTarget();
   if (!box || !target) return;
 
-  // 쪽 범위는 두 갈래 모두에 적용된다. 이것을 빼먹으면 «12쪽만 다시»라고
-  // 지정해 놓고 «15쪽 전체가 돕니다»라는 안내를 보게 된다 — 비용이 걸린
+  // 쪽 범위는 두 갈래 모두에 적용된다. 이것을 빼먹으면 《12쪽만 다시》라고
+  // 지정해 놓고 《15쪽 전체가 돕니다》라는 안내를 보게 된다 — 비용이 걸린
   // 자리에서 부풀린 숫자를 보여 주는 셈이다.
   const input = document.getElementById("extract-pages-input");
   const range = parsePageRange(input ? input.value : "", _extractPageCount());
   const rangeNote = range ? ` (지정한 범위 ${_formatPageList(range)})` : "";
 
-  // 단추 이름도 범위를 따른다. 도는 중(«중단»)에는 건드리지 않는다.
+  // 단추 이름도 범위를 따른다. 도는 중(《중단》)에는 건드리지 않는다.
   const runBtn = document.getElementById("extract-run-ocr");
   if (runBtn && !runBtn.classList.contains("extract-running")) {
     runBtn.textContent = _extractRunLabel(range);
@@ -427,8 +427,8 @@ async function _refreshExtractPending() {
   if (force && force.checked) {
     const count = range ? range.length : _extractPageCount();
     box.textContent = count
-      ? `«이미 처리한 쪽도 다시»가 켜져 있어 쪽 ${count}개가 다시 돕니다${rangeNote}.`
-      : "«이미 처리한 쪽도 다시»가 켜져 있어 전체가 다시 돕니다.";
+      ? `《이미 처리한 쪽도 다시》가 켜져 있어 쪽 ${count}개가 다시 돕니다${rangeNote}.`
+      : "《이미 처리한 쪽도 다시》가 켜져 있어 전체가 다시 돕니다.";
     box.className = "extract-pending extract-diag-scan";
     box.hidden = false;
     return;
@@ -453,28 +453,28 @@ async function _refreshExtractPending() {
     if (willRun === 0) {
       box.textContent = range
         ? `지정한 ${_formatPageList(range)}은 이미 처리됐습니다. ` +
-          "다시 돌리려면 «이미 처리한 쪽도 다시»를 켜세요."
+          "다시 돌리려면 《이미 처리한 쪽도 다시》를 켜세요."
         : `쪽 ${data.page_count}개를 모두 처리했습니다. 실행해도 도는 쪽이 없습니다.`;
       box.className = "extract-pending extract-diag-ok";
       box.hidden = false;
       return;
     }
 
-    // 내역은 «개수»가 아니라 **쪽 번호**로 적는다.
+    // 내역은 《개수》가 아니라 **쪽 번호**로 적는다.
     //
-    // 왜: 한국어에서 «쪽»이 개수 단위이자 번호 단위라 «3쪽 미처리»가
-    // «세 쪽이 미처리»로도 «3쪽이 미처리»로도 읽힌다. 쪽 범위를 비워 둔
-    // 상태에서 «실행하면 3쪽이 돕니다 — 3쪽 미처리»가 뜨면 어느 쪽이
+    // 왜: 한국어에서 《쪽》이 개수 단위이자 번호 단위라 《3쪽 미처리》가
+    // 《세 쪽이 미처리》로도 《3쪽이 미처리》로도 읽힌다. 쪽 범위를 비워 둔
+    // 상태에서 《실행하면 3쪽이 돕니다 — 3쪽 미처리》가 뜨면 어느 쪽이
     // 도는지 오히려 헷갈린다. 번호를 그대로 보여 주면 그 애매함이 없다.
     const parts = [];
-    // 라벨은 «쪽»을 겹쳐 쓰지 않는다 — _formatPageList가 이미 «쪽»으로 끝난다.
+    // 라벨은 《쪽》을 겹쳐 쓰지 않는다 — _formatPageList가 이미 《쪽》으로 끝난다.
     if (todo.length) parts.push(`아직 안 함: ${_formatPageList(todo)}`);
     if (stale.length) {
       parts.push(`레이아웃 수정: ${_formatPageList(stale)}`);
     }
     // 「실행하면 쪽 2개가 돕니다」로 적었더니 한국어가 되지 않았다.
     // 개수와 번호를 한 문장에 섞지 않고, 개수는 괄호로 뒤에 붙인다 —
-    // 번호가 앞에 오므로 «2쪽»이 번호로 오해될 여지도 없다.
+    // 번호가 앞에 오므로 《2쪽》이 번호로 오해될 여지도 없다.
     box.textContent = `실행 대상: ${parts.join(" · ")} (${willRun}쪽)${rangeNote}`;
     box.className = "extract-pending extract-diag-warn";
     box.hidden = false;
@@ -487,14 +487,14 @@ async function _refreshExtractPending() {
 /* ─── 쪽별 결과 훑어보기 ─────────────────────────
  *
  * 왜 필요한가:
- *   부분 재-OCR은 «어느 쪽이 나쁜지»를 이미 알고 있다는 전제 위에 서 있다.
+ *   부분 재-OCR은 《어느 쪽이 나쁜지》를 이미 알고 있다는 전제 위에 서 있다.
  *   그런데 텍스트를 보는 경로가 쪽 단위뿐이라, 15쪽이면 15번 눌러 봐야
  *   알 수 있고 300쪽이면 사실상 불가능하다. 여기서 한눈에 훑는다.
  *
  * 판정을 어디까지 믿을 것인가:
- *   «글자 적음»은 틀렸다는 뜻이 아니다. 표지·간지·참고문헌 쪽은 원래
+ *   《글자 적음》은 틀렸다는 뜻이 아니다. 표지·간지·참고문헌 쪽은 원래
  *   글자가 적다. 그래서 실제 글자 수와 본문 앞머리를 함께 보여 주고
- *   **판단은 사람이 한다.** 표시는 «봐 두라»는 뜻이다.
+ *   **판단은 사람이 한다.** 표시는 《봐 두라》는 뜻이다.
  */
 
 const _EXTRACT_FLAG_LABEL = {
@@ -513,7 +513,7 @@ function _isSuspectPage(page) {
  *
  * 왜 필요한가:
  *   결과에 확신이 있으면 추출 화면에서 바로 텍스트 레이어 PDF를 만드는 것이
- *   가장 편하다. 그런데 그 «확신»은 쪽마다 원본과 대조해 봐야 생긴다.
+ *   가장 편하다. 그런데 그 《확신》은 쪽마다 원본과 대조해 봐야 생긴다.
  *   어디까지 봤는지 기억에 의존하면 300쪽에서는 반드시 빠뜨린다.
  *
  * 왜 localStorage인가:
@@ -548,7 +548,7 @@ function _saveReviewed(target, map) {
   }
 }
 
-/** 이 쪽이 «확인됨»인가 — 확인 당시와 글자 수가 같을 때만. */
+/** 이 쪽이 《확인됨》인가 — 확인 당시와 글자 수가 같을 때만. */
 function _isReviewed(map, page) {
   const at = map[String(page.page)];
   return at !== undefined && at === page.chars;
@@ -557,15 +557,15 @@ function _isReviewed(map, page) {
 /* ─── 교정 탭의 검수 바 ───────────────────────────
  *
  * 왜 교정 탭에 두는가:
- *   검수는 «원본 이미지와 전체 텍스트를 나란히 놓고 보는» 일이고, 그 화면은
+ *   검수는 《원본 이미지와 전체 텍스트를 나란히 놓고 보는》 일이고, 그 화면은
  *   교정 탭뿐이다. 그런데 확인 표시가 추출 패널(열람 탭)에만 있으면
- *   쪽마다 «교정 탭에서 보고 → 열람 탭에서 체크 → 다시 교정 탭»이 되어
+ *   쪽마다 《교정 탭에서 보고 → 열람 탭에서 체크 → 다시 교정 탭》이 되어
  *   15쪽에 탭 전환이 30번 일어난다. 그러면 아무도 검수하지 않는다.
  *
  *   그래서 확인 표시를 검수하는 자리로 가져온다. 추출 패널의 목록은
  *   시작점과 진행률을 보여 주는 대시보드로 남는다.
  *
- * 왜 «다음 쪽»이 아니라 «다음 미확인 쪽»인가:
+ * 왜 《다음 쪽》이 아니라 《다음 미확인 쪽》인가:
  *   이미 본 쪽을 다시 지나가면 흐름이 끊긴다. 남은 것만 이어서 보게 한다.
  */
 
@@ -712,7 +712,7 @@ async function _refreshExtractOverview() {
       box.open = true;
     }
 
-    // 좌표 없음이 «글자가 나온 모든 쪽»에 해당하면 그것은 이 쪽의 문제가
+    // 좌표 없음이 《글자가 나온 모든 쪽》에 해당하면 그것은 이 쪽의 문제가
     // 아니라 엔진 특성이다(LLM Vision은 bbox를 주지 않는다). 쪽마다 붙이면
     // 똑같은 표시가 열댓 개 떠서 정작 봐야 할 표시가 묻힌다. 한 번만 말한다.
     //
@@ -723,9 +723,9 @@ async function _refreshExtractOverview() {
       scored.length > 0 &&
       scored.every((p) => (p.flags || []).includes("no_position"));
 
-    // 여기 표시는 «통계로 잡히는 것»뿐이다. 몇 글자 오독처럼 글자 수가
+    // 여기 표시는 《통계로 잡히는 것》뿐이다. 몇 글자 오독처럼 글자 수가
     // 정상인 잘못은 원본과 대조해야만 보인다. 그 사실을 숨기면 사용자는
-    // «표시 없는 쪽 = 문제 없는 쪽»으로 오해한다.
+    // 《표시 없는 쪽 = 문제 없는 쪽》으로 오해한다.
     const hints = [
       `글자 수 중앙값 ${data.median_chars}자.`,
       "표시가 없어도 틀렸을 수 있습니다 — 「대조」로 원본과 나란히 보세요.",
@@ -735,7 +735,7 @@ async function _refreshExtractOverview() {
     }
     if (allNoPosition) {
       hints.push(
-        "이 엔진은 글자 위치를 주지 않아 모든 쪽이 «좌표 없음»입니다 " +
+        "이 엔진은 글자 위치를 주지 않아 모든 쪽이 《좌표 없음》입니다 " +
           "(PaddleOCR를 설치하면 위치를 찾아 줍니다)."
       );
     }
@@ -756,7 +756,7 @@ async function _refreshExtractOverview() {
  * 훑어보기 한 행을 만든다.
  *
  * 행 하나에서 세 갈래로 갈 수 있어야 한다. 발견하고도 갈 곳이 없으면
- * 결국 «다시 OCR»만 반복하게 되는데, 같은 엔진·같은 레이아웃이면
+ * 결국 《다시 OCR》만 반복하게 되는데, 같은 엔진·같은 레이아웃이면
  * 결과도 대체로 같다.
  *
  *   대조   → 교정 탭. 원본 이미지 옆에서 글자를 직접 고친다.
@@ -857,7 +857,7 @@ function _buildOverviewRow(page, { target, reviewed, allNoPosition }) {
 
   const preview = document.createElement("div");
   preview.className = "extract-overview-preview";
-  // 미리보기가 비면 사용자는 «안 나온 건지 화면이 깨진 건지» 알 수 없다.
+  // 미리보기가 비면 사용자는 《안 나온 건지 화면이 깨진 건지》 알 수 없다.
   preview.textContent = page.preview || "— 텍스트가 없습니다 —";
   row.appendChild(preview);
 
@@ -873,10 +873,10 @@ function _buildOverviewRow(page, { target, reviewed, allNoPosition }) {
  * 나쁘면 이전 것(교정 포함)으로 물러설 길이 필요하다.
  *
  * 교정만 취소하려는 것이라면 이 버튼이 아니다 — 교정 탭의 교정 목록에서
- * 항목별 삭제나 «모두 삭제»를 쓰면 된다. 그쪽이 더 세밀하고 차수 제한도 없다.
+ * 항목별 삭제나 《모두 삭제》를 쓰면 된다. 그쪽이 더 세밀하고 차수 제한도 없다.
  *
  * OCR 결과(L2)와 교정 텍스트(L4)를 함께 되돌린다 — 배치가 둘 다 덮어쓰므로
- * 하나만 되돌리면 «OCR은 예전 것인데 교정은 사라진» 어긋난 상태가 된다.
+ * 하나만 되돌리면 《OCR은 예전 것인데 교정은 사라진》 어긋난 상태가 된다.
  */
 async function _restoreExtractPage(target, pageNumber) {
   try {
@@ -926,12 +926,12 @@ async function _restoreExtractPage(target, pageNumber) {
 async function _openPageInTab(pageNumber, mode) {
   const tab = document.querySelector(`.mode-tab[data-mode="${mode}"]`);
   if (!tab || tab.hidden) {
-    showToast(`«${mode}» 인덱스를 찾을 수 없습니다.`, "error");
+    showToast(`《${mode}》 인덱스를 찾을 수 없습니다.`, "error");
     return;
   }
 
   // 교정 탭은 L4를 읽는데, 배치 OCR 이전에 만든 문헌은 L4가 비어 있다.
-  // 그대로 보내면 «대조»를 눌렀는데 빈 화면이 나온다. 그 쪽만 미리 채운다.
+  // 그대로 보내면 《대조》를 눌렀는데 빈 화면이 나온다. 그 쪽만 미리 채운다.
   // (이미 있으면 건드리지 않으므로 손으로 고친 교정은 안전하다.)
   if (mode === "correction") {
     const target = _extractTarget();
@@ -957,7 +957,7 @@ async function _openPageInTab(pageNumber, mode) {
 }
 
 /**
- * PDF를 만들기 전에 «쪽마다 확인이 끝났는가»를 알린다.
+ * PDF를 만들기 전에 《쪽마다 확인이 끝났는가》를 알린다.
  *
  * 산출물은 서지 관리 도구로 넘어가 원본을 대체한다. 확신 없이 내보내면
  * 잘못된 텍스트가 그대로 굳는다. 막지는 않되 사실은 알린다.
@@ -978,7 +978,7 @@ function _refreshReviewStatus(pages, reviewed) {
     box.textContent =
       `아직 확인하지 않은 쪽이 ${notDone.length}개 있습니다 ` +
       `(${_formatPageList(notDone.map((p) => p.page), 6)}). ` +
-      "위 «쪽별 검수»에서 확인한 뒤 만드는 것을 권합니다.";
+      "위 《쪽별 검수》에서 확인한 뒤 만드는 것을 권합니다.";
     box.className = "extract-review-status extract-diag-warn";
   }
   box.hidden = false;
@@ -987,7 +987,7 @@ function _refreshReviewStatus(pages, reviewed) {
 /**
  * 그 쪽으로 이동하고 쪽 범위에 넣는다.
  *
- * 훑어보다 «이 쪽이 이상하다»를 발견한 순간 바로 다시 돌릴 수 있어야 한다.
+ * 훑어보다 《이 쪽이 이상하다》를 발견한 순간 바로 다시 돌릴 수 있어야 한다.
  * 쪽 번호를 외웠다가 아래 칸에 옮겨 적게 만들면 그 사이에 틀린다.
  */
 function _focusExtractPage(pageNumber) {
@@ -1040,7 +1040,7 @@ async function _runExtractOcr() {
   const force = document.getElementById("extract-force-redo");
   if (force && force.checked) body.skip_existing = false;
 
-  // LLM 교정 패스 (D-082). 끔이 기본. «선별»은 다시 볼 블록만, «전체»는 전량.
+  // LLM 교정 패스 (D-082). 끔이 기본. 《선별》은 다시 볼 블록만, 《전체》는 전량.
   const corr = document.getElementById("extract-llm-correction");
   if (corr && corr.value && corr.value !== "off") body.llm_correction = corr.value;
 
@@ -1080,7 +1080,7 @@ async function _runExtractOcr() {
     const decoder = new TextDecoder();
     let buffer = "";
     let done = null;
-    let lastSeen = null; // 스트림이 «완료» 없이 끊기면 어디서 멈췄는지 말한다(ocr-panel과 같은 이유)
+    let lastSeen = null; // 스트림이 《완료》 없이 끊기면 어디서 멈췄는지 말한다(ocr-panel과 같은 이유)
 
     while (true) {
       const chunk = await reader.read();
@@ -1104,7 +1104,7 @@ async function _runExtractOcr() {
           (evt.warnings || []).forEach((w) => showToast(w, "info"));
         } else if (evt.type === "redo") {
           // 레이아웃이 바뀌어 다시 도는 쪽이다. 왜 다시 도는지 그 자리에서
-          // 보이지 않으면 «건너뛴다더니 왜 도나»가 된다.
+          // 보이지 않으면 《건너뛴다더니 왜 도나》가 된다.
           text.textContent = `${evt.page}쪽 다시 — ${evt.reason}`;
         } else if (evt.type === "page" || evt.type === "skip") {
           lastSeen = evt;
@@ -1114,7 +1114,7 @@ async function _runExtractOcr() {
           text.textContent = `${evt.index + 1}/${evt.total}쪽 — ${evt.page}쪽 ${label}`;
         } else if (evt.type === "baking") {
           // OCR이 끝나고 **다른 단계**가 시작된 것이다. 그 사실이 보여야 한다 —
-          // 진행 막대만 100%로 두면 «끝났는데 멈춘 것»처럼 보인다.
+          // 진행 막대만 100%로 두면 《끝났는데 멈춘 것》처럼 보인다.
           // 검출이 쪽당 8초쯤 걸려 15쪽이면 2분 가까이 이 화면에 머문다.
           fill.style.width = "100%";
           text.textContent =
@@ -1164,7 +1164,7 @@ async function _runExtractOcr() {
         loadPageLayout(target.docId, target.partId, viewerState.pageNum);
       }
     } else {
-      // «완료» 없이 끊겼다 — 서버 재시작·네트워크. 진행 막대만 남기면 «끝난 것»으로 읽힌다
+      // 《완료》 없이 끊겼다 — 서버 재시작·네트워크. 진행 막대만 남기면 《끝난 것》으로 읽힌다
       const where = lastSeen ? `${lastSeen.index + 1}/${lastSeen.total}쪽(${lastSeen.page}쪽)까지 보고 ` : "";
       text.textContent = `연결이 끊겨 ${where}멈췄습니다. 다시 실행하면 이어서 돕니다.`;
       showToast("OCR이 끝나지 않고 서버와 연결이 끊겼습니다. 끝난 쪽은 저장돼 있습니다 — 다시 실행하면 이어서 돕니다.", "warning");
@@ -1297,16 +1297,16 @@ function initExtractPanel() {
   if (pages) {
     pages.addEventListener("input", () => {
       _updateExtractCost();
-      // 쪽 범위도 «몇 쪽이 도는가»를 바꾼다. 이것을 빼면 범위를 좁혀 놓고도
+      // 쪽 범위도 《몇 쪽이 도는가》를 바꾼다. 이것을 빼면 범위를 좁혀 놓고도
       // 예상 규모는 권 전체 기준으로 남아 실제보다 부풀려 보인다.
       _refreshExtractPending();
     });
   }
 
-  // 강제 재실행을 켜고 끄면 «몇 쪽이 도는가»가 달라진다. 그 자리에서 바꾼다.
+  // 강제 재실행을 켜고 끄면 《몇 쪽이 도는가》가 달라진다. 그 자리에서 바꾼다.
   const force = document.getElementById("extract-force-redo");
   if (force) force.addEventListener("change", _refreshExtractPending);
-  // LLM 교정을 켜고 끄면 비용 줄이 바뀐다 — 켜 놓고 «호출 없음»으로 남으면 안 된다
+  // LLM 교정을 켜고 끄면 비용 줄이 바뀐다 — 켜 놓고 《호출 없음》으로 남으면 안 된다
   const corr = document.getElementById("extract-llm-correction");
   if (corr) corr.addEventListener("change", _updateExtractCost);
 
@@ -1319,7 +1319,7 @@ function initExtractPanel() {
   }
 }
 
-// 키를 새로 넣으면 추출 패널의 모델 목록도 다시 채운다 — «한 번 채웠다»는 표시를 지우고
+// 키를 새로 넣으면 추출 패널의 모델 목록도 다시 채운다 — 《한 번 채웠다》는 표시를 지우고
 // 고른 것은 남긴다(2026-09-05 지적).
 document.addEventListener("llm-accounts-changed", async () => {
   const select = document.getElementById("extract-model-select");

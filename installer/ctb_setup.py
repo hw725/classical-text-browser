@@ -4,7 +4,7 @@
 ③ 앱을 내려받아 풀고 ④ `install.ps1`(Python·Git·uv·의존·모델)을 돌리고 ⑤ 바탕화면에
 「고전서지 브라우저」 아이콘을 만든 뒤 ⑥ 바로 켜 준다. 터미널을 열 일이 없다.
 
-왜 «부트스트래퍼»인가: OCR 스택(약 830MB)을 exe에 통째로 넣으면 판마다 그 크기를 다시
+왜 《부트스트래퍼》인가: OCR 스택(약 830MB)을 exe에 통째로 넣으면 판마다 그 크기를 다시
 받아야 하고, 앱의 자동 업데이트(D-112 — git 사본 + `uv sync`)와 어긋난다. 작은 exe가
 설치만 맡고, 그 뒤는 앱이 스스로 갱신하는 편이 사용자에게 가장 적게 시킨다.
 
@@ -32,7 +32,7 @@ import zipfile
 from pathlib import Path
 
 REPO = "hw725/classical-text-browser"
-# 설치 파일이 받는 판. 릴리스 태그의 소스 zip — main.zip이면 «릴리스 안 된 커밋»도 받게 된다.
+# 설치 파일이 받는 판. 릴리스 태그의 소스 zip — main.zip이면 《릴리스 안 된 커밋》도 받게 된다.
 ZIP_URL = os.environ.get("CTB_SETUP_ZIP") or (
     f"https://github.com/{REPO}/archive/refs/tags/v1.4.3.zip"
 )
@@ -363,7 +363,7 @@ def main(argv=None) -> int:
     # 콘솔 고정은 **맨 앞**이다 — argparse 도, gui() 도 이 뒤에 온다.
     # 한때 `parse_args()`·`gui()` **뒤**에 있어서 `--auto` 경로에서만 실행됐다
     # (2026-09-22 실측). 그때는 그 앞에서 찍는 cp949 불가 문자가 없어 안 죽었지만,
-    # help 문구에 «—» 하나만 들어가면 `--help` 가 사용자 콘솔에서 죽는다.
+    # help 문구에 《—》 하나만 들어가면 `--help` 가 사용자 콘솔에서 죽는다.
     # 창 없는 exe 는 stdout 이 None 이라 그때는 건너뛴다.
     if sys.stdout is not None:
         try:

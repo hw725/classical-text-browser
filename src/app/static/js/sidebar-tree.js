@@ -18,15 +18,15 @@
  * HTML 특수문자를 이스케이프한다.
  *
  * 왜 이렇게 하는가:
- *   문헌 제목은 «드롭한 파일 이름»에서 그대로 만들어진다(backend documents.py).
+ *   문헌 제목은 《드롭한 파일 이름》에서 그대로 만들어진다(backend documents.py).
  *   즉 사용자가 파일명을 지어 붙이는 순간 그 문자열이 트리 라벨의 innerHTML로
  *   들어간다 — `<img onerror=...>.pdf` 같은 이름이면 그대로 실행된다.
- *   브라우저의 textContent 경로를 빌려 «태그가 될 수 있는 글자»를 전부 무해한
+ *   브라우저의 textContent 경로를 빌려 《태그가 될 수 있는 글자》를 전부 무해한
  *   엔티티로 바꾼 뒤 innerHTML에 넣는다.
  *
  * 이름에 tree를 붙인 까닭:
  *   이 프로젝트의 JS 파일들은 모듈이 아니라 <script>로 나란히 읽히므로
- *   함수 이름이 «전부 하나의 전역 공간»을 공유한다. 다른 파일에도 _escHtml이
+ *   함수 이름이 《전부 하나의 전역 공간》을 공유한다. 다른 파일에도 _escHtml이
  *   여럿 있어서, 같은 이름을 쓰면 나중에 읽힌 파일의 것이 이겨 버린다.
  *
  * 입력: str — 임의의 문자열(null/undefined 허용)
@@ -49,7 +49,7 @@ function _treeEscHtml(str) {
 // eslint-disable-next-line no-unused-vars
 /**
  * 해석 API(L5·L6·L7)에 붙이는 권 쿼리 — 뷰어가 연 권을 그대로 쓴다.
- * 왜: 서버가 권을 «main»으로 박아 두어 다권본 둘째 권의 표점·현토·번역이 첫째 권 파일에
+ * 왜: 서버가 권을 《main》으로 박아 두어 다권본 둘째 권의 표점·현토·번역이 첫째 권 파일에
  * 들어갔다(D-127). sep는 URL에 이미 ?가 있으면 "&".
  */
 function interpPartQuery(sep = "?") {
@@ -300,7 +300,7 @@ async function _togglePart(docId, part, docInfo, headerEl, childrenEl) {
  *
  * 왜 따로 떼는가:
  *   권이 하나뿐인 문헌은 권 단계를 건너뛰고 문헌 아래에 쪽을 바로 붙인다.
- *   그때 _togglePart를 그대로 부르면 «이미 펼쳐져 있다»고 보고 곧바로 접어
+ *   그때 _togglePart를 그대로 부르면 《이미 펼쳐져 있다》고 보고 곧바로 접어
  *   버린다(문헌 노드를 펼치면서 display를 이미 비워 뒀기 때문이다).
  *   채우는 일만 하는 함수가 따로 있어야 두 경로가 같은 코드를 쓴다.
  */
@@ -495,7 +495,7 @@ function _highlightPage(pageNode) {
  * 왜 필요한가:
  *   쪽 이동은 지금까지 **트리 노드를 클릭하는 것**으로만 됐다
  *   (`_selectPage`는 docInfo와 노드를 인자로 받는 비공개 함수다).
- *   그래서 추출 패널의 «대조»·«다음 미확인 쪽» 같은 버튼이 이동을
+ *   그래서 추출 패널의 《대조》·《다음 미확인 쪽》 같은 버튼이 이동을
  *   시킬 방법이 없었다. 실제로 그 버튼들이 **조용히 아무 일도 하지
  *   않았다** — `typeof goToPage === "function"` 가드에 걸려 넘어갔기 때문에
  *   오류조차 나지 않았다.
@@ -559,7 +559,7 @@ function highlightTreePage(pageNum) {
  *   卷下를 뒤늦게 구하면 문헌을 지우고 처음부터 다시 만들어야 했고,
  *   그러면 이미 한 OCR·교정이 전부 사라졌다.
  *
- *   단권 문헌은 트리에서 권 단계를 접어 두므로(D-060) «권을 더한다»는
+ *   단권 문헌은 트리에서 권 단계를 접어 두므로(D-060) 《권을 더한다》는
  *   자리가 화면에 없다. 그래서 문헌 노드에 버튼을 둔다.
  */
 async function _addPartToDocument(docId, nodeEl, childrenEl) {

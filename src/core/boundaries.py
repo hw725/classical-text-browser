@@ -3,14 +3,14 @@
 왜 이것이 정본인가:
     v1.2.x까지 글 단위는 TextBlock(본문 복사본 + 쪽·글자 범위)이었고 경계는 그 위치의 보기였다
     (D-090). 임의 행·행 중간에 경계를 넣을 수 있게 되자(D-090 2단계) 그것이 따로 가진
-    정보는 «단위의 id·제목·상태»뿐이었고, 본문 복사본은 교감이 반영되지 않는 짐이었다.
+    정보는 《단위의 id·제목·상태》뿐이었고, 본문 복사본은 교감이 반영되지 않는 짐이었다.
     그래서 뒤집었다 — **경계 목록이 정본**이고 단위는 이 목록에서 만든 읽기 전용 보기다.
     (이름은 v1.3에서 TextBlock → 단위(unit)로 바꿨다 — D-093.)
 
 규칙 (D-092 결정):
     - 권마다 파일 하나: 원본 저장소 documents/{doc}/boundaries/{part}.json (D-097 — 그 전에는
       해석 저장소 core_entities/boundaries/{doc}__{part}.json, 처음 읽을 때 옮긴다)
-    - 항목 = «여기서 단위가 시작한다». 끝은 저장하지 않는다 — 같은 층위 이상의 다음 경계 앞까지.
+    - 항목 = 《여기서 단위가 시작한다》. 끝은 저장하지 않는다 — 같은 층위 이상의 다음 경계 앞까지.
     - 단위의 id는 시작 경계에 붙는다. 합치기 = 뒤 경계 삭제(앞 id가 남는다), 쪼개기 = 경계 삽입
       (새 id는 뒤 단위에), 옮기기 = start만 바꾼다.
     - 깊이(level)는 제한 없는 중첩이다. 역할(role: container·article·fragment)은 깊이로 어림해
@@ -65,9 +65,9 @@ def document_of(interp_path: str | Path) -> Optional[str]:
 def doc_boundaries_dir(doc_path: str | Path) -> Path:
     """경계는 **원본 저장소**에 산다 (D-097): documents/{doc}/boundaries/.
 
-    왜 L4_text/ 안이 아닌가: 경계는 L4의 일부가 아니라 L4 «위»의 구조 판단이다. L4 안에 두면
+    왜 L4_text/ 안이 아닌가: 경계는 L4의 일부가 아니라 L4 《위》의 구조 판단이다. L4 안에 두면
     재OCR·교정 되돌리기·쪽 백업(D-065)의 사정권에 들어가 「텍스트를 다시 뽑았더니 편성이
-    사라졌다」가 일어난다. 문헌 루트에 두면 «L1~L4는 원본을 층으로 나눈 것, 경계는 그 구조»가
+    사라졌다」가 일어난다. 문헌 루트에 두면 《L1~L4는 원본을 층으로 나눈 것, 경계는 그 구조》가
     폴더에서 그대로 읽힌다.
     """
     return Path(doc_path) / BOUNDARIES_DIRNAME
@@ -79,7 +79,7 @@ def doc_boundaries_file(doc_path: str | Path, part_id: str) -> Path:
 
 
 def boundaries_dir(interp_path: str | Path) -> Path:
-    """옛 자리(해석 저장소 안). 마이그레이션과 «옮길 것이 있는가» 검사에만 쓴다."""
+    """옛 자리(해석 저장소 안). 마이그레이션과 《옮길 것이 있는가》 검사에만 쓴다."""
     return Path(interp_path) / "core_entities" / BOUNDARIES_DIRNAME
 
 
@@ -163,7 +163,7 @@ def _drop_work_id(data: dict) -> int:
 
     왜: Work(저작)는 해석 저장소의 엔티티인데 경계는 문헌의 것이다(D-097) — 문헌의 데이터가
     남의 저장소 엔티티를 가리키고 있었고, 해석 저장소가 여럿이면 그중 하나만 가리켰다.
-    저작 묶음은 이제 층위 1의 «묶음(container)» 경계가 나타낸다.
+    저작 묶음은 이제 층위 1의 《묶음(container)》 경계가 나타낸다.
     출력: 버린 개수. 읽는 쪽이 `data["_dropped"]`에 담아 두고, 0보다 크면 파일을 다시 써서
     굳힌다(doc_units) — 읽기만 하고 두면 파일에는 남아 「검증 결과」 패널이 계속 짚는다
     (실측 2026-09-04). `_`로 시작하는 칸은 저장할 때 떼어 낸다.
@@ -179,7 +179,7 @@ def save_doc_boundaries(doc_path: str | Path, data: dict) -> Path:
     """검증하고 원자적으로 쓴다(write_json_atomic — D-069). 순서는 위치순으로 고정한다."""
     from core.document import write_json_atomic
 
-    # «_»로 시작하는 칸은 읽는 쪽이 붙인 메모다 — 파일에 쓰지 않는다(스키마도 거부한다)
+    # 《_》로 시작하는 칸은 읽는 쪽이 붙인 메모다 — 파일에 쓰지 않는다(스키마도 거부한다)
     data = {k: v for k, v in data.items() if not k.startswith("_")}
     data["boundaries"] = sorted(data.get("boundaries") or [], key=sort_key)
     validate(data)
@@ -194,7 +194,7 @@ def git_commit_boundaries(doc_path: str | Path, message: str) -> dict:
 
     왜: 파일이 그 저장소에 있기 때문이다. 해석 저장소에 커밋하면 아무것도 담기지 않은
     빈 커밋이 되거나(변경 없음) 커밋 자체가 나지 않아, 편성을 고쳐도 이력이 남지 않는다.
-    해석 저장소는 base_commit으로 이 커밋을 가리켜 «어느 편성을 보고 해석했는가»를 남긴다.
+    해석 저장소는 base_commit으로 이 커밋을 가리켜 《어느 편성을 보고 해석했는가》를 남긴다.
     """
     from core.document import git_commit_document
 
@@ -219,7 +219,7 @@ def save_boundaries(interp_path: str | Path, data: dict) -> Path:
     """검증하고 원자적으로 쓴다(write_json_atomic — D-069). 순서는 위치순으로 고정한다."""
     from core.document import write_json_atomic
 
-    # «_»로 시작하는 칸은 읽는 쪽이 붙인 메모다 — 파일에 쓰지 않는다(스키마도 거부한다)
+    # 《_》로 시작하는 칸은 읽는 쪽이 붙인 메모다 — 파일에 쓰지 않는다(스키마도 거부한다)
     data = {k: v for k, v in data.items() if not k.startswith("_")}
     data["boundaries"] = sorted(data.get("boundaries") or [], key=sort_key)
     validate(data)
@@ -294,7 +294,7 @@ class LineIndex:
     def __init__(self, lines):
         self.keys: list[tuple[int, int]] = [(ln.page, ln.line_index) for ln in lines]
         self.pos: dict[tuple[int, int], int] = {k: i for i, k in enumerate(self.keys)}
-        # 쪽 → 그 쪽의 마지막 행 번호(stale 끝 경계를 «그 쪽 앞까지»로 자를 때)
+        # 쪽 → 그 쪽의 마지막 행 번호(stale 끝 경계를 《그 쪽 앞까지》로 자를 때)
         self.last_of_page: dict[int, int] = {}
         for i, (page, _li) in enumerate(self.keys):
             self.last_of_page[page] = i
@@ -397,7 +397,7 @@ def compute_units(
                 "kind": b.get("kind"),
                 "level": int(b.get("level", 2)),
                 "role": b.get("role") or role_for_level(int(b.get("level", 2))),
-                # 파일에 실제 값이 없어 깊이로 어림한 것인가. 화면이 «(추정)»으로 표시한다 —
+                # 파일에 실제 값이 없어 깊이로 어림한 것인가. 화면이 《(추정)》으로 표시한다 —
                 # 값을 파일에 적어 굳히지 않는 이유는, 그러면 사람이 정한 것과 구별되지 않고
                 # 나중에 추정 규칙이 좋아져도 옛 데이터가 따라오지 않기 때문이다.
                 "role_estimated": not b.get("role"),
@@ -546,7 +546,7 @@ def find_at(data: dict, start: dict, level: int) -> Optional[dict]:
 def insert_boundary(data: dict, item: dict) -> dict:
     """경계를 넣는다. 같은 자리·같은 층위에 이미 살아 있는 경계가 있으면 **그것을 돌려준다**.
 
-    왜: 경계 제안을 두 번 «선택 적용»하면 같은 자리에 경계가 둘 생겨 빈 단위와 겹친 항목이
+    왜: 경계 제안을 두 번 《선택 적용》하면 같은 자리에 경계가 둘 생겨 빈 단위와 겹친 항목이
     트리에 두 번 떴다(운양집 실측 2026-09-03, 77 → 148). 같은 자리는 같은 단위이므로 두 번 넣는
     것은 아무 일도 아니어야 한다 — 먼저 있던 id가 남고, 관계·태그가 가리키는 id도 그것이다.
     """

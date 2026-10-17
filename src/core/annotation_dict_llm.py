@@ -11,7 +11,7 @@ Stage 4 (reviewed): 사람이 검토하여 확정 (코드 개입 없음, UI에�
 일괄 생성 모드: 원문+번역이 모두 준비된 경우 Stage 3으로 직행.
 
 v2(2026-09-12, D-019 덧붙임): 항목에 범주(category 11종)·범위(scope)·학술 해설(sense_note)이 붙는다.
-사용자가 바깥에서 쓰던 «전문 한문학자» 프롬프트(15개 내외·범주·scope·sense_note)를 옮긴 것이다.
+사용자가 바깥에서 쓰던 《전문 한문학자》 프롬프트(15개 내외·범주·scope·sense_note)를 옮긴 것이다.
 주석 type(person·place·term…)은 category에서 코드가 정한다 — 모델에게 같은 것을 두 번 묻지 않는다.
 """
 
@@ -123,11 +123,11 @@ def type_for(raw_type, category) -> str:
 
 
 class GeneratedAnnotations(list):
-    """생성 결과 목록 — list 그대로 쓰되 «어떻게 읽었는지»(diagnostics)를 붙인다.
+    """생성 결과 목록 — list 그대로 쓰되 《어떻게 읽었는지》(diagnostics)를 붙인다.
 
     왜 list 하위형인가: 라우터·시험·병합이 이 결과를 list로 다룬다. 반환형을 바꾸면 그 전부가
     깨지므로, list인 채로 진단만 얹는다. 라우터는 `getattr(result, "diagnostics", None)`으로 읽어
-    응답에 실고, 화면이 «완료»와 «부분 완료(잘린 답·거부 항목)»를 가른다(⑦).
+    응답에 실고, 화면이 《완료》와 《부분 완료(잘린 답·거부 항목)》를 가른다(⑦).
     """
 
     def __init__(self, items=(), diagnostics: dict | None = None):
@@ -627,7 +627,7 @@ async def generate_stage3_from_both(
     results = []
     deleted = 0
     for raw in raw_annotations:
-        # "deleted": true인 항목은 건너뜀 — 모델이 «지워라»고 표시한 것이라 거부가 아니다
+        # "deleted": true인 항목은 건너뜀 — 모델이 《지워라》고 표시한 것이라 거부가 아니다
         if isinstance(raw, dict) and raw.get("deleted"):
             deleted += 1
             continue

@@ -1,8 +1,8 @@
-"""편성 ③ «바뀐 것»과 「적용」이 같은 것을 세는가 (2026-10-05, D-121 후속).
+"""편성 ③ 《바뀐 것》과 「적용」이 같은 것을 세는가 (2026-10-05, D-121 후속).
 
 무엇을 고정하는가:
-  - «바뀐 것»은 **체크한 행**에서 나온다. 저장된 경계가 없을 때 판정의 확신 후보(accept)를 세던
-    옛 식은, 애매한 후보(escalate)를 「판정 들이기」·손으로 체크하면 «새로 잡히는 자리 27»인데
+  - 《바뀐 것》은 **체크한 행**에서 나온다. 저장된 경계가 없을 때 판정의 확신 후보(accept)를 세던
+    옛 식은, 애매한 후보(escalate)를 「판정 들이기」·손으로 체크하면 《새로 잡히는 자리 27》인데
     「적용」은 45개를 쓰는 어긋남을 냈다(headless 확인).
   - 미리 보기 숫자 == 실제 서버가 쓴 수. 화면 함수 `_planApply`의 구간을 **진짜 apply 라우트**에
     보내 `new`·`removed`가 미리 보기와 같은지 본다 — 저장된 경계가 (a) 없을 때 (b) 있고 일부 체크를
@@ -74,7 +74,7 @@ def test_preview_counts_checked_not_accepted_when_nothing_saved(client, tmp_path
         p["accepted"] = False
         p["band"] = "escalate"
     body = """
-      // 모든 후보 체크(애매한 것 둘 포함) — 「판정 들이기」가 «예»를 체크한 것과 같은 상태
+      // 모든 후보 체크(애매한 것 둘 포함) — 「판정 들이기」가 《예》를 체크한 것과 같은 상태
       for (const p of data.proposals) proposeState.checked.add(_propKey(p));
       const plan = _planApply(data, proposeState.checked, compState.currentBoundaries);
       const accepted = data.proposals.filter((p) => p.accepted).length;
@@ -147,7 +147,7 @@ def test_preview_matches_apply_with_saved_boundaries_some_unchecked(client, tmp_
 
 
 def test_hiding_second_no_does_not_change_preview(tmp_path):
-    """2차 «아니오» 가림은 체크를 건드리지 않는다 — 같은 체크면 같은 미리 보기."""
+    """2차 《아니오》 가림은 체크를 건드리지 않는다 — 같은 체크면 같은 미리 보기."""
     data = {
         "lines": [{"page": 1, "line_index": i, "text": f"行{i}"} for i in range(6)],
         "proposals": [
@@ -183,7 +183,7 @@ def test_hiding_second_no_does_not_change_preview(tmp_path):
     # 체크 2(확신 1 + 2차 예 1) — accept만 세던 옛 식이면 1이었다
     assert got == {"a": 2, "b": 2, "spans": 2}
 
-    # 위 실행은 _planApply가 손잡이를 읽지 않는다는 것만 잰다. «가림은 표시일 뿐»의 나머지 반 —
+    # 위 실행은 _planApply가 손잡이를 읽지 않는다는 것만 잰다. 《가림은 표시일 뿐》의 나머지 반 —
     # 표시 루프가 가리면서 체크를 바꾸지 않는가 — 은 그 줄을 직접 본다(2026-10-11 전수, B-035).
     from tests.js_harness import STATIC_JS
 

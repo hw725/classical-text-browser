@@ -344,7 +344,7 @@ async function loadPageCorrections(docId, partId, pageNum) {
     //
     // 쪽을 빠르게 옮기면 요청이 순서대로 돌아오지 않는다. 3쪽 요청이
     // 5쪽 요청보다 늦게 도착하면 화면에는 5쪽인데 내용은 3쪽이 된다.
-    // «텍스트가 뜨기도 하고 안 뜨기도 한다»의 실체가 이것이었다.
+    // 《텍스트가 뜨기도 하고 안 뜨기도 한다》의 실체가 이것이었다.
     if (
       viewerState.docId !== docId ||
       viewerState.partId !== partId ||
@@ -418,8 +418,8 @@ async function loadPageCorrections(docId, partId, pageNum) {
     // Git 이력도 로드
     _loadGitLog(docId);
 
-    // 추출 모드에서는 이 화면이 곧 검수 화면이다. 확인 표시와 «다음 미확인
-    // 쪽»을 여기에 띄워, 쪽마다 열람 탭으로 돌아가지 않아도 되게 한다.
+    // 추출 모드에서는 이 화면이 곧 검수 화면이다. 확인 표시와 《다음 미확인
+    // 쪽》을 여기에 띄워, 쪽마다 열람 탭으로 돌아가지 않아도 되게 한다.
     // (교감 모드에서는 이 함수가 스스로 아무것도 하지 않는다.)
     if (typeof refreshCorrectionReviewBar === "function") {
       refreshCorrectionReviewBar(pageNum);
@@ -605,7 +605,7 @@ function _applyCorrectionsLocally(original, corrections) {
 
   // char_index 역순 정렬 (뒤에서부터 치환해야 인덱스가 밀리지 않음).
   // 같은 자리는 글자 교정 보기(_renderCharsIntoElement)가 그리는 것과 같게 (2026-10-05 검토 지적):
-  //   넣기는 «그 자리 글자 앞», 바꾸기는 «그 자리 글자»라 둘 다 먹는다 → 바꾸기를 먼저 한다
+  //   넣기는 《그 자리 글자 앞》, 바꾸기는 《그 자리 글자》라 둘 다 먹는다 → 바꾸기를 먼저 한다
   //   (넣기를 먼저 하면 넣은 글이 그 자리에 와서 바꾸기가 원문 확인에 실패해 빠졌다).
   //   넣기 여럿은 목록 순서대로 보이게 뒤의 것부터, 바꾸기 여럿은 앞의 것이 이기게 앞의 것부터.
   //   서버 _apply_corrections_to_text와 같은 순서다.
@@ -783,11 +783,11 @@ function _renderCharsIntoElement(parent, text, globalStartIdx, blockType) {
   // 교정이 덮는 범위를 먼저 표로 만든다.
   //
   // 왜 이렇게 하는가 (2026-10-02 사고):
-  //   예전에는 «교정의 첫 글자 자리에서 그 글자 하나만 바꿔 그리기»만 했다.
+  //   예전에는 《교정의 첫 글자 자리에서 그 글자 하나만 바꿔 그리기》만 했다.
   //   자유 편집이 만드는 교정은 넣기(원문 ""), 지우기(교정 ""), 여러 글자·줄바꿈을
   //   한꺼번에 바꾸기다. 그래서 넣기는 원문 글자를 가리고, 지우기는 아무것도
   //   지우지 않고, 여러 글자 바꾸기는 둘째 글자부터 원문이 그대로 남았다 —
-  //   저장은 됐는데 화면은 «교정 전으로 되돌아간» 것처럼 보였다.
+  //   저장은 됐는데 화면은 《교정 전으로 되돌아간》 것처럼 보였다.
   //   이제 원문 범위 [char_index, char_index + 원문 길이)를 통째로 교정문으로
   //   바꿔 그리고, 넣기는 그 자리 앞에 끼워 그린다.
   const cs = _corrChars(text); // 코드포인트 — data-idx·char_index가 서버와 같은 자
@@ -865,7 +865,7 @@ function _renderCharsIntoElement(parent, text, globalStartIdx, blockType) {
 }
 
 /**
- * 한 구간(segment)에 걸리는 평면 교정(block_id·line 없음)을 «시작 자리 → 교정»으로 정리한다.
+ * 한 구간(segment)에 걸리는 평면 교정(block_id·line 없음)을 《시작 자리 → 교정》으로 정리한다.
  *
  * 입력: startIdx — 구간 시작의 전체 텍스트 인덱스, length — 구간 길이.
  * 출력: {starts: Map(시작 자리 → 교정 인덱스), inserts: Map(자리 → [교정 인덱스…])}
@@ -918,7 +918,7 @@ function _onCharClick(
   blockType,
   existingCorrIdx,
 ) {
-  // «경계 넣기»의 찍기가 켜져 있으면 교정이 아니라 자리 잡기다 (D-094 다음)
+  // 《경계 넣기》의 찍기가 켜져 있으면 교정이 아니라 자리 잡기다 (D-094 다음)
   if (
     typeof pickBoundaryFromCorrectionChar === "function" &&
     pickBoundaryFromCorrectionChar(globalIdx)
@@ -1304,7 +1304,7 @@ async function _saveCorrections() {
     }
 
     if (typedDuringSave) {
-      // 저장하는 사이에 더 고친 글이 있다 — «저장됨»이라고 말하지 않는다
+      // 저장하는 사이에 더 고친 글이 있다 — 《저장됨》이라고 말하지 않는다
       correctionState.isDirty = true;
       _updateCorrSaveStatus("modified");
     } else {
@@ -1356,7 +1356,7 @@ async function _resetAllCorrections() {
   )) return;
 
   // 교정 배열을 비우고 서버에 빈 배열로 저장.
-  // 자유 편집 모드의 저장은 «지금 글»(corrected_text)을 보내 서버가 diff로 교정을 만든다 — 글을
+  // 자유 편집 모드의 저장은 《지금 글》(corrected_text)을 보내 서버가 diff로 교정을 만든다 — 글을
   // 원문으로 되돌려 두지 않으면 리셋이 지금 교정을 그대로 다시 저장했다(2026-10-11 전수)
   // 저장이 실패하면 리셋 전으로 되돌린다 — 되돌리지 않으면 화면은 옛 교정을 보이는데 상태는 비어,
   // 다음 저장이 교정을 말없이 지웠다(2026-10-11 재확인)

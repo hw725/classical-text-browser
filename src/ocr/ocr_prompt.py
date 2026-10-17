@@ -13,7 +13,7 @@
     2. 문헌 지침   — bibliography.json + manifest.ocr_guidance 에서 자동 생성
     3. 블록 지침   — block_type 에 따른 한 줄 (resources/block_types.json)
     4. 자형 주의   — 문헌별 승인 이체자 쌍 (D-080). 정규화 지시가 아니라 주의 목록
-    5. 앵커        — 같은 블록의 엔진 결과. «참고만 하라»
+    5. 앵커        — 같은 블록의 엔진 결과. 《참고만 하라》
 
 규칙은 짧게 둔다. 1순위 프로바이더가 소형 로컬 모델이라 긴 규칙 목록에서
 지시 준수가 떨어진다. 효과가 더 확실한 앵커와 블록 종류에 투자한다.
@@ -155,7 +155,7 @@ def _read_json_or_none(path: Path) -> Optional[dict]:
 
 # ─── 3. 블록 지침 ────────────────────────────────────────────────
 
-# block_types.json 의 설명은 «무엇인가»를 말한다. 여기서는 «어떻게 읽는가»를
+# block_types.json 의 설명은 《무엇인가》를 말한다. 여기서는 《어떻게 읽는가》를
 # 덧붙인다. 읽는 법이 특별한 종류만 적고, 나머지는 설명만 쓴다.
 _BLOCK_READING_HINTS = {
     "annotation": "작은 글자가 쌍행(두 줄)으로 배열되어 있으면 오른쪽 줄을 먼저, "
@@ -199,7 +199,7 @@ def build_block_guidance(block_type: Optional[str]) -> str:
     label = info["label"] if info else block_type
     desc = (info["description"] if info else "").strip()
     hint = _BLOCK_READING_HINTS.get(block_type, "")
-    text = f"이 영역은 «{label}»입니다."
+    text = f"이 영역은 《{label}》입니다."
     if desc:
         text += f" {desc}"
     if hint:
@@ -213,12 +213,12 @@ MAX_VARIANT_HINTS = 30
 
 
 def build_variant_hints(pairs: Optional[list]) -> str:
-    """이체자 쌍 목록을 «주의 목록» 문장으로 만든다.
+    """이체자 쌍 목록을 《주의 목록》 문장으로 만든다.
 
     입력: pairs — [["說","説"], ...] 또는 ["說/説", ...]. None·빈 목록이면 빈 문자열.
     출력: 한 문단. 상위 MAX_VARIANT_HINTS 개까지만.
 
-    정규화 지시가 **아니다.** «이 둘은 헷갈리기 쉬우니 자형을 다시 보라»는 주의다.
+    정규화 지시가 **아니다.** 《이 둘은 헷갈리기 쉬우니 자형을 다시 보라》는 주의다.
     「臺가 맞다」고 배운 모델이 원본의 台를 臺로 바꾸는 과교정이 D-080이 막으려는
     것이다. 문장이 그 뜻을 명시한다.
     """
@@ -260,7 +260,7 @@ def build_user_prompt(
       block_type        — L3 블록 종류. 없으면 블록 지침 생략.
       doc_guidance      — build_document_guidance() 결과. 없으면 생략.
       variant_hints     — 이체자 쌍 목록. 없으면 생략.
-      anchor_text       — 같은 블록의 엔진 OCR 결과. 있으면 «참고만» 으로 첨부.
+      anchor_text       — 같은 블록의 엔진 OCR 결과. 있으면 《참고만》 으로 첨부.
       context_before/after — 앞뒤 블록·쪽의 텍스트. 정밀 판독(D-082 2단계)에서 쓴다.
     출력: 문자열. 비어 있는 조각은 자리 자체가 빠진다.
     """
@@ -311,7 +311,7 @@ def parse_uncertainty(text: str) -> tuple[str, list[float]]:
     L4와 PDF 텍스트 레이어에서 단어가 붙어 버린다. 신뢰도 목록은 공백을 건너뛴 글자
     순서다(엔진의 글자 목록이 공백을 세지 않기 때문). 마커가 문장 맨 앞에
     오면(붙일 글자가 없으면) 버린다. 마커 문자열 자체는 어떤 경우에도 텍스트에
-    남지 않는다 — 남으면 PDF 텍스트 레이어에 «[?]»가 구워진다.
+    남지 않는다 — 남으면 PDF 텍스트 레이어에 《[?]》가 구워진다.
     """
     chars: list[str] = []
     confs: list[float] = []

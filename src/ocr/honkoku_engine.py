@@ -150,7 +150,7 @@ class HonkokuOcrEngine(BaseOcrEngine):
 
     @staticmethod
     def _model_setup_error() -> type[BaseException]:
-        """`honkoku_ocr.ModelSetupError`를 가져온다. 패키지가 없으면 «결코 맞지 않는» 대역.
+        """`honkoku_ocr.ModelSetupError`를 가져온다. 패키지가 없으면 《결코 맞지 않는》 대역.
 
         출력: except 절에 쓸 예외 클래스.
 

@@ -13,7 +13,7 @@
   - **zip으로 받은 폴더도 새 판을 안다.** `.git`이 없으면 git 사본으로 바꾼다(파일은 그대로,
     HEAD·index만 원격 main) — 그 뒤로는 커밋으로 비교하고 「받기」가 된다(D-112).
     바꾼 순간의 파일 지문을 표시 파일에 적어 두고, 그 뒤 사용자가 고친 파일이 있으면 zip 사본이라도
-    덮지 않는다(2026-10-11 — 그 전에는 zip 사본의 차이를 모두 «옛 파일»로 보고 덮었다).
+    덮지 않는다(2026-10-11 — 그 전에는 zip 사본의 차이를 모두 《옛 파일》로 보고 덮었다).
 
 되돌릴 수 없는 판: 릴리스 본문에 「되돌릴 수 없는 변화 — 있음」이 있으면 그 사실을 함께
 돌려준다. 화면이 그것을 보여 주고 동의를 받은 뒤에만 받게 하기 위해서다(D-092·D-097처럼
@@ -29,7 +29,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-# CJK Text Contract E3 — 한국어 Windows 콘솔은 cp949 라 «—»·«✓» 를 print 하면
+# CJK Text Contract E3 — 한국어 Windows 콘솔은 cp949 라 《—》·《✓》 를 print 하면
 # UnicodeEncodeError 로 즉사한다. 이 PC 는 PYTHONUTF8=1 이 박혀 있어 겪지 않는다.
 # 고정은 글을 찍는 진입점(auto_update_cli) 맨 앞에서 한다 — 예전에는 import하는 순간 불러,
 # 이 모듈을 쓰는 서버 프로세스의 stdout·stderr까지 다시 열었다(2026-10-11 전수).
@@ -41,8 +41,8 @@ REPO = "hw725/classical-text-browser"
 RELEASES_URL = f"https://api.github.com/repos/{REPO}/releases/latest"
 REMOTE_URL = f"https://github.com/{REPO}.git"
 _TIMEOUT = 6.0
-# zip 폴더를 git 사본으로 바꾼 뒤 «아직 원격에 맞추지 않았다»는 표시(JSON — 바꾼 순간의 파일 지문).
-# 「받기」는 지문과 견줘 그 뒤 사용자가 고친 파일이 없을 때만 reset --hard로 원격에 맞춘다
+# zip 폴더를 git 사본으로 바꾼 뒤 《아직 원격에 맞추지 않았다》는 표시(JSON — 바꾼 순간의 파일
+# 지문). 「받기」는 지문과 견줘 그 뒤 사용자가 고친 파일이 없을 때만 reset --hard로 원격에 맞춘다
 # (zip_user_changes). 지문이 없는 옛 표시면 다른 파일을 설정 폴더에 남긴 뒤 맞춘다(_keep_zip_files).
 ZIP_MARK = ".ctb-from-zip"
 
@@ -56,7 +56,7 @@ def current_version() -> str:
     """지금 판 번호 — **pyproject.toml**에서 읽는다.
 
     dist-info는 실행 인터프리터의 것이라, GPU PC(.venv-gpu로 뜸)에서는 uv sync가 갱신하는 .venv와
-    어긋나 «새 판 있음»이 영원히 켜졌다(리뷰 실측: .venv-gpu 1.2.1 vs pyproject 1.3.0).
+    어긋나 《새 판 있음》이 영원히 켜졌다(리뷰 실측: .venv-gpu 1.2.1 vs pyproject 1.3.0).
     """
     try:
         import tomllib
@@ -76,7 +76,7 @@ def current_version() -> str:
 
 
 def _as_tuple(v: str) -> tuple:
-    """«1.3.0» → (1,3,0). 견줄 수 없는 값은 (-1,)로 뒤로 보낸다."""
+    """《1.3.0》 → (1,3,0). 견줄 수 없는 값은 (-1,)로 뒤로 보낸다."""
     parts = v.strip().lstrip("vV").split("-")[0].split(".")
     try:
         return tuple(int(x) for x in parts)
@@ -125,7 +125,7 @@ def check(timeout: float = _TIMEOUT) -> dict:
             "update_available": bool(latest) and _as_tuple(latest) > _as_tuple(cur),
         }
     )
-    # 같은 판 번호 안에서 고친 것 — 태그를 옮겨 다시 낸 경우. 번호만 보면 «최신»이라 받지 못한다
+    # 같은 판 번호 안에서 고친 것 — 태그를 옮겨 다시 낸 경우. 번호만 보면 《최신》이라 받지 못한다
     # (2026-09-05, v1.3.0을 유지한 채 고친 판을 다른 PC가 받지 못한 보고). 커밋을 비교한다.
     # zip 폴더면 먼저 git 사본으로 바꾼다 — 그래야 비교할 것이 생긴다(D-112).
     if not is_git_checkout():
@@ -137,7 +137,7 @@ def check(timeout: float = _TIMEOUT) -> dict:
             if zip_differs():
                 out["update_available"] = True
                 out["same_version"] = True
-                out["commits_behind"] = None  # zip에는 커밋이 없어 «몇 건»은 모른다
+                out["commits_behind"] = None  # zip에는 커밋이 없어 《몇 건》은 모른다
                 out["from_zip"] = True
         else:
             behind = commits_behind()
@@ -151,12 +151,12 @@ def check(timeout: float = _TIMEOUT) -> dict:
 def commits_behind(timeout: int = 30) -> int:
     """원격 main에 있고 여기에는 없는 커밋 수. 네트워크가 없거나 git이 아니면 0.
 
-    히스토리를 다시 쓴 뒤(강제 푸시)에는 «뒤처짐»이 아니라 «갈라짐»이다 — 그것도 받을 것으로
+    히스토리를 다시 쓴 뒤(강제 푸시)에는 《뒤처짐》이 아니라 《갈라짐》이다 — 그것도 받을 것으로
     센다(사용자는 커밋을 만들지 않으므로 갈라짐은 곧 원격이 새로 쓴 것이다).
     """
     root = app_root()
     try:
-        # main이 아닌 브랜치(개발 중)에서는 «뒤처짐»을 세지 않는다 — 언제나 뒤처진 것으로 보인다.
+        # main이 아닌 브랜치(개발 중)에서는 《뒤처짐》을 세지 않는다 — 언제나 뒤처진 것으로 보인다.
         code, branch = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], root, timeout)
         if code != 0 or branch.strip() != "main":
             return 0
@@ -214,10 +214,10 @@ def ensure_git_checkout(
     출력: {"ok", "converted", "reason"}.
     하는 일: git init → origin 추가 → main 받기(depth 50) → HEAD·index만 origin/main으로
     (`git reset --mixed`). 작업 트리는 zip 그대로라, 그 뒤 `git status`가 보여 주는 차이가
-    곧 «zip 시점 이후 바뀐 것»이다. ZIP_MARK를 남겨 「받기」가 그 차이를 사용자 수정으로
+    곧 《zip 시점 이후 바뀐 것》이다. ZIP_MARK를 남겨 「받기」가 그 차이를 사용자 수정으로
     오해하지 않게 한다.
-    왜: 설치 안내가 zip → install.bat이라 다른 PC에는 .git이 없었고, 판 번호가 같으면 «최신»으로만
-    보였다(2026-09-06 보고 — «커밋이 바뀌어도 업데이트가 안 된다»).
+    왜: 설치 안내가 zip → install.bat이라 다른 PC에는 .git이 없었고, 판 번호가 같으면 《최신》으로만
+    보였다(2026-09-06 보고 — 《커밋이 바뀌어도 업데이트가 안 된다》).
     """
     root = root or app_root()
     if is_git_checkout(root):
@@ -276,7 +276,7 @@ def zip_user_changes(root: Path | None = None) -> list[str] | None:
     바꿀 때 지문을 적지 않은 옛 표시(2026-10-11 전)면 None(판단할 수 없음 — apply_update가
     그 경우 다른 파일을 덮기 전에 _keep_zip_files로 남긴다).
 
-    왜(2026-10-11 전수): zip 사본의 «차이»는 zip 시점의 옛 파일이라 가정하고 묻지 않고
+    왜(2026-10-11 전수): zip 사본의 《차이》는 zip 시점의 옛 파일이라 가정하고 묻지 않고
     reset --hard 했다. 그런데 표시는 처음 확인 때 생기고 실제 받기 때까지 남으므로, 그 사이
     사용자가 고친 파일이 다음 서버 시작 때 조용히 덮였다. 바꾼 순간의 지문과 견준다.
     """
@@ -288,7 +288,7 @@ def zip_user_changes(root: Path | None = None) -> list[str] | None:
         return None
     import hashlib
 
-    # 적어 둔 경로를 그대로 다시 잰다 — 지금 index로 재면 새 판에서 빠진 경로가 «고침»으로 잡힌다
+    # 적어 둔 경로를 그대로 다시 잰다 — 지금 index로 재면 새 판에서 빠진 경로가 《고침》으로 잡힌다
     out = []
     for rel, h in before.items():
         p = root / rel
@@ -302,8 +302,8 @@ def _keep_zip_files(root: Path | None = None) -> Path | None:
 
     출력: 남긴 폴더(없으면 None).
 
-    왜: 지문이 없는 옛 zip 표시는 «zip 시점의 옛 파일»과 «그 뒤 사용자가 고친 파일»을 가를 수
-    없다. 묻지 않고 덮으면 고친 것이 사라지고(2026-10-11 재확인 — None을 «고친 것 없음»으로
+    왜: 지문이 없는 옛 zip 표시는 《zip 시점의 옛 파일》과 《그 뒤 사용자가 고친 파일》을 가를 수
+    없다. 묻지 않고 덮으면 고친 것이 사라지고(2026-10-11 재확인 — None을 《고친 것 없음》으로
     읽었다), 받지 않으면 그 PC는 영영 새 판을 못 받는다. 그래서 덮기 전에 남긴다.
     """
     root = root or app_root()
@@ -349,17 +349,17 @@ def _copy_to_update_backup(root: Path, rels: list[str]) -> Path | None:
 
 
 def _keep_untracked_collisions(root: Path, ref: str = "origin/main") -> tuple[bool, Path | None]:
-    """`reset --hard <ref>`가 덮거나 지울 «추적 밖» 파일을 먼저 update-backup/에 남긴다.
+    """`reset --hard <ref>`가 덮거나 지울 《추적 밖》 파일을 먼저 update-backup/에 남긴다.
 
     입력: root — 앱 뿌리, ref — 맞출 커밋.
     출력: (ok, 남긴 폴더 또는 None). ok가 False면 무엇이 덮일지 알 수 없거나 남기지 못한 것이다 —
-    호출부는 reset을 하지 않는다(조회 실패를 «충돌 없음»으로 읽으면 묻지 않고 덮게 된다).
+    호출부는 reset을 하지 않는다(조회 실패를 《충돌 없음》으로 읽으면 묻지 않고 덮게 된다).
 
     겹치는 모양 셋: 새 판의 파일 경로에 추적 밖 파일이 있다 / 새 판의 파일 경로가 지금은 추적 밖
     폴더다(그 안의 파일이 지워진다) / 새 판 경로의 조상이 지금은 추적 밖 파일이다
     (그 파일이 지워진다).
 
-    왜(2026-10-11 Codex 리뷰): zip 지문은 바꿀 때의 «추적» 파일만 적는다. 그 뒤 사용자가 만든
+    왜(2026-10-11 Codex 리뷰): zip 지문은 바꿀 때의 《추적》 파일만 적는다. 그 뒤 사용자가 만든
     파일을 새 판이 같은 경로로 추적하기 시작하면, 지문 검사에도 working_tree_dirty(추적 밖은
     세지 않음)에도 걸리지 않고 `reset --hard`가 묻지 않고 덮었다. pull은 이런 파일을 거부하지만
     reset --hard는 거부하지 않는다. 받기는 막지 않고(그러면 영영 못 받는다) 덮기 전에 남긴다.
@@ -467,7 +467,7 @@ def apply_update() -> dict:
         }
     try:
         return _apply_update_locked(root, steps, sync_args)
-    except Exception as e:  # noqa: BLE001 — 500으로 새면 화면은 «받지 못했습니다»조차 못 보여 준다
+    except Exception as e:  # noqa: BLE001 — 500으로 새면 화면은 《받지 못했습니다》조차 못 보여 준다
         steps.append({"name": "업데이트", "ok": False, "output": f"{type(e).__name__}: {e}"[:2000]})
         return {
             "ok": False,
@@ -508,7 +508,7 @@ def _note_kept_collisions(root: Path, steps: list[dict]) -> bool:
 
 def _apply_update_locked(root: Path, steps: list[dict], sync_args) -> dict:
     if from_zip(root):
-        # zip에서 바꾼 사본: 파일을 원격 main에 맞추는 것이 곧 «받기»다
+        # zip에서 바꾼 사본: 파일을 원격 main에 맞추는 것이 곧 《받기》다
         for name, args in (
             ("원격 main 받기 (git fetch)", ["git", "fetch", "-q", "origin", "main"]),
             (
@@ -546,7 +546,7 @@ def _apply_update_locked(root: Path, steps: list[dict], sync_args) -> dict:
                 if code == 0:
                     rc1, branch = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], root, 30)
                     rc2, ahead = _run(["git", "rev-list", "--count", "origin/main..HEAD"], root, 30)
-                    # 조회가 실패하면(rc≠0·빈 출력) «로컬 커밋 없음»으로 보지 않는다 —
+                    # 조회가 실패하면(rc≠0·빈 출력) 《로컬 커밋 없음》으로 보지 않는다 —
                     # 맞추지 않는다.
                     checks_ok = rc1 == 0 and rc2 == 0 and ahead.strip().isdigit()
                     if not checks_ok or branch.strip() != "main" or ahead.strip() != "0":

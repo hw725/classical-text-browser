@@ -76,7 +76,7 @@ def _get_resources_dir() -> str:
         for src in sorted(glob_mod.glob(os.path.join(_app_resources_dir(), "variant_*.json"))):
             seed = os.path.join(target, os.path.basename(src))
             if not os.path.exists(seed):
-                # 복사 도중 죽으면 반쪽짜리 사전이 «있는 것»으로 남는다 — 고유한 임시 파일로
+                # 복사 도중 죽으면 반쪽짜리 사전이 《있는 것》으로 남는다 — 고유한 임시 파일로
                 # 받아 갈아 끼운다.
                 fd, tmp = tempfile.mkstemp(dir=target, prefix=os.path.basename(src), suffix=".tmp")
                 os.close(fd)
@@ -600,8 +600,8 @@ async def api_delete_pair_from_dict(name: str, body: VariantPairRequest):
 
 # ── 문헌별 이체자 승인 (D-080 결정 3) ──
 #
-# 넓은 사전(loose)·문자 체계 사전(script)에만 있는 쌍을 사람이 «이 문헌에서는 같은
-# 글자»로 승인하면 그 문헌 안에서만 strict로 승격된다. 전역 사전으로 올라가지 않는다.
+# 넓은 사전(loose)·문자 체계 사전(script)에만 있는 쌍을 사람이 《이 문헌에서는 같은
+# 글자》로 승인하면 그 문헌 안에서만 strict로 승격된다. 전역 사전으로 올라가지 않는다.
 # A 문헌의 승인이 B 문헌의 판정을 바꾸면 안 되기 때문이다.
 
 

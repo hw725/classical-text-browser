@@ -4,7 +4,7 @@
 네트워크에 닿을 수 있는 자리는 전부 가짜 opener·가짜 클라이언트로 막는다. 지키는 것은 넷이다.
 ① TypeSafe 키가 OpenRouter 주소로 나가지 않는다(키 이름 격리).
 ② 기본 주소·모델이 측정한 그 길이다.
-③ 주 모델(Jev) 호출이 실패하면 «그 호출만» decider가 대신 답하고, 누가 답했는지 meta에 남는다.
+③ 주 모델(Jev) 호출이 실패하면 《그 호출만》 decider가 대신 답하고, 누가 답했는지 meta에 남는다.
 ④ 문턱은 답한 모델의 것을 쓴다 — decider v1.1 0.997/0.69, Jev 0.85/0.5.
 """
 
@@ -68,7 +68,7 @@ def _opener(seen: list):
 
 # ── ① 키 격리 ──────────────────────────────────────────────────────────────
 def test_typesafe_key_is_never_sent_to_openrouter(isolated_keys, monkeypatch):
-    """TypeSafe 키만 있으면 OpenRouter 클라이언트는 «키 없음»이다 — 남의 키를 빌리지 않는다."""
+    """TypeSafe 키만 있으면 OpenRouter 클라이언트는 《키 없음》이다 — 남의 키를 빌리지 않는다."""
     monkeypatch.setenv("TYPESAFE_API_KEY", "ts-secret")
     isolated_keys.write_text("TYPESAFE_API_KEY=ts-file\nJEV_API_KEY=jev-file\n", encoding="utf-8")
     c = OpenRouterDecisionClient()

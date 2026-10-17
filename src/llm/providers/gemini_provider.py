@@ -148,7 +148,7 @@ class GeminiProvider(BaseLlmProvider):
         # 사고 예산을 답변 예산에 더한다 (D-083) — 비전 경로와 같은 회계.
         # 텍스트 경로가 이것을 빠뜨려서, 목차 구조화(D-089)에서 2.5 flash가 기본 사고로
         # max_output_tokens 4096을 삼키고 한 쪽(30행)의 JSON도 잘렸다(실측 2026-09-03).
-        # JSON을 요구하는 호출은 think를 지정하지 않았으면 «끔»으로 본다 — 기본 사고 끔(D-074).
+        # JSON을 요구하는 호출은 think를 지정하지 않았으면 《끔》으로 본다 — 기본 사고 끔(D-074).
         think, thinking_budget = thinking_options(kwargs)
         if think is None and response_format == "json":
             think, thinking_budget = False, 0
@@ -241,7 +241,7 @@ class GeminiProvider(BaseLlmProvider):
         # 사고 예산을 답변 예산에 더한다 (D-083) — 비전 경로와 같은 회계.
         # 텍스트 경로가 이것을 빠뜨려서, 목차 구조화(D-089)에서 2.5 flash가 기본 사고로
         # max_output_tokens 4096을 삼키고 한 쪽(30행)의 JSON도 잘렸다(실측 2026-09-03).
-        # JSON을 요구하는 호출은 think를 지정하지 않았으면 «끔»으로 본다 — 기본 사고 끔(D-074).
+        # JSON을 요구하는 호출은 think를 지정하지 않았으면 《끔》으로 본다 — 기본 사고 끔(D-074).
         think, thinking_budget = thinking_options(kwargs)
         if think is None and response_format == "json":
             think, thinking_budget = False, 0

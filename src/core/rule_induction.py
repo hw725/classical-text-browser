@@ -3,35 +3,35 @@
 왜 필요한가:
     책마다 글의 시작 표지가 다르다 — 浩齋辰巳日錄은 「○+날짜」, 天津談草는 「날짜 … 談草」,
     문집은 목차와 卷頭. 이것을 코드에 책 이름으로 적어 두면 새 책이 올 때마다 코드를 고쳐야
-    한다. 대신 «표지는 책 안에서 되풀이된다»는 사실만 코드에 두고, 어느 표지가 이 책의
+    한다. 대신 《표지는 책 안에서 되풀이된다》는 사실만 코드에 두고, 어느 표지가 이 책의
     규약인지는 전문을 세어 **데이터**(manifest.segmentation_rules)로 저장한다.
 
 층계 — 사람이 책을 펼쳤을 때 보는 순서(D-117, 사용자 지시 2026-09-07):
     1단 목차   목차 쪽이 있고 항목이 본문과 충분히 대조되면 목차가 규약이다. 여기서 멈춘다.
-              목차 쪽은 아래 단에서 세지 않는다 — 목차의 짧은 행을 본문 규약으로 «배우면» 안 된다.
+              목차 쪽은 아래 단에서 세지 않는다 — 목차의 짧은 행을 본문 규약으로 《배우면》 안 된다.
     2단 시각   되풀이되는 기호(○●△… 한자가 아닌 글자), 내려쓰기. 눈에 띄는 것이 먼저다.
     3단 텍스트 행 첫머리·행 끝·기호 뒤에 편중되어 되풀이되는 문자열.
     4단 LLM    통계가 아무것도 못 찾았을 때만, 사람이 누르면 — extract_start_patterns_llm.
     0단 없음   사람이 찍는다.
-    위 단이 확실하면 아래 단은 «보조»로만 남고(세기는 하되 권고하지 않는다), 약하면 내려간다.
+    위 단이 확실하면 아래 단은 《보조》로만 남고(세기는 하되 권고하지 않는다), 약하면 내려간다.
 
 원리 (모든 단에 같다):
-    후보 «신호 가족»마다 전문에서 나온 자리를 모으고
-      (1) 횟수 (2) 간격의 고름 — 연속 출현 사이 행 수가 «매 행»도 «한 번»도 아닌 것
+    후보 《신호 가족》마다 전문에서 나온 자리를 모으고
+      (1) 횟수 (2) 간격의 고름 — 연속 출현 사이 행 수가 《매 행》도 《한 번》도 아닌 것
       (3) 날짜 가족이면 날짜 사슬(날이 뒤로 가지 않는 비율)
       (4) 잇달아 나오는 비율 — 표지는 줄지어 오지 않는다
-          (시의 본문처럼 내려쓴 «덩어리»는 표지가 아니다)
-    로 점수를 매긴다. «쪽마다 한 번, 같은 행 자리»에 되풀이되는 것(판심·엽수·서명)은
+          (시의 본문처럼 내려쓴 《덩어리》는 표지가 아니다)
+    로 점수를 매긴다. 《쪽마다 한 번, 같은 행 자리》에 되풀이되는 것(판심·엽수·서명)은
     글의 규약이 아니라 종이의 규약이라 버린다(page_furniture).
 
 무엇을 하지 않는가:
     경계를 만들지 않는다. 결과는 신호 목록(횟수·점수·보기)과 그것으로 만든 규칙 초안이고,
     화면이 체크박스로 보여 준 뒤 사람이 고른 것만 저장한다. 제안·적용은 segmentation.py가
-    저장된 규칙으로 한다 — 이 모듈은 규칙을 «찾는» 쪽이고, 규칙을 «쓰는» 쪽은 그쪽이다.
+    저장된 규칙으로 한다 — 이 모듈은 규칙을 《찾는》 쪽이고, 규칙을 《쓰는》 쪽은 그쪽이다.
 
-신호 «종류»는 코드에 없다 (D-119):
-    발견기(_discover)가 «자리 × 접은 문자열»의 되풀이를 찾고, 찾은 뒤에 _classify가 문법으로
-    어느 규칙 칸에 넣을지 정한다. 그래서 아래 대응표의 왼쪽은 코드가 아니라 «판정 결과»다.
+신호 《종류》는 코드에 없다 (D-119):
+    발견기(_discover)가 《자리 × 접은 문자열》의 되풀이를 찾고, 찾은 뒤에 _classify가 문법으로
+    어느 규칙 칸에 넣을지 정한다. 그래서 아래 대응표의 왼쪽은 코드가 아니라 《판정 결과》다.
         기호 자체              → symbols 목록 (혼자 후보를 만든다)
         기호 뒤가 날짜 문법     → signals.mark
         행 첫머리가 날짜 문법   → signals.date
@@ -81,13 +81,13 @@ STAGE_NAMES = {1: "목차", 2: "시각 신호", 3: "텍스트 패턴", 0: "찾�
 
 # 규칙 목록(title_words·head_words·symbols·templates)이 아니라 켜고 끄는 신호.
 # propose_boundaries가 읽는 키.
-# 발견기가 «찾은 꼴이 날짜·卷 문법이면» 이 스위치에 배정한다 — 종류를 미리 세지 않는다(D-119).
+# 발견기가 《찾은 꼴이 날짜·卷 문법이면》 이 스위치에 배정한다 — 종류를 미리 세지 않는다(D-119).
 TOGGLE_SIGNALS = ("date", "mark", "volume", "short_line", "after_short", "indent")
 _PRIMARY = ("date", "mark", "volume")  # 문법으로 판정되는 텍스트 신호(폴백 기본값용)
 _AUX = ("short_line", "after_short", "indent")  # 판식 물리 — 다른 신호가 있는 행의 점수만 올린다
 
 _UNKNOWN = "□"  # OCR이 못 읽은 글자. 어휘 후보에서 뺀다 — 규약이 아니라 잡음이다
-# 구두점·괄호·OCR 잡음은 기호 후보가 아니다. 그 밖의 «한자·숫자·문자가 아닌 글자»는 전부 후보다.
+# 구두점·괄호·OCR 잡음은 기호 후보가 아니다. 그 밖의 《한자·숫자·문자가 아닌 글자》는 전부 후보다.
 _NOT_SYMBOL = set(
     "、。，．：；！？「」『』（）()[]【】〈〉《》・･…‥—–-_~〜/／\\|＊*＋+=＝<>＜＞\"'“”‘’ 　\t"
 )
@@ -97,7 +97,7 @@ _MIN_COUNT = 4
 _MIN_REGULARITY = 0.6
 _MAX_DENSITY = 60.0
 _MAX_ADJACENT = 0.5
-_TOC_MIN_RATIO = 0.8  # 목차 항목의 이 비율 이상이 본문에서 찾아지면 «목차가 규약»
+_TOC_MIN_RATIO = 0.8  # 목차 항목의 이 비율 이상이 본문에서 찾아지면 《목차가 규약》
 _TOC_MIN_MATCHES = 3  # …그리고 대조된 항목이 이만큼은 있어야 한다
 
 
@@ -114,7 +114,7 @@ def is_symbol_char(ch: str) -> bool:
 def _gap_regularity(positions: list[int]) -> tuple[float, Optional[float]]:
     """연속 출현 사이 행 수가 고른 비율과 중앙값.
 
-    표지라면 간격이 «너무 촘촘하지도(매 행) 너무 드물지도» 않고 고르다. 중앙값의 3배를
+    표지라면 간격이 《너무 촘촘하지도(매 행) 너무 드물지도》 않고 고르다. 중앙값의 3배를
     넘는 간격이 많으면 우연히 흩어진 것이다.
     """
     if len(positions) < 3:
@@ -139,10 +139,10 @@ def _adjacent_fraction(positions: list[int]) -> float:
 
 
 def _page_ordinals(lines: list[Line]) -> dict[int, int]:
-    """행 → «그 쪽에서 비어 있지 않은 몇 번째 행인가».
+    """행 → 《그 쪽에서 비어 있지 않은 몇 번째 행인가》.
 
     입력: 행 목록. 출력: {행 번호: 쪽 안 순번}. 목적: L4(빈 행 포함)와 L2(빈 행 없음)의 행 번호를
-    섞어 세도 «같은 자리»를 견주게 한다 — 원본 번호는 좌표라서 고칠 수 없다.
+    섞어 세도 《같은 자리》를 견주게 한다 — 원본 번호는 좌표라서 고칠 수 없다.
     """
     seen: collections.Counter = collections.Counter()
     out: dict[int, int] = {}
@@ -156,7 +156,7 @@ def _page_ordinals(lines: list[Line]) -> dict[int, int]:
 def _page_furniture(
     lines: list[Line], positions: list[int], ordinals: Optional[dict[int, int]] = None
 ) -> bool:
-    """판심·엽수·서명처럼 «쪽마다 한 번, 같은 행 자리»에 되풀이되는가.
+    """판심·엽수·서명처럼 《쪽마다 한 번, 같은 행 자리》에 되풀이되는가.
 
     쪽당 1회인 쪽이 70% 이상이고 쪽 안 행 위치의 최빈값이 절반 이상이면 그렇다고 본다.
     (天津談草 실측 2026-09-06: 판심의 「京」「取」「六七」「三番」이 이것으로 빠졌다.)
@@ -174,7 +174,7 @@ def _page_furniture(
 
 
 def _chain_ok(lines: list[Line], positions: list[int]) -> Optional[float]:
-    """날짜 가족의 사슬 일관성 — «날이 뒤로 가지 않는» 이웃 쌍의 비율. 3개 미만이면 None."""
+    """날짜 가족의 사슬 일관성 — 《날이 뒤로 가지 않는》 이웃 쌍의 비율. 3개 미만이면 None."""
     days = []
     n = len(lines)
     for k in positions:
@@ -242,7 +242,7 @@ def toc_signal(
 
 
 def toc_decisive(matched: int, entries: int) -> bool:
-    """목차가 «이 책의 규약»으로 설 만큼 대조되었는가 — 라우터도 같은 문턱을 쓴다."""
+    """목차가 《이 책의 규약》으로 설 만큼 대조되었는가 — 라우터도 같은 문턱을 쓴다."""
     return matched >= _TOC_MIN_MATCHES and matched / max(1, entries) >= _TOC_MIN_RATIO
 
 
@@ -250,7 +250,7 @@ def _solid(r: dict) -> bool:
     """표지로 볼 만큼 되풀이·고름·밀도·연속성이 맞는가.
 
     내려쓰기 단독은 훨씬 엄격하다 — 네 책 눈가림(2026-09-07)에서 내려쓴 행의 연속 비율이
-    0.4~0.5로 전부 «덩어리»(협주·두주·시 본문)였는데 0.5 문턱을 통과해 천진담초 정밀도가
+    0.4~0.5로 전부 《덩어리》(협주·두주·시 본문)였는데 0.5 문턱을 통과해 천진담초 정밀도가
     65/240으로 무너졌다. 제목만 내려쓴 판식이라면 연속은 거의 0이고 밀도도 낮다.
     """
     if r.get("marker") == "repeat_text":
@@ -267,13 +267,13 @@ def _solid(r: dict) -> bool:
     return ok
 
 
-# ── 발견기 (D-119): «어느 자리에 어떤 문자열이 편중되어 되풀이되는가» — 종류를 코드에 두지
+# ── 발견기 (D-119): 《어느 자리에 어떤 문자열이 편중되어 되풀이되는가》 — 종류를 코드에 두지
 # 않는다 ──
 #
 # 자리 셋: 행 첫머리(head) · 행 끝(tail) · 기호 뒤(after). 문자열은 접은 글자로 1~4자.
 # 접기(fold)는 언어 지식이지 책의 규칙이 아니다: 한자 수사 → N, 天干 → G, 地支 → Z, 나머지는 그대로.
-# 그래서 「二十八日」「十日」은 같은 꼴 «N日»이 되고, 「壬午」「辛巳」는 «GZ»가 된다.
-# 무엇이 날짜이고 무엇이 卷頭인지는 찾은 뒤에 문법으로 «판정»만 한다(parse_date_head·volume_head).
+# 그래서 「二十八日」「十日」은 같은 꼴 《N日》이 되고, 「壬午」「辛巳」는 《GZ》가 된다.
+# 무엇이 날짜이고 무엇이 卷頭인지는 찾은 뒤에 문법으로 《판정》만 한다(parse_date_head·volume_head).
 
 from core.segmentation import _MAX_NGRAM  # noqa: E402
 
@@ -281,7 +281,7 @@ _STAGE2_KEEP = 0.4  # 2단(기호)에서 1위 점수의 이 비율 이상을 켠
 # (浩齋의 ○ 217·◯ 158)를 함께 켜야 해서 3단보다 너그럽다. 기호 가족은 수가 적어 과다 선택이 없다.
 _STAGE3_KEEP = 0.6  # 3단에서 1위 점수의 이 비율 이상만 켠다(0.4는 문집에서 31가족을 켰다)
 _STAGE3_MAX = 6  # …그리고 최대 여섯
-_MIN_LIFT = 3.0  # 그 자리에 오는 빈도가 전문 어디서나 오는 빈도의 몇 배여야 «편중»인가
+_MIN_LIFT = 3.0  # 그 자리에 오는 빈도가 전문 어디서나 오는 빈도의 몇 배여야 《편중》인가
 _NEST_KEEP = 0.8  # 긴 꼴이 짧은 꼴의 이 비율 이상 나오면 긴 꼴만 남긴다(「有詩」가 「有」를 설명)
 
 
@@ -293,7 +293,7 @@ def _discover(texts: list[str]) -> dict[tuple[str, str], list[int]]:
     """자리 × 접은 문자열 → 나온 행 번호 목록. 넷 이상 나온 것만.
 
     head: 행 첫머리 1~4자. tail: 행 끝 1~4자(짧은 행이 아니어도 센다 — 편중은 lift가 가린다).
-    after: 기호 뒤 1~4자 — 「○N日」의 «N日». 기호 자체는 (after, 기호) 가족으로 따로 센다.
+    after: 기호 뒤 1~4자 — 「○N日」의 《N日》. 기호 자체는 (after, 기호) 가족으로 따로 센다.
     """
     fam: dict[tuple[str, str], set[int]] = collections.defaultdict(set)
     for k, t in enumerate(texts):
@@ -311,7 +311,7 @@ def _discover(texts: list[str]) -> dict[tuple[str, str], list[int]]:
             if is_symbol_char(ch):
                 fam[("sym", ch)].add(k)
                 # 접은 뒤에 자른다 — 원문을 먼저 자르면 「一千二百三十四、」처럼 긴 수사가
-                # «N» 하나로 접혀 뒤의 「、」를 못 본다(Codex 지적 2026-09-08)
+                # 《N》 하나로 접혀 뒤의 「、」를 못 본다(Codex 지적 2026-09-08)
                 rest = fold_text(t[i + 1 :])[:_MAX_NGRAM]
                 for n in range(1, min(_MAX_NGRAM, len(rest)) + 1):
                     a = rest[:n]
@@ -341,7 +341,7 @@ def _lift(texts_folded: list[str], key: tuple[str, str], count: int) -> float:
 def _prune_nested(fams: dict[tuple[str, str], list[int]]) -> dict[tuple[str, str], list[int]]:
     """겹치는 꼴 정리 — 같은 자리에서 긴 꼴이 짧은 꼴의 대부분(80%↑)을 설명하면 짧은 꼴을 버린다.
 
-    긴 꼴을 «짧은 꼴의 일부»라고 버리지는 않는다: 「N日」(33)은 「N」(119)의 28%뿐이지만 날짜라는
+    긴 꼴을 《짧은 꼴의 일부》라고 버리지는 않는다: 「N日」(33)은 「N」(119)의 28%뿐이지만 날짜라는
     뜻이 있고, 「N」은 편중이 없어 어차피 떨어진다(천진담초 실측 2026-09-07 — 그렇게 버렸더니 날짜가
     통째로 사라졌다). 작은 하위 꼴은 횟수·편중·점수가 걸러 낸다.
     """
@@ -367,7 +367,7 @@ def _date_only(text: str) -> bool:
 def _repeat_fraction(texts: list[str], positions: list[int]) -> tuple[int, float]:
     """(날짜로 읽히는 행 수, 그 날짜들 중 서로 다른 날짜의 비율).
 
-    판권·두주는 쪽마다 «같은 날짜»를 되적는다 — 天津談草 실측 2026-09-07: 판권 문구
+    판권·두주는 쪽마다 《같은 날짜》를 되적는다 — 天津談草 실측 2026-09-07: 판권 문구
     「同十一日」 13행이
     전부 11일. 표제라면 날짜가 행마다 다르다(「十一日海關署談草」「十二日海關署談草」).
     """
@@ -398,7 +398,7 @@ def _classify(pos: str, s: str, texts: list[str], positions: list[int]) -> tuple
         dated = 0
         for k in positions:
             nxt = texts[k + 1] if k + 1 < len(texts) else ""
-            # 한 행에 기호가 여럿이면 «이 꼴이 붙은 자리»만 본다 — 「●又本文●初一日」에서 「●又」
+            # 한 행에 기호가 여럿이면 《이 꼴이 붙은 자리》만 본다 — 「●又本文●初一日」에서 「●又」
             # 가족이 뒤쪽 「●初一日」 때문에 날짜로 판정되면 안 된다
             segs = [
                 seg.strip()
@@ -438,7 +438,7 @@ def induce_signals(
     rules: Optional[dict] = None,
     toc: Optional[dict] = None,
 ) -> dict:
-    """행 목록에서 «자리 × 되풀이 문자열»을 찾아 층계로 이 책의 규약을 고른다. 저장하지 않는다.
+    """행 목록에서 《자리 × 되풀이 문자열》을 찾아 층계로 이 책의 규약을 고른다. 저장하지 않는다.
 
     입력: 행 목록(빈 행 포함 가능), 규칙(max_title_chars만 쓴다),
           toc — toc_signal()의 결과(None이면 목차 없음). 목차 쪽은 세지 않는다.
@@ -452,7 +452,7 @@ def induce_signals(
       "dropped": [{"id","label","count","why"} …]  판심·편중 없음으로 버린 가족,
       "furniture": [원문 …], "toc": toc 그대로,
     }
-    코드에 있는 «종류»는 자리 셋(행 첫머리·행 끝·기호 뒤)과 판식 물리(짧은 행·행갈음·
+    코드에 있는 《종류》는 자리 셋(행 첫머리·행 끝·기호 뒤)과 판식 물리(짧은 행·행갈음·
     내려쓰기)뿐이다.
     有詩·談草·○·N日은 전부 이 책에서 나온 값이다(D-119).
     """
@@ -501,8 +501,8 @@ def induce_signals(
     ordinals = _page_ordinals(lines)  # 판심 비교용 쪽 안 순번 — 가족마다 다시 세지 않는다
 
     # ── 텍스트 꼴 발견 → 분류 → 문법 스위치(날짜·권점+날짜·卷頭)로 판정된 꼴은 하나로 합친다 ──
-    # 「翌日」「初N日」「同日」은 꼴은 달라도 다 «행 첫머리 날짜»다. 따로 두면 작은 가족 여럿이 되어
-    # 규약이 흩어진다(운양집 실측 2026-09-07: 103회가 8·7회로 쪼개졌다).
+    # 「翌日」「初N日」「同日」은 꼴은 달라도 다 《행 첫머리 날짜》다. 따로 두면 작은 가족 여럿이
+    # 되어 규약이 흩어진다(운양집 실측 2026-09-07: 103회가 8·7회로 쪼개졌다).
     fams = _prune_nested(_discover(texts))
     rows: list[dict] = []
     dropped: list[dict] = []
@@ -532,7 +532,7 @@ def induce_signals(
     for toggle, (posset, forms) in grammar.items():
         key = toggle.split(".", 1)[1]
         # 길이가 같은 꼴이 여럿이면 집합의 순회 순서가 라벨을 바꾼다(실행마다 달라졌다).
-        # 사람이 읽는 줄이므로 «긴 것 먼저, 같으면 사전순»으로 못 박는다
+        # 사람이 읽는 줄이므로 《긴 것 먼저, 같으면 사전순》으로 못 박는다
         shown = "·".join(sorted(set(forms), key=lambda f: (-len(f), f))[:4])
         entries.append(
             (key, "", sorted(posset), toggle, "", f"{merged_labels[toggle]} ({shown})", True)
@@ -583,7 +583,7 @@ def induce_signals(
                 sum(1 for k in positions if k in short_set) / max(1, count), 2
             )
         if not is_grammar and pos in ("head", "tail"):
-            # 표제는 행마다 다르다. 어휘·꼴 가족의 행들이 절반 이상 «같은 글»이거나, 날짜가
+            # 표제는 행마다 다르다. 어휘·꼴 가족의 행들이 절반 이상 《같은 글》이거나, 날짜가
             # 있는데 서로
             # 다른 날짜가 절반이 안 되면 판권·두주·되풀이 표기다 — 天津談草 실측
             # 2026-09-07: 「同」 54행
@@ -701,7 +701,7 @@ def induce_signals(
                 by = [r["id"] for r in primary if r["score"] >= _STAGE3_KEEP * top_p][:_STAGE3_MAX]
     by_set = set(by)
     labels = {r["id"]: r["label"] for r in rows}
-    # 권점+날짜가 켜지면 «행 첫머리 날짜»도 켠다 — OCR이 ○를 빠뜨린 날짜 자리(D-115)
+    # 권점+날짜가 켜지면 《행 첫머리 날짜》도 켠다 — OCR이 ○를 빠뜨린 날짜 자리(D-115)
     mark_on = any(
         x["toggle"] == "signals.mark"
         and (x["id"] in by_set or (x["chain"] or 0) >= 0.8)
@@ -773,7 +773,8 @@ def rules_from_signals(
     입력: induce_signals() 결과, 바탕 규칙(억제·해제·글자수는 그대로 둔다),
           켤 신호 id 목록(None이면 recommended).
     출력: normalize_rules를 통과한 규칙. origin="induced".
-    행마다 toggle이 «어느 칸»인지, value가 «무슨 값»인지 들고 있으므로 여기서는 옮겨 담기만 한다.
+    행마다 toggle이 《어느 칸》인지, value가 《무슨 값》인지 들고 있으므로 여기서는 옮겨 담기만
+    한다.
     """
     rules = normalize_rules(base_rules)
     chosen = (
@@ -834,7 +835,7 @@ def rules_from_signals(
 
 
 def induction_found_something(induced: dict) -> bool:
-    """2·3단에서 규약을 골랐는가 — 자동 트리가 규칙을 «저장»할 조건.
+    """2·3단에서 규약을 골랐는가 — 자동 트리가 규칙을 《저장》할 조건.
 
     아무것도 못 찾았을 때 저장해 두면, 나중에 확정본이 늘어도 다시 세지 않는다.
     1단(목차)은 규칙에 적을 것이 없으므로 저장 조건이 아니다 — 목차는 제안 때마다 다시 본다.
@@ -862,13 +863,13 @@ def rules_are_empty(rules: Optional[dict]) -> bool:
 
 START_PATTERN_SYSTEM_PROMPT = (
     "당신은 한문 고서의 판식을 읽는 편집자입니다. 주어진 행 표본만 보고, 이 책에서 "
-    "«새 글이 시작하는 행»에 되풀이되는 표지를 찾아 JSON으로만 답하십시오. "
+    "《새 글이 시작하는 행》에 되풀이되는 표지를 찾아 JSON으로만 답하십시오. "
     "표본에 실제로 있는 글자만 답하고, "
     "없으면 kind를 none으로 하십시오."
 )
 
 
-# 표본 범위 (D-117 4단). 기본은 «시작 자리»다 — 표지가 표면에 되풀이되는 책은 그것으로 충분하고,
+# 표본 범위 (D-117 4단). 기본은 《시작 자리》다 — 표지가 표면에 되풀이되는 책은 그것으로 충분하고,
 # 문맥이 있어야 보이는 표지(제목인지 시의 끝구인지)는 앞뒤 행, 자리에 규칙성이 없는 표지(행 중간의
 # 「又」「按」)는 쪽 통째, 그래도 안 보이면 권 전체. 넓을수록 토큰을 많이 쓰므로 크기를 먼저 보인다.
 SAMPLE_SCOPES = ("starts", "context", "pages", "all")
@@ -897,7 +898,7 @@ def sample_start_lines(
 
     입력: 행 목록·규칙·상한·범위. context는 before·candidate·after JSON 객체로 보낸다.
     scope — "starts"(기본)·"context"(앞뒤 한 행을 붙임)·"pages"(고르게 고른
-    여섯 쪽의 행 전부, 쪽 머리 «— n쪽 —»)·"all"(권 전체, 쪽 머리 포함).
+    여섯 쪽의 행 전부, 쪽 머리 《— n쪽 —》)·"all"(권 전체, 쪽 머리 포함).
     출력: 모델에 보일 줄 목록.
     """
     lines = [ln for ln in lines if ln.text.strip()]
@@ -963,7 +964,7 @@ def verify_pattern(lines: list[Line], kind: str, value: str) -> Optional[dict]:
         return None  # 「□」는 OCR이 못 읽은 자리다 — 표지가 아니라 잡음(발견기와 같은 기준)
     if len(value) == 1 and is_symbol_char(value):
         kind = (
-            "symbol"  # 모델이 «행머리 ○»라 해도 ○는 기호다 — 2단 가족으로 합친다(2026-09-07 실측)
+            "symbol"  # 모델이 《행머리 ○》라 해도 ○는 기호다 — 2단 가족으로 합친다(2026-09-07 실측)
         )
     if kind == "head_word":
         pos = [k for k, t in enumerate(texts) if t.startswith(value)]
@@ -1012,13 +1013,13 @@ async def extract_start_patterns_llm(
     reference_text: str = "",
     scope: str = "starts",
 ) -> tuple[list[dict], dict]:
-    """4단 — 표본 행을 LLM에 보여 «시작 표지»를 정해진 종류로 답받고, 코드가 세어 확인한다.
+    """4단 — 표본 행을 LLM에 보여 《시작 표지》를 정해진 종류로 답받고, 코드가 세어 확인한다.
 
     scope — sample_start_lines의 범위. 넓은 범위(쪽 통째·권 전체)에서는 표지가 행 중간에 있을 수
     있다고 모델에 말한다.
 
     출력: (확인된 신호 행 목록, {"provider","model","error","raw","note"}). 모델이 경계를 찍지
-    않는다 — «규칙 후보»를 말하고, 그것이 전문에서 되풀이되는지는 verify_pattern이 정한다.
+    않는다 — 《규칙 후보》를 말하고, 그것이 전문에서 되풀이되는지는 verify_pattern이 정한다.
     """
     from core.toc import reference_excerpt
 
@@ -1033,19 +1034,19 @@ async def extract_start_patterns_llm(
         return [], meta
     if scope == "starts":
         intro = (
-            "다음은 이 책에서 «글이 시작할 법한 자리»(짧은 행·행갈음 뒤의 행·내려쓴 행)의 "
+            "다음은 이 책에서 《글이 시작할 법한 자리》(짧은 행·행갈음 뒤의 행·내려쓴 행)의 "
             "표본입니다."
         )
     elif scope == "context":
         intro = (
-            "다음은 이 책에서 «글이 시작할 법한 자리»의 표본입니다. "
+            "다음은 이 책에서 《글이 시작할 법한 자리》의 표본입니다. "
             "한 줄은 JSON 객체이며 before는 앞 행, candidate는 후보 행, after는 뒤 행입니다. "
             "필드 안의 구분자나 표시는 원문 글자입니다."
         )
     else:
         intro = (
             "다음은 이 책의 쪽들을 통째로 옮긴 것입니다"
-            "(«— n쪽 —»가 쪽 머리, 그다음 줄들이 그 쪽의 행). "
+            "(《— n쪽 —》가 쪽 머리, 그다음 줄들이 그 쪽의 행). "
             "표지는 행 첫머리가 아니라 행 중간에 있을 수도 있습니다."
         )
     ref = ""
@@ -1112,7 +1113,7 @@ def collect_lines_any_layer(doc_path: str | Path, part_id: str) -> tuple[list[Li
     """규칙 도출용 행 목록 — 확정본(L4)이 있는 쪽은 L4, 없는 쪽은 OCR 결과(L2)로 채운다.
 
     왜 섞는가: 규약을 세는 데는 글자 몇이 틀려도 된다. 그러나 제안·적용은 L4만 읽으므로
-    (D-088), 결과의 source 셈을 화면이 알려 «L4를 채우면 제안이 더 잡힌다»고 말해야 한다.
+    (D-088), 결과의 source 셈을 화면이 알려 《L4를 채우면 제안이 더 잡힌다》고 말해야 한다.
     출력: (행 목록, {"l4_pages": n, "l2_pages": m, "pages_total": t})
     """
     from core.document import get_document_info

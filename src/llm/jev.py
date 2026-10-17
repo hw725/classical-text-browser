@@ -1,13 +1,13 @@
-"""TypeSafe Jev(System One) 전송 계층 — 글을 만들지 않고 «판정»만 돌려주는 모델.
+"""TypeSafe Jev(System One) 전송 계층 — 글을 만들지 않고 《판정》만 돌려주는 모델.
 
 왜 여기 있는가:
     이 저장소의 `llm/providers/*`는 전부 **생성 모델**이다 — 프롬프트를 주면 글을 돌려주고,
     코드가 그 글에서 JSON을 건져 쓴다. Jev는 그 계열이 아니다. state(관찰한 것)와 **형이 정해진
     질문**을 주면 답은 확률이 붙은 판정 하나씩이고, 자유로운 글은 아예 나오지 않는다. 그래서
-    «모델이 위치를 만들지 않고 고르기만 한다»(D-117·D-125)를 프롬프트로 부탁하는 대신
+    《모델이 위치를 만들지 않고 고르기만 한다》(D-117·D-125)를 프롬프트로 부탁하는 대신
     **형식으로 강제**할 수 있다 — 없는 행 번호를 지어낼 자리가 없다.
 
-    LlmRouter에 넣지 않은 까닭도 같다. 라우터의 계약은 «프롬프트 → 글»이고 Jev에는 글이 없다.
+    LlmRouter에 넣지 않은 까닭도 같다. 라우터의 계약은 《프롬프트 → 글》이고 Jev에는 글이 없다.
     화면의 「모델」 목록(생성 모델을 고르는 자리)에도 넣지 않는다.
 
 무엇을 아는가:
@@ -17,24 +17,24 @@
       한 요청의 예산은 64k 토큰(state + 모든 질문), state + 가장 긴 질문 하나는 32k.
     - 입력만 청구된다($0.042/M, 2026-09-21 콘솔 확인). 응답에 cost가 없어 토큰으로 환산한다.
     - **텍스트 전용이다** — 이미지·오디오·비디오를 받지 않는다(공식 문서). 쪽 이미지를 봐야 하는
-      일(판독 계획의 «무슨 글인가»)에는 쓸 수 없다.
+      일(판독 계획의 《무슨 글인가》)에는 쓸 수 없다.
     - **영어가 1차 훈련 언어이고 CJK는 정확도가 낮다고 문서가 스스로 밝힌다.** 한문 코퍼스에
       들이기 전에 반드시 재야 한다.
 
 키:
     TYPESAFE_API_KEY → JEV_API_KEY 순으로, 이름마다 환경변수 → **서고 `.env`**(설정 화면
-    «판정 모델»에서 넣은 키, D-134) → 프로젝트 `.env` → 공용 키 파일(`~/.claude/data/triage/.env`,
+    《판정 모델》에서 넣은 키, D-134) → 프로젝트 `.env` → 공용 키 파일(`~/.claude/data/triage/.env`,
     **전부 읽은 뒤 같은 이름 순서로**)을 본다. 파일에 적힌 줄 순서가 우선순위를 뒤집으면 안 된다
     (llm_pipeline 2026-09-21 실측 사고: OpenRouter 키가 위에 있어 직결 호출이 401이었다).
     값은 어디에도 출력하지 않는다.
 
     **OPENROUTER_API_KEY는 여기서 보지 않는다**(D-136 후속, 2026-10-05). 전에는 이름 목록 끝에
     있어 OpenRouter 키만 있는 사람의 Jev가 그 키를 TypeSafe 주소로 보내 401을 받았다. 이제
-    «어떤 키도 남의 주소로 나가지 않는다» — OpenRouter 키만 있으면 `make_jev_client`가
+    《어떤 키도 남의 주소로 나가지 않는다》 — OpenRouter 키만 있으면 `make_jev_client`가
     같은 Jev를 OpenRouter 경유(`openrouter_decider.OpenRouterJevClient`)로 부른다.
 
 판정 모델 공통 계약 (D-134):
-    같은 «state + 형이 정해진 질문 → 확률 붙은 답» 계약을 쓰는 다른 업체(Perplexity Decisions —
+    같은 《state + 형이 정해진 질문 → 확률 붙은 답》 계약을 쓰는 다른 업체(Perplexity Decisions —
     이미지를 받는다)는 `llm/decider.py`가 이 클래스를 물려받아 주소·모델·이미지 싣는 법만 바꾼다.
     호출 상한·백오프·토큰/비용 세기·사용 기록은 여기 한 곳에 있다.
 """
@@ -58,14 +58,14 @@ TYPESAFE_MODEL = "jev-latest"
 INPUT_USD_PER_M = 0.042  # 입력만 청구된다 — 출력분은 청구서에 없다(2026-09-21)
 
 KEY_ENV_FILE = pathlib.Path.home() / ".claude" / "data" / "triage" / ".env"
-# TypeSafe 직결 주소로 보내도 되는 키만. OPENROUTER_API_KEY를 넣지 않는다(위 «키» 참고).
+# TypeSafe 직결 주소로 보내도 되는 키만. OPENROUTER_API_KEY를 넣지 않는다(위 《키》 참고).
 KEY_NAMES = ("TYPESAFE_API_KEY", "JEV_API_KEY")
 
 # 이 저장소가 아는 판정 업체의 호스트(PROVIDER → 그 업체 호스트). 주소 재정의(URL_ENV)가
 # **다른 업체**의 호스트를 가리키면 키를 싣지 않고 거부한다 — TypeSafe 키가 OpenRouter로,
 # OpenRouter 키가 Perplexity로 나가는 길을 막는다(Codex 리뷰 2026-10-06). 같은 업체 주소와
 # 모르는 호스트(자체 게이트웨이·Cloudflare AI Gateway 등)는 지금처럼 허용한다.
-# llm_pipeline 정본 `jev_decisions.py`의 «JEV_BASE_URL 은 직결 공급자에만 듣는다»와 같은 방침.
+# llm_pipeline 정본 `jev_decisions.py`의 《JEV_BASE_URL 은 직결 공급자에만 듣는다》와 같은 방침.
 # 앞에 점이 없는 값은 그 호스트와 그 하위 도메인을 뜻한다. Cloudflare는 API 호스트만 —
 # `gateway.ai.cloudflare.com`(AI Gateway)은 자체 게이트웨이로 본다.
 VENDOR_HOSTS: dict[str, tuple[str, ...]] = {
@@ -107,7 +107,7 @@ def _key_from_app_env(names: Sequence[str], library_root: Optional[pathlib.Path]
     """서고 `.env`·프로젝트 `.env`(LlmConfig와 같은 규칙 — 서고가 이긴다)에서 이름 순서로 찾는다.
 
     설정 화면에서 넣은 키가 여기 있다(D-134). 전에는 Jev가 이 파일을 보지 않아,
-    화면에서 키를 넣을 길이 생겨도 Jev는 «키 없음»이었을 것이다.
+    화면에서 키를 넣을 길이 생겨도 Jev는 《키 없음》이었을 것이다.
     """
     try:
         from llm.config import LlmConfig
@@ -133,7 +133,7 @@ def resolve_key(
     출력: 키 또는 None.
 
     순서: 환경변수 → 서고·프로젝트 `.env` → 공용 키 파일. 파일은 **전부 읽은 뒤** 같은 이름
-    순서로 고른다. 줄 끝 주석(` # …`)과 따옴표를 떼고, 공백뿐인 값은 «없음»으로 본다 —
+    순서로 고른다. 줄 끝 주석(` # …`)과 따옴표를 떼고, 공백뿐인 값은 《없음》으로 본다 —
     그대로 두면 `Bearer  ` 같은 헤더가 나간다.
     """
     # **이름이 먼저다** — 이름마다 환경변수 → 서고·프로젝트 .env → 공용 키 파일 순으로
@@ -176,7 +176,7 @@ def _read_key_file(env_file: Optional[pathlib.Path], fallback_file: bool) -> dic
 
 
 def noul(answer: Any) -> Optional[float]:
-    """noul 답에서 «예일 확률» 하나. 입력: answers의 값. 출력: 0~1 또는 None(형이 아니면)."""
+    """noul 답에서 《예일 확률》 하나. 입력: answers의 값. 출력: 0~1 또는 None(형이 아니면)."""
     if not isinstance(answer, Mapping):
         return None
     v = answer.get("noul")
@@ -202,7 +202,7 @@ def choice(answer: Any, allowed: Sequence[str]) -> tuple[Optional[str], Optional
 
 
 def _int(v: Any) -> int:
-    """토큰 수. 문자열로 와도 센다 — 조용히 0이 되면 «공짜로 돌았다»로 보고된다."""
+    """토큰 수. 문자열로 와도 센다 — 조용히 0이 되면 《공짜로 돌았다》로 보고된다."""
     if isinstance(v, bool):
         return 0
     if isinstance(v, int):
@@ -250,8 +250,8 @@ class JevClient:
         fallback: bool = True,
     ) -> None:
         self._library_root = pathlib.Path(library_root) if library_root else None
-        # 직결이 HTTP로 거절되면 같은 Jev를 OpenRouter 경유로(2026-10-06 사용자: «typesafe jev
-        # 안 되면 바로 openrouter로 폴백»). TypeSafe 크레딧이 바닥나 402가 나면, 두 키를 다 넣은
+        # 직결이 HTTP로 거절되면 같은 Jev를 OpenRouter 경유로(2026-10-06 사용자: 《typesafe jev
+        # 안 되면 바로 openrouter로 폴백》). TypeSafe 크레딧이 바닥나 402가 나면, 두 키를 다 넣은
         # 사람의 편성 판정이 전부 실패했다(make_jev_client는 시작할 때만 고른다).
         # 넘어간 뒤로는 그 클라이언트로만 묻는다 — 묻기마다 402를 다시 받지 않게.
         self._fallback = fallback
@@ -284,7 +284,7 @@ class JevClient:
         #                **상한(max_calls)은 이것을 센다.**
         #   calls_made — 실제로 나간 HTTP 요청(429·529 백오프, clef 413 축소 재전송 포함).
         #                사용 보고용.
-        # 왜 나누는가: 호출자는 상한을 «보낼 묶음 수 + 여유»로 잡는다(gate(planned)도 묶음
+        # 왜 나누는가: 호출자는 상한을 《보낼 묶음 수 + 여유》로 잡는다(gate(planned)도 묶음
         # 수와 견준다). 그런데 ask가 HTTP 요청을 세어 상한과 견주면, 거부된 요청(429·413 —
         # 청구되지 않는다)이 상한을 갉는다. 자동 스캔에서 Cloudflare 413 재전송이 쌓이면 쪽
         # 수의 절반쯤에서 상한이 차고, 남은 쪽이 유료 OpenRouter로 밀려났다. 재전송은 묻기
@@ -299,12 +299,12 @@ class JevClient:
         self.input_tokens_total = 0
         self.output_tokens_total = 0
         self.cost_total = 0.0
-        self.uncosted_calls = 0  # 비용을 셀 근거(usage)가 없던 호출 — 0이 «공짜»인지 구분한다
+        self.uncosted_calls = 0  # 비용을 셀 근거(usage)가 없던 호출 — 0이 《공짜》인지 구분한다
 
     def _resolve_key(self) -> Optional[str]:
         """키를 찾는다 — 물려받는 업체가 출처를 더할 수 있게 메서드로 둔다.
 
-        Cloudflare(clef_cf.py)는 여기에 «Windows 사용자 환경변수»를 더한다: 키를 거기 넣은 뒤
+        Cloudflare(clef_cf.py)는 여기에 《Windows 사용자 환경변수》를 더한다: 키를 거기 넣은 뒤
         이미 떠 있던 서버 프로세스는 os.environ에 그 값이 없기 때문이다.
         """
         return resolve_key(
@@ -371,7 +371,7 @@ class JevClient:
         if self._url_refusal:
             raise JevCallFailed("url_points_to_other_vendor", detail=self._url_refusal)
         if images and not self.ACCEPTS_IMAGES:
-            # Jev에 base64를 넣으면 오류 없이 «글자로» 읽어 엉뚱한 답이 온다(2026-10-02 실측) —
+            # Jev에 base64를 넣으면 오류 없이 《글자로》 읽어 엉뚱한 답이 온다(2026-10-02 실측) —
             # 보내기 전에 막는다
             raise JevCallFailed("images_not_supported")
         if self.asks_made >= self._max_calls:
@@ -404,7 +404,7 @@ class JevClient:
             return False
         self._via = via
         self.fell_back = f"openrouter(typesafe {exc.status})"
-        # «누가 답했나»(structure_llm.judge_label)가 이 둘을 읽는다 — 넘어간 뒤의 답은
+        # 《누가 답했나》(structure_llm.judge_label)가 이 둘을 읽는다 — 넘어간 뒤의 답은
         # openrouter:~typesafe/jev-latest로 남아야 한다. 문턱은 Jev 것 그대로(JUDGE_FAMILY).
         self.PROVIDER = via.PROVIDER
         self.model = via.model
@@ -433,7 +433,7 @@ class JevClient:
     ) -> Mapping[str, Any]:
         """묻기 하나를 HTTP로 보낸다(백오프 포함). 상한 검사는 ask가 이미 했다.
 
-        물려받는 업체가 «같은 묻기를 고쳐 다시 보내기»(clef 413 축소)를 여기에 얹는다 —
+        물려받는 업체가 《같은 묻기를 고쳐 다시 보내기》(clef 413 축소)를 여기에 얹는다 —
         ask를 두 번 부르면 묻기 두 번으로 세어진다.
         """
         body = self._body(state, questions, images)
@@ -519,7 +519,7 @@ class JevClient:
     ) -> None:
         """서고의 LLM 사용 기록(llm_usage_log.jsonl)에 한 줄 — 생성 모델과 같은 파일·같은 모양.
 
-        전에는 판정 모델 호출이 어디에도 남지 않아 «이번 달 얼마 썼나»에서 빠졌다(D-134).
+        전에는 판정 모델 호출이 어디에도 남지 않아 《이번 달 얼마 썼나》에서 빠졌다(D-134).
         기록 실패는 호출을 실패시키지 않는다.
         """
         try:
@@ -572,9 +572,9 @@ def make_jev_client(
         `~typesafe/jev-latest`)
       - 둘 다 없으면 → 키 없는 `JevClient`(has_key False — 호출하면 jev_no_key)
 
-    왜 이렇게 고르는가: 사용자 결정(2026-10-05) «OpenRouter 키만 있으면 Jev를 OpenRouter 경유로
-    부른다». 둘 다 있으면 직결이 먼저인 까닭은 그것이 측정한 기본 길이고(D-129), OpenRouter 크레딧을
-    폴백 decider(Jev가 실패한 호출만, D-139)와 이미지 판정 몫으로 남기기 위해서다.
+    왜 이렇게 고르는가: 사용자 결정(2026-10-05) 《OpenRouter 키만 있으면 Jev를 OpenRouter 경유로
+    부른다》. 둘 다 있으면 직결이 먼저인 까닭은 그것이 측정한 기본 길이고(D-129), OpenRouter
+    크레딧을 폴백 decider(Jev가 실패한 호출만, D-139)와 이미지 판정 몫으로 남기기 위해서다.
 
     클래스는 **부를 때** 모듈에서 찾는다 — 시험이 `llm.jev.JevClient`·
     `llm.openrouter_decider.OpenRouterJevClient`를 가짜로 바꿔 끼울 수 있게.

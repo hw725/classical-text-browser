@@ -132,7 +132,7 @@ schemas/
 | **\*document_id** | string | 영문 식별자 |
 | **\*title** | string | 원어 표기 |
 | title_ko | string? | 한국어 제목 |
-| **\*parts[]** | array | {part_id, label, file, page_count, rotation?, rotation_ranges?} — rotation은 «바로 세우려면 시계 방향 몇 도»(0·90·180·270, D-123). 없으면 0 |
+| **\*parts[]** | array | {part_id, label, file, page_count, rotation?, rotation_ranges?} — rotation은 《바로 세우려면 시계 방향 몇 도》(0·90·180·270, D-123). 없으면 0 |
 | **\*completeness_status** | enum | file_only → text_imported → bibliography_added → ocr_done → layout_analyzed → correcting → correction_done → finalized, 그리고 스냅샷에서 들인 문헌의 `imported`(B-014) |
 | segmentation_rules | object? | 편성 규칙(D-088·D-116·D-117) — 신호 스위치 `signals`(`toc`·date·mark·volume·short_line·after_short·indent — 안 적힌 키는 켜진 것, D-122), `title_words`·`head_words`, 시각 신호 `symbols`·`indent_alone`, 꼴 `head_templates`·`tail_templates`(접은 글자 N·G·Z, D-119), 판심 `furniture`, `suppress`, `reference_text`, `toc_llm`, `origin`(빈 값=아직 없음·induced·manual). 프로그램이 전문에서 층계로 찾아 채우고 사람이 고친다 |
 | ocr_guidance | string? | LLM OCR 판독 지침(D-081) |
@@ -433,7 +433,7 @@ Agent/Concept/단위 간 관계. predicate는 구조적 동사만.
 | **\*schema_version** | string | `"1.0"` |
 | export_timestamp | string? | 내보낸 일시(ISO 8601) |
 | platform_version | string? | 내보낸 앱의 판 |
-| corpus_version | object? | 코퍼스 스냅샷 각인 — 내보낼 때 코드가 찍는 «데이터» 판(`core/corpus_version.py`, D-128 1항). 옛 스냅샷에는 없다 |
+| corpus_version | object? | 코퍼스 스냅샷 각인 — 내보낼 때 코드가 찍는 《데이터》 판(`core/corpus_version.py`, D-128 1항). 옛 스냅샷에는 없다 |
 | **\*source_info** | object | 어느 문헌·해석의 것인가(제목·권·서지·해석자). v1.3까지 이름은 `work` |
 | **\*original** | object | 원본 층 — `head_hash` + `layers.L1_source`(경로 참조)·`L3_layout`·`L4_text`·`boundaries`(편성 경계)·`read_plan`(작업 계획)·`variant_approvals`(문헌별 이체자 승인) (B-013) |
 | interpretation | object? | 해석 층 — `head_hash`·`dependency`·`layers.L5~L7`·`core_entities` |

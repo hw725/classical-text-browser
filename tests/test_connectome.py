@@ -3,7 +3,7 @@
 이 기능의 요구는 둘이고 서로 반대 방향이다.
     ① 선생님 PC에서는 열린다 — neuprint-python(extra `connectome`) + 토큰.
     ② **배포본에서는 닫힌다** — 설치 파일이 그 extra를 선택지로도 내놓지 않고,
-       없으면 라우트가 400에 «왜»를 담아 답한다.
+       없으면 라우트가 400에 《왜》를 담아 답한다.
 
 ②가 조용히 깨지는 것이 가장 위험하다. extra 이름을 install.ps1의 어느 가지에
 슬쩍 넣으면, 설치 파일을 받은 사람이 4.5GB 옆에 이것까지 받고도 토큰이 없어
@@ -80,7 +80,7 @@ class TestExcludedFromDistribution:
 
 
 # ──────────────────────────────────────
-# 게이트가 «왜»를 말하는가
+# 게이트가 《왜》를 말하는가
 # ──────────────────────────────────────
 
 
@@ -204,7 +204,10 @@ class TestReachableFromTheScreen:
         )
 
     def test_there_is_a_button_for_it(self):
-        """엔티티 패널에 «커넥톰 대조» 단추가 있고, 화면 코드가 그 id 를 배선한다(B-008 뒤 자리)."""
+        """엔티티 패널에 《커넥톰 대조》 단추가 있고, 화면 코드가 그 id 를 배선한다.
+
+        B-008 뒤 자리.
+        """
         html = (REPO / "src" / "app" / "static" / "index.html").read_text(encoding="utf-8")
         assert 'id="entity-connectome-btn"' in html
         assert "entity-connectome-btn" in self._js()
@@ -212,7 +215,7 @@ class TestReachableFromTheScreen:
     def _render_body(self) -> str:
         """`_renderConnectome` 의 본문만 잘라 온다.
 
-        끝을 «다음 함수 이름»으로 잡지 않는다. 한때 `_openLlmRequestDialog` 를
+        끝을 《다음 함수 이름》으로 잡지 않는다. 한때 `_openLlmRequestDialog` 를
         표지로 썼는데 2026-09-22에 그 함수를 걷어내면서(B-008) 이 시험이
         `ValueError: substring not found` 로 깨졌다 — **시험이 남의 수명에 매달려
         있었다.** 이제 중괄호를 세어 함수가 끝나는 자리를 스스로 찾는다.
@@ -255,10 +258,10 @@ class TestReachableFromTheScreen:
             assert forbidden not in body, f"화면이 총점을 만들고 있다: {forbidden}"
 
     def test_the_gate_reason_is_shown_whole(self):
-        """400 의 사유는 줄바꿈째로 보여 준다 — 토스트로 줄이면 «왜·해결»이 사라진다."""
+        """400 의 사유는 줄바꿈째로 보여 준다 — 토스트로 줄이면 《왜·해결》이 사라진다."""
         js = self._js()
         assert "white-space:pre-wrap" in js, (
-            "사유 문구를 그대로 보여 주지 않으면 줄바꿈으로 적은 «왜·해결»이 한 줄로 뭉친다"
+            "사유 문구를 그대로 보여 주지 않으면 줄바꿈으로 적은 《왜·해결》이 한 줄로 뭉친다"
         )
 
 
@@ -309,7 +312,7 @@ class TestTokenFromFile:
         assert _token_from_file() == ""
 
     def test_presence_and_value_agree(self, monkeypatch, tmp_path):
-        """«있다»고 판정한 파일에서 값이 나와야 한다 — 두 파서가 갈라지면 여기서 걸린다.
+        """《있다》고 판정한 파일에서 값이 나와야 한다 — 두 파서가 갈라지면 여기서 걸린다.
 
         `_token_present()` 와 `_token_from_file()` 이 같은 줄을 각자 파싱한다.
         한쪽만 고치면 「토큰이 있다고 했는데 값이 빈 문자열」이 되고, 그때 실패는
@@ -359,7 +362,7 @@ class TestMeasurementProtocol:
     def test_it_asks_for_the_consensus_not_the_prediction(self):
         """`consensusNt`(합의값)를 묻는다 — `predictedNt`(기계 예측)가 아니다.
 
-        이 한 낱말이 조절 비중을 12.5% → 65.2%로 만들었다. 질의 «상수»만 본다 —
+        이 한 낱말이 조절 비중을 12.5% → 65.2%로 만들었다. 질의 《상수》만 본다 —
         주석은 그 잘못을 설명하느라 옛 이름을 적고 있어야 하므로 파일 전체를
         grep 하면 이 시험이 자기 설명에 걸린다(처음 쓸 때 실제로 걸렸다).
         """
@@ -403,7 +406,7 @@ class TestMeasurementProtocol:
         assert "무게 5" in d128 or "5 이상" in d128
 
     def test_only_the_remeasured_fields_are_labelled_live(self):
-        """다시 잰 칸만 «살아 있는» 것으로 표시한다.
+        """다시 잰 칸만 《살아 있는》 것으로 표시한다.
 
         한때 `{**RECORDED_REFERENCE, "source": "직접 질의"}`로 돌려주어, 기록된
         값인 `noise_share`·`top10_share`에까지 「방금 쟀다」는 이름표가 붙었다 —
@@ -414,9 +417,9 @@ class TestMeasurementProtocol:
         assert "top10_share" not in LIVE_FIELDS
 
     def test_rows_say_whether_their_reference_is_live(self):
-        """줄마다 «이 기준값이 방금 잰 것인가»가 붙는다."""
+        """줄마다 《이 기준값이 방금 잰 것인가》가 붙는다."""
         rels = [_rel(weight=9, polarity="support")]
-        # 기록된 값으로 대조하면 어느 줄도 «방금 잰 것»이 아니다.
+        # 기록된 값으로 대조하면 어느 줄도 《방금 잰 것》이 아니다.
         for row in compare(rels)["rows"]:
             assert row["reference_live"] is False
 
@@ -437,4 +440,4 @@ class TestMeasurementProtocol:
         js = (
             REPO / "src" / "app" / "static" / "js" / "entity-manager.js"
         ).read_text(encoding="utf-8")
-        assert "reference_live" in js, "화면이 «방금 잰 줄»을 구분하지 않는다"
+        assert "reference_live" in js, "화면이 《방금 잰 줄》을 구분하지 않는다"

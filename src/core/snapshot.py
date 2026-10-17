@@ -67,12 +67,12 @@ def normalize_snapshot(data: dict) -> dict:
 
 # 한 칸 이름(파일·폴더 하나)에 들어가면 안 되는 글자. 경로 구분자·드라이브 콜론·Windows 금지 문자.
 _BAD_NAME_CHARS = set('/\\:*?"<>|\0')
-# 새 문헌 id = 원래 id + «_» + 14자리 시각. 저장소 id는 64자까지라 원래 id는 49자로 자른다.
+# 새 문헌 id = 원래 id + 《_》 + 14자리 시각. 저장소 id는 64자까지라 원래 id는 49자로 자른다.
 _IMPORT_ID_BASE_MAX = 64 - 15
 
 
 def _is_safe_name(name) -> bool:
-    """파일·폴더 이름 «한 칸»으로 써도 되는가. 입력: 스냅샷의 값. 출력: 참이면 안전.
+    """파일·폴더 이름 《한 칸》으로 써도 되는가. 입력: 스냅샷의 값. 출력: 참이면 안전.
 
     왜: 스냅샷은 남이 만든 파일일 수 있다. `../` 하나로 서고 밖에 파일을 쓸 수 있으면 안 된다
     (2026-10-11 전수 검토 — 폴더 가져오기 라우트에는 이 검사가 있었고 JSON 가져오기에는 없었다).
@@ -218,7 +218,7 @@ _EXCHANGE_VALIDATOR = None
 
 
 def _platform_version() -> str:
-    """설치된 패키지 메타데이터에서 앱 판을 읽는다. 실패하면 «unknown».
+    """설치된 패키지 메타데이터에서 앱 판을 읽는다. 실패하면 《unknown》.
 
     왜 여기 적지 않는가: **버전을 적는 곳은 pyproject.toml 하나여야 한다**(릴리스 절차 7).
     v1.1.4부터 v1.2.3까지 이 상수가 "1.1.4"에 멈춰 있어 스냅샷마다 거짓 판을 적고 있었다
@@ -259,13 +259,13 @@ def build_snapshot(
         "schema_version": "1.0",
         "export_timestamp": datetime.now(timezone.utc).isoformat(),
         "platform_version": PLATFORM_VERSION,
-        # 데이터 버전 각인 (D-128 1항). schema_version은 «스키마» 판이고 이것은
-        # «데이터» 판이다 — 스키마가 그대로여도 원문 교정 한 글자로 결과가 달라진다.
+        # 데이터 버전 각인 (D-128 1항). schema_version은 《스키마》 판이고 이것은
+        # 《데이터》 판이다 — 스키마가 그대로여도 원문 교정 한 글자로 결과가 달라진다.
         "corpus_version": corpus_snapshot(
             library_path, document_ids=[doc_id], interpretation_ids=[interp_id]
         ),
-        # D-099 후속: 옛 이름은 "work"였다. Work 엔티티를 없앤 뒤로 «엔티티 Work»와 헷갈려서
-        # 이름을 바꿨다 — 이 절은 엔티티가 아니라 «이 스냅샷이 어느 문헌·해석의 것인가»다.
+        # D-099 후속: 옛 이름은 "work"였다. Work 엔티티를 없앤 뒤로 《엔티티 Work》와 헷갈려서
+        # 이름을 바꿨다 — 이 절은 엔티티가 아니라 《이 스냅샷이 어느 문헌·해석의 것인가》다.
         "source_info": _serialize_source_info(doc_path, interp_path),
         "original": _serialize_original(doc_path),
         "interpretation": _serialize_interpretation(interp_path),
@@ -405,7 +405,7 @@ def _serialize_original(doc_path: Path) -> dict:
 # 물린 폴더 — 스냅샷에 담지 않는다.
 #
 # 왜: 마이그레이션이 옛 파일을 지우지 않고 이름만 바꿔 남기는데(blocks → 경계 목록 D-092,
-# 경계 → 원본 저장소 D-097, Work 삭제 D-099), 그것은 «되돌릴 수 있게» 남긴 흔적이지 지금의
+# 경계 → 원본 저장소 D-097, Work 삭제 D-099), 그것은 《되돌릴 수 있게》 남긴 흔적이지 지금의
 # 엔티티가 아니다. 담으면 스냅샷이 커지고, 가져오기가 남의 서고에 죽은 폴더를 되살린다
 # (실측 2026-09-04: 천진담초 스냅샷의 core_entities가 물린 폴더 셋뿐이었다).
 RETIRED_ENTITY_DIRS = frozenset(
@@ -511,7 +511,7 @@ def _serialize_variant_chars(library_path: Path) -> dict:
 def _serialize_annotation_types(library_path: Path) -> list:
     """주석 유형 목록을 직렬화한다 = 앱 기본 프리셋 + 서고의 커스텀.
 
-    서고의 커스텀은 core/annotation_types.py가 쓰는 {서고}/annotation_types.json의 «custom»이다.
+    서고의 커스텀은 core/annotation_types.py가 쓰는 {서고}/annotation_types.json의 《custom》이다.
     예전에는 annotation_types_custom.json을 찾아 커스텀이 한 번도 실리지 않았다(B-013).
     """
     custom_path = library_path / "annotation_types.json"
@@ -544,7 +544,7 @@ def create_work_from_snapshot(
 ) -> dict:
     """스냅샷 데이터로 새 문헌 + 해석 저장소를 만든다.
 
-    (이름의 «work»는 Work 엔티티(D-099에서 없앰)와 무관한 옛 이름이다 — 라우트가 부르므로 유지.)
+    (이름의 《work》는 Work 엔티티(D-099에서 없앰)와 무관한 옛 이름이다 — 라우트가 부르므로 유지.)
 
     목적: /api/.../import/json 엔드포인트에서 호출.
     입력:
@@ -781,7 +781,7 @@ def detect_imported_layers(data: dict) -> list[str]:
         layers.append("L3")
     if orig_layers.get("L4_text", {}).get("pages"):
         layers.append("L4")
-    # 2026-10-11부터 내보내기·들이기 대상(B-013) — «들인 층» 요약에서 빠져 있었다
+    # 2026-10-11부터 내보내기·들이기 대상(B-013) — 《들인 층》 요약에서 빠져 있었다
     if (orig_layers.get("boundaries") or {}).get("parts"):
         layers.append("boundaries")
     if (orig_layers.get("read_plan") or {}).get("parts"):

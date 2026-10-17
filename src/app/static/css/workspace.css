@@ -22,7 +22,7 @@
  *   숨지 않았다. JS는 정상이었고 hidden 속성도 붙어 있었으나 CSS가 이겼다.
  *
  * !important를 쓰는 이유:
- *   hidden은 «이 요소는 지금 의미가 없다»는 선언이므로 어떤 레이아웃 규칙보다
+ *   hidden은 《이 요소는 지금 의미가 없다》는 선언이므로 어떤 레이아웃 규칙보다
  *   우선해야 한다. 이 한 줄이 없으면 display를 지정하는 규칙마다 개별 대응이
  *   필요해지고, 새 규칙을 추가할 때마다 같은 함정을 다시 밟게 된다.
  */
@@ -171,7 +171,7 @@
   --git-detail-msg-text: #bbb;
   --git-detail-code-bg: #333;
 
-  /* 폰트 — UI는 브라우저 기본 글꼴(D-108). 위 «폰트 정의» 절 참고 */
+  /* 폰트 — UI는 브라우저 기본 글꼴(D-108). 위 《폰트 정의》 절 참고 */
   --font-ui: sans-serif;
   --font-mono: "Sarasa Fixed K", "Sarasa Mono K", monospace;
   --font-size: 13px;
@@ -918,7 +918,7 @@ body.resizing-row {
 }
 
 /* 교정 초안·검토 목록의 머리글 — .ocr-result-block-id의 140px·한 줄 제한을 쓰면
-   «적용할 수 없습니다 — 다시 누르세요» 같은 행동 지시가 잘려 나간다 */
+   《적용할 수 없습니다 — 다시 누르세요》 같은 행동 지시가 잘려 나간다 */
 .ocr-correction-head {
   font-size: 11px;
   color: var(--text-muted);
@@ -993,7 +993,7 @@ body.resizing-row {
 
 .pdf-toolbar {
   /* 좁은 폭에서는 다음 줄로 감싼다 — 다른 도구 줄(.comp-toolbar·.cite-toolbar)과 같은 관례.
-     높이를 32px로 못박고 감싸지 않으면 항목이 눌려 «저장 90°(쪽 범위)» 글자가 옆 단추
+     높이를 32px로 못박고 감싸지 않으면 항목이 눌려 《저장 90°(쪽 범위)》 글자가 옆 단추
      「판독 계획」 위로 넘쳐 겹쳤다(1600px, 2026-09-30). */
   min-height: 32px;
   display: flex;
@@ -1324,7 +1324,7 @@ body.resizing-row {
    탭이 아니라 설정이므로 모드탭과 다르게 보이도록 오른쪽 끝에 둔다.
 
    왜 배지와 버튼을 나누는가: 버튼 하나가 상태와 동작을 겸하면
-   «지금이 어느 모드인지»를 읽기 어렵다. 배지가 현재를, 버튼이 갈 곳을 말한다. */
+   《지금이 어느 모드인지》를 읽기 어렵다. 배지가 현재를, 버튼이 갈 곳을 말한다. */
 .profile-switch {
   margin-left: auto; /* 탭 줄의 오른쪽 끝으로 밀어낸다 */
   align-self: center;
@@ -1377,7 +1377,7 @@ body.resizing-row {
 }
 
 /* 추출 모드에서는 탭 줄 자체에 표시를 남긴다.
-   탭 몇 개가 사라지는 것만으로는 «모드가 바뀌었다»는 느낌이 약하다. */
+   탭 몇 개가 사라지는 것만으로는 《모드가 바뀌었다》는 느낌이 약하다. */
 body[data-workspace-profile="extract"] .mode-bar {
   border-left: 3px solid var(--accent);
   background: linear-gradient(
@@ -1389,7 +1389,7 @@ body[data-workspace-profile="extract"] .mode-bar {
 
 /* 추출 모드에서는 우측 패널 제목도 달라진다 */
 body[data-workspace-profile="extract"] #right-panel-label::after {
-  /* `::after`의 선행 공백은 렌더링에서 접혀 «(4층)— 추출 모드»로 붙어 나온다.
+  /* `::after`의 선행 공백은 렌더링에서 접혀 《(4층)— 추출 모드》로 붙어 나온다.
      white-space를 pre로 두어 적은 대로 보이게 한다. */
   content: " — 추출 모드";
   white-space: pre;
@@ -1542,7 +1542,7 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
   font-size: 11px;
 }
 
-/* 버튼을 누르기 전에 «실제로 몇 쪽이 도는가»를 보여 준다.
+/* 버튼을 누르기 전에 《실제로 몇 쪽이 도는가》를 보여 준다.
    진단 배너와 같은 색 규약(extract-diag-*)을 함께 쓴다. */
 .extract-pending {
   padding: 6px 8px;
@@ -1602,7 +1602,7 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
   border-left-color: #e0a030;
 }
 
-/* 확인이 끝난 쪽은 가라앉혀 «남은 것»이 도드라지게 한다. */
+/* 확인이 끝난 쪽은 가라앉혀 《남은 것》이 도드라지게 한다. */
 .extract-overview-row.extract-overview-done {
   border-left-color: #4caf50;
   opacity: 0.6;
@@ -1641,7 +1641,7 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
   color: #fff;
 }
 
-/* 만들기 전에 «다 봤는가»를 알린다. */
+/* 만들기 전에 《다 봤는가》를 알린다. */
 .extract-review-status {
   padding: 6px 8px;
   border-radius: 4px;
@@ -3322,7 +3322,7 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
 }
 
 /* 「합치기」 — 승격과 같은 자리에 서므로 모양을 맞추고 색만 다르게 한다 (D-128 2항).
-   초록(승격 = 올린다)과 구분되는 회색조 — 합치기는 «올리는» 일이 아니다. */
+   초록(승격 = 올린다)과 구분되는 회색조 — 합치기는 《올리는》 일이 아니다. */
 .entity-merge-btn {
   font-size: 10px;
   padding: 0 4px;
@@ -3860,7 +3860,7 @@ body[data-workspace-profile="extract"] #right-panel-label::after {
   animation: progress-pulse 1.5s ease-in-out infinite;
 }
 
-/* 불확정 막대의 맥박. 이 @keyframes가 없어서 막대가 100% 꽉 찬 채 멈춰 «끝난 것»처럼 보였다
+/* 불확정 막대의 맥박. 이 @keyframes가 없어서 막대가 100% 꽉 찬 채 멈춰 《끝난 것》처럼 보였다
    (OCR·표점·번역·주석 공용, 2026-10-11 2차 전수) */
 @keyframes progress-pulse {
   0% { opacity: 1; }
@@ -4831,7 +4831,7 @@ details[open] > .punct-section-summary::before {
 }
 
 /* LLM 표시 — 이 단추·칸이 텍스트를 언어 모델에 보낸다는 뜻. 편성 탭처럼 규칙 도구와 LLM 도구가
-   나란히 있는 곳에서 «어느 것이 모델을 부르는가»를 한눈에 가른다. 표시가 없는 것은 규칙만 쓴다. */
+   나란히 있는 곳에서 《어느 것이 모델을 부르는가》를 한눈에 가른다. 표시가 없는 것은 규칙만 쓴다. */
 .llm-tag {
   display: inline-block;
   font-size: 9px;
@@ -4878,8 +4878,8 @@ details[open] > .punct-section-summary::before {
 }
 
 /* ─── LLM 연결 상태 ───────────────────────────────
-   구독형이 «무료»로 오해되면 안 되고, «서버는 떴는데 로그인은 안 된» 상태가
-   «사용 가능»으로 보이면 안 된다. 색으로 그 셋을 가른다. */
+   구독형이 《무료》로 오해되면 안 되고, 《서버는 떴는데 로그인은 안 된》 상태가
+   《사용 가능》으로 보이면 안 된다. 색으로 그 셋을 가른다. */
 .settings-llm-list {
   display: flex;
   flex-direction: column;
@@ -4898,7 +4898,7 @@ details[open] > .punct-section-summary::before {
   border-left-color: #4caf50;
 }
 
-/* 로그인만 하면 되는 상태 — 가장 흔한 «왜 안 되지»의 원인이다. */
+/* 로그인만 하면 되는 상태 — 가장 흔한 《왜 안 되지》의 원인이다. */
 .settings-llm-row.llm-needs_signin {
   border-left-color: #e0a030;
 }
@@ -7146,7 +7146,7 @@ button.mode-tab {
 .toast-message {
   flex: 1;
   word-break: break-word;
-  /* 여러 호출부가 «\n»으로 줄을 나눠 보낸다 — 없으면 한 줄로 접혔다(2026-10-11 재확인) */
+  /* 여러 호출부가 《\n》으로 줄을 나눠 보낸다 — 없으면 한 줄로 접혔다(2026-10-11 재확인) */
   white-space: pre-line;
 }
 
@@ -7278,7 +7278,7 @@ button.mode-tab {
   font-size: 11px;
 }
 
-/* 다 끝나면 색을 바꿔 «더 볼 것이 없다»를 한눈에 알린다. */
+/* 다 끝나면 색을 바꿔 《더 볼 것이 없다》를 한눈에 알린다. */
 .corr-review-bar.corr-review-complete {
   border-left-color: #4caf50;
 }
@@ -7349,7 +7349,7 @@ button.mode-tab {
 }
 
 /* 추출 패널의 절 제목 — 어느 단계인지 보이게 한다.
-   제목이 없어 «PDF를 어디서 만드는지 보이지도 않는다»는 지적이 있었다. */
+   제목이 없어 《PDF를 어디서 만드는지 보이지도 않는다》는 지적이 있었다. */
 .extract-section-title {
   font-size: 11px;
   font-weight: 600;
@@ -7409,7 +7409,7 @@ button.mode-tab {
 .comp-flow { display: flex; flex-direction: column; }
 .comp-step { border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px 6px; margin-top: 6px; font-size: 11px; }
 .comp-step-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
-/* 단계 접기(사용자 요청 2026-09-11) — 머리를 누르면 그 단계의 몸이 숨는다. ①의 «찾은 규약» 요약은 머리에 남는다 */
+/* 단계 접기(사용자 요청 2026-09-11) — 머리를 누르면 그 단계의 몸이 숨는다. ①의 《찾은 규약》 요약은 머리에 남는다 */
 .comp-step-head { cursor: pointer; user-select: none; }
 .comp-step-caret { font-size: 10px; color: var(--text-muted); width: 10px; flex: none; }
 .comp-step.is-collapsed > :not(.comp-step-head) { display: none; }
@@ -7436,7 +7436,7 @@ button.mode-tab {
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
   padding: 3px 0; background: var(--bg-primary, #fff); border-bottom: 1px solid var(--border); font-size: 11px;
 }
-/* 도구는 고른 행 바로 아래 한 줄(D-122 덧붙임 2) — «선택»을 배우지 않아도 «누르면 고칠 수 있다» */
+/* 도구는 고른 행 바로 아래 한 줄(D-122 덧붙임 2) — 《선택》을 배우지 않아도 《누르면 고칠 수 있다》 */
 #comp-batch-tools {
   display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
   padding: 4px 6px 4px 24px; font-size: 11px;
@@ -7761,7 +7761,7 @@ input.prop-level { width: 3.2em; }
 .comp-signals-foot { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
 .comp-toc-row.comp-sig-row { border-bottom: 1px dotted var(--border); padding-bottom: 3px; margin-bottom: 2px; }
 
-/* === 화면 정리 (2026-09-03, 사용자 요청 «전체적으로 어지럽다») === */
+/* === 화면 정리 (2026-09-03, 사용자 요청 《전체적으로 어지럽다》) === */
 
 /* 사이드바: 208쪽짜리 격자가 화면 절반을 먹어 「내용」이 늘 접혀 있었다.
    높이를 묶고 스스로 스크롤하게 한다 — 여덟 줄쯤 보인다. */
@@ -7790,9 +7790,9 @@ input.prop-level { width: 3.2em; }
 .comp-range-field > span { opacity: 0.6; }
 .comp-range-now { font-size: 11px; font-weight: 600; color: var(--text-primary); }
 
-/* 손질 도구 — 패널 «맨 아래»에 붙어 위로 펼쳐진다(기본 접힘).
+/* 손질 도구 — 패널 《맨 아래》에 붙어 위로 펼쳐진다(기본 접힘).
    왜 아래인가: 기사 단위는 경계만 정하면 저절로 정해진다(D-092). 여기 있는 것은
-   «기사 하나 안에서 문단 나누기»라 주 흐름이 아니고, 스크롤 통 안에 있으면 목록 끝에
+   《기사 하나 안에서 문단 나누기》라 주 흐름이 아니고, 스크롤 통 안에 있으면 목록 끝에
    붙어 중간에 뜬 것처럼 보였다(사용자 지적).
    column-reverse: summary를 아래에 두고 본문이 그 위로 자라게 한다. */
 .comp-manual {
@@ -7803,7 +7803,7 @@ input.prop-level { width: 3.2em; }
   display: flex;
   flex-direction: column-reverse;
   background: var(--bg-primary);
-  /* column-reverse는 내용이 넘치면 «위»로 넘친다 — 가두지 않으면 패널 머리줄을 덮는다 */
+  /* column-reverse는 내용이 넘치면 《위》로 넘친다 — 가두지 않으면 패널 머리줄을 덮는다 */
   overflow: hidden;
 }
 /* 요즘 크롬은 <details>의 내용을 ::details-content 안에 감싼다 — 그 상자가 flex 항목이므로
@@ -7823,7 +7823,7 @@ input.prop-level { width: 3.2em; }
   overscroll-behavior: contain;
 }
 /* 인라인 style로 있던 것을 여기로 옮겼다 — 인라인은 스타일시트를 이겨서 아래
-   «펼친 쪽이 세로를 온전히» 규칙이 먹지 않았다 */
+   《펼친 쪽이 세로를 온전히》 규칙이 먹지 않았다 */
 .comp-container {
   display: flex;
   flex-direction: column;
@@ -7867,7 +7867,7 @@ input.prop-level { width: 3.2em; }
 select.prop-level { max-width: 4.6em; }
 .prop-suppress { flex: none; }
 
-/* «경계 넣기»는 접어 둔다 — 사이드바에서는 「내용」 트리가 먼저다 */
+/* 《경계 넣기》는 접어 둔다 — 사이드바에서는 「내용」 트리가 먼저다 */
 .contents-insert-box > summary {
   cursor: pointer;
   font-size: 11px;
@@ -7884,8 +7884,8 @@ select.prop-level { max-width: 4.6em; }
 .comp-toc-row { gap: 4px; }
 
 /* === 모드 탭을 오른쪽 세로 줄로 (2026-09-03, 사용자 선택) ===
-   왜 옮겼나: 위 탭 + 접힌 패널 조합은 «지금 어느 모드인가»를 알 수 없게 만든다.
-   왼쪽 아이콘 줄이 이미 «활성 아이콘을 다시 누르면 접힘»으로 동작하므로, 오른쪽도
+   왜 옮겼나: 위 탭 + 접힌 패널 조합은 《지금 어느 모드인가》를 알 수 없게 만든다.
+   왼쪽 아이콘 줄이 이미 《활성 아이콘을 다시 누르면 접힘》으로 동작하므로, 오른쪽도
    같은 규칙을 쓰면 새로 배울 것이 없다. */
 
 .mode-rail {
@@ -8036,7 +8036,7 @@ select.prop-level { max-width: 4.6em; }
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
-/* 단위는 사이드바 「내용」에서 고른다 — 편집기 머리줄은 «지금 무엇을 보고 있는지»만 말한다 */
+/* 단위는 사이드바 「내용」에서 고른다 — 편집기 머리줄은 《지금 무엇을 보고 있는지》만 말한다 */
 .unit-select-hidden { display: none !important; }
 .unit-pick-label {
   /* 도구 바의 남는 자리를 먼저 가져간다 — 「#4 기사 · 是…」처럼 잘리면 어느 대목인지 모른다.
@@ -8055,7 +8055,7 @@ select.prop-level { max-width: 4.6em; }
 .unit-pick-label + .text-toolbar-spacer { flex: 0 1 auto; }
 .unit-pick-label.is-empty { font-weight: 400; color: var(--text-muted); }
 
-/* «지금 경계» — 이미 저장된 것. 접어 두고 수만 보인다(D-122). 목록은 사이드바 「내용」에도 있다 */
+/* 《지금 경계》 — 이미 저장된 것. 접어 두고 수만 보인다(D-122). 목록은 사이드바 「내용」에도 있다 */
 .comp-current { flex: none; font-size: 11px; }
 .comp-current > summary { display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 2px 0; }
 .comp-current-title { font-size: 11px; font-weight: 600; color: var(--text-muted); }
@@ -8157,7 +8157,7 @@ select.prop-level { max-width: 4.6em; }
 .wizard-status.todo, .wizard-row.todo { border-left: 3px solid var(--warning, #f0b429); }
 .wizard-row span { font-size: 11px; color: var(--text-muted); text-align: right; }
 
-/* 두 길의 어긋남 한 줄 (판정 모델을 돌린 뒤에만 선다) — 판정이 아니라 «모름»의 표시다.
+/* 두 길의 어긋남 한 줄 (판정 모델을 돌린 뒤에만 선다) — 판정이 아니라 《모름》의 표시다.
    많이 다를 때만 색을 준다. 늘 색을 주면 경고가 배경이 되어 아무도 안 본다 */
 .comp-divergence {
   font-size: 11px;

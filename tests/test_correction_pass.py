@@ -165,7 +165,7 @@ class TestEvaluate:
 
 
 class _EchoLlmEngine(BaseOcrEngine):
-    """앵커를 받아 «교정본»을 돌려주는 가짜 LLM 엔진. 받은 kwargs를 기록한다."""
+    """앵커를 받아 《교정본》을 돌려주는 가짜 LLM 엔진. 받은 kwargs를 기록한다."""
 
     engine_id = "llm_vision"
     display_name = "fake llm"
@@ -362,10 +362,10 @@ class TestApplyPreservesPriorWork:
         assert engine.calls == []
 
 
-# ─── 사다리의 «이음» (2026-09-18) ─────────────────────────────────────
+# ─── 사다리의 《이음》 (2026-09-18) ─────────────────────────────────────
 # 무엇을 고정하는가:
 #   - 초안은 블록 단위로 병합된다: 정밀 판독을 블록 하나에 돌려도 다른 블록 결과가 남는다
-#   - 2단계 판정은 1단계 답이 있으면 «두 단계의 일치»다(앵커가 아니라)
+#   - 2단계 판정은 1단계 답이 있으면 《두 단계의 일치》다(앵커가 아니라)
 #   - 검토 목록(list_review_pages)은 사람이 볼 블록이 남은 쪽만 센다
 #   - mark_applied는 applied_blocks를 누적한다
 
@@ -509,7 +509,7 @@ class TestLadderJoints:
 
 
 class TestLadderRoute:
-    """라우터의 mode="ladder": 1단계 전부 → 떨어진 블록만 2단계 (D-082의 «이음» ①)."""
+    """라우터의 mode="ladder": 1단계 전부 → 떨어진 블록만 2단계 (D-082의 《이음》 ①)."""
 
     def test_ladder_escalates_only_rejected(self, library, monkeypatch):
         root, doc = library
@@ -657,7 +657,7 @@ class TestCrossReviewFixes:
         (doc / "L2_ocr" / "v1_page_001.json").write_text(json.dumps(l2), encoding="utf-8")
         assert draft_is_stale(doc, "v1", 1, load_draft(doc, "v1", 1)) is True
         pages = list_review_pages(doc, "v1")
-        assert pages and pages[0]["stale"] is True  # 감추지 않고 «낡음»으로 올린다
+        assert pages and pages[0]["stale"] is True  # 감추지 않고 《낡음》으로 올린다
         from ocr.correction_pass import StaleDraftError
 
         with pytest.raises(StaleDraftError):
@@ -699,8 +699,8 @@ class TestCrossReviewFixes:
                 "blocks": 0,
             }
         ]
-        # 깨진 JSON 오류는 «낡은 초안»(409) 예외로 분류되지 않는다 — 클래스 관계만 잰다
-        # (깨진 L2를 실제로 넣어 보는 시험은 아니다. 위에서 넣은 것은 깨진 «초안»이다.)
+        # 깨진 JSON 오류는 《낡은 초안》(409) 예외로 분류되지 않는다 — 클래스 관계만 잰다
+        # (깨진 L2를 실제로 넣어 보는 시험은 아니다. 위에서 넣은 것은 깨진 《초안》이다.)
         assert not issubclass(
             json.JSONDecodeError, __import__("ocr.correction_pass", fromlist=["x"]).StaleDraftError
         )
@@ -749,7 +749,7 @@ class TestCrossReviewFixes:
         apply_draft(doc, "v1", 1, ["b3"])
         engine.reply_by_block["孔明卧龍"] = "孔明臥竜"
         run_correction(pipeline, engine, doc, "doc1", "v1", 1, b3, mode="precise")
-        # 사람이 L4를 손으로 고쳐 옛 적용문이 사라졌다 → «전에 적용했다»로 성공 처리하면 안 된다
+        # 사람이 L4를 손으로 고쳐 옛 적용문이 사라졌다 → 《전에 적용했다》로 성공 처리하면 안 된다
         from core.document import save_page_text
 
         save_page_text(doc, "v1", 1, "王戎簡要\n\n裴楷清通\n\n손으로 고침")

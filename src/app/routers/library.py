@@ -731,9 +731,9 @@ async def api_restore_from_trash(trash_type: str, trash_name: str):
 async def api_validate_repos(doc_id: str, interpretation_id: str | None = Query(None)):
     """서고 파일이 제 스키마를 지키는가 — 「검증 결과」 패널 (D-101).
 
-    목적: 스키마를 «적어 두기만 한 것»에서 «언제든 확인할 수 있는 것»으로. 문헌(과 있으면
+    목적: 스키마를 《적어 두기만 한 것》에서 《언제든 확인할 수 있는 것》으로. 문헌(과 있으면
           해석) 저장소의 JSON을 훑어 파일마다 정해진 스키마로 검증하고, 어긋난 곳을
-          «파일 · 위치 · 무엇이 틀렸나»로 돌려준다.
+          《파일 · 위치 · 무엇이 틀렸나》로 돌려준다.
     입력: doc_id, (선택) interpretation_id.
     출력: core.validation.validate_repos() 참조.
     """
@@ -777,10 +777,10 @@ class LlmKeysRequest(BaseModel):
 
 @router.get("/api/settings/decision-models")
 async def api_decision_models(check: bool = Query(False)):
-    """판정 모델(D-134)의 연결 상태 — 설정 화면 «판정 모델» 칸이 그린다.
+    """판정 모델(D-134)의 연결 상태 — 설정 화면 《판정 모델》 칸이 그린다.
 
-    판정 모델은 LLM 라우터에 들지 않아(계약이 «프롬프트 → 글»이 아니다) `/api/llm/accounts`에
-    나오지 않는다. 그래서 따로 둔다. 키 값은 돌려주지 않는다 — «있는가»와 어디서 왔는가만.
+    판정 모델은 LLM 라우터에 들지 않아(계약이 《프롬프트 → 글》이 아니다) `/api/llm/accounts`에
+    나오지 않는다. 그래서 따로 둔다. 키 값은 돌려주지 않는다 — 《있는가》와 어디서 왔는가만.
     check=true면 실제로 한 번 부른다(질문 하나, 입력 수십 토큰 — $0.000002 남짓). 키가 맞는지는
     불러 봐야 안다: 형식만 맞고 결제가 안 된 키가 흔하다.
     출력: {"models": [{id, display_name, role, has_key, env_name, signup_url, steps,
@@ -803,15 +803,15 @@ async def api_decision_models(check: bool = Query(False)):
             "id": "cloudflare",
             "cls": ClefClient,
             "display_name": "Cloudflare clef (Workers AI)",
-            "role": "이미지 판정 — 「말로 지시」 ① 자동 스캔의 «무슨 글인가»"
+            "role": "이미지 판정 — 「말로 지시」 ① 자동 스캔의 《무슨 글인가》"
             "(이 키나 OpenRouter 키가 있으면 종류 판정 모델의 기본. 둘 다 있으면 "
             "이쪽(무료 몫)이 먼저 돌고 실패한 쪽만 OpenRouter로 넘어간다)",
             "signup_url": "https://dash.cloudflare.com/profile/api-tokens",
             "steps": [
                 "Cloudflare 대시보드에 로그인합니다",
-                "My Profile ▸ API Tokens에서 «Workers AI» 권한이 있는 토큰을 만듭니다",
+                "My Profile ▸ API Tokens에서 《Workers AI》 권한이 있는 토큰을 만듭니다",
                 "대시보드 오른쪽의 Account ID를 복사합니다",
-                "아래 두 칸(토큰·계정 id)에 붙여 넣고 «저장» → «연결 확인» — "
+                "아래 두 칸(토큰·계정 id)에 붙여 넣고 《저장》 → 《연결 확인》 — "
                 "Windows 사용자 환경변수 CLOUDFLARE_API_TOKEN·CLOUDFLARE_ACCOUNT_ID에 "
                 "있으면 그것도 읽습니다",
             ],
@@ -821,16 +821,16 @@ async def api_decision_models(check: bool = Query(False)):
             "id": "perplexity",
             "cls": DeciderClient,
             "display_name": "Perplexity Decider (decider-27b)",
-            "role": "이미지 판정 — 「말로 지시」 ① 자동 스캔의 «무슨 글인가»"
+            "role": "이미지 판정 — 「말로 지시」 ① 자동 스캔의 《무슨 글인가》"
             "(종류 판정 모델에서 고른다)",
-            # 주소는 공식 문서(docs.perplexity.ai, 2026-10-02)의 «Generate API Keys» 링크 그대로
+            # 주소는 공식 문서(docs.perplexity.ai, 2026-10-02)의 《Generate API Keys》 링크 그대로
             "signup_url": "https://console.perplexity.ai/project/keys",
             "steps": [
                 "Perplexity API 콘솔(아래 주소)에 로그인합니다",
                 "프로젝트를 만들고 결제 수단을 등록합니다"
                 "(로그인만으로는 프로젝트가 생기지 않습니다)",
                 "API Keys에서 키를 만듭니다 — 키 전체는 만들 때 한 번만 보이니 바로 복사하세요",
-                "아래 칸에 붙여 넣고 «저장» → «연결 확인»",
+                "아래 칸에 붙여 넣고 《저장》 → 《연결 확인》",
             ],
         },
         {
@@ -838,7 +838,7 @@ async def api_decision_models(check: bool = Query(False)):
             "id": "openrouter",
             "cls": OpenRouterDecisionClient,
             "display_name": "Perplexity decider (OpenRouter 경유)",
-            "role": "텍스트 판정 — 편성 «판정 모델로 고르기»에서 Jev가 실패한 호출을 "
+            "role": "텍스트 판정 — 편성 《판정 모델로 고르기》에서 Jev가 실패한 호출을 "
             "대신 판정(폴백). "
             "TypeSafe 키가 없으면 이 키로 Jev도 OpenRouter 경유로 부른다. "
             "이미지 판정에도 쓴다 — 자동 스캔의 clef를 OpenRouter로 부른다"
@@ -847,20 +847,20 @@ async def api_decision_models(check: bool = Query(False)):
             "steps": [
                 "OpenRouter에 로그인하고 크레딧을 충전합니다",
                 "Settings ▸ API Keys에서 키를 만듭니다",
-                "아래 칸에 붙여 넣고 «저장» → «연결 확인»",
+                "아래 칸에 붙여 넣고 《저장》 → 《연결 확인》",
             ],
         },
         {
             "id": "typesafe",
             "cls": JevClient,
             "display_name": "TypeSafe Jev",
-            "role": "텍스트 판정 — 편성 «판정 모델로 고르기»의 본문 판정과 목차 대조(주 판정자, "
+            "role": "텍스트 판정 — 편성 《판정 모델로 고르기》의 본문 판정과 목차 대조(주 판정자, "
             "D-139). 이 칸은 TypeSafe 키만 봅니다 — "
             "TypeSafe 키가 없어도 OpenRouter 키가 있으면 같은 Jev를 OpenRouter 경유로 부릅니다",
             "signup_url": "https://docs.typesafe.ai",
             "steps": [
                 "TypeSafe에 가입하고 콘솔에서 API 키를 만듭니다",
-                "키를 아래 칸에 붙여 넣고 «저장» → «연결 확인»",
+                "키를 아래 칸에 붙여 넣고 《저장》 → 《연결 확인》",
             ],
         },
     ]
@@ -888,7 +888,7 @@ async def api_decision_models(check: bool = Query(False)):
                 }
                 row["detail"] = hint.get(e.status or 0) or f"{e} {e.status or ''}".strip()
         out.append(row)
-    # 화면이 «종류 판정 모델»에서 clef를 고를 수 있는가·처음 고를 것(D-135 후속, 2026-10-05).
+    # 화면이 《종류 판정 모델》에서 clef를 고를 수 있는가·처음 고를 것(D-135 후속, 2026-10-05).
     # clef는 사슬이다 — Cloudflare clef → OpenRouter clef → 기본 비전 모델. 자동 스캔 라우트
     # (`llm_ocr._decision_client`)는 Cloudflare 키가 없고 OpenRouter 키만 있으면 OpenRouter clef부터
     # 시작한다. 그런데 화면이 Cloudflare 키만 보고 clef를 막아, OpenRouter 키만 있는 사람은 clef를
@@ -903,8 +903,8 @@ async def api_decision_models(check: bool = Query(False)):
     )
     # Jev를 어느 길로 부르는가(D-136 후속, 2026-10-05) — 편성 라우트의 `make_jev_client`와 같은
     # 조건을 여기 한 곳에서 낸다: TypeSafe 키 → 직결, 없고 OpenRouter 키 → OpenRouter 경유.
-    # TypeSafe 칸의 has_key는 TypeSafe 키만 본다(전에는 OpenRouter 키로도 «키 있음»이 되고
-    # 「연결 확인」이 그 키를 TypeSafe 주소로 보냈다). 그래서 «OpenRouter 키로 Jev를 부른다»는
+    # TypeSafe 칸의 has_key는 TypeSafe 키만 본다(전에는 OpenRouter 키로도 《키 있음》이 되고
+    # 「연결 확인」이 그 키를 TypeSafe 주소로 보냈다). 그래서 《OpenRouter 키로 Jev를 부른다》는
     # 이 값과 TypeSafe 칸의 안내 한 줄로 알린다.
     jev_via = (
         "typesafe" if has.get("typesafe") else "openrouter" if has.get("openrouter") else None
@@ -924,10 +924,10 @@ async def api_decision_models(check: bool = Query(False)):
 
 @router.get("/api/settings/llm-keys")
 async def api_get_llm_keys():
-    """서고 .env에 어떤 키가 들어 있는가 — **값이 아니라 «있는가»만** (D-102).
+    """서고 .env에 어떤 키가 들어 있는가 — **값이 아니라 《있는가》만** (D-102).
 
     출력: {"path", "exists", "keys": {provider: {set, hint, env_name}}}
-    hint는 끝 네 글자뿐이다(«…abcd»). 사람이 «내가 넣은 그 키가 맞다»를 알아볼 만큼만.
+    hint는 끝 네 글자뿐이다(《…abcd》). 사람이 《내가 넣은 그 키가 맞다》를 알아볼 만큼만.
     """
     from core.env_settings import read_status
 
@@ -1056,7 +1056,7 @@ async def api_oauth_start():
 
 @router.post("/api/settings/ollama/signin")
 async def api_ollama_signin():
-    """`ollama signin`을 앱이 대신 띄우고 로그인 주소를 준다 — «로그인 필요»에서 끝내지 않는다."""
+    """`ollama signin`을 앱이 대신 띄우고 로그인 주소를 준다 — 《로그인 필요》에서 끝내지 않는다."""
     import app._state as _st
     from core.ollama_signin import start
 

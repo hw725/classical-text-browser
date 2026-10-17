@@ -1,11 +1,11 @@
 """Perplexity Decisions API — 이미지를 받는 판정 모델 (D-134).
 
 왜 있는가:
-    판정 모델(«state + 형이 정해진 질문 → 확률 붙은 답», 글을 만들지 않는다)은 지금까지 TypeSafe Jev
-    하나였고 Jev는 **텍스트 전용**이다. 그래서 쪽 이미지를 봐야 하는 일 — 자동 스캔의 «무슨 글인가»
-    (활자·판본·손글씨·훈점·한글·백지) — 은 생성형 비전 LLM에 자유 JSON을 받아 왔고 느렸다.
+    판정 모델(《state + 형이 정해진 질문 → 확률 붙은 답》, 글을 만들지 않는다)은 지금까지 TypeSafe
+    Jev 하나였고 Jev는 **텍스트 전용**이다. 그래서 쪽 이미지를 봐야 하는 일 — 자동 스캔의 《무슨
+    글인가》 (활자·판본·손글씨·훈점·한글·백지) — 은 생성형 비전 LLM에 자유 JSON을 받아 왔고 느렸다.
     Perplexity의 decider-27b는 같은 계약에 이미지를 받는다. 답은 정해진 선택지의 확률뿐이라
-    «정해진 값이 아니면 버린다»를 파서가 아니라 형식이 지킨다.
+    《정해진 값이 아니면 버린다》를 파서가 아니라 형식이 지킨다.
 
 무엇을 아는가 (공식 문서 2026-10-02 확인 — docs.perplexity.ai/docs/decisions):
     - `POST https://api.perplexity.ai/v1/decisions`, `Authorization: Bearer <키>`(x-api-key는 401).
@@ -14,15 +14,17 @@
       모델 id는 `decider-27b`(HF 이름 pplx-decider-v1-27b는 API에서 안 받는다).
     - 이미지는 **state 배열 안에**
       `{"type":"image_url","image_url":{"url":"data:image/png;base64,…"}}`.
-      PNG·JPEG·WebP data URL만 — http(s) 주소는 400(«API는 주소를 가져오지 않는다»).
+      PNG·JPEG·WebP data URL만 — http(s) 주소는 400(《API는 주소를 가져오지 않는다》).
       한 장에 32×32 타일 2,048개까지(1440×1440은 되고 1600×1310은 안 된다). 넘기면 1분쯤 기다리다
       504가 온다 — 그래서 보내기 전에 줄인다(`fit_image`). 메가픽셀당 약 1,000 입력 토큰.
     - 입력 100만 토큰당 $0.04, 출력 무료, 요청당 요금 없음. 초당 10요청(모든 요금제), 넘으면 429 +
       Retry-After. 질문 1~128개, 입력 262,144토큰 미만, 본문 32MiB.
     - **언어별 정확도는 문서에 없다.** 기반은 Qwen3.8-27B. 한문·고서 이미지에서 얼마나 맞는지는
-      우리 자료로 재야 한다(`scripts/eval_decider_survey.py`) — 재기 전에는 답을 «제안»으로만 쓴다.
+      우리 자료로 재야 한다(`scripts/eval_decider_survey.py`) —
+      재기 전에는 답을 《제안》으로만 쓴다.
 
-키: PERPLEXITY_API_KEY — 환경변수 → 서고 `.env`(설정 화면 «판정 모델»에서 넣는다) → 프로젝트 `.env`.
+키: PERPLEXITY_API_KEY — 환경변수 → 서고 `.env`(설정 화면 《판정 모델》에서 넣는다)
+→ 프로젝트 `.env`.
 """
 
 from __future__ import annotations

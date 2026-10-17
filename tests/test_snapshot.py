@@ -440,7 +440,7 @@ class TestBuildSnapshot:
     def test_retired_folders_are_not_exported(self, tmp_path):
         """물린 폴더(마이그레이션이 남긴 흔적)는 스냅샷에 담지 않는다.
 
-        왜: blocks_migrated_v1/·boundaries_migrated_v2/·works_removed_v1/은 «되돌릴 수 있게»
+        왜: blocks_migrated_v1/·boundaries_migrated_v2/·works_removed_v1/은 《되돌릴 수 있게》
         남긴 옛 파일이지 지금의 엔티티가 아니다. 담으면 가져오기가 남의 서고에 죽은 폴더를
         되살린다(실측 2026-09-04: 천진담초 스냅샷의 core_entities가 물린 폴더 셋뿐이었다).
         """
@@ -475,7 +475,7 @@ class TestBuildSnapshot:
 
         lib, doc_id, interp_id = _make_library(tmp_path)
         result = build_snapshot(lib, doc_id, interp_id)
-        # «None이 아니다»가 아니라 실제 저장소의 HEAD와 같은지 본다(2026-10-12 강화)
+        # 《None이 아니다》가 아니라 실제 저장소의 HEAD와 같은지 본다(2026-10-12 강화)
         doc_head = git.Repo(lib / "documents" / doc_id).head.commit.hexsha
         assert result["original"]["head_hash"] == doc_head
         assert (
@@ -811,7 +811,7 @@ class TestExchangeSchemaIsTheSingleSourceOfTruth:
 
     왜 이 시험이 필요한가: v1.3까지 스키마와 구현이 **다른 모양**이었고(문서는 export_info·
     parts·pages, 구현은 export_timestamp·original·interpretation), 게다가 스키마를 파이썬
-    어디서도 읽지 않아 아무도 그 사실을 몰랐다. 여기서 «내보낸 것이 스키마를 통과하는가»를
+    어디서도 읽지 않아 아무도 그 사실을 몰랐다. 여기서 《내보낸 것이 스키마를 통과하는가》를
     고정해 두면, 구현이 바뀌었는데 스키마를 안 고치면 곧바로 빨간불이 된다.
     """
 
@@ -845,7 +845,7 @@ class TestExchangeSchemaIsTheSingleSourceOfTruth:
         왜 교환 스키마가 $ref를 걸지 않는가: interp/*.schema.json이
         additionalProperties:false라 그 도장을 거부한다. 파일은 저장할 때 이미 그 스키마로
         검증되므로(core/punctuation.py 등) 검증이 빠진 것이 아니라 자리가 나뉜 것이고,
-        이 시험이 «내보낸 것도 그 스키마를 지키는가»를 확인한다.
+        이 시험이 《내보낸 것도 그 스키마를 지키는가》를 확인한다.
         """
         import json as _json
 

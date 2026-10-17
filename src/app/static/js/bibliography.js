@@ -185,7 +185,7 @@ function _renderBibliography(bib) {
  * 목적: 갈라 담은 칸이 있으면 그것을 보이고, 못 읽은 것은 원문 그대로 보인다.
  * 「반엽 10행」은 편성이 좌표에서 잰 값과 맞대어 볼 기준이다(D-120).
  * 값은 사용자 입력·서지 파서·스냅샷 들이기에서 온다 — 다른 서식 함수처럼 이스케이프한다.
- * 전에는 그대로 innerHTML에 들어갔고, «원문:» 앞 줄바꿈도 한 줄로 접혔다(2026-10-11 재확인).
+ * 전에는 그대로 innerHTML에 들어갔고, 《원문:》 앞 줄바꿈도 한 줄로 접혔다(2026-10-11 재확인).
  */
 function _formatPansik(info) {
   if (!info || typeof info !== "object") return '<span class="bib-empty">[미입력]</span>';
@@ -592,7 +592,7 @@ async function _saveEditedBibliography() {
   const title = _getEditField("bib-edit-title");
   const creatorName = _getEditField("bib-edit-creator-name");
 
-  // 칸이 화면에 있으면 비운 것은 «지우기»(null)다. 예전에는 «값 || 옛 값»이라 칸을 비워도
+  // 칸이 화면에 있으면 비운 것은 《지우기》(null)다. 예전에는 《값 || 옛 값》이라 칸을 비워도
   // 옛 값이 되살아나 지울 수 없었다(2026-10-11 전수). 칸이 없을 때만 옛 값을 둔다.
   // 제목은 필수라 비우면 옛 제목을 둔다.
   const updated = {
@@ -693,7 +693,7 @@ function _formatRepository(repo) {
 function _formatDigitalSource(ds) {
   if (!ds) return '<span class="bib-empty">[미입력]</span>';
   let text = _escapeHtmlBibliography(ds.platform || "");
-  // http(s)만 링크로 만든다 — 서지는 손 입력·스냅샷 들이기로도 들어와 «javascript:» 같은 주소가
+  // http(s)만 링크로 만든다 — 서지는 손 입력·스냅샷 들이기로도 들어와 《javascript:》 같은 주소가
   // 링크가 될 수 있었다(2026-10-11 재확인). 다른 주소는 글자로만 보인다.
   if (ds.source_url && /^https?:\/\//i.test(String(ds.source_url))) {
     text += ` <a href="${_escapeHtmlBibliography(ds.source_url)}" target="_blank" rel="noopener" class="bib-link">열기</a>`;
@@ -715,7 +715,7 @@ function _escapeHtmlBibliography(str) {
 }
 
 /**
- * HTML «속성값»용 이스케이프.
+ * HTML 《속성값》용 이스케이프.
  *
  * 왜 _escapeHtmlBibliography와 따로 두는가:
  *   옛 판의 글자용 이스케이프(textContent 경로)는 <, >, &만 바꿨다. value="…" 안에서는 따옴표
@@ -723,7 +723,7 @@ function _escapeHtmlBibliography(str) {
  *   따옴표까지 막지만(2026-10-11), 속성 자리임을 드러내려고 이름을 나눠 둔다.
  *
  * 이름에 bib를 붙인 까닭:
- *   JS 파일들이 모듈이 아니라 <script>로 나란히 읽혀 함수 이름이 «전역 하나»를
+ *   JS 파일들이 모듈이 아니라 <script>로 나란히 읽혀 함수 이름이 《전역 하나》를
  *   공유한다. 다른 파일에도 _escAttr가 있어 같은 이름이면 서로 덮어쓴다.
  *
  * 입력: str — 임의의 문자열(null/undefined 허용)

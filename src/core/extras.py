@@ -1,11 +1,11 @@
-"""엔진 추가 설치 — «uv sync --extra»를 서버가 대신 돌린다 (D-106).
+"""엔진 추가 설치 — 《uv sync --extra》를 서버가 대신 돌린다 (D-106).
 
 왜 있는가:
     이 앱의 사용자는 터미널을 쓰지 않는다. 고서 엔진을 넣으려고 `uv sync --extra classical`을
     치게 하면 거기서 끝난다(2026-09-05 지적). 업데이트(D-103)가 이미 uv sync를 돌리므로
     같은 길로 extras도 넣는다 — 화면의 「설치」 단추 하나.
 
-함정 — uv sync는 환경을 lock과 «정확히» 맞춘다:
+함정 — uv sync는 환경을 lock과 《정확히》 맞춘다:
     `--extra`로 적지 않은 extras는 **지운다.** 고서 엔진을 넣으려고 `uv sync --extra classical`만
     돌리면 전에 넣은 일본어 엔진이 사라진다. 그래서 고른 extras를 `.ctb-extras.json`(앱 루트,
     gitignore)에 기록하고, 업데이트와 추가 설치가 언제나 **기록 전부**를 넘긴다. 기록이 없으면
@@ -26,7 +26,7 @@ from pathlib import Path
 from core.document import write_json_atomic
 
 # 화면에 보여 주는 extras. 이름은 pyproject.toml [project.optional-dependencies]와 같아야 한다.
-# probe: 이 모듈이 import되면 «깔려 있다»고 본다. japanese·classical은 의존이 같아서
+# probe: 이 모듈이 import되면 《깔려 있다》고 본다. japanese·classical은 의존이 같아서
 # 하나를 깔면 둘 다 import된다 — 모델 파일은 엔진이 처음 돌 때 따로 받는다.
 KNOWN_EXTRAS: dict[str, dict] = {
     "classical": {
@@ -41,7 +41,8 @@ KNOWN_EXTRAS: dict[str, dict] = {
         "size": "약 170MB",
         "probe": "onnxruntime",
     },
-    # D-124: probe는 honkoku_ocr — onnxruntime만 보면 고서 엔진을 깐 PC에서 «깔려 있다»고 잘못 본다
+    # D-124: probe는 honkoku_ocr — onnxruntime만 보면 고서 엔진을 깐 PC에서 《깔려 있다》고 잘못
+    # 본다
     "honkoku": {
         "label": "くずし字 엔진 (みんなで翻刻OCR)",
         "for": "붓으로 흘려 쓴 초서·변체가나 고문서를 읽습니다. 모델 290MB는 첫 사용 때 받습니다.",
@@ -78,7 +79,7 @@ def defined_extras() -> set[str]:
 
 def _venv_python() -> str:
     """uv sync가 갱신하는 환경(.venv)의 파이썬. GPU PC는 서버가 .venv-gpu로 뜨므로 sys.executable로
-    짚으면 «깔림» 판정과 설치 대상이 어긋난다(리뷰 지적)."""
+    짚으면 《깔림》 판정과 설치 대상이 어긋난다(리뷰 지적)."""
 
     for rel in ("Scripts/python.exe", "bin/python"):
         cand = app_root() / ".venv" / rel
@@ -150,7 +151,7 @@ def _save_record(extras: list[str]) -> None:
 
 def sync_args(extra_extras: list[str] | None = None) -> list[str]:
     """`uv sync`에 넘길 인자 — 기록된 extras 전부 + 이번에 더할 것."""
-    # 기록에 남은 «지금 pyproject에 없는 이름»은 넘기지 않는다 — uv sync --extra bogus는 rc=2로
+    # 기록에 남은 《지금 pyproject에 없는 이름》은 넘기지 않는다 — uv sync --extra bogus는 rc=2로
     # 죽고, 그 뒤로 업데이트·설치가 화면에서 복구할 길 없이 전부 실패한다(리뷰 실측).
     defined = defined_extras()
     wanted = sorted((set(recorded_extras()) | set(extra_extras or [])) & defined)
@@ -254,7 +255,7 @@ def start_install(extra: str, on_done=None) -> dict:
             }
         )
 
-    # 준비(기록 읽기·probe)에서 죽어도 «도는 중»이 영원히 남지 않게 — 예외 경계 안에서.
+    # 준비(기록 읽기·probe)에서 죽어도 《도는 중》이 영원히 남지 않게 — 예외 경계 안에서.
     try:
         args = sync_args([extra])
     except Exception as e:  # noqa: BLE001
@@ -304,7 +305,7 @@ def start_install(extra: str, on_done=None) -> dict:
                 code = -1
                 with _lock:
                     _job["log"].append("30분을 넘겨 중단했습니다.")
-        except Exception as e:  # noqa: BLE001 — 어떤 예외든 «도는 중»을 남기지 않는다
+        except Exception as e:  # noqa: BLE001 — 어떤 예외든 《도는 중》을 남기지 않는다
             code = -1
             with _lock:
                 _job["log"].append(f"실패: {type(e).__name__}: {e}")

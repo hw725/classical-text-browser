@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""사각지대 실측 — 시험이 «본문을 돌린» 함수를 센다.
+"""사각지대 실측 — 시험이 《본문을 돌린》 함수를 센다.
 
 왜 이 스크립트가 필요한가:
     이 저장소는 사각지대를 기억이 아니라 실측으로 찾기로 했다(CLAUDE.md
@@ -38,7 +38,7 @@ import sys
 from pathlib import Path
 
 
-# CJK Text Contract E3 — 한국어 Windows 콘솔은 cp949 라 «—»·«✓» 를 print 하면
+# CJK Text Contract E3 — 한국어 Windows 콘솔은 cp949 라 《—》·《✓》 를 print 하면
 # UnicodeEncodeError 로 즉사한다. 이 PC 는 PYTHONUTF8=1 이 박혀 있어 겪지 않는다.
 from core.console import force_utf8_console
 

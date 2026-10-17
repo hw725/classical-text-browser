@@ -34,7 +34,7 @@ def ensure_document(library: Path, doc_id: str, pdf: Path | None, title: str) ->
     if not (doc_path / "manifest.json").exists():
         if pdf is None:
             raise FileNotFoundError(
-                f"서고에 문헌 «{doc_id}»이 없습니다 — 처음 적용할 때는 PDF 경로를 함께 주세요. "
+                f"서고에 문헌 《{doc_id}》이 없습니다 — 처음 적용할 때는 PDF 경로를 함께 주세요. "
                 f"예: ctb read 교재.pdf --doc-id {doc_id} --plan 계획.json"
             )
         add_document(library_path=library, title=title or pdf.stem, doc_id=doc_id, files=[pdf])
@@ -168,7 +168,7 @@ def cmd_read(args) -> int:
                     count = n["unmerged"].get("count", 0)
                     print(
                         f"  {page}쪽: 새 글이 옛 글과 많이 달라 사람 교정 {count}건을 "
-                        "«기록»으로 옮겼습니다 — 교정 탭에서 확인"
+                        "《기록》으로 옮겼습니다 — 교정 탭에서 확인"
                     )
                 elif (n.get("rebased") or {}).get("kept"):
                     kept = n["rebased"]["kept"]
@@ -307,7 +307,9 @@ def add_parser(subparsers, default_library: str) -> None:
     p.add_argument("--execute", action="store_true", help="실제로 OCR을 돌린다")
     p.add_argument("--redo", action="store_true", help="이미 결과가 있는 쪽도 다시 돌린다")
     p.add_argument(
-        "--model", help="llm_vision 구간이 쓸 모델 («ctb models»의 번호·이름 일부·프로바이더:모델)"
+        "--model",
+        help="llm_vision 구간이 쓸 모델 "
+        "(《ctb models》의 번호·이름 일부·프로바이더:모델)",
     )
     p.add_argument(
         "--note",

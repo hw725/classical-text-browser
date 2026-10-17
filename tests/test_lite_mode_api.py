@@ -814,7 +814,7 @@ def test_force_rmtree_removes_git_repo(tmp_path):
 
     Windows에서 `.git/objects/` 파일은 읽기 전용 속성이 붙어
     `shutil.rmtree`가 PermissionError로 멈춘다. `ignore_errors=True`로
-    넘기면 오류만 사라지고 파일은 남는다 — 실제로 배치가 «정리했다»고
+    넘기면 오류만 사라지고 파일은 남는다 — 실제로 배치가 《정리했다》고
     보고하면서 논문 사본을 계속 쌓던 사고가 있었다.
     """
     import os
@@ -866,8 +866,8 @@ def test_batch_works_when_manifest_page_count_missing(batch_ready):
 
     add_document()로 만든 문헌(CLI·URL 등록)은 page_count가 null이다.
     사이드바는 PDF를 직접 열어 쪽 수를 알아내므로 **화면에는 쪽이 보이는데**,
-    서버가 manifest만 믿으면 «쪽이 0개»라고 판단해 배치 OCR이
-    «OCR 할 쪽이 없습니다»로 죽는다. 실제로 사용자가 UI에서 이 에러를 만났다.
+    서버가 manifest만 믿으면 《쪽이 0개》라고 판단해 배치 OCR이
+    《OCR 할 쪽이 없습니다》로 죽는다. 실제로 사용자가 UI에서 이 에러를 만났다.
     """
     import json
     from pathlib import Path
@@ -931,8 +931,8 @@ def test_billing_kind_distinguishes_subscription_from_free():
     """구독 한도와 무료를 구분해야 한다.
 
     Ollama 클라우드는 금액이 0으로 기록되지만 계정 한도를 쓴다.
-    이것을 «무료»로 표시하면 사용자가 한도를 모르는 채 소모하게 된다.
-    실제로 폴백 순서만 보고 «무료 로컬»이라 여겼는데 유료 API가
+    이것을 《무료》로 표시하면 사용자가 한도를 모르는 채 소모하게 된다.
+    실제로 폴백 순서만 보고 《무료 로컬》이라 여겼는데 유료 API가
     처리하고 있던 일이 있었다.
     """
     from app.routers.llm_ocr import _billing_kind
@@ -950,7 +950,7 @@ def test_billing_kind_distinguishes_subscription_from_free():
 
 
 def test_billing_note_never_calls_subscription_free():
-    """구독 한도 사용을 «무료»라고 말하면 안 된다."""
+    """구독 한도 사용을 《무료》라고 말하면 안 된다."""
     from app.routers.llm_ocr import _billing_note
 
     usage = {"calls": 15, "cost_usd": 0.0}
@@ -1137,7 +1137,7 @@ def test_pending_counts_untouched_pages(isolated_app):
 def test_batch_skips_pages_whose_layout_is_unchanged(isolated_app):
     """레이아웃이 그대로면 배치가 전부 건너뛴다 (LLM 호출 0회).
 
-    이 테스트가 LLM 없이 끝난다는 사실 자체가 «건너뛰었다»의 증거다.
+    이 테스트가 LLM 없이 끝난다는 사실 자체가 《건너뛰었다》의 증거다.
     """
     client, tmp_path = isolated_app
     body = _register(client, tmp_path, "scan", "batch1", pages=3)
@@ -1165,7 +1165,7 @@ def test_batch_skips_pages_whose_layout_is_unchanged(isolated_app):
 def test_redo_can_be_turned_off(isolated_app):
     """redo_changed_layout=False면 레이아웃이 바뀌어도 건너뛴다.
 
-    대량 배치처럼 «어떤 일이 있어도 다시 돌지 않는다»를 보장해야 하는
+    대량 배치처럼 《어떤 일이 있어도 다시 돌지 않는다》를 보장해야 하는
     상황을 위한 안전장치다.
     """
     client, tmp_path = isolated_app
@@ -1210,7 +1210,7 @@ def test_redo_can_be_turned_off(isolated_app):
 def test_page_range_with_force_runs_only_those_pages(isolated_app):
     """쪽 범위 + 강제 재실행 = 지정한 쪽만 다시 돈다.
 
-    이것이 «수동 지정» 경로다. 자동 판정은 레이아웃이 바뀐 쪽만 찾으므로,
+    이것이 《수동 지정》 경로다. 자동 판정은 레이아웃이 바뀐 쪽만 찾으므로,
     레이아웃은 그대로인데 결과만 나쁜 쪽(모델을 바꿔 다시 돌리고 싶은 경우)은
     사람이 직접 골라야 한다.
 
@@ -1227,7 +1227,7 @@ def test_page_range_with_force_runs_only_those_pages(isolated_app):
     for page in range(1, 6):
         _fake_ocr_done(lib, doc_id, part_id, page, [f"p{page:02d}_b01"])
 
-    # 3쪽만, 그리고 이미 결과가 있어도 다시. 확인할 것은 «어느 쪽을 건드렸나»라 더미 엔진으로
+    # 3쪽만, 그리고 이미 결과가 있어도 다시. 확인할 것은 《어느 쪽을 건드렸나》라 더미 엔진으로
     # 잰다 — 예전에는 진짜 llm_vision을 돌려, PC에 Ollama가 떠 있으면 실제 비전 호출이 나갔다
     # (2026-10-11 2차 전수)
     from app._state import _get_ocr_pipeline
@@ -1261,7 +1261,7 @@ def test_page_range_with_force_runs_only_those_pages(isolated_app):
 def test_page_range_without_force_still_skips_done_pages(isolated_app):
     """쪽 범위만 지정하고 강제를 끄면, 그 범위 안에서도 끝난 쪽은 건너뛴다.
 
-    범위 지정이 곧 «다시 돌려라»는 아니다. 이어 돌리기를 위해 범위를 좁히는
+    범위 지정이 곧 《다시 돌려라》는 아니다. 이어 돌리기를 위해 범위를 좁히는
     경우가 있으므로 두 스위치는 독립이어야 한다.
     """
     client, tmp_path = isolated_app
@@ -1288,14 +1288,14 @@ def test_page_range_without_force_still_skips_done_pages(isolated_app):
 # ===========================================================================
 #
 # 왜 필요한가:
-#   부분 재-OCR은 «12쪽이 나쁘다»를 이미 안다는 전제 위에 서 있다. 그런데
+#   부분 재-OCR은 《12쪽이 나쁘다》를 이미 안다는 전제 위에 서 있다. 그런데
 #   텍스트를 보는 경로가 쪽 단위뿐이라 15쪽이면 15번 눌러 봐야 한다.
 #   실제로 15쪽짜리 논문에서 4쪽이 빈 채로 남아 있는 것을 아무도 모르고
 #   있었다 — 훑어볼 수단이 없었기 때문이다.
 
 
 def _write_l2(library_path, doc_id, part_id, page, texts, *, with_bbox=False):
-    """L2 결과를 직접 쓴다. texts가 비면 «돌았지만 아무것도 못 읽은» 쪽."""
+    """L2 결과를 직접 쓴다. texts가 비면 《돌았지만 아무것도 못 읽은》 쪽."""
     import json as _json
 
     doc_path = library_path / "documents" / doc_id
@@ -1321,7 +1321,7 @@ def _write_l2(library_path, doc_id, part_id, page, texts, *, with_bbox=False):
 
 
 def test_overview_separates_empty_from_not_run(isolated_app):
-    """«돌았는데 아무것도 못 읽은 쪽»과 «아직 안 돌린 쪽»은 다르다.
+    """《돌았는데 아무것도 못 읽은 쪽》과 《아직 안 돌린 쪽》은 다르다.
 
     둘을 뭉뚱그리면 원인을 좁힐 수 없다. 앞은 엔진·이미지 문제이고
     뒤는 그냥 아직 차례가 안 온 것이다.
@@ -1344,7 +1344,7 @@ def test_overview_separates_empty_from_not_run(isolated_app):
     assert by_page[2]["flags"] == []
     assert by_page[3]["flags"] == ["not_run"]
     # 빈 쪽에는 no_position을 붙이지 않는다 — 좌표를 가질 줄이 애초에 없다.
-    # 붙이면 «좌표 문제»로 오인해 엉뚱한 곳을 고치게 된다.
+    # 붙이면 《좌표 문제》로 오인해 엉뚱한 곳을 고치게 된다.
     assert "no_position" not in by_page[1]["flags"]
 
 
@@ -1372,7 +1372,7 @@ def test_overview_median_ignores_empty_pages(isolated_app):
 
 
 def test_overview_flags_short_page(isolated_app):
-    """중앙값의 40% 미만인 쪽은 «글자 적음»으로 표시한다."""
+    """중앙값의 40% 미만인 쪽은 《글자 적음》으로 표시한다."""
     client, tmp_path = isolated_app
     body = _register(client, tmp_path, "scan", "ov3", pages=4)
     doc_id, part_id = body["document_id"], body["parts"][0]["part_id"]
@@ -1393,9 +1393,9 @@ def test_overview_flags_short_page(isolated_app):
 
 
 def test_overview_gives_preview_text(isolated_app):
-    """미리보기가 있어야 «글자는 나왔는데 엉뚱한 내용»을 알아볼 수 있다.
+    """미리보기가 있어야 《글자는 나왔는데 엉뚱한 내용》을 알아볼 수 있다.
 
-    실제로 미리보기 덕분에 머리글이 «玄同»이어야 할 쪽이 «友同»으로
+    실제로 미리보기 덕분에 머리글이 《玄同》이어야 할 쪽이 《友同》으로
     읽힌 것을 발견했다. 글자 수만 봐서는 정상으로 보이는 쪽이었다.
     """
     client, tmp_path = isolated_app
@@ -1439,7 +1439,7 @@ def test_overview_reports_position_coverage(isolated_app):
 # ===========================================================================
 #
 # 왜 필요한가:
-#   검수는 «원본 이미지와 전체 텍스트를 나란히 놓고 보는» 일이고, 그 화면은
+#   검수는 《원본 이미지와 전체 텍스트를 나란히 놓고 보는》 일이고, 그 화면은
 #   교정 탭뿐이다. 그런데 교정 탭은 L4를 읽는데 배치 OCR은 L2까지만 썼다.
 #   그래서 OCR을 멀쩡히 돌린 문헌인데도 교정 탭이 **빈 화면**이었다.
 
@@ -1487,7 +1487,7 @@ def test_batch_keeps_hand_edited_correction_text(batch_ready):
     """다시 도는 쪽이라도 사람이 고친 확정본(L4)은 두고 OCR만 새로 한다 (D-115 보강).
 
     전에는 레이아웃이 바뀌어 다시 도는 쪽의 L4를 확인 없이 덮었다(Codex 지적 2026-09-07).
-    «전 OCR을 그대로 옮긴» L4는 새 OCR로 바꾸고, 다른 L4는 두고 경고에 적는다.
+    《전 OCR을 그대로 옮긴》 L4는 새 OCR로 바꾸고, 다른 L4는 두고 경고에 적는다.
     """
     client, doc_id, part_id = batch_ready
     url = f"/api/documents/{doc_id}/parts/{part_id}/ocr/batch"

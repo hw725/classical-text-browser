@@ -67,7 +67,7 @@ def test_resolve_ambiguous_and_missing_explain():
 
 
 def test_format_list_labels_subscription_not_free():
-    """구독으로 도는 것은 «무료»가 아니라 «구독 한도»다(D-056)."""
+    """구독으로 도는 것은 《무료》가 아니라 《구독 한도》다(D-056)."""
     text = cli_models.format_list(MODELS)
     assert "openai_oauth:gpt-6-astra    구독 한도" in text
     assert "ollama:glm-ocr:latest    로컬 무료" in text
@@ -75,7 +75,7 @@ def test_format_list_labels_subscription_not_free():
 
 
 def test_resolve_tagged_model_name_and_case():
-    """«glm-ocr:latest»는 프로바이더가 아니라 모델 이름이다. 프로바이더는 대문자로 적어도 된다."""
+    """《glm-ocr:latest》는 프로바이더가 아니라 모델 이름이다. 프로바이더는 대문자로 적어도 된다."""
     tagged = MODELS  # 첫 항목이 glm-ocr:latest
     assert cli_models.resolve("glm-ocr:latest", tagged) == ("ollama", "glm-ocr:latest")
     assert cli_models.resolve("OLLAMA:glm-ocr:latest", tagged) == ("ollama", "glm-ocr:latest")
@@ -105,7 +105,7 @@ def test_load_coerces_hand_edited_values(home: Path):
 
 
 def test_coerce_rejects_bad_paddle_lang_and_negative_sleep():
-    """오타 언어·음수 대기가 «다음 실행의 기본값»이 되면 안 된다 (Codex 지적 2026-09-06)."""
+    """오타 언어·음수 대기가 《다음 실행의 기본값》이 되면 안 된다 (Codex 지적 2026-09-06)."""
     assert cli_config.coerce("paddle_lang", "korean") == "korean"
     with pytest.raises(ValueError):
         cli_config.coerce("paddle_lang", "kor")

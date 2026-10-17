@@ -73,7 +73,7 @@ def test_eomi_conflicting_mentions_are_not_reduced_to_first(text):
 def test_bare_eomi_is_not_guessed_and_the_title_survives():
     """입력: 어미 글자가 든 서명. 출력: 어미는 비우고 서명은 보존.
 
-    목적: 「魚尾」 한 낱말만으로는 어느 어미인지 알 수 없다. 그것을 «어미»라고 읽어 주면
+    목적: 「魚尾」 한 낱말만으로는 어느 어미인지 알 수 없다. 그것을 《어미》라고 읽어 주면
     「金魚尾」·「魚尾草」 같은 낱말도 함께 읽히므로, 조각이 하나도 없으면 비워 둔다
     (2026-09-09 — 붙여 쓴 판식을 읽게 고치면서 정한 계약).
     """
@@ -585,7 +585,7 @@ class TestKorcisMapper:
     def test_schema_compliance(self, sample_marc_with_openapi):
         """결과가 JSON 직렬화 가능하고 bibliography.schema.json을 지키는지 확인.
 
-        이름은 «스키마 준수»인데 예전에는 직렬화만 봤다 — 스키마 검증을 더했다(2026-10-12 강화).
+        이름은 《스키마 준수》인데 예전에는 직렬화만 봤다 — 스키마 검증을 더했다(2026-10-12 강화).
         """
         import jsonschema
 

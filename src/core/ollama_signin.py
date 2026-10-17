@@ -1,4 +1,4 @@
-"""Ollama 로그인을 앱이 대신 시작한다 — «로그인 필요»라고만 말하고 끝내지 않는다 (D-107 연장).
+"""Ollama 로그인을 앱이 대신 시작한다 — 《로그인 필요》라고만 말하고 끝내지 않는다 (D-107 연장).
 
 `ollama signin`은 로그인 주소(https://ollama.com/connect?…)를 찍고 브라우저를 열어 준다.
 이 모듈은 그 명령을 뒤에서 돌리고 주소를 건져 화면에 준다. 로그인이 끝났는지는 설정 화면이
@@ -28,7 +28,7 @@ def find_ollama() -> str | None:
 def _env_for(host: str | None) -> dict | None:
     """앱이 보는 Ollama 서버를 ollama CLI에도 알려 준다.
 
-    다른 서버에 받아 놓고 화면에는 «없음»이 뜨는 어긋남을 막는다.
+    다른 서버에 받아 놓고 화면에는 《없음》이 뜨는 어긋남을 막는다.
     """
     if not host:
         return None
@@ -102,7 +102,7 @@ def _start_spawn(exe: str, wait: float, host: str | None) -> dict:
     return {"ok": True, "url": url, "running": running, "log": log}
 
 
-# ── 모델 받기(ollama pull) — «터미널에서 ollama pull 하세요»로 끝내지 않는다 ──
+# ── 모델 받기(ollama pull) — 《터미널에서 ollama pull 하세요》로 끝내지 않는다 ──
 _pull: dict = {"proc": None, "model": None, "log": [], "ok": None}
 
 
@@ -126,7 +126,8 @@ def pull(model: str, host: str | None = None, on_done=None) -> dict:
     exe = find_ollama()
     if exe is None:
         return {**pull_status(), "error": "ollama 명령을 찾지 못했습니다."}
-    # 앞의 «-»는 금지 — «-h» 같은 옵션이 모델 이름으로 통과해 rc 0으로 «받았다»가 된다(리뷰 실측).
+    # 앞의 《-》는 금지 — 《-h》 같은 옵션이 모델 이름으로 통과해 rc 0으로 《받았다》가 된다(리뷰
+    # 실측).
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,99}", model or ""):
         return {**pull_status(), "error": f"모델 이름이 이상합니다: {model!r}"}
     with _spawn_lock:

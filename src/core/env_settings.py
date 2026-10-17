@@ -75,10 +75,10 @@ def _read_lines_for_write(path: Path) -> list[str]:
 
     왜 _read_lines와 따로인가(2026-10-11 전수): 읽기용은 못 읽으면 빈 목록을 돌려준다. 쓰기가
     그것을 받으면 관리 키만 적은 파일로 갈아 끼워, 사람이 적어 둔 모델 고정·예산 같은 다른 줄이
-    통째로 사라졌다. 한글 주석이 든 cp949 .env(메모장이 «ANSI»로 저장한 것)가 바로 그 경우라,
+    통째로 사라졌다. 한글 주석이 든 cp949 .env(메모장이 《ANSI》로 저장한 것)가 바로 그 경우라,
     cp949로 한 번 더 읽어 보고(다시 쓸 때는 UTF-8) 그것도 안 되면 ValueError로 멈춘다.
-    cp949로 «읽히기만» 하는 다른 8비트 파일(라틴 문자 등)을 cp949로 오해해 다시 쓰면 글자가 바뀐다 —
-    그래서 cp949 판독은 ASCII 밖 글자가 한글·한자일 때만 받는다(2026-10-11 재확인).
+    cp949로 《읽히기만》 하는 다른 8비트 파일(라틴 문자 등)을 cp949로 오해해 다시 쓰면 글자가
+    바뀐다 — 그래서 cp949 판독은 ASCII 밖 글자가 한글·한자일 때만 받는다(2026-10-11 재확인).
     """
     if not path.exists():
         return []
@@ -95,7 +95,7 @@ def _read_lines_for_write(path: Path) -> list[str]:
         return text.splitlines()
     raise ValueError(
         f"{path}를 읽지 못해 고치지 않았습니다(UTF-8도 한글 cp949도 아님).\n"
-        "→ 해결: 그 파일을 메모장에서 열어 «UTF-8»로 다시 저장한 뒤 다시 시도하세요."
+        "→ 해결: 그 파일을 메모장에서 열어 《UTF-8》로 다시 저장한 뒤 다시 시도하세요."
     )
 
 
@@ -111,7 +111,7 @@ def _parse(lines: list[str]) -> dict[str, str]:
 
 
 def mask(value: str) -> str:
-    """키를 사람이 «맞는 것 같다»고만 알아볼 수 있게. 끝 네 글자만 남긴다."""
+    """키를 사람이 《맞는 것 같다》고만 알아볼 수 있게. 끝 네 글자만 남긴다."""
     v = (value or "").strip()
     if not v:
         return ""
@@ -169,7 +169,7 @@ def write_values(library_root: str | Path, updates: dict[str, str | None]) -> di
 
     body = "\n".join(out).rstrip("\n") + "\n"
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_name(p.name + ".tmp")  # with_suffix는 점 파일에서 «.env.env.tmp»가 됐다
+    tmp = p.with_name(p.name + ".tmp")  # with_suffix는 점 파일에서 《.env.env.tmp》가 됐다
     tmp.write_text(body, encoding="utf-8", newline="\n")
     tmp.replace(p)  # 원자적 교체 — 도중에 죽어도 반쪽 파일이 남지 않는다
     logger.info(".env 갱신: %s (%s)", p, ", ".join(sorted(wanted)))  # 값은 남기지 않는다

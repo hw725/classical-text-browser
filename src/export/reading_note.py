@@ -4,7 +4,7 @@
     장·문서 항목 = 편성 경계(단위), 원문 = 지금 L4(교정 탭에서 고친 것이 그대로 반영),
     국역 = L6 번역 항목, 어휘·문법 = L7 사전형 주석, 해제·서지·요점·문서 정보·검토 = L7 비고 주석.
 render_wiki·render_markdown은 기본 모양이다. 수업·스터디마다 모양이 다르면 코드를 고치지 않고
-«틀»을 준다(export/note_template.py — 예시 노트를 LLM이 틀로 바꾸고, 코드가 층으로 채운다).
+《틀》을 준다(export/note_template.py — 예시 노트를 LLM이 틀로 바꾸고, 코드가 층으로 채운다).
 assemble_notes가 만드는 dict는 **그리기 위한 보기**이지 저장 형식이 아니다.
 """
 
@@ -152,7 +152,7 @@ def assemble_notes(library: str | Path, doc_id: str, part_id: str, interp_id: st
 
 
 def _wiki_box(label: str, body: str) -> str:
-    """접히는 표 한 칸 — 강독 노트의 «국역 (펼치기)» 모양."""
+    """접히는 표 한 칸 — 강독 노트의 《국역 (펼치기)》 모양."""
     return (
         '{| class="wikitable mw-collapsible mw-collapsed" style="width:100%"\n'
         f"! {label} (펼치기)\n|-\n|\n{body}\n|}}"
@@ -250,6 +250,6 @@ def note_slug(chapter: str) -> str:
 
 
 def note_filename(order: int, chapter: str, ext: str) -> str:
-    """노트 파일 이름 — 장 순번을 앞에 붙인다. 제목만 쓰면 «A-B»와 «A B»가 같은 이름이 되어
+    """노트 파일 이름 — 장 순번을 앞에 붙인다. 제목만 쓰면 《A-B》와 《A B》가 같은 이름이 되어
     한 장이 다른 장을 덮는다(Codex 지적 2026-09-30)."""
     return f"노트_{order:02d}_{note_slug(chapter)}.{ext}"

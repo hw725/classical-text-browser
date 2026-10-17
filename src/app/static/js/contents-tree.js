@@ -19,8 +19,8 @@
 
 const contentsState = {
   selectedUnitId: null, // 「내용」에서 고른 단위 — 해석 편집기 다섯이 이것을 따라간다
-  insertOpen: false, // «경계 넣기» 폼을 펼쳤는가 (기본 접힘)
-  picking: false, // «찍기» 모드 — 원본 이미지를 눌러 경계 자리를 정하는 중 (B-002)
+  insertOpen: false, // 《경계 넣기》 폼을 펼쳤는가 (기본 접힘)
+  picking: false, // 《찍기》 모드 — 원본 이미지를 눌러 경계 자리를 정하는 중 (B-002)
   pickForm: null,
   interpId: null, // 마지막으로 그린 해석 저장소
   data: null, // /contents 응답
@@ -37,7 +37,7 @@ const contentsState = {
  * 모드에 따라 켠다. 이 섹션은 처음 만들 때 켜는 코드가 없어 **어디서도 보이지
  * 않았다** (v1.2.3 첫 배포에서 발견). 해석 섹션(interp-section)을 켜고 끄는 네 자리가
  * 이 함수를 같이 부른다. (내용 트리 자체는 해석 저장소 없이도 선다 — D-097. 여기서 따지는
- * 것은 «사이드바 섹션을 보일 때인가»뿐이다.)
+ * 것은 《사이드바 섹션을 보일 때인가》뿐이다.)
  * 추출 프로필(data-profile="collation" → hidden)에서는 hidden 속성이 우선하므로
  * 여기서 display를 비워도 보이지 않는다.
  */
@@ -93,14 +93,14 @@ function _renderContentsTree(container) {
   if (!data || data.total_units === 0) {
     const ph = document.createElement("div");
     ph.className = "placeholder";
-    ph.textContent = "단위(권·기사)가 없습니다. 위의 «경계 넣기»로 첫 경계를 놓거나, 「자동 트리」·편성 인덱스(①②③ → 「적용」)를 쓰세요.";
+    ph.textContent = "단위(권·기사)가 없습니다. 위의 《경계 넣기》로 첫 경계를 놓거나, 「자동 트리」·편성 인덱스(①②③ → 「적용」)를 쓰세요.";
     container.appendChild(ph);
     return;
   }
 
   // 문헌 > 권 > 단위 (B-004). 전에는 Work로 묶었는데, Work는 해석 저장소의 엔티티라
   // 편성이 문헌으로 내려온 뒤로는 가리킬 수 없다(D-097). 저작이 여럿인 문집은 층위 1의
-  // «묶음» 경계가 나타낸다 — 아래 개요의 첫 단계가 그것이다.
+  // 《묶음》 경계가 나타낸다 — 아래 개요의 첫 단계가 그것이다.
   const docNode = document.createElement("div");
   docNode.className = "tree-node contents-doc";
   const docHead = document.createElement("div");
@@ -164,7 +164,7 @@ function _allUnits() {
 }
 
 /**
- * 평평한(위치순) 단위 목록을 층위로 중첩해 그린다. 스택에 «열린 조상»을 두고, 각 행은
+ * 평평한(위치순) 단위 목록을 층위로 중첩해 그린다. 스택에 《열린 조상》을 두고, 각 행은
  * 자기보다 얕은 마지막 조상의 자식 컨테이너에 붙는다.
  */
 function _renderOutline(root, blocks, container) {
@@ -208,7 +208,7 @@ const ROLE_MARK = { container: "▣ ", article: "", fragment: "· " };
 /**
  * 행의 모양(굵게·흐리게·머리표)은 깊이가 정한다 — 1단 묶음꼴, 2단 보통, 3단↑ 조각꼴.
  * 역할(role)은 화면에서 물러났다(D-092 덧붙임 2026-09-11): 깊이가 구조를 다 정하고 역할이 행동을 바꾸는 데가
- * 없어 사용자가 «묶음/기사/조각» 개념을 배우지 않게 했다. 파일의 role 값은 읽지 않고 깊이로만 어림한다.
+ * 없어 사용자가 《묶음/기사/조각》 개념을 배우지 않게 했다. 파일의 role 값은 읽지 않고 깊이로만 어림한다.
  */
 function _roleOf(block) {
   const lv = Number(block.level) || 2;
@@ -398,7 +398,7 @@ function _highlightAnchor(block, pageRef) {
  * 왜 따로 그리는가: 레이아웃 오버레이(layout-overlay)는 레이아웃 모드에서만 display:block이라
  * 교정·편성·표점 탭에서 내용 트리를 눌러도 점선이 보이지 않았다(실측 2026-09-03). 이 캔버스는
  * PDF 캔버스 위에 같은 크기로 겹치고 마우스를 받지 않는다(pointer-events: none).
- * 좌표: L2 픽셀 → PDF 캔버스 픽셀은 «캔버스 폭 / L2 image_width» 비율로 옮긴다(쪽 전체를
+ * 좌표: L2 픽셀 → PDF 캔버스 픽셀은 《캔버스 폭 / L2 image_width》 비율로 옮긴다(쪽 전체를
  * 렌더한 것이라 가로·세로 비율이 같다). 회전은 다루지 않는다.
  */
 function _ensureAnchorCanvas() {
@@ -421,10 +421,10 @@ function _ensureAnchorCanvas() {
 /**
  * PDF 캔버스가 커지거나 작아지면 점선을 다시 그린다.
  *
- * 왜 필요한가: 패널을 접거나 펴면 «가로·세로 맞춤»이 다시 돌아 PDF 캔버스 크기가 바뀌는데,
+ * 왜 필요한가: 패널을 접거나 펴면 《가로·세로 맞춤》이 다시 돌아 PDF 캔버스 크기가 바뀌는데,
  * 점선 캔버스는 고를 때 한 번 맞춰 둔 크기 그대로였다. 그래서 네모가 자동 맞춤을 따라가지
  * 못하고 옛 자리에 남았다(사용자 지적 2026-09-04). 크기가 바뀌는 길이 여럿이라
- * (줌·맞춤·회전·패널 접기·창 크기) 원인마다 손대는 대신 «바뀌면 다시 그린다»로 잡는다.
+ * (줌·맞춤·회전·패널 접기·창 크기) 원인마다 손대는 대신 《바뀌면 다시 그린다》로 잡는다.
  */
 function _watchPdfCanvasResize() {
   const pdfCanvas = document.getElementById("pdf-canvas");
@@ -456,18 +456,18 @@ function _drawAnchorCanvas() {
 }
 
 /**
- * «경계 넣기» 폼 (D-092) — 임의 쪽·행·글자에 경계를 놓아 단위를 나눈다. 새 id는 뒤 단위에 붙는다.
+ * 《경계 넣기》 폼 (D-092) — 임의 쪽·행·글자에 경계를 놓아 단위를 나눈다. 새 id는 뒤 단위에 붙는다.
  * 쪽은 지금 보는 쪽이 기본값이다. 행·글자는 확정본(교정 탭) 기준 0부터.
  */
 function _renderInsertForm() {
-  // 펼치면 곧바로 «찍기»가 켜진다 — 경계 자리는 숫자로 세는 것이 아니라 눈으로 찍는 것이다.
+  // 펼치면 곧바로 《찍기》가 켜진다 — 경계 자리는 숫자로 세는 것이 아니라 눈으로 찍는 것이다.
   // 쪽·행·글자 칸은 「숫자로 적기」 안으로 넣었다: OCR 행 좌표가 없어 찍을 수 없는 쪽에서만 쓴다.
   const box = document.createElement("details");
   box.className = "contents-insert-box";
   box.open = !!contentsState.insertOpen;
   const sum = document.createElement("summary");
   sum.textContent = "＋ 경계 넣기";
-  sum.title = "펼치면 «찍기»가 켜집니다. 원본 이미지나 교정 텍스트에서 자리를 누르세요";
+  sum.title = "펼치면 《찍기》가 켜집니다. 원본 이미지나 교정 텍스트에서 자리를 누르세요";
   box.appendChild(sum);
 
   const form = document.createElement("div");
@@ -513,13 +513,13 @@ function _markPicked(form, picked) {
 }
 
 /**
- * «찍기» 모드를 켜고 끈다 (B-002·D-094).
+ * 《찍기》 모드를 켜고 끈다 (B-002·D-094).
  *
  * 왜 찍는 것이 기본인가: 고서는 이미지로 읽는다. 확정본의 몇 번째 행인지 세는 것은
  * 도구가 할 일을 사람에게 미루는 것이다. 그래서 「경계 넣기」를 펼치면 곧바로 켜진다.
  * 시작 행 점선을 그리는 캔버스(anchor-overlay)가 이미 PDF 위에 꼭 맞게 겹쳐 있으므로,
  * 그 캔버스에 마우스를 받게 하고 누른 자리를 서버에 물어 폼을 채운다.
- * 바로 넣지 않는 이유: 글자 번호는 «행 길이 × 비율»의 추정이라 협주가 섞인 행에서
+ * 바로 넣지 않는 이유: 글자 번호는 《행 길이 × 비율》의 추정이라 협주가 섞인 행에서
  * 한두 자 어긋난다. 찍은 자리의 글자를 보여 주고 「넣기」는 사람이 누른다.
  */
 function _setPickMode(form, on) {
@@ -541,10 +541,10 @@ function _setPickMode(form, on) {
 }
 
 /**
- * 교정 텍스트(오른쪽 패널)에서 글자를 눌렀을 때 그 자리를 «경계 넣기»에 채운다 (D-094 다음).
+ * 교정 텍스트(오른쪽 패널)에서 글자를 눌렀을 때 그 자리를 《경계 넣기》에 채운다 (D-094 다음).
  *
  * 입력: globalIdx — correctionState.pageText 안의 글자 번호(교정 편집기의 data-idx).
- * 출력: 자리를 채웠으면 true. «찍기»가 꺼져 있으면 false — 그때는 교정 대화상자가 열린다.
+ * 출력: 자리를 채웠으면 true. 《찍기》가 꺼져 있으면 false — 그때는 교정 대화상자가 열린다.
  *
  * 왜 서버에 묻지 않는가: 이미지와 달리 여기서는 행·글자를 바로 셀 수 있다(D-094의 이미지
  * 경로는 좌표를 행으로 옮겨야 해서 서버가 필요했다).
@@ -682,11 +682,11 @@ function _boundaryUrl(boundaryId) {
 
 
 /**
- * 「내용」 트리에서 단위을 고른다 — 해석 편집기 다섯의 «지금 단위»가 된다.
+ * 「내용」 트리에서 단위을 고른다 — 해석 편집기 다섯의 《지금 단위》가 된다.
  *
  * 왜 트리인가: 편집기마다 드롭다운을 두면 같은 것을 다섯 번 고르게 되고, 「#3 기사 …」라는
  * 이름만으로는 어느 대목인지 알기 어렵다. 트리는 전체 구조를 보며 고르는 자리다
- * (사용자 요청 2026-09-04 — «드롭다운 없애고 사이드바 트리에서 고르면 따라가게»).
+ * (사용자 요청 2026-09-04 — 《드롭다운 없애고 사이드바 트리에서 고르면 따라가게》).
  *
  * 알림은 DOM 이벤트로 보낸다: 편집기 다섯이 서로를 모르고, 불러오는 순서에도 매이지 않는다.
  */
@@ -713,7 +713,7 @@ function selectUnit(block) {
   );
 }
 
-// 해석 편집기 다섯의 «블록 선택». 화면에서는 감춰 두고 트리가 값을 넣는다(D-096).
+// 해석 편집기 다섯의 《블록 선택》. 화면에서는 감춰 두고 트리가 값을 넣는다(D-096).
 const UNIT_SELECT_IDS = [
   "punct-block-select",
   "hyeonto-block-select",
@@ -725,7 +725,7 @@ const UNIT_SELECT_IDS = [
 /**
  * 고른 단위를 편집기 다섯에 흘려 보낸다.
  *
- * 왜 select에 값을 넣고 change를 쏘는가: 편집기마다 이미 «고르면 불러온다»는 길이 있다.
+ * 왜 select에 값을 넣고 change를 쏘는가: 편집기마다 이미 《고르면 불러온다》는 길이 있다.
  * 그 길을 그대로 쓰면 다섯 곳을 새로 짤 필요가 없고, 저장·되돌리기 같은 뒷일도 그대로다.
  * 목록이 아직 안 채워졌을 수 있어 잠깐 뒤 한 번 더 시도한다(탭을 옮기며 고르는 경우).
  */
@@ -746,7 +746,7 @@ function _applyUnitToEditors(unitId, tries = 0) {
   _renderUnitLabels();
 }
 
-/** 편집기 머리줄의 «지금 단위» 표시를 갱신한다. */
+/** 편집기 머리줄의 《지금 단위》 표시를 갱신한다. */
 function _renderUnitLabels() {
   const u = currentUnit();
   const text = u
@@ -780,7 +780,7 @@ function currentUnit() {
  * 경계의 층위(깊이)를 바꾼다. 입력: block(단위 보기), level(1~). 저장한 뒤 트리를 다시 읽는다.
  *
  * 층위는 단위의 중첩을 바꾸므로 화면만 먼저 칠하지 않고 서버의 답을 기다린다(실패하면 알리고
- * 트리는 그대로). — 이 자리에 붙어 있던 «역할을 바꾼다, 화면은 곧바로·저장은 뒤에서» 설명은
+ * 트리는 그대로). — 이 자리에 붙어 있던 《역할을 바꾼다, 화면은 곧바로·저장은 뒤에서》 설명은
  * 역할 칸이 화면에서 물러난 뒤(D-092 덧붙임) 남은 옛 함수의 것이었다(2026-10-11 재확인).
  */
 async function _setBoundaryLevel(block, level) {
@@ -848,7 +848,7 @@ async function _shiftBoundary(block, delta) {
   // 옮기기 전에 묻는다.
   //
   // 왜: 이 단추들은 행 오른쪽에 겹쳐 떠 있어(마우스를 올렸을 때만) 스치듯 눌리기 쉽다.
-  // 그런데 시작 행이 한 줄만 밀려도 «그 기사가 어디서 시작하는가»가 바뀌고, 붙어 있던
+  // 그런데 시작 행이 한 줄만 밀려도 《그 기사가 어디서 시작하는가》가 바뀌고, 붙어 있던
   // 표점·번역이 딴 대목을 가리키게 된다. 되돌리려면 어느 경계가 밀렸는지 먼저 알아내야
   // 하는데, 조용히 바뀌면 그것부터 어렵다(실측 2026-09-04 — 시험이 모르고 밀었다).
   // 역할·깊이는 화면에서 곧바로 보이고 되돌리기 쉬워 묻지 않는다.
@@ -946,8 +946,8 @@ async function _autoTree() {
   const how = "확정본(L4)이 있는 쪽에서 이 책의 규약(목차 → 시각 신호 → 텍스트 패턴)으로 개요를 세웁니다 (규칙만, LLM 안 씀).\n신호 설정이 아직 없으면 전문에서 찾아 문헌 설정에 저장합니다 (편성 인덱스 ②에서 고칠 수 있음).";
   const msg = n ? `이 권의 단위 ${n}개를 지우고 개요를 다시 세웁니다.\n${how} 계속할까요?` : `${how} 계속할까요?`;
   if (!confirm(msg)) return;
-  // 이 단추는 LLM을 부르지 않는다(D-117 ③-B). 배지 없는 단추가 모델을 부르면 «표시 없는 것은
-  // LLM을 안 쓴다»(D-115)에 예외가 생긴다. 목차 항목 구조화에 모델을 쓰려면 스위치가 보이는
+  // 이 단추는 LLM을 부르지 않는다(D-117 ③-B). 배지 없는 단추가 모델을 부르면 《표시 없는 것은
+  // LLM을 안 쓴다》(D-115)에 예외가 생긴다. 목차 항목 구조화에 모델을 쓰려면 스위치가 보이는
   // 편성 탭 ①「더 묻기…」를 쓴다. 경계 찾기(층계 1~3단)는 언제나 규칙이다.
   const btn = document.getElementById("contents-auto-btn");
   if (btn) { btn.disabled = true; btn.textContent = "세우는 중…"; }
@@ -982,7 +982,7 @@ async function _autoTree() {
 
 /**
  * 자동 트리 응답 → 토스트 한 줄. 편성 탭의 「전부 적용해 새로 세우기」도 같은 말을 쓴다.
- * 목차가 없으면 LLM은 아예 불리지 않는다 — 스위치가 켜져 있어도 «규칙만»으로 적는다.
+ * 목차가 없으면 LLM은 아예 불리지 않는다 — 스위치가 켜져 있어도 《규칙만》으로 적는다.
  */
 function describeAutoTreeResult(d, useLlm) {
   const llmUsed = useLlm && d.toc_pages?.length;

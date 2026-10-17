@@ -102,7 +102,7 @@ class TestPlan:
         assert rotation_runs(s) == [(1, 1, 90), (3, 4, 0)]
 
     def test_words_unknown_engine_goes_to_unsupported(self):
-        """모델이 없는 엔진을 적으면 코드가 되돌려 «옮기지 못한 말»로 보인다."""
+        """모델이 없는 엔진을 적으면 코드가 되돌려 《옮기지 못한 말》로 보인다."""
         import asyncio
 
         answer = {
@@ -373,10 +373,11 @@ def test_answer_goes_into_existing_layers_and_note_is_reassembled(client, tmp_pa
         text=sent, interp_id=res["interp_id"], part_id=part, page=3, block_id=bid
     )
     composed = _translation_input(body)
-    # 들이기 직후의 어휘는 검토 전 초안 — «확정»이 아니라 «참고»로 실린다(사용자 지침: 검토된 사전)
+    # 들이기 직후의 어휘는 검토 전 초안 — 《확정》이 아니라 《참고》로 실린다(사용자 지침: 검토된
+    # 사전)
     assert composed.startswith("[검토 전 용어 풀이")
     assert "- 以テ(もって) [Grammar]: ~로써" in composed and composed.endswith(sent)
-    # 사람이 검토(reviewed)로 올리면 «확정 용어 풀이»가 된다
+    # 사람이 검토(reviewed)로 올리면 《확정 용어 풀이》가 된다
     ann_file = next((interp / "L7_annotation" / "main_text").glob("*.json"))
     ann = json.loads(ann_file.read_text("utf-8"))
     term = next(a for b in ann["blocks"] for a in b["annotations"] if a.get("dictionary"))
@@ -570,7 +571,7 @@ class TestNoteTemplate:
             render_with_template(SAMPLE_NOTE, "{{ ''.__class__.__mro__[1].__subclasses__() }}")
         with pytest.raises(ValueError):
             render_with_template(SAMPLE_NOTE, "{% for s in note.sections %}")  # 짝 없는 for
-        # 예시 글을 그대로 베낀 «틀»은 층의 내용을 쓰지 않는다 — 걸러 알린다
+        # 예시 글을 그대로 베낀 《틀》은 층의 내용을 쓰지 않는다 — 걸러 알린다
         assert check_template("= 제목 =\n원문 그대로 베낌\n")
 
     def test_template_from_example_strips_fence_and_previews(self):

@@ -3,7 +3,7 @@
 이 저장소의 스키마에 해당하는 항을 다룬다: 1·2·3·6·7 + 8·9·10 + 11·12·13.
 4·5항은 위키 순회 쪽이라 여기 없다(6항 범위는 주소·7항 파트너 수는 판정 밖 — 아래 두 클래스).
 
-    TestCorpusVersionStamp        — 1항: 데이터 버전을 «출력»에 각인
+    TestCorpusVersionStamp        — 1항: 데이터 버전을 《출력》에 각인
     TestIdMapKeepsOldIds          — 2항: 승격·병합 때 구 ID를 죽이지 않는다
     TestQuerySurfaceStaysNarrow   — 3항: 질의 API는 좁게
     TestPromotionWeighsNotCounts  — 8항: 승격 임계는 개수가 아니라 무게
@@ -62,7 +62,7 @@ def _make_library(tmp_path: Path, doc_id: str = "test_doc", interp_id: str = "te
     """문헌 하나 + 해석 하나를 가진 최소 서고를 만든다(둘 다 git 저장소).
 
     왜 git까지 만드는가: 1항의 코퍼스 해시는 HEAD 커밋에서 나온다. git이 없으면
-    «재현 불가»로 떨어지므로, 정상 경로를 재려면 커밋이 하나는 있어야 한다.
+    《재현 불가》로 떨어지므로, 정상 경로를 재려면 커밋이 하나는 있어야 한다.
     """
     lib = tmp_path / "library"
     doc_path = lib / "documents" / doc_id
@@ -113,7 +113,7 @@ def _rel(weight=None, polarity=None, mode=None) -> dict:
 
 
 # ──────────────────────────────────────
-# 1항 — 데이터 버전을 «출력»에 각인한다
+# 1항 — 데이터 버전을 《출력》에 각인한다
 # ──────────────────────────────────────
 
 
@@ -138,7 +138,7 @@ class TestCorpusVersionStamp:
         # 시각은 해시에 넣지 않는다 — 같은 데이터면 내보낸 때가 달라도 해시가 같다(위 단언)
 
     def test_commit_changes_hash(self, tmp_path):
-        """원문이 한 커밋 움직이면 해시도 움직인다 — 그래야 «어느 시점»을 가리킨다."""
+        """원문이 한 커밋 움직이면 해시도 움직인다 — 그래야 《어느 시점》을 가리킨다."""
         lib, doc_path, _ = _make_library(tmp_path)
         before = corpus_snapshot(lib, document_ids=["test_doc"])["corpus_hash"]
         (doc_path / "note.txt").write_text("교정 한 글자", encoding="utf-8")
@@ -214,7 +214,7 @@ class TestIdMapKeepsOldIds:
         still_there = get_entity(interp_path, "concept", old_id)
         assert still_there["id"] == old_id
         assert still_there["status"] == "deprecated"
-        # 조회는 «지금 어디를 보라»를 덧붙인다 — 기록 자체를 고치지 않는다.
+        # 조회는 《지금 어디를 보라》를 덧붙인다 — 기록 자체를 고치지 않는다.
         assert still_there["superseded_by"] == new_id
         assert still_there["supersede_chain"] == [old_id, new_id]
 
@@ -250,11 +250,11 @@ class TestIdMapKeepsOldIds:
             and e["relation"] == "promoted_to"
             for e in entries
         )
-        # 승격은 «대체»가 아니다 — Tag는 제 id로 그대로 조회되고, 되짚기 고리가
+        # 승격은 《대체》가 아니다 — Tag는 제 id로 그대로 조회되고, 되짚기 고리가
         # 그 id를 Concept으로 끌고 가지 않는다(promoted_to 는 따라가지 않는 고리).
         assert get_entity(interp_path, "tag", tag["id"])["id"] == tag["id"]
         assert resolve_id(interp_path, "tag", tag["id"])["superseded"] is False
-        # 그래도 «무엇이 됐는가»는 장부로 되짚힌다.
+        # 그래도 《무엇이 됐는가》는 장부로 되짚힌다.
         assert [e["old_id"] for e in predecessors(interp_path, "tag", concept_id)] == [tag["id"]]
 
     def test_cycle_does_not_hang(self, tmp_path):
@@ -308,13 +308,13 @@ class TestQuerySurfaceStaysNarrow:
 
 
 # ──────────────────────────────────────
-# 8항 — 승격 임계는 «개수»가 아니라 «무게»
+# 8항 — 승격 임계는 《개수》가 아니라 《무게》
 # ──────────────────────────────────────
 
 
 class TestPromotionWeighsNotCounts:
     def test_many_weak_lose_to_one_strong(self):
-        """약한 출처 «여럿»이 강한 출처 «하나»를 이기지 못한다 — 8항의 핵심."""
+        """약한 출처 《여럿》이 강한 출처 《하나》를 이기지 못한다 — 8항의 핵심."""
         weak_many = [{"weight": 1} for _ in range(20)]
         one_strong = [{"weight": 8}]
 
@@ -341,7 +341,7 @@ class TestPromotionWeighsNotCounts:
         assert evaluate_promotion(sources, noise_ceiling=0.5)["eligible"] is True
 
     def test_weight_from_occurrences(self):
-        """명시 무게가 없으면 «몇 번 건드렸는가 × 신뢰도»로 도출한다."""
+        """명시 무게가 없으면 《몇 번 건드렸는가 × 신뢰도》로 도출한다."""
         assert evaluate_promotion([{"occurrences": 6, "confidence": 0.9}])["eligible"] is True
         assert evaluate_promotion([{"occurrences": 1, "confidence": 0.9}])["eligible"] is False
 
@@ -385,9 +385,9 @@ class TestPromotionWeighsNotCounts:
         # 두껍게 언급한 출처가 하나만 더 있으면 넘는다 — 개수가 아니라 무게가 움직인다.
         #
         # **같은 단위를 두 번 넘기지 않는다**(2026-09-22, B-010). 예전에는 그렇게 적었는데,
-        # 그것은 «두 출처»가 아니라 Codex 교차검증이 잡은 중복 합산 결함 자체였다 —
+        # 그것은 《두 출처》가 아니라 Codex 교차검증이 잡은 중복 합산 결함 자체였다 —
         # promotion_metrics 가 이제 단위당 하나로 접으므로 그 표기는 성립하지 않는다.
-        # 시험이 말하려던 것은 «서로 다른 두꺼운 출처 둘»이므로 그렇게 적는다.
+        # 시험이 말하려던 것은 《서로 다른 두꺼운 출처 둘》이므로 그렇게 적는다.
         another_thick = dict(by_unit[thick], unit_id="u-thick-2")
         assert evaluate_promotion([by_unit[thick], another_thick])["eligible"] is True
 
@@ -425,7 +425,7 @@ class TestPromotionWeighsNotCounts:
         _tags([crowded] * 5)
         sources = gather_sources(interp_path, "王戎")
         assert len(sources) == 1
-        assert sources[0]["measured"] is False, "확정본이 없으면 «재지 못함»이어야 한다"
+        assert sources[0]["measured"] is False, "확정본이 없으면 《재지 못함》이어야 한다"
         assert sources[0]["occurrences"] == 0
         verdict = evaluate_promotion(sources)
         assert verdict["eligible"] is False
@@ -438,7 +438,7 @@ class TestPromotionWeighsNotCounts:
         assert evaluate_promotion(spread)["eligible"] is False
 
     def test_measured_zero_differs_from_unmeasured(self, tmp_path, monkeypatch):
-        """확정본은 있는데 표면형이 안 나오는 것은 «정상적인 0»이다.
+        """확정본은 있는데 표면형이 안 나오는 것은 《정상적인 0》이다.
 
         둘을 같은 말로 답하면 연구자가 「확정본을 채우라」는 답을 못 받는다.
         """
@@ -526,7 +526,7 @@ class TestCollectWideEmitNarrow:
         assert result["concept"]["scope_document"] == "test_doc"
 
     def test_rule_scope_is_written_down(self):
-        """어디에 적용하지 «않는지»가 코드에 적혀 있어야 한다."""
+        """어디에 적용하지 《않는지》가 코드에 적혀 있어야 한다."""
         from core.promotion import SCOPE_BLIND_COLLECTION_NOTE
 
         assert "편성" in SCOPE_BLIND_COLLECTION_NOTE
@@ -534,7 +534,7 @@ class TestCollectWideEmitNarrow:
 
 
 # ──────────────────────────────────────
-# 10항 — 승격은 «깔때기»가 아니다
+# 10항 — 승격은 《깔때기》가 아니다
 # ──────────────────────────────────────
 
 
@@ -664,7 +664,7 @@ class TestRelationPolarity:
 
 class TestModulationIsFirstClass:
     def test_modulation_targets_a_relation(self, tmp_path):
-        """조절은 «다른 관계의 무게를 바꾸는» 관계다 — 관계를 가리킬 수 있어야 한다."""
+        """조절은 《다른 관계의 무게를 바꾸는》 관계다 — 관계를 가리킬 수 있어야 한다."""
         _, _, interp_path = _make_library(tmp_path)
         subject = _concept(interp_path, "출처 신뢰도")
         target = {
@@ -732,7 +732,7 @@ class TestModulationIsFirstClass:
 
 class TestScopeIsAnAddress:
     def test_other_document_concept_is_excluded_not_ranked_down(self, tmp_path):
-        """다른 문헌의 개념은 순위가 낮아지는 것이 아니라 «아예 나오지 않는다»."""
+        """다른 문헌의 개념은 순위가 낮아지는 것이 아니라 《아예 나오지 않는다》."""
         _, _, interp_path = _make_library(tmp_path)
         mine = {"id": str(uuid.uuid4()), "label": "王戎", "scope_document": "doc_a",
                 "status": "draft"}
@@ -763,7 +763,7 @@ class TestScopeIsAnAddress:
         assert got == {global_c["id"]}
 
     def test_scope_does_not_sort(self):
-        """거르기만 하고 정렬하지 않는다 — 정렬하면 «순위 가중치»가 된다."""
+        """거르기만 하고 정렬하지 않는다 — 정렬하면 《순위 가중치》가 된다."""
         from core.concept_scope import scoped
 
         items = [
@@ -822,7 +822,7 @@ class TestPartnerCountIsNotEvidence:
         assert evaluate_promotion(weak * 500)["eligible"] is False
 
     def test_concentration_is_reported_not_decided_on(self):
-        """집중도는 «보여주는 값»이지 «판정하는 값»이 아니다."""
+        """집중도는 《보여주는 값》이지 《판정하는 값》이 아니다."""
         from core.promotion import METRICS_NOT_USED_FOR_VERDICT
 
         # 집중도만 다르고 실질 무게가 같은 두 묶음은 같은 판정을 받아야 한다.
@@ -862,8 +862,8 @@ class TestLedgerIsVisibleInLists:
     """목록에도 장부가 반영되는가 (2026-09-21 브라우저 검증에서 찾은 결함).
 
     `get_entity`만 장부를 보고 `list_entities`는 보지 않았다. 그래서 화면의 엔티티
-    «목록»에서는 이미 합쳐진 개념에 「합치기」 단추가 그대로 남고 «→ 새 ID» 표시도
-    뜨지 않았다. 상태가 deprecated 인 것과 «합쳐졌다»는 것은 다른 사실이라
+    《목록》에서는 이미 합쳐진 개념에 「합치기」 단추가 그대로 남고 《→ 새 ID》 표시도
+    뜨지 않았다. 상태가 deprecated 인 것과 《합쳐졌다》는 것은 다른 사실이라
     상태로는 대신할 수 없다.
     """
 
@@ -898,7 +898,7 @@ class TestLedgerIsVisibleInLists:
 class TestInjectedKeysNeverReachDisk:
     """조회가 덧붙인 `superseded_by`가 저장으로 돌아가지 않는가.
 
-    왜 위험한가: `get_entity`·`list_entities`가 «지금 어디를 보라»를 덧붙이는데,
+    왜 위험한가: `get_entity`·`list_entities`가 《지금 어디를 보라》를 덧붙이는데,
     concept·relation 스키마는 `additionalProperties: false`다. 읽은 것을 그대로
     저장하는 경로가 하나라도 있으면 그 순간 검증이 터지거나, 더 나쁘게는 장부가
     아니라 엔티티 파일에 대체 정보가 눌러앉아 장부와 두 벌이 된다.
@@ -948,7 +948,7 @@ class TestInjectedKeysNeverReachDisk:
 
 
 class TestWeightReadingIsRobust:
-    """무게를 읽다가 이상한 값을 만나도 «열리지» 않는다.
+    """무게를 읽다가 이상한 값을 만나도 《열리지》 않는다.
 
     승격은 무게가 커질수록 열리므로, 읽기 실패가 큰 값으로 떨어지면 안 된다.
     """
@@ -991,7 +991,7 @@ class TestEveryReadDoorSeesTheLedger:
     DELEGATING_DOORS = {"list_entities_for_page": "list_entities"}
 
     def test_query_surface_is_fully_covered(self):
-        """모든 읽기 문이 «직접» 또는 «위임» 중 하나로 덮여 있어야 한다.
+        """모든 읽기 문이 《직접》 또는 《위임》 중 하나로 덮여 있어야 한다.
 
         읽기 문을 늘리면 여기서 먼저 깨진다 — 늘린 사람이 장부를 봐야 하는지
         판단하고 이 시험에 자리를 만들게 하는 것이 목적이다.
@@ -1021,7 +1021,7 @@ class TestEveryReadDoorSeesTheLedger:
         """쪽 조회는 스스로 파일을 읽지 않고 `list_entities`를 거친다.
 
         왜 직접 재지 않는가: 쪽 조회가 개념을 돌려주려면 단위·태그·관계가
-        얽힌 상태가 필요해서, 픽스처로 닿지 못하면 «못 찾았으니 넘어감»이 되어
+        얽힌 상태가 필요해서, 픽스처로 닿지 못하면 《못 찾았으니 넘어감》이 되어
         헛통과한다. 대신 **파일을 자기가 읽지 않는다**는 구조를 확인한다 —
         `list_entities`를 거치는 한 장부 주석은 자동으로 따라온다.
         """
@@ -1089,7 +1089,7 @@ class TestChainFollowingHasOneImplementation:
         assert single["chain"] == listed["supersede_chain"]
 
     def test_no_ledger_agrees(self, tmp_path):
-        """장부가 비면 둘 다 «대체되지 않았다»로 답한다."""
+        """장부가 비면 둘 다 《대체되지 않았다》로 답한다."""
         _, _, interp_path = _make_library(tmp_path)
         a = _concept(interp_path, "혼자")
         single, listed = self._both_paths(interp_path, a)
@@ -1126,7 +1126,7 @@ class TestLedgerCannotBeCorrupted:
     """
 
     def test_merging_into_an_already_merged_target_is_refused(self, tmp_path):
-        """B→A 뒤 A→B를 허용하면 «대체되지 않은» 개념이 하나도 남지 않는다.
+        """B→A 뒤 A→B를 허용하면 《대체되지 않은》 개념이 하나도 남지 않는다.
 
         조회는 순환을 끊어 멎지는 않지만, 정본이 사라지면 화면에서 되돌릴 길이
         없다 — 삭제 금지 규약 때문에 장부 항목을 지우는 길도 없기 때문이다.
@@ -1139,13 +1139,13 @@ class TestLedgerCannotBeCorrupted:
         with pytest.raises(ValueError, match="이미"):
             merge_concepts(interp_path, [a], b)  # A → B 는 순환이다
 
-        # 정본이 남아 있다 — A 는 여전히 «대체되지 않은» 개념이다.
+        # 정본이 남아 있다 — A 는 여전히 《대체되지 않은》 개념이다.
         listed = {c["id"]: c for c in list_entities(interp_path, "concept")}
         assert "superseded_by" not in listed[a]
         assert listed[b]["superseded_by"] == a
 
     def test_duplicate_source_ids_are_counted_once(self, tmp_path):
-        """같은 id를 두 번 줘도 «2건 합쳤다»고 말하지 않는다."""
+        """같은 id를 두 번 줘도 《2건 합쳤다》고 말하지 않는다."""
         _, _, interp_path = _make_library(tmp_path)
         a = _concept(interp_path, "A")
         b = _concept(interp_path, "B")

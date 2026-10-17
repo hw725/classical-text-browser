@@ -32,7 +32,7 @@ def thinking_options(kwargs: dict) -> tuple:
 
     입력: 프로바이더 call*()이 받은 **kwargs.
     출력: (think, budget)
-        think  — None | False | True | str. None이면 «지정 안 함»이라 페이로드에 넣지 않는다.
+        think  — None | False | True | str. None이면 《지정 안 함》이라 페이로드에 넣지 않는다.
         budget — int. think가 꺼져 있으면 0. 켜져 있고 예산이 없으면 기본값.
 
     예산이 0이 아닌 것은 think가 True/str일 때뿐이다. 그래서 호출자는
@@ -56,7 +56,7 @@ def thinking_options(kwargs: dict) -> tuple:
 
 
 # 잘림 예외 메시지에 반드시 들어가는 표식. `_state._is_retryable_llm_error`가
-# "truncated"로 재시도 여부를 판단하고, LlmOcrEngine이 이것으로 «사고 끈 재시도»
+# "truncated"로 재시도 여부를 판단하고, LlmOcrEngine이 이것으로 《사고 끈 재시도》
 # 사다리를 탄다. 프로바이더마다 다른 문장을 쓰면 사다리가 한 곳에서 끊어진다.
 TRUNCATED_MARK = "truncated"
 
@@ -112,7 +112,7 @@ class BaseLlmProvider(ABC):
     #                    토큰을 보여 주고 한도는 제공자 대시보드로 안내한다.
     #   "free"         — 로컬 실행이라 소모하는 것이 없다(Ollama 로컬 모델).
     #
-    # 왜 이 구분이 필요한가: 폴백 순서만 보고 «무료로 돌 것»이라 여겼는데
+    # 왜 이 구분이 필요한가: 폴백 순서만 보고 《무료로 돌 것》이라 여겼는데
     # 실제로는 유료 API가 처리하고 있던 일이 있었다. 어느 방식으로 얼마를
     # 쓰는지 사용자가 그 자리에서 알 수 있어야 한다.
     billing_model: str = "metered"
@@ -134,9 +134,9 @@ class BaseLlmProvider(ABC):
     #   "cli_signin" — 터미널에서 로그인한다(구독형). 앱이 대신 해 줄 수 없다.
     #   "local"      — 설치하고 띄우기만 하면 된다. 계정이 필요 없다.
     #
-    # 왜 필요한가: API 키 방식은 «.env에 키를 넣으세요»로 끝나지만, 구독형은
+    # 왜 필요한가: API 키 방식은 《.env에 키를 넣으세요》로 끝나지만, 구독형은
     # 터미널 로그인이 필요하고 그 사실이 어디에도 적혀 있지 않으면 사용자는
-    # «왜 안 되는지» 알 수 없다. 폴백이 조용히 다음 프로바이더로 넘어가므로
+    # 《왜 안 되는지》 알 수 없다. 폴백이 조용히 다음 프로바이더로 넘어가므로
     # 화면에는 아무 표시도 남지 않는다(D-056).
     setup_kind: str = "env_key"
 
@@ -152,9 +152,9 @@ class BaseLlmProvider(ABC):
         출력 예: {"account": "user@example.com", "plan": "pro"}
 
         왜 이 메서드가 있는가:
-            구독형 프로바이더는 «서비스가 떠 있다»와 «로그인돼 있다»가 다르다.
+            구독형 프로바이더는 《서비스가 떠 있다》와 《로그인돼 있다》가 다르다.
             Ollama 서버는 로그인 없이도 뜨지만 클라우드 모델을 부르면 실패한다.
-            is_available()만 보면 «사용 가능»으로 보이므로, 실행하고 나서야
+            is_available()만 보면 《사용 가능》으로 보이므로, 실행하고 나서야
             안 되는 것을 알게 된다.
 
         기본은 None이다 — 조회할 방법이 확인되지 않은 프로바이더는

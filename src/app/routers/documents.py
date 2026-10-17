@@ -167,10 +167,10 @@ def _rotation_effect(
 ) -> dict:
     """회전을 target으로 바꾸면 좌표계가 어긋나는 결과가 몇 쪽인가.
 
-    출력: {"l2_pages", "l3_pages", "pages"} — pages는 L2·L3 쪽의 합집합. 화면은 «다시 OCR해야 할
-    쪽 N»으로 묻는다(Codex 지적). target을 주면 **도장이 그 값과 다른 쪽만** 센다 — 90°로 저장했다가
-    되돌리는 경우, 이미 90°에서 만든 결과는 어긋나지 않는데 전부 세면 과하게 경고한다(감사 지적).
-    pages=(a, b)면 그 쪽 범위의 결과만 센다(D-126). 지우지 않는다.
+    출력: {"l2_pages", "l3_pages", "pages"} — pages는 L2·L3 쪽의 합집합. 화면은 《다시 OCR해야 할
+    쪽 N》으로 묻는다(Codex 지적). target을 주면 **도장이 그 값과 다른 쪽만** 센다 — 90°로
+    저장했다가 되돌리는 경우, 이미 90°에서 만든 결과는 어긋나지 않는데 전부 세면 과하게
+    경고한다(감사 지적). pages=(a, b)면 그 쪽 범위의 결과만 센다(D-126). 지우지 않는다.
     """
 
     def _in_range(path: Path) -> bool:
@@ -1857,7 +1857,7 @@ async def api_add_parts(
     왜 PDF만 받는가:
         사이드바 트리가 권을 PDF.js로 연다(`part.file`). 이미지 묶음을
         받으려면 create-from-files처럼 PDF로 합치는 처리가 필요한데, 그것은
-        생성 경로의 몫으로 두고 여기서는 «이미 PDF인 것을 더한다»만 한다.
+        생성 경로의 몫으로 두고 여기서는 《이미 PDF인 것을 더한다》만 한다.
         경계를 좁게 두면 이 라우트가 생성 경로와 갈라질 여지가 줄어든다.
     """
     library_path = get_library_path()
@@ -2018,7 +2018,7 @@ async def api_document_pdf(doc_id: str, part_id: str):
     doc_path = require_repo_path("documents", doc_id)
     try:
         pdf_path = get_pdf_path(doc_path, part_id)
-        # filename=을 주지 않는다: Content-Disposition: attachment가 붙어 «내려받기»가 되고,
+        # filename=을 주지 않는다: Content-Disposition: attachment가 붙어 《내려받기》가 되고,
         # 화면에서 보는 용도와 어긋난다. Range 응답(206)은 그대로 나간다.
         return FileResponse(str(pdf_path), media_type="application/pdf")
     except FileNotFoundError as e:
@@ -2089,8 +2089,8 @@ async def api_save_page_text(
     # 여기서는 백업을 뜨지 않는다.
     #
     # 교정을 되돌리는 수단은 교정 탭에 이미 있고 더 낫다 —
-    # 항목별 삭제(고친 글자 하나만)와 «모두 삭제»(그 쪽 교정 전부)다.
-    # 교정 기록은 «어느 글자를 무엇으로»의 목록이라 차수 제한이 없다.
+    # 항목별 삭제(고친 글자 하나만)와 《모두 삭제》(그 쪽 교정 전부)다.
+    # 교정 기록은 《어느 글자를 무엇으로》의 목록이라 차수 제한이 없다.
     # 그 위에 쪽 통째 1단계 스냅샷을 얹으면 성능은 더 낮으면서
     # 개념만 하나 늘어난다. 백업은 **OCR 재실행**에만 둔다(llm_ocr.py).
     try:
@@ -2385,7 +2385,7 @@ async def api_suggest_segmentation_rules(doc_id: str, body: SegmentationRulesSug
     출력: {"title_words", "suppress", "note", "sample_count", "provider", "model", "error"}.
           **저장하지 않는다** — 규칙 칸을 채워 주기만 하고 넣을지는 사람이 정한다.
 
-    왜 본문 표본을 함께 보내는가: 해제만으로는 «이 책이 무엇으로 표제를 끝맺는가»가 드러나지
+    왜 본문 표본을 함께 보내는가: 해제만으로는 《이 책이 무엇으로 표제를 끝맺는가》가 드러나지
     않는 일이 많다. 짧은 행 예순 개면 판식이 보인다.
     """
     from app._state import _get_llm_router
@@ -2465,7 +2465,7 @@ async def api_position_at(
 ):
     """원본 이미지에서 찍은 점이 확정본의 어느 행·글자인지 돌려준다 (B-002).
 
-    목적: 내용 트리의 «찍어 넣기» — 쪽·행·글자를 손으로 적는 대신 이미지를 눌러 정한다.
+    목적: 내용 트리의 《찍어 넣기》 — 쪽·행·글자를 손으로 적는 대신 이미지를 눌러 정한다.
     입력: doc_id, page_num, part_id, x, y, image_width(선택 — 화면 캔버스 폭을 그대로 넘길 수 있게).
     출력: {page, line, offset, line_text, anchor_text, bbox, image_width, image_height, inside}.
           찾지 못하면 404 (L2 행과 L4 행 수가 어긋나거나 좌표가 없는 쪽).
@@ -2690,7 +2690,7 @@ async def api_save_bibliography(doc_id: str, body: BibliographySaveRequest):
         )
 
     # 보낸 칸만 덮어쓴다(exclude_unset) — 화면이 모르는 칸(판식·간행·권책수)을 지우지 않기
-    # 위해서다. 사람이 칸을 비우려고 null을 보낸 것은 «보낸 것»이라 그대로 반영된다.
+    # 위해서다. 사람이 칸을 비우려고 null을 보낸 것은 《보낸 것》이라 그대로 반영된다.
     incoming = body.model_dump(exclude_unset=True, by_alias=True)
     try:
         existing = get_bibliography(doc_path)
@@ -2730,7 +2730,7 @@ async def api_save_bibliography(doc_id: str, body: BibliographySaveRequest):
             # 원문이 바뀌었다 → 갈라 담은 값이 기준이다. 화면은 옛 값을 그대로 안고 새 원문만
             # 얹어 보내므로(…bib.printing_info, summary: 새 원문), 안고 온 값이 이기면 고친
             # 판식이 반영되지 않는다(2026-09-09 확인).
-            # 다만 «안고 온 것»과 «뜻을 담아 보낸 것»은 다르다 — 전에 저장된 값과 똑같으면
+            # 다만 《안고 온 것》과 《뜻을 담아 보낸 것》은 다르다 — 전에 저장된 값과 똑같으면
             # 안고 온 것이고, 다르면 사람이 이번에 손댄 것이라 그대로 둔다.
             # 새 원문이 말하지 않는 칸(전에 손으로 적어 둔 어미 같은 것)은 그대로 남긴다 —
             # 갈라 담은 것만 남기면 언급되지 않았다는 이유로 지워진다.
@@ -3064,7 +3064,7 @@ def api_import_from_text_layer(doc_id: str, part_id: str, body: TextLayerImportR
     wanted = set(body.pages) if body.pages is not None else None
 
     imported = skipped = empty = 0
-    notices: list[dict] = []  # 쪽마다 «교정 옮김» 소식 — 화면이 알린다(D-133)
+    notices: list[dict] = []  # 쪽마다 《교정 옮김》 소식 — 화면이 알린다(D-133)
     chars = 0
     warnings: list[str] = []
 
@@ -3333,7 +3333,7 @@ async def api_export_text(
 ):
     """확정본(L4)과 해석 층(L6·L7)으로 장별 문서를 만들어 zip으로 내려준다.
 
-    zip 안: 장마다 01.<형식>…·index·all(원문, 쪽 표시는 «PDF p.N · 교재 N면»),
+    zip 안: 장마다 01.<형식>…·index·all(원문, 쪽 표시는 《PDF p.N · 교재 N면》),
     노트_<순번>_<장>.<형식>(번역·어휘 노트 — 경계·L6·L7에서 조립, 들인 결과가 있을 때만).
     single=true면 원문 전문 한 파일만 내려준다(노트는 넣지 않는다).
     PDF 판면 때문에 생긴 줄바꿈만 지운다 — 쓰기 방향은 쪽마다 계획·OCR 결과에서 읽는다
@@ -3365,7 +3365,7 @@ async def api_export_text(
         resp = _file_response(
             files[f"all.{format}"], f"{doc_id}_{part_id}.{format}", f"{doc_id}.{format}"
         )
-        # 뺀 줄은 조용히 버리지 않는다 — 화면이 «머리글 N줄·잡음 M줄을 뺐습니다»로 알린다
+        # 뺀 줄은 조용히 버리지 않는다 — 화면이 《머리글 N줄·잡음 M줄을 뺐습니다》로 알린다
         resp.headers["X-CTB-Running-Lines"] = str(_stats.get("running_lines", 0))
         resp.headers["X-CTB-Noise-Lines"] = str(_stats.get("noise_lines", 0))
         return resp

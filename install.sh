@@ -118,7 +118,7 @@ case "${pick:-1}" in
     3) extras=(--extra classical --extra japanese) ;;
     4) extras=(--extra classical --extra japanese --extra honkoku) ;;
     1) ;;
-    *) echo "  «$pick»은 없는 번호라 본체만 깝니다." ;;
+    *) echo "  《$pick》은 없는 번호라 본체만 깝니다." ;;
 esac
 echo ""
 echo "  받는 중… (진행 표시가 멈춰 보여도 기다리세요)"
@@ -141,7 +141,7 @@ if command -v ollama >/dev/null 2>&1; then
     echo "[5-1] Ollama 기본 비전 모델 확인 (gemma4:cloud)"
     # 모델 목록은 `ollama list`가 아니라 HTTP API(/api/tags, 3초 제한)로 읽는다 — 서버가 꺼져 있으면
     # `ollama list`가 Ollama 앱을 스스로 띄우고, 그 앱이 출력 파이프를 붙잡아 설치가 끝없이
-    # 멈췄다(Windows 2026-10-06 실측, macOS 앱도 같은 «앱 띄우기»가 있다). 꺼져 있으면 넘어간다.
+    # 멈췄다(Windows 2026-10-06 실측, macOS 앱도 같은 《앱 띄우기》가 있다). 꺼져 있으면 넘어간다.
     ollama_base="${OLLAMA_HOST:-127.0.0.1:11434}"
     case "$ollama_base" in http://*|https://*) ;; *) ollama_base="http://$ollama_base" ;; esac
     ollama_base="${ollama_base%/}"
@@ -192,6 +192,6 @@ echo "============================================"
 echo ""
 echo "  서버 시작:  ./start_server.sh"
 echo ""
-echo "  처음 켜면 «처음 설정» 안내가 떠서 서고 만들기·글자 인식 엔진·AI 연결을 한 자리에서 끝냅니다."
+echo "  처음 켜면 《처음 설정》 안내가 떠서 서고 만들기·글자 인식 엔진·AI 연결을 한 자리에서 끝냅니다."
 echo "  API 키는 화면에서 넣습니다 — .env 파일을 편집할 일은 없습니다."
 echo ""

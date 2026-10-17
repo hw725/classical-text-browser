@@ -5,7 +5,7 @@
   - 본문은 {model:"clef", state, questions, images:[data URL]} — 이미지는 state 안이 아니라 최상위
   - 응답 {"result": {...}, "success": true}를 벗겨 answers·usage를 읽는다. success=false는 실패
   - 이미지 상한: 4장 초과는 보내기 전에 거부, 16MP·4MiB를 넘는 장은 줄인다, 합계 8MiB, 본문 13MiB
-  - 키: 환경변수 → 서고 .env → Windows 사용자 환경변수. 토큰과 계정 id가 둘 다 있어야 «키 있음»
+  - 키: 환경변수 → 서고 .env → Windows 사용자 환경변수. 토큰과 계정 id가 둘 다 있어야 《키 있음》
   - 자동 스캔이 force_provider="clef"면 clef의 확률로 종류를 정하고, 키가 없으면 400(needs_key)
   - 설정 상태가 키 있을 때 default_image_provider="clef"를 준다(화면이 미리 고른다)
 """
@@ -71,7 +71,7 @@ def _no_ambient_cloudflare(monkeypatch, tmp_path):
     """이 PC의 Cloudflare 키(환경변수·Windows 사용자 환경변수·프로젝트 .env)를 섞지 않는다."""
     import llm.jev as jev
 
-    # OPENROUTER_API_KEY도 — clef 사슬의 2단계라 그 키만 있어도 «clef 키 있음»이 된다(D-135 후속)
+    # OPENROUTER_API_KEY도 — clef 사슬의 2단계라 그 키만 있어도 《clef 키 있음》이 된다(D-135 후속)
     for k in (
         "CLOUDFLARE_API_TOKEN",
         "CLOUDFLARE_ACCOUNT_ID",
@@ -121,7 +121,7 @@ def test_body_shape_url_and_unwrap(tmp_path):
     )  # state는 글 그대로 — 이미지 안 섞임
     assert len(body["images"]) == 1 and body["images"][0].startswith("data:image/png;base64,")
     assert base64.b64decode(body["images"][0].split(",", 1)[1]) == _img(40, 30)
-    # usage는 result 안에 있다 — 벗기지 않으면 0토큰(«공짜»)으로 잘못 센다
+    # usage는 result 안에 있다 — 벗기지 않으면 0토큰(《공짜》)으로 잘못 센다
     assert c.usage()["input_tokens"] == 2000
     assert c.usage()["cost_usd"] == pytest.approx(2000 * 0.24 / 1e6)
 

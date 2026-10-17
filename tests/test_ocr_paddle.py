@@ -92,7 +92,7 @@ class TestPaddleOcrEngine:
 
 
 class TestPaddleImportFailure:
-    """패키지 찾기(find_spec)가 ImportError가 아닌 예외로 죽어도 «사용 불가»로 끝나야 한다.
+    """패키지 찾기(find_spec)가 ImportError가 아닌 예외로 죽어도 《사용 불가》로 끝나야 한다.
 
     is_available()은 paddle을 import하지 않고 메타데이터·find_spec만 본다(warmup_paddle 참고) —
     첫 OCR 때 _get_ocr()의 실제 import 실패는 이 시험이 재지 않는다.

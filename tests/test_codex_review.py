@@ -33,7 +33,7 @@ def test_ineligible_promotion_is_recorded_not_blocked(monkeypatch, tmp_path):
     승격을 누르면 그대로 승격되고, 다만 판정과 수치가 함께 적혀 나중에 되짚을 수
     있다. 막으려면 `require_weight=True` 를 준다.
 
-    시험을 뒤집어 둔 이유: 이 동작을 «고쳐야 할 것»으로 다시 올리는 일이 되풀이되지
+    시험을 뒤집어 둔 이유: 이 동작을 《고쳐야 할 것》으로 다시 올리는 일이 되풀이되지
     않게, 의도를 코드 옆에 고정한다. 판정이 **기록되지 않으면** 그때는 진짜 결함이다.
     """
     tag = {"id": "t1", "surface": "x", "block_id": "u1"}

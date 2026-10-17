@@ -9,7 +9,7 @@
        CPU만). torch가 먼저 떴으면 그 DLL을 같이 쓰므로 괜찮다.
     엔진마다 이 판단을 흩어 두면 하나만 CPU로 남아도 모른다 — 그래서 한 함수다.
 
-끄는 스위치: CTB_ORT_DEVICE=cpu (강제 CPU) / cuda (강제). 없으면 «되면 cuda».
+끄는 스위치: CTB_ORT_DEVICE=cpu (강제 CPU) / cuda (강제). 없으면 《되면 cuda》.
 """
 
 from __future__ import annotations

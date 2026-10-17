@@ -1,6 +1,6 @@
 """Relation 의 부호·무게·조절 (D-128 11·12·13항).
 
-왜 부호가 필요한가 — 그리고 왜 «강한 엣지»에서 특히 필요한가:
+왜 부호가 필요한가 — 그리고 왜 《강한 엣지》에서 특히 필요한가:
     커넥톰의 연합 구조에서 억제성 입력은 전체 무게의 12.0%인데, **강한 연결만
     보면 27.7%**로 두 배 넘게 뛴다(시각 전달도 35.0% → 42.5%). 약한 연결은
     대체로 흥분성이고 **반대 방향은 강한 꼬리에 몰려 있다**는 뜻이다.
@@ -13,7 +13,7 @@
     신호가 된다. 그래서 부호는 넷이다 — 지지·반박·맥락의존·불명. **적히지 않은
     것을 지지로 읽지 않는다**(`polarity_of`가 `undetermined`를 돌려준다).
 
-왜 «조절»이 따로 있는가 (12항):
+왜 《조절》이 따로 있는가 (12항):
     조절계 입력은 연합 구조에만 유의미하게 존재했다(KCg-m 12.5%, 나머지 0%대).
     내용을 주장하지 않고 **다른 관계의 무게를 바꾸는** 입력이다. 이 저장소에도
     대응물이 이미 있다 — 출처 신뢰도, 「이 판정은 폐기됨」, holder 표시 같은 것들이
@@ -44,10 +44,10 @@ MODE_ASSERT = "assert"
 MODE_MODULATE = "modulate"
 MODES = (MODE_ASSERT, MODE_MODULATE)
 
-# 조절형이 가리킬 수 있는 자리. 연합 층(Concept)과 «다른 관계» 둘이다 (12항).
+# 조절형이 가리킬 수 있는 자리. 연합 층(Concept)과 《다른 관계》 둘이다 (12항).
 MODULATION_OBJECT_TYPES = ("concept", "relation")
 
-# 실측에서 «강연결»을 자른 값. **임의 절단이고 값 자체가 결론이 아니다** —
+# 실측에서 《강연결》을 자른 값. **임의 절단이고 값 자체가 결론이 아니다** —
 # D-128 극성 표의 단서가 그렇게 밝히고 있다. 데이터가 있으면
 # suggest_strong_threshold()로 갈음하고, 없을 때의 마지막 기본값으로만 쓴다.
 MEASURED_STRONG_THRESHOLD = 5.0
@@ -87,7 +87,7 @@ def weight_of(relation: dict, *, default: float = 1.0) -> float:
     출력: 0 이상의 실수.
 
     왜 기본이 1인가: 무게를 적지 않은 옛 관계를 0으로 보면 임계를 세우는 순간
-    전부 사라진다 — 약한 것을 지우지 말라는 4항과 정반대가 된다. 1은 «있다»는
+    전부 사라진다 — 약한 것을 지우지 말라는 4항과 정반대가 된다. 1은 《있다》는
     뜻의 가장 작은 값이고, 실측의 잡음 바닥(1~2)과도 맞는다.
     """
     value = relation.get("weight")
@@ -101,7 +101,7 @@ def weight_of(relation: dict, *, default: float = 1.0) -> float:
 
 
 def suggest_strong_threshold(relations: list[dict]) -> float:
-    """«강연결» 임계를 데이터에서 정한다 (상수로 박지 않는다).
+    """《강연결》 임계를 데이터에서 정한다 (상수로 박지 않는다).
 
     입력: relations — Relation dict 목록.
     출력: 임계 무게.
@@ -162,7 +162,7 @@ def polarity_breakdown(relations: list[dict]) -> dict:
 
 
 def unsigned_strong_relations(relations: list[dict], threshold: float | None = None) -> list[dict]:
-    """부호가 없는 «강한» 관계를 찾아낸다 — 11항이 경고하는 자리.
+    """부호가 없는 《강한》 관계를 찾아낸다 — 11항이 경고하는 자리.
 
     입력: relations, threshold(None 이면 데이터에서).
     출력: 부호가 undetermined 인 강연결 목록.

@@ -1,4 +1,4 @@
-"""LLM 연결 상태 라우트 테스트 — 배포판에서 «무엇을 해야 하는가».
+"""LLM 연결 상태 라우트 테스트 — 배포판에서 《무엇을 해야 하는가》.
 
 왜 이 테스트가 있는가:
     배포판 사용자는 각자 자기 계정으로 LLM을 연결해야 한다. API 키는
@@ -10,7 +10,7 @@
     라우터가 조용히 다음 프로바이더(유료 API)로 넘어간다. 실제로 그 사고가
     있었다(D-056) — 무료로 도는 줄 알았는데 Gemini가 처리하고 있었다.
 
-    그래서 이 라우트는 «닿는가»와 «인증됐는가»를 **따로** 판정해야 한다.
+    그래서 이 라우트는 《닿는가》와 《인증됐는가》를 **따로** 판정해야 한다.
 """
 
 import pytest
@@ -30,7 +30,7 @@ def _isolate_ollama_shared_cache():
 
 
 def _entry(**kw):
-    """_account_status()에 넣을 항목을 만든다. 기본은 «준비된 종량제»."""
+    """_account_status()에 넣을 항목을 만든다. 기본은 《준비된 종량제》."""
     base = {
         "display_name": "테스트 프로바이더",
         "billing_model": "metered",
@@ -50,7 +50,7 @@ def _entry(**kw):
 
 
 def test_reachable_but_not_signed_in_is_not_ready():
-    """서버는 떴지만 로그인이 안 된 상태를 «사용 가능»으로 보이면 안 된다.
+    """서버는 떴지만 로그인이 안 된 상태를 《사용 가능》으로 보이면 안 된다.
 
     이것이 D-056 사고의 핵심이다. 여기서 ready가 나오면 사용자는
     실행하고 나서야 안 되는 것을 알게 된다.
@@ -80,7 +80,7 @@ def test_signed_in_shows_account_and_plan():
 
 
 def test_missing_api_key_says_what_to_do():
-    """키가 없으면 «키를 넣으세요»라고 말한다 («실행 안 됨»이 아니라)."""
+    """키가 없으면 《키를 넣으세요》라고 말한다 (《실행 안 됨》이 아니라)."""
     status, note = _account_status(_entry(reachable=False, authenticated=False))
     assert status == "needs_key"
     assert ".env" in note
@@ -96,14 +96,14 @@ def test_offline_subscription_service_is_not_a_key_problem():
 
 
 def test_metered_ready_warns_about_charges():
-    """종량제가 연결됐으면 «쓴 만큼 청구된다»를 명시한다."""
+    """종량제가 연결됐으면 《쓴 만큼 청구된다》를 명시한다."""
     status, note = _account_status(_entry())
     assert status == "ready"
     assert "청구" in note
 
 
 def test_subscription_ready_does_not_say_free():
-    """구독형을 «무료»라고 하지 않는다. 금액은 0이지만 한도를 쓴다."""
+    """구독형을 《무료》라고 하지 않는다. 금액은 0이지만 한도를 쓴다."""
     status, note = _account_status(_entry(setup_kind="cli_signin", billing_model="subscription"))
     assert status == "ready"
     assert "무료" not in note
@@ -152,10 +152,10 @@ def test_accounts_route_returns_every_provider(client):
             "note",
         ):
             assert key in p, f"{p['provider_id']}에 {key}가 없다"
-        # «checking»은 Ollama 모델 고르기가 1.5초 안에 못 끝나 뒤로 미룬 상태(D-109).
-        # «no_model»은 Ollama는 떠 있는데 비전 모델이 없거나 답하지 않는 상태
+        # 《checking》은 Ollama 모델 고르기가 1.5초 안에 못 끝나 뒤로 미룬 상태(D-109).
+        # 《no_model》은 Ollama는 떠 있는데 비전 모델이 없거나 답하지 않는 상태
         # (llm_ocr._account_status)
-        # — 빠뜨리면 그런 PC에서 거짓 실패한다(2026-10-11 전수). «unknown»은 billing 값이다.
+        # — 빠뜨리면 그런 PC에서 거짓 실패한다(2026-10-11 전수). 《unknown》은 billing 값이다.
         assert p["status"] in (
             "ready", "needs_signin", "needs_key", "offline", "checking", "no_model"
         )
@@ -165,7 +165,7 @@ def test_accounts_route_returns_every_provider(client):
 def test_accounts_route_never_leaks_api_keys(client):
     """응답에 API 키가 실려 나가면 안 된다.
 
-    설정 화면은 «키가 있는가»만 알면 된다. 키 자체를 브라우저로 보내면
+    설정 화면은 《키가 있는가》만 알면 된다. 키 자체를 브라우저로 보내면
     화면 캡처·로그·확장 프로그램을 통해 새어 나갈 수 있다.
     """
     body = client.get("/api/llm/accounts").text
@@ -189,7 +189,7 @@ def test_subscription_providers_explain_how_to_sign_in(client):
 def test_signed_in_subscription_still_warns_about_quota():
     """로그인돼 있어도 구독 한도를 쓴다는 사실이 가려지면 안 된다.
 
-    «로그인돼 있습니다»로 끝내면 공짜로 오해한다. Ollama는 클래스 기본값이
+    《로그인돼 있습니다》로 끝내면 공짜로 오해한다. Ollama는 클래스 기본값이
     "free"(로컬)인데 실제로 고르는 비전 모델은 클라우드일 수 있다 —
     D-056에서 문제 삼은 오해가 그대로 재발한다.
     """
@@ -222,14 +222,14 @@ def test_local_model_is_not_called_subscription():
 
 
 def test_ollama_billing_reflects_the_model_it_would_actually_use(client):
-    """Ollama의 과금 표시는 «실제로 고를 모델» 기준이어야 한다.
+    """Ollama의 과금 표시는 《실제로 고를 모델》 기준이어야 한다.
 
     클래스 기본값(free)을 그대로 쓰면, 클라우드 모델로 도는 환경에서
-    «로컬 무료»라고 표시된다.
+    《로컬 무료》라고 표시된다.
     """
     import time
 
-    # 첫 호출은 모델 고르기가 1.5초 안에 못 끝나 «확인 중»(active_model_pending)으로
+    # 첫 호출은 모델 고르기가 1.5초 안에 못 끝나 《확인 중》(active_model_pending)으로
     # 돌아올 수 있다(D-109 — 화면을 기다리게 하지 않는다). 뒤에서 마저 고르므로 잠시 다시 묻는다.
     for _ in range(20):
         providers = client.get("/api/llm/accounts").json()["providers"]
@@ -331,7 +331,7 @@ async def test_all_dead_falls_back_to_default(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_alive_check_reads_status_code(monkeypatch):
-    """410 같은 오류 상태는 «못 쓴다»로 판정한다."""
+    """410 같은 오류 상태는 《못 쓴다》로 판정한다."""
     import httpx
 
     from llm.config import LlmConfig
@@ -383,7 +383,7 @@ class TestDotenvEncoding:
 
 
 def test_ollama_local_model_without_signin_is_ready():
-    """로그인 안 된 Ollama라도 고른 비전 모델이 로컬이면 «사용 가능»이다(2026-09-05 보고)."""
+    """로그인 안 된 Ollama라도 고른 비전 모델이 로컬이면 《사용 가능》이다(2026-09-05 보고)."""
     e = _entry(
         provider_id="ollama",
         display_name="Ollama",
@@ -399,7 +399,7 @@ def test_ollama_local_model_without_signin_is_ready():
 
 
 def test_ollama_cloud_model_without_signin_needs_signin():
-    """클라우드 모델을 골랐는데 로그인이 없으면 여전히 «로그인 필요» — 유료 폴백 사고를 막는다."""
+    """클라우드 모델을 골랐는데 로그인이 없으면 여전히 《로그인 필요》 — 유료 폴백 사고를 막는다."""
     e = _entry(
         provider_id="ollama",
         display_name="Ollama",
@@ -414,7 +414,7 @@ def test_ollama_cloud_model_without_signin_needs_signin():
 
 
 def test_ollama_without_installed_vision_model_says_so():
-    """비전 모델이 하나도 없으면 «모델 없음»과 받을 명령을 말한다 — 로그인 여부와 무관하게."""
+    """비전 모델이 하나도 없으면 《모델 없음》과 받을 명령을 말한다 — 로그인 여부와 무관하게."""
     e = _entry(
         provider_id="ollama",
         display_name="Ollama",
@@ -431,9 +431,9 @@ def test_ollama_without_installed_vision_model_says_so():
 
 
 def test_ollama_url_uses_ipv6_override_even_if_default_is_written(monkeypatch):
-    """기본 주소를 .env에 «명시»해 둔 경우에도 [::1]에서 찾은 주소로 부른다.
+    """기본 주소를 .env에 《명시》해 둔 경우에도 [::1]에서 찾은 주소로 부른다.
 
-    is_alive는 그 경우 [::1]도 보고 override를 남기는데 _url이 무시하면 «떠 있음»으로
+    is_alive는 그 경우 [::1]도 보고 override를 남기는데 _url이 무시하면 《떠 있음》으로
     보고하고 호출은 127.0.0.1로 나가 실패한다 (Codex 지적 2026-09-06).
     """
     from llm.config import LlmConfig
@@ -499,7 +499,7 @@ def test_catalog_marks_installed_and_puts_default_first(monkeypatch):
     monkeypatch.setattr(
         oc, "fetch_cloud_vision_names", lambda *a, **k: ["gemma4", "qwen3.5", "brand-new", "no-tag"]
     )
-    # 레지스트리 확인도 가짜로 — «no-tag»는 검색 페이지에 있지만 :cloud 태그가 없는 경우
+    # 레지스트리 확인도 가짜로 — 《no-tag》는 검색 페이지에 있지만 :cloud 태그가 없는 경우
     # (mistral-large-3 실측)
     monkeypatch.setattr(oc, "cloud_tag_exists", lambda repo, timeout=3.0: repo != "no-tag")
     out = oc.catalog({"gemma4:e4b", "glm-ocr:latest", "kimi-k3:cloud"})
@@ -521,7 +521,7 @@ def test_catalog_marks_installed_and_puts_default_first(monkeypatch):
 
 
 def test_catalog_offline_keeps_builtin_without_retired_marks(monkeypatch):
-    """ollama.com을 못 읽으면(None) 내장 목록만 주고, 아무것도 «은퇴»로 찍지 않는다."""
+    """ollama.com을 못 읽으면(None) 내장 목록만 주고, 아무것도 《은퇴》로 찍지 않는다."""
     from llm import ollama_catalog as oc
 
     monkeypatch.setattr(oc, "fetch_cloud_vision_names", lambda *a, **k: None)
@@ -555,7 +555,7 @@ def test_catalog_route(client, monkeypatch):
 
 
 def test_no_model_note_for_cloud_default_points_to_login_and_chooser():
-    """기본이 클라우드일 때 «모델 없음»은 크기(GB)가 아니라 로그인과 「모델 받기」를 말한다."""
+    """기본이 클라우드일 때 《모델 없음》은 크기(GB)가 아니라 로그인과 「모델 받기」를 말한다."""
     e = _entry(
         provider_id="ollama",
         display_name="Ollama",
@@ -573,7 +573,7 @@ def test_no_model_note_for_cloud_default_points_to_login_and_chooser():
 
 
 def test_needs_signin_note_points_to_buttons_not_terminal():
-    """«로그인 필요» 안내는 터미널 명령이 아니라 카드의 두 단추(로그인·모델 받기)를 가리킨다."""
+    """《로그인 필요》 안내는 터미널 명령이 아니라 카드의 두 단추(로그인·모델 받기)를 가리킨다."""
     e = _entry(
         provider_id="ollama",
         display_name="Ollama",
@@ -589,7 +589,7 @@ def test_needs_signin_note_points_to_buttons_not_terminal():
 
 
 def test_pull_log_strips_terminal_control_sequences():
-    """ollama CLI가 찍는 커서·지우기 제어열은 진행 문구에서 지운다 — 화면에 «[K[?25h»가 남았다."""
+    """ollama CLI가 찍는 커서·지우기 제어열은 진행 문구에서 지운다 — 화면에 《[K[?25h》가 남았다."""
     from core.ollama_signin import _ANSI
 
     raw = "\x1b[?2026h\x1b[?25l\x1b[1G⠙ pulling manifest \x1b[K\x1b[?25h\x1b[?2026l"
@@ -598,7 +598,7 @@ def test_pull_log_strips_terminal_control_sequences():
 
 
 def test_dead_vision_model_is_not_ready():
-    """고른 모델이 응답하지 않았으면(은퇴·로그인 실패) 깔려 있고 로그인돼 있어도 «연결됨» 아님."""
+    """고른 모델이 응답하지 않았으면(은퇴·로그인 실패) 깔려 있고 로그인돼 있어도 《연결됨》 아님."""
     e = _entry(
         provider_id="ollama",
         display_name="Ollama",
@@ -668,7 +668,7 @@ def test_looks_like_json_strips_prose_around_object():
 async def test_json_call_retries_with_thinking_when_model_writes_prose(monkeypatch):
     """glm-5.3:cloud 실측(2026-09-07): think=False면 추론이 본문에, think=True면 JSON이 본문에 온다.
 
-    모델 이름을 코드에 적지 않고 «답이 JSON이 아니다»로 판단해 사고를 켜 한 번만 더 부른다.
+    모델 이름을 코드에 적지 않고 《답이 JSON이 아니다》로 판단해 사고를 켜 한 번만 더 부른다.
     """
     import json as _json
 

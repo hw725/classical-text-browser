@@ -118,7 +118,7 @@ def export_dictionary(
         },
     }
 
-    # 데이터 버전은 «출력»에 각인한다 (D-128 1항). 사용자는 아무것도 입력하지 않고,
+    # 데이터 버전은 《출력》에 각인한다 (D-128 1항). 사용자는 아무것도 입력하지 않고,
     # 내보낸 사전을 논문에 쓴 뒤에도 「어느 시점의 서고에서 나왔는가」를 지목할 수 있다.
     # 해석 저장소 경로가 …/{서고}/interpretations/{id} 이므로 두 단계 위가 서고 루트다.
     from .corpus_version import corpus_snapshot, stamp
@@ -241,7 +241,7 @@ def import_dictionary(
                 merged += 1
                 continue
             elif merge_strategy == "overwrite":
-                # 기존 주석의 «사전 풀이»를 가져온 것으로 바꾼다. 위치(target)·id는 그대로 둔다 —
+                # 기존 주석의 《사전 풀이》를 가져온 것으로 바꾼다. 위치(target)·id는 그대로 둔다 —
                 # 사람이 원문에 붙여 둔 자리를 잃지 않게. 예전에는 기존 항목을 그대로 두고 위치 없는
                 # 새 항목을 하나 더 만들어 같은 표제어가 둘이 됐다(2026-10-11 전수).
                 existing_dict = existing_headwords[headword].setdefault("dictionary", {})

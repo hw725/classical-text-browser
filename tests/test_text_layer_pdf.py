@@ -204,7 +204,7 @@ def test_embed_without_bbox_still_extractable(scanned_doc):
     위치는 원본 자리가 아니게 되지만, 복사·Ctrl+F·구조 분석이 동작하려면
     텍스트의 존재 자체가 먼저다.
 
-    검출을 끄고 본다: 여기서 확인할 것은 «좌표를 못 얻었을 때의 폴백»이다.
+    검출을 끄고 본다: 여기서 확인할 것은 《좌표를 못 얻었을 때의 폴백》이다.
     검출이 켜져 있으면 위치가 채워져 이 경로를 타지 않는다.
     """
     _write_l2(scanned_doc, "vol1", 1, with_bbox=False)
@@ -256,7 +256,7 @@ def test_embedded_font_costs_size_but_is_the_default(scanned_doc):
     처음에는 비임베드가 기본이었다(쪽당 +0.9KB, 실측 2026-07-25).
     그런데 실제 논문에서 **Adobe-Korea1 charset에 없는 한자가 조용히
     사라졌다** — 51종 130자, 하필 한시 인용문에 몰려 있었다
-    (실측 2026-07-26). 산출물의 계약은 «검색되는 PDF»이므로
+    (실측 2026-07-26). 산출물의 계약은 《검색되는 PDF》이므로
     크기(쪽당 +4.9KB)를 치르고 임베드하는 쪽으로 뒤집었다.
 
     여기서 고정하는 것은 **크기 관계**다. 임베드가 더 작아지면
@@ -337,7 +337,7 @@ def test_lines_without_bbox_are_stacked_not_placed(scanned_doc):
     """좌표가 없는 줄이 실제로 어떻게 놓이는지 못박아 둔다.
 
     왜 이 테스트가 있는가:
-        «위치가 대략적»이라고 설명해 왔으나 실제 구현은 다르다.
+        《위치가 대략적》이라고 설명해 왔으나 실제 구현은 다르다.
         좌표를 모르므로 **모든 줄을 왼쪽 여백에서 시작해 세로로 균등 배치**한다.
         검색하면 형광이 한 줄 크기로 정확히 뜨지만 그 자리에 원본 글자가 없다.
         설명과 구현이 다시 어긋나지 않도록 실제 좌표를 검증한다.
@@ -371,7 +371,7 @@ def test_lines_without_bbox_are_stacked_not_placed(scanned_doc):
         gaps = {round(ys[i + 1] - ys[i], 1) for i in range(len(ys) - 1)}
         assert len(gaps) == 1, f"y 간격이 일정하지 않다: {gaps}"
 
-        # 3) OCR이 보고한 bbox와는 다른 자리다 — «제자리»가 아님을 분명히 한다
+        # 3) OCR이 보고한 bbox와는 다른 자리다 — 《제자리》가 아님을 분명히 한다
         ocr_x = LINES[0][1][0] / RENDER_SCALE  # 80.0pt
         assert abs(next(iter(xs)) - ocr_x) > 5, (
             "좌표 없는 줄이 우연히 OCR bbox 자리에 놓였다 — 이 테스트의 전제가 깨졌다"
@@ -469,7 +469,7 @@ def test_chars_outside_korea1_survive(scanned_doc):
     """Adobe-Korea1에 없는 한자가 PDF에서 사라지면 안 된다.
 
     이것이 임베드를 기본값으로 뒤집은 이유다. 산출물의 계약은
-    «검색되는 PDF»인데, 검색하고 싶은 글자가 빠지면 계약이 깨진다.
+    《검색되는 PDF》인데, 검색하고 싶은 글자가 빠지면 계약이 깨진다.
     """
     text = f"勸{LOST_CHARS[0]}合歡酒 {LOST_CHARS[1]}不信 李安中{LOST_CHARS[2]}究"
     _write_l2_custom(scanned_doc, "vol1", 1, [(text, [160.0, 200.0, 900.0, 240.0])])
@@ -518,12 +518,12 @@ def test_without_embedding_the_loss_is_real(scanned_doc):
     assert LOST_CHARS[2] not in got, "비임베드에서도 살아남았다 — 측정 전제를 다시 볼 것"
 
 
-# ── 실제 스캔본의 «남은 좌표 변환» 회귀 (D-068) ──────────────────
+# ── 실제 스캔본의 《남은 좌표 변환》 회귀 (D-068) ──────────────────
 #
 # 왜 이 시험이 따로 필요한가: 위의 fixture는 PyMuPDF가 만든 **깨끗한** PDF다.
 # 실제 스캔 PDF는 픽셀 단위로 작업하려고 내용 스트림 첫 줄에 배율을 걸어 두고
 # 되돌리지 않는 일이 흔하다. 그 상태에서 TextWriter로 덧붙이면 텍스트가
-# 통째로 축소돼 쪽 구석에 박힌다 — get_text()로는 «있다»고 나오므로
+# 통째로 축소돼 쪽 구석에 박힌다 — get_text()로는 《있다》고 나오므로
 # 기존 시험은 전부 통과한다. 실제 논문에서만 드러났던 결함이다.
 
 
@@ -553,7 +553,7 @@ def _make_unwrapped_scan(path: Path, pages: int = 1) -> None:
         np_.insert_image(np_.rect, stream=jpg)
         # 내용 스트림을 실제 스캔본 모양으로 갈아 끼운다.
         # 이미지 이름은 방금 넣은 것에서 읽어 온다 — 이름을 지어내면 이미지가
-        # 그려지지 않아 시험이 «글자 없는 흰 종이»를 상대하게 된다.
+        # 그려지지 않아 시험이 《글자 없는 흰 종이》를 상대하게 된다.
         img_name = np_.get_images()[0][7]
         xref = np_.get_contents()[0]
         out.update_stream(
@@ -595,7 +595,7 @@ def unwrapped_doc(tmp_path):
 
 
 def test_source_really_has_unwrapped_transform(unwrapped_doc):
-    """시험 대상이 실제로 «되돌리지 않은 변환»을 갖고 있는지부터 확인한다.
+    """시험 대상이 실제로 《되돌리지 않은 변환》을 갖고 있는지부터 확인한다.
 
     이것이 깨지면 아래 두 시험은 아무것도 지키지 못한 채 통과한다.
     """
@@ -682,7 +682,7 @@ def test_source_pdf_untouched_by_wrapping(unwrapped_doc):
 
 
 def test_audit_catches_shrunken_text(tmp_path):
-    """산출물 검사가 «축소돼 구석에 박힌 텍스트»를 잡아내는가.
+    """산출물 검사가 《축소돼 구석에 박힌 텍스트》를 잡아내는가.
 
     D-068에서 실제로 나온 모양을 그대로 만든다 — 495×694 쪽의 왼쪽 아래에
     2.9pt 글자가 뭉쳐 있는 상태. 고침이 사라져 이 모양이 다시 나오면

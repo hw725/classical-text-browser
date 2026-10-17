@@ -4,7 +4,7 @@ from core import oauth_proxy as op
 
 
 def test_ready_and_login_url_are_parsed():
-    """프록시 출력에서 «준비됨» 주소와 로그인 주소를 건진다.
+    """프록시 출력에서 《준비됨》 주소와 로그인 주소를 건진다.
 
     내 컴퓨터 주소(127.0.0.1)는 로그인 주소가 아니다.
     """

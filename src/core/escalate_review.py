@@ -1,6 +1,6 @@
 """애매한 후보 2차 판정 (D-137).
 
-판정 모델이 확신하지 못한 자리를 «사람이 고른 채팅 LLM»에 붙여 넣어 묻는다.
+판정 모델이 확신하지 못한 자리를 《사람이 고른 채팅 LLM》에 붙여 넣어 묻는다.
 
 왜 있는가:
     편성의 본문 판정(D-129·D-136)은 후보를 세 대역으로 나눈다. 가운데(escalate)는 체크 해제로 서서
@@ -9,21 +9,22 @@
     555 → 74(87% 감소)로 줄였다. 같은 재현에서 decider 확률만으로 자르면 133이 남는다.
 
 무엇을 하지 않는가 — **앱은 여기서 외부 모델을 부르지 않는다**:
-    내보내기는 «지시문 + 후보 JSON 줄»인 글 한 덩어리를 만들 뿐이다. 사람이 그것을 아무 채팅
+    내보내기는 《지시문 + 후보 JSON 줄》인 글 한 덩어리를 만들 뿐이다. 사람이 그것을 아무 채팅
     LLM(Claude·ChatGPT·Gemini…)에 붙여 넣고, 답을 다시 붙여 넣는다. 이 PC에서는 Claude Code/Desktop
     세션이 `scripts/escalate_review.py`로 같은 일을 한다. 앱이 키·모델·비용을 하나 더 떠안지 않고,
     다른 사용자는 자기가 쓰는 채팅 LLM을 그대로 쓴다.
 
 모델이 할 수 없는 것:
-    - **행을 더할 수 없다.** 답의 id는 내보낸 후보 목록에 있는 것만 받는다(없는 id는 «거부»).
-    - **경계를 저장할 수 없다.** 결과는 체크 제안뿐이다 — «예»는 체크, «아니오»는 체크 해제 + 표시.
+    - **행을 더할 수 없다.** 답의 id는 내보낸 후보 목록에 있는 것만 받는다(없는 id는 《거부》).
+    - **경계를 저장할 수 없다.** 결과는 체크 제안뿐이다 — 《예》는 체크,
+      《아니오》는 체크 해제 + 표시.
       저장은 지금과 같이 사람이 「적용」을 누를 때만 일어난다.
     - 확률을 보지 않는다. 판정 모델의 확률을 보여 주면 그 숫자에 기대어 답한다(닻 효과) — 글만 준다.
 
 어디에 남기는가:
     `<서고>/.escalate_review/<문헌>/<권>.json` — 후보 목록과 들인 2차 판정.
     **문헌 저장소(git) 밖**이다: 문헌 폴더에 두면 다음 교정 커밋의 `git add -A`가 이 임시 기록을
-    끌고 들어간다. 경계가 아니라 «제안의 메모»라 서고 루트(git 아님 — `llm_usage_log.jsonl`과
+    끌고 들어간다. 경계가 아니라 《제안의 메모》라 서고 루트(git 아님 — `llm_usage_log.jsonl`과
     같은 자리)에 둔다. CLI(서버 없이 도는
     Claude 세션)가 화면이 세운 후보를 알아야 하므로 남기는 것이다.
 """
@@ -47,12 +48,12 @@ AFTER_LINES = 2  # 뒤 문맥 — 표제 다음 행이 본문 첫머리인지 �
 STORE_DIRNAME = ".escalate_review"
 
 # 지시문의 답 예시에 쓰는 id. **후보가 될 수 없는 자리**여야 한다 — 쪽은 1부터 센다
-# (`segmentation._list_part_pages`). 한때 실제로 있을 법한 «p8-L3»을 써서, 내보낸 글을 그대로
-# 들이거나 채팅 LLM이 지시문을 되풀이하면 예시가 진짜 «예» 판정으로 들어가 체크됐다
+# (`segmentation._list_part_pages`). 한때 실제로 있을 법한 《p8-L3》을 써서, 내보낸 글을 그대로
+# 들이거나 채팅 LLM이 지시문을 되풀이하면 예시가 진짜 《예》 판정으로 들어가 체크됐다
 # (2026-10-05 실측).
 EXAMPLE_ID = "p0-L0"
 
-# 내보낸 글의 머리. 들이기 입력에 이것이 있으면 «답»이 아니라 «내보낸 글»을 붙인 것이다
+# 내보낸 글의 머리. 들이기 입력에 이것이 있으면 《답》이 아니라 《내보낸 글》을 붙인 것이다
 # (클립보드를 못 쓰면 화면이 내보낸 글을 답 칸에 띄운다 — 그대로 「들이기」를 누르는 길이 있다).
 HEAD_PREFIX = "[애매한 후보 2차 판정 —"
 CANDIDATES_MARKER = "후보(한 줄에 하나):"
@@ -61,7 +62,7 @@ CANDIDATES_MARKER = "후보(한 줄에 하나):"
 # 상한이 없으면 깊게 중첩된 글 하나가 JSON 해석을 붙들거나(RecursionError) 서버 메모리를 쓴다.
 MAX_ANSWER_CHARS = 2_000_000
 
-# 묶음 표지 — «esc-<문헌·권 지문 6자>-<묶음 번호>». 답이 이것을 되받게 해서 다른 권·문헌의 답을
+# 묶음 표지 — 《esc-<문헌·권 지문 6자>-<묶음 번호>》. 답이 이것을 되받게 해서 다른 권·문헌의 답을
 # 가려낸다. 문헌 id를 그대로 쓰지 않는 까닭: 한글·기호가 든 id는 채팅 LLM이 옮겨 적다 바꾸기 쉽다
 # (짧은 ASCII가 안전).
 _TAG_RE = re.compile(r"esc-([0-9a-f]{6})-(\d+)")
@@ -106,7 +107,7 @@ def book_hint(book_type: Optional[str]) -> str:
 def candidate_items(
     lines: list[Line], positions: Iterable
 ) -> tuple[list[dict], list[str]]:
-    """후보 자리를 «id·앞 문맥·행·뒤 문맥»으로 편다. **확률은 넣지 않는다.**
+    """후보 자리를 《id·앞 문맥·행·뒤 문맥》으로 편다. **확률은 넣지 않는다.**
 
     입력: 확정본 행 목록(쪽·행 순), 자리 목록([(쪽, 행)] 또는 {page, line_index}).
     출력: (항목 목록 [{id, before, text, after}], 건너뛴 id — 지금 확정본에 없거나 빈 행).
@@ -140,7 +141,7 @@ def candidate_items(
 
 
 def _pos_key(pos) -> Optional[tuple[int, int]]:
-    """자리 하나 → (쪽, 행). dict·튜플·«p8-L3» 셋을 받는다."""
+    """자리 하나 → (쪽, 행). dict·튜플·《p8-L3》 셋을 받는다."""
     try:
         if isinstance(pos, dict):
             return int(pos["page"]), int(pos["line_index"])
@@ -152,12 +153,12 @@ def _pos_key(pos) -> Optional[tuple[int, int]]:
 
 
 def tag_key(doc_id: str, part_id: str) -> str:
-    """문헌·권 지문 6자(16진). 입력: 문헌·권 id. 출력: 예 «3fa9c1». 같은 문헌·권이면 늘 같다."""
+    """문헌·권 지문 6자(16진). 입력: 문헌·권 id. 출력: 예 《3fa9c1》. 같은 문헌·권이면 늘 같다."""
     return hashlib.sha1(f"{doc_id}\x00{part_id}".encode("utf-8")).hexdigest()[:6]
 
 
 def batch_tag(doc_id: str, part_id: str, index: int) -> str:
-    """묶음 표지 «esc-3fa9c1-2». 답이 이것을 «batch»로 되받는다."""
+    """묶음 표지 《esc-3fa9c1-2》. 답이 이것을 《batch》로 되받는다."""
     return f"esc-{tag_key(doc_id, part_id)}-{index}"
 
 
@@ -183,7 +184,7 @@ def render_chunk_text(
     )
     body = "\n".join(json.dumps(it, ensure_ascii=False) for it in items)
     if tag:
-        tag_rule = f'. "batch"에는 이 묶음의 표지 «{tag}»를 그대로 적으십시오'
+        tag_rule = f'. "batch"에는 이 묶음의 표지 《{tag}》를 그대로 적으십시오'
         example = (
             f'{{"batch":"{tag}","answers":[{{"id":"{EXAMPLE_ID}","start":"yes","conf":0.9}}, ...]}}'
         )
@@ -236,7 +237,7 @@ def _answer_objects(text: str) -> tuple[list, str]:
 
     덩어리 셋의 답을 한 칸에 이어 붙여도 읽히게 하려고 객체를 여러 개 찾는다(울타리·설명 문장은
     건너뛴다). 하나도 없으면 공통 파서(`parse_llm_items`)로 넘겨 잘린 답에서 완성된 항목만 건진다
-    — 기능마다 복구 파서를 따로 두지 않는다(AGENTS.md «파일 다루기»).
+    — 기능마다 복구 파서를 따로 두지 않는다(AGENTS.md 《파일 다루기》).
     """
     dec = json.JSONDecoder()
     found: list = []
@@ -249,7 +250,7 @@ def _answer_objects(text: str) -> tuple[list, str]:
         try:
             obj, end = dec.raw_decode(text, i)
         except (json.JSONDecodeError, RecursionError):
-            # RecursionError: «{"a":[{"a":[…» 같은 깊은 중첩 붙여 넣기에서 파이썬 JSON 해석기가
+            # RecursionError: 《{"a":[{"a":[…》 같은 깊은 중첩 붙여 넣기에서 파이썬 JSON 해석기가
             # 재귀 한도를 넘는다. 잡지 않으면 들이기 라우트가 500으로 죽었다(2026-10-05 실측).
             pos = i + 1
             continue
@@ -300,10 +301,10 @@ def _conf_value(v) -> Optional[float]:
 
 
 def looks_like_export(text: str) -> bool:
-    """붙여 넣은 글이 «답»이 아니라 «내보낸 글»(지시문 + 후보)인가.
+    """붙여 넣은 글이 《답》이 아니라 《내보낸 글》(지시문 + 후보)인가.
 
     왜: 클립보드를 못 쓰면 화면이 내보낸 글을 답 칸에 띄운다. 그대로 「들이기」를 누르거나
-    채팅 LLM이 지시문을 되풀이한 답을 붙이면, 복구 파서가 지시문의 예시 줄을 «답»으로 읽었다
+    채팅 LLM이 지시문을 되풀이한 답을 붙이면, 복구 파서가 지시문의 예시 줄을 《답》으로 읽었다
     (2026-10-05 실측 — 예시 id가 실제로 있을 법한 자리라 그대로 체크됐다).
     머리·후보 표지가 보이면 들이지 않는다.
     """
@@ -315,7 +316,7 @@ def check_batch_tags(text: str, doc_id: Optional[str], part_id: Optional[str]) -
     """답에 적힌 묶음 표지를 이 문헌·권과 견준다.
 
     출력: {"status": "ok"|"absent"|"mismatch", "tags": [본 표지], "foreign": [다른 권 표지]}.
-    «absent»는 옛 답이거나 LLM이 표지를 빠뜨린 것 — 받되 거부 비율로 경고한다(import_answers).
+    《absent》는 옛 답이거나 LLM이 표지를 빠뜨린 것 — 받되 거부 비율로 경고한다(import_answers).
     """
     found = [f"esc-{k}-{n}" for k, n in _TAG_RE.findall(text or "")]
     if not found or doc_id is None or part_id is None:
@@ -329,7 +330,7 @@ def parse_answers(text: str, candidate_ids: list[str], chunk_size: int = CHUNK_S
     """붙여 넣은 답을 읽어 후보 목록에 대조한다. **모델이 행을 더할 수 없다.**
 
     입력: 답 글(울타리·설명 문장 섞여도 됨), 내보낸 후보 id(순서 그대로), 덩어리 크기.
-    표지·«내보낸 글을 붙였나»는 여기서 보지 않는다 — 문헌·권을 아는 `import_answers`가 본다.
+    표지·《내보낸 글을 붙였나》는 여기서 보지 않는다 — 문헌·권을 아는 `import_answers`가 본다.
     출력: {
         "verdicts": {id: {"start": "yes"|"no", "conf": 수|None}},
         "counts": {"yes", "no", "missing", "rejected", "malformed"},
@@ -337,8 +338,8 @@ def parse_answers(text: str, candidate_ids: list[str], chunk_size: int = CHUNK_S
         "missing_ids": [...]   — 답이 닿은 덩어리 안에서 답이 없는 id(누락),
         "malformed": n, "duplicates": n, "parse_status": "ok"|"recovered"|"no_json",
     }
-    «누락»은 **답이 닿은 덩어리 안에서만** 센다 — 1/3의 답을 붙였는데 2/3·3/3을 누락으로 세면
-    사람이 «모델이 200개를 빠뜨렸다»로 읽는다. 하나도 못 읽었으면 전체를 누락으로 센다.
+    《누락》은 **답이 닿은 덩어리 안에서만** 센다 — 1/3의 답을 붙였는데 2/3·3/3을 누락으로 세면
+    사람이 《모델이 200개를 빠뜨렸다》로 읽는다. 하나도 못 읽었으면 전체를 누락으로 센다.
     """
     entries, status = _answer_objects(text)
     known = set(candidate_ids)
@@ -399,9 +400,9 @@ def parse_answers(text: str, candidate_ids: list[str], chunk_size: int = CHUNK_S
 def check_path_id(value, what: str) -> str:
     """문헌·권 id가 폴더 이름 하나인지 본다. 아니면 ValueError(한국어 — 원인과 할 일).
 
-    왜: CLI `--doc ..`이 `<서고>/documents/..`(= 서고 자체)를 «있는 폴더»로 통과시키고, 메모 자리가
-    `.escalate_review/../<권>.json`으로 서고 밖·위로 빠졌다(2026-10-05 실측). 또 예전에는 «a/b»를
-    «a_b»로 바꿔 두 문헌이 한 메모를 나눠 쓸 수 있었다 — 바꾸지 않고 거부한다.
+    왜: CLI `--doc ..`이 `<서고>/documents/..`(= 서고 자체)를 《있는 폴더》로 통과시키고, 메모
+    자리가 `.escalate_review/../<권>.json`으로 서고 밖·위로 빠졌다(2026-10-05 실측). 또 예전에는
+    《a/b》를 《a_b》로 바꿔 두 문헌이 한 메모를 나눠 쓸 수 있었다 — 바꾸지 않고 거부한다.
     """
     s = str(value or "")
     bad = (
@@ -412,8 +413,8 @@ def check_path_id(value, what: str) -> str:
     )
     if bad:
         raise ValueError(
-            f"{what} id «{s[:40]}»를 쓸 수 없습니다 — 폴더 이름 하나여야 합니다"
-            "(빈 값·«..»·경로 구분자·드라이브 문자 금지). 편성 화면이나 서고의 documents 폴더에 "
+            f"{what} id 《{s[:40]}》를 쓸 수 없습니다 — 폴더 이름 하나여야 합니다"
+            "(빈 값·《..》·경로 구분자·드라이브 문자 금지). 편성 화면이나 서고의 documents 폴더에 "
             "보이는 이름을 그대로 적으세요."
         )
     return s
@@ -491,7 +492,7 @@ def save_candidates(
         ],
         "skipped": skipped,
         "verdicts": kept,
-        # 들이기가 «누락»을 내보낸 덩어리와 같은 경계로 세도록 덩어리 크기를 함께 둔다
+        # 들이기가 《누락》을 내보낸 덩어리와 같은 경계로 세도록 덩어리 크기를 함께 둔다
         "chunk_size": max(1, int(chunk_size or old.get("chunk_size") or CHUNK_SIZE)),
     }
     write_json_atomic(store_path(library_root, doc_id, part_id), data)
@@ -577,7 +578,7 @@ def import_answers(library_root, doc_id: str, part_id: str, text: str) -> dict:
     answered = len(res["verdicts"]) + res["counts"]["rejected"]
     if tags["status"] == "absent" and answered and res["counts"]["rejected"] * 2 > answered:
         # 표지가 없는 답(옛 답·LLM이 빠뜨림)은 받는다. 그러나 거부가 절반을 넘으면 다른 권의 답일
-        # 공산이 크다 — 권마다 쪽·행 번호가 겹쳐 일부 id가 «우연히 맞아» 엉뚱한 자리에 체크될 수
+        # 공산이 크다 — 권마다 쪽·행 번호가 겹쳐 일부 id가 《우연히 맞아》 엉뚱한 자리에 체크될 수
         # 있다.
         warnings.append(
             f"거부한 id가 절반을 넘습니다({res['counts']['rejected']}/{answered}) — 다른 권·문헌의 "
@@ -596,10 +597,10 @@ def export_from_store(
     book_type: Optional[str] = None,
 ) -> dict:
     """메모의 후보로 내보낸다(서버 없이 도는 CLI가 쓴다). 덩어리 크기를 메모에 남겨 들이기가 같은
-    경계로 «누락»을 센다. 후보가 없으면 ValueError.
+    경계로 《누락》을 센다. 후보가 없으면 ValueError.
 
     한계: 메모를 적은 뒤 확정본이 바뀌어 사라진 행은 내보내기에서 빠지고(`skipped`), 그만큼
-    덩어리 경계가 메모의 순서와 어긋나 «누락» 범위가 한 덩어리 넘어갈 수 있다. 판정 자체는 id로
+    덩어리 경계가 메모의 순서와 어긋나 《누락》 범위가 한 덩어리 넘어갈 수 있다. 판정 자체는 id로
     맞추므로 틀어지지 않는다."""
     from core.document import write_json_atomic
 

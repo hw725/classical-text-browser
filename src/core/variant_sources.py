@@ -14,7 +14,7 @@
 | parse_jp_old_style | cjkvi-variants jp-old-style.txt (라이선스 미확인) | script |
 
 층(tier)의 뜻 — D-080 결정 2:
-  strict  확정 동자. 정렬 엔진이 «이체자»로 분류한다.
+  strict  확정 동자. 정렬 엔진이 《이체자》로 분류한다.
   loose   넓은 이체 관계(통가·차자 포함). 힌트만 — 동치로 쓰면 오독이 숨는다.
   script  문자 체계 차이(간체·신자체·지역 변형). 힌트만. 본문은 절대 고치지 않는다.
 """
@@ -27,7 +27,7 @@ from typing import Iterable
 
 TIERS = ("strict", "loose", "script")
 
-# Unihan 변형 필드 → 층. kSpoofingVariant는 «닮아 보이는 글자»라 이체자가 아니다 — 제외.
+# Unihan 변형 필드 → 층. kSpoofingVariant는 《닮아 보이는 글자》라 이체자가 아니다 — 제외.
 UNIHAN_FIELD_TIERS = {
     "kZVariant": "strict",
     "kSemanticVariant": "loose",
@@ -189,7 +189,7 @@ def build_dict_payload(
             "용도": "정렬 엔진이 OCR↔참조 텍스트 대조 시 이체자를 분류한다. "
             "본문은 고치지 않는다(D-080).",
             "층": {
-                "strict": "확정 동자 — 정렬에서 «이체자»로 분류",
+                "strict": "확정 동자 — 정렬에서 《이체자》로 분류",
                 "loose": "넓은 이체 관계 — 힌트만, 동치 아님",
                 "script": "문자 체계 차이(간체·신자체) — 힌트만, 동치 아님",
             },

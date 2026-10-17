@@ -56,7 +56,7 @@ def _looks_like_json(text: str) -> bool:
 def _gen_options(max_tokens: int, prompt_chars: int) -> dict:
     """Ollama 생성 옵션 — num_predict에 더해, 답이 길면 문맥 창(num_ctx)도 함께 올린다.
 
-    왜: Ollama의 기본 num_ctx는 4,096이다. num_predict를 8,192로 주어도 «프롬프트 + 답»이 4,096을
+    왜: Ollama의 기본 num_ctx는 4,096이다. num_predict를 8,192로 주어도 《프롬프트 + 답》이 4,096을
     넘는 순간 생성이 멈춘다 — 사전형 주석 1단계가 매번 2,883토큰에서 잘렸다(2026-09-12 실측,
     gemma4:e4b). 문자 수를 토큰 수로 어림한다(한자·한글은 글자당 1토큰 안팎이라 넉넉한 쪽이다).
     """
@@ -163,14 +163,15 @@ class OllamaProvider(BaseLlmProvider):
         default = "http://127.0.0.1:11434"
         url = self.config.get("ollama_url", default)
         # 사람이 .env에 localhost로 적어 두어도 127.0.0.1로 부른다 — Windows의 IPv6 우선 시도가
-        # 호출마다 2초를 버리고, 느린 기기에서는 제한 시간을 넘겨 «Ollama 없음»으로 오판한다
+        # 호출마다 2초를 버리고, 느린 기기에서는 제한 시간을 넘겨 《Ollama 없음》으로 오판한다
         # (2026-09-05, 다른 PC에서 Ollama가 떠 있는데 안 잡히던 보고).
         url = url.replace("://localhost:", "://127.0.0.1:").replace(
             "://localhost/", "://127.0.0.1/"
         )
-        # 찾아낸 주소([::1])는 사용자가 «다른» 주소를 정해 두지 않았을 때 쓴다. 기본 주소를 그대로
+        # 찾아낸 주소([::1])는 사용자가 《다른》 주소를 정해 두지 않았을 때 쓴다. 기본 주소를 그대로
         # 적어 둔 것은 is_alive가 [::1]도 보는 조건과 같아야 한다 — 전에는 is_alive는 [::1]에서
-        # 찾았다고 «떠 있음»으로 보고하면서 호출은 127.0.0.1로 나가 실패했다(Codex 지적 2026-09-06).
+        # 찾았다고 《떠 있음》으로 보고하면서 호출은 127.0.0.1로 나가 실패했다(Codex 지적
+        # 2026-09-06).
         explicit_other = self.config.is_set("ollama_url") and url.rstrip("/") != default
         if OllamaProvider._url_override and not explicit_other:
             return OllamaProvider._url_override
@@ -240,7 +241,7 @@ class OllamaProvider(BaseLlmProvider):
                 self._shared_set("vision_dead", None)
                 return candidate
 
-        # 기본을 돌려주되 «응답하지 않았다»를 남긴다 — 설정 카드가 «연결됨»으로 보이면 안 된다
+        # 기본을 돌려주되 《응답하지 않았다》를 남긴다 — 설정 카드가 《연결됨》으로 보이면 안 된다
         # (Codex 리뷰 2026-09-06: 은퇴·로그인 실패를 확인하고도 정상처럼 보였다).
         self._shared_set("vision_dead", default)
         logger.warning(
@@ -254,7 +255,7 @@ class OllamaProvider(BaseLlmProvider):
     async def _mark_retired(self, models: list[dict]) -> None:
         """클라우드 모델에 `retired` 표시를 붙인다(제자리 수정).
 
-        왜: `/api/tags`는 은퇴한 클라우드 모델도 그대로 올려 두어 화면에 «●사용 가능»으로 보였고,
+        왜: `/api/tags`는 은퇴한 클라우드 모델도 그대로 올려 두어 화면에 《●사용 가능》으로 보였고,
         고르면 쪽마다 410이 났다(판독 계획 벤치마크 2026-09-11 — qwen3-vl:235b·gemma3:27b).
         레지스트리에 매니페스트가 없으면(404) 은퇴다. 확인은 동시에 하고 프로세스가 기억한다.
         오프라인이면 표시하지 않는다(None) — 모르는 것을 은퇴라고 하면 안 된다.
@@ -327,7 +328,7 @@ class OllamaProvider(BaseLlmProvider):
         configured = self.config.get("ollama_url", default).replace(
             "://localhost:", "://127.0.0.1:"
         )
-        # 사용자가 «다른» 주소를 적어 둔 경우에만 그 주소 하나만 본다. .env.example대로
+        # 사용자가 《다른》 주소를 적어 둔 경우에만 그 주소 하나만 본다. .env.example대로
         # localhost:11434를 적어 둔 것은 기본과 같으므로 [::1] 폴백을 막지 않는다(리뷰 지적).
         explicit_other = self.config.is_set("ollama_url") and configured.rstrip("/") != default
         candidates = [self._url]
@@ -494,7 +495,7 @@ class OllamaProvider(BaseLlmProvider):
             `think`는 **호출자가 명시했을 때만** 보낸다 — 기본값을 보내지 않는다
             (qwen3.5:397b-cloud는 think=False를 받으면 response까지 비워 완전 무응답이 된다).
             그래서 모델 기본 동작(대개 사고 켬)을 두고, response가 비면 thinking을 폴백
-            텍스트로 쓴다. 예전 설명은 «기본값으로 think=False를 보낸다»고 적어 바로 아래
+            텍스트로 쓴다. 예전 설명은 《기본값으로 think=False를 보낸다》고 적어 바로 아래
             코드와 정반대였다(2026-10-11 전수).
         """
         selected_model = model or self.DEFAULT_MODELS.get(purpose, self.DEFAULT_MODELS["text"])
@@ -541,10 +542,10 @@ class OllamaProvider(BaseLlmProvider):
             payload["think"] = True
             # 사고 예산은 답변 예산에 더한다(D-083). 여기서 더하지 않으면 긴 입력(권 전문 3,900자,
             # D-125 실측 2026-09-10)에서 사고가 4096을 다 써 response가 비고, 폴백으로 돌아온
-            # thinking(영문 추론)이 «답»이 된다 — 다시 부른 보람이 없다.
+            # thinking(영문 추론)이 《답》이 된다 — 다시 부른 보람이 없다.
             _t, budget = thinking_options({"think": True})
-            # num_ctx도 함께 다시 잰다 — num_predict만 올리면 «프롬프트 + 답»이 처음 잡은 문맥 창을
-            # 넘어 긴 입력에서 다시 잘린다(_gen_options 머리말, 2026-10-11 재확인)
+            # num_ctx도 함께 다시 잰다 — num_predict만 올리면 《프롬프트 + 답》이 처음 잡은 문맥
+            # 창을 넘어 긴 입력에서 다시 잘린다(_gen_options 머리말, 2026-10-11 재확인)
             payload["options"] = {
                 **payload["options"],
                 **_gen_options(max_tokens + budget, len(prompt) + len(system or "")),
@@ -780,8 +781,8 @@ class OllamaProvider(BaseLlmProvider):
         #
         # Gemini·OpenAI 프로바이더는 finish_reason으로 잘림을 예외로 올리는데
         # (D-033) Ollama만 done_reason을 읽지 않고 조용히 성공으로 돌려줬다.
-        # 잘린 JSON은 파서가 «줄바꿈 분리»로 받아 한 덩어리 텍스트를 만든다 —
-        # D-075가 본 «y 위치 42개 → 1개» 붕괴가 그 결과다. 실패로 드러내는
+        # 잘린 JSON은 파서가 《줄바꿈 분리》로 받아 한 덩어리 텍스트를 만든다 —
+        # D-075가 본 《y 위치 42개 → 1개》 붕괴가 그 결과다. 실패로 드러내는
         # 편이 낫다. 메시지에 TRUNCATED_MARK를 넣어 호출자가 사다리를 탄다.
         if data.get("done_reason") == "length":
             raise LlmProviderError(
@@ -796,13 +797,13 @@ class OllamaProvider(BaseLlmProvider):
         # OCR이 그 경우다 — 사고문("The user wants me to extract text...")이
         # 그대로 PDF 텍스트 레이어로 구워지면, 문서는 멀쩡해 보이는데 검색은
         # 안 되고 복사하면 영어 사고문이 나온다. 무증상 오염이라 빈 결과보다
-        # 나쁘다. 빈 결과는 «실패»로 드러나기라도 한다.
+        # 나쁘다. 빈 결과는 《실패》로 드러나기라도 한다.
         # (실측 2026-08-12, qwen3.5:4b 1쪽: response 0자 / thinking 2,228자)
         text = data.get("response", "") or ""
         if not text.strip() and kwargs.get("allow_thinking_fallback", True):
             text = data.get("thinking", "") or ""
         # JSON을 요구했는데 비어 있으면 실패로 드러낸다 — 다른 세 프로바이더와 같다.
-        # 조용히 빈 결과를 돌려주면 줄 0개짜리 L2가 «처리 완료»로 저장된다.
+        # 조용히 빈 결과를 돌려주면 줄 0개짜리 L2가 《처리 완료》로 저장된다.
         if response_format == "json" and not text.strip():
             raise LlmProviderError(
                 f"Ollama vision empty JSON output (done_reason={data.get('done_reason')!r}, "

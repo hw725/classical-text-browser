@@ -1,4 +1,4 @@
-"""작업 계획 — 책 한 권을 «어느 쪽을 어떻게 읽을지» 적은 데이터 (D-131).
+"""작업 계획 — 책 한 권을 《어느 쪽을 어떻게 읽을지》 적은 데이터 (D-131).
 
 왜 필요한가:
     세부가 복잡한 스캔본(돌아간 2쪽 펼침·세로쓰기·필사본·한글 번역이 섞인 사진본·표)은
@@ -63,14 +63,14 @@ def parse_pages(spec: str | int, page_count: Optional[int] = None) -> list[int]:
     열린 범위(「5-」)는 쪽 수가 있어야 닫힌다 — 없으면 ValueError(끝을 0으로 두지 않는다).
     """
     if isinstance(spec, bool) or not isinstance(spec, (str, int)):
-        raise ValueError(f"쪽은 «1-4,7» 꼴의 글이어야 합니다: {spec!r}")
+        raise ValueError(f"쪽은 《1-4,7》 꼴의 글이어야 합니다: {spec!r}")
     out: set[int] = set()
     for piece in str(spec).replace(" ", "").split(","):
         if not piece:
             continue
         m = _PIECE_RE.match(piece)
         if not m:
-            raise ValueError(f"쪽 범위를 읽을 수 없습니다: «{piece}» (예: 5-69, 2,4)")
+            raise ValueError(f"쪽 범위를 읽을 수 없습니다: 《{piece}》 (예: 5-69, 2,4)")
         if m.group(3):
             a = b = int(m.group(3))
         else:
@@ -80,17 +80,17 @@ def parse_pages(spec: str | int, page_count: Optional[int] = None) -> list[int]:
             elif page_count:
                 b = page_count
             else:
-                raise ValueError(f"끝이 열린 범위는 책의 쪽 수를 알아야 합니다: «{piece}»")
+                raise ValueError(f"끝이 열린 범위는 책의 쪽 수를 알아야 합니다: 《{piece}》")
         if a < 1 or b < a:
-            raise ValueError(f"쪽 범위가 잘못되었습니다: «{piece}» (1부터, 끝은 시작 이상)")
+            raise ValueError(f"쪽 범위가 잘못되었습니다: 《{piece}》 (1부터, 끝은 시작 이상)")
         if page_count and b > page_count:
-            raise ValueError(f"쪽 범위가 책을 벗어납니다: «{piece}» (이 책은 {page_count}쪽)")
+            raise ValueError(f"쪽 범위가 책을 벗어납니다: 《{piece}》 (이 책은 {page_count}쪽)")
         out.update(range(a, b + 1))
     return sorted(out)
 
 
 def pages_spec(pages: list[int]) -> str:
-    """쪽 목록을 닫힌 범위 글로. 예: [1,2,3,7] → «1-3,7».
+    """쪽 목록을 닫힌 범위 글로. 예: [1,2,3,7] → 《1-3,7》.
 
     「5-」 같은 열린 범위를 저장하지 않으려고 쓴다.
     """
@@ -193,7 +193,7 @@ def validate_plan(plan: dict, page_count: int) -> tuple[dict, list[dict]]:
                 problems.append(
                     {
                         "where": where,
-                        "why": f"모르는 엔진 «{engine}» "
+                        "why": f"모르는 엔진 《{engine}》 "
                         f"(쓸 수 있는 것: {', '.join(KNOWN_ENGINES)})",
                     }
                 )
@@ -229,7 +229,7 @@ def validate_plan(plan: dict, page_count: int) -> tuple[dict, list[dict]]:
         clean["chapters"].append({"page": page, "title": title[:200], "level": level})
     clean["chapters"].sort(key=lambda c: (c["page"], c["level"]))
     # 쪽 이름표 — PDF 쪽과 다른 쪽 번호 체계(교재에 손글씨로 적은 면, 인쇄된 쪽수 등).
-    # 규칙이 있으면 offset(«교재 면 = PDF 쪽 − 4»), 낱쪽이면 label을 적는다. 뒤의 것이 이긴다.
+    # 규칙이 있으면 offset(《교재 면 = PDF 쪽 − 4》), 낱쪽이면 label을 적는다. 뒤의 것이 이긴다.
     labels: list[dict] = []
     for i, lb in enumerate(_list_of_dicts(plan, "page_labels", problems)):
         where = f"page_labels[{i}]"
@@ -303,7 +303,7 @@ def page_label_map(
     """쪽마다 붙일 이름표. 출력: {PDF 쪽: [(이름, 값), …]} — 예 {46: [("교재", "42")]}.
 
     뒤의 이름표가 이긴다. offset 규칙이 0 이하로 떨어지는 쪽(표지·목차 등)에서는 그 이름표를
-    **지운다** — 앞 이름표의 값이 남으면 뒤 규칙이 «없음»이라고 한 것을 어긴다.
+    **지운다** — 앞 이름표의 값이 남으면 뒤 규칙이 《없음》이라고 한 것을 어긴다.
     저장된 계획의 범위는 닫혀 있다(validate_plan) — 쪽 수 없이 읽어도 된다.
     """
     out: dict[int, dict[str, str]] = {}
@@ -344,7 +344,7 @@ def default_engine_for(writing: str, available: list[str] | set[str]) -> str:
 
     가로쓰기는 현대 활자(한글 포함)를 읽는 PaddleOCR, 세로쓰기는 근대 활자 NDLOCR이 먼저다.
     둘 다 없으면 설치된 것 중 계획에 적을 수 있는 첫 엔진, 그것도 없으면 NDLOCR(계획 확인이
-    «설치되지 않은 엔진»으로 알린다 — 조용히 다른 엔진으로 바꾸지 않는다).
+    《설치되지 않은 엔진》으로 알린다 — 조용히 다른 엔진으로 바꾸지 않는다).
     """
     order = (
         ("paddleocr", "ndlocr")
@@ -375,17 +375,17 @@ def plan_from_survey(
                  "problems": [...]}).
 
     왜 글이 아니라 계획으로 바로 넣는가: 측정값(회전·엔진)은 코드가 잰 숫자다. 문장으로 풀어
-    «말로 적으세요» 칸에 넣으면 LLM이 다시 칸으로 옮기며 쪽 번호를 밀 수 있다 — 지어낼 수 없던
+    《말로 적으세요》 칸에 넣으면 LLM이 다시 칸으로 옮기며 쪽 번호를 밀 수 있다 — 지어낼 수 없던
     값이 지어낼 수 있는 값이 된다. 그래서 측정은 계획으로 직접 들어가고, 말은 그 위를 고친다
     (plan_from_words의 base_plan).
 
     규칙:
       - 기존 계획에서 **건너뜀**(skip)으로 둔 쪽은 건드리지 않는다 — 사람이 정한 것이다.
       - 측정한 쪽: 회전은 측정값(target)이 있으면 그것, 엔진은 측정이 골랐으면 그것.
-        못 잰 칸은 기존 계획의 값, 그것도 없으면 지금 회전·fallback_engine(메모 «못 잼 — 기본값»).
+        못 잰 칸은 기존 계획의 값, 그것도 없으면 지금 회전·fallback_engine(메모 《못 잼 — 기본값》).
       - 백지·종류가 섞인 쪽은 건너뜀(기존 계획에 설정이 있으면 그 설정을 지킨다).
       - 스캔 범위 밖의 쪽은 기존 계획 그대로.
-      - 메모(note)에 출처를 적는다 — «측정»·«추정»(누운 쪽의 90/270은 코드가 못 가린다).
+      - 메모(note)에 출처를 적는다 — 《측정》·《추정》(누운 쪽의 90/270은 코드가 못 가린다).
     """
     base_clean: dict = {"title": "", "guidance": "", "ranges": [], "chapters": []}
     problems: list[dict] = []
@@ -423,7 +423,7 @@ def plan_from_survey(
             continue
         blank = row.get("content") == "blank" and not row.get("mixed")
         if prev is not None and (blank or row.get("mixed")):
-            # 사람이 설정을 적은 쪽은 모델의 «백지»·«섞임»으로 회전·엔진을 안 바꾼다 — 메모만
+            # 사람이 설정을 적은 쪽은 모델의 《백지》·《섞임》으로 회전·엔진을 안 바꾼다 — 메모만
             if row.get("mixed"):
                 mixed_pages.append(p)
             notes[p] = (
@@ -457,8 +457,8 @@ def plan_from_survey(
             s["engine"] = row["engine"]
             said.append(str(row.get("label") or row.get("content") or "종류 측정"))
         if row.get("mixed"):
-            # 엔진 하나로 읽을 수 없는 쪽 — 계획에서 뺀다(«권 전체 OCR»이 엉뚱한 엔진으로 읽지
-            # 않게). 화면은 «영역별 OCR이 필요한 쪽 (계획에서 뺌)»으로 알린다. 사람이 설정을 적은
+            # 엔진 하나로 읽을 수 없는 쪽 — 계획에서 뺀다(《권 전체 OCR》이 엉뚱한 엔진으로 읽지
+            # 않게). 화면은 《영역별 OCR이 필요한 쪽 (계획에서 뺌)》으로 알린다. 사람이 설정을 적은
             # 쪽은 위에서 이미 지켰다
             mixed_pages.append(p)
             settings[p] = {"skip": True}
@@ -469,7 +469,7 @@ def plan_from_survey(
             measured.append(p)
             notes[p] = "스캔: " + " · ".join(said)
         elif prev is None:
-            # 스캔은 했지만 아무것도 못 잰 쪽(투영이 «모름»·모델 실패) — 기본값으로 채웠다는 것을
+            # 스캔은 했지만 아무것도 못 잰 쪽(투영이 《모름》·모델 실패) — 기본값으로 채웠다는 것을
             # 메모로 밝힌다. 메모가 없으면 잰 쪽과 구별되지 않는다
             notes[p] = "스캔: 못 잼 — 기본값"
         settings[p] = s
@@ -518,7 +518,7 @@ def plan_from_survey(
 
 
 SYSTEM_PROMPT = (
-    "당신은 스캔본 OCR 도구의 «말 옮김이»입니다. 연구자가 책에 대해 말한 것을 이 프로그램의 "
+    "당신은 스캔본 OCR 도구의 《말 옮김이》입니다. 연구자가 책에 대해 말한 것을 이 프로그램의 "
     "작업 계획 칸으로 옮깁니다. 규칙: (1) 주어진 칸 이름과 값만 씁니다. (2) 어떤 칸으로도 옮길 수 "
     "없는 말은 지어내지 말고 unsupported에 그대로 적습니다 — 비슷한 칸으로 바꿔치기하는 것이 가장 "
     "나쁜 답입니다. (3) 연구자가 말하지 않은 쪽 범위·장 제목을 더하지 않습니다. "
@@ -535,7 +535,7 @@ def _field_guide(page_count: int, available: list[str]) -> str:
         "  guidance: LLM 엔진에게 줄 판독 지침(자연어, 연구자의 말을 요약)\n"
         '  ranges: [{"pages": "a-b,c", "rotation": 0|90|180|270, "engine": 엔진, '
         '"writing": "vertical_rtl"|"horizontal_ltr", "skip": true|false, "note": "…"}]\n'
-        "    rotation은 «바로 세우려면 시계 방향으로 몇 도». 누운 쪽이 어느 쪽으로 누웠는지 "
+        "    rotation은 《바로 세우려면 시계 방향으로 몇 도》. 누운 쪽이 어느 쪽으로 누웠는지 "
         "연구자가 말하지 않았으면 unsupported에 적습니다.\n"
         f"    engine은 다음 중 하나: {', '.join(KNOWN_ENGINES)}\n"
         f"    (지금 설치된 것: {', '.join(available) or '알 수 없음'})\n"
@@ -580,7 +580,7 @@ async def plan_from_words(
     if base_plan:
         prompt += (
             "\n지금 계획(이것을 고칩니다 — 말하지 않은 부분은 그대로 둡니다. "
-            "메모가 «스캔:»으로 시작하는 구간은 코드가 이미지에서 잰 값이니, 연구자가 그 쪽을 "
+            "메모가 《스캔:》으로 시작하는 구간은 코드가 이미지에서 잰 값이니, 연구자가 그 쪽을 "
             "말하지 않았으면 회전·엔진·메모를 바꾸지 않습니다):\n"
         )
         prompt += json.dumps(base_plan, ensure_ascii=False)

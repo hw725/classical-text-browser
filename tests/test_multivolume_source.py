@@ -22,7 +22,7 @@ PAGE_W, PAGE_H = 300, 400
 
 
 def _make_volume(path: Path, vol: int, pages: int = 3) -> None:
-    """쪽마다 «몇 권 몇 쪽»이 크게 찍힌 PDF를 만든다."""
+    """쪽마다 《몇 권 몇 쪽》이 크게 찍힌 PDF를 만든다."""
     doc = fitz.open()
     try:
         for pg in range(1, pages + 1):

@@ -5,7 +5,7 @@
 
 `_load_page_image`의 PDF 경로는 `get_pixmap`을 직접 불러 2.0배로 렌더하고 `page_rotation`을
 따로 얹었다. 금지 패턴 시험(`test_forbidden_patterns.py`)을 비우려고 이것을
-`ocr.image_utils.load_page_image_from_pdf(scale=2.0)`로 옮겼다(2026-10-01). 옮김은 «같은 결과»
+`ocr.image_utils.load_page_image_from_pdf(scale=2.0)`로 옮겼다(2026-10-01). 옮김은 《같은 결과》
 일 때만 옳다 — 특히 권 회전(D-123)과 **쪽 범위 회전**(D-126)이 예전과 같은 방향으로 얹히는가.
 
 그래서 예전 구현을 이 파일에 그대로 떠 두고(`_old_load`), 같은 서고에서 둘의 **최종 바이트**

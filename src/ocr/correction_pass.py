@@ -11,13 +11,13 @@
     2. run_correction()     — 고른 블록을 LLM Vision으로 다시 읽는다. L2는 건드리지 않고
                               초안(draft)으로 저장한다. 앵커(L2 텍스트)와의 정렬 결과를 함께 준다.
     3. apply_draft()        — 사람이(또는 자동 수용 기준이) 받아들인 블록만 L4에 쓴다.
-    4. rejected_block_ids() · list_review_pages() — 사다리의 «이음». 1단계에서 떨어진
+    4. rejected_block_ids() · list_review_pages() — 사다리의 《이음》. 1단계에서 떨어진
        블록을 2단계로 올릴 목록과, 일괄 실행 뒤 사람이 볼 쪽 목록을 준다.
 
 초안은 쪽마다 파일 하나이고 **블록 단위로 병합된다** (2026-09-18). 정밀 판독을 블록 하나에
 돌려도 같은 쪽의 다른 블록 결과는 남는다. 한 블록에 1단계 결과가 있는 채로 2단계를 돌리면
 1단계 답을 `stage1`에 보관하고, 2단계의 수용 기준은 앵커가 아니라 **두 단계의 일치**다
-(D-082 표의 2단계 «1·2단계 일치»). 두 답이 다르면 둘 다 사람에게 보인다.
+(D-082 표의 2단계 《1·2단계 일치》). 두 답이 다르면 둘 다 사람에게 보인다.
 
 왜 L2를 덮지 않는가:
     L2는 엔진이 본 것의 기록이다. 교정본이 더 나쁠 수 있고(D-065), 그때 돌아갈 곳이
@@ -26,7 +26,7 @@
 행초(行草):
     흘림체는 자형 하나로는 풀리지 않는다. precise 모드는 같은 쪽의 앞뒤 블록 텍스트와
     앞뒤 쪽의 확정본(있으면)을 함께 넘기고 사고를 켠다. 모델이 이미지와 문맥을 동시에
-    놓고 추론해야 «이 획이 무엇인가»가 정리된다.
+    놓고 추론해야 《이 획이 무엇인가》가 정리된다.
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 # ─── 쪽 단위 잠금 ─────────────────────────────────────────────────
-# 초안 파일은 여러 곳이 «읽고 → 고치고 → 쓴다»: run_correction(병합 저장)·apply_draft·
+# 초안 파일은 여러 곳이 《읽고 → 고치고 → 쓴다》: run_correction(병합 저장)·apply_draft·
 # mark_applied·discard_draft, 그리고 일괄 OCR의 L4 채우기. write_json_atomic은 쓰기만
 # 원자적이라, 일괄이 도는 중에 사람이 같은 쪽에 「적용」을 누르면 한쪽의 기록이 다른 쪽에
 # 덮여 사라졌다(2026-09-18 교차검증 사각지대). 쪽마다 RLock 하나로 그 구간을 묶는다.
@@ -142,8 +142,8 @@ def select_candidates(
       layout              — L3 레이아웃 (block_type을 본다). None 허용.
       confidence_threshold— 엔진 평균 신뢰도가 이 아래면 후보.
       document_language   — 서지의 language. korean/mixed이고 엔진이 한글을 못 읽으면 전부 후보.
-      force_block_ids     — 사람이 지정한 블록. 이유 «user»로 무조건 후보.
-      select_all          — 전량 (표본 감사·«전체» 모드).
+      force_block_ids     — 사람이 지정한 블록. 이유 《user》로 무조건 후보.
+      select_all          — 전량 (표본 감사·《전체》 모드).
     출력: Candidate 목록 (L2 순서). 이유가 없는 블록은 빠진다.
 
     기준은 전부 이미 있는 데이터다. 신뢰도가 높은데 틀린 경우는 여기서 안 잡힌다 —
@@ -206,7 +206,7 @@ def build_context(
 
     fast 모드: 같은 쪽에서 바로 앞·뒤 블록의 텍스트.
     precise 모드: 같은 쪽의 모든 앞 블록·뒤 블록 + 앞 쪽 확정본 끝부분·뒤 쪽 확정본 첫부분.
-                  행초처럼 자형만으로 안 풀리는 곳에 «앞뒤를 최대한» 준다 (D-082).
+                  행초처럼 자형만으로 안 풀리는 곳에 《앞뒤를 최대한》 준다 (D-082).
     출력: (context_before, context_after). 각각 CONTEXT_CHARS 안으로 자른다.
     """
     results = l2_page.get("ocr_results") or []
@@ -323,7 +323,7 @@ def text_agreement(a: str, b: str, variant_dict=None) -> float:
     """두 텍스트의 글자 일치율 (exact+variant ÷ 긴 쪽 길이). 둘 다 비면 0.
 
     1단계와 2단계의 답을 견주는 데 쓴다 — evaluate_block이 앵커와 교정본을 견주는 것과
-    같은 잣대라, «앵커와 90% 일치»와 «두 단계가 90% 일치»가 같은 뜻이 된다.
+    같은 잣대라, 《앵커와 90% 일치》와 《두 단계가 90% 일치》가 같은 뜻이 된다.
     """
     from core.alignment import MatchType, align_texts
 
@@ -369,7 +369,7 @@ def merge_draft(existing: Optional[dict], fresh: dict) -> dict:
     """새 실행 결과(fresh)를 기존 초안(existing) 위에 **블록 단위로** 얹는다.
 
     왜: 예전에는 실행마다 초안 파일을 통째로 다시 썼다. 1단계로 블록 둘을 본 뒤 블록
-    하나에 정밀 판독을 돌리면 나머지 블록의 결과가 사라졌고, «적용한 블록» 기록도 함께
+    하나에 정밀 판독을 돌리면 나머지 블록의 결과가 사라졌고, 《적용한 블록》 기록도 함께
     없어졌다(2026-09-17 재현). 같은 block_id는 새 결과로 바꾸고, 없는 블록은 그대로 둔다.
     출력: 병합된 초안. mode는 마지막 실행의 것, applied_blocks는 합집합.
     """
@@ -385,7 +385,7 @@ def merge_draft(existing: Optional[dict], fresh: dict) -> dict:
         if bid not in by_id:
             order.append(bid)
         elif by_id[bid].get("applied_text") is not None and "applied_text" not in b:
-            # 이미 L4에 들어간 글자는 새 결과에도 남겨야 «답이 달라졌다»를 알 수 있다
+            # 이미 L4에 들어간 글자는 새 결과에도 남겨야 《답이 달라졌다》를 알 수 있다
             b["applied_text"] = by_id[bid]["applied_text"]
         by_id[bid] = b
     merged = dict(fresh)
@@ -418,11 +418,11 @@ def rejected_block_ids(draft: dict) -> list[str]:
 def draft_status(draft: Optional[dict]) -> dict:
     """초안 한 장의 셈: 사람이 볼 것(pending)·자동 수용(accepted)·적용됨(applied)·오류.
 
-    «pending»이 사람 단계(3단계)의 입구다 — 결과는 있는데 자동 수용도 적용도 안 된 블록.
+    《pending》이 사람 단계(3단계)의 입구다 — 결과는 있는데 자동 수용도 적용도 안 된 블록.
     불변식: pending + accepted + errors + applied == blocks (한 블록은 한 칸에만 선다).
       - 결과가 비어 있으면(LLM이 빈 답) 오류로 센다 — 어느 칸에도 안 서면 영영 안 보인다.
       - 적용된 블록이라도 그 뒤 다시 읽어 답이 달라졌으면(applied_text ≠ corrected_text)
-        «충돌»이라 pending으로 되돌린다 — L4에 들어간 글자와 최신 답이 모순인데 침묵하면 안 된다.
+        《충돌》이라 pending으로 되돌린다 — L4에 들어간 글자와 최신 답이 모순인데 침묵하면 안 된다.
     """
     if not draft:
         return {"pending": 0, "accepted": 0, "applied": 0, "errors": 0, "conflicts": 0, "blocks": 0}
@@ -469,7 +469,7 @@ def l2_fingerprint(doc_path: Path, part_id: str, page_number: int) -> Optional[s
     """지금 L2의 지문(sha1) — 블록 id와 앵커 글자만 넣는다. 파일이 없으면 None.
 
     파일 전체를 해시하면 회전·크기·다른 블록의 좌표처럼 앵커와 무관한 변화에도 초안이 낡음
-    처리돼 전면 재교정을 부른다. 초안이 기대는 것은 «어느 블록에 어떤 글자가 있었나»뿐이다.
+    처리돼 전면 재교정을 부른다. 초안이 기대는 것은 《어느 블록에 어떤 글자가 있었나》뿐이다.
     JSON이 깨져 있으면 바이트 해시로 대신한다(어차피 그 쪽은 열리지 않는다).
     """
     import hashlib
@@ -527,7 +527,7 @@ def discard_draft(doc_path: Path, part_id: str, page_number: int) -> bool:
 def list_review_pages(doc_path: Path, part_id: str) -> list[dict]:
     """한 권에서 사람이 볼 초안이 있는 쪽 목록 (쪽 번호 순).
 
-    일괄 실행이 끝난 뒤 «어느 쪽을 열어야 하나»에 답한다. 초안 파일을 하나씩 읽어
+    일괄 실행이 끝난 뒤 《어느 쪽을 열어야 하나》에 답한다. 초안 파일을 하나씩 읽어
     사람이 볼 것(needs_human)이 있는 쪽만 돌려준다. 파일이 깨졌으면 corrupt=True로,
     L2가 바뀐 뒤의 초안이면 stale=True로 올린다 — 어느 쪽도 조용히 사라지지 않는다.
     출력: [{"page": n, "pending": p, "accepted": a, "applied": d, "errors": e, "conflicts": c,
@@ -551,7 +551,7 @@ def list_review_pages(doc_path: Path, part_id: str) -> list[dict]:
         try:
             draft = json.loads(path.read_text(encoding="utf-8"))  # 찾은 파일을 그대로 읽는다
         except (OSError, ValueError) as e:
-            # 깨진 파일은 숨기지 않고 «깨짐»으로 올린다 —
+            # 깨진 파일은 숨기지 않고 《깨짐》으로 올린다 —
             # 사람이 봐야 할 쪽이 조용히 사라지면 안 된다
             logger.warning(f"교정 초안을 읽지 못했습니다: {path} — {e}")
             out.append(
@@ -559,12 +559,12 @@ def list_review_pages(doc_path: Path, part_id: str) -> list[dict]:
             )
             continue
         st = draft_status(draft)
-        # accepted는 «자동 수용됐는데 아직 L4에 안 들어간 것»이다 — 일괄이 사람이 고친
+        # accepted는 《자동 수용됐는데 아직 L4에 안 들어간 것》이다 — 일괄이 사람이 고친
         # 확정본(keep_l4)을 지키느라 넣지 않은 경우. 사람이 「적용」을 눌러야 하므로 함께 센다.
         if needs_human(st):
             entry = {"page": page, "mode": draft.get("mode"), **st}
             if draft_is_stale(doc_path, part_id, page, draft):
-                # L2가 바뀐 뒤의 초안 — 적용할 수 없다. 감추지 않고 «다시 교정하세요»로 보인다
+                # L2가 바뀐 뒤의 초안 — 적용할 수 없다. 감추지 않고 《다시 교정하세요》로 보인다
                 entry["stale"] = True
             out.append(entry)
     return out
@@ -574,7 +574,7 @@ def mark_applied(doc_path: Path, part_id: str, page_number: int, block_ids: list
     """초안의 applied_blocks에 블록을 더해 저장한다.
 
     일괄 OCR이 compose_page_text로 자동 수용 블록을 L4에 넣을 때 부른다 — 적지 않으면
-    검토 목록이 이미 들어간 블록을 «자동 수용됐는데 안 적용됨»으로 다시 센다.
+    검토 목록이 이미 들어간 블록을 《자동 수용됐는데 안 적용됨》으로 다시 센다.
     """
     if not block_ids:
         return
@@ -643,7 +643,7 @@ def run_correction(
         "created_at": datetime.now(timezone.utc).isoformat(),
         # 이 초안이 어느 L2를 보고 만든 것인지 — L2가 바뀌면 draft_is_stale이 낡았다고 판정한다
         "l2_fingerprint": l2_fingerprint(doc_path, part_id, page_number),
-        # 첫 초안이라도 키를 둔다 — 소비자(화면·검토 셈)가 «없음»과 «빈 목록»을 가르지 않게
+        # 첫 초안이라도 키를 둔다 — 소비자(화면·검토 셈)가 《없음》과 《빈 목록》을 가르지 않게
         "applied_blocks": [],
         "blocks": [],
     }
@@ -654,7 +654,7 @@ def run_correction(
         fresh = True
     if not candidates:
         # 다시 볼 블록이 없으면 이미지도 열지 않고 초안 파일도 만들지 않는다.
-        # 빈 초안이 남으면 eval_cer가 «교정 초안이 있는 쪽»으로 세어 통계가 부푼다.
+        # 빈 초안이 남으면 eval_cer가 《교정 초안이 있는 쪽》으로 세어 통계가 부푼다.
         if fresh:
             # 새로 시작인데 볼 것이 없다 — 디스크의 옛 초안이 남으면
             # 화면·검토 목록·CER이 그것을 쓴다
@@ -705,7 +705,7 @@ def run_correction(
             entry["lines"] = lines
             entry["accept_basis"] = "anchor"
             if mode == "precise":
-                # 같은 블록에 1단계 답이 있으면 2단계 판정은 «두 단계의 일치»다.
+                # 같은 블록에 1단계 답이 있으면 2단계 판정은 《두 단계의 일치》다.
                 # 앞선 결과가 이미 2단계였으면 그 안의 stage1을 이어받는다 — 정밀 판독을
                 # 두 번 눌러도 1단계 답이 사라지지 않는다.
                 prior = prior_by_id.get(cand.block_id) or {}
@@ -783,7 +783,7 @@ def _apply_draft_locked(
 
     왜 L2에서 다시 조립하지 않는가:
         예전 구현은 L2 텍스트 + 이번에 고른 블록으로 쪽 전체를 다시 만들어 덮어썼다.
-        그러면 «적용»을 두 번째 누를 때 첫 번째 적용이 되돌아가고, 연구자가 L4
+        그러면 《적용》을 두 번째 누를 때 첫 번째 적용이 되돌아가고, 연구자가 L4
         편집기에서 손으로 고친 것도 사라진다. 그래서 지금 L4를 읽어 그 블록의
         엔진 원문(앵커)만 교정본으로 바꾼다. 앵커를 못 찾으면(이미 손으로 고쳤거나
         구조가 달라졌으면) 건드리지 않고 not_found로 알린다.
@@ -853,7 +853,7 @@ def _apply_draft_locked(
             elif corrected and corrected in text:
                 applied.append(bid)  # 이미 그 글자가 들어가 있다
             else:
-                # «전에 적용했다»는 기록만으로 성공이라 하지 않는다 —
+                # 《전에 적용했다》는 기록만으로 성공이라 하지 않는다 —
                 # L4에서 자리를 못 찾으면 못 찾은 것
                 not_found.append(bid)
 

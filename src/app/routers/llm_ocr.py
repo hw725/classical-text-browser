@@ -61,7 +61,7 @@ class OcrBatchRequest(BaseModel):
     engine_id: str | None = None  # None이면 기본 엔진
     pages: list[int] | None = None  # None이면 전체 쪽
     # 구간별 엔진 계획(D-126 덧붙임): [{"from", "to", "engine_id"}]. 계획에 든 쪽은 그 엔진으로,
-    # 나머지는 engine_id로 돈다. 판독 계획이 «1~36쪽 NDLOCR, 37~52쪽 みんなで翻刻»처럼 만들어 준다.
+    # 나머지는 engine_id로 돈다. 판독 계획이 《1~36쪽 NDLOCR, 37~52쪽 みんなで翻刻》처럼 만들어 준다.
     engine_plan: list[dict] | None = None
     # 이미 L2 결과가 있는 쪽을 건너뛴다. 중단 후 이어서 돌리는 기본 동작이다.
     skip_existing: bool = True
@@ -76,7 +76,7 @@ class OcrBatchRequest(BaseModel):
     #
     # 왜 기본값이 True인가: L2는 Git으로 추적되지 않아 되돌릴 방법이 없다.
     # 모델을 바꿔 다시 돌려 보는 것이 추출 흐름의 일부인데(D-057), 결과가
-    # 이전만 못해도 돌아갈 길이 없으면 «다시 돌려 보기»가 위험한 선택이 된다.
+    # 이전만 못해도 돌아갈 길이 없으면 《다시 돌려 보기》가 위험한 선택이 된다.
     # 쪽마다 파일 한 벌. 백업은 OCR 재실행에만 둔다 — 교정 저장은 git 이력이 지킨다(documents.py).
     backup_before_overwrite: bool = True
     # 레이아웃이 없는 쪽에 페이지 전면 블록을 자동 생성한다.
@@ -155,7 +155,7 @@ def _usage_since(start_line: int) -> dict:
 
     왜 필요한가:
         어느 모델이 얼마를 썼는지 **사용자가 그 자리에서 알아야 한다.**
-        실제로 폴백 순서만 보고 «무료 로컬로 돌 것»이라 여겼는데
+        실제로 폴백 순서만 보고 《무료 로컬로 돌 것》이라 여겼는데
         기록에는 유료 API가 찍히고 있던 일이 있었다. 모르는 채로
         API가 소모되는 상황을 없애려고 완료 응답에 실어 보낸다.
     """
@@ -208,7 +208,7 @@ def _billing_kind(model_labels: list[str]) -> str:
     출력: "metered" | "subscription" | "free" | "mixed" | "unknown"
 
     왜 이 판정이 필요한가: 구독형(Ollama 클라우드·OpenAI OAuth)은 금액이
-    0으로 기록된다. 그대로 «$0.00»이라고 띄우면 **공짜로 오해**하지만
+    0으로 기록된다. 그대로 《$0.00》이라고 띄우면 **공짜로 오해**하지만
     실제로는 계정 한도를 쓰고 있다. 표시 문구를 다르게 하려고 가른다.
     """
     if not model_labels:
@@ -234,7 +234,7 @@ def _billing_kind(model_labels: list[str]) -> str:
 def _billing_note(kind: str, usage: dict) -> str:
     """사용자에게 보여 줄 한 줄 안내를 만든다.
 
-    금액이 0이라고 «무료»라고 말하지 않는다 — 구독 한도는 눈에 보이지 않게
+    금액이 0이라고 《무료》라고 말하지 않는다 — 구독 한도는 눈에 보이지 않게
     소모되기 때문이다. Ollama·OpenAI는 남은 한도를 API로 알려 주지 않으므로
     (실측 2026-07-25: 응답 헤더에 rate limit 정보 없음) 대시보드로 안내한다.
     """
@@ -265,8 +265,8 @@ def _resolve_page_count(doc_path, part: dict) -> int:
     왜 manifest만 믿으면 안 되는가:
         `add_document()`로 만든 문헌(CLI·URL 등록)은 `page_count`가 null이다.
         사이드바는 PDF를 직접 열어 쪽 수를 알아내므로 화면에는 쪽이 보이는데,
-        서버가 manifest만 보면 «쪽이 0개»라고 판단해 배치 OCR이
-        «OCR 할 쪽이 없습니다»로 죽는다. 실제로 그 사고가 있었다 —
+        서버가 manifest만 보면 《쪽이 0개》라고 판단해 배치 OCR이
+        《OCR 할 쪽이 없습니다》로 죽는다. 실제로 그 사고가 있었다 —
         화면에는 쪽이 멀쩡히 있는데 OCR만 안 되는 상태였다.
     """
     declared = part.get("page_count")
@@ -377,9 +377,9 @@ def _load_page_image(doc_id: str, page: int, part_id: str | None = None) -> byte
     # LLM에 가는 이미지가 달라진다. 어차피 resize_for_llm이 긴 변 2000px로 줄인다.
     # 같은 결과임은 tests/test_llm_ocr_page_image.py가 예전 구현과 바이트로 견준다.
     # 예전 구현은 이 단계 전체(회전 읽기 포함)를 try로 감싸 None을 돌려줬다 — 호출자가 None을
-    # «이미지 없음»으로 다루므로 그 계약은 지킨다. 경고가 남는 것은 정본 함수 **밖으로** 나온
+    # 《이미지 없음》으로 다루므로 그 계약은 지킨다. 경고가 남는 것은 정본 함수 **밖으로** 나온
     # 예외(manifest를 못 읽어 page_rotation이 던지는 경우 등)뿐이다. PDF 열기·렌더 실패는
-    # load_page_image_from_pdf가 안에서 None으로 삼키므로 여기서는 «없는 쪽»과 구별되지 않는다
+    # load_page_image_from_pdf가 안에서 None으로 삼키므로 여기서는 《없는 쪽》과 구별되지 않는다
     # (Codex 교차 리뷰 2026-10-01 지적 — 정본 함수의 관측성은 별도 과제).
     from io import BytesIO
 
@@ -413,7 +413,7 @@ async def api_llm_status():
 
 @router.get("/api/llm/accounts")
 async def api_llm_accounts():
-    """프로바이더별 «쓸 수 있는 상태인가»와 «아니면 무엇을 해야 하는가».
+    """프로바이더별 《쓸 수 있는 상태인가》와 《아니면 무엇을 해야 하는가》.
 
     출력: {"providers": [{
         "provider_id": "ollama",
@@ -430,12 +430,12 @@ async def api_llm_accounts():
     }, ...]}
 
     왜 /api/llm/status와 따로 두는가:
-        status는 «가용한가»만 준다. 그런데 구독형은 **서비스가 떠 있는 것과
+        status는 《가용한가》만 준다. 그런데 구독형은 **서비스가 떠 있는 것과
         로그인된 것이 다르다.** Ollama 서버는 로그인 없이도 뜨므로 status는
         available=True를 주지만, 클라우드 모델을 부르면 실패하고 라우터가
         조용히 유료 API로 넘어간다(D-056에서 실제로 겪은 사고다).
 
-        배포판에서는 이 구분이 특히 중요하다. API 키는 «.env에 넣으세요»로
+        배포판에서는 이 구분이 특히 중요하다. API 키는 《.env에 넣으세요》로
         끝나지만 구독형은 터미널 로그인이 필요하고, 그것을 앱이 대신할 수 없다.
         무엇을 해야 하는지 화면에 적어 주는 것이 이 라우트의 목적이다.
     """
@@ -474,12 +474,12 @@ async def api_llm_accounts():
         # 왜 클래스 값을 그대로 쓰면 안 되는가: Ollama의 billing_model은
         # "free"(로컬)지만, 이 PC에서 실제로 고르는 비전 모델은
         # `qwen3.5:397b-cloud`처럼 **구독 한도를 쓰는 클라우드 모델**일 수 있다.
-        # 화면에 «로컬 무료»라고 띄우면 D-056에서 문제 삼은 그 오해가
+        # 화면에 《로컬 무료》라고 띄우면 D-056에서 문제 삼은 그 오해가
         # 그대로 재발한다.
         if reachable and hasattr(provider, "_pick_vision_model"):
-            # 모델 고르기는 «살아 있나» 호출(클라우드 왕복)을 포함해 2~10초가 걸릴 수 있다
+            # 모델 고르기는 《살아 있나》 호출(클라우드 왕복)을 포함해 2~10초가 걸릴 수 있다
             # (2026-09-05 실측). 설정 화면이 그것을 기다리게 하지 않는다 — 1.5초 안에 못 고르면
-            # 뒤에서 마저 고르게 두고(캐시 10분) 이번에는 «확인 중»으로 보낸다.
+            # 뒤에서 마저 고르게 두고(캐시 10분) 이번에는 《확인 중》으로 보낸다.
             try:
                 model = await asyncio.wait_for(provider._pick_vision_model(), timeout=1.5)
             except asyncio.TimeoutError:
@@ -493,14 +493,14 @@ async def api_llm_accounts():
                 entry["active_model"] = model
                 entry["billing_model"] = provider.billing_for_model(model)
                 # 고른 모델이 실제로 깔려 있는가 — _pick_vision_model은 아무것도 없을 때
-                # 기본 이름을 그대로 돌려준다. 그것을 «로컬 모델로 돕니다»라고 하면 거짓이다.
+                # 기본 이름을 그대로 돌려준다. 그것을 《로컬 모델로 돕니다》라고 하면 거짓이다.
                 try:
                     installed = {
                         m.get("name")
                         for m in await asyncio.wait_for(provider.list_models(), timeout=2.0)
                     }
                     entry["active_model_installed"] = model in installed
-                    # 고르기가 «전부 응답 없음»으로 끝나 기본 이름만 돌려준 경우 — 깔려 있어도 못 씀
+                    # 고르기가 《전부 응답 없음》으로 끝나 기본 이름만 돌려준 경우 — 깔려 있어도 못 씀
                     dead = (
                         provider._shared_get("vision_dead")
                         if hasattr(provider, "_shared_get")
@@ -519,8 +519,8 @@ async def api_llm_accounts():
             entry["plan"] = account.get("plan")
             entry["authenticated"] = True
         elif entry["setup_kind"] == "cli_signin":
-            # 조회 수단이 있는데 못 받았으면 «로그인 안 됨», 조회 수단 자체가
-            # 없으면 «모름». Ollama는 /api/me가 있고 OAuth 프록시는 없다.
+            # 조회 수단이 있는데 못 받았으면 《로그인 안 됨》, 조회 수단 자체가
+            # 없으면 《모름》. Ollama는 /api/me가 있고 OAuth 프록시는 없다.
             entry["authenticated"] = False if provider.provider_id == "ollama" else None
         else:
             # API 키 방식은 is_available()이 곧 키 유무다.
@@ -531,12 +531,12 @@ async def api_llm_accounts():
 
     # 프로바이더를 **동시에** 확인한다. 직렬로 하면 느린 하나(프록시 포트
     # 스캔 등)가 나머지 전부를 붙잡아 설정 화면이 그만큼 멈춘다.
-    # 순서는 폴백 순서 그대로 유지한다 — 화면의 «위에서부터 시도합니다»와
+    # 순서는 폴백 순서 그대로 유지한다 — 화면의 《위에서부터 시도합니다》와
     # 어긋나면 안 된다.
     return {"providers": list(await asyncio.gather(*(_one(p) for p in router_inst.providers)))}
 
 
-# 프로바이더 주소별로 «뒤에서 고르는 중»인 태스크 하나만 — 화면이 3초마다 다시 물을 때마다
+# 프로바이더 주소별로 《뒤에서 고르는 중》인 태스크 하나만 — 화면이 3초마다 다시 물을 때마다
 # /api/show 전부와 클라우드 generate가 겹쳐 나가면 안 된다(리뷰 실측: 동시 4회). 참조도 보관한다.
 _warm_tasks: dict[str, object] = {}  # {주소: asyncio.Task}
 
@@ -577,12 +577,12 @@ def _auto_pull_default(provider, model: str) -> None:
         result = pull(model, host, _after)
         if result.get("error"):
             _auto_pull_started.discard(key)  # 다음 확인 때 다시 시도
-    except Exception:  # noqa: BLE001 — 자동 받기 실패는 카드의 «모델 없음»으로 드러난다
+    except Exception:  # noqa: BLE001 — 자동 받기 실패는 카드의 《모델 없음》으로 드러난다
         _auto_pull_started.discard(key)
 
 
 async def _warm_vision_model(provider) -> None:
-    """설정 화면이 기다리지 않고 넘긴 «비전 모델 고르기»를 뒤에서 마친다.
+    """설정 화면이 기다리지 않고 넘긴 《비전 모델 고르기》를 뒤에서 마친다.
 
     결과는 공유 캐시에 남는다.
     """
@@ -598,7 +598,7 @@ def _account_status(entry: dict) -> tuple[str, str]:
     입력: api_llm_accounts()가 만든 항목 dict.
     출력: (status, note)
 
-    구독형에서 «로그인 안 됨»을 «사용 가능»으로 보이게 하면 안 된다.
+    구독형에서 《로그인 안 됨》을 《사용 가능》으로 보이게 하면 안 된다.
     실행하고 나서야 안 되는 것을 알게 되기 때문이다.
     """
     name = entry["display_name"]
@@ -644,8 +644,8 @@ def _account_status(entry: dict) -> tuple[str, str]:
 
     if entry["authenticated"] is False:
         # Ollama는 로그인 없이도 **로컬 모델로는 돈다.** 실제로 고른 비전 모델이 로컬이면
-        # «사용 가능»이다 — 로그인 필요라고 하면 로컬만 쓰는 PC에서 «Ollama가 떠 있는데
-        # 안 된다»로 보인다(2026-09-05 보고). 클라우드 모델을 고른 경우에만 로그인이 문제다.
+        # 《사용 가능》이다 — 로그인 필요라고 하면 로컬만 쓰는 PC에서 《Ollama가 떠 있는데
+        # 안 된다》로 보인다(2026-09-05 보고). 클라우드 모델을 고른 경우에만 로그인이 문제다.
         model = entry.get("active_model")
         if model and "cloud" not in model:
             return (
@@ -831,7 +831,7 @@ async def api_detect_layout(
 class PageSurveyRequest(BaseModel):
     """판독 계획 요청 (D-126). pages=[a, b]면 그 범위, 없으면 권 전체.
 
-    stride는 «몇 쪽마다 하나».
+    stride는 《몇 쪽마다 하나》.
     """
 
     pages: list[int] | None = None
@@ -839,9 +839,9 @@ class PageSurveyRequest(BaseModel):
     writing_direction: str = "vertical_rtl"  # 투영으로 방향을 잴 때의 기준(세로쓰기·가로쓰기)
     force_provider: str | None = None
     force_model: str | None = None
-    dry_run: bool = False  # True면 모델을 부르지 않고 «몇 쪽·호출 몇 번»만
+    dry_run: bool = False  # True면 모델을 부르지 않고 《몇 쪽·호출 몇 번》만
     stream: bool = False  # True면 SSE로 쪽마다 진행을 보낸다(화면 진행 막대, 2026-09-11)
-    # «돌아간 쪽은 세워서»(D-126 덧붙임 2026-09-18): 방향만 — 비전 모델을 부르지 않고 GPU 게이트도
+    # 《돌아간 쪽은 세워서》(D-126 덧붙임 2026-09-18): 방향만 — 비전 모델을 부르지 않고 GPU 게이트도
     # 지나지 않는다. 투영으로 누운 쪽만 찾고, GPU면 PaddleOCR 점수로 90/270을 가르고, CPU면 추정
     # (guess)으로 두어 화면이 미리보기로 묻는다. 바로 선 쪽의 180° 검사는 하지 않는다 — 그것까지
     # 하면 쪽마다 OCR 둘이라 CPU에서 한 시간이다. 「권 전체 OCR」이 실행 직전에 이것으로 부른다
@@ -883,7 +883,7 @@ def _survey_progress(progress, row: dict, done: int, total: int, labels: dict) -
 
 
 # 이미지 판정 모델(force_provider 값 → 업체). D-134 decider, D-135 clef.
-# key_id는 설정 «판정 모델»의 칸 id(needs_key로 화면에 돌려준다), usd_per_m은 문서 단가(실측 아님)
+# key_id는 설정 《판정 모델》의 칸 id(needs_key로 화면에 돌려준다), usd_per_m은 문서 단가(실측 아님)
 _DECISION_PROVIDERS: dict[str, dict] = {
     "decider": {"label": "Perplexity", "key_id": "perplexity", "usd_per_m": 0.04},
     # clef는 Cloudflare 키 또는 OpenRouter 키 중 하나면 돈다(사슬, `_decision_client`)
@@ -943,13 +943,13 @@ def _merge_usage(usages: list[dict]) -> dict:
 # (openrouter_decider 머리말) — 2,400은 위로 잡은 값이다
 _DRY_TOKENS_PER_PAGE = 2400
 # Cloudflare 무료 몫(하루 10,000 neurons)으로 clef를 몇 쪽 부르나 — 사용자 결정 기록의
-# «하루 ≈250쪽»(clef_cf·openrouter_decider 머리말). 잰 값이 아니라 어림이다
+# 《하루 ≈250쪽》(clef_cf·openrouter_decider 머리말). 잰 값이 아니라 어림이다
 _CLEF_FREE_PAGES_PER_DAY_EST = 250
 
 
 def _clef_chain(library_path) -> list[dict]:
     """자동 스캔 clef 사슬의 단계별 키 유무 — 미리 세기(dry_run)가
-    «무엇이 무료이고 어디서부터 유료인가»를 보내기 전에 말하게 한다. 네트워크를 쓰지 않는다.
+    《무엇이 무료이고 어디서부터 유료인가》를 보내기 전에 말하게 한다. 네트워크를 쓰지 않는다.
 
     출력: [{step, label, has_key, paid, …}] — cloudflare(무료 몫) → openrouter(유료) →
     vision(사슬 끝, Ollama 구독 — 추가 요금 없음). 실제 사슬(`_decision_client`·`_run`)과
@@ -977,7 +977,7 @@ def _clef_chain(library_path) -> list[dict]:
         {
             "step": "vision",
             "label": "기본 비전 모델",
-            # Ollama에는 키라는 것이 없다 — «키 있음»(True)으로 적으면 닿지 않는 PC에서도 사슬 끝이
+            # Ollama에는 키라는 것이 없다 — 《키 있음》(True)으로 적으면 닿지 않는 PC에서도 사슬 끝이
             # 있는 것처럼 읽혔다(2026-10-06 설치 검증). 닿는지는 라우트가 `reachable`로 따로 싣는다
             # (`_vision_readiness` — 이 함수는 네트워크를 쓰지 않는다).
             # 로그인·모델 유무는 재지 않는다
@@ -989,20 +989,20 @@ def _clef_chain(library_path) -> list[dict]:
     ]
 
 
-# 미리 세기가 비전 프로바이더의 가용성을 기다리는 최대 시간(초). 넘으면 «못 잼»(None)이다 —
-# «없다»고 말하지 않는다. 라우터 캐시(성공 60초·실패 30초)가 있어 다시 셀 때는 거의 즉시다
+# 미리 세기가 비전 프로바이더의 가용성을 기다리는 최대 시간(초). 넘으면 《못 잼》(None)이다 —
+# 《없다》고 말하지 않는다. 라우터 캐시(성공 60초·실패 30초)가 있어 다시 셀 때는 거의 즉시다
 _VISION_PROBE_TIMEOUT = 5.0
 
 
 async def _vision_readiness(force_provider: str | None) -> dict:
-    """지금 닿는 비전 프로바이더 — 미리 세기가 «쓸 수 있는 비전 모델 없음»을 보내기 전에 말하게.
+    """지금 닿는 비전 프로바이더 — 미리 세기가 《쓸 수 있는 비전 모델 없음》을 보내기 전에 말하게.
 
     입력: 화면이 고른 프로바이더(없으면 자동 — 라우터의 비전 프로바이더 전부).
     출력: {"checked": bool, "ready": [provider_id…]} — checked가 False면 시간 안에 못 쟀다(모름).
 
     실제 스캔과 같은 판정을 쓴다 — 라우터 `call_with_image`도 `is_available`(자동이면 캐시판)로
-    거른다. 닿는 것과 «그 모델이 깔렸고 로그인됐다»는 다르다: 그것까지는 재지 않는다
-    (2026-10-06 설치 검증 — 키도 Ollama도 없는 PC에서 «비전 모델 3번 … 쪽마다 몇 초»라고만 했다).
+    거른다. 닿는 것과 《그 모델이 깔렸고 로그인됐다》는 다르다: 그것까지는 재지 않는다
+    (2026-10-06 설치 검증 — 키도 Ollama도 없는 PC에서 《비전 모델 3번 … 쪽마다 몇 초》라고만 했다).
     """
     from app._state import _get_llm_router
 
@@ -1030,7 +1030,7 @@ async def _vision_readiness(force_provider: str | None) -> dict:
 
 @router.post("/api/documents/{doc_id}/parts/{part_id}/rotation/suggest")
 async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
-    """판독 계획 (D-126): 쪽 썸네일을 비전 모델에 보여 «바로 섰나·무슨 글인가»만 답받고,
+    """판독 계획 (D-126): 쪽 썸네일을 비전 모델에 보여 《바로 섰나·무슨 글인가》만 답받고,
     코드가 회전이 다른 구간과 쪽마다 알맞은 OCR 엔진을 제안한다. 저장·실행은 화면이 사람에게 묻는다.
 
     출력: {"checked", "calls", "unknown",
@@ -1042,7 +1042,7 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
     needs_key(clef는 chain, 그 끝 단계의 reachable), 생성형 비전 모델이면
     vision_checked·vision_ready·no_vision(닿는 비전 프로바이더가 없음, `_vision_readiness`).
 
-    orientation_only=True면(«돌아간 쪽은 세워서», 2026-09-18) 비전 모델을 부르지 않고 방향만 잰다 —
+    orientation_only=True면(《돌아간 쪽은 세워서》, 2026-09-18) 비전 모델을 부르지 않고 방향만 잰다 —
     GPU 게이트를 지나지 않고, "calls": 0·"engines": []·"mixed": []이며,
     누운 쪽만 "rotation"에 오른다. GPU이고 PaddleOCR이 있을 때만 90/270을
     점수로 가르고, 아니면 "guess": True(화면이 미리보기로 묻는다).
@@ -1088,7 +1088,7 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
     if part is None:
         return JSONResponse({"error": f"권을 찾을 수 없습니다: {part_id}"}, status_code=404)
     # manifest에 page_count가 없는 문헌(add_document로 만든 것)은 PDF를 열어 센다 —
-    # 배치 라우트와 같은 이유. 화면에는 쪽이 보이는데 «쪽 수를 몰라»로 400이 났다
+    # 배치 라우트와 같은 이유. 화면에는 쪽이 보이는데 《쪽 수를 몰라》로 400이 났다
     # (2026-09-18 E2E 실측)
     total = _resolve_page_count(doc_dir, part)
     a, b = 1, total
@@ -1115,14 +1115,14 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
             spec = _DECISION_PROVIDERS[decider_kind]
             return JSONResponse(
                 {
-                    "error": f"판정 모델({spec['label']}) 키가 없습니다. 설정 → «판정 모델»에서 "
+                    "error": f"판정 모델({spec['label']}) 키가 없습니다. 설정 → 《판정 모델》에서 "
                     f"{spec['label']} 키를 넣거나, 종류 판정 모델을 다른 것으로 고르세요.",
                     "needs_key": spec["key_id"],
                 },
                 status_code=400,
             )
     if body.dry_run:
-        # 실행 게이트(전역 규칙 11)는 도구 층에 — 보내기 전에 «몇 쪽·호출 몇 번·얼마»를
+        # 실행 게이트(전역 규칙 11)는 도구 층에 — 보내기 전에 《몇 쪽·호출 몇 번·얼마》를
         # 화면이 보인다. 화면은 실제 스캔과 같은 force_provider·force_model을 보내야 이 값이
         # 나온다(2026-10-05 — 전에는 {pages, dry_run}만 보내 판정 모델의 비용 어림이 한 번도
         # 화면에 닿지 않았다)
@@ -1142,7 +1142,7 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
             out["engine"] = decider_kind
             out["cost_usd_est"] = round(n * _DRY_TOKENS_PER_PAGE * usd_m / 1e6, 5)
             if decider_kind == "clef":
-                # clef는 사슬이다 — 단계마다 키가 있는가와 «최대 유료 어림»(무료 몫이 하나도
+                # clef는 사슬이다 — 단계마다 키가 있는가와 《최대 유료 어림》(무료 몫이 하나도
                 # 없어 전부 OpenRouter로 갈 때)을 준다. OpenRouter 키가 없으면 유료 단계가
                 # 없다(넘치면 비전 모델)
                 chain = _clef_chain(library_path)
@@ -1199,9 +1199,9 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
         # 방향만이면 모델을 부르지 않는다. (라우터 객체 자체는 위의 엔진 목록
         # 초기화가 llm_vision 엔진에 붙이느라 생길 수 있다 — 호출은 없다.
         # Codex 지적 2026-09-18)
-        # 판정 모델(D-134·D-135): 화면에서 «판정 모델 — Cloudflare clef»나 «… Perplexity Decider»를
+        # 판정 모델(D-134·D-135): 화면에서 《판정 모델 — Cloudflare clef》나 《… Perplexity Decider》를
         # 고르면 force_provider가 "clef"·"decider"로 온다. 생성형 비전 LLM 대신 정해진 질문의 확률만
-        # 받는다(라우터를 거치지 않는다 — 라우터의 계약은 «프롬프트 → 글»이다).
+        # 받는다(라우터를 거치지 않는다 — 라우터의 계약은 《프롬프트 → 글》이다).
         # 키는 라우트 앞에서 이미 확인했다
         decider = None
         if use_decider:
@@ -1287,7 +1287,7 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
                         )
                         break
                     except JevGateExceeded as e:
-                        # 호출 상한은 «더 쏘지 말라»다. 실패로 보고 폴백 업체(유료
+                        # 호출 상한은 《더 쏘지 말라》다. 실패로 보고 폴백 업체(유료
                         # OpenRouter)나 비전 모델로 넘기면 상한의 뜻이 무너진다 — 모델
                         # 호출을 여기서 멈추고, 이 쪽과 남은 쪽은 코드(투영·PaddleOCR)로
                         # 방향만 잰다. 상한은 쪽 수 + 5라 정상 흐름에서는 닿지 않는다
@@ -1342,7 +1342,7 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
                 if answers is not None:
                     provider, model = decider.PROVIDER, decider.model
                     orientation, contents, probs = parse_decider_answers(answers)
-                    # 확률을 실어 둔다 — 문턱 하나로 접으면 «아슬아슬했다»가 사라진다(측정·검토용)
+                    # 확률을 실어 둔다 — 문턱 하나로 접으면 《아슬아슬했다》가 사라진다(측정·검토용)
                     row["decider"] = probs
             if decider is None and router_llm is not None:
                 try:
@@ -1358,14 +1358,14 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
                 orientation, contents = parse_survey(getattr(resp, "text", "") or "")
             # 방향은 투영(코드)이 먼저 — 모델은 세로쓰기 한문의 방향을 자주 틀린다(D-126 실측).
             # 투영이 모름일 때만 모델의 답을 쓴다. 누운 쪽의 90/270은 투영으로 못 가리므로
-            # «추정»으로 표시한다.
+            # 《추정》으로 표시한다.
             heur, ratio = orientation_by_projection(image, body.writing_direction)
             row["heuristic"] = {"orientation": heur, "ratio": round(ratio, 2)}
-            # 투영이 «섰다/누웠다»를 가르면 후보는 둘 — 선 쪽은 0°·180°, 누운 쪽은 +90°·+270°.
+            # 투영이 《섰다/누웠다》를 가르면 후보는 둘 — 선 쪽은 0°·180°, 누운 쪽은 +90°·+270°.
             # OCR 점수로 그중 읽히는 쪽을 고른다(180°와 90/270을 이것으로 가린다). OCR이 없거나
             # 모름이면 추정.
             if body.orientation_only:
-                # «세우기»만 — 누운 쪽의 90/270만 가른다. 선 쪽의 180° 검사는
+                # 《세우기》만 — 누운 쪽의 90/270만 가른다. 선 쪽의 180° 검사는
                 # 하지 않고(쪽마다 OCR 둘은 CPU에서 한 시간), 점수도 GPU에서만
                 # 잰다. CPU면 추정으로 남겨 화면이 미리보기로 묻는다
                 candidates = (90, 270) if heur == "sideways" else ()
@@ -1405,7 +1405,7 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
                 row["orientation"] = orientation
                 row["target"] = target_rotation(current, orientation)
             row["contents"] = contents
-            # 대표 종류 — 하나면 그것, «활자+한글»·«판본+훈점»처럼 한 엔진이 읽는 짝이면 짝의 대표
+            # 대표 종류 — 하나면 그것, 《활자+한글》·《판본+훈점》처럼 한 엔진이 읽는 짝이면 짝의 대표
             row["content"] = primary_content(contents)
             # 한 쪽에 종류가 둘 이상이고 짝도 아니면(한글+훈점) — 쪽 단위 엔진으로는 못 푼다. 엔진을
             # 고르지 않고 따로 알린다
@@ -1494,7 +1494,7 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
                 [{**c.usage(), "provider": c.PROVIDER} for c in decision_clients])}
                if decision_clients else {}),
             # 사슬 어디까지 갔는가 — 화면(work-order.js `_woScanSummary`)이 fallback_steps로
-            # «3쪽부터 OpenRouter clef로»를 실패와 따로 알린다
+            # 《3쪽부터 OpenRouter clef로》를 실패와 따로 알린다
             **({"fallback": ("cloudflare→openrouter→vision" if clef_switched
                              else "clef→vision")} if clef_fallback
                else {"fallback": "cloudflare→openrouter"} if clef_switched else {}),
@@ -1508,7 +1508,7 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
     if not body.stream:
         return await _run()
 
-    # 진행률(사용자 요청 2026-09-11): 쪽마다 몇 초씩 걸리는 일을 «돌아가는지» 보이지 않고
+    # 진행률(사용자 요청 2026-09-11): 쪽마다 몇 초씩 걸리는 일을 《돌아가는지》 보이지 않고
     # 기다리게 하면 안 된다. 「권 전체 OCR」과 같은 SSE —
     # data: {"type": "start"|"page"|"complete"|"error"}.
     queue: asyncio.Queue = asyncio.Queue()
@@ -1562,7 +1562,7 @@ async def api_ocr_engines():
         engines = registry.list_engines()
     except Exception as e:  # noqa: BLE001
         # 엔진 등록·LLM 라우터 초기화(.env 읽기 등)에서 난 예외. 예전에는 그대로
-        # 500 HTML로 새어 나가 화면이 «서고를 선택하면…»으로 잘못 안내했다.
+        # 500 HTML로 새어 나가 화면이 《서고를 선택하면…》으로 잘못 안내했다.
         # 원인을 본문에 적어 드롭다운과 토스트에 보이게 하고, traceback은 서버 로그로.
         logger.exception("OCR 엔진 목록 초기화 실패")
         return JSONResponse(
@@ -1674,7 +1674,7 @@ def _run_page_correction(
     """한 쪽의 교정 패스를 끝까지 돈다 — 선별 → LLM → 초안 저장. 동기 함수(executor용).
 
     mode="ladder"면 1단계(fast)를 돌린 뒤 자동 수용을 못 받은 블록만 2단계(precise)로
-    올린다(D-082의 «각 단계는 앞 단계의 수용 기준을 통과하지 못한 항목만 받는다»).
+    올린다(D-082의 《각 단계는 앞 단계의 수용 기준을 통과하지 못한 항목만 받는다》).
     fresh=True면 기존 초안을 버린다 — 일괄 OCR이 L2를 새로 만든 직후.
     출력: 초안 dict (candidates가 없으면 blocks가 빈 초안). 기존 초안과 블록 단위로 병합된다.
     """
@@ -1782,7 +1782,7 @@ def _run_page_correction(
     except Exception as e:  # noqa: BLE001 — 2단계가 터져도 저장된 1단계 초안은 살아 있다
         logger.warning(f"{page_number}쪽 2단계(정밀 판독) 실패 — 1단계 초안으로 돌려준다: {e}")
         draft["stage2_error"] = str(e)
-        # 응답에만 두면 쪽을 다시 열 때 사라진다 — 초안 파일에도 적어 화면이 «2단계 빠짐»을 보인다
+        # 응답에만 두면 쪽을 다시 열 때 사라진다 — 초안 파일에도 적어 화면이 《2단계 빠짐》을 보인다
         try:
             from core.document import write_json_atomic
             from ocr.correction_pass import draft_path
@@ -1894,7 +1894,7 @@ async def api_correction_review(doc_id: str, part_id: str):
           초안 파일에만 남는다. 어느 쪽을 열어야 하는지 이 목록이 답한다.
     출력: {"pages": [{page, pending, accepted, applied, errors, conflicts, mode, corrupt?}],
            "total_pending": n, "total_accepted": n, "total_errors": n}
-    accepted는 «자동 수용됐는데 아직 L4에 안 들어간 것»이다(사람이 「적용」을 눌러야 한다).
+    accepted는 《자동 수용됐는데 아직 L4에 안 들어간 것》이다(사람이 「적용」을 눌러야 한다).
     """
     from ocr.correction_pass import list_review_pages
 
@@ -2439,7 +2439,7 @@ async def api_rerun_ocr_block(
 
 @router.get("/api/documents/{doc_id}/parts/{part_id}/ocr/pending")
 async def api_ocr_pending(doc_id: str, part_id: str):
-    """돌리기 전에 «무엇이 몇 쪽 돌 것인지»를 알려 준다.
+    """돌리기 전에 《무엇이 몇 쪽 돌 것인지》를 알려 준다.
 
     입력: doc_id, part_id.
     출력: {
@@ -2453,7 +2453,7 @@ async def api_ocr_pending(doc_id: str, part_id: str):
     }
 
     왜 필요한가:
-        OCR 한 쪽마다 LLM 호출이 나간다. 버튼을 누르기 전에 «몇 쪽이 도는가»를
+        OCR 한 쪽마다 LLM 호출이 나간다. 버튼을 누르기 전에 《몇 쪽이 도는가》를
         알 수 있어야 한다. 특히 레이아웃을 고친 뒤 다시 돌릴 때, 전체가 다시
         도는 것인지 고친 쪽만 도는 것인지가 화면에 보여야 안심하고 누른다.
     """
@@ -2513,7 +2513,7 @@ async def api_restore_ocr(
     출력: {"restored": [3], "no_backup": [7]}
 
     왜 필요한가:
-        L2는 Git으로 추적되지 않아 «다시 돌렸는데 더 나빠졌다»에서 돌아갈
+        L2는 Git으로 추적되지 않아 《다시 돌렸는데 더 나빠졌다》에서 돌아갈
         길이 없었다. 배치가 덮어쓰기 직전에 한 벌 남기므로 그것을 되돌린다.
 
     어디까지 가는가:
@@ -2604,8 +2604,8 @@ async def api_fill_text_from_ocr(
         targets = [p for p in targets if p in wanted]
 
     filled = skipped = empty = 0
-    # 쪽마다 «사람 교정을 새 글로 옮겼다/못 옮겼다» 소식(D-133) — 화면이
-    # notifyCorrectionsRebase로 알린다. 버리면 교정이 «기록»으로 옮겨져도 사람이 모른다.
+    # 쪽마다 《사람 교정을 새 글로 옮겼다/못 옮겼다》 소식(D-133) — 화면이
+    # notifyCorrectionsRebase로 알린다. 버리면 교정이 《기록》으로 옮겨져도 사람이 모른다.
     notices: list[dict] = []
 
     for page_number in targets:
@@ -2660,16 +2660,16 @@ async def api_ocr_overview(doc_id: str, part_id: str, preview_chars: int = 70):
     }
 
     왜 필요한가:
-        «12쪽만 다시 돌린다»를 하려면 **12쪽이 나쁘다는 것을 먼저 알아야 한다.**
+        《12쪽만 다시 돌린다》를 하려면 **12쪽이 나쁘다는 것을 먼저 알아야 한다.**
         그런데 텍스트를 보는 경로가 쪽 단위뿐이라, 15쪽이면 15번 눌러 봐야
         어디가 나쁜지 알 수 있다. 300쪽이면 사실상 불가능하다.
 
-    무엇을 «이상»이라 부르는가 (flags):
+    무엇을 《이상》이라 부르는가 (flags):
         empty      — 줄이 하나도 없다. 확실한 실패다.
         few_chars  — 글자 수가 이 권 중앙값의 40% 미만이다.
         no_position— 좌표를 가진 줄이 하나도 없다(형광 표시가 제자리에 안 뜬다).
 
-    **few_chars는 «틀렸다»가 아니라 «봐 두라»는 표시다.** 표지·간지·참고문헌
+    **few_chars는 《틀렸다》가 아니라 《봐 두라》는 표시다.** 표지·간지·참고문헌
     쪽은 원래 글자가 적다. 그래서 판정을 숨기지 않고 실제 글자 수를 함께
     돌려준다 — 최종 판단은 사람이 한다.
     """
@@ -2700,7 +2700,7 @@ async def api_ocr_overview(doc_id: str, part_id: str, preview_chars: int = 70):
     for page_number in range(1, page_count + 1):
         data = read_page_json(ocr_path(doc_path, part_id, page_number))
         if data is None:
-            # 아직 OCR 하지 않은 쪽. «결과가 나쁘다»와 구별해야 한다.
+            # 아직 OCR 하지 않은 쪽. 《결과가 나쁘다》와 구별해야 한다.
             pages.append(
                 {
                     "page": page_number,
@@ -2840,7 +2840,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
             status_code=400,
         )
 
-    # LLM 교정 옵션 검증 — 오타가 조용히 «선별»로 동작하면 안 된다.
+    # LLM 교정 옵션 검증 — 오타가 조용히 《선별》로 동작하면 안 된다.
     if body.llm_correction not in ("off", "selected", "all"):
         return JSONResponse(
             {
@@ -2950,7 +2950,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
     def _l4_is_hand_edited(dp, pid: str, page: int) -> bool:
         """확정본(L4)이 있고, 지금 L2를 그대로 옮긴 것과 다른가.
 
-        L2가 없는데 L4가 있으면(텍스트 가져오기·손 입력) 역시 «OCR에서 온 것이 아니다»로 본다.
+        L2가 없는데 L4가 있으면(텍스트 가져오기·손 입력) 역시 《OCR에서 온 것이 아니다》로 본다.
         비교는 일괄 OCR이 L4를 채울 때 쓰는 compose_page_text와 같은 모양으로 한다.
         """
         import json as _json
@@ -2978,9 +2978,9 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
         loop = asyncio.get_event_loop()
         processed = skipped = failed = redone = 0
         total_lines = 0
-        # LLM 교정 뒤 사람이 볼 블록이 남은 쪽 — 완료 이벤트로 알려 «어딜 열어야 하나»에 답한다
+        # LLM 교정 뒤 사람이 볼 블록이 남은 쪽 — 완료 이벤트로 알려 《어딜 열어야 하나》에 답한다
         review_pages: list[int] = []
-        # L4를 채운 쪽마다 «사람 교정을 옮겼다/못 옮겼다» 소식(D-133) — 완료 이벤트에 실어
+        # L4를 채운 쪽마다 《사람 교정을 옮겼다/못 옮겼다》 소식(D-133) — 완료 이벤트에 실어
         # 화면이 notifyCorrectionsRebase로 알린다. 작업 계획 OCR(work-order.js)도 이 길을 탄다.
         corrections_notices: list[dict] = []
         # 이 함수 스코프에 직접 import한다 — 중첩 함수(_l4_is_hand_edited) 안의 import는
@@ -3022,7 +3022,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                     continue
                 if reason:
                     # 레이아웃이 바뀌어 다시 도는 쪽이다. 왜 다시 도는지
-                    # 그 자리에서 보이지 않으면 «건너뛴다더니 왜 도나»가 된다.
+                    # 그 자리에서 보이지 않으면 《건너뛴다더니 왜 도나》가 된다.
                     redone += 1
                     await progress_queue.put(
                         {
@@ -3036,7 +3036,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
 
                 block_created = False
                 # L4 보호(D-115 보강, Codex 지적 2026-09-07):
-                # 이 쪽의 확정본이 «지금 L2를 그대로 옮긴 것»이
+                # 이 쪽의 확정본이 《지금 L2를 그대로 옮긴 것》이
                 # 아니면 사람이 고쳤거나 다른 데서 온 것이다 — OCR은 새로 하되 확정본은 두고 알린다.
                 # (레이아웃이 바뀌어 다시 도는 쪽이 여기 걸린다.
                 # 처음 도는 쪽은 L4가 비어 있어 걸리지 않는다.)
@@ -3136,7 +3136,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
 
                     # 3) OCR 텍스트를 교정 텍스트(L4)에도 넣는다.
                     #
-                    # 확정본이 비어 있거나 «전 OCR을 그대로 옮긴 것»일 때만 — 사람이 고친 확정본은
+                    # 확정본이 비어 있거나 《전 OCR을 그대로 옮긴 것》일 때만 — 사람이 고친 확정본은
                     # 위에서 keep_l4로 걸러 둔다(레이아웃이 바뀌어 다시 도는 쪽).
                     # 고서 흐름의 「OCR 채우기」 단추와 같은 일을 자동으로 한다.
                     # 교정 초안이 있으면 자동 수용된 블록은 교정본으로 바꿔 넣는다.
@@ -3150,7 +3150,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                             )
 
                             def _fill_l4(p=page_number, res=results, cd=correction_draft):
-                                # L4 쓰기와 «적용됨» 기록을 쪽 잠금 안에서 한 번에 — 그 사이에
+                                # L4 쓰기와 《적용됨》 기록을 쪽 잠금 안에서 한 번에 — 그 사이에
                                 # 사람이 같은 쪽에 「적용」을 누르면 한쪽이 다른 쪽을 덮는다.
                                 # executor 스레드에서 잡아야 라우트(다른 스레드)가 실제로 기다린다.
                                 # 출력: 교정 옮김 소식(없으면 None).
@@ -3158,7 +3158,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                                     text = compose_page_text({"ocr_results": res}, cd)
                                     saved = save_page_text(doc_path, part_id, p, text)
                                     # 자동 수용 블록이 L4에 들어갔음을 초안에 적는다 — 안 적으면
-                                    # 검토 목록이 그 블록을 «수용됐는데 안 적용됨»으로 다시 센다.
+                                    # 검토 목록이 그 블록을 《수용됐는데 안 적용됨》으로 다시 센다.
                                     if cd:
                                         mark_applied(
                                             doc_path,
@@ -3185,7 +3185,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                                 "「OCR 채우기」를 눌러 주세요."
                             )
                     # 3.5) 교정 회계 — L4 반영(mark_applied)까지 끝난 뒤 디스크의 초안으로 센다.
-                    #      try 밖이다: 여기 버그가 «교정 실패»로 위장되면 안 된다.
+                    #      try 밖이다: 여기 버그가 《교정 실패》로 위장되면 안 된다.
                     if correction_draft:
                         final_draft = load_draft(doc_path, part_id, page_number) or correction_draft
                         if final_draft.get("stage2_error"):
@@ -3405,7 +3405,7 @@ class NoteTemplateExampleRequest(BaseModel):
 
 @router.post("/api/documents/{doc_id}/note-template/from-example")
 async def api_note_template_from_example(doc_id: str, body: NoteTemplateExampleRequest):
-    """연구자가 붙여 넣은 노트 예시를 «틀»로 바꾼다. **저장하지 않는다.**
+    """연구자가 붙여 넣은 노트 예시를 《틀》로 바꾼다. **저장하지 않는다.**
 
     출력: {"template", "problems", "preview", "provider", "model"} 또는 {"error"}.
     모델은 자리만 표시하고, 노트의 원문·번역·주석은 내보낼 때 코드가 층에서 채운다
@@ -3430,7 +3430,7 @@ async def api_apply_read_plan(doc_id: str, body: ReadPlanApplyRequest):
     """작업 계획을 문헌에 적용한다 — 회전 구간·판독 지침·장 목록을 저장한다. OCR은 돌리지 않는다.
 
     출력: {"plan", "problems", "pages", "skipped", "engine_plan", "rotation_ranges"}.
-    화면은 이어서 «권 전체 OCR»(ocr/batch)에 pages·engine_plan을 넘겨 돌린다 — 진행 표시·중단·
+    화면은 이어서 《권 전체 OCR》(ocr/batch)에 pages·engine_plan을 넘겨 돌린다 — 진행 표시·중단·
     백업·L4 보호가 이미 거기 있으므로 같은 일을 두 번 구현하지 않는다.
     """
     from ocr.read_book import apply_plan

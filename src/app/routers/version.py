@@ -316,7 +316,7 @@ async def api_import_json(request: Request):
     왜 이렇게 하는가:
         늘 새 id(원래 id + 시각)로 만들어 기존 데이터에 영향을 주지 않는다.
         같은 스냅샷을 여러 번 들여도 각각 독립된 문헌·해석 저장소가 된다.
-        (함수 이름 create_work_from_snapshot의 «work»는 Work 엔티티(D-099에서 없앰)와
+        (함수 이름 create_work_from_snapshot의 《work》는 Work 엔티티(D-099에서 없앰)와
         무관한 옛 이름이다.)
     """
     _library_path = get_library_path()

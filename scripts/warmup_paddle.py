@@ -1,7 +1,7 @@
 """PaddleOCR 모델을 설치 단계에서 미리 받는다 — 첫 OCR이 몇 분씩 멈춰 보이지 않게.
 
 왜: PaddleOCR은 처음 쓰일 때 검출·인식 모델(약 240MB)을 Baidu 서버에서 받는다. 한국에서는
-느리고, 앱 화면에는 진행이 보이지 않아 «멈췄다»로 보인다(2026-09-06, 다른 PC 보고).
+느리고, 앱 화면에는 진행이 보이지 않아 《멈췄다》로 보인다(2026-09-06, 다른 PC 보고).
 설치 스크립트가 이 스크립트를 한 번 돌려 두면 첫 실행이 바로 된다.
 
 쓰는 법: uv run python scripts/warmup_paddle.py [언어…]   (기본: korean ch)
@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 def main() -> int:
     # 설치 5단계가 이 스크립트를 돌린다. 모델을 **못 받았을 때** 찍는 안내문에
-    # «—»가 들어 있어, cp949 콘솔(받는 사람 PC의 기본)에서는 설명 대신 파이썬
+    # 《—》가 들어 있어, cp949 콘솔(받는 사람 PC의 기본)에서는 설명 대신 파이썬
     # 트레이스백이 떴다 — 설명이 가장 필요한 순간이다(2026-09-22). core/console.py 참조.
     from core.console import force_utf8_console
 

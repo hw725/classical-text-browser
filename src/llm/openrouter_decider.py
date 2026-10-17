@@ -1,9 +1,9 @@
-"""OpenRouter로 부르는 Perplexity decider — 편성 «글이 시작하는 행» 판정의 폴백 (D-136·D-139).
+"""OpenRouter로 부르는 Perplexity decider — 편성 《글이 시작하는 행》 판정의 폴백 (D-136·D-139).
 
-2026-10-11(D-139): v1(`pplx-decider-v1-27b`)이 OpenRouter에서 폐기(404 «No endpoints found»)되어
+2026-10-11(D-139): v1(`pplx-decider-v1-27b`)이 OpenRouter에서 폐기(404 《No endpoints found》)되어
 v1.1(`pplx-decider-v1.1-27b`)로 바꾸고, 주 판정자는 Jev로 되돌렸다 —
 이것은 Jev가 실패한 호출만 대신 답한다.
-아래 «왜 있는가»는 D-136 당시(v1을 주로 쓰던 때)의 근거다.
+아래 《왜 있는가》는 D-136 당시(v1을 주로 쓰던 때)의 근거다.
 
 왜 있는가:
     편성 「더 묻기…」의 판정 모델(D-129)은 TypeSafe Jev였다. 같은 저장 측정(천진담초·운양집 1책
@@ -51,7 +51,7 @@ class OpenRouterDecisionClient(JevClient):
     DEFAULT_URL = OPENROUTER_DECISIONS_URL
     DEFAULT_MODEL = OPENROUTER_DECIDER_MODEL
     URL_ENV = "OPENROUTER_DECISIONS_URL"
-    KEY_NAMES = OPENROUTER_KEY_NAMES  # TYPESAFE_API_KEY를 물려받지 않는다 — 위 «키» 참고
+    KEY_NAMES = OPENROUTER_KEY_NAMES  # TYPESAFE_API_KEY를 물려받지 않는다 — 위 《키》 참고
     KEY_FALLBACK_FILE = True  # 개인 키 파일에 OPENROUTER_API_KEY가 있다(Jev와 같은 마지막 출처)
     INPUT_USD_PER_M = OPENROUTER_DECIDER_USD_PER_M
     ACCEPTS_IMAGES = False  # 측정하지 않은 길 — 보내기 전에 거부한다
@@ -65,14 +65,14 @@ class OpenRouterJevClient(OpenRouterDecisionClient):
 
     사용자 결정(2026-10-05): OpenRouter 키만 있으면 Jev를 OpenRouter 경유로 부른다. 전에는
     JevClient가 OPENROUTER_API_KEY를 이름 목록 끝에 두어, 그 키를 **TypeSafe 주소로** 보내 401을
-    받았다(목차 대조·decider 실패 시 폴백·설정 «연결 확인» 셋 다).
+    받았다(목차 대조·decider 실패 시 폴백·설정 《연결 확인》 셋 다).
 
     계약은 llm_pipeline 정본(`llm_runtime/jev_decisions.py` PROVIDERS["openrouter"])과 같다 —
     주소 `/api/alpha/decisions`, 모델 `~typesafe/jev-latest`, 본문·응답은 직결과 같은
     {model, state, questions} → {answers, usage}, 키는 OPENROUTER_API_KEY 하나. 비용은
     usage.cost가 정본이고, 없으면 직결과 같은 Jev 입력 단가($0.042/M)로 어림한다(모델이 같다).
 
-    **문턱은 Jev의 것이다**(0.85/0.5) — PROVIDER가 «openrouter»라 decider 문턱(0.997/0.69)을 받지
+    **문턱은 Jev의 것이다**(0.85/0.5) — PROVIDER가 《openrouter》라 decider 문턱(0.997/0.69)을 받지
     않게 `JUDGE_FAMILY = "jev"`를 단다(`structure_llm.judge_thresholds`가 이것을 먼저 본다).
     텍스트 전용 — 이미지는 보내기 전에 거부한다(Jev는 base64를 글자로 읽는다, 2026-10-02 실측).
     """

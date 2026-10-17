@@ -4,7 +4,7 @@
   - ○+날짜가 되풀이되는 일기에서는 mark가, 「談草」로 끝나는 짧은 행이 되풀이되면
     title_word가 권고된다
   - 쪽마다 한 번 같은 자리에 오는 것(판심·엽수)은 신호에서 빠지고 furniture로 간다
-  - 도출 결과 → segmentation_rules 변환(rules_from_signals)과 «규칙이 비어 있는가» 판정
+  - 도출 결과 → segmentation_rules 변환(rules_from_signals)과 《규칙이 비어 있는가》 판정
   - propose_boundaries가 signals 스위치·head_words·furniture를 따른다
   - API: /segmentation/signals는 저장하지 않고, 규칙이 빈 문헌의 /segmentation/auto는
     먼저 도출해 저장한다
@@ -195,8 +195,8 @@ class TestRulesFromSignals:
 
 class TestProposerHonoursRules:
     def test_mark_switch_off_removes_the_mark_family(self):
-        # mark는 «가족» 스위치다 —
-        # 끄면 행 중간 ○+날짜 후보가 «날짜»라는 다른 이름으로 살아남지 않는다
+        # mark는 《가족》 스위치다 —
+        # 끄면 행 중간 ○+날짜 후보가 《날짜》라는 다른 이름으로 살아남지 않는다
         lines = _diary_pages(n_pages=2, furniture=_COL)
         on = propose_boundaries(lines, None)
         off = propose_boundaries(lines, {"signals": {"mark": False}})
@@ -313,7 +313,7 @@ def test_put_rules_with_new_fields_passes_schema(client, tmp_path):  # noqa: F81
     saved = r.json()["segmentation_rules"]
     assert saved["signals"] == {"mark": False} and saved["toc_llm"] is True
     # 모르는 스위치 이름은 normalize_rules가 걷어 내고 저장은 된다 —
-    # 오타가 «꺼짐»으로 저장되지 않는다
+    # 오타가 《꺼짐》으로 저장되지 않는다
     r = client.put(
         "/api/documents/d1/segmentation-rules", json={"rules": {"signals": {"marc": False}}}
     )
@@ -374,7 +374,7 @@ class TestCascade:
         rows = []
         for i in range(24):
             # 여덟 행마다 셋이 붙어서 내려쓴다 —
-            # 절반이 내려쓰면 «본문 위치»의 중앙값이 흔들려 시험이 안 된다
+            # 절반이 내려쓰면 《본문 위치》의 중앙값이 흔들려 시험이 안 된다
             indented = (i % 8) in (2, 3, 4)
             top = 40 if indented else 10
             rows.append(Line(1, i, _COL, bbox=[10, top, 30, top + 400]))
@@ -384,7 +384,7 @@ class TestCascade:
         assert r["stage"]["level"] != 2 or "indent_alone" not in r["stage"]["by"]
 
     def test_weak_toc_falls_through_and_says_so(self):
-        # 목차 쪽은 잡혔지만 본문과 거의 대조되지 않는다 — 3단으로 내려가되 요약에 «약함»을 적는다
+        # 목차 쪽은 잡혔지만 본문과 거의 대조되지 않는다 — 3단으로 내려가되 요약에 《약함》을 적는다
         toc_page = ["目錄"] + [f"甲{i}篇 {i + 1}" for i in range(8)]
         body = [[f"{_DAYS[i]}談草", _COL, _COL, _COL] for i in range(8)]
         lines = _pages([toc_page] + body)
@@ -454,8 +454,8 @@ def test_explicit_toc_page_is_excluded_even_without_entries(client, tmp_path, mo
 
     목적: 목차를 규약으로 배우지 않는다.
 
-    사람이 «여기가 목차»라고 적었으면 항목을 못 읽어도 그 쪽의 짧은 행을 본문 규약으로 세면 안 된다
-    (D-117 1단). 전에는 항목 추출이 실패하면 목차 자체가 없던 일이 됐다(Codex 지적 2026-09-08).
+    사람이 《여기가 목차》라고 적었으면 항목을 못 읽어도 그 쪽의 짧은 행을 본문 규약으로 세면 안
+    된다 (D-117 1단). 전에는 항목 추출이 실패하면 목차 자체가 없던 일이 됐다(Codex 지적 2026-09-08).
     """
     from core import toc
 
@@ -593,10 +593,10 @@ def test_signals_llm_dry_run_reports_size_without_calling_model(client, tmp_path
 
 
 class TestDiscoveryIsGeneric:
-    """D-119 — 코드에 종류가 없다: 有·談草·N日·○ 전부 «자리 × 되풀이 문자열»로 찾는다."""
+    """D-119 — 코드에 종류가 없다: 有·談草·N日·○ 전부 《자리 × 되풀이 문자열》로 찾는다."""
 
     def test_finds_head_word_and_template_without_naming_them(self):
-        # 행마다 달라야 «같은 글 되풀이»로 걸리지 않는다
+        # 행마다 달라야 《같은 글 되풀이》로 걸리지 않는다
         body = "山川草木風雲雨雪日月星辰花鳥魚蟲春夏秋冬"
         pages = []
         for p in range(8):
@@ -608,7 +608,7 @@ class TestDiscoveryIsGeneric:
         r = induce_signals(_pages(pages))
         again = [s for s in r["signals"] if s["id"].startswith("head:又")]
         assert again and again[0]["toggle"] == "head_words" and again[0]["value"].startswith("又")
-        # 「一、」「二、」… 는 접으면 «N、» — 템플릿 칸으로
+        # 「一、」「二、」… 는 접으면 《N、》 — 템플릿 칸으로
         tpl = [s for s in r["signals"] if s["toggle"] == "head_templates"]
         assert tpl and tpl[0]["value"].startswith("N")
         rules = rules_from_signals(r, None, [s["id"] for s in r["signals"] if s["group"] != "aux"])
@@ -800,7 +800,7 @@ class TestPageFormat:
     def test_catalog_and_coordinates_check_each_other(self):
         """입력: 목록의 행자수와 좌표에서 잰 값. 출력: 일치·불일치·유보. 목적: 서로의 검산.
 
-        좌표만으로 «접은 자리»를 확정할 수 없다는 것이 D-120의 알려진 한계다. 목록(KORMARC
+        좌표만으로 《접은 자리》를 확정할 수 없다는 것이 D-120의 알려진 한계다. 목록(KORMARC
         300▼b)의 행자수는 그와 독립이므로 확인도 반증도 된다.
         """
         catalog = {"haengja": "반엽 10행 20자"}
@@ -811,7 +811,7 @@ class TestPageFormat:
         assert differ["agree"] is False
         assert "7·8행" in differ["summary"]
 
-        # 한쪽 반엽만 열을 놓친 쪽은 «맞음»으로 본다 — 목록의 값이 어느 한쪽에 있으면 된다
+        # 한쪽 반엽만 열을 놓친 쪽은 《맞음》으로 본다 — 목록의 값이 어느 한쪽에 있으면 된다
         partial = page_format.compare_with_catalog({"haengja": (9, 10)}, catalog)
         assert partial["agree"] is True
 
@@ -968,13 +968,13 @@ class TestDiscoveryRegressions:
 
     def test_month_only_and_relative_dates_are_not_repeated_dates(self):
         """입력: 월만 있는 날짜와 상대 날짜. 출력: 날짜 0. 목적: 같은 달의 시제(「三月春」)를
-        판권의 «같은 날짜 되풀이»로 오판하지 않는다 — Codex는 월만으로도 세자고 했으나 거절."""
+        판권의 《같은 날짜 되풀이》로 오판하지 않는다 — Codex는 월만으로도 세자고 했으나 거절."""
         texts = ["三月春", "三月雨", "三月晴", "三月風", "翌日", "同日"]
         assert induction._repeat_fraction(texts, list(range(6))) == (0, 1.0)
 
     def test_grammar_families_are_shown_but_not_recommended_when_dense(self):
         """입력: 매 행이 날짜. 출력: 날짜 가족은 보이되 권고 아님. 목적: 문법 가족도 밀도 문턱
-        (_solid)을 따른다. 판심 필터는 문법 가족에 적용하지 않는다 — «쪽마다 한 번 같은 자리»는
+        (_solid)을 따른다. 판심 필터는 문법 가족에 적용하지 않는다 — 《쪽마다 한 번 같은 자리》는
         판심의 꼴이지만 날짜는 행마다 다른 글이라 한 쪽 한 기사 일기를 판심으로 버리면 안 된다
         (Codex 제안 거절, 2026-09-08)."""
         dense = induce_signals(_pages([["一日"] * 8]))

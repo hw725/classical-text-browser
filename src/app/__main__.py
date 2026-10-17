@@ -16,8 +16,8 @@ if _src_dir not in sys.path:
 
 
 def main():
-    # 안내문에 «—»가 들어 있어 cp949 콘솔에서는 그대로 죽는다. `start_server.bat`이
-    # 이것을 `--reload`로 띄우므로, 코드가 바뀔 때마다 찍히는 «[자동 재적재]» 줄이
+    # 안내문에 《—》가 들어 있어 cp949 콘솔에서는 그대로 죽는다. `start_server.bat`이
+    # 이것을 `--reload`로 띄우므로, 코드가 바뀔 때마다 찍히는 《[자동 재적재]》 줄이
     # 받는 사람 PC에서 첫 재적재에 터졌다(2026-09-22 전수 측정). core/console.py 참조.
     from core.console import force_utf8_console
 
@@ -87,10 +87,10 @@ def main():
 
         print(f"서버: http://{args.host}:{args.port}")
         if args.reload:
-            # 사용자가 «고칠 때마다 서버를 껐다 켜기 싫다»고 해서 넣었다(2026-09-03).
+            # 사용자가 《고칠 때마다 서버를 껐다 켜기 싫다》고 해서 넣었다(2026-09-03).
             # uvicorn 자체 reload(멀티프로세싱으로 __main__을 다시 import)는 `python -m app`과
             # 얽혀 재기동 뒤 멈추는 것이 실측됐다. 대신 이 프로세스가 감시자가 되어 src/를 지켜보고,
-            # .py가 바뀌면 «평범한 serve» 자식을 끄고 다시 띄운다. 자식은 reload를 모른다.
+            # .py가 바뀌면 《평범한 serve》 자식을 끄고 다시 띄운다. 자식은 reload를 모른다.
             _supervise(args, library_path)
             return
         uvicorn.run(

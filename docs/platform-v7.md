@@ -1401,7 +1401,7 @@ library/
 > **정본은 `schemas/exchange.schema.json` 하나다** (D-100 — 옛 백로그 B-005, 2026-09-04. 그 번호는 지금 다른 항목). 아래는 그 스키마를
 > 사람이 읽기 좋게 간추린 것이며, 어긋나면 스키마가 기준이다.
 > `core/snapshot.py::build_snapshot()`이 이 모양으로 쓰고, `snapshot_validator.py`가 이
-> 스키마로 검증하며, `tests/test_snapshot.py`가 «내보낸 것이 스키마를 통과하는가»를 고정한다.
+> 스키마로 검증하며, `tests/test_snapshot.py`가 《내보낸 것이 스키마를 통과하는가》를 고정한다.
 >
 > v1.3까지는 이 절과 구현이 **다른 모양**이었고(문서는 `export_info`·`parts`·`pages`,
 > 구현은 `export_timestamp`·`original`·`interpretation`) 스키마를 아무도 읽지 않아

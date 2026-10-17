@@ -8,8 +8,8 @@
   - Jev에 이미지를 주면 보내기 전에 거부한다(Jev는 base64를 글자로 읽어 엉뚱한 답을 준다)
   - 429의 Retry-After를 따른다
   - 판정 모델 호출도 서고의 LLM 사용 기록에 남는다
-  - 자동 스캔이 «판정 모델»을 고르면 생성 LLM 대신 Decider의 확률로 종류를 정한다
-  - 설정 화면 «판정 모델»: 상태 라우트·키 저장(값은 돌려주지 않는다)
+  - 자동 스캔이 《판정 모델》을 고르면 생성 LLM 대신 Decider의 확률로 종류를 정한다
+  - 설정 화면 《판정 모델》: 상태 라우트·키 저장(값은 돌려주지 않는다)
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ def _png(w: int, h: int) -> bytes:
 def _no_ambient_keys(monkeypatch, tmp_path):
     """이 PC의 키를 시험에 섞지 않는다 — 환경변수·프로젝트 루트 .env·공용 키 파일을 모두 막는다.
 
-    프로젝트 루트 .env에 PERPLEXITY_API_KEY를 두면 «키 없음» 시험이 깨지고, 자동 스캔 시험은 진짜로
+    프로젝트 루트 .env에 PERPLEXITY_API_KEY를 두면 《키 없음》 시험이 깨지고, 자동 스캔 시험은 진짜로
     부를 뻔했다(2026-10-02 검토 지적). 서고 .env만 읽게 바꿔 둔다.
     """
     import llm.clef_cf as clef
@@ -290,7 +290,7 @@ def test_survey_with_decider_uses_probabilities(client, tmp_path, monkeypatch): 
 
 
 def test_scan_select_offers_decider_option():
-    """화면: 자동 스캔의 «종류 판정 모델»에 판정 모델 선택지가 붙는다(생성 모델 목록 밖이다)."""
+    """화면: 자동 스캔의 《종류 판정 모델》에 판정 모델 선택지가 붙는다(생성 모델 목록 밖이다)."""
     from pathlib import Path
 
     root = Path(__file__).resolve().parent.parent / "src" / "app" / "static"

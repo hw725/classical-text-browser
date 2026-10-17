@@ -2,7 +2,7 @@
  * 연결·업데이트를 화면에서 끝낸다 (D-102 · D-103).
  *
  * 왜 필요한가:
- *   v1.3.0까지 API 키를 넣는 길은 «메모장으로 .env를 여는 것»뿐이었고, 새 판이 나온 줄
+ *   v1.3.0까지 API 키를 넣는 길은 《메모장으로 .env를 여는 것》뿐이었고, 새 판이 나온 줄
  *   알려면 GitHub 저장소를 직접 봐야 했다. 처음 쓰는 사람에게 둘 다 넘기 어려운 문턱이다.
  *
  * 무엇을 하는가:
@@ -10,7 +10,7 @@
  *   - Ollama가 도는지 눌러서 확인
  *   - 새 판 확인과 내려받기 (고친 파일이 남아 있으면 받지 않는다)
  *
- * 키를 화면에 되돌려 주지 않는다: 서버는 «있는가»와 끝 네 글자만 준다.
+ * 키를 화면에 되돌려 주지 않는다: 서버는 《있는가》와 끝 네 글자만 준다.
  *
  * 의존성: showToast (workspace.js) · _loadLlmAccounts (workspace.js)
  */
@@ -41,10 +41,10 @@ const _DECISION_STATUS_LABEL = {
 let _decisionModelsGen = 0;
 
 /**
- * 설정 «판정 모델» 칸 (D-134).
+ * 설정 《판정 모델》 칸 (D-134).
  * 입력: check — true면 서버가 실제로 한 번 불러 키가 맞는지 본다(질문 하나).
  *
- * 왜 따로인가: 판정 모델은 LLM 라우터에 들지 않아 위의 «LLM 연결» 목록에 나오지 않는다.
+ * 왜 따로인가: 판정 모델은 LLM 라우터에 들지 않아 위의 《LLM 연결》 목록에 나오지 않는다.
  * 그래서 전에는 키를 넣을 화면이 아예 없었다 — 처음 쓰는 사람은 Jev를 쓸 길이 없었다.
  */
 async function _loadDecisionModels(check = false) {
@@ -52,7 +52,7 @@ async function _loadDecisionModels(check = false) {
   if (!box) return;
   // 늦게 온 응답이 새 것을 덮지 않게(설정 열기·키 저장 이벤트가 겹치면 두 번 그린다), 그리고 사람이
   // 칸에 키를 치는 중이면 다시 그리지 않는다 — 다시 그리면 친 글이 옛 칸과 함께 사라진다
-  // (2026-10-02 headless 실측: 넣은 키가 저장되지 않고 «키를 입력하세요»만 떴다)
+  // (2026-10-02 headless 실측: 넣은 키가 저장되지 않고 《키를 입력하세요》만 떴다)
   const gen = ++_decisionModelsGen;
   const typing = () =>
     [...box.querySelectorAll("input.settings-key-input")].some((i) => i.value.trim());
@@ -97,7 +97,7 @@ async function _loadDecisionModels(check = false) {
       note.textContent = m.role + (m.detail ? ` — ${m.detail}` : "");
       row.appendChild(note);
 
-      // 가입 안내는 키가 없거나 연결이 실패했을 때만 — 키가 있으면 «연결 확인»만 남긴다
+      // 가입 안내는 키가 없거나 연결이 실패했을 때만 — 키가 있으면 《연결 확인》만 남긴다
       if ((m.status === "needs_key" || m.status === "error") && (m.steps || []).length) {
         const steps = document.createElement("ol");
         steps.className = "settings-llm-steps";
@@ -201,7 +201,7 @@ async function _saveLlmKeys(payload, btn, okMessage) {
     showToast(okMessage, "success");
     if (typeof _loadLlmAccounts === "function") await _loadLlmAccounts();
     // 서버는 라우터 캐시를 비웠다. 화면의 모델 드롭다운·추출 패널·마법사도 다시 채워야
-    // 방금 넣은 연결이 «바로» 보인다(2026-09-05 지적 — 전에는 새로고침해야 했다).
+    // 방금 넣은 연결이 《바로》 보인다(2026-09-05 지적 — 전에는 새로고침해야 했다).
     document.dispatchEvent(new CustomEvent("llm-accounts-changed"));
   } catch (e) {
     showToast(`저장 실패: ${e.message}`, "error");
@@ -212,7 +212,7 @@ async function _saveLlmKeys(payload, btn, okMessage) {
 }
 
 /**
- * OpenAI(ChatGPT 계정) 카드 — 프록시 상태와 «시작·로그인» 단추 (D-107).
+ * OpenAI(ChatGPT 계정) 카드 — 프록시 상태와 《시작·로그인》 단추 (D-107).
  *
  * 왜: 이 길은 키가 없고 프록시(Node)가 로그인을 대신한다. 전에는 프록시가 창 없이 떠서
  * 로그인이 필요해도 로그 파일을 열어야 주소를 알 수 있었다. 단추를 누르면 앱이 프록시를
@@ -241,8 +241,8 @@ function _oauthRow() {
 
   let timer = null;
   let ticks = 0; // 프록시는 떴는데 로그인을 안 하면 영원히 묻게 된다 — 5분(150틱) 상한
-  // 마지막으로 본 상태. «안 됨 → 됨» 전이에서만 이벤트를 쏜다. 처음 물었을 때부터 «됨»이면
-  // 쏘지 않는다 — 쏘면 마법사가 자기를 다시 그리며 새 줄을 만들고, 그 줄이 또 «됨»을 보고
+  // 마지막으로 본 상태. 《안 됨 → 됨》 전이에서만 이벤트를 쏜다. 처음 물었을 때부터 《됨》이면
+  // 쏘지 않는다 — 쏘면 마법사가 자기를 다시 그리며 새 줄을 만들고, 그 줄이 또 《됨》을 보고
   // 쏘는 무한 루프가 된다(2026-09-05 실측: /api/llm/models가 ERR_INSUFFICIENT_RESOURCES).
   let lastReady = null;
   const stop = () => {
@@ -288,7 +288,7 @@ function _oauthRow() {
   };
   const poll = async (initial = false) => {
     // 처음 한 번은 아직 DOM에 붙기 전에 불린다 — isConnected로 끊으면 상태를 영영 묻지 않는다
-    // («확인 중…»이 단추를 누를 때까지 남았다, Codex 지적 2026-09-06).
+    // (《확인 중…》이 단추를 누를 때까지 남았다, Codex 지적 2026-09-06).
     if (!initial && (++ticks > 150 || !wrap.isConnected)) {
       stop();
       return;
@@ -317,7 +317,7 @@ function _oauthRow() {
   return wrap;
 }
 
-/** Ollama 카드에 붙는 «지금 도는지 확인» 줄. */
+/** Ollama 카드에 붙는 《지금 도는지 확인》 줄. */
 function _ollamaRow() {
   const wrap = document.createElement("div");
   wrap.className = "settings-key-row";
@@ -347,7 +347,7 @@ function _ollamaRow() {
     }
   });
 
-  // «로그인 필요»에서 끝내지 않는다 — 앱이 ollama signin을 띄우고 주소를 연다.
+  // 《로그인 필요》에서 끝내지 않는다 — 앱이 ollama signin을 띄우고 주소를 연다.
   const login = document.createElement("button");
   login.className = "text-btn text-btn-sm";
   login.textContent = "로그인";
@@ -589,7 +589,7 @@ function _closeWizard(remember) {
     clearInterval(_extrasPollTimer);
     _extrasPollTimer = null;
   }
-  // 3단계의 «다시 그리기» 리스너도 뗀다 — 닫힌 뒤에도 키 저장마다 숨은 화면을 다시 그리지 않게.
+  // 3단계의 《다시 그리기》 리스너도 뗀다 — 닫힌 뒤에도 키 저장마다 숨은 화면을 다시 그리지 않게.
   if (_wizardState.llmListener) {
     document.removeEventListener("llm-accounts-changed", _wizardState.llmListener);
     _wizardState.llmListener = null;
@@ -743,7 +743,7 @@ async function _installExtra(name, body) {
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
     if (typeof showToast === "function") showToast("받기 시작했습니다. 끝나면 알려 드립니다.", "info");
-    await _wizardOcr(body); // «설치 중…»을 바로 보여 준다
+    await _wizardOcr(body); // 《설치 중…》을 바로 보여 준다
   } catch (e) {
     if (typeof showToast === "function") showToast(`설치를 시작하지 못했습니다: ${e.message}`, "error");
   }
@@ -777,7 +777,7 @@ function _pollExtras(body) {
           s.job.ok ? "success" : "error",
         );
       }
-      // 실패해도 다시 그린다 — 안 그리면 «설치 중…»과 비활성 단추로 굳는다. 실패 기록은 남긴다.
+      // 실패해도 다시 그린다 — 안 그리면 《설치 중…》과 비활성 단추로 굳는다. 실패 기록은 남긴다.
       if (body.isConnected && _wizardState.step === 1) {
         await _wizardOcr(body);
         const again = document.getElementById("wizard-extras-log");
@@ -820,9 +820,9 @@ async function _wizardLlm(body) {
     box.appendChild(row);
     return row;
   };
-  // 이 단계는 «번역·주석 초안»용 LLM 키만 받는다 — 판정 모델 키(Perplexity·TypeSafe·OpenRouter·
+  // 이 단계는 《번역·주석 초안》용 LLM 키만 받는다 — 판정 모델 키(Perplexity·TypeSafe·OpenRouter·
   // Cloudflare)는 설정 ▸ 판정 모델에서 넣는다. 전에는 PROVIDER_KEY_HELP 전체를 돌아 그 키들까지
-  // 같은 목록에 보였고, Cloudflare는 « API 키» 꼬리가 없어 이름도 이상했다(2026-10-11 재확인).
+  // 같은 목록에 보였고, Cloudflare는 《 API 키》 꼬리가 없어 이름도 이상했다(2026-10-11 재확인).
   for (const pid of ["anthropic", "openai", "gemini"]) {
     card(PROVIDER_KEY_HELP[pid].label.replace(" API 키", "")).appendChild(_llmKeyRow(pid, keyState));
   }
@@ -832,7 +832,7 @@ async function _wizardLlm(body) {
   if (typeof _ollamaPullRow === "function") ollamaCard.appendChild(_ollamaPullRow({ status: "unknown" }));
   card("OpenAI — ChatGPT 계정으로 (구독 한도)").appendChild(_oauthRow());
 
-  // 저장·지우기 뒤에는 «저장됨 (…)» 표시가 바뀌어야 한다 — 이 단계가 떠 있을 때만 다시 그린다.
+  // 저장·지우기 뒤에는 《저장됨 (…)》 표시가 바뀌어야 한다 — 이 단계가 떠 있을 때만 다시 그린다.
   if (_wizardState.llmListener) {
     document.removeEventListener("llm-accounts-changed", _wizardState.llmListener);
   }

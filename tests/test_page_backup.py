@@ -2,11 +2,11 @@
 
 왜 이 테스트가 있는가:
     원본 저장소는 Git으로 관리되지만 **L2_ocr/는 커밋되지 않는다.**
-    그래서 OCR 결과는 «되돌리기»의 대상이 아니었다.
+    그래서 OCR 결과는 《되돌리기》의 대상이 아니었다.
 
     문제가 되는 자리는 하나다 — 모델을 바꾸거나 레이아웃을 고쳐 다시
     돌리는 것이 추출 흐름의 일부인데(D-057), 그 결과가 이전만 못해도
-    돌아갈 길이 없으면 «다시 돌려 보기»가 위험한 선택이 된다.
+    돌아갈 길이 없으면 《다시 돌려 보기》가 위험한 선택이 된다.
 """
 
 import json
@@ -71,7 +71,7 @@ def test_restore_swaps_so_you_can_go_back(doc):
 
 
 def test_empty_result_is_not_backed_up(doc):
-    """«돌았는데 아무것도 못 읽은» 쪽은 백업하지 않는다.
+    """《돌았는데 아무것도 못 읽은》 쪽은 백업하지 않는다.
 
     그런 쪽으로 되돌릴 이유가 없고, 남기면 되돌리기 버튼이 쓸모없는
     곳에도 뜬다.
@@ -138,8 +138,8 @@ def test_manual_corrections_are_restored_too(doc):
     """손으로 고친 교정도 함께 되돌아온다.
 
     배치는 fill_text_layer로 **L4 교정 텍스트도 덮어쓴다**(교정 탭이 L4를
-    읽으므로 채워 줘야 한다). L2만 되돌리면 «OCR은 예전 것인데 교정은
-    사라진» 어긋난 상태가 된다.
+    읽으므로 채워 줘야 한다). L2만 되돌리면 《OCR은 예전 것인데 교정은
+    사라진》 어긋난 상태가 된다.
     """
     _write(doc, 1, "OCR 원문 A")
     _write_l4(doc, 1, "사람이 고친 텍스트", corrections=[{"from": "A", "to": "B"}])
@@ -159,7 +159,7 @@ def test_manual_corrections_are_restored_too(doc):
 def test_files_absent_at_backup_time_are_removed_on_restore(doc):
     """백업 시점에 없던 파일은 되돌릴 때 사라져야 한다.
 
-    안 그러면 «그때 없던 교정»이 되살아나 그 시점 상태와 달라진다.
+    안 그러면 《그때 없던 교정》이 되살아나 그 시점 상태와 달라진다.
     """
     _write(doc, 1, "OCR만 있던 시절")
     save_backup(doc, "vol1", 1)  # L4 없음

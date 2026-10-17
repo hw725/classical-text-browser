@@ -1,9 +1,9 @@
 """경계 목록(D-092) — 단위의 정본. 순수 계산·파일·마이그레이션·entity 보기를 고정한다.
 
 왜 이 시험이 필요한가:
-    단위를 없애고 경계 목록으로 바꾸는 것은 저장 형식 변경이다. «끝은 다음 경계가 정한다»,
-    «id는 시작 경계에 붙는다», «층위 n을 손대도 더 얕은 층위의 id는 그대로», «옛 blocks/는 손실
-    없이 옮겨진다»가 깨지면 관계·태그·표점 파일의 참조가 끊긴다.
+    단위를 없애고 경계 목록으로 바꾸는 것은 저장 형식 변경이다. 《끝은 다음 경계가 정한다》,
+    《id는 시작 경계에 붙는다》, 《층위 n을 손대도 더 얕은 층위의 id는 그대로》, 《옛 blocks/는 손실
+    없이 옮겨진다》가 깨지면 관계·태그·표점 파일의 참조가 끊긴다.
 """
 
 from __future__ import annotations
@@ -71,9 +71,9 @@ class TestUnits:
         )
         units = B.compute_units(_data(b1, b2, b3), lines, pt)
         by = {u["metadata"]["title"]: u for u in units}
-        # 층위 2 단위 «七日»은 층위 3 경계를 건너뛰고 다음 층위 2 경계(九日) 앞까지
+        # 층위 2 단위 《七日》은 층위 3 경계를 건너뛰고 다음 층위 2 경계(九日) 앞까지
         assert by["七日"]["original_text"] == L0 + "\n" + L1[:K9]
-        # 층위 3 조각은 다음 경계(층위 2도 «같은 층위 이상»)에서 끝난다
+        # 층위 3 조각은 다음 경계(층위 2도 《같은 층위 이상》)에서 끝난다
         assert by["八日 조각"]["original_text"] == L0[K8:] + "\n" + L1[:K9]
         assert by["九日"]["original_text"] == L1[K9:] + "\n" + L2
         assert by["九日"]["source_refs"][0]["char_range"] == [len(L0) + 1 + K9, len(PAGE1)]
@@ -348,10 +348,10 @@ class TestEntityView:
 
 
 class TestRoles:
-    """역할(role)은 깊이(level)와 따로 산다 — «기사»가 2단에도 3단에도 오는 책이 있다(D-092 후속).
+    """역할(role)은 깊이(level)와 따로 산다 — 《기사》가 2단에도 3단에도 오는 책이 있다(D-092 후속).
 
     왜 시험하는가: 숫자에 뜻을 붙이면 다층 문집(集 > 卷 > 기사 > 협주)에서 기사가 3단으로
-    내려가는 순간 번역·주석의 단위가 조용히 «조각»이 된다.
+    내려가는 순간 번역·주석의 단위가 조용히 《조각》이 된다.
     """
 
     def test_new_boundary_keeps_only_known_roles(self):
@@ -551,7 +551,7 @@ class TestWorkIsGone:
         assert retired.exists()
         assert _json.loads(retired.read_text(encoding="utf-8"))["title"] == "옛 작품"
 
-    # 코어 스키마에서 «없앤 엔티티»를 가리키던 필드 이름. D-099에서 Work를 없앴는데
+    # 코어 스키마에서 《없앤 엔티티》를 가리키던 필드 이름. D-099에서 Work를 없앴는데
     # unit.schema.json의 required에 `work_id`가 2026-09-07까지 남아 있었다 — 그 스키마는
     # 어떤 저장 경로에서도 검증에 쓰이지 않아(단위는 파일이 아니다) 아무것도 빨간불을 켜지
     # 않았다. 엔티티를 또 없애면 여기에 이름을 보태면 된다.
@@ -577,7 +577,7 @@ class TestWorkIsGone:
     def test_no_core_schema_still_refers_to_a_removed_entity(self):
         """없앤 엔티티의 스키마 파일도, 그것을 가리키는 `<이름>_id`·`scope_<이름>`도 남지 않는다.
 
-        왜 test_doc_drift.py가 아니라 여기인가: 그 시험은 «셀 수 있는 수치»를 문서에서
+        왜 test_doc_drift.py가 아니라 여기인가: 그 시험은 《셀 수 있는 수치》를 문서에서
         정규식으로 찾아 코드 실측과 견주는 검사기(scripts/check_doc_drift.py)를 그대로
         부른다. 스키마의 모양은 수치가 아니라 이름이라 그 검사기 틀에 맞지 않고, D-099의
         회귀는 이 클래스가 맡고 있다.
@@ -603,7 +603,7 @@ class TestWorkIsGone:
         """경계 목록에서 만든 단위(읽기 보기)가 unit.schema.json에 맞는다.
 
         왜: create/update 경로는 단위를 경계로 바꿔 저장하므로 `_validate_entity`가
-        unit.schema.json을 열 일이 없다. 스키마가 «적어 둔 것»으로 남으면 D-099 뒤에도
+        unit.schema.json을 열 일이 없다. 스키마가 《적어 둔 것》으로 남으면 D-099 뒤에도
         `work_id`가 required에 남듯 조용히 어긋난다(D-101의 문제 의식). 여기서 실제
         보기를 스키마에 넣어 본다.
         """

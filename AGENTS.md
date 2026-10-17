@@ -60,7 +60,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 | Windows + paddlepaddle 3.x | OneDNN이 PIR 속성 변환 미지원 → `FLAGS_use_mkldnn=0` 회피 |
 | `torch`는 전용 인덱스(플랫폼 분기: Windows `pytorch-cu124`·Linux `pytorch-cu126`, 2026-08-20 실측) | CUDA 버전을 바꾸면 `[[tool.uv.index]]` URL도 함께 고쳐야 한다 |
 | `ndl-lab/ndlocr-lite` **master**에서 모델 받기 | 원본이 v1.2.0에서 PARSeq 셋을 바꿔(16px→24px, 파일명 변경) 셋이 404. 모델 URL은 **태그 1.1.3**에 고정(`src/ocr/ndlocr/__init__.py`). 古典籍-Lite는 이미 1.3.1 고정 |
-| `torch`(cu124) ↔ `paddlepaddle-gpu` **같은 프로세스** | 둘이 cuDNN 9 DLL을 따로 들고 온다(`torch/lib`, `nvidia/cudnn/bin`). 판이 다르면 먼저 뜬 쪽이 이기고 뒤쪽이 WinError 127. 앱은 torch(NDL Full)를 먼저 읽어 **PaddleOCR이 사용 불가**로 보인다(2026-09-02 실측). 해법은 프로세스 분리 — PaddleOCR을 자식 프로세스로 돌린다(D-091). 자식은 **.venv-gpu 파이썬 + torch import 차단(`CTB_PADDLE_BLOCK_TORCH`)으로 먼저 띄워 GPU**로 돌고, 안 뜨면 `start_server.bat`이 놓은 `CTB_PADDLE_PYTHON=.venv`(CPU)로 내려간다(2026-09-10 덧붙임, 조각 하나 5초 → 0.06초). 충돌은 «한 프로세스»이지 «GPU를 같이 쓰는 것»이 아니다. `doctor.bat`이 판정한다 |
+| `torch`(cu124) ↔ `paddlepaddle-gpu` **같은 프로세스** | 둘이 cuDNN 9 DLL을 따로 들고 온다(`torch/lib`, `nvidia/cudnn/bin`). 판이 다르면 먼저 뜬 쪽이 이기고 뒤쪽이 WinError 127. 앱은 torch(NDL Full)를 먼저 읽어 **PaddleOCR이 사용 불가**로 보인다(2026-09-02 실측). 해법은 프로세스 분리 — PaddleOCR을 자식 프로세스로 돌린다(D-091). 자식은 **.venv-gpu 파이썬 + torch import 차단(`CTB_PADDLE_BLOCK_TORCH`)으로 먼저 띄워 GPU**로 돌고, 안 뜨면 `start_server.bat`이 놓은 `CTB_PADDLE_PYTHON=.venv`(CPU)로 내려간다(2026-09-10 덧붙임, 조각 하나 5초 → 0.06초). 충돌은 《한 프로세스》이지 《GPU를 같이 쓰는 것》이 아니다. `doctor.bat`이 판정한다 |
 | `onnxruntime`(CPU판) ↔ `onnxruntime-gpu` | **같은 `onnxruntime` 패키지 디렉터리를 두 배포판이 제공** — 같이 두면 서로 덮어쓴다. `.venv-gpu`는 CPU판을 빼고 GPU판 1.24.4를 넣는다(user-guide 7-A.6-2). GPU판이면 ONNX 엔진 셋이 `ort_device()`로 cuda를 잡는다. **torch보다 onnxruntime을 먼저 쓰는 프로세스는 `preload_dlls`가 필요하다** — 안 하면 첫 세션이 조용히 CPU로 떨어진다(2026-09-10 실측). torch·ORT GPU판·paddle GPU판(워커)은 한 PC에서 충돌 없이 돈다 |
 | `opencv-contrib-python`(paddlex) ↔ `opencv-python-headless`(extras) | **같은 `cv2`를 두 배포판이 제공.** 한쪽을 지우면 공유 디렉터리가 사라져 남은 쪽까지 깨진다 — `module 'cv2' has no attribute 'IMREAD_COLOR'`. extras도 contrib판으로 통일했다 |
 
@@ -84,7 +84,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
    | `line_detector` | `detect_lines`·`_get_detector` |
    | `ndlkotenocr_engine`·`ndlkotenocr_full_engine` | `_process_detections`·`_match_lines_to_blocks`(2026-09-21에 `tests/test_ocr_kotenocr_contract.py`로 메웠다 — 그 전에는 `is_available()`뿐이었다) |
 
-   **주장에는 그것을 지키는 시험 이름을 붙인다.** 산문으로 «여기가 사각지대»라고 적으면 코드가
+   **주장에는 그것을 지키는 시험 이름을 붙인다.** 산문으로 《여기가 사각지대》라고 적으면 코드가
    바뀌어도 문장만 남는다(이 표도 그래서 두 달 동안 엉뚱한 곳을 가리켰다). 위 표가 거짓이 되면
    그 줄에 적힌 시험이 깨지도록 두는 것이 목표다.
 
@@ -126,16 +126,16 @@ src/app/
 
 ## 모듈 지도 — 표는 `docs/module-map.md`
 
-모듈마다 «무엇을 하고 무엇을 지키는가» 표(추출 모드·OCR 품질·판정 모델·말로 작업 지시·코어 스키마)는
+모듈마다 《무엇을 하고 무엇을 지키는가》 표(추출 모드·OCR 품질·판정 모델·말로 작업 지시·코어 스키마)는
 **`docs/module-map.md`**로 옮겼다(2026-10-11 — 매 세션 자동으로 읽히는 이 파일을 줄이려고). 그 모듈을
 고칠 때 그 표를 읽는다. 결정의 지금 결론은 **`docs/CHECKPOINTS.md`**. 아래는 모듈을 가로지르는 규칙이라 여기 둔다.
 
 - **사전은 지식이고 정책은 문헌의 것**: `strict`만 동치, `loose`·`script`는 힌트. 승인은 `documents/{doc_id}/variant_approvals.json`에만.
 - **Ollama 기본 비전 모델은 클라우드(`gemma4:cloud`)다**(D-114). 로컬 기본을 두면 처음 켠 PC가 9.6GB를 받기만 한다. 클라우드 기본은 목록에 있어도 `_pick_vision_model`이 한 번 불러 보고(로그인 없음·은퇴면 실패) 로컬 후보로 내려간다.
-- **Ollama 텍스트 호출은 답이 길면 문맥 창도 올린다**(`providers/ollama.py::_gen_options`, 2026-09-12). 기본 num_ctx 4,096이라 num_predict를 크게 줘도 «프롬프트 + 답»이 4,096을 넘는 순간 잘린다 — 사전형 주석이 매번 2,883토큰에서 끊겼다. 긴 JSON을 받는 호출은 잘린 답에서 완성된 항목만 건지는 파서도 둔다(`core.llm_json_items.recover_truncated_items`).
+- **Ollama 텍스트 호출은 답이 길면 문맥 창도 올린다**(`providers/ollama.py::_gen_options`, 2026-09-12). 기본 num_ctx 4,096이라 num_predict를 크게 줘도 《프롬프트 + 답》이 4,096을 넘는 순간 잘린다 — 사전형 주석이 매번 2,883토큰에서 끊겼다. 긴 JSON을 받는 호출은 잘린 답에서 완성된 항목만 건지는 파서도 둔다(`core.llm_json_items.recover_truncated_items`).
 - **사고(thinking)는 전역 스위치가 아니다**: 기본 끔(D-074). 정밀 판독과 사용자가 명시한 호출만 켠다. **다만 Ollama 프로바이더에는 폴백이 있다** — `response`가 비고 `thinking`만 찼을 때 그것을 본문으로 쓴다(`providers/ollama.py` 텍스트·스트리밍·비전 셋). 사고에 num_predict를 다 쓴 reasoning 모델의 방어책이고, 비전 경로는 `allow_thinking_fallback=False`로 끌 수 있다. 다른 세 프로바이더에는 없다. 한때 이 줄이 「폴백은 어디에도 없다」로 적혀 있었다(Codex 지적 2026-09-22 — 문서를 믿은 호출자가 사고문을 결과로 받는다).
 
-### Claude 세션에서 — «애매한 후보 판정해 줘» (D-137)
+### Claude 세션에서 — 《애매한 후보 판정해 줘》 (D-137)
 
 사용자가 편성 화면에서 「판정 모델로 고르기」를 돌린 뒤(또는 「애매한 후보 내보내기」를 한 번 누른 뒤) 이렇게 말하면:
 
@@ -178,10 +178,10 @@ src/app/
 | **L2 bbox를 쓸 때 배율은 L2의 `image_width`로 구한다**. 2.0 하드코딩 금지 | 스캔 PDF는 내장 이미지 해상도로 렌더하므로 쪽마다 배율이 다르다. 기록이 없는 옛 파일만 뷰포트×2.0(D-087) |
 | **화면에 넣는 파일명·OCR 원문은 이스케이프** | 드롭한 파일명이 문헌 제목이 되어 `innerHTML`로 들어간다(D-069) |
 | **로컬 서비스는 `127.0.0.1`로 부른다**. `localhost` 금지 | Windows는 `localhost`를 IPv6(::1)부터 시도한다. IPv4에만 뜬 서비스(Ollama)면 제한 시간을 다 쓰고서야 IPv4로 넘어가 **호출마다 2초**를 버린다(실측 2.11s vs 0.04s, D-109) |
-| **검증용 서버는 `CTB_CONFIG_DIR=<임시 폴더>`로 띄운다** | 설정 파일(`~/.classical-text-browser/config.json`)은 하나라, 복사본 서고로 띄운 서버가 «마지막 서고»를 덮어 아이콘으로 켠 앱이 임시 폴더를 열었다(2026-09-10). LLM 사용 기록도 서고가 없으면 같은 폴더로 간다(`usage_tracker.default_usage_log_path`) — pytest는 `tests/conftest.py`가 이 변수를 임시 폴더로 돌리고, 세션 맨 뒤 테스트가 홈 파일 크기가 변하지 않았는지 잰다. 서고 없이 `LlmConfig()`로 도는 라우터 테스트가 mock 응답 2,127행을 홈 기록에 섞었다(2026-09-10 확인) |
-| **빠른 시험은 바깥 네트워크에 닿지 않는다** — 실제 사이트·API가 필요한 시험은 `@pytest.mark.network`(그리고 `slow`) | 이 PC에는 실제 LLM 키가 있다. 가짜 라우터를 빠뜨린 시험이 «200 또는 400»을 둘 다 통과로 받으며 매 verify마다 실제 LLM을 불렀다(2026-10-11, 5.2초). `tests/conftest.py`가 표지 없는 시험의 바깥 소켓 연결을 막는다(로컬 127.0.0.1은 허용 — **단 Ollama 11434·OAuth 프록시 10531~10540은 로컬이어도 막는다**, 그 데몬이 바깥으로 넘겨 부르므로. 2026-10-11) |
+| **검증용 서버는 `CTB_CONFIG_DIR=<임시 폴더>`로 띄운다** | 설정 파일(`~/.classical-text-browser/config.json`)은 하나라, 복사본 서고로 띄운 서버가 《마지막 서고》를 덮어 아이콘으로 켠 앱이 임시 폴더를 열었다(2026-09-10). LLM 사용 기록도 서고가 없으면 같은 폴더로 간다(`usage_tracker.default_usage_log_path`) — pytest는 `tests/conftest.py`가 이 변수를 임시 폴더로 돌리고, 세션 맨 뒤 테스트가 홈 파일 크기가 변하지 않았는지 잰다. 서고 없이 `LlmConfig()`로 도는 라우터 테스트가 mock 응답 2,127행을 홈 기록에 섞었다(2026-09-10 확인) |
+| **빠른 시험은 바깥 네트워크에 닿지 않는다** — 실제 사이트·API가 필요한 시험은 `@pytest.mark.network`(그리고 `slow`) | 이 PC에는 실제 LLM 키가 있다. 가짜 라우터를 빠뜨린 시험이 《200 또는 400》을 둘 다 통과로 받으며 매 verify마다 실제 LLM을 불렀다(2026-10-11, 5.2초). `tests/conftest.py`가 표지 없는 시험의 바깥 소켓 연결을 막는다(로컬 127.0.0.1은 허용 — **단 Ollama 11434·OAuth 프록시 10531~10540은 로컬이어도 막는다**, 그 데몬이 바깥으로 넘겨 부르므로. 2026-10-11) |
 | **`.bat` 파일은 ASCII만** (주석도 영어) | `chcp 65001`의 cmd가 다중바이트 줄에서 위치를 잘못 세어 뒤쪽 줄 중간부터 읽는다. 새 콘솔에서만 재현(maintenance §1.6) |
-| **배포되는 진입점은 맨 앞에서 `core.console.force_utf8_console()`** | 한국어 Windows 콘솔은 cp949다. 한글은 있지만 `—`·`«»`·`✓`는 **없어** 그 글자를 `print`하면 즉사한다. 이 PC는 `PYTHONUTF8=1`이 박혀 있어 **겪지 않는다** — 「내 PC에서 잘 돌았다」가 증거가 못 되는 자리다. 셋을 배포한다: `warmup_paddle.py`·`cli/__main__.py`·`app/__main__.py`(+`ctb_setup.py`는 홀로 도는 exe라 직접 품는다). `test_doc_drift.py`가 본다 |
+| **배포되는 진입점은 맨 앞에서 `core.console.force_utf8_console()`** | 한국어 Windows 콘솔은 cp949다. 한글은 있지만 `—`·`《》`·`✓`는 **없어** 그 글자를 `print`하면 즉사한다. 이 PC는 `PYTHONUTF8=1`이 박혀 있어 **겪지 않는다** — 「내 PC에서 잘 돌았다」가 증거가 못 되는 자리다. 셋을 배포한다: `warmup_paddle.py`·`cli/__main__.py`·`app/__main__.py`(+`ctb_setup.py`는 홀로 도는 exe라 직접 품는다). `test_doc_drift.py`가 본다 |
 | **`.ps1`은 UTF-8 BOM + CRLF** | BOM이 없으면 PowerShell 5.1이 ANSI로 읽어 한글이 깨진다. **구문은 멀쩡해 그냥 돈다** — 눈으로 보기 전엔 모른다. `.gitattributes`가 CRLF를, `test_doc_drift.py`가 BOM을 못박는다 |
 | **LLM을 기다린 뒤 저장하는 라우트는 파일을 다시 읽어 그 위에 병합한다** | 아까 읽은 데이터를 저장하면 기다리는 동안 들어온 수동 주석이 오류 없이 사라진다(D-127). 해석 저장소 L5~L7 저장도 `write_json_atomic()`이다 |
 | **LLM 답의 항목 목록은 `core.llm_json_items.parse_llm_items()`로 꺼낸다** | 기형 항목(null·문자열) 거부·잘린 답 복구·`status`(ok·recovered·no_json)를 한 곳에서. 기능마다 파서를 복제하면 한쪽만 고쳐진다(D-127) |
@@ -201,11 +201,11 @@ src/app/
 - OcrResult: 원본 저장소 L2의 OCR 인식 결과
 - 단위(unit): 코어 스키마의 해석용 텍스트 단위. **v1.3(D-092)부터는 저장하지 않고** 경계 목록(`core/boundaries.py`)에서 만든 읽기 보기다. 단위의 id = 시작 경계의 id. 단위는 `source_ref`로 원본을 추적한다.
 - 편성(composition): 경계를 정하는 일. **원본 저장소의 것이다**(D-097) — 해석 저장소는 그것을 참조만 하고 표점·현토·번역·주석을 담당한다.
-  사이드바 「내용」 트리는 **문헌 > 권 > 단위**다(D-098). 저작 묶음은 층위 1의 «묶음» 경계가 나타낸다 — Work 엔티티는 D-099에서 없앴다.
+  사이드바 「내용」 트리는 **문헌 > 권 > 단위**다(D-098). 저작 묶음은 층위 1의 《묶음》 경계가 나타낸다 — Work 엔티티는 D-099에서 없앴다.
   코드·API·스키마의 이름도 `unit`이다(D-093 — v1.2까지는 `text_block`·TextBlock). 저장 파일이 단위를 가리키는 필드는 아직 `block_id`다(B-003)
 - 「Block」이라고만 쓰지 말고 항상 위 세 이름 중 하나를 사용할 것
-- 해석 편집기 다섯(표점·현토·번역·주석·인용)의 «지금 단위»는 사이드바 「내용」 트리가 정한다(D-096).
-  트리가 `unit-selected` 이벤트를 쏘고 감춰 둔 `<select>`에 값을 넣는다 — 편집기의 기존 «고르면 불러온다» 길을 그대로 쓴다
+- 해석 편집기 다섯(표점·현토·번역·주석·인용)의 《지금 단위》는 사이드바 「내용」 트리가 정한다(D-096).
+  트리가 `unit-selected` 이벤트를 쏘고 감춰 둔 `<select>`에 값을 넣는다 — 편집기의 기존 《고르면 불러온다》 길을 그대로 쓴다
 
 ## 작업 방식: CLI를 적극 활용할 것
 - 코드를 작성한 뒤 반드시 실행해서 확인하라. 작성만 하고 검증 없이 넘어가지 마라.
@@ -219,7 +219,7 @@ src/app/
 1. **추측하지 말고 원본 코드를 읽는다.** 이 문서의 표·요약은 위치를 좁혀 줄 뿐 근거가 아니다(기능 맵은 추후).
 2. **완료 보고에는 영수증을 붙인다** — `uv run python scripts/receipt.py`가 빠른 계층 pytest(`-m "not slow"`)·ruff·
    `check_doc_drift`·금지 패턴(`tests/test_forbidden_patterns.py`)을 돌려 `logs/receipts/<UTC>_verify.json`을 쓴다.
-   그 경로와 단계별 요약을 보고에 옮긴다. 영수증 없는 «완료»는 완료가 아니다.
+   그 경로와 단계별 요약을 보고에 옮긴다. 영수증 없는 《완료》는 완료가 아니다.
 3. **판정자가 없는 작업은 제안만 한다** — 판독 확정(L4)·이체자 승인·편성 경계 확정·시각 품질은 사람이 정한다.
 4. **산문 규칙이 시험으로 옮겨지면 산문을 줄인다.** 위 「파일 다루기」 표의 네 줄(write_json_atomic·
    get_pixmap·glob pdf·localhost)은 `tests/test_forbidden_patterns.py`가 지킨다 — 새 규칙도 시험이 먼저다.
@@ -245,10 +245,10 @@ src/app/
   `tests/test_entity_manager_js.py`(D-128)·`tests/test_structure_jev.py`·
   `tests/test_read_path_writes.py`(화면을 열기만 해도 쓰던 것, 2026-09-30)·
   `tests/test_correction_saves.py`(자유 편집 교정이 글자 교정 보기에 안 보이던 것·확정본을 다시 쓰면 교정이 어긋나던 것, 2026-10-02)·
-  `tests/test_composition_apply_plan_js.py`(편성 ③ «바뀐 것»과 「적용」이 다른 집합을 세던 것, 2026-10-05)·
+  `tests/test_composition_apply_plan_js.py`(편성 ③ 《바뀐 것》과 「적용」이 다른 집합을 세던 것, 2026-10-05)·
   `tests/test_sweep_20261011.py`(2026-10-11 전수 결함 B-012~B-077과 릴리스 리뷰 B-078·시험 정리 B-079의 회귀 — 인용·현토·번역 좌표, 번역 집계, 시작 행 옮기기,
   사전 활성화, 백업·.env·휴지통 데이터 손실, 이스케이프), **CI 없음.**
-  화면 «마크업»을 읽는 것도 둘이다 — `tests/test_ui_reachability.py`(조작 단추에 사람이
+  화면 《마크업》을 읽는 것도 둘이다 — `tests/test_ui_reachability.py`(조작 단추에 사람이
   닿을 수 있는가, B-008)와 `tests/test_connectome.py`(화면이 그 라우트를 부르는가).
   (2026-10-05 재실측. 2026-07-26 v1.2.0 감사 때 직전 대비 프론트가 줄어든 것은
   D-069에서 죽은 코드 약 1,000줄을 걷어냈기 때문이다.)
@@ -279,15 +279,15 @@ src/app/
    `?v=` 쿼리에 의존하지 말 것.
 12. **추출 패널에서 탭을 열 때는 `_switchMode()`를 직접 부르지 말 것**(D-057) —
    탭 하이라이트 처리가 그 함수가 아니라 `initModeBar()`의 클릭 핸들러 안에 있다.
-   직접 부르면 화면은 바뀌는데 탭 표시가 그대로여서 «지금 어느 탭인가»가 어긋난다.
+   직접 부르면 화면은 바뀌는데 탭 표시가 그대로여서 《지금 어느 탭인가》가 어긋난다.
    `.mode-tab[data-mode="..."]`를 찾아 `.click()`하면 기존 경로를 그대로 탄다.
    또한 검수 목록의 확인 기록은 **localStorage**(`ctb.reviewed.<doc>.<part>`)에
    글자 수와 함께 저장된다 — 다시 OCR로 내용이 바뀌면 확인이 저절로 풀리게 하기 위함.
-11. **배치 OCR의 «건너뛴다»는 두 조건이다**(D-057) — L2 결과가 있고 **그 결과가 지금
+11. **배치 OCR의 《건너뛴다》는 두 조건이다**(D-057) — L2 결과가 있고 **그 결과가 지금
    L3와 맞을 때**만 건너뛴다. `ocr/layout_staleness.py`가 L2의 `layout_block_id` 집합과
    L3의 `block_id` 집합을 비교한다. 스키마에 타임스탬프가 없어서 이 방식을 쓴다
    (`layout_page`·`ocr_page` 둘 다 `additionalProperties: false`). 판정이 애매하면
-   «안 바뀌었다»로 둔다 — 오판하면 쪽마다 LLM 호출이 다시 나가기 때문이다.
+   《안 바뀌었다》로 둔다 — 오판하면 쪽마다 LLM 호출이 다시 나가기 때문이다.
 5. 서지 파서(`src/parsers/` korcis·archives_jp·kyujanggak·kostma·jsg·ndl)는 외부
    사이트 HTML 구조 의존 — 사이트 개편 시 침묵 파손. 테스트가 실제 네트워크를 안 타면 못 잡음.
 6. `llm_usage_log.jsonl`은 서고 루트에, 서고 미설정 시 `~/.classical-text-browser/`에 기록 —
@@ -297,9 +297,9 @@ src/app/
 | 순위 | 경로 | 위험 |
 |---|---|---|
 | 1 | `src/app/_state.py` (약 930줄) | 전역 상태+프롬프트+캐시+JSON 파서 응집 |
-| 2 | `src/app/static/` 프론트 모놀리스 | CI 없음. 화면 JS를 node로 돌리는 시험은 위 «실제 하는 일»의 몇 파일뿐이고 index.html(약 5.1천 줄) 대부분은 시험 밖이다 — 정식 프론트 스모크 테스트는 미결(D-053 착수 조건). 2026-10-11 전수 검토의 동작 결함(B-012·B-016·B-018·B-019 등) 다수가 여기서 나왔다 |
+| 2 | `src/app/static/` 프론트 모놀리스 | CI 없음. 화면 JS를 node로 돌리는 시험은 위 《실제 하는 일》의 몇 파일뿐이고 index.html(약 5.1천 줄) 대부분은 시험 밖이다 — 정식 프론트 스모크 테스트는 미결(D-053 착수 조건). 2026-10-11 전수 검토의 동작 결함(B-012·B-016·B-018·B-019 등) 다수가 여기서 나왔다 |
 | 3 | `start_server.bat` | 암묵 부수효과 3종(프록시·Docker·포트 스캔), 실패 시 원인 추적 곤란 |
 | 4 | `src/parsers/` | 외부 사이트 의존 침묵 파손. 시험 픽스처가 실제 응답에 없는 키를 넣어 결함을 가린 사례가 있다(KORCIS 판식정보) |
 | 6 | 봉인된 「외부 파일 → 새 문헌」 가져오기 | 존재를 모르면 중복 재구현, 알면 진입점 복원만으로 재개(D-037). 백엔드는 살아 있고 `_openHwpImportDialog()` 호출자가 0건일 뿐이다. **추출 모드의 「텍스트 바로 가져오기」(`/text-import/from-text-layer`)와 혼동하지 말 것** — 그쪽은 정상 동작하는 별개 경로다 |
 | 7 | **합성 입력만으로 검증하는 습관** | D-068이 여기서 났다 — 시험용 PDF를 PyMuPDF로 만들어 써서, 실제 스캔본에만 있는 좌표 변환을 자동 테스트가 영영 만나지 못했다. 파일 형식·외부 엔진을 다루는 코드는 **실물로 한 번 돌려야** 한다 |
-| 8 | **강독 결과 JSON을 저장 형식으로 오해하기** (D-131) | `core/reading_ingest.py`가 받는 JSON은 **LLM 답 형식**이지 저장 스키마가 아니다 — 들이면 L4·편성 경계·L6·L7로 흩어지고 노트는 매번 층에서 조립한다. 노트 형식이 바뀌면 `export/reading_note.render_*`만 고친다. «노트를 파일로 두자»는 새 스키마는 사용자가 한 번 거절했다(2026-09-30). 장 목록은 두 곳에 있다: 원문 내보내기는 `read_plan/{권}.json`의 chapters, 강독 노트는 층위 1 경계. 들이기는 답의 chapter 제목이 계획의 장 제목과 **같을 때만** 계획의 쪽을 빌려 장 경계를 세우고(다르면 답의 가장 앞 쪽), 계획의 chapters는 고치지 않는다 — 제목을 다르게 적은 답은 두 장 목록을 어긋나게 한다 |
+| 8 | **강독 결과 JSON을 저장 형식으로 오해하기** (D-131) | `core/reading_ingest.py`가 받는 JSON은 **LLM 답 형식**이지 저장 스키마가 아니다 — 들이면 L4·편성 경계·L6·L7로 흩어지고 노트는 매번 층에서 조립한다. 노트 형식이 바뀌면 `export/reading_note.render_*`만 고친다. 《노트를 파일로 두자》는 새 스키마는 사용자가 한 번 거절했다(2026-09-30). 장 목록은 두 곳에 있다: 원문 내보내기는 `read_plan/{권}.json`의 chapters, 강독 노트는 층위 1 경계. 들이기는 답의 chapter 제목이 계획의 장 제목과 **같을 때만** 계획의 쪽을 빌려 장 경계를 세우고(다르면 답의 가장 앞 쪽), 계획의 chapters는 고치지 않는다 — 제목을 다르게 적은 답은 두 장 목록을 어긋나게 한다 |

@@ -4,7 +4,7 @@
   `_parse_result`의 v3 감지 조건이 `not isinstance(raw_result, list)`였다.
   그런데 PaddleOCR 3.x의 predict()는 **이미지별 결과의 리스트**를 돌려준다.
   그래서 v3 분기가 한 번도 실행되지 않고 v2 파서로 흘러, dict를 순회하며
-  키(str)를 item으로 받아 «구조 이상 — 건너뜀» 경고만 남기고 0줄을 돌려줬다.
+  키(str)를 item으로 받아 《구조 이상 — 건너뜀》 경고만 남기고 0줄을 돌려줬다.
 
   예외가 안 나고 로그 경고만 남아서 상위에서는 「OCR 실패」로만 보였다.
   게다가 기본 엔진이 llm_vision이라 이 경로는 `--engine paddleocr`를 명시할

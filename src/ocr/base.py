@@ -259,7 +259,7 @@ class BaseOcrEngine(ABC):
         """엔진 정보를 딕셔너리로 반환. API 응답용.
 
         엔진이 `_unavailable_reason`을 남겼으면 `unavailable_reason`으로 함께 내보낸다.
-        왜: 드롭다운의 «(사용 불가)»만으로는 사용자가 무엇을 고쳐야 하는지 알 수 없다.
+        왜: 드롭다운의 《(사용 불가)》만으로는 사용자가 무엇을 고쳐야 하는지 알 수 없다.
         """
         info = {
             "engine_id": self.engine_id,

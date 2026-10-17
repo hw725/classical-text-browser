@@ -4,7 +4,7 @@
 사용법:
     uv run python scripts/receipt.py
 
-하는 일 (순서대로, 앞 단계가 실패해도 뒤 단계는 돈다 — 영수증은 «전부»를 적어야 한다):
+하는 일 (순서대로, 앞 단계가 실패해도 뒤 단계는 돈다 — 영수증은 《전부》를 적어야 한다):
     1. fast_tests        — `pytest -m "not slow"` (빠른 계층, slow 마커는 pyproject에 등록)
     2. ruff              — `ruff check src/ tests/`
     3. doc_drift         — `scripts/check_doc_drift.py`
@@ -13,12 +13,12 @@
 결과: `logs/receipts/<UTC>_verify.json` 에 {git_rev, git_dirty, 단계별 exit·수·초}.
 하나라도 실패하면 종료 코드 1.
 
-왜 이것이 필요한가 — 에이전트의 «다 됐다»는 증거가 아니다. 완료 보고에는 이 파일의
-경로와 요약을 붙인다(AGENTS.md «에이전트 작업 계약»). `logs/`는 .gitignore 대상이라
+왜 이것이 필요한가 — 에이전트의 《다 됐다》는 증거가 아니다. 완료 보고에는 이 파일의
+경로와 요약을 붙인다(AGENTS.md 《에이전트 작업 계약》). `logs/`는 .gitignore 대상이라
 영수증은 추적하지 않는다 — 대신 실행 끝에 경로를 찍으니 보고에 그 경로를 옮긴다.
 
 사용자 설정을 건드리지 않는다: 모든 단계를 `CTB_CONFIG_DIR=<임시 폴더>`로 돌린다
-(AGENTS.md «검증용 서버는 CTB_CONFIG_DIR», 2026-09-10 설정 오염 사고). 외부 LLM은
+(AGENTS.md 《검증용 서버는 CTB_CONFIG_DIR》, 2026-09-10 설정 오염 사고). 외부 LLM은
 부르지 않는다 — 빠른 계층 시험은 가짜 공급자만 쓴다.
 """
 
@@ -33,7 +33,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-# CJK Text Contract E3 — 한국어 Windows 콘솔(cp949)에서 «—»·«✓»를 print 하면 즉사한다.
+# CJK Text Contract E3 — 한국어 Windows 콘솔(cp949)에서 《—》·《✓》를 print 하면 즉사한다.
 from core.console import force_utf8_console
 
 force_utf8_console()
@@ -67,7 +67,7 @@ def _run(cmd: list[str], env: dict[str, str]) -> tuple[int | str, str, float]:
 
 
 def _pytest_counts(out: str) -> dict[str, int]:
-    """pytest 요약 줄(마지막 «N passed, M deselected in Xs»)에서 건수를 꺼낸다."""
+    """pytest 요약 줄(마지막 《N passed, M deselected in Xs》)에서 건수를 꺼낸다."""
     summary = ""
     for line in reversed(out.splitlines()):
         if _PYTEST_COUNT.search(line):
@@ -82,9 +82,9 @@ def _pytest_counts(out: str) -> dict[str, int]:
 def _step_ok(name: str, code: int | str, counts: dict[str, int] | None) -> bool:
     """단계 통과 판정. 입력: 단계 이름, 종료 코드, pytest 건수(pytest 단계만).
 
-    pytest 단계는 종료 코드 0만으로 통과가 아니다 — «passed가 1건 이상»이어야 한다.
+    pytest 단계는 종료 코드 0만으로 통과가 아니다 — 《passed가 1건 이상》이어야 한다.
     수집만 하고 끝나거나(`--collect-only`) 전부 skipped여도 pytest는 0으로 끝나기 때문이다
-    (Codex 교차 리뷰 2026-10-01). 그 실행의 영수증이 «통과»로 남으면 시험이 돌지 않은 것을
+    (Codex 교차 리뷰 2026-10-01). 그 실행의 영수증이 《통과》로 남으면 시험이 돌지 않은 것을
     증거로 삼게 된다.
     """
     if code != 0:
@@ -132,8 +132,8 @@ def main() -> int:
     results: list[dict] = []
     with tempfile.TemporaryDirectory(prefix="ctb-receipt-cfg-") as cfg:
         env = dict(os.environ, CTB_CONFIG_DIR=cfg, PYTHONUTF8="1")
-        # 부모 셸의 PYTEST_ADDOPTS(예: --collect-only, -k)가 들어오면 영수증이 «무엇을
-        # 돌렸는가»를 거짓으로 적는다. 영수증의 명령은 위 목록 그대로여야 한다.
+        # 부모 셸의 PYTEST_ADDOPTS(예: --collect-only, -k)가 들어오면 영수증이 《무엇을
+        # 돌렸는가》를 거짓으로 적는다. 영수증의 명령은 위 목록 그대로여야 한다.
         env.pop("PYTEST_ADDOPTS", None)
         for name, cmd in steps:
             print(f"[receipt] {name} …", flush=True)

@@ -1,4 +1,4 @@
-"""Jev(판정 모델)로 «글이 시작하는 행»을 고르는 길 — 가짜 클라이언트로 잰다.
+"""Jev(판정 모델)로 《글이 시작하는 행》을 고르는 길 — 가짜 클라이언트로 잰다.
 
 실제 호출은 하지 않는다(돈이 들고, 답이 바뀌면 테스트가 흔들린다). 여기서 지키는 것은 셋이다.
 ① 코드가 행을 정해서 묻는다 — 모델이 행을 지어낼 자리가 형식에 없다.
@@ -82,7 +82,7 @@ def test_bands_decide_and_scores_are_kept_for_rescoring():
 
 
 def test_band_edges_belong_to_the_confident_bands():
-    """임계값 자체는 확신 대역이다(계약 표의 «이상»·«이하»).
+    """임계값 자체는 확신 대역이다(계약 표의 《이상》·《이하》).
 
     llm_pipeline `jev_sieve.band()`와 같은 규칙이다.
     """
@@ -117,7 +117,7 @@ def test_band_is_decided_before_rounding():
     """대역은 반올림 전 확률로 정한다 — nouls의 4자리 값으로 다시 판정하면 뒤집힌다.
 
     Codex 최종 리뷰(2026-09-27)가 찾은 자리: 0.84996은 escalate인데 0.85로 반올림돼 미리 체크됐고,
-    0.50004는 escalate인데 0.5로 반올림돼 «문턱 아래» 토글로 갔다. 대역 셈과 후보도 어긋났다.
+    0.50004는 escalate인데 0.5로 반올림돼 《문턱 아래》 토글로 갔다. 대역 셈과 후보도 어긋났다.
     """
     lines = _lines(2)
     scores = {line_id(lines[0]): 0.84996, line_id(lines[1]): 0.50004}
@@ -128,7 +128,7 @@ def test_band_is_decided_before_rounding():
 
 
 def test_non_finite_answers_are_not_answers():
-    """NaN·무한은 «답하지 못함»이다 — 대역 셈을 깨거나 응답 JSON에 NaN을 싣지 않는다."""
+    """NaN·무한은 《답하지 못함》이다 — 대역 셈을 깨거나 응답 JSON에 NaN을 싣지 않는다."""
     lines = _lines(3)
     scores = {line_id(lines[0]): float("nan"), line_id(lines[1]): float("inf"),
               line_id(lines[2]): 0.9}
@@ -166,7 +166,7 @@ def test_gate_refuses_before_the_network():
 
 
 def test_noul_reads_only_numbers():
-    """True는 파이썬에서 int다 — 확률로 세면 «예»가 1.0이 되어 조용히 통과한다."""
+    """True는 파이썬에서 int다 — 확률로 세면 《예》가 1.0이 되어 조용히 통과한다."""
     assert noul({"noul": 0.42}) == 0.42
     assert noul({"noul": True}) is None
     assert noul({"noul": "0.9"}) is None
@@ -212,12 +212,12 @@ def test_toc_picks_below_the_threshold_stand_unchecked():
 
     운양집 실측(2026-09-21): 0.8 이상 14건은 제목이 그 행에서 실제로 시작했고 불일치가 0,
     0.8 미만 11건 중 8건이 엉뚱한 행이었다 — 그 8건은 자기 검증이 떨어뜨린다. 예전에는 문턱 아래를
-    응답에 싣지 않았는데 docstring은 «버리지 않는다»고 적고 있었다(2026-09-27 감사).
+    응답에 싣지 않았는데 docstring은 《버리지 않는다》고 적고 있었다(2026-09-27 감사).
     """
     from core.structure_llm import TOC_JEV_REASON, toc_picks_to_proposals
 
     entries = [_Entry("擊磬集", level=2), _Entry("第一卷", level=1)]
-    # sim은 «고른 행에서 제목이 시작하는가»(match_toc_entries_jev가 늘 싣는다). 픽스처가
+    # sim은 《고른 행에서 제목이 시작하는가》(match_toc_entries_jev가 늘 싣는다). 픽스처가
     # 이것을 빠뜨리면 실제 답과 다른 모양이 되어, 시험은 초록인데 코드는 다른 일을 한다.
     picks = [
         {"entry": 0, "title": "擊磬集", "page": 14, "line_index": 7, "prob": 0.97, "sim": 1.0},
@@ -287,9 +287,9 @@ def test_without_a_toc_the_levels_stay_as_they_are():
 
 
 def test_toc_matching_refuses_when_nothing_fits():
-    """본문에 없는 항목에 «없음»을 고를 수 있어야 한다 — 없는 것을 고르게 하면 지어내기다.
+    """본문에 없는 항목에 《없음》을 고를 수 있어야 한다 — 없는 것을 고르게 하면 지어내기다.
 
-    운양집 실측: 본문에 글자가 없는 75항목 중 71개(95%)가 «없음»이었고, 잘못 고른 4건은
+    운양집 실측: 본문에 글자가 없는 75항목 중 71개(95%)가 《없음》이었고, 잘못 고른 4건은
     전부 확률 0.73 이하라 문턱 0.8에서 사라졌다.
     """
     from core.segmentation import Line
@@ -317,7 +317,7 @@ def test_toc_matching_refuses_when_nothing_fits():
 
 
 def test_toc_matching_ignores_an_answer_that_is_not_one_of_the_choices():
-    """모델이 정해 둔 선택지가 아닌 것을 말하면 코드가 «없음»으로 되돌린다."""
+    """모델이 정해 둔 선택지가 아닌 것을 말하면 코드가 《없음》으로 되돌린다."""
     from core.segmentation import Line
     from core.toc import match_toc_entries_jev
 
@@ -371,8 +371,8 @@ def test_screen_asks_the_judge_engine_and_keeps_the_answer(tmp_path):
     got = run_js(tmp_path, "composition-editor.js", names, setup, body)
     assert got["body"]["engine"] == "jev" and got["body"]["part_id"] == "vol1"
     assert "structure/llm" in got["url"]  # 라우트를 늘리지 않았다 — 같은 자리에 engine만 더했다
-    # **모달의 «모델» 고름을 보내지 않는다.** Jev는 생성 모델이 아니라 그 드롭다운의 대상이
-    # 아니다(D-129 «버린 것»). 보내면 서버가 무시하고, 사용자는 고른 모델이 돈 줄 안다 —
+    # **모달의 《모델》 고름을 보내지 않는다.** Jev는 생성 모델이 아니라 그 드롭다운의 대상이
+    # 아니다(D-129 《버린 것》). 보내면 서버가 무시하고, 사용자는 고른 모델이 돈 줄 안다 —
     # 화면 툴팁도 그래서 「이 고름과 무관하다」로 적어 두었다(2026-09-22).
     assert "force_provider" not in got["body"] and "force_model" not in got["body"]
     assert got["kept"] == 1
@@ -380,7 +380,7 @@ def test_screen_asks_the_judge_engine_and_keeps_the_answer(tmp_path):
 
 
 def test_screen_treats_judge_places_as_model_places(tmp_path):
-    """③의 «모델이 가리킨 자리»에 판정 모델·목차 대조도 들어간다(배지·정렬이 그 판정을 쓴다)."""
+    """③의 《모델이 가리킨 자리》에 판정 모델·목차 대조도 들어간다(배지·정렬이 그 판정을 쓴다)."""
     from tests.js_harness import run_js
 
     body = """
@@ -396,7 +396,7 @@ def test_screen_treats_judge_places_as_model_places(tmp_path):
 
 
 def test_screen_ranks_model_candidates_by_probability(tmp_path):
-    """«상위 몇 개»는 확률 내림차순으로 자른다. 확률이 없는 규칙 후보는 순위에 들어가지 않는다."""
+    """《상위 몇 개》는 확률 내림차순으로 자른다. 확률이 없는 규칙 후보는 순위에 들어가지 않는다."""
     from tests.js_harness import run_js
 
     body = """
@@ -413,7 +413,7 @@ def test_screen_ranks_model_candidates_by_probability(tmp_path):
 
 
 def test_screen_tells_when_the_two_paths_disagree(tmp_path):
-    """어긋남 줄은 «모름»의 표시다 — 많이 다를 때만 표본을 보라고 하고, 아무것도 바꾸지 않는다."""
+    """어긋남 줄은 《모름》의 표시다 — 많이 다를 때만 표본을 보라고 하고, 아무것도 바꾸지 않는다."""
     from tests.js_harness import run_js
 
     setup = """
@@ -449,7 +449,7 @@ def test_screen_tells_when_the_two_paths_disagree(tmp_path):
 def test_threshold_is_derived_from_this_book_not_a_constant():
     """문턱은 이 책의 답에서 뽑는다 — 자기 검증이 깨지는 직전에서 자른다.
 
-    자기 검증은 «고른 행에서 제목이 실제로 시작하는가»이고 코드가 공짜로 확인한다.
+    자기 검증은 《고른 행에서 제목이 실제로 시작하는가》이고 코드가 공짜로 확인한다.
 
     운양집 1책 실측(2026-09-21)을 줄여 옮긴 모양이다: 0.94 위는 전부 맞고 0.77부터 틀리기
     시작했다. 상수 0.8이 들었던 것은 그 사이가 비어 있었기 때문이지 0.8이 특별해서가 아니다.
@@ -486,10 +486,10 @@ def test_threshold_keeps_everything_when_nothing_fails_the_self_check():
     assert how["how"] == "all_pass" and value == picks[-1]["prob"]
 
 
-# ── 반대 배치 — «그 성질이 성립하는 유일한 배치»를 고른 것은 아닌가 ────────────
+# ── 반대 배치 — 《그 성질이 성립하는 유일한 배치》를 고른 것은 아닌가 ────────────
 # 2026-09-21 D-128 구현 세션의 지적: 픽스처가 우연히 성질이 성립하는 배치만 고르고
 # 독스트링이 그것을 코드의 성질이라고 적으면, 시험은 초록인데 주장은 거짓이다.
-# 그래서 «도출이 상수보다 나은 이유»가 실제로 걸리는 배치들을 함께 잰다.
+# 그래서 《도출이 상수보다 나은 이유》가 실제로 걸리는 배치들을 함께 잰다.
 def test_threshold_finds_a_low_cliff_where_the_constant_keeps_nothing():
     """절벽이 0.55에 있는 책 — 고정 0.8은 **하나도 못 건진다**. 도출이 필요한 진짜 이유다."""
     from core.structure_llm import derive_toc_threshold, toc_picks_to_proposals
@@ -551,11 +551,11 @@ def test_self_check_gate_holds_even_when_the_threshold_falls_back():
 
 
 def test_a_pick_without_a_self_check_value_is_not_stood_up():
-    """`sim`이 없는 답은 «검증할 수 없는 답»이므로 세우지 않는다.
+    """`sim`이 없는 답은 《검증할 수 없는 답》이므로 세우지 않는다.
 
     실제 경로(`match_toc_entries_jev`)는 늘 `sim`을 싣는다. 다른 생산자가 빠뜨리면 조용히
     통과시키는 대신 조용히 빠지는데, **둘 중에는 뒤가 낫다** — 검증 못 한 자리를 경계 후보로
-    세우면 사람이 «코드가 확인한 것»으로 읽는다. 이 시험은 그 선택을 못 박아 둔다.
+    세우면 사람이 《코드가 확인한 것》으로 읽는다. 이 시험은 그 선택을 못 박아 둔다.
     """
     from core.structure_llm import toc_picks_to_proposals
 
@@ -569,7 +569,7 @@ def test_a_pick_without_a_self_check_value_is_not_stood_up():
 def test_screen_keeps_rule_places_when_the_model_answers(tmp_path):
     """**모델의 답은 규칙 후보를 거르지 않는다 — 합집합이다.**
 
-    이 설계의 핵심 결정(D-129 1항)이고, 측정이 강제한 것이다: 천진담초에서는 «규칙 ∩ 모델»이
+    이 설계의 핵심 결정(D-129 1항)이고, 측정이 강제한 것이다: 천진담초에서는 《규칙 ∩ 모델》이
     가장 좋았지만 운양집에서 같은 구성은 규칙의 재현을 그대로 물려받아 0.880 → 0.176으로
     무너졌다. 규칙 후보로 거르면 **규칙이 못 보는 책에서는 모델도 함께 눈이 먼다.**
 
@@ -577,8 +577,8 @@ def test_screen_keeps_rule_places_when_the_model_answers(tmp_path):
     시험이 없었다 — D-129를 적으며 「이 주장을 무엇이 지키는가」를 묻다가 드러났다. 지금
     이 시험은 이렇게 갈린다:
 
-    - 합치기를 «교집합»으로 바꾸면(모델이 가리키지 않은 규칙 후보를 버림) → **빨간불**
-    - 합치기를 «모델 답으로 갈아 끼우기»로 바꾸면 → **빨간불**
+    - 합치기를 《교집합》으로 바꾸면(모델이 가리키지 않은 규칙 후보를 버림) → **빨간불**
+    - 합치기를 《모델 답으로 갈아 끼우기》로 바꾸면 → **빨간불**
     - 억제한 자리를 되살리게 하면 → **빨간불**
     """
     from tests.js_harness import run_js
@@ -621,9 +621,9 @@ def test_screen_keeps_rule_places_when_the_model_answers(tmp_path):
 
 # ── 라우트: 세 대역이 응답에 실리는가 (Jev 1차 거름망, 2026-09-27) ─────────────────
 def test_route_carries_escalate_and_unplaced_toc_titles(monkeypatch):
-    """escalate 후보가 응답 후보 목록에 실리고, 목차 «없음» 답은 제목 목록으로 실린다.
+    """escalate 후보가 응답 후보 목록에 실리고, 목차 《없음》 답은 제목 목록으로 실린다.
 
-    예전 응답은 문턱 아래 목차 답과 «없음» 답을 **개수만** 실었다 — 화면이 볼 방법이 없었다.
+    예전 응답은 문턱 아래 목차 답과 《없음》 답을 **개수만** 실었다 — 화면이 볼 방법이 없었다.
     층을 세우는 것은 확신한 목차 자리뿐이다(escalate 목차 자리로 본문 층위를 내리지 않는다).
     """
     import core.toc as toc_mod
@@ -737,11 +737,11 @@ def test_screen_does_not_promote_an_escalated_place(tmp_path):
     assert got["escJoined"] == [False, True]  # 애매한 답은 근거만 보태고 체크 해제로 남는다
     assert got["accJoined"] == [True, False]  # 확신한 답은 예전처럼 채택으로 올린다
     assert got["escAdded"] == [False, True]
-    assert got["ruleOnly"] is False  # 규칙의 문턱 아래는 «애매»가 아니다 — 다른 토글에 선다
+    assert got["ruleOnly"] is False  # 규칙의 문턱 아래는 《애매》가 아니다 — 다른 토글에 선다
 
 
 def test_screen_lists_toc_titles_without_a_place(tmp_path):
-    """«없음» 답은 제목 목록으로 보인다 — 개수만 말하면 버린 것과 같다.
+    """《없음》 답은 제목 목록으로 보인다 — 개수만 말하면 버린 것과 같다.
 
     글자는 textContent로만 넣는다(D-069).
     """

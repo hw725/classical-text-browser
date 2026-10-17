@@ -14,9 +14,9 @@ OpenRouter clef부터 시작하는데, 설정 라우트(`/api/settings/decision-
     (Cloudflare 칸의 has_key가 아니라).
 
 **이 PC에는 진짜 키가 있다** — 환경변수·Windows 사용자 환경변수(Cloudflare)·개인 키 파일
-(`~/.claude/data/triage/.env`, OpenRouter)·프로젝트 .env. 막지 않으면 «키 없음» 경우가 거짓 초록이
+(`~/.claude/data/triage/.env`, OpenRouter)·프로젝트 .env. 막지 않으면 《키 없음》 경우가 거짓 초록이
 되거나 거짓 빨강이 된다. 아래 fixture가 넷을 모두 막고, 첫 시험이 막혔는지부터 확인한다.
-네트워크는 쓰지 않는다(check=false — 키가 «있는가»만 본다).
+네트워크는 쓰지 않는다(check=false — 키가 《있는가》만 본다).
 """
 
 from __future__ import annotations

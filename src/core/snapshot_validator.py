@@ -59,7 +59,7 @@ def validate_snapshot(data: dict) -> tuple[list[str], list[str]]:
         hint = _MESSAGE_HINTS.get(where)  # 절 자체가 통째로 어긋난 때만 사람 말로 바꾼다
         errors.append(f"{where}: {hint or err.message}")
 
-    # 경로로 쓰일 값이 서고 밖을 가리키면 들이지 않는다 — 스키마로는 «../ 금지»를 다 적을 수 없다
+    # 경로로 쓰일 값이 서고 밖을 가리키면 들이지 않는다 — 스키마로는 《../ 금지》를 다 적을 수 없다
     errors.extend(unsafe_snapshot_paths(data))
 
     if "interpretation" not in data:
@@ -97,11 +97,11 @@ def _validate_interpretation(data: dict, warnings: list) -> None:
 
     # 아는 block_id: L3 LayoutBlock id + 편성 경계(단위) id.
     # v1.3(D-092·D-093)부터 L5~L7의 block_id는 단위 id를 가리킨다(B-003) — L3하고만 견주면
-    # 지금 서고의 스냅샷마다 «L3에 없음» 거짓 경고가 쏟아졌다(B-023).
+    # 지금 서고의 스냅샷마다 《L3에 없음》 거짓 경고가 쏟아졌다(B-023).
     unit_ids = _extract_unit_ids(data)
     l3_block_ids = _extract_l3_block_ids(data) | unit_ids
     # 편성 경계가 없는 옛 스냅샷(v1.4.3 첫 판까지)은 L3하고만 견줄 수 있다 — 그 block_id가 단위 id면
-    # «없음»은 거짓이다. 경고는 그대로 내되 그 사정을 문구에 밝힌다(2026-10-11 재확인).
+    # 《없음》은 거짓이다. 경고는 그대로 내되 그 사정을 문구에 밝힌다(2026-10-11 재확인).
     where = (
         "L3·편성 경계" if unit_ids
         else "L3(편성 경계가 없는 스냅샷 — 단위 id면 무시해도 됩니다)"

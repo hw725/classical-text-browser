@@ -1,7 +1,7 @@
-"""Ollama 비전 모델 후보 — «어느 모델을 받을까»를 사람이 고를 수 있게 목록을 준다 (D-114).
+"""Ollama 비전 모델 후보 — 《어느 모델을 받을까》를 사람이 고를 수 있게 목록을 준다 (D-114).
 
 왜 목록이 필요한가:
-    비전 모델이 없는 PC에서 앱이 «기본 모델 하나»만 받아 주면 두 가지가 어긋난다.
+    비전 모델이 없는 PC에서 앱이 《기본 모델 하나》만 받아 주면 두 가지가 어긋난다.
     ① 기본을 로컬 모델(gemma4:e4b, 9.6GB)로 두면 처음 켠 PC가 몇 분을 받기만 하고,
        사양이 낮은 PC에서는 받아도 느리다. ② 기본을 클라우드 모델로 두면 내려받는 파일은
        없지만(등록만 된다) ollama.com 로그인이 있어야 돈다 — 로그인하지 않을 사람은
@@ -13,7 +13,7 @@
       크기는 매니페스트 layers 합(GB, 소수 1자리). 클라우드 모델은 0 — 매니페스트 300B뿐.
     - 살아 있는 클라우드 목록: ollama.com 검색 페이지(비전·클라우드 필터)를 읽어 새 모델을
       더한다. 클라우드 모델은 은퇴한다(qwen3-vl:235b-cloud, 2026-06-16 — 목록에 있어도 410).
-      검색 페이지에 없는 내장 클라우드 후보는 «은퇴했을 수 있음»으로 표시만 하고 지우지는 않는다
+      검색 페이지에 없는 내장 클라우드 후보는 《은퇴했을 수 있음》으로 표시만 하고 지우지는 않는다
       (페이지 구조가 바뀌어 하나도 못 읽는 날, 목록이 텅 비면 안 된다).
     - 이 PC에 무엇이 깔렸는가는 호출자가 준다(`/api/tags`). 이 모듈은 네트워크를 그 페이지
       하나만 읽고, 그것도 1시간 캐시한다.
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_VISION_MODEL = "gemma4:cloud"
 
 # 비전이 아닌 클라우드 후보 — OCR에는 못 쓰지만 편성·번역·주석 같은 텍스트 일에 고를 수 있다.
-# ollama.com 검색 페이지(비전 필터)에 없으므로 «은퇴했을 수 있음» 판정에서 뺀다
+# ollama.com 검색 페이지(비전 필터)에 없으므로 《은퇴했을 수 있음》 판정에서 뺀다
 # (glm-5.3:cloud가 화면에 안 보인다는 지적 2026-09-07 — 목록에 flash판만 있었다).
 TEXT_ONLY: frozenset[str] = frozenset({"glm-5.3:cloud"})
 
@@ -104,7 +104,7 @@ def model_manifest_exists(name: str, timeout: float = 3.0) -> bool | None:
 
     실측 2026-09-11: qwen3-vl:235b-cloud·gemma3:27b-cloud → 404, kimi-k3:cloud·gemma4:cloud·
     minimax-m3:cloud → 200(각 0.2~0.4초). `/api/tags`는 은퇴한 모델도 그대로 올려 두므로 목록만
-    보면 «●사용 가능»으로 보이고, 고르면 쪽마다 410이 난다(판독 계획 벤치마크). 출력: True/False,
+    보면 《●사용 가능》으로 보이고, 고르면 쪽마다 410이 난다(판독 계획 벤치마크). 출력: True/False,
     네트워크가 없으면 None — None이면 은퇴 표시를 하지 않는다. 프로세스 캐시.
     """
     if name in _manifest_ok:
@@ -130,8 +130,8 @@ def fetch_cloud_vision_names(timeout: float = 5.0, *, force: bool = False) -> li
     """ollama.com 검색(비전·클라우드)에서 모델 이름을 읽는다. 결과는 1시간 캐시.
 
     출력: ["gemma4", "qwen3.5", ...] (태그 없는 저장소 이름). 못 읽으면 None —
-          빈 목록([])과 구별한다. 빈 목록은 «페이지는 읽었는데 하나도 없다»이고,
-          None은 «모른다»라 은퇴 표시를 하면 안 된다.
+          빈 목록([])과 구별한다. 빈 목록은 《페이지는 읽었는데 하나도 없다》이고,
+          None은 《모른다》라 은퇴 표시를 하면 안 된다.
     """
     now = time.time()
     if not force and _live["names"] is not None and now - _live["at"] < _TTL:
@@ -148,7 +148,7 @@ def fetch_cloud_vision_names(timeout: float = 5.0, *, force: bool = False) -> li
         if n not in names:
             names.append(n)
     if not names:
-        # 페이지는 왔는데 링크가 하나도 없다 — 구조가 바뀐 것이다. «모른다»로 다룬다.
+        # 페이지는 왔는데 링크가 하나도 없다 — 구조가 바뀐 것이다. 《모른다》로 다룬다.
         logger.warning(
             "ollama.com 검색 페이지에서 모델 링크를 찾지 못했습니다 — 구조가 바뀌었을 수 있습니다."
         )
@@ -165,7 +165,8 @@ def catalog(installed: set[str] | None = None, *, live: bool = True) -> dict:
           순서: 기본 → 나머지 클라우드 → 로컬(작은 것부터가 아니라 내장 순서 — 권장 순이다).
     """
     installed = {n for n in (installed or set()) if n}
-    # ollama는 태그 없는 이름을 :latest로 저장한다 — «glm-ocr»를 받았으면 목록에는 glm-ocr:latest다.
+    # ollama는 태그 없는 이름을 :latest로 저장한다 —
+    # 《glm-ocr》를 받았으면 목록에는 glm-ocr:latest다.
     bare = {n.split(":")[0] for n in installed if n.endswith(":latest")}
 
     live_names = fetch_cloud_vision_names() if live else None
@@ -173,7 +174,7 @@ def catalog(installed: set[str] | None = None, *, live: bool = True) -> dict:
     seen: set[str] = set()
     for name, kind, size, note in BUILTIN:
         repo = name.split(":")[0]
-        # 검색 페이지는 «비전» 필터라 텍스트 전용 클라우드 모델은 거기 없어도 은퇴가 아니다
+        # 검색 페이지는 《비전》 필터라 텍스트 전용 클라우드 모델은 거기 없어도 은퇴가 아니다
         maybe_retired = (
             kind == "cloud"
             and name not in TEXT_ONLY

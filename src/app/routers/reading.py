@@ -162,7 +162,7 @@ class AiTranslationRequest(BaseModel):
     part_id: str | None = None
     page: int | None = None
     block_id: str | None = None
-    # 번역 탭 «참조 사전 → 적용»이 만든 문맥(다른 문헌에서 들여온 사전의 매칭 항목). 화면이
+    # 번역 탭 《참조 사전 → 적용》이 만든 문맥(다른 문헌에서 들여온 사전의 매칭 항목). 화면이
     # 적어 두기만 하고 보내지 않아 「적용」이 아무 효과가 없었다(B-018).
     reference_context: str | None = None
 
@@ -171,10 +171,10 @@ def _translation_input(body: AiTranslationRequest) -> str:
     """번역에 보낼 글 — 확정 용어 풀이가 있으면 원문 앞에 붙인다(D-131).
 
     왜: 번역이 용어 풀이와 따로 놀면 같은 말이 노트 안에서 두 뜻으로 옮겨진다. 사용자가 쓰던 번역
-    지침(«검토된 용어사전을 근거로, 그 정의와 문형 해석을 우선»)을 앱의 번역에도 적용한다.
+    지침(《검토된 용어사전을 근거로, 그 정의와 문형 해석을 우선》)을 앱의 번역에도 적용한다.
     원문에 나오는 표제어만 싣는다 — 단위 전체의 주석을 다 실으면 모델이 없는 말을 끌어온다.
     """
-    # 참조 사전(다른 문헌의 사전) — 확정 풀이보다 뒤, «참고만» 등급으로 싣는다(B-018).
+    # 참조 사전(다른 문헌의 사전) — 확정 풀이보다 뒤, 《참고만》 등급으로 싣는다(B-018).
     # 길이는 잘라 둔다: 사람이 고른 항목이지만 수백 개를 고르면 원문보다 길어진다.
     ref = (body.reference_context or "").strip()[:4000]
     ref_part = (
@@ -191,8 +191,8 @@ def _translation_input(body: AiTranslationRequest) -> str:
         data = load_annotations(interp_path, body.part_id or "main", int(body.page))
     except Exception:  # noqa: BLE001 — 용어 풀이를 못 읽어도 번역은 된다
         data = {}
-    # 확정(reviewed·accepted)과 검토 전(draft)을 나눈다 — 사용자 지침은 «검토 완료된 용어사전»을
-    # 우선하라는 것이다. 초안까지 «확정»이라 부르면 검토 전 풀이가 번역을 끌고 간다(Codex 지적).
+    # 확정(reviewed·accepted)과 검토 전(draft)을 나눈다 — 사용자 지침은 《검토 완료된 용어사전》을
+    # 우선하라는 것이다. 초안까지 《확정》이라 부르면 검토 전 풀이가 번역을 끌고 간다(Codex 지적).
     confirmed, drafts = [], []
     for blk in data.get("blocks") or []:
         if blk.get("block_id") != body.block_id:

@@ -2,13 +2,13 @@
 
 왜 필요한가:
     규칙 변경은 세 곳에서 온다. ① 사람이 화면에서 체크를 고치거나 말로 이르는 것,
-    ② 통계가 «이 둘은 같은 기호로 보입니다»라고 제안하는 것, ③ LLM이 책을 읽고 제안하는 것.
-    셋 다 «맞을 수도 틀릴 수도 있는 주장»이라는 점에서 같다.
+    ② 통계가 《이 둘은 같은 기호로 보입니다》라고 제안하는 것, ③ LLM이 책을 읽고 제안하는 것.
+    셋 다 《맞을 수도 틀릴 수도 있는 주장》이라는 점에서 같다.
 
     이 프로젝트는 이미 그 태도를 갖고 있다 — LLM이 표지를 말하면 코드가 전문에서 세어
     되풀이되지 않으면 버린다(D-117 verify_pattern). 여기서는 한 걸음 더 나아가, 규칙을 켰을 때
-    **경계가 실제로 어떻게 달라지는지**를 미리 세어 보인다. 그래야 사람이 «후보 86 → 92,
-    새로 잡히는 자리 여섯»을 보고 받아들일지 정할 수 있다.
+    **경계가 실제로 어떻게 달라지는지**를 미리 세어 보인다. 그래야 사람이 《후보 86 → 92,
+    새로 잡히는 자리 여섯》을 보고 받아들일지 정할 수 있다.
 
 무엇을 하지 않는가:
     저장하지 않는다. 경계를 만들지도 지우지도 않는다. 두 규칙으로 제안을 각각 세어 견줄 뿐이다.
@@ -16,7 +16,7 @@
 
 왜 여기 있는가:
     제안을 세는 일(segmentation)과 규칙을 찾는 일(rule_induction)은 이미 나뉘어 있다.
-    «바꾸면 어떻게 되는가»는 그 둘 어디에도 속하지 않는 셋째 질문이라 따로 둔다.
+    《바꾸면 어떻게 되는가》는 그 둘 어디에도 속하지 않는 셋째 질문이라 따로 둔다.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from typing import Optional
 
 from core.segmentation import Line, normalize_rules, propose_boundaries
 
-# 화면에 늘어놓을 «달라지는 자리»의 최대 수. 넘으면 수만 알린다 — 583개를 늘어놓아야
+# 화면에 늘어놓을 《달라지는 자리》의 최대 수. 넘으면 수만 알린다 — 583개를 늘어놓아야
 # 사람이 읽지 못한다(浩齋 실측).
 _MAX_EXAMPLES = 12
 
@@ -54,15 +54,15 @@ def changed_fields(before: dict, after: dict) -> list[dict]:
             continue  # 제안에 영향을 주지 않는다 — 견줄 것이 아니다
         b, a = before.get(key), after.get(key)
         if key == "signals":
-            # 스위치는 «적힌 값»이 아니라 «듣는 값»을 견준다 — 안 적힌 스위치는 켜진 것이고,
-            # 그대로 보이면 «None → False»처럼 사람이 못 알아볼 말이 된다
+            # 스위치는 《적힌 값》이 아니라 《듣는 값》을 견준다 — 안 적힌 스위치는 켜진 것이고,
+            # 그대로 보이면 《None → False》처럼 사람이 못 알아볼 말이 된다
             for sig in sorted(set(b or {}) | set(a or {})):
                 was, now = signal_on(raw_before or {}, sig), signal_on(raw_after or {}, sig)
                 if was != now:
                     out.append({"field": f"signals.{sig}", "before": was, "after": now})
             continue
         if isinstance(b, list) and isinstance(a, list):
-            # 목록은 «무엇이 늘고 줄었는가»만 말한다. 순서만 바뀐 것은 달라진 것이 아니다
+            # 목록은 《무엇이 늘고 줄었는가》만 말한다. 순서만 바뀐 것은 달라진 것이 아니다
             gained = [x for x in a if x not in b]
             lost = [x for x in b if x not in a]
             if gained or lost:
@@ -104,7 +104,7 @@ def preview_rule_change(
     from core.segmentation import signal_on
 
     def _side(rules: Optional[dict]) -> dict:
-        # propose 라우트와 같은 판단: 목차 «항목»이 있으면(toc_pages) 대조가 0건이어도 목차 쪽은
+        # propose 라우트와 같은 판단: 목차 《항목》이 있으면(toc_pages) 대조가 0건이어도 목차 쪽은
         # 본문에서 뺀다. 대조 유무로 가르면 대응을 못 찾은 책에서 양쪽 범위가 달라진다(Codex 지적)
         if toc_pages and signal_on(rules or {}, "toc"):
             skip = set(toc_pages)

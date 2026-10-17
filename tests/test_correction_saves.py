@@ -1,12 +1,12 @@
-"""교정 탭 «글자 교정» 보기 — 자유 편집이 만든 교정을 그대로 그리는가 (2026-10-02 사고).
+"""교정 탭 《글자 교정》 보기 — 자유 편집이 만든 교정을 그대로 그리는가 (2026-10-02 사고).
 
 왜 이 시험이 필요한가:
     자유 편집으로 고치고 저장하면 서버가 원문과 diff해 교정 목록을 만든다
     (`core.document._diff_to_corrections`). 그 교정은 넣기(원문 "")·지우기(교정 "")·
-    여러 글자와 줄바꿈을 한꺼번에 바꾸기다. 그런데 「글자 교정」 보기는 «교정의
-    첫 글자 자리에서 그 글자 하나만 바꿔 그리기»만 할 줄 알았다. 저장은 됐는데
+    여러 글자와 줄바꿈을 한꺼번에 바꾸기다. 그런데 「글자 교정」 보기는 《교정의
+    첫 글자 자리에서 그 글자 하나만 바꿔 그리기》만 할 줄 알았다. 저장은 됐는데
     교정 탭을 다시 열면 기본 보기인 글자 교정이 원문을 거의 그대로 보여 줘서
-    «교정 전으로 되돌아갔다»로 보였다.
+    《교정 전으로 되돌아갔다》로 보였다.
 
     이 시험은 서버가 실제로 만드는 교정으로 화면 함수를 돌려, **보이는 글 = 교정본**인지
     잰다. 화면 쪽 글 만들기(`_applyCorrectionsLocally`, 모드 전환 때 쓴다)도 서버와 같은지 본다.
@@ -26,7 +26,7 @@ from tests.js_harness import run_js
 JS = "correction-editor.js"
 
 # _renderCharsIntoElement 가 쓰는 만큼만 흉내 낸 DOM.
-# 마지막에 «사람 눈에 보이는 글»을 꺼낸다 — br은 줄바꿈, 지운 표시(.corr-deleted)는 뺀다.
+# 마지막에 《사람 눈에 보이는 글》을 꺼낸다 — br은 줄바꿈, 지운 표시(.corr-deleted)는 뺀다.
 FAKE_DOM = r"""
 class El {
   constructor(tag) { this.tag = tag; this.children = []; this.dataset = {}; this.title = "";
@@ -86,7 +86,7 @@ def test_char_view_shows_the_freetext_result(tmp_path, original, corrected):
     out = run_js(
         tmp_path, JS, ["_renderCharsIntoElement", "_flatCorrectionLayout", "_onCharClick", "_applyCorrectionsLocally"], setup, body
     )
-    assert out["shown"] == corrected, "글자 교정 보기가 교정본과 다르다 — 저장한 교정이 «안 된 것처럼» 보인다"
+    assert out["shown"] == corrected, "글자 교정 보기가 교정본과 다르다 — 저장한 교정이 《안 된 것처럼》 보인다"
     assert out["local"] == corrected, "모드 전환 때 화면이 만드는 글이 서버 교정본과 다르다"
 
 
@@ -110,7 +110,7 @@ def _doc(tmp_path, base: str):
 
 
 def _freetext_save(doc, corrected: str):
-    """교정 탭 «자유 편집 → 저장»과 같은 일(라우트 api_save_page_corrections의 자유 편집 분기)."""
+    """교정 탭 《자유 편집 → 저장》과 같은 일(라우트 api_save_page_corrections의 자유 편집 분기)."""
     from core.document import get_page_text, save_page_corrections
 
     base = get_page_text(doc, "vol1", 1)["text"]
@@ -163,7 +163,7 @@ def test_insert_at_same_spot_keeps_both_once(tmp_path):
 
 
 def test_stale_records_become_history_not_deleted(tmp_path):
-    """옛 글에 맞지 않는 항목(일괄 교정의 «이미 반영» 기록)은 지우지 않고 다시 적용되지 않게 남긴다."""
+    """옛 글에 맞지 않는 항목(일괄 교정의 《이미 반영》 기록)은 지우지 않고 다시 적용되지 않게 남긴다."""
     from core.document import apply_batch_corrections, get_corrected_text, save_page_text
 
     doc = _doc(tmp_path, "玄黃玄")

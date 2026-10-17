@@ -60,7 +60,7 @@ def read_page_json(path: Path) -> dict | None:
     """L2/L3 페이지 JSON을 읽는다. 없거나 깨졌으면 None.
 
     깨진 파일을 예외로 올리지 않는 이유: 한 쪽이 깨졌다고 권 전체의 판정이
-    멈추면 안 된다. 읽지 못한 쪽은 «결과가 없는 쪽»으로 취급하면 다시 돌면서
+    멈추면 안 된다. 읽지 못한 쪽은 《결과가 없는 쪽》으로 취급하면 다시 돌면서
     저절로 고쳐진다.
     """
     if not path.exists():
@@ -149,7 +149,7 @@ def layout_changed_since_ocr(
     now = page_rotation(doc_path, part_id, page_number)
     if layout_data is None:
         # 레이아웃이 없으면 전면 블록이 새로 생길 것이다 — 다만 L2의 도장이
-        # 지금 회전과 다르면 그 L2는 옛 좌표계라 «이미 결과가 있다»로
+        # 지금 회전과 다르면 그 L2는 옛 좌표계라 《이미 결과가 있다》로
         # 건너뛰면 안 된다(Codex 지적 2026-09-18)
         was = int(ocr_data.get("rotation") or 0)
         if was != now:
@@ -194,7 +194,7 @@ def find_stale_pages(
     입력: doc_path, part_id, pages — 검사할 쪽 번호 목록.
     출력: 다시 돌려야 하는 쪽 번호 목록 (오름차순).
 
-    배치를 돌리기 전에 «몇 쪽이 다시 도는지»를 사용자에게 미리 보여 주는
+    배치를 돌리기 전에 《몇 쪽이 다시 도는지》를 사용자에게 미리 보여 주는
     용도다. 비용이 걸린 일은 실행 전에 규모를 알 수 있어야 한다.
     """
     stale = []

@@ -6,7 +6,7 @@
  *   2. 해석 저장소 생성 다이얼로그
  *   3. 의존 변경 확인 + 경고 배너
  *   4. 의존 추적(원본이 바뀌었는가) 확인·인지·기반 갱신
- *   (층별 내용 조회/편집/저장과 activate/deactivate는 2026-09-22에 걷어냈다 — 이 파일의 «걷어낸 자리» 주석.
+ *   (층별 내용 조회/편집/저장과 activate/deactivate는 2026-09-22에 걷어냈다 — 이 파일의 《걷어낸 자리》 주석.
  *    층 편집은 표점·현토·번역·주석·인용 편집기 다섯이 한다.)
  *
  * 의존성: viewerState (sidebar-tree.js), _loadGitLog (correction-editor.js)
@@ -296,7 +296,7 @@ async function _trashInterpretation(interpId, interpTitle) {
    해석 저장소 선택
    ────────────────────────── */
 
-// 문헌마다 «마지막에 쓴 저장소»를 기억한다 — 한 문헌에 여럿일 때만 쓸모가 있다
+// 문헌마다 《마지막에 쓴 저장소》를 기억한다 — 한 문헌에 여럿일 때만 쓸모가 있다
 const INTERP_PICK_KEY = "ctb.interpFor";
 
 function _readInterpPicks() {
@@ -321,7 +321,7 @@ function _rememberInterpFor(docId, interpId) {
 /**
  * 문헌을 고르면 그 문헌의 저장소를 저절로 잇는다.
  *
- * 왜: 편성까지 가려면 «문헌 고르기 → 저장소 고르기» 두 번을 눌러야 했고, 목록에는 남의 문헌
+ * 왜: 편성까지 가려면 《문헌 고르기 → 저장소 고르기》 두 번을 눌러야 했고, 목록에는 남의 문헌
  * 저장소까지 섞여 있었다(사용자 지적 2026-09-04). 대개 문헌마다 저장소는 하나다 —
  * 여럿으로 갈라지는 경우에만 고르게 하면 된다.
  *
@@ -529,7 +529,7 @@ function _renderDepPanel(dep) {
    ──────────────────────────
 
    `_loadLayerContent`·`_saveLayerContent`·`_updateSaveStatus`·`_updateFileInfo`
-   가 여기 있었다. 넷 다 옛 «해석 (L5~L7)» 통합 편집기의 것이다 — 붙잡던 DOM
+   가 여기 있었다. 넷 다 옛 《해석 (L5~L7)》 통합 편집기의 것이다 — 붙잡던 DOM
    (`#interp-content`·`#interp-save`·`#interp-save-status`·`#interp-file-info`)이
    전부 그 패널 안에 있었고, 그 패널은 2026-02-24 `e84d800` 이 「비교」 탭을
    지운 뒤로 어느 모드에서도 열리지 않았다.
@@ -643,14 +643,14 @@ async function _createInterpretation() {
    비교 모드 — 제거됨
    ────────────────────────── */
 
-// 예전에 이 자리에 «비교 모드»(두 해석 저장소 또는 두 커밋의 내용을 좌우로
+// 예전에 이 자리에 《비교 모드》(두 해석 저장소 또는 두 커밋의 내용을 좌우로
 // 놓고 줄 단위 diff를 보여 주던 기능)의 코드가 있었다.
 //
 // 왜 지웠는가:
 //   그 코드가 붙잡으려는 DOM 요소(compare-mode-checkbox, compare-container,
 //   compare-repo-a/b, compare-commit-a/b 등)가 index.html에서 모두 사라졌다.
 //   그래서 _toggleCompareMode는 첫 줄의 null 검사에서 언제나 그대로 돌아왔고,
-//   나머지 함수는 «한 번도 실행되지 않는» 코드였다. 읽는 사람에게는 아직
+//   나머지 함수는 《한 번도 실행되지 않는》 코드였다. 읽는 사람에게는 아직
 //   살아 있는 기능처럼 보여 오해만 준다.
 //
 // 되살릴 때: index.html에 위 요소들을 다시 넣은 뒤 git 이력에서 이 블록을

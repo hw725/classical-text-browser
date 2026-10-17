@@ -58,7 +58,7 @@ globalThis.annState = {
 
 
 def test_highlight_covers_the_code_point_not_a_surrogate_half(tmp_path, render_state):
-    """서버 좌표 [1,1]은 «甲»이다. 화면도 甲을 칠해야 한다."""
+    """서버 좌표 [1,1]은 《甲》이다. 화면도 甲을 칠해야 한다."""
     out = run_js(
         tmp_path,
         JS,
@@ -90,7 +90,7 @@ console.log(JSON.stringify({ one: _punctuateSlice(1, 1), zero: _punctuateSlice(0
 
 
 def test_selection_display_offsets_map_to_code_point_indices(tmp_path, render_state):
-    """DOM Range가 준 «선택 앞 표시 문자열»·«선택 끝까지 표시 문자열» → 원문 코드포인트 범위."""
+    """DOM Range가 준 《선택 앞 표시 문자열》·《선택 끝까지 표시 문자열》 → 원문 코드포인트 범위."""
     out = run_js(
         tmp_path,
         JS,

@@ -13,7 +13,7 @@ def make_router(library=None):
 
     입력: library — 서고 경로(Path·str) 또는 None(프로젝트 루트 .env만).
     왜: 앱은 API 키·Ollama 주소를 서고 .env에 쓴다. CLI가 프로젝트 루트만 보면 GUI에서 넣은
-    키가 «없는 것»이 된다(Codex 지적 2026-09-06).
+    키가 《없는 것》이 된다(Codex 지적 2026-09-06).
     """
     from pathlib import Path
 
@@ -46,7 +46,7 @@ def format_list(models: list[dict]) -> str:
     width = len(str(len(models)))
     lines = ["쓸 수 있는 모델 (번호나 이름 일부로 고릅니다):"]
     for i, m in enumerate(models, 1):
-        # «free»만 보고 공짜로 오해하면 안 된다(D-056). 구독으로 도는 것은 한도를 소모한다.
+        # 《free》만 보고 공짜로 오해하면 안 된다(D-056). 구독으로 도는 것은 한도를 소모한다.
         if m["provider"] == "openai_oauth" or (m["provider"] == "ollama" and "cloud" in m["model"]):
             cost = "구독 한도"
         elif m["cost"] == "free":
@@ -58,10 +58,10 @@ def format_list(models: list[dict]) -> str:
 
 
 def resolve(spec: str, models: list[dict] | None = None, library=None) -> tuple[str, str | None]:
-    """«3»·«astra»·«openai_oauth:gpt-6-astra»·«gemini» → (provider, model).
+    """《3》·《astra》·《openai_oauth:gpt-6-astra》·《gemini》 → (provider, model).
 
     - 번호: 목록의 그 줄.
-    - «프로바이더:모델» 정확히: 그대로(목록에 없어도 허용 — 새 모델일 수 있다).
+    - 《프로바이더:모델》 정확히: 그대로(목록에 없어도 허용 — 새 모델일 수 있다).
     - 프로바이더 이름만: 그 프로바이더의 기본 모델 (model=None).
     - 그 밖의 문자열: 목록에서 대소문자 무시 부분 일치. 하나면 그것, 여럿이면 ValueError로
       후보를 알린다.
@@ -78,7 +78,7 @@ def resolve(spec: str, models: list[dict] | None = None, library=None) -> tuple[
     known_providers = ("ollama", "openai_oauth", "gemini", "openai", "anthropic")
     if ":" in spec:
         provider, _, model = spec.partition(":")
-        # 콜론 앞이 프로바이더일 때만 «프로바이더:모델»이다. «glm-ocr:latest»처럼 태그가 붙은
+        # 콜론 앞이 프로바이더일 때만 《프로바이더:모델》이다. 《glm-ocr:latest》처럼 태그가 붙은
         # 모델 이름은 그대로 모델 이름이다.
         if provider.strip().lower() in known_providers:
             return provider.strip().lower(), (model.strip() or None)
@@ -98,7 +98,7 @@ def resolve(spec: str, models: list[dict] | None = None, library=None) -> tuple[
 
 
 def pick_interactive(library=None) -> str:
-    """목록을 보여 주고 번호를 묻는다. 돌려주는 값은 «프로바이더:모델»."""
+    """목록을 보여 주고 번호를 묻는다. 돌려주는 값은 《프로바이더:모델》."""
     models = list_vision_models(library)
     print(format_list(models))
     if not models:

@@ -982,8 +982,8 @@ async function _createFromUrl() {
   const statusEl = document.getElementById("create-doc-create-status");
   const createBtn = document.getElementById("create-doc-create-btn");
 
-  // 칸이 비면 미리보기가 제목에서 만든 후보 id를 쓴다 — 화면은 «비워 두면 자동 생성»이라고 적는데
-  // URL 모드만 «문헌 ID를 입력하세요»로 막았다(2026-10-11 재확인)
+  // 칸이 비면 미리보기가 제목에서 만든 후보 id를 쓴다 — 화면은 《비워 두면 자동 생성》이라고 적는데
+  // URL 모드만 《문헌 ID를 입력하세요》로 막았다(2026-10-11 재확인)
   const docId = (docIdInput ? docIdInput.value.trim() : "") ||
     ((_previewData && _previewData.suggested_doc_id) || "");
   const title = titleInput ? titleInput.value.trim() : "";

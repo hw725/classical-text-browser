@@ -424,7 +424,7 @@ def _get_file_extension(path: str) -> str:
     예: "/docs/file.pdf?v=1" → ".pdf"
     """
     # 쿼리 파라미터 제거, 마지막 경로 조각에서만 찾는다 — 경로 전체에서 마지막 점을 찾으면
-    # «/a.b/c» 같은 폴더 이름의 점을 확장자로 오인해 «.b/c»를 돌려줬다(2026-10-11 전수)
+    # 《/a.b/c》 같은 폴더 이름의 점을 확장자로 오인해 《.b/c》를 돌려줬다(2026-10-11 전수)
     clean = path.split("?")[0].split("#")[0].rsplit("/", 1)[-1]
     if "." in clean:
         ext = "." + clean.rsplit(".", 1)[-1].lower()

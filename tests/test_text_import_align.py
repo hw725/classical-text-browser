@@ -239,7 +239,7 @@ class TestAlignTextToPages:
         results = align_text_to_pages(page_texts, self.FULL_TEXT)
         assert len(results) == 3
         # 빈 페이지의 matched_text도 보간으로 채워진다
-        # (예전 단언은 «or confidence == 0.0»으로 늘 참이었다)
+        # (예전 단언은 《or confidence == 0.0》으로 늘 참이었다)
         assert results[1]["matched_text"]
         assert results[1]["confidence"] == 0.0  # 앵커가 없던 쪽은 신뢰도 0으로 알린다
 

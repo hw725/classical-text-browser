@@ -1,6 +1,6 @@
 """pytest 전역 설정 — 테스트를 사용자의 홈·바깥 네트워크·전역 서고 경로에서 격리한다.
 
-세 가지를 한다(아래 «왜 있는가»는 첫째의 사연):
+세 가지를 한다(아래 《왜 있는가》는 첫째의 사연):
     1. 앱 설정 폴더(`CTB_CONFIG_DIR`)를 임시 폴더로 — 홈의 기록·최근 서고 목록에 쓰지 않게.
     2. 표지(`network`) 없는 시험의 바깥 연결을 막는다 — 루프백이어도 바깥으로 넘겨 부르는 데몬
        (Ollama 11434·OAuth 프록시 10531~10540)은 막는다(2026-10-11).
@@ -8,7 +8,7 @@
 
 왜 있는가:
     서고 없이 만든 `LlmConfig()`로 도는 라우터 테스트는 `UsageTracker`가
-    «서고가 없으면 앱 설정 폴더»로 내려가, mock 응답(provider `second`·`ok`·
+    《서고가 없으면 앱 설정 폴더》로 내려가, mock 응답(provider `second`·`ok`·
     `vision`, model `mock-model`)을 사용자의
     `~/.classical-text-browser/llm_usage_log.jsonl`에 쌓았다(2026-09-10 확인,
     2,202행 중 2,127행이 시험 행). 최근 서고 목록(config.json)도 같은 폴더다.
@@ -37,9 +37,9 @@ from pathlib import Path
 
 import pytest
 
-# 세션 시작 때 잰 «사용자 홈 기록 크기». -1이면 파일이 없었다.
+# 세션 시작 때 잰 《사용자 홈 기록 크기》. -1이면 파일이 없었다.
 HOME_USAGE_LOG_SIZE_KEY = pytest.StashKey[int]()
-# 세션 시작 때 잰 «사용자 홈 config.json 크기». -1이면 파일이 없었다.
+# 세션 시작 때 잰 《사용자 홈 config.json 크기》. -1이면 파일이 없었다.
 HOME_CONFIG_SIZE_KEY = pytest.StashKey[int]()
 
 # 실행 순서를 맨 뒤로 보낼 마커 이름
@@ -122,14 +122,14 @@ def _block_external_network(request, monkeypatch):
     """`network` 표지가 없는 시험은 바깥으로 나가는 소켓 연결을 막는다.
 
     왜: 이 PC에는 실제 OpenRouter·Gemini·Cloudflare 키가 있다. 가짜 라우터를 빠뜨린 시험이
-    «200 또는 400»을 둘 다 통과로 받으며 매 verify마다 실제 LLM을 불렀다(2026-10-11 실측 —
-    편성 «말로 넣기» 시험 둘이 5.2초·3.6초, google.genai 클라이언트 생성, B-035). 키가 없는
-    PC에서는 같은 시험이 다른 길로 초록이 되어 아무도 몰랐다. 외부 연결이 «조용히 되는»
+    《200 또는 400》을 둘 다 통과로 받으며 매 verify마다 실제 LLM을 불렀다(2026-10-11 실측 —
+    편성 《말로 넣기》 시험 둘이 5.2초·3.6초, google.genai 클라이언트 생성, B-035). 키가 없는
+    PC에서는 같은 시험이 다른 길로 초록이 되어 아무도 몰랐다. 외부 연결이 《조용히 되는》
     길을 막아야 그런 시험이 빨간불로 드러난다.
 
     로컬(127.0.0.1·::1)은 막지 않는다 — 시험이 띄운 서버·워커와 말하는 길이다.
     **단 Ollama·OAuth 프록시 포트는 로컬이어도 막는다**(RELAYING_LOCAL_PORTS) — 그 데몬이 바깥으로
-    넘겨 부르므로, 열어 두면 «외부 연결이 조용히 되는 길»이 그대로 남는다(2026-10-11 2차 전수:
+    넘겨 부르므로, 열어 두면 《외부 연결이 조용히 되는 길》이 그대로 남는다(2026-10-11 2차 전수:
     llm_vision 강제 시험과 계정 라우트 시험이 PC에 Ollama가 떠 있으면 클라우드 모델까지 닿았다).
     """
     if request.node.get_closest_marker(NETWORK_MARK):

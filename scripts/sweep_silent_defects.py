@@ -2,11 +2,11 @@
 """조용한 결함을 전수로 쓴다 — 예외도 경고도 없이 빗나가는 자리 (2026-09-22).
 
 왜 이 스크립트가 있는가:
-    그날 결함 여섯이 «하나 고치면 그 옆에서 또» 하는 식으로 하루 종일 나왔다.
+    그날 결함 여섯이 《하나 고치면 그 옆에서 또》 하는 식으로 하루 종일 나왔다.
     여섯 다 예외도 경고도 없이 조용히 빗나가는 종류였고 **시험이 잡은 것은 0건**이다.
     그런데 여섯 다 기계로 판정할 수 있었다 — 부딪힐 때마다 재는 대신 한 번에 쓴다.
 
-**여기 있는 것은 «거짓을 안 내는» 검사뿐이다.** 처음에 여덟 가지를 넣었더니 524건이
+**여기 있는 것은 《거짓을 안 내는》 검사뿐이다.** 처음에 여덟 가지를 넣었더니 524건이
 나왔고, 손으로 세어 보니 대부분 거짓이었다. 거짓을 내는 검사기는 없느니만 못하다 —
 다음 사람이 목록을 믿지 않게 되고, 그러면 진짜가 섞여도 묻힌다. 그래서 다섯을 걷어냈다.
 
@@ -16,7 +16,7 @@
                     제대로 하려면 JS 를 파싱해야 한다(정규식으로는 안 된다).
     닿을 수 없는 조작  다이얼로그는 `style.display = ""` 로 열린다 — `panelSections`
                     에도 모드 패널에도 없다. 58건 대부분이 그 다이얼로그들이었다.
-                    «여는 주체»의 종류를 다 알아야 하는데 그 목록이 열려 있다.
+                    《여는 주체》의 종류를 다 알아야 하는데 그 목록이 열려 있다.
     안 불리는 라우트   CLI·스크립트·다른 라우터가 부르는 것이 많고, 화면이 경로를
                     조각내어 조립하면 문자열로 안 잡힌다. 19건 대부분이 거짓이었다.
     죽은 파이썬 함수   435건이 나왔다. 메서드·데코레이터·간접 참조를 못 가린다.
@@ -38,7 +38,7 @@ from collections import defaultdict
 from pathlib import Path
 
 
-# CJK Text Contract E3 — 한국어 Windows 콘솔은 cp949 라 «—»·«✓» 를 print 하면
+# CJK Text Contract E3 — 한국어 Windows 콘솔은 cp949 라 《—》·《✓》 를 print 하면
 # UnicodeEncodeError 로 즉사한다. 이 PC 는 PYTHONUTF8=1 이 박혀 있어 겪지 않는다.
 # 정의는 src/core/console.py 에 있으나, 이 파일은 src 를 경로에 올리지 않으므로
 # 네 줄을 품는다.
@@ -84,7 +84,7 @@ def sweep_a_collisions() -> list[str]:
         ):
             decls[m.group(1)].append(name)
     return [
-        f"{k}: {sorted(set(v))} → 이기는 쪽 «{v[-1]}»"
+        f"{k}: {sorted(set(v))} → 이기는 쪽 《{v[-1]}》"
         for k, v in sorted(decls.items())
         if len(set(v)) > 1
     ]
@@ -143,7 +143,7 @@ def sweep_b_loose_escapes() -> list[str]:
 # 남고, 고친 사람은 다 고쳤다고 여긴다. 2026-09-22에 `entity.py` 와
 # `interpretation.py` 의 `_get_source_head_commit` 이 그 모양이었다(Phase 8부터).
 #
-# 그래서 이 항목은 «0이어야 한다»가 아니다. 나란한 패키지가 같은 계약을 각자
+# 그래서 이 항목은 《0이어야 한다》가 아니다. 나란한 패키지가 같은 계약을 각자
 # 구현하는 것(`ndlocr`·`ndlkotenocr` 의 `get_config_dir` 등)은 설계다. 보고만 하고
 # 판단은 사람이 한다 — 다만 **모르는 채로 두지는 않는다.**
 #
@@ -198,8 +198,8 @@ def main() -> int:
             print(f"      … 그리고 {len(found)-10}건 (--verbose)")
     print("-" * 68)
     silent = sum(len(f) for _t, f in checks[:2])
-    print(f"  합계 {total}건 — 그중 «조용히 빗나가는 것» {silent}건 (A·B)")
-    print("  이 검사는 «구조적으로 조용한 자리»만 본다 — 동작이 맞는지는 안 본다.")
+    print(f"  합계 {total}건 — 그중 《조용히 빗나가는 것》 {silent}건 (A·B)")
+    print("  이 검사는 《구조적으로 조용한 자리》만 본다 — 동작이 맞는지는 안 본다.")
     print("  시험이 그 함수를 도는지는 scripts/measure_blind_spots.py 가 본다.")
     print("  거짓을 내던 다섯 검사는 걷어냈다 — 이유는 이 파일 머리말에 있다.")
     return 1 if total else 0

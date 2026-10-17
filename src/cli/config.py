@@ -30,7 +30,7 @@ PADDLE_LANGS = ("ch", "chinese_cht", "korean", "japan", "en")
 
 KEYS: dict[str, str] = {
     "engine": "OCR 엔진 (llm_vision·paddleocr·ndlocr·ndlkotenocr)",
-    "model": "llm_vision이 쓸 LLM «프로바이더:모델» (예: openai_oauth:gpt-6-astra)",
+    "model": "llm_vision이 쓸 LLM 《프로바이더:모델》 (예: openai_oauth:gpt-6-astra)",
     "paddle_lang": "PaddleOCR 언어 모델 (korean·chinese_cht·ch·japan·en)",
     "paddle_device": "PaddleOCR 연산 장치 (auto·cpu·gpu)",
     "line_detection": "줄 위치 검출 (true·false)",
@@ -102,7 +102,7 @@ def coerce(key: str, value: str):
         head = v.split(":", 1)[0]
         if not v or head not in PROVIDERS:
             raise ValueError(
-                "model은 «프로바이더:모델» 꼴 (프로바이더: " + ", ".join(PROVIDERS) + ")"
+                "model은 《프로바이더:모델》 꼴 (프로바이더: " + ", ".join(PROVIDERS) + ")"
             )
     if key == "library":
         from pathlib import Path

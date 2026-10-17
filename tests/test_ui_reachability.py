@@ -40,7 +40,7 @@ WORKSPACE_JS = REPO / "src" / "app" / "static" / "js" / "workspace.js"
 class _Ancestry(HTMLParser):
     """열린 태그의 id 를 쌓아 두었다가, id 가 있는 요소마다 조상 id 목록을 적는다.
 
-    왜 직접 쓰는가: 이 검사에 필요한 것은 «누구 안에 있는가» 하나뿐이라
+    왜 직접 쓰는가: 이 검사에 필요한 것은 《누구 안에 있는가》 하나뿐이라
     외부 파서를 더할 이유가 없다. 닫히지 않는 태그(br·img…)는 건너뛴다.
     """
 
@@ -120,14 +120,14 @@ def assert_reachable(
     opened_by = [(a, _opening_panel(a, panel_sections)) for a in chain]
     live = [(a, n) for a, n in opened_by if n]
     assert live, (
-        f"{control_id} 를 담은 조상 중 «여는 주체»가 있는 것이 없다.\n"
+        f"{control_id} 를 담은 조상 중 《여는 주체》가 있는 것이 없다.\n"
         f"  조상: {chain}\n"
         f"  → 화면에 있어도 사람이 닿을 수 없다(B-008 이 그 모양이었다)."
     )
 
     section_id, panel_name = live[0]
     assert f'data-panel="{panel_name}"' in index_html, (
-        f"{control_id} 는 «{section_id}» 안에 있고 그것을 여는 이름은 «{panel_name}» 인데,\n"
+        f"{control_id} 는 《{section_id}》 안에 있고 그것을 여는 이름은 《{panel_name}》 인데,\n"
         f"  `data-panel=\"{panel_name}\"` 단추가 index.html 에 없다 — 입구가 사라졌다."
     )
 
@@ -151,7 +151,7 @@ class TestDependencyActionsAreReachable:
         assert_reachable(control_id, ancestors, index_html, panel_sections)
 
     def test_the_actions_sit_with_what_they_act_on(self, ancestors):
-        """경고와 «바뀐 파일 목록»이 같은 자리에 있다 — 보는 것과 누르는 것이 붙어 있게."""
+        """경고와 《바뀐 파일 목록》이 같은 자리에 있다 — 보는 것과 누르는 것이 붙어 있게."""
         assert "dep-sidebar-section" in ancestors["interp-dep-banner"]
         assert "dep-sidebar-section" in ancestors["dep-file-list"]
 
@@ -194,9 +194,9 @@ class TestTheCheckItselfCatchesTheBug:
     def test_a_control_in_an_unopened_container_fails(
         self, ancestors, index_html, panel_sections
     ):
-        """여는 주체가 없는 조상에 든 단추는 «닿을 수 없다»로 판정된다.
+        """여는 주체가 없는 조상에 든 단추는 《닿을 수 없다》로 판정된다.
 
-        기준을 «오른쪽 편집기 패널»에서 잡는다. 그쪽은 모드 탭이 여는 다른 길이라
+        기준을 《오른쪽 편집기 패널》에서 잡는다. 그쪽은 모드 탭이 여는 다른 길이라
         `panelSections` 에 없고, 이 검사는 사이드바 계열만 본다(파일 머리말의 한정).
         한때는 `#interp-panel` 안의 단추로 이것을 쟀는데, 그 패널을 2026-09-22에
         걷어내면서(B-008) 기준을 옮겼다.
@@ -222,7 +222,7 @@ class TestTheCheckItselfCatchesTheBug:
 
         되살아나는 것을 막는다. 2026-02-24 `e84d800` 이 「비교」 탭을 지우며
         `_switchMode` 에 폴백까지 넣었으니 의도된 제거였는데, 패널과 그 안의 것들이
-        일곱 달 남아 의존 추적의 «쓰는 쪽»과 스냅샷 내보내기를 닿을 수 없게 했다.
+        일곱 달 남아 의존 추적의 《쓰는 쪽》과 스냅샷 내보내기를 닿을 수 없게 했다.
 
         지금 L5~L7 은 다섯 편집기가 각자 패널과 모드 탭으로 맡는다(D-096).
         이 셋이 돌아오면 그 결정을 되짚는 것이므로 빨간불을 낸다.
@@ -380,7 +380,7 @@ class TestEscapeHelpersAreStrict:
     def test_quotes_are_escaped(self, fname, fileno):
         body = self._impl(fname, fileno)
         # textContent → innerHTML 은 <, >, & 만 바꾸고 따옴표는 그대로 둔다 — 그것을
-        # «엄격»으로 받던 예전 단언이 속성 자리 다섯 곳의 구멍을 가렸다(2026-10-11 2차 전수).
+        # 《엄격》으로 받던 예전 단언이 속성 자리 다섯 곳의 구멍을 가렸다(2026-10-11 2차 전수).
         assert '"/g' in body, (
             f"{fileno}.js::{fname} 가 큰따옴표를 막지 않는다 — "
             "속성 안에 들어가면 따옴표로 속성을 벗어난다"

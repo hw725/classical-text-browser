@@ -55,7 +55,7 @@ Say "[1/5] Python 확인" "White"
 $pyVer = $null
 if (Have "python") {
     # Store의 python 별칭(실행하면 스토어를 열고 stderr에 안내를 씀)이나 stderr 출력은
-    # $ErrorActionPreference=Stop 아래에서 오류로 승격된다 — 여기서만 끄고 실패는 «없음»으로.
+    # $ErrorActionPreference=Stop 아래에서 오류로 승격된다 — 여기서만 끄고 실패는 《없음》으로.
     try {
         $ErrorActionPreference = "Continue"
         $pyVer = (& python --version 2>$null | Out-String).Trim()
@@ -121,12 +121,12 @@ Write-Host ""
 if ($env:CTB_INSTALL_PICK) { $pick = "$env:CTB_INSTALL_PICK".Trim() }
 else { $pick = (Read-Host "  고르세요 [1/2/3/4] (그냥 Enter = 1)").Trim() }
 if ($pick -and $pick -notin @("1", "2", "3", "4")) {
-    Say "  «$pick»은 없는 번호라 본체만 깝니다." "Yellow"
+    Say "  《$pick》은 없는 번호라 본체만 깝니다." "Yellow"
     $pick = "1"
 }
 
 # extras 이름은 pyproject.toml의 [project.optional-dependencies]와 같아야 한다.
-# 없는 이름을 적으면 uv가 «unknown extra»로 서고, 처음 까는 사람은 왜인지 모른다.
+# 없는 이름을 적으면 uv가 《unknown extra》로 서고, 처음 까는 사람은 왜인지 모른다.
 $extras = @()
 if ($pick -eq "2") { $extras = @("--extra", "classical") }
 elseif ($pick -eq "3") { $extras = @("--extra", "classical", "--extra", "japanese") }
@@ -136,7 +136,7 @@ Write-Host ""
 Say "  받는 중… (진행 표시가 멈춰 보여도 기다리세요)"
 Write-Host ""
 # 세 번까지 다시 시도한다 — Defender가 방금 푼 실행 파일(uv trampoline)을 검사하는 순간과 겹치면
-# «액세스가 거부되었습니다»로 한 번 실패하고 바로 다시 하면 된다(2026-09-06 실측, D-113).
+# 《액세스가 거부되었습니다》로 한 번 실패하고 바로 다시 하면 된다(2026-09-06 실측, D-113).
 $synced = $false
 foreach ($try in 1..3) {
     uv sync @extras
@@ -150,7 +150,7 @@ if (-not $synced) {
 
 # ── 5. 글자 인식 모델 미리 받기 ──────────────────────────────
 # PaddleOCR은 처음 쓰일 때 모델(약 240MB)을 Baidu 서버에서 받는다. 앱 안에서 받으면 진행이
-# 안 보여 «멈췄다»로 보이므로(2026-09-06 다른 PC 보고) 여기서 받아 둔다. 실패해도 설치는 끝낸다.
+# 안 보여 《멈췄다》로 보이므로(2026-09-06 다른 PC 보고) 여기서 받아 둔다. 실패해도 설치는 끝낸다.
 Write-Host ""
 Say "[5/5] 글자 인식 모델 미리 받기 (처음 한 번, 약 240MB, 인터넷 필요)" "White"
 uv run python scripts/warmup_paddle.py korean ch
@@ -191,7 +191,7 @@ Say "============================================" "Green"
 Write-Host ""
 Say "  다음: start_server.bat 을 두 번 누르세요." "White"
 Write-Host ""
-Say "  처음 켜면 «처음 설정» 안내가 떠서 이 셋을 한 자리에서 끝냅니다:"
+Say "  처음 켜면 《처음 설정》 안내가 떠서 이 셋을 한 자리에서 끝냅니다:"
 Say "    · 서고(작업 폴더) 만들기"
 Say "    · 글자 인식 엔진 상태 보기"
 Say "    · AI 연결 — API 키를 화면에서 넣습니다"

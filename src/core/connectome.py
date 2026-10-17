@@ -33,7 +33,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# 살아 있는 재측정에 필요한 것 둘. 토큰은 값을 읽지 않고 «있는가»만 본다.
+# 살아 있는 재측정에 필요한 것 둘. 토큰은 값을 읽지 않고 《있는가》만 본다.
 NEUPRINT_TOKEN_ENV = "NEUPRINT_APPLICATION_CREDENTIALS"
 NEUPRINT_TOKEN_FILE = Path.home() / ".claude" / "data" / "triage" / ".env"
 NEUPRINT_DATASET = "male-cns:v1.0"
@@ -51,7 +51,7 @@ RECORDED_REFERENCE: dict = {
     "dataset": NEUPRINT_DATASET,
     "measured_at": "2026-09-21",
     "source": "docs/DECISIONS.md D-128 (jt725/scripts/cns_structure_stats.py로 재생산)",
-    # 무게 1~2인 엣지의 비율. 이것이 «잡음 바닥»의 근거다.
+    # 무게 1~2인 엣지의 비율. 이것이 《잡음 바닥》의 근거다.
     "noise_share": 0.840,
     # 상위 10% 엣지가 가진 무게 비중.
     "top10_share": 0.471,
@@ -85,7 +85,7 @@ NT_CLASSES = {
 LIVE_FIELDS = ("polarity", "polarity_strong")
 
 #: 부호 구성 질의. 정본(`jt725/scripts/cns_structure_stats.py::polarity_table`)과
-#: **같은 자**여야 한다. 상수로 꺼낸 이유는 시험이 «주석이 아니라 질의»를 보게
+#: **같은 자**여야 한다. 상수로 꺼낸 이유는 시험이 《주석이 아니라 질의》를 보게
 #: 하려는 것이다 — 주석에 「정본과 같아야 한다」고 적어 두었지만 네 군데가 달랐고
 #: 아무도 몰랐다(2026-09-22 실측).
 #:
@@ -153,7 +153,7 @@ def _token_present() -> bool:
         for line in NEUPRINT_TOKEN_FILE.read_text(encoding="utf-8", errors="ignore").splitlines():
             if line.strip().startswith(NEUPRINT_TOKEN_ENV) and "=" in line:
                 return bool(line.split("=", 1)[1].strip())
-    except OSError as e:  # noqa: BLE001 — 읽지 못하면 «없다»로 본다
+    except OSError as e:  # noqa: BLE001 — 읽지 못하면 《없다》로 본다
         logger.warning("토큰 파일을 읽지 못했습니다(%s): %s", NEUPRINT_TOKEN_FILE, e)
     return False
 
@@ -231,7 +231,7 @@ def compare(relations: list[dict], reference: dict | None = None) -> dict:
     reference = reference or RECORDED_REFERENCE
     profile = library_profile(relations)
 
-    # 어느 줄의 기준값이 «방금 잰 것»인지. `measure_reference`는 부호 구성만 다시
+    # 어느 줄의 기준값이 《방금 잰 것》인지. `measure_reference`는 부호 구성만 다시
     # 재므로, 살아 있는 대조에서도 위 두 줄은 기록된 값이다. 줄마다 말해 주지
     # 않으면 「다시 재기」를 누른 사람이 다섯 줄 전부 새 값이라고 여긴다.
     live_fields = set(reference.get("live_fields") or ())
@@ -344,10 +344,10 @@ def measure_reference(lineage: str = REFERENCE_LINEAGE) -> dict:
     def _share_strong(*names: str) -> float:
         return round(sum(by_nt_strong.get(n, 0.0) for n in names) / grand_strong, 4)
 
-    # **다시 잰 것만 «직접 질의»라고 말한다.** 한때 `{**RECORDED_REFERENCE, "source":
+    # **다시 잰 것만 《직접 질의》라고 말한다.** 한때 `{**RECORDED_REFERENCE, "source":
     # "직접 질의"}`로 돌려주어, 실제로는 기록된 값인 `noise_share`·`top10_share`에까지
     # 「방금 쟀다」는 이름표가 붙었다. 대조의 다섯 줄 중 셋이 거짓이 되는 자리였다.
-    # 그 둘은 무게 «분포»에서 나오는 값이라 이 질의(부호 집계)로는 뽑을 수 없다.
+    # 그 둘은 무게 《분포》에서 나오는 값이라 이 질의(부호 집계)로는 뽑을 수 없다.
     return {
         **RECORDED_REFERENCE,
         "measured_at": date.today().isoformat(),

@@ -1,16 +1,16 @@
-"""키도 비전 모델도 없는 PC에서 «보내기 전 안내»가 사실을 말한다 (2026-10-06 설치 검증 후속).
+"""키도 비전 모델도 없는 PC에서 《보내기 전 안내》가 사실을 말한다 (2026-10-06 설치 검증 후속).
 
 설치 검증(새 PC 흉내 — 키 없음, Ollama 닿지 않음)에서 나온 빈틈 셋:
-  a. 편성 «판정 모델로 고르기» 미리 보기가 키가 하나도 없는데 «13행 · 질문 13개 · 호출 1번 ·
-     약 $0.000069 · TypeSafe Jev»로만 말했다 — 누르면 400. 미리 보기(dry_run) 응답이
-     `has_key`·`needs_key`를 싣고 화면이 «키 없음 — 설정 → «판정 모델»»을 보인다.
-  b. 자동 스캔의 «자동»·비전 모델 항목이 쓸 수 있는 비전 모델이 하나도 없어도 «비전 모델 3번 …
-     쪽마다 몇 초»만 말했다. 서버가 라우터의 가용성 확인(`is_available_cached`, 시간 제한)으로
-     «닿는 비전 프로바이더»를 세어 `vision_ready`·`no_vision`을 싣고, 화면이 그것을 말한다.
-     시간 안에 못 재면 `vision_checked: False`(모름) — «없다»고 하지 않는다.
+  a. 편성 《판정 모델로 고르기》 미리 보기가 키가 하나도 없는데 《13행 · 질문 13개 · 호출 1번 ·
+     약 $0.000069 · TypeSafe Jev》로만 말했다 — 누르면 400. 미리 보기(dry_run) 응답이
+     `has_key`·`needs_key`를 싣고 화면이 《키 없음 — 설정 → 《판정 모델》》을 보인다.
+  b. 자동 스캔의 《자동》·비전 모델 항목이 쓸 수 있는 비전 모델이 하나도 없어도 《비전 모델 3번 …
+     쪽마다 몇 초》만 말했다. 서버가 라우터의 가용성 확인(`is_available_cached`, 시간 제한)으로
+     《닿는 비전 프로바이더》를 세어 `vision_ready`·`no_vision`을 싣고, 화면이 그것을 말한다.
+     시간 안에 못 재면 `vision_checked: False`(모름) — 《없다》고 하지 않는다.
   c. clef 사슬의 마지막 단계(기본 비전 모델, Ollama)를 Ollama가 닿지 않아도 has_key=true로
      안내했다. Ollama에는 키라는 것이 없다 — `has_key`는 None, 닿는지는 `reachable`
-     (True/False, 못 재면 None)로 따로 말하고 화면은 «지금 닿지 않음»을 붙인다.
+     (True/False, 못 재면 None)로 따로 말하고 화면은 《지금 닿지 않음》을 붙인다.
 
 외부 호출 없음 — 키는 지우고, 라우터는 가짜로 바꾼다.
 """
@@ -86,7 +86,7 @@ def _gpu(monkeypatch):
     monkeypatch.setattr(env_doctor, "_GPU_RUNTIME", True)
 
 
-# ── a. 편성 «판정 모델로 고르기» 미리 보기 ─────────────────────────────
+# ── a. 편성 《판정 모델로 고르기》 미리 보기 ─────────────────────────────
 
 
 def _judge_dry(client, part_id):  # noqa: F811
@@ -237,7 +237,7 @@ def test_c_clef_chain_vision_step_is_not_claimed_as_keyed(client, tmp_path, monk
     _router(monkeypatch, ready=set())  # Ollama 닿지 않음
     d = _scan_dry(client, part_id, force_provider="clef", force_model="clef")
     vis = next(s for s in d["chain"] if s["step"] == "vision")
-    assert vis["has_key"] is not True  # Ollama에는 키가 없다 — «키 있음»이라고 하지 않는다
+    assert vis["has_key"] is not True  # Ollama에는 키가 없다 — 《키 있음》이라고 하지 않는다
     assert vis["reachable"] is False
 
 

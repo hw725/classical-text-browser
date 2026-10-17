@@ -169,7 +169,7 @@ class KorcisFetcher(BaseFetcher):
         """OpenAPI 상세(판식·소장처)를 data["_openapi_detail"]에 싣는다. 실패해도 MARC는 그대로.
 
         2026-10-11 실측: rec_key에 vdkvgwkey를 그대로 주면 된다(302554414 → 蒙求). 판식
-        («左右雙邊 … 半葉10行22字»)은 form_info가 아니라 note_info에 들어 있다.
+        (《左右雙邊 … 半葉10行22字》)은 form_info가 아니라 note_info에 들어 있다.
         """
         try:
             detail = await openapi_detail(rec_key)
@@ -598,7 +598,7 @@ class KorcisMapper(BaseMapper):
 
         # printing_info 객체 (판식정보)
         # OpenAPI enrichment로 form_info가 있으면 파싱
-        # 판식은 OpenAPI 상세의 note_info(주기)에 «左右雙邊 … 半葉10行22字»로 오고, form_info는
+        # 판식은 OpenAPI 상세의 note_info(주기)에 《左右雙邊 … 半葉10行22字》로 오고, form_info는
         # 대개 권책·크기뿐이다(2026-10-11 실측). 둘을 이어 한 번에 읽는다(B-031).
         printing_info = None
         openapi_data = raw_data.get("_openapi_detail") or {}
@@ -1197,7 +1197,7 @@ def _parse_search_results(html_text: str) -> list[dict[str, Any]]:
             )
 
     except Exception as e:  # noqa: BLE001
-        # 사이트 개편으로 «0건»이 원인 없이 나오지 않게 남긴다
+        # 사이트 개편으로 《0건》이 원인 없이 나오지 않게 남긴다
         logger.warning("KORCIS 검색 결과 해석 실패(빈 목록): %s", e)
 
     return results
@@ -1526,15 +1526,15 @@ _GWANGWAK_PATTERNS = [
     (re.compile(r"無邊"), "무변"),
 ]
 
-# 어미(魚尾)는 «자리 + 향 + 잎 수 + 무늬·색 + 魚尾»의 조합이다. 표로 나열하면 조합 하나가
+# 어미(魚尾)는 《자리 + 향 + 잎 수 + 무늬·색 + 魚尾》의 조합이다. 표로 나열하면 조합 하나가
 # 빠질 때마다 못 읽는다 — 실제로 국립중앙도서관 KOL000019624의 「上2葉花紋魚尾」가 그렇게
 # 통째로 빠졌다(2026-09-08). 아라비아 숫자를 쓴 표기도 목록마다 섞여 있다.
 # 그래서 조각을 읽어 이어 붙인다. 조각의 한자→한글 대응만 지식이고, 조합은 세지 않는다.
-# 어미 글자만으로 이어진 구간을 떼어 내 «통째로» 해석되는지 본다.
+# 어미 글자만으로 이어진 구간을 떼어 내 《통째로》 해석되는지 본다.
 # 왜 낱말 경계(·\w)를 쓰지 않는가: 한문에는 띄어쓰기가 없어 「…20字上下內向二葉花紋魚尾」처럼
 # 붙여 쓴 목록이 흔하고, 가드를 두면 그런 표기를 통째로 못 읽는다(2026-09-09 실측).
-# 왜 «통째로»인가: 「金魚尾」「魚尾草」는 어미가 아니고, 「上下向黑魚尾」「上2花紋魚尾」처럼 조각이
-# 어긋난 표기는 짐작하지 않고 비워 둔다 — 목록이 그렇게 적혔다면 사람이 봐야 한다.
+# 왜 《통째로》인가: 「金魚尾」「魚尾草」는 어미가 아니고, 「上下向黑魚尾」「上2花紋魚尾」처럼
+# 조각이 어긋난 표기는 짐작하지 않고 비워 둔다 — 목록이 그렇게 적혔다면 사람이 봐야 한다.
 _EOMI_CHARS = "無上下內外向二貳三四2-4２-４葉花紋黑白魚尾"
 _EOMI_RUN = re.compile(f"[{_EOMI_CHARS}]*魚尾")
 _EOMI_RE = re.compile(
@@ -1607,7 +1607,7 @@ _PANGOO_PATTERNS = [
 
 
 def _openapi_plain(text: str) -> str:
-    """OpenAPI 상세 칸의 «[…]» 괄호·<br>·쉼표 나열을 판식 문장으로 편다."""
+    """OpenAPI 상세 칸의 《[…]》 괄호·<br>·쉼표 나열을 판식 문장으로 편다."""
     text = re.sub(r"<br\s*/?>", " ", text or "", flags=re.IGNORECASE)
     text = text.replace("[", " ").replace("]", " ")
     return re.sub(r"\s+", " ", text).strip()

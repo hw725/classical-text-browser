@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """애매한 후보 2차 판정을 서버 없이 — Claude Code/Desktop 세션용 (D-137).
 
-사용자가 «애매한 후보 판정해 줘»라고 하면 세션이 이렇게 한다(AGENTS.md «Claude 세션에서»):
+사용자가 《애매한 후보 판정해 줘》라고 하면 세션이 이렇게 한다(AGENTS.md 《Claude 세션에서》):
 
     uv run python scripts/escalate_review.py export --doc <문헌> --part <권> --out esc.txt
     (세션이 esc.txt의 지시문대로 직접 판정해 answers.json을 쓴다 — 외부 모델을 부르지 않는다)
@@ -25,7 +25,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-# CJK Text Contract E3 — 한국어 Windows 콘솔(cp949)은 «—»를 print하면 즉사한다
+# CJK Text Contract E3 — 한국어 Windows 콘솔(cp949)은 《—》를 print하면 즉사한다
 from core.console import force_utf8_console  # noqa: E402
 
 force_utf8_console()
@@ -74,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     lib = _library(a.library)
     try:
-        # «--doc ..»이면 documents/..(= 서고 자체)가 «있는 폴더»로 통과하고
+        # 《--doc ..》이면 documents/..(= 서고 자체)가 《있는 폴더》로 통과하고
         # 메모가 서고 밖으로 빠졌다
         check_path_id(a.doc, "문헌")
         check_path_id(a.part, "권")

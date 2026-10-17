@@ -150,7 +150,7 @@ class TestOcrIntegration:
         with open(l2_path, encoding="utf-8") as f:
             data = json.load(f)
 
-        # 스키마로 검증한다 — 스키마는 저장소에 늘 있다. 예전에는 «없으면 기본 키만 보고 통과»
+        # 스키마로 검증한다 — 스키마는 저장소에 늘 있다. 예전에는 《없으면 기본 키만 보고 통과》
         # 갈래가 있어, 경로가 틀어지면 검증 없이 초록이 됐다(2026-10-12 시험 중복 정리)
         import jsonschema
 

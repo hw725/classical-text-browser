@@ -7,7 +7,7 @@
     OCR·교정이 전부 사라졌다.
 
     이 라우트는 manifest를 고치는 몇 안 되는 경로다. 잘못 쓰면 문헌이 통째로
-    열리지 않게 되므로, «실패하면 아무것도 바꾸지 않는다»를 회귀로 고정한다.
+    열리지 않게 되므로, 《실패하면 아무것도 바꾸지 않는다》를 회귀로 고정한다.
 """
 
 import json
@@ -170,7 +170,7 @@ def test_manifest_stays_valid(client, tmp_path):
 def test_existing_ocr_survives(client, tmp_path):
     """권을 더해도 기존 권의 OCR 결과가 남는다.
 
-    이 라우트를 만든 이유가 «다시 만들면 작업이 사라진다»이므로,
+    이 라우트를 만든 이유가 《다시 만들면 작업이 사라진다》이므로,
     더하는 행위 자체가 작업을 지우면 앞뒤가 안 맞는다.
     """
     from pathlib import Path
