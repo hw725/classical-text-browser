@@ -240,7 +240,7 @@ src/app/
   (`npx -y openai-oauth`, 포트 10531–10540 스캔, Bearer 토큰 `oauth-proxy` 하드코딩)와
   SikuRoBERTa 표점 Docker(punctuation-service/.env 존재 시)를 자동 기동.
 - 프론트(static/)가 약 4.7만 줄 — index.html 약 5.1천 줄 단일 파일, workspace.css 약 8.2천 줄,
-  JS 34개(약 3.3만 줄). 테스트 107파일 — 그중 화면 JS를 node로 돌리는 것(`tests/js_harness.py`)은
+  JS 34개(약 3.3만 줄). 테스트 108파일 — 그중 화면 JS를 node로 돌리는 것(`tests/js_harness.py`)은
   `tests/test_annotation_editor_js.py`(2026-09-16 Codex 교차검증 반영 때 처음)·
   `tests/test_entity_manager_js.py`(D-128)·`tests/test_structure_jev.py`·
   `tests/test_read_path_writes.py`(화면을 열기만 해도 쓰던 것, 2026-09-30)·
@@ -248,7 +248,8 @@ src/app/
   `tests/test_composition_apply_plan_js.py`(편성 ③ 《바뀐 것》과 「적용」이 다른 집합을 세던 것, 2026-10-05)·
   `tests/test_sweep_20261011.py`(2026-10-11 전수 결함 B-012~B-077과 릴리스 리뷰 B-078·시험 정리 B-079의 회귀 — 인용·현토·번역 좌표, 번역 집계, 시작 행 옮기기,
   사전 활성화, 백업·.env·휴지통 데이터 손실, 이스케이프)·
-  `tests/test_default_models_20261018.py`(《자동》 기본 모델과 앞 순위 실패 알림 문구, D-143), **CI 없음.**
+  `tests/test_default_models_20261018.py`(《자동》 기본 모델과 앞 순위 실패 알림 문구, D-143)·
+  `tests/test_model_choice_memory_20261018.py`(작업 화면 「모델」 칸이 새로고침 뒤에도 고른 모델을 기억, D-143), **CI 없음.**
   화면 《마크업》을 읽는 것도 둘이다 — `tests/test_ui_reachability.py`(조작 단추에 사람이
   닿을 수 있는가, B-008)와 `tests/test_connectome.py`(화면이 그 라우트를 부르는가).
   (2026-10-05 재실측. 2026-07-26 v1.2.0 감사 때 직전 대비 프론트가 줄어든 것은

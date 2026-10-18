@@ -189,12 +189,41 @@
         "quote": "인계_ctb기본모델_20261018: Ollama 404 model 'gemma4:e4b' not found, OAuth 500, 답은 3순위 Gemini — 실패가 조용히 넘어간다"
       },
       "status": "active"
+    },
+    {
+      "id": "C-004",
+      "text": "작업 화면의 「모델」 칸은 고른 모델을 새로고침 뒤에도 칸마다 기억하고, 기억한 모델을 쓸 수 없으면 알린 뒤 《자동》으로 둔다",
+      "judge": "deterministic",
+      "check": {
+        "argv": [
+          "uv",
+          "run",
+          "python",
+          "-m",
+          "pytest",
+          "tests/test_model_choice_memory_20261018.py",
+          "-q",
+          "-p",
+          "no:cacheprovider"
+        ],
+        "fail_regex": "FAILED|AssertionError|\\d+ errors?\\b",
+        "traceback_fatal": false
+      },
+      "guards": [
+        "tests/test_model_choice_memory_20261018.py"
+      ],
+      "origin": {
+        "kind": "user-correction",
+        "date": "2026-10-18",
+        "quote": "작업 화면 모델 선택 새로고침해도 기억하게 해야 하지 않을까? 안 그러면 의미가 있어...??"
+      },
+      "status": "active"
     }
   ],
   "approved": {
-    "hash": "a92e9142fef3cad147cf99635552037afe440f9c769a4ffce02a501f25501f7a",
-    "request": "A-0e31d87e",
-    "ts": "2026-10-18T14:29:01",
+    "hash": "7c5566414cdb364c6c5df13ca56a569abf5e6f9aef45c773f18ac338418ad338",
+    "request": "A-edf97939",
+    "ts": "2026-10-18T15:29:17",
     "guards": {
       "tests/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "tests/conftest.py": "39d9a0edf4011b44a408f8a73258e802b7a236ed2f1753b40ced6afeba49b18f",
@@ -259,6 +288,7 @@
       "tests/test_llm_json_items.py": "8ccd3ba5f0f21caa5c403ab0bbba57e619d1e419ecebcacec085f29003a0756d",
       "tests/test_llm_ocr_page_image.py": "9bd7318278335c36fa77ef3e112446d0d0fd39e8278e912b0cfbe37754d73c0e",
       "tests/test_llm_vision_reasoning.py": "7c5376d52c84cd2ab47802eb1f74684439d33aa93866a8baa59a64eafed0717e",
+      "tests/test_model_choice_memory_20261018.py": "0e602bac9dc9ad91f28d97f73f831baf7334077b60a01a2072fe86e8cef300f1",
       "tests/test_multivolume_source.py": "3ef8b01b2ce54c4af921a9955c3176a9bf174ae84d3975e0c013d76f2858c94e",
       "tests/test_no_key_notices.py": "ff3eef3c41a3ddd21fb9d2dd91fd803d02ae05a08a4d079554984502ae1155b4",
       "tests/test_oauth_proxy.py": "4c8c921b3015341c48486546b26ec645161404fa600945e23b2db774c4dfd2a2",

@@ -2205,14 +2205,75 @@ function _fillLlmSelect(select, models) {
         if (!ok && select.value === opt.value) select.value = "auto";
         if (d?.default_image_provider === "decision" && !select.dataset.decisionDefaulted) {
           select.dataset.decisionDefaulted = "1";
-          if (!previous || previous === "auto") select.value = DECISION_SCAN_VALUE;
+          // 사람이 고른 것(기억해 둔 것 포함)이 있으면 그대로 둔다
+          if (select.value === "auto" && !_llmChoiceLoad(select.id)) {
+            select.value = DECISION_SCAN_VALUE;
+          }
         }
       })
       .catch(() => {});
   }
 
-  if (previous && Array.from(select.options).some((o) => o.value === previous)) {
-    select.value = previous;
+  _restoreLlmChoice(select, previous);
+}
+
+/**
+ * 「모델」 칸의 선택을 되살린다 — 같은 페이지에서 다시 채울 때는 지금 고른 것, 처음 채울 때
+ * (새로고침)는 브라우저에 기억해 둔 것. 칸에서 고르면 그 칸 이름으로 기억한다.
+ *
+ * 왜: 설정의 《자동》 기본 모델(D-143)과 달리 작업 화면 칸은 새로고침하면 늘 《자동》으로
+ * 돌아가, 《번역은 늘 glm-5.2》처럼 작업마다 다른 모델을 쓰려면 매번 다시 골라야 했다.
+ * 기억한 모델이 지금 목록에 없거나 쓸 수 없으면 《자동》으로 두되 조용히 두지 않고 알린다 —
+ * 모르는 사이 다른 모델이 답하는 것이 D-143이 막으려던 일이다.
+ * 기억은 이 브라우저에만 남는 개인 편의라 localStorage에 둔다(막혀 있으면 기억만 못 한다).
+ *
+ * 입력: select — 채운 칸(id 필수), previous — 다시 채우기 전 값.
+ */
+function _restoreLlmChoice(select, previous) {
+  const usable = (v) =>
+    Array.from(select.options).some((o) => o.value === v && !o.disabled);
+  let wanted = previous && previous !== "auto" ? previous : null;
+  if (!select.dataset.llmChoiceRestored) {
+    select.dataset.llmChoiceRestored = "1";
+    wanted = wanted || _llmChoiceLoad(select.id);
+    select.addEventListener("change", () => _llmChoiceSave(select.id, select.value));
+  }
+  if (!wanted || wanted === "auto") return;
+  if (usable(wanted)) {
+    select.value = wanted;
+    // 사람이 고른 것과 같게 표시한다 — 「말로 지시」 창은 이 표지가 없으면 열 때 종류 판정 칸을
+    // 기본 모델로 덮는다(work-order.js::openWorkOrder).
+    select.dataset.picked = "1";
+    return;
+  }
+  select.value = "auto";
+  if (typeof window.showToast === "function") {
+    window.showToast(
+      `고른 모델 ${wanted}을(를) 지금 쓸 수 없어 이 칸을 《자동》으로 두었습니다 — 목록에서 다시 고르세요.`,
+      "warning",
+      8000,
+    );
+  }
+}
+
+/** 칸 이름으로 기억해 둔 모델 값. 없거나 저장소가 막혀 있으면 null. */
+function _llmChoiceLoad(id) {
+  if (!id) return null;
+  try {
+    return localStorage.getItem(`ctb.llmModel.${id}`);
+  } catch {
+    return null;
+  }
+}
+
+/** 칸에서 고른 모델을 기억한다. 《자동》이면 기억을 지운다. */
+function _llmChoiceSave(id, value) {
+  if (!id) return;
+  try {
+    if (!value || value === "auto") localStorage.removeItem(`ctb.llmModel.${id}`);
+    else localStorage.setItem(`ctb.llmModel.${id}`, value);
+  } catch {
+    // 사생활 보호 창 등 — 기억만 못 할 뿐 칸은 그대로 쓴다
   }
 }
 
