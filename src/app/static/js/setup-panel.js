@@ -228,7 +228,13 @@ async function _saveDecisionModel(slot, select) {
       body: JSON.stringify({ [slot]: select.value }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) {
+      // 서버 검사(400)는 error, FastAPI 형식 검사(422)는 detail(목록)에 까닭을 싣는다
+      const detail = Array.isArray(data.detail)
+        ? data.detail.map((d) => d.msg).join("; ")
+        : data.detail;
+      throw new Error(data.error || detail || `HTTP ${res.status}`);
+    }
     select.dataset.saved = select.value;
     showToast("판정 모델을 저장했습니다.", "success");
     // 자동 스캔의 《종류 판정 모델》 옵션 이름이 이미지 모델을 보인다 — 드롭다운도 다시 채운다
@@ -305,7 +311,13 @@ async function _saveLlmKeys(payload, btn, okMessage) {
       body: JSON.stringify(payload),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) {
+      // 서버 검사(400)는 error, FastAPI 형식 검사(422)는 detail(목록)에 까닭을 싣는다
+      const detail = Array.isArray(data.detail)
+        ? data.detail.map((d) => d.msg).join("; ")
+        : data.detail;
+      throw new Error(data.error || detail || `HTTP ${res.status}`);
+    }
     showToast(okMessage, "success");
     if (typeof _loadLlmAccounts === "function") await _loadLlmAccounts();
     // 서버는 라우터 캐시를 비웠다. 화면의 모델 드롭다운·추출 패널·마법사도 다시 채워야
@@ -423,6 +435,95 @@ function _oauthRow() {
   });
   poll(true);
   return wrap;
+}
+
+/**
+ * Ollama·OpenAI(OAuth) 카드의 《자동 모드 기본 모델》 칸 (D-143).
+ * 입력: dm — /api/llm/accounts 항목의 default_model. 출력: 붙일 요소.
+ *
+ * 왜: 「모델」 드롭다운이 《자동(폴백순서)》이면 공급자마다 기본 모델로 간다. 4월에 넣은 기본 모델이
+ * 이 PC에 없어 앞 두 순위가 반년 동안 실패했고 아무도 몰랐다(2026-10-18). 카드에서 지금 기본 모델과
+ * 목록에 있는지를 보이고 바로 고르게 한다. 고르면 서고 .env에 저장한다 — 저장 단추를 따로 두지
+ * 않는다(판정 모델 칸과 같은 이유: 고르고 잊은 값이 남는다).
+ */
+function _defaultModelRow(dm) {
+  const wrap = document.createElement("div");
+  wrap.className = "settings-default-model"; // 카드 안에 들어가므로 카드 테두리(settings-llm-row)를 겹치지 않는다
+  const label = document.createElement("label");
+  label.className = "settings-decision-slot";
+  label.textContent = "자동 모드 기본 모델 ";
+  const select = document.createElement("select");
+  select.className = "bib-input";
+  select.setAttribute("aria-label", "자동 모드 기본 모델");
+  select.appendChild(new Option(`앱 기본 (${dm.builtin})`, ""));
+  for (const name of dm.choices || []) select.appendChild(new Option(name, name));
+  const current = dm.source === "env" ? dm.model : "";
+  if (current && !(dm.choices || []).includes(current)) {
+    select.appendChild(new Option(`${current} (목록에 없음)`, current));
+  }
+  select.value = current;
+  select.dataset.saved = current;
+  select.addEventListener("change", () =>
+    _saveDefaultModel({ [dm.env_key]: select.value }, select, "기본 모델을 저장했습니다.")
+  );
+  label.appendChild(select);
+  wrap.appendChild(label);
+
+  if (dm.effort_key) {
+    const el = document.createElement("label");
+    el.className = "settings-decision-slot";
+    el.textContent = "추론 강도 ";
+    const es = document.createElement("select");
+    es.className = "bib-input";
+    es.setAttribute("aria-label", "추론 강도");
+    es.appendChild(new Option(`앱 기본 (${dm.effort_builtin})`, ""));
+    for (const e of dm.efforts || []) es.appendChild(new Option(e, e));
+    const cur = dm.effort_source === "env" ? dm.effort : "";
+    es.value = cur;
+    es.dataset.saved = cur;
+    es.addEventListener("change", () =>
+      _saveDefaultModel({ [dm.effort_key]: es.value }, es, "추론 강도를 저장했습니다.")
+    );
+    el.appendChild(es);
+    wrap.appendChild(el);
+  }
+
+  const note = document.createElement("div");
+  note.className = "settings-llm-note";
+  note.textContent = dm.listed
+    ? `지금 ${dm.model}(으)로 갑니다. 「모델」 칸에서 따로 고른 호출은 이 값을 쓰지 않습니다.`
+    : `지금 기본 모델 ${dm.model}이(가) 목록에 없어 자동 모드에서 이 공급자를 건너뜁니다 — 위에서 고르세요.`;
+  wrap.appendChild(note);
+  return wrap;
+}
+
+/** 기본 모델·추론 강도 저장. 실패하면 고르기 전 값으로 되돌린다 — 화면이 서버와 다른 값을 보이지 않게. */
+async function _saveDefaultModel(payload, select, okMessage) {
+  select.disabled = true;
+  try {
+    const res = await fetch("/api/settings/llm-keys", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      // 서버 검사(400)는 error, FastAPI 형식 검사(422)는 detail(목록)에 까닭을 싣는다
+      const detail = Array.isArray(data.detail)
+        ? data.detail.map((d) => d.msg).join("; ")
+        : data.detail;
+      throw new Error(data.error || detail || `HTTP ${res.status}`);
+    }
+    select.dataset.saved = select.value;
+    showToast(okMessage, "success");
+    if (typeof _loadLlmAccounts === "function") await _loadLlmAccounts();
+    document.dispatchEvent(new CustomEvent("llm-accounts-changed"));
+  } catch (e) {
+    select.value = select.dataset.saved ?? "";
+    showToast(`저장하지 못했습니다(앞 값으로 되돌림): ${e.message}`, "error");
+  } finally {
+    select.disabled = false;
+  }
 }
 
 /** Ollama 카드에 붙는 《지금 도는지 확인》 줄. */

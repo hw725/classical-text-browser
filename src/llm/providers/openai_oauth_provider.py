@@ -21,7 +21,13 @@ OPENAI_API_KEY가 설정된 경우에도, 프록시가 살아있으면 이 프�
 import logging
 from typing import Optional
 
-from .base import TRUNCATED_MARK, LlmProviderError, LlmResponse, thinking_options
+from .base import (
+    DEFAULT_THINKING_BUDGET,
+    TRUNCATED_MARK,
+    LlmProviderError,
+    LlmResponse,
+    thinking_options,
+)
 from .openai_provider import OpenAiProvider
 
 _logger = logging.getLogger(__name__)
@@ -44,7 +50,14 @@ class OpenAiOAuthProvider(OpenAiProvider):
     # ChatGPT 구독 한도를 쓴다. 종량 과금이 아니므로 금액은 0으로 기록되지만
     # 한도는 소모된다 — 남은 한도는 OpenAI 쪽에서 확인해야 한다.
     billing_model = "subscription"
-    DEFAULT_MODEL = "gpt-5.4-mini"  # OAuth 프록시 기본 모델 (비용 효율적)
+    # 기본 모델(D-143, 2026-10-18). v1.4.3까지는 4월에 넣은 gpt-5.4-mini였는데, 지금 프록시
+    # 목록(/v1/models)에 없어 자동 모드의 2순위가 늘 500으로 실패했다. .env `OPENAI_OAUTH_MODEL`
+    # (설정 화면에서도 고른다)이 이긴다 — default_model().
+    DEFAULT_MODEL = "gpt-6.1-sol"
+    # 호출자가 사고를 정하지 않았을 때 보낼 추론 강도(사용자 결정 2026-10-18).
+    # .env `OPENAI_OAUTH_EFFORT`
+    DEFAULT_EFFORT = "medium"
+    EFFORTS = ("minimal", "low", "medium", "high", "xhigh")
 
     # API 키가 아니라 ChatGPT 계정으로 로그인한다. 프록시가 브라우저를 열어
     # 인증을 받으므로 앱이 대신할 수 없다.
@@ -65,6 +78,68 @@ class OpenAiOAuthProvider(OpenAiProvider):
     # 짧게 잡아 프록시를 나중에 띄웠을 때 오래 기다리지 않게 한다.
     _miss_until: float = 0.0
     MISS_TTL_SEC = 30.0
+
+    def default_model(self) -> str:
+        """모델을 지정하지 않은 호출이 쓸 모델 — .env `OPENAI_OAUTH_MODEL`, 없으면 DEFAULT_MODEL."""
+        return (self.config.get("openai_oauth_model") or "").strip() or self.DEFAULT_MODEL
+
+    def reasoning_effort(self, think) -> str:
+        """보낼 추론 강도.
+
+        입력: think — None(호출자가 정하지 않음)·True·False·문자열("high" 등).
+        출력: "low"·"medium" 같은 강도.
+          - None·True → 설정값(.env `OPENAI_OAUTH_EFFORT`, 없으면 medium). 사용자가 정한 기본이다
+          - False     → "low". 사고 끔(D-074, OCR 기본)은 그대로 둔다
+          - 문자열    → 그대로
+        """
+        if isinstance(think, str) and think:
+            return think
+        if think is False:
+            return "low"
+        configured = (self.config.get("openai_oauth_effort") or "").strip().lower()
+        return configured if configured in self.EFFORTS else self.DEFAULT_EFFORT
+
+    def _text_reasoning_kwargs(self, model: str, kwargs: dict) -> dict:
+        """텍스트 호출에도 추론 강도를 보낸다 — 전에는 비전만 보냈다(D-143)."""
+        if not self._is_reasoning_model(model):
+            return {}
+        return {"reasoning_effort": self.reasoning_effort(kwargs.get("think"))}
+
+    def _reasoning_extra_tokens(self, model: str, kwargs: dict) -> int:
+        """추론 토큰 몫(D-083). 추론 토큰도 같은 상한에서 빠지므로, medium 이상을 보내면서
+        상한을 그대로 두면 긴 JSON 답이 잘린다. 호출자가 준 사고 예산이 있으면 그것, 없으면 기본값.
+        """
+        if not self._is_reasoning_model(model):
+            return 0
+        if self.reasoning_effort(kwargs.get("think")) in ("minimal", "low"):
+            return 0
+        # think를 비워 둔 호출은 thinking_options가 0을 돌려주므로, 준 예산을 직접 읽는다
+        # (thinking_budget=128을 주고도 4,096이 더해지던 것 — D-143 릴리스 리뷰).
+        try:
+            given = int(kwargs.get("thinking_budget") or 0)
+        except (TypeError, ValueError):
+            given = 0
+        return given if given > 0 else (thinking_options(kwargs)[1] or DEFAULT_THINKING_BUDGET)
+
+    async def _check_default_model(self, model: str) -> None:
+        """기본 모델이 프록시 목록(/v1/models)에 있는지 본다 — 없으면 부르지 않는다(D-143).
+
+        왜: 목록에 없는 모델을 부르면 프록시가 메시지 없는 500을 낸다(gpt-5.4-mini, 2026-10-18).
+        그 500은 원인을 알려 주지 않고 한도만 쓴다. 목록을 못 받았으면(None) 막지 않는다 —
+        받았는데 비어 있는 것([])은 《없다》로 본다.
+        """
+        if self._discovered_models is None:
+            await self.is_available()
+        if self._discovered_models is None:
+            return
+        ids = {m.get("id") for m in self._discovered_models}
+        if model not in ids:
+            listed = ", ".join(sorted(i for i in ids if i and not i.startswith("gpt-image")))
+            raise LlmProviderError(
+                f"ChatGPT 계정 기본 모델 {model}이(가) 프록시 목록에 없습니다 — 부르지 않았습니다. "
+                f"프록시가 내는 모델: {listed}. 설정 「LLM 연결」의 OpenAI(OAuth) 칸에서 "
+                "기본 모델을 고르거나 서고 .env에 OPENAI_OAUTH_MODEL=<모델 이름>을 적으세요."
+            )
 
     def _get_base_url(self) -> str:
         """프록시 URL 조회.
@@ -227,11 +302,15 @@ class OpenAiOAuthProvider(OpenAiProvider):
         import base64 as _b64
         import time as _time
 
+        selected_model = model or self.default_model()
+        if not model:
+            await self._check_default_model(selected_model)
         client = self._create_client()
-        selected_model = model or self.DEFAULT_MODEL
         data_uri = f"data:{image_mime};base64,{_b64.b64encode(image).decode('ascii')}"
 
         think, thinking_budget = thinking_options(kwargs)
+        # 호출자가 사고를 정하지 않아도 medium을 보내므로(D-143) 추론 몫을 상한에 더한다
+        thinking_budget = max(thinking_budget, self._reasoning_extra_tokens(selected_model, kwargs))
         req = {
             "model": selected_model,
             "input": [
@@ -250,7 +329,8 @@ class OpenAiOAuthProvider(OpenAiProvider):
         if response_format == "json":
             req["text"] = {"format": {"type": "json_object"}}
         if self._is_reasoning_model(selected_model):
-            req["reasoning"] = {"effort": "medium" if think else "low"}
+            # 호출자가 정하지 않았으면(None) 설정 강도 — 전에는 None도 "low"였다(D-143)
+            req["reasoning"] = {"effort": self.reasoning_effort(think)}
 
         t0 = _time.monotonic()
         try:

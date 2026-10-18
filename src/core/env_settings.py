@@ -10,7 +10,7 @@ BOM·cp949로 저장해 라우터 초기화가 통째로 실패한 사고도 있
   - 프로젝트 루트 `.env`는 그대로 읽히고(우선순위는 llm/config.py), 이 모듈은 건드리지 않는다.
 
 값을 돌려주지 않는다: 읽기는 **있는가와 끝 네 글자**만 알린다. 화면·로그·API 어디에도 키
-전체가 나가지 않는다.
+전체가 나가지 않는다. 예외는 비밀이 아닌 기본 모델 셋(PLAIN_KEYS, D-143)뿐이다.
 """
 
 from __future__ import annotations
@@ -38,7 +38,22 @@ MANAGED_KEYS: dict[str, str] = {
     # 주소에 계정 id가 들어가 값이 둘이다. 없으면 Windows 사용자 환경변수도 본다(llm/clef_cf.py)
     "cloudflare": "CLOUDFLARE_API_TOKEN",
     "cloudflare_account": "CLOUDFLARE_ACCOUNT_ID",
+    # 자동(폴백 순서) 기본 모델(D-143) — 비밀이 아니라 그대로 보인다(PLAIN_KEYS).
+    # 설정 「LLM 연결」의 Ollama·OpenAI(OAuth) 칸에서 고른다. 비우면 앱에 든 기본값
+    "ollama_text_model": "OLLAMA_TEXT_MODEL",
+    "openai_oauth_model": "OPENAI_OAUTH_MODEL",
+    "openai_oauth_effort": "OPENAI_OAUTH_EFFORT",
 }
+
+# 값을 가리지 않고 돌려주는 키 — 모델 이름·추론 강도는 비밀이 아니고, 사람이 무엇을 골랐는지
+# 보여야 고를 수 있다. API 키는 여기에 넣지 않는다.
+PLAIN_KEYS = frozenset({"ollama_text_model", "openai_oauth_model", "openai_oauth_effort"})
+
+# 추론 강도로 받는 값 — llm.providers.openai_oauth_provider.OpenAiOAuthProvider.EFFORTS와 같다.
+# 다른 글이 들어가면 프로바이더가 무시하고 medium으로 돌므로, 저장할 때 막아 화면과 실제를 맞춘다.
+_EFFORTS = ("minimal", "low", "medium", "high", "xhigh")
+# 모델 이름 모양 — Ollama(`kimi-k3:cloud`)·OpenAI(`gpt-6.1-sol`) 둘 다. 공백·따옴표·= 은 받지 않는다
+_MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$")
 
 _LINE_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$")
 
@@ -119,9 +134,9 @@ def mask(value: str) -> str:
 
 
 def read_status(library_root: str | Path) -> dict:
-    """서고 .env에 무엇이 들어 있는가. **값은 돌려주지 않는다.**
+    """서고 .env에 무엇이 들어 있는가. **키 값은 돌려주지 않는다**(PLAIN_KEYS만 value).
 
-    출력: {"path", "exists", "keys": {provider: {"set": bool, "hint": "…abcd"}}}
+    출력: {"path", "exists", "keys": {provider: {"set": bool, "hint": "…abcd", "value"?: str}}}
     """
     p = env_path(library_root)
     values = _parse(_read_lines(p))
@@ -129,6 +144,8 @@ def read_status(library_root: str | Path) -> dict:
     for provider, env_name in MANAGED_KEYS.items():
         v = values.get(env_name, "")
         keys[provider] = {"set": bool(v), "hint": mask(v), "env_name": env_name}
+        if provider in PLAIN_KEYS:
+            keys[provider]["value"] = v  # 모델 이름·강도는 비밀이 아니다(D-143)
     return {"path": str(p), "exists": p.exists(), "keys": keys}
 
 
@@ -148,6 +165,15 @@ def write_values(library_root: str | Path, updates: dict[str, str | None]) -> di
     for k, v in wanted.items():
         if "\n" in v or "\r" in v:
             raise ValueError(f"{k} 값에 줄바꿈이 들어 있습니다.")
+    effort = wanted.get(MANAGED_KEYS["openai_oauth_effort"])
+    if effort and effort not in _EFFORTS:
+        raise ValueError(
+            f"추론 강도는 {', '.join(_EFFORTS)} 중 하나여야 합니다(받은 값: {effort})."
+        )
+    for k in ("ollama_text_model", "openai_oauth_model"):
+        v = wanted.get(MANAGED_KEYS[k])
+        if v and not _MODEL_RE.match(v):
+            raise ValueError(f"{MANAGED_KEYS[k]} 값이 모델 이름 모양이 아닙니다: {v[:60]}")
     if not wanted:
         return read_status(library_root)
 

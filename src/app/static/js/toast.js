@@ -137,3 +137,41 @@
   /* 전역에 노출 */
   window.showToast = showToast;
 })();
+
+/**
+ * LLM 자동 폴백 알림 문구 (D-143).
+ * 입력: 응답 머리 X-CTB-LLM-Fallback 값(퍼센트 인코딩) 또는 null. 출력: 토스트 문구 또는 null.
+ *
+ * 왜: 앞 순위 공급자가 실패하면 라우터가 다음 순위로 넘어가는데, 예전에는 그 사실이 화면에 남지 않았다.
+ * 4월 기본 모델이 반년 동안 실패하는 사이 답은 조용히 3순위(Gemini, 종량 과금)에서 왔다(2026-10-18).
+ */
+function _llmFallbackNotice(raw) {
+  if (!raw) return null;
+  let text = raw;
+  try {
+    text = decodeURIComponent(raw);
+  } catch (_) {
+    /* 깨진 인코딩이면 받은 그대로 보인다 */
+  }
+  return `LLM 앞 순위가 실패해 다음 순위로 넘어갔습니다: ${text} — 기본 모델은 설정 「LLM 연결」에서 고릅니다.`;
+}
+
+/**
+ * 모든 fetch 응답에서 폴백 머리를 본다. 머리가 없는 응답은 그대로 지나간다.
+ * 왜 한 곳인가: LLM을 부르는 화면이 여럿이라 화면마다 붙이면 새 화면에서 또 빠진다(서버의 미들웨어와 같은 이유).
+ */
+(function () {
+  if (typeof window === "undefined" || typeof window.fetch !== "function" || window.__ctbFallbackWatch) return;
+  window.__ctbFallbackWatch = true;
+  const origFetch = window.fetch.bind(window);
+  window.fetch = async function (...args) {
+    const res = await origFetch(...args);
+    try {
+      const msg = _llmFallbackNotice(res.headers && res.headers.get("X-CTB-LLM-Fallback"));
+      if (msg && typeof window.showToast === "function") window.showToast(msg, "warning", 12000);
+    } catch (_) {
+      /* 알림이 실패해도 응답은 그대로 돌려준다 */
+    }
+    return res;
+  };
+})();

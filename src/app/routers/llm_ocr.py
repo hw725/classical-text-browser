@@ -387,9 +387,7 @@ def _load_page_image(doc_id: str, page: int, part_id: str | None = None) -> byte
     from ocr.image_utils import load_page_image_from_pdf
 
     try:
-        img = load_page_image_from_pdf(
-            str(library_path), doc_id, page, scale=2.0, part_id=part_id
-        )
+        img = load_page_image_from_pdf(str(library_path), doc_id, page, scale=2.0, part_id=part_id)
         if img is None:
             return None
         buf = BytesIO()
@@ -516,6 +514,14 @@ async def api_llm_accounts():
                 except Exception:  # noqa: BLE001
                     entry["active_model_installed"] = None
 
+        if reachable and provider.provider_id in ("ollama", "openai_oauth"):
+            try:
+                entry["default_model"] = await asyncio.wait_for(
+                    _default_model_info(provider), timeout=3.0
+                )
+            except Exception:  # noqa: BLE001 — 고르기 칸이 없어도 카드는 보인다
+                pass
+
         if account:
             entry["account"] = account.get("account")
             entry["plan"] = account.get("plan")
@@ -529,6 +535,14 @@ async def api_llm_accounts():
             entry["authenticated"] = reachable
 
         entry["status"], entry["note"] = _account_status(entry)
+        dm = entry.get("default_model")
+        if dm and not dm["listed"]:
+            # 부르지 않고 넘어가는 이유를 카드에 적는다(D-143)
+            # — 예전에는 404·500으로 조용히 넘어갔다
+            entry["note"] += (
+                f" 자동 모드 텍스트 기본 모델 {dm['model']}이(가) 목록에 없어"
+                " 이 공급자를 건너뜁니다 — 아래 「자동 모드 기본 모델」에서 고르세요."
+            )
         return entry
 
     # 프로바이더를 **동시에** 확인한다. 직렬로 하면 느린 하나(프록시 포트
@@ -536,6 +550,48 @@ async def api_llm_accounts():
     # 순서는 폴백 순서 그대로 유지한다 — 화면의 《위에서부터 시도합니다》와
     # 어긋나면 안 된다.
     return {"providers": list(await asyncio.gather(*(_one(p) for p in router_inst.providers)))}
+
+
+async def _default_model_info(provider) -> dict:
+    """자동(폴백 순서) 모드에서 이 공급자가 쓸 기본 모델과 고를 수 있는 목록 (D-143).
+
+    입력: Ollama 또는 OpenAI(OAuth) 프로바이더(이미 연결된 것).
+    출력: {"model", "builtin", "source": "env"|"builtin", "env_key", "listed": bool,
+           "choices": [이름…], "effort"?, "effort_builtin"?, "effort_source"?, "effort_key"?}
+
+    왜: 4월 기본 모델이 이 PC에 없어 자동 모드의 앞 두 순위가 반년 동안 실패했다. 카드에 《지금
+    무엇으로 도는가·목록에 있는가》를 보이고 그 자리에서 고르게 한다. 고른 값은 서고 .env에 쓴다
+    (POST /api/settings/llm-keys).
+    """
+    cfg = provider.config
+    if provider.provider_id == "ollama":
+        model = provider.default_text_model("text")
+        builtin = provider.DEFAULT_TEXT_MODEL
+        key = "ollama_text_model"
+        # 은퇴한 클라우드 모델은 부르면 410이라 고르는 목록에서 뺀다
+        choices = [m["name"] for m in await provider.list_models() if not m.get("retired")]
+    else:
+        model = provider.default_model()
+        builtin = provider.DEFAULT_MODEL
+        key = "openai_oauth_model"
+        choices = [m["name"] for m in await provider.list_models()]
+    info = {
+        "model": model,
+        "builtin": builtin,
+        "source": "env" if cfg.is_set(key) else "builtin",
+        "env_key": key,
+        "listed": model in choices,
+        "choices": choices,
+    }
+    if provider.provider_id == "openai_oauth":
+        info.update(
+            effort=provider.reasoning_effort(None),
+            effort_builtin=provider.DEFAULT_EFFORT,
+            effort_source="env" if cfg.is_set("openai_oauth_effort") else "builtin",
+            effort_key="openai_oauth_effort",
+            efforts=list(provider.EFFORTS),
+        )
+    return info
 
 
 # 프로바이더 주소별로 《뒤에서 고르는 중》인 태스크 하나만 — 화면이 3초마다 다시 물을 때마다
@@ -1209,10 +1265,9 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
 
         provider = model = None
         unknown = 0
-        loop = asyncio.get_event_loop()
         for page in targets:
             current = page_rotation(doc_dir, part_id, page)
-            image = await loop.run_in_executor(None, _load_page_image, doc_id, page, part_id)
+            image = await asyncio.to_thread(_load_page_image, doc_id, page, part_id)
             row = {
                 "page": page,
                 "current": current,
@@ -1241,8 +1296,7 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
                 answers = None
                 while decider is not None:
                     try:
-                        answers = await loop.run_in_executor(
-                            None,
+                        answers = await asyncio.to_thread(
                             lambda img=image, c=decider: c.ask(
                                 DECIDER_STATE,
                                 decider_questions(),
@@ -1273,8 +1327,14 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
                             " — 이 쪽부터 기본 비전 모델로"
                         )
                         fallback_steps.append(
-                            {"page": page, "from": decider.PROVIDER, "from_model": decider.model,
-                             "to": "vision", "model": ":".join(SURVEY_FALLBACK_MODEL), "why": why}
+                            {
+                                "page": page,
+                                "from": decider.PROVIDER,
+                                "from_model": decider.model,
+                                "to": "vision",
+                                "model": ":".join(SURVEY_FALLBACK_MODEL),
+                                "why": why,
+                            }
                         )
                         decider = None
                         to_vision = True
@@ -1321,8 +1381,7 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
                 score_it = bool(candidates) and flip_engine is not None
             delta = None
             if score_it:
-                delta, scores = await loop.run_in_executor(
-                    None,
+                delta, scores = await asyncio.to_thread(
                     lambda img=image, c=candidates: orientation_by_ocr_scores(
                         img, flip_engine.recognize, c, body.writing_direction
                     ),
@@ -1435,9 +1494,15 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
             "model": model,
             # 판정 모델이면 실제로 쓴 호출·토큰·비용(usage 기준) — 어림이 아니라 잰 값.
             # 업체를 붙여 둔다 — 화면이 Cloudflare 몫(무료 몫 안이면 명목값)과 유료 몫을 가른다
-            **({"decider_usage": _merge_usage(
-                [{**c.usage(), "provider": c.PROVIDER} for c in decision_clients])}
-               if decision_clients else {}),
+            **(
+                {
+                    "decider_usage": _merge_usage(
+                        [{**c.usage(), "provider": c.PROVIDER} for c in decision_clients]
+                    )
+                }
+                if decision_clients
+                else {}
+            ),
             # 사슬 어디까지 갔는가 — 화면(work-order.js `_woScanSummary`)이 fallback_steps로
             # 《3쪽부터 기본 비전 모델로》를 실패와 따로 알린다
             **({"fallback": "decision→vision"} if to_vision else {}),
@@ -1803,9 +1868,7 @@ async def api_run_correction(
     doc_path = require_repo_path("documents", doc_id)
     pipeline, registry = _get_ocr_pipeline()
     try:
-        loop = asyncio.get_running_loop()
-        draft = await loop.run_in_executor(
-            None,
+        draft = await asyncio.to_thread(
             lambda: _run_page_correction(
                 doc_path,
                 doc_id,
@@ -1864,9 +1927,8 @@ async def api_apply_correction(
     try:
         # executor에서 돌린다 — 일괄이 같은 쪽의 잠금을 쥐고 있으면 여기서 기다리는데,
         # 이벤트 루프 스레드에서 기다리면 서버 전체가 멈춘다
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(
-            None, lambda: apply_draft(doc_path, part_id, page_number, body.block_ids)
+        return await asyncio.to_thread(
+            lambda: apply_draft(doc_path, part_id, page_number, body.block_ids)
         )
     except FileNotFoundError as e:
         return JSONResponse({"error": str(e)}, status_code=404)
@@ -2059,10 +2121,8 @@ async def api_run_ocr_stream(
 
     async def _run_ocr_in_thread():
         """OCR를 별도 스레드에서 실행하고 결과를 큐에 넣는다."""
-        loop = asyncio.get_event_loop()
         try:
-            result = await loop.run_in_executor(
-                None,
+            result = await asyncio.to_thread(
                 lambda: pipeline.run_page(
                     doc_id=doc_id,
                     part_id=part_id,
@@ -2918,7 +2978,6 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
 
     async def _run_batch():
         """쪽을 하나씩 돌며 결과를 큐에 넣는다."""
-        loop = asyncio.get_event_loop()
         processed = skipped = failed = redone = 0
         total_lines = 0
         # LLM 교정 뒤 사람이 볼 블록이 남은 쪽 — 완료 이벤트로 알려 《어딜 열어야 하나》에 답한다
@@ -2985,8 +3044,8 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                 # 처음 도는 쪽은 L4가 비어 있어 걸리지 않는다.)
                 keep_l4 = False
                 if body.fill_text_layer:
-                    keep_l4 = await loop.run_in_executor(
-                        None, lambda p=page_number: _l4_is_hand_edited(doc_path, part_id, p)
+                    keep_l4 = await asyncio.to_thread(
+                        lambda p=page_number: _l4_is_hand_edited(doc_path, part_id, p)
                     )
                     if keep_l4:
                         warnings.append(
@@ -3002,8 +3061,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                     if body.backup_before_overwrite:
                         from ocr.page_backup import save_backup
 
-                        await loop.run_in_executor(
-                            None,
+                        await asyncio.to_thread(
                             lambda p=page_number: save_backup(doc_path, part_id, p),
                         )
 
@@ -3011,8 +3069,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                     if body.auto_full_page_block:
                         from ocr.full_page_block import ensure_full_page_block
 
-                        info = await loop.run_in_executor(
-                            None,
+                        info = await asyncio.to_thread(
                             lambda p=page_number: ensure_full_page_block(
                                 doc_path,
                                 part_id,
@@ -3023,8 +3080,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                         block_created = bool(info.get("created"))
 
                     # 2) 기존 파이프라인으로 OCR (D-009 계약 그대로)
-                    result = await loop.run_in_executor(
-                        None,
+                    result = await asyncio.to_thread(
                         lambda p=page_number: pipeline.run_page(
                             doc_id=doc_id,
                             part_id=part_id,
@@ -3048,8 +3104,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                     pending_blocks = 0
                     if body.llm_correction != "off" and results:
                         try:
-                            correction_draft = await loop.run_in_executor(
-                                None,
+                            correction_draft = await asyncio.to_thread(
                                 lambda p=page_number: _run_page_correction(
                                     doc_path,
                                     doc_id,
@@ -3115,7 +3170,7 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                                         )
                                 return rebase_notice(p, saved)
 
-                            notice = await loop.run_in_executor(None, _fill_l4)
+                            notice = await asyncio.to_thread(_fill_l4)
                             if notice:
                                 corrections_notices.append(notice)
                         except Exception as e:  # noqa: BLE001
@@ -3181,8 +3236,8 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                 try:
                     from export.text_layer_pdf import embed_text_layer
 
-                    embed_result = await loop.run_in_executor(
-                        None, lambda: embed_text_layer(doc_path, part_id)
+                    embed_result = await asyncio.to_thread(
+                        lambda: embed_text_layer(doc_path, part_id)
                     )
                     embed_summary = embed_result.to_dict()
                 except Exception as e:  # noqa: BLE001

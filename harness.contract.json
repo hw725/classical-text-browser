@@ -94,7 +94,7 @@
           "not slow"
         ],
         "count_regex": "(\\d+) passed",
-        "count_floor": 2040,
+        "count_floor": 2109,
         "timeout": 1800,
         "traceback_fatal": false,
         "reuse": true,
@@ -160,12 +160,41 @@
         "quote": "전수 검토 S-20261011-075504-7cb805 불일치 107건; 사용자 «권고대로 진행. 1번 2번 전부»"
       },
       "status": "active"
+    },
+    {
+      "id": "C-003",
+      "text": "자동(폴백 순서) 기본 모델이 이 PC가 쓰는 모델(Ollama kimi-k3:cloud·OAuth gpt-6.1-sol, 추론 medium, .env로 변경)이고, 목록에 없는 기본 모델은 부르지 않으며, 앞 순위 실패가 응답·서버 기록·화면에 드러난다",
+      "judge": "deterministic",
+      "check": {
+        "argv": [
+          "uv",
+          "run",
+          "python",
+          "-m",
+          "pytest",
+          "tests/test_default_models_20261018.py",
+          "-q",
+          "-p",
+          "no:cacheprovider"
+        ],
+        "fail_regex": "FAILED|AssertionError|\\d+ errors?\\b",
+        "traceback_fatal": false
+      },
+      "guards": [
+        "tests/test_default_models_20261018.py"
+      ],
+      "origin": {
+        "kind": "incident",
+        "date": "2026-10-18",
+        "quote": "인계_ctb기본모델_20261018: Ollama 404 model 'gemma4:e4b' not found, OAuth 500, 답은 3순위 Gemini — 실패가 조용히 넘어간다"
+      },
+      "status": "active"
     }
   ],
   "approved": {
-    "hash": "f74cdfa13b5a92b35aa99c77137367023d6e78b040d81888f14fd11c94b39946",
-    "request": "A-6ee6faaa",
-    "ts": "2026-10-18T00:47:05",
+    "hash": "a92e9142fef3cad147cf99635552037afe440f9c769a4ffce02a501f25501f7a",
+    "request": "A-0e31d87e",
+    "ts": "2026-10-18T14:29:01",
     "guards": {
       "tests/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "tests/conftest.py": "39d9a0edf4011b44a408f8a73258e802b7a236ed2f1753b40ced6afeba49b18f",
@@ -203,6 +232,7 @@
       "tests/test_d128.py": "0ec2216027d873b6f0dc7b45fc533dfc490912e0462ccb8e84ec43b2a7016696",
       "tests/test_decision_model_selection.py": "24c1299fbcc4052f21118ce88f349ece74577b003970e1a6ddd354326cb005c7",
       "tests/test_decision_models.py": "abbf3c2eb189490fd321c49c161caea39fe41273fa13097840d8016c81780bbc",
+      "tests/test_default_models_20261018.py": "9364cc48d10f29da2d1125743aa099b92b1f82a4b5802213e07c0cccf45b12b0",
       "tests/test_doc_drift.py": "ac54f0ea936855fe628bade42c82c5bd6e1dfec870d01bfe1b77fb79dc2d0de6",
       "tests/test_embed_folder_resume.py": "1a145a62b4a3e31ab0d3c9b5f14ed98ec1284f4079787c566c025baa183e9a22",
       "tests/test_entity_manager_js.py": "05aa3b602ceee1055747776ef6fb85c715bbdba0b2285036285b2eec1abe6522",

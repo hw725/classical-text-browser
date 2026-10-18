@@ -3,7 +3,7 @@
 Ollama 로컬 서버(127.0.0.1:11434)를 통한 LLM 호출.
 (localhost가 아니다 — Windows는 localhost를 IPv6부터 시도해 느리다, D-109)
 기본 비전 모델: gemma4:cloud — 클라우드(내려받는 파일 없음, ollama.com 로그인 필요, D-114)
-기본 텍스트 모델: gemma4:e4b (로컬)
+기본 텍스트 모델: kimi-k3:cloud — 클라우드(구독 한도, D-143). .env `OLLAMA_TEXT_MODEL`로 바꾼다
 
 호출 흐름:
     Python → HTTP POST 127.0.0.1:11434/api/generate
@@ -58,7 +58,8 @@ def _gen_options(max_tokens: int, prompt_chars: int) -> dict:
 
     왜: Ollama의 기본 num_ctx는 4,096이다. num_predict를 8,192로 주어도 《프롬프트 + 답》이 4,096을
     넘는 순간 생성이 멈춘다 — 사전형 주석 1단계가 매번 2,883토큰에서 잘렸다(2026-09-12 실측,
-    gemma4:e4b). 문자 수를 토큰 수로 어림한다(한자·한글은 글자당 1토큰 안팎이라 넉넉한 쪽이다).
+    당시 텍스트 기본이던 로컬 소형 모델). 문자 수를 토큰 수로 어림한다(한자·한글은 글자당
+    1토큰 안팎이라 넉넉한 쪽이다).
     """
     opts = {"num_predict": max_tokens}
     need = int(max_tokens) + int(prompt_chars) + 512
@@ -68,7 +69,7 @@ def _gen_options(max_tokens: int, prompt_chars: int) -> dict:
 
 
 class OllamaProvider(BaseLlmProvider):
-    """Ollama 로컬 서버를 통한 LLM 호출. 기본 비전 모델: gemma4:cloud, 텍스트: gemma4:e4b."""
+    """Ollama 로컬 서버를 통한 LLM 호출. 기본 비전 모델: gemma4:cloud, 텍스트: kimi-k3:cloud."""
 
     provider_id = "ollama"
     display_name = "Ollama"
@@ -79,28 +80,59 @@ class OllamaProvider(BaseLlmProvider):
     #   몇 초에 끝나지만 ollama.com 로그인이 있어야 돈다. 로그인하지 않을 PC는 화면의
     #   「모델 받기」에서 로컬 모델을 고른다(llm/ollama_catalog.py). v1.3.0까지는 gemma4:e4b
     #   (9.6GB)였다.
-    # 일반 텍스트: gemma4:e4b (로컬, 멀티모달)
-    # JSON 구조화 출력(표점/주석): 표에는 gemma4:e4b가 적혀 있지만 실제로는 쓰지 않는다 —
-    #   소형 로컬 모델은 품질이 떨어져 라우터가 이 용도에서 Ollama를 건너뛴다(아래
-    #   SKIP_FOR_PURPOSES). 사용자가 Ollama를 직접 고르면 그때만 이 모델로 간다.
-    #
-    # 왜 표점/주석은 별도 모델인가:
-    #   표점(구두점)은 고전 한문의 문맥을 이해해야 정확하고,
-    #   JSON 배열 형식으로 출력해야 한다. gemma4:e4b(소형)로는
-    #   구두점 위치 정확도와 JSON 구조 준수율이 크게 떨어진다.
+    # 텍스트(번역·JSON·표점·주석 포함): kimi-k3:cloud (D-143, 2026-10-18).
+    #   v1.4.3까지는 4월에 넣은 로컬 gemma4:e4b였다. 이 PC에는 클라우드 모델만 있어 자동 모드의
+    #   1순위가 늘 404로 실패했고, 그 실패가 기록 없이 다음 순위로 넘어갔다. kimi-k3는 「말로
+    #   넣기」 JSON을 실측에서 통과한 모델이다(glm-5.3:cloud는 같은 말에 JSON 해석 실패).
+    #   PC마다 받아 둔 모델이 다르므로 .env `OLLAMA_TEXT_MODEL`(설정 화면에서도 고른다)이 이긴다
+    #   — default_text_model().
+    DEFAULT_TEXT_MODEL = "kimi-k3:cloud"
     DEFAULT_MODELS = {
-        "text": "gemma4:e4b",
+        "text": DEFAULT_TEXT_MODEL,
         "vision": DEFAULT_VISION_MODEL,
-        "translation": "gemma4:e4b",
-        "json": "gemma4:e4b",
-        "punctuation": "gemma4:e4b",
-        "annotation": "gemma4:e4b",
+        "translation": DEFAULT_TEXT_MODEL,
+        "json": DEFAULT_TEXT_MODEL,
+        "punctuation": DEFAULT_TEXT_MODEL,
+        "annotation": DEFAULT_TEXT_MODEL,
     }
 
-    # JSON 구조화 출력에 소형 모델이 부적합한 용도 목록.
-    # 이 용도들은 LLM Router의 자동 폴백에서 Ollama를 건너뛰고
-    # 다음 프로바이더(Gemini 등)로 넘어가도록 한다.
+    # 자동 폴백에서 Ollama를 건너뛰는 용도. 표점(구두점)·주석은 고전 한문의 문맥과 JSON 배열
+    # 형식을 함께 지켜야 하는데, 이 목록을 만들 때의 로컬 소형 기본 모델로는 둘 다 크게 떨어졌다.
+    # 기본이 클라우드 대형 모델로 바뀐 뒤에도(D-143) 그대로 둔다 — 표점·주석의 품질을 그 모델로
+    # 잰 적이 없고, 이 목록을 풀면 두 기능의 답을 내는 공급자가 바뀐다. 푸는 것은 잰 뒤의 결정이다.
     SKIP_FOR_PURPOSES = {"punctuation", "annotation"}
+
+    def default_text_model(self, purpose: str = "text") -> str:
+        """모델을 지정하지 않은 텍스트 호출이 쓸 모델.
+
+        입력: purpose — 용도("text"·"translation"·"json" 등). 모르는 용도는 "text"로.
+        출력: 모델 이름. .env `OLLAMA_TEXT_MODEL`이 있으면 그것(모든 텍스트 용도에 같다),
+              없으면 DEFAULT_MODELS의 값.
+        """
+        configured = (self.config.get("ollama_text_model") or "").strip()
+        if configured:
+            return configured
+        return self.DEFAULT_MODELS.get(purpose, self.DEFAULT_MODELS["text"])
+
+    async def _require_installed(self, model: str) -> None:
+        """기본 모델이 이 Ollama의 설치 목록에 있는지 본다 — 없으면 부르지 않는다(D-143).
+
+        왜: 없는 모델을 부르면 404가 나고 라우터가 다음 공급자로 넘어간다. 그 404는 호출 한 번을
+        버릴 뿐 아니라 《왜 Ollama가 아니라 Gemini가 답했나》를 가린다. 미리 막고 이유를 남긴다.
+        사람이 고른 모델(model 인자)에는 쓰지 않는다 — 목록보다 새 모델일 수 있다.
+        목록을 못 받으면(서버가 느림 등) 막지 않고 부른다 — 확인 실패를 《없다》로 오판하지 않는다.
+        """
+        try:
+            # 은퇴한 클라우드 모델은 부르면 410이다 — 설정 카드와 같은 기준으로 《없다》에 넣는다
+            names = {m.get("name") for m in await self.list_models() if not m.get("retired")}
+        except Exception:  # noqa: BLE001
+            return
+        if model not in names:
+            raise LlmProviderError(
+                f"Ollama 기본 텍스트 모델 {model}이(가) 설치 목록에 없습니다 — 부르지 않았습니다. "
+                "설정 「LLM 연결」의 Ollama 칸에서 기본 모델을 고르거나 서고 .env에 "
+                "OLLAMA_TEXT_MODEL=<모델 이름>을 적으세요."
+            )
 
     # 로컬 실행이 기본이지만 `:cloud` 모델은 구독 한도를 쓴다.
     billing_model = "free"
@@ -399,6 +431,9 @@ class OllamaProvider(BaseLlmProvider):
 
         async with httpx.AsyncClient(timeout=5.0, trust_env=False) as client:
             resp = await client.get(f"{self._url}/api/tags")
+            # 503 같은 오류 JSON을 《모델 0개》로 읽으면 기본 모델이 《목록에 없다》로 막히고
+            # 빈 목록이 공유 캐시에 남는다 — 실패는 예외로 올린다(호출부가 모두 잡는다, D-143 리뷰).
+            resp.raise_for_status()
             data = resp.json()
 
         import asyncio as _aio
@@ -498,7 +533,9 @@ class OllamaProvider(BaseLlmProvider):
             텍스트로 쓴다. 예전 설명은 《기본값으로 think=False를 보낸다》고 적어 바로 아래
             코드와 정반대였다(2026-10-11 전수).
         """
-        selected_model = model or self.DEFAULT_MODELS.get(purpose, self.DEFAULT_MODELS["text"])
+        selected_model = model or self.default_text_model(purpose)
+        if not model:
+            await self._require_installed(selected_model)
 
         payload = {
             "model": selected_model,
@@ -605,7 +642,9 @@ class OllamaProvider(BaseLlmProvider):
         """
         import json as _json
 
-        selected_model = model or self.DEFAULT_MODELS.get(purpose, self.DEFAULT_MODELS["text"])
+        selected_model = model or self.default_text_model(purpose)
+        if not model:
+            await self._require_installed(selected_model)
 
         payload = {
             "model": selected_model,
@@ -727,7 +766,7 @@ class OllamaProvider(BaseLlmProvider):
         모델을 왜 자동으로 고르는가:
             DEFAULT_MODELS["vision"]에 적힌 모델이 **설치돼 있지 않으면**
             호출이 실패하고 라우터가 조용히 다음 프로바이더로 넘어간다.
-            실제로 그 일이 있었다 — 기본값 `gemma4:e4b`가 없어서 Ollama가
+            실제로 그 일이 있었다 — 당시 기본값(로컬 gemma4 소형판)이 없어서 Ollama가
             늘 탈락했고, 사용자는 무료 로컬로 도는 줄 알았는데 실제로는
             Gemini가 처리하고 있었다. 어느 모델이 쓰이는지 모르는 상태로
             유료 API가 소모되는 것이 가장 나쁘다.

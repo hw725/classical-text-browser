@@ -32,6 +32,7 @@ import logging
 import time
 from typing import Optional
 
+from . import fallback_notice
 from .config import LlmConfig
 from .providers.anthropic_provider import AnthropicProvider
 from .providers.base import (
@@ -66,7 +67,8 @@ class LlmRouter:
         # 우선순위 순서 (로컬·구독 → 저렴 → 중간 → 최후).
         # 구독(OAuth)은 《무료》가 아니라 한도가 있다(D-056)
         self.providers: list[BaseLlmProvider] = [
-            OllamaProvider(self.config),  # 1순위: 무료 (로컬 gemma4:e4b)
+            # 1순위: 로컬 무료·클라우드 구독 한도 (텍스트 kimi-k3:cloud, D-143)
+            OllamaProvider(self.config),
             OpenAiOAuthProvider(self.config),  # 2순위: 구독 한도 (ChatGPT OAuth 프록시)
             GeminiProvider(self.config),  # 3순위: 저렴 (비전 포함)
             OpenAiProvider(self.config),  # 4순위: 중간 (비전 포함)
@@ -105,6 +107,60 @@ class LlmRouter:
             self._avail_cache.pop(provider_id, None)
         else:
             self._avail_cache.clear()
+
+    @staticmethod
+    def _intended_model(provider: BaseLlmProvider, purpose: str, vision: bool) -> Optional[str]:
+        """자동 모드에서 그 공급자가 부르려던 모델 — 실패 꼬리표에 적는다. 모르면 None."""
+        try:
+            if vision:
+                return None  # 비전 모델은 호출 안에서 고른다(Ollama _pick_vision_model)
+            if hasattr(provider, "default_text_model"):
+                return provider.default_text_model(purpose)
+            if hasattr(provider, "default_model"):
+                return provider.default_model()
+        except Exception:  # noqa: BLE001 — 꼬리표 하나 때문에 폴백이 죽으면 안 된다
+            return None
+        return getattr(provider, "DEFAULT_MODEL", None)
+
+    def _note(self, trail: list, provider, purpose: str, err: Exception, vision: bool = False):
+        """앞 순위 실패 한 건을 적는다. 오류문은 한 줄로 줄인다(머리·토스트에 실린다)."""
+        msg = " ".join(str(err).split())[:160] or type(err).__name__
+        trail.append(
+            {
+                "provider": provider.provider_id,
+                "model": self._intended_model(provider, purpose, vision),
+                "error": msg,
+            }
+        )
+
+    def _finish(self, response: LlmResponse, trail: list, purpose: str) -> LlmResponse:
+        """답을 돌려주기 전에 앞 순위 실패를 답·서버 기록·요청 꼬리표에 남긴다 (D-143).
+
+        왜: 예전에는 모두 실패했을 때만 알렸다. 4월 기본 모델이 반년 동안 404·500을 내는 사이에도
+        답은 3순위에서 조용히 왔고, 흔적은 사용 기록의 공급자 이름뿐이었다(2026-10-18).
+        """
+        if trail:
+            response.fallback = list(trail)
+            line = fallback_notice.describe(trail, f"{response.provider}/{response.model}")
+            _logger.warning("LLM 자동 폴백(%s) — 앞 순위 실패: %s", purpose, line)
+            fallback_notice.record(line)
+        return response
+
+    def _unavailable_message(self, errors: list) -> str:
+        """모두 실패했을 때의 안내 — 지금 기본 모델 이름을 적는다(옛 이름을 박아 두지 않는다)."""
+        ollama = self._get_provider("ollama")
+        model = OllamaProvider.DEFAULT_TEXT_MODEL
+        if ollama is not None and hasattr(ollama, "default_text_model"):
+            model = ollama.default_text_model("text")
+        return (
+            "사용 가능한 LLM provider가 없습니다.\n"
+            "확인 사항:\n"
+            f"  1. Ollama: ollama serve (텍스트 기본 모델 {model}"
+            " 필요 — 서고 .env OLLAMA_TEXT_MODEL로 바꿀 수 있습니다)\n"
+            "  2. OpenAI OAuth: start_server.bat 또는 npx.cmd -y openai-oauth\n"
+            "  3. API 키: .env에 GOOGLE_API_KEY, OPENAI_API_KEY 등\n\n"
+            "시도 결과:\n" + "\n".join(f"  - {e}" for e in errors)
+        )
 
     def _get_provider(self, provider_id: str) -> Optional[BaseLlmProvider]:
         """provider_id로 provider 객체를 찾는다."""
@@ -176,6 +232,8 @@ class LlmRouter:
 
         # 2단계: 사용 가능한 프로바이더만 우선순위대로 호출
         errors = []
+        trail: list[dict] = []  # 앞 순위 실패 — 답과 함께 돌려주고 기록에 남긴다(D-143)
+        vision_call = False
         skipped_providers = []
         for provider, ok in zip(self.providers, avail_results):
             if ok is not True:
@@ -183,7 +241,7 @@ class LlmRouter:
 
             # 특정 purpose에서 소형 모델이 부적합한 프로바이더는 건너뛴다.
             # 예: 표점(punctuation), 주석(annotation)은 JSON 구조화 출력이 필요하여
-            #      gemma4:e4b 같은 소형 로컬 모델로는 품질이 떨어진다.
+            #      이 목록을 만들 때의 소형 로컬 기본 모델로는 품질이 떨어졌다(ollama.py 참조).
             #      Gemini, OpenAI 등 더 capable한 프로바이더로 넘긴다.
             skip_purposes = getattr(provider, "SKIP_FOR_PURPOSES", set())
             if purpose in skip_purposes:
@@ -203,12 +261,13 @@ class LlmRouter:
                     **kwargs,
                 )
                 self.usage_tracker.log(response, purpose=purpose)
-                return response
+                return self._finish(response, trail, purpose)
 
             except Exception as e:
                 # 호출 실패 시 캐시 무효화 (다음에 재체크)
                 self._avail_cache.pop(provider.provider_id, None)
                 errors.append(f"{provider.provider_id}: {e}")
+                self._note(trail, provider, purpose, e, vision=vision_call)
                 continue
 
         # 모든 프로바이더가 실패/건너뛰기된 경우,
@@ -231,18 +290,12 @@ class LlmRouter:
                         **kwargs,
                     )
                     self.usage_tracker.log(response, purpose=purpose)
-                    return response
+                    return self._finish(response, trail, purpose)
                 except Exception as e:
                     errors.append(f"{provider.provider_id}(폴백): {e}")
+                    self._note(trail, provider, purpose, e)
 
-        raise LlmUnavailableError(
-            "사용 가능한 LLM provider가 없습니다.\n"
-            "확인 사항:\n"
-            "  1. Ollama: ollama serve (gemma4:e4b 모델 필요)\n"
-            "  2. OpenAI OAuth: start_server.bat 또는 npx.cmd -y openai-oauth\n"
-            "  3. API 키: .env에 GOOGLE_API_KEY, OPENAI_API_KEY 등\n\n"
-            "시도 결과:\n" + "\n".join(f"  - {e}" for e in errors)
-        )
+        raise LlmUnavailableError(self._unavailable_message(errors))
 
     async def call_stream(
         self,
@@ -302,6 +355,8 @@ class LlmRouter:
         )
 
         errors = []
+        trail: list[dict] = []  # 앞 순위 실패 — 답과 함께 돌려주고 기록에 남긴다(D-143)
+        vision_call = False
         skipped_providers = []
         for provider, ok in zip(self.providers, avail_results):
             if ok is not True:
@@ -324,11 +379,12 @@ class LlmRouter:
                     **kwargs,
                 )
                 self.usage_tracker.log(response, purpose=purpose)
-                return response
+                return self._finish(response, trail, purpose)
 
             except Exception as e:
                 self._avail_cache.pop(provider.provider_id, None)
                 errors.append(f"{provider.provider_id}: {e}")
+                self._note(trail, provider, purpose, e, vision=vision_call)
                 continue
 
         # 건너뛴 프로바이더로 폴백
@@ -347,18 +403,12 @@ class LlmRouter:
                         **kwargs,
                     )
                     self.usage_tracker.log(response, purpose=purpose)
-                    return response
+                    return self._finish(response, trail, purpose)
                 except Exception as e:
                     errors.append(f"{provider.provider_id}(폴백): {e}")
+                    self._note(trail, provider, purpose, e)
 
-        raise LlmUnavailableError(
-            "사용 가능한 LLM provider가 없습니다.\n"
-            "확인 사항:\n"
-            "  1. Ollama: ollama serve (gemma4:e4b 모델 필요)\n"
-            "  2. OpenAI OAuth: start_server.bat 또는 npx.cmd -y openai-oauth\n"
-            "  3. API 키: .env에 GOOGLE_API_KEY, OPENAI_API_KEY 등\n\n"
-            "시도 결과:\n" + "\n".join(f"  - {e}" for e in errors)
-        )
+        raise LlmUnavailableError(self._unavailable_message(errors))
 
     async def call_with_image(
         self,
@@ -407,6 +457,8 @@ class LlmRouter:
         )
 
         errors = []
+        trail: list[dict] = []
+        vision_call = True
         for provider, ok in zip(vision_providers, avail_results):
             if ok is not True:
                 continue
@@ -418,12 +470,13 @@ class LlmRouter:
                     **kwargs,
                 )
                 self.usage_tracker.log(response, purpose=purpose)
-                return response
+                return self._finish(response, trail, purpose)
             except Exception as e:
                 if no_fallback_on_truncation and TRUNCATED_MARK in str(e).lower():
                     raise
                 self._avail_cache.pop(provider.provider_id, None)
                 errors.append(f"{provider.provider_id}: {e}")
+                self._note(trail, provider, purpose, e, vision=vision_call)
                 continue
 
         raise LlmUnavailableError(

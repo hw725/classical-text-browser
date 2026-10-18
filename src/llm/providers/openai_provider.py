@@ -90,6 +90,31 @@ class OpenAiProvider(BaseLlmProvider):
         """OPENAI_API_KEY가 설정되어 있는지 확인."""
         return bool(self.config.get_api_key("openai"))
 
+    # ── 서브클래스가 바꿔 끼우는 자리(D-143) ──
+    # 종량 과금 OpenAI는 셋 다 예전 그대로다. ChatGPT 계정(OpenAiOAuthProvider)만 바꾼다 —
+    # 기본 모델을 .env로 고르고, 프록시 목록에 없는 기본 모델은 부르지 않고, 추론 강도를 보낸다.
+
+    def default_model(self) -> str:
+        """모델을 지정하지 않은 호출이 쓸 모델. 출력: 모델 이름."""
+        return self.DEFAULT_MODEL
+
+    async def _check_default_model(self, model: str) -> None:
+        """기본 모델로 부르기 전 확인. 쓸 수 없으면 LlmProviderError. 여기서는 아무것도 안 한다."""
+        return None
+
+    def _text_reasoning_kwargs(self, model: str, kwargs: dict) -> dict:
+        """텍스트 호출(chat.completions)에 덧붙일 추론 인자. 여기서는 보내지 않는다(모델 기본)."""
+        return {}
+
+    def _reasoning_extra_tokens(self, model: str, kwargs: dict) -> int:
+        """추론 토큰 몫으로 상한에 더할 수(D-083). 추론 인자를 보내지 않으면 0."""
+        return 0
+
+    @staticmethod
+    def _reasoning_rejected(exc: Exception) -> bool:
+        """400이 추론 인자를 거부한 것인가 — 그때만 인자를 빼고 한 번 더 부른다."""
+        return "reasoning" in str(exc).lower()
+
     async def list_models(self) -> list[dict]:
         """드롭다운용 모델 목록 — API에서 받고, 못 받으면 MODELS. 10분 동안 기억한다.
 
@@ -155,8 +180,10 @@ class OpenAiProvider(BaseLlmProvider):
         """OpenAI Chat Completions API로 텍스트 생성."""
         import openai
 
+        selected_model = model or self.default_model()
+        if not model:
+            await self._check_default_model(selected_model)
         client = self._create_client()
-        selected_model = model or self.DEFAULT_MODEL
 
         messages = []
         if system:
@@ -166,12 +193,15 @@ class OpenAiProvider(BaseLlmProvider):
         create_kwargs = {
             "model": selected_model,
             "messages": messages,
+            **self._text_reasoning_kwargs(selected_model, kwargs),
         }
         # OpenAI 최신 모델(gpt-5, o3 등)은 max_tokens 대신
         # max_completion_tokens를 사용한다.
         # 구형 모델 호환을 위해 먼저 max_completion_tokens를 시도하고,
         # 실패하면 max_tokens로 폴백한다.
-        create_kwargs["max_completion_tokens"] = max_tokens
+        create_kwargs["max_completion_tokens"] = max_tokens + self._reasoning_extra_tokens(
+            selected_model, kwargs
+        )
         if response_format == "json":
             create_kwargs["response_format"] = {"type": "json_object"}
 
@@ -183,6 +213,10 @@ class OpenAiProvider(BaseLlmProvider):
                 # 구형 모델: max_tokens로 폴백
                 del create_kwargs["max_completion_tokens"]
                 create_kwargs["max_tokens"] = max_tokens
+                response = await client.chat.completions.create(**create_kwargs)
+            elif "reasoning_effort" in create_kwargs and self._reasoning_rejected(e):
+                # 이 모델·프록시가 추론 강도를 모른다 — 빼고 한 번 더(답은 모델 기본 강도)
+                del create_kwargs["reasoning_effort"]
                 response = await client.chat.completions.create(**create_kwargs)
             else:
                 raise
@@ -240,8 +274,10 @@ class OpenAiProvider(BaseLlmProvider):
         """
         import openai
 
+        selected_model = model or self.default_model()
+        if not model:
+            await self._check_default_model(selected_model)
         client = self._create_client()
-        selected_model = model or self.DEFAULT_MODEL
 
         messages = []
         if system:
@@ -252,7 +288,9 @@ class OpenAiProvider(BaseLlmProvider):
             "model": selected_model,
             "messages": messages,
             "stream": True,
-            "max_completion_tokens": max_tokens,
+            "max_completion_tokens": max_tokens
+            + self._reasoning_extra_tokens(selected_model, kwargs),
+            **self._text_reasoning_kwargs(selected_model, kwargs),
         }
         if response_format == "json":
             create_kwargs["response_format"] = {"type": "json_object"}
@@ -269,6 +307,9 @@ class OpenAiProvider(BaseLlmProvider):
             if "max_completion_tokens" in str(e):
                 del create_kwargs["max_completion_tokens"]
                 create_kwargs["max_tokens"] = max_tokens
+                stream = await client.chat.completions.create(**create_kwargs)
+            elif "reasoning_effort" in create_kwargs and self._reasoning_rejected(e):
+                del create_kwargs["reasoning_effort"]
                 stream = await client.chat.completions.create(**create_kwargs)
             else:
                 raise
@@ -407,9 +448,13 @@ class OpenAiProvider(BaseLlmProvider):
 
     @staticmethod
     def _is_reasoning_model(model: str) -> bool:
-        """reasoning_effort를 받는 모델인가. o-계열과 gpt-5 계열만 받는다."""
+        """reasoning_effort를 받는 모델인가. o-계열과 gpt-5·gpt-6 계열이 받는다.
+
+        gpt-6은 D-143(2026-10-18)에 더했다 — ChatGPT 계정 기본이 gpt-6.1-sol이 되면서, 여기서
+        거짓이면 사용자가 정한 추론 강도(medium)가 조용히 빠진다.
+        """
         name = (model or "").lower()
-        return name.startswith(("o1", "o3", "o4", "gpt-5"))
+        return name.startswith(("o1", "o3", "o4", "gpt-5", "gpt-6"))
 
     @classmethod
     def _vision_create_kwargs(

@@ -476,6 +476,10 @@ async function _loadLlmAccounts() {
       if (p.provider_id === "openai_oauth" && typeof _oauthRow === "function") {
         row.appendChild(_oauthRow());
       }
+      // 자동(폴백 순서) 모드의 기본 모델 — 지금 값·목록에 있는지·고르기(D-143)
+      if (p.default_model && typeof _defaultModelRow === "function") {
+        row.appendChild(_defaultModelRow(p.default_model));
+      }
 
       box.appendChild(row);
     }

@@ -159,6 +159,29 @@ _static_dir = Path(__file__).parent / "static"
 app.mount("/static", _NoCacheStaticFiles(directory=str(_static_dir)), name="static")
 
 
+async def _llm_fallback_header(request, call_next):
+    """자동 폴백에서 앞 순위가 실패했으면 응답 머리 `X-CTB-LLM-Fallback`에 싣는다 (D-143).
+
+    왜 미들웨어인가: LLM을 부르는 라우트가 여럿이라 라우트마다 꼬리표를 붙이면 새 라우트에서 또
+    빠진다. 요청마다 빈 목록을 깔고(라우터가 적는다) 응답에 옮긴다. 화면은 toast.js가 fetch 한
+    곳에서 이 머리를 보고 알린다. 스트리밍 응답은 머리가 먼저 나가 실리지 않는다
+    (llm/fallback_notice.py).
+    """
+    from llm import fallback_notice
+
+    bucket, token = fallback_notice.begin()
+    try:
+        response = await call_next(request)
+    finally:
+        fallback_notice.end(token)
+    if bucket:
+        response.headers[fallback_notice.HEADER] = fallback_notice.header_value(bucket)
+    return response
+
+
+app.middleware("http")(_llm_fallback_header)
+
+
 @app.middleware("http")
 async def _no_store_api(request, call_next):
     """API 응답에 캐시 금지를 붙인다.

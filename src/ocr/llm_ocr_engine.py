@@ -26,6 +26,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import logging
 import threading
@@ -190,7 +191,10 @@ class LlmOcrEngine(BaseOcrEngine):
         # 판독의 2번째 시도 도중 끊기고, 데몬 스레드는 결과를 버린 채 LLM을
         # 계속 부른다 — 실패로 표시되면서 토큰은 소모되는 최악의 조합이다.
         timeout_sec = self._join_timeout(kwargs)
-        thread = threading.Thread(target=_run_in_thread, daemon=True)
+        # 요청 컨텍스트를 복사해 넘긴다 — 새 스레드는 빈 컨텍스트로 시작해, 자동 폴백 알림
+        # (llm.fallback_notice)이 응답 머리에 실리지 않았다(D-143 릴리스 리뷰).
+        ctx = contextvars.copy_context()
+        thread = threading.Thread(target=ctx.run, args=(_run_in_thread,), daemon=True)
         thread.start()
         thread.join(timeout=timeout_sec)
 

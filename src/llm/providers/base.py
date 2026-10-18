@@ -77,6 +77,9 @@ class LlmResponse:
     elapsed_sec: Optional[float] = None  # 응답 시간 (비교용)
     raw: Optional[dict] = None  # provider별 원본 응답 (디버깅)
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+    # 자동 폴백에서 이 답보다 앞서 실패한 공급자 [{provider, model, error}] (D-143). 비어 있으면
+    # 첫 순위가 답한 것이다. 라우터만 채운다 — 공급자를 직접 부르면 늘 비어 있다.
+    fallback: list = field(default_factory=list)
 
 
 class LlmProviderError(Exception):

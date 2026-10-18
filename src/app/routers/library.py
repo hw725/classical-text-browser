@@ -760,7 +760,8 @@ async def api_validate_repos(doc_id: str, interpretation_id: str | None = Query(
 class LlmKeysRequest(BaseModel):
     """LLM 연결 설정 저장 요청 (D-102).
 
-    provider별 값. 빈 문자열이면 그 줄을 지운다. **값은 응답에도 로그에도 나가지 않는다.**
+    provider별 값. 빈 문자열이면 그 줄을 지운다. **키 값은 응답에도 로그에도 나가지 않는다** —
+    기본 모델 셋(D-143, `core.env_settings.PLAIN_KEYS`)만 비밀이 아니라 응답에 값이 실린다.
     """
 
     anthropic: str | None = None
@@ -773,6 +774,10 @@ class LlmKeysRequest(BaseModel):
     openrouter: str | None = None
     cloudflare: str | None = None  # 판정 모델 — Cloudflare clef 토큰 (D-135)
     cloudflare_account: str | None = None  # 같은 것의 계정 id(주소에 들어간다)
+    # 자동(폴백 순서) 기본 모델 (D-143) — 비밀이 아니라 응답에 값이 그대로 실린다
+    ollama_text_model: str | None = None
+    openai_oauth_model: str | None = None
+    openai_oauth_effort: str | None = None
 
 
 @router.get("/api/settings/decision-models")
@@ -898,8 +903,9 @@ async def api_set_decision_models(body: DecisionModelsRequest):
 async def api_get_llm_keys():
     """서고 .env에 어떤 키가 들어 있는가 — **값이 아니라 《있는가》만** (D-102).
 
-    출력: {"path", "exists", "keys": {provider: {set, hint, env_name}}}
+    출력: {"path", "exists", "keys": {provider: {set, hint, env_name, value?}}}
     hint는 끝 네 글자뿐이다(《…abcd》). 사람이 《내가 넣은 그 키가 맞다》를 알아볼 만큼만.
+    value는 기본 모델 셋(D-143)에만 있다 — 모델 이름은 비밀이 아니고, 보여야 고를 수 있다.
     """
     from core.env_settings import read_status
 
@@ -933,6 +939,15 @@ async def api_set_llm_keys(body: LlmKeysRequest):
     import app._state as _st
 
     _st._llm_router = None  # 다음 호출부터 새 .env로 다시 만든다
+    # 《자동》 결과 캐시는 모델 이름 대신 'auto'로 열쇠를 삼는다 — 기본 모델을 바꾼 뒤 10분 동안
+    # 같은 글을 다시 돌리면 옛 모델의 답이 그대로 나온다. 비운다(D-143 릴리스 리뷰).
+    _st._llm_result_cache.clear()
+    # 이미 만든 OCR 엔진(LLM 비전)은 옛 라우터를 쥐고 있다 — 새 라우터로 바꿔 끼우지 않으면
+    # 저장한 기본 모델·추론 강도·키가 OCR에만 반영되지 않는다(D-143 릴리스 리뷰).
+    registry = _st._ocr_registry
+    llm_engine = registry._engines.get("llm_vision") if registry is not None else None
+    if llm_engine is not None:
+        llm_engine.set_router(_st._get_llm_router())
     return status
 
 
