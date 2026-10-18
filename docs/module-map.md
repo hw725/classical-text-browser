@@ -18,7 +18,7 @@
 | `src/cli/embed_folder.py` · `src/cli/__main__.py` | `ctb ocr` 한 줄 진입점. 실행 전에 《도는 모델》을 한 줄 찍는다(`describe_llm_target`) |
 | `scripts/warmup_paddle.py` | 설치 마지막 단계에서 PaddleOCR 모델(약 240MB)을 미리 받는다. `is_available()`은 paddle을 import하지 않고(메타데이터만) 첫 OCR 때 `_get_ocr()`이 읽는다 — import가 서버 기동·엔진 목록을 붙들었다(2026-09-06) |
 | `installer/ctb_setup.py` · `scripts/build_installer.ps1` | Windows 설치 파일 `CTB-Setup.exe`(D-113). 표준 라이브러리만 — 릴리스 태그 zip을 받아 풀고 `install.ps1`(`CTB_INSTALL_PICK`)을 돌리고 바탕화면 바로 가기. `--auto --dir --pick`으로 창 없이 검증 — **`--auto`는 바로 가기를 만들지 않는다**(`--shortcut`으로 켠다; 격리 HOME 검증이 실제 바탕화면에 임시 폴더 아이콘을 남겼다, 2026-09-06). 빌드는 uvx pyinstaller(앱 .venv에 넣지 않는다) |
-| `src/llm/ollama_catalog.py` | Ollama 비전 모델 후보(D-114). 기본은 `gemma4:cloud`(내려받는 파일 없음, 로그인 필요) — 로그인하지 않을 PC는 화면 「모델 받기」에서 로컬 후보를 고른다. 내장 목록(크기는 레지스트리 매니페스트 실측) + ollama.com 검색 페이지의 클라우드 목록(1시간 캐시). `install.ps1`·`install.sh` 5-1도 같은 기본을 등록한다 |
+| `src/llm/ollama_catalog.py` | Ollama 비전 모델 후보(D-114). 기본은 `kimi-k3:cloud`(글 기본과 같음, 내려받는 파일 없음, 로그인 필요, D-143) — 로그인하지 않을 PC는 화면 「모델 받기」에서 로컬 후보를 고른다. 내장 목록(크기는 레지스트리 매니페스트 실측) + ollama.com 검색 페이지의 클라우드 목록(1시간 캐시). `install.ps1`·`install.sh` 5-1도 같은 기본을 등록한다 |
 | `src/cli/models.py` · `src/cli/config.py` | `ctb models`(번호 목록)·`--model`(번호·이름 일부·`provider:model`) · `ctb config`(기본값 `~/.classical-text-browser/cli.json`, 명령줄 > 저장값 > 내장) |
 
 ## OCR 품질 모듈 (D-080~D-084, 2026-09-02)

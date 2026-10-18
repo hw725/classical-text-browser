@@ -492,7 +492,9 @@ function _defaultModelRow(dm) {
   note.className = "settings-llm-note";
   note.textContent = dm.listed
     ? `지금 ${dm.model}(으)로 갑니다. 「모델」 칸에서 따로 고른 호출은 이 값을 쓰지 않습니다.`
-    : `지금 기본 모델 ${dm.model}이(가) 목록에 없어 자동 모드에서 이 공급자를 건너뜁니다 — 위에서 고르세요.`;
+    : dm.substitute
+      ? `기본 모델 ${dm.model}이(가) 목록에 없어 ${dm.substitute}(으)로 대신 갑니다 — 위에서 고를 수 있습니다.`
+      : `지금 기본 모델 ${dm.model}이(가) 목록에 없어 자동 모드에서 이 공급자를 건너뜁니다 — 위에서 고르세요.`;
   wrap.appendChild(note);
   return wrap;
 }

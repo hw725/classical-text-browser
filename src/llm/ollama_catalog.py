@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 # 비전 모델이 없을 때 앱과 설치 스크립트가 받는 기본값. 클라우드 — 내려받는 파일이 없다.
 # `llm.providers.ollama.OllamaProvider.DEFAULT_MODELS["vision"]`이 이 값을 쓴다.
-DEFAULT_VISION_MODEL = "gemma4:cloud"
+DEFAULT_VISION_MODEL = "kimi-k3:cloud"
 
 # 비전이 아닌 클라우드 후보 — OCR에는 못 쓰지만 편성·번역·주석 같은 텍스트 일에 고를 수 있다.
 # ollama.com 검색 페이지(비전 필터)에 없으므로 《은퇴했을 수 있음》 판정에서 뺀다
@@ -40,14 +40,14 @@ TEXT_ONLY: frozenset[str] = frozenset({"glm-5.3:cloud"})
 
 # (이름, 종류, 크기 GB, 한 줄 설명). 크기는 registry.ollama.ai 매니페스트 실측(2026-09-06).
 BUILTIN: list[tuple[str, str, float, str]] = [
-    ("gemma4:cloud", "cloud", 0.0, "Google Gemma 4 — 기본. 로그인만 있으면 바로 씁니다"),
+    ("gemma4:cloud", "cloud", 0.0, "Google Gemma 4 — v1.4.3까지의 이미지 기본"),
     ("qwen3.5:cloud", "cloud", 0.0, "Alibaba Qwen 3.5 397B"),
     ("kimi-k2.6:cloud", "cloud", 0.0, "Moonshot Kimi K2.6"),
     (
         "kimi-k3:cloud",
         "cloud",
         0.0,
-        "Moonshot Kimi K3 — 「판독 계획」 기본(종류 판정 벤치마크 1위)",
+        "Moonshot Kimi K3 — 기본(글·이미지 둘 다, 종류 판정 벤치마크 1위)",
     ),
     ("minimax-m3:cloud", "cloud", 0.0, "MiniMax M3"),
     ("glm-5.3-flash:cloud", "cloud", 0.0, "Zhipu GLM 5.3 Flash"),

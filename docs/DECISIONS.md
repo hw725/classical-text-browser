@@ -8930,3 +8930,24 @@ kimi-k3로 잰 적이 없고, 풀면 답을 내는 공급자가 바뀐다.
 사람이 고른 것과 같은 `dataset.picked`를 붙인다 — 「말로 지시」 창은 이 표지가 없으면 열 때 종류 판정 칸을 기본
 모델로 덮어, 되살린 선택이 창을 처음 여는 순간 사라졌다(자체 검토로 찾음 — Codex 리뷰는 크레딧 소진으로 끊겼다).
 시험 `tests/test_model_choice_memory_20261018.py`(계약 C-004, 고치기 전 5/5 실패).
+
+**이미지 기본도 kimi-k3:cloud(같은 날, 사용자 지적).** 인계는 《Ollama 기본》을 glm-5.2·glm-5.3·kimi-k3 가운데서
+고르라고 했는데, 이 결정은 그것을 글 작업에만 적용해 묻고 이미지 기본 `gemma4:cloud`(D-114)를 그대로 두었다
+(사용자: 《이미지도 kimi나 glm 5.2 쓰라니까》). 세 후보 가운데 이미지를 받는 것은 kimi-k3:cloud뿐이다 — Ollama
+`/api/show`의 capabilities가 kimi-k3 `vision·thinking·completion·tools`, glm-5.2·glm-5.3 `thinking·completion·tools`
+(2026-10-18 실측, 모델 호출 없음). 그래서 `ollama_catalog.DEFAULT_VISION_MODEL`을 kimi-k3:cloud로 바꿨고, 설치
+5-1단계(`scripts/install_ollama_step.ps1`)도 gemma4:cloud와 kimi-k3:cloud를 따로 받던 것을 kimi-k3:cloud 하나로
+줄였다. `OLLAMA_VISION_MODEL`로 바꾸는 길과, 기본이 죽었으면 설치된 비전 모델(클라우드 → 로컬)로 내려가는
+D-114의 고르기는 그대로다. 이미 gemma4:cloud를 받아 둔 PC는 kimi-k3가 없으면 그것으로 내려간다. 시험
+`tests/test_vision_default_20261018.py`(계약 C-005, 고치기 전 3/3 실패). 옛 기본을 단언하던 시험 넷
+(`test_llm_accounts` 셋·`test_install_ollama_probe` 하나)은 새 기본에 맞췄다.
+
+**글 기본이 없으면 받아 둔 glm으로 대신(같은 날, 사용자 결정).** 이미지 기본은 설치된 비전 모델로 내려가는데
+글 기본은 kimi-k3:cloud가 목록에 없으면 Ollama를 통째로 건너뛰었다. 사용자 결정 《그 순서로》에 따라 기본이 없으면
+받아 둔 `glm-5.2:cloud` → `glm-5.3:cloud` 순으로 대신 부르고(`OllamaProvider.TEXT_SUBSTITUTES`·`_resolve_text_model`),
+대신한 사실을 요청의 폴백 알림(화면 토스트)·서버 경고에 남긴다. 설정 카드도 《대신 무엇으로 가는가》를 보인다
+(`_default_model_info`의 `substitute`). **로컬 모델로는 대신하지 않는다** — 소형 로컬은 긴 JSON 답을 깨뜨리기 쉽고
+품질이 낮다. 사람이 `.env`·설정에서 고른 모델이 없을 때도 대신하지 않는다(고른 것을 말없이 바꾸지 않는다). 시험
+`tests/test_text_fallback_20261018.py`(계약 C-006, 고치기 전 4/7 실패 — 나머지 셋은 《대신하지 않는다》 쪽이라
+고치기 전에도 참이다). 기존 시험 하나(`test_ollama_default_missing_from_installed_list_fails_without_calling`)는
+목록에 glm-5.3이 있어 이제 대신 부르므로, 후보가 없는 목록으로 바꿨다.

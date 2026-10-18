@@ -536,7 +536,13 @@ async def api_llm_accounts():
 
         entry["status"], entry["note"] = _account_status(entry)
         dm = entry.get("default_model")
-        if dm and not dm["listed"]:
+        if dm and not dm["listed"] and dm.get("substitute"):
+            entry["note"] += (
+                f" 자동 모드 텍스트 기본 모델 {dm['model']}이(가) 목록에 없어"
+                f" {dm['substitute']}(으)로 대신 갑니다"
+                " — 아래 「자동 모드 기본 모델」에서 고를 수 있습니다."
+            )
+        elif dm and not dm["listed"]:
             # 부르지 않고 넘어가는 이유를 카드에 적는다(D-143)
             # — 예전에는 404·500으로 조용히 넘어갔다
             entry["note"] += (
@@ -582,6 +588,12 @@ async def _default_model_info(provider) -> dict:
         "env_key": key,
         "listed": model in choices,
         "choices": choices,
+        # 기본이 목록에 없을 때 대신 갈 모델(Ollama 글 — glm-5.2 → glm-5.3, 사용자 결정 2026-10-18)
+        "substitute": (
+            provider.text_substitute(set(choices))
+            if provider.provider_id == "ollama" and model not in choices
+            else None
+        ),
     }
     if provider.provider_id == "openai_oauth":
         info.update(
@@ -1341,7 +1353,7 @@ async def api_page_survey(doc_id: str, part_id: str, body: PageSurveyRequest):
                         router_llm = _get_llm_router()
                         # "decision"은 라우터의 프로바이더가 아니다 — 화면의 종류 판정 기본 모델로
                         # 바꿔 보낸다(page_survey.SURVEY_FALLBACK_MODEL). 지정하지 않으면
-                        # 라우터 기본(gemma4:cloud)으로 간다
+                        # 라우터 기본(kimi-k3:cloud)으로 간다
                         kwargs["force_provider"], kwargs["force_model"] = SURVEY_FALLBACK_MODEL
                 if answers is not None:
                     provider, model = decider.PROVIDER, decider.model

@@ -173,5 +173,6 @@ def test_step_pull_does_not_wait_for_lingering_children(tmp_path):
         srv.shutdown()
     # 가짜 ollama가 남긴 자식(40초)이 출력 파이프를 붙잡지 못했다
     assert elapsed < 20, f"남는 자식을 {elapsed:.1f}초 기다렸다"
-    assert calls == ["pull", "gemma4:cloud", "pull", "kimi-k3:cloud"]
+    # 기본 모델 하나만 받는다(D-143 — 옛 이미지 기본 gemma4는 받지 않는다)
+    assert calls == ["pull", "kimi-k3:cloud"]
     assert "등록합니다" in out

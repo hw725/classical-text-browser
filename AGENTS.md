@@ -131,7 +131,7 @@ src/app/
 고칠 때 그 표를 읽는다. 결정의 지금 결론은 **`docs/CHECKPOINTS.md`**. 아래는 모듈을 가로지르는 규칙이라 여기 둔다.
 
 - **사전은 지식이고 정책은 문헌의 것**: `strict`만 동치, `loose`·`script`는 힌트. 승인은 `documents/{doc_id}/variant_approvals.json`에만.
-- **Ollama 기본 비전 모델은 클라우드(`gemma4:cloud`)다**(D-114). 로컬 기본을 두면 처음 켠 PC가 9.6GB를 받기만 한다. 클라우드 기본은 목록에 있어도 `_pick_vision_model`이 한 번 불러 보고(로그인 없음·은퇴면 실패) 로컬 후보로 내려간다.
+- **Ollama 기본 비전 모델은 클라우드(`kimi-k3:cloud` — 글 기본과 같다)다**(D-114·D-143, v1.4.3까지는 `gemma4:cloud`). 로컬 기본을 두면 처음 켠 PC가 9.6GB를 받기만 한다. 클라우드 기본은 목록에 있어도 `_pick_vision_model`이 한 번 불러 보고(로그인 없음·은퇴면 실패) 로컬 후보로 내려간다.
 - **Ollama 텍스트 호출은 답이 길면 문맥 창도 올린다**(`providers/ollama.py::_gen_options`, 2026-09-12). 기본 num_ctx 4,096이라 num_predict를 크게 줘도 《프롬프트 + 답》이 4,096을 넘는 순간 잘린다 — 사전형 주석이 매번 2,883토큰에서 끊겼다. 긴 JSON을 받는 호출은 잘린 답에서 완성된 항목만 건지는 파서도 둔다(`core.llm_json_items.recover_truncated_items`).
 - **사고(thinking)는 전역 스위치가 아니다**: 기본 끔(D-074). 정밀 판독과 사용자가 명시한 호출만 켠다. **다만 Ollama 프로바이더에는 폴백이 있다** — `response`가 비고 `thinking`만 찼을 때 그것을 본문으로 쓴다(`providers/ollama.py` 텍스트·스트리밍·비전 셋). 사고에 num_predict를 다 쓴 reasoning 모델의 방어책이고, 비전 경로는 `allow_thinking_fallback=False`로 끌 수 있다. 다른 세 프로바이더에는 없다. 한때 이 줄이 「폴백은 어디에도 없다」로 적혀 있었다(Codex 지적 2026-09-22 — 문서를 믿은 호출자가 사고문을 결과로 받는다).
 
@@ -240,7 +240,7 @@ src/app/
   (`npx -y openai-oauth`, 포트 10531–10540 스캔, Bearer 토큰 `oauth-proxy` 하드코딩)와
   SikuRoBERTa 표점 Docker(punctuation-service/.env 존재 시)를 자동 기동.
 - 프론트(static/)가 약 4.7만 줄 — index.html 약 5.1천 줄 단일 파일, workspace.css 약 8.2천 줄,
-  JS 34개(약 3.3만 줄). 테스트 108파일 — 그중 화면 JS를 node로 돌리는 것(`tests/js_harness.py`)은
+  JS 34개(약 3.3만 줄). 테스트 110파일 — 그중 화면 JS를 node로 돌리는 것(`tests/js_harness.py`)은
   `tests/test_annotation_editor_js.py`(2026-09-16 Codex 교차검증 반영 때 처음)·
   `tests/test_entity_manager_js.py`(D-128)·`tests/test_structure_jev.py`·
   `tests/test_read_path_writes.py`(화면을 열기만 해도 쓰던 것, 2026-09-30)·
@@ -250,6 +250,8 @@ src/app/
   사전 활성화, 백업·.env·휴지통 데이터 손실, 이스케이프)·
   `tests/test_default_models_20261018.py`(《자동》 기본 모델과 앞 순위 실패 알림 문구, D-143)·
   `tests/test_model_choice_memory_20261018.py`(작업 화면 「모델」 칸이 새로고침 뒤에도 고른 모델을 기억, D-143), **CI 없음.**
+  (이미지 기본 kimi-k3는 `tests/test_vision_default_20261018.py`, 글 기본이 없을 때 glm 대체는
+  `tests/test_text_fallback_20261018.py`가 본다 — 둘 다 화면 JS는 돌리지 않는다.)
   화면 《마크업》을 읽는 것도 둘이다 — `tests/test_ui_reachability.py`(조작 단추에 사람이
   닿을 수 있는가, B-008)와 `tests/test_connectome.py`(화면이 그 라우트를 부르는가).
   (2026-10-05 재실측. 2026-07-26 v1.2.0 감사 때 직전 대비 프론트가 줄어든 것은

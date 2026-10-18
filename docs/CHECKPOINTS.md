@@ -95,7 +95,7 @@
 
 - **`LlmRouter`가 단일 진입점**, `force_provider`는 인자로(D-010·D-069). 판정 모델은 라우터에 넣지 않는다(《프롬프트 → 글》 계약이 아니다)(D-129).
 - **조용한 폴백을 드러낸다** — 과금 방식 표시, 구독 한도를 《무료》로 보이지 않음, 쓴 모델·비용을 결과에(D-056), 닿는가·인증됐는가를 따로(D-058).
-- **로컬 서비스는 `127.0.0.1`**(D-109). Ollama 기본 비전은 `gemma4:cloud`, 고르게 한다(D-114).
+- **로컬 서비스는 `127.0.0.1`**(D-109). Ollama 기본 비전은 `kimi-k3:cloud`(글 기본과 같음, D-143), 고르게 한다(D-114).
 - **《자동》 기본 모델**: Ollama 텍스트 `kimi-k3:cloud`, ChatGPT 계정 `gpt-6.1-sol`·추론 medium(think=False는 low), 서고 .env `OLLAMA_TEXT_MODEL`·`OPENAI_OAUTH_MODEL`·`OPENAI_OAUTH_EFFORT`와 설정 카드에서 고른다. 기본 모델이 설치·프록시 목록에 없으면 부르지 않는다. 앞 순위 실패는 `LlmResponse.fallback`·서버 경고·응답 머리 `X-CTB-LLM-Fallback`·화면 토스트로(스트리밍·배치는 기록만)(D-143).
 - **사고 예산은 답변 예산에 더한다**, JSON은 강제, 잘림은 예외(D-083). Ollama JSON 호출이 사고를 끈 채 JSON이 아니면 사고를 켜 1회 재시도(D-118).
 - **판정 모델 클라이언트는 `JevClient` 한 벌을 물려받는다**(Decider·clef·OpenRouter). 키는 제 업체 주소로만 — `KEY_NAMES`·`VENDOR_HOSTS`, 재정의 주소가 다른 업체면 키를 싣지 않는다(D-134·D-136). 상한은 묻기 수로, 상한에 닿으면 폴백(유료)으로 넘기지 않고 멈춘다 — 자동 스캔·편성 본문 판정 둘 다(D-135·D-142).

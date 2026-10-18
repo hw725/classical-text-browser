@@ -1,4 +1,4 @@
-﻿# 고전서지 통합 브라우저 — 설치 5-1단계: Ollama 기본 비전 모델 확인·등록
+﻿# 고전서지 통합 브라우저 — 설치 5-1단계: Ollama 기본 모델(kimi-k3:cloud) 확인·등록
 #
 # install.ps1이 부른다. 따로 떼어 둔 까닭은 이 단계만 시험할 수 있게 하려는 것이다
 # (tests/test_install_ollama_probe.py).
@@ -101,11 +101,13 @@ if ($null -eq $models) {
     exit 0
 }
 
-if ($models -contains "gemma4:cloud") {
+# 기본 모델 kimi-k3:cloud — 앱의 글·이미지 기본이자 「말로 지시」 자동 스캔의 종류 판정 모델(D-143,
+# 종류 판정 벤치마크 1위 2026-09-11). v1.4.3까지는 이미지 기본(Gemma 4 클라우드판, D-114)을 따로 받았다.
+if ($models -contains "kimi-k3:cloud") {
     Say "  이미 있습니다." "Green"
 } else {
     Say "  없습니다. 등록합니다 (클라우드 모델 — 내려받는 파일 없음, 몇 초)…"
-    $rc = Invoke-OllamaTimed @("pull", "gemma4:cloud") $pullTimeout
+    $rc = Invoke-OllamaTimed @("pull", "kimi-k3:cloud") $pullTimeout
     if ($rc -eq 0) {
         Say "  쓰려면 앱 설정 ▸ LLM 연결 ▸ Ollama의 「로그인」. 로그인 없이 쓰려면 같은 자리 「모델 받기」에서 내 PC용 모델을 고르세요." "DarkGray"
     } elseif ($rc -eq -1) {
@@ -113,13 +115,5 @@ if ($models -contains "gemma4:cloud") {
     } else {
         Say "  지금 등록하지 못했습니다. 앱 설정 ▸ LLM 연결 ▸ Ollama의 「모델 받기」에서 고를 수 있습니다." "Yellow"
     }
-}
-
-# 「말로 지시」 ① 자동 스캔(옛 「판독 계획」, D-126·D-132)의 비전 모델 후보 kimi-k3:cloud — 종류 판정
-# 벤치마크 1위(2026-09-11). Cloudflare·OpenRouter 키가 있으면 기본은 clef이고 이것은 사슬의 마지막이다(D-135).
-if (-not ($models -contains "kimi-k3:cloud")) {
-    Say "[5-1] 자동 스캔 비전 모델 등록 (kimi-k3:cloud — 클라우드, 몇 초)…" "White"
-    $rc = Invoke-OllamaTimed @("pull", "kimi-k3:cloud") $pullTimeout
-    if ($rc -ne 0) { Say "  지금 등록하지 못했습니다. 자동 스캔은 다른 비전 모델(자동)로 돕니다." "Yellow" }
 }
 exit 0

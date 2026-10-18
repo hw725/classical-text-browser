@@ -3,7 +3,7 @@
 플러그인 아키텍처로 다양한 OCR 엔진을 지원한다.
 
 기본 엔진:
-  - LLM Vision OCR: 기존 LLM 라우터의 비전 기능을 사용(Ollama 기본은 gemma4:cloud, D-114).
+  - LLM Vision OCR: 기존 LLM 라우터의 비전 기능을 사용(Ollama 기본은 kimi-k3:cloud, D-143).
   - PaddleOCR: 기본 의존성(CPU판). GPU판은 별도 환경 .venv-gpu(D-078).
 
 추가 엔진 (설치 프로그램의 선택지 = pyproject extras):

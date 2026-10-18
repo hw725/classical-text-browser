@@ -94,7 +94,7 @@
           "not slow"
         ],
         "count_regex": "(\\d+) passed",
-        "count_floor": 2109,
+        "count_floor": 2124,
         "timeout": 1800,
         "traceback_fatal": false,
         "reuse": true,
@@ -218,12 +218,70 @@
         "quote": "작업 화면 모델 선택 새로고침해도 기억하게 해야 하지 않을까? 안 그러면 의미가 있어...??"
       },
       "status": "active"
+    },
+    {
+      "id": "C-005",
+      "text": "Ollama 이미지(비전) 기본 모델도 kimi-k3:cloud이고, 설치 스크립트도 그 모델을 등록한다",
+      "judge": "deterministic",
+      "check": {
+        "argv": [
+          "uv",
+          "run",
+          "python",
+          "-m",
+          "pytest",
+          "tests/test_vision_default_20261018.py",
+          "-q",
+          "-p",
+          "no:cacheprovider"
+        ],
+        "fail_regex": "FAILED|AssertionError|\\d+ errors?\\b",
+        "traceback_fatal": false
+      },
+      "guards": [
+        "tests/test_vision_default_20261018.py"
+      ],
+      "origin": {
+        "kind": "user-correction",
+        "date": "2026-10-18",
+        "quote": "아니 이미지도 kimi 나 glm 5.2 쓰라니까??????"
+      },
+      "status": "active"
+    },
+    {
+      "id": "C-006",
+      "text": "Ollama 글 기본 kimi-k3:cloud가 없으면 받아 둔 glm-5.2:cloud → glm-5.3:cloud로 대신하고 그 사실을 알리며, 로컬 모델이나 사람이 고른 모델은 대신하지 않는다",
+      "judge": "deterministic",
+      "check": {
+        "argv": [
+          "uv",
+          "run",
+          "python",
+          "-m",
+          "pytest",
+          "tests/test_text_fallback_20261018.py",
+          "-q",
+          "-p",
+          "no:cacheprovider"
+        ],
+        "fail_regex": "FAILED|AssertionError|\\d+ errors?\\b",
+        "traceback_fatal": false
+      },
+      "guards": [
+        "tests/test_text_fallback_20261018.py"
+      ],
+      "origin": {
+        "kind": "user-correction",
+        "date": "2026-10-18",
+        "quote": "응 그 순서로 이번 v1.4.4에 같이 넣어줘"
+      },
+      "status": "active"
     }
   ],
   "approved": {
-    "hash": "7c5566414cdb364c6c5df13ca56a569abf5e6f9aef45c773f18ac338418ad338",
-    "request": "A-edf97939",
-    "ts": "2026-10-18T15:29:17",
+    "hash": "b36adcaf1464bcf72a035971fea5eb3078028b3328bf8f280a230b22dba3c8c6",
+    "request": "A-0eb0dce8",
+    "ts": "2026-10-18T16:12:39",
     "guards": {
       "tests/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "tests/conftest.py": "39d9a0edf4011b44a408f8a73258e802b7a236ed2f1753b40ced6afeba49b18f",
@@ -261,7 +319,7 @@
       "tests/test_d128.py": "0ec2216027d873b6f0dc7b45fc533dfc490912e0462ccb8e84ec43b2a7016696",
       "tests/test_decision_model_selection.py": "24c1299fbcc4052f21118ce88f349ece74577b003970e1a6ddd354326cb005c7",
       "tests/test_decision_models.py": "abbf3c2eb189490fd321c49c161caea39fe41273fa13097840d8016c81780bbc",
-      "tests/test_default_models_20261018.py": "9364cc48d10f29da2d1125743aa099b92b1f82a4b5802213e07c0cccf45b12b0",
+      "tests/test_default_models_20261018.py": "00916a15e88fd5e8b1dc90c2551cdfe9dd0d1a39f3ae74c8596f1c135b4383eb",
       "tests/test_doc_drift.py": "ac54f0ea936855fe628bade42c82c5bd6e1dfec870d01bfe1b77fb79dc2d0de6",
       "tests/test_embed_folder_resume.py": "1a145a62b4a3e31ab0d3c9b5f14ed98ec1284f4079787c566c025baa183e9a22",
       "tests/test_entity_manager_js.py": "05aa3b602ceee1055747776ef6fb85c715bbdba0b2285036285b2eec1abe6522",
@@ -275,7 +333,7 @@
       "tests/test_forbidden_patterns.py": "37456f3060cdca5755c72f9ed44231e481bd3623a417c8c710b9969579809556",
       "tests/test_full_page_block_rotation.py": "47e808273c451fd4d04b85b33eaa1d833079f7b93f2f5789b02f4eee041584b7",
       "tests/test_git_graph.py": "a04754082c4ec44efc96a7b1b2b7adeeaa1b268a6df7796ef691795f15eeb687",
-      "tests/test_install_ollama_probe.py": "448f6a5105f580639da4ee497e356b4716a52b6bd13a4873fc18628dd16ce47b",
+      "tests/test_install_ollama_probe.py": "8186055fb072ac8e69a2c41660b2c85ec7250d8bacc5e9429768dce96e84191a",
       "tests/test_interp_layers_atomic_write.py": "5bb105d72f906cbbd0f070a78be58436f3e97d83c3cea4154ffeb4aa55facd83",
       "tests/test_jev_via_openrouter.py": "70afe849aacc8b478dc6b5a71b0e527c1c10dc408f89daafa7dccea515c5ba79",
       "tests/test_korcis.py": "b1f62cf8dba379abffd5c0c0178322ed87fd5c15e4f45536837f435f3771b64b",
@@ -283,7 +341,7 @@
       "tests/test_line_detector.py": "ef088b225bbef7f5a0d5be4b1fded660b20202a5d71bea101187318feb61e268",
       "tests/test_lint_does_not_grow.py": "7abb38eddf1a7507ff4f5b1c49c9654751c9bab84bb2a60ba65874d8b41eb07e",
       "tests/test_lite_mode_api.py": "cdf52c69aee9a95223788a8ea2f37e30cafadfd333f250c95cda9516ba4aa24b",
-      "tests/test_llm_accounts.py": "7cae7415e887bb9850cf18fcf96780445bdb4d6b4dd41cf2fc3ee83f3d46004e",
+      "tests/test_llm_accounts.py": "1b2068c73ca5e311e22c2de45195fd8d9b0c3772f1b3e6b195d26ebf416b9e3c",
       "tests/test_llm_integration.py": "0505b1248e0e323ccbe6c9c4dc868d41738183afdbbe3dfdc60d0c2665fba9e4",
       "tests/test_llm_json_items.py": "8ccd3ba5f0f21caa5c403ab0bbba57e619d1e419ecebcacec085f29003a0756d",
       "tests/test_llm_ocr_page_image.py": "9bd7318278335c36fa77ef3e112446d0d0fd39e8278e912b0cfbe37754d73c0e",
@@ -328,6 +386,7 @@
       "tests/test_structure_llm.py": "28855cc2784fd3ae24223e26b133eb6800d1299977e9992c9480b1ddf436b9cf",
       "tests/test_sweep_20261011.py": "10650e0185384050090206f1638f905913e40458258b5c0b596141b26a196df4",
       "tests/test_text_cleaner.py": "763b8da3c29d7d061e2998854acf86542a71612093dc8b8c3c153c4e2f52ea13",
+      "tests/test_text_fallback_20261018.py": "2ec31b3b9a04bdfc9cc5fea44852ff9e8b1f7d7454c5b1dae59d39d63d6c7cba",
       "tests/test_text_import_align.py": "b9148dbfeba8164db0969d1e0a70456470dda0202c1af001637286ac36541e3f",
       "tests/test_text_layer_pdf.py": "5443fa7c4cef6e7d65929261e956e453a2e6f7d91ef1040c0139747ca72b71cc",
       "tests/test_translation.py": "adeeb404ea2d9c1342807d771a218631c651081d3a45a6085845aee117d57d1e",
@@ -335,7 +394,8 @@
       "tests/test_updater.py": "84477565255ec49dcf976184995d9f0edc8004225be0e51b19d642d868382bf7",
       "tests/test_usage_log_isolation.py": "4c04d4b91e7519ffd148c7cd8de5cfaeee77ddd3fba25f22262a795090c91235",
       "tests/test_validation_panel.py": "024163768c6c6adc507e77b0430a39521696f8f5086358687926ec1cbae92602",
-      "tests/test_variant_tiers.py": "55030247fe2432ea7439a739bc8ca1544a40104e5468588367fe4bef0ee7b0b8"
+      "tests/test_variant_tiers.py": "55030247fe2432ea7439a739bc8ca1544a40104e5468588367fe4bef0ee7b0b8",
+      "tests/test_vision_default_20261018.py": "286ca4b2c0aca64dc4f1c50c4644bcd01fcd14d9fc87386420a2958b3191d8e5"
     }
   }
 }

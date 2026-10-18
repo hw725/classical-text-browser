@@ -55,8 +55,8 @@ def test_ollama_text_default_is_kimi_k3_for_every_text_purpose(clean_env):
         "segmentation_rules",
     ):
         assert p.default_text_model(purpose) == "kimi-k3:cloud", purpose
-    # 비전 기본은 이 결정의 범위 밖 — 그대로 gemma4:cloud(D-114)
-    assert OllamaProvider.DEFAULT_MODELS["vision"] == "gemma4:cloud"
+    # 비전 기본도 같은 kimi-k3:cloud다(사용자 지적 2026-10-18, test_vision_default_20261018.py)
+    assert OllamaProvider.DEFAULT_MODELS["vision"] == "kimi-k3:cloud"
 
 
 def test_ollama_text_default_follows_env(clean_env):
@@ -181,7 +181,9 @@ def test_ollama_default_missing_from_installed_list_fails_without_calling(clean_
     calls = []
 
     async def _models(*a, **k):
-        return [{"name": "glm-5.3:cloud"}, {"name": "gemma4:cloud"}]
+        # 대신할 후보(glm-5.2·glm-5.3)도 없는 목록 — 후보가 있으면 대신 쓴다
+        # (test_text_fallback_20261018)
+        return [{"name": "qwen3:8b"}, {"name": "gemma4:cloud"}]
 
     async def _gen(payload):
         calls.append(payload)

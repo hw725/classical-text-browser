@@ -211,7 +211,7 @@ flowchart TB
             O5["PaddleOCR"]
         end
         subgraph LLM_ENG["LLM 라우터 (router.py)"]
-            LR1["1. Ollama (텍스트 kimi-k3:cloud · 비전 gemma4:cloud)"]
+            LR1["1. Ollama (텍스트·비전 kimi-k3:cloud)"]
             LR2["2. OpenAI OAuth (gpt-6.1-sol · 추론 medium)"]
             LR3["3. Gemini"]
             LR4["4. OpenAI"]
@@ -336,7 +336,7 @@ flowchart TB
     ENTRY -->|"시도"| TIER1
 
     subgraph TIER1_GROUP["1순위: Ollama (로컬 서버 · 클라우드 모델은 구독 한도)"]
-        TIER1["127.0.0.1:11434 -- 비전 gemma4:cloud · 텍스트 kimi-k3:cloud"]
+        TIER1["127.0.0.1:11434 -- 텍스트·비전 kimi-k3:cloud"]
     end
 
     TIER1_GROUP -->|"실패 시"| TIER2
@@ -720,7 +720,7 @@ flowchart TB
         LM3["draft.py"]
         LM4["usage_tracker.py"]
         subgraph PROVIDERS["providers/"]
-            LP1["ollama (텍스트 kimi-k3:cloud · 비전 gemma4:cloud)"]
+            LP1["ollama (텍스트·비전 kimi-k3:cloud)"]
             LP2["openai_oauth (gpt-6.1-sol)"]
             LP3["gemini"]
             LP4["openai"]

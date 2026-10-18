@@ -2,7 +2,7 @@
 
 Ollama 로컬 서버(127.0.0.1:11434)를 통한 LLM 호출.
 (localhost가 아니다 — Windows는 localhost를 IPv6부터 시도해 느리다, D-109)
-기본 비전 모델: gemma4:cloud — 클라우드(내려받는 파일 없음, ollama.com 로그인 필요, D-114)
+기본 비전 모델: kimi-k3:cloud — 클라우드(내려받는 파일 없음, ollama.com 로그인 필요, D-114·D-143)
 기본 텍스트 모델: kimi-k3:cloud — 클라우드(구독 한도, D-143). .env `OLLAMA_TEXT_MODEL`로 바꾼다
 
 호출 흐름:
@@ -69,17 +69,18 @@ def _gen_options(max_tokens: int, prompt_chars: int) -> dict:
 
 
 class OllamaProvider(BaseLlmProvider):
-    """Ollama 로컬 서버를 통한 LLM 호출. 기본 비전 모델: gemma4:cloud, 텍스트: kimi-k3:cloud."""
+    """Ollama 로컬 서버를 통한 LLM 호출. 기본 모델은 글·이미지 모두 kimi-k3:cloud."""
 
     provider_id = "ollama"
     display_name = "Ollama"
     supports_image = True
 
     # 용도별 기본 모델
-    # 비전: gemma4:cloud (D-114) — 비전 모델이 없는 PC가 처음 받는 것. 내려받는 파일이 없어
-    #   몇 초에 끝나지만 ollama.com 로그인이 있어야 돈다. 로그인하지 않을 PC는 화면의
-    #   「모델 받기」에서 로컬 모델을 고른다(llm/ollama_catalog.py). v1.3.0까지는 gemma4:e4b
-    #   (9.6GB)였다.
+    # 비전: kimi-k3:cloud (D-143 보충, 2026-10-18 사용자 결정) — 비전 모델이 없는 PC가 처음 받는 것.
+    #   내려받는 파일이 없어 몇 초에 끝나지만 ollama.com 로그인이 있어야 돈다. 로그인하지 않을 PC는
+    #   화면의 「모델 받기」에서 로컬 모델을 고른다(llm/ollama_catalog.py). 후보 glm-5.2·glm-5.3은
+    #   이미지를 받지 않는다(/api/show capabilities). v1.4.3까지는 gemma4:cloud(D-114), v1.3.0까지는
+    #   gemma4:e4b(9.6GB)였다.
     # 텍스트(번역·JSON·표점·주석 포함): kimi-k3:cloud (D-143, 2026-10-18).
     #   v1.4.3까지는 4월에 넣은 로컬 gemma4:e4b였다. 이 PC에는 클라우드 모델만 있어 자동 모드의
     #   1순위가 늘 404로 실패했고, 그 실패가 기록 없이 다음 순위로 넘어갔다. kimi-k3는 「말로
@@ -113,6 +114,42 @@ class OllamaProvider(BaseLlmProvider):
         if configured:
             return configured
         return self.DEFAULT_MODELS.get(purpose, self.DEFAULT_MODELS["text"])
+
+    # 글 기본(kimi-k3:cloud)이 설치 목록에 없을 때 대신 쓸 클라우드 글 모델, 앞에서부터
+    # (사용자 결정 2026-10-18). 로컬 모델은 넣지 않는다 — 소형 로컬은 긴 JSON 답을 깨뜨리기 쉽고
+    # 품질이 낮다는 사용자 판단. 로컬을 쓰려면 설정에서 직접 고른다.
+    TEXT_SUBSTITUTES = ("glm-5.2:cloud", "glm-5.3:cloud")
+
+    def text_substitute(self, names: set) -> str | None:
+        """기본이 목록에 없을 때 대신할 모델. 사람이 고른 모델이 있거나 후보가 없으면 None."""
+        if (self.config.get("ollama_text_model") or "").strip():
+            return None
+        return next((n for n in self.TEXT_SUBSTITUTES if n in names), None)
+
+    async def _resolve_text_model(self, purpose: str) -> str:
+        """모델을 지정하지 않은 글 호출이 실제로 부를 모델 (D-143).
+
+        순서: 기본(설정값 또는 kimi-k3:cloud)이 설치 목록에 있으면 그것 → 없으면 TEXT_SUBSTITUTES 중
+        받아 둔 첫 모델(대신 쓴 사실을 화면 알림·서버 경고에 남긴다) → 그것도 없으면 부르지 않고
+        실패(_require_installed). 목록을 못 받으면 기본을 그대로 부른다.
+        """
+        want = self.default_text_model(purpose)
+        try:
+            names = {m.get("name") for m in await self.list_models() if not m.get("retired")}
+        except Exception:  # noqa: BLE001 — 확인 실패를 《없다》로 오판하지 않는다
+            return want
+        if want in names:
+            return want
+        alt = self.text_substitute(names)
+        if alt:
+            from llm import fallback_notice
+
+            line = f"ollama: 기본 {want}이(가) 설치 목록에 없어 {alt}(으)로 대신 씀"
+            logger.warning("%s(%s)", line, purpose)
+            fallback_notice.record(line)
+            return alt
+        await self._require_installed(want)  # 없다는 까닭을 담아 실패한다
+        return want
 
     async def _require_installed(self, model: str) -> None:
         """기본 모델이 이 Ollama의 설치 목록에 있는지 본다 — 없으면 부르지 않는다(D-143).
@@ -533,9 +570,7 @@ class OllamaProvider(BaseLlmProvider):
             텍스트로 쓴다. 예전 설명은 《기본값으로 think=False를 보낸다》고 적어 바로 아래
             코드와 정반대였다(2026-10-11 전수).
         """
-        selected_model = model or self.default_text_model(purpose)
-        if not model:
-            await self._require_installed(selected_model)
+        selected_model = model or await self._resolve_text_model(purpose)
 
         payload = {
             "model": selected_model,
@@ -642,9 +677,7 @@ class OllamaProvider(BaseLlmProvider):
         """
         import json as _json
 
-        selected_model = model or self.default_text_model(purpose)
-        if not model:
-            await self._require_installed(selected_model)
+        selected_model = model or await self._resolve_text_model(purpose)
 
         payload = {
             "model": selected_model,

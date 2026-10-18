@@ -507,7 +507,7 @@ def test_catalog_marks_installed_and_puts_default_first(monkeypatch):
         "태그 없는 이름은 목록에서 뺀다"
     )
     names = [m["name"] for m in out["models"]]
-    assert names[0] == out["default"] == "gemma4:cloud"
+    assert names[0] == out["default"] == "kimi-k3:cloud"  # 이미지 기본(D-143)
     kinds = [m["kind"] for m in out["models"]]
     assert kinds == sorted(kinds, key=lambda k: k != "cloud"), "클라우드가 전부 로컬 앞이어야 한다"
     by = {m["name"]: m for m in out["models"]}
@@ -549,7 +549,7 @@ def test_catalog_route(client, monkeypatch):
     r = client.get("/api/settings/ollama/catalog")
     assert r.status_code == 200, r.text
     d = r.json()
-    assert d["default"] == "gemma4:cloud" and d["reachable"] is True
+    assert d["default"] == "kimi-k3:cloud" and d["reachable"] is True
     installed = {m["name"]: m["installed"] for m in d["models"]}
     assert installed["gemma4:e4b"] is True and installed["gemma4:cloud"] is False
 
@@ -621,14 +621,14 @@ async def test_all_dead_leaves_a_mark_for_the_card(monkeypatch):
     from llm.providers.ollama import OllamaProvider
 
     OllamaProvider._SHARED.clear()
-    p = _ollama(monkeypatch, models=[{"name": "gemma4:cloud", "vision": True}], alive=set())
-    assert await p._pick_vision_model() == "gemma4:cloud"
-    assert p._shared_get("vision_dead") == "gemma4:cloud"
+    p = _ollama(monkeypatch, models=[{"name": "kimi-k3:cloud", "vision": True}], alive=set())
+    assert await p._pick_vision_model() == "kimi-k3:cloud"
+    assert p._shared_get("vision_dead") == "kimi-k3:cloud"
     OllamaProvider._SHARED.clear()
     p = _ollama(
-        monkeypatch, models=[{"name": "gemma4:cloud", "vision": True}], alive={"gemma4:cloud"}
+        monkeypatch, models=[{"name": "kimi-k3:cloud", "vision": True}], alive={"kimi-k3:cloud"}
     )
-    assert await p._pick_vision_model() == "gemma4:cloud"
+    assert await p._pick_vision_model() == "kimi-k3:cloud"
     assert not p._shared_get("vision_dead")
 
 

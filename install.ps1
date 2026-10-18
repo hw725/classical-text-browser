@@ -166,7 +166,7 @@ if ($pick -eq "4") {
 
 # ── 5-1. Ollama 기본 비전 모델 ───────────────────────────────
 # Ollama가 깔려 있는데 이미지를 읽는 모델이 하나도 없으면 앱이 이미지 작업을 다음 프로바이더로
-# 넘긴다(대개 유료). 기본 모델은 클라우드(gemma4:cloud)다 — 내려받는 파일이 없어 몇 초에 끝나고,
+# 넘긴다(대개 유료). 기본 모델은 클라우드(kimi-k3:cloud — 글·이미지 둘 다, D-143)다 — 내려받는 파일이 없어 몇 초에 끝나고,
 # 쓸 때 ollama.com 로그인이 필요하다(D-114). 내 PC에서 도는 모델은 앱 안 「모델 받기」에서 고른다.
 #
 # `ollama` 명령을 여기서 직접 부르지 않는다 — Ollama가 꺼져 있으면 `ollama list`가 Ollama 앱을
@@ -175,7 +175,7 @@ if ($pick -eq "4") {
 # 설치는 끝낸다.
 if (Have "ollama") {
     Write-Host ""
-    Say "[5-1] Ollama 기본 비전 모델 확인 (gemma4:cloud)" "White"
+    Say "[5-1] Ollama 기본 모델 확인 (kimi-k3:cloud)" "White"
     try {
         & (Join-Path $PSScriptRoot "scripts\install_ollama_step.ps1")
     } catch {

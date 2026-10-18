@@ -55,7 +55,7 @@ function _woSetPlan(plan, warnList, heading) {
 }
 
 // 종류 판정 기본 모델 — 벤치마크(2026-09-11, 표본 10쪽): 종류 정답 kimi-k3 7/10·gemma4 5/10·minimax-m3 5/10,
-// 쪽당 1.5초로 gemma4(1.3초)와 같다. 앱 전체 기본(gemma4:cloud, D-114)과는 별개다.
+// 쪽당 1.5초로 gemma4(1.3초)와 같다. 앱 전체 이미지 기본도 같은 kimi-k3:cloud다(D-143).
 const WO_SCAN_DEFAULT_MODEL = "ollama:kimi-k3:cloud";
 // 판정 모델 옵션 값(D-142) — workspace.js의 DECISION_SCAN_VALUE와 같다(이 파일이 먼저 읽혀 따로 둔다)
 const WO_DECISION_VALUE = "decision:decision";
