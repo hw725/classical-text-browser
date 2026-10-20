@@ -87,8 +87,37 @@ class TestPaddleOcrEngine:
         img.save(buf, format="PNG")
 
         engine = PaddleOcrEngine()
+        missing = _paddle_models_missing(engine._lang)
+        if missing:
+            # 빠른 계층은 바깥 네트워크를 막으므로(conftest) 모델을 받을 수 없다.
+            # 이 PC는 캐시가 있어 돌았지만 빈 CI 서버에서는 《모델을 받을 곳이 없다》로
+            # 실패했다(D-144 첫 실행, 2026-10-20).
+            pytest.skip(
+                f"PaddleOCR 모델이 캐시에 없음({', '.join(missing)}) — "
+                "한 번 OCR을 돌려 받아 두면 이 시험이 돈다"
+            )
         result = engine.recognize(buf.getvalue())
         assert result.engine_id == "paddleocr"
+
+
+def _paddle_models_missing(lang: str) -> list[str]:
+    """실제 인식에 필요한 PaddleX 모델 가운데 로컬 캐시에 없는 것의 이름 목록.
+
+    입력: lang — 엔진의 PaddleOCR 언어 코드(기본 "ch").
+    출력: 캐시(`PADDLE_PDX_CACHE_HOME`, 기본 ~/.paddlex)의 official_models에 없는 모델 이름.
+    비면 다 있다.
+    목적: 모델 이름을 시험에 박지 않고 PaddleOCR이 지금 판에서 고르는 이름을 그대로 묻는다 —
+    PaddleOCR을 올려 기본 모델이 바뀌어도 이 검사가 따라간다.
+    `_get_ocr_model_names`는 self를 쓰지 않는다.
+    """
+    from pathlib import Path
+
+    from paddleocr._pipelines.ocr import PaddleOCR
+    from paddlex.utils.cache import CACHE_DIR
+
+    names = [n for n in PaddleOCR._get_ocr_model_names(None, lang, None) if n]
+    root = Path(CACHE_DIR) / "official_models"
+    return [n for n in names if not (root / n).is_dir()]
 
 
 class TestPaddleImportFailure:

@@ -8966,3 +8966,9 @@ D-114의 고르기는 그대로다. 이미 gemma4:cloud를 받아 둔 PC는 kimi
 3. slow·network 시험, `.venv`에만 있는 선택 의존(ONNX·torch — extras)과 실제 OCR 모델 품질은 CI 밖이다.
    이것들이 없어서 실패하는 시험이 첫 실행에서 나오면 시험 쪽에 건너뜀 조건을 단다(CI를 느슨하게 하지 않는다).
 4. 완료 영수증(`scripts/receipt.py`)은 그대로다 — CI는 영수증을 대신하지 않고, 영수증 이후의 회귀를 잡는다.
+
+**첫 실행(2026-10-20, run 39401714920).** 2,120 통과·1 실패·4 건너뜀, 9분 50초. 실패는
+`test_ocr_paddle.py::test_recognize_real` — 빈 서버에 PaddleX 모델 캐시가 없어 받으려다 conftest의 네트워크
+차단에 걸렸다(《No model hoster is available》). 이 PC는 `~/.paddlex/official_models`에 캐시가 있어 내내 통과했다 —
+《내 PC에서 잘 돌았다》의 한 예다. 시험이 PaddleOCR에게 지금 판의 모델 이름을 물어(`_get_ocr_model_names`)
+캐시에 없으면 이유를 밝히고 건너뛰게 했다. 빈 캐시(`PADDLE_PDX_CACHE_HOME`을 빈 폴더로)에서 건너뜀, 이 PC에서 통과를 둘 다 확인했다.

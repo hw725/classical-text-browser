@@ -77,7 +77,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
 
    | 엔진 | 시험에서 실행되는 것 |
    |---|---|
-   | `paddleocr_engine` | `recognize`(설치 시 실모델 1회, 단 `assert`는 engine_id뿐) |
+   | `paddleocr_engine` | `recognize`(설치되고 모델이 캐시에 있을 때 실모델 1회 — CI 빈 서버에서는 건너뜀, D-144. 단 `assert`는 engine_id뿐) |
    | `ndlocr_engine` | `recognize_page`·`_cascade_recognize`·`_process_detections` |
    | `honkoku_engine` | `recognize`·`recognize_page`(가짜 OCR 주입 — 변환 코드는 실행된다) |
    | `llm_ocr_engine` | `recognize`·`_recognize_async`(가짜 router) |
