@@ -242,6 +242,7 @@ XY-Cut을 빼면 빨강).
 ## 5. 릴리스 절차
 
 1. `uv run python -m pytest` — 전부 통과
+1-1. GitHub Actions `tests`가 main 마지막 커밋에서 초록인지(D-144). CI는 빠른 계층만 돌므로 1단계를 대신하지 않는다
 2. `uv run ruff check src/ tests/`
 3. JS 문법: `for f in src/app/static/js/*.js; do node --check "$f"; done`
 3-1. **그림**: `uv run python scripts/check_doc_drift.py --screenshots` — 문서가 가리키는

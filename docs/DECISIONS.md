@@ -8951,3 +8951,18 @@ D-114의 고르기는 그대로다. 이미 gemma4:cloud를 받아 둔 PC는 kimi
 `tests/test_text_fallback_20261018.py`(계약 C-006, 고치기 전 4/7 실패 — 나머지 셋은 《대신하지 않는다》 쪽이라
 고치기 전에도 참이다). 기존 시험 하나(`test_ollama_default_missing_from_installed_list_fails_without_calling`)는
 목록에 glm-5.3이 있어 이제 대신 부르므로, 후보가 없는 목록으로 바꿨다.
+
+## D-144: CI를 붙인다 — 빠른 계층 pytest를 main에 올릴 때마다 빈 Windows 서버에서 (2026-10-20)
+
+**무엇이 있었나.** 시험은 110파일·빠른 계층 2,124건(2026-10-20 이 PC 실측, 10분 23초 전부 통과)인데 누구도
+자동으로 돌리지 않았다. 커밋 대부분을 AI가 만들므로, 한 곳을 고치다 다른 곳을 깨뜨려도 사람이 직접 돌려 보기
+전에는 드러나지 않는다. 외부 저장소 평가(2026-10-20)도 《시험은 있는데 아무도 돌리지 않는다》를 첫 약점으로 짚었다.
+
+**결정(사용자 《ctb 먼저 진행》 2026-10-20).**
+1. `.github/workflows/tests.yml` — main push·PR·수동 실행 때 `uv sync --frozen` 뒤 `pytest -m "not slow"`.
+   공개 저장소라 Actions 시간은 무료다.
+2. **서버는 `windows-latest`.** 사용자 PC와 같은 OS이고, `PYTHONUTF8`을 일부러 켜지 않는다 — 이 PC는 켜 두어
+   cp949 사고가 가려지는데(「파일 다루기」 표의 `force_utf8_console` 줄) 빈 서버에서는 드러난다.
+3. slow·network 시험, `.venv`에만 있는 선택 의존(ONNX·torch — extras)과 실제 OCR 모델 품질은 CI 밖이다.
+   이것들이 없어서 실패하는 시험이 첫 실행에서 나오면 시험 쪽에 건너뜀 조건을 단다(CI를 느슨하게 하지 않는다).
+4. 완료 영수증(`scripts/receipt.py`)은 그대로다 — CI는 영수증을 대신하지 않고, 영수증 이후의 회귀를 잡는다.
