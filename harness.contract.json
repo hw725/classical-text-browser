@@ -280,8 +280,8 @@
   ],
   "approved": {
     "hash": "b36adcaf1464bcf72a035971fea5eb3078028b3328bf8f280a230b22dba3c8c6",
-    "request": "A-0eb0dce8",
-    "ts": "2026-10-18T16:12:39",
+    "request": "A-9d4cc9d0",
+    "ts": "2026-10-21T14:13:46",
     "guards": {
       "tests/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "tests/conftest.py": "39d9a0edf4011b44a408f8a73258e802b7a236ed2f1753b40ced6afeba49b18f",
@@ -356,7 +356,7 @@
       "tests/test_ocr_image_utils.py": "b7a411ade56b673088d94172dae906939f480f7775028f7082daa4dd9e89ad01",
       "tests/test_ocr_integration.py": "4415d3e1908cdfecc15e0a90250fd62675c1a21566ffb3df490bda8a3095b791",
       "tests/test_ocr_kotenocr_contract.py": "d809c43e71ff3fa4268c27eccf535f9f76ca022d102bae4b031d255e9742461a",
-      "tests/test_ocr_paddle.py": "289bdba769e40c4b89f4d4b0395a3aafc3cb338446dabf9040d22f70a4a46d2d",
+      "tests/test_ocr_paddle.py": "6772d84d3c01f02176c51c69f7d578290df6982bc032f02872a88a83c069e4e6",
       "tests/test_ocr_pipeline.py": "289d366b021cde0ec5d680bc329bdf967876e9d73bb2d9af20bbbefc3720b38e",
       "tests/test_ocr_prompt.py": "637a40b70acb06af1559225ccf534582486275a84e2c1a88655cbab6ede225cd",
       "tests/test_ocr_registry.py": "75b9d4eba8638da1c431743462cf435660e4363607657de51a0bb353984e01c8",

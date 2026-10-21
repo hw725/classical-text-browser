@@ -8972,3 +8972,18 @@ D-114의 고르기는 그대로다. 이미 gemma4:cloud를 받아 둔 PC는 kimi
 차단에 걸렸다(《No model hoster is available》). 이 PC는 `~/.paddlex/official_models`에 캐시가 있어 내내 통과했다 —
 《내 PC에서 잘 돌았다》의 한 예다. 시험이 PaddleOCR에게 지금 판의 모델 이름을 물어(`_get_ocr_model_names`)
 캐시에 없으면 이유를 밝히고 건너뛰게 했다. 빈 캐시(`PADDLE_PDX_CACHE_HOME`을 빈 폴더로)에서 건너뜀, 이 PC에서 통과를 둘 다 확인했다.
+
+## D-145: 게이트를 CI 하나로 — main 보호, 필수 검사 `fast`, doc-sync 토큰 면제 (2026-10-21)
+
+**무엇이 있었나.** 커밋 검사가 세 겹이었다 — 이 PC의 doc-sync 5분 토큰(커밋 도구에만 걸림), 완료 영수증
+(`scripts/receipt.py`, 에이전트가 보고할 때만), D-144의 CI(push 뒤에만, 막지는 못함). 어느 것도 《모든 경우에 걸리는
+하나》가 아니었다.
+
+**결정(사용자 《ctb도 claude-skills와 같은 방식으로》 2026-10-21 — claude-skills `docs/CI.md` 《게이트를 하나로》와 같다).**
+1. `main`을 보호한다 — PR로만 바뀌고, 필수 검사 `fast`(tests.yml)를 통과해야 병합된다. 관리자도 예외 없다.
+2. `fast`가 영수증과 같은 검사를 한다 — 빠른 계층 pytest(금지 패턴·문서 드리프트 시험 포함)에 더해 `ruff check src/ tests/`·
+   `scripts/check_doc_drift.py`를 단계로 더했다.
+3. 완료 영수증 첨부 의무를 내린다 — `receipt.py`는 PR 전에 미리 돌려 보는 도구로 남는다. 완료 보고는 CI 실행 번호와 결론.
+4. `.github/doc-sync-ci` 표지 — doc-sync 커밋 게이트 세 구현이 이 저장소에서는 토큰 없이 통과시킨다(claude-skills `95571b7`).
+5. slow·network 시험과 실제 OCR 모델 품질은 여전히 CI 밖이다(D-144) — 그 영역을 바꾸면 PR 전에 이 PC에서 돌린다.
+

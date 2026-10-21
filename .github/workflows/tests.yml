@@ -1,4 +1,5 @@
 # 올릴 때마다 빠른 시험 계층을 빈 Windows 서버에서 돌린다(D-144).
+# main 보호의 필수 검사(job `fast`)다 — main 은 PR 로만 바뀌고 이 검사를 통과해야 병합된다(D-145).
 # Windows인 이유: 사용자 PC와 같은 OS다. PYTHONUTF8 은 일부러 켜지 않는다 —
 # 개발 PC는 켜 두어 cp949 사고가 가려지므로, 여기서 드러나게 한다.
 name: tests
@@ -36,3 +37,10 @@ jobs:
 
       - name: 빠른 시험(slow 제외)
         run: uv run --frozen python -m pytest -m "not slow" -q -p no:cacheprovider --timeout=120
+
+      # 완료 영수증(scripts/receipt.py)의 나머지 단계 — CI 가 유일한 게이트라 같은 검사를 여기서 한다(D-145)
+      - name: ruff
+        run: uv run --frozen ruff check src/ tests/
+
+      - name: 문서 드리프트
+        run: uv run --frozen python scripts/check_doc_drift.py

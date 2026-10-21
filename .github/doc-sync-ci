@@ -1,0 +1,3 @@
+이 저장소는 main 보호 + GitHub Actions CI(tests.yml 의 fast — 빠른 시험·ruff·문서 드리프트)가 커밋 게이트다(D-145, 2026-10-21 사용자 결정).
+이 파일이 있으면 doc-sync 커밋 게이트(Claude PreToolUse·전역 commit-msg·Codex plugin)가 5분 토큰 없이 통과시킨다.
+지우면 로컬 토큰 게이트로 돌아간다.
