@@ -69,6 +69,40 @@ CJK_FONT = "korea"
 # 좌표가 없어 줄을 순서대로 늘어놓을 때, 페이지 상하좌우에 두는 여백(포인트).
 PAGE_MARGIN = 40.0
 
+# CJK_FONT(Droid Sans Fallback)에 없는 글자 — 옛한글 첫가끝 자모·확장 A 일부(䟽)·㊞ 등 — 를 넣을
+# 대체 글꼴(B-082). PyMuPDF 내장 글꼴은 모두 같은 Droid라 대신할 수 없어 설치 글꼴 파일을 찾는다.
+# 환경 변수(os.pathsep로 여럿)가 있으면 그것만 쓰고, 없으면 아래 후보 중 있는 것을 쓴다.
+FALLBACK_ENV = "CTB_TEXT_LAYER_FALLBACK_FONTS"
+# TrueType만 둔다 — CFF 글꼴(Noto Sans CJK .otf·.ttc)은 subset_fonts가 경고 없이 건너뛰어 16MB가
+# 통째로 들어갔다(실측 2026-10-22: 1.2MB 논문이 15.2MB). 한컴 돋움은 옛한글·䟽·㊞을 모두 담고
+# 서브셋 뒤 수십 KB다. 맑은 고딕은 ㊞이 없다.
+FALLBACK_CANDIDATES = (
+    r"%WINDIR%\Fonts\HANDotum.ttf",
+    r"%WINDIR%\Fonts\malgun.ttf",
+)
+
+
+def _load_fallback_fonts(paths: list[str | Path] | None) -> list[fitz.Font]:
+    """대체 글꼴을 연다. paths가 None이면 환경 변수 → 후보 순. 열리지 않는 파일은 건너뛴다."""
+    import os
+
+    if paths is None:
+        env = os.environ.get(FALLBACK_ENV)
+        if env:
+            paths = env.split(os.pathsep)
+        else:
+            paths = [os.path.expandvars(p) for p in FALLBACK_CANDIDATES]
+    fonts: list[fitz.Font] = []
+    for p in paths:
+        p = Path(p)
+        if not p.is_file():
+            continue
+        try:
+            fonts.append(fitz.Font(fontfile=str(p)))
+        except Exception as e:  # noqa: BLE001 — 깨진 글꼴 파일 하나로 내보내기를 멈추지 않는다
+            logger.warning(f"대체 글꼴을 열지 못했습니다({p}): {e}")
+    return fonts
+
 
 @dataclass
 class EmbedResult:
@@ -232,21 +266,66 @@ def _embed_page(
     scale: float,
     fontname: str,
     font: fitz.Font | None,
+    fallbacks: list[fitz.Font] = (),
+    uniform_size: bool = False,
+) -> tuple[int, int, list[str]]:
+    """CropBox를 잠시 MediaBox로 넓혀 _embed_lines를 부르고 되돌린다.
+
+    왜(B-081): CropBox가 MediaBox와 다르면 PyMuPDF 1.27.1 TextWriter.write_text가 글자를
+    엉뚱한 자리에 놓는다 — 회전 없는 쪽은 `(mediabox.height − cropbox.y1) −
+    cropbox_position.y`만큼 아래로 밀리고(실제 스캔 논문 2편에서 113pt·170pt, 쪽마다 끝 줄이
+    쪽 밖으로 나가 추출되지 않았다), 회전 쪽은 축마다 다르게 어긋나거나 쪽 밖으로 나간다.
+    CropBox가 MediaBox와 같으면 어긋남이 없으므로, 좌표를
+    《CropBox 표시 공간 → 전체 쪽 표시 공간》으로 옮겨 쓰고 CropBox를 원래대로 둔다.
+    bbox·검출·배치 계산은 그대로 CropBox 표시 공간(page.rect)에서 한다.
+    """
+    crop = page.cropbox
+    # abs(Rect - Rect)는 차이 사각형의 넓이라 뒤집힌 사각형이면 0이 된다 — 좌표를 직접 견준다.
+    if all(abs(a - b) < 1e-3 for a, b in zip(crop, page.mediabox)):
+        return _embed_lines(
+            page, page.rect, None, lines, scale, fontname, font, fallbacks, uniform_size
+        )
+    disp_rect = page.rect
+    to_full = page.derotation_matrix * fitz.Matrix(1, 0, 0, 1, crop.x0, crop.y0)
+    page.set_cropbox(page.mediabox)
+    try:
+        to_full = to_full * page.rotation_matrix
+        return _embed_lines(
+            page, disp_rect, to_full, lines, scale, fontname, font, fallbacks, uniform_size
+        )
+    finally:
+        page.set_cropbox(crop)
+
+
+def _embed_lines(
+    page: fitz.Page,
+    page_rect: fitz.Rect,
+    to_full: fitz.Matrix | None,
+    lines: list[tuple[str, list[float] | None]],
+    scale: float,
+    fontname: str,
+    font: fitz.Font | None,
+    fallbacks: list[fitz.Font] = (),
+    uniform_size: bool = False,
 ) -> tuple[int, int, list[str]]:
     """한 쪽에 보이지 않는 텍스트를 얹는다.
 
     입력:
         page — 대상 PDF 페이지 (원본 이미지가 이미 들어 있다).
+        page_rect — bbox·배치를 재는 표시 공간(원래 CropBox의 page.rect).
+        to_full — page_rect 좌표를 지금 page의 표시 공간으로 옮기는 행렬. None이면 같은 공간.
         lines — (텍스트, bbox) 목록. bbox는 이미지 픽셀 좌표이거나 None.
         scale — 픽셀 → 포인트 변환 배율.
         font — embed_font=True일 때만 주어지는 임베드용 폰트 객체.
+        fallbacks — font에 없는 글자를 넣을 대체 글꼴(B-082). 앞의 것부터 찾는다.
+        uniform_size — 쪽 안의 모든 줄을 한 글자 크기(중앙값)로 쓴다(B-083).
     출력: (제자리에 놓은 줄 수, 자리를 몰라 늘어놓은 줄 수, 경고 목록)
     """
     positioned = 0
     approximated = 0
     warnings: list[str] = []
 
-    page_rect = page.rect  # /Rotate가 적용된 《표시》 크기 — bbox·검출·잉크 검사가 다 이 공간이다
+    # page_rect: /Rotate가 적용된 《표시》 크기 — bbox·검출·잉크 검사가 다 이 공간이다
     with_bbox = [(t, b) for t, b in lines if b is not None]
     without_bbox = [t for t, b in lines if b is None]
 
@@ -284,7 +363,32 @@ def _embed_page(
     if not page.is_wrapped:
         page.wrap_contents()
 
-    writer = fitz.TextWriter(page_rect) if (font is not None and not rotated) else None
+    writer = fitz.TextWriter(page.rect) if (font is not None and not rotated) else None
+
+    def _runs(text: str) -> list[tuple[str, fitz.Font]]:
+        """글자를 담은 글꼴별로 잘라 나눈다.
+
+        어느 글꼴에도 없는 글자는 기본 글꼴에 둔다(embed_text_layer가 세어 경고한다).
+        대체 글꼴 구간에 들어선 뒤에는 그 글꼴에 있는 글자를 계속 그 글꼴에 둔다(B-084):
+        Droid는 받침 ᆨ(U+11A8)을 ㄱ(U+3131)과 한 글리프로 써서, 옛한글 음절을 글꼴 사이로
+        쪼개면 추출 때 ㄱ으로 바뀐다.
+        """
+        out: list[tuple[str, fitz.Font]] = []
+        for ch in text:
+            f = font
+            if out and out[-1][1] is not font and out[-1][1].has_glyph(ord(ch)):
+                f = out[-1][1]
+            elif not font.has_glyph(ord(ch)):
+                f = next((fb for fb in fallbacks if fb.has_glyph(ord(ch))), font)
+            if out and out[-1][1] is f:
+                out[-1] = (out[-1][0] + ch, f)
+            else:
+                out.append((ch, f))
+        return out
+
+    def _append(w: fitz.TextWriter, pos: fitz.Point, text: str, size: float) -> None:
+        for run, f in _runs(text):
+            _rect, pos = w.append(pos, run, font=f, fontsize=size)
 
     def _emit(text: str, x: float, baseline_y: float, size: float) -> bool:
         """한 줄을 실제로 써넣는다. 성공하면 True.
@@ -292,14 +396,17 @@ def _embed_page(
         왜 예외를 잡는가: 폰트에 없는 글리프가 섞이면 PyMuPDF가 예외를
         던진다. 한 줄 때문에 전체가 실패하면 안 되므로 건너뛰고 기록한다.
         """
+        if to_full is not None:
+            p = fitz.Point(x, baseline_y) * to_full
+            x, baseline_y = p.x, p.y
         try:
             if font is not None and rotated:
                 p_page = fitz.Point(x, baseline_y) * derot
                 w = fitz.TextWriter(page.rect)  # mediabox를 주면 자리가 어긋난다(실측)
-                w.append(p_page, text, font=font, fontsize=size)
+                _append(w, p_page, text, size)
                 w.write_text(page, render_mode=3, morph=(p_page, glyph_rot))
             elif writer is not None:
-                writer.append((x, baseline_y), text, font=font, fontsize=size)
+                _append(writer, fitz.Point(x, baseline_y), text, size)
             else:
                 page.insert_text(
                     fitz.Point(x, baseline_y) * derot if rotated else (x, baseline_y),
@@ -314,6 +421,10 @@ def _embed_page(
             warnings.append(f"줄을 건너뜀({text[:16]}…): {e}")
             return False
 
+    # 쓸 줄을 먼저 모두 계획한다 — uniform_size면 쪽 하나의 글자 크기를 정한 뒤 쓴다.
+    # (텍스트, x, 베이스라인, 크기, 크기 상한, 좌표 있음)
+    plan: list[tuple[str, float, float, float, float, bool]] = []
+
     # ── 1) 좌표가 있는 줄: 제자리에 놓는다
     for text, bbox in with_bbox:
         x0, y0, x1, y1 = (c / scale for c in bbox)
@@ -321,8 +432,7 @@ def _embed_page(
         width = max(x1 - x0, 1.0)
         size = _fit_fontsize(text, width, height, fontname, font)
         # 베이스라인은 박스 아래쪽에서 살짝 올린 지점.
-        if _emit(text, x0, y1 - height * 0.2, size):
-            positioned += 1
+        plan.append((text, x0, y1 - height * 0.2, size, 300.0, True))
 
     # ── 2) 좌표가 없는 줄: 쪽 전체에 균등 배치한다
     #
@@ -345,7 +455,34 @@ def _embed_page(
             size = _fit_fontsize(text, usable_w, size_base / 0.85, fontname, font)
             # 폭에 맞춘 크기가 행간보다 크면 겹치므로 잘라낸다.
             size = min(size, size_base)
-            if _emit(text, PAGE_MARGIN, baseline, size):
+            plan.append((text, PAGE_MARGIN, baseline, size, size_base, False))
+
+    # 쪽 하나에 글자 크기 하나(B-083, 선택). 줄을 지면 줄과 다르게 끊은 판독본(사람 판독을
+    # 일정 글자 수로 나눈 줄)은 폭에 맞춘 크기가 줄마다 9～11pt로 흔들리고, 추출기
+    # (opendataloader)가 큰 줄을 제목으로 읽어 본문 한가운데에 `######`를 끼운다(실제 논문
+    # 15편에서 편당 최대 77줄). 아래쪽 중앙값 하나로 맞추면 그 흔들림이 없어지고, 대신 형광
+    # 길이가 줄 폭과 조금 달라진다. 행간 상한과 쪽 오른쪽 끝은 그대로 지킨다(넘치면 그 줄만 줄임).
+    if uniform_size and plan:
+        sizes = sorted(p[3] for p in plan)
+        median = sizes[(len(sizes) - 1) // 2]
+
+        def _fit_right(text: str, x: float, size: float) -> float:
+            room = page_rect.width - x
+            try:
+                w = (font.text_length(text, fontsize=size) if font is not None
+                     else fitz.get_text_length(text, fontname=fontname, fontsize=size))
+            except Exception:  # noqa: BLE001 — 잴 수 없으면 그대로 둔다
+                return size
+            return size if w <= room or w <= 0 else max(1.0, size * room / w)
+
+        plan = [(t, x, b, _fit_right(t, x, min(median, cap)), cap, has)
+                for t, x, b, _s, cap, has in plan]
+
+    for text, x, baseline, size, _cap, has_bbox in plan:
+        if _emit(text, x, baseline, size):
+            if has_bbox:
+                positioned += 1
+            else:
                 approximated += 1
 
     if writer is not None:
@@ -363,6 +500,8 @@ def embed_text_layer(
     source_layer: str = "l2",
     embed_font: bool = True,
     use_line_detection: bool = True,
+    fallback_fonts: list[str | Path] | None = None,
+    uniform_size: bool = False,
 ) -> EmbedResult:
     """문헌의 한 권(part)에 텍스트 레이어를 입혀 새 PDF를 만든다.
 
@@ -377,6 +516,11 @@ def embed_text_layer(
             대신 Adobe-Korea1에 없는 한자가 **조용히 사라진다**(위 설명 참조).
         use_line_detection — 좌표 없는 줄에 검출로 찾은 위치를 채운다.
             PaddleOCR가 없으면 조용히 건너뛴다. 끄면 항상 순서 배치가 된다.
+        fallback_fonts — 기본 글꼴에 없는 글자를 넣을 글꼴 파일들(B-082). None이면
+            환경 변수 CTB_TEXT_LAYER_FALLBACK_FONTS → FALLBACK_CANDIDATES 중 있는 것.
+            []이면 쓰지 않는다.
+        uniform_size — 쪽마다 글자 크기를 하나(중앙값)로 맞춘다(B-083, 기본 끔). 줄을 지면 줄과
+            다르게 끊은 텍스트(사람 판독본 등)에서 추출기가 큰 줄을 제목으로 읽지 않게 한다.
     출력: EmbedResult.
 
     왜 원본을 복사해서 쓰는가: L1_source/의 PDF는 절대 수정하지 않는다.
@@ -406,6 +550,7 @@ def embed_text_layer(
 
     warnings: list[str] = []
     font = fitz.Font(CJK_FONT) if embed_font else None
+    fallbacks = _load_fallback_fonts(fallback_fonts) if embed_font else []
 
     doc = fitz.open(str(pdf_path))
     try:
@@ -440,7 +585,20 @@ def embed_text_layer(
                 lines, filled = _fill_positions_by_detection(page, lines, scale)
                 detected_lines += filled
 
-            pos, approx, warns = _embed_page(page, lines, scale, CJK_FONT, font)
+            pos, approx, warns = _embed_page(
+                page, lines, scale, CJK_FONT, font, fallbacks, uniform_size
+            )
+            if font is not None:
+                # 어느 글꼴에도 없는 글자는 글자층에서 빠진다 — 조용히 넘기지 않고 센다(B-082).
+                lost = sorted({c for t, _b in lines for c in t
+                               if not c.isspace() and not font.has_glyph(ord(c))
+                               and not any(fb.has_glyph(ord(c)) for fb in fallbacks)})
+                if lost:
+                    warns.append(
+                        f"{page_num}쪽: 글꼴에 없는 글자 {len(lost)}종이 빠집니다"
+                        f"({''.join(lost[:20])}) — 대체 글꼴을 fallback_fonts 또는 "
+                        f"{FALLBACK_ENV}로 주세요."
+                    )
 
             total_lines += len(lines)
             positioned += pos
@@ -457,6 +615,13 @@ def embed_text_layer(
                 doc.subset_fonts(verbose=False)
             except Exception as e:  # noqa: BLE001 — 서브셋 실패는 치명적이지 않다
                 warnings.append(f"폰트 서브셋에 실패했습니다(크기만 커집니다): {e}")
+            # subset_fonts는 CFF 글꼴을 말없이 건너뛴다 — 서브셋 접두(ABCDEF+)가 없으면
+            # 알린다(B-082).
+            whole = sorted({f[3] for pno in range(doc.page_count) for f in doc.get_page_fonts(pno)
+                            if f[1] in ("ttf", "otf", "cff") and "+" not in f[3]})
+            if whole:
+                warnings.append(f"서브셋되지 않은 글꼴이 통째로 들어갔습니다(크기가 커집니다): "
+                                f"{', '.join(whole)} — TrueType 대체 글꼴을 쓰세요.")
 
         # 산출물의 출처와 정밀도를 파일 자체에 남긴다.
         # 왜: 나중에 이 PDF만 보고도 텍스트가 OCR 산출물인지,
