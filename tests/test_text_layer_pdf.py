@@ -850,6 +850,24 @@ def test_fallback_font_keeps_old_hangul_and_ext_a(scanned_doc):
     assert not any("글꼴에 없는 글자" in w for w in result.warnings), result.warnings
 
 
+# ── B-084: 옛한글 음절을 글꼴 사이로 쪼개지 않는다 ─────────────────────────────────
+# ᄯᅥ는 대체 글꼴에만, 받침 ᆨ는 Droid에도 있다. 쪼개면 Droid의 ᆨ가 ㄱ(U+3131)으로 추출됐다.
+def test_old_hangul_syllable_stays_in_one_font(scanned_doc):
+    from export.text_layer_pdf import _load_fallback_fonts
+
+    word = "ᄯᅥᆨ"
+    if not any(all(f.has_glyph(ord(c)) for c in word) for f in _load_fallback_fonts(None)):
+        pytest.skip("옛한글 자모를 담은 설치 글꼴이 없다")
+    _write_l2_custom(scanned_doc, "vol1", 1, [(word, [160.0, 200.0, 900.0, 240.0])])
+    result = embed_text_layer(scanned_doc, "vol1", pages=[1], use_line_detection=False)
+    out = fitz.open(result.output_path)
+    try:
+        got = out[0].get_text()
+    finally:
+        out.close()
+    assert word in got, [f"{ord(c):04X}" for c in got.strip()]
+
+
 # ── B-083: 쪽 하나에 글자 크기 하나(선택) ──────────────────────────────────────────
 # 판독본을 일정 글자 수로 끊은 줄은 폭에 맞춘 크기가 줄마다 흔들려, 추출기가 큰 줄을 제목으로
 # 읽었다.

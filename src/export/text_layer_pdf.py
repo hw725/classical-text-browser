@@ -369,11 +369,16 @@ def _embed_lines(
         """글자를 담은 글꼴별로 잘라 나눈다.
 
         어느 글꼴에도 없는 글자는 기본 글꼴에 둔다(embed_text_layer가 세어 경고한다).
+        대체 글꼴 구간에 들어선 뒤에는 그 글꼴에 있는 글자를 계속 그 글꼴에 둔다(B-084):
+        Droid는 받침 ᆨ(U+11A8)을 ㄱ(U+3131)과 한 글리프로 써서, 옛한글 음절을 글꼴 사이로
+        쪼개면 추출 때 ㄱ으로 바뀐다.
         """
         out: list[tuple[str, fitz.Font]] = []
         for ch in text:
             f = font
-            if not font.has_glyph(ord(ch)):
+            if out and out[-1][1] is not font and out[-1][1].has_glyph(ord(ch)):
+                f = out[-1][1]
+            elif not font.has_glyph(ord(ch)):
                 f = next((fb for fb in fallbacks if fb.has_glyph(ord(ch))), font)
             if out and out[-1][1] is f:
                 out[-1] = (out[-1][0] + ch, f)
