@@ -726,3 +726,125 @@ def test_render_scale_prefers_l2_record(scanned_doc):
     l2["image_width"], l2["image_height"] = round(PAGE_W * 5), round(PAGE_H * 5)
     p.write_text(json.dumps(l2), encoding="utf-8")
     assert abs(_render_scale(scanned_doc, "vol1", 1, PAGE_W) - 5.0) < 0.01
+
+
+# ── B-081: CropBox가 MediaBox 위쪽에서 떨어진 쪽 ────────────────────────────────
+# 실제 스캔 논문 2편(CropBox 상단 56.7pt·하단 여백 170pt)에서 TextWriter가 줄을 113～170pt
+# 아래로 밀어 끝 줄이 쪽 밖으로 나가 추출되지 않았다. 깨끗한 시험 PDF는 CropBox가 MediaBox와
+# 같아 드러나지 않았다.
+CROP = fitz.Rect(40, 56.7, 555, 671)
+
+
+def _crop_source(doc_path: Path, rotation: int = 0) -> None:
+    src = doc_path / "L1_source" / "paper.pdf"
+    doc = fitz.open(str(src))
+    for page in doc:
+        page.set_cropbox(CROP)
+        if rotation:
+            page.set_rotation(rotation)
+    doc.saveIncr()
+    doc.close()
+
+
+@pytest.mark.parametrize("cropped", [False, True])
+def test_bbox_lines_land_in_place_on_cropped_page(scanned_doc, cropped):
+    """CropBox가 있어도 OCR bbox 자리(픽셀/배율, 표시 공간)에 놓인다."""
+    if cropped:
+        _crop_source(scanned_doc)
+    _write_l2(scanned_doc, "vol1", 1, with_bbox=True)
+    result = embed_text_layer(scanned_doc, "vol1", pages=[1], use_line_detection=False)
+    out = fitz.open(result.output_path)
+    try:
+        page = out[0]
+        for text, bbox in LINES:
+            hits = page.search_for(text)
+            assert hits, f"검색 실패: {text}"
+            assert abs(hits[0].x0 - bbox[0] / RENDER_SCALE) < 2.0, (text, hits[0])
+            assert abs(hits[0].y1 - bbox[3] / RENDER_SCALE) < 3.0, (text, hits[0])
+    finally:
+        out.close()
+
+
+def _hits(doc_path: Path) -> list[fitz.Rect]:
+    result = embed_text_layer(doc_path, "vol1", pages=[1], use_line_detection=False)
+    out = fitz.open(result.output_path)
+    try:
+        # search_for는 돌리기 전 쪽 좌표를 준다 — 표시 공간으로 옮겨 견준다.
+        return [out[0].search_for(t)[0] * out[0].rotation_matrix for t, _b in LINES]
+    finally:
+        out.close()
+
+
+@pytest.mark.parametrize("rotation", [90, 180, 270])
+def test_rotated_cropped_page_matches_rotated_uncropped(scanned_doc, tmp_path, rotation):
+    """회전 쪽: 같은 L2 표시 좌표면 CropBox가 있든 없든 표시 공간의 같은 자리에 놓인다."""
+    import shutil
+
+    other = tmp_path / "doc_cropped"
+    shutil.copytree(scanned_doc, other)
+    _rotate_only(scanned_doc, rotation)
+    _crop_source(other, rotation)
+    for d in (scanned_doc, other):
+        _write_l2(d, "vol1", 1, with_bbox=True)
+    for a, b in zip(_hits(scanned_doc), _hits(other)):
+        assert abs(a.x0 - b.x0) < 2.0 and abs(a.y0 - b.y0) < 2.0, (a, b)
+
+
+def _rotate_only(doc_path: Path, rotation: int) -> None:
+    src = doc_path / "L1_source" / "paper.pdf"
+    doc = fitz.open(str(src))
+    for page in doc:
+        page.set_rotation(rotation)
+    doc.saveIncr()
+    doc.close()
+
+
+def test_stacked_lines_stay_on_cropped_page(scanned_doc):
+    """좌표 없는 줄을 늘어놓아도 끝 줄까지 쪽 안에 있어 추출된다 — 실제 손실이 난 경로."""
+    _crop_source(scanned_doc)
+    lines = [(f"{i:02d}번째 줄 판독 텍스트", None) for i in range(30)]
+    _write_l2_custom(scanned_doc, "vol1", 1, lines)
+    result = embed_text_layer(scanned_doc, "vol1", pages=[1], use_line_detection=False)
+    out = fitz.open(result.output_path)
+    try:
+        got = out[0].get_text()
+    finally:
+        out.close()
+    missing = [t for t, _ in lines if t not in got]
+    assert not missing, f"쪽 밖으로 밀려 빠진 줄 {len(missing)}개: {missing[-3:]}"
+
+
+# ── B-082: 기본 글꼴(Droid Sans Fallback)에 없는 글자 ─────────────────────────────
+# 판독본의 옛한글 첫가끝 자모·확장 A 한자(䟽)가 글자층에서 오류 없이 빠졌다(실제 논문 763자).
+OLD_HANGUL = "ᄀᆞᆯ ᄒᆞᆫ 䟽"
+
+
+def test_missing_glyphs_are_reported_without_fallback(scanned_doc):
+    """대체 글꼴이 없으면 빠지는 글자를 경고로 밝힌다 — 조용히 버리지 않는다."""
+    _write_l2_custom(scanned_doc, "vol1", 1, [(OLD_HANGUL, [160.0, 200.0, 900.0, 240.0])])
+    result = embed_text_layer(
+        scanned_doc, "vol1", pages=[1], use_line_detection=False, fallback_fonts=[]
+    )
+    assert any("글꼴에 없는 글자" in w and "䟽" in w for w in result.warnings), result.warnings
+
+
+def test_fallback_font_keeps_old_hangul_and_ext_a(scanned_doc):
+    """대체 글꼴이 있으면 옛한글 자모와 䟽가 글자층에 남아 추출된다."""
+    from export.text_layer_pdf import _load_fallback_fonts
+
+    fbs = _load_fallback_fonts(None)
+    if not any(all(f.has_glyph(ord(c)) for c in OLD_HANGUL if not c.isspace()) for f in fbs):
+        pytest.skip(
+            "옛한글·확장 A를 담은 설치 글꼴이 없다"
+            "(FALLBACK_CANDIDATES·CTB_TEXT_LAYER_FALLBACK_FONTS)"
+        )
+    _write_l2_custom(scanned_doc, "vol1", 1, [(OLD_HANGUL, [160.0, 200.0, 900.0, 240.0])])
+    result = embed_text_layer(scanned_doc, "vol1", pages=[1], use_line_detection=False)
+    out = fitz.open(result.output_path)
+    try:
+        got = out[0].get_text()
+    finally:
+        out.close()
+    missing = [c for c in OLD_HANGUL if not c.isspace() and c not in got]
+    assert not missing, f"대체 글꼴을 주었는데 빠진 글자: {missing}"
+    assert not any("글꼴에 없는 글자" in w for w in result.warnings), result.warnings
