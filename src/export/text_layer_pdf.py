@@ -268,6 +268,7 @@ def _embed_page(
     fontname: str,
     font: fitz.Font | None,
     fallbacks: list[fitz.Font] = (),
+    uniform_size: bool = False,
 ) -> tuple[int, int, list[str]]:
     """CropBox를 잠시 MediaBox로 넓혀 _embed_lines를 부르고 되돌린다.
 
@@ -282,13 +283,17 @@ def _embed_page(
     crop = page.cropbox
     # abs(Rect - Rect)는 차이 사각형의 넓이라 뒤집힌 사각형이면 0이 된다 — 좌표를 직접 견준다.
     if all(abs(a - b) < 1e-3 for a, b in zip(crop, page.mediabox)):
-        return _embed_lines(page, page.rect, None, lines, scale, fontname, font, fallbacks)
+        return _embed_lines(
+            page, page.rect, None, lines, scale, fontname, font, fallbacks, uniform_size
+        )
     disp_rect = page.rect
     to_full = page.derotation_matrix * fitz.Matrix(1, 0, 0, 1, crop.x0, crop.y0)
     page.set_cropbox(page.mediabox)
     try:
         to_full = to_full * page.rotation_matrix
-        return _embed_lines(page, disp_rect, to_full, lines, scale, fontname, font, fallbacks)
+        return _embed_lines(
+            page, disp_rect, to_full, lines, scale, fontname, font, fallbacks, uniform_size
+        )
     finally:
         page.set_cropbox(crop)
 
@@ -302,6 +307,7 @@ def _embed_lines(
     fontname: str,
     font: fitz.Font | None,
     fallbacks: list[fitz.Font] = (),
+    uniform_size: bool = False,
 ) -> tuple[int, int, list[str]]:
     """한 쪽에 보이지 않는 텍스트를 얹는다.
 
@@ -313,6 +319,7 @@ def _embed_lines(
         scale — 픽셀 → 포인트 변환 배율.
         font — embed_font=True일 때만 주어지는 임베드용 폰트 객체.
         fallbacks — font에 없는 글자를 넣을 대체 글꼴(B-082). 앞의 것부터 찾는다.
+        uniform_size — 쪽 안의 모든 줄을 한 글자 크기(중앙값)로 쓴다(B-083).
     출력: (제자리에 놓은 줄 수, 자리를 몰라 늘어놓은 줄 수, 경고 목록)
     """
     positioned = 0
@@ -410,6 +417,10 @@ def _embed_lines(
             warnings.append(f"줄을 건너뜀({text[:16]}…): {e}")
             return False
 
+    # 쓸 줄을 먼저 모두 계획한다 — uniform_size면 쪽 하나의 글자 크기를 정한 뒤 쓴다.
+    # (텍스트, x, 베이스라인, 크기, 크기 상한, 좌표 있음)
+    plan: list[tuple[str, float, float, float, float, bool]] = []
+
     # ── 1) 좌표가 있는 줄: 제자리에 놓는다
     for text, bbox in with_bbox:
         x0, y0, x1, y1 = (c / scale for c in bbox)
@@ -417,8 +428,7 @@ def _embed_lines(
         width = max(x1 - x0, 1.0)
         size = _fit_fontsize(text, width, height, fontname, font)
         # 베이스라인은 박스 아래쪽에서 살짝 올린 지점.
-        if _emit(text, x0, y1 - height * 0.2, size):
-            positioned += 1
+        plan.append((text, x0, y1 - height * 0.2, size, 300.0, True))
 
     # ── 2) 좌표가 없는 줄: 쪽 전체에 균등 배치한다
     #
@@ -441,7 +451,34 @@ def _embed_lines(
             size = _fit_fontsize(text, usable_w, size_base / 0.85, fontname, font)
             # 폭에 맞춘 크기가 행간보다 크면 겹치므로 잘라낸다.
             size = min(size, size_base)
-            if _emit(text, PAGE_MARGIN, baseline, size):
+            plan.append((text, PAGE_MARGIN, baseline, size, size_base, False))
+
+    # 쪽 하나에 글자 크기 하나(B-083, 선택). 줄을 지면 줄과 다르게 끊은 판독본(사람 판독을
+    # 일정 글자 수로 나눈 줄)은 폭에 맞춘 크기가 줄마다 9～11pt로 흔들리고, 추출기
+    # (opendataloader)가 큰 줄을 제목으로 읽어 본문 한가운데에 `######`를 끼운다(실제 논문
+    # 15편에서 편당 최대 77줄). 아래쪽 중앙값 하나로 맞추면 그 흔들림이 없어지고, 대신 형광
+    # 길이가 줄 폭과 조금 달라진다. 행간 상한과 쪽 오른쪽 끝은 그대로 지킨다(넘치면 그 줄만 줄임).
+    if uniform_size and plan:
+        sizes = sorted(p[3] for p in plan)
+        median = sizes[(len(sizes) - 1) // 2]
+
+        def _fit_right(text: str, x: float, size: float) -> float:
+            room = page_rect.width - x
+            try:
+                w = (font.text_length(text, fontsize=size) if font is not None
+                     else fitz.get_text_length(text, fontname=fontname, fontsize=size))
+            except Exception:  # noqa: BLE001 — 잴 수 없으면 그대로 둔다
+                return size
+            return size if w <= room or w <= 0 else max(1.0, size * room / w)
+
+        plan = [(t, x, b, _fit_right(t, x, min(median, cap)), cap, has)
+                for t, x, b, _s, cap, has in plan]
+
+    for text, x, baseline, size, _cap, has_bbox in plan:
+        if _emit(text, x, baseline, size):
+            if has_bbox:
+                positioned += 1
+            else:
                 approximated += 1
 
     if writer is not None:
@@ -460,6 +497,7 @@ def embed_text_layer(
     embed_font: bool = True,
     use_line_detection: bool = True,
     fallback_fonts: list[str | Path] | None = None,
+    uniform_size: bool = False,
 ) -> EmbedResult:
     """문헌의 한 권(part)에 텍스트 레이어를 입혀 새 PDF를 만든다.
 
@@ -477,6 +515,8 @@ def embed_text_layer(
         fallback_fonts — 기본 글꼴에 없는 글자를 넣을 글꼴 파일들(B-082). None이면
             환경 변수 CTB_TEXT_LAYER_FALLBACK_FONTS → FALLBACK_CANDIDATES 중 있는 것.
             []이면 쓰지 않는다.
+        uniform_size — 쪽마다 글자 크기를 하나(중앙값)로 맞춘다(B-083, 기본 끔). 줄을 지면 줄과
+            다르게 끊은 텍스트(사람 판독본 등)에서 추출기가 큰 줄을 제목으로 읽지 않게 한다.
     출력: EmbedResult.
 
     왜 원본을 복사해서 쓰는가: L1_source/의 PDF는 절대 수정하지 않는다.
@@ -541,7 +581,9 @@ def embed_text_layer(
                 lines, filled = _fill_positions_by_detection(page, lines, scale)
                 detected_lines += filled
 
-            pos, approx, warns = _embed_page(page, lines, scale, CJK_FONT, font, fallbacks)
+            pos, approx, warns = _embed_page(
+                page, lines, scale, CJK_FONT, font, fallbacks, uniform_size
+            )
             if font is not None:
                 # 어느 글꼴에도 없는 글자는 글자층에서 빠진다 — 조용히 넘기지 않고 센다(B-082).
                 lost = sorted({c for t, _b in lines for c in t

@@ -848,3 +848,38 @@ def test_fallback_font_keeps_old_hangul_and_ext_a(scanned_doc):
     missing = [c for c in OLD_HANGUL if not c.isspace() and c not in got]
     assert not missing, f"대체 글꼴을 주었는데 빠진 글자: {missing}"
     assert not any("글꼴에 없는 글자" in w for w in result.warnings), result.warnings
+
+
+# ── B-083: 쪽 하나에 글자 크기 하나(선택) ──────────────────────────────────────────
+# 판독본을 일정 글자 수로 끊은 줄은 폭에 맞춘 크기가 줄마다 흔들려, 추출기가 큰 줄을 제목으로
+# 읽었다.
+def _sizes(path: str) -> set[float]:
+    out = fitz.open(path)
+    try:
+        return {
+            round(s["size"], 2)
+            for b in out[0].get_text("dict")["blocks"]
+            for ln in b.get("lines", [])
+            for s in ln["spans"]
+            if s["text"].strip()
+        }
+    finally:
+        out.close()
+
+
+def test_uniform_size_gives_one_size_per_page(scanned_doc):
+    """uniform_size=True면 같은 쪽의 줄이 모두 한 크기다. 끄면(기본) 폭에 맞춰 줄마다 다르다."""
+    lines = [("짧은 줄", [160.0, 200.0, 900.0, 240.0]),
+             ("훨씬 더 길게 이어지는 판독 줄 하나가 여기 있다", [160.0, 280.0, 900.0, 316.0])]
+    _write_l2_custom(scanned_doc, "vol1", 1, lines)
+    varied = embed_text_layer(scanned_doc, "vol1", pages=[1], use_line_detection=False)
+    assert len(_sizes(varied.output_path)) > 1
+    one = embed_text_layer(scanned_doc, "vol1", pages=[1], use_line_detection=False,
+                           uniform_size=True)
+    assert len(_sizes(one.output_path)) == 1
+    out = fitz.open(one.output_path)
+    try:
+        got = out[0].get_text()
+    finally:
+        out.close()
+    assert all(t in got for t, _ in lines)
