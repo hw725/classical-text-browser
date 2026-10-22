@@ -24,8 +24,44 @@ from hwp_hwpx_parser import (
     FileType,
     Reader,
 )
+from hwp_hwpx_parser.hwp5 import HWP5Reader
 
 logger = logging.getLogger(__name__)
+
+
+# ── HWP5 글자 필터 보정 (2026-10-22) ──────────────────────────────
+# hwp-hwpx-parser 1.0.0의 HWP5Reader는 글자를 UTF-16 한 단위(16비트)씩 읽고
+# `_is_valid_char`의 허용 목록에 든 것만 남긴다. 그 목록에 두 범위가 없다.
+#   - PUA U+E000~F8FF: 구결자·한양 PUA 한자. 고전 현토문에 수백 자씩 나온다.
+#   - 대리 단위 U+D800~DFFF: 확장 B 이후 한자(𥛠 U+256E0 등)와 SPUA-A는
+#     UTF-16에서 대리쌍 두 단위로 저장되므로, 한 단위씩 거르면 둘 다 버려진다.
+# 그래서 .hwp에서만 이 글자들이 오류 없이 사라졌다(.hwpx는 XML이라 무관).
+# 상류(KimDaehyeon6873/hwp-hwpx-parser)는 2026-01 뒤 멈춰 있고 최신 코드도 같으므로
+# 여기서 허용 범위를 넓히고, 이어 붙은 대리쌍은 아래 `_rejoin_surrogates`로 한 글자로 합친다.
+# 비공개 메서드를 덮으므로 라이브러리가 바뀌면 tests/test_hwp_extb_pua_20261022.py가 깨진다.
+_original_is_valid_char = HWP5Reader._is_valid_char
+
+
+def _is_valid_char_with_pua(self, code: int) -> bool:
+    """원래 허용 목록 + PUA + 대리 단위. 입력: UTF-16 한 단위 값. 출력: 남길지 여부."""
+    return 0xD800 <= code <= 0xF8FF or _original_is_valid_char(self, code)
+
+
+HWP5Reader._is_valid_char = _is_valid_char_with_pua
+
+
+def _rejoin_surrogates(text: str) -> str:
+    """한 단위씩 chr()로 만든 대리쌍을 한 글자로 합친다.
+
+    입력: 대리 단위가 섞여 있을 수 있는 문자열
+    출력: 대리쌍은 본래 글자(예: U+256E0)로, 짝 잃은 반쪽은 U+FFFD로 바꾼 문자열
+
+    왜 U+FFFD인가: 반쪽을 그대로 두면 UTF-8 저장에서 UnicodeEncodeError로 죽고,
+    지우면 《여기 글자가 있었다》는 흔적이 사라진다. 대체 문자로 남겨 사람이 보게 한다.
+    """
+    if not any(0xD800 <= ord(c) <= 0xDFFF for c in text):
+        return text
+    return text.encode("utf-16-le", "surrogatepass").decode("utf-16-le", "replace")
 
 
 class UnifiedReader:
@@ -80,7 +116,7 @@ class UnifiedReader:
             line_separator="\n",
             include_empty_paragraphs=False,
         )
-        return self._reader.extract_text(opts)
+        return _rejoin_surrogates(self._reader.extract_text(opts))
 
     def extract_sections(self) -> list[dict]:
         """섹션별 텍스트를 추출한다.
@@ -188,11 +224,15 @@ class UnifiedReader:
         )
         result = self._reader.extract_text_with_notes(opts)
 
-        footnotes = [{"number": n.number, "text": n.text} for n in result.footnotes]
-        endnotes = [{"number": n.number, "text": n.text} for n in result.endnotes]
+        footnotes = [
+            {"number": n.number, "text": _rejoin_surrogates(n.text)} for n in result.footnotes
+        ]
+        endnotes = [
+            {"number": n.number, "text": _rejoin_surrogates(n.text)} for n in result.endnotes
+        ]
 
         return {
-            "text": result.text,
+            "text": _rejoin_surrogates(result.text),
             "footnotes": footnotes,
             "endnotes": endnotes,
         }

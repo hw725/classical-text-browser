@@ -276,15 +276,46 @@
         "quote": "응 그 순서로 이번 v1.4.4에 같이 넣어줘"
       },
       "status": "active"
+    },
+    {
+      "id": "C-007",
+      "text": ".hwp를 읽을 때 확장 B 한자·PUA(구결자)·SPUA-A를 본문·각주·섹션 어디서도 지우지 않고, 짝 잃은 대리 단위는 U+FFFD로 남긴다",
+      "judge": "deterministic",
+      "check": {
+        "argv": [
+          "uv",
+          "run",
+          "python",
+          "-m",
+          "pytest",
+          "tests/test_hwp_extb_pua_20261022.py",
+          "-q",
+          "-p",
+          "no:cacheprovider"
+        ],
+        "fail_regex": "FAILED|AssertionError|\\d+ errors?\\b",
+        "traceback_fatal": false
+      },
+      "guards": [
+        "tests/test_hwp_extb_pua_20261022.py",
+        "tests/fixtures/hwp/extb_pua.hwp"
+      ],
+      "origin": {
+        "kind": "user-correction",
+        "date": "2026-10-22",
+        "quote": "ctb의 .hwp 확장 B·PUA 손실 - 이건 고쳐야되고"
+      },
+      "status": "active"
     }
   ],
   "approved": {
-    "hash": "b36adcaf1464bcf72a035971fea5eb3078028b3328bf8f280a230b22dba3c8c6",
-    "request": "A-9d4cc9d0",
-    "ts": "2026-10-21T14:13:46",
+    "hash": "82e515c07f7d3b6792bd92f9a589cc0544e38fdd02b92e5271ea0056b2462a03",
+    "request": "A-47fdd8f4",
+    "ts": "2026-10-22T16:20:36",
     "guards": {
       "tests/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "tests/conftest.py": "39d9a0edf4011b44a408f8a73258e802b7a236ed2f1753b40ced6afeba49b18f",
+      "tests/fixtures/hwp/extb_pua.hwp": "71570fcd36da390bbde04f6a85fcd10d5be155b5bcd958b259ae60e596f99328",
       "tests/js_harness.py": "ea8c96cf544432a18fcdf7e2cd8b8269158a110fb7f7945fcb452d5798a355f7",
       "tests/test_add_part.py": "1d59a5b92ebdc2edf632b262b15d4937e0d174534debdcd738c295e7bfe9752f",
       "tests/test_alignment_core.py": "d58984df5fca6a21247021619da8b07856e9daeabf7a83756a1ce79b6ce01df8",
@@ -333,6 +364,7 @@
       "tests/test_forbidden_patterns.py": "37456f3060cdca5755c72f9ed44231e481bd3623a417c8c710b9969579809556",
       "tests/test_full_page_block_rotation.py": "47e808273c451fd4d04b85b33eaa1d833079f7b93f2f5789b02f4eee041584b7",
       "tests/test_git_graph.py": "a04754082c4ec44efc96a7b1b2b7adeeaa1b268a6df7796ef691795f15eeb687",
+      "tests/test_hwp_extb_pua_20261022.py": "16539239a1b8abb11fa0c3684e7d1249cc7fe8d386b686a6b89b3327a1f4206b",
       "tests/test_install_ollama_probe.py": "8186055fb072ac8e69a2c41660b2c85ec7250d8bacc5e9429768dce96e84191a",
       "tests/test_interp_layers_atomic_write.py": "5bb105d72f906cbbd0f070a78be58436f3e97d83c3cea4154ffeb4aa55facd83",
       "tests/test_jev_via_openrouter.py": "70afe849aacc8b478dc6b5a71b0e527c1c10dc408f89daafa7dccea515c5ba79",
