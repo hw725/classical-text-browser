@@ -73,13 +73,12 @@ PAGE_MARGIN = 40.0
 # 대체 글꼴(B-082). PyMuPDF 내장 글꼴은 모두 같은 Droid라 대신할 수 없어 설치 글꼴 파일을 찾는다.
 # 환경 변수(os.pathsep로 여럿)가 있으면 그것만 쓰고, 없으면 아래 후보 중 있는 것을 쓴다.
 FALLBACK_ENV = "CTB_TEXT_LAYER_FALLBACK_FONTS"
+# TrueType만 둔다 — CFF 글꼴(Noto Sans CJK .otf·.ttc)은 subset_fonts가 경고 없이 건너뛰어 16MB가
+# 통째로 들어갔다(실측 2026-10-22: 1.2MB 논문이 15.2MB). 한컴 돋움은 옛한글·䟽·㊞을 모두 담고
+# 서브셋 뒤 수십 KB다. 맑은 고딕은 ㊞이 없다.
 FALLBACK_CANDIDATES = (
-    r"%LOCALAPPDATA%\Microsoft\Windows\Fonts\NotoSansCJKkr-Regular.otf",
-    r"%WINDIR%\Fonts\NotoSansCJKkr-Regular.otf",
+    r"%WINDIR%\Fonts\HANDotum.ttf",
     r"%WINDIR%\Fonts\malgun.ttf",
-    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-    "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
-    "/System/Library/Fonts/AppleSDGothicNeo.ttc",
 )
 
 
@@ -611,6 +610,13 @@ def embed_text_layer(
                 doc.subset_fonts(verbose=False)
             except Exception as e:  # noqa: BLE001 — 서브셋 실패는 치명적이지 않다
                 warnings.append(f"폰트 서브셋에 실패했습니다(크기만 커집니다): {e}")
+            # subset_fonts는 CFF 글꼴을 말없이 건너뛴다 — 서브셋 접두(ABCDEF+)가 없으면
+            # 알린다(B-082).
+            whole = sorted({f[3] for pno in range(doc.page_count) for f in doc.get_page_fonts(pno)
+                            if f[1] in ("ttf", "otf", "cff") and "+" not in f[3]})
+            if whole:
+                warnings.append(f"서브셋되지 않은 글꼴이 통째로 들어갔습니다(크기가 커집니다): "
+                                f"{', '.join(whole)} — TrueType 대체 글꼴을 쓰세요.")
 
         # 산출물의 출처와 정밀도를 파일 자체에 남긴다.
         # 왜: 나중에 이 PDF만 보고도 텍스트가 OCR 산출물인지,
