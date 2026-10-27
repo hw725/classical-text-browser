@@ -135,7 +135,9 @@ def _make_library(tmp_path: Path, doc_id: str = "test_doc", interp_id: str = "te
 
     # Git 초기화 (원본)
     repo = git.Repo.init(doc_path)
-    repo.index.add([str(f.relative_to(doc_path)) for f in doc_path.rglob("*") if f.is_file()])
+    # .git/ 내부는 넣지 않는다 — GitPython 3.2.1+ 는 .git 경로를 인덱스에 넣으면 ValueError 를 낸다
+    repo.index.add([str(f.relative_to(doc_path)) for f in doc_path.rglob("*")
+                    if f.is_file() and ".git" not in f.relative_to(doc_path).parts])
     repo.index.commit("init: 테스트 원본 데이터")
 
     # ─── 해석 저장소 ───
@@ -296,7 +298,8 @@ def _make_library(tmp_path: Path, doc_id: str = "test_doc", interp_id: str = "te
     # Git 초기화 (해석)
     repo2 = git.Repo.init(interp_path)
     repo2.index.add(
-        [str(f.relative_to(interp_path)) for f in interp_path.rglob("*") if f.is_file()]
+        [str(f.relative_to(interp_path)) for f in interp_path.rglob("*")
+         if f.is_file() and ".git" not in f.relative_to(interp_path).parts]
     )
     repo2.index.commit("init: 테스트 해석 데이터")
 
