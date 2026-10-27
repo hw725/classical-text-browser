@@ -12,6 +12,8 @@
     ← {"ok": true, "available": bool, "reason": str|null, "python": str, "paddle": str|null}
     → {"op": "recognize", "image_b64": str, "writing_direction": str, "language": str, "kwargs": {}}
     ← {"ok": true, "result": {"lines": [...]}}  |  {"ok": false, "error": str}
+    → {"op": "detect", "image_b64": str}            (줄 위치 검출만 — 글자층 PDF, B-085)
+    ← {"ok": true, "boxes": [[x0, y0, x1, y1], ...]}
     → {"op": "quit"}
 
 이 파일은 자식 파이썬(.venv)에서 `python -m ocr.paddle_worker`로 실행된다. 부모는
@@ -81,6 +83,11 @@ def handle_request(engine, req: dict) -> dict:
                 **(req.get("kwargs") or {}),
             )
             return {"ok": True, "result": result.to_dict()}
+        if op == "detect":
+            # 글자층 PDF의 줄 위치 검출(B-085) — 인식 모델 없이 TextDetection만 이 워커에서 돌린다
+            from ocr.line_detector import _raw_boxes
+
+            return {"ok": True, "boxes": _raw_boxes(base64.b64decode(req["image_b64"]))}
         if op == "quit":
             return {"ok": True, "bye": True}
         return {"ok": False, "error": f"알 수 없는 op: {op}"}

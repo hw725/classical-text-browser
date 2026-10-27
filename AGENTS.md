@@ -81,7 +81,7 @@ OCR 스택 셋(**paddlepaddle+paddleocr** / **onnxruntime+opencv** / **torch+tra
    | `ndlocr_engine` | `recognize_page`·`_cascade_recognize`·`_process_detections` |
    | `honkoku_engine` | `recognize`·`recognize_page`(가짜 OCR 주입 — 변환 코드는 실행된다) |
    | `llm_ocr_engine` | `recognize`·`_recognize_async`(가짜 router) |
-   | `line_detector` | `detect_lines`·`_get_detector` |
+   | `line_detector` | `detect_lines`·`_get_detector`. 워커 경로(`op: detect`, D-147)는 2026-10-28에 `tests/test_b085_1_line_detection_gpu.py`로 메웠다 — 실제 `.venv-gpu` 검출은 그 PC에 `.venv-gpu`가 있을 때만 |
    | `ndlkotenocr_engine`·`ndlkotenocr_full_engine` | `_process_detections`·`_match_lines_to_blocks`(2026-09-21에 `tests/test_ocr_kotenocr_contract.py`로 메웠다 — 그 전에는 `is_available()`뿐이었다) |
 
    **주장에는 그것을 지키는 시험 이름을 붙인다.** 산문으로 《여기가 사각지대》라고 적으면 코드가
@@ -242,7 +242,7 @@ src/app/
   (`npx -y openai-oauth`, 포트 10531–10540 스캔, Bearer 토큰 `oauth-proxy` 하드코딩)와
   SikuRoBERTa 표점 Docker(punctuation-service/.env 존재 시)를 자동 기동.
 - 프론트(static/)가 약 4.7만 줄 — index.html 약 5.1천 줄 단일 파일, workspace.css 약 8.2천 줄,
-  JS 34개(약 3.3만 줄). 테스트 111파일 — 그중 화면 JS를 node로 돌리는 것(`tests/js_harness.py`)은
+  JS 34개(약 3.3만 줄). 테스트 117파일 — 그중 화면 JS를 node로 돌리는 것(`tests/js_harness.py`)은
   `tests/test_annotation_editor_js.py`(2026-09-16 Codex 교차검증 반영 때 처음)·
   `tests/test_entity_manager_js.py`(D-128)·`tests/test_structure_jev.py`·
   `tests/test_read_path_writes.py`(화면을 열기만 해도 쓰던 것, 2026-09-30)·

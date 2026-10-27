@@ -118,6 +118,33 @@ def _restore_library_path():
 
 
 @pytest.fixture(autouse=True)
+def _fake_oauth_quota(monkeypatch):
+    """OAuth 남은 사용량 조회(`codex app-server`)를 시험에서 띄우지 않는다.
+
+    넉넉히 남은 가짜 조회기로 둔다.
+
+    왜: 2026-10-27부터 OpenAI(OAuth) 공급자는 부르기 전에 남은 사용량을 읽는다. 그대로 두면 OAuth 를
+    가짜 클라이언트로 부르는 시험마다 실제 계정을 조회하고, 계정이 예비분 아래면 시험이 흔들린다.
+    문지기 자체는 tests/test_oauth_quota_first_20261027.py 가 가짜 조회기로 따로 시험한다.
+    """
+    try:
+        from llm.providers import openai_oauth_provider as oap
+    except Exception:  # noqa: BLE001
+        yield
+        return
+    full = {
+        "rateLimits": {
+            "planType": "test",
+            "primary": {"usedPercent": 0, "windowDurationMins": 300},
+            "secondary": {"usedPercent": 0, "windowDurationMins": 10080},
+        },
+        "ordinaryUsageAllowed": True,
+    }
+    monkeypatch.setattr(oap, "_DEFAULT_GUARD", oap.OAuthQuotaGuard(reader=lambda: full))
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _block_external_network(request, monkeypatch):
     """`network` 표지가 없는 시험은 바깥으로 나가는 소켓 연결을 막는다.
 

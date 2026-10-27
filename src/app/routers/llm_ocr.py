@@ -3248,8 +3248,11 @@ async def api_run_ocr_batch(doc_id: str, part_id: str, body: OcrBatchRequest):
                 try:
                     from export.text_layer_pdf import embed_text_layer
 
+                    # 교정본(L4 + 저장한 교정)으로 굽는다(B-085) — L2로 구우면 일부 쪽만 다시 돌렸을
+                    # 때 다른 쪽에 저장해 둔 교정이 PDF에서 빠진다. 방금 채운 쪽은 L4가 L2와 같고(줄
+                    # 자리도 L2 그대로), 확정본이 없는 쪽은 L2 글이 들어간다.
                     embed_result = await asyncio.to_thread(
-                        lambda: embed_text_layer(doc_path, part_id)
+                        lambda: embed_text_layer(doc_path, part_id, source_layer="l4")
                     )
                     embed_summary = embed_result.to_dict()
                 except Exception as e:  # noqa: BLE001

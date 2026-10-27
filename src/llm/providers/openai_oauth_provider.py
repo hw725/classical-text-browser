@@ -19,8 +19,12 @@ OPENAI_API_KEY가 설정된 경우에도, 프록시가 살아있으면 이 프�
 """
 
 import logging
-from typing import Optional
+import re
+import threading
+import time
+from typing import Callable, Optional
 
+from .. import oauth_quota
 from .base import (
     DEFAULT_THINKING_BUDGET,
     TRUNCATED_MARK,
@@ -35,6 +39,142 @@ _logger = logging.getLogger(__name__)
 # openai-oauth 기본 포트 및 스캔 범위
 _DEFAULT_PORT = 10531
 _PORT_SCAN_RANGE = range(10531, 10541)  # 10531~10540
+
+
+class OAuthQuotaError(LlmProviderError):
+    """OAuth 를 부르지 않았다(또는 한도 오류를 받았다) — 남은 사용량 때문이다.
+
+    라우터는 이 오류를 보면 남은 순서에서 Claude 쪽(claude_cli·anthropic)을 앞으로 당긴다
+    (2026-10-27 사용자 지시: 넘친 몫은 ollama 가 아니라 Claude 가 마무리).
+    """
+
+
+# 한도·로그인 오류 — 같은 요청을 되풀이해도 결과가 같으니 Claude 로 넘긴다(BRIEF 2026-10-27).
+_LIMIT_STATUS = (401, 402, 403, 429)
+_LIMIT_TEXT = re.compile(
+    r"\b(401|402|403|429)\b|quota|usage[ _]limit|rate[ _]limit|out of credits|insufficient_quota",
+    re.IGNORECASE,
+)
+
+
+def is_limit_error(exc: BaseException) -> bool:
+    """프록시가 낸 오류가 한도·로그인 문제인가. 원인 사슬(__cause__)까지 본다."""
+    seen = 0
+    e: Optional[BaseException] = exc
+    while e is not None and seen < 4:
+        if getattr(e, "status_code", None) in _LIMIT_STATUS:
+            return True
+        if _LIMIT_TEXT.search(str(e)):
+            return True
+        e = e.__cause__ or e.__context__
+        seen += 1
+    return False
+
+
+class OAuthQuotaGuard:
+    """앱(서버 프로세스)용 OAuth 문지기 — 정본 QuotaGate(llm/oauth_quota.py)를 감싼다.
+
+    QuotaGate 는 배치 한 번을 위한 것이라 한 번 멈추면 끝까지 멈춘다. 서버는 며칠 떠 있으므로
+    여기서 두 가지를 더한다.
+      - 시간 재조회: 호출 20회마다(QuotaGate) 외에 OK_TTL_SEC 가 지나도 다시 읽는다.
+      - 막힘 풀기: 막힌 뒤 BLOCK_TTL_SEC 가 지나면 새로 읽어 본다(5시간 창이 리셋되면 다시 OAuth).
+
+    캐시 시간의 근거(추정 — 호출당 소비 %는 아직 실측 없음):
+      - 조회 한 번이 `codex app-server` 를 띄워 약 2～5초 걸린다(yoon 실측, BRIEF 2026-10-27).
+        요청마다 읽으면 쪽마다 그만큼 늦어지고 자식 프로세스가 겹친다.
+      - 같은 계정을 Codex CLI·yoon 배치도 쓴다. 우리 호출 수(20회)만으로는 남들이 쓴 양을 못 보므로
+        시간으로도 묶는다. 5분이면 우리 쪽 20회 상한과 비슷한 주기이고, 예비 10%를 넘어설 만큼
+        남들이 5분 안에 쓰는 일은 드물다고 본다(추정).
+      - 막힌 동안 5분마다 한 번만 읽는다. 리셋 뒤 최대 5분 더 Claude 로 가는 것이 비용의 전부다.
+    """
+
+    OK_TTL_SEC = 300.0
+    BLOCK_TTL_SEC = 300.0
+
+    def __init__(
+        self,
+        reader: Optional[Callable[[], dict]] = None,
+        reserve_pct: int = oauth_quota.RESERVE_PCT,
+        every: int = oauth_quota.RECHECK_EVERY,
+        clock: Callable[[], float] = time.monotonic,
+    ):
+        # reader 를 부를 때 고른다 — 시험이 모듈의 read_quota 를 갈아끼울 수 있게
+        self._reader = reader
+        self.reserve, self.every, self._clock = reserve_pct, every, clock
+        self._gate: Optional[oauth_quota.QuotaGate] = None
+        self._read_at = 0.0
+        self._lock = threading.Lock()
+        self.calls = 0  # 이 프로세스에서 OAuth 로 보낸 호출
+        self.overflowed = 0  # 남은 사용량 때문에 Claude 로 넘긴 건
+
+    def _timed_read(self) -> dict:
+        self._read_at = self._clock()
+        return (self._reader or oauth_quota.read_quota)()
+
+    def _new_gate(self) -> oauth_quota.QuotaGate:
+        self._gate = oauth_quota.QuotaGate(
+            reserve_pct=self.reserve, every=self.every, reader=self._timed_read,
+            say=lambda line: _logger.warning(line.strip()),
+        )
+        return self._gate
+
+    def _reason(self, g: oauth_quota.QuotaGate) -> str:
+        head = f"OAuth 남은 사용량: {g.stopped}"
+        if g.last:
+            head += " — " + oauth_quota.describe(g.last).split(": ", 1)[-1]
+        return head + " — Claude 로 넘김"
+
+    def check(self) -> Optional[str]:
+        """None 이면 불러도 된다. 문자열이면 막힌 이유(폴백 알림에 그대로 싣는다)."""
+        with self._lock:
+            now = self._clock()
+            g = self._gate
+            if g is None or (g.stopped and now - self._read_at >= self.BLOCK_TTL_SEC):
+                g = self._new_gate()
+            elif not g.stopped and g.last is not None and now - self._read_at >= self.OK_TTL_SEC:
+                g._since = g.every  # 다음 allow() 가 다시 읽게 한다
+            if g.allow():
+                return None
+            self.overflowed += 1
+            return self._reason(g)
+
+    def note_call(self) -> None:
+        with self._lock:
+            self.calls += 1
+            if self._gate is not None:
+                self._gate.note_call()
+
+    def block(self, why: str) -> str:
+        """한도 오류를 받았다 — 다시 읽기 전까지(BLOCK_TTL_SEC) OAuth 를 부르지 않는다."""
+        with self._lock:
+            g = self._gate or self._new_gate()
+            g.stopped = f"한도 오류({why})"
+            self._read_at = self._clock()
+            self.overflowed += 1
+            return self._reason(g)
+
+    def status_line(self) -> str:
+        """화면·로그용 한 줄 — 새로 읽지 않는다."""
+        g = self._gate
+        head = (
+            oauth_quota.describe(g.last) if g and g.last else "OAuth 남은 사용량: 아직 조회 안 함"
+        )
+        if g and g.stopped:
+            head += f" · 멈춤: {g.stopped}"
+        return f"{head} · OAuth {self.calls}회 · Claude {self.overflowed}건"
+
+
+_DEFAULT_GUARD: Optional[OAuthQuotaGuard] = None
+_DEFAULT_GUARD_LOCK = threading.Lock()
+
+
+def default_quota_guard() -> OAuthQuotaGuard:
+    """프로세스 하나에 문지기 하나 — 라우터를 여러 개 만들어도 같은 캐시를 쓴다."""
+    global _DEFAULT_GUARD
+    with _DEFAULT_GUARD_LOCK:
+        if _DEFAULT_GUARD is None:
+            _DEFAULT_GUARD = OAuthQuotaGuard()
+        return _DEFAULT_GUARD
 
 
 class OpenAiOAuthProvider(OpenAiProvider):
@@ -78,6 +218,54 @@ class OpenAiOAuthProvider(OpenAiProvider):
     # 짧게 잡아 프록시를 나중에 띄웠을 때 오래 기다리지 않게 한다.
     _miss_until: float = 0.0
     MISS_TTL_SEC = 30.0
+
+    # 남은 사용량 문지기(2026-10-27). None 이면 프로세스 공용(default_quota_guard).
+    # 시험이 갈아끼운다.
+    quota_guard: Optional[OAuthQuotaGuard] = None
+
+    def _quota(self) -> OAuthQuotaGuard:
+        return self.quota_guard or default_quota_guard()
+
+    async def _quota_gate(self) -> None:
+        """부르기 직전 — 남은 사용량을 보고, 막혔으면 프록시를 부르지 않고 OAuthQuotaError.
+
+        조회는 `codex app-server` 자식 프로세스라 막히는 호출이다 — 스레드로 돌려
+        이벤트 루프를 잡지 않는다.
+        """
+        import asyncio
+
+        guard = self._quota()
+        reason = await asyncio.to_thread(guard.check)
+        if reason:
+            raise OAuthQuotaError(reason)
+        guard.note_call()
+
+    def _limit_to_quota(self, exc: Exception) -> Exception:
+        """한도·로그인 오류면 문지기를 막고 OAuthQuotaError 로 바꾼다. 아니면 그대로."""
+        if isinstance(exc, OAuthQuotaError) or not is_limit_error(exc):
+            return exc
+        why = " ".join(str(exc).split())[:80] or type(exc).__name__
+        return OAuthQuotaError(self._quota().block(why))
+
+    async def call(self, prompt, **kwargs) -> LlmResponse:
+        await self._quota_gate()
+        try:
+            return await super().call(prompt, **kwargs)
+        except Exception as e:  # noqa: BLE001 — 한도 오류만 바꾸고 나머지는 그대로 올린다
+            err = self._limit_to_quota(e)
+            if err is e:
+                raise
+            raise err from e
+
+    async def call_stream(self, prompt, **kwargs) -> LlmResponse:
+        await self._quota_gate()
+        try:
+            return await super().call_stream(prompt, **kwargs)
+        except Exception as e:  # noqa: BLE001
+            err = self._limit_to_quota(e)
+            if err is e:
+                raise
+            raise err from e
 
     def default_model(self) -> str:
         """모델을 지정하지 않은 호출이 쓸 모델 — .env `OPENAI_OAUTH_MODEL`, 없으면 DEFAULT_MODEL."""
@@ -280,7 +468,18 @@ class OpenAiOAuthProvider(OpenAiProvider):
             if "image" not in str(m.get("id", ""))
         ]
 
-    async def call_with_image(
+    async def call_with_image(self, prompt, image, **kwargs) -> LlmResponse:
+        """남은 사용량을 먼저 보고 _call_with_image_now 를 부른다(2026-10-27)."""
+        await self._quota_gate()
+        try:
+            return await self._call_with_image_now(prompt, image, **kwargs)
+        except Exception as e:  # noqa: BLE001
+            err = self._limit_to_quota(e)
+            if err is e:
+                raise
+            raise err from e
+
+    async def _call_with_image_now(
         self,
         prompt,
         image,

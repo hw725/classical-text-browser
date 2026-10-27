@@ -1250,7 +1250,10 @@ async function _embedExtractPdf() {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        // 교정본(L4 + 저장한 교정)으로 굽는다 — 빈 본문이면 API 기본값 l2(OCR 원본)라 검수에서 고친
+        // 글이 PDF에 들어가지 않았다(B-085). 줄 수가 OCR과 같으면 서버가 OCR 줄 자리를 그대로 쓰고,
+        // 확정본이 없는 쪽은 OCR 글로 채운다.
+        body: JSON.stringify({ source_layer: "l4" }),
       }
     );
     const data = await res.json();
