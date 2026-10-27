@@ -306,15 +306,148 @@
         "quote": "ctb의 .hwp 확장 B·PUA 손실 - 이건 고쳐야되고"
       },
       "status": "active"
+    },
+    {
+      "id": "oauth-quota-first",
+      "text": "OpenAI OAuth 를 부르기 전에 남은 사용량(codex app-server account/rateLimits/read)을 보고, 예비분 이하·조회 실패·한도 오류면 OAuth 를 부르지 않고 Claude(claude -p, 비전은 Anthropic)로 넘기며 그 사유를 폴백 알림에 남긴다. Ollama 1순위는 그대로다",
+      "judge": "deterministic",
+      "check": {
+        "argv": [
+          ".venv/Scripts/python.exe",
+          "tests/test_oauth_quota_first_20261027.py"
+        ],
+        "fail_regex": "^FAIL:"
+      },
+      "guards": [
+        "tests/test_oauth_quota_first_20261027.py"
+      ],
+      "origin": {
+        "kind": "user-correction",
+        "date": "2026-10-27",
+        "quote": "2026-10-27 「앞으로 모든 openai oauth 쓸 때마다 codex /status 로 남은 사용량을 확인하고 적절하게 작업을 들어가란 말이야」「남은 사용량이 감당 못할 거 같으면 자동으로 네가 마저 처리하도록 하란 말이야」"
+      },
+      "status": "active"
+    },
+    {
+      "id": "B-085-1",
+      "text": "GPU 환경(.venv-gpu)에서도 글자층의 줄 위치 검출이 된다 — 서버가 PaddleOCR 워커를 쓰면 검출도 그 워커로 가고, 세로쓰기 쪽은 열 단위(오른쪽→왼쪽)로 묶는다",
+      "judge": "deterministic",
+      "check": {
+        "argv": [
+          ".venv/Scripts/python.exe",
+          "-m",
+          "pytest",
+          "tests/test_b085_1_line_detection_gpu.py",
+          "-q",
+          "-p",
+          "no:cacheprovider"
+        ],
+        "fail_regex": "^FAILED|^FAIL:",
+        "traceback_fatal": false,
+        "timeout": 900
+      },
+      "guards": [
+        "tests/test_b085_1_line_detection_gpu.py"
+      ],
+      "origin": {
+        "kind": "user-correction",
+        "date": "2026-10-28",
+        "quote": "2026-10-28 「결함은 당연히 고쳐야지」"
+      },
+      "status": "active"
+    },
+    {
+      "id": "B-085-2",
+      "text": "세로쓰기 쪽의 글자층(L2)은 열마다 글이 열을 따라 위에서 아래로, 열 자리·열 폭 크기로 놓여 드래그·검색이 된다",
+      "judge": "deterministic",
+      "check": {
+        "argv": [
+          ".venv/Scripts/python.exe",
+          "-m",
+          "pytest",
+          "tests/test_b085_2_vertical_text_layer.py",
+          "-q",
+          "-p",
+          "no:cacheprovider"
+        ],
+        "fail_regex": "^FAILED|^FAIL:",
+        "traceback_fatal": false,
+        "timeout": 600
+      },
+      "guards": [
+        "tests/test_b085_2_vertical_text_layer.py"
+      ],
+      "origin": {
+        "kind": "user-correction",
+        "date": "2026-10-28",
+        "quote": "2026-10-28 「결함은 당연히 고쳐야지」"
+      },
+      "status": "active"
+    },
+    {
+      "id": "B-085-3",
+      "text": "화면에서 만든 글자층 PDF(추출 패널 단추·권 OCR 뒤 자동)는 검수에서 저장한 교정을 담고, 교정본 줄 수가 OCR과 같으면 OCR 좌표에 놓으며, 확정본이 없는 쪽은 OCR 글로 채운다",
+      "judge": "deterministic",
+      "check": {
+        "argv": [
+          ".venv/Scripts/python.exe",
+          "-m",
+          "pytest",
+          "tests/test_b085_3_embed_uses_corrections.py",
+          "-q",
+          "-p",
+          "no:cacheprovider"
+        ],
+        "fail_regex": "^FAILED|^FAIL:",
+        "traceback_fatal": false,
+        "timeout": 600
+      },
+      "guards": [
+        "tests/test_b085_3_embed_uses_corrections.py"
+      ],
+      "origin": {
+        "kind": "user-correction",
+        "date": "2026-10-28",
+        "quote": "2026-10-28 「결함은 당연히 고쳐야지」"
+      },
+      "status": "active"
+    },
+    {
+      "id": "B-085-2b",
+      "text": "세로쓰기 쪽의 잉크 검사는 열에 제자리로 놓인 글자층을 《위치가 어긋났다》고 경고하지 않고, 열 폭만큼 밀린 글자층은 경고한다",
+      "judge": "deterministic",
+      "check": {
+        "argv": [
+          ".venv/Scripts/python.exe",
+          "-m",
+          "pytest",
+          "tests/test_b085_vertical_ink_audit.py",
+          "-q",
+          "-p",
+          "no:cacheprovider"
+        ],
+        "fail_regex": "^FAILED|^FAIL:",
+        "traceback_fatal": false,
+        "timeout": 600
+      },
+      "guards": [
+        "tests/test_b085_vertical_ink_audit.py"
+      ],
+      "origin": {
+        "kind": "user-correction",
+        "date": "2026-10-28",
+        "quote": "2026-10-28 「결함은 당연히 고쳐야지」"
+      },
+      "status": "active"
     }
   ],
   "approved": {
-    "hash": "82e515c07f7d3b6792bd92f9a589cc0544e38fdd02b92e5271ea0056b2462a03",
-    "request": "A-47fdd8f4",
-    "ts": "2026-10-22T16:20:36",
+    "hash": "811aacf362ef691942d4765383194878353befc8d0a6b221dc1ab8e0aca55193",
+    "request": "A-09164914",
+    "ts": "2026-10-28T03:16:55",
     "guards": {
       "tests/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "tests/conftest.py": "39d9a0edf4011b44a408f8a73258e802b7a236ed2f1753b40ced6afeba49b18f",
+      "tests/conftest.py": "caeafb4690d7d4811b4a96c2239b839711ef4e455e3007ba9967d69e12ac50c9",
       "tests/fixtures/hwp/extb_pua.hwp": "71570fcd36da390bbde04f6a85fcd10d5be155b5bcd958b259ae60e596f99328",
       "tests/js_harness.py": "ea8c96cf544432a18fcdf7e2cd8b8269158a110fb7f7945fcb452d5798a355f7",
       "tests/test_add_part.py": "1d59a5b92ebdc2edf632b262b15d4937e0d174534debdcd738c295e7bfe9752f",
@@ -332,6 +465,10 @@
       "tests/test_annotation_router_part_and_type.py": "9946658d3b1a4f5d251d8db0c8fa14caedda603c396230afd3c0fd184f1a2931",
       "tests/test_asset_detector.py": "6cc93862873d60ab79e36bf2178a4768233207d04abeebd8a6b5e2e22c0d87b6",
       "tests/test_atomic_write.py": "c849f851f2084763584adb1cdca85cce71e3577731b35b12cdbe44d6693b0dce",
+      "tests/test_b085_1_line_detection_gpu.py": "9b607448bd99d495f9c08e8d1afe14702094d837b62fa6f36c2116125471cca8",
+      "tests/test_b085_2_vertical_text_layer.py": "c4180ebc3e5e562c4cf27446b679df986842d2663b2cddccf541a827aacd1f37",
+      "tests/test_b085_3_embed_uses_corrections.py": "54ca3c31c2983b83f58efed3dac9c5cd5d4747c5a85ce9e68772a0aade77ab92",
+      "tests/test_b085_vertical_ink_audit.py": "16f70d18b7b224064afff0d860f5cd715096ede0a500587bafb5f2bed108a393",
       "tests/test_boundaries.py": "401b7741bf0f3ef4c741f401f6ba4dc6316123efaee2246a6ace15e2cf4e4785",
       "tests/test_boundaries_index.py": "3db49c815a07830823dba2d8cc5416455c6c8d69cd488f5c27cedbfea22e28c1",
       "tests/test_cache_headers.py": "ba903569d6201976e741b47fe3340c5b053a9d34af2c55c0e8aa44a24ac88594",
@@ -381,7 +518,9 @@
       "tests/test_model_choice_memory_20261018.py": "0e602bac9dc9ad91f28d97f73f831baf7334077b60a01a2072fe86e8cef300f1",
       "tests/test_multivolume_source.py": "3ef8b01b2ce54c4af921a9955c3176a9bf174ae84d3975e0c013d76f2858c94e",
       "tests/test_no_key_notices.py": "ff3eef3c41a3ddd21fb9d2dd91fd803d02ae05a08a4d079554984502ae1155b4",
+      "tests/test_oauth_no_codex_20261027.py": "809f4c6dbbf022ab636d3862e75bd808964cb40bba646fac3cf0f08bba476195",
       "tests/test_oauth_proxy.py": "4c8c921b3015341c48486546b26ec645161404fa600945e23b2db774c4dfd2a2",
+      "tests/test_oauth_quota_first_20261027.py": "bff2502236080868d8474216fb0bf2a6923eeb1eebe264b22d10de702d1c03d5",
       "tests/test_oauth_vision.py": "8b5a9db355b79000b7cad95f4ae3191ae1de0f1e6a7b43c8c35d1e78359e15a2",
       "tests/test_ocr_base.py": "2de7aae025942ed255125a938bb31e03e04db107a225545eecfd08e4270ecb8f",
       "tests/test_ocr_honkoku.py": "cb1ea7c1f7e13b2d0adf4af7c6012b81637bc8bdebbccb2848a92850cd26766b",
@@ -420,7 +559,7 @@
       "tests/test_text_cleaner.py": "763b8da3c29d7d061e2998854acf86542a71612093dc8b8c3c153c4e2f52ea13",
       "tests/test_text_fallback_20261018.py": "2ec31b3b9a04bdfc9cc5fea44852ff9e8b1f7d7454c5b1dae59d39d63d6c7cba",
       "tests/test_text_import_align.py": "b9148dbfeba8164db0969d1e0a70456470dda0202c1af001637286ac36541e3f",
-      "tests/test_text_layer_pdf.py": "5443fa7c4cef6e7d65929261e956e453a2e6f7d91ef1040c0139747ca72b71cc",
+      "tests/test_text_layer_pdf.py": "33f69bdf03f7f1ba09b21f25c4939d87f0fa6e0e5b8b8529948ecdfdcd7949c8",
       "tests/test_translation.py": "adeeb404ea2d9c1342807d771a218631c651081d3a45a6085845aee117d57d1e",
       "tests/test_ui_reachability.py": "d962d25340e3d2cd0ee3464fa7c59427197097bbcbe53f4765ebf376d449ab5e",
       "tests/test_updater.py": "84477565255ec49dcf976184995d9f0edc8004225be0e51b19d642d868382bf7",

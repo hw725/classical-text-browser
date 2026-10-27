@@ -93,6 +93,44 @@ def _gpu_paddle_installed() -> bool:
         return False
 
 
+def detection_worker_engine() -> "PaddleOcrEngine | None":
+    """줄 위치 검출을 자식 워커에 맡겨야 하는 환경이면 그 워커 엔진을, 아니면 None(B-085).
+
+    왜: torch와 paddle GPU판은 cuDNN 9 DLL이 달라 한 프로세스에 함께 못 산다(D-091). 서버가
+    .venv-gpu에서 NDL古典籍 Full(torch)을 올린 뒤 같은 프로세스에서 paddleocr TextDetection을 만들면
+    paddle import가 WinError 127로 죽고, 반쯤 올라간 모듈이 남아 그다음부터는 《partially
+    initialized module 'paddle'》로 보인다 — 글자층의 줄 검출이 늘 실패했다(2026-10-28 E2E).
+    인식처럼 검출도 워커에서 돌린다.
+
+    판정:
+        1. PaddleOcrEngine이 워커 모드로 서면(CTB_PADDLE_PYTHON — start_server.bat이 .venv-gpu
+           서버에 준다) 그 설정 그대로(GPU 워커 먼저, 안 뜨면 .venv CPU 워커).
+        2. 설정이 없어도 이 파이썬에 paddle GPU판과 torch가 함께 깔려 있으면, 같은 파이썬을 torch를
+           막은 워커로 띄운다(스크립트·CLI처럼 start_server.bat을 거치지 않은 .venv-gpu 프로세스).
+           paddlex가 torch를 끌어오는 순간 같은 충돌이 나기 때문이다.
+        3. 그 밖(.venv CPU, torch 없는 GPU 환경, 워커 안)은 None — 예전처럼 이 프로세스에서 돈다.
+    use_gpu=False를 주는 까닭: 장치 판정(_resolve_use_gpu)은 이 프로세스에서 paddle을 import하는데,
+    워커 모드에서는 그 값을 쓰지 않는다(워커가 제 장치를 고른다). 그 import가 바로 깨지는 자리다.
+    """
+    if os.environ.get("CTB_PADDLE_BLOCK_TORCH") == "1":
+        return None  # 이미 워커 안이다
+    eng = PaddleOcrEngine(use_gpu=False)
+    if eng._worker_python:
+        return eng
+    try:
+        import importlib.util
+
+        has_torch = importlib.util.find_spec("torch") is not None
+    except (ImportError, ValueError):
+        has_torch = False
+    if has_torch and _gpu_paddle_installed():
+        eng._worker_python = sys.executable
+        eng._worker_block_torch = True
+        eng._worker_fallback = None
+        return eng
+    return None
+
+
 def _same_python(a: str, b: str) -> bool:
     """두 파이썬 경로가 같은 실행 파일인가 (대소문자·상대 경로 차이 무시)."""
     try:
@@ -518,6 +556,26 @@ class PaddleOcrEngine(BaseOcrEngine):
                 f"언어: {target_lang}, GPU: {self._use_gpu}\n"
                 f"원본 에러: {e}"
             )
+
+    def detect_boxes(self, image_bytes: bytes) -> list[list[float]]:
+        """워커에서 **줄 위치 검출만** 한다(B-085). 출력: [x0, y0, x1, y1] 목록(이미지 픽셀).
+
+        글자층 PDF의 줄 검출(ocr.line_detector)이 쓴다. 워커 모드가 아니면 부르지 않는다 — 그때는
+        line_detector가 이 프로세스에서 직접 TextDetection을 돌린다.
+        """
+        if not self._worker_python:
+            raise OcrEngineError("워커 모드가 아닌 엔진에 줄 검출을 맡겼습니다")
+        if not self.is_available():
+            raise OcrEngineUnavailableError(self._unavailable_reason or "PaddleOCR 워커 사용 불가")
+        import base64
+
+        resp = self._worker_call(
+            {"op": "detect", "image_b64": base64.b64encode(image_bytes).decode("ascii")},
+            timeout=300,
+        )
+        if not resp.get("ok"):
+            raise OcrEngineError(f"PaddleOCR 워커 줄 검출 오류: {resp.get('error')}")
+        return [[float(v) for v in b] for b in resp.get("boxes") or []]
 
     def recognize(
         self,

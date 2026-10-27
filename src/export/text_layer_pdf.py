@@ -260,6 +260,17 @@ def _fit_fontsize(
     return max(1.0, min(size, 300.0))
 
 
+def _is_vertical_box(text: str, width: float, height: float) -> bool:
+    """줄 상자가 세로 열인가(B-085) — 두 글자 이상이고 높이가 폭의 1.5배 이상이면 세로 열로 본다.
+
+    왜 모양으로 가르는가: L2에는 줄마다 쓰기 방향이 없고(블록 방향도 엔진마다 비어 있다), 같은 쪽에
+    가로로 쓴 쪽 번호(《二十一》)와 세로 열이 섞인다. 가로 줄은 두 글자만 돼도 폭이 높이보다 크고,
+    세로 열은 두 글자만 돼도 높이가 폭의 두 배쯤이다. 한 글자 줄은 어느 쪽으로 써도 같은 자리라
+    가로로 둔다.
+    """
+    return len(text.strip()) >= 2 and height >= width * 1.5
+
+
 def _embed_page(
     page: fitz.Page,
     lines: list[tuple[str, list[float] | None]],
@@ -421,15 +432,73 @@ def _embed_lines(
             warnings.append(f"줄을 건너뜀({text[:16]}…): {e}")
             return False
 
+    def _emit_vertical(text: str, x0: float, y0: float, x1: float, y1: float) -> bool:
+        """세로 열 하나를 열 상자에 맞춰 위에서 아래로 써넣는다(B-085). 성공하면 True.
+
+        왜 이렇게 쓰는가: PyMuPDF에는 세로쓰기(WMode 1) 쓰기가 없다. 그래서 가로 글줄을 시계
+        방향으로 90° 돌려 열을 따라 눕힌다 — 보이지 않는 글자라 글리프가 누운 것은 화면에 드러나지
+        않고, 추출되는 글은 한 줄로 순서대로, 형광·드래그 상자는 열 자리에 선다(OCRmyPDF가 세로 줄을
+        넣는 방식과 같다). 크기: 글자 크기를 《글꼴 높이(어센더−디센더)가 열 폭》이 되게 정하고, 줄
+        길이는 열 높이에 맞게 진행 방향으로만 늘리거나 줄인다 — 그래서 n번째 글자가 열의 n번째 칸에
+        선다. 예전에는 이 열도 가로 줄로 써서, 12자가 열 폭 30pt에 가로로 들어가도록 1pt 안팎으로
+        줄어 열 아래 끝에 얹혔다(운양집 E2E 2026-10-28).
+        """
+        meas = font if font is not None else fitz.Font(fontname)
+        span = (meas.ascender - meas.descender) or 1.0
+        size = max(1.0, min((x1 - x0) / span, 300.0))
+        try:
+            if font is not None:
+                length = sum(f.text_length(run, fontsize=size) for run, f in _runs(text))
+            else:
+                length = meas.text_length(text, fontsize=size)
+        except Exception:  # noqa: BLE001 — 잴 수 없으면 늘이지 않는다
+            length = 0.0
+        stretch = (y1 - y0) / length if length > 0 else 1.0
+        # 진행 방향(x)만 늘인 뒤 90° 돌려 글줄이 열을 따라 아래로 가게 한다. morph의 부호는 PyMuPDF
+        # 실측으로 정했다(Matrix(0,1,−1,0)은 위로 거꾸로 섰다) — 회전 0·90·180·270·CropBox 쪽에서 열
+        # 상자와 일치(tests/test_b085_2_vertical_text_layer.py, 2026-10-28 수동 대조).
+        vmat = fitz.Matrix(stretch, 0, 0, 1, 0, 0) * fitz.Matrix(0, -1, 1, 0, 0, 0)
+        # 베이스라인은 열 왼쪽 끝에서 디센더만큼 안쪽 — 글꼴 상자가 열 폭을 꼭 채운다.
+        start = fitz.Point(x0 - meas.descender * size, y0)
+        if to_full is not None:
+            start = start * to_full
+        if rotated:
+            # 표시 공간의 vmat이 되도록, 쪽 공간에서는 회전을 되돌리는 행렬을 뒤에 붙인다
+            # (가로 줄이 glyph_rot 하나로 바로 서는 것과 같은 이치 — 부호는 시험이 잰다)
+            start = start * derot
+            mat = vmat * glyph_rot
+        else:
+            mat = vmat
+        try:
+            if font is not None:
+                w = fitz.TextWriter(page.rect)
+                _append(w, start, text, size)
+                w.write_text(page, render_mode=3, morph=(start, mat))
+            else:
+                page.insert_text(
+                    start, text, fontname=fontname, fontsize=size,
+                    morph=(start, mat), render_mode=3,
+                )
+            return True
+        except (ValueError, RuntimeError) as e:
+            warnings.append(f"줄을 건너뜀({text[:16]}…): {e}")
+            return False
+
     # 쓸 줄을 먼저 모두 계획한다 — uniform_size면 쪽 하나의 글자 크기를 정한 뒤 쓴다.
     # (텍스트, x, 베이스라인, 크기, 크기 상한, 좌표 있음)
     plan: list[tuple[str, float, float, float, float, bool]] = []
+    # 세로 열(B-085): (텍스트, x0, y0, x1, y1) — 열 상자에 맞춰 따로 쓴다. uniform_size는 가로
+    # 줄에만 건다.
+    vplan: list[tuple[str, float, float, float, float]] = []
 
     # ── 1) 좌표가 있는 줄: 제자리에 놓는다
     for text, bbox in with_bbox:
         x0, y0, x1, y1 = (c / scale for c in bbox)
         height = max(y1 - y0, 1.0)
         width = max(x1 - x0, 1.0)
+        if _is_vertical_box(text, width, height):
+            vplan.append((text, x0, y0, x1, y1))
+            continue
         size = _fit_fontsize(text, width, height, fontname, font)
         # 베이스라인은 박스 아래쪽에서 살짝 올린 지점.
         plan.append((text, x0, y1 - height * 0.2, size, 300.0, True))
@@ -484,6 +553,9 @@ def _embed_lines(
                 positioned += 1
             else:
                 approximated += 1
+    for text, x0, y0, x1, y1 in vplan:
+        if _emit_vertical(text, x0, y0, x1, y1):
+            positioned += 1
 
     if writer is not None:
         writer.write_text(page, render_mode=3)
@@ -559,6 +631,7 @@ def embed_text_layer(
 
         embedded = skipped = total_lines = positioned = approximated = 0
         detected_lines = 0
+        ocr_only_pages: list[int] = []  # 교정본(l4)을 골랐지만 확정본이 없어 OCR 글을 넣은 쪽
         # 권에 회전이 저장돼 있으면(D-123) 출력 복사본의 /Rotate를 그만큼 올린다 — 다른 뷰어에서도
         # 연구자가 저장한 방향으로 열리고, 표시 공간이 곧 L2 좌표계(돌린 이미지)가 된다.
         # 원본 L1은 그대로다(다른 경로에 저장한다).
@@ -575,6 +648,8 @@ def embed_text_layer(
             if not lines:
                 skipped += 1
                 continue
+            if source_layer == "l4" and _l4_missing(doc_path, part_id, page_num):
+                ocr_only_pages.append(page_num)
 
             scale = _render_scale(doc_path, part_id, page_num, page.rect.width)
 
@@ -582,7 +657,9 @@ def embed_text_layer(
             # LLM Vision은 텍스트만 주므로, 검출로 얻은 줄 위치와 순서를 맞춘다.
             # 실패하면 그대로 두고 아래에서 순서 배치로 물러난다.
             if use_line_detection:
-                lines, filled = _fill_positions_by_detection(page, lines, scale)
+                lines, filled = _fill_positions_by_detection(
+                    page, lines, scale, vertical=_page_is_vertical(doc_path, part_id, page_num)
+                )
                 detected_lines += filled
 
             pos, approx, warns = _embed_page(
@@ -608,6 +685,15 @@ def embed_text_layer(
                 embedded += 1
             else:
                 skipped += 1
+
+        if ocr_only_pages:
+            shown = ", ".join(str(p) for p in ocr_only_pages[:10])
+            more = f" 외 {len(ocr_only_pages) - 10}쪽" if len(ocr_only_pages) > 10 else ""
+            warnings.append(
+                f"{len(ocr_only_pages)}쪽은 확정본(L4)이 없어 OCR 결과(L2)를 넣었습니다: "
+                f"{shown}{more}쪽 — "
+                "교정하려면 그 쪽을 교정 탭에서 저장하세요."
+            )
 
         if embed_font:
             # 실제로 쓴 글리프만 남겨 파일 크기를 줄인다.
@@ -692,7 +778,7 @@ def embed_text_layer(
     )
 
 
-def _ink_check(page, spans: list[dict]) -> float | None:
+def _ink_check(page, spans: list[dict], vertical: bool = False) -> float | None:
     """이 쪽의 텍스트가 **실제 글자 위**에 놓였는지 잉크 밀도로 잰다.
 
     입력: 대상 페이지와 그 쪽의 span 목록.
@@ -714,7 +800,14 @@ def _ink_check(page, spans: list[dict]) -> float | None:
     except Exception:  # noqa: BLE001 — 렌더 실패는 확인을 포기할 뿐이다
         return None
 
-    dark = arr < 128
+    if vertical:
+        # 세로쓰기 목판·필사본(B-085): 획이 옅은 회색이라 고정 문턱 128 아래로 거의 떨어지지 않는다
+        # — 운양집 E2E에서 128로는 스캔 가장자리의 검은 띠만 잉크로 잡혀, 열에 꼭 맞게 놓아도
+        # 1.0배·0.6배가 나왔다. 종이 바탕(쪽 중앙값)보다 40 이상 어두운 화소를 잉크로 본다.
+        # 가로쓰기는 예전 그대로.
+        dark = arr < max(128.0, float(np.median(arr)) - 40.0)
+    else:
+        dark = arr < 128
     page_ratio = float(dark.mean())
     if page_ratio <= 0:
         return None  # 완전한 백지 — 비교할 기준이 없다
@@ -761,6 +854,11 @@ def _audit_output(output_path: Path, *, check_ink: bool = False) -> list[str]:
     MIN_COVERAGE = 0.02  # 쪽 넓이의 2% 미만이면 뭉친 것으로 본다
     MIN_LINES_TO_JUDGE = 5  # 줄이 적은 쪽은 좁아도 정상이다
     MIN_INK_RATIO = 1.3  # 쪽 평균보다 이만큼은 진해야 《글자 위》로 본다
+    # 세로 열이 쪽 대부분을 덮는 세로쓰기 쪽(B-085)은 열 안팎의 밀도 차가 작다. 운양집 3쪽
+    # 실측(2026-10-28, 종이 기준 문턱): 열에 꼭 맞게 놓으면 1.24～1.31배, 열 폭의 0.7만큼 옆으로
+    # 밀면 0.63～0.82배. 그 사이 1.0을 문턱으로 둔다(가로쓰기의 1.3은 학술지 논문 실측
+    # 2.7～4.8배에서 정한 값이다).
+    MIN_INK_RATIO_VERTICAL = 1.0
     INK_SAMPLE_PAGES = 3  # 잉크 확인은 표본만 — 300쪽을 다 렌더하지 않는다
 
     problems: list[str] = []
@@ -808,8 +906,15 @@ def _audit_output(output_path: Path, *, check_ink: bool = False) -> list[str]:
                     )
 
             if idx in ink_targets and len(spans) >= MIN_LINES_TO_JUDGE:
-                ratio = _ink_check(page, spans)
-                if ratio is not None and ratio < MIN_INK_RATIO:
+                # 세로 열이 절반 넘는 쪽 — 상자 모양은 _is_vertical_box와 같은 규칙(표시 공간에서)
+                tall = 0
+                for s in spans:
+                    r = fitz.Rect(s["bbox"]) * page.rotation_matrix
+                    tall += _is_vertical_box(s.get("text") or "", r.width, r.height)
+                vertical = tall * 2 > len(spans)
+                ratio = _ink_check(page, spans, vertical=vertical)
+                floor = MIN_INK_RATIO_VERTICAL if vertical else MIN_INK_RATIO
+                if ratio is not None and ratio < floor:
                     problems.append(
                         f"{idx}쪽: 텍스트가 놓인 자리에 글자가 거의 없습니다"
                         f"(쪽 평균의 {ratio:.1f}배) — 위치가 어긋났을 수 있습니다."
@@ -824,14 +929,35 @@ def _audit_output(output_path: Path, *, check_ink: bool = False) -> list[str]:
     return problems
 
 
+def _page_is_vertical(doc_path: Path, part_id: str, page_num: int) -> bool:
+    """이 쪽이 세로쓰기인가 — 줄 검출을 열로 묶을지 정한다(B-085).
+
+    L2 줄 상자가 있으면 그 모양(세로 열이 절반 넘음), 없으면 L2 결과·L3 블록의 writing_direction
+    순으로 본다. 아무것도 모르면 False(예전처럼 가로 행으로 묶는다).
+    """
+    l2 = _read_json(_l2_path(doc_path, part_id, page_num)) or {}
+    boxes = [(t, b) for t, b in _collect_lines(l2) if b is not None]
+    if boxes:
+        tall = sum(_is_vertical_box(t, b[2] - b[0], b[3] - b[1]) for t, b in boxes)
+        return tall * 2 > len(boxes)
+    dirs = [r.get("writing_direction") for r in l2.get("ocr_results") or []
+            if r.get("writing_direction")]
+    if not dirs:
+        l3 = _read_json(_l3_path(doc_path, part_id, page_num)) or {}
+        dirs = [b.get("writing_direction") for b in l3.get("blocks") or []
+                if b.get("writing_direction")]
+    return bool(dirs) and sum(str(d).startswith("vertical") for d in dirs) * 2 > len(dirs)
+
+
 def _fill_positions_by_detection(
-    page, lines: list[tuple[str, list[float] | None]], scale: float
+    page, lines: list[tuple[str, list[float] | None]], scale: float, *, vertical: bool = False
 ) -> tuple[list[tuple[str, list[float] | None]], int]:
     """좌표가 없는 줄에 검출로 찾은 《글자가 있는 자리》를 채운다.
 
     입력:
         page — 대상 PDF 페이지. lines — (텍스트, bbox 또는 None) 목록.
         scale — 픽셀 → 포인트 배율.
+        vertical — 세로쓰기 쪽이면 검출 조각을 열(오른쪽 → 왼쪽)로 묶는다(B-085).
     출력: (좌표를 채운 목록, 채운 줄 수)
 
     왜 줄 수가 같을 때만 채우는가:
@@ -858,7 +984,10 @@ def _fill_positions_by_detection(
         pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale))
         # 목표 줄 수를 함께 넘긴다. 쪽마다 알맞은 임계값이 달라
         # 고정값으로는 2단 목차와 한시 대역을 동시에 맞출 수 없다.
-        detected = detect_lines(pix.tobytes("png"), float(pix.width), target_count=len(lines))
+        detected = detect_lines(
+            pix.tobytes("png"), float(pix.width), target_count=len(lines),
+            image_height=float(pix.height), vertical=vertical,
+        )
     except Exception as e:  # noqa: BLE001
         logger.warning(f"줄 위치 검출을 건너뜁니다: {e}")
         return lines, 0
@@ -887,8 +1016,15 @@ def _load_lines(
     """한 쪽의 (텍스트, bbox) 목록을 지정한 층에서 읽어 온다.
 
     l2 — OCR 결과. 엔진에 따라 bbox가 있을 수도(NDL·Paddle) 없을 수도(LLM) 있다.
-    l4 — 사람이 교정한 텍스트. 좌표가 없으므로 전부 None이다.
+    l4 — 사람이 교정한 텍스트(교정 기록까지 적용). 줄 수가 OCR(L2)과 같으면 OCR 줄 좌표를 그대로
+    쓴다(B-085):
+         권 OCR이 L4를 L2에서 줄 그대로 옮기므로, 사람이 글자를 고쳐도 줄 수가 같으면 줄 자리는
+         그대로다 (text_export.line_geometry와 같은 전제). 다르면 좌표 없음(None) — 검출·순서 배치로
+         간다. 확정본이 아예 없는 쪽(L4 파일도, 저장한 교정 글도 없음)은 L2를 그대로 쓴다 — 교정본을
+         골랐다고 그 쪽 글이 PDF에서 빠지면 안 된다. 그런 쪽인지는 _l4_missing()이 따로 알린다.
     """
+    l2 = _read_json(_l2_path(doc_path, part_id, page_num))
+    ocr_lines = _collect_lines(l2) if l2 else []
     if source_layer == "l4":
         # 교정 탭의 교정(자유 편집 포함)까지 적용한 글을 싣는다. 확정본 파일만 읽으면
         # 교정 전 글이 PDF에 들어간다(2026-10-02 — 교정본을 고른 사람이 받는 것이 아니다).
@@ -897,11 +1033,25 @@ def _load_lines(
         try:
             data = get_corrected_text(doc_path, part_id, page_num)
         except (FileNotFoundError, OSError):
-            return []
+            data = None
         text = (data or {}).get("corrected_text") or ""
-        return [(ln.strip(), None) for ln in text.splitlines() if ln.strip()]
+        rows = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        if not rows and _l4_missing(doc_path, part_id, page_num):
+            return ocr_lines
+        if len(rows) == len(ocr_lines):
+            return [(t, b) for t, (_o, b) in zip(rows, ocr_lines)]
+        return [(t, None) for t in rows]
+    return ocr_lines
 
-    l2 = _read_json(_l2_path(doc_path, part_id, page_num))
-    if not l2:
-        return []
-    return _collect_lines(l2)
+
+def _l4_missing(doc_path: Path, part_id: str, page_num: int) -> bool:
+    """이 쪽에 확정본(L4 쪽 파일)도, 저장한 교정 글(자유 편집)도 없는가."""
+    from core.document import _text_file_path, get_page_corrections
+
+    if _text_file_path(doc_path, part_id, page_num).exists():
+        return False
+    try:
+        stored = get_page_corrections(doc_path, part_id, page_num).get("corrected_text")
+    except (FileNotFoundError, OSError, ValueError):
+        stored = None
+    return stored is None

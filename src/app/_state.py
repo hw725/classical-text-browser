@@ -595,11 +595,12 @@ async def _call_llm_text(purpose: str, text: str, force_provider=None, force_mod
 
     errors = []
     tried = []
-    for provider, avail in zip(router.providers, avail_results):
-        if avail is not True:
-            logger.debug(f"LLM {purpose} — {provider.provider_id}: 사용 불가, 건너뜀")
-            continue
+    # 라우터와 같은 순서 규칙 — OAuth 가 남은 사용량 때문에 막히면 Claude 쪽을 앞으로 당기고,
+    # OAuth 넘침 전용 공급자(claude_cli)는 그때만 쓴다(2026-10-27)
+    from llm.router import ProviderQueue
 
+    queue = ProviderQueue(zip(router.providers, avail_results))
+    for provider in queue:
         try:
             tried.append(provider.provider_id)
             logger.info(f"LLM {purpose} — {provider.provider_id} 시도 중...")
@@ -626,6 +627,7 @@ async def _call_llm_text(purpose: str, text: str, force_provider=None, force_mod
         except Exception as e:
             logger.warning(f"LLM {purpose} — {provider.provider_id} 실패: {e}")
             errors.append(f"{provider.provider_id}: {e}")
+            queue.failed(e)
             continue
 
     raise ValueError(

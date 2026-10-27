@@ -29,6 +29,7 @@ provider를 직접 호출하지 말고, 항상 이 Router를 통해 호출한다
 
 import asyncio
 import logging
+import shutil
 import time
 from typing import Optional
 
@@ -42,13 +43,72 @@ from .providers.base import (
     LlmResponse,
     LlmUnavailableError,
 )
+from .providers.claude_cli_provider import ClaudeCliProvider
 from .providers.gemini_provider import GeminiProvider
 from .providers.ollama import OllamaProvider
-from .providers.openai_oauth_provider import OpenAiOAuthProvider
+from .providers.openai_oauth_provider import OAuthQuotaError, OpenAiOAuthProvider
 from .providers.openai_provider import OpenAiProvider
 from .usage_tracker import UsageTracker
 
 _logger = logging.getLogger(__name__)
+
+# OAuth 넘침분을 맡는 Claude 쪽 공급자 — 이 순서로 앞으로 당긴다(2026-10-27 사용자 지시).
+CLAUDE_OVERFLOW_IDS = ("claude_cli", "anthropic")
+
+
+def _codex_installed() -> bool:
+    """codex CLI 가 PATH 에 있는가 — oauth_quota._codex_cmd 와 같은 판정."""
+    return bool(shutil.which("codex") or shutil.which("codex.cmd"))
+
+
+class ProviderQueue:
+    """자동 모드의 시도 순서. OAuth 가 남은 사용량 때문에 막히면(OAuthQuotaError) 남은 순서에서
+    Claude 쪽(claude_cli → anthropic)을 맨 앞으로 당긴다.
+
+    왜: 사용자 지시(2026-10-27) — 「남은 사용량이 감당 못할 거 같으면 자동으로 네가
+    마저 처리하도록」.
+    OAuth 다음 순위(Gemini·OpenAI)나 Ollama 로 넘기지 않는다. 1순위 Ollama 는 그대로다 — OAuth 를
+    부르려던 지점만 바뀐다. OVERFLOW_ONLY 공급자(claude_cli)는 넘침이 있을 때만 시도한다.
+
+    사용:
+        q = ProviderQueue(zip(providers, avail_results))
+        for provider in q:
+            try: ...
+            except Exception as e:
+                q.failed(e)
+    """
+
+    def __init__(self, pairs):
+        self._q = list(pairs)
+        self.overflow: Optional[str] = None  # 넘침 사유(OAuth 남은 사용량 …)
+
+    def __iter__(self):
+        while self._q:
+            provider, ok = self._q.pop(0)
+            if ok is not True:
+                # Codex 가 없는 PC(배포판)는 OAuth 를 쓸 수 없다 — 그 자리에서 Claude 쪽을 당긴다
+                # (2026-10-27 사용자 결정 「코덱스 없으면 클로드로 넘기도록 해」). Codex 는 있는데
+                # 프록시만 안 뜬 PC 는 OAuth 를 쓸 수 있는 PC 라 평소 순서를 둔다.
+                if provider.provider_id == "openai_oauth" and not _codex_installed():
+                    self.failed(OAuthQuotaError(
+                        "Codex CLI 가 없어 OpenAI(OAuth)를 쓸 수 없음 — Claude 로 넘김"
+                    ))
+                continue
+            if getattr(provider, "OVERFLOW_ONLY", False) and not self.overflow:
+                continue
+            yield provider
+
+    def failed(self, err: BaseException) -> None:
+        if self.overflow is None and isinstance(err, OAuthQuotaError):
+            self.overflow = str(err)
+            rank = {pid: i for i, pid in enumerate(CLAUDE_OVERFLOW_IDS)}
+            claude = sorted(
+                (x for x in self._q if x[0].provider_id in rank),
+                key=lambda x: rank[x[0].provider_id],
+            )
+            rest = [x for x in self._q if x[0].provider_id not in rank]
+            self._q = claude + rest
+            _logger.warning("%s", self.overflow)
 
 
 class LlmRouter:
@@ -70,6 +130,9 @@ class LlmRouter:
             # 1순위: 로컬 무료·클라우드 구독 한도 (텍스트 kimi-k3:cloud, D-143)
             OllamaProvider(self.config),
             OpenAiOAuthProvider(self.config),  # 2순위: 구독 한도 (ChatGPT OAuth 프록시)
+            # OAuth 넘침분 전용(2026-10-27) — 남은 사용량이 예비분 이하·조회 실패·한도 오류일 때만.
+            # 평소 순서에서는 건너뛴다(ProviderQueue·OVERFLOW_ONLY)
+            ClaudeCliProvider(self.config),
             GeminiProvider(self.config),  # 3순위: 저렴 (비전 포함)
             OpenAiProvider(self.config),  # 4순위: 중간 (비전 포함)
             AnthropicProvider(self.config),  # 5순위: 최후 폴백
@@ -169,6 +232,40 @@ class LlmRouter:
                 return p
         return None
 
+    async def _claude_overflow(
+        self, err: OAuthQuotaError, purpose: str, invoke, image: bool = False
+    ):
+        """사람이 OAuth 를 골랐는데 남은 사용량 때문에 막혔다 — Claude 쪽이 마무리한다(2026-10-27).
+
+        고른 모델(force_model)은 OAuth 모델이라 넘기지 않는다. Claude 쪽도 못 하면 사유를
+        모두 적어 올린다 — 조용히 버리지 않는다.
+        """
+        trail: list[dict] = []
+        oauth = self._get_provider("openai_oauth")
+        if oauth is not None:
+            self._note(trail, oauth, purpose, err, vision=image)
+        errors = [f"openai_oauth: {err}"]
+        for pid in CLAUDE_OVERFLOW_IDS:
+            p = self._get_provider(pid)
+            if p is None or (image and not p.supports_image):
+                continue
+            if not await self.is_available_cached(p):
+                errors.append(f"{pid}: 사용 불가")
+                continue
+            try:
+                response = await invoke(p)
+            except Exception as e2:  # noqa: BLE001 — 다음 Claude 쪽으로
+                self._avail_cache.pop(pid, None)
+                errors.append(f"{pid}: {e2}")
+                self._note(trail, p, purpose, e2, vision=image)
+                continue
+            self.usage_tracker.log(response, purpose=purpose)
+            return self._finish(response, trail, purpose)
+        raise LlmProviderError(
+            "OpenAI(OAuth)가 남은 사용량 때문에 막혔고 Claude 쪽도 처리하지 못했습니다:\n"
+            + "\n".join(f"  - {e}" for e in errors)
+        ) from err
+
     async def call(
         self,
         prompt: str,
@@ -209,15 +306,25 @@ class LlmRouter:
                     )
                 )
 
-            response = await provider.call(
-                prompt,
-                system=system,
-                response_format=response_format,
-                model=force_model,
-                max_tokens=max_tokens,
-                purpose=purpose,
-                **kwargs,
-            )
+            try:
+                response = await provider.call(
+                    prompt,
+                    system=system,
+                    response_format=response_format,
+                    model=force_model,
+                    max_tokens=max_tokens,
+                    purpose=purpose,
+                    **kwargs,
+                )
+            except OAuthQuotaError as e:
+                return await self._claude_overflow(
+                    e,
+                    purpose,
+                    lambda p: p.call(
+                        prompt, system=system, response_format=response_format,
+                        max_tokens=max_tokens, purpose=purpose, **kwargs,
+                    ),
+                )
             self.usage_tracker.log(response, purpose=purpose)
             return response
 
@@ -235,10 +342,8 @@ class LlmRouter:
         trail: list[dict] = []  # 앞 순위 실패 — 답과 함께 돌려주고 기록에 남긴다(D-143)
         vision_call = False
         skipped_providers = []
-        for provider, ok in zip(self.providers, avail_results):
-            if ok is not True:
-                continue
-
+        queue = ProviderQueue(zip(self.providers, avail_results))
+        for provider in queue:
             # 특정 purpose에서 소형 모델이 부적합한 프로바이더는 건너뛴다.
             # 예: 표점(punctuation), 주석(annotation)은 JSON 구조화 출력이 필요하여
             #      이 목록을 만들 때의 소형 로컬 기본 모델로는 품질이 떨어졌다(ollama.py 참조).
@@ -268,6 +373,7 @@ class LlmRouter:
                 self._avail_cache.pop(provider.provider_id, None)
                 errors.append(f"{provider.provider_id}: {e}")
                 self._note(trail, provider, purpose, e, vision=vision_call)
+                queue.failed(e)
                 continue
 
         # 모든 프로바이더가 실패/건너뛰기된 경우,
@@ -335,16 +441,27 @@ class LlmRouter:
                     )
                 )
 
-            response = await provider.call_stream(
-                prompt,
-                system=system,
-                response_format=response_format,
-                model=force_model,
-                max_tokens=max_tokens,
-                purpose=purpose,
-                progress_callback=progress_callback,
-                **kwargs,
-            )
+            try:
+                response = await provider.call_stream(
+                    prompt,
+                    system=system,
+                    response_format=response_format,
+                    model=force_model,
+                    max_tokens=max_tokens,
+                    purpose=purpose,
+                    progress_callback=progress_callback,
+                    **kwargs,
+                )
+            except OAuthQuotaError as e:
+                return await self._claude_overflow(
+                    e,
+                    purpose,
+                    lambda p: p.call_stream(
+                        prompt, system=system, response_format=response_format,
+                        max_tokens=max_tokens, purpose=purpose,
+                        progress_callback=progress_callback, **kwargs,
+                    ),
+                )
             self.usage_tracker.log(response, purpose=purpose)
             return response
 
@@ -358,10 +475,8 @@ class LlmRouter:
         trail: list[dict] = []  # 앞 순위 실패 — 답과 함께 돌려주고 기록에 남긴다(D-143)
         vision_call = False
         skipped_providers = []
-        for provider, ok in zip(self.providers, avail_results):
-            if ok is not True:
-                continue
-
+        queue = ProviderQueue(zip(self.providers, avail_results))
+        for provider in queue:
             # purpose별 소형 모델 건너뛰기 (call()과 동일 로직)
             skip_purposes = getattr(provider, "SKIP_FOR_PURPOSES", set())
             if purpose in skip_purposes:
@@ -385,6 +500,7 @@ class LlmRouter:
                 self._avail_cache.pop(provider.provider_id, None)
                 errors.append(f"{provider.provider_id}: {e}")
                 self._note(trail, provider, purpose, e, vision=vision_call)
+                queue.failed(e)
                 continue
 
         # 건너뛴 프로바이더로 폴백
@@ -439,13 +555,21 @@ class LlmRouter:
             if not await provider.is_available():
                 raise LlmProviderError(f"'{force_provider}' 사용 불가")
 
-            response = await provider.call_with_image(
-                prompt,
-                image,
-                image_mime=image_mime,
-                model=force_model,
-                **kwargs,
-            )
+            try:
+                response = await provider.call_with_image(
+                    prompt,
+                    image,
+                    image_mime=image_mime,
+                    model=force_model,
+                    **kwargs,
+                )
+            except OAuthQuotaError as e:
+                return await self._claude_overflow(
+                    e,
+                    purpose,
+                    lambda p: p.call_with_image(prompt, image, image_mime=image_mime, **kwargs),
+                    image=True,
+                )
             self.usage_tracker.log(response, purpose=purpose)
             return response
 
@@ -459,9 +583,8 @@ class LlmRouter:
         errors = []
         trail: list[dict] = []
         vision_call = True
-        for provider, ok in zip(vision_providers, avail_results):
-            if ok is not True:
-                continue
+        queue = ProviderQueue(zip(vision_providers, avail_results))
+        for provider in queue:
             try:
                 response = await provider.call_with_image(
                     prompt,
@@ -477,6 +600,7 @@ class LlmRouter:
                 self._avail_cache.pop(provider.provider_id, None)
                 errors.append(f"{provider.provider_id}: {e}")
                 self._note(trail, provider, purpose, e, vision=vision_call)
+                queue.failed(e)
                 continue
 
         raise LlmUnavailableError(
@@ -614,7 +738,8 @@ class LlmRouter:
                         # 구독 한도다(D-056). 이 줄만 《free》로 남아 있었다(2026-10-11 재확인)
                         "cost": (
                             "free" if provider.provider_id == "ollama"
-                            else "subscription" if provider.provider_id == "openai_oauth"
+                            else "subscription"
+                            if provider.provider_id in ("openai_oauth", "claude_cli")
                             else "paid"
                         ),
                         "vision": provider.supports_image,
@@ -637,6 +762,9 @@ class LlmRouter:
                 if provider.provider_id == "ollama" and avail:
                     models = await provider.list_models()
                     info["models"] = [m["name"] for m in models]
+                if provider.provider_id == "openai_oauth" and hasattr(provider, "_quota"):
+                    # 마지막으로 읽은 남은 사용량 — 여기서 새로 읽지 않는다(app-server 2～5초)
+                    info["quota"] = provider._quota().status_line()
 
                 status[provider.provider_id] = info
             except Exception as e:

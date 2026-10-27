@@ -629,5 +629,16 @@ def embed_folder(
             progress(f"    {paper_sleep:.0f}초 쉽니다…")
             time.sleep(paper_sleep)
 
+    # OAuth 를 썼으면 남은 사용량과 Claude 로 넘긴 건수를 끝에 한 줄 남긴다(2026-10-27).
+    # 새로 읽지 않는다.
+    try:
+        from llm.providers.openai_oauth_provider import default_quota_guard
+
+        guard = default_quota_guard()
+        if guard.calls or guard.overflowed:
+            progress(f"  {guard.status_line()} · 남은 보류(실패 편) {report.failed}")
+    except Exception:  # noqa: BLE001 — 보고 한 줄 때문에 결과를 잃지 않는다
+        pass
+
     report.elapsed_sec = time.time() - started
     return report

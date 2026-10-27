@@ -182,6 +182,18 @@ def _raw_boxes(image_bytes: bytes) -> list[list[float]]:
 #   그것을 목표로 후보를 훑어 맞는 조합을 고르면 쪽마다 알맞게 갈린다.
 _GAP_CANDIDATES = (0.04, 0.02, 0.03, 0.06, 0.08, 0.12, 0.20, 1.0)
 _ROW_TOLERANCE_CANDIDATES = (8.0, 6.0, 10.0, 12.0, 5.0, 16.0)
+# 세로쓰기: 한 열이 두 조각으로 끊겨 검출되면 그 사이가 쪽 높이의 1～2%쯤이다(운양집 목판 실측
+# 2026-10-28). 가로쓰기 후보에 없는 1%를 더한다 — 가로쓰기 후보는 예전 그대로 둔다.
+_VERTICAL_GAP_CANDIDATES = (0.04, 0.02, 0.03, 0.01, 0.06, 0.08, 0.12, 0.20, 1.0)
+
+
+def _transpose(boxes: list[list[float]], image_width: float) -> list[list[float]]:
+    """세로쓰기 조각을 《가로로 누인》 좌표로 옮긴다: (x, y) → (y, W − x).
+
+    열(좁은 x, 긴 y)이 행(좁은 y′, 긴 x′)이 되고, 행을 y′ 오름차순으로 늘어놓으면 x 내림차순 —
+    오른쪽 열부터다. 행 안의 x′ 오름차순은 열 안의 위 → 아래다. 그래서 가로쓰기 묶음을 그대로 쓴다.
+    """
+    return [[b[1], image_width - b[2], b[3], image_width - b[0]] for b in boxes]
 
 
 def group_into_lines(
@@ -191,6 +203,8 @@ def group_into_lines(
     row_tolerance: float = DEFAULT_ROW_TOLERANCE,
     column_gap_ratio: float = DEFAULT_COLUMN_GAP_RATIO,
     target_count: int | None = None,
+    image_height: float | None = None,
+    vertical: bool = False,
 ) -> list[DetectedLine]:
     """검출 조각들을 읽기 순서의 줄 목록으로 묶는다.
 
@@ -199,14 +213,38 @@ def group_into_lines(
         image_width — 렌더 이미지 폭(px). 단을 가르는 기준에 쓴다.
         target_count — 맞춰야 할 줄 수(보통 LLM이 읽은 줄 수). 주면 이 개수가
             나오는 임계값 조합을 찾아 쓴다. 못 찾으면 기본값 결과를 돌려준다.
-    출력: 읽기 순서(행 위→아래, 행 안에서 좌→우)로 정렬된 DetectedLine 목록.
+        vertical — 세로쓰기 쪽(B-085). 조각을 열로 묶고 오른쪽 열부터, 열 안에서는 위 → 아래로
+            늘어놓는다. 열 안에서 위아래로 크게 떨어진 조각은 다른 줄이다(가로쓰기의 단 가르기와
+            같은 규칙을 image_height 기준으로). image_height가 없으면 조각의 가장 아래 끝을 쓴다.
+    출력: 읽기 순서로 정렬된 DetectedLine 목록 — 가로쓰기는 행 위→아래·행 안에서 좌→우,
+        세로쓰기는 열 오른쪽→왼쪽·열 안에서 위→아래.
 
     이 함수는 PaddleOCR에 의존하지 않는다 — 순수 계산이라 따로 시험할 수 있다.
     """
+    if vertical:
+        height = image_height or max((b[3] for b in boxes), default=1.0)
+        flat = _group_with_candidates(
+            _transpose(boxes, image_width),
+            height,
+            row_tolerance,
+            column_gap_ratio,
+            target_count,
+            _VERTICAL_GAP_CANDIDATES,
+        )
+        return [
+            DetectedLine(x0=image_width - ln.y1, y0=ln.x0, x1=image_width - ln.y0, y1=ln.x1)
+            for ln in flat
+        ]
+    return _group_with_candidates(
+        boxes, image_width, row_tolerance, column_gap_ratio, target_count, _GAP_CANDIDATES
+    )
+
+
+def _group_with_candidates(boxes, image_width, row_tolerance, column_gap_ratio, target_count, gaps):
     if target_count is not None:
         # 기본 조합을 먼저 보고, 어긋나면 후보를 넓혀 간다.
         for tol in _ROW_TOLERANCE_CANDIDATES:
-            for ratio in _GAP_CANDIDATES:
+            for ratio in gaps:
                 lines = _group_once(boxes, image_width, tol, ratio)
                 if len(lines) == target_count:
                     return lines
@@ -274,25 +312,38 @@ def detect_lines(
     row_tolerance: float = DEFAULT_ROW_TOLERANCE,
     column_gap_ratio: float = DEFAULT_COLUMN_GAP_RATIO,
     target_count: int | None = None,
+    image_height: float | None = None,
+    vertical: bool = False,
 ) -> list[DetectedLine]:
     """페이지 이미지에서 글자 줄의 위치를 읽기 순서로 찾아낸다.
 
     입력:
         image_bytes — 페이지 이미지(PNG 등). 저장소 기본 배율(144 DPI)로 렌더한 것.
-        image_width — 그 이미지의 폭(px).
+        image_width — 그 이미지의 폭(px). image_height — 높이(px, 세로쓰기 줄 가르기 기준).
         target_count — 맞춰야 할 줄 수(보통 인식이 읽은 줄 수).
             쪽마다 알맞은 임계값이 다르므로 이 값을 목표로 후보를 훑는다.
+        vertical — 세로쓰기 쪽이면 열로 묶는다(group_into_lines 참조).
     출력: 읽기 순서의 DetectedLine 목록. 검출할 수 없으면 빈 목록.
+
+    어디서 검출하는가(B-085): 이 프로세스에 paddle을 올리면 안 되는 환경(서버가 PaddleOCR 워커를
+    쓰는 .venv-gpu 등 — paddleocr_engine.detection_worker_engine)이면 자식 워커에 맡기고, 아니면
+    여기서 돈다.
 
     예외를 던지지 않는다: 검출은 **위치를 개선하는 보조 수단**이지 필수가 아니다.
     실패하면 호출부가 지금까지처럼 순서 배치로 물러날 수 있어야 한다.
     """
-    if not is_available():
+    try:
+        worker = _detection_worker()
+    except Exception as e:  # noqa: BLE001 — 판정 실패는 이 프로세스 검출로 물러난다
+        logger.warning(f"줄 검출 워커 판정 실패 (이 프로세스에서 검출합니다): {e}")
+        worker = None
+    if worker is None and not is_available():
         return []
     try:
-        boxes = _raw_boxes(image_bytes)
+        boxes = worker.detect_boxes(image_bytes) if worker is not None else _raw_boxes(image_bytes)
     except Exception as e:  # noqa: BLE001 — 실패는 폴백으로 흡수한다
-        logger.warning(f"줄 위치 검출 실패 (순서 배치로 물러납니다): {e}")
+        where = f"워커 {worker._worker_python}" if worker is not None else "이 프로세스"
+        logger.warning(f"줄 위치 검출 실패({where}) — 순서 배치로 물러납니다: {e}")
         return []
     return group_into_lines(
         boxes,
@@ -300,4 +351,41 @@ def detect_lines(
         row_tolerance=row_tolerance,
         column_gap_ratio=column_gap_ratio,
         target_count=target_count,
+        image_height=image_height,
+        vertical=vertical,
     )
+
+
+_worker = None
+_worker_key: tuple | None = None
+_WORKER_ENV = (
+    "CTB_PADDLE_PYTHON",
+    "CTB_PADDLE_FORCE_WORKER",
+    "CTB_PADDLE_GPU_WORKER",
+    "CTB_PADDLE_BLOCK_TORCH",
+)
+
+
+def _detection_worker():
+    """검출을 맡길 워커 엔진(없으면 None)을 정해 재사용한다 — 워커는 모델을 올린 채 남는다.
+
+    판정을 가르는 환경 변수가 바뀌면 다시 정한다(앞서 띄운 자식은 끈다) — 서고·설정을 바꾼 뒤나
+    시험이 환경 변수를 되돌린 뒤에 옛 판정이 남지 않게.
+    """
+    global _worker, _worker_key
+    key = tuple(os.environ.get(k) for k in _WORKER_ENV)
+    if key != _worker_key:
+        from .paddleocr_engine import detection_worker_engine
+
+        _reset_worker()
+        _worker = detection_worker_engine()
+        _worker_key = key
+    return _worker
+
+
+def _reset_worker() -> None:
+    """정해 둔 워커를 잊는다. 이미 띄운 자식은 끈다."""
+    global _worker, _worker_key
+    if _worker is not None:
+        _worker._worker_stop()
+    _worker, _worker_key = None, None

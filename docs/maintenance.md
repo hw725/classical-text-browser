@@ -352,7 +352,8 @@ src/
 ├── text_import/  # 텍스트 가져오기 (HWP 표점분리 + PDF 참조텍스트)
 ├── llm/          # LLM 라우터 + 프로바이더
 ├── ocr/          # OCR 엔진 (NDL古典籍OCR Full/Lite + みんなで翻刻OCR + NDLOCR + LLM 비전 + PaddleOCR)
-│              #  + line_detector: 인식 없이 줄 위치만 찾는다 (텍스트 레이어 배치용)
+│              #  + line_detector: 인식 없이 줄 위치만 찾는다 (텍스트 레이어 배치용,
+│              #    GPU 서버에서는 PaddleOCR 워커에서 돈다 — D-147)
 ├── export/       # 연구 산출물 내보내기 (텍스트 레이어 PDF — 검색되는 PDF)
 ├── parsers/      # 서지정보 파서 (NDL, 국립공문서관, KORCIS, KOSTMA, 장서각, 규장각 + 범용 LLM)
 ├── cli/          # CLI 도구
