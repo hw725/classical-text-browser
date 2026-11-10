@@ -439,12 +439,40 @@
         "quote": "2026-10-28 「결함은 당연히 고쳐야지」"
       },
       "status": "active"
+    },
+    {
+      "id": "D-148",
+      "text": "강독 결과의 구획에 표점본(punct)·현토본(hyeonto)이 있으면 끼운 글자만 떼어 L5 표점·현토로 담는다 — 다시 그리면 답의 글이 나오고, 원문 글자가 다르거나 받지 않는 글자가 끼어 있으면 넣지 않고 알리며, 사람이 저장했거나 고친 표점·현토는 다시 들여도 그대로이고, 다시 들여도 항목이 늘지 않는다",
+      "judge": "deterministic",
+      "check": {
+        "argv": [
+          ".venv/Scripts/python.exe",
+          "-m",
+          "pytest",
+          "tests/test_reading_ingest_l5.py",
+          "-q",
+          "-p",
+          "no:cacheprovider"
+        ],
+        "fail_regex": "^FAILED|^FAIL:",
+        "traceback_fatal": false,
+        "timeout": 600
+      },
+      "guards": [
+        "tests/test_reading_ingest_l5.py"
+      ],
+      "origin": {
+        "kind": "user-intent",
+        "date": "2026-11-10",
+        "quote": "2026-11-10 「ctb 저장소 계약 승인」(연구 작업대 R-07 — 답 형식에 표점·현토 칸)"
+      },
+      "status": "active"
     }
   ],
   "approved": {
-    "hash": "811aacf362ef691942d4765383194878353befc8d0a6b221dc1ab8e0aca55193",
-    "request": "A-09164914",
-    "ts": "2026-10-28T03:16:55",
+    "hash": "5dd4f5e0c8ef6afd1e42f6b5fe286b7a9cc54acaf9d423956505ce3191b70acb",
+    "request": "A-a56e384b",
+    "ts": "2026-11-10T22:03:40",
     "guards": {
       "tests/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "tests/conftest.py": "caeafb4690d7d4811b4a96c2239b839711ef4e455e3007ba9967d69e12ac50c9",
@@ -544,6 +572,7 @@
       "tests/test_punctuation_service_attribution.py": "7f84d51c67eb7653a26149ddd76071270b1329e19764d24d6b1c95470beb5011",
       "tests/test_read_path_writes.py": "c1d1140574e491c89cdf0d19321b559bb917669e9375410269d835abc5526e3b",
       "tests/test_read_plan.py": "50f80336f69f377ef06ff0c77fc35e2bd972e3e4916519e2c6db2cefe626d405",
+      "tests/test_reading_ingest_l5.py": "e694158b6c958dcfe0eaa92ef7d856daf743bf8ad936c34a825c80b2f05f2537",
       "tests/test_reading_router_part.py": "1797aaf288f142d92565add09a2776d5f5d895c01da5f6a9532856d7a40d6ae9",
       "tests/test_receipt.py": "3d3aa7b4034afc42b8bde8cb1ecf64db9c92128d23068aa9d7ad2b6821192dd5",
       "tests/test_rule_induction.py": "0a7f30561cee1826562b0614ea963db650e6e897a398129c56402863a535a1bb",
@@ -552,7 +581,7 @@
       "tests/test_script_normalize.py": "4f158e66e1db7a9da33c4f78cabcbd2607212831209eb4ee49cf52e34c697ce5",
       "tests/test_segmentation.py": "0e8ad415eb8ae8838861c35c9b953d5d643e29114dd84c1b6b35e1c32aad49a0",
       "tests/test_setup_settings.py": "2ccf821335ed02124b35151b68d3bcae404a50da105f4511eb9f60bc50d91719",
-      "tests/test_snapshot.py": "92f79b6d3a722f4cf1d22f07886654bba69803d30e2558d0d7d1eab87821666d",
+      "tests/test_snapshot.py": "fbc686758c925b50b675d64269c044952e06d0e7756589b097259960dd5860b3",
       "tests/test_structure_jev.py": "71abcb6c0255c66076d1ea6da5a02ec7a60fe1f23225b9fee7e1077aaf2e9628",
       "tests/test_structure_llm.py": "28855cc2784fd3ae24223e26b133eb6800d1299977e9992c9480b1ddf436b9cf",
       "tests/test_sweep_20261011.py": "10650e0185384050090206f1638f905913e40458258b5c0b596141b26a196df4",
