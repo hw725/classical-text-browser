@@ -8,6 +8,7 @@
         OCR 교정            → L4 확정본(원본 저장소)
         장(章)·문서 항목     → 편성 경계(원본 저장소, D-092·D-097) — 장은 층위 1, 항목은 2~
         원문 구획(○①…)의 국역 → L6 번역 항목(해석 저장소) — 단위 안 글자 범위
+        구획의 표점본·현토본  → L5 표점·현토(해석 저장소, D-148) — 원문에 끼운 글자만 떼어 담는다
         어휘·문법            → L7 사전형 주석(headword·headword_reading·category·dictionary_meaning)
         해제·서지·요점·문서 정보·검토 메모 → L7 《비고(note)》 주석
 
@@ -21,6 +22,10 @@
     - L6·L7: 이 들이기가 넣었고(draft_id = IMPORT_TAG) 아직 초안(status draft)인 항목만 바꾼다.
       사람이 고치면 번역·주석 수정이 draft_id를 떼므로(core.translation·core.annotation)
       재들이기가 건드리지 않는다.
+    - L5(D-148): 표점·현토 항목에는 초안 표식을 둘 칸이 없다(스키마가 닫혀 있다). 그래서 L4 와 같은
+      규칙을 쓴다 — 그 단위의 L5 파일이 없거나, 마지막 커밋이 들이기이고 작업 파일이 그 커밋과 같을
+      때만 쓴다. 표점·현토 탭의 저장은 다른 메시지로 커밋하거나 커밋하지 않으므로 사람의 것으로
+      남는다.
     - 경계: 사람이 세운 경계는 옮기지도 고치지도 않는다. 들이기 경계는 이 답이 다룬 쪽에서만
       다시 쓰거나 지우고, 사람의 번역·주석이 가리키는 경계는 지우지 않는다.
 """
@@ -29,6 +34,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from pathlib import Path
 from typing import Optional
 
@@ -65,7 +71,7 @@ def _check_segment(g, where: str, p: list[str]) -> None:
     if not isinstance(g, dict) or not _is_str(g.get("text")):
         p.append(f"{where}: 원문(text)이 없습니다")
         return
-    for k in ("ko", "check", "label"):
+    for k in ("ko", "check", "label", "punct", "hyeonto"):
         if g.get(k) is not None and not isinstance(g[k], str):
             p.append(f"{where}.{k}는 글이어야 합니다")
     terms = g.get("terms", [])
@@ -642,6 +648,209 @@ def _purge_everywhere(interp_path: Path, part_id: str, targets: dict[str, Option
             save_annotations(interp_path, part_id, page, ann)
 
 
+# ── L5: 표점본·현토본에서 끼운 글자 떼어 내기 (D-148) ─────────────────
+
+# 여는 부호는 뒤 글자의 before 로, 나머지는 앞 글자의 after 로 간다(core.punctuation 의 표현).
+_OPENERS = "「『《〈（(“‘［[【〔〖｛{"
+
+
+def _is_punct(ch: str) -> bool:
+    """표점 부호인가 — 유니코드 구두점(P*)만. 글자·숫자·기호는 원문과 헷갈리므로 받지 않는다."""
+    return unicodedata.category(ch).startswith("P")
+
+
+def _is_hangul(ch: str) -> bool:
+    """한글 토인가 — 음절·자모(옛한글 포함)·호환 자모.
+
+    한자 구결자는 원문 한자와 구별할 수 없어 받지 않는다.
+    """
+    o = ord(ch)
+    return (
+        0xAC00 <= o <= 0xD7A3
+        or 0x1100 <= o <= 0x11FF
+        or 0x3130 <= o <= 0x318F
+        or 0xA960 <= o <= 0xA97F
+        or 0xD7B0 <= o <= 0xD7FF
+    )
+
+
+def split_inserted(seg_text: str, marked: str, allowed) -> Optional[list[str]]:
+    """원문에 글자를 끼운 글(표점본·현토본)에서 끼운 글자만 떼어 낸다.
+
+    입력: seg_text — 확정본에서 찾은 구획 원문, marked — 그 원문에 부호·토를 끼운 글,
+          allowed — 끼워도 되는 글자인지 판정하는 함수.
+    출력: 길이 len(seg_text)+1 의 목록. gaps[i] = seg_text[i] 앞(= i-1 뒤)에 끼운 글.
+          맞지 않으면 None.
+    왜 엄격한가: 원문 글자가 하나라도 다르거나(이체자·오독) 허용되지 않은 글자가 끼어 있으면 자리를
+    짐작하지 않는다 — 틀린 자리의 표점은 눈에 잘 띄지 않는다. 공백·줄바꿈은 양쪽 모두 무시한다
+    (확정본의 열 끊김, 답의 띄어쓰기).
+    """
+    n = len(seg_text)
+    gaps = [""] * (n + 1)
+    i = 0
+    for ch in marked:
+        if ch.isspace():
+            continue
+        j = i
+        while j < n and seg_text[j].isspace():
+            j += 1
+        if j < n and ch == seg_text[j]:
+            i = j + 1
+        elif allowed(ch):
+            gaps[i] += ch
+        else:
+            return None
+    if seg_text[i:].strip():
+        return None  # 원문이 남았다 — 답의 글이 구획보다 짧다
+    return gaps
+
+
+def _next_char(seg_text: str, i: int) -> Optional[int]:
+    """i 부터 처음 나오는 공백 아닌 글자의 자리. 없으면 None."""
+    while i < len(seg_text) and seg_text[i].isspace():
+        i += 1
+    return i if i < len(seg_text) else None
+
+
+def punct_marks(seg_text: str, marked: str, offset: int = 0) -> Optional[list[dict]]:
+    """표점본 → L5 표점 목록(id 없음 — core.punctuation.add_mark 가 붙인다). 맞지 않으면 None.
+
+    offset: 구획이 단위 원문에서 시작하는 자리(글자 좌표는 단위 기준, 코드포인트).
+    """
+    gaps = split_inserted(seg_text, marked, _is_punct)
+    if gaps is None:
+        return None
+    slots: dict[int, dict] = {}
+
+    def put(at: int, side: str, s: str) -> None:
+        if s:
+            m = slots.setdefault(at, {"before": "", "after": ""})
+            m[side] += s
+
+    for i, run in enumerate(gaps):
+        if not run:
+            continue
+        nxt = _next_char(seg_text, i)
+        if i == 0:
+            if nxt is None:
+                return None  # 원문이 비어 있다
+            put(nxt, "before", run)
+            continue
+        cut = len(run)
+        while cut > 0 and run[cut - 1] in _OPENERS:
+            cut -= 1
+        if nxt is None:
+            cut = len(run)  # 뒤 글자가 없으면 모두 앞 글자 뒤에
+        put(i - 1, "after", run[:cut])
+        if nxt is not None:
+            put(nxt, "before", run[cut:])
+    return [
+        {
+            "target": {"start": offset + at, "end": offset + at},
+            "before": m["before"] or None,
+            "after": m["after"] or None,
+        }
+        for at, m in sorted(slots.items())
+    ]
+
+
+def hyeonto_items(seg_text: str, marked: str, offset: int = 0) -> Optional[list[dict]]:
+    """현토본 → L5 현토 목록(id 없음 — core.hyeonto.add_annotation 이 붙인다). 맞지 않으면 None."""
+    gaps = split_inserted(seg_text, marked, _is_hangul)
+    if gaps is None:
+        return None
+    out = []
+    for i, run in enumerate(gaps):
+        if not run:
+            continue
+        if i == 0:
+            nxt = _next_char(seg_text, 0)
+            if nxt is None:
+                return None
+            at, pos = nxt, "before"
+        else:
+            at, pos = i - 1, "after"
+        out.append(
+            {
+                "target": {"start": offset + at, "end": offset + at},
+                "position": pos,
+                "text": run,
+                "category": None,
+            }
+        )
+    return out
+
+
+def _l5_file(interp_path: Path, part_id: str, page: int, block_id: str, kind: str) -> Path:
+    from core.hyeonto import _hyeonto_block_file_path
+    from core.punctuation import _punctuation_block_file_path
+
+    make = _punctuation_block_file_path if kind == "punctuation" else _hyeonto_block_file_path
+    return make(Path(interp_path).resolve(), part_id, page, block_id)
+
+
+def _l5_ours(interp_path: Path, file: Path) -> bool:
+    """이 L5 파일이 《들이기가 쓴 그대로》인가.
+
+    마지막 커밋이 들이기이고 작업 파일이 그 커밋과 같을 때만 참이다.
+    """
+    try:
+        import git
+
+        root = Path(interp_path).resolve()
+        rel = file.resolve().relative_to(root).as_posix()
+        repo = git.Repo(root)
+        last = next(repo.iter_commits(paths=rel, max_count=1), None)
+        if not (last and str(last.summary).startswith(COMMIT_PREFIX)):
+            return False
+        return not repo.git.status("--porcelain", "--", rel).strip()
+    except Exception:  # noqa: BLE001 — 이력을 못 읽으면 지키는 쪽으로
+        return False
+
+
+def _l5_writable(interp_path: Path, part_id: str, page: int, block_id: str, kind: str) -> bool:
+    """이 단위의 L5(kind: punctuation·hyeonto)를 들이기가 써도 되는가.
+
+    비어 있거나 들이기의 것일 때만 참이다.
+    """
+    from core.hyeonto import load_hyeonto
+    from core.punctuation import load_punctuation
+
+    file = _l5_file(interp_path, part_id, page, block_id, kind)
+    if file.exists():
+        return _l5_ours(interp_path, file)
+    # 블록별 파일은 없지만 옛 쪽 파일에 이 단위의 것이 있으면 사람의 것이다
+    if kind == "punctuation":
+        return not load_punctuation(interp_path, part_id, page, block_id).get("marks")
+    return not load_hyeonto(interp_path, part_id, page, block_id).get("annotations")
+
+
+def _drop_l5_of_removed(interp_path: Path, removed: list[str]) -> int:
+    """지운 경계(단위)의 L5 파일 가운데 들이기의 것만 지운다. 출력: 지운 파일 수.
+
+    왜: 단위가 없어지면 그 파일은 어느 화면에도 나오지 않는 채 남는다. 사람의 것은 두고(이력으로
+    되찾을 수 있게 커밋된 것만 지운다), 지운 것도 해석 저장소의 git 이력에 남는다.
+    """
+    folder = Path(interp_path).resolve() / "L5_reading" / "main_text"
+    n = 0
+    if not folder.is_dir():
+        return 0
+    for bid in removed:
+        for f in folder.glob(f"*_blk_{bid[:8]}_*.json"):
+            try:
+                if json.loads(f.read_text(encoding="utf-8")).get("block_id") != bid:
+                    continue
+            except (OSError, ValueError):
+                continue
+            if _l5_ours(interp_path, f):
+                f.unlink()
+                n += 1
+    return n
+
+
+# ── 한 벌 들이기 ─────────────────────────────────────────
+
+
 def ingest_answer(
     library: str | Path,
     doc_id: str,
@@ -655,7 +864,9 @@ def ingest_answer(
     출력: {"corrected", "kept", "boundaries_added", "boundaries_removed", "boundaries_kept",
            "unplaced_sections", "unplaced_segments", "approx_segments", "translations",
            "annotations", "relabeled_pages", "interp_id",
-           "corrections_notices"(L4를 다시 쓴 쪽의 교정 옮김 소식, D-133)}.
+           "corrections_notices"(L4를 다시 쓴 쪽의 교정 옮김 소식, D-133),
+           "punctuation"·"hyeonto"(쓴 L5 항목 수), "l5_kept"(사람의 것이라 둔 단위),
+           "l5_unplaced"(표점본·현토본이 원문과 맞지 않아 넣지 않은 구획) — D-148}.
     순서: 모양·id 확인(쓰기 전) → L4 교정 → 경계 → 사람 참조 없는 옛 경계 지우기 → 커밋 →
     해석 저장소(기반을 지금 원본으로) → 옛 초안 치우기(모든 쪽) → L6·L7 → 커밋.
     L4·경계를 먼저 끝내야 해석 저장소가 곧바로 《원본이 바뀜》이 되지 않는다.
@@ -663,7 +874,10 @@ def ingest_answer(
     from core.annotation import add_annotation, load_annotations, save_annotations
     from core.boundaries import compute_units, load_doc_boundaries
     from core.document import get_document_info, git_commit_document
+    from core.hyeonto import add_annotation as add_hyeonto
+    from core.hyeonto import save_hyeonto
     from core.interpretation import git_commit_interpretation
+    from core.punctuation import add_mark, save_punctuation
     from core.segmentation import collect_document_lines
     from core.translation import add_translation, load_translations, save_translations
     from ocr.read_book import check_part_id, load_plan
@@ -718,6 +932,7 @@ def ingest_answer(
         if given:  # 장 단위 비고는 이 답이 준 칸만 바꾼다(한 장을 여러 답으로 나눠 들이므로)
             targets[placed["chapter_id"]] = given
     _purge_everywhere(interp_path, part_id, targets)
+    _drop_l5_of_removed(interp_path, removed)
 
     # 5) 단위(경계에서 새로 만든 읽기 보기)와 L6·L7
     lines, page_texts = collect_document_lines(doc_path, part_id, None)
@@ -736,6 +951,9 @@ def ingest_answer(
         return files[page]
 
     n_tr = n_ann = 0
+    # L5(D-148): 단위마다 모았다가 한 번에 쓴다 — {단위 id: {page, punct?, hyeonto?}}
+    l5: dict[str, dict] = {}
+    l5_unplaced: list[str] = []
     unplaced_segments: list[str] = []
     approx_segments: list[str] = []
     chap = units.get(placed["chapter_id"]) if placed["chapter_id"] else None
@@ -797,6 +1015,20 @@ def ingest_answer(
                     },
                 )
                 n_tr += 1
+            for key, build, name in (
+                ("punct", punct_marks, "표점"),
+                ("hyeonto", hyeonto_items, "현토"),
+            ):
+                marked = (g.get(key) or "").strip()
+                if not marked:
+                    continue
+                got = build(seg_text, marked, a)
+                if got is None:
+                    # 원문 글자가 다르거나 받지 않는 글자가 끼어 있다 — 자리를 짐작하지 않는다
+                    l5_unplaced.append(f"{name}: {s['heading'][:30]} — {g['text'][:20]}")
+                    continue
+                slot = l5.setdefault(uid, {"page": int(unit["source_ref"]["page"])})
+                slot.setdefault(key, []).extend(got)
             for t in g.get("terms") or []:
                 th = locate(seg_text, t["term"])
                 ta, tb = (a + th[0], a + th[1]) if th else (a, b)
@@ -808,8 +1040,32 @@ def ingest_answer(
     for page, (tr, ann) in files.items():
         save_translations(interp_path, part_id, page, tr)
         save_annotations(interp_path, part_id, page, ann)
+    # L5 — 비어 있거나 들이기가 쓴 그대로인 단위에만 쓴다(그 단위의 것을 통째로 갈아 끼운다)
+    n_pu = n_ht = 0
+    l5_kept: list[str] = []
+    for uid, slot in l5.items():
+        page = slot["page"]
+        if slot.get("punct") is not None:
+            if _l5_writable(interp_path, part_id, page, uid, "punctuation"):
+                data = {"block_id": uid, "marks": []}
+                for m in slot["punct"]:
+                    add_mark(data, m)
+                save_punctuation(interp_path, part_id, page, data)
+                n_pu += len(data["marks"])
+            else:
+                l5_kept.append(f"표점: {page}쪽 단위 {uid[:8]}")
+        if slot.get("hyeonto") is not None:
+            if _l5_writable(interp_path, part_id, page, uid, "hyeonto"):
+                data = {"block_id": uid, "annotations": []}
+                for h in slot["hyeonto"]:
+                    add_hyeonto(data, h)
+                save_hyeonto(interp_path, part_id, page, data)
+                n_ht += len(data["annotations"])
+            else:
+                l5_kept.append(f"현토: {page}쪽 단위 {uid[:8]}")
+    l5_note = f" · 표점 {n_pu} · 현토 {n_ht}" if (n_pu or n_ht) else ""
     git_commit_interpretation(
-        interp_path, f"{COMMIT_PREFIX}: {chapter} — 번역 {n_tr} · 주석 {n_ann}"
+        interp_path, f"{COMMIT_PREFIX}: {chapter} — 번역 {n_tr} · 주석 {n_ann}{l5_note}"
     )
     return {
         "corrected": written,
@@ -825,6 +1081,10 @@ def ingest_answer(
         "relabeled_pages": relabeled,
         "interp_id": interp_id,
         "corrections_notices": notices,
+        "punctuation": n_pu,
+        "hyeonto": n_ht,
+        "l5_kept": l5_kept,
+        "l5_unplaced": l5_unplaced,
     }
 
 

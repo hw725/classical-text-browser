@@ -3296,7 +3296,8 @@ async def api_import_reading_note(doc_id: str, body: ReadingNoteRequest):
     출력: {"corrected", "kept"(사람이 고쳐 둔 L4 쪽), "boundaries_added", "boundaries_removed",
            "boundaries_kept"(사람 번역·주석이 가리켜 남긴 경계), "unplaced_sections",
            "unplaced_segments", "approx_segments", "translations", "annotations",
-           "relabeled_pages", "interp_id"}.
+           "relabeled_pages", "interp_id", "punctuation", "hyeonto", "l5_kept"(사람의 표점·현토라
+           둔 단위), "l5_unplaced"(표점본·현토본이 원문과 맞지 않은 구획) — D-148}.
     사람이 고친 확정본·번역·주석은 덮지 않는다 — 번역·주석은 사람이 고치면 초안 표식이 떨어져
     재들이기가 건드리지 않는다(core/reading_ingest.py 머리말).
     """

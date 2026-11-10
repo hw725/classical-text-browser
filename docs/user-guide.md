@@ -683,7 +683,8 @@ Claude Code 세션에 맡길 때의 요청 견본:
 
 > 서고 `<서고 경로>`의 문헌 `<문헌 id>`, PDF 34~52쪽(貳. 臨時財産整理局事務要綱)을 강독 노트로 만들어 줘.
 > 확정본은 `documents/<문헌 id>/L4_text/pages/`에 있고, 쪽 이미지를 직접 보며 OCR을 교정해.
-> 결과는 JSON 한 파일로 — chapter, corrections[{page, text, hand_page}], sections[{heading, page, level, meta, segments[{text, ko, terms[{term, reading, gloss, type}], check}]}], bibliography, intro, points.
+> 결과는 JSON 한 파일로 — chapter, corrections[{page, text, hand_page}], sections[{heading, page, level, meta, segments[{text, ko, punct, hyeonto, terms[{term, reading, gloss, type}], check}]}], bibliography, intro, points.
+> punct(원문에 표점 부호만 끼운 글)·hyeonto(원문에 한글 토만 끼운 글)는 있을 때만 — 원문 글자는 한 자도 바꾸지 마(바꾸면 그 칸은 들어가지 않는다).
 > 항목마다 시작 PDF 쪽(page)을 꼭 적어(자리를 찾는 창이 그 쪽부터 세 쪽이다). type은 Person·Place·Event·Timespan·Object·Record·ArtWork·Food·Clothing·Concept·Grammar 가운데 하나. 문서 항목마다 구획을 나누고,
 > 구획마다 원문·국역·어휘를 적되 어휘·문법은 일본어 고전문법(활용형·조동사의 의미와 접속)으로 풀이해.
 > 국역은 확정한 용어 풀이를 따르고, 확실하지 않은 곳은 check에 적어.

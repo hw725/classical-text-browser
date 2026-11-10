@@ -226,6 +226,12 @@ def cmd_read(args) -> int:
                 else ""
             )
         )
+        if res.get("punctuation") or res.get("hyeonto"):
+            print(f"    표점 {res['punctuation']} · 현토 {res['hyeonto']}")
+        for u in res.get("l5_kept") or []:
+            print(f"    · 사람의 것이라 둠: {u}")
+        for u in res.get("l5_unplaced") or []:
+            print(f"    · 원문과 맞지 않아 넣지 않음: {u}")
         for u in res["unplaced_sections"] + res["unplaced_segments"]:
             print(f"    · 못 찾음: {u}")
         for u in res["approx_segments"]:

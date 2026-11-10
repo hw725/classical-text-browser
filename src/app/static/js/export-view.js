@@ -114,12 +114,16 @@ async function _cxImportNote(file) {
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     // 새 저장 형식 없이 기존 층에 나눠 담았다(D-131): L4·편성 경계·L6 번역·L7 주석
     const missed = (data.unplaced_sections || []).length + (data.unplaced_segments || []).length;
+    const l5Skipped = (data.l5_unplaced || []).length + (data.l5_kept || []).length;
     _cxStatus(
       `들였습니다: ${note.chapter} — 교정 ${data.corrected.length}쪽 · 항목 경계 +${data.boundaries_added} · ` +
         `번역 ${data.translations} · 주석 ${data.annotations} (해석 저장소 ${data.interp_id})` +
         (data.kept.length ? ` · 사람이 고친 쪽 ${data.kept.join(",")}은 두었습니다(교정 서브탭에서 비교하세요)` : "") +
-        (missed ? ` · 자리를 못 찾은 항목·구획 ${missed}개 — 확정본과 답의 원문이 다릅니다` : ""),
-      data.kept.length || missed ? "warning" : "success",
+        (missed ? ` · 자리를 못 찾은 항목·구획 ${missed}개 — 확정본과 답의 원문이 다릅니다` : "") +
+        // L5 표점·현토(D-148) — 넣은 수, 그리고 넣지 않은 것(원문과 안 맞음·사람의 것)
+        (data.punctuation || data.hyeonto ? ` · 표점 ${data.punctuation} · 현토 ${data.hyeonto}` : "") +
+        (l5Skipped ? ` · 넣지 않은 표점·현토 ${l5Skipped}건(원문과 맞지 않거나 사람이 고친 단위)` : ""),
+      data.kept.length || missed || l5Skipped ? "warning" : "success",
     );
     // L4 교정을 쓴 쪽의 사람 교정 소식(D-133) — 옮기지 못한 교정은 《기록》으로 갔다
     if (typeof notifyCorrectionsRebase === "function") notifyCorrectionsRebase(data);
