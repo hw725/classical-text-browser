@@ -203,7 +203,12 @@ def add_document(
     # repo.git.add()는 실제 git 바이너리를 호출 — .git/ 내부를 추가하지 않음
     # (repo.index.add(["."])는 GitPython 저수준 API라 .git/도 추가해버림)
     repo.git.add("-A")
-    repo.index.commit(f"feat: 문헌 등록 — {title}")
+    # 위에서 훅을 껐으므로 막히지 않는 것이 정상이다. 그래도 사용자가 정한 훅이 막으면 알린다.
+    _commit, _hook_error = commit_index(repo, f"feat: 문헌 등록 — {title}")
+    if _commit is None:
+        logging.getLogger(__name__).warning(
+            "문헌 등록 커밋이 훅에 막힘(%s): %s", doc_id, _hook_error
+        )
 
     # --- 서고 매니페스트 업데이트 ---
     _update_library_manifest(library_path, doc_id, title)
@@ -2704,7 +2709,13 @@ async def create_document_from_url(
         # (Windows에서 핸들이 열려 있으면 아래 rmtree가 부분 실패한다)
         with git.Repo(doc_path) as repo:
             repo.git.add("-A")  # git 바이너리 호출 — .git/ 내부 추가 방지
-            repo.index.commit(f"feat: URL에서 문헌 생성 ({parser_id})")
+            # add_document 가 훅을 껐다. 그래도 막히면 문헌은 그대로 두고 알린다
+            # (폴더를 지우지 않는다).
+            _commit, _hook_error = commit_index(repo, f"feat: URL에서 문헌 생성 ({parser_id})")
+            if _commit is None:
+                logging.getLogger(__name__).warning(
+                    "URL 문헌 생성 커밋이 훅에 막힘(%s): %s", doc_id, _hook_error
+                )
     except Exception:
         # Windows에서 .git 내부 읽기전용 파일 때문에 일부가 남을 수 있으나
         # (ignore_errors), 최선의 정리를 시도한 뒤 원래 예외를 그대로 올린다.

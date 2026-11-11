@@ -14,6 +14,8 @@ from pathlib import Path
 
 import git
 
+from core.git_commit_guard import blocked_result, commit_index, disable_repo_hooks
+
 # ──────────────────────────────────────
 # trailer 파싱
 # ──────────────────────────────────────
@@ -627,7 +629,24 @@ def revert_to_commit(
                 "target_hash": target.hexsha,
             }
 
-        new_commit = repo.index.commit(message)
+        # 서고 저장소의 훅을 끄고(로컬 hooksPath 가 없을 때만) 커밋한다(D-149).
+        disable_repo_hooks(repo)
+        new_commit, hook_error = commit_index(repo, message)
+        if new_commit is None:
+            # 훅이 막았다. 되돌린 파일을 작업 폴더에 남기면 다음 되돌리기가
+            # 《커밋되지 않은 변경》으로 거부되고, 사용자는 되돌려진 것으로 오해한다.
+            # 시작 전에 작업 폴더가 깨끗했음을 위에서 확인했으므로 HEAD 로 돌려도 잃는 것이 없다.
+            repo.git.reset("--hard", "HEAD")
+            blocked = blocked_result(message, hook_error)
+            return {
+                "reverted": False,
+                "reason": blocked["reason"],
+                "error_detail": hook_error,
+                "message": "git 훅이 막아 되돌리지 못했습니다(파일도 원래대로 두었습니다). "
+                "→ 해결: 이 저장소의 .git/config 에 core.hooksPath 를 직접 정했다면 "
+                "그 훅을 확인하세요.",
+                "target_hash": target.hexsha,
+            }
 
         return {
             "reverted": True,

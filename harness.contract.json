@@ -521,12 +521,39 @@
         "quote": "2026-11-11: GitPython 3.2.1 이 전역 core.hooksPath 를 따라 doc-sync commit-msg 게이트가 feat: 커밋을 막았는데 git_commit_interpretation 이 이전 커밋 hash 로 committed: True 를 돌려줌(handoff_ctb-commit-hook-silent-failure.md)"
       },
       "status": "active"
+    },
+    {
+      "id": "COMMIT-HOOK-PATHS",
+      "text": "서고 저장소에 커밋하는 모든 길(되돌리기·백업 복원·스냅샷 작업 생성·해석 폴더 가져오기·자동 수리·문헌 생성)이 core/git_commit_guard 를 거쳐 훅을 끄고, 그래도 막히면 되돌리기는 reverted: False·hook_blocked 로 알리고 작업 폴더를 되돌리기 전으로 둔다",
+      "judge": "deterministic",
+      "check": {
+        "argv": [
+          ".venv/Scripts/python.exe",
+          "-m",
+          "pytest",
+          "tests/test_commit_hook_paths_20261111.py",
+          "-q",
+          "-p",
+          "no:cacheprovider"
+        ],
+        "fail_regex": "^FAILED|AssertionError",
+        "traceback_fatal": false
+      },
+      "guards": [
+        "tests/test_commit_hook_paths_20261111.py"
+      ],
+      "origin": {
+        "kind": "user-correction",
+        "date": "2026-11-11",
+        "quote": "2026-11-11 사용자: 「그럼 깔끔하게 지우자」(~/.gitconfig includeIf 우회 제거) — 제거 전 확인에서 D-149 밖의 직접 커밋 길이 드러남"
+      },
+      "status": "active"
     }
   ],
   "approved": {
-    "hash": "20e938aa152f8e8770233f06651d88ce49e26debfa0ac950932279087fa627c0",
-    "request": "A-fdd727ea",
-    "ts": "2026-11-11T14:56:49",
+    "hash": "ee55c35636691306049edf83afb69e252aeb35fedae03f335479c50b14acb7bf",
+    "request": "A-25d88ce5",
+    "ts": "2026-11-11T15:34:52",
     "guards": {
       "tests/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "tests/conftest.py": "82b380ae3fc84c494d248d52b297081a6beec58e3a4c62db5de7be04076b0e45",
@@ -561,6 +588,7 @@
       "tests/test_codex_review.py": "f78c34777829fb1c3bbe7df949c9f56598e616985a281cd071a8f16846fc26ec",
       "tests/test_codex_review_judge.py": "c5c629071301152fec01ce7d6efb378b5f276ebed10ea89c3de6d605bddfbad1",
       "tests/test_commit_hook_block_20261111.py": "0af557788cd0b810eefc947500e1b5c40990944014da0455f48bd0beaf489211",
+      "tests/test_commit_hook_paths_20261111.py": "eb4ac1abd8cfb608aaa7952cb13d8a75f3f26ca565d45aa21ce09b1f3f605bdb",
       "tests/test_composition_apply_plan_js.py": "f37ef7bb4045147c3343c9b5906e040063a0eae0618f5a24cb01fed66b431ac9",
       "tests/test_connectome.py": "935da13f221444d569836322c7d0d51b351e2636a280ca87bdff8316f079318f",
       "tests/test_contents_tree.py": "c53f4f58fc14dac3692a536d9d38fcfb479fab324a3b32da661694a36fad115e",

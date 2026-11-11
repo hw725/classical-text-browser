@@ -21,7 +21,6 @@ import io
 import json
 import logging
 import shutil
-import subprocess
 import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -563,25 +562,24 @@ async def api_import_interpretation_folder(files: list[UploadFile] = File(...)):
             )
 
         # Git 저장소가 없으면 초기화
+        # 새 저장소라 git 템플릿(LFS 등)·전역 훅이 붙는다 — 끄고 커밋한다(D-149).
+        # 예전에는 git CLI 로 init·add·commit 하고 결과를 보지 않았다(막혀도 성공으로 보였다).
         if not (target_interp_path / ".git").exists():
-            init_proc = subprocess.run(
-                ["git", "init"],
-                cwd=str(target_interp_path),
-                capture_output=True,
-                text=True,
-            )
-            if init_proc.returncode == 0:
-                subprocess.run(
-                    ["git", "add", "."],
-                    cwd=str(target_interp_path),
-                    capture_output=True,
+            try:
+                import git
+
+                from core.git_commit_guard import commit_index, disable_repo_hooks
+
+                repo = git.Repo.init(target_interp_path)
+                disable_repo_hooks(repo)
+                repo.git.add("-A")
+                _commit, _hook_error = commit_index(
+                    repo, f"feat: 해석 저장소 폴더 가져오기 — {interp_id}"
                 )
-                subprocess.run(
-                    ["git", "commit", "-m", f"feat: 해석 저장소 폴더 가져오기 — {interp_id}"],
-                    cwd=str(target_interp_path),
-                    capture_output=True,
-                    text=True,
-                )
+                if _commit is None:
+                    logger.warning("해석 폴더 가져오기 커밋이 훅에 막힘: %s", _hook_error)
+            except Exception as e:  # noqa: BLE001 — git 이 없어도 가져오기 자체는 유효(예전 동작)
+                logger.warning("해석 폴더 가져오기 git 초기화 실패: %s", e)
 
         _register_interp_in_library(
             _library_path,

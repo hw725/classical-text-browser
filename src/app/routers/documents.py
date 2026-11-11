@@ -43,6 +43,7 @@ from core.document import (
     set_part_rotation,
     write_json_atomic,
 )
+from core.git_commit_guard import commit_index
 from core.library import (
     list_documents,
     trash_document,
@@ -1098,7 +1099,11 @@ async def api_create_from_files(
             if repo.git.diff("--cached", "--name-only"):
                 n_imgs = len(image_paths)
                 n_pdfs = len(pdf_inputs)
-                repo.index.commit(f"feat: 로컬 파일 추가 — 이미지 {n_imgs}장, PDF {n_pdfs}개")
+                _commit, _hook_error = commit_index(
+                    repo, f"feat: 로컬 파일 추가 — 이미지 {n_imgs}장, PDF {n_pdfs}개"
+                )
+                if _commit is None:
+                    logger.warning(f"git commit 이 훅에 막힘 (무시): {_hook_error}")
         except Exception as e:  # noqa: BLE001
             logger.warning(f"git commit 경고 (무시): {e}")
 

@@ -26,6 +26,8 @@ from pathlib import Path
 
 import git
 
+from core.git_commit_guard import commit_index, disable_repo_hooks
+
 logger = logging.getLogger(__name__)
 
 
@@ -889,9 +891,13 @@ def _git_init_and_commit(repo_path: Path, message: str) -> None:
     """Git 저장소를 초기화하고 모든 파일을 커밋한다."""
     try:
         repo = git.Repo.init(repo_path)
+        # 새 저장소라 git 템플릿(LFS 등)·전역 훅이 붙는다 — 끄고 커밋한다(D-149)
+        disable_repo_hooks(repo)
         # repo.git.add()는 git 바이너리 호출 — .git/ 내부 추가 방지
         repo.git.add("-A")
-        repo.index.commit(message)
+        commit, hook_error = commit_index(repo, message)
+        if commit is None:
+            logger.warning("Git 커밋이 훅에 막힘: %s — %s", repo_path, hook_error)
     except Exception as e:
         logger.warning("Git 초기화/커밋 실패: %s — %s", repo_path, e)
 

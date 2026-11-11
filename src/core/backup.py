@@ -22,6 +22,7 @@ from pathlib import Path
 import git
 
 from core.document import write_json_atomic
+from core.git_commit_guard import commit_index, disable_repo_hooks
 
 logger = logging.getLogger(__name__)
 
@@ -225,8 +226,13 @@ def restore_from_backup(
                     continue
                 try:
                     repo = git.Repo.init(entry)
+                    # 새 저장소라 git 템플릿(LFS 등)·전역 훅이 붙는다 — 끄고 커밋한다(D-149)
+                    disable_repo_hooks(repo)
                     repo.git.add("-A")
-                    repo.index.commit("feat: 백업에서 복원")
+                    commit, hook_error = commit_index(repo, "feat: 백업에서 복원")
+                    if commit is None:
+                        logger.warning("복원 중 커밋이 훅에 막힘: %s — %s", entry, hook_error)
+                        continue
                     repos_initialized += 1
                 except Exception as e:
                     logger.warning("복원 중 git 초기화 실패: %s — %s", entry, e)

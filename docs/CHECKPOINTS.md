@@ -48,7 +48,7 @@
 - **사람이 만든 것은 서고에, 앱이 들고 다니는 것은 앱에** — API 키(서고 `.env`)·이체자 사전(서고 `resources/`)(D-102·D-104). 앱 폴더에 쓰면 자동 업데이트가 막힌다.
 - **JSON 저장은 `write_json_atomic`**(L5~L7 포함), PDF는 `resolve_part_pdf`, `fitz.open()`은 `with`(D-069·D-127). 시험 `test_forbidden_patterns.py`가 지킨다.
 - **추정값은 파일에 적지 않는다** — 역할 추정(D-096), bbox 재측정(D-111), 본문(D-092)은 읽을 때 만든다.
-- **서고 저장소 커밋은 `core/git_commit_guard.py`로** — 로컬 `core.hooksPath`가 없으면 빈 폴더로 훅을 끄고, 그래도 훅이 막으면(HEAD 그대로) `committed: False`·`reason: "hook_blocked"`. `repo.index.commit()`의 `HookExecutionError`를 삼키고 `repo.head.commit`을 돌려주지 않는다(D-149).
+- **서고 저장소 커밋은 `core/git_commit_guard.py`로** — 로컬 `core.hooksPath`가 없으면 빈 폴더로 훅을 끄고, 그래도 훅이 막으면(HEAD 그대로) `committed: False`·`reason: "hook_blocked"`. `repo.index.commit()`의 `HookExecutionError`를 삼키고 `repo.head.commit`을 돌려주지 않는다. `src/`에서 `index.commit(`·`git commit`을 직접 부르지 않는다 — 되돌리기·백업 복원·스냅샷·폴더 가져오기도 이 길이다(D-149, 시험 `test_commit_hook_paths_20261111.py`).
 - **삭제는 서고 `.trash/`로**(D-023). 마이그레이션은 옛 폴더를 지우지 않고 이름만 바꾼다.
 
 ### 2.2 OCR
