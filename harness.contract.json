@@ -467,15 +467,42 @@
         "quote": "2026-11-10 「ctb 저장소 계약 승인」(연구 작업대 R-07 — 답 형식에 표점·현토 칸)"
       },
       "status": "active"
+    },
+    {
+      "id": "GIT-HERMETIC",
+      "text": "시험 안의 git(GitPython·git 명령)은 사용자 전역 git 설정(훅 경로 등)을 읽지 않고, 임시 저장소의 feat: 커밋이 이 PC 의 전역 훅과 무관하게 된다",
+      "judge": "deterministic",
+      "check": {
+        "argv": [
+          ".venv/Scripts/python.exe",
+          "-m",
+          "pytest",
+          "tests/test_git_hermetic_20261111.py",
+          "-q",
+          "-p",
+          "no:cacheprovider"
+        ],
+        "fail_regex": "^FAILED|AssertionError",
+        "traceback_fatal": false
+      },
+      "guards": [
+        "tests/test_git_hermetic_20261111.py"
+      ],
+      "origin": {
+        "kind": "incident",
+        "date": "2026-11-11",
+        "quote": "2026-11-10: 전역 core.hooksPath 를 GitPython 3.2 가 따라 임시 저장소 커밋이 exit 127(77 실패·5 오류), CI 는 통과"
+      },
+      "status": "active"
     }
   ],
   "approved": {
-    "hash": "5dd4f5e0c8ef6afd1e42f6b5fe286b7a9cc54acaf9d423956505ce3191b70acb",
-    "request": "A-a56e384b",
-    "ts": "2026-11-10T22:03:40",
+    "hash": "5928c4989ee6f6e8315e4d5240153698028abd781bbd343d168b731aeec2aac3",
+    "request": "A-75e5f25b",
+    "ts": "2026-11-11T09:00:03",
     "guards": {
       "tests/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "tests/conftest.py": "caeafb4690d7d4811b4a96c2239b839711ef4e455e3007ba9967d69e12ac50c9",
+      "tests/conftest.py": "82b380ae3fc84c494d248d52b297081a6beec58e3a4c62db5de7be04076b0e45",
       "tests/fixtures/hwp/extb_pua.hwp": "71570fcd36da390bbde04f6a85fcd10d5be155b5bcd958b259ae60e596f99328",
       "tests/js_harness.py": "ea8c96cf544432a18fcdf7e2cd8b8269158a110fb7f7945fcb452d5798a355f7",
       "tests/test_add_part.py": "1d59a5b92ebdc2edf632b262b15d4937e0d174534debdcd738c295e7bfe9752f",
@@ -529,6 +556,7 @@
       "tests/test_forbidden_patterns.py": "37456f3060cdca5755c72f9ed44231e481bd3623a417c8c710b9969579809556",
       "tests/test_full_page_block_rotation.py": "47e808273c451fd4d04b85b33eaa1d833079f7b93f2f5789b02f4eee041584b7",
       "tests/test_git_graph.py": "a04754082c4ec44efc96a7b1b2b7adeeaa1b268a6df7796ef691795f15eeb687",
+      "tests/test_git_hermetic_20261111.py": "4d707e85496ff045cf1e235058f65e26132bde6d63cb2e1c53f8b66503d67c10",
       "tests/test_hwp_extb_pua_20261022.py": "16539239a1b8abb11fa0c3684e7d1249cc7fe8d386b686a6b89b3327a1f4206b",
       "tests/test_install_ollama_probe.py": "8186055fb072ac8e69a2c41660b2c85ec7250d8bacc5e9429768dce96e84191a",
       "tests/test_interp_layers_atomic_write.py": "5bb105d72f906cbbd0f070a78be58436f3e97d83c3cea4154ffeb4aa55facd83",
