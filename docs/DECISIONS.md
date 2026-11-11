@@ -9121,3 +9121,12 @@ GitPython 3.2.1(2026-10-28 설치)부터 `core.hooksPath`를 따르므로, 이 P
 **시험.** `tests/test_commit_hook_block_20261111.py`(계약 조건 COMMIT-HOOK-BLOCK) — 저장소 로컬 `core.hooksPath`의 실패하는
 pre-commit·commit-msg 훅이면 두 커밋 함수가 `committed: False`·`hook_blocked`를 돌려주고 HEAD가 그대로, post-commit만 실패하면
 커밋됨, 로컬 hooksPath 없는 저장소는 `.git/hooks`의 실패 훅을 끄고 커밋, 새 해석 저장소는 로컬 hooksPath를 가진다.
+
+**덧붙임(같은 날, 우회 설정을 지우기 전).** 위 네 곳 밖에도 `repo.index.commit()`·`git commit`을 직접 부르는 길이 있었다 —
+되돌리기(`git_graph.revert_to_commit`), 백업 복원, 스냅샷에서 작업 만들기, 해석 저장소 폴더 가져오기(git CLI, 결과를 보지 않음),
+.git 오염 자동 수리, 문헌 등록·로컬 파일 추가·URL 문헌 생성. 새로 `git init`하는 길(복원·스냅샷·가져오기)과 훅을 끄지 않은 옛
+저장소의 되돌리기는 git 템플릿·전역 훅에 막힐 수 있었다(이 PC는 `~/.gitconfig` includeIf 우회가 가리고 있었다). 모두
+`disable_repo_hooks`·`commit_index`를 거치게 했다. 되돌리기가 막히면 `reverted: False`·`reason: "hook_blocked"`를 돌려주고
+작업 폴더를 HEAD로 되돌린다 — 되돌린 파일을 남기면 다음 되돌리기가 《커밋되지 않은 변경》으로 거부되기 때문이다(시작 전에
+깨끗함을 확인하므로 잃는 것이 없다). 자동 수리가 막히면 《고쳐짐》으로 알리지 않는다. 시험 `tests/test_commit_hook_paths_20261111.py`
+(계약 조건 COMMIT-HOOK-PATHS)는 `src/`에 `commit_index` 밖의 직접 커밋이 없는지도 본다.

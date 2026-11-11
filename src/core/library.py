@@ -596,10 +596,17 @@ def repair_git_contamination(repo_path: str | Path) -> dict:
 
         # 변경사항 커밋
         repo.git.add("-A")
+        from core.git_commit_guard import commit_index, disable_repo_hooks
+
+        disable_repo_hooks(repo)
         try:
-            repo.index.commit("fix: .git 내부 파일 추적 제거 (자동 수리)")
+            commit, hook_error = commit_index(repo, "fix: .git 내부 파일 추적 제거 (자동 수리)")
         except gitmodule.GitCommandError:
-            pass  # 변경사항이 없으면 무시
+            commit, hook_error = True, None  # 변경사항이 없으면 무시
+        if commit is None:
+            # 인덱스에서는 이미 뺐지만 이력에 남지 않았다 — 고쳐진 것으로 알리지 않는다
+            result["error"] = f"git 훅이 수리 커밋을 막았습니다: {hook_error}"
+            return result
 
         result["repaired"] = True
         result["files_removed"] = len(contaminated)
