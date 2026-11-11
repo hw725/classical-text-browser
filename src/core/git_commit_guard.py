@@ -21,12 +21,42 @@
 
 from __future__ import annotations
 
+import contextvars
 import logging
 from pathlib import Path
 
 import git
 
 logger = logging.getLogger(__name__)
+
+# ── 막힌 커밋을 화면에 알리는 요청 단위 목록 ──────────────────────────
+# 왜: 해석 저장소 저장 호출처 다수가 `except Exception: pass`로 커밋 결과를 버린다. 라우트마다
+# 응답에 꼬리표를 붙이면 새 저장 화면에서 또 빠진다 — LLM 폴백 알림(llm/fallback_notice.py, D-143)과
+# 같은 길로, 미들웨어(app.server._commit_blocked_header)가 요청마다 빈 목록을 깔고 `commit_index`가
+# 거기에 적고 미들웨어가 응답 머리에 싣는다. 화면(toast.js)은 fetch 한 곳에서 그 머리를 본다.
+# 한계: 응답 뒤에 도는 커밋(백그라운드)은 머리가 먼저 나가므로 실리지 않는다
+# — 서버 경고 기록에는 남는다.
+BLOCKED_HEADER = "X-CTB-Commit-Blocked"
+_blocked: contextvars.ContextVar[list | None] = contextvars.ContextVar(
+    "ctb_commit_blocked", default=None
+)
+
+
+def begin_request() -> tuple[list, contextvars.Token]:
+    """요청 하나를 시작한다. 출력: (막힌 커밋 메시지를 모을 목록, 되돌릴 토큰)."""
+    bucket: list = []
+    return bucket, _blocked.set(bucket)
+
+
+def end_request(token: contextvars.Token) -> None:
+    _blocked.reset(token)
+
+
+def _record_blocked(message: str) -> None:
+    """막힌 커밋 한 건을 적는다. 요청 밖(스크립트·시험)이면 아무것도 하지 않는다."""
+    bucket = _blocked.get()
+    if bucket is not None:
+        bucket.append(message)
 
 # 훅을 끌 때 hooksPath 로 지정하는 빈 폴더 이름(.git 아래). 문서 저장소가 처음부터 쓰던 이름이다.
 EMPTY_HOOKS_DIRNAME = "no-hooks"
@@ -79,6 +109,7 @@ def commit_index(repo: git.Repo, message: str) -> tuple[git.Commit | None, str |
             logger.warning("git post-commit 훅 실패 — 커밋은 생성됨(%s): %s", after[:7], e)
             return repo.head.commit, None
         logger.warning("git 훅이 커밋을 막았습니다 — 커밋되지 않음: %s", e)
+        _record_blocked(message)
         return None, str(e)
 
 

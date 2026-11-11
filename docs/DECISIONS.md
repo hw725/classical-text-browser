@@ -9130,3 +9130,11 @@ pre-commit·commit-msg 훅이면 두 커밋 함수가 `committed: False`·`hook_
 작업 폴더를 HEAD로 되돌린다 — 되돌린 파일을 남기면 다음 되돌리기가 《커밋되지 않은 변경》으로 거부되기 때문이다(시작 전에
 깨끗함을 확인하므로 잃는 것이 없다). 자동 수리가 막히면 《고쳐짐》으로 알리지 않는다. 시험 `tests/test_commit_hook_paths_20261111.py`
 (계약 조건 COMMIT-HOOK-PATHS)는 `src/`에 `commit_index` 밖의 직접 커밋이 없는지도 본다.
+
+**덧붙임 2(같은 날 — 화면 알림).** 해석 저장소 저장 호출처 22곳 중 16곳(표점·현토·번역·주석·비고 저장 등)은
+`try: git_commit_interpretation(...) except Exception: pass`로 결과를 버려, 막힌 커밋이 서버 경고 기록에만 남았다.
+라우트마다 응답에 꼬리표를 붙이지 않고 LLM 폴백 알림(D-143)과 같은 길로 푼다 — `commit_index`가 막힌 커밋을 요청 단위
+목록에 적고(`git_commit_guard.begin_request`·`end_request`), 미들웨어 `app.server._commit_blocked_header`가 응답 머리
+`X-CTB-Commit-Blocked`(막힌 수)에 싣고, `toast.js`의 fetch 감시(`_watchResponseNotices`)가 경고 토스트 《저장은 됐지만 …
+버전 이력에 남지 않았습니다》를 띄운다. 응답 뒤에 도는 커밋(백그라운드)은 머리가 먼저 나가 실리지 않는다 — 서버 기록에는 남는다.
+시험 `tests/test_commit_blocked_notice_20261111.py`(계약 조건 COMMIT-BLOCKED-NOTICE).
