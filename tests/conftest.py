@@ -208,6 +208,39 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     # 쓰지 않는다 — 테스트는 언제나 자기 임시 폴더에만 쓴다.
     os.environ["CTB_CONFIG_DIR"] = str(config_dir)
 
+    _isolate_git_config(config_dir.parent if factory is not None else config_dir)
+
+
+def _isolate_git_config(base: Path) -> None:
+    """시험 안의 git 이 사용자 전역·시스템 git 설정을 읽지 않게 한다.
+
+    CI 와 같은 최소 설정(작성자만)을 쓴다.
+
+    왜(2026-11-11): 이 PC 의 전역 `core.hooksPath`(doc-sync 훅)를 GitPython 3.2 가 따르면서
+    시험이 임시 폴더에 만든 저장소의 커밋이 그 훅을 bash 상대 경로로 불렀고, Git Bash 가
+    %TEMP% 를 /tmp 로 마운트해 exit 127 로 죽었다(77 실패·5 오류). CI 는 전역 훅이 없어 통과했다.
+    git 명령은 `GIT_CONFIG_GLOBAL`·`GIT_CONFIG_NOSYSTEM` 으로 돌린다(자식 프로세스도 물려받는다).
+    GitPython 은 이 변수를 읽지 않고 `~/.gitconfig` 를 직접 열므로 설정 파일 경로 함수를 감싼다.
+    홈(USERPROFILE)은 바꾸지 않는다 — 홈 기록 누수 검사(real_home_config_dir)가 진짜 홈을 재야 한다.
+    """
+    gitconfig = base / "ctb-test-gitconfig"
+    gitconfig.write_text(
+        "[user]\n\tname = ctb-test\n\temail = ctb-test@example.invalid\n", encoding="utf-8"
+    )
+    os.environ["GIT_CONFIG_GLOBAL"] = str(gitconfig)
+    os.environ["GIT_CONFIG_NOSYSTEM"] = "1"
+
+    import git
+
+    original = git.Repo._get_config_path
+
+    def _hermetic_config_path(self, config_level, git_dir=None):
+        if config_level in ("system", "user", "global"):
+            return str(gitconfig)
+        return original(self, config_level, git_dir)
+
+    git.Repo._get_config_path = _hermetic_config_path
+
 
 @pytest.fixture()
 def home_config_dir() -> Path:
