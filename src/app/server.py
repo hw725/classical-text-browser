@@ -182,6 +182,30 @@ async def _llm_fallback_header(request, call_next):
 app.middleware("http")(_llm_fallback_header)
 
 
+async def _commit_blocked_header(request, call_next):
+    """이 요청 안에서 git 훅이 서고 저장소 커밋을 막았으면 응답 머리에 그 수를 싣는다.
+
+    머리 이름은 `X-CTB-Commit-Blocked`.
+    왜(D-149 후속): 표점·현토·번역·주석 저장 라우트 다수가 `except Exception: pass`로 커밋
+    결과를 버려, 막힌 커밋이 서버 기록에만 남고 연구자는 몰랐다. LLM 폴백 머리와 같은 이유로
+    한 곳에서 싣는다.
+    값은 막힌 커밋 수(ASCII) — 화면 문구는 toast.js가 만든다.
+    """
+    from core import git_commit_guard
+
+    bucket, token = git_commit_guard.begin_request()
+    try:
+        response = await call_next(request)
+    finally:
+        git_commit_guard.end_request(token)
+    if bucket:
+        response.headers[git_commit_guard.BLOCKED_HEADER] = str(len(bucket))
+    return response
+
+
+app.middleware("http")(_commit_blocked_header)
+
+
 @app.middleware("http")
 async def _no_store_api(request, call_next):
     """API 응답에 캐시 금지를 붙인다.

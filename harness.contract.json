@@ -548,12 +548,39 @@
         "quote": "2026-11-11 사용자: 「그럼 깔끔하게 지우자」(~/.gitconfig includeIf 우회 제거) — 제거 전 확인에서 D-149 밖의 직접 커밋 길이 드러남"
       },
       "status": "active"
+    },
+    {
+      "id": "COMMIT-BLOCKED-NOTICE",
+      "text": "훅이 커밋을 막으면, 호출처가 결과를 버리는 저장(표점·현토·번역·주석 등)이라도 응답 머리 X-CTB-Commit-Blocked 로 화면에 닿고, 화면은 《파일은 저장됐지만 버전 이력에 남지 않았다》는 경고 토스트를 띄운다",
+      "judge": "deterministic",
+      "check": {
+        "argv": [
+          ".venv/Scripts/python.exe",
+          "-m",
+          "pytest",
+          "tests/test_commit_blocked_notice_20261111.py",
+          "-q",
+          "-p",
+          "no:cacheprovider"
+        ],
+        "fail_regex": "^FAILED|AssertionError",
+        "traceback_fatal": false
+      },
+      "guards": [
+        "tests/test_commit_blocked_notice_20261111.py"
+      ],
+      "origin": {
+        "kind": "user-correction",
+        "date": "2026-11-11",
+        "quote": "2026-11-11 사용자: 「남은 일 마저 처리해야 될 것 같은데?」 — 남은 일: 해석 저장소 호출처 16곳이 결과를 버려 막힌 커밋이 화면에 안 보임"
+      },
+      "status": "active"
     }
   ],
   "approved": {
-    "hash": "ee55c35636691306049edf83afb69e252aeb35fedae03f335479c50b14acb7bf",
-    "request": "A-25d88ce5",
-    "ts": "2026-11-11T15:34:52",
+    "hash": "82513883df2a6e8598e478148b5bedb932f23d24c468accee646938b73c9e77b",
+    "request": "A-d9a86fcf",
+    "ts": "2026-11-11T16:17:19",
     "guards": {
       "tests/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "tests/conftest.py": "82b380ae3fc84c494d248d52b297081a6beec58e3a4c62db5de7be04076b0e45",
@@ -587,6 +614,7 @@
       "tests/test_cli_config.py": "7451fb2e1a2676d99966647ac089dbc1d01cb26fb66085bb03c3dde012418690",
       "tests/test_codex_review.py": "f78c34777829fb1c3bbe7df949c9f56598e616985a281cd071a8f16846fc26ec",
       "tests/test_codex_review_judge.py": "c5c629071301152fec01ce7d6efb378b5f276ebed10ea89c3de6d605bddfbad1",
+      "tests/test_commit_blocked_notice_20261111.py": "a7fbb3e76d600b74c235d498ed529eeef667294a1f3ad566855a61d0cc7752b9",
       "tests/test_commit_hook_block_20261111.py": "0af557788cd0b810eefc947500e1b5c40990944014da0455f48bd0beaf489211",
       "tests/test_commit_hook_paths_20261111.py": "eb4ac1abd8cfb608aaa7952cb13d8a75f3f26ca565d45aa21ce09b1f3f605bdb",
       "tests/test_composition_apply_plan_js.py": "f37ef7bb4045147c3343c9b5906e040063a0eae0618f5a24cb01fed66b431ac9",

@@ -157,8 +157,35 @@ function _llmFallbackNotice(raw) {
 }
 
 /**
- * 모든 fetch 응답에서 폴백 머리를 본다. 머리가 없는 응답은 그대로 지나간다.
- * 왜 한 곳인가: LLM을 부르는 화면이 여럿이라 화면마다 붙이면 새 화면에서 또 빠진다(서버의 미들웨어와 같은 이유).
+ * git 훅이 커밋을 막았다는 알림 문구 (D-149 후속).
+ * 입력: 응답 머리 X-CTB-Commit-Blocked 값(막힌 커밋 수) 또는 null. 출력: 토스트 문구 또는 null.
+ *
+ * 왜: 표점·현토·번역·주석 저장 라우트 다수가 커밋 결과를 버려, 훅이 커밋을 막아도 화면에는
+ * 《저장됨》만 보였다. 파일은 저장됐으니 저장 실패가 아니라, 버전 이력에 안 남았다는 경고다.
+ */
+function _commitBlockedNotice(raw) {
+  if (!raw) return null;
+  return (
+    "저장은 됐지만 git 훅이 커밋을 막아 이번 변경이 버전 이력에 남지 않았습니다. " +
+    "다음 저장 때 다시 커밋을 시도합니다 — 계속되면 그 저장소의 .git/config core.hooksPath 를 확인하세요."
+  );
+}
+
+/**
+ * fetch 응답 하나의 알림 머리(LLM 폴백·막힌 커밋)를 보고 토스트를 띄운다. 머리가 없으면 아무것도 안 한다.
+ * 함수로 뺀 까닭: 시험(js_harness)이 fetch 감시 본체를 그대로 돌릴 수 있게.
+ */
+function _watchResponseNotices(res) {
+  if (!res || !res.headers || typeof window.showToast !== "function") return;
+  const fallback = _llmFallbackNotice(res.headers.get("X-CTB-LLM-Fallback"));
+  if (fallback) window.showToast(fallback, "warning", 12000);
+  const blocked = _commitBlockedNotice(res.headers.get("X-CTB-Commit-Blocked"));
+  if (blocked) window.showToast(blocked, "warning", 12000);
+}
+
+/**
+ * 모든 fetch 응답에서 알림 머리를 본다. 머리가 없는 응답은 그대로 지나간다.
+ * 왜 한 곳인가: LLM을 부르는·저장하는 화면이 여럿이라 화면마다 붙이면 새 화면에서 또 빠진다(서버의 미들웨어와 같은 이유).
  */
 (function () {
   if (typeof window === "undefined" || typeof window.fetch !== "function" || window.__ctbFallbackWatch) return;
@@ -167,8 +194,7 @@ function _llmFallbackNotice(raw) {
   window.fetch = async function (...args) {
     const res = await origFetch(...args);
     try {
-      const msg = _llmFallbackNotice(res.headers && res.headers.get("X-CTB-LLM-Fallback"));
-      if (msg && typeof window.showToast === "function") window.showToast(msg, "warning", 12000);
+      _watchResponseNotices(res);
     } catch (_) {
       /* 알림이 실패해도 응답은 그대로 돌려준다 */
     }
