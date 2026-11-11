@@ -26,6 +26,7 @@ from pathlib import Path
 
 import git
 
+from core.git_commit_guard import blocked_result, commit_index, disable_repo_hooks
 from core.repo_id import REPO_ID_PATTERN
 
 # 문헌 ID 패턴 — 단일 진실원은 core/repo_id.py (기존 이름은 하위 호환 별칭)
@@ -179,11 +180,8 @@ def add_document(
     # post-commit 등이 실패해 commit 자체가 GitCommandError로 raise된다.
     # 우리는 이 문서 폴더의 git을 단순 버전 관리에만 쓰므로 모든 hook을 끈다.
     # 빈 디렉터리를 hooksPath로 지정하면 git이 hook을 찾지 못해 그냥 통과한다.
-    _empty_hooks = doc_path / ".git" / "no-hooks"
-    _empty_hooks.mkdir(exist_ok=True)
-    with repo.config_writer() as _cw:
-        # Windows에서도 git config는 forward slash를 받는다.
-        _cw.set_value("core", "hooksPath", str(_empty_hooks).replace("\\", "/"))
+    # (사용자 전역 core.hooksPath의 훅도 같은 이유로 끈다 — core/git_commit_guard.py)
+    disable_repo_hooks(repo)
 
     # 이 repo에서 git-lfs filter를 명시적으로 비활성화 — .gitattributes에 LFS 룰을
     # 안 넣었어도 system git config의 filter.lfs가 살아 있으면 어떤 git 동작에서
@@ -1575,6 +1573,9 @@ def git_commit_document(
         #      교정 저장 시 자연스럽게 git 이력을 시작할 수 있게 한다.
         repo = git.Repo.init(doc_path)
 
+    # 로컬 hooksPath 가 없는 저장소(옛 저장소·위에서 막 만든 저장소)는 훅을 끈다.
+    disable_repo_hooks(repo)
+
     # 변경사항이 없으면 커밋 스킵
     if not repo.is_dirty(untracked_files=True):
         return {"committed": False, "message": "변경사항 없음"}
@@ -1596,13 +1597,12 @@ def git_commit_document(
     else:
         repo.git.add("-A")
 
-    try:
-        commit = repo.index.commit(message)
-    except git.HookExecutionError:
-        # Git LFS 등의 post-commit hook이 실패할 수 있다.
-        # 커밋 자체는 이미 완료되었으므로, hook 에러는 무시하고
-        # 마지막 커밋 정보를 가져온다.
-        commit = repo.head.commit
+    # 훅이 커밋을 막으면 커밋은 생기지 않는다(pre-commit·commit-msg). 예전에는 이것을
+    # post-commit 실패로 보고 이전 커밋을 《커밋됨》으로 돌려줬다(2026-11-11 결함).
+    # 로컬 hooksPath 가 없는 옛 저장소는 여기서 훅을 끄고, 그래도 막히면 실패로 알린다.
+    commit, hook_error = commit_index(repo, message)
+    if commit is None:
+        return blocked_result(message, hook_error)
 
     return {
         "committed": True,
@@ -2455,10 +2455,13 @@ def create_document_from_hwp(
     # 7. git commit
     repo = git.Repo(doc_path)
     repo.git.add("-A")  # git 바이너리 호출 — .git/ 내부 추가 방지
-    try:
-        repo.index.commit(f"feat: HWP에서 문헌 생성 — {effective_title}")
-    except git.HookExecutionError:
-        pass  # hook 에러는 무시 (커밋 자체는 완료)
+    disable_repo_hooks(repo)
+    _commit, _hook_error = commit_index(repo, f"feat: HWP에서 문헌 생성 — {effective_title}")
+    if _commit is None:
+        # 파일은 이미 다 썼으므로 생성은 그대로 진행한다. 다음 저장 때 다시 커밋을 시도한다.
+        logging.getLogger(__name__).warning(
+            "HWP 문헌 생성 커밋이 훅에 막힘(%s): %s", doc_id, _hook_error
+        )
 
     return {
         "doc_path": str(doc_path),
