@@ -150,9 +150,7 @@
         "traceback_fatal": false
       },
       "guards": [
-        "tests/test_sweep_20261011.py",
-        "tests/js_harness.py",
-        "tests/conftest.py"
+        "tests/test_sweep_20261011.py"
       ],
       "origin": {
         "kind": "review",
@@ -578,9 +576,9 @@
     }
   ],
   "approved": {
-    "hash": "82513883df2a6e8598e478148b5bedb932f23d24c468accee646938b73c9e77b",
-    "request": "A-d9a86fcf",
-    "ts": "2026-11-11T16:17:19",
+    "hash": "ec6b35d19648db762dc723348a1de93682f5a2ca2a8de9de7bb242284ec99665",
+    "request": "A-7908d7b0",
+    "ts": "2026-11-11T17:10:40",
     "guards": {
       "tests/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "tests/conftest.py": "82b380ae3fc84c494d248d52b297081a6beec58e3a4c62db5de7be04076b0e45",
