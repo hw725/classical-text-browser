@@ -494,12 +494,39 @@
         "quote": "2026-11-10: 전역 core.hooksPath 를 GitPython 3.2 가 따라 임시 저장소 커밋이 exit 127(77 실패·5 오류), CI 는 통과"
       },
       "status": "active"
+    },
+    {
+      "id": "COMMIT-HOOK-BLOCK",
+      "text": "훅(pre-commit·commit-msg)이 커밋을 막으면 해석·문서 저장소 커밋 함수가 committed: False 와 사유(hook_blocked)를 돌려주고 이전 커밋 hash 를 새 커밋처럼 내지 않으며, post-commit 만 실패하면 커밋된 것으로 처리하고, 해석·문서 저장소는 로컬 core.hooksPath 가 없으면 빈 훅 폴더로 훅을 끈다",
+      "judge": "deterministic",
+      "check": {
+        "argv": [
+          ".venv/Scripts/python.exe",
+          "-m",
+          "pytest",
+          "tests/test_commit_hook_block_20261111.py",
+          "-q",
+          "-p",
+          "no:cacheprovider"
+        ],
+        "fail_regex": "^FAILED|AssertionError",
+        "traceback_fatal": false
+      },
+      "guards": [
+        "tests/test_commit_hook_block_20261111.py"
+      ],
+      "origin": {
+        "kind": "incident",
+        "date": "2026-11-11",
+        "quote": "2026-11-11: GitPython 3.2.1 이 전역 core.hooksPath 를 따라 doc-sync commit-msg 게이트가 feat: 커밋을 막았는데 git_commit_interpretation 이 이전 커밋 hash 로 committed: True 를 돌려줌(handoff_ctb-commit-hook-silent-failure.md)"
+      },
+      "status": "active"
     }
   ],
   "approved": {
-    "hash": "5928c4989ee6f6e8315e4d5240153698028abd781bbd343d168b731aeec2aac3",
-    "request": "A-75e5f25b",
-    "ts": "2026-11-11T09:00:03",
+    "hash": "20e938aa152f8e8770233f06651d88ce49e26debfa0ac950932279087fa627c0",
+    "request": "A-fdd727ea",
+    "ts": "2026-11-11T14:56:49",
     "guards": {
       "tests/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "tests/conftest.py": "82b380ae3fc84c494d248d52b297081a6beec58e3a4c62db5de7be04076b0e45",
@@ -533,6 +560,7 @@
       "tests/test_cli_config.py": "7451fb2e1a2676d99966647ac089dbc1d01cb26fb66085bb03c3dde012418690",
       "tests/test_codex_review.py": "f78c34777829fb1c3bbe7df949c9f56598e616985a281cd071a8f16846fc26ec",
       "tests/test_codex_review_judge.py": "c5c629071301152fec01ce7d6efb378b5f276ebed10ea89c3de6d605bddfbad1",
+      "tests/test_commit_hook_block_20261111.py": "0af557788cd0b810eefc947500e1b5c40990944014da0455f48bd0beaf489211",
       "tests/test_composition_apply_plan_js.py": "f37ef7bb4045147c3343c9b5906e040063a0eae0618f5a24cb01fed66b431ac9",
       "tests/test_connectome.py": "935da13f221444d569836322c7d0d51b351e2636a280ca87bdff8316f079318f",
       "tests/test_contents_tree.py": "c53f4f58fc14dac3692a536d9d38fcfb479fab324a3b32da661694a36fad115e",

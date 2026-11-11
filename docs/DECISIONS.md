@@ -9095,3 +9095,29 @@ D-114의 고르기는 그대로다. 이미 gemma4:cloud를 받아 둔 PC는 kimi
 **시험.** `tests/test_reading_ingest_l5.py`(계약 조건 D-148) — 떼어 낸 항목을 `render_punctuated_text`·`render_hyeonto_text`로
 다시 그리면 답의 글이 나온다, 어긋난 글은 거절, 사람이 저장한 표점과 커밋 안 된 현토 수정은 다시 들여도 그대로,
 다시 들이면 항목 수가 늘지 않는다.
+
+## D-149: 서고 저장소의 커밋은 훅을 끄고, 그래도 막히면 《커밋됨》이라 하지 않는다 (2026-11-11)
+
+**무엇이 났나.** `git_commit_interpretation`·`git_commit_document`와 저장소 생성 두 곳(해석 저장소 생성, HWP에서 문헌 생성)이
+GitPython `repo.index.commit()`의 `git.HookExecutionError`를 《post-commit(LFS 등) 실패라 커밋은 됐다》고 보고 삼켰다.
+`git_commit_interpretation`은 그때 `repo.head.commit` — **이전 커밋** — 의 hash를 담아 `committed: True`를 돌려줬다.
+그러나 GitPython은 pre-commit → commit-msg → 커밋 생성 → post-commit 순서로 돌고, 앞 둘이 실패하면 커밋은 생기지 않는다.
+GitPython 3.2.1(2026-10-28 설치)부터 `core.hooksPath`를 따르므로, 이 PC의 전역 doc-sync commit-msg 게이트가 서고 저장소의
+`feat:` 커밋을 실제로 막을 수 있었다. 문서 저장소는 생성 때 로컬 `core.hooksPath`를 빈 폴더(`.git/no-hooks`)로 돌려 훅을 껐지만
+해석 저장소에는 그 처리가 없었다. 2026-11-11 기준 서고에 커밋되지 않은 변경은 없었다(잃은 기록은 확인되지 않았다).
+
+**결정(사용자 2026-11-11).**
+1. **판정은 HEAD 전후 비교.** 훅 실패 뒤 HEAD가 옮겼으면(post-commit만 실패) 그 커밋으로 성공, 그대로면 실패.
+   오류 문구에서 훅 이름을 읽지 않는다 — GitPython 내부 문구 형식에 기대지 않으려고.
+2. **알림은 `committed: False` + `reason: "hook_blocked"`**(`error`·`detail` 동봉) — 예외로 올리지 않는다. 파일 저장은 커밋 전에
+   끝나 있으므로 저장을 실패로 만들지 않되 거짓 《커밋됨》만 없앤다. 막힌 스테이징은 남아 다음 저장 때 다시 커밋된다.
+   해석 저장소 호출처 22곳 중 16곳은 `try/except Exception`으로 결과를 버리므로 그 자리에서는 서버 로그(경고)에만 남는다.
+3. **해석 저장소도 훅을 끈다** — 생성 때, 그리고 기존 저장소는 커밋할 때 로컬 `core.hooksPath`가 없으면 빈 폴더로 지정한다
+   (문서 저장소 중 그 처리가 없는 옛 것도 같다). 사용자가 로컬 hooksPath를 직접 정했으면 건드리지 않는다. 대가: 서고 저장소의
+   `.git/hooks`·전역 훅은 돌지 않는다 — 서고 저장소는 앱의 버전 관리용이다.
+
+**어디.** `src/core/git_commit_guard.py`(`disable_repo_hooks`·`commit_index`·`blocked_result`), 호출은 `core/document.py`·`core/interpretation.py`.
+
+**시험.** `tests/test_commit_hook_block_20261111.py`(계약 조건 COMMIT-HOOK-BLOCK) — 저장소 로컬 `core.hooksPath`의 실패하는
+pre-commit·commit-msg 훅이면 두 커밋 함수가 `committed: False`·`hook_blocked`를 돌려주고 HEAD가 그대로, post-commit만 실패하면
+커밋됨, 로컬 hooksPath 없는 저장소는 `.git/hooks`의 실패 훅을 끄고 커밋, 새 해석 저장소는 로컬 hooksPath를 가진다.

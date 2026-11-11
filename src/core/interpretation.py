@@ -30,6 +30,7 @@ from pathlib import Path
 import git
 
 from core.document import write_json_atomic
+from core.git_commit_guard import blocked_result, commit_index, disable_repo_hooks
 from core.repo_id import REPO_ID_PATTERN
 
 # 해석 저장소 ID 패턴 — 단일 진실원은 core/repo_id.py (기존 이름은 하위 호환 별칭)
@@ -166,13 +167,20 @@ def create_interpretation(
 
     # --- git init + 초기 커밋 ---
     repo = git.Repo.init(interp_path)
+    # 문서 저장소처럼 훅을 끈다 — 시스템 템플릿(LFS)·사용자 전역 core.hooksPath 의 훅이
+    # 이 저장소의 커밋을 막지 않게(2026-11-11, core/git_commit_guard.py).
+    disable_repo_hooks(repo)
     # repo.git.add()는 실제 git 바이너리를 호출 — .git/ 내부를 추가하지 않음
     # (repo.index.add(["."])는 GitPython 저수준 API라 .git/도 추가해버림)
     repo.git.add("-A")
-    try:
-        repo.index.commit(f"feat: 해석 저장소 생성 — {title or interp_id}")
-    except git.HookExecutionError:
-        pass  # post-commit hook 에러 무시 (LFS 등)
+    _commit, _hook_error = commit_index(repo, f"feat: 해석 저장소 생성 — {title or interp_id}")
+    if _commit is None:
+        # 파일은 이미 다 썼으므로 생성은 그대로 진행한다. 다음 저장 때 다시 커밋을 시도한다.
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "해석 저장소 생성 커밋이 훅에 막힘(%s): %s", interp_id, _hook_error
+        )
 
     # --- 서고 매니페스트 업데이트 ---
     _update_library_manifest_interp(library_path, interp_id, source_document_id, title)
@@ -870,6 +878,9 @@ def git_commit_interpretation(interp_path: str | Path, message: str) -> dict:
     except git.InvalidGitRepositoryError:
         repo = git.Repo.init(interp_path)
 
+    # 생성 때 훅을 끄지 않았던 옛 해석 저장소도 여기서 끈다(로컬 hooksPath 가 없을 때만).
+    disable_repo_hooks(repo)
+
     if not repo.is_dirty(untracked_files=True):
         return {"committed": False, "message": "변경사항 없음"}
 
@@ -880,17 +891,11 @@ def git_commit_interpretation(interp_path: str | Path, message: str) -> dict:
     # Phase 12-1: Based-On-Original trailer 추가
     full_message = _append_based_on_trailer(interp_path, message)
 
-    try:
-        commit = repo.index.commit(full_message)
-    except git.HookExecutionError as e:
-        # 훅 실패 시 커밋이 실제로 생성되지 않았을 수 있으므로
-        # head.commit은 이전 커밋일 수 있다. 경고를 기록한다.
-        import logging
-
-        logging.getLogger(__name__).warning(
-            "git commit hook 실패 — 커밋이 생성되지 않았을 수 있음: %s", e
-        )
-        commit = repo.head.commit
+    # 훅이 커밋을 막으면(pre-commit·commit-msg) 커밋은 생기지 않는다. 예전에는 그때도
+    # 이전 커밋 hash 로 committed: True 를 돌려줬다(2026-11-11 결함). HEAD 전후를 비교한다.
+    commit, hook_error = commit_index(repo, full_message)
+    if commit is None:
+        return blocked_result(message, hook_error)
 
     return {
         "committed": True,
